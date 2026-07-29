@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
 from whymath_backend.api import _misconception_state as state
 from whymath_backend.config import Settings
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher

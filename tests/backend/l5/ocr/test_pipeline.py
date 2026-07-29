@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from whymath_backend.l5.ocr import pipeline as pipeline_mod
 from whymath_backend.l5.ocr.detect import DetectedRegion
 from whymath_backend.l5.ocr.factory import OcrComponents

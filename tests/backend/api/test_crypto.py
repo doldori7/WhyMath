@@ -12,7 +12,6 @@ import os
 import pytest
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
-
 from whymath_backend.api._crypto import (
     MultiKeyCipher,
     SecretCipher,

@@ -26,16 +26,24 @@ black --check 17파일이 실패 상태였다. 하네스는 backlog 대장을 �
 `--line-length 100` 없이 `../../tests/data_pipeline`만 추가하면 `src/data-pipeline` 자신까지
 88자로 재검사돼 **89파일이 FAIL**한다(그 전엔 77파일 clean). 이 계약이 그 회귀를 막는다.
 
+OPS-15가 계약 ⑤를 더했다. `src/*` 밖은 **저장소 표준이 적용된 적이 없었다** — 레포 루트에
+pyproject.toml이 없어 ruff가 파일마다 조상에서 설정을 찾다 실패하고 **기본값**(88자 ·
+`select E4,E7,E9,F`)으로 검사해 왔다. 배선은 켜졌는데 *기준이 달랐던* 것이라, 계약 ①~④
+(배선 유무·대상·`--check`)로는 구조적으로 잡히지 않는다. 그래서 설정 자체를 동결한다.
+
 검증 계약
 --------
 ① 각 잡에 ruff·black 스텝이 **둘 다** 있다
 ② black 스텝이 저장소 표준 `--line-length 100` + `--check`를 쓴다 (규칙이 갈리면 무의미)
 ③ 두 스텝이 선언된 대상 경로 **전부**를 검사한다 (다른 경로를 검사하는 위장 차단)
 ④ 파서가 위장하지 않는다 — 워크플로/잡을 못 찾으면 "위반 0 통과"가 아니라 **실패**
+⑤ 레포 루트 lint 정본이 존재하고 `src/*` 두 pyproject와 **같은 규칙**을 선언한다
+   (셋이 갈리면 같은 코드가 위치에 따라 다르게 판정돼 "표준"이 무의미해진다)
 """
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -126,3 +134,66 @@ def test_parser_fails_loudly_on_unknown_job() -> None:
     """계약 ④ — 잡을 못 찾으면 조용한 통과가 아니라 예외여야 한다."""
     with pytest.raises(AssertionError, match="잡이 없다"):
         _job_run_scripts("__nonexistent_job__")
+
+
+# ── 계약 ⑤ — lint 설정 정본 동결 (OPS-15) ─────────────────────────────────────
+
+# lint 설정을 선언하는 pyproject 전부. 루트가 `src/*` 밖을, 나머지는 각자 패키지를 덮는다.
+_CONFIG_FILES = ("pyproject.toml", "src/backend/pyproject.toml", "src/data-pipeline/pyproject.toml")
+
+
+def _lint_config(rel_path: str) -> dict[str, Any]:
+    """pyproject에서 lint 설정을 읽는다. 못 읽으면 **실패**(위장 차단).
+
+    stdlib `tomllib`만 쓴다 — 하네스·infra 계약 테스트에 새 의존성을 들이지 않는다.
+    """
+    path = _REPO_ROOT / rel_path
+    if not path.is_file():
+        raise AssertionError(
+            f"{rel_path}: lint 설정 파일이 없다. 루트 정본이 사라지면 `src/*` 밖은 다시 "
+            "ruff 기본값(88자·축소 룰셋)으로 조용히 강등된다 — OPS-15가 고친 바로 그 상태다."
+        )
+    try:
+        spec = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise AssertionError(f"{rel_path}: TOML 파손 ({exc}) — 조용히 넘기지 않는다.") from exc
+    tool = spec.get("tool") or {}
+    ruff = tool.get("ruff") or {}
+    black = tool.get("black") or {}
+    return {
+        "ruff_line_length": ruff.get("line-length"),
+        "ruff_select": tuple((ruff.get("lint") or {}).get("select") or ()),
+        "black_line_length": black.get("line-length"),
+    }
+
+
+def test_repo_root_lint_config_exists() -> None:
+    """계약 ⑤ — 루트 정본이 존재하고 ruff·black을 **둘 다** 선언한다."""
+    cfg = _lint_config("pyproject.toml")
+    assert cfg["ruff_line_length"] is not None, "루트 pyproject에 [tool.ruff] line-length가 없다."
+    assert cfg["black_line_length"] is not None, "루트 pyproject에 [tool.black] line-length가 없다."
+    assert cfg[
+        "ruff_select"
+    ], "루트 pyproject에 [tool.ruff.lint] select가 없다 — 기본 룰셋으로 강등된다."
+
+
+def test_all_lint_configs_declare_the_same_rules() -> None:
+    """계약 ⑤ — 세 pyproject의 규칙이 갈리면 '표준'이라는 말이 무의미해진다.
+
+    같은 코드가 어느 디렉터리에 있느냐에 따라 다르게 판정되면, 통과는 위치의 함수이지
+    품질의 함수가 아니다. OPS-15 이전이 정확히 그 상태였다.
+    """
+    configs = {rel: _lint_config(rel) for rel in _CONFIG_FILES}
+    for key in ("ruff_line_length", "black_line_length", "ruff_select"):
+        values = {rel: cfg[key] for rel, cfg in configs.items()}
+        assert (
+            len(set(values.values())) == 1
+        ), f"{key}가 pyproject마다 다르다 — 같은 코드가 위치에 따라 다르게 판정된다:\n" + "\n".join(
+            f"  {rel}: {val}" for rel, val in values.items()
+        )
+
+
+def test_config_reader_fails_loudly_on_missing_file() -> None:
+    """계약 ⑤ — 설정 파일 부재를 '위반 0'으로 넘기지 않는다."""
+    with pytest.raises(AssertionError, match="lint 설정 파일이 없다"):
+        _lint_config("__nonexistent__/pyproject.toml")

@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.assessment import (
     Assessment,
     ConceptMasteryHistory,

@@ -14,7 +14,6 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import SecretStr
-
 from whymath_backend.api._auth import get_consented_user, get_current_user
 from whymath_backend.config import Settings
 from whymath_backend.consent import current_year_kst, derive_is_minor

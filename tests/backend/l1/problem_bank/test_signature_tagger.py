@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankRecord,
     load_problem_bank_records,

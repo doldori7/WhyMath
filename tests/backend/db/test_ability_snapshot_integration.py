@@ -16,7 +16,6 @@ from pydantic import SecretStr
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.assessment import AbilitySnapshot
 from whymath_backend.l2.ability_tracking import get_current_ability, get_current_theta

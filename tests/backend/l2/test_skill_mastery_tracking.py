@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.db.models.assessment import SkillMasteryHistory
 from whymath_backend.l2 import BktModel
 from whymath_backend.l2.skill_mastery_tracking import (

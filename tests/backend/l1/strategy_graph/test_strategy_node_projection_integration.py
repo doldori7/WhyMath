@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.strategy_graph.strategy_node_projection import (
     load_strategies_from_graph_json,

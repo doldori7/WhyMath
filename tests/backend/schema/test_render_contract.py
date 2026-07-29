@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from whymath_backend.schema.enums import VisualizationType
 
 # tests/backend/schema/ → parents[3] = 레포 루트(test_notation_contract.py와 동일 기준).

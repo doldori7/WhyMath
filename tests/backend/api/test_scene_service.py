@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.api import scene as scene_mod
 from whymath_backend.api.scene import scene_for_concept_diagnosis
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis

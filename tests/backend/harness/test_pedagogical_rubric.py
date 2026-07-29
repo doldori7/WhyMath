@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.harness.pedagogical_rubric import (
     LeakageVerdict,
     detect_answer_leakage,

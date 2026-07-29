@@ -26,7 +26,6 @@ from types import TracebackType
 from typing import Any
 
 import pytest
-
 import whymath_backend.l1.atom_graph.retrieval as retrieval_mod
 from whymath_backend.config import Settings
 from whymath_backend.db.models.atom_node import ATOM_REVIEW_STATUS_AI_ESTIMATED

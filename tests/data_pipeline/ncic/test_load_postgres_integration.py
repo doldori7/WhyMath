@@ -19,11 +19,10 @@ import pytest
 
 pytest.importorskip("sqlalchemy")  # [postgres] 미설치(CI data-pipeline)면 모듈 전체 skip
 
-from sqlalchemy import text  # noqa: E402  (importorskip 뒤에 와야 함)
-from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
-
 from data_pipeline.ncic.load import _to_async_dsn, load_to_postgres  # noqa: E402
 from data_pipeline.ncic.models import AchievementStandard  # noqa: E402
+from sqlalchemy import text  # noqa: E402  (importorskip 뒤에 와야 함)
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
 pytestmark = pytest.mark.integration
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.l3.models import Usage
 from whymath_backend.l3.pregenerate.models import PrewarmItemResult, PrewarmStatus
 from whymath_backend.l3.pregenerate.provenance_bridge import generation_log_from_result

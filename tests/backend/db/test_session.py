@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 
 from sqlalchemy.pool import NullPool
-
 from whymath_backend.config import Settings
 from whymath_backend.db.session import dispose_engine, get_engine
 

@@ -41,7 +41,6 @@ def test_redis_backend_enforces_limit_on_live_daemon() -> None:
 
     async def _run() -> None:
         from pydantic import SecretStr
-
         from whymath_backend.api._rate_limit import RedisBackend
         from whymath_backend.config import Settings
 
@@ -76,7 +75,6 @@ def test_evalsha_recovers_from_script_flush_on_live_daemon() -> None:
     async def _run() -> None:
         from pydantic import SecretStr
         from redis.asyncio import Redis
-
         from whymath_backend.api._rate_limit import RedisBackend
         from whymath_backend.config import Settings
 
@@ -118,7 +116,6 @@ def test_redis_backend_distributed_consistency_on_live_daemon() -> None:
 
     async def _run() -> None:
         from pydantic import SecretStr
-
         from whymath_backend.api._rate_limit import RedisBackend
         from whymath_backend.config import Settings
 

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.lthc import LthcAdaptation, adapt_lthc, mastery_to_level
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.models import PolyaStage

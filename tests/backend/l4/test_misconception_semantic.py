@@ -18,7 +18,6 @@ import math
 from collections.abc import Sequence
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.embedding_primitives import normalize_embedding_input
 from whymath_backend.l4.misconception import MisconceptionMatch, diagnose

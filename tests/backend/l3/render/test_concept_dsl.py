@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l3.render.dsl import ConceptAssessment, ConceptDSL, from_concept_content
 
 

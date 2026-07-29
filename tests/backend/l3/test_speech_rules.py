@@ -10,7 +10,6 @@ from __future__ import annotations
 import xml.dom.minidom as minidom
 
 import pytest
-
 from whymath_backend.l3.speech import InvalidSpeechSpecError
 from whymath_backend.l4.speech import speak_latex
 

@@ -15,7 +15,6 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
 from whymath_backend.whs import prm_builder_export_cli as cli
 from whymath_backend.whs.prm_builder import PrmDataset, build_prm_dataset

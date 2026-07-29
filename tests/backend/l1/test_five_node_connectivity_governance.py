@@ -34,7 +34,6 @@ from data_pipeline.formula_graph.models import FormulaNode as PipelineFormulaNod
 from data_pipeline.problem_type_graph.models import ProblemTypeNode as PipelineProblemTypeNode
 from data_pipeline.skill_graph.models import BehaviorArea
 from data_pipeline.skill_graph.models import SkillNode as PipelineSkillNode
-
 from whymath_backend.db.models.formula_node import FormulaNode as OrmFormulaNode
 from whymath_backend.db.models.problem_type_node import ProblemTypeNode as OrmProblemTypeNode
 from whymath_backend.db.models.skill_node import SkillNode as OrmSkillNode

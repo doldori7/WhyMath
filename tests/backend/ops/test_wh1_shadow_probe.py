@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 
 import httpx
 import pytest
-
 from whymath_backend.api.coach import CoachRequest, SessionCreateRequest
 from whymath_backend.l3.verify_step import VerifyStepState, verify_step
 from whymath_backend.ops import wh1_shadow_probe as probe

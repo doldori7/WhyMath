@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision, RoutingRequest
 from whymath_backend.l3.visualization import (

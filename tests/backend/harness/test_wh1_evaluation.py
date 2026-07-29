@@ -19,7 +19,6 @@ from typing import Any, cast
 
 from pytest import approx as pytest_approx
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.harness.wh1_evaluation import (
     _MIN_CALIBRATION_SAMPLES,
     _MIN_MASTERY_POINTS,

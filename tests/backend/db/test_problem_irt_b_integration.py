@@ -16,7 +16,6 @@ from pydantic import SecretStr
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.schema.enums import Curriculum, SourceType, Subject

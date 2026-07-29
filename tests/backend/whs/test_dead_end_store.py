@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.whs.dead_end_store import (

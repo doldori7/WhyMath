@@ -20,7 +20,6 @@ from pathlib import Path
 
 import _db_leak_guard as guard
 import pytest
-
 from whymath_backend.db import session as db_session
 
 _TESTS_BACKEND = Path(__file__).resolve().parent

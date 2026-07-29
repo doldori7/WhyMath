@@ -31,7 +31,6 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
-
 from whymath_backend.api._degradation import DegradationCounter
 from whymath_backend.api._device_store import (
     CachedDeviceStore,

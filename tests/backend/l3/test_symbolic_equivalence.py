@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.symbolic_equivalence import (
     IdentityVerdict,
     identity_status,

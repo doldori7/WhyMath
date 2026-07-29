@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
-
 from whymath_backend.l1.misconception.crosslink_gate import (
     APPROVED_STATUS,
     DIRECT_LINK_TYPE,

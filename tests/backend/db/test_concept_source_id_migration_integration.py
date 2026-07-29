@@ -24,7 +24,6 @@ import uuid
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 
 pytestmark = pytest.mark.integration
@@ -216,9 +215,8 @@ class TestSourceIdMigrationRoundtrip:
 
     def test_roundtrip_keeps_aliases_not_null(self) -> None:
         _skip_if_unreachable()
-        from sqlalchemy import text
-
         from alembic import command
+        from sqlalchemy import text
 
         cfg = _alembic_config()
         try:

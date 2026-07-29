@@ -16,7 +16,6 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import Visualization
 

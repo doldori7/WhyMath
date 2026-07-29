@@ -45,7 +45,6 @@ def _sync_engine() -> object:
     """조회·시드·정리용 sync(psycopg) 엔진."""
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
-
     from whymath_backend.config import Settings
 
     settings = Settings()
@@ -211,9 +210,8 @@ class TestCurriculumEntrySubjectAxis:
     def test_downgrade_then_upgrade_roundtrip(self) -> None:
         """④ downgrade -1 → subject 부재·2-튜플 복원 → upgrade head → 3-튜플 복귀."""
         _skip_if_unreachable()
-        from sqlalchemy.exc import IntegrityError
-
         from alembic import command
+        from sqlalchemy.exc import IntegrityError
 
         _cleanup()  # downgrade의 2-튜플 UNIQUE 복원 전제 — 비수학 잔여 행 정리
         cfg = _alembic_config()

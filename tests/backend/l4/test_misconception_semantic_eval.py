@@ -21,7 +21,6 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.judge import FakeJudge, JudgeVerdict

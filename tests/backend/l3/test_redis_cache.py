@@ -27,7 +27,6 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.cache.redis_cache import (
     CacheDegradationCounter,
@@ -567,7 +566,6 @@ class TestSocketTimeout:
     def test_settings_rejects_nonpositive_timeout(self) -> None:
         """0·음수 타임아웃은 설정 단계에서 거부한다(무한 대기로의 우회 차단)."""
         import pydantic
-
         from whymath_backend.config import Settings
 
         with pytest.raises(pydantic.ValidationError):

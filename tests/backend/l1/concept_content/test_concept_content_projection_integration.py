@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept_content import (
     CONTENT_SCOPE_K12,

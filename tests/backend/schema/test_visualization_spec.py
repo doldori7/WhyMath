@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import (
     _SPEC_MODEL_BY_TYPE,

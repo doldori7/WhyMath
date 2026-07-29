@@ -15,7 +15,6 @@ from datetime import date
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.achievement_standard import (
     AchievementStandard as OrmAchievementStandard,

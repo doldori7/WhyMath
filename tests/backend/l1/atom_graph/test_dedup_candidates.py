@@ -20,7 +20,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l1.atom_graph.dedup_candidates import (
     DedupCandidate,

@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from whymath_backend.app import create_app
 from whymath_backend.config import get_settings
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink

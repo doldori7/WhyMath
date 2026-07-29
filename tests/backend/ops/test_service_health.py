@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from whymath_backend.l3.providers.ollama import OllamaStatus
 from whymath_backend.ops import service_health as sh
 

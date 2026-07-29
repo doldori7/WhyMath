@@ -12,7 +12,6 @@ from datetime import date
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.privacy.retention import (
     _RETENTION_PLAN,
     purge_expired_records,

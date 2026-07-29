@@ -29,7 +29,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from whymath_backend.app import create_app
 from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept

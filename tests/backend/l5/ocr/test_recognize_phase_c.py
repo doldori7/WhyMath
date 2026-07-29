@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l5.ocr.recognize import (
     TexTellerRecognizer,
     _rapidocr_rec_kwargs,

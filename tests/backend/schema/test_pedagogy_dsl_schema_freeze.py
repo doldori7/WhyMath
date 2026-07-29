@@ -12,7 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from whymath_backend.schema.pedagogy_pack import (
     FORBIDDEN_MODE_VOCAB,
     SUBJECT_NOUN_BLOCKLIST,

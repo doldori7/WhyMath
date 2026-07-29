@@ -12,7 +12,6 @@ import uuid
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.l2 import get_current_ability, get_current_theta
 
 _UID = uuid.uuid4()

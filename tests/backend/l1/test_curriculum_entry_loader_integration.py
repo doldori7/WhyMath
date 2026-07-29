@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.curriculum.curriculum_loader import (
     load_kr_curriculum_entries_from_graph_json,
@@ -188,7 +187,6 @@ class TestCurriculumEntryRoundtrip:
         """
         _skip_if_unreachable()
         from sqlalchemy import text
-
         from whymath_backend.l1.curriculum.curriculum_resolve import CurriculumDepthResolver
         from whymath_backend.schema.enums import RequiredDepth
 

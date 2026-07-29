@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.formula_graph.formula_node_projection import (
     load_formulas_from_graph_json,

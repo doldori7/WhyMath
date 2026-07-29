@@ -24,7 +24,6 @@ from typing import Any
 import pytest
 import yaml
 from pydantic import ValidationError
-
 from whymath_backend.l1.pedagogy.unit_compiler import (
     CompiledUnit,
     CompileError,

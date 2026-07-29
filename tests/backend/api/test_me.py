@@ -14,7 +14,6 @@ from typing import Any, cast
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api.me import (
     ConceptAbilityItem,

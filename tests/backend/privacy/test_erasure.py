@@ -16,7 +16,6 @@ import pytest
 from pydantic import SecretStr, ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn

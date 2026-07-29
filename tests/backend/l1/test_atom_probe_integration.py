@@ -19,7 +19,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.atom_probe import ATOM_PROBE_REVIEW_STATUS_AI_ESTIMATED
 from whymath_backend.l1.atom_probe.projection import (

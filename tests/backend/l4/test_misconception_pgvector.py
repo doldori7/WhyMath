@@ -276,7 +276,6 @@ class TestStatementConstruction:
         # subject 축(namespace = 테이블 × subject·S1): 기본 생성 인덱스의 add(upsert)가 subject를
         # DEFAULT_EMBEDDING_SUBJECT('수학')로 바인딩하고, 충돌 갱신 SET에도 subject가 포함된다.
         from sqlalchemy.dialects import postgresql
-
         from whymath_backend.l1.embedding_primitives import DEFAULT_EMBEDDING_SUBJECT
 
         index, engine = _fake_pg_index()

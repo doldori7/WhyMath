@@ -20,8 +20,6 @@ import pytest
 
 pytest.importorskip("neo4j")  # [neo4j] 미설치(CI data-pipeline 기본·PG 잡)면 모듈 전체 skip
 
-from neo4j import GraphDatabase  # noqa: E402  (importorskip 뒤에 와야 함)
-
 from data_pipeline.atom_graph.load import (  # noqa: E402
     CONSTRAINT_NAME,
     NODE_LABEL,
@@ -29,6 +27,7 @@ from data_pipeline.atom_graph.load import (  # noqa: E402
 )
 from data_pipeline.atom_graph.models import AtomConcept, AtomEdge  # noqa: E402
 from data_pipeline.atom_graph.transform import TransformResult  # noqa: E402
+from neo4j import GraphDatabase  # noqa: E402  (importorskip 뒤에 와야 함)
 
 pytestmark = pytest.mark.integration
 

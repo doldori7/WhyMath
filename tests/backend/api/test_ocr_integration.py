@@ -8,7 +8,6 @@ CI(라이브 모델·extra 미설치)에서는 conftest 게이트로 자동 skip
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l5.ocr.factory import build_ocr_components
 from whymath_backend.l5.ocr.pipeline import run_ocr_pipeline

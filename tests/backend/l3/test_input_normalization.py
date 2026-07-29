@@ -14,7 +14,6 @@ Part 4(AST 의미 엔진) 항목4 — implicit multiplication · unary minus · 
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.symbolic_equivalence import (
     IdentityVerdict,
     identity_status,

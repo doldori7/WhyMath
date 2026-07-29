@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l5.ocr.verify import (
     demote_confidence_if_unparseable,
     parse_check_latex,

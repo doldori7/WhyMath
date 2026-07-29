@@ -16,7 +16,6 @@ from types import TracebackType
 from typing import Any
 
 import pytest
-
 from whymath_backend.l1.concept_atom_crosswalk.transfer import CrosswalkRecord
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankPopulateReport,

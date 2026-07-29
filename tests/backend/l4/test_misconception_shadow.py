@@ -18,7 +18,6 @@ import json
 import logging
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.judge import (
     FakeJudge,

@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.l2 import (
     BktModel,

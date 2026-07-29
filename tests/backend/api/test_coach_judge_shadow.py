@@ -26,7 +26,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-
 from whymath_backend.api import coach
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._misconception_state import (

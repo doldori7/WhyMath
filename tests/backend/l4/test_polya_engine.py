@@ -6,7 +6,6 @@ LLM은 FakeLLM(Protocol 만족 — `async def generate`)으로 주입해 hermeti
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.models import CostTier
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.models import PolyaStage, PolyaState

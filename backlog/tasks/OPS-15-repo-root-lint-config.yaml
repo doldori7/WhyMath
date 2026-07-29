@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - ".github/workflows/ci.yml"
   - pyproject.toml
   - "tests/infra/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "OPS-14 착수 실측에서 발견(2026-07-28). OPS-11·12·13·14가 lint를 '배선'했지만 전부 저장소 표준이 아니라 ruff 기본값으로 돌고 있었다 — '장치는 있는데 *잘못된 설정으로* 배선됨' 형태로, 배선 유무만 보는 기존 검사(test_lint_coverage·test_infra_lint_wiring)가 못 잡는 축이다. black은 각 잡이 --line-length 100을 명시해 무관하나, 명시가 없으면 88로 조용히 강등된다는 것도 같은 실측에서 확인(OPS-14가 계약 ②로 동결). 실측 명령: ruff check --line-length 100 --select E,F,I,N,B,W --statistics <대상>"
-updated: 2026-07-28
+updated: 2026-07-29

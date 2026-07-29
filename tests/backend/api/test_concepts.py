@@ -18,7 +18,6 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
-
 from whymath_backend.app import create_app
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.session import get_session

@@ -9,7 +9,8 @@ from models import Policy
 
 
 class TestPolicyDefaults:
-    def test_파일_부재_시_전부_기본값(self, tmp_path: Path):
+    def test_missing_file_yields_all_defaults(self, tmp_path: Path):
+        """파일 부재 시 전부 기본값."""
         policy, errors = store.load_policy(tmp_path)
         assert errors == []
         assert policy.path_overlap == "warn"
@@ -18,20 +19,24 @@ class TestPolicyDefaults:
         assert policy.claim_ttl_hours == 72
         assert policy.remote_claims is True
 
-    def test_기본값은_검증_통과(self):
+    def test_defaults_pass_validation(self):
+        """기본값은 검증 통과."""
         assert Policy().validate() == []
 
 
 class TestPolicyValidation:
-    def test_잘못된_모드_거부(self):
+    def test_invalid_mode_is_rejected(self):
+        """잘못된 모드 거부."""
         errors = Policy(path_overlap="strict").validate()
         assert any("path_overlap" in e for e in errors)
 
-    def test_ttl_음수_거부(self):
+    def test_negative_ttl_is_rejected(self):
+        """ttl 음수 거부."""
         errors = Policy(claim_ttl_hours=0).validate()
         assert any("claim_ttl_hours" in e for e in errors)
 
-    def test_로드_시_잘못된_값이_오류로_보고된다(self, tmp_path: Path):
+    def test_load_reports_invalid_values_as_errors(self, tmp_path: Path):
+        """로드 시 잘못된 값이 오류로 보고된다."""
         (tmp_path / "backlog").mkdir()
         (tmp_path / "backlog" / "policy.yaml").write_text(
             "path_overlap: aggressive\n", encoding="utf-8"
@@ -39,7 +44,8 @@ class TestPolicyValidation:
         _, errors = store.load_policy(tmp_path)
         assert any("path_overlap" in e for e in errors)
 
-    def test_미지_필드는_오류(self, tmp_path: Path):
+    def test_unknown_field_is_an_error(self, tmp_path: Path):
+        """미지 필드는 오류."""
         (tmp_path / "backlog").mkdir()
         (tmp_path / "backlog" / "policy.yaml").write_text("unknown_rule: warn\n", encoding="utf-8")
         _, errors = store.load_policy(tmp_path)
@@ -47,14 +53,16 @@ class TestPolicyValidation:
 
 
 class TestPolicyRoundtrip:
-    def test_저장_후_로드_동일(self, tmp_path: Path):
+    def test_save_then_load_roundtrips(self, tmp_path: Path):
+        """저장 후 로드 동일."""
         policy = Policy(path_overlap="block", claim_ttl_hours=24)
         store.save_policy(tmp_path, policy)
         loaded, errors = store.load_policy(tmp_path)
         assert errors == []
         assert loaded == policy
 
-    def test_dump_결정성(self):
+    def test_dump_is_deterministic(self):
+        """dump 결정성."""
         # 같은 입력이면 항상 같은 출력 (diff 안정)
         a = store.dump_policy(Policy())
         b = store.dump_policy(Policy())

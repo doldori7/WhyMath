@@ -16,7 +16,6 @@ from __future__ import annotations
 from data_pipeline.concept_graph.models import RELATION_TYPES
 from data_pipeline.skill_graph.models import BEHAVIOR_AREAS
 from data_pipeline.skill_graph.models import BehaviorArea as PipelineBehaviorArea
-
 from whymath_backend.schema.enums import BehaviorArea as BackendBehaviorArea
 from whymath_backend.schema.enums import EdgeType
 

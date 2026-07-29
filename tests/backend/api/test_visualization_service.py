@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.api.visualization import visualize_for_concept_diagnosis
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink

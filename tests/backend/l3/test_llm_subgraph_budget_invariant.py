@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
-
 from whymath_backend.l2.prerequisite_recommendation import MAX_PREREQUISITE_DEPTH
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.pipeline import _build_async_payload

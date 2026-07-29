@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from whymath_backend.l4.misconception import probes as probes_mod
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose

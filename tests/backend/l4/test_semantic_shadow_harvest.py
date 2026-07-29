@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4.misconception.semantic_shadow_harvest import (
     SemanticShadowCoverageSummary,
     format_summary,

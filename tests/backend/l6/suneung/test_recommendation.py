@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l6.suneung.recommendation import (
     recommend_suneung_index,
     suneung_item_weight,

@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l1.concept_visualization import (
     ConceptVisualizabilityRecord,
     get_visualizability,

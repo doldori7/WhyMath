@@ -12,7 +12,6 @@ import importlib.util
 import json
 
 import pytest
-
 from whymath_backend.harness import agreement_gate_cli as cli
 from whymath_backend.harness.agreement_gate import (
     Phase2ExitVerdict,

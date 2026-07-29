@@ -26,9 +26,8 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 import whymath_backend.l2.weak_concept_recommendation as wcr_mod
+from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta
 from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.weak_concept_recommendation import (

@@ -26,7 +26,6 @@ from pathlib import Path
 from data_pipeline.concept_graph.models import RELATION_TYPES
 from data_pipeline.formula_graph.models import FORMULA_ID_PATTERN
 from data_pipeline.formula_graph.models import FormulaNode as PipelineFormulaNode
-
 from whymath_backend.db.models.formula_node import FormulaNode as OrmFormulaNode
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.symbolic_equivalence import to_sympy_source

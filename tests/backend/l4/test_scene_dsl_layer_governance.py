@@ -25,7 +25,6 @@ import ast
 import importlib.util
 
 import pytest
-
 from whymath_backend.l4.learning_scene import (
     AnnotationElement,
     LearningScene,

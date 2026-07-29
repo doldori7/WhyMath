@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
-
 from whymath_backend.l1.embedding_primitives import (
     EMBEDDING_TEXT_FORMAT_VERSION,
     embed_changed,

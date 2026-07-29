@@ -12,7 +12,6 @@ from collections.abc import AsyncIterator
 
 import pytest
 from fastapi.testclient import TestClient
-
 from whymath_backend.api import ocr as ocr_module
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._ocr_state import get_ocr_components

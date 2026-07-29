@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 
 # provider 반환형은 pipeline.GenerationResult(오케스트레이션 결과)와 이름이 겹쳐 별칭으로 구분.

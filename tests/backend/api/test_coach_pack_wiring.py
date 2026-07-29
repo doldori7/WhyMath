@@ -15,11 +15,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import whymath_backend.api.coach as coach
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-import whymath_backend.api.coach as coach
 from whymath_backend.api.coach import _pack_for
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.concept import Concept, ProblemConcept

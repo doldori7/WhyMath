@@ -16,7 +16,6 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l2.learning_path import (
     LearningPath,
     LearningStep,

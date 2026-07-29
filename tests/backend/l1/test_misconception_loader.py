@@ -22,7 +22,6 @@ from types import TracebackType
 from typing import Any
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.misconception import populate
 from whymath_backend.l1.misconception.catalog_loader import (
@@ -324,7 +323,6 @@ class TestCorpusFitsOrmColumns:
 
     def test_all_string_fields_fit_orm_limits(self) -> None:
         import sqlalchemy as sa
-
         from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog as OrmModel
 
         corpus = self._corpus_path()

@@ -22,7 +22,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,

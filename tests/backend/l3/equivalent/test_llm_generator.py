@@ -22,7 +22,6 @@ import json
 from collections.abc import Mapping, Sequence
 
 import pytest
-
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankPopulateReport,
     ProblemBankRecord,

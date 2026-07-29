@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4 import step_shadow_eval as eval_mod
 from whymath_backend.l4.step_shadow import StepBreakObservation
 from whymath_backend.l4.step_shadow_harvest import (

@@ -21,7 +21,6 @@ from pathlib import Path
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_atom_crosswalk import populate as populate_cli
 from whymath_backend.l1.concept_atom_crosswalk.transfer import (

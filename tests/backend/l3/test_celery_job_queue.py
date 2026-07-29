@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3.queue import CeleryJobQueue, JobStatus
 from whymath_backend.l3.queue.celery_job_queue import (
     _CeleryApp,

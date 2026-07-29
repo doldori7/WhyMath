@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-
 from whymath_backend.ops import cost_report as cr
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from whymath_backend.db.schema_version import (
     EXPECTED_ALEMBIC_HEAD,
     KNOWN_REVISIONS,

@@ -14,7 +14,6 @@ from decimal import Decimal
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.misconception_catalog import (
     MisconceptionCatalog as OrmMisconceptionCatalog,

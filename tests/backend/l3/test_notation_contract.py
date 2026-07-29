@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 import sympy
-
 from whymath_backend.l3.verify_step import VerifyStepState, verify_step
 
 # tests/backend/l3/ → parents[3] = 레포 루트(tests/backend/conftest.py의 parents[2]와 동일 기준).

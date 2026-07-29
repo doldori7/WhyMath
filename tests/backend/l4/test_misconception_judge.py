@@ -14,7 +14,6 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.models import LocalModelTier, ModelFamily
 from whymath_backend.l3.router import Router, resolve_model

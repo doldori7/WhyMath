@@ -14,7 +14,6 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,

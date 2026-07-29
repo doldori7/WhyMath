@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.api.auth import OAuthIdentity, email_hash, resolve_user
 from whymath_backend.config import Settings
 from whymath_backend.db.models.user import UserProfile

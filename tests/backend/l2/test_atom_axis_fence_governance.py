@@ -31,7 +31,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.selectable import Select
-
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.l2.prerequisite_recommendation import build_prerequisite_stmt
 

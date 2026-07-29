@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.evidence_event import EvidenceEvent
 

@@ -23,9 +23,8 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
-
 import whymath_backend.api.concepts as concepts_api
+from fastapi.testclient import TestClient
 from whymath_backend.api.concepts import get_embedding_provider
 from whymath_backend.app import create_app
 from whymath_backend.db.session import get_session

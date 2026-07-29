@@ -12,7 +12,6 @@ from typing import Any, cast
 
 from sqlalchemy import Select, Update
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.l2 import calibrate_item_difficulties
 from whymath_backend.l2.item_calibration import (
     _MIN_RESPONSES_FOR_CALIBRATION,

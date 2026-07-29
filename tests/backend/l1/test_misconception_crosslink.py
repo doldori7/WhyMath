@@ -11,7 +11,6 @@ from types import TracebackType
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l1.misconception.crosslink_loader import (
     MisconceptionCrosslinkStore,
     load_crosslinks,

@@ -21,7 +21,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,
@@ -283,7 +282,6 @@ class TestL2MasteryBridge:
 
         from sqlalchemy import text
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
         from whymath_backend.db.models.assessment import ConceptMasteryHistory
         from whymath_backend.l2.mastery_tracking import get_current_mastery
 

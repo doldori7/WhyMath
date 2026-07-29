@@ -20,7 +20,6 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,

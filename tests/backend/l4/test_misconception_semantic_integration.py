@@ -12,7 +12,6 @@ OpenAI 케이스는 키(WHYMATH_OPENAI_API_KEY)까지 있어야 의미가 있으
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.semantic import (
     LocalEmbeddingProvider,

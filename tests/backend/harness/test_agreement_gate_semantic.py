@@ -11,7 +11,6 @@ from __future__ import annotations
 import importlib.util
 
 import pytest
-
 from whymath_backend.harness.agreement_gate import AgreementVerdict, Phase2ExitVerdict
 from whymath_backend.harness.agreement_gate_semantic import (
     run_semantic_agreement_gate,

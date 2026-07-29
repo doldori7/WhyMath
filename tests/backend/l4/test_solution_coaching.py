@@ -11,7 +11,6 @@ import logging
 import uuid
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l3.pregenerate.models import PregenItem, ValidationSignal
 from whymath_backend.l4.metacognitive_trigger import recommend_coaching

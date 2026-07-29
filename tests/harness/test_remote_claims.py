@@ -30,7 +30,8 @@ def _mk_backlog(status: str = "in_progress", session: str | None = "claude/a") -
 
 
 class TestClaimCAS:
-    def test_claim_성공_후_ls_remote에_ref_존재(self, bare_remote):
+    def test_ref_exists_on_remote_after_successful_claim(self, bare_remote):
+        """claim 성공 후 ls remote에 ref 존재."""
         _, clone = bare_remote
         a = clone("session-a")
         result = remote_claims.claim(a, TASK, "claude/session-a")
@@ -41,7 +42,8 @@ class TestClaimCAS:
         assert claims[0].branch == "claude/session-a"
         assert claims[0].ts  # UTC ISO8601 타임스탬프 기록됨
 
-    def test_레이스_두_세션_중_한쪽만_성공(self, bare_remote):
+    def test_race_lets_only_one_of_two_sessions_win(self, bare_remote):
+        """레이스 두 세션 중 한쪽만 성공."""
         # 핵심 시나리오: A claim 후 B가 같은 태스크 claim → B는 conflict
         _, clone = bare_remote
         a = clone("session-a")
@@ -53,7 +55,8 @@ class TestClaimCAS:
         assert result_b.claim is not None
         assert result_b.claim.branch == "claude/session-a"
 
-    def test_release_후_재claim_가능(self, bare_remote):
+    def test_can_reclaim_after_release(self, bare_remote):
+        """release 후 재claim 가능."""
         _, clone = bare_remote
         a = clone("session-a")
         b = clone("session-b")
@@ -61,7 +64,8 @@ class TestClaimCAS:
         assert remote_claims.release(a, TASK, "claude/session-a").status == "ok"
         assert remote_claims.claim(b, TASK, "claude/session-b").status == "ok"
 
-    def test_서로_다른_태스크는_독립_claim(self, bare_remote):
+    def test_different_tasks_claim_independently(self, bare_remote):
+        """서로 다른 태스크는 독립 claim."""
         _, clone = bare_remote
         a = clone("session-a")
         b = clone("session-b")
@@ -70,7 +74,7 @@ class TestClaimCAS:
 
     # ── HARN-09 — 단일 브랜치 레이아웃이 새로 만든 계약 ────────────────────────
 
-    def test_경합해도_서로_다른_태스크는_둘_다_살아남는다(self, bare_remote):
+    def test_contention_keeps_both_claims_for_different_tasks(self, bare_remote):
         """lease 경합 재시도가 **기능을 죽이지 않는다**.
 
         단일 브랜치라 서로 다른 태스크를 claim해도 같은 ref를 갱신한다. 재시도가 없으면
@@ -109,7 +113,7 @@ class TestClaimCAS:
         assert status == "ok"
         assert {c.task_id for c in claims} == {TASK, "S1-02-other-task"}, "경합이 claim을 삼켰다"
 
-    def test_claim은_작업트리와_인덱스를_건드리지_않는다(self, bare_remote):
+    def test_claim_leaves_worktree_and_index_untouched(self, bare_remote):
         """트리를 `mktree`로 만드는 이유 — 인덱스를 쓰면 사용자 스테이징이 오염된다.
 
         하네스는 개발자가 편집 중인 클론에서 그대로 돈다. claim 하나가 스테이징을
@@ -136,7 +140,7 @@ class TestClaimCAS:
         ).stdout
         assert after == before, f"claim/release가 작업트리를 오염시켰다:\n{before!r} → {after!r}"
 
-    def test_해제는_ref_삭제를_쓰지_않는다(self, bare_remote):
+    def test_release_does_not_use_ref_deletion(self, bare_remote):
         """이 환경의 프록시가 ref 삭제를 거부하므로 삭제 push는 설계상 금지다.
 
         구현이 삭제 push로 회귀하면 실 환경에서만 조용히 깨진다(로컬 bare 원격은
@@ -168,14 +172,14 @@ class TestClaimCAS:
         claims, status = remote_claims.list_claims(a)
         assert status == "ok" and claims == []
 
-    def test_claim_브랜치_부재가_조회_실패로_오인되지_않는다(self, bare_remote):
+    def test_missing_claim_branch_is_not_mistaken_for_lookup_failure(self, bare_remote):
         """claim 0건은 정상 상태다 — ok로 보고돼야 후속 로직이 진행된다."""
         _, clone = bare_remote
         a = clone("session-a")
         claims, status = remote_claims.list_claims(a)
         assert claims == [] and status == "ok"
 
-    def test_메타가_파손된_claim은_조용히_탈취되지_않는다(self, bare_remote, monkeypatch):
+    def test_corrupt_meta_claim_is_not_silently_stolen(self, bare_remote, monkeypatch):
         """홀더를 특정 못 해도 **통과가 아니라 conflict**다.
 
         "누가 잡았는지 모르니 일단 진행"은 조용한 탈취이고, 그게 이 모듈이 막으려는
@@ -203,7 +207,8 @@ class TestClaimCAS:
 
 
 class TestReleaseSafety:
-    def test_남의_claim_해제는_force_필수(self, bare_remote):
+    def test_releasing_another_sessions_claim_requires_force(self, bare_remote):
+        """남의 claim 해제는 force 필수."""
         _, clone = bare_remote
         a = clone("session-a")
         b = clone("session-b")
@@ -214,18 +219,21 @@ class TestReleaseSafety:
         forced = remote_claims.release(b, TASK, "claude/session-b", force=True)
         assert forced.status == "ok"
 
-    def test_없는_claim_해제는_멱등(self, bare_remote):
+    def test_releasing_absent_claim_is_idempotent(self, bare_remote):
+        """없는 claim 해제는 멱등."""
         _, clone = bare_remote
         a = clone("session-a")
         assert remote_claims.release(a, TASK, "claude/session-a").status == "ok"
 
 
 class TestFailOpen:
-    def test_원격_없는_저장소는_offline(self, git_repo: Path):
+    def test_repository_without_remote_reports_offline(self, git_repo: Path):
+        """원격 없는 저장소는 offline."""
         result = remote_claims.claim(git_repo, TASK, "claude/x")
         assert result.status == "offline"
 
-    def test_죽은_원격은_offline_또는_error_절대_예외_아님(self, git_repo: Path, tmp_path):
+    def test_dead_remote_reports_offline_or_error_never_raises(self, git_repo: Path, tmp_path):
+        """죽은 원격은 offline 또는 error 절대 예외 아님."""
         import subprocess
 
         subprocess.run(
@@ -237,7 +245,8 @@ class TestFailOpen:
         result = remote_claims.claim(git_repo, TASK, "claude/x")
         assert result.status in ("offline", "error")
 
-    def test_list_claims_원격_없으면_offline(self, git_repo: Path):
+    def test_list_claims_reports_offline_without_remote(self, git_repo: Path):
+        """list claims 원격 없으면 offline."""
         claims, status = remote_claims.list_claims(git_repo)
         assert claims == []
         assert status == "offline"
@@ -246,7 +255,8 @@ class TestFailOpen:
 class TestTopLevelFieldParser:
     """태스크 YAML 최상위 스칼라 파서 — PyYAML 비의존 (하네스 의존성 0 설계)."""
 
-    def test_실제_dump_task_형식을_읽는다(self):
+    def test_reads_the_real_dump_task_format(self):
+        """실제 dump task 형식을 읽는다."""
         import store
 
         body = store.dump_task(
@@ -263,15 +273,18 @@ class TestTopLevelFieldParser:
         assert remote_claims._top_level_field(body, "status") == "in_progress"
         assert remote_claims._top_level_field(body, "session") == "claude/session-a"
 
-    def test_null_세션은_빈_문자열(self):
+    def test_null_session_becomes_empty_string(self):
+        """null 세션은 빈 문자열."""
         body = "id: X\nstatus: todo\nsession: null\n"
         assert remote_claims._top_level_field(body, "session") == ""
 
-    def test_인용된_값의_따옴표를_벗긴다(self):
+    def test_strips_quotes_from_quoted_values(self):
+        """인용된 값의 따옴표를 벗긴다."""
         body = 'status: "in_progress"\nsession: "claude/a-b"\n'
         assert remote_claims._top_level_field(body, "session") == "claude/a-b"
 
-    def test_들여쓰기된_줄과_값_속_콜론에_속지_않는다(self):
+    def test_not_fooled_by_indented_lines_or_colons_in_values(self):
+        """들여쓰기된 줄과 값 속 콜론에 속지 않는다."""
         # notes 값 안의 'status: in_progress'와 리스트 항목이 최상위로 오인되면 안 된다
         body = (
             "status: todo\n"
@@ -280,7 +293,8 @@ class TestTopLevelFieldParser:
         )
         assert remote_claims._top_level_field(body, "status") == "todo"
 
-    def test_없는_키는_빈_문자열(self):
+    def test_missing_key_yields_empty_string(self):
+        """없는 키는 빈 문자열."""
         assert remote_claims._top_level_field("id: X\n", "session") == ""
 
 
@@ -318,7 +332,8 @@ class TestReadSideScan:
         run("commit", "-m", f"claim {task_id}")
         run("push", "--quiet", "-u", "origin", branch)
 
-    def test_타_세션_in_progress를_탐지한다(self, bare_remote):
+    def test_detects_in_progress_from_another_session(self, bare_remote):
+        """타 세션 in progress를 탐지한다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a")
@@ -328,7 +343,8 @@ class TestReadSideScan:
             ("claude/session-a", "claude/session-a")
         ]
 
-    def test_내_세션의_in_progress는_나를_막지_않는다(self, bare_remote):
+    def test_own_session_in_progress_does_not_block_me(self, bare_remote):
+        """내 세션의 in progress는 나를 막지 않는다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         # 원격에 남은 claim의 session이 '나'인 경우 (내 브랜치를 이미 push한 상태)
@@ -337,7 +353,8 @@ class TestReadSideScan:
         assert result.status == "ok"
         assert result.holders == []
 
-    def test_todo_상태는_탐지하지_않는다(self, bare_remote):
+    def test_todo_status_is_not_detected(self, bare_remote):
+        """todo 상태는 탐지하지 않는다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_task_copy(a, "claude/session-a", "todo", None)
@@ -345,7 +362,8 @@ class TestReadSideScan:
         assert result.status == "ok"
         assert result.holders == []
 
-    def test_태스크_파일이_없는_브랜치는_건너뛴다(self, bare_remote):
+    def test_branch_without_task_file_is_skipped(self, bare_remote):
+        """태스크 파일이 없는 브랜치는 건너뛴다."""
         _, clone = bare_remote
         _, b = clone("session-a"), clone("session-b")
         # main에는 backlog/ 자체가 없다 — 예외 없이 조용히 넘어가야 한다
@@ -354,7 +372,8 @@ class TestReadSideScan:
         assert result.holders == []
         assert result.scanned_refs >= 1
 
-    def test_다른_태스크의_claim에는_반응하지_않는다(self, bare_remote):
+    def test_does_not_react_to_claims_on_other_tasks(self, bare_remote):
+        """다른 태스크의 claim에는 반응하지 않는다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_task_copy(
@@ -364,12 +383,14 @@ class TestReadSideScan:
         assert result.status == "ok"
         assert result.holders == []
 
-    def test_원격_없으면_offline_판정불가(self, git_repo: Path):
+    def test_without_remote_the_verdict_is_offline(self, git_repo: Path):
+        """원격 없으면 offline 판정불가."""
         result = remote_claims.scan_remote_in_progress(git_repo, TASK, "claude/x")
         assert result.status == "offline"
         assert result.holders == []  # 빈 holders를 '충돌 없음'으로 읽으면 안 된다
 
-    def test_fetch_실패는_상태로_보고되고_예외가_아니다(self, bare_remote, monkeypatch):
+    def test_fetch_failure_is_reported_as_status_not_raised(self, bare_remote, monkeypatch):
+        """fetch 실패는 상태로 보고되고 예외가 아니다."""
         _, clone = bare_remote
         b = clone("session-b")
         original = remote_claims._git
@@ -380,7 +401,9 @@ class TestReadSideScan:
                     ["git", *argv],
                     128,
                     stdout="",
-                    stderr="fatal: unable to access 'origin': The requested URL returned error: 403",
+                    stderr=(
+                        "fatal: unable to access 'origin': " "The requested URL returned error: 403"
+                    ),
                 )
             return original(root, *argv, **kwargs)
 
@@ -390,7 +413,8 @@ class TestReadSideScan:
         assert result.holders == []
         assert "403" in result.message  # 침묵 실패 금지 — 원인이 메시지에 남는다
 
-    def test_브랜치_상한_초과는_truncated로_보고된다(self, bare_remote):
+    def test_exceeding_branch_cap_is_reported_as_truncated(self, bare_remote):
+        """브랜치 상한 초과는 truncated로 보고된다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a")
@@ -449,7 +473,8 @@ class TestReadSideStaleHandling:
         self._run(repo, "commit", "-q", "-m", f"claim {task_id}")
         self._run(repo, "push", "--quiet", "-u", "origin", branch)
 
-    def test_규칙A_트렁크가_done이면_홀더는_stale로_제외된다(self, bare_remote):
+    def test_rule_a_done_on_trunk_marks_holders_stale(self, bare_remote):
+        """규칙A 트렁크가 done이면 홀더는 stale로 제외된다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_trunk(a, "done")
@@ -463,7 +488,8 @@ class TestReadSideStaleHandling:
             ("claude/session-a", "trunk_done")
         ]
 
-    def test_규칙A_역_트렁크가_todo면_여전히_차단한다(self, bare_remote):
+    def test_rule_a_inverse_todo_on_trunk_still_blocks(self, bare_remote):
+        """규칙A 역 트렁크가 todo면 여전히 차단한다."""
         # 규칙 A가 보호를 과잉 무력화하면 안 된다 — 착륙하지 않은 태스크는 그대로 막힌다
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
@@ -476,7 +502,8 @@ class TestReadSideStaleHandling:
         ]
         assert result.skipped == []
 
-    def test_규칙A_cancelled도_착륙으로_본다(self, bare_remote):
+    def test_rule_a_treats_cancelled_as_landed(self, bare_remote):
+        """규칙A cancelled도 착륙으로 본다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_trunk(a, "cancelled")
@@ -485,7 +512,8 @@ class TestReadSideStaleHandling:
         assert result.holders == []
         assert [s.reason for s in result.skipped] == ["trunk_cancelled"]
 
-    def test_규칙B_트렁크_자신은_홀더가_될_수_없다(self, bare_remote):
+    def test_rule_b_trunk_itself_cannot_be_a_holder(self, bare_remote):
+        """규칙B 트렁크 자신은 홀더가 될 수 없다."""
         # main의 in_progress는 활성 claim이 아니라 대장 위생 실패(done 미기입 머지)다
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
@@ -495,7 +523,8 @@ class TestReadSideStaleHandling:
         assert result.holders == []
         assert [(s.branch, s.reason) for s in result.skipped] == [("main", "trunk_not_session")]
 
-    def test_규칙B는_실_세션_claim까지_지우지는_않는다(self, bare_remote):
+    def test_rule_b_does_not_erase_live_session_claims(self, bare_remote):
+        """규칙B는 실 세션 claim까지 지우지는 않는다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_trunk(a, "in_progress", "claude/dead-session")
@@ -504,7 +533,8 @@ class TestReadSideStaleHandling:
         assert [h.branch for h in result.holders] == ["claude/session-a"]  # 살아있는 claim은 남는다
         assert [s.branch for s in result.skipped] == ["main"]
 
-    def test_트렁크에_태스크_파일이_없으면_규칙A_신호없이_홀더검사(self, bare_remote):
+    def test_no_task_file_on_trunk_falls_through_to_holder_check(self, bare_remote):
+        """트렁크에 태스크 파일이 없으면 규칙A 신호없이 홀더검사."""
         # 브랜치에서 신설된 태스크 — 트렁크 사본이 없다고 stale로 오해하면 안 된다
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
@@ -529,14 +559,15 @@ class TestReadSideStaleHandling:
 
         monkeypatch.setattr(remote_claims, "_git", fake_git)
 
-    def test_트렁크_ref는_원격_HEAD를_먼저_묻는다(self, bare_remote):
+    def test_trunk_ref_asks_remote_head_first(self, bare_remote):
+        """트렁크 ref는 원격 HEAD를 먼저 묻는다."""
         _, clone = bare_remote
         b = clone("session-b")
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.trunk_source == "ls-remote"  # 하드코딩 아님·원격 권위 우선
         assert result.trunk_ref == "refs/remotes/origin/main"
 
-    def test_로컬_origin_HEAD가_stale이어도_원격_권위를_따른다(self, bare_remote):
+    def test_remote_wins_even_when_local_origin_head_is_stale(self, bare_remote):
         """실측 사고 재현(2026-07-27): 로컬 origin/HEAD가 *세션 브랜치*를 가리킨 클론.
 
         그 값을 트렁크로 믿으면 규칙 A가 남의 세션 브랜치 status를 권위로 삼아
@@ -554,7 +585,10 @@ class TestReadSideStaleHandling:
         assert result.trunk_status == "todo"
         assert [h.branch for h in result.holders] == ["claude/session-a"]  # 보호 유지
 
-    def test_원격_HEAD_조회가_막히면_로컬_symbolic_ref로_폴백(self, bare_remote, monkeypatch):
+    def test_falls_back_to_local_symbolic_ref_when_remote_head_blocked(
+        self, bare_remote, monkeypatch
+    ):
+        """원격 HEAD 조회가 막히면 로컬 symbolic ref로 폴백."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_trunk(a, "done")
@@ -564,7 +598,8 @@ class TestReadSideStaleHandling:
         assert result.trunk_source == "symbolic-ref"
         assert result.holders == []  # 규칙 A는 그대로 작동
 
-    def test_해소_전부_실패하면_main으로_폴백한다(self, bare_remote, monkeypatch):
+    def test_falls_back_to_main_when_all_resolution_fails(self, bare_remote, monkeypatch):
+        """해소 전부 실패하면 main으로 폴백한다."""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_trunk(a, "done")
@@ -578,7 +613,8 @@ class TestReadSideStaleHandling:
 
 
 class TestStaleAndReap:
-    def test_stale_3중_기준(self):
+    def test_stale_detection_three_criteria(self):
+        """stale 3중 기준."""
         now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
         fresh_ts = "2026-07-16T10:00:00Z"  # 2시간 전 — TTL(72h) 이내
         old_ts = "2026-07-10T10:00:00Z"  # 6일 전 — TTL 초과
@@ -612,7 +648,8 @@ class TestStaleAndReap:
         assert reasons["S1-03-ghost-task"] == "task_missing"  # 태스크 미존재
         assert reasons["S1-04-old-task"] == "ttl"  # TTL 초과
 
-    def test_reap_dry_run은_삭제하지_않는다(self, bare_remote):
+    def test_reap_dry_run_does_not_delete(self, bare_remote):
+        """reap dry run은 삭제하지 않는다."""
         _, clone = bare_remote
         a = clone("session-a")
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
@@ -623,7 +660,8 @@ class TestStaleAndReap:
         claims, _ = remote_claims.list_claims(a)
         assert len(claims) == 1  # dry-run — 아직 남아 있음
 
-    def test_reap_apply는_실제_삭제(self, bare_remote):
+    def test_reap_apply_actually_deletes(self, bare_remote):
+        """reap apply는 실제 삭제."""
         _, clone = bare_remote
         a = clone("session-a")
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
@@ -633,7 +671,7 @@ class TestStaleAndReap:
         claims, _ = remote_claims.list_claims(a)
         assert claims == []
 
-    def test_조회_실패는_stale_없음으로_위장되지_않는다(self, bare_remote, monkeypatch):
+    def test_lookup_failure_is_not_disguised_as_no_stale(self, bare_remote, monkeypatch):
         """HARN-09 — 이 구분이 없어서 CI 교차검증이 공전했다.
 
         구 구현은 조회 실패 시 빈 목록만 돌려줬고, 호출자는 그것을 "stale 없음"과

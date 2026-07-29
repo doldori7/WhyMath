@@ -19,7 +19,6 @@ CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 자동 skip(conftes
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.misconception.judge import LLMJudge
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.probes import probes_path

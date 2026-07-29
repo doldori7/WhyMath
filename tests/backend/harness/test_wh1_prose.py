@@ -17,7 +17,6 @@ import logging
 from collections.abc import Mapping, Sequence
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_loop import (
     ENCOURAGE_FALLBACK_UTTERANCE,

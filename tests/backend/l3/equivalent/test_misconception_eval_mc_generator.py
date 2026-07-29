@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.harness.misconception_mc_batch import (
     build_kebab_distractor_codes_optional,
 )

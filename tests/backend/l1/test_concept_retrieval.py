@@ -24,7 +24,6 @@ from types import TracebackType
 from typing import Any
 
 import pytest
-
 import whymath_backend.l1.concept_graph.retrieval as retrieval_mod
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.embedding import ConceptEmbeddingIndex

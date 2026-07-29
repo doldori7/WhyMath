@@ -11,7 +11,6 @@ import logging
 import uuid
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l4 import step_shadow
 from whymath_backend.l4.step_shadow import StepBreakObservation, observe_step_breaks

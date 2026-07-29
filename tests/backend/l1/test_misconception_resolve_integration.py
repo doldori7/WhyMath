@@ -24,7 +24,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,
@@ -243,7 +242,6 @@ async def _resolve() -> list[ResolvedMisconceptionLinks]:
     """페치 → resolve_many(같은 AsyncSession에서 적재 행 해소)."""
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
     from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 
     engine = create_async_engine(Settings().database_url)
@@ -343,7 +341,6 @@ def _real_resolve(mis_ids: list[str]) -> list[ResolvedMisconceptionLinks]:
     """실 코퍼스 적재 후 mis_id 전건을 페치 → resolve_many(같은 AsyncSession 해소)."""
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
     from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 
     async def _run() -> list[ResolvedMisconceptionLinks]:

@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.models import (
     CostTier,

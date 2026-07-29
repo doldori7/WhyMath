@@ -17,7 +17,6 @@ import os
 from typing import Any
 
 import pytest
-
 from whymath_backend.api._crypto import (
     MultiKeyCipher,
     SecretCipher,

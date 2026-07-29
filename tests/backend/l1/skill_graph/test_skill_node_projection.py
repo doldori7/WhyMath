@@ -16,7 +16,6 @@ from pathlib import Path
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.skill_node import SKILL_REVIEW_STATUS_DEFAULT
 from whymath_backend.l1.skill_graph.skill_node_projection import (

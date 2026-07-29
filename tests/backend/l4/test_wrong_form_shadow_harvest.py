@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4.misconception.wrong_form_match import WrongFormShadowObservation
 from whymath_backend.l4.misconception.wrong_form_shadow_harvest import (
     WrongFormCoverageSummary,

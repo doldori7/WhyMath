@@ -25,7 +25,6 @@ graceful skip(슬3 `test_concept_embedding_integration.py` 미러). 단위 경�
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.embedding import (
     ConceptText,

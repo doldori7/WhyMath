@@ -14,7 +14,6 @@ import uuid
 from collections.abc import Sequence
 
 import pytest
-
 from whymath_backend.l1.problem_bank.embedding import ProblemEmbeddingIndex
 from whymath_backend.l1.problem_bank.populate import (
     ConceptTag,

@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.config import get_settings
 from whymath_backend.l4.learning_scene import (
     AnnotationElement,

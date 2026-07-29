@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l3.speech import InvalidSpeechSpecError, parse_speech_spec
 from whymath_backend.schema.speech import (
     BreakToken,

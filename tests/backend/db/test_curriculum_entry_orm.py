@@ -13,7 +13,6 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry as OrmCurriculumEntry
 from whymath_backend.schema.curriculum_entry import CurriculumEntry as SchemaCurriculumEntry

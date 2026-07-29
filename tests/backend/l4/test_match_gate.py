@@ -14,7 +14,6 @@ verify_step의 3-state는 후속 슬라이스이며 본 테스트 범위 밖.
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.match_gate import (
     MatchGateResult,

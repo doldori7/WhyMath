@@ -14,7 +14,6 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-
 from whymath_backend.harness.surrogate_baseline_report import (
     _resolve_params,
     render_baseline_report,

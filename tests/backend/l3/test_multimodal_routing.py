@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import (

@@ -13,7 +13,6 @@ import logging
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.l1.misconception.crosslink_resolve import MisconceptionCrosslinkResolver
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.crosslink_shadow import (

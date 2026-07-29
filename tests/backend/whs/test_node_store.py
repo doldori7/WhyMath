@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
 from whymath_backend.whs.node_store import (

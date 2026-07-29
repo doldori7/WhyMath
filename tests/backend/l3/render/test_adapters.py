@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.render.adapter import NullAdapter, PedagogyAdapter, RenderContext
 from whymath_backend.l3.render.dsl import ConceptAssessment, ConceptDSL
 from whymath_backend.l3.render.registry import get_adapter, registered_strategies

@@ -18,7 +18,6 @@ import uuid
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.populate import ProblemBankStore, populate_problem_bank
 

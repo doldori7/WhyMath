@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_type_graph.problem_type_node_projection import (
     load_problem_types_from_graph_json,

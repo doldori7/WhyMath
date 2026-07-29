@@ -13,7 +13,6 @@ from dataclasses import dataclass
 import pytest
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
-
 from whymath_backend.api._crypto import (
     SecretCipher,
     build_evidence_payload_cipher,

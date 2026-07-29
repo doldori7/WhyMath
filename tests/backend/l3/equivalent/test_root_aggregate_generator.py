@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import sympy
-
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,

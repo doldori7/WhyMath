@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l1.problem_bank.populate import ProblemBankRecord, load_problem_bank_records
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,

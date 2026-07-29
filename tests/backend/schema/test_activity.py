@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.activity import (
     AttemptEvent,
     LearningSession,

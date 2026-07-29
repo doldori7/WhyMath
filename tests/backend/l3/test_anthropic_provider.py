@@ -19,7 +19,6 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import (

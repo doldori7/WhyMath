@@ -27,7 +27,6 @@ from types import TracebackType
 from typing import Any, Literal
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.standards.standard_loader import (
     AchievementStandardStore,

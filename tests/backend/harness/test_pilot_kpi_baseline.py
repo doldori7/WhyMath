@@ -14,7 +14,6 @@ import uuid
 from datetime import UTC, datetime, timezone
 
 import pytest
-
 from whymath_backend.harness.pilot_kpi_baseline import (
     KpiStatus,
     PilotKpiBaseline,

@@ -22,7 +22,6 @@ import uuid
 from typing import Any
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.models import GenerationResult
 from whymath_backend.l3.queue.celery_app import build_celery_app

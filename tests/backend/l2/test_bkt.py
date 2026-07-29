@@ -9,7 +9,6 @@ import math
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l2.bkt import (
     DEFAULT_BKT_PARAMETERS,
     BktModel,

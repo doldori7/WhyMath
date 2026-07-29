@@ -18,7 +18,6 @@ import logging
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from whymath_backend.app import create_app
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision

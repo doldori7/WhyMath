@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_loop import (
     Action,

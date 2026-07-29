@@ -24,7 +24,6 @@ import한다.
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l6.school_progress.gating import (
     SCHOOL_PROGRESS_PERSONAS,
     curriculum_depth_alignment,

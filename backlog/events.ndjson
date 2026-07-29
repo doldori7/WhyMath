@@ -877,3 +877,4 @@
 {"ts": "2026-07-28T07:53:30", "actor": "claude/whymath-service-review-9r21im", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 OPS-14-data-pipeline-tests-lint의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-28T07:53:43", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-14-data-pipeline-tests-lint", "artifacts": ["ad3bba8"]}
 {"ts": "2026-07-28T07:28:12", "actor": "claude/whymath-concept-management-spnep8", "action": "add", "id": "S4-07-atom-dedup-merge"}
+{"ts": "2026-07-29T04:21:15", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-15-repo-root-lint-config", "session": "claude/whymath-service-review-9r21im", "remote": "ok"}

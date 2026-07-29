@@ -19,7 +19,6 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.l2.learning_path import fetch_internal_prerequisite_edges

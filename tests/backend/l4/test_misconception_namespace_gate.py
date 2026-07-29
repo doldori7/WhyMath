@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception
 

@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.harness import corpus_reverify as cr
 from whymath_backend.harness.misconception_mc_batch import (
     build_kebab_distractor_codes,

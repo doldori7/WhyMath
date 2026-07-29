@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.crosslink_review import (
     CrosslinkReviewError,

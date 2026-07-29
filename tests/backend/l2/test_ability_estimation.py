@@ -13,7 +13,6 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.l2 import (
     compute_concept_abilities,
     difficulty_to_logit,

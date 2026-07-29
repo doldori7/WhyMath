@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
 from whymath_backend.l4.lthc.models import MasteryLevel
 

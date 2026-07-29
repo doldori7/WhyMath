@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.models import PolyaStage, StageTransition
 from whymath_backend.l4.socratic import SocraticCategory, select_category

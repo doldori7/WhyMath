@@ -26,7 +26,6 @@ from data_pipeline.problem_type_graph.models import (
 from data_pipeline.problem_type_graph.models import (
     ProblemTypeNode as PipelineProblemTypeNode,
 )
-
 from whymath_backend.db.models.problem_type_node import ProblemTypeNode as OrmProblemTypeNode
 from whymath_backend.schema.enums import EdgeType, SignaturePattern
 

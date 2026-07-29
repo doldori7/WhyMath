@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l1.concept_visual_style import (
     ConceptVisualStyleRecord,
     get_recommended_visual_styles,

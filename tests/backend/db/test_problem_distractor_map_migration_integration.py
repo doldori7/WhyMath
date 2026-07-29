@@ -38,7 +38,6 @@ def _sync_engine() -> object:
     """조회·시드·정리용 sync(psycopg) 엔진."""
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
-
     from whymath_backend.config import Settings
 
     settings = Settings()

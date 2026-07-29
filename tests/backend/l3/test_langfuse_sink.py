@@ -20,7 +20,6 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.trace import LangfuseSink
 from whymath_backend.l3.trace.langfuse_sink import (

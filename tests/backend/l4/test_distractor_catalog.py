@@ -11,7 +11,6 @@ import re
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.distractor import (
     DISTRACTOR_BY_ID,

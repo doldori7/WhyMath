@@ -8,7 +8,6 @@ from datetime import timedelta
 import pytest
 from jose import JWTError, jwt
 from pydantic import SecretStr
-
 from whymath_backend.config import Settings
 from whymath_backend.security import (
     create_access_token,

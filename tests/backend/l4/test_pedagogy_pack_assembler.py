@@ -15,7 +15,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.models import PolyaStage, PolyaState

@@ -33,7 +33,6 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.models import (
     CostTier,

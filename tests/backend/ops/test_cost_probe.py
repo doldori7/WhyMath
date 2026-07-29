@@ -13,7 +13,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache

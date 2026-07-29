@@ -16,7 +16,6 @@ from pathlib import Path
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.atom_graph.atom_backend_concept import (
     AtomBackendConceptRecord,

@@ -19,7 +19,6 @@ from typing import Any
 
 import pytest
 import sympy
-
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision, RoutingRequest, Usage

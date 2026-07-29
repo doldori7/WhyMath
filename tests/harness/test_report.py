@@ -46,13 +46,16 @@ def _backlog() -> Backlog:
 
 
 class TestProgress:
-    def test_스테이지별_진행률(self):
+    def test_progress_per_stage(self):
+        """스테이지별 진행률."""
         assert report.stage_progress(_backlog()) == [("S1", 1, 2), ("S2", 0, 1)]
 
-    def test_현재_스테이지는_미완_최전방(self):
+    def test_current_stage_is_earliest_incomplete(self):
+        """현재 스테이지는 미완 최전방."""
         assert report.current_stage(_backlog()) == "S1"
 
-    def test_전부_완료면_마지막_스테이지(self):
+    def test_all_complete_yields_last_stage(self):
+        """전부 완료면 마지막 스테이지."""
         backlog = _backlog()
         for task in backlog.tasks.values():
             task.status = "done"
@@ -62,13 +65,15 @@ class TestProgress:
 
 
 class TestOverdueGates:
-    def test_기한_초과_게이트만_리마인드(self):
+    def test_only_overdue_gates_are_reminded(self):
+        """기한 초과 게이트만 리마인드."""
         backlog = _backlog()
         # 7일 기준: 15일 경과 → 리마인드, 3일 경과 → 리마인드 없음
         assert report.overdue_gates(backlog, date(2026, 7, 20)) == [("G-key", 15)]
         assert report.overdue_gates(backlog, date(2026, 7, 8)) == []
 
-    def test_cleared_게이트는_리마인드_제외(self):
+    def test_cleared_gates_are_excluded_from_reminders(self):
+        """cleared 게이트는 리마인드 제외."""
         backlog = _backlog()
         backlog.gates["G-key"].status = "cleared"
         backlog.gates["G-key"].evidence = "PR#2"
@@ -76,7 +81,8 @@ class TestOverdueGates:
 
 
 class TestBrief:
-    def test_브리핑에_현재_스테이지와_내_태스크와_리마인드(self):
+    def test_briefing_has_stage_task_and_reminder(self):
+        """브리핑에 현재 스테이지와 내 태스크와 리마인드."""
         backlog = _backlog()
         text = report.render_brief(backlog, [], "branch-x", date(2026, 7, 20))
         assert "현재 스테이지: S1" in text
@@ -85,6 +91,7 @@ class TestBrief:
         assert "G-key" in text  # 15일 경과 리마인드
         assert "15일 경과" in text
 
-    def test_무결성_경고_표기(self):
+    def test_integrity_warning_is_shown(self):
+        """무결성 경고 표기."""
         text = report.render_brief(_backlog(), ["오류1"], "other", date(2026, 7, 8))
         assert "무결성 경고 1건" in text

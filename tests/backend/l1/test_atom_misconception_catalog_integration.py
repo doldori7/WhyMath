@@ -19,7 +19,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.misconception.atom_catalog import (
     ATOM_MIS_ID_PREFIX,

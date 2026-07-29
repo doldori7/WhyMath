@@ -18,7 +18,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.embedding import ProblemEmbeddingIndex
 from whymath_backend.l1.problem_bank.populate import ConceptTag, ProblemBankStore

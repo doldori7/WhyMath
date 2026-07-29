@@ -18,7 +18,6 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.l1.misconception.resolve import (
     ConceptRef,

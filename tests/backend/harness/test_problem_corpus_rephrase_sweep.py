@@ -13,7 +13,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
 from whymath_backend.harness.problem_corpus_rephrase_sweep import (
     main,

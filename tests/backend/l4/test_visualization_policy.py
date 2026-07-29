@@ -8,7 +8,6 @@ Overlay 소유·05b). hermetic: 순수 함수. 정본 taxonomy(직접/동적/부
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.visualization_policy import is_visualizable, prefers_static_visual
 from whymath_backend.schema.enums import Visualizability
 

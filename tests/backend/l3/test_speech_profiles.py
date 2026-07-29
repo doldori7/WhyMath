@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.speech import speak_latex
 
 

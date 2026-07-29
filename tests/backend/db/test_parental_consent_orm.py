@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.consent_grant import (
     GuardianVerificationRequest,
     GuardianVerifier,

@@ -8,7 +8,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.harness import corpus_audit_eval as ca
 
 

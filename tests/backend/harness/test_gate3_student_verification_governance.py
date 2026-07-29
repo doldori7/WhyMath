@@ -29,10 +29,9 @@ import uuid
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
-
 import whymath_backend
 import whymath_backend.l4.solution_coaching as solution_coaching
+from pydantic import BaseModel
 from whymath_backend.api import coach
 from whymath_backend.harness.wh1_loop import (
     Action,

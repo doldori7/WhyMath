@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.distractor import DISTRACTOR_BY_ID
 from whymath_backend.l4.misconception.validate import (

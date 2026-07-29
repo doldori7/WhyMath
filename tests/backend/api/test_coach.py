@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.api import coach
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._rate_limit import reset_store
@@ -2590,7 +2589,6 @@ class TestIpRateLimit:
     def test_ip_dep_enforces_limit_via_test_endpoint(self) -> None:
         # 임시 미인증 엔드포인트로 IP dep 결선 검증
         from fastapi import APIRouter
-
         from whymath_backend.api._rate_limit import RateLimitedIpRead
 
         router = APIRouter()
@@ -2624,7 +2622,6 @@ class TestIpRateLimitEdgeCases:
 
     def test_ip_write_dep_enforces_via_test_endpoint(self) -> None:
         from fastapi import APIRouter
-
         from whymath_backend.api._rate_limit import RateLimitedIpWrite
 
         router = APIRouter()
@@ -2650,7 +2647,6 @@ class TestIpRateLimitEdgeCases:
     def test_ip_limit_zero_disables_enforcement(self) -> None:
         # IP limit=0 → 의존성이 짧게 반환, 응답 헤더 미세팅
         from fastapi import APIRouter
-
         from whymath_backend.api._rate_limit import RateLimitedIpRead
 
         router = APIRouter()
@@ -2677,7 +2673,6 @@ class TestIpRateLimitEdgeCases:
         from unittest.mock import MagicMock
 
         from fastapi import Response
-
         from whymath_backend.api._rate_limit import (
             rate_limit_ip_read,
             rate_limit_ip_write,
@@ -3075,7 +3070,6 @@ class TestPairHeaders:
     def test_ip_only_endpoint_emits_ip_pair(self) -> None:
         # 미인증 IP-only dep도 X-RateLimit-Ip-* 동시 노출
         from fastapi import APIRouter
-
         from whymath_backend.api._rate_limit import RateLimitedIpRead
 
         router = APIRouter()

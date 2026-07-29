@@ -354,7 +354,7 @@ def _mutate_claims(
     조기반환이 있으면 push 없이 그대로 반환한다(예: 남의 claim이라 conflict).
     """
     last = ""
-    for attempt in range(CAS_RETRIES):
+    for _attempt in range(CAS_RETRIES):
         base_sha, status = _fetch_claims_branch(root)
         if status != "ok":
             return ClaimResult(status, message=f"claim 브랜치 조회 실패: {status}")

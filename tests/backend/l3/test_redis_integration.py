@@ -17,7 +17,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l3.cache import RedisCache
 

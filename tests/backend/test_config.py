@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import SecretStr, ValidationError
-
 from whymath_backend.config import Settings, get_settings
 
 

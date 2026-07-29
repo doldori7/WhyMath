@@ -11,7 +11,6 @@ spec만)·답 미루기(hint_level=1)·낙인 금지(프로브는 활성 가설 
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision, RoutingRequest
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError

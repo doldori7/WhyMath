@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception import wrong_form_match
 from whymath_backend.l4.misconception.wrong_form_match import (

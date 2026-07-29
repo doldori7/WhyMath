@@ -9,7 +9,6 @@ import math
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,

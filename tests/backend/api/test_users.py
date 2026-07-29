@@ -13,7 +13,6 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
-
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
 from whymath_backend.db.models.user import UserProfile

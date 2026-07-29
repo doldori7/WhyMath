@@ -22,7 +22,6 @@ PG 없이 hermetic.
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.atom_graph.embedding import (
     AtomEmbeddingIndex,

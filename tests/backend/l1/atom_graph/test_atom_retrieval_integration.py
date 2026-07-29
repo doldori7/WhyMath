@@ -20,7 +20,6 @@ head가 적용된 **실 pgvector PostgreSQL**(`atom_embedding`·`atom_node` 테�
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.atom_graph.atom_node_projection import (
     AtomNodeRecord,

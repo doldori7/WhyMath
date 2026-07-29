@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-
 from whymath_backend.l4.step_shadow import candidate_for_verdict
 from whymath_backend.l4.step_shadow_eval import (
     StepBreakLabel,

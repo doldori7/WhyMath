@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import (
     CostTier,

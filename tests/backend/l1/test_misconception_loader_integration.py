@@ -17,7 +17,6 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.misconception.catalog_loader import load_misconceptions
 

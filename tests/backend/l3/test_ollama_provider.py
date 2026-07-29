@@ -12,7 +12,6 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3.models import (
     CostTier,
     LocalModelTier,

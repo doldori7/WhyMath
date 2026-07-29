@@ -28,7 +28,6 @@ from data_pipeline.strategy_graph.models import (
 from data_pipeline.strategy_graph.models import (
     StrategyNode as PipelineStrategyNode,
 )
-
 from whymath_backend.db.models.strategy_node import StrategyNode as OrmStrategyNode
 from whymath_backend.schema.enums import EdgeType, ReasoningType
 

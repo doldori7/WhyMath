@@ -12,7 +12,6 @@ import uuid
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.dialogue import (
     Dialogue as OrmDialogue,

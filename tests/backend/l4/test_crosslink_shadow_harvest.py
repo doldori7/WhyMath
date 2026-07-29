@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4.misconception.crosslink_shadow import (
     MisconceptionCrosslinkShadowObservation,
 )

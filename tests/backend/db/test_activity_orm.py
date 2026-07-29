@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
-
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.activity import (
     AttemptEvent as OrmAttemptEvent,

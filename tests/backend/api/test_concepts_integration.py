@@ -21,7 +21,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings
 

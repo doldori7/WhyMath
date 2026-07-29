@@ -9,7 +9,6 @@ behavior_skills는 S0-2가 원자 축(atom_node)으로 이전했고 resolve.py�
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.l1.skill_graph.resolve import get_behavior_areas
 from whymath_backend.schema.enums import BehaviorArea
 

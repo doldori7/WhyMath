@@ -16,7 +16,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from whymath_backend.api.concepts import get_embedding_provider
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings

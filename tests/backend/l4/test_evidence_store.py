@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.user import UserProfile

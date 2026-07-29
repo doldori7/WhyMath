@@ -20,7 +20,6 @@ hermetic: DB 불요(Pydantic 모델 메타데이터·enum 값·소스 스캔만)
 from __future__ import annotations
 
 from pydantic import BaseModel
-
 from whymath_backend.l4.learning_scene import (
     AnnotationElement,
     LearningScene,

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.enums import LegalReviewStatus
 from whymath_backend.schema.textbook_mapping import (
     TextbookMapping,

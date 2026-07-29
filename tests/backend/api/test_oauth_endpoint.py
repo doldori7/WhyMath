@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-
 from whymath_backend.api.auth import OAuthIdentity, OAuthProviderError
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings

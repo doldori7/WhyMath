@@ -21,7 +21,6 @@ from datetime import date, datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.timeseries import (
     DailyLearningMetrics,

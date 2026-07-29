@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.misconception.catalog_loader import load_misconceptions
 from whymath_backend.l1.misconception.crosslink_loader import load_crosslinks

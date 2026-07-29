@@ -14,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.harness import wh1_shadow_harvest as hv
 from whymath_backend.harness.wh1_shadow import Wh1HarnessShadowObservation, record_logger
 

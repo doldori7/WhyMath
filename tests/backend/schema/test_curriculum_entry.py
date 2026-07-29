@@ -20,7 +20,6 @@ from datetime import date, datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.curriculum_entry import CurriculumEntry
 from whymath_backend.schema.enums import (
     CurriculumLicense,

@@ -15,7 +15,6 @@ from collections.abc import AsyncIterator
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-
 from whymath_backend.api._auth import get_current_user
 from whymath_backend.api.demo_auth import (
     DEMO_BIRTH_YEAR,

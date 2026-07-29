@@ -19,7 +19,6 @@ from pathlib import Path
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept_content import (
     CONTENT_REVIEW_STATUS_AI_ESTIMATED,

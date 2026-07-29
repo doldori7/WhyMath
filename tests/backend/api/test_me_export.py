@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
 from whymath_backend.db.models.user import UserProfile

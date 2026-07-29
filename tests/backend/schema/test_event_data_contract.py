@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.enums import EventType
 from whymath_backend.schema.event_data_contract import (
     CONTRACT_EXEMPT_EVENT_TYPES,

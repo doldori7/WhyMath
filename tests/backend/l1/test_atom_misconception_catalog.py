@@ -20,7 +20,6 @@ from types import TracebackType
 from typing import Any
 
 import pytest
-
 from whymath_backend.l1.misconception import populate_atom
 from whymath_backend.l1.misconception.atom_catalog import (
     ATOM_MIS_ID_PREFIX,

@@ -10,7 +10,6 @@ import asyncio
 from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from whymath_backend.privacy.dialogue_content_backfill import (
     reencrypt_plaintext_dialogue_content,
 )

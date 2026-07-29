@@ -16,7 +16,6 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
 from whymath_backend.whs.node_store import create_node, get_all_nodes

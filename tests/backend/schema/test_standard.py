@@ -15,7 +15,6 @@ from datetime import date
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.schema.standard import AchievementStandard, ConceptStandardLink
 
 

@@ -12,9 +12,8 @@ import pytest
 
 openpyxl = pytest.importorskip("openpyxl")
 
-from typer.testing import CliRunner  # noqa: E402
-
 from data_pipeline.atom_graph.__main__ import app  # noqa: E402
+from typer.testing import CliRunner  # noqa: E402
 
 runner = CliRunner()
 

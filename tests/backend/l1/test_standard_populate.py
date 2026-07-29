@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from whymath_backend.l1.standards import populate
 
 

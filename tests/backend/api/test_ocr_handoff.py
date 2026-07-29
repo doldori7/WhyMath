@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
-
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.api.coach import CoachRequest

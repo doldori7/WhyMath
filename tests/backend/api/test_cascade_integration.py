@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.security import create_access_token

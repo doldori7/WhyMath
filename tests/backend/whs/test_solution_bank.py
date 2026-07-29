@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from whymath_backend.config import Settings
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,

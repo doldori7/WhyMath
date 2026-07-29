@@ -22,7 +22,6 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.pedagogy.pack_loader import (
     PedagogyPackStore,

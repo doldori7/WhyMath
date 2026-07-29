@@ -9,7 +9,8 @@
 `resolve_user`가 고정 데모 계정을 lazy upsert하므로, run 스크립트가 콜백으로 토큰을 발급하는 순간
 사용자 행이 생긴다(실 로그인 경로를 더 많이 태워 시연 신뢰도↑). 따라서 여기선 문제만 적재한다.
 
-전제: backend 패키지 설치·`WHYMATH_DATABASE_URL` 도달 가능·`alembic upgrade head` 선행(run 스크립트 담당).
+    전제: backend 패키지 설치·`WHYMATH_DATABASE_URL` 도달 가능·
+    `alembic upgrade head` 선행(run 스크립트 담당).
 CWD 무관하게 동작하도록 코퍼스 경로를 리포 루트 기준으로 해석한다.
 """
 

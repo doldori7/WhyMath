@@ -32,7 +32,6 @@ from functools import lru_cache
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings
 from whymath_backend.l3.router import SLA_GATE_MS

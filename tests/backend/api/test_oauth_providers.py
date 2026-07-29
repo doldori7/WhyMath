@@ -12,7 +12,6 @@ from collections.abc import Callable
 import httpx
 import pytest
 from pydantic import SecretStr
-
 from whymath_backend.api.auth import OAuthProviderError
 from whymath_backend.api.oauth_providers import (
     KakaoOAuthProvider,

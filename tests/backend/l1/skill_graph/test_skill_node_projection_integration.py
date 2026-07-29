@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l1.skill_graph.skill_node_projection import (
     load_skill_nodes_from_graph_json,

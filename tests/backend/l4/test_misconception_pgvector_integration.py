@@ -22,7 +22,6 @@ integration.py` 미러). 단위 경로(`test_misconception_pgvector.py`)는 PG �
 from __future__ import annotations
 
 import pytest
-
 from whymath_backend.config import Settings
 from whymath_backend.l4.misconception.semantic.pgvector_index import (
     PgVectorIndex,

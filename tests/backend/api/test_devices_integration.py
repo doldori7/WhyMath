@@ -26,7 +26,6 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-
 from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api._device_store import (
     CachedDeviceStore,

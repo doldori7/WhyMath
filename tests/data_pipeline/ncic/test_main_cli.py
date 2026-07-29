@@ -12,11 +12,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
 from data_pipeline.ncic.__main__ import app
 from data_pipeline.ncic.load import write_json
 from data_pipeline.ncic.models import AchievementStandard
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

@@ -23,7 +23,6 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from whymath_backend.api._crypto import (
     build_evidence_payload_cipher,
     encrypt_evidence_payload,

@@ -13,7 +13,6 @@ from typing import Any
 
 import pytest
 from PIL import Image
-
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, ModelFamily, RoutingDecision
 from whymath_backend.l5.ocr.detect import DetectedRegion

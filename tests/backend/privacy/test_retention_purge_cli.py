@@ -11,7 +11,6 @@ import json
 from datetime import UTC, date, datetime
 
 import pytest
-
 from whymath_backend.privacy import retention_purge_cli as cli
 
 

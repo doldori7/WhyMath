@@ -22,7 +22,6 @@ import json
 from pathlib import Path
 
 from data_pipeline.concept_graph.models import RELATION_TYPES
-
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog as OrmCatalog
 from whymath_backend.schema.enums import EdgeType
 from whymath_backend.schema.misconception_catalog import SEVERITY_VALUES

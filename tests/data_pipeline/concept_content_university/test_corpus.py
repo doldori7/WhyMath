@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from data_pipeline.concept_content_university.models import SUBUNIT_PATTERN
 
 _CORPUS = (

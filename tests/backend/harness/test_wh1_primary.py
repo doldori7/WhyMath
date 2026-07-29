@@ -20,7 +20,6 @@ import logging
 from collections.abc import Sequence
 
 import pytest
-
 from whymath_backend.harness import wh1_primary
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import Wh1HarnessShadowObservation

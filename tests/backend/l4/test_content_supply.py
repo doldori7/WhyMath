@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.render.adapter import RenderContext
 from whymath_backend.l3.render.dsl import ConceptDSL

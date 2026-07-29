@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from whymath_backend.l4.misconception.judge_shadow_harvest import (
     JudgeShadowSummary,
     format_summary,

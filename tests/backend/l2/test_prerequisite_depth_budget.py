@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import get_args
 
 import annotated_types
-
 from whymath_backend.api.me import MaxDepth
 from whymath_backend.l2.prerequisite_recommendation import MAX_PREREQUISITE_DEPTH
 

@@ -11,7 +11,6 @@ from pathlib import Path
 from types import TracebackType
 
 import pytest
-
 from whymath_backend.l1.atom_graph.atom_backend_concept import AtomBackendConceptStore
 from whymath_backend.l1.atom_graph.atom_backend_edge import AtomBackendEdgeStore
 from whymath_backend.l1.atom_graph.populate import (
