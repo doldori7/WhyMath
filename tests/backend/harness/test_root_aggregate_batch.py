@@ -50,6 +50,12 @@ class TestRunRootAggregateBatch:
             assert record.problem.difficulty_overall == 4.0  # 킬러 난이도
             assert record.problem.distractor_map is None  # 단답 집계라 오답 주입 0
             assert [t.concept_src_id for t in record.concept_tags] == ["HK06"]
+            # S3-12 성취기준 재태깅 봉인 — 이차=근과 계수의 관계·삼차=삼차·사차방정식(감사 확정
+            # 정위치). 구버전 전밴드 [10공수1-02-02](판별식) 하드코딩이면 여기서 실패한다.
+            expected_code = (
+                "[10공수1-02-07]" if "x^3" in record.problem.question_text else "[10공수1-02-03]"
+            )
+            assert record.problem.achievement_standard_codes == [expected_code], record.problem.slug
 
     def test_sum_and_product_coexist_without_dedup_collision(self, tmp_path: Path) -> None:
         # dedup 정합 봉인 — 같은 조건식(예: x^2+4x-2=0)의 합·곱이 별 signature로 공존한다.

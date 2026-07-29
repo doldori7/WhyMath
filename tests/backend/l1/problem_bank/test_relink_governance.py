@@ -9,7 +9,8 @@ DB/네트워크 0):
   ② 3 문제코퍼스 전 태그 해석 가능(dangling 0) — 알려진 예외는 빈 frozenset으로 동결
   ③ 해석 결과(primary_atom_code) ⊆ 원자 그래프 세부개념 code 집합
   ④ legacy 키공간 무교차 — primary code는 canonical(`math.` prefix)·src 공간과 겹치지 않는다
-  ⑤ 코퍼스별 태그 수 하한 동결(v1≥6·generated_v0≥620·rephrased_v0≥483) — 스캐너 무력화 방지
+  ⑤ 코퍼스별 태그 수 하한 동결(v1≥6·generated_v0≥620·rephrased_v0≥446 — S3-12 위생 축소 반영)
+     — 스캐너 무력화 방지
   ⑥ 동일 문제·동일 role의 primary 접힘 0 동결 — 현 코퍼스는 접힘 무손실(재저작 시 여기서 감지)
 
 코퍼스가 재유도·재저작되어 수치가 내려가거나 dangling이 생기면 여기서 잡는다(드리프트 감지).
@@ -41,8 +42,10 @@ _PROBLEM_CORPORA: dict[str, tuple[Path, int]] = {
         620,
     ),
     "problem_bank_rephrased_v0": (
+        # S3-12 발문 위생 일괄 적용(rephrased_corpus_hygiene)으로 483→446 정직 축소 —
+        # 위반 37건(한자·가나 주입/메타 라벨/비표준 용어/방법-값 부정합/조사 오류) 탈락.
         _ROOT / "data" / "corpus" / "problem_bank_rephrased_v0" / "problems.jsonl",
-        483,
+        446,
     ),
 }
 

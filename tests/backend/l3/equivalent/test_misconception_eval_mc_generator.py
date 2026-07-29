@@ -58,10 +58,10 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "HK35",
         "FUNC-COMPOSE",
     ),
-    (
+    (  # S3-12 재태깅: 주기는 [12대수02-02](삼각함수 그래프·성질) 정위치.
         "sine_period",
         "period-of-scaled-sine",
-        "[12미적Ⅱ-02-02]",
+        "[12대수02-02]",
         "H:12미적Ⅱ02-02",
         "TRIG-PERIOD",
     ),
@@ -95,10 +95,10 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "J0305",
         "POLYGON-ANGLE-SUM",
     ),
-    (
+    (  # S3-12 재태깅: [9수03-12](닮음) 제거 — 대표 코드로 [6수03-13](직사각형 넓이).
         "area_perimeter",
         "area-perimeter-confusion",
-        "[6수03-11]",
+        "[6수03-13]",
         "J0312",
         "AREA-PERIMETER",
     ),
@@ -118,10 +118,10 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "PROB-INDEPENDENT-TRIAL",
     ),
     # 843 확장 트랜치1 — 기초 계산형 6종(신규 탐지 kebab).
-    (
+    (  # S3-12 재태깅: 통분 덧셈은 [9수01-05](유리수 사칙계산) 정위치.
         "fraction_addition",
         "fraction-addition-naive",
-        "[9수01-04]",
+        "[9수01-05]",
         "J0104",
         "FRACTION-ADD",
     ),
@@ -141,10 +141,10 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ),
     ("absolute_value", "absolute-value-keeps-sign", "[9수01-04]", "J0104", "ABS-VALUE"),
     ("sqrt_sum", "sqrt-distributes-over-sum", "[9수01-07]", "J0107", "SQRT-SUM"),
-    (
+    (  # S3-12 재태깅: 합차는 [9수02-19](다항식 곱셈·인수분해) 정위치.
         "difference_of_squares",
         "difference-of-squares-confused",
-        "[9수01-01]",
+        "[9수02-19]",
         "J0101",
         "DIFF-SQUARES",
     ),
@@ -163,28 +163,37 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("square_difference", "square-of-difference-no-cross", "[9수02-19]", "J0219", "SQUARE-DIFF"),
     # 843 확장 트랜치3 — 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(신규 탐지 kebab).
     ("midpoint_no_half", "midpoint-sum-only", "[9수02-05]", "J0205", "MIDPOINT-NO-HALF"),
-    ("scale_area", "scale-area-linear", "[9수02-07]", "J0207", "SCALE-AREA"),
+    # S3-12 재태깅: 닮음 넓이비는 [9수03-12] 정위치.
+    ("scale_area", "scale-area-linear", "[9수03-12]", "J0207", "SCALE-AREA"),
     ("negative_even_power", "negative-even-power-sign", "[9수02-08]", "J0208", "NEG-EVEN-POWER"),
     ("combine_unlike", "combine-unlike-terms", "[9수02-09]", "J0209", "COMBINE-UNLIKE"),
     ("complete_square", "complete-square-naive", "[9수02-19]", "J0219", "COMPLETE-SQUARE"),
     ("conjugate_product", "conjugate-product-sum", "[9수01-07]", "J0107", "CONJUGATE-PRODUCT"),
     # 843 확장 트랜치4 — 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(신규 탐지 kebab).
-    ("transpose", "transpose-no-sign-change", "[9수02-13]", "J0213", "TRANSPOSE-SIGN"),
+    # S3-12 재태깅: 이항은 [9수02-04](일차방정식) 정위치.
+    ("transpose", "transpose-no-sign-change", "[9수02-04]", "J0213", "TRANSPOSE-SIGN"),
     ("gcd_lcm", "gcd-lcm-confused", "[9수01-02]", "J0102", "GCD-LCM"),
-    ("decimal_mult", "decimal-mult-place", "[9수01-06]", "J0106", "DECIMAL-MULT"),
-    ("mixed_mult", "mixed-number-mult-whole", "[9수01-04]", "J0104", "MIXED-MULT"),
-    ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-01]", "HK01", "REMAINDER-THEOREM"),
-    ("vieta_sum", "vieta-sign-error", "[10공수1-02-08]", "HK08", "VIETA-SUM"),
+    # S3-12 재태깅: 소수 곱셈은 초등 [6수01-13] 정위치.
+    ("decimal_mult", "decimal-mult-place", "[6수01-13]", "J0106", "DECIMAL-MULT"),
+    # S3-12 재태깅: 대분수 곱셈은 [9수01-05](유리수 사칙계산) 정본.
+    ("mixed_mult", "mixed-number-mult-whole", "[9수01-05]", "J0104", "MIXED-MULT"),
+    # S3-12 재태깅: 나머지정리는 [10공수1-01-02](항등식·나머지정리) 정위치.
+    ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-02]", "HK01", "REMAINDER-THEOREM"),
+    # S3-12 재태깅: 근과 계수의 관계는 [10공수1-02-03] 정위치.
+    ("vieta_sum", "vieta-sign-error", "[10공수1-02-03]", "HK08", "VIETA-SUM"),
     # 843 확장 트랜치5 — 비대수 도메인(기하4·확통2·신규 탐지 kebab).
-    ("trapezoid_area", "trapezoid-area-no-half", "[9수03-12]", "J0312", "TRAPEZOID-AREA"),
+    # S3-12 재태깅: 사다리꼴 넓이는 초등 [6수03-14] 정위치.
+    ("trapezoid_area", "trapezoid-area-no-half", "[6수03-14]", "J0312", "TRAPEZOID-AREA"),
     ("scale_volume", "scale-volume-linear", "[9수03-12]", "J0312", "SCALE-VOLUME"),
     ("cone_volume", "cone-volume-no-third", "[9수03-08]", "J0308", "CONE-VOLUME"),
-    ("circle_area", "circle-area-circumference", "[9수03-19]", "J0319", "CIRCLE-AREA"),
-    ("combination", "combination-no-denominator", "[12직수04-01]", "HK41", "COMBINATION-COUNT"),
-    (
+    # S3-12 재태깅: 원의 넓이는 초등 [6수03-16] 정위치.
+    ("circle_area", "circle-area-circumference", "[6수03-16]", "J0319", "CIRCLE-AREA"),
+    # S3-12 보강: 조합의 수 정위치 [10공수1-03-03] 병기(대표 코드로 사용).
+    ("combination", "combination-no-denominator", "[10공수1-03-03]", "HK41", "COMBINATION-COUNT"),
+    (  # S3-12 보강: 같은 것이 있는 순열 정위치 [12확통01-01] 병기(대표 코드로 사용).
         "same_item_permutation",
         "same-item-permutation-no-divide",
-        "[12직수04-01]",
+        "[12확통01-01]",
         "HK41",
         "SAME-ITEM-PERM",
     ),
@@ -319,6 +328,36 @@ class TestChoicesAndTagging:
         assert [t.concept_src_id for t in candidate.concept_tags] == [src]
         assert candidate.problem.unit_codes == [unit]
         assert candidate.problem.achievement_standard_codes == [code]
+
+
+class TestTextHygieneS312:
+    """S3-12 계통 결함 회귀 봉인 — 조사·미치환 변수(감사 확정 결함 상태면 이 테스트가 실패)."""
+
+    @pytest.mark.parametrize("template,kebab,code,_src,_unit", _CASES)
+    def test_question_and_explanation_pass_hygiene_gate(
+        self, template: TemplateKind, kebab: str, code: str, _src: str, _unit: str
+    ) -> None:
+        # 발문·해설 전건이 결정론 위생 게이트(조사 받침 정합 포함) 통과 — 구버전 생성기의
+        # '18² 로'·'x = 2 을'·'10 와' 류 조사 하드코딩이면 JOSA_ERROR로 즉시 실패한다.
+        from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
+
+        for candidate in _drain(_gen(template, kebab), _spec(kebab, code)):
+            problem = candidate.problem
+            assert question_hygiene_violations(problem.question_text) == (), problem.slug
+            assert question_hygiene_violations(problem.answer_explanation or "") == (), (
+                problem.slug,
+                problem.answer_explanation,
+            )
+
+    def test_complete_square_explanation_substitutes_template_variable(self) -> None:
+        # 감사 확정 explanation_slip — 해설에 미치환 '(c+N)²'가 노출되지 않고 실수치가 담긴다.
+        kebab, code = "complete-square-naive", "[9수02-19]"
+        drawn = _drain(_gen("complete_square", kebab), _spec(kebab, code))
+        assert len(drawn) >= 24
+        for candidate in drawn:
+            explanation = candidate.problem.answer_explanation or ""
+            assert "(c+" not in explanation, candidate.problem.slug
+            assert "(c +" not in explanation, candidate.problem.slug
 
 
 class TestInjectionIntegrity:

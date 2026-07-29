@@ -16,6 +16,7 @@ from whymath_backend.l3.equivalent.rephrase import (
     REASON_NO_CHANGE,
     REASON_NO_EQUATION,
     REASON_PROVIDER_ERROR,
+    REASON_QUESTION_HYGIENE,
     QuestionRephraser,
     classify_invariance_failure,
     extract_equation,
@@ -144,6 +145,16 @@ class TestClassifyInvarianceFailure:
         # 추가 '='은 없으나 거짓 부등식 → EXTRA_EQUATION 통과 후 위생 게이트가 잡음.
         text = "이차방정식 3x^2 - 7x + 4 = 0, 참고로 5 < 3 인 큰 근은?"
         assert classify_invariance_failure(text, equation=_EQ) == REASON_HYGIENE_REJECT
+
+    def test_question_hygiene_axis_wired(self) -> None:
+        # S3-12 ⑤축 배선 봉인 — 수치 봉인은 지켰지만 발문 텍스트 위생(한자 주입·메타 라벨·조사
+        # 오류)을 어긴 출력은 QUESTION_HYGIENE로 fail-closed된다(감사 결함 5류 ⑤ 회귀 방지).
+        hanja = "이차방정식 3x^2 - 7x + 4 = 0 의 두解 중 큰 근을 구하시오."
+        assert classify_invariance_failure(hanja, equation=_EQ) == REASON_QUESTION_HYGIENE
+        meta = "원 발문: 이차방정식 3x^2 - 7x + 4 = 0 의 큰 근을 구하시오."
+        assert classify_invariance_failure(meta, equation=_EQ) == REASON_QUESTION_HYGIENE
+        josa = "이차방정식 3x^2 - 7x + 4 = 0 의 두 근의 합 10 를 구하시오."
+        assert classify_invariance_failure(josa, equation=_EQ) == REASON_QUESTION_HYGIENE
 
 
 class TestRephrase:

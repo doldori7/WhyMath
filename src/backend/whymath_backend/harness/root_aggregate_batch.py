@@ -36,7 +36,10 @@ from whymath_backend.l3.equivalent.root_aggregate_skeleton_generator import (
 __all__ = ["run_root_aggregate_batch"]
 
 # 킬러 스펙 — 근집계 단답이라 distractor 없음(target_misconception_ids=∅), 난이도 4.0(킬러).
-_STANDARD_CODE = "[10공수1-02-02]"
+# S3-12 성취기준 재태깅(감사 확정): Vieta 문항에 종전 전밴드 [10공수1-02-02](판별식) 하드코딩은
+# 계통 오귀속 — 정본 statement 대조로 이차형은 [10공수1-02-03](근과 계수의 관계), 삼차형은
+# [10공수1-02-07](간단한 삼차·사차방정식)이 정위치다(차수별 분기).
+_STANDARD_CODE_BY_DEGREE: dict[int, str] = {2: "[10공수1-02-03]", 3: "[10공수1-02-07]"}
 _SPEC_DIFFICULTY = 4.0
 _DEFAULT_N = 30  # 서브밴드당 기본 요청 수(4밴드 → 120문 목표)
 
@@ -73,7 +76,8 @@ def run_root_aggregate_batch(
 
     for name, kind, degree in _SUBBANDS:
         spec = EquivalenceSpec(
-            achievement_standard_codes=frozenset({_STANDARD_CODE}),
+            # 차수별 정위치 성취기준(S3-12) — 이차=근과 계수의 관계·삼차=삼차·사차방정식.
+            achievement_standard_codes=frozenset({_STANDARD_CODE_BY_DEGREE[degree]}),
             target_misconception_ids=frozenset(),
             difficulty_overall=_SPEC_DIFFICULTY,
             answer_format=None,
