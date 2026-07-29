@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "data/corpus/**"
   - "docs/data/**"
-session: null
+session: claude/whymath-problem-bank-design-65tsm4
 notes: "docs/data/ai_review_batch_v0_4corpora_2026-07.md 환류 — 720문 검수 결함 310·4종 전부 FAIL(mc 63.6%·conceptual 30.4%·rephrased 16.3%·killer 100% 태그 계통). 수학 정답 오류 0 — 전부 Tier1 밖 축. 킬러 난이도 표기 4.0 vs 실체 1스텝 관찰도 이 태스크에서 판단"
 updated: 2026-07-29
