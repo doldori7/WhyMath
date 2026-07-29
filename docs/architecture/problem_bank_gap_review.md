@@ -32,10 +32,15 @@
 |---|---|---|---|---|
 | `problem_bank_v1` | 4 | 손저작 시드(코퍼스 저작 계약의 계약 문서) | — | ✅ |
 | `problem_bank_generated_v0` | 620 | 결정론 스켈레톤 15밴드(LLM 0) | ✅ AI 검수 240표본 Wilson 95% 상한 1.11% PASS | ❌ |
-| `problem_bank_rephrased_v0` | 483 | LLM 발문 다양화(수치·정답·선지 불변 봉인) | ❌ | ❌ |
-| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드 | ❌ | ❌ |
-| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드 | ❌ | ❌ |
-| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형 | ❌ | ❌ |
+| `problem_bank_rephrased_v0` | 483 | LLM 발문 다양화(수치·정답·선지 불변 봉인) | ❌ **FAIL**(상한 16.30%) | ❌ |
+| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드 | ❌ **FAIL**(상한 63.60%) | ❌ |
+| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드 | ❌ **FAIL**(상한 30.35%) | ❌ |
+| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형 | ❌ **FAIL**(태그 계통 100%·min-n 미달) | ❌ |
+
+*표본 검수 갱신(2026-07-29·S3-09)*: 잔여 4종 720문 AI 감사 결과 **전부 게이트 FAIL — 노출 부적격
+유지**. 계통 결함 5류(조사 하드코딩·성취기준 태그 오귀속·해설 수치·모순 전제·rephrase 위생)는
+전량 Tier1 검산 범위 밖 축 — D2의 실증. 정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md`,
+환류: `S3-12-problem-bank-v0-defect-remediation`.
 
 **파이프라인 4축** (모두 실가동):
 - **스키마 3층**: `schema/problem.py`(Pydantic 정본 705행·50+필드) → `db/models/problem.py`(ORM) →
