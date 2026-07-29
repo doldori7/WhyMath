@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-10-task-id-number-collision
+title: "태스크 ID 번호 충돌 방지 — 병렬 세션이 같은 번호를 각각 등재(ARCH-13·OPS-15 2회 실측)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "backlog.py add가 <PREFIX>-<번호> 충돌을 거부(로컬 백로그 + 원격 claim 대장 양쪽 조회·다음 빈 번호 제안) + validate가 신규 충돌을 실패로 판정(기존 ARCH-13·OPS-15는 사유 명기 grandfather) + hermetic 테스트로 동결"
+artifacts:
+  - "scripts/harness/{backlog,store}.py 번호 충돌 2선 가드"
+  - tests/harness/test_cli.py TestIdNumberCollision 7건
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/**"
+session: null
+notes: "2026-07-29 실측: ARCH-13(concept-atom-granularity-merge·visualization-harness-tracking — 둘 다 done·머지됨)에 이어 OPS-15(repo-root-lint-config·wh1-caplog-order-flake — 병렬 인플라이트)가 같은 번호로 중복 등재. validate는 full-ID 문자열만 비교해 exit 0(실측 — 두 파일 동시 배치 후 green). 두 사고 모두 병렬 세션이 서로의 브랜치를 못 봐서 발생 → 로컬 검사만으로는 예방 불가·원격 claim 대장 조회가 핵심."
+updated: 2026-07-29

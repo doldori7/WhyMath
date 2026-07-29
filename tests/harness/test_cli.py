@@ -179,6 +179,95 @@ class TestAdd:
         assert "S2-91-bad-task" not in backlog.tasks
 
 
+class TestIdNumberCollision:
+    """HARN-10 — `<PREFIX>-<번호>` 중복 등재 차단.
+
+    실측 2회(ARCH-13·OPS-15)가 전부 **병렬 세션이 서로의 브랜치를 못 봐서** 났으므로,
+    로컬 차단만이 아니라 *원격 claim 대장 조회*와 *변별력*(정상 케이스 통과)을 함께 동결한다.
+    """
+
+    def _add(self, task_id: str) -> int:
+        return cli.main(
+            [
+                "add",
+                "--id",
+                task_id,
+                "--title",
+                "번호 충돌 테스트",
+                "--track",
+                "math-completion",
+                "--stage",
+                "S2",
+            ]
+        )
+
+    def test_같은_번호_다른_슬러그_거부(self, seeded_repo: Path):
+        assert self._add("S2-90-first") == 0
+        assert self._add("S2-90-second-slug") == 1  # 번호 충돌
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "S2-90-second-slug" not in backlog.tasks
+
+    def test_다른_번호는_통과(self, seeded_repo: Path):
+        """변별력 — 충돌이 아닌 것까지 막으면 그건 게이트가 아니라 고장이다."""
+        assert self._add("S2-90-first") == 0
+        assert self._add("S2-91-different-number") == 0
+
+    def test_원격_claim이_점유한_번호도_거부(self, seeded_repo: Path, monkeypatch):
+        """로컬 백로그엔 없지만 *타 세션이 인플라이트*인 번호 — 실제 사고 형태."""
+        import remote_claims
+
+        claim = remote_claims.RemoteClaim(
+            task_id="S2-95-other-session", sha="deadbeef", branch="claude/other"
+        )
+        monkeypatch.setattr(remote_claims, "list_claims", lambda root, **kw: ([claim], "ok"))
+        assert self._add("S2-95-my-slug") == 1
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "S2-95-my-slug" not in backlog.tasks
+
+    def test_같은_full_ID_재등재는_충돌이_아니다(self, seeded_repo: Path, monkeypatch):
+        """다른 클론에서 같은 태스크를 재등재하는 것(시딩·복제 세션)은 정상 경로다.
+
+        구현 중 실제로 이걸 막아 기존 교차세션 테스트 5건을 깨뜨렸다 — 번호 참조가
+        모호해지는 것은 **슬러그가 다를 때**뿐이므로, 동일 ID는 통과해야 한다.
+        """
+        import remote_claims
+
+        claim = remote_claims.RemoteClaim(
+            task_id="S2-97-same-task", sha="deadbeef", branch="claude/other"
+        )
+        monkeypatch.setattr(remote_claims, "list_claims", lambda root, **kw: ([claim], "ok"))
+        assert self._add("S2-97-same-task") == 0
+
+    def test_원격_조회_실패는_등재를_막지_않되_경고한다(
+        self, seeded_repo: Path, monkeypatch, capsys
+    ):
+        """fail-open — 단 침묵 금지(예외 타입명 노출·CLAUDE.md 침묵 실패 금지)."""
+        import remote_claims
+
+        def _boom(root, **kw):
+            raise RuntimeError("원격 불가")
+
+        monkeypatch.setattr(remote_claims, "list_claims", _boom)
+        assert self._add("S2-96-offline-ok") == 0
+        captured = capsys.readouterr()
+        assert "RuntimeError" in captured.err
+
+    def test_validate가_머지된_충돌을_잡는다(self, seeded_repo: Path):
+        """2선 방어 — add를 우회해 손 편집으로 들어온 충돌도 validate가 실패시킨다."""
+        assert self._add("S2-90-first") == 0
+        backlog, _ = store.load_backlog(seeded_repo)
+        smuggled = backlog.tasks["S2-90-first"]
+        smuggled.id = "S2-90-smuggled-by-hand"
+        store.save_task(seeded_repo, smuggled)
+        assert cli.main(["validate"]) == 1
+
+    def test_grandfather_번호는_통과(self, seeded_repo: Path):
+        """이미 머지된 과거 충돌(개명 시 참조 파손)은 사유와 함께 면제된다."""
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert store._id_number_collisions(["ARCH-13-a", "ARCH-13-b"]) == []
+        assert store._id_number_collisions(["ZZ-01-a", "ZZ-01-b"]), "면제 아닌 번호는 잡혀야 함"
+
+
 class TestCheckStop:
     def _claim_and_commit(self, repo: Path, capsys) -> str:
         """작업 브랜치에서 태스크 claim + 무관한 커밋 1개 생성."""
