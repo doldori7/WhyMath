@@ -56,7 +56,11 @@ def _vs(
         solution_path=(
             solution_path
             if solution_path is not None
-            else {"conditions": ["Eq(2*x, 6)"], "answer": {"x": "3"}, "steps": list(steps)}
+            else {
+                "conditions": ["Eq(2*x, 6)"],
+                "answer": {"x": "3"},
+                "steps": list(steps),
+            }
         ),
         strategy_tag=strategy_tag,
         answer="x=3",

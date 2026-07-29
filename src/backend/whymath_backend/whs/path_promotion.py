@@ -493,7 +493,9 @@ async def promote_verified_solutions(session: AsyncSession) -> PromotionPlan:
 PromoteFn = Callable[[bool], Coroutine[Any, Any, PromotionPlan]]
 
 
-async def _default_promote(apply: bool) -> PromotionPlan:  # pragma: no cover — 실 DB(integration)
+async def _default_promote(
+    apply: bool,
+) -> PromotionPlan:  # pragma: no cover — 실 DB(integration)
     """기본 승격 실행 — 세션 1개로 계획·적재 후 apply면 commit, 아니면 rollback(dry-run)."""
     async with get_sessionmaker()() as session:
         plan = await promote_verified_solutions(session)

@@ -56,9 +56,9 @@
 never-break·예외 *타입명*만 경고). 키 미설정 환경에서는 sink가 no-op(네트워크 0·hermetic).
 
 실행 표면(ops CLI — `whs/path_promotion` 컨벤션 미러):
-    python -m whymath_backend.l3.multi_solution --seed-scope verified --limit 5            # dry-run
-    python -m whymath_backend.l3.multi_solution --seed-scope verified --limit 5 --apply    # 적재
-    python -m whymath_backend.l3.multi_solution --seed-scope verified --fake-provider      # 대체 실행
+    python -m whymath_backend.l3.multi_solution --seed-scope verified --limit 5        # dry-run
+    python -m whymath_backend.l3.multi_solution --seed-scope verified --limit 5 --apply  # 적재
+    python -m whymath_backend.l3.multi_solution --seed-scope verified --fake-provider   # 대체 실행
 stdout = 사람 검수 큐 JSONL(뱅크 경로 1건/줄 — ai_estimated 메타·개념 매칭·verified_by_human
 검수 대상), stderr = 실측 리포트 JSON 한 줄(시도 수·생성률·검증 통과율·approach 다양성 분포·
 뱅크 적재 수·ai_estimated 건수 — 정직 회계·0/0은 None).
@@ -111,14 +111,22 @@ from whymath_backend.l3.models import (
     RoutingRequest,
     Usage,
 )
-from whymath_backend.l3.router import Router, _as_cost_tier, actual_cost_krw, langfuse_fields
+from whymath_backend.l3.router import (
+    Router,
+    _as_cost_tier,
+    actual_cost_krw,
+    langfuse_fields,
+)
 from whymath_backend.l3.solution_path import (
     ApproachType,
     SolutionPath,
     parse_approach_label,
 )
 from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
-from whymath_backend.l3.verify_solution import SolutionVerificationResult, verify_solution
+from whymath_backend.l3.verify_solution import (
+    SolutionVerificationResult,
+    verify_solution,
+)
 from whymath_backend.l3.verify_step import VerifyStepState
 from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
 
@@ -222,10 +230,17 @@ _OUTPUT_JSON_SCHEMA: dict[str, object] = {
                         "enum": [member.value for member in ApproachType],
                     },
                     "key_insight": {"type": "string"},
-                    "steps": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                    },
                     "final_answer": {"type": "string"},
                     "educational_value": {"type": "string"},
-                    "difficulty": {"type": "string", "enum": sorted(_META_DIFFICULTIES)},
+                    "difficulty": {
+                        "type": "string",
+                        "enum": sorted(_META_DIFFICULTIES),
+                    },
                     "elegance": {"type": "number", "minimum": 1, "maximum": 5},
                 },
                 "required": ["approach", "steps", "final_answer"],
@@ -370,7 +385,9 @@ class MultiSolutionReport:
             ),
             "approach_distribution": dict(sorted(self.approach_distribution.items())),
             "problems_with_multi_approach": sum(
-                1 for approaches in self.problem_distinct_approaches.values() if len(approaches) >= 2
+                1
+                for approaches in self.problem_distinct_approaches.values()
+                if len(approaches) >= 2
             ),
             "distinct_approaches_per_problem": dict(sorted(diversity_histogram.items())),
             "failures": list(self.failures),
@@ -434,9 +451,7 @@ def generated_path_id(verified_solution_id: uuid.UUID) -> str:
     return f"sp-{verified_solution_id}"
 
 
-def _normalize_final_answer(
-    raw: object, known_vars: Sequence[str]
-) -> dict[str, str] | None:
+def _normalize_final_answer(raw: object, known_vars: Sequence[str]) -> dict[str, str] | None:
     """응답 `final_answer` → 치환맵 정규화. 형식 위반이면 None(카운트 — 조용한 통과 금지).
 
     허용 형식: ① 문자열(단일 변수 시드만 — `"4"` 또는 `"x = 4"`처럼 자기 변수 등호 접두 허용)
@@ -1157,7 +1172,9 @@ class RunOutcome:
     queue_entries: list[dict[str, Any]] = field(default_factory=list)
 
 
-async def _default_run(config: RunConfig) -> RunOutcome:  # pragma: no cover — 실 DB·라이브
+async def _default_run(
+    config: RunConfig,
+) -> RunOutcome:  # pragma: no cover — 실 DB·라이브
     """기본 실행 — 세션 1개로 시드 로딩→생성→적재, apply면 commit·아니면 rollback(dry-run).
 
     provider: 기본 **라이브**(CompositeProvider — 라우터 결정 존중·지연 연결). 도달 불가는
@@ -1266,7 +1283,10 @@ def main(argv: list[str] | None = None, *, run_fn: RunFn = _default_run) -> int:
 
     for entry in outcome.queue_entries:
         print(json.dumps(entry, ensure_ascii=False))
-    summary = {"mode": "apply" if config.apply else "dry-run", **outcome.report.summary()}
+    summary = {
+        "mode": "apply" if config.apply else "dry-run",
+        **outcome.report.summary(),
+    }
     print(json.dumps(summary, ensure_ascii=False), file=sys.stderr)
 
     report = outcome.report

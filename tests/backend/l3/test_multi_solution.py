@@ -55,8 +55,8 @@ from whymath_backend.l3.multi_solution import (
     evaluate_response,
     extract_json,
     generate_candidates,
-    generation_routing_request,
     generated_path_id,
+    generation_routing_request,
     load_seeds,
     main,
 )
@@ -96,7 +96,10 @@ def _solution(**overrides: Any) -> dict[str, Any]:
 
 
 def _evaluate(
-    seed: SeedProblem, solutions: list[dict[str, Any]], *, comparison: str | None = "비교"
+    seed: SeedProblem,
+    solutions: list[dict[str, Any]],
+    *,
+    comparison: str | None = "비교",
 ) -> tuple[list[Any], MultiSolutionReport]:
     """evaluate_response 호출 헬퍼 — (뱅크 후보, 리포트) 반환."""
     report = MultiSolutionReport()
@@ -162,7 +165,11 @@ class TestDriftFreeze:
 
         payload = {"conditions": ["2*x = 6"], "answer": {"x": "3"}, "steps": ["a", "b"]}
         assert content_fingerprint(payload) == solution_fingerprint(payload)
-        reordered = {"steps": ["a", "b"], "answer": {"x": "3"}, "conditions": ["2*x = 6"]}
+        reordered = {
+            "steps": ["a", "b"],
+            "answer": {"x": "3"},
+            "conditions": ["2*x = 6"],
+        }
         assert content_fingerprint(reordered) == solution_fingerprint(payload)
 
     def test_path_id_scheme_matches_promotion(self) -> None:
@@ -214,14 +221,15 @@ class TestEvaluateResponse:
         candidate = candidates[0]
         assert candidate.grade is WhsSolutionGrade.VERIFIED
         assert candidate.approach is ApproachType.algebraic
-        assert candidate.step_flags == (False, True)  # 첫 스텝 False·유입 전이 correct만 True
+        assert candidate.step_flags == (
+            False,
+            True,
+        )  # 첫 스텝 False·유입 전이 correct만 True
 
     def test_unverifiable_steps_banked_with_honest_flags(self) -> None:
         """산문 스텝(unverifiable 전이) — 뱅크는 진행·grade=unverified·플래그 정직 False."""
         seed = _seed()
-        candidates, report = _evaluate(
-            seed, [_solution(steps=["조건을 정리한다", "x = 3"])]
-        )
+        candidates, report = _evaluate(seed, [_solution(steps=["조건을 정리한다", "x = 3"])])
         assert len(candidates) == 1
         candidate = candidates[0]
         assert candidate.grade is WhsSolutionGrade.UNVERIFIED
@@ -399,9 +407,7 @@ class TestGeneration:
         assert candidates == []
         assert report.answer_failed == 1
         session = _BankFakeSession([], [])
-        queue = await bank_candidates(
-            cast(AsyncSession, session), candidates, report=report
-        )
+        queue = await bank_candidates(cast(AsyncSession, session), candidates, report=report)
         assert session.added == []
         assert queue == []
         assert report.banked_paths == 0
@@ -498,10 +504,21 @@ class TestBankCandidates:
 
     @pytest.mark.asyncio
     async def test_second_path_same_problem_header_only(self) -> None:
-        """다중 경로 재론: 같은 문제 두 경로 — 헤더 2·스텝은 대표(첫 경로)만(UNIQUE 불변)."""
+        """다중 경로 재론: 같은 문제 두 경로(내용도 상이) — 헤더 2·스텝은 대표(첫 경로)만.
+
+        두 후보는 approach *레이블*뿐 아니라 **step 내용도 실제로 다르다**(대수 표현식 형태
+        vs 방정식 형태) — 내용 지문 dedup은 `{conditions, answer, steps}`만 보므로(approach는
+        별도 컬럼·whs `solution_fingerprint` 입력 도메인과 동일 — 드리프트 동결), 이 테스트가
+        진짜 "다중 경로"(내용도 상이)를 뱅크하는지 검증한다. 내용이 우연히 동일한 두 approach는
+        의도적으로 별도 테스트(`test_identical_content_across_approaches_deduped`)가 다룬다.
+        """
         seed = _seed()
         candidates, report = await _banked_candidates(
-            seed, [_solution(), _solution(approach="backward")]
+            seed,
+            [
+                _solution(),  # algebraic — 표현식 형태
+                _solution(approach="backward", steps=["2*x = 6", "x = 3"]),  # 방정식 형태(상이)
+            ],
         )
         assert len(candidates) == 2
         session = _BankFakeSession([], [])
@@ -516,6 +533,28 @@ class TestBankCandidates:
         summary = report.summary()
         assert summary["problems_with_multi_approach"] == 1
         assert summary["distinct_approaches_per_problem"] == {"2": 1}
+
+    @pytest.mark.asyncio
+    async def test_identical_content_across_approaches_deduped(self) -> None:
+        """의도적 설계 확인: approach 레이블만 다르고 *내용(steps)이 바이트 동일*하면 dedup된다.
+
+        내용 지문은 `{conditions, answer, steps}`만 본다(approach는 별도 컬럼) — 이는
+        `whs/solution_bank.solution_fingerprint`(dedup=True 경로)와 동일 설계다. LLM이 서로
+        다른 이름을 붙였지만 실제로 같은 텍스트를 낸 "가짜 다양성"을 헤더 2건으로 부풀리지
+        않는다(다양성 지표 오염 방지 — 이 동작은 버그가 아니라 계약).
+        """
+        seed = _seed()
+        candidates, report = await _banked_candidates(
+            seed,
+            [_solution(), _solution(approach="backward")],  # steps·answer 바이트 동일
+        )
+        assert len(candidates) == 2  # evaluate_response 단계에선 둘 다 통과(approach만 다름)
+        session = _BankFakeSession([], [])
+        await bank_candidates(cast(AsyncSession, session), candidates, report=report)
+        headers = [o for o in session.added if isinstance(o, SolutionPathOrm)]
+        assert len(headers) == 1  # 뱅크 단계에서 내용 동일 → 두 번째는 dedup
+        assert report.banked_paths == 1
+        assert report.duplicates_skipped == 1
 
     @pytest.mark.asyncio
     async def test_legacy_steps_block_step_rows(self) -> None:
@@ -623,7 +662,11 @@ def _vs_row(
         solution_path=(
             payload
             if payload is not None
-            else {"conditions": ["2*x = 6"], "answer": {"x": "3"}, "steps": ["2*x = 6", "x = 3"]}
+            else {
+                "conditions": ["2*x = 6"],
+                "answer": {"x": "3"},
+                "steps": ["2*x = 6", "x = 3"],
+            }
         ),
         strategy_tag="algebraic",
         answer="x=3",
@@ -727,7 +770,14 @@ class TestCli:
         problem_id = uuid.uuid4()
         fake, received = self._run_fn(RunOutcome(report=MultiSolutionReport()))
         code = main(
-            ["--apply", "--fake-provider", "--limit", "3", "--problem-ids", str(problem_id)],
+            [
+                "--apply",
+                "--fake-provider",
+                "--limit",
+                "3",
+                "--problem-ids",
+                str(problem_id),
+            ],
             run_fn=fake,
         )
         assert code == 0

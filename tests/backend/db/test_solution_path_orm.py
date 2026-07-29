@@ -10,6 +10,8 @@ PG DDL 컴파일·컬럼 계약만). 실제 PG 적용(마이그레이션·FK 강
     (SEC-06 — 전수 스캔은 `test_jsonb_none_as_null_governance.py`가 자동 검출·여기서는
     신규 컬럼을 이름으로 못박아 회귀를 지역화).
   - `embedding` 컬럼 부재(acceptance — S4-12에서 판정).
+  - S4-10 추가: `gen_meta` JSONB 1컬럼(다중 풀이 생성 주관 메타·ai_estimated 게이팅 좌석) —
+    `none_as_null=True`·nullable(레거시 승격 경로 비파괴).
   - alembic 마이그레이션 파일 존재·단일 head 체인(파일 시스템 검사 — DB 불요).
 """
 
@@ -67,6 +69,17 @@ class TestSolutionPathTable:
     def test_concept_sequence_jsonb_none_as_null(self) -> None:
         """concept_sequence JSONB가 `none_as_null=True`(SEC-06 방침)."""
         column = SolutionPath.__table__.columns["concept_sequence"]
+        assert isinstance(column.type, JSONB)
+        assert column.type.none_as_null is True
+
+    def test_gen_meta_column_nullable_jsonb_none_as_null(self) -> None:
+        """S4-10: `gen_meta` JSONB 1컬럼 — nullable(비파괴)·`none_as_null=True`(SEC-06).
+
+        다중 풀이 생성 주관 메타(elegance·educational_value·difficulty·key_insight·
+        comparison + review_status=ai_estimated)의 단일 좌석(컬럼 폭발 방지 — acceptance).
+        """
+        column = SolutionPath.__table__.columns["gen_meta"]
+        assert column.nullable is True
         assert isinstance(column.type, JSONB)
         assert column.type.none_as_null is True
 
@@ -153,4 +166,14 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        assert heads == {"c6d7e8f1a2b4"}  # S4-09 리비전이 현 head
+        assert heads == {"d7e8f1a2b4c6"}  # S4-10 gen_meta 리비전이 현 head(S4-09 위에 체인)
+
+    def test_gen_meta_migration_file_exists_with_symmetric_updown(self) -> None:
+        """S4-10 `gen_meta` 마이그레이션 파일이 존재하고 up/down이 대칭(컬럼 add/drop)이다."""
+        matches = list(_VERSIONS_DIR.glob("*solution_paths_gen_meta.py"))
+        assert len(matches) == 1, "S4-10 gen_meta 마이그레이션 파일이 정확히 1개여야 한다"
+        source = matches[0].read_text(encoding="utf-8")
+        assert 'op.add_column(\n        "solution_paths"' in source
+        assert 'op.drop_column("solution_paths", "gen_meta")' in source
+        # down_revision이 S4-09 리비전을 가리켜 체인이 이어진다(단일 head 불변의 짝).
+        assert 'down_revision: str | None = "c6d7e8f1a2b4"' in source
