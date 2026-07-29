@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,11 +15,12 @@ acceptance:
   - "선결 정책 판단: N802 192건은 **한국어 테스트 함수명**(test_레이스_두_세션_중_한쪽만_성공 등)이며 의도된 명명이다. 표준을 그대로 적용하면 192건 개명이 강제되므로, tests에 N802 per-file-ignore를 두는 안과 대조 필요. src pyproject 선례는 tests/** = [E501]"
   - "나머지 실측 위반 상환: I001 35건(자동 수정 가능) · E501 18건 · B007 2건 · B905 1건"
   - "변별력 — 루트 설정 신설 후 각 대상의 실효 line_length·룰셋이 실제로 100/표준으로 바뀌는지 ruff --show-settings 로 확인"
-artifacts: []
+artifacts:
+  - fcf7513
 paths:
   - ".github/workflows/ci.yml"
   - pyproject.toml
   - "tests/infra/**"
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "OPS-14 착수 실측에서 발견(2026-07-28). OPS-11·12·13·14가 lint를 '배선'했지만 전부 저장소 표준이 아니라 ruff 기본값으로 돌고 있었다 — '장치는 있는데 *잘못된 설정으로* 배선됨' 형태로, 배선 유무만 보는 기존 검사(test_lint_coverage·test_infra_lint_wiring)가 못 잡는 축이다. black은 각 잡이 --line-length 100을 명시해 무관하나, 명시가 없으면 88로 조용히 강등된다는 것도 같은 실측에서 확인(OPS-14가 계약 ②로 동결). 실측 명령: ruff check --line-length 100 --select E,F,I,N,B,W --statistics <대상>"
 updated: 2026-07-29
