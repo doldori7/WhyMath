@@ -1190,6 +1190,7 @@ async def _wh1_primary_decision_or(
     turn_index: int,
     dialogue_id: str | None,
     problem_id: uuid.UUID | None,
+    pack: PedagogyPack | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1201,6 +1202,10 @@ async def _wh1_primary_decision_or(
     solution_coaching·가설·증거 파이프라인은 기존 결정론 경로 그대로다(상태 오케스트레이션
     수렴은 후속·`run_persisted_turn` docstring 참조). 여기서도 방어적으로 try/except를 한 겹 더
     둔다 — 테스트 대체물·미래 리팩터가 예외를 전파해도 학생 응답이 500이 되지 않게(이중 방어).
+
+    `pack`(PED-07 — 04e §9): `_pack_for`가 해석해 `decide(pack=)`에 넣은 *같은* 팩 객체를 러너로
+    thread한다 — 러너가 톤필터 직전 금지모드 가드(`mode_guard_runtime_enabled` 옵트인·기본 OFF)
+    에 재사용(위반 발화 미서빙·소크라테스 재질문 폴백). None(무팩·플래그 OFF 해석)이면 가드 무관.
     """
     try:
         utterance = await run_wh1_primary_turn(
@@ -1212,6 +1217,7 @@ async def _wh1_primary_decision_or(
             dialogue_id=dialogue_id,
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
+            pack=pack,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1394,6 +1400,7 @@ async def create_session(
             turn_index=1,  # 새 dialogue — 첫 교환(§2.2 ε 카운터·아래 _wh1_turn_state와 정합).
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
             problem_id=body.problem_id,
+            pack=pack,  # PED-07: decide에 넣은 같은 팩 재사용 — 러너의 금지모드 가드(옵트인).
         )
 
     now = datetime.now(timezone.utc)
@@ -1610,6 +1617,7 @@ async def append_turns(
             turn_index=(dialogue.total_turns or 0) // 2 + 1,
             dialogue_id=str(dialogue_id),
             problem_id=dialogue.problem_id,
+            pack=pack,  # PED-07: create_session과 동형 — decide와 같은 팩을 가드에 재사용.
         )
 
     current_total = dialogue.total_turns or 0

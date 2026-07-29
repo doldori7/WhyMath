@@ -333,7 +333,7 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 | 비유 자산 | `concept_content.metaphor` 846행 | ⚠️ 전량 검수 전 — PED-09가 채움·검수 파이프라인(§6) |
 | 비유·예시 생성기 | — | 🆕 PED-09(`l3/pedagogy/` — slot_generator 형제) |
 | 형성평가 | `pedagogy_content_slot.slot_type='diag_item'` 좌석만 | 🆕 PED-10 채움(§7.2) |
-| mode_guard | `l4/pedagogy/mode_guard.py`(검출 1종/7모드) | ⚠️ 런타임 미배선 — PED-07(§9) |
+| mode_guard | `l4/pedagogy/mode_guard.py`(검출 1종/7모드) | ✅ 런타임 배선(PED-07 — WH-1 primary 톤필터 직전·`mode_guard_runtime_enabled` 옵트인 기본 OFF 캔어리·위반 시 소크라테스 재질문 폴백. GA flip은 측정+사인오프 후 별도) |
 | 처치·효과 측정 | `l2/pedagogy_evidence.py`·`adaptive/effectiveness.py`(지표 2/4 구현) | ✅ 좌석 가동·표본 축적 중(04d §3) |
 | 예측 질문 | `04a §11.3` 도구#10 | ⏸ 설계만 — WH-1 하네스 소관(04e 범위 밖) |
 

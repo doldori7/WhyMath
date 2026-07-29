@@ -241,6 +241,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    mode_guard_runtime_enabled: bool = Field(
+        default=False,
+        description=(
+            "교수법 팩 forbidden_modes 런타임 가드(`mode_guard.check_forbidden_modes`)를 WH-1 "
+            "primary 학생-대면 발화 경로의 톤필터 *앞*에 걸지(PED-07 — 정본 "
+            "docs/architecture/04e_pedagogy_strategy_catalog.md §9). **False(기본·옵트인)** — "
+            "OFF면 가드 블록 미실행으로 기존 서빙 경로와 비트동일(회귀 0·킬스위치). ON이면 팩이 "
+            "해석된 턴에서 발화가 팩 금지 모드를 위반할 때 그 발화를 학생에게 내보내지 않고 "
+            "안전한 소크라테스식 재질문(결정론 템플릿·`fallback_reply_for`)으로 대체하며 "
+            "reason_code(위반 모드 토큰)를 구조화 WARNING 로그로 남긴다(fail-closed·04d §2.2 "
+            "SOCRATIC 강등 선례 미러). 팩 부재(None)면 가드는 통과(팩 없으면 forbidden_modes도 "
+            "없음). 결정론 폴백·검증 게이트·톤필터는 무변경 — 가드는 그 사슬 *안*(프로즈 뒤· "
+            "톤필터 앞)에 얹힌 계층이다. GA flip(기본 True)은 결함주입 측정"
+            "(pedagogy_pack_fidelity_eval exit 0 상시)+사인오프 후 별도 커밋(팩 GA 선례). "
+            "WHYMATH_MODE_GUARD_RUNTIME_ENABLED=false 킬스위치."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(

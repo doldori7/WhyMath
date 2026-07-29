@@ -5,6 +5,12 @@
 런타임 응답이 위반하는지 규칙 기반으로 검사한다 — 위반 모드 토큰(reason_code)을 반환하면 호출자가
 그 응답을 서빙하지 않고 폴백한다(fail-closed 사용·톤필터 *앞* 계층). 위반 없으면 None(순수).
 
+런타임 배선(PED-07 — 정본 `docs/architecture/04e_pedagogy_strategy_catalog.md` §9): WH-1 primary
+학생-대면 발화 경로(`harness/wh1_primary.py`)가 톤필터 직전에 이 가드를 호출한다 — 플래그
+`mode_guard_runtime_enabled`(기본 False·옵트인) 게이트, 위반 시 `fallback_reply_for`의 소크라테스
+재질문으로 대체 + reason_code 구조화 로그. 하네스(`harness/pedagogy_pack_fidelity_eval.py`)는
+같은 함수를 결함주입 시험지로 상시 측정한다(CI 게이트 — 검출력의 기계 증거).
+
 ────────────────────────────────────────────────────────────────────────────
 정직한 커버리지 (overclaim 금지)
 ────────────────────────────────────────────────────────────────────────────
@@ -32,6 +38,7 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Protocol
 
+from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
 from whymath_backend.schema.pedagogy_pack import FORBIDDEN_MODE_VOCAB, PedagogyPack
 
 # 가드 컨텍스트 — 검출기에 넘길 선택적 부가 정보 백(문항 메타·k_type 등). v1 검출기는 미사용이나
@@ -124,6 +131,33 @@ RULE_DETECTABLE_MODES: frozenset[str] = frozenset(FORBIDDEN_MODE_DETECTORS)
 DEFERRED_MODES: frozenset[str] = FORBIDDEN_MODE_VOCAB - RULE_DETECTABLE_MODES
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 폴백 재질문 — 위반 발화를 대체하는 안전한 소크라테스식 결정론 템플릿 (PED-07)
+# ──────────────────────────────────────────────────────────────────────────
+# 위반 모드 → 소크라테스 재질문 카테고리. WORKED_EXAMPLE_FIRST(정의·정답 단정)의 안전한 재진입은
+# 학생의 현재 이해 지점을 *묻는* 것(명료화) — 04d §2.2 "차단 시 SOCRATIC 강등(말하기 대신 묻기)"
+# 선례의 사후 가드판. 미등록 모드(deferred·v1 검출기 없음)는 방어적 기본값 CLARIFICATION —
+# 어떤 위반이든 "학생에게 되묻기"가 항상 안전한 강등이다(전량 기존 자산·신규 프로즈 0).
+_FALLBACK_CATEGORY: dict[str, SocraticCategory] = {
+    "WORKED_EXAMPLE_FIRST": SocraticCategory.CLARIFICATION,
+}
+_DEFAULT_FALLBACK_CATEGORY = SocraticCategory.CLARIFICATION
+
+
+def fallback_reply_for(mode: str) -> str:
+    """위반 모드 → 안전한 소크라테스식 재질문(결정론 템플릿) — 위반 발화의 대체재.
+
+    정본: `docs/architecture/04e_pedagogy_strategy_catalog.md` §9(PED-07 런타임 배선)·04d §2.2
+    (완전예제 차단 시 SOCRATIC 강등 선례). 런타임 가드가 위반을 검출하면 호출자는 그 발화를
+    학생에게 내보내지 않고(fail-closed) 이 함수의 재질문으로 *대체*한다. 반환값은
+    `l4/socratic/categories.py::EXAMPLE_QUESTION`(스펙 L65-70 정본 예시 질문)의 기존 자산
+    그대로다 — 새 학생-대면 프로즈를 만들지 않는다(교수학 검수 통과 자산 재사용). 순수·전역함수
+    (미정의 모드에도 기본 카테고리로 항상 안전한 문자열 반환·예외 0).
+    """
+    category = _FALLBACK_CATEGORY.get(mode, _DEFAULT_FALLBACK_CATEGORY)
+    return EXAMPLE_QUESTION[category]
+
+
 def check_forbidden_modes(
     pack: PedagogyPack, reply: str, *, context: GuardContext | None = None
 ) -> str | None:
@@ -153,4 +187,5 @@ __all__ = [
     "GuardContext",
     "ModeDetector",
     "check_forbidden_modes",
+    "fallback_reply_for",
 ]

@@ -18,6 +18,12 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/l4/**"
   - "src/backend/whymath_backend/api/**"
+  # 범위 확장(실배선 좌석·2026-07-29): coach 응답 경로의 filter_tone 좌석은 harness/wh1_primary.py
+  # (S1-11 flip 러너·톤필터 직전 가드 삽입점)이고, 플래그 옵트인은 config.py가 정본이다.
+  - "src/backend/whymath_backend/harness/wh1_primary.py"
+  - "src/backend/whymath_backend/config.py"
+  # 범위 확장 2(문서 진실 유지·2026-07-29): 배선 완료로 04e §10의 "런타임 미배선" 행이 구식 — 같은 커밋에서 갱신.
+  - "docs/architecture/04e_pedagogy_strategy_catalog.md"
   - "tests/backend/**"
 session: claude/whymath-teaching-strategy-enfkqt
 notes: "정본: 04e §9. \"검증 장치를 만들고 배선 확인 없이 완료 선언 금지\" 반복 사고 유형의 해소 — check_forbidden_modes 프로덕션 호출 현재 0."
