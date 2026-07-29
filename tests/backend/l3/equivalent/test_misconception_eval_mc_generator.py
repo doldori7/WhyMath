@@ -59,10 +59,11 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "FUNC-COMPOSE",
     ),
     (  # S3-12 재태깅: 주기는 [12대수02-02](삼각함수 그래프·성질) 정위치.
+        # rotation-1: concept_src_id도 재태깅에 맞춰 H:12대수02-02로 동시 교정(선재 불일치).
         "sine_period",
         "period-of-scaled-sine",
         "[12대수02-02]",
-        "H:12미적Ⅱ02-02",
+        "H:12대수02-02",
         "TRIG-PERIOD",
     ),
     # 신규 2종(op-code 부재) — 커버리지 13→15.
@@ -96,17 +97,20 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "POLYGON-ANGLE-SUM",
     ),
     (  # S3-12 재태깅: [9수03-12](닮음) 제거 — 대표 코드로 [6수03-13](직사각형 넓이).
+        # rotation-1: concept_src_id도 재태깅에 맞춰 ME3(직사각형 넓이)로 동시 교정(선재 불일치).
         "area_perimeter",
         "area-perimeter-confusion",
         "[6수03-13]",
-        "J0312",
+        "ME3",
         "AREA-PERIMETER",
     ),
     (
+        # rotation-1 발견(재태깅과 무관한 선재 결함): 구 값 "10공수2-01-04"는 concept_graph_v1에
+        # 없는 성취기준 코드 문자열 오기 — [10공수2-01-04] 보유 HK22(원의 방정식-2)로 교정.
         "circle_radius",
         "circle-radius-squared",
         "[10공수2-01-04]",
-        "10공수2-01-04",
+        "HK22",
         "CIRCLE-RADIUS",
     ),
     # Tier C 계산가능(값형·확률) 1종 — 도박사 오류.
@@ -119,10 +123,11 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ),
     # 843 확장 트랜치1 — 기초 계산형 6종(신규 탐지 kebab).
     (  # S3-12 재태깅: 통분 덧셈은 [9수01-05](유리수 사칙계산) 정위치.
+        # rotation-1: concept_src_id도 재태깅에 맞춰 J0105로 동시 교정(선재 불일치).
         "fraction_addition",
         "fraction-addition-naive",
         "[9수01-05]",
-        "J0104",
+        "J0105",
         "FRACTION-ADD",
     ),
     (
@@ -142,24 +147,27 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("absolute_value", "absolute-value-keeps-sign", "[9수01-04]", "J0104", "ABS-VALUE"),
     ("sqrt_sum", "sqrt-distributes-over-sum", "[9수01-07]", "J0107", "SQRT-SUM"),
     (  # S3-12 재태깅: 합차는 [9수02-19](다항식 곱셈·인수분해) 정위치.
+        # rotation-1: concept_src_id도 재태깅에 맞춰 J0219로 동시 교정(선재 불일치).
         "difference_of_squares",
         "difference-of-squares-confused",
         "[9수02-19]",
-        "J0101",
+        "J0219",
         "DIFF-SQUARES",
     ),
     # 843 확장 트랜치2 — 거듭제곱·분배·부호 계산형 6종(신규 탐지 kebab).
     ("exponent_product", "exponent-product-multiplies", "[9수02-08]", "J0208", "EXP-PRODUCT"),
     ("power_of_power", "power-of-power-adds", "[9수02-08]", "J0208", "POWER-OF-POWER"),
     ("negative_square", "negative-square-precedence", "[9수02-08]", "J0208", "NEG-SQUARE"),
-    (
+    (  # rotation-1 재태깅: a(b+c) 분배는 [9수02-10](단항식과 다항식의 곱셈) 정위치 —
+        # 종전 [9수02-09](다항식의 덧셈·뺄셈)는 무관 오귀속. concept_src_id도 J0210으로 동시 교정.
         "distribute_partial",
         "distribute-first-term-only",
-        "[9수02-09]",
-        "J0209",
+        "[9수02-10]",
+        "J0210",
         "DISTRIBUTE-PARTIAL",
     ),
-    ("negative_distribute", "negative-distribute-sign", "[9수02-09]", "J0209", "NEG-DISTRIBUTE"),
+    # rotation-1 재태깅: -(x-a) 분배도 동일하게 [9수02-10] 정위치·concept_src_id J0210.
+    ("negative_distribute", "negative-distribute-sign", "[9수02-10]", "J0210", "NEG-DISTRIBUTE"),
     ("square_difference", "square-of-difference-no-cross", "[9수02-19]", "J0219", "SQUARE-DIFF"),
     # 843 확장 트랜치3 — 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(신규 탐지 kebab).
     ("midpoint_no_half", "midpoint-sum-only", "[9수02-05]", "J0205", "MIDPOINT-NO-HALF"),
@@ -170,31 +178,36 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("complete_square", "complete-square-naive", "[9수02-19]", "J0219", "COMPLETE-SQUARE"),
     ("conjugate_product", "conjugate-product-sum", "[9수01-07]", "J0107", "CONJUGATE-PRODUCT"),
     # 843 확장 트랜치4 — 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(신규 탐지 kebab).
-    # S3-12 재태깅: 이항은 [9수02-04](일차방정식) 정위치.
-    ("transpose", "transpose-no-sign-change", "[9수02-04]", "J0213", "TRANSPOSE-SIGN"),
+    # S3-12 재태깅: 이항은 [9수02-04](일차방정식) 정위치. rotation-1: concept_src_id J0204로 교정.
+    ("transpose", "transpose-no-sign-change", "[9수02-04]", "J0204", "TRANSPOSE-SIGN"),
     ("gcd_lcm", "gcd-lcm-confused", "[9수01-02]", "J0102", "GCD-LCM"),
-    # S3-12 재태깅: 소수 곱셈은 초등 [6수01-13] 정위치.
-    ("decimal_mult", "decimal-mult-place", "[6수01-13]", "J0106", "DECIMAL-MULT"),
-    # S3-12 재태깅: 대분수 곱셈은 [9수01-05](유리수 사칙계산) 정본.
-    ("mixed_mult", "mixed-number-mult-whole", "[9수01-05]", "J0104", "MIXED-MULT"),
+    # S3-12 재태깅: 소수 곱셈은 초등 [6수01-13] 정위치. rotation-1: concept_src_id S5로 교정.
+    ("decimal_mult", "decimal-mult-place", "[6수01-13]", "S5", "DECIMAL-MULT"),
+    # S3-12 재태깅: 대분수 곱셈은 [9수01-05](유리수 사칙계산) 정본. rotation-1: J0105로 교정.
+    ("mixed_mult", "mixed-number-mult-whole", "[9수01-05]", "J0105", "MIXED-MULT"),
     # S3-12 재태깅: 나머지정리는 [10공수1-01-02](항등식·나머지정리) 정위치.
-    ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-02]", "HK01", "REMAINDER-THEOREM"),
+    # rotation-1: concept_src_id는 같은 표준코드의 두 후보(HK02=항등식·HK03=나머지정리) 중
+    # 실제 개념과 일치하는 HK03로 교정(HK02는 무관 오귀속이었음).
+    ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-02]", "HK03", "REMAINDER-THEOREM"),
     # S3-12 재태깅: 근과 계수의 관계는 [10공수1-02-03] 정위치.
     ("vieta_sum", "vieta-sign-error", "[10공수1-02-03]", "HK08", "VIETA-SUM"),
     # 843 확장 트랜치5 — 비대수 도메인(기하4·확통2·신규 탐지 kebab).
-    # S3-12 재태깅: 사다리꼴 넓이는 초등 [6수03-14] 정위치.
-    ("trapezoid_area", "trapezoid-area-no-half", "[6수03-14]", "J0312", "TRAPEZOID-AREA"),
+    # S3-12 재태깅: 사다리꼴 넓이는 초등 [6수03-14] 정위치. rotation-1: concept_src_id ME4로 교정.
+    ("trapezoid_area", "trapezoid-area-no-half", "[6수03-14]", "ME4", "TRAPEZOID-AREA"),
     ("scale_volume", "scale-volume-linear", "[9수03-12]", "J0312", "SCALE-VOLUME"),
     ("cone_volume", "cone-volume-no-third", "[9수03-08]", "J0308", "CONE-VOLUME"),
-    # S3-12 재태깅: 원의 넓이는 초등 [6수03-16] 정위치.
-    ("circle_area", "circle-area-circumference", "[6수03-16]", "J0319", "CIRCLE-AREA"),
-    # S3-12 보강: 조합의 수 정위치 [10공수1-03-03] 병기(대표 코드로 사용).
+    # S3-12 재태깅: 원의 넓이는 초등 [6수03-16] 정위치. rotation-1: concept_src_id ME6로 교정.
+    ("circle_area", "circle-area-circumference", "[6수03-16]", "ME6", "CIRCLE-AREA"),
+    # S3-12 보강: 조합의 수 정위치 [10공수1-03-03] 병기(대표 코드로 사용). concept_src_id는
+    # 그대로 HK41(조합) — combination 템플릿의 정당한 앵커라 rotation-1도 다치지 않았다.
     ("combination", "combination-no-denominator", "[10공수1-03-03]", "HK41", "COMBINATION-COUNT"),
     (  # S3-12 보강: 같은 것이 있는 순열 정위치 [12확통01-01] 병기(대표 코드로 사용).
+        # rotation-1: concept_src_id는 combination과 공유하던 HK41(조합, 오귀속)에서
+        # H:12확통01-01(중복순열·같은 것이 있는 순열 — 이름 그대로의 정확한 매치)로 교정.
         "same_item_permutation",
         "same-item-permutation-no-divide",
         "[12확통01-01]",
-        "HK41",
+        "H:12확통01-01",
         "SAME-ITEM-PERM",
     ),
 )
@@ -212,7 +225,9 @@ def _spec(kebab: str, code: str) -> EquivalenceSpec:
 def _gen(template: TemplateKind, kebab: str, **kw: object) -> MisconceptionEvalMCSkeletonGenerator:
     # op-code 有/無 무관 주입(부재 시 op_code=None) — 신규 5종은 op-code 없음.
     return MisconceptionEvalMCSkeletonGenerator(
-        template, build_kebab_distractor_codes_optional(kebab), **kw  # type: ignore[arg-type]
+        template,
+        build_kebab_distractor_codes_optional(kebab),
+        **kw,  # type: ignore[arg-type]
     )
 
 

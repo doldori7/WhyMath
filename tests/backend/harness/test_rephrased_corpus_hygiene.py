@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from whymath_backend.harness.rephrased_corpus_hygiene import (
+    _KNOWN_DEFECTIVE_SLUGS,
+    _REASON_MANUAL_AUDIT,
     _default_corpus_path,
     main,
     run_corpus_hygiene_sweep,
@@ -83,6 +85,33 @@ class TestSweep:
             run_corpus_hygiene_sweep(src, None, write=False)
 
 
+class TestManualAuditDenylist:
+    """개별 감사 확정 제거(GRAMMAR_BREAK) — 패턴 무관 명시 slug 소급 탈락(소급 청소 전용)."""
+
+    def test_known_defective_slug_dropped_even_if_pattern_clean(self, tmp_path: Path) -> None:
+        # 어형 붕괴 문면(예: "크다음 근")은 결정론 패턴이 못 잡으므로(정직 한계) slug 자체로
+        # 강제 탈락한다 — 아래 발문 자체는 6개 패턴 축 전부 통과하는 청정 문면이다.
+        manual = {
+            "slug": next(iter(_KNOWN_DEFECTIVE_SLUGS)),
+            "question_text": "이차방정식 x^2 - 7x + 10 = 0 의 두 근 중 큰 근을 구하시오.",
+        }
+        src = tmp_path / "problems.jsonl"
+        _write_corpus(src, [_CLEAN, manual])
+        report = run_corpus_hygiene_sweep(src, None, write=True)
+        assert (report.total, report.kept, report.dropped) == (2, 1, 1)
+        dropped_slug, reasons = report.dropped_items[0]
+        assert dropped_slug == manual["slug"]
+        assert _REASON_MANUAL_AUDIT in reasons
+        assert report.reason_counts[_REASON_MANUAL_AUDIT] == 1
+
+    def test_non_denylisted_clean_record_survives(self, tmp_path: Path) -> None:
+        # denylist는 명시된 slug만 겨냥한다 — 다른 청정 레코드는 다치지 않는다(과잉 탈락 방지).
+        src = tmp_path / "problems.jsonl"
+        _write_corpus(src, [_CLEAN])
+        report = run_corpus_hygiene_sweep(src, None, write=False)
+        assert report.dropped == 0
+
+
 class TestCliEntry:
     def test_main_dry_run_report_json(self, tmp_path: Path, capsys: object) -> None:
         src = tmp_path / "problems.jsonl"
@@ -97,9 +126,10 @@ class TestCliEntry:
 
 class TestCommittedCorpusClean:
     def test_committed_rephrased_corpus_has_zero_violations(self) -> None:
-        # 커밋 코퍼스 청정 동결 — S3-12 일괄 적용(483→446·37 탈락) 후 위반 0. 재오염 시 red.
+        # 커밋 코퍼스 청정 동결 — S3-12 일괄 적용(483→446→429, 1차 37건+rotation-1 재검수
+        # 발견 신규 3축 14건 추가 탈락) 후 위반 0. 재오염 시 red.
         corpus = _default_corpus_path()
         assert corpus.exists()
         report = run_corpus_hygiene_sweep(corpus, None, write=False)
         assert report.dropped == 0, report.dropped_items[:10]
-        assert report.kept == report.total >= 446
+        assert report.kept == report.total >= 429

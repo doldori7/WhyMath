@@ -123,6 +123,12 @@ TemplateKind = Literal[
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
 # concept_src_id는 개념그래프 원천 키, unit_code는 문항 단원 코드. 성취기준 코드는 spec이 공급한다.
+#
+# S3-12 rotation-1 자기정합성 교정(2026-07-29): `misconception_mc_batch._Band.standard_codes`
+# 재태깅 시 이 dict의 concept_src_id는 갱신되지 않아 13개 항목이 achievement_standard_codes와
+# 무관한 개념(concept_graph_v1)을 계속 가리키고 있었다(M0052 크로스링크 회귀와 동일 계통 —
+# 표시용 태그만 고치고 그래프 순회용 앵커를 놓치는 패턴). concept_graph_v1의 standard_codes로
+# 역탐색해 실제 겹치는 개념으로 전부 재고정(아래 개별 주석 = 신규 src_id 선정 근거).
 _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "distribution": ("J0219", "POLY-PRODUCT"),
     "chain_rule": ("H:12미적Ⅰ02-01", "CALC-CHAIN"),
@@ -131,27 +137,45 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "sqrt_pos": ("J0107", "SQRT-POS"),
     "log_dist": ("H:12대수01-05", "LOG-DIST"),
     "func_compose": ("HK35", "FUNC-COMPOSE"),
-    "sine_period": ("H:12미적Ⅱ02-02", "TRIG-PERIOD"),
+    # sine_period(S3-12 rotation-1 재고정): 밴드 성취기준이 [12미적Ⅱ-02-02]→[12대수02-02]로
+    # 재태깅됐으나 concept_src_id는 그대로였다 — [12대수02-02](삼각함수의 뜻과 그래프) 보유
+    # H:12대수02-02로 교정.
+    "sine_period": ("H:12대수02-02", "TRIG-PERIOD"),
     "translate": ("10기수2-01-06", "FUNC-TRANSLATE"),
     "product_rule": ("H:12미적Ⅰ02-01", "CALC-PRODUCT"),
     "fraction_cancel": ("J0104", "FRACTION-CANCEL"),
     "polygon_angle_sum": ("J0305", "POLYGON-ANGLE-SUM"),
-    "area_perimeter": ("J0312", "AREA-PERIMETER"),
-    "circle_radius": ("10공수2-01-04", "CIRCLE-RADIUS"),
+    # area_perimeter(S3-12 rotation-1 재고정): 재태깅 후 [9수03-12](닮음)만 보유한 J0312는
+    # 무관 — 문항이 실제로 묻는 직사각형 넓이 [6수03-13] 보유 ME3로 교정.
+    "area_perimeter": ("ME3", "AREA-PERIMETER"),
+    # circle_radius(S3-12 rotation-1 발견 — 재태깅과 무관한 선재 결함): 원래 값 "10공수2-01-04"는
+    # concept_graph_v1에 없는 성취기준 코드 문자열이 그대로 src_id 자리에 들어간 오기(이 그래프는
+    # 원칙적으로 J/H:/HK/ME/S 접두 source_id를 쓰나 드물게 코드형 source_id도 있다 — 다만 그건
+    # "10기수2-01-04"(원의 방정식, 별개 개념)이지 "10공수2-01-04"가 아니다). 밴드 표준코드 3종
+    # 중 [10공수2-01-04] 보유 HK22(원의 방정식-2)로 교정.
+    "circle_radius": ("HK22", "CIRCLE-RADIUS"),
     "gambler_streak": ("H:12확통02-01", "PROB-INDEPENDENT-TRIAL"),
     # 843 확장 트랜치1(기초 계산형 6종) — 성취기준은 spec이 공급([9수01-*]).
-    "fraction_addition": ("J0104", "FRACTION-ADD"),
+    # fraction_addition(S3-12 rotation-1 재고정): [9수01-04]→[9수01-05] 재태깅에 맞춰 J0104→
+    # [9수01-05] 보유 J0105로 교정.
+    "fraction_addition": ("J0105", "FRACTION-ADD"),
     "negative_product": ("J0103", "NEG-PRODUCT"),
     "subtract_negative": ("J0103", "SUBTRACT-NEG"),
     "absolute_value": ("J0104", "ABS-VALUE"),
     "sqrt_sum": ("J0107", "SQRT-SUM"),
-    "difference_of_squares": ("J0101", "DIFF-SQUARES"),
+    # difference_of_squares(S3-12 rotation-1 재고정): [9수01-01]→[9수02-19] 재태깅에 맞춰
+    # [9수02-19](다항식의 곱셈·인수분해) 보유 J0219로 교정.
+    "difference_of_squares": ("J0219", "DIFF-SQUARES"),
     # 843 확장 트랜치2(거듭제곱·분배·부호 계산형 6종) — 성취기준은 spec이 공급([9수02-*]).
     "exponent_product": ("J0208", "EXP-PRODUCT"),
     "power_of_power": ("J0208", "POWER-OF-POWER"),
     "negative_square": ("J0208", "NEG-SQUARE"),
-    "distribute_partial": ("J0209", "DISTRIBUTE-PARTIAL"),
-    "negative_distribute": ("J0209", "NEG-DISTRIBUTE"),
+    # distribute_partial/negative_distribute(S3-12 rotation-1 재고정): 둘 다 [9수02-09]→
+    # [9수02-10] 재태깅에 맞춰 [9수02-10](단항식과 다항식의 곱셈) 보유 J0210으로 교정 —
+    # J0209(다항식의 덧셈·뺄셈)는 combine_unlike의 정당한 앵커라 그대로 둔다(오직 이 두
+    # 템플릿의 배정이 오귀속이었음).
+    "distribute_partial": ("J0210", "DISTRIBUTE-PARTIAL"),
+    "negative_distribute": ("J0210", "NEG-DISTRIBUTE"),
     "square_difference": ("J0219", "SQUARE-DIFF"),
     # 843 확장 트랜치3(중점·비례·부호·동류항·완전제곱·켤레 계산형 6종).
     "midpoint_no_half": ("J0205", "MIDPOINT-NO-HALF"),
@@ -161,19 +185,37 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "complete_square": ("J0219", "COMPLETE-SQUARE"),
     "conjugate_product": ("J0107", "CONJUGATE-PRODUCT"),
     # 843 확장 트랜치4(이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종).
-    "transpose": ("J0213", "TRANSPOSE-SIGN"),
+    # transpose(S3-12 rotation-1 재고정): [9수02-13]→[9수02-04] 재태깅에 맞춰 [9수02-04]
+    # (일차방정식 풀이·활용) 보유 J0204로 교정.
+    "transpose": ("J0204", "TRANSPOSE-SIGN"),
     "gcd_lcm": ("J0102", "GCD-LCM"),
-    "decimal_mult": ("J0106", "DECIMAL-MULT"),
-    "mixed_mult": ("J0104", "MIXED-MULT"),
-    "remainder_sign": ("HK01", "REMAINDER-THEOREM"),
+    # decimal_mult(S3-12 rotation-1 재고정): [9수01-06]→[6수01-13] 재태깅에 맞춰 [6수01-13]
+    # (소수의 곱셈) 보유 S5로 교정.
+    "decimal_mult": ("S5", "DECIMAL-MULT"),
+    # mixed_mult(S3-12 rotation-1 재고정): [9수01-04]→[9수01-05] 재태깅에 맞춰 fraction_addition과
+    # 동일 근거로 J0105로 교정(공유 앵커 — [9수01-05]는 정수·유리수 사칙연산 포괄 성취기준).
+    "mixed_mult": ("J0105", "MIXED-MULT"),
+    # remainder_sign(S3-12 rotation-1 재고정): [10공수1-01-01]→[10공수1-01-02] 재태깅에 맞춰
+    # 교정 — [10공수1-01-02] 보유 개념이 HK02(항등식·미정계수)·HK03(나머지정리·인수정리) 둘이라
+    # misconception 자체가 "나머지정리"이므로 HK03을 선택(HK02는 무관 개념).
+    "remainder_sign": ("HK03", "REMAINDER-THEOREM"),
     "vieta_sum": ("HK08", "VIETA-SUM"),
     # 843 확장 트랜치5(비대수 도메인·기하4·확통2) — 성취기준은 spec이 공급.
-    "trapezoid_area": ("J0312", "TRAPEZOID-AREA"),
+    # trapezoid_area(S3-12 rotation-1 재고정): [9수03-12]→[6수03-14] 재태깅에 맞춰 [6수03-14]
+    # (평행사변형·삼각형·사다리꼴·마름모의 넓이) 보유 ME4로 교정.
+    "trapezoid_area": ("ME4", "TRAPEZOID-AREA"),
     "scale_volume": ("J0312", "SCALE-VOLUME"),
     "cone_volume": ("J0308", "CONE-VOLUME"),
-    "circle_area": ("J0319", "CIRCLE-AREA"),
+    # circle_area(S3-12 rotation-1 재고정): [9수03-19]→[6수03-16]/[9수03-06] 재태깅에 맞춰
+    # [6수03-16](원주와 원의 넓이 — 문항이 실제로 묻는 넓이·둘레 혼동을 그대로 포괄) 보유
+    # ME6으로 교정(J0306=부채꼴은 다른 도형이라 배제).
+    "circle_area": ("ME6", "CIRCLE-AREA"),
     "combination": ("HK41", "COMBINATION-COUNT"),
-    "same_item_permutation": ("HK41", "SAME-ITEM-PERM"),
+    # same_item_permutation(S3-12 rotation-1 재고정): [12직수04-01]만→[12확통01-01] 추가
+    # 재태깅에 맞춰 교정 — 종전 HK41(조합)은 combination 템플릿의 정당한 앵커라 여기 재사용은
+    # 애초 오귀속이었다. [12확통01-01](중복순열·같은 것이 있는 순열)이 이름 그대로의 정확한
+    # 매치라 H:12확통01-01로 교체(H:12직수04-01은 범용 직무 경우의 수라 배제).
+    "same_item_permutation": ("H:12확통01-01", "SAME-ITEM-PERM"),
 }
 
 
@@ -1063,7 +1105,7 @@ def _build_sqrt_sum_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = {k}",
                 answer_str=str(k),
-                question_text=(f"√({m*m} + {n*n}) 의 값을 구하시오."),
+                question_text=(f"√({m * m} + {n * n}) 의 값을 구하시오."),
                 answer_explanation=(
                     # 조사는 수 읽기 받침 판별 — '10000 는'·'84 이' 류 계통 결함 교정(S3-12).
                     f"근호 안의 합 {s} {eun_neun(str(s))} {k} 의 제곱이므로 "
@@ -1731,8 +1773,7 @@ def _build_mixed_mult_pool() -> tuple[_EvalItem, ...]:
                 answer_str=_display(correct),
                 # 조사는 수 읽기 받침 판별 — '5과'·'5 을' 류 계통 결함 교정(S3-12).
                 question_text=(
-                    f"{a}{wa_gwa(str(a))} 1/2 (대분수)에 {n} {eul_reul(str(n))} "
-                    "곱한 값을 구하시오."
+                    f"{a}{wa_gwa(str(a))} 1/2 (대분수)에 {n} {eul_reul(str(n))} 곱한 값을 구하시오."
                 ),
                 answer_explanation=(
                     f"대분수 {a}½ = {2 * a + 1}/2 에 {n}{eul_reul(str(n))} 곱하면 "

@@ -154,12 +154,14 @@ _BANDS: tuple[_Band, ...] = (
         "fraction-cancellation",
         ("[9수01-04]", "[6수01-06]"),
     ),
-    # angle-sum-non-triangle: 후보 M0493=[4수03-25]·M0580=[9수03-05]·M0051=[9수03-03] 모두 agree.
+    # angle-sum-non-triangle(S3-12 rotation-1 재태깅): 내각의 합 문항에 [9수03-03](삼각형
+    #   작도)은 무관 오귀속 — 정위치는 [4수03-25](삼각형·사각형 내각합 추론)·[9수03-05]
+    #   (다각형의 성질). M0051("삼각형 내각합")도 동일 오귀속이라 [4수03-25]로 동시 교정.
     _Band(
         "angle-sum-non-triangle",
         "polygon_angle_sum",
         "angle-sum-non-triangle",
-        ("[4수03-25]", "[9수03-05]", "[9수03-03]"),
+        ("[4수03-25]", "[9수03-05]"),
     ),
     # area-perimeter-confusion(S3-12 재태깅): 문항은 직사각형 넓이·둘레 혼동 —
     #   [6수03-13](직사각형 넓이)·[6수03-11](평면도형 둘레)·[12직수03-04](직무 둘레·넓이) 정위치.
@@ -259,19 +261,22 @@ _BANDS: tuple[_Band, ...] = (
         "negative-square-precedence",
         ("[9수02-08]",),
     ),
-    # distribute-first-term-only: 후보 M0017=[9수02-09] agree.
+    # distribute-first-term-only(S3-12 rotation-1 재검수 재태깅): a(b+c) 분배는 단항식×다항식
+    #   곱셈 [9수02-10] 정위치 — 종전 [9수02-09](다항식 덧셈·뺄셈)는 무관 오귀속.
+    #   M0017("분배법칙")도 동일 오귀속이라 동시 교정(agree 유지).
     _Band(
         "distribute-first-term-only",
         "distribute_partial",
         "distribute-first-term-only",
-        ("[9수02-09]",),
+        ("[9수02-10]",),
     ),
-    # negative-distribute-sign: 후보 M0018=[9수02-09] agree.
+    # negative-distribute-sign(S3-12 rotation-1 재검수 재태깅): -(x-a) 분배도 동일하게
+    #   단항식×다항식 곱셈 [9수02-10] 정위치 — M0018("음수 분배")도 동시 교정(agree 유지).
     _Band(
         "negative-distribute-sign",
         "negative_distribute",
         "negative-distribute-sign",
-        ("[9수02-09]",),
+        ("[9수02-10]",),
     ),
     # square-of-difference-no-cross: 후보 M0020=[9수02-19] agree.
     _Band(

@@ -10,6 +10,11 @@ S3-09 감사가 확정한 rephrase 발문 텍스트 결함(한자·가나 주입
 바이트 드리프트 금지). 산출 리포트는 총·생존·탈락 수, 사유 분포, 탈락 (slug, 사유) 목록을
 JSON으로 낸다(재검수 근거·조용한 축소 금지).
 
+개별 감사 확정 제거(`_KNOWN_DEFECTIVE_SLUGS`): rotation-1 재검수가 발견한 어형 붕괴(존재하지
+않는 활용형 — "크다음 근"·"크다 가르키는")는 결정론 패턴화가 불가능해(형태소 분석 필요·과공학
+방지) 명시 slug로 소급 제거한다. 패턴 축(①~⑥)과 달리 이 목록은 **범용 게이트가 아니다** —
+신규 재서술 배치의 같은 결함은 여기서 안 잡힌다(정직 한계).
+
 사용:
     python -m whymath_backend.harness.rephrased_corpus_hygiene            # 커밋 코퍼스 in-place
     python -m whymath_backend.harness.rephrased_corpus_hygiene --dry-run       # 판정만 출력
@@ -30,6 +35,15 @@ from pathlib import Path
 from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
 
 __all__ = ["HygieneSweepReport", "main", "run_corpus_hygiene_sweep"]
+
+# 개별 감사 확정 제거(GRAMMAR_BREAK) — rotation-1 재검수가 발견한 어형 붕괴 실사례
+# (`wm-skel-d5f5ea458863` "두 실근 중 크다음 근을"·`wm-skel-21ac53993db8` "크다 가르키는 값" —
+# 존재하지 않는 활용형)는 형태소 분석·맞춤법 검사기 없이는 결정론 일반화가 불가능하다
+# (`rephrase_hygiene.py` 도크스트링 "잔존 한계" 참조 — 과공학 방지). 개별 확인된 결함이므로
+# 패턴화 대신 명시 목록으로 제거한다 — 신규 재서술 배치가 같은 어형 붕괴를 다시 만들면
+# 이 목록이 아니라 재서술 프롬프트/모델 축에서 막아야 한다(이 목록은 소급 청소 전용).
+_KNOWN_DEFECTIVE_SLUGS: frozenset[str] = frozenset({"wm-skel-d5f5ea458863", "wm-skel-21ac53993db8"})
+_REASON_MANUAL_AUDIT = "MANUAL_AUDIT_GRAMMAR_BREAK"
 
 
 def _default_corpus_path() -> Path:
@@ -80,9 +94,11 @@ def run_corpus_hygiene_sweep(
         except json.JSONDecodeError as exc:  # 형식 파손은 fail-loud(예외 타입 포함).
             raise ValueError(f"JSONDecodeError line {line_num}: {exc}") from exc
         question = str(record.get("question_text") or "")
+        slug = str(record.get("slug") or f"line-{line_num}")
         violations = question_hygiene_violations(question)
+        if slug in _KNOWN_DEFECTIVE_SLUGS:
+            violations = (*violations, _REASON_MANUAL_AUDIT)
         if violations:
-            slug = str(record.get("slug") or f"line-{line_num}")
             dropped_items.append((slug, violations))
             for violation in violations:
                 reason_counts[violation.split(":", 1)[0]] += 1

@@ -3,7 +3,8 @@
 > **검수 방식**: **AI 검수** (2026-07-10 Kiki 결정·`ai_review_batch_240_2026-07.md` 규약 동형). 인간 수기검수가 아님을 정직 명시한다. 검수 주체 = pedagogy 서브에이전트 **7인**(코퍼스·표본 범위 분할·SymPy 배치 재검산 병행), 모델ID 미기재(규약).
 > **판정 항목**: 사람층 ①~⑥ (①발문 자연성 ②풀이 타당성 ③난이도 정합 ④성취기준 귀속 ⑤오답↔오개념 귀속[객관식] ⑥우연 유사). 기계 게이트(S2-a 4종)는 적재 시 이미 통과·**Tier1 전수 재검산(4종 2,043문) 검수 직전 전건 통과·실패 0** — 본 검수는 그 위의 교수학·표면 층이다.
 > **표본**: 결정론 층화(rotation 0·`reviewer_sample_package`) — mc 200/1,080 · rephrased 200/483 · conceptual 200/360 · **killer 120/120(전수 — 코퍼스가 min-n 200 미만인 유일 케이스)**. 합 720문.
-> **결론**: **4개 코퍼스 전부 게이트 FAIL — 노출 부적격 유지**(게이트 통과 ≠ 학생 노출). 계통 결함 5류가 원인이며 전량 생성기·파이프라인 결함(환류 대상·`S3-12` 등재). 수학 정답 자체의 오류는 0건 — 결함은 전부 해설 수치·전제 실현성·조사·성취기준 태그·발문 위생 축(기계 Tier1 게이트의 검산 범위 밖)이다.
+> **결론(rotation-0)**: **4개 코퍼스 전부 게이트 FAIL — 노출 부적격 유지**(게이트 통과 ≠ 학생 노출). 계통 결함 5류가 원인이며 전량 생성기·파이프라인 결함(환류 대상·`S3-12` 등재). 수학 정답 자체의 오류는 0건 — 결함은 전부 해설 수치·전제 실현성·조사·성취기준 태그·발문 위생 축(기계 Tier1 게이트의 검산 범위 밖)이다.
+> **현재 상태(rotation-1 · §"Rotation-1 환류 검증 결과" 참조)**: 5류 전건 생성기 교정 후 신규 독립 표본 재검수 — **conceptual PASS**·mc/rephrased는 잔여 결함(각 9·11건) 조치 완료했으나 rotation-1 as-found 자체는 여전히 FAIL로 정직 기록(§4.5 — rotation-2 확인 필요)·killer는 min-n 구조적 미달 지속. 부수로 concept_src_id 계통 결함(6번째 축) 14건 발견·전건 조치.
 
 ## 종합 — 코퍼스별 판정 (as-found · `corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found`)
 
@@ -52,6 +53,63 @@
 - **S5 감사 판정**: `corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found` 4회 실행 — 4종 전부 exit 1(종합 표). as-found 병기 선언은 각 감사 jsonl 선두에 기계 강제(§4.5·S2-12).
 - **표본 하한**: killer는 코퍼스 120 < min-n 200 — 전수 감사로도 표본 게이트 해금 불가(구조적 미달·정직 판정). 코퍼스 확장(≥200) 또는 기준 개정 전까지 표본 게이트 경로 자체가 닫혀 있다.
 - **재판정 규약(§4.5)**: 생성기 교정 후 같은 표본 재채점 금지 — 재판정은 `--rotation 1` 신규 독립 표본으로만(`S3-12` acceptance에 명시).
+
+## Rotation-1 환류 검증 결과 (S3-12 · 2026-07-29)
+
+**절차(§4.5 준수)**: 계통 결함 5류를 생성기 축에서 교정(josa.py 확장·태그 재귀속·해설 수치
+교정·확률 공리 가드·rephrase 발문 위생 게이트 신설)한 뒤, rotation-0(위 720문)과 **무관한
+신규 독립 표본**(`--rotation 1` — mc 200/1,080·conceptual 200/360·rephrased 200/429·killer
+120/120 전수)을 뽑아 재검수했다. rotation-0 표본을 재채점해 FAIL→PASS를 만드는 시도는
+없다(§4.5 "합격 로트 무결성" — 정본 `superhuman_verification_standard.md`).
+
+**rotation-1 as-found 판정**(`corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found`):
+
+| 코퍼스 | n | 결함 | 점추정 | Wilson 95% 상한 | 판정 | 결함류 분포 |
+|---|---|---|---|---|---|---|
+| `problem_bank_misconception_mc_v0` | 200/1,080 | 9 | 4.50% | **7.58%** | **FAIL** (exit 1) | standard_tag_error 9 |
+| `problem_bank_conceptual_v0` | 200/360 | 0 | 0.00% | **1.33%** | **PASS** (exit 0) | — |
+| `problem_bank_rephrased_v0` | 200/429 | 11 | 5.50% | **8.79%** | **FAIL** (exit 1) | grammar_break 3 · other 3 · statement_mismatch 5 |
+| `problem_bank_killer_v0` | 120/120 전수 | 0 | 0.00% | 2.20% | **FAIL — min-n 미달**(exit 1) | — |
+
+감사 라벨(rotation-1 as-found로 갱신): `corpus_audit_mc_v0.jsonl` · `corpus_audit_conceptual_v0.jsonl` · `corpus_audit_rephrased_v0.jsonl` · `corpus_audit_killer_v0.jsonl` (rotation-0 라벨을 덮어씀 — 사유: rotation-0의 5류 결함은 이미 생성기 교정으로 해소돼 있었고, 같은 표본 재채점은 §4.5 위반이라 새 독립 표본의 결과가 정본을 승계한다).
+
+**rotation-1이 발견한 잔여 결함(전건 조치 완료)**:
+- **mc 9건 — 성취기준 태그 오귀속 2종**: `distribute-first-term-only`·`negative-distribute-sign`(단항식×다항식 전개인데 `[9수02-09]`(다항식 덧셈·뺄셈) 태그 — 정위치 `[9수02-10]`, 5건) + `angle-sum-non-triangle`(`[9수03-03]`(삼각형 작도)이 내각합과 무관 — 정본 statement 대조 확정, 4건). **조치**: 밴드 표준코드 재태깅 + `misconceptions.json` M0017·M0018·M0051 동시 교정(agree 유지) + 코퍼스 재생성.
+- **rephrased 11건 — 발문 위생 게이트 잔존 축**: 괄호 메타 지시문 누출("(원래와 같은 표현으로)" 등 4건)·차원/도형 오기술("두 차원의 이차방정식" 등 3건)·개념 오치환("중점"·"큰 극" 2건)·어형 붕괴 비문("크다음 근을"·"크다 가르키는" 2건 — 형태소 분석 없이는 일반화 불가해 명시 slug 소급 제거). **조치**: `rephrase_hygiene.py`에 3신규 축 추가(패턴 정밀화로 오탐 0 확보 — 아래 참조) + 소급 제거 목록 신설 → 코퍼스 429→429(신규 축 적용 후 443에서 14건 추가 탈락, 최종 429).
+- **conceptual·killer**: rotation-1 결함 0건 — rotation-0에서 발견된 결함(극한 부호·확률 공리·판별식 태그)이 생성기 교정으로 완전 해소됐음을 독립 표본이 확인.
+
+**정직한 결과(§4.5 — 교정했다고 임의 PASS 선언 금지)**: mc·rephrased는 rotation-1이 발견한
+잔여 결함을 전부 조치했으나, **이 조치는 rotation-1 표본 자체를 재채점한 것이 아니라 코퍼스
+전체(재생성·재소인)에 적용한 것**이다 — 따라서 rotation-1의 as-found 판정(위 표)은 그대로
+FAIL로 기록하고, 조치 후 실제 결함율이 임계 이하인지는 **rotation-2 신규 독립 표본**으로만
+확인 가능하다(§4.5 — 후속 태스크로 등재, 아래 "다음 단계" 참조). 성급한 PASS 선언보다 정직한
+FAIL+조치완료 기록을 택했다.
+
+**부수 발견·조치 — concept_src_id 계통 결함(6번째 축, AI 텍스트 검수 범위 밖)**: 위 태그
+재귀속을 적용하며 misconception_mc의 `_TEMPLATE_META`(concept_src_id — 문항→개념그래프
+전이의 실제 앵커, `achievement_standard_codes`와는 별도 필드)를 45템플릿 전수 대조한 결과,
+**13개가 재태깅된 표준코드와 무관한 구 개념을 계속 가리키고 있었다**(이번 세션 rotation-1
+교정 12건 + S3-12 1차 패스 교정 11건에서 파생 — M0052 크로스링크 회귀와 동일 계통: 표시용
+태그만 고치고 그래프 앵커를 놓침) + concept_src_id 자체가 concept_graph_v1에 없는 성취기준
+코드 문자열 오기였던 선재 결함 1건(`circle_radius` — S3-12와 무관, 발견 즉시 조치). 전건을
+concept_graph_v1 역탐색으로 재고정하고, 크로스워크 실제 해석 경로(`derive_src_to_primary_atom`)로
+0 dangling 확인 → `test_relink_governance.py`가 이제 misconception_mc_v0도 상시 감시(3→4
+코퍼스, 재발 방지 — 편입 전에는 이 결함류가 무기한 미검출 상태였다).
+
+**하네스 자기검증 사후 발견·조치 — 위생 게이트 오탐 3건**: 신규 3축(괄호 메타·차원 오기술·
+개념 오치환)을 rephrase 코퍼스 대조만으로 검증했으나, 이 게이트는 `TestTextHygieneS312`를
+통해 misconception_eval_mc_generator·conceptual_count_mc_generator의 설명 문구에도 **공유
+적용**된다는 것이 사후 실측됐다 — "(일차항 계수)"·"(최대공약수는 1)"·"(단위: 도)"(정당한 괄호
+설명) · "중점"(midpoint-sum-only 밴드의 정상 용법) · "N의 제곱이므로 그 제곱근은"(sqrt_sum
+밴드의 참인 서술, 24건) 오탐을 실측 발견해 폐쇄 목록 후퇴·부정 lookahead로 정밀화(도크스트링
+"2026-07-29 재검토 실측" 참조 — 향후 신규 축은 rephrase 단독이 아니라 전 코퍼스 대조가
+재검증 범위).
+
+**다음 단계(후속 태스크 — 이 문서가 만드는 신규 정직한 공백)**: mc·rephrased의 rotation-2
+독립 표본 재검수(§4.5) — 조치가 실제로 결함율을 임계 이하로 낮췄는지 최종 확인. killer는
+corpus_audit_eval의 min-n 200 요구를 코퍼스 크기(120) 자체가 구조적으로 충족 못 한다 —
+표본 게이트 통과에는 코퍼스 확장(≥200건 추가 생성)이 선결 조건이며, 이는 결함 조치가 아니라
+별도의 저작 스코프 결정이라 이 세션 범위 밖으로 정직하게 남긴다.
 
 ## 문항별 판정 — misconception_mc (200)
 
