@@ -912,3 +912,6 @@
 {"ts": "2026-07-29T00:05:22", "actor": "claude/whymath-solution-review-40xspg", "action": "add", "id": "S4-10-multi-solution-generation"}
 {"ts": "2026-07-29T00:05:35", "actor": "claude/whymath-solution-review-40xspg", "action": "add", "id": "S4-11-hint-content-generation"}
 {"ts": "2026-07-29T00:05:47", "actor": "claude/whymath-solution-review-40xspg", "action": "add", "id": "S4-12-solution-comparison-clustering"}
+{"ts": "2026-07-29T01:28:49", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-13-unverifiable-domain-path"}
+{"ts": "2026-07-29T01:28:49", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-14-variant-lineage-persist"}
+{"ts": "2026-07-29T01:28:50", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-15-response-driven-difficulty-loop"}

@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: S4-10-unverifiable-domain-path
+id: S4-13-unverifiable-domain-path
 title: "SymPy 불가 영역 생성·검증 경로 v1 — 확률 유한 전수형 실증"
 track: math-completion
 stage: S4
@@ -18,5 +18,5 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "data/corpus/**"
 session: null
-notes: "docs/architecture/problem_bank_gap_review.md §3 D7 — 2026-07-12 정직 기록(수치평가 MC 소진·개념형은 사람/LLM 경로)의 이행. S4-01 K-12 완성의 구조적 선결(대수 계열 갇힘 해소)"
-updated: 2026-07-28
+notes: "docs/architecture/problem_bank_gap_review.md §3 D7 — 2026-07-12 정직 기록(수치평가 MC 소진·개념형은 사람/LLM 경로)의 이행. S4-01 K-12 완성의 구조적 선결(대수 계열 갇힘 해소). 구 S4-10에서 재번호(2026-07-29 — #635 풀이 엔진 축이 S4-09~12 선점)"
+updated: 2026-07-29

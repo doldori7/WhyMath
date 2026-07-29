@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: S4-12-response-driven-difficulty-loop
+id: S4-15-response-driven-difficulty-loop
 title: "실응답 난이도 루프 v1 — 정답률·rate_*·오개념 유발도 갱신(파일럿 후)"
 track: math-completion
 stage: S4
@@ -18,5 +18,5 @@ paths:
   - "src/backend/whymath_backend/l2/**"
   - "src/backend/whymath_backend/harness/**"
 session: null
-notes: "docs/architecture/problem_bank_gap_review.md §3 D9 — 외부 틀 기능 19 자동 업데이트 루프의 미가동 절반(IRT JMLE는 기배선). 실학생 응답 0이라 S3-01 잠금(입력 없는 파이프라인 금지)"
-updated: 2026-07-28
+notes: "docs/architecture/problem_bank_gap_review.md §3 D9 — 외부 틀 기능 19 자동 업데이트 루프의 미가동 절반(IRT JMLE는 기배선). 실학생 응답 0이라 S3-01 잠금(입력 없는 파이프라인 금지). 구 S4-12에서 재번호(2026-07-29)"
+updated: 2026-07-29
