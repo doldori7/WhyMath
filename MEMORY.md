@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·측정·PED-09): **비유·예시 생성기(L3)+analogy_fidelity_eval 강등전 — 846행 전량 저품질·797행 규칙 결함 실측** (claude /drive)
+
+**컨텍스트**: 04e §6 착지 — 비유 자산 846행은 실재하나 전량 검수 전·생성기와 품질 게이트 0. backend-engineer 위임.
+
+**적용**: ①`l3/pedagogy/analogy_generator.py`(개념-grain) — select-vs-generate 발주(`blank|defective|rejected`만·무결함 기존 비유 구조적 배제·개념당 1 dedup), 라우터 경유 seam(직접 호출 0·Fake 테스트), **정본 좌석 시행**: `MetaphorFillStore`가 `concept_content.metaphor` UPDATE(`IS NULL OR ai_estimated` WHERE 가드 — 검수 승격 행 보호). 상태기계는 테이블이 아니라 **전이 규약·함수 재사용**(prescreen→review) — 슬롯 테이블은 목표-grain FK라 개념-grain 혼입이 §7.2 grain 불일치를 낳기 때문 ②`example_generator.py`(목표-grain) — 발주−승인 산술로 잔여 슬롯만·숫자형 제외(검증 불가 답 저작은 동등문제 생성기 소관)·기존 슬롯 스토어 무수정 소비 ③검출기 `analogy_checker.py` 4+2축 — 오개념 유발은 규칙 프록시 2축(한계 명시 부재·동일시 단정)+의미론 본축 `SEMANTIC_MISCONCEPTION` **DEFERRED 코드 회계**, 정의 참칭·정답 유출·게임형(메커닉 어휘 한정 — "주사위 게임 확률 소재" 오탐 방지). 코퍼스 실측으로 오탐 계급 2종 조임(12→1·2→0) ④`harness/analogy_fidelity_eval.py` CLI+CI backend 잡 배선+**pytest 이중 배선**(CI 스텝 삭제돼도 pytest가 강제 — OPS-10 계약 정합·tests/infra 258 green).
+
+**수요 실측(재저작 실표적 정량화)**: metaphor 공백 0/846 — 단 **전량 review_status='ai_estimated'**(적재기 상수 각인)·**규칙 검출 결함 보유 797행**(한계 명시 부재 797·동일시 1). 발주서 잔여 슬롯 상한 40점(개념형 18·숫자형 22·APPROVED 채움은 DB 부재로 None — 0% 위장 금지).
+
+**검증**: eval **exit 0**(위반 432 미검출 0 — Wilson 상한 0.62%·클린 144 오검출 0 — 상한 1.84%)+**널 검출기 대조 exit 1**(변별력 봉인). 신규 74건·전체 스위트 2회 완주 7,752 passed(=7,678+74·seed 1791826515 귀속)·메인 독립 검증(105건·eval exit 0 재현)·lint 4종 clean·l3→l4 import 0.
+
+**롤백**: 전부 additive(신규 모듈·오프라인 저작 배치 — 서빙 경로 아님·플래그 불요 판단 사유 병기). 파일 제거로 원복.
+
+**정직한 공백**: 라이브 LLM 채움 미실행(컨테이너 LLM 0 — Phaiakes9 런북 소관)·SEMANTIC_MISCONCEPTION DEFERRED·잔존 오탐 1건(평균값 정리 — 수학적 상등 vs 비유 동일시 규칙 구분 불가)·metaphor 채움 후에도 'ai_estimated' 유지(기계 게이트는 4축만 — 'reviewed' 승격은 overclaim)·CI 워크플로 실구동은 PR CI가 최종.
+
 ### 2026-07-29 (구현·PED-06 + 결함 발견): **카탈로그 소비 배선(필터·전략 카드) + k_type 맹글링 프로덕션 결함 발견·수정** (claude /drive)
 
 **컨텍스트**: PED-05 카탈로그를 소비처 2곳(04e §4)에 배선. backend-engineer 위임.
