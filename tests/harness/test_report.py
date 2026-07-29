@@ -88,3 +88,38 @@ class TestBrief:
     def test_무결성_경고_표기(self):
         text = report.render_brief(_backlog(), ["오류1"], "other", date(2026, 7, 8))
         assert "무결성 경고 1건" in text
+
+    def test_미머지_done_후보는_브리핑에서_제외된다(self):
+        # HARN-12 — S2-01-c(유일 todo)가 타 세션에서 이미 done 처리됐으나 미머지 상태.
+        backlog = _backlog()
+        text = report.render_brief(
+            backlog,
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            done_excluded={"S2-01-c": ["claude/finisher"]},
+        )
+        assert "S2-01-c" not in text.split("다음 착수 후보")[-1]
+        assert "착수 가능 태스크 없음" in text  # 유일 후보가 빠져 폴백 메시지로
+
+    def test_미머지_done_필터는_무관한_후보를_다치지_않는다(self):
+        # 변별력 — 제외 대상이 아닌 todo 태스크는 그대로 노출돼야 필터가 아니라 고장이 아니다.
+        backlog = _backlog()
+        backlog.tasks["S2-02-d"] = Task(
+            id="S2-02-d", title="다른 대기건", track="main", stage="S2", updated="2026-07-08"
+        )
+        text = report.render_brief(
+            backlog,
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            done_excluded={"S2-01-c": ["claude/finisher"]},
+        )
+        candidates = text.split("다음 착수 후보")[-1]
+        assert "S2-01-c" not in candidates
+        assert "S2-02-d" in candidates
+
+    def test_done_excluded_미지정시_기존_동작_불변(self):
+        # 하위호환 — 새 파라미터를 생략한 기존 호출부(테스트 포함)가 그대로 통과해야 한다.
+        text = report.render_brief(_backlog(), [], "branch-x", date(2026, 7, 20))
+        assert "S2-01-c" in text.split("다음 착수 후보")[-1]

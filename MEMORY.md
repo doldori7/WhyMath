@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·HARN-12): **브리핑에도 미머지 done 필터 배선 — next만 걸러 SessionStart는 여전히 완료분 추천했던 HARN-11 잔여 해소** (claude 구현, Kiki `/drive`)
+
+**배경**: HARN-11(#638)이 `next`·`start`에는 미머지 done 필터(`scan_remote_done`)를 배선했지만 `brief`(SessionStart 훅 진입점 — 매 세션이 자동으로 읽는 최고 레버리지 표면)는 빠져 있었다. 실측: S3-12 세션 종료 직후 새 세션이 열리자 브리핑이 이미 타 세션에서 done 처리된 S3-10·S3-11을 1순위 후보로 계속 추천 — `next`·`start`는 정상 차단했지만 브리핑 자체가 안 막히면 다음 세션이 같은 근접사고를 반복한다("장치는 있는데 일부만 배선됨" 패턴, OPS-03·08·11·12·13과 동형).
+
+**구현**: `report.render_brief`에 `done_excluded: dict[str, list[str]]` 파라미터 추가(순수 함수 유지 — 원격 조회는 호출부 책임, 기존 시그니처 하위호환). `cmd_brief`가 `next`와 동일하게 `selector.candidates`로 후보를 구한 뒤 `scan_remote_done`(fetch 없이 캐시 ref만 — 훅은 빠르고 네트워크 0이어야 함)으로 걸러 전달. 두 try/except 모두 CLAUDE.md 침묵 실패 금지 준수(`type(exc).__name__` 로그 포함 fail-open) — 이 참에 곁에 있던 기존 `_remote_claim_map` 무타입 except도 같이 교정(같은 파일의 같은 위반 패턴을 발견하고 넘기지 않음).
+
+**변별력**: 실 git 저장소 fixture(`bare_remote`)로 ①타 세션이 done 처리·미머지 상태를 만들고 `brief` 출력에서 실제로 빠지는지 ②`scan_remote_done`이 예외를 던져도 브리핑이 살아있고 예외 타입이 stderr에 찍히는지 — 둘 다 CLI 통합 테스트로 확인(`TestUnmergedDoneDetection`에 2건 추가). `report.py` 단위 테스트 3건(정상 제외·무관 후보 비침해·하위호환) 동반. `tests/harness` 213건 green.
+
+**사고 정정(같은 회차)**: `ruff format`으로 이 두 파일을 먼저 포맷했으나 `scripts/harness`·`tests/harness`는 `src/backend/pyproject.toml` 관할 밖이라 CI 정본은 `black --line-length 100`(OPS-12/13 배선)이다 — 88폭 ruff 포맷이 CI와 어긋날 뻔한 것을 `black --check` 실측으로 발견·정정. 하네스 하위 디렉터리를 건드릴 때는 ruff format이 아니라 black이 정본임을 확인.
+
 ### 2026-07-29 (구현·환류·S3-12): **v0 계통 결함 5류 생성기 교정 + rotation-1 재검수 — mc/rephrased 잔여 결함 조치완료·정직 FAIL 유지, concept_src_id 6번째 결함류 발견·전건 교정** (claude 구현, Kiki `/drive` + "진행")
 
 **실행**: S3-09 감사 확정 5류(조사 하드코딩·성취기준 태그 오귀속·해설 수치·모순 전제·rephrase 위생 부재)를 생성기 축에서 교정 — `josa.py`에 `tail_reading`(거듭제곱·분수·소수·괄호/절댓값 묵음·라틴/그리스 문자 읽기) 확장해 mc·conceptual 생성기 전 조사 하드코딩 제거, `root_aggregate_batch`(killer) 차수별 성취기준 정위치, `conceptual_count_mc_generator` 극한 부호(b−a→a−b)·확률 공리 가드, `misconception_eval_mc_generator` 완전제곱 미치환 변수, `rephrase_hygiene.py` 신설(비한글 스크립트·메타 라벨·비표준 용어·요구-정답 부정합·조사 오류 5축) + `rephrased_corpus_hygiene` 일괄 적용(483→446, 37건 탈락). 전건 재생성 후 Tier1 전수 재검산 green(2,006문)·전체 백엔드 스위트 3회 실행(초회 파이프 tail이 종료코드 삼켜 재실행, HEAD 대조로 신규 회귀 0 확인)하여 1차 커밋(`8ae200b`).

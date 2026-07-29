@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -16,6 +16,6 @@ artifacts: []
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
-session: null
+session: claude/whymath-problem-bank-design-65tsm4
 notes: "HARN-11(#638)이 next·start에만 배선한 잔여. 2026-07-29 실측: HARN-11 머지 후에도 brief는 S3-09(타 세션 완료·미머지)를 1순위로 계속 추천 — 브리핑은 매 세션 시작이 읽는 최고 레버리지 표면이라 여기가 안 막히면 다음 세션이 같은 근접사고를 반복한다. 이 저장소가 여섯 번 반복한 '장치는 있는데 일부만 배선됨' 패턴(OPS-03·08·11·12·13 선례)."
 updated: 2026-07-29
