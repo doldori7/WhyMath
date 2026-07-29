@@ -910,3 +910,4 @@
 {"ts": "2026-07-28T23:51:19", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "add", "id": "PED-11-doc-debt-ghost-fields"}
 {"ts": "2026-07-28T23:57:00", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 PED-04-strategy-gap-design-doc의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-28T23:57:52", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "done", "id": "PED-04-strategy-gap-design-doc", "artifacts": ["commit 68b0448 (branch claude/whymath-teaching-strategy-enfkqt)"]}
+{"ts": "2026-07-29T01:15:11", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "start", "id": "PED-07-mode-guard-wiring", "session": "claude/whymath-teaching-strategy-enfkqt", "remote": "ok"}

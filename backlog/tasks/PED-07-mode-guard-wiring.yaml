@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "src/backend/whymath_backend/l4/**"
   - "src/backend/whymath_backend/api/**"
   - "tests/backend/**"
-session: null
+session: claude/whymath-teaching-strategy-enfkqt
 notes: "정본: 04e §9. \"검증 장치를 만들고 배선 확인 없이 완료 선언 금지\" 반복 사고 유형의 해소 — check_forbidden_modes 프로덕션 호출 현재 0."
-updated: 2026-07-28
+updated: 2026-07-29
