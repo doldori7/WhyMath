@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/**"
-session: null
+session: claude/whymath-teaching-strategy-enfkqt
 notes: "정본: 04e §7. 원천 = atom_probe 전량(1,823 — 2026-07-28 dedup 14쌍 통합 후). 문항 생성이 아니라 기존 자산 투영."
-updated: 2026-07-28
+updated: 2026-07-29
