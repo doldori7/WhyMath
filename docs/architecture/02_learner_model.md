@@ -158,6 +158,26 @@ class LearnerState(BaseModel):
 - `mastery`는 LLM 프롬프트에 바로 쓰기 좋은 *얇은 요약*, `mastery_states`는 어댑티브 출제·복습 추천에 쓰는 *두꺼운 상세*. 둘 다 BKT를 토대로 한다.
 - `grade`·`curriculum`·`active_textbook_id`·`shadow_curriculum_progress`·`goals`는 **L1 `StudentProfile`의 사본**이다. L2는 이를 *전달*할 뿐 *소유·수정*하지 않는다 (7계층 경계).
 
+> **v0 축소 개정 (편집자 부기, 2026-07-29 — `ai_tutor_module_gap_review.md §3 D3`)**: 위 스키마는
+> 이 클래스가 **아직 코드에 실체화되지 않은 상태**에서의 목표 전체 명세다. 실체화 착수
+> (`PED-05-learner-state-assembly`)는 **생산자가 실재하는 필드만**으로 v0을 좁혀 만든다 —
+> `mastery`·`general_ability`·`domain_abilities`·`active_misconceptions`·`recent_struggles`·
+> `recent_successes`·`grade`·`curriculum`·`goals` 9개는 v0에 포함, 다음 4개는 **v0에서 제외**한다:
+> - `affect: AffectState` — 정서 신호 생산자가 없다(`l4/pedagogy/runtime_selector.py:96-112`가
+>   이미 "집중도·학습시간·선호 신호는 생산자가 없어 필드로 만들지 않는다"고 명시한 것과 같은
+>   결정의 연장). 발화 조건: `ai_tutor_module_gap_review.md §3 D4`(행동 텔레메트리 생산자)가
+>   먼저 착지하고 §5-③ 조건이 충족될 때.
+> - `mastery_states: dict[str, MasteryState]` — `MasteryState` 자체가 미실체화 스케치다(같은
+>   `runtime_selector.py`가 자인). 발화 조건: 어댑티브 출제 또는 선호 풀이 스타일 추적이
+>   실소비처로 설 때(`solution_module_gap_review.md §4-⑤` 승계).
+> - `active_textbook_id` — L1 좌석은 실재하나(`textbook_mapping`/`textbook_unit`) 학생 프로필과의
+>   FK·L4 소비처가 0이다.
+> - `shadow_curriculum_progress` — `user_profile.uses_inkang` 불리언만 있고 진도 자체가 없다.
+>
+> "항상 None인 필드를 두면 읽고 있다는 착시를 주지만 실제 판단에는 기여하지 못한다"(같은
+> `runtime_selector.py` 결정)는 원칙을 이 계약에도 동형 적용한다. 제외 필드는 **v0 클래스의
+> docstring에 사유와 함께 명시**하고, 두꺼운 목표 스키마(위 코드 블록)는 장기 지향점으로 보존한다.
+
 ## 인터페이스 (L4·L5 호출)
 
 ```python
