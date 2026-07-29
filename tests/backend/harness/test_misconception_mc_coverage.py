@@ -35,7 +35,8 @@ _NEW_KEBABS: dict[str, str] = {
     "square-root-positivity": "[9수01-07]",
     "log-distribution": "[12대수01-05]",
     "composite-function-commutes": "[10공수2-03-02]",
-    "period-of-scaled-sine": "[12미적Ⅱ-02-02]",
+    # S3-12 재태깅: sin(bx) 주기는 [12대수02-02](삼각함수 그래프·성질) 정위치(감사 확정).
+    "period-of-scaled-sine": "[12대수02-02]",
     # Tier B 계산가능(값형) 4종.
     "fraction-cancellation": "[9수01-04]",
     "angle-sum-non-triangle": "[9수03-05]",

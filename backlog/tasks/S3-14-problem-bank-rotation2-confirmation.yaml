@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-14-problem-bank-rotation2-confirmation
+title: "misconception_mc·rephrased v0 rotation-2 확인 감사 — S3-12 조치 후 corpus_audit_eval PASS 최종 검증"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on:
+  - S3-12-problem-bank-v0-defect-remediation
+requires_gates: []
+acceptance:
+  - "S3-12이 rotation-1에서 발견·조치한 결함(mc 9건 성취기준 태그 오귀속·rephrased 11건 발문 위생)이 실제로 결함율을 낮췄는지 신규 독립 rotation-2 표본(--rotation 2·mc 200/1,080·rephrased 200/429 — rotation-0·1과 무관·§4.5 준수)으로 확인한다. corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found가 두 코퍼스 모두 exit 0이면 PASS로 노출 적격 재평가·실패 시 잔여 결함류를 신규 이슈로 재등재(무한 루프 방지 — 3회차부터는 근본 설계 재검토)."
+artifacts:
+  - "docs/data/ai_review_batch_v0_4corpora_2026-07.md §Rotation-2 확인 감사 결과"
+  - "docs/data/corpus_audit_{mc,rephrased}_v0_r2.jsonl"
+  - "mc PASS(Wilson 1.33%)·rephrased FAIL 3라운드 연속→S3-15 등재"
+paths:
+  - "docs/data/**"
+  - "data/corpus/problem_bank_misconception_mc_v0/**"
+  - "data/corpus/problem_bank_rephrased_v0/**"
+session: null
+notes: "S3-12(2026-07-29 rotation-1)가 mc/rephrased 잔여 결함을 전건 조치했으나 §4.5(같은 표본 재채점 금지) 때문에 rotation-1 표본 자체는 as-found FAIL로 정직 기록 — 이 태스크가 조치 효과를 신규 표본으로 최종 확인한다. 정본: docs/data/ai_review_batch_v0_4corpora_2026-07.md §Rotation-1 환류 검증 결과 '다음 단계'."
+updated: 2026-07-29

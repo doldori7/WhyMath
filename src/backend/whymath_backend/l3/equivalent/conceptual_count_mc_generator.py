@@ -34,6 +34,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eun_neun, euro_ro, i_ga, wa_gwa
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -208,6 +209,8 @@ def _build_is_one_to_one_pool() -> tuple[_CountItem, ...]:
             seen.add(conditions)
             b_disp = f" + {b}x" if b else ""
             c_disp = f" + {c}" if c else ""
+            # 주격 조사는 식 꼬리 읽기 받침 판별 — 'x^2 가'(제곱=곱) 류 결함 교정(S3-12).
+            formula = f"x^2{b_disp}{c_disp}"
             pool.append(
                 _CountItem(
                     conditions=conditions,
@@ -215,7 +218,7 @@ def _build_is_one_to_one_pool() -> tuple[_CountItem, ...]:
                     answer_str="0",
                     misc_str="1",
                     question_text=(
-                        f"함수 f(x) = x^2{b_disp}{c_disp} 가 실수 전체에서 일대일대응이면 1, "
+                        f"함수 f(x) = {formula} {i_ga(formula)} 실수 전체에서 일대일대응이면 1, "
                         "아니면 0을 쓰시오."
                     ),
                     answer_explanation=(
@@ -257,8 +260,10 @@ def _build_geometric_convergence_pool() -> tuple[_CountItem, ...]:
                         f"공비가 r = {r_disp} 인 등비급수가 수렴하면 1, 발산하면 0을 쓰시오."
                     ),
                     answer_explanation=(
-                        f"등비급수는 |r| < 1 일 때만 수렴하는데 r = {r_disp} 는 |r| > 1 이므로 "
-                        "발산한다 — 0이다. 등비급수가 늘 수렴한다고 오인하면 1로 잘못 답한다."
+                        # 보조사는 분수 읽기(분모분의 분자) 받침 판별 — '7/4 는' 류 교정(S3-12).
+                        f"등비급수는 |r| < 1 일 때만 수렴하는데 r = {r_disp} "
+                        f"{eun_neun(r_disp)} |r| > 1 이므로 발산한다 — 0이다. "
+                        "등비급수가 늘 수렴한다고 오인하면 1로 잘못 답한다."
                     ),
                     difficulty=_difficulty(p + q),
                 )
@@ -290,13 +295,20 @@ def _build_limit_equals_value_pool() -> tuple[_CountItem, ...]:
                     answer_kind="limit_equals_value",
                     answer_str="0",
                     misc_str="1",
+                    # 주격 조사는 식 꼬리 읽기 받침 판별 — 'f(1) 가' 류 결함 교정(S3-12).
                     question_text=(
                         f"함수 f(x) = (x^2 - {s}x + {p}) / (x - {a}) 에서 "
-                        f"lim(x→{a}) f(x) = f({a}) 가 성립하면 1, 아니면 0을 쓰시오."
+                        f"lim(x→{a}) f(x) = f({a}) {i_ga(f'f({a})')} 성립하면 1, "
+                        "아니면 0을 쓰시오."
                     ),
                     answer_explanation=(
-                        f"x = {a} 에서 분자·분모가 함께 0이 되어 함수값 f({a})는 정의되지 않지만 "
-                        f"약분하면 극한값은 {b - a}로 유한하다 — 극한값과 함수값이 달라 0이다. "
+                        # S3-12 교정: 극한값은 (x−a)(x−b)/(x−a)의 x→a 극한 = a−b — 생성기가
+                        # b−a로 부호를 뒤집어 적던 계통 결함(explanation_slip 13건)을 바로잡는다.
+                        # 조사도 값 읽기 받침 판별(euro_ro·eun_neun)로 고른다.
+                        f"x = {a} 에서 분자·분모가 함께 0이 되어 함수값 "
+                        f"f({a}){eun_neun(f'f({a})')} 정의되지 않지만 "
+                        f"약분하면 극한값은 {a - b}{euro_ro(str(a - b))} 유한하다 — "
+                        "극한값과 함수값이 달라 0이다. "
                         "극한값이 늘 함수값과 같다고 오인하면 1로 잘못 답한다."
                     ),
                     difficulty=_difficulty(a + b),
@@ -320,6 +332,8 @@ def _build_is_differentiable_pool() -> tuple[_CountItem, ...]:
                 continue
             seen.add(conditions)
             c_disp = f" + {c}" if c else ""
+            # 주격 조사는 식 꼬리 읽기 받침 판별 — '|x-1| 가'·'3 가' 류 결함 교정(S3-12).
+            formula = f"|x - {a}|{c_disp}"
             pool.append(
                 _CountItem(
                     conditions=conditions,
@@ -327,7 +341,7 @@ def _build_is_differentiable_pool() -> tuple[_CountItem, ...]:
                     answer_str="0",
                     misc_str="1",
                     question_text=(
-                        f"함수 f(x) = |x - {a}|{c_disp} 가 실수 전체에서 미분가능하면 1, "
+                        f"함수 f(x) = {formula} {i_ga(formula)} 실수 전체에서 미분가능하면 1, "
                         "아니면 0을 쓰시오."
                     ),
                     answer_explanation=(
@@ -506,11 +520,18 @@ def _build_conditional_equal_pool() -> tuple[_CountItem, ...]:
             if i == j:  # P(A)=P(B)면 대칭이라 오개념 표적 아님.
                 continue
             m = 6  # P(A|B)=6/12=1/2(임의 유효값·대칭 판정은 P(A),P(B)로 결정).
+            pa, pb, pab = (sympy.Rational(x, 12) for x in (i, j, m))
+            # S3-12 확률 공리 가드 — P(A∩B) = P(A|B)·P(B) ≤ min(P(A), P(B))를 위반하는 시드는
+            # **거부(skip)** 한다(기존 밴드 시드 정책 미러 — i=j 배제와 같은 continue 규약).
+            # 위반 시드는 실현 불가능한 확률 설정(예 P(B|A)=P(A∩B)/P(A) > 1)을 낳는다 —
+            # S3-09 감사 확정 모순 전제(condition_mismatch) 7건의 원인(재생성으로 자연 폐기).
+            p_ab = pab * pb
+            if p_ab > min(pa, pb):
+                continue
             conditions = f"{i}/12,{j}/12,{m}/12"
             if conditions in seen:
                 continue
             seen.add(conditions)
-            pa, pb, pab = (sympy.Rational(x, 12) for x in (i, j, m))
             pool.append(
                 _CountItem(
                     conditions=conditions,
@@ -522,9 +543,10 @@ def _build_conditional_equal_pool() -> tuple[_CountItem, ...]:
                         "P(A|B) = P(B|A) 이면 1, 아니면 0을 쓰시오."
                     ),
                     answer_explanation=(
+                        # 접속 조사는 분수 읽기 받침 판별 — '1/2 와 달라' 류 결함 교정(S3-12).
                         f"베이즈 정리로 P(B|A) = P(A|B)·P(B)/P(A) = {pab * pb / pa} 인데 "
-                        f"P(A|B) = {pab} 와 달라 P(A|B) ≠ P(B|A)다 — 0이다. 둘을 같다고 여기는 "
-                        "검사의 오류에 빠지면 1로 잘못 답한다."
+                        f"P(A|B) = {pab} {wa_gwa(str(pab))} 달라 P(A|B) ≠ P(B|A)다 — 0이다. "
+                        "둘을 같다고 여기는 검사의 오류에 빠지면 1로 잘못 답한다."
                     ),
                     difficulty=_difficulty(i + j),
                 )
@@ -596,7 +618,9 @@ def _build_dot_product_scalar_pool() -> tuple[_CountItem, ...]:
                                 "벡터이면 1, 스칼라(수)이면 0을 쓰시오."
                             ),
                             answer_explanation=(
-                                f"내적 a·b = {a1}·{b1} + {a2}·{b2} = {a1 * b1 + a2 * b2} 은 "
+                                # 보조사는 수 읽기 받침 판별 — '= 5 은' 류 결함 교정(S3-12).
+                                f"내적 a·b = {a1}·{b1} + {a2}·{b2} = {a1 * b1 + a2 * b2} "
+                                f"{eun_neun(str(a1 * b1 + a2 * b2))} "
                                 "하나의 수(스칼라)라 벡터가 아니다 — 0이다. 내적을 벡터로 여기면 "
                                 "1로 잘못 답한다."
                             ),
@@ -634,7 +658,8 @@ def _build_inequality_direction_pool() -> tuple[_CountItem, ...]:
                             "x < (어떤 수) 꼴이면 0을 쓰시오."
                         ),
                         answer_explanation=(
-                            f"음수 -{a}로 양변을 나누면 부등호 방향이 뒤집힌다 — "
+                            # 부사격 조사는 수 읽기 받침 판별 — '-3로' 류 결함 교정(S3-12).
+                            f"음수 -{a}{euro_ro(str(-a))} 양변을 나누면 부등호 방향이 뒤집힌다 — "
                             + (
                                 "해는 x > (어떤 수) 꼴이라 1이다"
                                 if correct == "1"

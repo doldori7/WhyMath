@@ -49,6 +49,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul, eun_neun, euro_ro, i_ga, wa_gwa
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -122,6 +123,12 @@ TemplateKind = Literal[
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
 # concept_src_id는 개념그래프 원천 키, unit_code는 문항 단원 코드. 성취기준 코드는 spec이 공급한다.
+#
+# S3-12 rotation-1 자기정합성 교정(2026-07-29): `misconception_mc_batch._Band.standard_codes`
+# 재태깅 시 이 dict의 concept_src_id는 갱신되지 않아 13개 항목이 achievement_standard_codes와
+# 무관한 개념(concept_graph_v1)을 계속 가리키고 있었다(M0052 크로스링크 회귀와 동일 계통 —
+# 표시용 태그만 고치고 그래프 순회용 앵커를 놓치는 패턴). concept_graph_v1의 standard_codes로
+# 역탐색해 실제 겹치는 개념으로 전부 재고정(아래 개별 주석 = 신규 src_id 선정 근거).
 _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "distribution": ("J0219", "POLY-PRODUCT"),
     "chain_rule": ("H:12미적Ⅰ02-01", "CALC-CHAIN"),
@@ -130,27 +137,45 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "sqrt_pos": ("J0107", "SQRT-POS"),
     "log_dist": ("H:12대수01-05", "LOG-DIST"),
     "func_compose": ("HK35", "FUNC-COMPOSE"),
-    "sine_period": ("H:12미적Ⅱ02-02", "TRIG-PERIOD"),
+    # sine_period(S3-12 rotation-1 재고정): 밴드 성취기준이 [12미적Ⅱ-02-02]→[12대수02-02]로
+    # 재태깅됐으나 concept_src_id는 그대로였다 — [12대수02-02](삼각함수의 뜻과 그래프) 보유
+    # H:12대수02-02로 교정.
+    "sine_period": ("H:12대수02-02", "TRIG-PERIOD"),
     "translate": ("10기수2-01-06", "FUNC-TRANSLATE"),
     "product_rule": ("H:12미적Ⅰ02-01", "CALC-PRODUCT"),
     "fraction_cancel": ("J0104", "FRACTION-CANCEL"),
     "polygon_angle_sum": ("J0305", "POLYGON-ANGLE-SUM"),
-    "area_perimeter": ("J0312", "AREA-PERIMETER"),
-    "circle_radius": ("10공수2-01-04", "CIRCLE-RADIUS"),
+    # area_perimeter(S3-12 rotation-1 재고정): 재태깅 후 [9수03-12](닮음)만 보유한 J0312는
+    # 무관 — 문항이 실제로 묻는 직사각형 넓이 [6수03-13] 보유 ME3로 교정.
+    "area_perimeter": ("ME3", "AREA-PERIMETER"),
+    # circle_radius(S3-12 rotation-1 발견 — 재태깅과 무관한 선재 결함): 원래 값 "10공수2-01-04"는
+    # concept_graph_v1에 없는 성취기준 코드 문자열이 그대로 src_id 자리에 들어간 오기(이 그래프는
+    # 원칙적으로 J/H:/HK/ME/S 접두 source_id를 쓰나 드물게 코드형 source_id도 있다 — 다만 그건
+    # "10기수2-01-04"(원의 방정식, 별개 개념)이지 "10공수2-01-04"가 아니다). 밴드 표준코드 3종
+    # 중 [10공수2-01-04] 보유 HK22(원의 방정식-2)로 교정.
+    "circle_radius": ("HK22", "CIRCLE-RADIUS"),
     "gambler_streak": ("H:12확통02-01", "PROB-INDEPENDENT-TRIAL"),
     # 843 확장 트랜치1(기초 계산형 6종) — 성취기준은 spec이 공급([9수01-*]).
-    "fraction_addition": ("J0104", "FRACTION-ADD"),
+    # fraction_addition(S3-12 rotation-1 재고정): [9수01-04]→[9수01-05] 재태깅에 맞춰 J0104→
+    # [9수01-05] 보유 J0105로 교정.
+    "fraction_addition": ("J0105", "FRACTION-ADD"),
     "negative_product": ("J0103", "NEG-PRODUCT"),
     "subtract_negative": ("J0103", "SUBTRACT-NEG"),
     "absolute_value": ("J0104", "ABS-VALUE"),
     "sqrt_sum": ("J0107", "SQRT-SUM"),
-    "difference_of_squares": ("J0101", "DIFF-SQUARES"),
+    # difference_of_squares(S3-12 rotation-1 재고정): [9수01-01]→[9수02-19] 재태깅에 맞춰
+    # [9수02-19](다항식의 곱셈·인수분해) 보유 J0219로 교정.
+    "difference_of_squares": ("J0219", "DIFF-SQUARES"),
     # 843 확장 트랜치2(거듭제곱·분배·부호 계산형 6종) — 성취기준은 spec이 공급([9수02-*]).
     "exponent_product": ("J0208", "EXP-PRODUCT"),
     "power_of_power": ("J0208", "POWER-OF-POWER"),
     "negative_square": ("J0208", "NEG-SQUARE"),
-    "distribute_partial": ("J0209", "DISTRIBUTE-PARTIAL"),
-    "negative_distribute": ("J0209", "NEG-DISTRIBUTE"),
+    # distribute_partial/negative_distribute(S3-12 rotation-1 재고정): 둘 다 [9수02-09]→
+    # [9수02-10] 재태깅에 맞춰 [9수02-10](단항식과 다항식의 곱셈) 보유 J0210으로 교정 —
+    # J0209(다항식의 덧셈·뺄셈)는 combine_unlike의 정당한 앵커라 그대로 둔다(오직 이 두
+    # 템플릿의 배정이 오귀속이었음).
+    "distribute_partial": ("J0210", "DISTRIBUTE-PARTIAL"),
+    "negative_distribute": ("J0210", "NEG-DISTRIBUTE"),
     "square_difference": ("J0219", "SQUARE-DIFF"),
     # 843 확장 트랜치3(중점·비례·부호·동류항·완전제곱·켤레 계산형 6종).
     "midpoint_no_half": ("J0205", "MIDPOINT-NO-HALF"),
@@ -160,19 +185,37 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "complete_square": ("J0219", "COMPLETE-SQUARE"),
     "conjugate_product": ("J0107", "CONJUGATE-PRODUCT"),
     # 843 확장 트랜치4(이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종).
-    "transpose": ("J0213", "TRANSPOSE-SIGN"),
+    # transpose(S3-12 rotation-1 재고정): [9수02-13]→[9수02-04] 재태깅에 맞춰 [9수02-04]
+    # (일차방정식 풀이·활용) 보유 J0204로 교정.
+    "transpose": ("J0204", "TRANSPOSE-SIGN"),
     "gcd_lcm": ("J0102", "GCD-LCM"),
-    "decimal_mult": ("J0106", "DECIMAL-MULT"),
-    "mixed_mult": ("J0104", "MIXED-MULT"),
-    "remainder_sign": ("HK01", "REMAINDER-THEOREM"),
+    # decimal_mult(S3-12 rotation-1 재고정): [9수01-06]→[6수01-13] 재태깅에 맞춰 [6수01-13]
+    # (소수의 곱셈) 보유 S5로 교정.
+    "decimal_mult": ("S5", "DECIMAL-MULT"),
+    # mixed_mult(S3-12 rotation-1 재고정): [9수01-04]→[9수01-05] 재태깅에 맞춰 fraction_addition과
+    # 동일 근거로 J0105로 교정(공유 앵커 — [9수01-05]는 정수·유리수 사칙연산 포괄 성취기준).
+    "mixed_mult": ("J0105", "MIXED-MULT"),
+    # remainder_sign(S3-12 rotation-1 재고정): [10공수1-01-01]→[10공수1-01-02] 재태깅에 맞춰
+    # 교정 — [10공수1-01-02] 보유 개념이 HK02(항등식·미정계수)·HK03(나머지정리·인수정리) 둘이라
+    # misconception 자체가 "나머지정리"이므로 HK03을 선택(HK02는 무관 개념).
+    "remainder_sign": ("HK03", "REMAINDER-THEOREM"),
     "vieta_sum": ("HK08", "VIETA-SUM"),
     # 843 확장 트랜치5(비대수 도메인·기하4·확통2) — 성취기준은 spec이 공급.
-    "trapezoid_area": ("J0312", "TRAPEZOID-AREA"),
+    # trapezoid_area(S3-12 rotation-1 재고정): [9수03-12]→[6수03-14] 재태깅에 맞춰 [6수03-14]
+    # (평행사변형·삼각형·사다리꼴·마름모의 넓이) 보유 ME4로 교정.
+    "trapezoid_area": ("ME4", "TRAPEZOID-AREA"),
     "scale_volume": ("J0312", "SCALE-VOLUME"),
     "cone_volume": ("J0308", "CONE-VOLUME"),
-    "circle_area": ("J0319", "CIRCLE-AREA"),
+    # circle_area(S3-12 rotation-1 재고정): [9수03-19]→[6수03-16]/[9수03-06] 재태깅에 맞춰
+    # [6수03-16](원주와 원의 넓이 — 문항이 실제로 묻는 넓이·둘레 혼동을 그대로 포괄) 보유
+    # ME6으로 교정(J0306=부채꼴은 다른 도형이라 배제).
+    "circle_area": ("ME6", "CIRCLE-AREA"),
     "combination": ("HK41", "COMBINATION-COUNT"),
-    "same_item_permutation": ("HK41", "SAME-ITEM-PERM"),
+    # same_item_permutation(S3-12 rotation-1 재고정): [12직수04-01]만→[12확통01-01] 추가
+    # 재태깅에 맞춰 교정 — 종전 HK41(조합)은 combination 템플릿의 정당한 앵커라 여기 재사용은
+    # 애초 오귀속이었다. [12확통01-01](중복순열·같은 것이 있는 순열)이 이름 그대로의 정확한
+    # 매치라 H:12확통01-01로 교체(H:12직수04-01은 범용 직무 경우의 수라 배제).
+    "same_item_permutation": ("H:12확통01-01", "SAME-ITEM-PERM"),
 }
 
 
@@ -293,8 +336,10 @@ def _build_distribution_pool() -> tuple[_EvalItem, ...]:
                     f"두 수 a, b에 대하여 a = {a}, b = {b} 일 때, (a+b)^2 의 값을 구하시오."
                 ),
                 answer_explanation=(
-                    f"(a+b)^2 = a^2 + 2ab + b^2 이므로 a = {a}, b = {b} 를 대입하면 "
-                    f"(a+b)^2 = {correct_v} 이다. 교차항 2ab 를 빠뜨리면 a^2+b^2 가 되어 틀린다."
+                    # 조사는 수 읽기 받침 판별(josa 헬퍼) — S3-09 감사 조사 계통 결함 교정(S3-12).
+                    f"(a+b)^2 = a^2 + 2ab + b^2 이므로 a = {a}, b = {b} {eul_reul(str(b))} "
+                    f"대입하면 (a+b)^2 = {correct_v} 이다. 교차항 2ab 를 빠뜨리면 "
+                    f"a^2+b^2 {i_ga('a^2+b^2')} 되어 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=AnswerFormat.자연수,
@@ -335,9 +380,11 @@ def _build_chain_rule_pool() -> tuple[_EvalItem, ...]:
                         f"f'({x0}) 의 값을 구하시오."
                     ),
                     answer_explanation=(
-                        f"연쇄법칙으로 도함수를 구하면 내부 함수의 도함수 {k} 를 곱해야 한다. "
-                        f"x = {x0} 을 대입하면 미분계수는 {correct_v} 이다. "
-                        f"내부 도함수 {k} 를 곱하지 않으면 틀린 값이 된다."
+                        # 조사는 수 읽기 받침 판별 — 'x = 2 을' 류 계통 결함 교정(S3-12).
+                        f"연쇄법칙으로 도함수를 구하면 내부 함수의 도함수 {k} "
+                        f"{eul_reul(str(k))} 곱해야 한다. x = {x0} {eul_reul(str(x0))} "
+                        f"대입하면 미분계수는 {correct_v} 이다. "
+                        f"내부 도함수 {k} {eul_reul(str(k))} 곱하지 않으면 틀린 값이 된다."
                     ),
                     difficulty=_difficulty(k + inner),
                     answer_format=AnswerFormat.자연수,
@@ -427,8 +474,9 @@ def _build_exp_zero_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"자연수 a = {a} 에 대하여 {n} + a^0 의 값을 구하시오.",
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '15 이 되어' 류 계통 결함 교정(S3-12).
                     f"a^0 = 1 이므로 {n} + a^0 = {n} + 1 = {correct_v} 이다. "
-                    f"a^0 을 0 으로 잘못 계산하면 {n} 이 되어 틀린다."
+                    f"a^0 을 0 으로 잘못 계산하면 {n} {i_ga(str(n))} 되어 틀린다."
                 ),
                 difficulty=_difficulty(n + a),
                 answer_format=AnswerFormat.자연수,
@@ -462,8 +510,9 @@ def _build_sqrt_pos_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=f"√((-{a})^2) 의 값을 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '-28 가' 류 계통 결함 교정(S3-12·부호 무시).
                 f"√(x²) = |x| 이므로 √((-{a})²) = |-{a}| = {a} 이다. "
-                f"√(x²) = x 로 오인하면 -{a} 가 되어 틀린다."
+                f"√(x²) = x 로 오인하면 -{a} {i_ga(str(-a))} 되어 틀린다."
             ),
             difficulty=_difficulty(a),
             answer_format=AnswerFormat.자연수,
@@ -497,8 +546,9 @@ def _build_log_dist_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=f"log_2(2^{k} + 2^{k}) 의 값을 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '40 로' 류 계통 결함 교정(S3-12).
                 f"2^{k} + 2^{k} = 2·2^{k} = 2^{k + 1} 이므로 값은 {correct_v} 이다. "
-                f"로그를 합에 분배해 {k}+{k} = {2 * k} 로 하면 틀린다."
+                f"로그를 합에 분배해 {k}+{k} = {2 * k} {euro_ro(str(2 * k))} 하면 틀린다."
             ),
             difficulty=_difficulty(k),
             answer_format=AnswerFormat.자연수,
@@ -537,8 +587,10 @@ def _build_func_compose_pool() -> tuple[_EvalItem, ...]:
                         f"(f∘g)({c}) 의 값을 구하시오."
                     ),
                     answer_explanation=(
+                        # 조사는 수 읽기 받침 판별 — '26 로' 류 잠복 결함 교정(S3-12).
                         f"(f∘g)({c}) = f(g({c})) = f({b * c}) = {b * c} + {a} = {correct_v} 이다. "
-                        f"순서를 뒤집어 (g∘f)({c}) = g({c}+{a}) = {b * c + a * b} 로 하면 틀린다."
+                        f"순서를 뒤집어 (g∘f)({c}) = g({c}+{a}) = {b * c + a * b} "
+                        f"{euro_ro(str(b * c + a * b))} 하면 틀린다."
                     ),
                     difficulty=_difficulty(a + b + c),
                     answer_format=AnswerFormat.자연수,
@@ -573,8 +625,9 @@ def _build_sine_period_pool() -> tuple[_EvalItem, ...]:
             answer_str=_display(correct),
             question_text=f"함수 y = sin({k}x) 의 주기를 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '26 를' 류 계통 결함 교정(S3-12).
                 f"y = sin(bx) 의 주기는 2π/b 이므로 y = sin({k}x) 의 주기는 2π/{k} 이다. "
-                f"계수 {k} 를 무시하면 주기를 2π 로 잘못 구한다."
+                f"계수 {k} {eul_reul(str(k))} 무시하면 주기를 2π 로 잘못 구한다."
             ),
             difficulty=_difficulty(k),
             answer_format=_answer_format_for(correct),
@@ -697,8 +750,10 @@ def _build_fraction_cancel_pool() -> tuple[_EvalItem, ...]:
                     f"두 자연수 a = {a}, b = {b} 에 대하여 (a + b) / a 의 값을 구하시오."
                 ),
                 answer_explanation=(
-                    f"(a + b) / a = 1 + b/a 이므로 a = {a}, b = {b} 를 대입하면 "
-                    f"{_display(correct)} 이다. 분자와 분모의 a 를 지워 b 로 약분하면 틀린다."
+                    # 조사는 수 읽기 받침 판별 — '13 를' 류 계통 결함 교정(S3-12).
+                    f"(a + b) / a = 1 + b/a 이므로 a = {a}, b = {b} {eul_reul(str(b))} "
+                    f"대입하면 {_display(correct)} 이다. 분자와 분모의 a 를 지워 b 로 "
+                    "약분하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=_answer_format_for(correct),
@@ -771,8 +826,10 @@ def _build_area_perimeter_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=(f"가로가 {a}, 세로가 {b} 인 직사각형의 넓이를 구하시오."),
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '30 와' 류 계통 결함 교정(S3-12).
                     f"직사각형의 넓이는 가로×세로 = {a}×{b} = {correct_v} 이다. "
-                    f"둘레 2×({a}+{b}) = {2 * (a + b)} 와 혼동하면 틀린다."
+                    f"둘레 2×({a}+{b}) = {2 * (a + b)} {wa_gwa(str(2 * (a + b)))} "
+                    "혼동하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=AnswerFormat.자연수,
@@ -807,8 +864,9 @@ def _build_circle_radius_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(r),
             question_text=f"원 x^2 + y^2 = {r_sq} 의 반지름의 길이를 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '529 을' 류 계통 결함 교정(S3-12).
                 f"x² + y² = r² 에서 반지름은 r 이므로 r² = {r_sq} 이면 반지름은 {r} 이다. "
-                f"우변 {r_sq} 을 반지름으로 여기면 틀린다."
+                f"우변 {r_sq} {eul_reul(str(r_sq))} 반지름으로 여기면 틀린다."
             ),
             difficulty=_difficulty(r),
             answer_format=AnswerFormat.자연수,
@@ -891,7 +949,9 @@ def _build_fraction_addition_pool() -> tuple[_EvalItem, ...]:
                 answer_str=_display(correct),
                 question_text=(f"1/{p} + 1/{q} 의 값을 구하시오."),
                 answer_explanation=(
-                    f"1/{p} + 1/{q} 는 통분하면 ({p}+{q})/({p}·{q}) = {_display(correct)} 이다. "
+                    # 조사는 분수 읽기(분모분의 분자) 받침 판별 — '1/5 는' 류 계통 결함 교정(S3-12).
+                    f"1/{p} + 1/{q} {eun_neun(f'1/{q}')} 통분하면 "
+                    f"({p}+{q})/({p}·{q}) = {_display(correct)} 이다. "
                     "통분 없이 분자·분모를 각각 더해 2/(p+q)로 답하면 틀린다."
                 ),
                 difficulty=_difficulty(p + q),
@@ -1045,10 +1105,12 @@ def _build_sqrt_sum_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = {k}",
                 answer_str=str(k),
-                question_text=(f"√({m*m} + {n*n}) 의 값을 구하시오."),
+                question_text=(f"√({m * m} + {n * n}) 의 값을 구하시오."),
                 answer_explanation=(
-                    f"근호 안의 합 {s} 는 {k} 의 제곱이므로 그 제곱근은 {k} 이다. "
-                    f"제곱근을 각 항에 분배하면 {m} + {n} 이 되어 틀린다."
+                    # 조사는 수 읽기 받침 판별 — '10000 는'·'84 이' 류 계통 결함 교정(S3-12).
+                    f"근호 안의 합 {s} {eun_neun(str(s))} {k} 의 제곱이므로 "
+                    f"그 제곱근은 {k} 이다. "
+                    f"제곱근을 각 항에 분배하면 {m} + {n} {i_ga(str(n))} 되어 틀린다."
                 ),
                 difficulty=_difficulty(m + n),
                 answer_format=_answer_format_for(sympy.Integer(k)),
@@ -1084,8 +1146,10 @@ def _build_difference_of_squares_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=(f"x = {x}, a = {a} 일 때 x² - a² 의 값을 구하시오."),
                 answer_explanation=(
-                    f"x² - a² = (x-a)(x+a) 이므로 x={x}, a={a} 를 대입하면 {correct_v} 이다. "
-                    "제곱의 차를 차의 제곱 (x-a)²로 여기면 틀린다."
+                    # 조사는 수·수식 꼬리 읽기 판별 — '1 를'·'(x-a)²로' 류 결함 교정(S3-12).
+                    f"x² - a² = (x-a)(x+a) 이므로 x={x}, a={a} {eul_reul(str(a))} "
+                    f"대입하면 {correct_v} 이다. "
+                    f"제곱의 차를 차의 제곱 (x-a)²{euro_ro('(x-a)²')} 여기면 틀린다."
                 ),
                 difficulty=_difficulty(x + a),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1120,8 +1184,9 @@ def _build_exponent_product_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=f"{a} × {a}² 의 값을 구하시오.",
             answer_explanation=(
+                # 조사는 수식 꼬리(제곱) 읽기 받침 판별 — '18² 로' 류 계통 결함 교정(S3-12).
                 f"밑이 같은 거듭제곱의 곱은 지수를 더하므로 {a} × {a}² = {a}^(1+2) = {a}³ "
-                f"= {correct_v} 이다. 지수를 곱해 {a}² 로 답하면 틀린다."
+                f"= {correct_v} 이다. 지수를 곱해 {a}² {euro_ro(f'{a}²')} 답하면 틀린다."
             ),
             difficulty=_difficulty(a),
             answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1158,8 +1223,10 @@ def _build_power_of_power_pool() -> tuple[_EvalItem, ...]:
                     answer_str=str(correct_v),
                     question_text=f"({a}^{m})^{n} 의 값을 구하시오.",
                     answer_explanation=(
+                        # 조사는 수식 꼬리(제곱) 읽기 판별 — '10^5 로' 류 결함 교정(S3-12).
                         f"거듭제곱의 거듭제곱은 지수를 곱하므로 ({a}^{m})^{n} = {a}^{m * n} "
-                        f"= {correct_v} 이다. 지수를 더해 {a}^{m + n} 로 답하면 틀린다."
+                        f"= {correct_v} 이다. 지수를 더해 {a}^{m + n} "
+                        f"{euro_ro(f'{a}^{m + n}')} 답하면 틀린다."
                     ),
                     difficulty=_difficulty(a + m + n),
                     answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1197,8 +1264,10 @@ def _build_negative_square_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"-{a}² + {b} 의 값을 구하시오.",
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '16로' 류 계통 결함 교정(S3-12).
                     f"거듭제곱이 부호보다 우선하므로 -{a}² = -{a * a} 이고 -{a}² + {b} = "
-                    f"{correct_v} 이다. -{a}²을 (-{a})²={a * a}로 계산하면 틀린다."
+                    f"{correct_v} 이다. -{a}²을 (-{a})²={a * a}{euro_ro(str(a * a))} "
+                    "계산하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1235,9 +1304,10 @@ def _build_distribute_partial_pool() -> tuple[_EvalItem, ...]:
                     answer_str=str(correct_v),
                     question_text=f"{a}(x + {b}) 에서 x = {c} 일 때의 값을 구하시오.",
                     answer_explanation=(
-                        f"분배법칙으로 {a}(x + {b}) = {a}x + {a * b} 이므로 x = {c} 를 "
-                        f"대입하면 {correct_v} 이다. 뒷항을 분배하지 않고 {a * c} + {b}로 "
-                        "계산하면 틀린다."
+                        # 조사는 수 읽기 받침 판별 — 'x = 8 를' 류 계통 결함 교정(S3-12).
+                        f"분배법칙으로 {a}(x + {b}) = {a}x + {a * b} 이므로 "
+                        f"x = {c} {eul_reul(str(c))} 대입하면 {correct_v} 이다. "
+                        f"뒷항을 분배하지 않고 {a * c} + {b}{euro_ro(str(b))} 계산하면 틀린다."
                     ),
                     difficulty=_difficulty(a + b + c),
                     answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1275,8 +1345,10 @@ def _build_negative_distribute_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"-(x - {b}) 에서 x = {c} 일 때의 값을 구하시오.",
                 answer_explanation=(
-                    f"음의 부호 분배는 -(x - {b}) = -x + {b} 이므로 x = {c} 를 대입하면 "
-                    f"{correct_v} 이다. 뒷항 부호를 반전하지 않고 -{c} - {b}로 계산하면 틀린다."
+                    # 조사는 수 읽기 받침 판별 — '13 를' 류 계통 결함 교정(S3-12).
+                    f"음의 부호 분배는 -(x - {b}) = -x + {b} 이므로 "
+                    f"x = {c} {eul_reul(str(c))} 대입하면 {correct_v} 이다. "
+                    f"뒷항 부호를 반전하지 않고 -{c} - {b}{euro_ro(str(b))} 계산하면 틀린다."
                 ),
                 difficulty=_difficulty(b + c),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1312,8 +1384,9 @@ def _build_square_difference_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"({a} - {b})² 의 값을 구하시오.",
                 answer_explanation=(
+                    # 조사는 수식 꼬리(제곱) 읽기 받침 판별 — '2²로' 류 계통 결함 교정(S3-12).
                     f"차의 제곱은 ({a} - {b})² = {a}² - 2·{a}·{b} + {b}² = {correct_v} 이다. "
-                    f"교차항을 누락해 {a}² - {b}²로 계산하면 틀린다."
+                    f"교차항을 누락해 {a}² - {b}²{euro_ro(f'{b}²')} 계산하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1350,8 +1423,9 @@ def _build_midpoint_no_half_pool() -> tuple[_EvalItem, ...]:
                 answer_str=_display(correct),
                 question_text=f"수직선 위 두 점 {a}, {b} 의 중점의 좌표를 구하시오.",
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '20로' 류 계통 결함 교정(S3-12).
                     f"두 점의 중점은 좌표의 평균이므로 ({a}+{b})/2 = {_display(correct)} 이다. "
-                    f"2로 나누지 않고 {a + b}로 답하면 틀린다."
+                    f"2로 나누지 않고 {a + b}{euro_ro(str(a + b))} 답하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=_answer_format_for(correct),
@@ -1386,8 +1460,9 @@ def _build_scale_area_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=f"닮음비가 {k} 인 두 도형의 넓이의 비를 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '17 를' 류 계통 결함 교정(S3-12).
                 f"넓이는 길이의 제곱에 비례하므로 닮음비 {k} 의 넓이의 비는 {k}² = {correct_v} "
-                f"이다. 닮음비 {k} 를 그대로 넓이의 비로 답하면 틀린다."
+                f"이다. 닮음비 {k} {eul_reul(str(k))} 그대로 넓이의 비로 답하면 틀린다."
             ),
             difficulty=_difficulty(k),
             answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1423,8 +1498,9 @@ def _build_negative_even_power_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"(-{a})^{n} 의 값을 구하시오.",
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '-46656로' 류 계통 결함 교정(S3-12).
                     f"음수의 짝수 거듭제곱은 양수이므로 (-{a})^{n} = {a}^{n} = {correct_v} 이다. "
-                    f"음수로 여겨 -{correct_v}로 답하면 틀린다."
+                    f"음수로 여겨 -{correct_v}{euro_ro(str(-correct_v))} 답하면 틀린다."
                 ),
                 difficulty=_difficulty(a + n),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1461,9 +1537,10 @@ def _build_combine_unlike_pool() -> tuple[_EvalItem, ...]:
                     answer_str=str(correct_v),
                     question_text=f"{a}x + {b}x² 에서 x = {c} 일 때의 값을 구하시오.",
                     answer_explanation=(
-                        f"차수가 다른 항은 따로 계산하므로 {a}x + {b}x² 는 x = {c} 에서 "
-                        f"{a * c} + {b * c * c} = {correct_v} 이다. 차수를 무시하고 {a + b}x³으로 "
-                        "결합하면 틀린다."
+                        # 조사는 수식 꼬리(제곱) 읽기 받침 판별 — 'x² 는' 류 계통 결함 교정(S3-12).
+                        f"차수가 다른 항은 따로 계산하므로 {a}x + {b}x² {eun_neun(f'{b}x²')} "
+                        f"x = {c} 에서 {a * c} + {b * c * c} = {correct_v} 이다. "
+                        f"차수를 무시하고 {a + b}x³으로 결합하면 틀린다."
                     ),
                     difficulty=_difficulty(a + b + c),
                     answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1499,8 +1576,11 @@ def _build_complete_square_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"x² + {b}x 에서 x = {c} 일 때의 값을 구하시오.",
                 answer_explanation=(
+                    # S3-12 교정: 해설의 미치환 템플릿 변수 '(c+N)²' 노출을 실수치로 치환하고
+                    # ('(c+11)²' 계통 결함), 조사는 수 읽기 받침 판별로 고른다('²로' 계통 결함).
                     f"x² + {b}x 는 x = {c} 에서 {c * c} + {b * c} = {correct_v} 이다. "
-                    f"이를 (x+{b})²으로 오인하면 (c+{b})²로 틀린다."
+                    f"이를 (x+{b})²으로 오인하면 ({c}+{b})² = {(c + b) ** 2} "
+                    f"{i_ga(str((c + b) ** 2))} 되어 틀린다."
                 ),
                 difficulty=_difficulty(b + c),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1574,8 +1654,10 @@ def _build_transpose_pool() -> tuple[_EvalItem, ...]:
                 answer_str=str(correct_v),
                 question_text=f"일차방정식 x + {b} = {c} 의 해를 구하시오.",
                 answer_explanation=(
-                    f"{b}를 이항하면 부호가 바뀌어 x = {c} - {b} = {correct_v} 이다. "
-                    f"이항할 때 부호를 바꾸지 않으면 {c} + {b}로 틀린다."
+                    # 조사는 수 읽기 받침 판별 — '10를'·'10로' 류 계통 결함 교정(S3-12).
+                    f"{b}{eul_reul(str(b))} 이항하면 부호가 바뀌어 "
+                    f"x = {c} - {b} = {correct_v} 이다. "
+                    f"이항할 때 부호를 바꾸지 않으면 {c} + {b}{euro_ro(str(b))} 틀린다."
                 ),
                 difficulty=_difficulty(b + c),
                 answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1610,9 +1692,10 @@ def _build_gcd_lcm_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = {lcm}",
                 answer_str=str(lcm),
-                question_text=f"{a} 와 {b} 의 최소공배수를 구하시오.",
+                # 조사는 수 읽기 받침 판별 — '10 와' 류 계통 결함 교정(S3-12).
+                question_text=f"{a} {wa_gwa(str(a))} {b} 의 최소공배수를 구하시오.",
                 answer_explanation=(
-                    f"{a}와 {b}의 최소공배수는 {lcm} 이다(최대공약수는 {g}). "
+                    f"{a}{wa_gwa(str(a))} {b}의 최소공배수는 {lcm} 이다(최대공약수는 {g}). "
                     "최소공배수와 최대공약수를 혼동하면 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
@@ -1650,8 +1733,10 @@ def _build_decimal_mult_pool() -> tuple[_EvalItem, ...]:
                 answer_str=_display(correct),
                 question_text=f"0.{a} × 0.{b} 의 값을 구하시오.",
                 answer_explanation=(
-                    f"0.{a} × 0.{b} 는 소수점 아래 자릿수를 더해 {a * b}/100 = {_display(correct)} "
-                    f"이다. 자릿수를 무시하면 {a * b}/10로 틀린다."
+                    # 조사는 소수·분수 읽기 받침 판별 — '0.8 는'·'40/10로' 류 계통 결함 교정(S3-12).
+                    f"0.{a} × 0.{b} {eun_neun(f'0.{b}')} 소수점 아래 자릿수를 더해 "
+                    f"{a * b}/100 = {_display(correct)} 이다. "
+                    f"자릿수를 무시하면 {a * b}/10{euro_ro(f'{a * b}/10')} 틀린다."
                 ),
                 difficulty=_difficulty(a + b),
                 answer_format=AnswerFormat.실수,
@@ -1686,10 +1771,14 @@ def _build_mixed_mult_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = ({2 * a + 1}*{n})/2",
                 answer_str=_display(correct),
-                question_text=f"{a}과 1/2 (대분수)에 {n} 을 곱한 값을 구하시오.",
+                # 조사는 수 읽기 받침 판별 — '5과'·'5 을' 류 계통 결함 교정(S3-12).
+                question_text=(
+                    f"{a}{wa_gwa(str(a))} 1/2 (대분수)에 {n} {eul_reul(str(n))} 곱한 값을 구하시오."
+                ),
                 answer_explanation=(
-                    f"대분수 {a}½ = {2 * a + 1}/2 에 {n}을 곱하면 {(2 * a + 1) * n}/2 "
-                    f"= {_display(correct)} 이다. 정수부만 곱해 {a * n}½로 답하면 틀린다."
+                    f"대분수 {a}½ = {2 * a + 1}/2 에 {n}{eul_reul(str(n))} 곱하면 "
+                    f"{(2 * a + 1) * n}/2 = {_display(correct)} 이다. "
+                    f"정수부만 곱해 {a * n}½로 답하면 틀린다."
                 ),
                 difficulty=_difficulty(a + n),
                 answer_format=_answer_format_for(correct),
@@ -1724,12 +1813,14 @@ def _build_remainder_sign_pool() -> tuple[_EvalItem, ...]:
                     ),
                     conditions=f"x = {a}**2 + {a}*{b} + {c}",
                     answer_str=str(correct_v),
+                    # 조사는 수·수식 꼬리 읽기 판별 — '7 를'·'(x-6)로' 류 결함 교정(S3-12).
                     question_text=(
-                        f"다항식 x² + {b}x + {c} 를 (x - {a})로 나눈 나머지를 구하시오."
+                        f"다항식 x² + {b}x + {c} {eul_reul(str(c))} "
+                        f"(x - {a}){euro_ro(f'(x - {a})')} 나눈 나머지를 구하시오."
                     ),
                     answer_explanation=(
                         f"나머지정리로 f({a}) = {a}² + {b}·{a} + {c} = {correct_v} 이다. "
-                        f"부호를 반대로 f(-{a})로 대입하면 틀린다."
+                        f"부호를 반대로 f(-{a}){euro_ro(f'f(-{a})')} 대입하면 틀린다."
                     ),
                     difficulty=_difficulty(a + b + c),
                     answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1765,8 +1856,9 @@ def _build_vieta_sum_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=f"x² + {b}x + {c} = 0 의 두 근의 합을 구하시오.",
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '23로' 류 계통 결함 교정(S3-12).
                 f"근과 계수 관계로 두 근의 합은 -(일차항 계수) = -{b} = {correct_v} 이다. "
-                f"부호를 놓쳐 {b}로 답하면 틀린다."
+                f"부호를 놓쳐 {b}{euro_ro(str(b))} 답하면 틀린다."
             ),
             difficulty=_difficulty(b),
             answer_format=_answer_format_for(sympy.Integer(correct_v)),
@@ -1806,8 +1898,10 @@ def _build_trapezoid_area_pool() -> tuple[_EvalItem, ...]:
                         f"윗변이 {a}, 아랫변이 {b}, 높이가 {h} 인 사다리꼴의 넓이를 구하시오."
                     ),
                     answer_explanation=(
+                        # 조사는 수 읽기 받침 판별 — '81 가' 류 계통 결함 교정(S3-12).
                         f"사다리꼴의 넓이 = (윗변+아랫변)×높이÷2 = ({a}+{b})×{h}÷2 = "
-                        f"{_display(correct)} 이다. ÷2 를 빠뜨리면 {(a + b) * h} 가 되어 틀린다."
+                        f"{_display(correct)} 이다. ÷2 를 빠뜨리면 {(a + b) * h} "
+                        f"{i_ga(str((a + b) * h))} 되어 틀린다."
                     ),
                     difficulty=_difficulty(a + b + h),
                     answer_format=_answer_format_for(correct),
@@ -1844,8 +1938,9 @@ def _build_scale_volume_pool() -> tuple[_EvalItem, ...]:
                 f"닮음비가 1:{k} 인 두 입체도형의 부피비는 1:? 이다. ? 의 값을 구하시오."
             ),
             answer_explanation=(
+                # 조사는 수 읽기 받침 판별 — '20 로' 류 계통 결함 교정(S3-12).
                 f"닮음비가 1:{k} 이면 부피비는 1:{k}³ = 1:{correct_v} 이다. "
-                f"부피비를 닮음비와 같은 {k} 로 두면 틀린다."
+                f"부피비를 닮음비와 같은 {k} {euro_ro(str(k))} 두면 틀린다."
             ),
             difficulty=_difficulty(k),
             answer_format=AnswerFormat.자연수,
@@ -1888,9 +1983,10 @@ def _build_cone_volume_pool() -> tuple[_EvalItem, ...]:
                     "값을 구하시오."
                 ),
                 answer_explanation=(
+                    # 조사는 수 읽기 받침 판별 — '126 가' 류 계통 결함 교정(S3-12).
                     f"원뿔의 부피는 ⅓×π×(반지름)²×높이 이므로 π로 나눈 값은 "
                     f"{r}²×{h}÷3 곧 {correct_v} 이다. "
-                    f"⅓ 을 빠뜨려 원기둥 부피로 계산하면 {v} 가 되어 틀린다."
+                    f"⅓ 을 빠뜨려 원기둥 부피로 계산하면 {v} {i_ga(str(v))} 되어 틀린다."
                 ),
                 difficulty=_difficulty(r + h),
                 answer_format=AnswerFormat.자연수,
@@ -1926,8 +2022,10 @@ def _build_circle_area_pool() -> tuple[_EvalItem, ...]:
             answer_str=str(correct_v),
             question_text=(f"반지름이 {r} 인 원의 넓이를 원주율 π로 나눈 값을 구하시오."),
             answer_explanation=(
+                # 조사는 수·문자 읽기 받침 판별 — '6 로'·'2πr 와'(알=ㄹ 받침) 계통 결함 교정(S3-12).
                 f"원의 넓이는 π×(반지름)² 이므로 π로 나눈 값은 {r}² 곧 {correct_v} 이다. "
-                f"원의 둘레 공식 2πr 와 혼동하면 2×{r} 곧 {2 * r} 로 잘못 답한다."
+                f"원의 둘레 공식 2πr {wa_gwa('2πr')} 혼동하면 2×{r} 곧 {2 * r} "
+                f"{euro_ro(str(2 * r))} 잘못 답한다."
             ),
             difficulty=_difficulty(r),
             answer_format=AnswerFormat.자연수,
@@ -1961,12 +2059,15 @@ def _build_combination_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = {correct_v}",
                 answer_str=str(correct_v),
+                # 조사는 수식 꼬리(끝 수) 읽기 받침 판별 — '17C3 를'·'3024 이' 류 결함 교정(S3-12).
                 question_text=(
-                    f"서로 다른 {n} 개에서 {r} 개를 뽑는 조합의 수 {n}C{r} 를 구하시오."
+                    f"서로 다른 {n} 개에서 {r} 개를 뽑는 조합의 수 "
+                    f"{n}C{r} {eul_reul(f'{n}C{r}')} 구하시오."
                 ),
                 answer_explanation=(
                     f"{n}C{r} = {n}!/({r}!×{n - r}!) = {correct_v} 이다. "
-                    f"분모의 {r}! 을 빠뜨리면 순열의 수 {n}P{r} = {perm(n, r)} 이 되어 틀린다."
+                    f"분모의 {r}! 을 빠뜨리면 순열의 수 {n}P{r} = {perm(n, r)} "
+                    f"{i_ga(str(perm(n, r)))} 되어 틀린다."
                 ),
                 difficulty=_difficulty(n + r),
                 answer_format=AnswerFormat.자연수,

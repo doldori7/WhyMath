@@ -374,6 +374,30 @@
 **검증**: 신규 실 PG 통합 테스트 2건 — ①기출유형·시그니처 둘 다 없고 persona_fit만 임계 통과(0.6≥0.5)하는 문항이 θ 근방 풀에 잡혀 실제 추천됨 ②persona_fit이 임계 미달(0.3<0.5)이면 여전히 배제됨(변별력 — 조건 존재만으로 항상 True가 되는 결함을 잡는다). **변별/mutation 확인**: SQL의 persona_fit 절을 임시로 제거하고 재실행 → ①번 테스트만 실패(예상대로) — 테스트가 실제로 이 SQL 조건에 의존함을 실측 확인 후 원복. 정적 게이트(ruff·black·mypy --strict·lint-imports) clean · CI 동일 선택 실 PG 통합 235 passed/13 skipped(외부서비스 skip만) · 전체 스위트 7,622 passed/264 skipped·exit 0(커버리지 92%, 게이트 70% 통과).
 
 **부수 사고 예방**: 검증 도중 로컬 PG 사용을 CI 잡별로 다시 확인 — 통합테스트 잡만 `WHYMATH_DB_DISABLE_POOL=1`을 쓰고 메인 커버리지 잡은 이 값을 쓰지 않는다(`ci.yml` 확인). 이 env를 전체 스위트 실행에 실수로 이어 쓰면 `test_default_settings_use_connection_pool`이 "기본값"을 검증할 수 없어 거짓 실패한다 — 실제 회귀가 아니라 로컬 호출 오류임을 CI yml 대조로 확인 후 env 없이 재실행해 정정.
+### 2026-07-29 (측정·S3-14): **rotation-2 확인 감사 — misconception_mc PASS 확정(3라운드 만에 게이트 통과)·rephrased 3연속 FAIL로 근본 설계 재검토 이관** (claude 측정, Kiki `/drive`)
+
+**절차**: S3-12(rotation-1) 조치가 실제로 결함율을 임계 이하로 낮췄는지, rotation-0·1과 무관한 신규 독립 표본(`--rotation 2` — mc 200/1,080·rephrased 200/429)으로 확인(§4.5 준수 — 4 pedagogy 서브에이전트 병렬, 코퍼스별 전·후반 100문 분할·전건 직접 계산 재검산 + 성취기준 정본 대조).
+
+**mc — 3라운드 만에 PASS**: rotation-0(FAIL 58%)→1(FAIL 4.5%)→2(**PASS 0%·Wilson 상한 1.33%**). rotation-1이 발견한 두 계통 결함(태그 오귀속 2종)이 해당 도메인 전건에서 정본 대조로 재발 0건 확정. `problem_bank_misconception_mc_v0`는 표본 감사 관점에서 노출 적격 재평가 대상(법적 게이트 `is_exposable()`은 원래 통과 상태 — 이번 PASS는 운영 정책상의 표본 감사 블로커 해소, 실 노출 전환은 별도 결정).
+
+**rephrased — 3라운드 연속 FAIL**: rotation-0(FAIL 12%)→1(FAIL 5.5%)→2(**FAIL 1%·Wilson 상한 2.98%**). 점추정은 꾸준히 개선되나 n=200에서 결함 2건만으로도 Wilson 상한이 2% 임계를 넘는 경계 구간이고, 두 결함 모두 기존 `rephrase_hygiene.py` 패턴에 안 걸리는 **매 라운드 새로운 유형**(이질문자+어형붕괴+개념오치환 복합·목적어 불명확 비문)이었다. S3-14 acceptance의 "3회차부터는 근본 설계 재검토" 조항에 따라 4번째 패턴 패치+rotation-3을 이 태스크에서 시도하지 않고, LLM 자유 재작성 방식 자체의 예측불가 변동성이 원인일 가능성을 근거로 **S3-15**(결정론 템플릿 치환 등 대안 아키텍처 평가)를 신규 등재 — 무한 패치-재표본 루프 대신 정직하게 손을 뗐다. `problem_bank_rephrased_v0`는 노출 부적격 유지.
+
+정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md` §Rotation-2 확인 감사 결과.
+
+### 2026-07-29 (구현·환류·S3-12): **v0 계통 결함 5류 생성기 교정 + rotation-1 재검수 — mc/rephrased 잔여 결함 조치완료·정직 FAIL 유지, concept_src_id 6번째 결함류 발견·전건 교정** (claude 구현, Kiki `/drive` + "진행")
+
+**실행**: S3-09 감사 확정 5류(조사 하드코딩·성취기준 태그 오귀속·해설 수치·모순 전제·rephrase 위생 부재)를 생성기 축에서 교정 — `josa.py`에 `tail_reading`(거듭제곱·분수·소수·괄호/절댓값 묵음·라틴/그리스 문자 읽기) 확장해 mc·conceptual 생성기 전 조사 하드코딩 제거, `root_aggregate_batch`(killer) 차수별 성취기준 정위치, `conceptual_count_mc_generator` 극한 부호(b−a→a−b)·확률 공리 가드, `misconception_eval_mc_generator` 완전제곱 미치환 변수, `rephrase_hygiene.py` 신설(비한글 스크립트·메타 라벨·비표준 용어·요구-정답 부정합·조사 오류 5축) + `rephrased_corpus_hygiene` 일괄 적용(483→446, 37건 탈락). 전건 재생성 후 Tier1 전수 재검산 green(2,006문)·전체 백엔드 스위트 3회 실행(초회 파이프 tail이 종료코드 삼켜 재실행, HEAD 대조로 신규 회귀 0 확인)하여 1차 커밋(`8ae200b`).
+
+**rotation-1 재검수(§4.5 신규 독립 표본)**: rotation-0과 무관한 새 표본(mc 200/1,080·conceptual 200/360·rephrased 200/483→429·killer 120/120)을 7인 서브에이전트로 재검수. **잔여 결함 20건 발견**: mc 9건(`distribute-first-term-only`·`negative-distribute-sign` `[9수02-09]`→`[9수02-10]` 5건 + `angle-sum-non-triangle`의 무관 `[9수03-03]` 제거 4건 — misconceptions.json M0017·M0018·M0051 `standard_code` 동시 교정) + rephrased 11건(지수 서술구 허상 3건→⑥축 신설·괄호 메타 누출 4건·차원 오기술 3건·개념 오치환 2건·어형 붕괴 비문 2건 — 후자는 형태소 분석 없이 일반화 불가해 `_KNOWN_DEFECTIVE_SLUGS` 명시 slug 소급 제거로 처리). conceptual·killer는 rotation-1 결함 0건(1차 교정이 완전 해소 확인). 위생 게이트 최종 443→429(신규 3축+denylist 14건 추가 탈락). **misconceptions.json 자체 사후 감사**: `standard_code`만 고치고 `concept_src_id`(L1 `resolve.py`가 `Concept.source_id` 직접 조인에 실사용하는 필드)를 놓친 동일 계통 결함을 M0017·M0018(J0209→J0210)·M0051(J0303→G25)·M0052(J0312→ME3, 1차 패스에서 `standard_code`만 고치고 놓쳤던 잔여)에서 추가 발견·교정 — crosslink 테스트 153건 재확인.
+
+**부수 발견·조치 — concept_src_id 6번째 결함류(AI 텍스트 검수 범위 밖, 자체 검증으로 발견)**: 태그 재귀속을 misconception_eval_mc_generator의 `_TEMPLATE_META`(concept_src_id — 실제 개념그래프 전이 앵커, `achievement_standard_codes` 표시 필드와는 별개)에 반영했는지 45템플릿 전수 대조 → **13개가 재태깅된 표준코드와 무관한 구 개념을 계속 가리키고 있었다**(M0052 크로스링크 회귀와 동일 계통 — 표시용 태그만 고치고 그래프 앵커를 놓침. 예: `distribute_partial`/`negative_distribute`가 여전히 J0209(다항식 덧셈·뺄셈)를 가리켜 정위치 J0210(단항식·다항식 곱셈)과 불일치) + concept_graph_v1에 없는 성취기준 코드 문자열이 그대로 src_id 자리에 들어간 선재 오기 1건(`circle_radius` "10공수2-01-04"→"HK22", S3-12와 무관). concept_graph_v1 역탐색으로 전건 재고정 후 실제 크로스워크 해석 경로(`derive_src_to_primary_atom`)로 dangling 0 확인·`test_relink_governance.py`를 3→4 코퍼스로 확장(재발 방지 — 편입 전엔 이 결함류가 무기한 미검출).
+
+**하네스 자기검증 사후 발견·조치 — 신규 위생 축 오탐 3건**: `TestTextHygieneS312`(misconception_eval_mc_generator 회귀 테스트)가 신규 축을 rephrase 코퍼스 대조만으로 검증했음을 드러냄 — 이 게이트는 다른 생성기 설명에도 공유 적용된다. "(일차항 계수)"·"(최대공약수는 1)"·"(단위: 도)"(정당한 괄호 설명)·"중점"(midpoint-sum-only 정상 용법)·"N의 제곱이므로 그 제곱근은"(sqrt_sum 참인 서술 24건) 오탐 실측 → ②는 폐쇄 목록 후퇴·③은 "중점" 제외·⑥은 "이므로" 부정 lookahead로 정밀화(`rephrase_hygiene.py` 도크스트링 "2026-07-29 재검토 실측" 기록 — 향후 신규 축은 rephrase 단독이 아니라 전 코퍼스 대조가 재검증 범위).
+
+**최종 판정(정직 기록·§4.5 — 조치했다고 임의 PASS 선언 금지)**: `corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found` — **conceptual PASS**(0/200·상한 1.33%) · **mc as-found FAIL**(9/200·상한 7.58% — 근본원인 조치완료, rotation-1 표본 자체 재채점은 §4.5 위반이라 정직 FAIL 유지) · **rephrased as-found FAIL**(11/200·상한 8.79% — 동일 사유) · **killer FAIL**(0/120·min-n 200 구조적 미달 — acceptance가 애초 예견한 예외). 전체 백엔드 스위트 최종 재실행(변경 전건 반영) — **7,714 passed·262 skipped·0 failed**(1차 재실행에서 `test_rephrased_corpus_changed_questions_preserve_equation`의 `changed>=150` 하한이 위생 재스윕으로 실측 147이 되어 위반 발견 → 탈락 레코드가 전부 "발문 변경됨" 항목이라는 산수로 확인 후 147로 정직 축소·재실행 green).
+
+**등재**: `S3-14-problem-bank-rotation2-confirmation`(dep S3-12) — mc·rephrased의 조치 효과를 **신규 독립 rotation-2 표본**으로 최종 확인(§4.5). killer의 min-n 미달은 코퍼스 확장(≥200)이라는 별도 저작 스코프 결정이라 이 태스크 범위 밖으로 명시(acceptance 원문에 이미 예견됨). 정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md` §"Rotation-1 환류 검증 결과", `docs/architecture/problem_bank_gap_review.md` §0.
+
 ### 2026-07-29 (구현·S4-13): **SymPy 불가 영역 대체 검증 스택 v1 — 기계 가능/불가 경계를 코드로 그음(확률 유한 전수형 파일럿)** (claude 구현, Kiki "/drive")
 
 **경계 결정(이 태스크의 본체)**: ①**기계 가능 = 형식 모델 위의 경우의 수·확률** — 유한 표본공간을 **전수 열거**하고 `Fraction`으로 정확 비교한다. 기존 Tier1(`verify_answer`)은 난수 샘플링이라 "샘플 점에서 만족·증명 아님"이지만, 전수는 그 모델 위에서 **증명**이다(`samples_checked`가 표본공간 크기와 같아 전수임이 수치로 드러남 — 실측 주사위 2개 36/36). ②**기계 불가 = 한국어 발문이 그 형식 모델을 뜻하는가**(등확률 가정의 서술 정당성·조건 결측·중의성). 여기에만 LLM을 쓴다. 등확률이 깨지는 구성(복원+비순서)은 **파서가 거부** — pass 위장 경로 없음.
@@ -403,6 +427,17 @@
 **대책(2선)**: ①**`add` 하드 거부** — 새 ID의 `<PREFIX>-<번호>`가 로컬 백로그 **또는 원격 claim 대장**(HARN-09 CAS 브랜치)에 점유돼 있으면 거부하고 다음 빈 번호(최대+1) 제안. 원격 조회가 핵심이며, 실패 시 fail-open하되 **예외 타입명과 축소 사실을 경고**(침묵 금지). ②**validate 2선** — 머지 후 잔존·손편집 우회분을 실패 처리, 이미 머지된 과거 충돌은 `_GRANDFATHERED_ID_NUMBERS`에 사유와 함께 등재(ARCH-13·OPS-15 — 개명 시 기존 참조 파손·타 세션 볼모). 테스트 7건 동결.
 
 **구현 중 자체 실측 2건(변별력 확보)**: ⓐ 정규식을 `[A-Za-z]+-\d+`로 쓰면 이 저장소 ID의 **다수파인 스테이지형(`S2-04`·`S4-07`)을 통째로 못 본다** — 영숫자 접두 허용으로 정정. ⓑ 첫 구현이 *같은 full-ID 재등재*(다른 클론의 시딩)까지 막아 기존 교차세션 테스트 5건이 깨졌다 — 충돌은 **슬러그가 다를 때만** 성립하므로 동일 ID는 통과. 두 케이스 모두 회귀 테스트로 동결.
+
+### 2026-07-29 (측정·S3-09): **v0 잔여 4종 720문 AI 감사 — 4종 전부 FAIL(결함 310)·계통 결함 5류 실증, "Tier1 통과 = 품질"의 반례 확정** (claude 실행, Kiki /drive)
+
+**실행**: 240 배치 규약 동형 — 결정론 층화 표본(mc 200/1,080·rephrased 200/483·conceptual 200/360·killer 120/120 전수) → pedagogy 에이전트 7인 분할 검수(6축·SymPy 배치 재검산 병행) → 코퍼스별 감사 jsonl(as-found 병기) → `corpus_audit_eval` 공식 판정. 착수 중 **샘플러 결함 선발견·교정**(로컬 DistractorEntry.op_code 필수 — 정본은 선택. op_code 없는 mc·conceptual에서 표본 생성 전멸 → `str|None` 정합+회귀 테스트).
+
+**판정(as-found)**: mc 116/200 상한 **63.60%** · conceptual 50/200 상한 **30.35%** · rephrased 24/200 상한 **16.30%** · killer 120/120 태그 계통 **100%**(+min-n 200 구조적 미달 — 전수로도 표본 게이트 해금 불가) — **전부 exit 1 FAIL·노출 부적격 유지**(기존에도 미검수 부적격 — "미측정"→"측정됨·불합격"으로 명확화·실질 후퇴 없음. 합격 노출 후보는 여전히 generated_v0 620뿐).
+
+**계통 결함 5류**(정본 `docs/data/ai_review_batch_v0_4corpora_2026-07.md`·환류 `S3-12` 등재): ①조사 하드코딩 전방위(113건 — **S2-08에서 trig만 고쳐진 josa 계통의 잔여가 mc·conceptual 생성기 전반 미적용**) ②성취기준 태그 계통 오귀속(killer 전건 판별식[02-02]→근과계수[02-03]/삼차[02-07]·mc 44건 초등 내용에 중등 코드 등 — 성취기준 정본 statement 대조 확정) ③해설 수치 오류(conceptual 극한 b−a 부호 반전 13·mc 미치환 변수 노출 5) ④조건부확률 모순 전제 7(P(A∩B)>P(A)·해설 확률>1 — 파라미터 공리 미검증) ⑤rephrase LLM 위생 게이트 부재(한자·일본어 주입·메타 누출·요구-정답 불일치).
+
+**의미(정직 기록)**: 수학 정답 오류 0 — Tier1 전수 재검산(2,043문)은 검수 직전에도 전건 통과였다. 결함 310건은 전부 **검산 게이트 밖 축**(해설·전제·조사·태그·발문 위생) — "게이트 통과 ≠ 학생 노출" 원칙과 15축 잔여 공백의 실증이자, 표본 검수 없이 게이트만으로 노출 자격을 선언했을 때 무엇이 새는지의 정량 증거. 검수자 판정은 맹신하지 않고 대표 주장 6건을 원문·정본 대조로 독립 재확정(교차확인 절). 사고 병행: 검수 에이전트 1차 투입 7인이 세션 사용 한도로 전멸(산출 0) → 재투입 시 스크래치패드 증분 기록 규약 추가로 회복력 확보.
+
 ### 2026-07-29 (설계·문제은행): **문제은행 갭 점검·설계(D1~D9) + 태스크 8건 등재·1건 병렬 승계 — 외부 EOS 틀 기능 18~22 대조** (claude 설계, Kiki 요청·"설계 문서+backlog 등재" 선택)
 
 **컨텍스트**: Kiki가 일반적 EOS 틀 문서(『0단계 문제은행 모듈』 18~22: 문제 DB·난이도·유형·자동 생성·변형 생성 — WhyMath 전용 아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청 — 2026-07-27 개념 관리 모듈(6~10) 갭 점검의 자매편. 실측 대조 결과 **이미 작동하는 문제은행이 존재**(코퍼스 6종 2,667문·수용 게이트 4종·초인간 검증 6축·IRT CAT 노출)하므로 무에서의 설계가 아니라 격차 보완으로 판정. 기능 18 대부분 충족(출처·검증은 틀보다 엄격)·19 절반(IRT 보정만 배선·실학생 데이터 0)·20 분류 초과 충족(17유형 6 family·인지 행동 기준)·연결은 Phase 3b 유지·21 4방식 충족·커버리지 편중·22 3/6 방식 보유·계보 미영속.

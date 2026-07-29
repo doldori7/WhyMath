@@ -1,15 +1,17 @@
 """problem_concept 원자 재연결 *거버넌스* — 실 코퍼스 대조 dangling 0 동결 (S2-03·hermetic·PG 불요).
 
-커밋된 실 코퍼스(3 문제코퍼스·크로스워크·구 437 다리·원자 그래프)로 재연결 해석 체인
+커밋된 실 코퍼스(4 문제코퍼스·크로스워크·구 437 다리·원자 그래프)로 재연결 해석 체인
 (src 태그 → bridge → crosswalk primary → 원자 code)을 실행해 참조 무결성을 동결한다
 (`test_crosswalk_transfer_governance.py` 패턴 미러 — 모든 소스가 repo 커밋 코퍼스라 hermetic·
 DB/네트워크 0):
 
-  ① 소스 코퍼스 실재 — 3 문제코퍼스 + 크로스워크 + 다리(+ 원자 그래프) 부재 시 loud 실패
-  ② 3 문제코퍼스 전 태그 해석 가능(dangling 0) — 알려진 예외는 빈 frozenset으로 동결
+  ① 소스 코퍼스 실재 — 4 문제코퍼스 + 크로스워크 + 다리(+ 원자 그래프) 부재 시 loud 실패
+  ② 4 문제코퍼스 전 태그 해석 가능(dangling 0) — 알려진 예외는 빈 frozenset으로 동결
   ③ 해석 결과(primary_atom_code) ⊆ 원자 그래프 세부개념 code 집합
   ④ legacy 키공간 무교차 — primary code는 canonical(`math.` prefix)·src 공간과 겹치지 않는다
-  ⑤ 코퍼스별 태그 수 하한 동결(v1≥6·generated_v0≥620·rephrased_v0≥483) — 스캐너 무력화 방지
+  ⑤ 코퍼스별 태그 수 하한 동결(v1≥6·generated_v0≥620·rephrased_v0≥429 — S3-12 위생 축소 반영,
+     483→446(1차 37건)→443(지수 서술구 3건)→429(rotation-1 신규 3축+어형 붕괴 수기감사 14건)
+     순차 탈락) — 스캐너 무력화 방지
   ⑥ 동일 문제·동일 role의 primary 접힘 0 동결 — 현 코퍼스는 접힘 무손실(재저작 시 여기서 감지)
 
 코퍼스가 재유도·재저작되어 수치가 내려가거나 dangling이 생기면 여기서 잡는다(드리프트 감지).
@@ -33,7 +35,8 @@ _ROOT = Path(__file__).resolve().parents[4]
 _CROSSWALK = _ROOT / "data" / "corpus" / "concept_atom_crosswalk_v1" / "crosswalk.jsonl"
 _CONCEPT_GRAPH = _ROOT / "data" / "corpus" / "concept_graph_v1" / "graph.json"
 _ATOM_GRAPH = _ROOT / "data" / "corpus" / "atom_graph_v1" / "graph.json"
-# 3 문제코퍼스 — {이름: (경로, 태그 수 하한)} (⑤ 하한은 2026-07-09 실측 동결).
+# 4 문제코퍼스 — {이름: (경로, 태그 수 하한)} (⑤ 하한은 2026-07-09 실측 동결, mc_v0은 2026-07-29
+# S3-12 rotation-1 concept_src_id 재고정 후 신규 편입).
 _PROBLEM_CORPORA: dict[str, tuple[Path, int]] = {
     "problem_bank_v1": (_ROOT / "data" / "corpus" / "problem_bank_v1" / "problems.jsonl", 6),
     "problem_bank_generated_v0": (
@@ -41,8 +44,22 @@ _PROBLEM_CORPORA: dict[str, tuple[Path, int]] = {
         620,
     ),
     "problem_bank_rephrased_v0": (
+        # S3-12 발문 위생 일괄 적용(rephrased_corpus_hygiene)으로 483→446→443→429 정직 축소 —
+        # 1차 37건(한자·가나 주입/메타 라벨/비표준 용어/방법-값 부정합/조사 오류) +
+        # 지수 서술구 허상 삽입 3건(⑥축 신설) +
+        # rotation-1 재검수 발견 신규 3축(괄호 메타 누출·차원 오기술·개념 오치환) 12건 +
+        # 어형 붕괴 수기감사 확정 2건(`_KNOWN_DEFECTIVE_SLUGS`) = 14건 추가 탈락.
         _ROOT / "data" / "corpus" / "problem_bank_rephrased_v0" / "problems.jsonl",
-        483,
+        429,
+    ),
+    "problem_bank_misconception_mc_v0": (
+        # S3-12 rotation-1이 45밴드 중 13개의 concept_src_id(`_TEMPLATE_META`)가 재태깅된
+        # standard_codes와 무관한 구 개념을 계속 가리키던 결함(M0052 크로스링크 회귀와 동일
+        # 계통 — 표시용 태그만 고치고 그래프 앵커를 놓침)을 발견·전수 교정 후 신규 편입.
+        # 편입 전에는 이 코퍼스가 거버넌스 밖이라 저 13건 dangling-등가 결함이 무기한 미검출
+        # 상태였다(재발 방지 — 이 테스트가 이제 4번째 코퍼스로 상시 감시).
+        _ROOT / "data" / "corpus" / "problem_bank_misconception_mc_v0" / "problems.jsonl",
+        1080,
     ),
 }
 

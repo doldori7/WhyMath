@@ -32,10 +32,22 @@
 |---|---|---|---|---|
 | `problem_bank_v1` | 4 | 손저작 시드(코퍼스 저작 계약의 계약 문서) | — | ✅ |
 | `problem_bank_generated_v0` | 620 | 결정론 스켈레톤 15밴드(LLM 0) | ✅ AI 검수 240표본 Wilson 95% 상한 1.11% PASS | ❌ |
-| `problem_bank_rephrased_v0` | 483 | LLM 발문 다양화(수치·정답·선지 불변 봉인) | ❌ | ❌ |
-| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드 | ❌ | ❌ |
-| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드 | ❌ | ❌ |
-| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형 | ❌ | ❌ |
+| `problem_bank_rephrased_v0` | 429 | LLM 발문 다양화(수치·정답·선지 불변 봉인) | ⚠️ rotation-1 조치완료·as-found **FAIL**(상한 8.79%)·rotation-2 확인 대기 | ❌ |
+| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드 | ⚠️ rotation-1 조치완료·as-found **FAIL**(상한 7.58%)·rotation-2 확인 대기 | ❌ |
+| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드 | ✅ rotation-1 **PASS**(상한 1.33%) | ❌ |
+| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형 | ⚠️ rotation-1 결함 0건이나 **min-n 200 구조적 미달**(코퍼스 크기 자체 — 별도 저작 스코프) | ❌ |
+
+*표본 검수 갱신(2026-07-29·S3-09→S3-12 rotation-1)*: 잔여 4종 720문 AI 감사(rotation-0)가 계통
+결함 5류(조사 하드코딩·성취기준 태그 오귀속·해설 수치·모순 전제·rephrase 위생)를 확정 —
+전량 Tier1 검산 범위 밖 축(D2의 실증). 생성기 축 전건 교정 후 **신규 독립 rotation-1 표본**으로
+재검수(§4.5 — 같은 표본 재채점 아님): conceptual PASS·mc/rephrased는 rotation-1이 발견한 잔여
+결함(태그 재귀속 9건·위생 게이트 3신규축 11건)을 조치했으나 as-found 자체는 정직하게 FAIL로
+기록(rotation-2 신규 표본 확인 필요)·killer는 결함 0이나 코퍼스 크기(120<200)가 구조적 한계.
+부수 발견: misconception_mc의 `concept_src_id`(개념그래프 앵커, `achievement_standard_codes`와
+별도 필드) 14건이 재태깅된 표준코드와 무관한 구 개념을 계속 가리키던 6번째 결함 축 — 전건
+concept_graph_v1 역탐색으로 교정, `test_relink_governance.py` 커버리지를 3→4 코퍼스로 확장해
+재발 방지. 정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md`(§"Rotation-1 환류 검증 결과"),
+환류: `S3-12-problem-bank-v0-defect-remediation`.
 
 **파이프라인 4축** (모두 실가동):
 - **스키마 3층**: `schema/problem.py`(Pydantic 정본 705행·50+필드) → `db/models/problem.py`(ORM) →
