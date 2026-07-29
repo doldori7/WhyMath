@@ -1,0 +1,18 @@
+# 교수전략 카탈로그 — RETRIEVAL(인출연습). 정본: docs/architecture/04e_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: RETRIEVAL
+name_ko: 인출연습
+description: 배운 내용을 다시 보여주지 않고 기억에서 꺼내는 연습을 반복한다.
+research_basis:
+  - Roediger & Karpicke (2006) 시험 효과(testing effect)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [중, 하]
+target_k_types: [PROCEDURE, CONCEPT]
+suitable_error_types: [절차오류]
+usage_notes: |
+  배운 내용의 정착이 부족하거나 계산 실수가 잦을 때, 다시 보여주는 대신 기억에서 꺼내게
+  한다(재학습보다 인출이 장기 파지에 우수 — 시험 효과). 절차가 손에 붙지 않아 생기는
+  절차오류의 교정·예방에 유효하다.
+  기대 효과: 장기 파지 강화·절차의 자동화·계산 실수 감소.
+  주의: 아직 형성되지 않은 개념을 인출시키면 좌절만 남는다 — 초기 학습 국면이 아니라 정착
+  국면에 쓴다. 실패한 인출은 질책 없이 즉시 교정 피드백으로 잇는다.
