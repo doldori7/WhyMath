@@ -337,6 +337,22 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·실측·OPS-15 + PED-11): **WH-1 caplog 순서 플레이크 근본 규명 — dictConfig propagate 오염·러너 버전 위장 발견·이중 봉쇄** (claude /drive, Kiki "진행")
+
+**컨텍스트**: 전체 스위트 랜덤 순서에서만 WH-1 harness 3파일이 "caplog 레코드 0건"으로 5~13건 변동 실패(2026-07-29 등재분). backend-engineer 위임 조사.
+
+**규명(전건 실측·인과 완결)**: 오염원 = `test_wh1_shadow_logconfig.py::test_logconfig_captures_record_logger` **단 1개** — dictConfig가 `whymath.harness.wh1_shadow.record` 로거에 `propagate=False`를 설정하고 구 finally는 핸들러만 복원. **pytest 8.x caplog은 root 로거에만 부착(전파 의존)**이라 이후 record 로거 caplog 단언 전건이 0건 관측 실패. 최소 쌍 재현+3중 대조+bad seed(442243680) 수집 순서 기하+pre-fix 전체 재현(13건 정체 1:1)로 완결. **핵심 발견: pytest 9.0+는 caplog이 비전파 로거에도 직접 부착해 같은 오염이 무증상 잠복**(9.1.1 실측) — 러너 버전에 따라 위장되는 순서 오염이라 "9에서 green"은 오염 부재의 증거가 아니다.
+
+**수정(병용·근거)**: ①근본 — `_dictconfig_loaded` 스냅샷→원복 컨텍스트(설정 loggers 키 파생·하드코딩 0)+원복 회귀 테스트(변별력: 적용 확인 후 복원 단언) ②OPS-07형 가드 — `tests/backend/_logging_state_guard.py`+conftest autouse: 기존 로거 propagate/disabled 플립·전역 disable·**신생 whymath\* 비전파 잔존**(단독 실행 갭 봉쇄) 탐지→스냅샷 복원(격리)→pytest.fail(귀책). 레벨·핸들러·필터는 의도적 비감시(오검출 0 우선·사유 docstring). `getLogger("root")`가 root가 아닌 'root' 이름 로거를 만드는 표준 함정은 빈 키 규약으로 봉인. 병용 근거: 근본만으론 미래 dictConfig 사용이 재발(9 환경 잠복), 가드만으론 기존 오염 잔존 — 가드가 순서·러너 무관 결정론 즉시 귀책으로 전환(OPS-09 무작위화와 상보).
+
+**검증**: 8.3.3 — 서브셋 무작위 10시드 green·전체 bad seed 442243680 **7,637 passed·0 failed**(pre-fix 동일 시드 13 failed)·무작위 시드 green / 9.1.1 — 전체 무작위 green·가드 오검출 0·오버헤드 무관측 / **메인 세션 독립 검증(8.4.2)** — 가드+회귀 19건·오염원→피해자 강제 순서 37건 green + 전체 bad seed 재실행. lint(ruff·black CI 인자)·mypy strict·lint-imports 전부 clean.
+
+**병행(PED-11 done·8b2e5c6)**: `preferred_solution_style` 유령 필드 실측 부기 6곳(02·03+grep 전수 발견 4곳: system_deep_dive·design/ui/01·llm-architect·ml-engineer)+pedagogy-designer.md 정본 관계 1줄(설계 정본=04* 계열·충돌 시 정본 우선). 검증: 무부기 유령 참조 0건.
+
+**롤백**: 가드는 conftest 픽스처 1개 제거로 비활성(테스트 파일 무영향). 근본 수정은 test 파일 한정.
+
+**정직한 공백**: 원 관측 환경(7,621 passed)의 pytest 버전 미확인(8.x 추정 — 시그니처 완전 일치). 신생 외부 네임스페이스·레벨·핸들러·필터 잔존 비감시(의도·docstring). integration 마크는 가드 밖(live-PG 피해자 2파일은 근본 수정이 보호·해당 잡 실측 불가).
+
 ### 2026-07-29 (구현·PED-07·PED-05 + 사고·재발방지): **mode_guard 런타임 배선 + 교수전략 카탈로그 착지 — 검증 함정 2건 규명·등재** (claude /drive)
 
 **컨텍스트**: 04e(PED-04) 후속 /drive 2건. ①PED-07 — `check_forbidden_modes` 프로덕션 호출 0("배선 없는 검증 장치" 반복 사고 유형) 해소 ②PED-05 — 전략은 enum+docstring뿐인 서술 자산 비대칭 해소.
