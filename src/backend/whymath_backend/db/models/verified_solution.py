@@ -94,7 +94,7 @@ class VerifiedSolution(Base):
         nullable=False,
     )
     # 완전 풀이 경로의 구조화 표현(단계열·중간 상태 — 자유형 JSONB·솔버 루프가 계약 정의).
-    solution_path: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    solution_path: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 풀이 전략 계열(대수적·기하적·귀납적 — 다중 풀이 다양성 태그). 미분류면 None.
     strategy_tag: Mapped[str | None] = mapped_column(sa.Text)
     # 최종 답(검색·중복 식별). 증명 등 답이 없으면 None.

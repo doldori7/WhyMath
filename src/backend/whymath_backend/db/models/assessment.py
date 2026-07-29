@@ -106,21 +106,21 @@ class Assessment(Base):
 
     # ===== 단원·패턴별 진단 (schema default_factory=list → NOT NULL JSONB) =====
     concept_diagnosis: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     pattern_diagnosis: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     weak_points: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     strong_points: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 권장 학습 경로 (특성 #78) =====
     recommended_path: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 멘탈·시간 관리 (특성 #50) =====

@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-15-response-driven-difficulty-loop
+title: "실응답 난이도 루프 v1 — 정답률·rate_*·오개념 유발도 갱신(파일럿 후)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "①problem_attempt 집계→historical_correct_rate·rate_top/mid/low_grade·경험 discrimination_D 갱신 배치(calibrate_items 동형 CLI·결정론·갱신 감사 로그·as-found 병기 준용) ②오개념 유발도=distractor_map 선지별 선택률 통계(신규 필드 0·리포트 축) ③AI 재평가 환류는 v2: 초기 난이도-실측 괴리 상위 문항 5축 재추정→검수 큐(자동 덮어쓰기 금지·기계 자율 거부만 — crosswalk 게이트 계약 준용) ④학생 풀이 데이터 사용은 명시적 동의 전제"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D9 — 외부 틀 기능 19 자동 업데이트 루프의 미가동 절반(IRT JMLE는 기배선). 실학생 응답 0이라 S3-01 잠금(입력 없는 파이프라인 금지). 구 S4-12에서 재번호(2026-07-29)"
+updated: 2026-07-29

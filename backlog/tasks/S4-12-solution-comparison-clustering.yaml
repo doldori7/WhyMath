@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-12-solution-comparison-clustering
+title: "풀이 비교 메타·동치 군집 리포트 — 기계 지표 자동·휴리스틱 1차+사람 검수 큐(자동 확정 금지)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S4-10-multi-solution-generation
+requires_gates: []
+acceptance:
+  - "빌드타임 비교 리포트(기계 산출 지표만: 스텝 수·concept_sequence 길이·sympy_verified 비율·reasoning_type 분포 — ARCH-17 오프라인 리포트 동형) + 동치성 점수(03 문서 L165 휴리스틱 정본: 편집거리+최종답 SymPy+approach_type+코사인)→equivalence_cluster_id 후보 부여·사람 검수 큐(자동 확정·AI 자기승인 금지) + solution_fingerprint 정확 일치 dedup의 예고된 후속 + SolutionPath embedding 도입 여부 본 태스크에서 판정(cross-table 코사인 금지 거버넌스) — 학생 노출·최적 풀이 라벨 없음(§2-④)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/whs/**"
+  - "src/backend/whymath_backend/l3/**"
+session: null
+notes: "docs/architecture/solution_module_gap_review.md §3 D4 — 외부 EOS 틀(기능 27) 대조(코드 전무 갭). '최적 선택·자동 추천'은 §2-④ 미채택. preferred_solution_style·갤러리 UI는 §4-⑤⑥/Phase 3. 오프라인 리포트 축 — S3-01 비의존(ARCH-17 선례)"
+updated: 2026-07-29

@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-19-answer-distribution-latex-gates
+title: "품질 15축 ⑧답 분포·⑩LaTeX 게이트 승격 — 강등전+Wilson 동반"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "⑧정답 위치 분포 편향(객관식 1,440문 — 코퍼스 수준 분포 검정·결정론)·⑩LaTeX/문법 검증(문항 단위 파스 게이트)을 수용 게이트 축으로 승격. 신규 게이트 규약 의무: defect_seeder 결함 유형 확장(⑧쏠림 주입·⑩깨진 수식 주입) 강등전 검출률 + 무결함 오검출 Wilson 상한 병기 + CLI exit 0/1"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/equivalent/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D5 — 측정 없는 게이트는 게이트가 아니다(CLAUDE.md 검증 권위). 15축 ⑦조건완전성은 §4 정직한 공백(교차단원 밴드 착수 시)"
+updated: 2026-07-28

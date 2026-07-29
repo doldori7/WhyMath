@@ -186,7 +186,7 @@ class ProblemAttempt(Base):
 
     # ===== 풀이 이미지/PDF (특성 #95) — *미성년 풀이 데이터* =====
     handwriting_uri: Mapped[str | None] = mapped_column(sa.Text)
-    ocr_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    ocr_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 막힌 지점 분석 =====
     stuck_at_step: Mapped[int | None] = mapped_column(sa.Integer)
@@ -198,7 +198,7 @@ class ProblemAttempt(Base):
 
     # ===== 풀이 단계별 시간 (특성 #42) — schema default_factory=list → NOT NULL JSONB =====
     step_times: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 운영 메타 =====
@@ -262,7 +262,7 @@ class AttemptEvent(Base):
 
     # ===== 이벤트 내용 =====
     event_type: Mapped[EventType | None] = mapped_column(_pg_enum(EventType, "event_type_enum"))
-    event_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    event_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     @classmethod
     def from_schema(cls, schema: SchemaAttemptEvent) -> AttemptEvent:

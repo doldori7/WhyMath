@@ -69,21 +69,21 @@ class ContentProvenance(Base):
     original_source: Mapped[SourceType | None] = mapped_column(
         _pg_enum(SourceType, "source_type_enum")
     )
-    original_reference: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    original_reference: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 변형·생성 단계 =====
     generation_type: Mapped[GenerationType | None] = mapped_column(
         _pg_enum(GenerationType, "generation_type_enum")
     )
-    transformation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    transformation: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     parent_problem_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("problem.problem_id")
     )
-    transformation_pipeline: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    transformation_pipeline: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 검증·승인 =====
-    auto_validation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    human_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    auto_validation: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    human_review: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     approved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     # DDL에 REFERENCES 없음 → plain UUID(FK 아님).
     approved_by: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
@@ -91,7 +91,7 @@ class ContentProvenance(Base):
     # ===== 저작권·법적 메타데이터 =====
     license: Mapped[LicenseType | None] = mapped_column(_pg_enum(LicenseType, "license_enum"))
     copyright_notice: Mapped[str | None] = mapped_column(sa.Text)
-    usage_restrictions: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    usage_restrictions: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 운영 메타 =====
     created_at: Mapped[datetime | None] = mapped_column(

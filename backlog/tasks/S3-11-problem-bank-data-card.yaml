@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-11-problem-bank-data-card
+title: "문제은행 데이터 카드 + v0 provenance 정규화 — 서지 정합"
+track: math-completion
+stage: S3
+subject: math
+layer: docs
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "docs/data/problem_bank_corpus_v1.md 데이터 카드(6종 건수·생성 CLI·게이트·검수 현황·노출 4단 지위·재현 명령) + v0 5종 _provenance.json 생성(v1 계약 문서 동형 — 저작 계약·게이트 경유·WHYMATH_GENERATED 명기) + licensing_safety.md 대장 1줄"
+artifacts: []
+paths:
+  - "docs/data/**"
+  - "data/corpus/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D1 — docs/data에 problem_bank 카드 0장·v0 5종 2,663문 provenance 부재 해소. 구본 명세(schemas/v1.1/problem.schema.yaml) 강등 배너·참조표 교정은 2026-07-28 커밋에서 기해소"
+updated: 2026-07-28
