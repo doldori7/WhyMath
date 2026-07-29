@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ paths:
   - "src/backend/whymath_backend/whs/**"
   - "src/backend/whymath_backend/db/models/**"
   - "src/backend/whymath_backend/api/**"
-session: null
+session: claude/whymath-solution-review-40xspg
 notes: "docs/architecture/solution_module_gap_review.md §3 D1 — 외부 EOS 틀(기능 23) 대조. 03_content_generation.md L151 'Phase 2(다중 풀이 소비처가 설 때)' 유보의 해제 조건 성립(S4-10이 소비처·620문 실데이터의 스키마 승격 — dead code 아님). 파일럿 루프 비간섭(코치 경로 무변경)이라 S3-01 비의존(S4-06/ARCH-16 오프라인 선례)"
 updated: 2026-07-29
