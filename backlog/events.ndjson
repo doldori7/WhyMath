@@ -961,3 +961,4 @@
 {"ts": "2026-07-29T06:11:07", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "add", "id": "PED-12-effectiveness-ktype-label"}
 {"ts": "2026-07-29T06:11:34", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 PED-06-catalog-consumption의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-29T06:11:55", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "done", "id": "PED-06-catalog-consumption", "artifacts": ["commit 842ed2a (branch claude/whymath-teaching-strategy-enfkqt)"]}
+{"ts": "2026-07-29T06:12:40", "actor": "claude/whymath-teaching-strategy-enfkqt", "action": "start", "id": "PED-09-analogy-example-generator", "session": "claude/whymath-teaching-strategy-enfkqt", "remote": "ok"}

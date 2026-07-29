@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/**"
-session: null
+session: claude/whymath-teaching-strategy-enfkqt
 notes: "정본: 04e §6. 상한 불변식: 개념당 비유 1(+레지스터 소수)·사전 대량 생성 금지. 오개념 교정 비유 신설 금지(반례가 기담당·reactive-only)."
-updated: 2026-07-28
+updated: 2026-07-29
