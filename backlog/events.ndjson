@@ -1123,3 +1123,9 @@
 {"ts": "2026-07-30T13:32:35", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-04-exam-calendar-season-skeleton-corpus"}
 {"ts": "2026-07-30T13:34:20", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-04-exam-calendar-season-skeleton-corpus"}
 {"ts": "2026-07-30T13:34:42", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-05-season-plan-derivation"}
+{"ts": "2026-07-30T13:52:58", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-06-progress-rate-axis"}
+{"ts": "2026-07-30T13:53:21", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-04-exam-calendar-season-skeleton-corpus"}
+{"ts": "2026-07-30T13:53:40", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-05-season-plan-derivation"}
+{"ts": "2026-07-30T14:13:57", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-07-subject-track-taxonomy-enrollment"}
+{"ts": "2026-07-30T14:14:17", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-08-curriculum-position-breadcrumb"}
+{"ts": "2026-07-30T14:15:07", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-03-me-tab-learning-path-view"}

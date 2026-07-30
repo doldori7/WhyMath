@@ -1,19 +1,20 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: PATH-04-exam-calendar-season-skeleton-corpus
-title: "고3 대입 시즌 골격 코퍼스 — 시험 일정·수능 출제범위 + L1 로더 (FR-010 선결)"
+title: "고3 시즌 골격 코퍼스 — 모의고사 회차·시행일·수능 출제범위 (달력=보조 제약)"
 track: math-completion
 stage: S4
 subject: math
 layer: backend
 status: todo
-priority: 2
+priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "①data/corpus/exam_calendar_v1/ 신설(기존 26 코퍼스 패턴·_provenance.json 동반) — 시험 회차(3월 교육청 학평·5월 일부지역·6월 평가원 모평·7월 교육청·9월 평가원 모평·10월 교육청·11월 수능)·학년도별 시행일·수능 출제범위 과목 목록. 평가원·교육청 시행 공고 = 공공 사실정보만(문항·본문 0)"
-  - "②L1 로더 + 멱등 적재 + docs/data/licensing_safety.md에 데이터 카드 등재(라이선스 매트릭스 기록 의무). 연도별로 바뀌는 값이므로 코드 상수 금지 — 학년도 키로 조회되는 데이터여야 함을 테스트로 동결(2028 수능 개편 대비)"
-  - "③국면(phase) 10구간을 D7 투영표대로 적재하되, 내신 구간(4월 중간·6말~7월 기말) 2건은 range_scope를 비운다(차원 6 교과서 배열 의존 — 없는 근거로 채우지 않음·정직 부분 착지를 테스트로 동결). 입시 컨설팅·타 과목·EBS 본문·기출 본문·학생부 필드 부재 동결"
+  - "①data/corpus/exam_calendar_v1/ 신설(기존 26 코퍼스 패턴·_provenance.json 동반) — 시험 회차(3월 교육청 학평·5월 일부지역·6·9월 평가원 모평·7·10월 교육청·11월 수능)·학년도별 시행일·회차 성격 메타·수능 출제범위 과목 목록. 평가원·교육청 시행 공고 = 공공 사실정보만(문항·본문 0)"
+  - "②L1 로더 + 멱등 적재 + docs/data/licensing_safety.md 데이터 카드 등재(라이선스 매트릭스 기록 의무). 연도별 변동값이라 코드 상수 금지 — 학년도 키 조회 데이터임을 테스트로 동결(2028 수능 개편 대비)"
+  - "③★달력은 보조 제약 — 회차 안내와 정합성 점검(남은 범위 vs 남은 기간)에만 쓰이고 **국면 판정 권한은 PATH-06 진도율이 갖는다**. 로드맵의 월별 학습 구간('5월 실전 시작' 등)을 국면 정의로 적재하지 않음을 테스트로 동결(일반 권장이지 개인 판정이 아니다)"
+  - "④내신 회차(4월 중간·6말~7월 기말)는 회차만 적재하고 range_scope를 비운다(차원 6 교과서 배열 의존·§4-1 — 없는 근거로 채우지 않음). 입시 컨설팅·타 과목·EBS 본문·기출 본문·학생부 필드 부재 동결"
 artifacts: []
 paths:
   - "data/corpus/exam_calendar_v1/**"
@@ -21,5 +22,5 @@ paths:
   - docs/data/licensing_safety.md
   - "tests/backend/l1/**"
 session: null
-notes: "2026-07-30 learning_path_module_gap_review.md D7. Kiki 결정으로 FR-010 유보 해제(PRD P0 정본 채택). 함께 제공된 고3 연간 로드맵은 'WhyMath 전용이 아닌 일반 고3 수학 입시대비용'(Kiki 명시)이라 외부 EOS 틀과 같은 참고 자료 지위 — 정본은 로드맵 원문이 아니라 D7 투영표다. 실측 선결: exam_calendar grep 0건. 범위 밖 명시 분리 — 목표대학 현실화·수시/정시 지원(입시 컨설팅·§2-② 점수예측 금지) / EBS 연계교재(CLAUDE.md 금기·저작권법 §32 단서) / 기출 회독(자체 동등문제로 대체·현 source_type 전량 자체생성·ebs_linked 전량 False) / 국어·영어·탐구(수학만) / 학생부·세특(페르소나 D v1.5·§4-7)."
+notes: "2026-07-30 learning_path_module_gap_review.md D8. Kiki 결정으로 FR-010 유보 해제(PRD P0 정본 채택). 함께 제공된 고3 연간 로드맵은 'WhyMath 전용이 아닌 일반 고3 수학 입시대비용'(Kiki 명시)이라 외부 EOS 틀과 같은 참고 자료 지위 — 로드맵에서 취하는 것은 시험 회차의 실재성과 성격뿐이고 월별 구간은 정본으로 받지 않는다(구간 판정은 PATH-06). priority 3으로 하향: 진도율 주축 채택 후 달력은 보조 제약이라 PATH-06보다 후행. 범위 밖 — 목표대학 현실화·수시/정시(입시 컨설팅·§2-②) / EBS 연계교재(CLAUDE.md 금기·저작권법 §32 단서) / 기출 회독(자체 동등문제 대체·source_type 전량 자체생성·ebs_linked 전량 False) / 국어·영어·탐구(수학만) / 학생부·세특(페르소나 D v1.5)."
 updated: 2026-07-30

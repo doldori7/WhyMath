@@ -10,16 +10,17 @@ priority: 3
 owner: claude
 depends_on:
   - PATH-01-unified-learning-path-difficulty-axis
+  - PATH-08-curriculum-position-breadcrumb
 requires_gates: []
 acceptance:
-  - "①me_screen.dart의 '준비 중' 2종(학습 경로·진단 결과)을 실 API 소비로 교체 — PATH-01의 GET /v1/me/learning-path + 기존 GET /v1/me/diagnosis/concepts. 서버 경로 엔드포인트의 첫 클라 소비(현재 클라가 부르는 /v1/me/*는 next-problem·diagnosis/concepts 둘뿐)"
+  - "①me_screen.dart의 '준비 중' 2종(학습 경로·진단 결과)을 실 API 소비로 교체 — PATH-01의 GET /v1/me/learning-path + 기존 GET /v1/me/diagnosis/concepts + PATH-08의 GET /v1/me/curriculum-position(브레드크럼). 화면 순서는 브레드크럼(지금 어디를 배우는지)을 최상단 요약으로 두고 그 아래 약점 복구 경로(PATH-01)를 잇는다(PATH-08 acceptance ⑤와 정합). 서버 경로 엔드포인트의 첫 클라 소비"
   - "②반게임화 경계 동결 — 랭킹·스트릭·카운트다운·보상 연출·학습시간 리더보드가 0임을 테스트로 동결(docs/design/ui/00_index.md:41 불변식 2가 '학습 경로 시각화는 허용'으로 명시 허용한 자리이므로, 허용 경계 안쪽에서 미끄러짐을 코드로 막는다). 근거를 주석에 명기"
-  - "③서버의 정직 신호를 삼키지 않고 노출 — has_cycle(사이클 잔여)·transitive 절단 표시·빈 경로(약개념 0)를 각각 UI 상태로 처리. 가짜 데이터 생성 0(현 placeholder의 정직성 유지)·로딩/에러/미인증(401) 상태 회귀"
+  - "③서버의 정직 신호를 삼키지 않고 노출 — has_cycle(사이클 잔여)·transitive 절단 표시·빈 경로(약개념 0)·PATH-08의 콘텐츠 없음 스킵 표시를 각각 UI 상태로 처리. 가짜 데이터 생성 0(현 placeholder의 정직성 유지)·로딩/에러/미인증(401) 상태 회귀"
 artifacts: []
 paths:
   - "src/mobile/lib/features/profile/**"
   - "src/mobile/lib/features/problems/data/**"
   - "src/mobile/test/**"
 session: null
-notes: "2026-07-30 learning_path_module_gap_review.md D3. 실측 낙차: 서버는 api/me.py:1438에서 경로를 산출하는데 클라는 호출 0 — me_screen.dart:31,36,82 '준비 중'. 이 placeholder는 게으름이 아니라 정직(:3-4 '가짜 데이터를 만들지 않고')이므로 대체 시 그 정직성을 승계한다. MEMORY L2100 NOT(후속) 'Flutter 클라 소비' 상환. 이 영역 최대 갭이면서 서버 로직이 이미 있어 가장 값싼 갭. 불채택: 스트릭·랭킹·복습 독촉 푸시(§2-③)."
+notes: "2026-07-30 learning_path_module_gap_review.md D3(+D11 결합). 실측 낙차: 서버는 api/me.py:1438에서 경로를 산출하는데 클라는 호출 0 — me_screen.dart:31,36,82 '준비 중'. 이 placeholder는 게으름이 아니라 정직(:3-4 '가짜 데이터를 만들지 않고')이므로 대체 시 그 정직성을 승계한다. MEMORY L2100 NOT(후속) 'Flutter 클라 소비' 상환. depends에 PATH-08 추가 — Kiki 2차 제안(브레드크럼)이 이 화면의 최상단 요약이 되도록 후행 배선. 불채택: 스트릭·랭킹·복습 독촉 푸시(§2-③)."
 updated: 2026-07-30

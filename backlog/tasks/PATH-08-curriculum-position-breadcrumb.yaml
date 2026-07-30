@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-08-curriculum-position-breadcrumb
+title: "학년트랙×과목×단원×소단원 진행 위치 브레드크럼 — GET /v1/me/curriculum-position"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PATH-07-subject-track-taxonomy-enrollment
+  - PATH-06-progress-rate-axis
+requires_gates: []
+acceptance:
+  - "①GET /v1/me/curriculum-position 신설 — 파생·읽기 전용. 입력=current_subjects(PATH-07)+BKT/IRT 진단(concept)+concept_atom_crosswalk(concept→atom)+atom_node.standard_codes(atom→성취기준코드)+standards_v1 단원/소단원 구조. 신규 알고리즘 0 — 기존 위상정렬·약점 스코프(PATH-01)를 성취기준 코드로 그룹핑해 재사용"
+  - "②위치 계산 — 과목의 성취기준을 코드순(단원번호·소단원번호, ★숫자 캐스트 정렬 — 문자열 정렬 시 단원 10개 이상에서 사전식 오정렬 발생을 회귀 테스트로 방지) 정렬 후 crosswalk 체인으로 BKT 숙달 개념에 대응하는 코드까지를 '지났다'로 보고 다음 미숙달 코드 위치를 현재 소단원으로 산출. 전단원 숙달 시 다음 단원 첫 소단원 이월을 테스트로 동결"
+  - "③★콘텐츠 커버리지 공백 정직 처리(§4-0 승계) — 문항 0개 소단원은 위치 계산에서 건너뛰되 몇 개가 콘텐츠 없음으로 건너뛰어졌는지 응답에 노출(조용한 스킵 금지 — axis_exclusions.py 선례 동형)"
+  - "④★학년 라벨 표현 경계 동결 — 이 엔드포인트는 정방향 진도 맥락이라 학년트랙 라벨 노출을 허용하되(D7의 결손복구 맥락 학년 라벨 금지와 다름을 코드 주석·문서에 명기), 이 라벨이 결손 복구 화면(약점 학습 경로 API)에 새어 들어가지 않음을 회귀 테스트로 동결. 또래 비교·백분위 필드 부재(§2-⑩ 승계)"
+  - "⑤PATH-03(「나」탭 학습 경로 시각화)의 최상단 요약으로 이 브레드크럼을 배치 — '지금 어디를 배우는지' 다음에 기존 약점 복구 경로(PATH-01)를 잇는 순서를 리뷰 게이트로 확인"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - src/backend/whymath_backend/api/me.py
+  - "src/mobile/lib/features/profile/**"
+  - "tests/backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "2026-07-30 learning_path_module_gap_review.md D11. Kiki 제안 2차('경제수학과목중 전체 몇 단원중 현재 몇번째 소단원 진행중') 그대로 구현. depends: PATH-07(과목 선택·이수구분)·PATH-06(진도율 축과 동일 crosswalk 체인 재사용). PATH-03과 UI 결합 지점을 리뷰 게이트로 명시."
+updated: 2026-07-30
