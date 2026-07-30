@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-26-concept-supply-integrity
+title: "개념 공급 무결성 — assessment 참조 주입(숙달 경로 404 해소) + 개념 코퍼스 감사 + dsl_render_rate 리포트 배선"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① assessment 공급원: ConceptAssessment(conditions·answer_map = verify_answer 입력 형식 그대로·l3/render/dsl.py:49)를 **검증 통과 문항 뱅크 2,647건에서 개념 태그(standard_codes·unit_codes)로 참조 주입** — 신규 저작 0·LLM 0·검증 앵커는 원천 상속(visualization_card_keys 참조 키 선례 동형). 개념 설명 LLM 생성 폴백은 켜지 않는다. ② 404 해소 실측: 숙달 신호 주입 시 ProblemBasedAdapter 렌더 성공률 전 0%(assessment=None 무조건 → can_render 항상 False → api/study.py:189 HTTP 404) → 후 N% 리포트, 참조 주입 실패 개념(문항 미보유)은 '미커버'로 명시 기록(침묵 통과 금지). ③ 개념 코퍼스 감사: concept_content_v1 437행에 review_status 축 도입 + 결함율 리포트(_provenance.json 'AI 추정·검수필요' 상태로 학생 노출 중인 것의 해소). ④ SupplyTally.dsl_render_rate 리포트 배선 — 현재 프로덕션 소비처 0이라 'generate로 집계되나 학생은 아무것도 못 본' 이중 회계 왜곡이 관측 불가. 어댑터별 분해 포함. ①~④는 단일 슬라이스(쪼개기 금지 — writer·reader 동반 규약, solution D1 동형)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/render/**"
+  - src/backend/whymath_backend/l4/content_supply.py
+  - src/backend/whymath_backend/api/study.py
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "docs/architecture/ai_content_generation_gap_review.md §3 D2 — 외부 EOS 틀(기능 58) 대조. 신규 학생 대면 축 0(기존 /study 표면의 404 해소·기존 검증 통과 자산 참조)이라 S3-01 비잠금이며 오히려 선결(파일럿 학생이 404를 받으면 파일럿 데이터 오염). 감사 축은 ARCH-21 QA 오케스트레이터가 흡수 예정"
+updated: 2026-07-30
