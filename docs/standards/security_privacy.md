@@ -1,5 +1,10 @@
 # 보안·개인정보 표준
 
+> **현행 실측 대조 (2026-07-30)**: 이 문서의 규정과 실제 구현의 격차는
+> `docs/architecture/account_security_gap_review.md`가 전수 대조했다(§0 스냅샷·§1 crosswalk).
+> 문서 규정과 코드가 어긋나는 절에는 **편집자 부기**로 실제 구현·정정 사유를 병기했다(원문은
+> 이력 보존을 위해 삭제하지 않는다). 미상환 갭은 `SEC-07`~`SEC-12`·`MGMT-02`로 백로그 추적 중.
+
 ## 미성년자 특수 사항
 
 ### 14세 미만
@@ -13,8 +18,18 @@
 
 ## PII 분리 저장
 
+> **⚠️ 편집자 부기 (2026-07-30 · `docs/architecture/account_security_gap_review.md` §4-④)**:
+> 아래 3테이블 설계는 **폐기됐다**(원문은 이력 보존을 위해 남긴다). 실명·전화·이메일 평문을
+> *애초에 수집하지 않는* 방향으로 우회했기 때문이다 — 분리 저장보다 **미수집**이 강한 보호다.
+> **실제 구현**: ⑴ `UserProfile` 단일 테이블(닉네임·학년·`school_id`·`birth_year`) + PII 최소
+> 수집 ⑵ 이메일은 **해시 키**로만 보관(OAuth upsert 키) ⑶ `parental_consent` 별도 테이블
+> (`guardian_email_hash` — 평문 금지) ⑷ **암호화 대상은 프로필이 아니라 대화·손글씨·증거 3자산**
+> (AES-256-GCM 봉투·SEC-01·`api/_crypto.py:285` fail-closed 부팅 게이트).
+> `nickname`·`birth_year`·`school_*`를 암호화하지 **않는** 이유: 커리큘럼 정렬·진단의 쿼리
+> 입력이라 암호화하면 조회가 불가능해진다(정직한 공백 §4-④).
+
 ```
-[테이블 A: students]
+[테이블 A: students]   ← 폐기된 설계 (아래 전체)
 - id (anonymous UUID)
 - nickname
 - grade
@@ -54,9 +69,21 @@ ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
 
 # 학생: SSO (카카오·네이버·Apple)
-# 부모: 별도 가입
-# 교사: 학교 인증 (Phase 3+)
+# 부모: 별도 가입          ← 좌석 0 (아래 부기 참조)
+# 교사: 학교 인증 (Phase 3+)  ← 좌석 0 (아래 부기 참조)
 ```
+
+> **⚠️ 편집자 부기 (2026-07-30 · `account_security_gap_review.md` D1·§5-②)**: "부모 별도 가입"·
+> "교사 학교 인증"은 **좌석이 0이다** — `UserProfile.role` 컬럼도, `Role` enum도 존재하지 않는다
+> (실측: `db/models/`의 `role`은 `TurnRole`·`ConceptRole`로 둘 다 다른 축). 따라서 이 두 줄은
+> *현행 규정*이 아니라 **미래 계획**으로 읽어야 한다.
+> **Role v0(SEC-07) = 2값**: `STUDENT`(기본) · `CONTENT_ADMIN`. 좌석 없는 역할은 만들지 않는다
+> (dead code 금지) — `PARENT`·`TEACHER`·`SCHOOL_ADMIN`은 Phase 3 대시보드·B2B 계약이 실체를 가질
+> 때 연다(§5-②).
+> **역할 추가 시 제약(협상 불가)**: 선형 서열(상위가 하위를 포함) 모델을 쓰지 않는다 —
+> `docs/legal/pipa_data_matrix.md:33-47`에서 **부모 열은 학생 열의 부분집합**이다(오답 패턴·또래
+> 비교·힌트 사용이 부모에게 ✕). 인가는 **2차원(역할 × 데이터 항목)** 매트릭스로만
+> (`docs/design/ui/04_admin_console_architecture.md` §2 원칙 3-4).
 
 > **구현 현황 (OAuth-a·a2·a3·a3b·a3c·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
 > 게이트(`api/_auth.py`)는 가동. **OAuth 로그인 콜백**(`api/auth.py`·`POST /v1/auth/{provider}/callback`
@@ -84,20 +111,49 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > + `router.dart` **비파괴 redirect**(*복원된 인증* 세션만 온보딩/로그인→채팅·미인증은 현 흐름 유지)
 > 가동. ★미인증→로그인 **강제** redirect·로그아웃 반영·세션 만료는 로그인이 실제 작동하는 c3로 연기
 > (그 전에 강제하면 앱이 막힘). 실 webview/딥링크 code 획득·카카오/네이버 SDK·네이티브 설정=OAuth-c3.
+>
+> **⚠️ 후속 항목의 백로그 배치 (2026-07-30 부기)**: 위 자백 3건은 이제 태스크로 추적된다 —
+> ⑴ 세션 목록/관리(a3d) → **`SEC-10`**(`_revoke_all_user_sessions`는 **함수만 있고 엔드포인트가
+> 없다**·`api/auth.py:186`·소생 대상). ⑵ 로그인 IP 레이트리밋(a4) → **`SEC-08`**(인프라는 이미
+> 있다 — `api/_rate_limit.py`의 `hit_by_ip`; 부착만 남음). ⑶ 액세스 24h → 15분 단축은 **클라
+> refresh-on-401 배선(MOB) 선결** — 먼저 줄이면 학생이 15분마다 튕긴다(우선순위 1 침해).
+> 추가 실측 갭: OAuth **`state`·PKCE·`redirect_uri` allowlist 0**(CSRF·open redirect) → `SEC-08`.
+> **경계 주의**: `device_credential`(기기 자격증명·rate limit 신뢰용)은 **로그인 세션이 아니다** —
+> 기기를 폐기해도 그 기기의 JWT는 만료까지 유효하다(`SEC-10`이 세션 축을 따로 세운다).
 
 ## 감사 로그
 
 ```python
-# 모든 PII 접근 로그
+# 감사 대상 3종 (아래 부기 — "모든 PII 접근"이 아니다)
 class AuditLog:
-    user_id: str
-    action: str         # 'read_pii', 'export_data', ...
+    user_id: str        # FK 아님 — 계정 삭제 후에도 감사 잔존
+    action: str         # 'export_data' | 'consent_change' | 'admin_access'
     target: str
     timestamp: datetime
-    ip_address: str
-    
+    ip_hash: str        # sha256(salt+ip) — 평문 IP 저장 금지
+
 # 보존: 5년 (개인정보보호법)
 ```
+
+> **⚠️ 편집자 부기 — 규정 정정 (2026-07-30 · `account_security_gap_review.md` D3)**: 원문의
+> "**모든** PII 접근 로그"는 **의도적으로 채택하지 않는다**. 본인 조회 경로(`/v1/me/*` 29
+> 엔드포인트)를 전수 감사하면 **미성년 학생의 학습 조회 이력 자체가 프로파일링 자산**이 되어
+> (언제·무엇을 몇 번 봤는가) 미성년자 보호 원칙과 역행하고, 볼륨도 소음이다. 규정을 그대로 남겨
+> 두면 **영구 미달 상태**가 되므로 경계를 확정해 정정한다.
+>
+> **감사 대상 = 3종만** — "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근":
+> ⑴ **데이터 반출**(`GET /v1/me/export`) ⑵ **동의 변경** ⑶ **관리자 접근**(SEC-07 착지 후).
+>
+> **구현 현황**: **삭제 감사만 가동**(`deletion_audit`·`db/models/audit.py:32`·writer
+> `api/me.py:291`·본인 조회 `GET /v1/me/deletions`). 반출은 **무기록**이 현실이며 SEC-09가
+> 상환한다. `deletion_audit`는 **삭제의 단일 권위로 유지**하고 신규 감사 테이블에 삭제를 중복
+> 기록하지 않는다(이중 진실원천 금지 — 테이블명·`deleted_at` 컬럼이 삭제 의미에 결합되어 있어
+> 반출 사건을 넣으면 스키마가 거짓말을 한다). 두 테이블 통합은 관리자 콘솔 Phase B에서 재론.
+>
+> **필드 정정 2건**: ⑴ `ip_address` 평문 → **`sha256(salt+ip)` 해시만**(반복 판정 가능·원본 복원
+> 불가) ⑵ 감사 행에 **반출 내용·본문·PII 값을 저장하지 않는다**(감사가 데이터 사본이 되면
+> 최소화 위반). append-only(UPDATE/DELETE 라우터 없음)·`user_id` FK 아님은 기존
+> `deletion_audit` 패턴 답습.
 
 ## 삭제·이전 권리
 

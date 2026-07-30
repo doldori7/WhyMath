@@ -34,6 +34,7 @@
 
 **선결 구현**:
 1. `Role` enum — 기존 골격 5종(`STUDENT`·`PARENT`·`TEACHER`·`SCHOOL_ADMIN`·`SYSTEM_ADMIN`) + 운영 백오피스용 **`CONTENT_ADMIN`**(콘텐츠 검수자·전권 아님) 추가 제안.
+   > **⚠️ v0 범위 축소 확정 (2026-07-30 · `SEC-07` 등재 시)**: 실제 착지하는 **v0는 2값**(`STUDENT`·`CONTENT_ADMIN`)이다. 좌석(소비처) 없는 역할은 만들지 않는다 — dead code 금지. `PARENT`·`TEACHER`·`SCHOOL_ADMIN`은 Phase 3 대시보드/B2B 계약이 실체를 가질 때 열고, `SYSTEM_ADMIN`은 `CONTENT_ADMIN`과 구분할 권한 항목이 생길 때 연다(역할 추가는 마이그레이션 1줄이고, 잘못 만든 역할을 걷어내는 비용이 더 크다). 근거·발화조건: `docs/architecture/account_security_gap_review.md` D1·§5-②.
 2. `UserProfile.role` 컬럼 신설(Alembic 마이그레이션·기본값 `STUDENT`).
 3. `require_role(*roles)` 의존성(`api/_auth.py`의 `get_current_user` 위에 얹음).
 4. **2차원 RBAC 매트릭스**(`backend-engineer.md:39` 방향): *역할 × 데이터 항목*. 예 — "교사는 학급 집계는 보되 개별 학생 PII는 못 본다", "부모는 자기 자녀의 *동의된 항목*만". 단순 역할 게이트를 넘어 항목 단위 인가.
