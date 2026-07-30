@@ -337,6 +337,50 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (구현·VIZ-01): **시각화 공급원 적재 배선 — concept_visual_style 코퍼스 127건 신설 + 두 오버레이 프로덕션 적재 배선 + 도달률 리포트, D1 "학생 도달 0회" 해소** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+**배경**: `visualization_module_gap_review.md` D1 — 전 시각화 스택(명세·렌더 계약·2,141행
+계산기·Flutter 봉투)이 구축·테스트 완료 상태로 **학생에게 도달 0회**였다. `l4/scene_generation.py:279`
+가 `concept_visual_style`·`concept_visualization` 두 Overlay를 AND로 요구하는데, 프로덕션 적재
+CLI(`populate_atom_backbone`, Kiki가 실행하는 그것)가 둘 다 건드리지 않아 항상 `return`.
+
+**실행**(backend-engineer 위임, 격리 worktree): ① `concept_visual_style_v1` 코퍼스 신설(127건) —
+`VisualizationStyle` 통제 어휘로 **결정론 리터럴 키워드 + subject_area 화이트리스트** 규칙(전수
+LLM 태깅 아님, 판정 불가는 미태깅 존치). 규칙 적용 중 동형이의어 오분류 2건을 직접 잡아 수동
+제외("수직선"이 좌표기하 수직선을 뜻하는 개념 1건, "부피" 키워드가 대수 항등식 비유인 개념 1건).
+② `populate_atom_backbone`에 두 오버레이 적재를 **opt-in 파라미터**로 배선(라이브러리 함수는
+`None`=스킵이라 기존 hermetic 단위테스트 무변경, CLI(`_main`)는 기본값으로 항상 적재) —
+`populate_concept_visual_style`·`populate_concept_visualization` 프로덕션 호출 0건이 해소됨.
+③ `harness/visualization_reach_report.py` 신설 — `l4.visualization_policy.is_visualizable`를
+재사용(재구현 0)해 도달률·분류율·미분류 목록을 결정론 관측(게이트 아님, `problem_bank_coverage`
+동형). ④ 변별력 2건: 로드 축(오버레이 0→127/7, 재현 가능한 통합테스트) + 게이트 축(임의 개념을
+"추상"으로 오태깅→시각화 보류 실측→복원→정상 재현), 하나의 실 PG 통합테스트
+(`test_viz01_reach_discrimination_integration.py`)에서 4단계 상태 전이(부재→적재→오태깅→복원)로
+연쇄 실측(LLM 호출 횟수까지 신호로 사용 — 응답 내용뿐 아니라 게이트가 LLM 호출 자체를 생략하는지
+확인).
+
+**부수 발견(정직 기록)**: 기존 `concept_visualization_v1`(7건)은 **레거시 437 개념그래프 code**로
+태깅돼 있어 원자 백본(`atom_graph_v1`) 런타임 code 공간과 전혀 겹치지 않는다(7/7 orphan) — 적재는
+되지만 실제 개념과 매치되는 것은 0건. 게이트가 `is_visualizable(None)` fail-open(D2 설계)이라
+서비스 장애는 아니지만, 리포트가 이 사실을 `visualization_orphaned_codes`로 조용히 감추지 않고
+드러낸다. 재작성은 이번 범위 밖(발화조건 별건).
+
+**환경 경계**: 이 세션은 Kiki의 실제 프로덕션(Phaiakes9 `whymath-pg`, 5433)에 접근할 수 없다.
+검증은 이 샌드박스의 로컬 PostgreSQL 16(동일 스키마·동일 프로덕션 CLI·동일 코퍼스)으로 메커니즘을
+재현했다 — `TRUNCATE`로 0/0 재현 → 실 CLI 실행 → `concepts=2683 edges=2210 visual_styles=127
+visualizability=7`. **prod 실제 행수 확인은 Kiki의 액션 항목으로 남는다**(이 세션이 그 박스를
+만졌다고 암시하지 않는다).
+
+**검증**: 위임 산출물 독립 재검증(신뢰하되 검증) — ①코퍼스 127건 전부를 실제 `atom_graph_v1`과
+대조해 code·name·level 불일치 0건 확인 ②주장된 동형이의어 제외 2건이 실제로 코퍼스에 없음을
+직접 확인 ③ruff·black·mypy --strict clean(439파일) ④CI-충실 전체 스위트 재현
+(`cd src/backend && pytest`, 경로 인자 0) **7896 passed, 262 skipped, 0 failed** — 위임 세션
+보고치와 정확히 일치 ⑤로컬 PG로 0→127/7 로드 전/후를 내가 직접 재현 ⑥신규 통합테스트 19+1건
+개별 재실행 통과 ⑦`ops/provenance_audit`(ARCH-20) 25개 코퍼스 스캔·위반 0건.
+
+정본: `docs/architecture/visualization_module_gap_review.md` §3 D1 ·
+`src/backend/whymath_backend/harness/visualization_reach_report.py`.
+
 ### 2026-07-30 (설계·시각화): **시각화 모듈 갭 점검·설계 — 전 시각화 스택이 학생 도달 0회(D1)·태스크 3건 등재·기능 63 승계 — 외부 EOS 틀 기능 62~65 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『시각화』(기능 62 함수 그래프 시각화·63 기하 도형 조작·

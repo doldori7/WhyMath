@@ -1,0 +1,36 @@
+{
+  "pool": "whymath-original",
+  "corpus_name": "concept_visual_style_v1",
+  "generated": "2026-07-30 (VIZ-01 D1 해소 — concept_visual_style 오버레이 코퍼스 신설)",
+  "generation_method": "결정론 규칙(문자열 리터럴 키워드 + subject_area 화이트리스트) 기반 시드 — 전수 LLM 태깅이 아니다. atom_graph_v1(원자 백본) 세부개념 레벨 개념의 name 필드에서 VisualizationStyle 통제 어휘(schema/enums.py)에 대응하는 리터럴 키워드가 발견되고, 그 개념의 subject_area가 2022 개정 K-12 교육과정 과목(중복 화이트리스트: 수와 연산·도형과 측정·변화와 관계·자료와 가능성·공통수학1/2·기본수학1/2·대수·미적분Ⅰ/Ⅱ·확률과 통계·기하·직무 수학·경제 수학·인공지능 수학·수학과 문화)에 속할 때만 채택했다. 판정 불가(추상적이거나 규칙 무매치) 개념은 미태깅 상태로 남겼다(억지 태깅 금지 — VIZ-01 acceptance③). 규칙 카탈로그는 rule_catalog 필드 참조.",
+  "record_count": 127,
+  "source_citation": "출처: WhyMath 자체 저작 — atom_graph_v1(원자 백본 코퍼스, 교육부 고시 제2022-33호 [수학과 교육과정] 기반) 개념의 name 필드에 대한 리터럴 키워드 규칙 파생. 검정교과서·평가원·EBS 본문 인용 0건 — 개념 코드·자체 rationale 서술만 존재.",
+  "license_notice": "WhyMath 자체 저작물(시각화 양식 태깅·rationale). 원본 개념(atom_graph_v1)의 라이선스를 승계하며, 검정교과서·평가원 본문을 인용하지 않는다 — 순수 분류 산출물.",
+  "copyright_rail": [
+    "검정교과서·평가원·EBS 본문·도표 복제 0 — 개념 코드 태그 + 자체 rationale 서술만 존재.",
+    "127/1,823(세부개념 레벨) 태깅 — 전면 커버리지 아님(결정론 규칙이 유도 가능한 것만, 100% 도달은 목표가 아니다 — VIZ-01 D2 참고)."
+  ],
+  "contract": [
+    "code 필드는 atom_graph_v1(=backend concept.code)의 원자 code를 참조하는 FK류 문자열 — atom_graph_v1이 갱신되면 이 파일도 재검토 필요(현재 자동 동기화 없음, 수동 관리).",
+    "이 코퍼스의 code 키공간은 concept_visualization_v1(레거시 437 개념그래프 code — 예: MID-FUN-010)과 *다르다*. VIZ-01 D1 실측: concept_visualization_v1의 7개 code는 atom_graph_v1에 존재하지 않는 레거시 별칭이라 현재 프로덕션 concept.code와 매치되지 않는다(별도 기록·재작성은 이번 태스크 범위 밖 — l4/visualization_policy.is_visualizable(None)이 fail-open이라 게이트 통과에는 영향 없음)."
+  ],
+  "authoring_fields": {
+    "note": "concept_visual_style.json 스키마는 {version, note, entries[]} — entries 각 항목은 code/name_ko/recommended_styles(VisualizationStyle 통제 어휘 배열)/rationale."
+  },
+  "rule_catalog": {
+    "R1": "이름에 '수직선' 리터럴 포함 → 수직선 (단, 좌표기하 '수직(垂直)선'과의 동형이의어 오분류 1건은 수동 제외 — 10기수2-01-02-1)",
+    "R2": "이름에 '단위원' 리터럴 포함 → 단위원",
+    "R3": "이름에 '삼각비' 또는 '호도법' 포함 → 단위원",
+    "R4": "이름에 함수족(이차함수/일차함수/다항함수/유리함수/무리함수/삼각함수) + ('그래프' 또는 '개형') 포함 → 함수그래프",
+    "R4b": "이름에 '지수그래프' 포함 → 함수그래프",
+    "R4c": "subject_area가 미적분Ⅰ/미적분Ⅱ/경제 수학이고 이름에 '그래프 개형' 포함 → 함수그래프",
+    "R5": "이름에 '수형도' 포함 → 수형도",
+    "R6": "이름에 겉넓이/부피/전개도/회전체/각기둥/각뿔/원기둥/원뿔 포함 → 입체도형 (단, 대수 항등식 비유 1건은 수동 제외 — 10공수1-01-03-3)",
+    "R7": "subject_area가 도형과 측정/직무 수학이고 이름에 작도/합동/닮음 포함 → 평면도형",
+    "R8": "subject_area가 기하/공통수학2이고 이름에 '벡터' 포함 → 벡터도",
+    "R9": "subject_area가 대수/미적분Ⅱ이고 이름에 등차수열/등비수열/점화식/수열의 귀납적 포함 → 점화도",
+    "R10": "이름에 '부등식의 영역' 포함 → 부등식영역",
+    "R11": "subject_area가 변화와 관계이고 이름에 분배법칙/곱셈공식과 인수분해의 관계/넓이로 보는 곱셈공식 포함 → 넓이모델"
+  },
+  "sidecar_note": "이 파일은 2026-07-30 VIZ-01(시각화 공급원 적재 배선) 태스크에서 concept_visual_style 오버레이의 프로덕션 적재 경로 신설과 함께 처음 작성됨 — 정본 형식은 concept_visualization_v1/_provenance.json 답습."
+}
