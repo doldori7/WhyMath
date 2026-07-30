@@ -60,6 +60,7 @@ from whymath_backend.api._rate_limit import (
 )
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
@@ -76,7 +77,9 @@ from whymath_backend.l2 import (
     get_primary_concept_id,
     theta_to_mastery_proxy,
 )
+from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
+from whymath_backend.l2.skill_mastery_tracking import record_problem_attempt_skill_mastery
 from whymath_backend.l3.interfaces import (
     CacheBackend,
     LLMProvider,
@@ -86,6 +89,7 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.verify_final_answer import FinalAnswerState, verify_final_answer
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -99,6 +103,10 @@ from whymath_backend.l4 import (
     focus_to_socratic_category,
     mastery_to_level,
     recommend_coaching_for_solution,
+)
+from whymath_backend.l4.completion import (
+    CompletionAction,
+    decide_completion,
 )
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -362,6 +370,25 @@ _ACTIVE_HYPOTHESES_DESC = (
 )
 
 
+# S3-27(원 S3-10) 완료 통합 — 세션/턴 응답 완료 필드 설명(SessionCreate·TurnAppend 공통).
+_PROBLEM_COMPLETE_DESC = (
+    "이 턴에 문제가 *완료*됐는지 — **클라가 '다음 문항으로 진행'을 판단하는 신호**. 완료는 오직 "
+    "풀이 제출(body.solution_steps 마지막 단계가 서버 verify로 correct)로 정답 도달을 감지한 뒤, "
+    "*Polya 돌아보기(메타인지) 1턴*을 거쳐서만 True가 된다(별도 '정답 제출' 버튼 대체). True면 "
+    "서버가 ProblemAttempt(is_correct=True)를 *이미 적재*하고 숙달을 전파했으므로 **클라는 별도로 "
+    "POST /v1/me/attempts를 부르지 않는다**(중복 적재 금지). incorrect/미검증이면 항상 False."
+)
+_AWAITING_REFLECTION_DESC = (
+    "정답에 도착해 완료 *직전 돌아보기(메타인지) 응답을 대기* 중인지 — 코치가 '왜 이 답이 "
+    "나왔는지' 설명을 요청한 상태다. True면 이번 턴은 완료가 아니며(problem_complete=False) 학생의 "
+    "근거 응답 다음 턴에 완료된다(MVP=1턴). 클라는 이 신호로 '돌아보기 1턴' UX(진행 보류)를 표시."
+)
+_COMPLETED_ATTEMPT_ID_DESC = (
+    "완료 시(problem_complete=True) 서버가 적재한 ProblemAttempt PK. 완료가 아니면 None. 클라가 "
+    "필요 시 이 attempt를 참조할 수 있게 노출한다(적재 자체는 서버가 이미 수행·클라 재적재 불요)."
+)
+
+
 class SessionCreateResponse(CoachResponse):
     """`/v1/coach/sessions` 응답 — `CoachResponse` + 영속된 dialogue/turn ID + 활성 가설 세트."""
 
@@ -379,6 +406,11 @@ class SessionCreateResponse(CoachResponse):
     )
     wh1_exploration_turn: bool = Field(
         description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
+    )
+    problem_complete: bool = Field(default=False, description=_PROBLEM_COMPLETE_DESC)
+    awaiting_reflection: bool = Field(default=False, description=_AWAITING_REFLECTION_DESC)
+    completed_attempt_id: uuid.UUID | None = Field(
+        default=None, description=_COMPLETED_ATTEMPT_ID_DESC
     )
 
 
@@ -402,6 +434,11 @@ class TurnAppendResponse(CoachResponse):
     )
     wh1_exploration_turn: bool = Field(
         description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
+    )
+    problem_complete: bool = Field(default=False, description=_PROBLEM_COMPLETE_DESC)
+    awaiting_reflection: bool = Field(default=False, description=_AWAITING_REFLECTION_DESC)
+    completed_attempt_id: uuid.UUID | None = Field(
+        default=None, description=_COMPLETED_ATTEMPT_ID_DESC
     )
 
 
@@ -746,6 +783,199 @@ async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | No
         return None
     problem = await session.get(ProblemORM, problem_id)
     return problem.answer if problem is not None else None
+
+
+# ── S3-27(원 S3-10): 완료를 풀이 제출에 통합 (정답 도달 감지 → Polya 돌아보기 1턴 → 완료 적재) ──
+
+
+def _last_solution_step(body: CoachRequest) -> str | None:
+    """풀이 단계 시퀀스의 *마지막 단계*(=학생 최종답 후보) — 정답 도달 감지 입력.
+
+    `body.solution_steps`(L5가 분해한 단계 리스트)의 마지막 비어있지 않은 원소를 돌려준다.
+    리스트가 없거나·비었거나·마지막 원소가 공백뿐이면 None(감지 대상 아님). *풀이 마지막 단계*가
+    완료 경로의 트리거다 — 대화 발화(student_input)나 풀이 산문(student_solution 문자열)이 아니라
+    구조화된 단계 시퀀스의 끝을 본다(클라 계약: 완료를 원하면 solution_steps를 보낸다).
+    """
+    steps = body.solution_steps
+    if not steps:
+        return None
+    last = steps[-1].strip()
+    return last or None
+
+
+async def _final_answer_correct(
+    session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
+) -> bool:
+    """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 동치인지 — L3 서버 권위 판정(비노출).
+
+    완료 상태머신의 *정답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·problem_id
+    없음·마지막 단계 없음이면 조회조차 하지 않고 False. 있으면 문항을 *무게이트*로 로드해
+    (`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션 기본 기능) 마지막 단계를
+    `verify_final_answer`로 3상태 판정하고 **correct일 때만 True**를 준다. incorrect/unverifiable은
+    False(완료 위장 금지·정직). 기대정답(`Problem.answer`)은 이 함수 밖으로 결코 흘러나가지 않는다
+    (verify_final_answer가 상태·사유만 반환·사유엔 학생 원문만 반향).
+    """
+    if not get_settings().l4_solution_completion_enabled or problem_id is None:
+        return False
+    last_step = _last_solution_step(body)
+    if last_step is None:
+        return False
+    problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
+    if problem is None:
+        return False  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
+    result = verify_final_answer(last_step, problem)
+    return result.state is FinalAnswerState.correct
+
+
+async def _complete_problem(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    final_answer: str | None,
+) -> uuid.UUID | None:
+    """완료 확정 — ProblemAttempt(is_correct=True) 적재 + 숙달 전파(L2 헬퍼 재사용·중복 로직 0).
+
+    돌아보기(메타인지) 1턴이 끝나 완료가 확정된 순간에만 호출한다. `submit_attempt`(me.py)와 *동일*
+    적재·전파 헬퍼를 재사용한다(중복 구현 금지):
+      - `ProblemAttempt`를 명시 UUID로 발급해 add하고 **먼저 commit**(주된 기록 durable·submit
+        패턴). `is_correct=True`는 turn A에서 서버가 correct로 판정했으므로 서버 권위값(클라 보고
+        아님·CLAUDE.md "수학 로직 코어 권위"). `used_socratic=True`(코치 대화로 도달).
+      - `record_problem_attempt_mastery`(개념 축)·`record_problem_attempt_skill_mastery`(스킬 축)로
+        모델 B(역할 비대칭) 숙달 전파. 개념/스킬 매핑이 없으면 각자 빈 리스트(커밋 0·graceful).
+
+    `problem_id`가 None이면(완료는 problem_id 있을 때만 진입·방어) 적재 없이 None. `final_answer`
+    (완료 턴에 재제출된 마지막 단계가 있으면 그 값·없으면 None)를 `student_answer`로 기록한다 — 정답
+    도달은 이전 턴에서 이미 서버가 확인했으므로 여기선 기록용일 뿐. 반환=적재된 attempt_id(호출자가
+    응답·dialogue 링크에 사용).
+
+    적재된 attempt(is_correct 비-NULL·problem_id 보유)는 `GET /me/next-problem` 미시도 필터(NOT IN)
+    에서 제외돼 다음 문항 진행이 작동한다(submit_attempt와 동일 루프 닫힘).
+    """
+    if problem_id is None:
+        return None  # 방어 — 완료는 problem_id가 있을 때만 진입(도달 안 함).
+    attempt = ProblemAttemptORM(
+        attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답·dialogue 링크에 즉시 사용).
+        user_id=user_id,
+        problem_id=problem_id,
+        is_correct=True,  # 서버 권위 판정(turn A correct) — 클라 보고 아님.
+        student_answer=final_answer,
+        used_socratic=True,  # 코치 대화(돌아보기)로 도달.
+        ended_at=datetime.now(timezone.utc),
+    )
+    session.add(attempt)
+    await session.commit()  # attempt 우선 durable(submit_attempt 패턴).
+    # 숙달 전파(개념·스킬 축) — 서버 판정 is_correct=True. 매핑 없으면 빈 리스트(graceful).
+    await record_problem_attempt_mastery(session, user_id, problem_id, True)
+    await record_problem_attempt_skill_mastery(session, user_id, problem_id, True)
+    return attempt.attempt_id
+
+
+class _CompletionResult(NamedTuple):
+    """`_resolve_completion` 반환 — 완료 상태머신 처리 결과(호출자가 발화·영속·응답에 반영).
+
+    - `decision`: 발화가 override됐을 수 있는 결정(돌아보기/인정이면 prompt·socratic_category 교체).
+    - `problem_complete`/`awaiting_reflection`: 응답 계약 필드(클라 진행·UX 신호).
+    - `review_turns_remaining_after`: 세션(dialogue.review_turns_remaining)에 저장할 값.
+    - `attempt_id`: 완료 시 적재된 ProblemAttempt PK(dialogue.attempt_id 링크·응답). 아니면 None.
+    - `handled`: 완료 상태머신이 이 턴 발화를 *가로챘는지*(True면 WH-1 primary LLM flip을 건너뛴다 —
+      돌아보기/인정 발화는 결정론 메타인지 템플릿이라 LLM으로 재작성하지 않는다).
+    """
+
+    decision: PedagogyDecision
+    problem_complete: bool
+    awaiting_reflection: bool
+    review_turns_remaining_after: int
+    attempt_id: uuid.UUID | None
+    handled: bool
+
+
+async def _resolve_completion(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    prior_review_remaining: int | None,
+    already_completed: bool,
+    body: CoachRequest,
+    decision: PedagogyDecision,
+) -> _CompletionResult:
+    """완료 상태머신 결선(L5 오케스트레이션) — 정답 감지(L3)·완료 판정(L4)·attempt 적재(L2 재사용).
+
+    흐름(순수 결정은 `l4/completion.decide_completion`·부작용만 여기서):
+      1. 게이트 off → no-op(`handled=False`·기존 발화·회귀 완전 불변).
+      2. *돌아보기 전(prior=0)이고 미완료*일 때만 이 턴 풀이 마지막 단계를 verify로 판정
+         (`_final_answer_correct`) — 돌아보기 중·완료된 세션은 감지 자체를 건너뛴다(불필요 조회 0·
+         돌아보기 응답 턴은 재검증하지 않음).
+      3. `decide_completion`으로 4전이 결정.
+      4. `NONE` → no-op(기존 발화 유지). 그 외 → 결정론 발화로 override(prompt·socratic_category).
+      5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보).
+
+    반환의 `handled`는 완료 상태머신이 발화를 가로챘는지다 — True면 호출자가 WH-1 primary flip을
+    건너뛴다(결정론 메타인지 템플릿을 LLM으로 재작성 금지).
+    """
+    if not get_settings().l4_solution_completion_enabled:
+        # 게이트 off — 완료 기능 완전 inert(정답 감지·돌아보기·적재 0·기존 동작 비트동일).
+        return _CompletionResult(
+            decision=decision,
+            problem_complete=False,
+            awaiting_reflection=False,
+            review_turns_remaining_after=(prior_review_remaining or 0),
+            attempt_id=None,
+            handled=False,
+        )
+
+    prior = prior_review_remaining or 0
+    # 정답 도달 감지는 *돌아보기 전(prior=0)·미완료*일 때만 — 돌아보기 응답 턴·완료 세션은 skip.
+    final_correct = False
+    if prior == 0 and not already_completed:
+        final_correct = await _final_answer_correct(session, problem_id, body)
+
+    cd = decide_completion(
+        prior_review_remaining=prior,
+        already_completed=already_completed,
+        final_answer_correct=final_correct,
+    )
+    if cd.action is CompletionAction.NONE:
+        # 완료 무관 — 기존 코칭 발화 그대로(돌아보기 상태 유지값=0·회귀 불변).
+        return _CompletionResult(
+            decision=decision,
+            problem_complete=False,
+            awaiting_reflection=False,
+            review_turns_remaining_after=cd.review_turns_remaining_after,
+            attempt_id=None,
+            handled=False,
+        )
+
+    # 결정론 발화로 override — 돌아보기/인정 발화(prompt)·메타인지 카테고리(socratic_category).
+    new_decision = decision.model_copy(
+        update={
+            "prompt": cd.prompt if cd.prompt is not None else decision.prompt,
+            "socratic_category": (
+                cd.socratic_category
+                if cd.socratic_category is not None
+                else decision.socratic_category
+            ),
+        }
+    )
+    attempt_id: uuid.UUID | None = None
+    if cd.action is CompletionAction.COMPLETE:
+        # 완료 확정 — attempt 적재·숙달 전파(L2 헬퍼 재사용). 완료 턴에 재제출된 마지막 단계가
+        # 있으면 그 값을 student_answer로 기록(없으면 None — 정답은 이전 턴에서 이미 서버 확인).
+        attempt_id = await _complete_problem(
+            session,
+            user_id=user_id,
+            problem_id=problem_id,
+            final_answer=_last_solution_step(body),
+        )
+    return _CompletionResult(
+        decision=new_decision,
+        problem_complete=cd.problem_complete,
+        awaiting_reflection=cd.awaiting_reflection,
+        review_turns_remaining_after=cd.review_turns_remaining_after,
+        attempt_id=attempt_id,
+        handled=True,
+    )
 
 
 async def _server_mastery_for(
@@ -1381,10 +1611,26 @@ async def create_session(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
+    # S3-27(원 S3-10) 완료 상태머신 — 새 dialogue라 돌아보기 이력·완료 없음(prior=0·미완료). 이 턴
+    # 풀이의 마지막 단계가 correct면 ENTER_REVIEW(돌아보기 대기·메타인지 프롬프트로 발화 override)·
+    # 아니면 no-op. 생성 턴에서 완료(COMPLETE)는 일어나지 않는다(돌아보기 이력이 없어 prior=0
+    # → ENTER만).
+    completion = await _resolve_completion(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        prior_review_remaining=0,
+        already_completed=False,
+        body=body,
+        decision=decision,
+    )
+    decision = completion.decision
     # S1-11 flip(사인오프 2026-07-20): primary on이면 학생-대면 발화(decision.prompt·AI 턴
     # content)를 하네스 LLM 발화로 교체한다 — verify 의무·정답 억제·톤필터 통과분만, 실패 시
     # 결정론 폴백(헬퍼 docstring). 구조화 결정·가설·증거 파이프라인은 위 결정론 경로 그대로.
-    if wh1_primary_on:
+    # 완료 상태머신이 발화를 가로챘으면(handled·돌아보기/인정) LLM flip을 건너뛴다 — 돌아보기
+    # 발화는 *결정론 메타인지 템플릿*이라 LLM으로 재작성하지 않는다(정서안전·문구 고정).
+    if wh1_primary_on and not completion.handled:
         decision = await _wh1_primary_decision_or(
             decision,
             body=body,
@@ -1405,8 +1651,14 @@ async def create_session(
             total_turns=2,
             student_turns=1,
             assistant_turns=1,
+            # S3-27: 정답 첫 도달이면 돌아보기 대기 상태를 세션에 심어 다음 턴 완료를 준비한다
+            # (감지 안 됐으면 0=돌아보기 아님). 완료(COMPLETE)는 생성 턴에서 나지 않아 attempt 없음.
+            review_turns_remaining=completion.review_turns_remaining_after,
         )
     )
+    # 방어: 생성 턴에서 완료가 났다면(이론상 미도달) attempt를 dialogue에 링크한다(재완료 가드).
+    if completion.attempt_id is not None:
+        dialogue.attempt_id = completion.attempt_id
     session.add(dialogue)
     await session.commit()
     await session.refresh(dialogue)
@@ -1503,6 +1755,9 @@ async def create_session(
         assistant_turn_id=assistant_turn.turn_id,
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
+        problem_complete=completion.problem_complete,
+        awaiting_reflection=completion.awaiting_reflection,
+        completed_attempt_id=completion.attempt_id,
     )
 
 
@@ -1598,9 +1853,25 @@ async def append_turns(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
+    # S3-27(원 S3-10) 완료 상태머신 — dialogue에 저장된 직전 돌아보기 상태(review_turns_remaining)와
+    # 완료 여부(attempt_id 존재)를 읽어 이 턴을 판정한다:
+    #   ① 돌아보기 대기 중(prior>0)이면 이 턴은 학생 근거 응답 → 완료 확정(attempt 적재·인정 발화).
+    #   ② 돌아보기 전(prior=0)·미완료면 이 턴 마지막 단계 correct 시 돌아보기 진입(메타인지 발화).
+    #   ③ 오답·미검증·이미 완료면 no-op(기존 코칭 그대로). 완료는 *풀이 제출을 통해서만* 일어난다.
+    completion = await _resolve_completion(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        prior_review_remaining=dialogue.review_turns_remaining,
+        already_completed=dialogue.attempt_id is not None,
+        body=body,
+        decision=decision,
+    )
+    decision = completion.decision
     # S1-11 flip: create_session과 동형 — 학생-대면 발화만 하네스 LLM 발화로 교체(검증 게이트·
     # 톤필터 통과분·실패 시 결정론 폴백). 멀티턴 메타(dialogue_id·turn_index)는 shadow와 동일 규약.
-    if wh1_primary_on:
+    # 완료 상태머신이 발화를 가로챘으면(돌아보기/인정) LLM flip을 건너뛴다(결정론 템플릿 고정).
+    if wh1_primary_on and not completion.handled:
         decision = await _wh1_primary_decision_or(
             decision,
             body=body,
@@ -1647,6 +1918,14 @@ async def append_turns(
     dialogue.total_turns = current_total + 2
     dialogue.student_turns = (dialogue.student_turns or 0) + 1
     dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
+
+    # S3-27(원 S3-10): 완료 상태머신이 계산한 남은 돌아보기 턴 수를 세션에 저장(다음 턴 상태). 완료
+    # 시 적재된 attempt를 dialogue에 링크한다 — 완료 판정·재완료 가드가 attempt_id 존재로 작동한다
+    # (이후 턴은 already_completed=True → no-op). 이하 verify/hint 이벤트가 완료 attempt에
+    # 귀속되게 먼저 설정.
+    dialogue.review_turns_remaining = completion.review_turns_remaining_after
+    if completion.attempt_id is not None:
+        dialogue.attempt_id = completion.attempt_id
 
     # S3-03 mode 태깅 — 멀티턴은 클라가 매 턴 같은 mode/persona를 실어 보낸다(dialogue 컬럼 대신
     # 요청 재사용·least-invasive·zero-migration). body가 CoachRequest라 두 값을 그대로 가진다.
@@ -1714,6 +1993,9 @@ async def append_turns(
         assistant_turn_order=assistant_order,
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
+        problem_complete=completion.problem_complete,
+        awaiting_reflection=completion.awaiting_reflection,
+        completed_attempt_id=completion.attempt_id,
     )
 
 

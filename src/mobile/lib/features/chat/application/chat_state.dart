@@ -28,5 +28,23 @@ abstract class ChatState with _$ChatState {
 
     /// 마지막 호출 실패 메시지(없으면 null). 가용성을 위해 앱은 죽지 않는다.
     String? error,
+
+    /// S3-27(원 S3-10) 완료 통합 — 이 문제가 *완료*됐는지(다음 문항 진행 신호·서버 권위).
+    ///
+    /// 완료는 오직 풀이 제출→정답 도달→Polya 돌아보기 1턴을 거쳐 서버가 내려주는 신호
+    /// (`problem_complete`)로만 true가 된다(별도 '정답 제출' 버튼 없음). true면 화면이
+    /// "다음 문제로" 어포던스를 코치 대화 흐름 안에 노출한다. 완료·정답 판정은 서버가 한다
+    /// (수학 로직 클라 금지) — 클라는 이 신호를 소비만 한다.
+    @Default(false) bool problemComplete,
+
+    /// 정답 도달 후 완료 *직전 돌아보기(메타인지) 응답을 대기* 중인지(완료 아님·서버 신호).
+    ///
+    /// true면 코치 발화가 이미 "왜 이 답이 나왔는지" 메타인지 프롬프트라, 학생이 평소처럼
+    /// 자연어로 답하면 된다 — 화면은 (선택) 작은 돌아보기 힌트만 두고 진행 어포던스는 띄우지
+    /// 않는다. 완료는 그 다음 응답에서 [problemComplete]=true로 온다.
+    @Default(false) bool awaitingReflection,
+
+    /// 완료 시 서버가 적재한 ProblemAttempt PK(선택·참조용)·아니면 null.
+    String? completedAttemptId,
   }) = _ChatState;
 }

@@ -286,6 +286,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    l4_solution_completion_enabled: bool = Field(
+        default=True,
+        description=(
+            "S3-27(원 S3-10) — 완료를 *풀이 제출을 통해서만* 일으킬지(별도 '정답 제출' 버튼 대체·"
+            "정식기능). True(기본)면 /v1/coach/sessions·turns가 body.solution_steps의 "
+            "*마지막 단계*를 L3 verify_final_answer로 판정해, correct면 *바로 넘기지 않고* "
+            "Polya 돌아보기 1턴을 유도한 뒤(review_turns_remaining) 다음 턴에 완료를 확정한다"
+            "(ProblemAttempt is_correct=True 적재·숙달 전파). incorrect/unverifiable은 완료 없음"
+            "(코칭 그대로). "
+            "**기대정답은 결코 응답에 노출하지 않는다**(verify_final_answer 계약). False면 동작 "
+            "완전 불변(정답 감지·돌아보기·완료 적재 전부 inert·완전 되돌리기). "
+            "WHYMATH_L4_SOLUTION_COMPLETION_ENABLED=false로 끈다."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시

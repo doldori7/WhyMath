@@ -915,3 +915,270 @@ def test_stateless_coach_omits_active_hypotheses() -> None:
             assert body["misconceptions"]
     finally:
         asyncio.run(_cleanup(uid, []))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# S3-27(원 S3-10) 완료를 풀이 제출에 통합 — 실 PG end-to-end(정답 도달 → 돌아보기 1턴 → 완료 적재)
+# ──────────────────────────────────────────────────────────────────────────
+def _problem_with_answer(pid: uuid.UUID, suffix: str, answer: str) -> Problem:
+    return Problem.from_schema(
+        ProblemSchema(
+            problem_id=pid,
+            source_type=SourceType.자체생성,
+            curriculum_version=Curriculum.REVISION_2022,
+            valid_from_year=2022,
+            subject=Subject.공통,
+            unit_codes=[f"U-{suffix}"],
+            answer=answer,
+        )
+    )
+
+
+async def _attempt_rows(uid: uuid.UUID) -> list[tuple[str, bool | None]]:
+    """user의 problem_attempt를 (problem_id, is_correct)로 — 완료 적재·제외집합 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT problem_id::text, is_correct FROM problem_attempt "
+                    "WHERE user_id = :uid ORDER BY created_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [(str(r[0]), r[1]) for r in rows.all()]
+    finally:
+        await engine.dispose()
+
+
+async def _next_problem_excluded_ids(uid: uuid.UUID) -> set[str]:
+    """`recommend_next_problem`이 미시도 필터(NOT IN)로 쓰는 *제외집합*을 그대로 재현한다 —
+    problem_attempt(user·is_correct 비-NULL)의 problem_id 집합(me.py predicate 동형)."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT problem_id::text FROM problem_attempt "
+                    "WHERE user_id = :uid AND is_correct IS NOT NULL"
+                ),
+                {"uid": str(uid)},
+            )
+            return {str(r[0]) for r in rows.all()}
+    finally:
+        await engine.dispose()
+
+
+async def _dialogue_review_state(did: uuid.UUID) -> tuple[int | None, bool]:
+    """dialogue의 (review_turns_remaining, attempt_id 존재여부) — 완료 상태 영속 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT review_turns_remaining, (attempt_id IS NOT NULL) "
+                    "FROM dialogue WHERE dialogue_id = :did"
+                ),
+                {"did": str(did)},
+            )
+            r = row.one()
+            return (None if r[0] is None else int(r[0]), bool(r[1]))
+    finally:
+        await engine.dispose()
+
+
+async def _concept_mastery_count(uid: uuid.UUID, cid: uuid.UUID) -> int:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM concept_mastery_history "
+                    "WHERE user_id = :uid AND concept_id = :cid"
+                ),
+                {"uid": str(uid), "cid": str(cid)},
+            )
+            return int(row.scalar_one())
+    finally:
+        await engine.dispose()
+
+
+async def _cleanup_completion(
+    uid: uuid.UUID,
+    *,
+    problem_ids: list[uuid.UUID],
+    concept_ids: list[uuid.UUID],
+    dialogue_ids: list[uuid.UUID],
+) -> None:
+    engine = create_async_engine(_settings().database_url)
+    dids = [str(d) for d in dialogue_ids]
+    pids = [str(p) for p in problem_ids]
+    cids = [str(c) for c in concept_ids]
+    try:
+        async with engine.begin() as conn:
+            # FK 순서: dialogue_turn·attempt_event → dialogue(attempt_id SET NULL) →
+            # problem_attempt → mastery(concept·skill) → problem_concept → problem → concept → user.
+            await conn.execute(
+                text("DELETE FROM dialogue_turn WHERE dialogue_id = ANY(:ids)"), {"ids": dids}
+            )
+            await conn.execute(
+                text("DELETE FROM attempt_event WHERE user_id = :uid"), {"uid": str(uid)}
+            )
+            await conn.execute(
+                text("DELETE FROM misconception_hypothesis WHERE user_id = :uid"),
+                {"uid": str(uid)},
+            )
+            await conn.execute(
+                text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"), {"ids": dids}
+            )
+            await conn.execute(
+                text("DELETE FROM problem_attempt WHERE user_id = :uid"), {"uid": str(uid)}
+            )
+            await conn.execute(
+                text("DELETE FROM concept_mastery_history WHERE user_id = :uid"),
+                {"uid": str(uid)},
+            )
+            await conn.execute(
+                text("DELETE FROM skill_mastery_history WHERE user_id = :uid"), {"uid": str(uid)}
+            )
+            await conn.execute(
+                text("DELETE FROM problem_concept WHERE problem_id = ANY(:ids)"), {"ids": pids}
+            )
+            await conn.execute(
+                text("DELETE FROM problem WHERE problem_id = ANY(:ids)"), {"ids": pids}
+            )
+            await conn.execute(
+                text("DELETE FROM concept WHERE concept_id = ANY(:ids)"), {"ids": cids}
+            )
+            await conn.execute(
+                text("DELETE FROM user_profile WHERE user_id = :uid"), {"uid": str(uid)}
+            )
+    finally:
+        await engine.dispose()
+
+
+def test_completion_via_solution_full_loop_on_live_pg() -> None:
+    """S3-27(원 S3-10) end-to-end — 완료는 *풀이 제출을 통해서만*, Polya 돌아보기 1턴 경유(실 PG).
+
+    흐름:
+      ① POST /v1/coach/sessions(problem_id·solution_steps 마지막=정답) → 정답 도달 감지 →
+         awaiting_reflection=True·problem_complete=False·attempt 미적재(돌아보기 대기).
+      ② POST .../turns(학생 근거 응답) → problem_complete=True·completed_attempt_id 실림 →
+         ProblemAttempt(is_correct=True) 실 PG 적재·개념 숙달(concept_mastery_history) 전파.
+      ③ 적재된 attempt가 next-problem 제외집합(NOT IN predicate)에 포함 → 재출제 안 됨(루프 닫힘).
+      ④ dialogue.review_turns_remaining·attempt_id가 실제로 영속됨.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    cid = uuid.uuid4()
+    pid = uuid.uuid4()
+    uc = f"UC.test.{sfx}.cmpl"
+    token = create_access_token(uid, settings=_settings())
+    headers = {"Authorization": f"Bearer {token}"}
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        asyncio.run(_add_all(_concept_with_code(cid, uc, "일차방정식")))
+        asyncio.run(_add_all(_problem_with_answer(pid, sfx, "3")))
+        asyncio.run(_add_all(_problem_concept(pid, cid)))
+
+        settings = _settings()
+        app = create_app()
+        app.dependency_overrides[get_settings] = lambda: settings
+        with TestClient(app) as client:
+            # ① 정답 도달 → 돌아보기 대기(완료 아님·attempt 미적재).
+            r1 = client.post(
+                "/v1/coach/sessions",
+                json={
+                    "student_input": "다 풀었어요",
+                    "problem_id": str(pid),
+                    "solution_steps": ["2*x = 6", "x = 3"],
+                },
+                headers=headers,
+            )
+            assert r1.status_code == 201, r1.text
+            b1 = r1.json()
+            did = uuid.UUID(b1["dialogue_id"])
+            dialogue_ids.append(did)
+            assert b1["awaiting_reflection"] is True
+            assert b1["problem_complete"] is False
+            assert b1["completed_attempt_id"] is None
+            assert "설명해줄래" in b1["decision"]["prompt"]
+            # 아직 attempt 미적재.
+            assert asyncio.run(_attempt_rows(uid)) == []
+
+            # ② 학생 근거 응답 → 완료 확정(attempt 적재·숙달 전파).
+            r2 = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                json={"student_input": "양변을 2로 나눠서 x=3이 나왔어요"},
+                headers=headers,
+            )
+            assert r2.status_code == 201, r2.text
+            b2 = r2.json()
+            assert b2["problem_complete"] is True
+            assert b2["awaiting_reflection"] is False
+            assert b2["completed_attempt_id"] is not None
+            assert "다음 문제로 가보자" in b2["decision"]["prompt"]
+
+            # ProblemAttempt(is_correct=True) 실 PG 적재.
+            attempts = asyncio.run(_attempt_rows(uid))
+            assert len(attempts) == 1
+            assert attempts[0] == (str(pid), True)
+            # ③ next-problem 제외집합에 완료 문항 포함(재출제 안 됨·루프 닫힘).
+            assert str(pid) in asyncio.run(_next_problem_excluded_ids(uid))
+            # 개념 숙달 전파(정답 → PRIMARY 개념 측정 1건 이상).
+            assert asyncio.run(_concept_mastery_count(uid, cid)) >= 1
+            # ④ dialogue 상태 영속 — 돌아보기 해제(0)·완료 attempt 링크(존재).
+            review_remaining, attempt_linked = asyncio.run(_dialogue_review_state(did))
+            assert review_remaining == 0
+            assert attempt_linked is True
+    finally:
+        asyncio.run(
+            _cleanup_completion(
+                uid, problem_ids=[pid], concept_ids=[cid], dialogue_ids=dialogue_ids
+            )
+        )
+
+
+def test_incorrect_final_step_no_completion_on_live_pg() -> None:
+    """오답 마지막 단계 — 완료 무관·attempt 미적재·기존 코칭 그대로(회귀 불변, 실 PG)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    pid = uuid.uuid4()
+    token = create_access_token(uid, settings=_settings())
+    headers = {"Authorization": f"Bearer {token}"}
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        asyncio.run(_add_all(_problem_with_answer(pid, sfx, "3")))
+
+        settings = _settings()
+        app = create_app()
+        app.dependency_overrides[get_settings] = lambda: settings
+        with TestClient(app) as client:
+            resp = client.post(
+                "/v1/coach/sessions",
+                json={
+                    "student_input": "이렇게 풀었어요",
+                    "problem_id": str(pid),
+                    "solution_steps": ["2*x = 6", "x = 4"],  # 마지막 x=4 ≠ 3(오답)
+                },
+                headers=headers,
+            )
+            assert resp.status_code == 201, resp.text
+            body = resp.json()
+            dialogue_ids.append(uuid.UUID(body["dialogue_id"]))
+            assert body["problem_complete"] is False
+            assert body["awaiting_reflection"] is False
+            assert body["completed_attempt_id"] is None
+            assert asyncio.run(_attempt_rows(uid)) == []
+    finally:
+        asyncio.run(
+            _cleanup_completion(uid, problem_ids=[pid], concept_ids=[], dialogue_ids=dialogue_ids)
+        )

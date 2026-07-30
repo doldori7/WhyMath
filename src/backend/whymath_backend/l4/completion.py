@@ -1,0 +1,191 @@
+"""L4 완료 상태머신 — 풀이 제출로만 완료, Polya 돌아보기(메타인지) 1턴 경유 (S3-27·원 S3-10).
+
+**배경·철학(Kiki 교수학 지적)**: 종래 앱은 풀이과정(코치 대화·단계 풀이)과 완료판정(별도 "정답
+제출" 버튼)이 *분리*돼 있었다. 그러면 풀이과정이 "이게 답인지"조차 모르니 신뢰가 안 가고, 학생은
+버튼만 눌러 **Polya 돌아보기(review)를 우회**한다 — 풀이과정이 공염불이 되고 WhyMath 금기
+("정답 빠르게 KPI 금지"·"막힘시 바로 정답 금지·Polya 우선")를 위반한다.
+
+**목표(확정)**: 완료를 **오직 풀이 제출을 통해서**만 일어나게 한다. 풀이의 마지막 단계가
+기대정답이면 서버가 감지하고(L3 `verify_final_answer`), *바로 넘기지 않고* 코치가 **Polya 돌아보기
+= "왜 이 답이 나왔는지" 메타인지 확인 1턴**을 한 뒤에야 완료→다음 문항으로 간다.
+
+**이 모듈의 책임(순수 L4·DB 0·LLM 0)**: 완료 *상태 전이*만 결정한다. 정답 도달 감지(L3 verify)와
+attempt 적재·숙달 전파(L2 헬퍼 재사용)·세션 상태 영속(dialogue)은 *L5 오케스트레이션*(coach.py)
+책임이다 — 계층 경계를 지킨다(L4는 "무엇을 말하고 완료할지"만, 부작용은 L5).
+
+**상태(턴 간)**: 세션(dialogue)에 *남은 돌아보기 턴 수*(`review_turns_remaining`)와 *완료 여부*
+(dialogue.attempt_id 존재)만 둔다. 흐름:
+  - **정답 첫 도달**(prior=0·미완료·마지막 단계 correct) → `ENTER_REVIEW`: 돌아보기 대기 진입,
+    `review_turns_remaining = REFLECTION_TURNS`(기본 1), 코치 발화=메타인지 프롬프트. **아직 완료
+    아님**(attempt 미적재).
+  - **돌아보기 응답 턴**(prior>0) → 감소. 0에 닿으면 `COMPLETE`(완료 확정·attempt 적재 신호·
+    인정 발화), 아직 남았으면 `CONTINUE_REVIEW`(다음 메타인지 프롬프트·2턴 확장 여지).
+  - **그 외**(오답·미검증·완료됨) → `NONE`: 완료 무관·기존 코칭 그대로(회귀 불변).
+
+**정직·안전(CLAUDE.md)**: 이 모듈은 *correct 도달 여부*만 입력으로 받는다 — incorrect/unverifiable을
+correct로 위장할 경로가 없다(호출자가 `FinalAnswerState.correct`만 True로 넘긴다). 발화는 결정론
+메타인지 템플릿(정서안전·부정 강화 금지·톤필터 금지패턴 0)이며 기대정답 원문을 담지 않는다.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from whymath_backend.l4.socratic.categories import SocraticCategory
+
+__all__ = [
+    "REFLECTION_TURNS",
+    "CompletionAction",
+    "CompletionDecision",
+    "decide_completion",
+]
+
+
+# 기본 돌아보기 턴 수 — MVP는 정확히 1턴(왜→학생답→완료). "1~2차례"의 2턴 확장은 이 상수만
+# 올리면 되도록 설계했다(`decide_completion(reflection_turns=2)`·상태머신은 감소 루프라 N턴 일반).
+REFLECTION_TURNS: int = 1
+
+
+class CompletionAction(str, Enum):
+    """완료 상태머신의 4전이 — 호출자(L5)가 발화·부작용을 이 값으로 분기한다.
+
+    `str, Enum`이라 멤버가 문자열과 동등 비교된다(코드베이스 enum 컨벤션). 값은 로그·테스트에서
+    직접 읽힌다.
+    """
+
+    NONE = "none"
+    """완료 무관 — 기존 코칭 발화 그대로(오답·미검증·이미 완료된 세션). 부작용 0."""
+
+    ENTER_REVIEW = "enter_review"
+    """정답 첫 도달 → 돌아보기 대기 진입. 메타인지 프롬프트 발화·attempt 미적재(아직 완료 아님)."""
+
+    CONTINUE_REVIEW = "continue_review"
+    """돌아보기 다회(2턴 확장) 중 — 아직 남음. 다음 메타인지 프롬프트·attempt 미적재."""
+
+    COMPLETE = "complete"
+    """돌아보기 끝 → 완료 확정. 인정 발화 + attempt(is_correct=True) 적재·숙달 전파 신호."""
+
+
+class CompletionDecision(BaseModel):
+    """완료 상태머신의 1턴 결정 — 순수(부작용 0). 호출자가 이 지시대로 발화·영속·적재한다.
+
+    - `action`: 4전이 중 하나(부작용 분기).
+    - `review_turns_remaining_after`: 이 턴 처리 *후* 세션(dialogue)에 저장할 남은 돌아보기 턴 수
+      (`ENTER_REVIEW`=REFLECTION_TURNS·`CONTINUE_REVIEW`=감소값·`COMPLETE`/`NONE`=0).
+    - `problem_complete`: 이 턴에 문제가 *완료*됐는지(다음 문항으로 갈 신호). `COMPLETE`만 True.
+    - `awaiting_reflection`: 돌아보기 응답 대기 중인지("돌아보기 1턴" UX 신호). ENTER/CONTINUE True.
+    - `prompt`: 결정론 발화 override(메타인지 프롬프트·인정 발화). `NONE`이면 None(기존 발화 유지).
+    - `socratic_category`: 발화의 소크라테스 카테고리 override(돌아보기는 META). `NONE`이면 None.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    action: CompletionAction = Field(description="완료 4전이(부작용 분기).")
+    review_turns_remaining_after: int = Field(
+        ge=0, description="이 턴 처리 후 세션에 저장할 남은 돌아보기 턴 수."
+    )
+    problem_complete: bool = Field(description="이 턴에 문제 완료 확정 여부(COMPLETE만 True).")
+    awaiting_reflection: bool = Field(description="돌아보기 응답 대기 중인지(ENTER/CONTINUE True).")
+    prompt: str | None = Field(
+        default=None, description="결정론 발화 override. NONE이면 None(기존 코칭 발화 유지)."
+    )
+    socratic_category: str | None = Field(
+        default=None, description="발화 소크라테스 카테고리 override(돌아보기=meta). NONE이면 None."
+    )
+
+
+# ── 결정론 메타인지 템플릿 (Polya 돌아보기·정서안전·톤필터 금지패턴 0) ──────────────────
+# 금지 6패턴(틀렸·못 하·잘못된·실수·바보·포기)을 포함하지 않는다(`tone_filter._REPLACEMENTS`).
+# 기대정답 원문을 담지 않는다 — 학생이 *스스로 제출한* 답에 도착했음을 확인하고 근거를 묻는다
+# (정답 노출이 아니라 "네 답이 나온 이유"를 묻는 메타인지 확인이 핵심).
+
+# 정답 첫 도달·돌아보기 진입 발화 — "왜 이 답이 나왔는지" 메타인지 확인(Kiki 확정 문구 취지).
+_REFLECTION_PROMPT = (
+    "답에 도착했네! 넘어가기 전에 한 가지만 같이 볼까? "
+    "이 답이 *어떻게* 나왔는지, *왜* 그렇게 풀었는지 너의 말로 설명해줄래?"
+)
+
+# 완료 확정·인정 발화 — 근거를 짧게 인정하고 다음 문항으로(정서 안전·격려).
+_COMPLETION_ACK_PROMPT = (
+    "좋아, 근거가 분명하네. 스스로 풀어내고 왜 그런지까지 설명했어 — 다음 문제로 가보자!"
+)
+
+
+def decide_completion(
+    *,
+    prior_review_remaining: int | None,
+    already_completed: bool,
+    final_answer_correct: bool,
+    reflection_turns: int = REFLECTION_TURNS,
+) -> CompletionDecision:
+    """완료 상태머신 1턴 전이 — 순수·결정론(DB 0·LLM 0). 호출자(L5)가 이 지시로 발화·부작용 수행.
+
+    입력:
+      - `prior_review_remaining`: 세션에 저장된 *직전* 남은 돌아보기 턴 수(None/0이면 돌아보기 전).
+      - `already_completed`: 이 세션이 *이미 완료*됐는지(dialogue.attempt_id 존재 → 재완료 금지).
+      - `final_answer_correct`: 이 턴 풀이의 *마지막 단계*가 기대정답과 동치인지(L3 verify correct).
+        호출자는 `FinalAnswerState.correct`일 때만 True를 넘긴다(incorrect/unverifiable→False).
+      - `reflection_turns`: 완료 전 요구 돌아보기 턴 수(기본 1·2턴 확장 여지).
+
+    전이:
+      1. **이미 완료** → `NONE`(재완료·중복 attempt 금지·발화 불변).
+      2. **돌아보기 중**(prior>0) → 감소. 0 도달 시 `COMPLETE`(완료·인정), 남으면 `CONTINUE_REVIEW`
+         (다음 메타인지 프롬프트). *이 분기는 이 턴 풀이 내용과 무관* — 돌아보기 응답 턴은 자연어
+         근거일 뿐이라 재검증하지 않는다(MVP: 왜→학생답→완료).
+      3. **돌아보기 전 + 정답 첫 도달** → `ENTER_REVIEW`(돌아보기 대기·메타인지 프롬프트·미완료).
+      4. **그 외**(오답·미검증) → `NONE`(기존 코칭 그대로).
+    """
+    # ① 이미 완료된 세션 — 재완료·중복 attempt 금지(발화 불변).
+    if already_completed:
+        return CompletionDecision(
+            action=CompletionAction.NONE,
+            review_turns_remaining_after=0,
+            problem_complete=False,
+            awaiting_reflection=False,
+        )
+
+    prior = prior_review_remaining or 0
+
+    # ② 돌아보기 응답 턴 — 남은 턴 감소(이 턴 풀이 내용 무관·자연어 근거).
+    if prior > 0:
+        after = prior - 1
+        if after <= 0:
+            # 돌아보기 끝 → 완료 확정(인정 발화·attempt 적재 신호).
+            return CompletionDecision(
+                action=CompletionAction.COMPLETE,
+                review_turns_remaining_after=0,
+                problem_complete=True,
+                awaiting_reflection=False,
+                prompt=_COMPLETION_ACK_PROMPT,
+                socratic_category=SocraticCategory.META.value,
+            )
+        # 아직 돌아보기 남음(2턴 확장) → 다음 메타인지 프롬프트.
+        return CompletionDecision(
+            action=CompletionAction.CONTINUE_REVIEW,
+            review_turns_remaining_after=after,
+            problem_complete=False,
+            awaiting_reflection=True,
+            prompt=_REFLECTION_PROMPT,
+            socratic_category=SocraticCategory.META.value,
+        )
+
+    # ③ 돌아보기 전 + 정답 첫 도달 → 돌아보기 대기 진입(미완료·메타인지 프롬프트).
+    if final_answer_correct:
+        return CompletionDecision(
+            action=CompletionAction.ENTER_REVIEW,
+            review_turns_remaining_after=max(1, reflection_turns),
+            problem_complete=False,
+            awaiting_reflection=True,
+            prompt=_REFLECTION_PROMPT,
+            socratic_category=SocraticCategory.META.value,
+        )
+
+    # ④ 오답·미검증 → 완료 무관(기존 코칭 그대로·회귀 불변).
+    return CompletionDecision(
+        action=CompletionAction.NONE,
+        review_turns_remaining_after=0,
+        problem_complete=False,
+        awaiting_reflection=False,
+    )

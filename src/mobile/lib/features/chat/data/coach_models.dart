@@ -373,6 +373,9 @@ class CoachTurnResult {
     required this.dialogueId,
     required this.response,
     required this.wh1TurnIndex,
+    this.problemComplete = false,
+    this.awaitingReflection = false,
+    this.completedAttemptId,
   });
 
   /// 이 대화 세션 PK(UUID 문자열) — 이후 턴 추가·세션 조회에 재사용.
@@ -384,8 +387,30 @@ class CoachTurnResult {
   /// 이 교환의 WH-1 턴 번호(1-기반·세션 누적). 생성=1·턴마다 증가.
   final int wh1TurnIndex;
 
+  /// S3-27(원 S3-10) 완료 통합 — 이 턴에 문제가 *완료*됐는지(다음 문항 진행 신호).
+  ///
+  /// 완료는 오직 *풀이 제출*(`solution_steps` 마지막 단계가 서버 verify로 correct)로 정답 도달을
+  /// 감지한 뒤 *Polya 돌아보기(메타인지) 1턴*을 거쳐서만 true가 된다(별도 '정답 제출' 버튼 대체).
+  /// true면 서버가 이미 ProblemAttempt를 적재했으므로 **클라는 POST /v1/me/attempts를 부르지
+  /// 않는다** — 완료·정답 판정은 전부 서버 권위다(수학 로직 클라 금지). 클라는 이 신호로
+  /// "다음 문제로"만 띄운다.
+  final bool problemComplete;
+
+  /// 정답 도달 후 완료 *직전 돌아보기(메타인지) 응답을 대기* 중인지 — 완료 아님.
+  ///
+  /// true면 코치 발화(`decision.prompt`)가 "왜 이 답이 나왔는지 설명해줄래?" 메타인지 프롬프트다.
+  /// 클라는 특별 처리 없이 학생의 자연어 근거 응답을 다음 턴으로 보내면 되고(그 응답 턴은
+  /// `solution_steps` 불필요), 완료는 그 다음 응답에서 [problemComplete]=true로 온다.
+  final bool awaitingReflection;
+
+  /// 완료 시([problemComplete]=true) 서버가 적재한 ProblemAttempt PK(선택·참조용)·아니면 null.
+  final String? completedAttemptId;
+
   /// 세션 생성/턴 추가 응답 JSON에서 파싱한다. [dialogueId]는 생성 응답이면 본문에서,
   /// 턴 추가 응답이면 URL에서 주입된다(TurnAppendResponse엔 dialogue_id가 없음).
+  ///
+  /// S3-27 완료 필드(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`)는 미선언
+  /// 키 무시 관용구대로 안전하게 낮춘다 — 부재 시 완료 아님(false)·attempt 미참조(null)로 본다.
   factory CoachTurnResult.fromJson(
     Map<String, dynamic> json, {
     required String dialogueId,
@@ -394,6 +419,9 @@ class CoachTurnResult {
       dialogueId: dialogueId,
       response: CoachResponse.fromJson(json),
       wh1TurnIndex: (json['wh1_turn_index'] as num?)?.toInt() ?? 1,
+      problemComplete: json['problem_complete'] as bool? ?? false,
+      awaitingReflection: json['awaiting_reflection'] as bool? ?? false,
+      completedAttemptId: json['completed_attempt_id'] as String?,
     );
   }
 }

@@ -170,10 +170,16 @@ class ChatController extends _$ChatController {
     required CoachRequest request,
   }) async {
     // ① 학생 메시지를 즉시 반영하고 로딩 상태로 전환한다.
+    //    이전 턴의 완료 신호는 새 턴 시작에 초기화한다(로딩 중 스테일 "다음 문제로" 방지·
+    //    S3-27). 완료 시엔 화면이 곧장 problemPath로 넘어가므로 이 경로엔 도달하지 않지만,
+    //    돌아보기 대기(awaiting_reflection) 후 학생이 근거를 보내는 턴에서 신호를 새로 받는다.
     state = state.copyWith(
       messages: [...state.messages, studentMessage],
       isSending: true,
       error: null,
+      problemComplete: false,
+      awaitingReflection: false,
+      completedAttemptId: null,
     );
 
     try {
@@ -182,17 +188,16 @@ class ChatController extends _$ChatController {
       //    같은 세션에 턴으로 잇는다. 스테이트리스 `coach()`는 자유 대화 fallback으로 남는다.
       final api = ref.read(coachApiProvider);
       String? dialogueId = state.dialogueId;
-      final CoachResponse response;
+      final CoachTurnResult result;
       if (dialogueId == null) {
         // 진단→문제제시에서 넘어온 활성 문제(있으면)에 세션을 묶는다(problem_id 영속).
         final problemId = ref.read(activeProblemProvider)?.problemId;
-        final result = await api.createSession(request, problemId: problemId);
+        result = await api.createSession(request, problemId: problemId);
         dialogueId = result.dialogueId;
-        response = result.response;
       } else {
-        final result = await api.addTurn(dialogueId, request);
-        response = result.response;
+        result = await api.addTurn(dialogueId, request);
       }
+      final response = result.response;
 
       // ③ 코치 발화를 만든다 — `decision.prompt`(메타인지 유도 발화)를 그대로 표시한다.
       final decision = response.decision;
@@ -222,11 +227,17 @@ class ChatController extends _$ChatController {
         decision.polyaStageToAdvance,
       );
 
+      // 서버가 내린 완료 신호를 그대로 소비한다(정답·완료 판정은 서버 권위·클라는 신호만).
+      // problem_complete=true면 화면이 "다음 문제로"를, awaiting_reflection=true면 (선택)
+      // 돌아보기 힌트만 노출한다 — 클라는 어느 것도 스스로 판정하지 않는다(수학 로직 클라 금지).
       state = state.copyWith(
         messages: newMessages,
         polyaState: nextStage,
         dialogueId: dialogueId,
         isSending: false,
+        problemComplete: result.problemComplete,
+        awaitingReflection: result.awaitingReflection,
+        completedAttemptId: result.completedAttemptId,
       );
     } catch (e) {
       // ④ 실패는 graceful — 에러만 기록하고 입력 상태를 복구한다(앱 안 죽음).
@@ -253,6 +264,22 @@ class ChatController extends _$ChatController {
   void clearError() {
     if (state.error != null) {
       state = state.copyWith(error: null);
+    }
+  }
+
+  /// 완료 신호를 지운다("다음 문제로" 진행 직전 정리·S3-27).
+  ///
+  /// 화면이 problemPath로 넘어가기 전에 호출한다 — 컨트롤러는 autoDispose라 재진입 시 새로
+  /// 만들어지지만, 넘어가는 프레임에 카드가 잔상으로 남지 않도록 명시적으로 비운다.
+  void clearCompletion() {
+    if (state.problemComplete ||
+        state.awaitingReflection ||
+        state.completedAttemptId != null) {
+      state = state.copyWith(
+        problemComplete: false,
+        awaitingReflection: false,
+        completedAttemptId: null,
+      );
     }
   }
 

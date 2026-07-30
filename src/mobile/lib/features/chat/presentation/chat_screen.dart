@@ -13,9 +13,7 @@ import '../../../core/router.dart';
 import '../../../theme/spacing.dart';
 import '../../ocr/data/ocr_models.dart';
 import '../../problems/application/active_problem.dart';
-import '../../problems/data/attempts_models.dart';
 import '../../problems/data/problem_models.dart';
-import '../application/attempt_controller.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
 import '../domain/latex_to_plain.dart';
@@ -173,29 +171,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  /// 정답 제출 어포던스 — 최종답을 입력받아 서버에 제출한다(서버 권위 채점·G1 루프 닫힘).
+  /// "다음 문제로" 진행 — 완료 신호를 지우고 문제 화면으로 넘어간다(S3-27 루프 닫힘).
   ///
-  /// 코치 대화는 *생각*을 위한 것이라 최종답의 단일 출처가 없다 — 그래서 최소 "정답 입력" 시트를
-  /// 띄워 학생 최종답을 받는다(MVP·단순·신뢰 우선). 받은 답은 컨트롤러가 `POST /v1/me/attempts`로
-  /// 보내고, 서버가 정답 여부를 판정한다(클라는 판정하지 않는다·수학 로직 클라 금지). 취소·빈 답이면
-  /// 아무 일도 하지 않는다. 활성 문제 유무·중복 방어는 컨트롤러가 한 번 더 확인한다(방어적 이중화).
-  Future<void> _onSubmitAnswer() async {
-    final answer = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const _AnswerSubmitSheet(),
-    );
-    if (answer != null && answer.trim().isNotEmpty && mounted) {
-      await ref.read(attemptControllerProvider.notifier).submit(answer);
-    }
+  /// 완료는 서버가 풀이 제출→정답 도달→돌아보기 1턴을 거쳐 내려준 신호(`problem_complete`)로만
+  /// 일어난다 — 여기서는 그 신호에 반응한 진행만 한다(별도 정답 제출·채점 UI 없음). ProblemScreen이
+  /// 매 마운트 next-problem을 재-fetch하므로(방금 문항은 서버가 제외) 이 한 번의 이동으로 다음 문항
+  /// 루프가 닫힌다. 완료 시 서버가 이미 ProblemAttempt를 적재했으므로 클라는 아무것도 제출하지 않는다.
+  void _onNextProblem() {
+    ref.read(chatControllerProvider.notifier).clearCompletion();
+    context.go(AppRoutes.problemPath);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
-    final attempt = ref.watch(attemptControllerProvider);
-    // 정답 제출 어포던스는 활성 문제가 있을 때만 노출한다(problem_id 없이는 채점 대상이 없다).
-    final hasActiveProblem = ref.watch(activeProblemProvider) != null;
 
     // 에러가 생기면 SnackBar로 알리고(가용성·앱은 죽지 않음) 상태를 지운다.
     ref.listen<String?>(
@@ -206,19 +195,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ..hideCurrentSnackBar()
             ..showSnackBar(SnackBar(content: Text(next)));
           ref.read(chatControllerProvider.notifier).clearError();
-        }
-      },
-    );
-
-    // 정답 제출 실패도 SnackBar로 알린다(가용성·앱은 죽지 않음·기존 패턴 답습).
-    ref.listen<String?>(
-      attemptControllerProvider.select((s) => s.error),
-      (previous, next) {
-        if (next != null && context.mounted) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(next)));
-          ref.read(attemptControllerProvider.notifier).clearError();
         }
       },
     );
@@ -239,16 +215,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             tooltip: '약점 개념 장면 보기',
             onPressed: state.isSending ? null : _onRequestScene,
           ),
-          // 정답 제출(서버 권위 채점·G1 학습 루프 닫힘) — 활성 문제가 있을 때만 노출한다.
-          // 전송·제출 중엔 비활성(중복 제출 방지).
-          if (hasActiveProblem)
-            IconButton(
-              icon: const Icon(Icons.task_alt),
-              tooltip: '정답 제출',
-              onPressed: (state.isSending || attempt.isSubmitting)
-                  ? null
-                  : _onSubmitAnswer,
-            ),
+          // 별도 '정답 제출' 버튼은 두지 않는다(S3-27·Kiki 교수학 지적): 완료를 오직 *풀이 제출*을
+          // 통해서만 일으켜 학생이 Polya 돌아보기(사고 추적)를 우회하지 못하게 한다. 완료 신호는
+          // 서버가 코치 응답으로 내려주고(problem_complete), 화면은 "다음 문제로"만 얹는다.
         ],
         // 슬로건을 부제로 — 답이 아닌 이유를 묻는다는 정체성을 항상 노출.
         bottom: PreferredSize(
@@ -286,24 +255,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             _MessageBubble(message: state.messages[index]),
                       ),
               ),
-              // 코치 응답 대기·정답 채점 대기 중 선형 인디케이터(은근한 로딩·카운트다운 아님).
-              if (state.isSending || attempt.isSubmitting)
-                const LinearProgressIndicator(minHeight: 2),
-              // 서버 권위 채점 결과 — correct면 "다음 문제로"(problemPath 재-fetch로 루프 닫힘),
-              // incorrect/unverifiable면 화면 유지·코치 계속(부정 강화 금지·정직 안내·G1).
-              if (attempt.result != null)
-                _AttemptResultCard(
-                  result: attempt.result!,
-                  onNext: () {
-                    // 카드를 먼저 닫고(스테일 방지) 문제 화면으로 이동한다. ProblemScreen이
-                    // 매 마운트 next-problem을 재-fetch하므로(방금 문항은 서버가 제외) 다른
-                    // 문항이 온다 — 이 한 번의 이동으로 다음 문항 루프가 닫힌다.
-                    ref.read(attemptControllerProvider.notifier).clearResult();
-                    context.go(AppRoutes.problemPath);
-                  },
-                  onContinue: () =>
-                      ref.read(attemptControllerProvider.notifier).clearResult(),
-                ),
+              // 코치 응답 대기 중 선형 인디케이터(은근한 로딩·카운트다운 아님).
+              if (state.isSending) const LinearProgressIndicator(minHeight: 2),
+              // 완료(problem_complete) — 서버가 풀이 제출→정답 도달→돌아보기 1턴을 거쳐 내려준
+              // 신호. "다음 문제로" 진행 어포던스를 코치 대화 흐름 안에 얹는다(problemPath 재-fetch로
+              // 루프 닫힘). 완료 발화("좋아, 근거가 분명하네…")는 이미 코치 버블로 렌더돼 있다.
+              if (state.problemComplete)
+                _NextProblemCard(onNext: _onNextProblem)
+              // 돌아보기 대기(awaiting_reflection) — 완료 아님. 코치 발화가 이미 메타인지 프롬프트라
+              // 진행 어포던스 없이 (선택) 작은 힌트만 둔다·학생이 근거를 답하면 다음 턴에 완료된다.
+              else if (state.awaitingReflection)
+                const _ReflectionHint(),
               _InputBar(
                 controller: _inputController,
                 stepsEditorKey: _stepsEditorKey,
@@ -984,85 +946,17 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
   }
 }
 
-/// 서버 권위 채점 결과 카드 — `verification_state`에 따라 진행/유지 어포던스를 렌더한다(G1).
+/// 완료(problem_complete) 진행 어포던스 — "다음 문제로" 카드(긍정 톤·게임화 아님·S3-27).
 ///
-/// 경계(CLAUDE.md 수학 로직 클라 금지): 정답 여부는 서버가 판정한 [AttemptSubmitResponse]를 그대로
-/// 읽어 표시만 한다(표현≠의미). 정서 안전(절대 금기): 오답에 "틀렸다" 단정·빨강 강조를 쓰지 않고
-/// "다시 살펴볼까요?" 류로만 안내한다. **correct일 때만** 다음 문항 진행([onNext])을 노출한다.
-class _AttemptResultCard extends StatelessWidget {
-  const _AttemptResultCard({
-    required this.result,
-    required this.onNext,
-    required this.onContinue,
-  });
+/// 완료는 서버가 *풀이 제출*→정답 도달→Polya 돌아보기 1턴을 거쳐 내려준 신호로만 노출된다(별도
+/// 정답 제출·채점 UI 없음 — 학생이 사고 추적을 우회하지 못하게 함). 완료 발화("좋아, 근거가 분명하네
+/// — 다음 문제로 가보자!")는 이미 코치 버블로 렌더돼 있으므로 이 카드는 *진행*만 얹는다. 정서 안전
+/// (절대 금기): 정답률·스트릭·빨강 카운트다운 없이 스스로 끝까지 사고했다는 성장 프레이밍만 둔다.
+class _NextProblemCard extends StatelessWidget {
+  const _NextProblemCard({required this.onNext});
 
-  /// 서버 채점 결과(진행 판단 근거는 verification_state).
-  final AttemptSubmitResponse result;
-
-  /// 정답 확정 시 "다음 문제로" 진행 콜백(problemPath 재-fetch로 루프 닫힘).
+  /// "다음 문제로" 탭 콜백 — 완료 신호를 지우고 problemPath로 넘어간다(재-fetch·루프 닫힘).
   final VoidCallback onNext;
-
-  /// 오답·미검증 시 카드를 닫고 코치와 계속 이어갈 콜백(화면 유지).
-  final VoidCallback onContinue;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (result.isVerifiedCorrect) {
-      // 정답 — 긍정 톤·명시적 진행(자동 전환 대신 학생이 "다음 문제로"를 누르게: 급하지 않게·메타인지).
-      return _ResultBanner(
-        background: theme.colorScheme.primaryContainer,
-        foreground: theme.colorScheme.onPrimaryContainer,
-        icon: Icons.celebration_outlined,
-        message: '정답이에요! 🎉 잘 해냈어요.',
-        action: FilledButton(
-          onPressed: onNext,
-          child: const Text('다음 문제로'),
-        ),
-      );
-    }
-    if (result.isVerifiedIncorrect) {
-      // 오답 — 부정 강화 금지("틀렸다" 단정 없음)·주의(따뜻한) 톤·코치와 계속(빨강 미사용).
-      return _ResultBanner(
-        background: theme.colorScheme.tertiaryContainer,
-        foreground: theme.colorScheme.onTertiaryContainer,
-        icon: Icons.emoji_objects_outlined,
-        message: '조금 더 살펴볼까요? 코치와 함께 이어서 생각해 봐요.',
-        action: TextButton(
-          onPressed: onContinue,
-          child: const Text('계속하기'),
-        ),
-      );
-    }
-    // unverifiable — 서버가 확인하지 못했음을 *정직하게* 안내(correct 위장 없음)·코치 계속.
-    return _ResultBanner(
-      background: theme.colorScheme.surfaceContainerHighest,
-      foreground: theme.colorScheme.onSurface,
-      icon: Icons.help_outline,
-      message: '답을 확인하지 못했어요. 풀이를 코치와 더 이어가 볼까요?',
-      action: TextButton(
-        onPressed: onContinue,
-        child: const Text('계속하기'),
-      ),
-    );
-  }
-}
-
-/// 결과 배너 공통 레이아웃 — 아이콘 + 메시지 + 단일 액션(정서 안전 톤·과한 경고색 없음).
-class _ResultBanner extends StatelessWidget {
-  const _ResultBanner({
-    required this.background,
-    required this.foreground,
-    required this.icon,
-    required this.message,
-    required this.action,
-  });
-
-  final Color background;
-  final Color foreground;
-  final IconData icon;
-  final String message;
-  final Widget action;
 
   @override
   Widget build(BuildContext context) {
@@ -1073,99 +967,69 @@ class _ResultBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md14, vertical: AppSpacing.md),
       decoration: BoxDecoration(
-        color: background,
+        color: theme.colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          Icon(icon, color: foreground),
+          Icon(
+            Icons.celebration_outlined,
+            color: theme.colorScheme.onPrimaryContainer,
+          ),
           const SizedBox(width: AppSpacing.sm10),
           Expanded(
             child: Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(color: foreground),
+              '스스로 끝까지 생각해냈어요. 다음 문제도 함께 볼까요?',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          action,
+          FilledButton(
+            onPressed: onNext,
+            child: const Text('다음 문제로'),
+          ),
         ],
       ),
     );
   }
 }
 
-/// 최종답 입력 시트 — 코치 대화와 분리된 "정답 확인" 최소 입력(MVP·단일 최종답 출처).
+/// 돌아보기 대기(awaiting_reflection) 힌트 — 완료 아님·진행 어포던스 없음(작은 안내만·S3-27).
 ///
-/// 대화는 사고를 위한 것이라 최종답의 단일 소스가 없어, 이 시트가 명확한 최종답을 받는다. 제출 시
-/// 입력 문자열을 `Navigator.pop`으로 호출부에 돌려주고, 실제 서버 제출은 컨트롤러가 한다(시트는
-/// 검증·판정을 알지 못한다·단방향 chat→sheet). 취소(바깥 탭)면 null을 돌려준다.
-class _AnswerSubmitSheet extends StatefulWidget {
-  const _AnswerSubmitSheet();
-
-  @override
-  State<_AnswerSubmitSheet> createState() => _AnswerSubmitSheetState();
-}
-
-class _AnswerSubmitSheetState extends State<_AnswerSubmitSheet> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// 입력한 최종답을 호출부로 돌려준다(빈 답이면 무시 — 컨트롤러도 한 번 더 방어).
-  void _submit() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) {
-      return;
-    }
-    Navigator.of(context).pop(text);
-  }
+/// 정답에 도착해 완료 *직전* 서버가 "왜 이 답이 나왔는지" 설명을 요청한 상태다(코치 발화가 이미 그
+/// 메타인지 프롬프트). 학생은 평소처럼 자연어로 답하면 되고 그 응답 다음 턴에 완료된다 — 여기선 무엇을
+/// 하면 되는지 작은 힌트만 둔다(부담 없는 톤·질책·정답 강조 없음). 특별 처리는 없다(대화 그대로 지속).
+class _ReflectionHint extends StatelessWidget {
+  const _ReflectionHint();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      // 키보드(IME) 위로 시트를 밀어 올린다(입력이 가려지지 않게).
-      padding: EdgeInsets.only(
-        left: AppSpacing.xl,
-        right: AppSpacing.xl,
-        top: AppSpacing.xl,
-        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xs, AppSpacing.md, 0),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md14, vertical: AppSpacing.sm10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text('정답 확인', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs6),
-          Text(
-            '이 문제의 최종 답을 적어 주세요. 코치가 서버에서 확인해 드려요.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          Icon(
+            Icons.psychology_outlined,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            key: const Key('answer-input'),
-            controller: _controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-            decoration: const InputDecoration(
-              hintText: '예: x=3, 2개',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _submit,
-              child: const Text('제출'),
+          const SizedBox(width: AppSpacing.sm10),
+          Expanded(
+            child: Text(
+              '돌아보기: 이 답이 어떻게·왜 나왔는지 내 말로 설명해 볼까요?',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],
