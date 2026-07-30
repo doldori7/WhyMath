@@ -94,7 +94,12 @@ dev = [
     # 백엔드 CI 4스텝(ruff·black·mypy·pytest)을 동일 floor·동일 도구로 핀해
     # data-pipeline과 재현성을 일치시킨다. 다음 메이저는 재검증 후 상한을 올린다.
     "pytest>=8.3.3,<10",
-    "pytest-asyncio>=0.24.0",
+    # 상한 재검증 2026-07-30(ARCH-22): 무상한 pin이 명시 테스트 경로 인자 invocation에서
+    # asyncio_mode 미적용(strict 폴백)을 유발할 수 있음을 로컬에서 관측했으나, 실 CI(bare
+    # `pytest` invocation·PR #648 run 30528307807)에서는 1.4.0도 정상 green — 활성 장애는
+    # 아니었다. 현재 검증된 1.x 계열(1.4.0)에 상한만 걸어 미검증 차기 메이저(2.x) 드리프트를
+    # 예방한다(langfuse>=2.50,<5 선례 동형).
+    "pytest-asyncio>=0.24.0,<2",
     "pytest-cov>=5.0.0",
     # pytest-randomly — 매 실행 테스트 순서를 섞어 *순서 의존*을 조기·반복 노출한다(OPS-09).
     # OPS-07 가드가 `db.session` 전역 오염의 *원인을 지목*한다면, 이쪽은 종류를 가리지 않고
