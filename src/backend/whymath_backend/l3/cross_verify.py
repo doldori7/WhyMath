@@ -60,6 +60,7 @@ from whymath_backend.l3.models import (
     RoutingRequest,
     Usage,
 )
+from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.l3.router import (
     Router,
     actual_cost_krw,
@@ -140,18 +141,14 @@ class IndependenceError(RuntimeError):
 # ──────────────────────────────────────────────────────────────────────────
 # 관점 ① 독립 재구성 — 발문만 보고 스스로 센다(판정은 기계)
 # ──────────────────────────────────────────────────────────────────────────
-_SYSTEM_RECONSTRUCT = (
-    "너는 확률·경우의 수 문제를 처음 보는 독립 채점자다. 주어진 문제 서술만 읽고, "
-    "표본공간의 전체 경우의 수와 문제가 묻는 사건을 만족하는 경우의 수를 직접 세어라. "
-    "다른 사람의 풀이나 정답은 주어지지 않는다. 세는 근거를 스스로 정하고, "
-    '반드시 {"total": 정수, "favorable": 정수} 형태의 JSON 하나만 출력하라. '
-    "셀 수 없거나 서술이 모호해 표본공간이 확정되지 않으면 "
-    '{"total": null, "favorable": null, "reason": "이유"}를 출력하라.'
-)
+_SYSTEM_RECONSTRUCT = prompt_text("l3.cross_verify.reconstruct_system")
 
 
 def _render_reconstruct(subject: ResidueSubject) -> str:
-    return f"[문제]\n{subject.question_text}"
+    """가시 필드 = 발문뿐. 정답·해설·형식 모델은 여기 없다(은닉 = 앵커링 차단)."""
+    return fill(
+        prompt_text("l3.cross_verify.reconstruct_user"), QUESTION_TEXT=subject.question_text
+    )
 
 
 def _judge_reconstruct(subject: ResidueSubject, data: Mapping[str, object]) -> PerspectiveVerdict:
@@ -187,39 +184,30 @@ def _judge_reconstruct(subject: ResidueSubject, data: Mapping[str, object]) -> P
 # ──────────────────────────────────────────────────────────────────────────
 # 관점 ② 적대적 반증 — 결함이 있다고 가정하고 근거를 찾는다
 # ──────────────────────────────────────────────────────────────────────────
-_SYSTEM_FALSIFY = (
-    "너는 문항 반증자다. 아래 문항에는 학생에게 내보내면 안 될 결함이 **있다고 가정하고** "
-    "그 근거를 찾아라. 특히 다음을 의심하라: 표본공간을 확정하기에 조건이 부족한가, "
-    "'서로 다른/동시에/다시 넣지 않고' 같은 결정적 문구가 빠졌는가, 등확률 가정이 서술에서 "
-    "정당화되는가, 답이 여러 개로 읽힐 수 있는가, 정답 표기 형식이 서술과 어긋나는가. "
-    "근거를 못 찾으면 정직하게 결함 없음이라고 답하라 — 억지 결함을 지어내지 마라. "
-    '출력은 {"verdict": "ok"|"defect", "defect_class": "짧은 분류", "reason": "한국어 근거"} '
-    "형태의 JSON 하나만."
-)
+_SYSTEM_FALSIFY = prompt_text("l3.cross_verify.falsify_system")
 
 
 def _render_falsify(subject: ResidueSubject) -> str:
-    return f"[문항]\n{subject.question_text}\n\n[제시된 정답]\n{subject.answer}"
+    """가시 필드 = 발문 + 제시된 정답(형식 모델은 은닉 — 모델을 보면 빈틈을 모델로 메워 읽는다)."""
+    return fill(
+        prompt_text("l3.cross_verify.falsify_user"),
+        QUESTION_TEXT=subject.question_text,
+        ANSWER=subject.answer,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
 # 관점 ③ 서술-형식모델 정합 — 번역 대조만(수치 계산 금지)
 # ──────────────────────────────────────────────────────────────────────────
-_SYSTEM_GROUNDING = (
-    "너는 번역 대조자다. [문항 서술]과 [기계가 실제로 검산한 형식 모델]이 **같은 상황을 "
-    "가리키는지만** 판정하라. 확률값이나 경우의 수를 다시 계산하지 마라 — 숫자의 옳고 그름은 "
-    "네 판단 대상이 아니다. 오직 '학생이 문항을 읽고 떠올릴 상황'과 '형식 모델이 서술하는 "
-    "상황'이 일치하는지만 본다. 순서 구별 여부, 복원 여부, 개체 구별 여부, 무엇을 세는지가 "
-    "어긋나면 결함이다. "
-    '출력은 {"verdict": "ok"|"defect", "defect_class": "짧은 분류", "reason": "한국어 근거"} '
-    "형태의 JSON 하나만."
-)
+_SYSTEM_GROUNDING = prompt_text("l3.cross_verify.grounding_system")
 
 
 def _render_grounding(subject: ResidueSubject) -> str:
-    return (
-        f"[문항 서술]\n{subject.question_text}\n\n"
-        f"[기계가 실제로 검산한 형식 모델]\n{subject.machine_model_ko}"
+    """가시 필드 = 발문 + 기계 형식 모델(정답은 은닉 — 번역 일치만 판정하므로 답이 필요 없다)."""
+    return fill(
+        prompt_text("l3.cross_verify.grounding_user"),
+        QUESTION_TEXT=subject.question_text,
+        MACHINE_MODEL_KO=subject.machine_model_ko,
     )
 
 

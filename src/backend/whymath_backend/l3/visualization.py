@@ -44,6 +44,7 @@ from pydantic import ValidationError
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import generate
+from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.visualization import Visualization
 
@@ -170,28 +171,26 @@ def renderable_visualization_types() -> tuple[str, ...]:
 
 
 def _build_system_prompt(types: Sequence[str]) -> str:
-    """렌더 가능 타입 목록 → 시스템 프롬프트(순수 함수 — 파일 I/O·전역 상태 없음).
+    """렌더 가능 타입 목록 → 시스템 프롬프트(순수 함수 — 전역 상태 없음·정본 캐시 경유).
 
     선언적 명세 JSON 하나만 출력시킨다(렌더 아님). 기능적 최소형(슬92 범위)이며, 목록 밖
     타입을 제시하지 않는 것이 이 함수의 유일한 불변식이다.
+
+    OPS-16: *고정 문안*은 `docs/prompts/l3_visualization.md` 정본에서 인용하고, *타입 목록*은
+    VIZ-02의 렌더 계약 파생을 그대로 유지한다 — 문면의 정본은 문서, 렌더 가능성의 정본은
+    `data/render_contract.json`으로 갈라 두 진실 원천이 겹치지 않게 한다. spec 예시 줄은
+    산문이 아니라 *데이터*(`_SPEC_EXAMPLES`)라 계약 파생 목록으로 여기서 조립한다.
     """
     lines = [
-        "당신은 수학 학습 앱의 시각화 *명세* 생성기다. 개념을 가장 잘 드러내는 선언적 시각화 "
-        "명세를 JSON 객체 하나로만 출력한다(렌더 이미지가 아니라 명세 — 렌더는 클라이언트가 "
-        "한다). 설명·코드펜스 없이 아래 형태의 JSON 하나만 출력하라:",
-        f'{{"type": "<{"|".join(types)}>", "spec": {{렌더 파라미터·데이터·축·상호작용 규칙}}, '
-        '"caption": "<한 줄 캡션>", "interactive": <true|false>}',
-        f"규칙: type은 위 {len(types)}종 중 하나의 영문 값만 쓴다 — 목록 밖 값은 렌더 경로가 "
-        "없어 학생 화면에 나타나지 못한다. 위 타입은 모두 학생 조작형이므로 interactive=true. "
-        "spec은 해당 type에 맞는 자유 JSON. 사용자가 '권장 시각화 양식'을 주면 그 교수학적 "
-        "양식을 최대한 반영해 spec을 구성하라.",
-        "type별 spec 예시(가능하면 이 키를 채워라):",
+        fill(
+            prompt_text("l3.visualization.system"),
+            TYPE_UNION="|".join(types),
+            TYPE_COUNT=str(len(types)),
+        )
     ]
     lines.extend(f"  - {name}: {_SPEC_EXAMPLES[name]}" for name in types if name in _SPEC_EXAMPLES)
     if "simulation_probabilistic" in types:
-        lines.append(
-            "확률 시뮬은 outcomes(결과 라벨+확률 가중치)를 반드시 채워 임의 실험도 표현하라."
-        )
+        lines.append(prompt_text("l3.visualization.system_probability_note"))
     return "\n".join(lines)
 
 
@@ -220,18 +219,22 @@ def reset_render_contract_cache() -> None:
     """렌더 계약·시스템 프롬프트 캐시 무효화 — 테스트 격리용 seam.
 
     프로덕션은 계약이 프로세스 수명 동안 고정이라 호출할 일이 없다
-    (`l3/render/assessment_bank.py::reset_assessment_bank_cache` 동형).
+    (`l3/render/assessment_bank.py::reset_assessment_bank_cache` 동형). 프롬프트 *문면*의
+    정본 캐시는 별도다 — 정본 파일을 바꾼 테스트는 `prompt_assets.reset_prompt_asset_cache()`도
+    함께 호출해야 여기 캐시된 조립 결과가 갱신된다(OPS-16).
     """
     renderable_visualization_types.cache_clear()
     _system_prompt.cache_clear()
 
 
 def _user_prompt(concept: str, level: str, recommended_styles: Sequence[str] | None = None) -> str:
-    """개념·수준(+권장 양식 힌트) → 사용자 프롬프트(시각화 명세 1개 요청)."""
-    lines = [f"개념: {concept}", f"대상 수준: {level}"]
+    """개념·수준(+권장 양식 힌트) → 사용자 프롬프트(시각화 명세 1개 요청·정본 인용)."""
+    lines = [fill(prompt_text("l3.visualization.user_head"), CONCEPT=concept, LEVEL=level)]
     if recommended_styles:
-        lines.append(f"권장 시각화 양식(참고): {', '.join(recommended_styles)}")
-    lines.append("이 개념을 가장 잘 드러내는 시각화 명세 JSON 하나를 출력하라.")
+        lines.append(
+            fill(prompt_text("l3.visualization.user_styles"), STYLES=", ".join(recommended_styles))
+        )
+    lines.append(prompt_text("l3.visualization.user_tail"))
     return "\n".join(lines)
 
 
