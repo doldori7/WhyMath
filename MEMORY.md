@@ -337,6 +337,69 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (회수·S3-10): **persona_fit 규칙 기반 백필 — 미병합 브랜치에서 회수(포팅) + 7번째 코퍼스 확장(전 2,647건 {} 죽은 적격 경로 소생)** (claude 규명·회수, `/drive`)
+
+**사고 경위(자기 규명)**: 이 세션은 S3-10을 처음부터 새로 설계·구현(태거 `persona_fit_tagger.py`
++ CLI + hermetic 테스트 32+10건 전부 그린)했으나, `scripts/harness/backlog.py start`를 실행하는
+**뒤늦은** 시점에야 이미 완료된 미병합 브랜치의 존재를 발견했다: `claude/education-os-architecture-
+mr0fbq`(main과 동일 merge-base `bf5be2b7`인 정상 형제 브랜치, 삭제·폐기 아님) 커밋 `837f00c1`
+(2026-07-29)이 이 태스크를 이미 구현·검증 완료한 상태였다(전체 스위트 7589 passed·실 PG 통합
+233 passed·mypy strict·계층 게이트 전 PASS). **착수(claim) 전에 하네스로 원격 상태를 먼저
+확인했어야 했다** — 이번엔 결과적으로 코드 실행 전이 아니라 실행 *후*에야 걸렸다(작업 자체는
+낭비됐으나 중복 커밋은 면함). 그 브랜치의 구현은 이번 세션의 설계보다 명백히 더 정교했다(난이도
+5밴드 vs 3밴드, 페르소나 5종 전원에 대한 완전한 근거표 vs 부분 생략, 문항당 1줄 감사 JSONL 근거
+로그 vs 집계 카운트만, 이미 채워진 값은 보존하는 보수적 백필 vs 항상 재계산). **결론**: 새 설계를
+폐기(코드 삭제·코퍼스 원복)하고 그 브랜치의 산출물을 회수했다 — `claude/shadow-data-s3-pilot-
+nh5kbz` Stage 1 회수(아래 항목) 선례와 동일 패턴.
+
+**회수 내용**: `l1/problem_bank/persona_fit_rules.py`(결정론 규칙 정본 — 난이도 5밴드×페르소나
+5종 기본표 + 시그니처·복합사고 시그니처 3종·질문형식·distractor_map 가산)·
+`harness/problem_corpus_persona_fit_backfill.py`(백필 CLI — 이미 채워진 `persona_fit`은
+보존·비어있는 값만 계산해 채움·문항당 1줄 감사 JSONL로 "근거 동반" 충족)·두 테스트 파일·
+`docs/data/persona_fit_backfill_report_s3_10.md`(실측 리포트)·`api/me.py`의 수능 SQL 사전필터
+docstring 정정(코드 로직 무변경) — 모두 바이트 동일 포팅(로직 변경 0).
+
+**코퍼스 데이터는 `persona_fit` 필드만 병합**(다른 필드는 원래 코퍼스 그대로) — 그 브랜치가 main을
+마지막 병합한 시점 이후 이쪽 브랜치가 독립적으로 진행한 `S3-12`(rephrased_v0 결함 조치·
+`achievement_standard_codes` 재귀속 등, PR #641) 변경분이 뒤섞이지 않게 슬러그 단위로
+`persona_fit`만 대체했다(persona_fit 유도 신호 4종 — `difficulty_overall`·`signature_patterns`·
+`question_format`·`distractor_map` — 은 두 브랜치 간 0건 불일치 실측 확인 후 안전 확정). 병합 중
+`conceptual_v0`에서 저장값-재계산값 6건(0.9%) 불일치를 발견(두 쌍이 서로 값이 맞바뀐 패턴 — 그
+브랜치 쪽 merge 국소 결함으로 추정) → 규칙이 단일 권위이므로 **현재 코퍼스에 규칙을 즉시
+재적용한 값**으로 확정(저장값이 아니라 재계산값 채택).
+
+**7번째 코퍼스 확장**: `probability_finite_v0`(34건, S4-13)는 원 구현(6종·2,667건, 이후 S3-12로
+2,613건) 당시 존재하지 않았다 — `KNOWN_CORPORA`에 추가(로직 무변경, 대상만 확장)해 같은 CLI로
+백필. **전 7종 2,647건 전량 `persona_fit` 비어있음 0건**(신규 회귀 테스트
+`tests/backend/harness/test_persona_fit_backfill_corpus_coverage.py`가 고정).
+
+**실측 효과**(같은 회귀 테스트가 고정): 수능 모드(A/B/C, `exam_type`·`signature_patterns` 신호를
+꺼서 persona_fit 신호만 격리) 적격 후보 전 0 → 후 양수. 학교진도 모드(A/D, `target_unit_codes`
+미지정으로 persona_fit 폴백 경로만 격리) 적격 후보 전 0 → 후 양수. 원 브랜치 리포트(§0~1)의
+6종 상세 수치(수능 A/B/C 0→2,667·학교진도 A 0→2,667·D 0→2,449 등)는 리포트에 그대로 보존하고,
+이번 회수·확장분은 리포트 §4에 별도 절로 덧붙였다(as-found 정직 기록 — 원 실측을 소급 수정하지
+않음).
+
+**정직한 잔여**: (1) `populate_problem_bank` DB 재적재는 이 세션 sandbox에 Postgres가 없어
+(docker 소켓 부재·`DATABASE_URL` 미설정 확인) **미실행** — 명령만 준비. (2) 원 커밋이 검증한
+mypy --strict·ruff·black·lint-imports·실 PG 통합 233건·전체 스위트 7589건·계층별 커버리지
+게이트는 이 세션에서 **재현하지 못했다** — 포팅한 로직은 그 검증을 신뢰하되, 이 세션이 새로
+바꾼 부분(7번째 코퍼스 확장·`KNOWN_CORPORA` 수정·테스트 2건 갱신·신규 커버리지 테스트 1건·
+`api/me.py` 포팅)은 이 세션 hermetic pytest(28 passed)로만 확인했다. (3) 원 브랜치가 분리
+등재한 후속 태스크 `S3-13-suneung-prefilter-persona-fit-widen`(SQL 사전필터를 persona_fit까지
+확장)은 **포팅하지 않았다** — 그 번호가 main 계열에 이미 `S3-13-demo-problem-pool`로 배정돼
+있어(번호 재사용 충돌 — 2026-07-27 HARN-10 규칙 대상) 재번호는 후속 세션의 `backlog.py add`
+경유로 넘긴다. (4) 사고력·영재·메타인지 모드는 persona_fit 백필만으로 소생하지 않는다
+(`bloom_level`·`is_cross_unit`·`scoring_type` 코퍼스 전체 부재 — 별도 갭, 원 리포트 §2에 이미
+정직 기록됨).
+
+**재발방지 메모**: 이번 사고는 코드 작성 *이후*에야 원격 상태를 확인해 걸렸다 — 운 좋게 낭비만
+발생했지 중복 커밋까지 가진 않았다. `backlog.py start`(또는 최소 `next`)를 **코드 작성 착수
+직전**에 항상 먼저 실행하는 습관이 유일한 구조적 방지책이다(하네스가 이미 이 체크를 제공하며
+2026-07-30 세션 시작 시점에도 후보로 노출했으나, 이 세션은 세션 시작 브리핑의 "원격 claim"
+목록만 보고 이 태스크가 안전하다고 넘겨짚었다 — 그 목록은 스냅샷이라 전 미병합 브랜치를
+포괄하지 않는다는 것이 이번에도 재확인됐다. §Stage 1 항목과 동일 교훈의 반복 관측).
+
 ### 2026-07-30 (사고 규명·회수 Stage 1): **미병합 브랜치 9일 고립 발견 — claude/shadow-data-s3-pilot-nh5kbz(70커밋·128파일) main과 무관하게 분기·SEC-01 중복 완료 확인·S3-13/NS-03 회수** (claude 규명·구현, Kiki "지금 회수 착수")
 
 **발견 경위**: S3-01(파일럿 코호트) 착수 트리거③(자연 자유사용 대표측정) 현황을 확인하던 중, `claude/shadow-data-s3-pilot-nh5kbz` 브랜치가 main과 공통 조상 `907fca9f`(2026-07-21)에서 갈라진 뒤 **한 번도 병합되지 않고 9일간 방치**돼 있음을 발견. 그 사이 양쪽이 각자 70여 커밋씩 쌓았다(main: OPS-06~15·HARN-06~11·PED-01/02·SEC-02 외 다수. shadow: S3-09~23·MOB-02~06·NS-01~03·ARCH-13/14·SEC-01). 그 브랜치 자신의 MEMORY에는 이미 2026-07-23 "브랜치-로컬 backlog 정본 포크" 재발방지 규칙이 등재돼 있었고 "머지 타이밍은 Kiki의 'pr' 지시 대기"로 적혀 있었으나, 그 지시가 오지 않은 채 하루치 작업(SEC-01)이 더 쌓이고 멈췄다 — **등재된 텍스트 규칙이 재발을 막지 못한 사례**(HARN-10·HARN-11이 이미 독립적으로 겨냥한 것과 같은 부류: ARCH-13 중복·S3-11 근접중복 등, 전부 "병렬 세션이 서로의 브랜치를 못 봄"이 근본원인).
