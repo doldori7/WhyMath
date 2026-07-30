@@ -144,16 +144,29 @@ class AuditLog:
 > **감사 대상 = 3종만** — "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근":
 > ⑴ **데이터 반출**(`GET /v1/me/export`) ⑵ **동의 변경** ⑶ **관리자 접근**(SEC-07 착지 후).
 >
-> **구현 현황**: **삭제 감사만 가동**(`deletion_audit`·`db/models/audit.py:32`·writer
-> `api/me.py:291`·본인 조회 `GET /v1/me/deletions`). 반출은 **무기록**이 현실이며 SEC-09가
-> 상환한다. `deletion_audit`는 **삭제의 단일 권위로 유지**하고 신규 감사 테이블에 삭제를 중복
-> 기록하지 않는다(이중 진실원천 금지 — 테이블명·`deleted_at` 컬럼이 삭제 의미에 결합되어 있어
-> 반출 사건을 넣으면 스키마가 거짓말을 한다). 두 테이블 통합은 관리자 콘솔 Phase B에서 재론.
+> **구현 현황(SEC-09 착지 — 2026-07-30)**: 삭제 감사는 여전히 `deletion_audit`
+> (`db/models/audit.py:32`·writer `api/me.py:291`·본인 조회 `GET /v1/me/deletions`)가 **단일
+> 권위**다. 위 3종(반출·동의변경·관리자접근)은 **신규 테이블 `privacy_audit`**
+> (`db/models/audit.py` `PrivacyAudit`·마이그레이션 `3702d8671074`)에 담고, 삭제 이벤트를
+> 여기 중복 기록하지 **않는다**(이중 진실원천 금지 — 테이블명·`deleted_at` 컬럼이 삭제 의미에
+> 결합되어 있어 반출 사건을 넣으면 스키마가 거짓말을 한다. 회귀 테스트
+> `tests/backend/api/test_privacy_audit.py::test_deletion_does_not_write_privacy_audit`가
+> 동결). 두 테이블 통합은 관리자 콘솔 Phase B에서 재론.
+>
+> writer 3곳(`whymath_backend/privacy/audit.py`): `record_export_audit`(`api/me.py:
+> export_my_data` 호출·반출 payload 조립 *후*) · `record_consent_change_audit`(`api/users.py:
+> grant_parental_consent` 호출·`parental_consent` 행 삽입과 **같은 트랜잭션**) · 
+> `record_admin_access_audit`(**현재 호출부 0곳** — 관리자 콘솔 Phase B가 착지할 때 배선,
+> `AuditEventKind.admin_access` docstring 참조 — 가짜 이벤트 날조 금지). 본인 조회
+> (`GET /v1/me/*`, 이제 30개 — 신규 `GET /v1/me/privacy-audit` 자기 자신 포함) 경로는 **감사
+> 0행**을 경계로 동결한다(`test_privacy_audit.py::TestSelfReadEndpointsProduceZeroAuditRows`).
 >
 > **필드 정정 2건**: ⑴ `ip_address` 평문 → **`sha256(salt+ip)` 해시만**(반복 판정 가능·원본 복원
-> 불가) ⑵ 감사 행에 **반출 내용·본문·PII 값을 저장하지 않는다**(감사가 데이터 사본이 되면
-> 최소화 위반). append-only(UPDATE/DELETE 라우터 없음)·`user_id` FK 아님은 기존
-> `deletion_audit` 패턴 답습.
+> 불가·`privacy.audit.hash_client_ip`·salt는 `WHYMATH_PII_AUDIT_IP_SALT`) ⑵ 감사 행에 **반출
+> 내용·본문·PII 값을 저장하지 않는다**(감사가 데이터 사본이 되면 최소화 위반). append-only
+> (UPDATE/DELETE 라우터 없음)·`user_id`(행위자) FK 아님은 기존 `deletion_audit` 패턴 답습.
+> `target_user_id`(행위 대상 — 관리자접근에서만 행위자와 다름)·`consent_scope`(동의변경 구분
+> typed 메타)는 `deletion_audit`엔 없는 신규 컬럼.
 
 ## 삭제·이전 권리
 
