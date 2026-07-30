@@ -1,27 +1,29 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S3-16-behavior-telemetry-writers
-title: "행동 텔레메트리 writer — attempt_event 휴면 EventType 3종 소생 + KPI3 정서안전 NO_DATA 해소"
+title: "행동 텔레메트리 writer — attempt_event 휴면 EventType 3종 소생 + harness-metrics ⑫ 신설"
 track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "①힌트요청(demand)·막힘·답입력(event_data.server_latency_ms) 3종을 세션 경로에서 attempt_event에 적재 + EVENT_DATA_CONTRACT 편입. 신규 EventType enum 0(휴면 소생만), 신호 부재 시 행 미생성(날조 회피)"
-  - "②pilot_kpi_baseline KPI3(정서안전)가 NO_DATA를 벗고 집계 산출 + 힌트제공(supply)/힌트요청(demand) 비를 harness-metrics에 노출. 학생 대면 응답 페이로드 무변경 회귀"
+  - "②[2026-07-30 정정: pilot_kpi_baseline KPI3는 톤 위반율(AI 발화 축)이라 이 태스크와 무관 — 등재 당시 추론 오귀속, 실측 없이 등재 금지 위반을 자체 발견·교정] wh1_evaluation.SurrogateMetrics에 신규 지표 ⑫(힌트요청/힌트제공 비, supply=0이면 NO_DATA)를 ⑤와 동형 좌석으로 추가 + GET /v1/me/harness-metrics 노출. 학생 대면 응답 페이로드 무변경 회귀"
   - "③focus_score·engagement_score·learning_session 행 writer는 미신설을 결정으로 명시(단일 스칼라가 정본 5분류와 축 불일치 — 코드 주석·문서 기록 + NULL 유지 동결 테스트). AffectState 분류기는 범위 밖(§D6 페이퍼)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/me.py
   - "src/backend/whymath_backend/schema/**"
   - src/backend/whymath_backend/l4/hint_deferral.py
-  - src/backend/whymath_backend/harness/pilot_kpi_baseline.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
   - "tests/backend/api/**"
   - "tests/backend/harness/**"
-session: null
+  - "tests/backend/schema/**"
+session: claude/whymath-ai-tutor-design-953m1e
 notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D4. S3-01 잠금 아님 — 파일럿 개시 전 관측 기반 확보가 목적('측정 없는 도입 없음'의 상류). 학생 대면 발화·결정 로직 무변경."
-updated: 2026-07-29
+updated: 2026-07-30
