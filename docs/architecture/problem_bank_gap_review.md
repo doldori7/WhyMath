@@ -338,6 +338,17 @@ S3 축 준용) + Wilson 표본 검수 게이트(S5 축) ⑶ "게이트 통과=�
 | ③ | Problem↔ProblemType 연결(Phase 3b) | 다음 둘 중 하나 실재 시: ⑴ D4 커버리지 리포트에 유형 축 수요(유형별 공백을 저작 우선순위로 쓰겠다는 결정) ⑵ L6 유형별 추천·출제 소비처(예: "존재_판정 유형 약점 보강" 모드) 착수. 연결 형태는 기존 판정대로 `problem_type_codes` 참조 배열(`signature_patterns` 동형) |
 | ④ | 조건 변형·난이도 계열 변형·역문제 생성 | D4 리포트가 특정 밴드 재고 부족을 실측하고, D8 계보 축이 착지해 변형을 *기록할 자리*가 생긴 뒤 — 계보 없는 변형 확대는 G18 재생산 |
 
+> **⚠️ 편집자 부기 — ③ 유보 해제 (2026-07-30 · `ai_content_generation_gap_review.md` D3·백로그 `S3-27`)**:
+> 위 ③행의 발화조건 ⑴이 **성립했다** — `ai_content_generation_gap_review.md`가 기능 59("무엇이
+> 없는지를 볼 수 없는 상태"·전 코퍼스 유형 미태깅) 대응으로 "유형별 공백을 저작 우선순위로 쓰겠다는
+> 결정"을 논증했다(D3, `solution_module_gap_review.md` D1의 유보 해제 선례 동형). ③행의 유보는
+> 여기서 **해제**한다(원문 유보 표는 이력 보존을 위해 삭제하지 않는다 — ④행은 별개로 미해제 유지).
+> 실제 구현: `schema/problem.py`의 `Problem.problem_type_codes: list[str]`(참조 배열·
+> `signature_patterns` 동형) + 결정론 백필(`harness/problem_type_backfill.py` — 생성기 identity·
+> `unit_codes`·`distractor_map` 오개념 kebab 기반, LLM 0·문항 텍스트 파싱 0). **경계는 원문 그대로
+> 유지**: `problem_type_node` FK 연결·유형별 생성 확대·추천/출제 로직은 여전히 스코프 밖(관측 축
+> 한정) — 이 부기가 해제하는 것은 "필드 신설·백필" 유보뿐이다.
+
 ---
 
 ## 부록 — 실측 근거·관련 코드 (2026-07-28 실측)
