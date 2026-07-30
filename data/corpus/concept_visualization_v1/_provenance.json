@@ -1,4 +1,5 @@
 {
+  "pool": "whymath-original",
   "corpus_name": "concept_visualization_v1",
   "generated": "2026-07-29 (소급 작성 — 기존 산출물 근거 확인, EOS 운영 평면 공백 점검 §3-1)",
   "generation_method": "WhyMath 자체 분류 작업 — 시각화 가능성 4분류(직접/동적/부분/추상, docs/architecture/05b_visualization_classification.md 정본) 대표 시드를 concept_graph_v1 개념에 태깅",

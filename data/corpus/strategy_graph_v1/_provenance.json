@@ -1,4 +1,5 @@
 {
+  "pool": "whymath-original",
   "source_file": "strategies.jsonl",
   "source_sha256": "b1f3ede72ed2d4e34a1734f46b9842bcaa31e144ae826f748ff6366615394cde",
   "source_citation": "문제 공략 전략(problem-solving heuristic) 택소노미: 와이매스 자체작성(Polya 『How to Solve It』 계획 단계 표준 어휘 수렴·본문 미복제).",

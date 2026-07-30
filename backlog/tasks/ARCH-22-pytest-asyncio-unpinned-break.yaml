@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-22-pytest-asyncio-unpinned-break
+title: "pytest-asyncio 무상한 pin — 1.x 드리프트로 백엔드 스위트 575건 동시 실패 실측"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "pyproject.toml의 pytest-asyncio>=0.24.0(상한 없음)에 검증된 메이저 상한을 건다(langfuse>=2.50,<5 선례 동형). 원인 확정: 2026-07-30 실측 — src/backend에서 pip install -e '.[dev]' 시 pytest-asyncio 1.4.0이 설치되고 'requested an async fixture ... with no plugin or hook that handled it' 오류로 async fixture/테스트 576건(479 FAILED + 4 ERROR 근사)이 setup 단계에서 동시 실패. origin/main HEAD(0d9d7925)와 이 브랜치(a1107775) 양쪽에서 완전히 동일한 실패 테스트 ID 집합(579건, diff 0)으로 재현 — 이 태스크 범위의 코드 변경과 무관한 순수 의존성 드리프트임을 확정. 호환 버전 범위를 실측 재검증(pytest-asyncio 0.24~0.x대 재고정 또는 asyncio_mode 설정 갱신 후 1.x 호환 확인) 후 CI green 복원."
+artifacts: []
+paths:
+  - src/backend/pyproject.toml
+session: null
+notes: "docs/architecture/operations_module_gap_review.md ARCH-20 구현 중 전체 백엔드 스위트 실행 과정에서 발견(2026-07-30). 회귀 아님 — clean origin/main에서도 동일 실패 diff 0으로 확정(방법: git worktree add로 origin/main 별도 체크아웃 후 동일 venv로 전체 스위트 재실행·grep FAILED/ERROR sort diff). CLAUDE.md '의존성 pin은 검증된 메이저 범위로 상한을 건다' 위반 사례(langfuse 선례와 동일 계열) — 조용히 넘기지 않고 즉시 등재. priority 1(전체 백엔드 CI 실질 마비 수준 — 575/7823 스위트 영향)."
+updated: 2026-07-30
