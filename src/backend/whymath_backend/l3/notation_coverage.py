@@ -1,0 +1,570 @@
+"""표기 커버리지 하네스(NS-03) — "코퍼스 표기 ⊆ 지원 표기"를 CLI exit 0/1로 측정하는 게이트.
+
+정본: `docs/architecture/notation_semantics_layer.md` §3(L3 완전성 하네스)·§4·§5 — 표기 완전성을
+인상이 아니라 *측정*으로 관리한다(측정 없는 도입 없음). 지원 표기의 열거 정본은
+`data/notation_support_manifest.json`(NS-02 신설·Dart canonical 파이프라인과의 정합은
+`src/mobile/test/notation_canonical_test.dart`가 동결)이고, 이 모듈은 리포 커밋 코퍼스
+(`data/corpus/problem_bank_*/problems.jsonl` 표기 필드 + `formula_graph_v1/formulas.jsonl`의
+`latex`)에서 표기 토큰을 전수 추출해 지원 집합과 대조한다(hermetic·LLM 0·DB 0·결정론).
+
+측정 축(2축 — 구조 표기는 과잉이라 제외):
+  ① **LaTeX 매크로**: `\\[a-zA-Z]+` 전수 추출. 지원 = manifest 파생(정규화 매크로 입력측 +
+     canonical 산출측 + accent_macros) ∪ KaTeX 렌더 *실증* allowlist(`KATEX_PROVEN_MACROS` —
+     Dart 위젯 렌더 테스트가 실제 조판을 확인한 매크로만·실증 없는 심볼 추가 금지).
+  ② **비-ASCII 수학 글리프**: 유니코드 카테고리·블록 기반 정밀 판별(`is_math_glyph`) —
+     한글·CJK·일반 문장부호는 제외해 한국어 프로즈 오탐 0을 지킨다. 지원 = manifest
+     `unicode_glyph_classes`(상첨자·프라임).
+
+게이트 판정(래칫): 누락 심볼(코퍼스 등장 ∧ 지원 집합 밖)을 **베이스라인**
+(`data/notation_missing_baseline.json` — 첫 실측 산출로 생성·커밋된 Missing Symbol Report 정본)
+대비 비교한다. **신규 누락 발견 시 exit 1**, 베이스라인 내 누락은 리포트만(기존 공백으로 상시
+red가 되는 것과 공백 은폐를 동시에 방지). 베이스라인 갱신은 *의식적 수동 편집*만 — 자동 갱신
+(`--rebaseline` 류)은 래칫을 무력화하므로 만들지 않는다. 전수 측정이라 Wilson 불요(표본 아님).
+
+변별력 대조군(`--control-empty-support`): 지원 집합을 비워 같은 코퍼스를 돌리면 지원 토큰
+(`²`·`\\frac` 등)이 전부 신규 누락이 되어 exit 1이 *실측*돼야 한다 — 실패 상태에서 실패 신호를
+내는 검출기임을 봉인한다("변별력 없는 검증 스텝 금지"·coach_prose_leak_eval `--control-flag-off`
+선례). 상시 회귀는 `tests/backend/l3/test_notation_coverage_eval.py`(backend pytest 잡 자동 포함).
+
+표현≠의미: 이 게이트는 표기 토큰 *멤버십*만 측정한다 — 수학 의미·동치 판정 0(그건 SymPy 단일
+권위·`l3/verify_step.py`). 침묵 실패 금지: 코퍼스·manifest·베이스라인 부재나 파싱 실패는 예외
+타입명을 포함해 명시 실패한다(skip 은폐 금지).
+
+7계층: L3이 L1 로더(`l1.problem_bank.populate.load_problem_bank_records`)를 *호출*한다
+(L3→L1 정방향·import-linter layers 계약 내).
+
+사용:
+    python -m whymath_backend.l3.notation_coverage
+    python -m whymath_backend.l3.notation_coverage --json report.json
+    python -m whymath_backend.l3.notation_coverage --control-empty-support   # exit 1이어야 정상
+"""
+
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import json
+import re
+import sys
+import unicodedata
+from collections import Counter
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Final
+
+from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
+
+# 종료 코드 — 게이트 CLI 관례(corpus_audit_eval·coach_prose_leak_eval 동형).
+_EXIT_OK: Final[int] = 0
+_EXIT_GATE_FAIL: Final[int] = 1
+
+# LaTeX 매크로 토큰 — 백슬래시 + 영문 연속(전수·결정론). `\left|`의 `|` 같은 비영문 꼬리는
+# 매크로명이 아니므로 잡지 않는다.
+_MACRO_RE: Final[re.Pattern[str]] = re.compile(r"\\[a-zA-Z]+")
+
+# ──────────────────────────────────────────────────────────────────────────
+# KaTeX 렌더 실증 매크로 allowlist — *실측 근거 있는 것만*(실증 없는 심볼 추가 금지)
+# ──────────────────────────────────────────────────────────────────────────
+# 출처(전 항목 실측): Dart 위젯 렌더 테스트가 flutter_math_fork(KaTeX 계열)로 실제 조판됨
+# (폴백 아님·크래시 0)을 단언한 매크로만 담는다. manifest 파생분(정규화 매크로·accent)과
+# 합집합으로 지원 집합을 이룬다. 새 매크로는 반드시 렌더 실증 테스트를 먼저 추가한 뒤 여기
+# 등재한다 — 여기 없는 코퍼스 매크로(`\cos`·`\int`·`\pm`·`\pi` 등)는 누락으로 측정되어
+# 베이스라인에 남는 것이 정직한 회계다.
+KATEX_PROVEN_MACROS: Final[frozenset[str]] = frozenset(
+    {
+        # src/mobile/test/math_notation_audit_test.dart — `_expectRenders` 위젯 조판 실증(S3-23):
+        "\\partial",  # 편미분 ∂·\frac{\partial f}{\partial x}
+        "\\frac",  # 분수형 편도함수
+        "\\lim",  # 극한 \lim_{x\to\infty}
+        "\\to",
+        "\\infty",
+        "\\iint",  # 이중적분
+        "\\iiint",  # 삼중적분
+        "\\sqrt",  # n제곱근 \sqrt[3]{x}
+        "\\log",  # 로그 하첨자 \log_{10}x
+        "\\sin",  # 역삼각 \sin^{-1}x
+        # 그리스 대표(같은 파일 '그리스 대표' 루프에서 개별 조판 실증):
+        "\\alpha",
+        "\\beta",
+        "\\theta",
+        "\\varepsilon",
+        "\\varkappa",
+        "\\varphi",
+        "\\omega",
+        "\\Gamma",
+        "\\Delta",
+        "\\Sigma",
+        "\\Omega",
+        # src/mobile/test/math_text_test.dart:118-125 — `f^(\prime)(x)=3\lbrack x+8\rbrack(x-6)`
+        # 조판 실증:
+        "\\prime",
+        "\\lbrack",
+        "\\rbrack",
+    }
+)
+
+# ──────────────────────────────────────────────────────────────────────────
+# NS-02 정합 검토 잔여 3건 — 게이트 *밖* 기록(notation_contract.md §6 전재)
+# ──────────────────────────────────────────────────────────────────────────
+# 이 게이트의 측정 축(①`\`매크로 ②비-ASCII 글리프)에 잡히지 않는 표기 품질 항목이다 —
+# `sin`은 매크로가 아니고(§6-1), §6-2·§6-3은 ASCII 표기의 *조판 방식* 문제라 토큰 멤버십
+# 측정과 별개 축이다. 은폐하지 않도록 리포트 known_gaps 메타로 전재한다(측정 축과 별개임을
+# 명시·수정은 NS-03 범위 밖).
+KNOWN_GAPS_OUT_OF_SCOPE: Final[tuple[str, ...]] = (
+    "§6-1 표준함수 이탤릭 조판: sin·cos 등 표준함수가 Dart 렌더 경로에서 \\sin 연산자 매크로로 "
+    "승격되지 않아 이탤릭 문자 나열(s·i·n)로 조판된다(sqrt만 승격). `sin`은 매크로 토큰이 "
+    "아니라 본 게이트의 매크로 축에 잡히지 않는다 — 측정 축과 별개·기록만.",
+    "§6-2 무신호 식 평문 폴백: `x+x+x`처럼 수식 신호(^ _ \\ / *) 없는 계약 canonical 식은 "
+    "조판에서 빠진다(S3-21 과잉 렌더 방지 정책의 의도된 결과). ASCII 표기의 라우팅 문제라 "
+    "토큰 멤버십 측정과 별개 축 — 기록만.",
+    "§6-3 슬래시 나눗셈: `x/4+1`이 \\frac 수평 분수로 승격되지 않고 슬래시 그대로 조판된다"
+    "(렌더 가능·의미 왜곡 없음·허용). ASCII 표기라 글리프/매크로 축 밖 — 기록만.",
+)
+
+# ──────────────────────────────────────────────────────────────────────────
+# 수학 글리프 판별 (순수·결정론) — 한국어 프로즈 오탐 0이 핵심
+# ──────────────────────────────────────────────────────────────────────────
+# 유니코드 프라임(U+2032~2034) — 카테고리는 Po(문장부호)지만 수학 전용 표기라 명시 포함.
+_PRIME_GLYPHS: Final[frozenset[str]] = frozenset("′″‴")
+# Latin-1 상첨자(U+00B9·B2·B3) — 상·하첨자 블록(U+2070~209F) 밖이라 명시 포함.
+_LATIN1_SUPERSCRIPTS: Final[frozenset[str]] = frozenset("¹²³")
+# Latin-1 분수꼴(U+00BC~BE) — 분수꼴 블록(U+2150~215F) 밖이라 명시 포함.
+_LATIN1_FRACTIONS: Final[frozenset[str]] = frozenset("¼½¾")
+# 도(degree·U+00B0) — 카테고리 So지만 각도 표기라 명시 포함(수학 관련 So).
+_DEGREE_SIGN: Final[str] = "°"
+
+
+def is_math_glyph(ch: str) -> bool:
+    """단일 문자가 *수학 표기 글리프*인지 판별(순수) — 카테고리·블록 기반 전수 규칙.
+
+    포함: ① 수학 연산자·기호(카테고리 Sm — ×·√·−·±·≠·≤·→·∩ 등) ② 상·하첨자 블록
+    U+2070~209F(ⁿ·ₙ·₁ 등·Lm/No/Sm 혼재라 블록으로) + Latin-1 상첨자 ¹²³ ③ 분수꼴
+    (¼½¾·U+2150~215F) ④ 그리스 문자(U+0370~03FF의 Letter — 한국 수학 코퍼스에서 그리스
+    문자는 항상 수학 표기) ⑤ 프라임 ′″‴ ⑥ 도(°).
+
+    제외(설계·오탐 0): 한글·CJK·가나(카테고리 Lo — 프로즈이거나 코퍼스 오염이며 표기 커버리지
+    축이 아님), 일반 문장부호(Po·Pd — 특히 중점 `·`은 한국어 열거 구분자와 곱셈 표기가 동형이라
+    판별이 의미 해석이 되므로 표현≠의미 원칙상 측정 밖), 선지 마커류(①② 등 Enclosed
+    Alphanumerics — 어느 규칙에도 안 걸려 자연 제외).
+    """
+    code = ord(ch)
+    if code < 128:  # ASCII는 글리프 축 밖(매크로·구조 표기는 별도 축)
+        return False
+    if ch in _PRIME_GLYPHS or ch in _LATIN1_SUPERSCRIPTS or ch in _LATIN1_FRACTIONS:
+        return True
+    if ch == _DEGREE_SIGN:
+        return True
+    if 0x2070 <= code <= 0x209F:  # 상·하첨자 블록
+        return True
+    if 0x2150 <= code <= 0x215F:  # 분수꼴(Number Forms 앞부분)
+        return True
+    if 0x0370 <= code <= 0x03FF and unicodedata.category(ch).startswith("L"):  # 그리스 문자
+        return True
+    return unicodedata.category(ch) == "Sm"  # 수학 기호 카테고리
+
+
+def extract_macros(text: str) -> Counter[str]:
+    """텍스트에서 LaTeX 매크로 토큰 전수 추출(순수·결정론) — `\\매크로명` 형태 그대로."""
+    return Counter(_MACRO_RE.findall(text))
+
+
+def extract_math_glyphs(text: str) -> Counter[str]:
+    """텍스트에서 비-ASCII 수학 글리프 전수 추출(순수·결정론) — `is_math_glyph` 규칙."""
+    return Counter(ch for ch in text if is_math_glyph(ch))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 지원 표기 집합 — manifest(정본) 파생 + KaTeX 실증 allowlist
+# ──────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True, slots=True)
+class SupportSet:
+    """지원 표기 집합 — 매크로(`\\이름` 형)·글리프(단일 문자). 불변."""
+
+    macros: frozenset[str]
+    glyphs: frozenset[str]
+
+
+# 변별력 대조군용 공집합 지원 — 게이트가 실패 상태에서 실패 신호를 내는지 실측하는 데 쓴다.
+EMPTY_SUPPORT: Final[SupportSet] = SupportSet(macros=frozenset(), glyphs=frozenset())
+
+
+def load_support_set(manifest_path: Path) -> SupportSet:
+    """`notation_support_manifest.json`(NS-02 정본) → 지원 표기 집합 파생(순수 파일 IO).
+
+    매크로 = cases[].input(정규화 매크로 입력측) ∪ cases[].canonical(산출측) ∪ accent_macros
+    ∪ `KATEX_PROVEN_MACROS`(렌더 실증 allowlist). 글리프 = unicode_glyph_classes 전 문자.
+    manifest가 정본이므로 여기서 별도 열거를 만들지 않는다(단일 진실 원천).
+
+    Raises:
+        FileNotFoundError: manifest 부재.
+        ValueError: 필수 키 부재·구조 위반(침묵 실패 금지).
+    """
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for key in ("cases", "accent_macros", "unicode_glyph_classes"):
+        if key not in payload:
+            raise ValueError(f"manifest 필수 키 부재: {key!r} ({manifest_path})")
+
+    macros: set[str] = set(KATEX_PROVEN_MACROS)
+    for case in payload["cases"]:
+        if not isinstance(case, dict) or "input" not in case or "canonical" not in case:
+            raise ValueError(f"manifest cases 항목 구조 위반: {case!r} ({manifest_path})")
+        macros.update(_MACRO_RE.findall(str(case["input"])))
+        macros.update(_MACRO_RE.findall(str(case["canonical"])))
+    macros.update(f"\\{name}" for name in payload["accent_macros"])
+
+    glyphs: set[str] = set()
+    for chars in payload["unicode_glyph_classes"].values():
+        for token in chars:
+            # 항목은 단일 문자 규약이나, 방어적으로 문자 단위로 편입한다(다문자 항목도 안전).
+            glyphs.update(str(token))
+    return SupportSet(macros=frozenset(macros), glyphs=frozenset(glyphs))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 코퍼스 스캔 — 표기 필드 전수(문항 3필드 + 수식 latex)
+# ──────────────────────────────────────────────────────────────────────────
+@dataclass(slots=True)
+class CorpusScan:
+    """코퍼스 전수 스캔 결과 — 토큰별 {출처: 등장 횟수} 원장(집계 전 원자료)."""
+
+    problems_scanned: int = 0
+    formulas_scanned: int = 0
+    # token → {source_name: count}. source_name = 코퍼스 디렉토리명(problem_bank_v1 등).
+    macro_occurrences: dict[str, dict[str, int]] = field(default_factory=dict)
+    glyph_occurrences: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    def _accumulate(self, table: dict[str, dict[str, int]], found: Counter[str], src: str) -> None:
+        for token, count in found.items():
+            per_source = table.setdefault(token, {})
+            per_source[src] = per_source.get(src, 0) + count
+
+    def add_text(self, text: str, source: str) -> None:
+        """표기 필드 텍스트 1건을 두 축(매크로·글리프)으로 추출해 원장에 누적한다."""
+        self._accumulate(self.macro_occurrences, extract_macros(text), source)
+        self._accumulate(self.glyph_occurrences, extract_math_glyphs(text), source)
+
+
+def _notation_texts(
+    question_text: str | None, explanation: str | None, choices: Sequence[str] | None
+) -> list[str]:
+    """문항 1건의 표기 필드(question_text·answer_explanation·choices) → 비어있지 않은 텍스트."""
+    texts = [t for t in (question_text, explanation) if t]
+    if choices:
+        texts.extend(c for c in choices if c)
+    return texts
+
+
+def scan_corpora(problem_paths: Sequence[Path], formulas_path: Path) -> CorpusScan:
+    """리포 커밋 코퍼스 전수 스캔 — 문항 표기 3필드 + 수식 `latex`(hermetic·DB 0).
+
+    문항은 L1 정본 로더 `load_problem_bank_records`(저작권 위생·Problem 스키마 검증 동반)로
+    읽는다 — 로더의 검증 실패(위생·스키마)는 그대로 전파한다(침묵 통과 금지). 수식 JSONL은
+    줄 단위 파싱하며 오류에 예외 타입명·줄 번호를 병기해 명시 실패한다.
+
+    Raises:
+        FileNotFoundError: 코퍼스 0건(전수 측정이 공허하게 통과하는 것 차단) 또는 파일 부재.
+        ValueError: 수식 JSONL 파싱 실패·latex 필드 부재(줄 번호 병기).
+    """
+    if not problem_paths:
+        raise FileNotFoundError(
+            "문항 코퍼스 0건 — problem_bank_*/problems.jsonl이 없다. 전수 측정이 공허하게 "
+            "통과할 수 없으므로 명시 실패한다(--corpus-root 확인)."
+        )
+    scan = CorpusScan()
+    for path in problem_paths:
+        source = path.parent.name
+        for record in load_problem_bank_records(path):
+            problem = record.problem
+            for text in _notation_texts(
+                problem.question_text, problem.answer_explanation, problem.choices
+            ):
+                scan.add_text(text, source)
+            scan.problems_scanned += 1
+
+    formula_source = formulas_path.parent.name
+    try:
+        formula_text = formulas_path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"수식 코퍼스 부재: {formulas_path} ({type(exc).__name__}) — skip 은폐 금지"
+        ) from exc
+    for line_num, raw in enumerate(formula_text.splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        try:
+            obj = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{formulas_path}:{line_num}: {type(exc).__name__}: {exc}") from exc
+        latex = obj.get("latex") if isinstance(obj, dict) else None
+        if not isinstance(latex, str) or not latex.strip():
+            raise ValueError(
+                f"{formulas_path}:{line_num}: latex 필드 부재/공백 — 표기 필드 누락을 "
+                "조용히 건너뛰지 않는다"
+            )
+        scan.add_text(latex, formula_source)
+        scan.formulas_scanned += 1
+    return scan
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 베이스라인 (래칫 정본) — 로드만 한다. 갱신은 의식적 수동 편집(자동 갱신 금지).
+# ──────────────────────────────────────────────────────────────────────────
+_BASELINE_KINDS: Final[frozenset[str]] = frozenset({"macro", "glyph"})
+
+
+def load_baseline(path: Path) -> frozenset[tuple[str, str]]:
+    """베이스라인 JSON → {(kind, token)} 집합. 부재·구조 위반은 명시 실패.
+
+    베이스라인은 첫 실측 산출로 생성·커밋된 Missing Symbol Report 정본이며, 갱신(항목 추가·
+    해소 제거)은 의식적 수동 편집으로만 한다 — 이 로더는 읽기 전용이고 쓰기 경로는 없다.
+
+    Raises:
+        FileNotFoundError: 베이스라인 부재(첫 생성도 수동 커밋 — 자동 생성 경로 없음).
+        ValueError: JSON 파싱 실패·구조 위반(예외 타입명 병기).
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"베이스라인 부재: {path} ({type(exc).__name__}) — 첫 실측 산출을 수동 커밋해야 "
+            "게이트가 가동된다(자동 생성 경로 없음·래칫 보호)"
+        ) from exc
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path}: {type(exc).__name__}: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("missing"), list):
+        raise ValueError(f"{path}: 베이스라인 구조 위반 — 최상위 dict + missing 리스트 필수")
+    out: set[tuple[str, str]] = set()
+    for entry in payload["missing"]:
+        if not isinstance(entry, dict) or "token" not in entry or "kind" not in entry:
+            raise ValueError(f"{path}: missing 항목 구조 위반: {entry!r}")
+        kind = str(entry["kind"])
+        if kind not in _BASELINE_KINDS:
+            raise ValueError(f"{path}: 알 수 없는 kind {kind!r} (허용: {sorted(_BASELINE_KINDS)})")
+        out.add((kind, str(entry["token"])))
+    return frozenset(out)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 판정 (순수) — 누락·신규 누락·해소 회계
+# ──────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True, slots=True)
+class MissingToken:
+    """누락 심볼 1건 — 코퍼스에 등장하나 지원 집합 밖(출처·횟수 병기·Missing Symbol Report 행)."""
+
+    token: str
+    kind: str  # "macro" | "glyph"
+    occurrences: int
+    sources: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageReport:
+    """커버리지 측정 결과 — 전수 통계 + 누락·베이스라인 대비 신규/해소(정직 회계). 불변."""
+
+    problems_scanned: int
+    formulas_scanned: int
+    macro_occurrence_total: int
+    macro_distinct: int
+    macro_supported_distinct: int
+    glyph_occurrence_total: int
+    glyph_distinct: int
+    glyph_supported_distinct: int
+    missing: tuple[MissingToken, ...]
+    new_missing: tuple[MissingToken, ...]  # 베이스라인 밖 누락 — 게이트 위반(exit 1)
+    baseline_resolved: tuple[str, ...]  # 베이스라인엔 있으나 이번 측정에 없음(수동 정리 후보)
+
+    @property
+    def gate_ok(self) -> bool:
+        """게이트 판정 — 신규 누락 0이면 통과(베이스라인 내 누락은 리포트만·래칫)."""
+        return not self.new_missing
+
+
+def _missing_for_axis(
+    occurrences: dict[str, dict[str, int]], supported: frozenset[str], kind: str
+) -> list[MissingToken]:
+    """한 축(매크로/글리프)의 누락 목록 — 등장 횟수 내림차순·토큰 오름차순(결정론)."""
+    out = [
+        MissingToken(
+            token=token,
+            kind=kind,
+            occurrences=sum(per_source.values()),
+            sources=dict(sorted(per_source.items())),
+        )
+        for token, per_source in occurrences.items()
+        if token not in supported
+    ]
+    out.sort(key=lambda m: (-m.occurrences, m.token))
+    return out
+
+
+def evaluate(
+    scan: CorpusScan, support: SupportSet, baseline: frozenset[tuple[str, str]]
+) -> CoverageReport:
+    """스캔 원장 × 지원 집합 × 베이스라인 → 커버리지 판정(순수·IO 0)."""
+    missing = _missing_for_axis(scan.macro_occurrences, support.macros, "macro")
+    missing += _missing_for_axis(scan.glyph_occurrences, support.glyphs, "glyph")
+    missing.sort(key=lambda m: (m.kind, -m.occurrences, m.token))
+
+    new_missing = tuple(m for m in missing if (m.kind, m.token) not in baseline)
+    observed_missing = {(m.kind, m.token) for m in missing}
+    resolved = tuple(
+        sorted(
+            f"{kind}:{token}" for kind, token in baseline if (kind, token) not in observed_missing
+        )
+    )
+    return CoverageReport(
+        problems_scanned=scan.problems_scanned,
+        formulas_scanned=scan.formulas_scanned,
+        macro_occurrence_total=sum(sum(per.values()) for per in scan.macro_occurrences.values()),
+        macro_distinct=len(scan.macro_occurrences),
+        macro_supported_distinct=sum(
+            1 for token in scan.macro_occurrences if token in support.macros
+        ),
+        glyph_occurrence_total=sum(sum(per.values()) for per in scan.glyph_occurrences.values()),
+        glyph_distinct=len(scan.glyph_occurrences),
+        glyph_supported_distinct=sum(
+            1 for token in scan.glyph_occurrences if token in support.glyphs
+        ),
+        missing=tuple(missing),
+        new_missing=new_missing,
+        baseline_resolved=resolved,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 리포트 렌더 (사람 가독) + CLI
+# ──────────────────────────────────────────────────────────────────────────
+def render_report(report: CoverageReport, *, control_empty_support: bool) -> str:
+    """사람 가독 요약 — 전수 통계·누락 목록(전체)·신규/해소·게이트 판정."""
+    lines = [
+        "=" * 64,
+        "표기 커버리지 하네스 (NS-03) — 코퍼스 표기 ⊆ 지원 표기 게이트",
+        "=" * 64,
+        f"코퍼스: 문항 {report.problems_scanned}건 · 수식 노드 {report.formulas_scanned}건",
+        f"매크로: 연 {report.macro_occurrence_total}회 / 고유 {report.macro_distinct}종 "
+        f"(지원 {report.macro_supported_distinct}·누락 "
+        f"{report.macro_distinct - report.macro_supported_distinct})",
+        f"글리프: 연 {report.glyph_occurrence_total}회 / 고유 {report.glyph_distinct}종 "
+        f"(지원 {report.glyph_supported_distinct}·누락 "
+        f"{report.glyph_distinct - report.glyph_supported_distinct})",
+    ]
+    if control_empty_support:
+        lines.append("[변별력 대조군] 지원 집합 공집합 강제 — exit 1이 나와야 검출기 정상.")
+    known_missing = [m for m in report.missing if m not in report.new_missing]
+    if known_missing:
+        lines.append(f"[누락 심볼 — 베이스라인 내 {len(known_missing)}건(리포트만·래칫)]")
+        for m in known_missing:
+            lines.append(f"  {m.token} ({m.kind}) x{m.occurrences} — {m.sources}")
+    if report.new_missing:
+        lines.append(f"[신규 누락 — 게이트 위반 {len(report.new_missing)}건]")
+        for m in report.new_missing:
+            lines.append(f"  {m.token} ({m.kind}) x{m.occurrences} — {m.sources}")
+        lines.append(
+            "  → 조치: ①지원으로 승격(렌더 실증 테스트 + manifest/allowlist 등재) 또는 "
+            "②의식적 수동 편집으로 베이스라인 등재(공백 인정·Missing Symbol Report)."
+        )
+    if report.baseline_resolved:
+        lines.append(
+            f"[베이스라인 해소 {len(report.baseline_resolved)}건 — "
+            "수동 편집으로 제거 검토(자동 갱신 없음)]"
+        )
+        for token in report.baseline_resolved:
+            lines.append(f"  {token}")
+    lines.append("[게이트 밖 기록 — notation_contract.md §6(측정 축과 별개)]")
+    for gap in KNOWN_GAPS_OUT_OF_SCOPE:
+        lines.append(f"  - {gap.splitlines()[0][:60]}…")
+    verdict = "PASS" if report.gate_ok else "FAIL"
+    lines.append(f"게이트 판정(신규 누락 0): {verdict}")
+    lines.append("=" * 64)
+    return "\n".join(lines)
+
+
+def _repo_root() -> Path:
+    # src/backend/whymath_backend/l3/ → repo root 5단계(harness eval 선례와 동일 깊이).
+    return Path(__file__).resolve().parents[4]
+
+
+def build_json_payload(report: CoverageReport, *, control_empty_support: bool) -> dict[str, Any]:
+    """JSON 리포트 페이로드 — 전 통계·누락 목록·known_gaps 메타(§6 전재)."""
+    payload: dict[str, Any] = dataclasses.asdict(report)
+    payload["gate_ok"] = report.gate_ok
+    payload["control_empty_support"] = control_empty_support
+    payload["known_gaps_out_of_scope"] = list(KNOWN_GAPS_OUT_OF_SCOPE)
+    return payload
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI — 코퍼스 표기 커버리지 게이트. exit 0(신규 누락 0)/1(신규 누락 발견)."""
+    parser = argparse.ArgumentParser(
+        prog="python -m whymath_backend.l3.notation_coverage",
+        description=(
+            "표기 커버리지 하네스(NS-03) — 코퍼스 표기 ⊆ 지원 표기를 전수 측정하고 "
+            "베이스라인 대비 신규 누락 발견 시 exit 1(래칫·hermetic·LLM 0)."
+        ),
+    )
+    parser.add_argument(
+        "--corpus-root",
+        type=Path,
+        default=None,
+        help="코퍼스 루트(기본 repo data/corpus) — problem_bank_*/problems.jsonl + "
+        "formula_graph_v1/formulas.jsonl을 읽는다.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="지원 표기 정본(기본 repo data/notation_support_manifest.json).",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="누락 베이스라인(기본 repo data/notation_missing_baseline.json) — 갱신은 수동 편집만.",
+    )
+    parser.add_argument("--json", type=Path, default=None, help="JSON 리포트 출력 경로(선택).")
+    parser.add_argument(
+        "--control-empty-support",
+        action="store_true",
+        help="변별력 대조군 — 지원 집합을 비워 측정(신규 누락이 실측돼 exit 1이어야 정상).",
+    )
+    args = parser.parse_args(argv)
+
+    root = _repo_root()
+    corpus_root: Path = (
+        args.corpus_root if args.corpus_root is not None else root / "data" / "corpus"
+    )
+    manifest_path: Path = (
+        args.manifest
+        if args.manifest is not None
+        else root / "data" / "notation_support_manifest.json"
+    )
+    baseline_path: Path = (
+        args.baseline
+        if args.baseline is not None
+        else root / "data" / "notation_missing_baseline.json"
+    )
+
+    # manifest는 대조군 모드에서도 *먼저* 로드한다(정본 구조 검증 자체는 항상 수행).
+    support = load_support_set(manifest_path)
+    if args.control_empty_support:
+        support = EMPTY_SUPPORT
+
+    problem_paths = sorted(corpus_root.glob("problem_bank_*/problems.jsonl"))
+    scan = scan_corpora(problem_paths, corpus_root / "formula_graph_v1" / "formulas.jsonl")
+    baseline = load_baseline(baseline_path)
+    report = evaluate(scan, support, baseline)
+
+    print(render_report(report, control_empty_support=args.control_empty_support))
+    if args.json is not None:
+        payload = build_json_payload(report, control_empty_support=args.control_empty_support)
+        args.json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"JSON 리포트 저장: {args.json}")
+    return _EXIT_OK if report.gate_ok else _EXIT_GATE_FAIL
+
+
+if __name__ == "__main__":  # pragma: no cover — 모듈 실행 진입점
+    sys.exit(main())

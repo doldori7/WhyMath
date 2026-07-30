@@ -407,6 +407,76 @@ unblock=공개 β 준비 착수], validate green **131건**) + 정본 3곳 개�
 
 정본: `docs/architecture/account_security_gap_review.md`.
 
+### 2026-07-30 (사고 규명·회수 Stage 1): **미병합 브랜치 9일 고립 발견 — claude/shadow-data-s3-pilot-nh5kbz(70커밋·128파일) main과 무관하게 분기·SEC-01 중복 완료 확인·S3-13/NS-03 회수** (claude 규명·구현, Kiki "지금 회수 착수")
+
+**발견 경위**: S3-01(파일럿 코호트) 착수 트리거③(자연 자유사용 대표측정) 현황을 확인하던 중, `claude/shadow-data-s3-pilot-nh5kbz` 브랜치가 main과 공통 조상 `907fca9f`(2026-07-21)에서 갈라진 뒤 **한 번도 병합되지 않고 9일간 방치**돼 있음을 발견. 그 사이 양쪽이 각자 70여 커밋씩 쌓았다(main: OPS-06~15·HARN-06~11·PED-01/02·SEC-02 외 다수. shadow: S3-09~23·MOB-02~06·NS-01~03·ARCH-13/14·SEC-01). 그 브랜치 자신의 MEMORY에는 이미 2026-07-23 "브랜치-로컬 backlog 정본 포크" 재발방지 규칙이 등재돼 있었고 "머지 타이밍은 Kiki의 'pr' 지시 대기"로 적혀 있었으나, 그 지시가 오지 않은 채 하루치 작업(SEC-01)이 더 쌓이고 멈췄다 — **등재된 텍스트 규칙이 재발을 막지 못한 사례**(HARN-10·HARN-11이 이미 독립적으로 겨냥한 것과 같은 부류: ARCH-13 중복·S3-11 근접중복 등, 전부 "병렬 세션이 서로의 브랜치를 못 봄"이 근본원인).
+
+**실측(Explore 에이전트 2건, git 명령 전수 근거)**:
+- **태스크 26개 분류**: MOB-02~06(분기 전 공통자산·조치 불필요) · S3-13,17~23·NS-01~03(11건, ID 충돌 없음·회수 가능) · S3-09,10,11,12,14,15,16(7건, **main이 같은 번호를 전혀 다른 작업에 이미 재사용** — 예: shadow의 S3-09="학습 루프 닫힘" vs main의 S3-09="문제은행 v0 검수". 재번호 필요) · **ARCH-13·ARCH-14·SEC-01(3건, main에 독립 구현이 이미 완료·중복 확인)**.
+- **SEC-01 중복 확인**: 대화 이미지 봉투 암호화가 main(PR #599·`f3517dd`)과 shadow(`6d29e56`) 양쪽에서 각자 완료됨 — 각자 alembic 마이그레이션까지 독립 생성. **OPS-07/HARN-07과 동일 부류의 사고가 이미 한 번 발생**했던 것.
+- **Alembic 충돌**: 리비전 ID `d5e6f0a1b2c3` 1건이 양쪽에서 동시에 같은 값으로 채번됨(같은 head `c4d5e6f0a1b2`에서 결정론적 sliding-window 스킴이 동일 값을 산출한 구조적 충돌). 이 마이그레이션(`dialogue_review_turns_remaining`)은 S3-10(버킷 C, 재번호 대상) 소속으로 확인 — Stage 1에서는 다루지 않고 Stage 2로 이관.
+- **모바일 충돌 위험**: `chat_screen.dart`·`mathlive_input_screen.dart`·`problem_screen.dart` 3개 파일을 main(MOB-09~13 디자인 토큰화)과 shadow(S3-12/14/17~20 신규 UX)가 각각 대폭 수정 — 자동 병합 시 라인 충돌 확정, 수동 재적용 필요(Stage 2+ 과제).
+
+**Stage 1 실행 (이번 세션)**: 충돌이 전혀 없는 최소 단위만 착지 —
+- **S3-13**(데모 문제 풀 4→1704 확장, `scripts/demo/seed_demo.py`) · **NS-03**(표기 커버리지 CLI 게이트, `l3/notation_coverage.py`+테스트+데이터 2종) 회수. 원본 `depends_on`(S3-12·NS-02)는 아직 미회수 태스크를 가리켜 제거 — 코드 임포트 실측으로 둘 다 런타임 의존이 없음을 확인(scope_drift 아님).
+- NS-03의 `data/notation_support_manifest.json`(NS-02가 만든 정적 열거 데이터)은 순수 데이터라 NS-02 코드 없이도 동봉 회수 — Dart 파이프라인이 이 계약을 실제로 지키는지의 교차검증(`notation_canonical_test.dart`)은 NS-02 착륙 전까지 없다는 뜻이지만 NS-03 자체 기능엔 무관.
+- **NS-03 CI 상시 배선**: 원 계획(ARCH-14 이관)은 main의 독립 ARCH-14와 무관해져 이 태스크가 직접 `backend` 잡에 게이트 스텝 배선(`defect_detection_eval` 등 기존 결함주입 게이트와 동일 패턴).
+- **ARCH-13·ARCH-14·SEC-01 shadow측 구현은 포팅하지 않는다(폐기)** — main에 독립 완료 존재.
+- **버킷 B 잔여 9건**(S3-17~23 중 미착수분·NS-01·NS-02)과 **버킷 C 7건**(S3-09~16 재번호 대상)은 이번 세션에서 착수하지 않음 — 후속 backlog 태스크로 원본 커밋 sha를 소스 포인터로 등재해 추적(아래 참조).
+
+**정직한 잔여**: 모바일 3개 hot file·백엔드 `api/coach.py`의 수동 재적용은 Stage 2+(별도 세션). shadow 브랜치는 삭제하지 않음(잔여 버킷의 유일한 소스). `claude/education-os-architecture-mr0fbq` 등 **이 브랜치 외에도 미병합 상태의 다른 브랜치가 최소 1개 더 존재**함을 HARN-11 결정 로그에서 확인(S3-11 근접중복 사례) — 이번 회수는 `shadow-data-s3-pilot-nh5kbz` 1건 한정이며, 미병합 브랜치 전수 조사는 범위 밖.
+
+### 2026-07-29 (설계·근접중복회피·운영 모듈): **운영(EOS) 모듈 갭 점검·설계 D1~D2 — 외부 EOS 틀 기능 42~50 대조 + S3-11 근접 중복 착수 회피(HARN-11 재실측)** (claude 설계·등재, Kiki 제공 문서)
+
+**컨텍스트**: Kiki가 일반적 EOS 틀 문서(『0단계 운영(EOS)』 42~45: 콘텐츠 저작권·출처·관리자
+CMS·버전 관리·QA 엔진 + 확장 제안 46~50: 배포·감사로그·RBAC·백업·모니터링 — WhyMath 전용
+아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청 — `knowledge_module_
+gap_review.md`(6~10)·`problem_bank_gap_review.md`(18~22)·`solution_module_gap_review.md`
+(23~27)의 같은 시리즈 자매편. 실측 대조 결과 46(배포)·49(백업)·50(모니터링)은 2026-07-26
+서비스·운영·관리 3축 검토에서 `OPS-01~04`로 이미 상환 완료, 43(CMS)·48(RBAC)은 1인 capacity
+가드상 의도적 지연, 44(버전관리)는 `knowledge_module_gap_review.md` §2-②의 기존 판정("git+
+코퍼스 버전+provenance가 정본")을 그대로 승계. 42(저작권·출처)는 스키마·불변식은 이미 있으나
+`copyright_gradient.md` §4.2가 명령한 `pool` 필드 기반 CI 차단 게이트가 전수 grep 무일치로
+미이행, 45(QA)는 harness 38모듈이 성숙했으나 이를 조립해 단일 판정을 내는 오케스트레이션이 0.
+
+**근접 중복 착수 회피(HARN-11 재실측)**: 42 갭 점검 중 코퍼스 사이드카 결손 7종을 직접
+소급 작성하려다, 그중 문제은행 v0 6종은 이미 `problem_bank_gap_review.md` D1이 설계해
+`S3-11-problem-bank-data-card`로 등재돼 있었고 **다른 미머지 브랜치(`claude/education-
+os-architecture-mr0fbq`)에서 이미 완료(done)** 상태임을 `backlog.py start S3-11-...`
+실제 시도로 확인(원격 done 감지 → 착수 거부, HARN-11 미머지 done 필터가 정상 작동).
+로컬 백로그 사본은 그 브랜치가 미머지라 여전히 `todo`로 보였다 — CLI로 착수를 시도하지
+않고 눈으로만 판단했다면 중복 구현으로 이어질 뻔했다. 그 브랜치 diff를 실측해 문제은행
+v0 6종의 사이드카·데이터 카드(`docs/data/problem_bank_corpus_v1.md`)·licensing_safety.md
+갱신이 이미 포함됨을 확인하고, 이미 만들었던 해당 5개 사이드카 파일을 제거했다. 그
+diff에 없는 진짜 미커버 2종(`problem_bank_probability_finite_v0`·`concept_visualization_v1`)
+만 실 레코드 집계 기반으로 소급 작성해 유지했다.
+
+**판정 — 의도적 미채택 7건**(협상 불가 근거 1:1, 정본 `docs/architecture/operations_module_
+gap_review.md` §2): ①저작권 기간 필드 신설(→소비처 없음, 외부 라이선스 실적재 시 재도입)
+②원본 링크 구조화 저장(→본문 미보유 정책 우회 위험, 서술형으로 충분) ③검수="사람이 봤는가"
+(→`problem_bank_gap_review.md` §2-③ 승계) ④관리자 CMS·RBAC 즉시 신설(→1인 capacity 가드)
+⑤교육과정 Branch 버전 트리(→"Curriculum은 Overlay" 불변식이 이미 흡수) ⑥UI 골든 비교
+신규(→소비처 없음) ⑦통계 이상치 검사 신규(→`problem_bank_gap_review.md` D9와 동일 사유,
+실학생 응답 0).
+
+**설계 D1~D2**(정본: `docs/architecture/operations_module_gap_review.md`): **D1** 콘텐츠
+출처·라이선스 집행 게이트 — `pool` 필드 계약(`schema/corpus_provenance.py`) + 감사 CLI
+(`ops/provenance_audit.py`, 사이드카·레코드 결손 검사 exit 0/1) + CI `policy-guard` 배선 +
+배선 실재성 테스트. S3-11이 다루지 않는 **전 코퍼스 대상 CI 집행**에 스코프를 명시적으로
+한정해 중복 회피(`ARCH-20-content-provenance-enforcement-gate`) · **D2** QA 파이프라인
+오케스트레이터 — 새 검사기 신설 없이 기존 자산(`corpus_audit_eval`·`canonicalize`·
+`crosslink_demotion_eval`·`coach_prose_leak_eval`·ARCH-20의 `provenance_audit`·`wilson`·
+`defect_detection_eval`) 조립 → 단일 JSON 리포트 + Wilson 게이트. 미측정 축(UI 골든·통계
+이상치·금칙어/PII·성능 연동)은 "검사 안 함"으로 명시(침묵 통과 금지)
+(`ARCH-21-qa-pipeline-orchestrator`, ARCH-20 의존).
+
+**등재·검증**: 태스크 2건 CLI add(`ARCH-20`·`ARCH-21`)·validate green(122건)·`ARCH-20`이
+next 최상위 후보로 정상 노출. 중복 등재 회피: `S3-11-problem-bank-data-card`(문제은행
+사이드카·데이터 카드 — 다른 브랜치 완료, 미착수) · `knowledge_module_gap_review.md` §2-②
+(버전 관리) · `problem_bank_gap_review.md` D9/`S4-15`(실응답 통계) · `OPS-01~04`(배포·백업·
+모니터링, 46·49·50). 용어 정리: 첨부 문서의 "EOS"는 `dev_constitution.md` §0이 폐기한
+대외 정체성 어휘와 동명이의 — 앞선 자매 문서들의 선례대로 "외부 EOS 틀"(참고 프레임워크
+명칭)로만 사용, 저장소 자체 정체성 선언과 무관함을 문서 §0에 명시.
 ### 2026-07-29 (설계·AI 튜터): **AI 튜터 모듈 갭 점검·설계(D1~D6) + 태스크 4건 등재 — 외부 EOS 틀 기능 37~41 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『AI Tutor』(기능 37~41: 대화형 AI 튜터·Socratic
@@ -901,6 +971,13 @@ PRD FR-010/014/020 시즌 플랜·dead table 5종 소생은 실행하지 않고 
 **적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f1a2b3c4d5e7`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
 
 **검증**: ruff·black clean·mypy Success·schema+purity 47 pass·`tests/backend/db` 221 pass(2 실패=asyncpg 부재 기존·무관). **ARCH-14 잔여**(recommended_visual_styles Overlay 이관·CI 게이트 배선①·계층 커버리지②·mobile 게이트④)는 in_progress 유지.
+### 2026-07-25 (구현·UI·MOB-14): **접근성 확대 — 조밀 위젯 대비 검증 + chat 배너 48dp** (claude, Kiki "접근성 확대(조밀 화면)")
+
+**컨텍스트**: MOB-13(접근성 baseline) 후 Kiki "여기서 가능"→"접근성 확대(조밀 화면)". 조밀 화면의 저대비 위험(onSurfaceVariant 소형 텍스트 on tonal 컨테이너)을 검증하고 MOB-13에서 보류한 배너 탭 타깃을 완결.
+
+**구현**: 대비 위험은 재사용 *위젯*에 있으므로(전체 화면 상태 구동 대신) `SceneRenderer`·`CoachSignalCard`를 실 테마(라이트·다크)로 직접 pump해 `textContrastGuideline` 검증(`accessibility_test.dart` 확장·기존 테스트 fixture 재사용). chat `_ActiveProblemBanner` 최소 48dp 탭 타깃: `BoxConstraints(minHeight: math.min(48, maxHeight), maxHeight)`로 **MOB-02 fraction 상한을 절대 넘지 않으면서**(min≤max 보장) 48dp 확보. 문서 `06 §7` 갱신.
+
+**설계 판단**: 조밀 위젯 직접 pump = 전체 화면(chat/ocr) 컨트롤러 override 하네스 없이 저대비 조합을 검증하는 최소 경로. M3 onSurfaceVariant/surfaceContainer 톤차가 커 대비 통과 예상(감사의 "경계선"은 보수적)·실패 시 CI가 지점 지목→타깃 수정. chat·ocr *전체 화면 상태* 대비는 후속(override 하네스). 배너 48dp는 maxHeight를 올리지 않는 clamp라 MOB-02 무침범. 검증=CI mobile 잡. MOB-13(PR #586) 머지됨 → rebase·새 PR.
 
 ### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
 

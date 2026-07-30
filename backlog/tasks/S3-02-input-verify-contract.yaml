@@ -15,8 +15,12 @@ acceptance:
 artifacts:
   - "PR #533"
   - 6d6ab09
+  - "PR #551"
+  - "PR #552"
+  - "PR #558"
+  - "PR #561"
 paths:
   - "src/backend/whymath_backend/l3/**"
 session: null
-notes: "실사용 shadow unverifiable 89%(2026-07-17 n=9) 근본원인=verify_step이 표현식 동치만 판정·등호 방정식은 unverifiable. 방향 B(검증 확장·Kiki 2026-07-18): classify_step_break 해집합 로직을 verify 경로로 승격. 파일럿 선행조건 겸 S1-11 flip 재판정 선행조건(이중 용도). UI 강제(A) 지양=교수학 우선순위. [2026-07-18 done: 코드·테스트·CI green(PR#533)·거짓 incorrect 0. 잔여 acceptance '라이브 shadow 재측정 실사용 unverifiable 하락'=Kiki 실기기 후속(코드 done+라이브 후속 결정)·S1-11 flip 재판정과 연동]"
-updated: 2026-07-18
+notes: "실사용 shadow unverifiable 89%(2026-07-17 n=9) 근본원인=verify_step이 표현식 동치만 판정·등호 방정식은 unverifiable. 방향 B(검증 확장·Kiki 2026-07-18): classify_step_break 해집합 로직을 verify 경로로 승격. 파일럿 선행조건 겸 S1-11 flip 재판정 선행조건(이중 용도). UI 강제(A) 지양=교수학 우선순위. [2026-07-18 done: 코드·테스트·CI green(PR#533)·거짓 incorrect 0]. [잔여 acceptance '라이브 shadow 재측정 실사용 unverifiable 하락'=완료(MEMORY.md 정본): 2026-07-19 라이브 재측정(합성 eq 24/24 unverifiable→correct·실기기 3-state 전부 실증, 잔여 unverifiable 원인=입력 UX로 이동) → 당일 자연표기 공백 2건 발견·수정(S3-06 PR#551·S3-07 PR#552, 부수로 S3-02 자체의 실전 거짓 incorrect 2건도 발견·수정) → 2026-07-20 대본 재측정 12/12 기대 일치(거짓 incorrect 0 확정) + 파생 S3-08(PR#558) → 이 근거로 S1-11 flip 사인오프(PR#561)·기본 ON 전환 완료. 재측정 재실행 불필요]"
+updated: 2026-07-30

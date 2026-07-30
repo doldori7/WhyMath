@@ -308,7 +308,12 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
         // 상한 초과분은 내부 스크롤 — 키보드가 올라와도 발문 전체를 볼 수 있는 경로는
         // 유지하면서(스크롤) 배너가 채팅·입력 영역을 밀어내지 않게 한다(MOB-02).
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: widget.maxHeight),
+          // 접근성(MOB-14): 접힌 배너도 최소 48dp 탭 타깃. minHeight를 maxHeight로 clamp해
+          // (math.min) MOB-02의 fraction 상한을 절대 넘지 않으면서 min>max assert도 피한다.
+          constraints: BoxConstraints(
+            minHeight: math.min(48, widget.maxHeight),
+            maxHeight: widget.maxHeight,
+          ),
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(

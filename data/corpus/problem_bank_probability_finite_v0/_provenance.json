@@ -1,0 +1,25 @@
+{
+  "corpus_name": "problem_bank_probability_finite_v0",
+  "generated": "2026-07-29 (소급 작성 — 코퍼스 실 레코드 집계 기반, EOS 운영 평면 공백 점검 §3-1)",
+  "generation_method": "harness/finite_probability_batch.py (+ l3/equivalent/finite_probability_skeleton_generator.py) — 확률(유한 전수형) 동등문제 생성",
+  "record_count": 34,
+  "record_field_distribution": {
+    "license": {"WHYMATH_GENERATED": 34},
+    "source_type": {"자체생성": 34},
+    "generation_type": {"FULLY_GENERATED": 34}
+  },
+  "source_citation": "출처: WhyMath 자체 저작 확률(유한 전수 검증) 동등문제(WHYMATH_GENERATED). S4-13 SymPy 불가 영역 대체 검증 스택 파일럿 산출물.",
+  "license_notice": "본 코퍼스의 모든 문항은 WhyMath가 자체 생성한 저작물(license=WHYMATH_GENERATED, source_type=자체생성)이다. 전 34건 필드 실측으로 확인 — 예외 0.",
+  "copyright_rail": [
+    "평가원·EBS·검정교과서의 본문·문항·풀이·그림 복제 0(CLAUDE.md 절대 금기·저작권 가이드 v2.0 §32 단서).",
+    "모든 레코드 source_type=자체생성·license=WHYMATH_GENERATED — 메타 전용 출처(평가원/EBS/교과서) 레코드 0."
+  ],
+  "contract": [
+    "l3/equivalent/finite_probability_skeleton_generator.py + S2-a 수용 게이트를 통과한 후보만 적재.",
+    "SymPy 불가(확률 유한 전수형) 영역이라 대체 검증 스택(S4-13)이 정확성 게이트를 대신한다."
+  ],
+  "authoring_fields": {
+    "note": "problems.jsonl 각 레코드의 license/source_type/generation_type은 저작 메타(Problem 스키마 밖)."
+  },
+  "sidecar_note": "이 파일은 2026-07-29 EOS 운영 평면 공백 점검(docs/reviews/eos_ops_plane_gap_review_2026-07.md §2-1)에서 결손이 실측되어 소급 작성됨 — 정본 형식은 problem_bank_v1/_provenance.json 답습."
+}
