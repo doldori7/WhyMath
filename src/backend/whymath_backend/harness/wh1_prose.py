@@ -96,7 +96,7 @@ REPHRASABLE_TEMPLATES: frozenset[str] = frozenset(
     {NEUTRAL_GUIDE_UTTERANCE, ENCOURAGE_FALLBACK_UTTERANCE}
 )
 
-# 프로즈 길이 상한 — 원 템플릿(24~27자)의 ~4.5배. LLM 폭주·프롬프트 주입 표면 방어.
+# 프로즈 길이 상한 — 원 템플릿(29~33자)의 ~3.6배. LLM 폭주·프롬프트 주입 표면 방어.
 _MAX_PROSE_LEN = 120
 # GT echo 판정 최소 길이(정규형 기준) — 1자 조각("x")의 우연 일치 오탐 방지.
 _MIN_ECHO_LEN = 2

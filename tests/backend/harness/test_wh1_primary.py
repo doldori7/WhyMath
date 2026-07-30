@@ -127,10 +127,11 @@ class TestServesHarnessUtterance:
         assert obs.problem_id == "p-1"
 
     def test_provider_failure_degrades_to_deterministic_safe_utterance(self) -> None:
+        """핀 갱신: S3-28(원 S3-11) 오해 문구 정비 — 전환 암시 없는 격려 폴백으로 값 변경."""
         # provider 장애는 정책이 안전 강등(격려·utterance 없음) → 하네스 파생 결정론 발화 반환.
         # 이 발화도 하네스 게이트 통과분(정답 미포함)이라 노출 가능 — coach 폴백(None)과 구분.
         served = _run(provider=_BoomProvider())
-        assert served == "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."
+        assert served == "좋아, 지금까지 잘 하고 있어. 이어서 풀이를 계속해 볼까?"
 
 
 # ──────────────────────────────────────────────────────────────────────────

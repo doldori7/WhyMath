@@ -371,10 +371,14 @@ _ACTIVE_HYPOTHESES_DESC = (
 
 
 # S3-27(원 S3-10) 완료 통합 — 세션/턴 응답 완료 필드 설명(SessionCreate·TurnAppend 공통).
+# S3-28(원 S3-11): 정답 도달 감지 입력원을 대화 입력(student_input)까지 확장 — 학생은 답을 대화창에
+# 자연스럽게 타이핑한다(실기기 3차 실증). 풀이 단계가 없거나 단계 감지가 실패하면 student_input도
+# verify한다(짧은 답 형태만 correct — 긴 문장·사변은 unverifiable로 자연 필터·거짓 완료 0).
 _PROBLEM_COMPLETE_DESC = (
-    "이 턴에 문제가 *완료*됐는지 — **클라가 '다음 문항으로 진행'을 판단하는 신호**. 완료는 오직 "
-    "풀이 제출(body.solution_steps 마지막 단계가 서버 verify로 correct)로 정답 도달을 감지한 뒤, "
-    "*Polya 돌아보기(메타인지) 1턴*을 거쳐서만 True가 된다(별도 '정답 제출' 버튼 대체). True면 "
+    "이 턴에 문제가 *완료*됐는지 — **클라가 '다음 문항으로 진행'을 판단하는 신호**. 완료는 풀이 "
+    "제출(body.solution_steps 마지막 단계) 또는 대화 입력(student_input이 짧은 답 형태)이 서버 "
+    "verify로 correct일 때 정답 도달을 감지한 뒤, *Polya 돌아보기(메타인지) 1턴*을 거쳐서만 True가 "
+    "된다(별도 '정답 제출' 버튼 대체). True면 "
     "서버가 ProblemAttempt(is_correct=True)를 *이미 적재*하고 숙달을 전파했으므로 **클라는 별도로 "
     "POST /v1/me/attempts를 부르지 않는다**(중복 적재 금지). incorrect/미검증이면 항상 False."
 )
@@ -806,25 +810,45 @@ def _last_solution_step(body: CoachRequest) -> str | None:
 async def _final_answer_correct(
     session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
 ) -> bool:
-    """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 동치인지 — L3 서버 권위 판정(비노출).
+    """이 턴의 최종답 후보(풀이 마지막 단계 → 대화 입력)가 기대정답과 동치인지 — 서버 권위 판정.
 
     완료 상태머신의 *정답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·problem_id
-    없음·마지막 단계 없음이면 조회조차 하지 않고 False. 있으면 문항을 *무게이트*로 로드해
-    (`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션 기본 기능) 마지막 단계를
+    없음·후보 없음이면 조회조차 하지 않고 False. 있으면 문항을 *무게이트*로 로드해
+    (`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션 기본 기능) 후보를
     `verify_final_answer`로 3상태 판정하고 **correct일 때만 True**를 준다. incorrect/unverifiable은
     False(완료 위장 금지·정직). 기대정답(`Problem.answer`)은 이 함수 밖으로 결코 흘러나가지 않는다
     (verify_final_answer가 상태·사유만 반환·사유엔 학생 원문만 반향).
+
+    **S3-28(원 S3-11) 대화 입력 확장(실기기 3차 실증)**: 학생은 답을 대화창(student_input)에
+    자연스럽게 타이핑한다 — 대화 입력도 풀이과정이다(Kiki 교수학 취지). 감지 순서:
+      ① 풀이 마지막 단계(`solution_steps` — S3-27 기존 경로)가 correct면 즉시 True.
+      ② 단계가 없거나 ①이 correct가 아니면 `student_input`으로도 verify를 시도한다.
+    **보수성(거짓 완료 0)**: `verify_final_answer`는 파싱 불가한 긴 문장·사변("인수분해 근 중에
+    큰거")을 unverifiable로 떨어뜨리므로 짧은 답 형태("x=3"·"3"·"a=2")만 correct가 된다 — 별도
+    휴리스틱 없이 검증기 자체가 자연 감지 필터다. incorrect 대화 입력("x=5")은 감지하지 않고
+    기존 코칭 흐름(NONE)을 유지한다(정답 노출 금지 계약 그대로).
     """
     if not get_settings().l4_solution_completion_enabled or problem_id is None:
         return False
     last_step = _last_solution_step(body)
-    if last_step is None:
+    # S3-28: 대화 입력도 최종답 후보 — 공백뿐이면 None(감지 대상 아님).
+    chat_answer = body.student_input.strip() or None
+    if last_step is None and chat_answer is None:
         return False
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
         return False  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
-    result = verify_final_answer(last_step, problem)
-    return result.state is FinalAnswerState.correct
+    # ① 풀이 단계 경로(S3-27) — 마지막 단계가 correct면 즉시 감지.
+    if last_step is not None:
+        result = verify_final_answer(last_step, problem)
+        if result.state is FinalAnswerState.correct:
+            return True
+    # ② S3-28 대화 입력 폴백 — 단계가 없거나 단계 감지 실패면 student_input으로도 시도.
+    #    (마지막 단계와 동일 문자열이면 재검증 생략 — 같은 판정이라 중복 호출만 아낀다.)
+    if chat_answer is not None and chat_answer != last_step:
+        result = verify_final_answer(chat_answer, problem)
+        return result.state is FinalAnswerState.correct
+    return False
 
 
 async def _complete_problem(
@@ -904,9 +928,9 @@ async def _resolve_completion(
 
     흐름(순수 결정은 `l4/completion.decide_completion`·부작용만 여기서):
       1. 게이트 off → no-op(`handled=False`·기존 발화·회귀 완전 불변).
-      2. *돌아보기 전(prior=0)이고 미완료*일 때만 이 턴 풀이 마지막 단계를 verify로 판정
-         (`_final_answer_correct`) — 돌아보기 중·완료된 세션은 감지 자체를 건너뛴다(불필요 조회 0·
-         돌아보기 응답 턴은 재검증하지 않음).
+      2. *돌아보기 전(prior=0)이고 미완료*일 때만 이 턴의 최종답 후보(풀이 마지막 단계 → S3-28
+         대화 입력 폴백)를 verify로 판정(`_final_answer_correct`) — 돌아보기 중·완료된 세션은
+         감지 자체를 건너뛴다(불필요 조회 0·돌아보기 응답 턴은 재검증하지 않음).
       3. `decide_completion`으로 4전이 결정.
       4. `NONE` → no-op(기존 발화 유지). 그 외 → 결정론 발화로 override(prompt·socratic_category).
       5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보).

@@ -1725,9 +1725,13 @@ class TestStepShadowProblemContext:
 
     def test_gate_off_skips_answer_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 게이트 off(프로덕션 기본) → 정답 조회·접근 자체를 안 함(불필요 적재 차단·비용).
+        # S3-28(원 S3-11) 갱신 사유: 대화 입력(student_input) 최종답 감지가 추가되어 완료 게이트가
+        # 켜져 있으면 대화 턴에도 문항 정답을 *정당하게* 읽는다 — 이 테스트는 step-shadow 게이트의
+        # 조회 차단만 검증하므로 완료 감지 게이트를 함께 꺼서 검증 대상을 분리한다.
         from whymath_backend.db.models.problem import Problem as ProblemORM
 
         monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
+        monkeypatch.setenv("WHYMATH_L4_SOLUTION_COMPLETION_ENABLED", "false")
         get_settings.cache_clear()
         pid = uuid.uuid4()
 

@@ -444,6 +444,10 @@ class TestEndTurnUtterance:
         assert out.utterance == "명시 발화"  # type: ignore[attr-defined]
 
     def test_encouragement_fallback_utterance(self) -> None:
-        """격려 + 발화 미지정 → 격려 폴백 발화."""
+        """격려 + 발화 미지정 → 격려 폴백 발화.
+
+        핀 문자열 갱신: S3-28(원 S3-11) 오해 문구 정비 — 구 "다음으로 가보자"는 전환 없이 발화돼
+        학생을 혼란시킴(실기기 실증) → 전환 암시 없는 "이어서 풀이 계속" 문구로 의도적 값 변경.
+        """
         out = _run([EndTurnAction(action_type="격려", utterance=None)])
-        assert out.utterance == "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."  # type: ignore[attr-defined]
+        assert out.utterance == "좋아, 지금까지 잘 하고 있어. 이어서 풀이를 계속해 볼까?"  # type: ignore[attr-defined]

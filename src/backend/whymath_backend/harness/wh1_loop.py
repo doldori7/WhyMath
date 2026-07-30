@@ -112,8 +112,11 @@ EndTurnType = Literal["질문", "힌트", "출제", "격려"]
 # 파생 발화 고정 템플릿(공개 상수·값 불변) — "같은 답 반복"의 잔여이자 S4-04 프로즈
 # rephrase의 정확-일치 화이트리스트 원천. probe(_FALLBACKS)·프로즈 계층이 import해
 # 단일 원천으로 쓴다. 값 변경은 회귀 핀(test_wh1_loop.py 정확 문자열 단언)과 함께만.
+# S3-28(원 S3-11) 문구 정비(실기기 실증): 구 격려 폴백("…다음으로 가보자")은 실제로 아무것도
+# 넘어가지 않는데 전환을 암시해 학생을 혼란시켰다 — 전환 암시 없는 "이어서 풀이 계속" 문구로
+# 교체(정서안전·톤필터 금지 6패턴 0·등호/숫자/"정답" 키워드 0 — 프로즈 위생 게이트 통과 유지).
 NEUTRAL_GUIDE_UTTERANCE = "방금 단계에서 무엇을 근거로 그렇게 했는지 말해줄래?"
-ENCOURAGE_FALLBACK_UTTERANCE = "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."
+ENCOURAGE_FALLBACK_UTTERANCE = "좋아, 지금까지 잘 하고 있어. 이어서 풀이를 계속해 볼까?"
 
 UtteranceSource = Literal["policy", "derived"]
 """발화 출처 — policy(정책 명시 발화 존중 턴)·derived(하네스 파생: 개입·중립·출제·격려).

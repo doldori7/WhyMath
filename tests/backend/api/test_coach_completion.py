@@ -436,6 +436,169 @@ class TestAppendTurnsUnverifiable:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# ⑤ S3-28(원 S3-11): 대화 입력(student_input) 최종답 감지 — 대화 모드에서도 돌아보기→완료
+# ──────────────────────────────────────────────────────────────────────────
+class TestChatInputAnswerDetection:
+    """S3-28(원 S3-11) — 학생이 답을 대화창(student_input)에 타이핑해도 완료 경로가 작동한다
+    (서버만·클라 무변경).
+
+    실기기 3차 실증: 학생은 답을 풀이 제출이 아니라 대화창에 자연스럽게 타이핑한다. 감지는
+    solution_steps(S3-27) 우선·없거나 감지 실패면 student_input 폴백. 보수성(거짓 완료 0)은
+    verify_final_answer의 3상태가 자연 필터 — 짧은 답 형태만 correct·긴 문장/사변은 unverifiable.
+    """
+
+    @pytest.mark.parametrize("chat_answer", ["x=3", "3"])
+    def test_chat_answer_enters_review_on_create(self, chat_answer: str) -> None:
+        """① 대화 입력 "x=3"/"3"(기대정답 3) → 돌아보기 대기(완료 아님·attempt 미적재)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": chat_answer, "problem_id": str(pid)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        # solution_steps 경로(S3-27)와 동일 — 돌아보기 진입·완료 아님.
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is True
+        assert body["completed_attempt_id"] is None
+        assert _REFLECTION_MARK in body["decision"]["prompt"]
+        assert body["decision"]["socratic_category"] == "meta"
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        assert dialogue.review_turns_remaining == 1
+        assert dialogue.attempt_id is None
+
+    def test_chat_answer_enters_review_on_append(self) -> None:
+        """① append_turns에서도 대화 입력 정답 감지 → 돌아보기 대기(생성/추가 양쪽 계약)."""
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        dialogue = _preloaded_dialogue(did, pid, total_turns=2, review_turns_remaining=0)
+        client, captured = _client(
+            preload={(DialogueORM, did): dialogue, (ProblemORM, pid): _problem("3")}
+        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": "x=3"})
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is True
+        assert _REFLECTION_MARK in body["decision"]["prompt"]
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        assert dialogue.review_turns_remaining == 1
+
+    def test_reflection_after_chat_detection_completes(self) -> None:
+        """② 대화 감지(생성 턴) → 이어 자연어 근거 턴 → 완료 확정·attempt 적재(전체 흐름 E2E)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        # 턴 1 — 대화 입력 "x=3" → 돌아보기 진입.
+        resp1 = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "x=3", "problem_id": str(pid)},
+        )
+        assert resp1.status_code == 201, resp1.text
+        assert resp1.json()["awaiting_reflection"] is True
+        did = uuid.UUID(resp1.json()["dialogue_id"])
+        # 생성된 dialogue를 preload에 등록해 append가 조회할 수 있게 한다(hermetic 세션 규약).
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        captured._preload[(DialogueORM, did)] = dialogue
+        # 턴 2 — 자연어 근거 응답(돌아보기) → 완료 확정·ProblemAttempt(is_correct=True) 적재.
+        resp2 = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "일차방정식이라 양변을 2로 나눠서 x=3이 나왔어요"},
+        )
+        assert resp2.status_code == 201, resp2.text
+        body = resp2.json()
+        assert body["problem_complete"] is True
+        assert body["awaiting_reflection"] is False
+        assert body["completed_attempt_id"] is not None
+        assert _ACK_MARK in body["decision"]["prompt"]
+        attempts = [o for o in captured.added if isinstance(o, ProblemAttemptORM)]
+        assert len(attempts) == 1
+        assert attempts[0].is_correct is True
+        assert dialogue.attempt_id == attempts[0].attempt_id
+        assert dialogue.review_turns_remaining == 0
+
+    @pytest.mark.parametrize(
+        "long_text",
+        [
+            "인수분해 근 중에 큰거",  # 파싱 불가 사변(실기기 실측 유형)
+            "그러니까 x=3이 맞는 것 같아요",  # 정답 값이 문장 속에 있어도 파싱 불가 → 감지 안 됨
+            "이차방정식이니까 근의 공식을 쓰면 될 것 같아요",  # 중간 사변
+        ],
+    )
+    def test_long_sentence_not_detected(self, long_text: str) -> None:
+        """③ 긴 문장·사변 → unverifiable → 감지 안 됨(거짓 완료 0 — 보수성 봉인)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": long_text, "problem_id": str(pid)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert _REFLECTION_MARK not in body["decision"]["prompt"]
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        assert dialogue.review_turns_remaining == 0
+
+    def test_incorrect_chat_answer_stays_none(self) -> None:
+        """④ 오답 대화 입력 "x=5" → 감지 안 됨(NONE)·기존 코칭 흐름 유지(정답 비노출 계약)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "x=5", "problem_id": str(pid)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert _REFLECTION_MARK not in body["decision"]["prompt"]
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        assert dialogue.review_turns_remaining == 0
+
+    def test_already_completed_chat_answer_no_recompletion(self) -> None:
+        """⑤ 이미 완료된 세션(attempt_id 존재)에 대화 정답 재입력 → 재완료·중복 attempt 금지."""
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        existing_attempt = uuid.uuid4()
+        dialogue = _preloaded_dialogue(
+            did, pid, total_turns=6, review_turns_remaining=0, attempt_id=existing_attempt
+        )
+        client, captured = _client(
+            preload={(DialogueORM, did): dialogue, (ProblemORM, pid): _problem("3")}
+        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": "x=3"})
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        assert dialogue.attempt_id == existing_attempt  # 기존 링크 유지
+
+    def test_steps_detection_failure_falls_back_to_chat(self) -> None:
+        """풀이 단계 감지 실패(단계 미검증)여도 대화 입력이 correct면 감지한다(폴백 순서 봉인)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "x=3",
+                "problem_id": str(pid),
+                "solution_steps": ["2*x = 6", "그래서 답이 나왔어요"],  # 마지막 단계 unverifiable
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["awaiting_reflection"] is True
+        assert body["problem_complete"] is False
+        assert _REFLECTION_MARK in body["decision"]["prompt"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # ④ 기대정답 비노출 — 완료 경로 어디에도 Problem.answer가 응답에 새지 않음
 # ──────────────────────────────────────────────────────────────────────────
 class TestAnswerNotLeaked:
