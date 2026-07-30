@@ -14,12 +14,32 @@ upsert 키는 **이메일 해시**(`email_hash = sha256(정규화 이메일)`) �
 리프레시(OAuth-a3·a3b·a3c): 로그인 시 액세스+리프레시를 함께 발급하고(리프레시마다 `jti`=세션 행
 PK), `/refresh`는 토큰 검증·allowlist 확인 후 **회전**한다(기존 세션 취소+새 토큰 발급).
 *이미 취소된* 토큰 재제출은 **재사용 탐지**로 전체 세션을 패닉 취소(탈취 대응). `/logout`은 세션
-취소(denylist)로 즉시 무효화. 세션 목록/관리는 a3d·로그인 레이트리밋은 a4.
+취소(denylist)로 즉시 무효화. 세션 목록/관리는 a3d.
+
+SEC-08(하드닝 — 인증 표면 남용 방어 + OAuth CSRF/open-redirect 방지):
+  - **rate limit**: `/{provider}/callback`·`/refresh`에 IP 단위 한도 부착(`_rate_limit.
+    RateLimitedAuthCallback`/`RateLimitedAuthRefresh`, category="auth"). 미인증 표면이라
+    IP 키만 가능(사용자 신원 확정 전). Redis 장애 시 OPS-06 인메모리 폴백 그대로 상속.
+  - **OAuth state(CSRF)**: 이 백엔드는 `/authorize` 리다이렉트를 자체 발급하지 않는다(모바일
+    클라가 provider와 직접 리다이렉트를 주고받고 code만 서버에 POST) — 그래서 서버가
+    `GET /{provider}/state`로 opaque state를 *사전 발급*하고, 클라는 그 값을 provider
+    authorize 요청에 실어 보낸 뒤 콜백 제출 시 그대로 동봉한다. 검증은 stateless HMAC 서명
+    (`issue_oauth_state`/`verify_oauth_state`)이라 DB/Redis 저장이 없다.
+  - **redirect_uri allowlist**: `Settings.oauth_redirect_uris`에 없는 redirect_uri는 400
+    (open redirect 방지). 배포·데모 환경은 `WHYMATH_OAUTH_REDIRECT_URI_ALLOWLIST` 필수.
+  - **클라 계약 변경(breaking)**: `OAuthCallbackRequest`에 `state`(required)가 새로 추가됐다
+    — 콜백 전 반드시 `GET /{provider}/state`를 먼저 호출해 값을 받아야 한다. 실 클라(OAuth-c3
+    로그인 webview)는 이 시점 아직 미구현 스텁(`src/mobile/lib/features/auth/presentation/
+    login_screen.dart`·`oauth_code_requester.dart`)이라 이 변경의 실 사용자 영향은 0이다.
+  - **계정 잠금(lockout) 미도입**: 의도된 결정 — 아래 `oauth_callback` 근처 주석·`db/models/
+    user.py` 컬럼 부재 동결 테스트(`tests/backend/api/test_no_lockout_columns.py`) 참조.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Protocol, runtime_checkable
@@ -30,6 +50,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._rate_limit import RateLimitedAuthCallback, RateLimitedAuthRefresh
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
@@ -156,6 +177,79 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# SEC-08 — OAuth CSRF state: 서버 사전 발급 + stateless HMAC 검증(DB/Redis 저장 0)
+#
+# 이 백엔드는 `/authorize` 리다이렉트를 자체 발급하지 않는다(모바일 클라가 OAuth provider와
+# 직접 리다이렉트를 주고받고 code만 우리 서버에 POST한다). 그래서 CSRF state는 서버가
+# *사전에* opaque 토큰을 발급하고(`GET /{provider}/state`), 클라가 그 값을 provider authorize
+# 요청의 state 파라미터로 실어 보낸 뒤, 콜백 제출 시 *같은 값을 그대로 동봉*해 서버가
+# 검증하는 방식이다. payload(`provider:nonce:expiry`)를 `jwt_secret_key`로 HMAC-SHA256
+# 서명한다 — 서버 저장 없이 서명·만료만으로 발급 사실을 검증(stateless).
+# ──────────────────────────────────────────────────────────────────────────
+
+_OAUTH_STATE_SEP = "."  # payload.signature
+
+
+def issue_oauth_state(provider: str, *, settings: Settings) -> str:
+    """OAuth CSRF state 발급 — provider+nonce+만료를 HMAC-SHA256(jwt_secret_key)로 서명한 opaque
+    토큰.
+
+    클라는 이 값을 provider authorize 요청의 state 파라미터로 실어 보내고, 콜백 제출 시 그대로
+    동봉한다. 서버 저장 없음(stateless) — 서명·만료만으로 발급 사실을 검증한다.
+    """
+    nonce = uuid.uuid4().hex
+    expiry = int(time.time()) + settings.oauth_state_ttl_seconds
+    payload = f"{provider}:{nonce}:{expiry}"
+    secret = settings.jwt_secret_key.get_secret_value().encode("utf-8")
+    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}{_OAUTH_STATE_SEP}{sig}"
+
+
+def verify_oauth_state(provider: str, state: str, *, settings: Settings) -> bool:
+    """state 검증 — 서명 일치·provider 일치·만료 전이면 True.
+
+    불량 형식(구분자·필드 수 불일치)·서명 불일치·provider 불일치·만료는 모두 False(콜백이 400
+    으로 변환) — 실패 사유를 세분해 노출하지 않는다(state 위조 시도에 힌트 제공 방지).
+    """
+    try:
+        payload, sig = state.rsplit(_OAUTH_STATE_SEP, 1)
+        state_provider, _nonce, expiry_str = payload.split(":", 2)
+        expiry = int(expiry_str)
+    except ValueError:
+        return False
+    secret = settings.jwt_secret_key.get_secret_value().encode("utf-8")
+    expected_sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    if state_provider != provider:
+        return False
+    return time.time() <= expiry
+
+
+class OAuthStateResponse(BaseModel):
+    """`GET /{provider}/state` 응답 — 콜백에 그대로 동봉할 CSRF state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: str = Field(
+        description="OAuth authorize 요청에 실어 보낼 CSRF state 토큰(콜백 시 동봉)."
+    )
+
+
+@router.get(
+    "/{provider}/state",
+    response_model=OAuthStateResponse,
+    summary="OAuth CSRF state 발급",
+)
+async def issue_state(provider: str, settings: SettingsDep) -> OAuthStateResponse:
+    """provider별 state 발급 — 미인증·rate limit 없음(발급 자체는 side-effect 0·소비 없이는 무해).
+
+    실 검증(서명·provider 일치·만료)은 콜백 제출 시 `verify_oauth_state`가 수행한다.
+    """
+    return OAuthStateResponse(state=issue_oauth_state(provider, settings=settings))
+
+
 def _refresh_unauthorized() -> HTTPException:
     """리프레시/로그아웃 401 — 불량·만료·취소·미인식 토큰(`_auth.py._unauthorized` 동형)."""
     return HTTPException(
@@ -199,6 +293,7 @@ async def _revoke_all_user_sessions(session: AsyncSession, user_id: uuid.UUID) -
     "/{provider}/callback",
     response_model=OAuthTokenResponse,
     summary="OAuth 로그인 콜백 — code 교환 → 사용자 upsert → JWT 발급",
+    dependencies=[RateLimitedAuthCallback],
 )
 async def oauth_callback(
     provider: str,
@@ -209,10 +304,33 @@ async def oauth_callback(
 ) -> OAuthTokenResponse:
     """OAuth provider redirect의 authorization code로 로그인 — 토큰 발급(미인증 엔드포인트).
 
-    흐름: provider 구현 조회(미등록 404) → `fetch_identity`(code 교환·실패 502) → 사용자 upsert
-    (이메일 해시 키) → 액세스+리프레시 토큰 발급. 미성년 동의는 *보호된* 엔드포인트가 게이트하므로
-    로그인은 토큰만 발급한다(JWT 시크릿 미설정 시 500·서버 구성 오류).
+    흐름: redirect_uri allowlist 확인(미등록 400) → state 검증(불일치·만료 400) → provider 구현
+    조회(미등록 404) → `fetch_identity`(code 교환·실패 502) → 사용자 upsert(이메일 해시 키) →
+    액세스+리프레시 토큰 발급. 미성년 동의는 *보호된* 엔드포인트가 게이트하므로 로그인은 토큰만
+    발급한다(JWT 시크릿 미설정 시 500·서버 구성 오류).
+
+    **검증 순서가 provider 조회보다 앞서는 이유**: 입력 위생(redirect_uri·state)이 provider
+    존재 여부보다 먼저 걸려야 의미상 맞다 — 등록되지 않은 provider라도 open redirect·위조
+    state 시도는 그 자체로 걸러야 한다(provider 등록 여부와 무관한 방어선).
+
+    **계정 잠금(lockout) 미도입 — 의도된 결정(SEC-08)**: 반복 실패로 계정을 잠그면 미성년
+    학생이 정당한 재시도(오타·세션 만료·기기 변경) 중에도 학습이 *중단*된다 — CLAUDE.md
+    의사결정 우선순위 #1(학생 안전·웰빙)이 #6(보안 강화)보다 위다. 위 IP 단위 rate limit이
+    자동화 남용(크리덴셜 스터핑·계정 생성 폭주)은 이미 차단하므로 잠금 없이도 방어선은
+    유지된다. `UserProfile`에 잠금 상태 컬럼을 추가하지 않는다(dead code 금지 — 쓰이지 않는
+    좌석 금지, security_privacy.md 부기와 동형 원칙). 부재는
+    `tests/backend/api/test_no_lockout_columns.py`가 동결한다.
     """
+    if body.redirect_uri not in settings.oauth_redirect_uris:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="허용되지 않은 redirect_uri입니다.",
+        )
+    if not verify_oauth_state(provider, body.state, settings=settings):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="state가 유효하지 않거나 만료되었습니다(다시 로그인해 주세요).",
+        )
     impl = _get_provider(request, provider)
     try:
         identity = await impl.fetch_identity(body.code, body.redirect_uri)
@@ -233,6 +351,7 @@ async def oauth_callback(
     "/refresh",
     response_model=OAuthTokenResponse,
     summary="리프레시 토큰 회전 — 새 액세스+리프레시 토큰 발급",
+    dependencies=[RateLimitedAuthRefresh],
 )
 async def refresh_access_token(
     body: RefreshRequest,

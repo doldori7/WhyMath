@@ -13,10 +13,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_current_user
+from whymath_backend.api._rate_limit import reset_store
+from whymath_backend.api.auth import issue_oauth_state
 from whymath_backend.api.demo_auth import (
     DEMO_BIRTH_YEAR,
     DEMO_EMAIL,
@@ -32,18 +35,44 @@ from whymath_backend.db.session import get_session
 from whymath_backend.security import decode_access_token
 
 _DEMO_PATH = "/v1/auth/demo/callback"
-_BODY = {"code": "demo", "redirect_uri": "https://demo/cb"}
+_REDIRECT_URI = "https://demo/cb"
 _SECRET = "demo-test-secret-0123456789abcdef"
 
 
 def _demo_settings() -> Settings:
-    """demo ON + 실 provider 미구성(로컬 시연 호스트 신호)."""
-    return Settings(jwt_secret_key=SecretStr(_SECRET), demo_auth_enabled=True)
+    """demo ON + 실 provider 미구성(로컬 시연 호스트 신호).
+
+    SEC-08: redirect_uri allowlist에 `_REDIRECT_URI`를 등록해야 콜백이 통과한다(비면
+    deny-by-default). rate limit은 이 파일의 관심사가 아니므로 0(비활성)으로 둔다.
+    """
+    return Settings(
+        jwt_secret_key=SecretStr(_SECRET),
+        demo_auth_enabled=True,
+        oauth_redirect_uri_allowlist=_REDIRECT_URI,
+        auth_rate_limit_ip_per_minute=0,
+    )
 
 
 def _off_settings() -> Settings:
-    """기본 — demo OFF."""
-    return Settings(jwt_secret_key=SecretStr(_SECRET))
+    """기본 — demo OFF(redirect_uri allowlist는 그대로 유지 — 404 분기를 실제로 태우기 위함)."""
+    return Settings(
+        jwt_secret_key=SecretStr(_SECRET),
+        oauth_redirect_uri_allowlist=_REDIRECT_URI,
+        auth_rate_limit_ip_per_minute=0,
+    )
+
+
+def _body(provider: str = "demo", *, settings: Settings | None = None) -> dict[str, str]:
+    """유효한 state(해당 provider로 서명)를 포함한 콜백 요청 바디."""
+    signing_settings = settings if settings is not None else _demo_settings()
+    return {
+        "code": "demo",
+        "redirect_uri": _REDIRECT_URI,
+        "state": issue_oauth_state(provider, settings=signing_settings),
+    }
+
+
+_BODY = _body()
 
 
 class _FakeSession:
@@ -88,6 +117,14 @@ def _client(settings: Settings, session: _FakeSession) -> TestClient:
 
     app.dependency_overrides[get_session] = _sess
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_store() -> None:
+    """매 테스트 격리 — sliding window 카운트 리셋(test_coach.py 미러 — `_BACKEND`는 모듈 전역)."""
+    import asyncio
+
+    asyncio.run(reset_store())
 
 
 def test_default_off_no_demo_provider() -> None:
@@ -141,7 +178,9 @@ def test_issued_token_passes_get_current_user() -> None:
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
     resolved = asyncio.run(
         get_current_user(
-            credentials=creds, session=session, settings=settings  # type: ignore[arg-type]
+            credentials=creds,
+            session=session,
+            settings=settings,  # type: ignore[arg-type]
         )
     )
     assert resolved.user_id == demo_user.user_id
@@ -153,11 +192,13 @@ def test_prod_double_guard_refuses_when_real_provider_configured() -> None:
         jwt_secret_key=SecretStr(_SECRET),
         demo_auth_enabled=True,
         kakao_client_id="prod-kakao-id",
+        oauth_redirect_uri_allowlist=_REDIRECT_URI,
+        auth_rate_limit_ip_per_minute=0,
     )
     providers = build_oauth_providers(settings)
     assert "demo" not in providers
     assert "kakao" in providers
-    resp = _client(settings, _FakeSession()).post(_DEMO_PATH, json=_BODY)
+    resp = _client(settings, _FakeSession()).post(_DEMO_PATH, json=_body(settings=settings))
     assert resp.status_code == 404
 
 

@@ -51,6 +51,9 @@ if ($env:WHYMATH_DEMO_DATABASE_URL) {
   $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable"
 }
 $env:WHYMATH_DEMO_AUTH_ENABLED = "true"
+# SEC-08: redirect_uri allowlist(open redirect 방지) — 데모 콜백이 쓰는 고정 redirect_uri를
+# 등록해 두지 않으면 400(허용되지 않은 redirect_uri)으로 [5/6]이 실패한다.
+$env:WHYMATH_OAUTH_REDIRECT_URI_ALLOWLIST = "https://demo/cb"
 if (-not $env:WHYMATH_JWT_SECRET_KEY) {
   $env:WHYMATH_JWT_SECRET_KEY = (python -c "import secrets;print(secrets.token_urlsafe(48))")
 }
@@ -120,7 +123,9 @@ if (-not $ok) { throw "backend가 시간 내 안 떴습니다. 로그 확인: $E
 Write-Host "  · backend ready."
 
 Write-Host "▶ [5/6] 데모 토큰 발급(/v1/auth/demo/callback) — 데모 사용자 lazy upsert…"
-$Body = '{"code":"demo","redirect_uri":"https://demo/cb"}'
+# SEC-08: 콜백은 이제 CSRF state를 요구한다 — 먼저 /v1/auth/demo/state로 발급받아 동봉한다.
+$StateResp = Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:$Port/v1/auth/demo/state"
+$Body = @{ code = "demo"; redirect_uri = "https://demo/cb"; state = $StateResp.state } | ConvertTo-Json -Compress
 $AccessToken = (Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/v1/auth/demo/callback" `
   -ContentType 'application/json' -Body $Body).access_token
 if (-not $AccessToken) { throw "토큰 발급 실패." }

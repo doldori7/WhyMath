@@ -61,7 +61,7 @@ _WINDOW_SECONDS = 60.0
 # 그대로 통과시키기 위한 제네릭(코드베이스 관행: PEP 695 대신 명시 TypeVar — api/me.py 선례).
 _FallbackT = TypeVar("_FallbackT")
 
-RateCategory = Literal["read", "write", "device_register", "visualization"]
+RateCategory = Literal["read", "write", "device_register", "visualization", "auth"]
 """POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
 
 `device_register`(슬라이스 25): `/v1/devices/register`의 *전용* 버킷. coach `write`와 키 공간
@@ -69,7 +69,13 @@ RateCategory = Literal["read", "write", "device_register", "visualization"]
 그 반대). 등록은 *드문* 작업(첫 실행 1회·기기 변경)이라 낮은 한도(5/min user·10/min IP).
 
 `visualization`(슬라이스 97): `/v1/visualizations/weak-concept`의 *전용* 버킷. coach `write`와
-분리 — LLM 생성(비용)이라 더 낮은 한도(15/min user). coach는 프롬프트 결정만(LLM 미호출)."""
+분리 — LLM 생성(비용)이라 더 낮은 한도(15/min user). coach는 프롬프트 결정만(LLM 미호출).
+
+`auth`(SEC-08): `/v1/auth/{provider}/callback`·`/v1/auth/refresh`의 *IP 단위 전용* 버킷 —
+둘 다 미인증 표면(로그인 남용·크리덴셜 스터핑 방어)이라 사용자 키가 없다. 콜백과 리프레시가
+같은 카테고리를 공유하되(같은 IP의 두 엔드포인트 호출이 한 슬라이딩 윈도우를 나눠 쓴다) 각자
+다른 한도(`auth_rate_limit_ip_per_minute`/`auth_rate_limit_ip_refresh_per_minute`)로 검사한다
+— coach `write`·`device_register` 등 인증 표면과는 키 공간 분리(상호 영향 0)."""
 
 
 class RateLimitResult(NamedTuple):
@@ -1008,6 +1014,62 @@ RateLimitedIpRead = Depends(rate_limit_ip_read)
 
 RateLimitedIpWrite = Depends(rate_limit_ip_write)
 """*미인증* POST 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SEC-08 — 인증 표면(`/v1/auth/{provider}/callback`·`/v1/auth/refresh`) IP 단위 한도.
+# 재구현 0 — `_client_ip`+`_enforce_by_ip`(위 rate_limit_ip_read/write와 동일 패턴)만 재사용.
+# 둘 다 미인증 표면(로그인 시도·리프레시 회전은 사용자 신원 확정 *전*이라 IP 키만 가능).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def rate_limit_auth_callback(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """OAuth 콜백(`/v1/auth/{provider}/callback`) IP 단위 한도 — 미인증 표면(로그인 남용 방어).
+
+    IP 추출 실패 시 적용 안 함(기존 rate_limit_ip_* fail-safe와 동일 시맨틱). Redis 백엔드
+    장애 시 `_enforce_by_ip`가 호출하는 `_BACKEND.hit_by_ip`가 OPS-06 인메모리 폴백을 그대로
+    상속한다(이 함수는 재구현 0 — 기존 fail-safe 거동 유지).
+    """
+    ip = _client_ip(request)
+    if ip is None:
+        return
+    await _enforce_by_ip(
+        ip,
+        category="auth",
+        limit=settings.auth_rate_limit_ip_per_minute,
+        response=response,
+    )
+
+
+async def rate_limit_auth_refresh(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """리프레시(`/v1/auth/refresh`) IP 단위 한도 — 미인증 표면.
+
+    IP 추출 실패 시 적용 안 함. Redis 장애 시 OPS-06 인메모리 폴백 그대로 상속(재구현 0).
+    """
+    ip = _client_ip(request)
+    if ip is None:
+        return
+    await _enforce_by_ip(
+        ip,
+        category="auth",
+        limit=settings.auth_rate_limit_ip_refresh_per_minute,
+        response=response,
+    )
+
+
+RateLimitedAuthCallback = Depends(rate_limit_auth_callback)
+"""OAuth 콜백 전용(SEC-08) — `dependencies=[RateLimitedAuthCallback]`."""
+
+RateLimitedAuthRefresh = Depends(rate_limit_auth_refresh)
+"""리프레시 전용(SEC-08) — `dependencies=[RateLimitedAuthRefresh]`."""
 
 
 # ──────────────────────────────────────────────────────────────────────────
