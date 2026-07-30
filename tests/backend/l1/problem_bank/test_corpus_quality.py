@@ -377,11 +377,13 @@ def test_rephrased_corpus_joins_source_by_math_key() -> None:
 def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # 핵심 안전 봉인 — question_text 외 전 필드(answer·verify·choices·conditions·distractor·
     # 난이도·개념·서명 등)가 소스(수학키 조인)와 동일(수치·정답·검증 메타 불변·오염 0). slug·
-    # problem_id는 rephrase가 LLM 원본을 보존하므로 재슬러그된 레코드에서 소스와 다를 수 있어
-    # 비교에서 제외한다(S2-08·발문 조사 수정으로 소스 slug만 바뀐 경우).
+    # problem_id는 rephrase 성공 시 새 정체성을 발급하므로(S4-14 — parent_slug 참조 변형 관계)
+    # 소스와 다를 수 있어 비교에서 제외한다. relations도 같은 이유로 제외(S4-14) — 소스는 자신의
+    # "유사" 형제 태깅, rephrase 성공 레코드는 parent_slug를 향한 "변형" 태깅으로 *의도적으로
+    # 다르다*(계보가 곧 이 차이의 요점).
     source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
-    exclude = {"question_text", "slug", "problem_id"}
+    exclude = {"question_text", "slug", "problem_id", "relations"}
     for slug, rec in rephrased.items():
         src = source[_math_key(rec)]
         assert set(rec) == set(src), f"{slug} 키 집합 변화"

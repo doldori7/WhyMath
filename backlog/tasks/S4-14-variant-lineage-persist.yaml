@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - "src/backend/whymath_backend/l1/problem_bank/**"
   - "src/backend/whymath_backend/harness/**"
   - "data/corpus/**"
-session: null
+session: claude/s4-14-skeleton-cat-re24tk
 notes: "docs/architecture/problem_bank_gap_review.md §3 D8 — problem_relation(db/models/problem.py:359)을 채우는 경로 0건 실측. 계보 없는 변형 확대 금지(§5-④ 발화 조건과 연동). 구 S4-11에서 재번호(2026-07-29)"
-updated: 2026-07-29
+updated: 2026-07-30

@@ -94,9 +94,14 @@ class TestRunCorpusRephrase:
 
         after = load_problem_bank_records(out)
         assert len(after) == len(before) == 12
-        by_slug_before = {r.slug: r for r in before}
-        for record in after:
-            original = by_slug_before[record.slug]
+        # 입출력 순서 보존이라(모듈 docstring) 위치로 짝짓는다 — slug는 rephrase 성공 시 바뀐다.
+        for original, record in zip(before, after, strict=True):
+            # S4-14 — 전건 rephrase 성공 → 새 정체성(slug/problem_id) 발급 + 변형 관계 태깅.
+            assert record.slug != original.slug
+            assert record.problem.problem_id != original.problem.problem_id
+            assert len(record.relation_tags) == 1
+            assert record.relation_tags[0].parent_slug == original.slug
+            assert record.relation_tags[0].relation_type == "변형"
             # 발문은 바뀌고(접미사) 수치·정답·선지·distractor·조건은 불변.
             assert record.problem.question_text != original.problem.question_text
             assert record.problem.question_text.endswith("(다양화)")
@@ -105,6 +110,40 @@ class TestRunCorpusRephrase:
             assert record.verify.conditions == original.verify.conditions
             assert record.verify.answer_selection == original.verify.answer_selection
             assert record.problem.distractor_map == original.problem.distractor_map
+
+    def test_rephrase_new_slug_is_deterministic(self, tmp_path: Path) -> None:
+        # 같은 입력(부모 slug+변형 텍스트) 재실행 → 같은 신규 slug/problem_id(재현성).
+        src = _seed_corpus(tmp_path)
+        out1 = tmp_path / "rephrased1.jsonl"
+        out2 = tmp_path / "rephrased2.jsonl"
+        run_corpus_rephrase(
+            in_path=src, out_path=out1, rephraser=_rephraser(_EchoRephraseProvider()), write=True
+        )
+        run_corpus_rephrase(
+            in_path=src, out_path=out2, rephraser=_rephraser(_EchoRephraseProvider()), write=True
+        )
+        after1 = load_problem_bank_records(out1)
+        after2 = load_problem_bank_records(out2)
+        assert [r.slug for r in after1] == [r.slug for r in after2]
+        assert [r.problem.problem_id for r in after1] == [r.problem.problem_id for r in after2]
+
+    def test_failed_rephrase_preserves_slug_and_problem_id(self, tmp_path: Path) -> None:
+        # rephrase 실패(fail-closed) → 새 정체성 발급 없이 원본 slug/problem_id/관계 그대로.
+        class _CorruptProvider:
+            async def generate(self, *args: object, **kwargs: object) -> GenerationResult:
+                return GenerationResult("이차방정식 9x^2 = 0 큰 근은?")
+
+        src = _seed_corpus(tmp_path)
+        out = tmp_path / "rephrased.jsonl"
+        before = load_problem_bank_records(src)
+        run_corpus_rephrase(
+            in_path=src, out_path=out, rephraser=_rephraser(_CorruptProvider()), write=True
+        )
+        after = load_problem_bank_records(out)
+        for original, record in zip(before, after, strict=True):
+            assert record.slug == original.slug
+            assert record.problem.problem_id == original.problem.problem_id
+            assert record.relation_tags == original.relation_tags
 
     def test_rephrased_corpus_still_passes_acceptance_gate(self, tmp_path: Path) -> None:
         # 다양화 후에도 코퍼스가 S2-a 게이트를 통과(수치·정답 불변이라 정확성 게이트 무료 재통과).

@@ -107,7 +107,7 @@ from whymath_backend.l1.concept_atom_crosswalk.transfer import (
 
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — standards/atom_graph와 동일 좌석. (intra-L1 import)
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
-from whymath_backend.schema.enums import ConceptRole, LicenseType, SourceType
+from whymath_backend.schema.enums import ConceptRole, LicenseType, RelationType, SourceType
 from whymath_backend.schema.problem import Problem
 
 if TYPE_CHECKING:
@@ -122,8 +122,10 @@ _DEFAULT_CROSSWALK = Path("data/corpus/concept_atom_crosswalk_v1/crosswalk.jsonl
 _DEFAULT_CONCEPT_GRAPH = Path("data/corpus/concept_graph_v1/graph.json")
 
 # Problem 스키마 밖 *저작 메타* 키 — Problem.model_validate 전에 분리한다(extra=forbid 대응).
+# "relations"(S4-14 변형 계보)는 "original_source"(저작권 provenance — 평가원/EBS 등 SourceType)
+# 와 무관한 별개 축이다: 이 문제가 어느 문제의 파생인지(problem_relation 재료)를 담는다.
 _AUTHORING_KEYS: frozenset[str] = frozenset(
-    {"concepts", "verify", "license", "generation_type", "original_source"}
+    {"concepts", "verify", "license", "generation_type", "original_source", "relations"}
 )
 
 # 본문 보유가 합법인 출처·라이선스(코퍼스 위생) — 자체생성 동등문제만 적재한다.
@@ -132,6 +134,9 @@ _ACCEPTED_LICENSE_VALUE: str = LicenseType.WHYMATH_GENERATED.value
 
 # 유효 개념 역할 값 집합(ConceptRole) — 태깅 role 검증용.
 _CONCEPT_ROLE_VALUES: frozenset[str] = frozenset(r.value for r in ConceptRole)
+
+# 유효 관계 유형 값 집합(RelationType) — S4-14 관계 태깅 검증용(변형/유사/선수/심화/대조).
+_RELATION_TYPE_VALUES: frozenset[str] = frozenset(r.value for r in RelationType)
 
 
 class ProblemCorpusError(ValueError):
@@ -153,6 +158,20 @@ class ConceptTag:
     concept_src_id: str
     role: str  # ConceptRole 값(PRIMARY/SUPPORTING/IMPLICIT/TESTED)
     relevance: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RelationTag:
+    """관계 태깅 1건(S4-14) — 이 문제가 *받는* 관계(parent→이 문제)의 부모 slug·유형·유사도.
+
+    레코드가 자신의 *들어오는* 엣지를 스스로 기술한다(부모 slug는 다른 코퍼스 파일에 있을 수
+    있음 — populate 적재 시 배치 내+DB 조회로 해석). `problem_relation` 재료(populate.py 모듈
+    docstring §원자 재연결과 같은 authoring 분리 규약).
+    """
+
+    parent_slug: str
+    relation_type: str  # RelationType 값(변형/유사/선수/심화/대조)
+    similarity_score: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +214,8 @@ class ProblemBankRecord:
     concept_tags: tuple[ConceptTag, ...]
     verify: ProblemVerifyMeta
     provenance: ProblemProvenanceMeta
+    relation_tags: tuple[RelationTag, ...] = ()
+    """S4-14 — 이 문제가 받는 관계(들어오는 엣지). 기본 빈 튜플(관계 없는 대다수 코퍼스 호환)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,7 +225,9 @@ class ProblemBankPopulateReport:
     `problems_loaded`(문제 upsert 행 수·dedup 후)·`problem_concepts_loaded`(개념 태깅 upsert 수)·
     `concepts_skipped`(미해석 개념 orphan skip 수)·`skipped_messages`(orphan 상세·조용한 누락 금지)·
     `problem_concepts_reconciled`(reconcile DELETE 행 수 — 구 연결 청소·기존 위치 인자 호환을 위해
-    말미 기본값 필드로 추가).
+    말미 기본값 필드로 추가). S4-14 `relations_loaded`/`relations_skipped`/
+    `relation_skipped_messages`/`relations_reconciled`는 `problem_relation` 적재 짝(동일 규약 —
+    말미 기본값 필드).
     """
 
     problems_loaded: int
@@ -212,6 +235,10 @@ class ProblemBankPopulateReport:
     concepts_skipped: int
     skipped_messages: list[str] = field(default_factory=list)
     problem_concepts_reconciled: int = 0
+    relations_loaded: int = 0
+    relations_skipped: int = 0
+    relation_skipped_messages: list[str] = field(default_factory=list)
+    relations_reconciled: int = 0
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -233,6 +260,33 @@ def _concept_tag_from_dict(raw: dict[str, Any], *, slug: str) -> ConceptTag:
     return ConceptTag(concept_src_id=src_id, role=role, relevance=rel_value)
 
 
+def _relation_tag_from_dict(raw: dict[str, Any], *, slug: str) -> RelationTag:
+    """관계 태깅 dict → `RelationTag`(parent_slug 필수·relation_type 검증). 위반 시 거부.
+
+    자기 참조(parent_slug == slug)는 여기서 즉시 거부한다 — `schema.ProblemRelation`의
+    `_no_self_relation` 불변식을 authoring 단계에서 먼저 잡아(조용한 통과 금지) DB 단계까지
+    끌고 가지 않는다.
+    """
+    parent_slug = raw.get("parent_slug")
+    relation_type = raw.get("relation_type")
+    if not isinstance(parent_slug, str) or not parent_slug:
+        raise ProblemCorpusError(f"관계 태깅 parent_slug 누락/형식오류: slug={slug} raw={raw!r}")
+    if parent_slug == slug:
+        raise ProblemCorpusError(f"관계 태깅 자기 참조 금지: slug={slug}")
+    if not isinstance(relation_type, str) or relation_type not in _RELATION_TYPE_VALUES:
+        raise ProblemCorpusError(
+            f"관계 태깅 relation_type이 RelationType 밖: slug={slug} "
+            f"relation_type={relation_type!r}(허용 {sorted(_RELATION_TYPE_VALUES)})"
+        )
+    score_raw = raw.get("similarity_score")
+    score = float(score_raw) if isinstance(score_raw, (int, float)) else None
+    if score is not None and not (0.0 <= score <= 1.0):
+        raise ProblemCorpusError(
+            f"관계 태깅 similarity_score 범위 밖[0,1]: slug={slug} value={score}"
+        )
+    return RelationTag(parent_slug=parent_slug, relation_type=relation_type, similarity_score=score)
+
+
 def _record_from_line(raw: dict[str, Any]) -> ProblemBankRecord:
     """코퍼스 JSONL 한 줄(dict) → 검증된 `ProblemBankRecord`(authoring 분리·위생·Problem 검증).
 
@@ -244,6 +298,7 @@ def _record_from_line(raw: dict[str, Any]) -> ProblemBankRecord:
 
     # ── ① authoring 분리 ──
     concepts_raw = data.pop("concepts", []) or []
+    relations_raw = data.pop("relations", []) or []
     verify_raw = data.pop("verify", None)
     license_value = data.pop("license", None)
     generation_type = data.pop("generation_type", None)
@@ -279,12 +334,16 @@ def _record_from_line(raw: dict[str, Any]) -> ProblemBankRecord:
         license=str(license_value),
         original_source=str(original_source) if original_source is not None else None,
     )
+    relation_tags = tuple(
+        _relation_tag_from_dict(r, slug=slug) for r in relations_raw if isinstance(r, dict)
+    )
     return ProblemBankRecord(
         slug=slug,
         problem=problem,
         concept_tags=concept_tags,
         verify=verify_meta,
         provenance=provenance_meta,
+        relation_tags=relation_tags,
     )
 
 
@@ -475,7 +534,10 @@ class ProblemBankStore:
         problem_id 획득 → ④ 개념 태깅을 concept_id로 해석(맵에 없으면 orphan skip·집계)·같은
         `(concept_id, role)` 접힘 시 relevance **max**(None 최저 취급) → ⑤ `ON CONFLICT(problem_id,
         concept_id, role) DO UPDATE`로 relevance만 갱신 → ⑥ 같은 트랜잭션에서 해석 집합 밖 기존
-        연결 reconcile DELETE(해석 0건이면 그 문제의 연결 전체 삭제 — 구 437 잔재 청소). 반환:
+        연결 reconcile DELETE(해석 0건이면 그 문제의 연결 전체 삭제 — 구 437 잔재 청소) → ⑦
+        S4-14 관계 태깅(parent_slug)을 problem_id로 해석(배치 내 맵 + 배치 밖 단일 SELECT 보강,
+        N+1 없음) → ⑧ `problem_relation` upsert(같은 (parent, relation_type) 접힘 시
+        similarity_score max) → ⑨ 같은 트랜잭션에서 관계 reconcile DELETE(④~⑥과 동형). 반환:
         리포트. 빈 입력은 0 리포트(조기 반환).
         """
         if not records:
@@ -488,6 +550,7 @@ class ProblemBankStore:
             ProblemConcept as ProblemConceptORM,
         )
         from whymath_backend.db.models.problem import Problem as ProblemORM
+        from whymath_backend.db.models.problem import ProblemRelation as ProblemRelationORM
 
         # ① slug 기준 dedup(마지막 우선) — 단일 배치 ON CONFLICT 중복행 오류 방지.
         by_slug: dict[str, ProblemBankRecord] = {r.slug: r for r in records}
@@ -504,8 +567,12 @@ class ProblemBankStore:
         problem_concepts_loaded = 0
         reconciled = 0
         skipped: list[str] = []
+        relations_loaded = 0
+        relations_reconciled = 0
+        relation_skipped: list[str] = []
 
         with self._get_engine().begin() as conn:
+            slug_to_problem_id: dict[str, Any] = {}
             for record in deduped:
                 # ③ 문제 upsert(slug 충돌) + RETURNING problem_id(안정 식별자 획득).
                 payload = record.problem.model_dump()
@@ -517,6 +584,7 @@ class ProblemBankStore:
                 ).returning(ProblemORM.problem_id)
                 problem_id = conn.execute(problem_stmt).scalar_one()
                 problems_loaded += 1
+                slug_to_problem_id[record.slug] = problem_id
 
                 # ④ 개념 태깅 해석(orphan skip)·같은 (concept_id, role) 접힘 시 relevance max
                 #    (None은 최저 취급 — 마지막-우선의 조용한 정보 손실 방지).
@@ -572,12 +640,95 @@ class ProblemBankStore:
                 delete_result = conn.execute(delete_stmt)
                 reconciled += int(getattr(delete_result, "rowcount", 0) or 0)
 
+            # ⑦ 관계 태깅 해석 — 배치 내 slug 맵(위) + 배치 밖 parent_slug는 단일 SELECT 보강
+            #    (N+1 없음 — `_load_source_id_to_concept_id`와 동형의 배치 조회 관행).
+            missing_parent_slugs = {
+                tag.parent_slug
+                for record in deduped
+                for tag in record.relation_tags
+                if tag.parent_slug not in slug_to_problem_id
+            }
+            if missing_parent_slugs:
+                parent_stmt = sa.select(ProblemORM.slug, ProblemORM.problem_id).where(
+                    ProblemORM.slug.in_(missing_parent_slugs)
+                )
+                for row in conn.execute(parent_stmt).all():
+                    slug_to_problem_id[row.slug] = row.problem_id
+
+            for record in deduped:
+                related_id = slug_to_problem_id[record.slug]
+
+                # ⑧ 같은 (parent_id, relation_type) 접힘 시 similarity_score max(None 최저 취급).
+                #    parent_slug 미해석(orphan) 또는 자기 관계는 스킵·집계(조용한 누락 금지).
+                resolved_relations: dict[tuple[Any, str], float | None] = {}
+                for rel_tag in record.relation_tags:
+                    parent_id = slug_to_problem_id.get(rel_tag.parent_slug)
+                    if parent_id is None:
+                        relation_skipped.append(
+                            f"orphan relation skip(부모 미해석): slug={record.slug} "
+                            f"parent_slug={rel_tag.parent_slug} "
+                            f"relation_type={rel_tag.relation_type}"
+                        )
+                        continue
+                    if parent_id == related_id:
+                        relation_skipped.append(
+                            f"자기 관계 스킵(방어 — authoring 단계 거부를 통과했을 리 없으나 "
+                            f"방어적 skip): slug={record.slug} "
+                            f"relation_type={rel_tag.relation_type}"
+                        )
+                        continue
+                    key = (parent_id, rel_tag.relation_type)
+                    if key in resolved_relations:
+                        prev = resolved_relations[key]
+                        score = rel_tag.similarity_score
+                        if prev is None or (score is not None and score > prev):
+                            resolved_relations[key] = score
+                    else:
+                        resolved_relations[key] = rel_tag.similarity_score
+
+                # ⑨ problem_relation upsert(복합 PK 충돌 시 similarity_score만 갱신).
+                for (parent_id, relation_type), score in resolved_relations.items():
+                    rel_stmt = pg_insert(ProblemRelationORM).values(
+                        parent_problem_id=parent_id,
+                        related_problem_id=related_id,
+                        relation_type=relation_type,
+                        similarity_score=score,
+                    )
+                    rel_stmt = rel_stmt.on_conflict_do_update(
+                        index_elements=[
+                            ProblemRelationORM.parent_problem_id,
+                            ProblemRelationORM.related_problem_id,
+                            ProblemRelationORM.relation_type,
+                        ],
+                        set_={"similarity_score": rel_stmt.excluded.similarity_score},
+                    )
+                    conn.execute(rel_stmt)
+                    relations_loaded += 1
+
+                # 관계 reconcile — 이번 해석 집합 밖 기존 들어오는 관계 삭제(같은 트랜잭션).
+                delete_rel_stmt = sa.delete(ProblemRelationORM).where(
+                    ProblemRelationORM.related_problem_id == related_id
+                )
+                if resolved_relations:
+                    delete_rel_stmt = delete_rel_stmt.where(
+                        sa.tuple_(
+                            ProblemRelationORM.parent_problem_id,
+                            ProblemRelationORM.relation_type,
+                        ).not_in(list(resolved_relations))
+                    )
+                delete_rel_result = conn.execute(delete_rel_stmt)
+                relations_reconciled += int(getattr(delete_rel_result, "rowcount", 0) or 0)
+
         return ProblemBankPopulateReport(
             problems_loaded=problems_loaded,
             problem_concepts_loaded=problem_concepts_loaded,
             concepts_skipped=len(skipped),
             skipped_messages=skipped,
             problem_concepts_reconciled=reconciled,
+            relations_loaded=relations_loaded,
+            relations_skipped=len(relation_skipped),
+            relation_skipped_messages=relation_skipped,
+            relations_reconciled=relations_reconciled,
         )
 
 
@@ -646,6 +797,11 @@ def main(argv: list[str] | None = None) -> int:
         f"{report.problem_concepts_reconciled}건 (src={path}). "
         f"개념 orphan skip: {report.concepts_skipped}건"
         + (" (원자 미적재 — l1.atom_graph 선행)." if report.concepts_skipped else ".")
+    )
+    print(
+        f"관계 태깅(problem_relation): {report.relations_loaded}건·reconcile 삭제: "
+        f"{report.relations_reconciled}건·orphan skip: {report.relations_skipped}건"
+        + (" (부모 slug 미해석 — 로드 순서 확인)." if report.relations_skipped else ".")
     )
     return 0
 

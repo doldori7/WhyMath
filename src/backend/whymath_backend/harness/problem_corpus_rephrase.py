@@ -24,18 +24,25 @@ harness는 import-linter 계약 밖(조성/ops 층·상위 호출 정상 — pro
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from whymath_backend.l3.equivalent.rephrase import QuestionRephraser
 
-__all__ = ["RephraseCorpusReport", "main", "run_corpus_rephrase"]
+__all__ = ["RephraseCorpusReport", "main", "rephrased_slug", "run_corpus_rephrase"]
 
 # 사유 표본 상한 — 리포트에 unchanged 사유를 몇 건만 실어 관측(로그 폭주 방지).
 _REASON_SAMPLE_CAP = 10
+
+# S4-14 변형 관계 유형·유사도 — 발문만 바뀌고 수치·정답·선지·distractor는 rephrase 게이트가
+# 보증하는 봉인이라(모듈 docstring §수학적 실체 오염 원천 차단) 고정 고값을 정책 상수로 둔다.
+_REPHRASE_RELATION_TYPE = "변형"
+_REPHRASE_SIMILARITY_SCORE = 0.95
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +85,23 @@ def _write_records(path: Path, records: list[dict[str, Any]]) -> int:
     return len(lines)
 
 
+def rephrased_slug(parent_slug: str, rephrased_text: str) -> str:
+    """부모 slug + 변형 발문 → 결정론 신규 slug(`wm-rephrase-<12hex>`).
+
+    발문 다양화는 *새 문제 정체성*을 만든다(원문과 다른 표현 — parent_slug와 동일 slug/
+    problem_id를 재사용하면 `problem_relation`의 `parent != related` 불변식을 만족할 수 없다).
+    입력이 같으면 항상 같은 slug(부모+텍스트 해시) — 재실행 결정론 유지(스켈레톤 uuid5 관행과
+    동형, `l3/equivalent/skeleton_generator.py` §결정론 problem_id).
+    """
+    digest = hashlib.sha256(f"{parent_slug}|{rephrased_text}".encode()).hexdigest()[:12]
+    return f"wm-rephrase-{digest}"
+
+
+def _rephrased_problem_id(slug: str) -> uuid.UUID:
+    """slug(내용 해시) 기반 uuid5 — 결정론 problem_id(스켈레톤 생성기 관행 미러)."""
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}")
+
+
 def run_corpus_rephrase(
     *,
     in_path: Path,
@@ -111,11 +135,25 @@ def run_corpus_rephrase(
         outcome = rephraser.rephrase(question)
         updated = dict(record)
         updated["question_text"] = outcome.text
-        out_records.append(updated)
         if outcome.rephrased:
+            # 발문이 실제로 바뀌었다 — 새 정체성(slug/problem_id) 발급 + 변형 관계 태깅
+            # (S4-14: problem_relation 계보 재료. 원본 slug는 그대로 부모로 남는다).
+            parent_slug = record.get("slug")
+            if isinstance(parent_slug, str) and parent_slug:
+                new_slug = rephrased_slug(parent_slug, outcome.text)
+                updated["slug"] = new_slug
+                updated["problem_id"] = str(_rephrased_problem_id(new_slug))
+                updated["relations"] = [
+                    {
+                        "parent_slug": parent_slug,
+                        "relation_type": _REPHRASE_RELATION_TYPE,
+                        "similarity_score": _REPHRASE_SIMILARITY_SCORE,
+                    }
+                ]
             rephrased_count += 1
         elif outcome.reason is not None and len(reasons) < _REASON_SAMPLE_CAP:
             reasons.append(f"{record.get('slug', '?')}: {outcome.reason}")
+        out_records.append(updated)
 
     written = _write_records(out_path, out_records) if write else None
     total = len(records)

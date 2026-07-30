@@ -771,6 +771,10 @@ class _AQResult:
     def first(self) -> Any:
         return self._rows[0] if self._rows else None
 
+    def scalar_one_or_none(self) -> Any:
+        # S4-14: _last_incorrect_problem_id의 단일-스칼라 조회 시뮬(직전 오답 문항 id 유/무).
+        return self._rows[0] if self._rows else None
+
 
 class _QueueSession:
     """execute 호출마다 큐잉 결과를 순서대로 반환 — 채점 엔드포인트의 다중 쿼리(개념 조회 →
@@ -1518,6 +1522,93 @@ class TestNextProblem:
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
         assert body["problem_id"] is None
+
+    # ── S4-14: ?sibling_filter — problem_relation(변형·유사) 첫 소비처 ──────────
+    def test_sibling_filter_unset_skips_extra_queries(self) -> None:
+        """미지정(기본) → 형제 조회 자체를 생략 — 쿼리 2회만(회귀 0 — 큐 소진 시 IndexError)."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_filter_set_but_no_prior_incorrect_skips_sibling_query(self) -> None:
+        """직전 오답이 없으면(2번째 쿼리가 None) 형제 조회 자체를 생략 — 쿼리 3회만."""
+        pid = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # ① 채점 이력 없음
+                _AQResult([]),  # ② _last_incorrect_problem_id → None(오답 이력 없음)
+                _AQResult([(pid, 3.0, None)]),  # ③ 후보(형제 조회 생략 — 4번째 큐 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=exclude").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_include_boosts_sibling_candidate(self) -> None:
+        """include — 직전 오답 문항의 형제 후보가 동일 정보량 경쟁자보다 가중으로 우선.
+
+        쿼리 4회: ①채점 이력 ②직전 오답 문항 id ③형제 id(양방향) ④후보 풀. pid_sibling·
+        pid_other는 난이도(=정보량) 동일이라 가중 없이는 인덱스(순서) 의존 동률 — 형제 가중
+        (1+BOOST=2.0배)이 그 동률을 결정론으로 깬다(순서 무관 — score가 2배 차이).
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling, pid_other = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),  # ① 오답 이력(θ 추정 겸용)
+                _AQResult([pid_wrong]),  # ② 직전 오답 문항 id
+                _AQResult([(pid_wrong, pid_sibling)]),  # ③ 형제(parent=오답, related=형제)
+                _AQResult(  # ④ 후보(동일 난이도)
+                    [(pid_other, 3.0, None), (pid_sibling, 3.0, None)]
+                ),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=include").json()
+        assert body["problem_id"] == str(pid_sibling)
+
+    def test_sibling_include_combines_with_weak_concept_weight(self) -> None:
+        """include + prioritize_weak_concepts 동시 지정 — 가중이 곱으로 합성(둘 다 강한 후보 승).
+
+        쿼리 6회: ①채점이력 ②직전오답 ③형제 ④후보 ⑤숙달스냅샷 ⑥후보개념매핑.
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling_weak, pid_plain = uuid.uuid4(), uuid.uuid4()
+        c_weak = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling_weak)]),
+                _AQResult([(pid_plain, 3.0, None), (pid_sibling_weak, 3.0, None)]),
+                _AQResult([(c_weak, 0.0)]),  # 숙달 스냅샷 — 저숙달
+                _AQResult([(pid_sibling_weak, c_weak)]),  # 후보 개념 매핑(pid_plain은 매핑 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get(
+            "/v1/me/next-problem?sibling_filter=include&prioritize_weak_concepts=true"
+        ).json()
+        assert body["problem_id"] == str(pid_sibling_weak)
+
+    def test_sibling_exclude_smoke_no_crash(self) -> None:
+        """exclude — FakeSession은 SQL notin_을 적용하지 않으므로(stmt 무시) 실 배제는
+        통합테스트가 검증. 여기선 쿼리 배선(4회)과 무크래시만 스모크."""
+        pid_wrong = uuid.uuid4()
+        pid_sibling = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling)]),
+                _AQResult([(pid_sibling, 3.0, None)]),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.get("/v1/me/next-problem?sibling_filter=exclude")
+        assert resp.status_code == 200
 
 
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
