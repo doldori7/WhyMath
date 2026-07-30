@@ -18,8 +18,13 @@
 **결정론**: 난수 0·시각 의존 0·정렬 고정(단원은 총량 내림차순→코드 오름차순, 코드/라벨은 사전순).
 같은 입력 파일 → 같은 바이트 출력(`--json` 산출물 포함).
 
-**유형(17종) 축은 범위 밖**: `Problem`↔`ProblemType` 연결(gap review §5-③)이 발화하기 전에는
-전 문항이 유형 미태깅이라 전부 0인 무의미 축이 된다. Phase 3b 발화 후 확장한다.
+**유형(17종) 축(S3-27 확장·2026-07-30)**: `Problem`↔`ProblemType` 연결(`problem_type_codes` 필드
+신설·`ai_content_generation_gap_review.md` D3·`problem_bank_gap_review.md` §5-③ 유보 해제)이
+착지해 더 이상 범위 밖이 아니다 — 코퍼스 전체 2,647건 중 2,218건이 결정론 백필로 유형 태깅됐다
+(`harness/problem_type_backfill.py`). 유형×단원 매트릭스와 "17유형 중 0커버 유형 목록"을 §2.5에
+낸다. 유형 카탈로그(`data/corpus/problem_type_graph_v1/problem_types.jsonl`)를 못 읽으면 이 축만
+"카탈로그 미상"으로 정직하게 빠지고(exit 코드에 영향 없음) 나머지 축(성취기준·단원×난이도 등)은
+그대로 낸다 — 유형 축은 관측의 *일부*일 뿐 전체 리포트의 필수 선결 조건이 아니다.
 
 사용:
     python -m whymath_backend.harness.problem_bank_coverage
@@ -53,6 +58,7 @@ __all__ = [
     "difficulty_band",
     "discover_corpora",
     "load_corpus_file",
+    "load_problem_types",
     "load_standards",
     "main",
     "render_report",
@@ -66,6 +72,11 @@ _EXIT_INPUT_ERROR = 2
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_CORPUS_ROOT = _REPO_ROOT / "data" / "corpus"
 DEFAULT_STANDARDS_PATH = DEFAULT_CORPUS_ROOT / "standards_v1" / "standards.json"
+# 유형(problem_type) 카탈로그(S3-27) — 17종 problem_type_id 대장. `problem_bank_coverage`는
+# `schema.enums`도 import하지 않는 hermetic 원칙(모듈 docstring)을 여기서도 지킨다 — 카탈로그
+# JSONL을 파싱만 하고 `problem_type_mapping` 상수는 참조하지 않는다(관측 도구가 조성 층의
+# 매핑표에 의존하면 안 된다 — 매핑표가 바뀌어도 이 관측 도구는 카탈로그 파일만 보고 그대로 돈다).
+DEFAULT_PROBLEM_TYPES_PATH = DEFAULT_CORPUS_ROOT / "problem_type_graph_v1" / "problem_types.jsonl"
 
 # 문제 코퍼스 디렉터리 패턴 — `data/corpus/problem_bank*/problems.jsonl` 관례.
 CORPUS_DIR_GLOB = "problem_bank*"
@@ -111,6 +122,7 @@ BAND_LABELS: tuple[str, ...] = (
 # 태깅이 비어 있는 문항을 매트릭스에서 지우지 않고 드러내기 위한 자리표시 키(정직 회계).
 UNTAGGED_UNIT = "(단원 미태깅)"
 UNSPECIFIED_FORMAT = "(형식 미지정)"
+UNTAGGED_TYPE = "(유형 미태깅)"
 
 CorpusStatus = Literal["적재됨", "비어있음", "데이터없음"]
 
@@ -169,6 +181,7 @@ class ProblemRecord:
     standard_codes: tuple[str, ...]
     difficulty_overall: float | None
     question_format: str | None
+    problem_type_codes: tuple[str, ...]
 
 
 @dataclass(slots=True, frozen=True)
@@ -269,6 +282,27 @@ def load_standards(payload: object) -> StandardsCatalog:
     return StandardsCatalog(entries=tuple(entries))
 
 
+def load_problem_types(payload: object) -> tuple[str, ...]:
+    """유형 카탈로그(JSONL을 라인별 `json.loads`한 list) → `problem_type_id` 튜플(사전순·중복 제거).
+
+    최상위가 list가 아니거나 원소가 object가 아니거나 `problem_type_id` 문자열이 없으면
+    ValueError로 즉시 실패한다 — `load_standards`와 동일 원칙(분모를 모른 채 0커버 유형을
+    내는 것은 관측이 아니라 날조). `schema.enums`·`problem_type_mapping` 어느 것도 import하지
+    않는다 — 카탈로그 파일 자체가 유일한 원천이다(모듈 hermetic 원칙 유지).
+    """
+    if not isinstance(payload, list):
+        raise ValueError(f"유형 카탈로그가 배열이 아님(type={type(payload).__name__})")
+    ids: set[str] = set()
+    for idx, item in enumerate(payload):
+        if not isinstance(item, dict):
+            raise ValueError(f"problem_types[{idx}]가 object가 아님(type={type(item).__name__})")
+        type_id = item.get("problem_type_id")
+        if not isinstance(type_id, str) or not type_id:
+            raise ValueError(f"problem_types[{idx}]에 problem_type_id 문자열이 없음")
+        ids.add(type_id)
+    return tuple(sorted(ids))
+
+
 def _str_list(value: object, field: str) -> tuple[str, ...]:
     """리스트[str] 필드 추출 — None/부재는 빈 튜플, 타입 위반은 TypeError(라인 단위 보고용)."""
     if value is None:
@@ -316,6 +350,7 @@ def parse_problem_line(raw: str, *, corpus: str, line_no: int) -> ProblemRecord:
         ),
         difficulty_overall=_opt_float(obj.get("difficulty_overall"), "difficulty_overall"),
         question_format=_opt_str(obj.get("question_format"), "question_format"),
+        problem_type_codes=_str_list(obj.get("problem_type_codes"), "problem_type_codes"),
     )
 
 
@@ -398,11 +433,15 @@ class CoverageReport:
     per_corpus_bands: dict[str, dict[str, int]]
     per_corpus_formats: dict[str, dict[str, int]]
     format_totals: dict[str, int]
+    # 유형(problem_type) × 단원 축 (S3-27)
+    problem_types_catalog: tuple[str, ...]  # 카탈로그 로드 실패/미지정 시 빈 튜플(정직 회계).
+    type_unit_matrix: dict[str, dict[str, int]]
     # 정직 회계
     problems_without_standard_codes: int
     problems_without_unit_codes: int
     problems_without_difficulty: int
     problems_without_question_format: int
+    problems_without_problem_type: int
 
     @property
     def covered_code_count(self) -> int:
@@ -424,14 +463,50 @@ class CoverageReport:
         totals = self.unit_totals
         return tuple(sorted(totals, key=lambda u: (-totals[u], u)))
 
+    @property
+    def type_totals(self) -> dict[str, int]:
+        """유형별 총 문항 수(행 합계) — 다중 단원 문항은 중복 가산 가능(unit_totals와 동일 관례)."""
+        return {ptype: sum(units.values()) for ptype, units in self.type_unit_matrix.items()}
+
+    @property
+    def zero_coverage_types(self) -> tuple[str, ...]:
+        """카탈로그 중 문항이 1건도 없는 `problem_type_id`(§4-① 트리거의 발화 계측기).
+
+        카탈로그가 비어 있으면(로드 실패/미지정) 빈 튜플 — "0커버"와 "카탈로그 모름"을
+        혼동하지 않는다(정직 회계).
+        """
+        if not self.problem_types_catalog:
+            return ()
+        totals = self.type_totals
+        return tuple(sorted(t for t in self.problem_types_catalog if totals.get(t, 0) == 0))
+
+    def sorted_problem_types(self) -> tuple[str, ...]:
+        """유형 행 순서 — 카탈로그(사전순 튜플) 전량 + 카탈로그 밖 유형(관측됐으나 대장에 없는
+        값·스키마 오류 등)을 뒤에 사전순으로 덧붙인다. 카탈로그가 없으면(로드 실패·미지정)
+        관측된 유형만 사전순으로 낸다(0커버 유형은 이 경우 정의 불가 — `zero_coverage_types` 참고).
+        """
+        totals = self.type_totals
+        if self.problem_types_catalog:
+            catalog_set = set(self.problem_types_catalog)
+            extra = sorted(t for t in totals if t not in catalog_set)
+            return tuple(self.problem_types_catalog) + tuple(extra)
+        return tuple(sorted(totals))
+
 
 def build_report(
     loads: tuple[CorpusLoad, ...],
     catalog: StandardsCatalog,
     *,
     revision: str,
+    problem_types: tuple[str, ...] = (),
 ) -> CoverageReport:
-    """코퍼스 적재 결과 + 성취기준 대장 → `CoverageReport`(순수·부작용 0)."""
+    """코퍼스 적재 결과 + 성취기준 대장 → `CoverageReport`(순수·부작용 0).
+
+    `problem_types`(S3-27)는 선택 인자다 — 미지정(기본 빈 튜플)이면 유형×단원 축은 관측된
+    유형만으로 채워지고 `zero_coverage_types`는 항상 빈 튜플이다(카탈로그를 모르면 "0커버"를
+    단정할 수 없다 — 정직 회계). 기존 호출자(카탈로그 없이 `build_report(loads, catalog,
+    revision=...)`만 쓰는 코드)는 그대로 동작한다(하위호환).
+    """
     target_codes = catalog.codes_for(revision)
     all_codes = catalog.unique_codes
 
@@ -443,7 +518,8 @@ def build_report(
     per_corpus_bands: dict[str, Counter[str]] = {}
     per_corpus_formats: dict[str, Counter[str]] = {}
     format_totals: Counter[str] = Counter()
-    no_std = no_unit = no_diff = no_format = 0
+    type_unit_matrix: dict[str, Counter[str]] = {}
+    no_std = no_unit = no_diff = no_format = no_type = 0
     total = 0
 
     for load in loads:
@@ -467,6 +543,12 @@ def build_report(
                 no_unit += 1
             for unit in units:
                 unit_matrix.setdefault(unit, Counter())[band] += 1
+            # 유형 × 단원(S3-27) — 유형 축도 단원 축과 같은 관례(다중 단원=중복 가산).
+            if not rec.problem_type_codes:
+                no_type += 1
+            for ptype in rec.problem_type_codes:
+                for unit in units:
+                    type_unit_matrix.setdefault(ptype, Counter())[unit] += 1
             # 성취기준 — 대장에 있는지, 있다면 대상 개정인지 3분류(미지 코드를 조용히 버리지 않음).
             if not rec.standard_codes:
                 no_std += 1
@@ -513,10 +595,13 @@ def build_report(
         per_corpus_bands={name: dict(bands) for name, bands in per_corpus_bands.items()},
         per_corpus_formats={name: dict(fmts) for name, fmts in per_corpus_formats.items()},
         format_totals=dict(format_totals),
+        problem_types_catalog=tuple(problem_types),
+        type_unit_matrix={ptype: dict(units) for ptype, units in type_unit_matrix.items()},
         problems_without_standard_codes=no_std,
         problems_without_unit_codes=no_unit,
         problems_without_difficulty=no_diff,
         problems_without_question_format=no_format,
+        problems_without_problem_type=no_type,
     )
 
 
@@ -545,7 +630,7 @@ def render_report(report: CoverageReport, *, max_zero_codes: int = 40) -> str:
         "# 문제은행 커버리지 관측 리포트 (D4)",
         "",
         "> 관측 리포트다 — **exit 게이트가 아니다**(커버율 임계로 실패시키지 않는다).",
-        "> S4-01 초·중 확장의 저작 우선순위 입력. 유형(17종) 축은 Phase 3b 발화 후 확장.",
+        "> S4-01 초·중 확장의 저작 우선순위 입력. 유형(problem_type) × 단원 축은 §2.5(S3-27).",
         "",
         "## 0. 입력 요약",
         "",
@@ -629,6 +714,45 @@ def render_report(report: CoverageReport, *, max_zero_codes: int = 40) -> str:
     band_row = " | ".join(str(report.band_totals.get(band, 0)) for band in BAND_LABELS)
     lines.append(f"| **문항 기준 합계** | {band_row} | {report.total_problems} |")
 
+    # ── 2.5 유형(problem_type) × 단원 분포(S3-27) ──
+    lines += [
+        "",
+        "## 2.5 유형(problem_type) × 단원 분포",
+        "",
+        "> `problem_type_codes`(S3-27 백필) 기반 — 유보 해제 근거는 `ai_content_generation_gap_"
+        "review.md` D3·`problem_bank_gap_review.md` §5-③ 편집자 부기. 한 문항이 여러 단원을 "
+        "가지면 각 단원에 1씩 세므로 행 합계는 총 태깅 문항 수와 다를 수 있다(§2 관례 동일).",
+    ]
+    if not report.problem_types_catalog:
+        lines.append("- 유형 카탈로그 미상(로드 실패 또는 미지정) — 이 축은 관측 불가로 표시.")
+    type_units = sorted({unit for units in report.type_unit_matrix.values() for unit in units})
+    if not type_units:
+        lines.append("- 유형 태깅된 문항 없음(비어있음).")
+    else:
+        lines += [
+            "",
+            "| 유형(problem_type_id) | " + " | ".join(f"`{u}`" for u in type_units) + " | 합계 |",
+            "|---" * (len(type_units) + 2) + "|",
+        ]
+        totals = report.type_totals
+        for ptype in report.sorted_problem_types():
+            row = report.type_unit_matrix.get(ptype, {})
+            cells = " | ".join(str(row.get(u, 0)) for u in type_units)
+            lines.append(f"| `{ptype}` | {cells} | {totals.get(ptype, 0)} |")
+
+    lines += ["", "### 2.5.1 0커버 유형 목록", ""]
+    if not report.problem_types_catalog:
+        lines.append("- 카탈로그 미상 — 0커버 판정 불가(정직 회계).")
+    elif not report.zero_coverage_types:
+        lines.append("- 없음(카탈로그 전 유형이 1문 이상 태깅됨).")
+    else:
+        lines.append("- " + " ".join(f"`{t}`" for t in report.zero_coverage_types))
+        lines.append(
+            f"- 이 목록이 §4-① 트리거의 발화 계측기다(`ai_content_generation_gap_review.md` "
+            f"D3) — **{len(report.zero_coverage_types)}**/{len(report.problem_types_catalog)}종 "
+            "미커버."
+        )
+
     lines += ["", "## 3. 코퍼스별 분해", "", "| 코퍼스 | " + " | ".join(BAND_LABELS) + " |"]
     lines.append("|---" * (len(BAND_LABELS) + 1) + "|")
     for load in report.corpora:
@@ -665,6 +789,7 @@ def render_report(report: CoverageReport, *, max_zero_codes: int = 40) -> str:
         f"| 단원 코드 없는 문항 | {report.problems_without_unit_codes} |",
         f"| 난이도 없는 문항 | {report.problems_without_difficulty} |",
         f"| 질문형식 없는 문항 | {report.problems_without_question_format} |",
+        f"| 유형(problem_type) 없는 문항 | {report.problems_without_problem_type} |",
         f"| 대장에 없는 성취기준 코드(종) | {len(report.unknown_standard_codes)} |",
         f"| 다른 개정에만 있는 코드(종) | {len(report.other_revision_only_codes)} |",
     ]
@@ -723,6 +848,14 @@ def report_to_json(report: CoverageReport) -> dict[str, Any]:
         "per_corpus_bands": report.per_corpus_bands,
         "per_corpus_formats": report.per_corpus_formats,
         "format_totals": report.format_totals,
+        "problem_types": {
+            "catalog": list(report.problem_types_catalog),
+            "catalog_count": len(report.problem_types_catalog),
+            "type_unit_matrix": report.type_unit_matrix,
+            "type_totals": report.type_totals,
+            "zero_coverage_types": list(report.zero_coverage_types),
+            "zero_coverage_type_count": len(report.zero_coverage_types),
+        },
         "honest_accounting": {
             "parse_error_lines": len(report.parse_errors),
             "parse_errors": [
@@ -738,6 +871,7 @@ def report_to_json(report: CoverageReport) -> dict[str, Any]:
             "problems_without_unit_codes": report.problems_without_unit_codes,
             "problems_without_difficulty": report.problems_without_difficulty,
             "problems_without_question_format": report.problems_without_question_format,
+            "problems_without_problem_type": report.problems_without_problem_type,
             "unknown_standard_codes": report.unknown_standard_codes,
             "other_revision_only_codes": report.other_revision_only_codes,
         },
@@ -817,6 +951,12 @@ def main(argv: list[str] | None = None) -> int:
         help="본문에 나열할 0커버 코드 최대 개수(기본 40·전량은 --json).",
     )
     parser.add_argument(
+        "--problem-types",
+        type=Path,
+        default=DEFAULT_PROBLEM_TYPES_PATH,
+        help=f"유형(problem_type) 카탈로그 JSONL 경로(기본 {DEFAULT_PROBLEM_TYPES_PATH}).",
+    )
+    parser.add_argument(
         "--json",
         dest="json_path",
         type=Path,
@@ -840,8 +980,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         return _EXIT_INPUT_ERROR
 
+    # 유형 카탈로그(S3-27)는 *보조 축*이다 — 못 읽어도 exit 2로 전체 리포트를 막지 않는다
+    # (성취기준 대장과 달리 유형 축은 관측의 일부일 뿐 필수 선결 조건이 아니다 — 모듈 docstring).
+    # 실패는 조용히 넘기지 않고 stderr에 예외 타입명과 함께 경고한다(침묵 실패 금지).
+    problem_types: tuple[str, ...] = ()
+    try:
+        raw_lines = args.problem_types.read_text(encoding="utf-8").splitlines()
+        parsed = [json.loads(line) for line in raw_lines if line.strip()]
+        problem_types = load_problem_types(parsed)
+    except Exception as exc:  # noqa: BLE001 — 보조 축 실패는 경고만(예외 타입명 포함)하고 계속
+        print(
+            f"경고 — 유형 카탈로그 적재 실패({type(exc).__name__}): {exc} "
+            "— 유형×단원 축은 '카탈로그 미상'으로 표시됩니다.",
+            file=sys.stderr,
+        )
+
     loads, problems = _resolve_loads(args.corpus_root, args.corpus)
-    report = build_report(loads, catalog, revision=args.revision)
+    report = build_report(loads, catalog, revision=args.revision, problem_types=problem_types)
     print(render_report(report, max_zero_codes=args.max_zero_codes))
     if args.json_path is not None:
         args.json_path.parent.mkdir(parents=True, exist_ok=True)

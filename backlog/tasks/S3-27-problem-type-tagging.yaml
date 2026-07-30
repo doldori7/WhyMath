@@ -5,14 +5,15 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "① 유보 해제 논증 선행: problem_bank_gap_review §5-③ 발화 조건 ⑴('유형별 공백을 저작 우선순위로 쓰겠다는 결정')이 ai_content_generation_gap_review 기능 59 대응으로 성립함을 문서에 명시(solution D1 유보 해제 선례 동형). ② schema/problem.py에 problem_type_codes: list[str] 참조 배열 추가(signature_patterns 동형 — problem_type_node FK 연결·유형별 생성 확대는 스코프 밖·관측 축 한정). ③ 코퍼스 7종 2,647건 결정론 백필: **생성기 identity → 17유형 매핑표**(l3/equivalent 스켈레톤 생성기 18종 × problem_type_graph_v1의 behavior_skills 대조·매핑 근거 1:1 주석)를 정본으로 하며 **문항 텍스트 추론·LLM 0**·재실행 바이트 결정론(S3-10 persona_fit 백필 동형). ④ 계보 미영속 코퍼스(rephrased_v0 429문 — S4-14 미착지로 원 생성기 추적 불가)는 태깅 불가로 명시 제외하고 미태깅 건수를 리포트에 기록(침묵 통과 금지) — 따라서 S4-14 의존 아님. ⑤ 변별력 검증 의무: 매핑표 임의 1밴드를 오매핑시킨 상태에서 거버넌스 테스트 exit 1 실측 후, 정상 상태 exit 0 실측(성공·실패 동일값이면 위장). ⑥ harness/problem_bank_coverage.py(ARCH-18)에 유형×단원 매트릭스 + 17유형 중 0커버 유형 목록 축 추가"
-artifacts: []
+artifacts:
+  - e0c99e9f
 paths:
   - src/backend/whymath_backend/schema/problem.py
   - "src/backend/whymath_backend/harness/**"

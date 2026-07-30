@@ -327,6 +327,24 @@ class Problem(BaseModel):
         description="한국 수능 시그니처 패턴 배열(10종 중)",
     )
 
+    # ===== 문제 유형(problem_type) 참조 =====
+    # S3-27 신규(Problem↔ProblemType 연결 — `problem_bank_gap_review.md` §5-③ 유보 해제,
+    # `ai_content_generation_gap_review.md` D3). `signature_patterns` 동형의 *순수 참조 배열*
+    # (문자열 목록·ORM 관계 아님) — `data/corpus/problem_type_graph_v1/problem_types.jsonl`의
+    # `problem_type_id`(예 'ptype.solve-for-unknown')를 가리키는 문자열만 담는다. 이 필드는
+    # **관측 축 한정**이다: problem_type_node FK 연결·유형별 생성 확대·유형 기반 추천/출제는
+    # 스코프 밖(`problem_bank_gap_review.md` §5-③ 판정 준수) — L1 스키마가 L6(응용 모드) 소비
+    # 로직을 알 필요가 없다(역방향 의존 금지). 결정론 백필은 `harness/problem_type_backfill.py`
+    # (생성기 identity → 유형 매핑표, LLM 0·텍스트 파싱 0)가 채운다. 참조 무결성(값이 카탈로그에
+    # 실재하는지)은 이 스키마가 아니라 백필 CLI·거버넌스 테스트 소관(L1은 형태만 검증).
+    problem_type_codes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "문제 유형(problem_type_id) 참조 배열 — problem_type_graph_v1의 id만 담는 문자열 "
+            "목록(signature_patterns 동형). ORM 관계 아님·관측 축 한정(생성/추천 로직은 스코프 밖)."
+        ),
+    )
+
     # ===== 발문 구조 =====
     has_condition_list: bool = Field(
         default=False,

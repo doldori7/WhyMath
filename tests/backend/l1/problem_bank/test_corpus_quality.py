@@ -379,14 +379,21 @@ def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # 난이도·개념·서명 등)가 소스(수학키 조인)와 동일(수치·정답·검증 메타 불변·오염 0). slug·
     # problem_id는 rephrase가 LLM 원본을 보존하므로 재슬러그된 레코드에서 소스와 다를 수 있어
     # 비교에서 제외한다(S2-08·발문 조사 수정으로 소스 slug만 바뀐 경우).
+    #
+    # S3-27(2026-07-30) 편집자 참고: `problem_type_codes`는 소스(generated_v0)에만 있고 rephrased_v0
+    # 에는 없는 *의도된* 비대칭 필드다 — `S4-14`(변형 계보 영속) 미착지로 원 생성기를 추적할 수 없어
+    # rephrased_v0 429건은 유형 백필에서 명시 제외됐다(`problem_bank_gap_review.md` §5-③ 편집자
+    # 부기·`harness/problem_type_backfill.py`). 오염이 아니라 설계이므로 키 집합·값 비교 양쪽에서
+    # 제외한다.
+    source_only_fields = {"problem_type_codes"}
     source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
     exclude = {"question_text", "slug", "problem_id"}
     for slug, rec in rephrased.items():
         src = source[_math_key(rec)]
-        assert set(rec) == set(src), f"{slug} 키 집합 변화"
+        assert set(rec) == set(src) - source_only_fields, f"{slug} 키 집합 변화"
         for key in src:
-            if key in exclude:
+            if key in exclude or key in source_only_fields:
                 continue
             assert rec[key] == src[key], f"{slug} 필드 변조: {key}"
 
