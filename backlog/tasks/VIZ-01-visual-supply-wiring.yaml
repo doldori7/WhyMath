@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - "src/backend/whymath_backend/l1/concept_visual_style/**"
   - "src/backend/whymath_backend/l1/concept_visualization/**"
   - src/backend/whymath_backend/l1/atom_graph/populate.py
-session: null
+session: main
 notes: "visualization_module_gap_review.md §3 D1+D2. 학생 경로(/v1/scenes/weak-concept)의 시각화 블록이 scene_generation.py:279에서 두 오버레이를 AND로 요구하는데 프로덕션 적재 호출이 4함수 전건 0건 → 전 시각화 스택(명세·렌더 계약·계산기 2141행·Flutter 봉투)이 구축 완료 상태로 도달 0회. D2(fail-open)는 fail-closed로 바꾸지 않는다(시각화 전멸=학습효과 침해) — 바꾸는 것은 가시성. 선행 자매편 S3-26(assessment=None → 404)과 동일 실패 유형(§6 반복 실수)."
 updated: 2026-07-30
