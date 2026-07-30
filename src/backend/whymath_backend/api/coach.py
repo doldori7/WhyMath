@@ -807,48 +807,56 @@ def _last_solution_step(body: CoachRequest) -> str | None:
     return last or None
 
 
-async def _final_answer_correct(
+async def _final_answer_state(
     session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
-) -> bool:
-    """이 턴의 최종답 후보(풀이 마지막 단계 → 대화 입력)가 기대정답과 동치인지 — 서버 권위 판정.
+) -> FinalAnswerState | None:
+    """이 턴의 최종답 후보(풀이 마지막 단계 → 대화 입력)의 *3상태* 판정 — 서버 권위(S3-31 확장).
 
-    완료 상태머신의 *정답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·problem_id
-    없음·후보 없음이면 조회조차 하지 않고 False. 있으면 문항을 *무게이트*로 로드해
-    (`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션 기본 기능) 후보를
-    `verify_final_answer`로 3상태 판정하고 **correct일 때만 True**를 준다. incorrect/unverifiable은
-    False(완료 위장 금지·정직). 기대정답(`Problem.answer`)은 이 함수 밖으로 결코 흘러나가지 않는다
-    (verify_final_answer가 상태·사유만 반환·사유엔 학생 원문만 반향).
+    완료 상태머신의 *정답/오답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·
+    problem_id 없음·후보 없음이면 조회조차 하지 않고 `None`(감지 대상 아님). 있으면 문항을
+    *무게이트*로 로드해(`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션 기본 기능)
+    후보를 `verify_final_answer`로 3상태 판정한다. 기대정답(`Problem.answer`)은 이 함수 밖으로 결코
+    흘러나가지 않는다(verify_final_answer가 상태·사유만 반환·사유엔 학생 원문만 반향).
 
-    **S3-28(원 S3-11) 대화 입력 확장(실기기 3차 실증)**: 학생은 답을 대화창(student_input)에
-    자연스럽게 타이핑한다 — 대화 입력도 풀이과정이다(Kiki 교수학 취지). 감지 순서:
-      ① 풀이 마지막 단계(`solution_steps` — S3-27 기존 경로)가 correct면 즉시 True.
-      ② 단계가 없거나 ①이 correct가 아니면 `student_input`으로도 verify를 시도한다.
-    **보수성(거짓 완료 0)**: `verify_final_answer`는 파싱 불가한 긴 문장·사변("인수분해 근 중에
-    큰거")을 unverifiable로 떨어뜨리므로 짧은 답 형태("x=3"·"3"·"a=2")만 correct가 된다 — 별도
-    휴리스틱 없이 검증기 자체가 자연 감지 필터다. incorrect 대화 입력("x=5")은 감지하지 않고
-    기존 코칭 흐름(NONE)을 유지한다(정답 노출 금지 계약 그대로).
+    **S3-31 3상태 확장(오답 재고 유도)**: 직전(S3-27/28)의 `_final_answer_correct`는 correct 여부만
+    bool로 냈다. 이제 `FinalAnswerState`를 그대로 돌려 호출자가 correct(→완료 진입)·incorrect(→재고
+    유도)·unverifiable(→기존 코칭)을 구분하게 한다. 반환값 계약:
+      - `None`: 게이트 off·problem_id/문항 부재·후보 없음(감지 대상 자체가 아님).
+      - `FinalAnswerState.correct/incorrect/unverifiable`: 후보가 있어 판정한 결과.
+
+    **후보 결합(정직·correct 우선)**: 풀이 마지막 단계(`solution_steps` — S3-27)와 대화 입력
+    (`student_input` — S3-28 실기기 실증)을 *둘 다* 최종답 후보로 본다. 여러 후보의 상태를 모아
+    ① 하나라도 correct면 `correct`(완료 차단 금지·기존 correct 감지 로직 상위호환) ② correct는 없고
+    하나라도 incorrect면 `incorrect`(명확한 오답 → 재고 유도) ③ 그 외(전부 unverifiable)면
+    `unverifiable`을 준다. 같은 문자열이면 재검증을 생략한다(중복 호출만 아낌·판정 동일).
+
+    **보수성(거짓 완료·거짓 redirect 0)**: `verify_final_answer`는 파싱 불가한 긴 문장·사변
+    ("인수분해 근 중에 큰거")을 unverifiable로 떨어뜨리므로, incorrect는 *명확한 오답 값/식*
+    (객관식 6 vs 정답 4·오답 방정식 "x=5")일 때만 나온다 — 사변에 재고 유도가 잘못 발동하지
+    않는다(호출자가 unverifiable을 REDIRECT로 쓰지 않음). 정답 노출 금지 계약은 그대로다.
     """
     if not get_settings().l4_solution_completion_enabled or problem_id is None:
-        return False
+        return None
     last_step = _last_solution_step(body)
     # S3-28: 대화 입력도 최종답 후보 — 공백뿐이면 None(감지 대상 아님).
     chat_answer = body.student_input.strip() or None
     if last_step is None and chat_answer is None:
-        return False
+        return None
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
-        return False  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
-    # ① 풀이 단계 경로(S3-27) — 마지막 단계가 correct면 즉시 감지.
+        return None  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
+    # 후보별 3상태 수집 — 풀이 마지막 단계(S3-27)·대화 입력(S3-28). 같은 문자열이면 재검증 생략.
+    states: list[FinalAnswerState] = []
     if last_step is not None:
-        result = verify_final_answer(last_step, problem)
-        if result.state is FinalAnswerState.correct:
-            return True
-    # ② S3-28 대화 입력 폴백 — 단계가 없거나 단계 감지 실패면 student_input으로도 시도.
-    #    (마지막 단계와 동일 문자열이면 재검증 생략 — 같은 판정이라 중복 호출만 아낀다.)
+        states.append(verify_final_answer(last_step, problem).state)
     if chat_answer is not None and chat_answer != last_step:
-        result = verify_final_answer(chat_answer, problem)
-        return result.state is FinalAnswerState.correct
-    return False
+        states.append(verify_final_answer(chat_answer, problem).state)
+    # 집계: correct 우선(완료 차단 금지) → incorrect(재고 유도) → unverifiable(기존 코칭).
+    if FinalAnswerState.correct in states:
+        return FinalAnswerState.correct
+    if FinalAnswerState.incorrect in states:
+        return FinalAnswerState.incorrect
+    return FinalAnswerState.unverifiable
 
 
 async def _complete_problem(
@@ -923,23 +931,28 @@ async def _resolve_completion(
     already_completed: bool,
     body: CoachRequest,
     decision: PedagogyDecision,
+    turn_index: int = 1,
 ) -> _CompletionResult:
-    """완료 상태머신 결선(L5 오케스트레이션) — 정답 감지(L3)·완료 판정(L4)·attempt 적재(L2 재사용).
+    """완료 상태머신 결선(L5 오케스트레이션) — 정답/오답 감지(L3)·완료 판정(L4)·attempt 적재(L2).
 
     흐름(순수 결정은 `l4/completion.decide_completion`·부작용만 여기서):
       1. 게이트 off → no-op(`handled=False`·기존 발화·회귀 완전 불변).
       2. *돌아보기 전(prior=0)이고 미완료*일 때만 이 턴의 최종답 후보(풀이 마지막 단계 → S3-28
-         대화 입력 폴백)를 verify로 판정(`_final_answer_correct`) — 돌아보기 중·완료된 세션은
+         대화 입력 폴백)를 verify로 3상태 판정(`_final_answer_state`) — 돌아보기 중·완료된 세션은
          감지 자체를 건너뛴다(불필요 조회 0·돌아보기 응답 턴은 재검증하지 않음).
-      3. `decide_completion`으로 4전이 결정.
+      3. `decide_completion`으로 5전이 결정(correct→ENTER_REVIEW·**incorrect→REDIRECT**·그 외 NONE).
       4. `NONE` → no-op(기존 발화 유지). 그 외 → 결정론 발화로 override(prompt·socratic_category).
-      5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보).
+      5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보). REDIRECT는
+         attempt 없음(완료 아님) — 재고 유도 발화만 override한다.
+
+    `turn_index`(S3-31): REDIRECT 재고 발화 변주용 1-기반 턴 번호(create=1·append는 누적 턴). 세션에
+    새 카운터를 만들지 않고 이미 계산되는 턴 번호로만 변주(같은 재고 발화 반복 완화).
 
     반환의 `handled`는 완료 상태머신이 발화를 가로챘는지다 — True면 호출자가 WH-1 primary flip을
-    건너뛴다(결정론 메타인지 템플릿을 LLM으로 재작성 금지).
+    건너뛴다(결정론 메타인지·재고 유도 템플릿을 LLM으로 재작성 금지).
     """
     if not get_settings().l4_solution_completion_enabled:
-        # 게이트 off — 완료 기능 완전 inert(정답 감지·돌아보기·적재 0·기존 동작 비트동일).
+        # 게이트 off — 완료 기능 완전 inert(정답/오답 감지·돌아보기·적재 0·기존 동작 비트동일).
         return _CompletionResult(
             decision=decision,
             problem_complete=False,
@@ -950,15 +963,18 @@ async def _resolve_completion(
         )
 
     prior = prior_review_remaining or 0
-    # 정답 도달 감지는 *돌아보기 전(prior=0)·미완료*일 때만 — 돌아보기 응답 턴·완료 세션은 skip.
-    final_correct = False
+    # 정답/오답 도달 감지는 *돌아보기 전(prior=0)·미완료*일 때만 — 돌아보기 응답 턴·완료 세션 skip.
+    final_state: FinalAnswerState | None = None
     if prior == 0 and not already_completed:
-        final_correct = await _final_answer_correct(session, problem_id, body)
+        final_state = await _final_answer_state(session, problem_id, body)
 
     cd = decide_completion(
         prior_review_remaining=prior,
         already_completed=already_completed,
-        final_answer_correct=final_correct,
+        final_answer_correct=final_state is FinalAnswerState.correct,
+        # S3-31: 명확한 오답(incorrect)만 재고 유도 — unverifiable(사변)은 False(false redirect 0).
+        final_answer_incorrect=final_state is FinalAnswerState.incorrect,
+        redirect_turn_index=turn_index,
     )
     if cd.action is CompletionAction.NONE:
         # 완료 무관 — 기존 코칭 발화 그대로(돌아보기 상태 유지값=0·회귀 불변).
@@ -1635,10 +1651,11 @@ async def create_session(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
-    # S3-27(원 S3-10) 완료 상태머신 — 새 dialogue라 돌아보기 이력·완료 없음(prior=0·미완료). 이 턴
-    # 풀이의 마지막 단계가 correct면 ENTER_REVIEW(돌아보기 대기·메타인지 프롬프트로 발화 override)·
-    # 아니면 no-op. 생성 턴에서 완료(COMPLETE)는 일어나지 않는다(돌아보기 이력이 없어 prior=0
-    # → ENTER만).
+    # S3-27/31(원 S3-10/15) 완료 상태머신 — 새 dialogue라 돌아보기 이력·완료 없음(prior=0·미완료).
+    # 이 턴 최종답 후보가 correct면 ENTER_REVIEW(돌아보기 대기·메타인지 프롬프트로 발화 override)·
+    # 명확한 오답이면 REDIRECT(재고 유도 발화·완료 없음·S3-31)·그 외 no-op. 생성 턴에서 완료
+    # (COMPLETE)는 일어나지 않는다(돌아보기 이력이 없어 prior=0 → ENTER/REDIRECT/NONE만·turn_index
+    # 기본 1=일반 재고).
     completion = await _resolve_completion(
         session,
         user_id=user.user_id,
@@ -1877,11 +1894,13 @@ async def append_turns(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
-    # S3-27(원 S3-10) 완료 상태머신 — dialogue에 저장된 직전 돌아보기 상태(review_turns_remaining)와
-    # 완료 여부(attempt_id 존재)를 읽어 이 턴을 판정한다:
+    # S3-27/31(원 S3-10/15) 완료 상태머신 — dialogue에 저장된 직전 돌아보기 상태
+    # (review_turns_remaining)와 완료 여부(attempt_id 존재)를 읽어 이 턴을 판정한다:
     #   ① 돌아보기 대기 중(prior>0)이면 이 턴은 학생 근거 응답 → 완료 확정(attempt 적재·인정 발화).
-    #   ② 돌아보기 전(prior=0)·미완료면 이 턴 마지막 단계 correct 시 돌아보기 진입(메타인지 발화).
-    #   ③ 오답·미검증·이미 완료면 no-op(기존 코칭 그대로). 완료는 *풀이 제출을 통해서만* 일어난다.
+    #      (돌아보기 중 오답스러운 입력이 와도 재검증하지 않고 review를 진행한다.)
+    #   ② 돌아보기 전(prior=0)·미완료면 이 턴 최종답 후보 correct 시 돌아보기 진입(메타인지 발화).
+    #   ③ 돌아보기 전·미완료·명확한 오답이면 REDIRECT(재고 유도 발화·완료 없음·S3-31).
+    #   ④ 미검증·사변·이미 완료면 no-op(기존 코칭 그대로). 완료는 *풀이 제출을 통해서만* 일어난다.
     completion = await _resolve_completion(
         session,
         user_id=user.user_id,
@@ -1890,6 +1909,9 @@ async def append_turns(
         already_completed=dialogue.attempt_id is not None,
         body=body,
         decision=decision,
+        # S3-31: 재고 발화 변주용 이번 교환의 1-기반 턴 번호(shadow spawn·_wh1_turn_state와 동일).
+        # 새 카운터를 만들지 않고 누적 턴 번호로만 변주 — 후속(2회차+) 재고는 살짝 더 구체화.
+        turn_index=(dialogue.total_turns or 0) // 2 + 1,
     )
     decision = completion.decision
     # S1-11 flip: create_session과 동형 — 학생-대면 발화만 하네스 LLM 발화로 교체(검증 게이트·

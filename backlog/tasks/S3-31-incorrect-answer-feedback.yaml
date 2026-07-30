@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-31-incorrect-answer-feedback
+title: "오답 최종답 피드백 — 오답 인식 시 재고 유도(일반 반복 대신)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: in_progress
+priority: 1
+owner: claude
+depends_on:
+  - S3-30-dialogue-reset-per-problem
+requires_gates: []
+acceptance:
+  - "오답 최종답 인식 시 일반 소크라테스 반복 대신 재고 유도 발화(정답 미노출·톤필터 금지패턴 0)"
+  - correct/unverifiable/돌아보기중/완료됨 경로는 회귀 0
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+  - src/backend/whymath_backend/api/coach.py
+session: claude/s3-02-live-remeasurement-tlthrr
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-15, 원 커밋 631f6d9) — 재채번. 검증: test_coach.py+test_coach_completion.py+test_coach_pack_wiring.py 283 passed(1 skipped·통합)·ruff/mypy clean(2026-07-30, -c src/backend/pyproject.toml). 전체 스위트(tests/backend/) 백그라운드 실행 중 — done 등재 전 결과 확인 예정."
+updated: 2026-07-30

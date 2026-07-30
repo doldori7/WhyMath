@@ -1,16 +1,20 @@
-"""S3-27(원 S3-10) 완료를 풀이 제출에 통합 — 완료 상태머신·정답 도달 감지·돌아보기 결선(hermetic).
+"""S3-27(원 S3-10) 완료를 풀이 제출에 통합 + S3-31(원 S3-15) 오답 재고 유도 — 완료 상태머신·정답/오답
+도달 감지·돌아보기 결선(hermetic).
 
 **철학(Kiki 교수학 지적)**: 완료를 *오직 풀이 제출을 통해서*만 일어나게 한다. 풀이 마지막 단계가
 기대정답이면 서버가 감지하고, *바로 넘기지 않고* Polya 돌아보기(메타인지) 1턴을 거친 뒤 완료→다음
-문항으로 간다. 별도 "정답 제출" 버튼(POST /me/attempts 직접 호출)을 대체한다.
+문항으로 간다. 별도 "정답 제출" 버튼(POST /me/attempts 직접 호출)을 대체한다. 명확한 *오답*이면
+(S3-31) 일반 소크라테스 반복 대신 재고 유도 발화로 방향을 준다(Kiki '오답에 같은 답만 하는 건 잘못').
 
 검증 범위:
-  - 순수 상태머신(`decide_completion`) 4전이 전수.
+  - 순수 상태머신(`decide_completion`) 5전이 전수(REDIRECT 포함).
   - create_session: 정답 첫 도달 → 돌아보기 대기(review_pending)·완료 아님·attempt 미적재.
   - append_turns: 돌아보기 응답 턴 → 완료 확정(problem_complete·ProblemAttempt is_correct=True
     적재).
-  - 오답/미검증 last step → 완료 없음·기존 코칭 지속(회귀 불변).
-  - 이미 완료(attempt_id 존재) → 재완료 금지(중복 attempt 0).
+  - 명확한 오답 last step/대화 입력 → REDIRECT(재고 유도 발화·정답 비노출·톤필터 금지패턴 0)·
+    완료/attempt/돌아보기 없음.
+  - 미검증·사변(unverifiable) → 완료 없음·재고 유도도 없음·기존 코칭 지속(회귀 불변).
+  - 이미 완료(attempt_id 존재) → 재완료 금지(중복 attempt 0)·재고 발화도 없음.
   - 게이트 off → 완료 기능 완전 inert(기존 동작 비트동일).
 """
 
@@ -33,7 +37,13 @@ from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptO
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
-from whymath_backend.l4.completion import CompletionAction, decide_completion
+from whymath_backend.l4.completion import (
+    _REDIRECT_PROMPT,
+    _REDIRECT_PROMPT_SPECIFIC,
+    CompletionAction,
+    decide_completion,
+)
+from whymath_backend.l4.tone_filter import filter_tone
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -42,6 +52,14 @@ _UID = uuid.uuid4()
 _SECRET = "test-secret-0123456789abcdef"
 _REFLECTION_MARK = "설명해줄래"  # 돌아보기 프롬프트 표식(문구 취지 검증)
 _ACK_MARK = "다음 문제로 가보자"  # 완료 인정 발화 표식
+# S3-31 재고 유도 발화 상수 2종(일반·구체) — 단일 진실원천으로 import해 exact 비교한다.
+_REDIRECT_PROMPTS = (_REDIRECT_PROMPT, _REDIRECT_PROMPT_SPECIFIC)
+
+
+def _assert_tone_safe(text: str) -> None:
+    """톤필터 금지 6패턴(틀렸·못 하·잘못된·실수·바보·포기) 0건 — 재고 발화 정서안전 봉인."""
+    _, report = filter_tone(text)
+    assert report.violations == [], f"금지 패턴 검출: {report.violations}"
 
 
 @pytest.fixture(autouse=True)
@@ -99,10 +117,13 @@ class TestDecideCompletionPure:
         assert cd.review_turns_remaining_after == 2
         assert cd.action is CompletionAction.ENTER_REVIEW
 
-    def test_none_on_incorrect(self) -> None:
-        """오답(정답 미도달)·돌아보기 전 → NONE(완료 무관·발화 override 없음)."""
+    def test_none_on_unverifiable(self) -> None:
+        """미검증·사변(correct도 incorrect도 아님)·돌아보기 전 → NONE(완료 무관·발화 override 없음)."""
         cd = decide_completion(
-            prior_review_remaining=0, already_completed=False, final_answer_correct=False
+            prior_review_remaining=0,
+            already_completed=False,
+            final_answer_correct=False,
+            final_answer_incorrect=False,
         )
         assert cd.action is CompletionAction.NONE
         assert cd.problem_complete is False
@@ -116,6 +137,68 @@ class TestDecideCompletionPure:
         )
         assert cd.action is CompletionAction.NONE
         assert cd.problem_complete is False
+
+    # ── S3-31: REDIRECT 전이(명확한 오답 → 재고 유도) ─────────────────────────────
+    def test_redirect_on_incorrect_first_turn(self) -> None:
+        """돌아보기 전·미완료·명확한 오답(turn 1) → REDIRECT(일반 재고 발화·완료/attempt 없음)."""
+        cd = decide_completion(
+            prior_review_remaining=0,
+            already_completed=False,
+            final_answer_correct=False,
+            final_answer_incorrect=True,
+        )
+        assert cd.action is CompletionAction.REDIRECT
+        assert cd.problem_complete is False
+        assert cd.awaiting_reflection is False
+        assert cd.review_turns_remaining_after == 0
+        assert cd.prompt == _REDIRECT_PROMPT  # turn_index 기본 1 → 일반 재고
+        assert cd.socratic_category == "meta"
+        _assert_tone_safe(cd.prompt)
+
+    def test_redirect_variant_on_later_turn(self) -> None:
+        """2회차 이후(turn_index≥2) → 같은 발화 반복 대신 구체 재고 발화로 변주."""
+        cd = decide_completion(
+            prior_review_remaining=0,
+            already_completed=False,
+            final_answer_correct=False,
+            final_answer_incorrect=True,
+            redirect_turn_index=2,
+        )
+        assert cd.action is CompletionAction.REDIRECT
+        assert cd.prompt == _REDIRECT_PROMPT_SPECIFIC
+        assert cd.prompt != _REDIRECT_PROMPT  # 변주됨(verbatim 반복 아님)
+        _assert_tone_safe(cd.prompt)
+
+    def test_correct_wins_over_incorrect(self) -> None:
+        """방어 — correct·incorrect가 동시에 True로 들어와도 correct 우선(ENTER_REVIEW)."""
+        cd = decide_completion(
+            prior_review_remaining=0,
+            already_completed=False,
+            final_answer_correct=True,
+            final_answer_incorrect=True,
+        )
+        assert cd.action is CompletionAction.ENTER_REVIEW
+
+    def test_no_redirect_during_review(self) -> None:
+        """돌아보기 중(prior>0)엔 오답 신호여도 재검증하지 않고 review 진행(여기선 COMPLETE)."""
+        cd = decide_completion(
+            prior_review_remaining=1,
+            already_completed=False,
+            final_answer_correct=False,
+            final_answer_incorrect=True,
+        )
+        assert cd.action is CompletionAction.COMPLETE
+
+    def test_no_redirect_when_already_completed_incorrect(self) -> None:
+        """이미 완료된 세션 → 오답 재제출이어도 NONE(재고 발화도 없음·불변)."""
+        cd = decide_completion(
+            prior_review_remaining=0,
+            already_completed=True,
+            final_answer_correct=False,
+            final_answer_incorrect=True,
+        )
+        assert cd.action is CompletionAction.NONE
+        assert cd.prompt is None
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -228,6 +311,17 @@ def _problem(answer: str | None = "3") -> SimpleNamespace:
     return SimpleNamespace(answer=answer, choices=None, question_format=None, multiple_answers=None)
 
 
+# 객관식 문항 — 실기기 실측 (f∘g)(1) 유형(정답 4·합성순서 오개념이면 6 제출). choices 보유 →
+# verify_final_answer가 객관식 값 매칭 경로로 판정(다른 선택지 값이면 incorrect).
+def _problem_mc(answer: str = "4", choices: list[str] | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        answer=answer,
+        choices=choices if choices is not None else ["2", "4", "6", "8"],
+        question_format=None,
+        multiple_answers=None,
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # ① create_session: 정답 첫 도달 → 돌아보기 대기(완료 아님·attempt 미적재)
 # ──────────────────────────────────────────────────────────────────────────
@@ -259,8 +353,8 @@ class TestCreateSessionEntersReview:
         assert dialogue.review_turns_remaining == 1
         assert dialogue.attempt_id is None
 
-    def test_incorrect_final_step_no_review(self) -> None:
-        """오답 마지막 단계 → 돌아보기 없음·완료 없음·기존 코칭 그대로(회귀 불변)."""
+    def test_incorrect_final_step_redirects(self) -> None:
+        """S3-31 — 오답 마지막 단계(x=4≠3) → 재고 유도 발화(REDIRECT)·완료/돌아보기/attempt 없음."""
         pid = uuid.uuid4()
         client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
         resp = client.post(
@@ -275,12 +369,20 @@ class TestCreateSessionEntersReview:
         body = resp.json()
         assert body["problem_complete"] is False
         assert body["awaiting_reflection"] is False
+        assert body["completed_attempt_id"] is None
+        # 돌아보기 프롬프트 아님·재고 유도 발화(일반·turn 1).
         assert _REFLECTION_MARK not in body["decision"]["prompt"]
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT
+        assert body["decision"]["socratic_category"] == "meta"
+        _assert_tone_safe(body["decision"]["prompt"])
+        assert "3" not in body["decision"]["prompt"]  # 기대정답 비노출
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
         dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
         assert dialogue.review_turns_remaining == 0
+        assert dialogue.attempt_id is None
 
     def test_no_solution_steps_no_review(self) -> None:
-        """solution_steps 미제공(대화만) → 감지 없음·기존 동작(회귀 불변)."""
+        """solution_steps 미제공(대화만·"모르겠어요"=사변) → 감지 없음·기존 동작(회귀 불변·재고 아님)."""
         pid = uuid.uuid4()
         client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
         resp = client.post(
@@ -288,7 +390,9 @@ class TestCreateSessionEntersReview:
             json={"student_input": "모르겠어요", "problem_id": str(pid)},
         )
         assert resp.status_code == 201, resp.text
-        assert resp.json()["awaiting_reflection"] is False
+        body = resp.json()
+        assert body["awaiting_reflection"] is False
+        assert body["decision"]["prompt"] not in _REDIRECT_PROMPTS  # 사변 → 재고 유도 아님
         dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
         assert dialogue.review_turns_remaining == 0
 
@@ -539,12 +643,13 @@ class TestChatInputAnswerDetection:
         assert body["problem_complete"] is False
         assert body["awaiting_reflection"] is False
         assert _REFLECTION_MARK not in body["decision"]["prompt"]
+        assert body["decision"]["prompt"] not in _REDIRECT_PROMPTS  # 사변 → 재고 유도 아님
         assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
         dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
         assert dialogue.review_turns_remaining == 0
 
-    def test_incorrect_chat_answer_stays_none(self) -> None:
-        """④ 오답 대화 입력 "x=5" → 감지 안 됨(NONE)·기존 코칭 흐름 유지(정답 비노출 계약)."""
+    def test_incorrect_chat_answer_redirects(self) -> None:
+        """④ S3-31 — 명확한 오답 대화 입력 "x=5" → 재고 유도(REDIRECT)·완료/attempt 없음·정답 비노출."""
         pid = uuid.uuid4()
         client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
         resp = client.post(
@@ -555,7 +660,12 @@ class TestChatInputAnswerDetection:
         body = resp.json()
         assert body["problem_complete"] is False
         assert body["awaiting_reflection"] is False
+        assert body["completed_attempt_id"] is None
         assert _REFLECTION_MARK not in body["decision"]["prompt"]
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT  # 대화만·create → turn 1 일반 재고
+        assert body["decision"]["socratic_category"] == "meta"
+        _assert_tone_safe(body["decision"]["prompt"])
+        assert "3" not in body["decision"]["prompt"]  # 기대정답 비노출
         assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
         dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
         assert dialogue.review_turns_remaining == 0
@@ -596,6 +706,139 @@ class TestChatInputAnswerDetection:
         assert body["awaiting_reflection"] is True
         assert body["problem_complete"] is False
         assert _REFLECTION_MARK in body["decision"]["prompt"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑥ S3-31: 명확한 오답 → 재고 유도(REDIRECT) — 일반 소크라테스 반복 대신 방향 제시
+# ──────────────────────────────────────────────────────────────────────────
+class TestRedirectOnIncorrect:
+    """오답을 인식(verify incorrect)하면 재고 유도 발화로 학생이 오답에 갇히지 않게 방향을 준다.
+
+    실기기 실증(Kiki 지적): (f∘g)(1) 정답 4인데 학생이 6(합성순서 오개념)을 반복 제출해도 코치가
+    일반 반복만 했다. 이제 명확한 오답이면 REDIRECT(완료/attempt/돌아보기 없음·정답 비노출·톤필터
+    금지 6패턴 0). unverifiable(사변)은 재고 대상 아님(기존 코칭 유지·다른 테스트에서 봉인).
+    """
+
+    def test_mc_wrong_choice_redirects(self) -> None:
+        """객관식(정답 4·choices) 대화 입력 "6" → REDIRECT(일반 재고·완료/attempt 없음·정답 비노출)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem_mc("4")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "6", "problem_id": str(pid)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert body["completed_attempt_id"] is None
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT
+        assert body["decision"]["socratic_category"] == "meta"
+        _assert_tone_safe(body["decision"]["prompt"])
+        assert "4" not in body["decision"]["prompt"]  # 기대정답 비노출
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        assert dialogue.review_turns_remaining == 0
+        assert dialogue.attempt_id is None
+
+    def test_wrong_equation_solution_redirects(self) -> None:
+        """주관식 오답 방정식(정답 3·마지막 단계 x=5) → REDIRECT(풀이 제출 경로)."""
+        pid = uuid.uuid4()
+        client, captured = _client(preload={(ProblemORM, pid): _problem("3")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "이렇게 풀었어요",
+                "problem_id": str(pid),
+                "solution_steps": ["2*x = 10", "x = 5"],  # 마지막 x=5 ≠ 3
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT
+        _assert_tone_safe(body["decision"]["prompt"])
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+
+    def test_repeated_wrong_answer_varies_utterance(self) -> None:
+        """같은 세션 후속 턴(turn_index≥2) 오답 → 같은 재고 발화 반복 대신 구체 발화로 변주."""
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        # total_turns=2(직전 1교환) → 이 append는 turn_index=2 → 구체 재고.
+        dialogue = _preloaded_dialogue(did, pid, total_turns=2, review_turns_remaining=0)
+        client, captured = _client(
+            preload={(DialogueORM, did): dialogue, (ProblemORM, pid): _problem("3")}
+        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": "x=5"})
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["awaiting_reflection"] is False
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT_SPECIFIC  # 변주(2회차 구체)
+        _assert_tone_safe(body["decision"]["prompt"])
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+
+    def test_review_turn_wrong_input_still_completes_not_redirect(self) -> None:
+        """돌아보기 중(prior=1) 오답스러운 입력 "x=5" → 재검증 없이 review 완료(REDIRECT 아님)."""
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        dialogue = _preloaded_dialogue(did, pid, total_turns=4, review_turns_remaining=1)
+        client, captured = _client(
+            preload={(DialogueORM, did): dialogue, (ProblemORM, pid): _problem("3")}
+        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": "x=5"})
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        # 돌아보기 응답 턴이라 재검증 없이 완료 확정(오답 신호는 무시) — 재고 유도 아님.
+        assert body["problem_complete"] is True
+        assert body["decision"]["prompt"] not in _REDIRECT_PROMPTS
+        assert _ACK_MARK in body["decision"]["prompt"]
+        attempts = [o for o in captured.added if isinstance(o, ProblemAttemptORM)]
+        assert len(attempts) == 1
+
+    def test_already_completed_wrong_answer_no_redirect(self) -> None:
+        """이미 완료(attempt_id 존재)된 세션에 오답 재제출 → 불변(재고 발화도 없음·중복 attempt 0)."""
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        existing_attempt = uuid.uuid4()
+        dialogue = _preloaded_dialogue(
+            did, pid, total_turns=6, review_turns_remaining=0, attempt_id=existing_attempt
+        )
+        client, captured = _client(
+            preload={(DialogueORM, did): dialogue, (ProblemORM, pid): _problem("3")}
+        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": "x=5"})
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["problem_complete"] is False
+        assert body["decision"]["prompt"] not in _REDIRECT_PROMPTS
+        assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
+        assert dialogue.attempt_id == existing_attempt
+
+    def test_redirect_never_leaks_expected_answer(self) -> None:
+        """오답 재고 경로에서도 기대정답(distinctive "17/5")이 응답 어디에도 노출되지 않는다."""
+        import json
+
+        pid = uuid.uuid4()
+        client, _ = _client(preload={(ProblemORM, pid): _problem("17/5")})
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "x=4", "problem_id": str(pid)},  # 4 ≠ 17/5 → incorrect
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["decision"]["prompt"] == _REDIRECT_PROMPT  # 재고 유도로 진입했음을 확인
+        assert "17/5" not in resp.text
+        assert "17/5" not in json.dumps(body)
+
+    def test_redirect_prompts_pass_tone_filter(self) -> None:
+        """재고 발화 상수 2종 모두 톤필터 금지 6패턴 0(정서안전 봉인·멱등)."""
+        for prompt in _REDIRECT_PROMPTS:
+            rewritten, report = filter_tone(prompt)
+            assert report.violations == []
+            assert report.rewritten is False
+            assert rewritten == prompt  # 치환 없음(원문 그대로)
 
 
 # ──────────────────────────────────────────────────────────────────────────
