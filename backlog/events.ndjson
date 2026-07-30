@@ -1135,3 +1135,7 @@
 {"ts": "2026-07-30T12:08:11", "actor": "claude/whymath-visualization-review-zl2v1b", "action": "add", "id": "VIZ-01-visual-supply-wiring"}
 {"ts": "2026-07-30T12:08:31", "actor": "claude/whymath-visualization-review-zl2v1b", "action": "add", "id": "VIZ-02-generator-render-contract-derive"}
 {"ts": "2026-07-30T12:08:47", "actor": "claude/whymath-visualization-review-zl2v1b", "action": "add", "id": "VIZ-03-graph2d-spec-expressiveness"}
+{"ts": "2026-07-30T11:08:52", "actor": "claude/arch-22-pytest-asyncio-pin", "action": "claim_release", "id": "ARCH-22-pytest-asyncio-unpinned-break", "forced": true}
+{"ts": "2026-07-30T11:08:55", "actor": "claude/arch-22-pytest-asyncio-pin", "action": "start", "id": "ARCH-22-pytest-asyncio-unpinned-break", "session": "claude/arch-22-pytest-asyncio-pin", "remote": "ok"}
+{"ts": "2026-07-30T11:31:07", "actor": "claude/arch-22-pytest-asyncio-pin", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 ARCH-22-pytest-asyncio-unpinned-break의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-30T11:31:32", "actor": "claude/arch-22-pytest-asyncio-pin", "action": "done", "id": "ARCH-22-pytest-asyncio-unpinned-break", "artifacts": ["bc994749"]}
