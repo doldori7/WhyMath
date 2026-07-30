@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-01-unified-learning-path-difficulty-axis
+title: "다(多)약개념 통합 학습 경로 + intrinsic_difficulty 첫 L2 reader"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①GET /v1/me/learning-path 신설(concept_id 없는 학생 단위 좌석) — 여러 약개념의 선수 합집합을 order_learning_path로 1개 경로로 배열. 기존 /weak-concepts/{concept_id}/learning-path 좌석 유지·순수 정렬 함수 신규 알고리즘 0(입력 조립층만 추가)·중복 개념 0"
+  - "②intrinsic_difficulty의 L2 첫 reader — l1/atom_graph/axis.py ATOM_AXIS_META_COLUMNS에 1열 추가(prerequisite_recommendation.py:275가 이미 SELECT하므로 자동 유입)하고 _tiebreak에 난이도 축 삽입. 위상 제약이 항상 우선임을 대비 테스트로 동결(난이도가 위상 순서를 역전시키지 않음)"
+  - "③난이도 미주입(NULL) 시 기존 순서와 완전 동일(하위호환·데이터0 안전) + 결정론 재현(같은 입력→같은 steps) + user_id 스코핑 읽기 전용 권한 회귀. 전역 그래프 순회·curriculum_entry.prerequisite_concept_ids 동시 소비 미도입(이중 진실원천·노드폭발 회피)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/learning_path.py
+  - src/backend/whymath_backend/l2/prerequisite_recommendation.py
+  - src/backend/whymath_backend/l1/atom_graph/axis.py
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "2026-07-30 learning_path_module_gap_review.md D1. 실측: l2/learning_path.py:120 _tiebreak·:143 order_learning_path, l1/atom_graph/axis.py:52(현재 3열), api/me.py:1438(기존 개념별 좌석). MEMORY L2104·L2100 NOT(후속) '다(多)약개념 통합 경로' 상환 — L2100이 전역 좌석 이름까지 예고. intrinsic_difficulty는 L1 생산자만 있고 L2+ reader 0(dead code 금지). 불채택: 전역 순회 최단경로(§2-⑨)·recommended_path 영속(§2-④)."
+updated: 2026-07-30

@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-02-transitive-edge-order-budget
+title: "transitive 순서 보정 — 비-weak 중간 노드 경유 축약 엣지 + max_nodes 예산"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PATH-01-unified-learning-path-difficulty-axis
+requires_gates: []
+acceptance:
+  - "①fetch_internal_prerequisite_edges 확장 — 막힌 선수 집합 내 두 노드가 비-weak 중간 노드를 경유해 의존할 때(A→X→B·X는 약개념 아님) 축약 엣지 A→B로 순서 제약만 전달. 중간 노드 X는 경로 steps에 넣지 않음. l2/learning_path.py:257-258 코드 자인 한계 해소"
+  - "②depth/max_nodes 예산 가드 필수 동반 — 예산 없는 transitive 확장은 노드·관계 폭발 경로. 예산 초과 시 조용히 자르지 않고 절단됨을 응답에 표시(is_cycle_residual/has_cycle 정직 표기와 동형 계약)를 테스트로 동결"
+  - "③결정론 재현 + 기존 직접 엣지만의 결과와 대비 테스트(축약 엣지가 실제로 순서를 잡는 케이스 1개 이상 명시) + 사이클 방어 회귀(축약 엣지가 사이클을 만들지 않음·만들면 정직 잔여로) + 실 PG 통합"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/learning_path.py
+  - "tests/backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "2026-07-30 learning_path_module_gap_review.md D2. 실측: l2/learning_path.py:257-258 자인('비-막힌 중간 노드를 경유하는 transitive 의존은 반영하지 않는다 … 후속 범위'). MEMORY L2104·L2100 NOT(후속) 'transitive 내부 엣지(비-weak 중간 노드 의존)' 상환. 예산 가드는 §2-⑨(Minimal Reasoning Subgraph·노드폭발 방어)가 요구하는 필수 조건 — 예산 없이 착지 금지. depends는 통합 경로 좌석 위에 얹기 위함."
+updated: 2026-07-30

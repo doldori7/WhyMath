@@ -1,0 +1,312 @@
+# 학습 경로(Learning Path) 모듈 — 외부 EOS 틀 대조 갭 점검·설계 (2026-07-30)
+
+> **범위**: 외부 참고 문서 『학습 경로』(0단계 모듈 54~57: 개인별 학습 경로 생성 · 선수학습 자동
+> 추천 · 복습 스케줄 생성 · 목표 기반 학습 플랜 — + 확장 후보 58~62: 적응형 경로·일정 최적화·
+> 목표 추적·추천 엔진·학습 시뮬레이션. **WhyMath 전용이 아닌 일반적 EOS 틀**, Kiki 제공)을 현
+> 코드베이스와 대조해 빠진 부분을 점검하고, 진짜 갭을 WhyMath 불변식(교수학 금기 — 바로 정답
+> 금지·정답률 KPI 금지·반게임화 · 구조 붕괴 방어 — 노드/관계 폭발·Minimal Reasoning Subgraph ·
+> dead code 금지 · 이중 진실원천 금지 · 1인 capacity) 안에서 설계한 기록.
+> **형식**: `knowledge_module_gap_review.md`(모듈 6~10, 07-27) · `problem_bank_gap_review.md`
+> (18~22, 07-28) · `solution_module_gap_review.md`(23~27, 07-29) ·
+> `ai_tutor_module_gap_review.md`(37~41, 07-29) · `operations_module_gap_review.md`(42~50, 07-29) ·
+> `account_security_gap_review.md`(46~53, 07-30) 답습 — **7번째 자매편**.
+> **대전제 2가지**: ① 이 영역은 자매편 6편과 달리 **좌석이 이미 있고 작동한다** — Kahn 위상정렬
+> 경로 엔진·재귀 CTE 선수 탐색·IRT 적응 출제·bandit 교수법 선택이 모두 실가동이다. 무에서의
+> 설계가 아니라 격차 보완이다. ② **"학습 경로"라는 말이 두 개의 서로 다른 것을 가리킨다** —
+> 저장소에 실재하는 것은 **후방 결손 복구 경로**(이미 막힌 선수개념 집합 *내부*의 복습 순서)이고,
+> 외부 틀 54·58이 말하는 "다음에 배울 개념 순서"는 **전방 진도 경로**로서 문서가 L1+L6
+> 자동 커리큘럼 정렬 차원 1·6의 소관으로 규정해 둔 미구현 영역이다. 두 축을 한 이름으로 묶어
+> 판정하면 "부분 구현"이라는 무의미한 결론이 나온다.
+> **결론**: 모듈 55(선수학습 추천)는 **문서보다 엄격**(재귀 CTE·MIN depth dedup·원자축 울타리·
+> 조용한 탈락 금지). 54는 **후방 축 있음 / 전방 축 코드 0 + 입력 데이터 미비**. 56·57·60은
+> **재료만 있고 시간축·목표축 reader 0** — 기존 `S4-18`이 이미 선점했다. 58은 태스크가 아니라
+> **판정으로 종결**(경로는 상태가 아니라 파생 — 영속 슬롯 소생은 이중 진실원천). 59·62는 불채택.
+> 최대 갭은 기능 목록에 없는 곳에 있다 — **서버의 경로 3종 엔드포인트를 클라이언트가 하나도
+> 호출하지 않는다**(「나」탭이 "준비 중" placeholder). 진짜 갭을 설계(D1~D6, D4~D6은 코드 0)하고
+> 실행 3건을 백로그에 등재했다. 의도적 미채택 9건 · 정직한 공백 9종 · 유보 발화조건 6건.
+> 정본 3곳(`06_application_modes.md` · `02_learner_model.md` · `ROADMAP.md`)을 개정한다.
+
+관련 정본: `docs/architecture/02_learner_model.md`(L2 학습자 모델 — 이번 개정 대상) ·
+`docs/architecture/06_application_modes.md` §자동 커리큘럼 정렬(7차원·차원 1·6 정본 — 이번 개정
+대상) · `docs/architecture/04d_adaptive_pedagogy_engine.md`(적응 교수법·bandit) ·
+`docs/design/ui/00_index.md` 불변식 2(반게임화 — 경로 시각화 허용 근거) ·
+`docs/architecture/ai_tutor_module_gap_review.md` §2·§4(SM-2·점수 서열화·학습계획 유보 승계) ·
+`CLAUDE.md` 교수학 금기·구조 붕괴 금기 · `MEMORY.md` 결정 로그(PED-03~05 · S4-18 · 2026-07-30).
+
+---
+
+## §0. 전제 — 실측 현황 스냅샷 (2026-07-30 기준)
+
+**이미 가동 중이고 외부 문서보다 엄격한 것**:
+
+- **위상정렬 경로 엔진 (완전 결정론 + 정직한 사이클 잔여)**:
+  `l2/learning_path.py:143` `order_learning_path`는 Kahn 위상정렬로 막힌 선수개념을 학습 순서로
+  배열한다. 핵심은 **사이클을 조용히 버리지 않는 것**이다 — Kahn이 모든 노드를 방출하지 못하면
+  잔여를 `_tiebreak` 정렬해 deterministic append하고 `is_cycle_residual=True`·`has_cycle=True`로
+  표시한다(`:197-205`). 데이터는 이미 비순환 보장(`concept_graph/validate.py` `prerequisite_cycle`
+  hard error)인데도 방어를 넣고 *그 방어가 발동했음을 응답에 노출*한다. 조용한 누락 0.
+- **재귀 CTE 선수 탐색 + 깊이 상한**: `l2/prerequisite_recommendation.py:230`
+  `build_prerequisite_stmt` — `MAX_PREREQUISITE_DEPTH: int = 5`(`:123`) 상한, MIN depth dedup
+  (같은 개념이 여러 경로로 닿으면 *가장 가까운* 깊이로 축약), `weakness = min(bkt, irt)`
+  보수적 결합. 외부 문서의 "선수 개념 추천"보다 한 단계 위다.
+- **원자축 울타리 + 조용한 탈락 금지**: `l2/axis_exclusions.py`가 축 불일치로 탈락한 후보를
+  *세어서 남긴다* — 추천 목록에서 사라진 것이 "없었다"가 아니라 "왜 빠졌다"로 남는다.
+- **적응 축 2종 실가동**: 문항 축(`GET /v1/me/next-problem` IRT CAT) · 교수법 축
+  (`l4/pedagogy/adaptive/policy.py` bandit — PED-03 **done**).
+- **관계 타입 폭발 0**: 개념그래프 437노드/581엣지 · 원자그래프 2,683노드/2,210엣지에서
+  **관계 타입은 `prerequisite` 단일 100%**. 구축 플레이북의 "5~8개 핵심 관계" 상한을 크게 밑돈다.
+
+**낙차 — 계산은 되는데 아무도 보지 않는다**:
+서버는 경로를 산출하는데(`GET /v1/me/weak-concepts/{concept_id}/learning-path`, `api/me.py:1438`),
+**Flutter는 이 엔드포인트를 호출하지 않는다.** 클라가 실제로 부르는 `/v1/me/*`는
+`next-problem`·`diagnosis/concepts` 둘뿐이고(`features/problems/data/problems_api.dart:30,54`),
+「나」탭의 `학습 경로`·`진단 결과`는 "준비 중" placeholder다
+(`features/profile/presentation/me_screen.dart:31,36,82`). 그리고 이 placeholder는 *게으름이 아니라
+정직*이다 — 파일 머리에 "가짜 데이터를 만들지 않고 준비 중으로 정직하게 표기한다"고 적혀 있다(`:3-4`).
+
+**낙차의 형태 — 두 개의 "경로"**:
+
+| | 후방 결손 복구 경로 | 전방 진도 경로 |
+|---|---|---|
+| 질문 | "막힌 선수개념들을 *어떤 순서로* 되짚나" | "이 학생이 *다음에 배울* 개념은 무엇인가" |
+| 소유 계층 | **L2 학습자 모델** | **L1+L6 자동 커리큘럼 정렬** 차원 1·6 |
+| 정본 | `02_learner_model.md` | `06_application_modes.md` §7차원 (차원 1 활성 개념 풀 · 차원 6 인접 개념 순서 — "교과서 단원 배열 따름") |
+| 상태 | ✅ 실가동 | 🔴 **코드 0** — `06:93` 잔여(후속) 명시. 차원 3(깊이)만 1차 배선됨 |
+| 입력 데이터 | 개념그래프 `prerequisite` 엣지(적재됨) | 교과서 단원 배열 — **미비**(§4-1) |
+
+외부 틀 54·58은 후자를 말하고, 저장소가 가진 것은 전자다. 이 구분 없이는 판정이 성립하지 않는다.
+
+**소생 가능한 죽은 자재 (dead code 금지 대상)**:
+
+| 자재 | 생산자 | 소비자 | 판정 |
+|---|---|---|---|
+| `atom_node.intrinsic_difficulty`(1~5) · `concept.intrinsic_difficulty`(1.0~5.0) | ✅ L1 적재 (`l1/atom_graph/atom_node_projection.py:173` · `l1/concept_graph/backend_concept.py:269` `difficulty_tier`→선형 스케일) | 🔴 **L2 이상 reader 0** (`l2`/`l4`/`l6`/`api` 전량 무일치 — `schema/concept.py:175` 정의뿐) | **소생**(D1) — 외부 틀 54의 경로 기준 "개념 난이도"가 생산자만 있는 상태 |
+| `curriculum_entry.prerequisite_concept_ids` / `followup_concept_ids` | ✅ 로더 적재 (`l1/curriculum/curriculum_loader.py:33`) | 🔴 reader 0 | 보류 — 개념그래프 엣지와 **이중 진실원천** 위험(§2-⑨) |
+| `assessment.recommended_path`(JSONB) | 🔴 writer 0 | 🔴 reader 0 | **소생 안 함**(§2-④) — 경로는 상태가 아니라 파생 |
+| `learning_session` 테이블 | 🔴 **writer 0 — 단 결정에 의한 것**(`S3-16` ③ "미신설을 결정으로 명시") | ⚠️ reader 1 (`harness/pilot_kpi_baseline.py:812` KPI2 리텐션) | **소생 안 함**(§2-⑥) — 신호 생산자가 없으니 일정 최적화의 입력이 비어 있다 |
+
+주의: `learning_session`은 순수 dead table도, 정직성 결함도 아니다. 읽는 쪽이 있는데 쓰는 쪽이
+없지만 **KPI2는 가짜 0을 내지 않는다** — `pilot_kpi_baseline.py:202-209`가 유효 세션 0건일 때
+`NO_DATA` + note "가짜 0 아님"을 낸다. 빈 신호가 통과로 위장되지 않는 자리다(§4-8).
+
+---
+
+## §1. 모듈 54~62 crosswalk
+
+판정 기호: ✅ 충족(문서 이상) · ⚠️ 부분 · 🔴 갭 → D블록 · 🚫 의도적 미채택 → §2 · ⏸ 유보 → §5
+
+| # | 외부 모듈 | 판정 | 실측 근거 |
+|---|---|---|---|
+| **54** | 개인별 학습 경로 생성 | ⚠️ **후방 축 있음 / 전방 축 0** | 후방: `l2/learning_path.py` + `GET /me/weak-concepts/{concept_id}/learning-path`(`api/me.py:1438`). 단 입력이 **단일 약개념 C의 선수 집합**뿐 — 여러 약개념을 아우르는 통합 경로 좌석 0. transitive 한계는 **코드가 자인**(`:257-258` "비-막힌 중간 노드를 경유하는 transitive 의존은 반영하지 않는다 … 후속 범위"). 전방: `06:93` 잔여 → **§4-1** |
+| **55** | 선수학습 자동 추천 | ✅ **문서보다 엄격** | 재귀 CTE(`:230`)·`MAX_PREREQUISITE_DEPTH=5`(`:123`)·MIN depth dedup·`weakness=min(bkt,irt)`·`reviewed_only` 게이팅·`AxisExclusions` 조용한 탈락 금지. "왜 필요한가"의 교수학 좌석도 있다(`l4/prerequisite_coaching.py`) |
+| **56** | 복습 스케줄 생성 | 🔴 **재료만·시간축 0** → `S4-18` | `l2/bkt.py` `apply_forgetting`은 **다음 관측의 prior 보정 전용** — due 시각을 산출하지 않는다. `next_review_at`·`due_at` 컬럼 **무일치**(검색된 `review_queue`는 오개념 crosslink *사람 검수* 큐로 무관 — `l4/misconception/crosslink_review.py:49`). `GET /me/review-queue` 없음 |
+| **57** | 목표 기반 학습 플랜 | 🔴 **컬럼만·reader 0** → `S4-18` | `user_profile.target_grade`/`target_score`/`target_exam_date`(`db/models/user.py:107-110`) + `PATCH /v1/users/me` **쓰기만**(`api/users.py:79-81`). **reader 전량 0**. `study_plan` 테이블·엔티티 **무일치** |
+| **58** | 적응형 경로 (실시간 재구성) | ⚠️ → **판정으로 종결**(§2-④) | 문항 축·교수법 축 실가동. 경로는 **요청 시 파생**이라 매 호출이 곧 재계산 — "실시간 재구성"은 이미 충족된다. 남은 것은 `assessment.recommended_path` 영속 소생뿐이고 그것은 이중 진실원천 |
+| **59** | 학습 일정 최적화 | 🚫 §2-⑥ | 학습시간 **신호 생산자 0**(`learning_session` writer 0) — 그리고 그 부재는 누락이 아니라 **`S3-16` ③의 명시적 결정**이다. 없는 신호 위에 최적화기를 얹을 수 없다 |
+| **60** | 목표 추적 | 🔴 → `S4-18` | 목표 대비 진척 좌석 0. 표현은 **목표 성취기준 커버리지**로만 — 점수·등급 예측 금지(§2-②) |
+| **61** | 학습 추천 엔진 | ⚠️ **부분 — 조립 문제** | 추천기 4종 실재(문항 IRT·약개념·교수법 bandit·오개념 프로브). 통합 오케스트레이터는 0이지만 **새 추천기 신설이 아니라 조립**이고, 조립 좌석은 `PED-05`(LearnerState)가 이미 선점 |
+| **62** | 학습 시뮬레이션 (점수 예측) | 🚫 §2-② | 점수·등급·합격 예측은 **이미 불채택**(`ai_tutor_module_gap_review.md` §2-⑧ 점수 서열화 금지). PRD FR-018/FR-031이 같은 축 |
+
+---
+
+## §2. 의도적 미채택 (9건 — 재설계 금지)
+
+① **SM-2/FSRS 등 카드형 간격반복 알고리즘** — 승계(`ai_tutor` §2-④). BKT 숙달도와 **이중 진실
+원천**이 된다. 복습 시점은 BKT `p_forget` 파생으로만 산출한다(`S4-18` acceptance ③에 동결됨).
+
+② **점수·등급·합격 확률 예측 시뮬레이션**(외부 62) — 승계(`ai_tutor` §2-⑧). "학습 시간·정답률만으로
+우열을 매기는 게임화 금지"(CLAUDE.md 교수학 금기)의 직접 위반. PRD FR-018/FR-031이 같은 축에
+있으나 **학생 대면 노출은 불채택**이 정본이다. 목표 축의 허용 표현은 점수·등급이 아닌
+**성취기준 커버리지**뿐(`S4-18` acceptance ②).
+
+③ **스트릭·랭킹·학습시간 리더보드·복습 독촉 푸시** — 승계(`ai_tutor` §2-③) + `docs/design/ui/00_index.md`
+불변식 2("정답률 랭킹·스트릭·카운트다운·보상 연출 금지"). 복습 스케줄이 있어도 **압박 알림으로
+바꾸지 않는다** — 같은 불변식이 "학습 경로 시각화는 허용"이라고 명시적으로 선을 그어 준다.
+
+④ **`assessment.recommended_path` 영속 소생** — writer/reader 0인 JSONB 슬롯을 살리지 않는다.
+**경로는 상태가 아니라 파생**이다: 약개념 진단이 바뀌면 경로도 바뀌어야 하는데, 영속 사본은
+진단과 어긋나는 순간 이중 진실원천이 된다. 그리고 이 판정이 곧 외부 58(적응형 경로)의 답이다 —
+파생 즉시성이 이미 "실시간 재구성"이므로 재최적화 루프를 따로 만들 필요가 없다.
+
+⑤ **`study_plan`/주간·일일 학습계획 엔티티** — 유보 승계(`ai_tutor` §4-⑤·§5-⑤). PRD FR-010
+(시즌 플랜)이 P0인데 아키텍처는 유보 상태이며, 그 모순은 미해소로 §4-5에 기록한다. 발화 조건은
+§5에 유지.
+
+⑥ **학습시간 기반 일정 최적화**(외부 59) — `learning_session` writer 0. **"생산자 없는 신호는
+필드로 만들지 않는다"** 선례(`l4/pedagogy/runtime_selector.py:96-112`)를 그대로 적용한다. 중요한 것은
+writer 부재가 **누락이 아니라 결정**이라는 점이다 — `S3-16` acceptance ③이 `learning_session` 행
+writer **미신설을 명시적 결정으로** 못박았다. 따라서 59의 선결 조건은 "writer를 배선하면"이 아니라
+**"그 결정이 번복되면"**이다(§5-4). 이 문서는 그 결정을 뒤집자고 제안하지 않는다.
+
+⑦ **협업필터링 기반 경로 추천** — `02_learner_model.md`이 스스로 사용자 수 부족을 경고한다.
+Phase 3+ 이전에는 데이터가 없다.
+
+⑧ **복습 주기 고정 상수(1·3·7·14·30일)** — BKT 파생과 이중 진실원천이 되고, 더 결정적으로
+**`calibrated=false` 상태에서 상수는 근거가 0**이다. 캘리브레이션 전에는 파생값에 정직 표기를
+붙여 내보내는 것이 유일하게 정당한 형태다.
+
+⑨ **전역 그래프 순회 기반 경로**(현재→목표 최단경로) 및 `curriculum_entry.prerequisite_concept_ids`
+동시 소비 — 두 가지 이유로 불채택: (a) 구축 플레이북의 노드·관계 폭발 방어 및 Minimal Reasoning
+Subgraph 예산(depth ≤ 2 · max_nodes ≤ 12~20)을 정면으로 어긴다. (b) 선수 관계의 진실 원천이
+개념그래프 엣지와 `curriculum_entry` 배열로 **둘**이 된다. 경로 탐색은 항상 **막힌 집합 내부로
+한정**한다.
+
+---
+
+## §3. 설계 — D1~D6
+
+실행 순서 `D1 → D2 → D3`. D4~D6은 코드 변경 0.
+
+**D1~D3은 새로 발명한 갭이 아니다.** 셋 모두 이 프로젝트가 스스로 미룬 항목이며 MEMORY에
+문자 그대로 남아 있다 — `L2104`(PR #305) NOT: "다(多)약개념 통합 경로·transitive 내부 엣지
+(비-weak 중간 노드 의존)" · `L2100`(PR #307) NOT: "다(多)약개념 통합 경로·transitive 내부 엣지·
+**Flutter 클라 소비**". 외부 EOS 틀이 한 일은 새 요구를 들여온 것이 아니라 **6주 묵은 NOT
+목록이 아직 상환되지 않았음을 드러낸 것**이다. 이 문서의 기여는 그 세 항목에 (a) 왜 지금인지의
+근거와 (b) 상환 시 지켜야 할 불변식(§2)을 붙인 것이다.
+
+### D1. 다(多)약개념 통합 경로 + 개념 난이도 축 첫 reader 〔신규 태스크〕
+
+**문제**: 현재 경로는 약개념 **하나**를 인자로 받는다(`/weak-concepts/{concept_id}/learning-path`).
+학생에게 약개념이 5개면 경로도 5개가 나오고, 그것들이 선수를 공유할 때 **같은 개념을 여러 경로에서
+중복해 되짚는다**. 외부 54가 말하는 "개인별 학습 경로"는 학생 단위 하나여야 한다.
+
+**설계**:
+- `order_learning_path`를 여러 약개념의 선수 **합집합**에 대해 호출하는 조립 좌석 신설. 순수 정렬
+  함수 자체는 이미 집합을 받으므로 **신규 알고리즘 0** — 입력을 모으는 층만 추가한다.
+- `_tiebreak`(`l2/learning_path.py:120`)에 `intrinsic_difficulty` 축을 삽입한다. **위상 제약이
+  항상 우선**이고 난이도는 위상적으로 동등한 노드들 사이의 tiebreak로만 쓴다(쉬운 것 먼저).
+  이것이 `intrinsic_difficulty`의 **L2 첫 reader**다.
+- 주입 seam은 신설하지 않는다 — `l1/atom_graph/axis.py:52` `ATOM_AXIS_META_COLUMNS`에 1열을
+  추가하면 `prerequisite_recommendation.py:275`가 이미 그 목록을 SELECT하므로 자동으로 흐른다.
+- `GET /v1/me/learning-path` 신설(concept_id 없는 학생 단위 좌석). 기존 개념별 좌석은 유지.
+- MEMORY `L2104`·`L2100`의 NOT(후속) 명시 항목을 상환한다.
+
+**동결할 것**: 결정론 재현(같은 입력 → 같은 순서) · 중복 개념 0 · 난이도 축이 위상 제약을
+역전시키지 않음 · 난이도 미주입(NULL) 시 기존 순서와 동일(하위호환·데이터 0 안전).
+
+### D2. transitive 순서 보정 + max_nodes 예산 〔신규 태스크〕
+
+**문제**: `build_learning_path`가 쓰는 내부 엣지는 막힌 집합 *내* **직접** 엣지뿐이다. A→X→B에서
+X가 약개념이 아니면 A·B 사이 순서를 못 잡는다 — 코드가 스스로 적어 둔 한계(`:257-258`).
+
+**설계**: `fetch_internal_prerequisite_edges`를 확장해 **비-weak 중간 노드를 경유하는 축약 엣지**를
+추가로 산출한다(중간 노드는 경로에 *넣지 않고* 순서 제약만 전달). 반드시 `max_nodes`/depth 예산을
+동반한다 — 예산 없는 transitive 확장이 정확히 §2-⑨가 막는 폭발 경로이기 때문이다. 예산 초과 시
+조용히 자르지 않고 **잘렸음을 응답에 표시**한다(사이클 잔여 정직 표기와 동형 계약).
+
+### D3. 클라이언트 경로 소비 — 「나」탭 학습 경로 시각화 〔신규 태스크·layer=mobile〕
+
+**문제**: §0의 낙차 — 서버가 계산한 경로를 아무도 보지 않는다. 이것이 이 영역 최대 갭이고,
+서버 로직이 이미 있으므로 **가장 값싼 갭**이기도 하다.
+
+**설계**: `me_screen.dart`의 "준비 중" 2종(`학습 경로`·`진단 결과`)을 실 API 소비로 교체한다 —
+D1의 학생 단위 좌석 + 기존 `/v1/me/diagnosis/concepts`. 반게임화 근거를 코드 주석에 명기한다
+(`00_index.md` 불변식 2가 경로 시각화를 *명시적으로 허용*).
+
+**동결할 것**: 랭킹·스트릭·카운트다운·보상 연출이 **0임을 테스트로 동결**한다. 경로 시각화는
+허용의 경계 안쪽이지만, 진척 UI는 게임화로 미끄러지기 쉬운 표면이라 허용을 받은 자리에서
+바로 선을 그어 둔다. `has_cycle`·transitive 절단 표시 등 서버의 정직 신호를 **삼키지 않고** 노출한다.
+
+### D4. `S4-18` 정합 확인 — 모듈 56·57·60은 개정 불요 〔태스크 변경 0〕
+
+`S4-18-review-time-axis`가 이미 56(복습 시간축)·57(목표축 첫 reader)·60(목표 커버리지)을 정확히
+선점하고 있다. acceptance를 실측 대조한 결과 이 문서가 요구할 것이 **하나도 남지 않는다**:
+- ① `GET /v1/me/review-queue`를 `apply_forgetting` **조회 시점 순수 파생**으로 규정하고
+  `next_review_at` 컬럼·마이그레이션 신설 0을 리뷰 게이트로 못박음 → §2-①·§2-⑧과 일치.
+- ② `target_*` 첫 reader를 **D-day + 목표 성취기준 커버리지 %**로 한정하고 "점수·등급 예측 필드
+  부재를 테스트로 동결" → §2-② 그대로.
+- ③ `decay_model='bkt_p_forget'`·`calibrated=false` **정직 표기** + SM-2/FSRS 미도입 명시.
+
+따라서 **재설계·중복 등재·YAML 개정 모두 하지 않는다.** 외부 모듈 번호(56·57·60) ↔ `S4-18`
+대응은 이 문서 §1 crosswalk가 보유한다 — 태스크 `notes`에는 CLI 조작 창구가 없으므로 손편집하지
+않고(자매편 6편의 선례와 동일: 기존 태스크 YAML 무수정), 대응 관계의 진실 원천을 문서 한 곳에 둔다.
+
+남는 판단 하나는 **priority 5가 적정한가**이며, 이는 §4-3(경로 축 KPI 0)이 해소되지 않은 상태에서
+근거를 댈 수 없으므로 **올리지 않는다** — 우선순위를 인상으로 바꾸는 것이 정확히 이 프로젝트가
+금지하는 "점추정·인상 판정"이다.
+
+### D5. 소유권 분열 정본 정정 〔정본 개정·코드 0〕
+
+§0의 표를 정본에 반영한다. `06_application_modes.md`에는 차원 1·6이 **전방 진도 경로**이고 그
+입력 데이터가 미비하다는 사실을(§4-1), `02_learner_model.md`에는 L2 경로 좌석이 **후방 결손
+복구**로 스코프 한정된다는 사실과 난이도 축 계약을 적는다. 이 정정이 없으면 미래 세션이 "학습
+경로는 이미 있다"를 근거로 전방 축을 구현했다고 오인한다.
+
+### D6. 페이퍼 — 59·62 〔태스크 0〕
+
+59(일정 최적화)는 신호 부재(§2-⑥), 62(시뮬레이션)는 불변식 충돌(§2-②)로 설계만 기록한다.
+59의 발화 조건은 §5-4에 둔다.
+
+---
+
+## §4. 정직한 공백 (9종 — 이 문서가 해결하지 않는 것)
+
+1. **전방 진도 경로의 입력 데이터 미비.** 부분적으로만 있다 — `introduced_grade`/`grade_band`는
+   적재되지만(`curriculum_loader.py:30`) 그것은 **학년 밴드**이지 단원 순서가 아니다. 정작 필요한
+   교과서 단원 배열은: `textbook_mapping` 테이블은 **스키마·ORM만 있고 적재기 0**(`schema/`·
+   `db/models/` 밖 무일치) · `data/corpus/units_v1/`는 **소단원 DSL 파일럿 1건**
+   (`quadratic_maxmin.unit.yaml`·4목표)뿐 · `textbook_unit_refs` 배열은 로더가 채우지 않는다.
+   → 차원 6은 **데이터 차단**이므로 태스크로 등재하지 않는다(착수 불가 태스크를 쌓지 않기 위해).
+2. **명시적 단원 순서 정수 필드 0.** `curriculum_entry`에 `sequence`/`order` 계열 컬럼이 없다
+   (그룹 3 시점 = `introduced_grade`·`grade_band`·`effective_from`뿐). 전방 경로 착수 시
+   스키마 확장이 선결이다.
+3. **경로·복습·목표 전용 KPI 0.** PRD §10.2에 이 축의 성공 지표가 없다. "경로를 따라간 학생이
+   더 배웠는가"를 측정할 좌석이 없으므로, D1~D3은 **효과 검증 없이 착지**한다. 이 상태를
+   숨기지 않고 기록한다.
+4. **진단(`assessment`) 세션 생성 경로 0.** `GET /me/assessments`는 읽기만 있고 진단 세션을
+   *만드는* 경로가 없다. 경로 축과 진단 축을 이 문서에서 합치지 않는다(두 축 분리 유지).
+5. **PRD FR-010(시즌 플랜) P0 ↔ 아키텍처 유보 모순 미해소.** PRD는 P0로 두는데 아키텍처는
+   `ai_tutor` §4-⑤에서 유보했다. 어느 쪽이 정본인지 이 문서가 결정하지 않는다 — 발화 조건(§5-2)에
+   맡긴다. 결정 주체는 Kiki다.
+6. **Minimal Reasoning Subgraph 코드 배선 부재.** `ARCH-11`이 **blocked**다. D2의 예산 가드는
+   자체적으로 상한을 두지만, 프로젝트 차원의 subgraph 예산 표준과는 아직 결선되지 않는다.
+7. **진로·과목 선택·자유연구 주제 추천**(PRD FR-016/FR-017) — 페르소나 D(학종 고2) v1.5 축.
+   MVP 페르소나 A(고3) 범위 밖.
+8. **`learning_session` writer 0 — 다만 이것은 공백이 아니라 이미 내려진 결정이다.**
+   `harness/pilot_kpi_baseline.py:812`가 읽는 테이블에 아무도 쓰지 않는다. 처음에는 이것을
+   "측정 실패가 0건으로 위장되는 형태"로 의심했으나 **실측 결과 그렇지 않다** — `:202-209`가
+   유효 세션 0건일 때 `MetricStatus.NO_DATA`를 내고 note에 **"가짜 0 아님"**을 명시한다. 정직
+   회계 규율이 실제로 작동하는 자리다. 그리고 writer 미신설은 누락이 아니라 **`S3-16` acceptance
+   ③의 명시적 결정**이다("`focus_score`·`engagement_score`·`learning_session` 행 writer는
+   미신설을 결정으로 명시"). 따라서 이 문서는 여기에 아무 요구도 하지 않는다 — 다만 외부 59
+   (일정 최적화)의 입력이 이 결정에 막혀 있다는 사실만 §2-⑥·§5-4에 연결한다.
+9. **DKT·협업필터링** — Phase 3+ (`02_learner_model.md`).
+
+---
+
+## §5. 유보 발화 조건 (6건)
+
+| # | 유보 항목 | 발화 조건 |
+|---|---|---|
+| 1 | 전방 진도 경로(차원 1·6) | 교과서 단원 배열 데이터가 실재할 때 — `textbook_mapping` 적재기 + `units_v1` 파일럿 1건 → 학기 단위 이상. 스키마 순서 필드(§4-2)가 선결 |
+| 2 | `study_plan` 엔티티·FR-010 시즌 플랜 | Kiki가 PRD P0 ↔ 아키텍처 유보 모순(§4-5)을 명시 결정할 때. 조건 없이 착수하면 §2-⑤ 위반 |
+| 3 | 통합 추천 오케스트레이터(외부 61) | `PED-05` LearnerState 착지 후. 그 전에 만들면 조립 대상이 확정 전이라 중복 좌석이 된다 |
+| 4 | 학습 일정 최적화(외부 59) | **`S3-16` ③의 `learning_session` writer 미신설 결정이 번복**되고 신호가 실제 축적된 뒤. 그 결정이 유지되는 한 59는 영구 미채택이며, 이 문서는 번복을 제안하지 않는다(§2-⑥) |
+| 5 | 복습 주기 상수화 | BKT `p_forget` 캘리브레이션이 `calibrated=true`에 도달할 때. 그전엔 파생+정직 표기만(§2-⑧) |
+| 6 | 경로 효과 KPI | PRD §10.2에 경로 축 지표가 등재될 때(§4-3). D1~D3의 효과 검증은 그때 가능해진다 |
+
+---
+
+## 부록. 실측 근거 (2026-07-30 · commit 86f69ef)
+
+**경로 엔진**: `l2/learning_path.py`(271줄) — `_tiebreak:120` · `order_learning_path:143` ·
+사이클 잔여 `:197-205` · transitive 자인 `:257-258` · `build_learning_path:247`.
+**선수 추천**: `l2/prerequisite_recommendation.py` — `MAX_PREREQUISITE_DEPTH=5 :123` ·
+`build_prerequisite_stmt:230` · `ATOM_AXIS_META_COLUMNS` 소비 `:275` ·
+`recommend_prerequisite_gaps_detailed:338`.
+**난이도 축 seam**: `l1/atom_graph/axis.py:52`(현재 3열 — `name_ko`·`subject_area`·`review_status`).
+**엔드포인트**: `api/me.py:1438`(경로) · `api/users.py:79-81`(목표 쓰기).
+**클라이언트**: `mobile/lib/features/problems/data/problems_api.dart:30,54`(호출하는 2종) ·
+`mobile/lib/features/profile/presentation/me_screen.dart:3-4,31,36,82`(준비 중) ·
+`mobile/lib/features/home/presentation/home_screen.dart:51,73`(교과서 좌표 준비 중 — 자동
+커리큘럼 정렬 미배선 자인).
+**부재 확인(grep 무일치)**: `next_review_at`·`due_at` · `study_plan` · `TextbookMapping` 적재기 ·
+`LearningSession(` 생성 호출 · `intrinsic_difficulty`의 `l2`/`l4`/`l6`/`api` reader.
+**데이터**: 개념 437노드/581엣지 · 원자 2,683노드/2,210엣지 · 관계 타입 `prerequisite` 단일 ·
+`data/corpus/units_v1/` 1 unit / 4 objectives.
+**정본 위치**: `06_application_modes.md:53-110`(7차원 표 `:69-75` · 차원 3 구현 현황 `:77` ·
+잔여 `:93` · 경계 L1+L6 `:105-107`) · `docs/design/ui/00_index.md:41` 불변식 2.
+**MEMORY NOT(후속) 상환 대상**: `L2104`(2026-06-20 · PR #305) "다(多)약개념 통합 경로·transitive
+내부 엣지(비-weak 중간 노드 의존)" · `L2100`(2026-06-21 · PR #307) "다(多)약개념 통합 경로·
+transitive 내부 엣지·**Flutter 클라 소비**" — D1·D2·D3이 각각 이 세 항목이다. `L2100`은 전역
+좌석 이름까지 예고해 뒀다("#305 메모가 추측한 전역 `GET /v1/me/learning-path`").
