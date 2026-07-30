@@ -403,6 +403,23 @@ CACHE-01 done) — 기계 강제까지 있다(`dsl.py:35` `PEDAGOGY_METHOD_BLOCK
 **검증 통과 문항 2,647건을 참조 주입**하면 신규 저작 0·LLM 0) · `S3-27-problem-type-tagging`(pri 3) ·
 `OPS-16-l3-prompt-asset-audit`(infra-debt·pri 3). D5는 신규 0 —
 `ARCH-20`(저작권 데이터 게이트 — **본 설계 중 착지·done**)·`ARCH-21`(QA 오케스트레이터) 참조 연결.
+### 2026-07-30 (정정·ARCH-22): **pytest-asyncio 575건 실패는 로컬 컨테이너 한정 — 실 CI(PR #648) green 확인 후 priority 1→4 정정** (claude 정정, Kiki "pr" 진행 중 자체 발견)
+
+**정정 경위**: ARCH-20 PR #648의 `backend` 잡이 ruff E501 위반으로 먼저 실패해 로컬에서 lint를
+수정하던 중, 참고용으로 origin/main의 가장 최근 CI 실행(커밋 eab7f8c0)을 확인해보니 그 잡의
+Pytest 단계가 **정상 green**이었다 — 로컬 venv 재현(575 failed·4 errors)과 모순. 수정 커밋
+푸시 후 실제 CI(run 30528307807)가 완주할 때까지 지켜본 결과, **`backend` 잡의 Pytest 단계가
+21분간 정상 통과**(2026-07-30T08:53~09:14, PR #648 merge로 확정)했다 — 로컬에서 본 실패는 이
+세션의 컨테이너가 `pip install -e ".[dev]"` 시 우연히 pytest-asyncio 1.4.0을 해석한 **로컬
+환경 한정 현상**이었고, 실제 GitHub Actions는 같은 무상한 pin으로도 이 문제를 겪지 않음을
+확정했다.
+
+**교훈**: 로컬 재현을 clean origin/main과 diff해 "내 변경 탓이 아님"까지는 정확히 확인했으나,
+그로부터 "실 CI도 이 상태다"로 확대 해석한 것은 성급했다 — 로컬 컨테이너와 GitHub Actions
+러너는 같은 무상한 pin이라도 pip 해석 시점에 따라 다른 버전을 받을 수 있다(CLAUDE.md "환경
+사실의 추론 등재 금지" 원칙의 정확한 사례). `ARCH-22-pytest-asyncio-unpinned-break`를
+priority 1("전체 백엔드 CI 실질 마비")에서 priority 4("활성 장애 아님, 예방적 상한 pin만
+필요")로 즉시 정정하고 task notes에 이 경위를 기록했다.
 
 ### 2026-07-30 (구현·ARCH-20): **콘텐츠 출처·라이선스 집행 게이트 — pool 필드 신설·19개 사이드카 백필·CI 배선 + pytest-asyncio 무상한 pin 회귀 발견(ARCH-22 등재)** (claude 구현, Kiki "ARCH-20 착수")
 
