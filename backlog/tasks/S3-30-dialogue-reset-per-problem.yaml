@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-30-dialogue-reset-per-problem
+title: "코치 dialogue 문제별 리셋 — 완료가 이전 문제 problem_id로 오기록되는 반복/고갈 버그"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - S3-13-demo-problem-pool
+requires_gates: []
+acceptance:
+  - "새 문제 코칭 시작 시 새 dialogue 세션 생성(createSession)·이전 dialogue에 append 금지"
+  - "문제 A 완료→B 전환→B 첫 발화가 createSession(problemId=B)로 나감"
+artifacts:
+  - fcc554be
+paths:
+  - "src/mobile/lib/features/chat/**"
+  - src/mobile/test/chat_controller_test.dart
+session: null
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-14, 원 커밋 b2e8612b) — 재채번(S3-25 버킷 C 항목⑤). 현재 chat_controller/chat_state 구조(S3-27 완료 통합·S3-28 대화 최종답 감지·S3-29 선택지 버튼) 위에 수동 재적용. 검증 실측: build_runner 재생성 + flutter analyze 0 issues + flutter test 238 green(chat_controller_test.dart 24건=기존 20+신규 4). 커밋 fcc554be."
+updated: 2026-07-30
