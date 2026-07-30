@@ -100,6 +100,7 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
+from whymath_backend.l4.hint_deferral import is_answer_demand, is_stuck_turn_count
 from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
@@ -987,6 +988,128 @@ async def _log_hint_event(
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
 
 
+async def _log_demand_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    student_input: str,
+    event_at: datetime,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """학생의 답 요구 발화를 `attempt_event`(event_type=힌트요청)로 1행 적재 — S3-16 소생.
+
+    WH-1 행동 텔레메트리 공백을 메우는 *생산자 좌석*(`docs/architecture/
+    ai_tutor_module_gap_review.md` §3 D4)의 하나. `is_answer_demand`(재계산 아님·`decide_hint_
+    level` 2번 규칙과 동일 상수)가 False면 적재 안 함(신호 없는 행 미생성·날조 회피) — `_log_hint_
+    event`의 `hint_level is None` early-return과 동형 원칙.
+
+    트랜잭션: `_log_verify_event`·`_log_hint_event`와 동일하게 ORM 1행을 `session.add`만 하고
+    *commit은 하지 않는다*(호출 핸들러의 트랜잭션에 합류). `event_at`은 호출 핸들러가 이미 가진
+    `now`를 그대로 받는다(별도 `datetime.now()` 재호출 금지 — 복합 PK 시각 일관성).
+    """
+    if not is_answer_demand(student_input):
+        return  # 답 요구 신호 없음 → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=event_at,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.힌트요청,
+        event_data=build_event_data(EventType.힌트요청, mode=mode, persona=persona),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_stuck_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    turn_count: int,
+    event_at: datetime,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """5회+ 막힘 임계 도달을 `attempt_event`(event_type=막힘)로 1행 적재 — S3-16 소생.
+
+    `is_stuck_turn_count`(재계산 아님·`decide_hint_level` 1번 규칙과 동일 임계)가 False면
+    적재 안 함(신호 없는 행 미생성·날조 회피). `turn_count`는 `PolyaState.turn_count`를 그대로
+    싣는다(재계산 아님).
+
+    트랜잭션: 형제 writer들과 동형(`session.add`만·commit은 핸들러). `event_at`은 핸들러의
+    `now`를 그대로 받는다.
+    """
+    if not is_stuck_turn_count(turn_count):
+        return  # 막힘 임계 미도달 → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=event_at,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.막힘,
+        event_data=build_event_data(
+            EventType.막힘, turn_count=turn_count, mode=mode, persona=persona
+        ),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_response_latency_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    dialogue_id: uuid.UUID,
+    now: datetime,
+    student_order: int,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """직전 학생 턴(server 기준 spoken_at)과 이번 제출 시각의 차를 답입력 이벤트로 적재(S3-16 소생).
+
+    서버 시각 차이므로 클라 신뢰가 불필요하고 조작 불가하다(D4 설계). `append_turns`에서만
+    호출한다 — `create_session`은 새 dialogue의 첫 턴이라 이전 턴 기준선이 없어 latency 정의
+    불가(날조 회피). 이론상 append_turns는 create_session이 만든 최초 교환 위에서만 호출되므로
+    직전 학생 턴이 항상 있어야 하지만, 방어적으로 없으면(None) 기준선 없음으로 보고 행 미생성한다.
+
+    트랜잭션: 형제 writer들과 동형(`session.add`만·commit은 핸들러). `event_at`은 핸들러의
+    `now`를 그대로 받는다(복합 PK 시각 일관성).
+    """
+    prev_stmt = (
+        select(DialogueTurnORM.spoken_at)
+        .where(
+            DialogueTurnORM.dialogue_id == dialogue_id,
+            DialogueTurnORM.role == TurnRole.student,
+            DialogueTurnORM.turn_order < student_order,
+        )
+        .order_by(DialogueTurnORM.turn_order.desc())
+        .limit(1)
+    )
+    prev_spoken_at = (await session.execute(prev_stmt)).scalar_one_or_none()
+    if prev_spoken_at is None:
+        return  # 기준선 없음(이론상 도달 안 함) → 적재 안 함(날조 회피).
+
+    latency_ms = int((now - prev_spoken_at).total_seconds() * 1000)
+    event = AttemptEventORM(
+        event_at=now,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.답입력,
+        event_data=build_event_data(
+            EventType.답입력, server_latency_ms=latency_ms, mode=mode, persona=persona
+        ),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
 async def _apply_hypotheses(
     session: AsyncSession,
     user_id: uuid.UUID | None,
@@ -1464,6 +1587,29 @@ async def create_session(
         mode=body.mode,
         persona=event_persona,
     )
+    # S3-16 소생 — 행동 텔레메트리 생산자 좌석(§3 D4). 답 요구(demand)·5회+ 막힘 신호는
+    # 신호가 실제 있을 때만 1행 적재(날조 회피). 응답 지연(답입력)은 새 dialogue의 첫 턴이라
+    # 이전 턴 기준선이 없어 여기서는 호출하지 않는다(append_turns 전용).
+    await _log_demand_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_input=body.student_input,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    await _log_stuck_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        turn_count=body.polya_state.turn_count,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
     # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
     # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
     await _log_match_evidence(
@@ -1673,6 +1819,41 @@ async def append_turns(
         problem_id=dialogue.problem_id,
         attempt_id=dialogue.attempt_id,
         hint_level=decision.hint_level,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    # S3-16 소생 — create_session과 동형(§3 D4). 답 요구(demand)·5회+ 막힘 신호는 있을 때만
+    # 1행 적재(날조 회피). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
+    await _log_demand_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_input=body.student_input,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    await _log_stuck_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        turn_count=body.polya_state.turn_count,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    # S3-16 소생 — 응답 지연(답입력)은 *멀티턴 전용*(create_session은 첫 턴이라 기준선 없음).
+    # 직전 학생 턴(server spoken_at)과 이번 제출(now)의 차를 서버 시각으로만 계산(조작 불가).
+    await _log_response_latency_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        dialogue_id=dialogue_id,
+        now=now,
+        student_order=student_order,
         mode=body.mode,
         persona=event_persona,
     )

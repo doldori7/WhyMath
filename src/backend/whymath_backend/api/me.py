@@ -2125,8 +2125,10 @@ async def get_my_harness_metrics(
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
     모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-    value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. S3-16(행동 텔레메트리
+    생산자 좌석)에서 ⑫ 도움 요청 대 제공 비(힌트요청/힌트제공 개수 비)도 편입됐다 — supply
+    (힌트제공) 0건이면 NO_DATA. 각 지표는 표본 0/부족이면 value=None + status + note로
+    "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
     ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
     started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
 

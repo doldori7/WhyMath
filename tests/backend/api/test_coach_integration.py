@@ -11,6 +11,7 @@ get_settings만 오버라이드(jwt secret), get_session은 실 PG. FK 순서: d
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 
 import pytest
@@ -135,6 +136,57 @@ async def _hint_events(uid: uuid.UUID) -> list[int]:
                     "FROM attempt_event "
                     "WHERE user_id = :uid AND event_type = '힌트제공' "
                     "ORDER BY event_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [int(r[0]) for r in rows.all()]
+    finally:
+        await engine.dispose()
+
+
+async def _demand_event_count(uid: uuid.UUID) -> int:
+    """user의 힌트요청 attempt_event 수 — S3-16 ⑫ 분자 적재 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '힌트요청'"
+                ),
+                {"uid": str(uid)},
+            )
+            return int(row.scalar_one())
+    finally:
+        await engine.dispose()
+
+
+async def _stuck_event_turn_counts(uid: uuid.UUID) -> list[int]:
+    """user의 막힘 attempt_event turn_count를 event_at 오름차순으로 — S3-16 소생 적재 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT (event_data->>'turn_count')::int FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '막힘' ORDER BY event_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [int(r[0]) for r in rows.all()]
+    finally:
+        await engine.dispose()
+
+
+async def _latency_event_values(uid: uuid.UUID) -> list[int]:
+    """user의 답입력 attempt_event server_latency_ms를 event_at 오름차순으로(S3-16 소생 검증용)."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT (event_data->>'server_latency_ms')::int FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '답입력' ORDER BY event_at"
                 ),
                 {"uid": str(uid)},
             )
@@ -745,6 +797,95 @@ def test_session_multiturn_logs_hint_events_on_live_pg() -> None:
             metrics = asyncio.run(_compute_hint_metric(uid))
             assert metrics["sample_hint_events"] == 3
             assert metrics["help_status"] in ("measured", "no_data")
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_session_create_logs_demand_and_stuck_events_on_live_pg() -> None:
+    """S3-16 소생 — 답 요구 발화 → 힌트요청 1행·5회+ 막힘 → 막힘 1행(신호 없으면 0행)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 답 요구 발화 + turn_count=5(임계) → 힌트요청 1행 + 막힘 1행(turn_count=5).
+            r1 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={
+                    "student_input": "그냥 답 알려줘",
+                    "polya_state": {"turn_count": 5},
+                },
+            )
+            assert r1.status_code == 201, r1.text
+            dialogue_ids.append(uuid.UUID(r1.json()["dialogue_id"]))
+
+            # ② 신호 없는 발화(turn_count 기본 0) → 힌트요청·막힘 둘 다 0행 추가.
+            r2 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "이렇게 접근하면 될까요?"},
+            )
+            assert r2.status_code == 201, r2.text
+            dialogue_ids.append(uuid.UUID(r2.json()["dialogue_id"]))
+
+            assert asyncio.run(_demand_event_count(uid)) == 1
+            assert asyncio.run(_stuck_event_turn_counts(uid)) == [5]
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_append_turns_logs_response_latency_event_on_live_pg() -> None:
+    """S3-16 소생 — `append_turns`만 답입력(응답 지연) 이벤트를 적재. `create_session`은 0행.
+
+    2회 연속 append 각각 직전 학생 턴 대비 지연(ms)을 1행씩 적재하는지, 그 값이 양수인지 확인.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post("/v1/coach/sessions", headers=auth, json={"student_input": "처음"})
+            assert create.status_code == 201, create.text
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            # create_session은 새 dialogue의 첫 턴이라 기준선이 없어 답입력 이벤트 0행.
+            assert asyncio.run(_latency_event_values(uid)) == []
+
+            time.sleep(0.05)  # 실측 지연이 0ms가 되지 않도록 약간의 실제 시간차를 둔다.
+            append1 = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "두번째"},
+            )
+            assert append1.status_code == 201, append1.text
+
+            latencies_after_first = asyncio.run(_latency_event_values(uid))
+            assert len(latencies_after_first) == 1
+            assert latencies_after_first[0] > 0  # 양수(대략 실행 시간).
+
+            time.sleep(0.05)
+            append2 = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "세번째"},
+            )
+            assert append2.status_code == 201, append2.text
+
+            latencies_after_second = asyncio.run(_latency_event_values(uid))
+            assert len(latencies_after_second) == 2
+            assert all(ms > 0 for ms in latencies_after_second)
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
 

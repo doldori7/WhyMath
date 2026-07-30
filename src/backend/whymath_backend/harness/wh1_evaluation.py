@@ -68,6 +68,14 @@ S3 세션 대리 지표 4종 추가(`status_roadmap_2026-07.md` §3): 기존 7�
                             로 편입 — 서버가 신호로 판정하지 않는다(정답성·hint_level의 dialogue
                             귀속·포기 영속은 후속). `Socratic유도성공`은 별개 축(후속 분해 가능).
 
+S3-16 편입(행동 텔레메트리 생산자 좌석 — `docs/architecture/ai_tutor_module_gap_review.md`
+§3 D4): 휴면이던 `힌트요청`(demand) 이벤트가 생산자를 얻으며 ⑤(도움 감소)와 형제 좌석을 연다.
+  ⑫ 도움 요청 대 제공 비   — 🟢 MEASURED/NO_DATA: attempt_event(힌트요청)/attempt_event(힌트
+                            제공) 개수 비 — ⑤와 *동일 scope*(user/시간창/mode). supply(힌트
+                            제공) 0건이면 NO_DATA(분모 0 방지·가짜 0 금지) — 힌트제공 0이면 ⑤⑧도
+                            이미 NO_DATA이므로 이 지표만 홀로 값을 내지 않는다(일관성). demand=0·
+                            supply>0이면 ratio=0.0(MEASURED·실측 0·날조 아님).
+
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
 모듈은 L1(활동 로그 `LearningSession`·`AttemptEvent`)·L2(`ConceptMasteryHistory`)·L4(오개념
 가설)·L2/L5(대화 `Dialogue`) 데이터를 *조회만* 하고(역방향 의존 없음·ORM/쿼리빌더만·원시 SQL
@@ -317,6 +325,13 @@ class SurrogateMetrics(BaseModel):
     help_reduction_slope: Metric = Field(
         description="⑤ 도움 감소 곡선 — 시간에 따른 힌트 의존 감소 기울기."
     )
+    help_demand_supply_ratio: Metric = Field(
+        description=(
+            "⑫ 도움 요청 대 제공 비 — attempt_event(힌트요청)/attempt_event(힌트제공) 개수 비. "
+            "supply(힌트제공) 0건이면 NO_DATA(분모 0 방지·가짜 0 금지). 힌트제공 이벤트가 0이면 "
+            "⑤⑧도 이미 NO_DATA이므로 이 지표만 홀로 값을 내지 않는다(일관성)."
+        )
+    )
     calibration_brier: Metric = Field(
         description=(
             "⑥ 보정 점수(Brier) — 자기보고 확신도(0~1) vs 실제 정오답 mean((conf−correct)²)"
@@ -379,6 +394,9 @@ class SurrogateMetrics(BaseModel):
     sample_hint_events: int = Field(
         default=0,
         description="⑤ 집계 대상 힌트제공 attempt_event 수(hint_level 채워진 행·OLS 포인트 수).",
+    )
+    sample_demand_events: int = Field(
+        default=0, description="⑫ 집계 대상 힌트요청 attempt_event 수."
     )
     sample_accuracy_attempts: int = Field(
         default=0,
@@ -552,6 +570,36 @@ def _help_reduction_from_levels(hint_levels: list[int]) -> Metric:
             f"힌트제공 {n}건 hint_level OLS 기울기 {slope:+.4f}(event_at 순서·음수=도움 감소). "
             "R15 정확률 교차검증 미반영(힌트 회피만으로 개선 판정 안 함은 후속)·종단 지표라 "
             "표본 적으면 NO_DATA·hint_level은 graded 노출량(1~4)."
+        ),
+    )
+
+
+def _help_demand_supply_ratio_from_counts(demand_count: int, supply_count: int) -> Metric:
+    """⑫ 도움 요청 대 제공 비 — 힌트요청(demand)/힌트제공(supply) 개수 비를 Metric으로(순수·날조 0).
+
+    입력은 (힌트요청 attempt_event 수, 힌트제공 attempt_event 수) — S3-16에서 `힌트요청`이
+    휴면에서 생산자를 얻으며 연 형제 좌석이다(⑤⑧과 동일 힌트제공 표본을 분모로 재사용).
+    supply_count==0이면 **NO_DATA**(분모 0 방지·가짜 0 회피) — 힌트제공이 0이면 ⑤⑧도 이미
+    NO_DATA이므로 이 지표만 홀로 값을 내는 일은 없다(일관성). demand_count==0이어도 supply>0이면
+    ratio=0.0(MEASURED·실측 0·날조 아님 — 학생이 답을 요구한 적이 없다는 실제 신호).
+    """
+    if supply_count <= 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "힌트제공(supply) 이벤트 0건 — 분모 0이라 비율 산출 불가(가짜 0 아님). "
+                "힌트제공이 쌓이면 도움 요청 대 제공 비 계측(⑤⑧과 동일 표본 재사용)."
+            ),
+        )
+    ratio = demand_count / supply_count
+    return Metric(
+        value=ratio,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"힌트요청(demand) {demand_count}건 / 힌트제공(supply) {supply_count}건 = "
+            f"{ratio:.4f}(비율↑=학생이 AI 제공량 대비 더 많이 직접 답을 요구). demand 0건은 "
+            "요구 없음의 실측(날조 아님)·⑤⑧과 동일 scope(user/시간창/mode)."
         ),
     )
 
@@ -1212,6 +1260,26 @@ async def compute_wh1_surrogate_metrics(
     # 방어는 R15(help_reduction_validated) 몫이라 ⑧은 단독 해석 금지(note 표기).
     hint_depth = _hint_depth_from_levels(hint_levels)
 
+    # ── ⑫ 도움 요청 대 제공 비 (attempt_event event_type=힌트요청 개수·⑤와 동형 scope) ──
+    # S3-16 소생 — 힌트요청(demand)이 휴면에서 생산자를 얻으며 연 형제 좌석. 분모(supply)는
+    # 위 ⑤ hint_rows와 동일 힌트제공 표본(len(hint_levels))을 재사용한다(새 쿼리 0).
+    demand_conds = [AttemptEvent.event_type == EventType.힌트요청]
+    if user_id is not None:
+        demand_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        demand_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        demand_conds.append(AttemptEvent.event_at <= until)
+    # S3-03: mode 스코프 — ⑤⑧과 동형(수능 세션만 집계).
+    if mode is not None:
+        demand_conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
+
+    demand_total = (
+        await session.execute(select(func.count()).select_from(AttemptEvent).where(*demand_conds))
+    ).scalar() or 0
+    demand_total = int(demand_total)
+    help_demand_supply = _help_demand_supply_ratio_from_counts(demand_total, len(hint_levels))
+
     # ── R15 결합 판정 (⑤ 도움 감소 × 정답률 추세) ──
     # 정답률 신호 = ProblemAttempt.is_correct(실제 정답률·① 검산 proxy보다 직접적·R15의
     # "정답률"에 정확히 대응). is_correct IS NOT NULL(미응답=NULL 제외)·started_at 오름차순으로
@@ -1435,6 +1503,7 @@ async def compute_wh1_surrogate_metrics(
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
+        help_demand_supply_ratio=help_demand_supply,
         calibration_brier=calibration_brier,
         transfer_score=transfer_score,
         help_reduction_validated=help_reduction_validated,
@@ -1446,6 +1515,7 @@ async def compute_wh1_surrogate_metrics(
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
         sample_hint_events=len(hint_levels),
+        sample_demand_events=demand_total,
         sample_accuracy_attempts=len(accuracy_series),
         sample_difficulty_attempts=len(difficulty_series),
         sample_calibration_pairs=len(calibration_pairs),
