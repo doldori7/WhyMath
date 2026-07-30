@@ -11,6 +11,11 @@
 경계 메모(CLAUDE.md 절대 금기): 본문 보유 금지 불변식(평가원·EBS·교과서 출처는 question_text
 미저장·license=WHYMATH_GENERATED 강제 등)은 *schema.Problem after-validator*가 이미 강제한다
 — 이 라우터는 검증 통과한 모델만 영속화한다. 학생 표면화 전 LLM 생성물은 L3/app.py 소관.
+
+인가(SEC-07 D1): POST/PATCH/DELETE 3개는 `RequireContentAdmin`(`Role.CONTENT_ADMIN`)로
+게이팅한다 — 이전엔 인증 의존성이 0건이라 누구나 문제를 생성·수정·삭제할 수 있었다(실측
+`docs/architecture/account_security_gap_review.md` D1). GET(단건·목록·steps·relations)은
+*무인증 유지*(공개 카탈로그·현 클라·데모 경로 파괴 금지 — 봉인 범위 과확대 방지).
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._auth import RequireContentAdmin
 from whymath_backend.api._concurrency import (
     ensure_if_match,
     etag_for,
@@ -48,9 +54,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
     summary="문제 생성",
 )
 async def create_problem(
-    body: ProblemSchema, session: SessionDep, response: Response
+    body: ProblemSchema, session: SessionDep, response: Response, admin: RequireContentAdmin
 ) -> ProblemSchema:
-    """검증된 schema.Problem을 영속화하고 복원해 반환한다(201).
+    """검증된 schema.Problem을 영속화하고 복원해 반환한다(201). `Role.CONTENT_ADMIN` 전용.
 
     `external_id`/`slug`는 UNIQUE이므로 중복이면 PG가 IntegrityError → 롤백 후 **409**.
     본문 보유 금지 등 출처별 불변식은 schema.Problem이 이미 검증했다(경계 메모 참조).
@@ -175,12 +181,14 @@ async def patch_problem(
     body: dict[str, Any],
     session: SessionDep,
     response: Response,
+    admin: RequireContentAdmin,
     if_match: Annotated[str | None, Header()] = None,
 ) -> ProblemSchema:
     """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식(본문 보유 금지 등)을
-    유지한다. `problem_id`(PK)는 경로 고정. 없으면 404, 병합 결과 스키마 위반 422,
-    `external_id`/`slug` UNIQUE 충돌 409. **낙관적 동시성**: `If-Match`(GET ETag)를 보내면
-    그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 — 비파괴). 응답에 새 ETag를 싣는다.
+    유지한다. `Role.CONTENT_ADMIN` 전용. `problem_id`(PK)는 경로 고정. 없으면 404, 병합 결과
+    스키마 위반 422, `external_id`/`slug` UNIQUE 충돌 409. **낙관적 동시성**: `If-Match`(GET
+    ETag)를 보내면 그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 — 비파괴). 응답에
+    새 ETag를 싣는다.
     """
     existing = await session.get(Problem, problem_id)
     if existing is None:
@@ -220,9 +228,11 @@ async def patch_problem(
 async def delete_problem(
     problem_id: uuid.UUID,
     session: SessionDep,
+    admin: RequireContentAdmin,
     if_match: Annotated[str | None, Header()] = None,
 ) -> Response:
     """문제 삭제 — 없으면 404. 풀이단계·관계·시도 등 참조가 있으면 FK 위반 → 409.
+    `Role.CONTENT_ADMIN` 전용.
 
     cascade를 ORM에 두지 않았으므로 참조가 있으면 삭제를 거부한다(가짜 cascade 금지).
     `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).

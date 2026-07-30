@@ -10,22 +10,40 @@ TestClient를 컨텍스트매니저로 써 lifespan(종료 시 dispose_engine)�
 
 설정/정리는 전역 캐시 엔진이 아니라 *독립 엔진*으로 수행한다 — TestClient가 자기 이벤트
 루프에서 만든 전역 엔진과 루프가 충돌하지 않도록(asyncpg 엔진은 루프 바인딩).
+
+인가(SEC-07 D1): CUD(POST/PATCH/DELETE)는 이제 `Role.CONTENT_ADMIN` 인증이 필요하다.
+`test_users_integration.py` 패턴 답습 — `get_settings`를 고정 시크릿으로 오버라이드해 토큰
+mint(테스트)와 decode(앱)가 같은 시크릿을 쓰게 하고, 실 PG에 CONTENT_ADMIN
+UserProfile 행을 만들어 `get_current_user`가 그 행을 로드하게 한다(get_session은 실제 —
+인증→DB 사용자 로드까지 end-to-end). GET은 헤더 없이 호출해 무인증 유지를 함께 확인한다.
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.app import create_app
-from whymath_backend.config import Settings
+from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.user import UserProfile
+from whymath_backend.schema.enums import Persona, Role
+from whymath_backend.schema.user import UserProfile as UserProfileSchema
+from whymath_backend.security import create_access_token
 
 pytestmark = pytest.mark.integration
+
+_JWT_SECRET = "concepts-integration-jwt-secret-0123456789ab"
+
+
+def _jwt_settings() -> Settings:
+    return Settings(jwt_secret_key=SecretStr(_JWT_SECRET))
 
 
 async def _pg_reachable() -> bool:
@@ -39,6 +57,62 @@ async def _pg_reachable() -> bool:
         return False
     finally:
         await engine.dispose()
+
+
+async def _insert_content_admin(user_id: uuid.UUID) -> None:
+    """CONTENT_ADMIN UserProfile 행을 실 PG에 적재(get_current_user의 실 로드 대상)."""
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add(
+                UserProfile.from_schema(
+                    UserProfileSchema(
+                        user_id=user_id,
+                        persona_primary=Persona.A_일반고고3,
+                        role=Role.CONTENT_ADMIN,
+                    )
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _delete_user(user_id: uuid.UUID) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM user_profile WHERE user_id = :uid"),
+                {"uid": str(user_id)},
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+def admin_auth() -> Iterator[dict[str, str]]:
+    """CONTENT_ADMIN 사용자를 실 PG에 만들고 `Authorization` 헤더를 yield(테스트 후 정리).
+
+    PG 미도달이면 각 테스트 본문의 `_pg_reachable` 체크가 skip을 던지므로, 여기서도 먼저
+    확인해 미도달 환경에서 불필요한 삽입 시도를 하지 않는다(그래도 실패하면 그대로 skip).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+    admin_id = uuid.uuid4()
+    asyncio.run(_insert_content_admin(admin_id))
+    token = create_access_token(admin_id, settings=_jwt_settings())
+    try:
+        yield {"Authorization": f"Bearer {token}"}
+    finally:
+        asyncio.run(_delete_user(admin_id))
+
+
+def _app_with_jwt_settings() -> TestClient:
+    """get_settings만 고정 시크릿으로 오버라이드(get_session은 실 PG 그대로)."""
+    app = create_app()
+    app.dependency_overrides[get_settings] = _jwt_settings
+    return TestClient(app)
 
 
 async def _delete_concept(concept_id: uuid.UUID) -> None:
@@ -90,15 +164,13 @@ async def _delete_concepts_and_edges(concept_ids: list[uuid.UUID]) -> None:
         await engine.dispose()
 
 
-def test_concept_edges_nested_read_on_live_pg() -> None:
+def test_concept_edges_nested_read_on_live_pg(admin_auth: dict[str, str]) -> None:
     """GET /concepts/{id}/edges가 outgoing 엣지를 실 PG에서 반환·방향·404 검증."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     suffix = uuid.uuid4().hex[:8]
     ids: list[str] = []
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             a = client.post(
                 "/v1/concepts",
                 json={"code": f"CG-A-{suffix}", "name_ko": "가", "level": "단원"},
@@ -127,16 +199,14 @@ def test_concept_edges_nested_read_on_live_pg() -> None:
             asyncio.run(_delete_concepts_and_edges([uuid.UUID(c) for c in ids]))
 
 
-def test_concept_crud_roundtrip_on_live_pg() -> None:
+def test_concept_crud_roundtrip_on_live_pg(admin_auth: dict[str, str]) -> None:
     """POST→GET→중복(409)→목록이 실 PG에서 HTTP→get_session→PG로 왕복한다."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     code = f"TEST-CONCEPT-{uuid.uuid4().hex[:8]}"
     body = {"code": code, "name_ko": "통합테스트 개념", "level": "세부개념"}
     concept_id: str | None = None
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             # CREATE → 201
             created = client.post("/v1/concepts", json=body)
             assert created.status_code == 201, created.text
@@ -162,16 +232,14 @@ def test_concept_crud_roundtrip_on_live_pg() -> None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
 
 
-def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
+def test_concept_patch_delete_roundtrip_on_live_pg(admin_auth: dict[str, str]) -> None:
     """POST→PATCH(부분수정)→GET(반영확인)→DELETE(204)→GET(404)이 실 PG에서 왕복."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     code = f"TEST-PATCH-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
     deleted = False
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             concept_id = client.post(
                 "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
             ).json()["concept_id"]
@@ -194,15 +262,13 @@ def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
 
 
-def test_concept_optimistic_lock_on_live_pg() -> None:
+def test_concept_optimistic_lock_on_live_pg(admin_auth: dict[str, str]) -> None:
     """GET ETag로 PATCH→200·ETag 갱신→옛 ETag 재PATCH→412(동시수정 차단)."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     code = f"TEST-LOCK-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             created = client.post(
                 "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
             )
@@ -233,15 +299,13 @@ def test_concept_optimistic_lock_on_live_pg() -> None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
 
 
-def test_concept_conditional_get_304_on_live_pg() -> None:
+def test_concept_conditional_get_304_on_live_pg(admin_auth: dict[str, str]) -> None:
     """GET ETag→If-None-Match로 GET→304→PATCH 변경 후 옛 ETag→200(내용 바뀜)."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     code = f"TEST-INM-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             concept_id = client.post(
                 "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
             ).json()["concept_id"]
@@ -257,6 +321,45 @@ def test_concept_conditional_get_304_on_live_pg() -> None:
             refetched = client.get(f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag})
             assert refetched.status_code == 200
             assert refetched.json()["name_en"] == "Changed"
+    finally:
+        if concept_id is not None:
+            asyncio.run(_delete_concept(uuid.UUID(concept_id)))
+
+
+def test_concept_post_without_auth_returns_401_on_live_pg() -> None:
+    """SEC-07 D1 — 실 PG 경로에서도 무인증 POST는 401(get_current_user가 DB 도달 전 차단)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    with TestClient(create_app()) as client:
+        body = {
+            "code": f"TEST-NOAUTH-{uuid.uuid4().hex[:8]}",
+            "name_ko": "무인증",
+            "level": "단원",
+        }
+        resp = client.post("/v1/concepts", json=body)
+        assert resp.status_code == 401
+
+
+def test_concept_get_without_auth_still_public_on_live_pg(admin_auth: dict[str, str]) -> None:
+    """SEC-07 D1 — GET은 실 PG 경로에서도 무인증 유지(봉인 범위 과확대 방지 회귀)."""
+    code = f"TEST-PUBLICGET-{uuid.uuid4().hex[:8]}"
+    concept_id: str | None = None
+    try:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
+            concept_id = client.post(
+                "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
+            ).json()["concept_id"]
+
+        # 별도 무인증 client로 GET — 헤더 없이 200이어야 한다. 첫 client의 `with` 블록을
+        # 벗어난 뒤 새 TestClient를 연다 — 중첩하면 각자의 anyio 이벤트루프 포탈이 asyncpg
+        # 커넥션을 서로 다른 loop에 바인딩해 "attached to a different loop" RuntimeError를 낸다
+        # (실측 — 이 파일의 다른 모든 통합테스트는 client 1개만 연다).
+        with TestClient(create_app()) as anon_client:
+            resp = anon_client.get(f"/v1/concepts/{concept_id}")
+            assert resp.status_code == 200
+            assert resp.json()["code"] == code
     finally:
         if concept_id is not None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))

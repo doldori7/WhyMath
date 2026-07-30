@@ -30,6 +30,7 @@ from whymath_backend.db.models.user import (
 from whymath_backend.schema.enums import (
     Accessibility,
     Persona,
+    Role,
     SchoolType,
     SubscriptionTier,
     TrackType,
@@ -137,6 +138,18 @@ def test_user_school_type_enum_values() -> None:
     assert "자사고_전국" in enums
 
 
+def test_user_role_column_ddl_and_enum_values() -> None:
+    """role 컬럼(SEC-07 D1) — NOT NULL·server_default='student'·role_enum 2값(멤버명≠값이므로
+    values_callable이 실제 *값*을 썼는지 확인 — `_pg_enum` `_orm_enum.py` 규약)."""
+    ddl = _pg_ddl(OrmUserProfile.__table__)
+    assert "role_enum" in ddl
+    assert "NOT NULL" in ddl
+    assert "'student'" in ddl
+    enums = OrmUserProfile.__table__.c.role.type.enums  # type: ignore[attr-defined]
+    # 값(멤버명 아님)이 들어가야 한다 — Role.STUDENT="student"(멤버명 STUDENT와 다름).
+    assert set(enums) == {"student", "content_admin"}
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 4) 변환 roundtrip
 # ──────────────────────────────────────────────────────────────────────────
@@ -185,9 +198,19 @@ def test_user_profile_minimal_only_persona() -> None:
     assert orm.persona_primary == "C_검정고시N수"
     back = orm.to_schema()
     assert back.persona_primary == s.persona_primary
-    # 기본값 보존(diagnostic_completed·is_active·is_deleted).
+    # 기본값 보존(diagnostic_completed·is_active·is_deleted·role).
     assert back.diagnostic_completed is False
     assert back.is_active is True
+    assert back.role == Role.STUDENT.value  # use_enum_values=True → 문자열 "student"
+
+
+def test_user_profile_role_content_admin_roundtrip() -> None:
+    """role=CONTENT_ADMIN 명시 지정도 schema→ORM→schema 왕복에서 보존된다."""
+    s = SchemaUserProfile(persona_primary=Persona.A_일반고고3, role=Role.CONTENT_ADMIN)
+    orm = OrmUserProfile.from_schema(s)
+    assert orm.role == "content_admin"
+    back = orm.to_schema()
+    assert back.role == Role.CONTENT_ADMIN.value
 
 
 def test_user_persona_history_roundtrip() -> None:

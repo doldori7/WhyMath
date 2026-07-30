@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "CUD 6라우터(concepts POST/PATCH/DELETE·problems POST/PATCH/DELETE) + /v1/generate에 require_role/CurrentUser 부착 + 무인증 호출 401/403 회귀 동결 + GET 무인증 유지도 함께 동결(봉인 범위 과확대 방지)"
   - "get_current_user가 is_active=False·is_deleted=True를 401로 차단(기존 컬럼 첫 reader) 동결"
   - "Role enum 2값(STUDENT·CONTENT_ADMIN) + UserProfile.role 마이그레이션 기본값 STUDENT + 7단 선형 서열 미도입(서열 비교 연산 부재)을 테스트로 동결 + passlib[bcrypt] 의존성 제거 후 전체 스위트 green"
-artifacts: []
+artifacts:
+  - 1e8967f2
 paths:
   - src/backend/whymath_backend/api/concepts.py
   - src/backend/whymath_backend/api/problems.py

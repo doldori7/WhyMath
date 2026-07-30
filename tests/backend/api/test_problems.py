@@ -2,6 +2,11 @@
 
 concept 라우터 테스트(test_concepts.py)와 동형. 실제 SQL·필터는 통합테스트와 메인 PG 검증
 담당(여기서는 상태코드·직렬화·404/409/422·commit/rollback 결선만).
+
+인가(SEC-07 D1): POST/PATCH/DELETE는 `RequireContentAdmin` 게이트가 있다. `_client()`가
+`require_content_admin`을 CONTENT_ADMIN 고정 사용자로 오버라이드해 이 파일의 결선 테스트를
+유지하고(test_concepts.py 패턴 동형), `TestAuthGate`가 오버라이드 없는 실제 인증·인가 회귀
+(401/403)와 GET 무인증 유지를 검증한다.
 """
 
 from __future__ import annotations
@@ -11,15 +16,22 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 
+from whymath_backend.api._auth import require_content_admin
 from whymath_backend.app import create_app
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.enums import Curriculum, RelationType, SourceType, Subject
+from whymath_backend.schema.enums import Curriculum, RelationType, Role, SourceType, Subject
 from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
 from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
+from whymath_backend.security import create_access_token
+
+_ADMIN_USER = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
 
 
 def _valid_schema() -> ProblemSchema:
@@ -99,12 +111,14 @@ class FakeSession:
 
 
 def _client(fake: FakeSession) -> TestClient:
+    """get_session을 가짜로, require_content_admin을 고정 관리자로 오버라이드(결선 테스트용)."""
     app = create_app()
 
     async def _override() -> AsyncIterator[FakeSession]:
         yield fake
 
     app.dependency_overrides[get_session] = _override
+    app.dependency_overrides[require_content_admin] = lambda: _ADMIN_USER
     return TestClient(app)
 
 
@@ -401,4 +415,81 @@ class TestConditionalGet:
         problem = _sample_problem()
         client = _client(FakeSession(get_map={problem.problem_id: problem}))
         resp = client.get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 200
+
+
+_TEST_JWT_SETTINGS = Settings(jwt_secret_key=SecretStr("test-secret-key-0123456789abcdef"))
+
+
+class TestAuthGate:
+    """SEC-07 D1 — CUD 인가 회귀(오버라이드 없는 *실제* 의존성) + GET 무인증 유지 동결.
+
+    test_concepts.py `TestAuthGate`와 동형(설계 근거는 그쪽 docstring 참조).
+    """
+
+    def _client_real_auth(self, fake: FakeSession) -> TestClient:
+        app = create_app()
+
+        async def _override() -> AsyncIterator[FakeSession]:
+            yield fake
+
+        app.dependency_overrides[get_session] = _override
+        app.dependency_overrides[get_settings] = lambda: _TEST_JWT_SETTINGS
+        return TestClient(app)
+
+    def _token_for(self, user: UserProfile) -> str:
+        return create_access_token(user.user_id, settings=_TEST_JWT_SETTINGS)
+
+    # ── 무인증 → CUD 401 ──
+    def test_unauthenticated_post_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).post("/v1/problems", json=_valid_body())
+        assert resp.status_code == 401
+
+    def test_unauthenticated_patch_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).patch(
+            f"/v1/problems/{uuid.uuid4()}", json={"answer": "x"}
+        )
+        assert resp.status_code == 401
+
+    def test_unauthenticated_delete_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).delete(f"/v1/problems/{uuid.uuid4()}")
+        assert resp.status_code == 401
+
+    # ── 인증됐으나 역할 불일치(STUDENT) → CUD 403 ──
+    def test_student_role_post_returns_403(self) -> None:
+        student = UserProfile(user_id=uuid.uuid4(), role=Role.STUDENT)
+        fake = FakeSession(get_map={student.user_id: student})
+        resp = self._client_real_auth(fake).post(
+            "/v1/problems",
+            json=_valid_body(),
+            headers={"Authorization": f"Bearer {self._token_for(student)}"},
+        )
+        assert resp.status_code == 403
+
+    # ── CONTENT_ADMIN 실 토큰 → 정상 통과(엔드투엔드 결선 확인) ──
+    def test_content_admin_role_post_returns_201(self) -> None:
+        admin = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
+        fake = FakeSession(get_map={admin.user_id: admin})
+        resp = self._client_real_auth(fake).post(
+            "/v1/problems",
+            json=_valid_body(),
+            headers={"Authorization": f"Bearer {self._token_for(admin)}"},
+        )
+        assert resp.status_code == 201, resp.text
+
+    # ── GET은 봉인 범위 밖 — 무인증 유지 회귀(과확대 방지) ──
+    def test_unauthenticated_get_single_still_public(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = self._client_real_auth(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 200
+
+    def test_unauthenticated_get_list_still_public(self) -> None:
+        resp = self._client_real_auth(FakeSession()).get("/v1/problems")
+        assert resp.status_code == 200
+
+    def test_unauthenticated_get_steps_still_public(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = self._client_real_auth(fake).get(f"/v1/problems/{problem.problem_id}/steps")
         assert resp.status_code == 200
