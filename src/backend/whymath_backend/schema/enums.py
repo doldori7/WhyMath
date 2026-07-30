@@ -1131,6 +1131,41 @@ class ConsentScope(str, Enum):
     """서비스 본 기능 이용을 위한 개인정보 처리 동의(미성년 게이트 해제) — §3.1 가입 단계."""
 
 
+class Role(Enum):
+    """`user_profile.role` — 인가(authorization) 역할, v0 **2값 확정(축소)**(SEC-07 D1).
+
+    `require_role`(`api/_auth.py`)이 콘텐츠 CUD(개념·문제 생성/수정/삭제)를 게이팅하는 데
+    쓴다. `.claude/agents/backend-engineer.md:248-262`·`docs/design/ui/04_admin_console_
+    architecture.md` §2 원칙3은 `PARENT`/`TEACHER`/`SCHOOL_ADMIN`을 포함한 5종 골격을
+    스케치하지만, **좌석(소비처) 없는 역할은 만들지 않는다**(dead code 금지) — 그 3종은
+    Phase 3 대시보드/B2B 계약이 실체를 가질 때(`docs/architecture/account_security_gap_
+    review.md` §5-②) 연다. 역할 추가는 마이그레이션 1줄이고, 잘못 만든 역할을 걷어내는
+    비용이 더 크다.
+
+    **7단 선형 서열을 의도적으로 미도입한다** — `docs/legal/pipa_data_matrix.md:33-47`이
+    반증하듯 부모의 데이터 가시성은 학생 본인의 *부분집합*이지 상위집합이 아니다(오답
+    패턴·또래 비교·힌트 사용은 부모에게 비공개이나 학생 본인에겐 공개). 선형 서열
+    (`STUDENT < TEACHER < PARENT < ... < SYSTEM_ADMIN`류)은 "상위가 하위를 포함"을
+    전제하므로 채택 시 미성년 보호 매트릭스를 구조적으로 깬다(`account_security_gap_
+    review.md` §2-①). 이 사유로 다른 enum과 달리 **`str` mixin을 쓰지 않는다** — 순수
+    `Enum`이라 `<`/`>` 비교가 `TypeError`를 던진다(house style은 `class X(str, Enum)`이나,
+    str mixin은 멤버가 사전식으로 비교 가능해져(`"content_admin" < "student"`) 서열 연산이
+    *존재하게* 된다 — 의미 없는 사전순이라도 연산 자체가 열려 있으면 미래 세션이 실수로
+    등급 비교 코드를 짤 여지를 준다). `test_role_enum.py`가 멤버 수 2·서열 비교 부재를
+    동결해 미래 세션이 7단 서열을 조용히 되살리지 못하게 막는다.
+
+    Pydantic 직렬화 메모: str mixin이 아니므로 `UserProfile` 스키마의 `role` 필드는
+    `Field(..., validate_default=True)`로 기본값도 검증 경로를 태워 `use_enum_values=True`가
+    일관되게 적용되게 한다(기본값 미검증 시 `.value` 추출이 스킵되는 Pydantic v2 동작 회피).
+    """
+
+    STUDENT = "student"
+    """기본 역할 — 모든 신규 가입자(마이그레이션 `server_default='student'`가 기존 행도 백필)."""
+
+    CONTENT_ADMIN = "content_admin"
+    """콘텐츠 CUD 권한 — 개념·문제(`/v1/concepts`·`/v1/problems`) 생성·수정·삭제."""
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 교수법 팩 지식 유형 (교수법 팩 + 소단원 DSL — 7유형→팩→증거)
 # ──────────────────────────────────────────────────────────────────────────
