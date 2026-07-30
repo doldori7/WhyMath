@@ -45,6 +45,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     ExamType,
     Persona,
+    QuestionFormat,
     Resolution,
     SignaturePattern,
     SourceType,
@@ -772,20 +773,48 @@ class _AQResult:
         return self._rows[0] if self._rows else None
 
 
+class _StubProblem:
+    """서버 권위 채점 테스트용 최소 문항 스텁 — `verify_final_answer`가 읽는 필드만 duck-type.
+
+    실 ORM `Problem` 대신 `session.get`이 돌려줄 가벼운 대역(hermetic·DB 무접근). 검증기는
+    `answer`·`choices`·`question_format`·`answer_format`·`multiple_answers`만 참조한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        answer: str | None = None,
+        choices: list[str] | None = None,
+        question_format: Any = None,
+        answer_format: Any = None,
+        multiple_answers: dict[str, Any] | None = None,
+    ) -> None:
+        self.answer = answer
+        self.choices = choices
+        self.question_format = question_format
+        self.answer_format = answer_format
+        self.multiple_answers = multiple_answers
+
+
 class _QueueSession:
     """execute 호출마다 큐잉 결과를 순서대로 반환 — 채점 엔드포인트의 다중 쿼리(개념 조회 →
-    개념별 prior) 시뮬. add/commit 캡처."""
+    개념별 prior) 시뮬. add/commit 캡처. `get`은 서버 권위 채점의 문항 조회를 대역한다."""
 
-    def __init__(self, results: list[_AQResult]) -> None:
+    def __init__(self, results: list[_AQResult], get_result: Any = None) -> None:
         self._results = results
         self._i = 0
         self.added: list[Any] = []
         self.commits = 0
+        self._get_result = get_result  # session.get(Problem, id) 대역(기본 None=문항 없음).
 
     async def execute(self, _stmt: Any) -> _AQResult:
         result = self._results[self._i]
         self._i += 1
         return result
+
+    async def get(self, _entity: Any, _ident: Any) -> Any:
+        # 서버 권위 채점의 문항 조회 — execute 큐와 무관(순서 불변). 기본 None → unverifiable.
+        return self._get_result
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -807,7 +836,11 @@ def _attempts_client(session: _QueueSession) -> TestClient:
 
 class TestSubmitAttempt:
     def test_submit_with_assessed_concept(self) -> None:
-        """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
+        """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답.
+
+        student_answer 미제공 → 서버 검증 근거 없음(get→None) → verification_state=unverifiable →
+        is_correct는 클라 보고로 폴백(S3-09 정직 폴백). 서버 권위 승격은 별도 테스트가 검증한다.
+        """
         cid = uuid.uuid4()
         # 개념 숙달: execute#1=개념 [cid]·#2=개념 prior 없음.
         # 스킬 숙달(Phase 2b-2): #3=개념 [cid]·#4=스킬 해소 [](미매핑 → 스킬행 0).
@@ -821,6 +854,7 @@ class TestSubmitAttempt:
         body = resp.json()
         uuid.UUID(body["attempt_id"])  # 발급됨
         assert body["is_correct"] is True
+        assert body["verification_state"] == "unverifiable"  # student_answer 없음 → 서버 미검증
         assert len(body["mastery_updates"]) == 1
         upd = body["mastery_updates"][0]
         assert upd["concept_id"] == str(cid)
@@ -892,6 +926,101 @@ class TestSubmitAttempt:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
+
+    # ── S3-09: 서버 권위 채점(student_answer + Problem.answer → 서버가 is_correct 계산) ──
+    def test_server_authority_overrides_client_when_answer_wrong(self) -> None:
+        """서버 권위: 클라 is_correct=true 보고 + student_answer가 기대정답과 불일치 → 서버가
+        is_correct=False로 적재(클라 보고가 이기지 못함). 수학 로직 코어 권위(CLAUDE.md)."""
+        # 오답 경로(모델 B) — 개념 PRIMARY→[]·TESTED→[]·스킬 PRIMARY→[]·TESTED→[](매핑 없음).
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])],
+            get_result=_StubProblem(answer="3"),
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,  # 클라는 정답이라 우기지만…
+                "student_answer": "x=5",  # 실제 최종답은 기대정답 3과 불일치
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["verification_state"] == "incorrect"
+        assert body["is_correct"] is False  # 서버 판정이 클라 True를 이긴다
+        # 적재된 ProblemAttempt의 is_correct도 서버 판정값(NOT NULL → next-problem NOT IN 대상).
+        attempt = session.added[0]
+        assert attempt.is_correct is False
+
+    def test_server_authority_marks_correct_when_answer_matches(self) -> None:
+        """서버 권위: 클라 is_correct=false 보고여도 student_answer가 기대정답과 동치이면 서버가
+        is_correct=True로 적재(등식 x=3 ≡ 기대정답 3·자연 표기 동치)."""
+        # 정답 경로 — 개념 assessed→[]·스킬 assessed→[](매핑 없음·2 execute).
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([])],
+            get_result=_StubProblem(answer="3"),
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,  # 클라는 오답이라 보고하지만…
+                "student_answer": "x=3",  # 최종답이 기대정답 3과 동치
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["verification_state"] == "correct"
+        assert body["is_correct"] is True  # 서버 판정이 클라 False를 이긴다
+
+    def test_server_authority_multiple_choice_counter_suffix(self) -> None:
+        """객관식: 학생 '2개'가 수량 접미사 정규화로 정답 '2'와 correct(값 매칭)."""
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([])],
+            get_result=_StubProblem(
+                answer="2",
+                choices=["0", "1", "2", "3"],
+                question_format=QuestionFormat.객관식,
+            ),
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "student_answer": "2개",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["verification_state"] == "correct"
+        assert body["is_correct"] is True
+
+    def test_server_authority_unverifiable_falls_back_to_client(self) -> None:
+        """기대정답 미보유(Problem.answer None) → unverifiable → is_correct 클라 보고 폴백.
+
+        정직: 서버가 correct를 *주장하지 않는다*(verification_state=unverifiable). is_correct는
+        클라 보고(True) 그대로 — NULL이 아니라 비-NULL 유지(next-problem 재출제 방지)."""
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([])],
+            get_result=_StubProblem(answer=None),
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "student_answer": "x=3",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["verification_state"] == "unverifiable"
+        assert body["is_correct"] is True  # 클라 폴백(서버 correct 주장 없음)
 
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""

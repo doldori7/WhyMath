@@ -106,6 +106,10 @@ from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
 )
+from whymath_backend.l3.verify_final_answer import (
+    FinalAnswerState,
+    verify_final_answer,
+)
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
@@ -513,15 +517,26 @@ async def list_my_deletions(
 class AttemptSubmitRequest(BaseModel):
     """본인 풀이 채점 결과 제출 — `POST /v1/me/attempts` 요청 본문.
 
-    v1: `is_correct`는 *클라이언트 보고*(서버측 답안 채점[OCR·answer-check]은 L3/L5 후속).
+    `is_correct`는 *클라이언트 보고*이나 **서버 권위가 우선**한다(S3-09): `student_answer`가 있고
+    문항에 기대정답(`Problem.answer`)이 있으면 서버가 verify primitive로 정답 여부를 *계산*하고 그
+    값이 클라 보고를 이긴다(CLAUDE.md "수학 로직을 클라에 넣지 않는다" — 독립 수학 코어가 권위).
+    서버가 판정 불가(unverifiable)·기대정답 미보유면 이 클라 보고로 폴백한다(정직 — 응답
+    `verification_state`가 미검증을 투명 표기·correct 위장 없음).
     `problem_id`는 존재하는 문제를 참조해야 한다(FK — 미존재 시 저장계층 무결성 오류).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     problem_id: uuid.UUID = Field(description="채점 대상 문제 FK.")
-    is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
-    student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
+    is_correct: bool = Field(
+        description="정답 여부(클라이언트 보고). student_answer+기대정답 있으면 서버 판정이 우선."
+    )
+    student_answer: str | None = Field(
+        default=None,
+        description=(
+            "학생 제출 최종답(선택). 제공 시 서버가 기대정답과 동치 검증해 is_correct를 산출한다."
+        ),
+    )
     duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
     session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
     confidence_self_reported: float | None = Field(
@@ -552,7 +567,21 @@ class AttemptSubmitResponse(BaseModel):
     """`POST /v1/me/attempts` 응답 — 적재된 attempt + 갱신된 개념·스킬 숙달 목록."""
 
     attempt_id: uuid.UUID
-    is_correct: bool
+    is_correct: bool = Field(
+        description=(
+            "적재된 최종 정답 여부. 서버 검증 가능(verification_state correct/incorrect)이면 서버 "
+            "판정값, 불가(unverifiable)면 클라 보고값. 클라는 진행 가부를 이 값이 아니라 "
+            "verification_state로 판단한다."
+        ),
+    )
+    verification_state: FinalAnswerState = Field(
+        description=(
+            "서버 최종답 검증 결과(S3-09) — correct·incorrect·unverifiable. **클라가 '다음 문항 "
+            '진행\'을 판단하는 근거**: `verification_state == "correct"`일 때만 서버가 정답을 '
+            "확인한 것이므로 진행한다. unverifiable(기대정답 미보유·판정 불가)이면 is_correct는 "
+            "클라 보고로 폴백되나 서버가 correct를 *주장하지 않았음*을 뜻한다(correct 위장 없음)."
+        ),
+    )
     mastery_updates: list[ConceptMasteryUpdate]
     skill_mastery_updates: list[SkillMasteryUpdate] = Field(
         default_factory=list,
@@ -592,13 +621,40 @@ async def submit_attempt(
     이어서 `record_problem_attempt_skill_mastery`로 *스킬 축* 숙달도 같은 모델 B로 전파한다(Phase
     2b-2·행동 축) — 평가 개념을 `Concept.behavior_skills` 브리지로 mastery-estimable 스킬에 해소해
     갱신한다. 응답 `skill_mastery_updates`는 실제 갱신된 스킬만(매핑/해소 없으면 빈 목록).
+
+    서버 권위 채점(S3-09·학습 루프 닫힘의 G2): `student_answer`가 제공되면 문항을 조회해
+    `verify_final_answer`(L3 verify primitive 재사용)로 학생 최종답↔기대정답(`Problem.answer`)
+    동치를 3상태(correct/incorrect/unverifiable)로 판정한다. **서버가 판정 가능하면 그 값이 클라
+    보고를 이긴다**(수학 로직은 코어 권위·CLAUDE.md). 판정 불가(unverifiable)·기대정답 미보유면
+    클라 보고로 폴백하되 응답 `verification_state`로 미검증을 투명 표기한다(정직 — correct 위장
+    없음). 이 서버 판정 is_correct가 attempt 적재·숙달 전파·보정 코칭 *전부*에 쓰여, 적재된
+    attempt(is_correct 비-NULL)가 `next-problem`의 미시도 필터(NOT IN)에서 제외돼 진행이 작동한다.
+
+    unverifiable에 대한 정직 결정(NULL vs 클라 폴백): **클라 보고로 폴백**한다(is_correct 비-NULL
+    유지). 근거 — ① 서버가 correct/incorrect를 *주장*하지 않는다(verification_state로 미검증 표기).
+    ② 기대정답 미보유(서술형·비대수 다수)에서 v1 클라 보고 동작 보존(하위호환). ③ is_correct를
+    NULL로 두면 next-problem이 "미시도"로 오인해 같은 문항을 재출제하므로(루프 재정체) 비-NULL 필요.
+    ④ 불변식: unverifiable을 correct로 *승격하지 않는다* — 클라 보고를 그대로 통과시킬 뿐이다.
     """
+    # 서버 권위 채점 — 문항 조회 후 학생 최종답을 기대정답과 동치 검증(S3-09). 문항 미존재면
+    # verify_final_answer(·, None)이 unverifiable을 돌리고, 이후 attempt commit에서 FK 무결성
+    # 오류가 나는 기존 동작은 불변(미존재 problem_id 방어는 저장계층 책임).
+    problem = await session.get(Problem, body.problem_id)
+    verification = verify_final_answer(body.student_answer, problem)
+    if verification.state is FinalAnswerState.correct:
+        effective_is_correct = True
+    elif verification.state is FinalAnswerState.incorrect:
+        effective_is_correct = False  # 서버 판정 우선 — 클라의 True 보고가 이기지 못한다.
+    else:
+        # unverifiable — 서버 판정 근거 없음(기대정답 미보유·파싱 불가 등) → 클라 보고 폴백.
+        effective_is_correct = body.is_correct
+
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
         problem_id=body.problem_id,
         session_id=body.session_id,
-        is_correct=body.is_correct,
+        is_correct=effective_is_correct,  # 서버 권위 판정(불가 시 클라 폴백)
         student_answer=body.student_answer,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
@@ -606,23 +662,24 @@ async def submit_attempt(
     )
     session.add(attempt)
     await session.commit()
-    # 숙달 전파(평가 개념별 측정 적재·개념 매핑 없으면 빈 리스트)
+    # 숙달 전파(평가 개념별 측정 적재·개념 매핑 없으면 빈 리스트) — 서버 판정 is_correct 사용.
     records = await record_problem_attempt_mastery(
-        session, user.user_id, body.problem_id, body.is_correct
+        session, user.user_id, body.problem_id, effective_is_correct
     )
     # 스킬 숙달 전파(Phase 2b-2·행동 축) — 같은 모델 B로 concept→skill 해소 후 스킬별 측정 적재.
     # 개념 전파와 독립 트랜잭션(자체 단일 commit)·concept→skill 매핑/해소 없으면 빈 리스트.
     skill_records = await record_problem_attempt_skill_mastery(
-        session, user.user_id, body.problem_id, body.is_correct
+        session, user.user_id, body.problem_id, effective_is_correct
     )
-    # WH-1 §11.4 보정 루프: 이미 받은 자기보고 확신도↔정오답에서 과신/과소신 코칭 결정.
+    # WH-1 §11.4 보정 루프: 자기보고 확신도↔*서버 판정* 정오답에서 과신/과소신 코칭 결정.
     # 순수 L4 결정(DB 무접근·적재 로직 불변)·확신 미제출(None)이면 None(자연).
     calibration_coaching = recommend_calibration_coaching(
-        body.confidence_self_reported, body.is_correct
+        body.confidence_self_reported, effective_is_correct
     )
     return AttemptSubmitResponse(
         attempt_id=attempt.attempt_id,
-        is_correct=body.is_correct,
+        is_correct=effective_is_correct,
+        verification_state=verification.state,
         mastery_updates=[
             ConceptMasteryUpdate(
                 concept_id=r.concept_id,

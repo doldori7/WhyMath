@@ -836,6 +836,84 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
         asyncio.run(_cleanup_all())
 
 
+def test_me_attempt_server_authority_drives_progression_on_live_pg() -> None:
+    """S3-09 학습 루프 닫힘: POST /v1/me/attempts(student_answer=정답) → 서버가 is_correct=True로
+    적재(클라 보고 False를 이김) → GET /v1/me/next-problem이 *다른* 문항을 추천(미시도 NOT IN
+    필터가 실제로 작동해 같은 문항 반복이 끝난다).
+
+    test_me_next_problem_recommends_unattempted_on_live_pg 패턴 확장 — 그쪽은 attempt를 직접
+    ORM 적재했으나, 여기선 *엔드포인트를 통해* 서버 권위 채점으로 attempt를 만든 뒤 진행을 봉인한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid_a = uuid.uuid4()  # answer="3" — 정답 제출 대상(제출 후 미시도 필터로 제외)
+    pid_b = uuid.uuid4()  # 미시도 — 진행 후 추천될 다른 문항
+    suffix = pid_a.hex[:8]
+
+    def _problem(pid: uuid.UUID, difficulty: float, answer: str | None = None) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=difficulty,
+                answer=answer,
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_problem(pid_a, 3.0, answer="3"))
+        await _add_all(_problem(pid_b, 3.0))
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("DELETE FROM problem_attempt WHERE user_id=:u"), {"u": str(uid)}
+                )
+                for pid in (pid_a, pid_b):
+                    await conn.execute(
+                        text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)}
+                    )
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            headers = {"Authorization": f"Bearer {token}"}
+            # 서버 권위 채점 — 클라가 is_correct=False로 보고해도 학생 최종답 "x=3"이 기대정답
+            # "3"과 동치이므로 서버가 True로 적재(클라 보고가 이기지 못함).
+            submit = client.post(
+                "/v1/me/attempts",
+                headers=headers,
+                json={"problem_id": str(pid_a), "is_correct": False, "student_answer": "x=3"},
+            )
+            assert submit.status_code == 201, submit.text
+            sbody = submit.json()
+            assert sbody["verification_state"] == "correct"
+            assert sbody["is_correct"] is True  # 서버 판정이 클라 False를 이긴다
+            # 진행 — 적재된 attempt(is_correct 비-NULL)가 미시도 필터에서 제외 → B 추천(A 아님).
+            nxt = client.get("/v1/me/next-problem", headers=headers)
+            assert nxt.status_code == 200, nxt.text
+            nbody = nxt.json()
+            assert nbody["problem_id"] == str(pid_b)
+            assert nbody["problem_id"] != str(pid_a)  # 같은 문항 반복이 끝났다
+    finally:
+        asyncio.run(_cleanup_all())
+
+
 def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
     """GET /v1/me/next-problem?prioritize_weak_concepts=true — 동일 난이도 두 문항 중
     약점 개념(저숙달) 문항을 BKT 숙달 스냅샷 조인으로 우선 추천(BKT+IRT 융합·end-to-end)."""
