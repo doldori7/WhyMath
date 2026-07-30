@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ paths:
   - src/backend/whymath_backend/l4/content_supply.py
   - src/backend/whymath_backend/api/study.py
   - "src/backend/whymath_backend/harness/**"
-session: null
+session: claude/whymath-visualization-review-zl2v1b
 notes: "docs/architecture/ai_content_generation_gap_review.md §3 D2 — 외부 EOS 틀(기능 58) 대조. 신규 학생 대면 축 0(기존 /study 표면의 404 해소·기존 검증 통과 자산 참조)이라 S3-01 비잠금이며 오히려 선결(파일럿 학생이 404를 받으면 파일럿 데이터 오염). 감사 축은 ARCH-21 QA 오케스트레이터가 흡수 예정"
 updated: 2026-07-30
