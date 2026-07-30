@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - src/backend/whymath_backend/schema/problem.py
   - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/l1/problem_bank/**"
-session: null
+session: claude/s3-27-problem-type-tagging
 notes: "docs/architecture/ai_content_generation_gap_review.md §3 D3 — 외부 EOS 틀(기능 59 '생성 기준: 유형'·'예제 종류 6종') 대조. 실측: persona_fit·problem_type·visual_type·has_visual·requires_graph_sketch 5개 메타 태그가 전 코퍼스 2,647건에서 0건이며 ARCH-18이 유형 축을 '전 문항 미태깅이라 무의미'로 스코프아웃한 상태. 산출 리포트가 gap_review §4-① 트리거(결정론 맥락 슬롯)의 발화 계측기가 된다. S3-01 비잠금(오프라인 메타·학생 노출 0)"
 updated: 2026-07-30
