@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/l3/visualization.py
   - data/render_contract.json
   - tests/backend/schema/test_render_contract.py
-session: null
+session: claude/whymath-visualization-review-zl2v1b
 notes: "visualization_module_gap_review.md §3 D3. 런타임 실측(격리 환경): 빈 spec의 animation_prerendered가 중앙 검증·parse_visualization_spec 게이트를 통과하는데 계약은 web_adapter=null(렌더 불가)이고 Manim 구현 0건. 변별력 확인 완료(interactive=True는 거부됨 → 게이트 자체는 살아있음). 심각도는 '잠재'로 하향됨 — Flutter가 _VisualizationSeed(caption 카드)로 우아하게 강등하고 interactive=False 강제로 WebView 도달 불가하며 D1이 scene 경로 생성을 선행 차단. 남는 피해는 웹 조용한 미렌더(graph2dSpec.js:181)·LLM 호출 낭비·caption이 예고한 시각화 불이행."
 updated: 2026-07-30
