@@ -85,6 +85,17 @@ Widget _wrap(CoachApi fake) {
   );
 }
 
+/// 활성 문제를 함께 주입해 감싸는 헬퍼(객관식 선택지 버튼 테스트용·S3-29).
+Widget _wrapWithProblem(CoachApi fake, Problem problem) {
+  return ProviderScope(
+    overrides: [
+      coachApiProvider.overrideWithValue(fake),
+      activeProblemProvider.overrideWith((ref) => problem),
+    ],
+    child: const MaterialApp(home: ChatScreen()),
+  );
+}
+
 void main() {
   testWidgets('슬로건과 빈 안내가 보인다', (tester) async {
     await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
@@ -422,5 +433,132 @@ void main() {
   testWidgets('활성 문제가 없으면 배너가 그려지지 않는다', (tester) async {
     await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
     expect(find.textContaining('풀이 중인 문제'), findsNothing);
+  });
+
+  // ── S3-29 객관식 선택지 버튼 ──────────────────────────────────────────────
+  testWidgets('객관식 문항이면 선택지를 탭 버튼으로 렌더한다(라벨=선택지 값 그대로)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '이차방정식 x^2-5x+6=0의 서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 선택지 4개가 각각 탭 가능한 버튼(라벨=선택지 값)으로 렌더된다.
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+    expect(find.widgetWithText(OutlinedButton, '0'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '2'), findsOneWidget);
+    // 은근한 안내(정오·정답률 강조 없음).
+    expect(find.text('보기 중 하나를 골라 보세요'), findsOneWidget);
+  });
+
+  testWidgets('choices만 있고 question_format이 없어도 선택지 버튼을 렌더한다', (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc2',
+          sourceType: '자체생성',
+          subject: '공통',
+          // question_format 미지정 — choices 보유만으로 MC로 취급.
+          questionText: '다음 중 옳은 것은?',
+          choices: ['ㄱ', 'ㄴ', 'ㄷ'],
+        ),
+      ),
+    );
+    expect(find.byType(OutlinedButton), findsNWidgets(3));
+  });
+
+  testWidgets('선택지 탭 → 그 값이 send(student_input) 경로로 나간다', (tester) async {
+    final fake = _FakeCoachApi(response: _response());
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        fake,
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 선택지 "2"를 탭한다.
+    await tester.tap(find.widgetWithText(OutlinedButton, '2'));
+    await tester.pumpAndSettle();
+
+    // 타이핑과 동일한 경로 — student_input에 정확한 선택지 값이 실려 나간다(풀이 단계 아님).
+    expect(fake.lastRequest?.studentInput, '2');
+    expect(fake.lastRequest?.solutionSteps, isNull);
+    // 학생 버블로 선택 값이 보이고 코치 응답이 이어진다.
+    expect(find.text('먼저 무엇이 주어졌는지 정리해 볼까요?'), findsOneWidget);
+  });
+
+  testWidgets('주관식 문항이면 선택지 버튼을 렌더하지 않는다(주관식 흐름 영향 0)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-sub',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '단답형',
+          questionText: '이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.',
+          // choices 없음(단답형) → MC 아님.
+        ),
+      ),
+    );
+
+    // 선택지 버튼·안내가 없고, 기존 대화 입력(단일 필드+전송)은 그대로다.
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.text('보기 중 하나를 골라 보세요'), findsNothing);
+    expect(find.byIcon(Icons.send), findsOneWidget);
+  });
+
+  testWidgets('활성 문제가 없으면(자유 대화) 선택지 버튼을 렌더하지 않는다', (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('풀이 단계 모드로 전환하면 선택지 버튼을 감춘다(풀이 편집기와 겹치지 않음·MOB-02 불변식)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 대화 모드(기본) — 선택지 버튼이 주 어포던스로 보인다.
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+
+    // 풀이 단계 모드로 토글 → 단계 편집기가 답 구성 어포던스를 넘겨받고 선택지 버튼은 감춰진다.
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.text('보기 중 하나를 골라 보세요'), findsNothing);
+
+    // 대화로 돌아오면 다시 선택지 버튼이 나타난다.
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.pump();
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
   });
 }

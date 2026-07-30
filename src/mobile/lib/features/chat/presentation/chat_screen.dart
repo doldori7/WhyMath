@@ -44,6 +44,14 @@ const double _stepAreaMaxHeightFraction = 0.25;
 /// 값이 걸리고, 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽).
 const double _stepAreaMaxHeight = 162;
 
+/// 객관식 선택지 버튼 영역이 차지할 수 있는 body 가용 높이 비율 상한(S3-29·MOB-02 동형).
+/// 초과분은 버튼 영역 내부 스크롤로 가둬 어떤 화면·키보드 높이에서도 Column을 넘치지 않게 한다.
+const double _choiceAreaMaxHeightFraction = 0.25;
+
+/// 선택지 버튼 영역 절대 상한(px) — 안내 라벨 + 버튼 두어 줄 분량. 공간이 넉넉하면 이 값이,
+/// 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽). 초과분은 내부 스크롤.
+const double _choiceAreaMaxHeight = 160;
+
 /// 빈 단계 필드 예시 힌트 (MOB-05) — 학생에게 *앱이 알아듣는 입력 형태*를 스스로 안내한다.
 /// 등식 한 줄·근 나열 등 백엔드 verify가 결정하는 자연 표기(MOB-06·S3-06)라, 그대로 따라 쓰면
 /// 검증 결정 구간에 들어간다. 왼쪽 번호 라벨과 중복되던 "단계 N"을 대체. 정오 강조·부정 표현 없음.
@@ -53,6 +61,33 @@ const List<String> _stepHintExamples = <String>[
   '예: x=2',
   '예: (x-2)(x-3)=0',
 ];
+
+/// 활성 문항이 객관식인지 판정한다(S3-29).
+///
+/// 규칙: `questionFormat == '객관식'`이거나 `choices`가 비어있지 않으면 객관식으로 취급한다
+/// (둘 중 하나면 MC). 단, 실제 *버튼 렌더*는 보수적으로 [_renderableChoices]가 결정한다 —
+/// 탭할 선택지(choices)가 없으면 어포던스를 만들 수 없기 때문이다.
+bool _isMultipleChoice(Problem problem) {
+  if (problem.questionFormat == '객관식') {
+    return true;
+  }
+  final choices = problem.choices;
+  return choices != null && choices.isNotEmpty;
+}
+
+/// 렌더 가능한 선택지 목록(객관식이고 choices 보유)·아니면 null(주관식·선택지 없음).
+///
+/// 이 함수가 null을 돌려주면 선택지 버튼을 아예 그리지 않는다 — 주관식 문항엔 영향이 0이다.
+List<String>? _renderableChoices(Problem? problem) {
+  if (problem == null || !_isMultipleChoice(problem)) {
+    return null;
+  }
+  final choices = problem.choices;
+  if (choices == null || choices.isEmpty) {
+    return null; // MC지만 탭할 선택지가 없으면 버튼을 만들 수 없다(보수적).
+  }
+  return choices;
+}
 
 /// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
@@ -182,6 +217,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     context.go(AppRoutes.problemPath);
   }
 
+  /// 객관식 선택지 탭 → 그 선택지 값을 코치 턴(`student_input`)으로 제출한다(S3-29).
+  ///
+  /// 타이핑과 *동일한* 경로(`send`)를 재사용한다 — 서버는 정확한 선택지 값("2")을 correct로
+  /// 판정해 돌아보기→완료(주관식과 같은 흐름·S3-27/S3-28)로 이어준다. 자유 타이핑의 자연 표현
+  /// ("답은 2"·"2개요")이 unverifiable로 떨어지던 브리틀함을 정확한 값 제출로 원천 우회한다.
+  /// 정답 판정·완료는 서버 권위다 — 클라는 선택지 값을 제출만 한다(정답 미보유·표현≠의미).
+  Future<void> _onChoiceSelected(String choice) async {
+    await ref.read(chatControllerProvider.notifier).send(choice);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
@@ -240,6 +285,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _stepAreaMaxHeight,
             bodyHeight * _stepAreaMaxHeightFraction,
           );
+          final double choiceAreaMaxHeight = math.min(
+            _choiceAreaMaxHeight,
+            bodyHeight * _choiceAreaMaxHeightFraction,
+          );
           return Column(
             children: [
               // 풀이 중인 문제를 채팅 위에 상시 노출(접기 가능) — 실기기 시연 피드백:
@@ -266,6 +315,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               // 진행 어포던스 없이 (선택) 작은 힌트만 둔다·학생이 근거를 답하면 다음 턴에 완료된다.
               else if (state.awaitingReflection)
                 const _ReflectionHint(),
+              // 객관식 선택지 버튼(S3-29) — 활성 문항이 객관식일 때 보기를 탭 버튼으로 노출한다
+              // (입력 영역 바로 위·주 어포던스). 노출 조건:
+              //  · *대화 모드에서만* 렌더한다 — 풀이 단계 모드는 학생이 다단계 풀이를 *직접 구성*하는
+              //    별도 어포던스(그대로 유지)이고, 그 편집기가 이미 좁은 세로 공간을 쓰므로 선택지
+              //    버튼을 겹쳐 넣지 않는다(MOB-02 오버플로 불변식 보존·풀이 모드 레이아웃 무변경).
+              //  · 완료·돌아보기 대기 중엔 감춘다 — 완료 후엔 "다음 문제로"만, 돌아보기 중엔 학생이
+              //    자연어로 근거를 답해야 하므로(선택지 재탭은 부적절) 버튼을 두지 않는다.
+              // 주관식 문항엔 위젯이 스스로 빈 자리를 반환해 영향이 0이다(주관식 흐름 무변경).
+              if (_mode == _InputMode.conversation &&
+                  !state.problemComplete &&
+                  !state.awaitingReflection)
+                _ChoiceButtons(
+                  enabled: !state.isSending,
+                  maxHeight: choiceAreaMaxHeight,
+                  onSelected: _onChoiceSelected,
+                ),
               _InputBar(
                 controller: _inputController,
                 stepsEditorKey: _stepsEditorKey,
@@ -385,6 +450,80 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// 객관식 선택지 버튼 줄 — 활성 문항이 객관식일 때 보기를 탭 가능한 버튼으로 렌더한다(S3-29).
+///
+/// 배경(실기기 실측 2026-07-22): 서버 `verify_final_answer`는 *정확한 선택지 값*("2")만 correct로
+/// 판정하고 자연 표현("답은 2"·"2개요")·근 나열은 unverifiable로 떨어져 완료가 안 됐다. 선택지를
+/// 버튼으로 렌더해 탭 시 *정확한 선택지 값*을 코치 턴(`student_input`)으로 제출하면 서버가 correct→
+/// 돌아보기→완료(주관식과 동일 흐름·S3-27/S3-28)로 이어준다. 정답 판정·완료는 서버 권위다(클라는
+/// 선택지 값 제출만·정답 미보유).
+///
+/// 경계(CLAUDE.md): WhyMath는 객관식 양산 앱이 아니다 — 객관식은 부차이고 이 버튼은 *우아한 완료*만
+/// 보장한다. 정오·정답률·빨강 카운트다운 등 부정 강화 UI는 두지 않는다(정서 안전·표현≠의미).
+/// 주관식·선택지 없음이면 스스로 빈 자리(SizedBox.shrink)를 반환해 주관식 흐름엔 영향이 0이다.
+class _ChoiceButtons extends ConsumerWidget {
+  const _ChoiceButtons({
+    required this.enabled,
+    required this.maxHeight,
+    required this.onSelected,
+  });
+
+  /// 버튼 활성 여부(전송 중엔 비활성 — 기존 입력 행과 동일 규칙·중복 제출 방지).
+  final bool enabled;
+
+  /// 선택지 버튼 영역 최대 높이 — 화면(LayoutBuilder)이 키보드로 줄어든 body 가용 높이에
+  /// 맞춰 계산해 내려준다(MOB-02). 선택지가 많아 초과하면 내부 스크롤로 가둔다(Column 안 넘침).
+  final double maxHeight;
+
+  /// 선택지 탭 콜백 — 그 선택지 값을 그대로(`student_input`) 코치 턴으로 제출한다.
+  final Future<void> Function(String choice) onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choices = _renderableChoices(ref.watch(activeProblemProvider));
+    if (choices == null) {
+      return const SizedBox.shrink(); // 주관식·선택지 없음 → 아무것도 그리지 않는다.
+    }
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 은근한 안내 — 답을 재촉·정오 강조하지 않는 톤(정서 안전).
+          Text(
+            '보기 중 하나를 골라 보세요',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // 선택지를 탭 버튼으로 — 라벨은 선택지 값 그대로("0"·"1"·"2"·"3"). Wrap으로 폭에 맞춰
+          // 줄바꿈되며, 각 버튼은 서버 verify가 받는 *정확한 값*을 제출한다(자유 타이핑 브리틀함 우회).
+          // 높이를 가둬(내부 스크롤) 선택지가 많아도 화면(입력 영역)을 밀어내지 않는다(MOB-02).
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final choice in choices)
+                    OutlinedButton(
+                      onPressed: enabled ? () => onSelected(choice) : null,
+                      child: Text(choice),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
