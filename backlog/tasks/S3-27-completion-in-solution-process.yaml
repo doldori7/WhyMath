@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-27-completion-in-solution-process
+title: "완료를 풀이과정에 통합 — 정답 도달 시 Polya 돌아보기 후 완료·체크 버튼 제거"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - S3-26-learning-loop-closure
+requires_gates: []
+acceptance:
+  - "풀이 제출 시 마지막 단계가 기대정답이면 서버 감지→Polya 돌아보기 1~2턴 후 완료(attempt 적재)"
+  - "완료 신호(problem_complete)로 클라 다음 문제 전환 — ✓ 정답 제출 버튼 제거"
+artifacts:
+  - a4e42eab
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/**"
+  - "src/mobile/lib/features/**"
+session: null
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-10, 원 커밋 2f6433b/ead23ef) — 재채번. alembic 리비전 원본 d5e6f0a1b2c3 충돌로 c5d6e7f0a2b3(down b4c5d6e7f0a2)로 재채번. 검증: 백엔드 ruff/black/mypy(strict)/lint-imports clean, pytest 전체 7877 passed/262 skipped(신규 test_coach_completion.py 16건), 계층 커버리지 전부 PASS(전체 92%), WHYMATH_RUN_INTEGRATION=1 test_coach_integration.py 12 passed(신규 완료 e2e 2건)·test_me_integration.py 26 passed, alembic upgrade/downgrade 실PG 왕복 검증. 모바일 flutter analyze 0 issues, flutter test 228 passed(신규 completion_flow_test 2건). 커밋 a4e42eab."
+updated: 2026-07-30
