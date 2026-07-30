@@ -112,15 +112,18 @@ def _settings() -> Settings:
 
 
 def _body(provider: str = "kakao", redirect_uri: str = _REDIRECT_URI) -> dict[str, str]:
-    """유효한 state(해당 provider로 서명)를 포함한 콜백 요청 바디."""
+    """유효한 state(해당 provider로 서명)를 포함한 콜백 요청 바디.
+
+    **모듈 상수로 미리 만들지 않는다**(과거 버그: `_BODY = _body()`를 collection 시점에 한 번
+    계산해뒀더니, 대규모 랜덤 순서 전체 스위트에서 `oauth_state_ttl_seconds`(기본 300초)가
+    지난 뒤에야 그 테스트가 실행되며 state가 만료돼 400으로 실패했다 — CI 970초 전체 실행에서
+    실측). 매 호출마다 새로 발급해 사용 시점 기준 TTL이 시작되게 한다.
+    """
     return {
         "code": "auth-code",
         "redirect_uri": redirect_uri,
         "state": issue_oauth_state(provider, settings=_settings()),
     }
-
-
-_BODY = _body()
 
 
 def _user(uid: uuid.UUID) -> UserProfile:
@@ -184,7 +187,7 @@ def test_callback_issues_token_for_resolved_user(monkeypatch: pytest.MonkeyPatch
     uid = uuid.uuid4()
     monkeypatch.setattr(_RESOLVE_FN, _resolve_to(_user(uid)))
     identity = OAuthIdentity(provider="kakao", subject="s", email="a@b.com")
-    resp = _client({"kakao": _FakeProvider(identity=identity)}).post(_PATH, json=_BODY)
+    resp = _client({"kakao": _FakeProvider(identity=identity)}).post(_PATH, json=_body())
     assert resp.status_code == 200
     body = resp.json()
     assert body["token_type"] == "bearer"
@@ -192,14 +195,14 @@ def test_callback_issues_token_for_resolved_user(monkeypatch: pytest.MonkeyPatch
 
 
 def test_unknown_provider_404() -> None:
-    """등록되지 않은 provider → 404(state·redirect_uri는 `_BODY`가 이미 유효 — 검증 순서 확인)."""
-    assert _client({}).post(_PATH, json=_BODY).status_code == 404
+    """등록되지 않은 provider → 404(state·redirect_uri는 `_body()`가 이미 유효 — 검증 순서 확인)."""
+    assert _client({}).post(_PATH, json=_body()).status_code == 404
 
 
 def test_provider_error_502(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider code 교환 실패(OAuthProviderError) → 502."""
     monkeypatch.setattr(_RESOLVE_FN, _resolve_to(_user(uuid.uuid4())))
-    resp = _client({"kakao": _FakeProvider(raises=True)}).post(_PATH, json=_BODY)
+    resp = _client({"kakao": _FakeProvider(raises=True)}).post(_PATH, json=_body())
     assert resp.status_code == 502
 
 
@@ -208,7 +211,7 @@ def test_callback_issues_refresh_token(monkeypatch: pytest.MonkeyPatch) -> None:
     uid = uuid.uuid4()
     monkeypatch.setattr(_RESOLVE_FN, _resolve_to(_user(uid)))
     identity = OAuthIdentity(provider="kakao", subject="s", email="a@b.com")
-    resp = _client({"kakao": _FakeProvider(identity=identity)}).post(_PATH, json=_BODY)
+    resp = _client({"kakao": _FakeProvider(identity=identity)}).post(_PATH, json=_body())
     assert resp.status_code == 200
     claims = decode_refresh_token(resp.json()["refresh_token"], settings=_settings())
     assert claims.subject == str(uid)
@@ -221,7 +224,7 @@ def test_callback_persists_session_row(monkeypatch: pytest.MonkeyPatch) -> None:
     identity = OAuthIdentity(provider="kakao", subject="s", email="a@b.com")
     session = _FakeSession()
     resp = _client({"kakao": _FakeProvider(identity=identity)}, session=session).post(
-        _PATH, json=_BODY
+        _PATH, json=_body()
     )
     assert resp.status_code == 200
     rows = session.stored_rows()
@@ -405,7 +408,7 @@ def test_callback_empty_allowlist_denies_by_default() -> None:
         return Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
 
     resp = _client({"kakao": _FakeProvider()}, settings_factory=_settings_no_allowlist).post(
-        _PATH, json=_BODY
+        _PATH, json=_body()
     )
     assert resp.status_code == 400
 

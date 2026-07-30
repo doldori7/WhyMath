@@ -63,16 +63,20 @@ def _off_settings() -> Settings:
 
 
 def _body(provider: str = "demo", *, settings: Settings | None = None) -> dict[str, str]:
-    """유효한 state(해당 provider로 서명)를 포함한 콜백 요청 바디."""
+    """유효한 state(해당 provider로 서명)를 포함한 콜백 요청 바디.
+
+    **모듈 상수로 미리 만들지 않는다**(과거 버그: `_BODY = _body()`를 collection 시점에 한 번
+    계산해뒀더니, 대규모 랜덤 순서 전체 스위트에서 `oauth_state_ttl_seconds`(기본 300초)가
+    지난 뒤에야 그 테스트가 실행되며 state가 만료돼 400으로 실패했다 — CI 970초 전체 실행에서
+    실측·`test_oauth_endpoint.py` 동형). 매 호출마다 새로 발급해 사용 시점 기준 TTL이 시작되게
+    한다.
+    """
     signing_settings = settings if settings is not None else _demo_settings()
     return {
         "code": "demo",
         "redirect_uri": _REDIRECT_URI,
         "state": issue_oauth_state(provider, settings=signing_settings),
     }
-
-
-_BODY = _body()
 
 
 class _FakeSession:
@@ -131,7 +135,7 @@ def test_default_off_no_demo_provider() -> None:
     """기본(demo OFF) — build_oauth_providers에 demo 없음 ⇒ 콜백 404."""
     settings = _off_settings()
     assert "demo" not in build_oauth_providers(settings)
-    resp = _client(settings, _FakeSession()).post(_DEMO_PATH, json=_BODY)
+    resp = _client(settings, _FakeSession()).post(_DEMO_PATH, json=_body())
     assert resp.status_code == 404
 
 
@@ -140,7 +144,7 @@ def test_demo_on_issues_valid_token() -> None:
     settings = _demo_settings()
     assert "demo" in build_oauth_providers(settings)
     session = _FakeSession()
-    resp = _client(settings, session).post(_DEMO_PATH, json=_BODY)
+    resp = _client(settings, session).post(_DEMO_PATH, json=_body())
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     subject = decode_access_token(token, settings=settings)
@@ -157,7 +161,7 @@ def test_demo_user_is_non_minor() -> None:
     assert derive_is_minor(DEMO_BIRTH_YEAR, current_year=current_year_kst(), threshold=14) is False
     # 콜백이 만든 실제 사용자도 is_minor=False.
     session = _FakeSession()
-    resp = _client(_demo_settings(), session).post(_DEMO_PATH, json=_BODY)
+    resp = _client(_demo_settings(), session).post(_DEMO_PATH, json=_body())
     assert resp.status_code == 200
     assert session.added[0].is_minor is False
 
@@ -170,7 +174,7 @@ def test_issued_token_passes_get_current_user() -> None:
 
     settings = _demo_settings()
     session = _FakeSession()
-    resp = _client(settings, session).post(_DEMO_PATH, json=_BODY)
+    resp = _client(settings, session).post(_DEMO_PATH, json=_body())
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     demo_user = session.added[0]
