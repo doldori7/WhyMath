@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/api/auth.py
   - src/backend/whymath_backend/api/oauth_providers.py
   - src/backend/whymath_backend/api/_rate_limit.py
-session: null
+session: claude/backlog-drive-arch20
 notes: "2026-07-30 account_security_gap_review.md D2. 실측: api/auth.py에 _rate_limit import 0(security_privacy.md:74 '로그인 IP 레이트리밋은 후속' 자백)·oauth_providers.py:42/105 fetch_identity(code, redirect_uri)가 계약 전부로 state/PKCE/allowlist grep 0(CSRF·open redirect). 인프라는 이미 있다 — _rate_limit.py 1261줄의 hit_by_ip:135·hit_both:146 호출만. 액세스 TTL 15분 단축은 범위 밖(클라 refresh-on-401 배선 선결 — 없이 줄이면 학생이 15분마다 튕김·§5-⑧)."
 updated: 2026-07-30
