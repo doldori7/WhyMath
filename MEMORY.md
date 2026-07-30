@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (설계 결정·구현·S4-18): **rephrase 변형 계보 — identity_id/Canonical 분리 설계로 problem_relation 영속** (Kiki 설계 결정, claude 구현)
+
+**배경**: S4-14(변형 계보 영속) 착수 전 타당성 조사에서 구조적 블로커를 발견 — rephrase는 원본 Problem을 그대로 복사하며 question_text만 바꾸므로(`l3/equivalent/rephrase.py` 계약), rephrased_v0 429건(당초 태스크에 적힌 483은 S3-12 위생조치 이전 구수치 — 실측으로 정정) 중 392건(91%)이 원본과 *동일* slug·problem_id를 갖는다. `populate.py`의 slug ON CONFLICT upsert가 이 둘을 *같은 DB 행*으로 병합해버려 `problem_relation`(2행 관계)을 맺을 대상 행 자체가 없다 — `schema.ProblemRelation._no_self_relation`이 구조적으로 막는다. 생성 로그도 전무해 사후 역추적 근거가 없었다. 이 발견으로 S4-14를 스켈레톤측(별도 커밋)과 이 rephrase측 identity 결정으로 분리했다.
+
+**Kiki 설계 결정(1.5번 — Identity/Canonical 분리)**: 처음 제안한 3안(신규 problem_id 채번/provenance 애노테이션 재정의/9% 커버리지 수용) 중 (a)를 고르는 대신, Kiki가 더 나은 설계를 직접 제시했다 — `Problem`에 `identity_id`(계열 식별자)를 `problem_id`(개체 PK)와 **별개**로 신설해, `problem_id`는 개체마다 절대 불변으로 두고 `identity_id`만으로 "같은 문제의 다른 표현" 계열(원본+rephrase+난이도변형+교사수정 등)을 묶는다는 안이다. 예시: `identity_id=I-201` 아래 `problem_id=1001(slug=a)→1002(a-lite)→1003(a-ai)→1004(a-teacher)`이 모두 관계 그래프(`problem_relation`)로 체이닝된다. 이 설계는 "같은 계열인가?"를 관계 그래프 순회 없이 O(1)로 판정하게 하고, `problem_id` 불변성을 다운스트림(학생 응답 로그 등 FK 참조) 어디에도 흔들지 않는다. 스켈레톤 동일 밴드 형제(S4-14)는 "같은 문제의 재표현"이 아니라 독립 생성된 별개 문제이므로 identity_id를 공유하지 않고 관계(`유사`)만 받는다는 경계도 이 결정으로 명확해졌다.
+
+**구현**: ①`schema/problem.py`·`db/models/problem.py`에 `identity_id: UUID | None`(nullable·색인) 신설 + alembic 마이그레이션(`090d254a5d43`, additive·비파괴). ②`l1/problem_bank/populate.py`에 `problem_relation` upsert 추가 — 배치 내 slug→problem_id 맵으로 먼저 parent를 해석하고 없으면 DB를 조회하는 2단 해석, 미해석은 orphan skip(집계·조용한 실패 아님), 자기관계는 ORM 직접 upsert 경로가 schema의 `_no_self_relation` 검증을 거치지 않으므로 populate 자체가 재확인해 `ProblemCorpusError`로 거부한다. `ProblemBankRecord`에 `relations: tuple[ProblemRelationTag, ...] = ()`(기본값 — 기존 호출부 전부 무영향), `answer_kind`처럼 authoring key `relations`를 파싱한다. ③`scripts/backfill_rephrase_lineage_s4_18.py`로 기존 429건 소급 백필 — slug 충돌하는 392건은 결정론 파생(uuid5·`f"{parent_slug}-rephrased"`)으로 신규 slug/problem_id 채번(원본 행은 불변), 이미 분리돼 있던 37건은(수정 불변 수학키로 parent 조인·S2-08 조인키 재사용·전건 유일성 실측) identity_id·relation만 채운다. ④향후 신규 rephrase 배치는 이 스크립트를 재실행해 동기화한다 — `run_corpus_rephrase` 자체는 소스 코퍼스 읽기전용 관례(S2-08과 동형)를 지켜 slug를 건드리지 않는 설계로, 스크립트가 멱등(이미 처리된 레코드는 identity_id 존재로 스킵)이라 몇 번을 재실행해도 안전하다.
+
+**검증**: 전체 백엔드 스위트 stash-diff(변경 전/후 실패 테스트명 완전 일치·환경 제약 기인 579건 pre-existing만) + 실 코퍼스 계보 거버넌스 테스트 신설(identity_id 전건 부여·참조 무결·slug 충돌 0·parent-child identity_id 대칭) + `test_rephrased_corpus_preserves_all_fields_but_question_text`(rephrase 안전 봉인)를 `relations`(rephrase측에만 있는 의도적 비대칭 키) 제외하도록 갱신 + alembic 동결 리스트(`schema_version.py::KNOWN_REVISIONS`)에 신규 리비전 반영(안 하면 `test_schema_version_guard.py`가 정확히 그 표류를 잡아낸다 — 실측 확인) + ruff/black/mypy --strict(433파일)/lint-imports(7계층 계약) 전부 green.
+
+**사고 없음(정상 설계 협업)**: 이번 결정은 사고가 아니라 Kiki가 claude의 3안 제시에 더 나은 4번째 설계로 응답한 정상적 협업 사례다 — CLAUDE.md의 "실수 관리" 절차(재발방지대책 등재 의무)는 해당 없음. 다만 향후 세션을 위해 이 결정의 배경(왜 신규 problem_id 채번만으로는 부족한지 — identity/canonical 개념이 왜 필요한지)을 여기 기록해 "전에 말했잖아"가 통하지 않는 이 프로젝트의 컨텍스트 위생 원칙을 지킨다.
+
 ### 2026-07-29 (구현·S4-17): **verification_tier L1 계약 승격 — 후처리 각인·감사 도구 로더 우회 해소 (S4-13 잔여)** (claude 구현, Kiki `/drive`)
 
 **배경**: S4-13(확률 유한 전수형 파일럿)이 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려, `verification_tier`(어떤 검증 강도로 증명됐는지)를 `ProblemVerifyMeta`의 정식 필드가 아니라 배치 기록 *후* `stamp_corpus_file`이 JSONL을 다시 읽어 후처리로 찍는 임시 경로로 남겼다. 부작용: L1 정본 로더(`load_problem_bank_records`)가 이 필드를 모르니 그대로 흘려버려, 잔여 축 감사 도구(`residue_cross_verify_eval.load_pilot_records`)가 등급을 읽으려면 L1을 우회해 원시 JSONL을 직접 파싱해야 했다 — 코드 자체가 "감사 도구가 로더를 우회하는" 상태를 문서화하고 있었다.
