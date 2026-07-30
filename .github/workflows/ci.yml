@@ -254,6 +254,12 @@ jobs:
           python -m whymath_backend.harness.pedagogy_pack_fidelity_eval \
             --n-per-cell 12 --max-miss-upper 0.05 --max-false-alarm-upper 0.2
 
+      # NS-03 — 코퍼스 표기 ⊆ 지원 표기(data/notation_support_manifest.json) 커버리지 게이트.
+      # hermetic(LLM 0·DB 0)·결정론. 신규 누락 심볼 발견 시 exit 1(베이스라인 래칫) — 변별력은
+      # tests/backend/l3/test_notation_coverage_eval.py의 --control-empty-support 대조군이 봉인.
+      - name: 게이트 — 표기 커버리지 (notation_coverage·코퍼스 표기 ⊆ 지원 표기)
+        run: python -m whymath_backend.l3.notation_coverage
+
       # ARCH-20: 콘텐츠 출처·라이선스 집행 게이트 — copyright_gradient.md §4.2가 명령한
       # pool 필드 차단을 실제로 CI에 배선(2026-07-29 실측 전 집행 지점 0건 확인 후 신설).
       # 코퍼스 루트는 CLI가 __file__ 기준으로 자가 탐지(cwd=src/backend 무관 — parents[4]).

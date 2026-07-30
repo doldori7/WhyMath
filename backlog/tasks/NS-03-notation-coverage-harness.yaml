@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NS-03-notation-coverage-harness
+title: "표기 커버리지 하네스 — 교과서 표기 완전성 CI 게이트"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "교과서/코퍼스 표기 ⊆ 지원 표기 커버리지를 CLI exit 0/1로 측정(누락 심볼 리포트)·CI 상시 게이트"
+artifacts:
+  - "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(Stage 1) — 원 구현 9743c36d"
+  - "pytest 20 green·ruff/mypy clean·실 CLI exit0 PASS(문항2667·수식25)·대조군 exit1 (원 구현 시점 실측)"
+paths:
+  - "src/backend/whymath_backend/l3/notation_coverage.py"
+  - "tests/backend/l3/test_notation_coverage_eval.py"
+  - data/notation_missing_baseline.json
+  - data/notation_support_manifest.json
+  - ".github/workflows/ci.yml"
+session: null
+notes: "표기·의미 계층 Phase A(원 구현 세션). '수학해석의 하네스'(Kiki) 실체=커버리지 측정 게이트. notation_contract golden + S3-23 감사 승격·측정 없는 도입 없음. l3/notation_coverage.py는 코퍼스(problem_bank_*·formula_graph latex) 표기 토큰 2축(LaTeX 매크로·비-ASCII 수학 글리프) 전수 추출 → 지원집합(manifest+KaTeX 실증 allowlist) 대조 → 베이스라인 래칫(신규 누락 exit 1). 한글 프로즈 오탐 0(유니코드 카테고리/블록)·hermetic(LLM 0·DB 0)·--control-empty-support 변별력 대조군. [회수 경위 2026-07-30] 원 구현이 main과 07-21 분기한 미병합 브랜치(claude/shadow-data-s3-pilot-nh5kbz)에 고립돼 있던 것을 발견해 회수. 원본 depends_on(NS-02-notation-canonical-layer, 같은 브랜치의 모바일 표기 계층·아직 미회수)은 제거 — notation_coverage.py의 유일한 프로젝트 내부 import는 l1/problem_bank/populate.load_problem_bank_records뿐이라(실측 확인) NS-02 코드에 대한 런타임 의존이 없다. data/notation_support_manifest.json(NS-02가 신설한 정적 열거 데이터)은 순수 데이터라 NS-02 코드 없이도 회수·동봉 — NS-02 본체(Dart 표기 파이프라인) 착륙 전까지는 '실제 구현이 이 계약을 지키는지'의 Dart측 정합 검사(notation_canonical_test.dart)가 아직 없다는 뜻이지만 NS-03(코퍼스↔매니페스트 측정) 자체 기능에는 무관. CI 상시 배선(ci.yml backend 잡에 notation_coverage CLI 게이트 스텝) — 원 계획은 ARCH-14 이관이었으나 main의 ARCH-14는 이 브랜치와 무관한 독립 구현이라 이 태스크가 직접 배선(defect_detection_eval 등 기존 결함주입 게이트와 동일 패턴)."
+updated: 2026-07-30
