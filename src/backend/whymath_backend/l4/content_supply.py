@@ -49,6 +49,7 @@ from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.render.adapter import RenderContext, RenderedUnit
+from whymath_backend.l3.render.assessment_bank import attach_assessment
 from whymath_backend.l3.render.dsl import ConceptDSL, from_concept_content
 from whymath_backend.l3.render.registry import get_adapter
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals, decide
@@ -105,16 +106,56 @@ class SupplyTally:
 
     `dsl_render_rate`는 점추정과 **Wilson 하한**을 함께 노출한다. 표본이 작을 때 점추정만 보면
     과신하게 되므로, 게이트 판정은 하한으로 한다(`ops/cost_probe`의 로컬 비율 관례 동형).
+
+    **어댑터별 분해가 필수인 이유**: 전체 비율만 보면 "generate로 집계되나 학생은 아무것도 못 본"
+    왜곡이 보이지 않는다. 어댑터 5종 중 하나만 구조적으로 렌더 불가여도 전체 비율은 완만하게
+    떨어질 뿐이라, 그 한 종을 고르는 학생 집단이 **전건 404**를 받는 사실이 평균에 묻힌다(실제로
+    PROBLEM_BASED가 그랬다). 그래서 경로 축(`counts`)과 별개로 (전략 × 경로)·폴백 사유를 함께
+    센다 — 신규 분류축이 아니라 기존 `PedagogyStrategy`·폴백 사유 상수를 키로 쓸 뿐이다.
     """
 
     counts: dict[str, int] = field(default_factory=dict)
+    by_strategy: dict[str, dict[str, int]] = field(default_factory=dict)
+    """전략(어댑터) → 경로별 건수. 키는 `PedagogyStrategy` 값 문자열."""
 
-    def record(self, source: ContentSource) -> None:
+    by_fallback_reason: dict[str, int] = field(default_factory=dict)
+    """폴백 사유(`REASON_*`) → 건수. 렌더가 아니었던 *이유*의 분포."""
+
+    def record(
+        self,
+        source: ContentSource,
+        *,
+        strategy: str | None = None,
+        fallback_reason: str | None = None,
+    ) -> None:
+        """공급 1건 집계 — 경로는 항상, 전략·폴백 사유는 알려진 경우에만 분해에 더한다.
+
+        `strategy`·`fallback_reason`이 선택인 이유는 호출자가 그 축을 모르는 경우(사전 점검·
+        경로만 세는 배치)에도 경로 회계가 성립해야 하기 때문이다. 모르는 값을 "기타" 같은
+        기본치로 채우면 분해가 근거 없는 숫자를 만든다(모르면 모른다).
+        """
         self.counts[source] = self.counts.get(source, 0) + 1
+        if strategy is not None:
+            per_strategy = self.by_strategy.setdefault(strategy, {})
+            per_strategy[source] = per_strategy.get(source, 0) + 1
+        if fallback_reason is not None:
+            self.by_fallback_reason[fallback_reason] = (
+                self.by_fallback_reason.get(fallback_reason, 0) + 1
+            )
 
     @property
     def total(self) -> int:
         return sum(self.counts.values())
+
+    def strategy_render_rate(self, strategy: str) -> float | None:
+        """특정 전략의 렌더 경로 비율(점추정). 그 전략 표본이 0이면 None(미상 ≠ 0%)."""
+        per_strategy = self.by_strategy.get(strategy)
+        if not per_strategy:
+            return None
+        total = sum(per_strategy.values())
+        if total == 0:  # pragma: no cover — record가 항상 1 이상을 넣는다(방어).
+            return None
+        return per_strategy.get("dsl_render", 0) / total
 
     @property
     def dsl_render_rate(self) -> float | None:
@@ -131,13 +172,46 @@ class SupplyTally:
         return wilson_lower_bound(self.counts.get("dsl_render", 0), self.total)
 
     def to_json(self) -> dict[str, object]:
-        """사람·자동화가 읽는 요약(미상은 None으로 남긴다)."""
+        """사람·자동화가 읽는 요약(미상은 None으로 남긴다) — 어댑터별 분해 포함.
+
+        이 요약이 리포트 배선의 유일한 표면이다: 프로덕션(`api/study.py`의 프로세스 집계)과
+        빌드타임 리포트(`harness/concept_assessment_index`)가 *같은 형태*를 낸다.
+        """
         return {
             "total": self.total,
             "counts": dict(self.counts),
             "dsl_render_rate": self.dsl_render_rate,
             "dsl_render_rate_lower": self.dsl_render_rate_lower,
+            "by_strategy": {k: dict(v) for k, v in sorted(self.by_strategy.items())},
+            "render_rate_by_strategy": {
+                k: self.strategy_render_rate(k) for k in sorted(self.by_strategy)
+            },
+            "by_fallback_reason": dict(sorted(self.by_fallback_reason.items())),
         }
+
+
+# 프로세스 전역 공급 집계 — **프로덕션 소비처**(`api/study.py`가 매 요청 여기에 기록한다).
+# `api/_device_metrics.py`의 모듈 전역 Counter와 같은 규약이다: 단일 프로세스 인메모리이며 다중
+# 워커면 워커별로 분리된다(rate_limit 인메모리 backend와 동일 한계). 이 좌석이 없던 동안
+# `SupplyTally`는 소비처 0이었고, 그래서 "generate로 집계되나 학생은 아무것도 못 본" 왜곡이
+# 프로덕션에서 관측 불가였다 — 이중 회계의 in-process 축은 *실제로 기록될 때만* 회계다.
+_PROCESS_TALLY = SupplyTally()
+
+
+def get_process_tally() -> SupplyTally:
+    """프로세스 전역 공급 집계 핸들 — 기록·스냅샷 모두 이 인스턴스로 한다.
+
+    반환값은 *살아 있는* 인스턴스다(복사본 아님). 호출자는 `to_json()`으로 스냅샷을 뜬다 —
+    어댑터별 분해가 그 안에 들어 있어 "어느 교수법이 학생에게 도달하지 못하는가"가 드러난다.
+    """
+    return _PROCESS_TALLY
+
+
+def reset_process_tally() -> None:
+    """프로세스 집계 초기화 — 테스트 격리·시간창 rollover용(`reset_device_sig_failures` 동형)."""
+    _PROCESS_TALLY.counts.clear()
+    _PROCESS_TALLY.by_strategy.clear()
+    _PROCESS_TALLY.by_fallback_reason.clear()
 
 
 async def get_concept_dsl(
@@ -147,17 +221,23 @@ async def get_concept_dsl(
     cache: CacheBackend,
     ttl_s: int = DSL_CACHE_TTL_S,
 ) -> ConceptDSL | None:
-    """개념 주소화 DSL 조회 — 캐시 → DB read-through. 미적재 개념이면 None.
+    """개념 주소화 DSL 조회 — 캐시 → DB read-through 후 **평가 재료 참조 주입**. 미적재면 None.
 
     캐시(`CacheBackend`)는 **str 전용**이라 pydantic `model_dump_json()`으로 직렬화한다. 역직렬화가
     실패하면(계약 변경·손상) **미스로 취급**해 DB에서 다시 만든다 — 낡은 형태를 억지로 쓰는 조용한
     오작동보다 재적재가 낫다.
+
+    `from_concept_content`은 `assessment=None`을 남긴다(concept_content에 평가 재료가 없다). 그
+    자리를 `l3/render/assessment_bank`가 채운다 — 검증 통과 자체 저작 문항의 verify 앵커를 개념
+    태그로 이어둔 *참조* 뱅크이며 LLM·신규 저작이 0이다. **캐시 히트 경로에도 주입한다**: 뱅크가
+    나중에 채워졌는데 TTL이 남은 낡은 캐시 항목이 계속 빈 평가 재료를 돌려주면, 그 개념만 조용히
+    렌더 불가로 남는다(주입은 이미 있는 값을 덮지 않으므로 히트 경로에서도 안전하다).
     """
     key = f"{DSL_CACHE_PREFIX}{code}"
     cached = await cache.get(key)
     if cached is not None:
         try:
-            return ConceptDSL.model_validate_json(cached)
+            return attach_assessment(ConceptDSL.model_validate_json(cached))
         except ValidationError:
             pass  # 계약 변경 등 — 미스 취급 후 아래에서 재생성.
 
@@ -165,7 +245,7 @@ async def get_concept_dsl(
     if row is None:
         return None
 
-    dsl = from_concept_content(row)
+    dsl = attach_assessment(from_concept_content(row))
     await cache.set(key, dsl.model_dump_json(), ttl_s)
     return dsl
 
@@ -239,7 +319,7 @@ async def supply(
         if trace is not None:
             trace.record(_render_trace_fields(code, strategy))
         if tally is not None:
-            tally.record(result.content_source)
+            tally.record(result.content_source, strategy=strategy.value)
         return result
 
     # ── 생성 폴백 ────────────────────────────────────────────────
@@ -251,7 +331,7 @@ async def supply(
             fallback_reason=reason,
         )
         if tally is not None:
-            tally.record(result.content_source)
+            tally.record(result.content_source, strategy=strategy.value, fallback_reason=reason)
         return result
 
     generated = await pipeline.generate(
@@ -272,7 +352,7 @@ async def supply(
         fallback_reason=reason,
     )
     if tally is not None:
-        tally.record(source)
+        tally.record(source, strategy=strategy.value, fallback_reason=reason)
     return result
 
 
@@ -301,5 +381,7 @@ __all__ = [
     "SupplyResult",
     "SupplyTally",
     "get_concept_dsl",
+    "get_process_tally",
+    "reset_process_tally",
     "supply",
 ]

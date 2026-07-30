@@ -157,7 +157,16 @@ class TestNoVariantEnumeration:
 
     def test_render_package_has_no_per_concept_modules(self) -> None:
         # 개념별 모듈(예: linear_equation_adapter.py)이 생기면 곧 자산이 곱으로 자란다.
-        allowed = {"__init__.py", "adapter.py", "adapters.py", "dsl.py", "registry.py"}
+        # `assessment_bank.py`는 개념별 모듈이 아니라 **개념 무관 조회 레이어**다(개념 code →
+        # 참조 1건). 개념이 늘어도 이 파일은 자라지 않고 코퍼스 산출물의 행만 늘어난다.
+        allowed = {
+            "__init__.py",
+            "adapter.py",
+            "adapters.py",
+            "assessment_bank.py",
+            "dsl.py",
+            "registry.py",
+        }
         actual = set(_render_sources())
         assert actual == allowed, (
             f"렌더 패키지 모듈 구성이 바뀌었습니다: {sorted(actual - allowed)} 추가/"
