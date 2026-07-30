@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-28-conversation-answer-detection
+title: "대화 입력 최종답 감지 — 대화 모드에서도 정답 도달→돌아보기→완료"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - S3-27-completion-in-solution-process
+requires_gates: []
+acceptance:
+  - "대화 모드 student_input이 기대정답과 동치면 solution_steps 경로와 동일하게 완료 진행(서버만·클라 무변경)"
+  - "중간 사변은 감지 안 됨 — 짧은 답 형태만 보수 감지(거짓 완료 0)"
+artifacts:
+  - 8e8a9218
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-11, 원 커밋 fc09405) — 재채번. 검증: 대상 스위트(test_coach·test_coach_completion·test_wh1_loop·test_wh1_primary·test_wh1_prose·test_pedagogical_rubric) 428 passed(신규 65건 포함, test_coach.py 기존 36건 실패는 stash 대조로 이 변경과 무관함을 확인 — venv 환경의 async 픽스처 이슈, l3/l5/ops 전역에서도 동일 양상)·ruff/black/mypy --strict clean·flutter analyze clean(모바일 무변경)."
+updated: 2026-07-30
