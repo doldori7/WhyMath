@@ -1092,7 +1092,7 @@ async def _log_response_latency_event(
         .order_by(DialogueTurnORM.turn_order.desc())
         .limit(1)
     )
-    prev_spoken_at = (await session.execute(prev_stmt)).scalar_one_or_none()
+    prev_spoken_at = (await session.execute(prev_stmt)).scalars().first()
     if prev_spoken_at is None:
         return  # 기준선 없음(이론상 도달 안 함) → 적재 안 함(날조 회피).
 

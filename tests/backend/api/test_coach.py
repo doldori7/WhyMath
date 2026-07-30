@@ -3696,8 +3696,10 @@ class TestPrerequisiteCoachingField:
 class _CaptureSession:
     """`add`된 ORM 인스턴스를 캡처하는 최소 가짜 세션(검증은 실 함수가 결정론으로 수행).
 
-    S3-16: `_log_response_latency_event`가 `execute(select(...)).scalar_one_or_none()`으로
-    직전 학생 턴 spoken_at을 조회한다 — `execute_result`(선택)에 `.scalar_one_or_none()`을
+    S3-16: `_log_response_latency_event`가 `execute(select(...)).scalars().first()`으로
+    직전 학생 턴 spoken_at을 조회한다(`l2.ability_tracking.get_current_theta`와 동일 관례 —
+    `.scalar_one_or_none()`은 repo 전역 fake session(`test_coach_semantic.py` 등)이 지원하지
+    않아 초판은 회귀를 냈다·2026-07-30 정정) — `execute_result`(선택)에 `.scalars().first()`를
     가진 스텁을 주입할 수 있게 확장(기존 `add`만 쓰는 테스트는 영향 없음·하위호환).
     """
 
@@ -3712,13 +3714,16 @@ class _CaptureSession:
         return self._execute_result
 
 
-class _ScalarOneOrNone:
-    """`execute()` 결과 스텁 — `.scalar_one_or_none()`만 지원(S3-16 응답 지연 조회용)."""
+class _ScalarsFirst:
+    """`execute()` 결과 스텁 — `.scalars().first()`만 지원(S3-16 응답 지연 조회용)."""
 
     def __init__(self, value: Any) -> None:
         self._value = value
 
-    def scalar_one_or_none(self) -> Any:
+    def scalars(self) -> "_ScalarsFirst":
+        return self
+
+    def first(self) -> Any:
         return self._value
 
 
@@ -4044,7 +4049,7 @@ class TestLogResponseLatencyEvent:
         """기준선(직전 학생 턴) 없음 → 적재 0(날조 회피)."""
         from whymath_backend.api.coach import _log_response_latency_event
 
-        sess = _CaptureSession(execute_result=_ScalarOneOrNone(None))
+        sess = _CaptureSession(execute_result=_ScalarsFirst(None))
         await _log_response_latency_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
@@ -4062,7 +4067,7 @@ class TestLogResponseLatencyEvent:
         from whymath_backend.schema.enums import EventType
 
         prev = datetime(2026, 7, 30, 12, 0, 2, tzinfo=timezone.utc)  # NOW보다 3초 이전.
-        sess = _CaptureSession(execute_result=_ScalarOneOrNone(prev))
+        sess = _CaptureSession(execute_result=_ScalarsFirst(prev))
         await _log_response_latency_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
@@ -4084,7 +4089,7 @@ class TestLogResponseLatencyEvent:
         from whymath_backend.schema.enums import EventType
 
         prev = datetime(2026, 7, 30, 12, 0, 4, tzinfo=timezone.utc)
-        sess = _CaptureSession(execute_result=_ScalarOneOrNone(prev))
+        sess = _CaptureSession(execute_result=_ScalarsFirst(prev))
         await _log_response_latency_event(
             cast(AsyncSession, sess),
             user_id=self._UID,

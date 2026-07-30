@@ -4,7 +4,7 @@
 검증한다. DB 조회 glue(`_run`·`main`의 asyncio.run)는 실 PG 통합검증 소관(pragma no cover).
 
 핵심 불변(계산 계층과 동일 철학·CLAUDE.md "모르면 모른다"): 렌더는 "가짜 0 금지"를 표면화한다 —
-MEASURED만 값을 보이고 NO_DATA는 값 대신 '—' + 사유(note)를 옮긴다. 11 지표 전부·R15 판정·
+MEASURED만 값을 보이고 NO_DATA는 값 대신 '—' + 사유(note)를 옮긴다. 12 지표 전부·R15 판정·
 커버리지 카운트가 리포트에 나타나야 한다.
 """
 
@@ -27,7 +27,7 @@ from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
 )
 
-# 11 지표 라벨(리포트에 전부 나타나야 함).
+# 12 지표 라벨(리포트에 전부 나타나야 함).
 _METRIC_LABELS = (
     "① verify 통과율",
     "② 진단정확도(오프라인)",
@@ -40,6 +40,7 @@ _METRIC_LABELS = (
     "⑨ BKT 숙달 증가율",
     "⑩ 오개념 해소율",
     "⑪ 스스로 풀이 도달율",
+    "⑫ 도움 요청 대 제공 비",
 )
 
 
@@ -52,7 +53,7 @@ def _no_data() -> Metric:
 
 
 def _all_measured_metrics() -> SurrogateMetrics:
-    """11 지표 전부 MEASURED인 SurrogateMetrics(커버리지 11/11 검증용)."""
+    """12 지표 전부 MEASURED인 SurrogateMetrics(커버리지 12/12 검증용)."""
     m = _measured(0.5)
     return SurrogateMetrics(
         verify_pass_rate=m,
@@ -60,6 +61,7 @@ def _all_measured_metrics() -> SurrogateMetrics:
         session_completion_rate=m,
         tokens_per_turn=_measured(42.0),
         help_reduction_slope=_measured(-1.0),
+        help_demand_supply_ratio=_measured(0.2),
         calibration_brier=_measured(0.1),
         transfer_score=m,
         hint_depth_reached=_measured(2.5),
@@ -75,6 +77,7 @@ def _all_measured_metrics() -> SurrogateMetrics:
         ),
         sample_sessions=4,
         sample_resolved_dialogues=3,
+        sample_demand_events=1,
         window_start=datetime(2026, 1, 1, tzinfo=UTC),
         window_end=datetime(2026, 3, 1, tzinfo=UTC),
         user_scoped=False,
@@ -89,6 +92,7 @@ def _mixed_metrics() -> SurrogateMetrics:
         session_completion_rate=_measured(0.75),
         tokens_per_turn=_no_data(),
         help_reduction_slope=_no_data(),
+        help_demand_supply_ratio=_no_data(),
         calibration_brier=_no_data(),
         transfer_score=_no_data(),
         hint_depth_reached=_no_data(),
@@ -105,22 +109,22 @@ def _mixed_metrics() -> SurrogateMetrics:
 
 class TestRenderBaselineReport:
     def test_all_metric_labels_present(self) -> None:
-        """11 지표 라벨이 전부 리포트에 렌더된다(빠짐 없음)."""
+        """12 지표 라벨이 전부 리포트에 렌더된다(빠짐 없음)."""
         report = render_baseline_report(_all_measured_metrics())
         for label in _METRIC_LABELS:
             assert label in report
 
     def test_coverage_count_all_measured(self) -> None:
-        """전부 MEASURED → 커버리지 11/11."""
+        """전부 MEASURED → 커버리지 12/12."""
         report = render_baseline_report(_all_measured_metrics())
-        assert "MEASURED 11/11" in report
+        assert "MEASURED 12/12" in report
         assert "코호트 전체" in report  # user_scoped=False
 
     def test_coverage_count_mixed(self) -> None:
-        """혼합(2 MEASURED) → 커버리지 2/11·본인 스코프."""
+        """혼합(2 MEASURED) → 커버리지 2/12·본인 스코프."""
         report = render_baseline_report(_mixed_metrics())
-        assert "MEASURED 2/11" in report
-        assert "NO_DATA/미계측 9/11" in report
+        assert "MEASURED 2/12" in report
+        assert "NO_DATA/미계측 10/12" in report
         assert "본인(user)" in report  # user_scoped=True
 
     def test_no_data_shows_reason_not_zero(self) -> None:
