@@ -23,6 +23,7 @@ from whymath_backend.schema.enums import (
     MajorCategory,
     NoteApp,
     Persona,
+    Role,
     SchoolType,
     SubscriptionTier,
     TrackType,
@@ -139,6 +140,8 @@ class TestUserProfileCreation:
         assert u.diagnostic_completed is False
         assert u.is_active is True
         assert u.is_deleted is False
+        # role(SEC-07 D1) — 기본 STUDENT, validate_default=True라 미지정이어도 문자열로 검증됨.
+        assert u.role == "student"
         # 기본값 없는 BOOLEAN → None
         assert u.has_apple_pencil is None
         assert u.is_minor is None
@@ -207,6 +210,17 @@ class TestUserProfileCreation:
         """extra='forbid' — 알 수 없는 필드 거부."""
         with pytest.raises(ValidationError):
             UserProfile(persona_primary=Persona.A_일반고고3, bogus="x")  # type: ignore[call-arg]
+
+    def test_role_content_admin_accepted(self) -> None:
+        """role=CONTENT_ADMIN 명시 지정 — validate_default=True와 무관하게(지정값이므로) 문자열
+        보존(use_enum_values=True)."""
+        u = UserProfile(persona_primary=Persona.A_일반고고3, role=Role.CONTENT_ADMIN)
+        assert u.role == "content_admin"
+
+    def test_role_invalid_value_rejected(self) -> None:
+        """v0 2값 밖 문자열(예: 'teacher')은 거부 — 7단 서열 재도입을 스키마 층에서도 차단."""
+        with pytest.raises(ValidationError):
+            UserProfile(persona_primary=Persona.A_일반고고3, role="teacher")  # type: ignore[arg-type]
 
     def test_enum_value_serialization_korean(self) -> None:
         """use_enum_values → 한글 enum 값 보존(school_type='일반고' 등)."""
