@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,11 +16,12 @@ acceptance:
   - "③ 게이트 테스트 신설: '생성기가 제시하는 타입 집합 ⊆ 렌더 가능 타입 집합'. 기존 게이트(계약↔enum 완전성·웹 dispatch)는 이 축을 보지 않는다"
   - "④ 변별력: data/render_contract.json에서 graph2dSpecToState를 null로 바꿔 게이트 exit 1 실측 → 복원해 exit 0 실측(성공/실패 동일값이면 위장)"
   - "⑤ CI 잡이 ③의 테스트를 실제로 실행하는지 확인 — tests/infra/test_test_suite_wiring.py(OPS-10) 규약 준수. '저장소에 존재함'과 '돌아감'은 다르다"
-artifacts: []
+artifacts:
+  - f9b2065a
 paths:
   - src/backend/whymath_backend/l3/visualization.py
   - data/render_contract.json
   - tests/backend/schema/test_render_contract.py
-session: claude/whymath-visualization-review-zl2v1b
+session: null
 notes: "visualization_module_gap_review.md §3 D3. 런타임 실측(격리 환경): 빈 spec의 animation_prerendered가 중앙 검증·parse_visualization_spec 게이트를 통과하는데 계약은 web_adapter=null(렌더 불가)이고 Manim 구현 0건. 변별력 확인 완료(interactive=True는 거부됨 → 게이트 자체는 살아있음). 심각도는 '잠재'로 하향됨 — Flutter가 _VisualizationSeed(caption 카드)로 우아하게 강등하고 interactive=False 강제로 WebView 도달 불가하며 D1이 scene 경로 생성을 선행 차단. 남는 피해는 웹 조용한 미렌더(graph2dSpec.js:181)·LLM 호출 낭비·caption이 예고한 시각화 불이행."
 updated: 2026-07-30
