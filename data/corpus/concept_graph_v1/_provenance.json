@@ -1,4 +1,6 @@
 {
+  "pool": "whymath-original",
+  "license_notice": "WhyMath 자체 저작 개념 그래프(구 437, legacy_snapshot) — 검정교과서·평가원·EBS 본문 미포함(본문 필드는 redacted 배열대로 완전 제거됨). 성취기준 코드(ccss_statement_en 등)는 구조 메타(공공·사실)만 보존.",
   "lifecycle": {
     "status": "legacy_snapshot",
     "readonly": true,

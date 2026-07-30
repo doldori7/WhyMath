@@ -1,4 +1,5 @@
 {
+  "pool": "whymath-original",
   "source_file": "problem_types.jsonl",
   "source_sha256": "006b980abba05944f3643e36880d482d8ea23584ceacbeb0bd4c3f199eef1fcc",
   "source_citation": "문제유형(cognitive-action) 택소노미: 와이매스 자체작성(평가원 기출 문항 본문 미포함).",

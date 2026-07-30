@@ -1,12 +1,19 @@
 {
+  "pool": "whymath-original",
   "corpus_name": "problem_bank_probability_finite_v0",
   "generated": "2026-07-29 (소급 작성 — 코퍼스 실 레코드 집계 기반, EOS 운영 평면 공백 점검 §3-1)",
   "generation_method": "harness/finite_probability_batch.py (+ l3/equivalent/finite_probability_skeleton_generator.py) — 확률(유한 전수형) 동등문제 생성",
   "record_count": 34,
   "record_field_distribution": {
-    "license": {"WHYMATH_GENERATED": 34},
-    "source_type": {"자체생성": 34},
-    "generation_type": {"FULLY_GENERATED": 34}
+    "license": {
+      "WHYMATH_GENERATED": 34
+    },
+    "source_type": {
+      "자체생성": 34
+    },
+    "generation_type": {
+      "FULLY_GENERATED": 34
+    }
   },
   "source_citation": "출처: WhyMath 자체 저작 확률(유한 전수 검증) 동등문제(WHYMATH_GENERATED). S4-13 SymPy 불가 영역 대체 검증 스택 파일럿 산출물.",
   "license_notice": "본 코퍼스의 모든 문항은 WhyMath가 자체 생성한 저작물(license=WHYMATH_GENERATED, source_type=자체생성)이다. 전 34건 필드 실측으로 확인 — 예외 0.",

@@ -1099,3 +1099,6 @@
 {"ts": "2026-07-29T23:20:35", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "PED-05-learner-state-assembly"}
 {"ts": "2026-07-29T23:20:50", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S3-16-behavior-telemetry-writers"}
 {"ts": "2026-07-29T23:21:06", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S4-18-review-time-axis"}
+{"ts": "2026-07-30T05:51:58", "actor": "claude/whymath-eos-review-euolne", "action": "start", "id": "ARCH-20-content-provenance-enforcement-gate", "session": "claude/whymath-eos-review-euolne", "remote": "ok"}
+{"ts": "2026-07-30T06:25:12", "actor": "claude/whymath-eos-review-euolne", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "tests/backend/schema/test_corpus_provenance.py", "mode": "warn", "detail": "'tests/backend/schema/test_corpus_provenance.py' 은 claim 태스크 ARCH-20-content-provenance-enforcement-gate의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-30T06:29:21", "actor": "claude/whymath-eos-review-euolne", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "docs/architecture/operations_module_gap_review.md", "mode": "warn", "detail": "'docs/architecture/operations_module_gap_review.md' 은 claim 태스크 ARCH-20-content-provenance-enforcement-gate의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}

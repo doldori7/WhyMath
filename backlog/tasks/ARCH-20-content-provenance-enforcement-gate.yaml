@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - ".github/workflows/ci.yml"
   - "tests/backend/ops/**"
   - "tests/infra/**"
-session: null
+session: claude/whymath-eos-review-euolne
 notes: "docs/architecture/operations_module_gap_review.md §3 D1 — 외부 EOS 틀 모듈 42(콘텐츠 저작권·출처) 대조. copyright_gradient.md §4.2가 명령한 pool 필드 차단 게이트가 전수 grep 무일치로 미이행 확인. S3-11-problem-bank-data-card(문제은행 v0 사이드카·데이터 카드)는 다른 미머지 브랜치에서 이미 완료 — 이 태스크는 그 태스크가 다루지 않는 전 코퍼스 CI 집행 게이트에 한정, 중복 없음."
-updated: 2026-07-29
+updated: 2026-07-30
