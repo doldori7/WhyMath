@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,11 +14,12 @@ acceptance:
   - "/v1/auth/{provider}/callback·/refresh에 IP 키 rate limit 부착(_rate_limit.hit_by_ip 호출·재구현 0) + 429 회귀 + Redis 부재 시 기존 fail-safe 거동 유지"
   - "OAuth state 발급·검증(불일치 400) + redirect_uri allowlist(미등록 400) + 클라 계약 변경분 문서화"
   - "계정 잠금(lockout) 미도입을 결정으로 명시 — 근거 주석(미성년 학습 중단=우선순위1 침해) + 잠금 상태 컬럼 부재 동결 테스트"
-artifacts: []
+artifacts:
+  - 801b08bca76b0856e9a8fd27a8f1ca325306b174
 paths:
   - src/backend/whymath_backend/api/auth.py
   - src/backend/whymath_backend/api/oauth_providers.py
   - src/backend/whymath_backend/api/_rate_limit.py
-session: claude/backlog-drive-arch20
+session: null
 notes: "2026-07-30 account_security_gap_review.md D2. 실측: api/auth.py에 _rate_limit import 0(security_privacy.md:74 '로그인 IP 레이트리밋은 후속' 자백)·oauth_providers.py:42/105 fetch_identity(code, redirect_uri)가 계약 전부로 state/PKCE/allowlist grep 0(CSRF·open redirect). 인프라는 이미 있다 — _rate_limit.py 1261줄의 hit_by_ip:135·hit_both:146 호출만. 액세스 TTL 15분 단축은 범위 밖(클라 refresh-on-401 배선 선결 — 없이 줄이면 학생이 15분마다 튕김·§5-⑧)."
 updated: 2026-07-30
