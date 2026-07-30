@@ -1095,3 +1095,7 @@
 {"ts": "2026-07-29T17:32:42", "actor": "claude/whymath-concept-management-spnep8", "action": "done", "id": "S3-15-rephrase-pipeline-redesign", "artifacts": ["docs/data/ai_review_batch_v0_4corpora_2026-07.md §근본 설계 결정", "docs/data/corpus_audit_rephrased_v0_census.jsonl (429/429 PASS·Wilson 0.63%)", "harness/problem_corpus_batch.py _STANDARD_CODE 근원 교정 + generated_v0 185건·rephrased_v0 146건·M0862/M0863 동기 재태깅"]}
 {"ts": "2026-07-29T23:39:00", "actor": "claude/whymath-eos-review-euolne", "action": "add", "id": "ARCH-20-content-provenance-enforcement-gate"}
 {"ts": "2026-07-29T23:39:14", "actor": "claude/whymath-eos-review-euolne", "action": "add", "id": "ARCH-21-qa-pipeline-orchestrator"}
+{"ts": "2026-07-29T23:20:16", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "PED-04-tutoring-decision-log"}
+{"ts": "2026-07-29T23:20:35", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "PED-05-learner-state-assembly"}
+{"ts": "2026-07-29T23:20:50", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S3-16-behavior-telemetry-writers"}
+{"ts": "2026-07-29T23:21:06", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S4-18-review-time-axis"}

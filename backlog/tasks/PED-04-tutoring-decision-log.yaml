@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-04-tutoring-decision-log
+title: "교수 결정 로그 writer + 세션 간 구조화 회상 + Polya 상태 서버 소유"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①세션 경로(create_session·append_turns)가 DialogueTurn 메타 컬럼(targeted_step·student_intent·student_understanding_signal·socratic_strategy — 재계산 0, 값 공간 정정은 §D1 참조)을 채움. stateless /v1/coach는 DB 무접근 계약 유지"
+  - "②select_category에 recent_categories 회전(3연속 시 차선 카테고리, 결정론) + recall_session_context(원문 미복호·암호화 봉투 미개봉을 테스트로 동결)"
+  - "③Polya 상태(polya_state·prev_hint_level)를 세션 경로에서 서버 파생으로 전환, 불일치 시 client_state_mismatch 플래그(침묵 실패 금지). 신규 스키마 0 — 기존 dead 컬럼 소생 + 순수 파생만"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/socratic/**"
+  - src/backend/whymath_backend/harness/wh1_llm_policy.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - src/backend/whymath_backend/db/models/dialogue.py
+  - "tests/backend/l4/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D1·D2. PED-03 bandit 승격의 잠금 해제 조건(보상 신호 부재로 영구 미승격 상태였음). 04a §5.1 '원문 재조회'는 '메타 한정 회상'으로 강등 개정 동반(§2-⑤). socratic_strategy 컬럼 값 공간은 착수 시 첫 확인 항목(SocraticStrategy≠SocraticCategory, 두 enum이 직교 — 문서 §3 D1 정정 참조)."
+updated: 2026-07-29
