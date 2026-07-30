@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-20-content-provenance-enforcement-gate
+title: "콘텐츠 출처·라이선스 집행 게이트 — pool 필드 + CI 차단"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "schema/corpus_provenance.py — _provenance.json 필수 필드 Pydantic 계약(기존 v1 사이드카 키 정본화 + copyright_gradient.md §4.2 pool 필드: whymath-original/external-sharealike/external-licensed 추가). ops/provenance_audit.py — data/corpus/* 전수 순회해 사이드카 존재·스키마 적합·레코드 레벨 license/source_type 결손·메타전용 출처 위반 검사 후 위반 표+exit 0/1(ops/live_preflight.py CLI 형태 답습). CI policy-guard 잡에 스텝 배선 + tests/infra/에 배선 실재성 테스트. 변별력 검증 의무 — 결손 상태 재현해 exit 1 실측 후 정상 상태 exit 0 실측(성공/실패 동일값이면 위장). LicenseType enum 확장은 이번 스코프 밖(YAGNI, 외부 라이선스 콘텐츠 실적재 시 alembic과 함께)."
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/ops/**"
+  - "src/backend/whymath_backend/schema/**"
+  - "data/corpus/**"
+  - ".github/workflows/ci.yml"
+  - "tests/backend/ops/**"
+  - "tests/infra/**"
+session: null
+notes: "docs/architecture/operations_module_gap_review.md §3 D1 — 외부 EOS 틀 모듈 42(콘텐츠 저작권·출처) 대조. copyright_gradient.md §4.2가 명령한 pool 필드 차단 게이트가 전수 grep 무일치로 미이행 확인. S3-11-problem-bank-data-card(문제은행 v0 사이드카·데이터 카드)는 다른 미머지 브랜치에서 이미 완료 — 이 태스크는 그 태스크가 다루지 않는 전 코퍼스 CI 집행 게이트에 한정, 중복 없음."
+updated: 2026-07-29

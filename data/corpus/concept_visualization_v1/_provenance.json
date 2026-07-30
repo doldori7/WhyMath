@@ -1,0 +1,19 @@
+{
+  "corpus_name": "concept_visualization_v1",
+  "generated": "2026-07-29 (소급 작성 — 기존 산출물 근거 확인, EOS 운영 평면 공백 점검 §3-1)",
+  "generation_method": "WhyMath 자체 분류 작업 — 시각화 가능성 4분류(직접/동적/부분/추상, docs/architecture/05b_visualization_classification.md 정본) 대표 시드를 concept_graph_v1 개념에 태깅",
+  "record_count": 7,
+  "source_citation": "출처: WhyMath 자체 저작 — concept_graph_v1(자체 개념 그래프) 개념에 대한 시각화 분류 파생 메타데이터. code는 concept_graph_v1 concept_id(=backend concept.code) 참조.",
+  "license_notice": "WhyMath 자체 저작물(개념 시각화 분류·rationale). 원본 개념(concept_graph_v1)의 라이선스를 승계하며, 검정교과서·평가원 본문을 인용하지 않는다 — 순수 분류 산출물.",
+  "copyright_rail": [
+    "검정교과서·평가원·EBS 본문·도표 복제 0 — 개념 코드 태그 + 자체 rationale 서술만 존재.",
+    "\"명백히 분류 가능한 개념만 태깅(전면 분류는 전문가 검수·점진)\" — 대표 시드 7건, 전면 커버리지 아님(visualizability.json note 필드 그대로)."
+  ],
+  "contract": [
+    "code 필드는 concept_graph_v1의 concept_id를 참조하는 FK류 문자열 — concept_graph_v1이 삭제/변경되면 이 파일도 갱신 필요(현재 자동 동기화 없음, 수동 관리)."
+  ],
+  "authoring_fields": {
+    "note": "visualizability.json 스키마는 {version, note, entries[]} — entries 각 항목은 code/name_ko/visualizability/rationale."
+  },
+  "sidecar_note": "이 파일은 2026-07-29 EOS 운영 평면 공백 점검(docs/reviews/eos_ops_plane_gap_review_2026-07.md §2-1)에서 결손이 실측되어 소급 작성됨 — 정본 형식은 problem_bank_v1/_provenance.json 답습(단, 파생 분류 메타 특성상 authoring_fields는 실제 스키마로 대체)."
+}

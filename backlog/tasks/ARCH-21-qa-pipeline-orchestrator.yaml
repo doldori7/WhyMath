@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-21-qa-pipeline-orchestrator
+title: "QA 파이프라인 오케스트레이터 — 기존 검사 38모듈 조립·단일 판정"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - ARCH-20-content-provenance-enforcement-gate
+requires_gates: []
+acceptance:
+  - "harness/qa_pipeline.py — 새 검사기 신설 없이 기존 자산 조립: corpus_audit_eval(문항 감사)·l3/equivalent/canonicalize(수식 동치)·concept graph reachability(개념 연결)·crosslink_demotion_eval(오개념)·coach_prose_leak_eval(AI 출력 누설)·ops/provenance_audit(저작권 축, ARCH-20)·wilson.py(경계 판정)·defect_detection_eval.py(결함주입 강등전) 순회 실행 → 단일 JSON QA 리포트(코퍼스/배치 단위) + Wilson 단측 경계 게이트 exit 0/1. 미측정 축(UI 골든·통계 이상치·금칙어/PII·성능 연동)은 리포트에 '검사 안 함'으로 명시 — 침묵 통과 금지. CI data-pipeline 잡에 옵션 스텝(코퍼스 변경 시 트리거, 상시 실행 아님)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/qa_pipeline.py
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/operations_module_gap_review.md §3 D2 — 외부 EOS 틀 모듈 45(품질검증 QA 엔진) 대조. harness/ 38개 검사 모듈이 각자 CLI로 흩어져 있고 단일 판정으로 묶는 조립 층이 없음(오케스트레이션 0). ARCH-20의 provenance_audit을 저작권 축으로 흡수."
+updated: 2026-07-29
