@@ -150,7 +150,7 @@ class AuditLog:
 > (`db/models/audit.py` `PrivacyAudit`·마이그레이션 `3702d8671074`)에 담고, 삭제 이벤트를
 > 여기 중복 기록하지 **않는다**(이중 진실원천 금지 — 테이블명·`deleted_at` 컬럼이 삭제 의미에
 > 결합되어 있어 반출 사건을 넣으면 스키마가 거짓말을 한다. 회귀 테스트
-> `tests/backend/api/test_privacy_audit.py::test_deletion_does_not_write_privacy_audit`가
+> `tests/backend/api/test_privacy_audit_integration.py::TestDeletionDoesNotWritePrivacyAudit`가
 > 동결). 두 테이블 통합은 관리자 콘솔 Phase B에서 재론.
 >
 > writer 3곳(`whymath_backend/privacy/audit.py`): `record_export_audit`(`api/me.py:
@@ -158,8 +158,9 @@ class AuditLog:
 > grant_parental_consent` 호출·`parental_consent` 행 삽입과 **같은 트랜잭션**) · 
 > `record_admin_access_audit`(**현재 호출부 0곳** — 관리자 콘솔 Phase B가 착지할 때 배선,
 > `AuditEventKind.admin_access` docstring 참조 — 가짜 이벤트 날조 금지). 본인 조회
-> (`GET /v1/me/*`, 이제 30개 — 신규 `GET /v1/me/privacy-audit` 자기 자신 포함) 경로는 **감사
-> 0행**을 경계로 동결한다(`test_privacy_audit.py::TestSelfReadEndpointsProduceZeroAuditRows`).
+> (`GET /v1/me/*`, 이제 29개 — 신규 `GET /v1/me/privacy-audit` 자기 자신 포함) 경로는 **감사
+> 0행**을 경계로 동결한다
+> (`test_privacy_audit_integration.py::TestSelfScopedRoutesProduceZeroPrivacyAuditRows`).
 >
 > **필드 정정 2건**: ⑴ `ip_address` 평문 → **`sha256(salt+ip)` 해시만**(반복 판정 가능·원본 복원
 > 불가·`privacy.audit.hash_client_ip`·salt는 `WHYMATH_PII_AUDIT_IP_SALT`) ⑵ 감사 행에 **반출
