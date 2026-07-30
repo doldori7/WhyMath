@@ -18,5 +18,5 @@ paths:
   - src/backend/whymath_backend/l3/visualization.py
   - "src/web/graphing-calculator/**"
 session: null
-notes: "core_feature_review_2026-07.md §3.2 — 파일럿(S3-01) 후 착수. ARCH-13(추적화) 선행 권장."
-updated: 2026-07-18
+notes: "core_feature_review_2026-07.md §3.2 — 파일럿(S3-01) 후 착수. ARCH-13(추적화) 선행 권장. 2026-07-30 visualization_module_gap_review.md §1 기능 63 승계 확정(재설계 금지) — 외부 EOS 틀 기능 63 세부 9개(점 드래그·선분/각도·원과 접선·삼각형 성질·다각형 생성·전개도·좌표기하·벡터·입체도형 회전)가 이 태스크 범위이며, 착수 시 9개 전건 커버 여부를 재확인하고 미커버는 정직 고지한다. 부수 실측 2건: ⑴ 분류·렌더 불일치 — visualizability.json이 HIGH-GEO-010(벡터)을 '직접'으로 분류했으나 벡터 렌더 타입이 없다 ⑵ HIGH-CALC-005(미분계수)·HIGH-CALC-001(극한)은 '동적'+rationale '★AI 교육 핵심'인데 Manim 렌더 경로 0건(§4 트리거). 경계: 본 태스크=새 VisualizationType(기하·벡터·행렬), VIZ-03=기존 interactive_graph_2d의 필드 확장 — 중복 아님."
+updated: 2026-07-30

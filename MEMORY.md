@@ -337,6 +337,99 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (설계·시각화): **시각화 모듈 갭 점검·설계 — 전 시각화 스택이 학생 도달 0회(D1)·태스크 3건 등재·기능 63 승계 — 외부 EOS 틀 기능 62~65 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『시각화』(기능 62 함수 그래프 시각화·63 기하 도형 조작·
+64 애니메이션 설명·65 수학 모델 시뮬레이션, 세부 40개 — WhyMath 전용이 아닌 일반적 EOS 틀)를
+코드베이스와 대조. AI 콘텐츠 생성(07-30)에 이은 **8번째 자매편**.
+산출: `docs/architecture/visualization_module_gap_review.md`. **코드 변경 0.**
+
+**착수 가설이 두 번 뒤집혔다.**
+1. **"시각화는 문서만 있고 구현이 얇다"는 실측으로 정면 기각.** 명세→API→클라 렌더가 end-to-end로
+   배선돼 있다: `Graph2dSpec`/`Surface3dSpec`/`SimulationSpec` typed 검증 · `data/render_contract.json`
+   (invariant ⑩)을 백엔드 pytest·웹 vitest가 교차 게이트 · 자체 제작 계산기 `GraphingCalculator.jsx`
+   **2,141행**(Phase 1~15 — 접선·도함수·적분 리만합·3D 곡면·매개변수·극좌표·음함수·부등식·회귀 R²) ·
+   MathLive·three.js **npm 번들**(CDN 0·오프라인 WebView 자족) · Flutter `{type,spec}` 봉투.
+   **틀이 요구하는 수준을 상당 부분 초과한다.**
+2. **그런데 더 나쁜 것이 나왔다 — 이 전 스택이 학생에게 단 한 번도 도달하지 않는다(D1).**
+   경로 5단 전건 실측: 학생 경로는 `POST /v1/scenes/weak-concept` **단 하나**이고
+   (`/v1/visualizations/*` 3엔드포인트는 **클라 소비처 0건**) → `api/scene.py:92-93`이 오버레이 2종
+   조회 → `l4/scene_generation.py:279`가 **두 값을 AND로 요구**
+   (`if not (concept.recommended_visual_styles and is_visualizable(visualizability)): return`) →
+   **두 오버레이의 프로덕션 적재 호출이 4함수 전건 0건**
+   (`populate_concept_visual_style`·`load_concept_visual_style_from_json`·
+   `populate_concept_visualization`·`load_concept_visualization_from_json` — 테스트·자기 모듈 제외
+   저장소 전수) → `[]`·`None` 반환 → **항상 조기 return**.
+   프로덕션 오케스트레이터 `l1/atom_graph/populate.py::populate_atom_backbone`(Kiki가 실행해
+   `concepts=2,683 edges=2,210` 적재한 그것)은 `concept`·`concept_edge`만 적재하고
+   두 오버레이를 건드리지 않는다(`grep -n visual` 0건). alembic `a9b8c7d6e5f4`는 **스키마만**·INSERT 0.
+   `scripts/demo/seed_demo.py`는 problem_bank만. **`concept_visual_style`은 코퍼스 파일 자체가 없고,
+   `concept_visualization`은 파일 7건이 있으나 적재 경로가 없어 DB 0행** → 즉 분류율 1.60%(7/437)는
+   *파일 기준*이고 **런타임 분류율은 0%**다. 기능 62의 갭은 "못 만들었다"가 아니라
+   **"만들어 놓고 연결하지 않았다"**.
+
+**정본 결정 4건**:
+1. **D2(시각화 가능성 fail-open)는 fail-closed로 바꾸지 않는다.** `visualization_policy.py:29`가
+   `None → True`(주석이 "하위호환"이라 명시)라 미분류 430개념에서 교수학 보호가 무력하다 — 추상 개념
+   리터럴 그래프 금지(`05b`·오개념 유발)와 직접/동적 슬라이더 구분(`:296` `prefers_static_visual(None)
+   =False`라 미분류 전건에 슬라이더)이 발동하지 않는다. 그러나 fail-closed로 전환하면 **시각화가
+   전멸**해 의사결정 우선순위 4(학습효과)를 침해한다. **바꾸는 것은 가시성**(분류율·미분류 목록
+   리포트)이며, 지금 문제는 무력 그 자체보다 **관측조차 0건**이라는 것이다.
+2. **D3(생성기가 렌더 불가 타입 제시)의 심각도를 반증으로 하향했다.** 런타임 실측(격리 환경·프로덕션
+   코드 직접 호출): 빈 spec `{"type":"animation_prerendered","spec":{}}`가 `Visualization.model_validate`
+   와 프로덕션 게이트 `parse_visualization_spec`을 **전부 통과**하는데(두 필드 optional) 계약은
+   `web_adapter: null`(렌더 불가)이고 Manim 구현은 **0건**(`grep -ril manim src/` 4파일 전건
+   docstring·주석). **변별력 동봉 확인**: `interactive=True`로 바꾸면 거부됨 → 게이트는 살아있고
+   ①②의 통과는 고장이 아니라 설계상 통과. **당초 "학생이 빈 화면을 받는다"로 판정했으나 하향**:
+   Flutter가 `_VisualizationSeed`(아이콘+caption 카드)로 **우아하게 강등**하고, 스키마 불변식이
+   `interactive=False`를 강제해 **구조적으로 WebView 도달 불가**이며, D1이 scene 경로 생성을 선행
+   차단한다. 남는 실질 피해는 **웹의 조용한 미렌더**(`graph2dSpec.js:181`)·LLM 호출 낭비·caption이
+   예고한 시각화 불이행. 해법은 `_SYSTEM_PROMPT`의 하드코딩 4종을 **렌더 계약에서 파생**시키는 것
+   (새 추상 0·`AnimationSpec`은 존치해 Manim 배선 시 계약 한 줄로 복귀).
+3. **기능 63(기하)은 신규 태스크 0 — `S4-03` 승계·재설계 금지.** `S4-03-visualization-type-expansion`
+   (todo·`depends_on: S3-01`)이 이미 "기하(작도)·벡터·행렬 변환·미적분 애니메이션 spec+렌더러"를
+   acceptance로 보유. notes에 승계 확정 + 부수 실측 2건 명기: ⑴ `visualizability.json`이
+   `HIGH-GEO-010`(벡터)을 **"직접"**(즉시 보임)으로 분류했는데 벡터 렌더 타입이 없다 ⑵
+   `HIGH-CALC-005`(미분계수)·`HIGH-CALC-001`(극한)은 "동적"+rationale **"★AI 교육 핵심"**인데
+   Manim 렌더 경로 0 — **정본이 스스로 최중요라 표기한 개념이 렌더 불가**.
+4. **외부 틀의 번호 체계가 문서 간 불일치 — 스코프를 못박았다.** 선행 편
+   `ai_content_generation_gap_review.md:136`의 "확장 후보 62~68"은 62=힌트 자동생성…65=멀티모달인데
+   본 편은 62=함수그래프…65=시뮬레이션이다. **같은 번호에 다른 기능.** 본 편의 번호는 전부 본 편
+   기준이며, 선행 편 후보 65(멀티모달) 판정 4개(`animation_prerendered`만 렌더 경로 부재·기하/벡터/
+   행렬 spec 부재·`figure.spec` 의도적 거부·⏸`S4-03`)는 **승계**하고 본 편이 **적재 축(D1)·계약
+   축(D3)을 새로 더한다**.
+
+**의도적 미채택 6건**: ①물리·금융·경제 수요공급·SIR·최적화·미분방정식(페르소나 밖 + **SymPy 검증
+앵커 부재** — SymPy는 동치·해집합 권위이고 모델 타당성 권위가 아니다 + Phase 2+ capacity)
+②AI 기반 가상 실험(검증 권위 서열 ①②를 원리적으로 통과 불가) ③AI 음성 **동기화**(갭이 아니라
+**순서** — 음성 표면 `/v1/speech` 실재·동기화 대상이 §4 트리거 뒤) ④자동 증명 보조 시각화(SymPy는
+기하 증명 엔진 아님) ⑤GeoGebra·Desmos 연동(**자체 구현 2,141행이 이미 있고** 외부 임베드는
+미성년자 데이터 제3자 유출·오프라인 자족 역행·"2 비상구" 원칙에 3번째 추가) ⑥개념 노드에 그림 부착
+(`TestConceptPurity`가 `figure_spec` 슬롯 부재를 **기계로 단언**·Renderer=Plugin).
+
+**등재 3건**: `VIZ-01-visual-supply-wiring`(S3·pri 1 — D1+D2. 코퍼스 신설·적재 배선·**도달률 리포트
+CI**) · `VIZ-02-generator-render-contract-derive`(S3·pri 2 — D3) ·
+`VIZ-03-graph2d-spec-expressiveness`(S4·pri 4 — D4 `Graph2dSpec` 4필드뿐이라 코어가 "접선을 보여라"·
+"적분영역을 칠하라"를 지시 못 한다. **`depends_on: VIZ-01`** — 도달 0회 상태에서 표현력을 늘리면
+도달하지 않는 명세의 표현력을 늘리는 일). 백로그 145건 green.
+
+**반복 실수 관측(§6·재발방지)**: D1은 처음이 아니다 — 선행 자매편 D2(`S3-26`: `assessment=None`
+무조건 → `can_render` 항상 False → 숙달 학생 전 개념 404) · `OPS-03`(`tests/infra` 199건을 어떤 CI
+잡도 실행 안 함) · `OPS-08`(브랜치 보호 required check가 `checks=[]`로 미강제)와 **동일 유형**이다.
+공통 구조는 **"만들었다"와 "흐른다"의 혼동**이고 공통 원인은 **연결 지점을 관측하는 지표의 부재**다 —
+네 사례 모두 *단위 테스트는 green*이었다(기전은 동작하고 배선만 없었다). 기존 규칙 "❌ 검증 장치를
+만들고 배선 확인 없이 완료 선언 금지"가 **검증 장치** 축을 덮으므로, 이를 **데이터 공급 축으로
+일반화**할 것을 제안한다(소비 경로를 만들면 그 경로에 실제로 데이터가 흐르는지 확인한 뒤 완료로
+친다 — "스키마 있음"·"적재 함수 있음"·"단위 테스트 green"은 "흐른다"가 아니다). **CLAUDE.md 규칙
+문안 확정은 Kiki 확인 후 반영**하고, 본 세션은 `VIZ-01` acceptance의 도달률 리포트(기계 관측)로
+먼저 못박았다.
+
+**정직한 공백**: prod DB 행수 실측 없음(코드·저장소 근거로만 확정 — `VIZ-01` ①이 실측) · 도달 0회
+라이브 재현 없음(`VIZ-01` ②로 이관) · 분류율 분모 437은 파일 기준이고 prod는 2,683일 수 있음 ·
+`05a_learning_scene_dsl.md`(24KB) 미완독으로 **Scene DSL과 Visualization의 중복 여부는 미검토 축** ·
+세부 40개 중 기능 64의 "0건" 판정들은 grep 기반 · 부수 관측으로 `src/backend`의 `uv run` 의존성
+해결 불가(`great-expectations`↔`pandas`↔`numpy`↔`rapid-latex-ocr`) — `ARCH-22`와 같은 pin 위생
+계열이나 본 편 범위 밖이라 **태스크화하지 않고 관측만** 남겼다(런타임 증명은 `--no-project` 우회).
 ### 2026-07-30 (구현·S3-27): **Problem↔ProblemType 연결 유보 해제 — 생성기 identity 매핑표로 2,218/2,647건 결정론 백필 + ARCH-18 유형 축 해금** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `docs/architecture/ai_content_generation_gap_review.md` D3(기능 59 대응)가

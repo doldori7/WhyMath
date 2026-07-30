@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-01-visual-supply-wiring
+title: "시각화 공급원 적재 배선 — concept_visual_style 코퍼스 신설 + 두 오버레이 프로덕션 적재 + 도달률 리포트"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① prod(whymath-pg·5433) 실측: concept_visual_style·concept_visualization 두 테이블 행수를 세어 D1의 '적재 0행' 주장을 확인 또는 반증한다(반증되면 이 태스크 범위를 재조정)"
+  - "② 학생 경로 도달 0회 라이브 재현: 인증 학생으로 POST /v1/scenes/weak-concept 호출 → 응답에 VisualizationElement 부재를 실측(현행 0%)"
+  - "③ concept_visual_style 코퍼스 신설 — VisualizationStyle enum 값으로 개념별 권장 양식 태깅. 전수 LLM 태깅 금지(검증 앵커 없음): 성취기준 영역·개념 유형에서 결정론 규칙으로 유도 가능한 것만 채우고 판정 불가는 미태깅 존치(억지 태깅이 억지 그림을 만든다). _provenance.json 동반(pool 필드·ARCH-20 집행)"
+  - "④ 두 오버레이를 프로덕션 적재 경로에 배선 — populate_atom_backbone 확장 또는 동급 CLI. 기존 populate 규약(멱등·upsert) 재사용·새 추상 금지. 배선 후 populate_concept_visual_style·populate_concept_visualization 프로덕션 호출이 0건이 아님을 grep으로 확인"
+  - "⑤ 도달률 리포트 CI 배선 — '시각화 요소를 포함한 장면 비율' + '시각화 가능성 분류율(현행 7/437=1.60%·런타임 0%)' + 미분류 개념 목록. 100% 도달은 목표가 아님(추상 개념은 보류가 정답) — 관측이 목표. CI 잡이 이 리포트를 실제로 실행하는지 확인(OPS-03·OPS-10 선례 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑥ 변별력(적재 축): 적재 전 도달률 0% 실측 → 적재 후 N% 실측. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑦ 변별력(게이트 축): 임의 개념 1건을 '추상'으로 오태깅해 scene_generation.py:279 게이트가 실제로 시각화를 보류하는지 실측(exit/응답 차이) → 복원해 정상 동작 실측"
+artifacts: []
+paths:
+  - "data/corpus/concept_visual_style_v1/**"
+  - "src/backend/whymath_backend/l1/concept_visual_style/**"
+  - "src/backend/whymath_backend/l1/concept_visualization/**"
+  - src/backend/whymath_backend/l1/atom_graph/populate.py
+session: null
+notes: "visualization_module_gap_review.md §3 D1+D2. 학생 경로(/v1/scenes/weak-concept)의 시각화 블록이 scene_generation.py:279에서 두 오버레이를 AND로 요구하는데 프로덕션 적재 호출이 4함수 전건 0건 → 전 시각화 스택(명세·렌더 계약·계산기 2141행·Flutter 봉투)이 구축 완료 상태로 도달 0회. D2(fail-open)는 fail-closed로 바꾸지 않는다(시각화 전멸=학습효과 침해) — 바꾸는 것은 가시성. 선행 자매편 S3-26(assessment=None → 404)과 동일 실패 유형(§6 반복 실수)."
+updated: 2026-07-30

@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-03-graph2d-spec-expressiveness
+title: "Graph2dSpec 표현력 확장 — 접선·적분영역·극값·함수비교(렌더러가 이미 하는 것에 명세 좌석)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - VIZ-01-visual-supply-wiring
+requires_gates: []
+acceptance:
+  - "① Graph2dSpec에 optional 필드 확장 — 접선(점)·적분영역(구간)·극값 표시·함수 비교(다중 함수). 웹 계산기가 이미 렌더할 수 있는 능력에 명세 좌석을 주는 것이며 렌더러 신규 구현이 아니다"
+  - "② 새 VisualizationType 신설 금지(anti-explosion — 4종 유지). 기존 interactive_graph_2d의 필드 확장만"
+  - "③ 웹 어댑터(graph2dSpec.js)·Flutter 봉투·렌더 계약까지 동반 갱신. 어느 한쪽만 갱신하면 교차 게이트가 red(invariant ⑩)"
+  - "④ S4-03과의 경계를 양쪽 notes에 상호 참조 — S4-03=새 type(기하·벡터·행렬), 본 태스크=기존 2D type의 필드. 중복 아님"
+  - "⑤ 변별력: 신규 필드 1개를 웹 어댑터에서 미소비 상태로 두고 계약 게이트가 red를 내는지 실측 → 배선해 green 실측"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/visualization.py
+  - src/web/graphing-calculator/src/lib/graph2dSpec.js
+  - src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart
+session: null
+notes: "visualization_module_gap_review.md §3 D4. 기능 62 세부 10개 중 5개(함수비교·접선/법선·극대극소·적분영역·미분변화)가 '계산기는 하는데 명세가 지시 못 한다'에 걸린다. Graph2dSpec은 function·domain·y_range·parameters 4필드뿐. depends_on VIZ-01 — 도달 0회 상태에서 표현력을 늘리면 도달하지 않는 명세의 표현력을 늘리는 일이 된다."
+updated: 2026-07-30
