@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "task": "NS-02",
+  "note": "L5 표기 정규화 계층(math_notation.dart canonical 파이프라인)이 *실제 지원하는* 표기 집합의 열거 가능한 정본(단일 진실 원천). 스코프는 현 파이프라인 실측 지원분만 — S3-23 정규화 매크로·유니코드 글리프 클래스·구조 표기·contract canonical 연산(과잉 열거 금지·notation_semantics_layer.md §5 노드 폭발 방어). canonical 표현 = LaTeX 문자열. cases[].input을 Dart toRenderLatex에 통과시키면 cases[].canonical이 나와야 하며, 그 정합은 src/mobile/test/notation_canonical_test.dart가 동결한다. 이 계층은 표기 정규화·렌더만 담당한다 — 수학 의미·동치 판정은 백엔드 L3(SymPy) 단일 권위(표현≠의미).",
+  "consumers": [
+    "NS-03 표기 커버리지 게이트 (backend CI — 교과서 표기 ⊆ 지원 표기 측정)",
+    "src/mobile/test/notation_canonical_test.dart (Dart 파이프라인과의 정합 동결)"
+  ],
+  "input_forms": {
+    "supported": [
+      {"id": "mathlive_latex", "desc": "MathLive 직렬화 LaTeX — 입력 팔레트 산출(\\frac·\\doubleprime·\\mleft·\\placeholder 등, 번들 v0.110.0 실측)"},
+      {"id": "unicode_typography", "desc": "유니코드 수학 조판 — 코퍼스·코치 발화의 상첨자/프라임(x²·f″·x⁻¹)"},
+      {"id": "caret_plain", "desc": "캐럿/평문(caret/plain) — 전송 경로(latex_to_plain) 산출·계약 canonical(x^2·((a)/(b))·sqrt(x)·명시 *)"}
+    ],
+    "unsupported_stub": [
+      {"id": "natural_language", "desc": "자연어 표기(\"선분 AB\") — Phase B(NL↔Entity 매핑·reasoning_type 확장)에서 합류. 지금은 미지원 stub(anchorFor는 항상 null)", "status": "stub"}
+    ]
+  },
+  "unicode_glyph_classes": {
+    "superscript": ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹", "⁺", "⁻", "⁼", "⁽", "⁾", "ⁿ", "ⁱ"],
+    "prime": ["′", "″", "‴"]
+  },
+  "accent_macros": [
+    "overline", "underline", "overrightarrow", "overleftarrow", "vec", "bar",
+    "hat", "widehat", "widetilde", "tilde", "dot", "ddot", "check", "breve",
+    "acute", "grave"
+  ],
+  "cases": [
+    {"id": "macro_doubleprime", "class": "normalization_macro", "input": "f^\\doubleprime(x)", "canonical": "f^{\\prime\\prime}(x)"},
+    {"id": "macro_dprime", "class": "normalization_macro", "input": "\\dprime", "canonical": "{\\prime\\prime}"},
+    {"id": "macro_backdoubleprime", "class": "normalization_macro", "input": "\\backdoubleprime", "canonical": "{\\prime\\prime}"},
+    {"id": "macro_trprime", "class": "normalization_macro", "input": "f^\\trprime", "canonical": "f^{\\prime\\prime\\prime}"},
+    {"id": "macro_backtrprime", "class": "normalization_macro", "input": "\\backtrprime", "canonical": "{\\prime\\prime\\prime}"},
+    {"id": "macro_differential_d", "class": "normalization_macro", "input": "\\differentialD x", "canonical": "\\mathrm{d} x"},
+    {"id": "macro_differential_e", "class": "normalization_macro", "input": "\\differentialE", "canonical": "\\mathrm{e}"},
+    {"id": "macro_exponential_e", "class": "normalization_macro", "input": "\\exponentialE", "canonical": "\\mathrm{e}"},
+    {"id": "macro_capital_differential_d", "class": "normalization_macro", "input": "\\capitalDifferentialD", "canonical": "\\mathrm{D}"},
+    {"id": "macro_mleft_mright", "class": "normalization_macro", "input": "\\mleft(x+1\\mright)", "canonical": "\\left(x+1\\right)"},
+    {"id": "macro_abs", "class": "normalization_macro", "input": "\\abs{x}", "canonical": "\\left|x\\right|"},
+    {"id": "macro_norm", "class": "normalization_macro", "input": "\\norm{v}", "canonical": "\\left\\|v\\right\\|"},
+    {"id": "macro_placeholder", "class": "normalization_macro", "input": "\\placeholder{n}", "canonical": "n"},
+    {"id": "macro_accent_paren_restore", "class": "normalization_macro", "input": "\\overline(AB)", "canonical": "\\overline{AB}"},
+    {"id": "unicode_superscript_digit", "class": "unicode_typography", "input": "x²", "canonical": "x^{2}"},
+    {"id": "unicode_superscript_negative", "class": "unicode_typography", "input": "x⁻¹", "canonical": "x^{-1}"},
+    {"id": "unicode_superscript_letter", "class": "unicode_typography", "input": "aⁿ", "canonical": "a^{n}"},
+    {"id": "unicode_prime_single", "class": "unicode_typography", "input": "f′(0)", "canonical": "f^{\\prime}(0)"},
+    {"id": "unicode_prime_double", "class": "unicode_typography", "input": "f″(x)", "canonical": "f^{\\prime\\prime}(x)"},
+    {"id": "unicode_prime_triple", "class": "unicode_typography", "input": "f‴", "canonical": "f^{\\prime\\prime\\prime}"},
+    {"id": "structural_fraction_paren", "class": "structural", "input": "((3x)/(2))", "canonical": "\\frac{3x}{2}"},
+    {"id": "structural_sqrt_double_paren", "class": "structural", "input": "sqrt((x))", "canonical": "\\sqrt{x}"},
+    {"id": "structural_sqrt_single_paren", "class": "structural", "input": "sqrt(x)", "canonical": "\\sqrt{x}"},
+    {"id": "structural_caret_paren_group", "class": "structural", "input": "f^(\\prime)(x)", "canonical": "f^{\\prime}(x)"},
+    {"id": "structural_sub_paren_group", "class": "structural", "input": "a_(1)", "canonical": "a_{1}"},
+    {"id": "structural_caret_digit_run", "class": "structural", "input": "x^23", "canonical": "x^{23}"},
+    {"id": "structural_sub_digit_run", "class": "structural", "input": "a_12", "canonical": "a_{12}"},
+    {"id": "structural_star_to_cdot", "class": "structural", "input": "2*x", "canonical": "2 \\cdot x"},
+    {"id": "contract_caret_power", "class": "contract_canonical", "input": "x^3", "canonical": "x^{3}"},
+    {"id": "contract_explicit_star", "class": "contract_canonical", "input": "3*x^2", "canonical": "3 \\cdot x^{2}"},
+    {"id": "contract_slash_division", "class": "contract_canonical", "input": "x/4+1", "canonical": "x/4+1"},
+    {"id": "contract_sqrt_call", "class": "contract_canonical", "input": "sqrt(x^2)", "canonical": "\\sqrt{x^{2}}"}
+  ]
+}

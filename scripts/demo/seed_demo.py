@@ -19,21 +19,54 @@ from pathlib import Path
 
 # 리포 루트 = scripts/demo/seed_demo.py에서 2단계 상위. 코퍼스 경로를 절대경로로 고정(CWD 무관).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PROBLEMS = _REPO_ROOT / "data" / "corpus" / "problem_bank_v1" / "problems.jsonl"
+_CORPUS_ROOT = _REPO_ROOT / "data" / "corpus"
+
+# 데모/파일럿 문제 풀(멱등 적재·순서대로). 4문제만 시드하면 2~3문제 풀고 next-problem 후보가
+# 고갈돼(NOT IN 제외) "추천 없음"→앱이 마지막 문항 폴백="같은 문제 반복" 체감(2026-07-22 실기기).
+# answer 100% 보유 코퍼스만(완료 감지 verify_final_answer 필요)·전부 자체생성·WHYMATH_GENERATED
+# (populate 위생 통과 실측). 첫 항목(손저작 v1)은 *필수*, 나머지는 best-effort(부재/실패 skip).
+_CORPORA: tuple[Path, ...] = (
+    _CORPUS_ROOT / "problem_bank_v1" / "problems.jsonl",  # 손저작 4(필수·안정)
+    _CORPUS_ROOT / "problem_bank_generated_v0" / "problems.jsonl",  # 단답 620(answer 100%)
+    _CORPUS_ROOT / "problem_bank_misconception_mc_v0" / "problems.jsonl",  # 객관식 1080(choices)
+)
 
 
 def main() -> int:
-    """문제 코퍼스를 멱등 적재하고 종료 코드를 반환(0=성공·2=코퍼스 부재)."""
+    """데모 문제 풀을 멱등 적재하고 종료 코드를 반환(0=성공·2=필수 코퍼스 부재/실패).
+
+    여러 코퍼스를 순서대로 적재한다(멱등·slug upsert). 첫 항목(손저작 v1)은 필수라 실패 시 2를
+    반환하고, 나머지는 best-effort(부재/실패는 경고만·데모는 v1만으로도 최소 동작). 조용한 무동작
+    금지 — 각 코퍼스의 적재 결과를 명시 보고한다.
+    """
     from whymath_backend.l1.problem_bank.populate import main as populate_main
 
-    print(f"[seed_demo] 문제 코퍼스 적재 시작: {_PROBLEMS}")
-    code = populate_main(["--problems", str(_PROBLEMS)])
-    if code == 0:
-        print(
-            "[seed_demo] 완료 — 데모 사용자는 콜백(/v1/auth/demo/callback) 최초 호출 시 "
-            "lazy upsert된다(별도 시드 불필요)."
-        )
-    return code
+    loaded_any = False
+    for index, corpus in enumerate(_CORPORA):
+        is_required = index == 0  # 첫 항목(v1)은 필수.
+        if not corpus.exists():
+            msg = f"[seed_demo] 코퍼스 부재: {corpus}"
+            if is_required:
+                print(msg + " — 필수 코퍼스라 중단.")
+                return 2
+            print(msg + " — best-effort skip.")
+            continue
+        print(f"[seed_demo] 적재 시작: {corpus}")
+        code = populate_main(["--problems", str(corpus)])
+        if code != 0:
+            if is_required:
+                print(f"[seed_demo] 필수 코퍼스 적재 실패(code={code}): {corpus} — 중단.")
+                return code
+            print(f"[seed_demo] 경고 — 적재 실패(code={code}·skip): {corpus}")
+            continue
+        loaded_any = True
+    if not loaded_any:
+        return 2
+    print(
+        "[seed_demo] 완료 — 데모 사용자는 콜백(/v1/auth/demo/callback) 최초 호출 시 "
+        "lazy upsert된다(별도 시드 불필요)."
+    )
+    return 0
 
 
 if __name__ == "__main__":
