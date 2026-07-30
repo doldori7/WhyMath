@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-13-demo-problem-pool
+title: "데모 문제 풀 확장 — 4개→수백개(고갈·반복 해소)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "seed_demo가 answer 보유 코퍼스(v1 + generated_v0 단답 + misconception_mc_v0 객관식)를 적재해 데모 풀 수백개로 확장"
+  - "로컬 PG 실측: 연속 완료해도 서로 다른 문항 계속 서빙·수십 문항까지 '추천 없음' 미발생·완료 감지 정상"
+  - "seed 소요 합리적(멱등)·개념 미태깅도 로드 가능(mastery 전파만 skip)"
+artifacts:
+  - "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(Stage 1) — 원 구현 8c0d57a"
+paths:
+  - "scripts/demo/**"
+session: null
+notes: "2026-07-22 실기기(원 구현 세션): 루프 정상(NOT IN 제외)인데 데모 4문제뿐→2~3문제 풀면 고갈→null→앱 마지막 문항 폴백='반복' 체감. generated_v0 620(단답100%)·misconception_mc_v0 1080(객관식100%). populate --problems 단일파일 멱등. 로컬 PG 실측 1704문제 10초 멱등 시드·전부 difficulty_overall+answer 보유(1176 객관식)·NOT IN 제외 서빙은 기존 통합 테스트 증명. [회수 경위 2026-07-30] 원 구현이 main과 07-21 분기한 미병합 브랜치(claude/shadow-data-s3-pilot-nh5kbz)에 9일간 고립돼 있던 것을 발견해 회수. 원본은 `depends_on: [S3-12-mc-choice-buttons]`였으나 그 S3-12는 main에서 번호가 다른 작업(v0-defect-remediation)에 재사용된 ID 충돌 대상이라 여기선 제거 — S3-13 자체(scripts/demo/seed_demo.py)는 S3-12(모바일 UX)와 코드 의존이 없다(파일 겹침 0). 원 브랜치의 S3-12 관련 실기기 검증분은 별도 재번호 회수 대상(HARN-10 관례를 따라 다음 세션이 처리)."
+updated: 2026-07-30

@@ -1099,3 +1099,9 @@
 {"ts": "2026-07-29T23:20:35", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "PED-05-learner-state-assembly"}
 {"ts": "2026-07-29T23:20:50", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S3-16-behavior-telemetry-writers"}
 {"ts": "2026-07-29T23:21:06", "actor": "claude/whymath-ai-tutor-design-953m1e", "action": "add", "id": "S4-18-review-time-axis"}
+{"ts": "2026-07-22T07:23:58", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-13-demo-problem-pool"}
+{"ts": "2026-07-22T07:28:15", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "done", "id": "S3-13-demo-problem-pool", "artifacts": ["8c0d57a", "로컬 PG 실측: 1704문제(전부 difficulty+answer·1176 MC) 10초 멱등 시드·전량 서빙 가능. NOT IN 제외는 test_me_next_problem_recommends_unattempted 증명"]}
+{"ts": "2026-07-23T13:36:31", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "NS-03-notation-coverage-harness"}
+{"ts": "2026-07-23T14:10:14", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "done", "id": "NS-03-notation-coverage-harness", "artifacts": ["559ca17", "pytest 20 green·ruff/mypy clean·실 CLI exit0 PASS(문항2667·수식25)·대조군 exit1"]}
+{"ts": "2026-07-30T06:00:00", "actor": "claude/shadow-branch-recovery-stage1", "action": "recover_from_unmerged_branch", "id": "S3-13-demo-problem-pool", "detail": "claude/shadow-data-s3-pilot-nh5kbz(907fca9f 분기·9일 미병합)에서 회수 — 원본 depends_on(S3-12, ID충돌·미회수)은 제거. 재검증: notation_coverage 무관, seed_demo.py 패치 적용 후 pytest/ruff/black 재통과"}
+{"ts": "2026-07-30T06:00:00", "actor": "claude/shadow-branch-recovery-stage1", "action": "recover_from_unmerged_branch", "id": "NS-03-notation-coverage-harness", "detail": "claude/shadow-data-s3-pilot-nh5kbz(907fca9f 분기·9일 미병합)에서 회수 — 원본 depends_on(NS-02, ID충돌 아니나 미회수)은 제거(런타임 의존 없음 확인). data/notation_support_manifest.json(NS-02 산출 정적 데이터)만 동봉. CI 상시 게이트 신규 배선(backend 잡). 재검증: pytest 20 passed·CLI exit0(문항2647)·ruff/black/mypy clean"}

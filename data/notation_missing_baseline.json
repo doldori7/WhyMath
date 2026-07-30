@@ -1,0 +1,327 @@
+{
+  "version": "1.0",
+  "task": "NS-03",
+  "note": "표기 누락 베이스라인(Missing Symbol Report 정본) — 코퍼스에 등장하나 지원 표기 집합(data/notation_support_manifest.json 파생 + KaTeX 렌더 실증 allowlist) 밖인 심볼의 첫 실측(2026-07-23) 산출. l3/notation_coverage 게이트가 래칫으로 소비한다: 여기 없는 신규 누락 발견 시 exit 1, 여기 있는 누락은 리포트만. 갱신은 의식적 수동 편집만 — 자동 갱신(--rebaseline 류)은 래칫을 무력화하므로 존재하지 않는다. 항목 해소 경로: ①렌더 실증 테스트 추가 후 지원 승격(manifest/KATEX_PROVEN_MACROS 등재) → 본 파일에서 제거 ②코퍼스 표기 정리 → 제거. occurrences·sources는 첫 실측 시점 스냅샷(참고용).",
+  "measured_at": "2026-07-23",
+  "measured_by": "python -m whymath_backend.l3.notation_coverage (첫 실측·부트스트랩)",
+  "known_gaps_out_of_scope": [
+    "§6-1 표준함수 이탤릭 조판: sin·cos 등 표준함수가 Dart 렌더 경로에서 \\sin 연산자 매크로로 승격되지 않아 이탤릭 문자 나열(s·i·n)로 조판된다(sqrt만 승격). `sin`은 매크로 토큰이 아니라 본 게이트의 매크로 축에 잡히지 않는다 — 측정 축과 별개·기록만.",
+    "§6-2 무신호 식 평문 폴백: `x+x+x`처럼 수식 신호(^ _ \\ / *) 없는 계약 canonical 식은 조판에서 빠진다(S3-21 과잉 렌더 방지 정책의 의도된 결과). ASCII 표기의 라우팅 문제라 토큰 멤버십 측정과 별개 축 — 기록만.",
+    "§6-3 슬래시 나눗셈: `x/4+1`이 \\frac 수평 분수로 승격되지 않고 슬래시 그대로 조판된다(렌더 가능·의미 왜곡 없음·허용). ASCII 표기라 글리프/매크로 축 밖 — 기록만."
+  ],
+  "missing": [
+    {
+      "token": "×",
+      "kind": "glyph",
+      "occurrences": 521,
+      "sources": {
+        "problem_bank_generated_v0": 65,
+        "problem_bank_misconception_mc_v0": 456
+      },
+      "codepoint": "U+00D7",
+      "unicode_name": "MULTIPLICATION SIGN"
+    },
+    {
+      "token": "√",
+      "kind": "glyph",
+      "occurrences": 507,
+      "sources": {
+        "problem_bank_conceptual_v0": 12,
+        "problem_bank_generated_v0": 156,
+        "problem_bank_misconception_mc_v0": 192,
+        "problem_bank_rephrased_v0": 147
+      },
+      "codepoint": "U+221A",
+      "unicode_name": "SQUARE ROOT"
+    },
+    {
+      "token": "π",
+      "kind": "glyph",
+      "occurrences": 288,
+      "sources": {
+        "problem_bank_misconception_mc_v0": 288
+      },
+      "codepoint": "U+03C0",
+      "unicode_name": "GREEK SMALL LETTER PI"
+    },
+    {
+      "token": "−",
+      "kind": "glyph",
+      "occurrences": 244,
+      "sources": {
+        "problem_bank_conceptual_v0": 24,
+        "problem_bank_generated_v0": 130,
+        "problem_bank_rephrased_v0": 90
+      },
+      "codepoint": "U+2212",
+      "unicode_name": "MINUS SIGN"
+    },
+    {
+      "token": "±",
+      "kind": "glyph",
+      "occurrences": 194,
+      "sources": {
+        "problem_bank_generated_v0": 97,
+        "problem_bank_rephrased_v0": 97
+      },
+      "codepoint": "U+00B1",
+      "unicode_name": "PLUS-MINUS SIGN"
+    },
+    {
+      "token": "°",
+      "kind": "glyph",
+      "occurrences": 186,
+      "sources": {
+        "problem_bank_generated_v0": 75,
+        "problem_bank_misconception_mc_v0": 72,
+        "problem_bank_rephrased_v0": 39
+      },
+      "codepoint": "U+00B0",
+      "unicode_name": "DEGREE SIGN"
+    },
+    {
+      "token": "ₙ",
+      "kind": "glyph",
+      "occurrences": 172,
+      "sources": {
+        "problem_bank_generated_v0": 142,
+        "problem_bank_rephrased_v0": 30
+      },
+      "codepoint": "U+2099",
+      "unicode_name": "LATIN SUBSCRIPT SMALL LETTER N"
+    },
+    {
+      "token": "÷",
+      "kind": "glyph",
+      "occurrences": 161,
+      "sources": {
+        "problem_bank_generated_v0": 65,
+        "problem_bank_misconception_mc_v0": 96
+      },
+      "codepoint": "U+00F7",
+      "unicode_name": "DIVISION SIGN"
+    },
+    {
+      "token": "₁",
+      "kind": "glyph",
+      "occurrences": 108,
+      "sources": {
+        "problem_bank_generated_v0": 108
+      },
+      "codepoint": "U+2081",
+      "unicode_name": "SUBSCRIPT ONE"
+    },
+    {
+      "token": "∘",
+      "kind": "glyph",
+      "occurrences": 72,
+      "sources": {
+        "problem_bank_misconception_mc_v0": 72
+      },
+      "codepoint": "U+2218",
+      "unicode_name": "RING OPERATOR"
+    },
+    {
+      "token": "≠",
+      "kind": "glyph",
+      "occurrences": 72,
+      "sources": {
+        "problem_bank_conceptual_v0": 72
+      },
+      "codepoint": "U+2260",
+      "unicode_name": "NOT EQUAL TO"
+    },
+    {
+      "token": "½",
+      "kind": "glyph",
+      "occurrences": 48,
+      "sources": {
+        "problem_bank_misconception_mc_v0": 48
+      },
+      "codepoint": "U+00BD",
+      "unicode_name": "VULGAR FRACTION ONE HALF"
+    },
+    {
+      "token": "⅓",
+      "kind": "glyph",
+      "occurrences": 48,
+      "sources": {
+        "problem_bank_misconception_mc_v0": 48
+      },
+      "codepoint": "U+2153",
+      "unicode_name": "VULGAR FRACTION ONE THIRD"
+    },
+    {
+      "token": "∩",
+      "kind": "glyph",
+      "occurrences": 48,
+      "sources": {
+        "problem_bank_conceptual_v0": 48
+      },
+      "codepoint": "U+2229",
+      "unicode_name": "INTERSECTION"
+    },
+    {
+      "token": "₊",
+      "kind": "glyph",
+      "occurrences": 30,
+      "sources": {
+        "problem_bank_generated_v0": 30
+      },
+      "codepoint": "U+208A",
+      "unicode_name": "SUBSCRIPT PLUS SIGN"
+    },
+    {
+      "token": "≥",
+      "kind": "glyph",
+      "occurrences": 30,
+      "sources": {
+        "problem_bank_generated_v0": 30
+      },
+      "codepoint": "U+2265",
+      "unicode_name": "GREATER-THAN OR EQUAL TO"
+    },
+    {
+      "token": "Σ",
+      "kind": "glyph",
+      "occurrences": 24,
+      "sources": {
+        "problem_bank_conceptual_v0": 24
+      },
+      "codepoint": "U+03A3",
+      "unicode_name": "GREEK CAPITAL LETTER SIGMA"
+    },
+    {
+      "token": "→",
+      "kind": "glyph",
+      "occurrences": 24,
+      "sources": {
+        "problem_bank_conceptual_v0": 24
+      },
+      "codepoint": "U+2192",
+      "unicode_name": "RIGHTWARDS ARROW"
+    },
+    {
+      "token": "₂",
+      "kind": "glyph",
+      "occurrences": 16,
+      "sources": {
+        "problem_bank_generated_v0": 16
+      },
+      "codepoint": "U+2082",
+      "unicode_name": "SUBSCRIPT TWO"
+    },
+    {
+      "token": "≤",
+      "kind": "glyph",
+      "occurrences": 12,
+      "sources": {
+        "problem_bank_generated_v0": 12
+      },
+      "codepoint": "U+2264",
+      "unicode_name": "LESS-THAN OR EQUAL TO"
+    },
+    {
+      "token": "₀",
+      "kind": "glyph",
+      "occurrences": 8,
+      "sources": {
+        "problem_bank_generated_v0": 8
+      },
+      "codepoint": "U+2080",
+      "unicode_name": "SUBSCRIPT ZERO"
+    },
+    {
+      "token": "₃",
+      "kind": "glyph",
+      "occurrences": 6,
+      "sources": {
+        "problem_bank_generated_v0": 6
+      },
+      "codepoint": "U+2083",
+      "unicode_name": "SUBSCRIPT THREE"
+    },
+    {
+      "token": "₄",
+      "kind": "glyph",
+      "occurrences": 4,
+      "sources": {
+        "problem_bank_generated_v0": 4
+      },
+      "codepoint": "U+2084",
+      "unicode_name": "SUBSCRIPT FOUR"
+    },
+    {
+      "token": "₅",
+      "kind": "glyph",
+      "occurrences": 4,
+      "sources": {
+        "problem_bank_generated_v0": 4
+      },
+      "codepoint": "U+2085",
+      "unicode_name": "SUBSCRIPT FIVE"
+    },
+    {
+      "token": "₈",
+      "kind": "glyph",
+      "occurrences": 4,
+      "sources": {
+        "problem_bank_generated_v0": 4
+      },
+      "codepoint": "U+2088",
+      "unicode_name": "SUBSCRIPT EIGHT"
+    },
+    {
+      "token": "₉",
+      "kind": "glyph",
+      "occurrences": 4,
+      "sources": {
+        "problem_bank_generated_v0": 4
+      },
+      "codepoint": "U+2089",
+      "unicode_name": "SUBSCRIPT NINE"
+    },
+    {
+      "token": "₇",
+      "kind": "glyph",
+      "occurrences": 2,
+      "sources": {
+        "problem_bank_generated_v0": 2
+      },
+      "codepoint": "U+2087",
+      "unicode_name": "SUBSCRIPT SEVEN"
+    },
+    {
+      "token": "\\cos",
+      "kind": "macro",
+      "occurrences": 6,
+      "sources": {
+        "formula_graph_v1": 6
+      }
+    },
+    {
+      "token": "\\int",
+      "kind": "macro",
+      "occurrences": 1,
+      "sources": {
+        "formula_graph_v1": 1
+      }
+    },
+    {
+      "token": "\\pi",
+      "kind": "macro",
+      "occurrences": 1,
+      "sources": {
+        "formula_graph_v1": 1
+      }
+    },
+    {
+      "token": "\\pm",
+      "kind": "macro",
+      "occurrences": 1,
+      "sources": {
+        "formula_graph_v1": 1
+      }
+    }
+  ]
+}

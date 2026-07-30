@@ -1,0 +1,34 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-25-shadow-recovery-bucket-c
+title: "미병합 브랜치 회수 Stage 2 — 버킷 C(ID 충돌 7건, main이 같은 번호를 다른 작업에 재사용)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "아래 7개 항목을 각각 main에서 비어 있는 새 번호(S3-26~32 제안 — 착수 시점 재확인 필수, main이 계속 전진 중)로 재등재 후 회수"
+  - "S3-10 소속 alembic 마이그레이션(dialogue_review_turns_remaining, 리비전 d5e6f0a1b2c3 — main과 동일값 충돌) 재채번 필요: sliding-window hex 스킴으로 main 현재 head 위에 새 리비전 작성(무작위 hex 금지·versions/ 전수 grep 무충돌 확인 — MEMORY 2026-07-03 결정 로그 참조)"
+  - "S3-24(버킷 B)와 동일하게 모바일 hot file(chat_screen.dart 등) 수동 재적용 — 특히 S3-09/10/11/12/14가 이 파일들을 건드림"
+  - "S3-22(버킷 B)와 함께 api/coach.py 재조정 — S3-10/11/15/16이 같은 파일을 건드림. 한 세션에서 버킷 B·C의 coach.py 관련 항목을 함께 처리하는 편이 안전(파편화된 반복 재조정 방지)"
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+  - "src/backend/whymath_backend/api/coach.py"
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/alembic/versions/**"
+notes: "[출처] 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f에서 분기·9일 미병합·2026-07-30 발견 — MEMORY 결정 로그 'Stage 1' 참조). 아래 7건은 shadow에서 쓴 번호를 main이 착수 시점(07-22~24) 이후 **전혀 다른 작업에 재사용**해 그대로는 회수 불가 — HARN-10 번호충돌 가드가 등재 시점에 거부한다(그랜드파더 대상 아님 — 아직 미머지).
+  ① 원 S3-09(학습 루프 닫힘 G1/G2·client+server) 원 커밋 7cc0e98/5041487/479163a — main의 현 S3-09는 무관한 별개 작업
+  ② 원 S3-10(완료를 풀이과정에 통합·client+server+**alembic**) 원 커밋 2f6433b/ead23ef/557485f
+  ③ 원 S3-11(대화 입력 최종답 감지·서버만) 원 커밋 a5dee77/fc09405/35f6061
+  ④ 원 S3-12(객관식 선택지 버튼 UX·모바일) 원 커밋 0bd16aa/b1ec9fa
+  ⑤ 원 S3-14(코치 dialogue 문제별 리셋·모바일) 원 커밋 2825c4a/b2e8612/cc7a5f3
+  ⑥ 원 S3-15(오답 최종답 피드백·서버) 원 커밋 66fb2b4/631f6d9/f8585d2
+  ⑦ 원 S3-16(오답 targeted 소크라테스 힌트·서버) 원 커밋 a495222/879ad99/3ab4e20
+  [번호 제안] S3-26=구S3-09 · S3-27=구S3-10 · S3-28=구S3-11 · S3-29=구S3-12 · S3-30=구S3-14 · S3-31=구S3-15 · S3-32=구S3-16 (착수 시점 main 최신 상태로 재확인 필수 — 이 목록 작성 시점 main S3 최대 번호=16, S3-24/25는 본 회수 태스크 자신이 이미 점유).
+  ⑨~⑦ 순서 의존: ①→②(같은 '완료' 상태머신)→③(같은 계열)·⑥→⑦(같은 오답 피드백 계열) 순으로 회수하면 diff 충돌이 적을 가능성(원 개발 순서와 동일)."
+updated: 2026-07-30
