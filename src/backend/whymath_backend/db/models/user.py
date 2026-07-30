@@ -44,6 +44,7 @@ from whymath_backend.schema.enums import (
     MajorCategory,
     NoteApp,
     Persona,
+    Role,
     SchoolType,
     SubscriptionTier,
     TrackType,
@@ -152,6 +153,15 @@ class UserProfile(Base):
     # ===== 접근성 =====
     accessibility_needs: Mapped[list[Accessibility] | None] = mapped_column(
         ARRAY(_pg_enum(Accessibility, "accessibility_enum"))
+    )
+
+    # ===== 인가(authorization) 역할 (SEC-07 D1 — 콘텐츠 CUD 게이팅) =====
+    # Role은 str mixin이 아니다(enums.py 참조 — 7단 선형 서열 재도입 방지를 위해 <·> 비교가
+    # TypeError). _pg_enum은 어느 Enum이든 values_callable로 값(멤버명 아님)을 쓰므로 무관하다.
+    role: Mapped[Role] = mapped_column(
+        _pg_enum(Role, "role_enum"),
+        nullable=False,
+        server_default="student",
     )
 
     # ===== 운영 메타 =====

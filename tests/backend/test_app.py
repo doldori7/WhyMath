@@ -4,22 +4,33 @@
 503)·/v1/jobs/{id}(폴링)를 검증한다. 실제 Ollama·Redis·Langfuse·Celery broker에
 의존하지 않는다 — 특히 가짜 큐를 주입해 기본 CeleryJobQueue가 broker에 닿는 것을 막는다
 (hermeticity: 큐 미주입 시 QUALITY 경로가 라이브 Redis로 ~20초 블록됨).
+
+인가(SEC-07 D1): `/v1/generate`는 이제 `CurrentUser`(인증만) 게이트가 있다. 이 파일의
+대부분 테스트는 라우팅/캐시/큐 *결선*이 목적이라 `_client()`가 `get_current_user`를 고정
+인증 사용자로 오버라이드한다(test_concepts.py의 `require_content_admin` 오버라이드 패턴과
+동형) — 인증 자체(무토큰 401)는 `TestGenerateAuthGate`가 오버라이드 없이 검증한다.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from whymath_backend.api._auth import get_current_user
 from whymath_backend.app import create_app
 from whymath_backend.config import get_settings
+from whymath_backend.db.models.user import UserProfile
+from whymath_backend.db.session import get_session
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import ModelAvailability, OllamaStatus
 from whymath_backend.l3.queue.celery_job_queue import JobStatus
+
+_FAKE_USER = UserProfile(user_id=uuid.uuid4())
 
 
 class StubProvider:
@@ -112,6 +123,7 @@ class NoPollQueue:
 
 
 def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
+    """provider/cache/trace/queue를 가짜로, get_current_user를 고정 인증 사용자로 오버라이드."""
     app = create_app(
         provider=provider,
         cache=InMemoryCache(),
@@ -119,6 +131,7 @@ def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
         # 기본적으로 가짜 큐 주입 — 라이브 broker 차단(hermetic).
         queue=queue if queue is not None else StubQueue(),
     )
+    app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
     return TestClient(app)
 
 
@@ -466,6 +479,45 @@ class TestGenerateEndpoint:
         }
         resp = client.post("/v1/generate", json=payload)
         assert resp.status_code == 422
+
+
+class TestGenerateAuthGate:
+    """SEC-07 D1 — `/v1/generate` 인가 회귀(오버라이드 없는 *실제* `get_current_user`).
+
+    이전엔 인증 의존성이 0건이라 무인증 LLM 비용 남용 표면이었다(`docs/architecture/
+    account_security_gap_review.md` D1). `CurrentUser`(인증만 — 역할 불문)로 게이팅한다.
+    """
+
+    def test_unauthenticated_post_returns_401(self) -> None:
+        app = create_app(
+            provider=StubProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(),
+        )
+
+        # get_session은 get_current_user의 형제 의존성이라 무토큰이어도 FastAPI가 먼저
+        # 해석을 시도한다 — 가짜로 오버라이드해 실 DB 엔진 진입을 막는다(전역 누수 가드
+        # OPS-07 회피, api/test_ocr_endpoint.py 선례). credentials=None이면 get_current_user가
+        # session을 실제로 쓰기 전에 401을 던지므로 더미 객체만 yield하면 충분하다.
+        async def _fake_session() -> Any:
+            yield object()
+
+        app.dependency_overrides[get_session] = _fake_session
+        client = TestClient(app)
+        payload = {
+            "request": {
+                "task_type": "explain",
+                "difficulty": "easy",
+                "requires_reasoning": False,
+                "student_subscription": "free",
+                "sync": True,
+            },
+            "prompt": "p",
+            "system": "s",
+        }
+        resp = client.post("/v1/generate", json=payload)
+        assert resp.status_code == 401
 
 
 class TestJobsEndpoint:

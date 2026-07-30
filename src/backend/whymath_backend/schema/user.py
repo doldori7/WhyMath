@@ -60,6 +60,7 @@ from whymath_backend.schema.enums import (
     MajorCategory,
     NoteApp,
     Persona,
+    Role,
     SchoolType,
     SubscriptionTier,
     TrackType,
@@ -288,6 +289,17 @@ class UserProfile(BaseModel):
     accessibility_needs: list[Accessibility] = Field(
         default_factory=list,
         description="접근성 필요 배열 — 시각약자/색약/큰글씨/음성안내/시간연장",
+    )
+
+    # ===== 인가(authorization) 역할 (SEC-07 D1 — 콘텐츠 CUD 게이팅) =====
+    role: Role = Field(
+        default=Role.STUDENT,
+        validate_default=True,
+        description=(
+            "인가 역할 v0 2값(student/content_admin) — server_default='student'가 기존 행도 "
+            "백필. `validate_default=True`: Role이 str mixin이 아니라(enums.py 참조) 기본값도 "
+            "검증 경로를 태워야 use_enum_values 직렬화가 일관된다."
+        ),
     )
 
     # ===== 운영 메타 =====

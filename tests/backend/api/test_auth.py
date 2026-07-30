@@ -1,4 +1,4 @@
-"""인증 의존성 단위테스트 — get_current_user(401)·get_consented_user(403).
+"""인증 의존성 단위테스트 — get_current_user(401)·get_consented_user(403)·require_role(403).
 
 FastAPI 의존성 함수를 *직접* 호출(Depends 메타데이터는 직접 호출 시 무시)하고, AsyncSession은
 가짜로 주입한다. 토큰은 `create_access_token` 헬퍼로 mint(HTTP 로그인 엔드포인트 없음).
@@ -15,10 +15,11 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import SecretStr
 
-from whymath_backend.api._auth import get_consented_user, get_current_user
+from whymath_backend.api._auth import get_consented_user, get_current_user, require_role
 from whymath_backend.config import Settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
 from whymath_backend.db.models.user import UserProfile
+from whymath_backend.schema.enums import Role
 from whymath_backend.security import create_access_token
 
 _SECRET = "test-secret-key-0123456789abcdef"
@@ -87,6 +88,62 @@ class TestGetCurrentUser:
                 credentials=_creds(token), session=_FakeSession(None), settings=settings  # type: ignore[arg-type]
             )
         assert exc.value.status_code == 401
+
+
+class TestActiveDeletedGate:
+    """SEC-07 D1 — 비활성(is_active=False)·삭제됨(is_deleted=True) 계정은 401.
+
+    `is_active`/`is_deleted`는 기존 컬럼이었으나 `get_current_user`가 그 첫 reader였다(그전엔
+    탈퇴·비활성 계정의 미만료 토큰이 그대로 통과했다 — account_security_gap_review.md D1).
+    """
+
+    async def test_inactive_user_raises_401(self) -> None:
+        settings = _settings()
+        uid = uuid.uuid4()
+        user = UserProfile(user_id=uid, is_active=False)
+        token = create_access_token(uid, settings=settings)
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(
+                credentials=_creds(token), session=_FakeSession(user), settings=settings  # type: ignore[arg-type]
+            )
+        assert exc.value.status_code == 401
+
+    async def test_deleted_user_raises_401(self) -> None:
+        settings = _settings()
+        uid = uuid.uuid4()
+        user = UserProfile(user_id=uid, is_deleted=True)
+        token = create_access_token(uid, settings=settings)
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(
+                credentials=_creds(token), session=_FakeSession(user), settings=settings  # type: ignore[arg-type]
+            )
+        assert exc.value.status_code == 401
+
+    async def test_active_non_deleted_user_passes(self) -> None:
+        """명시적으로 활성·비삭제인 사용자는 정상 통과(회귀 방지)."""
+        settings = _settings()
+        uid = uuid.uuid4()
+        user = UserProfile(user_id=uid, is_active=True, is_deleted=False)
+        token = create_access_token(uid, settings=settings)
+        result = await get_current_user(
+            credentials=_creds(token), session=_FakeSession(user), settings=settings  # type: ignore[arg-type]
+        )
+        assert result is user
+
+    async def test_unset_is_active_is_deleted_passes(self) -> None:
+        """직접 생성(미영속)해 컬럼이 None(미상)인 사용자는 차단하지 않는다(기존 동작 회귀 방지 —
+        `test_valid_token_returns_user`와 동일하게 `UserProfile(user_id=uid)`만으로 생성).
+        """
+        settings = _settings()
+        uid = uuid.uuid4()
+        user = UserProfile(user_id=uid)
+        assert user.is_active is None
+        assert user.is_deleted is None
+        token = create_access_token(uid, settings=settings)
+        result = await get_current_user(
+            credentials=_creds(token), session=_FakeSession(user), settings=settings  # type: ignore[arg-type]
+        )
+        assert result is user
 
 
 class TestConsentGate:
@@ -160,3 +217,34 @@ class TestDerivedMinorGateEndToEnd:
             is_minor=is_minor,
         )
         assert await get_consented_user(user=user) is user
+
+
+class TestRequireRole:
+    """SEC-07 D1 — `require_role(*roles)`: 역할 불일치 403, 일치 시 통과."""
+
+    async def test_matching_role_passes(self) -> None:
+        user = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
+        dependency = require_role(Role.CONTENT_ADMIN)
+        assert await dependency(user=user) is user
+
+    async def test_mismatched_role_raises_403(self) -> None:
+        user = UserProfile(user_id=uuid.uuid4(), role=Role.STUDENT)
+        dependency = require_role(Role.CONTENT_ADMIN)
+        with pytest.raises(HTTPException) as exc:
+            await dependency(user=user)
+        assert exc.value.status_code == 403
+
+    async def test_multiple_allowed_roles(self) -> None:
+        """가변인자로 여러 역할을 허용할 수 있다(범용성 확인 — v0은 실제 2값만 존재)."""
+        user = UserProfile(user_id=uuid.uuid4(), role=Role.STUDENT)
+        dependency = require_role(Role.STUDENT, Role.CONTENT_ADMIN)
+        assert await dependency(user=user) is user
+
+    async def test_unset_role_raises_403(self) -> None:
+        """직접 생성(미영속)해 role이 None(미상)이면 관리자 게이트는 기본 거부한다."""
+        user = UserProfile(user_id=uuid.uuid4())
+        assert user.role is None
+        dependency = require_role(Role.CONTENT_ADMIN)
+        with pytest.raises(HTTPException) as exc:
+            await dependency(user=user)
+        assert exc.value.status_code == 403

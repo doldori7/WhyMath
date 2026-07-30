@@ -8,6 +8,12 @@ get_session 의존성을 가짜 세션으로 오버라이드해 *엔드포인트
 app.py L3 테스트가 provider/cache/queue 가짜를 주입하는 것과 동형으로, 여기서는 DB 세션을
 FastAPI dependency_overrides로 가짜화한다(create_app의 L3 기본 의존성은 모두 지연이라 구성만
 으로 네트워크를 타지 않는다 — app.py docstring).
+
+인가(SEC-07 D1): POST/PATCH/DELETE는 이제 `RequireContentAdmin` 게이트가 있다. 이 파일의
+대부분 테스트는 *결선*(상태코드·직렬화·404/409/422)을 보는 것이 목적이라 `_client()`가
+`require_content_admin`을 CONTENT_ADMIN 고정 사용자로 오버라이드한다(test_users.py의
+`get_consented_user` 오버라이드 패턴과 동형) — 인증 자체는 `TestAuthGate`가 *실제* 의존성으로
+검증한다(오버라이드 없이 401/403 확인 + GET 무인증 유지 회귀).
 """
 
 from __future__ import annotations
@@ -17,16 +23,23 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 
+from whymath_backend.api._auth import require_content_admin
 from whymath_backend.app import create_app
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
-from whymath_backend.schema.enums import EdgeType
+from whymath_backend.schema.enums import EdgeType, Role
+from whymath_backend.security import create_access_token
 
 _VALID_BODY = {"code": "CAL-INT-FTC", "name_ko": "미적분학의 기본정리", "level": "단원"}
+
+_ADMIN_USER = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
 
 
 class _FakeScalars:
@@ -95,13 +108,18 @@ class FakeSession:
 
 
 def _client(fake: FakeSession) -> TestClient:
-    """get_session을 가짜로 오버라이드한 TestClient."""
+    """get_session을 가짜로, require_content_admin을 고정 관리자로 오버라이드한 TestClient.
+
+    이 파일의 테스트는 CUD *결선*(상태코드·직렬화·404/409/422)이 목적이라 인가는 항상 통과
+    시킨다 — 인가 자체의 401/403/GET-무인증 회귀는 `TestAuthGate`가 오버라이드 없이 검증한다.
+    """
     app = create_app()
 
     async def _override() -> AsyncIterator[FakeSession]:
         yield fake
 
     app.dependency_overrides[get_session] = _override
+    app.dependency_overrides[require_content_admin] = lambda: _ADMIN_USER
     return TestClient(app)
 
 
@@ -378,4 +396,87 @@ class TestConditionalGet:
         concept = _sample_concept()
         client = _client(FakeSession(get_map={concept.concept_id: concept}))
         resp = client.get(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 200
+
+
+_TEST_JWT_SETTINGS = Settings(jwt_secret_key=SecretStr("test-secret-key-0123456789abcdef"))
+
+
+class TestAuthGate:
+    """SEC-07 D1 — CUD 인가 회귀(오버라이드 없는 *실제* 의존성) + GET 무인증 유지 동결.
+
+    `require_content_admin`을 오버라이드하지 않는 별도 client를 써서 라우트 결선이 실제
+    인증·인가 체인을 타는지 확인한다(get_session만 가짜 — DB 접근 없이 인증 앞단에서
+    끝나므로 무관). `get_settings`를 고정 시크릿 `Settings`로 오버라이드해 토큰 mint(테스트)와
+    `get_current_user`의 decode(앱)가 같은 시크릿을 쓰게 한다 — 기본 `jwt_secret_key`는 빈
+    문자열(`config.py` — 환경변수 `WHYMATH_JWT_SECRET_KEY` 미설정 시 CI가 그렇다)이라 오버라이드
+    없이는 decode가 RuntimeError(500)를 던진다(`test_auth.py`의 `Settings(jwt_secret_key=...)`
+    직접호출 패턴을 TestClient 왕복용으로 이식).
+    """
+
+    def _client_real_auth(self, fake: FakeSession) -> TestClient:
+        app = create_app()
+
+        async def _override() -> AsyncIterator[FakeSession]:
+            yield fake
+
+        app.dependency_overrides[get_session] = _override
+        app.dependency_overrides[get_settings] = lambda: _TEST_JWT_SETTINGS
+        return TestClient(app)
+
+    def _token_for(self, user: UserProfile) -> str:
+        return create_access_token(user.user_id, settings=_TEST_JWT_SETTINGS)
+
+    # ── 무인증 → CUD 401(GET은 미포함 — 아래 별도 검증) ──
+    def test_unauthenticated_post_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).post("/v1/concepts", json=_VALID_BODY)
+        assert resp.status_code == 401
+
+    def test_unauthenticated_patch_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).patch(
+            f"/v1/concepts/{uuid.uuid4()}", json={"name_en": "x"}
+        )
+        assert resp.status_code == 401
+
+    def test_unauthenticated_delete_returns_401(self) -> None:
+        resp = self._client_real_auth(FakeSession()).delete(f"/v1/concepts/{uuid.uuid4()}")
+        assert resp.status_code == 401
+
+    # ── 인증됐으나 역할 불일치(STUDENT) → CUD 403 ──
+    def test_student_role_post_returns_403(self) -> None:
+        student = UserProfile(user_id=uuid.uuid4(), role=Role.STUDENT)
+        fake = FakeSession(get_map={student.user_id: student})
+        resp = self._client_real_auth(fake).post(
+            "/v1/concepts",
+            json=_VALID_BODY,
+            headers={"Authorization": f"Bearer {self._token_for(student)}"},
+        )
+        assert resp.status_code == 403
+
+    # ── CONTENT_ADMIN 실 토큰 → 정상 통과(엔드투엔드 결선 확인) ──
+    def test_content_admin_role_post_returns_201(self) -> None:
+        admin = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
+        fake = FakeSession(get_map={admin.user_id: admin})
+        resp = self._client_real_auth(fake).post(
+            "/v1/concepts",
+            json=_VALID_BODY,
+            headers={"Authorization": f"Bearer {self._token_for(admin)}"},
+        )
+        assert resp.status_code == 201, resp.text
+
+    # ── GET은 봉인 범위 밖 — 무인증 유지 회귀(과확대 방지) ──
+    def test_unauthenticated_get_single_still_public(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = self._client_real_auth(fake).get(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 200
+
+    def test_unauthenticated_get_list_still_public(self) -> None:
+        resp = self._client_real_auth(FakeSession()).get("/v1/concepts")
+        assert resp.status_code == 200
+
+    def test_unauthenticated_get_edges_still_public(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = self._client_real_auth(fake).get(f"/v1/concepts/{concept.concept_id}/edges")
         assert resp.status_code == 200
