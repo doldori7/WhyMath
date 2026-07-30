@@ -59,6 +59,6 @@ def test_provenance_audit_step_uses_module_invocation_not_bare_script() -> None:
     scripts = _backend_job_run_scripts()
     matching = [s for s in scripts if "provenance_audit" in s]
     assert matching, "provenance_audit을 언급하는 스텝이 하나도 없다."
-    assert all(_MODULE_INVOCATION in s for s in matching), (
-        f"provenance_audit 스텝이 `-m` 모듈 실행 형태가 아니다: {matching}"
-    )
+    assert all(
+        _MODULE_INVOCATION in s for s in matching
+    ), f"provenance_audit 스텝이 `-m` 모듈 실행 형태가 아니다: {matching}"

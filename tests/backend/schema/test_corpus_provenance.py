@@ -31,9 +31,7 @@ class TestPoolRequired:
         ["whymath-original", "external-sharealike", "external-licensed"],
     )
     def test_all_three_pool_values_accepted(self, value: str) -> None:
-        model = CorpusProvenanceSidecar.model_validate(
-            {"pool": value, "source_citation": "출처"}
-        )
+        model = CorpusProvenanceSidecar.model_validate({"pool": value, "source_citation": "출처"})
         assert model.pool == ContentPool(value)
 
 

@@ -1,4 +1,5 @@
-"""콘텐츠 출처·라이선스 집행 게이트 — ARCH-20 (`docs/architecture/operations_module_gap_review.md` §3 D1).
+"""콘텐츠 출처·라이선스 집행 게이트 — ARCH-20
+(`docs/architecture/operations_module_gap_review.md` §3 D1).
 
 배경
 ----
@@ -64,12 +65,13 @@ _EXIT_VIOLATIONS = 1
 
 # 코퍼스명 → 그랜드파더 사유. 사이드카 부재를 위반으로 잡지 않고 건너뛴다.
 # 항목 추가/삭제는 반드시 사유 + 추적 태스크 id를 남긴다(test_provenance_audit.py가 동결).
+_S3_11_PENDING = "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거"
 _KNOWN_GAPS: dict[str, str] = {
-    "problem_bank_conceptual_v0": "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거",
-    "problem_bank_generated_v0": "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거",
-    "problem_bank_killer_v0": "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거",
-    "problem_bank_misconception_mc_v0": "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거",
-    "problem_bank_rephrased_v0": "S3-11-problem-bank-data-card 진행 중(다른 세션, 미머지) — 랜딩 시 제거",
+    "problem_bank_conceptual_v0": _S3_11_PENDING,
+    "problem_bank_generated_v0": _S3_11_PENDING,
+    "problem_bank_killer_v0": _S3_11_PENDING,
+    "problem_bank_misconception_mc_v0": _S3_11_PENDING,
+    "problem_bank_rephrased_v0": _S3_11_PENDING,
 }
 
 _PROBLEM_RECORD_FILENAME = "problems.jsonl"
@@ -127,7 +129,8 @@ def _check_record_fields(corpus_dir: Path) -> Violation | None:
         if missing_fields:
             missing_count += 1
             if len(sample_slugs) < 3:
-                sample_slugs.append(record.get("slug") or record.get("problem_id") or f"line {line_no}")
+                identifier = record.get("slug") or record.get("problem_id") or f"line {line_no}"
+                sample_slugs.append(identifier)
 
     if missing_count == 0:
         return None
@@ -222,7 +225,9 @@ def _render_stdout(report: AuditReport) -> str:
     else:
         lines.append("위반          : 0건")
     lines.append("-" * 60)
-    verdict = "정상(exit 0)" if report.exit_code == _EXIT_OK else f"위반 발견(exit {report.exit_code})"
+    verdict = (
+        "정상(exit 0)" if report.exit_code == _EXIT_OK else f"위반 발견(exit {report.exit_code})"
+    )
     lines.append(f"결과: {verdict}")
     lines.append("=" * 60)
     return "\n".join(lines)

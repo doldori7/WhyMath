@@ -1,4 +1,5 @@
-"""코퍼스 사이드카(`_provenance.json`) 계약 — ARCH-20 (`docs/architecture/operations_module_gap_review.md` §3 D1).
+"""코퍼스 사이드카(`_provenance.json`) 계약 — ARCH-20
+(`docs/architecture/operations_module_gap_review.md` §3 D1).
 
 배경
 ----
