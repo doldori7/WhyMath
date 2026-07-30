@@ -337,6 +337,76 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (설계·계정/보안): **계정·보안 모듈 갭 점검·설계(D1~D7) + 태스크 7건 등재 — 외부 EOS 틀 모듈 46~48·후보 49~53 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『계정·보안』(모듈 46 계정 관리·47 개인정보 보호·48
+보안 + 확장 후보 49~53 RBAC/조직/기기/감사/정책 — WhyMath 전용이 아닌 일반적 EOS 틀)을 코드베이스와
+대조. `knowledge_module_gap_review.md`(07-27)·`problem_bank_gap_review.md`(07-28)·
+`solution_module_gap_review.md`(07-29)·`ai_tutor_module_gap_review.md`(07-29)에 이은 **5번째 자매편**.
+
+**판정 — 자매편 4편과 다른 형태**: 이 영역은 "약한 곳"이 아니라 **낙차가 가장 큰 곳**이다.
+모듈 47(개인정보)은 문서보다 *엄격*(18테이블 원자 삭제·이동권·AES-256-GCM 봉투 3자산 +
+**fail-closed 부팅 게이트** `_crypto.py:285`·리프레시 회전 + 재사용 탐지 패닉 취소). 그런데
+**최대 갭은 외부 문서 기능 목록에 없는 곳에 있었다** — `api/concepts.py:231/330/379`·
+`api/problems.py:44/172/219`의 **CUD가 완전 무인증**(DELETE 포함·인증 의존성 grep 0)이고
+`app.py:660` `/v1/generate`도 무인증이다. 낙차의 원인 진단: **"보안을 안 했다"가 아니라 "학생용
+보안만 했다"** — 학생 1인칭 경로(`/v1/me/*`)는 미성년 보호 요구가 처음부터 붙어 조여졌고, 운영자
+경로는 **운영자 좌석 자체가 없어서** 인가를 붙일 대상이 없었다. 결과: "학생 데이터는 암호화되는데
+그 데이터가 붙은 문제는 누구나 지울 수 있다."
+
+**정본 결정 5건**:
+1. **7단 선형 Role 서열 불채택 — 모델 자체가 우리 데이터와 모순**. `docs/legal/pipa_data_matrix.md:33-47`
+   에서 **부모 열은 학생 열의 상위가 아니라 부분집합**이다(오답 패턴·또래 비교·힌트 사용이 부모에게
+   ✕인데 학생 본인은 ●/◐). 선형 서열은 "상위가 하위를 포함"을 전제하므로 채택하면 **미성년 보호
+   매트릭스를 구조적으로 깬다** → 2차원(역할 × 데이터 항목) 매트릭스만(`04_admin_console_architecture.md`
+   §2 원칙 3-4 승계).
+2. **Role v0 = 2값 축소 확정**(`STUDENT`·`CONTENT_ADMIN`) — 정본이 제안한 5종 골격 중 좌석 없는
+   역할은 만들지 않는다(dead code 금지). `04_admin_console_architecture.md` §2 원칙 3에 축소 부기
+   (이중 진실원천 방지). 역할 추가는 마이그레이션 1줄이고 잘못 만든 역할 제거가 더 비싸다.
+3. **감사 범위 = 3종 한정 · "모든 PII 접근" 규정 정정** — 본인 조회 29 엔드포인트 전수 감사는
+   하지 않는다. **미성년 학생의 학습 조회 이력 자체가 프로파일링 자산**이 되어 보호 원칙과
+   역행한다. 감사는 ⑴반출 ⑵동의 변경 ⑶관리자 접근 = "시스템 밖으로 나가는 사건"과 "본인 아닌
+   주체의 접근"만. `deletion_audit`는 **삭제의 단일 권위 유지**(중복 기록 금지·테이블명·`deleted_at`이
+   삭제 의미에 결합). IP는 `sha256(salt+ip)` 해시만.
+4. **계정 잠금(lockout) 불채택 — rate limit + 지연으로 대체**. 미성년 학생이 자기 계정에서
+   락아웃되면 **학습 중단 = 우선순위 1(학생 웰빙) 침해**이고, SSO 전용이라 "우리 쪽 로그인 실패"는
+   provider 왕복 실패뿐이다. 비밀번호 로그인도 불채택 — **비밀번호를 만들지 않는 것**이 미성년
+   보안상 우월(자격증명 유출·재사용·피싱 표면 원천 제거). 따라서 "비밀번호 찾기" 부재는 구현
+   누락이 아니라 **구조적 무해당**이고, `passlib[bcrypt]`(선언만·사용 0)는 제거 대상.
+5. **동의 버전 원장은 문안 확정 후 — 기계장치 선행 금지**(D7 페이퍼). `ConsentScope`가
+   `service_core` 1값이고 `consent_version` grep 0인데, 문안 없는 버전 스탬프는 **writer 없는 dead
+   컬럼**이고 더 나쁘게는 **가짜 법적 의사표시**(내용 없는 동의 v1)가 된다. `enums.py:1122-1126`이
+   이미 "변호사 자문으로 확정된 뒤 추가한다"고 자백 — `StubGuardianVerifier`·`MGMT-01`과 동형
+   (CLAUDE.md "법령 유래 절차의 기계 대체 금지").
+
+**부수 발견 2건**: ⑴ **`device_credential` ≠ 로그인 세션** — 기기를 폐기해도 그 기기의 JWT는
+만료까지 유효하다. 외부 문서의 "기기 관리 = 원격 로그아웃"을 이 테이블로 충족했다고 읽으면
+**보안 착시**가 생겨 문서에 경계를 못 박았다(`SEC-10`). ⑵ **보존 파기가 집행되지 않는 상태** —
+`retention.py`·`retention_purge_cli.py`는 완비고 CLI docstring이 "실행 진입점이 없어 집행되지
+않았다 — 이 CLI가 그 표면"이라고 쓰여 있는데, **그 CLI를 부르는 스케줄이 grep 0**이다("존재함 ≠
+돌아감" — OPS-03/08/10/11과 같은 반복 부류).
+
+**산출**: `docs/architecture/account_security_gap_review.md` 신설(§0 스냅샷·§1 crosswalk 46~48 +
+후보 49~53·§2 의도적 미채택 10건·§3 설계 D1~D7·§4 정직한 공백 9종·§5 유보 발화조건 9건·부록
+실측 근거) + backlog **7건 CLI 등재**(`SEC-07-unauthenticated-write-seal-role-v0`[p1]·
+`SEC-08-auth-surface-ratelimit-oauth-hardening`[p1]·`SEC-09-privacy-audit-export-consent`·
+`SEC-10-session-visibility-global-logout`·`SEC-11-log-pii-secret-scrubber`·
+`SEC-12-retention-purge-schedule-wiring`·`MGMT-02-terms-privacy-policy-counsel`[owner=kiki·blocked·
+unblock=공개 β 준비 착수], validate green **131건**) + 정본 3곳 개정(`security_privacy.md` 4절
+편집자 부기[폐기된 PII 3테이블·부모/교사 좌석 0·감사 규정 정정·후속 항목 백로그 배치] ·
+`ROADMAP.md` 계정·보안 축 신설[전 281줄에 키워드 **0건**이었음] · `04_admin_console_architecture.md`
+§2 원칙 3 v0 축소 부기).
+
+**NOT**: 코드 변경 0(`git diff -- src/` 빈 결과 — 설계+등재+정본 개정만, 구현은 `/drive`가 태스크로
+이어받음). 7단 선형 서열·이메일/비밀번호 로그인·QR 로그인·OTP/SMS 2FA·동시 로그인 제한·계정 잠금·
+계정 상태 5종 상태기계·보안 정책 런타임 편집·학생 IP 화이트리스트·SQLi/XSS/Bot 자동 탐지는 협상
+불가 불변식 근거로 **의도적 미채택**(§2 10건). TLS 종단·Google/Apple/MS 로그인·KMS/HSM·프로필 PII
+암호화·익명화·ISMS-P·Admin BFF·조직 테넌시·액세스 TTL 15분은 실행하지 않고 발화조건만 기록(§4·§5).
+`backlog/gates.yaml`에 법무 게이트 **0건**임을 지적했으나 `gates` 서브커맨드에 `add`가 없어
+**손편집하지 않았다**(CLAUDE.md 거부 우회 금지·HARN-06 선례) — 게이트 승격은 공개 β 결정 시점.
+
+정본: `docs/architecture/account_security_gap_review.md`.
+
 ### 2026-07-29 (설계·AI 튜터): **AI 튜터 모듈 갭 점검·설계(D1~D6) + 태스크 4건 등재 — 외부 EOS 틀 기능 37~41 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『AI Tutor』(기능 37~41: 대화형 AI 튜터·Socratic
