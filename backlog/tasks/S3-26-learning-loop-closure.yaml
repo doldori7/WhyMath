@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-26-learning-loop-closure
+title: "학습 루프 닫힘 — 정답 서버검증→attempt 적재→다음 문항 진행"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - S3-02-input-verify-contract
+requires_gates: []
+acceptance:
+  - "정답 판정을 서버(코어)가 verify 프리미티브로 수행(클라 미판정)해 ProblemAttempt 적재 + 완료 신호 노출"
+  - 정답 완료 후 클라가 next-problem 재요청·다음 문항 전환
+  - 같은 학생 재사용 시 이미 정답한 문제 NOT IN 제외
+artifacts:
+  - a178ce10
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/mobile/lib/features/**"
+session: null
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-09, 원 커밋 5041487/479163a) — main이 S3-09 번호를 이미 다른 작업에 재사용해 재채번. 검증: 백엔드 ruff/black/mypy(strict)/lint-imports clean, pytest 전체(통합 제외) 7860 passed, WHYMATH_RUN_INTEGRATION=1로 test_me_integration 26 passed(신설 진행-구동 테스트 포함), --cov-fail-under=70 게이트 통과(7861 passed/262 skipped). 모바일 flutter analyze 이슈 0, flutter test 242 passed(신규 16건: controller 7 + api 5 + flow 4). 커밋 a178ce10."
+updated: 2026-07-30
