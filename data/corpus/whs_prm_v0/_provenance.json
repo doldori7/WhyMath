@@ -1,9 +1,13 @@
 {
+  "pool": "whymath-original",
   "corpus_name": "whs_prm_v0",
   "generated": "2026-07-14",
   "generation_method": "WH-S corpus replay 배치(whymath_backend.whs.corpus_replay) — 생성 코퍼스의 검증 단계 체인을 실제 WH-S 하네스(run_solver)로 replay해 solution_nodes에 라벨 적재 후 prm_builder_export_cli --stream으로 export",
   "record_count": 1282,
-  "label_counts": {"good": 663, "bad": 619},
+  "label_counts": {
+    "good": 663,
+    "bad": 619
+  },
   "problems_covered": 620,
   "source": {
     "corpus": "data/corpus/problem_bank_generated_v0/problems.jsonl (620문·verify.solution_steps)",

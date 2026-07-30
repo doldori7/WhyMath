@@ -1240,3 +1240,23 @@ class PedagogyStrategy(str, Enum):
 
     VISUALIZATION = "VISUALIZATION"
     """시각화 — 그림·그래프 등 시각 표현을 앞세운다(렌더 intent는 L5 시각화 명세로)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 콘텐츠 풀 분리 (ARCH-20 — docs/legal/copyright_gradient.md §4.2 집행)
+# ──────────────────────────────────────────────────────────────────────────
+class ContentPool(str, Enum):
+    """코퍼스 사이드카(`_provenance.json`)의 `pool` 필드 — 3종 폐쇄(§4.2 원문 그대로).
+
+    Share-Alike 의무가 있는 콘텐츠가 자체 저작 풀에 "전염"되는 것을 막기 위한 물리·논리
+    분리 경계. 값 자체가 정본(`copyright_gradient.md` §4.2) — 추가는 그 문서 개정을 전제한다.
+    """
+
+    WHYMATH_ORIGINAL = "whymath-original"
+    """자체 저작 + 공공누리 등 등급1(Share-Alike 의무 없음) 사실정보 소스 — 현재 전 코퍼스."""
+
+    EXTERNAL_SHAREALIKE = "external-sharealike"
+    """CC BY-SA 등 등급2 — Share-Alike 의무. 자체 풀과 물리·논리 분리 관리 필수."""
+
+    EXTERNAL_LICENSED = "external-licensed"
+    """등급3 협상 타결분 — 계약 범위 내에서만 사용."""

@@ -177,6 +177,24 @@ done 필터가 정상 작동). 그 브랜치 diff 실측 결과 문제은행 v0 
   미영속" 사실 자체를 리포트에 명시하는 것으로 1단계는 충분. 실제 영속이 필요해지는 시점
   (감사·재현성 요구 발생)에 별도 판단.
 
+**구현 완결 기록(2026-07-30, `ARCH-20`)**: 위 설계를 그대로 구현했다. 다만 실제 코퍼스 19개를
+전수 조사해 이질성을 재확인한 뒤(설계 단계의 "기존 v1 뱅크 키 정본화"보다 훨씬 자유로운 형태 —
+`corpus_name`조차 3/19만 보유) `schema/corpus_provenance.py`의 계약을 **최소 공통분모**로
+좁혔다: `pool` 필수 + `source_citation`/`license_notice` 중 최소 1건, `extra="allow"`(코퍼스별
+자유 서술은 갈아엎지 않음 — 과공학 회피). `pool: "whymath-original"`을 실존 사이드카 19개
+전부에 백필(전량 자체생성/NCIC 공공누리1유형 사실정보 인용 — Share-Alike 오염 사례 없음).
+CI 배선은 `policy-guard`가 아니라 `backend` 잡에 넣었다 — `policy-guard`는 Python 셋업이
+없고 문자열 grep 전용이라, 이미 Pydantic·백엔드 의존성이 설치된 `backend` 잡의 기존 게이트
+스텝(`defect_detection_eval` 등) 뒤에 자연스럽게 이어 붙였다. 그랜드파더 목록(`_KNOWN_GAPS`)으로
+S3-11이 다루는 문제은행 v0 5종의 사이드카 부재를 신규 위반으로 재선언하지 않는다(사유 명시,
+S3-11 랜딩 시 수동 제거 — HARN-10류 grandfather 선례 동형). **변별력 실측**: 백필 전 CLI
+실행 → exit 1·위반 19건(전 코퍼스 `pool` 결손) → 백필 후 재실행 → exit 0. 테스트 22건 신규
+(`tests/backend/schema/test_corpus_provenance.py` 10 · `tests/backend/ops/test_provenance_audit.py`
+12) + `tests/infra/test_provenance_audit_wiring.py` 2건(배선 실재성). 부수 발견: 도크스트링에
+`concept_graph_v1`을 예시로 직접 언급했더니 `test_legacy_snapshot_governance.py`의 AST
+문자열-리터럴 스캐너(주석 제외를 표방하나 docstring은 걸러내지 못함)가 오탐 — 일반화된
+표현으로 재작성해 해소(검사기 자체는 이 태스크 범위 밖이라 손대지 않음).
+
 ### D2. QA 파이프라인 오케스트레이터 (`ARCH-21` 신규)
 
 **갭**: §1 모듈 45 — 38개 harness 검사 모듈이 각자 CLI로 흩어져 있고 이들을 조립해 단일

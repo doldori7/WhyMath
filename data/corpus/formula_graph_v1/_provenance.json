@@ -1,4 +1,5 @@
 {
+  "pool": "whymath-original",
   "source_file": "formulas.jsonl",
   "source_sha256": "54a168edb9eeb645dad59d713f1fdba741f2cb58eec6396266926108c5231d25",
   "source_citation": "canonical 수식 택소노미: 와이매스 자체작성(수학적 사실·표준 표기·교과서/기출 본문 미포함).",

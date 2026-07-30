@@ -260,6 +260,12 @@ jobs:
       - name: 게이트 — 표기 커버리지 (notation_coverage·코퍼스 표기 ⊆ 지원 표기)
         run: python -m whymath_backend.l3.notation_coverage
 
+      # ARCH-20: 콘텐츠 출처·라이선스 집행 게이트 — copyright_gradient.md §4.2가 명령한
+      # pool 필드 차단을 실제로 CI에 배선(2026-07-29 실측 전 집행 지점 0건 확인 후 신설).
+      # 코퍼스 루트는 CLI가 __file__ 기준으로 자가 탐지(cwd=src/backend 무관 — parents[4]).
+      - name: 게이트 — 콘텐츠 출처·라이선스 집행 (provenance_audit·pool 필드 + 사이드카 계약)
+        run: python -m whymath_backend.ops.provenance_audit
+
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
