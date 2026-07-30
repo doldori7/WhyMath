@@ -337,6 +337,42 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (구현·ARCH-20): **콘텐츠 출처·라이선스 집행 게이트 — pool 필드 신설·19개 사이드카 백필·CI 배선 + pytest-asyncio 무상한 pin 회귀 발견(ARCH-22 등재)** (claude 구현, Kiki "ARCH-20 착수")
+
+**구현**: `copyright_gradient.md` §4.2가 명령한 `pool` 필드 집행 게이트가 실제로 0건이었던
+공백을 상환. `ContentPool` enum(3종: whymath-original/external-sharealike/external-licensed,
+§4.2 원문 그대로) + `schema/corpus_provenance.py`(`CorpusProvenanceSidecar` — `pool` 필수 +
+`source_citation`/`license_notice` 중 최소 1건, `extra="allow"`) + `ops/provenance_audit.py`
+(코퍼스 전수 감사 CLI, exit 0/1) 신설. 실 사이드카 19개 전수 조사 결과 이질성이 극심함을
+확인(`corpus_name`조차 3/19만 보유) — 단일 엄격 스키마 강제 대신 **최소 공통분모만** 계약화
+(과공학 회피). 19개 전부에 `pool: whymath-original` 백필(전량 자체생성/NCIC 공공누리1유형
+사실정보 — Share-Alike 오염 사례 현재 0). CI는 `policy-guard`(Python 셋업 없음)가 아니라
+`backend` 잡의 기존 게이트 스텝(`defect_detection_eval` 등) 뒤에 배선. 그랜드파더 목록으로
+`S3-11-problem-bank-data-card`(다른 미머지 브랜치에서 진행 중)의 문제은행 v0 5종 사이드카
+부재를 신규 위반으로 재선언하지 않음(사유 명시, HARN-10류 grandfather 선례).
+
+**변별력 실측**: 백필 전 CLI 실행 → exit 1(19건 SCHEMA_INVALID, 전 코퍼스 `pool` 결손) →
+백필 후 재실행 → exit 0. 테스트 24건 신규(schema 10·ops CLI 12·CI 배선 실재성 2). 구현 중
+`schema/corpus_provenance.py` 도크스트링이 예시로 든 코퍼스명이 `test_legacy_snapshot_
+governance.py`의 AST 문자열-리터럴 스캐너(docstring 오탐 방지가 안 되는 축)에 걸려 일반화된
+표현으로 재작성해 해소(검사기 자체는 범위 밖이라 손대지 않음).
+
+**부수 발견·등재(ARCH-22, priority 1)**: 백엔드 소스를 건드렸으므로 CLAUDE.md 규칙대로 전체
+백엔드 스위트를 실행했더니 **575 failed·4 errors**(거의 전부 "requested an async fixture ...
+with no plugin or hook that handled it" — `pytest-asyncio` async fixture 미처리). 회귀인지
+확정하기 위해 `git worktree add`로 origin/main HEAD(`0d9d7925`)를 별도 체크아웃해 동일 venv로
+전체 스위트를 재실행하고 실패 테스트 ID 집합을 `sort`+`diff` — **완전히 동일한 579줄(575
+FAILED+4 ERROR), diff 0**. ARCH-20 변경과 무관한 순수 의존성 드리프트임을 확정(내 브랜치는
+신규 테스트 22건이 추가로 통과해 7248 passed, main은 7226 passed — 그 차이뿐). 근본 원인:
+`pyproject.toml`의 `pytest-asyncio>=0.24.0`에 **상한이 없어** 최근 릴리즈된 1.4.0이 딸려오며
+호환성이 깨짐 — CLAUDE.md "의존성 pin은 검증된 메이저 범위로 상한을 건다"(langfuse 선례) 위반
+사례. 조용히 넘기지 않고 `ARCH-22-pytest-asyncio-unpinned-break`(priority 1)로 즉시 등재 —
+ARCH-20 자체는 회귀 0으로 확정됐으므로 별도 태스크로 분리(원인이 다른 문제를 같은 PR에
+번들링하지 않는다).
+
+**검증**: `backlog.py validate` green(127건) · 하네스 무관 · CI `backend` 잡 배선 실재성
+테스트로 "존재함≠돌아감" 방지.
+
 ### 2026-07-29 (설계·근접중복회피·운영 모듈): **운영(EOS) 모듈 갭 점검·설계 D1~D2 — 외부 EOS 틀 기능 42~50 대조 + S3-11 근접 중복 착수 회피(HARN-11 재실측)** (claude 설계·등재, Kiki 제공 문서)
 
 **컨텍스트**: Kiki가 일반적 EOS 틀 문서(『0단계 운영(EOS)』 42~45: 콘텐츠 저작권·출처·관리자
