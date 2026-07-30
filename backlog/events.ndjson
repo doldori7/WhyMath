@@ -1120,3 +1120,6 @@
 {"ts": "2026-07-30T09:11:56", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-01-unified-learning-path-difficulty-axis"}
 {"ts": "2026-07-30T09:12:11", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-02-transitive-edge-order-budget"}
 {"ts": "2026-07-30T09:12:27", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-03-me-tab-learning-path-view"}
+{"ts": "2026-07-30T13:32:35", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-04-exam-calendar-season-skeleton-corpus"}
+{"ts": "2026-07-30T13:34:20", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-04-exam-calendar-season-skeleton-corpus"}
+{"ts": "2026-07-30T13:34:42", "actor": "claude/whymath-learning-path-design-gvku5q", "action": "add", "id": "PATH-05-season-plan-derivation"}

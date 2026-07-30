@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-05-season-plan-derivation
+title: "시즌 플랜 파생 엔진 — GET /v1/me/season-plan (국면 인식 + 과목 축 범위 배분·테이블 0)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - PATH-04-exam-calendar-season-skeleton-corpus
+  - PATH-01-unified-learning-path-difficulty-axis
+requires_gates: []
+acceptance:
+  - "①GET /v1/me/season-plan 신설 — 파생·읽기 전용. 입력 = target_exam_date + PATH-04 코퍼스 + BKT/IRT 진단 + 성취기준 코드의 과목 축. 출력 = 현재 국면 + 그 국면의 범위 배분(성취기준 코드 집합) + 우선순위. study_plan 테이블·마이그레이션 신설 0을 리뷰 게이트로 확인(§2-④ 경로는 상태가 아니라 파생 — FR-010은 엔티티를 요구하지 않았다)"
+  - "②과목 축은 신규 백필 없이 achievement_standard_codes 파싱으로 얻는다(실측: 2,647건 100% 보유·코드가 과목·학년 내장·problem.subject는 전량 '공통'으로 무용). 배분 규칙은 신규 알고리즘 0 — 약점 우선 + 선수 위상 순서로 order_learning_path(PATH-01 통합 좌석)를 국면별 범위로 스코프해 재사용"
+  - "③★반게임화 동결 — 잔여 일수를 카운트다운·초조 연출·독촉에 쓰지 않음을 테스트로 동결(00_index.md:41 불변식 2가 '카운트다운 금지' 명시). 시간은 배분 계산의 내부 입력으로만 쓰고 학생 대면 표현은 국면+범위로만('수능까지 D-97' 금지 → '6월 모평 대비 구간, 이 범위를 다진다'). 점수·등급·합격 예측 필드 부재도 함께 동결(§2-②)"
+  - "④내신 구간(4월·6말~7월)은 range_scope 빈 상태를 정직하게 노출 — 차원 6 데이터 부재를 가짜 배분으로 덮지 않음. 목표 성취기준 커버리지는 S4-18과 이중 산출하지 않고 재사용(단일 진실원천)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "2026-07-30 learning_path_module_gap_review.md D8. FR-010 P0 기능 착지 — 단 study_plan 엔티티 불채택은 유지(§2-⑤): PRD는 '시즌별 학습 플랜 자동 생성'을 요구했고 엔티티를 요구하지 않았으므로 파생 구현이 기능과 불채택을 동시에 성립시킨다(두 정본 화해 지점). depends: PATH-04는 국면·범위 데이터 선결, PATH-01은 통합 경로 좌석 재사용. 주간·일일 단위 쪼개기는 범위 밖(수요 미관측 + §2-⑥ 학습시간 신호 요구)."
+updated: 2026-07-30
