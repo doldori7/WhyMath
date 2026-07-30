@@ -5,16 +5,17 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "pyproject.toml의 pytest-asyncio>=0.24.0(상한 없음)에 검증된 메이저 상한을 건다(langfuse>=2.50,<5 선례 동형) — 현재 활성 장애가 아니라 예방적 조치. 배경(2026-07-30 정정): 이 세션의 로컬 컨테이너 venv에서 pip install -e '.[dev]' 시 pytest-asyncio 1.4.0이 해석돼 async fixture 처리가 깨지며 575 failed·4 errors가 재현됐다(origin/main worktree와 diff 0으로 로컬 환경 한정임은 확인). 그러나 **실 GitHub Actions CI**(PR #648, run 30528307807 — 동일 무상한 pin, 동일 pip install 커맨드)에서는 backend 잡의 Pytest 단계가 21분간 정상 green(2026-07-30T08:53~09:14) — 실 CI는 이 문제를 겪지 않는다. 즉 활성 장애가 아니라 **미래 드리프트 리스크**(pip 해석 시점에 따라 CI가 예고 없이 깨질 수 있음)로 성격을 낮춘다. 상한 pin으로 이 리스크 자체를 제거."
-artifacts: []
+artifacts:
+  - bc994749
 paths:
   - src/backend/pyproject.toml
-session: claude/arch-22-pytest-asyncio-pin
+session: null
 notes: "docs/architecture/operations_module_gap_review.md ARCH-20 구현 중 로컬 전체 백엔드 스위트 실행에서 발견(2026-07-30, priority 1로 최초 등재) → 같은 날 PR #648 실 CI 결과로 '활성 장애 아님' 확정, priority 4로 정정(하향)·설명 재작성. 최초 등재 사유(회귀 아님 확인 방법: git worktree add로 origin/main 별도 체크아웃 후 동일 venv 재실행·diff 0)는 여전히 유효하나, '575건 동시 실패'라는 프레이밍이 실 CI 상태를 오도했었다 — CLAUDE.md '환경 사실의 추론 등재 금지'(로컬 재현을 전체 정상/비정상 상태로 확대 해석 금지) 원칙에 따라 실측(PR #648 CI green) 확인 즉시 정정. **근본 메커니즘 확정(2026-07-30 후속 세션 재확인)**: 로컬 재현이 실 CI와 갈린 이유는 pip 해석 시점 차이가 아니라 **pytest invocation 방식 차이**였다 — pytest의 rootdir/inifile 탐색은 *명시 경로 인자*가 있으면 그 경로(예 `../../tests/backend/...`)의 조상 디렉터리에서 설정파일을 찾는데, 저장소 루트에는 `pyproject.toml`이 없어(`tests/backend`↔`src/backend`가 형제 디렉터리) 탐색이 실패해 `asyncio_mode`가 기본값(strict)으로 폴백한다. 반면 CI(`ci.yml` backend 잡)는 `working-directory: src/backend`에서 **경로 인자 없이** bare `pytest`만 호출 — 이 경우 cwd 자체에서 `pyproject.toml`을 즉시 발견해 `configfile: pyproject.toml`·`asyncio_mode=auto`가 정상 적용된다. 재검증: 동일 venv(pytest-asyncio 1.4.0 무상한)를 CI와 동일하게 `cd src/backend && pytest`(경로 인자 0)로 재실행 → **7847 passed, 0 failed**(실패 0 — 명시 경로 인자로 돌렸을 때만 재현되던 579건 실패가 사라짐). 이번 pin(`<2`) 적용 후에도 동일 방식 재검증 → **7847 passed, 0 failed** 동일 — pin은 동작 변화 없는 순수 예방 조치임을 확인. 교훈: 로컬 재현 시 **CI가 실제로 호출하는 커맨드·cwd를 그대로 재현**해야 하며, 그렇지 않으면 재현 자체가 별도의 아티팩트를 만든다(이번 사례가 그 구체 반례)."
 updated: 2026-07-30
