@@ -3,22 +3,38 @@
 test_concepts_integration.py와 동일 게이트(`@integration`·`WHYMATH_RUN_INTEGRATION=1`·PG
 도달성 skip). POST→GET→목록(subject 필터)이 실 PG에서 HTTP→get_session→PG로 왕복하는지 검증.
 설정/정리는 독립 엔진으로(전역 캐시 엔진 루프 충돌 회피).
+
+인가(SEC-07 D1): CUD(POST/PATCH/DELETE)는 이제 `Role.CONTENT_ADMIN` 인증이 필요하다.
+`test_concepts_integration.py`와 동일 패턴(`admin_auth` 픽스처 — 실 PG에 CONTENT_ADMIN
+UserProfile 행 적재 + `get_settings` 고정 시크릿 오버라이드로 토큰 mint/decode 일치).
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.app import create_app
-from whymath_backend.config import Settings
+from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.user import UserProfile
+from whymath_backend.schema.enums import Persona, Role
+from whymath_backend.schema.user import UserProfile as UserProfileSchema
+from whymath_backend.security import create_access_token
 
 pytestmark = pytest.mark.integration
+
+_JWT_SECRET = "problems-integration-jwt-secret-0123456789ab"
+
+
+def _jwt_settings() -> Settings:
+    return Settings(jwt_secret_key=SecretStr(_JWT_SECRET))
 
 
 def _body(subject: str = "미적분") -> dict[str, object]:
@@ -41,6 +57,58 @@ async def _pg_reachable() -> bool:
         return False
     finally:
         await engine.dispose()
+
+
+async def _insert_content_admin(user_id: uuid.UUID) -> None:
+    """CONTENT_ADMIN UserProfile 행을 실 PG에 적재(get_current_user의 실 로드 대상)."""
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add(
+                UserProfile.from_schema(
+                    UserProfileSchema(
+                        user_id=user_id,
+                        persona_primary=Persona.A_일반고고3,
+                        role=Role.CONTENT_ADMIN,
+                    )
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _delete_user(user_id: uuid.UUID) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM user_profile WHERE user_id = :uid"),
+                {"uid": str(user_id)},
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+def admin_auth() -> Iterator[dict[str, str]]:
+    """CONTENT_ADMIN 사용자를 실 PG에 만들고 `Authorization` 헤더를 yield(테스트 후 정리)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+    admin_id = uuid.uuid4()
+    asyncio.run(_insert_content_admin(admin_id))
+    token = create_access_token(admin_id, settings=_jwt_settings())
+    try:
+        yield {"Authorization": f"Bearer {token}"}
+    finally:
+        asyncio.run(_delete_user(admin_id))
+
+
+def _app_with_jwt_settings() -> TestClient:
+    """get_settings만 고정 시크릿으로 오버라이드(get_session은 실 PG 그대로)."""
+    app = create_app()
+    app.dependency_overrides[get_settings] = _jwt_settings
+    return TestClient(app)
 
 
 async def _delete_problem(problem_id: uuid.UUID) -> None:
@@ -82,14 +150,12 @@ async def _delete_steps(problem_id: uuid.UUID) -> None:
         await engine.dispose()
 
 
-def test_problem_crud_roundtrip_on_live_pg() -> None:
+def test_problem_crud_roundtrip_on_live_pg(admin_auth: dict[str, str]) -> None:
     """POST→GET→subject 목록이 실 PG에서 왕복한다."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     problem_id: str | None = None
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             created = client.post("/v1/problems", json=_body())
             assert created.status_code == 201, created.text
             payload = created.json()
@@ -113,14 +179,12 @@ def test_problem_crud_roundtrip_on_live_pg() -> None:
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))
 
 
-def test_problem_steps_nested_read_on_live_pg() -> None:
+def test_problem_steps_nested_read_on_live_pg(admin_auth: dict[str, str]) -> None:
     """GET /problems/{id}/steps가 step_order 순으로 실 PG에서 반환·404·빈 relations."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     problem_id: str | None = None
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
             # 단계 2건을 역순(2→1)으로 삽입 → 엔드포인트가 step_order로 정렬하는지 확인
             asyncio.run(_insert_step(uuid.UUID(problem_id), 2, "둘째 단계"))
@@ -143,15 +207,13 @@ def test_problem_steps_nested_read_on_live_pg() -> None:
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))
 
 
-def test_problem_patch_delete_roundtrip_on_live_pg() -> None:
+def test_problem_patch_delete_roundtrip_on_live_pg(admin_auth: dict[str, str]) -> None:
     """POST→PATCH→GET→DELETE(204)→GET(404)이 실 PG에서 왕복."""
-    if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
-
     problem_id: str | None = None
     deleted = False
     try:
-        with TestClient(create_app()) as client:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
             problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
 
             patched = client.patch(f"/v1/problems/{problem_id}", json={"answer": "42"})
@@ -166,4 +228,31 @@ def test_problem_patch_delete_roundtrip_on_live_pg() -> None:
             assert client.get(f"/v1/problems/{problem_id}").status_code == 404
     finally:
         if problem_id is not None and not deleted:
+            asyncio.run(_delete_problem(uuid.UUID(problem_id)))
+
+
+def test_problem_post_without_auth_returns_401_on_live_pg() -> None:
+    """SEC-07 D1 — 실 PG 경로에서도 무인증 POST는 401."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    with TestClient(create_app()) as client:
+        resp = client.post("/v1/problems", json=_body())
+        assert resp.status_code == 401
+
+
+def test_problem_get_without_auth_still_public_on_live_pg(admin_auth: dict[str, str]) -> None:
+    """SEC-07 D1 — GET은 실 PG 경로에서도 무인증 유지(봉인 범위 과확대 방지 회귀)."""
+    problem_id: str | None = None
+    try:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
+            problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
+
+            with TestClient(create_app()) as anon_client:
+                resp = anon_client.get(f"/v1/problems/{problem_id}")
+                assert resp.status_code == 200
+                assert resp.json()["problem_id"] == problem_id
+    finally:
+        if problem_id is not None:
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))

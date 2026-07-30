@@ -17,6 +17,11 @@ PG 행을 직접 만지지 않고 검증된 Pydantic 모델만 주고받는다.
 하며(검정교과서·EBS 본문 복제 금지) — 이 불변식은 schema.Concept 검수 단계 책임이고 이
 라우터는 이미 검증된 모델을 영속화할 뿐이다.
 
+인가(SEC-07 D1): POST/PATCH/DELETE 3개는 `RequireContentAdmin`(`Role.CONTENT_ADMIN`)로
+게이팅한다 — 이전엔 인증 의존성이 0건이라 누구나 개념을 생성·수정·삭제할 수 있었다(실측
+`docs/architecture/account_security_gap_review.md` D1). GET(단건·목록·엣지·의미검색)은
+*무인증 유지*(공개 카탈로그·현 클라·데모 경로 파괴 금지 — 봉인 범위 과확대 방지).
+
 의미검색(S0-4a — runtime truth source=원자 전환): `GET /v1/concepts/search`가 적재된 *원자*
 임베딩(`atom_embedding` pgvector·Phase 2b)을 조회하고, 잡힌 원자 code들의 안전 메타(name_ko·
 subject_area·review_status)를 `atom_node`(PG 프로젝션·Phase 2a) 조인으로 enrich한다.
@@ -47,6 +52,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._auth import RequireContentAdmin
 from whymath_backend.api._concurrency import (
     ensure_if_match,
     etag_for,
@@ -235,9 +241,9 @@ async def search_concepts_endpoint(
     summary="개념 노드 생성",
 )
 async def create_concept(
-    body: ConceptSchema, session: SessionDep, response: Response
+    body: ConceptSchema, session: SessionDep, response: Response, admin: RequireContentAdmin
 ) -> ConceptSchema:
-    """검증된 schema.Concept를 영속화하고 복원해 반환한다(201).
+    """검증된 schema.Concept를 영속화하고 복원해 반환한다(201). `Role.CONTENT_ADMIN` 전용.
 
     `code`는 UNIQUE이므로 중복이면 PG가 IntegrityError를 던진다 → 롤백 후 **409**로
     명확히 보고한다(스택트레이스 노출 금지 — 시스템 경계 검증). commit은 핸들러 책임이며
@@ -333,9 +339,11 @@ async def patch_concept(
     body: dict[str, Any],
     session: SessionDep,
     response: Response,
+    admin: RequireContentAdmin,
     if_match: Annotated[str | None, Header()] = None,
 ) -> ConceptSchema:
     """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식을 유지한다.
+    `Role.CONTENT_ADMIN` 전용.
 
     `concept_id`(PK)는 경로로 고정(본문이 덮어쓰지 못함). 없으면 404, 병합 결과가 스키마
     위반(미정의 필드·잘못된 값)이면 422, `code` UNIQUE 충돌이면 409. **낙관적 동시성**:
@@ -380,9 +388,11 @@ async def patch_concept(
 async def delete_concept(
     concept_id: uuid.UUID,
     session: SessionDep,
+    admin: RequireContentAdmin,
     if_match: Annotated[str | None, Header()] = None,
 ) -> Response:
     """개념 삭제 — 없으면 404. 이 개념을 참조하는 엣지·매핑이 있으면 FK 위반 → 409.
+    `Role.CONTENT_ADMIN` 전용.
 
     cascade를 ORM에 두지 않았으므로(가짜 cascade 금지) 참조가 있으면 삭제를 거부한다.
     `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).
