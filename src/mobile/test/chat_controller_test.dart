@@ -479,4 +479,111 @@ void main() {
       expect(fake.lastProblemId, 'prob-99');
     });
   });
+
+  // S3-30(원 S3-14) — 코치 dialogue가 문제 간에 리셋되지 않던 버그의 회귀 방어.
+  //
+  // 실기기 내비게이션(코치→"다음 문제로"→풀이 시작→코치)에서 컨트롤러 autoDispose 리셋이
+  // 신뢰성 있게 일어나지 않아, 새 문제 B의 발화가 이전 문제 A의 dialogue에 append되던 버그를
+  // 명시적 문제별 리셋으로 바로잡는다. 활성 문제(activeProblemProvider)를 바꿔 가며 create/turn
+  // 분기와 대화 비움·problemId 저장을 관측한다. activeProblem은 legacy StateProvider라 `.notifier`
+  // 로 값을 직접 바꾼다(진단→문제제시가 세팅하는 흐름을 테스트에서 재현).
+  group('ChatController 문제 전환 시 세션 리셋 (S3-30, 원 S3-14)', () {
+    Problem prob(String id) => Problem(
+          problemId: id,
+          sourceType: '자체생성',
+          subject: '미적분',
+          unitCodes: const <String>['CAL'],
+        );
+
+    test('문제가 바뀌면 새 세션(createSession)으로 강제하고 이전 대화를 비운다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // ① 문제 A 활성 → 첫 발화 = createSession(problemId=A)·problemId·dialogueId 확보.
+      container.read(activeProblemProvider.notifier).state = prob('prob-A');
+      await notifier.send('A 첫 발화');
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 0);
+      expect(fake.lastProblemId, 'prob-A');
+      expect(container.read(chatControllerProvider).problemId, 'prob-A');
+      expect(
+        container.read(chatControllerProvider).dialogueId,
+        'test-dialogue',
+      );
+
+      // ② 같은 A로 다시 발화 = addTurn(새 세션 아님·회귀 0).
+      await notifier.send('A 두 번째 발화');
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 1);
+      // A 대화 누적: student·coach·student·coach = 4.
+      expect(container.read(chatControllerProvider).messages.length, 4);
+      expect(container.read(chatControllerProvider).problemId, 'prob-A');
+
+      // ③ 문제 B로 전환 후 발화 = createSession(problemId=B)·addTurn 아님·이전 대화 비움.
+      container.read(activeProblemProvider.notifier).state = prob('prob-B');
+      await notifier.send('B 첫 발화');
+      expect(fake.createCalls, 2); // 새 세션 생성됨.
+      expect(fake.turnCalls, 1); // addTurn은 증가하지 않는다.
+      expect(fake.lastProblemId, 'prob-B');
+
+      final state = container.read(chatControllerProvider);
+      expect(state.problemId, 'prob-B');
+      // 이전 A 대화는 사라지고 B의 새 대화만 남는다: student(B)·coach(B) = 2.
+      expect(state.messages.length, 2);
+      expect(state.messages[0].role, ChatRole.student);
+      expect(state.messages[0].text, 'B 첫 발화');
+      expect(state.messages[1].role, ChatRole.coach);
+    });
+
+    test('풀이 제출(sendSolution)도 같은 문제 전환 리셋을 탄다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      container.read(activeProblemProvider.notifier).state = prob('prob-A');
+      await notifier.sendSolution('x=1\nx=2');
+      expect(fake.lastProblemId, 'prob-A');
+
+      // 문제 B로 전환 후 풀이 제출도 새 세션으로 나가야 한다(공통 경로 리셋).
+      container.read(activeProblemProvider.notifier).state = prob('prob-B');
+      await notifier.sendSolution('y=3\ny=4');
+      expect(fake.createCalls, 2);
+      expect(fake.lastProblemId, 'prob-B');
+      expect(container.read(chatControllerProvider).problemId, 'prob-B');
+    });
+
+    test('자유 대화(활성 문제 없음)는 problemId null·append 유지(회귀 0)', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // 활성 문제가 없으면 problemId는 계속 null이라 전환으로 보지 않는다.
+      await notifier.send('자유 질문 1');
+      await notifier.send('자유 질문 2');
+
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 1);
+      expect(container.read(chatControllerProvider).problemId, isNull);
+    });
+
+    test('자유 대화 중 문제가 활성화되면 그 첫 발화는 새 세션으로 묶인다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // 자유 대화로 세션이 먼저 생긴 뒤(problemId null),
+      await notifier.send('그냥 궁금해서요');
+      expect(container.read(chatControllerProvider).problemId, isNull);
+
+      // 문제가 활성화되면(null→A) 전환으로 판정해 새 세션을 만든다.
+      container.read(activeProblemProvider.notifier).state = prob('prob-A');
+      await notifier.send('이 문제 풀래요');
+
+      expect(fake.createCalls, 2);
+      expect(fake.turnCalls, 0);
+      expect(fake.lastProblemId, 'prob-A');
+      expect(container.read(chatControllerProvider).problemId, 'prob-A');
+    });
+  });
 }

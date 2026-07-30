@@ -169,12 +169,26 @@ class ChatController extends _$ChatController {
     required ChatMessage studentMessage,
     required CoachRequest request,
   }) async {
+    // 활성 문제를 먼저 읽어 "현 dialogue가 묶인 문제"(state.problemId)와 비교한다(S3-30,
+    // 원 S3-14). 기존 dialogue가 있는데 활성 문제가 바뀌었다면 새 문제로 넘어온 것 → 이 턴을
+    // 이전 문제의 dialogue에 append하지 않고 *새 세션*으로 강제한다(문제 간 대화 오염 방지).
+    // 실기기 내비게이션(코치→"다음 문제로"→풀이 시작→코치)에서 컨트롤러 autoDispose 리셋이
+    // 신뢰성 있게 일어나지 않던 버그를 명시적 문제별 리셋으로 바로잡는다. activeProblem이
+    // null인 자유 대화는 problemId가 계속 null이라 전환으로 보지 않는다(append 유지·회귀 0).
+    final currentProblemId = ref.read(activeProblemProvider)?.problemId;
+    final problemSwitched =
+        state.dialogueId != null && state.problemId != currentProblemId;
+
     // ① 학생 메시지를 즉시 반영하고 로딩 상태로 전환한다.
+    //    문제가 바뀌었으면(problemSwitched) 이전 문제의 대화를 비우고 새 학생 메시지만
+    //    남긴다(새 문제의 깨끗한 대화). 아니면 기존 대화에 이어 붙인다.
     //    이전 턴의 완료 신호는 새 턴 시작에 초기화한다(로딩 중 스테일 "다음 문제로" 방지·
     //    S3-27). 완료 시엔 화면이 곧장 problemPath로 넘어가므로 이 경로엔 도달하지 않지만,
     //    돌아보기 대기(awaiting_reflection) 후 학생이 근거를 보내는 턴에서 신호를 새로 받는다.
+    final priorMessages =
+        problemSwitched ? const <ChatMessage>[] : state.messages;
     state = state.copyWith(
-      messages: [...state.messages, studentMessage],
+      messages: [...priorMessages, studentMessage],
       isSending: true,
       error: null,
       problemComplete: false,
@@ -184,15 +198,16 @@ class ChatController extends _$ChatController {
 
     try {
       // ② 서버 호출 — 영속 세션 경로(WH-1 턴·가설 누적·백엔드 E2E 앵커 정합).
-      //    첫 발화면 세션을 생성(활성 문제에 묶음)하고 dialogue_id를 확보하며, 이후 발화는
-      //    같은 세션에 턴으로 잇는다. 스테이트리스 `coach()`는 자유 대화 fallback으로 남는다.
+      //    첫 발화이거나(dialogue 없음) 문제가 바뀌었으면(problemSwitched) 세션을 새로
+      //    생성해 활성 문제에 묶고 dialogue_id를 확보한다. 같은 문제 내 후속 발화는 기존
+      //    세션에 턴으로 잇는다. 스테이트리스 `coach()`는 자유 대화 fallback으로 남는다.
       final api = ref.read(coachApiProvider);
-      String? dialogueId = state.dialogueId;
+      // 문제가 바뀌었으면 이전 dialogue를 버리고(null) 새 세션 경로로 태운다.
+      String? dialogueId = problemSwitched ? null : state.dialogueId;
       final CoachTurnResult result;
       if (dialogueId == null) {
         // 진단→문제제시에서 넘어온 활성 문제(있으면)에 세션을 묶는다(problem_id 영속).
-        final problemId = ref.read(activeProblemProvider)?.problemId;
-        result = await api.createSession(request, problemId: problemId);
+        result = await api.createSession(request, problemId: currentProblemId);
         dialogueId = result.dialogueId;
       } else {
         result = await api.addTurn(dialogueId, request);
@@ -234,6 +249,10 @@ class ChatController extends _$ChatController {
         messages: newMessages,
         polyaState: nextStage,
         dialogueId: dialogueId,
+        // 현 dialogue가 묶인 문제를 저장한다 — 다음 턴에서 문제 전환 판정 기준이 된다
+        // (S3-30, 원 S3-14). 같은 문제 후속 턴이면 값이 그대로 유지되고, 자유 대화면
+        // 계속 null이다.
+        problemId: currentProblemId,
         isSending: false,
         problemComplete: result.problemComplete,
         awaitingReflection: result.awaitingReflection,

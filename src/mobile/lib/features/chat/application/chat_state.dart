@@ -23,6 +23,15 @@ abstract class ChatState with _$ChatState {
     /// 이후 발화는 이 세션에 턴으로 누적된다(WH-1 턴·가설 영속·백엔드 E2E 앵커 정합).
     String? dialogueId,
 
+    /// 현 [dialogueId] 세션이 묶인 문제 PK(UUID 문자열)·자유 대화면 null (S3-30, 원 S3-14).
+    ///
+    /// "이 대화가 어느 문제에 속하는가"의 단일 기준값이다. 다음 턴을 보낼 때 활성 문제
+    /// (`activeProblemProvider`)와 이 값을 비교해 *문제가 바뀌었는지* 판정한다 — 바뀌었다면
+    /// 이전 문제의 dialogue에 append하지 않고 새 세션을 강제한다(문제 간 대화 오염 방지·
+    /// 컨트롤러 autoDispose 재생성에 의존하지 않는 명시적 리셋). 세션 생성 시 활성 문제 값으로
+    /// 채워지고 같은 문제 내 후속 턴에서는 유지된다.
+    String? problemId,
+
     /// 코치 응답 대기 중인지(입력 잠금·로딩 인디케이터 표시).
     @Default(false) bool isSending,
 
