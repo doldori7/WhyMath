@@ -401,8 +401,8 @@ CACHE-01 done) — 기계 강제까지 있다(`dsl.py:35` `PEDAGOGY_METHOD_BLOCK
 **등재 3건**: `S3-26-concept-supply-integrity`(pri 2·S3-01 **비잠금이며 오히려 선결** — 파일럿 학생이
 404를 받으면 파일럿 데이터가 오염된다. `ConceptAssessment`가 `verify_answer` 입력 형식 그대로라
 **검증 통과 문항 2,647건을 참조 주입**하면 신규 저작 0·LLM 0) · `S3-27-problem-type-tagging`(pri 3) ·
-`OPS-15-l3-prompt-asset-audit`(infra-debt·pri 3). D5는 신규 0 —
-`ARCH-20`(저작권 데이터 게이트)·`ARCH-21`(QA 오케스트레이터) 참조 연결.
+`OPS-16-l3-prompt-asset-audit`(infra-debt·pri 3). D5는 신규 0 —
+`ARCH-20`(저작권 데이터 게이트 — **본 설계 중 착지·done**)·`ARCH-21`(QA 오케스트레이터) 참조 연결.
 
 ### 2026-07-30 (구현·ARCH-20): **콘텐츠 출처·라이선스 집행 게이트 — pool 필드 신설·19개 사이드카 백필·CI 배선 + pytest-asyncio 무상한 pin 회귀 발견(ARCH-22 등재)** (claude 구현, Kiki "ARCH-20 착수")
 

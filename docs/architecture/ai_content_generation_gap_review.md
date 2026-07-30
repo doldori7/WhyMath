@@ -151,7 +151,7 @@
 |---|---|---|
 | 생성물 QA | 결함 주입 강등전 6종(`defect_seeder.py`)·Wilson 단측 경계(`harness/wilson.py`)·전 코퍼스 야간 재검증(`corpus_reverify.py`)·독립성 **기계 강제** 교차검증(`cross_verify.py:324`)·표기 커버리지 래칫·반례 fuzz 10,000시행·유한 전수열거 | ✅ (틀보다 압도적) |
 | 단일 QA 오케스트레이터 | 38모듈이 흩어져 단일 판정이 없음 | ⏸ **`ARCH-21`** 승계 |
-| 배포(노출 게이팅) | `is_exposable()`·`_METADATA_ONLY_SOURCES` validator·provenance 지배. 단 `copyright_gradient §4.2` **pool 필드 CI 집행이 미이행** | ⏸ **`ARCH-20`** 승계(next 1순위) |
+| 배포(노출 게이팅) | `is_exposable()`·`_METADATA_ONLY_SOURCES` validator·provenance 지배 + `copyright_gradient §4.2` **pool 필드 CI 집행**(`ops/provenance_audit.py`·`schema/corpus_provenance.py` — **`ARCH-20` done, 2026-07-30 본 문서 작성 중 착지**) | ✅ |
 | **개념 콘텐츠 축의 QA** | **0** — 문항 축만 게이트가 있다 | ⚠️ 갭 → **D2** |
 | **생성 프롬프트 축의 QA** | L4 교수학 프롬프트는 `docs/prompts/` 정본 + `harness/prompt_asset_audit.py` 회귀 감사. **L3 생성 프롬프트 4모듈은 코드 인라인이 정본이고 감사 0** | ⚠️ 갭 → **D4** |
 
@@ -287,7 +287,7 @@ D1은 그 결함류를 *기능으로 승격*하자는 제안이다.** 게다가 
 - **산출**: `ARCH-18` `harness/problem_bank_coverage.py`에 **유형×단원 매트릭스 + 17유형 중 0커버 유형
   목록** 축 추가 — 이것이 §4-① 트리거의 **발화 계측기**가 된다.
 
-### D4. L3 생성 프롬프트 정본화 + 감사 (백로그 `OPS-15`)
+### D4. L3 생성 프롬프트 정본화 + 감사 (백로그 `OPS-16`)
 
 **목적**: D1을 기각한 자리에 남는 실제 부채. "새 LLM 생성 경로를 열지 않는다"고 판정했다면, **이미
 열려 있는 LLM 지점들**이 정본·감사 없이 코드 인라인으로 사는 상태가 그 판정과 모순된다.
@@ -313,7 +313,9 @@ D1은 그 결함류를 *기능으로 승격*하자는 제안이다.** 게다가 
 틀의 `QA 엔진 → 콘텐츠 배포` 박스는 이미 압도적으로 강하다(§1 표). 남은 두 조각은 기등재:
 - 단일 오케스트레이터 부재 → **`ARCH-21-qa-pipeline-orchestrator`**(todo). D2의 개념 축 감사·D3의 유형
   커버리지·D4의 프롬프트 감사는 모두 **ARCH-21이 흡수할 축**이므로 각 태스크 notes에 참조를 남긴다.
-- 저작권 pool 필드 CI 집행 → **`ARCH-20-content-provenance-enforcement-gate`**(todo·next 1순위).
+- 저작권 pool 필드 CI 집행 → **`ARCH-20-content-provenance-enforcement-gate`** **done**(본 문서 작성 중
+  착지 — `ops/provenance_audit.py` 전수 순회 + CI policy-guard 차단 + `tests/infra` 배선 테스트).
+  틀의 "콘텐츠 배포" 박스 중 저작권 축은 이로써 닫혔다.
 
 ---
 
@@ -370,5 +372,5 @@ D1은 그 결함류를 *기능으로 승격*하자는 제안이다.** 게다가 
   `l3/cross_verify.py:153,201,219`(인라인·감사 0)
 - **기존 추적 승계(중복 등재 금지)**: `S4-09`(SolutionPath 좌석)·`S4-10`(다중 풀이·인플라이트)·
   `S4-11`(힌트 내용)·`S4-12`(풀이 비교)·`S4-14`(변형 계보·인플라이트)·`S4-05`(정의 레지스터)·
-  `S4-03`(시각화 유형)·`S4-15`(난이도 루프)·`S3-10`(persona_fit 백필)·`ARCH-20`(저작권 데이터 게이트)·
+  `S4-03`(시각화 유형)·`S4-15`(난이도 루프)·`S3-10`(persona_fit 백필)·`ARCH-20`(저작권 데이터 게이트·**done**)·
   `ARCH-21`(QA 오케스트레이터)·`ARCH-18`(커버리지 리포트·D3가 유형 축 해금)

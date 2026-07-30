@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-15-l3-prompt-asset-audit
+id: OPS-16-l3-prompt-asset-audit
 title: "L3 생성 프롬프트 정본화 + 감사 — docs/prompts 이전·생성 프롬프트 3준거·드리프트 검출 CI 배선"
 track: infra-debt
 stage: S3
@@ -19,5 +19,5 @@ paths:
   - "src/backend/whymath_backend/l3/**"
   - "tests/infra/**"
 session: null
-notes: "docs/architecture/ai_content_generation_gap_review.md §3 D4 — 외부 EOS 틀 대조에서 D1(맥락 문항 생성)을 기각한 자리에 남는 실제 부채. L4 교수학 프롬프트는 docs/prompts 정본 + prompt_asset_audit 회귀 감사가 있는데 L3 생성 프롬프트는 코드 인라인이 정본이고 감사 0. ARCH-20(저작권 데이터·pool 필드 축)과 축이 다름(D4는 프롬프트 축) — 중복 없음. ARCH-21 QA 오케스트레이터가 흡수할 축"
+notes: "docs/architecture/ai_content_generation_gap_review.md §3 D4 — 외부 EOS 틀 대조에서 D1(맥락 문항 생성)을 기각한 자리에 남는 실제 부채. L4 교수학 프롬프트는 docs/prompts 정본 + prompt_asset_audit 회귀 감사가 있는데 L3 생성 프롬프트는 코드 인라인이 정본이고 감사 0. ARCH-20(저작권 데이터·pool 필드 축·done)과 축이 다름(D4는 프롬프트 축) — 중복 없음. ARCH-21 QA 오케스트레이터가 흡수할 축. [번호: 최초 OPS-15로 등재했으나 HARN-10 notes가 OPS-15를 2026-07-29 중복 배정 번호(repo-root-lint-config·wh1-caplog-order-flake·둘 다 소멸)로 기록하고 있어, 세 번째 참조 대상이 되는 것을 피해 OPS-16으로 옮김]"
 updated: 2026-07-30
