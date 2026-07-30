@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/db/models/audit.py
   - src/backend/whymath_backend/schema/audit.py
-session: null
+session: main
 notes: "2026-07-30 account_security_gap_review.md D3. 실측: security_privacy.md:88-100이 '모든 PII 접근 로그'를 규정했으나 DeletionAudit writer는 api/me.py:291(삭제) 1곳뿐 — 가장 감사가 필요한 반출 GET /v1/me/export(me.py:2071)가 무기록. 경계 확정: 본인 조회 29 엔드포인트 전수 감사는 하지 않는다(미성년 조회 이력 자체가 프로파일링 자산·볼륨 소음) — 감사는 '시스템 밖으로 나가는 사건'과 '본인 아닌 주체의 접근' 3종만. deletion_audit 확장 미사용 이유: 테이블명·deleted_at이 삭제 의미에 결합(통합은 §5-③). 정본 security_privacy.md §감사 로그를 이 경계로 정정 동반."
 updated: 2026-07-30
