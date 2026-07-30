@@ -337,6 +337,52 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (구현·SEC-07): **무인증 콘텐츠 CUD 봉인 + Role v0(2값) — 개념·문제 생성/수정/삭제 6라우터 + /v1/generate 인가 부착, DELETE 포함 완전 무방비 상태 해소** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+**배경**: `account_security_gap_review.md` D1 — `/v1/concepts`·`/v1/problems`의 POST/PATCH/**DELETE**
+6라우터에 인증 의존성이 **0건**이었다(실측) — 누구나 콘텐츠를 생성·수정·**삭제**할 수 있었다.
+`POST /v1/generate`도 무인증(LLM 비용 남용 표면). `get_current_user`가 `is_active`/`is_deleted`
+컬럼(기존 컬럼이나 **첫 reader가 없었음**)을 검사하지 않아 탈퇴·비활성 계정의 미만료 토큰도 통과했다.
+
+**핵심 결정 — `Role`을 `str` mixin에서 이탈시킴(house style 위반을 의도적으로 선택)**:
+`schema/enums.py`의 다른 모든 enum은 `class X(str, Enum)`이지만 `Role`은 **순수 `Enum`**이다 —
+str mixin이면 멤버가 사전식으로 비교 가능해져(`"content_admin" < "student"`) 의미 없는 서열
+연산이라도 *존재*하게 된다. `docs/legal/pipa_data_matrix.md:33-47`이 반증하듯(부모의 데이터
+가시성은 학생 본인의 부분집합이지 상위집합이 아님) 7단 선형 서열은 이 앱의 데이터 모델과
+구조적으로 모순되므로, 미래 세션이 실수로 등급 비교 코드를 짤 여지 자체를 타입 층에서 닫았다
+— `test_role_enum.py`가 `<`/`>`/`<=`/`>=` 전부 `TypeError`를 던짐을 동결(멤버 수 2 동결 동반).
+
+**실행**: ① `Role` enum v0(STUDENT/CONTENT_ADMIN 2값 — PARENT/TEACHER/SCHOOL_ADMIN은 좌석 없는
+dead code라 미도입) ② `UserProfile.role` 컬럼 + 마이그레이션(NOT NULL·`server_default='student'`
+안전 백필) + `db/schema_version.py` `KNOWN_REVISIONS` 갱신 ③ `get_current_user`에 비활성/삭제
+검사 추가(명시적 `False`/`True`만 차단, `None`은 "미상"으로 통과 — 미영속 테스트 객체 기존 동작
+보존) + `require_role(*roles)` 팩토리 신설(`get_consented_user`와 동일 패턴) ④ 6라우터 +
+`/v1/generate`에 게이트 부착 — `/v1/generate`는 `RequireContentAdmin`이 아니라 `CurrentUser`
+(인증만)로 판단: 아직 특정 역할로 좁혀지지 않은 L3 raw 생성 표면이라 인증된 어느 사용자든
+호출 가능해야 한다는 판단 ⑤ `passlib[bcrypt]` 제거(SSO 전용이라 src/ 실사용 0건).
+
+**검증 중 발견·직접 수정한 실결함(위임 세션의 보고와 불일치)**: 위임받은 세션은 "실 PG 통합
+12/12 passed"로 보고했으나, 독립 재검증에서 신규 GET-공개-유지 회귀 테스트 2건
+(`test_concept_get_without_auth_still_public_on_live_pg`·`test_problem_get_without_auth_still_
+public_on_live_pg`)이 **`RuntimeError: ... attached to a different loop`**로 실패했다. 원인:
+두 테스트가 유일하게 `TestClient`를 **중첩**해서 열었다(인증 client의 `with` 블록 안에서 두
+번째 무인증 `TestClient(create_app())`을 또 염) — 각자의 anyio 이벤트루프 포탈이 asyncpg
+커넥션을 서로 다른 loop에 바인딩했다. 같은 파일의 다른 모든 통합테스트는 client 1개만 여는데
+이 2건만 그 관례를 벗어났다. 수정: 첫 `with` 블록을 벗어난 뒤 두 번째 client를 열도록 재구성
+— 재검증 12/12 passed. 위임 세션의 "12/12 passed" 주장 자체가 부정확했던 사례 — 병합 전
+독립 재검증(신뢰하되 검증)이 실제로 결함을 잡은 구체 사례로 기록.
+
+**검증**: ruff·black·mypy --strict(439파일) clean. CI-충실 재현(`cd src/backend && pytest`,
+경로 인자 0) 전체 스위트 **7933 passed, 266 skipped, 0 failed**(VIZ-01 이후 baseline 7896 대비
+정확히 +37 — 신규 테스트만큼 증가, 회귀 0). 마이그레이션 downgrade→upgrade 라운드트립을 로컬
+PG에서 직접 재현(독립). GET 라우트 무인증 유지·비활성/삭제 401·역할 불일치 403 전부 회귀
+테스트로 동결.
+
+**NOT**: `/v1/jobs/{id}`(폴링)는 범위 밖. `PARENT`/`TEACHER`/`SCHOOL_ADMIN` 역할은 Phase 3
+대시보드/B2B 계약이 실체를 가질 때(§5-②). 액세스 TTL 15분 단축은 클라 refresh 배선 선결(SEC-08).
+
+정본: `docs/architecture/account_security_gap_review.md` D1 · `api/_auth.py`(`require_role`).
+
 ### 2026-07-30 (구현·VIZ-01): **시각화 공급원 적재 배선 — concept_visual_style 코퍼스 127건 신설 + 두 오버레이 프로덕션 적재 배선 + 도달률 리포트, D1 "학생 도달 0회" 해소** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `visualization_module_gap_review.md` D1 — 전 시각화 스택(명세·렌더 계약·2,141행

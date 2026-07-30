@@ -249,10 +249,14 @@ def test_problem_get_without_auth_still_public_on_live_pg(admin_auth: dict[str, 
             client.headers.update(admin_auth)
             problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
 
-            with TestClient(create_app()) as anon_client:
-                resp = anon_client.get(f"/v1/problems/{problem_id}")
-                assert resp.status_code == 200
-                assert resp.json()["problem_id"] == problem_id
+        # 별도 무인증 client로 GET — 헤더 없이 200이어야 한다. 첫 client의 `with` 블록을
+        # 벗어난 뒤 새 TestClient를 연다 — 중첩하면 각자의 anyio 이벤트루프 포탈이 asyncpg
+        # 커넥션을 서로 다른 loop에 바인딩해 "attached to a different loop" RuntimeError를 낸다
+        # (실측 — 이 파일의 다른 모든 통합테스트는 client 1개만 연다).
+        with TestClient(create_app()) as anon_client:
+            resp = anon_client.get(f"/v1/problems/{problem_id}")
+            assert resp.status_code == 200
+            assert resp.json()["problem_id"] == problem_id
     finally:
         if problem_id is not None:
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))

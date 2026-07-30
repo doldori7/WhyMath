@@ -352,11 +352,14 @@ def test_concept_get_without_auth_still_public_on_live_pg(admin_auth: dict[str, 
                 "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
             ).json()["concept_id"]
 
-            # 이 client는 별도 무인증 client로 GET — 헤더 없이 200이어야 한다.
-            with TestClient(create_app()) as anon_client:
-                resp = anon_client.get(f"/v1/concepts/{concept_id}")
-                assert resp.status_code == 200
-                assert resp.json()["code"] == code
+        # 별도 무인증 client로 GET — 헤더 없이 200이어야 한다. 첫 client의 `with` 블록을
+        # 벗어난 뒤 새 TestClient를 연다 — 중첩하면 각자의 anyio 이벤트루프 포탈이 asyncpg
+        # 커넥션을 서로 다른 loop에 바인딩해 "attached to a different loop" RuntimeError를 낸다
+        # (실측 — 이 파일의 다른 모든 통합테스트는 client 1개만 연다).
+        with TestClient(create_app()) as anon_client:
+            resp = anon_client.get(f"/v1/concepts/{concept_id}")
+            assert resp.status_code == 200
+            assert resp.json()["code"] == code
     finally:
         if concept_id is not None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
