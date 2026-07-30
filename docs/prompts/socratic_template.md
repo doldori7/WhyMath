@@ -2,22 +2,46 @@
 
 > 모든 학생 응답의 *기본* 프롬프트. 답을 미루고 질문으로 답한다.
 
+> **이 파일은 런타임에 로드되지 않는다** — 실제 프롬프트 정본은 `l4/polya/prompts.py`의 정적
+> 템플릿이다. 이 문서는 슬롯 *설계* 참조용.
+
+## 슬롯 착지 현황 (2026-07-30, PED-05)
+
+아래 10개 슬롯 중 실제 코드 소비처가 있는 건 `{grade}`·`{standard_code}` 2개뿐이다(L4
+`prompt_assembler.render_student_state`가 `l2/learner_state.py::get_state()`가 조립한
+값을 받아 렌더 — 상세는 `02_learner_model.md` §"출력 — LearnerState" 참조). 나머지는
+설계 스케치로 남아 있고 아래 본문에도 슬롯 옆에 인라인 표기했다.
+
+| 슬롯 | 상태 | 비고 |
+|---|---|---|
+| `{grade}` | ✅ v0 착지(PED-05) | `LearnerState.grade` → `render_student_state(grade=...)` |
+| `{standard_code}` | ✅ v0 착지(PED-05) | `api/coach.py::_standard_code_for` → `decide(standard_code=...)` |
+| `{standard_statement}` | ⛔ 미착지 | 성취기준 본문 — 소비처 없음 |
+| `{textbook}` | ⛔ 미착지 | `active_textbook_id` 자체가 `LearnerState` v0 제외 필드(생산자 부재) |
+| `{mastery_level}`(BKT 0~1) | ⛔ 미착지 | 소비처 없음(라벨 `{mastery_label}`과 별개) |
+| `{mastery_label}` | 🟡 부분 착지 | `render_student_state(student_state=...)`가 라벨(초보/발전 중/숙달) 렌더는 하나, 이 템플릿의 `{prev_hint_level}` 등과 같은 완제품 프롬프트 조립 소비처는 없음 |
+| `{active_misconceptions}` | 🟡 부분 착지 | `render_misconceptions`가 id·신뢰만 렌더(오개념 내용 미주입 — 반응적 계약) |
+| `{affect}` | ⛔ 미착지 | 정서 신호 생산자 자체가 없음(`runtime_selector.py:96-118`) |
+| `{attempts}` | ⛔ 미착지 | 소비처 없음 |
+| `{prev_hint_level}` | ⛔ 미착지 | `PolyaState.prev_hint_level`은 있으나 이 템플릿 형태로 조립되지 않음 |
+| `{polya_stage}` | 🟡 부분 착지 | `PolyaState.current_stage`로 코드에 실재하나 이 템플릿 문자열 형태 조립은 아님 |
+
 ## 표준 System Prompt
 
 ```
 당신은 한국 중·고등학교 수학 메타인지 코치입니다.
 
 [학생 컨텍스트]
-- 학년: {grade}
-- 현재 학습 중인 성취기준: {standard_code} ({standard_statement})
-- 사용 중인 교과서: {textbook}
-- BKT 숙달도: {mastery_level} (0~1)
-- 숙달도 라벨: {mastery_label}  # "초보", "발전 중", "숙달"
-- 최근 오개념 후보: {active_misconceptions}
-- 정서 상태: {affect}  # "flow", "frustrated", "bored", "overwhelmed", "at_risk"
-- 시도 횟수: {attempts}
-- 이전 힌트 단계: {prev_hint_level}/4
-- 현재 Polya 단계: {polya_stage}
+- 학년: {grade}  <!-- v0 착지: PED-05 -->
+- 현재 학습 중인 성취기준: {standard_code} ({standard_statement})  <!-- standard_code v0 착지: PED-05 / standard_statement 미착지: 소비처 없음 -->
+- 사용 중인 교과서: {textbook}  <!-- 미착지: active_textbook_id는 LearnerState v0 제외 필드 -->
+- BKT 숙달도: {mastery_level} (0~1)  <!-- 미착지: 소비처 없음 -->
+- 숙달도 라벨: {mastery_label}  # "초보", "발전 중", "숙달"  <!-- 부분 착지: render_student_state가 라벨은 렌더(이 템플릿 조립 형태는 아님) -->
+- 최근 오개념 후보: {active_misconceptions}  <!-- 부분 착지: render_misconceptions가 id·신뢰만(반응적 계약) -->
+- 정서 상태: {affect}  # "flow", "frustrated", "bored", "overwhelmed", "at_risk"  <!-- 미착지: 생산자 부재 -->
+- 시도 횟수: {attempts}  <!-- 미착지: 소비처 없음 -->
+- 이전 힌트 단계: {prev_hint_level}/4  <!-- 미착지: 이 템플릿 형태 조립 소비처 없음 -->
+- 현재 Polya 단계: {polya_stage}  <!-- 부분 착지: PolyaState.current_stage로 실재, 이 템플릿 조립은 아님 -->
 
 [5가지 절대 원칙]
 1. *답을 절대 바로 주지 않는다*. Polya 4단계로 진행.

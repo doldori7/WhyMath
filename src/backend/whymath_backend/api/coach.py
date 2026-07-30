@@ -59,11 +59,14 @@ from whymath_backend.api._rate_limit import (
     RateLimitedTripleWrite,
 )
 from whymath_backend.config import get_settings
+from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
@@ -443,6 +446,8 @@ def _build_response_payload(
     matches: list[MisconceptionMatch] | None = None,
     misconception_hypotheses: list[MisconceptionHypothesis] | None = None,
     pack: PedagogyPack | None = None,
+    grade: int | None = None,
+    standard_code: str | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -470,6 +475,11 @@ def _build_response_payload(
     고신뢰+최근 가설이면 ASSUMPTION(가정 표면화). **미주입(기본 None)이면 현행 비트동일**
     (stateless `/v1/coach`·sync 직접호출). 세션/턴 핸들러가 `_apply_hypotheses` 반환 세트를 넘긴다
     (개입 채널 `_intervention_from_hypotheses_or`와 *같은* post-apply 세트·단일 진실원천).
+
+    `grade`·`standard_code`(PED-05 개인화 슬롯)는 `decide()`로 그대로 thread된다 — 둘 다 기본
+    None이라 미주입 호출자(stateless `/v1/coach`·sync 직접호출)는 완전 회귀 0. 실제 프롬프트
+    반영은 `decide()` 내부에서 pack 주입 ∧ `pedagogy_pack_prompt_enabled` 플래그 ON일 때만
+    일어난다(기존 옵트인 게이트 그대로 재사용 — 별도 플래그 신설 0).
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -487,6 +497,8 @@ def _build_response_payload(
         mastery_level=level,
         misconception_hypotheses=misconception_hypotheses,
         pack=pack,
+        grade=grade,
+        standard_code=standard_code,
     )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
@@ -788,6 +800,46 @@ async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> Peda
     if k_type is None:
         return None
     return get_pack(str(getattr(k_type, "value", k_type)))
+
+
+async def _grade_for(session: AsyncSession, user_id: uuid.UUID) -> int | None:
+    """학생 학년(`user_profile.grade`) 단건 조회 — 프롬프트 개인화(PED-05) 착지용.
+
+    `get_state()`(l2 조립기)를 거치지 않고 `user_profile` 단건만 읽는다 — `get_state()`는
+    `compute_concept_diagnoses`(전체 개념 진단 재계산)까지 함께 하므로, 매 코치 턴마다 grade 하나
+    때문에 그 무거운 계산을 태우면 `_server_mastery_for`/`_server_theta_for`(단건 조회로 성능을
+    지키는 기존 결정)와 같은 함정에 빠진다. graceful None(프로필 없음·미입력) — 호출자는 grade
+    없이도 정상 동작(PolyaCoach.decide 기본값 None과 동형).
+    """
+    profile = await session.get(UserProfile, user_id)
+    return profile.grade if profile is not None else None
+
+
+async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
+    """문항 PRIMARY 개념의 성취기준 고시코드 1개 — 프롬프트 개인화(PED-05) 착지용(비PII).
+
+    `_pack_for`와 동일한 해석 seam(`get_primary_concept_id` — PRIMARY 없으면 TESTED 폴백)으로
+    concept_id를 얻고, `concept_standard_link → achievement_standard` 조인으로 `official_code`
+    (예 '[12미적01-01]') 1개를 결정적으로(정렬) 고른다. 문항 없음·개념 미해석·성취기준 연결
+    미적재 어느 단계든 graceful None(폴백) — L6 게이팅의 동일 조인 관례와 정합.
+    """
+    if problem_id is None:
+        return None
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None
+    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
+    if code is None:
+        return None
+    stmt = (
+        select(AchievementStandard.official_code)
+        .join(ConceptStandardLink, ConceptStandardLink.norm_id == AchievementStandard.norm_id)
+        .where(ConceptStandardLink.concept_code == str(code))
+        .order_by(AchievementStandard.official_code)
+        .limit(1)
+    )
+    official_code: str | None = await session.scalar(stmt)
+    return official_code
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
@@ -1491,6 +1543,10 @@ async def create_session(
             )
         )
     pack = await _pack_for(session, body.problem_id)
+    # PED-05: grade(user_profile 단건 — get_state() 전체 재계산 회피)·standard_code(문항 PRIMARY
+    # 개념의 성취기준 고시코드) — 둘 다 비노출 개인화 슬롯(_grade_for/_standard_code_for docstring).
+    grade = await _grade_for(session, user.user_id)
+    standard_code = await _standard_code_for(session, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1501,6 +1557,8 @@ async def create_session(
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
             pack=pack,
+            grade=grade,
+            standard_code=standard_code,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1731,6 +1789,10 @@ async def append_turns(
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
+    # PED-05: create_session과 동형 — grade는 user_profile 단건, standard_code는 dialogue에 실린
+    # problem_id 출처(append 규약과 정합·expected_answer/server_mastery와 같은 출처 패턴).
+    grade = await _grade_for(session, user.user_id)
+    standard_code = await _standard_code_for(session, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1741,6 +1803,8 @@ async def append_turns(
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
             pack=pack,
+            grade=grade,
+            standard_code=standard_code,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)

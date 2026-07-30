@@ -71,6 +71,8 @@ class PolyaCoach:
         mastery_level: MasteryLevel | None = None,
         misconception_hypotheses: Sequence[MisconceptionHypothesis] | None = None,
         pack: PedagogyPack | None = None,
+        grade: int | None = None,
+        standard_code: str | None = None,
     ) -> PedagogyDecision:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
@@ -85,6 +87,10 @@ class PolyaCoach:
           `pedagogy_pack_prompt_enabled` 플래그가 켜졌을 때만, base_system 위에 팩 4계층 발문을
           조립해 `system`을 대체한다. **pack None(기본)이거나 플래그 OFF면 조립기 미호출로
           `system=sp.system` 그대로**(바이트 동일·회귀 0). 기존 호출자는 pack 미전달이라 무영향.
+        - `grade`·`standard_code`(PED-05 개인화 슬롯): 팩 조립이 실제로 일어날 때(pack 주입 ∧
+          플래그 ON)만 `build_system_prompt`의 계층 4로 thread된다 — 둘 다 기본 None이라 기존
+          호출자(팩 미주입·플래그 OFF)는 완전 회귀 0. PII 가드: 이 둘(학년 정수·성취기준 코드
+          문자열) 외의 학생 식별 정보는 이 메서드 시그니처에 자리가 없다.
         """
         transition = should_advance(state, student_input, mastery_level=mastery_level)
         target_stage = (
@@ -112,6 +118,8 @@ class PolyaCoach:
                 pack=pack,
                 misconceptions=misconception_hypotheses,
                 student_state=mastery_level,
+                grade=grade,
+                standard_code=standard_code,
             )
         return PedagogyDecision(
             polya_stage_to_advance=transition,
