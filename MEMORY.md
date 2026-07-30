@@ -337,6 +337,55 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (구현·S3-27): **Problem↔ProblemType 연결 유보 해제 — 생성기 identity 매핑표로 2,218/2,647건 결정론 백필 + ARCH-18 유형 축 해금** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+**배경**: `docs/architecture/ai_content_generation_gap_review.md` D3(기능 59 대응)가
+`problem_bank_gap_review.md` §5-③의 발화조건 ⑴("유형별 공백을 저작 우선순위로 쓰겠다는
+결정")이 성립했음을 논증해 Problem↔ProblemType 연결 유보를 해제했다. 실측: 문항 코퍼스
+2,647건 중 유형(17종 인지행동) 태그를 단 하나도 달고 있지 않았고, `ARCH-18` 커버리지
+리포트가 이 축을 "전 문항 미태깅이라 무의미"로 스코프아웃한 상태였다.
+
+**핵심 설계**: 17종 `problem_type_id`는 인지 행동 기준이라 문항 텍스트를 읽어야 분류 가능할
+것 같지만, 코퍼스의 스켈레톤 생성기는 **생성기(또는 밴드 파라미터) 1종이 인지 행동 1종을 고정
+산출**한다는 통찰로 **"생성기 identity → 유형" 결정론 매핑표**(`harness/problem_type_mapping.py`)
+를 만들어 텍스트 파싱·LLM 0으로 우회했다. 코퍼스별 식별 키가 다르다 — `generated_v0`는
+`unit_codes`(스켈레톤 생성기 클래스와 1:1), `conceptual_v0`·`misconception_mc_v0`는
+`distractor_map`의 `misconception_id` kebab(밴드가 정확히 1종만 주입하는 계약을 역이용해
+템플릿 식별자를 복원), `killer_v0`는 코퍼스 전체가 단일 생성기, `probability_finite_v0`는
+`unit_codes` 2분기, `v1`(4건 레거시 손저작)은 slug 직접 판단. **`rephrased_v0`(429건)는
+명시 제외** — `S4-14`(변형 계보 영속) 미착지로 원 생성기 추적 불가.
+
+**실행**: `schema/problem.py`에 `problem_type_codes: list[str]`(`signature_patterns` 동형
+참조 배열) 신설 + `harness/problem_type_backfill.py`(`problem_corpus_tag.py`와 동일 바이트
+계약 — 변경 레코드만 그 키 하나만 교체해 재직렬화, 2회 실행 멱등)로 6개 코퍼스 **2,218/2,218건
+전건 태깅**(0 untagged) + rephrased_v0 429건 미태깅을 리포트에 정직 기록. 검증: 백필 후
+전 코퍼스 diff를 라인 단위로 검사해 **모든 변경 라인이 `problem_type_codes` 키 추가만**이고
+다른 키는 0건 변경임을 확인(재검증), 결과 타입 분포 8/17 유형 커버(evaluate-expression
+1322건 최다, 9종 0커버). `harness/problem_bank_coverage.py`(ARCH-18)에 유형×단원 매트릭스 +
+0커버 유형 목록 축을 추가(hermetic 원칙 유지 — `problem_type_mapping` 상수를 참조하지 않고
+카탈로그 JSONL만 읽음) — docstring의 "유형 축은 범위 밖" 문구도 갱신.
+
+**변별력(acceptance⑤)**: 매핑표 1개 항목(`QUAD-EQ`→185건)을 명백히 틀린 유형으로 오염시켜
+골든 분포 대조가 실제로 달라짐을 확인(exit 1 상당) 후 원복해 일치 확인(exit 0 상당) — 이
+과정을 `monkeypatch` 기반 테스트로 자동화해 CI에서도 반복 검증되게 했다(수동 1회성 확인이
+아니라 회귀 테스트로 편입).
+
+**검증**: 위임받은 backend-engineer의 산출물을 별도로 독립 재검증(신뢰하되 검증) — ①코퍼스
+diff 전수 스캔으로 바이트 계약 재확인(모든 2,218 변경 라인이 `problem_type_codes` 키 1개
+추가뿐) ②`ruff check`·`black --check`(src+tests) clean ③`mypy --strict` clean(438파일)
+④CI-충실 재현(`cd src/backend && pytest`, 경로 인자 0)으로 전체 스위트 **7876 passed, 262
+skipped, 0 failed** — 위임받은 세션이 보고한 수치와 정확히 일치 ⑤신규 테스트 62건 개별
+재실행 통과. 회귀 1건 발견·수정 확인: `test_corpus_quality.py`가 generated_v0/rephrased_v0
+키 집합 동일을 가정했는데 `problem_type_codes`가 의도적으로 source-only 필드라 그 가정이
+깨졌음 — 편집자 주석과 함께 `source_only_fields` 제외 처리로 정직하게 수정됨을 확인.
+
+**NOT**: `problem_type_node` FK 연결·유형별 생성 확대·추천/출제 로직은 스코프 밖(관측 축
+한정, `problem_bank_gap_review.md §5-③` 판정 유지). `S4-14` 의존 아님(rephrased_v0 부분
+커버를 정직 고지로 해소).
+
+정본: `docs/architecture/problem_bank_gap_review.md` §5-③ 편집자 부기 ·
+`src/backend/whymath_backend/harness/problem_type_mapping.py`.
+
 ### 2026-07-30 (정정 완결·ARCH-22): **pytest-asyncio 로컬 재현의 근본 메커니즘 확정 — "pip 해석 시점 차이"가 아니라 "invocation 방식 차이"였다 + 검증된 상한 pin 적용** (claude 구현, Kiki "/drive" 진행 중 발견)
 
 **배경**: 같은 날 앞선 세션이 ARCH-22를 priority 1("전체 백엔드 CI 실질 마비")로 등재했다가, PR
