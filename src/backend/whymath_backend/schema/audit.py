@@ -1,9 +1,13 @@
-"""GDPR 삭제 감사(DeletionAudit) Pydantic 스키마 — slice 58 (조회 API 응답).
+"""감사 Pydantic 스키마 — `DeletionAudit`(slice 58) + `PrivacyAudit`(SEC-09) 조회 API 응답.
 
 slice 57이 `deletion_audit`에 적재하는 행의 *읽기* 표현. `GET /v1/me/deletions`가 본인 삭제
 이력을 반환할 때 직렬화에 쓴다. 삭제 *메타*만(콘텐츠 없음 — slice 57 설계: 누가·무엇·언제).
 ORM(`db/models/audit.py`)과 별도로 세운 검증·API 레이어이며 `to_schema`/`from_schema`가 잇는다
 (activity.py·user.py 동일 패턴).
+
+SEC-09의 `PrivacyAudit`은 개인정보 감사 3종(반출·동의변경·관리자접근)의 읽기 표현 —
+`GET /v1/me/privacy-audit`가 본인 스코핑으로 반환한다. 동일 패턴(메타만·`to_schema`/
+`from_schema`).
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.schema.enums import AuditResourceType
+from whymath_backend.schema.enums import AuditEventKind, AuditResourceType, ConsentScope
 
 
 class DeletionAudit(BaseModel):
@@ -45,4 +49,47 @@ class DeletionAudit(BaseModel):
     deleted_at: datetime | None = Field(
         default=None,
         description="삭제·감사 기록 시각 (DB server_default now())",
+    )
+
+
+class PrivacyAudit(BaseModel):
+    """SEC-09 개인정보 감사(반출·동의변경·관리자접근) 1행(읽기) — append-only 기록의 단일 표현.
+
+    본문·PII 값·평문 IP는 어떤 필드에도 담지 않는다(`docs/architecture/account_security_gap_
+    review.md` D3·CLAUDE.md 미성년 PII 보호). `target_user_id`는 행위자(`user_id`)와 다른
+    사용자의 데이터가 대상일 때만(관리자접근) 채워지고, 본인 행위(반출·동의변경)는 NULL이다.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    audit_id: uuid.UUID = Field(default_factory=uuid4, description="감사 PK (UUID)")
+    user_id: uuid.UUID | None = Field(
+        default=None,
+        description="행위자(action을 수행한 주체) — plain UUID, FK 아님(계정 삭제돼도 잔존)",
+    )
+    target_user_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "행위 대상 사용자(행위자와 다를 때만 — 관리자접근) — 본인 행위(반출·동의변경)는 NULL"
+        ),
+    )
+    event_kind: AuditEventKind | None = Field(
+        default=None,
+        description="감사 이벤트 종류(export_data/consent_change/admin_access)",
+    )
+    consent_scope: ConsentScope | None = Field(
+        default=None,
+        description="event_kind=consent_change일 때만 — 어떤 동의 범위가 바뀌었는지",
+    )
+    ip_hash: str | None = Field(
+        default=None,
+        description="sha256(salt+ip) — 평문 IP 미저장. salt 미설정(개발·CI)이면 None",
+    )
+    occurred_at: datetime | None = Field(
+        default=None,
+        description="감사 기록 시각 (DB server_default now())",
     )
