@@ -187,6 +187,14 @@ class Problem(BaseModel):
         description="사람이 읽는 식별자(UNIQUE)",
         max_length=128,
     )
+    identity_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "변형 계열 식별자(Identity·Canonical 분리·S4-18) — 원본과 그 rephrase 등 "
+            "변형들이 공유하는 고정 값. problem_id는 개체마다 절대 불변, identity_id로만 "
+            "'같은 문제의 다른 표현' 계열을 묶는다. None=계열 없음(단일 개체)."
+        ),
+    )
 
     # ===== 출처 =====
     source_type: SourceType = Field(..., description="출처 — 평가원/EBS/AIHub/자체생성 등")

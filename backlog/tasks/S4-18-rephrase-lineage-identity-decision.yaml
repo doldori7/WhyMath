@@ -1,23 +1,30 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S4-18-rephrase-lineage-identity-decision
-title: "리프레이즈 변형 계보 identity 설계 결정 필요 — slug upsert 병합으로 91% 관계 불가 (S4-14에서 분리)"
+title: "리프레이즈 변형 계보 — identity_id/Canonical 분리 설계로 problem_relation 영속"
 track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
-depends_on:
-  - S4-14-variant-lineage-persist
+depends_on: []
 requires_gates: []
 acceptance:
-  - "Kiki 결정 선행 필요(택1 또는 대안 제시): (a) rephrase 변형마다 신규 problem_id/slug 채번(소급 429건 + 향후 배치 전부) (b) problem_relation 2행 관계 대신 원본 slug 참조 provenance 애노테이션으로 lineage 재정의(스키마 변경) (c) 관계 형성 가능한 37/429(8.6%·slug가 원본과 다른 것만)만 커버함을 명시 수용. 결정 확정 후: ①rephrase 배치가 생성 시점에 원본→변형 problem_relation(변형·similarity_score) 산출 ②기존 429건(당초 483은 S3-12 위생조치로 감소한 구수치) 결정된 방식으로 소급 반영 ③S4-14가 만든 populate.py relation upsert 인프라 재사용 ④거버넌스 테스트(행>0·참조 무결) — 결정 전까지 착수 금지"
+  - "Kiki 결정(2026-07-29, identity_id/Canonical 분리): Problem에 identity_id(계열 식별자·problem_id와 별개·UUID·nullable) 신설 — problem_id는 절대 불변, identity_id로 동일 계열(원본+rephrase 변형들)을 묶고 problem_relation(변형 타입·기존 5종 enum 재사용)으로 개별 변환 이력을 기록. 스켈레톤 동일 밴드 형제(S4-14)는 별개 문제라 identity_id 미공유(관계만). 구현: ①schema/problem.py·db/models/problem.py·alembic 마이그레이션 ②l1/problem_bank/populate.py relation upsert(멱등) ③기존 rephrased_v0 429건(당초 483은 S3-12 위생조치로 감소한 구수치) 소급 백필 — 원본과 slug 충돌하는 392건은 신규 slug/problem_id 채번 후 원본과 identity_id 공유+변형 relation 기록, 이미 분리된 37건은 identity_id·relation만 채움 ④향후 신규 rephrase 배치는 재실행 가능한 결정론 동기화 스크립트(scripts/backfill_rephrase_lineage_s4_18.py)로 slug 채번+identity_id+relation을 부여 — `run_corpus_rephrase` 자체는 의도적으로 slug/identity_id 미변경(소스 코퍼스 읽기전용 관례 유지) ⑤거버넌스 테스트(행>0·참조 무결·자기관계 금지 유지)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/harness/problem_corpus_rephrase.py
   - src/backend/whymath_backend/l3/equivalent/rephrase.py
   - "src/backend/whymath_backend/l1/problem_bank/**"
-session: null
-notes: "S4-14 착수 전 타당성 조사(2026-07-29, claude)에서 발견한 구조적 블로커를 분리 등재. 실측: rephrased_v0 429건(현재 실 카운트 — 483은 S3-12 위생조치 이전 구수치) 중 392건(91%)이 populate.py의 slug ON CONFLICT upsert로 원본과 *같은* DB 행에 병합됨(problem_id·slug 동일) — 관계를 맺을 두 번째 행이 없고 schema._no_self_relation(parent==related 금지)이 구조적으로 막는다. canonical_signature 매칭 자체는 가능(rephrase가 conditions는 안 건드림 실측 확인) — 막힌 것은 매칭이 아니라 identity. 생성 로그가 전무해(디스크·git 이력 모두) 사후 역추적 근거도 없다. Kiki의 명시적 identity 설계 결정 없이 구현 착수 금지."
-updated: 2026-07-29
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/db/models/problem.py
+  - src/backend/whymath_backend/db/schema_version.py
+  - "src/backend/alembic/**"
+  - "data/corpus/**"
+  - "scripts/backfill_rephrase_lineage_s4_18.py"
+  - "tests/backend/db/**"
+  - "tests/backend/l1/problem_bank/**"
+session: claude/whymath-problem-bank-design-65tsm4
+notes: "S4-14 착수 전 타당성 조사(2026-07-29, claude)에서 발견한 구조적 블로커(rephrased_v0 429건 중 392건(91%)이 populate.py slug ON CONFLICT upsert로 원본과 동일 DB 행에 병합돼 2행 관계 자체가 불가 — schema._no_self_relation이 구조적으로 막음)를 분리 등재. Kiki가 identity_id(계열)/problem_id(불변 개체) 분리 설계로 결정(2026-07-29) — 신규 problem_id/slug를 채번하되 별도 identity_id로 계열을 묶어 problem_id 불변과 계보 양쪽을 확보. canonical_signature 매칭은 가능(rephrase가 conditions는 안 건드림 실측 확인)하나 생성 로그는 전무해 매칭 근거로 미사용 — slug 충돌 여부로 정본/변형 판정. 실 구현 시 db/schema_version.py(alembic 동결 리스트 갱신)·scripts/·tests/backend/db,l1로 범위 확장(scope_drift 경고 반영·사후 실측 반영)."
+updated: 2026-07-30
