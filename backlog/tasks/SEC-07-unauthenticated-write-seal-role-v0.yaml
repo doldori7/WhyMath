@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/api/_auth.py
   - src/backend/whymath_backend/db/models/user.py
   - src/backend/whymath_backend/schema/enums.py
-session: null
+session: main
 notes: "2026-07-30 account_security_gap_review.md D1. 실측: concepts.py:231/330/379·problems.py:44/172/219 CUD에 인증 의존성 0건(DELETE 포함 — 누구나 콘텐츠 삭제 가능)·app.py:660 /v1/generate 무인증(LLM 비용). Role 컬럼·enum 0(db/models의 role은 TurnRole·ConceptRole로 다른 축). 04_admin_console_architecture.md §2 원칙3·§8 ADMIN-RBAC 정본의 등재분(백로그 미등재 실측) + 범위 축소(v0 2값 — 좌석 없는 PARENT/TEACHER/SCHOOL_ADMIN은 dead code 금지로 미도입·§5-②). 7단 선형 서열은 pipa_data_matrix.md:33-47이 반증(부모⊂학생)해 의도적 미채택."
 updated: 2026-07-30
