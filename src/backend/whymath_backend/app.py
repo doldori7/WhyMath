@@ -19,6 +19,13 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 경계 메모 (CLAUDE.md 절대 금기): /v1/generate·/v1/jobs가 돌려주는 텍스트는 *검증 전
 원시 모델 출력*이다. 03 문서 환각 방어 파이프라인 통과 전에는 학생에게 직접 노출 금지
 ("LLM 응답을 검증 없이 학생에게 제공 금지").
+
+인가(SEC-07 D1): `/v1/generate`는 이전엔 인증 의존성이 0건이라 무인증 LLM 비용 남용 표면이었다
+(실측 `docs/architecture/account_security_gap_review.md` D1). `CurrentUser`(인증만 — 역할
+불문)로 게이팅한다: 콘텐츠 CUD(`Role.CONTENT_ADMIN`)와 달리 이 엔드포인트는 *인증된 어느
+사용자든* 호출할 수 있어야 하는 저수준 L3 raw 생성 표면이라(orchestrator·teacher tooling 등
+소비처가 아직 특정 역할로 좁혀지지 않음) `require_content_admin`이 아니라 인증 존재만 요구한다.
+`/v1/jobs/{id}`(폴링)는 SEC-07 범위 밖 — 이 태스크는 콘텐츠 CUD 6라우터 + `/v1/generate`만 봉인.
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from starlette.middleware.base import RequestResponseEndpoint
 
+from whymath_backend.api._auth import CurrentUser
 from whymath_backend.api._device_store import (
     build_device_store_from_settings,
     ping_device_store_health,
@@ -658,12 +666,15 @@ def create_app(
         )
 
     @app.post("/v1/generate", tags=["l3"])
-    async def post_generate(body: GenerateBody, request: Request) -> JSONResponse:
+    async def post_generate(
+        body: GenerateBody, request: Request, user: CurrentUser
+    ) -> JSONResponse:
         """라우팅 → (동기) 캐시·생성 / (비동기 QUALITY) 큐잉. 메타데이터 + 결과 반환.
 
-        반환 텍스트(동기·완료)는 *검증 전 원시 출력*이다 — 03 문서 환각 방어 파이프라인을
-        통과하기 전에는 학생에게 직접 노출 금지 (CLAUDE.md 절대 금기). 환각 방어·학생
-        표면화는 상위 계층(L4/L5 오케스트레이터)의 책임이다.
+        인증 필수(`CurrentUser` — SEC-07 D1, 무인증 LLM 비용 남용 표면 봉인). 반환 텍스트
+        (동기·완료)는 *검증 전 원시 출력*이다 — 03 문서 환각 방어 파이프라인을 통과하기
+        전에는 학생에게 직접 노출 금지 (CLAUDE.md 절대 금기). 환각 방어·학생 표면화는 상위
+        계층(L4/L5 오케스트레이터)의 책임이다.
 
         QUALITY(27b)로 라우팅되면 동기 호출이 불가하므로(03a §D.3) 작업 큐에 적재하고
         **HTTP 202 Accepted**로 job_id를 반환한다 — 호출자는 /v1/jobs/{job_id}로 폴링한다.
