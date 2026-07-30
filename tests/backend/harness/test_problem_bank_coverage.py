@@ -57,14 +57,27 @@ def _problem(
     standards: list[str] | None = None,
     difficulty: float | None = 2.5,
     question_format: str | None = "단답형",
+    problem_types: list[str] | None = None,
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "problem_id": problem_id,
         "unit_codes": units if units is not None else ["QUAD-EQ"],
         "achievement_standard_codes": standards if standards is not None else ["[10공수1-02-02]"],
         "difficulty_overall": difficulty,
         "question_format": question_format,
     }
+    if problem_types is not None:
+        payload["problem_type_codes"] = problem_types
+    return payload
+
+
+def _write_problem_types(path: Path, type_ids: list[str]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps({"problem_type_id": t}, ensure_ascii=False) + "\n" for t in type_ids),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _write_corpus(root: Path, name: str, problems: list[dict[str, object]]) -> Path:
@@ -405,15 +418,118 @@ def test_zero_list_truncation_is_announced(tmp_path: Path) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 6. CLI — exit 0/2만(게이트 아님)
+# 6. 유형(problem_type) × 단원 축 (S3-27)
 # ──────────────────────────────────────────────────────────────────────────
-def _cli_env(tmp_path: Path, problems: list[dict[str, object]]) -> tuple[Path, Path]:
+def test_type_unit_matrix_and_zero_coverage(tmp_path: Path) -> None:
+    corpus = _write_corpus(
+        tmp_path,
+        "problem_bank_types",
+        [
+            _problem(problem_id="t1", units=["QUAD-EQ"], problem_types=["ptype.solve-for-unknown"]),
+            _problem(problem_id="t2", units=["QUAD-EQ"], problem_types=["ptype.solve-for-unknown"]),
+            _problem(
+                problem_id="t3", units=["ARITH-SEQ"], problem_types=["ptype.evaluate-expression"]
+            ),
+            _problem(problem_id="t4", units=["POLY-ROOT"]),  # 유형 미태깅.
+        ],
+    )
+    catalog = pbc.load_standards({"standards": [_standard("[10공수1-02-02]")]})
+    report = pbc.build_report(
+        (pbc.load_corpus_file(corpus, name="problem_bank_types"),),
+        catalog,
+        revision=_STD_2022,
+        problem_types=(
+            "ptype.solve-for-unknown",
+            "ptype.evaluate-expression",
+            "ptype.verify-claim",
+        ),
+    )
+
+    assert report.type_unit_matrix["ptype.solve-for-unknown"] == {"QUAD-EQ": 2}
+    assert report.type_unit_matrix["ptype.evaluate-expression"] == {"ARITH-SEQ": 1}
+    assert report.type_totals["ptype.solve-for-unknown"] == 2
+    assert report.zero_coverage_types == ("ptype.verify-claim",)
+    assert report.problems_without_problem_type == 1
+
+
+def test_zero_coverage_types_empty_when_catalog_unknown(tmp_path: Path) -> None:
+    """카탈로그를 안 주면(기본값) '0커버'를 단정하지 않는다 — 정직 회계."""
+    corpus = _write_corpus(
+        tmp_path,
+        "problem_bank_types2",
+        [_problem(problem_id="u1", problem_types=["ptype.solve-for-unknown"])],
+    )
+    catalog = pbc.load_standards({"standards": [_standard("[10공수1-02-02]")]})
+    report = pbc.build_report(
+        (pbc.load_corpus_file(corpus, name="problem_bank_types2"),), catalog, revision=_STD_2022
+    )
+    assert report.problem_types_catalog == ()
+    assert report.zero_coverage_types == ()
+    assert report.type_totals["ptype.solve-for-unknown"] == 1
+
+
+def test_load_problem_types_rejects_malformed_payload() -> None:
+    """분모(카탈로그)를 모른 채 0커버를 내지 않는다 — 조용한 폴백 없이 즉시 ValueError."""
+    with pytest.raises(ValueError):
+        pbc.load_problem_types({"not": "a list"})
+    with pytest.raises(ValueError):
+        pbc.load_problem_types([{"name_ko": "누락"}])  # problem_type_id 없음
+    with pytest.raises(ValueError):
+        pbc.load_problem_types(["문자열도 안 됨"])
+
+
+def test_load_problem_types_dedups_and_sorts() -> None:
+    ids = pbc.load_problem_types(
+        [
+            {"problem_type_id": "ptype.verify-claim"},
+            {"problem_type_id": "ptype.solve-for-unknown"},
+            {"problem_type_id": "ptype.verify-claim"},  # 중복.
+        ]
+    )
+    assert ids == ("ptype.solve-for-unknown", "ptype.verify-claim")
+
+
+def test_render_report_shows_zero_coverage_type_list(tmp_path: Path) -> None:
+    corpus = _write_corpus(
+        tmp_path,
+        "problem_bank_types3",
+        [_problem(problem_id="v1", problem_types=["ptype.solve-for-unknown"])],
+    )
+    catalog = pbc.load_standards({"standards": [_standard("[10공수1-02-02]")]})
+    report = pbc.build_report(
+        (pbc.load_corpus_file(corpus, name="problem_bank_types3"),),
+        catalog,
+        revision=_STD_2022,
+        problem_types=("ptype.solve-for-unknown", "ptype.verify-claim"),
+    )
+    text = pbc.render_report(report)
+    assert "## 2.5 유형(problem_type) × 단원 분포" in text
+    assert "`ptype.verify-claim`" in text
+    assert "1/2종 미커버" in text or "**1**/2종 미커버" in text
+
+    empty_catalog_report = pbc.build_report(
+        (pbc.load_corpus_file(corpus, name="problem_bank_types3"),), catalog, revision=_STD_2022
+    )
+    empty_text = pbc.render_report(empty_catalog_report)
+    assert "카탈로그 미상" in empty_text
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 7. CLI — exit 0/2만(게이트 아님)
+# ──────────────────────────────────────────────────────────────────────────
+def _cli_env(
+    tmp_path: Path, problems: list[dict[str, object]], *, problem_type_ids: list[str] | None = None
+) -> tuple[Path, Path]:
     corpus_root = tmp_path / "corpus"
     _write_corpus(corpus_root, "problem_bank_cli", problems)
     standards = _write_standards(
         corpus_root / "standards_v1" / "standards.json",
         [_standard("[10공수1-02-02]"), _standard("[12확통02-04]")],
     )
+    if problem_type_ids is not None:
+        _write_problem_types(
+            corpus_root / "problem_type_graph_v1" / "problem_types.jsonl", problem_type_ids
+        )
     return corpus_root, standards
 
 
@@ -515,3 +631,49 @@ def test_cli_json_artifact_is_deterministic(tmp_path: Path) -> None:
     assert payload["standards"]["target_revision"] == _STD_2022
     assert payload["standards"]["coverage_rate"] == pytest.approx(0.5)
     assert payload["band_labels"] == list(pbc.BAND_LABELS)
+
+
+def test_cli_wires_problem_types_catalog(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--problem-types`로 지정한 카탈로그가 유형×단원 축·0커버 목록에 실제로 반영된다."""
+    corpus_root, standards = _cli_env(
+        tmp_path,
+        [_problem(problem_id="p1", problem_types=["ptype.solve-for-unknown"])],
+        problem_type_ids=["ptype.solve-for-unknown", "ptype.verify-claim"],
+    )
+    rc = pbc.main(
+        [
+            "--corpus-root",
+            str(corpus_root),
+            "--standards",
+            str(standards),
+            "--problem-types",
+            str(corpus_root / "problem_type_graph_v1" / "problem_types.jsonl"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "`ptype.verify-claim`" in out
+    assert "1/2종 미커버" in out or "**1**/2종 미커버" in out
+
+
+def test_cli_missing_problem_types_warns_but_does_not_gate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """유형 카탈로그 파일이 없어도 exit 2로 막지 않는다 — 보조 축이라 경고만(침묵 실패 금지)."""
+    corpus_root, standards = _cli_env(tmp_path, [_problem()])
+    rc = pbc.main(
+        [
+            "--corpus-root",
+            str(corpus_root),
+            "--standards",
+            str(standards),
+            "--problem-types",
+            str(tmp_path / "no-such-catalog.jsonl"),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "경고 — 유형 카탈로그 적재 실패" in captured.err
+    assert "카탈로그 미상" in captured.out
