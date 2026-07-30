@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-29-mc-choice-buttons
+title: "객관식 선택지 버튼 UX — 보기 탭 제출로 완료(자유 타이핑 브리틀함 해소)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - S3-28-conversation-answer-detection
+requires_gates: []
+acceptance:
+  - 객관식 문항이 코치 화면에 탭 가능한 선택지 버튼으로 렌더
+  - "선택지 탭→값 제출(student_input)→서버 correct→돌아보기→완료(주관식과 동일 흐름)"
+artifacts:
+  - 379bf2cc
+paths:
+  - "src/mobile/lib/features/**"
+session: null
+notes: "미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz 회수(원 ID: S3-12, 원 커밋 b1ec9fa4) — 재채번. 검증: flutter analyze 0 issues + flutter test 234 green(chat_screen_test.dart 20건 — 기존 14 + 신규 6). 원본 diff를 S3-26/S3-27을 거쳐 이미 재구성된 chat_screen.dart 구조 위에 수동 재적용(자동 merge 미사용)."
+updated: 2026-07-30
