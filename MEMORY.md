@@ -337,6 +337,62 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (설계·평가): **평가 모듈 갭 점검·설계(D1~D7) + 태스크 6건 등재 — 외부 EOS 틀 기능 49~58 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『평가(Assessment)』(기능 49~53 진단·형성·총괄·수행평가
+생성 + AI 평가문항 생성, 확장 후보 54~58 자동채점·결과분석·문항통계·오답오개념분석·맞춤형 재평가
+— WhyMath 전용이 아닌 일반적 EOS 틀)를 코드베이스와 대조. `knowledge_module_gap_review.md`(6~10,
+07-27)·`problem_bank_gap_review.md`(18~22, 07-28)·`solution_module_gap_review.md`(23~27)·
+`ai_tutor_module_gap_review.md`(37~41, 07-29) 형식 답습 — **5번째 자매편**.
+
+**판정 — 근원 갭이 틀의 "확장 후보"에 있었다**: 10기능 중 53(AI 문항 생성)·57(오답·오개념 자산)은
+**틀보다 엄격**(수용 게이트 4종·독립 감사·Wilson 6축·강등전 / 카탈로그 64종·pgvector matcher·가설
+감쇠 ×0.85), 50(형성평가)은 **튜터링 루프로 재해석 충족**, 56(문항통계)은 `S4-15` 승계. 그러나
+틀이 확장 후보로 뒤에 둔 **54(자동채점)가 이 저장소의 근원 갭**이다 — `is_correct`를 **클라이언트가
+신고**하고(`api/me.py:601,625`), 저장된 정답(`Problem.answer`·`AtomProbe.diagnostic_answer`)을 읽는
+채점기가 **src 0건**(`correct_answer`·`grade_answer`·`auto_grade` 전량 0)이라 IRT 보정·BKT 숙달·
+WH-1 대리지표 11종·파일럿 KPI 5종이 모두 클라 신뢰에 종속된다. 3계층 SymPy 검산 약 1,900행은
+`api/verify.py:224`가 "**서버 정답을 조회하지도, 누출하지도 않는다**"고 명시한 **자기검산 도구**이며
+방향이 반대다. ARCH-10/ARCH-12가 막으려 한 것의 **미완성 절반**.
+
+**부수 실측 3건**: ① `assessment` 테이블·인덱스·조회/완료/삭제 API·privacy 3종이 실재하는데 행을
+만드는 코드가 **0건**(`session.add(Assessment` 0·`POST /assessments` 부재) — 형제 3테이블은 live
+writer 보유이므로 **4테이블 중 `Assessment`만 고아**, `AssessmentType` 5종 전부 미발화 ② 시험지·세트
+구조 **전량 0건**(`blueprint`·`test_paper`·`total_score`·`time_limit` src grep 0, `points` 소비처 0)
+— l6 6모드는 `list[Problem]` 필터+안정정렬뿐 ③ `distractor_map` 122히트지만 실소비는 `len()*2.0`
+개수 세기뿐이고 `l4/misconception/distractor.py:13`이 "실시간 distractor→진단 결선은 모달리티
+추가라 후속 보류"로 명시 선언.
+
+**의도적 미채택 7건** (협상 불가 근거와 1:1): ①평가원·EBS 기출 조립 모의고사 → 저작권 3중 레일
+(§32 단서·§136·§140·§125-2·2024.8 대법원) ②학급·학교 집계·석차·랭킹 → 미성년자 개인정보·랭킹
+금지·Phase 3+ ③표절 검사 → 학생 데이터 외부 공유 금지·소비처 0 ④형성평가를 별도 평가 엔티티로
+신설 → 추상 이중화 금지(튜터링 루프가 truth source) ⑤루브릭·서술형 "정답 확언" 채점 →
+`verify_step` `unverifiable` 정직 경계·허위 확언 금지 ⑥수행평가 제출물·프로젝트·발표 → 학생앱
+우선·소비처 0 ⑦성취도 등급 A~E·백분위·합격 예측 → **데이터부터 0**(코퍼스 필드 부재) + 근거 없는
+예측 금지 → `Assessment` 예측 4필드를 **채우지 않기로 동결**.
+
+**설계 D1~D7** (정본: `docs/architecture/assessment_module_gap_review.md`): D1 서버 자동채점(최우선·
+`/verify-*` 계약 무변경·별 경로) · D2 진단 시행 단위 착지(기존 L2 산출물 조립만·신규 계산 0) ·
+D3 진단문항 서빙(`atom_probe` 1,837건 소비처 0 — **`PED-10` 타 세션 중복 회피로 등재 보류**) ·
+D4 평가 blueprint + 배점·세트 채점(CAT 단건이 정본·blueprint는 단원 마감 전용 예외) · D5 오답
+선지→오개념 결선(매처 시그니처 무변경·`distractor_map` 조회로 우회) · D6 유사문제 재출제 폐루프
+(`S4-14` 계보 소비·생성 0) · D7 성취기준 달성도 관측(**축 결정: 개념/원자 축을 정본으로 확정하고
+성취기준은 `atom_node.standard_codes` 투영으로 파생** — 새 mastery 테이블 0).
+
+**등재·검증**: `ASM-01`~`ASM-06` 6건을 `backlog.py add` CLI로 등재(ID 추론 배정 금지 준수) →
+validate green **130건**·`next` 최상위 후보가 `ASM-01`로 편입 확인. 정본 3곳 부기 —
+`02_learner_model.md`(BKT 성취기준 축은 문서 축이고 구현은 개념 축 · `Assessment` 고아) ·
+`06_application_modes.md`(모드는 세트를 묶지 않는다 · 성취기준 주입 실경로는 원자 축 3단·학교진도
+전용) · `00_overview.md`(인덱스 1줄). **중복 등재 회피**: `S4-15`(문항통계)·`S4-02`(서술형·증명
+채점)·`S4-18`(복습 시간축 — D7은 측정 축으로 층위 구분)·`S4-14`(변형 계보)·`S3-16`(행동 텔레메트리)·
+`PED-05`(런타임 휘발 조립 — D2는 영속 스냅샷)·`PED-10`(진단문항 슬롯)·`ME-06`(생성 학년 범위)는
+**기존 추적 승계**.
+
+**NOT**: 코드 변경 0(설계·등재까지). 스테일 코드 주석 2곳(`schema/assessment.py:7` "DB 미배포" ·
+`schema/problem.py:492-494` 4단 조인)은 이번 커밋에서 고치지 않고 §0.5에 사실로 기록 + 정정을
+D2·D7 acceptance에 편입. 정직한 공백 6종·유보 발화조건 6건은 조건만 기록.
+정본: `docs/architecture/assessment_module_gap_review.md`.
+
 ### 2026-07-29 (설계·AI 튜터): **AI 튜터 모듈 갭 점검·설계(D1~D6) + 태스크 4건 등재 — 외부 EOS 틀 기능 37~41 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『AI Tutor』(기능 37~41: 대화형 AI 튜터·Socratic

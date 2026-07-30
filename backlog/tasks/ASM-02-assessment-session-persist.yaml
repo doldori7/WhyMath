@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-02-assessment-session-persist
+title: "진단 시행 단위 착지 — Assessment writer 실체화(고아 테이블 소생·조립만)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①`Assessment` 행 생성 경로를 신설해 결과 5필드를 기존 산출물로 조립한다 — `concept_diagnosis`←`l2/concept_diagnosis.compute_concept_diagnoses`·`weak_points`←`l2/weak_concept_recommendation`·`strong_points`←같은 산출물 상위 숙달·`recommended_path`←`l2/learning_path`·`pattern_diagnosis`←`l4/misconception/hypothesis_store` 활성 가설, ②신규 계산 로직 0·신규 테이블 0·신규 마이그레이션 0(테이블·인덱스가 이미 배포됨), ③종료 시점은 기존 `measurement_sufficient`(`_TARGET_SE=0.3`) 재사용"
+  - "①발화 대상은 `AssessmentType` 2종만 — 초기진단(온보딩 CAT 웜스타트 종료)·단원진단(단원 마감). 주간진단·실전모의고사·D-100예측은 §5 발화조건으로 유보, ②반-스코프 동결: 예측 4필드(`estimated_grade`·`estimated_score`·`estimated_percentile`·`admission_probability`)와 `mental_phase` 미충전 — §2-⑦ 근거 없는 예측 금지, ③상시 추정(`/diagnosis/concepts` 실시간)과 시점 스냅샷(`Assessment` 불변)의 역할 분담을 주석·테스트로 동결"
+  - "①`schema/assessment.py:7`의 스테일 docstring(\"Pydantic-schema-only·DB 미배포\") 정정 — ORM·alembic이 이미 배포됨, ②PED-05(런타임 휘발 `LearnerState` 조립)와 층위 구분 명기 — 본 태스크는 영속 시점 스냅샷이며 중복이 아님, ③`GET /v1/me/assessments`·`PATCH /complete`·`DELETE`·privacy export/erasure/retention 3종이 빈 배열을 벗어나 실제 행을 다루는지 회귀 테스트"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/assessment.py
+  - src/backend/whymath_backend/schema/assessment.py
+  - src/backend/whymath_backend/api/me.py
+  - tests/backend/db/test_assessment_orm.py
+  - "tests/backend/api/**"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D2. assessment 테이블·인덱스·조회/완료/삭제 API·privacy 3종이 모두 실재하는데 행을 만드는 코드가 src 0건(session.add(Assessment 0건·POST /assessments 부재) — 4테이블 중 Assessment만 고아. AssessmentType 5종 전부 미발화(30히트 중 17건이 tests). 귀결: GET /me/assessments가 영구히 빈 배열이고 재진단 성장 비교가 불가. ASM-03(세트)·ASM-06(성장 비교)의 선결. 착수 시 첫 확인: db/models/assessment.py:66 컬럼과 l2 산출물의 필드 대응표."
+updated: 2026-07-30

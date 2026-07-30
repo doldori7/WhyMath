@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-05-similar-problem-retry
+title: "유사문제 재출제 폐루프 — SocraticStrategy.유사문제 라벨 실체화(형제 문항 재선택)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - ASM-04-distractor-misconception-wiring
+requires_gates: []
+acceptance:
+  - "①오개념이 확정된 뒤 같은 오개념을 유발하는 형제 문항을 기존 코퍼스에서 재선택해 코치 응답 경로로 내보낸다 — `SocraticStrategy.유사문제`(`schema/enums.py:930`) 라벨의 첫 실체, ②형제 관계는 S4-14가 착지시키는 `problem_relation` 계보를 소비하고 자체 계보를 만들지 않는다, ③문항 생성 0·LLM 0(선택만)"
+  - "①반-스코프 동결: 문항 *생성*은 스코프 밖(l3/equivalent 배치의 일) — 여기서는 기존 코퍼스에서 고르기만 한다, ②직전 오답 문항 자체는 재노출에서 제외(같은 문항 반복 금지), ③유사문제 제시가 원 문항의 답을 알려주지 않는지 검증(정답 누출 금지·답 미루기 정합)"
+  - "①S4-14-variant-lineage-persist 미착지 상태에서는 착수하지 않는다(계보 writer 0이면 입력 없는 파이프라인), ②`CoachResponse`에 문항 반환 필드를 추가할 경우 coach가 텍스트만 낸다는 기존 계약 변경을 명시적 결정으로 기록, ③신규 테이블 0"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+  - src/backend/whymath_backend/api/coach.py
+  - "tests/backend/l4/**"
+  - "tests/backend/api/test_coach*.py"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D6. SocraticStrategy.유사문제가 enum 라벨만이고 l4/ 내 0건·similar_problem 0건·재출제 0건 — 생성기도 조회기도 없어 형성평가 루프가 닫히지 않는다. CoachResponse에 문항 반환 필드가 없어 coach는 텍스트만 낸다. core_feature_review_2026-07.md가 이미 '학생 특정 오답에서 새 문제 폐루프 재생성은 미구현'으로 판정. S4-14(변형 계보·타 세션 in-flight) 착지 후 소비하는 구조이므로 그 전 착수 금지. ASM-04 선결(오개념 확정). 착수 시 첫 확인: S4-14 머지 여부와 problem_relation writer 실재."
+updated: 2026-07-30

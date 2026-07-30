@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-03-assessment-blueprint
+title: "평가 blueprint — 총괄평가 세트 조립 + 배점·총점·부분점수 첫 소비처"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - ASM-01-server-side-grading
+  - ASM-02-assessment-session-persist
+requires_gates: []
+acceptance:
+  - "①선언적 blueprint 명세(성취기준×난이도 밴드×유형 비율·문항 수·배점 배분·시험시간)를 만족하는 세트를 자체 동등문제 코퍼스에서 조립하고 `l6/_shared.py:141 is_exposable()`를 최종 게이트로 통과시킨다, ②`points`(`schema/problem.py:258`) 첫 소비처로 총점을 합산한다, ③부분점수는 신규 채점기 없이 기존 `l3/verify_solution.py` `first_incorrect_index`를 부분 인정 근거로 재사용"
+  - "①CAT vs blueprint 역할 분담을 주석·테스트로 동결 — 학습 중 노출은 CAT 단건(`GET /v1/me/next-problem`)이 정본이고 blueprint는 '단원 마감 측정'에만 쓰는 특정 목적의 예외, 세트가 CAT을 대체하지 않는다, ②좌석 증설 회피: 세트를 새 테이블로 만들지 않고 `Assessment` 행 + 문항 id 배열로 표현(`AssessmentType.실전모의고사`가 이때 첫 발화), ③신규 테이블 0"
+  - "①반-스코프 동결: 평가원·EBS 본문 0건(§2-① 저작권 3중 레일 — 구조 메타만·자체 동등문제로 대체), ②교사용 시험지 빌더 UI·인쇄·PDF 출력 미포함(§5-④ Phase 3+), ③루브릭·서술형 채점 미포함(§2-⑤)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l6/**"
+  - src/backend/whymath_backend/db/models/assessment.py
+  - src/backend/whymath_backend/schema/problem.py
+  - "tests/backend/l6/**"
+  - "tests/backend/api/**"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D4. 시험지·세트 구조가 코드·스키마·DB 전량 0건(blueprint·test_paper·exam_set·total_score·time_limit·answer_sheet src grep 모두 0) — 시험지 26히트는 전부 docs의 Phase 3+ 계획. l6 6모드는 list[Problem]·limit≤200 필터+안정정렬뿐이라 배점 총합·시간·비율 제약을 표현할 필드 자체가 없다. points 소비처 0으로 총점 계산 불가. ASM-01(채점)·ASM-02(Assessment 좌석) 선결. 착수 시 첫 확인: api/gating.py:299 정렬·limit 계약을 깨지 않고 세트 제약을 얹을 수 있는지."
+updated: 2026-07-30

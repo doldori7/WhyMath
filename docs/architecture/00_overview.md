@@ -187,6 +187,7 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 - 하네스: `03b_wh_s_solver_harness.md`(솔버·WH-S) · `04a_wh1_tutoring_harness.md`(튜터링·WH-1)
 - 콘텐츠 전략(교수법-중립 DSL·Rendering Engine·2층 캐시): `03c_content_strategy_cache.md`
 - 문제은행 격차·정합 정본: `problem_bank_gap_review.md` — 코퍼스 6종 현황·외부 틀(18~22) 대조 판정·설계 D1~D9
+- 평가 격차·정합 정본: `assessment_module_gap_review.md` — 채점·진단 시행·세트·재평가 현황·외부 틀(49~58) 대조 판정·설계 D1~D7
 - 2단계 교수법·런타임 선택·적응 엔진: `04d_adaptive_pedagogy_engine.md` · 북극성 서사: `../strategy/education_os_positioning_v1.md`
 - 시장 전략: `../strategy/`
 - 코딩 표준: `../standards/`

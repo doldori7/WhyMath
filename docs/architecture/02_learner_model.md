@@ -27,6 +27,16 @@
 
 ### 1. BKT (Bayesian Knowledge Tracing) — Phase 1
 - 성취기준당 1개 4-파라미터 모델
+
+> **부기 (2026-07-30 — `assessment_module_gap_review.md` §0.4·§3 D7)**: "성취기준당 1개 모델"은
+> **문서 축이고 구현 축이 아니다.** 실제 영속 축은 **개념/원자**다(`ConceptMasteryHistory`·
+> `SkillMasteryHistory`·`AbilitySnapshot`) — L2 16파일에서 `성취기준` grep 3건이 전부 docstring
+> 산문이고, 성취기준 단위 mastery 테이블은 존재하지 않는다. 아래 §시계열 저장의 SQL
+> `standard_code` 키도 같은 사유로 미구현이다(실 테이블은 `concept_mastery_history`).
+> **D7의 축 결정**: 원자 백본이 runtime 진실 원천으로 단일화됐고(2026-07-04) 성취기준은 교육과정
+> 오버레이(8대 원칙 5)이므로, **개념/원자 축을 정본으로 확정하고 성취기준 달성률은
+> `atom_node.standard_codes` 투영으로 파생 계산**한다 — 성취기준 축 mastery 테이블을 새로 만들지
+> 않는다. 등재: `ASM-06-standard-attainment-observation`.
 - (P(L0), P(T), P(S), P(G))
 - 학생 풀이 결과로 베이지안 업데이트
 - 도구: `pyBKT` 또는 자체 구현
@@ -209,6 +219,16 @@ CREATE TABLE mastery_history (
 );
 SELECT create_hypertable('mastery_history', 'timestamp');
 ```
+
+> **부기 (2026-07-30 — `assessment_module_gap_review.md` §0.3·§3 D2)**: 이 계층에는 **진단 시행
+> 단위가 없다.** `assessment` 테이블·인덱스·조회/완료/삭제 API·privacy 3종이 모두 실재하는데
+> **행을 만드는 코드가 저장소 전체에 0건**이고(`session.add(Assessment` src 0 · `POST /assessments`
+> 부재), `AssessmentType` 5종도 프로덕션 writer·reader 0이다 — 형제 3테이블은 live writer를
+> 가지므로 **4테이블 중 `Assessment`만 고아**다. 귀결: 학습자 모델은 *지금 상태*를 상시 추정
+> (`GET /v1/me/diagnosis/concepts`)하지만 *그때 상태*를 동결한 스냅샷이 없어 **재진단 성장 비교가
+> 성립하지 않는다.** D2는 이 좌석을 기존 L2 산출물 조립만으로 채우되(신규 계산 0) 예측 4필드
+> (`estimated_grade`·`estimated_score`·`estimated_percentile`·`admission_probability`)는 근거 없는
+> 예측 금지에 따라 **채우지 않는다**. 등재: `ASM-02-assessment-session-persist`.
 
 ## 성공 기준
 

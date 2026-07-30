@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-06-standard-attainment-observation
+title: "성취기준 달성도 관측(수요측) + 재측정 축 — ARCH-18 공급측의 쌍"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+  - ASM-02-assessment-session-persist
+  - S4-18-review-time-axis
+requires_gates: []
+acceptance:
+  - "①축 결정을 먼저 못박는다 — 구현이 쓰는 개념/원자 축을 정본으로 확정하고 성취기준은 `atom_node.standard_codes` 투영으로 파생 계산한다(8대 원칙 5 'Curriculum은 Overlay'·2026-07-04 원자 백본 단일화 근거). 새 mastery 테이블 0, ②학생별 성취기준 달성률을 ARCH-18과 같은 형식(결정론·정직 회계·NO_DATA 표기)으로 산출, ③분모는 2022 개정 435(레코드 895 아님 — problem_bank_coverage_2026-07.md:36-48 정정 승계)"
+  - "①재측정 축은 S4-18이 착지시키는 `decayed_mastery`·`days_since_practice`를 소비하고 자체 시간축을 만들지 않는다 — S4-18은 복습(=학습) due, 본 태스크는 측정 due로 층위 구분, ②성장 비교는 ASM-02의 `Assessment` 스냅샷 2개 차분으로 산출, ③`harness/pilot_kpi_baseline.py:18-23` 정직 표기 규약 적용 — 측정 불가는 NO_DATA + 사유 문자열이며 0으로 위장하지 않는다"
+  - "①반-스코프 동결: 성취수준 A~E·평가기준(상/중/하)·백분위·석차 미포함 — 코퍼스 필드부터 0건(§4 정직한 공백), ②코호트·학급·학교 단위 집계 미포함(§2-② 미성년자 개인정보·랭킹 금지·Phase 3+), ③S3-01 미착지 상태에서 착수 금지(실학생 응답 0이면 입력 없는 파이프라인)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/l2/**"
+  - "tests/backend/harness/**"
+  - "tests/backend/l2/**"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D7. 성취기준 단위 학생 달성도 집계 코드 0(L2 16파일에서 성취기준 grep 3건 전부 docstring 산문) — 영속 축은 concept/skill/θ뿐. 문서(02_learner_model.md:29 '성취기준당 1개 BKT'·:141 mastery 키가 [9수01-01]·:199-211 SQL standard_code)와 구현이 서로 다른 축을 쓰는 불일치가 근본 원인이라 축 결정이 선행 과제. ARCH-18(공급측 문항 커버리지·harness/problem_bank_coverage.py)의 수요측 쌍이며 형식 선례로 삼는다. 실학생 응답 0이라 S3-01 잠금. 착수 시 첫 확인: api/gating.py:126-128의 원자 축 3단 조인을 학교진도 전용에서 일반화할 수 있는지."
+updated: 2026-07-30

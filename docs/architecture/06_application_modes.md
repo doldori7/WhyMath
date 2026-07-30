@@ -89,6 +89,20 @@ L5 온보딩(국가·학년·학교·교과서·진도·목표, `05_interaction.
   (성취기준 코드 주입과 동형 계약). 흐름: `HTTP → 후보 조회 → 개념코드 조인 → curriculum_entry
   resolver(to_thread) → 깊이 주입 → L6 깊이정렬`.
 
+> **부기 (2026-07-30 — `assessment_module_gap_review.md` §0.4·§0.5-2·§3 D4)**: 두 가지를 정정한다.
+> ① **모드는 문항을 "세트"로 묶지 않는다.** 6모드 전부 `gating.py` 1개 구조이고 출력은
+> `list[Problem]`(`limit≤200`) — 적격 필터 → 우선순위 내림차순 안정정렬 → limit뿐이다
+> (`api/gating.py:296,319,367`). 배점 총합·시험시간·성취기준 비율·유형 비율을 표현할 **필드 자체가 없고**
+> (`points` src 소비처 0), 시험지·blueprint·총점 관련 식별자는 코드·스키마·DB 전량 0건이다.
+> 즉 위 차원 7("평가 형식")의 미구현은 표기 문제가 아니라 **세트 구조 자체의 부재**다. 총괄평가
+> 세트 조립은 `ASM-03-assessment-blueprint`에서 다루며, 그때도 **학습 중 노출은 CAT 단건이 정본이고
+> blueprint는 "단원 마감 측정" 전용 예외**로 경계를 동결한다.
+> ② **성취기준 코드 주입의 실가동 경로는 3단이다.** `schema/problem.py:492-494`가 서술한 4단
+> (`concept_standard_link`→`achievement_standard`)은 `api/gating.py:126-128`이 "원자 축 전환(S2-03)…
+> 구 437 code 공간·**재연결 후 0행**"이라 자인해 `atom_node.standard_codes` 3단으로 교체됐고,
+> 그것도 **학교진도 핸들러 전용**이다(`api/gating.py:257-258` — retake·suneung·thinking은 이 조인을
+> 지지 않는다).
+
 깊이는 *적격성 게이트가 아니라 우선순위 보너스*다(난이도처럼 — 깊이 불일치로 탈락시키지 않는다).
 잔여(후속): 차원 1·2·4~7(활성 풀·표기·풀이 순서·용어·인접 순서·평가 형식)·다국(US/IMO)·
 `required_depth` 큐레이션·표기/용어(notation_local·terminology_local) 소비.

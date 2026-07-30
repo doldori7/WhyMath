@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-04-distractor-misconception-wiring
+title: "오답 선지 → 오개념 결선 — distractor_map 개수세기에서 M-id 역추적으로"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - ASM-01-server-side-grading
+requires_gates: []
+acceptance:
+  - "①학생이 고른 선지에서 `distractor_map` 조회로 오개념 M-id를 직접 얻는 결정론 경로를 배선한다 — LLM 0·임베딩 0, ②얻은 M-id를 기존 `l4/misconception/hypothesis_store`에 같은 규약(감쇠 ×0.85)으로 투입해 자유서술 경로와 하나의 가설 세트로 합류시킨다, ③`match_gate` 신뢰 규약 준용"
+  - "①반-스코프 동결: 매처(`l4/misconception/diagnose.py`·`semantic/matcher.py`) 입력 시그니처 무변경 — 선지 경로를 매처에 추가하는 것이 `distractor.py:13`이 '모달리티 추가'라 보류한 그것이므로 조회로 우회한다, ②새 EdgeType 발화 0(`TRIGGERS_DISTRACTOR`는 어휘만 존치), ③오개념 초기 context preload 금지 원칙 유지(reactive retrieval만)"
+  - "①즉시 소비처 `misconception_mc_v0` 1,080문(선지별 오개념 태깅 보유)에서 역추적이 실제로 M-id를 산출하는지 회귀 테스트, ②`l6/metacognition/gating.py:118,157`의 `len()*2.0` 개수 세기 경로는 무회귀(게이팅은 L4를 import하지 않는 계약 유지), ③미등록 M-id는 fail-fast(카탈로그 `CATALOG_BY_ID` 키 검증)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/misconception/**"
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/l4/**"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D5. distractor_map 122히트지만 실소비는 l6/metacognition/gating.py:118,157의 len()*2.0 개수 세기뿐 — 오개념 id를 꺼내는 코드가 0건이고 l4/misconception/distractor.py:13이 '객관식에서 실시간 distractor→진단 결선은 모달리티 추가라 후속 보류'로 명시 선언. 매처 입력은 student_solution:str 자유서술 전용이라 선지 index 오버로드가 없다. 자산(선지→오개념 컬럼 + op-code 11종 + 카탈로그 64종)은 이미 갖춰져 결선 한 경로만 남았다. ASM-01 선결(어떤 선지를 골랐는지 서버가 알아야 함 — 현 student_answer는 자유 텍스트). 착수 시 첫 확인: distractor.py의 DistractorOpCode ↔ CATALOG_BY_ID 매핑 실재 여부."
+updated: 2026-07-30

@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-01-server-side-grading
+title: "서버 자동채점 — 저장된 정답 대조 경로 신설(클라 is_correct 신고 강등)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①`POST /v1/me/attempts`에서 서버가 저장된 정답(`Problem.answer`·`AtomProbe.diagnostic_answer`)과 대조해 판정하고 결과를 `ProblemAttempt`에 기록한다 — 객관식=선지 대조·단답형=`l3/equivalent/canonicalize` 정규화 후 비교·수식=`l3/symbolic_equivalence` 호출, ②신규 수학 로직 0(기존 SymPy 단일권위 재사용)·LLM 호출 0, ③서술형은 `unverifiable` 유지"
+  - "①반-스코프 동결: `/v1/verify-{step,solution,answer}` 3엔드포인트의 stateless·DB무접근·정답 비누출 계약(`api/verify.py:15,224`) 무변경 — 학생 자기검산 도구로 존치하고 채점은 별 경로, ②부분점수·총점 합산은 ASM-03 소관으로 제외, ③신규 테이블 0(`ProblemAttempt`에 서버 판정 컬럼 추가만)"
+  - "①채점 응답에 정답 자체를 담지 않는다(Polya 답 미루기 정합 — 틀렸다는 사실이 정답 공개가 되면 안 됨), ②클라 신고 `is_correct`를 즉시 제거하지 않고 서버 판정과의 불일치율을 먼저 계측한 뒤 강등한다(측정 없는 전환 금지), ③ARCH-12가 공식화한 데모 예외 화이트리스트 2건 존중·ARCH-10 클라 무-수학로직 게이트 무회귀"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/l3/symbolic_equivalence.py
+  - src/backend/whymath_backend/l3/equivalent/canonicalize.py
+  - "tests/backend/api/**"
+  - "tests/backend/l3/**"
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D1. 평가 모듈 근원 갭 — is_correct가 클라이언트 신고(api/me.py:601,625)이고 저장된 정답을 읽는 채점기가 src 0건(correct_answer·grade_answer·auto_grade 전량 0)이라 IRT 보정(l2/item_calibration.py)·BKT 숙달·WH-1 대리지표 11종·파일럿 KPI 5종이 전부 클라 신뢰에 종속. S3-01 파일럿 전 착지 필수 — 그 후엔 신뢰 불가 입력으로 오염된 시계열이 영구 축적된다. ASM-02·ASM-03·ASM-04의 선결. 서술형·루브릭 채점은 §2-⑤로 미채택(S4-02 승계). 착수 시 첫 확인: api/verify.py:224 정답 비누출 계약을 건드리지 않는 별 경로인지."
+updated: 2026-07-30
