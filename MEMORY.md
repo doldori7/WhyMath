@@ -337,6 +337,40 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (정정 완결·ARCH-22): **pytest-asyncio 로컬 재현의 근본 메커니즘 확정 — "pip 해석 시점 차이"가 아니라 "invocation 방식 차이"였다 + 검증된 상한 pin 적용** (claude 구현, Kiki "/drive" 진행 중 발견)
+
+**배경**: 같은 날 앞선 세션이 ARCH-22를 priority 1("전체 백엔드 CI 실질 마비")로 등재했다가, PR
+#648 실 CI green 확인 후 priority 4("활성 장애 아님·예방적 조치만")로 정정했다(위 결정 로그
+참조). 그 정정은 "실 CI는 무영향"이라는 **결과**는 정확히 잡았지만, **왜** 로컬은 재현되고 실
+CI는 안 되는지 **메커니즘**은 미확정("pip 해석 시점에 따라 다른 버전을 받을 수 있다"는 가설로
+남겨둠)이었다.
+
+**근본 원인 확정**: 버전 차이가 아니라 **pytest invocation 방식의 차이**였다. pytest의
+rootdir/inifile 탐색은 *명시 경로 인자*가 주어지면 그 경로(예 `../../tests/backend/ops/...`)의
+조상 디렉터리를 거슬러 올라가며 설정파일을 찾는다 — 그런데 저장소 루트에는 `pyproject.toml`이
+없고(`tests/backend`와 `src/backend`는 **형제** 디렉터리이지 부모-자식이 아니다), 그 결과 탐색이
+실패해 `asyncio_mode`가 명시한 `auto`가 아니라 **기본값(strict)으로 조용히 폴백**한다 — 이것이
+"async def functions are not natively supported" 오류의 정체다. 반면 `ci.yml`의 backend 잡은
+`working-directory: src/backend`에서 **경로 인자 없이** bare `pytest`만 호출한다 — 이 경우 cwd
+자체에서 `pyproject.toml`을 즉시 발견해 `configfile: pyproject.toml`·`asyncio_mode=Mode.AUTO`가
+정상 적용된다. 검증: 동일 venv(pytest-asyncio 1.4.0 무상한 pin)를 CI와 동일한 방식(`cd
+src/backend && pytest`, 경로 인자 0)으로 재실행 → **7847 passed, 0 failed**(경로 인자를 주고
+돌렸을 때만 재현되던 579건 실패가 완전히 사라짐).
+
+**조치**: `pyproject.toml`의 `pytest-asyncio>=0.24.0`(상한 없음)에 `<2` 상한을 건다(현재
+검증된 1.4.0을 포함하는 1.x 계열만 허용·`langfuse>=2.50,<5` 선례 동형) — 활성 장애가 아니므로
+기능 변화가 목적이 아니라 **미검증 차기 메이저(2.x) 드리프트를 예방**하는 조치다. pin 적용
+전/후 모두 동일한 CI-충실 재현(경로 인자 0)으로 **7847 passed, 0 failed** 동일함을 확인해
+pin이 동작을 바꾸지 않음을 확정했다.
+
+**교훈(일반화)**: 로컬 재현은 CI가 실제로 호출하는 **커맨드·cwd·인자**를 그대로 재현해야 한다.
+"편의상 경로를 명시해서 돌린다"는 재현이 아니라 **별도의 아티팩트를 만드는 행위**가 될 수 있다
+— 이번 사례가 그 구체 반례다(CLAUDE.md "환경 사실의 추론 등재 금지"의 연장선: 로컬 재현
+방법론 자체도 실측·검증 대상이다). 앞선 세션의 priority 4 정정은 유지하고(활성 장애 아님이
+맞다), 그 정정이 남겨둔 "왜"를 이번에 닫았다.
+
+정본: `backlog/tasks/ARCH-22-pytest-asyncio-unpinned-break.yaml`.
+
 ### 2026-07-30 (설계·AI 콘텐츠 생성): **AI 콘텐츠 생성 모듈 갭 점검·설계(D1 기각·D2~D4 등재·D5 승계) + 태스크 3건 — 외부 EOS 틀 기능 58~61·후보 62~68 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『AI 콘텐츠 생성』(기능 58 개념 설명 자동 생성·59 예제
