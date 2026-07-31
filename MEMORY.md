@@ -337,6 +337,52 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+**배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데
+(`api/_crypto.py:285`) 로깅 축은 CLAUDE.md·`dev_constitution.md`·`security_privacy.md` 3곳이
+"로그에 시크릿·PII 남기지 마라"고 규정만 하고 강제 코드가 0건이었다(`logging.Filter`/
+`addFilter` grep 0). 같은 위험을 한쪽은 게이트로, 한쪽은 사람 기억으로 다루는 비대칭 자체가 갭.
+
+**핵심 발견 — `root.addFilter()` 한 줄로는 부족했다(실측 함정)**: Python `logging`의 전파
+규칙상, 조상 로거(`Logger.callHandlers`)는 **조상의 핸들러만** 순회하고 **조상 로거 자신의
+`Filter`는 건너뛴다** — 필터는 레코드를 *만든* 로거의 `.handle()`에서 딱 한 번만 검사된다.
+즉 `logging.getLogger().addFilter(scrubber)`만 하면 `logging.getLogger()` 직접 호출만 걸리고,
+이 코드베이스 전역이 쓰는 `logger = logging.getLogger(__name__)` 패턴은 전혀 걸러지지 않는다.
+위임 세션이 자체 배선 실재성 테스트(`test_scrubber_active_end_to_end_through_test_client`)를
+작성하는 과정에서 실측으로 드러난 함정 — "존재함 ≠ 돌아감"이 로깅 레이어 안에서도 성립한
+사례로 기록. 해결: `logging.setLogRecordFactory`로 레코드 **생성 시점** 자체를 감싸 어떤
+로거·핸들러 경로를 타든 마스킹이 선행되도록 하고, 루트 로거 `addFilter`도 이중 방어로 유지.
+
+**실행**: `ops/log_scrubber.py`(cost_probe·service_health와 동일 `ops/` 횡단 관심사 선례) —
+`PiiSecretScrubberFilter` + `scrub_text` 순수함수. 마스킹 대상: ①시크릿 형태(`sk-`/`pk-` API
+키·`Bearer` 토큰·JWT 3-세그먼트·`WHYMATH_*_KEY/SECRET/SALT` 대입값 — 키 *이름*은 진단용으로
+보존) ②PII 형태(이메일·한국 휴대전화) ③학생 발화·풀이 원문 후보 필드명(`student_text` 등,
+`api/coach.py` 실사용 필드 기반 — 자유 산문 전체 의미론 탐지는 오탐 통제 불가라 미채택,
+필드명 기반이 현실적 방어선). **예외 타입명(`type(exc).__name__`)은 어떤 패턴도 건드리지
+않음**(하드 제약 — CLAUDE.md "침묵 실패 금지", 2026-07-16 langfuse 8일 무증상 전멸 재발 방지).
+`create_app()`이 부팅 시 1회 배선(`_lifespan`이 아니라 구성 시점 — `TestClient(app)`을 `with`
+없이 쓰는 기존 테스트 다수도 보호받아야 하므로).
+
+**검증**: ruff·black(무관한 기존 drift 1건은 이전 SEC-09 검증에서도 확인된 `defect_detection_
+eval.py` — git blame 재확인, 미접촉)·mypy --strict(441파일) clean. CI-충실 전체 스위트
+**7979 passed, 272 skipped, 0 failed**(SEC-09 이후 baseline 7951 대비 +28, 회귀 0) — 위임
+세션의 보고와 정확히 일치. 변별력 쌍(학생 원문·`sk-`/`pk-` 시크릿·`Bearer` 토큰 각각에 대해
+스크러버 有/無 대조군 — 無 쪽은 전역 `LogRecord` 팩토리를 실제로 원복해 "끄면 진짜로 샌다"를
+증명) + 예외 타입명 보존 회귀(시크릿과 같은 메시지에 동시 존재하는 케이스 포함) + 시크릿
+하드코딩 저장소 스캔(플랜티드 위반 검출 확인 + docstring 말줄임표 오탐 방지 확인) 모두 확인.
+배선 실재성 테스트를 직접 재현 — 루트 로거에서 필터 제거 후 `create_app()` 재호출 시 재부착됨,
+반복 호출 시 중복 없음, `_Collector` 핸들러로 실제 HTTP 표면 경로에서 시크릿 마스킹 확인.
+
+**독립 검증 중 직접 추가**: 위임 세션은 `docs/standards/security_privacy.md`의 "❌ 로그에 PII
+평문 기록" 항목에 SEC-09 선례(편집자 부기)를 적용하지 않고 남겨뒀다 — 병합 전 직접 추가(구현
+현황 부기, 원문 삭제 없음).
+
+**NOT**: 자유 산문 전체의 의미론적 PII 탐지(오탐 통제 불가 — 필드명 기반 방어선 채택 이유
+참조). `record.exc_info`(트레이스백 원본)는 검사 대상 밖(렌더된 메시지만 검사).
+
+정본: `docs/architecture/account_security_gap_review.md` D5 · `ops/log_scrubber.py`.
+
 ### 2026-07-30 (구현·SEC-09): **개인정보 감사 3종(반출·동의변경·관리자접근) — `privacy_audit` 신규 테이블 + writer 3곳 + `GET /v1/me/privacy-audit`, 본인 조회 전수 감사는 의도적 제외** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D3 — `security_privacy.md:88-100`이 규정한 감사 로그가
