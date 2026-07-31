@@ -99,12 +99,18 @@ class L7CommunityService:
 
 ## Phase별 진입
 
+> **정정 (2026-07-31)**: 이 절은 교사 대시보드를 Phase 4에만 두어 본문 §4·"전달 형태"(`Phase 3+`)와
+> 모순이었다. `ROADMAP.md:177-179`(M3.3 월 18~21 교사 대시보드 **베타**)와 `:194-210`(Phase 4 학교
+> 라이선스·계약 확산)에 맞춰 **베타=Phase 3 / 학교 확산=Phase 4**로 분리한다. 근거:
+> `collaboration_module_gap_review.md` §3 D4.
+
 ### Phase 3
 - 다중 풀이 갤러리
 - 부모 보고서
+- 교사 대시보드 (B2B) — 베타
 
 ### Phase 4
-- 교사 대시보드 (B2B)
+- 교사 대시보드 (B2B) — 학교 확산
 - Live Problems
 
 ### Phase 4+
