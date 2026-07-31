@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/harness/qa_pipeline.py
   - "tests/backend/harness/**"
-session: null
+session: claude/backlog-drive-next
 notes: "docs/architecture/operations_module_gap_review.md §3 D2 — 외부 EOS 틀 모듈 45(품질검증 QA 엔진) 대조. harness/ 38개 검사 모듈이 각자 CLI로 흩어져 있고 단일 판정으로 묶는 조립 층이 없음(오케스트레이션 0). ARCH-20의 provenance_audit을 저작권 축으로 흡수."
-updated: 2026-07-29
+updated: 2026-07-31
