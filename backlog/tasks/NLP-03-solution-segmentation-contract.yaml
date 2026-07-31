@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-03-solution-segmentation-contract
+title: "풀이 단계 분해 규약 코어 정본화 — 계약 JSON + 백엔드 순수 함수 + 교차 골든 게이트"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 계약 정본 신설: 텍스트 풀이 → 단계 분해 규약을 data/ 계약 JSON + 백엔드 순수 함수로 정본화한다. notation_contract.json 선례를 그대로 따른다(tests/backend/l3/test_notation_contract.py ↔ src/web/graphing-calculator/test/notation_contract.test.js 교차 골든)"
+  - "② 교차 골든 게이트: 계약 JSON 1개를 백엔드 테스트와 모바일 테스트가 동시에 읽어 동일 판정. 클라의 _splitSteps·latexToPlainSolution은 미러 재구현이 아니라 계약 소비로 전환(추가가 아니라 이관 — dead code 금지)"
+  - "③ 2026-07-20 회귀 동결: MathLive \\\\displaylines{} 다행 입력이 0-전이 단일 스텝으로 뭉개지지 않음을 케이스로 동결"
+  - "④ fail-closed 보류: 분해 불가·모호는 조용히 1스텝으로 뭉개지 않고 unverifiable 사유로 보류하고 관측한다(침묵 실패 0)"
+  - "⑤ 측정: 0-전이 제출 비율을 리포트에 노출 — 분해가 실패하는 실사용 빈도가 곧 이 계약의 필요성 근거다"
+  - "⑥ LLM 0: 분해에 LLM을 쓰지 않는다(api/verify.py:8-10 사유 — 방정식 풀이와 변형 체인 혼동 시 거짓 incorrect). 분해는 형태 판별이지 의미 이해가 아니다"
+artifacts: []
+paths:
+  - data/segmentation_contract.json
+  - "src/backend/whymath_backend/l5/**"
+  - "src/mobile/lib/features/chat/domain/**"
+  - "tests/backend/l5/**"
+session: null
+notes: "docs/architecture/nlp_module_gap_review.md §3 D3. api/verify.py:8-10과 04a:605가 '분해는 L5 책임'이라 넘기는데 L5 assemble.py는 이미지 bbox 읽기순만 한다 — 텍스트 경로 분해는 Flutter chat_controller.dart:84 _splitSteps에 있다. 클라가 수학을 하는 위반은 아니나(줄 분해만) 규약이 코어에 없어 타 클라가 재구현해야 하고, latex_to_plain.dart:13이 백엔드 미러링 드리프트를 이미 주석으로 자인한다. 현재 실동작 중이므로 S4(긴급 아님)."
+updated: 2026-07-31

@@ -73,7 +73,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 행동 로그 | ClickHouse | 학습 행동 로그 분석 |
 | 객체 저장소 | S3 / MinIO | 영상·이미지 |
 | 캐시 | Redis 7 | 세션·핫 데이터 |
-| 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math, **Qwen3-VL**(멀티모달·그래프 개형) — *실제 핀(2026-07 코드)*: `qwen2-math:1.5b/7b`(MATH), `qwen2.5:3b/7b`(GENERAL), `qwen3.5:27b`(QUALITY·비동기), `qwen3-vl:8b`(VISION·인식기 보류) | Phaiakes9. 정본 = `03a_l3_router_design.md`·`l3/router.py`(`LOCAL_MODEL_MATRIX`) |
+| 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math, **Qwen3-VL**(멀티모달·그래프 개형) — *실제 핀(2026-07 코드)*: `qwen2-math:1.5b/7b`(MATH), `qwen2.5:3b/7b`(GENERAL), `qwen3.5:27b`(QUALITY·비동기), `qwen3-vl:8b`(VISION·인식기 실배선·라이브 정확도 미검증) | Phaiakes9. 정본 = `03a_l3_router_design.md`·`l3/router.py`(`LOCAL_MODEL_MATRIX`) |
 | 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 — *실제 배선(2026-07 코드)*: `claude-sonnet-4-6`(CLOUD_MID)·`claude-opus-4-7`(CLOUD_HIGH)만. **GPT-5·Gemini 2.5는 계획·라우터 미배선** | 라우터 경유. 정본 = `config.py`(`anthropic_model_mid/high`)·`l3/providers/anthropic.py` |
 | 임베딩 | **기본(로컬)=bge-m3**(`BAAI/bge-m3`·1024) · 클라우드 옵션=OpenAI text-embedding-3-large(3072) | 의미 검색·클러스터링. `embedding_provider` 셀렉터(local 기본·openai·fake)·로컬 우선(비용·Phaiakes9). **최종 확정 미결**(bge-m3 vs te-3-large — MEMORY 슬105·SSM 2026-Q3 스캔 ③) |
 | OCR | **PaddleOCR + Qwen3-VL 하이브리드** (로컬, PaddleOCR fallback) | 손글씨·그래프, Phaiakes9·미성년자 프라이버시. 2026-05-28 결정 (Mathpix 대체) |
