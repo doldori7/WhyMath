@@ -28,7 +28,7 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
-from whymath_backend.db.models.audit import DeletionAudit
+from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
@@ -39,8 +39,10 @@ from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
+from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import (
+    AuditEventKind,
     AuditResourceType,
     Curriculum,
     ExamType,
@@ -155,6 +157,7 @@ _ENDPOINTS = (
     "/v1/me/assessments",
     "/v1/me/dialogues",
     "/v1/me/deletions",
+    "/v1/me/privacy-audit",
 )
 
 
@@ -198,6 +201,48 @@ class TestScopedLists:
         assert len(body) == 1
         assert body[0]["resource_type"] == "learning_session"
         assert str(body[0]["user_id"]) == str(_UID)
+
+    def test_privacy_audit_returns_rows(self) -> None:
+        """SEC-09: 본인 개인정보 감사 이력 조회 — event_kind enum 값 직렬화."""
+        rows = [
+            PrivacyAudit.from_schema(
+                PrivacyAuditSchema(
+                    user_id=_UID,
+                    event_kind=AuditEventKind.export_data,
+                )
+            )
+        ]
+        client, _ = _client(rows)
+        resp = client.get("/v1/me/privacy-audit")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["event_kind"] == "export_data"
+        assert str(body[0]["user_id"]) == str(_UID)
+
+    def test_privacy_audit_event_kind_filter_accepted(self) -> None:
+        """SEC-09: 유효한 event_kind 값은 200(쿼리 결선) — 실 필터링은 통합테스트가 검증."""
+        rows = [
+            PrivacyAudit.from_schema(
+                PrivacyAuditSchema(user_id=_UID, event_kind=AuditEventKind.consent_change)
+            )
+        ]
+        client, _ = _client(rows)
+        for value in ("export_data", "consent_change", "admin_access"):
+            resp = client.get("/v1/me/privacy-audit", params={"event_kind": value})
+            assert resp.status_code == 200, resp.text
+
+    def test_privacy_audit_invalid_event_kind_rejected(self) -> None:
+        """SEC-09: enum 밖 값은 422(임의 문자열 주입 차단)."""
+        client, _ = _client([])
+        resp = client.get("/v1/me/privacy-audit", params={"event_kind": "bogus"})
+        assert resp.status_code == 422
+
+    def test_privacy_audit_naive_datetime_rejected(self) -> None:
+        """SEC-09: timezone 없는 datetime은 422(deletions와 동형 시간창 검증)."""
+        client, _ = _client([])
+        resp = client.get("/v1/me/privacy-audit", params={"since": "2024-01-01T00:00:00"})
+        assert resp.status_code == 422
 
     def test_empty_lists(self) -> None:
         client, _ = _client([])

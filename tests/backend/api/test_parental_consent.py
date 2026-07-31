@@ -25,6 +25,7 @@ from whymath_backend.consent_grant import (
     VerificationResult,
     _default_guardian_verifier,
 )
+from whymath_backend.db.models.audit import PrivacyAudit
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
@@ -77,6 +78,10 @@ class FakeSession:
 
     def added_consents(self) -> list[ParentalConsent]:
         return [o for o in self.added if isinstance(o, ParentalConsent)]
+
+    def added_privacy_audits(self) -> list[PrivacyAudit]:
+        """SEC-09: 이번 호출로 적재된 `privacy_audit` 행(동의변경 감사) — added 스캔."""
+        return [o for o in self.added if isinstance(o, PrivacyAudit)]
 
 
 def _client(
@@ -220,6 +225,44 @@ class TestGrantParentalConsent:
         resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
         assert resp.status_code == 201, resp.text
         assert resp.json()["verification_method"] == StubGuardianVerifier.METHOD
+
+    def test_records_privacy_audit_row_same_transaction(self) -> None:
+        """SEC-09: 동의 기록 성공 → `privacy_audit` 1행(event_kind=consent_change) 동일 TX 적재."""
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "parent@example.com"})
+        assert resp.status_code == 201, resp.text
+        audits = fake.added_privacy_audits()
+        assert len(audits) == 1
+        assert audits[0].user_id == user.user_id
+        assert audits[0].event_kind == "consent_change"
+        assert audits[0].consent_scope == "service_core"
+        assert fake.committed is True
+
+    def test_disabled_grant_writes_no_privacy_audit(self) -> None:
+        """기능 플래그 off(404)면 동의도 감사도 적재되지 않는다(주행위 실패 시 부작용 0)."""
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake, grant_enabled=False).post(
+            _GRANT_PATH, json={"guardian_email": "parent@example.com"}
+        )
+        assert resp.status_code == 404
+        assert fake.added_privacy_audits() == []
+
+    def test_verifier_failure_writes_no_privacy_audit(self) -> None:
+        """신원 확인 미통과(403)면 동의도 감사도 적재되지 않는다."""
+
+        class _FailingVerifier:
+            def verify(self, request: GuardianVerificationRequest) -> VerificationResult:
+                return VerificationResult(verified=False, method="stub", reference=None)
+
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake, verifier=_FailingVerifier()).post(
+            _GRANT_PATH, json={"guardian_email": "parent@example.com"}
+        )
+        assert resp.status_code == 403
+        assert fake.added_privacy_audits() == []
 
     def test_idempotent_repeat_grant_keeps_gate_open(self) -> None:
         """멱등성: 이미 동의가 있어도 재호출이 안전(새 행 적재·parent_consent_at 유지·200대)."""

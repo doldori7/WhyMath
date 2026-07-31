@@ -337,6 +337,55 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-30 (구현·SEC-09): **개인정보 감사 3종(반출·동의변경·관리자접근) — `privacy_audit` 신규 테이블 + writer 3곳 + `GET /v1/me/privacy-audit`, 본인 조회 전수 감사는 의도적 제외** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+**배경**: `account_security_gap_review.md` D3 — `security_privacy.md:88-100`이 규정한 감사 로그가
+`deletion_audit`(삭제) 1곳뿐이었다(실측). **가장 감사가 필요한 반출**(`GET /v1/me/export`)이
+무기록이었고, 동의 변경(`grant_parental_consent`)도 마찬가지였다.
+
+**경계 결정(D3 그대로 집행)**: 본인 조회 29개 엔드포인트 전수 감사는 **하지 않는다** — 미성년
+학습 조회 이력 자체가 프로파일링 자산이 되어 미성년자 보호 원칙과 역행하고 볼륨도 소음이다.
+감사 대상은 ⑴데이터 반출 ⑵동의 변경 ⑶관리자 접근(호출부 0곳 — 관리자 콘솔 Phase B가 배선할
+때까지 writer만 준비) 3종만.
+
+**실행**: ① `PrivacyAudit` ORM 모델(`db/models/audit.py`) — `deletion_audit` 패턴 그대로 답습
+(plain UUID `user_id`·append-only·`event_kind: String(32)`) + 신규 컬럼 2개(`target_user_id`
+— 관리자접근에서만 행위자와 다른 대상, `consent_scope` — 동의변경 구분 메타) ②
+`privacy/audit.py`: `hash_client_ip(ip, *, settings)` — `sha256(salt+ip)`, salt
+(`WHYMATH_PII_AUDIT_IP_SALT`) 미설정 시 프로덕션은 `RuntimeError`(fail-closed, SEC-01
+`require_dialogue_content_cipher` 선례 답습)·dev/CI는 경고+`ip_hash=None`이지만 감사 행 자체는
+적재(주행위를 막는 대가가 감사 이벤트 소실보다 크다는 판단) ③ writer 3곳 모두
+`session.add()`만 하고 커밋은 호출자 책임 — `export_my_data`(반출 payload 조립 *후*)·
+`grant_parental_consent`(`parental_consent` 행 삽입과 **같은 TX**)에 배선, 동일 커밋 원자성
+확보 ④ `GET /v1/me/privacy-audit` 본인 조회 엔드포인트(`list_my_deletions`와 동일 필터/페이지네이션
+형태) — 자기 자신을 읽는 행위는 그 자체로 감사 이벤트가 아님을 명시.
+
+**독립 재검증 중 발견·직접 수정한 문서 결함**(위임 세션의 코드는 정확했으나 동반 문서 커밋이
+부정확)**: `docs/standards/security_privacy.md`의 SEC-09 착지 갱신 커밋(`50d3c29e`)이 회귀
+테스트를 `tests/backend/api/test_privacy_audit.py`(존재하지 않는 파일명)·클래스명
+`TestSelfReadEndpointsProduceZeroAuditRows`(실제와 다름)로 잘못 가리켰고, 본인 조회 경로 수도
+"30개"라고 썼으나 테스트 파일의 실제 튜플 길이는 29개였다. 실제 파일·클래스명은
+`tests/backend/api/test_privacy_audit_integration.py`의 `TestDeletionDoesNotWritePrivacyAudit`·
+`TestSelfScopedRoutesProduceZeroPrivacyAuditRows`. 병합 전 직접 정정(커밋 `cfd26f0d`) — 코드는
+맞고 문서만 어긋난 경우도 "신뢰하되 검증"이 잡아야 할 대상이라는 사례로 기록.
+
+**검증**: ruff·black(무관한 기존 drift 1건 `defect_detection_eval.py`는 SEC-09 이전부터 존재 —
+git blame으로 미접촉 확인)·mypy --strict(440파일) clean. CI-충실 재현(`cd src/backend &&
+pytest`, 경로 인자 0) 전체 스위트 **7951 passed, 271 skipped, 0 failed** — 위임 세션의 보고와
+정확히 일치(SEC-07 이후 baseline 7933 대비 +18, 회귀 0). 마이그레이션 downgrade→upgrade
+라운드트립을 로컬 PG에서 직접 재현(테이블 컬럼 7개·인덱스 1개 확인). 신규 실 PG 통합테스트
+5건(`test_privacy_audit_integration.py`)을 `WHYMATH_RUN_INTEGRATION=1`로 직접 재실행 —
+append-only 누적(반출 2회 호출 → 2행)·동일 TX 원자성(감사 1행 + `parental_consent` 1행)·
+`ip_hash` 재현 가능성(같은 salt+IP=같은 해시)·`deletion_audit` 무중복(계정 삭제가
+`privacy_audit`에 0행)을 모두 재확인. 단위테스트(`tests/backend/privacy/test_audit.py`)도
+fail-closed/graceful-degrade 두 분기 모두 discrimination test로 검증됨을 확인.
+
+**NOT**: 본인 조회 전수 감사(경계 결정, 위 참조). `deletion_audit`와의 테이블 통합(관리자 콘솔
+Phase B, §5-③). 동의 scope 확장(`MGMT-02` 회신 선결).
+
+정본: `docs/architecture/account_security_gap_review.md` D3 ·
+`docs/standards/security_privacy.md` §감사 로그 · `whymath_backend/privacy/audit.py`.
+
 ### 2026-07-30 (구현·SEC-07): **무인증 콘텐츠 CUD 봉인 + Role v0(2값) — 개념·문제 생성/수정/삭제 6라우터 + /v1/generate 인가 부착, DELETE 포함 완전 무방비 상태 해소** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D1 — `/v1/concepts`·`/v1/problems`의 POST/PATCH/**DELETE**
