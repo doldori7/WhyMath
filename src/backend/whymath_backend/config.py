@@ -466,6 +466,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 개인정보 감사 IP 해싱 시크릿(SEC-09, L5) ──
+    # `privacy.audit.hash_client_ip`가 `sha256(salt+ip)`로 감사 행의 IP를 해싱할 때 쓰는 salt.
+    # `email_hash`(api/auth.py)는 *의도적으로 무염* — upsert 조회 키라 같은 이메일=같은 해시가
+    # 필요하다. 감사 IP 해시는 반대 요구(레인보우테이블 불가·조회 키 아님)라 새 salt를 둔다
+    # (jwt_secret_key 패턴 답습 — SecretStr·코드 하드코딩 기본값 없음·env 전용).
+    pii_audit_ip_salt: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "개인정보 감사(SEC-09) IP 해싱 salt — sha256(salt+ip). SecretStr — repr/로그 평문 "
+            "노출 안 됨. 기본값 없음(빈 = 미설정). 환경변수 WHYMATH_PII_AUDIT_IP_SALT로만 주입 "
+            "(하드코딩 금지). 미설정 시 프로덕션 추정 환경은 RuntimeError(fail-closed·SEC-01 "
+            "`require_dialogue_content_cipher` 패턴 답습), 개발·CI는 경고 후 ip_hash=None으로 "
+            "감사 행 자체는 계속 적재한다(IP 해시 미비로 반출·동의변경 감사 자체를 놓치는 것이 "
+            "더 나쁜 실패 모드이므로 주행위를 막지 않는다)."
+        ),
+    )
+
     # ── 시연(데모) 전용 가짜 OAuth provider(S1 게이트 ① 실기기 시연) ──
     # 실기기 학습 루프 녹화를 turnkey로 만들기 위한 하드 블로커 ①(인증) 해소 수단이다.
     # 실 로그인 webview(OAuth-c3)가 미배선이라 보호 엔드포인트가 401로 막히는데, 이 플래그를
@@ -1155,6 +1172,16 @@ class Settings(BaseSettings):
         던진다(빈 시크릿으로 토큰을 발급/검증하는 사고 방지). 값은 로그에 남기지 않는다.
         """
         return bool(self.jwt_secret_key.get_secret_value())
+
+    @property
+    def pii_audit_ip_salt_configured(self) -> bool:
+        """개인정보 감사(SEC-09) IP 해싱 salt가 채워졌는가.
+
+        비어 있으면 미설정 — `privacy.audit.hash_client_ip`가 프로덕션 추정 환경에서는
+        RuntimeError, 개발·CI에서는 경고 후 ip_hash=None으로 감사 행을 계속 적재한다. 값은
+        로그에 남기지 않는다.
+        """
+        return bool(self.pii_audit_ip_salt.get_secret_value())
 
     @property
     def kakao_configured(self) -> bool:

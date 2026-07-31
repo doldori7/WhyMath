@@ -1112,6 +1112,35 @@ class AuditResourceType(str, Enum):
     """계정 전체(삭제권) 삭제 — 사용자의 *모든* 학생-연결 데이터 단일 트랜잭션 영구 삭제(R11)."""
 
 
+class AuditEventKind(str, Enum):
+    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 3종 폐쇄 택소노미.
+
+    `docs/architecture/account_security_gap_review.md` D3의 경계 확정: `security_privacy.md:
+    88-100`의 "모든 PII 접근 로그"는 **채택하지 않는다**(본인 조회 29개 엔드포인트 전수 감사는
+    미성년 프로파일링 자산화·볼륨 소음 — 정정 경위는 `docs/standards/security_privacy.md` §감사
+    로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근"
+    3종뿐이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와 정확히 일치시킨다.
+
+    `deletion_audit`(별도 테이블·`DeletionAudit`)이 삭제 감사의 **단일 권위**를 유지하므로
+    `resource_type`류의 삭제 이벤트는 여기 포함하지 않는다(이중 진실원천 금지 — D3 판단 근거).
+    """
+
+    export_data = "export_data"
+    """`GET /v1/me/export` — 본인 데이터가 시스템 밖(응답 payload)으로 반출됨."""
+
+    consent_change = "consent_change"
+    """`POST /v1/users/me/parental-consent` — 법정대리인 동의 상태 변경."""
+
+    admin_access = "admin_access"
+    """관리자(`Role.CONTENT_ADMIN` 이상)가 *본인 아닌* 사용자의 개인정보에 접근.
+
+    **현재 호출부 0곳**(SEC-09 시점 실측) — 관리자 콘솔(`docs/design/ui/04_admin_console_
+    architecture.md` Phase B)이 아직 없어 이 값을 실제로 적재하는 엔드포인트가 없다. 값·모델·
+    writer(`privacy.audit.record_admin_access_audit`)는 그 콘솔이 착지할 때 바로 배선할 수
+    있도록 미리 세운다(가짜 이벤트 날조 금지 — 실 호출부가 생기기 전까지는 진짜로 0행이다).
+    """
+
+
 class ConsentScope(str, Enum):
     """`parental_consent.consent_scope` — 14세 미만 법정대리인 동의가 *무엇을* 허용했는가.
 

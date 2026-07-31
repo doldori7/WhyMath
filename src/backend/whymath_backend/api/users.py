@@ -13,6 +13,9 @@ is_minor·email_hash·persona_*·subscription_*·created_at 등)는 사용자가
 금지·CLAUDE.md).
 
 다른 사용자 프로필 조회/관리(관리자)는 범위 밖 — 본인(`me`)만 노출(CLAUDE.md 미성년 PII 보호).
+
+SEC-09: 동의 기록 성공 시 `privacy.record_consent_change_audit`가 `privacy_audit`에 감사 1행을
+같은 트랜잭션으로 적재한다(`account_security_gap_review.md` D3 — 감사 대상 3종 중 "동의 변경").
 """
 
 from __future__ import annotations
@@ -21,13 +24,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, get_current_user
 from whymath_backend.api._concurrency import ensure_if_match, etag_for
+from whymath_backend.api._rate_limit import _client_ip
 from whymath_backend.api.auth import email_hash
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
@@ -39,6 +43,7 @@ from whymath_backend.consent_grant import (
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.privacy import record_consent_change_audit
 from whymath_backend.schema.parental_consent import (
     ParentalConsentGrantRequest,
     ParentalConsentGrantResponse,
@@ -174,6 +179,7 @@ async def patch_me(
     summary="법정대리인 동의 기록(14세 미만 게이트 해제) — PIPA §22-2",
 )
 async def grant_parental_consent(
+    request: Request,
     body: ParentalConsentGrantRequest,
     user: Annotated[UserProfile, Depends(get_current_user)],
     session: SessionDep,
@@ -239,6 +245,16 @@ async def grant_parental_consent(
     # 3. 같은 트랜잭션으로 게이트 통과 근거(parent_consent_at) 설정 — 동의 기록과 원자적.
     user.parent_consent_at = now
     await session.merge(user)
+    # 4. SEC-09: 동의변경 감사 1행 — 위 두 쓰기와 *같은* 트랜잭션(session.commit() 1회)이라
+    #    동의 기록·게이트 갱신·감사가 원자적(부분 성공 없음). 어떤 동의 범위가 바뀌었는지만
+    #    typed 메타(consent_scope)로 남기고, 법정대리인 이메일 등 PII는 담지 않는다.
+    record_consent_change_audit(
+        session,
+        user_id=user.user_id,
+        consent_scope=body.consent_scope,
+        ip=_client_ip(request),
+        settings=settings,
+    )
     try:
         await session.commit()
     except IntegrityError as exc:

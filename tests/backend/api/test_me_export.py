@@ -1,8 +1,8 @@
 """데이터 열람·이동권 엔드포인트(`GET /v1/me/export`) — hermetic(FakeSession·인증 오버라이드).
 
 `export_my_data`의 *엔드포인트 결선*만 검증한다: 인증(401)·정상 경로(200 + data·not_included +
-user_id 스코핑)·외부 store 상세는 응답 미노출·ops 로그 가시화. ★실제 ORM 직렬화·실 PG 조회는
-`privacy/test_export.py`·통합테스트가 검증한다(중복 0).
+user_id 스코핑)·외부 store 상세는 응답 미노출·ops 로그 가시화·SEC-09 반출 감사 1행 적재(동일
+트랜잭션). ★실제 ORM 직렬화·실 PG 조회는 `privacy/test_export.py`·통합테스트가 검증한다(중복 0).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
+from whymath_backend.db.models.audit import PrivacyAudit
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Persona
@@ -91,13 +92,26 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """execute(select)별 scalars 큐(15종 + 대화 턴 조인 + profile = 17)를 순서대로 반환."""
+    """execute(select)별 scalars 큐(15종 + 대화 턴 조인 + profile = 17)를 순서대로 반환.
+
+    SEC-09: `export_my_data`가 반출 후 `privacy_audit` 감사 1행을 같은 트랜잭션으로 적재하므로
+    `add`/`commit`도 흉내낸다(`test_parental_consent.FakeSession` 동형) — `added`로 무엇이
+    적재됐는지 검사할 수 있다.
+    """
 
     def __init__(self, result_rows: list[list[Any]]) -> None:
         self._queue = list(result_rows)
+        self.added: list[Any] = []
+        self.committed = False
 
     async def execute(self, stmt: Any) -> _FakeResult:
         return _FakeResult(self._queue.pop(0) if self._queue else [])
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        self.committed = True
 
 
 def _client() -> TestClient:
@@ -181,6 +195,50 @@ class TestExportMyData:
         """무토큰 → 401(인증 필수·본인 데이터만)."""
         resp = _no_auth_client().get("/v1/me/export")
         assert resp.status_code == 401
+
+    def test_export_writes_privacy_audit_row_same_transaction(self) -> None:
+        """SEC-09: 200 응답 + `privacy_audit` 감사 1행 적재(반출 내용은 감사에 없음) + commit."""
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        fake = _FakeSession(
+            [
+                [_StubRow({"sid": "s1"})],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [_StubRow({"cid": "c1"})],
+                [],
+                [],
+                [],
+                [],
+                [_StubRow({"link_id": 7})],
+                [],
+                [_StubRow({"metric": "churn_risk"})],
+                [_StubRow({"resolution": "자기풀이"})],
+                [_StubRow({"event": "step_submit"})],
+                [_StubRow({"content": "x=2?"}, content="x=2?")],
+                [_StubRow({"uid": str(_UID)})],
+            ]
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield fake
+
+        app.dependency_overrides[get_session] = _sess
+        resp = TestClient(app).get("/v1/me/export")
+        assert resp.status_code == 200, resp.text
+        audits = [o for o in fake.added if isinstance(o, PrivacyAudit)]
+        assert len(audits) == 1
+        assert audits[0].user_id == _UID
+        assert audits[0].event_kind == "export_data"
+        assert fake.committed is True
+        # 반출 *내용*은 감사 행에 없다(최소화 — event_kind/user_id/ip_hash/target_user_id/
+        # consent_scope 외 필드 부재 자체가 스키마 레벨 보증이나, 응답 데이터 문자열이 감사
+        # 객체 attr로 새지 않았는지도 방어적으로 확인).
+        assert not hasattr(audits[0], "data")
+        assert not hasattr(audits[0], "export_payload")
 
     def test_pending_external_logged(self, caplog: pytest.LogCaptureFixture) -> None:
         """외부 store 별도 export 필요를 *ops 로그*로 가시화(store명·user_id)."""

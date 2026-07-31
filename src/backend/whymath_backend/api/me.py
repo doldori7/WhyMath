@@ -47,7 +47,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,8 @@ from whymath_backend.api._query_filters import (
     _validate_tz_aware,
     time_window_conditions,
 )
+from whymath_backend.api._rate_limit import _client_ip
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -65,7 +67,7 @@ from whymath_backend.db.models.assessment import (
     ConceptMasteryHistory,
     SkillMasteryHistory,
 )
-from whymath_backend.db.models.audit import DeletionAudit
+from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
@@ -119,6 +121,7 @@ from whymath_backend.privacy import (
     erase_user,
     export_user_data,
     external_export_pending,
+    record_export_audit,
 )
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
@@ -130,9 +133,11 @@ from whymath_backend.schema.assessment import (
     SkillMasteryHistory as SkillMasteryHistorySchema,
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
+from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import (
     ASSESSED_ROLES,
+    AuditEventKind,
     AuditResourceType,
     Persona,
     Resolution,
@@ -143,6 +148,7 @@ router = APIRouter(prefix="/v1/me", tags=["me"])
 _logger = logging.getLogger("whymath.api.me")
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 Limit = Annotated[int, Query(ge=1, le=200, description="페이지 크기")]
 Offset = Annotated[int, Query(ge=0, description="건너뛸 행 수")]
 # slice 65: deletions 조회의 선택적 도메인 필터 — None이면 전체(slice 58 동작 보존).
@@ -154,6 +160,16 @@ ResourceTypeFilter = Annotated[
         description=(
             "삭제 도메인 필터(learning_session·dialogue·assessment). 반복 지정 시 OR(IN). "
             "생략 시 전체."
+        )
+    ),
+]
+# SEC-09: privacy-audit 조회의 선택적 이벤트 종류 필터 — resource_type 필터(slice 65/68)와 동형.
+EventKindFilter = Annotated[
+    list[AuditEventKind] | None,
+    Query(
+        description=(
+            "개인정보 감사 이벤트 종류 필터(export_data·consent_change·admin_access). 반복 지정 "
+            "시 OR(IN). 생략 시 전체."
         )
     ),
 ]
@@ -505,6 +521,59 @@ async def list_my_deletions(
         response,
         include_total,
         select(func.count()).select_from(DeletionAudit).where(*conds),
+    )
+    return rows
+
+
+@router.get(
+    "/privacy-audit",
+    response_model=list[PrivacyAuditSchema],
+    summary="내 개인정보 감사 이력(반출·동의변경·관리자접근)",
+)
+async def list_my_privacy_audit(
+    user: ConsentedUser,
+    session: SessionDep,
+    response: Response,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    event_kind: EventKindFilter = None,
+    since: SinceParam = None,
+    until: UntilParam = None,
+    order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
+) -> list[PrivacyAuditSchema]:
+    """SEC-09: 본인 개인정보 감사 이력 — 기본 최신순(occurred_at desc·audit_id 안정 정렬).
+
+    `privacy.audit`의 세 writer(`record_export_audit`·`record_consent_change_audit`·
+    `record_admin_access_audit`)가 적재한 `privacy_audit`를 `user_id`(행위자) 스코핑으로
+    조회한다(`GET /v1/me/deletions`와 동형 패턴 — `list_my_deletions` 참조). 삭제 이벤트는
+    여기 없다(`deletion_audit`가 단일 권위 — 이중 진실원천 금지).
+
+    `event_kind`(선택)로 종류 필터(export_data·consent_change·admin_access), `since`/`until`
+    (선택)로 `occurred_at` 시간창(inclusive), `order`로 정렬 방향(기본 desc), `include_total=true`
+    면 `X-Total-Count` 헤더. 모두 생략 시 전체.
+    """
+    conds = [
+        PrivacyAudit.user_id == user.user_id,
+        *time_window_conditions(PrivacyAudit.occurred_at, since, until),
+    ]
+    if event_kind:
+        conds.append(PrivacyAudit.event_kind.in_([ek.value for ek in event_kind]))
+    primary = PrivacyAudit.occurred_at.asc() if order == "asc" else PrivacyAudit.occurred_at.desc()
+    stmt = (
+        select(PrivacyAudit)
+        .where(*conds)
+        .order_by(primary, PrivacyAudit.audit_id)
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(PrivacyAudit).where(*conds),
     )
     return rows
 
@@ -2074,8 +2143,10 @@ async def erase_my_account(
     summary="내 데이터 내보내기(개인정보 열람·이동권·GDPR)",
 )
 async def export_my_data(
+    request: Request,
     user: ConsentedUser,
     session: SessionDep,
+    settings: SettingsDep,
 ) -> UserDataExport:
     """열람·이동권 — 본인의 학습/진단 데이터를 구조화 JSON으로 내려받는다(삭제권의 짝).
 
@@ -2087,8 +2158,15 @@ async def export_my_data(
     외부 store(ClickHouse·S3·Redis)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
     매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 export가 필요함을 가시화한다(누락 은폐
     금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
+
+    SEC-09: export payload를 모은 *뒤*(반출 내용이 아니라 "반출이 일어났다"는 사실만) `privacy_
+    audit`에 감사 1행을 적재하고 이 요청 안에서 commit한다(반출과 감사가 원자적 — 한쪽만
+    성공하는 부분 상태를 만들지 않는다). `export_user_data`는 읽기 전용(commit 0)이라 이 함수가
+    이 엔드포인트 최초의 쓰기다.
     """
     export = await export_user_data(session, user_id=user.user_id)
+    record_export_audit(session, user_id=user.user_id, ip=_client_ip(request), settings=settings)
+    await session.commit()
     # ops 가시화 — RDB 밖 store는 이 export(PG)에 미포함(store명·user_id만·키 패턴 미로깅).
     pending = external_export_pending(user.user_id)
     _logger.info(
