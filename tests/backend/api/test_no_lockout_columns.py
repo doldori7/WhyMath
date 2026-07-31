@@ -60,6 +60,7 @@ def test_user_profile_column_snapshot_unchanged_by_lockout() -> None:
         "persona_primary",
         "persona_secondary",
         "persona_confidence",
+        "role",
         "primary_device",
         "has_apple_pencil",
         "note_app",
