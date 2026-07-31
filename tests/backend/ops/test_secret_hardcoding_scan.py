@@ -71,9 +71,7 @@ def _find_violations(
             if rel in _ALLOWLIST:
                 reason = _ALLOWLIST[rel]
                 if not reason.strip():
-                    raise AssertionError(
-                        f"allowlist 항목 '{rel}'의 사유가 비어 있음(무효)"
-                    )
+                    raise AssertionError(f"allowlist 항목 '{rel}'의 사유가 비어 있음(무효)")
                 continue
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):

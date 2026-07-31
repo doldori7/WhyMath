@@ -60,12 +60,11 @@ class TestRootLoggerWiringReality:
         create_app()
 
         count = sum(isinstance(f, PiiSecretScrubberFilter) for f in root.filters)
-        assert (
-            count == 1
-        ), f"필터가 {count}개 누적됨 — install_log_scrubber의 중복 방지 실패"
+        assert count == 1, f"필터가 {count}개 누적됨 — install_log_scrubber의 중복 방지 실패"
 
     def test_scrubber_active_end_to_end_through_test_client(self) -> None:
-        """`create_app()`으로 만든 실제 앱이 뜬 프로세스에서, 루트 로거로 시크릿을 흘리면 마스킹된다.
+        """`create_app()`으로 만든 실제 앱이 뜬 프로세스에서, 루트 로거로 시크릿을 흘리면
+        마스킹된다.
 
         TestClient 생성 자체가 목적이 아니라 — create_app()이 이미 앱 구성 시점(lifespan
         발화와 무관)에 배선을 마쳤음을 HTTP 표면과 함께 확인해 "구성됐지만 실제 요청 경로에선
@@ -109,11 +108,7 @@ class TestAppPySourceCallsInstall:
 
     def test_create_app_body_contains_install_log_scrubber_call(self) -> None:
         app_py = (
-            Path(__file__).resolve().parents[3]
-            / "src"
-            / "backend"
-            / "whymath_backend"
-            / "app.py"
+            Path(__file__).resolve().parents[3] / "src" / "backend" / "whymath_backend" / "app.py"
         )
         assert app_py.is_file(), f"app.py를 찾을 수 없음: {app_py}"
         tree = ast.parse(app_py.read_text(encoding="utf-8"), filename=str(app_py))

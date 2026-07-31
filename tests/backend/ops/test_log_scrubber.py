@@ -79,15 +79,16 @@ def scrubber_globally_disabled() -> Iterator[None]:
 # 변별력 쌍 (a) 학생 원문 (b) sk-/pk- 시크릿 (c) Bearer 토큰
 # ──────────────────────────────────────────────────────────────────────────
 class TestDiscriminationPairs:
-    """각 케이스: 스크러버 有 → 마스킹됨(원문 미노출) / 스크러버 無 → 원문 그대로(같은 코드가 실패)."""
+    """각 케이스: 스크러버 有 → 마스킹됨(원문 미노출) / 스크러버 無 → 원문 그대로(같은 코드가
+    실패)."""
 
-    @pytest.mark.parametrize(
-        "raw_message",
-        [
-            'student_text="x^2 + 2x + 1 = (x+1)^2 입니다, 제 이름은 김민수이고 010-1234-5678로 연락주세요"',
-            "student_solution: 부모님 이메일은 minsu.parent@example.com 입니다",
-        ],
-    )
+    _STUDENT_DIALOGUE_CASES = [
+        'student_text="x^2 + 2x + 1 = (x+1)^2 입니다, 제 이름은 김민수이고 '
+        '010-1234-5678로 연락주세요"',
+        "student_solution: 부모님 이메일은 minsu.parent@example.com 입니다",
+    ]
+
+    @pytest.mark.parametrize("raw_message", _STUDENT_DIALOGUE_CASES)
     def test_student_dialogue_masked_with_scrubber(
         self, scrubbed_logger: logging.Logger, raw_message: str
     ) -> None:
@@ -97,13 +98,7 @@ class TestDiscriminationPairs:
         assert "010-1234-5678" not in out
         assert "minsu.parent@example.com" not in out
 
-    @pytest.mark.parametrize(
-        "raw_message",
-        [
-            'student_text="x^2 + 2x + 1 = (x+1)^2 입니다, 제 이름은 김민수이고 010-1234-5678로 연락주세요"',
-            "student_solution: 부모님 이메일은 minsu.parent@example.com 입니다",
-        ],
-    )
+    @pytest.mark.parametrize("raw_message", _STUDENT_DIALOGUE_CASES)
     def test_student_dialogue_leaks_without_scrubber(
         self,
         unscrubbed_logger: logging.Logger,
@@ -149,13 +144,9 @@ class TestDiscriminationPairs:
     ) -> None:
         """동일 케이스 — 스크러버 없이는 실제 키 값이 그대로 로그에 남는다(대조군)."""
         out = _capture(unscrubbed_logger, logging.INFO, raw_message)
-        assert ("sk-ant-api03-abcdEFGH12345678zzzzYYYY" in out) or (
-            "pk-lf-1234567890abcdef" in out
-        )
+        assert ("sk-ant-api03-abcdEFGH12345678zzzzYYYY" in out) or ("pk-lf-1234567890abcdef" in out)
 
-    def test_bearer_token_masked_with_scrubber(
-        self, scrubbed_logger: logging.Logger
-    ) -> None:
+    def test_bearer_token_masked_with_scrubber(self, scrubbed_logger: logging.Logger) -> None:
         """(c) Bearer 토큰 — 스크러버가 있으면 Authorization 헤더 값이 마스킹된다."""
         raw = (
             "요청 헤더 Authorization: Bearer "
@@ -203,15 +194,16 @@ class TestExceptionTypeNamesSurvive:
         message = f"요청 계측 실패(요청은 정상 반환) — 예외 타입: {exc_type_name}"
         out = _capture(scrubbed_logger, logging.WARNING, message)
         assert exc_type_name in out
-        assert (
-            "***MASKED***" not in out
-        )  # 이 메시지엔 시크릿이 없으니 마스킹도 없어야 정상
+        assert "***MASKED***" not in out  # 이 메시지엔 시크릿이 없으니 마스킹도 없어야 정상
 
     def test_exception_type_name_survives_alongside_secret_in_same_message(
         self, scrubbed_logger: logging.Logger
     ) -> None:
         """같은 메시지에 시크릿과 예외 타입명이 동시에 있어도 타입명만 살아남는다(핵심 케이스)."""
-        message = "Anthropic 호출 실패 — 예외 타입: ConnectionError, 사용된 키 sk-ant-api03-leakedkey0001"
+        message = (
+            "Anthropic 호출 실패 — 예외 타입: ConnectionError, "
+            "사용된 키 sk-ant-api03-leakedkey0001"
+        )
         out = _capture(scrubbed_logger, logging.WARNING, message)
         assert "ConnectionError" in out
         assert "sk-ant-api03-leakedkey0001" not in out
@@ -221,16 +213,12 @@ class TestExceptionTypeNamesSurvive:
 # 기존 로그 호출부 회귀 — 시크릿·PII가 없는 메시지는 포맷·내용이 무변경(추가적 필터일 뿐)
 # ──────────────────────────────────────────────────────────────────────────
 class TestBenignMessagesUnaffected:
-    def test_plain_korean_message_unchanged(
-        self, scrubbed_logger: logging.Logger
-    ) -> None:
+    def test_plain_korean_message_unchanged(self, scrubbed_logger: logging.Logger) -> None:
         raw = "오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도"
         out = _capture(scrubbed_logger, logging.WARNING, raw)
         assert out == raw
 
-    def test_percent_style_args_still_interpolated(
-        self, scrubbed_logger: logging.Logger
-    ) -> None:
+    def test_percent_style_args_still_interpolated(self, scrubbed_logger: logging.Logger) -> None:
         """`logger.warning("... %s", value)` 관용구 — 시크릿이 없으면 %-포맷이 그대로 동작."""
         records: list[logging.LogRecord] = []
 
