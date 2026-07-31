@@ -210,3 +210,13 @@ async def export_my_data(...):
 ❌ 학교·학년 정보로 *개인 식별 가능* 분석 외부 노출
 ❌ 부모에게 *불필요한* 학생 PII 노출
 ❌ 로그에 PII 평문 기록
+
+> **구현 현황(SEC-11 착지 — 2026-07-31)**: 위 두 항목(시크릿 하드코딩·로그 PII)은 이제
+> 규정에서 그치지 않고 기계로 강제된다. `logging.Filter`(`ops/log_scrubber.py`
+> `PiiSecretScrubberFilter`) + `LogRecord` 팩토리 배선(`app.py` `create_app()` — 자식 로거
+> 전파 경로까지 포함)이 `sk-`/`pk-` API 키·`Bearer` 토큰·JWT·`WHYMATH_*_KEY/SECRET/SALT` 값·
+> 이메일·전화번호·학생 발화 후보 필드(`student_text` 등)를 로그 렌더 시점에 마스킹한다.
+> 예외 타입명(`type(exc).__name__`)은 마스킹 대상에서 제외(위 "침묵 실패 금지"와 충돌 방지).
+> 시크릿 하드코딩은 `tests/backend/ops/test_secret_hardcoding_scan.py`가 `src/backend/
+> whymath_backend/` 전수를 스캔해 회귀로 동결(`dev_constitution.md:193`의 "코드 테스트화는
+> 남은 선택지" 상환). 배선 실재성은 `tests/backend/ops/test_log_scrubber_wiring.py`가 동결.
