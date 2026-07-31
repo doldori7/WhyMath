@@ -121,6 +121,7 @@ from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
 from whymath_backend.l5.ocr.factory import build_ocr_components
+from whymath_backend.ops.log_scrubber import install_log_scrubber
 from whymath_backend.ops.service_health import (
     AlertLogNotifier,
     ComponentCheck,
@@ -258,7 +259,8 @@ class ComponentCheckBody(BaseModel):
 
     configured: bool = Field(..., description="구성/확인 수단 노출 여부(False=미구성·오류 아님)")
     reachable: bool | None = Field(
-        ..., description="도달성. None='판정 불가'(미구성 등 — False '도달 실패'와 구분)"
+        ...,
+        description="도달성. None='판정 불가'(미구성 등 — False '도달 실패'와 구분)",
     )
     required: bool = Field(
         ..., description="ready 판정 필수 여부(DB만 True — 엔드포인트 docstring)"
@@ -305,7 +307,8 @@ class ReadyBody(BaseModel):
     )
     metrics: MetricsSummaryBody = Field(..., description="인프로세스 요청 계측 요약")
     alerts: list[AlertBody] = Field(
-        ..., description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축"
+        ...,
+        description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축",
     )
 
 
@@ -451,7 +454,15 @@ def create_app(
     폭발하는 가짜를 주입)·`readiness_probes`(/health/ready 딥체크 묶음 — 테스트가 가짜
     CheckFn을 주입해 라이브 DB·Redis·Ollama 없이 200/503 변별을 검증). 기본 probes도
     전부 *지연*이라 앱 구성만으로는 어떤 인프라에도 연결하지 않는다.
+
+    SEC-11: 로그 PII·시크릿 스크러버(`ops/log_scrubber.py`)를 루트 로거에 배선한다.
+    `_lifespan`이 아니라 여기서 거는 이유는 순수 in-process 설정(I/O 없음)이라 지연시킬
+    이유가 없고, `TestClient(app)`을 `with` 없이 쓰는(=lifespan 미발화) 기존 테스트 다수도
+    스크러버 보호를 받아야 하기 때문이다(`api/_crypto.py`의 "게이트는 앱 구성 시점에 건다"
+    선례와 동일 타이밍). Settings 게이트 없음 — 저장 축 fail-closed 게이트처럼 끄는 옵션을
+    주지 않는다.
     """
+    install_log_scrubber()
     app = FastAPI(
         title="WhyMath Backend — L3 생성 표면",
         version="0.1.0",
