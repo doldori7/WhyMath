@@ -337,6 +337,71 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-31 (설계·NLP): **자연어 처리 모듈 갭 점검·설계(D1~D4) + 태스크 3건 등재 — OCR이 배포 경로 양쪽에서 비활성이라 학생 도달 0회(D1)·정본 stale 3곳 정정 — 외부 EOS 틀 기능 66~69 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『16. 자연어 처리』(기능 66 자연어 질문 이해 · 67 풀이
+과정 분석 · 68 학생 답안 분석 · 69 OCR 수식 인식, 세부 40개 — WhyMath 전용이 아닌 일반적 EOS 틀)를
+코드베이스와 대조. `knowledge_module_gap_review.md`(모듈 6~10, 07-27)부터
+`visualization_module_gap_review.md`(기능 62~65, 07-30)에 이은 **9번째 자매편**.
+
+**착수 가설이 두 번 뒤집혔다.**
+1. "NLP 계층이 통째로 없다" → **반증**. 없는 게 아니라 *의도적으로 얇다*. 발화 **생성(NLG)은 LLM이
+   학생 대면 GA**(`wh1_primary`·3중 게이트)인데 발화 **이해(NLU)만 한국어 키워드 화이트리스트**다.
+   이 비대칭은 명문화된 설계다(`l4/polya/transitions.py:5-8` — "false-negative(stay 과다)는
+   교수학적으로 안전, false-positive(잘못 next)는 유해 — 이 비대칭이 설계의 핵심").
+2. "Qwen3-VL 인식기가 스텁이다" → **반증**. `recognize.py:265` `arecognize`가 L3 라우터 경유로 완전
+   구현돼 있다. 스텁이라 **말하는 쪽**(docstring·`CLAUDE.md:76`)이 stale이었다.
+
+**판정**: 틀이 그리는 "NLP = 모든 입력을 이해로 변환하는 인터페이스 계층"은 정본과 **아키텍처가
+다르다**. 정본은 그 자리를 ①입력 UX 유도(MathLive·"자유 입력 최소화") ②결정론 검증(SymPy — 이해하지
+않고 *검증*한다) ③OCR 공간정보로 대체한다. 2026-07-19 라이브 재측정에서 자유 텍스트 미검증 89%의
+해법으로 **NLP가 아니라 입력 UX를 채택**한 것이 근거다. 따라서 "NLU 부재"는 갭이 아니며, **대체 전략이
+뚫린 지점**만 갭으로 셌다.
+
+**정본 결정 4건**:
+1. **D1 OCR 도달 — 활성화가 아니라 가시화로 범위 확정**(Kiki 결정). 기능 69는 코드 완결인데 배포
+   경로 양쪽 모두 비활성이다: 컨테이너는 `Dockerfile:43`이 `[ocr]` extra를 **의도적 미설치**,
+   네이티브 파일럿 런처(`run_demo.ps1`)는 `WHYMATH_OCR_*` **0건**(기본 `ocr_enabled=False`).
+   `docker-compose.pilot.yml`은 DB만 띄우므로 파일럿 학생은 `/v1/ocr` → **503**. 그런데
+   `ocr_controller.dart:70-74`가 503·401·422·네트워크를 **같은 문구**로 처리해 "꺼져 있음"과
+   "인식 실패"가 **무변별** — "변별력 없는 검증 스텝 금지"(07-17 등재)의 *런타임 판*. 활성화는
+   모델 자산·Phaiakes9 라이브 검증(목표 90%) 선행이라 범위 밖으로 두고 발화조건만 기록(§5-①).
+2. **D2 채점 권위 — 이중 회계 관측 먼저**(Kiki 결정). `is_correct`가 클라이언트 보고인데 그대로
+   BKT 숙달을 구동한다(`api/me.py:585` 자인). **재료는 이미 다 있다** — `student_answer`가 요청
+   슬롯(`me.py:593`)이자 적재 컬럼(`activity.py:176`)으로 실재하고 `verify_answer` 3상태 검산기도
+   완성인데 **잇는 선만 없다**. MEMORY에 3회 반복 명시된 후속인데 백로그 태스크는 0건이었다.
+   권위를 바로 옮기지 않고 불일치율부터 측정한다("측정 없는 도입 없음") — 이관 조건은 §5-②.
+3. **D3 분해 규약 — severity 정직 하향 후 계약 정본화**. "클라가 수학을 한다"는 위반 가설은
+   **반증**(주석이 "수학 검증·단계 의미 추론은 절대 하지 않는다"고 못 박고 실제로 줄 분해만 한다).
+   진짜 문제는 규약이 코어에 없어 타 클라가 재구현해야 하고, `latex_to_plain.dart:13`이 백엔드
+   미러링 드리프트를 **이미 주석으로 자인**했으며 실제로 `\displaylines` 0-전이 사고(07-20)로
+   터졌다는 것. `notation_contract.json` 교차 골든 선례로 정본화한다. **분해에 LLM은 미채택**
+   (거짓 incorrect 위험 — `api/verify.py:8-10`).
+4. **정본 stale 3곳 정정**: `CLAUDE.md:76`(`qwen3-vl:8b` "인식기 보류"→"실배선·라이브 정확도
+   미검증") · `l5/ocr/recognize.py`(모듈·클래스·`__init__` docstring의 "Phase C 스텁·
+   NotImplementedError") · `05_interaction.md:125`(Mathpix→PaddleOCR+Qwen3-VL, `ROADMAP.md:39`가
+   이미 교정 명시했으나 본문 미반영 잔재). 셋 다 **"실제보다 못하다"고 말하는 방향의 stale**이라
+   조용하고, 실제로 이번 착수 가설 ②를 틀리게 했다.
+
+**산출**: `docs/architecture/nlp_module_gap_review.md` 신설 420줄(§0 전제 2종·§1 crosswalk 세부
+40개·§2 의도적 미채택 8건·§3 설계 D1~D4(D4는 페이퍼)·§4 정직한 공백 7종·§5 유보 발화조건 6건·
+§6 반복 실수 3회차·§정정 3곳·부록 실측 근거) + backlog 3건 CLI 등재
+(`NLP-01-ocr-reachability-observability`·`NLP-02-server-answer-grading-shadow`·
+`NLP-03-solution-segmentation-contract`, `NLP-` 신규 축 — `VIZ-` 선례, validate green 148건).
+
+**§6 반복 실수 3회차 등재**: "완비된 소비 경로 + 미도달 공급원" — ①`tests/infra` 199건 미실행
+(OPS-03·CI 배선 안 함) ②시각화 스택 도달 0회(VIZ-01·적재 안 함) ③**OCR 배포 양쪽 비활성(D1·배포에
+넣지 않음)**. 셋 다 소비측이 완비돼 "존재함"이 "돌아감"으로 읽혔고, **graceful 실패가 증상을 덮었다**.
+CLAUDE.md의 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"를 **런타임 기능 일반으로 확장**하고
+판정 기준을 "코드가 있는가"가 아니라 **"학생에게 닿는 경로가 실측되는가"**로 둘 것을 제안한다.
+
+**NOT**: 코드 로직 변경 0(설계+등재+정본/docstring 정정만 — 구현은 `/drive`가 태스크로 이어받음).
+파일럿 OCR을 켜지 않았고 채점 권위도 옮기지 않았다(둘 다 Kiki 결정·발화조건만). 다국어 이해·
+서술형/의미 기반 채점·부분점수·MathML·이해도 추정·다중 질문 분리는 협상 불가 불변식 근거로 의도적
+미채택(§2). `PED-04`(intent writer·회상)·`S4-10`(다중 풀이)·`S4-11`(힌트)은 **승계·재설계 금지**.
+
+정본: `docs/architecture/nlp_module_gap_review.md`.
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데

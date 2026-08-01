@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-01-ocr-reachability-observability
+title: "OCR 도달 관측 + 비활성·인식실패 무변별 해소 — 학생 도달 0회 가시화"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: 파일럿 런처(scripts/demo/run_demo.ps1)가 띄운 서버에서 POST /v1/ocr가 503을 반환함을 재현하고, 컨테이너 경로는 Dockerfile:43이 [ocr] extra를 의도적으로 설치하지 않음을 확인한다(주장 확인 또는 반증 — 반증되면 범위 재조정)"
+  - "② 503 사유 코드 분리: OCR 비활성(ocr_enabled=False)과 부품 적재 실패(import·모델 자산 부재)가 서로 다른 기계 판독 사유 코드를 낸다. 침묵 실패 금지 — 적재 실패는 예외 타입명을 로그에 포함(시크릿·필드값 제외)"
+  - "③ 클라 문구 분기: 모바일이 비활성 503과 인식 실패를 다른 문구로 표시(현재 ocr_controller.dart:71-74가 503·401·422·네트워크를 전부 같은 문구로 처리). 위젯 테스트로 동결"
+  - "④ 도달 관측: OCR 요청·성공·503(사유별) 카운트를 리포트에 노출. 미활성일 때 '0건 통과'가 아니라 '미활성'으로 표시된다(이중 회계 — VIZ-01 선례). CI 잡이 이 리포트를 실제로 실행하는지 확인(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑤ 변별력: 비활성 상태와 부품 적재 실패 상태가 서로 다른 값을 내는지 실측한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑥ 범위 밖 명시: 파일럿 OCR 활성화는 이 태스크에 포함하지 않는다(Kiki 결정 2026-07-31 — 모델 자산·Phaiakes9 라이브 검증 선행). 활성 절차는 nlp_module_gap_review.md §5-①에 기록"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/ocr.py
+  - src/backend/whymath_backend/api/_ocr_state.py
+  - "src/mobile/lib/features/ocr/**"
+  - "tests/backend/api/test_ocr*.py"
+session: null
+notes: "docs/architecture/nlp_module_gap_review.md §3 D1. 기능 69(OCR 수식 인식)는 코드 완결(파이프라인 4단·엔드포인트·모바일 진입 버튼)인데 배포 경로 양쪽 모두 비활성이라 학생 도달 0회. 활성화가 아니라 가시화가 이 태스크의 목표 — 꺼져 있음이 보이지 않는 것이 결함이다. VIZ-01(적재 0행)·OPS-03(테스트 미실행)에 이은 '완비된 소비 경로 + 미도달 공급원' 3회차(§6)."
+updated: 2026-07-31

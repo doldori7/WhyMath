@@ -13,9 +13,9 @@
   - `TexTellerRecognizer`(Phase C·동작) — TexTeller(transformers VisionEncoderDecoder) 고정밀
     수식 인식. transformers·torch 지연 import(`[ocr-heavy]`)·미설치 시 RuntimeError. 라이브
     모델(`OleehyO/TexTeller`·약 1.2GB)은 Phaiakes9에서 검증(CI는 가짜 엔진 주입·hermetic).
-  - `QwenVlRecognizer`(보류) — 멀티모달 VLM. **L3 라우터 경유 필수**이나 현 L3 provider 계약
-    (`LLMProvider.generate(prompt, system, decision)`)이 텍스트 전용이라 멀티모달 인터페이스
-    확장이 선행돼야 함 → 별도 슬라이스로 보류(현재 NotImplementedError·호출 형태만 docstring).
+  - `QwenVlRecognizer`(실배선) — 멀티모달 VLM. **L3 라우터 경유 필수**이며 provider 계약이
+    `generate(..., images=...)`로 확장돼 비동기 `arecognize`가 실동작한다. 동기 진입점은 의도적
+    RuntimeError(라우터 경유가 async라서). 라이브 인식 *정확도*는 Phaiakes9 미검증.
   - `PaddleTextRecognizer`(Phase A·Phase C 한국어 wiring) — rapidocr로 텍스트 영역 인식.
     `language=korean`+`model_dir`이면 한국어 PP-OCRv4 rec 모델·사전을 rapidocr에 주입한다.
 """
@@ -204,35 +204,21 @@ class TexTellerRecognizer(_BaseMathRecognizer):
 
 
 class QwenVlRecognizer(_BaseMathRecognizer):
-    """Qwen3-VL 멀티모달 수식 인식기 좌석 — **Phase C 스텁**. *반드시 L3 라우터 경유*.
+    """Qwen3-VL 멀티모달 수식 인식기 — **비동기 경로 실배선**. *반드시 L3 라우터 경유*.
 
     CLAUDE.md 절대 원칙("LLM 호출은 항상 라우터 경유 — 직접 호출 금지"): VLM 인식도 LLM
     호출이므로 Ollama를 *직접* 부르지 않고 L3 파이프라인(`l3.pipeline.generate`)을 통한다.
-    Phase C에서 `_recognize_crop`은 크롭을 base64 이미지로 인코딩해 멀티모달 프롬프트를
-    구성하고, 다음 형태로 L3를 호출한다(현재는 NotImplementedError·형태만 박아 둔다):
+    실동작 경로는 아래 `arecognize`이며 크롭을 base64 PNG로 인코딩해 `requires_vision=True`
+    요청으로 L3를 호출한다(라우터가 LOCAL Qwen3-VL로 라우팅·캐시·Langfuse 자동 적용).
 
-        from whymath_backend.l3 import pipeline
-        from whymath_backend.l3.models import RoutingRequest
+    **미검증인 것은 *구현*이 아니라 *라이브 정확도*다** — Phaiakes9 실모델 인식 품질 측정이
+    아직 없다(목표 90%·PRD §12.3). 2026-07-31 `nlp_module_gap_review.md` §정정: 이 docstring이
+    "Phase C 스텁·NotImplementedError"라 기술해 실제보다 못하다고 말하던 stale을 바로잡았다 —
+    그 stale이 실제로 갭 대조의 착수 가설을 한 번 틀리게 했다.
 
-        req = RoutingRequest(
-            task_type="extract",        # ① 개념/수식 추출 호출지점(03a §B.2 CONCEPT_EXTRACT)
-            difficulty="easy",
-            requires_reasoning=False,
-            student_subscription=...,    # 호출자 구독(클라우드 승급 가드)
-            sync=True,                   # 인식은 즉답 필요(파이프라인 동기 경로)
-        )
-        result = await pipeline.generate(
-            req,
-            prompt=<멀티모달 프롬프트(이미지 + "이 손글씨 수식을 LaTeX로">,
-            system=<수식 추출 시스템 프롬프트>,
-            provider=self._provider,     # 주입된 L3 LLMProvider(Ollama Qwen3-VL 등)
-            cache=self._cache,           # 인식 캐시(같은 크롭 재인식 회피)
-            trace=self._trace,           # Langfuse 추적
-        )
-        return result.text               # 검증 전 원시 LaTeX(verify.py가 후속 검증)
-
-    `_recognize_crop`이 동기 시그니처라 Phase C에서는 `recognize`를 async로 오버라이드하거나
-    파이프라인 호출을 별도 동기 진입점으로 감싼다(설계 결정은 Phase C). provider/cache/trace는
+    동기 진입점 `_recognize_crop`은 **의도적으로 RuntimeError**다(비동기 전용). L3 파이프라인이
+    async라 동기 시그니처로는 라우터를 경유할 수 없고, 우회하면 직접 Ollama 호출이 된다.
+    provider/cache/trace는
     *생성자 주입*이다(전역 import·직접 Ollama 금지) — factory가 L3 의존을 넣는다.
     """
 
@@ -246,8 +232,8 @@ class QwenVlRecognizer(_BaseMathRecognizer):
     ) -> None:
         """L3 의존 주입 좌석 — provider/cache/trace는 factory가 넣는다(직접 Ollama 금지).
 
-        Phase A/B에서는 보관만 한다. Phase C에서 `_recognize_crop`이 이 의존으로
-        `l3.pipeline.generate`를 호출한다(라우터 경유·CLAUDE.md).
+        비동기 `arecognize`가 이 의존으로 `l3.pipeline.generate`를 호출한다(라우터 경유·
+        CLAUDE.md). 주입이 없으면 `arecognize`가 RuntimeError로 거부한다(조용한 폴백 없음).
         """
         self._provider = provider
         self._cache = cache
