@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-02-misconception-probe-supply
+title: "오개념 표적 프로브 공급원 배선 — select_probe 후보 0 해소 + 후보 0 사유별 계상"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① L1 역인덱스 조회 좌석: Problem.distractor_map JSONB의 misconception_id 값 매칭으로 mids→문항을 조회한다(미응답 제외·난이도 보유만). 조회 좌석이며 선택 로직은 담지 않는다. 신규 컬럼·마이그레이션 0"
+  - "② 하네스 주입: wh1_primary가 **활성 가설이 선 뒤** 가설 mids+θ로 후보 풀을 조립해 LLMTutorPolicy(probe_candidates)에 전달. reactive retrieval 준수 — 오개념 preload 0을 회귀 테스트로 동결(프롬프트·코칭 context·레코드에 mid 미노출)"
+  - "③ ε-탐색 성립: 탐색 턴에는 활성 세트 **밖** mids도 후보에 포함해 §2.2 규칙2가 성립한다(현재는 ε 턴마다 wh1_loop.py:463 거부). 거부 0을 실측"
+  - "④ 후보 0의 사유별 계상: (가설 없음 / 오개념 미태깅 / 난이도 부재 / 전부 응답함)이 **서로 다른 값**을 낸다. 침묵 실패 금지 — l2/axis_exclusions.py 사유 계상 패턴 답습"
+  - "⑤ 변별력: 공급 배선 전후로 select_probe의 ok=True 건수가 0 → >0으로 달라지는지 실측. 현재는 공급 있음/없음이 wh1_loop.py:472 '판별 문항 없음(억지 매칭 금지)'로 같은 값을 낸다"
+  - "⑥ 7계층 동결: L1 조회 → 하네스 주입 → L4 순수 선택. L4(probe_selection)는 DB를 계속 모른다(현행 순수 계약 유지)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_primary.py
+  - "src/backend/whymath_backend/l1/*"
+  - "tests/backend/harness/test_wh1_*probe*.py"
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D2. WH-1 도구6 select_probe가 라이브에서 구조적으로 항상 실패한다 — wh1_llm_policy.py:143 probe_candidates 기본 ()를 채우는 프로덕션 호출자 0건(wh1_primary.py:115·wh1_shadow.py:261 둘 다 outside_mids만 전달) → plan_probe([]) → 항상 None → '판별 문항 없음' 정상 폴백으로 위장. 재료는 이미 적재: distractor_map 1,616문항·오개념 64종·difficulty_overall 100%(=후보 자격 1,616). probe_selection.py:24의 '태그 스키마 현 레포 부재' 주석은 stale(§정정). 반복 실수 6회차 — '만들고 공급원을 잇지 않음'."
+updated: 2026-08-01

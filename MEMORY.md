@@ -337,6 +337,99 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『19. AI 추천』(기능 80 문제 추천 · 81 개념 추천 ·
+82 학습 시간 추천 · 83 난이도 자동 조절, 세부 57개 — WhyMath 전용이 아닌 일반적 EOS 틀)을
+코드베이스와 대조. `knowledge_module_gap_review.md`(07-27)부터 `nlp_module_gap_review.md`
+(기능 66~69, 07-31)에 이은 **10번째 자매편**.
+
+**착수 가설이 반증됐고, 실측 중에 더 큰 것이 뒤집혔다.**
+1. "AI 추천이 WhyMath에 거의 없다" → **반증**. `GET /v1/me/next-problem`(`api/me.py:1680`)이
+   **IRT CAT(정보량 최대 × SE 중단규칙) × BKT 약점 가중 × L6 모드 게이팅**을 곱 결합해 이미
+   프로덕션에서 돈다. 개념 추천도 재귀 CTE 선수 추적 + Kahn 위상정렬 학습 경로까지 완비다.
+2. **"추천 엔진의 입력 루프가 클라에서 끊겨 있다"** → **이번 대조의 최대 발견**. Flutter 앱이
+   호출하는 `/v1/` 엔드포인트는 **13개뿐이고 그 안에 `POST /v1/me/attempts`가 없다**(전수 실측).
+   이것이 `ProblemAttempt`의 **서버측 유일 writer**이고 데모 시드도 attempt를 넣지 않으므로
+   실사용에서 `problem_attempt`는 **0행**이다.
+
+**판정**: "추천이 없다"가 아니라 **"추천은 있는데 먹일 것이 없다"**가 정확한 진단이다. 입력 0의
+귀결이 연쇄로 확인됐다 — θ = `estimate_ability([])` = **0.0 고정**(`l2/irt.py:76`) ·
+`measurement_sufficient` 항상 False · BKT 숙달 0행 → 약점 가중이 켜져도 **전 후보 중립 1.0** ·
+`irt_difficulty_b` **코퍼스 0건**(JMLE 보정 미실행) · 앱이 실제로 부르는
+`/me/diagnosis/concepts`는 **항상 빈 결과** · `/scenes/weak-concept`은 **항상 404**.
+구조적 원인은 클라의 누락이 아니라 **채점 권위 공백(`NLP-02`)의 하류 증상**이다 — 앱은
+`is_correct`를 알 수 없다(`verify-solution`은 단계 전이 검증이고 정답을 싣지 않으며,
+`Problem` 클라 모델이 `answer` 키를 의도적으로 미선언).
+
+**정본 결정 5건**:
+1. **D1 추천 도달 — 활성화가 아니라 가시화로 범위 확정**(`NLP-01` 판단 동형). 단건 응답은 이미
+   정직하다(`standard_error=null`·`measurement_sufficient=false`가 표본 0을 구분). 없는 것은
+   **집계 도달 관측**이다. 여기에 같은 축의 두 미도달을 묶었다 — `?prioritize_weak_concepts`
+   **기본 false**이고 모바일이 인자 없이 호출해 약점 가중 적용 **0회**, 개념 추천 API
+   (`/me/weak-concepts`·`prerequisites`·`coaching`·`learning-path`·`/gating/*` 6종·`/study`)가
+   **클라 소비 0**. 클라 attempt 배선·기본값 on 전환은 **범위 밖**(발화조건 §5-①②).
+2. **D2 오개념 프로브 공급원 — 재료는 이미 적재돼 있고 공급선 하나만 없다**. WH-1 도구6
+   `select_probe`가 라이브에서 **구조적으로 항상 실패**한다: `wh1_llm_policy.py:143`의
+   `probe_candidates` 기본 `()`를 채우는 프로덕션 호출자가 **0건**(`wh1_primary.py:115`·
+   `wh1_shadow.py:261` 둘 다 `outside_mids`만 전달) → `plan_probe([])` → 항상 None →
+   `wh1_loop.py:472` "판별 문항 없음(억지 매칭 금지)"가 **정상 폴백으로 위장**된다(변별력 0).
+   재료 실측: `distractor_map` **1,616문항**·오개념 **64종**·`difficulty_overall` **100%**
+   (= 후보 자격 1,616). **신규 컬럼·마이그레이션 0**으로 착지 가능하며, 후보는 *활성 가설이 선 뒤*
+   조회해 **reactive retrieval(오개념 preload 금지) 불변식을 유지**한다.
+3. **D3 폐루프 회계 — `PED-03`의 `evidence_event` 좌석 동형 적용**. 추천→풀이를 잇는 기록이 없어
+   수용률·추천 문항 정답률·약점 감소를 못 재고 bandit이 영구 미승격이다. `l2/pedagogy_evidence.py`의
+   계약(`session_id` 축·`user_id` 없음·비민감 meta만·**"가짜 처치 금지"**)이 이 축에 그대로 맞아
+   **신규 테이블 0**. 결과 결합은 `session_id`를 클라가 안 보내고 `learning_session` writer도 0이라
+   **`S3-01` 파일럿 이후**로 명시 유보("입력 없는 파이프라인 금지").
+4. **D4 난이도 목적 분리 — 밴드 상수가 아니라 목적이 문제**. 현행 CAT의 Fisher 정보량 최대는
+   Rasch에서 **P≈0.5 지향**이라 학습 세션에서도 학생이 절반을 틀리도록 출제된다. 진단에서 P≈0.5는
+   옳으므로(SE를 가장 빨리 줄인다) **진단/학습 목적을 파라미터로 분리**하고, 학습 목적은
+   `probability_correct` 밴드를 **기존 곱 결합 축에 가중으로** 얹는다(새 선택기 0·기본값 현행 보존).
+   실응답 0건이라 임계는 측정 불가 → `band_calibrated=false` 정직 표기 후 `S4-15`에 잇는다.
+   밴드 **하한**을 둬 "쉬운 문제로 정답률 꾸미기"가 되지 않게 하고 생산적 고투는 힌트 사다리가 계속 담당.
+5. **정본 stale 4곳 정정**: `probe_selection.py:24`("문항-오개념 태그 스키마 **현 레포 부재**" →
+   스키마는 실재하고 **부재한 것은 공급선**) · `NLP-02` notes("미검증 클라 불리언 위에 서 있다" →
+   **그 불리언조차 오지 않는다**) · `02_learner_model.md:193`(`select_next_item`이 L2 인터페이스 →
+   실제는 L2 순수 함수 + L5 조립) · 같은 문서 `:218`(Phase 1 기준 "오개념 카탈로그 30개" →
+   실측 843건·인코딩 64종·태깅 1,616건). 앞의 둘은 **원인을 다른 곳에 지목하는 형태의 stale**이라
+   더 나쁘다 — 다음 세션이 없는 스키마를 만들거나 이미 성립한다고 믿고 후속을 설계하게 한다.
+   **앞의 둘은 소스/YAML 반영을 하지 않고 문서 §정정에만 기록했다**: `probe_selection.py`는 병렬
+   세션이 claim한 `S3-24` 범위라 하네스 `path_overlap` 경고가 떴고(2026-07-27 충돌 교훈 적용),
+   경고를 넘기지 않고 정정을 `REC-02` 범위로 접었다. `NLP-02` notes는 `backlog.py`에 notes 갱신
+   서브커맨드가 없어 손편집 우회를 하지 않았다(**거부의 우회 금지**) — `REC-01` acceptance ⑤·
+   notes가 전제 미성립을 참조한다. 뒤의 둘(`02_learner_model.md`)만 실제로 파일을 고쳤다.
+
+**산출**: `docs/architecture/ai_recommendation_module_gap_review.md` 신설(§0 전제 2종·§1 crosswalk
+세부 57개·§2 의도적 미채택 9건·§3 설계 D1~D5(D5는 페이퍼)·§4 정직한 공백 9종·§5 유보 발화조건 8건·
+§6 반복 실수 4~6회차·§정정 4곳·부록 실측 근거) + backlog 4건 CLI 등재
+(`REC-01-recommendation-reach-observability`·`REC-02-misconception-probe-supply`·
+`REC-03-recommendation-outcome-accounting`·`REC-04-difficulty-purpose-separation`, `REC-` 신규 축 —
+`NLP-`·`VIZ-` 선례, **validate green 152건**).
+
+**코퍼스 실측(2026-08-01)**: 문항 2,647 · `distractor_map` 1,616 · 오개념 id 64종 ·
+`difficulty_overall` 2,647/2,647(100%) · **`irt_difficulty_b` 0건** · 원자 그래프 2,683노드/2,210엣지
+(**전부 `prerequisite`**) · 개념 그래프 437/581(전부 선수) · 오개념 카탈로그 843.
+→ 심화 개념 추천(`EXTENDS`)은 **엣지가 코퍼스에 0건**이라 "구현 안 함"이 아니라 **적재 안 됨**이다.
+
+**§6 반복 실수 4~6회차 등재**: "완비된 소비 경로 + 미도달 공급원"에 세 형태를 추가한다 —
+④**attempt 클라 호출 0회**(만들고 *입력*을 잇지 않음) ⑤**개인화 기본 off·개념 추천 API 소비 0**
+(만들고 *켜지* 않음) ⑥**`select_probe` 공급원 0**(만들고 *공급원*을 잇지 않음). 앞선 3회와
+다른 점 하나를 기록한다: **여기서는 미도달이 정상 응답과 같은 모양이다.** OCR은 503이라도 냈지만
+추천은 문항을 정상적으로 돌려준다 — 다만 θ=0 근방에서 아무 개인화 없이 뽑힐 뿐이다. 실패 신호가
+아예 없으므로 판정 기준은 응답 코드가 아니라 **"입력이 몇 건 들어왔는가"**여야 한다.
+
+**NOT**: **소스 코드 변경 0**(설계+등재+정본 문서 정정만 — 구현은 `/drive`가 태스크로 이어받음).
+클라 attempt 배선·개인화 기본값 전환·채점 권위 이관은 하지 않았다(전부 발화조건만). 단일 "AI
+Recommendation Engine" 컴포넌트·협업 필터링·SM-2/FSRS·`learning_session` writer·집중/피로 예측·
+`related_to` traversal·성장곡선 예측·학습 스케줄 자동생성·별도 난이도 예측 모델·**학습 스타일
+기반 추천**은 협상 불가 불변식 근거로 의도적 미채택(§2, 9건). `NLP-02`(채점 권위·D1의 상류 원인)·
+`S4-18`·`S3-16`(기능 82 간격·개입 시점)·`PED-03`·`PED-04`·`PED-05`·`S4-15`는 **승계·재설계 금지**.
+
+정본: `docs/architecture/ai_recommendation_module_gap_review.md`.
+
+---
+
 ### 2026-08-01 (SSM 대조·판정): **외부 「AI 수학앱 최적 아키텍처(2026)」 제안 대조 — 신규 후보 3건 Q4 큐 이월 + 기각 5건 사유 확정, 스택 실변경 0** (claude 검토, Kiki 공유·"검토해줘")
 
 **컨텍스트**: Kiki가 외부 채널 공유글 2편(계층별 추천 스택 + 5대 설계 원칙: 하이브리드 연산·Multi-Agent 분업·KG-RAG·CoT+Self-Consistency·적응형 학습)을 제공하고 검토 요청. SSM(`system_superiority_maintenance.md`) §5 도입 게이트로 대조.

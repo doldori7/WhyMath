@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-03-recommendation-outcome-accounting
+title: "추천 폐루프 회계 좌석 — evidence_event 동형 적용(처치 기록) + 결과 결합은 파일럿 이후"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 처치 기록: 추천 1건마다 evidence_event 처치 행 1건. **학생에게 실제로 반환된 추천만** 기록한다(l2/pedagogy_evidence.py의 '가짜 처치 금지' 계약 동형). 신규 테이블 0·신규 EventType enum 0"
+  - "② PII 구조적 차단: meta JSONB에 problem_id·theta·pool_size·applied_weights·mode·gate_reason 등 비민감 메타만. 학생 원문·풀이·user_id가 **들어갈 수 없음**을 시그니처·테스트로 동결(가명화 유지 — 결합 축은 session_id)"
+  - "③ 리포트: 처치 건수와 '결과 미결합(파일럿 대기)'을 **구분해** 표시한다. 결합 0이 효과 0으로 읽히면 안 된다"
+  - "④ 범위 밖 동결: 결과 결합·보상 계산·bandit 승격은 하지 않는다. AttemptSubmitRequest.session_id는 클라가 보내지 않고(REC-01) learning_session writer도 0이라(영구 미신설 결정) 결합 축이 아직 없다 — S3-01 파일럿 이후. PED-03의 잠금 해제 조건임을 교차 링크"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/l2/pedagogy_evidence.py
+  - "tests/backend/l2/test_pedagogy_evidence*.py"
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D3. next-problem이 추천한 문항을 학생이 실제로 풀었는지 잇는 기록이 없다 — AttemptSubmitRequest에 추천 출처 필드 0·EventType 11종에 추천 관련 0. 그래서 추천 수용률·추천 문항 정답률·약점 감소 효과를 잴 수 없고 l4/pedagogy/adaptive/policy.py bandit이 보상 신호 부재로 영구 미승격. PED-03이 만든 evidence_event 좌석(session_id 축·user_id 없음·비민감 meta·가짜 처치 금지)이 이 축에 그대로 맞아 신규 테이블 0으로 착지 가능."
+updated: 2026-08-01
