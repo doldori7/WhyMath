@@ -196,6 +196,12 @@ class L2LearnerService:
     ) -> str: ...  # 어댑티브 출제
 ```
 
+> **현행 정합(2026-08-01 실측 정정)**: `select_next_item`은 L2 서비스 메서드로 구현되지 않았다.
+> L2는 **순수 함수**(`l2/irt.py:236` `select_weighted_item` · `:203` `item_information`)를 제공하고,
+> 후보 조회·가중 결합·응답 조립은 L5 표면(`api/me.py:1680` `recommend_next_problem`)이 한다.
+> 실동작이 이 배치이며 계층 경계(L2=판정 재료, L5=조립)에도 부합한다 —
+> `ai_recommendation_module_gap_review.md` §정정.
+
 ## 시계열 저장 (TimescaleDB)
 
 ```sql
@@ -215,7 +221,9 @@ SELECT create_hypertable('mastery_history', 'timestamp');
 ### Phase 1
 - ✅ BKT 가동
 - ✅ 풀이 → 숙달도 업데이트
-- ✅ 오개념 카탈로그 30개 매칭
+- ✅ 오개념 카탈로그 30개 매칭 — **실측은 이미 이 기준을 크게 넘었다**(2026-08-01): 카탈로그
+  **843건** · 탐지 인코딩 **64종** · 문항 태깅 **1,616건**. 기준치를 실측에 맞춰 재설정할 것
+  (`ai_recommendation_module_gap_review.md` §정정)
 
 ### Phase 2
 - ✅ IRT 도입

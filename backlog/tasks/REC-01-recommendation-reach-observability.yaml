@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-01-recommendation-reach-observability
+title: "추천 도달 관측 — 입력 루프 미도달(attempt 0행)·개인화 미적용 가시화 + 응답 정직 표기"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 도달 리포트: 추천 요청 수 / 실측 θ 기반 비율 / problem_attempt 적재 건수 / 개인화 가중 적용 건수 / 후보 0 사유별을 산출한다. attempt 0행이면 '0건 통과'가 아니라 **'미도달'**로 표시(분모 없는 0 금지 — VIZ-01·NLP-01 이중 회계 선례)"
+  - "② 응답 정직 표기: NextProblemResponse에 적용된 가중 축 목록·후보 풀 크기·약점 가중이 실제로 붙은 개념 수·후보 0 사유를 싣는다. '적용 안 됨'과 '적용했는데 신호가 없음'이 구분된다. 기존 5필드는 불변(회귀 0)"
+  - "③ 변별력: attempt 1건을 주입하면 '미도달'이 실제로 해제되고, 되돌리면 다시 '미도달'이 나오는지 양방향 실측. 성공/실패가 같은 값을 내면 검증이 아니다"
+  - "④ CI 배선 실재 확인: 리포트를 어떤 잡이 실제로 실행하는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑤ 범위 밖 동결: 클라 attempt POST 배선·개인화 기본값 on 전환·개념 추천 화면 신설은 하지 않는다. 상류 원인은 채점 권위 공백(NLP-02)이며 활성화 판단은 그 관측 결과로 한다(NLP-01의 '활성화가 아니라 가시화'와 동형)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - "src/backend/whymath_backend/ops/*"
+  - "tests/backend/api/test_me_next_problem*.py"
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D1. Flutter 앱이 호출하는 /v1/ 엔드포인트 13종에 POST /v1/me/attempts가 없다(전수 실측) → ProblemAttempt 0행 → θ=0.0 고정(l2/irt.py:76)·BKT 숙달 0행으로 약점 가중이 전 후보 중립 1.0·/me/diagnosis/concepts 항상 빈 결과·/scenes/weak-concept 항상 404·irt_difficulty_b 코퍼스 0건(JMLE 미실행). 단건 응답은 standard_error=null로 이미 정직하나 집계 도달 관측 좌석이 없다. 반복 실수 4·5회차(§6) — '만들고 입력을 잇지 않음'·'만들고 켜지 않음'."
+updated: 2026-08-01
