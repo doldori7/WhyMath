@@ -542,6 +542,15 @@ PG에서 직접 재현(독립). GET 라우트 무인증 유지·비활성/삭제
 대시보드/B2B 계약이 실체를 가질 때(§5-②). 액세스 TTL 15분 단축은 클라 refresh 배선 선결(SEC-08).
 
 정본: `docs/architecture/account_security_gap_review.md` D1 · `api/_auth.py`(`require_role`).
+### 2026-07-30 (구현·SEC-08·사고 기록): **인증 표면 남용 방어 + OAuth 하드닝 — CI에서 발견된 state TTL 만료 플레이키 테스트 시스템 실수 상환** (backend-engineer 위임 구현, claude 검증·수정)
+
+**구현**: `/v1/auth/{provider}/callback`·`/refresh`에 IP rate limit 부착(기존 `_rate_limit.hit_by_ip` 재사용·재구현 0) + OAuth CSRF state(stateless HMAC 사전발급·`GET /{provider}/state`) + redirect_uri allowlist(deny-by-default) + 계정 잠금 미도입을 의도된 결정으로 문서화·컬럼 부재 동결 테스트. 데모 런북(`run_demo.ps1`/`.sh`) 갱신. PR #656.
+
+**사고 경위(시스템 실수 — 재발방지대책 의무·CLAUDE.md "실수 관리")**: 로컬에서 전체 백엔드 스위트(7911 passed·0 failed)와 격리된 SEC-08 38개 테스트가 모두 green임을 확인하고 PR을 냈으나, **CI에서 9건이 `assert 400 == 200/404/502`로 실패**(정확히 7911-9=7902 일치). 근본원인: `test_oauth_endpoint.py`·`test_demo_auth.py`가 `_BODY = _body()`를 **모듈 collection 시점**에 한 번 계산해뒀는데, `_body()`가 발급하는 OAuth CSRF state의 TTL이 `oauth_state_ttl_seconds`(기본 300초)였다. `pytest-randomly`가 매 실행마다 무작위 순서로 7900+개 테스트를 도는 전체 스위트(로컬 658s·CI 970s)에서, 해당 테스트가 collection 후 300초 안에 실행되면 우연히 통과하고(로컬 실측이 그랬다) 그 밖이면 state가 만료돼 400으로 실패한다(CI 실측) — **완전히 랜덤 시드에 좌우되는 플레이키**였고, 로컬의 우연한 통과가 거짓 확신을 줬다. 격리 3-파일 재실행(3~4초)은 항상 통과라 이 결함을 드러내지 못했다.
+
+**대책(코드 — 재발방지)**: `_BODY` 모듈 상수를 제거하고 모든 호출부를 `_body()`(사용 시점에 즉시 새로 발급)로 교체 — 두 파일 모두. 각 테스트가 실행되는 순간 state TTL이 새로 시작되므로, 단일 테스트 실행 시간이 300초에 근접할 수 없어 만료 경로가 원천 차단된다. 함수 docstring에 사고 경위를 1줄 남겨(왜 모듈 상수로 두면 안 되는지) 미래 세션의 재도입을 막는다.
+
+**교훈(일반화 — 향후 테스트 작성 규칙)**: **TTL·만료·시간 의존 토큰을 테스트에서 쓸 때는 절대 모듈/클래스 레벨 상수로 미리 계산해두지 않는다** — 대규모 랜덤 순서 스위트에서 collection↔실행 사이 지연이 TTL을 넘을 수 있다. 항상 사용 직전에 발급(fixture 또는 헬퍼 함수를 매 호출)한다. **부분 검증(로컬 격리 서브셋)의 통과가 전체 스위트에서의 안정성을 보장하지 않는다** — CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지" 원칙의 시간-의존 변주. PR 머지 전 CI의 전체 스위트 결과를 반드시 최종 판정으로 기다린다(로컬 그린은 참고일 뿐).
 
 ### 2026-07-30 (구현·VIZ-01): **시각화 공급원 적재 배선 — concept_visual_style 코퍼스 127건 신설 + 두 오버레이 프로덕션 적재 배선 + 도달률 리포트, D1 "학생 도달 0회" 해소** (claude 구현·backend-engineer 위임, Kiki "/drive")
 

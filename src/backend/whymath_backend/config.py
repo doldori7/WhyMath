@@ -532,6 +532,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── SEC-08: OAuth state(CSRF) + redirect_uri allowlist(open redirect 방지) ──
+    # 이 백엔드는 `/authorize` 리다이렉트를 자체 발급하지 않는다(모바일 클라가 OAuth provider와
+    # 직접 리다이렉트를 주고받고 code만 서버에 POST) — 그래서 state는 서버가 *사전 발급*
+    # (GET /v1/auth/{provider}/state)하고 콜백 제출 시 그대로 동봉받아 검증하는 stateless HMAC
+    # 서명 방식이다(DB/Redis 저장 불필요·api/auth.py issue_oauth_state/verify_oauth_state).
+    oauth_redirect_uri_allowlist: str = Field(
+        default="",
+        description=(
+            "OAuth 콜백이 허용하는 redirect_uri 화이트리스트(콤마 구분). 비면 *전부 거부*"
+            "(deny-by-default·open redirect 방지). 배포·데모 환경은 반드시 설정. "
+            "환경변수 WHYMATH_OAUTH_REDIRECT_URI_ALLOWLIST. 시크릿 아님(공개 URI). "
+            "파싱된 리스트는 `oauth_redirect_uris` 프로퍼티 참조."
+        ),
+    )
+    oauth_state_ttl_seconds: int = Field(
+        default=300,
+        ge=1,
+        description=(
+            "OAuth CSRF state(`issue_oauth_state`) 유효 기간(초). 기본 5분 — provider 동의 "
+            "화면 체류 시간 여유. WHYMATH_OAUTH_STATE_TTL_SECONDS로 조정."
+        ),
+    )
+
     # ── L4 코치 엔드포인트 rate limit ──
     coach_rate_limit_read_per_minute: int = Field(
         default=60,
@@ -586,6 +609,24 @@ class Settings(BaseSettings):
         description=(
             "L4 코치 *쓰기* 엔드포인트의 *IP 단위* 분당 요청 상한. 0=비활성. "
             "쓰기는 IP 단위에서도 상대적으로 엄격(공격·자동화 봇 방어). 인증 사용자 한도는 별도."
+        ),
+    )
+    # ── SEC-08: 인증 표면(/v1/auth/*) IP 단위 rate limit ──
+    auth_rate_limit_ip_per_minute: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "OAuth 콜백(`POST /v1/auth/{provider}/callback`)의 *IP 단위* 분당 요청 상한. "
+            "0=비활성. 로그인 시도는 드문 작업이라 20이면 정상 사용자는 무영향이고 자동화 "
+            "남용(크리덴셜 스터핑·계정 생성 폭주)만 차단한다."
+        ),
+    )
+    auth_rate_limit_ip_refresh_per_minute: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "리프레시(`POST /v1/auth/refresh`)의 *IP 단위* 분당 요청 상한. 0=비활성. "
+            "액세스 토큰 TTL이 24시간이라 정상 리프레시는 드물게 일어나므로 30이면 여유롭다."
         ),
     )
     coach_rate_limit_device_read_per_minute: int = Field(
@@ -1192,6 +1233,15 @@ class Settings(BaseSettings):
     def naver_configured(self) -> bool:
         """네이버 로그인이 구성됐는가(client_id 존재). 비면 콜백 레지스트리에서 제외(404)."""
         return bool(self.naver_client_id)
+
+    @property
+    def oauth_redirect_uris(self) -> list[str]:
+        """`oauth_redirect_uri_allowlist`(콤마 구분 원시값)를 파싱한 리스트(공백 제거·빈 항목 제외).
+
+        빈 리스트면 deny-by-default(모든 redirect_uri 거부) — `api/auth.py::oauth_callback`이
+        이 리스트에 없는 redirect_uri를 400으로 거절한다.
+        """
+        return [u.strip() for u in self.oauth_redirect_uri_allowlist.split(",") if u.strip()]
 
     @property
     def production_like(self) -> bool:

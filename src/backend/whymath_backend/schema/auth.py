@@ -17,6 +17,12 @@ class OAuthCallbackRequest(BaseModel):
 
     code: str = Field(description="OAuth provider가 발급한 authorization code.")
     redirect_uri: str = Field(description="code 교환에 쓸 redirect_uri(인가 요청과 동일해야 함).")
+    state: str = Field(
+        description=(
+            "GET /v1/auth/{provider}/state로 발급받은 CSRF state 토큰(그대로 동봉). SEC-08 —"
+            " 미동봉·불일치·만료 시 400(다시 로그인 요구)."
+        )
+    )
 
 
 class OAuthTokenResponse(BaseModel):

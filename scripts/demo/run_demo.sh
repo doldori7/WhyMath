@@ -29,6 +29,9 @@ PID_FILE="$REPO_ROOT/.demo_uvicorn.pid"
 # 새어드는 사고 방지(Windows .ps1에서 실측). 데모 아닌 DB는 *전용* WHYMATH_DEMO_DATABASE_URL로만.
 export WHYMATH_DATABASE_URL="${WHYMATH_DEMO_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable}"
 export WHYMATH_DEMO_AUTH_ENABLED=true
+# SEC-08: redirect_uri allowlist(open redirect 방지) — 데모 콜백이 쓰는 고정 redirect_uri를
+# 등록해 두지 않으면 400(허용되지 않은 redirect_uri)으로 [5/6]이 실패한다.
+export WHYMATH_OAUTH_REDIRECT_URI_ALLOWLIST="https://demo/cb"
 export WHYMATH_JWT_SECRET_KEY="${WHYMATH_JWT_SECRET_KEY:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
 
 echo "▶ [1/6] throwaway Postgres 기동…"
@@ -66,9 +69,11 @@ for _ in $(seq 1 60); do
 done
 
 echo "▶ [5/6] 데모 토큰 발급(/v1/auth/demo/callback) — 데모 사용자 lazy upsert…"
+# SEC-08: 콜백은 이제 CSRF state를 요구한다 — 먼저 /v1/auth/demo/state로 발급받아 동봉한다.
+STATE="$(curl -sf "http://127.0.0.1:$PORT/v1/auth/demo/state" | python3 -c 'import sys,json;print(json.load(sys.stdin)["state"])')"
 TOKEN_JSON="$(curl -sf -X POST "http://127.0.0.1:$PORT/v1/auth/demo/callback" \
   -H 'content-type: application/json' \
-  -d '{"code":"demo","redirect_uri":"https://demo/cb"}')"
+  -d "{\"code\":\"demo\",\"redirect_uri\":\"https://demo/cb\",\"state\":\"$STATE\"}")"
 ACCESS_TOKEN="$(printf '%s' "$TOKEN_JSON" | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')"
 if [ -z "${ACCESS_TOKEN:-}" ]; then
   echo "✗ 토큰 발급 실패 — 응답: $TOKEN_JSON" >&2
