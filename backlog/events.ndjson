@@ -1272,3 +1272,4 @@
 {"ts": "2026-08-02T06:23:12", "actor": "claude/backlog-drive-next", "action": "add", "id": "S3-28-canonicalize-answer-kind-scope-audit"}
 {"ts": "2026-08-02T06:23:23", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": ".github/workflows/ci.yml", "mode": "warn", "detail": "'.github/workflows/ci.yml' 은 claim 태스크 ARCH-21-qa-pipeline-orchestrator의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-08-02T06:28:58", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 ARCH-21-qa-pipeline-orchestrator의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-08-02T06:34:02", "actor": "claude/backlog-drive-next", "action": "done", "id": "ARCH-21-qa-pipeline-orchestrator", "artifacts": ["c7833846"]}
