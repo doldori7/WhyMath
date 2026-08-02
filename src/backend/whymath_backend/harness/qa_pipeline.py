@@ -13,7 +13,7 @@ in-process import, subprocess 금지, **새 판정 로직 신설 0**(전부 기�
 조립 대상 7개 축(+ wilson.py는 아래 참조):
     1. corpus_audit            — `corpus_audit_eval`(문항 감사, 커밋 스냅샷 재검산)
     2. equivalence_canonicalize — `l3/equivalent/canonicalize`(수식 동치 DSL 폐쇄성)
-    3. concept_graph_reachability — `data_pipeline.concept_graph`(개념 연결 그래프)
+    3. concept_graph_reachability — `data_pipeline.atom_graph`(원자 백본 그래프)
     4. misconception_crosslink_demotion — `crosslink_demotion_eval`(오개념 crosswalk)
     5. coach_prose_leak        — `coach_prose_leak_eval`(AI 출력 누설)
     6. content_provenance      — `ops.provenance_audit`(저작권 축, ARCH-20)
@@ -26,14 +26,21 @@ in-process import, subprocess 금지, **새 판정 로직 신설 0**(전부 기�
 
 **cross-package import 경계** — `concept_graph_reachability` 축은 `whymath_backend`가
 아니라 별도 pip 패키지(`whymath-data-pipeline`, import명 `data_pipeline`)의
-`concept_graph.transform`/`concept_graph.validate`를 직접 import한다. 개념 그래프
-정형화·검증 로직의 단일 진실 원천이 data-pipeline 쪽에만 있어(재구현 금지 원칙 — 새
-판정 로직 신설 0), harness가 예외적으로 패키지 경계를 넘는다. 이게 문제없이 동작하는
-이유: ① backend CI 잡이 이미 `pip install -e ../data-pipeline`을 실행한다(교차계층
-거버넌스 테스트 `test_five_node_connectivity_governance.py`가 같은 이유로 선례) ②
-mypy는 `ignore_missing_imports=true`라 스텁 부재를 문제삼지 않는다 ③ import-linter
-7계층 계약(`[tool.importlinter]`)은 `root_package = "whymath_backend"`만 대상이고
-`harness`/`ops`는 그 계약 밖(횡단 인프라)이라 이 방향의 import가 계약 위반이 아니다.
+`atom_graph.validate`를 직접 import한다. 이 축은 원래 구 437 개념그래프 코퍼스를
+대상으로 설계됐으나, 그 코퍼스는 S0-4b로 `legacy_snapshot`
+(readonly·non_runtime·audit_only)로 격하되어
+`tests/backend/l1/test_legacy_snapshot_governance.py`가 audit 화이트리스트 밖
+소비처를 red로 막는다(실측: 이 축을 최초 실행한 CI에서 그 게이트가 정확히
+이 축을 위반으로 잡았다) — QA 오케스트레이터는 "학생에게 실제로 나가는" 그래프를
+감사해야 하므로 런타임 진실원천인 원자 백본(`atom_graph_v1`)을 대상으로 한다.
+그래프 정형화·검증 로직의 단일 진실 원천이 data-pipeline 쪽에만 있어(재구현 금지
+원칙 — 새 판정 로직 신설 0), harness가 예외적으로 패키지 경계를 넘는다. 이게 문제없이
+동작하는 이유: ① backend CI 잡이 이미 `pip install -e ../data-pipeline`을 실행한다
+(교차계층 거버넌스 테스트 `test_five_node_connectivity_governance.py`가 같은 이유로
+선례) ② mypy는 `ignore_missing_imports=true`라 스텁 부재를 문제삼지 않는다 ③
+import-linter 7계층 계약(`[tool.importlinter]`)은 `root_package = "whymath_backend"`만
+대상이고 `harness`/`ops`는 그 계약 밖(횡단 인프라)이라 이 방향의 import가 계약
+위반이 아니다.
 
 미측정 4축(UI 골든·통계 이상치·금칙어/PII·성능 연동)은 코드가 없음을 실측 확인했다 —
 `not_measured_axes`에 "검사 안 함"으로 명시한다(침묵 통과 금지, CLAUDE.md).
@@ -59,13 +66,13 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 # cross-package import(모듈 docstring "cross-package import 경계" 참조) — data_pipeline은
-# whymath_backend가 아니라 별도 pip 패키지(whymath-data-pipeline)다. 개념 그래프
-# 정형화·검증의 단일 진실 원천이 거기에만 있어 harness가 예외적으로 패키지 경계를 넘는다.
-from data_pipeline.concept_graph.transform import transform_dataset
-from data_pipeline.concept_graph.validate import validate_dataset
+# whymath_backend가 아니라 별도 pip 패키지(whymath-data-pipeline)다. 원자 백본 그래프
+# 검증의 단일 진실 원천이 거기에만 있어 harness가 예외적으로 패키지 경계를 넘는다.
+from data_pipeline.atom_graph.validate import AtomRelation, _find_prerequisite_cycle
 
 from whymath_backend.config import get_settings
 from whymath_backend.harness import (
@@ -244,27 +251,52 @@ def _axis_equivalence_canonicalize(corpus_root: Path) -> AxisResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 축 3 — concept_graph_reachability: 개념 연결 그래프
+# 축 3 — concept_graph_reachability: 원자 백본 그래프(atom_graph_v1)
 # ──────────────────────────────────────────────────────────────────────────
 
 
 def _axis_concept_graph_reachability(corpus_root: Path) -> AxisResult:
-    """`concept_graph_v1` 커밋 코퍼스를 정본 파이프라인(transform→validate)으로 재검증한다.
+    """`atom_graph_v1` 커밋 코퍼스(런타임 진실원천)의 그래프 구조 무결성을 재검증한다.
 
-    검증은 정본 파이프라인 재사용(재구현 0) — `tests/data_pipeline/concept_graph/
-    test_concept_corpus_governance.py`가 쓰는 것과 동일한 `transform_dataset`→
-    `validate_dataset` 경로를 미러링한다.
+    구 437 개념그래프는 S0-4b로 `legacy_snapshot`(non_runtime·audit_only)으로
+    격하됐다(`tests/backend/l1/test_legacy_snapshot_governance.py`가 audit 화이트리스트
+    밖 소비처를 막는다) — 이 축은 학생에게 실제로 나가는 원자 백본을 대상으로 한다.
+    검증은 정본 함수 재사용(재구현 0) — `tests/data_pipeline/atom_graph/
+    test_atom_corpus_governance.py`가 쓰는 것과 동일한 `_find_prerequisite_cycle` +
+    dangling-endpoint 체크를 미러링한다(atom_graph_v1은 xlsx 원본 미커밋·이미 변환된
+    `graph.json`만 커밋되어 `transform_dataset` 경로가 없다 — 위 테스트 선례와 동일하게
+    `graph.json`을 직접 읽는다).
     """
-    concept_dir = corpus_root / "concept_graph_v1"
-    concept_records = _load_jsonl(concept_dir / "concepts.jsonl")
-    edge_records = _load_jsonl(concept_dir / "prerequisite_edges.jsonl")
-    result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
-    graph_report = validate_dataset(result)
-    status: AxisStatus = "ok" if graph_report.success else "gate_fail"
+    graph_path = corpus_root / "atom_graph_v1" / "graph.json"
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    edges = [
+        SimpleNamespace(relation=e["relation"], from_code=e["from_code"], to_code=e["to_code"])
+        for e in graph["edges"]
+    ]
+    cycle = _find_prerequisite_cycle(edges)
+
+    codes = {c["code"] for c in graph["concepts"]}
+    dangling: list[str] = []
+    for e in graph["edges"]:
+        if e["relation"] != AtomRelation.PREREQUISITE.value:
+            continue
+        if e["from_code"] not in codes:
+            dangling.append(f"{e['from_code']}(from)")
+        if e["to_code"] not in codes:
+            dangling.append(f"{e['to_code']}(to)")
+
+    success = cycle is None and not dangling
+    status: AxisStatus = "ok" if success else "gate_fail"
     return AxisResult(
         measured=True,
         status=status,
-        detail={"error_count": len(graph_report.errors), "success": graph_report.success},
+        detail={
+            "node_count": len(graph["concepts"]),
+            "edge_count": len(graph["edges"]),
+            "cycle": cycle,
+            "dangling_count": len(dangling),
+            "success": success,
+        },
     )
 
 

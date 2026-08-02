@@ -125,54 +125,51 @@ class TestAxisEquivalenceCanonicalize:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 축 3 — concept_graph_reachability(개념 연결 그래프)
+# 축 3 — concept_graph_reachability(원자 백본 그래프 atom_graph_v1)
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _write_concept_graph_fixture(corpus_root: Path, *, with_cycle: bool) -> None:
-    concept_a = {
-        "src_id": "HK01",
-        "name_ko": "A",
-        "category": "[공통]식·방정식·부등식",
-        "difficulty_tier": "6",
-        "standard_codes": ["[10공수1-01-01]"],
-        "ccss_code": "",
-        "metaphor": "",
-        "misconception": "",
-        "accepted_expressions": "",
-        "definition_provenance": "수기 검수",
-        "flashcard_count": "0",
-    }
-    concept_b = dict(concept_a, src_id="HK02", name_ko="B")
-    concept_dir = corpus_root / "concept_graph_v1"
-    concept_dir.mkdir(parents=True)
-    (concept_dir / "concepts.jsonl").write_text(
-        json.dumps(concept_a, ensure_ascii=False)
-        + "\n"
-        + json.dumps(concept_b, ensure_ascii=False)
-        + "\n",
-        encoding="utf-8",
-    )
-    edges = [{"from_id": "HK01", "to_id": "HK02", "relation": "선수(prereq)"}]
+def _write_atom_graph_fixture(
+    corpus_root: Path, *, with_cycle: bool, with_dangling: bool = False
+) -> None:
+    concepts = [{"code": "atom.a"}, {"code": "atom.b"}]
+    edges = [{"relation": "prerequisite", "from_code": "atom.a", "to_code": "atom.b"}]
     if with_cycle:
-        edges.append({"from_id": "HK02", "to_id": "HK01", "relation": "선수(prereq)"})
-    (concept_dir / "prerequisite_edges.jsonl").write_text(
-        "\n".join(json.dumps(e, ensure_ascii=False) for e in edges) + "\n", encoding="utf-8"
+        edges.append({"relation": "prerequisite", "from_code": "atom.b", "to_code": "atom.a"})
+    if with_dangling:
+        edges.append({"relation": "prerequisite", "from_code": "atom.a", "to_code": "atom.missing"})
+    graph_dir = corpus_root / "atom_graph_v1"
+    graph_dir.mkdir(parents=True)
+    (graph_dir / "graph.json").write_text(
+        json.dumps({"concepts": concepts, "edges": edges}, ensure_ascii=False), encoding="utf-8"
     )
 
 
 class TestAxisConceptGraphReachability:
     def test_ok_on_clean_dag(self, tmp_path: Path) -> None:
-        _write_concept_graph_fixture(tmp_path, with_cycle=False)
+        _write_atom_graph_fixture(tmp_path, with_cycle=False)
         result = qp._axis_concept_graph_reachability(tmp_path)
         assert result.status == "ok"
-        assert result.detail == {"error_count": 0, "success": True}
+        assert result.detail == {
+            "node_count": 2,
+            "edge_count": 1,
+            "cycle": None,
+            "dangling_count": 0,
+            "success": True,
+        }
 
     def test_gate_fail_on_cycle(self, tmp_path: Path) -> None:
-        _write_concept_graph_fixture(tmp_path, with_cycle=True)
+        _write_atom_graph_fixture(tmp_path, with_cycle=True)
         result = qp._axis_concept_graph_reachability(tmp_path)
         assert result.status == "gate_fail"
-        assert result.detail["error_count"] >= 1
+        assert result.detail["cycle"] is not None
+        assert result.detail["success"] is False
+
+    def test_gate_fail_on_dangling_endpoint(self, tmp_path: Path) -> None:
+        _write_atom_graph_fixture(tmp_path, with_cycle=False, with_dangling=True)
+        result = qp._axis_concept_graph_reachability(tmp_path)
+        assert result.status == "gate_fail"
+        assert result.detail["dangling_count"] == 1
         assert result.detail["success"] is False
 
 
