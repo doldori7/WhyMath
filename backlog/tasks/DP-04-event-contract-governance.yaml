@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: DP-04-event-contract-governance
+title: "이벤트 계약 거버넌스 — EventType·payload 계약·producer 정합 게이트"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - DP-03-attempt-event-idempotency
+requires_gates: []
+acceptance:
+  - "신규 생산 이벤트는 EventType·타입별 Pydantic payload 계약·writer·consumer·테스트를 한 변경 단위로 강제; 모든 EventType은 계약 또는 명시적 exemption; unrestricted event_metadata JSONB 미도입; S3-16과 호환 검증"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/enums.py
+  - src/backend/whymath_backend/schema/event_data_contract.py
+  - "src/backend/whymath_backend/api/**"
+  - "tests/backend/schema/**"
+  - "tests/backend/api/**"
+session: null
+notes: "EOS #84/#85 수정 계획 P0-4. 기존 S3-16 behavior telemetry writer의 선행 계약 태스크."
+updated: 2026-08-02
