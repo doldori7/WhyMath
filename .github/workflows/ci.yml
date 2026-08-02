@@ -43,6 +43,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       web: ${{ steps.filter.outputs.web }}
       docker: ${{ steps.filter.outputs.docker }}
+      corpus: ${{ steps.filter.outputs.corpus }}
     steps:
       - name: Checkout (merge commit + 부모 — PR diff용)
         uses: actions/checkout@v4
@@ -60,12 +61,13 @@ jobs:
             echo "mobile=true" >> "$GITHUB_OUTPUT"
             echo "web=true" >> "$GITHUB_OUTPUT"
             echo "docker=true" >> "$GITHUB_OUTPUT"
+            echo "corpus=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
-          be=false; dp=false; mo=false; web=false; dk=false
+          be=false; dp=false; mo=false; web=false; dk=false; cp=false
           if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
@@ -88,11 +90,17 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(Dockerfile$|\.dockerignore$|docker-compose\.prod\.yml$|\.env\.prod\.example$|src/backend/|tests/infra/test_deploy_artifacts\.py$|\.github/workflows/(ci|deploy)\.yml$)'; then
             dk=true
           fi
+          # ARCH-21: 코퍼스 변경 시에만 QA 파이프라인 오케스트레이터(qa_pipeline)를 트리거
+          # (상시 실행 아님 — data/corpus/는 매우 잦게 바뀌고 무거운 3축을 매번 돌리면 비용 낭비).
+          if printf '%s\n' "$files" | grep -qE '^(data/corpus/|\.github/workflows/ci\.yml$)'; then
+            cp=true
+          fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
           echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
           echo "mobile=$mo" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "docker=$dk" >> "$GITHUB_OUTPUT"
+          echo "corpus=$cp" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
@@ -122,6 +130,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          # ARCH-21: QA 파이프라인 오케스트레이터(whymath_backend.harness.qa_pipeline)를 이
+          # 잡에서 돌리려면 backend 패키지가 필요하다(backend 잡이 역방향으로 이미
+          # `pip install -e ../data-pipeline`을 하는 것의 대칭).
+          pip install -e ../backend
 
       # lint(ruff·black)는 src(.)뿐 아니라 tests(../../tests/data_pipeline)도 검사한다
       # (OPS-14 — backend 잡 PR #223 동형). 과거엔 src만 lint해 tests의 포맷 드리프트가
@@ -156,6 +168,23 @@ jobs:
           name: coverage-data-pipeline
           path: src/data-pipeline/coverage.xml
           retention-days: 14
+
+      # ARCH-21: 코퍼스 변경 시에만 트리거되는 옵션 스텝(상시 실행 아님 — changes 잡의
+      # corpus 플래그 경유). harness/의 기존 검사 자산 8종(corpus_audit·수식동치·개념그래프·
+      # 오개념crosswalk·코치프로즈누설·저작권·결함주입강등전 + wilson 경계)을 조립해 단일
+      # JSON 리포트 + exit 0/1 게이트를 낸다. 이 스텝만 레포 루트로 working-directory를
+      # 오버라이드한다 — 잡 기본값(defaults.run.working-directory: src/data-pipeline)에서는
+      # `-m whymath_backend.harness.qa_pipeline`이 backend 패키지를 못 찾는다.
+      - name: 게이트 — QA 파이프라인 오케스트레이터 (코퍼스 변경 시만·qa_pipeline)
+        if: needs.changes.outputs.corpus == 'true'
+        working-directory: .
+        # continue-on-error(임시): 첫 실행에서 equivalence_canonicalize 축이 코퍼스 전수(2647건
+        # 중 130건)에서 사전 존재 결함/오탐을 실측 발견했다(condition_dsl_violation이 확률·통계
+        # 미니 DSL을 검증 대상으로 상정하지 않았을 가능성 — S3-28로 등재·Kiki 판정 대기). 이
+        # 축이 해소되기 전까지 이 신규 게이트를 무음 실패시키지 않으면서도(리포트는 그대로
+        # 남는다) 다른 PR의 CI를 막지 않는다. S3-28 완료 시 이 줄을 제거해 강제 게이트로 전환.
+        continue-on-error: true
+        run: python -m whymath_backend.harness.qa_pipeline --json qa_report.json
 
   # ─────────────────────────────────────────────────────────────────
   # L3 백엔드 (LLM 라우터 M1.2 — 결정 로직 + 타입 인터페이스)
