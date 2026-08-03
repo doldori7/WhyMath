@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,12 +14,13 @@ acceptance:
   - "개념↔원자 crosswalk 경유 diag_item 슬롯 채움 — 원자(code)→목표(objective) grain 다리 명시"
   - "채움 건수·prescreen 통과율 보고 — 표본 0은 None(0% 위장 금지)"
   - 손대지 않은 슬롯 유형 무변경 테스트
-artifacts: []
+artifacts:
+  - commit 3dcb3e93
 paths:
   - "src/backend/whymath_backend/l1/**"
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/**"
   - "docs/architecture/**"
-session: claude/whymath-pedagogy-review-uqyg79
+session: null
 notes: "claude/whymath-teaching-strategy-enfkqt 세션이 claim만 하고 미착수(실구현 0) 상태로 5일 방치 — 방치 브랜치 인수 머지로 해당 세션은 소멸. 이 세션이 인수해 재개. 구현 중 실측 정정: concept_nodes가 이미 원자 백본 code라 개념↔원자 crosswalk 불필요(H2 계약·unit_compiler 검증 확인) — 04e §7.2에 반영."
 updated: 2026-08-03
