@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-04-graph2d-extrema-marker
+title: "Graph2dSpec 극값 표시 — 렌더러에 극값(임계점) 마커 신규 구현 후 명세 좌석"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - VIZ-03-graph2d-spec-expressiveness
+requires_gates: []
+acceptance:
+  - "① GraphingCalculator.jsx에 극값(임계점) 마커 표시 기능을 신규 구현한다 — numDeriv를 이용해 도메인 내 도함수 부호 변화 지점을 찾아 접선과 유사한 스타일로 점+라벨을 그린다(기존 drawTangent 패턴 참고, 새 라이브러리 도입 금지)."
+  - "② Graph2dSpec에 극값 표시 필드(예: show_extrema: bool) 추가 — VIZ-03과 동일하게 주 함수 행에만 적용."
+  - "③ 웹 어댑터(graph2dSpec.js)가 새 필드를 기존 renderer 상태(예: showExtrema)로 변환. 변별력 실측(신규 필드 미소비 상태에서 테스트 red 확인 → 배선 후 green)."
+artifacts: []
+paths:
+  - src/web/graphing-calculator/src/GraphingCalculator.jsx
+  - src/web/graphing-calculator/src/lib/graph2dSpec.js
+  - src/backend/whymath_backend/schema/visualization.py
+session: null
+notes: "VIZ-03(2026-08-03) 실측에서 발견: visualization_module_gap_review.md §3 D4가 '극값 자동 표시 ✗'(계산기에 극값 마커 그리기 기능 자체 없음)라고 이미 정확히 적어뒀는데도, D4의 상위 요약 문장은 '계산기는 하는데 명세가 지시 못 한다'로 뭉뚱그려 5항목 전부 렌더러 완비로 착각하게 만들었다. VIZ-03은 '렌더러 신규 구현 금지' 제약 때문에 이 항목을 범위에서 제외했다 — 이 태스크가 그 후속(렌더러 자체에 기능 추가 후 VIZ-03과 동형 패턴으로 명세 좌석)."
+updated: 2026-08-03

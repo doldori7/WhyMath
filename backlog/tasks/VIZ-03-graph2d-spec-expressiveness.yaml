@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -17,11 +17,12 @@ acceptance:
   - "③ 웹 어댑터(graph2dSpec.js)·Flutter 봉투·렌더 계약까지 동반 갱신. 어느 한쪽만 갱신하면 교차 게이트가 red(invariant ⑩)"
   - "④ S4-03과의 경계를 양쪽 notes에 상호 참조 — S4-03=새 type(기하·벡터·행렬), 본 태스크=기존 2D type의 필드. 중복 아님"
   - "⑤ 변별력: 신규 필드 1개를 웹 어댑터에서 미소비 상태로 두고 계약 게이트가 red를 내는지 실측 → 배선해 green 실측"
-artifacts: []
+artifacts:
+  - 35353a53
 paths:
   - src/backend/whymath_backend/schema/visualization.py
   - src/web/graphing-calculator/src/lib/graph2dSpec.js
   - src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart
 session: null
-notes: "visualization_module_gap_review.md §3 D4. 기능 62 세부 10개 중 5개(함수비교·접선/법선·극대극소·적분영역·미분변화)가 '계산기는 하는데 명세가 지시 못 한다'에 걸린다. Graph2dSpec은 function·domain·y_range·parameters 4필드뿐. depends_on VIZ-01 — 도달 0회 상태에서 표현력을 늘리면 도달하지 않는 명세의 표현력을 늘리는 일이 된다."
-updated: 2026-07-30
+notes: "visualization_module_gap_review.md §3 D4. 기능 62 세부 10개 중 5개(함수비교·접선/법선·극대극소·적분영역·미분변화)가 '계산기는 하는데 명세가 지시 못 한다'에 걸린다. Graph2dSpec은 function·domain·y_range·parameters 4필드뿐. depends_on VIZ-01 — 도달 0회 상태에서 표현력을 늘리면 도달하지 않는 명세의 표현력을 늘리는 일이 된다. 경계(S4-03 notes와 상호 참조): 본 태스크=기존 interactive_graph_2d(2D) type의 필드 확장, S4-03=새 VisualizationType(기하·벡터·행렬) 신설 — 중복 아님. 착수 확인(2026-08-03): 4항목 중 '극값 표시'는 D4 문서 §1 기능62 표('극대·극소 자동 표시' 행)가 이미 정확히 지적하듯 렌더러(GraphingCalculator.jsx)에 대응 그리기 기능이 없다(근·절편 표시만 있음) — 이 태스크의 '렌더러 신규 구현 금지' 제약을 충족 못 해 범위에서 제외. 접선(점)·적분영역(구간)·함수비교(다중 함수) 3필드만 구현. 극값 표시는 렌더러에 실제 마커를 추가하는 별도 태스크가 선행돼야 한다."
+updated: 2026-08-03
