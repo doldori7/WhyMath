@@ -548,8 +548,15 @@ jobs:
           flutter-version: "3.41.9"
           cache: true
 
-      - name: Flutter pub get
-        run: flutter pub get
+      # --enforce-lockfile(dart-lang/pub, Dart 2.19+에서 도입되고 flutter_tools의
+      # _permissiveArgParser가 그대로 전달 — flutter/flutter PR #117896·2023-01-10 병합,
+      # Flutter 3.41.9 pin보다 훨씬 앞서 병합돼 이 pin에서도 유효)로 pubspec.yaml↔
+      # pubspec.lock 정합을 CI에서 강제한다. lock이 pubspec.yaml의 정확한 해(exact
+      # resolution)가 아니면(의존 제거 후 lock 미갱신·의존 재추가 후 lock 미갱신 등)
+      # pub get이 조용히 lock을 고쳐쓰지 않고 즉시 실패한다(MOB-08 — firebase 미사용
+      # 의존 제거의 재발방지 게이트).
+      - name: Flutter pub get (lockfile 정합 강제)
+        run: flutter pub get --enforce-lockfile
 
       - name: Codegen (freezed·json_serializable·riverpod)
         run: dart run build_runner build --delete-conflicting-outputs
