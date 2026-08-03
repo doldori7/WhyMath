@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,10 +17,11 @@ acceptance:
   - "④ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
   - "⑤ 변별력: 코퍼스 엣지 1개를 가감해 순서화 카운트가 양방향으로 움직이는지 + 직접 축과 전이 축이 서로 다른 값을 내는지(depth1에서 96 vs 249) 확인한다. 두 축이 같은 값을 내면 축이 하나뿐인 위장이다"
   - "⑥ 범위 밖 명시: 엔드포인트 응답 변경(PATH-02)·정렬 알고리즘 변경(PATH-03)·max_depth 기본값 변경(페이퍼 P1)·전역 학습 경로는 이 태스크에 포함하지 않는다"
-artifacts: []
+artifacts:
+  - "26678594"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: claude/backlog-drive-next
+session: null
 notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. Kahn 위상정렬은 실재하나 엔드포인트 기본 max_depth=1에서 제약 엣지 0인 사례가 96.4%이고 그때 응답은 _tiebreak 정렬로 조용히 강등된다. 이 밀도가 코드·테스트·문서 어디에도 수치로 없다. 코퍼스만 읽으므로 problem_attempt 0행(REC-01)과 무관하게 즉시 착수 가능."
 updated: 2026-08-03
