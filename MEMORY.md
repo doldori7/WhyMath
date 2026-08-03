@@ -393,6 +393,71 @@ EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`(
 없음을 확인.
 
 정본: `docs/architecture/math_engine_gap_review.md`.
+### 2026-08-03 (설계·게임화): **게임화 모듈 갭 점검·설계(D1~D4) + 태스크 2건 등재 — 게임화 5모듈(XP·레벨·배지·퀘스트·Streak)은 미구현이 아니라 헌법 금기이고, 진짜 갭은 그 반대편(성장의 증거 11지표)이 계산되는데 학생 도달 0회(D1)·반게임화 불변식의 기계 게이트 0(D2)·동기 정본은 새 태스크 대신 기존 정본 3곳 직접 개정으로 착지 — 외부 EOS 틀 기능 75~79 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『18. 게임화(Gamification)』(기능 75 레벨 시스템 ·
+76 경험치(XP) · 77 배지 · 78 도전과제(퀘스트) · 79 학습 연속기록(Streak), 세부 55개 — WhyMath
+전용이 아닌 일반적 EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`
+(기능 80~83, 08-01)에 이은 **11번째 자매편**.
+
+**착수 가설이 두 번 뒤집혔다.**
+1. "게임화가 빠졌다"가 아니다 — XP·레벨·배지·퀘스트·Streak 전형 5모듈은 코드 0이지만, 이는
+   `CLAUDE.md:33/106`이 20+ 곳에서 반복 인용하는 **헌법상 결정**이지 미구현이 아니다. 진짜
+   공백은 "그럼 무엇으로 동기를 지탱하는가"의 정본이 0이라는 것 — `risks.md:119-121`의 D7
+   retention ≥ 30% 최우선 검증 가설을 지탱할 설계가 `02_student_ui_master_plan.md:81-83` 한
+   문단뿐이었다.
+2. **더 큰 반전** — 그 반대편 재료("성장의 증거" 11지표)는 이미 서버에서 계산되는데
+   (`compute_wh1_surrogate_metrics`·`GET /v1/me/harness-metrics`) Flutter가 호출하는 13종
+   엔드포인트 어디에도 없다. `/home`·`/me`·`/explore` 3탭은 전부 "준비 중" placeholder이고
+   `fl_chart`는 pubspec 선언만 있고 사용처 0.
+
+**판정**: "게임화가 없다"가 아니라 **"게임화의 반대편이 만들어진 채로 보여진 적이 없다"**가
+정확한 진단이다.
+
+**정본 결정 4건**:
+1. **D1 성장 증거 노출 계약 + 도달 리포트** — 11지표를 학생 노출 가능/보호자 요약/내부 전용
+   3분류로 고정, `GAMING_SUSPECT`는 단독 노출 금지(⑧과 조합 제약), 3상태(미도달/무데이터/
+   구조적 불가) 리포트. `LearningSession` 생성자 호출 0건 실측으로 ③ 세션 완주율이 "구조적
+   불가"임을 확인(§정정).
+2. **D2 반게임화 기계 게이트** — Dart(`src/mobile/lib/**`)·Python(학생 대면 표면 한정) 소스
+   스캔 + `UserBehaviorMetrics.metric_name`(`'streak'` 예시 명시 open set) 금지값 동결 +
+   `consecutive_active_days` writer 0 동결. `focus_score`/`engagement_score`는 `S3-16` 소유라
+   범위 제외(중복 등재 회피). Dart 선례는 `theme_test.dart`가 아니라
+   `no_math_logic_governance_test.dart`(`ARCH-10`)로 정정. **원래 `ARCH-23`으로 등재했으나
+머지 시 병렬 PR의 `ARCH-23-qa-gate-enforcement`와 번호 충돌해 `ARCH-26`으로 CLI 재등재
+(손편집 아님 — HARN-10).**
+3. **D3 동기 설계 정본** — 새 태스크·새 파일 대신 "성장의 증거" 5원칙을 확정하고 기존 정본
+   3곳(`02_student_ui_master_plan.md`·`dev_constitution.md`·`02_learner_model.md`)을 같은
+   커밋에서 직접 개정(시리즈 "정본 신설" 선례 없음 확인 — 개정이 관례).
+4. **정본 stale 5곳 정정**: `dev_constitution.md` 우선순위 웰빙 누락 · `gamification_level`
+   코드 0 · `02_learner_model.md` 정서 분류기 성공 기준 vs v0 제외 결정 불일치 ·
+   `04a_wh1_tutoring_harness.md` 세션 완주율 커버리지 오표기 · `prd_v1.2.md` 학습시간 KPI
+   긴장(기록만, 미수정).
+
+**산출**: `docs/architecture/gamification_module_gap_review.md` 신설(§0 전제 2종·§1 전수 대조
+세부 55개·§2 의도적 미채택 11건·§3 설계 D1~D4·§4 정직한 공백 6종·§5 유보 발화조건 6건·§6
+반복 실수 7~8회차·§정정 5곳·부록 실측 근거) + backlog 2건 CLI 등재(`PED-06-growth-evidence-
+reach-observability`·`ARCH-26-anti-gamification-source-governance-gate`, **validate green
+164건** — main 병합 후 baseline 162건에서 +2, D3·D4는 태스크 미신설이라 REC/NLP 편보다 신설
+수가 적음) +
+`02_student_ui_master_plan.md`·`dev_constitution.md`·`02_learner_model.md`·
+`04a_wh1_tutoring_harness.md` 4곳 인라인 정정.
+
+**§6 반복 실수 7~8회차 등재**: 7회차 "성장 지표를 클라가 부르기로 결정한 적조차 없음"(결정
+부재 — 5회차 "안 켬"과는 다름: 스위치가 없다 vs 꺼져 있다), 8회차 "규정하고 기계화 안 함"
+(주어가 자산이 아니라 규범 — `schema/timeseries.py:228`의 "가짜 validator를 두지 않는다
+(문서화만)"이 이 형태를 코드 스스로 자인).
+
+**NOT**: **소스 코드 변경 0**(설계+등재+정본 문서 정정만 — 구현은 `/drive`가 태스크로
+이어받는다). 미채택 11건(XP·레벨·배지·퀘스트·Streak 카운터·랭킹·코인·카운트다운·보상 알림
+문구·dead table 소생·자유학기제 외 확대) — 전건 `CLAUDE.md`·`07_community.md`·
+`ai_tutor_module_gap_review.md §2-③` 근거로 불채택. `focus_score`/`engagement_score`
+(`S3-16` 소유)·`tone_filter` 라이브 배선(별도 L3/L4 결정)은 승계·재설계 금지.
+
+정본: `docs/architecture/gamification_module_gap_review.md`.
+
+---
+
 ### 2026-08-03 (구현): **`VIZ-05-visualizability-atom-backbone-realign` 구현 — 4분류(visualizability) 코퍼스 원자 백본 code 재정렬(추상 축 1건) + orphan CI 게이트 신설** (claude 구현, backend-engineer 위임)
 
 **배경**: `docs/architecture/visualization_module_gap_review.md` §7.2 G2 — `concept_visualization_v1/
