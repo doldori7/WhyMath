@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - src/backend/whymath_backend/l4/misconception/judge_seam.py
   - src/backend/whymath_backend/l3/cross_verify.py
   - "src/backend/whymath_backend/l3/equivalent/**"
-session: null
+session: claude/backlog-drive-next
 notes: "docs/architecture/service_operations_gap_review.md §3 D3 — 외부 EOS 틀 모듈 91(결제·구독) 대조. 구독 배선만 고치면 budget_krw<=0 규칙이 먼저 발동해 바이트 동일 결과(변별력 0) — 대상은 배선이 아니라 도달 관측. CLAUDE.md 클라우드 LLM 배선 서술(§정정 6) 대비 학생 도달 0 정합 필요."
 updated: 2026-08-03
