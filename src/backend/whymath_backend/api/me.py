@@ -98,6 +98,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
     estimate_ability,
+    learning_band_weight,
     select_weighted_item,
 )
 from whymath_backend.l2.learning_path import (
@@ -1585,6 +1586,20 @@ NextProblemMode = Annotated[
     Literal["suneung"] | None,
     Query(description="응용 모드. 'suneung'=수능 적응 추천(L6 게이팅×IRT CAT). 미지정=기본 CAT."),
 ]
+# REC-04: ?purpose=diagnosis|learning — 진단(현행 정보량 최대, 기본·회귀 0) vs 학습(목표
+# 성공률 밴드 70~85% 가중, l2.learning_band_weight). 근원 문제: Rasch 정보량 최대는 P≈0.5를
+# 지향해 학생이 절반을 틀리도록 설계된 출제가 학습 세션에도 그대로 적용된다(교수학 금기 —
+# 부정적 피드백 정서 강화 금지). mode(suneung)와 직교 축 — 둘 다 지정 가능.
+NextProblemPurpose = Annotated[
+    Literal["diagnosis", "learning"],
+    Query(
+        description=(
+            "출제 목적. 'diagnosis'(기본)=정보량 최대(측정 정밀도, 회귀 0). "
+            "'learning'=목표 성공률 밴드(70~85%, 문헌값·미보정) 가중 — 응답의 "
+            "band_calibrated=false로 미보정 상태를 표시한다."
+        )
+    ),
+]
 # S2-06: 수능 모드 대상 페르소나 — L6 게이팅(`is_suneung_eligible`)의 판정 축. mode=suneung
 # 에서만 쓰인다(기본 CAT 경로는 무시). 기본 A_일반고고3(MVP 정시 정면 대상 — L6 기본과 동일).
 SuneungPersona = Annotated[
@@ -1680,6 +1695,13 @@ class NextProblemResponse(BaseModel):
         default=False,
         description=f"SE가 목표({_TARGET_SE}) 이하면 True — 적응 검사 중단 권고(CAT 중단 규칙).",
     )
+    band_calibrated: bool | None = Field(
+        default=None,
+        description=(
+            "REC-04: purpose=learning일 때만 False(문헌값 70~85%·실측 미보정 — S4-15 보정 "
+            "대기). purpose=diagnosis(기본)에서는 밴드 자체가 적용되지 않으므로 null."
+        ),
+    )
 
 
 @router.get(
@@ -1693,6 +1715,7 @@ async def recommend_next_problem(
     prioritize_weak_concepts: PrioritizeWeakConcepts = False,
     mode: NextProblemMode = None,
     persona: SuneungPersona = Persona.A_일반고고3,
+    purpose: NextProblemPurpose = "diagnosis",
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
@@ -1728,6 +1751,12 @@ async def recommend_next_problem(
     REC-03: `problem_id`가 확정되면(null이 아니면) `evidence_event`에 처치 1건을 기록한다
     (`record_recommendation_treatment` — 가짜 처치 금지, null 응답은 기록하지 않음). 결과
     결합(추천→정답 여부)은 아직 없다(S3-01 파일럿 이후 후속).
+
+    REC-04: `purpose`는 `mode`와 직교하는 축이다(수능 여부와 무관하게 적용). 기본
+    `diagnosis`는 현행 그대로(정보량 최대, 회귀 0). `learning`이면 예상 정답확률이 목표
+    성공률 밴드(70~85%, 문헌값)에 드는 후보를 `l2.learning_band_weight`로 가중해 같은 곱
+    결합 축(약점 가중·수능 가중과 동일 자리)에 얹는다 — 새 선택기는 만들지 않는다. 밴드
+    임계는 실측 미보정이라 응답에 `band_calibrated=false`가 실린다(보정은 `S4-15` 승계).
     """
     attempt_stmt = (
         select(
@@ -1756,6 +1785,9 @@ async def recommend_next_problem(
     se = ability_standard_error(theta, administered_items)
     standard_error = None if math.isinf(se) else se
     measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
+    # REC-04: purpose=learning일 때만 False(문헌값·미보정 — S4-15 전까지). diagnosis는 밴드
+    # 자체가 적용되지 않으므로 null(응답 필드 docstring 참조).
+    band_calibrated = False if purpose == "learning" else None
 
     # ── S2-06: 수능 적응 추천 분기 — θ·SE는 위 공통, 후보 조회·선택만 다르다. ──
     if mode == "suneung":
@@ -1797,6 +1829,23 @@ async def recommend_next_problem(
             extra_weights = await _load_weak_concept_weights(
                 session, user.user_id, [p.problem_id for p in candidates]
             )
+        # REC-04: purpose=learning이면 같은 곱 결합 축에 밴드 가중을 얹는다(새 선택기 0).
+        # b 미보유 후보는 어차피 recommend_suneung_index 내부에서 배제되므로 중립 1.0.
+        if purpose == "learning" and candidates:
+            band_weights = [
+                (
+                    learning_band_weight(theta, IrtItem(difficulty=b))
+                    if (b := resolve_item_difficulty_b(p.irt_difficulty_b, p.difficulty_overall))
+                    is not None
+                    else 1.0
+                )
+                for p in candidates
+            ]
+            extra_weights = (
+                band_weights
+                if extra_weights is None
+                else [w * b for w, b in zip(extra_weights, band_weights, strict=True)]
+            )
         chosen_index = recommend_suneung_index(
             theta, candidates, persona, extra_weights=extra_weights
         )
@@ -1808,6 +1857,7 @@ async def recommend_next_problem(
                 difficulty=None,
                 standard_error=standard_error,
                 measurement_sufficient=measurement_sufficient,
+                band_calibrated=band_calibrated,
             )
         picked = candidates[chosen_index]
         # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — null 분기(위)는
@@ -1830,6 +1880,7 @@ async def recommend_next_problem(
             ),
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            band_calibrated=band_calibrated,
         )
 
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
@@ -1864,6 +1915,15 @@ async def recommend_next_problem(
         weights = await _load_weak_concept_weights(
             session, user.user_id, [pid for pid, _d, _b in candidate_rows]
         )
+    # REC-04: purpose=learning이면 같은 곱 결합 축에 밴드 가중을 얹는다(새 선택기 0). 미지정
+    # (diagnosis)이면 weights는 위 그대로(None일 수 있음) — 현행과 바이트 동일(회귀 0).
+    if purpose == "learning" and candidate_rows:
+        band_weights = [learning_band_weight(theta, item) for item in items]
+        weights = (
+            band_weights
+            if weights is None
+            else [w * b for w, b in zip(weights, band_weights, strict=True)]
+        )
 
     best = select_weighted_item(theta, items, weights=weights)
     if best is None:
@@ -1873,6 +1933,7 @@ async def recommend_next_problem(
             difficulty=None,
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            band_calibrated=band_calibrated,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
     # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — 위 null 분기는
@@ -1892,6 +1953,7 @@ async def recommend_next_problem(
         difficulty=float(chosen_difficulty),
         standard_error=standard_error,
         measurement_sufficient=measurement_sufficient,
+        band_calibrated=band_calibrated,
     )
 
 
