@@ -16,7 +16,9 @@
 > 감사 2테이블의 보존 정책은 결정된 적이 없는데 사실상 무기한 보존 중이다(D3). 조직·학교·
 > 라이선스 테넌시 자체는 D4로 페이퍼 설계만 남긴다(B2B 계약 전 코드 0). 진짜 갭 3건을 실행
 > 설계(D1~D3)하고 1건을 페이퍼(D4)로 남겨 실행 태스크 3건을 백로그에 등재했다. 의도적 미채택
-> 11건 · 정직한 공백 7종 · 유보 발화조건 6건. 정본 stale 4곳을 이번 대조에서 정정한다.
+> 11건 · 정직한 공백 7종 · 유보 발화조건 6건. 정본 stale 4곳을 발견했고, 그중 2곳은 병렬
+> 세션이 병합 시점 이전에 이미 독립적으로 정정해 §정정에서 갱신·기록만 하며, 남은 2곳(1곳은
+> 상호보완, 1곳은 미해소)을 이번 대조에서 다룬다.
 
 관련 정본: `docs/design/ui/04_admin_console_architecture.md`(Admin BFF·RBAC 원칙 3~4 정본) ·
 `docs/design/ui/03_admin_console_plan.md`(관리 자원 인벤토리) · `docs/architecture/account_
@@ -373,7 +375,7 @@ Kiki 결정에 따라 이번 범위는 **목표 형태와 발화조건만** 문�
 | D4(조직·학교·라이선스) | 페이퍼 | — | — | **태스크 신설 없음** — B2B 계약 체결 시 발화(§5-③) |
 | `SEC-07`(기존) | Role v0·`require_content_admin` | — | — | **완료·승계** — D1이 그 위에 좌석 발급만 얹는다 |
 | `SEC-09`(기존) | `privacy_audit`(SEC-09) | — | — | **완료·승계** — D1이 `role_change` 값만 추가 |
-| `SEC-10`/`SEC-12`(기존) | 세션 가시성/보존 파기 배선 | — | — | **승계·재설계 금지**(todo, 감사 인접이나 이 문서 범위 밖) |
+| `SEC-10`/`SEC-12`(기존) | 세션 가시성/보존 파기 배선 | — | — | **승계·재설계 금지** — 착수 시점 todo였으나 이 세션 진행 중 병합된 `e77218b`(2026-08-03, "SEC-10 세션 가시성·전체 로그아웃 + SEC-12 보존 파기 스케줄 배선")로 **done 전환**. D3(감사 2테이블이 `_RETENTION_PLAN` 미포함)과는 별개 축 — SEC-12는 *학습 활동 시계열*의 보존 파기 스케줄 배선이고, D3는 *감사 로그*(`deletion_audit`·`privacy_audit`) 보존 연한 미결정을 다룬다. 병합 후 `privacy/retention.py:46` `_RETENTION_PLAN` 재확인 — 감사 2테이블 여전히 미포함, D3 유효 |
 | `MGMT-02`(기존) | 변호사 문안 회신 | — | — | **승계**(blocked) — D3의 보존 연한 확정이 이 태스크 회신을 전제 |
 | `04_admin_console_architecture.md` §8 ADMIN-BFF/REVIEW-UI/WEB | 관리자 HTTP API·콘솔 UI | — | — | **등재하지 않는다** — 콘솔 Phase B 발화 전까지 dead task(§5-①) |
 
@@ -440,22 +442,27 @@ Kiki 결정에 따라 이번 범위는 **목표 형태와 발화조건만** 문�
 
 ---
 
-## §정정 — stale 정본 4곳 (이번 대조에서 실측으로 발견)
+## §정정 — stale 정본 4곳 (이번 대조에서 실측으로 발견 — 이후 2곳은 병합 시점에 이미 해소)
 
-| 위치 | 현재 기술 | 실측 |
+| 위치 | 이 세션 착수 시(2026-08-03 이전) 기술 | 실측·현황 |
 |---|---|---|
-| `docs/design/ui/04_admin_console_architecture.md` §2 원칙 3 | "**현재 상태(실측)**: `db/models/user.py`의 `UserProfile`에 role 필드가 **없다**. `Role` enum·`require_role`은 … **설계만** 존재. 콘텐츠 CRUD는 무인증" | **완료됨** — `user.py:161-165` role 컬럼·`schema/enums.py:1163` `Role`·`api/_auth.py:96/123` `require_role`/`require_content_admin`·CUD 6라우터 부착 전부 실재(SEC-07, 2026-07-30) |
-| 동 문서 §8 backlog 제안 | "**ADMIN-RBAC** — `Role` enum + `UserProfile.role`(Alembic) + `require_role` + 콘텐츠 CRUD 인가 부착. (선결·최우선)" | SEC-07로 이미 완료 — 남은 선결은 **운영자 좌석 발급**(본 문서 D1) |
-| `docs/design/ui/03_admin_console_plan.md` §2 관리 자원 인벤토리 | "`api/concepts.py`·`api/problems.py`(CRUD 존재·**무인증** ⚠️)" | 인증·인가 부착됨(RequireContentAdmin) — 단 부여 경로가 없어 사실상 아무도 못 쓴다는 점을 §0-①-2로 갱신 필요 |
-| `docs/architecture/account_security_gap_review.md` §4-⑦ | "**Admin BFF·콘솔 UI·역할 관리 화면** — `04_admin_console_architecture.md` §8 ADMIN-BFF·ADMIN-WEB 승계" | 방향은 유효하나, **CLI 경로(D1)가 화면보다 먼저** 필요함을 부기 — 운영자가 1명도 없는 상태에서 화면부터 만드는 것은 순서 오류 |
+| `docs/design/ui/04_admin_console_architecture.md` §2 원칙 3 | "**현재 상태(실측)**: `db/models/user.py`의 `UserProfile`에 role 필드가 **없다**. `Role` enum·`require_role`은 … **설계만** 존재. 콘텐츠 CRUD는 무인증" | **이미 정정 완료** — 병렬 세션 `99dfc3a`(2026-08-02, "관리 콘솔 UI: 모듈 자동 등록 설계 신설 + RBAC 서술 현행화")가 이 원문 자체를 SEC-07 반영 문구로 직접 고쳤다. 이 문서가 그 fork 시점 이전 스냅샷을 근거로 stale로 지목했으나, `main` 병합(본 커밋) 시점에는 원본이 **이미 최신**이다 — 후속 세션의 조치 불필요 |
+| 동 문서 §8 backlog 제안 | "**ADMIN-RBAC** — `Role` enum + `UserProfile.role`(Alembic) + `require_role` + 콘텐츠 CRUD 인가 부착. (선결·최우선)" | 상동(`99dfc3a`) — `~~ADMIN-RBAC~~`로 취소선 처리 + "v0(2값) 완료" 각주로 이미 갱신됨. **ADMIN-MODULE-REGISTRY**(모듈 레지스트리·`GET /v1/admin/menu`)가 §8에 신규 항목으로 추가됐으나 backlog에는 아직 미등재(grep 확인) — 본 문서 D1과 겹치지 않는 축(메뉴 자동화 vs 좌석 발급)이라 중복 등재 위험 없음 |
+| `docs/design/ui/03_admin_console_plan.md` §2 관리 자원 인벤토리·§7 | "`api/concepts.py`·`api/problems.py`(CRUD 존재·**무인증** ⚠️)" / "선결 과제 = RBAC. 현재 role 필드가 없고 무인증이다" | **이미 정정 완료**(상동 `99dfc3a`) — "RBAC v0 착지 완료·관리 콘솔 자체는 미소비"로 갱신됨. 이 문서 D1("부여 경로 0건이라 사실상 아무도 못 쓴다")이 그 갱신문이 놓친 정확한 지점을 메운다 — **상호 보완, 재정정 불필요** |
+| `docs/architecture/account_security_gap_review.md` §4-⑦ | "**Admin BFF·콘솔 UI·역할 관리 화면** — `04_admin_console_architecture.md` §8 ADMIN-BFF·ADMIN-WEB 승계" | 이 파일은 병합 diff에 포함되지 않아 **fork 시점 그대로**. 방향은 유효하나, **CLI 경로(D1)가 화면보다 먼저** 필요함을 부기 — 운영자가 1명도 없는 상태에서 화면부터 만드는 것은 순서 오류. 유일하게 **아직 미해소** — 후속 세션이 이 표를 근거로 1줄 정정 |
 
-4곳 모두 **"실제보다 덜 됐다"는 방향의 stale**이다. 앞선 시리즈(NLP·REC 편)의 관찰과 같은
-패턴 — 이런 stale은 조용해서 다음 세션이 "아직 안 됐구나" 하고 이미 끝난 일을 중복
-구현하게 만든다.
+4곳 모두 착수 시점엔 **"실제보다 덜 됐다"는 방향의 stale**이었다(앞선 시리즈 NLP·REC 편과
+같은 패턴). 그러나 이 세션이 진행되는 동안 **병렬 세션이 앞의 2곳을 이미 고쳤다** —
+`99dfc3a`는 이 문서와 무관하게 독립적으로 착수돼 같은 stale을 다른 방향(원본 직접 수정)으로
+해소했다. 두 접근(본 문서의 "고치지 않고 표에 기록" vs `99dfc3a`의 "직접 고침")이 같은
+대상에 동시에 작동한 사례로, 원본을 실제로 고치는 세션이 이긴다 — 이 §정정 표는 그 경합을
+숨기지 않고 **"우리가 찾았을 때는 stale이었으나 병합 시점엔 이미 남이 고쳤다"**로 갱신해
+다음 세션이 헛수고하지 않게 한다(§6의 반복 실수 패턴과 다른 축: 여기서는 *중복 발견*이지
+*미도달*이 아니다).
 
-**정정 원칙**: `.md` 1줄 단위로만 정정한다. 이번 세션은 이 문서 자체가 그 정정을 담으며,
-원본 파일들의 직접 편집은 하지 않는다(코드 로직 변경 0의 연장 — 소스·타 문서 미편집).
-후속 세션이 원본 4곳을 직접 고칠 때 이 표를 근거로 삼는다.
+**정정 원칙**: `.md` 1줄 단위로만 정정한다. 이번 세션은 이 문서 자체로 정정을 기록하며, 원본
+파일의 직접 편집은 최소화한다(코드 로직 변경 0의 연장). 유일하게 남은 `account_security_
+gap_review.md` §4-⑦은 후속 세션이 이 표를 근거로 고친다.
 
 ---
 
