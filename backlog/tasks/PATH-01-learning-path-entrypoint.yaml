@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-01-learning-path-entrypoint
+title: "학습 경로 진입점 조립 — 무인자 /me/learning-path + 콜드스타트·미도달 변별"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 무인자 GET /v1/me/learning-path 신설 — recommend_weak_concepts(l2/weak_concept_recommendation.py:245) → recommend_prerequisite_gaps(:448·max_depth≥2) → order_learning_path(l2/learning_path.py:143) 합집합 1회 위상정렬의 *배선만* L5가 소유. 신규 정렬 알고리즘 0·신규 테이블·마이그레이션 0·순수 파생"
+  - "② 정직 표기: 응답에 entry_source(시작점 선정 방식)·entry_concept_ids·unreached(숙달 관측 0행이면 빈 배열이 아니라 '미도달')·max_depth_used를 싣는다. '경로 없음(=잘 하고 있음)'과 '아직 측정 안 됨'이 구분된다. 기존 LearningPath 2필드(steps·has_cycle)는 불변(회귀 0)"
+  - "③ 변별력: 숙달 관측 1건을 주입하면 unreached가 실제로 해제되고 되돌리면 다시 unreached가 나오는지 **양방향** 실측. 성공/실패가 같은 값을 내는 검사는 검증이 아니다(2026-07-17 교훈)"
+  - "④ 도달 관측: 경로 조립 요청 수 / 진입점 확보 건수 / unreached 비율 / 제외 사유별을 ops/ 리포트로 산출. 제외 사유 계상은 l2/axis_exclusions.py:43 log_axis_exclusions 규약 답습(신규 로깅 규약 0). 분모 없는 0 금지"
+  - "⑤ 결정론·권한: 같은 상태 → 같은 순서(합집합 위상정렬 tiebreak 재현)·user_id 스코핑·읽기 전용 회귀. 리포트를 어떤 CI 잡이 실제로 실행하는지 확인(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑥ 범위 밖 동결: 클라 화면 신설·POST /v1/me/attempts 배선·개인화 기본값 on 전환·경로 영속화(스냅샷 테이블)는 하지 않는다. 상류 원인은 채점 권위 공백(NLP-02)이며 활성화 판단은 REC-01 관측 결과로 한다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/l2/learning_path.py
+  - "src/backend/whymath_backend/ops/*"
+  - "tests/backend/l2/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. 경로 엔진 3좌석(Kahn 위상정렬·재귀 CTE 다단계 선수·L4 선수 코칭)은 완성돼 있는데 API 3종이 전부 concept_id를 인자로 요구하고 그 concept_id를 고르는 조립 좌석이 0 → 기능 54가 학생에게 미도달. Flutter 실호출 /v1/ 엔드포인트 13종에 경로 API 0종. max_depth 기본 1이라 다단계 연쇄는 기본값으로 안 나옴. 반복 실수 7회차(§6) — '만들고 진입점을 잇지 않음'. REC-01과 좌석 다름(REC-01=next-problem 문항 축 도달 관측·D1=경로 개념 축 진입점 신설) — 중복 없음."
+updated: 2026-08-03

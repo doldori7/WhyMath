@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-02-learning-path-corpus-ingestion
+title: "7주체 S1~S7 학습경로 코퍼스 677행 적재 추적 복원 — 자매 데이터셋 누락 해소"
+track: math-completion
+stage: S4
+subject: math
+layer: data-pipeline
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 원본 자산 확보 **선행**(Kiki 소유 행동) — Path xlsx는 저장소에 없다(저장소 내 .xlsx는 ai_llm_inventory_2026-07.xlsx 1건뿐). 제공받은 파일의 sha256 앞 16자리가 f4ee650b734ac854와 일치하는지 검증하고, 불일치면 코드가 아니라 데이터 카드(docs/data/concept_content_corpus_v1.md B.1)부터 정정한다. 자산 없이 store만 만들면 dead table"
+  - "② 코퍼스 추출 → data/corpus/learning_paths_v1/. 불변식 검증(데이터 카드 §C): 전체요약 677행 · 트랙 합계 일치(초119+중60+고기본34+고일반93+고진로127+재수130+영재114=677) · concept_id 전건 해소(고아 0)"
+  - "③ store·로더는 자매 데이터셋 ③의 l1/concept_content/populate.py 패턴 미러 — 멱등 적재·provenance 기록·라이선스 필드(와이매스 자체 저작). 적재 대상 = S1 진단임계·S5 숙달임계(L2 mastery 게이트 파라미터) + 소단원×트랙 경로 메타(concept_id·성취기준·이론틀 EIS·대상특화)"
+  - "④ **S7 간격복습은 적재 범위에서 제외**하고 그 사실을 로더 docstring·데이터 카드에 명시 — 코퍼스 간격 설계를 store에 넣으면 BKT p_forget 단일 권위(S4-18)와 두 번째 복습 권위가 생긴다(이중 진실원천 회피)"
+  - "⑤ 축 혼동 방지: 코퍼스 트랙 7종(초·중·고기본·고일반·고진로·재수·영재)과 코드 Persona A~E(시장 세그먼트)의 **직교**를 테스트로 동결 — 둘을 조인하는 코드가 생기면 실패(데이터 카드 B.3 '혼동 금지')"
+  - "⑥ 범위 밖: L4 교수학 소비(S2~S4·S6 단계)·학생 노출 화면·경로 추천 결합은 하지 않는다. 이 태스크는 **적재까지**다"
+artifacts: []
+paths:
+  - "data/corpus/learning_paths_v1/**"
+  - "src/backend/whymath_backend/l1/**"
+  - docs/data/concept_content_corpus_v1.md
+session: null
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D2. 데이터 카드(2026-06-20)가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 반복 실수 8회차(§6) — '만들고 추적을 놓침'. §2-⑦(경로 영속화 금지)과 다름: 금지 대상은 학생별 파생 경로이고 이건 전 학생 공통 교수학 템플릿. 중복 없음."
+updated: 2026-08-03
