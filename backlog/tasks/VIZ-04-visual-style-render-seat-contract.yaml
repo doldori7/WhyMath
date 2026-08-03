@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,13 +17,14 @@ acceptance:
   - "④ harness/visualization_reach_report.py에 '양식 정합 도달률' 축 추가 — 좌석 보유 양식(현재 함수그래프 15/127=11.8%)으로 실제 통과한 비율. 100% 도달은 목표가 아님(미좌석은 보류가 정답) — 태깅 127건 중 좌석 없는 112건이 어떤 타입으로 억지 매칭되는지를 조용히 감추지 않고 드러내는 것이 목표"
   - "⑤ 변별력: visual_style_contract.json에서 함수그래프의 render_types를 비워 도달률이 15→0으로 떨어지는지 실측 → 복원해 15 복귀 실측(성공/실패가 같은 값을 내면 검증이 아니라 위장)"
   - "⑥ CI 잡이 ④의 리포트를 실제로 실행하는지 확인(OPS-03·OPS-10 선례 — '저장소에 존재함'과 '돌아감'은 다르다)"
-artifacts: []
+artifacts:
+  - e3025483
 paths:
   - data/visual_style_contract.json
   - src/backend/whymath_backend/l4/visualization_policy.py
   - src/backend/whymath_backend/l3/visualization.py
   - src/backend/whymath_backend/harness/visualization_reach_report.py
   - tests/backend/schema/test_visual_style_render_contract.py
-session: claude/whymath-visualization-review-i2tgt2
+session: null
 notes: "visualization_module_gap_review.md §7(2026-08-03 2차 점검) G1. VIZ-01 착륙 후 실측: concept_visual_style_v1 코퍼스 127건 태깅 중 실제 렌더 좌석이 있는 양식은 함수그래프 15건(11.8%)뿐 — 나머지 112건(수직선25·입체도형32·평면도형16·벡터도12·점화도11·단위원8·수형도4·넓이모델3·부등식영역1)은 표현할 VisualizationType이 없다. 05b_visualization_classification.md §3 파이프라인의 첫 화살표(Concept.recommended_visual_styles → Visualization.type)에 계약이 없어 LLM이 4종 중 하나를 강제로 골라 개념과 무관한 그림을 렌더할 위험(억지 그림·CLAUDE.md 확신 패턴 금지 위반) — 이것이 폴백(caption 카드)이 아니라 오정보라는 점이 D1(도달 0회)보다 더 나쁜 축. VIZ-02(렌더 계약 파생)와 합류 지점 있음 — 중복 구현 금지."
 updated: 2026-08-03
