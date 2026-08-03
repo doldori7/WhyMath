@@ -23,7 +23,13 @@ final dioProvider = Provider<Dio>((ref) {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 30),
       // 코어 API는 JSON in/out — 구조(AST/JSON)를 그대로 주고받는다.
-      headers: const {'Content-Type': 'application/json'},
+      // X-App-Version(OPS-17): 서버 최소버전 계약 게이트(app.py _service_metrics_middleware)가
+      // 읽는 클라 버전 신고. Env.appVersion은 컴파일타임 상수라야 이 const 맵에 들어갈 수 있다
+      // (pubspec.yaml version:과의 동기화는 tests/infra/test_app_version_pubspec_sync.py가 게이트).
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-App-Version': Env.appVersion,
+      },
     ),
   );
   // 저장된 토큰을 모든 요청에 Bearer로 첨부(인증 플로우·OAuth-b).

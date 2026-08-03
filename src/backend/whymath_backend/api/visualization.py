@@ -32,6 +32,7 @@ from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
 )
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
@@ -44,6 +45,10 @@ from whymath_backend.l4.visualization_policy import is_visualizable
 from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import Visualization, VisualizationShareLink
 
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18). 값 자체는 불변(회귀 0),
+# 실 구독·예산 배선은 이 좌석의 소스만 바뀌면 된다(`escalation_defaults` 참조).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
+
 
 async def visualize_for_concept_diagnosis(
     diagnosis: ConceptDiagnosis,
@@ -52,7 +57,7 @@ async def visualize_for_concept_diagnosis(
     provider: LLMProvider,
     cache: CacheBackend,
     trace: TraceSink,
-    student_subscription: str = "free",
+    student_subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
 ) -> Visualization | None:
     """진단된 개념 → Concept 로드 → 맞춤 시각화 명세 생성. Concept 미존재면 None.
 
@@ -71,7 +76,8 @@ async def visualize_for_concept_diagnosis(
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
         session: DB 세션(Concept 로드용·L5가 보유).
         provider/cache/trace: L3 `pipeline.generate` DI(라우터 경유·캐시·관측).
-        student_subscription: 클라우드 승급 가드용 구독 등급(기본 free).
+        student_subscription: 클라우드 승급 가드용 구독 등급(기본값은
+            `escalation_defaults.default_student_escalation_signals()` 단일 좌석, 오늘은 free).
 
     Returns:
         검증된 `Visualization`, Concept 미존재 또는 시각화 보류(추상·불가) 시 None.
@@ -101,6 +107,7 @@ async def visualize_for_concept_diagnosis(
         difficulty="medium",
         requires_reasoning=True,
         student_subscription=student_subscription,
+        budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
         # sync 강제(슬97): parse_visualization_spec 게이트가 텍스트를 *즉시* 필요로 하므로
         # QUALITY 비동기(빈 text·job_id)로 가면 안 된다 — sync=True면 라우터가 async 미선택.
         sync=True,

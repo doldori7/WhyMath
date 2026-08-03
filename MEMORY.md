@@ -337,6 +337,73 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (구현·PED-06): **성장 증거 도달 관측 + 노출 계약 정본 — 라이브 요청 카운터(`/health/ready`)·구조적불가/무데이터/미도달 3상태·11지표 학생 노출 계층 분류·⑧×R15 조합 억제·⑥ 서술 변환** (claude 구현, `gamification_module_gap_review.md` §3 D1 설계 승계 — Kiki "/drive")
+
+**배경**: `compute_wh1_surrogate_metrics`가 성장 대리지표 11종을 계산해 `GET /v1/me/
+harness-metrics`로 노출하지만 Flutter가 이 엔드포인트를 **호출하기로 결정한 적 자체가
+없다**(전수 실측 — 배선 부재가 아니라 결정 부재, 반복 실수 회차 7). 게다가 11지표를 그대로
+한 덩어리로 노출하면 그 자체가 새 위험이었다 — `GAMING_SUSPECT`(교정기 함정 경보) 원문
+노출은 낙인, ②(진단정확도)·④(턴당 토큰)는 학생 개인 지표가 아닌 시스템/비용 지표, ⑥(Brier)
+원 스칼라는 "낮을수록 좋음" 역방향이라 오독.
+
+**설계는 07-30 이전 세션이 아니라 같은 날 앞서 확정한 `gamification_module_gap_review.md`
+§3 D1을 그대로 승계**(새 설계 아님) — 이 구현은 그 문서가 지정한 acceptance 7개를 집행한다.
+
+**구현 4갈래**:
+1. **노출 계약 정본**(`harness/growth_evidence_exposure.py`) — 11지표를 `STUDENT_VISIBLE`/
+   `GUARDIAN_SUMMARY`/`INTERNAL_ONLY` 3분류로 고정(②④=INTERNAL_ONLY 정적). `classify_metric_
+   exposure`가 R15 verdict를 함께 받아 ⑧(답 미루기 도달 깊이)을 GAMING_SUSPECT일 때만
+   억제하는 **조합 제약**을 적용 — 필드 단위 allowlist가 아니라 필드×verdict 조합 판정.
+   `narrate_calibration_brier`가 ⑥ 원 스칼라를 3구간 서술로 변환(원값 미반환). 비교·서열·
+   순위 파생 함수는 이 모듈에 **의도적으로 0개**(governance 테스트가 함수명 토큰으로 동결).
+2. **라이브 도달 카운터**(`api/_growth_evidence_state.py` — `NLP-01 OcrReachCounters` 동형
+   패턴·병렬 구축) — `GrowthEvidenceReachCounters`(요청 수만, distinct user_id는 메모리
+   미누적 — PII 최소화 의도적 선택)를 `create_app`이 앱 수명 1개 심고, `GET /v1/me/
+   harness-metrics` 호출마다 증가, `GET /health/ready`의 신규 `growth_evidence` 섹션으로
+   노출. 지금은 0 — 정적 감사(Flutter 미호출)와의 이중 회계.
+3. **3상태 도달 리포트**(`harness/surrogate_baseline_report.py` 확장 — 새 파일 대신 기존
+   리포트에 `render_growth_evidence_reach_report`/`classify_reach_state` 추가, 재사용 원칙)
+   — `구조적불가`(③ 세션완주율 전용·`LearningSession` 생성자 호출 0건·S3-16 영구 미신설
+   결정 승계) > `무데이터`(MetricStatus≠MEASURED) > `미도달`(MEASURED인데 요청 0) > `도달`
+   우선순위로 판정하는 순수 함수. CLI는 `--requests-total`로 라이브 카운터 값을 인자로
+   받는다(DB 전용 프로세스가 다른 프로세스의 인프로세스 상태를 직접 읽을 수 없어 합성하지
+   않고 명시 요구). ⑥ NO_DATA 행에 "입력 UI 부재"(REC-01의 "입력 루프 미도달"과 다른 층)를
+   구분 표기.
+4. **`api/me.py`** — `get_my_harness_metrics`에 카운터 기록 1줄 추가(응답 스키마 불변).
+
+**변별력**: `classify_reach_state` 양방향(요청 0→1→0 되돌림에서 미도달⇄도달 실제로 뒤집힘)·
+`classify_metric_exposure`(GENUINE_IMPROVEMENT↔GAMING_SUSPECT에서 ⑧ 노출 여부 실제로
+뒤집힘)·라이브 카운터(실 PG 통합테스트로 `GET /v1/me/harness-metrics` 1·2회 호출 후 `/health/
+ready` 값이 정확히 그만큼 증가함을 실측 — `test_wh1_evaluation_integration.py`에 추가).
+
+**CI 배선**: 신규 테스트 파일 전부 기존 `tests/backend/` 하위(harness·api) — 새 디렉터리
+0이라 기존 CI 커버리지에 자동 편입(`tests/infra` wiring 테스트 43건 green으로 재확인).
+
+**검증**: ruff·black·mypy --strict(446파일) clean. 신규/확장 테스트: exposure 8건·reach
+classification+report 11건·counters hermetic 7건·live PG 통합 1건(SEC-10/12에서 이미
+구성한 로컬 네이티브 PostgreSQL 16+pgvector·Redis로 실측) 전부 green.
+
+**NOT**: 모바일 화면 신설·클라 attempt POST 배선(REC-01 소관)·확신도 수집 UI 신설·푸시
+알림(전부 acceptance ⑦ 범위 밖 동결) — 백엔드 관측·계약 축만.
+
+정본: `docs/architecture/gamification_module_gap_review.md` §3 D1.
+
+### 2026-08-03 (재점검·개념): **개념 관리 모듈 갭 리뷰 §5 재점검 — 도달 관측 렌즈 최초 적용, concepts API 7라우트·flashcards(113건 적재)·prerequisites/learning-path 학생 도달 0회 확인 + `KG-01` 1건 등재** (claude 설계, Kiki 요청)
+
+**컨텍스트**: 2026-07-27 `knowledge_module_gap_review.md`(D1~D5·`S4-05`/`S4-06`/`ARCH-16`/
+`ARCH-17`) 이후 재점검. §1~§4는 모듈 6~10 crosswalk·설계였고 클라 도달은 다루지 않았음 —
+`ai_recommendation`/`visualization`/`nlp` 3개 자매편이 확립한 도달 관측 렌즈를 개념 축에
+처음 적용. Flutter 앱이 실호출하는 `/v1/` 13종 목록(원래 "20종" 주장은 test mock 리터럴 혼입
+오류 — `src/mobile/lib`만 대상이면 13종, `concept_reach_report.py` 실측 재확인)에 `concepts`
+API 7라우트(생성·조회·검색·
+엣지·수정·삭제)·`ConceptContent.flashcards`(코퍼스 113건 적재, 읽기 API 0개)·
+`/me/weak-concepts/{id}/prerequisites`·`.../learning-path`가 전부 없음을 실측. `REC-01`이
+이미 지적한 "개념 추천 API 클라 소비 0"과는 관측 축이 다름(요청량·개인화 vs 콘텐츠·그래프
+표면 자체)이라 중복 아님. chunk 임베딩·`formula_refs` 미충전은 재확인 결과 변동 없음(신규
+태스크 없음). `problem.schema.yaml`의 `ActiveConcepts`(3분류) vs 런타임 `ConceptRole`(4종)
+스키마 stale은 문서 각주로만 기록(편집 소유는 다음 스키마 유지보수 세션에 위임). 신규 태스크
+1건만 등재(`KG-01-concept-reach-observability`) — 활성화가 아니라 가시화. 정본:
+`docs/architecture/knowledge_module_gap_review.md` §5.
 ### 2026-08-03 (재점검·AI 콘텐츠 생성): **AI 콘텐츠 생성 모듈 2차 재점검(`ai_content_generation_gap_review_2.md`) — 1차 판정(58~68) 전부 유지·`S3-27`/`ARCH-21` 착지 반영·404 체인(`S3-26`) 불변 재확인. 신규 발견: 학생 도달 상한 4는 `CUR-02`와 동일 근본원인이라 중복 등재 배제(G1) / 교수법 콘텐츠 슬롯 파이프라인(`slot_generator`→`prescreen`→`review`)이 프로덕션 호출자 0·학생 reader 0로 완전 격리 — "완비된 소비 경로+미도달 공급원" 계열의 역방향 8회차(G2/G3) — 태스크 1건(`PED-06`) 등재** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재대조)
 ### 2026-08-03 (설계·평가): **평가(Assessment) 모듈 갭 점검·설계(D1~D2+페이퍼) + 태스크 2건 등재(`ASM-02`는 owner=kiki) — 평가 결과 영속 좌석 writer 0(D1·"완비된 소비 경로+미도달 공급원" 8회차)·등급·백분위·합격예측 노출과 게임화 금기의 미기록 긴장(D2) — 외부 EOS 틀 1단계 모듈 49~53+확장54~58 대조** (claude 설계, Kiki 요청)
 
