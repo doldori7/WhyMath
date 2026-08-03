@@ -16,7 +16,7 @@ acceptance:
   - "클라 diagnosis_controller.dart:66 단일 실패 문구 분기에 업데이트 필요 전용 문구 케이스 1개 추가."
   - "변별력: 최소버전 상향→전용 문구, 하향→정상 복귀(양방향). 범위 밖 동결: 강제 업데이트 UI·스토어 링크·서명·자동 업데이트·Crash 수집·Canary/Blue-Green."
 artifacts:
-  - d92c839f294f45c8ab95f28be9a848dcae83939a
+  - 92c91bdc
 paths:
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/config.py
