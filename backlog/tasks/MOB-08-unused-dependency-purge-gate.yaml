@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: mobile
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -15,13 +15,14 @@ acceptance:
   - "lock 정합 확보 — CI flutter pub get에 --enforce-lockfile 적용 시도(mobile CI 잡이 flutter 3.41.9 실제 설치하므로 가능성 있음), 미지원 시 tests/infra/에 pubspec.yaml 의존↔pubspec.lock 최상위 항목 일치를 검사하는 Python 게이트로 대체 — 착수 세션이 CI 1회전으로 확정."
   - "선언↔사용 거버넌스 테스트 신설 — pubspec.yaml 의존 중 lib/·test/·android/ 사용처 0인 것을 검출(허용목록 명시). 미사용 의존 1개를 되돌리면 red."
   - "개인정보처리방침 사실관계(제3자 SDK 0)를 MGMT-02 자문 항목에 교차 기록. 범위 밖 동결: 푸시 구현 일체·FCM 설정·디바이스토큰 테이블·ios/ 신설."
-artifacts: []
+artifacts:
+  - c2cfb3486bc133797a9b4a15e9ad1907a341ab8c
 paths:
   - src/mobile/pubspec.yaml
   - src/mobile/pubspec.lock
   - src/mobile/test/pubspec_dependency_usage_governance_test.dart
   - "tests/infra/**"
   - ".github/workflows/ci.yml"
-session: claude/backlog-drive-next
+session: null
 notes: "docs/architecture/service_operations_gap_review.md §3 D5 — 외부 EOS 틀 모듈 93(푸시 알림) 대조. §6 반복실수 7회차(선언만 하고 만들지 않음, TTS/STT 제거에 이은 2회차)."
 updated: 2026-08-03
