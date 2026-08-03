@@ -11,7 +11,8 @@
 //
 // Graph2dSpec 형태:
 //   { function: "a*x**2+b*x+c", domain: [xMin, xMax], y_range: [yMin, yMax]?,
-//     parameters: [{name,min,max,step,default}], tangent_point?, integral_region?, functions? }
+//     parameters: [{name,min,max,step,default}], tangent_point?, integral_region?, functions?,
+//     show_extrema? }
 //
 // 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
 //
@@ -20,6 +21,10 @@
 // 행(rows 배열)을 지원한다 — 여기선 그 기존 상태 필드에 값을 채워 넣을 뿐 새 렌더 로직은 0이다.
 // tangent_point·integral_region은 *주 함수*(function) 행에만 적용한다(명세가 단수 — 함수별
 // 개별 접선/적분은 이 계약 밖). functions는 주 함수에 *추가*되는 비교 함수 행들이다.
+//
+// VIZ-04(2026-08-03) — show_extrema: VIZ-03이 "렌더러 신규 구현 금지" 제약 때문에 제외했던
+// 극값 표시. 이번엔 렌더러 자체에 `findExtrema`/`drawExtrema`(numDeriv 부호 변화 스캔)를 새로
+// 구현한 뒤 그 결과 상태 필드(`showExtrema`)에 좌석을 준다 — VIZ-03과 동일하게 주 함수 행에만.
 import * as math from "mathjs";
 import { classify, extractVars } from "./mathExpr.js";
 
@@ -55,6 +60,11 @@ export const graph2dSpecToState = (spec) => {
   if (rows.length && Number.isFinite(spec.tangent_point)) {
     rows[0].showTangent = true;
     rows[0].tangentX = spec.tangent_point;
+  }
+
+  // show_extrema → 주 함수(rows[0]) 행에 극값 마커 좌석(VIZ-04 신규 렌더러 기능 showExtrema).
+  if (rows.length && spec.show_extrema === true) {
+    rows[0].showExtrema = true;
   }
 
   // integral_region [a, b] → 주 함수(rows[0]) 행에 적분 영역 좌석(기존 showIntegral/intA/intB).

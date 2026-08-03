@@ -64,11 +64,15 @@ class Graph2dSpec(BaseModel):
     (`showIntegral`/`intA`/`intB`)·다중 함수 행(`rows` 배열)을 렌더하지만, 그 능력을 선언할
     spec 좌석이 없어 코어가 지시할 수 없었다(`visualization_module_gap_review.md` §3 D4).
     새 렌더러 구현 0 — 기존 렌더러 상태 필드에 좌석만 준다(웹 어댑터 `graph2dSpec.js`가
-    번역). **"극값 표시"는 이 슬라이스에 포함하지 않는다** — D4 문서(§1 기능62 표, "극대·극소
-    자동 표시" 행)가 이미 정확히 지적하듯 계산기에 극값 자동 표시 기능 자체가 없다(근·절편
-    표시만 있음). 이 필드만 "렌더러가 이미 하는 것에 좌석을 준다"는 이 태스크의 제약(렌더러
-    신규 구현 금지)을 충족할 수 없어 제외한다 — 렌더러에 실제 극값 마커를 추가하는 별도
-    태스크가 선행돼야 한다.
+    번역). VIZ-03은 D4의 5항목 중 "극값 표시"만 제외했다 — D4 문서(§1 기능62 표, "극대·극소
+    자동 표시" 행)가 이미 정확히 지적하듯 당시 계산기엔 극값 자동 표시 기능 자체가 없어서
+    (근·절편 표시만 있음) "렌더러가 이미 하는 것에 좌석을 준다"는 제약(렌더러 신규 구현
+    금지)을 충족할 수 없었다.
+
+    VIZ-04(2026-08-03) — `show_extrema` 추가로 그 공백을 닫는다: 렌더러 자체에
+    `findExtrema`/`drawExtrema`(`numDeriv` 부호 변화 스캔 — 새 수치 primitive 도입 0)를
+    먼저 구현한 뒤, 그 결과 상태(`showExtrema`)에 이 필드로 좌석을 준다. VIZ-03의 세
+    필드와 동형으로 주 함수(`function`) 행에만 적용한다.
     """
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
@@ -108,6 +112,14 @@ class Graph2dSpec(BaseModel):
             "`function`(주 함수)과 비교할 추가 함수식 목록 — 렌더러가 이미 지원하는 다중 함수 행"
             "(`rows` 배열)에 좌석을 준다. `function`을 대체하지 않고 *추가*한다(주 함수 +"
             "비교 함수들 — 함수 비교 시각화)."
+        ),
+    )
+    show_extrema: bool | None = Field(
+        default=None,
+        description=(
+            "주 함수(`function`)의 극값(임계점) 마커 표시 여부(VIZ-04) — 렌더러의 극값 스캔 기능"
+            "(`findExtrema`/`drawExtrema` — `numDeriv` 부호 변화 지점)에 좌석을 준다. "
+            "`tangent_point`·`integral_region`과 동형으로 주 함수 행에만 적용."
         ),
     )
 

@@ -28,4 +28,12 @@ describe("GraphingCalculator 스모크", () => {
     expect(window.whymathApplySpec(b64)).toBe(true);
     expect(window.whymathApplySpec("not-a-spec")).toBe(false);
   });
+
+  it("show_extrema 명세 주입 후 크래시 없이 그리기까지 완료한다(VIZ-04 회귀)", () => {
+    render(<GraphingCalculator />);
+    const b64 = btoa(JSON.stringify({ function: "x**3-3*x", show_extrema: true }));
+    // 극값 스캔(findExtrema)이 draw 이펙트 안에서 실 canvas 없이(jsdom stub) 돌아간다 —
+    // throw 없이 true를 돌려주면 렌더 파이프라인이 안전하다는 증거.
+    expect(window.whymathApplySpec(b64)).toBe(true);
+  });
 });

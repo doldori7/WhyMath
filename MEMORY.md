@@ -675,6 +675,31 @@ ruff·black·mypy clean. 웹 `graph2dSpec.test.js`(신규 9케이스 포함 57�
 스위트(123건) green. `backlog/tasks/VIZ-03-...yaml` notes에 극값 제외 사유·S4-03 경계
 상호 참조 기록.
 
+### 2026-08-03 (구현·VIZ-04): **Graph2dSpec 극값 표시 — 렌더러에 findExtrema/drawExtrema 신규 구현(numDeriv 부호 변화 스캔) 후 show_extrema 명세 좌석** (claude 직접 구현, Kiki "/drive")
+
+**배경**: VIZ-03이 acceptance ①의 4항목 중 "극값 표시"만 렌더러에 대응 기능이 없어(D4 문서가
+이미 정확히 지적) 범위에서 제외하고 후속 태스크(VIZ-04)로 등재했다. 이번 태스크는 그 공백을
+직접 채운다 — VIZ-03과 달리 "렌더러 신규 구현 금지" 제약이 없는 태스크라 렌더러 자체에
+기능을 추가한다.
+
+**구현**: `GraphingCalculator.jsx`에 `findExtrema`(화면을 픽셀 단위로 스캔하며 `numDeriv`
+— 접선·도함수 곡선이 이미 쓰는 수치 미분 — 의 부호가 바뀌는 지점을 찾아 이분법 20회로 x를
+정련·극대/극소는 부호가 +→-냐 -→+냐로 구분)·`drawExtrema`(기존 `drawTangent`와 동일 스타일
+— 점+말풍선 라벨) 신규 구현. 새 수치 primitive·라이브러리 도입 0(기존 `numDeriv` 재사용).
+row 상태에 `showExtrema` 추가 + UI 체크박스("극값") + `collectState`/`applyState` 직렬화
+동반 갱신(기존 `showTangent`/`showIntegral` 패턴 그대로 미러). `schema/visualization.py::
+Graph2dSpec`에 `show_extrema: bool|None` 추가, 웹 어댑터(`graph2dSpec.js`)가 `true`일 때만
+주 함수 행의 `showExtrema`를 켠다(`false`·미지정은 무시 — 명시적 opt-in).
+
+**변별력 실측**: VIZ-03과 동일 절차 — 어댑터 변경을 커밋 전 `git stash`로 되돌려 JS 테스트가
+red를 내는지 확인(2건 실패) → 복원해 green(129건 전부 통과) 확인. jsdom canvas 스텁
+(`test/setup.js`)이 `drawExtrema`가 쓰는 모든 canvas 메서드를 이미 커버해 스모크 렌더도
+크래시 없이 통과.
+
+**검증**: 웹 `graph2dSpec.test.js`(신규 5케이스)·`GraphingCalculator.smoke.test.jsx`(신규
+1케이스·`show_extrema` 명세 주입 후 크래시 없음) + 전체 vitest 스위트(129건) green. 백엔드
+`test_visualization_spec.py`(신규 2케이스·151건)·ruff·black·mypy clean.
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데

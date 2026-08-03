@@ -147,6 +147,35 @@ describe("graph2dSpecToState — VIZ-03 필드 확장", () => {
     expect(st.rows[1].showTangent).toBeUndefined();
     expect(st.rows[1].showIntegral).toBeUndefined();
   });
+
+  it("show_extrema:true → 주 함수 행에 showExtrema", () => {
+    const st = graph2dSpecToState({ function: "x^3-3*x", show_extrema: true });
+    expect(st.rows[0].showExtrema).toBe(true);
+  });
+
+  it("show_extrema 없으면 showExtrema 미설정", () => {
+    const st = graph2dSpecToState({ function: "x^2" });
+    expect(st.rows[0].showExtrema).toBeUndefined();
+  });
+
+  it("show_extrema:false는 무시(참·명시적 true만 켠다)", () => {
+    const st = graph2dSpecToState({ function: "x^2", show_extrema: false });
+    expect(st.rows[0].showExtrema).toBeUndefined();
+  });
+
+  it("함수 없이 show_extrema만 있으면 무시(행이 없어 실을 곳이 없음)", () => {
+    expect(graph2dSpecToState({ show_extrema: true })).toBeNull();
+  });
+
+  it("show_extrema는 functions로 추가된 행이 아니라 주 함수(rows[0])에만 실린다", () => {
+    const st = graph2dSpecToState({
+      function: "x^2",
+      functions: ["x^3"],
+      show_extrema: true,
+    });
+    expect(st.rows[0].showExtrema).toBe(true);
+    expect(st.rows[1].showExtrema).toBeUndefined();
+  });
 });
 
 describe("parseSpecParam — URL 파라미터 파싱", () => {
