@@ -92,6 +92,10 @@ _SYSTEM_PROMPT = (
     "type별 spec 예시(가능하면 이 키를 채워라):\n"
     '  - interactive_graph_2d: {"function":"a*x**2+b*x+c", "domain":[-3,3], '
     '"parameters":[{"name":"a","min":-5,"max":5,"step":0.1,"default":1}]}\n'
+    "  - interactive_graph_2d(관계식·음함수 — 원·타원처럼 y=f(x) 형태가 아닌 경우): "
+    '{"function":"x**2 + y**2 = 1", "domain":[-2,2]} ("=" 포함 허용)\n'
+    "  - interactive_graph_2d(부등식 영역 — 연립부등식·해집합처럼 영역을 칠해야 하는 경우): "
+    '{"function":"y > x**2", "domain":[-3,3]} (">"·"<"·">="·"<=" 포함 허용)\n'
     '  - interactive_surface_3d: {"surface":"z = x**2 + y**2", "rotatable":true}\n'
     '  - simulation_probabilistic: {"experiment":"동전 던지기", "trials":200, '
     '"outcomes":[{"label":"앞면","weight":1},{"label":"뒷면","weight":1}]}\n'
