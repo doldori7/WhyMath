@@ -337,6 +337,53 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (구현·정정): **`VIZ-04-visual-style-render-seat-contract` 구현 — 양식↔렌더 좌석 계약 신설 + 구현 중 재감사로 §7.1 좌석 수치 정정(15건 11.8% → 24건 18.9%, 단위원·부등식영역 seated로 이동)** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.1(2026-08-03 2차 점검)이 밝힌
+G1 — `concept_visual_style_v1` 코퍼스(127개념 태깅)의 권장 시각화 양식과 실제 렌더 가능
+`VisualizationType`(4종) 사이에 기계 계약이 없어, LLM이 렌더 불가 양식(예: 입체도형)에도 4종 중
+하나를 억지로 골라 **개념과 무관한 그림**을 렌더할 위험(05b Part 5-1 "억지 그림" 금기 위반).
+
+**구현 착수 전 재감사로 정정된 사실**: §7.1 원문은 "함수그래프만 seated(11.8%)"라 썼으나 이것이
+**과소평가**였음을 발견했다. 웹 계산기(`GraphingCalculator.jsx`)가 `mathExpr.js::classify()`로
+문자열을 6가지(function·implicit·inequality·polar·parametric·point)로 분류해 그리고,
+`graph2dSpecToState`(`graph2dSpec.js:21`)는 `spec.function`을 파싱 없이 그대로 상태에 얹으므로
+`Graph2dSpec.function`에 `"x**2+y**2=1"`(단위원)·`"y > x**2"`(부등식영역)를 넣으면 **스키마 변경
+없이 오늘 코드로 이미 렌더된다**. 진짜 갭은 `l3/visualization.py`의 `_SYSTEM_PROMPT`가 `function`
+(순수 함수) 예시만 보여줘 LLM에게 관계식·부등식 형태를 알려주지 않은 것뿐이었다.
+
+**산출**:
+- `data/visual_style_contract.json` 신설 — `render_contract.json`과 동형 확장. `VisualizationStyle`
+  16종(코퍼스 태깅 10종 + 미사용 6종 포함 완전성) 각각에 `render_types`·`render_mode`·`status`
+  (seated|unseated)·`seat_owner` 선언. seated 5종(함수그래프·단위원·부등식영역·분포곡선·
+  확률시뮬레이션) — 실제 코퍼스 기준 좌석 보유 15+8+1=24건(18.9%).
+- `l3/visualization.py` `_SYSTEM_PROMPT`에 음함수·부등식 예시 2건 추가(스키마 변경 없음).
+- `l4/visualization_policy.py`에 `has_render_seat` 순수 함수 신설(`_SEATED_STYLES` 리터럴 상수 —
+  모듈이 hermetic 원칙이라 JSON을 직접 읽지 않음. 테스트가 JSON↔Python 이중 진실원 drift를
+  cross-check).
+- `l4/scene_generation.py::_append_visual_block` 게이트에 세 번째 AND 조건(`has_render_seat`)
+  추가 — 기존 `is_visualizable`과 병렬(대체 아님). 좌석 0이면 LLM 미호출·시각화 미생성·소크라테스만.
+- `harness/visualization_reach_report.py`에 "양식 정합 도달률" 축(`seat_pass_count`) 추가 — 게이트
+  통과 AND 좌석 보유. 100% 정합은 목표 아님(미좌석은 보류가 정답).
+- 테스트: `tests/backend/schema/test_visual_style_render_contract.py` 신설(완전성·JSON↔Python
+  drift·seated 항목의 render_types가 실제 렌더 가능 타입의 부분집합인지). `test_scene_generation.py`
+  의 `test_partial_visualizes`가 unseated 양식(수형도)으로 4분류 축을 검증하던 것을 seated 양식
+  (함수그래프)으로 교체해 두 축을 분리 검증하고, 신규 `TestRenderSeatGate` 클래스로 좌석 축을
+  독립 검증(LLM 미호출까지 확인). `test_non_graph2d_no_param_control`도 좌석 없는 입체도형 →
+  좌석 있는 함수그래프로 교체(가짜 LLM 응답 내용과 무관하게 게이트를 통과시키기 위함).
+
+**정정 반영**: `visualization_module_gap_review.md` §7.1 표를 재감사 결과로 갱신(정정 각주 동봉),
+§7.3의 "VIZ-03이 34건을 흡수" 서술도 각주로 정정(단위원·부등식영역 제외 → 수직선 25건+접선도함수만
+남음). `VIZ-03` 태스크 yaml notes에 범위 축소를 반영(id·status는 미변경).
+
+**NOT**: `data/render_contract.json`은 불변(동형 확장이지 병합 아님) — `VisualizationType` 4종
+자체는 늘리지 않음(anti-explosion). `l3/visualization.py`의 타입 선택 로직을 `render_contract.json`
+에서 파생시키는 것은 `VIZ-02` 범위(합류 지점만 상호 참조, 중복 구현 안 함). 산점도는 `point`
+classify로 다중 좌표가 기술적으로는 가능하나 연속 좌표쌍 정규식 의존 임시방편이라 보수적으로
+unseated 유지(신뢰 가능한 좌석으로 인정 안 함).
+
+---
+
 ### 2026-08-03 (설계·시각화 2차): **시각화 모듈 2차 갭 점검·설계 — `VIZ-01` 착륙 후 지형 실측, 양식↔렌더 좌석 계약 부재(태깅 127건 중 좌석 보유 15건=11.8%)·4분류 코퍼스 orphan 7/7(fail-open 보호 2회+ 반복 무력) + 태스크 2건 신규 등재·기존 3건 재정렬 — 동일 문서 §7로 추가(같은 EOS 틀 기능 62~65 재대조)** (claude 설계, Kiki 요청)
 
 **배경**: Kiki가 같은 외부 EOS 틀 문서 『15. 시각화』(1차 점검 `visualization_module_gap_review.md`,
