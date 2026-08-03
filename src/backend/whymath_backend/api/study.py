@@ -46,16 +46,13 @@ from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
-from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.l2.concept_diagnosis import compute_concept_diagnoses
 from whymath_backend.l2.pedagogy_evidence import (
     record_pedagogy_outcome,
     record_pedagogy_treatment,
 )
 from whymath_backend.l4.content_supply import supply
-from whymath_backend.l4.lthc import mastery_to_level
-from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals, grade_to_band
+from whymath_backend.l4.pedagogy.signal_assembly import build_student_signals
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
 
@@ -121,39 +118,6 @@ async def _load_objective(session: AsyncSession, objective_id: str) -> LearningO
     return objective
 
 
-async def _build_signals(
-    session: AsyncSession, user_id: uuid.UUID, concept_code: str
-) -> StudentSignals:
-    """L2 진단 + L5 프로필 → `StudentSignals` 조립 — **실재하는 신호만** 채운다.
-
-    진단이 없거나(신규 학생) 해당 개념이 진단 목록에 없으면 숙달 축은 비운 채로 둔다 — 없는 값을
-    기본치로 채우면 선택기가 근거 없는 판단을 하게 된다(PED-02가 세운 "가짜 통과 금지" 규약).
-    Polya 단계·턴 수·힌트는 대화 세션 축이라 여기서는 기본값이다(공급 진입 = 시도 전).
-
-    `grade_band`(PED-06 — 04e §4 카탈로그 후보 필터 축)는 `UserProfile.grade`(10~14 —
-    `schema/user.py` 계약)에서 `grade_to_band` 순수 변환으로 파생한다("생산자 먼저" — 04d §2.1).
-    프로필 미존재·grade 미기입이면 None으로 두어 필터의 학년 축이 조용히 스킵된다(필수화 금지).
-    """
-    profile = await session.get(UserProfile, user_id)
-    grade_band = grade_to_band(profile.grade if profile is not None else None)
-
-    diagnoses = await compute_concept_diagnoses(session, user_id)
-    for diagnosis in diagnoses:
-        if diagnosis.concept_code == concept_code:
-            mastery = (
-                diagnosis.bkt_mastery
-                if diagnosis.bkt_mastery is not None
-                else diagnosis.irt_mastery_proxy
-            )
-            return StudentSignals(
-                mastery_level=mastery_to_level(mastery) if mastery is not None else None,
-                bkt_mastery=diagnosis.bkt_mastery,
-                irt_theta=diagnosis.irt_theta,
-                grade_band=grade_band,
-            )
-    return StudentSignals(grade_band=grade_band)
-
-
 @router.post(
     "/{objective_id}/study",
     response_model=StudyUnitResponse,
@@ -187,7 +151,7 @@ async def post_study_unit(
     # 공급은 후속 — 지금 임의 병합을 하면 처치 귀속이 흐려진다.
     concept_code = concept_codes[0]
 
-    signals = await _build_signals(session, user.user_id, concept_code)
+    signals = await build_student_signals(session, user.user_id, concept_code)
     # ⚠️ k_type은 `.value`("CONCEPT")로 넘긴다 — 멤버를 str()로 감싸면 str-mixin Enum이라
     # "KnowledgeType.CONCEPT"로 맹글링된다(2026-07-29 실측: 팩 조회 상시 미스 + evidence_event
     # native enum 플러시 LookupError + 카탈로그 필터 상시 공집합). 회귀는
