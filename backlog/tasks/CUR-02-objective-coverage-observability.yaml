@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,10 +16,11 @@ acceptance:
   - "③ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인한다(OPS-03·OPS-10 선례)"
   - "④ 변별력: 소단원 1건을 추가 반입했을 때 커버리지 % 수치가 실제로 움직이는지 확인한다"
   - "⑤ 범위 밖 명시: 목표 분해 자동 생성 파이프라인은 이 태스크에 포함하지 않는다(docs/architecture/curriculum_module_gap_review.md §5-⑥에 발화조건 기록)"
-artifacts: []
+artifacts:
+  - cd34719c
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: claude/backlog-drive-next
+session: null
 notes: "docs/architecture/curriculum_module_gap_review.md §3 D2. LearningObjective 스키마·unit_compiler.py 컴파일러·런타임 API(/v1/me/objectives/*)까지 완비됐으나 실데이터는 소단원 1개·목표 4개뿐(895개 성취기준 중 0.1%). NLP-01·REC-01/02에 이은 '완비된 소비 경로 + 미도달 공급원' 7회차(§6)."
 updated: 2026-08-03
