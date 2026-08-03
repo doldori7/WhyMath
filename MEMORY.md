@@ -402,6 +402,150 @@ reach-observability`·`ARCH-26-anti-gamification-source-governance-gate`, **vali
 
 ---
 
+### 2026-08-03 (구현): **`VIZ-05-visualizability-atom-backbone-realign` 구현 — 4분류(visualizability) 코퍼스 원자 백본 code 재정렬(추상 축 1건) + orphan CI 게이트 신설** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.2 G2 — `concept_visualization_v1/
+visualizability.json` 7건 전건이 레거시 `concept_graph_v1` code(예: `HIGH-CALC-005`)로 태깅돼
+런타임 원자 백본(`atom_graph_v1`, 2,683개념) code 공간과 **전혀 겹치지 않았다**(orphan 7/7).
+`is_visualizable(None)`이 fail-open이라 서비스 장애는 아니었으나, 추상 개념(대우증명·귀류법)의
+"리터럴 그래프는 오개념 유발" 보호가 런타임에서 전혀 발동하지 않았다 — CLAUDE.md "상시 실패하는
+fail-open 보호를 신뢰 금지(2회+ 반복 관측 시 태스크 등재 의무)" 발화(1차 편 D2 예고 + 2차 편 §7.2
+실측 = 반복 2회).
+
+**산출**:
+- `visualizability.json`을 v1.1(7건)→v1.2(**1건**)로 재작성 — `HIGH-LOGIC-007`(대우증명·귀류법)을
+  원자 백본 code `10공수2-02-07-1`(`atom_graph_v1/graph.json`에서 name 완전 일치 확인)로 교체.
+  acceptance①("추상 축만 보수적으로 재정렬, 직접·동적·부분은 미태깅 존치")과 orphan 게이트가
+  동시에 만족되는 유일한 설계 — 직접·동적·부분 6건은 애초에 런타임에서 한 번도 매치된 적 없는
+  orphan이었으므로 억지 재태깅 없이 제거(데이터 손실 아님, VIZ-01 acceptance③ "억지 태깅이 억지
+  그림을 만든다" 답습).
+- `_provenance.json` 갱신(재정렬 경위·record_count 1로 정정).
+- `tests/backend/l1/test_concept_visualization_orphan_gate.py` 신설 — ①orphan 게이트 본체(코퍼스
+  code가 원자 백본 code 공간에 있는지) ②변별력(임의 code 주입 → 게이트 fail 실측 → 복원 → pass
+  실측, `pytest.fail.Exception`으로 정확 포착) ③라이브 재현(코퍼스 로드 →
+  `Visualizability.추상` → `l4/scene_generation.generate_learning_scene` — 시각화 블록 생략·LLM
+  미호출을 hermetic 통합 재현으로 확인, DB 접근 불가 환경의 acceptance④ 대체). 새 CI 워크플로
+  불요 — 기존 `backend` 잡 pytest 수집(`testpaths`)에 자동 편입(`tests/infra/
+  test_test_suite_wiring.py`로 배선 재확인).
+- 기존 `tests/backend/l1/concept_visualization/test_overlay.py`의 `test_seed_corpus_covers_
+  all_four_classes`(4분류 전건 실증을 불변식으로 삼던 테스트)를 코퍼스 재작성에 맞춰
+  `test_seed_corpus_is_atom_backbone_aligned_abstract_only`로 정정(4분류 전건 실증은 더 이상 이
+  코퍼스의 불변식이 아님 — orphan 게이트가 code 정합을 대신 지킴).
+- `harness/visualization_reach_report`(VIZ-01 산출물, 재구현 0)로 재정렬 전후 실측:
+  `visualization_matched_count` 0→**1**, `orphaned_codes` 7건→**0건**.
+
+**검증**: `pytest tests/backend/l1 -q` 771 passed·85 skipped(DB 필요 integration만 skip) — 회귀
+없음. `ruff check .`·`mypy --strict whymath_backend` green. `black --check`는 신설 테스트 파일
+포맷팅 후 green(단, 무관한 기존 파일 `harness/defect_detection_eval.py` 1건이 이 작업 이전부터
+포맷 드리프트 상태 — 이번 변경과 무관, 별도 처리 필요). `backlog.py validate` green.
+
+**범위**: 코퍼스 재작성 1 · provenance 갱신 1 · 테스트 신설 1 · 테스트 정정 1 · 문서 각주 1 ·
+MEMORY 1. `l1/atom_graph/populate.py`·`atom_graph_v1/graph.json` 무변경(Overlay 분리 원칙 — 개념
+노드에 시각화 판정 미혼입).
+
+### 2026-08-03 (구현·정정): **`VIZ-04-visual-style-render-seat-contract` 구현 — 양식↔렌더 좌석 계약 신설 + 구현 중 재감사로 §7.1 좌석 수치 정정(15건 11.8% → 24건 18.9%, 단위원·부등식영역 seated로 이동)** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.1(2026-08-03 2차 점검)이 밝힌
+G1 — `concept_visual_style_v1` 코퍼스(127개념 태깅)의 권장 시각화 양식과 실제 렌더 가능
+`VisualizationType`(4종) 사이에 기계 계약이 없어, LLM이 렌더 불가 양식(예: 입체도형)에도 4종 중
+하나를 억지로 골라 **개념과 무관한 그림**을 렌더할 위험(05b Part 5-1 "억지 그림" 금기 위반).
+
+**구현 착수 전 재감사로 정정된 사실**: §7.1 원문은 "함수그래프만 seated(11.8%)"라 썼으나 이것이
+**과소평가**였음을 발견했다. 웹 계산기(`GraphingCalculator.jsx`)가 `mathExpr.js::classify()`로
+문자열을 6가지(function·implicit·inequality·polar·parametric·point)로 분류해 그리고,
+`graph2dSpecToState`(`graph2dSpec.js:21`)는 `spec.function`을 파싱 없이 그대로 상태에 얹으므로
+`Graph2dSpec.function`에 `"x**2+y**2=1"`(단위원)·`"y > x**2"`(부등식영역)를 넣으면 **스키마 변경
+없이 오늘 코드로 이미 렌더된다**. 진짜 갭은 `l3/visualization.py`의 `_SYSTEM_PROMPT`가 `function`
+(순수 함수) 예시만 보여줘 LLM에게 관계식·부등식 형태를 알려주지 않은 것뿐이었다.
+
+**산출**:
+- `data/visual_style_contract.json` 신설 — `render_contract.json`과 동형 확장. `VisualizationStyle`
+  16종(코퍼스 태깅 10종 + 미사용 6종 포함 완전성) 각각에 `render_types`·`render_mode`·`status`
+  (seated|unseated)·`seat_owner` 선언. seated 5종(함수그래프·단위원·부등식영역·분포곡선·
+  확률시뮬레이션) — 실제 코퍼스 기준 좌석 보유 15+8+1=24건(18.9%).
+- `l3/visualization.py` `_SYSTEM_PROMPT`에 음함수·부등식 예시 2건 추가(스키마 변경 없음).
+- `l4/visualization_policy.py`에 `has_render_seat` 순수 함수 신설(`_SEATED_STYLES` 리터럴 상수 —
+  모듈이 hermetic 원칙이라 JSON을 직접 읽지 않음. 테스트가 JSON↔Python 이중 진실원 drift를
+  cross-check).
+- `l4/scene_generation.py::_append_visual_block` 게이트에 세 번째 AND 조건(`has_render_seat`)
+  추가 — 기존 `is_visualizable`과 병렬(대체 아님). 좌석 0이면 LLM 미호출·시각화 미생성·소크라테스만.
+- `harness/visualization_reach_report.py`에 "양식 정합 도달률" 축(`seat_pass_count`) 추가 — 게이트
+  통과 AND 좌석 보유. 100% 정합은 목표 아님(미좌석은 보류가 정답).
+- 테스트: `tests/backend/schema/test_visual_style_render_contract.py` 신설(완전성·JSON↔Python
+  drift·seated 항목의 render_types가 실제 렌더 가능 타입의 부분집합인지). `test_scene_generation.py`
+  의 `test_partial_visualizes`가 unseated 양식(수형도)으로 4분류 축을 검증하던 것을 seated 양식
+  (함수그래프)으로 교체해 두 축을 분리 검증하고, 신규 `TestRenderSeatGate` 클래스로 좌석 축을
+  독립 검증(LLM 미호출까지 확인). `test_non_graph2d_no_param_control`도 좌석 없는 입체도형 →
+  좌석 있는 함수그래프로 교체(가짜 LLM 응답 내용과 무관하게 게이트를 통과시키기 위함).
+
+**정정 반영**: `visualization_module_gap_review.md` §7.1 표를 재감사 결과로 갱신(정정 각주 동봉),
+§7.3의 "VIZ-03이 34건을 흡수" 서술도 각주로 정정(단위원·부등식영역 제외 → 수직선 25건+접선도함수만
+남음). `VIZ-03` 태스크 yaml notes에 범위 축소를 반영(id·status는 미변경).
+
+**NOT**: `data/render_contract.json`은 불변(동형 확장이지 병합 아님) — `VisualizationType` 4종
+자체는 늘리지 않음(anti-explosion). `l3/visualization.py`의 타입 선택 로직을 `render_contract.json`
+에서 파생시키는 것은 `VIZ-02` 범위(합류 지점만 상호 참조, 중복 구현 안 함). 산점도는 `point`
+classify로 다중 좌표가 기술적으로는 가능하나 연속 좌표쌍 정규식 의존 임시방편이라 보수적으로
+unseated 유지(신뢰 가능한 좌석으로 인정 안 함).
+
+---
+
+### 2026-08-03 (설계·시각화 2차): **시각화 모듈 2차 갭 점검·설계 — `VIZ-01` 착륙 후 지형 실측, 양식↔렌더 좌석 계약 부재(태깅 127건 중 좌석 보유 15건=11.8%)·4분류 코퍼스 orphan 7/7(fail-open 보호 2회+ 반복 무력) + 태스크 2건 신규 등재·기존 3건 재정렬 — 동일 문서 §7로 추가(같은 EOS 틀 기능 62~65 재대조)** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 같은 외부 EOS 틀 문서 『15. 시각화』(1차 점검 `visualization_module_gap_review.md`,
+2026-07-30·PR #652)에 대해 "빠진 부분을 재점검"을 요청. 1차 편의 최우선 갭 D1(전 시각화 스택
+학생 도달 0회)은 이미 `VIZ-01`으로 해소·머지됐다(PR #654, 2026-07-31). 따라서 40개 세부 기능을
+다시 훑는 재작업이 아니라, **적재가 배선된 뒤 처음 관측 가능해진 지형**을 새로 대조하는
+2차 점검으로 스코프를 잡고 동일 문서에 §7로 이어붙였다(모듈당 단일 진실원 유지 — 새 파일
+미신설).
+
+**착수 가설("`VIZ-01`으로 도달 문제는 끝났다")은 실측으로 기각됐다.** 데이터가 흐르기 시작하자
+*흐르는 데이터가 렌더 좌석과 맞지 않는다*는 더 깊은 결함이 드러났다.
+
+**진짜 갭 2건 설계**:
+1. **G1(최우선) 양식↔렌더 좌석 계약 부재**. `concept_visual_style_v1` 코퍼스(127건 태깅)의 양식
+   분포(입체도형32·수직선25·평면도형16·함수그래프15·벡터도12·점화도11·단위원8·수형도4·
+   넓이모델3·부등식영역1)를 렌더 타입 3종(`interactive_graph_2d`·`interactive_surface_3d`·
+   `simulation_probabilistic`, `animation_prerendered`는 `web_adapter: null`)과 전건 대조한 결과
+   **실제로 표현 가능한 양식은 함수그래프 15건(11.8%)뿐**이다. `VisualizationStyle →
+   VisualizationType` 변환 코드는 저장소 전체 0건 — 양식은 LLM 프롬프트의 자유 텍스트 힌트
+   1줄로만 흐르고 구속력이 없다. `05b_visualization_classification.md` §3 파이프라인의 두 번째
+   화살표(`type→렌더러`)는 `render_contract.json`이 계약으로 봉인했는데 **첫 화살표
+   (`양식→type`)는 문서에만 있고 기계에 없다.** 피해가 D1(도달 0회)보다 나쁘다 — 폴백이 아니라
+   *개념과 무관한 그림이 그럴듯하게 렌더될 위험*이다("확실하지 않을 때 자신 있게 말함" 패턴의
+   시각적 형태). `VIZ-04` 신규 등재로 `render_contract.json` 동형 확장(`visual_style_contract.json`)
+   + 미좌석 양식 보류 게이트 + 정합 도달률 관측을 설계.
+2. **G2 4분류 코퍼스 orphan 7/7 — fail-open 보호 2회+ 반복 무력**. `visualizability.json`의 7건
+   전건이 레거시 `concept_graph_v1` code로 태깅돼 런타임 `atom_graph_v1` code 공간과 전혀
+   겹치지 않는다(1차 편 `VIZ-01` PR이 이미 부수 발견으로 기록·"재작성은 범위 밖"으로 유보한
+   그 사실). `is_visualizable(None)`이 fail-open이라 장애는 아니나, 추상 개념(대우증명·귀류법)
+   오개념 보호와 직접/동적 슬라이더 구분이 런타임에서 발동하지 않는다. 1차 편 D2가 "적재되면
+   표면화된다"고 예고했고 2차 편이 그것을 실측 — CLAUDE.md 『fail-open 보호 2회+ 반복 관측 시
+   태스크 등재 의무』가 정확히 발화. `VIZ-05` 신규 등재로 추상 축 보수적 재정렬 + orphan CI
+   게이트 설계.
+
+**부수 판정(G3) — 기존 태스크 3건 재정렬**: `S4-03`(기하·벡터·행렬)·`VIZ-03`(접선·적분영역 등)의
+acceptance는 코퍼스 실측 분포를 보기 전에 쓰였다. 재정렬: `VIZ-03` 범위를 수직선25+단위원8+
+부등식영역1=34건 좌석 확보로 확장(새 `VisualizationType` 없이 `Graph2dSpec` 필드 확장으로
+흡수 — anti-explosion 유지)하고 `depends_on: VIZ-04` 추가. `S4-03` notes에 코퍼스 분포 근거
+(입체도형+평면도형+벡터도=60건, 최대 덩어리) 명기. `VIZ-02`(렌더 계약 파생)와 `VIZ-04`는 같은
+`_SYSTEM_PROMPT` 파생 지점을 건드리므로 양쪽 acceptance에 상호 참조. **점화도11+수형도4+
+넓이모델3=18건은 어느 태스크 범위에도 없음을 정직 고지**(구조 다이어그램 계열·05b §4.1
+`StructureGraph` 목표 아키텍처 소관) — 지금 태스크화하면 dead task이므로 미등재 트리거로만
+남김(발화 조건: 확률과통계·수열 커버리지 착수 시).
+
+**산출**: `docs/architecture/visualization_module_gap_review.md`에 §7 추가(새 파일 미신설) +
+backlog 2건 CLI 신규 등재(`VIZ-04-visual-style-render-seat-contract`·
+`VIZ-05-visualizability-atom-backbone-realign`) + 기존 3건(`VIZ-02`·`VIZ-03`·`S4-03`) notes·
+acceptance 재정렬, validate green 158건.
+
+**NOT**: 코드 로직 변경 0(2차 점검도 문서+등재만). prod DB 실측 아님(코퍼스 파일·스키마 필드
+기준 — `VIZ-04` 착수 시 실측 이관). "LLM이 무관한 그래프를 만든다"는 구조적 추론이며 라이브
+재현은 하지 않음(`VIZ-04` acceptance로 이관). 기능 64·65는 재점검하지 않음(1차 편 판정 이후
+관련 코드 변경 없음을 `git log`로 확인).
+
+정본: `docs/architecture/visualization_module_gap_review.md` §7.
+
 ### 2026-08-03 (설계·운영 r2): **운영(EOS) 모듈 2차 재점검 — 동일 문서 재제출 발견 후 델타 재점검으로 전환·QA 게이트가 상시 fail-open(D3)·학생 대면 금칙어/PII 검사기 0(D4)·v1 판정표 stale 4칸 정정, 태스크 3건 등재 + 1건 우선순위 상향** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 외부 EOS 틀 문서 『0단계 운영(EOS)』(모듈 42~45 + 확장 제안 46~50)를
