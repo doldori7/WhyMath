@@ -7,6 +7,7 @@
 // 흐름(백엔드 E2E 테스트 미러): GET /v1/me/next-problem → (problem_id 있으면) GET
 // /v1/problems/{id} + GET /v1/me/diagnosis/concepts. problem_id가 null이면 후보 없음으로
 // graceful 종료(noCandidate)한다 — 앱은 코치 없이도 진행 가능해야 한다(가용성).
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/problem_models.dart';
@@ -14,6 +15,11 @@ import '../data/problems_api.dart';
 import 'diagnosis_state.dart';
 
 part 'diagnosis_controller.g.dart';
+
+/// 서버 최소버전 계약 미달 사유코드(OPS-17) — `app.py _service_metrics_middleware`가 돌려주는
+/// `426 Upgrade Required`. 표준 HTTP status(`status.HTTP_426_UPGRADE_REQUIRED`)와 동형이며
+/// 401/404/422 등 다른 실패와 구분해 전용 문구로 분기하는 데만 쓴다.
+const int _updateRequiredStatusCode = 426;
 
 /// 진단(CAT)→문제제시 흐름을 관장하는 Riverpod Notifier.
 @riverpod
@@ -60,6 +66,14 @@ class DiagnosisController extends _$DiagnosisController {
         noCandidate: false,
       );
     } catch (e) {
+      if (e is DioException && e.response?.statusCode == _updateRequiredStatusCode) {
+        // OPS-17: 서버 최소버전 계약 미달(426) — 일반 실패와 다른 전용 문구로 분기한다.
+        state = state.copyWith(
+          isLoading: false,
+          error: '앱을 최신 버전으로 업데이트해주세요.',
+        );
+        return;
+      }
       // graceful — 네트워크·인증 실패 모두 앱을 막지 않는다.
       state = state.copyWith(
         isLoading: false,

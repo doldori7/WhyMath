@@ -146,6 +146,13 @@ _READY_PROBES_KEY = "readiness_probes"
 # *자기증폭*시킨다(관측이 관측을 오염). 학생·API 트래픽만 계측한다.
 _OPS_PROBE_PATHS = frozenset({"/health", "/health/live", "/health/ready", "/status"})
 
+# OPS-17: 클라 최소 버전 게이트 — 헤더 이름 + '미상(unknown)' 경량 카운터의 app.state 키.
+# 신규 미들웨어를 만들지 않고 기존 `_service_metrics_middleware`(OPS-01) 좌석에 얹는다(아래
+# create_app 참조). 헤더 부재/파싱 불가는 '미달'(426 차단)과 다른 '미상'으로, 차단과 무관한
+# 롤아웃 추적 신호로만 계상한다(임계는 `Settings.min_app_version`).
+_APP_VERSION_HEADER = "X-App-Version"
+_VERSION_UNKNOWN_COUNT_KEY = "app_version_unknown_count"
+
 logger = logging.getLogger(__name__)
 
 # /v1/generate의 런타임 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠·연쇄). 모듈 1회
@@ -153,6 +160,24 @@ logger = logging.getLogger(__name__)
 # (`_WORKER_SHADOW_VALIDATOR`, slice 43)와 같은 관측 정책을 동기 HTTP 경로에 적용한다.
 # 실제 활성 여부는 `Settings.l3_shadow_validation_enabled`로 게이트(create_app에서 결정).
 _SHADOW_VALIDATOR = default_seed_validator()
+
+
+def _parse_app_version(version: str) -> tuple[int, int, int] | None:
+    """`X.Y.Z`(빌드번호 없음) 버전 문자열을 정수 3튜플로 파싱 — 순수 함수(OPS-17).
+
+    외부 semver 라이브러리 없이 `tuple(int, ...)` 비교로 충분하다(정책 확정). 정확히
+    3개의 정수 부분이 아니면(형식 위반·빈 문자열·`1.2`·`1.2.3.4`·`1.2.x` 등) **조용히
+    넘어가지 않고 None을 반환**한다 — 호출부가 이를 '미상'(차단하지 않음·관측만)으로
+    명시 처리한다(CLAUDE.md 침묵 실패 금지 — 여기서는 예외를 삼키는 대신 "판정 불가"를
+    타입으로 드러낸다).
+    """
+    parts = version.strip().split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -520,6 +545,10 @@ def create_app(
     app.state.__setattr__(_METRICS_KEY, resolved_metrics)
     app.state.__setattr__(_ALERT_NOTIFIER_KEY, alert_notifier)
     app.state.__setattr__(_READY_PROBES_KEY, resolved_probes)
+    # OPS-17: 클라 버전 게이트 — 헤더 부재/파싱 실패("미상") 경량 카운터(신규 SaaS 의존
+    # 없음 — Prometheus/StatsD 등은 과공학. 모듈 전역이 아니라 app.state에 둬 앱 인스턴스별
+    # (테스트 격리 포함) 카운터가 섞이지 않는다).
+    app.state.__setattr__(_VERSION_UNKNOWN_COUNT_KEY, 0)
 
     def _observe_request(elapsed_ms: float, status_code: int) -> None:
         """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
@@ -541,20 +570,71 @@ def create_app(
         except Exception as exc:  # noqa: BLE001 — 계측 실패 흡수(요청 보호)·타입명 로그 필수
             logger.warning("요청 계측 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__)
 
+    def _observe_version_unknown() -> None:
+        """`X-App-Version` 헤더 부재/파싱 불가 — '미달'과 다른 '미상' 경량 관측(OPS-17).
+
+        차단 여부와 무관한 롤아웃 추적 신호(app.state 카운터)다. 계측(`_observe_request`)과
+        같은 정책 — 관측 실패가 요청을 절대 깨지 않되 **무타입 경고 금지**(예외 타입명을
+        warning에 남긴다·CLAUDE.md 침묵 실패 금지).
+        """
+        try:
+            setattr(
+                app.state,
+                _VERSION_UNKNOWN_COUNT_KEY,
+                getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY) + 1,
+            )
+        except Exception as exc:  # noqa: BLE001 — 카운터 실패 흡수(요청 보호)·타입명 로그 필수
+            logger.warning(
+                "버전 미상 카운터 갱신 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__
+            )
+
     @app.middleware("http")
     async def _service_metrics_middleware(
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        """요청별 (지연 ms·상태코드) 인프로세스 계측 미들웨어 (OPS-01).
+        """요청별 (지연 ms·상태코드) 인프로세스 계측 + 클라 최소 버전 게이트 (OPS-01·OPS-17).
 
-        - ops 프로브 경로(`_OPS_PROBE_PATHS`)는 계측에서 제외한다 — 업타임 프로브 폴링이
-          표본을 지배·오염하는 것을 막는다(상수 주석의 자기증폭 근거).
+        - ops 프로브 경로(`_OPS_PROBE_PATHS`)는 계측·버전 게이트 모두에서 제외한다 — 업타임
+          프로브 폴링이 표본을 지배·오염하는 것을 막는다(상수 주석의 자기증폭 근거).
+        - **OPS-17 버전 게이트**(신규 미들웨어가 아니라 이 기존 계측 미들웨어 좌석에 얹는다):
+          `X-App-Version` 헤더 값이 `Settings.min_app_version` *미만*이면 **426 Upgrade
+          Required**로 즉시 차단한다(`call_next` 미호출 — 401/404/422와 구분되는 전용
+          사유코드). 헤더가 아예 없으면(이 기능 배포 이전의 구버전 클라) *차단하지 않는다*
+          (`call_next` 정상 호출 — 기존 클라이언트를 즉시 깨뜨리지 않는다) — 대신 "미상"으로
+          `_observe_version_unknown`이 경량 관측한다(롤아웃 추적용 신호일 뿐 차단과 무관).
+          파싱 불가한 버전 문자열(형식 위반)도 침묵 실패 없이 동일하게 "미상"으로 계상한다.
         - 핸들러의 미처리 예외는 5xx(500)로 회계한 뒤 **그대로 재던진다** — 계측은
           예외를 삼키지 않는다(바깥 ServerErrorMiddleware가 500 응답으로 변환).
         - 계측 자체의 실패는 `_observe_request`가 흡수한다(요청 무영향·예외 타입명 로그).
         """
         if request.url.path in _OPS_PROBE_PATHS:
             return await call_next(request)
+
+        version_header = request.headers.get(_APP_VERSION_HEADER)
+        if version_header is None:
+            # 헤더 없음 — 이 기능 배포 이전 구버전 클라. 차단하지 않고 '미상'으로만 관측.
+            _observe_version_unknown()
+        else:
+            client_version = _parse_app_version(version_header)
+            if client_version is None:
+                # 파싱 불가 — 침묵 실패 금지: '미상'과 동일 취급(차단하지 않음·관측만).
+                logger.warning(
+                    "%s 파싱 불가 — 미상으로 계상(차단 안 함) — 원값: %r",
+                    _APP_VERSION_HEADER,
+                    version_header,
+                )
+                _observe_version_unknown()
+            else:
+                min_version = _parse_app_version(get_settings().min_app_version)
+                if min_version is not None and client_version < min_version:
+                    # 미달 — 426(401/404/422와 구분되는 전용 사유코드). call_next 미호출.
+                    return JSONResponse(
+                        status_code=status.HTTP_426_UPGRADE_REQUIRED,
+                        content={"detail": "앱을 최신 버전으로 업데이트해주세요."},
+                    )
+                # min_version 파싱 불가(Settings 오구성)면 게이트 자체를 적용하지 않는다
+                # (fail-open — 서버 설정 오류로 전 클라를 차단하는 것이 더 나쁜 실패 모드).
+
         started = time.monotonic()
         try:
             response = await call_next(request)
