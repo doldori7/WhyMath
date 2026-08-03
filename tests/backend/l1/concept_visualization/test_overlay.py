@@ -75,10 +75,17 @@ def test_loader_parses_records_and_skips_bad() -> None:
     ]
 
 
-def test_seed_corpus_covers_all_four_classes() -> None:
-    """대표 시드 코퍼스가 4분류(직접/동적/부분/추상)를 전부 실증한다(end-to-end 판별 존재)."""
+def test_seed_corpus_is_atom_backbone_aligned_abstract_only() -> None:
+    """VIZ-05 재정렬 후 시드 코퍼스 — 추상 축 1건만, code는 원자 백본(atom_graph_v1) 형식.
+
+    v1.1(7건 전부 레거시 concept_graph_v1 code)은 런타임 code 공간과 orphan 7/7이었다
+    (docs/architecture/visualization_module_gap_review.md §7.2). 직접·동적·부분은 인지행동
+    판정이라 억지 재태깅하지 않고 미태깅 존치했으므로(VIZ-01 acceptance③ 답습), 4분류 전부
+    실증은 더 이상 이 코퍼스의 불변식이 아니다 — orphan 게이트(신설
+    `tests/backend/l1/test_concept_visualization_orphan_gate.py`)가 대신 code 정합을 지킨다.
+    """
     records = load_concept_visualization_from_json(_SEED)
-    covered = {r.visualizability for r in records}
-    assert covered == set(Visualizability)
-    # 모든 시드 code는 concept_graph_v1 형식({TRACK}-{AREA}-{NNN}).
-    assert all("-" in r.code for r in records)
+    assert [r.visualizability for r in records] == [Visualizability.추상]
+    # 원자 백본 code 형식({학년군}{과목}-{단원}-{소단원}-{세부}) — concept_graph_v1의
+    # {TRACK}-{AREA}-{NNN} 형식과 다르다(둘 다 "-" 포함이라 그 자체는 구분자가 아님).
+    assert records[0].code == "10공수2-02-07-1"

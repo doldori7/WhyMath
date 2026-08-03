@@ -337,6 +337,47 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (구현): **`VIZ-05-visualizability-atom-backbone-realign` 구현 — 4분류(visualizability) 코퍼스 원자 백본 code 재정렬(추상 축 1건) + orphan CI 게이트 신설** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.2 G2 — `concept_visualization_v1/
+visualizability.json` 7건 전건이 레거시 `concept_graph_v1` code(예: `HIGH-CALC-005`)로 태깅돼
+런타임 원자 백본(`atom_graph_v1`, 2,683개념) code 공간과 **전혀 겹치지 않았다**(orphan 7/7).
+`is_visualizable(None)`이 fail-open이라 서비스 장애는 아니었으나, 추상 개념(대우증명·귀류법)의
+"리터럴 그래프는 오개념 유발" 보호가 런타임에서 전혀 발동하지 않았다 — CLAUDE.md "상시 실패하는
+fail-open 보호를 신뢰 금지(2회+ 반복 관측 시 태스크 등재 의무)" 발화(1차 편 D2 예고 + 2차 편 §7.2
+실측 = 반복 2회).
+
+**산출**:
+- `visualizability.json`을 v1.1(7건)→v1.2(**1건**)로 재작성 — `HIGH-LOGIC-007`(대우증명·귀류법)을
+  원자 백본 code `10공수2-02-07-1`(`atom_graph_v1/graph.json`에서 name 완전 일치 확인)로 교체.
+  acceptance①("추상 축만 보수적으로 재정렬, 직접·동적·부분은 미태깅 존치")과 orphan 게이트가
+  동시에 만족되는 유일한 설계 — 직접·동적·부분 6건은 애초에 런타임에서 한 번도 매치된 적 없는
+  orphan이었으므로 억지 재태깅 없이 제거(데이터 손실 아님, VIZ-01 acceptance③ "억지 태깅이 억지
+  그림을 만든다" 답습).
+- `_provenance.json` 갱신(재정렬 경위·record_count 1로 정정).
+- `tests/backend/l1/test_concept_visualization_orphan_gate.py` 신설 — ①orphan 게이트 본체(코퍼스
+  code가 원자 백본 code 공간에 있는지) ②변별력(임의 code 주입 → 게이트 fail 실측 → 복원 → pass
+  실측, `pytest.fail.Exception`으로 정확 포착) ③라이브 재현(코퍼스 로드 →
+  `Visualizability.추상` → `l4/scene_generation.generate_learning_scene` — 시각화 블록 생략·LLM
+  미호출을 hermetic 통합 재현으로 확인, DB 접근 불가 환경의 acceptance④ 대체). 새 CI 워크플로
+  불요 — 기존 `backend` 잡 pytest 수집(`testpaths`)에 자동 편입(`tests/infra/
+  test_test_suite_wiring.py`로 배선 재확인).
+- 기존 `tests/backend/l1/concept_visualization/test_overlay.py`의 `test_seed_corpus_covers_
+  all_four_classes`(4분류 전건 실증을 불변식으로 삼던 테스트)를 코퍼스 재작성에 맞춰
+  `test_seed_corpus_is_atom_backbone_aligned_abstract_only`로 정정(4분류 전건 실증은 더 이상 이
+  코퍼스의 불변식이 아님 — orphan 게이트가 code 정합을 대신 지킴).
+- `harness/visualization_reach_report`(VIZ-01 산출물, 재구현 0)로 재정렬 전후 실측:
+  `visualization_matched_count` 0→**1**, `orphaned_codes` 7건→**0건**.
+
+**검증**: `pytest tests/backend/l1 -q` 771 passed·85 skipped(DB 필요 integration만 skip) — 회귀
+없음. `ruff check .`·`mypy --strict whymath_backend` green. `black --check`는 신설 테스트 파일
+포맷팅 후 green(단, 무관한 기존 파일 `harness/defect_detection_eval.py` 1건이 이 작업 이전부터
+포맷 드리프트 상태 — 이번 변경과 무관, 별도 처리 필요). `backlog.py validate` green.
+
+**범위**: 코퍼스 재작성 1 · provenance 갱신 1 · 테스트 신설 1 · 테스트 정정 1 · 문서 각주 1 ·
+MEMORY 1. `l1/atom_graph/populate.py`·`atom_graph_v1/graph.json` 무변경(Overlay 분리 원칙 — 개념
+노드에 시각화 판정 미혼입).
+
 ### 2026-08-03 (구현·정정): **`VIZ-04-visual-style-render-seat-contract` 구현 — 양식↔렌더 좌석 계약 신설 + 구현 중 재감사로 §7.1 좌석 수치 정정(15건 11.8% → 24건 18.9%, 단위원·부등식영역 seated로 이동)** (claude 구현, backend-engineer 위임)
 
 **배경**: `docs/architecture/visualization_module_gap_review.md` §7.1(2026-08-03 2차 점검)이 밝힌

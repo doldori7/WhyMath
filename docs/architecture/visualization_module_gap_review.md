@@ -526,6 +526,17 @@ D1 상태에서는 시각화 블록이 아예 `return`돼 학생이 아무것도
   0"은 이 저장소의 반복 실패 유형(§6)이므로 리포트 표시가 아니라 **기계 차단**(exit 1)으로 올린다.
 - 변별력: 임의 개념 1건을 존재하지 않는 code로 바꿔 게이트 exit 1 실측 → 복원해 exit 0 실측.
 
+> **2026-08-03 구현 완료(각주).** `visualizability.json`을 v1.2로 재작성 — `HIGH-LOGIC-007`(대우
+> 증명·귀류법)을 원자 백본 code `10공수2-02-07-1`(name 완전 일치 확인)로 교체한 **1건짜리**
+> 코퍼스로 축소했다(직접·동적·부분 6건은 계획대로 재태깅 없이 제거 — orphan 게이트와
+> acceptance①의 보수적 축소가 만나는 지점에서 유일하게 성립하는 설계). orphan 게이트는
+> `tests/backend/l1/test_concept_visualization_orphan_gate.py`로 신설(CI는 기존 `backend` 잡
+> pytest 수집에 자동 편입 — 새 워크플로 불요, `tests/infra/test_test_suite_wiring.py`로 배선
+> 재확인). 라이브 재현(코퍼스 로드 → `Visualizability.추상` → `l4/scene_generation`)으로
+> 시각화 블록 생략·LLM 미호출을 실측했고, `harness/visualization_reach_report`로
+> `visualization_matched_count` 0→1·orphan 7→0을 실측했다(변별력: 임의 code 주입 시 게이트
+> fail→복원 시 pass 상태 전이를 실측 — 성공/실패 동일값 위장 아님).
+
 ### §7.3 G3 — 좌석 우선순위가 코퍼스 실측 분포와 무관 (기존 태스크 재정렬)
 
 > **2026-08-03 재감사 반영**: §7.1 정정으로 단위원·부등식영역은 이미 seated다(별도 태스크 불요).
