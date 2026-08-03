@@ -47,11 +47,15 @@ from whymath_backend.l3.finite_probability import (
     verify_finite_count,
     verify_finite_probability,
 )
-from whymath_backend.l3.verification_tier import VerificationTier, read_verification_tier
+from whymath_backend.l3.verification_tier import (
+    VerificationTier,
+    read_verification_tier,
+)
 
 __all__ = [
     "PilotRecord",
     "ResidueGateReport",
+    "build_finite_probability_subject",
     "load_pilot_records",
     "run_residue_cross_verify",
     "select_sample",
@@ -213,21 +217,44 @@ def _verify_machine_axis(records: Sequence[PilotRecord]) -> tuple[list[str], lis
     return tier_violations, machine_failures
 
 
-def _build_subject(record: PilotRecord, *, authored_by: str) -> ResidueSubject | str:
-    """교차검증 대상 조립 — 모델 파싱·열거 실패는 *사유 문자열*(호출자가 기계 실패로 처리)."""
+def build_finite_probability_subject(
+    *,
+    slug: str,
+    conditions: str,
+    question_text: str,
+    answer: str,
+    answer_explanation: str,
+    authored_by: str,
+) -> ResidueSubject | str:
+    """교차검증 대상 조립(공용) — 모델 파싱·열거 실패는 *사유 문자열*(호출자가 기계 실패로
+    처리). `PilotRecord`뿐 아니라 결함 시더(`SeededResidueItem` 등)도 같은 조립 경로를
+    쓴다 — 이 로직은 여기 한 곳뿐이고 재구현하지 않는다(S4-16 강등전이 이 함수를 재사용).
+    """
     try:
-        model = parse_finite_model(record.conditions)
+        model = parse_finite_model(conditions)
         result = enumerate_model(model)
     except FiniteProbabilityError as exc:
-        return f"{record.slug}: 형식 모델 조립 실패({type(exc).__name__}) {exc}"
+        return f"{slug}: 형식 모델 조립 실패({type(exc).__name__}) {exc}"
     return ResidueSubject(
-        problem_id=record.slug,
-        question_text=record.question_text,
-        answer=record.answer,
-        answer_explanation=record.answer_explanation,
+        problem_id=slug,
+        question_text=question_text,
+        answer=answer,
+        answer_explanation=answer_explanation,
         machine_model_ko=describe_model_ko(model, result),
         machine_total=result.total,
         machine_favorable=result.favorable,
+        authored_by=authored_by,
+    )
+
+
+def _build_subject(record: PilotRecord, *, authored_by: str) -> ResidueSubject | str:
+    """`PilotRecord` 특화 래퍼 — 공용 조립기(`build_finite_probability_subject`)에 위임."""
+    return build_finite_probability_subject(
+        slug=record.slug,
+        conditions=record.conditions,
+        question_text=record.question_text,
+        answer=record.answer,
+        answer_explanation=record.answer_explanation,
         authored_by=authored_by,
     )
 
@@ -415,10 +442,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", default="S4-13", help="결정론 표본 추출 시드.")
     parser.add_argument("--min-n", type=int, default=20, help="판정 최소 표본(미만이면 NO_DATA).")
     parser.add_argument(
-        "--max-defect-upper", type=float, default=0.05, help="잔여 축 결함율 Wilson 상한 임계."
+        "--max-defect-upper",
+        type=float,
+        default=0.05,
+        help="잔여 축 결함율 Wilson 상한 임계.",
     )
     parser.add_argument(
-        "--max-unresolved", type=int, default=0, help="허용 판정불가 건수(기본 0·측정 실패 무관용)."
+        "--max-unresolved",
+        type=int,
+        default=0,
+        help="허용 판정불가 건수(기본 0·측정 실패 무관용).",
     )
     parser.add_argument("--confidence", type=float, default=0.95, help="Wilson 신뢰수준.")
     parser.add_argument("--audit-out", type=Path, default=None, help="감사 JSONL 산출 경로.")

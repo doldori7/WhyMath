@@ -700,6 +700,41 @@ red를 내는지 확인(2건 실패) → 복원해 green(129건 전부 통과) �
 1케이스·`show_extrema` 명세 주입 후 크래시 없음) + 전체 vitest 스위트(129건) green. 백엔드
 `test_visualization_spec.py`(신규 2케이스·151건)·ruff·black·mypy clean.
 
+### 2026-08-03 (구현·S4-16 — 하네스만·게이트 승격 미완): **잔여 축 강등전 하네스 신설(`l3/finite_probability_defect_seeder.py` + `harness/residue_gate_demotion_battle.py`) — hermetic 검증 완료, 라이브 LLM 실측은 Kiki(Phaiakes9) 대기** (backend-engineer 위임 + claude 검토·수정, Kiki "/drive")
+
+**배경**: `S4-13`이 잔여 축(발문↔형식모델) 교차검증 게이트(`CrossVerifier`·K≥3)를
+배선했지만 CI엔 LLM provider가 없어 전 테스트가 결정론 fake provider로만 돌았다 — 게이트
+*배선*은 끝났고 게이트 *승격*(실 LLM 검출력 실측)이 미완이었다. `harness/
+defect_detection_eval.py`(대수 도메인 "계산 축" 강등전)의 확률 도메인 형제를 만든다.
+
+**설계**: `l3/finite_probability_defect_seeder.py` — 결함 4종(`condition_missing`·
+`ambiguous_statement`·`equal_probability_unstated`·`multiple_answers`)을 무결함 스켈레톤
+(`FiniteProbabilitySkeletonGenerator` 밴드 A·B)의 **발문 텍스트만** 결정론 정규식 변조로
+주입한다 — `conditions`(DSL)·`answer`·`answer_explanation`은 항상 원본 그대로라 기계 축은
+늘 pass하고, 오직 잔여 축(LLM 교차검증)만 이 결함을 잡아야 하는 구도가 성립한다(계산 축과
+서술 축을 한 문항에 섞지 않는 게 이 시더의 존재 이유). 변조 앵커 불일치는 조용히 넘기지
+않고 `ValueError`(침묵 실패 금지). `harness/residue_gate_demotion_battle.py`가
+`defect_detection_eval.py`의 Wilson 리포트 구조를 그대로 미러하되, **unclear(측정 실패)를
+not-detected로 뭉개지 않는다** — 결함류별·전체 검출률/오검출률 Wilson 경계의 분모는
+`resolved`(=total-unclear)뿐이다. opt-in 게이트(`--min-detection-lower`·
+`--max-false-alarm-upper` 둘 다 미지정이면 리포트만·exit 0).
+
+**위임 검토에서 잡은 문제**: 위임 세션이 공용 조립기(`build_finite_probability_subject`)를
+`residue_cross_verify_eval.py`에서 뽑아 양쪽이 재사용하게 리팩터한 것까지는 정확했으나,
+그 파일과 신규 2개 파일을 `black`으로 재포맷할 때 프로젝트 설정(`line-length=100`)이 아닌
+기본값(88)으로 돌려 불필요한 개행이 대량 발생했다 — 로컬 재현·`black --check` 개별 파일
+스코프로 재포맷해 상환(내용 로직은 무변경). *부수 발견*: 이 저장소의 `black` CLI는 `src/
+backend/`와 `tests/backend/`에 걸친 경로를 한 호출에 섞으면(`black a.py ../../tests/b.py`)
+공통 상위 디렉터리 기준으로 설정을 재탐색해 **다른 설정으로 전환**된다(개별 파일 스코프
+호출은 정상) — 이번 세션의 `black` 호출 관례에 반영(향후 세션 참고: 경로를 섞지 말 것).
+
+**미완 — 승격 대기**: 이 커밋은 **hermetic 검증만**(`ScriptedProvider`·`StubVerifier`로
+93테스트 green·ruff·black·mypy clean·`--help` 정상). 실제 acceptance
+("K=3 게이트를 실 provider로 강등전 통과 + `--max-defect-upper` 보정")는 Kiki가
+Phaiakes9에서 라이브 Ollama로 `python -m whymath_backend.harness.
+residue_gate_demotion_battle`을 실행해야 완성된다. 백로그 `S4-16`은 `in_progress`
+유지(라이브 실측 결과 확인 후 `done` 전환).
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데

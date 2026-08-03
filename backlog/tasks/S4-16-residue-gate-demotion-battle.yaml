@@ -15,7 +15,10 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/l3/finite_probability_defect_seeder.py"
+  - "tests/backend/harness/test_residue_gate_demotion_battle.py"
+  - "tests/backend/l3/test_finite_probability_defect_seeder.py"
   - "docs/standards/**"
 session: claude/openrouter-setup-guide-e98dw4
-notes: "S4-13(#PR)의 정직한 미충족 축. 현 환경에 LLM provider가 없어 전 테스트가 결정론 시임 — 게이트 *배선*은 완료·게이트 *승격*은 미완이다. 실 LLM 호출이 필요하므로 Kiki 머신(Phaiakes9) 실행 동반. 파일럿 코퍼스 problem_bank_probability_finite_v0(34문)는 그때까지 노출 부적격 유지(is_published=False)."
+notes: "S4-13(#PR)의 정직한 미충족 축. 현 환경에 LLM provider가 없어 전 테스트가 결정론 시임 — 게이트 *배선*은 완료·게이트 *승격*은 미완이다. 실 LLM 호출이 필요하므로 Kiki 머신(Phaiakes9) 실행 동반. 파일럿 코퍼스 problem_bank_probability_finite_v0(34문)는 그때까지 노출 부적격 유지(is_published=False). 2026-08-03: 하네스(l3/finite_probability_defect_seeder.py + harness/residue_gate_demotion_battle.py) hermetic 구현·검증 완료(fake provider만·93테스트 green) — 실 provider 라이브 실측(acceptance 본문)은 아직. paths에 l3/finite_probability_defect_seeder.py 추가(원래 harness/**만 선언했으나 실제로는 L3에 결함 시더를 둠 — defect_seeder.py 선례와 계층 정합)."
 updated: 2026-08-03
