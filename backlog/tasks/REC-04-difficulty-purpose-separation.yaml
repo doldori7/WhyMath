@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/l2/irt.py
   - "tests/backend/l2/test_irt*.py"
-session: null
+session: claude/whymath-assessment-review-pgvxnj
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D4. 현행 CAT은 Fisher 정보량 최대(l2/irt.py:203)이고 Rasch에서 이는 P≈0.5 지향 — 학생이 절반을 틀리도록 설계된 출제가 학습 세션에도 그대로 적용된다. 근원은 밴드 상수 부재가 아니라 **진단(측정 정밀도)과 학습(생산적 고투) 목적이 한 엔드포인트에 겸해 있는 것**. 진단에서 P≈0.5는 옳다(SE를 가장 빨리 줄인다). 의사결정 우선순위 #1(학생 안전·웰빙)이 #6(비용·효율)을 이기는 축."
-updated: 2026-08-01
+updated: 2026-08-03
