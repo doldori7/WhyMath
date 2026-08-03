@@ -36,6 +36,7 @@ from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
 from whymath_backend.harness.wh1_loop import ToolResult, TurnOutcome, run_tutoring_turn
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 
 __all__ = ["Wh1HarnessShadowObservation", "emit_wh1_observation", "observe_wh1_harness_shadow"]
 
@@ -232,6 +233,8 @@ async def observe_wh1_harness_shadow(
     dialogue_id: str | None = None,
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
+    probe_candidates: Sequence[ProbeCandidate] = (),
+    theta: float = 0.0,
 ) -> None:
     """WH-1 하네스를 한 턴 돌려 *거동 요약만* 로그로 관측(shadow·비노출·무영속). 반환 `None`.
 
@@ -252,6 +255,10 @@ async def observe_wh1_harness_shadow(
     개입 발화에 오개념을 preload하지 않는다(reactive retrieval 유지·CLAUDE.md). student_text·
     solution_steps와 같은 사적 주입 계약이라 LLM 프롬프트에도, shadow 레코드에도 실리지 않는다.
 
+    **판별 문항 후보 풀(REC-02)**: `probe_candidates`(호출자가 `l4.misconception.probe_supply.
+    assemble_probe_candidates`로 `active_hypotheses`가 선 뒤 조립)도 동일 사적 주입 계약 —
+    `LLMTutorPolicy.probe_candidates`로만 흐르고 프롬프트·레코드엔 실리지 않는다.
+
     **never-break**(비차단 방어선·judge shadow의 async 미러): 정책 구성·하네스 실행·직렬화·로깅을
     한 `try`로 감싸 *어떤 예외도* 본류(fire-and-forget task)를 깨지 않는다. 정책(`LLMTutorPolicy`)은
     provider 장애를 안전 강등으로 흡수하지만(never-break), 그 위 직렬화·로깅 실패까지 방어한다
@@ -266,6 +273,9 @@ async def observe_wh1_harness_shadow(
             # 웜스타트 outside_mids도 사적 probe 컨텍스트로만 주입 — select_probe→plan_probe 전용
             # (진단 타깃팅). 코칭 context·프롬프트·레코드에 오개념 preload 0(감사 Q5·CLAUDE.md).
             outside_mids=list(warmstart_outside_mids),
+            # REC-02 — 판별 문항 후보 풀도 동일 계약(사적 probe 컨텍스트로만).
+            probe_candidates=list(probe_candidates),
+            theta=theta,
         )
         outcome: TurnOutcome = await run_tutoring_turn(
             policy=policy,

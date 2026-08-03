@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
+
 import pytest
 
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
@@ -231,3 +234,33 @@ class TestPlanProbe:
         active = [_hyp("A", 0.8)]
         cands = [_cand("pB", 0.0, {"B"})]  # A 판별 문항 없음
         assert plan_probe(cands, active, [], theta=0.0, turn_index=1) is None
+
+
+class TestDbFreeContract:
+    """REC-02 acceptance ⑥ — `probe_selection.py`는 DB를 계속 모른다(L4 순수 계약 동결).
+
+    `tests/backend/l1/test_no_import_cycle.py::test_l1_embedding_modules_have_no_l4_import`의
+    AST 가드 패턴을 미러한다 — 실제 import 문(TYPE_CHECKING 블록 포함)만 검사하고 주석·docstring의
+    'sqlalchemy'/'DB' 언급은 무방하다.
+    """
+
+    def test_probe_selection_has_no_sqlalchemy_import(self) -> None:
+        spec = importlib.util.find_spec("whymath_backend.l4.misconception.probe_selection")
+        assert spec is not None and spec.origin is not None, "모듈 경로 해석 실패"
+        with open(spec.origin, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=spec.origin)
+
+        offending: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("sqlalchemy"):
+                offending.append(f"from {node.module} import ... (line {node.lineno})")
+            elif isinstance(node, ast.Import):
+                offending.extend(
+                    f"import {alias.name} (line {node.lineno})"
+                    for alias in node.names
+                    if alias.name.startswith("sqlalchemy")
+                )
+        msg = "probe_selection.py에 sqlalchemy import 재발(L4 순수 계약 위반):\n" + "\n".join(
+            offending
+        )
+        assert not offending, msg

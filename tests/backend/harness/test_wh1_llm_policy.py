@@ -254,6 +254,28 @@ class TestNoRawLeak:
         assert _SECRET_STUDENT_TEXT not in combined
         assert _SECRET_ANSWER_STEP not in combined
 
+    def test_probe_candidate_misconception_tags_absent_from_prompt(self) -> None:
+        """REC-02 — probe_candidates.misconception_tags가 프롬프트에 절대 새지 않는다(reactive
+        retrieval — 오개념 preload 금지 회귀 동결). `self._probe_candidates`는 `_build_action`
+        (select_probe 분기)에서만 소비되고 `_build_prompt`에서는 전혀 참조되지 않는다."""
+        from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
+
+        sentinel = "ZZPROBE-MID-SENTINEL-ZZ"
+        provider = FakeProvider(['{"kind": "match_misconception"}'])
+        policy = LLMTutorPolicy(
+            provider,
+            student_text="풀이",
+            probe_candidates=[
+                ProbeCandidate(
+                    problem_id="P1", difficulty=0.0, misconception_tags=frozenset({sentinel})
+                )
+            ],
+        )
+        _next(policy, _state())
+        assert provider.calls, "provider가 호출되어야 한다"
+        prompt, system = provider.calls[0]
+        assert sentinel not in (prompt + system)
+
 
 class TestIntegration:
     """LLMTutorPolicy + FakeProvider로 run_tutoring_turn 한 턴 완주(ScriptedPolicy 테스트 미러)."""

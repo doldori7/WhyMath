@@ -50,6 +50,7 @@ from whymath_backend.harness.wh1_prose import gate_policy_prose, rephrase_coach_
 from whymath_backend.harness.wh1_shadow import _extract_verify_verdict, emit_wh1_observation
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 from whymath_backend.l4.tone_filter import filter_tone
 
 __all__ = ["run_wh1_primary_turn"]
@@ -99,6 +100,8 @@ async def run_wh1_primary_turn(
     dialogue_id: str | None = None,
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
+    probe_candidates: Sequence[ProbeCandidate] = (),
+    theta: float = 0.0,
 ) -> str | None:
     """WH-1 하네스를 한 턴 돌려 *학생-대면 발화*를 산출한다 — flip primary 경로(S1-11).
 
@@ -110,6 +113,11 @@ async def run_wh1_primary_turn(
     `active_hypotheses`(post-apply 누적 가설 세트)가 §2.2 웜 스타트다 — 호출자(coach)가
     `_apply_hypotheses`로 영속·큐레이션한 세트를 그대로 실어 shadow와 동일 계약을 유지한다.
     `timeout_seconds` 미지정 시 설정(config)의 primary 타임아웃을 쓴다.
+
+    `probe_candidates`(REC-02)는 호출자(coach)가 `l4.misconception.probe_supply.
+    assemble_probe_candidates`로 **`active_hypotheses`가 선 뒤** 조립한 판별 문항 풀이다 —
+    `warmstart_outside_mids`와 마찬가지로 정책의 *사적 probe 컨텍스트*로만 흐른다
+    (`select_probe`→`plan_probe` 전용·코칭 context·프롬프트·레코드에 오개념 preload 0).
     """
     try:
         policy = LLMTutorPolicy(
@@ -120,6 +128,9 @@ async def run_wh1_primary_turn(
             # 웜스타트 outside_mids도 사적 probe 컨텍스트로만(select_probe→plan_probe 전용·
             # 코칭 context에 오개념 preload 0·reactive retrieval 유지·CLAUDE.md).
             outside_mids=list(warmstart_outside_mids),
+            # REC-02 — 판별 문항 후보 풀도 동일 계약(사적 probe 컨텍스트로만).
+            probe_candidates=list(probe_candidates),
+            theta=theta,
         )
         timeout = (
             timeout_seconds
