@@ -342,7 +342,9 @@
 **컨텍스트**: 2026-07-27 `knowledge_module_gap_review.md`(D1~D5·`S4-05`/`S4-06`/`ARCH-16`/
 `ARCH-17`) 이후 재점검. §1~§4는 모듈 6~10 crosswalk·설계였고 클라 도달은 다루지 않았음 —
 `ai_recommendation`/`visualization`/`nlp` 3개 자매편이 확립한 도달 관측 렌즈를 개념 축에
-처음 적용. Flutter 앱이 실호출하는 `/v1/` 20종 목록에 `concepts` API 7라우트(생성·조회·검색·
+처음 적용. Flutter 앱이 실호출하는 `/v1/` 13종 목록(원래 "20종" 주장은 test mock 리터럴 혼입
+오류 — `src/mobile/lib`만 대상이면 13종, `concept_reach_report.py` 실측 재확인)에 `concepts`
+API 7라우트(생성·조회·검색·
 엣지·수정·삭제)·`ConceptContent.flashcards`(코퍼스 113건 적재, 읽기 API 0개)·
 `/me/weak-concepts/{id}/prerequisites`·`.../learning-path`가 전부 없음을 실측. `REC-01`이
 이미 지적한 "개념 추천 API 클라 소비 0"과는 관측 축이 다름(요청량·개인화 vs 콘텐츠·그래프

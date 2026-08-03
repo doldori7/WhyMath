@@ -231,15 +231,18 @@ CLAUDE.md 구조 붕괴 절의 "노드 embedding 전체 생성 금지 — chunk 
 
 ### §5-1. 신규 갭 A — 개념 지식 자산의 학생 도달이 0회다 (최우선 → `KG-01`)
 
-Flutter 학생 앱이 실제로 호출하는 `/v1/` 경로는 **20개뿐**이다(전수 grep, `src/mobile/lib/**/*.dart`).
-개념 지식 자산 관련 표면은 그 20개 중 **단 하나도 없다**:
+Flutter 학생 앱이 실제로 호출하는 `/v1/` 경로는 **13개뿐**이다(전수 grep, `src/mobile/lib/**/*.dart`
+— `test/` 제외. 이 절 초판은 "20개"라고 썼으나, 이는 `src/mobile` 전체(테스트 목 리터럴 포함)를
+대상으로 한 grep의 착오였다. `concept_reach_report.py`가 매 실행마다 이 분모를 결정론으로
+재확인한다 — 이 리포트가 향후 문서 stale의 실측 anchor다).
+개념 지식 자산 관련 표면은 그 13개 중 **단 하나도 없다**:
 
 | 표면 | 실측 | 판정 |
 |---|---|---|
-| `POST/GET/PATCH/DELETE /v1/concepts`·`/v1/concepts/{id}`·`/v1/concepts/{id}/edges`(단건·목록·엣지·생성·수정·삭제 — `api/concepts.py`) | 클라 소비 **0**(20종 목록 부재) | ⚠️ 갭 → **KG-01** |
+| `POST/GET/PATCH/DELETE /v1/concepts`·`/v1/concepts/{id}`·`/v1/concepts/{id}/edges`(단건·목록·엣지·생성·수정·삭제 — `api/concepts.py`) | 클라 소비 **0**(13종 목록 부재) | ⚠️ 갭 → **KG-01** |
 | `GET /v1/concepts/search`(pgvector 원자 유사도 조회 — `api/concepts.py:161`) | 클라 소비 **0**. 원래 설계도 "학생 직접 노출 아닌 L2/L4·교사 도구 좌석"(docstring)이라 *학생 경로 노출 자체가 목표가 아님* — 그런데 L2/L4·교사 도구 쪽 배선도 **0**(내부 소비자도 없음). 하위 함수 `search_atoms` 자체는 `l4/misconception/warmstart.py`가 이미 실소비 중이라 "능력이 죽은 것"이 아니라 "이 HTTP 래퍼가 죽은 것" | ⚠️ 갭 → **KG-01**(도달 관측만. 학생 노출은 `nlp_module_gap_review.md §5-⑤` 판정 승계 — `ARCH-11` 해제 전까지 하지 않는다) |
 | `ConceptContent.flashcards`(암기카드 JSONB, 코퍼스 **113건** 적재 — `data/corpus/concept_graph_v1/flashcards.jsonl`) | 이를 읽는 API 엔드포인트 **0개**(`grep -rn flashcards src/backend/whymath_backend/api/` 무결과) — 저작된 113건이 어떤 표면으로도 학생·교사·L2/L4 어디에도 나가지 않는다 | ⚠️ 갭 → **KG-01** |
-| `GET /v1/me/weak-concepts/{concept_id}/prerequisites`·`.../learning-path`(재귀 CTE 선수개념·Kahn 위상정렬 학습경로 — `l2/prerequisite_recommendation.py`·`l2/learning_path.py`, HTTP 표면 `api/me.py:1391,1507`) | 클라 소비 **0**(20종 목록 부재) | ⚠️ 갭 → **KG-01**(경계는 아래 참조) |
+| `GET /v1/me/weak-concepts/{concept_id}/prerequisites`·`.../learning-path`(재귀 CTE 선수개념·Kahn 위상정렬 학습경로 — `l2/prerequisite_recommendation.py`·`l2/learning_path.py`, HTTP 표면 `api/me.py:1391,1507`) | 클라 소비 **0**(13종 목록 부재) | ⚠️ 갭 → **KG-01**(경계는 아래 참조) |
 
 **REC-01과의 경계(중복 등재 회피)**: `ai_recommendation_module_gap_review.md` §0-①이 이미
 "개념 추천(기능81) API 전군 클라 소비 0"을 지적했다. 그러나 그 문서·`REC-01` 태스크의 관측
