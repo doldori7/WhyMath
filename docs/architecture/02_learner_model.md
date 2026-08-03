@@ -227,7 +227,10 @@ SELECT create_hypertable('mastery_history', 'timestamp');
 
 ### Phase 2
 - ✅ IRT 도입
-- ✅ 정서 분류기
+- ✅ 정서 분류기 — **현행 정합(2026-08-03 실측 정정)**: 2026-07-29 `affect: AffectState` v0
+  제외 결정("생산자 먼저·분류기 나중")과 불일치 — 성공 기준이 미채택 결정보다 앞서 있다.
+  분류기 신설 발화 조건은 `ai_tutor_module_gap_review.md §3 D4`(행동 텔레메트리 생산자 확보) 참조
+  (`gamification_module_gap_review.md` §정정)
 - ✅ 학습 곡선 시각화
 
 ### Phase 3+

@@ -1280,6 +1280,8 @@
 {"ts": "2026-08-02T07:08:06", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:21", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:37", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-08-03T06:53:21", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "PED-06-growth-evidence-reach-observability"}
+{"ts": "2026-08-03T06:53:45", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "ARCH-23-anti-gamification-source-governance-gate"}
 {"ts": "2026-08-03T08:00:38", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-23-qa-gate-enforcement"}
 {"ts": "2026-08-03T08:01:20", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-24-output-safety-filter-axis"}
 {"ts": "2026-08-03T08:02:02", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-25-grandfather-expiry-contract"}
@@ -1367,3 +1369,4 @@
 {"ts": "2026-08-03T10:40:45", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "PATH-01-learning-path-orderability-report", "rule": "path_overlap", "other": "REC-02-misconception-probe-supply", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/wh1_primary.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/wh1_primary.py", "mode": "warn"}
 {"ts": "2026-08-03T10:40:47", "actor": "claude/backlog-drive-next", "action": "start", "id": "PATH-01-learning-path-orderability-report", "session": "claude/backlog-drive-next", "remote": "ok"}
 {"ts": "2026-08-03T11:11:08", "actor": "claude/backlog-drive-next", "action": "done", "id": "PATH-01-learning-path-orderability-report", "artifacts": ["26678594"]}
+{"ts": "2026-08-03T12:01:51", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "ARCH-26-anti-gamification-source-governance-gate"}
