@@ -1336,3 +1336,4 @@
 {"ts": "2026-08-03T10:40:45", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "PATH-01-learning-path-orderability-report", "rule": "path_overlap", "other": "REC-02-misconception-probe-supply", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/wh1_primary.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/wh1_primary.py", "mode": "warn"}
 {"ts": "2026-08-03T10:40:47", "actor": "claude/backlog-drive-next", "action": "start", "id": "PATH-01-learning-path-orderability-report", "session": "claude/backlog-drive-next", "remote": "ok"}
 {"ts": "2026-08-03T11:11:08", "actor": "claude/backlog-drive-next", "action": "done", "id": "PATH-01-learning-path-orderability-report", "artifacts": ["26678594"]}
+{"ts": "2026-08-03T12:01:51", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "ARCH-26-anti-gamification-source-governance-gate"}

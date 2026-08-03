@@ -230,7 +230,7 @@ pubspec 선언만 있고 `lib/`·`test/` 사용처 **0건**. `l4/lthc/adapt.py:1
 
 **의존**: `REC-01`(입력 루프 상류) · `S3-16`(③ writer 결정 승계). **태스크**: 신설 — `PED-06`
 
-### D2 — 반게임화 불변식의 기계 게이트가 0이다 (`ARCH-23`)
+### D2 — 반게임화 불변식의 기계 게이트가 0이다 (`ARCH-26`)
 
 **문제**: 전역 UI 불변식 #2(`docs/design/ui/00_index.md:41`)가 문서·주석 20+ 곳에 인용되는데
 **테스트는 0건**이다. `tests/`에 반게임화 관련 소스 스캔 심볼 0. 즉 **"규정하고 기계화 안 함"**
@@ -286,7 +286,8 @@ Streak(기능 79) 축이라 논지가 오히려 더 선명해진다.
 6. **범위 밖 동결**: `focus_score`/`engagement_score`(`S3-16` 소유) · 컬럼 제거 마이그레이션 ·
    `tone_filter` 라이브 배선(§4-② 참조).
 
-**태스크**: 신설 — `ARCH-23`
+**태스크**: 신설 — `ARCH-26`(원래 `ARCH-23`으로 등재했으나 병렬 머지된
+`ARCH-23-qa-gate-enforcement`와 번호 충돌해 CLI로 재등재 — HARN-10)
 
 ### D3 — 동기 설계 정본 부재 (**페이퍼 → 정본 3곳 직접 개정 · 태스크 신설 없음**)
 
@@ -342,13 +343,15 @@ Streak(기능 79) 축이라 논지가 오히려 더 선명해진다.
 | 태스크 | 설계 | stage | priority | 근거 |
 |---|---|---|---|---|
 | `PED-06-growth-evidence-reach-observability` | D1 — 성장 증거 노출 계약 + 도달 리포트 | S3 | 2 | 대리지표 11종 계산 완비·클라 도달 0(§0-②) |
-| `ARCH-23-anti-gamification-source-governance-gate` | D2 — 반게임화 소스 스캔 게이트 + 값·writer 동결 | S3 | 2 | 전역 UI 불변식 #2 인용 20+·집행 테스트 0 |
+| `ARCH-26-anti-gamification-source-governance-gate` | D2 — 반게임화 소스 스캔 게이트 + 값·writer 동결 | S3 | 2 | 전역 UI 불변식 #2 인용 20+·집행 테스트 0(원 `ARCH-23`이 병렬 머지 충돌해 `ARCH-26`으로 CLI 재등재) |
 | D3(동기 정본) | 정본 3곳 직접 개정 — 새 태스크 없음 | — | — | **정본 개정(§정정) 관례 적용** — 시리즈에 "정본 신설" 태스크 선례 없음 |
 | D4(`gamification_level`) | 페이퍼 — 태스크 없음 | — | — | **승계·재설계 금지**(`05_source_reconciliation.md:56` 이미 조정됨) |
 
 태스크는 전건 `backlog.py add` CLI 경유로 등재했다(ID 손편집 0 · 번호 충돌은 CLI가 로컬+원격
-양쪽 검사 — HARN-10). `--path` 선언으로 겹침 검사를 켰다. **`validate` green 155건**
-(baseline 153건 + 신설 2건 — D3·D4는 태스크 미신설이라 REC/NLP 편보다 신설 수가 적다).
+양쪽 검사 — HARN-10). `--path` 선언으로 겹침 검사를 켰다. **`validate` green 164건**
+(main 병합 후 baseline 162건 + 신설 2건 — D3·D4는 태스크 미신설이라 REC/NLP 편보다 신설 수가
+적다. 원래 `PED-06`·`ARCH-23`으로 등재했으나 `ARCH-23`이 병렬 머지된
+`ARCH-23-qa-gate-enforcement`와 번호 충돌해 `ARCH-26`으로 CLI 재등재했다).
 
 ---
 
@@ -381,7 +384,7 @@ Streak(기능 79) 축이라 논지가 오히려 더 선명해진다.
 | ② | 확신도 수집 UI(§4-②) | `REC-01` 도달 리포트에서 attempt 제출이 실제로 관측된 뒤 — 입력 루프부터 살아야 확신도 UI가 의미를 가짐 |
 | ③ | 재진입 UX 화면(§4-③) | D1 노출 계약이 확정되고 `/me` 탭 placeholder 해소가 별도로 착수될 때 |
 | ④ | 복귀 유도 알림(§4-④) | Firebase 초기화·백엔드 발송 인프라가 별도 태스크로 갖춰질 때(현재 태스크 0) |
-| ⑤ | `gamification_level` 코드 실체화(D4) | 자유학기제 모드가 L6 게이팅에 실제 배선될 때(Phase 3~4). **동시에 D2(ARCH-23) 게이트가 이 값을 오탐하지 않도록 예외 경로를 그 시점에 함께 설계**해야 한다 — 안 그러면 정당한 `gamification_level>0` 배선이 반게임화 게이트와 충돌한다 |
+| ⑤ | `gamification_level` 코드 실체화(D4) | 자유학기제 모드가 L6 게이팅에 실제 배선될 때(Phase 3~4). **동시에 D2(`ARCH-26`) 게이트가 이 값을 오탐하지 않도록 예외 경로를 그 시점에 함께 설계**해야 한다 — 안 그러면 정당한 `gamification_level>0` 배선이 반게임화 게이트와 충돌한다 |
 | ⑥ | 협업 필터링·소셜 동기(다중 풀이 갤러리 확장) | `ai_recommendation_module_gap_review.md §5-③`과 동일 조건(파일럿 N 임계 + 동의 범위 갱신) 승계 |
 
 ---

@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: ARCH-23-anti-gamification-source-governance-gate
+id: ARCH-26-anti-gamification-source-governance-gate
 title: "반게임화 불변식 기계 게이트 — Dart·Python 소스 스캔 + 죽은 좌석 값·writer 동결"
 track: infra-debt
 stage: S3
@@ -24,5 +24,5 @@ paths:
   - src/backend/whymath_backend/db/models/user.py
   - "tests/backend/l1/test_*governance*.py"
 session: null
-notes: "docs/architecture/gamification_module_gap_review.md §3 D2. 전역 UI 불변식 #2(docs/design/ui/00_index.md:41)가 20+ 곳 인용되나 집행 테스트 0건. CLAUDE.md:104-107 교수학 금기 4조항 중 3개(답 미루기·정서 톤·GAMING_SUSPECT)는 게이트 보유, 우열 게임화 금지만 게이트 0. UserBehaviorMetrics.metric_name이 'streak'을 예시로 든 열린 문자열 통로라는 신규 실측 포함. Dart 선례는 theme_test.dart 아니라 no_math_logic_governance_test.dart(ARCH-10)."
+notes: "docs/architecture/gamification_module_gap_review.md §3 D2. 전역 UI 불변식 #2(docs/design/ui/00_index.md:41)가 20+ 곳 인용되나 집행 테스트 0건. CLAUDE.md:104-107 교수학 금기 4조항 중 3개(답 미루기·정서 톤·GAMING_SUSPECT)는 게이트 보유, 우열 게임화 금지만 게이트 0. UserBehaviorMetrics.metric_name이 'streak'을 예시로 든 열린 문자열 통로라는 신규 실측 포함. Dart 선례는 theme_test.dart 아니라 no_math_logic_governance_test.dart(ARCH-10). (원래 ARCH-23으로 등재했으나 병렬 머지된 ARCH-23-qa-gate-enforcement와 번호 충돌해 ARCH-26으로 재등재 — 손편집 아닌 CLI 재실행)"
 updated: 2026-08-03

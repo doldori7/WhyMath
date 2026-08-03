@@ -367,7 +367,9 @@
    스캔 + `UserBehaviorMetrics.metric_name`(`'streak'` 예시 명시 open set) 금지값 동결 +
    `consecutive_active_days` writer 0 동결. `focus_score`/`engagement_score`는 `S3-16` 소유라
    범위 제외(중복 등재 회피). Dart 선례는 `theme_test.dart`가 아니라
-   `no_math_logic_governance_test.dart`(`ARCH-10`)로 정정.
+   `no_math_logic_governance_test.dart`(`ARCH-10`)로 정정. **원래 `ARCH-23`으로 등재했으나
+머지 시 병렬 PR의 `ARCH-23-qa-gate-enforcement`와 번호 충돌해 `ARCH-26`으로 CLI 재등재
+(손편집 아님 — HARN-10).**
 3. **D3 동기 설계 정본** — 새 태스크·새 파일 대신 "성장의 증거" 5원칙을 확정하고 기존 정본
    3곳(`02_student_ui_master_plan.md`·`dev_constitution.md`·`02_learner_model.md`)을 같은
    커밋에서 직접 개정(시리즈 "정본 신설" 선례 없음 확인 — 개정이 관례).
@@ -379,8 +381,9 @@
 **산출**: `docs/architecture/gamification_module_gap_review.md` 신설(§0 전제 2종·§1 전수 대조
 세부 55개·§2 의도적 미채택 11건·§3 설계 D1~D4·§4 정직한 공백 6종·§5 유보 발화조건 6건·§6
 반복 실수 7~8회차·§정정 5곳·부록 실측 근거) + backlog 2건 CLI 등재(`PED-06-growth-evidence-
-reach-observability`·`ARCH-23-anti-gamification-source-governance-gate`, **validate green
-155건** — baseline 153건에서 +2, D3·D4는 태스크 미신설이라 REC/NLP 편보다 신설 수가 적음) +
+reach-observability`·`ARCH-26-anti-gamification-source-governance-gate`, **validate green
+164건** — main 병합 후 baseline 162건에서 +2, D3·D4는 태스크 미신설이라 REC/NLP 편보다 신설
+수가 적음) +
 `02_student_ui_master_plan.md`·`dev_constitution.md`·`02_learner_model.md`·
 `04a_wh1_tutoring_harness.md` 4곳 인라인 정정.
 
