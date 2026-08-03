@@ -1,6 +1,6 @@
 {
-  "corpus_name": "problem_bank_generated_v0",
   "pool": "whymath-original",
+  "corpus_name": "problem_bank_generated_v0",
   "generated": "2026-07-17",
   "generation_method": "결정론 스켈레톤 생성기 15밴드(LLM 0) — l3/equivalent/*_skeleton_generator.py를 harness/problem_corpus_batch.py가 오케스트레이션(S2-a 수용 게이트 통과분만 편입)",
   "generation_cli": "python -m whymath_backend.harness.problem_corpus_batch",
@@ -18,7 +18,7 @@
     "독립 감사(retag.py·생성자≠검증자)·수치 반례 퍼징(counterexample_fuzz.py ≥10,000회)이 생성 파이프라인에 포함된다."
   ],
   "review_status": {
-    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계 — S2-a 게이트 통과와 별개로 사람 표본 검수를 거쳤다(S3-09 D2).",
+    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계 — S2-a 게이트 통과와 별개로 사람 표본 검수를 거쳤다(S3-09 D2). (2026-08-03 추가 확인 — ARCH-25 S3-11 회수 시 정정: S3-15가 이 코퍼스 중 185건의 성취기준 태그 오귀속(`[10공수1-02-02]`→정위치 `[9수02-20]`)을 소급 재태깅했다. 정답·수치는 불변이라 아래 rotation-0 PASS 판정은 그대로 유지된다 — 교정은 태그 정합 문제였지 정확성 문제가 아니었다.)",
     "sample_review": "결정론 층화 샘플링 240표본 AI 검수 완료 — Wilson 95% 단측 상한 결함율 1.11% PASS(min-n 200 기준).",
     "evidence": "docs/data/reviewer_sample_240_v0.md(표본 패키지)·docs/data/corpus_audit_240.jsonl(감사 결과 240행)."
   },

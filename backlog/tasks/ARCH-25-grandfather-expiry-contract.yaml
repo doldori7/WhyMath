@@ -13,7 +13,7 @@ requires_gates: []
 acceptance:
   - "(a) S3-11-problem-bank-data-card 회수 판정·실행 — 그 브랜치(claude/education-os-architecture-mr0fbq)가 살아있는지·회수할 diff가 무엇인지 실측하고, 살아있으면 사이드카·데이터 카드를 트렁크로 회수한다(선례: shadow-data-s3-pilot-nh5kbz Stage 1 회수). 회수 시 ops/provenance_audit.py의 _KNOWN_GAPS 5종을 제거해 provenance 게이트가 전 학생 노출 코퍼스에 실제 적용되게 한다. (b) 회수 성패와 무관하게 그랜드파더 계약 자체를 강화 — _KNOWN_GAPS 값이 자유 문자열이 아니라 추적 태스크 ID를 필수 포함하게 하고, tests/backend/ops/test_provenance_audit.py가 ①모든 항목이 실존 백로그 태스크 ID를 참조할 것 ②그 태스크가 done인데 항목이 남아 있으면 red 를 동결한다. 자동 해제는 아니다(면제 해제는 사람 판단) — 방치만 구조적으로 막는다. 변별력 실측: 존재하지 않는 태스크 ID·done 태스크 잔존 두 경우 모두에서 테스트가 실제 red를 내는지 확인."
 artifacts:
-  - d8151a0e
+  - 2112ad6c
 paths:
   - src/backend/whymath_backend/ops/provenance_audit.py
   - "tests/backend/ops/**"

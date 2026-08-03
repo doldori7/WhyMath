@@ -1,6 +1,6 @@
 {
-  "corpus_name": "problem_bank_conceptual_v0",
   "pool": "whymath-original",
+  "corpus_name": "problem_bank_conceptual_v0",
   "generated": "2026-07-17",
   "generation_method": "개념형(개수·판정) 객관식 15밴드 결정론 생성기(LLM 0) — l3/equivalent/conceptual_count_mc_generator.py를 harness/conceptual_count_mc_batch.py가 오케스트레이션(S2-a 수용 게이트 통과분만 편입)",
   "generation_cli": "python -m whymath_backend.harness.conceptual_count_mc_batch",
@@ -17,9 +17,9 @@
     "적재 파이프라인(l1/problem_bank/populate.py)은 L1이라 L3 게이트를 부르지 않는다(import-linter L1→L3 금지) — 게이트 통과는 코퍼스 저작 계약."
   ],
   "review_status": {
-    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계의 사람 표본 검수는 이 문서 작성 시점(2026-07-29) 기준 이 브랜치에 병합되지 않았다.",
-    "sample_review": "미기록(as-of 2026-07-29) — S2-a 게이트는 통과했으나 '게이트 통과 ≠ 학생 노출' 규약상 별도 표본 검수 기록이 아직 이 이력에 없다. 잔여 4종 표본 검수는 별도 태스크(S3-09) 대상(갭 리뷰 §3 D2).",
-    "evidence": null
+    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계 표본 검수 완료(2026-08-03 갱신 — ARCH-25 S3-11 회수 시 정정). S3-09(rotation-0)에서 발견된 조사(josa)·해설 극한 부호·조건부확률 공리 결함을 생성기에서 교정(S3-12)한 뒤 rotation-0과 무관한 신규 독립 표본으로 재검수해 PASS 확정.",
+    "sample_review": "rotation-1 결정론 층화 표본 200/360 — 결함 0건, 점추정 0.00%, Wilson 95% 단측 상한 1.33%(≤2% 임계) → PASS(exit 0).",
+    "evidence": "docs/data/ai_review_batch_v0_4corpora_2026-07.md §Rotation-1 환류 검증 결과(S3-12) — corpus_audit_conceptual_v0.jsonl"
   },
   "authoring_fields": {
     "note": "problems.jsonl 각 레코드의 concepts/verify/license/generation_type/original_source는 *저작 메타*(Problem 스키마 밖)로, populate가 Problem 본문 필드와 분리 처리한다.",

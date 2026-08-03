@@ -1,8 +1,9 @@
 # 문제은행 코퍼스 (자체 저작 6종) — 데이터 카드
 
-> **요약**: 연습·평가용 문항 코퍼스 6종, 전 2,667건, **전량 자체 저작**(`source_type=자체생성`·
-> `license=WHYMATH_GENERATED`) — 평가원·EBS·검정교과서 본문 복제 0. 진단문항(`atom_probe`)과는
-> 별개 자산이며, 이 문서의 범위는 연습·모드별 출제용 문제은행이다.
+> **요약**: 연습·평가용 문항 코퍼스 6종, 전 2,613건(2026-08-03 갱신 — `rephrased_v0`가 위생 게이트
+> 확장으로 483→429건 소급 조정), **전량 자체 저작**(`source_type=자체생성`·`license=WHYMATH_GENERATED`)
+> — 평가원·EBS·검정교과서 본문 복제 0. 진단문항(`atom_probe`)과는 별개 자산이며, 이 문서의 범위는
+> 연습·모드별 출제용 문제은행이다.
 >
 > **역할 경계**: 문제은행(연습·평가) vs `atom_probe`(원자 단위 진단문항+소크라테스, 별도 데이터
 > 카드 `atom_probe_v1.md`) — 후자는 진단, 전자는 연습·CAT 출제를 담당한다(`l6/__init__.py` 참조).
@@ -14,22 +15,32 @@
 | 코퍼스 | 건수 | 생성 방식(LLM 개입) | 생성 CLI | 표본 검수 | `_provenance.json` |
 |---|---:|---|---|---|---|
 | `problem_bank_v1` | 4 | 손저작 시드(계약 문서 그 자체) | — (수기 시드) | — | ✅ (2026-07-05) |
-| `problem_bank_generated_v0` | 620 | 결정론 스켈레톤 15밴드(LLM 0) | `python -m whymath_backend.harness.problem_corpus_batch` | ✅ 240표본 Wilson 95% 상한 1.11% PASS | ✅ (신설) |
-| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드(LLM 0) | `python -m whymath_backend.harness.conceptual_count_mc_batch` | ❌ 미기록 | ✅ (신설) |
-| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형(LLM 0) | `python -m whymath_backend.harness.root_aggregate_batch` | ❌ 미기록 | ✅ (신설) |
-| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드(LLM 0) | `python -m whymath_backend.harness.misconception_mc_batch` | ❌ 미기록 | ✅ (신설) |
-| `problem_bank_rephrased_v0` | 483 | generated_v0 발문만 LLM 재작성(수치·정답·distractor_map 등은 코드가 그대로 복사) | `python -m whymath_backend.harness.problem_corpus_rephrase` | ❌ 미기록 | ✅ (신설) |
-| **합계** | **2,667** | | | **1/6 표본 검수 완료** | **6/6 완료** |
+| `problem_bank_generated_v0` | 620 | 결정론 스켈레톤 15밴드(LLM 0) | `python -m whymath_backend.harness.problem_corpus_batch` | ✅ 240표본 Wilson 95% 상한 1.11% PASS | ✅ |
+| `problem_bank_conceptual_v0` | 360 | 개념형(개수·판정) 객관식 15밴드(LLM 0) | `python -m whymath_backend.harness.conceptual_count_mc_batch` | ✅ rotation-1 200/360표본 Wilson 상한 1.33% PASS | ✅ |
+| `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형(LLM 0) | `python -m whymath_backend.harness.root_aggregate_batch` | ⚠ rotation-1 120/120 전수 결함 0건이나 min-n 200 미달로 게이트 판정 불가(구조적 미해결) | ✅ |
+| `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드(LLM 0) | `python -m whymath_backend.harness.misconception_mc_batch` | ✅ rotation-0 FAIL 63.60%→rotation-1 FAIL 7.58%→rotation-2 PASS(Wilson 상한 1.33%) | ✅ |
+| `problem_bank_rephrased_v0` | 429 | generated_v0 발문만 LLM 재작성(수치·정답·distractor_map 등은 코드가 그대로 복사) | `python -m whymath_backend.harness.problem_corpus_rephrase` | ✅ 표본 3라운드 연속 FAIL(12%→5.5%→1%) 후 전수 감사(429/429) Wilson 상한 0.63% PASS | ✅ |
+| **합계** | **2,613** | | | **5/6 표본 검수 완료(PASS)·1/6 구조적 미해결(killer, 코퍼스 확장 대기)** | **6/6 완료** |
 
 `problem_bank_rephrased_v0`가 유일하게 LLM을 쓰는 축은 *발문 문장 표현*뿐이다 — 수치·정답·선지·
 `distractor_map`·난이도·`slug`·`problem_id`는 원본(`generated_v0`)에서 그대로 복사돼 LLM 산출을
 신뢰하지 않는다(`l3/equivalent/rephrase.py` 계약).
 
-**표본 검수 현황(정직 기록, 2026-07-29 기준)**: 갭 리뷰(`docs/architecture/problem_bank_gap_review.md`
-§3 D2)가 지적한 대로, `generated_v0`(620건) 외 4종(2,043건)은 S2-a 자동 게이트는 통과했으나
-**사람/AI 표본 감사 기록이 이 브랜치 이력에 아직 없다**. 잔여 4종 표본 검수는 별도 태스크
-`S3-09-problem-bank-v0-ai-review`가 다른 세션에서 진행 중(2026-07-29 기준 미머지) — 이 카드는
-그 결과를 앞당겨 주장하지 않는다.
+**표본 검수 현황(2026-08-03 갱신 — ARCH-25 S3-11 회수 시 정정)**: 갭 리뷰
+(`docs/architecture/problem_bank_gap_review.md` §3 D2)가 지적한 표본 감사 공백은 S3-09(2026-07-29
+720문 감사)→S3-12(계통 결함 5류 생성기 환류·rotation-1 재검수)→S3-14(rotation-2 확인 감사)→
+S3-15(rephrased 근본 설계 재검토·전수 감사 전환)를 거쳐 대부분 해소됐다.
+- `conceptual_v0`: rotation-1에서 PASS(결함 0·Wilson 상한 1.33%).
+- `misconception_mc_v0`: rotation-0 FAIL(63.60%)→rotation-1 FAIL(7.58%)→rotation-2 PASS(결함 0·
+  Wilson 상한 1.33%) — 3라운드 만에 통과.
+- `rephrased_v0`: 표본 3라운드 연속 FAIL(12%→5.5%→1%, Wilson 상한이 매번 2% 임계 초과) 후 근본
+  설계 재검토(S3-15)로 전수 감사(429/429)로 전환해 결함 0·Wilson 상한 0.63%로 최종 PASS.
+- `killer_v0`: rotation-1에서 120/120 전수 결함 0건을 확인했으나, 코퍼스 크기(120)가 표본 게이트
+  최소 표본수(min-n 200) 미만이라 **자동 게이트 자체가 판정을 낼 수 없다**(품질 실패가 아니라
+  구조적 미달). 코퍼스를 ≥200건으로 확장하는 것은 별도 저작 스코프 결정이며 아직 이뤄지지
+  않았다 — **PASS로 서술하지 않는다**.
+
+상세 근거·수치: `docs/data/ai_review_batch_v0_4corpora_2026-07.md`.
 
 ---
 
@@ -63,10 +74,12 @@
 ④ 실노출(L6 모드 게이팅 통과 → CAT 선택)
 ```
 
-6종 전부 ①·②는 실측 완료(코퍼스에 존재 = 게이트 통과 계약). ③은 `generated_v0`만 완료, 나머지
-4종은 진행 중(S3-09). ④는 `persona_fit` 백필(S3-10, 2026-07-29)로 L6 6개 모드의 페르소나 적합도
-경로가 살아났으나(§4 참조), 실제 학생 트래픽은 아직 0이라 "실노출"은 코드 경로 활성화 이상의
-의미는 아직 없다.
+6종 전부 ①·②는 실측 완료(코퍼스에 존재 = 게이트 통과 계약). ③은 `generated_v0`·`conceptual_v0`·
+`misconception_mc_v0`·`rephrased_v0` 4종 완료(PASS, 2026-08-03 갱신 — S3-09/S3-12/S3-14/S3-15
+경유), `killer_v0`는 코퍼스 크기(120)가 표본 게이트 min-n(200) 미만이라 게이트가 구조적으로
+판정을 낼 수 없어 노출 부적격 유지(코퍼스 확장 대기). ④는 `persona_fit` 백필(S3-10, 2026-07-29)로
+L6 6개 모드의 페르소나 적합도 경로가 살아났으나(§4 참조), 실제 학생 트래픽은 아직 0이라 "실노출"은
+코드 경로 활성화 이상의 의미는 아직 없다.
 
 ## 3. 저작권 보증 (전 6종 공통)
 
@@ -113,4 +126,5 @@ pytest tests/backend/l1/problem_bank/test_corpus_quality.py
 - 라이선스 대장: `docs/data/licensing_safety.md`(이 코퍼스 1행 신설)
 - 페르소나 적합도 백필: `docs/data/persona_fit_backfill_report_s3_10.md`
 - 표본 검수(generated_v0 완료분): `docs/data/reviewer_sample_240_v0.md` · `docs/data/corpus_audit_240.jsonl`
-- 잔여 4종 표본 검수(진행 중): `S3-09-problem-bank-v0-ai-review`
+- 잔여 4종 표본 검수(2026-08-03 갱신 — 완료): `docs/data/ai_review_batch_v0_4corpora_2026-07.md`
+  (S3-09 최초 감사 → S3-12 rotation-1 환류 → S3-14 rotation-2 확인 → S3-15 rephrased 전수 감사 전환)

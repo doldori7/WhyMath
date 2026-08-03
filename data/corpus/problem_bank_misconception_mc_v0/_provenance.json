@@ -1,6 +1,6 @@
 {
-  "corpus_name": "problem_bank_misconception_mc_v0",
   "pool": "whymath-original",
+  "corpus_name": "problem_bank_misconception_mc_v0",
   "generated": "2026-07-17",
   "generation_method": "오개념 수치평가 객관식 45서브밴드 결정론 생성기(LLM 0) — l3/equivalent/misconception_eval_mc_generator.py를 harness/misconception_mc_batch.py가 오케스트레이션. 오답 선지는 distractor_map으로 오개념 코드에 매핑(S2-a 수용 게이트 통과분만 편입)",
   "generation_cli": "python -m whymath_backend.harness.misconception_mc_batch",
@@ -18,9 +18,9 @@
     "적재 파이프라인(l1/problem_bank/populate.py)은 L1이라 L3 게이트를 부르지 않는다(import-linter L1→L3 금지) — 게이트 통과는 코퍼스 저작 계약."
   ],
   "review_status": {
-    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계의 사람 표본 검수는 이 문서 작성 시점(2026-07-29) 기준 이 브랜치에 병합되지 않았다.",
-    "sample_review": "미기록(as-of 2026-07-29) — S2-a 게이트는 통과했으나 '게이트 통과 ≠ 학생 노출' 규약상 별도 표본 검수 기록이 아직 이 이력에 없다. 잔여 4종 표본 검수는 별도 태스크(S3-09) 대상(갭 리뷰 §3 D2).",
-    "evidence": null
+    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계 표본 검수 완료(2026-08-03 갱신 — ARCH-25 S3-11 회수 시 정정). rotation-0(FAIL 63.60%)→rotation-1(FAIL 7.58%)→rotation-2(PASS) 3라운드 만에 게이트 통과 — 성취기준 태그 오귀속(distribute-first-term-only·negative-distribute-sign·angle-sum-non-triangle) 계통 결함을 생성기에서 교정 후 신규 독립 표본 재검수로 재발 0건 확인.",
+    "sample_review": "rotation-2 결정론 층화 표본 200/1,080 — 결함 0건, 점추정 0.00%, Wilson 95% 단측 상한 1.33%(≤2% 임계) → PASS(exit 0).",
+    "evidence": "docs/data/ai_review_batch_v0_4corpora_2026-07.md §Rotation-2 확인 감사 결과(S3-14) — corpus_audit_mc_v0_r2.jsonl"
   },
   "authoring_fields": {
     "note": "problems.jsonl 각 레코드의 concepts/verify/license/generation_type/original_source는 *저작 메타*(Problem 스키마 밖)로, populate가 Problem 본문 필드와 분리 처리한다.",
