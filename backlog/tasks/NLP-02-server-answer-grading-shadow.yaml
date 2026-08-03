@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on: []
@@ -22,5 +22,5 @@ paths:
   - src/backend/whymath_backend/l3/verify_answer.py
   - "tests/backend/api/test_me_attempts*.py"
 session: null
-notes: "docs/architecture/nlp_module_gap_review.md §3 D2. 입력(student_answer 슬롯·적재)·검증기(verify_answer)·저장소가 전부 실재하는데 잇는 선만 없어 학습자 모델 전체가 미검증 클라이언트 불리언 위에 서 있다(api/me.py:585 v1 한계 자인). MEMORY.md:94·95·96에 3회 반복 명시된 미착수 후속인데 백로그 태스크는 0건이었다. ARCH-12(QuizMode 클라 채점=데모 예외)의 강제 트리거와 같은 축. 권위 이관은 이 관측의 결과로 판단(§5-②)."
-updated: 2026-07-31
+notes: "acceptance①의 전제(문항이 conditions·answer_map 보유·신규 컬럼 0)가 실측으로 반증됨: l1/problem_bank/populate.py:247이 코퍼스 JSONL의 verify{conditions,answer_map} 블록을 DB 적재 직전 명시적으로 pop해 버리며(ProblemVerifyMeta는 적재시 품질게이트용 휘발 값), Problem ORM·Pydantic 스키마 전체에 conditions/answer_map 컬럼이 0건(answer_constraint·answer_transform도 다른 용도 확인). 유일한 소비처는 오프라인 야간 배치 corpus_reverify.py(raw JSONL 직접 읽기)뿐 — 런타임 POST /v1/me/attempts가 problem_id로 접근 가능한 conditions/answer_map이 DB에 없다. api/l2/l3/l4 어디에도 런타임에 data/corpus/problem_bank*를 문항 단위로 읽는 선례가 없어(전수 grep 확인), 이 태스크를 그대로 구현하려면 (a)신규 컬럼/테이블 신설 또는 (b)라이브 요청 경로에서 코퍼스 파일 읽기라는 미결 아키텍처 결정이 필요하다. 채점 권위(NLP-02 자신의 notes가 인용하는 고위험 축)에 영향을 주는 결정이라 단독 판단하지 않고 Kiki 확인 후 acceptance 재설계 필요."
+updated: 2026-08-03
