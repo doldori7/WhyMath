@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,13 +15,14 @@ acceptance:
   - "서버측 최소버전 판정을 app.py:544 기존 _service_metrics_middleware(OPS-01) 좌석에 얹는다(신규 미들웨어 금지) — 임계는 config.py Settings 동거. 미달 시 401/404/422와 다른 전용 사유코드, 헤더 부재는 '미달'과 다른 '미상'으로 계상."
   - "클라 diagnosis_controller.dart:66 단일 실패 문구 분기에 업데이트 필요 전용 문구 케이스 1개 추가."
   - "변별력: 최소버전 상향→전용 문구, 하향→정상 복귀(양방향). 범위 밖 동결: 강제 업데이트 UI·스토어 링크·서명·자동 업데이트·Crash 수집·Canary/Blue-Green."
-artifacts: []
+artifacts:
+  - d92c839f294f45c8ab95f28be9a848dcae83939a
 paths:
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/config.py
   - "src/mobile/lib/core/**"
   - "src/mobile/lib/features/problems/**"
   - "tests/infra/**"
-session: claude/backlog-drive-next
+session: null
 notes: "docs/architecture/service_operations_gap_review.md §3 D4 — 외부 EOS 틀 모듈 95(앱 배포·업데이트) 대조. 백엔드는 deploy.yml로 매 커밋 갱신되나 사이드로드 앱은 무관 — 2026-07-20 인증누락 사고(CLAUDE.md 등재)와 동일 구조의 위험."
 updated: 2026-08-03
