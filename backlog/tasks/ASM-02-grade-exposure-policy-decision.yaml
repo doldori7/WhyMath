@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-02-grade-exposure-policy-decision
+title: "등급·백분위·합격예측(estimated_grade/percentile/admission_probability) 학생 노출 정책 결정 — 게임화 금기와의 미기록 긴장 해소"
+track: infra-debt
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: estimated_grade·estimated_score·estimated_percentile·admission_probability를 읽어 학생 대면 응답에 싣는 코드가 현재 0건임을 재확인한다"
+  - "② 결정 기록: (a)원시값 노출 (b)구간·방향성 서술로 감싸 노출 (c)학생 비노출·교사/학부모 대시보드(Phase 3)만 노출 (d)영구 비노출·필드 폐기 — 4개 옵션 중 Kiki가 선택해 MEMORY.md 결정 로그에 기록한다"
+  - "③ 봉인 게이트 방향 확정: 결정 전까지 이 필드들을 읽어 학생 대면 응답에 싣는 신규 코드 유입을 막을 게이트의 설계 방향(화이트리스트 vs 필드 제거 vs 별도 스코프, ARCH-12 선례)을 문서화한다. 실제 게이트 구현은 범위 밖"
+  - "④ 변별력: 해당 없음(결정 태스크 — ARCH-12 acceptance 패턴 승계)"
+  - "⑤ 범위 밖 명시: 게이트 코드 구현·노출 UI 설계·D-100예측 알고리즘 자체 설계는 이 태스크에 포함하지 않는다(결정 이후 별도 태스크로 분리)"
+artifacts: []
+paths:
+  - docs/architecture/assessment_module_gap_review.md
+  - MEMORY.md
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D2. assessment 테이블의 estimated_grade(1~9)·estimated_score·estimated_percentile·target_university_id·admission_probability(PRD 특성#14/#15/#45/#86)가 CLAUDE.md 게임화 금기('정답률만으로 우열 매기는 게임화 금지'·'부정적 피드백 정서적 강화 금지')와 정면 긴장하는데 이 긴장이 어디에도 기록된 적 없었다. 현재 노출 경로 0건(D1과 동일 원인)이라 실제 피해는 없으나 결정 없이 방치하면 소비 코드가 결정 없이 유입될 위험. ARCH-12(QuizMode 채점 존치, owner=kiki) 선례를 따른다."
+updated: 2026-08-03
