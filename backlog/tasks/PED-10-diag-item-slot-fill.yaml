@@ -19,6 +19,6 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/**"
-session: claude/whymath-teaching-strategy-enfkqt
-notes: "정본: 04e §7. 원천 = atom_probe 전량(1,823 — 2026-07-28 dedup 14쌍 통합 후). 문항 생성이 아니라 기존 자산 투영."
-updated: 2026-07-29
+session: claude/whymath-pedagogy-review-uqyg79
+notes: "claude/whymath-teaching-strategy-enfkqt 세션이 claim만 하고 미착수(실구현 0) 상태로 5일 방치 — 방치 브랜치 인수 머지로 해당 세션은 소멸. 이 세션이 인수해 재개"
+updated: 2026-08-03
