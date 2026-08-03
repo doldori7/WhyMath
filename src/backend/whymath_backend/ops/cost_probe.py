@@ -25,6 +25,11 @@ S1 탈출 게이트 ②("루프당 LLM 비용 실측·로컬 ≥80%")는 `l3_rou
 2. **비용·지연 분포** — 파이프라인이 `l3_routing` 이벤트를 Langfuse에 실제 기록·flush
    하므로, 이 프로브를 돌린 뒤 `ops/cost_report --days 1`이 p50/p90·실측 cost_krw를
    집계한다(인그레션 지연 수 초 후).
+3. **클라우드 승급 사슬 도달(OPS-18)** — `local_reason_counts`(LOCAL로 귀결된 사유를
+   budget0/free/rule6_catchall 3버킷으로 계상)·`cloud_reach_count`(CLOUD_MID+CLOUD_HIGH
+   실측 도달 횟수)·`next_tier_calls`(에스컬레이션 재시도 호출 — 이 단발 프로브는 항상 0).
+   0은 "0건 통과"가 아니라 **"미도달"**로 렌더한다 — 학생 요청 6개 호출부가 구조적으로
+   클라우드에 못 올라가는 상태(§5-① 결제 미배선)가 "정상 응답"으로 위장되지 않게 한다.
 
 대표 믹스의 근거 (표현이 아니라 트래픽 모델)
 --------------------------------------------
@@ -56,7 +61,7 @@ import asyncio
 import dataclasses
 import json
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -217,9 +222,60 @@ def build_probe_plan(
     return plan
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# LOCAL 강등 사유 3버킷 (OPS-18 acceptance② — "왜 로컬로 귀결됐는가" 계상)
+#
+# `router.Router._decide_cost_tier`(03a §C.1)와 *동일한 규칙 순서*로 판별한다 — 다른
+# 분류 체계를 새로 만들지 않고 그 함수의 첫 두 규칙을 그대로 미러한다:
+#   규칙1 budget_krw<=0            → "budget0"
+#   규칙2(규칙1 미해당) subscription=="free" → "free"
+#   그 외(규칙3·4가 매치 안 했거나 guard_cloud가 강등)  → "rule6_catchall"
+# 호출자는 실제 결정이 LOCAL로 확정된 요청에만 분류를 적용한다(그 외 티어에는 의미 없음).
+# router.py의 규칙 순서가 바뀌면 이 사본도 맞춰 갱신해야 한다(단발 관측용 미러·자동 동기화 없음).
+# ──────────────────────────────────────────────────────────────────────────
+LOCAL_REASON_BUDGET0 = "budget0"
+LOCAL_REASON_FREE = "free"
+LOCAL_REASON_RULE6_CATCHALL = "rule6_catchall"
+LOCAL_REASONS: tuple[str, ...] = (
+    LOCAL_REASON_BUDGET0,
+    LOCAL_REASON_FREE,
+    LOCAL_REASON_RULE6_CATCHALL,
+)
+
+
+def classify_local_reason(req: RoutingRequest) -> str:
+    """LOCAL 결정 사유 분류 — `router.Router._decide_cost_tier` 규칙1·2를 그대로 미러(OPS-18).
+
+    호출자는 실제 `route(req).cost_tier`가 LOCAL로 확정된 요청에만 이 함수를 쓴다. CLOUD로
+    간 요청에 호출해도 값은 나오지만 의미가 없다(그 요청은 애초에 이 계상 대상이 아니다).
+    """
+    if req.budget_krw <= 0:
+        return LOCAL_REASON_BUDGET0
+    if req.student_subscription == "free":
+        return LOCAL_REASON_FREE
+    return LOCAL_REASON_RULE6_CATCHALL
+
+
+def _local_reason_counts(
+    tier_values: Sequence[str], requests: Sequence[RoutingRequest]
+) -> dict[str, int]:
+    """성공분 (tier, request) 쌍에서 LOCAL만 골라 사유별 계상 — 3버킷 모두 키 보장(미관측=0)."""
+    counts = {reason: 0 for reason in LOCAL_REASONS}
+    for tier, req in zip(tier_values, requests, strict=True):
+        if tier != CostTier.LOCAL.value:
+            continue
+        counts[classify_local_reason(req)] += 1
+    return counts
+
+
 @dataclass(slots=True)
 class ProbeReport:
-    """프로브 결과 — 라우터 결정 기반 로컬 비율(게이트② 판정선)·티어 분포·오류 회계."""
+    """프로브 결과 — 라우터 결정 기반 로컬 비율(게이트② 판정선)·티어 분포·오류 회계.
+
+    `local_reason_counts`·`cloud_reach_count`·`next_tier_calls`는 OPS-18 승급 사슬 도달
+    관측 계상이다 — "0건 통과"(측정해서 0)와 "미도달"(구조적으로 도달한 적이 없음, 또는
+    이 프로브가 애초에 시행하지 않는 축)을 구분한다(CLAUDE.md 침묵 실패 금지).
+    """
 
     total: int
     tier_counts: dict[str, int]
@@ -228,11 +284,17 @@ class ProbeReport:
     cloud_included: bool
     local_ratio: float | None  # 로컬/성공분. 성공분 0이면 None('미상'과 0 구분 — 날조 금지).
     rounds: int
+    # LOCAL 강등 사유별 계상(budget0/free/rule6_catchall). `requests`를 준 호출만 채워진다 —
+    # None은 "0건"이 아니라 "이 호출은 사유를 계상하지 않았다"(레거시 순수 tier_values 호출
+    # 호환·회귀 0, OPS-18 acceptance②).
+    local_reason_counts: dict[str, int] | None = None
 
     def to_json(self) -> dict[str, object]:
         data = dataclasses.asdict(self)
         data["local_ratio_lower"] = self.local_ratio_lower
         data["gate2_local_pass"] = self.gate2_local_pass
+        data["cloud_reach_count"] = self.cloud_reach_count
+        data["next_tier_calls"] = self.next_tier_calls
         return data
 
     @property
@@ -256,6 +318,28 @@ class ProbeReport:
             return None
         return lower >= _GATE2_LOCAL_THRESHOLD
 
+    @property
+    def cloud_reach_count(self) -> int:
+        """CLOUD_MID+CLOUD_HIGH 합산 — 승급 사슬이 실제로 클라우드에 도달한 실측 횟수.
+
+        `tier_counts`에서 유도(신규 회계 없음 — 이미 있던 분포를 이름 붙여 노출). 0이면
+        render_report는 "0건 통과"가 아니라 **"미도달"**로 표기한다 — 구조적으로 도달한 적
+        없음과 측정해서 0인 것을 같은 말로 뭉개지 않는다(OPS-18 배경 그 자체).
+        """
+        return self.tier_counts.get(CostTier.CLOUD_MID.value, 0) + self.tier_counts.get(
+            CostTier.CLOUD_HIGH.value, 0
+        )
+
+    @property
+    def next_tier_calls(self) -> int:
+        """`router.next_tier()` 호출 횟수 — 이 단발 프로브는 `route()`만 태우므로 **항상 0**.
+
+        에스컬레이션 재시도(자기일관성 불일치 등, 03a §D.2)는 생성 파이프라인이 트리거를
+        감지한 *다음*에 호출하는 별도 경로다 — 단발 `route()` 프로브의 범위 밖(OPS-18 범위
+        밖 동결). 0을 "미시행"으로 명시해 조용한 누락(어디에도 안 적힘)과 구분한다.
+        """
+        return 0
+
 
 def summarize_decisions(
     tier_values: list[str],
@@ -264,11 +348,17 @@ def summarize_decisions(
     error_samples: list[str],
     cloud_included: bool,
     rounds: int,
+    requests: Sequence[RoutingRequest] | None = None,
 ) -> ProbeReport:
     """라우터가 결정한 cost_tier 문자열 리스트 → 로컬 비율·분포 집계(순수).
 
     성공분(tier_values)만 분모로 쓴다 — 오류(생성 실패)는 티어 결정과 무관한 실패라
     별도 회계한다(지어내지 않음). 성공분 0이면 local_ratio=None(미상).
+
+    `requests`: `tier_values`와 같은 순서·같은 길이의 원 `RoutingRequest`(선택, OPS-18).
+    주어지면 LOCAL 강등 사유(budget0/free/rule6_catchall)를 계상해 `local_reason_counts`를
+    채운다. None이면(레거시 호출·회귀 0) 계상하지 않고 None으로 남긴다 — "0건"과
+    "이 호출은 사유를 안 물었다"를 구분한다(날조 금지).
     """
     tier_counts: dict[str, int] = {}
     for tier in tier_values:
@@ -276,6 +366,7 @@ def summarize_decisions(
     succeeded = len(tier_values)
     local = tier_counts.get(CostTier.LOCAL.value, 0)
     local_ratio = (local / succeeded) if succeeded > 0 else None
+    reason_counts = _local_reason_counts(tier_values, requests) if requests is not None else None
     return ProbeReport(
         total=succeeded + errors,
         tier_counts=tier_counts,
@@ -284,6 +375,7 @@ def summarize_decisions(
         cloud_included=cloud_included,
         local_ratio=local_ratio,
         rounds=rounds,
+        local_reason_counts=reason_counts,
     )
 
 
@@ -336,9 +428,14 @@ def _default_probe_deps(settings: Settings) -> ProbeDeps:
 
 @dataclass(slots=True)
 class _RunOutcome:
-    """구동 중간 회계 — 성공 티어 리스트 + 오류 수·표본(최대 5건)."""
+    """구동 중간 회계 — 성공 (티어·요청) 목록 + 오류 수·표본(최대 5건).
+
+    `requests`는 `tier_values`와 같은 순서로 쌓인다(같은 루프 반복에서 함께 append) —
+    LOCAL 강등 사유 계상(`summarize_decisions(requests=...)`)이 이 정렬에 의존한다(OPS-18).
+    """
 
     tier_values: list[str] = field(default_factory=list)
+    requests: list[RoutingRequest] = field(default_factory=list)
     errors: int = 0
     error_samples: list[str] = field(default_factory=list)
 
@@ -378,6 +475,7 @@ async def run_probe(
                 outcome.error_samples.append(f"[{item.label}] {type(exc).__name__}: {exc}")
             continue
         outcome.tier_values.append(_as_cost_tier(result.decision.cost_tier).value)
+        outcome.requests.append(item.request)
 
     # 짧게 끝나는 CLI — 배치 유실 방지로 전송을 지금 확정한다(LangfuseSink.flush는 오류를 삼킴).
     deps.trace.flush()
@@ -388,6 +486,7 @@ async def run_probe(
         error_samples=outcome.error_samples,
         cloud_included=cloud,
         rounds=rounds,
+        requests=outcome.requests,
     )
 
 
@@ -426,6 +525,26 @@ def render_report(report: ProbeReport) -> str:
     lines.append(f"  게이트② 로컬 판정선(Wilson 하한 ≥80%): {verdict_str}")
     if verdict is False and report.local_ratio is not None and report.local_ratio >= 0.80:
         lines.append("  ※ 점추정은 80% 이상이나 표본이 작아 하한 미달 — --rounds를 키워 재측정.")
+    lines.append("[LOCAL 강등 사유 — budget0/free/rule6_catchall 3버킷(OPS-18)]")
+    if report.local_reason_counts is None:
+        lines.append("  (사유 계상 미제공 — requests 없이 호출된 리포트)")
+    else:
+        for reason in LOCAL_REASONS:
+            lines.append(f"  {reason:<14}: {report.local_reason_counts[reason]}건")
+    lines.append("[클라우드 승급 도달 — CLOUD_MID+CLOUD_HIGH 실측(OPS-18)]")
+    if report.cloud_reach_count == 0:
+        lines.append(
+            "  클라우드 도달: 미도달 (0건 통과가 아니라 승급 사슬이 구조적으로 도달한 적 없음)"
+        )
+    else:
+        lines.append(f"  클라우드 도달: {report.cloud_reach_count}건")
+    lines.append("[next_tier() 호출 — 에스컬레이션 재시도, 단발 프로브 범위 밖(OPS-18)]")
+    if report.next_tier_calls == 0:
+        lines.append(
+            "  next_tier 호출: 미도달 (0건 실패가 아니라 이 프로브가 애초에 시행하지 않음)"
+        )
+    else:
+        lines.append(f"  next_tier 호출: {report.next_tier_calls}건")
     lines.append("=" * 64)
     lines.append("다음: 수 초 후 `python -m whymath_backend.ops.cost_report --days 1`로")
     lines.append("비용·지연 분포(p50/p90)를 집계한다 — 로컬 비율은 위 인프로세스 실측이")
