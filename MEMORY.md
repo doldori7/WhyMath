@@ -337,6 +337,43 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (PR #670 CI 피드백·수정): **SEC-10 실 PG 통합테스트 버그 발견·수정 + SEC-10/SEC-12 라이브 증거 사후 확보 — email_hash 유니크 충돌** (claude 진단·수정, "Pr" 지시 후 CI가 발견)
+
+**배경**: SEC-10/SEC-12 PR(#670) 생성 후 auto-merge 대기 중 CI `backend — 마이그레이션·통합
+(실 PG)` 잡이 실패. 신설 통합테스트
+`test_revoke_single_session_is_ownership_scoped_on_live_pg`가 `uq_user_profile_email_hash`
+유니크 제약 위반으로 죽었다 — 원인은 이 테스트 파일의 **기존** 헬퍼 `_build_user`가 모든
+사용자에게 고정 리터럴 `email_hash="HASHED_EMAIL"`을 박아 넣던 것인데, 그 전까지는 어느
+테스트도 한 테스트 안에서 사용자 2명을 동시에 넣지 않아 드러나지 않았다. SEC-10의 본인
+스코핑 테스트(owner/other 2명 필요)가 그 가정을 처음 깬 경우였다. 다른 4건(`244 passed`)은
+전부 green — 이 세션 CI 환경에서 SEC-07~09·11이 회귀 없음을 재확인.
+
+**수정**: `_build_user`의 `email_hash`를 `f"HASHED_EMAIL_{user_id}"`로 user_id 유도값으로
+변경(어떤 테스트도 리터럴 값에 의존하지 않음을 grep으로 확인 후 변경).
+
+**라이브 증거 사후 확보(정직한 공백 해소)**: 이 세션 컨테이너에는 원래 Docker 데몬·도달
+가능한 PostgreSQL이 없었으나, CI 실패를 로컬에서 재현·검증하기 위해 **네이티브 패키지로
+직접 구성**했다 — `apt-get install postgresql-16-pgvector`(pgvector 확장) + `service
+postgresql start` + `service redis-server start`. `alembic upgrade head`로 `d6e7f0a2b3c4`
+(SEC-10 마이그레이션 포함)까지 전 리비전 정상 적용 확인 후:
+- 수정 전 상태로 버그 재현(CI와 동일한 `UniqueViolationError`) → 수정 후
+  `test_refresh_session_integration.py` **5건 전부 실 PG에서 통과**(신설 2건 포함 — 실 정렬·
+  `platform` 영속·본인 스코핑 e2e를 이제 라이브로 검증).
+- `python -m whymath_backend.privacy.retention_purge_cli` 직접 실행 →
+  `{"as_of": "2026-08-03", "purged": {...11개 테이블 전부 0...}, "total": 0}` — SEC-12의
+  "라이브 dry-run 미실행" 공백을 해소(0건 파기는 정상 — 실행 자체가 성공했다는 증거).
+
+**정직한 잔여 공백**: 로컬 `test_devices_integration.py`·`test_me_integration.py`의 일부
+테스트가 이 임시 환경에서 `asyncpg InterfaceError`(event loop closed)로 실패했으나, 이
+파일들은 이번 PR과 무관하고(diff 밖) CI의 실제 잡(`244 passed`)에서는 통과했다 — 로컬 임시
+PG/Redis 구성(네이티브 설치·짧은 세션)의 연결 처리 차이로 보고, 이번 범위에서 추가 조사하지
+않았다(별도 파일·별도 이슈).
+
+**검증**: 수정 커밋(`d75b376a`) 푸시 후 CI 재실행 대기 중. ruff·black clean(수정 파일).
+
+정본: PR https://github.com/doldori7/WhyMath/pull/670 · `tests/backend/api/
+test_refresh_session_integration.py`.
+
 ### 2026-08-03 (구현·SEC-12): **보존 파기 정기 실행 배선 — `retention-purge` compose 서비스(app 이미지 재사용·CLI 호출만) + 배선 실재성 테스트 5건** (claude 구현, Kiki 요청 — 첨부 문서 대조 후 잔여 항목 실행)
 
 **배경**: `account_security_gap_review.md` D6 — `privacy/retention_purge_cli.py`(증거+PII
