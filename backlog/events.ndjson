@@ -1288,3 +1288,4 @@
 {"ts": "2026-08-03T08:48:46", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-01-learning-path-orderability-report"}
 {"ts": "2026-08-03T08:49:28", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-02-learning-path-ordering-honesty"}
 {"ts": "2026-08-03T08:50:12", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-03-transitive-ordering-edges"}
+{"ts": "2026-08-03T10:30:23", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-04-learning-path-corpus-ingestion"}
