@@ -1434,6 +1434,11 @@ class TestNextProblem:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀 0건 → '미도달' 사유 코드(응답 정직 표기 신규 4필드).
+            "weight_axes_applied": [],
+            "candidate_pool_size": 0,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "no_candidate_pool",
             "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
         }
 
@@ -1720,18 +1725,27 @@ class TestNextProblemSuneungMode:
         session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?mode=suneung").json()
-        # 응답 모델(NextProblemResponse) — 기본 CAT과 같은 필드(REC-04: band_calibrated 추가).
+        # 응답 모델(NextProblemResponse) — 기존 5필드 + REC-01 4필드 + REC-04 band_calibrated.
         assert set(body) == {
             "problem_id",
             "theta",
             "difficulty",
             "standard_error",
             "measurement_sufficient",
+            "weight_axes_applied",
+            "candidate_pool_size",
+            "weak_concept_signal_count",
+            "candidate_zero_reason",
             "band_calibrated",
         }
         assert body["problem_id"] == str(problem.problem_id)
         assert body["difficulty"] == 3.0
         assert body["theta"] == 0.0
+        # 수능 모드는 suneung_priority 축이 항상 적용(약점 가중은 flag 미지정 → 미적용).
+        assert body["weight_axes_applied"] == ["suneung_priority"]
+        assert body["candidate_pool_size"] == 1
+        assert body["weak_concept_signal_count"] == 0
+        assert body["candidate_zero_reason"] is None
         assert body["band_calibrated"] is None  # purpose 기본(diagnosis)은 밴드 미적용
 
     def test_recommendation_records_mode_suneung_in_treatment_meta(self) -> None:
@@ -1776,6 +1790,12 @@ class TestNextProblemSuneungMode:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀은 1건 있었으나(SQL 사전필터 통과) L6 진실 게이트가 전부 배제
+            # — '후보 0건'과 '전부 부적격'을 사유 코드로 구분(candidate_pool_size 참고).
+            "weight_axes_applied": ["suneung_priority"],
+            "candidate_pool_size": 1,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "all_candidates_gated_ineligible",
             "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
         }
         assert session.added == []  # REC-03: null 응답은 처치가 아니다(가짜 처치 금지)
