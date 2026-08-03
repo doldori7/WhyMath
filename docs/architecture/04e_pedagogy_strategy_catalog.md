@@ -281,13 +281,24 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 지점 기록 후 실수요 대기. **별도 "질문 7유형" 축을 신설하지 않는다** — 소크라테스 6카테고리+오개념 개입
 축이 상위 호환한다(§8-⑧).
 
-### 7.2 형성평가 슬롯 채움 (신규 — PED-10)
+### 7.2 형성평가 슬롯 채움 (PED-10 — 착지 완료·§10 부기 참조)
 
 - 좌석: `pedagogy_content_slot.slot_type='diag_item'`(자유 문자열 — 테이블·스키마 신설 0).
 - 원천: **atom_probe 전량(1,823 — 2026-07-28 dedup 14쌍 통합 후)** — 원자별 진단문항(발문·통과기준·오답신호)
   기보유. **생성이 아니라 투영**이다(문항을 새로 만들지 않는다 — 검증된 자산 재사용).
-- grain 다리: atom_probe는 원자(`code`) 키·슬롯은 목표(`objective_id`) grain — **개념↔원자 crosswalk 경유**를
-  명시적으로 설계한다(다리 없는 채움은 grain 불일치 데이터를 만든다).
+- **grain 다리 — 실측 정정(PED-10 구현 중 발견, crosswalk 불필요)**: 아래 초안은 "개념↔원자
+  crosswalk 경유"를 그렸으나, 실측하면 그 다리가 이미 다른 곳에서 닫혀 있다. `learning_objective.
+  concept_nodes`는 H2 계약(`db/models/pedagogy_dsl.py`)상 **원자 백본(atom_node) code 배열 그
+  자체**이며(legacy 437/545 개념 그래프가 아니다), `l1/pedagogy/unit_compiler.py`가 컴파일 시점에
+  `obj.concept_nodes`를 `valid_atom_codes`(원자 백본 전량)에 대조 검증한다 — 저작 단계에서 이미
+  원자 code로 쓰인다. `atom_probe.code`도 같은 원자 세부개념 code 공간(K-12·대학 겹침 0)이므로,
+  목표→원자의 다리는 **`concept_nodes`와 `atom_probe.code`의 직접 교집합**이다(정본 구현:
+  `l3/pedagogy/diag_item_projector.py` 모듈 docstring). `data/corpus/concept_atom_crosswalk_v1`
+  (구 437-개념-id ↔ 원자 code)는 다른 소비처(콘텐츠 이관 등) 용이지 이 bridging에는 쓰이지 않는다 —
+  존재하지 않는 다리를 새로 놓지 않는다(§3.2의 "유령 참조 재사용 금지" G7과 동일 원칙).
+- select-vs-generate: 이미 검수 결정이 난 슬롯(PRESCREENED/APPROVED/REJECTED)은 손대지 않고 그
+  자리의 원자 후보도 소비하지 않는다 — 워킹 스켈레톤 픽스처가 있던 자리는 DRAFT일 때만 실제
+  atom_probe 콘텐츠로 교체된다.
 - 보고: 채움 건수·prescreen 통과율. 표본 0은 None(0% 위장 금지 — 정직한 공백 하우스 스타일).
 
 ---
@@ -332,7 +343,7 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 | 후보 필터·전략 카드 | `runtime_selector.narrow_candidates`·`prompt_assembler.attach_strategy_card`·`supply()` 생성 폴백 | ✅ 착지(PED-06 — 플래그 2종 기본 OFF 캔어리·공집합 3중 폴백 reason_code·gate 카탈로그 부재 동결. grade_band 생산자 배선·난이도는 kwargs 축만(생산자 부재)·R2 정밀화는 error_type 순수 경로 생산자 부재로 보류) |
 | 비유 자산 | `concept_content.metaphor` 846행 | ⚠️ 전량 검수 전 — PED-09가 채움·검수 파이프라인(§6) |
 | 비유·예시 생성기 | — | 🆕 PED-09(`l3/pedagogy/` — slot_generator 형제) |
-| 형성평가 | `pedagogy_content_slot.slot_type='diag_item'` 좌석만 | 🆕 PED-10 채움(§7.2) |
+| 형성평가 | `l3/pedagogy/diag_item_projector.py`(계획·행 빌드·오케스트레이션) | ✅ 착지(PED-10 — atom_probe↔concept_nodes 직접 code 교집합·crosswalk 불필요(§7.2 실측 정정)·select-vs-generate·표본 0=None) |
 | mode_guard | `l4/pedagogy/mode_guard.py`(검출 1종/7모드) | ✅ 런타임 배선(PED-07 — WH-1 primary 톤필터 직전·`mode_guard_runtime_enabled` 옵트인 기본 OFF 캔어리·위반 시 소크라테스 재질문 폴백. GA flip은 측정+사인오프 후 별도) |
 | 처치·효과 측정 | `l2/pedagogy_evidence.py`·`adaptive/effectiveness.py`(지표 2/4 구현) | ✅ 좌석 가동·표본 축적 중(04d §3) |
 | 예측 질문 | `04a §11.3` 도구#10 | ⏸ 설계만 — WH-1 하네스 소관(04e 범위 밖) |

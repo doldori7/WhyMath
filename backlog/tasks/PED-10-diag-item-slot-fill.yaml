@@ -19,6 +19,7 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/**"
+  - "docs/architecture/**"
 session: claude/whymath-pedagogy-review-uqyg79
-notes: "claude/whymath-teaching-strategy-enfkqt 세션이 claim만 하고 미착수(실구현 0) 상태로 5일 방치 — 방치 브랜치 인수 머지로 해당 세션은 소멸. 이 세션이 인수해 재개"
+notes: "claude/whymath-teaching-strategy-enfkqt 세션이 claim만 하고 미착수(실구현 0) 상태로 5일 방치 — 방치 브랜치 인수 머지로 해당 세션은 소멸. 이 세션이 인수해 재개. 구현 중 실측 정정: concept_nodes가 이미 원자 백본 code라 개념↔원자 crosswalk 불필요(H2 계약·unit_compiler 검증 확인) — 04e §7.2에 반영."
 updated: 2026-08-03
