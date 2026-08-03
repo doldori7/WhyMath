@@ -337,6 +337,185 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (설계·운영 r2): **운영(EOS) 모듈 2차 재점검 — 동일 문서 재제출 발견 후 델타 재점검으로 전환·QA 게이트가 상시 fail-open(D3)·학생 대면 금칙어/PII 검사기 0(D4)·v1 판정표 stale 4칸 정정, 태스크 3건 등재 + 1건 우선순위 상향** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 외부 EOS 틀 문서 『0단계 운영(EOS)』(모듈 42~45 + 확장 제안 46~50)를
+제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청 — **2026-07-29에 이미 점검한 것과
+동일한 문서**였다(v1 = `operations_module_gap_review.md`, 설계 D1·D2 → `ARCH-20` done 07-30 ·
+`ARCH-21` done 08-02). 처음부터 재대조하면 v1의 판정 근거가 유실되고 중복 작업이 되므로
+**델타 재점검(r2)** 으로 전환했다. 재점검이 실제로 필요했던 사유 2종은 둘 다 실측 확인:
+⑴ v1 판정표가 stale해졌다 ⑵ D1·D2가 **구현된 뒤** 설계 단계엔 없던 새 잔여가 생겼다.
+
+**v1 판정표 stale 정정 4칸**: ①**48 RBAC** — v1 "role/permission 모델 0건" → `SEC-07`(07-30,
+v1 작성 *다음날* 착지)로 `Role` v0 2값 + `require_role` 실재(🚫→⚠️ 부분). ②**47 감사 로그** —
+`SEC-09`로 `PrivacyAudit` 3종 writer 실배선. 잔여의 정체가 바뀌었다: 감사 인프라가 없어서가
+아니라 **감사할 액션 자체가 없다**(`review_status`는 전 API에서 읽기 필터 전용·쓰기 엔드포인트 0).
+③**43 관리자 CMS** — v1이 `api/`만 보고 "전무"로 판정했으나 **`docs/design/ui/03_admin_console_
+plan.md`·`04_admin_console_architecture.md`가 설계 정본으로 실재**(v1 미참조). 결론(의도적 지연)은
+유지하되 근거를 "설계도 없다"→"설계는 정본으로 있고 구현만 지연"으로 정정 — 트리거 발화 시
+처음부터 설계할 필요가 없다는 뜻이라 실질 차이가 크다. ④**45-⑤ 금칙어·PII** — `SEC-11`
+log_scrubber가 착지했으나 **로그 평면 전용**이라 학생 대면 본문 축은 여전히 0(⚠️→🔴 승격).
+
+**미채택 7건 재심**: v1 §2의 7건 각각에 대해 재판정 트리거 발화 여부를 실측 — **전부 미도달·
+유지**. pool 20건 전량 `whymath-original`(외부 라이선스 0) · 결제 코드 0건 · Flutter 화면 9개 ·
+`S3-01` todo. 이번 신규 설계는 미채택 번복이 아니라 **구현이 만든 새 잔여**에서 나온다.
+
+**설계 D3~D6**(정본: `docs/architecture/operations_module_gap_review_r2.md`): **D3** QA 게이트
+fail-open 해소 — `ARCH-21` 게이트가 CI에 배선은 됐으나 `ci.yml:186` `continue-on-error: true`로
+**아무것도 막지 않고**, 해제 조건이 ci.yml 주석·MEMORY 한 줄(=사람 기억)에만 있다. 무력화가
+3겹: ⑴fail-open ⑵트리거 경로 필터(`ci.yml:96`)가 **검사기 소스를 포함하지 않아** 판정 로직을
+느슨하게 만드는 변경이 무검증 통과 ⑶`test_qa_pipeline_wiring.py`가 5개 계약을 동결하나
+`continue-on-error`는 보지 않는다 — ARCH-20/21이 학습한 "존재함≠돌아감"의 **다음 단계
+'돌아감≠막음'이 빠졌다**(`ARCH-23`) · **D4** 학생 대면 출력 금칙어·PII 검사 축 — 전수 grep이
+`qa_pipeline.py:145`의 *"검사 안 함" 선언 자체* 외에 무일치. 인접 자산은 전부 다른 축
+(coach_prose_leak=날조 정답 누설·log_scrubber=로그 평면·judge_filter=오개념 선별). 의사결정
+우선순위 **1위(학생 안전)** 축인데 백로그 추적조차 0이었다(`ARCH-24`). 나머지 미측정 3축도
+"향후"를 없애고 이번에 결론: ui_golden·statistical_outlier 미채택 유지(§2-⑥⑦·`S4-15` 추적),
+**performance는 축 오분류로 영구 미채택** — `ops/service_health.py`는 가동 중 서비스의 런타임
+관측이라 배치 QA가 소비할 형태가 아니고, 억지 배선은 CI에 라이브 의존을 만든다(틀의 분류를
+따르지 않는다) · **D5** 그랜드파더 만료 계약 — `_KNOWN_GAPS` 5종은 **학생 노출** 문제은행인데
+v1이 "S3-11 머지되면 자동 해소"로 넘긴 뒤 5일째 `todo`. 2026-07-30 미병합 브랜치 9일 고립
+사고와 동형 패턴. (a)S3-11 회수 판정 + (b)면제 항목에 추적 태스크 ID 필수화·done인데 잔존하면
+red(`ARCH-25`) · **D6** ORM `content_provenance`/`generation_log` 실영속 + 콘텐츠 운영 감사 —
+**미채택 유지 재확인**. 모델 파일 밖 참조는 전부 동명의 Pydantic 스키마이지 ORM 행이 아니다.
+47의 잔여는 독립 갭이 아니라 **43의 부분집합**(`04_admin_console_architecture.md` §2 원칙4가
+감사를 CMS 동반 조건으로 이미 못박음) — 별도 태스크 미등재(백로그 오염 방지).
+
+**등재·검증**: 태스크 3건 CLI add(`ARCH-23`·`ARCH-24`·`ARCH-25`) + `S3-28` priority 3→2 상향
+(`ARCH-23`의 유일 블로커라 3에 묻히면 "판정 대기"가 무기한이 된다). validate green 156건 ·
+`next` 최상위 = S3-28("완료 시 후속 1건 해금" 의존 정상 노출). **코드 변경 0**(자매 갭 리뷰
+선례). v1은 소급 수정하지 않고 배너 1줄만 추가 — v1이 `ARCH-20`/`ARCH-21` notes의 정본 참조
+대상이라 완료 태스크의 판정 근거를 변조할 수 없다(`arch_audit_*_r2/_r3` 리비전 파일 관례).
+중복 회피: `S3-28`·`S3-11`·`S4-15`/`S3-01`·`OPS-01~04`·`SEC-07`/`SEC-09`/`SEC-11`·
+`docs/design/ui/03·04`.
+
+**프로세스 교훈(등재)**: v1이 43번을 판정하며 `api/` 실측만 하고 **같은 저장소의 설계 정본
+디렉터리(`docs/design/ui/`)를 보지 않았다**. 갭 리뷰가 "코드 0"과 "설계 0"을 구분하지 않으면
+미래 세션이 이미 있는 설계를 재작성한다. 자매 리뷰 시리즈는 코드뿐 아니라 `docs/design/`·
+`docs/standards/`도 대조 범위에 포함해야 한다.
+### 2026-08-03 (PR #670 CI 피드백·수정): **SEC-10 실 PG 통합테스트 버그 발견·수정 + SEC-10/SEC-12 라이브 증거 사후 확보 — email_hash 유니크 충돌** (claude 진단·수정, "Pr" 지시 후 CI가 발견)
+
+**배경**: SEC-10/SEC-12 PR(#670) 생성 후 auto-merge 대기 중 CI `backend — 마이그레이션·통합
+(실 PG)` 잡이 실패. 신설 통합테스트
+`test_revoke_single_session_is_ownership_scoped_on_live_pg`가 `uq_user_profile_email_hash`
+유니크 제약 위반으로 죽었다 — 원인은 이 테스트 파일의 **기존** 헬퍼 `_build_user`가 모든
+사용자에게 고정 리터럴 `email_hash="HASHED_EMAIL"`을 박아 넣던 것인데, 그 전까지는 어느
+테스트도 한 테스트 안에서 사용자 2명을 동시에 넣지 않아 드러나지 않았다. SEC-10의 본인
+스코핑 테스트(owner/other 2명 필요)가 그 가정을 처음 깬 경우였다. 다른 4건(`244 passed`)은
+전부 green — 이 세션 CI 환경에서 SEC-07~09·11이 회귀 없음을 재확인.
+
+**수정**: `_build_user`의 `email_hash`를 `f"HASHED_EMAIL_{user_id}"`로 user_id 유도값으로
+변경(어떤 테스트도 리터럴 값에 의존하지 않음을 grep으로 확인 후 변경).
+
+**라이브 증거 사후 확보(정직한 공백 해소)**: 이 세션 컨테이너에는 원래 Docker 데몬·도달
+가능한 PostgreSQL이 없었으나, CI 실패를 로컬에서 재현·검증하기 위해 **네이티브 패키지로
+직접 구성**했다 — `apt-get install postgresql-16-pgvector`(pgvector 확장) + `service
+postgresql start` + `service redis-server start`. `alembic upgrade head`로 `d6e7f0a2b3c4`
+(SEC-10 마이그레이션 포함)까지 전 리비전 정상 적용 확인 후:
+- 수정 전 상태로 버그 재현(CI와 동일한 `UniqueViolationError`) → 수정 후
+  `test_refresh_session_integration.py` **5건 전부 실 PG에서 통과**(신설 2건 포함 — 실 정렬·
+  `platform` 영속·본인 스코핑 e2e를 이제 라이브로 검증).
+- `python -m whymath_backend.privacy.retention_purge_cli` 직접 실행 →
+  `{"as_of": "2026-08-03", "purged": {...11개 테이블 전부 0...}, "total": 0}` — SEC-12의
+  "라이브 dry-run 미실행" 공백을 해소(0건 파기는 정상 — 실행 자체가 성공했다는 증거).
+
+**정직한 잔여 공백**: 로컬 `test_devices_integration.py`·`test_me_integration.py`의 일부
+테스트가 이 임시 환경에서 `asyncpg InterfaceError`(event loop closed)로 실패했으나, 이
+파일들은 이번 PR과 무관하고(diff 밖) CI의 실제 잡(`244 passed`)에서는 통과했다 — 로컬 임시
+PG/Redis 구성(네이티브 설치·짧은 세션)의 연결 처리 차이로 보고, 이번 범위에서 추가 조사하지
+않았다(별도 파일·별도 이슈).
+
+**검증**: 수정 커밋(`d75b376a`) 푸시 후 CI 재실행 대기 중. ruff·black clean(수정 파일).
+
+정본: PR https://github.com/doldori7/WhyMath/pull/670 · `tests/backend/api/
+test_refresh_session_integration.py`.
+
+### 2026-08-03 (구현·SEC-12): **보존 파기 정기 실행 배선 — `retention-purge` compose 서비스(app 이미지 재사용·CLI 호출만) + 배선 실재성 테스트 5건** (claude 구현, Kiki 요청 — 첨부 문서 대조 후 잔여 항목 실행)
+
+**배경**: `account_security_gap_review.md` D6 — `privacy/retention_purge_cli.py`(증거+PII
+시계열 단일 TX 파기)는 완비돼 있었지만 그 CLI를 부르는 cron·Celery beat 정의가 0건이라 보존
+정책이 *집행되지 않는 상태*였다("CLI가 생긴 것"과 "CLI가 불리는 것"의 차이).
+
+**설계**: 신규 로직 0 — `docker-compose.prod.yml`에 `retention-purge` 서비스를 추가해 CLI를
+호출만 한다. `app`과 **동일 이미지**를 재사용(새 Dockerfile·새 이미지 0). 기존 QUALITY(27b)
+전용 Celery 앱(`l3/queue/celery_app.py`)은 GPU 큐 관심사와 혼입하지 않도록 재사용하지 않았다.
+base 이미지(`python:3.12-slim`)에 cron 바이너리가 없어 새로 얹지 않고(공격면·이미지 크기 회피)
+`sh -c 'while true; do python -m ...retention_purge_cli || exit 1; sleep 86400; done'` 셸
+루프로 24시간마다 1회 호출한다. **크래시와 정상 실행을 로그 형태로 구분**(이중 회계 금기):
+CLI가 예외로 죽으면 `|| exit 1`이 컨테이너를 죽이고 `restart: unless-stopped`가 즉시 재기동
+(파기는 cutoff 재조회라 멱등·안전) — docker logs에서 트레이스백(크래시)과 `{"as_of":...,
+"purged":{...}}` JSON(정상 실행 — 0건 파기도 포함)이 형태로 갈린다. 파기는 복호화하지 않으므로
+`WHYMATH_DATABASE_URL`만 주입(불필요한 시크릿 0 — 최소 권한). 이미지 내장 HTTP 라이브니스
+HEALTHCHECK는 이 서비스엔 무해당이라 `healthcheck.disable: true`로 명시 비활성화(안 하면
+8000 포트 무응답을 영구 unhealthy로 오판). `cleanup_stale_devices`(D6 "동반 검토" 대상)는
+실측 결과 **함수 자체가 아직 구현돼 있지 않아**(`config.py` 설정값 docstring 언급뿐) 배선
+대상이 없다고 기록 — 새 기능을 만들지 않았다(scope creep 방지).
+
+**배선 실재성**: `tests/infra/test_deploy_artifacts.py`에 ⑧번 섹션(5건) 추가 — 서비스 실재·
+CLI 모듈 경로 호출·app 이미지 재사용·restart 정책·healthcheck 비활성·불필요 시크릿 부재를
+동결. 서비스 정의를 지우면 테스트가 깨진다(OPS-03/08/10/11 선례). `docker compose config`로
+compose가 실제로 파싱됨을 확인(`docker-compose.prod.yml` 렌더 결과에 `retention-purge` 서비스
+등장).
+
+**⚠️ 정직한 공백 — 라이브 dry-run 미실행**: 이 세션 컨테이너에는 Docker 데몬도 도달 가능한
+PostgreSQL도 없어(`docker info` 소켓 연결 실패·`127.0.0.1:5432` 미도달) **실제 파기 실행
+JSON 산출물을 확보하지 못했다**. `tests/backend/privacy/test_retention_purge_cli.py`(합성
+`purge_fn` 주입 — DB 없이 CLI 배선 자체는 검증됨)와 `docker compose config` 렌더 검증까지가
+이 세션에서 확보한 증거의 한계다. Phaiakes9에서 배포 시 런북 §5b의 자가검증 3종(컨테이너
+Up 상태·최근 로그의 JSON 형태·수동 1회 실행)으로 실제 집행을 확인해야 한다 — SEC-01의
+"프로덕션 실측 미수행" 정직 자인과 동형 패턴.
+
+**검증**: ruff·black·mypy --strict(442파일) clean. `tests/infra` 전체 270 passed(신규 5건
+포함). 백엔드 CI-충실 전체 스위트 **8042 passed, 274 skipped, 0 failed**(SEC-11 이후
+baseline 7979 대비 +63 — SEC-10과 함께 반영된 수치, 회귀 0).
+
+**NOT**: 특정 시각(예: 매일 새벽 3시) 고정 실행 — 24시간 고정 간격만 보장(컨테이너 기동
+시각 기준). host cron·Celery beat로의 교체는 필요해지면 재검토(§8 미프로비저닝 목록에 추가
+안 함 — 현재는 불요 판단).
+
+정본: `docs/architecture/account_security_gap_review.md` D6 · `docker-compose.prod.yml` ·
+`docs/architecture/deployment_cd_runbook.md` §5b.
+
+### 2026-08-03 (구현·SEC-10): **세션 가시성·전체/단건 로그아웃 — `GET/DELETE /v1/auth/sessions[...]` + `platform` 컬럼(User-Agent 좁은 요약, IP·UA 원문 미저장)** (claude 구현, Kiki 요청 — 첨부 문서 대조 후 잔여 항목 실행)
+
+**배경**: `account_security_gap_review.md` D4 — `_revoke_all_user_sessions`(`api/auth.py:280`)
+는 재사용 탐지 경로에서만 호출되던 기존 함수로, 학생이 *스스로* 세션 목록을 보거나 특정
+기기를 로그아웃시킬 방법이 없었다(`security_privacy.md:99` "세션 목록/관리는 후속(a3d)" 자백).
+
+**설계**: 신규 테이블 0 — `refresh_token_session`(이미 allowlist)을 그대로 재사용, 마이그레이션
+은 `platform`(nullable `String(32)`) 컬럼 1개 추가(`d6e7f0a2b3c4`, `KNOWN_REVISIONS` 갱신).
+3개 엔드포인트(`CurrentUser` 게이트 — `is_active`/`is_deleted` 검사가 이미 걸린
+`get_current_user` 재사용): `GET /sessions`(본인 활성 세션 목록·issued_at desc)·
+`DELETE /sessions`(전체 — 기존 `_revoke_all_user_sessions` 재사용·중복 구현 0)·
+`DELETE /sessions/{session_id}`(단건·본인 스코핑 — 타인 소유·미존재는 404·이미 취소된 세션
+재요청은 멱등 204). **최소 수집**: 응답·저장 어디에도 IP·User-Agent 원문이 없다 — 로그인·
+리프레시 시점 `_summarize_platform`이 User-Agent에서 도출한 좁은 범주(`"iOS"`/`"Android"`/
+`"Web"`, 그 외 `None`)만 저장한다(새 파싱 라이브러리 추가 없음 — 불명확하면 None, 오분류로
+거짓 정보를 만들지 않는 것이 세밀한 분류보다 우선). **한계를 정직 표기**(응답·docstring·
+`security_privacy.md` 3곳): ⑴ `device_credential`(rate limit 신뢰용 기기 자격증명) 폐기는
+이 세션 취소와 무관 — 기기 폐기해도 그 기기의 JWT는 만료까지 살아있다(§1 후보 51의 "보안
+착시" 경계를 코드로 명시). ⑵ "전체 로그아웃"은 리프레시 토큰만 취소 — 이미 발급된 액세스
+토큰은 `jwt_expire_minutes`까지 유효(즉시 무효화 아님. 액세스 TTL 단축은 클라
+refresh-on-401 배선 선결 — 이번 범위 밖).
+
+**테스트**: hermetic 14건(`test_auth_sessions.py` — 목록 정렬·본인 스코핑·응답 스키마 IP/UA
+부재 동결·멱등성·`_summarize_platform` 대표 UA 7종 파라미터화) + 실 PG 통합 2건 신설
+(`test_refresh_session_integration.py` — 실 정렬·`platform` 영속·본인 스코핑 e2e, 기존
+3건과 함께 총 5건). **⚠️ 정직한 공백**: 이 세션 컨테이너에 도달 가능한 PostgreSQL이 없어
+신설 통합 2건은 skip으로만 확인됐다(hermetic 14건·mypy·기존 리팩터 회귀 없음으로 로직
+정확성은 검증되나, 실 PG 정렬·영속 왕복의 라이브 증거는 이 세션에서 확보하지 못했다) —
+Phaiakes9 실 PG에서 `WHYMATH_RUN_INTEGRATION=1`로 재확인 필요.
+
+**검증**: ruff·black·mypy --strict(442파일) clean. 백엔드 CI-충실 전체 스위트 **8042 passed,
+274 skipped, 0 failed**(SEC-11 이후 baseline 7979 대비 +63 — SEC-12와 함께 반영된 수치,
+회귀 0). `docs/standards/security_privacy.md`(a3d 완료 갱신)·
+`docs/architecture/deployment_cd_runbook.md` 갱신 불요(SEC-10은 배포 절차 변경 없음 — 코드
+배포와 함께 자동 반영).
+
+**NOT**: 액세스 토큰 즉시 무효화(denylist·TTL 단축 — §5-⑧ 발화조건 미충족). "현재 접속 중인
+기기" 표시(액세스 토큰은 이 테이블에 없어 구분 불가 — 리프레시 세션 목록일 뿐).
+
+정본: `docs/architecture/account_security_gap_review.md` D4 · `docs/standards/security_privacy.md`.
 ### 2026-08-03 (설계·학습경로): **학습 경로(Path) 모듈 갭 점검·설계(D1~D3+페이퍼 3) + 태스크 3건 등재(`PATH-01`~`PATH-03`) — 위상정렬이 기본값에서 96.4% 무력(D1)·강등이 응답에서 구분 불가(D2)·전이 의존 미반영 27.0%→69.9%(D3) — 외부 EOS 틀 1단계 4기능 대조** (claude 설계, Kiki 요청)
 
 **배경**: Kiki가 업로드한 외부 EOS 틀 문서(『1단계: 학습 경로(Path)』 4기능 — 54 개인별 학습
