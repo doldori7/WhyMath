@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - "data/corpus/concept_visualization_v1/**"
   - "src/backend/whymath_backend/l1/concept_visualization/**"
   - tests/backend/l1/test_concept_visualization_orphan_gate.py
-session: null
+session: claude/whymath-visualization-review-i2tgt2
 notes: "visualization_module_gap_review.md §7(2026-08-03 2차 점검) G2. 1차 편(§3 D1 결론부)이 'VIZ-01 PR 부수 발견'으로 이미 orphan 7/7을 기록했고 D2가 '적재되면 표면화된다'고 예고한 것이 실제로 표면화됨 — is_visualizable(None)=fail-open이라 서비스 장애는 아니나, HIGH-LOGIC-007(대우증명·귀류법) 같은 추상 개념의 오개념 유발 보호가 런타임에서 발동하지 않고, prefers_static_visual(None)=False라 게이트 통과 127건 전부에 불필요한 슬라이더가 붙는다(05b가 명시적으로 피하려는 것). CLAUDE.md '상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지 — 2회+ 반복 관측 시 태스크 등재 의무' 발화(1차 편 예고+2차 편 실측=2회)."
 updated: 2026-08-03
