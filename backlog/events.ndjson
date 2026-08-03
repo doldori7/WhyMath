@@ -1284,3 +1284,9 @@
 {"ts": "2026-08-03T08:16:14", "actor": "claude/whymath-math-engine-design-4qbaru", "action": "add", "id": "MATH-02-notation-canon-reference-integrity"}
 {"ts": "2026-08-03T08:17:03", "actor": "claude/whymath-math-engine-design-4qbaru", "action": "add", "id": "MATH-03-verify-reason-code-discrimination"}
 {"ts": "2026-08-03T08:18:04", "actor": "claude/whymath-math-engine-design-4qbaru", "action": "add", "id": "MATH-04-curriculum-notation-range-gate"}
+{"ts": "2026-08-03T06:48:37", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-01-curriculum-revision-vocabulary-consistency"}
+{"ts": "2026-08-03T06:48:59", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-02-objective-coverage-observability"}
+{"ts": "2026-08-03T06:49:13", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-03-achievement-level-data-intake"}
+{"ts": "2026-08-03T08:48:46", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-01-learning-path-orderability-report"}
+{"ts": "2026-08-03T08:49:28", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-02-learning-path-ordering-honesty"}
+{"ts": "2026-08-03T08:50:12", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-03-transitive-ordering-edges"}

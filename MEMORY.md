@@ -393,6 +393,138 @@ EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`(
 없음을 확인.
 
 정본: `docs/architecture/math_engine_gap_review.md`.
+### 2026-08-03 (설계·학습경로): **학습 경로(Path) 모듈 갭 점검·설계(D1~D3+페이퍼 3) + 태스크 3건 등재(`PATH-01`~`PATH-03`) — 위상정렬이 기본값에서 96.4% 무력(D1)·강등이 응답에서 구분 불가(D2)·전이 의존 미반영 27.0%→69.9%(D3) — 외부 EOS 틀 1단계 4기능 대조** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 업로드한 외부 EOS 틀 문서(『1단계: 학습 경로(Path)』 4기능 — 54 개인별 학습
+경로 생성 · 55 선수학습 자동 추천 · 56 복습 스케줄 생성 · 57 목표 기반 학습 플랜, WhyMath 전용
+아닌 일반 틀)를 코드베이스와 대조. 시리즈 **12번째** 자매편(1.knowledge → … → 11.curriculum
+계보 승계). 산출: `docs/architecture/learning_path_module_gap_review.md` 신설.
+
+**착수 가설이 반증됐다.** "학습 경로가 없다"가 아니었다 — Kahn 위상정렬(`l2/learning_path.py:143`)·
+재귀 CTE 선수 traversal(`l2/prerequisite_recommendation.py:230`)·HTTP 노출(`api/me.py:1506`)·
+테스트 18건이 이미 전부 프로덕션이다. 진짜 문제는 **"있는데 기본 파라미터에서 죽어 있고, 죽었다는
+사실이 응답에 안 나온다"**였다.
+
+**핵심 실측**(원자 백본 2,683노드·2,210 prerequisite 엣지 전수):
+- 직접 선수 개수 분포 0개 915 / 1개 1,412 / 2개 278 / 3개 70 / 4개 8 → **순서화가 성립할 수 있는
+  모집단이 356건(13.3%)뿐**
+- 엔드포인트 **기본값 `max_depth=1`**에서 집합 내부 직접 엣지 보유 **96/356(27.0%)** → 전체 대비
+  **3.6%**. 즉 **96.4%에서 in-degree가 전부 0**이고 Kahn은 `_tiebreak`(weakness·depth·strength·uuid)
+  가중 정렬로 조용히 강등된다. `has_cycle`은 있는데 "정렬 제약이 0이었다"는 표기가 **없어
+  호출자가 구별할 수 없다**
+- 전이(ancestor) 도달로 바꾸면 후보 집합 불변인 채 **1홉 96 → 5홉 249(69.9%) → 무한 310(87.1%)**.
+  이 축이 정확히 `learning_path.py:258`이 스스로 "후속 범위"라 적어두고 **백로그에 등재한 적 없는**
+  항목이며, 무력화의 지배적 원인이었다
+
+**등재 3건**: `PATH-01`(위상 제약 밀도 관측 리포트·S3·prio3·코퍼스만 읽어 입력 루프와 무관하게
+즉시 착수 가능) · `PATH-02`(`ordering_edge_count`·`ordering_basis` 응답 정직 표기·S3·prio3) ·
+`PATH-03`(전이 순서 제약·S4·prio4·depends PATH-01,02). 전건 `backlog.py add` CLI 경유(HARN-10).
+
+**기능 56·57은 신규 태스크 0** — `S4-18-review-time-axis`가 이미 복습 시간축(`review-queue`)과
+목표축(`target_*` 첫 reader)을 보유한다. `REC-01`(입력 루프)·`PED-05`(LearnerState)와도 범위 중첩 0.
+
+**의도적 미채택 9건**: ①단원 생략(LTHC 정면 충돌 — 경로의 임무는 *메울 것* 찾기) ②하루 학습가능시간
+(생산자 없는 신호) ③요일별 학습량(②의 2차 파생) ④SM-2/FSRS/`next_review_at`(이중 진실원천 재확인)
+⑤점수·등급 예측(서열화) ⑥**경로에 학년 게이팅**(선수는 정의상 학년 *아래* — 필터가 근본 결손을
+정확히 지운다. `reviewed_only`가 검수 게이팅뿐인 건 **설계이지 누락이 아니다**) ⑦`max_nodes` 상한
+(깊이 예산이 이미 bound — depth5 최대 55) ⑧**`subunit_code`를 교과서 단원 배열로 재라벨**
+(2,466노드가 `<영역>-U#-S#` 번호를 갖고 있어 *순서 신호처럼 보이지만* 저작 순서다 — 그럴듯해서
+특히 위험) ⑨전이 엣지에 합성 `edge_strength` 부여.
+
+**전역 학습 경로(기능 54의 핵심)는 유보** — 4조건 AND(REC-01 미도달 해제+약개념 2건 이상 / 클라
+실호출 / PATH-01이 "병합이 개념별 나열보다 순서를 더 결정한다"는 수치 산출 / PED-05 착지).
+지금 만들면 **항상 빈 배열을 반환하는 엔드포인트**가 된다.
+
+**§6 반복 실수 8회차 — 형태가 새롭다**: 앞의 일곱(배선/적재/배포/입력/스위치/공급원/분해 누락)은
+전부 **"돌지 않아서"** 안 보였는데, 8회차는 **"돌아서"** 안 보였다 — 배선·적재·기동이 전부 정상이고
+200을 반환하며 테스트 18건이 green인데, 꺼진 것은 **파라미터 기본값 한 개**다. 재발방지 원칙 등재:
+**"알고리즘을 붙였으면 그 알고리즘이 *실제로 작동한 비율*을 응답이나 리포트가 말해야 한다 —
+정상 응답 200은 알고리즘이 일했다는 증거가 아니다."** 부수 원칙: **"docstring은 백로그를 대신하지
+못한다"**(단, `"후속 범위"` 표기는 `src/` 전수 1건뿐이라 일제 점검 태스크는 만들지 않는다 —
+패턴이 아니라 단발).
+
+**자체 정정 1건(기록)**: 설계 검토 중 전이 개선폭을 **87.1%**로 잡았으나 그것은 **무한 도달** 기준
+이었다. 실제 구현 예산(`MAX_PREREQUISITE_DEPTH=5`)에서의 정직한 값은 **69.9%**이며, 문서·acceptance
+는 69.9%를 쓰고 87.1%는 도달 불가능한 천장으로만 병기했다. 교훈: **개선폭은 실제로 구현할 예산에서의
+값으로 인용한다** — 천장 수치는 설득력이 크지만 acceptance에 넣으면 달성 불가 기준이 된다.
+
+**정본 정정 3곳**: `l2/learning_path.py:1-6`·`api/me.py get_my_learning_path` docstring의 무조건적
+"위상정렬" 서술(→ `PATH-02` 안에서 정정·이 커밋은 `src/` 변경 0) / `06_application_modes.md`
+차원⑥ 잔여 서술에 "막힌 원인 = 출판사별 목차 순서 데이터 0 + `subunit_code` 오인 함정" 착지
+(→ **이 커밋에서 정정**).
+
+**범위**: 문서 신설 1 · 문서 정정 1 · 백로그 태스크 3 · MEMORY 1. **소스 코드 변경 0**(선례 11편 규율).
+
+---
+
+### 2026-08-03 (설계·교육과정): **교육과정 관리 모듈 갭 점검·설계(D1~D3+페이퍼) + 태스크 3건 등재(`CUR-03`은 owner=kiki) — 개정판 표기 3어휘 분열(D1)·학습목표 커버리지 0.1%(D2·"완비된 소비 경로+미도달 공급원" 7회차)·성취수준(A~E)/평가기준(상/중/하) 0건(D3) — 외부 EOS 틀 0단계 5모듈 대조** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 업로드한 외부 EOS 틀 문서(『0단계: 교육과정 관리』5모듈 — ①교육과정DB
+②단원구조 ③성취기준 ④학습목표(Objective) ⑤선수학습그래프, WhyMath 전용 아닌 일반 틀)를
+코드베이스와 대조. 시리즈 **11번째** 자매편(`ai_recommendation_module_gap_review.md` 등 10편
+계보 승계).
+
+**착수 가설 절반만 맞았다**: "교육과정 관리가 빈약하다"는 가설은 **반증** — 성취기준 축은
+오히려 초과 충족(895건, `norm_id` PK로 개정 간 코드 충돌 153건 해소). 진짜 문제는 관리 축마다
+성숙도가 극단적으로 다르다는 것(성취기준 100% vs 학습목표 0.1%). 아키텍처 차이의 핵심은 방향
+전도다 — 외부 틀은 "교육과정이 원본, 개념이 하류"이지만 WhyMath는 정반대로 "개념이 영속 원본,
+교육과정은 Overlay"(원칙5, `Concept`에서 `subject`·`curriculum_version`·`semester_introduced`
+의도적 제거 후 `CurriculumEntry` 셀로 이관).
+
+**진짜 갭 3건 설계**:
+1. **D1 교육과정 개정판 표기 3어휘 분열 — 관측 먼저**(최우선). `"2022 개정"`(achievement_standard·
+   curriculum_entry)/`"2022"`(unit_spec.curriculum_rev)/`"2022_REVISION"`(schema/enums.py
+   Curriculum) 3개 어휘 공간이 자유 문자열로 분열. `gating.py`의 `normalize_enum_value`는
+   국소 방어일 뿐 축 간 정합은 관측된 적 없음. 스키마 통합은 하지 않고(발산 규모 모르는 채
+   통합 방식을 정할 수 없다) 발산 건수 리포트부터 낸다.
+2. **D2 학습목표(Objective) 커버리지 0.1% — 7회차**. `LearningObjective`+`UnitDSL`+컴파일러+
+   런타임 API(`/v1/me/objectives/*`)까지 완비됐는데 실데이터는 895개 성취기준 중 **1개**
+   (소단원 `10공수1-이차함수-최대최소`, 목표 4개)뿐. `_provenance.json`이 스스로 "E2E 확인용
+   단일 소단원"이라 밝혀, 앞선 6회차(OCR·시각화·추천 등)와 달리 **고장이 아니라 파일럿 이후
+   확장이 없었던 정지 상태**. ARCH-18 패턴 재사용해 커버리지 리포트만 먼저 낸다.
+3. **D3 성취수준(A~E)·평가기준(상/중/하) 데이터 반입 — owner=kiki**. 저장소 전체 0건인데
+   상류 도구(`curriculum-node-builder` 스킬)는 이미 KICE 보고서 PDF→노드 엑셀 변환 가능.
+   NCIC 403 차단 선례와 동일하게 데이터 반입은 사람 소유 액션. 스키마 확장은 반입 후 별도
+   태스크로 분리(데이터가 스키마보다 먼저).
+
+**페이퍼 갭**: `PREREQUISITE` 외 5종 관계 타입(`COMPOSED_OF`·`ANALOGOUS_TO`·`EXTENDS`·
+`CONTRASTS`·`TRIGGERS_DISTRACTOR`)은 enum 선언만 있고 적재 0 — 소스 신호 없이 채우면 교수학
+날조이므로 어휘만 준비된 상태로 유지(발화조건만 §5-④).
+
+**의도적 미채택 6건**: ①학기 축 재도입(영구 — Overlay 원칙) ②`related`/`similar` traversal
+관계 채택(영구 — CLAUDE.md 명문 금지) ③`contains` 별도 엣지(영구 — parent_code 컬럼과 중복)
+④`equivalent` 별도 엣지(영구 — SymPy canonicalize가 유일 정본) ⑤다국가 풀스케일(조건부 유보,
+기존 Phase 1 축소 결정 승계) ⑥교육과정 편집 GUI(조건부 유보, CLI populate가 정본 경로).
+
+**정본 stale 6곳 정정**: `docs/data/concept_graph.md:5`("상태: 미구축" → 437/581 적재
+완료·원자 백본 2,683/2,210) · `01_data_foundation.md`·`ncic.md`(성취기준 "150~180개" →
+실측 895건) · `00_overview.md`·`01_data_foundation.md`(개념 그래프 저장소 "Neo4j" → PG 단일
+평면·런타임 연결 안 함 확정) · `curriculum_matrix.md`(`CurriculumEntry` "30필드·PK 2-튜플·
+미구현" → 실측 31필드·`entry_id` 단일PK+3-튜플·구현 완료) · `prd_v1.2.md`("현행=2015 개정,
+2022는 2027~28 분기" → `curriculum_2022_revision.md`가 이미 2022를 현 백본으로 확정, 각주로
+"수능 대개편"과 "교육과정 데이터 반영"이 별개 축임을 정정) · `units_v1` 데이터 카드 신설
+(`docs/data/units_v1.md`, 카드 부재 공백 해소).
+
+**산출**: `docs/architecture/curriculum_module_gap_review.md` 신설(§0 전제 2종·§1 5모듈 전수
+대조·§2 의도적 미채택 6건·§3 설계 D1~D3+페이퍼·§4 정직한 공백 7종·§5 유보 발화조건 6건·§6
+반복 실수 7회차·§정정 6곳·부록 실측 근거) + `docs/data/units_v1.md` 신설 + backlog 3건 CLI
+등재(`CUR-01-curriculum-revision-vocabulary-consistency`·`CUR-02-objective-coverage-observability`·
+`CUR-03-achievement-level-data-intake`, `CUR-` 신규 축, validate green 156건).
+
+**NOT**: 코드 로직 변경 0(설계+등재+정본 정정만). 3어휘 통합 마이그레이션·학습목표 자동 생성·
+성취수준 스키마 확장은 만들지 않았다(전부 발화조건만 기록). `S2-07`·`ARCH-13`은 승계·재해석
+금지(원자 축 이관·이중 진실 원천 해소는 완결 상태 그대로 인용만).
+
+정본: `docs/architecture/curriculum_module_gap_review.md`.
+### 2026-08-02 (설계·UI·관리자 콘솔): **관리 모듈 declarative 레지스트리 + `GET /v1/admin/menu` 자동 파생 좌측 내비 설계 신설 — "모든 가능 메뉴 자동 등록"** (claude 설계·문서, Kiki "관리자 작업화면에 모든 가능 메뉴가 자동으로 등록 되도록 설정해줘")
+
+**배경**: 관리자 콘솔(Operator Console)은 저장소에 코드가 전혀 없고 `docs/design/ui/03_admin_console_plan.md`·`04_admin_console_architecture.md`에 설계 문서로만 존재한다(전 항목 🔴). Kiki 요청에 AskUserQuestion으로 범위를 먼저 확인 — "설계 문서만 갱신"(권장안) 선택. ARCH-21 완료 후 세션 스코프를 "UI 설계·아키텍처만"으로 좁힌 직후의 작업이라 코드 스캐폴딩 없이 설계만 갱신한다.
+
+**설계 반영(`04` §2 원칙7 신설)**: 관리 콘솔의 좌측 내비·22모듈 매핑 표(`03` §4/§5)가 지금은 손으로 유지보수하는 마크다운이라, 새 관리 기능이 생길 때마다 ①내비 컴포넌트 ②라우트 가드(`require_role`) ③설계 문서 세 곳을 사람이 각각 맞춰야 하는 구조적 위험(하나 빠뜨리면 "코드엔 있는데 메뉴엔 없음" 또는 "메뉴엔 있는데 가드 없음")이 있었다. 해법으로 **선언적 모듈 레지스트리**(`AdminModule` — id·section·label·route·status(🟢/🟡/🔴)·`required_roles`·`backing_assets`)를 단일 진실 원천으로 두고, Admin BFF에 `GET /v1/admin/menu`(로그인만 요구·현재 사용자 role로 레지스트리 필터링해 반환)를 신설·Next.js 좌측 내비는 이 응답을 그대로 렌더(하드코딩 nav 배열 0)하는 아키텍처를 설계했다. **이중 방어 명시**: 메뉴 필터링은 UX일 뿐 보안 경계가 아니므로 각 라우트는 여전히 자체 `require_role`을 가지며, 레지스트리의 `required_roles`와 라우트 가드의 일치는 후속 `ADMIN-MODULE-REGISTRY` 태스크에서 정적 스캔 테스트로 동결 지향(`test_legacy_snapshot_governance.py` 패턴 재사용).
+
+**겸사겸사 현행화**: `03`·`04`·`00_index.md`의 RBAC 서술이 "role 필드가 없다"로 정체돼 있었는데(SEC-07이 2026-07-30 이미 2값 `STUDENT`/`CONTENT_ADMIN` 착지시킴), 세 문서 모두 실제 상태(v0 완료·관리 콘솔 소비는 미착수)로 갱신했다(README 청사진과 실제의 괴리 방지 원칙). `00_index.md` 전역 불변식 표에 #7(모듈 자동 등록)을 추가하고 스냅샷 날짜를 2026-08-02로 갱신.
+
+**스코프 밖(코드 미작성)**: `AdminModule`/`_MODULE_REGISTRY`/`GET /v1/admin/menu`/Next.js 앱 자체는 전부 설계 단계 — `04` §8에 `ADMIN-MODULE-REGISTRY`(신규)·`ADMIN-BFF`·`ADMIN-WEB` 제안으로만 기재, 실제 등재는 후속 `backlog.py` 경유.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 
