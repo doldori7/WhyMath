@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: mobile
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,12 +17,13 @@ acceptance:
   - "④ 변별력 — 금지 심볼·금지값을 일부러 주입하면 실제로 red가 나는지 양방향 실측"
   - "⑤ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
   - "⑥ 범위 밖 동결 — focus_score/engagement_score(S3-16 소유)·죽은 컬럼 제거 마이그레이션·tone_filter 라이브 배선(별도 L3/L4 결정)"
-artifacts: []
+artifacts:
+  - 672be224
 paths:
   - "src/mobile/test/governance/*.dart"
   - src/backend/whymath_backend/schema/timeseries.py
   - src/backend/whymath_backend/db/models/user.py
   - "tests/backend/l1/test_*governance*.py"
-session: claude/arch-26-anti-gamification-gate
+session: null
 notes: "docs/architecture/gamification_module_gap_review.md §3 D2. 전역 UI 불변식 #2(docs/design/ui/00_index.md:41)가 20+ 곳 인용되나 집행 테스트 0건. CLAUDE.md:104-107 교수학 금기 4조항 중 3개(답 미루기·정서 톤·GAMING_SUSPECT)는 게이트 보유, 우열 게임화 금지만 게이트 0. UserBehaviorMetrics.metric_name이 'streak'을 예시로 든 열린 문자열 통로라는 신규 실측 포함. Dart 선례는 theme_test.dart 아니라 no_math_logic_governance_test.dart(ARCH-10). (원래 ARCH-23으로 등재했으나 병렬 머지된 ARCH-23-qa-gate-enforcement와 번호 충돌해 ARCH-26으로 재등재 — 손편집 아닌 CLI 재실행)"
 updated: 2026-08-03
