@@ -1283,3 +1283,5 @@
 {"ts": "2026-08-03T06:48:37", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-01-curriculum-revision-vocabulary-consistency"}
 {"ts": "2026-08-03T06:48:59", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-02-objective-coverage-observability"}
 {"ts": "2026-08-03T06:49:13", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-03-achievement-level-data-intake"}
+{"ts": "2026-08-03T08:43:55", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "add", "id": "ASM-01-assessment-seat-reachability-observability"}
+{"ts": "2026-08-03T08:44:35", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "add", "id": "ASM-02-grade-exposure-policy-decision"}
