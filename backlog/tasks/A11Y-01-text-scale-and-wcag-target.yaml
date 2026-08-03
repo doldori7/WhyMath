@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - docs/architecture/05_interaction.md
   - docs/design/ui/06_design_system.md
   - docs/standards/coding_flutter.md
-session: null
+session: claude/backlog-drive-next
 notes: "docs/architecture/service_operations_gap_review.md §3 D2 — 외부 EOS 틀 모듈 92(접근성) 대조. accessibility_needs 필드는 writer 0(Flutter 온보딩 미수집)이라 소비 분기는 §2-⑧ 미채택 — 이 태스크는 배율·목표선언·시각화 라벨 3종만."
 updated: 2026-08-03
