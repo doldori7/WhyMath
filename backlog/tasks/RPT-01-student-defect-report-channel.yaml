@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "src/mobile/lib/features/**"
   - "src/backend/alembic/versions/**"
-session: null
+session: claude/rpt-01-student-defect-report
 notes: "docs/architecture/service_operations_gap_review.md §3 D1 — 외부 EOS 틀 모듈 94(고객지원·오류신고) 대조 최대 갭. 학생이 문항·AI응답·수식 오류를 신고할 경로가 라우터 16종·DDL 28테이블 전수에 0건(2026-08-03 실측)."
 updated: 2026-08-03
