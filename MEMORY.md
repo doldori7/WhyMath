@@ -393,6 +393,42 @@ EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`(
 없음을 확인.
 
 정본: `docs/architecture/math_engine_gap_review.md`.
+### 2026-08-03 (설계·서비스운영): **서비스 운영 모듈 갭 점검·설계(D1~D5) + 태스크 5건 등재 — 학생 결함신고 경로 0(D1)·클라 최소버전 게이트 0(D4)이 최대 갭, 접근성은 목표 미선언(D2), 결제·푸시는 "있는 것처럼 보이는데 도달 0"으로 재확인(D3·D5) — 외부 EOS 틀 모듈 91~95 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 첨부한 외부 EOS 참고 문서(WhyMath 전용 아닌 일반 틀)의 "22. 서비스 운영"
+절(91 결제·구독·환불 · 92 접근성 · 93 푸시 알림 인프라 · 94 고객지원(CS)·오류신고 · 95 앱
+배포·업데이트 관리)을 저장소와 대조해 빠진 부분을 WhyMath 방향에 맞게 설계해달라는 요청.
+`docs/reviews/service_ops_mgmt_gap_review_2026-07.md`(2026-07-26)가 91·93·CS 도구를 이미
+"의도된 지연·백로그 오염 방지 미등재"로 판정해 놓았던 터라, 이번 대조는 그 판정을 재확인하고
+그 검토가 다루지 않은 **클라이언트 축·학생→시스템 역방향 채널**의 진짜 갭을 찾는 데 집중했다.
+Explore 2건(문서 시리즈 규약 조사 + 5축 코드 실태 조사) 병렬 실행 후 Plan 1건으로 D 항목
+선정·스코프를 설계했고, 핵심 실측 6곳(caption 필드·router.py 4겹 가드·audit.py append-only
+패턴·app.py 미들웨어 좌석·api_client.dart 헤더 좌석·pubspec.yaml 제거 주석)을 직접
+spot-check로 재검증한 뒤 문서화했다.
+
+**판정**: 91(결제)은 필드만 있고 PG·환불·테이블 전무 — 선행 판정 그대로 승계하되, **진짜
+갭은 결제가 아니라 `l3/router.py`가 이미 집행하는 클라우드 승급 가드(구독·예산·킬러문항
+3축)가 학생 경로 6곳의 `budget_krw=0.0`/`subscription="free"` 하드코딩으로 4겹 차단돼
+도달이 0이라는 것**(D3) — 구독만 배선하면 예산 규칙이 먼저 막아 바이트 동일 결과라 변별력
+0(§0 확대①). 92(접근성)는 Flutter 대비·탭영역 회귀 게이트가 이미 도는데 목표 레벨(WCAG/
+KWCAG AA) 선언·글자크기 배율 축·시각화 `Semantics` 라벨이 빠짐(D2); `accessibility_needs`
+필드는 writer도 0이라 소비 분기는 미채택. 93(푸시)은 `firebase_messaging`/`firebase_core`가
+pubspec에 선언만 있고 Dart/Kotlin·`ios/`·gradle 플러그인 전부 0이라 제거 대상(D5, TTS/STT
+제거 선례 답습) — Streak 유지 알림은 게이미피케이션 금지 3정본 위반으로 **영구 미채택**(지연
+아님). 94(CS·오류신고)는 **최대 갭** — 학생이 문항·AI응답·수식 오류를 신고할 경로가
+스키마·API·UI 전부 0이라 파일럿(S3-01) 전 필수 안전망으로 최우선 등재(D1, `user_id`·자유
+서술은 의도적 미보유). 95(배포)는 백엔드 CD가 틀보다 엄격하나 클라이언트가 자기 버전을
+서버에 알리지 않아 API 계약 파손이 `diagnosis_controller.dart:66`의 단일 실패 문구로
+위장되는 위험이 실재(2026-07-20 인증누락 사고와 동일 구조) → 최소버전 계약 게이트(D4).
+
+**등재**(`backlog.py add` 경유·`validate` green 158건): `RPT-01-student-defect-report-
+channel`(S3·p2, 신규 접두어)·`OPS-17-client-version-contract-gate`(S3·p2)·`A11Y-01-text-
+scale-and-wcag-target`(S3·p3, 신규 접두어)·`OPS-18-cloud-escalation-reach-observability`
+(S4·p3)·`MOB-08-unused-dependency-purge-gate`(S4·p4). 각 acceptance에 변별력 검증 방법
+(실패 상태 재현→exit 다름 확인)을 명시했다. 전건 `docs/architecture/service_operations_
+gap_review.md`로 상세 설계·§2 의도적 미채택 13건·§4 정직한 공백 13종·§5 발화 트리거 10건·
+§6 반복 실수 7~9회차(만들지 않고 선언만/기본값이 정책으로 읽힘/정본이 코드를 못 따라감)·
+§정정 stale 9곳을 기록했다.
 ### 2026-08-03 (설계·게임화): **게임화 모듈 갭 점검·설계(D1~D4) + 태스크 2건 등재 — 게임화 5모듈(XP·레벨·배지·퀘스트·Streak)은 미구현이 아니라 헌법 금기이고, 진짜 갭은 그 반대편(성장의 증거 11지표)이 계산되는데 학생 도달 0회(D1)·반게임화 불변식의 기계 게이트 0(D2)·동기 정본은 새 태스크 대신 기존 정본 3곳 직접 개정으로 착지 — 외부 EOS 틀 기능 75~79 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『18. 게임화(Gamification)』(기능 75 레벨 시스템 ·
