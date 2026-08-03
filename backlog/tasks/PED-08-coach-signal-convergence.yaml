@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - "src/backend/whymath_backend/l4/**"
   - "src/backend/whymath_backend/l2/**"
   - "tests/backend/**"
-session: null
+session: claude/whymath-pedagogy-review-uqyg79
 notes: "정본: 04e §9. 최고 위험(api/coach.py 101KB — 추출 슬라이스 선행). 팩(설계용) 축은 2026-07-27 GA 기배선 — 이 태스크는 실행용 축만."
-updated: 2026-07-28
+updated: 2026-08-03
