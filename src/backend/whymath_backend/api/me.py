@@ -2179,17 +2179,18 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 4종 커버리지 맵 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — 본인 스코핑) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
 # 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-# value=None + status(NO_DATA) + note로 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다").
-# 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만*
-# 노출(타 학생 0·admin auth 범위 밖).
+# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)가
+# 3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)을 더 편입했다 — D1 writer가
+# 처음 만든 데이터의 첫 reader. 각 지표는 표본 0/부족이면 value=None + status(NO_DATA) + note로
+# 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다"). 코호트 전체 집계(user_id=None)는
+# ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만* 노출(타 학생 0·admin auth 범위 밖).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
+    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
     user: ConsentedUser,
@@ -2198,15 +2199,19 @@ async def get_my_harness_metrics(
     until: UntilParam = None,
     mode: HarnessMetricsMode = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 + PED-04 3종 — *본인* 집계 커버리지 맵.
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
     모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)
+    3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)도 편입됐다 — `DialogueTurn`
+    메타 컬럼 writer가 처음 만든 데이터의 첫 reader. 각 지표는 표본 0/부족이면
     value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
-    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
-    started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
+    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, ⑫⑬은 대화
+    started_at·⑭는 힌트제공 이벤트 event_at 시간창을 쓴다(mode 스코프는 ⑭만 적용 — ⑫⑬은 대화
+    기반이라 mode 태그가 아직 실리지 않는다). 나머지는 started_at/event_at 기준이다. ⑪ resolution은
+    클라이언트 보고(PATCH .../end 적재·서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
     422). user_id는 인증에서 주입(본인 집계만).

@@ -274,6 +274,10 @@ v0.1의 “요약 압축”은 오개념을 드러내는 학생의 정확한 표
   `docs/architecture/ai_tutor_module_gap_review.md §2-⑤·§3 D1`(`recall_session_context`
   — 원문 미복호를 테스트로 동결) 참조. 원문 복원이 필요한 경우(교사·연구 감사)는
   이 하네스의 도구가 아니라 별도 축(L7·복호 권한 분리)에서 재론한다(같은 문서 §5-⑥).
+  **✅ 구현 완료(2026-08-03, `PED-04`)**: `l4/session_recall.py::SessionRecall`(필드
+  전부 enum/id/정수 — 원문을 실을 자리가 타입상 없음) + `api/coach.py::_session_recall_or_none`
+  (컬럼 투영·복호 함수 호출 0을 통합테스트로 동결) + `wh1_llm_policy.py`가 예산 초과 시
+  회상을 **최우선 절단**(세션 간 맥락은 이번 턴에 가장 덜 급함).
 - 컨텍스트에는 하네스가 만든 구조화 인덱스(턴 번호, 이벤트 유형, 가설 변화)만 유지
 - 반박된 가설(confidence < 0.2): archived 전환, 증거 그래프엔 보존
 

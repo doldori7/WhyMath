@@ -24,11 +24,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -123,10 +125,23 @@ from whymath_backend.l4.misconception.shadow import (
     observe_misconception_shadow,
 )
 from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
+from whymath_backend.l4.models import next_polya_stage
 from whymath_backend.l4.pedagogy.k_type_resolver import k_type_query
 from whymath_backend.l4.pedagogy.pack_registry import get_pack
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
+from whymath_backend.l4.session_recall import SessionRecall, assemble_session_recall
 from whymath_backend.l4.socratic.categories import SocraticCategory
+from whymath_backend.l4.turn_meta import (
+    TurnMeta,
+    TurnMetaRow,
+    classify_student_intent,
+    compose_understanding_signal,
+    derive_polya_state,
+    derive_recent_categories,
+    detect_state_mismatch,
+    resolve_socratic_strategy,
+    stage_to_targeted_step,
+)
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
@@ -352,6 +367,16 @@ class SessionCreateRequest(CoachRequest):
 # WH-1 2단계 §8.4 슬라이스 3: 활성 가설 세트 노출 필드 설명(SessionCreateResponse·
 # TurnAppendResponse 공통). stateless `CoachResponse`에는 *싣지 않는다* — stateless 경로는
 # DB가 없어 가설을 영속·누적할 수 없기 때문(슬라이스 3 결선은 세션 엔드포인트 한정).
+# PED-04 D2: 클라 제출 Polya 상태와 서버 파생 상태가 어긋났음을 알리는 플래그(세션 2응답 공통).
+# stateless `CoachResponse`에는 *싣지 않는다* — 그 경로는 DB가 없어 서버 파생 자체가 불가능하고,
+# 필드를 넣으면 항상 False인 가짜 계기판이 된다(OpenAPI 스키마 무변경 = 클라 회귀 0).
+_CLIENT_STATE_MISMATCH_DESC = (
+    "클라이언트가 제출한 `polya_state`가 서버 파생 상태(직전 턴 메타·힌트 적재에서 역산)와 "
+    "달랐는지. **true여도 요청은 정상 처리되며, 결정은 서버 파생값으로 내려간다** — 이 값은 "
+    "오류가 아니라 *동기화 신호*다(클라가 상태를 갱신하면 사라진다). S3 파일럿 KPI가 이 상태값에 "
+    "의존하므로, 어긋남을 조용히 덮지 않고 표면화한다(침묵 실패 금지)."
+)
+
 _ACTIVE_HYPOTHESES_DESC = (
     "이 학생의 *누적·감쇠된* 활성 오개념 가설 세트(confidence 내림차순). 매 턴 매칭(증거)으로 "
     "갱신·영속되며, 증거가 끊긴 가설은 감쇠하고 임계 미만이면 가지치기된다. 각 항목은 *확정 "
@@ -380,6 +405,10 @@ class SessionCreateResponse(CoachResponse):
     wh1_exploration_turn: bool = Field(
         description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
     )
+    client_state_mismatch: bool = Field(
+        default=False,
+        description=_CLIENT_STATE_MISMATCH_DESC,
+    )
 
 
 class TurnAppendResponse(CoachResponse):
@@ -402,6 +431,10 @@ class TurnAppendResponse(CoachResponse):
     )
     wh1_exploration_turn: bool = Field(
         description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
+    )
+    client_state_mismatch: bool = Field(
+        default=False,
+        description=_CLIENT_STATE_MISMATCH_DESC,
     )
 
 
@@ -442,6 +475,8 @@ def _build_response_payload(
     matches: list[MisconceptionMatch] | None = None,
     misconception_hypotheses: list[MisconceptionHypothesis] | None = None,
     pack: PedagogyPack | None = None,
+    polya_state_override: PolyaState | None = None,
+    recent_categories: Sequence[SocraticCategory] = (),
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -469,6 +504,10 @@ def _build_response_payload(
     고신뢰+최근 가설이면 ASSUMPTION(가정 표면화). **미주입(기본 None)이면 현행 비트동일**
     (stateless `/v1/coach`·sync 직접호출). 세션/턴 핸들러가 `_apply_hypotheses` 반환 세트를 넘긴다
     (개입 채널 `_intervention_from_hypotheses_or`와 *같은* post-apply 세트·단일 진실원천).
+
+    **PED-04 D2** `polya_state_override`: 세션 경로가 넘기는 *서버 파생* Polya 상태. 주면 Polya
+    결정·LTHC가 클라 제출 `body.polya_state` 대신 이 값을 쓴다. 미주입(기본 None)이면 stateless
+    `/v1/coach`·직접 호출은 **완전 비트동일**. `recent_categories`(D1 reader ①)도 같은 규약.
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -480,19 +519,23 @@ def _build_response_payload(
     level = body.mastery_level
     if level is None:
         level = _ability_level(effective_bkt, server_theta)
+    # PED-04 D2: 세션 경로는 서버 파생 상태가 진실원천(클라 제출은 참고값). stateless는 override
+    # None이라 클라 제출 그대로 — 두 경로의 계약 차이가 이 한 줄에 모인다.
+    state = polya_state_override if polya_state_override is not None else body.polya_state
     decision = _coach.decide(
         body.student_input,
-        body.polya_state,
+        state,
         mastery_level=level,
         misconception_hypotheses=misconception_hypotheses,
         pack=pack,
+        recent_categories=recent_categories,
     )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
     # 있으면 substr → select_intervention이 substring 진단(검증된 표면 신호) 기준으로 구동.
     resolved = matches if matches is not None else diagnose(body.student_input)
     intervention = select_intervention(resolved[0]) if resolved else None
-    lthc = adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
+    lthc = adapt_lthc(state.current_stage, level) if level is not None else None
     # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
     entry_category = (
         focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None
@@ -946,6 +989,7 @@ async def _log_hint_event(
     hint_level: int | None,
     mode: str | None = None,
     persona: str | None = None,
+    client_state_mismatch: bool = False,
 ) -> None:
     """AI가 제공한 힌트 노출량(hint_level)을 `attempt_event`(event_type=힌트제공)로 1행 적재.
 
@@ -981,7 +1025,11 @@ async def _log_hint_event(
         problem_id=problem_id,
         event_type=EventType.힌트제공,
         event_data=build_event_data(
-            EventType.힌트제공, hint_level=hint_level, mode=mode, persona=persona
+            EventType.힌트제공,
+            hint_level=hint_level,
+            mode=mode,
+            persona=persona,
+            client_state_mismatch=client_state_mismatch,
         ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
@@ -1155,8 +1203,124 @@ def _intervention_from_hypotheses_or(
     return select_intervention_from_hypotheses(active_hypotheses) or fallback
 
 
+async def _turn_meta_rows(session: AsyncSession, dialogue_id: uuid.UUID) -> list[TurnMetaRow]:
+    """대화의 **평문 메타만** 컬럼 투영으로 읽는다(PED-04 D1 reader ①·D2 입력).
+
+    `select(DialogueTurnORM)`으로 엔티티를 통째 로드하지 **않는다** — 그러면 복호하지 않더라도
+    미성년 대화 ciphertext가 메모리에 올라온다(데이터 최소화). 4개 컬럼만 투영한다.
+
+    **호출 위치가 계약이다**: 이번 턴을 `session.add`하기 *전에* 불러야 한다. 뒤로 옮기면
+    `turn_count`가 이번 턴만큼 부풀어 D2 파생이 조용히 오염된다(통합 테스트가 수치로 동결).
+    """
+    result = await session.execute(
+        select(
+            DialogueTurnORM.turn_order,
+            DialogueTurnORM.role,
+            DialogueTurnORM.targeted_step,
+            DialogueTurnORM.student_intent,
+        )
+        .where(DialogueTurnORM.dialogue_id == dialogue_id)
+        .order_by(DialogueTurnORM.turn_order)
+    )
+    return [TurnMetaRow(*row) for row in result.all()]
+
+
+async def _prev_hint_level_for(
+    session: AsyncSession, *, user_id: uuid.UUID, problem_id: uuid.UUID | None
+) -> int | None:
+    """직전에 *제공한* 힌트 단계 — `_log_hint_event`(supply) 적재의 짝 reader(PED-04 D2).
+
+    지금까지 `prev_hint_level`은 클라가 실어 보냈다. 그런데 이 값은 답 미루기 점진 상승의 입력
+    이고 S3 파일럿의 "도달 깊이" KPI 축이라, 클라 신뢰에 맡기면 측정이 조작·버그에 열린다.
+    적재 좌석이 이미 있으므로 **신규 스키마 0으로** 서버가 되찾을 수 있다.
+
+    이력이 없으면 None(첫 결정 — `decide_hint_level`이 1부터 시작).
+    """
+    stmt = (
+        select(AttemptEventORM.event_data)
+        .where(
+            AttemptEventORM.user_id == user_id,
+            AttemptEventORM.event_type == EventType.힌트제공,
+        )
+        .order_by(AttemptEventORM.event_at.desc())
+        .limit(1)
+    )
+    if problem_id is not None:
+        stmt = stmt.where(AttemptEventORM.problem_id == problem_id)
+    payload = (await session.execute(stmt)).scalar_one_or_none()
+    if not isinstance(payload, dict):
+        return None
+    level = payload.get("hint_level")
+    return level if isinstance(level, int) and 1 <= level <= 4 else None
+
+
+async def _session_recall_or_none(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    active_hypotheses: list[MisconceptionHypothesis],
+    exclude_dialogue_id: uuid.UUID | None,
+) -> SessionRecall | None:
+    """직전 세션의 교수 이력을 **메타만** 회상한다(never-break·복호 0).
+
+    `_warmstart_hints_or_empty` 선례 그대로 never-break로 감싼다 — 회상 실패가 학생 응답을 깨면
+    안 된다(가용성 ≫ 회상). 예외는 삼키되 **타입명을 반드시 로그에 남긴다**(침묵 실패 금지).
+
+    본문 컬럼(`content`·`content_encrypted`·`image_*`)을 **select 목록에 넣지 않는다** — 이 함수가
+    암호화 봉투를 여는 경로가 되지 않게 하는 구조적 장치이며, SQL 캡처 테스트로 동결한다.
+    """
+    try:
+        prior_id = (
+            await session.execute(
+                select(DialogueORM.dialogue_id)
+                .where(
+                    DialogueORM.user_id == user_id,
+                    *(
+                        (DialogueORM.dialogue_id != exclude_dialogue_id,)
+                        if exclude_dialogue_id is not None
+                        else ()
+                    ),
+                )
+                .order_by(DialogueORM.started_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if prior_id is None:
+            return None
+
+        rows = (
+            await session.execute(
+                select(DialogueTurnORM.targeted_step, DialogueTurnORM.socratic_strategy)
+                .where(
+                    DialogueTurnORM.dialogue_id == prior_id,
+                    DialogueTurnORM.role == TurnRole.assistant,
+                )
+                .order_by(DialogueTurnORM.turn_order)
+            )
+        ).all()
+        turns_since = (
+            await session.execute(
+                select(sa_func.coalesce(sa_func.sum(DialogueORM.total_turns), 0)).where(
+                    DialogueORM.user_id == user_id,
+                    DialogueORM.dialogue_id != prior_id,
+                )
+            )
+        ).scalar_one()
+        return assemble_session_recall(
+            last_stage_step=rows[-1][0] if rows else None,
+            strategies=[strategy for _step, strategy in rows],
+            active_hypothesis_ids=[h.misconception_id for h in active_hypotheses],
+            turns_since=int(turns_since or 0),
+        )
+    except Exception as exc:  # noqa: BLE001 — 회상 실패는 학생 응답을 안 깬다(never-break).
+        logger.warning(
+            "세션 회상 조립 실패(%s) — 회상 없이 진행", type(exc).__name__, exc_info=True
+        )
+        return None
+
+
 async def _warmstart_hints_or_empty(
-    session: AsyncSession, *, problem_id: uuid.UUID | None
+    session: AsyncSession, *, problem_id: uuid.UUID | None, exclude_mids: Sequence[str] = ()
 ) -> list[str]:
     """웜스타트 probe 힌트(outside_mids) 조립 — WH-1 shadow·primary 공용(never-break).
 
@@ -1172,6 +1336,9 @@ async def _warmstart_hints_or_empty(
             session,
             problem_id=problem_id,
             provider=build_provider(get_settings()),
+            # PED-04: 이미 활성인 가설은 탐색 표적에서 뺀다(warmstart=무엇을 의심할지 /
+            # recall=무엇을 이미 시도했는지 — 교집합 0으로 상보 유지).
+            exclude_mids=exclude_mids,
         )
     except Exception as exc:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
         logger.warning(
@@ -1190,6 +1357,7 @@ async def _wh1_primary_decision_or(
     turn_index: int,
     dialogue_id: str | None,
     problem_id: uuid.UUID | None,
+    session_recall: SessionRecall | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1212,6 +1380,7 @@ async def _wh1_primary_decision_or(
             dialogue_id=dialogue_id,
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
+            session_recall=session_recall,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1224,7 +1393,9 @@ async def _wh1_primary_decision_or(
 
 
 def _build_dialogue_turn(
-    schema: DialogueTurnSchema, cipher: SupportsEnvelope | None
+    schema: DialogueTurnSchema,
+    cipher: SupportsEnvelope | None,
+    meta: TurnMeta | None = None,
 ) -> DialogueTurnORM:
     """감사상환 #2: 스키마 → 대화 턴 ORM(본문 봉투 암호화 적용) — 4개 write 경로의 단일 좌석.
 
@@ -1258,6 +1429,15 @@ def _build_dialogue_turn(
     turn.image_analysis = analysis_plain
     turn.image_analysis_encrypted = analysis_encrypted
     turn.image_analysis_nonce = analysis_nonce
+
+    # PED-04 D1: 교수 결정 메타 4축 적재. **평문 열**이라 위 봉투 암호화 3축과 성격이 다르고,
+    # 그래서 암호화 블록 *뒤*에 분리해 붙인다(암호화 좌석의 책임을 흐리지 않는다). `meta=None`
+    # (stateless·기존 호출)이면 한 줄도 실행되지 않아 현행과 비트동일.
+    if meta is not None:
+        turn.socratic_strategy = meta.socratic_strategy
+        turn.targeted_step = meta.targeted_step
+        turn.student_intent = meta.student_intent
+        turn.student_understanding_signal = meta.student_understanding_signal
     return turn
 
 
@@ -1352,9 +1532,22 @@ async def create_session(
     wh1_primary_on = get_settings().wh1_primary_enabled
     wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
     warmstart_mids: list[str] = []
+    session_recall: SessionRecall | None = None
     if wh1_primary_on or wh1_shadow_on:
+        # PED-04 D1 reader ②: 직전 세션의 교수 이력(메타 한정·복호 0). 하네스 게이트 *안*이라
+        # 두 플래그가 모두 OFF면 쿼리 0(비용·회귀 0).
+        session_recall = await _session_recall_or_none(
+            session,
+            user_id=user.user_id,
+            active_hypotheses=active_hypotheses,
+            exclude_dialogue_id=None,  # 아직 dialogue 미생성 — 제외할 대상 없음.
+        )
         # S1-c: 웜스타트 probe 힌트 조립(진단 probe 타깃팅 전용·never-break·헬퍼 docstring 참조).
-        warmstart_mids = await _warmstart_hints_or_empty(session, problem_id=body.problem_id)
+        warmstart_mids = await _warmstart_hints_or_empty(
+            session,
+            problem_id=body.problem_id,
+            exclude_mids=(session_recall.unresolved_hypothesis_ids if session_recall else ()),
+        )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
             observe_wh1_harness_shadow(
@@ -1365,9 +1558,31 @@ async def create_session(
                 problem_id=str(body.problem_id) if body.problem_id is not None else None,
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
+                session_recall=session_recall,
             )
         )
     pack = await _pack_for(session, body.problem_id)
+    # PED-04 D2: 새 dialogue라 *이 대화의* 턴 이력은 없다 — 그래서 D2가 "클라 vs 서버" 로
+    # 판정할 대상은 turn_count·prev_hint_level뿐이다. **current_stage는 다르다** — 새 세션의
+    # 진입 단계는 서버가 역산할 대상이 아니라 클라가 고르는 *초기 조건*이다(예: 이해 단계를
+    # 건너뛰고 PLAN에서 시작하는 정당한 진입). 그래서 클라 제출값을 그대로 받아들인다(오버라이드
+    # 아님). turn_count는 새 대화이므로 항상 0(클라가 0이 아닌 값을 보내면 그 자체가 불일치
+    # 신호). prev_hint_level은 *진짜* 서버 소유 데이터라 이 학생·이 문항의 직전 힌트 적재에서
+    # 되찾는다(세션을 새로 열어도 답 미루기 사다리가 리셋되지 않게). 회전 이력
+    # (`recent_categories`)은 정의상 비어 있다.
+    server_prev_hint = await _prev_hint_level_for(
+        session, user_id=user.user_id, problem_id=body.problem_id
+    )
+    server_state = PolyaState(
+        current_stage=body.polya_state.current_stage,
+        turn_count=0,
+        prev_hint_level=server_prev_hint,
+    )
+    mismatch_fields = detect_state_mismatch(body.polya_state, server_state)
+    if mismatch_fields:
+        logger.info(
+            "client_state_mismatch(세션 생성) fields=%s — 서버 파생값 우선", mismatch_fields
+        )
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1378,6 +1593,7 @@ async def create_session(
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
             pack=pack,
+            polya_state_override=server_state,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1394,6 +1610,7 @@ async def create_session(
             turn_index=1,  # 새 dialogue — 첫 교환(§2.2 ε 카운터·아래 _wh1_turn_state와 정합).
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
             problem_id=body.problem_id,
+            session_recall=session_recall,
         )
 
     now = datetime.now(timezone.utc)
@@ -1414,35 +1631,16 @@ async def create_session(
     # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
     # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
     content_cipher = require_dialogue_content_cipher(get_settings())
-    student_turn = _build_dialogue_turn(
-        DialogueTurnSchema(
-            dialogue_id=dialogue.dialogue_id,
-            turn_order=1,
-            spoken_at=now,
-            role=TurnRole.student,
-            content=body.student_input,
-            content_type=ContentType.텍스트,
-        ),
-        content_cipher,
-    )
-    assistant_turn = _build_dialogue_turn(
-        DialogueTurnSchema(
-            dialogue_id=dialogue.dialogue_id,
-            turn_order=2,
-            spoken_at=now,
-            role=TurnRole.assistant,
-            content=decision.prompt,
-            content_type=ContentType.텍스트,
-        ),
-        content_cipher,
-    )
-    session.add_all([student_turn, assistant_turn])
     # S3-03 mode 태깅 — 요청의 응용 모드/페르소나를 event_data에 실을 문자열로 정규화한다.
     # persona는 Persona enum이라 .value(문자열)로 싣는다(둘 다 None이면 미태깅·기존 동작 불변).
     event_persona = body.persona.value if body.persona is not None else None
     # WH-1 지표 ① 적재 — 풀이 제출(student_solution 비어있지 않음)이면 검산 결과를 attempt_event로
     # 기록(같은 트랜잭션 합류·별도 commit 없음). stateless /v1/coach는 미적재(DB 무접근 계약).
     # S3-03: body.mode·persona를 실어 수능 세션 검산결과를 측정 계층에서 식별 가능하게 한다.
+    # **PED-04 재정렬**: 이 적재를 턴 생성 *앞*으로 옮겼다 — `student_understanding_signal`이
+    # `verify_passed`를 축으로 쓰기 때문이다. 두 `session.add`는 같은 트랜잭션·FK 의존 0이라
+    # 순서 교환이 의미상 무해하고, `_log_match_evidence`→`_log_refutation_evidence` 상대 순서
+    # (curate 뒤·no-match 게이트)는 손대지 않았다.
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
@@ -1455,6 +1653,8 @@ async def create_session(
     # WH-1 지표 ⑤ 적재 — 이미 계산된 decision.hint_level(supply·1~4)을 그대로 기록(재계산 0·
     # _build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도 commit 없음).
     # S3-03: verify와 동일 mode·persona 태그를 실어 ⑤⑧ mode-scoped 집계를 가능하게 한다.
+    # PED-04 D2: 클라 제출 상태와의 불일치 여부를 이 이벤트에 태그로 실어 *영속 좌석*을 만든다
+    # (신규 EventType·컬럼 0 — JSONB 페이로드 확장). 로그만 두면 집계가 불가능하다.
     await _log_hint_event(
         session,
         user_id=user.user_id,
@@ -1463,7 +1663,58 @@ async def create_session(
         hint_level=decision.hint_level,
         mode=body.mode,
         persona=event_persona,
+        client_state_mismatch=bool(mismatch_fields),
     )
+    # PED-04 D1: 교수 결정 메타 조립 — 전부 위에서 *이미 계산된* 값이다(재계산 0).
+    target_stage = (
+        next_polya_stage(server_state.current_stage)
+        if decision.polya_stage_to_advance == "next"
+        else server_state.current_stage
+    )
+    targeted_step = stage_to_targeted_step(target_stage)
+    student_turn = _build_dialogue_turn(
+        DialogueTurnSchema(
+            dialogue_id=dialogue.dialogue_id,
+            turn_order=1,
+            spoken_at=now,
+            role=TurnRole.student,
+            content=body.student_input,
+            content_type=ContentType.텍스트,
+        ),
+        content_cipher,
+        TurnMeta(
+            targeted_step=targeted_step,
+            student_intent=classify_student_intent(
+                student_input=body.student_input,
+                has_solution=bool((body.student_solution or "").strip()),
+            ),
+            student_understanding_signal=compose_understanding_signal(
+                mastery=(server_mastery if server_mastery is not None else body.bkt_mastery),
+                verify_passed=verify_passed,
+                stuck_turns=server_state.turn_count,
+            ),
+        ),
+    )
+    assistant_turn = _build_dialogue_turn(
+        DialogueTurnSchema(
+            dialogue_id=dialogue.dialogue_id,
+            turn_order=2,
+            spoken_at=now,
+            role=TurnRole.assistant,
+            content=decision.prompt,
+            content_type=ContentType.텍스트,
+        ),
+        content_cipher,
+        TurnMeta(
+            socratic_strategy=resolve_socratic_strategy(
+                intervention=intervention,
+                reveals=decision.reveals,
+                target_stage=target_stage,
+            ),
+            targeted_step=targeted_step,
+        ),
+    )
+    session.add_all([student_turn, assistant_turn])
     # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
     # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
     await _log_match_evidence(
@@ -1503,6 +1754,7 @@ async def create_session(
         assistant_turn_id=assistant_turn.turn_id,
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
+        client_state_mismatch=bool(mismatch_fields),
     )
 
 
@@ -1531,6 +1783,25 @@ async def append_turns(
     if dialogue is None or dialogue.user_id != user.user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
+        )
+
+    # PED-04 D1·D2: **이번 턴을 적재하기 전에** 직전 턴들의 평문 메타를 읽는다(순서가 계약 —
+    # `_turn_meta_rows` docstring 참조). 여기서 Polya 상태를 서버가 파생하고, 발문 회전용
+    # 카테고리 꼬리 연속열을 복원한다. 클라 제출값은 참고로만 두고 불일치를 표면화한다.
+    meta_rows = await _turn_meta_rows(session, dialogue_id)
+    server_prev_hint = await _prev_hint_level_for(
+        session, user_id=user.user_id, problem_id=dialogue.problem_id
+    )
+    server_state = derive_polya_state(meta_rows, prev_hint_level=server_prev_hint)
+    recent_categories = derive_recent_categories(meta_rows)
+    mismatch_fields = detect_state_mismatch(body.polya_state, server_state)
+    if mismatch_fields:
+        # 침묵 실패 금지 — 무엇이 어긋났는지·양쪽 값(enum/int·PII 아님)을 구조화해 남긴다.
+        logger.info(
+            "client_state_mismatch(턴 추가) fields=%s client=%s server=%s — 서버 파생값 우선",
+            mismatch_fields,
+            body.polya_state.model_dump(mode="json", exclude={"history"}),
+            server_state.model_dump(mode="json", exclude={"history"}),
         )
 
     # slice 64: 멀티턴 경로도 문항 맥락 주입 — dialogue에 이미 실린 problem_id로 기대정답 조회
@@ -1566,9 +1837,19 @@ async def append_turns(
     wh1_primary_on = get_settings().wh1_primary_enabled
     wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
     warmstart_mids_turn: list[str] = []
+    session_recall: SessionRecall | None = None
     if wh1_primary_on or wh1_shadow_on:
+        # PED-04 D1 reader ②: *직전* 세션(현 dialogue 제외)의 교수 이력 — 메타 한정·복호 0.
+        session_recall = await _session_recall_or_none(
+            session,
+            user_id=user.user_id,
+            active_hypotheses=active_hypotheses,
+            exclude_dialogue_id=dialogue_id,
+        )
         warmstart_mids_turn = await _warmstart_hints_or_empty(
-            session, problem_id=dialogue.problem_id
+            session,
+            problem_id=dialogue.problem_id,
+            exclude_mids=(session_recall.unresolved_hypothesis_ids if session_recall else ()),
         )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
@@ -1582,6 +1863,7 @@ async def append_turns(
                 turn_index=(dialogue.total_turns or 0) // 2 + 1,
                 problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
                 warmstart_outside_mids=warmstart_mids_turn,
+                session_recall=session_recall,
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
@@ -1595,6 +1877,8 @@ async def append_turns(
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
             pack=pack,
+            polya_state_override=server_state,
+            recent_categories=recent_categories,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1610,6 +1894,7 @@ async def append_turns(
             turn_index=(dialogue.total_turns or 0) // 2 + 1,
             dialogue_id=str(dialogue_id),
             problem_id=dialogue.problem_id,
+            session_recall=session_recall,
         )
 
     current_total = dialogue.total_turns or 0
@@ -1619,41 +1904,14 @@ async def append_turns(
     now = datetime.now(timezone.utc)
     # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
     content_cipher = require_dialogue_content_cipher(get_settings())
-    student_turn = _build_dialogue_turn(
-        DialogueTurnSchema(
-            dialogue_id=dialogue_id,
-            turn_order=student_order,
-            spoken_at=now,
-            role=TurnRole.student,
-            content=body.student_input,
-            content_type=ContentType.텍스트,
-        ),
-        content_cipher,
-    )
-    assistant_turn = _build_dialogue_turn(
-        DialogueTurnSchema(
-            dialogue_id=dialogue_id,
-            turn_order=assistant_order,
-            spoken_at=now,
-            role=TurnRole.assistant,
-            content=decision.prompt,
-            content_type=ContentType.텍스트,
-        ),
-        content_cipher,
-    )
-    session.add_all([student_turn, assistant_turn])
-
-    # dialogue 카운트 증가 — 다음 append의 `total_turns` 입력.
-    dialogue.total_turns = current_total + 2
-    dialogue.student_turns = (dialogue.student_turns or 0) + 1
-    dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
-
     # S3-03 mode 태깅 — 멀티턴은 클라가 매 턴 같은 mode/persona를 실어 보낸다(dialogue 컬럼 대신
     # 요청 재사용·least-invasive·zero-migration). body가 CoachRequest라 두 값을 그대로 가진다.
     event_persona = body.persona.value if body.persona is not None else None
     # WH-1 지표 ① 적재 — create_session과 동형(풀이 제출 턴만·같은 트랜잭션 합류). problem_id·
     # attempt_id는 dialogue에서 출처(append는 dialogue 컨텍스트).
     # S3-03: body.mode·persona를 실어 수능 세션 후속 턴의 검산결과도 측정 계층에서 식별 가능.
+    # PED-04 재정렬: create_session과 동형 — 이해도 신호가 verify 판정을 축으로 쓰므로 턴 생성
+    # *앞*에서 계산한다(같은 트랜잭션·FK 의존 0·증거 적재 상대 순서 불변).
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
@@ -1667,6 +1925,7 @@ async def append_turns(
     # 기록·재계산 0·_build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도
     # commit 없음). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
     # S3-03: verify와 동일 mode·persona 태그를 실어 후속 턴의 ⑤⑧ 집계도 mode-scoped 가능.
+    # PED-04 D2: 클라 제출 상태 불일치 태그(영속 좌석·신규 EventType 0).
     await _log_hint_event(
         session,
         user_id=user.user_id,
@@ -1675,7 +1934,64 @@ async def append_turns(
         hint_level=decision.hint_level,
         mode=body.mode,
         persona=event_persona,
+        client_state_mismatch=bool(mismatch_fields),
     )
+    # PED-04 D1: 교수 결정 메타 — create_session과 동형. 목표 단계는 *서버 파생* 상태 기준이다
+    # (클라 제출 기준이면 D2가 되찾은 진실원천이 다시 클라로 새어 나간다).
+    target_stage = (
+        next_polya_stage(server_state.current_stage)
+        if decision.polya_stage_to_advance == "next"
+        else server_state.current_stage
+    )
+    targeted_step = stage_to_targeted_step(target_stage)
+    student_turn = _build_dialogue_turn(
+        DialogueTurnSchema(
+            dialogue_id=dialogue_id,
+            turn_order=student_order,
+            spoken_at=now,
+            role=TurnRole.student,
+            content=body.student_input,
+            content_type=ContentType.텍스트,
+        ),
+        content_cipher,
+        TurnMeta(
+            targeted_step=targeted_step,
+            student_intent=classify_student_intent(
+                student_input=body.student_input,
+                has_solution=bool((body.student_solution or "").strip()),
+            ),
+            student_understanding_signal=compose_understanding_signal(
+                mastery=(server_mastery if server_mastery is not None else body.bkt_mastery),
+                verify_passed=verify_passed,
+                stuck_turns=server_state.turn_count,
+            ),
+        ),
+    )
+    assistant_turn = _build_dialogue_turn(
+        DialogueTurnSchema(
+            dialogue_id=dialogue_id,
+            turn_order=assistant_order,
+            spoken_at=now,
+            role=TurnRole.assistant,
+            content=decision.prompt,
+            content_type=ContentType.텍스트,
+        ),
+        content_cipher,
+        TurnMeta(
+            socratic_strategy=resolve_socratic_strategy(
+                intervention=intervention,
+                reveals=decision.reveals,
+                target_stage=target_stage,
+            ),
+            targeted_step=targeted_step,
+        ),
+    )
+    session.add_all([student_turn, assistant_turn])
+
+    # dialogue 카운트 증가 — 다음 append의 `total_turns` 입력.
+    dialogue.total_turns = current_total + 2
+    dialogue.student_turns = (dialogue.student_turns or 0) + 1
+    dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
     # WH-1 §2.3 — create_session과 동형. 이번 턴 확정 매치를 +1 지지 증거로 적재(생산측·curate 뒤).
     await _log_match_evidence(
         session,
@@ -1714,6 +2030,7 @@ async def append_turns(
         assistant_turn_order=assistant_order,
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
+        client_state_mismatch=bool(mismatch_fields),
     )
 
 

@@ -100,13 +100,31 @@ def test_hint_shape() -> None:
         "hint_level": 3,
         "mode": None,
         "persona": None,
+        # PED-04 D2: 불일치 태그 — 미지정 시 기본 False(기존 픽스처 무손상).
+        "client_state_mismatch": False,
     }
 
 
 def test_hint_mode_persona_tag() -> None:
     """S3-03: 힌트제공에 mode/persona 태그를 실으면 event_data에 그대로 보존(⑤⑧ mode-scoped)."""
     data = build_event_data(EventType.힌트제공, hint_level=2, mode="suneung")
-    assert data == {"hint_level": 2, "mode": "suneung", "persona": None}
+    assert data == {
+        "hint_level": 2,
+        "mode": "suneung",
+        "persona": None,
+        "client_state_mismatch": False,
+    }
+
+
+def test_hint_client_state_mismatch_tag() -> None:
+    """PED-04 D2: client_state_mismatch=True 명시 시 event_data에 그대로 보존(집계 가능 좌석)."""
+    data = build_event_data(EventType.힌트제공, hint_level=1, client_state_mismatch=True)
+    assert data == {
+        "hint_level": 1,
+        "mode": None,
+        "persona": None,
+        "client_state_mismatch": True,
+    }
 
 
 def test_interaction_envelope_shape() -> None:
