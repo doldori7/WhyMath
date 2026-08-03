@@ -62,14 +62,16 @@ Universal Concept ID  ─┐
   가능(`WM-C-…`/`UC.*` 표기는 stale).
 - **국가 코드**: ISO 3166-1 alpha-2 (`KR`·`US`·`JP`·`GB` 등). IMO는 국가가
   아니므로 의사 코드 `IMO` 사용 (국제 올림피아드 신택터스).
-- **CurriculumEntry**: (개념, 국가) 한 쌍에 대한 30필드 레코드. 셀이 비어 있을
-  수 있다(그 나라 교육과정에 그 개념이 없음) — `is_present: false`로 표시.
+- **CurriculumEntry**: (개념, 국가, 과목) 세 값에 대한 31필드 레코드(2026-08-03 정정 —
+  애초 "(개념, 국가) 2-튜플·30필드"는 stale. `curriculum_entry_subject_axis` 마이그레이션이
+  2026-07-02에 이미 `subject` 축을 추가했다). 셀이 비어 있을 수 있다(그 나라 교육과정에 그
+  개념이 없음) — `is_present: false`로 표시.
 
-### 2.2 `CurriculumEntry` 30필드 (그룹별 요약)
+### 2.2 `CurriculumEntry` 31필드 (그룹별 요약, 2026-08-03 정정 — PK·필드수)
 
 | 그룹 | 대표 필드 | 설명 |
 |---|---|---|
-| 식별 | `concept_id`, `country_code`, `entry_id` | 셀 PK는 (`concept_id`,`country_code`) |
+| 식별 | `concept_id`, `country_code`, `subject`, `entry_id` | ORM PK는 `entry_id` **단일 PK**(표면 식별자), 복합 의미키는 `UniqueConstraint(concept_id, country_code, subject)` 3-튜플(`db/models/curriculum_entry.py:9-11`) — 애초 "셀 PK는 (`concept_id`,`country_code`)" 2-튜플 서술은 stale |
 | 출처 | `source_name`, `source_code`, `source_url`, `source_document`, `license_id` | 국가별 교육과정 표준 출처 (§3) |
 | 시점 | `introduced_grade`, `grade_band`, `effective_from`, `curriculum_revision` | 도입 학년·학년군·시행 |
 | 맥락 | `introduced_context`, `domain_label`, `sub_domain_label` | 어떤 맥락/단원에서 처음 등장 |
@@ -79,8 +81,9 @@ Universal Concept ID  ─┐
 | 매핑 | `national_standard_codes`, `textbook_unit_refs` | 국가 표준 코드·교과서 단원 참조 |
 | 상태 | `is_present`, `confidence`, `verified_by`, `created_at`, `updated_at` | 셀 존재 여부·신뢰도·검수자 |
 
-> 정확히 30개 필드의 1:1 명세는 `schemas/v1.1/curriculum_entry.yaml`이 정본.
-> 위는 *그룹 단위 요약* — 카드는 구조를 설명하고, 스키마는 필드를 확정한다.
+> 정확히 필드 명세는 `schemas/v1.1/curriculum_entry.schema.yaml`(`field_count: 31` — "PRD 부록
+> A 30개 + subject 1개")이 정본. 위는 *그룹 단위 요약* — 카드는 구조를 설명하고, 스키마는
+> 필드를 확정한다.
 
 ### 2.3 한국 열 = NCIC 성취기준
 
@@ -101,7 +104,11 @@ KR 국가의 CurriculumEntry  ←─  ncic.md 의 AchievementStandard 에서 파
 
 ### 2.4 셀 데이터 모델 (Pydantic — Phase 1 시그니처)
 
-`src/data-pipeline/data_pipeline/curriculum_matrix/models.py` (미구현):
+`src/data-pipeline/data_pipeline/curriculum_matrix/models.py` (2026-08-03 정정: 이 경로는
+미구현이 맞으나, 실제 구현 위치는 백엔드 쪽으로 옮겨졌다 —
+`src/backend/whymath_backend/db/models/curriculum_entry.py`(ORM)·
+`src/backend/whymath_backend/l1/curriculum/curriculum_loader.py`(적재기)·
+`curriculum_resolve.py`(조회)가 이미 구현·적재 완료 상태다):
 
 ```python
 class CurriculumEntry(BaseModel):
