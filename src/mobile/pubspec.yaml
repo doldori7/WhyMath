@@ -45,9 +45,13 @@ dependencies:
   # 4.2.5는 compileSdk 36 하드코딩. 재도입 시 고정 Flutter와의 Gradle 호환을 실기기 빌드로 검증할 것.
   # 차트
   fl_chart: ^0.69.0
-  # 푸시
-  firebase_messaging: ^15.0.0
-  firebase_core: ^3.0.0
+  # 푸시 — 클라 FCM 연동은 *기능 착수 시* 재도입한다(현재 firebase_messaging·firebase_core
+  # lib/test 사용처 0·선언만 있던 상태 — MOB-08, TTS/STT 제거에 이은 2회차 반복실수).
+  # 제거 이유: google-services.json 파일 자체가 저장소에 없고, android/ Gradle(build.gradle·
+  # settings.gradle·app/build.gradle) 어디에도 Firebase 플러그인이 적용돼 있지 않으며, ios/
+  # 디렉터리 자체가 존재하지 않는다 — 두 패키지 모두 플랫폼 설정이 전혀 안 걸려 선언만 존재했다.
+  # 재도입 시 FCM을 실제 기능으로 구현하며(디바이스 토큰 발급·백엔드 저장·google-services.json·
+  # Gradle 플러그인 적용) 함께 진행할 것.
 
 dev_dependencies:
   flutter_test:

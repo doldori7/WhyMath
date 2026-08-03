@@ -19,6 +19,7 @@ artifacts: []
 paths:
   - src/mobile/pubspec.yaml
   - src/mobile/pubspec.lock
+  - src/mobile/test/pubspec_dependency_usage_governance_test.dart
   - "tests/infra/**"
   - ".github/workflows/ci.yml"
 session: claude/backlog-drive-next
