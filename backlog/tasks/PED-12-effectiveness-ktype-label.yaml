@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-12-effectiveness-ktype-label
+title: "adaptive/effectiveness.py k_type 라벨 맹글링 수정 — str(enum)→.value + 소스 스캔 동결"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "effectiveness.py:173 str(outcome.k_type)를 .value로 수정 — 집계 키 라벨 \"KnowledgeType.X\"→\"X\" 정상화"
+  - "str(k_type) 맹글링 패턴 소스 스캔 동결 테스트를 adaptive 경로에 확장(PED-06 TestKTypeValueFrozen 선례)"
+  - "기존 effectiveness 테스트 전건 유지 + 라벨 정상화 회귀 테스트"
+artifacts:
+  - commit 4fd8684a
+paths:
+  - "src/backend/whymath_backend/l4/pedagogy/adaptive/**"
+  - "tests/backend/l4/adaptive/**"
+session: null
+notes: "PED-06 구현 중 발견(2026-07-29): study.py와 동일한 str-mixin Enum 맹글링 — 플러시 없음·집계 내 일관이라 조인은 성립하나 보고 라벨이 \"KnowledgeType.CONCEPT\"로 틀림. PED-03 도메인이라 분리 등재."
+updated: 2026-08-03

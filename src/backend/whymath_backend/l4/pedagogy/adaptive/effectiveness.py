@@ -170,7 +170,12 @@ def aggregate_effectiveness(rows: list[EvidenceEvent]) -> EffectivenessReport:
             continue  # 정답 여부 미기록 — 정답률 분모에 넣지 않는다.
         key = EffectivenessKey(
             strategy=strategy,
-            k_type=str(outcome.k_type),
+            # k_type에 그냥 str()을 씌우면 str-mixin Enum이라 "KnowledgeType.CONCEPT"로
+            # 맹글링된다(PED-12·2026-07-29 study.py 동일 사고). 실 DB 행은 native enum으로 읽혀
+            # `.value`가 필요하지만, 이 함수는 순수 함수라 테스트가 평문 문자열을 직접 구성해
+            # 넣기도 한다(`.value` 미보유) — `coach.py::_pack_for`의 getattr 정규화 선례를 그대로
+            # 따라 두 형태 모두 안전하게 값으로 정규화한다.
+            k_type=getattr(outcome.k_type, "value", outcome.k_type),
             objective_id=outcome.objective_id,
         )
         stat = stats[key]

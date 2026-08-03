@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -17,11 +18,13 @@ from whymath_backend.l2.pedagogy_evidence import (
     EVENT_TYPE_TREATMENT,
     META_KEY_STRATEGY,
 )
+from whymath_backend.l4.pedagogy.adaptive import effectiveness
 from whymath_backend.l4.pedagogy.adaptive.effectiveness import (
     EffectivenessKey,
     EffectivenessStat,
     aggregate_effectiveness,
 )
+from whymath_backend.schema.enums import KnowledgeType
 
 _T0 = datetime(2026, 7, 26, tzinfo=UTC)
 _OBJ = "OBJ.quadratic.01"
@@ -156,3 +159,38 @@ class TestWilsonJudgement:
         json_cells = report.to_json()["cells"]
         assert isinstance(json_cells, list)
         assert {c["strategy"] for c in json_cells} == {"SOCRATIC", "DIRECT"}
+
+
+class TestKTypeLabelNotMangled:
+    """PED-12 회귀 — 실 DB native enum 행에서도 라벨이 "KnowledgeType.CONCEPT"로 맹글링되지 않는다.
+
+    study.py 동일 사고(2026-07-29)의 adaptive 판. `str(outcome.k_type)`이 str-mixin Enum이라
+    낸 틀린 라벨을 `.value`(또는 이미 평문 문자열인 픽스처는 그대로)로 정규화하는 회귀 동결.
+    """
+
+    def test_real_enum_instance_yields_bare_value_label(self) -> None:
+        sid = uuid.uuid4()
+        treatment = _treatment(sid, "SOCRATIC")
+        outcome = _outcome(sid, True)
+        outcome.k_type = KnowledgeType.CONCEPT  # 실 DB native enum 행을 시뮬레이션
+        report = aggregate_effectiveness([treatment, outcome])
+        key = EffectivenessKey(strategy="SOCRATIC", k_type="CONCEPT", objective_id=_OBJ)
+        assert report.stats[key].trials == 1
+        assert all(not k.k_type.startswith("KnowledgeType.") for k in report.stats)
+
+
+class TestKTypeValueSourceFrozen:
+    """소스 스캔 동결 — `str(outcome.k_type)` 맹글링 패턴의 재발을 막는다 (PED-06 선례 확장)."""
+
+    def test_source_has_no_str_mangled_k_type(self) -> None:
+        source = inspect.getsource(effectiveness)
+        assert "str(outcome.k_type)" not in source, (
+            "str(outcome.k_type)은 'KnowledgeType.CONCEPT'로 맹글링된다 — "
+            "adaptive 효과 집계의 보고 라벨이 틀리게 기록된다(PED-12·2026-07-29 실측). "
+            "getattr(outcome.k_type, 'value', outcome.k_type)을 쓰라."
+        )
+        assert 'getattr(outcome.k_type, "value", outcome.k_type)' in source
+
+    def test_mangling_premise_still_holds(self) -> None:
+        # 이 동결의 전제 실측 — str-mixin Enum의 str()은 값이 아니다(전제가 바뀌면 동결 재검토).
+        assert str(KnowledgeType.CONCEPT) != KnowledgeType.CONCEPT.value

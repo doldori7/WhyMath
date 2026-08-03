@@ -152,6 +152,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - 모든 데이터베이스 접근은 ORM/쿼리 빌더 — 원시 SQL 최소화
 - 한국어 주석을 코드에 직접 작성 (Kiki 선호)
 - **외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다** — 로케일 인코딩(한국어 Windows=cp949)으로 읽는 파일(uvicorn `--log-config` 등)은 **ASCII 전용** + 회귀 테스트 동결. 한국어 설명은 파일이 아니라 런북/문서에 둔다. (2026-07-17 logconfig UnicodeDecodeError 기동 실패 실측 — `test_wh1_shadow_logconfig.py` 선례)
+- **백엔드 pytest는 `src/backend`에서 인자 없이(testpaths) 실행한다** — `../../tests/...` 경로 인자를 주면 pytest rootdir이 리포 루트로 잡혀 `src/backend/pyproject.toml`의 `[tool.pytest.ini_options]`(특히 `asyncio_mode=auto`)가 **통째로 미적용**되고, 마크 없는 async 테스트가 "async not supported"로 대량 위장 실패한다(파일 선택 실행이 필요하면 `-c pyproject.toml` 동봉). 위장 실패를 회귀로 오판하지 말 것 — 판정 전 세션 헤더의 `rootdir`·`asyncio: mode`를 확인한다. (2026-07-29 실측: PED-07/05 검증에서 경로 인자 실행이 60~529건 가짜 실패를 만들어 두 태스크 연속 오도 — `-c pyproject.toml` 동봉 시 전건 통과)
 
 ### LLM 사용
 - 모든 LLM 호출 → Langfuse 추적

@@ -283,6 +283,14 @@ jobs:
           python -m whymath_backend.harness.pedagogy_pack_fidelity_eval \
             --n-per-cell 12 --max-miss-upper 0.05 --max-false-alarm-upper 0.2
 
+      # PED-09 ③: 비유·예시 결함주입 강등전(04e §6.3). 고정 그리드 실측 여유값 —
+      # violating 432셀 미검출 0 → Wilson 상한 0.0062 · clean 144셀 오검출 0 → 상한 0.0184.
+      # 생성기(analogy/example_generator) 검수 게이트의 검출력을 상시 봉인한다(게임형 0 검사 포함).
+      - name: 게이트 — 비유·예시 결함 검출기 (analogy_fidelity·미검출 상한 0.05·오검출 상한 0.2)
+        run: |
+          python -m whymath_backend.harness.analogy_fidelity_eval \
+            --n-per-cell 12 --max-miss-upper 0.05 --max-false-alarm-upper 0.2
+
       # NS-03 — 코퍼스 표기 ⊆ 지원 표기(data/notation_support_manifest.json) 커버리지 게이트.
       # hermetic(LLM 0·DB 0)·결정론. 신규 누락 심볼 발견 시 exit 1(베이스라인 래칫) — 변별력은
       # tests/backend/l3/test_notation_coverage_eval.py의 --control-empty-support 대조군이 봉인.
