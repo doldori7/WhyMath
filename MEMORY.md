@@ -642,6 +642,39 @@ segmentation_contract_test.dart`가 계약 JSON을 로드해 `ChatController.sen
 SDK가 이 세션 환경에 없어 실행 미확인(정적 트레이스로 10케이스 전부 수동 검증) — 후속
 세션에서 `flutter test test/segmentation_contract_test.dart` 실행 필요.
 
+### 2026-08-03 (구현·VIZ-03): **Graph2dSpec 표현력 확장 — 접선(점)·적분영역(구간)·함수비교(다중 함수) 3필드, '극값 표시'는 렌더러 미구현 확인으로 범위 제외** (claude 직접 구현, Kiki "/drive")
+
+**배경**: `visualization_module_gap_review.md` §3 D4. 웹 계산기(`GraphingCalculator.jsx`)가
+이미 접선(`showTangent`/`tangentX`)·적분 영역(`showIntegral`/`intA`/`intB`)·다중 함수 행
+(`rows` 배열)을 렌더하지만 `Graph2dSpec`은 `function`·`domain`·`y_range`·`parameters` 4필드뿐
+이라 코어가 이 능력을 지시할 수 없었다.
+
+**조사 결과 — acceptance ①의 4항목 중 3항목만 구현**: D4 문서 §1 기능62 표를 다시 확인한
+결과("극대·극소 자동 표시" 행) 문서가 이미 정확히 "극값 자동 표시 ✗"라고 적어뒀다 — 계산기에
+극값 마커를 그리는 기능 자체가 없다(근·절편 표시만 있음). 이 항목만 "렌더러가 이미 하는
+것에 좌석을 준다"는 이 태스크의 제약(신규 렌더러 구현 금지)과 충돌해 제외했다 — 렌더러에
+실제 극값 마커를 추가하는 것은 별도 범위(새 canvas 그리기 로직 필요). 나머지 3항목(접선·
+적분영역·함수비교)은 실측으로 확인한 대로 기존 렌더러 상태 필드에 값만 채우면 되어 그대로
+구현했다.
+
+**구현**: `schema/visualization.py::Graph2dSpec`에 `tangent_point: float|None`·
+`integral_region: list[float]|None`·`functions: list[str]|None` 3필드 추가(전부 optional·
+타입만 검증). 웹 어댑터(`graph2dSpec.js::graph2dSpecToState`)가 `tangent_point`→주 함수 행의
+`showTangent`/`tangentX`, `integral_region`→`showIntegral`/`intA`/`intB`, `functions`→주
+함수 뒤에 비교 함수 행 추가로 변환(새 렌더 로직 0 — 기존 `rows` 배열 shape 재사용).
+`tangent_point`·`integral_region`은 주 함수(단수) 행에만 적용 — acceptance가 단수로
+서술한 것과 정합. Flutter는 **변경 0**(`Visualization.spec`이 이미 `Map<String,dynamic>?`
+제네릭 봉투라 신규 필드에 무관 — 확인 후 결정, 억지로 손대지 않음).
+
+**변별력 실측(acceptance ⑤)**: 어댑터 코드를 커밋 전 임시로 되돌려(`git stash`) JS 테스트가
+실제로 red를 내는지 확인(6건 실패) → 복원해 green(57건 전부 통과) 확인. 새 판정 로직이 아니라
+기존 테스트가 자연히 discriminative함을 실측(별도 메타 게이트 신설 없이 acceptance 충족).
+
+**검증**: 백엔드 `tests/backend/schema/test_visualization_spec.py`(신규 8케이스 포함 149건)·
+ruff·black·mypy clean. 웹 `graph2dSpec.test.js`(신규 9케이스 포함 57건) + 전체 vitest
+스위트(123건) green. `backlog/tasks/VIZ-03-...yaml` notes에 극값 제외 사유·S4-03 경계
+상호 참조 기록.
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데

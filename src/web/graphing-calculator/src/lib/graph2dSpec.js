@@ -11,27 +11,60 @@
 //
 // Graph2dSpec 형태:
 //   { function: "a*x**2+b*x+c", domain: [xMin, xMax], y_range: [yMin, yMax]?,
-//     parameters: [{name,min,max,step,default}] }
+//     parameters: [{name,min,max,step,default}], tangent_point?, integral_region?, functions? }
 //
 // 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
+//
+// VIZ-03(2026-08-03) — tangent_point·integral_region·functions: 렌더러(GraphingCalculator.jsx)가
+// *이미* 각 함수 행(row)에 접선(showTangent/tangentX)·적분 영역(showIntegral/intA/intB)·다중
+// 행(rows 배열)을 지원한다 — 여기선 그 기존 상태 필드에 값을 채워 넣을 뿐 새 렌더 로직은 0이다.
+// tangent_point·integral_region은 *주 함수*(function) 행에만 적용한다(명세가 단수 — 함수별
+// 개별 접선/적분은 이 계약 밖). functions는 주 함수에 *추가*되는 비교 함수 행들이다.
 import * as math from "mathjs";
 import { classify, extractVars } from "./mathExpr.js";
+
+// 함수식 문자열 1개 → 행(row) 부분 객체({latex, expr}). 파이썬식 '**'를 mathjs '^'로 변환.
+const _functionToRow = (fn) => {
+  const expr = fn.replace(/\*\*/g, "^").trim();
+  let latex = expr;
+  try {
+    latex = math.parse(expr).toTex();
+  } catch {
+    /* 파싱 실패 시 원본 문자열을 latex로 사용(텍스트 모드 폴백) */
+  }
+  return { latex, expr };
+};
 
 // Graph2dSpec → 계산기 applyState 호환 부분 상태({rows, sliders, view}). 변환할 게 없으면 null.
 export const graph2dSpecToState = (spec) => {
   if (!spec || typeof spec !== "object") return null;
 
-  // function: 파이썬식 '**' 지수를 mathjs '^'로 변환, latex는 toTex로 생성(MathField 표시용).
+  // function(주 함수) + functions(비교 함수 목록) → rows. 주 함수가 있으면 첫 행이 되고,
+  // 그 행에만 tangent_point/integral_region이 실린다(아래).
   const rows = [];
   if (typeof spec.function === "string" && spec.function.trim()) {
-    const expr = spec.function.replace(/\*\*/g, "^").trim();
-    let latex = expr;
-    try {
-      latex = math.parse(expr).toTex();
-    } catch {
-      /* 파싱 실패 시 원본 문자열을 latex로 사용(텍스트 모드 폴백) */
+    rows.push(_functionToRow(spec.function));
+  }
+  if (Array.isArray(spec.functions)) {
+    spec.functions.forEach((fn) => {
+      if (typeof fn === "string" && fn.trim()) rows.push(_functionToRow(fn));
+    });
+  }
+
+  // tangent_point → 주 함수(rows[0]) 행에 접선 표시 좌석(기존 showTangent/tangentX 상태 재사용).
+  if (rows.length && Number.isFinite(spec.tangent_point)) {
+    rows[0].showTangent = true;
+    rows[0].tangentX = spec.tangent_point;
+  }
+
+  // integral_region [a, b] → 주 함수(rows[0]) 행에 적분 영역 좌석(기존 showIntegral/intA/intB).
+  if (rows.length && Array.isArray(spec.integral_region) && spec.integral_region.length === 2) {
+    const [a, b] = spec.integral_region;
+    if (Number.isFinite(a) && Number.isFinite(b) && a < b) {
+      rows[0].showIntegral = true;
+      rows[0].intA = a;
+      rows[0].intB = b;
     }
-    rows.push({ latex, expr });
   }
 
   // parameters → sliders (이름·범위·기본값). 누락 필드는 계산기 기본값으로 보정.
