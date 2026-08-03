@@ -460,6 +460,15 @@
 금지(원자 축 이관·이중 진실 원천 해소는 완결 상태 그대로 인용만).
 
 정본: `docs/architecture/curriculum_module_gap_review.md`.
+### 2026-08-02 (설계·UI·관리자 콘솔): **관리 모듈 declarative 레지스트리 + `GET /v1/admin/menu` 자동 파생 좌측 내비 설계 신설 — "모든 가능 메뉴 자동 등록"** (claude 설계·문서, Kiki "관리자 작업화면에 모든 가능 메뉴가 자동으로 등록 되도록 설정해줘")
+
+**배경**: 관리자 콘솔(Operator Console)은 저장소에 코드가 전혀 없고 `docs/design/ui/03_admin_console_plan.md`·`04_admin_console_architecture.md`에 설계 문서로만 존재한다(전 항목 🔴). Kiki 요청에 AskUserQuestion으로 범위를 먼저 확인 — "설계 문서만 갱신"(권장안) 선택. ARCH-21 완료 후 세션 스코프를 "UI 설계·아키텍처만"으로 좁힌 직후의 작업이라 코드 스캐폴딩 없이 설계만 갱신한다.
+
+**설계 반영(`04` §2 원칙7 신설)**: 관리 콘솔의 좌측 내비·22모듈 매핑 표(`03` §4/§5)가 지금은 손으로 유지보수하는 마크다운이라, 새 관리 기능이 생길 때마다 ①내비 컴포넌트 ②라우트 가드(`require_role`) ③설계 문서 세 곳을 사람이 각각 맞춰야 하는 구조적 위험(하나 빠뜨리면 "코드엔 있는데 메뉴엔 없음" 또는 "메뉴엔 있는데 가드 없음")이 있었다. 해법으로 **선언적 모듈 레지스트리**(`AdminModule` — id·section·label·route·status(🟢/🟡/🔴)·`required_roles`·`backing_assets`)를 단일 진실 원천으로 두고, Admin BFF에 `GET /v1/admin/menu`(로그인만 요구·현재 사용자 role로 레지스트리 필터링해 반환)를 신설·Next.js 좌측 내비는 이 응답을 그대로 렌더(하드코딩 nav 배열 0)하는 아키텍처를 설계했다. **이중 방어 명시**: 메뉴 필터링은 UX일 뿐 보안 경계가 아니므로 각 라우트는 여전히 자체 `require_role`을 가지며, 레지스트리의 `required_roles`와 라우트 가드의 일치는 후속 `ADMIN-MODULE-REGISTRY` 태스크에서 정적 스캔 테스트로 동결 지향(`test_legacy_snapshot_governance.py` 패턴 재사용).
+
+**겸사겸사 현행화**: `03`·`04`·`00_index.md`의 RBAC 서술이 "role 필드가 없다"로 정체돼 있었는데(SEC-07이 2026-07-30 이미 2값 `STUDENT`/`CONTENT_ADMIN` 착지시킴), 세 문서 모두 실제 상태(v0 완료·관리 콘솔 소비는 미착수)로 갱신했다(README 청사진과 실제의 괴리 방지 원칙). `00_index.md` 전역 불변식 표에 #7(모듈 자동 등록)을 추가하고 스냅샷 날짜를 2026-08-02로 갱신.
+
+**스코프 밖(코드 미작성)**: `AdminModule`/`_MODULE_REGISTRY`/`GET /v1/admin/menu`/Next.js 앱 자체는 전부 설계 단계 — `04` §8에 `ADMIN-MODULE-REGISTRY`(신규)·`ADMIN-BFF`·`ADMIN-WEB` 제안으로만 기재, 실제 등재는 후속 `backlog.py` 경유.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 

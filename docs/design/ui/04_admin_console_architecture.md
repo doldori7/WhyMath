@@ -2,7 +2,7 @@
 
 > **질문**: 이 관리 UI의 아키텍처는?
 >
-> **한 줄 답**: **Next.js 15 프런트 + FastAPI `/v1/admin/*` BFF 계층**, 그 앞에 **RBAC(현재 부재·선결)**. 백오피스도 표현≠의미를 지켜 수학 로직을 담지 않고 독립 코어 API만 소비하며, 모든 관리 액션은 불변 감사 로그를 남긴다.
+> **한 줄 답**: **Next.js 15 프런트 + FastAPI `/v1/admin/*` BFF 계층**, 그 앞에 **RBAC**(v0 2값 착지·관리 콘솔 전용 확장은 선결). 좌측 내비는 **선언적 모듈 레지스트리**에서 자동 파생(§2 원칙7 — "모든 가능 메뉴 자동 등록", 2026-08-02 Kiki 요청). 백오피스도 표현≠의미를 지켜 수학 로직을 담지 않고 독립 코어 API만 소비하며, 모든 관리 액션은 불변 감사 로그를 남긴다.
 
 ---
 
@@ -29,15 +29,15 @@
 - **기존 무인증 콘텐츠 CRUD에 RBAC 부착** — `api/concepts.py`·`api/problems.py`의 생성/수정/삭제는 현재 인증 의존성이 없다(실측). BFF가 이들을 `require_role`로 감싸거나, admin 전용 래퍼로 재노출한다.
 - 집계·마스킹은 BFF에서 수행(프런트에 원자료 미노출 — 미성년 PII 최소화).
 
-### 원칙 3 — RBAC 신설 (선결·현재 🔴)
-**현재 상태(실측)**: `db/models/user.py`의 `UserProfile`에 **role 필드가 없다**. `Role` enum·`require_role`은 `.claude/agents/backend-engineer.md:249-262`에 **설계만** 존재. 콘텐츠 CRUD는 무인증.
+### 원칙 3 — RBAC (v0 착지 · 관리 콘솔 전용 확장은 후속 🔴)
 
-**선결 구현**:
-1. `Role` enum — 기존 골격 5종(`STUDENT`·`PARENT`·`TEACHER`·`SCHOOL_ADMIN`·`SYSTEM_ADMIN`) + 운영 백오피스용 **`CONTENT_ADMIN`**(콘텐츠 검수자·전권 아님) 추가 제안.
-   > **⚠️ v0 범위 축소 확정 (2026-07-30 · `SEC-07` 등재 시)**: 실제 착지하는 **v0는 2값**(`STUDENT`·`CONTENT_ADMIN`)이다. 좌석(소비처) 없는 역할은 만들지 않는다 — dead code 금지. `PARENT`·`TEACHER`·`SCHOOL_ADMIN`은 Phase 3 대시보드/B2B 계약이 실체를 가질 때 열고, `SYSTEM_ADMIN`은 `CONTENT_ADMIN`과 구분할 권한 항목이 생길 때 연다(역할 추가는 마이그레이션 1줄이고, 잘못 만든 역할을 걷어내는 비용이 더 크다). 근거·발화조건: `docs/architecture/account_security_gap_review.md` D1·§5-②.
-2. `UserProfile.role` 컬럼 신설(Alembic 마이그레이션·기본값 `STUDENT`).
-3. `require_role(*roles)` 의존성(`api/_auth.py`의 `get_current_user` 위에 얹음).
-4. **2차원 RBAC 매트릭스**(`backend-engineer.md:39` 방향): *역할 × 데이터 항목*. 예 — "교사는 학급 집계는 보되 개별 학생 PII는 못 본다", "부모는 자기 자녀의 *동의된 항목*만". 단순 역할 게이트를 넘어 항목 단위 인가.
+**현재 상태(2026-08-02 실측 갱신 — `SEC-07` 완료)**: `Role` enum(`schema/enums.py`)에 **`STUDENT`·`CONTENT_ADMIN` 2값**이 착지했고, `UserProfile.role` 컬럼(기본값 `STUDENT`)·`require_role` 의존성이 콘텐츠 CRUD 6라우터+`/v1/generate`에 부착돼 **무인증 CUD는 봉인됐다**. 단, **관리 콘솔 자체는 아직 이 role을 소비하지 않는다** — Admin BFF(`/v1/admin/*`)가 없으므로 `CONTENT_ADMIN`이 실제로 쓰이는 곳은 콘텐츠 API뿐이고, 운영 백오피스 화면·§2 원칙7 모듈 레지스트리의 권한 필터·2차원 항목별 인가는 여전히 🔴다.
+
+**의도적 축소(재확인)**: `PARENT`·`TEACHER`·`SCHOOL_ADMIN`·`SYSTEM_ADMIN`은 아직 열지 않는다(좌석 없는 역할은 dead code 금지). `SYSTEM_ADMIN`은 `CONTENT_ADMIN`과 구분할 권한 항목(예: 사용자 삭제·플래그 오버라이드처럼 검수자 권한을 넘는 액션)이 실제로 생길 때 연다(역할 추가는 마이그레이션 1줄이고, 잘못 만든 역할을 걷어내는 비용이 더 크다). 근거·발화조건: `docs/architecture/account_security_gap_review.md` D1·§5-②.
+
+**남은 선결 구현**:
+1. Admin BFF(`/v1/admin/*`)가 기존 `require_role(Role.CONTENT_ADMIN)`을 재사용(신규 enum 불요 — v0 2값으로 Phase A/B 커버 가능, `SYSTEM_ADMIN`은 Phase B 후반 필요 시 추가).
+2. **2차원 RBAC 매트릭스**(`backend-engineer.md:39` 방향): *역할 × 데이터 항목*. 예 — "교사는 학급 집계는 보되 개별 학생 PII는 못 본다", "부모는 자기 자녀의 *동의된 항목*만". 단순 역할 게이트를 넘어 항목 단위 인가. (§2 원칙7의 모듈 레지스트리 `required_roles`는 이 매트릭스의 **모듈 단위** 부분집합이고, 필드/항목 단위 인가는 별도 구현.)
 
 ### 원칙 4 — 감사 로그(불변)
 모든 관리 액션(검수 승인/반려·플래그 변경·삭제·데이터 반출)을 **불변 기록**한다. 기존 자산 재사용: `db/models/audit.py`(삭제 감사)·`backlog/events.ndjson`(하네스 감사). 감사 없는 쓰기 액션 금지.
@@ -48,6 +48,41 @@
 
 ### 원칙 6 — 측정치 이중 회계
 핵심 판정치(로컬 비율·비용·게이트 통과율)는 SaaS(Langfuse)뿐 아니라 **인프로세스**(`ops/cost_probe`)에서도 산출한다. Langfuse가 죽으면 콘솔은 **"측정 실패"를 명시**해야지 "0건 통과"로 위장하면 안 된다(`CLAUDE.md` AI·신뢰 금기).
+
+### 원칙 7 — 모듈 자동 등록(Auto-Registration) — 신설 (2026-08-02, Kiki 요청 "모든 가능 메뉴 자동 등록")
+
+**문제**: [03 §4](03_admin_console_plan.md)의 좌측 내비 트리·[03 §5](03_admin_console_plan.md)의 22모듈 매핑 표는 지금 **손으로 유지보수하는 마크다운**이다. 실제 관리 UI가 만들어지면, 새 관리 기능이 생길 때마다 ①좌측 내비 컴포넌트 ②라우트 가드(`require_role`) ③이 설계 문서까지 세 곳을 사람이 각각 손으로 맞춰야 한다 — 하나라도 빠뜨리면 "코드엔 있는데 메뉴엔 없음"(발견 안 됨) 또는 "메뉴엔 있는데 가드가 없음"(무인가 노출) 사고가 난다.
+
+**해법 — 선언적 모듈 레지스트리(단일 진실 원천)**: 관리 기능을 만들 때 개발자는 **레지스트리 엔트리 하나만 추가**한다. 좌측 내비·권한 게이트·(궁극적으로는) 문서 표까지 전부 그 한 곳에서 파생된다 — "자동 등록"의 실체는 *발견 로직*이 아니라 *중복 유지보수 제거*다(모듈이 레지스트리에 있으면 메뉴 등록을 잊을 수 없는 구조).
+
+**모듈 매니페스트 스키마** (Admin BFF 쪽 — `admin/module_registry.py`, 신설 제안):
+```python
+class AdminModuleStatus(str, Enum):
+    LIVE = "live"        # 🟢 데이터+UI 모두 실동작
+    PARTIAL = "partial"  # 🟡 데이터/엔진만 있고 UI 일부
+    PLANNED = "planned"  # 🔴 계획만(자산 없음) — 메뉴엔 노출하되 비활성 표시
+
+class AdminModule(BaseModel):
+    id: str                          # 안정 식별자("concept_atom" 등) — 파일명·경로와 독립
+    section: str                     # 좌측 내비 섹션 키("content"·"llm_prompt"·"cost_quality"·
+                                      #   "user_privacy"·"dataset"·"settings")
+    label_ko: str
+    route: str                       # Next.js 경로("/admin/content/concepts")
+    status: AdminModuleStatus
+    required_roles: frozenset[Role]  # 이 모듈을 볼 수 있는 역할(빈 집합 금지 — 명시 필수)
+    backing_assets: tuple[str, ...]  # 실 코드 경로(추적성·§5 표 자동생성용 원천)
+
+# append-only 상수 — [03 §5]의 22모듈 표가 이 목록의 *초기 시드 콘텐츠*.
+_MODULE_REGISTRY: tuple[AdminModule, ...] = (...)
+```
+
+**BFF 엔드포인트**: `GET /v1/admin/menu` — `get_current_user`만 요구(비공개), 레지스트리를 순회해 **현재 사용자의 role이 `required_roles`에 포함되는 항목만** 필터링해 섹션별로 그룹핑해 반환한다. `status="planned"`인 항목도 포함하되 프런트는 비활성("준비 중")으로 렌더 — 존재를 숨기지 않는다(`00_index.md` 구현 상태 범례의 정직성 원칙을 메뉴에도 적용).
+
+**Next.js 소비**: 좌측 내비 컴포넌트는 앱 로드 시 `GET /v1/admin/menu` **1회 호출**로 전체 트리를 렌더한다 — **하드코딩 nav 배열이 프런트 코드에 없다**. 이것이 "모든 가능 메뉴 자동 등록"의 구체 구현이다: 레지스트리에 있는 모든 모듈이 (권한이 되는 한) 자동으로 메뉴에 나타난다.
+
+**이중 방어(원칙 2·3과 결합)**: 메뉴 필터링은 **UX 편의**일 뿐 보안 경계가 아니다 — 메뉴에 안 보이는 항목도 URL을 직접 쳐서 접근을 시도할 수 있으므로, 각 라우트는 여전히 **자체 `require_role` 가드**를 가진다. 레지스트리의 `required_roles`와 라우트 가드는 같은 값을 참조해야 하며, 이 일치는 §8의 `ADMIN-MODULE-REGISTRY` 태스크에서 테스트로 동결한다(메뉴와 가드가 따로 놀면 "메뉴엔 없는데 URL로는 됨" 회귀가 재발한다 — `test_legacy_snapshot_governance.py`류 정적 스캔 거버넌스 테스트 패턴 재사용 지향).
+
+**[03 §5] 표와의 관계**: 레지스트리 구현 후에는 22모듈 표를 `_MODULE_REGISTRY`에서 **자동 생성**하는 스크립트로 전환해 문서-코드 드리프트를 원천 차단하는 것을 지향한다(MVP는 수동 표 유지 — 레지스트리가 실제로 여러 모듈을 담기 전까지 자동생성 스크립트 자체는 과공학).
 
 ---
 
@@ -62,6 +97,7 @@ flowchart TD
         B[인증·require_role RBAC]
         C[집계·PII 마스킹]
         D[감사 로그 기록]
+        M["모듈 레지스트리<br/>GET /v1/admin/menu (원칙 7)"]
     end
     subgraph Core["독립 수학 코어 · 운영 자산"]
         E[L1-L6 도메인 서비스<br/>concepts·problems·검수 상태]
@@ -76,6 +112,8 @@ flowchart TD
     end
 
     A -->|HTTPS + JWT role| B --> C --> D
+    A -->|앱 로드 시 1회| M
+    M -->|권한 필터된 좌측 내비| A
     C --> E & F & G & H & I
     E --> K
     A -.iframe/link.-> J
@@ -151,9 +189,9 @@ Kiki의 ChatGPT 설계안([E])은 "AI Native + Knowledge Graph + DSL + Runtime E
 
 | 단계 | 범위 | 선결 |
 |---|---|---|
-| **Phase A** | read-only 관측: `GET /status`·비용 리포트·게이트·검수 큐 | Admin BFF(read) |
-| **Phase B** | 콘텐츠 검수 승인·문항 CRUD (쓰기) | **RBAC** + 감사 로그 |
-| **Phase C** | 교사 웹 B2B 합류(L7 Phase3) | 2차원 RBAC 매트릭스 |
+| **Phase A** | read-only 관측: `GET /status`·비용 리포트·게이트·검수 큐 | Admin BFF(read) + **모듈 레지스트리**(§2 원칙7) |
+| **Phase B** | 콘텐츠 검수 승인·문항 CRUD (쓰기) | RBAC v0(완료·`SEC-07`) 소비 + 감사 로그 |
+| **Phase C** | 교사 웹 B2B 합류(L7 Phase3) | 2차원 RBAC 매트릭스(`SYSTEM_ADMIN` 등 역할 확장 포함) |
 
 ---
 
@@ -161,11 +199,12 @@ Kiki의 ChatGPT 설계안([E])은 "AI Native + Knowledge Graph + DSL + Runtime E
 
 > 아래는 **제안**이다. 실제 태스크 등재는 `python3 scripts/harness/backlog.py`를 통해 하며, `backlog/` 대장을 손편집하지 않는다(`CLAUDE.md` 거부 우회 금지).
 
-- **ADMIN-RBAC** — `Role` enum + `UserProfile.role`(Alembic) + `require_role` + 콘텐츠 CRUD 인가 부착. (선결·최우선)
-- **ADMIN-BFF** — `/v1/admin/*` 라우터(모델 상태·비용·검수 큐·사용자 조회)·집계·마스킹·감사.
+- ~~**ADMIN-RBAC**~~ — `Role` enum + `UserProfile.role`(Alembic) + `require_role` + 콘텐츠 CRUD 인가 부착. **v0(2값) 완료** — `SEC-07`(2026-07-30). 관리 콘솔용 소비(BFF)는 미착수.
+- **ADMIN-MODULE-REGISTRY** — §2 원칙7의 `AdminModule`+`_MODULE_REGISTRY`(초기 시드=[03 §5](03_admin_console_plan.md) 22모듈) + `GET /v1/admin/menu` + 메뉴 필터·라우트 가드 `required_roles` 일치 동결 테스트. (선결·ADMIN-BFF 직전)
+- **ADMIN-BFF** — `/v1/admin/*` 라우터(모델 상태·비용·검수 큐·사용자 조회)·집계·마스킹·감사. `GET /v1/admin/menu`는 이 라우터의 첫 엔드포인트로 착지 권장.
 - **ADMIN-REVIEW-UI** — 검수 큐 UI(`needs_review_worklist` 소비)·DRAFT→PRESCREENED→APPROVED 상태 전이.
-- **ADMIN-WEB** — Next.js 15 백오피스 셸(내부망·SSO).
+- **ADMIN-WEB** — Next.js 15 백오피스 셸(내부망·SSO)·좌측 내비는 `GET /v1/admin/menu` 소비(하드코딩 nav 배열 금지).
 
 ---
 
-**버전**: 1.1 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · [05_source_reconciliation](05_source_reconciliation.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md`
+**버전**: 1.2 | **작성**: 2026-07-24 | **최종 수정**: 2026-08-02(§2 원칙7 모듈 자동 등록 신설·§2 원칙3 RBAC 현행화·`SEC-07` 반영) | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · [05_source_reconciliation](05_source_reconciliation.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md`
