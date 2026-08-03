@@ -1392,6 +1392,77 @@ PRD FR-010/014/020 시즌 플랜·dead table 5종 소생은 실행하지 않고 
 **설계 D1~D5** (정본: `docs/architecture/solution_module_gap_review.md`): **D1** SolutionPath/SolutionStep 실체화 — 유보 해제 논증(D2가 소비처+620문 실데이터 스키마 승격 = dead code 아님)·writer(WH-S 승격 어댑터·매칭 실패 검수 큐)+reader 2종(steps API 소생·learning_scene 댕글링 해소) 동반·신규 학생 노출 0·enum은 기존 좌석 소비(`schema/enums.py` ReasoningType) · **D2** 다중 풀이 생성 — multi_solution_gen 첫 소비처·ApproachType 단일 좌석 신설(거버넌스 리터럴→좌석 승격·3축 disjoint 유지)·SymPy 검증 통과분만 뱅크·주관 메타 ai_estimated · **D3** 힌트 내용 생성기+hints 영속 — HintNode 연기(2026-07-08 Phase 6b) 해제 전제 3종 한 슬라이스 충족(생성 writer·게이트 3종 level-reveals/answer-leakage/톤·coach 서빙 reader)·reveal_score로 KPI "도달 깊이 2.5+" 측정 기반·Level 4는 엔티티 밖 안전망 유지 · **D4** 풀이 비교·동치 군집 — 기계 지표만 자동(ARCH-17 오프라인 동형)·휴리스틱 1차+사람 검수 큐(자동 확정 금지)·SolutionPath embedding 도입 판정 동반 · **D5** 채점 심화 페이퍼(태스크 0·knowledge D2 선례 동형) — 누락 단계 '후보' 정렬(동치 다양성 때문에 확언 금지)·학생 대면 질문형·PRM 스코어러는 §4 경계.
 
 **등재**: `S4-09-solution-path-materialization` · `S4-10-multi-solution-generation`(dep 09) · `S4-11-hint-content-generation`(dep 09+**S3-01** — 학생 대면 서빙 포함이라 루프 검증 전 확장 금지·S4-05 선례. D1·D2·D4는 오프라인 축이라 비의존 — S4-06/ARCH-16/17 선례) · `S4-12-solution-comparison-clustering`(dep 10·pri 4) — 전부 CLI add·validate green 104건·selector가 S4-09를 차기 후보로 정상 노출. 중복 등재 회피: 증명·서술 채점=`S4-02` 승계(notes에 D5 참조 추가)·단계 시각화=`S4-03`·클라 채점 게이트=`ARCH-10`/`ARCH-12`·PRM 후보 평가(ROADMAP:68)=§4 트리거 관리(dead task 방지)·갤러리·비교 UI=Phase 3.
+### 2026-07-29 (구현·측정·PED-09): **비유·예시 생성기(L3)+analogy_fidelity_eval 강등전 — 846행 전량 저품질·797행 규칙 결함 실측** (claude /drive)
+
+**컨텍스트**: 04e §6 착지 — 비유 자산 846행은 실재하나 전량 검수 전·생성기와 품질 게이트 0. backend-engineer 위임.
+
+**적용**: ①`l3/pedagogy/analogy_generator.py`(개념-grain) — select-vs-generate 발주(`blank|defective|rejected`만·무결함 기존 비유 구조적 배제·개념당 1 dedup), 라우터 경유 seam(직접 호출 0·Fake 테스트), **정본 좌석 시행**: `MetaphorFillStore`가 `concept_content.metaphor` UPDATE(`IS NULL OR ai_estimated` WHERE 가드 — 검수 승격 행 보호). 상태기계는 테이블이 아니라 **전이 규약·함수 재사용**(prescreen→review) — 슬롯 테이블은 목표-grain FK라 개념-grain 혼입이 §7.2 grain 불일치를 낳기 때문 ②`example_generator.py`(목표-grain) — 발주−승인 산술로 잔여 슬롯만·숫자형 제외(검증 불가 답 저작은 동등문제 생성기 소관)·기존 슬롯 스토어 무수정 소비 ③검출기 `analogy_checker.py` 4+2축 — 오개념 유발은 규칙 프록시 2축(한계 명시 부재·동일시 단정)+의미론 본축 `SEMANTIC_MISCONCEPTION` **DEFERRED 코드 회계**, 정의 참칭·정답 유출·게임형(메커닉 어휘 한정 — "주사위 게임 확률 소재" 오탐 방지). 코퍼스 실측으로 오탐 계급 2종 조임(12→1·2→0) ④`harness/analogy_fidelity_eval.py` CLI+CI backend 잡 배선+**pytest 이중 배선**(CI 스텝 삭제돼도 pytest가 강제 — OPS-10 계약 정합·tests/infra 258 green).
+
+**수요 실측(재저작 실표적 정량화)**: metaphor 공백 0/846 — 단 **전량 review_status='ai_estimated'**(적재기 상수 각인)·**규칙 검출 결함 보유 797행**(한계 명시 부재 797·동일시 1). 발주서 잔여 슬롯 상한 40점(개념형 18·숫자형 22·APPROVED 채움은 DB 부재로 None — 0% 위장 금지).
+
+**검증**: eval **exit 0**(위반 432 미검출 0 — Wilson 상한 0.62%·클린 144 오검출 0 — 상한 1.84%)+**널 검출기 대조 exit 1**(변별력 봉인). 신규 74건·전체 스위트 2회 완주 7,752 passed(=7,678+74·seed 1791826515 귀속)·메인 독립 검증(105건·eval exit 0 재현)·lint 4종 clean·l3→l4 import 0.
+
+**롤백**: 전부 additive(신규 모듈·오프라인 저작 배치 — 서빙 경로 아님·플래그 불요 판단 사유 병기). 파일 제거로 원복.
+
+**정직한 공백**: 라이브 LLM 채움 미실행(컨테이너 LLM 0 — Phaiakes9 런북 소관)·SEMANTIC_MISCONCEPTION DEFERRED·잔존 오탐 1건(평균값 정리 — 수학적 상등 vs 비유 동일시 규칙 구분 불가)·metaphor 채움 후에도 'ai_estimated' 유지(기계 게이트는 4축만 — 'reviewed' 승격은 overclaim)·CI 워크플로 실구동은 PR CI가 최종.
+
+### 2026-07-29 (구현·PED-06 + 결함 발견): **카탈로그 소비 배선(필터·전략 카드) + k_type 맹글링 프로덕션 결함 발견·수정** (claude /drive)
+
+**컨텍스트**: PED-05 카탈로그를 소비처 2곳(04e §4)에 배선. backend-engineer 위임.
+
+**적용**: ①후보 필터 — `narrow_candidates()`(순수)+`_rule_table()`(R1~R5 후보 제약판·전체 후보면 v1 판정 동일)+3중 폴백(공집합 `CATALOG_FILTER_EMPTY`·소진 `CATALOG_FILTER_EXHAUSTED`·적재 실패 `CATALOG_UNAVAILABLE` — 전부 구조화 로그). 플래그 `pedagogy_catalog_filter_enabled`(기본 OFF 캔어리) ②전략 카드 — `attach_strategy_card()` 합성 계층(`build_system_prompt` 무수정 — 바이트 동일 최강 보존)·소비 지점은 `supply()` 생성 폴백의 generate 직전(실측 유일 지점). 플래그 `pedagogy_strategy_card_enabled`(기본 OFF) ③신호 생산자 — `grade_to_band`(UserProfile.grade 10~14=고교·N수 계약 실측)+`_build_signals` 배선. 난이도는 생산자 부재 실측 → 필드 비신설·kwargs 축만(항상-None 금지 준수). R2 정밀화(error_type 대조)는 **보류** — kebab 인코드 카탈로그에 error_type 필드 자체가 없고 DB 좌석은 AsyncSession 필요(순수함수 위반) → 순수 경로 생산자 실재 시 재개.
+
+**결함 발견·수정(중요)**: `api/study.py`의 `str(objective.k_type)`이 str-mixin Enum이라 `"KnowledgeType.CONCEPT"`을 생성 — sqlite 재현 실측: ①`get_pack` 상시 미스(팩 축① 무력) ②`evidence_event.k_type` native enum 플러시 `LookupError`(**실 DB /study 500**) ③필터 k_type 축 상시 공집합. 3개소 `.value` 수정+소스 스캔 동결 테스트. 엔드포인트 라이브 PG 테스트 부재로 잠복해 있었음. 동일 패턴 `adaptive/effectiveness.py:173`(라벨 맹글링·플러시 없음)은 PED-03 도메인이라 **PED-12 등재**로 분리.
+
+**검증**: 신규 41건·전체 스위트 2회 완주 7,678 passed(=7,637+41 정합·시드 병기)·메인 독립 검증(신규 41+l4/api/schema/l3 5,064·ruff·mypy strict 426 clean)·gate 카탈로그 부재는 정적(co_names ∩ 심볼=∅)+런타임(봄베 하 판정 동일) 이중 동결.
+
+**롤백**: 플래그 2종 기본 OFF라 배선은 무영향 상태로 안전. k_type 수정은 결함 수정이라 롤백 대상 아님.
+
+**정직한 공백**: R2 정밀화·난이도 축·"대학" 밴드 생산자 부재(각 docstring 부기). GA flip은 측정+사인오프 후 별도.
+
+### 2026-07-29 (구현·실측·OPS-15 + PED-11): **WH-1 caplog 순서 플레이크 근본 규명 — dictConfig propagate 오염·러너 버전 위장 발견·이중 봉쇄** (claude /drive, Kiki "진행")
+
+**컨텍스트**: 전체 스위트 랜덤 순서에서만 WH-1 harness 3파일이 "caplog 레코드 0건"으로 5~13건 변동 실패(2026-07-29 등재분). backend-engineer 위임 조사.
+
+**규명(전건 실측·인과 완결)**: 오염원 = `test_wh1_shadow_logconfig.py::test_logconfig_captures_record_logger` **단 1개** — dictConfig가 `whymath.harness.wh1_shadow.record` 로거에 `propagate=False`를 설정하고 구 finally는 핸들러만 복원. **pytest 8.x caplog은 root 로거에만 부착(전파 의존)**이라 이후 record 로거 caplog 단언 전건이 0건 관측 실패. 최소 쌍 재현+3중 대조+bad seed(442243680) 수집 순서 기하+pre-fix 전체 재현(13건 정체 1:1)로 완결. **핵심 발견: pytest 9.0+는 caplog이 비전파 로거에도 직접 부착해 같은 오염이 무증상 잠복**(9.1.1 실측) — 러너 버전에 따라 위장되는 순서 오염이라 "9에서 green"은 오염 부재의 증거가 아니다.
+
+**수정(병용·근거)**: ①근본 — `_dictconfig_loaded` 스냅샷→원복 컨텍스트(설정 loggers 키 파생·하드코딩 0)+원복 회귀 테스트(변별력: 적용 확인 후 복원 단언) ②OPS-07형 가드 — `tests/backend/_logging_state_guard.py`+conftest autouse: 기존 로거 propagate/disabled 플립·전역 disable·**신생 whymath\* 비전파 잔존**(단독 실행 갭 봉쇄) 탐지→스냅샷 복원(격리)→pytest.fail(귀책). 레벨·핸들러·필터는 의도적 비감시(오검출 0 우선·사유 docstring). `getLogger("root")`가 root가 아닌 'root' 이름 로거를 만드는 표준 함정은 빈 키 규약으로 봉인. 병용 근거: 근본만으론 미래 dictConfig 사용이 재발(9 환경 잠복), 가드만으론 기존 오염 잔존 — 가드가 순서·러너 무관 결정론 즉시 귀책으로 전환(OPS-09 무작위화와 상보).
+
+**검증**: 8.3.3 — 서브셋 무작위 10시드 green·전체 bad seed 442243680 **7,637 passed·0 failed**(pre-fix 동일 시드 13 failed)·무작위 시드 green / 9.1.1 — 전체 무작위 green·가드 오검출 0·오버헤드 무관측 / **메인 세션 독립 검증(8.4.2)** — 가드+회귀 19건·오염원→피해자 강제 순서 37건 green + 전체 bad seed 재실행. lint(ruff·black CI 인자)·mypy strict·lint-imports 전부 clean.
+
+**병행(PED-11 done·8b2e5c6)**: `preferred_solution_style` 유령 필드 실측 부기 6곳(02·03+grep 전수 발견 4곳: system_deep_dive·design/ui/01·llm-architect·ml-engineer)+pedagogy-designer.md 정본 관계 1줄(설계 정본=04* 계열·충돌 시 정본 우선). 검증: 무부기 유령 참조 0건.
+
+**롤백**: 가드는 conftest 픽스처 1개 제거로 비활성(테스트 파일 무영향). 근본 수정은 test 파일 한정.
+
+**정직한 공백**: 원 관측 환경(7,621 passed)의 pytest 버전 미확인(8.x 추정 — 시그니처 완전 일치). 신생 외부 네임스페이스·레벨·핸들러·필터 잔존 비감시(의도·docstring). integration 마크는 가드 밖(live-PG 피해자 2파일은 근본 수정이 보호·해당 잡 실측 불가).
+
+### 2026-07-29 (구현·PED-07·PED-05 + 사고·재발방지): **mode_guard 런타임 배선 + 교수전략 카탈로그 착지 — 검증 함정 2건 규명·등재** (claude /drive)
+
+**컨텍스트**: 04e(PED-04) 후속 /drive 2건. ①PED-07 — `check_forbidden_modes` 프로덕션 호출 0("배선 없는 검증 장치" 반복 사고 유형) 해소 ②PED-05 — 전략은 enum+docstring뿐인 서술 자산 비대칭 해소.
+
+**적용**: ①PED-07(2874e7b): `mode_guard_runtime_enabled`(기본 False·킬스위치) 신설, WH-1 primary 발화 확정 후·톤필터 직전 가드 — 위반 발화 미서빙(fail-closed)·`fallback_reply_for`(기존 자산 EXAMPLE_QUESTION 재사용·신규 프로즈 0) 폴백·reason_code 구조화 로그·가드 자체 예외는 타입명 로그 후 판정 유보. coach는 decide에 넣은 같은 팩 객체를 러너로 thread(재해석 0). GA flip은 측정+사인오프 후 별도. ②PED-05(d8e3864): `schema/pedagogy_strategy.py`(9필드·`extra="forbid"`·폐쇄 어휘 3종 frozenset)+`pedagogy_strategies_v1` YAML 10건(enum 1:1·실존 연구 보수 인용·페이지/수치 미기재)+`strategy_registry.py`(lru_cache·LookupError·reset seam·pack_registry 미러). 제거 필드 3계열(추천점수·기계 금지조건·페이딩)은 **부재를 정적(model_fields)+런타임(extra=forbid) 이중 동결**. STOCHASTIC k_type 커버 0 사각을 발견해 방어 범위로 커버+7유형 전종 테스트 동결. 소비 배선은 PED-06 범위로 무접촉.
+
+**검증**: PED-07 — 전체 스위트 단일 프로세스 7,578 passed·exit 0(구현 env)·fidelity eval CI 인자 PASS·mypy strict 424 clean·import-linter KEPT. PED-05 — 신규 43건+schema/l4 1,922 passed·전체 스위트 7,608 passed/13 failed(아래 플레이크·변경 무관 3중 실측: 단독 33 green·신규 선행 강제 76 green·additive-only)·mypy 426 clean·ruff/black/lint-imports PASS.
+
+**사고·재발방지 2건(실측 규명·등재 완료)**: (a) **pytest 경로 인자 → rootdir 어긋남**: `../../tests/...` 인자 실행 시 rootdir이 리포 루트로 잡혀 `asyncio_mode=auto` 미적용 → 마크 없는 async 테스트 60~529건 "async not supported" **가짜 실패**로 PED-07/05 검증을 연속 오도(stash 대조·플러그인 의심 등 우회 진단 소모). `-c pyproject.toml` 동봉 시 전건 통과 실측 → **CLAUDE.md 코드 원칙에 규칙 등재**(인자 없이 testpaths 실행·판정 전 rootdir/asyncio mode 확인). (b) **WH-1 caplog 순서 플레이크**: 전체 스위트 랜덤 순서에서만 harness 3파일(test_wh1_{primary,shadow,primary_mode_guard})이 caplog 레코드 0건으로 5~13건 변동 실패(2회+ 관측·단독/강제순서 green — OPS-07 db 누수와 별개의 로거 상태 오염 계열 추정) → **OPS-15-wh1-caplog-order-flake 등재**(오염원 규명·격리 fixture·시드 10회 green).
+
+**롤백**: 플래그 OFF가 기본이라 PED-07은 무영향 상태로 이미 안전. PED-05는 additive(신규 모듈·YAML)라 파일 제거로 원복.
+
+**정직한 공백**: mode_guard 검출기 1/7 모드 그대로(deferred 6종 판정 유보)·PolyaCoach.coach() 데모 표면 미배선·관측 레코드 필드 미확장. 카탈로그 서술·매핑은 후속 사람 검토 전제(_provenance 명시). caplog 오염원 근본 규명은 OPS-15로 이연. CI(별도 env)가 최종 판정.
+
+### 2026-07-28 (설계·문서·PED-04): **교수전략 격차 완결 설계(04e) — 외부 프레임워크 전수 대조·ExplanationMode 비신설·카탈로그 신설** (claude 설계, Kiki "교수전략 분야의 빠진 부분을 점검하고 WhyMath의 방향과 같이 하는 내용으로 설계")
+
+**컨텍스트**: Kiki가 외부 일반 교수전략 프레임워크(docx — 4기능: ⑭전략 라이브러리 14관리항목 ⑮설명방식 10종 ⑯비유/예시 5유형 ⑰질문 7유형)를 제공하며 격차 점검·설계를 지시. 3축 탐색(문서·코드·백로그) 실측: 선택·게이트·측정 골격은 PED-01~03/REND-01/CACHE-01로 완성, 공백은 ①전략 서술 자산(오개념 839×12필드 대비 전략은 enum+docstring뿐) ②비유·예시 *생성* 파이프라인(자산 `metaphor` 846행은 실재·전량 검수 전·AnalogyAdapter가 기렌더) ③형성평가 슬롯 내용물 ④배선 3건(mode_guard 프로덕션 호출 0·coach 실행용 축 미수렴·adaptive 표본 대기).
+
+**결정**: `docs/architecture/04e_pedagogy_strategy_catalog.md` 신설(04d 참조만·개정 없음). 핵심 판정 3건 — ① **ExplanationMode 독립 enum 비신설**: 외부 10종은 기존 3축(전략/슬롯·자산/L5 시각화)의 사영. 중첩 축=단일 진실 원천 붕괴+렌더 조합폭발(5×8=40)+처치 생산자 부재(`pedagogy_evidence` 축=전략 단위). 학생 옵트인은 `requested_strategy` 힌트로 흡수(gate 통과 의무). ② **카탈로그 제거 필드 3종**: AI 추천점수(bandit Beta(1,1) 무정보 사전 오염)·기계 금지조건(팩 forbidden_modes+gate 정본 이중화)·선행/후속 페이딩(팩 fading_schedule 정본 이중화) — 부재를 테스트로 동결. ③ **용어 3축 구분 정본화**: 교수전략(`PedagogyStrategy`·ANALOGY=비유) ≠ 문제 공략 전략(`strategy_graph_v1`·`strategy.analogy`=유추) ≠ 전략 레퍼토리(04a §11 학생 휴리스틱). 비수용 9항목 §8 영구 기록(게임형 전 축·전략×오개념 개별 매핑 10×839 관계 폭발·14필드 전량 미러링 등). 오개념 연결은 실재 폐쇄 축 `error_type` 6종 기반(초안의 "개입 패턴 어휘 재사용"은 유령 참조로 판명·폐기).
+
+**적용**: ① 04e 신설(§1 용어 3축·§2 전수 대조 판정표·§3 카탈로그(소비처 지정표)·§4 후보 필터 불변식(좁힘만·공집합 폴백·gate 입력 금지)·§5 분해표·§6 생성 파이프라인(정본 좌석: 개념 비유=`concept_content.metaphor`·analogy_fidelity_eval 강등전)·§7 형성평가(atom_probe 1,823 투영·crosswalk grain 다리)·§8 비수용·§9 배선·§10 구현 매핑 부기) ② backlog 등재 8건: PED-04(본 설계·claim)·PED-05/06(카탈로그·소비)·PED-07(mode_guard fail-closed 배선·p2)·PED-08(coach 실행용 축 수렴·최고 위험 101KB)·PED-09(비유·예시 생성기)·PED-10(diag_item 채움)·PED-11(유령 필드 02/03 부기) ③ 00_overview 인덱스 1줄. CLAUDE.md는 무변경 — 개별 문서 미등재 구조(04d도 미등재)라 불요.
+
+**검증**: `backlog.py validate` green(108건)·next 후보에 PED-07/10/08 진입 확인·04/04a/04d 본문 무변경(참조만).
+
+**롤백**: 04e 삭제+인덱스 1줄 제거+PED-04~11 YAML 제거(테스트·코드 변경 0 — 문서·대장만).
+
+**정직한 공백**: 카탈로그 YAML 10건의 *내용*(연구근거·적합성 값)은 PED-05에서 작성 — 본 세션은 스키마·필드 계약까지만. 예측 질문(04a 도구#10)·비교·확장·역사배경·발견학습·CRA 구체물은 보류로 명시(§2 ⏸ — 각 조건 병기). adaptive 승격은 신규 작업 없음(표본 게이트가 정직 미달 표기 중).
 
 ### 2026-07-28 (구현·OPS-14): **tests/data_pipeline lint 배선 — 정본 컨텍스트 확정 + ruff per-file-ignores가 죽은 설정이었음 실측** (claude 구현, Kiki "다음 진행")
 

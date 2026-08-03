@@ -39,6 +39,15 @@ from _db_leak_guard import (  # noqa: E402  (위 sys.path 삽입 후에 import�
     format_leak_failure,
 )
 
+# 로거 상태 오염 가드(OPS-15)의 탐지·격리 로직 — 분리 이유는 OPS-07과 동일(변별력 실측은
+# test_logging_state_guard.py).
+from _logging_state_guard import (  # noqa: E402  (위 sys.path 삽입 후에 import해야 한다)
+    contain_logging_state_leak,
+    format_logging_leak_failure,
+    logging_state_leak_reason,
+    snapshot_logging_state,
+)
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SRC_BACKEND = _PROJECT_ROOT / "src" / "backend"
 
@@ -112,6 +121,45 @@ def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[No
         return
     contain_db_session_leak()
     pytest.fail(format_leak_failure(request.node.nodeid, reason), pytrace=False)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 로거 상태 오염 가드 (OPS-15)
+# ──────────────────────────────────────────────────────────────────────
+# 2026-07-29 사고: harness/test_wh1_shadow_logconfig.py의 dictConfig 테스트가
+# `whymath.harness.wh1_shadow.record` 로거에 propagate=False를 남겼다(구 finally가 핸들러만
+# 복원). pytest 8.x caplog은 캡처 핸들러를 root에만 달아 전파에 의존하므로, 무작위 순서에서
+# 그 테스트가 먼저 돌면 WH-1 caplog 단언 테스트 13건(primary 5·shadow 7·mode_guard 1)이
+# '관측 레코드 0건'으로 깨졌다(시드 442243680 실측). pytest 9+는 비전파 로거에도 핸들러를
+# 달아 같은 오염을 *위장*한다 — 러너 버전에 따라 숨는 순서-의존 오염이라, OPS-07과 같은
+# 구조(귀책+격리)로 오염을 남긴 테스트 자체를 결정론적으로 실패시킨다. 탐지·격리 로직과
+# 감시 범위(propagate·disabled·전역 disable 한정·오검출 0 우선)는 `_logging_state_guard` 참조.
+
+
+@pytest.fixture(autouse=True)
+def _guard_logging_state_pollution(request: pytest.FixtureRequest) -> Iterator[None]:
+    """모든 백엔드 테스트 종료 후 로거 상태 오염을 탐지·격리·귀책한다(OPS-15).
+
+    시작 시 스냅샷(현존 로거의 propagate·disabled + 전역 disable)을 뜨고, 종료 시 달라져
+    있으면 이 테스트가 바꾼 것이므로 실패시킨다 — 실패 신호 전에 스냅샷 값으로 되돌려 다음
+    테스트로의 전파를 막는다(귀책과 격리의 분리). 테스트 중 새로 생긴 *외부* 로거는 판정하지
+    않되(라이브러리 import가 비전파 로거를 만드는 것은 정상 — 오검출 방지), *whymath**
+    네임스페이스 신생 로거의 비전파/비활성 잔존은 판정한다(단독 실행 갭 봉쇄 — 상세는
+    `_logging_state_guard` docstring 감시 범위 ④).
+
+    **범위 = hermetic 전용**: OPS-07과 동일하게 `integration` 마크는 제외한다 — 통합 잡은
+    별도 프로세스라 교차 오염이 없고, 라이브 서비스 구동(예: uvicorn in-process)의 로깅
+    구성은 로컬에서 검증 불가한 구간이라 가드를 검증된 범위(hermetic)로 한정한다.
+    """
+    snapshot = snapshot_logging_state()
+    yield
+    if request.node.get_closest_marker("integration") is not None:
+        return
+    reason = logging_state_leak_reason(snapshot)
+    if reason is None:
+        return
+    contain_logging_state_leak(snapshot)
+    pytest.fail(format_logging_leak_failure(request.node.nodeid, reason), pytrace=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────

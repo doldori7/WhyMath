@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-08-coach-signal-convergence
+title: "coach 실행용 축 수렴 — study 신호 조립기 공용 추출 + decide() 소비"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "api/study.py의 StudentSignals 조립을 공용 좌석으로 추출 — study 기존 테스트 전건 유지(회귀 0)"
+  - "coach 턴에서 decide() 산출 소비 + record_pedagogy_treatment 처치 기록"
+  - 플래그 OFF 시 coach 동작 무변경
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/whymath_backend/l2/**"
+  - "tests/backend/**"
+session: null
+notes: "정본: 04e §9. 최고 위험(api/coach.py 101KB — 추출 슬라이스 선행). 팩(설계용) 축은 2026-07-27 GA 기배선 — 이 태스크는 실행용 축만."
+updated: 2026-07-28

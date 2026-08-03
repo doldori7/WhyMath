@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-15-wh1-caplog-order-flake
+title: "WH-1 harness 테스트 caplog 순서 플레이크 — 로거 상태 오염원 규명·격리"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "오염원 실측 규명 — 랜덤 순서에서 test_wh1_{primary,shadow,primary_mode_guard}의 caplog 관측 레코드 0건 실패(13건 변동 집합)를 재현하는 최소 선행 테스트 조합 특정"
+  - "격리 장치 — 로거 상태(전파·핸들러·레벨) 복원 fixture 또는 OPS-07형 가드로 랜덤 시드 10회 반복 green"
+  - "전체 스위트 단일 프로세스 완주 실패 0 (플레이크 재발 시 재현 시드 기록)"
+artifacts:
+  - "commit e1401c8 (branch claude/whymath-teaching-strategy-enfkqt)"
+paths:
+  - "tests/backend/harness/**"
+  - tests/backend/conftest.py
+  - "src/backend/whymath_backend/harness/**"
+  - tests/backend/_logging_state_guard.py
+  - tests/backend/test_logging_state_guard.py
+session: null
+notes: "2026-07-29 실측(PED-05 검증 중 2회+ 관측): 전체 스위트 랜덤 순서에서만 harness WH-1 파일 3개가 caplog 레코드 0건으로 5~13건 변동 실패 — 단독·강제 순서 실행은 전건 green(PED-05/07 변경 무관 3중 실측). OPS-09(순서 무작위화)가 노출한 기존 순서 의존·OPS-07(db 엔진 누수)과 별개 계열(로거 상태 추정). 재발방지 의무 등재."
+updated: 2026-07-29

@@ -49,19 +49,50 @@ L4 → L3(`l3/render/registry`) 하향 임포트는 합법이다(`api→l6→l5�
 
 DB 세션에 의존하지 않는 순수 함수다(`pack_registry`가 DB-free인 것과 동형). 신호 조립(ORM 조회)은
 호출자(API·하네스) 책임이다.
+
+────────────────────────────────────────────────────────────────────────────
+카탈로그 후보 필터 (PED-06 — 정본 `docs/architecture/04e_pedagogy_strategy_catalog.md` §4)
+────────────────────────────────────────────────────────────────────────────
+교수전략 카탈로그(PED-05·`strategy_registry`)의 적합성 필드를 `select()`가 **후보 필터**로
+소비한다. 규칙표 v1(R1~R5)은 유지하고, 필터는 그 앞에서 후보 집합만 좁힌다:
+
+    candidates = registered_strategies()                        # 렌더 가능 전략(기존 거버넌스)
+    candidates = narrow(candidates, grade_band, difficulty, k_type)  # 카탈로그 적합성 — 좁힘만
+    strategy   = rule_table(signals, candidates)                # R1~R5 (기존 우선순위 그대로)
+
+불변식(04e §4):
+  ① **필터는 좁힘만 한다** — 좁힌 결과가 공집합이거나 규칙표가 좁힌 후보를 소진하면 필터를
+     무시하고 규칙표 *원판정*으로 폴백한다(신호 부재·카탈로그 공백이 선택 불능을 만들면 안 됨).
+     폴백은 reason_code(`REASON_CATALOG_FILTER_*`)를 구조화 로그로 남긴다(조용한 실패 아님).
+  ② **카탈로그는 select 전용 — `gate()` 입력 금지.** 게이트가 카탈로그(YAML 데이터)를 읽기
+     시작하면 코퍼스 편집만으로 "효과 ≤ 허용"이 우회된다 — 부재를 테스트가 동결한다
+     (`tests/backend/l4/test_catalog_consumption.py`).
+  ③ **`select()` 출력 ⊆ `registered_strategies()`** — 기존 거버넌스 유지(필터는 부분집합만
+     만들고, 폴백 원판정도 등록 전략에서 나온다).
+
+필터는 `pedagogy_catalog_filter_enabled` 플래그 옵트인(기본 OFF·킬스위치)이다 — OFF면 카탈로그
+미조회·규칙표 원판정 그대로(기존 경로와 비트동일). None 신호는 해당 필터 축을 조용히 건너뛴다
+(필수화 금지).
 """
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from whymath_backend.config import get_settings
 from whymath_backend.l3.render.registry import registered_strategies
 from whymath_backend.l4.hint_deferral import HintLevel
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.pedagogy.pack_registry import get_pack
+from whymath_backend.l4.pedagogy.strategy_registry import get_pedagogy_strategies
 from whymath_backend.schema.enums import PedagogyStrategy
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.pedagogy_strategy import PedagogyStrategyCard
+
+logger = logging.getLogger("whymath.l4.runtime_selector")
 
 # ──────────────────────────────────────────────────────────────────────────
 # 튜닝 상수 — KPI 튜닝 대상이며 측정된 최적값이 아니다(socratic/select.py 관례).
@@ -89,6 +120,55 @@ REASON_PACK_FORBIDS_WORKED_FIRST = _MODE_WORKED_EXAMPLE_FIRST
 
 REASON_HINT_NOT_ESCALATED = "HINT_NOT_ESCALATED"
 """막힌 학생에게 힌트 에스컬레이션 없이 완전예제가 요청됨(축② — 냉담 정답 제공)."""
+
+# reason_code — 카탈로그 필터 폴백 사유(04e §4 불변식 ① "조용한 실패 아님" — 구조화 로그 필드).
+REASON_CATALOG_FILTER_EMPTY = "CATALOG_FILTER_EMPTY"
+"""카탈로그 적합성 필터가 후보를 공집합으로 좁힘 — 필터 무시·규칙표 원판정 폴백."""
+
+REASON_CATALOG_FILTER_EXHAUSTED = "CATALOG_FILTER_EXHAUSTED"
+"""좁힌 후보는 비어 있지 않으나 규칙표(R1~R5)가 후보를 소진 — 규칙표 원판정 폴백."""
+
+REASON_CATALOG_UNAVAILABLE = "CATALOG_UNAVAILABLE"
+"""카탈로그 적재 실패(코퍼스 손상 등) — 필터 생략·규칙표 원판정(예외 타입명 로그 동반)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 학년 → 학교급 밴드 (grade_band 신호의 순수 변환 — 생산자 `UserProfile.grade`)
+# ──────────────────────────────────────────────────────────────────────────
+# K-12 사다리 구간 경계 — `schema/user.py`의 grade 계약(10=고1·11=고2·12=고3·13=N수1·14=N수2,
+# ge=10 le=14) 실측에서 역산한 동일 사다리(10=고1 ⇒ 7~9=중학·1~6=초등)다.
+_GRADE_ELEMENTARY_MAX = 6
+_GRADE_MIDDLE_MAX = 9
+_GRADE_NSU_MAX = 14
+
+
+def grade_to_band(grade: int | None) -> str | None:
+    """학년 정수 → 학교급 밴드(`GRADE_BAND_VOCAB` 부분집합) 순수 변환. 미상은 None.
+
+    정본: 04e §4(카탈로그 후보 필터의 grade 신호 — "생산자 먼저" 원칙). 생산자는
+    `UserProfile.grade`(`db/models/user.py` — int|None)이며, 값 의미는 `schema/user.py` 계약
+    실측: **10/11/12=고1~고3·13/14=N수1·2(ge=10 le=14)**. 같은 사다리를 아래로 연장해
+    1~6=초등·7~9=중학으로 해석한다(현 생산자 domain 밖이나, 초등/중학 확장 시 변환 재작성이
+    필요 없도록 총함수로 둔다).
+
+      - None → None (신호 부재 — 필터 축 조용히 스킵)
+      - 1~6 → "초등" / 7~9 → "중학" / 10~12 → "고등"
+      - 13~14 → "고등" (N수는 고교 교육과정·수능 대비 재학습 — 대학 과정이 아니다)
+      - 그 외(0 이하·15 이상) → None (미정의 값 — 추측 매핑 금지·축 스킵)
+
+    ⚠️ 정직한 공백: "대학" 밴드는 이 변환이 **영원히 내지 않는다** — grade 정수 계약에 대학
+    인코딩이 없다(생산자 부재). 카탈로그 쪽 target_grade_bands의 "대학"은 유효하되, 신호 쪽
+    생산자가 생기기 전까지 그 축으로는 좁혀지지 않는다.
+    """
+    if grade is None:
+        return None
+    if grade < 1 or grade > _GRADE_NSU_MAX:
+        return None
+    if grade <= _GRADE_ELEMENTARY_MAX:
+        return "초등"
+    if grade <= _GRADE_MIDDLE_MAX:
+        return "중학"
+    return "고등"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +225,12 @@ class StudentSignals:
     misconception_ids: tuple[str, ...] = field(default=())
     """활성 오개념 가설 id(`l4.misconception.diagnose`/`hypothesis_store`). 비면 미검출."""
 
+    # ── 학적 (L5 프로필 — PED-06 카탈로그 필터 축) ────────────────
+    grade_band: str | None = None
+    """학교급 밴드('초등'/'중학'/'고등'/'대학' — GRADE_BAND_VOCAB). 생산자는
+    `UserProfile.grade` → `grade_to_band()`(`api/study.py::_build_signals` 배선 — 04d §2.1
+    "생산자 먼저" 충족). None이면 카탈로그 필터의 학년 축을 조용히 건너뛴다."""
+
     @property
     def is_stuck(self) -> bool:
         """막힘 상태인지 — 힌트가 이미 올라갔거나 같은 단계에서 오래 맴돌면 막힌 것으로 본다.
@@ -179,40 +265,178 @@ class GateResult:
     """게이트 이전에 요청됐던 전략(강등 시에만 채워짐 — 감사용)."""
 
 
-def select(signals: StudentSignals) -> PedagogyStrategy:
-    """학생 신호 → 교수법 전략(결정론 규칙표 v1). **허용 판정은 하지 않는다** — `gate()` 담당.
+def narrow_candidates(
+    candidates: frozenset[PedagogyStrategy],
+    cards: Mapping[str, PedagogyStrategyCard],
+    *,
+    grade_band: str | None = None,
+    difficulty: str | None = None,
+    k_type: str | None = None,
+) -> frozenset[PedagogyStrategy]:
+    """카탈로그 적합성으로 후보 집합을 **좁히기만** 하는 순수 함수(04e §4의 `narrow`).
 
-    우선순위(먼저 걸린 규칙이 이긴다):
-      R1. 막힘 상태 → `WORKED_EXAMPLE` 제안. 실제 허용 여부는 게이트가 2축으로 판정한다(여기서 막지
-          않는 이유: 선택은 *필요*를, 게이트는 *허용*을 담당하는 분리).
-      R2. 오개념 가설 있음 → `ANALOGY`. 틀린 직관은 설명을 덧대기보다 다른 직관으로 재구성하는
-      편이 낫다.
-      R3. 직전 오답 + 초보 → `DIRECT`. 기반이 약한 학생에게 발문만 던지면 인지 부하만 커진다.
-      R4. 숙달 → `PROBLEM_BASED`. 충분히 아는 학생에게는 문제를 먼저 줘 생산적 고투를 만든다.
-      R5. 그 외 → `SOCRATIC`. "답이 아닌, 이유를 묻는" 기본값.
+    축별 규칙(모두 AND):
+      - 축 신호가 None이면 그 축은 검사하지 않는다(조용히 스킵 — 필수화 금지).
+      - 카드가 없는 전략은 **제외하지 않는다**(적합성 미상은 배제 근거가 아니다 — 카탈로그
+        공백이 선택 불능을 만들면 안 됨). enum 1:1 완비는 거버넌스 테스트가 동결하므로 실
+        코퍼스에서는 도달하지 않는 방어 분기다.
+      - 카드가 있으면 `target_grade_bands`/`difficulty_range`/`target_k_types` 멤버십 검사.
 
-    **출력은 렌더 어댑터가 등록된 전략으로 제한된다.** 폐쇄 enum은 10종이지만 어댑터는 5종만 있어
-    (REND-01), 미등록 전략을 고르면 호출자가 `LookupError`를 맞는다. 어댑터가 늘면 이 규칙표를 함께
-    확장한다(거버넌스 테스트가 `select()` 출력 ⊆ 등록 전략을 동결한다).
+    반환은 항상 `candidates`의 부분집합이다(좁힘만 — 불변식 ①의 절반. 공집합 폴백은 호출자
+    `select()` 몫). `cards`를 인자로 받는 이유: 레지스트리 조회를 분리해 이 함수를 100% 순수로
+    유지하고, 합성 카드로 축별 변별력을 테스트하기 위해서다.
+    """
+    if grade_band is None and difficulty is None and k_type is None:
+        return candidates
+    kept: set[PedagogyStrategy] = set()
+    for strategy in candidates:
+        card = cards.get(strategy.value)
+        if card is None:
+            kept.add(strategy)
+            continue
+        if grade_band is not None and grade_band not in card.target_grade_bands:
+            continue
+        if difficulty is not None and difficulty not in card.difficulty_range:
+            continue
+        if k_type is not None and k_type not in card.target_k_types:
+            continue
+        kept.add(strategy)
+    return frozenset(kept)
+
+
+def _rule_table(
+    signals: StudentSignals, candidates: frozenset[PedagogyStrategy]
+) -> PedagogyStrategy | None:
+    """규칙표 v1(R1~R5) — 후보 제약판. 조건이 성립해도 전략이 후보 밖이면 다음 규칙으로.
+
+    `candidates`가 전체 등록 전략이면 기존 규칙표와 판정이 동일하다(필터 OFF 경로의 비트동일
+    근거). 후보가 좁혀져 있으면 "이 학생에게 필요한 것" 중 카탈로그가 적합하다고 서술한 첫
+    전략이 이긴다 — 우선순위 순서 자체는 그대로다(04e §4 "R1~R5 우선순위 그대로").
+
+    R2 정밀화(04e §4 v2)는 **정직한 공백으로 보류**한다: 설계는 오개념 가설의 `error_type`을
+    카탈로그 `suitable_error_types`와 대조하라고 지시하나, 2026-07-29 실측 결과 runtime의
+    `misconception_ids`(kebab id — `l4/misconception/catalog.py` 34종)에는 `error_type` 필드
+    자체가 없고, error_type은 DB `misconception_catalog`(L1 코퍼스 839+·M-코드)에만 있어
+    AsyncSession 없이는 조회 불가다(이 모듈은 DB-free 순수 함수 — 억지 배선 금지). kebab↔M코드
+    crosslink도 검수 파이프라인이지 프로덕션 매핑 좌석이 아니다. 대조 불가면 기존 R2 그대로가
+    설계의 지시이므로, 순수 경로 생산자가 생길 때까지 R2는 v1 그대로 둔다.
     """
     # R1. 막힘 — 완전예제 제안(게이트가 최종 판정).
-    if signals.is_stuck:
+    if signals.is_stuck and PedagogyStrategy.WORKED_EXAMPLE in candidates:
         return PedagogyStrategy.WORKED_EXAMPLE
 
-    # R2. 오개념 가설 — 비유로 직관 재구성.
-    if signals.misconception_ids:
+    # R2. 오개념 가설 — 비유로 직관 재구성(정밀화 보류 — docstring).
+    if signals.misconception_ids and PedagogyStrategy.ANALOGY in candidates:
         return PedagogyStrategy.ANALOGY
 
     # R3. 직전 오답 + 초보 — 설명 스캐폴딩.
-    if signals.last_attempt_correct is False and signals.mastery_level == "초보":
+    if (
+        signals.last_attempt_correct is False
+        and signals.mastery_level == "초보"
+        and PedagogyStrategy.DIRECT in candidates
+    ):
         return PedagogyStrategy.DIRECT
 
     # R4. 숙달 — 문제 우선(생산적 고투).
-    if signals.mastery_level == "숙달":
+    if signals.mastery_level == "숙달" and PedagogyStrategy.PROBLEM_BASED in candidates:
         return PedagogyStrategy.PROBLEM_BASED
 
     # R5. 기본 — 질문 중심.
-    return PedagogyStrategy.SOCRATIC
+    if PedagogyStrategy.SOCRATIC in candidates:
+        return PedagogyStrategy.SOCRATIC
+
+    # 후보 소진 — 좁힌 집합에는 규칙표가 낼 전략이 없다(호출자가 원판정으로 폴백).
+    return None
+
+
+def select(
+    signals: StudentSignals,
+    *,
+    k_type: str | None = None,
+    difficulty: str | None = None,
+) -> PedagogyStrategy:
+    """학생 신호 → 교수법 전략(결정론 규칙표 v1 + 카탈로그 후보 필터). **허용 판정은 하지
+    않는다** — `gate()` 담당.
+
+    우선순위(먼저 걸린 규칙이 이긴다 — `_rule_table` 참조):
+      R1. 막힘 상태 → `WORKED_EXAMPLE` 제안(허용은 게이트가 2축으로 판정).
+      R2. 오개념 가설 있음 → `ANALOGY`.
+      R3. 직전 오답 + 초보 → `DIRECT`.
+      R4. 숙달 → `PROBLEM_BASED`.
+      R5. 그 외 → `SOCRATIC`. "답이 아닌, 이유를 묻는" 기본값.
+
+    카탈로그 후보 필터(PED-06 — 04e §4·모듈 docstring): `pedagogy_catalog_filter_enabled`
+    플래그 ON이고 필터 축 신호(`signals.grade_band`·`difficulty`·`k_type`)가 하나라도 있으면,
+    규칙표 적용 전에 후보를 카탈로그 적합성으로 좁힌다. **좁힘만** — 공집합·후보 소진·카탈로그
+    적재 실패는 규칙표 *원판정*으로 폴백하고 reason_code를 구조화 로그로 남긴다(조용한 실패
+    금지). 플래그 OFF(기본)면 카탈로그를 조회조차 하지 않는다(기존 경로와 비트동일).
+
+    `k_type`·`difficulty`는 문항/목표 축이라 신호(dataclass)가 아니라 호출부 kwargs로 받는다
+    (`decide()`의 k_type 관례 동형). ⚠️ difficulty는 2026-07-29 실측 결과 study 경로에 상/중/하
+    생산자가 없다(`LearningObjective`에 난이도 메타 부재·`problem.difficulty_overall`은 수치
+    척도이고 study 경로 밖) — 축은 실재(카탈로그·narrow)하나 프로덕션 배선은 생산자가 생길
+    때까지 정직한 공백이다(항상-None 신호 필드를 만들지 않기 위해 kwargs로만 연다).
+
+    **출력은 렌더 어댑터가 등록된 전략으로 제한된다.** 폐쇄 enum은 10종이지만 어댑터는 5종만
+    있어(REND-01), 미등록 전략을 고르면 호출자가 `LookupError`를 맞는다. 어댑터가 늘면 규칙표를
+    함께 확장한다(거버넌스 테스트가 `select()` 출력 ⊆ 등록 전략을 동결한다 — 불변식 ③).
+    """
+    candidates = registered_strategies()
+    # 원판정 — 필터와 무관한 규칙표 v1 결과. SOCRATIC ∈ 등록 전략은 거버넌스 테스트가 동결하므로
+    # None은 이론상 미도달이나, 총함수 보증으로 강등 폴백 상수를 쓴다(조용한 크래시 금지).
+    base_verdict = _rule_table(signals, candidates)
+    if base_verdict is None:  # pragma: no cover — 거버넌스 동결상 미도달(방어 분기)
+        base_verdict = _FALLBACK_STRATEGY
+
+    if not get_settings().pedagogy_catalog_filter_enabled:
+        return base_verdict
+    if signals.grade_band is None and difficulty is None and k_type is None:
+        return base_verdict  # 필터 축 신호 전무 — 필터할 것이 없다(정상 경로·로그 없음).
+
+    try:
+        cards: Mapping[str, PedagogyStrategyCard] = get_pedagogy_strategies()
+    except Exception as exc:  # 코퍼스 손상·경로 회귀 등 — 효과 축이 선택 불능을 만들면 안 된다.
+        logger.warning(
+            "교수전략 카탈로그 적재 실패 — 필터 생략·규칙표 원판정 폴백 "
+            "(reason_code=%s, error=%s)",
+            REASON_CATALOG_UNAVAILABLE,
+            type(exc).__name__,  # 침묵 실패 금지 — 예외 타입명 로그(CLAUDE.md)
+        )
+        return base_verdict
+
+    narrowed = narrow_candidates(
+        candidates,
+        cards,
+        grade_band=signals.grade_band,
+        difficulty=difficulty,
+        k_type=k_type,
+    )
+    if not narrowed:
+        logger.info(
+            "카탈로그 필터 공집합 — 필터 무시·규칙표 원판정 폴백 "
+            "(reason_code=%s, grade_band=%s, difficulty=%s, k_type=%s, verdict=%s)",
+            REASON_CATALOG_FILTER_EMPTY,
+            signals.grade_band,
+            difficulty,
+            k_type,
+            base_verdict.value,
+        )
+        return base_verdict
+
+    filtered_verdict = _rule_table(signals, narrowed)
+    if filtered_verdict is None:
+        logger.info(
+            "카탈로그 필터 후보 소진 — 규칙표 원판정 폴백 "
+            "(reason_code=%s, narrowed=%s, grade_band=%s, difficulty=%s, k_type=%s, verdict=%s)",
+            REASON_CATALOG_FILTER_EXHAUSTED,
+            sorted(s.value for s in narrowed),
+            signals.grade_band,
+            difficulty,
+            k_type,
+            base_verdict.value,
+        )
+        return base_verdict
+    return filtered_verdict
 
 
 def gate(
@@ -229,6 +453,12 @@ def gate(
 
     `pack=None`(팩 미적용·조회 실패)이어도 **축②는 적용된다** — 팩이 없다는 사실이 냉담 정답 제공을
     열어주면 안 된다(fail-safe).
+
+    ⚠️ **카탈로그 입력 금지(04e §4 불변식 ② — PED-06 동결)**: 이 함수는 교수전략 카탈로그
+    (`strategy_registry`)를 읽지 않는다. 카탈로그는 select 전용 *효과* 축이며, 게이트가 YAML
+    데이터를 읽기 시작하면 코퍼스 편집만으로 "효과 ≤ 허용"이 우회된다. 부재는
+    `tests/backend/l4/test_catalog_consumption.py`가 정적(co_names)·런타임(레지스트리 봄베)으로
+    동결한다 — 카탈로그 축을 추가하려면 그 테스트와 04e §4 개정이 선행이다.
     """
     if strategy is not PedagogyStrategy.WORKED_EXAMPLE:
         return GateResult(strategy=strategy, allowed=True)
@@ -255,14 +485,22 @@ def gate(
     return GateResult(strategy=strategy, allowed=True)
 
 
-def decide(signals: StudentSignals, *, k_type: str | None = None) -> GateResult:
+def decide(
+    signals: StudentSignals,
+    *,
+    k_type: str | None = None,
+    difficulty: str | None = None,
+) -> GateResult:
     """선택 + 게이트 합성 — 호출자가 쓰는 단일 진입점.
 
-    `k_type`(학습목표의 지식 유형)을 주면 해당 교수법 팩을 조회해 축①을 적용한다. 팩을 못 찾으면
-    축①은 생략되고 축②만 적용된다(`gate()` fail-safe 참조).
+    `k_type`(학습목표의 지식 유형)을 주면 ① `select()` 카탈로그 후보 필터의 축(플래그 ON 시 —
+    PED-06)과 ② 해당 교수법 팩 조회(게이트 축①)에 함께 쓰인다. 팩을 못 찾으면 축①은 생략되고
+    축②만 적용된다(`gate()` fail-safe 참조). `difficulty`(상/중/하)는 select 필터 전용이며
+    게이트에는 들어가지 않는다 — 카탈로그·난이도는 *효과* 축이지 *허용* 축이 아니다(04e §4
+    불변식 ②). 생산자 현황은 `select()` docstring의 정직한 공백 부기 참조.
     """
     pack = get_pack(k_type) if k_type is not None else None
-    return gate(select(signals), signals, pack=pack)
+    return gate(select(signals, k_type=k_type, difficulty=difficulty), signals, pack=pack)
 
 
 def selectable_strategies() -> frozenset[PedagogyStrategy]:
@@ -276,12 +514,17 @@ def selectable_strategies() -> frozenset[PedagogyStrategy]:
 
 
 __all__ = [
+    "REASON_CATALOG_FILTER_EMPTY",
+    "REASON_CATALOG_FILTER_EXHAUSTED",
+    "REASON_CATALOG_UNAVAILABLE",
     "REASON_HINT_NOT_ESCALATED",
     "REASON_PACK_FORBIDS_WORKED_FIRST",
     "GateResult",
     "StudentSignals",
     "decide",
     "gate",
+    "grade_to_band",
+    "narrow_candidates",
     "select",
     "selectable_strategies",
 ]

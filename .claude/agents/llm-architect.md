@@ -47,7 +47,7 @@ description: L3 콘텐츠 생성·검증 — LLM 라우팅·PRM 단계검증·�
    - `concept_sequence`: 풀이의 *골격* — 통과하는 개념 노드 ID 순서열. 비교·검색·분류의 기준. 자연어 풀이는 `steps[].content`에 남김
    - `steps`: 각 단계의 내용 + 막힌 학생용 힌트(L4 graded `Hint`로 전달) + 흔한 오류(L1 misconceptions·L2 오개념 매핑과 연결) + SymPy/Lean 검증 표시
    - `embedding`: 풀이 임베딩 벡터 (유사 풀이 검색·군집). 모델은 OpenAI text-embedding-3-large
-   - **L2 연결**: L2 `MasteryState.preferred_solution_style`이 `SolutionPath.approach_type` 값을 취함 — L2가 추적한 학생 선호 유형의 `SolutionPath`를 L4가 우선 노출
+   - **L2 연결**: L2 `MasteryState.preferred_solution_style`이 `SolutionPath.approach_type` 값을 취함 — L2가 추적한 학생 선호 유형의 `SolutionPath`를 L4가 우선 노출 (⚠️ 실측 부기 2026-07-29·PED-11: `MasteryState`는 코드 부재 — 문서 스케치·04d §2.1 생산자 먼저)
 7. **🚨 개념 시퀀스 동치성 판정 — 휴리스틱 + 사람 검수 병행**
    - PRD는 `concept_sequence` 비교만으로 두 풀이의 "자동 동치성 판정"을 비교적 쉽게 가정하나, **WhyMath는 그대로 수용하지 않는다**. `concept_sequence`는 동치성의 *필요조건도 충분조건도 아니다* — 같은 노드를 지나도 본질이 다를 수 있고, 다른 노드를 지나도 동치일 수 있음. 수학 풀이 동치성 일반의 *미해결 연구 난제*
    - **휴리스틱 1차 필터 (자동)**: `concept_sequence` 편집 거리 + `embedding` 코사인 유사도 + 최종 답 SymPy 동치 검사 + `approach_type` 일치 여부 → *동치성 점수* 산출. "동치 후보"/"비동치 후보"로 *분류만* (확정 안 함)

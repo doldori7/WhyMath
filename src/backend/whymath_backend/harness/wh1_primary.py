@@ -21,6 +21,11 @@ shadow와 달리 **발화(`outcome.utterance`)를 호출자(coach)에게 돌려�
      예외면 `None`을 반환해 호출자가 결정론 Polya 템플릿으로 안전 폴백하게 한다(가용성 — 앱은
      죽지 않는다). 모든 실패는 예외 *타입명* 포함 WARNING 로그(침묵 실패 금지·CLAUDE.md).
 
+옵트인 추가 계층(PED-07·기본 OFF — 정본 `docs/architecture/04e_pedagogy_strategy_catalog.md` §9):
+`mode_guard_runtime_enabled` ∧ 팩 주입 시, 발화 확정 후·톤필터 직전에 교수법 팩 금지모드 가드
+(`l4/pedagogy/mode_guard.py`)를 태운다 — 위반 발화는 서빙하지 않고 소크라테스 재질문(결정론
+템플릿)으로 대체 + reason_code 구조화 로그(fail-closed). OFF/무팩이면 기존 경로와 비트동일.
+
 관측 연속성(사인오프 방침 ⑤): primary 경로에서도 shadow와 *동일 레코드 계약*으로
 `emit_wh1_observation`을 호출해 verdict 원장 축적이 끊기지 않는다(`primary=True` 표식으로 회계
 분리·S3-07 신/구판 분리 선례). coach는 primary on이면 별도 shadow spawn을 하지 않는다(같은 턴
@@ -50,7 +55,9 @@ from whymath_backend.harness.wh1_prose import gate_policy_prose, rephrase_coach_
 from whymath_backend.harness.wh1_shadow import _extract_verify_verdict, emit_wh1_observation
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.pedagogy.mode_guard import check_forbidden_modes, fallback_reply_for
 from whymath_backend.l4.tone_filter import filter_tone
+from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 __all__ = ["run_wh1_primary_turn"]
 
@@ -99,6 +106,7 @@ async def run_wh1_primary_turn(
     dialogue_id: str | None = None,
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
+    pack: PedagogyPack | None = None,
 ) -> str | None:
     """WH-1 하네스를 한 턴 돌려 *학생-대면 발화*를 산출한다 — flip primary 경로(S1-11).
 
@@ -110,6 +118,13 @@ async def run_wh1_primary_turn(
     `active_hypotheses`(post-apply 누적 가설 세트)가 §2.2 웜 스타트다 — 호출자(coach)가
     `_apply_hypotheses`로 영속·큐레이션한 세트를 그대로 실어 shadow와 동일 계약을 유지한다.
     `timeout_seconds` 미지정 시 설정(config)의 primary 타임아웃을 쓴다.
+
+    `pack`(PED-07 — 정본 `docs/architecture/04e_pedagogy_strategy_catalog.md` §9): 호출자
+    (coach)가 문항 PRIMARY 개념으로 해석해 `decide(pack=)`에 이미 주입한 *같은* 교수법 팩 객체.
+    `mode_guard_runtime_enabled`(기본 False·옵트인) ∧ pack 주입 시에만, 발화 확정 후·톤필터
+    직전에 팩 금지 모드 가드를 태운다 — 위반이면 그 발화를 서빙하지 않고(fail-closed) 안전한
+    소크라테스 재질문(결정론 템플릿)으로 대체 + reason_code(위반 모드 토큰) 구조화 로그. 팩
+    None(기본·미주입)이거나 플래그 OFF면 가드 블록 전체 미실행 — 기존 경로와 비트동일(회귀 0).
     """
     try:
         policy = LLMTutorPolicy(
@@ -197,6 +212,34 @@ async def run_wh1_primary_turn(
             utterance = prose_outcome.text  # fail-closed — 실패면 원 템플릿 그대로.
             prose_rephrased = prose_outcome.rephrased
             prose_reason = prose_outcome.reason_code
+
+    # ── 금지모드 가드(PED-07·옵트인 — 정본 04e §9) — 발화 확정 후·톤필터 *직전* 계층.
+    # 팩(coach가 decide에 주입한 같은 객체)이 금지한 교수 모드를 발화가 위반하면 그 발화를
+    # 학생에게 내보내지 않고(fail-closed) 소크라테스 재질문(결정론 템플릿·기존 자산)으로 대체
+    # 한다 — 04d §2.2 "차단 시 SOCRATIC 강등(말하기 대신 묻기)" 선례의 사후 가드판. 플래그
+    # OFF(기본)거나 팩 부재(None — 팩 없으면 forbidden_modes도 없음)면 블록 미실행·비트동일.
+    if settings.mode_guard_runtime_enabled and pack is not None:
+        try:
+            violated_mode = check_forbidden_modes(pack, utterance)
+        except Exception as exc:  # noqa: BLE001 — 가드 자체 장애로 서빙을 죽이지 않는다.
+            # 예외 skip은 침묵 금지(CLAUDE.md) — 타입명 로그. 발화는 기존 게이트(하네스 verify·
+            # 정답 억제·톤필터)를 이미/곧 통과하므로 가드 판정 유보 상태로 서빙을 계속한다.
+            logger.warning(
+                "mode_guard 실행 실패(%s) — 가드 판정 유보·발화는 기존 게이트로만 서빙",
+                type(exc).__name__,
+                exc_info=True,
+            )
+            violated_mode = None
+        if violated_mode is not None:
+            # reason_code(위반 모드 토큰)·검출기 축·팩 유형만 구조화 로그 — 발화 원문은 싣지
+            # 않는다(프라이버시·톤필터 로그 관례 동형). 조용한 폴백 금지.
+            logger.warning(
+                "mode_guard 위반(reason_code=%s·k_type=%s·detector=rule) — "
+                "발화 미서빙·소크라테스 재질문 폴백",
+                violated_mode,
+                pack.k_type,
+            )
+            utterance = fallback_reply_for(violated_mode)
 
     # 톤필터 라이브 배선(방침 ③·KPI3) — 위반 시 rewritten 텍스트만 노출·위반 사실은 관측 기록.
     filtered, report = filter_tone(utterance)
