@@ -1425,6 +1425,11 @@ class TestNextProblem:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀 0건 → '미도달' 사유 코드(응답 정직 표기 신규 4필드).
+            "weight_axes_applied": [],
+            "candidate_pool_size": 0,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "no_candidate_pool",
         }
 
     def test_requires_auth(self) -> None:
@@ -1608,17 +1613,26 @@ class TestNextProblemSuneungMode:
         session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?mode=suneung").json()
-        # 응답 모델(NextProblemResponse) 무변경 — 기본 CAT과 같은 5개 필드.
+        # 응답 모델(NextProblemResponse) — 기존 5필드 + REC-01 응답 정직 표기 신규 4필드.
         assert set(body) == {
             "problem_id",
             "theta",
             "difficulty",
             "standard_error",
             "measurement_sufficient",
+            "weight_axes_applied",
+            "candidate_pool_size",
+            "weak_concept_signal_count",
+            "candidate_zero_reason",
         }
         assert body["problem_id"] == str(problem.problem_id)
         assert body["difficulty"] == 3.0
         assert body["theta"] == 0.0
+        # 수능 모드는 suneung_priority 축이 항상 적용(약점 가중은 flag 미지정 → 미적용).
+        assert body["weight_axes_applied"] == ["suneung_priority"]
+        assert body["candidate_pool_size"] == 1
+        assert body["weak_concept_signal_count"] == 0
+        assert body["candidate_zero_reason"] is None
 
     def test_no_eligible_candidates_null(self) -> None:
         """적격 0 → problem_id null(기본 CAT과 동일한 null 응답 계약)."""
@@ -1633,6 +1647,12 @@ class TestNextProblemSuneungMode:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀은 1건 있었으나(SQL 사전필터 통과) L6 진실 게이트가 전부 배제
+            # — '후보 0건'과 '전부 부적격'을 사유 코드로 구분(candidate_pool_size 참고).
+            "weight_axes_applied": ["suneung_priority"],
+            "candidate_pool_size": 1,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "all_candidates_gated_ineligible",
         }
 
     def test_copyright_blocked_source_null_even_if_sql_leaks(self) -> None:

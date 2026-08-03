@@ -1594,6 +1594,23 @@ HarnessMetricsMode = Annotated[
     ),
 ]
 
+# REC-01: 응답 정직 표기 — 이번 요청에 *실제로* 적용된 가중 축 이름(NextProblemResponse
+# `weight_axes_applied`). "적용 안 됨"(빈 리스트)과 "적용했으나 신호가 없었음"
+# (`weak_concept_signal_count=0`)을 별도 필드로 구분하는 것이 이 상수들의 존재 이유다
+# (θ=0 콜드스타트·BKT 숙달 0행 상태를 응답에서 숨기지 않기 위함 — 배경은 모듈 상단 참조).
+# prioritize_weak_concepts=true면 항상 포함(기본/수능 공통).
+WEIGHT_AXIS_WEAK_CONCEPT = "weak_concept"
+# mode=suneung이면 항상 포함(수능 우선순위 가중).
+WEIGHT_AXIS_SUNEUNG_PRIORITY = "suneung_priority"
+
+# REC-01: candidate_zero_reason 값 — problem_id가 null일 때만 채워지는 사유 코드.
+# 기본 CAT 경로는 `best is None`이 곧 `candidate_rows`가 비었다는 뜻뿐이라(select_weighted_item은
+# items가 비면 루프가 안 돌아 None) 항상 NO_POOL이다. 수능 모드만 두 사유가 갈린다: SQL 사전필터
+# 자체가 0건인지(NO_POOL), 아니면 후보는 있었으나 L6 진실 게이트(is_suneung_eligible)가 전부
+# 부적격 처리했는지(ALL_GATED_INELIGIBLE — `recommend_suneung_index`가 None을 반환).
+CANDIDATE_ZERO_NO_POOL = "no_candidate_pool"
+CANDIDATE_ZERO_ALL_GATED_INELIGIBLE = "all_candidates_gated_ineligible"
+
 
 def _weak_concept_weights(
     candidate_problem_ids: list[uuid.UUID],
@@ -1669,6 +1686,39 @@ class NextProblemResponse(BaseModel):
     measurement_sufficient: bool = Field(
         default=False,
         description=f"SE가 목표({_TARGET_SE}) 이하면 True — 적응 검사 중단 권고(CAT 중단 규칙).",
+    )
+    # ── REC-01: 응답 정직 표기(추천 도달 관측) — 기존 5필드 불변·아래 4필드는 신규 추가 ──
+    weight_axes_applied: list[str] = Field(
+        default_factory=list,
+        description=(
+            "이번 응답에 실제로 적용된 가중 축 이름 목록(예: 'weak_concept'·'suneung_priority'). "
+            "prioritize_weak_concepts=false(기본)면 'weak_concept' 미포함 — 빈 리스트는 "
+            "'적용 안 됨'이지 신호 없음이 아니다. 'weak_concept'이 있어도 실제 가중 신호가 "
+            "있었는지는 weak_concept_signal_count로 별도 확인한다."
+        ),
+    )
+    candidate_pool_size: int = Field(
+        default=0,
+        description=(
+            "이번 요청의 실제 후보 풀 크기(θ 근방 SQL 선별 후 개수, 수능 모드는 L6 게이팅 전)."
+        ),
+    )
+    weak_concept_signal_count: int = Field(
+        default=0,
+        description=(
+            "후보 중 BKT 숙달 기록이 있어 약점 가중치가 1.0이 아니게 된 문항 수. "
+            "prioritize_weak_concepts=false거나 후보가 없으면 0 — 'weak_concept' 축이 "
+            "weight_axes_applied에 있는데 이 값이 0이면 '적용했으나 신호 없음'(콜드스타트 등)."
+        ),
+    )
+    candidate_zero_reason: str | None = Field(
+        default=None,
+        description=(
+            "problem_id가 null일 때만 채워지는 사유 코드. "
+            f"'{CANDIDATE_ZERO_NO_POOL}'=SQL 후보 조회 자체가 0건, "
+            f"'{CANDIDATE_ZERO_ALL_GATED_INELIGIBLE}'=후보는 있었으나 수능 모드 L6 게이팅이 "
+            "전부 부적격 처리(기본 CAT 경로에서는 발생하지 않음). problem_id가 있으면 null."
+        ),
     )
 
 
@@ -1776,6 +1826,8 @@ async def recommend_next_problem(
         candidates = [
             row.to_schema() for row in (await session.execute(suneung_stmt)).scalars().all()
         ]
+        # REC-01: SQL 사전필터 통과 직후(L6 게이팅 전) 실제 후보 풀 크기 — 정직 표기용.
+        candidate_pool_size = len(candidates)
 
         # 약점 가중(슬라이스 17)은 기본 CAT과 *같은 헬퍼*를 공유 — extra_weights로 곱 결합.
         extra_weights: list[float] | None = None
@@ -1783,17 +1835,34 @@ async def recommend_next_problem(
             extra_weights = await _load_weak_concept_weights(
                 session, user.user_id, [p.problem_id for p in candidates]
             )
+        # REC-01: 수능 모드는 suneung_priority가 항상 적용되고, 약점 가중은 플래그에 따른다.
+        # extra_weights는 곱 결합 *전*(순수 약점 가중) 값이라 신호 유무를 여기서 바로 셀 수 있다
+        # (새 쿼리 불요 — 이미 계산된 리스트에서 파생).
+        weight_axes_applied = [WEIGHT_AXIS_SUNEUNG_PRIORITY]
+        if prioritize_weak_concepts:
+            weight_axes_applied.append(WEIGHT_AXIS_WEAK_CONCEPT)
+        weak_concept_signal_count = (
+            sum(1 for w in extra_weights if w != 1.0) if extra_weights is not None else 0
+        )
         chosen_index = recommend_suneung_index(
             theta, candidates, persona, extra_weights=extra_weights
         )
         if chosen_index is None:
             # 적격 후보 0(전부 차단·신호 없음·b 없음) — 기본 CAT과 동일한 null 계약.
+            # REC-01: 후보 풀 자체가 0건인지, 풀은 있었으나 L6 게이팅이 전부 배제했는지 구분.
+            zero_reason = (
+                CANDIDATE_ZERO_NO_POOL if not candidates else CANDIDATE_ZERO_ALL_GATED_INELIGIBLE
+            )
             return NextProblemResponse(
                 problem_id=None,
                 theta=theta,
                 difficulty=None,
                 standard_error=standard_error,
                 measurement_sufficient=measurement_sufficient,
+                weight_axes_applied=weight_axes_applied,
+                candidate_pool_size=candidate_pool_size,
+                weak_concept_signal_count=weak_concept_signal_count,
+                candidate_zero_reason=zero_reason,
             )
         picked = candidates[chosen_index]
         return NextProblemResponse(
@@ -1805,6 +1874,10 @@ async def recommend_next_problem(
             ),
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            weight_axes_applied=weight_axes_applied,
+            candidate_pool_size=candidate_pool_size,
+            weak_concept_signal_count=weak_concept_signal_count,
+            candidate_zero_reason=None,
         )
 
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
@@ -1825,6 +1898,8 @@ async def recommend_next_problem(
         )
     ).limit(_CANDIDATE_POOL_SIZE)
     candidate_rows = (await session.execute(candidate_stmt)).all()
+    # REC-01: 실제 후보 풀 크기 — 정직 표기용(θ 근방 SQL 선별 후, 미응답·난이도 라벨 보유 개수).
+    candidate_pool_size = len(candidate_rows)
 
     # 보정 b 우선·없으면 휴리스틱(difficulty_overall NOT NULL 보장 → 항상 값·candidate_rows와 1:1).
     items = [
@@ -1840,14 +1915,27 @@ async def recommend_next_problem(
             session, user.user_id, [pid for pid, _d, _b in candidate_rows]
         )
 
+    # REC-01: 응답 정직 표기 — 기본 CAT은 weak_concept 축만 존재(수능 우선순위 없음).
+    # prioritize_weak_concepts=false면 축 자체가 빈 리스트('적용 안 됨'). true면 축은 항상
+    # 실리되(가중 로직은 "적용"됐다는 뜻), 실제 신호 유무는 weak_concept_signal_count로 구분한다
+    # (weights는 이미 계산된 리스트라 새 쿼리 없이 그대로 파생).
+    weight_axes_applied = [WEIGHT_AXIS_WEAK_CONCEPT] if prioritize_weak_concepts else []
+    weak_concept_signal_count = sum(1 for w in weights if w != 1.0) if weights is not None else 0
+
     best = select_weighted_item(theta, items, weights=weights)
     if best is None:
+        # REC-01: 기본 CAT 경로에서 best is None은 candidate_rows가 비었다는 뜻뿐이다
+        # (items는 candidate_rows와 1:1이라 다른 사유가 없음 — select_weighted_item docstring).
         return NextProblemResponse(
             problem_id=None,
             theta=theta,
             difficulty=None,
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            weight_axes_applied=weight_axes_applied,
+            candidate_pool_size=candidate_pool_size,
+            weak_concept_signal_count=weak_concept_signal_count,
+            candidate_zero_reason=CANDIDATE_ZERO_NO_POOL,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
     return NextProblemResponse(
@@ -1856,6 +1944,10 @@ async def recommend_next_problem(
         difficulty=float(chosen_difficulty),
         standard_error=standard_error,
         measurement_sufficient=measurement_sufficient,
+        weight_axes_applied=weight_axes_applied,
+        candidate_pool_size=candidate_pool_size,
+        weak_concept_signal_count=weak_concept_signal_count,
+        candidate_zero_reason=None,
     )
 
 
