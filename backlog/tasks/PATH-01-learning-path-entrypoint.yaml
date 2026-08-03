@@ -24,5 +24,5 @@ paths:
   - "src/backend/whymath_backend/ops/*"
   - "tests/backend/l2/**"
 session: null
-notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. 경로 엔진 3좌석(Kahn 위상정렬·재귀 CTE 다단계 선수·L4 선수 코칭)은 완성돼 있는데 API 3종이 전부 concept_id를 인자로 요구하고 그 concept_id를 고르는 조립 좌석이 0 → 기능 54가 학생에게 미도달. Flutter 실호출 /v1/ 엔드포인트 13종에 경로 API 0종. max_depth 기본 1이라 다단계 연쇄는 기본값으로 안 나옴. 반복 실수 7회차(§6) — '만들고 진입점을 잇지 않음'. REC-01과 좌석 다름(REC-01=next-problem 문항 축 도달 관측·D1=경로 개념 축 진입점 신설) — 중복 없음."
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. 경로 엔진 3좌석(Kahn 위상정렬·재귀 CTE 다단계 선수·L4 선수 코칭)은 완성돼 있는데 API 3종이 전부 concept_id를 인자로 요구하고 그 concept_id를 고르는 조립 좌석이 0 → 기능 54가 학생에게 미도달. Flutter 실호출 /v1/ 엔드포인트 13종에 경로 API 0종. max_depth 기본 1이라 다단계 연쇄는 기본값으로 안 나옴. 반복 실수 8회차(§6·curriculum_module_gap_review.md 7회차 병렬 충돌로 정정) — '만들고 진입점을 잇지 않음'. REC-01과 좌석 다름(REC-01=next-problem 문항 축 도달 관측·D1=경로 개념 축 진입점 신설) — 중복 없음."
 updated: 2026-08-03

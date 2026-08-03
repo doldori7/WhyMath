@@ -23,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - docs/data/concept_content_corpus_v1.md
 session: null
-notes: "docs/architecture/learning_path_module_gap_review.md §3 D2. 데이터 카드(2026-06-20)가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 반복 실수 8회차(§6) — '만들고 추적을 놓침'. §2-⑦(경로 영속화 금지)과 다름: 금지 대상은 학생별 파생 경로이고 이건 전 학생 공통 교수학 템플릿. 중복 없음."
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D2. 데이터 카드(2026-06-20)가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 반복 실수 9회차(§6·curriculum_module_gap_review.md 7회차 병렬 충돌로 정정) — '만들고 추적을 놓침'. §2-⑦(경로 영속화 금지)과 다름: 금지 대상은 학생별 파생 경로이고 이건 전 학생 공통 교수학 템플릿. 중복 없음."
 updated: 2026-08-03
