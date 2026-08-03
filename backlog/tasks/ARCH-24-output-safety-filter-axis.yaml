@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-24-output-safety-filter-axis
+title: "학생 대면 출력 금칙어·PII 검사 축 — qa_pipeline 8번째 축 승격(현재 검사기 0)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "학생에게 실제 전달되는 LLM 산문(coach 발화·해설·힌트)에 부적절 표현·타인 PII가 섞였는지 검사하는 결정론 검사기 신설 + qa_pipeline의 8번째 축으로 즉시 조립(소비처 동반 — dead code 금지). ①사전 기반 금칙어 + 정규식(연락처·이메일·주민번호 형태) 결정론 1차 — LLM 판정 미도입(비용·비결정성·자기승인 금지) ②PII 두 방향: 학생 자신의 PII 반사 + 타인 PII 생성. ops/log_scrubber.py의 패턴 자산(이메일·한국 휴대전화·JWT) 재사용 — 재구현 금지 ③게이트는 wilson.py 단측 상한(점추정 금지) ④qa_pipeline의 _NOT_MEASURED_AXES에서 banned_words_pii 제거하고 실축으로 승격 ⑤실시간 서빙 경로 부착은 별도 판단(배치 검사가 1단계). 변별력 실측 의무 — 금칙어·PII를 주입한 샘플에서 exit 1, 무결 샘플에서 exit 0을 양쪽 다 실측."
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/operations_module_gap_review_r2.md §3 D4 — 외부 EOS 틀 모듈 45-⑤(AI 출력 검사 中 금칙어·개인정보) 재점검. 전수 grep(금칙어/banned_word/profanity/blocklist) 무일치 — qa_pipeline.py:145의 '검사 안 함' 선언 자체가 유일 히트. 인접 자산은 전부 다른 축: coach_prose_leak_eval=날조 정답·외래 등식 노출(교수학적 누설), SEC-11 log_scrubber=로그 평면(logging.Filter), judge_filter=오개념 후보 선별. CLAUDE.md 의사결정 우선순위 1위(학생 안전·웰빙) 축인데 백로그 추적조차 0이었다(MEMORY 2026-08-02 '향후 별도 태스크'가 미등재). 나머지 미측정 3축은 r2 §3 D4에서 결론: ui_golden·statistical_outlier는 미채택 유지(§2-⑥⑦ 트리거 미도달·S4-15 추적), performance는 축 오분류로 영구 미채택(OPS-01 런타임 관측 평면)."
+updated: 2026-08-03
