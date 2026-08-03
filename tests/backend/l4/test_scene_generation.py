@@ -154,8 +154,16 @@ class TestVisualizationElement:
 
     @pytest.mark.asyncio
     async def test_non_graph2d_no_param_control(self) -> None:
-        """비-graph_2d(surface_3d) → param_control 없음."""
-        scene, _ = await _generate(_concept(styles=[VisualizationStyle.입체도형]), text=_SURFACE3D)
+        """비-graph_2d(surface_3d) → param_control 없음.
+
+        게이트를 통과시키려면 좌석 있는 양식이 필요하다(VIZ-04) — 이 테스트의 관심사는 "LLM이
+        surface_3d를 반환했을 때 코드 경로"이지 양식↔타입 사실적 대응이 아니므로 좌석 있는
+        함수그래프를 쓰고, 가짜 LLM 응답만 surface_3d로 둔다(fake provider는 style과 무관하게
+        지정된 텍스트를 그대로 반환 — `_FakeProvider`).
+        """
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]), text=_SURFACE3D
+        )
         assert any(isinstance(el, VisualizationElement) for el in scene.elements)
         assert not any(isinstance(el, ParamControlElement) for el in scene.elements)
 
@@ -197,9 +205,14 @@ class TestVisualizabilityGate:
 
     @pytest.mark.asyncio
     async def test_partial_visualizes(self) -> None:
-        """부분(확률 등) → 부분 시각화 대상(AnalogyVisual) — 억지 아님·viz 생성."""
+        """부분(확률 등) → 부분 시각화 대상(AnalogyVisual) — 억지 아님·viz 생성.
+
+        4분류 축(is_visualizable)만 독립적으로 검증하기 위해 좌석 있는 양식(함수그래프)을 쓴다 —
+        좌석 축(has_render_seat)은 `TestRenderSeatGate`가 별도로 검증한다(VIZ-04, 두 게이트를
+        혼동하지 않도록 분리).
+        """
         scene, provider = await _generate(
-            _concept(styles=[VisualizationStyle.수형도]),
+            _concept(styles=[VisualizationStyle.함수그래프]),
             visualizability=Visualizability.부분,
         )
         assert any(isinstance(el, VisualizationElement) for el in scene.elements)
@@ -235,6 +248,53 @@ class TestVisualizabilityGate:
         )
         assert any(isinstance(el, VisualizationElement) for el in scene.elements)
         assert any(isinstance(el, ParamControlElement) for el in scene.elements)
+
+
+# ── 렌더 좌석 게이트(VIZ-04·05b §3 첫 화살표) ────────────────────────────────
+class TestRenderSeatGate:
+    """권장 양식에 렌더 좌석이 없으면(unseated) 4분류가 통과해도 시각화가 생략되는지 검증.
+
+    `TestVisualizabilityGate`(4분류 축)와 독립된 두 번째 AND 조건 — 4분류가 시각화를 "허용"해도
+    표현할 렌더 타입이 없는 양식(예: 수형도)은 LLM이 4종 중 하나를 억지로 골라 개념과 무관한
+    그림을 렌더할 위험이 있어(§7.1 G1) 여기서 보류한다.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unseated_style_skips_visualization_even_when_4class_gate_passes(self) -> None:
+        """수형도(unseated)+visualizability=None(4분류 게이트는 fail-open 통과)
+        → 그래도 시각화 생략."""
+        scene, provider = await _generate(
+            _concept(
+                styles=[VisualizationStyle.수형도],
+                cognitive=[CognitiveType.DEFINITION],
+            ),
+            visualizability=None,  # 4분류 축은 통과(fail-open) — 좌석 축만으로 보류돼야 함을 격리
+        )
+        assert not any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert not any(isinstance(el, ParamControlElement) for el in scene.elements)
+        assert provider.calls == []  # 좌석 없는 양식으로 LLM을 부르지 않는다(비용·억지 그림 방지)
+        assert _socratics(scene)  # 대체 접근(소크라테스)은 유지된다
+
+    @pytest.mark.asyncio
+    async def test_seated_style_still_visualizes(self) -> None:
+        """함수그래프(seated) → 좌석 축은 통과, 시각화 생성(회귀 방지 — 다른 개념이 아니라 이 조건).
+
+        `TestVisualizationElement.test_graph2d_with_params_adds_param_control`과 동형이나, 이
+        클래스의 관심사(좌석 축 통과)를 명시적으로 이름 붙여 재확인한다.
+        """
+        scene, provider = await _generate(_concept(styles=[VisualizationStyle.함수그래프]))
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert provider.calls
+
+    @pytest.mark.asyncio
+    async def test_mixed_seated_and_unseated_styles_visualizes(self) -> None:
+        """권장 양식이 여럿이고 그중 하나만 seated여도 시각화 생성
+        (one-of 의미론 — has_render_seat)."""
+        scene, provider = await _generate(
+            _concept(styles=[VisualizationStyle.수형도, VisualizationStyle.함수그래프])
+        )
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert provider.calls
 
 
 # ── 소크라테스 발화(인지유형 결정론) ─────────────────────────────────────────

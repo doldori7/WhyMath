@@ -795,6 +795,21 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
         remote_claimed, remote_status = _remote_claim_map(root, policy)
     except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
         remote_claimed, remote_status = {}, "error"
+
+    # 장기 미머지 브랜치 경고 (HARN-13) — SessionStart 1회 비용, 정보성(브리핑을 막지 않음).
+    stale_branches: list[tuple[str, float, int]] = []
+    stale_branch_status = "ok"
+    if policy.remote_claims:
+        try:
+            scan = remote_claims.scan_stale_branches(root)
+            stale_branch_status = scan.status
+            if scan.status == "ok":
+                stale_branches = [(s.branch, s.age_days, s.ahead) for s in scan.stale]
+        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            stale_branch_status = "error"
+    else:
+        stale_branch_status = "disabled"
+
     print(
         report.render_brief(
             backlog,
@@ -803,6 +818,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             date.today(),
             remote_claimed=remote_claimed,
             remote_status=remote_status,
+            stale_branches=stale_branches,
+            stale_branch_status=stale_branch_status,
         )
     )
     return 0

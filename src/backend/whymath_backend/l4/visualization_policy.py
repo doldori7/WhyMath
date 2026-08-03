@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
-from whymath_backend.schema.enums import Visualizability
+from collections.abc import Sequence
+
+from whymath_backend.schema.enums import Visualizability, VisualizationStyle
 
 # 리터럴 자동 시각화를 *보류*하는 분류 — **추상**(군론·위상·논리: 리터럴 그래프가 거짓 구체성으로
 # 오개념 유발·목표 렌더는 StructureGraph/메타포지 리터럴 그래프 아님). 이 경우 소크라테스·단계로
@@ -27,6 +29,37 @@ def is_visualizable(visualizability: Visualizability | None) -> bool:
     두는 것은 *하위호환*(미태깅은 기존 동작 유지) — 태깅이 진행되면 추상만 걸러진다(부분은 시각화).
     """
     return visualizability is None or visualizability not in _ABSTAIN
+
+
+# 렌더 좌석 보유 양식 — data/visual_style_contract.json의 status=="seated" 집합과 정확히
+# 일치해야 한다(JSON↔Python 이중 진실원 drift 방지 —
+# tests/backend/schema/test_visual_style_render_contract.py 가 교차검증). 이 모듈은 순수
+# 함수·부작용 0 원칙(hermetic)이라 계약 파일을 직접 읽지 않고 리터럴
+# 상수로 박는다(VIZ-04). 근거(양식↔실제 렌더 경로): 함수그래프·단위원(관계식)·부등식영역(영역
+# 색칠)은 `interactive_graph_2d`(웹 `classify()`가 각각 function/implicit/inequality로 분류해
+# 그린다) · 분포곡선은 PDF가 x의 함수라 `interactive_graph_2d` · 확률시뮬레이션은
+# `simulation_probabilistic`. 나머지 11종(수직선·접선도함수·입체도형·평면도형·벡터도·점화도·
+# 수형도·넓이모델·통계차트·산점도·상자그림)은 표현할 렌더 타입이 없다(unseated).
+_SEATED_STYLES: frozenset[VisualizationStyle] = frozenset(
+    {
+        VisualizationStyle.함수그래프,
+        VisualizationStyle.단위원,
+        VisualizationStyle.부등식영역,
+        VisualizationStyle.분포곡선,
+        VisualizationStyle.확률시뮬레이션,
+    }
+)
+
+
+def has_render_seat(styles: Sequence[VisualizationStyle]) -> bool:
+    """권장 시각화 양식 중 하나라도 렌더 좌석이 있으면 True.
+
+    좌석이 0이면(권장 양식 전건이 unseated) 억지 시각화를 보류한다 — 렌더 타입이 없는 양식을
+    LLM이 4종 중 하나로 강제로 골라 개념과 무관한 그림을 렌더하는 것을 막는다(VIZ-04·
+    `docs/architecture/visualization_module_gap_review.md` §7.1 G1). `is_visualizable`(4분류
+    게이트)과 **병렬**이며 대체하지 않는다 — 둘 다 통과해야 시각화가 생성된다.
+    """
+    return any(s in _SEATED_STYLES for s in styles)
 
 
 def prefers_static_visual(visualizability: Visualizability | None) -> bool:

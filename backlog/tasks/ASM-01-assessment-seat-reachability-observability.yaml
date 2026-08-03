@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-01-assessment-seat-reachability-observability
+title: "평가 결과 영속 좌석(assessment 4테이블) writer 0 관측 — 조회·완료·삭제·프라이버시 완비 vs 생성 경로 부재 가시화"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: Assessment(...) 생성 코드 0건·AssessmentType 5종 소비 코드 0건을 재현한다(주장 확인 또는 반증 — 반증되면 범위 재조정)"
+  - "② 정합 설계 본체: 좌석 도달 리포트(assessment 4테이블 행 수·AssessmentType별 분포·오개념목록/recommended_path 결손 표기, 0건은 '0건'이 아니라 '생성 경로 부재'로 표시). 신규 스키마·마이그레이션 0"
+  - "③ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "④ 변별력: 테스트에서 의도적으로 Assessment row 하나를 만들어 카운터가 실제로 오르는지 실측 → 제거해 0으로 복원되는지 실측. 성공/실패가 같은 값을 내면 검증이 아니다"
+  - "⑤ 범위 밖 명시: POST /v1/me/assessments(생성 API) 신설·활성화는 이 태스크에 포함하지 않는다(활성화가 아니라 가시화가 목표). 채점 권위 이관(NLP-02)·문항 통계 갱신(S4-15)도 포함하지 않는다"
+artifacts:
+  - 467a5af4
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/db/models/assessment.py
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+  - tests/backend/db/test_assessment_seat_reach_report_integration.py
+session: null
+notes: "docs/architecture/assessment_module_gap_review.md §3 D1. assessment·concept_mastery_history·skill_mastery_history·ability_snapshot 4테이블 중 본체(assessment)가 조회·완료·삭제·프라이버시 내보내기·파기까지 5개 표면 완비된 채 Assessment(...) 생성 코드 0건. '완비된 소비 경로+미도달 공급원' 8회차(이 시리즈 최강 형태 — CRUD의 R/U/D는 다 있고 C만 없음). 진단 엔진(IRT CAT+BKT) 자체는 초과 충족이며 이 태스크는 재설계하지 않는다."
+updated: 2026-08-03
