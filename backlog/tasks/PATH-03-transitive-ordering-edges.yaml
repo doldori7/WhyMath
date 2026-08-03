@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-03-transitive-ordering-edges
+title: "학습 경로 전이 순서 제약 — 비-막힌 중간 노드 경유 의존 반영(27.0%→69.9%)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PATH-01-learning-path-orderability-report
+  - PATH-02-learning-path-ordering-honesty
+requires_gates: []
+acceptance:
+  - "① 현행 한계 재현 고정: A→X→B(X가 막힌 선수 아님) fixture에서 현행 fetch_internal_prerequisite_edges가 A·B 사이 순서를 못 잡음을 테스트로 먼저 재현한다. PATH-01 리포트 기준 개선 예측치를 96/356(27.0%) → 249/356(69.9%, 5홉 예산)으로 문서에 고정한다(87.1%는 무한 도달 천장이므로 목표치로 쓰지 않는다)"
+  - "② 정합 설계 본체: fetch_ordering_subgraph(bounded 재귀 CTE — build_prerequisite_stmt 패턴 답습·SQLAlchemy Core·원시 SQL 0·읽기 전용)와 derive_ordering_edges(순수 함수 — PATH-01 리포트가 재사용)를 l2/learning_path.py에 추가하고 build_learning_path의 배선만 교체한다. order_learning_path·_tiebreak 수정 0, 기존 테스트 18건 무수정 통과, 신규 스키마·마이그레이션 0, max_hops는 MAX_PREREQUISITE_DEPTH 재사용(신규 상수 0)"
+  - "③ 후보 집합 불변: recommend_prerequisite_gaps를 변경하지 않아 학생에게 제시되는 막힌 선수의 개수·구성이 바뀌지 않음을 테스트로 동결한다(순서 품질만 상승·교수학 리스크 구조적 0)"
+  - "④ 변별력: A→X→B fixture에서 순서가 실제로 역전되는지 확인한다(before: ordering_edge_count=0·tiebreak_only·B 먼저 / after: count=1·topological·A 먼저). 순서가 뒤집히지 않는 fixture만으로 검증하면 위장이다"
+  - "⑤ 날조 방지·계약 회귀: 전이 엣지에 합성 edge_strength(곱·최소·평균)를 부여하지 않음을 테스트로 동결한다. has_cycle·is_cycle_residual 계약 회귀 0(bounded 도달은 참 ancestor의 부분집합이고 ancestor는 DAG 위에서 비순환). bounded reachability가 전이적이지 않다는 한계를 docstring에 명시한다"
+  - "⑥ 범위 밖 명시: max_depth 기본값 변경(페이퍼 P1)·전역 학습 경로(§5 유보)·Assessment.recommended_path 소생(페이퍼 P3)·prerequisites/coaching 엔드포인트 정렬 변경은 이 태스크에 포함하지 않는다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/learning_path.py
+  - "tests/backend/l2/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D3. learning_path.py:258이 스스로 '후속 범위'라 적어두고 백로그에 등재된 적 없는 항목이며, 실측상 위상정렬 무력화의 지배적 원인이다(1홉 96건 → 5홉 249건). depends는 측정 선행(PATH-01)과 런타임 계측기 확보(PATH-02)를 위한 것. 저장소 전수에서 '후속 범위' 표기는 이 1건뿐이라 docstring TODO 일제 점검 태스크는 만들지 않는다(패턴이 아니라 단발)."
+updated: 2026-08-03

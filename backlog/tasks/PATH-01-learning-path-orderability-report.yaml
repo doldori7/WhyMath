@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-01-learning-path-orderability-report
+title: "학습 경로 위상 제약 밀도 관측 — 기본 max_depth=1에서 96.4% 무력 가시화"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: 원자 백본 2,683노드/2,210엣지에서 직접선수 분포(915/1412/278/70/8)·직접 선수 2개 이상 356건·max_depth=1 순서화 96/356(27.0%)를 재현한다(주장 확인 또는 반증 — 반증되면 범위 재조정)"
+  - "② 정합 설계 본체: 깊이별(1·2·5) × (직접 엣지·전이 도달) × 결정도(완전/부분/병렬) 3축 리포트를 harness/learning_path_orderability_report.py에 추가한다. l2.learning_path.order_learning_path를 그대로 재호출해 신규 정렬 로직 0(리포트와 런타임이 갈라질 수 없게), 신규 스키마·DB 접근 0(visualization_reach_report.py 코퍼스 리포트 패턴 재사용)"
+  - "③ 상한 표기 의무: 산출값이 weak_only 필터 이전의 구조적 상한이며 병렬 집합(순서가 없는 게 정답) 때문에 100%가 목표가 아님을 리포트 본문·JSON 필드에 명시한다(런타임 실측과 혼동 불가하게)"
+  - "④ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑤ 변별력: 코퍼스 엣지 1개를 가감해 순서화 카운트가 양방향으로 움직이는지 + 직접 축과 전이 축이 서로 다른 값을 내는지(depth1에서 96 vs 249) 확인한다. 두 축이 같은 값을 내면 축이 하나뿐인 위장이다"
+  - "⑥ 범위 밖 명시: 엔드포인트 응답 변경(PATH-02)·정렬 알고리즘 변경(PATH-03)·max_depth 기본값 변경(페이퍼 P1)·전역 학습 경로는 이 태스크에 포함하지 않는다"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. Kahn 위상정렬은 실재하나 엔드포인트 기본 max_depth=1에서 제약 엣지 0인 사례가 96.4%이고 그때 응답은 _tiebreak 정렬로 조용히 강등된다. 이 밀도가 코드·테스트·문서 어디에도 수치로 없다. 코퍼스만 읽으므로 problem_attempt 0행(REC-01)과 무관하게 즉시 착수 가능."
+updated: 2026-08-03
