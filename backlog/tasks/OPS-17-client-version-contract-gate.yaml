@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-17-client-version-contract-gate
+title: "클라 버전 미상 + 최소버전 게이트 0 — API 계약 파손이 '문제를 불러오지 못했어요'로 위장"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "X-App-Version 헤더(api_client.dart:26 기존 단일 헤더 좌석에 추가) + app_version 상수↔pubspec.yaml version: 드리프트 게이트(tests/infra/, OPS-10/11 배선 실재성 관용구 답습)."
+  - "서버측 최소버전 판정을 app.py:544 기존 _service_metrics_middleware(OPS-01) 좌석에 얹는다(신규 미들웨어 금지) — 임계는 config.py Settings 동거. 미달 시 401/404/422와 다른 전용 사유코드, 헤더 부재는 '미달'과 다른 '미상'으로 계상."
+  - "클라 diagnosis_controller.dart:66 단일 실패 문구 분기에 업데이트 필요 전용 문구 케이스 1개 추가."
+  - "변별력: 최소버전 상향→전용 문구, 하향→정상 복귀(양방향). 범위 밖 동결: 강제 업데이트 UI·스토어 링크·서명·자동 업데이트·Crash 수집·Canary/Blue-Green."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - "src/mobile/lib/core/**"
+  - "src/mobile/lib/features/problems/**"
+  - "tests/infra/**"
+session: null
+notes: "docs/architecture/service_operations_gap_review.md §3 D4 — 외부 EOS 틀 모듈 95(앱 배포·업데이트) 대조. 백엔드는 deploy.yml로 매 커밋 갱신되나 사이드로드 앱은 무관 — 2026-07-20 인증누락 사고(CLAUDE.md 등재)와 동일 구조의 위험."
+updated: 2026-08-03
