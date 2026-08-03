@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-13-coach-objective-resolver-bridge
+title: "coach 처치 기록용 목표 해석 다리 — concept 그래프 code ↔ 원자 code(crosswalk) ↔ learning_objective 역조회"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PED-08-coach-signal-convergence
+requires_gates: []
+acceptance:
+  - "concept_id(Concept.code=concept 그래프 math.<area>.<slug> 공간) → atom code(concept_atom_crosswalk_v1을 lru_cache로 로드하는 신규 registry) → learning_objective 역조회(concept_nodes 배열 포함 검색)로 objective_id를 해석하는 순수 함수 신설 — 매핑 불가 시 None(치환·날조 금지)"
+  - "coach 턴(create_session/append_turns)에서 해석 성공 시에만 decide() 소비 + record_pedagogy_treatment 기록 — 실패 시 조용히 스킵(가짜 처치 금지)"
+  - "플래그 OFF 시 coach 동작 무변경 — 기본 OFF 캔어리(mode_guard_runtime_enabled 선례)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/pedagogy/**"
+  - "tests/backend/**"
+session: null
+notes: "PED-08 구현 중 발견(2026-08-03): coach의 problem_id→concept_id 축(Concept.code=math.<area>.<slug> 개념그래프 space, _pack_for가 이미 이 축으로 k_type을 해석)과 study의 objective_id 축(learning_objective.concept_nodes=원자 backbone code space, 10공수1-... 형식)이 서로 다른 ID 공간이라 직접 조인이 불가능하다(04e §7.2가 PED-10에서 밝힌 '개념↔원자 crosswalk 불필요'는 study 축 얘기이지 이 coach 축과는 무관 — 여기는 crosswalk가 실제로 필요한 자리). concept_atom_crosswalk_v1(data/corpus)은 CrosswalkTransferStore가 쓰는 오프라인 JSONL 변환 유틸일 뿐 라이브 조회 가능한 DB 테이블이 아니라, 런타임 해석에는 strategy_registry.py 선례(lru_cache 로더)를 미러하는 신규 registry가 필요하다. 파일럿 데이터(4개 objective뿐)로는 이 해석이 대부분 실패할 것 — 실질 발화는 unit 코퍼스가 자랄수록 자연 증가(정직한 초기 공백). PED-08은 신호 조립 공용 추출(①)만 완료(commit f06fe78e) — ②는 이 태스크로 분리."
+updated: 2026-08-03
