@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-23-anti-gamification-source-governance-gate
+title: "반게임화 불변식 기계 게이트 — Dart·Python 소스 스캔 + 죽은 좌석 값·writer 동결"
+track: infra-debt
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① Dart 게이트 — src/mobile/lib/** 소스 스캔. no_math_logic_governance_test.dart(ARCH-10) 4대 기법 재사용: 정밀도 원칙(발화 카테고리 라벨 등 정당 심볼은 금지 안 함)·\\b+합성어 경계 정규식(XpPoints?·LevelUp·BadgeEarned·QuestUnlock·Leaderboard·StreakCounter·DailyStreak·CoinReward류 복합 식별자로 좁혀 _SocraticBadge 등 오탐 회피)·lib/ 경로 스코프·게이트 무력화 방지(스캔 파일 수 하한 assert)"
+  - "② Python 게이트 — 학생 대면 표면(api/**·응답 schema/** 최상위 모델)에 한정 스캔. l3/·l4/misconception/·harness/·data/corpus/**는 제외(gambler_streak·achievement_standard 등 정당 어휘 서식지 — test_subject_neutrality_gate.py:29 선례). 게이트 자신의 리터럴은 자기회피 문자열 조립(:33 선례)"
+  - "③ 값·writer 동결 — UserBehaviorMetrics.metric_name(schema/timeseries.py:216,240) 금지값 집합(게임화 계열 문자열 삽입 시 위반) + consecutive_active_days(db/models/user.py:324) writer 0 동결. focus_score·engagement_score는 S3-16 acceptance③ 소유이므로 범위 제외(중복 등재 금지)"
+  - "④ 변별력 — 금지 심볼·금지값을 일부러 주입하면 실제로 red가 나는지 양방향 실측"
+  - "⑤ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
+  - "⑥ 범위 밖 동결 — focus_score/engagement_score(S3-16 소유)·죽은 컬럼 제거 마이그레이션·tone_filter 라이브 배선(별도 L3/L4 결정)"
+artifacts: []
+paths:
+  - "src/mobile/test/governance/*.dart"
+  - src/backend/whymath_backend/schema/timeseries.py
+  - src/backend/whymath_backend/db/models/user.py
+  - "tests/backend/l1/test_*governance*.py"
+session: null
+notes: "docs/architecture/gamification_module_gap_review.md §3 D2. 전역 UI 불변식 #2(docs/design/ui/00_index.md:41)가 20+ 곳 인용되나 집행 테스트 0건. CLAUDE.md:104-107 교수학 금기 4조항 중 3개(답 미루기·정서 톤·GAMING_SUSPECT)는 게이트 보유, 우열 게임화 금지만 게이트 0. UserBehaviorMetrics.metric_name이 'streak'을 예시로 든 열린 문자열 통로라는 신규 실측 포함. Dart 선례는 theme_test.dart 아니라 no_math_logic_governance_test.dart(ARCH-10)."
+updated: 2026-08-03
