@@ -1,6 +1,6 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: VIZ-03-graph2d-spec-expressiveness
-title: "Graph2dSpec 표현력 확장 — 수직선·단위원·부등식영역 34건 좌석 확보 + 접선·적분영역·극값·함수비교"
+title: "Graph2dSpec 표현력 확장 — 수직선 좌석 확보 + 접선·적분영역·극값·함수비교(단위원·부등식영역은 VIZ-04 재감사로 이미 seated)"
 track: math-completion
 stage: S4
 subject: math
@@ -14,12 +14,12 @@ depends_on:
 requires_gates: []
 acceptance:
   - "① Graph2dSpec에 optional 필드 확장 — 접선(점)·적분영역(구간)·극값 표시·함수 비교(다중 함수). 웹 계산기가 이미 렌더할 수 있는 능력에 명세 좌석을 주는 것이며 렌더러 신규 구현이 아니다"
-  - "①-b (2026-08-03 §7 확장) 1D 축 모드(수직선 — 정수·부등식 해·구간 표시) · 원 방정식(단위원 — implicit curve, function이 아니라 x²+y²=1 형태) · region 색칠(부등식영역) 필드도 동반 확장 — concept_visual_style_v1 코퍼스 실측 분포(수직선 25건·단위원 8건·부등식영역 1건=34건)가 이 세 필드의 우선순위 근거. 새 VisualizationType 신설 없이 interactive_graph_2d 하나로 34건의 미좌석 양식을 흡수한다"
+  - "①-b (2026-08-03 §7 확장·VIZ-04 재감사로 2026-08-03 재정정) 1D 축 모드(수직선 — 정수·부등식 해·구간 표시) 필드 동반 확장 — concept_visual_style_v1 코퍼스 실측 분포(수직선 25건)가 우선순위 근거. **단위원(8건)·부등식영역(1건)은 VIZ-04 구현 중 재감사로 이미 seated임이 밝혀져 본 태스크 범위에서 제외**(Graph2dSpec.function에 관계식/부등식 문자열을 그대로 넣으면 웹 classify()가 implicit/inequality로 처리해 스키마 변경 없이 렌더됨 — data/visual_style_contract.json 참조). 새 VisualizationType 신설 없이 interactive_graph_2d 필드 확장으로 수직선 25건을 흡수한다"
   - "② 새 VisualizationType 신설 금지(anti-explosion — 4종 유지). 기존 interactive_graph_2d의 필드 확장만"
   - "③ 웹 어댑터(graph2dSpec.js)·Flutter 봉투·렌더 계약까지 동반 갱신. 어느 한쪽만 갱신하면 교차 게이트가 red(invariant ⑩)"
   - "④ S4-03과의 경계를 양쪽 notes에 상호 참조 — S4-03=새 type(기하·벡터·행렬), 본 태스크=기존 2D type의 필드. 중복 아님"
   - "⑤ 변별력: 신규 필드 1개를 웹 어댑터에서 미소비 상태로 두고 계약 게이트가 red를 내는지 실측 → 배선해 green 실측"
-  - "⑥ VIZ-04(양식↔렌더 좌석 계약)의 data/visual_style_contract.json에서 수직선·단위원·부등식영역의 status를 unseated→seated·seat_owner를 본 태스크 완료로 갱신(계약 파일이 착수 순서의 단일 진실원)"
+  - "⑥ VIZ-04(양식↔렌더 좌석 계약)의 data/visual_style_contract.json에서 수직선의 status를 unseated→seated·seat_owner를 본 태스크 완료로 갱신(단위원·부등식영역은 이미 VIZ-04 구현에서 seated로 착륙 — 갱신 불요, 계약 파일이 착수 순서의 단일 진실원)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/schema/visualization.py
