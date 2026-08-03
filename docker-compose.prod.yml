@@ -140,6 +140,42 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ★ SEC-12 — 보존 파기 정기 실행 배선. `privacy/retention_purge_cli.py`(증거+PII 시계열 단일
+  #   TX 파기)는 완비돼 있었지만 그 CLI를 부르는 스케줄이 없어 보존 정책이 *집행되지 않는
+  #   상태*였다(cron·Celery beat grep 0 — `docs/architecture/account_security_gap_review.md` D6).
+  #   신규 로직 0 — CLI 호출만. `app`과 **동일 이미지**를 재사용한다(새 Dockerfile·새 이미지 0).
+  #   base 이미지(python:3.12-slim)에 cron 바이너리가 없어 새로 얹지 않는다(공격면·이미지 크기
+  #   증가 회피) — 대신 셸 루프로 24시간마다 1회 호출한다.
+  #   ★ 크래시와 정상 실행을 로그 *형태*로 구분한다(이중 회계 금기 — "0건 통과"와 "측정 실패"가
+  #   같은 출력이면 안 된다): CLI가 예외로 죽으면 `|| exit 1`이 셸도 비정상 종료시켜 컨테이너가
+  #   죽고 `restart: unless-stopped`가 재기동한다(파기는 `retention_until`/타임스탬프 cutoff
+  #   기준 재조회라 즉시 재실행해도 멱등 — 안전). docker logs에서 트레이스백(크래시)과
+  #   `{"as_of":...,"purged":{...}}` JSON(정상 실행 — 0건 파기도 포함)이 형태로 갈린다.
+  #   ★ 암호화 키 불요 — 파기는 `retention_until`/타임스탬프로 행을 지울 뿐 복호화하지 않는다
+  #   (`WHYMATH_DATABASE_URL`만 필요).
+  retention-purge:
+    image: whymath-backend:${WHYMATH_IMAGE_TAG:?WHYMATH_IMAGE_TAG 미설정 - 불변 이미지 태그(git short SHA 등)를 env 파일에 지정하라. latest 금지(롤백 불가)}
+    container_name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-retention-purge
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - "while true; do python -m whymath_backend.privacy.retention_purge_cli || exit 1; sleep 86400; done"
+    environment:
+      WHYMATH_DATABASE_URL: postgresql+asyncpg://whymath:${WHYMATH_DB_PASSWORD:?WHYMATH_DB_PASSWORD 미설정 - prod DB는 trust 인증 금지}@db:5432/whymath
+    # 이미지의 HEALTHCHECK(/health/live 폴)는 이 서비스엔 무해당(HTTP 서버 없음) — 비활성화하지
+    # 않으면 도커가 8000 포트 무응답을 "unhealthy"로 영구 오판한다.
+    healthcheck:
+      disable: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   db-data:
     # 볼륨 이름에 환경을 박아 staging이 prod 데이터를 절대 건드리지 못하게 한다.
