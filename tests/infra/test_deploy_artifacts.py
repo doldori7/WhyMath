@@ -21,6 +21,11 @@ docker 실행이 필요한 검증(이미지가 실제로 빌드·기동되는가
      명시 실패하며(조용한 성공 금지), 시크릿 값을 echo하지 않는다.
   ⑦ **문서-구현 정합** — compose가 요구하는 모든 변수가 `.env.prod.example`에 키로 존재하고,
      그 템플릿에는 값이 하나도 채워져 있지 않다(ASCII 전용).
+  ⑧ **보존 파기 스케줄 배선(SEC-12)** — `retention-purge` 서비스가 compose에 정의돼 있고
+     `privacy.retention_purge_cli`를 실제로 호출한다. `privacy/retention_purge_cli.py`는
+     완비돼 있었지만 그 CLI를 부르는 cron·Celery beat 정의가 0건이라 보존 정책이 *집행되지
+     않는 상태*였다(`docs/architecture/account_security_gap_review.md` D6). 이 서비스 정의를
+     지우면 이 테스트가 깨진다 — "존재함 ≠ 돌아감"(OPS-03/08/10/11 선례).
 
 실제 배포 실행 절차·롤백은 런북 `docs/architecture/deployment_cd_runbook.md`가 담당한다.
 """
@@ -650,3 +655,70 @@ def test_runbook_exists_and_documents_gaps() -> None:
     text = runbook.read_text(encoding="utf-8")
     for token in ("미프로비저닝", "롤백", "자가검증", "db_backup_dr_runbook.md"):
         assert token in text, f"런북에 필수 절/연계가 없다: {token}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ⑧ 보존 파기 스케줄 배선(SEC-12) — "CLI가 있다"와 "CLI가 불린다"는 다르다
+# ──────────────────────────────────────────────────────────────────────
+def _retention_purge_service() -> dict[str, Any]:
+    services = _compose()["services"]
+    assert "retention-purge" in services, (
+        "docker-compose.prod.yml에 retention-purge 서비스가 없다 — "
+        "privacy/retention_purge_cli.py를 부르는 스케줄이 사라지면 보존 정책이 "
+        "다시 집행되지 않는 상태(SEC-12 이전)로 돌아간다"
+    )
+    service: dict[str, Any] = services["retention-purge"]
+    return service
+
+
+def _command_text(service: dict[str, Any]) -> str:
+    command = service.get("command", [])
+    return " ".join(command) if isinstance(command, list) else str(command)
+
+
+def test_retention_purge_service_calls_the_cli() -> None:
+    """⑧ 서비스 명령이 실제로 `whymath_backend.privacy.retention_purge_cli`를 참조한다."""
+    command = _command_text(_retention_purge_service())
+    assert (
+        "whymath_backend.privacy.retention_purge_cli" in command
+    ), f"retention-purge 서비스 명령이 CLI를 호출하지 않는다: {command!r}"
+
+
+def test_retention_purge_reuses_app_image_no_new_dockerfile() -> None:
+    """⑧ 신규 이미지 0 — `app`과 동일 이미지(불변 태그) 재사용."""
+    app_image = str(_compose()["services"]["app"]["image"])
+    purge_image = str(_retention_purge_service()["image"])
+    assert purge_image == app_image, (
+        f"retention-purge가 app과 다른 이미지를 쓴다({purge_image!r} != {app_image!r}) — "
+        "새 Dockerfile·새 이미지를 만들지 않는다는 설계(SEC-12)를 위반한다"
+    )
+
+
+def test_retention_purge_restarts_on_failure() -> None:
+    """⑧ 크래시(트레이스백) → 재기동해 다음 파기를 재시도(파기는 cutoff 재조회라 멱등·안전)."""
+    assert _retention_purge_service().get("restart") == "unless-stopped"
+
+
+def test_retention_purge_healthcheck_disabled() -> None:
+    """⑧ 베이스 이미지의 HTTP 라이브니스 HEALTHCHECK는 이 서비스엔 무해당 — 비활성화돼 있다.
+
+    비활성화가 없으면 도커가 8000 포트 무응답을 영구 'unhealthy'로 오판한다(이 서비스는 HTTP
+    서버가 아니다).
+    """
+    assert _retention_purge_service().get("healthcheck", {}).get("disable") is True
+
+
+def test_retention_purge_needs_no_encryption_keys() -> None:
+    """⑧ 파기는 `retention_until`/타임스탬프로 행을 지울 뿐 복호화하지 않는다 — 암호화 키 불요.
+
+    필요 이상의 시크릿을 주입하지 않는 것 자체가 최소 권한 원칙(불필요한 키 유출 시 피해 범위
+    축소).
+    """
+    env = _retention_purge_service().get("environment", {})
+    assert "WHYMATH_DATABASE_URL" in env
+    for forbidden in (
+        "WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY",
+        "WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY",
+        "WHYMATH_JWT_SECRET_KEY",
+    ):
+        assert forbidden not in env, f"retention-purge에 불필요한 시크릿이 주입됨: {forbidden}"

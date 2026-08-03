@@ -14,7 +14,17 @@ upsert 키는 **이메일 해시**(`email_hash = sha256(정규화 이메일)`) �
 리프레시(OAuth-a3·a3b·a3c): 로그인 시 액세스+리프레시를 함께 발급하고(리프레시마다 `jti`=세션 행
 PK), `/refresh`는 토큰 검증·allowlist 확인 후 **회전**한다(기존 세션 취소+새 토큰 발급).
 *이미 취소된* 토큰 재제출은 **재사용 탐지**로 전체 세션을 패닉 취소(탈취 대응). `/logout`은 세션
-취소(denylist)로 즉시 무효화. 세션 목록/관리는 a3d.
+취소(denylist)로 즉시 무효화.
+
+SEC-10(세션 가시성·전체/단건 로그아웃 — a3d 자백 해소): `_revoke_all_user_sessions`가 이미
+있었는데 재사용 탐지 경로에서만 호출돼 학생이 *스스로* 세션을 끊을 방법이 없었다. `GET
+/sessions`(목록)·`DELETE /sessions`(전체 — 기존 함수 재사용)·`DELETE /sessions/{session_id}`
+(단건·본인 스코핑)를 추가한다. **한계를 정직 표기**: ⑴ `device_credential`(rate limit 신뢰용
+기기 자격증명) 폐기는 이 세션 취소와 *무관*하다 — 기기를 폐기해도 그 기기가 들고 있는 JWT는
+살아있다(`api/devices.py`의 `/revoke`와 혼동 금지). ⑵ "전체 로그아웃"은 *리프레시 토큰만*
+취소한다 — 이미 발급된 액세스 토큰은 `jwt_expire_minutes`까지 자체 만료 전엔 유효하다(즉시
+무효화 아님). 세션 목록의 `platform`은 로그인·리프레시 시점 User-Agent에서 도출한 좁은 요약뿐
+(IP·UA 원문 미저장 — 최소 수집, `docs/architecture/account_security_gap_review.md` D4).
 
 SEC-08(하드닝 — 인증 표면 남용 방어 + OAuth CSRF/open-redirect 방지):
   - **rate limit**: `/{provider}/callback`·`/refresh`에 IP 단위 한도 부착(`_rate_limit.
@@ -50,6 +60,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._auth import CurrentUser
 from whymath_backend.api._rate_limit import RateLimitedAuthCallback, RateLimitedAuthRefresh
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
@@ -60,6 +71,8 @@ from whymath_backend.schema.auth import (
     OAuthCallbackRequest,
     OAuthTokenResponse,
     RefreshRequest,
+    SessionInfo,
+    SessionListResponse,
 )
 from whymath_backend.schema.enums import Persona
 from whymath_backend.security import (
@@ -259,10 +272,43 @@ def _refresh_unauthorized() -> HTTPException:
     )
 
 
-def _issue_refresh_session(session: AsyncSession, user_id: uuid.UUID, settings: Settings) -> str:
+# User-Agent 부분일치로 도출하는 좁은 플랫폼 범주 — 순서가 판정 순서(먼저 일치하는 것 채택).
+# 새 파싱 라이브러리를 추가하지 않는다(SEC-10 — 불명확하면 None. 오분류로 거짓 정보를 만들지
+# 않는 것이 세밀한 분류보다 우선).
+_PLATFORM_MARKERS: tuple[tuple[str, str], ...] = (
+    ("ipad", "iOS"),
+    ("iphone", "iOS"),
+    ("android", "Android"),
+    ("mozilla", "Web"),
+)
+
+
+def _summarize_platform(user_agent: str | None) -> str | None:
+    """User-Agent 원문 → 좁은 플랫폼 요약("iOS"/"Android"/"Web") 또는 판별 불가 시 None.
+
+    원문 UA는 반환하지도 저장하지도 않는다(최소 수집 — SEC-10 D4). `_PLATFORM_MARKERS` 밖의
+    패턴은 전부 None(과분류 방지).
+    """
+    if not user_agent:
+        return None
+    lowered = user_agent.lower()
+    for marker, platform in _PLATFORM_MARKERS:
+        if marker in lowered:
+            return platform
+    return None
+
+
+def _issue_refresh_session(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    settings: Settings,
+    *,
+    platform: str | None = None,
+) -> str:
     """새 jti로 리프레시 토큰 발급 + 세션 행(allowlist) add. 반환=리프레시 토큰(commit은 호출자).
 
     콜백(로그인)과 `/refresh`(회전)가 공유한다 — 둘 다 같은 트랜잭션에서 다른 변경과 함께 커밋한다.
+    `platform`(SEC-10)은 `_summarize_platform`이 도출한 좁은 요약(IP·UA 원문 미저장).
     """
     jti = uuid.uuid4()
     token = create_refresh_token(user_id, settings=settings, jti=jti)
@@ -272,6 +318,7 @@ def _issue_refresh_session(session: AsyncSession, user_id: uuid.UUID, settings: 
             user_id=user_id,
             expires_at=datetime.now(tz=timezone.utc)
             + timedelta(minutes=settings.jwt_refresh_expire_minutes),
+            platform=platform,
         )
     )
     return token
@@ -341,7 +388,8 @@ async def oauth_callback(
         ) from exc
     user = await resolve_user(session, identity, settings=settings)
     access_token = create_access_token(user.user_id, settings=settings)
-    refresh_token = _issue_refresh_session(session, user.user_id, settings)
+    platform = _summarize_platform(request.headers.get("user-agent"))
+    refresh_token = _issue_refresh_session(session, user.user_id, settings, platform=platform)
     # 세션 행(allowlist) + (신규면) 사용자까지 한 번에 영속(resolve_user는 flush만 하므로).
     await session.commit()
     return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
@@ -355,6 +403,7 @@ async def oauth_callback(
 )
 async def refresh_access_token(
     body: RefreshRequest,
+    request: Request,
     session: SessionDep,
     settings: SettingsDep,
 ) -> OAuthTokenResponse:
@@ -363,7 +412,8 @@ async def refresh_access_token(
     리프레시 토큰을 검증(typ=refresh·만료·서명·jti)하고 그 jti의 세션 행을 allowlist 확인한다. 행이
     *없으면* 401. 행이 *이미 취소됨*이면 **재사용 탐지**(회전·로그아웃된 토큰 재제출 = 탈취 신호) →
     사용자 전체 활성 세션을 패닉 취소하고 401. 정상이면 **회전**: 기존 세션 취소 + 새 리프레시 세션
-    발급 → 새 액세스+리프레시 반환. 불량/만료/타입불일치/사용자없음 → 401. 시크릿 미설정 500.
+    발급(SEC-10 — 이 시점 User-Agent로 `platform` 갱신 기록) → 새 액세스+리프레시 반환. 불량/만료/
+    타입불일치/사용자없음 → 401. 시크릿 미설정 500.
     """
     try:
         claims = decode_refresh_token(body.refresh_token, settings=settings)
@@ -386,7 +436,8 @@ async def refresh_access_token(
     token_session.revoked = True
     token_session.revoked_at = datetime.now(tz=timezone.utc)
     access_token = create_access_token(user.user_id, settings=settings)
-    refresh_token = _issue_refresh_session(session, user.user_id, settings)
+    platform = _summarize_platform(request.headers.get("user-agent"))
+    refresh_token = _issue_refresh_session(session, user.user_id, settings, platform=platform)
     await session.commit()
     return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
 
@@ -413,6 +464,97 @@ async def logout(
         raise _refresh_unauthorized() from exc
     token_session = await session.get(RefreshTokenSession, session_id)
     if token_session is not None and not token_session.revoked:
+        token_session.revoked = True
+        token_session.revoked_at = datetime.now(tz=timezone.utc)
+        await session.commit()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SEC-10 — 세션 가시성·전체/단건 로그아웃(인증 필요·`CurrentUser`)
+#
+# `_revoke_all_user_sessions`는 재사용 탐지 경로에서만 쓰이던 기존 함수를 여기서도 재사용한다
+# (중복 구현 0). 신규 테이블도 0 — `refresh_token_session`(allowlist)이 이미 있다. 응답은
+# `session_id`(=jti)·`platform`(좁은 요약)·`issued_at`·`expires_at`만 노출한다 — IP·UA 원문은
+# 이 엔드포인트도, 다른 어떤 경로도 저장하지 않는다(최소 수집).
+#
+# **한계(정직 표기)**: ⑴ `device_credential`(rate limit 신뢰용 기기 자격증명) 폐기는 이 세션
+# 취소와 무관하다 — 기기를 폐기해도 그 기기가 들고 있는 JWT는 만료까지 살아있다. ⑵ "전체
+# 로그아웃"은 *리프레시 토큰만* 취소한다 — 이미 발급된 액세스 토큰은 `jwt_expire_minutes`까지
+# 자체 만료 전엔 유효하다(즉시 무효화 아님. 진짜 즉시 무효화는 액세스 TTL 단축 또는 denylist
+# 축이 필요하고, 클라 refresh-on-401 배선 선결 — 이번 범위 밖).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/sessions",
+    response_model=SessionListResponse,
+    summary="내 활성 세션 목록 (SEC-10 — 낯선 기기 인지 용도)",
+)
+async def list_sessions(user: CurrentUser, session: SessionDep) -> SessionListResponse:
+    """본인의 *활성*(미취소) 리프레시 세션 목록 — `issued_at` 내림차순.
+
+    IP·User-Agent 원문은 응답에 없다(최소 수집) — `platform`은 좁은 요약뿐. 액세스 토큰 자체는
+    이 테이블에 없어 "현재 접속 중인 기기" 여부는 구분하지 않는다(리프레시 세션 목록일 뿐).
+    """
+    result = await session.execute(
+        select(RefreshTokenSession)
+        .where(
+            RefreshTokenSession.user_id == user.user_id,
+            RefreshTokenSession.revoked.is_(False),
+        )
+        .order_by(RefreshTokenSession.issued_at.desc())
+    )
+    rows = result.scalars().all()
+    return SessionListResponse(
+        sessions=[
+            SessionInfo(
+                session_id=row.token_session_id,
+                platform=row.platform,
+                issued_at=row.issued_at,
+                expires_at=row.expires_at,
+            )
+            for row in rows
+        ]
+    )
+
+
+@router.delete(
+    "/sessions",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="전체 로그아웃 — 내 모든 활성 세션 취소 (SEC-10)",
+)
+async def revoke_all_sessions(user: CurrentUser, session: SessionDep) -> None:
+    """본인의 모든 활성 리프레시 세션을 취소한다(재사용 탐지의 `_revoke_all_user_sessions` 재사용).
+
+    **한계**: 리프레시 토큰만 취소된다 — 이미 발급된 액세스 토큰은 만료까지 유효하다(모듈
+    docstring·§SEC-10 참조). 다른 기기의 세션까지 포함해 즉시 강제 로그아웃하려는 용도(기기
+    분실·계정 탈취 의심)에 쓴다.
+    """
+    await _revoke_all_user_sessions(session, user.user_id)
+    await session.commit()
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="단건 세션 로그아웃 — 본인 소유 세션만 (SEC-10)",
+)
+async def revoke_session(
+    session_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+) -> None:
+    """본인 소유의 특정 세션을 취소한다 — 타인 소유·미존재 `session_id`는 404(본인 스코핑).
+
+    이미 취소된 세션을 다시 요청해도 멱등하게 204(재확인 취소로 처리 — `/logout`과 동형).
+    """
+    token_session = await session.get(RefreshTokenSession, session_id)
+    if token_session is None or token_session.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="세션을 찾을 수 없습니다.",
+        )
+    if not token_session.revoked:
         token_session.revoked = True
         token_session.revoked_at = datetime.now(tz=timezone.utc)
         await session.commit()
