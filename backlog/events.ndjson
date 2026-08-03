@@ -1285,3 +1285,5 @@
 {"ts": "2026-08-03T06:49:13", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-03-achievement-level-data-intake"}
 {"ts": "2026-08-03T08:43:55", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "add", "id": "ASM-01-assessment-seat-reachability-observability"}
 {"ts": "2026-08-03T08:44:35", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "add", "id": "ASM-02-grade-exposure-policy-decision"}
+{"ts": "2026-08-03T09:33:15", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "policy_warn", "id": "ASM-01-assessment-seat-reachability-observability", "rule": "path_overlap", "other": "REC-02-misconception-probe-supply", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/wh1_primary.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/wh1_primary.py", "mode": "warn"}
+{"ts": "2026-08-03T09:33:22", "actor": "claude/whymath-assessment-review-pgvxnj", "action": "start", "id": "ASM-01-assessment-seat-reachability-observability", "session": "claude/whymath-assessment-review-pgvxnj", "remote": "ok"}

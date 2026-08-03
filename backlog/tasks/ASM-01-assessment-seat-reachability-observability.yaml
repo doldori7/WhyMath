@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/db/models/assessment.py
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/whymath-assessment-review-pgvxnj
 notes: "docs/architecture/assessment_module_gap_review.md §3 D1. assessment·concept_mastery_history·skill_mastery_history·ability_snapshot 4테이블 중 본체(assessment)가 조회·완료·삭제·프라이버시 내보내기·파기까지 5개 표면 완비된 채 Assessment(...) 생성 코드 0건. '완비된 소비 경로+미도달 공급원' 8회차(이 시리즈 최강 형태 — CRUD의 R/U/D는 다 있고 C만 없음). 진단 엔진(IRT CAT+BKT) 자체는 초과 충족이며 이 태스크는 재설계하지 않는다."
 updated: 2026-08-03
