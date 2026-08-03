@@ -1,13 +1,7 @@
 {
-  "version": "1.1",
-  "note": "시각화 가능성 4분류(직접/동적/부분/추상·플레이북 Part 5-1) 대표 시드 — end-to-end 실증. 명백히 분류 가능한 개념만 태깅(전면 분류는 전문가 검수·점진). code는 concept_graph_v1 concept_id(=backend concept.code). 정본 docs/architecture/05b_visualization_classification.md.",
+  "version": "1.2",
+  "note": "시각화 가능성 4분류(직접/동적/부분/추상·플레이북 Part 5-1) 대표 시드 — end-to-end 실증. 명백히 분류 가능한 개념만 태깅(전면 분류는 전문가 검수·점진). code는 원자 백본(atom_graph_v1) concept.code — v1.1의 7건은 전부 레거시 concept_graph_v1 code로 태깅돼 런타임 code 공간과 orphan 7/7이었다(VIZ-05 실측). 재정렬 결과 추상 축 1건만 원자 백본 code로 복원했고, 직접·동적·부분 6건은 인지행동 판정이라 억지 재태깅하지 않고 제거했다(미태깅 존치 — VIZ-01 acceptance③ 답습). 정본 docs/architecture/05b_visualization_classification.md.",
   "entries": [
-    {"code": "MID-FUN-010", "name_ko": "이차함수의 그래프·성질", "visualizability": "직접", "rationale": "형태 자체가 보임 — 정지된 포물선이 대칭축·꼭짓점·개형을 즉시 드러냄(Geometry2D)."},
-    {"code": "HIGH-GEO-010", "name_ko": "벡터의 뜻과 연산", "visualizability": "직접", "rationale": "화살표(위치·크기·방향)로 형태가 직접 보임(Geometry2D)."},
-    {"code": "HIGH-CALC-005", "name_ko": "미분계수", "visualizability": "동적", "rationale": "할선→접선으로 극한을 향해 기울기가 변하는 과정을 봐야 함(★AI 교육 핵심·애니메이션/슬라이더)."},
-    {"code": "HIGH-CALC-001", "name_ko": "함수의 극한의 뜻", "visualizability": "동적", "rationale": "값이 극한으로 접근하는 과정 표현이 인지 조건(애니메이션)."},
-    {"code": "HIGH-PROB-004", "name_ko": "확률의 뜻과 기본 성질", "visualizability": "부분", "rationale": "수형도·시행 시뮬레이션이 *일부* 의미만 담음 — AnalogyVisual + coverage 표시."},
-    {"code": "HIGH-CALC-022", "name_ko": "수열의 극한의 성질", "visualizability": "부분", "rationale": "수렴 — 그림이 근사만 보이고 엄밀 극한 의미는 부분적(AnalogyVisual·coverage)."},
-    {"code": "HIGH-LOGIC-007", "name_ko": "대우증명·귀류법", "visualizability": "추상", "rationale": "논리 구조가 추상적 — 리터럴 그래프는 오개념 유발. StructureGraph(메타포 중심)."}
+    {"code": "10공수2-02-07-1", "name_ko": "대우증명·귀류법", "visualizability": "추상", "rationale": "논리 구조가 추상적 — 리터럴 그래프는 오개념 유발. StructureGraph(메타포 중심)."}
   ]
 }

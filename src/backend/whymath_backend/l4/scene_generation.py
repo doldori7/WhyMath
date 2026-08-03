@@ -49,7 +49,11 @@ from whymath_backend.l4.misconception.models import (
 )
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
-from whymath_backend.l4.visualization_policy import is_visualizable, prefers_static_visual
+from whymath_backend.l4.visualization_policy import (
+    has_render_seat,
+    is_visualizable,
+    prefers_static_visual,
+)
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     BehaviorArea,
@@ -234,8 +238,9 @@ async def generate_learning_scene(
     표상/변형/계산은 시각화 먼저, 해석/추론/검증은 질문 먼저. 개념과 직교하므로 소크라테스
     프레이밍은 개념 축(`cognitive_type`)이 계속 담당한다. ⓪ 행동영역 focus: 주 행동영역이 있으면
     그 행동영역의 `skill_focus`를 맨 앞에 둔다(미매핑=미부여·05a §3.2). ① 시각화 블록:
-    `recommended_visual_styles`가 있고 `visualizability`가 허용할 때만 `visualization`(+graph_2d·
-    비정적이면 `param_control`)을 붙인다(bound index는 append 시점 계산이라 진입 순서와 무관 정합).
+    `recommended_visual_styles`가 있고 `visualizability`가 허용하고 그 양식에 렌더 좌석이 있을
+    때만(VIZ-04) `visualization`(+graph_2d·비정적이면 `param_control`)을 붙인다(bound index는
+    append 시점 계산이라 진입 순서와 무관 정합).
     ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ 활성 가설 ∩ 카탈로그
     → `misconception_probe`(적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·
     param/annotation 정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
@@ -271,12 +276,19 @@ async def generate_learning_scene(
     async def _append_visual_block() -> None:
         """시각화(+graph_2d면 param_control)를 공유 `elements`에 append.
 
-        권장 양식이 있고 `visualizability`가 허용할 때만(추상·불가면 억지 그림 대신 폴백·05b Part 5
-        게이트·CLAUDE.md 교수학 정확성). `bound_visualization_index`를 append 시점 `len(elements)`로
-        계산하므로, 소크라테스가 앞서(inquiry) viz가 뒤 인덱스여도 정합(불변식 통과). LLM 호출은
-        여기 1회뿐(스타일 있을 때).
+        권장 양식이 있고 `visualizability`가 허용하고(추상·불가면 억지 그림 대신 폴백·05b Part 5
+        게이트·CLAUDE.md 교수학 정확성) 그 양식 중 하나라도 렌더 좌석이 있을 때만(좌석 0이면 LLM이
+        4종 중 하나를 억지로 골라 개념과 무관한 그림을 렌더할 위험 — VIZ-04·
+        `visualization_module_gap_review.md` §7.1 G1) 시각화 블록을 붙인다.
+        `bound_visualization_index`를 append 시점 `len(elements)`로 계산하므로, 소크라테스가
+        앞서(inquiry) viz가 뒤 인덱스여도 정합(불변식 통과). LLM 호출은 여기 1회뿐(양식·좌석 둘 다
+        있을 때).
         """
-        if not (concept.recommended_visual_styles and is_visualizable(visualizability)):
+        if not (
+            concept.recommended_visual_styles
+            and is_visualizable(visualizability)
+            and has_render_seat(concept.recommended_visual_styles)
+        ):
             return
         viz = await generate_visualization_spec(
             concept.name_ko,
