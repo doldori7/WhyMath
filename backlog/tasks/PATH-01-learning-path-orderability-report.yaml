@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/backlog-drive-next
 notes: "docs/architecture/learning_path_module_gap_review.md §3 D1. Kahn 위상정렬은 실재하나 엔드포인트 기본 max_depth=1에서 제약 엣지 0인 사례가 96.4%이고 그때 응답은 _tiebreak 정렬로 조용히 강등된다. 이 밀도가 코드·테스트·문서 어디에도 수치로 없다. 코퍼스만 읽으므로 problem_attempt 0행(REC-01)과 무관하게 즉시 착수 가능."
 updated: 2026-08-03
