@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: PED-06-content-slot-pipeline-reachability
+id: PED-07-content-slot-pipeline-reachability
 title: "교수법 콘텐츠 슬롯 파이프라인 도달성 관측 — 프로덕션 호출자 0·학생 reader 0 해소(관측 축)"
 track: infra-debt
 stage: S3

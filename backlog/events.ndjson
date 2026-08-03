@@ -1480,3 +1480,4 @@
 {"ts": "2026-08-03T12:28:54", "actor": "claude/backlog-drive-next", "action": "start", "id": "S3-11-problem-bank-data-card", "session": "claude/backlog-drive-next", "remote": "ok"}
 {"ts": "2026-08-03T12:28:58", "actor": "claude/backlog-drive-next", "action": "done", "id": "S3-11-problem-bank-data-card", "artifacts": ["07402e35"]}
 {"ts": "2026-08-03T12:29:33", "actor": "claude/backlog-drive-next", "action": "done", "id": "ARCH-25-grandfather-expiry-contract", "artifacts": ["2112ad6c"]}
+{"ts": "2026-08-03T13:58:00", "actor": "claude/whymath-ai-content-design-vafylb", "action": "rename", "id": "PED-07-content-slot-pipeline-reachability", "from": "PED-06-content-slot-pipeline-reachability", "detail": "main에 병렬 등재된 PED-06-growth-evidence-reach-observability와 번호 충돌 — HARN-10 패턴에 따라 미머지 쪽(본 PR #683)을 rename"}

@@ -168,6 +168,9 @@ l3/pedagogy/review.py           →  PRESCREENED → APPROVED | REJECTED (검수
 - 신규 태스크 등재: `PED-06-content-slot-pipeline-reachability`(`scripts/harness/backlog.py add`,
   track=infra-debt·stage=S3·priority=3·owner=claude) — 등재 후 `backlog.py validate` green(태스크
   157건) 확인.
+- 2026-08-03 정정: main 병합 시 `PED-06-growth-evidence-reach-observability`(다른 병렬 세션 등재)와
+  ID 번호 충돌 발견 → 본 태스크를 `PED-07-content-slot-pipeline-reachability`로 rename(HARN-10
+  패턴 — 미머지 쪽을 rename).
 
 ---
 
