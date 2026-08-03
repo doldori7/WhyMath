@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/whymath-visualization-review-i2tgt2
 notes: "docs/architecture/curriculum_module_gap_review.md §3 D2. LearningObjective 스키마·unit_compiler.py 컴파일러·런타임 API(/v1/me/objectives/*)까지 완비됐으나 실데이터는 소단원 1개·목표 4개뿐(895개 성취기준 중 0.1%). NLP-01·REC-01/02에 이은 '완비된 소비 경로 + 미도달 공급원' 7회차(§6)."
 updated: 2026-08-03
