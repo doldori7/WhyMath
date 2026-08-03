@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,13 +15,15 @@ acceptance:
   - "Flutter 버튼 1개(유일한 생산자) → POST 1개 → 적재 왕복을 실측(버튼 1회→1행 적재, 철회 경로 있으면 0행 복귀)."
   - "CLI 리포트가 '수집 경로 미배선'과 '0건 접수'를 다른 값으로 표시(이중 회계) — harness/qa_pipeline.py(ARCH-21) 기존 7축과 별개로 합류하는 8번째 입력으로 설계."
   - "범위 밖 동결: 자유서술·첨부·티켓·배정·SLA·챗봇·회신·만족도·admin 콘솔은 만들지 않는다(docs/architecture/service_operations_gap_review.md D1 §2-⑤~⑦ 참조)."
-artifacts: []
+artifacts:
+  - 133f6958
+  - 5517ecf5
 paths:
   - "src/backend/whymath_backend/db/models/**"
   - "src/backend/whymath_backend/api/**"
   - "src/backend/whymath_backend/harness/**"
   - "src/mobile/lib/features/**"
   - "src/backend/alembic/versions/**"
-session: claude/rpt-01-student-defect-report
+session: null
 notes: "docs/architecture/service_operations_gap_review.md §3 D1 — 외부 EOS 틀 모듈 94(고객지원·오류신고) 대조 최대 갭. 학생이 문항·AI응답·수식 오류를 신고할 경로가 라우터 16종·DDL 28테이블 전수에 0건(2026-08-03 실측)."
 updated: 2026-08-03
