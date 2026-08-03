@@ -216,6 +216,16 @@ CREATE TABLE mastery_history (
 SELECT create_hypertable('mastery_history', 'timestamp');
 ```
 
+> **입력 단절 부기 (편집자 부기, 2026-08-03 실측)**: 위 시계열 좌석과 별개로, 학습자 모델의
+> *입력*인 `ProblemAttempt`가 **0행**이다 — 서버 `POST /v1/me/attempts`는 구현 완료지만 학생 앱이
+> 호출하지 않는다(dart `/v1/` 호출 경로 전수에 부재). 연쇄: θ가 `initial=0.0`으로 고정
+> (`l2/irt.py:64,76`) → BKT 숙달 0행 → `/v1/me/diagnosis/concepts` 빈 결과 → `/v1/scenes/
+> weak-concept` 404. 집계 hypertable 3종(`daily_learning_metrics`·`problem_solve_time_
+> distribution`·`user_behavior_metrics`)도 writer가 없다. 추적: `REC-01`(도달 관측)·
+> `NLP-02`(채점 권위)·`S3-16`(행동 텔레메트리 writer·미신설 결정 동결). 이 단절이 반복 발생하는
+> 구조 자체에 대한 기계 탐지기는 `OPS-17`이며, 판정·설계 정본은
+> `data_platform_module_gap_review.md`(모듈 84).
+
 ## 성공 기준
 
 ### Phase 1

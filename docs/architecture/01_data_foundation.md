@@ -164,6 +164,14 @@ httpx pandas pydantic  GE  PG+pgvector ANN
 - 가공 단계
 - 검증 결과
 
+> **학습 이벤트 축의 좌석 (편집자 부기, 2026-08-03)**: 이 문서에는 학습 *이벤트·텔레메트리* 절이
+> 없다(실측). 그 계약의 단일 진실 원천은 코드다 — `schema/event_data_contract.py`
+> (`EVENT_DATA_CONTRACT` + `build_event_data()` seam, `extra="forbid"`로 stray key 차단) ·
+> `schema/enums.py`의 `EventType`(11종 중 생산자 있는 3종만 계약 구속, 나머지 8종은 휴면이라
+> 계약 면제) · 저장 좌석은 `attempt_event`(append-only·복합 PK·hypertable)를 비롯한
+> PostgreSQL+TimescaleDB. 외부 틀 대조·갭 판정·설계는
+> `data_platform_module_gap_review.md`(모듈 84·85)가 정본이다.
+
 ## 절대 금기
 
 - ❌ 검정 교과서 본문·예제 복제

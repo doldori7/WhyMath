@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-17-supply-demand-reach-audit
+title: "공급↔소비 도달 대장 — '만들고 입력을 잇지 않음' 반복 실수의 첫 기계 탐지기"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 4축 정적 감사(create_app 라우트표↔dart /v1/ 리터럴 · EventType 11↔build_event_data 생산좌석 3 · timeseries hypertable↔ORM writer · harness/ops CLI main()↔CI 실행). DB 0·LLM 0·HTTP 0(빌드타임 결정론). CLI 도달은 ci.yml의 'python -m' **뿐 아니라 in-process import도 도달로 계산**한다(qa_pipeline이 corpus_audit_eval을 import하는 경우를 미도달로 세면 오탐)"
+  - "② 판정 규약 = 미도달 **수**가 아니라 **미분류**가 exit 1. 4분류: student-reached(자동 판정) / server-only-by-design(**사유 문자열 필수**) / pending-task:<id> / unclassified←exit 1. 미도달률 자체를 게이트로 걸면 즉시 영구 red이고 무의미하다(콘텐츠 저작 API는 원래 클라가 안 부른다)"
+  - "③ 유예 대장 규약: pending-task:<id>는 backlog/tasks/<id>.yaml이 실재하고 status!=done일 때만 유효. 부재/done이면 exit 1(유예의 조용한 영구화 차단). 진실 원천은 backlog/ — **새 대장 파일 신설 금지**"
+  - "④ tests/backend/ops/test_slo_contract.py의 _app_route_paths()를 공용 헬퍼로 **승격 재사용**(재구현 금지). FastAPI 0.140부터 include_router가 평탄화하지 않고 _IncludedRouter 래퍼만 얹어 original_router 재귀 없이는 /v1/** 전체가 통째로 누락된다 — 이미 실측으로 해결된 함정이다"
+  - "⑤ backend 잡 **상시 실행**(라우트·클라 변경은 코퍼스 변경이 아니므로 코퍼스 트리거 금지) + tests/infra 배선 실재성 동결(OPS-03/10/11 선례)"
+  - "⑥ 변별력 양방향 실측: 더미 라우트 추가→exit 1(unclassified) / dart 호출 1건 삭제→exit 1(student-reached 붕괴) / pending-task를 done 태스크로 교체→exit 1(유예 만료). 추가로 수집기 파손 방어 — 라우트·클라 호출 수가 하한 미만이면 **exit 2**(정규식이 깨져 '0건 미도달'이 된 것을 통과로 읽지 않는다)"
+  - "⑦ 범위 밖 동결: 클라 attempt POST 배선(REC-01·NLP-02)·휴면 EventType 소생(S3-16)·개인화 기본값 전환은 하지 않는다. **활성화가 아니라 가시화·차단**(NLP-01⑥·REC-01⑤ 승계)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/reach_audit.py
+  - "tests/backend/ops/*"
+  - "tests/infra/*"
+  - ".github/workflows/ci.yml"
+session: null
+notes: "docs/architecture/data_platform_module_gap_review.md §3 D1(외부 틀 모듈 84①⑤ 대조). §1-C 반복 실수 대장: OPS-03(CI 미배선)·OPS-08(브랜치보호 미강제)·VIZ-01(적재 0행)·NLP-01(OCR 비활성)·REC-01(클라 미호출) — NLP-01 notes '3회차'·REC-01 notes '반복 실수 4·5회차'. 매번 축별 런타임 리포트에 위임했고 **일반 탐지기를 만든 사람이 아직 없다**. 그중 최소 4회는 런타임이 아니라 정적으로 탐지 가능했다. 초안의 '축별 리포트 조립' 구상은 기각 — 조립 대상 셋 중 둘이 todo라 조립할 자산이 하나뿐이고, 셋 다 런타임 카운터라 결정론을 잃는다."
+updated: 2026-08-03

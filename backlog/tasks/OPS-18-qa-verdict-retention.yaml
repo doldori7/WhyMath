@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-18-qa-verdict-retention
+title: "QA 판정 보존·비집행 가시화 — qa_pipeline이 판정도 기록도 남기지 않는 상태 해소"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - OPS-17-supply-demand-reach-audit
+requires_gates: []
+acceptance:
+  - "① ci.yml qa_pipeline 스텝에 upload-artifact(qa_report.json) 추가 — 현재 --json으로 러너 작업 디렉터리에 쓸 뿐 업로드 스텝이 없어 판정이 러너와 함께 증발한다(커버리지 XML은 이미 업로드 중이라 동형 선례)"
+  - "② tests/infra에 비집행 waiver 동결 신설: ci.yml에서 continue-on-error:true가 붙은 **게이트성** 스텝마다 ⑴사유 주석 ⑵열린 backlog 태스크 id를 요구하고, 그 태스크가 done/부재면 실패. 현 대상은 qa_pipeline 스텝(→S3-28) 1건. shellcheck처럼 의도적 조언 스텝은 제외. **S3-28이 닫히는 순간 continue-on-error 제거가 강제된다**"
+  - "③ (선택·후행) qa_pipeline --ledger → 커밋되는 NDJSON 1줄=1판정(커밋 sha·축별 status·overall.pass·**enforced 불리언**). 새 store 신설 0. 원장 로드·append·부식 라인 회계는 harness/wh1_shadow_harvest.py의 기존 함수를 그대로 재사용(부식 라인을 세어 보고하되 축적은 막지 않는 관례)"
+  - "④ '검사 안 함'과 '통과'를 혼동하지 않는다 — not_measured_axes·no_snapshot·error 구분을 원장·리포트에 그대로 보존(침묵 통과 금지)"
+  - "⑤ 변별력 양방향 실측: S3-28 태스크를 임시 status:done으로 바꾸면 ②가 **실패**하고, continue-on-error 줄을 지우면 **통과**해야 한다. 양방향이 갈리지 않으면 위장이다"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - src/backend/whymath_backend/harness/qa_pipeline.py
+  - "tests/infra/*"
+  - "docs/data/*"
+session: null
+notes: "docs/architecture/data_platform_module_gap_review.md §3 D2(외부 틀 모듈 85⑤ '품질 이력 관리' 대조). 실측(2026-08-03): ARCH-21이 2026-08-02 착지시킨 가장 비싼 품질 자산이 **비집행 + 무보존** 상태 — ci.yml qa_pipeline 스텝이 continue-on-error:true(S3-28 대기)이고 upload-artifact가 없다. 2026-07-16 Langfuse v2 8일 무증상 전멸과 같은 구조(아무도 안 보는 채널은 죽어도 모른다). 초안의 '회귀 추세' 목적은 축소 — 코퍼스 변경 트리거라 원장 행이 드물어 추세는 당분간 통계적으로 무의미하고, 추세를 목적으로 걸면 그 자체가 소비처 없는 설계다. **S3-28을 대체하지 않는다** — 품질 축 최우선은 여전히 canonicalize 130건 오탐 해소이고 이 태스크는 그동안 비집행이 잊히지 않게 하는 장치. 유예 대장 규약은 OPS-17과 공유."
+updated: 2026-08-03
