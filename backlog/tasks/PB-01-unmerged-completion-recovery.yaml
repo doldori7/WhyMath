@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-01-unmerged-completion-recovery
+title: "고립 브랜치 완료분 회수 — S3-10·S3-11·ARCH-19 (미병합 고립 3회차·실피해 4건 진행 중)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "S3-10(persona_fit 백필) 회수 — 정본은 상위집합 브랜치 claude/s3-10-persona-fit-2xk548(fc7c9663, 7번째 코퍼스 34건 포함). 고립본은 2,667/483 시점 코퍼스 위에서 작성됐고 main은 2,647/429이므로 산출물을 재적용하지 말고 백필 CLI를 main 코퍼스에서 재실행(결정론이라 재현 가능). 실측 리포트로 L6 적격 후보 수 전0→후N>0 확인"
+  - "S3-11(데이터 카드 + _provenance.json) 회수 — docs/data/problem_bank_corpus_v1.md + 사이드카. record_count 등 수치는 main 실측(7종 2,647)으로 재계산"
+  - "ARCH-19(⑧답 분포·⑩LaTeX 게이트) 회수 — 고립본의 설계 판단(parse_latex 대신 균형 검사)은 그대로 존중·재심하지 않는다. 회수 후 실코퍼스 재스캔으로 정답 위치 쏠림(고립본 실측 χ² p=1.07e-8·객관식 1,631문)이 재현되는지 확인하고, 원인 규명은 별도 후속으로 정직하게 분리"
+  - "ops/provenance_audit.py:69 _KNOWN_GAPS의 문제은행 v0 5항목 제거 — 제거 전 exit 1(위반 검출)·제거 후 exit 0을 양쪽 다 실측(변별력). 현재 2,643/2,647건(99.8%)이 라이선스 집행 게이트에서 영구 면제 상태다"
+  - "docs/data/licensing_safety.md 대장에 문제은행 코퍼스 7종 전부 등재 — 고립 브랜치는 v0 5종만 다루므로 problem_bank_probability_finite_v0(S4-13 신설)·problem_type_graph_v1 2종은 이 태스크에서 직접 추가(어느 태스크 범위에도 없는 무주공산)"
+  - "S3-13 태스크 ID 충돌 해소 — 고립 브랜치가 S3-13을 '수능 SQL persona_fit 조건'에, main은 '데모 문제 풀 확장'에 쓴다. 회수 시 backlog.py add로 별 ID 재배정(HARN-10 유형 재발)"
+  - "회수 후 백엔드 전체 스위트 재검증(부분 스위트 통과를 회귀 없음의 근거로 보고 금지 — CLAUDE.md 금기)"
+artifacts: []
+paths:
+  - "data/corpus/problem_bank_*/**"
+  - "docs/data/**"
+  - "src/backend/whymath_backend/l1/problem_bank/**"
+  - "src/backend/whymath_backend/l3/equivalent/**"
+  - src/backend/whymath_backend/ops/provenance_audit.py
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-① · §3 R1. 선례: S3-24/S3-25(미병합 회수 Stage 2 — shadow-data-s3-pilot-nh5kbz) 동형. S4-14는 이 태스크 범위 밖 — 두 브랜치가 정반대 판정(974e933 '차단' vs ed040217 '구현 완료')이라 사람 게이트 선행(R2). 고립 브랜치: claude/education-os-architecture-mr0fbq(974e933, 2026-07-30 마지막 커밋·열린 PR 없음). 실피해 4건은 R2 문서 §0-① 참조. 재발 방지 메커니즘은 HARN-13(기존 등재·중복 신설 금지)."
+updated: 2026-08-03

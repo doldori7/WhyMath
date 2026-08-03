@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-05-item-content-safety-scan
+title: "문항 본문 금칙어·PII 검사 — 미성년자 대면 콘텐츠 2,647건에 내용 안전 검사기 0"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "qa_pipeline.py:142-147 _NOT_MEASURED_AXES의 banned_words_pii를 실체화해 8번째 축으로 승격 — 대상은 코퍼스 본문(question_text·choices·answer_explanation) 2,647건. 기존 트리거였던 operations_module_gap_review.md:222의 '실 학생 대화 데이터 축적 후'는 대상을 잘못 겨눴다(문항 본문은 대화와 무관하게 이미 존재하며 SEC-11은 로그 스크러버지 콘텐츠 검사기가 아니다) — 이 재판정을 태스크 산출물에 명시"
+  - "검사 범위 v1은 좁게 — 실명·연락처·주소 형태의 PII 패턴 + 폭력·차별·자해 관련 금칙어. 정서적 부정 강화 표현(CLAUDE.md 교수학 금기: 틀렸다·못 한다를 정서적으로 강화)은 검출 원리가 달라 이번 스코프 밖으로 명시(과공학·오탐 폭발 회피)"
+  - "신규 게이트 규약 준수 — 결함 주입 강등전(defect_seeder.py에 결함류 추가) 검출률 + 무결함 오검출 Wilson 95% 상한 병기 + CLI exit 0/1. 측정 없는 게이트는 게이트가 아니다(superhuman_verification_standard.md)"
+  - "오탐 실측 동반 — 수학 문항은 인명(가우스·피타고라스)·지명·숫자열이 정당하게 등장한다. 전 코퍼스 스캔 후 오탐 표본을 직접 확인하고 패턴을 정밀화한다(S3-12 위생 게이트 오탐 3건 선례 — 신규 축은 단일 코퍼스가 아니라 전 코퍼스 대조로 재검증)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/qa_pipeline.py
+  - src/backend/whymath_backend/l3/equivalent/defect_seeder.py
+  - "tests/backend/harness/**"
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-②-사 · §3 R6. 의사결정 우선순위 #1(학생 안전)·#2(법적 준수)에 걸리는 축이라 '데이터가 쌓인 뒤'로 미루지 않는다. qa_pipeline의 나머지 미측정 3축(ui_golden·statistical_outlier·performance)은 이 태스크 범위 밖(statistical_outlier는 S4-15/D9와 통합)."
+updated: 2026-08-03
