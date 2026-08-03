@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "src/mobile/lib/core/**"
   - "src/mobile/lib/features/problems/**"
   - "tests/infra/**"
-session: null
+session: claude/backlog-drive-next
 notes: "docs/architecture/service_operations_gap_review.md §3 D4 — 외부 EOS 틀 모듈 95(앱 배포·업데이트) 대조. 백엔드는 deploy.yml로 매 커밋 갱신되나 사이드로드 앱은 무관 — 2026-07-20 인증누락 사고(CLAUDE.md 등재)와 동일 구조의 위험."
 updated: 2026-08-03
