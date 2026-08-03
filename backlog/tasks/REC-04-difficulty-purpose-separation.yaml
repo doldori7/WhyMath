@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -16,12 +16,13 @@ acceptance:
   - "③ 미보정 정직 표기: 실학생 응답 0건에서 밴드 임계를 측정으로 정할 수 없다. 초기값은 문헌값으로 두고 응답·리포트에 band_calibrated=false를 싣는다(S4-18 calibrated=false 선례). 보정은 S4-15에 잇는다"
   - "④ 금기 무모순: 밴드 **하한**을 두어 지나치게 쉬운 후보도 배제한다 — 밴드는 '쉬운 문제로 정답률을 꾸미는 장치'가 아니다. 생산적 고투는 l4/hint_deferral.py가 계속 담당함을 문서로 못박는다"
   - "⑤ 변별력: 학습 목적에서 선택 문항의 예상 정답확률이 밴드에 드는 비율이 진단 목적보다 유의하게 높은지 실측 + 하한 제거 시 배제가 풀리는지 양방향 실측"
-artifacts: []
+artifacts:
+  - a865445a
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/l2/irt.py
   - "tests/backend/l2/test_irt*.py"
   - tests/backend/api/test_me.py
-session: claude/whymath-assessment-review-pgvxnj
+session: null
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D4. 현행 CAT은 Fisher 정보량 최대(l2/irt.py:203)이고 Rasch에서 이는 P≈0.5 지향 — 학생이 절반을 틀리도록 설계된 출제가 학습 세션에도 그대로 적용된다. 근원은 밴드 상수 부재가 아니라 **진단(측정 정밀도)과 학습(생산적 고투) 목적이 한 엔드포인트에 겸해 있는 것**. 진단에서 P≈0.5는 옳다(SE를 가장 빨리 줄인다). 의사결정 우선순위 #1(학생 안전·웰빙)이 #6(비용·효율)을 이기는 축."
 updated: 2026-08-03
