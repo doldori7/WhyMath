@@ -38,6 +38,7 @@ import re
 from dataclasses import dataclass
 
 from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import ModelFamily, RoutingDecision, RoutingRequest
 from whymath_backend.l3.pregenerate.validator import (
@@ -46,6 +47,9 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l3.router import Router
+
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
 __all__ = [
     "QuestionRephraser",
@@ -212,7 +216,7 @@ class QuestionRephraser:
         # 순 수율이 떨어진다(2026-07-07 결정 로그).
         temperature: float = 0.7,
         authoring_family: ModelFamily | None = ModelFamily.GENERAL,
-        subscription: str = "free",
+        subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
         validator: SeedValidator | None = None,
     ) -> None:
         self._provider = provider
@@ -294,6 +298,7 @@ class QuestionRephraser:
             difficulty="easy",
             requires_reasoning=False,
             student_subscription=self._subscription,
+            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             sync=True,
         )
         decision = Router().route(request)
