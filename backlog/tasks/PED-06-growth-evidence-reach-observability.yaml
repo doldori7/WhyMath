@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -18,7 +18,8 @@ acceptance:
   - "⑤ 변별력 — attempt 1건 주입 시 미도달이 실제로 해제되고 되돌리면 다시 나오는지 양방향 실측"
   - "⑥ CI 배선 실재 확인(OPS-03·OPS-10 선례)"
   - "⑦ 범위 밖 동결 — 모바일 화면 신설·클라 attempt POST 배선(REC-01 소관)·확신도 수집 UI 신설·푸시 알림"
-artifacts: []
+artifacts:
+  - 14a0b46b
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/harness/wh1_evaluation.py
