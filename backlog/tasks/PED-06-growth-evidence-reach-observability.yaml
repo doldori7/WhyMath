@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -18,13 +18,14 @@ acceptance:
   - "⑤ 변별력 — attempt 1건 주입 시 미도달이 실제로 해제되고 되돌리면 다시 나오는지 양방향 실측"
   - "⑥ CI 배선 실재 확인(OPS-03·OPS-10 선례)"
   - "⑦ 범위 밖 동결 — 모바일 화면 신설·클라 attempt POST 배선(REC-01 소관)·확신도 수집 UI 신설·푸시 알림"
-artifacts: []
+artifacts:
+  - 14a0b46b
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/harness/wh1_evaluation.py
   - "src/backend/whymath_backend/harness/*"
   - "tests/backend/api/test_me_harness_metrics*.py"
   - "tests/backend/harness/test_wh1_evaluation*.py"
-session: main
+session: null
 notes: "docs/architecture/gamification_module_gap_review.md §3 D1. compute_wh1_surrogate_metrics(harness/wh1_evaluation.py:983)가 11지표를 계산해 GET /v1/me/harness-metrics(api/me.py:2190)로 노출하나 Flutter 13종 엔드포인트에 없음(전수 실측). api/me.py:1247 주석이 /diagnosis/summary 소비자를 '대시보드 헤더'로 명시하나 그 대시보드가 만들어진 적 없음. NLP-01 '활성화가 아니라 가시화'와 동형. 의존: REC-01(입력 루프 상류)·S3-16(LearningSession writer 결정 승계)."
 updated: 2026-08-03
