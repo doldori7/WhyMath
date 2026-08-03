@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 변별력 — 금지 심볼·금지값을 일부러 주입하면 실제로 red가 나는지 양방향 실측"
   - "⑤ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
   - "⑥ 범위 밖 동결 — focus_score/engagement_score(S3-16 소유)·죽은 컬럼 제거 마이그레이션·tone_filter 라이브 배선(별도 L3/L4 결정)"
-artifacts: []
+artifacts:
+  - 672be224
 paths:
   - "src/mobile/test/governance/*.dart"
   - src/backend/whymath_backend/schema/timeseries.py

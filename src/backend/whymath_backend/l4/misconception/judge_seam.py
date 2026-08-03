@@ -15,6 +15,7 @@ judge 코어(`judge.py`)·하니스(`semantic_eval.py`)는 `LLMSeam`(async `gene
 from __future__ import annotations
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import (
     CacheBackend,
     InMemoryCache,
@@ -25,6 +26,9 @@ from whymath_backend.l3.interfaces import (
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import generate as l3_generate
 from whymath_backend.l3.providers.ollama import OllamaProvider
+
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
 
 def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
@@ -40,7 +44,9 @@ def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
     `difficulty="medium"`+`sync`(rule8 → MID) + `max_latency_ms=5000`(rule5 회피).
     `resolve_model(GENERAL, MID)=qwen2.5:7b`. coach 미배선이라 이 전환은 *측정 경로*만 영향.
 
-    `student_subscription="free"`로 두 경우 모두 로컬 유지(CLOUD 승급 가드 회피·03a §E.2).
+    구독·예산 신호는 `escalation_defaults.default_student_escalation_signals()` 단일 좌석에서
+    가져온다(OPS-18) — 오늘은 두 경우 모두 free·예산 0으로 로컬 유지(CLOUD 승급 가드 회피·
+    03a §E.2), 값 자체는 리터럴 시절과 바이트 동일(회귀 0).
     """
     resolved = settings if settings is not None else get_settings()
     if resolved.misconception_judge_routing == "general_mid":
@@ -48,7 +54,8 @@ def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
             task_type="extract",
             difficulty="medium",
             requires_reasoning=True,
-            student_subscription="free",
+            student_subscription=_STUDENT_ESCALATION_DEFAULTS.student_subscription,
+            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,
             max_latency_ms=5000,
             sync=True,
         )
@@ -56,7 +63,8 @@ def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
         task_type="misconception_judge",
         difficulty="easy",
         requires_reasoning=False,
-        student_subscription="free",
+        student_subscription=_STUDENT_ESCALATION_DEFAULTS.student_subscription,
+        budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,
         max_latency_ms=1500,
         sync=True,
     )

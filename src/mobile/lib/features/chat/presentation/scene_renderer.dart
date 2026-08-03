@@ -162,20 +162,25 @@ class _VisualizationSeed extends StatelessWidget {
     final theme = Theme.of(context);
     final caption = viz?.caption;
     final label = (caption != null && caption.isNotEmpty) ? caption : '인터랙티브 시각화';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: AppSpacing.sm),
-          Flexible(child: Text(label, style: theme.textTheme.bodyMedium)),
-        ],
+    // 접근성(A11Y-01): 아이콘+텍스트로 흩어진 자식 대신 이 placeholder 블록 전체를 스크린리더가
+    // 하나의 일관된 라벨로 읽도록 명시 부착(구조는 그대로, 시맨틱만 보강).
+    return Semantics(
+      label: label,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(child: Text(label, style: theme.textTheme.bodyMedium)),
+          ],
+        ),
       ),
     );
   }
