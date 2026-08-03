@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - src/backend/whymath_backend/ops/provenance_audit.py
   - "tests/backend/ops/**"
   - "data/corpus/**"
-session: null
+session: claude/drive-cur-nlp-observability
 notes: "docs/architecture/operations_module_gap_review_r2.md §3 D5 — 외부 EOS 틀 모듈 42(저작권·출처) 재점검. _KNOWN_GAPS 5종(problem_bank_{conceptual,generated,killer,misconception_mc,rephrased}_v0)은 학생에게 실제 노출되는 문제은행인데 provenance 집행 게이트에서 면제 중. v1 D1이 'S3-11이 다른 브랜치에서 done이니 머지되면 자동 해소'로 넘겼으나 5일 경과·S3-11은 여전히 todo. 2026-07-30 미병합 브랜치 9일 고립 사고와 동형 패턴('다른 곳에서 이미 됐다'가 트렁크에 착륙하지 않은 채 시간이 흐름). ARCH-20 주석이 해제를 손 유지보수로 명시 — 손 유지보수는 잊히면 영구 면제가 된다. S3-11 자체를 재구현하지 않는다(회수 여부 판정만 — 중복 착수 회피, HARN-11)."
 updated: 2026-08-03
