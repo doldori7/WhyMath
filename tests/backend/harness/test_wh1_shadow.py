@@ -29,6 +29,7 @@ from whymath_backend.harness.wh1_shadow import (
 )
 from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 
 _RECORD_LOGGER = "whymath.harness.wh1_shadow.record"
 
@@ -338,6 +339,59 @@ class TestWarmstartWiring:
             )
         )
         assert captured.get("outside_mids") == []
+
+    def test_probe_candidates_flow_to_policy_when_supplied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """REC-02 — probe_candidates·theta가 공급되면 LLMTutorPolicy로 그대로 전달된다.
+
+        배선 누락 재발 방지 가드: `probe_candidates` 기본값 `()`를 채우는 호출자가 없어 select_probe
+        가 상시 실패했던 결함(REC-02 원 사고)이 재발하면 이 단언이 CI에서 실패한다.
+        """
+        captured: dict[str, object] = {}
+        real_policy = wh1_shadow.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_shadow, "LLMTutorPolicy", _spy_policy)
+        candidate = ProbeCandidate(
+            problem_id="P1", difficulty=0.0, misconception_tags=frozenset({"M-A"})
+        )
+        asyncio.run(
+            observe_wh1_harness_shadow(
+                student_solution="풀이",
+                solution_steps=[],
+                active_hypotheses=[],
+                provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']),
+                probe_candidates=[candidate],
+                theta=0.5,
+            )
+        )
+        assert captured.get("probe_candidates") == [candidate]
+        assert captured.get("theta") == 0.5
+
+    def test_default_empty_probe_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # probe_candidates 미주입(기본 빈 튜플)이면 정책도 빈 리스트(기존 동작 불변).
+        captured: dict[str, object] = {}
+        real_policy = wh1_shadow.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_shadow, "LLMTutorPolicy", _spy_policy)
+        asyncio.run(
+            observe_wh1_harness_shadow(
+                student_solution="풀이",
+                solution_steps=[],
+                active_hypotheses=[],
+                provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']),
+            )
+        )
+        assert captured.get("probe_candidates") == []
+        assert captured.get("theta") == 0.0
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ from whymath_backend.harness import wh1_primary
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import Wh1HarnessShadowObservation
 from whymath_backend.l3.models import GenerationResult, RoutingDecision
+from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 
 _RECORD_LOGGER = "whymath.harness.wh1_shadow.record"
 _PRIMARY_LOGGER = "whymath.harness.wh1_primary"
@@ -261,3 +262,50 @@ class TestPrivacy:
         joined = " ".join(r.getMessage() for r in caplog.records)
         assert "ZZPIIZZ" not in joined  # 학생 풀이 원문 sentinel 부재(레코드·평문 로그 전부)
         assert "(a+b)" not in joined
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑥ probe_candidates 배선(REC-02) — LLMTutorPolicy(shadow의 TestWarmstartWiring과 동형)
+# ──────────────────────────────────────────────────────────────────────────
+class TestProbeCandidatesWiring:
+    """`probe_candidates`·`theta`가 `LLMTutorPolicy`로 그대로 전달되는지 구조 동결.
+
+    배선 누락 재발 방지 가드 — `run_wh1_primary_turn`이 `probe_candidates` 기본값 `()`를
+    채우는 프로덕션 호출자가 없어 select_probe가 상시 실패했던 결함(REC-02 원 사고)이 재발하면
+    이 단언이 CI에서 실패한다(`test_wh1_shadow.py::TestWarmstartWiring` 동형 가드).
+    """
+
+    def test_probe_candidates_flow_to_policy_when_supplied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+        real_policy = wh1_primary.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_primary, "LLMTutorPolicy", _spy_policy)
+        candidate = ProbeCandidate(
+            problem_id="P1", difficulty=0.0, misconception_tags=frozenset({"M-A"})
+        )
+        _run(
+            provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']),
+            probe_candidates=[candidate],
+            theta=0.5,
+        )
+        assert captured.get("probe_candidates") == [candidate]
+        assert captured.get("theta") == 0.5
+
+    def test_default_empty_probe_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+        real_policy = wh1_primary.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_primary, "LLMTutorPolicy", _spy_policy)
+        _run(provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']))
+        assert captured.get("probe_candidates") == []
+        assert captured.get("theta") == 0.0
