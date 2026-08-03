@@ -602,6 +602,46 @@ statistical_outlier·banned_words_pii·performance)은 향후 별도 태스크.
 7건 포함)·ruff·black clean. 전체 스위트는 이 세션 범위 밖(건드린 디렉터리만 확인 — 무증상
 전체 스위트 주장 금지 원칙).
 
+### 2026-08-03 (구현·NLP-03): **텍스트 풀이 단계 분해 계약 정본화 — `data/segmentation_contract.json` + `l5/ocr/text_segmentation.py` + 모바일 교차 골든 테스트, 0-전이 제출 관측 카운터 신설** (claude 구현·backend-engineer·flutter-engineer 위임, Kiki "/drive")
+
+**배경**: `docs/architecture/nlp_module_gap_review.md` §3 D3. 텍스트 풀이 → 단계 분해
+로직이 모바일에만 있었다(`chat_controller._splitSteps`·`latex_to_plain.dart`의 displaylines
+언랩). 백엔드 코어에 대응 정본이 0이라 "미러링한다"는 주석만 있고 동기화 강제 장치가
+없었고, 실제로 2026-07-20에 드리프트가 터졌다(`\displaylines{}` 행 구분자가 `'\n'` 분해에
+안 걸려 단일 0-전이 스텝이 된 실기기 사고 — 이미 고쳐졌으나 재발 방지 장치 부재).
+
+**설계**: `data/notation_contract.json` 선례(Python SymPy ↔ JS mathjs 교차 골든)와 동형
+패턴을 이번엔 backend(Python) ↔ mobile(Dart)에 적용. 계약은 이 세션이 직접 설계·검증한 뒤
+(`data/segmentation_contract.json`, 10케이스 — plain 여러 줄·CRLF·displaylines 2행(2026-07-20
+회귀 케이스)·displaylines 언더스플릿(ambiguous=true) 등) 두 서브에이전트에 동시에 위임했다
+— 계약 파일을 먼저 고정해 두 구현이 독립적으로도 반드시 수렴하게 함(설계 일관성을
+조율 오버헤드 없이 확보). 알고리즘은 의도적으로 좁게 잡았다 — 기호 치환(`\frac`·`\pi`
+등)은 계약 밖(별개 기존 미러 `l5/ocr/verify.py::_latex_to_sympifiable` ↔
+`latex_to_plain.dart`), 이 계약은 순수 구조(행 분해)만 책임진다.
+
+**백엔드**: `l5/ocr/text_segmentation.py`(신설) `segment_solution_text` — displaylines 언랩
++ 행 구분자 `\\`→`'\n'` 정규화 + trim/빈 줄 제거 + `ambiguous` fail-closed 플래그(displaylines
+마커가 있는데 1스텝 이하로 뭉개지면 구조적 의심 신호로 관측만, 차단 안 함). L5 배치(L3는
+*이미 분해된* steps만 검증 — 분해와 검증을 섞지 않는다). 0-전이 제출 관측
+(`api/_segmentation_state.py::SolutionSegmentationCounters`)은 `NLP-01`의
+`OcrReachCounters`와 동형 패턴(병렬 구축·재사용 아님) — 클라가 이미 분해해 보낸
+`solution_steps` 길이 분포(`len<=1` 비율)를 `/v1/coach` 세 핸들러에서 관측해
+`/health/ready`에 노출(백엔드가 원문을 직접 분해하는 라이브 경로는 아직 없어 대리 신호).
+
+**모바일**: 프로덕션 코드 변경 0(기존 `_splitSteps`·`latexToPlainSolution`이 계약의 모든
+케이스를 이미 통과 — 알고리즘 불일치 없음, 순수 회귀 테스트 신설). `test/
+segmentation_contract_test.dart`가 계약 JSON을 로드해 `ChatController.sendSolution`/
+`sendMathLiveSolution`(공개 API)을 호출하고 fake `CoachApi`가 캡처한 실제 전송
+`solution_steps`를 대조(private `_splitSteps` 직접 호출 대신 공개 경로 우회 관찰 —
+`chat_controller_test.dart` 기존 관례 답습). `ambiguous`는 모바일에서 검증하지 않음
+(백엔드 전용 관측 신호).
+
+**검증**: 로컬 venv에서 `tests/backend/l5/ocr/test_text_segmentation.py`·
+`tests/backend/api/test_solution_segmentation_observability.py`·기존 `test_coach.py`·
+`test_health_endpoints.py` 전건 green(336+ passed)·ruff·black clean. 모바일은 Flutter
+SDK가 이 세션 환경에 없어 실행 미확인(정적 트레이스로 10케이스 전부 수동 검증) — 후속
+세션에서 `flutter test test/segmentation_contract_test.dart` 실행 필요.
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데

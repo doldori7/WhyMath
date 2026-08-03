@@ -58,6 +58,10 @@ from whymath_backend.api._rate_limit import (
     RateLimitedTripleRead,
     RateLimitedTripleWrite,
 )
+from whymath_backend.api._segmentation_state import (
+    SolutionSegmentationCounters,
+    get_segmentation_counters,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.concept import Concept
@@ -129,12 +133,23 @@ from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coac
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
+from whymath_backend.schema.enums import (
+    ContentType,
+    EventType,
+    Persona,
+    StepType,
+    TurnRole,
+)
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# NLP-03 acceptance ③ — 0-전이 제출 관측 카운터(`api/_segmentation_state.py`). 세 핸들러
+# (`/coach`·`/coach/sessions`·`/coach/sessions/{id}/turns`) 공통 주입 좌석.
+SegmentationCountersDep = Annotated[
+    SolutionSegmentationCounters, Depends(get_segmentation_counters)
+]
 
 logger = logging.getLogger(__name__)
 
@@ -375,7 +390,8 @@ class SessionCreateResponse(CoachResponse):
         description=_ACTIVE_HYPOTHESES_DESC,
     )
     wh1_turn_index: int = Field(
-        ge=1, description="이 교환의 WH-1 턴 번호(1-기반·세션 누적·ε-탐색 카운터·§2.2). 생성=1."
+        ge=1,
+        description="이 교환의 WH-1 턴 번호(1-기반·세션 누적·ε-탐색 카운터·§2.2). 생성=1.",
     )
     wh1_exploration_turn: bool = Field(
         description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
@@ -385,14 +401,18 @@ class SessionCreateResponse(CoachResponse):
 class TurnAppendResponse(CoachResponse):
     """`/v1/coach/sessions/{id}/turns` 응답 — `CoachResponse` + 추가 턴 PK·turn_order."""
 
-    student_turn_id: uuid.UUID = Field(description="추가된 학생 턴 PK(turn_order=직전+1).")
+    student_turn_id: uuid.UUID = Field(
+        description="추가된 학생 턴 PK(turn_order=직전+1)."
+    )
     assistant_turn_id: uuid.UUID = Field(
         description="추가된 AI 턴 PK(turn_order=직전+2, content=decision.prompt)."
     )
     student_turn_order: int = Field(
         ge=1, description="학생 턴 순번(append 후 dialogue.total_turns에 반영)."
     )
-    assistant_turn_order: int = Field(ge=1, description="AI 턴 순번(=student_turn_order + 1).")
+    assistant_turn_order: int = Field(
+        ge=1, description="AI 턴 순번(=student_turn_order + 1)."
+    )
     active_hypotheses: list[MisconceptionHypothesis] = Field(
         default_factory=list,
         description=_ACTIVE_HYPOTHESES_DESC,
@@ -417,7 +437,9 @@ class SessionGetResponse(BaseModel):
     )
 
 
-def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLevel | None:
+def _ability_level(
+    bkt_mastery: float | None, theta: float | None
+) -> MasteryLevel | None:
     """BKT 숙달(0~1)과 신뢰 θ(logistic 프록시)를 평균해 적응형 스캐폴딩용 ability 라벨 산출.
 
     힌트(`decide_hint_level`)·Polya 전이(`should_advance`)·LTHC(`adapt_lthc`)가 공유하는
@@ -492,10 +514,14 @@ def _build_response_payload(
     # 있으면 substr → select_intervention이 substring 진단(검증된 표면 신호) 기준으로 구동.
     resolved = matches if matches is not None else diagnose(body.student_input)
     intervention = select_intervention(resolved[0]) if resolved else None
-    lthc = adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
+    lthc = (
+        adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
+    )
     # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
     entry_category = (
-        focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None
+        focus_to_socratic_category(body.coaching_focus)
+        if body.coaching_focus is not None
+        else None
     )
     # slice 53: L3→L4 오케스트레이터(slice 52) — 학생 풀이의 *거짓 수치 관계*를 L3 결정론
     # 검증으로 검출해 검산(verify) 코칭을 처방(실시간 슬립은 배경 진단보다 우선·slice 51).
@@ -529,7 +555,9 @@ def _build_response_payload(
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은
     # θ 희소 노이즈라 비노출. θ 수치 자체는 노출 안 함(노출되는 건 trigger의 정성 발화뿐).
     solution_coaching = (
-        sol if (sol.arithmetic_error or sol.trigger.focus in _THETA_SURFACED_FOCI) else None
+        sol
+        if (sol.arithmetic_error or sol.trigger.focus in _THETA_SURFACED_FOCI)
+        else None
     )
     return decision, resolved, intervention, lthc, entry_category, solution_coaching
 
@@ -681,7 +709,9 @@ async def _compute_matches(
         # no_confident_match가 *judge 통과 후* top-1을 반영하게 한다. 세 모드(off/shadow/on) 공통
         # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
         if candidates and get_settings().misconception_judge_enabled:
-            candidates = await judge_filter(candidates, student_input, judge=_make_judge())
+            candidates = await judge_filter(
+                candidates, student_input, judge=_make_judge()
+            )
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
@@ -732,7 +762,9 @@ async def _compute_matches(
     return await _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
 
 
-async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
+async def _expected_answer_for(
+    session: AsyncSession, problem_id: uuid.UUID | None
+) -> str | None:
     """문항 기대정답을 서버 DB에서 조회 — step shadow 진단 맥락 전용(slice 64·비노출).
 
     shadow 게이트(`l4_step_shadow_enabled`)가 off(프로덕션 기본)거나 `problem_id`가 None이면
@@ -766,7 +798,9 @@ async def _server_mastery_for(
     return await get_current_mastery(session, user_id, concept_id)
 
 
-async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> PedagogyPack | None:
+async def _pack_for(
+    session: AsyncSession, problem_id: uuid.UUID | None
+) -> PedagogyPack | None:
     """문항 PRIMARY 개념 → k_type → 교수법 팩 해석 — coach 세션/턴 GA 배선(PED-01 후속).
 
     게이트(`pedagogy_pack_prompt_enabled`)가 off면 **조기 None**(팩 조회 자체 skip → 완전
@@ -780,7 +814,9 @@ async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> Peda
     concept_id = await get_primary_concept_id(session, problem_id)
     if concept_id is None:
         return None
-    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
+    code = await session.scalar(
+        select(Concept.code).where(Concept.concept_id == concept_id)
+    )
     if code is None:
         return None
     k_type = await session.scalar(k_type_query(str(code)))
@@ -827,7 +863,9 @@ async def _server_theta_for(
             reading = await get_current_ability(session, user_id, concept_id)
             if reading is not None and _theta_reading_reliable(reading):
                 return reading.theta  # 신뢰도 충분한 개념 θ(정밀 교차검증)
-    return await get_current_theta(session, user_id)  # 전과목 폴백(slice 73·게이팅 안 함)
+    return await get_current_theta(
+        session, user_id
+    )  # 전과목 폴백(slice 73·게이팅 안 함)
 
 
 async def _prerequisite_coaching_for(
@@ -1016,7 +1054,9 @@ async def _apply_hypotheses(
     루프 오케스트레이션도 후속 슬라이스다.
     """
     if user_id is None:
-        return []  # 인증 게이트라 도달 안 함(방어 가드 — curate_hypothesis는 user_id 필수).
+        return (
+            []
+        )  # 인증 게이트라 도달 안 함(방어 가드 — curate_hypothesis는 user_id 필수).
     return await curate_hypothesis(session, student_id=user_id, matches=matches)
 
 
@@ -1106,7 +1146,9 @@ async def _log_refutation_evidence(
         return  # clean 검증(통과)만 반박 — None(풀이 아님)·False(거짓관계 적발)은 제외.
     if matches:
         return  # no-match 게이트 — 이번 턴이 매치(+1 지지)면 같은 턴 반박 안 함(모순 차단).
-    text = solution_text or ""  # passed is True ⟹ student_solution 비어있지 않음(verify 게이트).
+    text = (
+        solution_text or ""
+    )  # passed is True ⟹ student_solution 비어있지 않음(verify 게이트).
     for hyp in active_hypotheses:
         # 정정 형태 검출 시 정밀·강한 반박(1.0), 아니면 막연한 clean 작업의 약한 반박(0.5).
         entry = CATALOG_BY_ID.get(hyp.misconception_id)
@@ -1173,9 +1215,13 @@ async def _warmstart_hints_or_empty(
             problem_id=problem_id,
             provider=build_provider(get_settings()),
         )
-    except Exception as exc:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
         logger.warning(
-            "웜스타트 probe 힌트 조립 실패(%s) — 빈 힌트로 진행", type(exc).__name__, exc_info=True
+            "웜스타트 probe 힌트 조립 실패(%s) — 빈 힌트로 진행",
+            type(exc).__name__,
+            exc_info=True,
         )
         return []
 
@@ -1213,9 +1259,13 @@ async def _wh1_primary_decision_or(
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
         )
-    except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
-            "WH-1 primary 경로 예외(%s) — 결정론 템플릿 폴백", type(exc).__name__, exc_info=True
+            "WH-1 primary 경로 예외(%s) — 결정론 템플릿 폴백",
+            type(exc).__name__,
+            exc_info=True,
         )
         return decision
     if utterance is None:
@@ -1247,13 +1297,15 @@ def _build_dialogue_turn(
     turn.content_encrypted = content_encrypted
     turn.content_nonce = content_nonce
 
-    uri_plain, uri_encrypted, uri_nonce = encrypt_dialogue_image_uri(cipher, schema.image_uri)
+    uri_plain, uri_encrypted, uri_nonce = encrypt_dialogue_image_uri(
+        cipher, schema.image_uri
+    )
     turn.image_uri = uri_plain
     turn.image_uri_encrypted = uri_encrypted
     turn.image_uri_nonce = uri_nonce
 
-    analysis_plain, analysis_encrypted, analysis_nonce = encrypt_dialogue_image_analysis(
-        cipher, schema.image_analysis
+    analysis_plain, analysis_encrypted, analysis_nonce = (
+        encrypt_dialogue_image_analysis(cipher, schema.image_analysis)
     )
     turn.image_analysis = analysis_plain
     turn.image_analysis_encrypted = analysis_encrypted
@@ -1271,12 +1323,15 @@ async def coach_decide(
     body: CoachRequest,
     user: ConsentedUser,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
     *DB 무접근* — 영속이 필요하면 `/v1/coach/sessions`를 호출. `user`는 인증 게이트만.
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
@@ -1310,6 +1365,7 @@ async def create_session(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> SessionCreateResponse:
     """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
 
@@ -1317,6 +1373,8 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     # slice 64: 문항 기대정답을 서버 DB에서 조회해 step shadow 진단 맥락으로 주입(비노출 — 응답엔
     # 결코 싣지 않음·정답 누출 차단). 문항 부재/없음이면 None(graceful).
     expected_answer = await _expected_answer_for(session, body.problem_id)
@@ -1354,7 +1412,9 @@ async def create_session(
     warmstart_mids: list[str] = []
     if wh1_primary_on or wh1_shadow_on:
         # S1-c: 웜스타트 probe 힌트 조립(진단 probe 타깃팅 전용·never-break·헬퍼 docstring 참조).
-        warmstart_mids = await _warmstart_hints_or_empty(session, problem_id=body.problem_id)
+        warmstart_mids = await _warmstart_hints_or_empty(
+            session, problem_id=body.problem_id
+        )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
             observe_wh1_harness_shadow(
@@ -1362,7 +1422,9 @@ async def create_session(
                 student_solution=body.student_solution or body.student_input,
                 solution_steps=body.solution_steps or [],
                 active_hypotheses=active_hypotheses,
-                problem_id=str(body.problem_id) if body.problem_id is not None else None,
+                problem_id=(
+                    str(body.problem_id) if body.problem_id is not None else None
+                ),
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
             )
@@ -1519,6 +1581,7 @@ async def append_turns(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> TurnAppendResponse:
     """기존 dialogue에 학생/AI 2턴 추가.
 
@@ -1527,6 +1590,8 @@ async def append_turns(
     `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
     LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     dialogue = await session.get(DialogueORM, dialogue_id)
     if dialogue is None or dialogue.user_id != user.user_id:
         raise HTTPException(
@@ -1537,13 +1602,17 @@ async def append_turns(
     # (비노출 진단 로그 전용). create_session과 동형(create는 body, append는 dialogue 출처).
     expected_answer = await _expected_answer_for(session, dialogue.problem_id)
     # slice 70: 멀티턴도 서버 L2 숙달도 조회(dialogue.problem_id·user 출처)·클라 bkt 대체.
-    server_mastery = await _server_mastery_for(session, user.user_id, dialogue.problem_id)
+    server_mastery = await _server_mastery_for(
+        session, user.user_id, dialogue.problem_id
+    )
     # slice 73·74: 멀티턴도 서버 L2 θ 조회 — BKT↔θ 교차검증(θ 수치 비노출). slice 74: 개념별 θ
     # 우선(dialogue.problem_id)·없으면 전과목 폴백.
     server_theta = await _server_theta_for(session, user.user_id, dialogue.problem_id)
     # 선수 복습 코칭 — dialogue에 실린 problem_id로 막힌 선수 조회(create_session과 동형·dialogue
     # 출처). 별개 추가 신호(non-override·턴 비가로채기).
-    prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
+    prereq = await _prerequisite_coaching_for(
+        session, user.user_id, dialogue.problem_id
+    )
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
     outcome = await _compute_matches(
@@ -1580,7 +1649,11 @@ async def append_turns(
                 # 분포를 묶을 수 있게 한다(레코드 스키마 기존 필드·PII 아님·UUID·정수).
                 dialogue_id=str(dialogue_id),
                 turn_index=(dialogue.total_turns or 0) // 2 + 1,
-                problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
+                problem_id=(
+                    str(dialogue.problem_id)
+                    if dialogue.problem_id is not None
+                    else None
+                ),
                 warmstart_outside_mids=warmstart_mids_turn,
             )
         )
@@ -1778,6 +1851,8 @@ async def get_session_detail(
     payload = SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
     etag = etag_for(payload)
     if matches_if_none_match(if_none_match, etag):
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag}
+        )
     response.headers["ETag"] = etag
     return payload

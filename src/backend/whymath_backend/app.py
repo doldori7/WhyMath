@@ -83,6 +83,16 @@ from whymath_backend.api._ocr_state import (
 from whymath_backend.api._ocr_state import (
     get_ocr_reach_snapshot as _get_ocr_reach_snapshot,
 )
+from whymath_backend.api._segmentation_state import (
+    SEGMENTATION_COUNTERS_KEY as _SEGMENTATION_COUNTERS_KEY,
+)
+from whymath_backend.api._segmentation_state import (
+    SolutionSegmentationCounters,
+    SolutionSegmentationSnapshot,
+)
+from whymath_backend.api._segmentation_state import (
+    get_segmentation_snapshot as _get_segmentation_snapshot,
+)
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
 )
@@ -187,9 +197,13 @@ class GenerateResponseBody(BaseModel):
     `text`는 검증 전 원시 출력이다(앱 docstring 경계 메모 참조).
     """
 
-    text: str = Field(..., description="생성된 원시 텍스트(검증 전 — 학생 직접 노출 금지)")
+    text: str = Field(
+        ..., description="생성된 원시 텍스트(검증 전 — 학생 직접 노출 금지)"
+    )
     cache_hit: bool = Field(..., description="캐시 적중 여부 (KPI, 03a §F.1)")
-    decision: RoutingDecision = Field(..., description="라우팅 결정 메타데이터 (03a §G)")
+    decision: RoutingDecision = Field(
+        ..., description="라우팅 결정 메타데이터 (03a §G)"
+    )
     validation_signal: str | None = Field(
         default=None,
         description=(
@@ -208,7 +222,9 @@ class GenerateQueuedBody(BaseModel):
 
     job_id: str = Field(..., description="비동기 작업 ID — /v1/jobs/{job_id}로 폴링")
     status: str = Field(default="queued", description="작업 적재 상태('queued')")
-    decision: RoutingDecision = Field(..., description="라우팅 결정 메타데이터 (03a §G)")
+    decision: RoutingDecision = Field(
+        ..., description="라우팅 결정 메타데이터 (03a §G)"
+    )
 
 
 class JobStatusBody(BaseModel):
@@ -222,7 +238,9 @@ class JobStatusBody(BaseModel):
     job_id: str = Field(..., description="조회한 작업 ID")
     state: str = Field(..., description="pending/success/failure/unknown")
     text: str | None = Field(default=None, description="완료 시 원시 텍스트(검증 전)")
-    error: str | None = Field(default=None, description="실패/판정불가 사유(스택트레이스 X)")
+    error: str | None = Field(
+        default=None, description="실패/판정불가 사유(스택트레이스 X)"
+    )
     validation_signal: str | None = Field(
         default=None,
         description=(
@@ -249,7 +267,9 @@ class StatusBody(BaseModel):
 
     ready: bool = Field(..., description="도달 가능 + 모든 라우팅 모델 설치 여부(로컬)")
     reachable: bool = Field(..., description="Ollama 데몬 도달 가능 여부")
-    models: list[ModelAvailabilityBody] = Field(..., description="라우팅 모델별 설치 여부")
+    models: list[ModelAvailabilityBody] = Field(
+        ..., description="라우팅 모델별 설치 여부"
+    )
     missing: list[str] = Field(..., description="미설치 모델 ID 목록")
     error: str | None = Field(default=None, description="도달 실패 시 사유(비크래시)")
     # ── 클라우드(Anthropic, S5) — 선택적. None이면 클라우드 상태 미노출 ──
@@ -267,7 +287,9 @@ class StatusBody(BaseModel):
 class ComponentCheckBody(BaseModel):
     """/health/ready 컴포넌트 항목 — 딥체크 1건 결과(ops/service_health.ComponentCheck)."""
 
-    configured: bool = Field(..., description="구성/확인 수단 노출 여부(False=미구성·오류 아님)")
+    configured: bool = Field(
+        ..., description="구성/확인 수단 노출 여부(False=미구성·오류 아님)"
+    )
     reachable: bool | None = Field(
         ...,
         description="도달성. None='판정 불가'(미구성 등 — False '도달 실패'와 구분)",
@@ -286,8 +308,12 @@ class ComponentCheckBody(BaseModel):
 class MetricsSummaryBody(BaseModel):
     """/health/ready 인프로세스 계측 요약 — None 필드는 '미측정'(0과 구분·날조 금지)."""
 
-    uptime_seconds: float = Field(..., description="프로세스(계측 시작) 이후 경과 초 — 가동 보고")
-    total_requests: int = Field(..., description="누적 계측 요청 수(ops 프로브 경로 제외)")
+    uptime_seconds: float = Field(
+        ..., description="프로세스(계측 시작) 이후 경과 초 — 가동 보고"
+    )
+    total_requests: int = Field(
+        ..., description="누적 계측 요청 수(ops 프로브 경로 제외)"
+    )
     total_5xx: int = Field(..., description="누적 5xx 응답 수")
     window_count: int = Field(..., description="최근 창(고정 deque) 표본 수")
     window_error_rate: float | None = Field(
@@ -297,7 +323,9 @@ class MetricsSummaryBody(BaseModel):
         ..., description="최근 창 p95 지연(ms). None=표본 없음(미측정)"
     )
     latency_sum_ms: float = Field(..., description="누적 지연 합계(ms)")
-    latency_max_ms: float | None = Field(..., description="누적 최대 지연(ms). None=요청 0건")
+    latency_max_ms: float | None = Field(
+        ..., description="누적 최대 지연(ms). None=요청 0건"
+    )
 
 
 class AlertBody(BaseModel):
@@ -316,17 +344,43 @@ class OcrReachBody(BaseModel):
     필드와 같은 취지를 bool 플래그로 표현).
     """
 
-    enabled: bool = Field(..., description="OCR 활성 의도(부품 로드 성공 또는 적재 시도함)")
-    requests_total: int = Field(..., description="get_ocr_components 디펜던시 도달 총 횟수")
+    enabled: bool = Field(
+        ..., description="OCR 활성 의도(부품 로드 성공 또는 적재 시도함)"
+    )
+    requests_total: int = Field(
+        ..., description="get_ocr_components 디펜던시 도달 총 횟수"
+    )
     succeeded: int = Field(..., description="OCR 파이프라인 정상 완료(200 응답) 횟수")
     unavailable_disabled: int = Field(..., description="503 — 사유: 비활성(config off)")
     unavailable_load_failed: int = Field(..., description="503 — 사유: 부품 적재 실패")
 
 
+class SolutionSegmentationBody(BaseModel):
+    """/health/ready 단계 분해 0-전이 제출 관측 요약 (NLP-03 acceptance ③).
+
+    클라이언트가 이미 분해해 보낸 `CoachRequest.solution_steps`의 길이 분포를 관측한다
+    (백엔드가 원문을 직접 분해하는 라이브 경로는 없다 — `api/_segmentation_state.py` 모듈
+    docstring 참조). `total`이 분모, `single_or_zero_step`이 분자다. `total=0`이면 관측
+    대상 요청 자체가 없었다는 뜻이라 별도 enabled 플래그는 두지 않는다(OCR 축과 달리
+    "요청 0건"과 "0-전이 0건"이 total로 자연스럽게 구분됨).
+    """
+
+    total: int = Field(
+        ...,
+        description="solution_steps가 있고(None 아님) 비어있지 않은 요청 총계(분모)",
+    )
+    single_or_zero_step: int = Field(
+        ...,
+        description="그중 len(solution_steps) <= 1인 건수(분자·클라 분해 degenerate 의심 신호)",
+    )
+
+
 class ReadyBody(BaseModel):
     """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
 
-    ready: bool = Field(..., description="트래픽 수용 가능 여부(= DB 도달성·필수 컴포넌트만)")
+    ready: bool = Field(
+        ..., description="트래픽 수용 가능 여부(= DB 도달성·필수 컴포넌트만)"
+    )
     components: dict[str, ComponentCheckBody] = Field(
         ..., description="컴포넌트별 딥체크(database·redis·llm_router)"
     )
@@ -336,7 +390,11 @@ class ReadyBody(BaseModel):
         description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축",
     )
     ocr: OcrReachBody = Field(
-        ..., description="OCR 도달 관측(NLP-01) — 활성 의도 + 요청/성공/사유별 503 카운트"
+        ...,
+        description="OCR 도달 관측(NLP-01) — 활성 의도 + 요청/성공/사유별 503 카운트",
+    )
+    solution_segmentation: SolutionSegmentationBody = Field(
+        ..., description="단계 분해 0-전이 제출 관측(NLP-03) — solution_steps 길이 분포"
     )
 
 
@@ -358,6 +416,16 @@ def _ocr_reach_body(snapshot: OcrReachSnapshot) -> OcrReachBody:
         succeeded=snapshot.succeeded,
         unavailable_disabled=snapshot.unavailable_disabled,
         unavailable_load_failed=snapshot.unavailable_load_failed,
+    )
+
+
+def _segmentation_body(
+    snapshot: SolutionSegmentationSnapshot,
+) -> SolutionSegmentationBody:
+    """SolutionSegmentationSnapshot(도메인, `api._segmentation_state`) → HTTP 스키마 변환."""
+    return SolutionSegmentationBody(
+        total=snapshot.total,
+        single_or_zero_step=snapshot.single_or_zero_step,
     )
 
 
@@ -483,7 +551,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 threshold=settings.misconception_semantic_threshold,
             )
         except Exception:
-            logger.warning("오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도", exc_info=True)
+            logger.warning(
+                "오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도", exc_info=True
+            )
     # L5 OCR: 사유 분리·로그 타입명 회귀 동결이 가능하도록 별도 함수로 분리(`_activate_ocr`
     # docstring — NLP-01).
     _activate_ocr(_app, settings)
@@ -505,6 +575,7 @@ def create_app(
     metrics: ServiceMetrics | None = None,
     readiness_probes: ReadinessProbes | None = None,
     ocr_counters: OcrReachCounters | None = None,
+    segmentation_counters: SolutionSegmentationCounters | None = None,
 ) -> FastAPI:
     """FastAPI 앱 팩토리 — 의존성 주입 가능.
 
@@ -522,6 +593,10 @@ def create_app(
     NLP-01 추가 주입 좌석: `ocr_counters`(OCR 도달 관측 — `api._ocr_state.OcrReachCounters`)
     — 테스트가 초기 카운트를 주입하거나 폭발 가짜로 계측 자체를 검증할 수 있다. 기본은
     새 카운터 1개(전부 0에서 시작).
+
+    NLP-03 추가 주입 좌석: `segmentation_counters`(단계 분해 0-전이 제출 관측 —
+    `api._segmentation_state.SolutionSegmentationCounters`) — `ocr_counters`와 동형(테스트
+    주입 좌석). 기본은 새 카운터 1개(전부 0에서 시작).
 
     SEC-11: 로그 PII·시크릿 스크러버(`ops/log_scrubber.py`)를 루트 로거에 배선한다.
     `_lifespan`이 아니라 여기서 거는 이유는 순수 in-process 설정(I/O 없음)이라 지연시킬
@@ -558,7 +633,11 @@ def create_app(
     # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
     app.state.__setattr__(
         _OAUTH_PROVIDERS_KEY,
-        (oauth_providers if oauth_providers is not None else build_oauth_providers(get_settings())),
+        (
+            oauth_providers
+            if oauth_providers is not None
+            else build_oauth_providers(get_settings())
+        ),
     )
     # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
     # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.
@@ -592,8 +671,20 @@ def create_app(
     # NLP-01: OCR 도달 관측 카운터 — ServiceMetrics와 같은 타이밍(create_app에서 심고,
     # lifespan은 OCR 부품 자체만 늦게 결정)에 앱 수명 동안 1개를 심는다. 테스트가 폭발하는
     # 가짜를 주입할 좌석(metrics·readiness_probes와 동형).
-    resolved_ocr_counters = ocr_counters if ocr_counters is not None else OcrReachCounters()
+    resolved_ocr_counters = (
+        ocr_counters if ocr_counters is not None else OcrReachCounters()
+    )
     app.state.__setattr__(_OCR_COUNTERS_KEY, resolved_ocr_counters)
+
+    # NLP-03: 단계 분해 0-전이 제출 관측 카운터 — ocr_counters와 같은 타이밍(create_app에서
+    # 즉시 심음·lifespan 무관, `api/coach.py` 핸들러가 매 요청 Depends로 record). 테스트가
+    # 초기값·폭발 가짜를 주입할 좌석(ocr_counters와 동형).
+    resolved_segmentation_counters = (
+        segmentation_counters
+        if segmentation_counters is not None
+        else SolutionSegmentationCounters()
+    )
+    app.state.__setattr__(_SEGMENTATION_COUNTERS_KEY, resolved_segmentation_counters)
 
     def _observe_request(elapsed_ms: float, status_code: int) -> None:
         """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
@@ -612,8 +703,12 @@ def create_app(
                     latency_p95_threshold_ms=observed_settings.ops_latency_p95_alert_ms,
                 )
             )
-        except Exception as exc:  # noqa: BLE001 — 계측 실패 흡수(요청 보호)·타입명 로그 필수
-            logger.warning("요청 계측 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__)
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — 계측 실패 흡수(요청 보호)·타입명 로그 필수
+            logger.warning(
+                "요청 계측 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__
+            )
 
     @app.middleware("http")
     async def _service_metrics_middleware(
@@ -673,6 +768,9 @@ def create_app(
         `ocr`(NLP-01)은 OCR 가용성 관측 축이다 — ready 판정에는 관여하지 않는다(OCR은
         L5 부가 기능이라 DB처럼 필수가 아니다·`required` 정책과 동일 취지). `enabled=False`면
         나머지 카운트가 0이어도 '미측정'으로 읽는다(None-vs-zero — `OcrReachBody` docstring).
+
+        `solution_segmentation`(NLP-03)도 ready 판정에는 관여하지 않는다 — 클라이언트
+        `solution_steps`의 0-전이(<=1) 제출 비율 관측 축(`SolutionSegmentationBody` docstring).
         """
         probes: ReadinessProbes = getattr(request.app.state, _READY_PROBES_KEY)
         svc_metrics: ServiceMetrics = getattr(request.app.state, _METRICS_KEY)
@@ -695,7 +793,8 @@ def create_app(
         body = ReadyBody(
             ready=ready,
             components={
-                check.name: _component_body(check) for check in (db_check, redis_check, llm_check)
+                check.name: _component_body(check)
+                for check in (db_check, redis_check, llm_check)
             },
             metrics=_metrics_body(snapshot),
             alerts=[
@@ -703,9 +802,14 @@ def create_app(
                 for a in alerts
             ],
             ocr=_ocr_reach_body(_get_ocr_reach_snapshot(request.app)),
+            solution_segmentation=_segmentation_body(
+                _get_segmentation_snapshot(request.app)
+            ),
         )
         return JSONResponse(
-            status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),
+            status_code=(
+                status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
             content=body.model_dump(mode="json"),
         )
 
