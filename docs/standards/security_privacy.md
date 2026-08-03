@@ -96,8 +96,12 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > `refresh_token_session` 행(PK=jti·allowlist)을 두고 `/refresh`가 존재·미취소 확인·`POST
 > /v1/auth/logout`이 행을 취소(denylist)해 *만료 전 즉시 무효화*. **회전·재사용 탐지(OAuth-a3c)** 가동:
 > `/refresh`가 매번 회전(기존 세션 취소+새 액세스/리프레시 반환)하고, 이미 취소된 토큰 재제출은 재사용
-> 탐지로 사용자 전체 세션을 패닉 취소한다(탈취 대응). 세션 목록/관리(`GET·DELETE /v1/auth/sessions`)는
-> 후속(a3d). refresh 30일 TTL(`jwt_refresh_expire_minutes`); access는 현재 24h 유지(15분 단축은
+> 탐지로 사용자 전체 세션을 패닉 취소한다(탈취 대응). **세션 목록/관리(OAuth-a3d·SEC-10) 가동**:
+> `GET /v1/auth/sessions`(본인 활성 세션 목록·issued_at desc)·`DELETE /v1/auth/sessions`(전체 —
+> 기존 `_revoke_all_user_sessions` 재사용)·`DELETE /v1/auth/sessions/{session_id}`(단건·본인
+> 스코핑 — 타인 소유·미존재는 404). 응답에 IP·UA 원문은 없다 — `platform`(로그인·리프레시 시점
+> User-Agent에서 도출한 "iOS"/"Android"/"Web" 좁은 요약)만(최소 수집). refresh 30일 TTL
+> (`jwt_refresh_expire_minutes`); access는 현재 24h 유지(15분 단축은
 > 모바일 refresh-on-401 배선 후). **로그인 IP 레이트리밋은 후속**(OAuth-a4). **모바일(OAuth-b)**:
 > `core/token_store.dart`(`TokenStore`·OS 보안 저장소
 > `flutter_secure_storage`) + `core/auth_interceptor.dart`(dio Bearer 자동 첨부) + **인증 세션
@@ -112,14 +116,15 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > 가동. ★미인증→로그인 **강제** redirect·로그아웃 반영·세션 만료는 로그인이 실제 작동하는 c3로 연기
 > (그 전에 강제하면 앱이 막힘). 실 webview/딥링크 code 획득·카카오/네이버 SDK·네이티브 설정=OAuth-c3.
 >
-> **⚠️ 후속 항목의 백로그 배치 (2026-07-30 부기)**: 위 자백 3건은 이제 태스크로 추적된다 —
-> ⑴ 세션 목록/관리(a3d) → **`SEC-10`**(`_revoke_all_user_sessions`는 **함수만 있고 엔드포인트가
-> 없다**·`api/auth.py:186`·소생 대상). ⑵ 로그인 IP 레이트리밋(a4) → **`SEC-08`**(인프라는 이미
-> 있다 — `api/_rate_limit.py`의 `hit_by_ip`; 부착만 남음). ⑶ 액세스 24h → 15분 단축은 **클라
-> refresh-on-401 배선(MOB) 선결** — 먼저 줄이면 학생이 15분마다 튕긴다(우선순위 1 침해).
-> 추가 실측 갭: OAuth **`state`·PKCE·`redirect_uri` allowlist 0**(CSRF·open redirect) → `SEC-08`.
+> **⚠️ 후속 항목의 백로그 배치 (2026-07-30 부기 · 2026-08-03 SEC-10 착지 갱신)**: 위 자백 3건은
+> 태스크로 추적됐다 — ⑴ 세션 목록/관리(a3d) → **`SEC-10` 완료**(위 본문 참조 — `_revoke_all_user_
+> sessions`가 함수만 있고 엔드포인트가 없던 상태를 해소). ⑵ 로그인 IP 레이트리밋(a4) →
+> **`SEC-08` 완료**(인프라는 이미 있었다 — `api/_rate_limit.py`의 `hit_by_ip`; 부착 완료).
+> ⑶ 액세스 24h → 15분 단축은 여전히 **클라 refresh-on-401 배선(MOB) 선결** — 먼저 줄이면 학생이
+> 15분마다 튕긴다(우선순위 1 침해). OAuth **`state`·PKCE·`redirect_uri` allowlist**(CSRF·open
+> redirect)도 `SEC-08`에서 완료.
 > **경계 주의**: `device_credential`(기기 자격증명·rate limit 신뢰용)은 **로그인 세션이 아니다** —
-> 기기를 폐기해도 그 기기의 JWT는 만료까지 유효하다(`SEC-10`이 세션 축을 따로 세운다).
+> 기기를 폐기해도 그 기기의 JWT는 만료까지 유효하다(`SEC-10`이 세션 축을 따로 세웠다 — 혼동 금지).
 
 ## 감사 로그
 

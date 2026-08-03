@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/auth.py
   - src/backend/whymath_backend/db/models/refresh_token_session.py
-session: null
+session: claude/whymath-account-security-973iv1
 notes: "2026-07-30 account_security_gap_review.md D4. 실측: _revoke_all_user_sessions(api/auth.py:186)는 이미 존재하는데 재사용 탐지(:260)에서만 호출 — 함수는 있고 엔드포인트가 없다. 학생이 기기를 분실해도 자기 세션을 끊을 방법 0(security_privacy.md:72 '후속(a3d)' 자백). 숨은 발견: device_credential은 rate limit 신뢰용 기기 자격증명이고 로그인 세션이 아니다 — 기기 폐기해도 JWT는 만료까지 유효해 '기기 관리=원격 로그아웃'으로 읽으면 보안 착시(외부 문서 후보 51 경계)."
-updated: 2026-07-30
+updated: 2026-08-03

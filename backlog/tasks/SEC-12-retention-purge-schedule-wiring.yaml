@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/privacy/retention_purge_cli.py
   - docker-compose.prod.yml
   - "infra/**"
-session: null
+session: claude/whymath-account-security-973iv1
 notes: "2026-07-30 account_security_gap_review.md D6. 실측: privacy/retention.py·retention_purge_cli.py 완비이고 CLI docstring:8이 '둘 다 실행 진입점이 없어 retention이 집행되지 않았다 — 이 CLI가 그 표면이다'라고 쓰여 있는데, 그 CLI를 부르는 스케줄 정의가 grep 0(cron·Celery beat·CronJob). 즉 보존 정책은 여전히 집행되지 않는 상태 — CLI가 생긴 것으로 문제가 해결됐다고 읽히기 쉬운 형태. config.py:632 device_credential_max_idle_days도 '운영은 Celery beat·cron 권장' 상태. 배포 형태(OPS-03) 확정 시 배선 위치가 바뀔 수 있어 priority 3."
-updated: 2026-07-30
+updated: 2026-08-03
