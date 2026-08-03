@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-02-learning-path-ordering-honesty
+title: "학습 경로 정렬 근거 정직 표기 — 위상정렬 강등이 응답에서 구분 불가한 문제 해소"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 결함 재현 고정: 집합 내부 엣지가 0인 입력에서 현행 LearningPath 응답이 정상 위상정렬 결과와 구분 불가함을 테스트로 먼저 고정한다(주장 확인 또는 반증)"
+  - "② 정합 설계 본체: LearningPath에 ordering_edge_count(Kahn이 실제 소비한 집합 내부 제약 엣지 수)와 ordering_basis(topological|tiebreak_only|empty)를 order_learning_path 내부 adj에서 파생 추가한다. _tiebreak·Kahn 루프·엣지 공급 로직 변경 0, 추가 순회·추가 쿼리 0, 신규 스키마·마이그레이션 0, frozen·본문 슬롯 부재(redaction) 계약 불변"
+  - "③ 변별력(핵심): steps 튜플이 완전히 동일하면서 두 필드는 서로 다른 fixture 쌍으로 검증한다(엣지 있음=topological·count>0 / 엣지 없음=tiebreak_only·count=0). 순서만 비교하는 검사는 원리적으로 이 결함을 못 잡으므로 그것만으로는 통과로 보지 않는다"
+  - "④ 계약 안정: 추가 필드는 default 보유로 기존 소비자 회귀 0(OpenAPI 가산 변경만), 기존 테스트 18건(tests/backend/l2/test_learning_path.py) 회귀 0"
+  - "⑤ 정본 정정 동반: l2/learning_path.py 모듈 docstring의 무조건적 '위상정렬 순서화' 서술과 api/me.py get_my_learning_path docstring의 '추천의 depth/strength 정렬과 다르다' 서술을 기본값 실측(96.4% tiebreak 강등)에 맞춰 조건부로 정정한다"
+  - "⑥ 범위 밖 명시: 순서 알고리즘·엣지 공급 변경(PATH-03)·max_depth 기본값 변경·prerequisites/coaching 엔드포인트 응답 변경은 이 태스크에 포함하지 않는다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/learning_path.py
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review.md §3 D2. 정직 표기가 정확히 뒤집혀 있다 — 사이클(validate.py hard error로 실제 발생 0건)에는 has_cycle·is_cycle_residual이 붙어 있는데, 96.4%인 '제약 0' 축에는 표기가 없다. 파생 필드 중복의 선례는 같은 파일 안의 has_cycle(learning_path.py:114)↔is_cycle_residual(:95). 응답 정직 표기 선례는 REC-01 acceptance ②. PATH-03의 계측기 역할을 겸한다."
+updated: 2026-08-03

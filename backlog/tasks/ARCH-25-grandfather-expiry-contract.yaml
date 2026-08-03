@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-25-grandfather-expiry-contract
+title: "provenance 그랜드파더 만료 계약 + S3-11 회수 판정 — 학생 노출 코퍼스 5종 면제 무기한화 차단"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "(a) S3-11-problem-bank-data-card 회수 판정·실행 — 그 브랜치(claude/education-os-architecture-mr0fbq)가 살아있는지·회수할 diff가 무엇인지 실측하고, 살아있으면 사이드카·데이터 카드를 트렁크로 회수한다(선례: shadow-data-s3-pilot-nh5kbz Stage 1 회수). 회수 시 ops/provenance_audit.py의 _KNOWN_GAPS 5종을 제거해 provenance 게이트가 전 학생 노출 코퍼스에 실제 적용되게 한다. (b) 회수 성패와 무관하게 그랜드파더 계약 자체를 강화 — _KNOWN_GAPS 값이 자유 문자열이 아니라 추적 태스크 ID를 필수 포함하게 하고, tests/backend/ops/test_provenance_audit.py가 ①모든 항목이 실존 백로그 태스크 ID를 참조할 것 ②그 태스크가 done인데 항목이 남아 있으면 red 를 동결한다. 자동 해제는 아니다(면제 해제는 사람 판단) — 방치만 구조적으로 막는다. 변별력 실측: 존재하지 않는 태스크 ID·done 태스크 잔존 두 경우 모두에서 테스트가 실제 red를 내는지 확인."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/provenance_audit.py
+  - "tests/backend/ops/**"
+  - "data/corpus/**"
+session: null
+notes: "docs/architecture/operations_module_gap_review_r2.md §3 D5 — 외부 EOS 틀 모듈 42(저작권·출처) 재점검. _KNOWN_GAPS 5종(problem_bank_{conceptual,generated,killer,misconception_mc,rephrased}_v0)은 학생에게 실제 노출되는 문제은행인데 provenance 집행 게이트에서 면제 중. v1 D1이 'S3-11이 다른 브랜치에서 done이니 머지되면 자동 해소'로 넘겼으나 5일 경과·S3-11은 여전히 todo. 2026-07-30 미병합 브랜치 9일 고립 사고와 동형 패턴('다른 곳에서 이미 됐다'가 트렁크에 착륙하지 않은 채 시간이 흐름). ARCH-20 주석이 해제를 손 유지보수로 명시 — 손 유지보수는 잊히면 영구 면제가 된다. S3-11 자체를 재구현하지 않는다(회수 여부 판정만 — 중복 착수 회피, HARN-11)."
+updated: 2026-08-03
