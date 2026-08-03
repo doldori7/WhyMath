@@ -1,0 +1,333 @@
+"""평가 결과 영속 좌석(`assessment` 4테이블) 도달 관측 리포트 — ASM-01 acceptance②.
+
+설계 정본: `docs/architecture/assessment_module_gap_review.md` §3 D1. `assessment`·
+`concept_mastery_history`·`skill_mastery_history`·`ability_snapshot` 4테이블 중 `assessment`
+본체는 조회(`GET /v1/me/assessments`)·완료(`PATCH .../complete`)·삭제(`DELETE`)·프라이버시
+내보내기/파기까지 5개 표면이 완비돼 있는데 `Assessment(...)` 생성 코드가 저장소 전체에 0건이다
+(이 시리즈 "완비된 소비 경로+미도달 공급원" 8회차). 이 모듈은 그 사실을 *영구히 눈에 보이게* 한다.
+
+**게이트가 아니다**(`visualization_reach_report`·`problem_bank_coverage`와 동일 원칙) — 카운트가
+0이어도 exit 1을 내지 않는다. 목표는 활성화가 아니라 가시화다: `POST /v1/me/assessments`(생성
+API) 신설·활성화는 이 태스크 범위 밖이다(설계 문서 §3 D1 acceptance⑤).
+
+**"0건"과 "writer 부재"를 혼동하지 않는다** — 형제 테이블 중 `ability_snapshot`은 실제 writer가
+있다(`POST /v1/me/ability/snapshots` → `capture_ability_snapshot`, `api/me.py:965`). 이 테이블이
+카운트 0이어도 "생성 경로 부재"라고 말하면 거짓 주장이 된다. `_KNOWN_WRITER_CITATION`이 테이블별
+writer 유무를 정적으로 기록해 두 상태("생성 경로 자체가 없음" vs "생성 경로는 있으나 아직 호출된
+적 없음")를 구분해 렌더한다.
+
+산출 3축:
+  1. **4테이블 행 수** — 테이블별 row count + writer 유무에 따른 정직한 사유 문구.
+  2. **`AssessmentType` 5종 분포** — DB에 실재하는 값만이 아니라 5종 전부를 보여준다(데이터 없는
+     값도 0으로 명시 — 조용한 생략 금지).
+  3. **진단 산출물 JSONB 결손** — `concept_diagnosis`(오개념 목록이 여기 담길 자리)·
+     `recommended_path`(추천 학습경로)가 비어있지 않은 row 수. `assessment` writer가 0이므로
+     현재는 반드시 0이지만, 그 사실 자체를 하드코딩하지 않고 실제 쿼리 결과를 그대로 신뢰한다.
+
+사용:
+    python -m whymath_backend.harness.assessment_seat_reach_report
+    python -m whymath_backend.harness.assessment_seat_reach_report --json out/asm_reach.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from whymath_backend.db.models.assessment import (
+    AbilitySnapshot,
+    Assessment,
+    ConceptMasteryHistory,
+    SkillMasteryHistory,
+)
+from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.schema.enums import AssessmentType
+
+__all__ = [
+    "SeatCounts",
+    "SeatReachReport",
+    "TableSeat",
+    "build_report",
+    "collect_seat_counts",
+    "dump_json",
+    "main",
+    "render_report",
+    "report_to_json",
+]
+
+_EXIT_OK = 0
+_EXIT_INPUT_ERROR = 2
+
+# 렌더링 사유 3종 — count>0/writer 없음/writer 있음의 상호 배타 3분류(§D1 "0건≠writer 부재").
+_REASON_OBSERVED = "관측됨"
+_REASON_NO_PRODUCER = "생성 경로 부재"
+_REASON_UNCALLED_WRITER = "writer 존재하나 미호출 관측"
+
+# 테이블별 실제 writer 인용 — None이면 저장소 전체에 생성 코드 0(전수 grep 실측,
+# `assessment_module_gap_review.md` §3 D1 부록). 있으면 그 writer가 아직 호출되지 않았을
+# 뿐임을 렌더가 구분해야 한다(그렇지 않으면 ability_snapshot에 대해 거짓 주장이 된다).
+_KNOWN_WRITER_CITATION: dict[str, str | None] = {
+    "assessment": None,
+    "concept_mastery_history": None,
+    "skill_mastery_history": None,
+    "ability_snapshot": (
+        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:965)"
+    ),
+}
+
+# 테이블 렌더 순서(§부록 표와 동일 순서 — assessment 본체 먼저, 형제 3종 뒤).
+_TABLE_ORDER: tuple[str, ...] = (
+    "assessment",
+    "concept_mastery_history",
+    "skill_mastery_history",
+    "ability_snapshot",
+)
+
+
+@dataclass(slots=True, frozen=True)
+class SeatCounts:
+    """`collect_seat_counts`의 DB 원시 조회 결과 투영 — `build_report`의 유일한 입력.
+
+    `assessment_type_counts`는 DB에 *실재하는* 값만 담는다(5종 보강은 순수 `build_report`가
+    수행 — 그래야 단위테스트가 DB 없이 보강 로직 자체를 검증할 수 있다).
+    """
+
+    table_row_counts: dict[str, int]
+    assessment_type_counts: dict[str, int]
+    concept_diagnosis_nonempty_count: int
+    recommended_path_nonempty_count: int
+
+
+@dataclass(slots=True, frozen=True)
+class TableSeat:
+    """테이블 1건의 리포트 투영 — 행 수 + writer 유무 + 그에 따른 정직한 사유 문구."""
+
+    name: str
+    row_count: int
+    writer_citation: str | None
+    reason: str
+
+
+@dataclass(slots=True, frozen=True)
+class SeatReachReport:
+    """도달 관측 결과 전량(불변·렌더/직렬화의 단일 입력)."""
+
+    seats: tuple[TableSeat, ...]
+    assessment_type_distribution: dict[str, int]  # AssessmentType 5종 전부(0 보강 완료)
+    concept_diagnosis_nonempty_count: int
+    recommended_path_nonempty_count: int
+
+
+async def collect_seat_counts(session: AsyncSession) -> SeatCounts:
+    """4테이블 행 수 + `assessment_type` 분포 + JSONB 결손 카운트를 조회(유일한 DB 접근 지점).
+
+    전부 ORM 쿼리빌더로만 조립한다(원시 SQL 금지 — CLAUDE.md 원칙). `func.jsonb_array_length`는
+    SQLAlchemy `func` 네임스페이스를 통한 표준 함수 호출이라 원시 SQL 문자열이 아니다.
+    """
+    table_counts: dict[str, int] = {}
+    for name, model in (
+        ("assessment", Assessment),
+        ("concept_mastery_history", ConceptMasteryHistory),
+        ("skill_mastery_history", SkillMasteryHistory),
+        ("ability_snapshot", AbilitySnapshot),
+    ):
+        result = await session.execute(select(func.count()).select_from(model))
+        table_counts[name] = result.scalar_one()
+
+    type_result = await session.execute(
+        select(Assessment.assessment_type, func.count())
+        .where(Assessment.assessment_type.is_not(None))
+        .group_by(Assessment.assessment_type)
+    )
+    # enum 컬럼은 `AssessmentType` 인스턴스로 돌아온다 — 정본 표기는 `.value`(D-100예측 하이픈).
+    type_counts = {row[0].value: row[1] for row in type_result.all()}
+
+    concept_diagnosis_nonempty = await session.execute(
+        select(func.count())
+        .select_from(Assessment)
+        .where(func.jsonb_array_length(Assessment.concept_diagnosis) > 0)
+    )
+    recommended_path_nonempty = await session.execute(
+        select(func.count())
+        .select_from(Assessment)
+        .where(func.jsonb_array_length(Assessment.recommended_path) > 0)
+    )
+
+    return SeatCounts(
+        table_row_counts=table_counts,
+        assessment_type_counts=type_counts,
+        concept_diagnosis_nonempty_count=concept_diagnosis_nonempty.scalar_one(),
+        recommended_path_nonempty_count=recommended_path_nonempty.scalar_one(),
+    )
+
+
+def _reason_for(name: str, count: int) -> str:
+    """행 수 + writer 유무 → 3분류 중 하나(§D1 핵심 — 0건과 writer 부재를 혼동하지 않는다)."""
+    if count > 0:
+        return _REASON_OBSERVED
+    writer = _KNOWN_WRITER_CITATION.get(name)
+    return _REASON_UNCALLED_WRITER if writer is not None else _REASON_NO_PRODUCER
+
+
+def build_report(counts: SeatCounts) -> SeatReachReport:
+    """DB 조회 결과(`SeatCounts`) → `SeatReachReport`(순수·부작용 0·DB 세션 불요).
+
+    `AssessmentType` 5종 전부를 여기서 보강한다(DB에 없는 값도 0으로 명시) — 이 보강을
+    `collect_seat_counts`가 아니라 여기서 하는 이유는, 단위테스트가 실 DB 없이 "5종 전부가
+    빠짐없이 나타나는가"를 직접 검증할 수 있게 하기 위함이다.
+    """
+    seats = tuple(
+        TableSeat(
+            name=name,
+            row_count=counts.table_row_counts.get(name, 0),
+            writer_citation=_KNOWN_WRITER_CITATION.get(name),
+            reason=_reason_for(name, counts.table_row_counts.get(name, 0)),
+        )
+        for name in _TABLE_ORDER
+    )
+    # 5종 전부 보강 — `.value`로 순회해 D-100예측의 하이픈 표기를 정확히 유지한다.
+    distribution = {t.value: counts.assessment_type_counts.get(t.value, 0) for t in AssessmentType}
+    return SeatReachReport(
+        seats=seats,
+        assessment_type_distribution=distribution,
+        concept_diagnosis_nonempty_count=counts.concept_diagnosis_nonempty_count,
+        recommended_path_nonempty_count=counts.recommended_path_nonempty_count,
+    )
+
+
+def render_report(report: SeatReachReport, *, max_listed: int = 40) -> str:
+    """도달 관측 결과를 마크다운으로 렌더(순수·입력 외 계산 없음).
+
+    `max_listed`는 이 리포트에는 목록형 산출물이 없어 현재 미사용이나, 시리즈 관례
+    (`visualization_reach_report.render_report`)와 시그니처를 맞춰 향후 목록 확장 시
+    호출부를 바꾸지 않아도 되게 한다.
+    """
+    del max_listed  # 현재 렌더에는 목록이 없다 — 시그니처만 관례에 맞춘다.
+    lines: list[str] = [
+        "# 평가 결과 영속 좌석 도달 관측 리포트 (ASM-01 D1)",
+        "",
+        "> 관측 리포트다 — **exit 게이트가 아니다**(행 수가 0이어도 실패시키지 않는다).",
+        "> 활성화가 아니라 가시화가 목표다 — 생성 API 신설은 이 리포트의 범위 밖이다.",
+        "",
+        "## 1. 좌석별 행 수",
+        "",
+        "| 테이블 | 행 수 | writer | 사유 |",
+        "|---|---:|---|---|",
+    ]
+    for seat in report.seats:
+        writer_cell = seat.writer_citation if seat.writer_citation is not None else "—"
+        lines.append(f"| `{seat.name}` | {seat.row_count} | {writer_cell} | {seat.reason} |")
+
+    lines += [
+        "",
+        f"- `{_REASON_NO_PRODUCER}`: 저장소 전체에 이 테이블에 행을 생성하는 코드가 없다"
+        "(0건이 곧 구조적 부재).",
+        f"- `{_REASON_UNCALLED_WRITER}`: 생성 경로(writer)는 실재하나 이번 조회 시점에 행이"
+        " 없다(0건이 부재를 뜻하지 않는다 — 혼동 방지).",
+        "",
+        "## 2. AssessmentType 분포 (5종 전부 — 데이터 없는 값도 0으로 명시)",
+        "",
+        "| 유형 | 건수 |",
+        "|---|---:|",
+    ]
+    for type_value, count in report.assessment_type_distribution.items():
+        lines.append(f"| {type_value} | {count} |")
+
+    lines += [
+        "",
+        "## 3. 진단 산출물 JSONB 결손 (오개념 목록·추천 학습경로)",
+        "",
+        f"- `concept_diagnosis`(오개념 목록이 담길 자리) 비어있지 않은 행: "
+        f"**{report.concept_diagnosis_nonempty_count}**",
+        f"- `recommended_path`(추천 학습경로) 비어있지 않은 행: "
+        f"**{report.recommended_path_nonempty_count}**",
+        "- 두 값 모두 `assessment` writer가 0이므로 구조적으로 0이 될 수밖에 없다 — 그러나 이"
+        " 값은 하드코딩이 아니라 실제 쿼리 결과다(측정 없는 도입 없음).",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def report_to_json(report: SeatReachReport) -> dict[str, Any]:
+    """리포트 → JSON 직렬화 가능 dict(키 정렬은 dump 시 `sort_keys=True`로 고정)."""
+    return {
+        "seats": [
+            {
+                "name": seat.name,
+                "row_count": seat.row_count,
+                "writer_citation": seat.writer_citation,
+                "reason": seat.reason,
+            }
+            for seat in report.seats
+        ],
+        "assessment_type_distribution": report.assessment_type_distribution,
+        "concept_diagnosis_nonempty_count": report.concept_diagnosis_nonempty_count,
+        "recommended_path_nonempty_count": report.recommended_path_nonempty_count,
+    }
+
+
+def dump_json(report: SeatReachReport) -> str:
+    return json.dumps(report_to_json(report), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# CLI (얇은 껍데기 — DB 조회·입출력만, 집계는 위 순수 코어)
+# ──────────────────────────────────────────────────────────────────────────
+async def _run() -> SeatReachReport:  # pragma: no cover — 라이브 PG 연결 glue
+    """세션을 열어 좌석 카운트를 조회하고 리포트를 조립한다(DB 조회 전용·쓰기 0)."""
+    sessionmaker = get_sessionmaker()
+    async with sessionmaker() as session:
+        counts = await collect_seat_counts(session)
+    return build_report(counts)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI 엔트리 — 좌석 도달 관측 리포트를 stdout에 출력. **0=성공(카운트 0이어도) / 2=DB 오류**.
+
+    DB 접속·쿼리 실패는 예외 타입명을 stderr에 포함해 보고한다(CLAUDE.md 침묵 실패 금지 —
+    무타입 경고 금지 원칙).
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m whymath_backend.harness.assessment_seat_reach_report",
+        description=(
+            "평가 결과 영속 좌석(assessment 4테이블) 도달 관측 리포트(ASM-01 D1) — 행 수·"
+            "AssessmentType 분포·진단 산출물 JSONB 결손. 결정론 아님(DB 실측)·게이트 아님"
+            "(exit 0/2)."
+        ),
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_path",
+        type=Path,
+        default=None,
+        help="JSON 산출물 경로(선택)",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        report = asyncio.run(_run())
+    except Exception as exc:  # noqa: BLE001 — DB 오류는 타입명과 함께 보고하고 exit 2
+        print(
+            f"DB 오류 — 좌석 카운트 조회 실패({type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        return _EXIT_INPUT_ERROR
+
+    print(render_report(report))
+    if args.json_path is not None:
+        args.json_path.parent.mkdir(parents=True, exist_ok=True)
+        args.json_path.write_text(dump_json(report), encoding="utf-8")
+        print(f"JSON 산출물: {args.json_path}")
+    return _EXIT_OK
+
+
+if __name__ == "__main__":  # pragma: no cover — 엔트리포인트
+    sys.exit(main())

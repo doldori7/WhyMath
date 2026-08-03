@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import remote_claims
@@ -656,3 +656,127 @@ class TestStaleAndReap:
         reaped, status = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=True)
         assert reaped == []
         assert status != "ok", "조회 실패가 ok로 보고되면 '0건 통과' 위장이 된다"
+
+
+class TestScanStaleBranches:
+    """장기 미머지 브랜치 감지 (HARN-13) — 진짜 로컬 원격에서 커밋 나이·ahead count 실측.
+
+    2026-07-30 사고(claude/shadow-data-s3-pilot-nh5kbz 9일·40+커밋 고립)의 재발방지
+    메커니즘. 변별력의 핵심은 "오래됐지만 이미 머지된 브랜치"와 "오래됐고 아직
+    안 흡수된 브랜치"를 다른 값으로 구분하는가다 — 나이만 보고 ahead를 안 보면
+    머지된 브랜치도 계속 stale로 오탐한다.
+    """
+
+    def _commit_backdated(self, repo: Path, days_ago: int, filename: str, message: str) -> None:
+        """`days_ago`일 전 committerdate로 파일 1건을 커밋한다(나이 축 통제 실측용)."""
+        (repo / filename).write_text(f"{message}\n", encoding="utf-8")
+        past = datetime.now(timezone.utc) - timedelta(days=days_ago)
+        iso = past.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        env = {
+            "GIT_AUTHOR_DATE": iso,
+            "GIT_COMMITTER_DATE": iso,
+        }
+        subprocess.run(["git", "add", filename], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            env={**_os_environ(), **env},
+        )
+
+    def test_오래되고_ahead인_브랜치를_감지한다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        subprocess.run(
+            ["git", "checkout", "-b", "claude/old-orphan"], cwd=a, check=True, capture_output=True
+        )
+        self._commit_backdated(a, days_ago=9, filename="orphan.txt", message="orphan work")
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/old-orphan"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        branches = {s.branch: s for s in result.stale}
+        assert "claude/old-orphan" in branches
+        assert branches["claude/old-orphan"].ahead >= 1
+        assert branches["claude/old-orphan"].age_days >= 9
+
+    def test_최근_커밋된_브랜치는_감지하지_않는다(self, bare_remote):
+        """나이 조건 미충족 — ahead는 있지만 threshold 미만이면 stale이 아니다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        subprocess.run(
+            ["git", "checkout", "-b", "claude/fresh"], cwd=a, check=True, capture_output=True
+        )
+        (a / "fresh.txt").write_text("fresh\n", encoding="utf-8")
+        subprocess.run(["git", "add", "fresh.txt"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "fresh work"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/fresh"], cwd=a, check=True, capture_output=True
+        )
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert "claude/fresh" not in {s.branch for s in result.stale}
+
+    def test_트렁크에_흡수된_브랜치는_감지하지_않는다(self, bare_remote):
+        """ahead 조건 미충족 — 나이는 오래됐지만 트렁크가 이미 그 커밋을 포함하면 stale이 아니다.
+
+        SQUASH 머지가 아니라 fast-forward로 트렁크에 실제로 흡수시켜, ahead count가
+        정확히 0이 되는 경로를 재현한다(scan_remote_in_progress의 규칙 A·B와 동일하게
+        조상 관계가 아니라 rev-list count로 판정하는 것을 검증).
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        subprocess.run(
+            ["git", "checkout", "-b", "claude/landed"], cwd=a, check=True, capture_output=True
+        )
+        self._commit_backdated(a, days_ago=10, filename="landed.txt", message="landed work")
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/landed"], cwd=a, check=True, capture_output=True
+        )
+        # main으로 fast-forward 병합 후 push — 트렁크가 이 커밋을 실제로 흡수한다.
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "merge", "--ff-only", "claude/landed"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert "claude/landed" not in {s.branch for s in result.stale}
+
+    def test_원격_없음은_offline_판정(self, git_repo: Path):
+        """origin이 아예 없는 저장소 — '방치 브랜치 없음'이 아니라 offline이어야 한다."""
+        result = remote_claims.scan_stale_branches(git_repo, days_threshold=3)
+        assert result.status == "offline"
+        assert result.stale == []
+
+    def test_조회_실패는_빈_목록으로_위장되지_않는다(self, bare_remote, monkeypatch):
+        """fetch 실패가 '방치 브랜치 0건'과 같은 값이면 인프라 장애가 "문제 없음"으로 읽힌다."""
+        _, clone = bare_remote
+        a = clone("session-a")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "fetch":
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result = remote_claims.scan_stale_branches(a, days_threshold=3)
+        assert result.status != "ok"
+        assert result.stale == []
+
+
+def _os_environ() -> dict[str, str]:
+    import os
+
+    return dict(os.environ)

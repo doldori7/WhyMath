@@ -88,3 +88,33 @@ class TestBrief:
     def test_무결성_경고_표기(self):
         text = report.render_brief(_backlog(), ["오류1"], "other", date(2026, 7, 8))
         assert "무결성 경고 1건" in text
+
+    def test_장기_미머지_브랜치_경고_표기(self):
+        """HARN-13 — stale_branches가 있으면 브랜치·나이·ahead가 브리핑에 보여야 한다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[("claude/old-orphan", 9.3, 42)],
+        )
+        assert "claude/old-orphan" in text
+        assert "9일 전" in text
+        assert "42커밋" in text
+
+    def test_장기_미머지_브랜치_없으면_경고_생략(self):
+        text = report.render_brief(_backlog(), [], "branch-x", date(2026, 7, 20), stale_branches=[])
+        assert "장기 미머지" not in text
+
+    def test_장기_미머지_브랜치_조회_실패는_판정_보류로_표기(self):
+        """조회 실패가 '방치 브랜치 없음'과 같은 문구로 보이면 침묵 실패다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[],
+            stale_branch_status="offline",
+        )
+        assert "장기 미머지 브랜치 조회 불가" in text
+        assert "판정 보류" in text
