@@ -116,7 +116,8 @@ from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
-from whymath_backend.l4.misconception.probe_selection import is_exploration_turn
+from whymath_backend.l4.misconception.probe_selection import ProbeCandidate, is_exploration_turn
+from whymath_backend.l4.misconception.probe_supply import assemble_probe_candidates
 from whymath_backend.l4.misconception.shadow import (
     _spawn,
     observe_misconception_judge_shadow,
@@ -1180,12 +1181,45 @@ async def _warmstart_hints_or_empty(
         return []
 
 
+async def _probe_candidates_or_empty(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    active_hypotheses: list[MisconceptionHypothesis],
+    warmstart_mids: list[str],
+    seat: str,
+) -> list[ProbeCandidate]:
+    """select_probe 판별 문항 후보 풀 조립 — WH-1 shadow·primary 공용(never-break·REC-02 ②).
+
+    `active_hypotheses`가 **선 뒤**(`_apply_hypotheses` 이후) 호출되어야 acceptance ②를
+    충족한다 — 두 핸들러 모두 이 헬퍼를 `_apply_hypotheses` 다음·웜스타트 조회 다음 줄에서
+    호출한다. 조회만이라 실패해도 학생 응답을 깨면 안 되므로 `_warmstart_hints_or_empty`와
+    동일한 never-break 방어선을 쓴다(가용성 #1≫진단 관측 #6·예외 타입명 로그 — 침묵 실패 금지).
+    """
+    try:
+        outcome = await assemble_probe_candidates(
+            session,
+            user_id=user_id,
+            active_hypotheses=active_hypotheses,
+            outside_mids=warmstart_mids,
+            seat=seat,
+        )
+        return list(outcome.candidates)
+    except Exception as exc:  # noqa: BLE001 — probe 공급 실패는 학생 응답을 안 깬다(never-break).
+        logger.warning(
+            "probe_candidates 조립 실패(%s) — 빈 후보로 진행", type(exc).__name__, exc_info=True
+        )
+        return []
+
+
 async def _wh1_primary_decision_or(
     decision: PedagogyDecision,
     *,
     body: CoachRequest,
     active_hypotheses: list[MisconceptionHypothesis],
     warmstart_mids: list[str],
+    probe_candidates: list[ProbeCandidate],
+    theta: float,
     provider: LLMProvider | None,
     turn_index: int,
     dialogue_id: str | None,
@@ -1212,6 +1246,8 @@ async def _wh1_primary_decision_or(
             dialogue_id=dialogue_id,
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
+            probe_candidates=probe_candidates,
+            theta=theta,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1352,9 +1388,18 @@ async def create_session(
     wh1_primary_on = get_settings().wh1_primary_enabled
     wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
     warmstart_mids: list[str] = []
+    probe_candidates: list[ProbeCandidate] = []
     if wh1_primary_on or wh1_shadow_on:
         # S1-c: 웜스타트 probe 힌트 조립(진단 probe 타깃팅 전용·never-break·헬퍼 docstring 참조).
         warmstart_mids = await _warmstart_hints_or_empty(session, problem_id=body.problem_id)
+        # REC-02: 판별 문항 후보 풀 조립 — active_hypotheses(위 :1379)가 **선 뒤**(acceptance ②).
+        probe_candidates = await _probe_candidates_or_empty(
+            session,
+            user_id=user.user_id,
+            active_hypotheses=active_hypotheses,
+            warmstart_mids=warmstart_mids,
+            seat="wh1_primary" if wh1_primary_on else "wh1_shadow",
+        )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
             observe_wh1_harness_shadow(
@@ -1365,6 +1410,8 @@ async def create_session(
                 problem_id=str(body.problem_id) if body.problem_id is not None else None,
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
+                probe_candidates=probe_candidates,
+                theta=server_theta if server_theta is not None else 0.0,
             )
         )
     pack = await _pack_for(session, body.problem_id)
@@ -1390,6 +1437,8 @@ async def create_session(
             body=body,
             active_hypotheses=active_hypotheses,
             warmstart_mids=warmstart_mids,
+            probe_candidates=probe_candidates,
+            theta=server_theta if server_theta is not None else 0.0,
             provider=judge_deps.provider,
             turn_index=1,  # 새 dialogue — 첫 교환(§2.2 ε 카운터·아래 _wh1_turn_state와 정합).
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
@@ -1566,9 +1615,18 @@ async def append_turns(
     wh1_primary_on = get_settings().wh1_primary_enabled
     wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
     warmstart_mids_turn: list[str] = []
+    probe_candidates_turn: list[ProbeCandidate] = []
     if wh1_primary_on or wh1_shadow_on:
         warmstart_mids_turn = await _warmstart_hints_or_empty(
             session, problem_id=dialogue.problem_id
+        )
+        # REC-02: 판별 문항 후보 풀 조립 — active_hypotheses(위 :1557)가 **선 뒤**(acceptance ②).
+        probe_candidates_turn = await _probe_candidates_or_empty(
+            session,
+            user_id=user.user_id,
+            active_hypotheses=active_hypotheses,
+            warmstart_mids=warmstart_mids_turn,
+            seat="wh1_primary" if wh1_primary_on else "wh1_shadow",
         )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
@@ -1582,6 +1640,8 @@ async def append_turns(
                 turn_index=(dialogue.total_turns or 0) // 2 + 1,
                 problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
                 warmstart_outside_mids=warmstart_mids_turn,
+                probe_candidates=probe_candidates_turn,
+                theta=server_theta if server_theta is not None else 0.0,
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
@@ -1606,6 +1666,8 @@ async def append_turns(
             body=body,
             active_hypotheses=active_hypotheses,
             warmstart_mids=warmstart_mids_turn,
+            probe_candidates=probe_candidates_turn,
+            theta=server_theta if server_theta is not None else 0.0,
             provider=judge_deps.provider,
             turn_index=(dialogue.total_turns or 0) // 2 + 1,
             dialogue_id=str(dialogue_id),
