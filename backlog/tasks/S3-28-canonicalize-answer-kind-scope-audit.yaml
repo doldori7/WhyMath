@@ -5,17 +5,18 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "ARCH-21 qa_pipeline.py의 equivalence_canonicalize 축이 코퍼스 전수(2647건 중 130건)에서 condition_dsl_violation 위반을 검출 — 전부 answer_kind가 finite_probability·mean_equals_median·events_independent·conditional_equal·dot_product_scalar·finite_count인 문제(verify.conditions가 방정식 DSL이 아니라 확률/통계 미니 DSL, 예: 'space=dice(n=2,faces=6); event=sum==2'). condition_dsl_violation은 애초에 방정식 조건(l3/equivalent/llm_generator.py::_parse_conditions) 검증용으로 설계돼 이 DSL 형태를 검증 대상으로 상정하지 않았을 가능성 — Kiki/pedagogy 판정 필요: (a) 실제 방정식 DSL 위반(코퍼스 결함, 데이터 수정) (b) canonicalize 오탐(answer_kind별 적용 범위 스코프 조정 필요, 새 판정 로직 아니라 적용 대상 필터) 중 무엇인지 130건 표본 확인 후 결정·조치. 조치 후 qa_pipeline의 equivalence_canonicalize 축 게이트(현재 non-blocking) 활성화 여부 재검토."
-artifacts: []
+artifacts:
+  - 902702ea
 paths:
   - "data/corpus/problem_bank_*/problems.jsonl"
   - src/backend/whymath_backend/l3/equivalent/canonicalize.py
 session: null
 notes: "ARCH-21 qa_pipeline.py 첫 실행에서 실측 발견. corpus 경로 변경 시 트리거되는 CI 옵션 스텝이 이 축을 continue-on-error로 임시 완화해뒀다(이 태스크 완료 후 강제 게이트로 전환 검토) — MEMORY.md 2026-08-02 결정 로그 참조."
-updated: 2026-08-02
+updated: 2026-08-03
