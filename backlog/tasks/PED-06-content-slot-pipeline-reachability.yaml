@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/l3/pedagogy/**"
   - "tests/infra/**"
-session: null
+session: claude/whymath-ai-content-design-vafylb
 notes: "docs/architecture/ai_content_generation_gap_review_2.md §2 G2/G3·§3 D6. 1차 문서(ai_content_generation_gap_review.md)가 PED-01/PED-02/REND-01/CACHE-01을 '가동 중인 코드'로 인용했으나, 실측 결과 slot_generator→prescreen→review 3단계는 프로덕션 호출자 0·학생 reader 0(유일한 실행자는 E2E 파일럿 테스트 1개). curriculum_module_gap_review.md §6 '완비된 소비 경로 + 미도달 공급원' 계열의 역방향(완비된 조성 파이프라인 + 미도달 소비 경로) 8회차."
 updated: 2026-08-03
