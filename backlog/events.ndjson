@@ -1286,3 +1286,5 @@
 {"ts": "2026-08-03T08:48:46", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-01-learning-path-orderability-report"}
 {"ts": "2026-08-03T08:49:28", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-02-learning-path-ordering-honesty"}
 {"ts": "2026-08-03T08:50:12", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-03-transitive-ordering-edges"}
+{"ts": "2026-08-03T09:39:56", "actor": "claude/drive-cur-nlp-observability", "action": "policy_warn", "id": "CUR-01-curriculum-revision-vocabulary-consistency", "rule": "path_overlap", "other": "REC-02-misconception-probe-supply", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/wh1_primary.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/wh1_primary.py", "mode": "warn"}
+{"ts": "2026-08-03T09:39:58", "actor": "claude/drive-cur-nlp-observability", "action": "start", "id": "CUR-01-curriculum-revision-vocabulary-consistency", "session": "claude/drive-cur-nlp-observability", "remote": "ok"}

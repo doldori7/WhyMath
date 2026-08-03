@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/drive-cur-nlp-observability
 notes: "docs/architecture/curriculum_module_gap_review.md §3 D1. 교육과정 개정판 표기가 3개 어휘 공간(\"2022 개정\"/\"2022\"/\"2022_REVISION\")으로 분열돼 있음. gating.py의 normalize_enum_value는 국소 방어일 뿐 축 간 정합 관측은 없었다."
 updated: 2026-08-03
