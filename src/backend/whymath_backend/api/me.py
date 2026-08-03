@@ -62,6 +62,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser
+from whymath_backend.api._growth_evidence_state import get_growth_evidence_counters
 from whymath_backend.api._query_filters import (
     _validate_time_window,
     _validate_tz_aware,
@@ -2290,6 +2291,7 @@ async def export_my_data(
     summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
+    request: Request,
     user: ConsentedUser,
     session: SessionDep,
     since: SinceParam = None,
@@ -2312,8 +2314,16 @@ async def get_my_harness_metrics(
     **노출 계약(CLAUDE.md 미성년 PII·식별 분석 금기)**: 본인 집계 신호(완주율·턴당 토큰 등)만
     반환 — 타 학생 데이터 0·개념 본문 0·정답 0. 코호트 전체 집계는 admin auth 범위라 이
     엔드포인트에 미포함(ops/스크립트가 `compute_wh1_surrogate_metrics(user_id=None)` 직접 호출).
+
+    **PED-06 도달 관측**: 이 호출 자체를 `GrowthEvidenceReachCounters`가 센다(`GET /health/ready`
+    `growth_evidence.requests_total`에 노출) — `gamification_module_gap_review.md` §3 D1이
+    실측한 "클라가 이 엔드포인트를 호출하기로 결정한 적 자체가 없다"는 주장을 라이브로도
+    검증 가능하게 만든다. 응답 필드 자체는 이번 태스크로 변경하지 않는다(11지표 학생 노출
+    허용 여부는 `harness/growth_evidence_exposure.py` 계약을 클라이언트가 소비할 때의 몫 —
+    이 엔드포인트는 여전히 내부·집계 전용 원시 계측 표면이다).
     """
     # 시간창 검증(noexpose 계층): naive·since>until 거부. 검증된 경계를 harness에 그대로 전달.
+    get_growth_evidence_counters(request.app).record_request()
     since = _validate_tz_aware(since, "since")
     until = _validate_tz_aware(until, "until")
     _validate_time_window(since, until, "since", "until")
