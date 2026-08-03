@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,13 +15,14 @@ acceptance:
   - "② slot_generator.py/prescreen.py/review.py의 '프로덕션 API 소비자 0'을 기계로 동결하는 거버넌스 테스트 — 신규 import 1줄 결함 주입 시 실패, 정상 상태 통과 양쪽 실측(성공/실패 동일값이면 위장)"
   - "③ test_e2e_pedagogy_pilot_integration.py가 tests/infra/test_test_suite_wiring.py에 등록되어 CI에서 실제로 실행되는지 확인(미등록이면 등록)"
   - "④ 경계 명시: pedagogy_content_slot을 concept_content_v1/S3-26과 합류시킬지 분리 유지할지는 이번 태스크에서 결정하지 않는다(CUR-02가 소단원 수를 늘려야 합류 가치가 생김 — §4 트리거로 문서화만). 신규 저작·신규 학생 대면 축 0. LLM 생성 개방 0(PED-01 결정론 픽스처 의도 유지)"
-artifacts: []
+artifacts:
+  - c802844c
 paths:
   - "src/backend/whymath_backend/l3/pedagogy/**"
   - src/backend/whymath_backend/l4/content_supply.py
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/l3/pedagogy/**"
   - "tests/infra/**"
-session: claude/whymath-ai-content-design-vafylb
+session: null
 notes: "docs/architecture/ai_content_generation_gap_review_2.md §2 G2/G3·§3 D6. 1차 문서(ai_content_generation_gap_review.md)가 PED-01/PED-02/REND-01/CACHE-01을 '가동 중인 코드'로 인용했으나, 실측 결과 slot_generator→prescreen→review 3단계는 프로덕션 호출자 0·학생 reader 0(유일한 실행자는 E2E 파일럿 테스트 1개). curriculum_module_gap_review.md §6 '완비된 소비 경로 + 미도달 공급원' 계열의 역방향(완비된 조성 파이프라인 + 미도달 소비 경로) 8회차."
 updated: 2026-08-03
