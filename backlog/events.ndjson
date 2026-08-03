@@ -1310,3 +1310,6 @@
 {"ts": "2026-08-03T08:55:27", "actor": "claude/whymath-account-security-973iv1", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 SEC-10-session-visibility-global-logout의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-08-03T08:56:18", "actor": "claude/whymath-account-security-973iv1", "action": "done", "id": "SEC-10-session-visibility-global-logout", "artifacts": ["64e97565"]}
 {"ts": "2026-08-03T08:57:06", "actor": "claude/whymath-account-security-973iv1", "action": "done", "id": "SEC-12-retention-purge-schedule-wiring", "artifacts": ["64e97565"]}
+{"ts": "2026-08-03T08:48:46", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-01-learning-path-orderability-report"}
+{"ts": "2026-08-03T08:49:28", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-02-learning-path-ordering-honesty"}
+{"ts": "2026-08-03T08:50:12", "actor": "claude/whymath-learning-path-design-7v26c2", "action": "add", "id": "PATH-03-transitive-ordering-edges"}
