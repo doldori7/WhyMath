@@ -15,7 +15,13 @@ a3의 stateless 리프레시 토큰엔 만료 전 개별 취소 수단이 없었
   용도이고 실제 만료 게이트는 JWT `exp`(decode가 강제). 약간의 시각 오차는 무해.
 - **revoked / revoked_at**: 로그아웃·관리 취소 플래그(device.py revoked 동형). `/refresh`는
   revoked=true면 거부. revoke는 멱등.
-- **회전(rotation)·재사용 탐지·세션 목록 조회는 a3c**: 본 테이블이 그 기반(인덱스 포함).
+- **회전(rotation)·재사용 탐지는 a3c. 세션 목록 조회·전체/단건 로그아웃은 SEC-10(D4)**: 본
+  테이블이 그 기반(인덱스 포함) — 신규 테이블 0.
+- **platform(SEC-10)**: `GET /v1/auth/sessions`가 "낯선 기기 인지" 용도로만 노출하는 좁은 요약
+  (`"iOS"`/`"Android"`/`"Web"`/`NULL`). IP·User-Agent *원문*은 이 테이블에도, 다른 어떤 테이블
+  에도 저장하지 않는다(최소 수집 — `account_security_gap_review.md` D4). `api/auth.py`의
+  `_summarize_platform`이 로그인·리프레시 시점 `User-Agent` 헤더에서 도출한다. nullable —
+  이 컬럼 도입 이전 발급 세션은 값이 없다(소급 채움 없음).
 
 Pydantic `schema/` 상응물 없음(서버 내부 테이블 — device.py 방침).
 """
@@ -60,6 +66,8 @@ class RefreshTokenSession(Base):
     )
     # 취소 시각 — 미취소는 NULL.
     revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    # 플랫폼 요약(SEC-10) — "iOS"/"Android"/"Web"/NULL. IP·UA 원문은 저장하지 않는다(최소 수집).
+    platform: Mapped[str | None] = mapped_column(sa.String(32))
 
     # 사용자별 세션 조회·일괄취소(a3c) 접근 경로(device.idx_device_credential_user 동형).
     __table_args__ = (
