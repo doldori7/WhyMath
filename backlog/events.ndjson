@@ -1280,6 +1280,11 @@
 {"ts": "2026-08-02T07:08:06", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:21", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:37", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-08-03T07:02:15", "actor": "claude/whymath-service-operations-review-ml92w9", "action": "add", "id": "RPT-01-student-defect-report-channel"}
+{"ts": "2026-08-03T07:02:35", "actor": "claude/whymath-service-operations-review-ml92w9", "action": "add", "id": "OPS-17-client-version-contract-gate"}
+{"ts": "2026-08-03T07:02:52", "actor": "claude/whymath-service-operations-review-ml92w9", "action": "add", "id": "A11Y-01-text-scale-and-wcag-target"}
+{"ts": "2026-08-03T07:04:15", "actor": "claude/whymath-service-operations-review-ml92w9", "action": "add", "id": "OPS-18-cloud-escalation-reach-observability"}
+{"ts": "2026-08-03T07:04:46", "actor": "claude/whymath-service-operations-review-ml92w9", "action": "add", "id": "MOB-08-unused-dependency-purge-gate"}
 {"ts": "2026-08-03T06:53:21", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "PED-06-growth-evidence-reach-observability"}
 {"ts": "2026-08-03T06:53:45", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "ARCH-23-anti-gamification-source-governance-gate"}
 {"ts": "2026-08-03T08:00:38", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-23-qa-gate-enforcement"}
