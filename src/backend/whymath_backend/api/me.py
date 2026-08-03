@@ -47,7 +47,16 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,6 +110,7 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
+from whymath_backend.l2.recommendation_evidence import record_recommendation_treatment
 from whymath_backend.l2.skill_mastery_tracking import (
     record_problem_attempt_skill_mastery,
 )
@@ -1714,6 +1724,10 @@ async def recommend_next_problem(
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
       - `persona`는 수능 모드에서만 쓰인다(기본 A_일반고고3). D·E는 게이트에서 전부 차단 →
         problem_id=null. mode 미지정 경로는 코드 무변경(회귀 0)·응답 모델 동일.
+
+    REC-03: `problem_id`가 확정되면(null이 아니면) `evidence_event`에 처치 1건을 기록한다
+    (`record_recommendation_treatment` — 가짜 처치 금지, null 응답은 기록하지 않음). 결과
+    결합(추천→정답 여부)은 아직 없다(S3-01 파일럿 이후 후속).
     """
     attempt_stmt = (
         select(
@@ -1796,6 +1810,17 @@ async def recommend_next_problem(
                 measurement_sufficient=measurement_sufficient,
             )
         picked = candidates[chosen_index]
+        # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — null 분기(위)는
+        # 호출하지 않는다.
+        await record_recommendation_treatment(
+            session,
+            problem_id=picked.problem_id,
+            theta=theta,
+            pool_size=len(candidates),
+            applied_weights=extra_weights is not None,
+            mode=mode,
+        )
+        await session.commit()
         return NextProblemResponse(
             problem_id=picked.problem_id,
             theta=theta,
@@ -1850,6 +1875,17 @@ async def recommend_next_problem(
             measurement_sufficient=measurement_sufficient,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
+    # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — 위 null 분기는
+    # 호출하지 않는다.
+    await record_recommendation_treatment(
+        session,
+        problem_id=chosen_id,
+        theta=theta,
+        pool_size=len(candidate_rows),
+        applied_weights=weights is not None,
+        mode=mode,
+    )
+    await session.commit()
     return NextProblemResponse(
         problem_id=chosen_id,
         theta=theta,

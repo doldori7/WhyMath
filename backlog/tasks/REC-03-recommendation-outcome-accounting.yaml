@@ -19,7 +19,12 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/l2/pedagogy_evidence.py
+  - src/backend/whymath_backend/l2/recommendation_evidence.py
+  - src/backend/whymath_backend/harness/recommendation_outcome_report.py
   - "tests/backend/l2/test_pedagogy_evidence*.py"
+  - tests/backend/l2/test_recommendation_evidence.py
+  - tests/backend/harness/test_recommendation_outcome_report.py
+  - tests/backend/api/test_me.py
 session: claude/whymath-assessment-review-pgvxnj
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D3. next-problem이 추천한 문항을 학생이 실제로 풀었는지 잇는 기록이 없다 — AttemptSubmitRequest에 추천 출처 필드 0·EventType 11종에 추천 관련 0. 그래서 추천 수용률·추천 문항 정답률·약점 감소 효과를 잴 수 없고 l4/pedagogy/adaptive/policy.py bandit이 보상 신호 부재로 영구 미승격. PED-03이 만든 evidence_event 좌석(session_id 축·user_id 없음·비민감 meta·가짜 처치 금지)이 이 축에 그대로 맞아 신규 테이블 0으로 착지 가능."
 updated: 2026-08-03

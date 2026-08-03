@@ -30,8 +30,16 @@ from whymath_backend.db.models.assessment import (
 )
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.evidence_event import EvidenceEvent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.recommendation_evidence import (
+    EVENT_TYPE_RECOMMENDATION_TREATMENT,
+    META_KEY_APPLIED_WEIGHTS,
+    META_KEY_MODE,
+    META_KEY_POOL_SIZE,
+    META_KEY_PROBLEM_ID,
+)
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -1564,6 +1572,49 @@ class TestNextProblem:
         body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
         assert body["problem_id"] is None
 
+    def test_no_candidates_does_not_record_treatment(self) -> None:
+        """REC-03 — 가짜 처치 금지: problem_id=null이면 evidence_event를 기록하지 않는다."""
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem")
+        assert session.added == []
+        assert session.commits == 0
+
+    def test_recommendation_records_treatment_evidence(self) -> None:
+        """REC-03 — 추천이 실제로 반환되면 evidence_event 처치 1건이 기록·commit된다."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert isinstance(row, EvidenceEvent)
+        assert row.event_type == EVENT_TYPE_RECOMMENDATION_TREATMENT
+        assert row.meta[META_KEY_PROBLEM_ID] == str(pid)
+        assert row.meta[META_KEY_POOL_SIZE] == 1
+        assert row.meta[META_KEY_APPLIED_WEIGHTS] is False
+        assert META_KEY_MODE not in row.meta  # 기본 CAT은 mode 미기록
+        assert session.commits == 1
+
+    def test_recommendation_records_applied_weights_true_when_weak_concept_used(
+        self,
+    ) -> None:
+        c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),
+                _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, None)]),
+                _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),
+                _AQResult([(pid_a, c_strong), (pid_b, c_weak)]),
+            ]
+        )
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?prioritize_weak_concepts=true")
+        assert len(session.added) == 1
+        assert session.added[0].meta[META_KEY_APPLIED_WEIGHTS] is True
+
 
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
 def _suneung_problem(**over: object) -> SchemaProblem:
@@ -1620,6 +1671,18 @@ class TestNextProblemSuneungMode:
         assert body["difficulty"] == 3.0
         assert body["theta"] == 0.0
 
+    def test_recommendation_records_mode_suneung_in_treatment_meta(self) -> None:
+        """REC-03 — 수능 모드 추천도 처치로 기록되며 meta.mode="suneung"이 남는다."""
+        problem = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?mode=suneung")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_MODE] == "suneung"
+        assert row.meta[META_KEY_PROBLEM_ID] == str(problem.problem_id)
+        assert session.commits == 1
+
     def test_no_eligible_candidates_null(self) -> None:
         """적격 0 → problem_id null(기본 CAT과 동일한 null 응답 계약)."""
         # 수능 신호 전무(기출 아님·시그니처 없음·적합도 없음) → 진실 게이트에서 탈락.
@@ -1634,6 +1697,8 @@ class TestNextProblemSuneungMode:
             "standard_error": None,
             "measurement_sufficient": False,
         }
+        assert session.added == []  # REC-03: null 응답은 처치가 아니다(가짜 처치 금지)
+        assert session.commits == 0
 
     def test_copyright_blocked_source_null_even_if_sql_leaks(self) -> None:
         """평가원 출처가 후보에 섞여 들어와도(사전필터 실패 가정) 진실 게이트가 차단 → null.
