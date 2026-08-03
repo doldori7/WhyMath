@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: mobile
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,7 +15,8 @@ acceptance:
   - "test/accessibility_test.dart 기존 라이트/다크 하네스에 배율 축(1.3×·2.0×) 추가 — 고정 height 위젯을 배율 대상에 두면 실패함을 실측(변별력)."
   - "scene_renderer.dart:163-164 기존 caption 소비 위에 Semantics(label: caption) 1줄 부착 — 제거 시 테스트 red."
   - "범위 밖 동결: 런타임 고대비·색약 토글, accessibility_needs 소비 분기(writer 0), TTS 재도입, AAA. 법적 준수 수준은 MGMT-02 자문 항목에 1줄 추가 제안만(법률 판단 아님)."
-artifacts: []
+artifacts:
+  - 9cff3f75726d99411d9bfc29cbd46e0a805bdc30
 paths:
   - src/mobile/test/accessibility_test.dart
   - "src/mobile/lib/theme/**"
@@ -23,6 +24,6 @@ paths:
   - docs/architecture/05_interaction.md
   - docs/design/ui/06_design_system.md
   - docs/standards/coding_flutter.md
-session: claude/backlog-drive-next
+session: null
 notes: "docs/architecture/service_operations_gap_review.md §3 D2 — 외부 EOS 틀 모듈 92(접근성) 대조. accessibility_needs 필드는 writer 0(Flutter 온보딩 미수집)이라 소비 분기는 §2-⑧ 미채택 — 이 태스크는 배율·목표선언·시각화 라벨 3종만."
 updated: 2026-08-03
