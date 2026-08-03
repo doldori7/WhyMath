@@ -598,3 +598,34 @@ def test_harness_metrics_transfer_score_measured_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup([uid]))
         asyncio.run(_cleanup_problems(pids))
+
+
+def test_harness_metrics_call_increments_growth_evidence_reach_counter_on_live_pg() -> None:
+    """PED-06 — `GET /v1/me/harness-metrics` 호출이 `/health/ready` 도달 카운터에 반영된다.
+
+    변별력(양방향): 호출 전 카운터는 0, 1회 호출 후 1, 2회 호출 후 2 — "0건 통과"와
+    "실제로 도달함"이 서로 다른 값을 낸다는 것을 실측한다(`account_security_gap_review.md`류
+    이중 회계 선례와 동형).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            before = client.get("/health/ready").json()["growth_evidence"]["requests_total"]
+
+            first = client.get("/v1/me/harness-metrics", headers=auth)
+            assert first.status_code == 200, first.text
+            after_one = client.get("/health/ready").json()["growth_evidence"]["requests_total"]
+            assert after_one == before + 1
+
+            second = client.get("/v1/me/harness-metrics", headers=auth)
+            assert second.status_code == 200, second.text
+            after_two = client.get("/health/ready").json()["growth_evidence"]["requests_total"]
+            assert after_two == before + 2
+    finally:
+        asyncio.run(_cleanup([uid]))

@@ -17,6 +17,14 @@ MEASURED만 값을 보이고, NO_DATA/미계측은 값 대신 사유(note)를 �
 계층 메모(CLAUDE.md 7계층): `wh1_evaluation`(횡단 인프라)을 소비하는 *리포팅* 진입점이다 —
 L1(활동)·L2(mastery)·L4(오개념)·Dialogue를 조회만 하는 계산 계층을 그대로 호출하고, 새 계산·
 새 지표를 만들지 않는다(렌더 전용).
+
+**PED-06 확장(도달 관측 + 3상태 + 노출 계약)**: `docs/architecture/gamification_module_gap_
+review.md` §3 D1. `render_baseline_report`(위 원본)는 그대로 두고, `render_growth_evidence_
+reach_report`가 그 위에 세 가지를 더한다 — ① 지표별 노출 계층(`growth_evidence_exposure`
+계약 재사용) ② 3상태(구조적불가/무데이터/미도달) 구분 ③ `requests_total`(라이브 카운터 —
+`GET /health/ready` `growth_evidence.requests_total`에서 읽은 값을 CLI 인자로 받는다. 이
+CLI는 DB만 조회하는 별도 프로세스라 실행 중인 API 서버의 인프로세스 카운터를 직접 읽을 수
+없다 — 값을 합성하지 않고 인자로 명시 요구한다). 새 계산·새 지표는 없다(렌더 전용 원칙 유지).
 """
 
 from __future__ import annotations
@@ -25,15 +33,26 @@ import argparse
 import asyncio
 import uuid
 from datetime import datetime
+from enum import Enum
 
 from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.harness.growth_evidence_exposure import (
+    ExposureTier,
+    classify_metric_exposure,
+)
 from whymath_backend.harness.wh1_evaluation import (
     MetricStatus,
     SurrogateMetrics,
     compute_wh1_surrogate_metrics,
 )
 
-__all__ = ["render_baseline_report", "main"]
+__all__ = [
+    "GrowthEvidenceReachState",
+    "classify_reach_state",
+    "render_baseline_report",
+    "render_growth_evidence_reach_report",
+    "main",
+]
 
 
 # 상태 → 아이콘(커버리지 맵 가독). MEASURED 실측·NO_DATA 좌석 있으나 표본 0·나머지는 미계측.
@@ -108,6 +127,109 @@ def render_baseline_report(metrics: SurrogateMetrics) -> str:
     return "\n".join(lines)
 
 
+# ── PED-06 — 도달 3상태 + 노출 계약 확장 ──────────────────────────────────────────
+# `docs/architecture/gamification_module_gap_review.md` §3 D1 ③. 세션완주율(③)만 구조적
+# 불가로 고정한다 — LearningSession 생성자 호출이 src/ 전체에서 0건이고(실측), writer는
+# 2026-07-29 영구 미신설 결정(S3-16 소유). 다른 지표는 전부 좌석이 살아 있어 표본만 쌓이면
+# MEASURED가 된다(구조적 불가가 아니다).
+_STRUCTURALLY_IMPOSSIBLE_FIELDS: frozenset[str] = frozenset({"session_completion_rate"})
+
+# calibration_brier가 NO_DATA일 때 REC-01(attempt 제출 자체 미도달)과 구분해 붙이는 부기 —
+# "확신도 필드를 받을 입력 UI가 없다"는 *다른 층*의 이유임을 리포트가 명시한다(gap review ④).
+_CALIBRATION_NO_UI_NOTE = (
+    "(참고: attempt 제출 루프 자체는 REC-01 축과 별개로 이미 배선돼 있음 — 비어 있는 이유는 "
+    "confidence_self_reported를 받을 학생 입력 UI가 src/mobile/lib/에 아직 없기 때문. "
+    "REC-01의 '입력 루프 미도달'과는 다른 층의 부재.)"
+)
+
+
+class GrowthEvidenceReachState(str, Enum):
+    """지표 1종의 도달 3상태(+ 도달) — 미도달/무데이터/구조적불가를 서로 다른 칸으로 분리.
+
+    같은 정보를 한 칸에 뭉치면 다음 세션이 "무데이터니까 writer를 만들자"처럼 잘못된 조치를
+    취할 위험이 있다(구조적 불가는 writer를 만들어도 소용없는 *결정된* 상태 — S3-16 소유).
+    """
+
+    STRUCTURALLY_IMPOSSIBLE = "structurally_impossible"
+    """생산자 자체가 없음(예: ③ LearningSession writer 영구 미신설) — 표본을 기다려도 안 참."""
+
+    NO_DATA = "no_data"
+    """계측 좌석은 있는데 표본이 0(또는 부족) — MetricStatus가 MEASURED가 아님."""
+
+    UNREACHED = "unreached"
+    """계측은 되는데(MEASURED) 학생에게 보여준 적이 없음 — `requests_total`이 0."""
+
+    REACHED = "reached"
+    """계측되고(MEASURED) 실제로 요청된 적도 있음(`requests_total` > 0) — 유일한 정상 종착점."""
+
+
+def classify_reach_state(
+    field: str, status: MetricStatus, requests_total: int
+) -> GrowthEvidenceReachState:
+    """지표 1종의 도달 상태를 판정(순수 함수) — 구조적불가 > 무데이터 > 미도달 > 도달 우선순위.
+
+    `field`가 `_STRUCTURALLY_IMPOSSIBLE_FIELDS`에 있으면 다른 조건과 무관하게
+    `STRUCTURALLY_IMPOSSIBLE`(생산자가 없으니 표본·요청 여부가 의미 없음). 그다음 `status`가
+    `MEASURED`가 아니면 `NO_DATA`. 둘 다 아니면 `requests_total`로 미도달/도달을 가른다.
+    """
+    if field in _STRUCTURALLY_IMPOSSIBLE_FIELDS:
+        return GrowthEvidenceReachState.STRUCTURALLY_IMPOSSIBLE
+    if status is not MetricStatus.MEASURED:
+        return GrowthEvidenceReachState.NO_DATA
+    if requests_total <= 0:
+        return GrowthEvidenceReachState.UNREACHED
+    return GrowthEvidenceReachState.REACHED
+
+
+_REACH_STATE_LABEL: dict[GrowthEvidenceReachState, str] = {
+    GrowthEvidenceReachState.STRUCTURALLY_IMPOSSIBLE: "구조적 불가",
+    GrowthEvidenceReachState.NO_DATA: "무데이터",
+    GrowthEvidenceReachState.UNREACHED: "미도달",
+    GrowthEvidenceReachState.REACHED: "도달",
+}
+
+_TIER_LABEL: dict[ExposureTier, str] = {
+    ExposureTier.STUDENT_VISIBLE: "학생 노출 가능",
+    ExposureTier.GUARDIAN_SUMMARY: "보호자 요약",
+    ExposureTier.INTERNAL_ONLY: "내부 전용",
+}
+
+
+def render_growth_evidence_reach_report(metrics: SurrogateMetrics, requests_total: int) -> str:
+    """`render_baseline_report` 위에 노출 계약 + 도달 3상태를 얹은 확장 리포트(순수·DB 무관).
+
+    `requests_total`은 `GET /health/ready`의 `growth_evidence.requests_total`(라이브
+    인프로세스 카운터)에서 읽어 인자로 전달한다 — 이 함수 자체는 DB도 라이브 프로세스 상태도
+    새로 조회하지 않는다(렌더 전용 원칙 유지). "표본 0"과 "요청 0"을 구분해 둘 다 "0건 통과"로
+    뭉개지 않는다(VIZ-01·NLP-01 이중 회계 승계).
+    """
+    exposure = classify_metric_exposure(metrics)
+    lines: list[str] = [
+        "# 성장 증거(WH-1 대리 지표) 도달 관측 + 노출 계약",
+        "",
+        f"- 도달 카운터: GET /v1/me/harness-metrics 누적 요청 {requests_total}건",
+        "  (0이면 '측정했더니 0'이 아니라 '이 API를 부르기로 결정한 적이 없다' — 정적 감사 "
+        "결과와의 이중 회계)",
+        "",
+    ]
+    for label, attr, _sample_attr in _METRIC_ROWS:
+        metric = getattr(metrics, attr)
+        reach = classify_reach_state(attr, metric.status, requests_total)
+        exp = exposure[attr]
+        tier_label = _TIER_LABEL[exp.tier]
+        lines.append(f"## {label}")
+        lines.append(
+            f"- 도달상태 {_REACH_STATE_LABEL[reach]} · 계측상태 {metric.status.value} · "
+            f"노출계층 {tier_label}"
+        )
+        if not exp.exposable_now:
+            lines.append(f"- 노출 억제 사유: {exp.suppressed_reason}")
+        if attr == "calibration_brier" and metric.status is not MetricStatus.MEASURED:
+            lines.append(f"- {_CALIBRATION_NO_UI_NOTE}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _resolve_params(
     user_id: str | None,
     since: str | None,
@@ -130,13 +252,21 @@ async def _run(  # pragma: no cover — 라이브 PG 연결 glue(단위테스트
     user_id: uuid.UUID | None,
     since: datetime | None,
     until: datetime | None,
+    requests_total: int | None,
 ) -> str:
-    """세션을 열어 대리 지표를 계산하고 리포트를 렌더한다(DB 조회 전용·쓰기 0)."""
+    """세션을 열어 대리 지표를 계산하고 리포트를 렌더한다(DB 조회 전용·쓰기 0).
+
+    `requests_total`이 주어지면(PED-06) 도달 3상태 + 노출 계약을 얹은 확장 리포트를,
+    아니면(기본) 기존 베이스라인 리포트를 낸다 — 기존 호출자(스크립트·문서)의 기본 동작은
+    바뀌지 않는다.
+    """
     sessionmaker = get_sessionmaker()
     async with sessionmaker() as session:
         metrics = await compute_wh1_surrogate_metrics(
             session, user_id=user_id, since=since, until=until
         )
+    if requests_total is not None:
+        return render_growth_evidence_reach_report(metrics, requests_total)
     return render_baseline_report(metrics)
 
 
@@ -157,10 +287,19 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="특정 user UUID(선택·기본은 코호트 전체 집계).",
     )
+    parser.add_argument(
+        "--requests-total",
+        type=int,
+        default=None,
+        help=(
+            "PED-06 — GET /health/ready의 growth_evidence.requests_total 값을 그대로 전달하면 "
+            "도달 3상태 + 노출 계약을 얹은 확장 리포트를 낸다(미지정 시 기존 베이스라인 리포트)."
+        ),
+    )
     args = parser.parse_args(argv)
     user_id, since, until = _resolve_params(args.user_id, args.since, args.until)
     report = asyncio.run(  # pragma: no cover — 라이브 PG 연결 glue
-        _run(user_id=user_id, since=since, until=until)
+        _run(user_id=user_id, since=since, until=until, requests_total=args.requests_total)
     )
     print(report)  # pragma: no cover
     return 0  # pragma: no cover

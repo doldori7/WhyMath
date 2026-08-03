@@ -47,6 +47,12 @@ from whymath_backend.api._device_store import (
     ping_device_store_health,
     set_device_store,
 )
+from whymath_backend.api._growth_evidence_state import (
+    GrowthEvidenceReachCounters,
+    GrowthEvidenceReachSnapshot,
+    get_growth_evidence_counters,
+    set_growth_evidence_counters,
+)
 from whymath_backend.api._l3_state import (
     CACHE_KEY as _CACHE_KEY,
 )
@@ -298,6 +304,19 @@ class AlertBody(BaseModel):
     threshold: float = Field(..., description="Settings 임계(초과 시 breach)")
 
 
+class GrowthEvidenceReachBody(BaseModel):
+    """/health/ready 성장 증거 도달 관측 섹션(PED-06) — `GET /v1/me/harness-metrics` 도달 카운터.
+
+    `gamification_module_gap_review.md` §3 D1 — 이 값이 0이면 "성장 지표 11종이 계산은
+    되지만 학생에게 도달한 적이 없다"는 실측 주장이 라이브로도 유지된다는 뜻이다. 0이
+    아니게 되는 순간이 그 주장이 깨지는 순간이다(정적 감사와의 이중 회계).
+    """
+
+    requests_total: int = Field(
+        ..., description="GET /v1/me/harness-metrics 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+
+
 class ReadyBody(BaseModel):
     """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
 
@@ -310,6 +329,9 @@ class ReadyBody(BaseModel):
         ...,
         description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축",
     )
+    growth_evidence: GrowthEvidenceReachBody = Field(
+        ..., description="성장 증거(WH-1 대리 지표) 도달 관측(PED-06)"
+    )
 
 
 def _component_body(check: ComponentCheck) -> ComponentCheckBody:
@@ -320,6 +342,11 @@ def _component_body(check: ComponentCheck) -> ComponentCheckBody:
         required=check.required,
         error=check.error,
     )
+
+
+def _growth_evidence_body(snapshot: GrowthEvidenceReachSnapshot) -> GrowthEvidenceReachBody:
+    """GrowthEvidenceReachSnapshot(도메인) → GrowthEvidenceReachBody(HTTP 스키마) 변환."""
+    return GrowthEvidenceReachBody(requests_total=snapshot.requests_total)
 
 
 def _metrics_body(snapshot: MetricsSnapshot) -> MetricsSummaryBody:
@@ -521,6 +548,10 @@ def create_app(
     app.state.__setattr__(_ALERT_NOTIFIER_KEY, alert_notifier)
     app.state.__setattr__(_READY_PROBES_KEY, resolved_probes)
 
+    # PED-06 — 성장 증거(WH-1 대리 지표) 도달 관측 카운터. 앱 수명 동안 1개(재시작 시 리셋
+    # — 인프로세스 계측이라 영속 저장 0, `ServiceMetrics`와 동형 전제).
+    set_growth_evidence_counters(app, GrowthEvidenceReachCounters())
+
     def _observe_request(elapsed_ms: float, status_code: int) -> None:
         """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
 
@@ -599,6 +630,7 @@ def create_app(
         probes: ReadinessProbes = getattr(request.app.state, _READY_PROBES_KEY)
         svc_metrics: ServiceMetrics = getattr(request.app.state, _METRICS_KEY)
         notifier: AlertLogNotifier = getattr(request.app.state, _ALERT_NOTIFIER_KEY)
+        growth_evidence_counters = get_growth_evidence_counters(request.app)
         # 세 딥체크는 서로 독립이라 동시 실행한다. 각 체크는 예외를 던지지 않는 계약
         # (ops/service_health — 비크래시 보고)이라 gather에 예외 누수가 없다.
         db_check, redis_check, llm_check = await asyncio.gather(
@@ -624,6 +656,7 @@ def create_app(
                 AlertBody(metric=a.metric, observed=a.observed, threshold=a.threshold)
                 for a in alerts
             ],
+            growth_evidence=_growth_evidence_body(growth_evidence_counters.snapshot()),
         )
         return JSONResponse(
             status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),
