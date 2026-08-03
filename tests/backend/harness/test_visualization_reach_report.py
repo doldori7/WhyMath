@@ -199,6 +199,96 @@ def test_gate_reuses_real_is_visualizable_not_a_reimplementation(
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 3b. 양식 정합 도달률(VIZ-04) — has_render_seat 재사용을 변별력 있게 실측
+# ──────────────────────────────────────────────────────────────────────────
+def test_seat_pass_requires_gate_pass_and_render_seat() -> None:
+    """게이트 통과 AND 권장 양식 중 렌더 좌석 보유(함수그래프=seated·수형도=unseated)."""
+    catalog = vrr.load_catalog(
+        _catalog_payload([_concept("A1"), _concept("A2"), _concept("A3"), _concept("A4")])
+    )
+    style = vrr.load_style_corpus(
+        _style_payload(
+            [
+                _style_entry("A1", ["함수그래프"]),  # 게이트 통과(fail-open)+좌석 보유 → seat_pass
+                _style_entry("A2", ["수형도"]),  # 게이트 통과하나 좌석 0 → seat_pass 아님
+                _style_entry("A3", ["함수그래프"]),  # 분류=추상 → 게이트 자체 미통과
+                # A4는 스타일 없음 → 게이트 미통과
+            ]
+        )
+    )
+    viz = vrr.load_visualization_corpus(_viz_payload([_viz_entry("A3", "추상")]))
+
+    report = vrr.build_report(catalog, style, viz)
+    assert report.gate_pass_count == 2  # A1·A2
+    assert report.seat_pass_count == 1  # A1만(A2는 게이트는 통과해도 좌석 0)
+    assert report.seat_pass_rate == pytest.approx(1 / 4)
+
+
+def test_seat_pass_multi_style_one_seated_counts_as_pass() -> None:
+    """권장 양식이 여럿이고 그중 하나만 seated여도 seat_pass에 잡힌다(one-of 의미론)."""
+    catalog = vrr.load_catalog(_catalog_payload([_concept("A1")]))
+    style = vrr.load_style_corpus(_style_payload([_style_entry("A1", ["수형도", "함수그래프"])]))
+    viz = vrr.load_visualization_corpus(_viz_payload([]))
+
+    report = vrr.build_report(catalog, style, viz)
+    assert report.seat_pass_count == 1
+
+
+def test_seat_pass_ignores_out_of_vocabulary_style_values() -> None:
+    """통제 어휘 밖 양식 값은 좌석 판정에서 조용히 걸러진다(오염값이 예외를 던지지 않음)."""
+    catalog = vrr.load_catalog(_catalog_payload([_concept("A1")]))
+    style = vrr.load_style_corpus(_style_payload([_style_entry("A1", ["오염값"])]))
+    viz = vrr.load_visualization_corpus(_viz_payload([]))
+
+    report = vrr.build_report(catalog, style, viz)
+    assert report.gate_pass_count == 1  # 게이트는 원시 문자열 존재 여부만 봄(fail-open)
+    assert report.seat_pass_count == 0  # 유효 양식이 하나도 없어 좌석 0
+
+
+def test_seat_pass_reuses_real_has_render_seat_not_a_reimplementation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """변별력 핵심 — has_render_seat 몽키패치 시 리포트 값이 실제로 바뀐다(재구현이면 안 바뀜)."""
+    catalog = vrr.load_catalog(_catalog_payload([_concept("A1")]))
+    style = vrr.load_style_corpus(_style_payload([_style_entry("A1", ["함수그래프"])]))
+    viz = vrr.load_visualization_corpus(_viz_payload([]))
+
+    baseline = vrr.build_report(catalog, style, viz)
+    assert baseline.seat_pass_count == 1  # 함수그래프=seated(대조군)
+
+    monkeypatch.setattr(vrr, "has_render_seat", lambda styles: False)
+    mutated = vrr.build_report(catalog, style, viz)
+    assert mutated.seat_pass_count == 0
+    assert mutated.seat_pass_count != baseline.seat_pass_count
+
+    monkeypatch.undo()
+    restored = vrr.build_report(catalog, style, viz)
+    assert restored.seat_pass_count == baseline.seat_pass_count == 1
+
+
+def test_render_report_includes_seat_section() -> None:
+    catalog = vrr.load_catalog(_catalog_payload([_concept("A1")]))
+    style = vrr.load_style_corpus(_style_payload([_style_entry("A1", ["함수그래프"])]))
+    viz = vrr.load_visualization_corpus(_viz_payload([]))
+    report = vrr.build_report(catalog, style, viz)
+
+    rendered = vrr.render_report(report)
+    assert "## 5. 양식 정합 도달률" in rendered
+    assert "**1**" in rendered  # seat_pass_count
+
+
+def test_report_to_json_includes_seat_axis() -> None:
+    catalog = vrr.load_catalog(_catalog_payload([_concept("A1")]))
+    style = vrr.load_style_corpus(_style_payload([_style_entry("A1", ["함수그래프"])]))
+    viz = vrr.load_visualization_corpus(_viz_payload([]))
+    report = vrr.build_report(catalog, style, viz)
+
+    payload = vrr.report_to_json(report)
+    assert payload["seat"]["pass_count"] == 1
+    assert payload["seat"]["pass_rate"] == pytest.approx(1.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 4. 렌더·JSON — 결정론·정직 절단 표기
 # ──────────────────────────────────────────────────────────────────────────
 def test_render_report_is_deterministic_across_dict_insertion_order() -> None:
