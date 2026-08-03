@@ -6,6 +6,11 @@
 harness 모듈의 함수를 monkeypatch해 결정론·경량으로 게이트 판정 로직만 검증한다. CLI
 통합테스트(`test_cli_main_runs_end_to_end_and_writes_valid_json`)만 실제로 `main([])`를
 끝까지 돌려 exit code·JSON 유효성을 확인한다(느려도 필수 — acceptance).
+
+`TestAxisDefectReportIntake`(RPT-01 8번째 축)는 실 PG 없이 세션 팩토리를 가짜로 주입해
+"미배선"(no_snapshot)·"0건 접수"(ok+count=0)·"그 외 DB 오류"(error로 전파) 세 상태를
+결정론적으로 재현한다 — 실 PG로의 왕복(진짜 gen_random_uuid()/now())은
+`tests/backend/api/test_reports_integration.py`가 담당한다.
 """
 
 from __future__ import annotations
@@ -13,8 +18,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from whymath_backend.harness import qa_pipeline as qp
 from whymath_backend.harness.coach_prose_leak_eval import ProseLeakReport
@@ -351,6 +358,121 @@ class TestAxisDefectInjectionDemotion:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 축 8 — defect_report_intake(RPT-01 학생 결함 신고 채널 수집 현황) — 가짜 세션 팩토리 주입
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class _FakeResult:
+    def __init__(self, value: int) -> None:
+        self._value = value
+
+    def scalar_one(self) -> int:
+        return self._value
+
+
+class _FakeAsyncSession:
+    """`async with sessionmaker() as session:` 표면만 모사 — execute/rollback만 필요."""
+
+    def __init__(self, *, count: int | None = None, execute_error: Exception | None = None) -> None:
+        self._count = count
+        self._execute_error = execute_error
+        self.rolled_back = False
+
+    async def __aenter__(self) -> _FakeAsyncSession:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> bool:
+        return False
+
+    async def execute(self, _stmt: Any) -> _FakeResult:
+        if self._execute_error is not None:
+            raise self._execute_error
+        assert self._count is not None
+        return _FakeResult(self._count)
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+
+class _FakeSessionmaker:
+    def __init__(self, session: _FakeAsyncSession) -> None:
+        self._session = session
+
+    def __call__(self) -> _FakeAsyncSession:
+        return self._session
+
+
+class _FakeOrigError(Exception):
+    """asyncpg 원 예외 모사 — `sqlstate` 속성만 필요(qa_pipeline이 이걸로 판별)."""
+
+    def __init__(self, sqlstate: str) -> None:
+        self.sqlstate = sqlstate
+        super().__init__(f"synthetic pg error {sqlstate}")
+
+
+def _undefined_table_error() -> ProgrammingError:
+    return ProgrammingError("SELECT count(*) FROM defect_report", {}, _FakeOrigError("42P01"))
+
+
+class TestAxisDefectReportIntake:
+    """ "미배선"(no_snapshot)·"0건 접수"(ok)·"그 외 오류"(error 전파) 세 상태 변별력 재현."""
+
+    def test_undefined_table_reports_no_snapshot_not_ok(self) -> None:
+        """테이블 자체가 없음(마이그레이션 미적용) — 이중 회계의 "미배선" 값."""
+        session = _FakeAsyncSession(execute_error=_undefined_table_error())
+        maker = _FakeSessionmaker(session)
+        result = qp._axis_defect_report_intake(maker)
+        assert result.status == "no_snapshot"
+        assert result.detail["table_exists"] is False
+        assert session.rolled_back is True
+
+    def test_zero_rows_reports_ok_with_count_zero_not_no_snapshot(self) -> None:
+        """테이블은 있는데 0건 접수 — 이중 회계의 "0건 접수" 값(`no_snapshot`과 다른 값)."""
+        session = _FakeAsyncSession(count=0)
+        maker = _FakeSessionmaker(session)
+        result = qp._axis_defect_report_intake(maker)
+        assert result.status == "ok"
+        assert result.detail == {"table_exists": True, "count": 0}
+
+    def test_no_snapshot_and_ok_zero_are_distinguishable(self) -> None:
+        """acceptance③ 핵심 단언 — 두 상태가 *다른 값*을 낸다(같으면 검증 실패)."""
+        no_snapshot = qp._axis_defect_report_intake(
+            _FakeSessionmaker(_FakeAsyncSession(execute_error=_undefined_table_error()))
+        )
+        ok_zero = qp._axis_defect_report_intake(_FakeSessionmaker(_FakeAsyncSession(count=0)))
+        assert no_snapshot.status != ok_zero.status
+        assert no_snapshot.to_json() != ok_zero.to_json()
+
+    def test_nonzero_count_reports_ok_with_that_count(self) -> None:
+        session = _FakeAsyncSession(count=7)
+        maker = _FakeSessionmaker(session)
+        result = qp._axis_defect_report_intake(maker)
+        assert result.status == "ok"
+        assert result.detail == {"table_exists": True, "count": 7}
+
+    def test_other_programming_error_is_not_swallowed_as_no_snapshot(self) -> None:
+        """undefined_table이 *아닌* ProgrammingError는 no_snapshot으로 흡수하지 않고 올린다
+        (`_run_axis_safely`가 잡아 "error"로 격리 — 세 번째 구분값)."""
+        other_error = ProgrammingError("SELECT 1", {}, _FakeOrigError("42601"))  # syntax_error
+        session = _FakeAsyncSession(execute_error=other_error)
+        maker = _FakeSessionmaker(session)
+        with pytest.raises(ProgrammingError):
+            qp._axis_defect_report_intake(maker)
+
+    def test_connection_failure_propagates_for_run_axis_safely_to_classify_as_error(self) -> None:
+        """DB 도달 불가(연결 실패) — no_snapshot도 ok도 아닌 "error"(세 번째 상태)."""
+        conn_error = OperationalError("SELECT 1", {}, _FakeOrigError("08006"))
+        session = _FakeAsyncSession(execute_error=conn_error)
+        maker = _FakeSessionmaker(session)
+        result = qp._run_axis_safely(
+            lambda: qp._axis_defect_report_intake(maker), axis_name="defect_report_intake"
+        )
+        assert result.status == "error"
+        assert result.measured is False
+        assert result.detail["error_type"] == "OperationalError"
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 예외 격리(_run_axis_safely) — 침묵 실패 금지 회귀
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -450,6 +572,7 @@ def test_build_report_assembles_axes_and_isolates_one_exception(
     monkeypatch.setattr(qp, "_axis_coach_prose_leak", _boom)
     monkeypatch.setattr(qp, "_axis_content_provenance", _ok)
     monkeypatch.setattr(qp, "_axis_defect_injection_demotion", _ok)
+    monkeypatch.setattr(qp, "_axis_defect_report_intake", _ok)
 
     report = qp.build_report(tmp_path, repo_root=tmp_path)
 
@@ -462,6 +585,7 @@ def test_build_report_assembles_axes_and_isolates_one_exception(
         "coach_prose_leak",
         "content_provenance",
         "defect_injection_demotion",
+        "defect_report_intake",
     }
     assert report["axes"]["corpus_audit"]["status"] == "no_snapshot"
     assert report["axes"]["coach_prose_leak"]["status"] == "error"
@@ -492,6 +616,7 @@ def test_build_report_all_ok_passes_overall(
         "_axis_coach_prose_leak",
         "_axis_content_provenance",
         "_axis_defect_injection_demotion",
+        "_axis_defect_report_intake",
     ):
         monkeypatch.setattr(qp, name, _ok)
 
@@ -518,6 +643,7 @@ def test_cli_main_runs_end_to_end_and_writes_valid_json(tmp_path: Path) -> None:
         "coach_prose_leak",
         "content_provenance",
         "defect_injection_demotion",
+        "defect_report_intake",
     }
     # 미실행(no code path) 없이 전 축이 measured 또는 명시적 error로 보고됐는지 확인.
     for axis in payload["axes"].values():

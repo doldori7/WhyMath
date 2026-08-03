@@ -91,6 +91,7 @@ from whymath_backend.api.me import router as me_router
 from whymath_backend.api.oauth_providers import build_oauth_providers
 from whymath_backend.api.ocr import router as ocr_router
 from whymath_backend.api.problems import router as problems_router
+from whymath_backend.api.reports import router as reports_router
 from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.speech import router as speech_router
 from whymath_backend.api.study import router as study_router
@@ -804,5 +805,6 @@ def create_app(
     app.include_router(study_router)
     app.include_router(ocr_router)
     app.include_router(speech_router)
+    app.include_router(reports_router)
 
     return app

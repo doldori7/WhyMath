@@ -23,6 +23,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
   - PIPA §22-2 ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사 — user_profile FK).
   - SEC-09 PrivacyAudit (개인정보 감사 3종 — 반출·동의변경·관리자접근·user_id FK 아님).
+  - RPT-01 DefectReport (학생 결함 신고 — 카테고리+problem_id만, user_id 컬럼 자체 없음).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
 `concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
 `problem_attempt.attempt_id`·`dialogue.dialogue_id`·`textbook_mapping.isbn` 등)이 해소된다.
@@ -54,7 +55,7 @@ from whymath_backend.db.models.atom_probe import (
     ATOM_PROBE_REVIEW_STATUS_AI_ESTIMATED,
     AtomProbe,
 )
-from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
+from whymath_backend.db.models.audit import DefectReport, DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import (
     Concept,
     ConceptEdge,
@@ -190,6 +191,8 @@ __all__ = [
     "DeletionAudit",
     # SEC-09: PrivacyAudit (개인정보 감사 3종 — 반출·동의변경·관리자접근)
     "PrivacyAudit",
+    # RPT-01: DefectReport (학생 결함 신고 — user_id 컬럼 없음, append-only)
+    "DefectReport",
     # Phase B.2: MisconceptionCatalog (M-id 오개념 콘텐츠 카탈로그·mis_id PK·기존 kebab 체계와 별개)
     "MisconceptionCatalog",
     # 오개념 정체성 통합 골격: MisconceptionCrosslink (kebab-id ↔ M-id N:M 매핑·read-time 해석)

@@ -629,6 +629,17 @@ class Settings(BaseSettings):
             "액세스 토큰 TTL이 24시간이라 정상 리프레시는 드물게 일어나므로 30이면 여유롭다."
         ),
     )
+    # ── RPT-01: 학생 결함 신고(무인증 표면) IP 단위 rate limit ──
+    defect_report_rate_limit_ip_per_minute: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "결함 신고(`POST /v1/reports/defects`)의 *IP 단위* 분당 요청 상한. 0=비활성. "
+            "`user_id`를 저장하지 않는 무인증 표면이라 IP만 검사한다(user·device 차원 N/A). "
+            "정상 사용자는 같은 세션에서 신고를 자주 반복하지 않으므로 20이면 여유롭고, "
+            "coach `write`(60)와 별도 카테고리라 상호 영향 0."
+        ),
+    )
     coach_rate_limit_device_read_per_minute: int = Field(
         default=90,
         ge=0,
