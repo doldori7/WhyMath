@@ -394,6 +394,21 @@ _GRANDFATHERED_ID_NUMBERS: dict[str, str] = {
         "기존 충돌(2026-07-29 repo-root-lint-config · wh1-caplog-order-flake) — "
         "HARN-10 착수 시점에 타 세션 2곳에서 인플라이트였다. 사후 개명은 타 세션 볼모."
     ),
+    # 2026-08-03 병렬 세션 인수 머지에서 발견 — 두 독립 PED 축이 같은 번호를 각자 배정했다.
+    # main측(D1~D3 튜터링 축·todo)은 4개 문서(ai_tutor/ai_recommendation/nlp_module_gap_review·
+    # 02_learner_model.md)가 "PED-04·PED-05 승계·재설계 금지"로 명시 참조. 병합해온 브랜치측
+    # (04e 전략 카탈로그 축·5건 done)은 자체 events.ndjson에 이미 이 ID로 start/done 이벤트가
+    # append-only 기록돼 있다 — 개명하면 한쪽은 이미 머지된 문서 4종을, 다른 쪽은 append-only
+    # 이벤트 로그의 사후 위조를 요구해 어느 방향으로도 "개명"이 "파손 없음"이 아니다.
+    "PED-04": (
+        "main의 PED-04-tutoring-decision-log(D1~D2 튜터링 축·todo) vs 병합 브랜치의 "
+        "PED-04-strategy-gap-design-doc(04e 전략 카탈로그 설계·done). 개명 시 전자는 4개 문서의 "
+        "승계·재설계 금지 참조가, 후자는 events.ndjson append-only 기록이 파손된다."
+    ),
+    "PED-05": (
+        "main의 PED-05-learner-state-assembly(LearnerState v0·todo) vs 병합 브랜치의 "
+        "PED-05-strategy-catalog-data(교수전략 카탈로그 schema+YAML·done). 위 PED-04와 동일 사유."
+    ),
 }
 
 # 접두는 영숫자 혼합을 허용한다 — 이 저장소 ID의 다수파가 스테이지형(`S2-04`·`S4-07`)이라
