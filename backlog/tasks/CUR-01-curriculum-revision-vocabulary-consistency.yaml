@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-01-curriculum-revision-vocabulary-consistency
+title: "교육과정 개정판 표기 3어휘 분열 관측 — 통합 마이그레이션 전 발산 건수 가시화"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: achievement_standard.curriculum_revision(\"2022 개정\"/\"2015 개정\")·unit_spec.curriculum_rev(\"2022\")·schema/enums.py Curriculum(\"2022_REVISION\") 3어휘가 실제로 공존함을 재현한다(주장 확인 또는 반증 — 반증되면 범위 재조정)"
+  - "② 정합 설계 본체: 3어휘 crosswalk 매핑 + 발산 건수 리포트를 harness/에 추가한다(problem_bank_coverage.py 빌드타임 집계 패턴 재사용, 신규 스키마·마이그레이션 0)"
+  - "③ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "④ 변별력: 세 어휘 중 하나를 의도적으로 다른 값으로 바꿔 발산 건수가 실제로 변하는지 확인한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑤ 범위 밖 명시: 3어휘를 1어휘로 통합하는 마이그레이션은 이 태스크에 포함하지 않는다(발산 규모가 관측되기 전에는 통합 방식을 결정할 수 없다)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/curriculum_module_gap_review.md §3 D1. 교육과정 개정판 표기가 3개 어휘 공간(\"2022 개정\"/\"2022\"/\"2022_REVISION\")으로 분열돼 있음. gating.py의 normalize_enum_value는 국소 방어일 뿐 축 간 정합 관측은 없었다."
+updated: 2026-08-03

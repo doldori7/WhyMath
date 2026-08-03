@@ -433,6 +433,461 @@ notes에 *"2회째 텍스트 규칙 실패이므로 **3번째도 텍스트면 �
 **변경 범위**: 문서 3(신규 R2 + 1차 배너 + `problem_type_graph_v1` 부기) · `backlog/`(태스크
 6건 신규·S4-14 보정·게이트 1건) · MEMORY 1건. **코드·코퍼스·생성기 변경 0**
 (`backlog.py validate` green — 태스크 159건·게이트 8건).
+### 2026-08-03 (구현): **`VIZ-05-visualizability-atom-backbone-realign` 구현 — 4분류(visualizability) 코퍼스 원자 백본 code 재정렬(추상 축 1건) + orphan CI 게이트 신설** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.2 G2 — `concept_visualization_v1/
+visualizability.json` 7건 전건이 레거시 `concept_graph_v1` code(예: `HIGH-CALC-005`)로 태깅돼
+런타임 원자 백본(`atom_graph_v1`, 2,683개념) code 공간과 **전혀 겹치지 않았다**(orphan 7/7).
+`is_visualizable(None)`이 fail-open이라 서비스 장애는 아니었으나, 추상 개념(대우증명·귀류법)의
+"리터럴 그래프는 오개념 유발" 보호가 런타임에서 전혀 발동하지 않았다 — CLAUDE.md "상시 실패하는
+fail-open 보호를 신뢰 금지(2회+ 반복 관측 시 태스크 등재 의무)" 발화(1차 편 D2 예고 + 2차 편 §7.2
+실측 = 반복 2회).
+
+**산출**:
+- `visualizability.json`을 v1.1(7건)→v1.2(**1건**)로 재작성 — `HIGH-LOGIC-007`(대우증명·귀류법)을
+  원자 백본 code `10공수2-02-07-1`(`atom_graph_v1/graph.json`에서 name 완전 일치 확인)로 교체.
+  acceptance①("추상 축만 보수적으로 재정렬, 직접·동적·부분은 미태깅 존치")과 orphan 게이트가
+  동시에 만족되는 유일한 설계 — 직접·동적·부분 6건은 애초에 런타임에서 한 번도 매치된 적 없는
+  orphan이었으므로 억지 재태깅 없이 제거(데이터 손실 아님, VIZ-01 acceptance③ "억지 태깅이 억지
+  그림을 만든다" 답습).
+- `_provenance.json` 갱신(재정렬 경위·record_count 1로 정정).
+- `tests/backend/l1/test_concept_visualization_orphan_gate.py` 신설 — ①orphan 게이트 본체(코퍼스
+  code가 원자 백본 code 공간에 있는지) ②변별력(임의 code 주입 → 게이트 fail 실측 → 복원 → pass
+  실측, `pytest.fail.Exception`으로 정확 포착) ③라이브 재현(코퍼스 로드 →
+  `Visualizability.추상` → `l4/scene_generation.generate_learning_scene` — 시각화 블록 생략·LLM
+  미호출을 hermetic 통합 재현으로 확인, DB 접근 불가 환경의 acceptance④ 대체). 새 CI 워크플로
+  불요 — 기존 `backend` 잡 pytest 수집(`testpaths`)에 자동 편입(`tests/infra/
+  test_test_suite_wiring.py`로 배선 재확인).
+- 기존 `tests/backend/l1/concept_visualization/test_overlay.py`의 `test_seed_corpus_covers_
+  all_four_classes`(4분류 전건 실증을 불변식으로 삼던 테스트)를 코퍼스 재작성에 맞춰
+  `test_seed_corpus_is_atom_backbone_aligned_abstract_only`로 정정(4분류 전건 실증은 더 이상 이
+  코퍼스의 불변식이 아님 — orphan 게이트가 code 정합을 대신 지킴).
+- `harness/visualization_reach_report`(VIZ-01 산출물, 재구현 0)로 재정렬 전후 실측:
+  `visualization_matched_count` 0→**1**, `orphaned_codes` 7건→**0건**.
+
+**검증**: `pytest tests/backend/l1 -q` 771 passed·85 skipped(DB 필요 integration만 skip) — 회귀
+없음. `ruff check .`·`mypy --strict whymath_backend` green. `black --check`는 신설 테스트 파일
+포맷팅 후 green(단, 무관한 기존 파일 `harness/defect_detection_eval.py` 1건이 이 작업 이전부터
+포맷 드리프트 상태 — 이번 변경과 무관, 별도 처리 필요). `backlog.py validate` green.
+
+**범위**: 코퍼스 재작성 1 · provenance 갱신 1 · 테스트 신설 1 · 테스트 정정 1 · 문서 각주 1 ·
+MEMORY 1. `l1/atom_graph/populate.py`·`atom_graph_v1/graph.json` 무변경(Overlay 분리 원칙 — 개념
+노드에 시각화 판정 미혼입).
+
+### 2026-08-03 (구현·정정): **`VIZ-04-visual-style-render-seat-contract` 구현 — 양식↔렌더 좌석 계약 신설 + 구현 중 재감사로 §7.1 좌석 수치 정정(15건 11.8% → 24건 18.9%, 단위원·부등식영역 seated로 이동)** (claude 구현, backend-engineer 위임)
+
+**배경**: `docs/architecture/visualization_module_gap_review.md` §7.1(2026-08-03 2차 점검)이 밝힌
+G1 — `concept_visual_style_v1` 코퍼스(127개념 태깅)의 권장 시각화 양식과 실제 렌더 가능
+`VisualizationType`(4종) 사이에 기계 계약이 없어, LLM이 렌더 불가 양식(예: 입체도형)에도 4종 중
+하나를 억지로 골라 **개념과 무관한 그림**을 렌더할 위험(05b Part 5-1 "억지 그림" 금기 위반).
+
+**구현 착수 전 재감사로 정정된 사실**: §7.1 원문은 "함수그래프만 seated(11.8%)"라 썼으나 이것이
+**과소평가**였음을 발견했다. 웹 계산기(`GraphingCalculator.jsx`)가 `mathExpr.js::classify()`로
+문자열을 6가지(function·implicit·inequality·polar·parametric·point)로 분류해 그리고,
+`graph2dSpecToState`(`graph2dSpec.js:21`)는 `spec.function`을 파싱 없이 그대로 상태에 얹으므로
+`Graph2dSpec.function`에 `"x**2+y**2=1"`(단위원)·`"y > x**2"`(부등식영역)를 넣으면 **스키마 변경
+없이 오늘 코드로 이미 렌더된다**. 진짜 갭은 `l3/visualization.py`의 `_SYSTEM_PROMPT`가 `function`
+(순수 함수) 예시만 보여줘 LLM에게 관계식·부등식 형태를 알려주지 않은 것뿐이었다.
+
+**산출**:
+- `data/visual_style_contract.json` 신설 — `render_contract.json`과 동형 확장. `VisualizationStyle`
+  16종(코퍼스 태깅 10종 + 미사용 6종 포함 완전성) 각각에 `render_types`·`render_mode`·`status`
+  (seated|unseated)·`seat_owner` 선언. seated 5종(함수그래프·단위원·부등식영역·분포곡선·
+  확률시뮬레이션) — 실제 코퍼스 기준 좌석 보유 15+8+1=24건(18.9%).
+- `l3/visualization.py` `_SYSTEM_PROMPT`에 음함수·부등식 예시 2건 추가(스키마 변경 없음).
+- `l4/visualization_policy.py`에 `has_render_seat` 순수 함수 신설(`_SEATED_STYLES` 리터럴 상수 —
+  모듈이 hermetic 원칙이라 JSON을 직접 읽지 않음. 테스트가 JSON↔Python 이중 진실원 drift를
+  cross-check).
+- `l4/scene_generation.py::_append_visual_block` 게이트에 세 번째 AND 조건(`has_render_seat`)
+  추가 — 기존 `is_visualizable`과 병렬(대체 아님). 좌석 0이면 LLM 미호출·시각화 미생성·소크라테스만.
+- `harness/visualization_reach_report.py`에 "양식 정합 도달률" 축(`seat_pass_count`) 추가 — 게이트
+  통과 AND 좌석 보유. 100% 정합은 목표 아님(미좌석은 보류가 정답).
+- 테스트: `tests/backend/schema/test_visual_style_render_contract.py` 신설(완전성·JSON↔Python
+  drift·seated 항목의 render_types가 실제 렌더 가능 타입의 부분집합인지). `test_scene_generation.py`
+  의 `test_partial_visualizes`가 unseated 양식(수형도)으로 4분류 축을 검증하던 것을 seated 양식
+  (함수그래프)으로 교체해 두 축을 분리 검증하고, 신규 `TestRenderSeatGate` 클래스로 좌석 축을
+  독립 검증(LLM 미호출까지 확인). `test_non_graph2d_no_param_control`도 좌석 없는 입체도형 →
+  좌석 있는 함수그래프로 교체(가짜 LLM 응답 내용과 무관하게 게이트를 통과시키기 위함).
+
+**정정 반영**: `visualization_module_gap_review.md` §7.1 표를 재감사 결과로 갱신(정정 각주 동봉),
+§7.3의 "VIZ-03이 34건을 흡수" 서술도 각주로 정정(단위원·부등식영역 제외 → 수직선 25건+접선도함수만
+남음). `VIZ-03` 태스크 yaml notes에 범위 축소를 반영(id·status는 미변경).
+
+**NOT**: `data/render_contract.json`은 불변(동형 확장이지 병합 아님) — `VisualizationType` 4종
+자체는 늘리지 않음(anti-explosion). `l3/visualization.py`의 타입 선택 로직을 `render_contract.json`
+에서 파생시키는 것은 `VIZ-02` 범위(합류 지점만 상호 참조, 중복 구현 안 함). 산점도는 `point`
+classify로 다중 좌표가 기술적으로는 가능하나 연속 좌표쌍 정규식 의존 임시방편이라 보수적으로
+unseated 유지(신뢰 가능한 좌석으로 인정 안 함).
+
+---
+
+### 2026-08-03 (설계·시각화 2차): **시각화 모듈 2차 갭 점검·설계 — `VIZ-01` 착륙 후 지형 실측, 양식↔렌더 좌석 계약 부재(태깅 127건 중 좌석 보유 15건=11.8%)·4분류 코퍼스 orphan 7/7(fail-open 보호 2회+ 반복 무력) + 태스크 2건 신규 등재·기존 3건 재정렬 — 동일 문서 §7로 추가(같은 EOS 틀 기능 62~65 재대조)** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 같은 외부 EOS 틀 문서 『15. 시각화』(1차 점검 `visualization_module_gap_review.md`,
+2026-07-30·PR #652)에 대해 "빠진 부분을 재점검"을 요청. 1차 편의 최우선 갭 D1(전 시각화 스택
+학생 도달 0회)은 이미 `VIZ-01`으로 해소·머지됐다(PR #654, 2026-07-31). 따라서 40개 세부 기능을
+다시 훑는 재작업이 아니라, **적재가 배선된 뒤 처음 관측 가능해진 지형**을 새로 대조하는
+2차 점검으로 스코프를 잡고 동일 문서에 §7로 이어붙였다(모듈당 단일 진실원 유지 — 새 파일
+미신설).
+
+**착수 가설("`VIZ-01`으로 도달 문제는 끝났다")은 실측으로 기각됐다.** 데이터가 흐르기 시작하자
+*흐르는 데이터가 렌더 좌석과 맞지 않는다*는 더 깊은 결함이 드러났다.
+
+**진짜 갭 2건 설계**:
+1. **G1(최우선) 양식↔렌더 좌석 계약 부재**. `concept_visual_style_v1` 코퍼스(127건 태깅)의 양식
+   분포(입체도형32·수직선25·평면도형16·함수그래프15·벡터도12·점화도11·단위원8·수형도4·
+   넓이모델3·부등식영역1)를 렌더 타입 3종(`interactive_graph_2d`·`interactive_surface_3d`·
+   `simulation_probabilistic`, `animation_prerendered`는 `web_adapter: null`)과 전건 대조한 결과
+   **실제로 표현 가능한 양식은 함수그래프 15건(11.8%)뿐**이다. `VisualizationStyle →
+   VisualizationType` 변환 코드는 저장소 전체 0건 — 양식은 LLM 프롬프트의 자유 텍스트 힌트
+   1줄로만 흐르고 구속력이 없다. `05b_visualization_classification.md` §3 파이프라인의 두 번째
+   화살표(`type→렌더러`)는 `render_contract.json`이 계약으로 봉인했는데 **첫 화살표
+   (`양식→type`)는 문서에만 있고 기계에 없다.** 피해가 D1(도달 0회)보다 나쁘다 — 폴백이 아니라
+   *개념과 무관한 그림이 그럴듯하게 렌더될 위험*이다("확실하지 않을 때 자신 있게 말함" 패턴의
+   시각적 형태). `VIZ-04` 신규 등재로 `render_contract.json` 동형 확장(`visual_style_contract.json`)
+   + 미좌석 양식 보류 게이트 + 정합 도달률 관측을 설계.
+2. **G2 4분류 코퍼스 orphan 7/7 — fail-open 보호 2회+ 반복 무력**. `visualizability.json`의 7건
+   전건이 레거시 `concept_graph_v1` code로 태깅돼 런타임 `atom_graph_v1` code 공간과 전혀
+   겹치지 않는다(1차 편 `VIZ-01` PR이 이미 부수 발견으로 기록·"재작성은 범위 밖"으로 유보한
+   그 사실). `is_visualizable(None)`이 fail-open이라 장애는 아니나, 추상 개념(대우증명·귀류법)
+   오개념 보호와 직접/동적 슬라이더 구분이 런타임에서 발동하지 않는다. 1차 편 D2가 "적재되면
+   표면화된다"고 예고했고 2차 편이 그것을 실측 — CLAUDE.md 『fail-open 보호 2회+ 반복 관측 시
+   태스크 등재 의무』가 정확히 발화. `VIZ-05` 신규 등재로 추상 축 보수적 재정렬 + orphan CI
+   게이트 설계.
+
+**부수 판정(G3) — 기존 태스크 3건 재정렬**: `S4-03`(기하·벡터·행렬)·`VIZ-03`(접선·적분영역 등)의
+acceptance는 코퍼스 실측 분포를 보기 전에 쓰였다. 재정렬: `VIZ-03` 범위를 수직선25+단위원8+
+부등식영역1=34건 좌석 확보로 확장(새 `VisualizationType` 없이 `Graph2dSpec` 필드 확장으로
+흡수 — anti-explosion 유지)하고 `depends_on: VIZ-04` 추가. `S4-03` notes에 코퍼스 분포 근거
+(입체도형+평면도형+벡터도=60건, 최대 덩어리) 명기. `VIZ-02`(렌더 계약 파생)와 `VIZ-04`는 같은
+`_SYSTEM_PROMPT` 파생 지점을 건드리므로 양쪽 acceptance에 상호 참조. **점화도11+수형도4+
+넓이모델3=18건은 어느 태스크 범위에도 없음을 정직 고지**(구조 다이어그램 계열·05b §4.1
+`StructureGraph` 목표 아키텍처 소관) — 지금 태스크화하면 dead task이므로 미등재 트리거로만
+남김(발화 조건: 확률과통계·수열 커버리지 착수 시).
+
+**산출**: `docs/architecture/visualization_module_gap_review.md`에 §7 추가(새 파일 미신설) +
+backlog 2건 CLI 신규 등재(`VIZ-04-visual-style-render-seat-contract`·
+`VIZ-05-visualizability-atom-backbone-realign`) + 기존 3건(`VIZ-02`·`VIZ-03`·`S4-03`) notes·
+acceptance 재정렬, validate green 158건.
+
+**NOT**: 코드 로직 변경 0(2차 점검도 문서+등재만). prod DB 실측 아님(코퍼스 파일·스키마 필드
+기준 — `VIZ-04` 착수 시 실측 이관). "LLM이 무관한 그래프를 만든다"는 구조적 추론이며 라이브
+재현은 하지 않음(`VIZ-04` acceptance로 이관). 기능 64·65는 재점검하지 않음(1차 편 판정 이후
+관련 코드 변경 없음을 `git log`로 확인).
+
+정본: `docs/architecture/visualization_module_gap_review.md` §7.
+
+### 2026-08-03 (설계·운영 r2): **운영(EOS) 모듈 2차 재점검 — 동일 문서 재제출 발견 후 델타 재점검으로 전환·QA 게이트가 상시 fail-open(D3)·학생 대면 금칙어/PII 검사기 0(D4)·v1 판정표 stale 4칸 정정, 태스크 3건 등재 + 1건 우선순위 상향** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 외부 EOS 틀 문서 『0단계 운영(EOS)』(모듈 42~45 + 확장 제안 46~50)를
+제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청 — **2026-07-29에 이미 점검한 것과
+동일한 문서**였다(v1 = `operations_module_gap_review.md`, 설계 D1·D2 → `ARCH-20` done 07-30 ·
+`ARCH-21` done 08-02). 처음부터 재대조하면 v1의 판정 근거가 유실되고 중복 작업이 되므로
+**델타 재점검(r2)** 으로 전환했다. 재점검이 실제로 필요했던 사유 2종은 둘 다 실측 확인:
+⑴ v1 판정표가 stale해졌다 ⑵ D1·D2가 **구현된 뒤** 설계 단계엔 없던 새 잔여가 생겼다.
+
+**v1 판정표 stale 정정 4칸**: ①**48 RBAC** — v1 "role/permission 모델 0건" → `SEC-07`(07-30,
+v1 작성 *다음날* 착지)로 `Role` v0 2값 + `require_role` 실재(🚫→⚠️ 부분). ②**47 감사 로그** —
+`SEC-09`로 `PrivacyAudit` 3종 writer 실배선. 잔여의 정체가 바뀌었다: 감사 인프라가 없어서가
+아니라 **감사할 액션 자체가 없다**(`review_status`는 전 API에서 읽기 필터 전용·쓰기 엔드포인트 0).
+③**43 관리자 CMS** — v1이 `api/`만 보고 "전무"로 판정했으나 **`docs/design/ui/03_admin_console_
+plan.md`·`04_admin_console_architecture.md`가 설계 정본으로 실재**(v1 미참조). 결론(의도적 지연)은
+유지하되 근거를 "설계도 없다"→"설계는 정본으로 있고 구현만 지연"으로 정정 — 트리거 발화 시
+처음부터 설계할 필요가 없다는 뜻이라 실질 차이가 크다. ④**45-⑤ 금칙어·PII** — `SEC-11`
+log_scrubber가 착지했으나 **로그 평면 전용**이라 학생 대면 본문 축은 여전히 0(⚠️→🔴 승격).
+
+**미채택 7건 재심**: v1 §2의 7건 각각에 대해 재판정 트리거 발화 여부를 실측 — **전부 미도달·
+유지**. pool 20건 전량 `whymath-original`(외부 라이선스 0) · 결제 코드 0건 · Flutter 화면 9개 ·
+`S3-01` todo. 이번 신규 설계는 미채택 번복이 아니라 **구현이 만든 새 잔여**에서 나온다.
+
+**설계 D3~D6**(정본: `docs/architecture/operations_module_gap_review_r2.md`): **D3** QA 게이트
+fail-open 해소 — `ARCH-21` 게이트가 CI에 배선은 됐으나 `ci.yml:186` `continue-on-error: true`로
+**아무것도 막지 않고**, 해제 조건이 ci.yml 주석·MEMORY 한 줄(=사람 기억)에만 있다. 무력화가
+3겹: ⑴fail-open ⑵트리거 경로 필터(`ci.yml:96`)가 **검사기 소스를 포함하지 않아** 판정 로직을
+느슨하게 만드는 변경이 무검증 통과 ⑶`test_qa_pipeline_wiring.py`가 5개 계약을 동결하나
+`continue-on-error`는 보지 않는다 — ARCH-20/21이 학습한 "존재함≠돌아감"의 **다음 단계
+'돌아감≠막음'이 빠졌다**(`ARCH-23`) · **D4** 학생 대면 출력 금칙어·PII 검사 축 — 전수 grep이
+`qa_pipeline.py:145`의 *"검사 안 함" 선언 자체* 외에 무일치. 인접 자산은 전부 다른 축
+(coach_prose_leak=날조 정답 누설·log_scrubber=로그 평면·judge_filter=오개념 선별). 의사결정
+우선순위 **1위(학생 안전)** 축인데 백로그 추적조차 0이었다(`ARCH-24`). 나머지 미측정 3축도
+"향후"를 없애고 이번에 결론: ui_golden·statistical_outlier 미채택 유지(§2-⑥⑦·`S4-15` 추적),
+**performance는 축 오분류로 영구 미채택** — `ops/service_health.py`는 가동 중 서비스의 런타임
+관측이라 배치 QA가 소비할 형태가 아니고, 억지 배선은 CI에 라이브 의존을 만든다(틀의 분류를
+따르지 않는다) · **D5** 그랜드파더 만료 계약 — `_KNOWN_GAPS` 5종은 **학생 노출** 문제은행인데
+v1이 "S3-11 머지되면 자동 해소"로 넘긴 뒤 5일째 `todo`. 2026-07-30 미병합 브랜치 9일 고립
+사고와 동형 패턴. (a)S3-11 회수 판정 + (b)면제 항목에 추적 태스크 ID 필수화·done인데 잔존하면
+red(`ARCH-25`) · **D6** ORM `content_provenance`/`generation_log` 실영속 + 콘텐츠 운영 감사 —
+**미채택 유지 재확인**. 모델 파일 밖 참조는 전부 동명의 Pydantic 스키마이지 ORM 행이 아니다.
+47의 잔여는 독립 갭이 아니라 **43의 부분집합**(`04_admin_console_architecture.md` §2 원칙4가
+감사를 CMS 동반 조건으로 이미 못박음) — 별도 태스크 미등재(백로그 오염 방지).
+
+**등재·검증**: 태스크 3건 CLI add(`ARCH-23`·`ARCH-24`·`ARCH-25`) + `S3-28` priority 3→2 상향
+(`ARCH-23`의 유일 블로커라 3에 묻히면 "판정 대기"가 무기한이 된다). validate green 156건 ·
+`next` 최상위 = S3-28("완료 시 후속 1건 해금" 의존 정상 노출). **코드 변경 0**(자매 갭 리뷰
+선례). v1은 소급 수정하지 않고 배너 1줄만 추가 — v1이 `ARCH-20`/`ARCH-21` notes의 정본 참조
+대상이라 완료 태스크의 판정 근거를 변조할 수 없다(`arch_audit_*_r2/_r3` 리비전 파일 관례).
+중복 회피: `S3-28`·`S3-11`·`S4-15`/`S3-01`·`OPS-01~04`·`SEC-07`/`SEC-09`/`SEC-11`·
+`docs/design/ui/03·04`.
+
+**프로세스 교훈(등재)**: v1이 43번을 판정하며 `api/` 실측만 하고 **같은 저장소의 설계 정본
+디렉터리(`docs/design/ui/`)를 보지 않았다**. 갭 리뷰가 "코드 0"과 "설계 0"을 구분하지 않으면
+미래 세션이 이미 있는 설계를 재작성한다. 자매 리뷰 시리즈는 코드뿐 아니라 `docs/design/`·
+`docs/standards/`도 대조 범위에 포함해야 한다.
+### 2026-08-03 (PR #670 CI 피드백·수정): **SEC-10 실 PG 통합테스트 버그 발견·수정 + SEC-10/SEC-12 라이브 증거 사후 확보 — email_hash 유니크 충돌** (claude 진단·수정, "Pr" 지시 후 CI가 발견)
+
+**배경**: SEC-10/SEC-12 PR(#670) 생성 후 auto-merge 대기 중 CI `backend — 마이그레이션·통합
+(실 PG)` 잡이 실패. 신설 통합테스트
+`test_revoke_single_session_is_ownership_scoped_on_live_pg`가 `uq_user_profile_email_hash`
+유니크 제약 위반으로 죽었다 — 원인은 이 테스트 파일의 **기존** 헬퍼 `_build_user`가 모든
+사용자에게 고정 리터럴 `email_hash="HASHED_EMAIL"`을 박아 넣던 것인데, 그 전까지는 어느
+테스트도 한 테스트 안에서 사용자 2명을 동시에 넣지 않아 드러나지 않았다. SEC-10의 본인
+스코핑 테스트(owner/other 2명 필요)가 그 가정을 처음 깬 경우였다. 다른 4건(`244 passed`)은
+전부 green — 이 세션 CI 환경에서 SEC-07~09·11이 회귀 없음을 재확인.
+
+**수정**: `_build_user`의 `email_hash`를 `f"HASHED_EMAIL_{user_id}"`로 user_id 유도값으로
+변경(어떤 테스트도 리터럴 값에 의존하지 않음을 grep으로 확인 후 변경).
+
+**라이브 증거 사후 확보(정직한 공백 해소)**: 이 세션 컨테이너에는 원래 Docker 데몬·도달
+가능한 PostgreSQL이 없었으나, CI 실패를 로컬에서 재현·검증하기 위해 **네이티브 패키지로
+직접 구성**했다 — `apt-get install postgresql-16-pgvector`(pgvector 확장) + `service
+postgresql start` + `service redis-server start`. `alembic upgrade head`로 `d6e7f0a2b3c4`
+(SEC-10 마이그레이션 포함)까지 전 리비전 정상 적용 확인 후:
+- 수정 전 상태로 버그 재현(CI와 동일한 `UniqueViolationError`) → 수정 후
+  `test_refresh_session_integration.py` **5건 전부 실 PG에서 통과**(신설 2건 포함 — 실 정렬·
+  `platform` 영속·본인 스코핑 e2e를 이제 라이브로 검증).
+- `python -m whymath_backend.privacy.retention_purge_cli` 직접 실행 →
+  `{"as_of": "2026-08-03", "purged": {...11개 테이블 전부 0...}, "total": 0}` — SEC-12의
+  "라이브 dry-run 미실행" 공백을 해소(0건 파기는 정상 — 실행 자체가 성공했다는 증거).
+
+**정직한 잔여 공백**: 로컬 `test_devices_integration.py`·`test_me_integration.py`의 일부
+테스트가 이 임시 환경에서 `asyncpg InterfaceError`(event loop closed)로 실패했으나, 이
+파일들은 이번 PR과 무관하고(diff 밖) CI의 실제 잡(`244 passed`)에서는 통과했다 — 로컬 임시
+PG/Redis 구성(네이티브 설치·짧은 세션)의 연결 처리 차이로 보고, 이번 범위에서 추가 조사하지
+않았다(별도 파일·별도 이슈).
+
+**검증**: 수정 커밋(`d75b376a`) 푸시 후 CI 재실행 대기 중. ruff·black clean(수정 파일).
+
+정본: PR https://github.com/doldori7/WhyMath/pull/670 · `tests/backend/api/
+test_refresh_session_integration.py`.
+
+### 2026-08-03 (구현·SEC-12): **보존 파기 정기 실행 배선 — `retention-purge` compose 서비스(app 이미지 재사용·CLI 호출만) + 배선 실재성 테스트 5건** (claude 구현, Kiki 요청 — 첨부 문서 대조 후 잔여 항목 실행)
+
+**배경**: `account_security_gap_review.md` D6 — `privacy/retention_purge_cli.py`(증거+PII
+시계열 단일 TX 파기)는 완비돼 있었지만 그 CLI를 부르는 cron·Celery beat 정의가 0건이라 보존
+정책이 *집행되지 않는 상태*였다("CLI가 생긴 것"과 "CLI가 불리는 것"의 차이).
+
+**설계**: 신규 로직 0 — `docker-compose.prod.yml`에 `retention-purge` 서비스를 추가해 CLI를
+호출만 한다. `app`과 **동일 이미지**를 재사용(새 Dockerfile·새 이미지 0). 기존 QUALITY(27b)
+전용 Celery 앱(`l3/queue/celery_app.py`)은 GPU 큐 관심사와 혼입하지 않도록 재사용하지 않았다.
+base 이미지(`python:3.12-slim`)에 cron 바이너리가 없어 새로 얹지 않고(공격면·이미지 크기 회피)
+`sh -c 'while true; do python -m ...retention_purge_cli || exit 1; sleep 86400; done'` 셸
+루프로 24시간마다 1회 호출한다. **크래시와 정상 실행을 로그 형태로 구분**(이중 회계 금기):
+CLI가 예외로 죽으면 `|| exit 1`이 컨테이너를 죽이고 `restart: unless-stopped`가 즉시 재기동
+(파기는 cutoff 재조회라 멱등·안전) — docker logs에서 트레이스백(크래시)과 `{"as_of":...,
+"purged":{...}}` JSON(정상 실행 — 0건 파기도 포함)이 형태로 갈린다. 파기는 복호화하지 않으므로
+`WHYMATH_DATABASE_URL`만 주입(불필요한 시크릿 0 — 최소 권한). 이미지 내장 HTTP 라이브니스
+HEALTHCHECK는 이 서비스엔 무해당이라 `healthcheck.disable: true`로 명시 비활성화(안 하면
+8000 포트 무응답을 영구 unhealthy로 오판). `cleanup_stale_devices`(D6 "동반 검토" 대상)는
+실측 결과 **함수 자체가 아직 구현돼 있지 않아**(`config.py` 설정값 docstring 언급뿐) 배선
+대상이 없다고 기록 — 새 기능을 만들지 않았다(scope creep 방지).
+
+**배선 실재성**: `tests/infra/test_deploy_artifacts.py`에 ⑧번 섹션(5건) 추가 — 서비스 실재·
+CLI 모듈 경로 호출·app 이미지 재사용·restart 정책·healthcheck 비활성·불필요 시크릿 부재를
+동결. 서비스 정의를 지우면 테스트가 깨진다(OPS-03/08/10/11 선례). `docker compose config`로
+compose가 실제로 파싱됨을 확인(`docker-compose.prod.yml` 렌더 결과에 `retention-purge` 서비스
+등장).
+
+**⚠️ 정직한 공백 — 라이브 dry-run 미실행**: 이 세션 컨테이너에는 Docker 데몬도 도달 가능한
+PostgreSQL도 없어(`docker info` 소켓 연결 실패·`127.0.0.1:5432` 미도달) **실제 파기 실행
+JSON 산출물을 확보하지 못했다**. `tests/backend/privacy/test_retention_purge_cli.py`(합성
+`purge_fn` 주입 — DB 없이 CLI 배선 자체는 검증됨)와 `docker compose config` 렌더 검증까지가
+이 세션에서 확보한 증거의 한계다. Phaiakes9에서 배포 시 런북 §5b의 자가검증 3종(컨테이너
+Up 상태·최근 로그의 JSON 형태·수동 1회 실행)으로 실제 집행을 확인해야 한다 — SEC-01의
+"프로덕션 실측 미수행" 정직 자인과 동형 패턴.
+
+**검증**: ruff·black·mypy --strict(442파일) clean. `tests/infra` 전체 270 passed(신규 5건
+포함). 백엔드 CI-충실 전체 스위트 **8042 passed, 274 skipped, 0 failed**(SEC-11 이후
+baseline 7979 대비 +63 — SEC-10과 함께 반영된 수치, 회귀 0).
+
+**NOT**: 특정 시각(예: 매일 새벽 3시) 고정 실행 — 24시간 고정 간격만 보장(컨테이너 기동
+시각 기준). host cron·Celery beat로의 교체는 필요해지면 재검토(§8 미프로비저닝 목록에 추가
+안 함 — 현재는 불요 판단).
+
+정본: `docs/architecture/account_security_gap_review.md` D6 · `docker-compose.prod.yml` ·
+`docs/architecture/deployment_cd_runbook.md` §5b.
+
+### 2026-08-03 (구현·SEC-10): **세션 가시성·전체/단건 로그아웃 — `GET/DELETE /v1/auth/sessions[...]` + `platform` 컬럼(User-Agent 좁은 요약, IP·UA 원문 미저장)** (claude 구현, Kiki 요청 — 첨부 문서 대조 후 잔여 항목 실행)
+
+**배경**: `account_security_gap_review.md` D4 — `_revoke_all_user_sessions`(`api/auth.py:280`)
+는 재사용 탐지 경로에서만 호출되던 기존 함수로, 학생이 *스스로* 세션 목록을 보거나 특정
+기기를 로그아웃시킬 방법이 없었다(`security_privacy.md:99` "세션 목록/관리는 후속(a3d)" 자백).
+
+**설계**: 신규 테이블 0 — `refresh_token_session`(이미 allowlist)을 그대로 재사용, 마이그레이션
+은 `platform`(nullable `String(32)`) 컬럼 1개 추가(`d6e7f0a2b3c4`, `KNOWN_REVISIONS` 갱신).
+3개 엔드포인트(`CurrentUser` 게이트 — `is_active`/`is_deleted` 검사가 이미 걸린
+`get_current_user` 재사용): `GET /sessions`(본인 활성 세션 목록·issued_at desc)·
+`DELETE /sessions`(전체 — 기존 `_revoke_all_user_sessions` 재사용·중복 구현 0)·
+`DELETE /sessions/{session_id}`(단건·본인 스코핑 — 타인 소유·미존재는 404·이미 취소된 세션
+재요청은 멱등 204). **최소 수집**: 응답·저장 어디에도 IP·User-Agent 원문이 없다 — 로그인·
+리프레시 시점 `_summarize_platform`이 User-Agent에서 도출한 좁은 범주(`"iOS"`/`"Android"`/
+`"Web"`, 그 외 `None`)만 저장한다(새 파싱 라이브러리 추가 없음 — 불명확하면 None, 오분류로
+거짓 정보를 만들지 않는 것이 세밀한 분류보다 우선). **한계를 정직 표기**(응답·docstring·
+`security_privacy.md` 3곳): ⑴ `device_credential`(rate limit 신뢰용 기기 자격증명) 폐기는
+이 세션 취소와 무관 — 기기 폐기해도 그 기기의 JWT는 만료까지 살아있다(§1 후보 51의 "보안
+착시" 경계를 코드로 명시). ⑵ "전체 로그아웃"은 리프레시 토큰만 취소 — 이미 발급된 액세스
+토큰은 `jwt_expire_minutes`까지 유효(즉시 무효화 아님. 액세스 TTL 단축은 클라
+refresh-on-401 배선 선결 — 이번 범위 밖).
+
+**테스트**: hermetic 14건(`test_auth_sessions.py` — 목록 정렬·본인 스코핑·응답 스키마 IP/UA
+부재 동결·멱등성·`_summarize_platform` 대표 UA 7종 파라미터화) + 실 PG 통합 2건 신설
+(`test_refresh_session_integration.py` — 실 정렬·`platform` 영속·본인 스코핑 e2e, 기존
+3건과 함께 총 5건). **⚠️ 정직한 공백**: 이 세션 컨테이너에 도달 가능한 PostgreSQL이 없어
+신설 통합 2건은 skip으로만 확인됐다(hermetic 14건·mypy·기존 리팩터 회귀 없음으로 로직
+정확성은 검증되나, 실 PG 정렬·영속 왕복의 라이브 증거는 이 세션에서 확보하지 못했다) —
+Phaiakes9 실 PG에서 `WHYMATH_RUN_INTEGRATION=1`로 재확인 필요.
+
+**검증**: ruff·black·mypy --strict(442파일) clean. 백엔드 CI-충실 전체 스위트 **8042 passed,
+274 skipped, 0 failed**(SEC-11 이후 baseline 7979 대비 +63 — SEC-12와 함께 반영된 수치,
+회귀 0). `docs/standards/security_privacy.md`(a3d 완료 갱신)·
+`docs/architecture/deployment_cd_runbook.md` 갱신 불요(SEC-10은 배포 절차 변경 없음 — 코드
+배포와 함께 자동 반영).
+
+**NOT**: 액세스 토큰 즉시 무효화(denylist·TTL 단축 — §5-⑧ 발화조건 미충족). "현재 접속 중인
+기기" 표시(액세스 토큰은 이 테이블에 없어 구분 불가 — 리프레시 세션 목록일 뿐).
+
+정본: `docs/architecture/account_security_gap_review.md` D4 · `docs/standards/security_privacy.md`.
+### 2026-08-03 (설계·학습경로): **학습 경로(Path) 모듈 갭 점검·설계(D1~D3+페이퍼 3) + 태스크 3건 등재(`PATH-01`~`PATH-03`) — 위상정렬이 기본값에서 96.4% 무력(D1)·강등이 응답에서 구분 불가(D2)·전이 의존 미반영 27.0%→69.9%(D3) — 외부 EOS 틀 1단계 4기능 대조** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 업로드한 외부 EOS 틀 문서(『1단계: 학습 경로(Path)』 4기능 — 54 개인별 학습
+경로 생성 · 55 선수학습 자동 추천 · 56 복습 스케줄 생성 · 57 목표 기반 학습 플랜, WhyMath 전용
+아닌 일반 틀)를 코드베이스와 대조. 시리즈 **12번째** 자매편(1.knowledge → … → 11.curriculum
+계보 승계). 산출: `docs/architecture/learning_path_module_gap_review.md` 신설.
+
+**착수 가설이 반증됐다.** "학습 경로가 없다"가 아니었다 — Kahn 위상정렬(`l2/learning_path.py:143`)·
+재귀 CTE 선수 traversal(`l2/prerequisite_recommendation.py:230`)·HTTP 노출(`api/me.py:1506`)·
+테스트 18건이 이미 전부 프로덕션이다. 진짜 문제는 **"있는데 기본 파라미터에서 죽어 있고, 죽었다는
+사실이 응답에 안 나온다"**였다.
+
+**핵심 실측**(원자 백본 2,683노드·2,210 prerequisite 엣지 전수):
+- 직접 선수 개수 분포 0개 915 / 1개 1,412 / 2개 278 / 3개 70 / 4개 8 → **순서화가 성립할 수 있는
+  모집단이 356건(13.3%)뿐**
+- 엔드포인트 **기본값 `max_depth=1`**에서 집합 내부 직접 엣지 보유 **96/356(27.0%)** → 전체 대비
+  **3.6%**. 즉 **96.4%에서 in-degree가 전부 0**이고 Kahn은 `_tiebreak`(weakness·depth·strength·uuid)
+  가중 정렬로 조용히 강등된다. `has_cycle`은 있는데 "정렬 제약이 0이었다"는 표기가 **없어
+  호출자가 구별할 수 없다**
+- 전이(ancestor) 도달로 바꾸면 후보 집합 불변인 채 **1홉 96 → 5홉 249(69.9%) → 무한 310(87.1%)**.
+  이 축이 정확히 `learning_path.py:258`이 스스로 "후속 범위"라 적어두고 **백로그에 등재한 적 없는**
+  항목이며, 무력화의 지배적 원인이었다
+
+**등재 3건**: `PATH-01`(위상 제약 밀도 관측 리포트·S3·prio3·코퍼스만 읽어 입력 루프와 무관하게
+즉시 착수 가능) · `PATH-02`(`ordering_edge_count`·`ordering_basis` 응답 정직 표기·S3·prio3) ·
+`PATH-03`(전이 순서 제약·S4·prio4·depends PATH-01,02). 전건 `backlog.py add` CLI 경유(HARN-10).
+
+**기능 56·57은 신규 태스크 0** — `S4-18-review-time-axis`가 이미 복습 시간축(`review-queue`)과
+목표축(`target_*` 첫 reader)을 보유한다. `REC-01`(입력 루프)·`PED-05`(LearnerState)와도 범위 중첩 0.
+
+**의도적 미채택 9건**: ①단원 생략(LTHC 정면 충돌 — 경로의 임무는 *메울 것* 찾기) ②하루 학습가능시간
+(생산자 없는 신호) ③요일별 학습량(②의 2차 파생) ④SM-2/FSRS/`next_review_at`(이중 진실원천 재확인)
+⑤점수·등급 예측(서열화) ⑥**경로에 학년 게이팅**(선수는 정의상 학년 *아래* — 필터가 근본 결손을
+정확히 지운다. `reviewed_only`가 검수 게이팅뿐인 건 **설계이지 누락이 아니다**) ⑦`max_nodes` 상한
+(깊이 예산이 이미 bound — depth5 최대 55) ⑧**`subunit_code`를 교과서 단원 배열로 재라벨**
+(2,466노드가 `<영역>-U#-S#` 번호를 갖고 있어 *순서 신호처럼 보이지만* 저작 순서다 — 그럴듯해서
+특히 위험) ⑨전이 엣지에 합성 `edge_strength` 부여.
+
+**전역 학습 경로(기능 54의 핵심)는 유보** — 4조건 AND(REC-01 미도달 해제+약개념 2건 이상 / 클라
+실호출 / PATH-01이 "병합이 개념별 나열보다 순서를 더 결정한다"는 수치 산출 / PED-05 착지).
+지금 만들면 **항상 빈 배열을 반환하는 엔드포인트**가 된다.
+
+**§6 반복 실수 8회차 — 형태가 새롭다**: 앞의 일곱(배선/적재/배포/입력/스위치/공급원/분해 누락)은
+전부 **"돌지 않아서"** 안 보였는데, 8회차는 **"돌아서"** 안 보였다 — 배선·적재·기동이 전부 정상이고
+200을 반환하며 테스트 18건이 green인데, 꺼진 것은 **파라미터 기본값 한 개**다. 재발방지 원칙 등재:
+**"알고리즘을 붙였으면 그 알고리즘이 *실제로 작동한 비율*을 응답이나 리포트가 말해야 한다 —
+정상 응답 200은 알고리즘이 일했다는 증거가 아니다."** 부수 원칙: **"docstring은 백로그를 대신하지
+못한다"**(단, `"후속 범위"` 표기는 `src/` 전수 1건뿐이라 일제 점검 태스크는 만들지 않는다 —
+패턴이 아니라 단발).
+
+**자체 정정 1건(기록)**: 설계 검토 중 전이 개선폭을 **87.1%**로 잡았으나 그것은 **무한 도달** 기준
+이었다. 실제 구현 예산(`MAX_PREREQUISITE_DEPTH=5`)에서의 정직한 값은 **69.9%**이며, 문서·acceptance
+는 69.9%를 쓰고 87.1%는 도달 불가능한 천장으로만 병기했다. 교훈: **개선폭은 실제로 구현할 예산에서의
+값으로 인용한다** — 천장 수치는 설득력이 크지만 acceptance에 넣으면 달성 불가 기준이 된다.
+
+**정본 정정 3곳**: `l2/learning_path.py:1-6`·`api/me.py get_my_learning_path` docstring의 무조건적
+"위상정렬" 서술(→ `PATH-02` 안에서 정정·이 커밋은 `src/` 변경 0) / `06_application_modes.md`
+차원⑥ 잔여 서술에 "막힌 원인 = 출판사별 목차 순서 데이터 0 + `subunit_code` 오인 함정" 착지
+(→ **이 커밋에서 정정**).
+
+**범위**: 문서 신설 1 · 문서 정정 1 · 백로그 태스크 3 · MEMORY 1. **소스 코드 변경 0**(선례 11편 규율).
+
+---
+
+### 2026-08-03 (설계·교육과정): **교육과정 관리 모듈 갭 점검·설계(D1~D3+페이퍼) + 태스크 3건 등재(`CUR-03`은 owner=kiki) — 개정판 표기 3어휘 분열(D1)·학습목표 커버리지 0.1%(D2·"완비된 소비 경로+미도달 공급원" 7회차)·성취수준(A~E)/평가기준(상/중/하) 0건(D3) — 외부 EOS 틀 0단계 5모듈 대조** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 업로드한 외부 EOS 틀 문서(『0단계: 교육과정 관리』5모듈 — ①교육과정DB
+②단원구조 ③성취기준 ④학습목표(Objective) ⑤선수학습그래프, WhyMath 전용 아닌 일반 틀)를
+코드베이스와 대조. 시리즈 **11번째** 자매편(`ai_recommendation_module_gap_review.md` 등 10편
+계보 승계).
+
+**착수 가설 절반만 맞았다**: "교육과정 관리가 빈약하다"는 가설은 **반증** — 성취기준 축은
+오히려 초과 충족(895건, `norm_id` PK로 개정 간 코드 충돌 153건 해소). 진짜 문제는 관리 축마다
+성숙도가 극단적으로 다르다는 것(성취기준 100% vs 학습목표 0.1%). 아키텍처 차이의 핵심은 방향
+전도다 — 외부 틀은 "교육과정이 원본, 개념이 하류"이지만 WhyMath는 정반대로 "개념이 영속 원본,
+교육과정은 Overlay"(원칙5, `Concept`에서 `subject`·`curriculum_version`·`semester_introduced`
+의도적 제거 후 `CurriculumEntry` 셀로 이관).
+
+**진짜 갭 3건 설계**:
+1. **D1 교육과정 개정판 표기 3어휘 분열 — 관측 먼저**(최우선). `"2022 개정"`(achievement_standard·
+   curriculum_entry)/`"2022"`(unit_spec.curriculum_rev)/`"2022_REVISION"`(schema/enums.py
+   Curriculum) 3개 어휘 공간이 자유 문자열로 분열. `gating.py`의 `normalize_enum_value`는
+   국소 방어일 뿐 축 간 정합은 관측된 적 없음. 스키마 통합은 하지 않고(발산 규모 모르는 채
+   통합 방식을 정할 수 없다) 발산 건수 리포트부터 낸다.
+2. **D2 학습목표(Objective) 커버리지 0.1% — 7회차**. `LearningObjective`+`UnitDSL`+컴파일러+
+   런타임 API(`/v1/me/objectives/*`)까지 완비됐는데 실데이터는 895개 성취기준 중 **1개**
+   (소단원 `10공수1-이차함수-최대최소`, 목표 4개)뿐. `_provenance.json`이 스스로 "E2E 확인용
+   단일 소단원"이라 밝혀, 앞선 6회차(OCR·시각화·추천 등)와 달리 **고장이 아니라 파일럿 이후
+   확장이 없었던 정지 상태**. ARCH-18 패턴 재사용해 커버리지 리포트만 먼저 낸다.
+3. **D3 성취수준(A~E)·평가기준(상/중/하) 데이터 반입 — owner=kiki**. 저장소 전체 0건인데
+   상류 도구(`curriculum-node-builder` 스킬)는 이미 KICE 보고서 PDF→노드 엑셀 변환 가능.
+   NCIC 403 차단 선례와 동일하게 데이터 반입은 사람 소유 액션. 스키마 확장은 반입 후 별도
+   태스크로 분리(데이터가 스키마보다 먼저).
+
+**페이퍼 갭**: `PREREQUISITE` 외 5종 관계 타입(`COMPOSED_OF`·`ANALOGOUS_TO`·`EXTENDS`·
+`CONTRASTS`·`TRIGGERS_DISTRACTOR`)은 enum 선언만 있고 적재 0 — 소스 신호 없이 채우면 교수학
+날조이므로 어휘만 준비된 상태로 유지(발화조건만 §5-④).
+
+**의도적 미채택 6건**: ①학기 축 재도입(영구 — Overlay 원칙) ②`related`/`similar` traversal
+관계 채택(영구 — CLAUDE.md 명문 금지) ③`contains` 별도 엣지(영구 — parent_code 컬럼과 중복)
+④`equivalent` 별도 엣지(영구 — SymPy canonicalize가 유일 정본) ⑤다국가 풀스케일(조건부 유보,
+기존 Phase 1 축소 결정 승계) ⑥교육과정 편집 GUI(조건부 유보, CLI populate가 정본 경로).
+
+**정본 stale 6곳 정정**: `docs/data/concept_graph.md:5`("상태: 미구축" → 437/581 적재
+완료·원자 백본 2,683/2,210) · `01_data_foundation.md`·`ncic.md`(성취기준 "150~180개" →
+실측 895건) · `00_overview.md`·`01_data_foundation.md`(개념 그래프 저장소 "Neo4j" → PG 단일
+평면·런타임 연결 안 함 확정) · `curriculum_matrix.md`(`CurriculumEntry` "30필드·PK 2-튜플·
+미구현" → 실측 31필드·`entry_id` 단일PK+3-튜플·구현 완료) · `prd_v1.2.md`("현행=2015 개정,
+2022는 2027~28 분기" → `curriculum_2022_revision.md`가 이미 2022를 현 백본으로 확정, 각주로
+"수능 대개편"과 "교육과정 데이터 반영"이 별개 축임을 정정) · `units_v1` 데이터 카드 신설
+(`docs/data/units_v1.md`, 카드 부재 공백 해소).
+
+**산출**: `docs/architecture/curriculum_module_gap_review.md` 신설(§0 전제 2종·§1 5모듈 전수
+대조·§2 의도적 미채택 6건·§3 설계 D1~D3+페이퍼·§4 정직한 공백 7종·§5 유보 발화조건 6건·§6
+반복 실수 7회차·§정정 6곳·부록 실측 근거) + `docs/data/units_v1.md` 신설 + backlog 3건 CLI
+등재(`CUR-01-curriculum-revision-vocabulary-consistency`·`CUR-02-objective-coverage-observability`·
+`CUR-03-achievement-level-data-intake`, `CUR-` 신규 축, validate green 156건).
+
+**NOT**: 코드 로직 변경 0(설계+등재+정본 정정만). 3어휘 통합 마이그레이션·학습목표 자동 생성·
+성취수준 스키마 확장은 만들지 않았다(전부 발화조건만 기록). `S2-07`·`ARCH-13`은 승계·재해석
+금지(원자 축 이관·이중 진실 원천 해소는 완결 상태 그대로 인용만).
+
+정본: `docs/architecture/curriculum_module_gap_review.md`.
+### 2026-08-02 (설계·UI·관리자 콘솔): **관리 모듈 declarative 레지스트리 + `GET /v1/admin/menu` 자동 파생 좌측 내비 설계 신설 — "모든 가능 메뉴 자동 등록"** (claude 설계·문서, Kiki "관리자 작업화면에 모든 가능 메뉴가 자동으로 등록 되도록 설정해줘")
+
+**배경**: 관리자 콘솔(Operator Console)은 저장소에 코드가 전혀 없고 `docs/design/ui/03_admin_console_plan.md`·`04_admin_console_architecture.md`에 설계 문서로만 존재한다(전 항목 🔴). Kiki 요청에 AskUserQuestion으로 범위를 먼저 확인 — "설계 문서만 갱신"(권장안) 선택. ARCH-21 완료 후 세션 스코프를 "UI 설계·아키텍처만"으로 좁힌 직후의 작업이라 코드 스캐폴딩 없이 설계만 갱신한다.
+
+**설계 반영(`04` §2 원칙7 신설)**: 관리 콘솔의 좌측 내비·22모듈 매핑 표(`03` §4/§5)가 지금은 손으로 유지보수하는 마크다운이라, 새 관리 기능이 생길 때마다 ①내비 컴포넌트 ②라우트 가드(`require_role`) ③설계 문서 세 곳을 사람이 각각 맞춰야 하는 구조적 위험(하나 빠뜨리면 "코드엔 있는데 메뉴엔 없음" 또는 "메뉴엔 있는데 가드 없음")이 있었다. 해법으로 **선언적 모듈 레지스트리**(`AdminModule` — id·section·label·route·status(🟢/🟡/🔴)·`required_roles`·`backing_assets`)를 단일 진실 원천으로 두고, Admin BFF에 `GET /v1/admin/menu`(로그인만 요구·현재 사용자 role로 레지스트리 필터링해 반환)를 신설·Next.js 좌측 내비는 이 응답을 그대로 렌더(하드코딩 nav 배열 0)하는 아키텍처를 설계했다. **이중 방어 명시**: 메뉴 필터링은 UX일 뿐 보안 경계가 아니므로 각 라우트는 여전히 자체 `require_role`을 가지며, 레지스트리의 `required_roles`와 라우트 가드의 일치는 후속 `ADMIN-MODULE-REGISTRY` 태스크에서 정적 스캔 테스트로 동결 지향(`test_legacy_snapshot_governance.py` 패턴 재사용).
+
+**겸사겸사 현행화**: `03`·`04`·`00_index.md`의 RBAC 서술이 "role 필드가 없다"로 정체돼 있었는데(SEC-07이 2026-07-30 이미 2값 `STUDENT`/`CONTENT_ADMIN` 착지시킴), 세 문서 모두 실제 상태(v0 완료·관리 콘솔 소비는 미착수)로 갱신했다(README 청사진과 실제의 괴리 방지 원칙). `00_index.md` 전역 불변식 표에 #7(모듈 자동 등록)을 추가하고 스냅샷 날짜를 2026-08-02로 갱신.
+
+**스코프 밖(코드 미작성)**: `AdminModule`/`_MODULE_REGISTRY`/`GET /v1/admin/menu`/Next.js 앱 자체는 전부 설계 단계 — `04` §8에 `ADMIN-MODULE-REGISTRY`(신규)·`ADMIN-BFF`·`ADMIN-WEB` 제안으로만 기재, 실제 등재는 후속 `backlog.py` 경유.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 
