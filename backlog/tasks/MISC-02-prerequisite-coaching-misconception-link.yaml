@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-02-prerequisite-coaching-misconception-link
+title: "선수학습 복습 ↔ 오개념 연동(신규 얇은 어댑터, 기존 시그니처 불변)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PED-05-learner-state-assembly
+requires_gates: []
+acceptance:
+  - "recommend_prerequisite_coaching(gaps) 시그니처 불변(회귀 0), concept_src_id 느슨참조 재사용해 PrerequisiteGap 변환 어댑터만 신설"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/prerequisite_coaching.py
+  - src/backend/whymath_backend/l2/learner_state.py
+session: null
+notes: "04e_misconception_remediation_design.md §1-2. PED-05의 active_misconceptions 슬롯 선착지가 자연스러운 신호원."
+updated: 2026-08-03

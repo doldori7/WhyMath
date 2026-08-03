@@ -1280,3 +1280,10 @@
 {"ts": "2026-08-02T07:08:06", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:21", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:37", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-08-03T07:04:11", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-01"}
+{"ts": "2026-08-03T07:05:30", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-01-visualization-shadow-rollout"}
+{"ts": "2026-08-03T07:05:33", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-02-prerequisite-coaching-misconception-link"}
+{"ts": "2026-08-03T07:05:40", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-03-misconception-similar-problem-serving"}
+{"ts": "2026-08-03T07:05:46", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-04-misconception-relation-isolated-schema"}
+{"ts": "2026-08-03T07:05:51", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-05-root-symptom-slip-observation-report"}
+{"ts": "2026-08-03T07:05:55", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-06-misconception-recurrence-signal"}
