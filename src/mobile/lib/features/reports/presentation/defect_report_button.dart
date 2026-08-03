@@ -80,23 +80,28 @@ class _DefectReportDialogState extends State<_DefectReportDialog> {
     return AlertDialog(
       title: const Text('어떤 문제를 신고할까요?'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final DefectReportCategory category
-                in DefectReportCategory.values)
-              RadioListTile<DefectReportCategory>(
-                dense: true,
-                title: Text(category.label),
-                value: category,
-                groupValue: _selected,
-                onChanged: (DefectReportCategory? value) {
-                  if (value != null) {
-                    setState(() => _selected = value);
-                  }
-                },
-              ),
-          ],
+        // RadioGroup 조상 위젯이 그룹 상태를 관리한다(Flutter 3.32+ — RadioListTile의
+        // groupValue/onChanged 직접 사용은 deprecated_member_use로 flutter analyze가
+        // exit 1을 낸다).
+        child: RadioGroup<DefectReportCategory>(
+          groupValue: _selected,
+          onChanged: (DefectReportCategory? value) {
+            if (value != null) {
+              setState(() => _selected = value);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final DefectReportCategory category
+                  in DefectReportCategory.values)
+                RadioListTile<DefectReportCategory>(
+                  dense: true,
+                  title: Text(category.label),
+                  value: category,
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
