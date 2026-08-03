@@ -74,11 +74,7 @@ def test_assessment_row_delta_increases_on_insert_and_restores_on_delete() -> No
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
-                session.add(
-                    Assessment(
-                        assessment_id=aid, assessment_type=AssessmentType.초기진단
-                    )
-                )
+                session.add(Assessment(assessment_id=aid, assessment_type=AssessmentType.초기진단))
                 await session.commit()
             async with sm() as session:
                 counts = await collect_seat_counts(session)
@@ -90,9 +86,7 @@ def test_assessment_row_delta_increases_on_insert_and_restores_on_delete() -> No
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             async with engine.begin() as conn:
-                await conn.execute(
-                    delete(Assessment).where(Assessment.assessment_id == aid)
-                )
+                await conn.execute(delete(Assessment).where(Assessment.assessment_id == aid))
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
                 counts = await collect_seat_counts(session)
@@ -112,18 +106,14 @@ def test_assessment_row_delta_increases_on_insert_and_restores_on_delete() -> No
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 async with engine.begin() as conn:
-                    await conn.execute(
-                        delete(Assessment).where(Assessment.assessment_id == aid)
-                    )
+                    await conn.execute(delete(Assessment).where(Assessment.assessment_id == aid))
             finally:
                 await engine.dispose()
 
         asyncio.run(_force_cleanup())
 
 
-def test_concept_mastery_history_row_delta_increases_on_insert_and_restores_on_delete() -> (
-    None
-):
+def test_concept_mastery_history_row_delta_increases_on_insert_and_restores_on_delete() -> None:
     """concept_mastery_history — 복합 PK(user_id, concept_id, measured_at). writer 0(§D1)."""
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
@@ -186,9 +176,7 @@ def test_concept_mastery_history_row_delta_increases_on_insert_and_restores_on_d
         asyncio.run(_cleanup())
 
 
-def test_skill_mastery_history_row_delta_increases_on_insert_and_restores_on_delete() -> (
-    None
-):
+def test_skill_mastery_history_row_delta_increases_on_insert_and_restores_on_delete() -> None:
     """skill_mastery_history — 복합 PK(user_id, skill_id[Text], measured_at). writer 0(§D1)."""
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
@@ -250,9 +238,7 @@ def test_skill_mastery_history_row_delta_increases_on_insert_and_restores_on_del
         asyncio.run(_cleanup())
 
 
-def test_ability_snapshot_row_delta_increases_on_insert_and_restores_on_delete() -> (
-    None
-):
+def test_ability_snapshot_row_delta_increases_on_insert_and_restores_on_delete() -> None:
     """ability_snapshot — 유일하게 실제 writer가 있는 테이블(POST /v1/me/ability/snapshots).
 
     실사용 중일 수 있어 절대값 0을 가정하지 않는다 — 다른 프로세스가 동시에 행을 추가해도
@@ -280,9 +266,7 @@ def test_ability_snapshot_row_delta_increases_on_insert_and_restores_on_delete()
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
                 session.add(
-                    AbilitySnapshot(
-                        snapshot_id=sid, user_id=uid, theta=0.0, response_count=0
-                    )
+                    AbilitySnapshot(snapshot_id=sid, user_id=uid, theta=0.0, response_count=0)
                 )
                 await session.commit()
         finally:
@@ -322,11 +306,7 @@ def test_assessment_type_distribution_reflects_live_insert() -> None:
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
-                session.add(
-                    Assessment(
-                        assessment_id=aid, assessment_type=AssessmentType.D_100예측
-                    )
-                )
+                session.add(Assessment(assessment_id=aid, assessment_type=AssessmentType.D_100예측))
                 await session.commit()
             async with sm() as session:
                 counts = await collect_seat_counts(session)
@@ -338,9 +318,7 @@ def test_assessment_type_distribution_reflects_live_insert() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             async with engine.begin() as conn:
-                await conn.execute(
-                    delete(Assessment).where(Assessment.assessment_id == aid)
-                )
+                await conn.execute(delete(Assessment).where(Assessment.assessment_id == aid))
         finally:
             await engine.dispose()
 

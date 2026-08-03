@@ -194,9 +194,7 @@ def build_report(counts: SeatCounts) -> SeatReachReport:
         for name in _TABLE_ORDER
     )
     # 5종 전부 보강 — `.value`로 순회해 D-100예측의 하이픈 표기를 정확히 유지한다.
-    distribution = {
-        t.value: counts.assessment_type_counts.get(t.value, 0) for t in AssessmentType
-    }
+    distribution = {t.value: counts.assessment_type_counts.get(t.value, 0) for t in AssessmentType}
     return SeatReachReport(
         seats=seats,
         assessment_type_distribution=distribution,
@@ -226,9 +224,7 @@ def render_report(report: SeatReachReport, *, max_listed: int = 40) -> str:
     ]
     for seat in report.seats:
         writer_cell = seat.writer_citation if seat.writer_citation is not None else "—"
-        lines.append(
-            f"| `{seat.name}` | {seat.row_count} | {writer_cell} | {seat.reason} |"
-        )
+        lines.append(f"| `{seat.name}` | {seat.row_count} | {writer_cell} | {seat.reason} |")
 
     lines += [
         "",
@@ -279,10 +275,7 @@ def report_to_json(report: SeatReachReport) -> dict[str, Any]:
 
 
 def dump_json(report: SeatReachReport) -> str:
-    return (
-        json.dumps(report_to_json(report), ensure_ascii=False, indent=2, sort_keys=True)
-        + "\n"
-    )
+    return json.dumps(report_to_json(report), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 # ──────────────────────────────────────────────────────────────────────────

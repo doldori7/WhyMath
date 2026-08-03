@@ -150,9 +150,7 @@ def test_d100_prediction_hyphen_value_rendered_exactly() -> None:
 # 7. JSONB 결손 표기
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_diagnosis_and_recommended_path_nonempty_counts_pass_through() -> None:
-    report = asrr.build_report(
-        _counts(concept_diagnosis_nonempty=2, recommended_path_nonempty=1)
-    )
+    report = asrr.build_report(_counts(concept_diagnosis_nonempty=2, recommended_path_nonempty=1))
     assert report.concept_diagnosis_nonempty_count == 2
     assert report.recommended_path_nonempty_count == 1
     rendered = asrr.render_report(report)
@@ -196,15 +194,11 @@ def test_render_report_is_deterministic_across_repeated_calls() -> None:
 # 10. CLI — DB 오류 시 exit 2·예외 타입명 stderr 포함(침묵 실패 금지)
 # ──────────────────────────────────────────────────────────────────────────
 def test_main_returns_exit_2_and_logs_exception_type_on_db_failure(capsys) -> None:
-    with patch.object(
-        asrr, "_run", new=AsyncMock(side_effect=RuntimeError("접속 실패"))
-    ):
+    with patch.object(asrr, "_run", new=AsyncMock(side_effect=RuntimeError("접속 실패"))):
         exit_code = asrr.main([])
     assert exit_code == asrr._EXIT_INPUT_ERROR
     captured = capsys.readouterr()
-    assert (
-        "RuntimeError" in captured.err
-    )  # 무타입 경고 금지 — 예외 타입명이 로그에 있어야 한다.
+    assert "RuntimeError" in captured.err  # 무타입 경고 금지 — 예외 타입명이 로그에 있어야 한다.
 
 
 def test_main_cli_smoke_help_exits_zero_without_db() -> None:
