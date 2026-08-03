@@ -130,23 +130,14 @@ void main() {
               'lib/test에 package:json_annotation/ 직접 import는 없다.',
     };
 
-    // 위 allowlist와는 성격이 다르다 — "합법적으로 0"이 아니라 "이미 0이었고 아직 안 치웠다"는
-    // 뜻이다. 이 게이트를 신설하며 firebase 2종 외에 5종이 이미 같은 패턴(선언만·사용처 0)으로
-    // 방치돼 있음을 발견했으나, MOB-08의 acceptance는 firebase 2종 제거로 스코프가 한정돼 있어
-    // 이 5종의 처분(제거 또는 실사용 착수)은 별도 태스크(MOB-09)로 분리했다. 여기 grandfather
-    // 없이 그대로 뒀다면 이 신규 게이트 자체가 착지 첫날부터 CI red였을 것이다 — 그렇다고
-    // allowlist에 "정당한 이유"로 섞어 넣으면 다음 사람이 "합법적 예외"로 오해한다. 각 항목은
-    // 반드시 처분 태스크 id를 달아야 하며(ARCH-25 grandfather 관용구의 Dart판), MOB-09가
-    // 완료되면 이 맵에서 해당 항목을 지워 allowlist와 혼동될 여지를 남기지 않는다.
-    const Map<String, String> pendingRemovalGrandfather = <String, String>{
-      'retrofit': 'MOB-09 — coach_api.dart가 수동 메서드를 채택해 codegen 미사용(정합 재확인 대상).',
-      'cached_network_image': 'MOB-09 — lib/features/ 실 사용처 0.',
-      'video_player': 'MOB-09 — lib/features/ 실 사용처 0.',
-      'flutter_math_fork': 'MOB-09 — lib/features/ 실 사용처 0.',
-      'fl_chart': 'MOB-09 — lib/features/ 실 사용처 0.',
-    };
+    // MOB-08 착지 당시 firebase 2종 외 5종(retrofit·cached_network_image·video_player·
+    // flutter_math_fork·fl_chart)이 이미 같은 패턴(선언만·사용처 0)으로 방치돼 있었다 —
+    // MOB-08 스코프(firebase 2종) 밖이라 grandfather로 임시 허용하고 MOB-09로 분리했다.
+    // MOB-09가 5종 전부를 pubspec.yaml에서 제거해 이 grandfather 목록은 이제 비어 있다
+    // (grandfather는 "합법적 예외"가 아니라 "처분 대기"라 완료되면 지운다 — allowlist와
+    // 혼동 방지).
 
-    test('dependencies 선언 패키지가 모두 사용되거나 허용목록/grandfather에 있다', () {
+    test('dependencies 선언 패키지가 모두 사용되거나 허용목록에 있다', () {
       final String pubspecContent = File('pubspec.yaml').readAsStringSync();
       final List<String> declared = _parsePubspecDependencyNames(pubspecContent);
       final List<File> sourceFiles = _dartSourceFiles();
@@ -154,7 +145,6 @@ void main() {
       final List<String> violations = <String>[];
       for (final String pkg in declared) {
         if (allowlist.containsKey(pkg)) continue;
-        if (pendingRemovalGrandfather.containsKey(pkg)) continue;
         if (!_isPackageReferenced(_importPattern(pkg), sourceFiles)) {
           violations.add(pkg);
         }

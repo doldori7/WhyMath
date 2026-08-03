@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/mobile/pubspec.yaml
   - src/mobile/pubspec.lock
   - src/mobile/test/pubspec_dependency_usage_governance_test.dart
-session: null
+session: claude/backlog-drive-next
 notes: "MOB-08(2026-08-03) 선언↔사용 거버넌스 테스트 신설 시 발견 — firebase 2종 외 5종이 이미 미사용 상태였다. MOB-08 스코프(firebase 2종)를 넘는 발견이라 grandfather 항목(task_id=이 태스크)으로 임시 허용하고 별도 태스크로 분리."
 updated: 2026-08-03
