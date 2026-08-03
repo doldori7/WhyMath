@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - "src/backend/whymath_backend/ops/*"
   - "tests/backend/api/test_me_next_problem*.py"
-session: null
+session: claude/drive-cur-nlp-observability
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D1. Flutter 앱이 호출하는 /v1/ 엔드포인트 13종에 POST /v1/me/attempts가 없다(전수 실측) → ProblemAttempt 0행 → θ=0.0 고정(l2/irt.py:76)·BKT 숙달 0행으로 약점 가중이 전 후보 중립 1.0·/me/diagnosis/concepts 항상 빈 결과·/scenes/weak-concept 항상 404·irt_difficulty_b 코퍼스 0건(JMLE 미실행). 단건 응답은 standard_error=null로 이미 정직하나 집계 도달 관측 좌석이 없다. 반복 실수 4·5회차(§6) — '만들고 입력을 잇지 않음'·'만들고 켜지 않음'."
-updated: 2026-08-01
+updated: 2026-08-03
