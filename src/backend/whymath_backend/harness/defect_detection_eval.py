@@ -197,9 +197,10 @@ def format_report(
 
 def _emit_blind(items: list[SeededItem], blind_path: Path, key_path: Path) -> None:
     """블라인드 시험지(정답 제거) + 분리된 정답지를 각각 JSONL로 저장(사람 라운드용)."""
-    with blind_path.open("w", encoding="utf-8") as blind, key_path.open(
-        "w", encoding="utf-8"
-    ) as key:
+    with (
+        blind_path.open("w", encoding="utf-8") as blind,
+        key_path.open("w", encoding="utf-8") as key,
+    ):
         for item in items:
             problem = item.candidate.problem
             blind.write(
