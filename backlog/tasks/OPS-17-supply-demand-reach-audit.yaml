@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - "tests/backend/ops/*"
   - "tests/infra/*"
   - ".github/workflows/ci.yml"
-session: null
+session: claude/whymath-data-platform-design-8ceaf5
 notes: "docs/architecture/data_platform_module_gap_review.md §3 D1(외부 틀 모듈 84①⑤ 대조). §1-C 반복 실수 대장: OPS-03(CI 미배선)·OPS-08(브랜치보호 미강제)·VIZ-01(적재 0행)·NLP-01(OCR 비활성)·REC-01(클라 미호출) — NLP-01 notes '3회차'·REC-01 notes '반복 실수 4·5회차'. 매번 축별 런타임 리포트에 위임했고 **일반 탐지기를 만든 사람이 아직 없다**. 그중 최소 4회는 런타임이 아니라 정적으로 탐지 가능했다. 초안의 '축별 리포트 조립' 구상은 기각 — 조립 대상 셋 중 둘이 todo라 조립할 자산이 하나뿐이고, 셋 다 런타임 카운터라 결정론을 잃는다."
 updated: 2026-08-03

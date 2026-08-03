@@ -318,6 +318,40 @@ status가 done이 아닐 때만** 유효하다. 태스크가 사라지거나 don
 - **범위 밖(명시 동결)**: 클라이언트 attempt POST 실배선(`REC-01`·`NLP-02`) · 휴면 EventType
   소생(`S3-16`) · 개인화 기본값 전환. **가시화·차단이지 활성화가 아니다**(`NLP-01`과 동형).
 
+**구현 완결 기록 (2026-08-03, `OPS-17`)**: 위 설계를 구현했다(`ops/reach_audit.py`). 설계와
+달라진 점과 실측을 남긴다.
+
+- **CI 호스트를 `backend` 잡이 아니라 신규 상시 잡 `reach-audit`으로 바꿨다.** 구현 중
+  실측으로 드러난 사실 때문이다 — `backend` 잡의 변경 필터는 `src/backend/`·`tests/backend/`·
+  `conftest.py`·`ci.yml`만 보고 **`src/mobile/`도 `backlog/`도 보지 않는다**. 거기에 스텝으로
+  얹었다면 *dart 호출을 지우는 모바일 전용 PR*과 *태스크를 done으로 바꾸는 backlog 전용 PR*에서
+  감사가 skip되고, GitHub은 skipped를 required check 충족으로 세므로 회귀가 그대로 머지된다 —
+  **"만들고 켜지 않음"을 막는 장치가 정작 안 켜지는 자기모순**이 될 뻔했다. 필터를 넓히는 대안은
+  모바일 전용 PR에 35분짜리 백엔드 스위트를 물리므로 택하지 않았다. `if:`·`needs:` 금지는
+  `tests/infra/test_reach_audit_wiring.py`가 기계로 동결한다.
+- **분류 어휘를 축 중립으로 옮겼다** — `student-reached`→`reached`, `server-only-by-design`→
+  `by-design`. HTTP 외 3축(EventType·ORM·CLI)에 "student"·"server" 어휘가 맞지 않기 때문이다.
+  4분류의 판정 규약은 동일하다.
+- **전이 도달 계산에서 실제 오탐이 났고 고쳤다.** 첫 구현이 `from whymath_backend.harness import
+  corpus_audit_eval`(패키지에서 서브모듈을 꺼내는 형태)을 놓쳐 `qa_pipeline`이 조립하는 CLI들이
+  전부 미도달로 잡혔다 — 수용기준 ①이 경고한 바로 그 오탐. `<module>`과 `<module>.<name>`
+  후보를 둘 다 내도록 고쳐 도달 6→8건이 됐다(회귀는 테스트로 동결).
+- **`stale-waiver`가 자기 자신을 잡았다.** `ops.reach_audit`을 "순환이라 대장에 명시"로
+  `by-design` 등재했는데, CI 잡을 추가하자 실제로 도달 상태가 되어 그 항목이 낡은 예외가 됐고
+  게이트가 즉시 잡아냈다 — 낡은 예외 탐지의 변별력 실증이라 그 경위를 코드 주석에 남겼다.
+- **`_app_route_paths()` 승격 완료** — `ops/reach_audit.route_paths()`가 단일 진실 원천이 되고
+  `test_slo_contract.py`는 그것을 import한다. 그 파일의 기존 11건 전건 통과(회귀 0).
+- **실측 규모**: 라우트 87(`/v1` 79)·dart 호출 13·EventType 11(생산 3)·timeseries ORM 3
+  (writer **0**)·CLI 36(도달 8). 미도달 113건 전부에 의도를 선언했다 — `by-design` 사유 부여가
+  다수, **유예(`pending-task:`)는 학습 루프 텔레메트리·세션/디바이스·OCR·검증·시각화 축**에
+  달았다(`REC-01`·`S3-16`·`SEC-10`·`NLP-01`·`NLP-02`·`PED-05`·`REC-03`·`VIZ-02`·`OPS-16`).
+- **변별력 6종 CLI 실측**(전부 양방향 확인): 현행 exit 0 / 더미 라우트 추가 exit 1(그 라우트만
+  지목) / 선언 추가 시 exit 0 / dart 호출 1건 삭제 exit 1(그 라우트 지목) / 유예 태스크를 done
+  으로 exit 1(그 태스크에 걸린 18건 지목) / dart 정규식 무력화 **exit 2**(수집기 파손 — "0건
+  통과" 위장 거부). 복구 시 전부 exit 0 회귀.
+- **회귀**: 백엔드 전체 스위트 **8055 passed·0 failed**(부분 스위트 아님) · `tests/infra` 269
+  passed · ruff·black·`mypy --strict`(443파일)·import-linter 계약 전부 green.
+
 ### D2. QA 판정 보존·비집행 가시화 (신규 태스크)
 
 **갭**: §1-85⑤ — `qa_pipeline`의 판정이 **완전히 휘발한다**. 결함율·검출률의 **추세**를 볼 수

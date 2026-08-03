@@ -903,6 +903,43 @@ jobs:
           echo "OK — 하드코딩된 시크릿 패턴 없음"
 
   # ─────────────────────────────────────────────────────────────────
+  # 공급↔소비 도달 대장 (OPS-17) — **항상 실행**
+  #
+  # 왜 전용 잡인가 (backend 잡에 넣지 않은 이유):
+  #   이 감사는 서버 라우트 표 ↔ **Flutter 클라 호출**, CLI ↔ **ci.yml**, 유예 ↔ **backlog/**
+  #   를 대조한다. 그런데 `backend` 잡의 변경 필터는 `src/backend/`·`tests/backend/`·
+  #   `conftest.py`·`ci.yml`만 본다 — `src/mobile/`도 `backlog/`도 없다. 거기에 스텝으로
+  #   넣으면 **dart 호출을 지우는 모바일 전용 PR에서 감사가 아예 돌지 않아** 회귀가 그대로
+  #   통과한다("만들고 켜지 않음"을 막는 장치가 정작 안 켜지는 자기모순). 그렇다고 backend
+  #   필터를 넓히면 모바일 전용 PR이 35분짜리 백엔드 스위트를 통째로 지불한다.
+  #   그래서 필터 없이 항상 도는 경량 전용 잡으로 둔다(infra-contracts·harness-integrity 선례).
+  #
+  # 판정: 미도달 *수*는 게이트가 아니다. **미분류·만료 유예·사유 없는 예외**만 실패시킨다.
+  # ─────────────────────────────────────────────────────────────────
+  reach-audit:
+    name: reach-audit — 공급↔소비 도달 대장
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # 런타임만 설치한다(`[dev]` 불요) — 이 감사는 create_app() 라우트 표 인트로스펙션과
+      # AST 정적 스캔만 하고, 테스트·타입체커를 돌리지 않는다.
+      - name: Install backend (런타임만 — dev extras 불요)
+        run: pip install -e src/backend
+
+      - name: 공급↔소비 도달 대장 (미분류·만료 유예 차단)
+        run: python -m whymath_backend.ops.reach_audit
+
+  # ─────────────────────────────────────────────────────────────────
   # 빌드 하네스 무결성 + 원격 claim 교차 검증 (항상 실행 — 초 단위)
   # 병렬 세션 중복작업 방지: backlog 무결성·stale claim을 PR마다 감시
   # ─────────────────────────────────────────────────────────────────

@@ -33,9 +33,9 @@ from pathlib import Path
 
 import pytest
 
-from whymath_backend.app import create_app
 from whymath_backend.config import Settings
 from whymath_backend.l3.router import SLA_GATE_MS
+from whymath_backend.ops.reach_audit import route_paths
 
 # 레포 루트 — tests/backend/ops/<이 파일> 기준 3단계 위.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -128,30 +128,19 @@ def _doc_text() -> str:
     return _SLO_DOC.read_text(encoding="utf-8")
 
 
-@lru_cache(maxsize=1)
 def _app_route_paths() -> frozenset[str]:
     """`create_app()`의 실제 라우트 경로 집합.
 
-    **FastAPI 0.140 실측 주의**: `include_router()`가 더 이상 하위 라우트를 `app.routes`로
-    평탄화하지 않고 `_IncludedRouter` 래퍼 1개만 얹는다(래퍼는 `path` 속성이 없고
-    `original_router`를 들고 있다). 그래서 순진하게 `app.routes`의 `path`만 모으면
-    `/v1/**` 전체가 통째로 누락되고 — 문서가 그 경로들을 안내해도 "없는 경로"로 오판된다.
-    아래처럼 `original_router`를 재귀로 따라가야 실제 표가 나온다.
+    **구현은 `whymath_backend.ops.reach_audit.route_paths()`로 승격했다**(OPS-17). 같은
+    라우트 표를 두 곳에서 각자 순회하면 FastAPI 0.140 `original_router` 함정(아래)을 한쪽만
+    풀어 놓는 드리프트가 생긴다 — 라우트 표 추출의 단일 진실 원천을 하나로 둔다.
+
+    그 함정: `include_router()`가 더 이상 하위 라우트를 `app.routes`로 평탄화하지 않고
+    `_IncludedRouter` 래퍼 1개만 얹는다(래퍼는 `path` 속성이 없고 `original_router`를
+    들고 있다). 순진하게 `app.routes`의 `path`만 모으면 `/v1/**` 전체가 통째로 누락되고 —
+    문서가 그 경로들을 안내해도 "없는 경로"로 오판된다.
     """
-
-    def collect(routes: object) -> set[str]:
-        found: set[str] = set()
-        for route in routes:  # type: ignore[union-attr]
-            inner = getattr(route, "original_router", None)
-            if inner is not None:  # FastAPI 0.140 lazy include 래퍼
-                found |= collect(inner.routes)
-                continue
-            path = getattr(route, "path", None)
-            if isinstance(path, str) and path:
-                found.add(path)
-        return found
-
-    return frozenset(collect(create_app().routes))
+    return route_paths()
 
 
 def _route_matches(candidate: str, known: frozenset[str]) -> bool:

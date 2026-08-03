@@ -66,6 +66,7 @@ main
 - `infra/phaiakes9 — bash syntax`
 - `policy-guard — CLAUDE.md 금기 가드`
 - `harness-integrity — backlog 무결성·claim 교차 검증`
+- `reach-audit — 공급↔소비 도달 대장`
 <!-- REQUIRED_CHECKS_END -->
 
   **제외 1종**: `e2e-nightly — 관통 슬라이스 (실 PG·야간)`는 `if: github.event_name == 'schedule'`
