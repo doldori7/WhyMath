@@ -11,12 +11,16 @@ import pytest
 from pydantic import ValidationError
 
 from whymath_backend.l2.irt import (
+    LEARNING_BAND_HIGH,
+    LEARNING_BAND_LOW,
+    LEARNING_BAND_OUT_OF_RANGE_WEIGHT,
     IrtItem,
     ability_standard_error,
     estimate_ability,
     estimate_difficulty,
     fit_jmle,
     item_information,
+    learning_band_weight,
     probability_correct,
     select_next_item,
     select_weighted_item,
@@ -264,6 +268,75 @@ class TestSelectWeightedItem:
     def test_length_mismatch_raises(self) -> None:
         with pytest.raises(ValueError, match="weights 길이"):
             select_weighted_item(0.0, self._POOL, weights=[1.0, 2.0])
+
+
+class TestLearningBandWeight:
+    """REC-04 D4② — 학습 목적 성공률 밴드 가중치. 문헌값(70~85%)·미보정(band_calibrated=false)."""
+
+    def test_in_band_probability_gets_full_weight(self) -> None:
+        # θ=b(난이도=능력)에서 확률 0.5 — 밴드(0.70~0.85) 밖이라 낮은 가중이어야 한다는
+        # 사실 자체가 이 태스크의 핵심 문제 제기다(Rasch P≈0.5 지향과 밴드의 충돌).
+        item = IrtItem(difficulty=0.0)
+        assert probability_correct(0.0, item) == pytest.approx(0.5)
+        assert learning_band_weight(0.0, item) == LEARNING_BAND_OUT_OF_RANGE_WEIGHT
+
+    def test_probability_within_band_gets_weight_one(self) -> None:
+        # a=1 Rasch에서 P=0.8(밴드 안)이 되는 θ-b를 역산: θ-b = ln(0.8/0.2) ≈ 1.386.
+        item = IrtItem(difficulty=0.0)
+        theta = math.log(0.8 / 0.2)
+        p = probability_correct(theta, item)
+        assert LEARNING_BAND_LOW <= p <= LEARNING_BAND_HIGH
+        assert learning_band_weight(theta, item) == 1.0
+
+    def test_too_easy_probability_excluded_by_band_upper_bound(self) -> None:
+        """acceptance④ — 밴드 상한이 지나치게 쉬운 후보(확률 0.85 초과)를 배제한다."""
+        item = IrtItem(difficulty=-5.0)  # θ=0에서 매우 쉬움
+        p = probability_correct(0.0, item)
+        assert p > LEARNING_BAND_HIGH
+        assert learning_band_weight(0.0, item) == LEARNING_BAND_OUT_OF_RANGE_WEIGHT
+
+    def test_removing_band_upper_bound_releases_the_exclusion(self) -> None:
+        """acceptance⑤(양방향) — 상한을 실측으로 끄면(band_high=1.0) 배제가 실제로 풀린다.
+
+        같은 값을 내면 검증이 아니다(CLAUDE.md 변별력) — 상한 유무로 결과가 달라짐을 직접 비교.
+        """
+        item = IrtItem(difficulty=-5.0)
+        excluded = learning_band_weight(0.0, item)
+        released = learning_band_weight(0.0, item, band_high=1.0)
+        assert excluded == LEARNING_BAND_OUT_OF_RANGE_WEIGHT
+        assert released == 1.0
+        assert excluded != released
+
+    def test_too_hard_probability_also_gets_low_weight(self) -> None:
+        item = IrtItem(difficulty=5.0)  # θ=0에서 매우 어려움
+        p = probability_correct(0.0, item)
+        assert p < LEARNING_BAND_LOW
+        assert learning_band_weight(0.0, item) == LEARNING_BAND_OUT_OF_RANGE_WEIGHT
+
+    def test_out_of_range_weight_is_not_zero(self) -> None:
+        """0이면 밴드 안 후보가 전무할 때 select_weighted_item이 전부 동률 0으로 결정론이 깨진다."""
+        assert LEARNING_BAND_OUT_OF_RANGE_WEIGHT > 0.0
+
+    def test_learning_purpose_selects_in_band_more_often_than_diagnosis(self) -> None:
+        """acceptance② — 학습 목적(밴드 가중) 선택이 진단 목적(정보량 최대)보다 밴드 안 비율이
+        유의하게 높다. Rasch 정보량 최대는 P≈0.5(밴드 0.70~0.85 밖)를 선호하므로, 같은 후보
+        풀에서 두 목적의 선택이 서로 다른 문항을 고르고 그 차이가 밴드 적중률로 드러나야 한다.
+        """
+        # b=0(θ=0에서 P=0.5, 정보량 최대)·b=-1.386(θ=0에서 P=0.8, 밴드 안)의 두 후보.
+        pool = [IrtItem(difficulty=0.0), IrtItem(difficulty=-math.log(0.8 / 0.2))]
+        theta = 0.0
+
+        diagnosis_choice = select_weighted_item(theta, pool)  # 균등 가중 = 진단 목적
+        band_weights = [learning_band_weight(theta, item) for item in pool]
+        learning_choice = select_weighted_item(theta, pool, weights=band_weights)
+
+        assert diagnosis_choice == 0  # 정보량 최대 → P≈0.5 문항
+        assert learning_choice == 1  # 밴드 가중 → 밴드 안(P=0.8) 문항
+        assert diagnosis_choice != learning_choice
+        diagnosis_p = probability_correct(theta, pool[diagnosis_choice])
+        learning_p = probability_correct(theta, pool[learning_choice])
+        assert not (LEARNING_BAND_LOW <= diagnosis_p <= LEARNING_BAND_HIGH)
+        assert LEARNING_BAND_LOW <= learning_p <= LEARNING_BAND_HIGH
 
 
 class TestTotalInformation:

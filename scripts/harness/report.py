@@ -149,10 +149,14 @@ def render_brief(
     today: date,
     remote_claimed: dict[str, str] | None = None,
     remote_status: str = "ok",
+    stale_branches: list[tuple[str, float, int]] | None = None,
+    stale_branch_status: str = "ok",
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
+    stale_branches: (branch, age_days, ahead) 목록(HARN-13) — 원시 튜플로 받아 이 모듈이
+    `remote_claims`를 직접 import하지 않게 한다(remote_claimed와 동일한 결합도 원칙).
     """
     lines = ["[빌드하네스 브리핑]"]
 
@@ -181,6 +185,16 @@ def render_brief(
             lines.append(f"  · {tid} — {br}")
     elif remote_status not in ("ok", "disabled"):
         lines.append(f"(원격 claim 조회 불가: {remote_status} — 로컬 claim 정보만 표시)")
+
+    # 장기 미머지 브랜치 (HARN-13) — 정보성 경고일 뿐 착수를 막지 않는다.
+    if stale_branches:
+        lines.append("⚠️ 장기 미머지 브랜치 (Kiki 확인 필요):")
+        for stale_branch, age_days, ahead in stale_branches:
+            lines.append(
+                f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
+            )
+    elif stale_branch_status not in ("ok", "disabled"):
+        lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
 
     ready, excluded = selector.candidates(backlog, remote_claimed=remote_claimed)
     if ready:

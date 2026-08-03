@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,11 +16,12 @@ acceptance:
   - "③ BKT 입력 불변 동결: 이번 슬라이스는 관측만이며 숙달 전파 입력은 클라 보고(is_correct)를 유지한다. 권위 이관이 아님을 테스트로 동결(Kiki 결정 2026-07-31 — 측정 없는 도입 없음)"
   - "④ 이중 회계 리포트: 클라 보고 ↔ 서버 검산 불일치를 client_grade_mismatch로 카운트해 노출한다. 0건이면 '0건'이 아니라 '검산 가능 표본 N건 중 0건'으로 표시(분모 없는 0 금지). unverifiable 비율도 함께 — 그것이 이 기능의 실효 커버리지다"
   - "⑤ 변별력: 의도적으로 어긋난 is_correct를 주입해 불일치 카운터가 실제로 오르는지 실측 → 복원해 정상 동작 실측. 성공/실패가 같은 값을 내면 검증이 아니다"
-artifacts: []
+artifacts:
+  - 222a4a9e
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/l3/verify_answer.py
   - "tests/backend/api/test_me_attempts*.py"
 session: null
 notes: "docs/architecture/nlp_module_gap_review.md §3 D2. 입력(student_answer 슬롯·적재)·검증기(verify_answer)·저장소가 전부 실재하는데 잇는 선만 없어 학습자 모델 전체가 미검증 클라이언트 불리언 위에 서 있다(api/me.py:585 v1 한계 자인). MEMORY.md:94·95·96에 3회 반복 명시된 미착수 후속인데 백로그 태스크는 0건이었다. ARCH-12(QuizMode 클라 채점=데모 예외)의 강제 트리거와 같은 축. 권위 이관은 이 관측의 결과로 판단(§5-②)."
-updated: 2026-07-31
+updated: 2026-08-03

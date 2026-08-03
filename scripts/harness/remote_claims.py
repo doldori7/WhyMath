@@ -878,6 +878,172 @@ def scan_remote_done(
         return {}, f"error:{type(exc).__name__}"
 
 
+# ── 장기 미머지 브랜치 감지 (HARN-13) ──────────────────────────────────────
+#
+# HARN-11(미머지 done)이 다루는 축과 가깝지만 다른 신호다 — HARN-11은 "이 태스크,
+# 어디선가 이미 끝났나"(status: done 여부)를 backlog 사본에서 읽는 반면, 이 스캔은
+# 태스크 상태와 무관하게 "이 *브랜치*가 트렁크에 아직 안 흡수된 채 얼마나 오래
+# 방치됐는가"를 커밋 그래프 자체(committerdate·ahead count)로 잰다. 2026-07-30
+# 사고(claude/shadow-data-s3-pilot-nh5kbz 9일·40+커밋 고립)는 태스크 status와
+# 무관하게 벌어졌다 — 텍스트 재발방지 규칙("머지 타이밍은 Kiki의 pr 지시 대기")이
+# 2회 반복 무력화된 뒤에야 이 스캔을 코드로 대체한다(CLAUDE.md "시스템 실수 재발
+# 시 재발방지대책은 규칙 텍스트가 아니라 코드·CI로 등재").
+#
+# HARN-08이 claim(in_progress) 판정에 "나이" 휴리스틱을 **의도적으로 빼둔 것**과
+# 모순되지 않는다 — 그건 "아직 활성 세션인가"를 나이로 오판하지 않기 위한 결정이었고,
+# 여기는 "사람에게 존재 자체를 알릴 가치가 있는가"를 판정한다. 전자는 자동 판정을
+# 내리면 안 되는 축이고, 후자는 정보성 경고일 뿐 태스크 진행을 막지 않는다.
+
+STALE_BRANCH_DEFAULT_DAYS = 3
+
+
+@dataclass(frozen=True)
+class StaleBranch:
+    """N일 이상 트렁크에 흡수되지 않은 원격 브랜치 1건."""
+
+    branch: str
+    ref: str
+    last_commit_at: datetime
+    age_days: float
+    ahead: int
+
+
+@dataclass
+class StaleBranchScanResult:
+    """장기 미머지 브랜치 스캔 결과. status: ok | offline | error(판정 불가는 stale 무시 금지)."""
+
+    status: str
+    stale: list[StaleBranch] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+    trunk_ref: str = ""
+    trunk_branch: str = ""
+    trunk_source: str = ""
+
+
+def scan_stale_branches(
+    root: Path,
+    *,
+    days_threshold: int = STALE_BRANCH_DEFAULT_DAYS,
+    fetch: bool = True,
+    max_refs: int = SCAN_MAX_REFS,
+    now: datetime | None = None,
+) -> StaleBranchScanResult:
+    """트렁크에 `days_threshold`일 이상 흡수되지 않은 원격 브랜치를 찾는다.
+
+    "흡수되지 않음"의 판정은 두 조건의 AND다 — 둘 다 필요하다:
+      1. 최종 커밋(`committerdate`)이 `days_threshold`일 이상 경과.
+      2. 트렁크 기준 `ahead count > 0`(SQUASH 머지 저장소이므로 커밋 그래프 조상
+         관계가 아니라 `rev-list --count trunk..ref`로 판정 — `scan_remote_in_progress`
+         의 규칙 A·B가 같은 이유로 조상 검사 대신 트렁크 사본 상태를 쓰는 것과 동형
+         근거: SQUASH 머지 후에도 원본 브랜치의 커밋들은 트렁크의 조상이 되지 않는다).
+      ahead==0이면 실질적으로 머지됐거나 애초에 커밋이 없는 것이므로 stale이 아니다.
+
+    `fetch=True`(기본)는 이 스캔이 세션당 드물게(SessionStart 1회 또는 CI 1회) 도는
+    것을 전제로 한다 — `scan_remote_done`의 `fetch=False` 기본(고빈도 `next` 경로용)과
+    반대 선택이다. 최신 브랜치 목록이 없으면 "9일째 아무도 모른다"는 이 스캔의
+    존재 이유 자체가 무너진다(캐시된 오래된 remote-tracking ref만 보면 새로 생긴
+    방치 브랜치를 못 본다).
+
+    반환 status가 'ok'가 아니면 **판정 자체가 불가**했다는 뜻이며, 빈 stale 목록을
+    '방치 브랜치 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+    """
+    if not has_remote(root):
+        return StaleBranchScanResult("offline", message="origin 원격 없음 — 브랜치 스캔 불가")
+    now = now or _utcnow()
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return StaleBranchScanResult(
+                    _classify_failure(fetched.stderr),
+                    message=f"원격 브랜치 fetch 실패: {fetched.stderr.strip()}",
+                )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)%09%(committerdate:iso-strict)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return StaleBranchScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+
+        entries: list[tuple[str, str]] = []
+        for line in listing.stdout.splitlines():
+            ref, _, date_str = line.partition("\t")
+            ref, date_str = ref.strip(), date_str.strip()
+            if not ref or ref.endswith("/HEAD"):
+                continue
+            entries.append((ref, date_str))
+        truncated = len(entries) > max_refs
+        entries = entries[:max_refs]
+
+        trunk_ref, trunk_source = _resolve_trunk_ref(root)
+        trunk_branch = (
+            trunk_ref[len(REMOTE_REF_PREFIX) :]
+            if trunk_ref.startswith(REMOTE_REF_PREFIX)
+            else trunk_ref
+        )
+
+        stale: list[StaleBranch] = []
+        for ref, date_str in entries:
+            if ref == trunk_ref:
+                continue
+            try:
+                last_commit_at = datetime.fromisoformat(date_str)
+            except ValueError:
+                continue  # 파싱 불가 — 이 브랜치만 조용히 제외(전체 스캔은 실패시키지 않음)
+            age_days = (now - last_commit_at).total_seconds() / 86400
+            if age_days < days_threshold:
+                continue
+            ahead_result = _git(root, "rev-list", "--count", f"{trunk_ref}..{ref}", timeout=15)
+            if ahead_result.returncode != 0:
+                continue
+            try:
+                ahead = int(ahead_result.stdout.strip() or "0")
+            except ValueError:
+                continue
+            if ahead <= 0:
+                continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 방치 아님
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            stale.append(
+                StaleBranch(
+                    branch=branch,
+                    ref=ref,
+                    last_commit_at=last_commit_at,
+                    age_days=age_days,
+                    ahead=ahead,
+                )
+            )
+
+        return StaleBranchScanResult(
+            "ok",
+            stale=stale,
+            scanned_refs=len(entries),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=trunk_branch,
+            trunk_source=trunk_source,
+        )
+    except subprocess.TimeoutExpired:
+        return StaleBranchScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return StaleBranchScanResult("error", message=f"{type(exc).__name__}: {exc}")
+
+
 def _iter_batch_blobs(stdout: str):
     """`git cat-file --batch` 출력을 요청 순서대로 blob 본문(또는 None)으로 흘린다.
 
