@@ -178,12 +178,14 @@ jobs:
       - name: 게이트 — QA 파이프라인 오케스트레이터 (코퍼스 변경 시만·qa_pipeline)
         if: needs.changes.outputs.corpus == 'true'
         working-directory: .
-        # continue-on-error(임시): 첫 실행에서 equivalence_canonicalize 축이 코퍼스 전수(2647건
-        # 중 130건)에서 사전 존재 결함/오탐을 실측 발견했다(condition_dsl_violation이 확률·통계
-        # 미니 DSL을 검증 대상으로 상정하지 않았을 가능성 — S3-28로 등재·Kiki 판정 대기). 이
-        # 축이 해소되기 전까지 이 신규 게이트를 무음 실패시키지 않으면서도(리포트는 그대로
-        # 남는다) 다른 PR의 CI를 막지 않는다. S3-28 완료 시 이 줄을 제거해 강제 게이트로 전환.
-        continue-on-error: true
+        # S3-28(2026-08-03)로 강제 게이트 전환: 첫 실행에서 equivalence_canonicalize 축이
+        # 코퍼스 전수(2647건 중 130건)에서 위반을 냈는데, 실측 확인 결과 코퍼스 결함이 아니라
+        # 축의 적용 범위 오탐이었다(condition_dsl_violation은 등식 DSL 전용 — finite_probability·
+        # finite_count·mean_equals_median·events_independent·conditional_equal·
+        # dot_product_scalar 6종은 각자 이미 닫힌 별도 DSL을 쓴다. 130건 전부 이 6종이었고
+        # 나머지 2517건은 그대로 통과). `qa_pipeline._NON_EQUATION_DSL_ANSWER_KINDS`로 적용
+        # 대상을 필터링(새 판정 로직 0)한 뒤 전 축 재실행 결과 overall.pass=True(실측) —
+        # 더 이상 continue-on-error로 무음 처리할 이유가 없어 제거했다.
         run: python -m whymath_backend.harness.qa_pipeline --json qa_report.json
 
   # ─────────────────────────────────────────────────────────────────

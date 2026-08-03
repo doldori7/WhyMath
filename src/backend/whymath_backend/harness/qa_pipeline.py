@@ -197,7 +197,9 @@ def _axis_corpus_audit(repo_root: Path) -> AxisResult:
     """
     snapshot_paths = sorted((repo_root / "docs" / "data").glob("corpus_audit_*.jsonl"))
     if not snapshot_paths:
-        return AxisResult(measured=True, status="no_snapshot", detail={"snapshot_count": 0})
+        return AxisResult(
+            measured=True, status="no_snapshot", detail={"snapshot_count": 0}
+        )
 
     snapshots: dict[str, dict[str, float | int | None]] = {}
     for path in snapshot_paths:
@@ -206,7 +208,9 @@ def _axis_corpus_audit(repo_root: Path) -> AxisResult:
         snapshots[path.name] = {
             "n": report.n,
             "defects": report.defects,
-            "defect_rate_upper_bound": report.defect_rate_upper_bound(confidence=_CONFIDENCE),
+            "defect_rate_upper_bound": report.defect_rate_upper_bound(
+                confidence=_CONFIDENCE
+            ),
         }
     return AxisResult(
         measured=True,
@@ -220,6 +224,29 @@ def _axis_corpus_audit(repo_root: Path) -> AxisResult:
 # ──────────────────────────────────────────────────────────────────────────
 
 
+# S3-28 — `condition_dsl_violation`은 *등식/부등식* 폐쇄 DSL(SymPy sympify로 파싱되는
+# lhs op rhs)만 검증하도록 설계됐다(원 설계: `l3/equivalent/llm_generator.py`의 대수
+# 조건 생성 축). 아래 answer_kind들은 각자 *독립된, 이미 닫힌* DSL을 쓴다 —
+# `finite_probability`/`finite_count`는 `l3/finite_probability.py`의 정규식 기반
+# `space=...; event=...` 문법(sympify 대상이 아님·전수 열거로 별도 검증), 나머지 넷은
+# `l3/verify_answer.py`의 쉼표구분 숫자열 DSL(`verify_mean_equals_median` 등이
+# `_parse_number_list`로 직접 파싱 — sympify하면 `sympy.Tuple`이 되어 `sympy.Expr`이
+# 아니므로 필연적으로 위반 판정된다). 즉 코퍼스 결함이 아니라 이 축의 적용 범위가
+# 넓었던 것(실측: 2647건 중 130건 전부 이 6종 — 나머지 2517건은 등식 DSL 그대로 통과).
+# 새 판정 로직을 추가하는 게 아니라 이미 다른 파서로 닫힘이 보장된 answer_kind를
+# *적용 대상에서 제외*한다(각자의 폐쇄성은 해당 verify_* 함수·전수 열거가 이미 보증).
+_NON_EQUATION_DSL_ANSWER_KINDS = frozenset(
+    {
+        "finite_probability",
+        "finite_count",
+        "mean_equals_median",
+        "events_independent",
+        "conditional_equal",
+        "dot_product_scalar",
+    }
+)
+
+
 def _axis_equivalence_canonicalize(corpus_root: Path) -> AxisResult:
     """코퍼스 전 문제의 `conditions`에 폐쇄 검증 DSL 위반이 있는지 순회 검사한다.
 
@@ -227,16 +254,22 @@ def _axis_equivalence_canonicalize(corpus_root: Path) -> AxisResult:
     적용하는 것뿐이다(acceptance 위반 아님). `conditions` 필드는 스키마가 다양해
     레코드 최상위 또는 `verify.conditions`(실측 확인 — 현재 커밋 코퍼스는 전부
     `verify.conditions`에 있다) 양쪽을 방어적으로 읽고, 둘 다 없으면 스킵(에러로
-    만들지 않는다).
+    만들지 않는다). `answer_kind`가 `_NON_EQUATION_DSL_ANSWER_KINDS`에 속하면 이
+    축의 검사 대상에서 제외한다(S3-28 — 등식 DSL 폐쇄성 검사이지 그 answer_kind의
+    전용 DSL 폐쇄성은 각자의 파서가 이미 보증).
     """
     total = 0
     violations = 0
     for path in sorted(corpus_root.glob("problem_bank_*/problems.jsonl")):
         for problem in _load_jsonl(path):
+            verify = problem.get("verify")
+            verify = verify if isinstance(verify, dict) else {}
+            answer_kind = verify.get("answer_kind") or problem.get("answer_kind")
+            if answer_kind in _NON_EQUATION_DSL_ANSWER_KINDS:
+                continue
             conditions = problem.get("conditions")
             if not isinstance(conditions, str):
-                verify = problem.get("verify")
-                conditions = verify.get("conditions") if isinstance(verify, dict) else None
+                conditions = verify.get("conditions")
             if not isinstance(conditions, str) or not conditions.strip():
                 continue
             total += 1
@@ -270,7 +303,9 @@ def _axis_concept_graph_reachability(corpus_root: Path) -> AxisResult:
     graph_path = corpus_root / "atom_graph_v1" / "graph.json"
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
     edges = [
-        SimpleNamespace(relation=e["relation"], from_code=e["from_code"], to_code=e["to_code"])
+        SimpleNamespace(
+            relation=e["relation"], from_code=e["from_code"], to_code=e["to_code"]
+        )
         for e in graph["edges"]
     ]
     cycle = _find_prerequisite_cycle(edges)
@@ -372,13 +407,17 @@ def _axis_coach_prose_leak() -> AxisResult:
     leak_upper = report.leak_upper_bound(confidence=_CONFIDENCE)
     false_block_upper = report.false_block_upper_bound(confidence=_CONFIDENCE)
     gate_fail = (
-        leak_upper > _PROSE_MAX_LEAK_UPPER or false_block_upper > _PROSE_MAX_FALSE_BLOCK_UPPER
+        leak_upper > _PROSE_MAX_LEAK_UPPER
+        or false_block_upper > _PROSE_MAX_FALSE_BLOCK_UPPER
     )
     status: AxisStatus = "gate_fail" if gate_fail else "ok"
     return AxisResult(
         measured=True,
         status=status,
-        detail={"leak_upper_bound": leak_upper, "false_block_upper_bound": false_block_upper},
+        detail={
+            "leak_upper_bound": leak_upper,
+            "false_block_upper_bound": false_block_upper,
+        },
     )
 
 
@@ -391,7 +430,9 @@ def _axis_content_provenance(corpus_root: Path) -> AxisResult:
     """콘텐츠 출처·라이선스 집행 게이트(ARCH-20)의 `exit_code`를 그대로 게이트로 흡수한다."""
     report = provenance_audit.audit_corpus_root(corpus_root)
     status: AxisStatus = "ok" if report.exit_code == 0 else "gate_fail"
-    return AxisResult(measured=True, status=status, detail={"exit_code": report.exit_code})
+    return AxisResult(
+        measured=True, status=status, detail={"exit_code": report.exit_code}
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -443,12 +484,16 @@ def _run_axis_safely(func: Callable[[], AxisResult], *, axis_name: str) -> AxisR
     """
     try:
         return func()
-    except Exception as exc:  # noqa: BLE001 — 침묵 실패 금지(CLAUDE.md): 타입명을 반드시 로그.
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — 침묵 실패 금지(CLAUDE.md): 타입명을 반드시 로그.
         print(
             f"[qa_pipeline] 축 '{axis_name}' 실행 중 예외 — {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
-        return AxisResult(measured=False, status="error", detail={"error_type": type(exc).__name__})
+        return AxisResult(
+            measured=False, status="error", detail={"error_type": type(exc).__name__}
+        )
 
 
 def _aggregate_overall(axes: dict[str, AxisResult]) -> OverallResult:
@@ -484,11 +529,15 @@ def build_report(corpus_root: Path, *, repo_root: Path | None = None) -> dict[st
             axis_name="concept_graph_reachability",
         ),
         "misconception_crosslink_demotion": _run_axis_safely(
-            _axis_misconception_crosslink_demotion, axis_name="misconception_crosslink_demotion"
+            _axis_misconception_crosslink_demotion,
+            axis_name="misconception_crosslink_demotion",
         ),
-        "coach_prose_leak": _run_axis_safely(_axis_coach_prose_leak, axis_name="coach_prose_leak"),
+        "coach_prose_leak": _run_axis_safely(
+            _axis_coach_prose_leak, axis_name="coach_prose_leak"
+        ),
         "content_provenance": _run_axis_safely(
-            lambda: _axis_content_provenance(corpus_root), axis_name="content_provenance"
+            lambda: _axis_content_provenance(corpus_root),
+            axis_name="content_provenance",
         ),
         "defect_injection_demotion": _run_axis_safely(
             _axis_defect_injection_demotion, axis_name="defect_injection_demotion"
@@ -529,7 +578,9 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = _repo_root()
     corpus_root = (
-        args.corpus_root if args.corpus_root is not None else _default_corpus_root(repo_root)
+        args.corpus_root
+        if args.corpus_root is not None
+        else _default_corpus_root(repo_root)
     )
 
     report = build_report(corpus_root, repo_root=repo_root)

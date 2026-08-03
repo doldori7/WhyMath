@@ -32,7 +32,9 @@ def test_default_corpus_root_appends_data_corpus(tmp_path: Path) -> None:
 
 def test_repo_root_points_to_real_repo() -> None:
     root = qp._repo_root()
-    assert (root / "src" / "backend" / "whymath_backend" / "harness" / "qa_pipeline.py").is_file()
+    assert (
+        root / "src" / "backend" / "whymath_backend" / "harness" / "qa_pipeline.py"
+    ).is_file()
 
 
 def test_load_jsonl_skips_blank_lines(tmp_path: Path) -> None:
@@ -97,11 +99,15 @@ class TestAxisEquivalenceCanonicalize:
         bank.mkdir()
         rows = [
             {"slug": "p1", "conditions": "x**2 - 1 = 0"},  # 최상위
-            {"slug": "p2", "verify": {"conditions": "x + 1 = 0"}},  # verify.conditions(실측 형태)
+            {
+                "slug": "p2",
+                "verify": {"conditions": "x + 1 = 0"},
+            },  # verify.conditions(실측 형태)
             {"slug": "p3"},  # conditions 없음 — 스킵(에러 아님)
         ]
         (bank / "problems.jsonl").write_text(
-            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8"
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
         )
         result = qp._axis_equivalence_canonicalize(tmp_path)
         assert result.status == "ok"
@@ -112,7 +118,8 @@ class TestAxisEquivalenceCanonicalize:
         bank.mkdir()
         rows = [{"slug": "p1", "verify": {"conditions": "largest_root(2, 8) == 8"}}]
         (bank / "problems.jsonl").write_text(
-            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8"
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
         )
         result = qp._axis_equivalence_canonicalize(tmp_path)
         assert result.status == "gate_fail"
@@ -122,6 +129,61 @@ class TestAxisEquivalenceCanonicalize:
         result = qp._axis_equivalence_canonicalize(tmp_path)
         assert result.status == "ok"
         assert result.detail == {"total_conditions_checked": 0, "violations": 0}
+
+    @pytest.mark.parametrize("answer_kind", sorted(qp._NON_EQUATION_DSL_ANSWER_KINDS))
+    def test_non_equation_dsl_answer_kinds_are_excluded_from_check(
+        self, tmp_path: Path, answer_kind: str
+    ) -> None:
+        """S3-28: 확률/통계 전용 DSL(answer_kind별 별도 파서)은 등식 DSL 검사 대상이 아니다.
+
+        실측(2026-08-03): 2647건 중 130건이 전부 이 6종 — 각자 이미 닫힌 파서
+        (`l3/finite_probability.py`·`l3/verify_answer.py`의 comma-list 파서)로 검증되므로
+        등식 sympify 폐쇄성 검사를 적용하면 필연적으로 위반 오탐이 난다(코퍼스 결함 아님).
+        """
+        bank = tmp_path / "problem_bank_a"
+        bank.mkdir()
+        # 실제로 sympify 위반을 내는 형태(확률 미니 DSL·쉼표 숫자열) — exempt 안 됐다면
+        # gate_fail이 났을 조건들. answer_kind가 상위/verify 어느 쪽에 있어도 동작해야 한다.
+        rows = [
+            {
+                "slug": "p1",
+                "answer_kind": answer_kind,
+                "conditions": "space=dice(n=2,faces=6); event=sum==7",
+            },
+            {
+                "slug": "p2",
+                "verify": {"answer_kind": answer_kind, "conditions": "3,5,7,9"},
+            },
+        ]
+        (bank / "problems.jsonl").write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        result = qp._axis_equivalence_canonicalize(tmp_path)
+        assert result.status == "ok"
+        assert result.detail == {"total_conditions_checked": 0, "violations": 0}
+
+    def test_equation_answer_kind_violation_still_caught(self, tmp_path: Path) -> None:
+        """비exempt answer_kind(또는 무지정)는 등식 DSL 검사가 그대로 적용된다(회귀 방지 —
+        exempt 범위를 넓혀 진짜 결함까지 숨기지 않았는지 확인)."""
+        bank = tmp_path / "problem_bank_a"
+        bank.mkdir()
+        rows = [
+            {
+                "slug": "p1",
+                "verify": {
+                    "answer_kind": "real_root_count",
+                    "conditions": "largest_root(2, 8) == 8",
+                },
+            }
+        ]
+        (bank / "problems.jsonl").write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        result = qp._axis_equivalence_canonicalize(tmp_path)
+        assert result.status == "gate_fail"
+        assert result.detail == {"total_conditions_checked": 1, "violations": 1}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -135,13 +197,22 @@ def _write_atom_graph_fixture(
     concepts = [{"code": "atom.a"}, {"code": "atom.b"}]
     edges = [{"relation": "prerequisite", "from_code": "atom.a", "to_code": "atom.b"}]
     if with_cycle:
-        edges.append({"relation": "prerequisite", "from_code": "atom.b", "to_code": "atom.a"})
+        edges.append(
+            {"relation": "prerequisite", "from_code": "atom.b", "to_code": "atom.a"}
+        )
     if with_dangling:
-        edges.append({"relation": "prerequisite", "from_code": "atom.a", "to_code": "atom.missing"})
+        edges.append(
+            {
+                "relation": "prerequisite",
+                "from_code": "atom.a",
+                "to_code": "atom.missing",
+            }
+        )
     graph_dir = corpus_root / "atom_graph_v1"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.json").write_text(
-        json.dumps({"concepts": concepts, "edges": edges}, ensure_ascii=False), encoding="utf-8"
+        json.dumps({"concepts": concepts, "edges": edges}, ensure_ascii=False),
+        encoding="utf-8",
     )
 
 
@@ -190,12 +261,16 @@ class TestAxisMisconceptionCrosslinkDemotion:
             kebabs_total=64,
             kebabs_decidable=64,
         )
-        monkeypatch.setattr(qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, []))
+        monkeypatch.setattr(
+            qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, [])
+        )
         result = qp._axis_misconception_crosslink_demotion()
         assert result.status == "ok"
         assert result.detail["false_reject_count"] == 0
 
-    def test_gate_fail_on_positive_false_reject(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gate_fail_on_positive_false_reject(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         fake_report = CrosslinkDemotionReport(
             positive_total=10,
             positive_false_reject=1,
@@ -206,7 +281,9 @@ class TestAxisMisconceptionCrosslinkDemotion:
             kebabs_total=64,
             kebabs_decidable=64,
         )
-        monkeypatch.setattr(qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, []))
+        monkeypatch.setattr(
+            qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, [])
+        )
         result = qp._axis_misconception_crosslink_demotion()
         assert result.status == "gate_fail"
         assert result.detail["false_reject_count"] == 1
@@ -225,10 +302,15 @@ class TestAxisMisconceptionCrosslinkDemotion:
             kebabs_total=64,
             kebabs_decidable=64,
         )
-        monkeypatch.setattr(qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, []))
+        monkeypatch.setattr(
+            qp.crosslink_demotion_eval, "run", lambda **_kwargs: (fake_report, [])
+        )
         result = qp._axis_misconception_crosslink_demotion()
         assert result.status == "gate_fail"
-        assert result.detail["cross_lower_bound"] < qp.crosslink_demotion_eval._CROSS_REJECT_FLOOR
+        assert (
+            result.detail["cross_lower_bound"]
+            < qp.crosslink_demotion_eval._CROSS_REJECT_FLOOR
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -242,7 +324,9 @@ class TestAxisCoachProseLeak:
             defect_total=100, leaked=0, clean_total=100, false_blocked=0, by_cell={}
         )
         monkeypatch.setattr(qp.coach_prose_leak_eval, "run_machine", lambda _cases: [])
-        monkeypatch.setattr(qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report
+        )
         result = qp._axis_coach_prose_leak()
         assert result.status == "ok"
         assert result.detail["leak_upper_bound"] < qp._PROSE_MAX_LEAK_UPPER
@@ -252,7 +336,9 @@ class TestAxisCoachProseLeak:
             defect_total=100, leaked=100, clean_total=100, false_blocked=0, by_cell={}
         )
         monkeypatch.setattr(qp.coach_prose_leak_eval, "run_machine", lambda _cases: [])
-        monkeypatch.setattr(qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report
+        )
         result = qp._axis_coach_prose_leak()
         assert result.status == "gate_fail"
 
@@ -269,7 +355,9 @@ class TestAxisCoachProseLeak:
             defect_total=1, leaked=0, clean_total=1, false_blocked=0, by_cell={}
         )
         monkeypatch.setattr(qp.coach_prose_leak_eval, "run_machine", _fake_run_machine)
-        monkeypatch.setattr(qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.coach_prose_leak_eval, "summarize", lambda _outcomes: fake_report
+        )
         monkeypatch.setenv(qp._PROSE_FLAG_ENV, "false")  # 이전 값(canary) — 원복 검증용
 
         qp._axis_coach_prose_leak()
@@ -315,25 +403,39 @@ class TestAxisDefectInjectionDemotion:
         )
         monkeypatch.setattr(qp, "build_defect_seeded_set", lambda **_kwargs: [])
         monkeypatch.setattr(
-            qp.defect_detection_eval, "_run_machine", lambda _items, with_auditor=False: []
+            qp.defect_detection_eval,
+            "_run_machine",
+            lambda _items, with_auditor=False: [],
         )
-        monkeypatch.setattr(qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report
+        )
         result = qp._axis_defect_injection_demotion()
         assert result.status == "ok"
 
     def test_gate_fail_on_low_detection(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_report = DetectionReport(
-            per_class={}, defective_detected=50, defective_total=100, false_alarm=0, clean_total=100
+            per_class={},
+            defective_detected=50,
+            defective_total=100,
+            false_alarm=0,
+            clean_total=100,
         )
         monkeypatch.setattr(qp, "build_defect_seeded_set", lambda **_kwargs: [])
         monkeypatch.setattr(
-            qp.defect_detection_eval, "_run_machine", lambda _items, with_auditor=False: []
+            qp.defect_detection_eval,
+            "_run_machine",
+            lambda _items, with_auditor=False: [],
         )
-        monkeypatch.setattr(qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report
+        )
         result = qp._axis_defect_injection_demotion()
         assert result.status == "gate_fail"
 
-    def test_gate_fail_on_high_false_alarm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gate_fail_on_high_false_alarm(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         fake_report = DetectionReport(
             per_class={},
             defective_detected=100,
@@ -343,9 +445,13 @@ class TestAxisDefectInjectionDemotion:
         )
         monkeypatch.setattr(qp, "build_defect_seeded_set", lambda **_kwargs: [])
         monkeypatch.setattr(
-            qp.defect_detection_eval, "_run_machine", lambda _items, with_auditor=False: []
+            qp.defect_detection_eval,
+            "_run_machine",
+            lambda _items, with_auditor=False: [],
         )
-        monkeypatch.setattr(qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report)
+        monkeypatch.setattr(
+            qp.defect_detection_eval, "summarize", lambda _outcomes: fake_report
+        )
         result = qp._axis_defect_injection_demotion()
         assert result.status == "gate_fail"
 
@@ -388,7 +494,9 @@ class TestAggregateOverall:
 
     def test_no_snapshot_does_not_fail_overall(self) -> None:
         axes = {
-            "corpus_audit": qp.AxisResult(measured=True, status="no_snapshot", detail={}),
+            "corpus_audit": qp.AxisResult(
+                measured=True, status="no_snapshot", detail={}
+            ),
             "other": qp.AxisResult(measured=True, status="ok", detail={}),
         }
         overall = qp._aggregate_overall(axes)
@@ -406,7 +514,9 @@ class TestAggregateOverall:
 
     def test_error_fails_overall(self) -> None:
         axes = {
-            "a": qp.AxisResult(measured=False, status="error", detail={"error_type": "ValueError"}),
+            "a": qp.AxisResult(
+                measured=False, status="error", detail={"error_type": "ValueError"}
+            ),
             "b": qp.AxisResult(measured=True, status="ok", detail={}),
         }
         overall = qp._aggregate_overall(axes)
@@ -416,7 +526,9 @@ class TestAggregateOverall:
     def test_multiple_failing_axes_sorted(self) -> None:
         axes = {
             "z_axis": qp.AxisResult(measured=True, status="gate_fail", detail={}),
-            "a_axis": qp.AxisResult(measured=True, status="error", detail={"error_type": "X"}),
+            "a_axis": qp.AxisResult(
+                measured=True, status="error", detail={"error_type": "X"}
+            ),
         }
         overall = qp._aggregate_overall(axes)
         assert overall.passed is False
@@ -475,7 +587,9 @@ def test_build_report_assembles_axes_and_isolates_one_exception(
         "banned_words_pii",
         "performance",
     }
-    assert all(a["reason"] for a in report["not_measured_axes"])  # 전부 사유 명시(침묵 통과 금지)
+    assert all(
+        a["reason"] for a in report["not_measured_axes"]
+    )  # 전부 사유 명시(침묵 통과 금지)
 
 
 def test_build_report_all_ok_passes_overall(
@@ -509,7 +623,12 @@ def test_cli_main_runs_end_to_end_and_writes_valid_json(tmp_path: Path) -> None:
     rc = qp.main(["--json", str(json_path)])
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert set(payload.keys()) == {"corpus_root", "axes", "not_measured_axes", "overall"}
+    assert set(payload.keys()) == {
+        "corpus_root",
+        "axes",
+        "not_measured_axes",
+        "overall",
+    }
     assert set(payload["axes"].keys()) == {
         "corpus_audit",
         "equivalence_canonicalize",

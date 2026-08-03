@@ -563,6 +563,45 @@ defect_injection_demotion=ok(detection_lower=0.978) → `overall={"pass": false,
 **후속**: S3-28 판정 후 `continue-on-error` 제거. 미측정 4축(ui_golden·
 statistical_outlier·banned_words_pii·performance)은 향후 별도 태스크.
 
+### 2026-08-03 (판정·S3-28): **condition_dsl_violation 130/2647건 위반 = canonicalize 적용범위 오탐(코퍼스 결함 아님) — answer_kind 6종 exempt 필터 + qa_pipeline 강제 게이트 전환** (claude 판정·구현, Kiki "/drive")
+
+**배경**: ARCH-21(2026-08-02)이 처음 코퍼스 전수 실행에서 `equivalence_canonicalize` 축이
+130/2647건 위반을 내 `S3-28`로 등재하고 (a)실 콘텐츠 결함 vs (b)canonicalize 스코프 오탐
+판정을 미뤘다(임의 판단 금지 원칙 준수).
+
+**판정 근거(실측 — 코드·데이터 양쪽 확인, 표본 아닌 전수)**:
+- 위반 130건 전부가 정확히 6개 `answer_kind`(`finite_probability`·`finite_count`·
+  `mean_equals_median`·`events_independent`·`conditional_equal`·`dot_product_scalar`)에만
+  분포(전수 스크립트로 확인 — 나머지 2517건은 등식 DSL 그대로 통과, 표본 편향 없음).
+- 이 6종은 이미 **각자 독립된 닫힌 DSL**을 쓴다: `finite_probability`/`finite_count`는
+  `l3/finite_probability.py`의 정규식 문법(`space=...; event=...` — sympify 대상이 아니라
+  전수 열거로 검증), 나머지 넷은 `l3/verify_answer.py`의 쉼표구분 숫자열
+  (`verify_mean_equals_median` 등이 `_parse_number_list`로 직접 파싱). `condition_dsl_violation`
+  (`l3/equivalent/canonicalize.py`)은 *등식/부등식* sympify 폐쇄성만 검증하도록 설계된
+  함수라(원 설계: `llm_generator.py`의 대수 조건 생성 축), 쉼표숫자열을 sympify하면
+  `sympy.Tuple`(비-`Expr`)이 돼 필연적으로 위반 판정되고, 확률 미니DSL은 애초에 sympify
+  자체가 실패한다 — **재현 가능한 구조적 오탐**이지 우연한 데이터 결함이 아니다.
+  → 판정: **(b) canonicalize 오탐**.
+
+**조치**(새 판정 로직 0 — 적용 대상 필터만): `qa_pipeline._NON_EQUATION_DSL_ANSWER_KINDS`
+(6종 frozenset)를 신설해 `_axis_equivalence_canonicalize`가 이 answer_kind는 검사 대상에서
+제외한다(`condition_dsl_violation` 함수 자체는 무변경 — 원 설계 범위 안에서는 여전히
+유효). 조치 후 전수 재실행: `equivalence_canonicalize` violations 130→**0**
+(checked 2647→2517, 정확히 제외분만큼 감소 — 판정과 수치 정합). 회귀 방지 테스트 7건
+추가(`tests/backend/harness/test_qa_pipeline.py`) — exempt 6종 각각이 스킵됨을 확인하는
+파라미터화 테스트 + **비exempt answer_kind(예: `real_root_count`)의 진짜 위반은 그대로
+잡힘**을 확인하는 회귀 테스트(스코프를 넓혀 진짜 결함까지 숨기지 않았는지 변별력 실측).
+
+**게이트 전환**: 필터 적용 후 `qa_pipeline` 전 축을 코퍼스 전수 재실행 →
+`overall={"pass": true, "failing_axes": []}`(7축 전부 ok — 실측, 다른 축에 숨은 실패
+없음을 확인한 뒤 전환). `ci.yml`의 `continue-on-error: true`를 제거해 강제 게이트로
+전환(ARCH-21이 남긴 "S3-28 해소 시 제거" 주석 이행).
+
+**검증**: 로컬 venv(`pip install -e ".[dev]"` + `pip install -e ../data-pipeline`)에서
+`tests/backend/api/`·`tests/backend/harness/test_qa_pipeline.py` 전건 green(40건, 신규
+7건 포함)·ruff·black clean. 전체 스위트는 이 세션 범위 밖(건드린 디렉터리만 확인 — 무증상
+전체 스위트 주장 금지 원칙).
+
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 **배경**: `account_security_gap_review.md` D5 — 저장 축은 fail-closed 게이트로 닫혀 있는데
