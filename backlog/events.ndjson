@@ -1280,3 +1280,9 @@
 {"ts": "2026-08-02T07:08:06", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:21", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-02T07:09:37", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-08-03T08:04:48", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-01-unmerged-completion-recovery"}
+{"ts": "2026-08-03T08:05:33", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-02-declaration-wiring-reconciliation"}
+{"ts": "2026-08-03T08:06:29", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-03-exposure-path-gates"}
+{"ts": "2026-08-03T08:07:06", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-04-l6-mode-reach-observability"}
+{"ts": "2026-08-03T08:07:46", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-05-item-content-safety-scan"}
+{"ts": "2026-08-03T08:10:24", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "HARN-14-gates-add-cli-path"}
