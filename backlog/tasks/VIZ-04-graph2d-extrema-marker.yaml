@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -15,7 +15,8 @@ acceptance:
   - "① GraphingCalculator.jsx에 극값(임계점) 마커 표시 기능을 신규 구현한다 — numDeriv를 이용해 도메인 내 도함수 부호 변화 지점을 찾아 접선과 유사한 스타일로 점+라벨을 그린다(기존 drawTangent 패턴 참고, 새 라이브러리 도입 금지)."
   - "② Graph2dSpec에 극값 표시 필드(예: show_extrema: bool) 추가 — VIZ-03과 동일하게 주 함수 행에만 적용."
   - "③ 웹 어댑터(graph2dSpec.js)가 새 필드를 기존 renderer 상태(예: showExtrema)로 변환. 변별력 실측(신규 필드 미소비 상태에서 테스트 red 확인 → 배선 후 green)."
-artifacts: []
+artifacts:
+  - 637ead29
 paths:
   - src/web/graphing-calculator/src/GraphingCalculator.jsx
   - src/web/graphing-calculator/src/lib/graph2dSpec.js
