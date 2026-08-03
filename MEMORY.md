@@ -394,6 +394,65 @@ validate green 155건): `PATH-01-learning-path-entrypoint`(S3·pri 2 — 무인�
 적응 축은 전부 기존 좌석 보유). SM-2/FSRS 고정 주기 · 학습량·주간/일일 계획 · 추천 영상(EBS 저작권) ·
 목표 달성 가능성 예측 · 자신감 입력 · 경로 스냅샷 테이블 · `assessment` writer 소생 · 복습 푸시 ·
 협업 필터링형 경로 **미채택**.
+### 2026-08-03 (설계·교육과정): **교육과정 관리 모듈 갭 점검·설계(D1~D3+페이퍼) + 태스크 3건 등재(`CUR-03`은 owner=kiki) — 개정판 표기 3어휘 분열(D1)·학습목표 커버리지 0.1%(D2·"완비된 소비 경로+미도달 공급원" 7회차)·성취수준(A~E)/평가기준(상/중/하) 0건(D3) — 외부 EOS 틀 0단계 5모듈 대조** (claude 설계, Kiki 요청)
+
+**배경**: Kiki가 업로드한 외부 EOS 틀 문서(『0단계: 교육과정 관리』5모듈 — ①교육과정DB
+②단원구조 ③성취기준 ④학습목표(Objective) ⑤선수학습그래프, WhyMath 전용 아닌 일반 틀)를
+코드베이스와 대조. 시리즈 **11번째** 자매편(`ai_recommendation_module_gap_review.md` 등 10편
+계보 승계).
+
+**착수 가설 절반만 맞았다**: "교육과정 관리가 빈약하다"는 가설은 **반증** — 성취기준 축은
+오히려 초과 충족(895건, `norm_id` PK로 개정 간 코드 충돌 153건 해소). 진짜 문제는 관리 축마다
+성숙도가 극단적으로 다르다는 것(성취기준 100% vs 학습목표 0.1%). 아키텍처 차이의 핵심은 방향
+전도다 — 외부 틀은 "교육과정이 원본, 개념이 하류"이지만 WhyMath는 정반대로 "개념이 영속 원본,
+교육과정은 Overlay"(원칙5, `Concept`에서 `subject`·`curriculum_version`·`semester_introduced`
+의도적 제거 후 `CurriculumEntry` 셀로 이관).
+
+**진짜 갭 3건 설계**:
+1. **D1 교육과정 개정판 표기 3어휘 분열 — 관측 먼저**(최우선). `"2022 개정"`(achievement_standard·
+   curriculum_entry)/`"2022"`(unit_spec.curriculum_rev)/`"2022_REVISION"`(schema/enums.py
+   Curriculum) 3개 어휘 공간이 자유 문자열로 분열. `gating.py`의 `normalize_enum_value`는
+   국소 방어일 뿐 축 간 정합은 관측된 적 없음. 스키마 통합은 하지 않고(발산 규모 모르는 채
+   통합 방식을 정할 수 없다) 발산 건수 리포트부터 낸다.
+2. **D2 학습목표(Objective) 커버리지 0.1% — 7회차**. `LearningObjective`+`UnitDSL`+컴파일러+
+   런타임 API(`/v1/me/objectives/*`)까지 완비됐는데 실데이터는 895개 성취기준 중 **1개**
+   (소단원 `10공수1-이차함수-최대최소`, 목표 4개)뿐. `_provenance.json`이 스스로 "E2E 확인용
+   단일 소단원"이라 밝혀, 앞선 6회차(OCR·시각화·추천 등)와 달리 **고장이 아니라 파일럿 이후
+   확장이 없었던 정지 상태**. ARCH-18 패턴 재사용해 커버리지 리포트만 먼저 낸다.
+3. **D3 성취수준(A~E)·평가기준(상/중/하) 데이터 반입 — owner=kiki**. 저장소 전체 0건인데
+   상류 도구(`curriculum-node-builder` 스킬)는 이미 KICE 보고서 PDF→노드 엑셀 변환 가능.
+   NCIC 403 차단 선례와 동일하게 데이터 반입은 사람 소유 액션. 스키마 확장은 반입 후 별도
+   태스크로 분리(데이터가 스키마보다 먼저).
+
+**페이퍼 갭**: `PREREQUISITE` 외 5종 관계 타입(`COMPOSED_OF`·`ANALOGOUS_TO`·`EXTENDS`·
+`CONTRASTS`·`TRIGGERS_DISTRACTOR`)은 enum 선언만 있고 적재 0 — 소스 신호 없이 채우면 교수학
+날조이므로 어휘만 준비된 상태로 유지(발화조건만 §5-④).
+
+**의도적 미채택 6건**: ①학기 축 재도입(영구 — Overlay 원칙) ②`related`/`similar` traversal
+관계 채택(영구 — CLAUDE.md 명문 금지) ③`contains` 별도 엣지(영구 — parent_code 컬럼과 중복)
+④`equivalent` 별도 엣지(영구 — SymPy canonicalize가 유일 정본) ⑤다국가 풀스케일(조건부 유보,
+기존 Phase 1 축소 결정 승계) ⑥교육과정 편집 GUI(조건부 유보, CLI populate가 정본 경로).
+
+**정본 stale 6곳 정정**: `docs/data/concept_graph.md:5`("상태: 미구축" → 437/581 적재
+완료·원자 백본 2,683/2,210) · `01_data_foundation.md`·`ncic.md`(성취기준 "150~180개" →
+실측 895건) · `00_overview.md`·`01_data_foundation.md`(개념 그래프 저장소 "Neo4j" → PG 단일
+평면·런타임 연결 안 함 확정) · `curriculum_matrix.md`(`CurriculumEntry` "30필드·PK 2-튜플·
+미구현" → 실측 31필드·`entry_id` 단일PK+3-튜플·구현 완료) · `prd_v1.2.md`("현행=2015 개정,
+2022는 2027~28 분기" → `curriculum_2022_revision.md`가 이미 2022를 현 백본으로 확정, 각주로
+"수능 대개편"과 "교육과정 데이터 반영"이 별개 축임을 정정) · `units_v1` 데이터 카드 신설
+(`docs/data/units_v1.md`, 카드 부재 공백 해소).
+
+**산출**: `docs/architecture/curriculum_module_gap_review.md` 신설(§0 전제 2종·§1 5모듈 전수
+대조·§2 의도적 미채택 6건·§3 설계 D1~D3+페이퍼·§4 정직한 공백 7종·§5 유보 발화조건 6건·§6
+반복 실수 7회차·§정정 6곳·부록 실측 근거) + `docs/data/units_v1.md` 신설 + backlog 3건 CLI
+등재(`CUR-01-curriculum-revision-vocabulary-consistency`·`CUR-02-objective-coverage-observability`·
+`CUR-03-achievement-level-data-intake`, `CUR-` 신규 축, validate green 156건).
+
+**NOT**: 코드 로직 변경 0(설계+등재+정본 정정만). 3어휘 통합 마이그레이션·학습목표 자동 생성·
+성취수준 스키마 확장은 만들지 않았다(전부 발화조건만 기록). `S2-07`·`ARCH-13`은 승계·재해석
+금지(원자 축 이관·이중 진실 원천 해소는 완결 상태 그대로 인용만).
+
+정본: `docs/architecture/curriculum_module_gap_review.md`.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 

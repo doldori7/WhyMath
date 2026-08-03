@@ -1282,3 +1282,6 @@
 {"ts": "2026-08-02T07:09:37", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/qa_pipeline.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/qa_pipeline.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-03T08:03:21", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-01-learning-path-entrypoint"}
 {"ts": "2026-08-03T08:04:08", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-02-learning-path-corpus-ingestion"}
+{"ts": "2026-08-03T06:48:37", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-01-curriculum-revision-vocabulary-consistency"}
+{"ts": "2026-08-03T06:48:59", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-02-objective-coverage-observability"}
+{"ts": "2026-08-03T06:49:13", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-03-achievement-level-data-intake"}
