@@ -106,10 +106,14 @@ async def _cleanup(uid: uuid.UUID) -> None:
 
 
 def _build_user(user_id: uuid.UUID) -> UserProfile:
+    # email_hash는 user_id로부터 유도해 유니크 제약(uq_user_profile_email_hash)을 만족시킨다 —
+    # 고정 리터럴("HASHED_EMAIL")은 한 테스트에서 사용자 2명 이상을 넣는 순간(SEC-10 본인
+    # 스코핑 테스트처럼 owner/other 2명이 필요한 경우) 두 번째 insert가 UniqueViolation으로
+    # 죽는다. 어떤 테스트도 이 값의 리터럴 내용에 의존하지 않는다(grep 확인).
     schema = UserProfileSchema(
         user_id=user_id,
         persona_primary=Persona.A_일반고고3,
-        email_hash="HASHED_EMAIL",
+        email_hash=f"HASHED_EMAIL_{user_id}",
         is_minor=False,
     )
     return UserProfile.from_schema(schema)
