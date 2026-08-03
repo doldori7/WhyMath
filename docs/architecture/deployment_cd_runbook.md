@@ -202,6 +202,40 @@ docker compose --env-file deploy\staging.env -f docker-compose.prod.yml up -d
 - **다운타임(정직 기술)**: `up -d`가 컨테이너를 교체하는 수 초 동안 API가 끊긴다. 무중단 배포(블루/그린·롤링)는 미도입이다(§8).
 - **직전 태그 기록**: 갱신 전에 `docker inspect -f '{{.Config.Image}}' whymath-staging-app`을 실행해 **현재 태그를 메모**해 둔다 — 롤백 좌표다.
 
+## §5b. 보존 파기 스케줄(retention-purge) 확인 — SEC-12
+
+`privacy/retention_purge_cli.py`(증거+PII 시계열 보존기한 경과분을 단일 TX로 파기)는 §3의
+최초 배포·§5의 갱신 배포에서 **자동으로 같이 뜬다** — `docker-compose.prod.yml`의
+`retention-purge` 서비스가 `app`과 동일 이미지를 재사용해 24시간마다 CLI를 1회 호출한다(신규
+이미지·신규 로직 0). 별도 기동 스텝은 없다. 이 절은 **그 서비스가 실제로 파기를 집행하고
+있는지 확인**하는 방법이다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# 자가검증 1: 컨테이너가 떠 있다 - "Up" 상태여야 함
+docker ps --filter "name=whymath-staging-retention-purge" --format "{{.Status}}"
+
+# 자가검증 2: 최근 실행 로그 - 성공은 {"as_of":...,"purged":{...},"total":N} JSON 한 줄.
+#   크래시면 이 JSON이 아니라 Python 트레이스백이 보인다(형태로 구분 — 이중 회계 금기).
+docker logs --tail 20 whymath-staging-retention-purge
+
+# 자가검증 3(선택 — 스케줄과 무관하게 즉시 1회 확인하고 싶을 때만): 컨테이너 안에서 CLI를
+#   1회 직접 실행(스케줄 루프는 건드리지 않음 - exec는 별도 프로세스).
+docker exec whymath-staging-retention-purge python -m whymath_backend.privacy.retention_purge_cli
+```
+
+- **성공**: 자가검증 1이 "Up"(재시작 반복 중이 아님) + 자가검증 2에서 `{"as_of": ...}` JSON
+  형태(0건 파기도 정상 — `"total": 0`은 "파기 대상이 없었다"이지 "실행이 안 됐다"가 아니다).
+- **실패 시 신호**: 컨테이너 상태가 "Restarting"을 반복하면 CLI가 매 실행마다 크래시하고
+  있다는 뜻(`WHYMATH_DATABASE_URL` 도달성부터 확인). 로그에 JSON 대신 트레이스백만 쌓이면
+  같은 신호다.
+- **한계(정직 기술)**: 스케줄은 *24시간 고정 간격*이며 특정 시각(예: 매일 새벽 3시) 실행을
+  보장하지 않는다 — 컨테이너 기동 시각을 기준으로 24시간마다 돈다. 특정 시각 실행이 필요해지면
+  compose 셸 루프를 host cron/Celery beat로 교체(§8 미프로비저닝 목록에 없음 — 현재는 불요
+  판단, 필요해지면 재검토).
+
 ## §6. 롤백
 
 ### 6-1. 1순위 — 이미지만 되돌린다 (스키마는 그대로)
@@ -365,7 +399,8 @@ GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·
 
 | 항목 | 값 |
 |---|---|
-| 스택 | `whymath-<env>-app`(uvicorn) + `-db`(pgvector/pg16) + `-redis`(redis:7-alpine) |
+| 스택 | `whymath-<env>-app`(uvicorn) + `-db`(pgvector/pg16) + `-redis`(redis:7-alpine) + `-retention-purge`(보존 파기 스케줄·SEC-12) |
+| 보존 파기 | `retention-purge`가 app 이미지를 재사용해 24h마다 `retention_purge_cli` 호출(§5b) |
 | 영속 볼륨 | `whymath-<env>-db-data`, `whymath-<env>-redis-data` |
 | 공개 포트 | app만 `${APP_PORT}`(기본 127.0.0.1 바인딩). db·redis는 **미공개**(compose 네트워크 내부) |
 | 환경 분리 | 단일 compose + `deploy/<env>.env` + `DEPLOY_ENV` 이름 격리 |

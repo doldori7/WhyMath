@@ -68,6 +68,8 @@
 
 ## §4. 정보구조(IA) — 좌측 내비 섹션
 
+> **이 트리는 손으로 유지보수하는 초기 시드 콘텐츠다.** 구현 단계에서는 [04 아키텍처](04_admin_console_architecture.md) §2 원칙7 모듈 레지스트리에서 좌측 내비가 **자동 파생**된다 — 새 관리 기능은 이 문서를 손으로 늘리는 대신 레지스트리 엔트리 하나만 추가하면 (권한이 되는 한) 자동으로 메뉴에 나타난다("모든 가능 메뉴 자동 등록", 2026-08-02 Kiki 요청).
+
 ```
 콘텐츠
   ├─ 개념·원자 (concept / atom)
@@ -110,6 +112,8 @@ Kiki의 ChatGPT 설계안([C]·[D])은 관리 UI를 *단순 CMS가 아니라 Edu
 ### 22모듈 + 5 EOS Studio → WhyMath 자산 매핑
 
 원본 [D]의 22개 모듈과 5개 EOS Studio를 실재 코드/데이터에 매핑한다. **대부분 데이터·엔진은 🟢 있고 UI만 🔴 없다** — 콘솔은 이들을 래핑한다.
+
+> 이 표의 각 행은 [04 아키텍처](04_admin_console_architecture.md) §2 원칙7 `_MODULE_REGISTRY`의 **엔트리 후보**다 — 레지스트리 구현 후에는 이 표 자체를 코드에서 자동 생성하는 것을 지향(문서-코드 드리프트 차단).
 
 | 원본 모듈/Studio | WhyMath 자산 | 상태 |
 |---|---|---|
@@ -169,8 +173,8 @@ Kiki의 ChatGPT 설계안([C]·[D])은 관리 UI를 *단순 CMS가 아니라 Edu
 | **Phase B** | 콘텐츠 검수 승인·문항 CRUD (쓰기) | `api/concepts.py`·`api/problems.py`(+**RBAC 부착**)·검수 상태 전이 |
 | **Phase C** | 교사 웹 B2B 합류 | `07` 교사 대시보드·같은 스택 공유 |
 
-> **선결 과제 = RBAC**. 현재 `UserProfile`에 role 필드가 없고 콘텐츠 CRUD가 무인증이다. 어떤 쓰기 기능도 RBAC 없이는 위험하다. 아키텍처·선결 구현은 [04 문서](04_admin_console_architecture.md).
+> **RBAC v0(2값: `STUDENT`·`CONTENT_ADMIN`)은 착지 완료**(`SEC-07`, 2026-07-30) — 콘텐츠 CRUD는 더 이상 무인증이 아니다. 단 **관리 콘솔 자체(Admin BFF·모듈 레지스트리 권한 필터)는 아직 이 role을 소비하지 않는다** — Phase B 전 남은 선결 과제는 Admin BFF 신설 + §4/§5의 모듈 레지스트리(04 §2 원칙7)뿐이다. 아키텍처·현행화는 [04 문서](04_admin_console_architecture.md).
 
 ---
 
-**버전**: 1.1 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [04 아키텍처](04_admin_console_architecture.md) · [05_source_reconciliation](05_source_reconciliation.md) · `../architecture/07_community.md` · `../standards/superhuman_verification_standard.md`
+**버전**: 1.2 | **작성**: 2026-07-24 | **최종 수정**: 2026-08-02(§4/§5 모듈 레지스트리 자동 파생 연결·§7 RBAC v0 현행화) | **교차링크**: [00_index](00_index.md) · [04 아키텍처](04_admin_console_architecture.md) · [05_source_reconciliation](05_source_reconciliation.md) · `../architecture/07_community.md` · `../standards/superhuman_verification_standard.md`
