@@ -53,6 +53,15 @@ def test_l4_theta_noise_guard_thresholds(monkeypatch: pytest.MonkeyPatch) -> Non
     assert s2.l4_theta_max_se == 0.5
 
 
+def test_min_app_version_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OPS-17: 기본 0.0.0(게이트 사실상 비활성) — WHYMATH_MIN_APP_VERSION으로 오버라이드."""
+    s = Settings()
+    assert s.min_app_version == "0.0.0"
+    monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "1.3.0")
+    s2 = Settings()
+    assert s2.min_app_version == "1.3.0"
+
+
 def test_l4_theta_thresholds_validated() -> None:
     """SE 상한 양수(gt=0)·최소 응답수 음수 불가(ge=0)."""
     with pytest.raises(ValidationError):

@@ -622,6 +622,159 @@ class TestJobsEndpoint:
         assert body["error"] is not None
 
 
+class TestParseAppVersion:
+    """`_parse_app_version` 순수 함수 단위테스트(OPS-17) — 외부 semver 라이브러리 없이 정수
+    3튜플 비교로 버전을 가른다."""
+
+    def test_parses_well_formed_version(self) -> None:
+        from whymath_backend.app import _parse_app_version
+
+        assert _parse_app_version("1.2.3") == (1, 2, 3)
+        assert _parse_app_version(" 0.0.0 ") == (0, 0, 0)
+
+    def test_rejects_malformed_versions(self) -> None:
+        from whymath_backend.app import _parse_app_version
+
+        assert _parse_app_version("1.2") is None  # 부분 누락
+        assert _parse_app_version("1.2.3.4") is None  # 빌드번호 등 초과 부분
+        assert _parse_app_version("1.2.x") is None  # 비정수 부분
+        assert _parse_app_version("") is None  # 빈 문자열
+
+    def test_tuple_ordering_is_numeric_not_lexicographic(self) -> None:
+        """정수 튜플 비교라 "1.10.0"이 "1.2.0"보다 크다(문자열 비교였다면 반대)."""
+        from whymath_backend.app import _parse_app_version
+
+        low, high = _parse_app_version("0.9.9"), _parse_app_version("1.0.0")
+        assert low is not None and high is not None
+        assert low < high
+
+        a, b = _parse_app_version("1.2.0"), _parse_app_version("1.10.0")
+        assert a is not None and b is not None
+        assert a < b
+
+
+class TestAppVersionGate:
+    """OPS-17 — X-App-Version 헤더 최소버전 게이트(app.py _service_metrics_middleware 좌석).
+
+    GET /v1/jobs/{id}를 표적 엔드포인트로 쓴다 — 인증 불요(`CurrentUser` 의존 없음)·ops
+    프로브 경로가 아니라(게이트 대상) 별도 인증 오버라이드 없이 검증할 수 있다.
+    """
+
+    def _make_app(self, queue: Any) -> Any:
+        return create_app(
+            provider=StubProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=queue,
+        )
+
+    def test_missing_header_passes_through_and_counts_unknown(self) -> None:
+        """헤더 없음(배포 이전 구버전 클라) → 차단하지 않고(200) '미상' 카운터만 증가."""
+        from whymath_backend.app import _VERSION_UNKNOWN_COUNT_KEY
+
+        app = self._make_app(StubQueue(statuses={"j1": JobStatus(job_id="j1", state="pending")}))
+        client = TestClient(app)
+        before = getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY)
+        resp = client.get("/v1/jobs/j1")
+        assert resp.status_code == 200
+        assert getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY) == before + 1
+
+    def test_malformed_header_treated_as_unknown_not_blocked(self) -> None:
+        """파싱 불가한 버전 문자열 → 침묵 실패 없이 '미상' 취급(차단하지 않음)."""
+        from whymath_backend.app import _VERSION_UNKNOWN_COUNT_KEY
+
+        app = self._make_app(StubQueue(statuses={"j2": JobStatus(job_id="j2", state="pending")}))
+        client = TestClient(app)
+        before = getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY)
+        resp = client.get("/v1/jobs/j2", headers={"X-App-Version": "not-a-version"})
+        assert resp.status_code == 200
+        assert getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY) == before + 1
+
+    def test_default_min_version_passes_any_well_formed_version(self) -> None:
+        """기본 min_app_version=0.0.0 → 어떤 X.Y.Z 헤더든 통과(게이트 사실상 비활성)."""
+        app = self._make_app(StubQueue(statuses={"j3": JobStatus(job_id="j3", state="pending")}))
+        client = TestClient(app)
+        resp = client.get("/v1/jobs/j3", headers={"X-App-Version": "0.0.1"})
+        assert resp.status_code == 200
+
+    def test_below_min_version_blocked_with_426(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """최소버전 상향 → 미달 클라는 426(401/404/422와 다른 전용 사유코드)."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "1.0.0")
+        get_settings.cache_clear()
+        try:
+            app = self._make_app(
+                StubQueue(statuses={"j4": JobStatus(job_id="j4", state="pending")})
+            )
+            client = TestClient(app)
+            resp = client.get("/v1/jobs/j4", headers={"X-App-Version": "0.9.9"})
+            assert resp.status_code == 426
+            assert "업데이트" in resp.json()["detail"]
+        finally:
+            get_settings.cache_clear()
+
+    def test_at_or_above_min_version_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """최소버전과 같거나 위인 클라는 통과(경계값 정합)."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "1.0.0")
+        get_settings.cache_clear()
+        try:
+            app = self._make_app(
+                StubQueue(statuses={"j5": JobStatus(job_id="j5", state="pending")})
+            )
+            client = TestClient(app)
+            resp_eq = client.get("/v1/jobs/j5", headers={"X-App-Version": "1.0.0"})
+            assert resp_eq.status_code == 200
+            resp_above = client.get("/v1/jobs/j5", headers={"X-App-Version": "1.2.0"})
+            assert resp_above.status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+    def test_bidirectional_threshold_flip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """변별력(acceptance ④) — 최소버전 상향→전용 문구(426), 하향→같은 클라 버전이 다시
+        정상 복귀(200). 양방향 모두 실제로 *다른* 응답을 낸다."""
+        app = self._make_app(StubQueue(statuses={"j6": JobStatus(job_id="j6", state="pending")}))
+        client = TestClient(app)
+        headers = {"X-App-Version": "1.0.0"}
+
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "2.0.0")
+        get_settings.cache_clear()
+        blocked = client.get("/v1/jobs/j6", headers=headers)
+        assert blocked.status_code == 426
+
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "0.5.0")
+        get_settings.cache_clear()
+        restored = client.get("/v1/jobs/j6", headers=headers)
+        assert restored.status_code == 200
+
+        get_settings.cache_clear()
+
+    def test_unparseable_min_app_version_fails_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """min_app_version 자체가 오구성(파싱 불가)이어도 전 클라를 막지 않는다(fail-open —
+        서버 설정 오류로 전 클라를 차단하는 것이 더 나쁜 실패 모드)."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "not-a-version")
+        get_settings.cache_clear()
+        try:
+            app = self._make_app(
+                StubQueue(statuses={"j7": JobStatus(job_id="j7", state="pending")})
+            )
+            client = TestClient(app)
+            resp = client.get("/v1/jobs/j7", headers={"X-App-Version": "0.0.1"})
+            assert resp.status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+    def test_ops_probe_paths_exempt_from_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """/health 등 ops 프로브 경로는 헤더 유무·최소버전 설정과 무관하게 게이트 대상이 아니다."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "99.0.0")
+        get_settings.cache_clear()
+        try:
+            app = self._make_app(StubQueue())
+            client = TestClient(app)
+            resp = client.get("/health")
+            assert resp.status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+
 def test_create_app_defaults_are_real_implementations() -> None:
     """기본 팩토리(주입 없음)는 CompositeProvider(Ollama+Anthropic, S5)
     +RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.
