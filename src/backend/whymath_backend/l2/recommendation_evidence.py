@@ -1,0 +1,128 @@
+"""L2 추천 폐루프 회계 — `/me/next-problem`이 반환한 추천을 `evidence_event`에 기록 (REC-03).
+
+────────────────────────────────────────────────────────────────────────────
+왜 필요한가 — 처치 기록 없이는 추천 효과를 잴 수 없다
+────────────────────────────────────────────────────────────────────────────
+`ai_recommendation_module_gap_review.md` §3 D3 실측: `/v1/me/next-problem`이 IRT CAT으로
+문항을 추천하지만, 그 추천이 *학생에게 실제로 나갔다*는 사실을 잇는 기록이 어디에도 없다.
+`AttemptSubmitRequest`에 추천 출처 필드가 0개이고 `attempt_event`의 11종 이벤트 타입에도
+추천 관련이 없다. 그래서 추천 수용률·추천 문항 정답률·약점 감소 효과를 잴 방법이 없고,
+`l4/pedagogy/adaptive/policy.py`의 bandit은 보상 신호 부재로 영구 미승격 상태다.
+
+**가짜 처치 금지**(`l2/pedagogy_evidence.py` 계약 승계): 이 좌석은 "학생에게 실제로 반환된
+추천"만 기록한다. 후보 조회만 하고 `problem_id=null`로 끝난 요청(추천 실패)은 처치가 아니다
+— 호출자(`api/me.py`)는 `problem_id`가 확정된 뒤에만 이 함수를 부른다.
+
+────────────────────────────────────────────────────────────────────────────
+좌석 재사용 — `evidence_event`를 신규 테이블 0으로 그대로 쓴다
+────────────────────────────────────────────────────────────────────────────
+PED-03(`l2/pedagogy_evidence.py`)이 이미 세운 `evidence_event` 좌석(session_id 축·user_id
+없음·비민감 meta·가짜 처치 금지)을 그대로 재사용한다. 다만 이 테이블의 `objective_id`·
+`k_type`은 원래 *학습목표(pedagogy pack)* 축이라 IRT 문항 추천에는 자연스러운 값이 없다 —
+둘 다 NOT NULL 스키마 제약이라 placeholder가 필요하다. **이 placeholder가 PED-03의 교수법
+효과 집계를 오염시키지 않는 근거**: `l4/pedagogy/adaptive/effectiveness.py:196`이
+`EvidenceEvent.event_type.in_([EVENT_TYPE_TREATMENT, EVENT_TYPE_OUTCOME])`로 그 두 문자열만
+걸러 읽는다(실측 확인) — `EVENT_TYPE_RECOMMENDATION_TREATMENT`는 그 필터에 애초에 걸리지
+않는다. 즉 event_type 축이 두 도메인을 완전히 분리한다.
+
+`session_id`도 같은 이유로 placeholder다 — 매 호출마다 `uuid.uuid4()`로 새로 발급한다.
+`/me/next-problem`에는 아직 결합 가능한 실 학습 세션 개념이 없다(`learning_session` writer
+0·`AttemptSubmitRequest.session_id`를 클라가 보내지 않음 — `REC-01` 실측). 결과 결합(처치→
+정답 여부 조인)은 실 session_id가 배선된 뒤(S3-01 파일럿 이후)의 후속 범위이며, 이 좌석은
+지금은 "이 추천이 실제로 나갔다"는 처치 존재 자체만 관측한다(acceptance④ 범위 밖 동결).
+
+B1(미성년 원문 발화 평문 저장 금지): `meta`에는 problem_id·theta·pool_size·applied_weights·
+mode·gate_reason 등 비민감 메타만 넣는다. 이 모듈의 함수 시그니처에는 학생 원문·풀이·user_id
+슬롯이 아예 없다(구조적 차단 — 나중에 실수로 채울 여지 자체가 없다).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from whymath_backend.db.models.evidence_event import EvidenceEvent
+from whymath_backend.schema.enums import KnowledgeType
+
+EVENT_TYPE_RECOMMENDATION_TREATMENT: str = "recommendation_render"
+"""처치 — `/me/next-problem`이 학생에게 *실제로 반환한* 추천 문항 1건."""
+
+# `meta` JSONB 키 — 비민감 메타만(B1). 집계가 이 키로 되읽을 수 있게 상수로 동결한다.
+META_KEY_PROBLEM_ID: str = "problem_id"
+META_KEY_THETA: str = "theta"
+META_KEY_POOL_SIZE: str = "pool_size"
+META_KEY_APPLIED_WEIGHTS: str = "applied_weights"
+META_KEY_MODE: str = "mode"
+META_KEY_GATE_REASON: str = "gate_reason"
+
+# objective_id·k_type NOT NULL 제약을 채우는 네임스페이스 격리 placeholder(모듈 docstring
+# "좌석 재사용" 참조) — event_type 축으로 PED-03 집계와 완전히 분리되므로 실제 학습목표·
+# 지식유형처럼 읽히거나 조인될 위험이 없다.
+_OBJECTIVE_ID_PLACEHOLDER: str = "recommendation:next_problem"
+_K_TYPE_PLACEHOLDER: KnowledgeType = KnowledgeType.PROCEDURE
+
+
+def _now() -> datetime:
+    """기록 시각(UTC aware) — 파티션 키 `time`. 테스트가 패치할 수 있게 함수로 뺀다."""
+    return datetime.now(UTC)
+
+
+async def record_recommendation_treatment(
+    session: AsyncSession,
+    *,
+    problem_id: uuid.UUID,
+    theta: float,
+    pool_size: int,
+    applied_weights: bool,
+    mode: str | None = None,
+    gate_reason: str | None = None,
+    occurred_at: datetime | None = None,
+) -> EvidenceEvent:
+    """`/me/next-problem`이 학생에게 실제로 반환한 추천 1건을 stage한다(commit 0).
+
+    `session.add`만 하고 commit하지 않는다(`pedagogy_evidence.py` 관례 — 커밋 경계는
+    호출자 책임). 호출자는 `problem_id`가 null이 아닐 때만(추천이 실제로 나갔을 때만)
+    이 함수를 불러야 한다 — 가짜 처치 금지.
+
+    `pool_size`: 선택 시점의 후보 풀 크기(θ 근방 SQL 선별 결과 건수). `applied_weights`:
+    `prioritize_weak_concepts` 가중이 실제로 적용됐는지(약점 개념 가중 쿼리가 돌았는지).
+    `mode`: "suneung" 또는 None(기본 CAT). `gate_reason`: 이 추천이 어떤 게이트 사유로
+    조정됐는지(있으면) — 현재 호출부는 채우지 않지만 향후 L6 게이팅 사유 노출용으로 열어둔다.
+    """
+    meta: dict[str, Any] = {
+        META_KEY_PROBLEM_ID: str(problem_id),
+        META_KEY_THETA: theta,
+        META_KEY_POOL_SIZE: pool_size,
+        META_KEY_APPLIED_WEIGHTS: applied_weights,
+    }
+    # None인 선택 키는 아예 넣지 않는다 — "없음"과 "null로 기록됨"을 구분 가능하게.
+    if mode is not None:
+        meta[META_KEY_MODE] = mode
+    if gate_reason is not None:
+        meta[META_KEY_GATE_REASON] = gate_reason
+
+    row = EvidenceEvent(
+        time=occurred_at if occurred_at is not None else _now(),
+        session_id=uuid.uuid4(),
+        objective_id=_OBJECTIVE_ID_PLACEHOLDER,
+        k_type=_K_TYPE_PLACEHOLDER,
+        event_type=EVENT_TYPE_RECOMMENDATION_TREATMENT,
+        meta=meta,
+    )
+    session.add(row)
+    return row
+
+
+__all__ = [
+    "EVENT_TYPE_RECOMMENDATION_TREATMENT",
+    "META_KEY_APPLIED_WEIGHTS",
+    "META_KEY_GATE_REASON",
+    "META_KEY_MODE",
+    "META_KEY_POOL_SIZE",
+    "META_KEY_PROBLEM_ID",
+    "META_KEY_THETA",
+    "record_recommendation_treatment",
+]

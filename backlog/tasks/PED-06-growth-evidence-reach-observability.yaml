@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-06-growth-evidence-reach-observability
+title: "성장 증거 도달 관측 — 대리지표 11종 학생 노출 계약 + 3상태(미도달/무데이터/구조적불가) 리포트"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 학생 대면 노출 계약 정본화 — 11지표를 학생 노출 가능/보호자 요약/내부 전용 3분류로 고정. help_reduction_validated의 GAMING_SUSPECT는 단독 노출 금지(⑧과 조합 제약)·②④는 내부 전용·⑥은 원 스칼라 대신 서술 변환. 비교·서열·순위 파생 금지 명문화"
+  - "② 도달 관측 리포트 — 성장 지표 요청 수/지표별 MetricStatus 분포/학생 도달 건수 산출. 표본 0은 '0건 통과'가 아니라 '미도달'로 표시"
+  - "③ 3상태 구분 — 미도달(계산되나 안 보임)/무데이터(입력 0)/구조적 불가(생산자 자체 없음·예: LearningSession 생성자 호출 0인 세션완주율)를 리포트가 서로 다른 칸으로 표시"
+  - "④ 확신도 수집 표면 부재를 리포트가 기록 — calibration_coaching이 영구 NO_DATA인 이유가 '배선 안 됨'이 아니라 '입력 UI가 없음'임을 REC-01의 입력 루프 미도달과 구분해 표기"
+  - "⑤ 변별력 — attempt 1건 주입 시 미도달이 실제로 해제되고 되돌리면 다시 나오는지 양방향 실측"
+  - "⑥ CI 배선 실재 확인(OPS-03·OPS-10 선례)"
+  - "⑦ 범위 밖 동결 — 모바일 화면 신설·클라 attempt POST 배선(REC-01 소관)·확신도 수집 UI 신설·푸시 알림"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - "src/backend/whymath_backend/harness/*"
+  - "tests/backend/api/test_me_harness_metrics*.py"
+  - "tests/backend/harness/test_wh1_evaluation*.py"
+session: null
+notes: "docs/architecture/gamification_module_gap_review.md §3 D1. compute_wh1_surrogate_metrics(harness/wh1_evaluation.py:983)가 11지표를 계산해 GET /v1/me/harness-metrics(api/me.py:2190)로 노출하나 Flutter 13종 엔드포인트에 없음(전수 실측). api/me.py:1247 주석이 /diagnosis/summary 소비자를 '대시보드 헤더'로 명시하나 그 대시보드가 만들어진 적 없음. NLP-01 '활성화가 아니라 가시화'와 동형. 의존: REC-01(입력 루프 상류)·S3-16(LearningSession writer 결정 승계)."
+updated: 2026-08-03

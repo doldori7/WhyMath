@@ -24,6 +24,13 @@
      리포트가 그대로 재현한다(새 판정 로직 추가 0 — 기존 `is_visualizable` 재사용).
   3. **미분류 개념 목록** — 스타일·분류 둘 다 없는(완전 미관측) 개념 목록(D2 가시성 요구사항).
 
+VIZ-04 추가 축 — **양식 정합 도달률**: 게이트를 통과한 개념 중 몇 %가 권장 양식에 *실제 렌더
+좌석*이 있는가(`l4/visualization_policy.has_render_seat` 재사용 — 새 판정 로직 0). 게이트 통과만으론
+"시각화 요소가 붙는다"만 알 수 있고 "그 요소가 개념과 맞는 그림인가"는 몰랐다 — 좌석 0인 양식(예:
+입체도형)이 게이트를 통과하면 LLM이 4종 중 하나를 억지로 골라 개념과 무관한 그림을 렌더할 위험이
+있다(`visualization_module_gap_review.md` §7.1 G1). 100% 정합도 목표가 아니다(미좌석은 보류가
+정답) — 격차를 눈에 계속 보이게 하는 것이 목표.
+
 사용:
     python -m whymath_backend.harness.visualization_reach_report
     python -m whymath_backend.harness.visualization_reach_report --json out/viz_reach.json
@@ -39,8 +46,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from whymath_backend.l4.visualization_policy import is_visualizable
-from whymath_backend.schema.enums import Visualizability
+from whymath_backend.l4.visualization_policy import has_render_seat, is_visualizable
+from whymath_backend.schema.enums import Visualizability, VisualizationStyle
 
 __all__ = [
     "CatalogEntry",
@@ -197,6 +204,9 @@ class ReachReport:
     gate_withheld_abstain_count: int  # 스타일 있으나 '추상' 분류로 보류된 개념 수
     # ④ 완전 미관측(스타일·분류 둘 다 없음)
     unclassified_both_codes: tuple[str, ...]
+    # ⑤ 양식 정합 도달률(VIZ-04) — 게이트 통과 AND 권장 양식 중 렌더 좌석 보유
+    # (has_render_seat 재사용)
+    seat_pass_count: int
 
     @property
     def style_tagged_rate(self) -> float | None:
@@ -215,6 +225,14 @@ class ReachReport:
         if self.catalog_total == 0:
             return None
         return self.gate_pass_count / self.catalog_total
+
+    @property
+    def seat_pass_rate(self) -> float | None:
+        """카탈로그 총계 대비 양식 정합 도달 비율(분모=catalog_total — gate_pass_rate와 같은 분모라
+        "게이트 통과율 대비 정합률"을 별도 계산 없이 두 % 값을 나란히 비교할 수 있다)."""
+        if self.catalog_total == 0:
+            return None
+        return self.seat_pass_count / self.catalog_total
 
 
 def build_report(
@@ -248,13 +266,27 @@ def build_report(
 
     gate_pass = 0
     gate_withheld_abstain = 0
+    seat_pass = 0
     for code in catalog_codes:
         styles = style_matched.get(code, ())
         classification = viz_matched.get(code)
-        if styles and is_visualizable(classification):
+        gate_ok = bool(styles) and is_visualizable(classification)
+        if gate_ok:
             gate_pass += 1
         if styles and classification == Visualizability.추상:
             gate_withheld_abstain += 1
+        if gate_ok:
+            # 원시 문자열 중 통제 어휘(VisualizationStyle) 안에 드는 것만 좌석 판정에 넣는다
+            # (오염값은 style_dist처럼 조용히 세지도 않지만, 좌석 판정에서도 조용히 통과시키지
+            # 않는다 — has_render_seat가 유효 enum만 받는 계약이라 여기서 걸러야 한다).
+            valid_styles: list[VisualizationStyle] = []
+            for raw in styles:
+                try:
+                    valid_styles.append(VisualizationStyle(raw))
+                except ValueError:
+                    continue
+            if has_render_seat(valid_styles):
+                seat_pass += 1
 
     unclassified_both = tuple(
         sorted(c for c in catalog_codes if c not in style_matched and c not in viz_matched)
@@ -275,6 +307,7 @@ def build_report(
         gate_pass_count=gate_pass,
         gate_withheld_abstain_count=gate_withheld_abstain,
         unclassified_both_codes=unclassified_both,
+        seat_pass_count=seat_pass,
     )
 
 
@@ -374,6 +407,20 @@ def render_report(report: ReachReport, *, max_listed: int = 40) -> str:
         lines.append("- " + " ".join(f"`{c}`" for c in shown))
         if remainder > 0:
             lines.append(f"- …외 **{remainder}**건(전량은 `--json` 산출물).")
+
+    lines += [
+        "",
+        "## 5. 양식 정합 도달률 (VIZ-04 — 게이트 통과 AND 권장 양식에 렌더 좌석 존재)",
+        "",
+        f"- 게이트 통과 중 양식 정합(좌석 보유): **{report.seat_pass_count}** "
+        f"({_pct(report.seat_pass_count, report.catalog_total)})",
+        f"- 게이트는 통과했으나 권장 양식 전건이 unseated(좌석 0): "
+        f"**{report.gate_pass_count - report.seat_pass_count}**",
+        "- 100% 정합은 목표가 아니다 — 미좌석 양식(예: 입체도형·수직선)은 시각화를 보류하는 것이 "
+        "정답이다. 목표는 이 격차를 계속 눈에 보이게 하는 것이다.",
+        "- 판정 함수는 `l4.visualization_policy.has_render_seat`를 그대로 재사용한다"
+        "(신규 판정 로직 0).",
+    ]
     lines.append("")
     return "\n".join(lines)
 
@@ -405,6 +452,10 @@ def report_to_json(report: ReachReport) -> dict[str, Any]:
         },
         "unclassified_both_codes": list(report.unclassified_both_codes),
         "unclassified_both_count": len(report.unclassified_both_codes),
+        "seat": {
+            "pass_count": report.seat_pass_count,
+            "pass_rate": report.seat_pass_rate,
+        },
     }
 
 

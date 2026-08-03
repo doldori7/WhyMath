@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-18-cloud-escalation-reach-observability
+title: "클라우드 승급 사슬 학생 도달 0 — 예산·구독·에스컬레이션 3중 차단이 정상 응답으로 위장"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "학생 경로 6곳(api/visualization.py:55·api/scene.py:54·l4/misconception/judge_seam.py:47,55·l3/cross_verify.py:375·l3/equivalent/{llm_generator,rephrase}.py)의 라우팅 신호 리터럴을 단일 정책 함수로 모으되 반환값 불변(회귀 0·바이트 동일 동결)."
+  - "ops/cost_probe.py 이중 회계 좌석에 승급 도달 계상 추가 — LOCAL 강등 사유별(예산0/free/규칙6)·CLOUD 도달 건수·next_tier 호출 0건을 '0건 통과'가 아니라 '미도달'로 표시."
+  - "변별력: budget_krw=1000·subscription=premium·difficulty=killer 요청 1건 주입 시 CLOUD 도달 0→1, 되돌리면 '미도달' 복귀(양방향 실측)."
+  - "범위 밖 동결: DB subscription_tier 읽기·결제·budget_krw 실배정·is_premium 게이팅·tier별 rate limit·next_tier 트리거 구현은 결제 도입 결정 이후(§5-①)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/router.py
+  - src/backend/whymath_backend/ops/cost_probe.py
+  - src/backend/whymath_backend/api/visualization.py
+  - src/backend/whymath_backend/api/scene.py
+  - src/backend/whymath_backend/l4/misconception/judge_seam.py
+  - src/backend/whymath_backend/l3/cross_verify.py
+  - "src/backend/whymath_backend/l3/equivalent/**"
+session: null
+notes: "docs/architecture/service_operations_gap_review.md §3 D3 — 외부 EOS 틀 모듈 91(결제·구독) 대조. 구독 배선만 고치면 budget_krw<=0 규칙이 먼저 발동해 바이트 동일 결과(변별력 0) — 대상은 배선이 아니라 도달 관측. CLAUDE.md 클라우드 LLM 배선 서술(§정정 6) 대비 학생 도달 0 정합 필요."
+updated: 2026-08-03
