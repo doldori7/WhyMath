@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,11 +15,12 @@ acceptance:
   - "② orphan 게이트 신설 — concept_visualization 코퍼스의 code가 런타임 개념 code 공간(atom_graph_v1)에 실제로 존재하는지 CI에서 검사. '적재는 됐는데 매치 0'은 이 저장소 반복 실패 유형(§6 재발방지)이므로 리포트 표시가 아니라 기계 차단(exit 1)으로 올린다"
   - "③ 변별력: 임의 개념 1건의 code를 존재하지 않는 값으로 바꿔 ②의 게이트가 exit 1을 내는지 실측 → 복원해 exit 0 실측(성공/실패 동일값이면 위장)"
   - "④ 재정렬 후 l4/visualization_policy.py의 추상 보호(is_visualizable)·직접/동적 구분(prefers_static_visual)이 실제로 게이트에서 발동하는지 라이브 재현 1건(추상 태깅 개념 1건으로 시각화 블록이 실제로 생략되는지 확인)"
-artifacts: []
+artifacts:
+  - fd19e89e
 paths:
   - "data/corpus/concept_visualization_v1/**"
   - "src/backend/whymath_backend/l1/concept_visualization/**"
   - tests/backend/l1/test_concept_visualization_orphan_gate.py
-session: claude/whymath-visualization-review-i2tgt2
+session: null
 notes: "visualization_module_gap_review.md §7(2026-08-03 2차 점검) G2. 1차 편(§3 D1 결론부)이 'VIZ-01 PR 부수 발견'으로 이미 orphan 7/7을 기록했고 D2가 '적재되면 표면화된다'고 예고한 것이 실제로 표면화됨 — is_visualizable(None)=fail-open이라 서비스 장애는 아니나, HIGH-LOGIC-007(대우증명·귀류법) 같은 추상 개념의 오개념 유발 보호가 런타임에서 발동하지 않고, prefers_static_visual(None)=False라 게이트 통과 127건 전부에 불필요한 슬라이더가 붙는다(05b가 명시적으로 피하려는 것). CLAUDE.md '상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지 — 2회+ 반복 관측 시 태스크 등재 의무' 발화(1차 편 예고+2차 편 실측=2회)."
 updated: 2026-08-03
