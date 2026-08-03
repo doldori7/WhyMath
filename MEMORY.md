@@ -388,6 +388,22 @@ classification+report 11건·counters hermetic 7건·live PG 통합 1건(SEC-10/
 
 정본: `docs/architecture/gamification_module_gap_review.md` §3 D1.
 
+### 2026-08-03 (재점검·개념): **개념 관리 모듈 갭 리뷰 §5 재점검 — 도달 관측 렌즈 최초 적용, concepts API 7라우트·flashcards(113건 적재)·prerequisites/learning-path 학생 도달 0회 확인 + `KG-01` 1건 등재** (claude 설계, Kiki 요청)
+
+**컨텍스트**: 2026-07-27 `knowledge_module_gap_review.md`(D1~D5·`S4-05`/`S4-06`/`ARCH-16`/
+`ARCH-17`) 이후 재점검. §1~§4는 모듈 6~10 crosswalk·설계였고 클라 도달은 다루지 않았음 —
+`ai_recommendation`/`visualization`/`nlp` 3개 자매편이 확립한 도달 관측 렌즈를 개념 축에
+처음 적용. Flutter 앱이 실호출하는 `/v1/` 13종 목록(원래 "20종" 주장은 test mock 리터럴 혼입
+오류 — `src/mobile/lib`만 대상이면 13종, `concept_reach_report.py` 실측 재확인)에 `concepts`
+API 7라우트(생성·조회·검색·
+엣지·수정·삭제)·`ConceptContent.flashcards`(코퍼스 113건 적재, 읽기 API 0개)·
+`/me/weak-concepts/{id}/prerequisites`·`.../learning-path`가 전부 없음을 실측. `REC-01`이
+이미 지적한 "개념 추천 API 클라 소비 0"과는 관측 축이 다름(요청량·개인화 vs 콘텐츠·그래프
+표면 자체)이라 중복 아님. chunk 임베딩·`formula_refs` 미충전은 재확인 결과 변동 없음(신규
+태스크 없음). `problem.schema.yaml`의 `ActiveConcepts`(3분류) vs 런타임 `ConceptRole`(4종)
+스키마 stale은 문서 각주로만 기록(편집 소유는 다음 스키마 유지보수 세션에 위임). 신규 태스크
+1건만 등재(`KG-01-concept-reach-observability`) — 활성화가 아니라 가시화. 정본:
+`docs/architecture/knowledge_module_gap_review.md` §5.
 ### 2026-08-03 (재점검·AI 콘텐츠 생성): **AI 콘텐츠 생성 모듈 2차 재점검(`ai_content_generation_gap_review_2.md`) — 1차 판정(58~68) 전부 유지·`S3-27`/`ARCH-21` 착지 반영·404 체인(`S3-26`) 불변 재확인. 신규 발견: 학생 도달 상한 4는 `CUR-02`와 동일 근본원인이라 중복 등재 배제(G1) / 교수법 콘텐츠 슬롯 파이프라인(`slot_generator`→`prescreen`→`review`)이 프로덕션 호출자 0·학생 reader 0로 완전 격리 — "완비된 소비 경로+미도달 공급원" 계열의 역방향 8회차(G2/G3) — 태스크 1건(`PED-06`) 등재** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재대조)
 ### 2026-08-03 (설계·평가): **평가(Assessment) 모듈 갭 점검·설계(D1~D2+페이퍼) + 태스크 2건 등재(`ASM-02`는 owner=kiki) — 평가 결과 영속 좌석 writer 0(D1·"완비된 소비 경로+미도달 공급원" 8회차)·등급·백분위·합격예측 노출과 게임화 금기의 미기록 긴장(D2) — 외부 EOS 틀 1단계 모듈 49~53+확장54~58 대조** (claude 설계, Kiki 요청)
 
