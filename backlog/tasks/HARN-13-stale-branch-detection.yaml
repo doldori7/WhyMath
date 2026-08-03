@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "scripts/harness/**"
   - "tests/harness/**"
   - ".github/workflows/ci.yml"
-session: null
+session: claude/whymath-assessment-review-pgvxnj
 notes: "2026-07-30 사고 재규명(2회차 실측): 2026-07-23에 이미 '브랜치-로컬 backlog 정본 포크' 재발방지 규칙이 MEMORY에 텍스트로 등재됐고 '머지 타이밍은 Kiki의 pr 지시 대기'로 명시됐으나, 그 지시가 오지 않은 채 claude/shadow-data-s3-pilot-nh5kbz가 이후로도 9일·40+커밋을 더 쌓고 방치됐다 — 텍스트 규칙만으로는 세션이 그 브랜치의 존재 자체를 모르면 무력하다(HARN-10 ARCH-13 중복·HARN-11 S3-11 근접중복과 동일 부류: '병렬 세션이 서로의 브랜치를 못 봄'). CLAUDE.md '시스템 실수 재발 시 재발방지대책 등재 의무' — 이번엔 규칙이 아니라 코드/CI로 등재한다(2회째 텍스트 규칙 실패이므로 3번째도 텍스트면 안 된다). 구현 방향 제안(확정 아님·설계는 착수 세션 몫): ① `git for-each-ref refs/remotes/origin`로 각 브랜치의 마지막 커밋 시각·merge-base 대비 ahead 커밋 수 조회 ② main에 완전히 merge-base 흡수되지 않은(ahead>0) 브랜치 중 마지막 커밋이 N일 이상 경과한 것을 나열 ③ SessionStart 훅 브리핑에 한 줄 경고 추가 또는 CI `harness-integrity` 잡에 경고 스텝(실패시키지는 않음 — 정보성) 추가. 참고 선례: HARN-11(미머지 done 비가시성)이 유사 문제(다른 각도 — 태스크 상태 가시성)를 이미 해결한 코드가 있으니 재사용 가능한 부분(원격 브랜치 열거 로직 등) 확인 후 중복 구현 회피. [발견 경위] S3-01 파일럿 현황 확인 중 shadow-data-s3-pilot-nh5kbz 9일 고립을 발견·회수(S3-13·NS-03 Stage 1 완료, S3-24·S3-25가 Stage 2 잔여 추적) — 이 태스크는 그 회수 자체가 아니라 재발 방지 메커니즘."
-updated: 2026-07-30
+updated: 2026-08-03
