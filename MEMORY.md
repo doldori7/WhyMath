@@ -337,6 +337,21 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (재점검·개념): **개념 관리 모듈 갭 리뷰 §5 재점검 — 도달 관측 렌즈 최초 적용, concepts API 7라우트·flashcards(113건 적재)·prerequisites/learning-path 학생 도달 0회 확인 + `KG-01` 1건 등재** (claude 설계, Kiki 요청)
+
+**컨텍스트**: 2026-07-27 `knowledge_module_gap_review.md`(D1~D5·`S4-05`/`S4-06`/`ARCH-16`/
+`ARCH-17`) 이후 재점검. §1~§4는 모듈 6~10 crosswalk·설계였고 클라 도달은 다루지 않았음 —
+`ai_recommendation`/`visualization`/`nlp` 3개 자매편이 확립한 도달 관측 렌즈를 개념 축에
+처음 적용. Flutter 앱이 실호출하는 `/v1/` 20종 목록에 `concepts` API 7라우트(생성·조회·검색·
+엣지·수정·삭제)·`ConceptContent.flashcards`(코퍼스 113건 적재, 읽기 API 0개)·
+`/me/weak-concepts/{id}/prerequisites`·`.../learning-path`가 전부 없음을 실측. `REC-01`이
+이미 지적한 "개념 추천 API 클라 소비 0"과는 관측 축이 다름(요청량·개인화 vs 콘텐츠·그래프
+표면 자체)이라 중복 아님. chunk 임베딩·`formula_refs` 미충전은 재확인 결과 변동 없음(신규
+태스크 없음). `problem.schema.yaml`의 `ActiveConcepts`(3분류) vs 런타임 `ConceptRole`(4종)
+스키마 stale은 문서 각주로만 기록(편집 소유는 다음 스키마 유지보수 세션에 위임). 신규 태스크
+1건만 등재(`KG-01-concept-reach-observability`) — 활성화가 아니라 가시화. 정본:
+`docs/architecture/knowledge_module_gap_review.md` §5.
+
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 제공한 외부 참고 문서 『19. AI 추천』(기능 80 문제 추천 · 81 개념 추천 ·
