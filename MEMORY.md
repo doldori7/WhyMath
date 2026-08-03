@@ -337,6 +337,60 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (인수·구현·교수전략): **방치 브랜치 인수(04e+PED-04~11 6,543행) + PED-12 결함 수정 +
+PED-10 형성평가 슬롯 채움(grain 다리 실측 정정) + PED-08 부분 완료(신호 조립 추출)·PED-13 분리
++ 04e §12 보류 6항목 해제 조건 신설** (claude 인수·구현, Kiki "교수전략 분야의 빠진 부분을 점검하고
+WhyMath의 방향과 같이 하는 내용으로 설계")
+
+**배경**: Kiki가 2026-07-28과 **동일한** 외부 교수전략 docx(⑭전략 라이브러리·⑮설명방식·⑯비유/예시·
+⑰질문 생성)로 같은 요청을 반복. 실측 결과 **같은 요청이 이미 처리돼 있었다** — 병렬 세션이
+`claude/whymath-teaching-strategy-enfkqt` 브랜치에서 `04e_pedagogy_strategy_catalog.md`(외부 4기능
+전수 대조 판정표)를 작성하고 PED-04~12 태스크 9건을 등재·5건(PED-04/05/06/07/09/11)을 구현했으나,
+**PR 없이 5일간 미머지 방치**됐다(PED-10 claim만 하고 실구현 0). 재설계는 병렬 중복 금기(ARCH-13·
+OPS-15 선례) 위반이라 채택하지 않고 **인수·착륙 + 잔여 완결**로 방향을 잡았다.
+
+**적용**:
+① **인수** — `origin/claude/whymath-teaching-strategy-enfkqt`를 머지(충돌 1건 `.github/workflows/
+ci.yml` — 양측 게이트 스텝 모두 채택). `PED-04`·`PED-05` 번호가 main의 기존 튜터링 축 태스크와
+충돌(둘 다 서로 다른 4개+ 문서가 참조 중이라 개명 시 어느 쪽도 파손) → `store._GRANDFATHERED_
+ID_NUMBERS`에 등재(ARCH-13/OPS-15 동형).
+② **PED-12** — `adaptive/effectiveness.py:173`의 `str(outcome.k_type)` 맹글링("KnowledgeType.
+CONCEPT") 실수정. 단순 `.value`는 순수함수 테스트가 평문 문자열을 직접 구성하는 기존 5건을 깨뜨려
+(실측 확인) `getattr(outcome.k_type, "value", outcome.k_type)`(coach.py `_pack_for` 선례)로 실
+enum·평문 양쪽 안전 처리.
+③ **PED-10** — `l3/pedagogy/diag_item_projector.py` 신설(atom_probe→`diag_item` 슬롯 투영).
+**04e §7.2의 설계를 실측으로 정정**: "개념↔원자 crosswalk 경유"라 썼으나, `learning_objective.
+concept_nodes`가 H2 계약상 이미 원자 백본 code 배열이고 `unit_compiler.py`가 컴파일 시점에
+`valid_atom_codes`로 직접 대조 검증함을 확인 — crosswalk 불필요, `concept_nodes`↔`atom_probe.code`
+직접 교집합으로 충분. select-vs-generate(검수 완료 슬롯 불가침)·부분 채움 정직성·표본 0=None 원칙
+준수.
+④ **PED-08** — study.py의 `_build_signals`를 `l4/pedagogy/signal_assembly.py::build_student_
+signals`로 순수 추출(①만 완료). ②(coach `decide()`+`record_pedagogy_treatment` 배선)는 구현 중
+**새로운 갭 발견**: `evidence_event.objective_id`가 NOT NULL인데, coach의 `problem_id→concept_id`
+축(`Concept.code`=concept 그래프 `math.<area>.<slug>` 공간)과 study의 `objective_id` 축
+(`learning_objective.concept_nodes`=원자 backbone code 공간)이 **서로 다른 ID 공간**이라 직접 조인
+불가 — 필요한 `concept_atom_crosswalk_v1`은 라이브 조회 가능한 DB 테이블이 아니라 오프라인 JSONL
+변환 유틸(`CrosswalkTransferStore`)뿐이다. 최고 위험 파일(coach.py 101KB)에 새 resolver를 급조하는
+대신 **PED-08을 blocked 처리하고 `PED-13-coach-objective-resolver-bridge`로 분리 등재**했다(신중한
+설계가 필요한 만큼 별도 세션 몫으로 남김).
+⑤ **04e §12 신설** — docx가 남긴 ⏸ 보류 6+1항목(예측·비교·확장 질문·역사적 배경·발견학습·CRA
+구체물·게임형)에 *측정 가능한 해제 조건*을 병기(§8 비수용의 대칭축 — "아직 안 됐다" vs "안 하기로
+했다" 혼동 방지). 실측 정정 1건 추가 발견: "LTHC `ExtensionPath`"는 §2.4가 코드 좌석처럼 썼으나
+grep 확인 결과 실재하지 않는 설계 스케치일 뿐(§12가 처음 명시). 신규 태스크·코드 0 — 문서만.
+
+**검증**: 전체 스위트 매 단계 완주(8,215→8,218→8,239 passed·0 failed 누적)·ruff/black/mypy strict
+451 clean·lint-imports KEPT(1613 dependencies)·`pedagogy_pack_fidelity_eval`·`analogy_fidelity_
+eval` 게이트 PASS(수치 원 세션과 동일 재현)·`backlog.py validate` green(167건).
+
+**롤백**: 인수 머지는 커밋 1개(`revert -m 1`로 원복 가능·원 브랜치는 그대로 남음). PED-12는 결함
+수정이라 롤백 대상 아님. PED-10/signal_assembly는 additive(신규 모듈)라 파일 제거로 원복. PED-08
+Slice 1은 study.py 동작 바이트 동일이라 무위험.
+
+**정직한 공백**: PED-10 실 채움 실행(라이브 DB)은 이 컨테이너에 PG 부재로 미실행 — 통합테스트
+2건은 self-skip(Kiki 환경·CI 통합 잡에서 실행). PED-08 ②(coach 처치 기록)는 PED-13 완결 전까지
+공백 — coach 턴은 여전히 처치·효과 표본을 남기지 않는다(adaptive 승격 게이트 계속 미달 예상).
+04e §12의 6항목은 설계상 의도적 보류 유지(해제 조건 미충족).
+
 ### 2026-08-03 (설계·교육과정): **교육과정 관리 모듈 갭 점검·설계(D1~D3+페이퍼) + 태스크 3건 등재(`CUR-03`은 owner=kiki) — 개정판 표기 3어휘 분열(D1)·학습목표 커버리지 0.1%(D2·"완비된 소비 경로+미도달 공급원" 7회차)·성취수준(A~E)/평가기준(상/중/하) 0건(D3) — 외부 EOS 틀 0단계 5모듈 대조** (claude 설계, Kiki 요청)
 
 **배경**: Kiki가 업로드한 외부 EOS 틀 문서(『0단계: 교육과정 관리』5모듈 — ①교육과정DB
