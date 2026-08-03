@@ -1654,3 +1654,5 @@
 {"ts": "2026-08-03T20:53:26", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "src/mobile/test/pubspec_dependency_usage_governance_test.dart", "mode": "warn", "detail": "'src/mobile/test/pubspec_dependency_usage_governance_test.dart' 은 claim 태스크 MOB-08-unused-dependency-purge-gate의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-08-03T21:04:56", "actor": "claude/backlog-drive-next", "action": "add", "id": "MOB-09-unused-dependency-purge-round3"}
 {"ts": "2026-08-03T21:13:50", "actor": "claude/backlog-drive-next", "action": "done", "id": "MOB-08-unused-dependency-purge-gate", "artifacts": ["c2cfb3486bc133797a9b4a15e9ad1907a341ab8c"]}
+{"ts": "2026-08-03T21:40:31", "actor": "claude/backlog-drive-next", "action": "start", "id": "MOB-09-unused-dependency-purge-round3", "session": "claude/backlog-drive-next", "remote": "ok"}
+{"ts": "2026-08-03T21:46:27", "actor": "claude/backlog-drive-next", "action": "done", "id": "MOB-09-unused-dependency-purge-round3", "artifacts": ["1fab211263c5d3cfc14668c2e4be9a2e236b93ff"]}
