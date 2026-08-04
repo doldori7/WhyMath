@@ -35,6 +35,7 @@ segments를 내므로(SOCRATIC=질문 중심·DIRECT=설명 중심…) 응답은
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -52,11 +53,13 @@ from whymath_backend.l2.pedagogy_evidence import (
     record_pedagogy_outcome,
     record_pedagogy_treatment,
 )
-from whymath_backend.l4.content_supply import supply
+from whymath_backend.l4.content_supply import get_process_tally, supply
 from whymath_backend.l4.lthc import mastery_to_level
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
+
+logger = logging.getLogger("whymath.api.study")
 
 # 세션 의존성 — 모듈별 로컬 선언이 이 저장소 관례다(`api/scene.py`·`api/users.py` 동형).
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -179,12 +182,27 @@ async def post_study_unit(
     concept_code = concept_codes[0]
 
     signals = await _build_signals(session, user.user_id, concept_code)
+    tally = get_process_tally()
     result = await supply(
         code=concept_code,
         signals=signals,
         session=session,
         cache=get_cache(request),
         k_type=str(objective.k_type),
+        tally=tally,
+    )
+    # 공급 경로 리포트 1줄 — 이중 회계의 in-process 축을 *프로덕션에서* 관측 가능하게 만든다.
+    # 어댑터별 비율을 함께 실어, 특정 교수법만 학생에게 도달하지 못하는 상태(전건 404)가 전체
+    # 평균에 묻히지 않게 한다. 학생 원문·식별자는 싣지 않는다(개념 code·전략·경로만).
+    logger.info(
+        "study supply — concept=%s strategy=%s source=%s fallback=%s "
+        "dsl_render_rate=%s strategy_render_rate=%s",
+        concept_code,
+        result.strategy.value,
+        result.content_source,
+        result.fallback_reason,
+        tally.dsl_render_rate,
+        tally.strategy_render_rate(result.strategy.value),
     )
     if result.rendered is None:
         # 생성 폴백을 켜지 않았으므로 렌더 실패 = 공급 불가. 처치도 기록하지 않는다 —

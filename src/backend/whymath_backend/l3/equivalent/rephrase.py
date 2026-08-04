@@ -36,6 +36,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
@@ -46,6 +47,7 @@ from whymath_backend.l3.pregenerate.validator import (
     default_seed_validator,
     validate_response,
 )
+from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.l3.router import Router
 
 # 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
@@ -82,25 +84,17 @@ REASON_HYGIENE_REJECT = "HYGIENE_REJECT"
 REASON_QUESTION_HYGIENE = "QUESTION_HYGIENE"
 REASON_NO_CHANGE = "NO_CHANGE"
 
+
 # 시스템 프롬프트 v3 — **경량 회귀 + 정책 앵커**(2026-07-07 라이브 A/B 실측 근거).
-# v2(5계층 적층: 불변식 섹션·허용/금지 목록·negative example 3종·자가 점검)는 라이브에서
-# 수율을 82%→57%로 역행시켰다(n=100·~6σ): ① negative example의 방정식들이 소형 모델
-# (qwen2.5)에 시연으로 오독돼 출력에 누출(EXTRA_EQUATION 0→3건 — 결정적 물증) ② 프롬프트
-# 길이가 attention을 희석해 EQUATION_ALTERED 18→33 증가. CLAUDE.md의 "더 많이 넣을수록 더
-# 멍청해진다"가 소형 모델 프롬프트에도 그대로 적용됨을 실측. 따라서 v3는 실측 검증된 v1
-# (81~82%) 문면으로 회귀하고, v2에서 유일하게 유효했던 **정책 앵커 한 줄**(보존 불가 시 원문
-# 출력 — NO_CHANGE로 안전 흡수·오염 0)만 남긴다. negative example·마크다운 섹션 금지.
-_SYSTEM_PROMPT = """당신은 WhyMath의 **발문 다양화 편집자**입니다. 주어진 한국어 수학 문제의
-*발문 문장 표현만* 자연스럽게 다시 씁니다. 절대 규칙:
+# 문면의 정본은 `docs/prompts/l3_rephrase.md`이며 v2 기각(수율 82%→57%·n=100·~6σ)의 실측
+# 경위도 거기 있다(OPS-16 — 코드에 사본을 두지 않는다). 봉인 레일ⓑ(수치·정답 불변 지시문)는
+# `harness/prompt_asset_audit`가 CI에서 실재를 감사한다. 정본 부재·파손은 폴백 없이
+# `PromptAssetError`(fail-closed — 봉인 없는 다양화 금지).
+@lru_cache(maxsize=1)
+def _system_prompt() -> str:
+    """발문 다양화 시스템 프롬프트 — 정본 1회 로드·캐시(매 호출 파일 I/O 금지)."""
+    return prompt_text("l3.rephrase.system")
 
-1. 문장에 포함된 **방정식·수식 문자열**(예: `3x^2 - 7x + 4 = 0`)은 글자·공백·기호까지 **그대로**
-   두십시오. 계수·부호·지수를 바꾸거나 표기(^, *, 괄호)를 변형하지 마십시오.
-2. 요구하는 것(큰 근/작은 근/근 등)의 **수학적 의미를 바꾸지** 마십시오.
-3. 새로운 수·계산·등식을 **추가하지** 마십시오(예: "3×4=12" 같은 부연 금지).
-4. 위 규칙을 하나라도 지킬 수 없으면 **원 발문을 그대로** 출력하십시오.
-5. 출력은 다양화된 **발문 문장 한 줄만**. 설명·따옴표·코드펜스·머리말 없이 문장만 내십시오.
-
-같은 문제라도 어투·어순·연결어를 바꿔 표현을 다양화하되, 창의성보다 보존이 우선입니다."""
 
 # 발문에서 방정식 문자열을 추출하는 정규식 — 우리 템플릿이 박는 형태를 겨냥한다.
 #   ① 로그: 'log_5 x = 2' — **log_ 접두를 포함해 통째로** 잡는다. leftmost 우선이라 'log'에서
@@ -267,7 +261,7 @@ class QuestionRephraser:
         generated = self._ensure_loop().run_until_complete(
             provider.generate(
                 prompt,
-                _SYSTEM_PROMPT,
+                _system_prompt(),
                 decision,
                 temperature=self._temperature,
             )
@@ -333,11 +327,6 @@ def _build_prompt(question_text: str, equation: str) -> str:
 
     "복사해 붙여넣듯"·"한 글자도 바꾸지 말고"로 보존 지시를 이중 반복한다 — 실측 실패의 100%가
     방정식 표기 훼손(EQUATION_ALTERED)이라 attention을 방정식 문자열에 앵커링한다.
+    문면은 `docs/prompts/l3_rephrase.md` 정본 인용(OPS-16) — 여기서 채우는 것은 *값*뿐이다.
     """
-    return (
-        f"다음 수학 문제의 발문을 다양화하세요.\n\n"
-        f"원 발문: {question_text}\n"
-        f"보존할 방정식 문자열(복사해 붙여넣듯 글자 그대로): {equation}\n\n"
-        f"위 방정식 문자열을 한 글자도 바꾸지 말고 그대로 포함해, 다양화된 발문 한 줄만 "
-        f"출력하세요."
-    )
+    return fill(prompt_text("l3.rephrase.user"), QUESTION_TEXT=question_text, EQUATION=equation)
