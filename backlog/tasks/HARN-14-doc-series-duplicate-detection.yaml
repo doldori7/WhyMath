@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-14-doc-series-duplicate-detection
+title: "설계 문서 중복 착수 탐지 — 미머지 브랜치의 신규 갭 리뷰 문서를 브리핑에 노출 (HARN-13 나이 임계의 사각)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — HARN-13이 만든 미머지 브랜치 목록이 4일 이상만 나열해 1일 경과 브랜치(claude/whymath-operations-platform-cn6dxi, PR #663)를 못 보여줬음을 재현(나이 임계가 원인임을 지목)."
+  - "② scripts/harness/에 스캐너 추가 — 원격 미머지 브랜치가 추가한 docs/**/*_gap_review.md·*_review.md 신규 파일을 브랜치·파일명·최종 커밋일과 함께 열거(나이 임계 없음 — 문서 중복은 첫날이 가장 위험)."
+  - "③ 네트워크·git 실패를 '0건'으로 위장 금지 — 스캔 실패 시 '스캔 실패(사유·예외 타입명)'를 명시 출력(측정 이중 회계·침묵 실패 금지)."
+  - "④ SessionStart 브리핑(backlog.py brief --format hook)에 배선하고 실제로 실행되는지 확인 — '저장소에 존재함'과 '돌아감'은 다르다(OPS-10 배선 실재성 패턴)."
+  - "⑤ 변별력 양방향 실측 — 대상 브랜치가 미머지일 때 목록에 뜨고 머지 후 사라짐. 성공/실패에 같은 값을 내면 검증이 아니라 위장(2026-07-17 delay:true 선례)."
+  - "⑥ 범위 밖 동결 — refs/claims 403 자체의 해소(HARN-07 소유)·HARN-12 미머지 done 필터·문서 시리즈 인덱스 자동생성·태스크 편집 CLI 신설은 하지 않는다."
+artifacts: []
+paths:
+  - "scripts/harness/**"
+  - ".claude/settings.json"
+  - "tests/infra/**"
+session: null
+notes: "docs/architecture/operations_platform_gap_review.md §독립 검증 ④⑤. HARN-13(done, 장기 미병합 브랜치 기계 감지)의 잔여 — HARN-13은 브랜치를 나이(4일+)로 거르는데, 설계 문서 중복은 착수 당일이 가장 위험해 그 임계 아래에서 전부 새어나간다. 사고 경위: 2026-08-04 세션이 같은 외부 틀(21. 운영 플랫폼 86~90)로 독립 착수했다가 조사 중 미머지 브랜치 claude/whymath-operations-platform-cn6dxi(2026-08-03 22:35·PR #663)의 동일 산출물을 발견해 작성 전 중단(폐기 0줄). 하네스가 못 막은 3겹: 1)설계 문서 세션은 태스크를 claim하지 않아 claim 대장에 뜰 수 없음(구조적) 2)refs/claims push가 프록시 403으로 상시 실패(2026-07-27 등재·fail-open) 3)브리핑 목록의 나이 임계. 이번 회피는 장치가 아니라 운 — 2026-07-27 동형 사고는 735줄 폐기."
+updated: 2026-08-04
