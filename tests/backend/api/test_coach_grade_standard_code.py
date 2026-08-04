@@ -130,7 +130,7 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
         async with maker() as s:
             s.add(
                 UserProfile.from_schema(
-                    SchemaUserProfile(user_id=uid, persona_primary=Persona.A_일반고고3, grade=2)
+                    SchemaUserProfile(user_id=uid, persona_primary=Persona.A_일반고고3, grade=12)
                 )
             )
             s.add(
@@ -194,7 +194,7 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
             await s.commit()
 
         async with async_sessionmaker(async_engine, expire_on_commit=False)() as s:
-            assert await _grade_for(s, uid) == 2
+            assert await _grade_for(s, uid) == 12
             assert await _standard_code_for(s, pid) == official_code
             # fail-soft — 개념 미매핑 문항은 None.
             assert await _standard_code_for(s, pid_unmapped) is None
