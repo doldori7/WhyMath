@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: COLLAB-03-learning-metrics-writer
+title: "학습시간·행동 집계 writer 신설 — daily_learning_metrics 등 3테이블 적재 0 해소(학생 1인칭 좌석 선행 확보)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 선행: prod(whymath-pg·5433)에서 daily_learning_metrics·user_behavior_metrics·problem_solve_time_distribution 세 테이블 행수를 세어 '적재 0행' 주장을 확인 또는 반증한다(반증되면 범위 재조정)"
+  - "② 집계 잡 신설 — 기존 learning_session·problem_attempt·attempt_event에서 일별 롤업. 새 인프라 금지: 기존 populate/CLI 규약(멱등·upsert) 재사용, 새 스케줄러 도입 금지"
+  - "③ 학생 1인칭 조회 좌석 배선 — /v1/me/* 규약을 그대로 따라 학습시간 통계를 노출. 이 태스크의 좌석 근거이며, 좌석 없이 적재만 하면 viz D1(만들어 놓고 연결하지 않음)의 재발이다"
+  - "④ 변별력(적재 축): 적재 전 행수 0 실측 → 집계 실행 후 N행 실측. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑤ 변별력(도달 축): 인증 학생으로 /v1/me/* 라이브 호출 → 응답에 통계가 실제로 실리는지 실측. 테이블만 차고 도달 0이면 목표 미달"
+  - "⑥ 파기·반출·보존 정합 확인 — 세 테이블은 이미 erasure.py:92·export.py:103·retention.py:55에 등재돼 있다. 적재가 시작되면 기존 보존기간 정책이 실제로 이 데이터에 적용되는지 확인(집계 주기·보존기간을 이 태스크에서 확정)"
+  - "⑦ 부모·교사 노출 금지 — 이 태스크의 산출은 학생 본인 축까지다. 매트릭스상 이용 시간대는 교사 ✕·부모 ◐이므로 제3자 노출은 COLLAB-01 계약과 Phase 3 좌석을 거친다"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - src/backend/whymath_backend/api/me.py
+session: null
+notes: "collaboration_module_gap_review.md §3 D3. DailyLearningMetrics 등 3테이블이 파기(erasure.py:92)·반출(export.py:103)·보존(retention.py:55) 배관에 전부 등재돼 있으나 프로덕션 writer가 0건(인스턴스화가 ORM/Pydantic 정의와 테스트에만 존재). 기능 71-4 '학습 시간 통계'·70-5 '성취도 분석'의 공급원 부재. visualization_module_gap_review.md D1과 동일 실패 유형(완비된 배관 + 미적재 공급원)의 다른 도메인 재발. 협업(Phase 3)을 기다릴 필요 없음 — /v1/me/* 학생 1인칭이 Phase 1~2 좌석이고 매트릭스상 학생 본인은 ● 전체 공개."
+updated: 2026-07-31

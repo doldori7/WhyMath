@@ -18,7 +18,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.schema.enums import AuditEventKind, AuditResourceType, ConsentScope
+from whymath_backend.schema.enums import (
+    AuditEventKind,
+    AuditResourceType,
+    ConsentScope,
+    DefectCategory,
+)
 
 
 class DeletionAudit(BaseModel):
@@ -92,4 +97,37 @@ class PrivacyAudit(BaseModel):
     occurred_at: datetime | None = Field(
         default=None,
         description="감사 기록 시각 (DB server_default now())",
+    )
+
+
+class DefectReport(BaseModel):
+    """학생 결함 신고 1행(append-only) — RPT-01.
+
+    `docs/architecture/service_operations_gap_review.md` §3 D1. **`user_id` 필드 자체가
+    존재하지 않는다** — 결함 대장은 "누가"가 아니라 "무엇이"를 기록한다. 이 필드 부재로
+    ⑴ 미성년 PII 미저촉 ⑵ 보존·파기 대상 아님 ⑶ 반출·삭제권 대상 아님 ⑷ 회신 유혹이 구조적으로
+    차단(CS로 새지 않음)이 자동 성립한다(`tests/backend/db/test_defect_report_no_user_id.py`가
+    이 부재를 컬럼 레벨로 동결).
+
+    v0는 카테고리 + `problem_id`만(자유서술 0). `problem_id`는 문항이 나중에 삭제·재편돼도
+    신고 기록이 잔존해야 하므로 FK가 아니라 plain UUID(`DeletionAudit.resource_id` 선례).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    report_id: uuid.UUID = Field(default_factory=uuid4, description="신고 PK (UUID)")
+    category: DefectCategory = Field(description="결함 카테고리(폐쇄 6종 — 자유서술 없음)")
+    problem_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "신고 대상 문항 id(선택 — plain UUID, FK 아님). 문항 무관 신고(UI문제 등)는 None."
+        ),
+    )
+    reported_at: datetime | None = Field(
+        default=None,
+        description="신고 접수 시각(DB server_default now())",
     )
