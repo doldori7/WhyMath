@@ -1,4 +1,5 @@
-"""QA 파이프라인 오케스트레이터 — 기존 검사 자산 조립·단일 판정 (ARCH-21).
+"""QA 파이프라인 오케스트레이터 — 기존 검사 자산 조립·단일 판정 (ARCH-21 + ARCH-24 축 8 +
+RPT-01 축 9).
 
 정본: `docs/architecture/operations_module_gap_review.md` §3 D2(외부 EOS 틀 모듈 45
 "품질검증 QA 엔진" 대조). `harness/`의 38개 검사 모듈이 각자 독립 CLI로 흩어져 있고
@@ -8,13 +9,14 @@
 이 저장소에 없다. 대신 각 harness 모듈이 자기보다 하위인 여러 모듈을 *직접 import해서
 조립*하는 것이 유일한 관례다(예: `defect_detection_eval.py`가 `l3.equivalent.acceptance`+
 `defect_seeder`+`retag`를 조립). 이 모듈은 그 관례를 한 계층 위에서 반복한다 — 전부
-in-process import, subprocess 금지. 7개 기존 축은 **새 판정 로직 신설 0**(전부 기존 함수
-재사용)이고, 8번째 축(`banned_words_pii`)만 예외다 — `_NOT_MEASURED_AXES`가 "코드 미구현"
-으로 선언하던 것을 ARCH-24가 실제로 채워 승격시켰으므로, 그 축의 판정 로직 자체는
-`banned_words_pii_eval.py`에 신설됐다(이 조립 층은 여전히 그 모듈의 `run()`을 그대로
-호출할 뿐 — "조립 층 자신은 새 판정 로직 0"이라는 원칙은 유지된다).
+in-process import, subprocess 금지. 1~7 기존 축은 **새 판정 로직 신설 0**(전부 기존 함수
+재사용)이고, 축 8(`banned_words_pii`)·축 9(`defect_report_intake`)가 예외다 —
+`_NOT_MEASURED_AXES`가 "코드 미구현"으로 선언하던 것을 ARCH-24가 실제로 채워 승격시켰으므로
+그 축의 판정 로직 자체는 `banned_words_pii_eval.py`에 신설됐고, 축 9는 RPT-01이 신설한
+결함 신고 대장을 읽는다(이 조립 층은 여전히 하위 모듈·모델을 그대로 호출할 뿐 — "조립 층
+자신은 새 판정 로직 0"이라는 원칙은 유지된다).
 
-조립 대상 8개 축(+ wilson.py는 아래 참조):
+조립 대상 9개 축(+ wilson.py는 아래 참조):
     1. corpus_audit            — `corpus_audit_eval`(문항 감사, 커밋 스냅샷 재검산)
     2. equivalence_canonicalize — `l3/equivalent/canonicalize`(수식 동치 DSL 폐쇄성)
     3. concept_graph_reachability — `data_pipeline.atom_graph`(원자 백본 그래프)
@@ -23,14 +25,24 @@ in-process import, subprocess 금지. 7개 기존 축은 **새 판정 로직 신
     6. content_provenance      — `ops.provenance_audit`(저작권 축, ARCH-20)
     7. defect_injection_demotion — `defect_detection_eval`(결함주입 강등전)
     8. banned_words_pii        — `banned_words_pii_eval`(학생 대면 산문 금칙어·PII, ARCH-24 —
-       `_NOT_MEASURED_AXES`에서 승격. 이 저장소 8개 축 중 유일하게 신규 검사기를 이번
-       태스크에서 신설했다 — 다른 7개는 전부 기존 자산 재사용이라 이 축의 "새 판정 로직
-       신설 0" 원칙은 하위 모듈 자체가 아니라 *이 조립 층*에 한정된다)
+       `_NOT_MEASURED_AXES`에서 승격. 신규 검사기를 그 태스크에서 신설했다 — 1~7은 전부
+       기존 자산 재사용이라 이 축의 "새 판정 로직 신설 0" 원칙은 하위 모듈 자체가 아니라
+       *이 조립 층*에 한정된다)
+    9. defect_report_intake    — `db.models.audit.DefectReport`(RPT-01 학생 결함 신고 수집 현황)
+
+축 9(`defect_report_intake`)는 나머지 8축과 달리 *커밋된 코퍼스 파일*이 아니라 **DB**를 읽는다
+(`defect_report` 테이블 행 수). "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)과
+"0건 접수"(테이블은 있는데 아직 신고가 없음)를 *다른 값*으로 낸다(이중 회계, CLAUDE.md
+"변별력 없는 검증 스텝 금지" — `_axis_defect_report_intake` 참조). DB 자체가 도달 불가(연결
+실패 등)면 이 축이 판정하지 않고 예외를 그대로 올려 `_run_axis_safely`가 "error"로 격리한다
+(no_snapshot·ok·error 세 값이 서로 다른 사태를 가리킨다). CI의 `data-pipeline` 잡은 Postgres
+서비스가 없어 이 축은 그 잡에서 상시 "error"로 보고되는데, 이 잡의 qa_pipeline 스텝은 이미
+`continue-on-error: true`(S3-28 전까지 비강제 게이트)라 CI를 막지 않는다.
 
 **wilson.py는 별도 축이 아니다** — 위 1·4·5·7·8 다섯 축이 이미 각자 내부에서
 `wilson_lower_bound`/`wilson_upper_bound`를 호출해 경계 판정을 한다(Wilson은 그 다섯 축이
 공유하는 *경계 판정 메커니즘*이지, 독립적으로 실행 가능한 검사 대상이 아니다). 그래서
-리포트의 `axes`에 별도 9번째 키로 노출하지 않는다 — 중복 신호 금지.
+리포트의 `axes`에 별도 10번째 키로 노출하지 않는다 — 중복 신호 금지.
 
 **cross-package import 경계** — `concept_graph_reachability` 축은 `whymath_backend`가
 아니라 별도 pip 패키지(`whymath-data-pipeline`, import명 `data_pipeline`)의
@@ -68,6 +80,7 @@ not_measured_axes)과 "에러로 못 함"(error)은 구분해서 보고하되, �
 from __future__ import annotations
 
 import argparse
+import asyncio
 import dataclasses
 import json
 import os
@@ -78,12 +91,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal
 
+import sqlalchemy as sa
+
 # cross-package import(모듈 docstring "cross-package import 경계" 참조) — data_pipeline은
 # whymath_backend가 아니라 별도 pip 패키지(whymath-data-pipeline)다. 원자 백본 그래프
 # 검증의 단일 진실 원천이 거기에만 있어 harness가 예외적으로 패키지 경계를 넘는다.
 from data_pipeline.atom_graph.validate import AtomRelation, _find_prerequisite_cycle
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from whymath_backend.config import get_settings
+from whymath_backend.db.models.audit import DefectReport
+from whymath_backend.db.session import dispose_engine, get_sessionmaker
 from whymath_backend.harness import (
     banned_words_pii_eval,
     coach_prose_leak_eval,
@@ -473,6 +492,83 @@ def _axis_banned_words_pii(corpus_root: Path) -> AxisResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 축 9 — defect_report_intake: 학생 결함 신고 채널 수집 현황 (RPT-01)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+_PG_UNDEFINED_TABLE_SQLSTATE = "42P01"
+
+
+def _is_undefined_table_error(exc: ProgrammingError) -> bool:
+    """PG "relation ... does not exist"(UndefinedTable) 여부 — 마이그레이션 미적용 판별.
+
+    표준 PostgreSQL SQLSTATE `42P01`(undefined_table)로 판별한다 — asyncpg 드라이버의
+    `ProgrammingError`(`AsyncAdapt_asyncpg_dbapi.ProgrammingError`)는 원 예외를 문자열로
+    감싸 `.orig`의 타입명이 항상 `ProgrammingError`로 뭉개지므로(실측 확인) 타입명 판별은
+    쓸 수 없다. `sqlstate`는 asyncpg가 PG 서버 응답에서 그대로 노출하는 표준 코드라 로케일·
+    드라이버 래핑 변경에 강건하다.
+    """
+    return getattr(exc.orig, "sqlstate", None) == _PG_UNDEFINED_TABLE_SQLSTATE
+
+
+async def _defect_report_intake_async(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> AxisResult:
+    """`defect_report` 테이블 행 수를 재는 실제 판정 로직 — 세션 팩토리 주입(테스트 가능).
+
+    "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)과 "0건 접수"(테이블은
+    있는데 아직 아무도 신고하지 않음)를 *다른 값*으로 구분한다(이중 회계, CLAUDE.md
+    "변별력 없는 검증 스텝 금지"). 그 밖의 DB 오류(연결 실패 등)는 여기서 삼키지 않고
+    그대로 전파해 `_run_axis_safely`가 "error"로 격리하게 한다(세 번째 구분값).
+    """
+    async with sessionmaker() as session:
+        try:
+            result = await session.execute(sa.select(sa.func.count()).select_from(DefectReport))
+            count = result.scalar_one()
+        except ProgrammingError as exc:
+            if _is_undefined_table_error(exc):
+                await session.rollback()
+                return AxisResult(
+                    measured=True,
+                    status="no_snapshot",
+                    detail={
+                        "table_exists": False,
+                        "reason": "defect_report 테이블 없음(마이그레이션 미적용) — 수집 미배선",
+                    },
+                )
+            raise
+    return AxisResult(
+        measured=True,
+        status="ok",
+        detail={"table_exists": True, "count": count},
+    )
+
+
+def _axis_defect_report_intake(
+    sessionmaker: async_sessionmaker[AsyncSession] | None = None,
+) -> AxisResult:
+    """동기 CLI 진입점 — 세션 팩토리 미주입 시 실 DB(`db.session.get_sessionmaker`) 사용.
+
+    `coach_prose_leak_eval`처럼 내부에서 `asyncio.run`을 직접 호출한다(호출부는 동기 유지).
+    세션 팩토리를 *직접 해소*했을 때만(주입 없음 — 우리가 전역 엔진을 만든 쪽) 종료 시
+    `dispose_engine()`으로 정리한다(`l2/calibrate_items.py` CLI 선례 — "만든 쪽이 치운다").
+    테스트가 가짜 세션 팩토리를 주입한 경우는 실 엔진을 만들지 않았으므로 정리도 스킵한다
+    (`tests/backend/conftest.py` OPS-07 db.session 전역 누수 가드 대응).
+    """
+    if sessionmaker is not None:
+        return asyncio.run(_defect_report_intake_async(sessionmaker))
+
+    async def _run_and_dispose() -> AxisResult:
+        maker = get_sessionmaker()
+        try:
+            return await _defect_report_intake_async(maker)
+        finally:
+            await dispose_engine()
+
+    return asyncio.run(_run_and_dispose())
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 조립 — 개별 격리 실행 + 집계 + 리포트
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -506,11 +602,12 @@ def _aggregate_overall(axes: dict[str, AxisResult]) -> OverallResult:
 
 
 def build_report(corpus_root: Path, *, repo_root: Path | None = None) -> dict[str, Any]:
-    """9개(8 실행 + wilson.py는 그 내부 메커니즘) 검사 자산을 조립해 QA JSON 리포트를 낸다.
+    """10개(9 실행 + wilson.py는 그 내부 메커니즘) 검사 자산을 조립해 QA JSON 리포트를 낸다.
 
-    7개 축은 새 판정 로직 신설 0(전부 기존 함수 재사용) — 8번째 축(`banned_words_pii`,
-    ARCH-24)만 이번 태스크에서 신설된 하위 모듈을 조립한다(모듈 docstring 참조). 각 축은
-    `_run_axis_safely`로 개별 격리되어 한 축의 예외가 나머지 축 실행을 막지 않는다.
+    1~7축은 새 판정 로직 신설 0(전부 기존 함수 재사용) — 축 8(`banned_words_pii`, ARCH-24)은
+    그 태스크에서 신설된 하위 모듈을 조립하고, 축 9(`defect_report_intake`, RPT-01)는 결함
+    신고 대장을 읽는다(모듈 docstring 참조). 각 축은 `_run_axis_safely`로 개별 격리되어 한
+    축의 예외가 나머지 축 실행을 막지 않는다.
     """
     root = repo_root if repo_root is not None else _repo_root()
 
@@ -539,6 +636,9 @@ def build_report(corpus_root: Path, *, repo_root: Path | None = None) -> dict[st
         "banned_words_pii": _run_axis_safely(
             lambda: _axis_banned_words_pii(corpus_root), axis_name="banned_words_pii"
         ),
+        "defect_report_intake": _run_axis_safely(
+            _axis_defect_report_intake, axis_name="defect_report_intake"
+        ),
     }
     overall = _aggregate_overall(axes)
     return {
@@ -555,7 +655,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m whymath_backend.harness.qa_pipeline",
         description=(
             "QA 파이프라인 오케스트레이터 — corpus_audit·수식동치·개념그래프·오개념crosswalk·"
-            "코치프로즈누설·저작권·결함주입강등전·금칙어PII(ARCH-24) 8개 검사 자산을 조립해 "
+            "코치프로즈누설·저작권·결함주입강등전·금칙어PII(ARCH-24)·"
+            "학생결함신고수집(RPT-01) 9개 검사 자산을 조립해 "
             "단일 JSON 리포트 + Wilson 단측 경계 게이트(exit 0/1)를 낸다."
         ),
     )

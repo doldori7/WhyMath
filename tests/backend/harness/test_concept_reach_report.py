@@ -251,12 +251,18 @@ def test_main_writes_json_artifact(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 6. 실 코퍼스 스모크(회귀 감시 — 핵심 신호)
 # ──────────────────────────────────────────────────────────────────────────
-def test_real_corpus_smoke_all_ten_surfaces_unreached_and_thirteen_callsites() -> None:
+def test_real_corpus_smoke_all_ten_surfaces_unreached_and_fourteen_callsites() -> None:
     """실제 src/mobile/lib·src/backend/whymath_backend/api를 읽어 확인한다.
 
-    `total_v1_literal_callsites`가 13이 아니게 되면(모바일이 실제로 이 표면들 중 하나를
+    `total_v1_literal_callsites`가 기대값이 아니게 되면(모바일이 실제로 이 표면들 중 하나를
     호출하기 시작하면) 이 테스트가 깨져서 "가시화 리포트가 낡았다"를 자동으로 신호한다 —
     의도된 동작(회귀 감시이지 임의 임계값이 아니다).
+
+    **분모 갱신 이력**: 13 → 14 (2026-08-04, RPT-01). 학생 결함 신고 버튼이
+    `features/reports/data/defect_report_api.dart`에서 `/v1/reports/defects`를 호출하기
+    시작해 프로덕션 `/v1/` 리터럴 콜사이트가 하나 늘었다. 이 가드가 설계대로 발화해
+    분모 변화를 잡았고(회귀가 아니라 정당한 증가), 10종 표면의 `미도달` 판정 자체는
+    그대로다 — 새 콜사이트는 개념 표면이 아니라 신고 표면이기 때문이다.
     """
     if not crr.DEFAULT_MOBILE_LIB_ROOT.is_dir() or not crr.DEFAULT_BACKEND_API_ROOT.is_dir():
         pytest.skip("실 mobile/backend 경로 미존재")
@@ -264,6 +270,6 @@ def test_real_corpus_smoke_all_ten_surfaces_unreached_and_thirteen_callsites() -
     report = crr.build_report()
     assert all(s.status == "미도달" for s in report.surfaces)
     assert all(s.reach_count == 0 for s in report.surfaces)
-    assert report.total_v1_literal_callsites == 13
+    assert report.total_v1_literal_callsites == 14
     assert isinstance(crr.render_report(report), str)
     assert isinstance(crr.dump_json(report), str)

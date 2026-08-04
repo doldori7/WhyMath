@@ -61,7 +61,7 @@ _WINDOW_SECONDS = 60.0
 # 그대로 통과시키기 위한 제네릭(코드베이스 관행: PEP 695 대신 명시 TypeVar — api/me.py 선례).
 _FallbackT = TypeVar("_FallbackT")
 
-RateCategory = Literal["read", "write", "device_register", "visualization", "auth"]
+RateCategory = Literal["read", "write", "device_register", "visualization", "auth", "defect_report"]
 """POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
 
 `device_register`(슬라이스 25): `/v1/devices/register`의 *전용* 버킷. coach `write`와 키 공간
@@ -75,7 +75,13 @@ RateCategory = Literal["read", "write", "device_register", "visualization", "aut
 둘 다 미인증 표면(로그인 남용·크리덴셜 스터핑 방어)이라 사용자 키가 없다. 콜백과 리프레시가
 같은 카테고리를 공유하되(같은 IP의 두 엔드포인트 호출이 한 슬라이딩 윈도우를 나눠 쓴다) 각자
 다른 한도(`auth_rate_limit_ip_per_minute`/`auth_rate_limit_ip_refresh_per_minute`)로 검사한다
-— coach `write`·`device_register` 등 인증 표면과는 키 공간 분리(상호 영향 0)."""
+— coach `write`·`device_register` 등 인증 표면과는 키 공간 분리(상호 영향 0).
+
+`defect_report`(RPT-01): `POST /v1/reports/defects`의 *IP 단위 전용* 버킷 — 결함 신고는
+`user_id`를 저장하지 않는(RPT-01 설계) *무인증* 표면이라 IP만 가능. coach `write`와 같은
+"write" 카테고리를 공유하면 같은 IP에서의 coach 쓰기 폭주가 결함 신고 한도를 잠식하거나(또는
+그 반대) 두 트래픽 패턴(LLM 대화 vs 1회성 신고)이 뒤섞여 어느 쪽 남용인지 구분이 안 되므로
+`device_register`/`visualization` 선례처럼 전용 카테고리로 분리한다."""
 
 
 class RateLimitResult(NamedTuple):
@@ -1014,6 +1020,37 @@ RateLimitedIpRead = Depends(rate_limit_ip_read)
 
 RateLimitedIpWrite = Depends(rate_limit_ip_write)
 """*미인증* POST 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# RPT-01 — 학생 결함 신고(`POST /v1/reports/defects`) 전용 IP 단위 rate limit.
+# coach write와 category 분리(모듈 docstring `defect_report` 항목 참조) — 저장 기반 방어
+# 신설 없이(CLAUDE.md·태스크 명세) 기존 `_enforce_by_ip` 재사용만으로 남용을 방어한다.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def rate_limit_ip_defect_report(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """결함 신고(`POST /v1/reports/defects`) 전용 *IP 단위* 한도. IP 추출 실패 시 적용 안 함.
+
+    `user_id`를 저장하지 않는 무인증 표면이라 IP 차원만 가능(user·device 차원 N/A).
+    """
+    ip = _client_ip(request)
+    if ip is None:
+        return
+    await _enforce_by_ip(
+        ip,
+        category="defect_report",
+        limit=settings.defect_report_rate_limit_ip_per_minute,
+        response=response,
+    )
+
+
+RateLimitedIpDefectReport = Depends(rate_limit_ip_defect_report)
+"""결함 신고 전용(RPT-01) — `dependencies=[RateLimitedIpDefectReport]`."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

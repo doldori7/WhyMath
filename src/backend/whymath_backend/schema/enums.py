@@ -1141,6 +1141,37 @@ class AuditEventKind(str, Enum):
     """
 
 
+class DefectCategory(str, Enum):
+    """`defect_report.category` — 학생 결함 신고 카테고리(RPT-01, 폐쇄 6종).
+
+    `docs/architecture/service_operations_gap_review.md` §3 D1의 설계를 따른다: 학생이
+    문항·AI응답·수식 오류를 신고할 경로가 스키마·API·UI 전부 0건이었던 갭을 메우되, *자유서술은
+    받지 않는다*(미성년 자유서술은 PII이고 SEC-01 암호화 좌석을 끌어옴 — v0는 카테고리 +
+    `problem_id`만으로 QA 파이프라인을 특정 문항에 겨눌 수 있어 충분히 행동 가능하다).
+
+    `AuditResourceType` 선례를 따라 ORM은 `sa.String(32)`(네이티브 PG enum 미생성) — 코드
+    안전성은 이 Pydantic enum(`.value` 저장)으로, DB는 단순 문자열로 둔다.
+    """
+
+    콘텐츠오류 = "콘텐츠오류"
+    """문항 발문·보기·정답·해설 등 콘텐츠 자체의 오류."""
+
+    AI응답오류 = "AI응답오류"
+    """코치 AI(소크라테스 대화·힌트 등) 응답의 오류(사실 오류·부적절한 힌트 등)."""
+
+    수식오류 = "수식오류"
+    """수식 렌더링·동치 판정·계산 결과의 오류."""
+
+    오답의심 = "오답의심"
+    """제공된 정답 자체가 틀렸다고 의심되는 경우."""
+
+    UI문제 = "UI문제"
+    """앱 UI/UX 결함(표시 깨짐·조작 불가 등) — 콘텐츠·AI 응답과 무관한 표면 결함."""
+
+    기타 = "기타"
+    """위 5종에 속하지 않는 기타 결함."""
+
+
 class ConsentScope(str, Enum):
     """`parental_consent.consent_scope` — 14세 미만 법정대리인 동의가 *무엇을* 허용했는가.
 
