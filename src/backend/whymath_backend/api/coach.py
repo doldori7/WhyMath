@@ -61,11 +61,14 @@ from whymath_backend.api._rate_limit import (
     RateLimitedTripleWrite,
 )
 from whymath_backend.config import get_settings
+from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
@@ -102,6 +105,7 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
+from whymath_backend.l4.hint_deferral import is_answer_demand, is_stuck_turn_count
 from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
@@ -477,6 +481,8 @@ def _build_response_payload(
     pack: PedagogyPack | None = None,
     polya_state_override: PolyaState | None = None,
     recent_categories: Sequence[SocraticCategory] = (),
+    grade: int | None = None,
+    standard_code: str | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -508,6 +514,11 @@ def _build_response_payload(
     **PED-04 D2** `polya_state_override`: 세션 경로가 넘기는 *서버 파생* Polya 상태. 주면 Polya
     결정·LTHC가 클라 제출 `body.polya_state` 대신 이 값을 쓴다. 미주입(기본 None)이면 stateless
     `/v1/coach`·직접 호출은 **완전 비트동일**. `recent_categories`(D1 reader ①)도 같은 규약.
+
+    `grade`·`standard_code`(PED-05 개인화 슬롯)는 `decide()`로 그대로 thread된다 — 둘 다 기본
+    None이라 미주입 호출자(stateless `/v1/coach`·sync 직접호출)는 완전 회귀 0. 실제 프롬프트
+    반영은 `decide()` 내부에서 pack 주입 ∧ `pedagogy_pack_prompt_enabled` 플래그 ON일 때만
+    일어난다(기존 옵트인 게이트 그대로 재사용 — 별도 플래그 신설 0).
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -529,6 +540,8 @@ def _build_response_payload(
         misconception_hypotheses=misconception_hypotheses,
         pack=pack,
         recent_categories=recent_categories,
+        grade=grade,
+        standard_code=standard_code,
     )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
@@ -832,6 +845,46 @@ async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> Peda
     return get_pack(str(getattr(k_type, "value", k_type)))
 
 
+async def _grade_for(session: AsyncSession, user_id: uuid.UUID) -> int | None:
+    """학생 학년(`user_profile.grade`) 단건 조회 — 프롬프트 개인화(PED-05) 착지용.
+
+    `get_state()`(l2 조립기)를 거치지 않고 `user_profile` 단건만 읽는다 — `get_state()`는
+    `compute_concept_diagnoses`(전체 개념 진단 재계산)까지 함께 하므로, 매 코치 턴마다 grade 하나
+    때문에 그 무거운 계산을 태우면 `_server_mastery_for`/`_server_theta_for`(단건 조회로 성능을
+    지키는 기존 결정)와 같은 함정에 빠진다. graceful None(프로필 없음·미입력) — 호출자는 grade
+    없이도 정상 동작(PolyaCoach.decide 기본값 None과 동형).
+    """
+    profile = await session.get(UserProfile, user_id)
+    return profile.grade if profile is not None else None
+
+
+async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
+    """문항 PRIMARY 개념의 성취기준 고시코드 1개 — 프롬프트 개인화(PED-05) 착지용(비PII).
+
+    `_pack_for`와 동일한 해석 seam(`get_primary_concept_id` — PRIMARY 없으면 TESTED 폴백)으로
+    concept_id를 얻고, `concept_standard_link → achievement_standard` 조인으로 `official_code`
+    (예 '[12미적01-01]') 1개를 결정적으로(정렬) 고른다. 문항 없음·개념 미해석·성취기준 연결
+    미적재 어느 단계든 graceful None(폴백) — L6 게이팅의 동일 조인 관례와 정합.
+    """
+    if problem_id is None:
+        return None
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None
+    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
+    if code is None:
+        return None
+    stmt = (
+        select(AchievementStandard.official_code)
+        .join(ConceptStandardLink, ConceptStandardLink.norm_id == AchievementStandard.norm_id)
+        .where(ConceptStandardLink.concept_code == str(code))
+        .order_by(AchievementStandard.official_code)
+        .limit(1)
+    )
+    official_code: str | None = await session.scalar(stmt)
+    return official_code
+
+
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
     """개념 θ를 코칭 교차검증에 쓸 만큼 *신뢰*할 수 있나 — 응답수·SE 게이트(slice 76 노이즈 가드).
 
@@ -1030,6 +1083,128 @@ async def _log_hint_event(
             mode=mode,
             persona=persona,
             client_state_mismatch=client_state_mismatch,
+        ),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_demand_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    student_input: str,
+    event_at: datetime,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """학생의 답 요구 발화를 `attempt_event`(event_type=힌트요청)로 1행 적재 — S3-16 소생.
+
+    WH-1 행동 텔레메트리 공백을 메우는 *생산자 좌석*(`docs/architecture/
+    ai_tutor_module_gap_review.md` §3 D4)의 하나. `is_answer_demand`(재계산 아님·`decide_hint_
+    level` 2번 규칙과 동일 상수)가 False면 적재 안 함(신호 없는 행 미생성·날조 회피) — `_log_hint_
+    event`의 `hint_level is None` early-return과 동형 원칙.
+
+    트랜잭션: `_log_verify_event`·`_log_hint_event`와 동일하게 ORM 1행을 `session.add`만 하고
+    *commit은 하지 않는다*(호출 핸들러의 트랜잭션에 합류). `event_at`은 호출 핸들러가 이미 가진
+    `now`를 그대로 받는다(별도 `datetime.now()` 재호출 금지 — 복합 PK 시각 일관성).
+    """
+    if not is_answer_demand(student_input):
+        return  # 답 요구 신호 없음 → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=event_at,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.힌트요청,
+        event_data=build_event_data(EventType.힌트요청, mode=mode, persona=persona),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_stuck_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    turn_count: int,
+    event_at: datetime,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """5회+ 막힘 임계 도달을 `attempt_event`(event_type=막힘)로 1행 적재 — S3-16 소생.
+
+    `is_stuck_turn_count`(재계산 아님·`decide_hint_level` 1번 규칙과 동일 임계)가 False면
+    적재 안 함(신호 없는 행 미생성·날조 회피). `turn_count`는 `PolyaState.turn_count`를 그대로
+    싣는다(재계산 아님).
+
+    트랜잭션: 형제 writer들과 동형(`session.add`만·commit은 핸들러). `event_at`은 핸들러의
+    `now`를 그대로 받는다.
+    """
+    if not is_stuck_turn_count(turn_count):
+        return  # 막힘 임계 미도달 → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=event_at,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.막힘,
+        event_data=build_event_data(
+            EventType.막힘, turn_count=turn_count, mode=mode, persona=persona
+        ),
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_response_latency_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    dialogue_id: uuid.UUID,
+    now: datetime,
+    student_order: int,
+    mode: str | None = None,
+    persona: str | None = None,
+) -> None:
+    """직전 학생 턴(server 기준 spoken_at)과 이번 제출 시각의 차를 답입력 이벤트로 적재(S3-16 소생).
+
+    서버 시각 차이므로 클라 신뢰가 불필요하고 조작 불가하다(D4 설계). `append_turns`에서만
+    호출한다 — `create_session`은 새 dialogue의 첫 턴이라 이전 턴 기준선이 없어 latency 정의
+    불가(날조 회피). 이론상 append_turns는 create_session이 만든 최초 교환 위에서만 호출되므로
+    직전 학생 턴이 항상 있어야 하지만, 방어적으로 없으면(None) 기준선 없음으로 보고 행 미생성한다.
+
+    트랜잭션: 형제 writer들과 동형(`session.add`만·commit은 핸들러). `event_at`은 핸들러의
+    `now`를 그대로 받는다(복합 PK 시각 일관성).
+    """
+    prev_stmt = (
+        select(DialogueTurnORM.spoken_at)
+        .where(
+            DialogueTurnORM.dialogue_id == dialogue_id,
+            DialogueTurnORM.role == TurnRole.student,
+            DialogueTurnORM.turn_order < student_order,
+        )
+        .order_by(DialogueTurnORM.turn_order.desc())
+        .limit(1)
+    )
+    prev_spoken_at = (await session.execute(prev_stmt)).scalars().first()
+    if prev_spoken_at is None:
+        return  # 기준선 없음(이론상 도달 안 함) → 적재 안 함(날조 회피).
+
+    latency_ms = int((now - prev_spoken_at).total_seconds() * 1000)
+    event = AttemptEventORM(
+        event_at=now,
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.답입력,
+        event_data=build_event_data(
+            EventType.답입력, server_latency_ms=latency_ms, mode=mode, persona=persona
         ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
@@ -1583,6 +1758,10 @@ async def create_session(
         logger.info(
             "client_state_mismatch(세션 생성) fields=%s — 서버 파생값 우선", mismatch_fields
         )
+    # PED-05: grade(user_profile 단건 — get_state() 전체 재계산 회피)·standard_code(문항 PRIMARY
+    # 개념의 성취기준 고시코드) — 둘 다 비노출 개인화 슬롯(_grade_for/_standard_code_for docstring).
+    grade = await _grade_for(session, user.user_id)
+    standard_code = await _standard_code_for(session, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1594,6 +1773,8 @@ async def create_session(
             misconception_hypotheses=active_hypotheses,
             pack=pack,
             polya_state_override=server_state,
+            grade=grade,
+            standard_code=standard_code,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1715,6 +1896,29 @@ async def create_session(
         ),
     )
     session.add_all([student_turn, assistant_turn])
+    # S3-16 소생 — 행동 텔레메트리 생산자 좌석(§3 D4). 답 요구(demand)·5회+ 막힘 신호는
+    # 신호가 실제 있을 때만 1행 적재(날조 회피). 응답 지연(답입력)은 새 dialogue의 첫 턴이라
+    # 이전 턴 기준선이 없어 여기서는 호출하지 않는다(append_turns 전용).
+    await _log_demand_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_input=body.student_input,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    await _log_stuck_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        turn_count=body.polya_state.turn_count,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
     # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
     # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
     await _log_match_evidence(
@@ -1867,6 +2071,10 @@ async def append_turns(
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
+    # PED-05: create_session과 동형 — grade는 user_profile 단건, standard_code는 dialogue에 실린
+    # problem_id 출처(append 규약과 정합·expected_answer/server_mastery와 같은 출처 패턴).
+    grade = await _grade_for(session, user.user_id)
+    standard_code = await _standard_code_for(session, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1879,6 +2087,8 @@ async def append_turns(
             pack=pack,
             polya_state_override=server_state,
             recent_categories=recent_categories,
+            grade=grade,
+            standard_code=standard_code,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1992,6 +2202,41 @@ async def append_turns(
     dialogue.total_turns = current_total + 2
     dialogue.student_turns = (dialogue.student_turns or 0) + 1
     dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
+    # S3-16 소생 — create_session과 동형(§3 D4). 답 요구(demand)·5회+ 막힘 신호는 있을 때만
+    # 1행 적재(날조 회피). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
+    await _log_demand_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_input=body.student_input,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    await _log_stuck_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        turn_count=body.polya_state.turn_count,
+        event_at=now,
+        mode=body.mode,
+        persona=event_persona,
+    )
+    # S3-16 소생 — 응답 지연(답입력)은 *멀티턴 전용*(create_session은 첫 턴이라 기준선 없음).
+    # 직전 학생 턴(server spoken_at)과 이번 제출(now)의 차를 서버 시각으로만 계산(조작 불가).
+    await _log_response_latency_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        dialogue_id=dialogue_id,
+        now=now,
+        student_order=student_order,
+        mode=body.mode,
+        persona=event_persona,
+    )
     # WH-1 §2.3 — create_session과 동형. 이번 턴 확정 매치를 +1 지지 증거로 적재(생산측·curate 뒤).
     await _log_match_evidence(
         session,

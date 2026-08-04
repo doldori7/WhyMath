@@ -838,9 +838,11 @@ class EventType(str, Enum):
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
 
-    페이로드 계약(invariant ⑫): *생산되는* 3종(검산결과·힌트제공·시각화조작)의 `event_data`
-    모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로 고정한다.
-    나머지 8종(문제읽기…답입력)은 생산자가 아직 0이라 계약 면제(휴면)다.
+    페이로드 계약(invariant ⑫): *생산되는* 6종(검산결과·힌트제공·시각화조작·막힘·힌트요청·답입력)의
+    `event_data` 모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로
+    고정한다. 나머지 5종(문제읽기·조건분석·그래프그리기·계산·지움)은 생산자가 아직 0이라 계약
+    면제(휴면)다. `막힘`·`힌트요청`·`답입력`은 S3-16에서 휴면→생산으로 소생됐다(신규 enum 값
+    추가 아님 — 기존 3종의 생산자를 `api/coach.py`에 배선).
     """
 
     문제읽기 = "문제읽기"
@@ -849,8 +851,29 @@ class EventType(str, Enum):
     계산 = "계산"
     지움 = "지움"
     막힘 = "막힘"
+    """WH-1 답 미루기 5회+ 막힘 임계 이벤트(S3-16 소생)·event_data={turn_count:int}.
+
+    `l4.hint_deferral.is_stuck_turn_count`(turn_count≥5)가 True일 때만 스테이트풀 coach가
+    적재한다 — `decide_hint_level`의 1번 규칙(5회+ 막힘→hint_level 최소 3)과 *같은 임계*를
+    관측 신호로 노출할 뿐 결정 로직 자체는 건드리지 않는다.
+    """
+
     힌트요청 = "힌트요청"
+    """학생이 *요청*한 도움 demand 이벤트(S3-16 소생)·event_data={mode, persona}(선택 태그만).
+
+    `l4.hint_deferral.is_answer_demand`(답 요구 토큰 포함)가 True일 때만 적재한다. `힌트제공`
+    (AI가 *제공*한 supply·hint_level)과 의미가 다르다 — 지표 ⑫(도움 요청/제공 비)는 이 둘의
+    개수 비다.
+    """
+
     답입력 = "답입력"
+    """학생 응답 제출의 서버 측 지연 이벤트(S3-16 소생)·event_data={server_latency_ms:int|None}.
+
+    직전 학생 턴(server 기준 spoken_at)과 이번 제출 시각의 차 — 서버 시각 차이므로 클라 신뢰가
+    불필요하고 조작 불가하다. 이전 학생 턴이 없으면(새 dialogue의 첫 턴) 기준선이 없어 적재하지
+    않는다(날조 회피) — `append_turns`에서만 생산된다.
+    """
+
     검산결과 = "검산결과"
     """WH-1 검산(verify) 결과 이벤트·event_data={passed:bool, error_kind}.
 

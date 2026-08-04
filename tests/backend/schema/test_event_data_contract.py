@@ -1,8 +1,9 @@
 """이벤트 페이로드 타입별 계약 거버넌스 게이트 — invariant ⑫.
 
-`event_data`가 자유 JSONB로 방치되던 것을 *생산 3종*(검산결과·힌트제공·시각화조작)에 대해
-계약(`schema/event_data_contract.py`)으로 고정했다. 이 테스트는 그 계약이:
-  1) 생산 3종을 빠짐없이 덮고(휴면 8종은 명시적 면제·분류 누락 0),
+`event_data`가 자유 JSONB로 방치되던 것을 *생산 6종*(검산결과·힌트제공·시각화조작·막힘·힌트요청·
+답입력)에 대해 계약(`schema/event_data_contract.py`)으로 고정했다(S3-16: 막힘·힌트요청·답입력
+3종이 휴면에서 편입 — 신규 EventType 추가 아님·소생). 이 테스트는 그 계약이:
+  1) 생산 6종을 빠짐없이 덮고(휴면 5종은 명시적 면제·분류 누락 0),
   2) 하네스가 실제로 읽는 키(passed·hint_level)를 포함하며,
   3) stray key(자유 JSONB의 씨앗)를 produce 좌석에서 거부하고,
   4) `시각화조작.payload` 내부 자유형은 의도적으로 보존하는지
@@ -21,19 +22,29 @@ from whymath_backend.schema.enums import EventType
 from whymath_backend.schema.event_data_contract import (
     CONTRACT_EXEMPT_EVENT_TYPES,
     EVENT_DATA_CONTRACT,
+    DemandEventData,
     HintEventData,
     InteractionEventData,
+    ResponseLatencyEventData,
+    StuckEventData,
     VerifyEventData,
     build_event_data,
 )
 
-# 코드가 실제로 event_data를 *쓰는* EventType — 탐사(producer 전수 grep)로 확정한 3종.
-# (api/coach.py: 검산결과·힌트제공, api/interactions.py: 시각화조작.)
-_PRODUCED = {EventType.검산결과, EventType.힌트제공, EventType.시각화조작}
+# 코드가 실제로 event_data를 *쓰는* EventType — 탐사(producer 전수 grep)로 확정한 6종.
+# (api/coach.py: 검산결과·힌트제공·막힘·힌트요청·답입력, api/interactions.py: 시각화조작.)
+_PRODUCED = {
+    EventType.검산결과,
+    EventType.힌트제공,
+    EventType.시각화조작,
+    EventType.막힘,
+    EventType.힌트요청,
+    EventType.답입력,
+}
 
 
 def test_contract_covers_exactly_the_produced_types() -> None:
-    """계약 키 == 실제 생산 3종(누락·잉여 0) — 단일 진실원 완전성."""
+    """계약 키 == 실제 생산 6종(누락·잉여 0) — 단일 진실원 완전성."""
     assert set(EVENT_DATA_CONTRACT) == _PRODUCED
 
 
@@ -45,16 +56,14 @@ def test_every_event_type_is_classified() -> None:
 
 
 def test_dormant_types_are_exempt_not_contracted() -> None:
-    """휴면 8종(문제읽기…답입력)은 면제 집합 — 계약으로 구속하지 않는다(premature 회피)."""
+    """휴면 5종(문제읽기·조건분석·그래프그리기·계산·지움)은 면제 집합 — 계약으로 구속하지 않는다
+    (premature 회피). S3-16으로 막힘·힌트요청·답입력 3종은 생산자를 얻어 계약으로 이동했다."""
     dormant = {
         EventType.문제읽기,
         EventType.조건분석,
         EventType.그래프그리기,
         EventType.계산,
         EventType.지움,
-        EventType.막힘,
-        EventType.힌트요청,
-        EventType.답입력,
     }
     assert dormant == CONTRACT_EXEMPT_EVENT_TYPES
 
@@ -67,6 +76,20 @@ def test_harness_consumed_keys_are_in_contract() -> None:
     """
     assert "passed" in VerifyEventData.model_fields
     assert "hint_level" in HintEventData.model_fields
+
+
+def test_s3_16_producer_fields_exist_in_contract() -> None:
+    """S3-16 신규 페이로드 필드(mode·turn_count·server_latency_ms) 존재 — writer↔계약 정합.
+
+    `api/coach.py`의 `_log_demand_event`·`_log_stuck_event`·`_log_response_latency_event`가
+    각각 mode/turn_count/server_latency_ms를 싣는다. 이 키가 계약에서 빠지면 writer가
+    조용히 깨지므로(`build_event_data`가 KeyError/ValidationError로 즉시 드러내긴 하나) 계약
+    자체의 형태를 여기서 고정한다.
+    """
+    assert "mode" in DemandEventData.model_fields
+    assert "persona" in DemandEventData.model_fields
+    assert "turn_count" in StuckEventData.model_fields
+    assert "server_latency_ms" in ResponseLatencyEventData.model_fields
 
 
 def test_verify_normalizes_missing_error_kind() -> None:
@@ -168,12 +191,41 @@ def test_interaction_optional_context_defaults() -> None:
     }
 
 
+def test_demand_shape() -> None:
+    """`힌트요청`은 값 필드 없이 mode·persona만(발생 자체가 신호·supply와 대칭이나 값 없음)."""
+    assert build_event_data(EventType.힌트요청) == {"mode": None, "persona": None}
+    data = build_event_data(EventType.힌트요청, mode="suneung", persona="A_일반고고3")
+    assert data == {"mode": "suneung", "persona": "A_일반고고3"}
+
+
+def test_stuck_shape() -> None:
+    """`막힘`은 turn_count 필수 + mode·persona 선택."""
+    data = build_event_data(EventType.막힘, turn_count=5)
+    assert data == {"turn_count": 5, "mode": None, "persona": None}
+    data_tagged = build_event_data(EventType.막힘, turn_count=7, mode="suneung")
+    assert data_tagged == {"turn_count": 7, "mode": "suneung", "persona": None}
+
+
+def test_response_latency_shape() -> None:
+    """`답입력`은 server_latency_ms(기본 None) + mode·persona 선택."""
+    assert build_event_data(EventType.답입력) == {
+        "server_latency_ms": None,
+        "mode": None,
+        "persona": None,
+    }
+    data = build_event_data(EventType.답입력, server_latency_ms=1500, persona="A_일반고고3")
+    assert data == {"server_latency_ms": 1500, "mode": None, "persona": "A_일반고고3"}
+
+
 @pytest.mark.parametrize(
     ("event_type", "payload"),
     [
         (EventType.검산결과, {"passed": True, "bogus": 1}),
         (EventType.힌트제공, {"hint_level": 2, "extra": "x"}),
         (EventType.시각화조작, {"interaction": "p", "unknown": True}),
+        (EventType.힌트요청, {"mode": "suneung", "bogus": 1}),
+        (EventType.막힘, {"turn_count": 5, "extra": "x"}),
+        (EventType.답입력, {"server_latency_ms": 100, "unknown": True}),
     ],
 )
 def test_stray_keys_rejected(event_type: EventType, payload: dict[str, object]) -> None:
@@ -189,6 +241,8 @@ def test_type_coercion_enforced() -> None:
 
 
 def test_dormant_type_is_not_a_build_target() -> None:
-    """휴면 EventType으로 build_event_data 호출은 오용 → KeyError(생산 경로 없어야 함)."""
+    """휴면 EventType으로 build_event_data 호출은 오용 → KeyError(생산 경로 없어야 함).
+
+    `막힘`은 S3-16으로 계약 대상이 됐으므로(위 test_stuck_shape) 휴면 예시로는 `지움`을 쓴다."""
     with pytest.raises(KeyError):
-        build_event_data(EventType.막힘, foo="bar")
+        build_event_data(EventType.지움, foo="bar")
