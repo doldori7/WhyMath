@@ -15,9 +15,14 @@ KG-01 acceptance②.
 **정정 기록(2026-08-03, KG-01 acceptance① 반증 결과)**: 이 리포트 신설 이전 커밋된 문서
 (`knowledge_module_gap_review.md` §5-1 초판)는 Flutter 앱이 실호출하는 `/v1/` 경로가 "20종"
 이라고 주장했으나, 이는 `src/mobile`(테스트 목 리터럴 포함) 전체를 대상으로 한 grep의 착오였다.
-`src/mobile/lib`(프로덕션 코드, `test/` 제외)만 대상으로 하면 **정확히 13종**이다. 이 모듈의
-`total_v1_literal_callsites` 필드가 그 정확한 분모를 매 실행마다 실측해, 향후 문서가 다시
-stale해지는 것을 리포트 자체가 anchor로 방지한다.
+`src/mobile/lib`(프로덕션 코드, `test/` 제외)만 대상으로 하면 초판 시점 **정확히 13종**이었다.
+이 모듈의 `total_v1_literal_callsites` 필드가 그 정확한 분모를 매 실행마다 실측해, 향후 문서가
+다시 stale해지는 것을 리포트 자체가 anchor로 방지한다.
+
+**분모 갱신(2026-08-04, RPT-01)**: 13 → **14**. 학생 결함 신고 버튼이
+`features/reports/data/defect_report_api.dart`에서 `/v1/reports/defects`를 호출하기 시작했다.
+회귀 감시 가드(`test_concept_reach_report.py`)가 설계대로 발화해 이 증가를 잡았다 — 개념
+표면 10종의 `미도달` 판정은 변동 없다(새 콜사이트는 개념이 아니라 신고 표면).
 
 산출 표면 10종:
   1~7. `api/concepts.py`의 7라우트(POST/GET단건/GET목록/GET search/GET edges/PATCH/DELETE)

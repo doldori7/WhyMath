@@ -1,4 +1,4 @@
-"""감사(audit) ORM 모델 — `DeletionAudit`(slice 57) + `PrivacyAudit`(SEC-09).
+"""감사(audit) ORM 모델 — `DeletionAudit`(slice 57)·`PrivacyAudit`(SEC-09)·`DefectReport`(RPT-01).
 
 본인 데이터 삭제(`DELETE /v1/me/{sessions,dialogues,assessments}/{id}`, slice 51~53) 시 *부모
 리소스 삭제 이벤트*를 append-only로 기록한다 — GDPR 삭제권 이행의 *증빙*(언제·누가·무엇을
@@ -19,6 +19,14 @@ UUID) — 미성년 PII 비저촉(CLAUDE.md). 자식(cascade·slice 56)은 DB �
 기록한다. `DeletionAudit`의 append-only·plain-UUID·String(32) 패턴을 그대로 답습하되
 **삭제 이벤트는 중복 기록하지 않는다**(`deletion_audit`가 삭제 감사의 단일 권위 — 이중
 진실원천 금지).
+
+`DefectReport`(RPT-01)는 학생 결함 신고(문항·AI응답·수식 오류)의 append-only 기록이다 —
+`docs/architecture/service_operations_gap_review.md` §3 D1. **`user_id` 컬럼 자체를 만들지
+않는다**(다른 두 감사 테이블과의 핵심 차이 — 저것들은 "누가"가 필수지만 결함 대장은 "무엇을"만
+필요하다). `attempt_event`/`EventType`은 재사용하지 않는다(`EventType`은 네이티브 PG enum이라
+값 추가에 alembic이 필요해지고, `attempt_event`는 `privacy/retention.py`가 이미 3년 보존파기
+대상으로 지정해 학생 데이터 파기와 함께 사라지는데 결함 대장은 학생 기록이 아니라 콘텐츠
+기록이라 그와 함께 사라지면 안 된다).
 """
 
 from __future__ import annotations
@@ -30,6 +38,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.audit import DefectReport as SchemaDefectReport
 from whymath_backend.schema.audit import DeletionAudit as SchemaDeletionAudit
 from whymath_backend.schema.audit import PrivacyAudit as SchemaPrivacyAudit
 
@@ -140,3 +149,57 @@ class PrivacyAudit(Base):
         mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
         data = {key: getattr(self, key) for key in mapped_keys}
         return SchemaPrivacyAudit.model_validate(data)
+
+
+class DefectReport(Base):
+    """RPT-01 학생 결함 신고 append-only 1행 — 카테고리 + 대상 문항 참조만.
+
+    설계 결정(`DeletionAudit`/`PrivacyAudit` 패턴 답습·차이점 명시):
+      - **`user_id` 컬럼이 없다**(이 클래스의 핵심 차이) — 결함 대장에 필요한 건 "누가"가
+        아니라 "무엇이"다. 이 부재가 ⑴ 미성년 PII 미저촉 ⑵ 보존·파기 대상 아님 ⑶ 반출·삭제권
+        대상 아님 ⑷ 회신 유혹 차단(CS로 새지 않음)을 구조적으로 성립시킨다. 이 부재는
+        `tests/backend/db/test_defect_report_no_user_id.py`가 컬럼 목록 레벨로 동결한다.
+      - `category`는 `sa.String(32)`(네이티브 PG enum 미생성) — 코드 안전성은 Pydantic
+        `DefectCategory`(.value 저장)로, DB는 단순 문자열(`AuditResourceType` 선례).
+      - `problem_id`는 **FK 아님**(plain UUID) — 문항이 나중에 삭제·재편돼도 신고 기록은
+        잔존해야 한다(`DeletionAudit.resource_id` 설계 메모와 동일 근거). nullable — 문항과
+        무관한 신고(UI문제 등)도 허용.
+      - 자유서술 필드 없음(v0는 카테고리 + `problem_id`만) — 미성년 자유서술 PII 표면을 만들지
+        않는다.
+      - append-only — UPDATE/DELETE 라우터 없음(`api/reports.py`는 POST 1개만 노출).
+    """
+
+    __tablename__ = "defect_report"
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    category: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    # FK 아님(plain UUID) — 문항이 삭제·재편돼도 신고 기록 잔존(DeletionAudit 설계 메모 참조).
+    problem_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid, nullable=True)
+    reported_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+    )
+
+    # qa_pipeline 축(harness/qa_pipeline.py `defect_report_intake`)의 카테고리별 집계 조회
+    # 패턴 인덱스 — idx_deletion_audit_user/idx_privacy_audit_user와 동형(parity).
+    __table_args__ = (sa.Index("idx_defect_report_category", "category", sa.desc("reported_at")),)
+
+    # ── 변환 헬퍼 (schema↔db seam, DeletionAudit 패턴) ──
+    @classmethod
+    def from_schema(cls, schema: SchemaDefectReport) -> DefectReport:
+        """검증된 `schema.DefectReport` → 영속 ORM(mapper 컬럼키 필터)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaDefectReport:
+        """영속 ORM → `schema.DefectReport`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaDefectReport.model_validate(data)
