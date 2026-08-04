@@ -1215,6 +1215,43 @@ Phaiakes9 실 PG에서 `WHYMATH_RUN_INTEGRATION=1`로 재확인 필요.
 **겸사겸사 현행화**: `03`·`04`·`00_index.md`의 RBAC 서술이 "role 필드가 없다"로 정체돼 있었는데(SEC-07이 2026-07-30 이미 2값 `STUDENT`/`CONTENT_ADMIN` 착지시킴), 세 문서 모두 실제 상태(v0 완료·관리 콘솔 소비는 미착수)로 갱신했다(README 청사진과 실제의 괴리 방지 원칙). `00_index.md` 전역 불변식 표에 #7(모듈 자동 등록)을 추가하고 스냅샷 날짜를 2026-08-02로 갱신.
 
 **스코프 밖(코드 미작성)**: `AdminModule`/`_MODULE_REGISTRY`/`GET /v1/admin/menu`/Next.js 앱 자체는 전부 설계 단계 — `04` §8에 `ADMIN-MODULE-REGISTRY`(신규)·`ADMIN-BFF`·`ADMIN-WEB` 제안으로만 기재, 실제 등재는 후속 `backlog.py` 경유.
+### 2026-08-03 (구현·AI튜터): **PED-04 교수 결정 로그 writer + 세션 간 구조화 회상 + Polya 상태 서버 소유 구현 — `ai_tutor_module_gap_review.md` §3 D1·D2 착지, 착수 시 확정 결과 3건 + 구현 중 설계 정정 1건** (claude 구현, Kiki 요청)
+
+**컨텍스트**: Kiki가 첨부한 외부 EOS 틀 문서 『09. AI Tutor』는 이미 2026-07-29에 동일 문서로
+갭 점검·설계가 완료돼 있었다(`ai_tutor_module_gap_review.md`, PR #644) — 태스크 4건(PED-04·
+PED-05·S3-16·S4-18)이 등재됐으나 전부 `todo`. "설계를 구현으로" 요청에 따라 PED-04(D1+D2)부터
+착수 — 37(대화형 튜터)·38(이해도)·41(이전 설명 성공)의 공통 원천이자 PED-03 bandit 잠금 해제
+조건이기 때문.
+
+**설계가 착수 시 요구한 확정 항목 3건**:
+1. `socratic_strategy` 컬럼 값 공간 — `SocraticCategory`(질문 유형)와 `SocraticStrategy`(발문
+   전략)가 직교 enum이라 매핑하지 않고, 개입 패턴→답 미루기 단계→Polya 단계 기본의 **3단 사다리**
+   로 채운다. REVIEW 단계는 6종 중 대응이 없어 정직하게 NULL.
+2. 턴 간 회전(reader ①)의 상태 원천 — DB 컬럼도 인메모리도 아닌 `targeted_step` 시퀀스에서
+   **파생-온-리드**. 오버라이드 의심 턴에서 절단(보수적 — 잔여 오차는 규칙 우선순위로 무해화).
+3. **구현 중 발견한 설계 정정**: 당초 설계는 새 dialogue의 서버 파생 상태를 항상 UNDERSTAND로
+   가정했으나, 기존 테스트(`TestActiveHypothesesIntoSocratic`)가 클라의 PLAN 직접 진입을 정당한
+   동작으로 전제하고 있었다 — 이 회귀는 문서만 보고 구현했다면 놓쳤을 것이고, 전체 스위트 실행
+   (`CLAUDE.md` "부분 스위트 통과를 전체 통과의 근거로 보고 금지" 정신)으로 잡았다. `create_session`
+   은 이력이 없어 서버가 arbitrate할 대상이 없으므로 `current_stage`는 클라의 초기 조건으로
+   존중하고, `turn_count`(새 대화 항상 0)·`prev_hint_level`(타 세션에서 되찾는 진짜 서버 소유
+   데이터)만 D2가 관할한다. `append_turns`(턴 이력 있음)는 원안대로 세 필드 전부 서버 파생.
+
+**신규 스키마 0**(문서 요구 그대로 충족) — 기존 dead 컬럼 4개(`socratic_strategy`·`targeted_step`·
+`student_intent`·`student_understanding_signal`) 소생 + `HintEventData` JSONB 페이로드에
+`client_state_mismatch` 필드 추가(신규 EventType은 PG enum ALTER를 부르므로 회피) + 순수 로직
+신규 파일 2개(`l4/turn_meta.py`·`l4/session_recall.py`).
+
+**측정 3종 동반**(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 상태 불일치율) —
+`GET /v1/me/harness-metrics`. 표본 부족 시 NO_DATA(가짜 0 금지), 다양성 지표는 현 생산 경로의
+실질 상한(4/6종)을 note에 명기해 거짓 경보를 방지.
+
+**검증**: `python -m pytest tests/backend/l4 tests/backend/harness tests/backend/api`(hermetic·
+integration 마커 제외) 전수 green. 라이브 PG 통합테스트 3건(`test_coach_integration.py`)은
+이 세션 환경에 PG가 없어 **skip 확인만**(CI에서 실행). ruff·black 통과.
+
+**문서 개정**: `04a_wh1_tutoring_harness.md` §5.1 "원문 재조회 강등"에 구현 완료 표기 추가.
+`ai_tutor_module_gap_review.md` §3 D1에 위 확정 결과·정정을 부기.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 

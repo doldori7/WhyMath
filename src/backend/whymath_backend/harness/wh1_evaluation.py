@@ -91,13 +91,14 @@ from whymath_backend.db.models.activity import (
     ProblemAttempt,
 )
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
-from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
+from whymath_backend.l4.turn_meta import REACHABLE_STRATEGIES
 from whymath_backend.schema.enums import EventType, Resolution, SignaturePattern
 
 __all__ = [
@@ -365,6 +366,35 @@ class SurrogateMetrics(BaseModel):
         )
     )
 
+    # ── PED-04 교수 결정 로그 지표 3종(D1 writer가 만든 데이터의 첫 reader) ──
+    strategy_diversity: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑫ 발문 전략 다양성 — DialogueTurn.socratic_strategy의 distinct/total. 실질 상한은 "
+            "현 생산 경로 도달 가능 4종(note 참조)·기록 턴 부족이면 NO_DATA."
+        ),
+    )
+    strategy_repeat_rate: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑬ 발문 전략 연속 반복률 — *대화 내* 인접 AI 턴 쌍 중 전략 동일 비율(세션 경계 "
+            "미교차). 단조 발문 회전(select_category 규칙 2.5)의 계기판·인접쌍 부족이면 NO_DATA."
+        ),
+    )
+    client_state_mismatch_rate: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑭ 클라 Polya 상태 불일치율 — 힌트제공 이벤트 중 client_state_mismatch=true 비율. "
+            "오류율이 아니라 *동기화 신호*(D2가 서버 소유로 되찾은 상태의 신뢰 지표)."
+        ),
+    )
+
     # ── 표본·범위 메타 ──
     sample_sessions: int = Field(
         default=0, description="③ 집계 대상 LearningSession 수(시간창·user 필터 적용)."
@@ -379,6 +409,10 @@ class SurrogateMetrics(BaseModel):
     sample_hint_events: int = Field(
         default=0,
         description="⑤ 집계 대상 힌트제공 attempt_event 수(hint_level 채워진 행·OLS 포인트 수).",
+    )
+    sample_strategy_turns: int = Field(
+        default=0,
+        description="⑫⑬ 집계 대상 AI 턴 수(socratic_strategy NOT NULL·대화별 시퀀스 합).",
     )
     sample_accuracy_attempts: int = Field(
         default=0,
@@ -808,6 +842,107 @@ def _transfer_from_probes(transfer_outcomes: list[bool]) -> Metric:
     )
 
 
+# ⑫⑬ 발문 전략 지표의 *최소 기록 턴 수*. 전략이 한두 턴만 기록된 상태에서 다양성/반복률을 내면
+# 1.0 또는 0.0이라는 극단값이 나와 추세를 오도한다(N=1이면 다양성은 항상 1.0). 최소 3턴을 요구한다.
+_MIN_STRATEGY_TURNS = 3
+
+
+def _strategy_diversity_from_values(strategies: list[str]) -> Metric:
+    """⑫ 전략 다양성 — 기록된 발문 전략 중 서로 다른 값의 비율(순수·날조 0).
+
+    `distinct/total`이라 1.0은 "매 턴 다른 전략", 낮을수록 단조롭다. 표본이
+    `_MIN_STRATEGY_TURNS` 미만이면 NO_DATA(가짜 1.0 금지).
+
+    **해석 상한을 note에 반드시 싣는다**: 현 생산 경로에서 도달 가능한 전략은
+    `REACHABLE_STRATEGIES` 4종뿐이라(`select_intervention`이 개입 패턴 2종만 반환) 다양성의
+    실질 상한은 min(4, N)/N이다. 이 상한을 모르면 "6종 중 4종만 쓴다"를 품질 저하로 오독한다.
+    """
+    total = len(strategies)
+    if total < _MIN_STRATEGY_TURNS:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"발문 전략 기록 턴 {total}건 — 표본 부족(최소 {_MIN_STRATEGY_TURNS}턴)으로 "
+                "다양성 산출 불가(가짜 1.0 아님). coach 세션 턴이 쌓이면 계측."
+            ),
+        )
+    distinct = len(set(strategies))
+    reachable = len(REACHABLE_STRATEGIES)
+    return Metric(
+        value=distinct / total,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"AI 턴 {total}건 중 서로 다른 전략 {distinct}종. **실질 상한은 "
+            f"min({reachable},N)/N** — 현 생산 경로에서 도달 가능한 SocraticStrategy는 "
+            f"{reachable}종뿐이다(개입 2종 + 단계 기본 3종의 합집합·나머지 2종은 생산자 0). "
+            "낮은 값이 곧 품질 저하가 아니라 *발문 각도 단조*의 신호다."
+        ),
+    )
+
+
+def _strategy_repeat_from_sequences(sequences: list[list[str]]) -> Metric:
+    """⑬ 연속 반복률 — 인접한 두 AI 턴의 전략이 같은 비율(순수·날조 0).
+
+    `sequences`는 **대화별** 전략 시퀀스다 — 세션 경계를 넘어 인접쌍을 만들면 서로 다른 학습
+    맥락을 이어 붙여 반복을 날조하게 된다. 인접쌍이 `_MIN_STRATEGY_TURNS` 미만이면 NO_DATA.
+
+    높을수록 같은 각도의 발문이 이어졌다는 뜻이다 — 단조 발문 회전(`select_category` 규칙 2.5)이
+    실제로 듣는지 보는 계기판이다. 다만 *같은 전략의 반복이 항상 나쁜 것은 아니다*(단계분해는
+    연속이 자연스럽다) — 절대 임계가 아니라 추세로 읽는다.
+    """
+    pairs = 0
+    repeats = 0
+    for seq in sequences:
+        for previous, current in zip(seq, seq[1:], strict=False):
+            pairs += 1
+            if previous == current:
+                repeats += 1
+    if pairs < _MIN_STRATEGY_TURNS:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"인접 AI 턴 쌍 {pairs}건 — 표본 부족(최소 {_MIN_STRATEGY_TURNS}쌍)으로 연속 "
+                "반복률 산출 불가(가짜 0 아님). 멀티턴 세션이 쌓이면 계측."
+            ),
+        )
+    return Metric(
+        value=repeats / pairs,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"대화 내 인접 AI 턴 쌍 {pairs}건 중 전략 동일 {repeats}건(대화 경계 미교차). "
+            "높을수록 발문 각도가 단조 — 절대 임계가 아니라 추세로 읽는다(단계분해 연속은 자연)."
+        ),
+    )
+
+
+def _state_mismatch_from_counts(mismatched: int, total: int) -> Metric:
+    """⑭ 클라 상태 불일치율 — 힌트제공 이벤트 중 `client_state_mismatch=true` 비율(순수).
+
+    PED-04 D2가 Polya 상태를 서버 소유로 되찾으면서 생긴 계기판이다. **불일치는 오류가 아니라
+    동기화 신호**이며, 이 비율이 높다는 것은 클라 상태 모델이 서버와 어긋나 있다는 뜻이다
+    (S3 파일럿 KPI가 그 상태값에 의존했으므로 측정 신뢰의 직접 지표).
+
+    표본 가드는 두지 않는다 — 비율이 아니라 *존재 여부*가 먼저 중요하고(1건이라도 보이면 조사),
+    total==0이면 NO_DATA다.
+    """
+    if total <= 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=("힌트제공 이벤트 0건 — coach 세션이 쌓이면 클라 상태 불일치율 계측(가짜 0 아님)"),
+        )
+    return Metric(
+        value=mismatched / total,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"힌트제공 이벤트 {total}건 중 클라 제출 polya_state가 서버 파생과 어긋난 건 "
+            f"{mismatched}건. 오류가 아니라 *동기화 신호* — 높으면 클라 상태 모델을 점검한다."
+        ),
+    )
+
+
 def _hint_depth_from_levels(hint_levels: list[int]) -> Metric:
     """⑧ 답 미루기 도달 깊이 — 힌트제공 hint_level의 평균·최대를 Metric으로(순수·날조 0).
 
@@ -1196,7 +1331,11 @@ async def compute_wh1_surrogate_metrics(
 
     hint_rows = (
         await session.execute(
-            select(AttemptEvent.event_data["hint_level"].as_integer())
+            select(
+                AttemptEvent.event_data["hint_level"].as_integer(),
+                # PED-04 ⑭: 같은 행에 실린 D2 불일치 태그를 함께 뽑는다(신규 쿼리 0).
+                AttemptEvent.event_data["client_state_mismatch"].as_boolean(),
+            )
             .select_from(AttemptEvent)
             .where(*hint_conds)
             .order_by(AttemptEvent.event_at.asc())
@@ -1205,6 +1344,12 @@ async def compute_wh1_surrogate_metrics(
     # JSONB 파싱 실패(키 부재 등)로 None이 섞일 수 있으니 정수만 채택(날조 회피·결손 행 제외).
     hint_levels = [int(row[0]) for row in hint_rows if row[0] is not None]
     help_reduction = _help_reduction_from_levels(hint_levels)
+
+    # ── ⑭ 클라 상태 불일치율 (PED-04 D2·⑤와 같은 행 재사용·신규 쿼리 0) ──
+    # 키가 없는 구(舊) 이벤트는 None → False로 읽는다(태그 도입 전 행 = 불일치 미관측).
+    state_mismatch_metric = _state_mismatch_from_counts(
+        sum(1 for row in hint_rows if row[1] is True), len(hint_rows)
+    )
 
     # ── ⑧ 답 미루기 도달 깊이 (⑤와 동일 hint_levels 재사용·새 쿼리 0) ──
     # ⑤가 hint_level *기울기*(도움 감소 추세)를 본다면 ⑧은 *도달 깊이*(평균·최대)를 본다 —
@@ -1425,6 +1570,33 @@ async def compute_wh1_surrogate_metrics(
     resolved_total = int(resolved_total_raw or 0)
     self_solve = _self_solve_from_counts(self_solved, resolved_total)
 
+    # ── ⑫⑬ 발문 전략 지표 (PED-04 D1 writer가 적재한 socratic_strategy의 첫 reader) ──
+    # 대화별 시퀀스로 뽑는다 — ⑬ 인접쌍이 세션 경계를 넘으면 서로 다른 학습 맥락을 이어 붙여
+    # 반복을 날조한다. 본문 컬럼은 조회하지 않는다(컬럼 투영·복호 0).
+    strategy_conds: list[ColumnElement[bool]] = [DialogueTurn.socratic_strategy.is_not(None)]
+    if user_id is not None:
+        strategy_conds.append(Dialogue.user_id == user_id)
+    if since is not None:
+        strategy_conds.append(Dialogue.started_at >= since)
+    if until is not None:
+        strategy_conds.append(Dialogue.started_at <= until)
+    strategy_rows = (
+        await session.execute(
+            select(DialogueTurn.dialogue_id, DialogueTurn.socratic_strategy)
+            .join(Dialogue, DialogueTurn.dialogue_id == Dialogue.dialogue_id)
+            .where(*strategy_conds)
+            .order_by(DialogueTurn.dialogue_id, DialogueTurn.turn_order)
+        )
+    ).all()
+    strategy_sequences: dict[uuid.UUID, list[str]] = {}
+    for dialogue_key, strategy_value in strategy_rows:
+        strategy_sequences.setdefault(dialogue_key, []).append(
+            strategy_value.value if hasattr(strategy_value, "value") else str(strategy_value)
+        )
+    flat_strategies = [value for seq in strategy_sequences.values() for value in seq]
+    strategy_diversity = _strategy_diversity_from_values(flat_strategies)
+    strategy_repeat_rate = _strategy_repeat_from_sequences(list(strategy_sequences.values()))
+
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
     diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
@@ -1442,10 +1614,14 @@ async def compute_wh1_surrogate_metrics(
         mastery_gain_rate=mastery_gain_metric,
         misconception_resolution_rate=misconception_resolution,
         self_solve_rate=self_solve,
+        strategy_diversity=strategy_diversity,
+        strategy_repeat_rate=strategy_repeat_rate,
+        client_state_mismatch_rate=state_mismatch_metric,
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
         sample_hint_events=len(hint_levels),
+        sample_strategy_turns=len(flat_strategies),
         sample_accuracy_attempts=len(accuracy_series),
         sample_difficulty_attempts=len(difficulty_series),
         sample_calibration_pairs=len(calibration_pairs),

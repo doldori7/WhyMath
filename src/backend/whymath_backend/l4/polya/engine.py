@@ -22,21 +22,14 @@ from whymath_backend.l4.models import (
     PolyaStage,
     PolyaState,
     ToneReport,
+    next_polya_stage,
 )
 from whymath_backend.l4.pedagogy.prompt_assembler import build_system_prompt
 from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
 from whymath_backend.l4.polya.transitions import should_advance
-from whymath_backend.l4.socratic import select_category
+from whymath_backend.l4.socratic import SocraticCategory, select_category
 from whymath_backend.l4.tone_filter import filter_tone
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
-
-_STAGE_ORDER: tuple[PolyaStage, ...] = (
-    PolyaStage.UNDERSTAND,
-    PolyaStage.PLAN,
-    PolyaStage.EXECUTE,
-    PolyaStage.REVIEW,
-)
-
 
 # 단계별 보조 행동 라벨 — UI/내부 후속 트리거 후보(스펙 §"인터페이스" L173).
 # 슬라이스 1은 정적 매핑(학습자별 동적 조정은 L2 통합 후속).
@@ -46,14 +39,6 @@ _STAGE_ACTIONS: dict[PolyaStage, tuple[str, ...]] = {
     PolyaStage.EXECUTE: ("단계별 적기", "막힘 보고", "중간 점검"),
     PolyaStage.REVIEW: ("검산", "다른 풀이 탐색", "메타인지 회상", "전이 시도"),
 }
-
-
-def _next_stage(current: PolyaStage) -> PolyaStage:
-    """현 단계의 다음 단계. REVIEW면 자기 자신(종착)."""
-    idx = _STAGE_ORDER.index(current)
-    if idx == len(_STAGE_ORDER) - 1:
-        return current
-    return _STAGE_ORDER[idx + 1]
 
 
 class PolyaCoach:
@@ -71,6 +56,7 @@ class PolyaCoach:
         mastery_level: MasteryLevel | None = None,
         misconception_hypotheses: Sequence[MisconceptionHypothesis] | None = None,
         pack: PedagogyPack | None = None,
+        recent_categories: Sequence[SocraticCategory] = (),
     ) -> PedagogyDecision:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
@@ -78,6 +64,9 @@ class PolyaCoach:
         - `socratic_category`: 단계·전이·발화 신호·활성 오개념 가설로 6카테고리 중 하나.
           stay/previous + 명시 신호 없음 + 고신뢰·최근 가설이면 ASSUMPTION으로 가정 표면화.
           `misconception_hypotheses` None → 현 동작 불변(하위호환·맞은 학생 영향 0).
+        - `recent_categories`(PED-04 D1 reader ①): 직전 AI 턴들의 카테고리 꼬리 연속열. 세션
+          경로가 `DialogueTurn.targeted_step` 이력에서 서버 파생해 넘긴다. 기본 `()`면 회전
+          규칙이 잠들어 **현 동작과 비트동일**(stateless `/v1/coach`·직접 호출).
         - `hint_level`: 답 미루기 4단계 — 좌절·답요구·5회+ 막힘 신호로 점진 상승(슬라이스 3).
         - `reveals`: hint_level에서 파생된 노출량 라벨(KPI 입력).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
@@ -88,7 +77,7 @@ class PolyaCoach:
         """
         transition = should_advance(state, student_input, mastery_level=mastery_level)
         target_stage = (
-            _next_stage(state.current_stage) if transition == "next" else state.current_stage
+            next_polya_stage(state.current_stage) if transition == "next" else state.current_stage
         )
         sp = STAGE_PROMPTS[target_stage]
         category = select_category(
@@ -96,6 +85,7 @@ class PolyaCoach:
             transition,
             student_input,
             misconception_hypotheses,
+            recent_categories,
         )
         hint_level = decide_hint_level(
             student_input=student_input,
