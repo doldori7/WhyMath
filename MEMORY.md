@@ -337,6 +337,124 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-04 (설계·협업 착지): **협업 판정 이식(미머지 브랜치 → main 계보) + 갭 리뷰 §5 공백 3건 해소 설계 신설(`collaboration_landing_design.md`) — 다자 소유 파기 규칙 v1·보호자 접근 3안과 권고(ⓒ 링크 우선)·매트릭스 확장 6항목·기능 70/71/74 최소 착지 형태. 신규 태스크 0건, 코드 0** (claude 설계, Kiki 요청 — 동일 EOS 틀 『17. 협업』 재제출)
+
+**컨텍스트**: Kiki가 외부 EOS 틀 『17. 협업』(기능 70~74)을 **재제출**하며 점검·설계를 요청했다.
+탐색 결과 **동일 대조가 2026-07-31에 이미 수행**됐고(`collaboration_module_gap_review.md` 441행 +
+`COLLAB-01`~`03`), 그 성과가 브랜치 `claude/whymath-collaboration-design-ur7l4v`에 **미머지로
+고립**돼 있었다 — `origin/main` 176태스크에 COLLAB 접두사 0건, 즉 **판정 결과가 main에서 보이지
+않는 상태**. 재점검하면 정면 중복이므로 Kiki 확인 후 **이식 + 공백 보완**으로 방향을 잡았다.
+
+**결정 1 — 이식**. 커밋 `24345812`를 현 브랜치로 cherry-pick(충돌 0·태스크 176→179·
+`backlog.py validate` green). 판정(세부 50개 ✅/△/⌛/⏸/🚫, D1~D4)은 재론 없이 승계. `ur7l4v`는
+내용상 잉여가 됐다 — **Kiki가 브랜치 정리 판단 필요**.
+
+**결정 2 — 사실 정정 1건**. 이식 문서 D3이 `DailyLearningMetrics`·`UserBehaviorMetrics`·
+`ProblemSolveTimeDistribution` **3테이블이 파기·반출·보존 배관에 전부 등재**됐다고 적었으나
+**실측 결과 2테이블뿐**이다. `ProblemSolveTimeDistribution`은 `export.py:16-17,76-77`이
+"`problem_id` 교차 사용자 집계라 개인 PII 아님 → 영구 제외"로 **의도적으로 제외**한 것이다(writer 0인
+것은 3테이블 공통이나 배관 등재는 2건). 이 구별이 사소하지 않은 이유: **저장소에 이미 존재한 유일한
+"개인 소유 축 밖 데이터" 판례**이며, 신설 설계 §2의 C형(교차 사용자 집계)이 이를 정식 분류로 승격했다.
+
+**결정 3 — 공백 3건 해소(`collaboration_landing_design.md` 신설)**. 갭 리뷰가 §5에서 "답하지
+않는다"고 자백한 것 중 지금 설계 가능한 3건:
+- **다자 소유 파기 규칙 v1(§3)** — 협업 테이블은 현 구조의 근본 전제인 `user_id` **단일 소유 축**
+  (현행 62테이블 전부)을 깨는 첫 사례. **소유 축 5분류**(A 학생 단독 / B 학생 기여+타인 컨테이너 /
+  C 교차 집계 / D 조직 소유 / E 감사) × 3배관 처리표를 정하고, B형 익명화 잔존의 **판정 3기준**
+  (구조화·소집단·역산)을 명시. **파생 결론**: 자유 텍스트 기여는 기준 1을 통과하지 못해 *지울 수도
+  남길 수도 없다* — 화이트보드·그룹채팅·게시판 미채택의 **두 번째 독립 사유**(운영 인력이 생겨도
+  사라지지 않는다). 또 *컨테이너 소유권 ≠ 내용물 소유권* — 학급이 사라져도 학생 학습 이력은 학생
+  것이며, 이것이 B2B에서 "학원이 학생 데이터를 가져가는" 형태를 구조적으로 차단한다.
+- **보호자 접근 모델(§4)** — 갭 리뷰는 이 항목을 "MGMT-01 소관·기계 대체 금지"로 미설계했으나 그
+  판단은 절반만 옳다: 본인확인 *방식의 법적 적정성*은 법무지만 **어떤 좌석으로 접근하는가는 공학
+  결정**이다. 섞어 두면 법무 회신이 와도 설계를 처음부터 다시 한다. ⓐ학생 세션 위임(현행)·ⓑ보호자
+  독립 계정·ⓒ일회용 서명 링크를 비교해 **Phase 3=ⓒ / Phase 4=ⓑ 권고**. 근거: 정본이 요구하는 것은
+  *상시 대시보드*가 아니라 **주 1회 요약**이고(`07_community.md`), 매트릭스 §2.3이 부모에게 "감시가
+  아니라 지원 도구"를 준다고 못박는다. ⓒ는 보호자 측에 조회 API가 열리지 않고 **이미 투영된 정적
+  요약**만 전달하므로 매트릭스 위반 경로가 구조적으로 생기지 않는다. 공학/법무 결정 분리표 동봉.
+- **매트릭스 확장 후보(§5)** — 협업이 만들 신규 항목 10~15번 초안 판정. 원칙 **deny by default**
+  (신규 항목 기본값은 전 역할 ✕, 여는 쪽이 근거를 댄다). **14 학급 내 상대 위치·15 그룹 기여도는
+  권한 ✕가 아니라 "미산출"** — 소집단은 N이 작아 순위가 곧 개인 식별이고 역산도 된다. 권한 설정은
+  코드 실수로 뚫리지만 산출하지 않는 값은 샐 수 없다(`Role` 서열 비교를 `TypeError`로 봉인한 것과
+  같은 계열의 구조적 방어).
+
+**결정 4 — 신규 태스크 0건**. §3~§5 산출물은 이미 등재된 `COLLAB-01`~`03`의 **대상 정본**이 되고
+(특히 `COLLAB-02` acceptance ⑤가 요구한 문서가 §3), 나머지(보호자 인증·교사 웹 IA·테넌시)는 발화
+조건 미충족이라 지금 등재하면 dead task다. **중복 경보**: `COLLAB-03`과 미머지 브랜치
+`claude/whymath-learning-analytics-9t71oh`의 `S4-20`이 **같은 writer 0 문제**를 지목 — 먼저 머지되는
+쪽으로 통합하고 나머지는 중복 사유 명시 후 `cancelled`. 병렬 구현은 2026-07-27 OPS-07(735줄 폐기)
+재발이다.
+
+**검증**: `git diff --stat -- src/` **빈 결과**(좌석 없는 코드 0) · `backlog.py validate` green
+(179건) · 문서 인용 전건 현행 재실측(62테이블·`Role` 2값·`test_erasure.py:94` 방향·3배관 등재 2건).
+
+### 2026-08-03 (구현·PED-06): **성장 증거 도달 관측 + 노출 계약 정본 — 라이브 요청 카운터(`/health/ready`)·구조적불가/무데이터/미도달 3상태·11지표 학생 노출 계층 분류·⑧×R15 조합 억제·⑥ 서술 변환** (claude 구현, `gamification_module_gap_review.md` §3 D1 설계 승계 — Kiki "/drive")
+
+**배경**: `compute_wh1_surrogate_metrics`가 성장 대리지표 11종을 계산해 `GET /v1/me/
+harness-metrics`로 노출하지만 Flutter가 이 엔드포인트를 **호출하기로 결정한 적 자체가
+없다**(전수 실측 — 배선 부재가 아니라 결정 부재, 반복 실수 회차 7). 게다가 11지표를 그대로
+한 덩어리로 노출하면 그 자체가 새 위험이었다 — `GAMING_SUSPECT`(교정기 함정 경보) 원문
+노출은 낙인, ②(진단정확도)·④(턴당 토큰)는 학생 개인 지표가 아닌 시스템/비용 지표, ⑥(Brier)
+원 스칼라는 "낮을수록 좋음" 역방향이라 오독.
+
+**설계는 07-30 이전 세션이 아니라 같은 날 앞서 확정한 `gamification_module_gap_review.md`
+§3 D1을 그대로 승계**(새 설계 아님) — 이 구현은 그 문서가 지정한 acceptance 7개를 집행한다.
+
+**구현 4갈래**:
+1. **노출 계약 정본**(`harness/growth_evidence_exposure.py`) — 11지표를 `STUDENT_VISIBLE`/
+   `GUARDIAN_SUMMARY`/`INTERNAL_ONLY` 3분류로 고정(②④=INTERNAL_ONLY 정적). `classify_metric_
+   exposure`가 R15 verdict를 함께 받아 ⑧(답 미루기 도달 깊이)을 GAMING_SUSPECT일 때만
+   억제하는 **조합 제약**을 적용 — 필드 단위 allowlist가 아니라 필드×verdict 조합 판정.
+   `narrate_calibration_brier`가 ⑥ 원 스칼라를 3구간 서술로 변환(원값 미반환). 비교·서열·
+   순위 파생 함수는 이 모듈에 **의도적으로 0개**(governance 테스트가 함수명 토큰으로 동결).
+2. **라이브 도달 카운터**(`api/_growth_evidence_state.py` — `NLP-01 OcrReachCounters` 동형
+   패턴·병렬 구축) — `GrowthEvidenceReachCounters`(요청 수만, distinct user_id는 메모리
+   미누적 — PII 최소화 의도적 선택)를 `create_app`이 앱 수명 1개 심고, `GET /v1/me/
+   harness-metrics` 호출마다 증가, `GET /health/ready`의 신규 `growth_evidence` 섹션으로
+   노출. 지금은 0 — 정적 감사(Flutter 미호출)와의 이중 회계.
+3. **3상태 도달 리포트**(`harness/surrogate_baseline_report.py` 확장 — 새 파일 대신 기존
+   리포트에 `render_growth_evidence_reach_report`/`classify_reach_state` 추가, 재사용 원칙)
+   — `구조적불가`(③ 세션완주율 전용·`LearningSession` 생성자 호출 0건·S3-16 영구 미신설
+   결정 승계) > `무데이터`(MetricStatus≠MEASURED) > `미도달`(MEASURED인데 요청 0) > `도달`
+   우선순위로 판정하는 순수 함수. CLI는 `--requests-total`로 라이브 카운터 값을 인자로
+   받는다(DB 전용 프로세스가 다른 프로세스의 인프로세스 상태를 직접 읽을 수 없어 합성하지
+   않고 명시 요구). ⑥ NO_DATA 행에 "입력 UI 부재"(REC-01의 "입력 루프 미도달"과 다른 층)를
+   구분 표기.
+4. **`api/me.py`** — `get_my_harness_metrics`에 카운터 기록 1줄 추가(응답 스키마 불변).
+
+**변별력**: `classify_reach_state` 양방향(요청 0→1→0 되돌림에서 미도달⇄도달 실제로 뒤집힘)·
+`classify_metric_exposure`(GENUINE_IMPROVEMENT↔GAMING_SUSPECT에서 ⑧ 노출 여부 실제로
+뒤집힘)·라이브 카운터(실 PG 통합테스트로 `GET /v1/me/harness-metrics` 1·2회 호출 후 `/health/
+ready` 값이 정확히 그만큼 증가함을 실측 — `test_wh1_evaluation_integration.py`에 추가).
+
+**CI 배선**: 신규 테스트 파일 전부 기존 `tests/backend/` 하위(harness·api) — 새 디렉터리
+0이라 기존 CI 커버리지에 자동 편입(`tests/infra` wiring 테스트 43건 green으로 재확인).
+
+**검증**: ruff·black·mypy --strict(446파일) clean. 신규/확장 테스트: exposure 8건·reach
+classification+report 11건·counters hermetic 7건·live PG 통합 1건(SEC-10/12에서 이미
+구성한 로컬 네이티브 PostgreSQL 16+pgvector·Redis로 실측) 전부 green.
+
+**NOT**: 모바일 화면 신설·클라 attempt POST 배선(REC-01 소관)·확신도 수집 UI 신설·푸시
+알림(전부 acceptance ⑦ 범위 밖 동결) — 백엔드 관측·계약 축만.
+
+정본: `docs/architecture/gamification_module_gap_review.md` §3 D1.
+
+### 2026-08-03 (재점검·개념): **개념 관리 모듈 갭 리뷰 §5 재점검 — 도달 관측 렌즈 최초 적용, concepts API 7라우트·flashcards(113건 적재)·prerequisites/learning-path 학생 도달 0회 확인 + `KG-01` 1건 등재** (claude 설계, Kiki 요청)
+
+**컨텍스트**: 2026-07-27 `knowledge_module_gap_review.md`(D1~D5·`S4-05`/`S4-06`/`ARCH-16`/
+`ARCH-17`) 이후 재점검. §1~§4는 모듈 6~10 crosswalk·설계였고 클라 도달은 다루지 않았음 —
+`ai_recommendation`/`visualization`/`nlp` 3개 자매편이 확립한 도달 관측 렌즈를 개념 축에
+처음 적용. Flutter 앱이 실호출하는 `/v1/` 13종 목록(원래 "20종" 주장은 test mock 리터럴 혼입
+오류 — `src/mobile/lib`만 대상이면 13종, `concept_reach_report.py` 실측 재확인)에 `concepts`
+API 7라우트(생성·조회·검색·
+엣지·수정·삭제)·`ConceptContent.flashcards`(코퍼스 113건 적재, 읽기 API 0개)·
+`/me/weak-concepts/{id}/prerequisites`·`.../learning-path`가 전부 없음을 실측. `REC-01`이
+이미 지적한 "개념 추천 API 클라 소비 0"과는 관측 축이 다름(요청량·개인화 vs 콘텐츠·그래프
+표면 자체)이라 중복 아님. chunk 임베딩·`formula_refs` 미충전은 재확인 결과 변동 없음(신규
+태스크 없음). `problem.schema.yaml`의 `ActiveConcepts`(3분류) vs 런타임 `ConceptRole`(4종)
+스키마 stale은 문서 각주로만 기록(편집 소유는 다음 스키마 유지보수 세션에 위임). 신규 태스크
+1건만 등재(`KG-01-concept-reach-observability`) — 활성화가 아니라 가시화. 정본:
+`docs/architecture/knowledge_module_gap_review.md` §5.
 ### 2026-08-03 (재점검·AI 콘텐츠 생성): **AI 콘텐츠 생성 모듈 2차 재점검(`ai_content_generation_gap_review_2.md`) — 1차 판정(58~68) 전부 유지·`S3-27`/`ARCH-21` 착지 반영·404 체인(`S3-26`) 불변 재확인. 신규 발견: 학생 도달 상한 4는 `CUR-02`와 동일 근본원인이라 중복 등재 배제(G1) / 교수법 콘텐츠 슬롯 파이프라인(`slot_generator`→`prescreen`→`review`)이 프로덕션 호출자 0·학생 reader 0로 완전 격리 — "완비된 소비 경로+미도달 공급원" 계열의 역방향 8회차(G2/G3) — 태스크 1건(`PED-06`) 등재** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재대조)
 ### 2026-08-03 (설계·평가): **평가(Assessment) 모듈 갭 점검·설계(D1~D2+페이퍼) + 태스크 2건 등재(`ASM-02`는 owner=kiki) — 평가 결과 영속 좌석 writer 0(D1·"완비된 소비 경로+미도달 공급원" 8회차)·등급·백분위·합격예측 노출과 게임화 금기의 미기록 긴장(D2) — 외부 EOS 틀 1단계 모듈 49~53+확장54~58 대조** (claude 설계, Kiki 요청)
 
@@ -1182,6 +1300,72 @@ defect_injection_demotion=ok(detection_lower=0.978) → `overall={"pass": false,
 
 **후속**: S3-28 판정 후 `continue-on-error` 제거. 미측정 4축(ui_golden·
 statistical_outlier·banned_words_pii·performance)은 향후 별도 태스크.
+### 2026-07-31 (설계·협업): **협업 모듈 갭 점검·설계 — "구현 0%"는 갭이 아니고 *협업이 착지할 때 무너질 바닥*이 갭이다·태스크 3건 등재·정본 Phase 모순 교정 — 외부 EOS 틀 기능 70~74 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『17. 협업』(기능 70 교사 클래스 관리 · 71 학부모 대시보드 ·
+72 그룹 학습 · 73 토론 기능 · 74 과제 배포, 세부 50개 — **WhyMath 전용이 아닌 일반적 EOS 틀**)을
+코드베이스와 전수 대조. `visualization_module_gap_review.md`(07-30)에 이은 **9번째 자매편**.
+산출: `docs/architecture/collaboration_module_gap_review.md`. **코드 변경 0**(`git diff --stat -- src/`
+빈 결과로 확인).
+
+**착수 가설은 확인됐으나 그것이 결론이 될 수 없었다.** 협업은 백엔드·클라이언트·백로그 **전 스택 0**이다
+(classroom·roster·invite·attendance·whiteboard·discussion 전건 grep 0 · 62테이블 중 협업 0 · `l7/`
+부재 · 알림 인프라 0 · 백로그 145건 중 0). 그런데 **구현 0%는 그 자체로 갭이 아니다** — 정본이 Phase 3+로
+배치한 결과이고, `Role` v0가 `PARENT`/`TEACHER`를 *의도적으로* 만들지 않은 결과다(좌석 없는 역할 금지).
+그래서 판정 기준을 **"좌석 없이도 지금 유효한가"**로 바꿔 재대조했고, 그 결과 세부 기능 체크리스트로는
+드러나지 않는 **구조 축의 갭**을 찾았다.
+
+**정본 결정 4건**:
+1. **D1 — PIPA 권한 매트릭스는 선언은 정본, 집행은 0.** `pipa_data_matrix.md` §2.4가 *"매트릭스의 각
+   칸을 코드의 권한 체크 단위로 사용한다"*고 **명령**하는데, 매트릭스는 md 표뿐이고 `Role`은 2값이며
+   `require_role`(`_auth.py:96`)은 1차원(역할)만이다. 미성년자 보호의 마지막 방어선이 **관례**에 의존한다.
+   → `data/access_matrix.json` 단일 진실원 + 거버넌스 게이트(`render_contract.json` 동형 선례).
+   **협업의 임계 경로는 화면이 아니라 매트릭스**라는 것이 이 편의 핵심 판정.
+2. **D2 — 파기 완전성 검사의 방향이 반대.** `test_erasure.py:94`가 `assert planned <= order`로
+   **계획→실행**만 단언 — 역방향이 없어 `user_id`를 가진 신설 테이블이 `_ERASURE_PLAN`에 없어도 red가
+   나지 않는다. 협업 테이블은 **다자 소유**라 현 구조의 근본 전제("`user_id` 단일 소유 축")를 깨는 첫
+   사례가 된다. 파기 누락은 사후에 고쳐도 되돌릴 수 없어 D3보다 우선.
+3. **D3 — `daily_learning_metrics` 등 3테이블 writer 0.** 파기·반출·보존 배관에 **전부 등재돼 있는데
+   프로덕션 writer가 0건**이다. 기능 71-4 "학습 시간 통계"의 공급원 부재이며,
+   `visualization_module_gap_review.md` D1과 **동일 실패 유형(완비된 배관 + 미적재 공급원)의 다른 도메인
+   재발**. 학생 1인칭(`/v1/me/*`)에 Phase 1~2 좌석이 있어 협업을 기다릴 필요가 없다.
+4. **D4 — 정본 자체의 Phase 모순 교정.** `07_community.md:70`이 *"아래 Phase별 진입과 일치"*라고
+   주장하는데 실제로는 불일치였다(§4 본문 "Phase 3+" ↔ Phase별 진입 "Phase 4"). `ROADMAP.md:177-179`
+   (M3.3 교사 대시보드 **베타**)와 `:194-210`(Phase 4 학교 확산)에 맞춰 **베타=Phase 3 / 확산=Phase 4**로
+   분리 교정.
+
+**틀의 "1단계" 표기 반려**: Phase 3+는 자의적 배치가 아니라 **선결 조건의 귀결**이다 — ⓐ 보호자 인증
+모델 부재("학부모"라는 주체가 시스템에 없다 · 법정대리인 동의조차 *학생 세션*에서 호출됨을
+`consent_grant.py`가 자인) ⓑ `MGMT-01` **blocked**(공개 β까지 연기) ⓒ `ConsentScope`에 **제3자 제공
+범위가 아예 없음**(변호사 확정 전 추가 금지) ⓓ B2B 계약 좌석 선행 ⓔ 1인 capacity 가드. 즉 학부모
+대시보드는 **법적으로** Phase 1에 착지할 수 없다.
+
+**의도적 미채택 22개 세부(8개 사유)**: ①미성년자 간 자유 텍스트 상호작용(화이트보드·그룹채팅·게시판·
+댓글 — 모더레이션 인력 0에서 열면 학교폭력·PII 노출이 *제품 기능으로* 들어온다) ②AI 팩트체크·토론
+요약(SymPy는 담화 진위 권위가 아니다 — 검증 권위 서열을 **원리적으로** 통과 불가) ③출석 관리(매트릭스 #4
+이용 시간대 = 교사 ✕와 정면 충돌) ④LMS 연동(제3자 제공 범위 부재) ⑤성적 반영("어느 단계에서 막혔는지"
+재정의를 되돌려 이분법 복원) ⑥팀 성과·참여도 순위(**팀 단위 비교는 개인 비교의 우회로** — 팀 순위는 개인
+순위를 역산 가능하게 한다) ⑦그룹별 AI Tutor(BKT·오개념은 전부 *개인* 상태 — 개인 진단이 집단 평균으로
+희석) ⑧학급 코드 초대(보호자 동의 범위 밖). ①②⑥⑦은 **영구 미채택**, ③④⑤⑧은 조건부.
+
+**정본 승계(재설계 금지)**: 기능 72·73은 "못 만든 것"이 아니라 정본이 **다른 형태로 이미 답한 것** —
+익명 다중 풀이 갤러리(본인 풀이 *후* 열람·랭킹 금지)와 Live Problems. 선행 축 `S4-12`. 자동 채점(74-7)은
+`07:38`(OCR→PRM 단계 검증) 승계, 역할 설계는 `account_security_gap_review.md` §2-①(선형 서열 원리적
+반증) 승계.
+
+**세부 50개 판정**: 🚫 미채택 22(44%) · ⌛ 좌석 대기 15 · ⏸ 승계 5 · ✅ 엔진 충족·초과 4 · △ 부분 2 ·
+⚠️ 진짜 갭 2. **분석 엔진은 오히려 초과충족**(L2 BKT·IRT·합치 진단·약점 추천 + `/v1/me/*` 29개) —
+없는 것은 계산이 아니라 **역할별 뷰**다.
+
+**등재 3건**: `COLLAB-01-access-matrix-contract`(S3·pri 3 — D1) ·
+`COLLAB-02-erasure-completeness-direction`(S3·pri 2 — D2) ·
+`COLLAB-03-learning-metrics-writer`(S4·pri 3 — D3). 백로그 145→**148건 green**.
+
+**정직한 공백**: 다자 소유 파기 규칙 *자체*는 미정(D2는 누락 검출 장치만) · 보호자 인증 방식 미설계
+(`MGMT-01` 정본·기계 대체 금지) · 매트릭스 9항목의 충분성 미검증 · 교사 웹 IA/화면 범위 밖 · B2B 사업
+조건 관할 밖 · Live Problems Phase 불일치는 **손대지 않음**(근거 없이 정본을 옮기지 않는다).
+
+정본: `docs/architecture/collaboration_module_gap_review.md` · `docs/architecture/07_community.md`(개정).
 
 ### 2026-07-31 (구현·SEC-11): **로그 PII·시크릿 스크러버 — `logging.Filter`+`LogRecord` 팩토리 배선, 규정 3곳·구현 0의 비대칭 상환** (claude 구현·backend-engineer 위임, Kiki "/drive")
 

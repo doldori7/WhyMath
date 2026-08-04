@@ -1159,6 +1159,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── OPS-17: 클라 버전 계약 게이트 ──
+    # 클라(`X-App-Version` 헤더)가 서버 계약과 어긋나는 구버전으로 고착되는 것을 막는 최소
+    # 허용 버전 임계(app.py `_service_metrics_middleware` 좌석 — 신규 미들웨어 아님). 형식은
+    # `X.Y.Z`(빌드번호 없음·클라가 그대로 보냄), 비교는 정수 3튜플(외부 semver 라이브러리 불요).
+    min_app_version: str = Field(
+        default="0.0.0",
+        description=(
+            "클라이언트 최소 허용 버전(`X.Y.Z`, 빌드번호 없음). 기본 0.0.0 — 사실상 게이트 "
+            "비활성(모든 버전이 통과, 기존 클라이언트 무영향). 올리면(예: 0.2.0) 그 미만 "
+            "`X-App-Version`은 426 Upgrade Required로 차단된다(app.py "
+            "_service_metrics_middleware 좌석 — 401/404/422와 구분되는 전용 사유코드). 헤더 "
+            "부재(이 기능 배포 이전의 구버전 클라)나 파싱 불가한 버전 문자열은 '미달'과 다른 "
+            "'미상'으로만 관측하고 차단하지 않는다(app.py 경량 카운터·기존 클라 보호). "
+            "WHYMATH_MIN_APP_VERSION으로 조정."
+        ),
+    )
+
     @property
     def sync_database_url(self) -> str:
         """`database_url`(async asyncpg)에서 *sync psycopg* 드라이버 URL을 파생(슬105).

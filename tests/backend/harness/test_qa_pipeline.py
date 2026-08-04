@@ -24,6 +24,7 @@ import pytest
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from whymath_backend.harness import qa_pipeline as qp
+from whymath_backend.harness.banned_words_pii_eval import BannedWordsPiiReport
 from whymath_backend.harness.coach_prose_leak_eval import ProseLeakReport
 from whymath_backend.harness.crosslink_demotion_eval import CrosslinkDemotionReport
 from whymath_backend.harness.defect_detection_eval import DetectionReport
@@ -358,7 +359,56 @@ class TestAxisDefectInjectionDemotion:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 축 8 — defect_report_intake(RPT-01 학생 결함 신고 채널 수집 현황) — 가짜 세션 팩토리 주입
+# 축 8 — banned_words_pii(학생 대면 산문 금칙어·PII, ARCH-24) — run() monkeypatch
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestAxisBannedWordsPii:
+    def test_ok_when_no_hits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_report = BannedWordsPiiReport(
+            fields_scanned=7780,
+            banned_word_hits=0,
+            pii_third_party_hits=0,
+            pii_self_reflection_hits=0,
+            parse_error_count=0,
+            by_corpus={},
+        )
+        monkeypatch.setattr(qp.banned_words_pii_eval, "run", lambda _root: fake_report)
+        result = qp._axis_banned_words_pii(Path("/unused"))
+        assert result.status == "ok"
+        assert result.detail["fields_scanned"] == 7780
+        assert result.detail["banned_word_hits"] == 0
+
+    def test_gate_fail_on_high_banned_word_rate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 소표본(n=10) 중 5건 위반 — Wilson 상한이 임계(모듈 상수)를 크게 초과.
+        fake_report = BannedWordsPiiReport(
+            fields_scanned=10,
+            banned_word_hits=5,
+            pii_third_party_hits=0,
+            pii_self_reflection_hits=0,
+            parse_error_count=0,
+            by_corpus={},
+        )
+        monkeypatch.setattr(qp.banned_words_pii_eval, "run", lambda _root: fake_report)
+        result = qp._axis_banned_words_pii(Path("/unused"))
+        assert result.status == "gate_fail"
+
+    def test_gate_fail_counts_third_party_pii_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_report = BannedWordsPiiReport(
+            fields_scanned=10,
+            banned_word_hits=0,
+            pii_third_party_hits=5,
+            pii_self_reflection_hits=0,
+            parse_error_count=0,
+            by_corpus={},
+        )
+        monkeypatch.setattr(qp.banned_words_pii_eval, "run", lambda _root: fake_report)
+        result = qp._axis_banned_words_pii(Path("/unused"))
+        assert result.status == "gate_fail"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 축 9 — defect_report_intake(RPT-01 학생 결함 신고 채널 수집 현황) — 가짜 세션 팩토리 주입
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -572,6 +622,7 @@ def test_build_report_assembles_axes_and_isolates_one_exception(
     monkeypatch.setattr(qp, "_axis_coach_prose_leak", _boom)
     monkeypatch.setattr(qp, "_axis_content_provenance", _ok)
     monkeypatch.setattr(qp, "_axis_defect_injection_demotion", _ok)
+    monkeypatch.setattr(qp, "_axis_banned_words_pii", _ok)
     monkeypatch.setattr(qp, "_axis_defect_report_intake", _ok)
 
     report = qp.build_report(tmp_path, repo_root=tmp_path)
@@ -585,18 +636,19 @@ def test_build_report_assembles_axes_and_isolates_one_exception(
         "coach_prose_leak",
         "content_provenance",
         "defect_injection_demotion",
+        "banned_words_pii",
         "defect_report_intake",
     }
     assert report["axes"]["corpus_audit"]["status"] == "no_snapshot"
     assert report["axes"]["coach_prose_leak"]["status"] == "error"
     assert report["axes"]["coach_prose_leak"]["detail"]["error_type"] == "RuntimeError"
     assert report["axes"]["equivalence_canonicalize"]["status"] == "ok"
+    assert report["axes"]["banned_words_pii"]["status"] == "ok"
     assert report["overall"]["pass"] is False
     assert report["overall"]["failing_axes"] == ["coach_prose_leak"]
     assert {a["name"] for a in report["not_measured_axes"]} == {
         "ui_golden",
         "statistical_outlier",
-        "banned_words_pii",
         "performance",
     }
     assert all(a["reason"] for a in report["not_measured_axes"])  # 전부 사유 명시(침묵 통과 금지)
@@ -616,6 +668,7 @@ def test_build_report_all_ok_passes_overall(
         "_axis_coach_prose_leak",
         "_axis_content_provenance",
         "_axis_defect_injection_demotion",
+        "_axis_banned_words_pii",
         "_axis_defect_report_intake",
     ):
         monkeypatch.setattr(qp, name, _ok)
@@ -643,12 +696,13 @@ def test_cli_main_runs_end_to_end_and_writes_valid_json(tmp_path: Path) -> None:
         "coach_prose_leak",
         "content_provenance",
         "defect_injection_demotion",
+        "banned_words_pii",
         "defect_report_intake",
     }
     # 미실행(no code path) 없이 전 축이 measured 또는 명시적 error로 보고됐는지 확인.
     for axis in payload["axes"].values():
         assert axis["status"] in ("ok", "no_snapshot", "gate_fail", "error")
-    assert len(payload["not_measured_axes"]) == 4
+    assert len(payload["not_measured_axes"]) == 3
 
     # exit code는 overall.pass와 정확히 일치해야 한다(정직 회계).
     assert rc == (0 if payload["overall"]["pass"] else 1)

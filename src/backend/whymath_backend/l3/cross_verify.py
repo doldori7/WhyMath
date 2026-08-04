@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from whymath_backend.config import Settings
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CallSite,
@@ -66,6 +67,9 @@ from whymath_backend.l3.router import (
     langfuse_fields,
     resolve_model,
 )
+
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
 __all__ = [
     "CrossVerificationResult",
@@ -372,7 +376,7 @@ class CrossVerifier:
         min_perspectives: int = MIN_PERSPECTIVES,
         settings: Settings | None = None,
         trace: TraceSink | None = None,
-        subscription: str = "free",
+        subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
         difficulty: str = "medium",
     ) -> None:
         _assert_independent(perspectives, min_perspectives)
@@ -406,6 +410,7 @@ class CrossVerifier:
             difficulty=self._difficulty,
             requires_reasoning=True,
             student_subscription=self._subscription,
+            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             call_site=CallSite.SELF_VERIFY,
             sync=False,
         )

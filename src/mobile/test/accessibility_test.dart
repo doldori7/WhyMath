@@ -8,6 +8,10 @@
 // `ThemeData`로 pump하면 앱 색(indigo seed·error=앰버)이 아닌 엉뚱한 팔레트를 검증해
 // 거짓 통과가 난다. login은 네이버 브랜드색(초록 배경+흰 글자·≈2.3:1·WCAG AA 미달)이
 // 사업자 규정색 예외(`brand_colors.dart`)라 대비 테스트에서 제외한다.
+//
+// 배율 축(A11Y-01): 밝기 축과 별개로 텍스트 배율(1.0×/1.3×/2.0×)도 곱해 돈다 — 학생이
+// 시스템 글자 크기를 키워도 탭 타깃·라벨·대비 가드가 여전히 통과하는지 확인한다. 뷰포트
+// 크기 등 나머지 MediaQueryData는 보존한 채 `textScaler`만 덮어쓴다(`_TextScaleOverride`).
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,14 +24,36 @@ import 'package:korean_math_app/features/home/presentation/home_screen.dart';
 import 'package:korean_math_app/features/profile/presentation/me_screen.dart';
 import 'package:korean_math_app/theme/app_theme.dart';
 
+/// 기존 `MediaQueryData`(뷰포트 크기·기기 픽셀비 등)는 그대로 둔 채 `textScaler`만
+/// 덮어써 배율 축(A11Y-01)을 표현한다. deprecated `textScaleFactor`가 아니라 현행
+/// `TextScaler`/`MediaQueryData.copyWith(textScaler: ...)`를 쓴다.
+class _TextScaleOverride extends StatelessWidget {
+  const _TextScaleOverride({required this.scale, required this.child});
+
+  /// 강제할 배율(1.3·2.0 등). 1.0은 호출부에서 아예 이 위젯을 안 씀(무변경 경로 보존).
+  final double scale;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(textScaler: TextScaler.linear(scale)),
+      child: child,
+    );
+  }
+}
+
 /// 화면을 *실제 테마*로 감싸 pump한다(대비 검증이 앱 색으로 이뤄지도록).
-Widget _wrap(Widget screen, Brightness brightness) {
+/// [textScale]이 1.0이 아니면 배율 축(A11Y-01)을 얹는다.
+Widget _wrap(Widget screen, Brightness brightness, {double textScale = 1.0}) {
   return ProviderScope(
     child: MaterialApp(
       theme: brightness == Brightness.light
           ? WhyMathTheme.light
           : WhyMathTheme.dark,
-      home: screen,
+      home: textScale == 1.0 ? screen : _TextScaleOverride(scale: textScale, child: screen),
     ),
   );
 }
@@ -47,10 +73,12 @@ Future<void> _expectAccessible(
 }
 
 /// 조밀 위젯(장면·신호 카드)을 실 테마 + Scaffold surface 위에 얹어 pump한다.
-Widget _wrapWidget(Widget child, Brightness brightness) {
+/// [textScale]이 1.0이 아니면 배율 축(A11Y-01)을 얹는다.
+Widget _wrapWidget(Widget child, Brightness brightness, {double textScale = 1.0}) {
+  final content = textScale == 1.0 ? child : _TextScaleOverride(scale: textScale, child: child);
   return MaterialApp(
     theme: brightness == Brightness.light ? WhyMathTheme.light : WhyMathTheme.dark,
-    home: Scaffold(body: Center(child: child)),
+    home: Scaffold(body: Center(child: content)),
   );
 }
 
@@ -97,42 +125,56 @@ CoachResponse _signalResponse() => CoachResponse(
     );
 
 void main() {
-  for (final brightness in <Brightness>[Brightness.light, Brightness.dark]) {
-    final mode = brightness == Brightness.light ? '라이트' : '다크';
+  // 배율 축(A11Y-01): 1.0×(기존 동작 그대로)·1.3×·2.0×. 시스템 글자 크기를 키운 학생도
+  // 탭 타깃·라벨·대비 가드를 통과해야 한다.
+  const textScales = <double>[1.0, 1.3, 2.0];
 
-    testWidgets('ExploreScreen 접근성($mode): 탭타깃·라벨·대비', (tester) async {
-      await tester.pumpWidget(_wrap(const ExploreScreen(), brightness));
-      await _expectAccessible(tester);
-    });
+  for (final textScale in textScales) {
+    final scaleLabel = '${textScale}x';
 
-    testWidgets('HomeScreen 접근성($mode): 탭타깃·라벨·대비', (tester) async {
-      await tester.pumpWidget(_wrap(const HomeScreen(), brightness));
-      await _expectAccessible(tester);
-    });
-  }
+    for (final brightness in <Brightness>[Brightness.light, Brightness.dark]) {
+      final mode = brightness == Brightness.light ? '라이트' : '다크';
 
-  // MeScreen — 기본(미인증) 상태: 플레이스홀더 타일(비탭) + 라벨. 라이트만.
-  testWidgets('MeScreen 접근성(라이트): 탭타깃·라벨·대비', (tester) async {
-    await tester.pumpWidget(_wrap(const MeScreen(), Brightness.light));
-    await _expectAccessible(tester);
-  });
+      testWidgets('ExploreScreen 접근성($mode·배율$scaleLabel): 탭타깃·라벨·대비', (tester) async {
+        await tester.pumpWidget(
+          _wrap(const ExploreScreen(), brightness, textScale: textScale),
+        );
+        await _expectAccessible(tester);
+      });
 
-  // 조밀 위젯 — onSurfaceVariant 소형 텍스트 on tonal 컨테이너 대비를 실 테마로 검증.
-  for (final brightness in <Brightness>[Brightness.light, Brightness.dark]) {
-    final mode = brightness == Brightness.light ? '라이트' : '다크';
+      testWidgets('HomeScreen 접근성($mode·배율$scaleLabel): 탭타깃·라벨·대비', (tester) async {
+        await tester.pumpWidget(
+          _wrap(const HomeScreen(), brightness, textScale: textScale),
+        );
+        await _expectAccessible(tester);
+      });
+    }
 
-    testWidgets('SceneRenderer 접근성($mode): 대비·라벨', (tester) async {
+    // MeScreen — 기본(미인증) 상태: 플레이스홀더 타일(비탭) + 라벨. 라이트만.
+    testWidgets('MeScreen 접근성(라이트·배율$scaleLabel): 탭타깃·라벨·대비', (tester) async {
       await tester.pumpWidget(
-        _wrapWidget(SceneRenderer(scene: _denseScene()), brightness),
+        _wrap(const MeScreen(), Brightness.light, textScale: textScale),
       );
       await _expectAccessible(tester);
     });
 
-    testWidgets('CoachSignalCard 접근성($mode): 대비', (tester) async {
-      await tester.pumpWidget(
-        _wrapWidget(CoachSignalCard(response: _signalResponse()), brightness),
-      );
-      await _expectAccessible(tester);
-    });
+    // 조밀 위젯 — onSurfaceVariant 소형 텍스트 on tonal 컨테이너 대비를 실 테마로 검증.
+    for (final brightness in <Brightness>[Brightness.light, Brightness.dark]) {
+      final mode = brightness == Brightness.light ? '라이트' : '다크';
+
+      testWidgets('SceneRenderer 접근성($mode·배율$scaleLabel): 대비·라벨', (tester) async {
+        await tester.pumpWidget(
+          _wrapWidget(SceneRenderer(scene: _denseScene()), brightness, textScale: textScale),
+        );
+        await _expectAccessible(tester);
+      });
+
+      testWidgets('CoachSignalCard 접근성($mode·배율$scaleLabel): 대비', (tester) async {
+        await tester.pumpWidget(
+          _wrapWidget(CoachSignalCard(response: _signalResponse()), brightness, textScale: textScale),
+        );
+        await _expectAccessible(tester);
+      });
+    }
   }
 }

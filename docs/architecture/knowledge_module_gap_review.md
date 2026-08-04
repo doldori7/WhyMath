@@ -216,3 +216,78 @@ CLAUDE.md 구조 붕괴 절의 "노드 embedding 전체 생성 금지 — chunk 
 - 성취기준 Overlay: `db/models/achievement_standard.py:66`(895건) + `concept_standard_link.py:55`(443건)
 - 기존 추적 승계(중복 등재 금지): `ARCH-11-subgraph-depth-guard`(blocked) · Phase 5b
   formula_refs(ADR §Phase 5a) · `S4-02-proof-learning-support`(D2 구현 트리거)
+
+---
+
+## §5. 2026-08-03 재점검 — 도달 관측 렌즈 최초 적용
+
+> 이 절은 `ai_recommendation_module_gap_review.md` §0("두 가지 전제 정리")·
+> `visualization_module_gap_review.md`(학생 도달 0회 패턴)·`nlp_module_gap_review.md` D1이
+> 이미 확립한 **"소비 경로 완비 여부와 무관하게 실제 클라 도달을 실측한다"** 렌즈를,
+> **개념(Knowledge) 축에 처음 적용**한 재점검이다. §1~§4(2026-07-27)는 모듈 6~10과의
+> crosswalk·설계였고 클라 도달은 별도로 다루지 않았다 — 이번에 그 공백을 채운다.
+> 판정 기호는 §1과 동일(✅ 충족 / ⚠️ 진짜 갭 → 태스크 / 🚫 의도적 미채택 / ⏸ 기존 추적 승계)에
+> **△ 재확인·변동 없음**을 추가한다(자매 문서들의 판정 기호 표 관례 승계).
+
+### §5-1. 신규 갭 A — 개념 지식 자산의 학생 도달이 0회다 (최우선 → `KG-01`)
+
+Flutter 학생 앱이 실제로 호출하는 `/v1/` 경로는 **13개뿐**이다(전수 grep, `src/mobile/lib/**/*.dart`
+— `test/` 제외. 이 절 초판은 "20개"라고 썼으나, 이는 `src/mobile` 전체(테스트 목 리터럴 포함)를
+대상으로 한 grep의 착오였다. `concept_reach_report.py`가 매 실행마다 이 분모를 결정론으로
+재확인한다 — 이 리포트가 향후 문서 stale의 실측 anchor다).
+개념 지식 자산 관련 표면은 그 13개 중 **단 하나도 없다**:
+
+| 표면 | 실측 | 판정 |
+|---|---|---|
+| `POST/GET/PATCH/DELETE /v1/concepts`·`/v1/concepts/{id}`·`/v1/concepts/{id}/edges`(단건·목록·엣지·생성·수정·삭제 — `api/concepts.py`) | 클라 소비 **0**(13종 목록 부재) | ⚠️ 갭 → **KG-01** |
+| `GET /v1/concepts/search`(pgvector 원자 유사도 조회 — `api/concepts.py:161`) | 클라 소비 **0**. 원래 설계도 "학생 직접 노출 아닌 L2/L4·교사 도구 좌석"(docstring)이라 *학생 경로 노출 자체가 목표가 아님* — 그런데 L2/L4·교사 도구 쪽 배선도 **0**(내부 소비자도 없음). 하위 함수 `search_atoms` 자체는 `l4/misconception/warmstart.py`가 이미 실소비 중이라 "능력이 죽은 것"이 아니라 "이 HTTP 래퍼가 죽은 것" | ⚠️ 갭 → **KG-01**(도달 관측만. 학생 노출은 `nlp_module_gap_review.md §5-⑤` 판정 승계 — `ARCH-11` 해제 전까지 하지 않는다) |
+| `ConceptContent.flashcards`(암기카드 JSONB, 코퍼스 **113건** 적재 — `data/corpus/concept_graph_v1/flashcards.jsonl`) | 이를 읽는 API 엔드포인트 **0개**(`grep -rn flashcards src/backend/whymath_backend/api/` 무결과) — 저작된 113건이 어떤 표면으로도 학생·교사·L2/L4 어디에도 나가지 않는다 | ⚠️ 갭 → **KG-01** |
+| `GET /v1/me/weak-concepts/{concept_id}/prerequisites`·`.../learning-path`(재귀 CTE 선수개념·Kahn 위상정렬 학습경로 — `l2/prerequisite_recommendation.py`·`l2/learning_path.py`, HTTP 표면 `api/me.py:1391,1507`) | 클라 소비 **0**(13종 목록 부재) | ⚠️ 갭 → **KG-01**(경계는 아래 참조) |
+
+**REC-01과의 경계(중복 등재 회피)**: `ai_recommendation_module_gap_review.md` §0-①이 이미
+"개념 추천(기능81) API 전군 클라 소비 0"을 지적했다. 그러나 그 문서·`REC-01` 태스크의 관측
+축은 **요청량·개인화 가중치**(θ 기반 비율·`problem_attempt` 적재 건수·약점 가중 적용 건수)다.
+`KG-01`은 **개념 콘텐츠·그래프 표면 자체**(라우트가 존재하는데 아무도 안 쓴다는 사실, flashcards
+읽기 좌석 부재)의 도달 관측이다 — 관측 축이 다르므로 중복이 아니다. `api/me.py` 파일 경로가
+겹치는 것은 하네스 `path_overlap` 정책(`backlog/policy.yaml` = `warn`, 아직 `block` 아님)상
+허용 범위이며, 두 태스크는 같은 파일의 서로 다른 관측 축을 각자 손댄다.
+
+**활성화가 아니라 가시화**(NLP-01·REC-01과 동형): 클라 배선·신규 화면·`/concepts/search`의 학생
+노출은 이 재점검·`KG-01` 어느 쪽도 다루지 않는다.
+
+### §5-2. B·D 재확인 — 변동 없음 (△)
+
+- **chunk 단위 임베딩**(§4): `concept_embedding`/`atom_embedding` 여전히 엔티티당 벡터 1개·
+  `chunk_type` 컬럼 0건. §4의 "D1(정의 레지스터) 착지 시 `(code, kind)`가 자연스러운 chunk 키
+  공간이 된다"는 판단은 재확인 결과 **여전히 유효**하다. 신규 갭 아님·신규 태스크 없음.
+- **`formula_refs`(concept↔formula 참조) 미충전**(§3 D3 하단): 여전히 0건 충전이나 이는
+  기존 ADR(Phase 5a "D2 분리")이 이미 계획한 **의도적 유보**(Phase 5b). 재등재하지 않는다.
+
+### §5-3. 스키마 정본 stale — `active_concepts`(YAML) vs `ConceptRole`(런타임) 정정 (문서 각주)
+
+`schemas/v1.1/problem.schema.yaml:107,241-261`의 `ActiveConcepts`는 `primary`/`secondary`/
+`arithmetic_only` **3분류**로 문항-개념 연결을 정의한다. 그러나 실제 런타임 정본
+`ConceptRole`(`src/backend/whymath_backend/schema/enums.py:671`)은 `PRIMARY`·`SUPPORTING`·
+`IMPLICIT`·`TESTED` **4종**이고, `ASSESSED_ROLES = (PRIMARY, TESTED)`가 BKT 숙달 갱신·IRT θ
+추정·약점 가중의 **단일 대상 집합**이다(L2·L5 공유 단일 출처). YAML 명세가 구현을 반영하지
+못하는 stale 상태다 — `ai_recommendation_module_gap_review.md §정정`이 확립한 선례(원인이
+다른 곳을 가리키는 stale·"코드 변경 없이 사실만 기록하고 소유를 지정") 형식을 그대로 따른다.
+
+**처리**: 이번 재점검의 산출물 범위는 "문서 추가 + 백로그 태스크 1건"으로 확정돼 있어(Kiki
+합의) `problem.schema.yaml` 자체의 정정은 **이번 슬라이스에서 하지 않는다**. 별도 코드/스키마
+태스크도 신설하지 않는다 — YAML 설명 필드 1줄 수정은 위험이 낮으나(런타임 로직 무영향·순수
+문서), path_overlap 위험 회피 원칙(2026-07-27 병렬 세션 충돌 교훈)과 산출물 범위 규율을 함께
+지키기 위해 **이 문서(§5-3)에 사실을 고정**해 두고, 다음으로 `problem.schema.yaml`을 만지는
+세션(스키마 유지보수·v1.2 슬라이스 등)이 `ActiveConcepts` 블록에 각주("런타임 정본은
+`ConceptRole` 4종 — `SUPPORTING`/`IMPLICIT`는 `secondary`에 대응, `TESTED`는 `primary`와
+구분돼 `ASSESSED_ROLES`에 포함되나 이 3분류에는 대응 슬롯 없음. 정본 `schema/enums.py:671`
+참조")을 추가하도록 소유를 지정한다.
+
+### §5-4. 등재 요약
+
+| 태스크 | 근거 | stage | priority | 비고 |
+|---|---|---|---|---|
+| `KG-01-concept-reach-observability` | §5-1 | S3 | 2 | **최우선 신규 갭** — concepts API 7라우트·flashcards 읽기 표면·prerequisites/learning-path 도달 0회 가시화. 활성화는 범위 밖 |
+
+중복 등재 회피: `REC-01`(요청량·개인화 축, 승계) · `ARCH-11`(subgraph depth guard, blocked,
+승계) · Phase 5b `formula_refs`(승계) · §5-3 스키마 stale(신규 태스크 없음, 소유만 지정).

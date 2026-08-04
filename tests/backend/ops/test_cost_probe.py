@@ -17,7 +17,14 @@ import pytest
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache
-from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
+from whymath_backend.l3.models import (
+    CostTier,
+    GenerationResult,
+    RoutingDecision,
+    RoutingRequest,
+    Usage,
+)
+from whymath_backend.l3.router import Router, _as_cost_tier
 from whymath_backend.ops import cost_probe as cp
 
 
@@ -196,6 +203,201 @@ def test_summary_errors_excluded_from_denominator() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# OPS-18 — LOCAL 강등 사유 3버킷(classify_local_reason) + 클라우드 도달 관측.
+# ──────────────────────────────────────────────────────────────────────────
+def test_classify_local_reason_budget0_beats_free() -> None:
+    """규칙1(budget_krw<=0)이 규칙2(free)보다 먼저 — 두 조건이 겹치면 budget0로 분류."""
+    req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=0.0,
+    )
+    assert cp.classify_local_reason(req) == cp.LOCAL_REASON_BUDGET0
+
+
+def test_classify_local_reason_free_when_budget_positive() -> None:
+    """budget_krw>0인데 free면 규칙2 — free 버킷(규칙1은 이미 통과했으므로 미해당)."""
+    req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=100.0,
+    )
+    assert cp.classify_local_reason(req) == cp.LOCAL_REASON_FREE
+
+
+def test_classify_local_reason_rule6_catchall_when_neither_rule_fires() -> None:
+    """budget>0·구독≠free인데 결정이 LOCAL로 귀결된 경우(규칙3·4 미매치 등) — rule6_catchall."""
+    req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="basic",
+        budget_krw=100.0,
+    )
+    assert cp.classify_local_reason(req) == cp.LOCAL_REASON_RULE6_CATCHALL
+    # 실제로도 이 요청은 LOCAL로 귀결된다(규칙3·4 미매치·규칙6 기본값) — 분류가 허구가 아님.
+    assert Router().route(req).cost_tier == CostTier.LOCAL.value
+
+
+def test_summarize_decisions_local_reason_counts_needs_requests() -> None:
+    """requests 없이 호출 → local_reason_counts=None('미계상', '0건'과 구분)."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 3, errors=0, error_samples=[], cloud_included=False, rounds=1
+    )
+    assert report.local_reason_counts is None
+
+
+def test_summarize_decisions_local_reason_counts_with_requests() -> None:
+    """requests를 주면 실 요청 필드로 3버킷을 계상 — CLOUD 성공분은 계상에서 제외."""
+    budget0_req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=0.0,
+    )
+    free_req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=100.0,
+    )
+    catchall_req = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="basic",
+        budget_krw=100.0,
+    )
+    cloud_req = RoutingRequest(
+        task_type="diagnose",
+        difficulty="hard",
+        requires_reasoning=True,
+        student_subscription="premium",
+        budget_krw=1000.0,
+    )
+    tiers = [
+        CostTier.LOCAL.value,
+        CostTier.LOCAL.value,
+        CostTier.LOCAL.value,
+        CostTier.CLOUD_MID.value,
+    ]
+    requests = [budget0_req, free_req, catchall_req, cloud_req]
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=1, requests=requests
+    )
+    assert report.local_reason_counts == {
+        cp.LOCAL_REASON_BUDGET0: 1,
+        cp.LOCAL_REASON_FREE: 1,
+        cp.LOCAL_REASON_RULE6_CATCHALL: 1,
+    }
+
+
+def test_cloud_reach_count_derived_from_tier_counts() -> None:
+    """cloud_reach_count = CLOUD_MID+CLOUD_HIGH 합 — 기존 tier_counts에서 유도."""
+    tiers = (
+        [CostTier.LOCAL.value] * 5
+        + [CostTier.CLOUD_MID.value] * 2
+        + [CostTier.CLOUD_HIGH.value] * 3
+    )
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=1
+    )
+    assert report.cloud_reach_count == 5
+
+
+def test_next_tier_calls_is_always_zero_and_honestly_labeled() -> None:
+    """이 프로브는 next_tier()를 호출하지 않는다 — 0을 '미시행'으로 렌더(침묵 누락 아님)."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 3, errors=0, error_samples=[], cloud_included=False, rounds=1
+    )
+    assert report.next_tier_calls == 0
+    text = cp.render_report(report)
+    assert "next_tier 호출: 미도달" in text
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPS-18 acceptance③ — 변별력: killer+premium+budget 요청 삽입 시 cloud_reach 0→1→0
+# (실 Router().route(...) 결정을 뒤집어서 본다 — 하드코딩된 기대값이 아니라 진짜 회로).
+# ──────────────────────────────────────────────────────────────────────────
+def _cloud_reach_line(rendered: str) -> str:
+    """render_report 출력에서 '클라우드 도달' 줄만 뽑는다(다른 '미도달' 줄과 혼동 방지)."""
+    for line in rendered.splitlines():
+        if line.strip().startswith("클라우드 도달"):
+            return line
+    raise AssertionError("'클라우드 도달' 줄이 리포트에 없음")
+
+
+def test_cloud_reach_flips_0_to_1_and_back_with_killer_premium_request() -> None:
+    """로컬-우세 대표 믹스만으로는 cloud_reach=0·'미도달' → killer+premium+예산 요청 1건 추가로
+    1로 뒤집힘 → 제거하면 다시 0·'미도달'로 복귀(양방향 실측, OPS-18 acceptance③)."""
+    router = Router()
+
+    # ── ① 기존 로컬-우세 archetype만(REPRESENTATIVE_MIX의 include_cloud=False 부분집합) ──
+    baseline_items = cp.build_probe_plan(cp.REPRESENTATIVE_MIX, rounds=1, include_cloud=False)
+    baseline_requests = [item.request for item in baseline_items]
+    baseline_tiers = [_as_cost_tier(router.route(req).cost_tier).value for req in baseline_requests]
+
+    report_before = cp.summarize_decisions(
+        baseline_tiers,
+        errors=0,
+        error_samples=[],
+        cloud_included=False,
+        rounds=1,
+        requests=baseline_requests,
+    )
+    assert report_before.cloud_reach_count == 0
+    assert _cloud_reach_line(cp.render_report(report_before)) == (
+        "  클라우드 도달: 미도달 (0건 통과가 아니라 승급 사슬이 구조적으로 도달한 적 없음)"
+    )
+
+    # ── ② killer+premium+budget_krw=1000 요청 1건 추가 — rule3 guard_cloud(CLOUD_HIGH) 경로 ──
+    killer_premium_request = RoutingRequest(
+        task_type="diagnose",
+        difficulty="killer",
+        requires_reasoning=True,
+        student_subscription="premium",
+        budget_krw=1000.0,
+        sync=True,
+    )
+    killer_decision = router.route(killer_premium_request)
+    killer_tier = _as_cost_tier(killer_decision.cost_tier).value
+    assert killer_tier == CostTier.CLOUD_HIGH.value  # 전제 확인(진짜 클라우드 도달)
+
+    with_cloud_requests = [*baseline_requests, killer_premium_request]
+    with_cloud_tiers = [*baseline_tiers, killer_tier]
+    report_with_cloud = cp.summarize_decisions(
+        with_cloud_tiers,
+        errors=0,
+        error_samples=[],
+        cloud_included=True,
+        rounds=1,
+        requests=with_cloud_requests,
+    )
+    assert report_with_cloud.cloud_reach_count == 1
+    assert _cloud_reach_line(cp.render_report(report_with_cloud)) == "  클라우드 도달: 1건"
+
+    # ── ③ 제거하면 원복 — 0/'미도달'로 되돌아온다(양방향 실측) ──
+    report_after_removal = cp.summarize_decisions(
+        baseline_tiers,
+        errors=0,
+        error_samples=[],
+        cloud_included=False,
+        rounds=1,
+        requests=baseline_requests,
+    )
+    assert report_after_removal.cloud_reach_count == 0
+    assert _cloud_reach_line(cp.render_report(report_after_removal)) == (
+        "  클라우드 도달: 미도달 (0건 통과가 아니라 승급 사슬이 구조적으로 도달한 적 없음)"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # run_probe — 실 pipeline.generate(순수) + 가짜 provider·스파이 sink.
 # ──────────────────────────────────────────────────────────────────────────
 def test_run_probe_local_only_when_anthropic_unset() -> None:
@@ -322,7 +524,11 @@ def test_render_unknown_ratio() -> None:
 
 
 def test_json_roundtrip(tmp_path: Path) -> None:
-    """to_json이 판정선·Wilson 하한 포함 직렬화 — cost_report JSON 관례와 동형(파일 왕복)."""
+    """to_json이 판정선·Wilson 하한 포함 직렬화 — cost_report JSON 관례와 동형(파일 왕복).
+
+    OPS-18: requests 미전달 호출이므로 local_reason_counts는 '미계상'(None→JSON null)으로
+    라운드트립돼야 한다 — cloud_reach_count·next_tier_calls는 requests 없이도 유도 가능.
+    """
     report = cp.summarize_decisions(
         [CostTier.LOCAL.value] * 54 + [CostTier.CLOUD_MID.value] * 6,
         errors=1,
@@ -338,3 +544,41 @@ def test_json_roundtrip(tmp_path: Path) -> None:
     assert loaded["gate2_local_pass"] is True
     assert loaded["errors"] == 1
     assert loaded["rounds"] == 6
+    # OPS-18 신규 필드 — requests 미전달이라 사유 계상은 None(JSON null), 도달·next_tier는 유도됨.
+    assert loaded["local_reason_counts"] is None
+    assert loaded["cloud_reach_count"] == 6
+    assert loaded["next_tier_calls"] == 0
+
+
+def test_json_roundtrip_with_local_reason_counts(tmp_path: Path) -> None:
+    """requests를 준 호출은 local_reason_counts도 dict[str,int]로 JSON 왕복한다(OPS-18)."""
+    requests = [
+        RoutingRequest(
+            task_type="explain",
+            difficulty="easy",
+            requires_reasoning=False,
+            student_subscription="free",
+            budget_krw=0.0,
+        ),
+        RoutingRequest(
+            task_type="explain",
+            difficulty="easy",
+            requires_reasoning=False,
+            student_subscription="basic",
+            budget_krw=100.0,
+        ),
+    ]
+    tiers = [CostTier.LOCAL.value, CostTier.LOCAL.value]
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=False, rounds=1, requests=requests
+    )
+    out = tmp_path / "probe_reasons.json"
+    out.write_text(json.dumps(report.to_json(), ensure_ascii=False), encoding="utf-8")
+    loaded = json.loads(out.read_text(encoding="utf-8"))
+    assert loaded["local_reason_counts"] == {
+        cp.LOCAL_REASON_BUDGET0: 1,
+        cp.LOCAL_REASON_FREE: 0,
+        cp.LOCAL_REASON_RULE6_CATCHALL: 1,
+    }
+    assert loaded["cloud_reach_count"] == 0
+    assert loaded["next_tier_calls"] == 0

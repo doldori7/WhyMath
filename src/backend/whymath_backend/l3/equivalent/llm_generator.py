@@ -109,6 +109,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -271,6 +272,10 @@ answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기
 """
 
 
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
+
+
 class LLMEquivalentProblemGenerator:
     """프로덕션 LLM 동등문제 생성기 — `EquivalentProblemGenerator` 좌석 구현(S2-e).
 
@@ -290,7 +295,7 @@ class LLMEquivalentProblemGenerator:
         trace: TraceSink | None = None,
         misconception_catalog: Mapping[str, str] | None = None,
         topic_hint: str | None = None,
-        subscription: str = "free",
+        subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
         difficulty: str | None = None,
         temperature: float = 0.9,
         authoring_family: ModelFamily | None = ModelFamily.GENERAL,
@@ -317,7 +322,9 @@ class LLMEquivalentProblemGenerator:
                 모델이 "무엇을 출제할지" 모른다(예 `[10공수1-02-02]`가 이차방정식인 줄 모름) —
                 이 힌트를 프롬프트에 실어 주제·답 형태를 명시한다(예 "이차방정식 — 두 근 중 큰
                 근을 구하는 형태"). None이면 스펙 코드만 준다(약한 모델은 주제를 못 맞힐 수 있음).
-            subscription: 라우팅 신호(구독 — 클라우드 승급 가드).
+            subscription: 라우팅 신호(구독 — 클라우드 승급 가드). 기본값은
+                `escalation_defaults.default_student_escalation_signals()` 단일 좌석(OPS-18,
+                오늘은 free).
             difficulty: 라우팅 난이도 라벨(None이면 spec.difficulty_overall에서 파생).
             temperature: **생성 샘플링 온도**(S2-g 생성 다양성·기본 0.9). 튜터링(도구선택·다음
                 행동)은 *결정론*이 좋아 온도를 지정하지 않지만(제공자 기본), *동등문제 저작*은
@@ -538,6 +545,7 @@ class LLMEquivalentProblemGenerator:
             difficulty=difficulty,
             requires_reasoning=True,
             student_subscription=self._subscription,
+            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             sync=True,
         )
 

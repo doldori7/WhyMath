@@ -16,8 +16,11 @@ from datetime import UTC, datetime
 import pytest
 
 from whymath_backend.harness.surrogate_baseline_report import (
+    GrowthEvidenceReachState,
     _resolve_params,
+    classify_reach_state,
     render_baseline_report,
+    render_growth_evidence_reach_report,
 )
 from whymath_backend.harness.wh1_evaluation import (
     HelpReductionValidation,
@@ -179,3 +182,98 @@ class TestResolveParams:
     def test_invalid_date_raises(self) -> None:
         with pytest.raises(ValueError):
             _resolve_params(None, "not-a-date", None)
+
+
+class TestClassifyReachState:
+    """`classify_reach_state` 순수 함수 — 구조적불가 > 무데이터 > 미도달/도달 우선순위(PED-06)."""
+
+    def test_structurally_impossible_overrides_everything(self) -> None:
+        """③(세션완주율)은 MEASURED·요청 있음이어도 구조적 불가로 고정(생산자 자체 부재)."""
+        state = classify_reach_state("session_completion_rate", MetricStatus.MEASURED, 100)
+        assert state is GrowthEvidenceReachState.STRUCTURALLY_IMPOSSIBLE
+
+    def test_no_data_when_status_not_measured(self) -> None:
+        state = classify_reach_state("verify_pass_rate", MetricStatus.NO_DATA, 0)
+        assert state is GrowthEvidenceReachState.NO_DATA
+
+    def test_unreached_when_measured_but_zero_requests(self) -> None:
+        state = classify_reach_state("verify_pass_rate", MetricStatus.MEASURED, 0)
+        assert state is GrowthEvidenceReachState.UNREACHED
+
+    def test_reached_when_measured_and_requests_positive(self) -> None:
+        """변별력(양방향) — 요청 수가 0→양수로 바뀌면 미도달이 실제로 해제된다."""
+        unreached = classify_reach_state("verify_pass_rate", MetricStatus.MEASURED, 0)
+        reached = classify_reach_state("verify_pass_rate", MetricStatus.MEASURED, 1)
+        assert unreached is GrowthEvidenceReachState.UNREACHED
+        assert reached is GrowthEvidenceReachState.REACHED
+        assert unreached is not reached
+
+    def test_reverts_to_unreached_when_requests_reset_to_zero(self) -> None:
+        """변별력(양방향, 되돌림) — 도달 후 요청 수가 다시 0이면 미도달로 되돌아간다."""
+        reached = classify_reach_state("verify_pass_rate", MetricStatus.MEASURED, 3)
+        reverted = classify_reach_state("verify_pass_rate", MetricStatus.MEASURED, 0)
+        assert reached is GrowthEvidenceReachState.REACHED
+        assert reverted is GrowthEvidenceReachState.UNREACHED
+
+    def test_no_data_takes_priority_over_reach_regardless_of_requests(self) -> None:
+        """무데이터는 요청 수가 아무리 커도 도달로 격상되지 않는다(값이 없으니 보여줄 게 없음)."""
+        state = classify_reach_state("calibration_brier", MetricStatus.NO_DATA, 1000)
+        assert state is GrowthEvidenceReachState.NO_DATA
+
+
+class TestRenderGrowthEvidenceReachReport:
+    """`render_growth_evidence_reach_report` — 노출 계약 + 3상태를 얹은 확장 리포트(PED-06)."""
+
+    def test_zero_requests_shown_as_unreached_not_zero_pass(self) -> None:
+        """요청 0건은 '0건 통과'가 아니라 '미도달'로 표시(이중 회계 — VIZ-01·NLP-01 승계)."""
+        report = render_growth_evidence_reach_report(_all_measured_metrics(), requests_total=0)
+        assert "누적 요청 0건" in report
+        assert "미도달" in report
+        assert "0건 통과" not in report
+
+    def test_structurally_impossible_labeled_distinctly_from_no_data(self) -> None:
+        """③(구조적 불가)과 다른 NO_DATA 지표가 리포트에서 서로 다른 라벨로 나타난다."""
+        report = render_growth_evidence_reach_report(_mixed_metrics(), requests_total=0)
+        assert "구조적 불가" in report
+        assert "무데이터" in report
+        # ③ 세션 완주율 섹션에 '구조적 불가'가 붙어 있어야 한다(순서 의존 없이 섹션 단위 확인).
+        section_start = report.index("## ③ 세션 완주율")
+        section_end = report.index("## ④", section_start)
+        assert "구조적 불가" in report[section_start:section_end]
+
+    def test_internal_only_fields_show_suppression_reason(self) -> None:
+        report = render_growth_evidence_reach_report(_all_measured_metrics(), requests_total=5)
+        assert "내부 전용" in report
+        assert "노출 억제 사유" in report
+
+    def test_hint_depth_suppressed_when_gaming_suspect(self) -> None:
+        metrics = _all_measured_metrics()
+        gaming = metrics.model_copy(
+            update={
+                "help_reduction_validated": HelpReductionValidation(
+                    verdict=R15Verdict.GAMING_SUSPECT,
+                    help_slope=-1.0,
+                    accuracy_slope=-0.5,
+                    difficulty_slope=None,
+                    note="게이밍 의심 note",
+                )
+            }
+        )
+        report = render_growth_evidence_reach_report(gaming, requests_total=5)
+        section_start = report.index("## ⑧")
+        section_end = report.index("## ⑨", section_start)
+        assert "노출 억제 사유" in report[section_start:section_end]
+
+    def test_calibration_no_data_notes_missing_input_ui_not_rec01(self) -> None:
+        """⑥ NO_DATA일 때 '입력 UI 부재'를 REC-01 입력 루프 미도달과 구분해 표기한다."""
+        report = render_growth_evidence_reach_report(_mixed_metrics(), requests_total=0)
+        section_start = report.index("## ⑥")
+        section_end = report.index("## ⑦", section_start)
+        section = report[section_start:section_end]
+        assert "입력 UI" in section
+        assert "REC-01" in section
+
+    def test_reached_state_appears_when_requests_positive_and_measured(self) -> None:
+        report = render_growth_evidence_reach_report(_all_measured_metrics(), requests_total=7)
+        assert "누적 요청 7건" in report
+        assert "도달상태 도달" in report

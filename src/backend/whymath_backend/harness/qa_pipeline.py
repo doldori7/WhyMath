@@ -1,4 +1,5 @@
-"""QA 파이프라인 오케스트레이터 — 기존 검사 자산 조립·단일 판정 (ARCH-21 + RPT-01 8번째 축).
+"""QA 파이프라인 오케스트레이터 — 기존 검사 자산 조립·단일 판정 (ARCH-21 + ARCH-24 축 8 +
+RPT-01 축 9).
 
 정본: `docs/architecture/operations_module_gap_review.md` §3 D2(외부 EOS 틀 모듈 45
 "품질검증 QA 엔진" 대조). `harness/`의 38개 검사 모듈이 각자 독립 CLI로 흩어져 있고
@@ -8,9 +9,14 @@
 이 저장소에 없다. 대신 각 harness 모듈이 자기보다 하위인 여러 모듈을 *직접 import해서
 조립*하는 것이 유일한 관례다(예: `defect_detection_eval.py`가 `l3.equivalent.acceptance`+
 `defect_seeder`+`retag`를 조립). 이 모듈은 그 관례를 한 계층 위에서 반복한다 — 전부
-in-process import, subprocess 금지, **새 판정 로직 신설 0**(전부 기존 함수 재사용).
+in-process import, subprocess 금지. 1~7 기존 축은 **새 판정 로직 신설 0**(전부 기존 함수
+재사용)이고, 축 8(`banned_words_pii`)·축 9(`defect_report_intake`)가 예외다 —
+`_NOT_MEASURED_AXES`가 "코드 미구현"으로 선언하던 것을 ARCH-24가 실제로 채워 승격시켰으므로
+그 축의 판정 로직 자체는 `banned_words_pii_eval.py`에 신설됐고, 축 9는 RPT-01이 신설한
+결함 신고 대장을 읽는다(이 조립 층은 여전히 하위 모듈·모델을 그대로 호출할 뿐 — "조립 층
+자신은 새 판정 로직 0"이라는 원칙은 유지된다).
 
-조립 대상 8개 축(+ wilson.py는 아래 참조):
+조립 대상 9개 축(+ wilson.py는 아래 참조):
     1. corpus_audit            — `corpus_audit_eval`(문항 감사, 커밋 스냅샷 재검산)
     2. equivalence_canonicalize — `l3/equivalent/canonicalize`(수식 동치 DSL 폐쇄성)
     3. concept_graph_reachability — `data_pipeline.atom_graph`(원자 백본 그래프)
@@ -18,9 +24,13 @@ in-process import, subprocess 금지, **새 판정 로직 신설 0**(전부 기�
     5. coach_prose_leak        — `coach_prose_leak_eval`(AI 출력 누설)
     6. content_provenance      — `ops.provenance_audit`(저작권 축, ARCH-20)
     7. defect_injection_demotion — `defect_detection_eval`(결함주입 강등전)
-    8. defect_report_intake    — `db.models.audit.DefectReport`(RPT-01 학생 결함 신고 수집 현황)
+    8. banned_words_pii        — `banned_words_pii_eval`(학생 대면 산문 금칙어·PII, ARCH-24 —
+       `_NOT_MEASURED_AXES`에서 승격. 신규 검사기를 그 태스크에서 신설했다 — 1~7은 전부
+       기존 자산 재사용이라 이 축의 "새 판정 로직 신설 0" 원칙은 하위 모듈 자체가 아니라
+       *이 조립 층*에 한정된다)
+    9. defect_report_intake    — `db.models.audit.DefectReport`(RPT-01 학생 결함 신고 수집 현황)
 
-축 8(`defect_report_intake`)은 나머지 7축과 달리 *커밋된 코퍼스 파일*이 아니라 **DB**를 읽는다
+축 9(`defect_report_intake`)는 나머지 8축과 달리 *커밋된 코퍼스 파일*이 아니라 **DB**를 읽는다
 (`defect_report` 테이블 행 수). "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)과
 "0건 접수"(테이블은 있는데 아직 신고가 없음)를 *다른 값*으로 낸다(이중 회계, CLAUDE.md
 "변별력 없는 검증 스텝 금지" — `_axis_defect_report_intake` 참조). DB 자체가 도달 불가(연결
@@ -29,10 +39,10 @@ in-process import, subprocess 금지, **새 판정 로직 신설 0**(전부 기�
 서비스가 없어 이 축은 그 잡에서 상시 "error"로 보고되는데, 이 잡의 qa_pipeline 스텝은 이미
 `continue-on-error: true`(S3-28 전까지 비강제 게이트)라 CI를 막지 않는다.
 
-**wilson.py는 별도 축이 아니다** — 위 1·4·5·7 네 축이 이미 각자 내부에서
-`wilson_lower_bound`/`wilson_upper_bound`를 호출해 경계 판정을 한다(Wilson은 그 네 축이
+**wilson.py는 별도 축이 아니다** — 위 1·4·5·7·8 다섯 축이 이미 각자 내부에서
+`wilson_lower_bound`/`wilson_upper_bound`를 호출해 경계 판정을 한다(Wilson은 그 다섯 축이
 공유하는 *경계 판정 메커니즘*이지, 독립적으로 실행 가능한 검사 대상이 아니다). 그래서
-리포트의 `axes`에 8번째 키로 별도 노출하지 않는다 — 중복 신호 금지.
+리포트의 `axes`에 별도 10번째 키로 노출하지 않는다 — 중복 신호 금지.
 
 **cross-package import 경계** — `concept_graph_reachability` 축은 `whymath_backend`가
 아니라 별도 pip 패키지(`whymath-data-pipeline`, import명 `data_pipeline`)의
@@ -52,8 +62,9 @@ import-linter 7계층 계약(`[tool.importlinter]`)은 `root_package = "whymath_
 대상이고 `harness`/`ops`는 그 계약 밖(횡단 인프라)이라 이 방향의 import가 계약
 위반이 아니다.
 
-미측정 4축(UI 골든·통계 이상치·금칙어/PII·성능 연동)은 코드가 없음을 실측 확인했다 —
-`not_measured_axes`에 "검사 안 함"으로 명시한다(침묵 통과 금지, CLAUDE.md).
+미측정 3축(UI 골든·통계 이상치·성능 연동)은 코드가 없음을 실측 확인했다 —
+`not_measured_axes`에 "검사 안 함"으로 명시한다(침묵 통과 금지, CLAUDE.md). 금칙어/PII
+축은 2026-08-03 ARCH-24로 이 목록에서 빠져 실축(`banned_words_pii`)으로 승격됐다.
 
 각 축 실행은 개별 try/except로 격리된다 — 한 축의 예외가 나머지 축 실행을 막지 않고,
 그 축은 `{"measured": false, "status": "error", "detail": {"error_type": ...}}`로
@@ -93,6 +104,7 @@ from whymath_backend.config import get_settings
 from whymath_backend.db.models.audit import DefectReport
 from whymath_backend.db.session import dispose_engine, get_sessionmaker
 from whymath_backend.harness import (
+    banned_words_pii_eval,
     coach_prose_leak_eval,
     corpus_audit_eval,
     crosslink_demotion_eval,
@@ -129,6 +141,11 @@ _DEFECT_MAX_FALSE_ALARM_UPPER = 0.05
 _CROSSLINK_CROSS_PER_POSITIVE = 60
 _CROSSLINK_SAME_PER_POSITIVE = 60
 
+# 금칙어·PII 축(ARCH-24) — banned_words_pii_eval CLI(main())의 argparse 기본값과 동일
+# (근거는 그 모듈 docstring "게이트" 절 — Wilson 상한은 유한 표본에서 절대 0.0이 될 수
+# 없어 정확히 0.0을 기본값으로 두지 않는다).
+_BANNED_WORDS_PII_MAX_VIOLATION_RATE_UPPER = banned_words_pii_eval._DEFAULT_MAX_VIOLATION_RATE_UPPER
+
 
 @dataclass(slots=True, frozen=True)
 class AxisResult:
@@ -150,16 +167,14 @@ class NotMeasuredAxis:
     reason: str
 
 
-# 미측정 4축(2026-07-31 실측 확인 — 코드 0건):
+# 미측정 3축(2026-07-31 실측 확인 — 코드 0건. banned_words_pii는 2026-08-03 ARCH-24로
+# 이 목록에서 빠져 실축(축 8 `banned_words_pii`)으로 승격됐다):
 #   · UI 골든 스크린샷 비교
 #   · 통계 이상치(정답률/이탈)
-#   · 금칙어/PII(코치 AI 출력 콘텐츠 대상 — log_scrubber.py는 로그 전송계층 시크릿
-#     마스킹이라 *다른 축*, 여기 흡수 대상 아님)
 #   · 성능 연동(ops/service_health.py는 CLI 없음)
 _NOT_MEASURED_AXES: tuple[NotMeasuredAxis, ...] = (
     NotMeasuredAxis("ui_golden", "코드 미구현(실측)"),
     NotMeasuredAxis("statistical_outlier", "코드 미구현(실측)"),
-    NotMeasuredAxis("banned_words_pii", "코드 미구현(실측·log_scrubber는 별도 축)"),
     NotMeasuredAxis("performance", "코드 미구현(실측)"),
 )
 
@@ -448,7 +463,36 @@ def _axis_defect_injection_demotion() -> AxisResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 축 8 — defect_report_intake: 학생 결함 신고 채널 수집 현황 (RPT-01)
+# 축 8 — banned_words_pii: 학생 대면 산문 금칙어·PII(ARCH-24, `_NOT_MEASURED_AXES` 승격)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _axis_banned_words_pii(corpus_root: Path) -> AxisResult:
+    """`banned_words_pii_eval.run()`을 코퍼스 루트에 돌려 Wilson 상한으로 게이트한다.
+
+    이 축만 다른 7개 축과 달리 *이번 태스크에서 신설된* 하위 모듈(`banned_words_pii_eval`)
+    을 조립한다(모듈 docstring 참조) — 조립 층인 이 함수 자체는 여전히 새 판정 로직 없이
+    `run()`/`violation_rate_upper_bound()`만 호출한다.
+    """
+    report = banned_words_pii_eval.run(corpus_root)
+    upper = report.violation_rate_upper_bound(confidence=_CONFIDENCE)
+    gate_fail = upper > _BANNED_WORDS_PII_MAX_VIOLATION_RATE_UPPER
+    status: AxisStatus = "gate_fail" if gate_fail else "ok"
+    return AxisResult(
+        measured=True,
+        status=status,
+        detail={
+            "fields_scanned": report.fields_scanned,
+            "banned_word_hits": report.banned_word_hits,
+            "pii_third_party_hits": report.pii_third_party_hits,
+            "pii_self_reflection_hits": report.pii_self_reflection_hits,
+            "violation_rate_upper_bound": upper,
+        },
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 축 9 — defect_report_intake: 학생 결함 신고 채널 수집 현황 (RPT-01)
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -558,11 +602,12 @@ def _aggregate_overall(axes: dict[str, AxisResult]) -> OverallResult:
 
 
 def build_report(corpus_root: Path, *, repo_root: Path | None = None) -> dict[str, Any]:
-    """9개(8 실행 + wilson.py는 그 내부 메커니즘) 검사 자산을 조립해 QA JSON 리포트를 낸다.
+    """10개(9 실행 + wilson.py는 그 내부 메커니즘) 검사 자산을 조립해 QA JSON 리포트를 낸다.
 
-    새 판정 로직 신설은 `defect_report_intake`(RPT-01 8번째 축) 하나뿐 — 나머지 7축은 전부
-    기존 함수 재사용. 각 축은 `_run_axis_safely`로 개별 격리되어 한 축의 예외가 나머지 축
-    실행을 막지 않는다.
+    1~7축은 새 판정 로직 신설 0(전부 기존 함수 재사용) — 축 8(`banned_words_pii`, ARCH-24)은
+    그 태스크에서 신설된 하위 모듈을 조립하고, 축 9(`defect_report_intake`, RPT-01)는 결함
+    신고 대장을 읽는다(모듈 docstring 참조). 각 축은 `_run_axis_safely`로 개별 격리되어 한
+    축의 예외가 나머지 축 실행을 막지 않는다.
     """
     root = repo_root if repo_root is not None else _repo_root()
 
@@ -588,6 +633,9 @@ def build_report(corpus_root: Path, *, repo_root: Path | None = None) -> dict[st
         "defect_injection_demotion": _run_axis_safely(
             _axis_defect_injection_demotion, axis_name="defect_injection_demotion"
         ),
+        "banned_words_pii": _run_axis_safely(
+            lambda: _axis_banned_words_pii(corpus_root), axis_name="banned_words_pii"
+        ),
         "defect_report_intake": _run_axis_safely(
             _axis_defect_report_intake, axis_name="defect_report_intake"
         ),
@@ -607,7 +655,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m whymath_backend.harness.qa_pipeline",
         description=(
             "QA 파이프라인 오케스트레이터 — corpus_audit·수식동치·개념그래프·오개념crosswalk·"
-            "코치프로즈누설·저작권·결함주입강등전·학생결함신고수집 8개 검사 자산을 조립해 "
+            "코치프로즈누설·저작권·결함주입강등전·금칙어PII(ARCH-24)·"
+            "학생결함신고수집(RPT-01) 9개 검사 자산을 조립해 "
             "단일 JSON 리포트 + Wilson 단측 경계 게이트(exit 0/1)를 낸다."
         ),
     )
