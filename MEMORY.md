@@ -337,6 +337,68 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-03 (설계·운영플랫폼): **운영 플랫폼 갭 점검·설계(D1~D4, D4는 페이퍼) + 태스크 3건 등재 — CONTENT_ADMIN 게이트는 섰으나 부여 경로 0건이라 아무도 통과할 수 없다(D1)·dead 컬럼 4개(D2)·감사 보존정책 침묵 공백(D3)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 86~90(권한·조직·학교·라이선스·감사) 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 첨부 문서 『21. 운영 플랫폼』(1단계 모듈 86 권한 관리 · 87 조직 관리 ·
+88 학교 관리 · 89 라이선스 관리 · 90 감사(Audit) 로그, 세부 약 90개 — WhyMath 전용이 아닌
+일반 SaaS 운영 틀)을 제공하며 갭 점검·설계를 요청. `knowledge_module_gap_review.md`(07-27)
+부터 `ai_recommendation_module_gap_review.md`(기능 80~83, 08-01)에 이은 **11번째 자매편**.
+
+**착수 가설이 절반 반증됐다.**
+1. "운영 플랫폼은 통째로 없다" → **절반 반증**. 감사(`deletion_audit`·`privacy_audit`)·인증
+   (JWT 회전·재사용 탐지·OAuth 하드닝)·역할 게이트(`Role` enum·`require_content_admin`)는
+   이미 SEC-07~11로 착지했다.
+2. **진짜 형태는 "게이트는 세웠는데 통과할 사람을 만드는 경로가 없다"**. `require_content_
+   admin`(`api/_auth.py:123`)이 콘텐츠 CUD 6라우터를 지키지만, `Role.CONTENT_ADMIN`을
+   부여하는 코드 경로가 저장소 전체에 **0건**(`.role =` 대입 grep 무일치, `api/auth.py:146`
+   `resolve_user`가 role kwarg 없이 사용자 생성). 봉인(SEC-07의 의도)과 좌석 부재(설계 공백)가
+   **똑같은 403**을 낸다.
+
+**판정**: "운영 플랫폼이 없다"가 아니라 **"문은 만들고 열쇠를 만들지 않았다"**가 정확한
+진단이다.
+
+**정본 결정 4건**:
+1. **D1 운영자 좌석 발급 + 역할 변경 감사 — CLI 경로로 즉시 착지, HTTP 표면·콘솔은 범위 밖**
+   (Kiki 결정). `role_grant_cli`(신규 ops CLI, `retention_purge_cli.py` 컨벤션 답습) +
+   `AuditEventKind.role_change`(**신규 테이블 0** — 기존 `privacy_audit` 재사용) + 동일
+   트랜잭션 부여+감사.
+2. **D2 dead 컬럼 4개(`school_id`·`subscription_tier`·`subscription_started_at`·
+   `subscription_renewed_at`) — 드롭 기본, prod 비영행 확인 시 동결로 전환**(Kiki 결정).
+   `account_security_gap_review.md:421` §4-⑧이 `school_id` 부재를 이미 자인했으나 정리는
+   안 됐던 비대칭 해소. `school_type`·`school_region`·`grade`(실 소비처 있는 학생 프로필
+   속성)는 유지 — 조직 엔티티와 혼동 금지.
+3. **D3 감사 보존정책 명문화 — 연한 숫자는 지금 정하지 않는다**(Kiki 결정, 법령 유래 판단).
+   `deletion_audit`·`privacy_audit`이 `_RETENTION_PLAN`(`privacy/retention.py:46`)에 미포함
+   = 사실상 무기한 보존인데 그 결정이 문서 어디에도 없었다. 이번 범위는 docstring 명문화 +
+   동결 테스트까지, 연한 확정은 `MGMT-02` 변호사 회신 이후(§5-④).
+4. **조직·학교·라이선스 테넌시(D4) — 페이퍼만, 태스크 신설 없음**(Kiki 결정, B2B 축 처리).
+   목표 스키마(조직 자기참조 계층이 학교를 흡수·3엔티티)·`pipa_data_matrix.md` 2차원 매트릭스
+   승계(선형 서열 재도입 금지)·학급 비교 대체 방향(순위 아닌 개념 커버리지 집계)만 문서화.
+   발화조건은 **B2B 계약 1건 체결**(`account_security_gap_review.md` §4-⑧·`ROADMAP.md:134`
+   승계, 재판정 아님).
+
+**산출**: `docs/architecture/operations_platform_gap_review.md` 신설(§0 전제 3종·§1 crosswalk
+기능86~90 전수·§2 의도적 미채택 15건·§3 설계 D1~D4(D4는 페이퍼)·§4 정직한 공백 7종·§5 유보
+발화조건 6건·§6 반복 실수 7·8회차·§정정 4곳·부록 실측 근거) + backlog 3건 CLI 등재
+(`ADMIN-01-operator-seat-grant-audit`·`ADMIN-02-dead-tenancy-billing-columns`·
+`ADMIN-03-audit-retention-policy` — `ADMIN-` 신규 축, `04_admin_console_architecture.md` §8
+명명 계열과 정합), `validate` green 156건.
+
+**§6 반복 실수 7·8회차 등재**: 앞선 6회(만들고 CI 배선 안 함/적재 안 함/배포에 안 넣음/입력을
+안 이음/안 켬/공급원을 안 이음)는 전부 *공급·입력* 축 단절이었다. 이번 7회차(`require_
+content_admin` 통과 주체 부재)는 처음으로 **인가(authorization)** 축이 끊긴 사례이며, 정상
+봉인과 똑같은 상태코드(403)를 내 관측만으로 구분되지 않는 새 하위유형이다. 8회차(dead
+컬럼 4개)는 "만들고 읽지 않음"의 스키마 판.
+
+**NOT**: 코드 로직 변경 0(설계+등재+정본 stale 지적만 — 소스·타 문서 직접 편집 0, 원본 4곳
+정정은 `operations_platform_gap_review.md` §정정 표에 기록만 하고 후속 세션이 반영). 관리자
+HTTP API·콘솔 UI·`SYSTEM_ADMIN` 역할·조직/학교/라이선스 테이블·결제 시스템 신설 0. `04_admin_
+console_architecture.md` §8 ADMIN-BFF/REVIEW-UI/WEB은 **등재하지 않는다**(콘솔 Phase B 발화
+전까지 dead task). D1~D3의 **구현**은 이 세션 범위 밖 — `/drive`가 태스크로 이어받는다.
+
+정본: `docs/architecture/operations_platform_gap_review.md`.
+
+---
 ### 2026-08-04 (설계·협업 착지): **협업 판정 이식(미머지 브랜치 → main 계보) + 갭 리뷰 §5 공백 3건 해소 설계 신설(`collaboration_landing_design.md`) — 다자 소유 파기 규칙 v1·보호자 접근 3안과 권고(ⓒ 링크 우선)·매트릭스 확장 6항목·기능 70/71/74 최소 착지 형태. 신규 태스크 0건, 코드 0** (claude 설계, Kiki 요청 — 동일 EOS 틀 『17. 협업』 재제출)
 
 **컨텍스트**: Kiki가 외부 EOS 틀 『17. 협업』(기능 70~74)을 **재제출**하며 점검·설계를 요청했다.
