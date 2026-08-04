@@ -327,11 +327,16 @@ class SurrogateMetrics(BaseModel):
         description="⑤ 도움 감소 곡선 — 시간에 따른 힌트 의존 감소 기울기."
     )
     help_demand_supply_ratio: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
         description=(
             "⑮ 도움 요청 대 제공 비 — attempt_event(힌트요청)/attempt_event(힌트제공) 개수 비. "
             "supply(힌트제공) 0건이면 NO_DATA(분모 0 방지·가짜 0 금지). 힌트제공 이벤트가 0이면 "
-            "⑤⑧도 이미 NO_DATA이므로 이 지표만 홀로 값을 내지 않는다(일관성)."
-        )
+            "⑤⑧도 이미 NO_DATA이므로 이 지표만 홀로 값을 내지 않는다(일관성). 기본값은 미집계 "
+            "호출자(다른 지표 신설 시점 이전 생성자)와의 회귀 0을 위함 — 실 집계 경로는 항상 "
+            "명시 주입(`compute_wh1_surrogate_metrics`)."
+        ),
     )
     calibration_brier: Metric = Field(
         description=(
