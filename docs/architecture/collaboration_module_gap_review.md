@@ -307,10 +307,18 @@ green. `Role`에 `PARENT`를 추가 → 계약 행 부재로 **red 실측** → 
 
 ### D3 — `daily_learning_metrics` 등 3테이블 writer 0: 배관만 있고 데이터가 없다
 
-**증상.** `DailyLearningMetrics`·`UserBehaviorMetrics`·`ProblemSolveTimeDistribution`은
-`db/models/timeseries.py:64,114,161`에 정의돼 있고 **파기·반출·보존 배관에 전부 등재돼 있다**
-(`erasure.py:92` · `export.py:103` · `retention.py:55`). 그런데 **프로덕션 writer가 0건**이다 —
-인스턴스화가 ORM/Pydantic 정의와 테스트에만 있다(실측 grep 0).
+**증상.** `DailyLearningMetrics`·`UserBehaviorMetrics`는 `db/models/timeseries.py:64,161`에 정의돼
+있고 **파기·반출·보존 3배관에 전부 등재돼 있다**(`erasure.py:92-93` · `export.py:103-104` ·
+`retention.py:55-56`). 그런데 **프로덕션 writer가 0건**이다 — 인스턴스화가 ORM/Pydantic 정의와
+테스트에만 있다(실측 grep 0).
+
+> **정정(2026-08-04 재실측)**: 초판은 `ProblemSolveTimeDistribution`(`timeseries.py:114`)까지
+> 묶어 *"3테이블이 배관에 전부 등재"*라고 적었으나 **사실이 아니다**. 이 테이블은 3배관 어디에도
+> 등재돼 있지 않고, `export.py:16-17,76-77`이 **`problem_id` 키 교차 사용자 집계라 개인 PII가
+> 아니므로 영구 제외**임을 명시한다 — 누락이 아니라 **의도된 제외**다. writer 0인 것은 3테이블
+> 모두 동일하나, 배관 등재는 2테이블뿐이다. 이 구별은 사소하지 않다: 교차집계 테이블을 "개인
+> 소유 축 밖"에 두는 이 선례가 §3 D2의 **다자 소유 파기 규칙**이 딛는 유일한 기존 판례이며,
+> `collaboration_landing_design.md` §3이 이를 정식 분류(C형)로 승격한다.
 
 **이것이 왜 협업 리뷰의 갭인가.** 기능 71-4 "학습 시간 통계"와 70-5 "성취도 분석"의 **공급원이 바로 이
 테이블들**이다. 즉 학부모·교사 리포트를 Phase 3에 만들려 해도 **채울 데이터가 없다**. 더 중요한 것은 이것이
@@ -436,6 +444,9 @@ green. `Role`에 `PARENT`를 추가 → 계약 행 부재로 **red 실측** → 
 
 ---
 
-**버전**: 1.0 | **작성**: 2026-07-31 | **교차링크**: `07_community.md` ·
+**버전**: 1.0 (2026-08-04 D3 사실 정정 1건 — `ProblemSolveTimeDistribution`은 배관 누락이 아니라
+의도된 제외) | **작성**: 2026-07-31 | **후속**: **§5의 공백 1·2·3은
+`collaboration_landing_design.md`(2026-08-04)가 해소** — 다자 소유 파기 규칙 v1 · 보호자 접근 모델
+3안·권고 · 매트릭스 확장 후보 항목. | **교차링크**: `07_community.md` ·
 `docs/legal/pipa_data_matrix.md` · `account_security_gap_review.md` ·
 `visualization_module_gap_review.md` · `docs/design/ui/04_admin_console_architecture.md`
