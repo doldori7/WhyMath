@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-05-grading-coverage-ceiling
+title: "채점 가능성 상한 관측 — shadow 파생 경로 커버리지 0/2,647 실측 + 선택형 61.1% 미배선 가시화"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 코퍼스 정적 리포트: 문항 전량을 (A 선택형 정확일치 / B 수치 단답 정규화 후보 / C conditions-formal 파생)의 상호배타 버킷으로 분류해 분모와 함께 낸다. C가 0이면 '0건 통과'가 아니라 '파생 불가(formal 전건 결측)'로 표시(분모 없는 0 금지 — REC-01·NLP-02 규약 승계)"
+  - "② 구조적 0의 원인 구분: attempt_grading_shadow_report가 verifiable_count=0일 때 '표본 없음(attempt 0행)'과 '파생 가능 문항 0(코퍼스 formal 결측)'이 서로 다른 값을 낸다. 현재는 둘 다 mismatch_rate=None으로 같은 값 — 변별력 없는 검증 스텝 금지(2026-07-17 등재)"
+  - "③ 권위 이관·클라 배선 범위 밖 동결: POST /v1/me/attempts의 is_correct 소비·BKT 입력·클라 계약 무변경(NLP-02 acceptance③ 동결 승계). 이 태스크는 REC-07(사람 결정)의 입력 수치만 만든다"
+  - "④ 변별력: formal을 채운 문항 1건을 주입하면 C 버킷이 0→1로 오르고 되돌리면 0으로 복귀하는지 양방향 실측"
+  - "⑤ CI 배선 실재 확인: 어떤 잡이 이 리포트를 실제로 실행하는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/attempt_grading_shadow_report.py
+  - "src/backend/whymath_backend/ops/*"
+  - tests/backend/harness/test_attempt_grading_shadow_report.py
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review_2.md §2 G1. NLP-02가 착지시킨 shadow 채점의 파생 게이트(derive_verify_inputs)는 conditions_parsed[*].formal의 자유기호가 정확히 {x}일 때만 입력을 만드는데, 코퍼스 2,647문항 중 conditions 보유는 30건이고 그 30건 전부 formal=null이다(2026-08-04 실측) → 파생 가능 문항 0건. 즉 attempt가 아무리 쌓여도 verdict 0이며, 1차 문서 §5-①의 발화 조건('서버가 채점 권위를 가질 수 있음이 확인됐을 때')이 구조적으로 충족될 수 없다. 반면 객관식 1,616건(61.1%)은 answer가 choices 원소와 1,616/1,616 정확 일치해 서버 채점이 자명하고, 단답형 1,031건도 answer_format이 전건 수치형이다 — 채점 가능성은 attempt 없이 코퍼스만으로 잴 수 있다."
+updated: 2026-08-04
