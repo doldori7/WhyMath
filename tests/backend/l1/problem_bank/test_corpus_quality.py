@@ -385,13 +385,28 @@ def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # rephrased_v0 429건은 유형 백필에서 명시 제외됐다(`problem_bank_gap_review.md` §5-③ 편집자
     # 부기·`harness/problem_type_backfill.py`). 오염이 아니라 설계이므로 키 집합·값 비교 양쪽에서
     # 제외한다.
+    #
+    # relations는 S4-18 계보 백필이 rephrase측에만 부여하는(parent를 가리키는) 비대칭 신규
+    # 키라 키 집합 비교에서 제외한다(identity_id는 양쪽에 대칭 부여라 이미 값 비교를 통과·
+    # 제외 불요).
+    #
+    # 병합 경위(2026-08-04, S4-18 병합): 이 병합 시점의 `rephrased_v0`는 병합 대상 브랜치와
+    # 별개로 main에서 rotation-2 이후 재생성돼(S3-15 재설계) problem_id 429건 중 37건만 원
+    # 코퍼스와 일치했다 — `scripts/backfill_rephrase_lineage_s4_18.py --check`로 재생성된
+    # 코퍼스 위에서 드라이런 후(전량 미처리 429건 확인) 실행해 identity_id·relations를
+    # 재생성 코퍼스 기준으로 다시 채웠다(멱등 스크립트 — 재실행 안전). 아래 두 어서션은 그
+    # 재실행 결과가 원 브랜치의 계약(양쪽 identity_id 대칭·relations는 rephrase 전용)과
+    # 여전히 일치함을 실측 확인한 뒤 살렸다.
     source_only_fields = {"problem_type_codes"}
+    asymmetric_only_on_variant = {"relations"}
     source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
     exclude = {"question_text", "slug", "problem_id"}
     for slug, rec in rephrased.items():
         src = source[_math_key(rec)]
-        assert set(rec) == set(src) - source_only_fields, f"{slug} 키 집합 변화"
+        assert (
+            set(rec) - asymmetric_only_on_variant == set(src) - source_only_fields
+        ), f"{slug} 키 집합 변화"
         for key in src:
             if key in exclude or key in source_only_fields:
                 continue
@@ -435,3 +450,50 @@ def test_rephrased_corpus_copyright_rail() -> None:
         assert record.problem.source_type == "자체생성"
         assert record.provenance.license == "WHYMATH_GENERATED"
         assert record.provenance.original_source is None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 계보(identity_id·problem_relation) 거버넌스 — S4-18 소급 백필 결과 봉인.
+# ──────────────────────────────────────────────────────────────────────
+def test_rephrased_corpus_all_records_have_identity_id() -> None:
+    records = _rephrased_records()
+    assert len(records) >= 400  # 429건 실측 하한(여유 마진)
+    missing = [r.slug for r in records if r.problem.identity_id is None]
+    assert not missing, f"identity_id 미부여 {len(missing)}건: {missing[:5]}"
+
+
+def test_rephrased_corpus_all_records_have_exactly_one_variant_relation() -> None:
+    for record in _rephrased_records():
+        assert len(record.relations) == 1, f"{record.slug} relations 개수 이상: {record.relations}"
+        rel = record.relations[0]
+        assert rel.relation_type == "변형"
+        assert rel.similarity_score == 1.0  # rephrase는 conditions·answer 그대로 복사(실측 사실)
+
+
+def test_rephrased_corpus_relation_parent_exists_in_generated() -> None:
+    # 참조 무결성 — 계보가 가리키는 parent_slug가 실제로 생성 코퍼스에 존재한다(orphan 0건).
+    generated_slugs = {rec["slug"] for rec in _raw_by_slug(_generated_corpus_path()).values()}
+    for record in _rephrased_records():
+        parent_slug = record.relations[0].parent_slug
+        assert parent_slug in generated_slugs, f"{record.slug}의 parent_slug 미존재: {parent_slug}"
+
+
+def test_rephrased_corpus_identity_id_matches_parent() -> None:
+    # rephrase 변형과 그 parent(생성 코퍼스)가 같은 identity_id를 공유한다(계열 대칭성).
+    generated_by_slug = _raw_by_slug(_generated_corpus_path())
+    for record in _rephrased_records():
+        parent_slug = record.relations[0].parent_slug
+        parent_identity = generated_by_slug[parent_slug].get("identity_id")
+        assert parent_identity is not None, f"parent {parent_slug}에 identity_id 미부여"
+        assert (
+            str(record.problem.identity_id) == parent_identity
+        ), f"{record.slug}·parent {parent_slug} identity_id 불일치"
+
+
+def test_no_slug_collisions_between_generated_and_rephrased() -> None:
+    # S4-18 핵심 수정 — 이전엔 429건 중 392건이 원본과 slug가 같아 DB에서 한 행으로 병합됐다.
+    # 백필 후에는 전량 유일해야 한다(populate.py upsert가 서로 다른 행으로 저장).
+    generated_slugs = [rec["slug"] for rec in _raw_by_slug(_generated_corpus_path()).values()]
+    rephrased_slugs = [r.slug for r in _rephrased_records()]
+    all_slugs = generated_slugs + rephrased_slugs
+    assert len(all_slugs) == len(set(all_slugs)), "생성·rephrase 코퍼스 간 slug 충돌 잔존"

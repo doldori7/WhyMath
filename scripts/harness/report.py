@@ -132,7 +132,11 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
         ],
         "blocked": [t.id for t in backlog.tasks.values() if t.status == "blocked"],
         "pending_gates": [
-            {"id": g.id, "assignee": g.assignee, "days": _days_pending(g.requested, today)}
+            {
+                "id": g.id,
+                "assignee": g.assignee,
+                "days": _days_pending(g.requested, today),
+            }
             for g in backlog.gates.values()
             if g.status == "pending"
         ],
@@ -151,12 +155,17 @@ def render_brief(
     remote_status: str = "ok",
     stale_branches: list[tuple[str, float, int]] | None = None,
     stale_branch_status: str = "ok",
+    done_excluded: dict[str, list[str]] | None = None,
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
     stale_branches: (branch, age_days, ahead) 목록(HARN-13) — 원시 튜플로 받아 이 모듈이
     `remote_claims`를 직접 import하지 않게 한다(remote_claimed와 동일한 결합도 원칙).
+    done_excluded: task_id → 완료 브랜치 목록(HARN-12) — 타 세션이 이미 끝냈으나 아직
+    머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
+    일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
+    책임이라 여기서는 이미 계산된 결과만 받는다(테스트 용이성·기존 시그니처 하위호환 유지).
     """
     lines = ["[빌드하네스 브리핑]"]
 
@@ -197,6 +206,8 @@ def render_brief(
         lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
 
     ready, excluded = selector.candidates(backlog, remote_claimed=remote_claimed)
+    if done_excluded:
+        ready = [t for t in ready if t.id not in done_excluded]
     if ready:
         lines.append("다음 착수 후보:")
         for i, task in enumerate(ready[:3], start=1):

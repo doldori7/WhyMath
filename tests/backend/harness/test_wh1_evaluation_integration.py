@@ -6,6 +6,8 @@
   - ④ 턴당 토큰: user A의 Dialogue(일부 total_tokens/total_turns 채움) → MEASURED 또는 NO_DATA.
   - ⑤ 도움 감소 곡선: user A의 힌트제공 attempt_event N개(event_at 순서·hint_level 하강) →
     MEASURED·음수 기울기. 데이터 없으면 NO_DATA(날조 0).
+  - ⑮ 도움 요청 대 제공 비(S3-16): user A의 힌트요청 attempt_event N개(⑤의 힌트제공 표본과
+    동형 scope) → MEASURED·정확 ratio. supply 0건이면 NO_DATA(분모 0 방지).
   - ②⑥⑦ 미계측 3종: 고정 status·value None(날조 0).
   - 401(무토큰)·user 스코핑(타 user B 세션은 A 집계에서 제외).
 
@@ -176,6 +178,19 @@ def _hint_event_row(uid: uuid.UUID, *, hint_level: int, order: int) -> AttemptEv
     )
 
 
+def _demand_event_row(uid: uuid.UUID, *, order: int) -> AttemptEvent:
+    """힌트요청 attempt_event 1행(event_data 빈 페이로드) — ⑮ 도움 요청 대 제공 비 표본(S3-16).
+
+    값 필드가 없는 단순 발생 신호라 `order`는 event_at만 어긋낸다(정렬 요구 없음·개수만 집계).
+    """
+    return AttemptEvent(
+        event_at=datetime.now(UTC) + timedelta(seconds=order),
+        user_id=uid,
+        event_type=EventType.힌트요청,
+        event_data={},
+    )
+
+
 def _attempt_row(uid: uuid.UUID, *, is_correct: bool, order: int) -> ProblemAttempt:
     """ProblemAttempt 1행(is_correct) — R15 정답률 추세 표본.
 
@@ -321,6 +336,14 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
                 _hint_event_row(uid_b, hint_level=4, order=0),
             )
         )
+        # A: 힌트요청 이벤트 2개(supply 4건 대비 demand 2건) → ⑫ ratio 0.5. B는 1개(스코핑·제외).
+        asyncio.run(
+            _add_all(
+                _demand_event_row(uid_a, order=0),
+                _demand_event_row(uid_a, order=1),
+                _demand_event_row(uid_b, order=0),
+            )
+        )
         # A: ProblemAttempt 4개(is_correct F→T→T→T·started_at 순서) → 정답률 추세 상승(양수
         # 기울기). 도움↓(−1.0)·정답률↑ 교차 → R15 GENUINE_IMPROVEMENT. B는 1개(스코핑·제외).
         asyncio.run(
@@ -367,6 +390,12 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert body["sample_hint_events"] == 4
             assert "R15" in hrs["note"]  # 정확률 교차검증 미반영 정직 표기
             assert "종단" in hrs["note"]
+
+            # ⑮ 도움 요청 대 제공 비 — MEASURED·demand 2/supply 4=0.5(B의 1건 제외 — 스코핑).
+            hdsr = body["help_demand_supply_ratio"]
+            assert hdsr["status"] == "measured"
+            assert hdsr["value"] == 0.5
+            assert body["sample_demand_events"] == 2
 
             # R15 결합 판정 — 도움↓(−1.0)·정답률↑(F→T→T→T) → GENUINE_IMPROVEMENT·표본 4
             # (B의 1건 제외 — 스코핑). is_correct 추세(① 검산 proxy 아님)로 교차.
@@ -424,6 +453,9 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             # ⑤ 도움 감소 곡선 — 힌트제공 0건 → NO_DATA·value None(가짜 기울기/0 금지).
             assert body["help_reduction_slope"]["status"] == "no_data"
             assert body["help_reduction_slope"]["value"] is None
+            # ⑮ 도움 요청 대 제공 비 — 힌트제공(supply) 0건 → NO_DATA(분모 0 방지·가짜 0 금지).
+            assert body["help_demand_supply_ratio"]["status"] == "no_data"
+            assert body["help_demand_supply_ratio"]["value"] is None
             # R15 결합 판정 — 도움/정답률 둘 다 표본 0 → INSUFFICIENT_DATA(날조 판정 금지).
             hrv = body["help_reduction_validated"]
             assert hrv["verdict"] == "insufficient_data"

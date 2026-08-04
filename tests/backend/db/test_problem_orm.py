@@ -380,6 +380,34 @@ def test_problem_distractor_map_default_none_roundtrip() -> None:
     assert back.distractor_map is None
 
 
+def test_problem_identity_id_in_ddl_and_indexed() -> None:
+    """S4-18: identity_id 컬럼이 PG DDL(UUID)에 있고 색인이 걸린다(계열 조회 O(1))."""
+    ddl = _pg_ddl(OrmProblem.__table__)
+    assert "identity_id" in ddl
+    col = OrmProblem.__table__.c.identity_id
+    assert col.nullable  # 기존 행·단일 개체는 계열 없음(None)
+    assert col.index is True
+
+
+def test_problem_identity_id_roundtrip() -> None:
+    """S4-18: identity_id가 schema → ORM → schema 왕복을 보존한다(원본↔변형 동일 계열값)."""
+    identity = uuid.uuid4()
+    s = _valid_schema_problem().model_copy(update={"identity_id": identity})
+    orm = OrmProblem.from_schema(s)
+    assert orm.identity_id == identity
+    back = orm.to_schema()
+    assert back.identity_id == identity
+
+
+def test_problem_identity_id_default_none_roundtrip() -> None:
+    """S4-18: identity_id 미지정 시 None으로 왕복(무회귀 — 계열 없는 기존 문제 보존)."""
+    s = _valid_schema_problem()  # identity_id 미지정
+    orm = OrmProblem.from_schema(s)
+    assert orm.identity_id is None
+    back = orm.to_schema()
+    assert back.identity_id is None
+
+
 def test_problem_step_roundtrip() -> None:
     """ProblemStep schema↔ORM 변환이 핵심 필드를 보존한다."""
     pid = uuid.uuid4()

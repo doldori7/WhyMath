@@ -206,11 +206,31 @@ def test_audit_jsonl_roundtrips_through_corpus_audit_eval(
 
 # ── 로더 위생 ─────────────────────────────────────────────────────────
 def test_loader_rejects_record_without_verify_clause(tmp_path: Path) -> None:
+    """L1 스키마·저작권 위생은 통과하는(=유효한) 레코드라도 verify 절이 없으면 감사가 거부한다.
+
+    S4-17로 `load_pilot_records`가 `load_problem_bank_records`(L1 정본) 경유로 바뀌어, L1이
+    먼저 통과시키는 레코드여야 이 감사 전용 불변식(검산 재료 필요)까지 도달한다 — 그래서
+    fixture가 최소 무효 dict가 아니라 *L1 통과·verify만 결측*인 완전한 레코드여야 한다.
+    """
+    record = {
+        "slug": "wm-residue-loader-test",
+        "source_type": "자체생성",
+        "license": "WHYMATH_GENERATED",
+        "generation_type": "FULLY_GENERATED",
+        "subject": "공통",
+        "curriculum_version": "2022_REVISION",
+        "valid_from_year": 2025,
+        "unit_codes": ["QUAD-EQ"],
+        "question_format": "단답형",
+        "answer_format": "자연수",
+        "difficulty_overall": 2.0,
+        "question_text": "q",
+        "answer": "1",
+        "answer_explanation": "e",
+        "achievement_standard_codes": ["[10공수1-02-02]"],
+    }
     path = tmp_path / "bad.jsonl"
-    path.write_text(
-        json.dumps({"slug": "x", "question_text": "q", "answer": "1"}, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="verify 절 결측"):
         load_pilot_records(path)
 

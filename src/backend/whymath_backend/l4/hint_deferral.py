@@ -37,7 +37,7 @@ REVEALS: dict[HintLevel, str] = {
 
 # 좌절 신호 — `docs/prompts/socratic_template.md` 시나리오 4(`affect=frustrated`).
 # 학생이 *명시적*으로 막힘을 표현하는 토큰. 모호한 침묵·짧은 응답은 신호 아님(보수적).
-_FRUSTRATION_TOKENS: frozenset[str] = frozenset(
+FRUSTRATION_TOKENS: frozenset[str] = frozenset(
     {
         "모르겠",
         "막혔",
@@ -54,7 +54,7 @@ _FRUSTRATION_TOKENS: frozenset[str] = frozenset(
 
 # 답 요구 신호 — `docs/prompts/socratic_template.md` 시나리오 3("그냥 답 알려주세요").
 # 답을 *직접* 요구하는 토큰. 응답은 답 미루기 발동 + 점진 hint_level 상승.
-_DEMAND_ANSWER_TOKENS: frozenset[str] = frozenset(
+DEMAND_ANSWER_TOKENS: frozenset[str] = frozenset(
     {
         "답 알려",
         "답 좀",
@@ -69,10 +69,15 @@ _DEMAND_ANSWER_TOKENS: frozenset[str] = frozenset(
 
 
 # 5회+ 막힘 임계값 — 스펙 L37 "3. 부분 풀이(5회+ 막힘)" 정본.
-_STUCK_TURN_THRESHOLD = 5
+STUCK_TURN_THRESHOLD = 5
 
 
-def _has_any(text: str, tokens: frozenset[str]) -> bool:
+def has_any_token(text: str, tokens: frozenset[str]) -> bool:
+    """`text`에 토큰이 하나라도 포함되는가(부분 문자열·순수).
+
+    PED-04: `l4/turn_meta.classify_student_intent`가 *같은* 토큰셋으로 학생 의도를 분류하므로
+    토큰셋 3종과 이 술어를 공개했다 — 좌절·답요구 신호의 진실원천을 둘로 쪼개지 않기 위함.
+    """
     return any(t in text for t in tokens)
 
 
@@ -100,10 +105,10 @@ def decide_hint_level(
     text = student_input.strip()
 
     # 1. 5회+ 막힘 — 임계 우선(스펙 L37). prev∈[1,4] → max(prev,3)∈{3,4}.
-    if turn_count >= _STUCK_TURN_THRESHOLD:
+    if turn_count >= STUCK_TURN_THRESHOLD:
         base: int = max(prev, 3)
     # 2·3. 답 요구(시나리오 3) 또는 좌절(시나리오 4) — 점진 상승, prev∈[1,4] → min(4,prev+1)∈[2,4].
-    elif _has_any(text, _DEMAND_ANSWER_TOKENS) or _has_any(text, _FRUSTRATION_TOKENS):
+    elif has_any_token(text, DEMAND_ANSWER_TOKENS) or has_any_token(text, FRUSTRATION_TOKENS):
         base = min(4, prev + 1)
     # 4. 기본 — 1(방향). 신호 사라지면 가장 은근한 단계로 복귀(생산적 막힘 우선).
     else:
@@ -117,3 +122,21 @@ def decide_hint_level(
         base = min(4, base + 1)
 
     return cast(HintLevel, base)
+
+
+def is_answer_demand(student_input: str) -> bool:
+    """학생 발화가 답 요구 토큰(`DEMAND_ANSWER_TOKENS`)을 포함하는가 — 힌트요청(demand) 트리거.
+
+    `decide_hint_level`의 2번 규칙(답 요구→hint_level 상승)과 *같은 판정*을 재사용만 한다(재계산
+    아님·상수 단일 출처). 좌절 신호(`FRUSTRATION_TOKENS`)는 포함하지 않는다 — "답을 달라"는
+    명시적 요구만 demand로 집계한다(좌절은 별도 신호로 후속 고려·이번 태스크 범위 밖).
+    """
+    return has_any_token(student_input.strip(), DEMAND_ANSWER_TOKENS)
+
+
+def is_stuck_turn_count(turn_count: int) -> bool:
+    """5회+ 막힘 임계(`STUCK_TURN_THRESHOLD`) 도달 여부 — 막힘 이벤트 트리거.
+
+    `decide_hint_level`의 1번 규칙(5회+ 막힘→hint_level 최소 3)과 *같은 임계*를 재사용한다.
+    """
+    return turn_count >= STUCK_TURN_THRESHOLD
