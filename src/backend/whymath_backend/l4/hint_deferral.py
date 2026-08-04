@@ -125,18 +125,18 @@ def decide_hint_level(
 
 
 def is_answer_demand(student_input: str) -> bool:
-    """학생 발화가 답 요구 토큰(`_DEMAND_ANSWER_TOKENS`)을 포함하는가 — 힌트요청(demand) 트리거.
+    """학생 발화가 답 요구 토큰(`DEMAND_ANSWER_TOKENS`)을 포함하는가 — 힌트요청(demand) 트리거.
 
     `decide_hint_level`의 2번 규칙(답 요구→hint_level 상승)과 *같은 판정*을 재사용만 한다(재계산
-    아님·상수 단일 출처). 좌절 신호(`_FRUSTRATION_TOKENS`)는 포함하지 않는다 — "답을 달라"는
+    아님·상수 단일 출처). 좌절 신호(`FRUSTRATION_TOKENS`)는 포함하지 않는다 — "답을 달라"는
     명시적 요구만 demand로 집계한다(좌절은 별도 신호로 후속 고려·이번 태스크 범위 밖).
     """
-    return _has_any(student_input.strip(), _DEMAND_ANSWER_TOKENS)
+    return has_any_token(student_input.strip(), DEMAND_ANSWER_TOKENS)
 
 
 def is_stuck_turn_count(turn_count: int) -> bool:
-    """5회+ 막힘 임계(`_STUCK_TURN_THRESHOLD`) 도달 여부 — 막힘 이벤트 트리거.
+    """5회+ 막힘 임계(`STUCK_TURN_THRESHOLD`) 도달 여부 — 막힘 이벤트 트리거.
 
     `decide_hint_level`의 1번 규칙(5회+ 막힘→hint_level 최소 3)과 *같은 임계*를 재사용한다.
     """
-    return turn_count >= _STUCK_TURN_THRESHOLD
+    return turn_count >= STUCK_TURN_THRESHOLD
