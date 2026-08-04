@@ -3,6 +3,11 @@
 > 느리지만 *결정적* 자산. 데이터 누적 → 모델 개선 → 콘텐츠 풍부 의 선순환.
 >
 > **UI/IA 설계**: 교사·학부모 대시보드 UI·역할 설계는 `../design/ui/03_admin_console_plan.md`·`04_admin_console_architecture.md` 참조. 본 문서는 L7 계층 책임의 정본.
+>
+> **착지 설계**: 갭 점검·판정은 `collaboration_module_gap_review.md`(2026-07-31), 착지 형태
+> (다자 소유 파기 규칙·보호자 접근 모델·매트릭스 확장 항목·기능 70/71/74의 최소 형태)는
+> `collaboration_landing_design.md`(2026-08-04)가 정본. **학부모 컴포넌트는 상시 대시보드가 아니라
+> 주기 요약 전달**임에 유의(착지 설계 §4.3).
 
 ## 책임
 
@@ -99,12 +104,18 @@ class L7CommunityService:
 
 ## Phase별 진입
 
+> **정정 (2026-07-31)**: 이 절은 교사 대시보드를 Phase 4에만 두어 본문 §4·"전달 형태"(`Phase 3+`)와
+> 모순이었다. `ROADMAP.md:177-179`(M3.3 월 18~21 교사 대시보드 **베타**)와 `:194-210`(Phase 4 학교
+> 라이선스·계약 확산)에 맞춰 **베타=Phase 3 / 학교 확산=Phase 4**로 분리한다. 근거:
+> `collaboration_module_gap_review.md` §3 D4.
+
 ### Phase 3
 - 다중 풀이 갤러리
 - 부모 보고서
+- 교사 대시보드 (B2B) — 베타
 
 ### Phase 4
-- 교사 대시보드 (B2B)
+- 교사 대시보드 (B2B) — 학교 확산
 - Live Problems
 
 ### Phase 4+
