@@ -1538,9 +1538,13 @@ async def get_my_learning_path(
          조회한다(`prerequisites`와 동일 인자).
       ② **L2 위상정렬** — `build_learning_path(session, gaps)`가 그 막힌 선수 집합 *내부*의
          직접 선수 엣지를 조회해 Kahn 위상정렬한다 — in-degree 0(선수 의존 없는 *근본*)을 먼저
-         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **추천의 depth/strength 정렬과 다르다**:
-         두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면 A를 먼저 다져야 한다(LTHC).
-         사이클(부분 적재 방어)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
+         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **제약 엣지가 있을 때만 추천의 depth/
+         strength 정렬과 달라진다**: 두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면
+         A를 먼저 다져야 한다(LTHC). 다만 기본값(`max_depth=1`)에서는 그런 제약 엣지가 0인
+         사례가 **96.4%**이고, 그때는 실질적으로 `_tiebreak`(weakness 등)만으로 정렬된다 —
+         응답의 `ordering_basis`(`"topological"|"tiebreak_only"|"empty"`)와
+         `ordering_edge_count`가 이 구분을 정직하게 노출한다(`PATH-02`). 사이클(부분 적재
+         방어, 실발생 0건)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
 
     L2 fetch + L2 정렬 *배선*만 여기(L5)가 소유하고(신규 로직 0), 순수 위상정렬·내부엣지 조회는
     L2(`build_learning_path`·`order_learning_path`)가 소유한다. user_id 스코핑·읽기 전용·
