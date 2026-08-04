@@ -82,6 +82,15 @@ class HintEventData(_EventPayload):
         default=None,
         description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
     )
+    client_state_mismatch: bool = Field(
+        default=False,
+        description=(
+            "PED-04 D2: 이 턴에서 클라 제출 `polya_state`가 서버 파생 상태와 어긋났는지. "
+            "불일치율을 *집계 가능한* 형태로 남기기 위한 태그다 — 로그로만 두면 측정이 불가능하고, "
+            "신규 EventType은 PG enum ALTER(마이그레이션)를 부르므로 JSONB 페이로드에 싣는다. "
+            "기본 False라 기존 이벤트·픽스처와 호환."
+        ),
+    )
 
 
 class InteractionEventData(_EventPayload):

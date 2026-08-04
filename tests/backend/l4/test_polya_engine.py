@@ -9,8 +9,8 @@ import pytest
 
 from whymath_backend.l3.models import CostTier
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
-from whymath_backend.l4.models import PolyaStage, PolyaState
-from whymath_backend.l4.polya.engine import PolyaCoach, _next_stage
+from whymath_backend.l4.models import PolyaStage, PolyaState, next_polya_stage
+from whymath_backend.l4.polya.engine import PolyaCoach
 from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
 
 
@@ -180,15 +180,15 @@ class TestDecideAdvances:
 
 
 class TestNextStage:
-    """REVIEW가 종착임을 `_next_stage` 직접 호출로도 보장(미래 회귀 가드)."""
+    """REVIEW가 종착임을 `next_polya_stage` 직접 호출로도 보장(미래 회귀 가드)."""
 
     def test_review_next_stage_is_review(self) -> None:
-        assert _next_stage(PolyaStage.REVIEW) is PolyaStage.REVIEW
+        assert next_polya_stage(PolyaStage.REVIEW) is PolyaStage.REVIEW
 
     def test_non_terminal_advances(self) -> None:
-        assert _next_stage(PolyaStage.UNDERSTAND) is PolyaStage.PLAN
-        assert _next_stage(PolyaStage.PLAN) is PolyaStage.EXECUTE
-        assert _next_stage(PolyaStage.EXECUTE) is PolyaStage.REVIEW
+        assert next_polya_stage(PolyaStage.UNDERSTAND) is PolyaStage.PLAN
+        assert next_polya_stage(PolyaStage.PLAN) is PolyaStage.EXECUTE
+        assert next_polya_stage(PolyaStage.EXECUTE) is PolyaStage.REVIEW
 
 
 class TestSystemPromptShape:

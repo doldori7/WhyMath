@@ -148,6 +148,17 @@ class _Result:
         # 캡처 세션엔 증거 행이 없으니 0.0(반박 아님) — apply_matches와 결과 동치(하위호환).
         return 0.0
 
+    def scalar_one_or_none(self) -> Any:
+        # PED-04: `_prev_hint_level_for`(직전 힌트 적재)·`_session_recall_or_none`(직전 대화 id)이
+        # 단일 스칼라를 이 API로 읽는다. 캡처 세션엔 이력이 없으니 None — "첫 결정·회상 없음"과
+        # 같은 뜻이라 기존 hermetic 기대(클라 제출 상태 그대로)와 정합.
+        return self._rows[0] if self._rows else None
+
+    def all(self) -> list[Any]:
+        # PED-04: `_turn_meta_rows`(턴 메타 컬럼 투영)가 Row 튜플을 이 API로 읽는다. 캡처
+        # 세션은 execute_rows를 그대로 돌려주므로, 메타 이력이 필요한 테스트만 행을 주입한다.
+        return list(self._rows)
+
 
 class _CapturingSession:
     """`/v1/coach/sessions`용 — add/add_all/commit/refresh/get/execute 캡처.
@@ -1505,6 +1516,110 @@ class TestSessionPersistence:
             json={"student_input": "음", "problem_id": "not-a-uuid"},
         )
         assert resp.status_code == 422
+
+
+class TestTurnMetaWriter:
+    """PED-04 D1 acceptance ① — 세션 경로가 이미 계산된 값으로 메타 4컬럼을 채운다(hermetic).
+
+    실 PG NULL 잔존 0 검증은 `test_coach_integration.py`(라이브)의 짝이 맡는다 — 여기선
+    핸들러가 `_build_dialogue_turn`에 *무엇을 넘기는지*(ORM 속성)만 hermetic으로 본다.
+    """
+
+    def test_student_turn_gets_intent_and_understanding_signal(self) -> None:
+        client, captured = _session_client()
+        client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "왜 그렇게 되는지 이유를 모르겠어요"},
+        )
+        from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+
+        student_t = next(o for o in captured.added if isinstance(o, DialogueTurnORM)).__class__
+        turns = [o for o in captured.added if isinstance(o, student_t)]
+        student = next(t for t in turns if t.role == "student")
+        assistant = next(t for t in turns if t.role == "assistant")
+        # 좌절+질문 토큰이 섞였지만 좌절이 없고 "왜/이유"만 있으므로 질문 신호가 먼저 걸린다.
+        assert student.student_intent is not None
+        assert student.student_understanding_signal is not None
+        assert 0.0 <= student.student_understanding_signal <= 1.0
+        # 학생 턴엔 AI 전용 축이 비어 있어야 한다(정의상 비어있음 — 결손 아님).
+        assert student.socratic_strategy is None
+        # AI 턴엔 targeted_step이 반드시 있고(단계는 항상 결정됨), 학생 전용 축은 비어 있다.
+        assert assistant.targeted_step is not None
+        assert assistant.student_intent is None
+        assert assistant.student_understanding_signal is None
+        # 두 턴 다 같은 목표 단계를 가리켜야 한다(같은 교환의 같은 맥락).
+        assert student.targeted_step == assistant.targeted_step
+
+    def test_demand_answer_input_classified_as_giveup(self) -> None:
+        client, captured = _session_client()
+        client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "그냥 답 알려주세요"},
+        )
+        from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+
+        turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
+        student = next(t for t in turns if t.role == "student")
+        assert student.student_intent == "포기"
+
+    def test_empty_input_first_turn_has_no_intent(self) -> None:
+        """빈 발화 + 풀이 없음 → 의도 미분류(None) — 날조 금지."""
+        client, captured = _session_client()
+        client.post("/v1/coach/sessions", json={"student_input": ""})
+        from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+
+        turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
+        student = next(t for t in turns if t.role == "student")
+        assert student.student_intent is None
+
+    def test_stateless_coach_endpoint_untouched_by_meta_writer(self) -> None:
+        """stateless `/v1/coach`는 DB 무접근 계약 — 메타 writer 관련 코드도 호출되지 않는다."""
+        client = _client()
+        resp = client.post("/v1/coach", json={"student_input": "테스트"})
+        assert resp.status_code == 200
+        # 응답에 client_state_mismatch 등 세션 전용 필드가 없어야 한다(OpenAPI 계약 무변경).
+        assert "client_state_mismatch" not in resp.json()
+
+
+class TestClientStateMismatchFlag:
+    """PED-04 D2 acceptance ③ — 클라 제출 Polya 상태와 서버 파생이 어긋나면 표면화한다."""
+
+    def test_first_session_no_history_default_state_no_mismatch(self) -> None:
+        """새 세션(이력 0)에서 클라가 기본 PolyaState(UNDERSTAND·turn_count=0)를 보내면
+        서버 파생(prev_hint_level 없음의 기본값)과 일치 — 불일치 플래그 False."""
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "안녕하세요"},
+        )
+        assert resp.json()["client_state_mismatch"] is False
+
+    def test_false_polya_state_flags_mismatch(self) -> None:
+        """새 세션인데 클라가 EXECUTE·turn_count=99를 거짓 제출 → 서버 파생(UNDERSTAND·0)과
+        어긋나 플래그 True. 결정은 여전히 서버 파생 기준(응답 200·정상 처리)."""
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "안녕하세요",
+                "polya_state": {"current_stage": "execute", "turn_count": 99},
+            },
+        )
+        assert resp.status_code == 201
+        assert resp.json()["client_state_mismatch"] is True
+
+    def test_stateless_endpoint_has_no_mismatch_field(self) -> None:
+        """stateless 경로는 서버 파생 자체가 없어 플래그를 노출하지 않는다(가짜 계기판 금지)."""
+        client = _client()
+        resp = client.post(
+            "/v1/coach",
+            json={
+                "student_input": "테스트",
+                "polya_state": {"current_stage": "execute", "turn_count": 99},
+            },
+        )
+        assert resp.status_code == 200
+        assert "client_state_mismatch" not in resp.json()
 
 
 class TestTurnAppend:
@@ -3840,7 +3955,13 @@ class TestLogHintEvent:
         event = sess.added[0]
         assert event.event_type is EventType.힌트제공
         # S3-03: mode/persona 미지정 → 계약이 None으로 정규화(mode-agnostic·기존 동작 불변).
-        assert event.event_data == {"hint_level": 3, "mode": None, "persona": None}
+        assert event.event_data == {
+            "hint_level": 3,
+            "mode": None,
+            "persona": None,
+            # PED-04 D2: 불일치 태그 — 기본 False(클라 상태 미제출·서버 파생과 일치).
+            "client_state_mismatch": False,
+        }
         assert event.user_id == self._UID
         assert event.problem_id == self._PID
 
@@ -3861,7 +3982,12 @@ class TestLogHintEvent:
         assert sess.added[0].attempt_id == aid
         assert sess.added[0].problem_id is None
         # S3-03: mode/persona 미지정 → None 정규화(기존 동작 불변).
-        assert sess.added[0].event_data == {"hint_level": 1, "mode": None, "persona": None}
+        assert sess.added[0].event_data == {
+            "hint_level": 1,
+            "mode": None,
+            "persona": None,
+            "client_state_mismatch": False,
+        }
 
 
 # ── S3-03 수능 MVP: mode 태깅(요청 → 검산/힌트 event_data) 단위·결선 테스트 ─────────
