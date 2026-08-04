@@ -1662,3 +1662,4 @@
 {"ts": "2026-07-31T03:49:56", "actor": "claude/whymath-collaboration-design-ur7l4v", "action": "add", "id": "COLLAB-01-access-matrix-contract"}
 {"ts": "2026-07-31T03:50:19", "actor": "claude/whymath-collaboration-design-ur7l4v", "action": "add", "id": "COLLAB-02-erasure-completeness-direction"}
 {"ts": "2026-07-31T03:50:41", "actor": "claude/whymath-collaboration-design-ur7l4v", "action": "add", "id": "COLLAB-03-learning-metrics-writer"}
+{"ts": "2026-08-04T07:14:49", "actor": "claude/whymath-platform-review-t03j7y", "action": "add", "id": "HARN-14-doc-series-duplicate-detection"}
