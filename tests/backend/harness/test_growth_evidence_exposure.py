@@ -99,7 +99,7 @@ def test_gaming_suspect_label_not_exposed_as_a_field() -> None:
 
 
 def test_all_twelve_fields_classified() -> None:
-    """12지표(원 설계 11종 + 병합 편입 help_demand_supply_ratio) 전부가 판정 결과에 나타난다(누락 0)."""
+    """12지표(원 설계 11종 + 병합 편입 help_demand_supply_ratio) 전부가 판정에 나타난다(누락 0)."""
     result = classify_metric_exposure(_metrics(R15Verdict.GENUINE_IMPROVEMENT))
     assert set(result) == {
         "verify_pass_rate",

@@ -94,12 +94,9 @@ class _FakeSession:
          (is_active=false 비율) 카운트.
      13) self-solve row((self_solved_count, resolved_total_count)·one 튜플) — ⑪ 스스로 풀이
          도달율(resolution=학생자력해결 / resolution NOT NULL) 카운트.
-<<<<<<< HEAD
-     13) strategy rows((dialogue_id, socratic_strategy) 행 목록·all·turn_order 오름차순) —
+     14) strategy rows((dialogue_id, socratic_strategy) 행 목록·all·turn_order 오름차순) —
          ⑫⑬ 발문 전략 다양성·연속 반복률(PED-04) 입력.
-=======
->>>>>>> origin/claude/whymath-ai-tutor-design-953m1e
-    이 13개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+    이 14개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:

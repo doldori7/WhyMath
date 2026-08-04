@@ -162,7 +162,6 @@ class _Result:
         return list(self._rows)
 
 
-
 class _CapturingSession:
     """`/v1/coach/sessions`용 — add/add_all/commit/refresh/get/execute 캡처.
 
