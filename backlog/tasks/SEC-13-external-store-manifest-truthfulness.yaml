@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-13-external-store-manifest-truthfulness
+title: "개인정보 삭제·반출 매니페스트 진실성 — 실재 반출처 Langfuse 누락 + 미도입 store 2종(ClickHouse·S3) 허위 선언"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "Langfuse를 외부 store 매니페스트에 등재(본체) — l3/trace/langfuse_sink.py:126이 student_id_hash를 외부 SaaS로 실제 전송하고 app.py:499 기본 주입·docker-compose.prod.yml:63-65 env 실배포. 미성년자 데이터의 실재 반출처가 삭제·반출 매니페스트에 없다."
+  - "ClickHouse·S3 항목 처분 — 제거하거나 '미도입' 사유를 병기(선례: CLAUDE.md:82 Wolfram Alpha·:77 GPT-5/Gemini·00_overview.md:165 Neo4j). 의존·클라이언트 코드·compose·config 전부 0건으로 실측됨."
+  - "Redis locator 정정 — 현행 'user_id={uid} 연관 세션·캐시 키'(erasure.py:147)를 쓰는 두 경로가 배포 기본값에서 비활성(coach_rate_limit_backend=memory·config.py:864 / device_store_mode=none·config.py:672, prod compose env 오버라이드 없음). 실재하는 학생 유래 데이터(LLM 응답 캐시·Celery payload)를 서술하거나 조건부 표기."
+  - "회귀 테스트 6건을 하드코딩 집합에서 계약으로 전환 — '선언된 store는 config 키 또는 compose 서비스로 실재가 확인돼야 한다'. 대상: test_erasure.py:156·:178, test_export.py:233, test_me_erasure.py:140-142, test_me_export.py:249. 다음 store 추가 시 자동 방어되어야 한다."
+  - "범위 밖 명시: 실제 외부 삭제 실행(Langfuse API 연동)은 별건 — 이 태스크는 매니페스트 진실성까지."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/privacy/erasure.py
+  - src/backend/whymath_backend/privacy/export.py
+  - tests/backend/privacy/test_erasure.py
+  - tests/backend/privacy/test_export.py
+  - tests/backend/api/test_me_erasure.py
+  - tests/backend/api/test_me_export.py
+session: null
+notes: "data_platform_module_gap_review_r2.md C1. 매니페스트가 없는 store 2개를 선언하고 있는 store 1개를 누락 — 양방향 오류이며 누락 쪽이 중대(법적·윤리 = 의사결정 우선순위 2위). r1 문서는 이를 '삭제 요청 학생에게 보고하는 셈'이라 기술했으나 실측 정정: pending_external은 API 응답에 실리지 않고 ops 로그로만 나간다(api/me.py:2321-2327·:2362-2369, 응답 모델은 me.py:2275-2281의 2필드뿐) — 수신자는 학생이 아니라 운영자·코드 독자."
+updated: 2026-08-04

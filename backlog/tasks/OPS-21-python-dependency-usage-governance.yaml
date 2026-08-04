@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-21-python-dependency-usage-governance
+title: "Python 선언↔사용 거버넌스 게이트 + 미사용 런타임 의존 6종 처분 — MOB-08 게이트의 백엔드 축 대응물 부재"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "tests/infra/ 에 선언↔사용 거버넌스 테스트 신설 — MOB-08의 src/mobile/test/pubspec_dependency_usage_governance_test.dart 대응물. grandfather 목록 + 각 항목에 열린 backlog 태스크 id 요구(MOB-09 규약 답습)."
+  - "예외 목록을 근거와 함께 명시 — uvicorn(CLI 실행체)·asyncpg/psycopg(SQLAlchemy DSN 드라이버)는 import 0이 정상이다. 근거 없는 예외 추가 금지."
+  - "미사용 6종 처분(제거 또는 사용 착수): opentelemetry-api·opentelemetry-sdk(pyproject.toml:45-46)·structlog(:47)·pandas(:50)·polars(:51)·great-expectations(:52). src/·tests/·scripts/ 전수 import 0건으로 실측됨."
+  - "OpenTelemetry를 제거하면 CLAUDE.md 기술 스택 표(모니터링 = Langfuse + OpenTelemetry)와 00_overview.md에 '미배선' 병기 — 선례 CLAUDE.md:82(Wolfram Alpha)·:77(GPT-5/Gemini)·00_overview.md:165(Neo4j 2026-08-03 정정)."
+artifacts: []
+paths:
+  - src/backend/pyproject.toml
+  - tests/infra/test_python_dependency_usage_governance.py
+session: null
+notes: "data_platform_module_gap_review_r2.md C2. 런타임 의존 26종 전수 스캔 결과 6종 사용처 0 — 전부 데이터 플랫폼 축(관측성·분석·데이터 품질)이라는 점이 핵심이다. src/data-pipeline/data_pipeline/ncic/validate.py:3이 'great_expectations 미사용(대형 의존성). 자체 validator로 동일 invariant 검증'이라고 코드가 스스로 자인한다. pyproject는 의존마다 근거 주석을 다는 방식으로 적극 관리되는 파일인데(SEC-07 passlib 제거·embedding extra 분리·pin 상한 근거) '관측성·데이터' 블록 6종만 근거가 없다. MOB-08/MOB-09가 Flutter 축에서 같은 유형을 이미 처리했다."
+updated: 2026-08-04

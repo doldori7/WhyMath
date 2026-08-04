@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-19-ci-gate-reachability-contract
+title: "CI 게이트 도달 가능성 계약 — 스텝 if ∧ 부모 잡 if 가 동시 참일 수 없는 게이트 차단 (qa_pipeline 실측 미실행)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "tests/infra/ 신설: 워크플로의 게이트성 스텝마다 (부모 잡 if ∧ 스텝 if)를 동시에 참으로 만드는 변경 파일 집합이 존재함을 정적 판정 — 불가능하면 실패. changes 잡의 path 정규식을 파싱해 플래그별 대표 경로를 도출한다."
+  - "qa_pipeline 스텝을 실제 도달 가능하게 수정 — data-pipeline 잡 if에 corpus 플래그를 추가(권장·diff 최소·working-directory 오버라이드 기존 유지)하거나 별도 잡으로 분리. 코퍼스만 바뀐 PR에서 게이트가 실행됨을 확인."
+  - "코퍼스를 읽는 검사기(l3.notation_coverage·ops.provenance_audit)의 트리거 축 정렬 — 코퍼스 변경 PR에서도 발화. backend 잡 전체(35분) 통째 트리거는 금지, 경량 경로 선택은 구현 시 판정."
+  - "변별력 검증(양방향): data-pipeline 잡 if를 원복하면 신설 테스트가 실패하고, 고친 상태에서는 통과해야 한다. 갈리지 않으면 위장이므로 불가."
+  - "tests/infra/test_qa_pipeline_wiring.py:117 도크스트링의 오인 기술 정정 — 부모 잡 if는 corpus가 아니라 data_pipeline 플래그다."
+  - "가시화(게이트 아님): __main__을 갖췄으나 워크플로 호출 0인 CLI 목록 보고 — 현재 harness.problem_bank_coverage(ARCH-18 소유)·harness.visualization_reach_report(VIZ-04 소유)·ops.cost_report 3종. 소유 태스크가 있으면 id 병기."
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - tests/infra/test_qa_pipeline_wiring.py
+  - tests/infra/test_ci_gate_reachability.py
+session: null
+notes: "data_platform_module_gap_review_r2.md A1·A2·A3. 실측: 스텝 if=corpus(ci.yml:179) ∧ 부모 data-pipeline 잡 if=data_pipeline(ci.yml:114)이고 두 플래그 경로 필터의 교집합은 ci.yml 자기 자신뿐(ci.yml:74-75·95-96) — 코퍼스만 바꾸는 PR에서 부모 잡이 skip돼 최대 비용 게이트가 시작조차 안 한다(continue-on-error 무음화 이전 단계의 결함). 배선 동결 테스트 5건은 스텝 존재·조건 문자열만 보고 도달 가능성을 안 봐서 전부 green. '검증 장치를 만들고 배선 확인 없이 완료 선언 금지' 4회차(선례 OPS-03·OPS-08·OPS-11)."
+updated: 2026-08-04

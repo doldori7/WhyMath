@@ -337,6 +337,31 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-04 (재점검·데이터 플랫폼 r2): **데이터 플랫폼 모듈 갭 재점검(`data_platform_module_gap_review_r2.md`) — r1의 ✅ 판정에 「근거가 존재인가 측정인가」를 되물어 5건 이탈 발견·r1 기술 3건 정정. 최대 발견: `qa_pipeline` 게이트가 코퍼스 PR에서 *부모 잡 skip*으로 실행조차 안 되는데 그것을 막으려 만든 배선 동결 테스트 5건이 전부 green(4회차) + 태스크 5건 등재** (claude 재점검, Kiki 요청·첨부 외부 틀 모듈 84~85 재대조)
+
+**배경**: Kiki가 외부 일반 틀 『20. 데이터 플랫폼』(모듈 84 이벤트 분석·85 품질 모니터링)을 첨부하고 갭 점검·설계를 요청. 실측 결과 **선행 산출물이 이미 있었다** — `data_platform_module_gap_review.md`(476줄·태스크 3건, 2026-08-03, 브랜치 `claude/whymath-data-platform-design-8ceaf5`·`f3d312f0`, **미머지**). 그 문서(r1)가 틀의 84·85 **전 항목을 빠짐없이** crosswalk 했으므로 "빠진 틀 항목"은 남아 있지 않았다. 그대로 재수행하면 CLAUDE.md 병렬 세션 중복 구현 금기(2026-07-27 OPS-07 735줄 폐기)의 재발이라, **Kiki 승인(AskUserQuestion)을 받아 r2 심화로 전환**했다.
+
+**방법론(이 문서의 전부)**: r1은 자기 초고를 뒤집으며 교훈을 남겼다 — *"「방어 코드가 존재한다」를 「위험이 없다」로 읽었다. 코드 존재 확인이 아니라 데이터 전수 집계가 판정 근거여야 했다"*. r1은 그 잣대를 중복 축(D3) **한 항목에만** 댔다. r2는 같은 잣대를 **r1의 모든 ✅에** 댔다 — 각 판정의 근거가 코드의 *존재*인지 실행·강제·실재의 *측정*인지 되묻는다.
+
+**발견 5건 (세 표면 — A 실행 / B 강제 / C 선언)**:
+- **A1 🔴 최대**: `qa_pipeline` 스텝 조건은 `corpus`(`ci.yml:179`)인데 **부모 `data-pipeline` 잡 조건은 `data_pipeline`**(`:114`)이고, 두 플래그의 경로 필터(`:74-75`·`:95-96`) 교집합은 **`ci.yml` 자기 자신뿐**이다. → **코퍼스만 바꾸는 PR에서 부모 잡이 통째로 skip돼 가장 비싼 게이트가 시작조차 안 한다**(`continue-on-error`로 무음화되기 *이전* 단계의 결함). 그런데 `tests/infra/test_qa_pipeline_wiring.py` 5건은 스텝 존재·`-m` 형·**스텝 if 문자열**·working-directory·output 노출만 검사해 전부 green이고, `:117` 도크스트링은 부모 잡 조건을 `corpus`로 **오인 기술**한다 — **오해가 그것을 막으려 만든 테스트 안에 박제**돼 있다. CLAUDE.md *"검증 장치를 만들고 배선 확인 없이 완료 선언 금지"* **4회차**(선례 `OPS-03`·`OPS-08`·`OPS-11`)이자 가장 순수한 형태.
+- **A2 🔴 r1 정정**: `notation_coverage`(코퍼스 `problems.jsonl` **전수** 스캔)·`provenance_audit`(코퍼스 사이드카)이 `backend` 잡 소속이라 `src/backend/` 변경에만 발화 — **대상과 트리거의 축이 어긋났다**. r1 부록의 "(상시)" 기록은 부정확.
+- **A3 ⚠️ r1 부분 정정**: `problem_bank_coverage`·`visualization_reach_report`·`cost_report`가 `__main__`을 갖췄으나 워크플로 호출 0건. r1이 85④ "누락 데이터 탐지 ✅"의 근거로 든 4종 중 **상시 판정에 기여하는 것은 0종**. (앞 둘은 `ARCH-18`·`VIZ-04` 소유 → 신규 등재 안 함)
+- **B1 ⚠️ r1 정정**: 이벤트 페이로드 계약은 **규율이지 불변식이 아니다**. 생산자 3종 전부 `build_event_data` 경유는 사실이나 **강제 테스트 0건**, `db/models/activity.py:268` `from_schema`가 계약 미참조 우회문으로 열려 있고(호출자 0), `event_data`는 평문 JSONB(`:266`)로 DB 제약 0. `_PRODUCED`(테스트 `:30-32`)는 *"producer 전수 grep으로 확정"*이라 **자인**하는 손베낌 리터럴이다. **부수 실측**: 생산자 3종 중 2종이 ORM을 별칭으로 쓴다(`coach.py:62` `AttemptEvent as AttemptEventORM` → `:922`·`:977`) → **`grep "AttemptEvent("`는 3종 중 1종만 잡는다**. 즉 그 손베낌 리터럴의 근거가 된 grep 자체가 취약했다.
+- **C1 🔴**: 개인정보 삭제·반출 매니페스트가 **양방향으로 틀렸다** — 없는 store 2종(ClickHouse·S3/MinIO: 의존·코드·compose·config **전부 0건**)을 선언하고, **실재하는 외부 반출처 Langfuse를 누락**했다(`l3/trace/langfuse_sink.py:126`이 `student_id_hash`를 외부 SaaS로 실제 전송·`app.py:499` 기본 주입·`docker-compose.prod.yml:63-65` 실배포). Redis는 실재하나 locator(`user_id={uid} 세션·캐시 키`)가 배포 기본값에서 부존재(`coach_rate_limit_backend=memory`·`device_store_mode=none`). **회귀 테스트 6건이 이 틀린 집합을 동결**. 허위 선언보다 **누락이 중대**하다(의사결정 우선순위 2위 = 법적·윤리).
+- **C2 ⚠️**: 백엔드 런타임 의존 26종 중 **6종 사용처 0** — `opentelemetry-api`/`-sdk`·`structlog`·`pandas`·`polars`·`great-expectations`(`pyproject.toml:45-52`). **6종 전부가 데이터 플랫폼 축**이며 우연이 아니다: 이 축은 "나중에 제대로" 선언만 되고 자체 경량 구현으로 대체돼 왔다. `data_pipeline/ncic/validate.py:3`이 *"great_expectations 미사용(대형 의존성). 자체 validator로 동일 invariant 검증"*이라고 **코드가 스스로 자인**한다. r1이 그 경량 실재를 옳다고 판정했다면(§2-① 6번째 store 회피) **선언을 실재에 맞춰 내려야 한다**. `MOB-08`의 선언↔사용 거버넌스 게이트는 Flutter 전용이라 Python 축에 대응물이 없다.
+- **C3 ⚠️ 부수 발견(등재 중 발견)**: **`OPS-17`·`OPS-18`이 각각 두 태스크에 이중 배정**돼 있다 — 브랜치 `f3d312f0`(2026-08-03 07:03 UTC)이 `supply-demand-reach-audit`/`qa-verdict-retention`을, main #677 `a2bfa85c`(같은 날 13:00 UTC)이 `client-version-contract-gate`/`cloud-escalation-reach-observability`를 등재. `HARN-10` 가드(`backlog.py:718-743`)는 **로컬 백로그 + 원격 *claim* 대장**만 보는데 claim은 `in_progress`만 기록하므로 **"등재만 되고 미착수"인 번호는 구조적으로 안 보인다**. 게다가 이 환경은 `refs/claims/*` push가 프록시 403으로 **상시** 실패해(`HARN-07`) 2선 방어도 없었다. **`HARN-10`의 3회차**(선례 `ARCH-13`·`OPS-15`)이며 **A1과 정확히 같은 형태** — 가드는 실재하나 그것이 보는 표면이 실제 위험 표면과 다르다.
+
+**r1 미채택 판정 재검토**: §2-①~⑩ **전건 유지**. 특히 ③(퍼널 KPI 승격 불채택)·⑧(SymPy 서명 동일 ≠ 중복, 반례 2쌍)은 근거가 **측정**이라 견고하다. ①(ClickHouse 회피)은 유지하면서 **그 판정의 귀결이 처리되지 않았음**을 C1이 드러냈다.
+
+**등재(5건 — `backlog.py add` 경유, 번호 추론 금지·HARN-10 준수)**: `OPS-19-ci-gate-reachability-contract`(p2·게이트 도달 가능성 계약 + 트리거 축 정렬 + `test_qa_pipeline_wiring.py:117` 오인 정정 + 미배선 CLI 가시화) · `SEC-13-external-store-manifest-truthfulness`(p2·Langfuse 등재가 본체 + 하드코딩 집합을 "config 키/compose 서비스로 실재 확인" 계약으로 전환) · `OPS-20-event-payload-contract-enforcement`(p3·소스 스캔 강제 + **ast로 import 별칭 해석 필수** — 없으면 A1과 같은 "통과하지만 안 보는" 장치가 하나 더 생긴다) · `OPS-21-python-dependency-usage-governance`(p3·`MOB-08` 대응물 + 6종 처분 + OTel 제거 시 CLAUDE.md 스택 표 "미배선" 병기) · `HARN-15-id-collision-cross-branch-scan`(p3·번호 충돌 가드에 원격 브랜치 `backlog/tasks/` 스캔 추가·캐시 ref만·fetch 금지). **4건 전부에 변별력 양방향 검증을 acceptance로 못박았다**(CLAUDE.md *변별력 없는 검증 스텝 금지*).
+
+**🔒 경계·중복 금지**: **코드 0**(설계·등재까지·Kiki 승인 범위). r1 문서·`OPS-17` 구현·타 세션 브랜치 미접촉. r1의 D1(서버 라우트↔클라 호출의 *런타임/구조* 도달)·D2(판정 *보존*)·D3(문항 중복)과 표면이 다르며, **순서상 `OPS-19`가 D2에 선행**한다 — 판정을 보존하려면 판정이 먼저 일어나야 한다. `S3-16`(휴면 EventType writer 신설)과 `OPS-20`(기존 3종 경로의 강제력)도 층위가 다르다. `S3-28`의 `continue-on-error` 제거는 D2 소관이라 `OPS-19`가 강제하지 않는다.
+
+**검증**: `backlog.py validate` green(태스크 181건) · **부록 재현 명령 전건 실행해 문서 기재와 일치 확인**(초안의 `sed` 줄 번호 2곳·`grep` 별칭 누락 1곳을 실행 결과로 정정 — CLAUDE.md *검증 없는 실행 안내 금지*의 자기 적용).
+
+**🎯 의미**: r1이 "만들고 입력을 잇지 않음"(공급→소비 단절)을 다뤘다면 r2는 **"판정·선언이 실재와 어긋남"**을 다룬다. 두 축의 공통 뿌리는 같다 — 이 저장소는 **장치를 잘 만들고, 그 장치가 실제로 무엇을 보는지 확인하지 않는다**. A1과 C3이 같은 형태로 같은 날 발견된 것이 그 증거다. `OPS-19`·`HARN-15`가 그 두 사례의 재발방지대책이며, CLAUDE.md 실수 관리 규범상 **등재 의무** 이행이다.
+
 ### 2026-08-03 (구현·PED-06): **성장 증거 도달 관측 + 노출 계약 정본 — 라이브 요청 카운터(`/health/ready`)·구조적불가/무데이터/미도달 3상태·11지표 학생 노출 계층 분류·⑧×R15 조합 억제·⑥ 서술 변환** (claude 구현, `gamification_module_gap_review.md` §3 D1 설계 승계 — Kiki "/drive")
 
 **배경**: `compute_wh1_surrogate_metrics`가 성장 대리지표 11종을 계산해 `GET /v1/me/

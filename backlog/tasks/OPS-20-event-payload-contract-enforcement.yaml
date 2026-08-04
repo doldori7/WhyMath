@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-20-event-payload-contract-enforcement
+title: "이벤트 페이로드 계약 seam 강제 — build_event_data 경유가 규율일 뿐 불변식이 아님(우회 금지 테스트 0건)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "소스 스캔 정적 테스트 신설 — src/ 내 AttemptEvent(...) 생성 전량이 build_event_data를 경유함을 강제. 저장소 기존 패턴 재사용(tests/backend/harness/test_gate3_student_verification_governance.py:111이 api/coach.py 소스를 read_text로 스캔하는 선례)."
+  - "import 별칭 해석 필수 — 문자열 'AttemptEvent('만 찾으면 현재 3종 중 1종만 잡힌다. api/coach.py:62가 'AttemptEvent as AttemptEventORM'으로 import해 :922·:977에서 별칭으로 생성하고, api/interactions.py:75만 원명을 쓴다. ast 모듈로 ImportFrom의 asname을 따라가는 것이 최소 요건 — 이 요건 없이 만들면 OPS-19가 지적한 '통과하지만 안 보는 장치'가 하나 더 생긴다."
+  - "test_event_data_contract.py의 _PRODUCED(:30-32) 손베낌 리터럴을 스캔 산출로 대체 — 주석이 'grep으로 확정'이라 자인하는 사람 베낌 값이다."
+  - "db/models/activity.py:268 AttemptEvent.from_schema 우회문 처분 — 제거하거나 계약 경유를 강제. schema.AttemptEvent.event_data는 dict[str,Any] 자유형이고 from_schema는 계약을 참조하지 않는다(현재 호출자 0)."
+  - "변별력 검증(양방향): AttemptEvent(event_data={...})를 seam 우회로 1줄 넣으면 red, 빼면 green. 현재는 그 1줄을 넣어도 전 테스트가 green으로 통과한다."
+artifacts: []
+paths:
+  - tests/backend/schema/test_event_data_contract.py
+  - src/backend/whymath_backend/db/models/activity.py
+  - tests/infra/test_event_contract_seam.py
+session: null
+notes: "data_platform_module_gap_review_r2.md B1. r1은 84①을 '생산자가 반드시 경유' ✅로 판정했으나, 현재 3/3 준수는 사실이되 강제는 0이다 — 계약을 지키는 것이 테스트가 아니라 사람이다. ORM event_data는 평문 JSONB(activity.py:266)로 DB CHECK 제약도 없다. S3-16(휴면 EventType writer 소생)과 층위가 다르다 — 이건 기존 3종 생산 경로의 강제력이고 S3-16은 신규 생산자 신설이다."
+updated: 2026-08-04
