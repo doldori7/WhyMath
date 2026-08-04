@@ -118,6 +118,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "3702d8671074",
     "d6e7f0a2b3c4",
     "db8ae6d2d91c",
+    "090d254a5d43",
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

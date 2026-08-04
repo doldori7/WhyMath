@@ -139,13 +139,18 @@ def _enum_value(value: object) -> str | None:
     return str(value)
 
 
-def _to_record(candidate: CandidateProblem) -> ProblemBankRecord:
+def _to_record(
+    candidate: CandidateProblem, *, verification_tier: str | None = None
+) -> ProblemBankRecord:
     """후보 번들 → S2-b 저장 레코드(단건). slug·problem·concept_tags·verify·provenance 조립.
 
     저장 seam(`ProblemBankStore.populate`)이 소비하는 것은 slug·problem·concept_tags뿐이나,
     `ProblemBankRecord`는 authoring 메타(verify·provenance)도 필드로 요구하므로 후보에서 그대로
     옮겨 담는다(적재엔 미사용·계약 충족). 안정 키 `slug`는 멱등 upsert의 근간이라 후보 문제에
     반드시 있어야 한다 — 없으면 fail-loud(생성기 계약 위반·조용한 통과 금지).
+
+    `verification_tier`(S4-13·S4-17)는 후보가 아니라 *배치 호출자*가 아는 정보(어떤 검증 방식을
+    거쳤는지)라 `CandidateProblem` 필드가 아니라 이 함수의 별도 주입 인자로 받는다.
     """
     slug = candidate.problem.slug
     if not slug:
@@ -166,6 +171,7 @@ def _to_record(candidate: CandidateProblem) -> ProblemBankRecord:
             answer_selection=candidate.answer_selection,
             answer_aggregate=candidate.answer_aggregate,
             answer_kind=candidate.answer_kind,
+            verification_tier=verification_tier,
         ),
         provenance=ProblemProvenanceMeta(
             generation_type=_enum_value(candidate.provenance.generation_type) or "",
@@ -184,6 +190,7 @@ def run_equivalent_generation(
     signature_index: MutableSet[str] | None = None,
     store: ProblemBankSink | None = None,
     dedup_threshold: float = _DEFAULT_DEDUP_THRESHOLD,
+    verification_tier: str | None = None,
 ) -> GenerationOutcome:
     """동등문제 후보 1건을 생성→게이트→dedup→저장으로 흘려 최종 판정을 낸다(순수 조합·주입 효과).
 
@@ -203,6 +210,8 @@ def run_equivalent_generation(
       - `dedup_index`·`embed_provider` 둘 다 줘야 임베딩 dedup이 돈다(하나만 주면 스킵·순수 결정).
       - `store` 없으면 dry-run(검증만·저장 0). 저장 후 임베딩 영속은 `dedup_index`+`embed_provider`
         가 함께 주입됐을 때만 일어난다(임베딩 저장소 seam이 곧 dedup_index — 같은 벡터 재사용).
+      - `verification_tier`(S4-17)는 저장 시에만 의미가 있다 — `_to_record`로 그대로 전달돼
+        `verify.verification_tier`로 영속된다. 미주입(`None`)이면 등급 미각인(구코퍼스 호환).
     """
     reasons: list[str] = []
 
@@ -291,7 +300,7 @@ def run_equivalent_generation(
 
     # ── 4. 저장(S2-b) — 좌석 주입 시에만 ──
     if store is not None:
-        record = _to_record(candidate)
+        record = _to_record(candidate, verification_tier=verification_tier)
         store.populate([record])
         # 저장한 문제의 발문 벡터를 dedup_index에 영속 — 이후 후보가 이 문제를 코퍼스 중복으로
         # 보게 한다(배치 누적 dedup). dedup 단계에서 이미 계산한 벡터를 재사용(재임베딩 0).
@@ -330,6 +339,7 @@ def run_batch(
     signature_index: MutableSet[str] | None = None,
     store: ProblemBankSink | None = None,
     dedup_threshold: float = _DEFAULT_DEDUP_THRESHOLD,
+    verification_tier: str | None = None,
 ) -> list[GenerationOutcome]:
     """생성기를 n회 돌려 각 후보의 outcome을 수집(코퍼스 배치 생성 데모).
 
@@ -352,6 +362,7 @@ def run_batch(
             signature_index=shared_signatures,
             store=store,
             dedup_threshold=dedup_threshold,
+            verification_tier=verification_tier,
         )
         for _ in range(n)
     ]
