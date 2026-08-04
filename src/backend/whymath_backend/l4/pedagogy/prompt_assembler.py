@@ -8,7 +8,10 @@
      발문(개념형=예/비예 대조, 절차형=완전예제→페이딩 등). 유형 불변 발문에 소단원 예제만 주입한다.
   3. **오개념 계층**(반응적·v1 최소) — 이미 활성인 오개념 *가설*이 주입됐을 때만 렌더(caller가
      reactive retrieval로 표면화한 가설을 넘긴다 — 초기 preload 아님). 없으면 빈 문자열(계층 생략).
-  4. **학습자 상태 계층**(v1 최소) — 숙달 수준 라벨이 주어졌을 때만 난이도·도움량 조절 힌트를 렌더.
+  4. **학습자 상태 계층**(v1 최소 + PED-05 개인화 슬롯) — 숙달 수준 라벨·학년(`grade`)·성취기준
+     (`standard_code`) 중 있는 것만 골라 난이도·도움량 조절 힌트를 렌더(전부 없으면 빈 문자열).
+     PII 가드: 이 계층은 grade(학년 정수)·standard_code(성취기준 코드 문자열)만 받는다 — 학교명·
+     지역·학생 이름·목표 점수/등급/대학은 이 함수 시그니처에 자리 자체가 없다(구조적 차단).
 
 **OFF/무팩 보장**: `pack is None`이면 `base_system`을 *바이트 동일*로 그대로 반환한다(치환·조립·
 join 없음). 이것이 플래그 OFF·팩 미주입 경로의 회귀 0 계약이다 — 호출자(`PolyaCoach.decide`)는
@@ -76,18 +79,36 @@ def render_misconceptions(misconceptions: Sequence[MisconceptionHypothesis] | No
     return "\n".join(lines)
 
 
-def render_student_state(student_state: MasteryLevel | None) -> str:
-    """계층 4(v1 최소) — 학습자 숙달 수준 힌트 블록. 없으면 "".
+def render_student_state(
+    student_state: MasteryLevel | None,
+    *,
+    grade: int | None = None,
+    standard_code: str | None = None,
+) -> str:
+    """계층 4(v1 최소 + PED-05) — 학습자 숙달 수준·학년·성취기준 힌트 블록. 전부 없으면 "".
 
-    숙달 수준(`MasteryLevel` Literal: 초보·발전 중·숙달)이 주어졌을 때만 발문의 난이도·도움량을
-    조절하라는 지시를 준다(student-facing 미노출 — 결정 내부 힌트). v1은 숙달 라벨 1개만 반영한다
-    (전체 IRT θ·BKT 상태 요약은 후속 — 모듈 docstring deferred).
+    숙달 수준(`MasteryLevel` Literal: 초보·발전 중·숙달)·학년(`grade`)·성취기준(`standard_code`)
+    중 있는 것만 골라 발문의 난이도·도움량을 조절하라는 지시를 준다(student-facing 미노출 — 결정
+    내부 힌트). 셋 다 선택적이라 `student_state`가 없어도 `grade`·`standard_code`만으로 블록을
+    렌더할 수 있다(PED-05 개인화 슬롯 착지 — L4 조립 좌석은 이미 있었고 학년·성취기준 인자만
+    새로 열었다). 전체 IRT θ·BKT 상태 요약·오개념 *내용*은 여전히 후속(모듈 docstring deferred).
+
+    **PII 가드**: 이 함수는 grade(학년 정수)·standard_code(성취기준 코드 문자열) 외 어떤 학생
+    식별 정보도 받지 않는다 — 학교명·지역·이름·목표 점수/등급/대학은 시그니처에 자리가 없어
+    구조적으로 노출될 수 없다.
     """
-    if student_state is None:
+    parts: list[str] = []
+    if student_state is not None:
+        parts.append(f"학습자 숙달 수준: {student_state}")
+    if grade is not None:
+        parts.append(f"학년: {grade}")
+    if standard_code is not None:
+        parts.append(f"성취기준: {standard_code}")
+    if not parts:
         return ""
     return (
-        f"[학습자 숙달 수준: {student_state}] "
-        "이 수준에 맞춰 발문의 난이도와 도움의 양을 조절하라(학생에게 직접 노출하지 마라)."
+        f"[{' / '.join(parts)}] "
+        "이 정보에 맞춰 발문의 난이도와 도움의 양을 조절하라(학생에게 직접 노출하지 마라)."
     )
 
 
@@ -98,12 +119,17 @@ def build_system_prompt(
     domain_example: str | None = None,
     misconceptions: Sequence[MisconceptionHypothesis] | None = None,
     student_state: MasteryLevel | None = None,
+    grade: int | None = None,
+    standard_code: str | None = None,
 ) -> str:
     """4계층 시스템 프롬프트 조립 — 순수 함수. `pack is None`이면 `base_system` 바이트 동일 반환.
 
     계층 순서·규칙은 모듈 docstring 참조. 계층 3·4는 입력이 비면 빈 문자열이라 join에서 생략된다
     (빈 계층이 `\\n\\n`만 남기지 않게 필터). **pack None 경로는 조립 자체를 건너뛰어 base_system을
     무변경 반환**한다 — 이것이 OFF/무팩 회귀 0 계약의 단일 지점이다(테스트가 바이트 동일로 봉인).
+
+    `grade`·`standard_code`(PED-05)는 계층 4에 그대로 thread된다 — 둘 다 기본 None이라 미전달
+    호출자는 회귀 0.
     """
     # OFF/무팩 보장 — 조립 없이 base_system 그대로(바이트 동일). 단일 회귀 0 지점.
     if pack is None:
@@ -115,7 +141,7 @@ def build_system_prompt(
     misconception_block = render_misconceptions(misconceptions)
     if misconception_block:
         layers.append(misconception_block)
-    student_block = render_student_state(student_state)
+    student_block = render_student_state(student_state, grade=grade, standard_code=standard_code)
     if student_block:
         layers.append(student_block)
     return "\n\n".join(layers)

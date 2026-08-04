@@ -48,7 +48,8 @@ from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
 from whymath_backend.db.session import get_session
-from whymath_backend.l2.concept_diagnosis import compute_concept_diagnoses
+from whymath_backend.l2.irt import theta_to_mastery_proxy
+from whymath_backend.l2.learner_state import get_state
 from whymath_backend.l2.pedagogy_evidence import (
     record_pedagogy_outcome,
     record_pedagogy_treatment,
@@ -126,26 +127,36 @@ async def _load_objective(session: AsyncSession, objective_id: str) -> LearningO
 async def _build_signals(
     session: AsyncSession, user_id: uuid.UUID, concept_code: str
 ) -> StudentSignals:
-    """L2 진단 → `StudentSignals` 조립 — **실재하는 신호만** 채운다.
+    """L2 학습자 상태(`get_state`) → `StudentSignals` 조립 — **실재하는 신호만** 채운다.
+
+    PED-05 리팩터: 예전엔 `compute_concept_diagnoses`를 직접 호출해 그 결과 리스트를 순회하며
+    `concept_code`가 일치하는 항목을 찾았다. `get_state()`가 내부적으로 *같은*
+    `compute_concept_diagnoses` 호출을 이미 하고 그 결과를 `mastery`/`domain_abilities` dict로
+    미리 인덱싱해 두므로, 이제 그 dict에서 O(1) lookup만 한다(쿼리 중복 0 — 리스트 순회가 dict
+    lookup으로 *방식만* 바뀌고 값은 비트동일).
+
+    `get_state().domain_abilities`는 raw IRT θ를 담는다(원래 `ConceptDiagnosis.irt_theta`와
+    동일 소스). `mastery_level` 산출은 원래처럼 **BKT 우선·없으면 IRT 프록시([0,1]) 폴백**이므로,
+    θ를 `theta_to_mastery_proxy`로 재환산한다(순수·결정론 함수라 원래 `irt_mastery_proxy`와
+    비트동일 값).
 
     진단이 없거나(신규 학생) 해당 개념이 진단 목록에 없으면 숙달 축은 비운 채로 둔다 — 없는 값을
     기본치로 채우면 선택기가 근거 없는 판단을 하게 된다(PED-02가 세운 "가짜 통과 금지" 규약).
     Polya 단계·턴 수·힌트는 대화 세션 축이라 여기서는 기본값이다(공급 진입 = 시도 전).
     """
-    diagnoses = await compute_concept_diagnoses(session, user_id)
-    for diagnosis in diagnoses:
-        if diagnosis.concept_code == concept_code:
-            mastery = (
-                diagnosis.bkt_mastery
-                if diagnosis.bkt_mastery is not None
-                else diagnosis.irt_mastery_proxy
-            )
-            return StudentSignals(
-                mastery_level=mastery_to_level(mastery) if mastery is not None else None,
-                bkt_mastery=diagnosis.bkt_mastery,
-                irt_theta=diagnosis.irt_theta,
-            )
-    return StudentSignals()
+    state = await get_state(session, user_id)
+    bkt_mastery = state.mastery.get(concept_code)
+    irt_theta = state.domain_abilities.get(concept_code)
+    mastery = (
+        bkt_mastery
+        if bkt_mastery is not None
+        else (theta_to_mastery_proxy(irt_theta) if irt_theta is not None else None)
+    )
+    return StudentSignals(
+        mastery_level=mastery_to_level(mastery) if mastery is not None else None,
+        bkt_mastery=bkt_mastery,
+        irt_theta=irt_theta,
+    )
 
 
 @router.post(

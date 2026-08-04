@@ -31,6 +31,7 @@ from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
     _calibration_from_pairs,
     _diagnosis_agreement_offline,
+    _help_demand_supply_ratio_from_counts,
     _hint_depth_from_levels,
     _identify_transfer_probes,
     _judge_r15,
@@ -80,19 +81,24 @@ class _FakeSession:
       3) token row(AVG, count·one 튜플)
       4) verify row(passed_count, total·one 튜플)
       5) hint rows(event_at 오름차순 hint_level 행 목록·all)
-      6) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
-      7) difficulty rows(started_at 오름차순 (irt_b, difficulty_overall) 행 목록·all·Problem join)
-      8) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
-      9) transfer rows(started_at 오름차순 (problem_id, signature_patterns, is_correct) 행
+      6) demand total(count·scalar) — ⑮ 도움 요청 대 제공 비의 분자(힌트요청 attempt_event 수·
+         S3-16 소생). 분모는 5)의 hint_levels 표본을 재사용(새 all-row 쿼리 아님).
+      7) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
+      8) difficulty rows(started_at 오름차순 (irt_b, difficulty_overall) 행 목록·all·Problem join)
+      9) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
+     10) transfer rows(started_at 오름차순 (problem_id, signature_patterns, is_correct) 행
          목록·all·Problem join) — ⑦ 근사 전이 점수 식별 입력.
-     10) mastery rows((user_id, concept_id, mastery) 행 목록·all·(user,concept,measured_at)
+     11) mastery rows((user_id, concept_id, mastery) 행 목록·all·(user,concept,measured_at)
          오름차순) — ⑨ BKT 숙달 증가율(그룹별 첫→마지막 차) 입력.
-     11) misconception row((inactive_count, total_count)·one 튜플) — ⑩ 오개념 해소율
+     12) misconception row((inactive_count, total_count)·one 튜플) — ⑩ 오개념 해소율
          (is_active=false 비율) 카운트.
-     12) self-solve row((self_solved_count, resolved_total_count)·one 튜플) — ⑪ 스스로 풀이
+     13) self-solve row((self_solved_count, resolved_total_count)·one 튜플) — ⑪ 스스로 풀이
          도달율(resolution=학생자력해결 / resolution NOT NULL) 카운트.
+<<<<<<< HEAD
      13) strategy rows((dialogue_id, socratic_strategy) 행 목록·all·turn_order 오름차순) —
          ⑫⑬ 발문 전략 다양성·연속 반복률(PED-04) 입력.
+=======
+>>>>>>> origin/claude/whymath-ai-tutor-design-953m1e
     이 13개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
@@ -115,6 +121,7 @@ def _make_session(
     verify_passed: int = 0,
     verify_total: int = 0,
     hint_levels: list[int | None] | None = None,
+    demand_events: int = 0,
     accuracy_correct: list[bool | None] | None = None,
     difficulty_rows: list[tuple[float | None, float | None]] | None = None,
     calibration_pairs: list[tuple[float | None, bool | None]] | None = None,
@@ -160,6 +167,7 @@ def _make_session(
                 _FakeScalarResult(one=(avg_tokens, token_sample)),
                 _FakeScalarResult(one=(verify_passed, verify_total)),
                 _FakeScalarResult(all_rows=hint_rows),
+                _FakeScalarResult(scalar=demand_events),
                 _FakeScalarResult(all_rows=accuracy_rows),
                 _FakeScalarResult(all_rows=diff_rows),
                 _FakeScalarResult(all_rows=calib_rows),
@@ -892,6 +900,8 @@ class TestMetaAndFieldSet:
             avg_tokens=12.0,
             token_sample=4,
             hint_levels=[4, 3, 2],
+            # ⑮ 도움 요청 대 제공 비 — 힌트제공(supply) 3건(위 hint_levels) 대 힌트요청(demand) 2건.
+            demand_events=2,
             accuracy_correct=[True, True, True],
             difficulty_rows=[(1.0, None), (0.5, None), (0.0, None)],
             # ⑥ 보정 쌍 5개(>= _MIN_CALIBRATION_SAMPLES) → calibration_brier MEASURED.
@@ -939,6 +949,7 @@ class TestMetaAndFieldSet:
             "session_completion_rate",
             "tokens_per_turn",
             "help_reduction_slope",
+            "help_demand_supply_ratio",
             "calibration_brier",
             "transfer_score",
             "hint_depth_reached",
@@ -954,6 +965,9 @@ class TestMetaAndFieldSet:
         assert m.sample_sessions == 2
         assert m.sample_dialogues == 4
         assert m.sample_hint_events == 3  # 유효 hint_level 행 수
+        assert m.sample_demand_events == 2  # ⑫ 힌트요청 attempt_event 수
+        assert m.help_demand_supply_ratio.status is MetricStatus.MEASURED
+        assert m.help_demand_supply_ratio.value == pytest_approx(2 / 3)
         assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
@@ -1322,6 +1336,60 @@ class TestHintDepthIntegratedWithCompute:
         m = await compute_wh1_surrogate_metrics(session)
         assert m.hint_depth_reached.status is MetricStatus.NO_DATA
         assert m.hint_depth_reached.value is None
+
+
+# ── ⑮ 도움 요청 대 제공 비 (힌트요청/힌트제공 개수 비·S3-16 소생) ──────────────────────
+class TestHelpDemandSupplyRatioPure:
+    def test_measured_ratio(self) -> None:
+        """demand 2/supply 4 → MEASURED·value 0.5."""
+        m = _help_demand_supply_ratio_from_counts(2, 4)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == pytest_approx(0.5)
+
+    def test_zero_supply_no_data(self) -> None:
+        """힌트제공(supply) 0건 → NO_DATA·value None(분모 0 방지·가짜 0 금지)."""
+        m = _help_demand_supply_ratio_from_counts(3, 0)
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "0건" in m.note
+
+    def test_zero_demand_with_supply_is_measured_zero(self) -> None:
+        """demand 0·supply>0 → ratio 0.0·MEASURED(실측 0·날조 아님 — NO_DATA 아님)."""
+        m = _help_demand_supply_ratio_from_counts(0, 5)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+
+class TestHelpDemandSupplyRatioIntegratedWithCompute:
+    async def test_measured_via_compute(self) -> None:
+        """compute가 ⑤ hint_levels(supply)를 분모로 재사용·demand_events를 분자로 ⑫ 산출."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            hint_levels=[1, 2, 3, 4],  # supply 4건
+            demand_events=1,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.help_demand_supply_ratio.status is MetricStatus.MEASURED
+        assert m.help_demand_supply_ratio.value == pytest_approx(0.25)
+        assert m.sample_demand_events == 1
+        assert m.sample_hint_events == 4  # ⑤와 동일 표본(새 all-row 쿼리 0)
+
+    async def test_no_supply_no_data(self) -> None:
+        """힌트제공(supply) 0건이면 ⑤⑧과 함께 ⑫도 NO_DATA(분모 0 방지)."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            demand_events=3,  # supply 없이 demand만 있어도 분모 0이라 NO_DATA.
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.help_demand_supply_ratio.status is MetricStatus.NO_DATA
+        assert m.help_demand_supply_ratio.value is None
+        assert m.sample_demand_events == 3
 
 
 # ── ⑨ BKT 숙달 증가율 ((user,concept)별 첫→마지막 mastery 차 평균) ──────────────────

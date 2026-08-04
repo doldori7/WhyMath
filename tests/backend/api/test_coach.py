@@ -10,6 +10,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any, cast
 
 import pytest
@@ -149,15 +150,17 @@ class _Result:
         return 0.0
 
     def scalar_one_or_none(self) -> Any:
-        # PED-04: `_prev_hint_level_for`(직전 힌트 적재)·`_session_recall_or_none`(직전 대화 id)이
-        # 단일 스칼라를 이 API로 읽는다. 캡처 세션엔 이력이 없으니 None — "첫 결정·회상 없음"과
-        # 같은 뜻이라 기존 hermetic 기대(클라 제출 상태 그대로)와 정합.
+        # PED-04: `_prev_hint_level_for`(직전 힌트 적재)·`_session_recall_or_none`(직전 대화 id)와
+        # S3-16: `_log_response_latency_event`(직전 학생 턴 spoken_at)가 단일 스칼라를 이 API로
+        # 읽는다. 캡처 세션엔 이력이 없으니 None — "첫 결정·회상 없음·기준선 없음"과 같은 뜻이라
+        # 기존 hermetic 기대(클라 제출 상태 그대로)와 정합.
         return self._rows[0] if self._rows else None
 
     def all(self) -> list[Any]:
         # PED-04: `_turn_meta_rows`(턴 메타 컬럼 투영)가 Row 튜플을 이 API로 읽는다. 캡처
         # 세션은 execute_rows를 그대로 돌려주므로, 메타 이력이 필요한 테스트만 행을 주입한다.
         return list(self._rows)
+
 
 
 class _CapturingSession:
@@ -3803,13 +3806,37 @@ class TestPrerequisiteCoachingField:
 
 # ── WH-1 지표 ① 적재: _log_verify_event 단위테스트 (FakeSession add 캡처) ──────────
 class _CaptureSession:
-    """`add`된 ORM 인스턴스를 캡처하는 최소 가짜 세션(검증은 실 함수가 결정론으로 수행)."""
+    """`add`된 ORM 인스턴스를 캡처하는 최소 가짜 세션(검증은 실 함수가 결정론으로 수행).
 
-    def __init__(self) -> None:
+    S3-16: `_log_response_latency_event`가 `execute(select(...)).scalars().first()`으로
+    직전 학생 턴 spoken_at을 조회한다(`l2.ability_tracking.get_current_theta`와 동일 관례 —
+    `.scalar_one_or_none()`은 repo 전역 fake session(`test_coach_semantic.py` 등)이 지원하지
+    않아 초판은 회귀를 냈다·2026-07-30 정정) — `execute_result`(선택)에 `.scalars().first()`를
+    가진 스텁을 주입할 수 있게 확장(기존 `add`만 쓰는 테스트는 영향 없음·하위호환).
+    """
+
+    def __init__(self, execute_result: Any = None) -> None:
         self.added: list[Any] = []
+        self._execute_result = execute_result
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
+
+    async def execute(self, _stmt: Any) -> Any:
+        return self._execute_result
+
+
+class _ScalarsFirst:
+    """`execute()` 결과 스텁 — `.scalars().first()`만 지원(S3-16 응답 지연 조회용)."""
+
+    def __init__(self, value: Any) -> None:
+        self._value = value
+
+    def scalars(self) -> "_ScalarsFirst":
+        return self
+
+    def first(self) -> Any:
+        return self._value
 
 
 class TestLogVerifyEvent:
@@ -3990,6 +4017,223 @@ class TestLogHintEvent:
         }
 
 
+# ── S3-16 소생: _log_demand_event 단위테스트 (답 요구 신호 → 힌트요청 적재) ────────────
+class TestLogDemandEvent:
+    """`_log_demand_event` — 답 요구 발화만 힌트요청 attempt_event로 적재(날조 회피).
+
+    `is_answer_demand`(재계산 아님·`decide_hint_level` 2번 규칙과 동일 상수)가 신호를 판정한다.
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+    _NOW = datetime(2026, 7, 30, 12, 0, 0, tzinfo=timezone.utc)
+
+    async def test_no_demand_signal_no_event(self) -> None:
+        """답 요구 토큰이 없으면 적재 0(신호 없는 행 미생성)."""
+        from whymath_backend.api.coach import _log_demand_event
+
+        sess = _CaptureSession()
+        await _log_demand_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_input="이렇게 풀면 될까요?",
+            event_at=self._NOW,
+        )
+        assert sess.added == []
+
+    async def test_demand_token_logs_event(self) -> None:
+        """답 요구 토큰("답 좀 알려줘") → event_type 힌트요청·event_data mode/persona만."""
+        from whymath_backend.api.coach import _log_demand_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_demand_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_input="답 좀 알려줘",
+            event_at=self._NOW,
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.힌트요청
+        assert event.event_data == {"mode": None, "persona": None}
+        assert event.user_id == self._UID
+        assert event.problem_id == self._PID
+        assert event.event_at == self._NOW
+
+    async def test_demand_event_carries_mode_persona(self) -> None:
+        """mode/persona 주입 → event_data에 보존(⑫ mode-scoped 집계 데이터)."""
+        from whymath_backend.api.coach import _log_demand_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_demand_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_input="그냥 답 알려줘",
+            event_at=self._NOW,
+            mode="suneung",
+            persona="A_일반고고3",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.힌트요청
+        assert event.event_data == {"mode": "suneung", "persona": "A_일반고고3"}
+
+
+# ── S3-16 소생: _log_stuck_event 단위테스트 (5회+ 막힘 임계 → 막힘 적재) ──────────────
+class TestLogStuckEvent:
+    """`_log_stuck_event` — turn_count≥5(임계)일 때만 막힘 attempt_event로 적재(날조 회피).
+
+    `is_stuck_turn_count`(재계산 아님·`decide_hint_level` 1번 규칙과 동일 임계)가 신호를 판정한다.
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+    _NOW = datetime(2026, 7, 30, 12, 0, 0, tzinfo=timezone.utc)
+
+    async def test_below_threshold_no_event(self) -> None:
+        """turn_count<5 → 적재 0(임계 미도달)."""
+        from whymath_backend.api.coach import _log_stuck_event
+
+        sess = _CaptureSession()
+        await _log_stuck_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            turn_count=4,
+            event_at=self._NOW,
+        )
+        assert sess.added == []
+
+    async def test_threshold_reached_logs_event(self) -> None:
+        """turn_count=5(임계) → event_type 막힘·event_data.turn_count=5(재계산 아님)."""
+        from whymath_backend.api.coach import _log_stuck_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_stuck_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            turn_count=5,
+            event_at=self._NOW,
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.막힘
+        assert event.event_data == {"turn_count": 5, "mode": None, "persona": None}
+        assert event.user_id == self._UID
+        assert event.problem_id == self._PID
+
+    async def test_above_threshold_carries_actual_turn_count(self) -> None:
+        """임계 초과(turn_count=9)도 실측값 그대로 싣는다(재계산 아님)."""
+        from whymath_backend.api.coach import _log_stuck_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_stuck_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            turn_count=9,
+            event_at=self._NOW,
+            mode="suneung",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.막힘
+        assert event.event_data == {"turn_count": 9, "mode": "suneung", "persona": None}
+
+
+# ── S3-16 소생: _log_response_latency_event 단위테스트 (서버 기준 응답 지연 → 답입력 적재) ──
+class TestLogResponseLatencyEvent:
+    """`_log_response_latency_event` — 직전 학생 턴 대비 서버 지연을 답입력 이벤트로 적재.
+
+    직전 학생 턴이 없으면(기준선 부재) 적재 0(날조 회피) — 이론상 append_turns는 항상 직전
+    학생 턴이 있어야 하지만 방어적으로 검증한다.
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+    _DID = uuid.uuid4()
+    _NOW = datetime(2026, 7, 30, 12, 0, 5, tzinfo=timezone.utc)
+
+    async def test_no_prior_student_turn_no_event(self) -> None:
+        """기준선(직전 학생 턴) 없음 → 적재 0(날조 회피)."""
+        from whymath_backend.api.coach import _log_response_latency_event
+
+        sess = _CaptureSession(execute_result=_ScalarsFirst(None))
+        await _log_response_latency_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            dialogue_id=self._DID,
+            now=self._NOW,
+            student_order=3,
+        )
+        assert sess.added == []
+
+    async def test_prior_turn_logs_positive_latency(self) -> None:
+        """직전 학생 턴 spoken_at이 있으면 그 차이(ms)를 답입력 이벤트로 적재."""
+        from whymath_backend.api.coach import _log_response_latency_event
+        from whymath_backend.schema.enums import EventType
+
+        prev = datetime(2026, 7, 30, 12, 0, 2, tzinfo=timezone.utc)  # NOW보다 3초 이전.
+        sess = _CaptureSession(execute_result=_ScalarsFirst(prev))
+        await _log_response_latency_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            dialogue_id=self._DID,
+            now=self._NOW,
+            student_order=3,
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.답입력
+        assert event.event_data == {"server_latency_ms": 3000, "mode": None, "persona": None}
+        assert event.event_at == self._NOW
+
+    async def test_mode_persona_carried(self) -> None:
+        """mode/persona 주입 → event_data에 보존(형제 writer와 동형)."""
+        from whymath_backend.api.coach import _log_response_latency_event
+        from whymath_backend.schema.enums import EventType
+
+        prev = datetime(2026, 7, 30, 12, 0, 4, tzinfo=timezone.utc)
+        sess = _CaptureSession(execute_result=_ScalarsFirst(prev))
+        await _log_response_latency_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            dialogue_id=self._DID,
+            now=self._NOW,
+            student_order=3,
+            mode="suneung",
+            persona="A_일반고고3",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.답입력
+        assert event.event_data == {
+            "server_latency_ms": 1000,
+            "mode": "suneung",
+            "persona": "A_일반고고3",
+        }
+
+
 # ── S3-03 수능 MVP: mode 태깅(요청 → 검산/힌트 event_data) 단위·결선 테스트 ─────────
 class TestSuneungModeTagging:
     """S3-03 — 코치 세션의 `mode`/`persona`가 검산/힌트 attempt_event.event_data에 실린다.
@@ -4116,6 +4360,113 @@ class TestSuneungModeTagging:
         # 풀이 미제출 턴이라 검산결과는 없고 힌트제공만 — 그 힌트 이벤트가 mode 태깅됐는지 확인.
         hint = next(e for e in events if e.event_type is EventType.힌트제공)
         assert hint.event_data["mode"] == "suneung"
+
+
+# ── S3-16 소생: 엔드포인트 결선(힌트요청·막힘 적재 + 학생 대면 응답 무변경 회귀) ──────
+class TestDemandStuckEventWiring:
+    """S3-16 — `create_session`/`append_turns`가 답 요구·5회+ 막힘 신호를 실제로 적재한다.
+
+    `TestSuneungModeTagging`과 동형 2층 검증(단위는 위 `TestLogDemandEvent`/`TestLogStuckEvent`)
+    — 여기선 *엔드포인트 결선*(요청 필드 → 실제 적재)과 *학생 대면 응답 무변경*(페이로드 회귀)만
+    확인한다. `_log_response_latency_event`(답입력)는 실 PG의 턴 영속이 필요해 여기선 다루지
+    않는다 — `test_coach_integration.py`(실 PG)가 담당.
+    """
+
+    def _tagged_events(self, captured: Any) -> list[Any]:
+        from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+
+        return [o for o in captured.added if isinstance(o, AttemptEventORM)]
+
+    def test_session_create_demand_token_logs_hint_request_event(self) -> None:
+        """세션 생성(답 요구 발화) → 힌트요청 이벤트 1행 적재."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "그냥 답 알려줘"},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        demand_events = [e for e in events if e.event_type is EventType.힌트요청]
+        assert len(demand_events) == 1
+
+    def test_session_create_no_demand_signal_logs_zero_hint_request_events(self) -> None:
+        """답 요구 신호 없는 발화 → 힌트요청 이벤트 0행(날조 회피)."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "이렇게 접근하면 될까요?"},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        assert [e for e in events if e.event_type is EventType.힌트요청] == []
+
+    def test_session_create_stuck_turn_count_logs_stuck_event(self) -> None:
+        """polya_state.turn_count≥5 → 막힘 이벤트 1행 적재(event_data.turn_count=실측값)."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "polya_state": {"turn_count": 5}},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        stuck_events = [e for e in events if e.event_type is EventType.막힘]
+        assert len(stuck_events) == 1
+        assert stuck_events[0].event_data["turn_count"] == 5
+
+    def test_session_create_below_threshold_logs_zero_stuck_events(self) -> None:
+        """polya_state.turn_count<5 → 막힘 이벤트 0행(날조 회피)."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "polya_state": {"turn_count": 2}},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        assert [e for e in events if e.event_type is EventType.막힘] == []
+
+    def test_session_create_never_logs_response_latency_event(self) -> None:
+        """`create_session`은 새 dialogue의 첫 턴이라 답입력(응답 지연) 이벤트를 *절대* 적재하지
+        않는다(기준선 없음·날조 회피) — 답 요구·막힘 신호를 동시에 유발해도 마찬가지."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "그냥 답 알려줘", "polya_state": {"turn_count": 5}},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        assert [e for e in events if e.event_type is EventType.답입력] == []
+
+    def test_student_facing_response_payload_has_no_new_fields(self) -> None:
+        """S3-16 writer는 순수 부수효과 — 응답 JSON에 힌트요청/막힘/답입력 키가 없다(회귀 고정).
+
+        `SessionCreateResponse`는 S3-16 이전 필드셋 그대로다 — writer가 반환값을 응답에 노출하지
+        않는지 최상위 키 목록으로 고정한다.
+        """
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "그냥 답 알려줘", "polya_state": {"turn_count": 5}},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        for leaked_key in (
+            "demand_events",
+            "stuck_events",
+            "response_latency_ms",
+            "server_latency_ms",
+            "turn_count_events",
+        ):
+            assert leaked_key not in body
 
 
 # ── WH-1 2단계 슬라이스 3: _apply_hypotheses 가드·결선 단위테스트 ──────────────────
