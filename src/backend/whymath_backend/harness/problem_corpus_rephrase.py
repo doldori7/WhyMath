@@ -11,6 +11,13 @@ hermetic 주의: 이 환경엔 LLM(Ollama·키)이 없어 provider 미주입 시
 FakeProvider를 `run_corpus_rephrase(..., rephraser=...)`로 주입해 라이브 0으로 검증한다. 따라서
 repo에 rephrase 코퍼스 산출물은 커밋하지 않는다(라이브 LLM 산출·Phaiakes9 소관).
 
+**계보(S4-18) 후속 단계**: 이 함수는 의도적으로 slug·problem_id·identity_id를 건드리지 않는다
+(`--in` 소스 코퍼스는 읽기 전용이라는 파이프라인 관례 — S2-08 재조정 스크립트와 동형 — 이
+함수는 발문만 다양화). 그래서 원본과 slug가 충돌하는 산출물이 나온다 — populate.py의 slug
+upsert가 원본과 *같은 DB 행*으로 병합해버리므로, 계보(problem_relation)를 걸려면 이 CLI
+실행 *직후* 매번 `scripts/backfill_rephrase_lineage_s4_18.py`를 재실행해 신규 slug 채번·
+identity_id·relation을 동기화해야 한다(멱등 — 여러 번 돌려도 안전).
+
 사용법(Phaiakes9):
     python -m whymath_backend.harness.problem_corpus_rephrase --in <src.jsonl> --out <dst.jsonl>
 

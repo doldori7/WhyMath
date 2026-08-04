@@ -2201,6 +2201,39 @@ PRD FR-010/014/020 시즌 플랜·dead table 5종 소생은 실행하지 않고 
 **rephrased — 3라운드 연속 FAIL**: rotation-0(FAIL 12%)→1(FAIL 5.5%)→2(**FAIL 1%·Wilson 상한 2.98%**). 점추정은 꾸준히 개선되나 n=200에서 결함 2건만으로도 Wilson 상한이 2% 임계를 넘는 경계 구간이고, 두 결함 모두 기존 `rephrase_hygiene.py` 패턴에 안 걸리는 **매 라운드 새로운 유형**(이질문자+어형붕괴+개념오치환 복합·목적어 불명확 비문)이었다. S3-14 acceptance의 "3회차부터는 근본 설계 재검토" 조항에 따라 4번째 패턴 패치+rotation-3을 이 태스크에서 시도하지 않고, LLM 자유 재작성 방식 자체의 예측불가 변동성이 원인일 가능성을 근거로 **S3-15**(결정론 템플릿 치환 등 대안 아키텍처 평가)를 신규 등재 — 무한 패치-재표본 루프 대신 정직하게 손을 뗐다. `problem_bank_rephrased_v0`는 노출 부적격 유지.
 
 정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md` §Rotation-2 확인 감사 결과.
+### 2026-07-30 (설계 결정·구현·S4-18): **rephrase 변형 계보 — identity_id/Canonical 분리 설계로 problem_relation 영속** (Kiki 설계 결정, claude 구현)
+
+**배경**: S4-14(변형 계보 영속) 착수 전 타당성 조사에서 구조적 블로커를 발견 — rephrase는 원본 Problem을 그대로 복사하며 question_text만 바꾸므로(`l3/equivalent/rephrase.py` 계약), rephrased_v0 429건(당초 태스크에 적힌 483은 S3-12 위생조치 이전 구수치 — 실측으로 정정) 중 392건(91%)이 원본과 *동일* slug·problem_id를 갖는다. `populate.py`의 slug ON CONFLICT upsert가 이 둘을 *같은 DB 행*으로 병합해버려 `problem_relation`(2행 관계)을 맺을 대상 행 자체가 없다 — `schema.ProblemRelation._no_self_relation`이 구조적으로 막는다. 생성 로그도 전무해 사후 역추적 근거가 없었다. 이 발견으로 S4-14를 스켈레톤측(별도 커밋)과 이 rephrase측 identity 결정으로 분리했다.
+
+**Kiki 설계 결정(1.5번 — Identity/Canonical 분리)**: 처음 제안한 3안(신규 problem_id 채번/provenance 애노테이션 재정의/9% 커버리지 수용) 중 (a)를 고르는 대신, Kiki가 더 나은 설계를 직접 제시했다 — `Problem`에 `identity_id`(계열 식별자)를 `problem_id`(개체 PK)와 **별개**로 신설해, `problem_id`는 개체마다 절대 불변으로 두고 `identity_id`만으로 "같은 문제의 다른 표현" 계열(원본+rephrase+난이도변형+교사수정 등)을 묶는다는 안이다. 예시: `identity_id=I-201` 아래 `problem_id=1001(slug=a)→1002(a-lite)→1003(a-ai)→1004(a-teacher)`이 모두 관계 그래프(`problem_relation`)로 체이닝된다. 이 설계는 "같은 계열인가?"를 관계 그래프 순회 없이 O(1)로 판정하게 하고, `problem_id` 불변성을 다운스트림(학생 응답 로그 등 FK 참조) 어디에도 흔들지 않는다. 스켈레톤 동일 밴드 형제(S4-14)는 "같은 문제의 재표현"이 아니라 독립 생성된 별개 문제이므로 identity_id를 공유하지 않고 관계(`유사`)만 받는다는 경계도 이 결정으로 명확해졌다.
+
+**구현**: ①`schema/problem.py`·`db/models/problem.py`에 `identity_id: UUID | None`(nullable·색인) 신설 + alembic 마이그레이션(`090d254a5d43`, additive·비파괴). ②`l1/problem_bank/populate.py`에 `problem_relation` upsert 추가 — 배치 내 slug→problem_id 맵으로 먼저 parent를 해석하고 없으면 DB를 조회하는 2단 해석, 미해석은 orphan skip(집계·조용한 실패 아님), 자기관계는 ORM 직접 upsert 경로가 schema의 `_no_self_relation` 검증을 거치지 않으므로 populate 자체가 재확인해 `ProblemCorpusError`로 거부한다. `ProblemBankRecord`에 `relations: tuple[ProblemRelationTag, ...] = ()`(기본값 — 기존 호출부 전부 무영향), `answer_kind`처럼 authoring key `relations`를 파싱한다. ③`scripts/backfill_rephrase_lineage_s4_18.py`로 기존 429건 소급 백필 — slug 충돌하는 392건은 결정론 파생(uuid5·`f"{parent_slug}-rephrased"`)으로 신규 slug/problem_id 채번(원본 행은 불변), 이미 분리돼 있던 37건은(수정 불변 수학키로 parent 조인·S2-08 조인키 재사용·전건 유일성 실측) identity_id·relation만 채운다. ④향후 신규 rephrase 배치는 이 스크립트를 재실행해 동기화한다 — `run_corpus_rephrase` 자체는 소스 코퍼스 읽기전용 관례(S2-08과 동형)를 지켜 slug를 건드리지 않는 설계로, 스크립트가 멱등(이미 처리된 레코드는 identity_id 존재로 스킵)이라 몇 번을 재실행해도 안전하다.
+
+**검증**: 전체 백엔드 스위트 stash-diff(변경 전/후 실패 테스트명 완전 일치·환경 제약 기인 579건 pre-existing만) + 실 코퍼스 계보 거버넌스 테스트 신설(identity_id 전건 부여·참조 무결·slug 충돌 0·parent-child identity_id 대칭) + `test_rephrased_corpus_preserves_all_fields_but_question_text`(rephrase 안전 봉인)를 `relations`(rephrase측에만 있는 의도적 비대칭 키) 제외하도록 갱신 + alembic 동결 리스트(`schema_version.py::KNOWN_REVISIONS`)에 신규 리비전 반영(안 하면 `test_schema_version_guard.py`가 정확히 그 표류를 잡아낸다 — 실측 확인) + ruff/black/mypy --strict(433파일)/lint-imports(7계층 계약) 전부 green.
+
+**사고 없음(정상 설계 협업)**: 이번 결정은 사고가 아니라 Kiki가 claude의 3안 제시에 더 나은 4번째 설계로 응답한 정상적 협업 사례다 — CLAUDE.md의 "실수 관리" 절차(재발방지대책 등재 의무)는 해당 없음. 다만 향후 세션을 위해 이 결정의 배경(왜 신규 problem_id 채번만으로는 부족한지 — identity/canonical 개념이 왜 필요한지)을 여기 기록해 "전에 말했잖아"가 통하지 않는 이 프로젝트의 컨텍스트 위생 원칙을 지킨다.
+
+### 2026-07-29 (구현·S4-17): **verification_tier L1 계약 승격 — 후처리 각인·감사 도구 로더 우회 해소 (S4-13 잔여)** (claude 구현, Kiki `/drive`)
+
+**배경**: S4-13(확률 유한 전수형 파일럿)이 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려, `verification_tier`(어떤 검증 강도로 증명됐는지)를 `ProblemVerifyMeta`의 정식 필드가 아니라 배치 기록 *후* `stamp_corpus_file`이 JSONL을 다시 읽어 후처리로 찍는 임시 경로로 남겼다. 부작용: L1 정본 로더(`load_problem_bank_records`)가 이 필드를 모르니 그대로 흘려버려, 잔여 축 감사 도구(`residue_cross_verify_eval.load_pilot_records`)가 등급을 읽으려면 L1을 우회해 원시 JSONL을 직접 파싱해야 했다 — 코드 자체가 "감사 도구가 로더를 우회하는" 상태를 문서화하고 있었다.
+
+**구현**: `ProblemVerifyMeta`에 `verification_tier: str | None` 필드 추가(`populate.py`). L1은 L3(`l3/verification_tier.VerificationTier`)를 임포트할 수 없어(7계층 단방향) 허용값을 문자열 상수(`_VERIFICATION_TIER_VALUES`)로 이중 관리하고, 미지값은 `ProblemCorpusError`로 즉시 거부(검증 등급은 안전 신호라 sibling authoring 필드처럼 조용히 None으로 떨구지 않는다). `orchestrator.py`의 `_to_record`/`run_equivalent_generation`/`run_batch`에 `verification_tier` 주입 인자를 관통시켜(기본 `None`·기존 호출부 전부 무영향) 저장 *시점*에 `conditions`/`answer_map`과 함께 조립되게 했다 — 후처리로 등급만 따로 찍는 경로가 구조적으로 존재할 수 없게 됐다. `finite_probability_batch.py`는 `stamp_corpus_file`/`stamp_verification_tier` 후처리 호출을 제거하고 `run_batch(verification_tier=machine_exhaustive)`를 네이티브로 준다. `residue_cross_verify_eval.load_pilot_records`는 `load_problem_bank_records`(L1 정본) 경유로 재작성 — 감사 전용 불변식(발문·정답·검산 조건 비어있지 않음)만 위에서 추가 검증한다.
+
+**부수 발견**: `_verify_meta_from_raw`의 `answer_kind` 화이트리스트가 S4-13 코퍼스 실사용값 `finite_probability`/`finite_count`를 애초에 포함하지 않아 조용히 `None`으로 떨구고 있었다(같은 함수·같은 결함류 — 발견 즉시 같이 교정).
+
+**검증**: 전체 백엔드 스위트를 stash-diff로 대조(변경 전/후 실패 테스트명 목록이 diff exit 0 — 완전 일치, 575 failed 전부 이 샌드박스의 Redis/Postgres/실LLM/OCR 모델 부재에서 기인하는 기존 실패)·순증 6건(populate.py 4·orchestrator.py 3·finite_probability_batch.py 구 테스트 1건 제거) 신규 통과. `ruff check`/`ruff format --check`/`black --check --line-length 100`/`mypy --strict`(433파일)/`lint-imports`(7계층 계약) 전부 green.
+
+**scope_drift**: 실 구현이 `orchestrator.py`(L3, verification_tier 관통에 필수)와 테스트 4파일로 확장돼 태스크 원 선언 `paths`(l1/problem_bank·harness만) 밖이었다 — 하네스 scope_drift 경고를 그대로 따라 완료 전 `paths`를 실측 반영(사후 확장 기록, 은폐 아님). `path_overlap`(ARCH-19, 다른 세션) 경고도 발생했으나 그 브랜치의 실제 diff를 확인해 겹치는 파일에 실질 충돌이 없음을 확인 후 진행.
+
+### 2026-07-29 (구현·HARN-12): **브리핑에도 미머지 done 필터 배선 — next만 걸러 SessionStart는 여전히 완료분 추천했던 HARN-11 잔여 해소** (claude 구현, Kiki `/drive`)
+
+**배경**: HARN-11(#638)이 `next`·`start`에는 미머지 done 필터(`scan_remote_done`)를 배선했지만 `brief`(SessionStart 훅 진입점 — 매 세션이 자동으로 읽는 최고 레버리지 표면)는 빠져 있었다. 실측: S3-12 세션 종료 직후 새 세션이 열리자 브리핑이 이미 타 세션에서 done 처리된 S3-10·S3-11을 1순위 후보로 계속 추천 — `next`·`start`는 정상 차단했지만 브리핑 자체가 안 막히면 다음 세션이 같은 근접사고를 반복한다("장치는 있는데 일부만 배선됨" 패턴, OPS-03·08·11·12·13과 동형).
+
+**구현**: `report.render_brief`에 `done_excluded: dict[str, list[str]]` 파라미터 추가(순수 함수 유지 — 원격 조회는 호출부 책임, 기존 시그니처 하위호환). `cmd_brief`가 `next`와 동일하게 `selector.candidates`로 후보를 구한 뒤 `scan_remote_done`(fetch 없이 캐시 ref만 — 훅은 빠르고 네트워크 0이어야 함)으로 걸러 전달. 두 try/except 모두 CLAUDE.md 침묵 실패 금지 준수(`type(exc).__name__` 로그 포함 fail-open) — 이 참에 곁에 있던 기존 `_remote_claim_map` 무타입 except도 같이 교정(같은 파일의 같은 위반 패턴을 발견하고 넘기지 않음).
+
+**변별력**: 실 git 저장소 fixture(`bare_remote`)로 ①타 세션이 done 처리·미머지 상태를 만들고 `brief` 출력에서 실제로 빠지는지 ②`scan_remote_done`이 예외를 던져도 브리핑이 살아있고 예외 타입이 stderr에 찍히는지 — 둘 다 CLI 통합 테스트로 확인(`TestUnmergedDoneDetection`에 2건 추가). `report.py` 단위 테스트 3건(정상 제외·무관 후보 비침해·하위호환) 동반. `tests/harness` 213건 green.
+
+**사고 정정(같은 회차)**: `ruff format`으로 이 두 파일을 먼저 포맷했으나 `scripts/harness`·`tests/harness`는 `src/backend/pyproject.toml` 관할 밖이라 CI 정본은 `black --line-length 100`(OPS-12/13 배선)이다 — 88폭 ruff 포맷이 CI와 어긋날 뻔한 것을 `black --check` 실측으로 발견·정정. 하네스 하위 디렉터리를 건드릴 때는 ruff format이 아니라 black이 정본임을 확인.
 
 ### 2026-07-29 (구현·환류·S3-12): **v0 계통 결함 5류 생성기 교정 + rotation-1 재검수 — mc/rephrased 잔여 결함 조치완료·정직 FAIL 유지, concept_src_id 6번째 결함류 발견·전건 교정** (claude 구현, Kiki `/drive` + "진행")
 
