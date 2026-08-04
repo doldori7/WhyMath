@@ -1063,9 +1063,14 @@ class Settings(BaseSettings):
         default="rapid_latex",
         description=(
             "수식 인식 백엔드 좌석. `rapid_latex`(기본·Phase A)=rapid_latex_ocr(경량 ONNX). "
-            "`texteller`(Phase B 스텁)=transformers TexTeller(손글씨 강건·미배선). "
-            "`qwen_vl`(Phase C 스텁)=Qwen3-VL 멀티모달(*반드시 L3 라우터 경유*·Ollama 직접 호출 "
-            "금지·미배선). WHYMATH_OCR_RECOGNIZER_BACKEND로 조정."
+            "`texteller`(Phase C·실배선)=transformers TexTeller(손글씨 강건·extra [ocr-heavy]). "
+            "`qwen_vl`(Phase C·실배선·비동기 전용)=Qwen3-VL 멀티모달(*반드시 L3 라우터 경유*· "
+            "Ollama 직접 호출 금지 — factory가 provider/cache/trace를 주입하며 미주입이면 "
+            "RuntimeError). 셋 다 배선돼 있고 미검증인 것은 *구현*이 아니라 *라이브 정확도*다 "
+            "(2026-08-04 nlp_module_gap_review_r2.md §1-② 정정 — 이 설명이 texteller·qwen_vl을 "
+            "'스텁·미배선'이라 기술해 실제보다 못하다고 말하던 stale을 바로잡았다. 근거: "
+            "l5/ocr/factory.py `_build_recognizer` · l5/ocr/recognize.py `TexTellerRecognizer`/ "
+            "`QwenVlRecognizer`). WHYMATH_OCR_RECOGNIZER_BACKEND로 조정."
         ),
     )
     ocr_detector: Literal["paddle", "mfd"] = Field(

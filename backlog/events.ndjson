@@ -1656,3 +1656,5 @@
 {"ts": "2026-08-03T21:13:50", "actor": "claude/backlog-drive-next", "action": "done", "id": "MOB-08-unused-dependency-purge-gate", "artifacts": ["c2cfb3486bc133797a9b4a15e9ad1907a341ab8c"]}
 {"ts": "2026-08-03T21:40:31", "actor": "claude/backlog-drive-next", "action": "start", "id": "MOB-09-unused-dependency-purge-round3", "session": "claude/backlog-drive-next", "remote": "ok"}
 {"ts": "2026-08-03T21:46:27", "actor": "claude/backlog-drive-next", "action": "done", "id": "MOB-09-unused-dependency-purge-round3", "artifacts": ["1fab211263c5d3cfc14668c2e4be9a2e236b93ff"]}
+{"ts": "2026-08-04T05:55:29", "actor": "claude/whymath-nlp-design-my18a1", "action": "add", "id": "OPS-19-observability-report-runner-wiring"}
+{"ts": "2026-08-04T05:57:04", "actor": "claude/whymath-nlp-design-my18a1", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/config.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/config.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
