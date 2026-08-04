@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "tests/backend/privacy/**"
   - "src/backend/whymath_backend/privacy/**"
-session: null
+session: claude/collab-02-erasure-completeness
 notes: "collaboration_module_gap_review.md §3 D2. test_erasure.py:94가 assert planned <= order로 계획→실행 방향만 단언 — 역방향이 없어 user_id를 가진 신설 테이블이 _ERASURE_PLAN에 없어도 아무도 red를 내지 않는다. 협업 테이블은 다자 소유(교사가 만든 학급에 학생 데이터가 섞임)라 현 구조의 근본 전제인 'user_id 단일 소유 축'을 깨는 첫 사례가 되므로, 착지 전에 방향을 뒤집어 두면 부채가 원천 차단된다. 파기 누락은 사후에 고쳐도 이미 남은 데이터를 되돌리지 못한다(D3보다 우선하는 이유)."
-updated: 2026-07-31
+updated: 2026-08-04
