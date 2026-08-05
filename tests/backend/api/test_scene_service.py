@@ -21,6 +21,7 @@ from whymath_backend.l4.learning_scene import (
     MisconceptionProbeElement,
     SkillFocusElement,
     SocraticPromptElement,
+    TutoringPromptElement,
     VisualizationElement,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
@@ -187,6 +188,43 @@ async def test_learner_context_snapshot_carried() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mastery_threads_to_tutoring_prompt() -> None:
+    """진단 BKT 숙달이 LTHC 튜터링 프롬프트로 장면에 반영된다(S5l·학습자모델 축·끝단 배선).
+
+    bkt=0.3(초보)·개념 인지유형 DEFINITION → 주 Polya UNDERSTAND → 진입점+비계 역할 방출.
+    """
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    tutoring = [el for el in scene.elements if isinstance(el, TutoringPromptElement)]
+    assert tutoring
+    assert {t.role for t in tutoring} == {"entry", "scaffold"}  # 초보 → 진입+비계
+
+
+@pytest.mark.asyncio
+async def test_none_mastery_no_tutoring_prompt() -> None:
+    """bkt·irt 숙달 모두 None(신호 없음) → 튜터링 프롬프트 미방출(비계 날조 금지·낙인 회피)."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(None, None),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    assert not any(isinstance(el, TutoringPromptElement) for el in scene.elements)
+
+
+@pytest.mark.asyncio
 async def test_none_mastery_defaults_level_chobo() -> None:
     """bkt·irt 숙달 모두 None → level 기본 '초보'가 프롬프트에 반영."""
     provider = _FakeProvider(_VALID_JSON)
@@ -280,7 +318,9 @@ async def test_probe_intervention_diversified_by_confidence(
 
 
 @pytest.mark.asyncio
-async def test_refuted_hypothesis_probe_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_refuted_hypothesis_probe_suppressed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """evidence_links 순지지도<0(반박 우세)인 가설은 렌더 시점에 프로브에서 제외(RS2 낙인 회피)."""
 
     async def _fake_active(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
@@ -323,7 +363,9 @@ async def test_refuted_hypothesis_probe_suppressed(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
-async def test_no_student_id_skips_hypothesis_query(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_no_student_id_skips_hypothesis_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """student_id 미제공 → 가설 store 조회 생략·active_hypothesis_ids 빈 목록(프로브 0)."""
 
     async def _boom(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
