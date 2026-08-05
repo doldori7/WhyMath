@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-21-prerequisite-node-budget-safety-valve
+title: "선수 traversal breadth 안전밸브 — fetch_prerequisites 노드 수 무제한 해소 (구 PR#379 잔여, spec 절반은 main이 이미 상환)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "MAX_PREREQUISITE_NODES(안전밸브 64) + 순수 헬퍼 _cap_by_node_budget 신설 — fetch_prerequisites의 dedup 이후 최종 목록에 노드 수 상한 적용. 현재 규모 미발동(행동 불변)·초과 시 경고 로깅(침묵 절단 금지)"
+  - "hermetic 단위테스트 4케이스(값 동결·캡 이하 불변·초과 절단+드롭 로그·custom cap) — DB 불요"
+  - "__all__에 신규 상수 노출 + 기존 backend 테스트 스위트 회귀 없음"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/prerequisite_recommendation.py
+  - tests/backend/l2/test_prerequisite_depth_budget.py
+session: claude/merge-failure-reflection-issues-560vwh
+notes: "2026-08-05 PR#379(dsl-scalability-analysis-3rbgxr) close 후 잔여 재실행. 원 커밋(3e84a718 '선수 traversal 노드 예산 안전밸브 + LLM subgraph 예산 spec')은 두 절반이었다: ①spec 명문화(risk_register §5 ⑨ 신설) ②코드(breadth cap). 조사 결과 ①은 main이 **같은 날**(2026-07-03) 독립적으로 더 상위 문서(docs/standards/build_roadmap_part10_review.md)+CI 동결 테스트(tests/backend/l3/test_llm_subgraph_budget_invariant.py)로 이미 상환 완료 — 같은 수치(depth≤2·max_nodes~12·max_tokens~3000)·같은 '미채택(소비처 생기면 도입)' 판정까지 일치, 병렬 세션이 같은 날 같은 결론에 독립 도달한 사례. §5 신설은 중복이라 하지 않는다. ②는 main의 현재 fetch_prerequisites(재귀 CTE 기반, #379 당시와 구조가 다름 — ARCH-13 원자 축 조인 등 그 사이 대폭 개편)에 breadth cap이 여전히 부재함을 직접 확인(git show origin/main으로 실측) — 이것만 재구현. LLM 컨텍스트 예산(max_tokens)과는 별개 축(원 커밋 자신의 주석: '이것도 그래프 traversal 예산이지 LLM 컨텍스트 예산이 아니다') — Part 10 검토의 '미채택' 판정과 충돌하지 않는다."
+updated: 2026-08-05
