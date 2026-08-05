@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -17,10 +17,11 @@ acceptance:
   - "대학 자체 커버리지 절(target_codes_total·covered_codes·zero_coverage_codes·과목별 분해)이 K-12 §1과 동일한 정직회계 원칙(분모 0 시 None·0커버 목록 truncation 고지)으로 리포트에 신설"
   - "기존 K-12 §1 헤드라인(revision·target_codes_total·covered_codes 등)은 바이트 단위 회귀 0 — 대학 데이터는 별도 축으로 가산, 기존 분모에 합산되지 않음"
   - "단위테스트·CLI 테스트 green, JSON 산출물에 university 블록 신설"
-artifacts: []
+artifacts:
+  - 1325fae1
 paths:
   - src/backend/whymath_backend/harness/problem_bank_coverage.py
   - tests/backend/harness/test_problem_bank_coverage.py
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획(docs/strategy/grade_axis_mvp_shortest_path_v1.md) §3 W1. S4-19(W0) 완료 후 착수. 실측: standards_university_v1/standards.json의 curriculum_revision은 고정값 '대학'(K-12 '2022 개정'과 다른 축·자체작성이라 국가교육과정 개정 체계 밖). school_type 전량 '대학교' 단일값. build_report의 기존 revision(단일 문자열) 분모 계약은 그대로 두고 university_catalog를 완전히 별도 optional 축으로 가산 — problem_types(S3-27) 축 설계 선례를 그대로 따른다(신규 패턴 0)."
 updated: 2026-08-05
