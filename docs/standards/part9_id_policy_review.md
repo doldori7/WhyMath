@@ -111,8 +111,10 @@ area 학년독립·alias roundtrip 2 이벤트·재생성 멱등·충돌 접미 
 
 ## 남은 후속 (별도 슬라이스·flag)
 
-- **`domain` 필드 정화**: `domain="[고]미적분"`은 여전히 교육과정 접두 보유 — 이번 범위(concept_id·
-  locale) 밖. Part 9 별건 후속으로 분리.
+- ~~**`domain` 필드 정화**: `domain="[고]미적분"`은 여전히 교육과정 접두 보유~~ → **완료(P2e·2026-07-03)**:
+  `transform._strip_domain_prefix`가 `[고]/[중]/[공통]/[기본]`을 제거해 순수 영역명으로 정화(예
+  `[고]미적분`→`미적분`). idmap 경로(concept_id 파생·`[기본]` full-key)와 독립. 거버넌스:
+  `test_transform.py::TestDomainPurity`(실데이터 437 domain 접두 0건 잠금).
 - **seed 경로**: `seed.build_concept_id`는 NCIC 코드 경로라 name_ko가 없어 의미론 slug 불가 →
   잠정 `math.seed.<code>` 네임스페이스(코퍼스 경로만 P2d 적용). 전문가 저작 시 canonical 발급.
 - **name_en/ja 저작**: `locales/en.json`·`ja.json` 충전은 i18n phase 후속(canonical 불변).
