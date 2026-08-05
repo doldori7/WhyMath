@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -16,7 +16,8 @@ acceptance:
   - "나머지 위반 16건(E501 10·B007 3·B905 1·I001 2) 해소 — infra/scripts/harness 소재"
   - "CI(ci.yml)의 harness-integrity/infra-contracts 잡이 신설된 루트 pyproject.toml 기준으로 통과 — 배선 실재성 확인"
   - "전체 harness 테스트 스위트 회귀 없음 — 함수명 개명이 pytest 수집·-k 필터에 영향 없는지 확인"
-artifacts: []
+artifacts:
+  - 00182d69
 paths:
   - pyproject.toml
   - "scripts/**"
@@ -24,6 +25,6 @@ paths:
   - "tests/infra/**"
   - "infra/**"
   - conftest.py
-session: claude/merge-failure-reflection-issues-560vwh
+session: null
 notes: "2026-08-05 Kiki 지시로 PR#626(OPS-14+15) close 후 재실행 — OPS-14 절반은 이미 #632로 완료돼 죽은 코드였고, OPS-15 절반(이 태스크)은 여전히 유효하나 diff 자체는 못 씀: cherry-pick 실측 결과 tests/backend/api/* 등 8개 파일 실충돌 + backlog/tasks/OPS-15-repo-root-lint-config.yaml가 main에서 이미 다른 태스크(OPS-15-wh1-caplog-order-flake)에 재사용돼 ID 충돌. src/backend/pyproject.toml 주석에 '한국어 식별자 사용 금지(N) 비활성 안 함: docstring·문자열만 한국어, 식별자는 영어' 정책이 이미 명문화돼 있어 이 작업은 그 정책을 tests/harness에도 일관 적용하는 것 — 정책 자체의 타당성은 이미 backend에서 결정됨."
 updated: 2026-08-05
