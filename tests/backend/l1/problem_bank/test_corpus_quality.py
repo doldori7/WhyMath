@@ -386,27 +386,25 @@ def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # 부기·`harness/problem_type_backfill.py`). 오염이 아니라 설계이므로 키 집합·값 비교 양쪽에서
     # 제외한다.
     #
-    # relations는 S4-18 계보 백필이 rephrase측에만 부여하는(parent를 가리키는) 비대칭 신규
-    # 키라 키 집합 비교에서 제외한다(identity_id는 양쪽에 대칭 부여라 이미 값 비교를 통과·
-    # 제외 불요).
-    #
     # 병합 경위(2026-08-04, S4-18 병합): 이 병합 시점의 `rephrased_v0`는 병합 대상 브랜치와
     # 별개로 main에서 rotation-2 이후 재생성돼(S3-15 재설계) problem_id 429건 중 37건만 원
     # 코퍼스와 일치했다 — `scripts/backfill_rephrase_lineage_s4_18.py --check`로 재생성된
     # 코퍼스 위에서 드라이런 후(전량 미처리 429건 확인) 실행해 identity_id·relations를
     # 재생성 코퍼스 기준으로 다시 채웠다(멱등 스크립트 — 재실행 안전). 아래 두 어서션은 그
-    # 재실행 결과가 원 브랜치의 계약(양쪽 identity_id 대칭·relations는 rephrase 전용)과
-    # 여전히 일치함을 실측 확인한 뒤 살렸다.
+    # 재실행 결과가 원 브랜치의 계약(양쪽 identity_id 대칭)과 여전히 일치함을 실측 확인한
+    # 뒤 살렸다.
+    #
+    # relations는 S4-14(스켈레톤 "유사" 형제) 병합 이후 *양쪽* 코퍼스에 키 자체는 대칭으로
+    # 존재하되(키 집합 비교는 별도 제외 불요), *값*은 의도적으로 비대칭이다 — 소스는 자신의
+    # "유사" 형제 태깅, rephrase 성공 레코드는 parent_slug를 향한 "변형" 태깅(S4-18)으로
+    # 서로 다른 관계를 가리킨다(계보가 곧 이 차이의 요점) — 값 비교에서만 제외한다.
     source_only_fields = {"problem_type_codes"}
-    asymmetric_only_on_variant = {"relations"}
     source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
-    exclude = {"question_text", "slug", "problem_id"}
+    exclude = {"question_text", "slug", "problem_id", "relations"}
     for slug, rec in rephrased.items():
         src = source[_math_key(rec)]
-        assert (
-            set(rec) - asymmetric_only_on_variant == set(src) - source_only_fields
-        ), f"{slug} 키 집합 변화"
+        assert set(rec) == set(src) - source_only_fields, f"{slug} 키 집합 변화"
         for key in src:
             if key in exclude or key in source_only_fields:
                 continue
