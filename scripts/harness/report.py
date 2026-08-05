@@ -216,17 +216,19 @@ def render_brief(
             lines.append(f"⚠️ 미해결 장기 미머지 브랜치 (Kiki 결정 필요) — {len(unresolved)}건:")
             for stale_branch, age_days, ahead, _status, _evidence in unresolved:
                 lines.append(
-                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
+                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
+                    f"trunk 대비 {ahead}커밋 앞섬"
                 )
         if ported:
             lines.append(f"(참고) 이미 포팅됨 — 원본 정리만 필요, 결정 불요 — {len(ported)}건:")
-            for stale_branch, age_days, ahead, _status, evidence in ported:
+            for stale_branch, _age_days, _ahead, _status, evidence in ported:
                 lines.append(f"  · {stale_branch} — 근거: {evidence}")
         if active:
             lines.append(f"(참고) 타 세션 진행중 — 정보성, 결정 불요 — {len(active)}건:")
             for stale_branch, age_days, ahead, _status, _evidence in active:
                 lines.append(
-                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
+                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
+                    f"trunk 대비 {ahead}커밋 앞섬"
                 )
     elif stale_branch_status not in ("ok", "disabled"):
         lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")

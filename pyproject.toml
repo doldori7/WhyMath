@@ -1,0 +1,41 @@
+# 레포 루트 lint 정본 (OPS-20, 구 PR#626 OPS-15 재실행)
+#
+# 왜 이 파일이 생겼는가
+# --------------------
+# 이 저장소는 패키지 루트가 `src/backend`·`src/data-pipeline` 두 곳이고, lint 설정도
+# 그 두 pyproject에만 있었다. 그래서 **`src/` 밖은 저장소 표준이 적용된 적이 없다** —
+# ruff는 파일마다 조상 디렉터리에서 설정을 찾는데 레포 루트에 아무것도 없으니
+# `tests/harness`·`tests/infra`·`scripts`·`infra`·`conftest.py`가 전부 **ruff 기본값**
+# (line-length 88 · select E4,E7,E9,F)으로만 검사돼 왔다.
+#
+# 즉 배선(lint 잡 자체)은 있었지만 **기준이 저장소 표준이 아니었다** — 배선 유무만
+# 보는 검사로는 구조적으로 못 잡는 축이다. 2026-08-05 재실측: 표준 적용 시 N802
+# (한국어 식별자) 226건 + 나머지 위반 16건(E501 10 · B007 3 · B905 1 · I001 2)이
+# 드러났다.
+#
+# black에도 같은 함정이 있다 — 루트에 설정이 없으면 경로를 두 개 이상 준 순간
+# 프로젝트 루트 탐지가 레포 루트로 올라가 **기본값 88자로 조용히 강등**될 수 있다.
+# 이 파일이 그 강등을 원천 제거한다.
+#
+# 범위 주의: `src/backend`·`src/data-pipeline`은 **자기 pyproject가 더 가까워** 그쪽
+# 설정이 이긴다(ruff·black 모두 최근접 설정 우선 — nearest-pyproject-wins). 이 파일은
+# 그 밖(scripts·tests/harness·tests/infra·infra·conftest.py)을 덮는 fallback이다.
+# 세 파일의 line-length·select는 의도적으로 동일하게 유지한다 — 갈리면 무의미하다.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# src/backend·src/data-pipeline의 pyproject와 **동일**해야 한다. 규칙이 갈리면
+# 같은 코드가 위치에 따라 다르게 판정돼 표준이라는 말이 무의미해진다.
+select = ["E", "F", "I", "N", "B", "W"]
+# 한국어 식별자 사용 금지 (N) 비활성 안 함: docstring·문자열만 한국어, 식별자는 영어
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]   # 테스트 픽스처에 긴 한국어 문자열 허용
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]

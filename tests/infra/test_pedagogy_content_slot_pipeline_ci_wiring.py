@@ -25,6 +25,7 @@ CI의 실제 pytest 실행에 도달함을 매 CI마다 재확인하므로, 이 
 from __future__ import annotations
 
 import yaml
+
 from tests.infra.test_test_suite_wiring import _REPO_ROOT, _TESTS_ROOT, _all_wirings
 
 _TARGET_TEST_FILE = _TESTS_ROOT / "backend" / "api" / "test_e2e_pedagogy_pilot_integration.py"
