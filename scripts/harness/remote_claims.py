@@ -81,6 +81,7 @@ stale claim 청소: 세션이 release 없이 죽으면 claim 파일이 남는다
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -899,13 +900,62 @@ STALE_BRANCH_DEFAULT_DAYS = 3
 
 @dataclass(frozen=True)
 class StaleBranch:
-    """N일 이상 트렁크에 흡수되지 않은 원격 브랜치 1건."""
+    """N일 이상 트렁크에 흡수되지 않은 원격 브랜치 1건.
+
+    status(HARN-13 잔여 — 2026-08-05 3분류 확장):
+      · "unresolved" — 진짜 Kiki 결정 대기. 기본값.
+      · "ported"     — 이 브랜치의 유용한 부분이 이미 별도 소형 PR로 trunk에
+                        흡수된 흔적(커밋 메시지에 브랜치 세션 접미사 언급)이 있다.
+                        원본은 정리 대상일 뿐 결정 대기가 아니다.
+      · "active"     — 다른 세션이 지금 이 브랜치에서 태스크를 claim 중(원격
+                        claim 맵에 존재). 방치가 아니라 진행 중인 정상 작업.
+    evidence: ported일 때 근거 커밋(짧은 sha + 제목), 그 외 "".
+    """
 
     branch: str
     ref: str
     last_commit_at: datetime
     age_days: float
     ahead: int
+    status: str = "unresolved"
+    evidence: str = ""
+
+
+_SESSION_SUFFIX_RE = re.compile(r"-([a-z0-9]{6})$")
+
+
+def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
+    """`branch`의 세션 접미사를 trunk 커밋 로그에서 찾는다 — 있으면 "이미 포팅됨" 근거.
+
+    이 저장소의 관측된 명명 관행(예 `claude/whymath-ai-tutor-design-953m1e`)은 세션마다
+    6자 영숫자 접미사를 붙인다. 그 브랜치의 유용한 부분을 뽑아 trunk에 흡수할 때(예:
+    `merge: claude/whymath-ai-tutor-design-953m1e (PED-05, S3-16)`) 커밋 메시지가 그
+    접미사를 그대로 인용하는 패턴이 반복 관측됐다(PR#705·#702·#707 등). 접미사가 이
+    패턴에 안 맞거나 grep이 실패하면 "포팅 근거 없음"으로 안전 폴백한다(전체 스캔을
+    막지 않음 — 이 브랜치만 unresolved로 남는다).
+    """
+    match = _SESSION_SUFFIX_RE.search(branch)
+    if not match:
+        return ""
+    suffix = match.group(1)
+    try:
+        found = _git(
+            root,
+            "log",
+            trunk_ref,
+            f"--grep={suffix}",
+            "--fixed-strings",
+            "--oneline",
+            "-n",
+            "5",
+            timeout=15,
+        )
+    except Exception:  # pragma: no cover - 환경 의존
+        return ""
+    if found.returncode != 0:
+        return ""
+    line = found.stdout.strip().splitlines()[0] if found.stdout.strip() else ""
+    return line
 
 
 @dataclass
@@ -929,6 +979,7 @@ def scan_stale_branches(
     fetch: bool = True,
     max_refs: int = SCAN_MAX_REFS,
     now: datetime | None = None,
+    active_branches: frozenset[str] = frozenset(),
 ) -> StaleBranchScanResult:
     """트렁크에 `days_threshold`일 이상 흡수되지 않은 원격 브랜치를 찾는다.
 
@@ -948,6 +999,10 @@ def scan_stale_branches(
 
     반환 status가 'ok'가 아니면 **판정 자체가 불가**했다는 뜻이며, 빈 stale 목록을
     '방치 브랜치 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+
+    active_branches(HARN-13 잔여 — 2026-08-05): 호출부가 이미 계산해둔 원격 claim
+    맵의 브랜치 집합(`remote_claimed.values()`)을 그대로 넘긴다 — 새 스캔을 추가하지
+    않고 기존 데이터를 재사용해 "타 세션이 지금 이 브랜치에서 작업 중"을 판별한다.
     """
     if not has_remote(root):
         return StaleBranchScanResult("offline", message="origin 원격 없음 — 브랜치 스캔 불가")
@@ -1018,6 +1073,11 @@ def scan_stale_branches(
             if ahead <= 0:
                 continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 방치 아님
             branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            if branch in active_branches:
+                status, evidence = "active", ""
+            else:
+                evidence = _find_ported_evidence(root, trunk_ref, branch)
+                status = "ported" if evidence else "unresolved"
             stale.append(
                 StaleBranch(
                     branch=branch,
@@ -1025,6 +1085,8 @@ def scan_stale_branches(
                     last_commit_at=last_commit_at,
                     age_days=age_days,
                     ahead=ahead,
+                    status=status,
+                    evidence=evidence,
                 )
             )
 

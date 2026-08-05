@@ -704,6 +704,9 @@ class TestScanStaleBranches:
         assert "claude/old-orphan" in branches
         assert branches["claude/old-orphan"].ahead >= 1
         assert branches["claude/old-orphan"].age_days >= 9
+        # 포팅 근거도 active claim도 없으면 기본값 unresolved (2026-08-05 3분류 확장)
+        assert branches["claude/old-orphan"].status == "unresolved"
+        assert branches["claude/old-orphan"].evidence == ""
 
     def test_최근_커밋된_브랜치는_감지하지_않는다(self, bare_remote):
         """나이 조건 미충족 — ahead는 있지만 threshold 미만이면 stale이 아니다."""
@@ -750,6 +753,104 @@ class TestScanStaleBranches:
         result = remote_claims.scan_stale_branches(b, days_threshold=3)
         assert result.status == "ok"
         assert "claude/landed" not in {s.branch for s in result.stale}
+
+    def test_trunk에_포팅_흔적이_있으면_ported로_분류한다(self, bare_remote):
+        """PR#705류 패턴("merge: ...(953m1e) 흡수") 재현 — 원본은 결정 대기가 아니다.
+
+        2026-08-05 실측: SessionStart가 경고하던 19개 브랜치 중 10개가 이미 이 패턴으로
+        trunk에 흡수된 뒤 원본만 방치돼 있었다 — unresolved와 뭉뚱그리면 Kiki가 매번
+        이미 끝난 일까지 다시 훑어야 한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-example-review-953m1e"
+        subprocess.run(["git", "checkout", "-b", branch], cwd=a, check=True, capture_output=True)
+        self._commit_backdated(a, days_ago=9, filename="orphan2.txt", message="review work")
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        (a / "ported.txt").write_text("ported content\n", encoding="utf-8")
+        subprocess.run(["git", "add", "ported.txt"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "merge: 953m1e 유용분 흡수"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        branches = {s.branch: s for s in result.stale}
+        assert branch in branches
+        assert branches[branch].status == "ported"
+        assert "953m1e" in branches[branch].evidence
+
+    def test_원격_claim_중인_브랜치는_active로_분류한다(self, bare_remote):
+        """다른 세션이 지금 이 브랜치에서 작업 중이면 방치가 아니라 진행 중인 정상 작업이다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-active-example-aaaaaa"
+        subprocess.run(["git", "checkout", "-b", branch], cwd=a, check=True, capture_output=True)
+        self._commit_backdated(a, days_ago=9, filename="active.txt", message="active work")
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=a, check=True, capture_output=True
+        )
+
+        result = remote_claims.scan_stale_branches(
+            b, days_threshold=3, active_branches=frozenset({branch})
+        )
+        assert result.status == "ok"
+        branches = {s.branch: s for s in result.stale}
+        assert branch in branches
+        assert branches[branch].status == "active"
+        assert branches[branch].evidence == ""
+
+    def test_세_분류가_한_스캔에서_동시에_구분된다(self, bare_remote):
+        """unresolved·ported·active가 서로 다른 값으로 동시에 나오는지 변별력 실측.
+
+        각 분류가 개별 테스트에서만 통과하고 한 스캔에서는 서로를 오염시키면(예: 전부
+        unresolved로 뭉개짐) 실전에서 무의미하다 — 성공/실패에 같은 값을 내면 검증이
+        아니라 위장(CLAUDE.md 변별력 없는 검증 스텝 금지).
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+
+        unresolved_branch = "claude/whymath-unresolved-example-zzzzzz"
+        ported_branch = "claude/whymath-ported-example-953m1e"
+        active_branch = "claude/whymath-active-example-bbbbbb"
+
+        for branch, fname in [
+            (unresolved_branch, "u.txt"),
+            (ported_branch, "p.txt"),
+            (active_branch, "ac.txt"),
+        ]:
+            subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "checkout", "-b", branch], cwd=a, check=True, capture_output=True
+            )
+            self._commit_backdated(a, days_ago=9, filename=fname, message=f"{branch} work")
+            subprocess.run(
+                ["git", "push", "-u", "origin", branch], cwd=a, check=True, capture_output=True
+            )
+
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        (a / "port_commit.txt").write_text("ported\n", encoding="utf-8")
+        subprocess.run(["git", "add", "port_commit.txt"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "merge: 953m1e 흡수"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(
+            b, days_threshold=3, active_branches=frozenset({active_branch})
+        )
+        assert result.status == "ok"
+        branches = {s.branch: s.status for s in result.stale}
+        assert branches[unresolved_branch] == "unresolved"
+        assert branches[ported_branch] == "ported"
+        assert branches[active_branch] == "active"
 
     def test_원격_없음은_offline_판정(self, git_repo: Path):
         """origin이 아예 없는 저장소 — '방치 브랜치 없음'이 아니라 offline이어야 한다."""

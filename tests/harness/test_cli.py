@@ -1404,6 +1404,39 @@ class TestUnmergedDoneDetection:
         assert "중복 구현 위험" in capsys.readouterr().err
 
 
+class TestStaleBranchClassificationWiring:
+    """brief(cmd_brief)가 active_branches를 실제로 scan_stale_branches에 넘기는지 —
+    "장치가 존재함"과 "실제로 배선됨"은 다르다(OPS-10 배선 실재성 패턴). 2026-08-05
+    3분류 확장(HARN-13 잔여)의 배선 축.
+    """
+
+    def test_brief가_원격_claim_브랜치를_active_branches로_전달한다(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        import remote_claims
+
+        _, clone = bare_remote
+        other = clone("claimer")
+        assert remote_claims.claim(other, "S1-01-claimed", "claude/claimer").status == "ok"
+
+        mine = clone("newcomer")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        captured_kwargs: dict = {}
+        original = remote_claims.scan_stale_branches
+
+        def spy(root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original(root, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "scan_stale_branches", spy)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+        assert "active_branches" in captured_kwargs, "cmd_brief가 active_branches를 안 넘기면 회귀"
+        assert "claude/claimer" in captured_kwargs["active_branches"]
+
+
 class TestBatchBlobParsing:
     """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.
 

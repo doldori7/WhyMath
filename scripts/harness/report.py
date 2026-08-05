@@ -153,15 +153,19 @@ def render_brief(
     today: date,
     remote_claimed: dict[str, str] | None = None,
     remote_status: str = "ok",
-    stale_branches: list[tuple[str, float, int]] | None = None,
+    stale_branches: list[tuple[str, float, int, str, str]] | None = None,
     stale_branch_status: str = "ok",
     done_excluded: dict[str, list[str]] | None = None,
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
-    stale_branches: (branch, age_days, ahead) 목록(HARN-13) — 원시 튜플로 받아 이 모듈이
-    `remote_claims`를 직접 import하지 않게 한다(remote_claimed와 동일한 결합도 원칙).
+    stale_branches: (branch, age_days, ahead, status, evidence) 목록(HARN-13 + 2026-08-05
+    3분류 확장) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접 import하지 않게 한다
+    (remote_claimed와 동일한 결합도 원칙). status는 "unresolved"|"ported"|"active" —
+    구분 없이 하나로 뭉쳐 보여주면 매 세션 전부를 훑어야 해서 신호 대 잡음비가 나빠진다
+    (2026-08-05 실측: 19건 중 실제 결정 대기는 6건뿐이었다). 하위호환을 위해 4-튜플
+    (status·evidence 생략)도 받아들인다 — 그 경우 전부 "unresolved"로 취급.
     done_excluded: task_id → 완료 브랜치 목록(HARN-12) — 타 세션이 이미 끝냈으나 아직
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
@@ -195,13 +199,35 @@ def render_brief(
     elif remote_status not in ("ok", "disabled"):
         lines.append(f"(원격 claim 조회 불가: {remote_status} — 로컬 claim 정보만 표시)")
 
-    # 장기 미머지 브랜치 (HARN-13) — 정보성 경고일 뿐 착수를 막지 않는다.
+    # 장기 미머지 브랜치 (HARN-13 + 2026-08-05 3분류 확장) — 정보성일 뿐 착수를 막지
+    # 않는다. unresolved만 강조하고 ported/active는 참고로 낮춰, 매 세션 Kiki가 훑어야
+    # 하는 줄 수를 실제 결정 대기 건수로 좁힌다.
     if stale_branches:
-        lines.append("⚠️ 장기 미머지 브랜치 (Kiki 확인 필요):")
-        for stale_branch, age_days, ahead in stale_branches:
-            lines.append(
-                f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
-            )
+        normalized = []
+        for entry in stale_branches:
+            branch_name, age_days_val, ahead_val = entry[0], entry[1], entry[2]
+            status_val, evidence_val = entry[3:5] if len(entry) >= 5 else ("unresolved", "")
+            normalized.append((branch_name, age_days_val, ahead_val, status_val, evidence_val))
+        unresolved = [e for e in normalized if e[3] == "unresolved"]
+        ported = [e for e in normalized if e[3] == "ported"]
+        active = [e for e in normalized if e[3] == "active"]
+
+        if unresolved:
+            lines.append(f"⚠️ 미해결 장기 미머지 브랜치 (Kiki 결정 필요) — {len(unresolved)}건:")
+            for stale_branch, age_days, ahead, _status, _evidence in unresolved:
+                lines.append(
+                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
+                )
+        if ported:
+            lines.append(f"(참고) 이미 포팅됨 — 원본 정리만 필요, 결정 불요 — {len(ported)}건:")
+            for stale_branch, age_days, ahead, _status, evidence in ported:
+                lines.append(f"  · {stale_branch} — 근거: {evidence}")
+        if active:
+            lines.append(f"(참고) 타 세션 진행중 — 정보성, 결정 불요 — {len(active)}건:")
+            for stale_branch, age_days, ahead, _status, _evidence in active:
+                lines.append(
+                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · trunk 대비 {ahead}커밋 앞섬"
+                )
     elif stale_branch_status not in ("ok", "disabled"):
         lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
 

@@ -102,6 +102,65 @@ class TestBrief:
         assert "9일 전" in text
         assert "42커밋" in text
 
+    def test_포팅됨_분류는_참고_섹션에_결정_불요로_표기(self):
+        """2026-08-05 3분류 확장 — ported는 '결정 필요' 섹션이 아니라 참고로 분리돼야 한다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                ("claude/whymath-example-953m1e", 6.0, 40, "ported", "abc1234 merge: 953m1e 흡수")
+            ],
+        )
+        assert "이미 포팅됨" in text
+        assert "결정 불요" in text
+        assert "claude/whymath-example-953m1e" in text
+        assert "abc1234 merge: 953m1e 흡수" in text
+        assert "미해결 장기 미머지 브랜치" not in text, "결정 대기 0건인데 강조 섹션이 뜨면 안 된다"
+
+    def test_진행중_분류는_참고_섹션에_정보성으로_표기(self):
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[("claude/whymath-active-example", 6.0, 30, "active", "")],
+        )
+        assert "타 세션 진행중" in text
+        assert "정보성" in text
+        assert "claude/whymath-active-example" in text
+        assert "미해결 장기 미머지 브랜치" not in text
+
+    def test_3분류가_섞이면_미해결만_강조_섹션에_남는다(self):
+        """미해결·포팅됨·진행중이 섞인 브리핑에서 Kiki가 실제로 훑어야 하는 줄만 상단에 뜬다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                ("claude/whymath-unresolved-example", 27.0, 513, "unresolved", ""),
+                ("claude/whymath-ported-example", 6.0, 48, "ported", "def5678 merge: 흡수"),
+                ("claude/whymath-active-example", 7.0, 44, "active", ""),
+            ],
+        )
+        assert "미해결 장기 미머지 브랜치 (Kiki 결정 필요) — 1건" in text
+        assert "claude/whymath-unresolved-example" in text
+        assert "이미 포팅됨" in text and "claude/whymath-ported-example" in text
+        assert "타 세션 진행중" in text and "claude/whymath-active-example" in text
+
+    def test_4튜플_구버전_입력은_전부_미해결로_취급(self):
+        """하위호환 — status·evidence 없는 기존 3-튜플 호출부는 unresolved로 안전 폴백."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[("claude/old-orphan", 9.3, 42)],
+        )
+        assert "미해결 장기 미머지 브랜치 (Kiki 결정 필요) — 1건" in text
+
     def test_장기_미머지_브랜치_없으면_경고_생략(self):
         text = report.render_brief(_backlog(), [], "branch-x", date(2026, 7, 20), stale_branches=[])
         assert "장기 미머지" not in text

@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-17-stale-branch-triage-classification
+title: "장기 미머지 브랜치 3분류(HARN-13 잔여) — 미해결/포팅됨/타세션진행중 구분해 Kiki 결정 큐 축소"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "unresolved/ported/active 3분류 — trunk 커밋 로그의 브랜치 세션 접미사 언급을 포팅 근거로, 원격 claim 맵을 진행중 근거로 판정"
+  - "브리핑(brief)이 미해결만 강조 섹션에 남기고 포팅됨·진행중은 참고로 분리 — 2026-08-05 실측: 19건 중 실결정 대기 6건뿐"
+  - "변별력 실측 — unresolved/ported/active가 한 스캔에서 동시에 다른 값으로 나오는지, 실패 시 안전 폴백(unresolved)하는지"
+  - "배선 실재성 — cmd_brief가 active_branches를 실제로 scan_stale_branches에 전달하는지 CLI 레벨에서 검증"
+artifacts: []
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/**"
+session: claude/merge-failure-reflection-issues-560vwh
+notes: "2026-08-05 Kiki 질문(작업이 꼬여서 머지 안 되는 문제를 시스템이 못 거르는지) 진단 세션. gh MCP로 19개 stale-branch 경고를 실제 PR 이력과 교차대조한 결과: 6개만 진짜 방치(8~34일째 열린 PR #374·#379·#412·#423·#490·#626), 3개는 다른 세션이 지금 claim 중(PED-10·S4-10·S3-24/25), 나머지 10개는 이미 별도 소형 PR(예 PR#705·#702·#707)로 trunk에 포팅된 뒤 원본만 방치된 상태였다. HARN-13(나이+ahead 감지)·HARN-14(당일 문서 중복)·HARN-16(삭제 403 런북) 어느 것도 이 3분류를 다루지 않아 순수 미커버 구간이었음. remote_claims.scan_stale_branches에 active_branches 파라미터 + trunk 커밋 로그 grep 기반 포팅 감지를 추가하고, report.py 렌더링을 3섹션으로 분리, cmd_brief에 배선. 같은 세션에서 구현까지 완결."
+updated: 2026-08-05

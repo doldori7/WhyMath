@@ -811,15 +811,21 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
-    # 장기 미머지 브랜치 경고 (HARN-13) — SessionStart 1회 비용, 정보성(브리핑을 막지 않음).
-    stale_branches: list[tuple[str, float, int]] = []
+    # 장기 미머지 브랜치 경고 (HARN-13 + 2026-08-05 3분류 확장) — SessionStart 1회 비용,
+    # 정보성(브리핑을 막지 않음). active_branches는 이미 계산해둔 remote_claimed의 브랜치
+    # 집합을 재사용한다 — 새 원격 조회 없이 "타 세션 진행중"을 판별하기 위함.
+    stale_branches: list[tuple[str, float, int, str, str]] = []
     stale_branch_status = "ok"
     if policy.remote_claims:
         try:
-            scan = remote_claims.scan_stale_branches(root)
+            scan = remote_claims.scan_stale_branches(
+                root, active_branches=frozenset(remote_claimed.values())
+            )
             stale_branch_status = scan.status
             if scan.status == "ok":
-                stale_branches = [(s.branch, s.age_days, s.ahead) for s in scan.stale]
+                stale_branches = [
+                    (s.branch, s.age_days, s.ahead, s.status, s.evidence) for s in scan.stale
+                ]
         except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
             stale_branch_status = "error"
     else:
