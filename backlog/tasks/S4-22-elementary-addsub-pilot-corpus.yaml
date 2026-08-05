@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -18,13 +18,14 @@ acceptance:
   - "problem_bank_elementary_v0(400문·덧셈/뺄셈 2밴드) 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False(AI 검수 게이트는 이 환경 밖 Kiki 머신 소관)"
   - "coverage 리포트 재실행으로 실제 이동 확인(초등학교 7.4%→8.3%, [2수01-06] 커버 전환)"
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - 6a93537c
 paths:
   - src/backend/whymath_backend/l3/equivalent/elementary_addsub_skeleton_generator.py
   - src/backend/whymath_backend/harness/elementary_addsub_batch.py
   - tests/backend/l3/equivalent/test_elementary_addsub_skeleton_generator.py
   - tests/backend/harness/test_elementary_addsub_batch.py
   - data/corpus/problem_bank_elementary_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획(docs/strategy/grade_axis_mvp_shortest_path_v1.md) §3 W2 첫 슬라이스(임계경로). W2 전체(4축 콘텐츠 공장)는 단일 세션 범위를 넘는 대작업이라, 최대 공백축(초등 4.1%·0커버 116건)에서 신규 생성기 1종을 실증하는 것으로 범위를 좁혔다. 대학·고등 0커버 축·중등 증분은 후속 슬라이스(같은 패턴 반복 — 새 생성기 + 새 batch 스크립트). AI 검수 Wilson 게이트는 실 LLM 필요 — 원격 세션 환경 밖(Kiki 머신)이라 이 슬라이스는 v0(is_published=False)로 멈춘다."
 updated: 2026-08-05
