@@ -231,6 +231,23 @@ class TestAcceptedStored:
         with pytest.raises(ValueError, match="slug"):
             _run([candidate], store=store)
 
+    def test_verification_tier_threads_through_to_stored_record(self) -> None:
+        # S4-17 — verification_tier는 후보 필드가 아니라 호출자 주입 인자라 _to_record까지
+        # 별도로 전달돼야 verify.verification_tier로 영속된다.
+        store = _FakeStore()
+        outcome = _run([_candidate()], store=store, verification_tier="machine_exhaustive")
+        assert outcome.status == "accepted_stored"
+        (records,) = store.calls
+        assert records[0].verify.verification_tier == "machine_exhaustive"
+
+    def test_verification_tier_unset_stays_none(self) -> None:
+        # 미주입(기존 호출부 전부의 기본 경로)이면 등급 미각인 — 하위호환 봉인.
+        store = _FakeStore()
+        outcome = _run([_candidate()], store=store)
+        assert outcome.status == "accepted_stored"
+        (records,) = store.calls
+        assert records[0].verify.verification_tier is None
+
 
 # ──────────────────────────────────────────────────────────────────────
 # rejected_gate — 저작권·정확성 실패(검수필요 아님).
@@ -384,6 +401,24 @@ class TestBatch:
         generator = ScriptedGenerator([_candidate(), None])
         outcomes = run_batch(_spec(), generator, 2)
         assert [o.status for o in outcomes] == ["accepted", "generation_failed"]
+
+    def test_batch_verification_tier_applies_to_every_stored_record(self) -> None:
+        # S4-17 — run_batch가 각 회차의 run_equivalent_generation에 같은 등급을 전달한다
+        # (finite_probability_batch처럼 배치 전체를 한 등급으로 각인하는 호출부의 실사용 형태).
+        # 구조 dedup(S2-l)이 배치 기본 ON이라 두 후보는 서로 다른 방정식이어야 둘 다 저장된다.
+        store = _FakeStore()
+        second = _candidate(
+            conditions="x**2 - 7*x + 12 = 0",
+            answer_map={"x": "4"},
+            problem=_problem(slug="wm-orch-quad-root-2", answer="4"),
+        )
+        generator = ScriptedGenerator([_candidate(), second])
+        outcomes = run_batch(
+            _spec(), generator, 2, store=store, verification_tier="machine_sampled"
+        )
+        assert [o.status for o in outcomes] == ["accepted_stored", "accepted_stored"]
+        stored_tiers = [records[0].verify.verification_tier for records in store.calls]
+        assert stored_tiers == ["machine_sampled", "machine_sampled"]
 
     def test_batch_cumulative_dedup_within_batch(self) -> None:
         # 두 후보가 같은 발문 → 첫 후보 저장 시 index에 벡터 upsert → 둘째 후보는 그 벡터를

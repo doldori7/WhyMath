@@ -5,14 +5,15 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "① L3 인라인 프롬프트 4모듈(l3/equivalent/llm_generator.py·rephrase.py:326·l3/visualization.py:102,111·l3/cross_verify.py:153,201,219)을 docs/prompts/ 정본 파일로 이전하고 코드는 로더 경유 인용(L4 docs/prompts 규약 미러). ② harness/prompt_asset_audit.py를 L3 축으로 확장하되 **준거를 교체한다** — 소크라테스 루브릭이 아니라 생성 프롬프트 3준거: ⓐ 저작권 레일(평가원·EBS·교과서 본문 금지 지시문 실재 — licensing_safety 삼중 방어 중 프롬프트 레일) ⓑ 봉인 레일(rephrase 계열의 수치·정답·선지 불변 지시문 실재 — S3-15 설계 결정 동결) ⓒ 독립성 레일(cross_verify 프롬프트에 생성자 문맥 미주입 = 생성자≠검증자). ③ 정본↔코드 인용 드리프트 검출 회귀 테스트 + CI 배선 + tests/infra/test_test_suite_wiring.py 등록('검증 장치를 만들고 배선 확인 없이 완료 선언 금지' — tests/infra 199건 미실행 선례). ④ 변별력 검증 의무: 정본에서 저작권 지시문 1줄 제거 → exit 1 실측 후 복원 → exit 0 실측"
-artifacts: []
+artifacts:
+  - cea68d94
 paths:
   - "docs/prompts/**"
   - src/backend/whymath_backend/harness/prompt_asset_audit.py

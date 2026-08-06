@@ -173,6 +173,41 @@ void main() {
     expect(find.textContaining('틀렸'), findsNothing);
   });
 
+  testWidgets('tutoring_prompt는 역할 배지(진입점)+발화만·정답 없음', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _scene(const [
+          SceneElement(
+            kind: 'tutoring_prompt',
+            role: 'entry',
+            promptText: '더 작은 경우부터 시작해볼까?',
+          ),
+        ]),
+      ),
+    );
+    expect(find.text('진입점'), findsOneWidget); // LTHC 역할 배지
+    expect(find.textContaining('더 작은 경우부터'), findsOneWidget); // 정본 발화
+    // 정답/낙인 가드: 정답·틀렸 미렌더(지원 발화일 뿐·판정 아님).
+    expect(find.textContaining('정답'), findsNothing);
+    expect(find.textContaining('틀렸'), findsNothing);
+  });
+
+  testWidgets('tutoring_prompt 미지 role은 배지 없이 발화만 렌더한다(전방호환)', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _scene(const [
+          SceneElement(
+            kind: 'tutoring_prompt',
+            role: 'future_role',
+            promptText: '이 발상을 다른 문제에도 쓸 수 있을까?',
+          ),
+        ]),
+      ),
+    );
+    expect(find.textContaining('다른 문제에도'), findsOneWidget);
+    expect(find.text('진입점'), findsNothing); // 미지 role → 배지 생략
+  });
+
   testWidgets('topicLabel 헤더를 렌더한다', (tester) async {
     await tester.pumpWidget(
       _wrap(
@@ -203,7 +238,7 @@ void main() {
     expect(find.text('알려진 발화'), findsOneWidget);
   });
 
-  testWidgets('7종 요소가 한 장면에서 모두 렌더된다', (tester) async {
+  testWidgets('8종 요소가 한 장면에서 모두 렌더된다', (tester) async {
     await tester.pumpWidget(
       _wrap(
         _scene(const [
@@ -221,6 +256,11 @@ void main() {
             behaviorArea: 'INTERPRET',
             focusPrompt: '주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.',
           ),
+          SceneElement(
+            kind: 'tutoring_prompt',
+            role: 'scaffold',
+            promptText: '어디서 막혔는지 같이 봐줄게.',
+          ),
         ]),
       ),
     );
@@ -231,5 +271,7 @@ void main() {
     expect(find.text('왜 그렇게 생각했어?'), findsOneWidget);
     expect(find.text('강조 표시'), findsOneWidget);
     expect(find.textContaining('수학 구조'), findsOneWidget);
+    expect(find.text('비계'), findsOneWidget); // tutoring_prompt 역할 배지
+    expect(find.textContaining('같이 봐줄게'), findsOneWidget);
   });
 }

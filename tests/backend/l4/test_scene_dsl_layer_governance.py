@@ -1,7 +1,7 @@
 """Part 7. Math UI DSL — 계층 방향·순수성 동결 거버넌스.
 
 `docs/standards/part7_math_ui_dsl_review.md`(판정 리포트)의 항목 ③(Core로 UI/런타임 상태 역류
-없음)과 항목 ②(9블록→6 element kind 크로스워크)를 *회귀 감지 테스트*로 못박는다. 검토 시점의
+없음)과 항목 ②(9블록→8 element kind 크로스워크)를 *회귀 감지 테스트*로 못박는다. 검토 시점의
 판정을 코드가 스스로 지키게 하는 하드 게이트다(`tests/backend/l1/test_no_import_cycle.py`의
 AST 역방향-import 스캔 + `tests/data_pipeline/concept_graph/test_models.py::TestConceptPurity`의
 필드 화이트리스트 freeze 두 선례를 답습).
@@ -11,9 +11,9 @@ AST 역방향-import 스캔 + `tests/data_pipeline/concept_graph/test_models.py:
       — 생성기가 L4→L3 다운콜만 하도록(역의존 0). scene_generation(L4)이 L3를 부르는 건 정방향.
   (b) `schema.*`(scene DSL이 조립 재료로 쓰는 Visualization·Concept·enums)가 **어떤 L레이어도
       import하지 않는다** — 이 순수성 때문에 `LearningScene`이 schema 아닌 **L4**에 배치됐다.
-  (c) `SceneElement` 6종에 **정답·수정·판정·런타임/interaction state 필드가 없다**(필드 화이트
+  (c) `SceneElement` 8종에 **정답·수정·판정·런타임/interaction state 필드가 없다**(필드 화이트
       리스트 freeze) — 답 미루기·낙인 금지를 스키마 차원에서, "interaction state 누출 0"을 고정.
-  (d) 6 element kind 집합이 판정 리포트의 9블록→6 kind 크로스워크와 일치한다(택소노미 표류 감지).
+  (d) 8 element kind 집합이 판정 리포트의 9블록→8 kind 크로스워크와 일치한다(택소노미 표류 감지).
 
 주의: 이 파일은 *설계-준수 회귀 가드*이지 DSL 동작 테스트가 아니다(동작은 `test_learning_scene.py`·
 `test_scene_generation.py`). 여기 red = "새 필드/새 import가 검토 판정을 깼다"는 신호.
@@ -34,6 +34,7 @@ from whymath_backend.l4.learning_scene import (
     SkillFocusElement,
     SocraticPromptElement,
     StepPanelElement,
+    TutoringPromptElement,
     VisualizationElement,
 )
 
@@ -97,7 +98,7 @@ def test_scene_schema_seat_imports_no_layer(module: str) -> None:
     )
 
 
-# (c) SceneElement 6종 필드 화이트리스트(동결) — 새 필드 추가 시 red → "이 필드가 정답/판정/런타임
+# (c) SceneElement 8종 필드 화이트리스트(동결) — 새 필드 추가 시 red → "이 필드가 정답/판정/런타임
 # 상태인가?"를 의식적으로 판정하게 강제하는 하드 게이트. 정답·수정·판정·interaction state 부재 고정.
 _ELEMENT_ALLOWED_FIELDS: dict[type, frozenset[str]] = {
     VisualizationElement: frozenset({"kind", "ref"}),
@@ -111,6 +112,7 @@ _ELEMENT_ALLOWED_FIELDS: dict[type, frozenset[str]] = {
     ),
     AnnotationElement: frozenset({"kind", "target_element_index", "highlight_spec"}),
     SkillFocusElement: frozenset({"kind", "behavior_area", "focus_prompt"}),
+    TutoringPromptElement: frozenset({"kind", "role", "prompt_text"}),
 }
 
 # 정답 유출(낙인·즉답)·런타임/interaction state 관심사 토큰 — 어떤 요소 필드명에도 등장 금지.
@@ -155,7 +157,7 @@ def test_scene_element_no_answer_or_runtime_field(element_cls: type) -> None:
             ), f"{element_cls.__name__}.{name}: 금지 토큰 '{token}'(역류/낙인 의심)"
 
 
-# (d) 9블록(플레이북 Part 7) → 현 구현 6 kind 크로스워크. 판정 리포트와 코드의 단일 진실 원천을
+# (d) 9블록(플레이북 Part 7) → 현 구현 8 kind 크로스워크. 판정 리포트와 코드의 단일 진실 원천을
 # 대조해 택소노미 표류를 감지한다(블록 추가/삭제 시 리포트 갱신을 강제).
 _EXPECTED_SCENE_KINDS: frozenset[str] = frozenset(
     {
@@ -166,12 +168,13 @@ _EXPECTED_SCENE_KINDS: frozenset[str] = frozenset(
         "socratic_prompt",  # 9블록 Tutoring(소크라테스)
         "annotation",  # 9블록 Interaction(강조/라벨)
         "skill_focus",  # 9블록 Skill(행동영역 focus·선언적 조건 강조·S5j)
+        "tutoring_prompt",  # 9블록 Tutoring(LTHC mastery 적응·학습자모델 축·S5l)
     }
 )
 
 
 def test_scene_kind_taxonomy_matches_crosswalk() -> None:
-    """(d) SceneElement 판별 kind 집합이 검토 크로스워크의 6종과 일치한다.
+    """(d) SceneElement 판별 kind 집합이 검토 크로스워크의 8종과 일치한다.
 
     Scene=LearningScene 자체, Concept=L1 참조(`concept_id`), **Skill=`skill_focus` 블록(S5j·행동영역
     focus)**, Assessment=schema/assessment+gating, AIExplanation=같은 장면의 렌더 타깃 — 이 중
@@ -182,7 +185,7 @@ def test_scene_kind_taxonomy_matches_crosswalk() -> None:
     actual = {cls.model_fields["kind"].default for cls in _ELEMENT_ALLOWED_FIELDS}
     assert actual == _EXPECTED_SCENE_KINDS, (
         f"scene kind 택소노미 표류: {sorted(actual)} != {sorted(_EXPECTED_SCENE_KINDS)} "
-        "(9블록→6 kind 크로스워크·판정 리포트 동반 갱신 필요)"
+        "(9블록→8 kind 크로스워크·판정 리포트 동반 갱신 필요)"
     )
     # LearningScene 최상위에도 런타임/UI 상태 필드가 새어들지 않았는지 동시 확인(항목 ③).
     scene_forbidden = {"session", "runtime", "pixel", "widget", "current_value"}

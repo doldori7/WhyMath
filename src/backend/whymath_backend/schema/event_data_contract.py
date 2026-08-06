@@ -7,8 +7,9 @@
 Python 네이티브)로 실현한다.
 
 경계(의도적 비구속):
-- **휴면 8종**(문제읽기·조건분석·그래프그리기·계산·지움·막힘·힌트요청·답입력)은 생산자가
-  아직 0이라 페이로드 모양이 미지 → 계약으로 구속하지 않는다(`_CONTRACT_EXEMPT`, premature 회피).
+- **휴면 5종**(문제읽기·조건분석·그래프그리기·계산·지움)은 생산자가 아직 0이라 페이로드 모양이
+  미지 → 계약으로 구속하지 않는다(`_CONTRACT_EXEMPT`, premature 회피). `막힘`·`힌트요청`·
+  `답입력`은 S3-16에서 생산자가 생겨 계약으로 편입됐다(신규 EventType 추가 아님·소생).
 - **`시각화조작.payload`**(내부)는 조작 종류별로 달라 자유형을 *의도적으로* 유지한다 —
   봉투(interaction·payload·client_at·concept_id·scene_id)만 계약하고 내부는 열어 둔다.
 
@@ -82,6 +83,76 @@ class HintEventData(_EventPayload):
         default=None,
         description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
     )
+    client_state_mismatch: bool = Field(
+        default=False,
+        description=(
+            "PED-04 D2: 이 턴에서 클라 제출 `polya_state`가 서버 파생 상태와 어긋났는지. "
+            "불일치율을 *집계 가능한* 형태로 남기기 위한 태그다 — 로그로만 두면 측정이 불가능하고, "
+            "신규 EventType은 PG enum ALTER(마이그레이션)를 부르므로 JSONB 페이로드에 싣는다. "
+            "기본 False라 기존 이벤트·픽스처와 호환."
+        ),
+    )
+
+
+class DemandEventData(_EventPayload):
+    """`힌트요청` 페이로드 — 학생이 *요청*한 도움 demand 신호(S3-16, 지표 ⑫ 분자 입력).
+
+    `HintEventData`(supply)와 대칭이지만 값 필드(hint_level)가 없다 — `힌트요청`은 발생
+    자체가 신호인 단순 카운트 이벤트라 `mode`·`persona`(선택 태그)만 싣는다. `l4.hint_deferral.
+    is_answer_demand`가 True일 때만 생산되며, 좌절 신호(`_FRUSTRATION_TOKENS`)는 포함하지
+    않는다(답을 직접 요구하는 명시적 신호만 demand로 집계 — 좌절은 범위 밖 후속).
+    """
+
+    mode: str | None = Field(
+        default=None,
+        description="응용 모드 태그(예: 'suneung'). None=미지정(mode-agnostic·기존 동작 불변).",
+    )
+    persona: str | None = Field(
+        default=None,
+        description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
+    )
+
+
+class StuckEventData(_EventPayload):
+    """`막힘` 페이로드 — 5회+ 막힘 임계 도달 신호(S3-16, 지표 ⑧ 형제 관측 좌석).
+
+    `turn_count`는 `decide_hint_level`이 이미 계산해 둔 값(재계산 아님)을 그대로 싣는다 —
+    `l4.hint_deferral.is_stuck_turn_count`가 True(turn_count≥5)일 때만 생산된다. `mode`·
+    `persona`는 `HintEventData`와 동형 선택 태그.
+    """
+
+    turn_count: int = Field(..., description="현재 단계서 누적 턴 수(임계 도달 시점의 실측값).")
+    mode: str | None = Field(
+        default=None,
+        description="응용 모드 태그(예: 'suneung'). None=미지정(mode-agnostic·기존 동작 불변).",
+    )
+    persona: str | None = Field(
+        default=None,
+        description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
+    )
+
+
+class ResponseLatencyEventData(_EventPayload):
+    """`답입력` 페이로드 — 서버 기준 응답 지연 신호(S3-16, 행동 텔레메트리 관측 좌석).
+
+    `server_latency_ms`는 직전 학생 턴(server `spoken_at`)과 이번 제출 시각의 차다 — 서버
+    시각만 쓰므로 클라 신뢰가 불필요하고 조작 불가하다. 이전 학생 턴이 없으면(새 dialogue의
+    첫 턴) 기준선이 없어 행 자체가 생산되지 않으므로(날조 회피) 실제로는 항상 값이 채워진 채
+    적재된다 — None 허용은 방어적 여유(타입 안전)일 뿐이다. `mode`·`persona`는 형제 페이로드와
+    동형 선택 태그.
+    """
+
+    server_latency_ms: int | None = Field(
+        default=None, description="직전 학생 턴 대비 서버 기준 응답 지연(ms). 기준선 없으면 None."
+    )
+    mode: str | None = Field(
+        default=None,
+        description="응용 모드 태그(예: 'suneung'). None=미지정(mode-agnostic·기존 동작 불변).",
+    )
+    persona: str | None = Field(
+        default=None,
+        description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
+    )
 
 
 class InteractionEventData(_EventPayload):
@@ -101,11 +172,15 @@ class InteractionEventData(_EventPayload):
     scene_id: str | None = Field(default=None, description="조작이 일어난 학습 장면(선택)")
 
 
-# 생산되는 EventType → 페이로드 계약. 이 3종만 코드가 실제로 event_data를 쓴다.
+# 생산되는 EventType → 페이로드 계약. 이 6종만 코드가 실제로 event_data를 쓴다(S3-16: 막힘·
+# 힌트요청·답입력 3종이 휴면에서 편입).
 EVENT_DATA_CONTRACT: dict[EventType, type[_EventPayload]] = {
     EventType.검산결과: VerifyEventData,
     EventType.힌트제공: HintEventData,
     EventType.시각화조작: InteractionEventData,
+    EventType.막힘: StuckEventData,
+    EventType.힌트요청: DemandEventData,
+    EventType.답입력: ResponseLatencyEventData,
 }
 
 # 휴면(생산자 0) EventType — 페이로드 모양 미지라 계약에서 *의도적으로* 제외(premature 회피).

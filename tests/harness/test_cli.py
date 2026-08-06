@@ -1360,6 +1360,40 @@ class TestUnmergedDoneDetection:
         self._seeded_clone(clone, monkeypatch, "newcomer")
         assert cli.main(["start", self.TASK_ID]) == 0
 
+    def test_brief가_미머지_done을_후보에서_제외한다(self, bare_remote, monkeypatch, capsys):
+        """HARN-12 — next(HARN-11)의 필터가 브리핑(SessionStart 훅 진입점)에도 배선됐는지."""
+        _, clone = bare_remote
+        self._finished_elsewhere(clone, monkeypatch)
+
+        self._seeded_clone(clone, monkeypatch, "newcomer")
+        subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=Path.cwd(), check=True)
+        capsys.readouterr()  # 셋업(seed·add) 출력을 버리고 brief 출력만 본다
+        assert cli.main(["brief"]) == 0
+        captured = capsys.readouterr()
+        candidates = captured.out.split("다음 착수 후보")[-1]
+        assert self.TASK_ID not in candidates, "완료된 태스크가 브리핑 후보로 노출되면 안 된다"
+
+    def test_brief는_미머지_done_필터_실패에도_막히지_않는다(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """변별력 — scan_remote_done이 예외를 던져도 브리핑은 fail-open으로 통과해야 한다."""
+        import remote_claims
+
+        _, clone = bare_remote
+        self._finished_elsewhere(clone, monkeypatch)
+        self._seeded_clone(clone, monkeypatch, "newcomer")
+        subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=Path.cwd(), check=True)
+
+        def _boom(root, task_ids, **kw):
+            raise RuntimeError("원격 불가")
+
+        monkeypatch.setattr(remote_claims, "scan_remote_done", _boom)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0, "필터 실패가 브리핑 자체를 막으면 안 된다(fail-open)"
+        captured = capsys.readouterr()
+        assert "RuntimeError" in captured.err, "예외를 삼키면 안 된다(무타입 침묵 실패 금지)"
+        assert "[빌드하네스 브리핑]" in captured.out  # 정상 브리핑 본문은 그대로 출력됨
+
     def test_ignore_remote_claim으로_우회_가능하다(self, bare_remote, monkeypatch, capsys):
         """그 브랜치가 폐기된 경우의 탈출구 — 단 무엇을 감수하는지 경고한다."""
         _, clone = bare_remote

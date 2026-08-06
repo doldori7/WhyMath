@@ -6,12 +6,17 @@
   "counts": {
     "content": 437,
     "flashcards": 113,
-    "subjects": 17
+    "subjects": 17,
+    "review_status": {
+      "ai_estimated": 437,
+      "reviewed": 0
+    }
   },
   "source_citation": "출처: 와이매스 자체작성 — K-12 개념 교수학 콘텐츠(은유·오개념·정식정의·허용표현·암기카드). 원자노드DB 종합·AI 추정·검수필요. K-12 성취기준 본문은 NCIC 저작물이라 미수록 — 연결 성취기준 코드만 다리로 보존.",
   "license_notice": "본 데이터(은유·오개념·정식정의·허용표현·설명·암기카드)는 와이매스 자체 저작물입니다 — AI 추정 초안으로 검수필요. **K-12 성취기준 본문(성취기준 문장·요약)은 NCIC 저작물이라 미수록**·연결 성취기준 코드만 보존. `formal_definition_internal`(정식정의)은 학생 비노출(내부·검수용).",
   "post_extraction": [
     "개념(학교급!='대학교') 437 + 암기카드 조인 추출. 대학 비추출(U4 별도).",
-    "성취기준 본문 미수록(NCIC)·연결 성취기준 코드만 보존. 정식정의=학생 비노출. DB 투영 Phase 3."
+    "성취기준 본문 미수록(NCIC)·연결 성취기준 코드만 보존. 정식정의=학생 비노출. DB 투영 Phase 3.",
+    "review_status 축 도입(S3-26): 안내 시트상 전량 'AI 추정·검수필요'라 437행 모두 'ai_estimated'. 검수 승격 시 행 단위로 'reviewed'로 갱신하며, 결함율·미검수 비율 관측은 `python -m whymath_backend.harness.concept_content_audit`."
   ]
 }

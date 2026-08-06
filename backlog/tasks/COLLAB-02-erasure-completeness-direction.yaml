@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,10 +17,11 @@ acceptance:
   - "④ 변별력: user_id를 가진 더미 테이블을 임시 추가 → red 실측 → 제거 → green 실측. 실패 상태에서 실제로 실패 신호를 내는지 확인된 검사만 동봉한다"
   - "⑤ 다자 소유 파기 규칙 문서화 — 협업 스키마(학급·제출물·그룹 노트) 신설 전에 '누구의 삭제 요청이 무엇을 지우는가·타인 기여가 섞인 레코드의 처리(익명화 vs 삭제)'를 문서로 못박는다. 법령 판단이 필요한 부분은 단정하지 말고 변호사 검토 대상으로 표기(기계 대체 금지)"
   - "⑥ CI 배선 확인 — 신설 테스트가 실제 CI 잡에서 실행되는지 확인(OPS-03·OPS-10·OPS-11 선례)"
-artifacts: []
+artifacts:
+  - d3c105b0
 paths:
   - "tests/backend/privacy/**"
   - "src/backend/whymath_backend/privacy/**"
 session: null
 notes: "collaboration_module_gap_review.md §3 D2. test_erasure.py:94가 assert planned <= order로 계획→실행 방향만 단언 — 역방향이 없어 user_id를 가진 신설 테이블이 _ERASURE_PLAN에 없어도 아무도 red를 내지 않는다. 협업 테이블은 다자 소유(교사가 만든 학급에 학생 데이터가 섞임)라 현 구조의 근본 전제인 'user_id 단일 소유 축'을 깨는 첫 사례가 되므로, 착지 전에 방향을 뒤집어 두면 부채가 원천 차단된다. 파기 누락은 사후에 고쳐도 이미 남은 데이터를 되돌리지 못한다(D3보다 우선하는 이유)."
-updated: 2026-07-31
+updated: 2026-08-04
