@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -18,10 +18,11 @@ acceptance:
   - "⑤ 변별력(역할 축): Role에 PARENT를 임시 추가 → 계약 행 부재로 red 실측 → 되돌림. Phase 3에 역할이 열릴 때 계약이 먼저 강제하고 있어야 한다는 것이 이 태스크의 존재 이유"
   - "⑥ CI 배선 확인 — 신설 테스트가 실제로 CI 잡에서 실행되는지 확인한다('저장소에 존재함'과 '돌아감'은 다르다 — OPS-03·OPS-10·OPS-11 선례). tests/infra/test_test_suite_wiring.py 규약 준수"
   - "⑦ 역할 신설 금지 — 이 태스크는 계약만 동결한다. PARENT/TEACHER 실제 개설은 좌석(Phase 3 대시보드·B2B 계약) 발생 시이며 여기서 만들지 않는다(dead code 금지)"
-artifacts: []
+artifacts:
+  - e937f42d
 paths:
   - data/access_matrix.json
   - "tests/backend/schema/**"
 session: null
 notes: "collaboration_module_gap_review.md §3 D1. pipa_data_matrix.md §2.4가 '매트릭스의 각 칸을 코드의 권한 체크 단위로 사용한다'고 명령하는데 기계 강제가 0 — 매트릭스는 md 표뿐이고 Role은 2값이며 require_role(_auth.py:96)은 1차원(역할)만이다. 협업(기능 70~74)의 임계 경로는 화면이 아니라 이 매트릭스다. 계약은 소비 좌석 없이도 유효한 불변식(render_contract.json이 렌더러 없이도 계약인 것과 동형)이며, 좌석이 생긴 뒤 만들면 이미 위반 코드가 존재한다."
-updated: 2026-07-31
+updated: 2026-08-05

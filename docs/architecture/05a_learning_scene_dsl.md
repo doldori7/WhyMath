@@ -106,11 +106,18 @@ LearningScene
 | `socratic_prompt` | `PedagogyDecision`(L4) | `socratic_category`·`polya_stage`·`hint_level`·`prompt_text` | `hint_level ≤ max_level` |
 | `annotation` | overlay | `target_element_index`·`highlight_spec` | 강조·라벨만 |
 | `skill_focus` | `BehaviorArea`(정본 행동영역·#418·S5k) | `behavior_area`·`focus_prompt` | **정답·수정 필드 없음**(행동 지시·질문 아님) |
+| `tutoring_prompt` | `adapt_lthc`(L4 LTHC·`mastery_to_level`·S5l) | `role`(entry/scaffold/extension)·`prompt_text` | **정답·hint_level 필드 없음**(지원 발화·판정 아님) |
 
 `skill_focus`는 관점 문서 **SkillBlock**의 선언적 형태(조건 강조) — 주 행동영역(`BehaviorArea`·정본
 6종·#418)이 있으면 그 행동영역의 focus cue를 자동 부여(미매핑=미부여·블록 유무를 행동영역별로 분기).
 행동영역은 L5 `get_behavior_areas`가 concept→skill 조인(`concept_node.behavior_skills`→`skill_node
 .behavior_area`·#419)으로 해소해 주입한다. interactive 경우분할 트리는 WH-S Tier3 종속(초기 scope 제외).
+
+`tutoring_prompt`는 관점 문서 **TutoringBlock**의 *학생적응* 축(S5l) — `learner_context.mastery_level`
+(L2 BKT)을 `mastery_to_level`(0.4/0.8→초보/발전중/숙달)로 밴딩하고 주 Polya 단계와 함께 `adapt_lthc`
+정본 발화를 진입점/비계/확장 3축으로 받아 각 축 1개(attention 보호)를 낸다(초보=진입+비계·숙달=확장·
+발전중=균형). mastery 신호가 없으면 미방출(없는 신호로 비계 날조 금지·낙인 회피). 학생적응을 *반증된
+학습양식(modality)이 아니라 mastery*로 닫은 것이 핵심(설명 스타일 modality 축은 의도적 미배선).
 
 `intervention`은 L4 `InterventionPattern` 4종(`COUNTEREXAMPLE` 반례·`CONCRETE_CASE` 구체사례·
 `VISUALIZATION` 시각화·`REVERSE_REASONING` 거꾸로) 중 하나 — *수정법이 아니라 사고 유도*다.
@@ -160,6 +167,8 @@ LearningScene
 2. **요소별 `spec` 충전** — `visualization` 요소의 `spec`만 `l3/visualization.py::generate_visualization_spec`
    재사용(라우터 경유·Langfuse 추적·응답 캐싱·로컬 LLM 우선 — CLAUDE.md). 골격·참조는 코드가 채움.
 3. **적응** — `learner_context`에 활성 오개념 가설이 있으면 해당 `misconception_probe`를 골격에 삽입(중기).
+   **학습자모델 축(S5l)**: `mastery_level`(BKT)이 있으면 `mastery_to_level`→`adapt_lthc`(진입/비계/확장)를
+   `tutoring_prompt`로 삽입(`_lthc_prompts`·lead 분기 뒤·프로브 앞·축당 1개 캡·mastery 없으면 미방출).
 
 -----
 
@@ -178,6 +187,7 @@ LearningScene
 | `socratic_prompt` | 대화 버블(기존 `_MessageBubble` 재사용) |
 | `annotation` | overlay 강조/라벨 |
 | `skill_focus` | 행동 focus 카드(`_SceneRow`·flag 아이콘·**정답 없음**·행동 지시 cue만) |
+| `tutoring_prompt` | LTHC 튜터링 행(`_TutoringRow`·역할 배지 진입점/비계/확장·**정답 없음**·지원 발화만) |
 
 `coach_models.dart`에 `Visualization` 계약을 추가하고 `_SceneRenderer` 위젯을 `chat_screen`
 메시지 빌드에 삽입하는 것이 자연 확장 경로다. **Flutter SDK 부재 → CI mobile 잡이 게이트.**
@@ -209,7 +219,7 @@ LearningScene
 | `socratic_prompt` | L4 `PolyaState`·`PedagogyDecision`·`recommend_coaching` | 🟡 코칭 결정 가동(요소화 후속) |
 | `learner_context` | L2 BKT/IRT·`MisconceptionHypothesisRecord`(활성 가설·confidence) | 🟢 가동 |
 | `SceneRenderer`(L5) | `scene_renderer.dart`(레지스트리)·`scene_models.dart`·`scene_api.dart`(S5a 소비)·`chat_screen` 통합(S5e) | 🟢 S4+S5e(CI mobile·시각화 seed·실 WebView는 S5d) |
-| `LearningScene`/`parse_learning_scene` | `l4/learning_scene.py`(6종 kind 판별 유니온·3 구조 불변식·카탈로그 참조 게이트·cov 100%) | 🟢 S2 완료 |
+| `LearningScene`/`parse_learning_scene` | `l4/learning_scene.py`(8종 kind 판별 유니온·3 구조 불변식·카탈로그 참조 게이트·cov 100%) | 🟢 S2 완료 |
 
 **판독**: 장면을 구성하는 *재료*(개념·오개념·코칭·학습자상태·단일 시각화 명세)는 대부분 가동.
 본 DSL이 추가하는 건 ① **합성 스키마**(`LearningScene`) ② **검증 게이트**(불변식) ③ **L5 렌더러**.
@@ -235,6 +245,7 @@ LearningScene
 | S5i ✅ | **행동영역 분기축 승격** — `cognitive_type`을 `_COGNITIVE_SOCRATIC_MAP` 부수효과에서 `CompositionProfile`(소크라테스 프레이밍 + 인지 진입 순서 `lead`)로 흡수·1급 분기 입력화. `_primary_cognitive_type` precedence(VISUAL_REASONING>PATTERN>TECHNIQUE>THEOREM>DEFINITION)로 주 행동영역 선택 → visual 진입은 시각화 먼저·inquiry 진입은 질문 먼저. `bound_visualization_index`는 append 시점 계산이라 순서 변경에도 정합. Part 7 재검토 "행동영역 축 미분기" 상환(신규 element kind 0·SkillBlock 가시 UI는 잔여) | **완료**: 축 테스트 5개(진입 순서·precedence·인덱스 정합)·기존 26 무회귀·layout/게이트/동결 무영향 | 0 |
 | S5j ✅ | **가시 SkillBlock element kind** — `skill_focus`(7번째 kind·`cognitive_type`+`focus_prompt`·정답 필드 0) 신설. 주 행동영역 THEOREM/TECHNIQUE/PATTERN에 정본 focus cue 자동 부여(블록 유무를 행동영역별 자동 분기)·맨 앞 프레이밍. 모바일 렌더러 focus 카드·동결 크로스워크 6→7 갱신. interactive 경우분할 트리는 잔여(Tier3) | **완료**: 백엔드 축 테스트 10개(생성·분기·게이트·필드 동결)·모바일 파싱/렌더 테스트·회귀 0 | 0 |
 | S5k ✅ | **정본 BehaviorArea로 재정렬** — S5i/S5j가 근사했던 `CognitiveType` 축을 #418 정본 `BehaviorArea` 6종으로 이전(직교 2축: 소크라테스=개념축·lead/skill_focus=행동영역축). `skill_focus.behavior_area`·L1 `get_behavior_areas`(concept→skill 조인·#419)·L5 `api/scene.py` 스레딩. 미매핑=중립(탐구 진입·focus 0). main #404/#408~#419 재베이스 병합(visualizability 게이팅 보존) | **완료**: 축·skill·접근자·엔드포인트 테스트 재작성·l4/api 2001 passed·ruff·black·mypy·lint-imports green·모바일 JSON 키 갱신 | 0 |
+| S5l ✅ | **학생적응 Tutoring Adapter(mastery 축)** — `tutoring_prompt`(8번째 kind·`role`+`prompt_text`·정답/hint_level 필드 0) 신설. `learner_context.mastery_level`(BKT)→`mastery_to_level`→`adapt_lthc`(진입/비계/확장) 정본 발화를 `_lthc_prompts`로 장면에 배선(초보=진입+비계·숙달=확장·발전중=균형·축당 1개 캡·lead 분기 뒤·프로브 앞). mastery 없으면 미방출(비계 날조 금지·낙인 회피). 학생적응을 *반증된 modality가 아니라 mastery*로 닫음(설명 스타일 modality는 의도적 미배선). API 변경 0(mastery 이미 스레딩)·마이그레이션 0. 동결 크로스워크 7→8 갱신 | **완료 2026-08-05**: 생성기 9개+서비스 2개 테스트·모바일 파싱/렌더 테스트·`_primary_polya_stage`(소크라테스 매핑 재사용) | 0 |
 | S5+ | 적응형 장면 잔여(1:N crosswalk 정책)·과목 확장·교과서 자동 UI·interactive 경우분할 트리(SkillBlock Tier3) | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
