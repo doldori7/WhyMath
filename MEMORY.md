@@ -393,6 +393,48 @@ EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`(
 없음을 확인.
 
 정본: `docs/architecture/math_engine_gap_review.md`.
+### 2026-08-06 (구현·하네스): **HARN-14 구현 중 병렬 세션 충돌 실측 — 동일 브랜치명에 독립 세션이 같은 태스크를 선-구현·선-푸시, 그 구현의 3-dot diff가 SQUASH 머지 저장소에서 영구 오탐하는 버그를 발견해 정정 병합(강제푸시 없이)** (claude 구현·정정, Kiki "/drive")
+
+**컨텍스트**: `/drive`로 HARN-14(설계 문서 중복 착수 탐지 스캐너)를 구현하고
+`git push -u origin claude/harn-14-doc-series-duplicate-detection`을 실행하자
+non-fast-forward로 거부됐다. 원인은 네트워크 오류가 아니라 **동일 브랜치명에 독립
+세션(`session_01FDGzK95LSQfZbhMYVrdmjU`)이 같은 태스크를 병행 구현해 먼저 푸시**한
+것이었다(태스크 결정론적 브랜치명 규칙상 두 세션이 같은 이름으로 수렴). refs/claims
+403 상시 실패(2026-07-27 등재)가 만드는 바로 그 사각 — claim이 원격에 안 뜨니 두
+세션 다 "비어있다"로 보고 같은 next를 집었다. HARN-14 자신의 notes가 이미 기록한
+2026-08-04 사고(같은 원인·다른 형태: 그때는 설계 문서 중복, 이번은 구현 코드 중복)의
+**세 번째 반복**이자, 2026-07-27 OPS-07 병렬 구현 충돌의 재현이다.
+
+**판정**: 두 구현을 비교한 결과 **단순 폐기가 아니라 정정 병합**이 맞았다 — 상대 구현에
+검증 가능한 정합성 버그가 있었다. 상대는 신규 파일 판정에 3-dot diff(`{trunk}...{ref}`,
+merge-base 기준)를 썼는데, 이 저장소의 SQUASH 머지 관행에서는 **이미 병합된 브랜치도
+영구 오탐**한다 — squash는 원본 커밋을 트렁크의 조상으로 만들지 않아 merge-base가 옛
+분기점에 고정되기 때문이다(브랜치가 삭제되지 않는 한 오탐이 영구화됨). 실측: 이미
+PR #666으로 머지된 `claude/whymath-gamification-design-n3mf50`에 대해 3-dot diff는
+`gamification_module_gap_review.md`를 "신규 추가"로 오탐했고, 2-dot 직접 diff
+(`git diff A B`, 이 세션의 구현)는 정확히 빈 목록을 반환했다. 이 2-dot 대 3-dot 선택은
+사실 이 세션이 **구현 설계 단계에서 이미 한 번 발견하고 고친** 버그였다(HARN-14 자체
+설계 중 실측 → 회귀 테스트 `test_이미_SQUASH_머지된_문서는_오탐하지_않는다`로 고정) —
+상대 세션은 그 함정을 독립적으로 다시 밟았다.
+
+**처리**: `git merge origin/claude/harn-14-doc-series-duplicate-detection`(강제푸시
+없음 — "거부의 우회 금지"와 동형으로 "타 세션 작업의 무단 덮어쓰기 금지"도 지킨다)로
+양쪽 히스토리를 보존한 뒤, 충돌 4파일(`backlog.py`·`report.py`·`remote_claims.py`·
+`test_remote_claims.py`)에서 3-dot 구현(`scan_new_review_docs`·`ReviewDocFinding`
+등)과 그 전용 배선 테스트(`tests/infra/test_harness_brief_review_doc_wiring.py`)를
+전량 삭제하고 2-dot 구현(`scan_doc_series_duplicates`)만 정본으로 남겼다. 병합
+직후 비충돌 삽입 지점(conflict marker 밖)에 남아있던 `review_doc_findings` 참조
+1건이 `cmd_brief`를 NameError로 죽이고 있었는데, 정확히 이 부류를 잡으라고 같은
+세션에서 미리 만든 `tests/infra/test_session_start_brief_wiring.py`(엔드투엔드
+서브프로세스 실행 검증)가 즉시 잡아냈다 — 배선 실재성 테스트가 존재 이유를 스스로
+증명한 사례.
+
+**등재 없음**: 근본 원인(refs/claims 403)은 이미 `HARN-07` 소유이고 HARN-14 acceptance
+⑥이 명시적으로 범위 밖 동결했다 — 새 태스크나 규칙 대신 이 결정 로그로 세 번째 반복
+사례를 기록한다(재발방지대책은 기존 `HARN-07` 등재로 충족·CLAUDE.md "반복 실수" 조항).
+상세 진단·수정 커밋은 `claude/harn-14-doc-series-duplicate-detection` 브랜치 머지
+커밋 메시지 참조.
+
 ### 2026-08-05 (판정·문서): **Part 9(파일·ID 정책) 종료 처리 — 코드 범위 완료·잔여 3건 콘텐츠/ops 이관** (claude, Kiki 지시)
 
 **무엇/왜**: 플레이북 Part 9 준수 작업을 **종료**로 확정. 코드 범위는 완료됐다 — 핵심 ①(교육과정 무관 canonical `math.<area>.<slug>`)②(name_* locale 분리)③(`ids.yaml` registry)를 **P2d(PR #409)**로, [C] `domain` 접두 정화를 **P2e(PR #412 닫힘→#709 포팅·머지)**로 시정. ID 스킴·locale·registry·거버넌스 불변식(`curriculum_independence`·`registry_parity`·`locale_parity`·`alias_roundtrip`) 정본·CI 동결. 실데이터 437 노드 전건 canonical 준수·학년 토큰 0·domain 접두 0(재확인). **잔여 후속 3건은 코드로 진전 불가**해 범위 밖 명시 이관(스코핑 3중 blocker): **A. name_en/ja**=번역 콘텐츠(도메인 파트너 저작·검수·AI 임의생성 금지·소비처 부재·빈 상태 governance-lock), **B. seed 경로**=`name_ko` 부재로 의미 slug 불가·`math.seed.*` 잠정 **의도적 동결**(정상), **C. Alembic 재키**=라이브 DB 필요(런바 유지)+대상 모듈 S0-4b 레거시 격하(런타임 호출자 0)라 **moot**. 유일 순수-코드 후보(en/ja 커버리지 리포트)는 소비처 없는 저가치 스캐폴딩이라 미채택. **조치**: `docs/standards/part9_id_policy_review.md` "남은 후속"→"종료 상태" 개편(결론·이관 트랙 명시)·본 로그. **검증**: 문서 전용(코드/테스트/마이그레이션 0). **NOT**: en/ja 저작·seed 재발급·Alembic 재키(각 콘텐츠/ops 트랙 소관).
