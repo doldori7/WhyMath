@@ -963,8 +963,11 @@ class TestScanDocSeriesDuplicates:
         path.write_text(content, encoding="utf-8")
         subprocess.run(["git", "add", relpath], cwd=repo, check=True, capture_output=True)
 
-    def test_새_설계문서를_추가한_브랜치를_나이_무관하게_감지한다(self, bare_remote):
-        """방금(0일 전) 만든 브랜치도 즉시 잡혀야 한다 — 이 스캔은 나이 임계가 없다."""
+    def test_new_design_doc_branch_detected_regardless_of_age(self, bare_remote):
+        """새_설계문서를_추가한_브랜치를_나이_무관하게_감지한다
+
+        방금(0일 전) 만든 브랜치도 즉시 잡혀야 한다 — 이 스캔은 나이 임계가 없다.
+        """
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._add_doc(a, "docs/architecture/foo_gap_review.md", "새 갭 리뷰\n")
@@ -987,7 +990,8 @@ class TestScanDocSeriesDuplicates:
         assert "claude/session-a" in branches
         assert branches["claude/session-a"].files == ("docs/architecture/foo_gap_review.md",)
 
-    def test_문서가_아닌_파일_추가는_감지하지_않는다(self, bare_remote):
+    def test_non_doc_file_addition_not_detected(self, bare_remote):
+        """문서가_아닌_파일_추가는_감지하지_않는다"""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._add_doc(a, "src/backend/whymath_backend/ops/foo.py", "# code\n")
@@ -1005,7 +1009,8 @@ class TestScanDocSeriesDuplicates:
         assert result.status == "ok"
         assert "claude/session-a" not in {c.branch for c in result.candidates}
 
-    def test_docs_안이어도_review_접미어가_아니면_감지하지_않는다(self, bare_remote):
+    def test_non_review_suffix_under_docs_not_detected(self, bare_remote):
+        """docs_안이어도_review_접미어가_아니면_감지하지_않는다"""
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._add_doc(a, "docs/architecture/foo_notes.md", "무관 문서\n")
@@ -1023,8 +1028,10 @@ class TestScanDocSeriesDuplicates:
         assert result.status == "ok"
         assert "claude/session-a" not in {c.branch for c in result.candidates}
 
-    def test_이미_SQUASH_머지된_문서는_오탐하지_않는다(self, bare_remote):
-        """핵심 회귀 — 3점 diff였다면 이 케이스가 오탐났을 것(설계 중 실측으로 발견).
+    def test_already_squash_merged_doc_not_false_positive(self, bare_remote):
+        """이미_SQUASH_머지된_문서는_오탐하지_않는다
+
+        핵심 회귀 — 3점 diff였다면 이 케이스가 오탐났을 것(설계 중 실측으로 발견).
 
         브랜치가 신규 문서를 추가해 push한 뒤, 그 브랜치를 SQUASH(비-ff)로 main에
         합치고 origin/main을 갱신한다. 원 브랜치 ref는 원격에 그대로 남는다(GitHub가
@@ -1066,8 +1073,11 @@ class TestScanDocSeriesDuplicates:
             c.branch for c in result.candidates
         }, "SQUASH 머지로 이미 트렁크에 존재하는 문서가 오탐됨 — 3점 diff 회귀 의심"
 
-    def test_변별력_미머지일때_뜨고_머지후_사라진다(self, bare_remote):
-        """⑤ — 같은 브랜치가 미머지 상태와 머지 후 상태에서 실제로 다른 값을 낸다."""
+    def test_discriminates_unmerged_shown_then_merged_gone(self, bare_remote):
+        """변별력_미머지일때_뜨고_머지후_사라진다
+
+        ⑤ — 같은 브랜치가 미머지 상태와 머지 후 상태에서 실제로 다른 값을 낸다.
+        """
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._add_doc(a, "docs/architecture/roundtrip_gap_review.md", "왕복 갭 리뷰\n")
@@ -1105,12 +1115,14 @@ class TestScanDocSeriesDuplicates:
         after = remote_claims.scan_doc_series_duplicates(b)
         assert "claude/session-a" not in {c.branch for c in after.candidates}  # 머지 후 — 사라진다
 
-    def test_원격_없음은_offline_판정(self, git_repo: Path):
+    def test_no_remote_is_offline_judgment(self, git_repo: Path):
+        """원격_없음은_offline_판정"""
         result = remote_claims.scan_doc_series_duplicates(git_repo)
         assert result.status == "offline"
         assert result.candidates == []
 
-    def test_조회_실패는_빈_목록으로_위장되지_않는다(self, bare_remote, monkeypatch):
+    def test_query_failure_not_disguised_as_empty_list(self, bare_remote, monkeypatch):
+        """조회_실패는_빈_목록으로_위장되지_않는다"""
         _, clone = bare_remote
         a = clone("session-a")
         original = remote_claims._git
