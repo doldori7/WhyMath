@@ -888,8 +888,6 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             remote_status=remote_status,
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
-            review_doc_findings=review_doc_findings,
-            review_doc_status=review_doc_status,
             done_excluded=done_excluded,
             doc_series_candidates=doc_series_candidates,
             doc_series_status=doc_series_status,

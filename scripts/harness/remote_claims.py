@@ -1231,4 +1231,3 @@ def _iter_batch_blobs(stdout: str):
             yield body.decode("utf-8", errors="surrogateescape")
         else:
             yield None  # missing / ambiguous
-
