@@ -13,9 +13,8 @@ from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
 from data_pipeline.atom_graph.__main__ import _graph_json_to_result, app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

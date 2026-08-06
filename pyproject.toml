@@ -17,10 +17,34 @@
 # 프로젝트 루트 탐지가 레포 루트로 올라가 **기본값 88자로 조용히 강등**될 수 있다.
 # 이 파일이 그 강등을 원천 제거한다.
 #
-# 범위 주의: `src/backend`·`src/data-pipeline`은 **자기 pyproject가 더 가까워** 그쪽
-# 설정이 이긴다(ruff·black 모두 최근접 설정 우선 — nearest-pyproject-wins). 이 파일은
-# 그 밖(scripts·tests/harness·tests/infra·infra·conftest.py)을 덮는 fallback이다.
+# 범위 주의: `src/backend`·`src/data-pipeline` *본체*(패키지 코드)는 **자기 pyproject가
+# 더 가까워** 그쪽 설정이 이긴다(ruff·black 모두 최근접 설정 우선 — nearest-pyproject-wins).
+# 이 파일은 그 밖(scripts·tests/harness·tests/infra·infra·conftest.py)을 덮는 fallback이다.
 # 세 파일의 line-length·select는 의도적으로 동일하게 유지한다 — 갈리면 무의미하다.
+#
+# ⚠️ `tests/backend`·`tests/data_pipeline`은 **`src/backend`·`src/data-pipeline`의
+# 자손이 아니다**(레포 루트 기준 형제 디렉터리) — "최근접 설정 우선"이 이 둘을 보호하지
+# 못한다. 이 파일이 생기기 전엔 두 테스트 디렉터리에 조상 pyproject가 전혀 없어 CI가
+# `src/backend`/`src/data-pipeline`를 작업 디렉터리로 잡고 도는 우연 덕에 그쪽 설정을
+# 물려받았다(ruff CLI가 여러 경로를 받을 때 호출 디렉터리 기준으로 설정을 찾는 동작) —
+# 이 파일이 생기자 **레포 루트가 더 가까운 조상**이 되어 그 우연한 상속이 깨지고
+# `whymath_backend`/`data_pipeline`이 first-party로 인식되지 않아 I001(import 정렬) 375건이
+# 새로 터졌다(2026-08-06 PR#711 CI 실측).
+#
+# 해소 시도·최종 판단: ① `extend-exclude`로 두 디렉터리를 이 파일 적용에서 빼서 원래
+# CWD 상속을 되살리는 방법을 시도했으나 **ruff `force-exclude`가 기본 false라 CI가
+# 디렉터리를 명시 인자로 넘기는 호출 방식에서 exclude가 무력**함을 `--show-settings`로
+# 확인(먹히지 않는 설정을 남겨두면 그 자체가 위장이므로 제거). ② 대신 아래
+# `known-first-party`로 `whymath_backend`만 명시해 tests/backend를 원래 판정으로
+# 복원했다 — `data_pipeline`은 *의도적으로* 넣지 않았다(바로 아래 주석 참조).
+# ③ tests/data_pipeline(33건)은 원래 판정(자기 pyproject 상속 시 data_pipeline=
+# first-party)을 되살릴 방법이 없어 — 이 루트 설정 하에서는 data_pipeline이
+# third-party로 분류된다 — **원래 스타일이 아니라 이 루트 설정이 요구하는 정렬로
+# `ruff --fix` 일괄 재정렬**했다(import 순서만 바뀜·동작 불변, 테스트 40건+7건 통과
+# 재확인). tests/data_pipeline을 향후 다시 만지면 이 비대칭(자기 pyproject 기준과
+# CI 실행 시 실제 적용 설정이 다름)을 기억할 것 — 근본 해소는 src/data-pipeline를
+# `tests/data_pipeline`의 실제 조상으로 옮기거나 그 디렉터리 전용 nested config를
+# 추가하는 것인데, 둘 다 이 태스크 범위 밖(과공학 방지).
 
 [tool.ruff]
 line-length = 100
@@ -32,6 +56,16 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "B", "W"]
 # 한국어 식별자 사용 금지 (N) 비활성 안 함: docstring·문자열만 한국어, 식별자는 영어
 ignore = []
+
+[tool.ruff.lint.isort]
+# tests/backend가 이 파일을 조상 설정으로 물려받을 때도 whymath_backend import를
+# first-party로 정확히 분류하게 한다(위 경고 참조) — src/backend 본체는 자기
+# pyproject가 이겨 이 설정과 무관하다(중복이지만 무해). data_pipeline은 *제외*
+# 한다 — tests/backend의 원래(이 파일이 생기기 전) 판정은 data_pipeline을
+# third-party로 봐 whymath_backend와 빈 줄로 분리했다(교차 계층 테스트 다수).
+# 여기 넣으면 그 분리가 사라져 기존 스타일과 어긋난다(2026-08-06 PR#711 CI 실측 —
+# 처음엔 둘 다 넣었다가 governance 테스트 6건에서 빈 줄 삭제를 요구해 발견).
+known-first-party = ["whymath_backend"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501"]   # 테스트 픽스처에 긴 한국어 문자열 허용

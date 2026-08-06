@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.ncic.models import (
     LICENSE_NOTICE,
     NORM_ID_PATTERN,
@@ -15,6 +13,7 @@ from data_pipeline.ncic.models import (
     ConceptStandardLink,
     ConceptStandardLinkCollection,
 )
+from pydantic import ValidationError
 
 
 def _std_kwargs(**overrides: object) -> dict[str, object]:
