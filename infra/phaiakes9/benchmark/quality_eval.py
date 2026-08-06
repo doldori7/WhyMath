@@ -170,7 +170,8 @@ GRADER_CODE: Final[str] = "code_match"
 
 # 호출지점(03a §B.2 CallSite) → 채점기 매핑.
 # CONCEPT_EXTRACT(①)는 개념 *집합* → set_f1(부분 점수).
-# TRANSLATE(③)·산술(call_site 없음)은 단일 답 → exact_match. CONCEPT_ID_MATCH(④)는 코드 추출 후 매칭.
+# TRANSLATE(③)·산술(call_site 없음)은 단일 답 → exact_match.
+# CONCEPT_ID_MATCH(④)는 코드 추출 후 매칭.
 CALL_SITE_GRADER: Final[dict[str, str]] = {
     "extract": GRADER_SET_F1,  # ① 개념 추출 — 집합 F1
     "translate": GRADER_EXACT,  # ③ 번역·정규화 — 정규형 정확 매칭
@@ -1181,7 +1182,7 @@ async def _embed_concepts(
         if not isinstance(vectors, list) or len(vectors) != len(concepts):
             return None
         emb: dict[str, list[float]] = {}
-        for concept, vec in zip(concepts, vectors):
+        for concept, vec in zip(concepts, vectors, strict=True):
             emb[concept] = [float(x) for x in vec]
         return emb
     except Exception:  # noqa: BLE001 — 임베딩 실패는 폴백 신호로 흡수

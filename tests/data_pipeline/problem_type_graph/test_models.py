@@ -6,9 +6,8 @@ hermetic: 외부 의존·DB 불요(모델 introspection·검증만).
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.problem_type_graph.models import ProblemTypeNode
+from pydantic import ValidationError
 
 
 def _ptype(**overrides: object) -> ProblemTypeNode:

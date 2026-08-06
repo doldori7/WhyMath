@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from data_pipeline.ncic.transform import (
     TransformError,
     build_norm_id,
