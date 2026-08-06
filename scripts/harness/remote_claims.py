@@ -1074,3 +1074,176 @@ def _iter_batch_blobs(stdout: str):
             yield body.decode("utf-8", errors="surrogateescape")
         else:
             yield None  # missing / ambiguous
+
+
+# ── 설계 문서 중복 착수 탐지 (HARN-14) ──────────────────────────────────────
+#
+# HARN-13(장기 미머지 브랜치)의 잔여다 — HARN-13은 브랜치를 나이(기본 3일)로 거르는데,
+# 설계 문서 중복은 **착수 당일이 가장 위험**해서 그 임계 아래로 전부 새어나간다.
+# 2026-08-04 사고: 세션이 같은 외부 틀로 독립 착수했다가, 조사 중 1일 경과 미머지
+# 브랜치(claude/whymath-operations-platform-cn6dxi, PR #663)가 이미 동일 산출물을 갖고
+# 있음을 뒤늦게 발견해 작성분(0줄)을 폐기했다 — 이 스캔은 그 사각을 없앤다. 그래서
+# `scan_stale_branches`와 골격은 같지만 **나이 threshold가 없다** — ahead>0(트렁크에
+# 안 흡수됨)이면 나이와 무관하게 스캔 대상이다.
+
+_REVIEW_DOC_PREFIX = "docs/"
+_REVIEW_DOC_SUFFIXES = ("_gap_review.md", "_review.md")
+
+
+@dataclass(frozen=True)
+class ReviewDocFinding:
+    """미머지 브랜치가 트렁크에 없는 설계 리뷰 문서 1건을 추가한 사실."""
+
+    branch: str
+    ref: str
+    path: str
+    last_commit_at: datetime  # 나이로 거르지 않는다 — 표시 맥락용
+
+
+@dataclass
+class ReviewDocScanResult:
+    """설계 문서 중복 스캔 결과. status: ok | offline | error(판정 불가는 findings 무시 금지)."""
+
+    status: str
+    findings: list[ReviewDocFinding] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+    trunk_ref: str = ""
+    trunk_branch: str = ""
+
+
+def _is_review_doc_path(path: str) -> bool:
+    """`docs/` 아래 `*_gap_review.md`·`*_review.md`로 끝나는 경로인가(수용 기준 ②)."""
+    return path.startswith(_REVIEW_DOC_PREFIX) and path.endswith(_REVIEW_DOC_SUFFIXES)
+
+
+def scan_new_review_docs(
+    root: Path,
+    *,
+    fetch: bool = True,
+    max_refs: int = SCAN_MAX_REFS,
+    now: datetime | None = None,
+) -> ReviewDocScanResult:
+    """미머지 원격 브랜치가 트렁크에 없는 `docs/**/*_{gap_,}review.md`를 찾는다.
+
+    나이 임계 없음(HARN-13과의 유일한 설계 차이) — 문서 중복은 첫날이 가장 위험하다.
+    "흡수되지 않음" 판정은 `ahead count > 0`(`{trunk_ref}..{ref}`) 하나뿐이다: 이미
+    트렁크에 흡수됐거나 커밋이 없으면 스캔 대상에서 제외한다(SQUASH 머지 저장소라
+    조상 관계가 아니라 rev-list count로 판정 — `scan_stale_branches`와 동일 근거).
+
+    각 후보 브랜치의 **신규 추가 파일**은 `{trunk_ref}...{ref}`(3-dot·merge-base 기준
+    diff)의 `--diff-filter=A`로 얻는다 — 트렁크가 그새 전진해도(2-dot과 달리) 노이즈가
+    안 생긴다. 패턴 매칭은 git pathspec `**` glob 매직에 기대지 않고 Python에서
+    직접 한다(이식성 — 환경별 git glob 지원 차이를 피한다).
+
+    반환 status가 'ok'가 아니면 판정 자체가 불가했다는 뜻이며, 빈 findings를
+    '중복 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다 —
+    CLAUDE.md 침묵 실패 금지).
+    """
+    if not has_remote(root):
+        return ReviewDocScanResult("offline", message="origin 원격 없음 — 문서 스캔 불가")
+    now = now or _utcnow()
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return ReviewDocScanResult(
+                    _classify_failure(fetched.stderr),
+                    message=f"원격 브랜치 fetch 실패: {fetched.stderr.strip()}",
+                )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)%09%(committerdate:iso-strict)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return ReviewDocScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+
+        entries: list[tuple[str, str]] = []
+        for line in listing.stdout.splitlines():
+            ref, _, date_str = line.partition("\t")
+            ref, date_str = ref.strip(), date_str.strip()
+            if not ref or ref.endswith("/HEAD"):
+                continue
+            entries.append((ref, date_str))
+        truncated = len(entries) > max_refs
+        entries = entries[:max_refs]
+
+        trunk_ref, _trunk_source = _resolve_trunk_ref(root)
+        trunk_branch = (
+            trunk_ref[len(REMOTE_REF_PREFIX) :]
+            if trunk_ref.startswith(REMOTE_REF_PREFIX)
+            else trunk_ref
+        )
+
+        findings: list[ReviewDocFinding] = []
+        for ref, date_str in entries:
+            if ref == trunk_ref:
+                continue
+            try:
+                last_commit_at = datetime.fromisoformat(date_str)
+            except ValueError:
+                continue  # 파싱 불가 — 이 브랜치만 조용히 제외(전체 스캔은 실패시키지 않음)
+            ahead_result = _git(root, "rev-list", "--count", f"{trunk_ref}..{ref}", timeout=15)
+            if ahead_result.returncode != 0:
+                continue
+            try:
+                ahead = int(ahead_result.stdout.strip() or "0")
+            except ValueError:
+                continue
+            if ahead <= 0:
+                continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 스캔 대상 아님(나이는 안 봄)
+
+            diff_result = _git(
+                root,
+                "diff",
+                "--name-status",
+                "--diff-filter=A",
+                f"{trunk_ref}...{ref}",
+                timeout=15,
+            )
+            if diff_result.returncode != 0:
+                continue  # 이 브랜치만 조용히 제외 — 전체 스캔은 실패시키지 않음
+
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            for line in diff_result.stdout.splitlines():
+                status, _, added_path = line.partition("\t")
+                added_path = added_path.strip()
+                if status.strip() != "A" or not added_path:
+                    continue
+                if _is_review_doc_path(added_path):
+                    findings.append(
+                        ReviewDocFinding(
+                            branch=branch,
+                            ref=ref,
+                            path=added_path,
+                            last_commit_at=last_commit_at,
+                        )
+                    )
+
+        return ReviewDocScanResult(
+            "ok",
+            findings=findings,
+            scanned_refs=len(entries),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=trunk_branch,
+        )
+    except subprocess.TimeoutExpired:
+        return ReviewDocScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return ReviewDocScanResult("error", message=f"{type(exc).__name__}: {exc}")

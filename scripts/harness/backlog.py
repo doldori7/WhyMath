@@ -825,6 +825,24 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     else:
         stale_branch_status = "disabled"
 
+    # 미머지 브랜치의 신규 설계 문서 경고 (HARN-14) — HARN-13의 나이 임계 아래 사각.
+    # 나이 무관(첫날이 가장 위험) — 정보성, 브리핑을 막지 않음(fail-open).
+    review_doc_findings: list[tuple[str, str, str]] = []
+    review_doc_status = "ok"
+    if policy.remote_claims:
+        try:
+            doc_scan = remote_claims.scan_new_review_docs(root)
+            review_doc_status = doc_scan.status
+            if doc_scan.status == "ok":
+                review_doc_findings = [
+                    (f.branch, f.path, f"{(date.today() - f.last_commit_at.date()).days}")
+                    for f in doc_scan.findings
+                ]
+        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            review_doc_status = "error"
+    else:
+        review_doc_status = "disabled"
+
     # 미머지 done 제외 (HARN-12 — next의 HARN-11 필터를 브리핑에도 배선). render_brief가
     # 내부에서 계산하는 후보 집합과 동일하게(layer/subject/track 미지정) 구해 그 id만
     # scan_remote_done에 묻는다 — fetch 없이 캐시 ref만(훅은 빠르고 네트워크 0이어야 함).
@@ -860,6 +878,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             remote_status=remote_status,
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
+            review_doc_findings=review_doc_findings,
+            review_doc_status=review_doc_status,
             done_excluded=done_excluded,
         )
     )

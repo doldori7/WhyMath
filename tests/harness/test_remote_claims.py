@@ -776,6 +776,108 @@ class TestScanStaleBranches:
         assert result.stale == []
 
 
+class TestScanNewReviewDocs:
+    """설계 문서 중복 착수 탐지 (HARN-14) — 나이 임계 없이 진짜 로컬 원격에서 실측.
+
+    HARN-13(장기 미머지 브랜치)이 나이(기본 3일)로 걸러 1일 경과 브랜치(PR #663)를
+    놓쳤던 사각(2026-08-04 사고)의 재현이자 수정 증명. 변별력의 핵심은 "당일 커밋도
+    감지"와 "머지되면 사라짐"을 같은 스캐너가 정확히 구분하는가다.
+    """
+
+    def _push_new_file(self, repo: Path, branch: str, rel_path: str, content: str) -> None:
+        """`repo`(이미 `branch`로 체크아웃된 클론)에 새 파일을 커밋·push한다(당일 커밋 — 백데이트 없음)."""
+        target = repo / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", rel_path], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"add {rel_path}"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=repo, check=True, capture_output=True
+        )
+
+    def test_당일_커밋도_감지한다(self, bare_remote):
+        """나이 threshold가 없다 — 방금 push된 브랜치도 즉시 뜬다(HARN-13 사각의 수정 증명)."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_new_file(
+            a,
+            "claude/session-a",
+            "docs/architecture/operations_platform_gap_review.md",
+            "gap review\n",
+        )
+        result = remote_claims.scan_new_review_docs(b)
+        assert result.status == "ok"
+        found = {(f.branch, f.path) for f in result.findings}
+        assert (
+            "claude/session-a",
+            "docs/architecture/operations_platform_gap_review.md",
+        ) in found
+
+    def test_트렁크에_흡수되면_사라진다(self, bare_remote):
+        """양방향 변별력(수용 기준 ⑤) — 미머지일 때 뜨고, ff-merge 후 사라진다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_new_file(a, "claude/session-a", "docs/standards/foo_review.md", "review\n")
+        result_before = remote_claims.scan_new_review_docs(b)
+        assert "claude/session-a" in {f.branch for f in result_before.findings}
+
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "merge", "--ff-only", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result_after = remote_claims.scan_new_review_docs(b)
+        assert "claude/session-a" not in {f.branch for f in result_after.findings}
+
+    def test_패턴_불일치_파일은_무시(self, bare_remote):
+        """`docs/` 밖이거나 접미사가 안 맞으면 대상이 아니다(수용 기준 ② 경계)."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_new_file(a, "claude/session-a", "docs/notes/foo.md", "no suffix match\n")
+        subprocess.run(
+            ["git", "checkout", "-b", "claude/session-c"], cwd=a, check=True, capture_output=True
+        )
+        self._push_new_file(a, "claude/session-c", "src/backend/foo_review.md", "outside docs/\n")
+        result = remote_claims.scan_new_review_docs(b)
+        paths = {f.path for f in result.findings}
+        assert "docs/notes/foo.md" not in paths
+        assert "src/backend/foo_review.md" not in paths
+
+    def test_원격_없음은_offline_판정(self, git_repo: Path):
+        """origin이 아예 없는 저장소 — '중복 없음'이 아니라 offline이어야 한다."""
+        result = remote_claims.scan_new_review_docs(git_repo)
+        assert result.status == "offline"
+        assert result.findings == []
+
+    def test_조회_실패는_빈_목록으로_위장되지_않는다(self, bare_remote, monkeypatch):
+        """fetch 실패가 '신규 문서 0건'과 같은 값이면 인프라 장애가 "문제 없음"으로 읽힌다."""
+        _, clone = bare_remote
+        a = clone("session-a")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "fetch":
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result = remote_claims.scan_new_review_docs(a)
+        assert result.status != "ok"
+        assert result.findings == []
+        assert "CompletedProcess" not in result.message  # 예외가 아니라 정상 실패 분류 경로
+
+
 def _os_environ() -> dict[str, str]:
     import os
 

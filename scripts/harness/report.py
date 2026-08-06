@@ -156,6 +156,8 @@ def render_brief(
     stale_branches: list[tuple[str, float, int]] | None = None,
     stale_branch_status: str = "ok",
     done_excluded: dict[str, list[str]] | None = None,
+    review_doc_findings: list[tuple[str, str, str]] | None = None,
+    review_doc_status: str = "ok",
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
@@ -166,6 +168,9 @@ def render_brief(
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
     책임이라 여기서는 이미 계산된 결과만 받는다(테스트 용이성·기존 시그니처 하위호환 유지).
+    review_doc_findings: (branch, path, age_days) 목록(HARN-14) — 미머지 브랜치가 트렁크에
+    없는 `docs/**/*_{gap_,}review.md`를 추가한 사실. stale_branches와 달리 나이로 거르지
+    않는다(문서 중복은 첫날이 가장 위험 — HARN-13 나이 임계의 사각 보완).
     """
     lines = ["[빌드하네스 브리핑]"]
 
@@ -204,6 +209,14 @@ def render_brief(
             )
     elif stale_branch_status not in ("ok", "disabled"):
         lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
+
+    # 미머지 브랜치의 신규 설계 문서 (HARN-14) — 나이 무관·정보성 경고, 착수를 막지 않는다.
+    if review_doc_findings:
+        lines.append("⚠️ 미머지 브랜치의 신규 설계 문서 (중복 착수 위험 — 먼저 확인):")
+        for doc_branch, doc_path, doc_age_days in review_doc_findings:
+            lines.append(f"  · {doc_branch} — {doc_path} (최종 커밋 {doc_age_days}일 전)")
+    elif review_doc_status not in ("ok", "disabled"):
+        lines.append(f"(신규 설계 문서 조회 불가: {review_doc_status} — 판정 보류)")
 
     ready, excluded = selector.candidates(backlog, remote_claimed=remote_claimed)
     if done_excluded:

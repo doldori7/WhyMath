@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "scripts/harness/**"
   - ".claude/settings.json"
   - "tests/infra/**"
-session: null
+session: claude/harn-14-doc-series-duplicate-detection
 notes: "docs/architecture/operations_platform_gap_review.md §독립 검증 ④⑤. HARN-13(done, 장기 미병합 브랜치 기계 감지)의 잔여 — HARN-13은 브랜치를 나이(4일+)로 거르는데, 설계 문서 중복은 착수 당일이 가장 위험해 그 임계 아래에서 전부 새어나간다. 사고 경위: 2026-08-04 세션이 같은 외부 틀(21. 운영 플랫폼 86~90)로 독립 착수했다가 조사 중 미머지 브랜치 claude/whymath-operations-platform-cn6dxi(2026-08-03 22:35·PR #663)의 동일 산출물을 발견해 작성 전 중단(폐기 0줄). 하네스가 못 막은 3겹: 1)설계 문서 세션은 태스크를 claim하지 않아 claim 대장에 뜰 수 없음(구조적) 2)refs/claims push가 프록시 403으로 상시 실패(2026-07-27 등재·fail-open) 3)브리핑 목록의 나이 임계. 이번 회피는 장치가 아니라 운 — 2026-07-27 동형 사고는 735줄 폐기."
-updated: 2026-08-04
+updated: 2026-08-06
