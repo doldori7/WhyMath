@@ -156,6 +156,8 @@ def render_brief(
     stale_branches: list[tuple[str, float, int]] | None = None,
     stale_branch_status: str = "ok",
     done_excluded: dict[str, list[str]] | None = None,
+    doc_series_candidates: list[tuple[str, tuple[str, ...], str]] | None = None,
+    doc_series_status: str = "ok",
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
@@ -166,6 +168,11 @@ def render_brief(
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
     책임이라 여기서는 이미 계산된 결과만 받는다(테스트 용이성·기존 시그니처 하위호환 유지).
+    doc_series_candidates: (branch, files, last_commit_at_iso) 목록(HARN-14) — 나이 임계
+    없이 트렁크에 없는 `docs/**/*_review.md`를 추가한 미머지 브랜치 전부. stale_branches와
+    같은 결합도 원칙(원시 튜플만 받음). **훅이 stderr를 버리므로**(`.claude/settings.json`
+    `2>/dev/null`) 스캔 실패는 이 함수가 반환하는 문자열(stdout) 안에만 표시해야 실제로
+    보인다 — stale_branch_status와 동형 처리.
     """
     lines = ["[빌드하네스 브리핑]"]
 
@@ -204,6 +211,15 @@ def render_brief(
             )
     elif stale_branch_status not in ("ok", "disabled"):
         lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
+
+    # 설계 문서 중복 착수 (HARN-14) — 나이 임계 없음. 정보성 경고일 뿐 착수를 막지 않는다.
+    if doc_series_candidates:
+        lines.append("📄 미머지 브랜치의 신규 설계 문서 (중복 착수 확인):")
+        for doc_branch, files, last_commit_iso in doc_series_candidates:
+            file_list = ", ".join(files)
+            lines.append(f"  · {doc_branch} ({last_commit_iso[:10]}) — {file_list}")
+    elif doc_series_status not in ("ok", "disabled"):
+        lines.append(f"(설계 문서 중복 스캔 실패: {doc_series_status} — 판정 보류)")
 
     ready, excluded = selector.candidates(backlog, remote_claimed=remote_claimed)
     if done_excluded:

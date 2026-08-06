@@ -825,6 +825,23 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     else:
         stale_branch_status = "disabled"
 
+    # 설계 문서 중복 착수 탐지 (HARN-14) — SessionStart 1회 비용, 나이 임계 없음(HARN-13의
+    # 3일 임계 아래에서 새는 것이 이 스캔의 존재 이유 — 문서 중복은 착수 당일이 가장 위험).
+    doc_series_candidates: list[tuple[str, tuple[str, ...], str]] = []
+    doc_series_status = "ok"
+    if policy.remote_claims:
+        try:
+            doc_scan = remote_claims.scan_doc_series_duplicates(root)
+            doc_series_status = doc_scan.status
+            if doc_scan.status == "ok":
+                doc_series_candidates = [
+                    (c.branch, c.files, c.last_commit_at.isoformat()) for c in doc_scan.candidates
+                ]
+        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            doc_series_status = "error"
+    else:
+        doc_series_status = "disabled"
+
     # 미머지 done 제외 (HARN-12 — next의 HARN-11 필터를 브리핑에도 배선). render_brief가
     # 내부에서 계산하는 후보 집합과 동일하게(layer/subject/track 미지정) 구해 그 id만
     # scan_remote_done에 묻는다 — fetch 없이 캐시 ref만(훅은 빠르고 네트워크 0이어야 함).
@@ -861,6 +878,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
             done_excluded=done_excluded,
+            doc_series_candidates=doc_series_candidates,
+            doc_series_status=doc_series_status,
         )
     )
     return 0
