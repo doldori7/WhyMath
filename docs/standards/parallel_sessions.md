@@ -92,10 +92,37 @@ cd worktrees/backend-prm-verify && claude
 ### 정리
 ```bash
 git worktree remove worktrees/backend-prm-verify
-git branch -D claude/backend-prm-verify   # 원격 머지 완료 후
+git branch -D claude/backend-prm-verify   # 로컬 브랜치 — 원격 머지 완료 후
 ```
 
 `worktrees/` 는 `.gitignore` 에 있어 추적되지 않는다.
+
+> **⚠️ 컨테이너(Claude Code 웹) 세션은 *원격* 브랜치를 삭제할 수 없다 — HTTP 403 (HARN-16)**
+>
+> 위 `git branch -D`는 *로컬* 삭제라 컨테이너에서도 된다. 그러나 **원격** 브랜치 삭제
+> (`git push origin --delete <branch>` = zero-SHA push)는 이 실행 환경의 git 프록시가
+> **HTTP 403으로 거부**한다. 이건 "권한 없음"이 아니라 **삭제 연산 자체의 차단**이다 —
+> 근거: 일반 push·PR 생성·머지·브랜치 *생성* push는 정상(exit 0)이고, **세션이 방금 만든
+> 브랜치조차** 삭제 push만 403이며(2026-08-06 `tmp-delete-probe-ignore-hn16` 변별 실측:
+> create-push `* [new branch]` exit 0 → delete-push `error: RPC failed; HTTP 403`), 동일 삭제
+> 명령이 Kiki 로컬(Windows·비프록시)에서는 41건 전건 성공했다(2026-08-04). 즉 릴레이가
+> *삭제 refspec만* 막는다.
+>
+> **그래서 이 하네스는 "1 태스크 = 1 브랜치"가 아니라 "1 세션 = 1 브랜치"다** — 태스크마다
+> 브랜치를 파면 컨테이너 세션이 해제(삭제)할 수 없어 브랜치가 영구 누적되기 때문이다
+> (`build_harness.md` §CAS·원격 claim 참조). 병합된 브랜치·probe 브랜치(`tmp-*`) 정리가 필요하면
+> **컨테이너에서 시도하지 말고**(40회 403을 받는 길) Kiki에게 실행 명령으로 위임한다:
+>
+> ```powershell
+> # Windows PowerShell (= Phaiakes9). 원격 브랜치 삭제는 비프록시 로컬에서만 된다.
+> cd C:\Users\kiki\Desktop\__AI\WhyMath
+> git push origin --delete <삭제할_원격_브랜치명>
+> # 예(이번 세션 probe 잔여): git push origin --delete tmp-delete-probe-ignore-hn16
+> ```
+>
+> **우회 금지(CLAUDE.md 「거부의 우회 금지」·프록시 README "403은 재시도·우회 말고 보고")**:
+> 프록시 정책 변경 시도·직접 `github.com` push·API 삭제 등 우회 경로를 탐색하지 않는다. 403은
+> 장애가 아니라 *판정*이다 — 삭제는 소유자(Kiki) 액션으로 넘긴다.
 
 ---
 
