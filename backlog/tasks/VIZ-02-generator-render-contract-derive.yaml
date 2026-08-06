@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 변별력: data/render_contract.json에서 graph2dSpecToState를 null로 바꿔 게이트 exit 1 실측 → 복원해 exit 0 실측(성공/실패 동일값이면 위장)"
   - "⑤ CI 잡이 ③의 테스트를 실제로 실행하는지 확인 — tests/infra/test_test_suite_wiring.py(OPS-10) 규약 준수. '저장소에 존재함'과 '돌아감'은 다르다"
   - "⑥ VIZ-04와의 합류: VIZ-04가 신설하는 data/visual_style_contract.json이 먼저 착륙하면 본 태스크 ①의 파생 소스를 render_contract.json 단독이 아니라 render_contract ∩ visual_style_contract(양식이 허용하는 타입)로 확장한다 — 두 태스크가 같은 _SYSTEM_PROMPT 파생 지점을 건드리므로 착수 순서와 무관하게 중복 구현 0(먼저 착수하는 쪽이 파생 함수를 만들고, 나중 쪽은 그 함수에 조건을 추가)"
-artifacts: []
+artifacts:
+  - f9b2065a
 paths:
   - src/backend/whymath_backend/l3/visualization.py
   - data/render_contract.json

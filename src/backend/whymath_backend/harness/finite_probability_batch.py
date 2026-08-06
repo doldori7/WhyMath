@@ -5,15 +5,12 @@
 파일럿 코퍼스를 적재한다. SymPy 대수 검산이 성립하지 않아 생성 경로 자체가 없던 영역
 (`problem_bank_gap_review.md` §3 D7)의 첫 코퍼스다.
 
-**검증 등급 각인(S4-13 ③)**: 기록 직후 각 레코드의 `verify`에 `verification_tier=
-machine_exhaustive`를 찍는다(신규 필드 1개). "수치 축은 전수 열거로 증명됐고, 발문↔형식모델
-정합은 아직 아니다"를 코퍼스가 스스로 말하게 하는 것이 목적이다 — 이 등급을 읽는 소비처가
-`harness/residue_cross_verify_eval`(잔여 축 Wilson 게이트)이다.
-
-각인을 *기록 후 후처리*로 하는 이유: 등급의 단일 원천은 L3(`l3/verification_tier`)이고, 코퍼스
-직렬화기(`problem_corpus_batch._record_to_json`)는 L1 `ProblemVerifyMeta` 필드만 옮긴다. L1
-계약 확장은 본 태스크의 작업 경로 밖이라, 직렬화기를 재구현하지 않고 그 산출물에 등급만
-덧입힌다(재구현 0). L1 `ProblemVerifyMeta` 필드 승격은 후속 태스크로 남긴다.
+**검증 등급 각인(S4-13 ③·S4-17 L1 승격)**: 배치가 `run_batch`에 `verification_tier=
+machine_exhaustive`를 주입해 저장 시점에 `verify.verification_tier`로 영속한다(L1
+`ProblemVerifyMeta` 정식 필드 — 후처리 재기록 없음). "수치 축은 전수 열거로 증명됐고,
+발문↔형식모델 정합은 아직 아니다"를 코퍼스가 스스로 말하게 하는 것이 목적이다 — 이 등급을
+읽는 소비처가 `harness/residue_cross_verify_eval`(잔여 축 Wilson 게이트)이며, 이제
+`load_problem_bank_records`(L1 정본) 경유로 읽어 원시 JSONL 우회가 없다.
 
 산출물은 v0(사람 검수 전) — **게이트 통과 ≠ 학생 노출**. 잔여 축 교차검증 + Wilson 표본 검수
 게이트를 통과해야 노출 자격 논의가 시작된다.
@@ -39,9 +36,9 @@ from whymath_backend.l3.equivalent.finite_probability_skeleton_generator import 
     FiniteProbabilitySkeletonGenerator,
 )
 from whymath_backend.l3.equivalent.orchestrator import run_batch
-from whymath_backend.l3.verification_tier import VerificationTier, stamp_verification_tier
+from whymath_backend.l3.verification_tier import VerificationTier
 
-__all__ = ["CORPUS_DIR_NAME", "run_finite_probability_batch", "stamp_corpus_file"]
+__all__ = ["CORPUS_DIR_NAME", "run_finite_probability_batch"]
 
 CORPUS_DIR_NAME = "problem_bank_probability_finite_v0"
 
@@ -61,22 +58,6 @@ def _default_out_path() -> Path:
     # src/backend/whymath_backend/harness/ → repo root 4단계.
     root = Path(__file__).resolve().parents[4]
     return root / "data" / "corpus" / CORPUS_DIR_NAME / "problems.jsonl"
-
-
-def stamp_corpus_file(path: Path, tier: VerificationTier) -> int:
-    """기록된 코퍼스 JSONL의 각 레코드 `verify`에 검증 등급을 찍는다 — 찍은 행 수 반환.
-
-    `verify` 절이 없는 레코드를 만나면 `ValueError`로 즉시 실패한다(등급만 떠 있는 레코드·
-    검산 재료 없는 등급을 만들지 않는다 — 조용한 통과 금지).
-    """
-    lines = path.read_text(encoding="utf-8").splitlines()
-    stamped = [
-        json.dumps(stamp_verification_tier(json.loads(line), tier), ensure_ascii=False)
-        for line in lines
-        if line.strip()
-    ]
-    path.write_text("\n".join(stamped) + "\n" if stamped else "", encoding="utf-8")
-    return len(stamped)
 
 
 def run_finite_probability_batch(
@@ -99,7 +80,13 @@ def run_finite_probability_batch(
         # 배치 내 중복은 원천적으로 없고, 이 집합은 재실행 시 누적 중복을 막는 좌석이다.
         seen: set[str] = set()
         generator = FiniteProbabilitySkeletonGenerator(band=name, skip_conditions=seen)
-        outcomes = run_batch(spec, generator, n_per_band, store=sink)
+        outcomes = run_batch(
+            spec,
+            generator,
+            n_per_band,
+            store=sink,
+            verification_tier=VerificationTier.MACHINE_EXHAUSTIVE.value,
+        )
         stored = 0
         produced = 0  # 생성기가 실제로 후보를 낸 회차 수(풀 소진 이후 회차는 제외).
         failures: list[str] = []
@@ -123,8 +110,6 @@ def run_finite_probability_batch(
 
     total_stored = sum(b.stored for b in bands)
     written = sink.write(resolved_out) if write else None
-    if written is not None:
-        stamp_corpus_file(resolved_out, VerificationTier.MACHINE_EXHAUSTIVE)
     return CorpusBatchReport(
         bands=bands,
         total_requested=sum(b.requested for b in bands),

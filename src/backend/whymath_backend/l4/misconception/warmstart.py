@@ -190,6 +190,7 @@ async def assemble_warmstart_probe_hints(
     atom_top_k: int = _DEFAULT_ATOM_TOP_K,
     settings: Settings | None = None,
     atom_search: _AtomSearchFn = search_atoms,
+    exclude_mids: Sequence[str] = (),
 ) -> list[str]:
     """웜스타트 probe 힌트(=outside_mids) 조립 — 단원 고빈도 + atom 확장·결정론·중복 제거.
 
@@ -218,6 +219,8 @@ async def assemble_warmstart_probe_hints(
         limit: 반환 outside_mids 상한(기본 12·탐색 표적 풀은 작게).
         atom_top_k: atom search 근접 원자 top-k(기본 5).
         settings·atom_search: 테스트 주입 좌석(hermetic). atom_search 기본은 실 `search_atoms`.
+        exclude_mids: 결과에서 뺄 mis_id(PED-04). 세션 회상이 넘기는 *이미 활성인 가설* 집합으로,
+            outside_mids의 "활성 세트 밖" 정의를 실제로 충족시킨다. 기본 `()`면 기존 동작 불변.
 
     Returns:
         outside_mids(mis_id `list[str]`) — 결정론 순서·중복 제거·limit 이내. 단원 맥락이 없거나
@@ -251,7 +254,9 @@ async def assemble_warmstart_probe_hints(
         atom_expansion = await _fetch_atom_expansion_mids(session, atom_codes)
 
     # ⓓ 순서 보존 중복 제거(고빈도 우선) → limit 절단. 결정론이라 outside_mids[0] 재현 가능.
-    seen: set[str] = set()
+    # PED-04: `exclude_mids`를 seen에 미리 넣어 *이미 살아 있는 가설*을 탐색 표적에서 뺀다 —
+    # outside_mids는 정의상 "활성 세트 *밖*"인데 그동안 활성 세트를 알 길이 없어 겹칠 수 있었다.
+    seen: set[str] = set(exclude_mids)
     ordered: list[str] = []
     for mid in (*high_freq, *atom_expansion):
         if mid not in seen:

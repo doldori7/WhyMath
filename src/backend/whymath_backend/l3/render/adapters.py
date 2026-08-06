@@ -28,6 +28,11 @@ from whymath_backend.l3.render.dsl import ConceptDSL
 from whymath_backend.l3.verify_answer import verify_answer
 from whymath_backend.schema.enums import PedagogyStrategy
 
+# DSL *본문*(정의·직관·예시)이 흘러들 수 있는 세그먼트 종류 — 수식 봉인 검사의 범위.
+# 나머지 종류(`prompt`·`solution_step`·`heading`·`reflection`)는 어댑터가 평가 재료나 고정 문구로
+# 조립하므로 본문 수식을 싣지 않는다. SOCRATIC이 예시 본문을 `question`에 실으므로 question은 포함.
+_BODY_SEGMENT_KINDS: frozenset[str] = frozenset({"definition", "intuition", "example", "question"})
+
 
 def _substitute(text: str, bindings: dict[str, str]) -> str:
     """light render 치환 — `{name}` 자리를 bindings 값으로 바꾼다(없는 키는 그대로 둔다).
@@ -47,13 +52,25 @@ def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> Valida
     DSL 자유 서술에서 방정식을 추출해(`extract_equation`), 그 수식을 실은 세그먼트가 봉인을
     지켰는지 `classify_invariance_failure`로 판정한다(단일 진실 원천 재사용). 추출할 수식이
     없으면 검사 대상이 아니다(None=통과).
+
+    **검사 대상은 DSL *본문*을 실을 수 있는 세그먼트뿐이다**(`_BODY_SEGMENT_KINDS`). `prompt`·
+    `solution_step`은 어느 어댑터에서도 평가 재료(`assessment.conditions`/`answer_map`)에서만
+    조립되므로 DSL 본문 수식을 실을 리가 없다. 그런데 그 세그먼트들은 조건식 때문에 `=`를
+    포함해 캐리어 조건(`"=" in seg.content`)에 걸리고, 그러면 *다른 출처*의 수식이 없다는
+    이유로 EQUATION_ALTERED가 뜬다 — 봉인이 잡으려던 위반(본문 수식 변형)이 아니라 오탐이다.
+    kind로 범위를 좁히는 것이 봉인을 *약화*시키지 않는 이유가 이것이다(본문이 흘러드는 kind는
+    그대로 검사한다).
     """
     sources = [text for text in (dsl.definition, dsl.intuition) if text] + list(dsl.examples)
     for source in sources:
         equation = extract_equation(source)
         if equation is None:
             continue
-        carriers = [seg for seg in segments if equation in seg.content or "=" in seg.content]
+        carriers = [
+            seg
+            for seg in segments
+            if seg.kind in _BODY_SEGMENT_KINDS and (equation in seg.content or "=" in seg.content)
+        ]
         for seg in carriers:
             reason = classify_invariance_failure(seg.content, equation=equation)
             if reason is not None:

@@ -1,9 +1,17 @@
-"""L2 학습 경로 생성 — 막힌 선수개념들의 *선수 위상정렬*(근본→말단) 순서화.
+"""L2 학습 경로 생성 — 막힌 선수개념들의 *선수 위상정렬*(근본→말단) 순서화, 단 **조건부**다.
 
 개념그래프 소비 아크의 *학습 경로* 좌석이다. 직전 슬라이스 `recommend_prerequisite_gaps`
 (막힌 선수 추천)가 "어떤 선수개념들이 막혔는지"를 weakness 정렬로 골랐다면, 이 좌석은 그
 막힌 선수개념들 *사이의 선수 의존*을 위상정렬(topological sort)해 **"무엇부터 복습해야
 하는가 — 근본 선수 먼저, 그 위에 쌓이는 말단 나중"**의 학습 *순서*를 돌려준다.
+
+**무조건적 서술이 아니다(2026-08 실측, `PATH-02`)**: 엔드포인트 기본값(`max_depth=1`)에서
+막힌 선수 집합 *내부*의 직접 선수 엣지가 0인 사례가 **96.4%**다 — 그 경우 Kahn의 in-degree가
+전부 0이라 실제로는 `_tiebreak`만으로 정렬되고(`ordering_basis="tiebreak_only"`), "위상정렬"은
+남은 3.6%에서만 비자명하게 작동한다(`ordering_basis="topological"`). `LearningPath.
+ordering_edge_count`·`ordering_basis`가 이 구분을 응답에 정직하게 노출한다 — 둘 다
+`is_cycle_residual`과 대칭인 정직 표기이며(사이클은 실제 발생 0건인 방어적 축, 제약 0은
+지배적 축), 결정 로직(`_tiebreak`·Kahn 루프·엣지 공급)은 이 태스크로 변경되지 않는다.
 
 ────────────────────────────────────────────────────────────────────────────
 왜 위상정렬인가 — depth 정렬과 다르다
@@ -52,6 +60,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection, Sequence
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -104,6 +113,11 @@ class LearningPath(BaseModel):
     `steps`는 position 0..n-1 연속의 `LearningStep` 튜플이다. `has_cycle`이 True면
     선수 그래프에 사이클이 있어 일부 노드가 위상정렬로 방출되지 못하고 잔여로 append됐음을
     뜻한다(정직 표시·기본 False). frozen·본문 슬롯 없음(redaction 계약).
+
+    `ordering_edge_count`·`ordering_basis`는 `has_cycle`과 대칭인 정직 표기다(`PATH-02`) —
+    `steps`의 순서 *자체*만 봐서는 "제약이 있어 위상정렬됐는지" vs "제약이 0이라 tiebreak만
+    적용됐는지"를 구분할 수 없다(두 경우 우연히 같은 순서가 나올 수 있음). 기본값
+    (`max_depth=1`)에서는 96.4%가 `tiebreak_only`다.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -114,6 +128,21 @@ class LearningPath(BaseModel):
     has_cycle: bool = Field(
         default=False,
         description="선수 그래프에 사이클이 있어 잔여 노드가 발생했는지(정직 표시).",
+    )
+    ordering_edge_count: int = Field(
+        default=0,
+        description=(
+            "Kahn이 실제로 소비한 집합 내부 제약 엣지 수(집합 밖·중복 엣지 제외 후). "
+            "0이면 순서가 전부 _tiebreak로만 정해졌다는 뜻."
+        ),
+    )
+    ordering_basis: Literal["topological", "tiebreak_only", "empty"] = Field(
+        default="empty",
+        description=(
+            "'topological'=제약 엣지 ≥1개가 순서에 실제로 반영됨 · "
+            "'tiebreak_only'=제약 엣지 0(steps는 있음, weakness 등 tiebreak만으로 정렬) · "
+            "'empty'=steps 자체가 없음(입력 gaps 0건)."
+        ),
     )
 
 
@@ -161,7 +190,13 @@ def order_learning_path(
       ④ **잔여(사이클)** — Kahn이 못 방출한 노드를 `_tiebreak` 정렬해 deterministic
          append·`is_cycle_residual=True`·`LearningPath.has_cycle=True`(정직·누락 0).
 
-    완전 결정론(같은 입력 → 항상 같은 steps). 빈 입력 → 빈 steps·has_cycle False.
+    완전 결정론(같은 입력 → 항상 같은 steps). 빈 입력 → 빈 steps·has_cycle False·
+    ordering_basis="empty".
+
+    `ordering_edge_count`·`ordering_basis`(`PATH-02`)는 위 ②에서 이미 구성된 `adj`에서
+    파생만 한다(신규 순회·쿼리 0, `_tiebreak`·Kahn 루프·엣지 공급 로직 변경 0) —
+    `sum(len(v) for v in adj.values())`가 집합 밖·중복 엣지가 이미 걸러진 뒤의 실제 소비
+    제약 엣지 수다.
     """
     # ① dedup — 같은 concept_id 첫 등장만(순서 보존). dict가 삽입 순서를 보존한다.
     nodes: dict[uuid.UUID, PrerequisiteGap] = {}
@@ -202,7 +237,21 @@ def order_learning_path(
         steps.append(_to_step(gap, position, is_cycle_residual=True))
         position += 1
 
-    return LearningPath(steps=tuple(steps), has_cycle=has_cycle)
+    # ⑤ ordering_edge_count·ordering_basis(PATH-02) — ②의 adj에서 파생만, 신규 순회 0.
+    edge_count = sum(len(v) for v in adj.values())
+    if not steps:
+        ordering_basis: Literal["topological", "tiebreak_only", "empty"] = "empty"
+    elif edge_count > 0:
+        ordering_basis = "topological"
+    else:
+        ordering_basis = "tiebreak_only"
+
+    return LearningPath(
+        steps=tuple(steps),
+        has_cycle=has_cycle,
+        ordering_edge_count=edge_count,
+        ordering_basis=ordering_basis,
+    )
 
 
 def _to_step(gap: PrerequisiteGap, position: int, *, is_cycle_residual: bool) -> LearningStep:

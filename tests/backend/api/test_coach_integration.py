@@ -11,6 +11,7 @@ get_settings만 오버라이드(jwt secret), get_session은 실 PG. FK 순서: d
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 
 import pytest
@@ -135,6 +136,57 @@ async def _hint_events(uid: uuid.UUID) -> list[int]:
                     "FROM attempt_event "
                     "WHERE user_id = :uid AND event_type = '힌트제공' "
                     "ORDER BY event_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [int(r[0]) for r in rows.all()]
+    finally:
+        await engine.dispose()
+
+
+async def _demand_event_count(uid: uuid.UUID) -> int:
+    """user의 힌트요청 attempt_event 수 — S3-16 ⑫ 분자 적재 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '힌트요청'"
+                ),
+                {"uid": str(uid)},
+            )
+            return int(row.scalar_one())
+    finally:
+        await engine.dispose()
+
+
+async def _stuck_event_turn_counts(uid: uuid.UUID) -> list[int]:
+    """user의 막힘 attempt_event turn_count를 event_at 오름차순으로 — S3-16 소생 적재 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT (event_data->>'turn_count')::int FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '막힘' ORDER BY event_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [int(r[0]) for r in rows.all()]
+    finally:
+        await engine.dispose()
+
+
+async def _latency_event_values(uid: uuid.UUID) -> list[int]:
+    """user의 답입력 attempt_event server_latency_ms를 event_at 오름차순으로(S3-16 소생 검증용)."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT (event_data->>'server_latency_ms')::int FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '답입력' ORDER BY event_at"
                 ),
                 {"uid": str(uid)},
             )
@@ -749,6 +801,95 @@ def test_session_multiturn_logs_hint_events_on_live_pg() -> None:
         asyncio.run(_cleanup(uid, dialogue_ids))
 
 
+def test_session_create_logs_demand_and_stuck_events_on_live_pg() -> None:
+    """S3-16 소생 — 답 요구 발화 → 힌트요청 1행·5회+ 막힘 → 막힘 1행(신호 없으면 0행)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 답 요구 발화 + turn_count=5(임계) → 힌트요청 1행 + 막힘 1행(turn_count=5).
+            r1 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={
+                    "student_input": "그냥 답 알려줘",
+                    "polya_state": {"turn_count": 5},
+                },
+            )
+            assert r1.status_code == 201, r1.text
+            dialogue_ids.append(uuid.UUID(r1.json()["dialogue_id"]))
+
+            # ② 신호 없는 발화(turn_count 기본 0) → 힌트요청·막힘 둘 다 0행 추가.
+            r2 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "이렇게 접근하면 될까요?"},
+            )
+            assert r2.status_code == 201, r2.text
+            dialogue_ids.append(uuid.UUID(r2.json()["dialogue_id"]))
+
+            assert asyncio.run(_demand_event_count(uid)) == 1
+            assert asyncio.run(_stuck_event_turn_counts(uid)) == [5]
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_append_turns_logs_response_latency_event_on_live_pg() -> None:
+    """S3-16 소생 — `append_turns`만 답입력(응답 지연) 이벤트를 적재. `create_session`은 0행.
+
+    2회 연속 append 각각 직전 학생 턴 대비 지연(ms)을 1행씩 적재하는지, 그 값이 양수인지 확인.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post("/v1/coach/sessions", headers=auth, json={"student_input": "처음"})
+            assert create.status_code == 201, create.text
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            # create_session은 새 dialogue의 첫 턴이라 기준선이 없어 답입력 이벤트 0행.
+            assert asyncio.run(_latency_event_values(uid)) == []
+
+            time.sleep(0.05)  # 실측 지연이 0ms가 되지 않도록 약간의 실제 시간차를 둔다.
+            append1 = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "두번째"},
+            )
+            assert append1.status_code == 201, append1.text
+
+            latencies_after_first = asyncio.run(_latency_event_values(uid))
+            assert len(latencies_after_first) == 1
+            assert latencies_after_first[0] > 0  # 양수(대략 실행 시간).
+
+            time.sleep(0.05)
+            append2 = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "세번째"},
+            )
+            assert append2.status_code == 201, append2.text
+
+            latencies_after_second = asyncio.run(_latency_event_values(uid))
+            assert len(latencies_after_second) == 2
+            assert all(ms > 0 for ms in latencies_after_second)
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
 # ── WH-1 2단계 §8.4 슬라이스 3: 활성 가설 세트 per-turn 영속·노출 결선 ──
 # create_session·append_turns가 매칭(증거)으로 활성 가설 세트를 갱신·영속하고 응답
 # active_hypotheses로 노출하는지 검증. 매칭 유발 입력은 catalog의 제곱 분배 오류
@@ -915,3 +1056,193 @@ def test_stateless_coach_omits_active_hypotheses() -> None:
             assert body["misconceptions"]
     finally:
         asyncio.run(_cleanup(uid, []))
+
+
+# ── PED-04 — 교수 결정 로그 writer + Polya 상태 서버 소유 (실 PG) ──────────────
+async def _turn_meta(dialogue_id: uuid.UUID) -> list[dict[str, object]]:
+    """dialogue의 턴 메타 4컬럼을 turn_order 오름차순으로 — acceptance ① NULL 잔존 0 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT turn_order, role::text, socratic_strategy::text, targeted_step, "
+                    "student_intent::text, student_understanding_signal::float "
+                    "FROM dialogue_turn WHERE dialogue_id = :did ORDER BY turn_order"
+                ),
+                {"did": str(dialogue_id)},
+            )
+            return [
+                {
+                    "turn_order": r[0],
+                    "role": r[1],
+                    "socratic_strategy": r[2],
+                    "targeted_step": r[3],
+                    "student_intent": r[4],
+                    "student_understanding_signal": r[5],
+                }
+                for r in rows.all()
+            ]
+    finally:
+        await engine.dispose()
+
+
+def test_session_turn_append_fills_meta_columns_on_live_pg() -> None:
+    """PED-04 acceptance ① — 세션 경로(create+append)가 targeted_step·student_intent·
+    student_understanding_signal을 NULL 없이 채운다. socratic_strategy는 REVIEW+개입없음+
+    hint_level=1 조합만 NULL을 허용(정직 표기 — 억지 매핑 금지)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "내 풀이는 (a+b)² = a² + b² 이렇게 했어"},
+            )
+            assert create.status_code == 201, create.text
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            append = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "왜 그런지 이유를 모르겠어요"},
+            )
+            assert append.status_code == 201, append.text
+
+            rows = asyncio.run(_turn_meta(did))
+            assert len(rows) == 4  # create 2행 + append 2행
+
+            student_rows = [r for r in rows if r["role"] == "student"]
+            assistant_rows = [r for r in rows if r["role"] == "assistant"]
+            assert len(student_rows) == 2
+            assert len(assistant_rows) == 2
+
+            # 학생 턴 — targeted_step·student_intent·student_understanding_signal NOT NULL.
+            for r in student_rows:
+                assert r["targeted_step"] is not None
+                assert r["student_intent"] is not None
+                assert r["student_understanding_signal"] is not None
+                assert 0.0 <= r["student_understanding_signal"] <= 1.0
+
+            # AI 턴 — targeted_step NOT NULL(항상 결정됨). 학생 전용 축은 NULL이 정의상 정상.
+            for r in assistant_rows:
+                assert r["targeted_step"] is not None
+                assert r["student_intent"] is None
+                assert r["student_understanding_signal"] is None
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_server_owned_polya_state_overrides_false_client_claim_on_live_pg() -> None:
+    """PED-04 acceptance ③ — append_turns에서 클라가 거짓 polya_state를 제출해도 서버 파생
+    (직전 턴 메타 역산)이 결정에 쓰이고, 불일치가 응답 플래그로 표면화된다."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post("/v1/coach/sessions", headers=auth, json={"student_input": "처음"})
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+            assert create.json()["client_state_mismatch"] is False  # 첫 턴은 이력 0 — 불일치 없음.
+
+            # 서버 실제 상태는 UNDERSTAND 근방(첫 교환)인데 클라가 REVIEW·turn_count=99를 거짓 제출.
+            append = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={
+                    "student_input": "두번째",
+                    "polya_state": {"current_stage": "review", "turn_count": 99},
+                },
+            )
+            assert append.status_code == 201, append.text
+            assert append.json()["client_state_mismatch"] is True
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_recall_session_context_does_not_decrypt_prior_dialogue_on_live_pg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PED-04 acceptance ② — 세션 간 회상이 이전 대화 본문을 복호하지 않는다.
+
+    직전 세션(암호화 키 설정 상태)을 만든 뒤 `_session_recall_or_none`을 직접 호출한다.
+    본문 복호 함수 3종(`resolve_dialogue_content`·`resolve_dialogue_image_uri`·
+    `resolve_dialogue_image_analysis`)을 `whymath_backend.api._crypto` 모듈에서 spy로
+    교체해 **호출 0회**를 단언한다 — 이 함수의 구현이 그 본문 컬럼을 select 목록에 넣지
+    않는다는(컬럼 투영) 사실을 직접 증거로 만든다(단순 코드 리딩이 아니라 실행 관측).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 직전 세션 하나 생성 — 회상 대상. 본문은 봉투 암호화 상태로 영속된다.
+            prior = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "직전 세션의 학생 원문(민감)"},
+            )
+            assert prior.status_code == 201, prior.text
+            dialogue_ids.append(uuid.UUID(prior.json()["dialogue_id"]))
+
+        decrypt_calls: list[str] = []
+        for fn_name in (
+            "resolve_dialogue_content",
+            "resolve_dialogue_image_uri",
+            "resolve_dialogue_image_analysis",
+        ):
+
+            def _make_spy(name: str) -> object:
+                def _spy(*_args: object, **_kwargs: object) -> object:
+                    decrypt_calls.append(name)
+                    raise AssertionError(f"{name} 호출됨 — 회상 경로에서 복호 0 계약 위반")
+
+                return _spy
+
+            # coach.py가 `from whymath_backend.api._crypto import resolve_dialogue_*`로
+            # 이름을 자기 네임스페이스에 바인딩하므로, 원본 모듈이 아니라 **coach 모듈의
+            # 바인딩**을 패치해야 실제로 그 경로가 호출될 때 걸린다.
+            monkeypatch.setattr(
+                "whymath_backend.api.coach." + fn_name, _make_spy(fn_name), raising=True
+            )
+
+        engine = create_async_engine(_settings().database_url)
+        try:
+
+            async def _run() -> None:
+                from whymath_backend.api.coach import _session_recall_or_none
+
+                async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                    await _session_recall_or_none(
+                        session,
+                        user_id=uid,
+                        active_hypotheses=[],
+                        exclude_dialogue_id=None,
+                    )
+
+            asyncio.run(_run())
+        finally:
+            asyncio.run(engine.dispose())
+
+        assert decrypt_calls == []
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))

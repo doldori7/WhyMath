@@ -170,9 +170,12 @@ jobs:
           retention-days: 14
 
       # ARCH-21: 코퍼스 변경 시에만 트리거되는 옵션 스텝(상시 실행 아님 — changes 잡의
-      # corpus 플래그 경유). harness/의 기존 검사 자산 8종(corpus_audit·수식동치·개념그래프·
-      # 오개념crosswalk·코치프로즈누설·저작권·결함주입강등전 + wilson 경계)을 조립해 단일
-      # JSON 리포트 + exit 0/1 게이트를 낸다. 이 스텝만 레포 루트로 working-directory를
+      # corpus 플래그 경유). harness/의 기존 검사 자산 9종(corpus_audit·수식동치·개념그래프·
+      # 오개념crosswalk·코치프로즈누설·저작권·결함주입강등전·금칙어PII(ARCH-24)·
+      # 학생결함신고수집(RPT-01) + wilson 경계)을 조립해 단일 JSON 리포트 + exit 0/1 게이트를
+      # 낸다. 축 9(defect_report_intake)는 DB를 읽는데 이 잡엔 Postgres 서비스가 없어 상시
+      # error로 보고되지만, 이 스텝은 continue-on-error: true라 CI를 막지 않는다.
+      # 이 스텝만 레포 루트로 working-directory를
       # 오버라이드한다 — 잡 기본값(defaults.run.working-directory: src/data-pipeline)에서는
       # `-m whymath_backend.harness.qa_pipeline`이 backend 패키지를 못 찾는다.
       - name: 게이트 — QA 파이프라인 오케스트레이터 (코퍼스 변경 시만·qa_pipeline)
@@ -294,6 +297,13 @@ jobs:
       # 코퍼스 루트는 CLI가 __file__ 기준으로 자가 탐지(cwd=src/backend 무관 — parents[4]).
       - name: 게이트 — 콘텐츠 출처·라이선스 집행 (provenance_audit·pool 필드 + 사이드카 계약)
         run: python -m whymath_backend.ops.provenance_audit
+
+      # OPS-16: L3 생성 프롬프트 정본(docs/prompts/l3_*.md)의 3레일 감사 —
+      # ⓐ 저작권(평가원·EBS·교과서 본문 복제 금지 지시문) ⓑ 봉인(rephrase 수치·정답 불변)
+      # ⓒ 독립성(cross_verify에 생성자 문맥 미주입). 위반 시 exit 1. hermetic(LLM 0·DB 0).
+      # 변별력은 tests/backend/harness/test_prompt_asset_audit_l3.py의 결함 주입이 상시 봉인.
+      - name: 게이트 — L3 생성 프롬프트 레일 (prompt_asset_audit·저작권·봉인·독립성)
+        run: python -m whymath_backend.harness.prompt_asset_audit --axis l3
 
       - name: Upload coverage artifact
         if: always()

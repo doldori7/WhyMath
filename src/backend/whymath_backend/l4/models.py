@@ -39,6 +39,44 @@ StageTransition = Literal["stay", "next", "previous"]
 """다음 단계 전이 결정. *자동 previous는 절대 없음* — 학생 명시 후퇴 신호로만 발생."""
 
 
+POLYA_STAGE_ORDER: tuple[PolyaStage, ...] = (
+    PolyaStage.UNDERSTAND,
+    PolyaStage.PLAN,
+    PolyaStage.EXECUTE,
+    PolyaStage.REVIEW,
+)
+"""단계 순서 정본(스펙 L22-27). PED-04 이전에는 `polya/engine.py`·`socratic/select.py`가
+동일 튜플을 각자 사복제했고, `DialogueTurn.targeted_step`(1-기반 인덱스) 적재·역산이 세 번째
+사본을 요구하게 되어 여기로 단일화했다 — 유지보수 지옥 방어(단일 진실원천)."""
+
+
+def next_polya_stage(current: PolyaStage) -> PolyaStage:
+    """현 단계의 다음 단계. REVIEW는 종착이라 자기 자신(셀프루프)."""
+    idx = POLYA_STAGE_ORDER.index(current)
+    if idx == len(POLYA_STAGE_ORDER) - 1:
+        return current
+    return POLYA_STAGE_ORDER[idx + 1]
+
+
+def polya_stage_index(stage: PolyaStage) -> int:
+    """단계 → **1-기반** 인덱스(UNDERSTAND=1 … REVIEW=4).
+
+    `DialogueTurn.targeted_step`(INTEGER)의 값 공간 정본. 1-기반인 이유: 0은 "미지정"과
+    구분되지 않아 NULL/0 혼동을 부른다(적재 여부 판정이 값 자체로 서게 하려는 것).
+    """
+    return POLYA_STAGE_ORDER.index(stage) + 1
+
+
+def polya_stage_from_index(index: int | None) -> PolyaStage | None:
+    """1-기반 인덱스 → 단계. 범위 밖·None이면 None(관용 — 과거 행·손상 값 방어).
+
+    PED-04 D2가 `targeted_step`에서 서버측 Polya 상태를 역산할 때 쓴다.
+    """
+    if index is None or not 1 <= index <= len(POLYA_STAGE_ORDER):
+        return None
+    return POLYA_STAGE_ORDER[index - 1]
+
+
 class PolyaState(BaseModel):
     """세션의 현재 Polya 상태. 자연스러운 진행·후퇴 추적(스펙 §"Polya 4단계 엔진" L27).
 

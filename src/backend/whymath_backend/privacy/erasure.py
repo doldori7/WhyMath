@@ -34,6 +34,15 @@ ORM/쿼리빌더만(`delete(Model).where(...)` — 원시 SQL 0·CLAUDE.md). `di
 범위 밖(후속): 삭제권 *요청* API 엔드포인트(인증·본인 확인·법정대리인 동의 흐름)·보존 기한 배치
 (`evidence_store.purge_expired`는 retention 전용·여기는 user 단위)·외부 store 삭제 *집행*
 (ClickHouse·S3·Redis 클라이언트 — 현재는 `pending_external` 매니페스트로 명시만).
+
+완전성 검사의 방향(COLLAB-02, 2026-08): 기존 `tests/backend/privacy/test_erasure.py`는 "계획된
+테이블은 전부 실제 삭제 순서에 등장하는가"(계획→실행)만 단언했다 — 그 역방향("소유 컬럼을 가진
+테이블인데 계획에 없는 것이 있는가", 실행→계획)은 검사되지 않아 신설 테이블의 파기 누락이 조용히
+샐 수 있었다. `_ERASURE_PLAN_EXEMPTIONS`(아래)가 그 역방향 검사의 *사유 명시 허용목록*이고,
+`tests/backend/privacy/test_erasure_plan_completeness.py`가 `Base.metadata.tables` 전수 스윕으로
+이를 강제한다. 협업(다자 소유) 스키마의 파기 규칙은
+`docs/architecture/collaboration_landing_design.md` §3(5분류·3배관 처리표·변호사 검토 대상)이
+정본이다.
 """
 
 from __future__ import annotations
@@ -100,6 +109,35 @@ _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
     (UserPersonaHistory, "user_id"),
     (UserStateSnapshot, "user_id"),
 )
+
+# COLLAB-02 방향 역전 — 소유 컬럼(user_id·student_id·target_user_id)을 가졌지만 *정당하게*
+# `_ERASURE_PLAN` 밖에 있어야 하는 테이블의 사유 명시 허용목록. 무사유 예외는 금지(CLAUDE.md).
+# `tests/backend/privacy/test_erasure_plan_completeness.py`가 `Base.metadata.tables` 전수에서
+# 소유 컬럼 보유 테이블을 스윕해 이 두 집합(_ERASURE_PLAN ∪ 아래 허용목록) 밖의 테이블을 red로
+# 잡는다 — 기존 test_erasure.py:94 `test_covers_all_planned_tables`(계획→실행, planned <= order)의
+# *역방향*(실행→계획, 소유 테이블 중 계획 누락 검출)이다.
+#
+# 분류 근거: `docs/architecture/collaboration_landing_design.md` §2.2(소유 축 5분류) — 여기 등재된
+# 모든 테이블은 **E형(감사)** 또는 `user_profile`(별도 명시 삭제) 둘 중 하나다. 미래 협업 스키마가
+# 만드는 B형(학생 기여+타인 컨테이너)·C형(교차 사용자 집계)·D형(조직 소유) 테이블도 같은 방식으로
+# 이 상수에 사유와 함께 등재하거나, `_ERASURE_PLAN`에 편입해야 한다(같은 문서 §3 다자 소유 규칙).
+_ERASURE_PLAN_EXEMPTIONS: dict[str, str] = {
+    "user_profile": (
+        "user_id가 PK 자체 — `_ERASURE_PLAN` 튜플이 아니라 `erase_user()`가 자식 삭제 전부가 "
+        "끝난 뒤 마지막에 명시적으로 `delete(UserProfile)...`한다(FK 의존 안전 순서, 위 삭제 순서 "
+        "주석 참조). 계획 튜플에 없다고 파기 누락이 아니다 — 코드에서 항상 실행된다."
+    ),
+    "deletion_audit": (
+        "GDPR 삭제 증빙 append-only 로그(`privacy/audit.py` `DeletionAudit`) — user_id는 FK가 "
+        "*아닌* plain UUID로 설계돼 있다. 사용자 삭제 *후*에도 잔존해야 삭제 사실 자체를 증빙할 수 "
+        "있다(지우면 증빙이 함께 사라져 목적이 무너진다). 협업 5분류(E형 감사)와 동형."
+    ),
+    "privacy_audit": (
+        "SEC-09 개인정보 감사(반출·동의변경·관리자접근) append-only 로그(`privacy/audit.py` "
+        "`PrivacyAudit`) — user_id·target_user_id 둘 다 FK가 아닌 plain UUID. deletion_audit와 "
+        "동일 근거로 계정 삭제 후에도 잔존해야 감사 목적을 달성한다. 협업 5분류(E형 감사)와 동형."
+    ),
+}
 
 
 class ExternalErasureTarget(BaseModel):
