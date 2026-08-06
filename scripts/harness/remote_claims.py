@@ -1106,6 +1106,163 @@ def scan_stale_branches(
         return StaleBranchScanResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 설계 문서 중복 착수 탐지 (HARN-14 — HARN-13 나이 임계의 사각 보완)
+# ──────────────────────────────────────────────────────────────────────────
+# 2026-08-04 사고: 세션이 외부 틀(21. 운영 플랫폼)로 독립 착수했다가, 조사 중 미머지 브랜치
+# claude/whymath-operations-platform-cn6dxi(당시 1일 경과)가 같은 산출물을 이미 만든 것을
+# 발견했다 — 착수 전에 발견해 폐기 0줄로 끝났지만, HARN-13의 3일 나이 임계 아래였다면 브리핑에
+# 안 떴을 것이다(운으로 회피). 설계 문서 중복은 *나이가 아니라 존재 자체*가 위험 신호다
+# (착수 당일이 가장 위험 — 아무도 아직 모른다). 그래서 이 스캔은 나이 임계를 두지 않는다.
+_DOC_SERIES_PREFIX = "docs/"
+_DOC_SERIES_SUFFIX = "_review.md"  # *_gap_review.md도 이 접미어로 커버(예: "..._gap_review.md")
+
+
+def _is_doc_series_path(path: str) -> bool:
+    return path.startswith(_DOC_SERIES_PREFIX) and path.endswith(_DOC_SERIES_SUFFIX)
+
+
+@dataclass(frozen=True)
+class DocSeriesCandidate:
+    """미머지 원격 브랜치가 트렁크에 없는 설계 문서 시리즈 파일을 추가한 1건."""
+
+    branch: str
+    ref: str
+    files: tuple[str, ...]
+    last_commit_at: datetime
+
+
+@dataclass
+class DocSeriesScanResult:
+    """설계 문서 중복 착수 스캔 결과. status: ok | offline | error(판정 불가는 무시 금지)."""
+
+    status: str
+    candidates: list[DocSeriesCandidate] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+    trunk_ref: str = ""
+    trunk_branch: str = ""
+    trunk_source: str = ""
+
+
+def scan_doc_series_duplicates(
+    root: Path,
+    *,
+    fetch: bool = True,
+    max_refs: int = SCAN_MAX_REFS,
+) -> DocSeriesScanResult:
+    """트렁크에 없는 `docs/**/*_review.md`(`*_gap_review.md` 포함)를 추가한 미머지 원격
+    브랜치를 나이 무관하게 전부 찾는다.
+
+    "추가"의 판정은 **트렁크 커밋과 브랜치 커밋의 직접 트리 비교**(`git diff A B`, 점 없는
+    두 ref 형태)여야 한다 — `A...B`(공통 조상 기준 3점 diff)를 쓰면, 이미 SQUASH 머지돼
+    트렁크에 실제로 존재하는 파일도 그 브랜치의 오래된 merge-base 기준으로는 "새 파일"처럼
+    보여 **오탐**한다(SQUASH 머지는 원 브랜치 커밋을 트렁크의 조상으로 만들지 않으므로
+    merge-base가 머지 시점보다 훨씬 이전에 머무른다 — `scan_stale_branches`가 조상 관계
+    대신 `ahead` count를 쓰는 것과 같은 이유의 재발). 실측: 이미 머지된
+    `claude/whymath-gamification-design-n3mf50`이 `A...B`로는 오탐되고 `A B`(직접 비교)로는
+    정상적으로 빠짐을 이 스캔 설계 중 실제로 확인했다.
+
+    반환 status가 'ok'가 아니면 판정 자체가 불가했다는 뜻이며, 빈 candidates 목록을
+    '중복 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다 — CLAUDE.md).
+    """
+    if not has_remote(root):
+        return DocSeriesScanResult("offline", message="origin 원격 없음 — 문서 스캔 불가")
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return DocSeriesScanResult(
+                    _classify_failure(fetched.stderr),
+                    message=f"원격 브랜치 fetch 실패: {fetched.stderr.strip()}",
+                )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)%09%(committerdate:iso-strict)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return DocSeriesScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+
+        entries: list[tuple[str, str]] = []
+        for line in listing.stdout.splitlines():
+            ref, _, date_str = line.partition("\t")
+            ref, date_str = ref.strip(), date_str.strip()
+            if not ref or ref.endswith("/HEAD"):
+                continue
+            entries.append((ref, date_str))
+        truncated = len(entries) > max_refs
+        entries = entries[:max_refs]
+
+        trunk_ref, trunk_source = _resolve_trunk_ref(root)
+        trunk_branch = (
+            trunk_ref[len(REMOTE_REF_PREFIX) :]
+            if trunk_ref.startswith(REMOTE_REF_PREFIX)
+            else trunk_ref
+        )
+
+        candidates: list[DocSeriesCandidate] = []
+        for ref, date_str in entries:
+            if ref == trunk_ref:
+                continue
+            # 나이 임계 없음(HARN-14 존재 이유) — 직접 트리 비교(점 없는 두 ref)로 트렁크에
+            # 없는 신규 파일만 "추가"로 잡는다(3점 diff 오탐 회피, 함수 docstring 참조).
+            diff = _git(
+                root,
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                trunk_ref,
+                ref,
+                timeout=30,
+            )
+            if diff.returncode != 0:
+                continue  # 이 브랜치만 조용히 제외(전체 스캔은 실패시키지 않음 — stale 선례 동형)
+            files = tuple(
+                sorted(p for p in diff.stdout.splitlines() if _is_doc_series_path(p.strip()))
+            )
+            if not files:
+                continue
+            try:
+                last_commit_at = datetime.fromisoformat(date_str)
+            except ValueError:
+                continue
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            candidates.append(
+                DocSeriesCandidate(
+                    branch=branch, ref=ref, files=files, last_commit_at=last_commit_at
+                )
+            )
+
+        return DocSeriesScanResult(
+            "ok",
+            candidates=candidates,
+            scanned_refs=len(entries),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=trunk_branch,
+            trunk_source=trunk_source,
+        )
+    except subprocess.TimeoutExpired:
+        return DocSeriesScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return DocSeriesScanResult("error", message=f"{type(exc).__name__}: {exc}")
+
+
 def _iter_batch_blobs(stdout: str):
     """`git cat-file --batch` 출력을 요청 순서대로 blob 본문(또는 None)으로 흘린다.
 

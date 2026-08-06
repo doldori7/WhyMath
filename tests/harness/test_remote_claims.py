@@ -947,6 +947,187 @@ class TestScanStaleBranches:
         assert result.stale == []
 
 
+class TestScanDocSeriesDuplicates:
+    """설계 문서 중복 착수 탐지(HARN-14) — 나이 임계 없이 진짜 로컬 원격에서 실측.
+
+    2026-08-04 사고(claude/whymath-operations-platform-cn6dxi 1일 경과·HARN-13의 3일
+    나이 임계 아래라 브리핑에 안 뜸)의 재발방지. 변별력의 핵심은 "이미 SQUASH 머지돼
+    트렁크에 실제로 존재하는 파일"과 "트렁크에 없는 진짜 신규 파일"을 다른 값으로
+    구분하는가다 — 3점 diff(`A...B`)를 쓰면 전자도 오탐한다(SQUASH는 원 브랜치 커밋을
+    트렁크의 조상으로 만들지 않아 merge-base가 머지 이전에 머무르기 때문).
+    """
+
+    def _add_doc(self, repo: Path, relpath: str, content: str = "content\n") -> None:
+        path = repo / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", relpath], cwd=repo, check=True, capture_output=True)
+
+    def test_새_설계문서를_추가한_브랜치를_나이_무관하게_감지한다(self, bare_remote):
+        """방금(0일 전) 만든 브랜치도 즉시 잡혀야 한다 — 이 스캔은 나이 임계가 없다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._add_doc(a, "docs/architecture/foo_gap_review.md", "새 갭 리뷰\n")
+        subprocess.run(
+            ["git", "commit", "-m", "add foo gap review"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        result = remote_claims.scan_doc_series_duplicates(b)
+        assert result.status == "ok"
+        branches = {c.branch: c for c in result.candidates}
+        assert "claude/session-a" in branches
+        assert branches["claude/session-a"].files == ("docs/architecture/foo_gap_review.md",)
+
+    def test_문서가_아닌_파일_추가는_감지하지_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._add_doc(a, "src/backend/whymath_backend/ops/foo.py", "# code\n")
+        subprocess.run(
+            ["git", "commit", "-m", "add unrelated code"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        result = remote_claims.scan_doc_series_duplicates(b)
+        assert result.status == "ok"
+        assert "claude/session-a" not in {c.branch for c in result.candidates}
+
+    def test_docs_안이어도_review_접미어가_아니면_감지하지_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._add_doc(a, "docs/architecture/foo_notes.md", "무관 문서\n")
+        subprocess.run(
+            ["git", "commit", "-m", "add unrelated doc"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        result = remote_claims.scan_doc_series_duplicates(b)
+        assert result.status == "ok"
+        assert "claude/session-a" not in {c.branch for c in result.candidates}
+
+    def test_이미_SQUASH_머지된_문서는_오탐하지_않는다(self, bare_remote):
+        """핵심 회귀 — 3점 diff였다면 이 케이스가 오탐났을 것(설계 중 실측으로 발견).
+
+        브랜치가 신규 문서를 추가해 push한 뒤, 그 브랜치를 SQUASH(비-ff)로 main에
+        합치고 origin/main을 갱신한다. 원 브랜치 ref는 원격에 그대로 남는다(GitHub가
+        squash 머지 후 브랜치를 자동 삭제하지 않는 한 흔한 상태) — 이 상태에서 스캔이
+        그 브랜치를 더 이상 후보로 잡으면 안 된다(파일이 이미 트렁크에 있으므로).
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._add_doc(a, "docs/architecture/landed_gap_review.md", "머지된 갭 리뷰\n")
+        subprocess.run(
+            ["git", "commit", "-m", "add landed gap review"], cwd=a, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        # session-a에서 SQUASH 머지 시뮬레이션: main으로 체크아웃 후 --squash 병합·새 커밋.
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "merge", "--squash", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "squash merge landed gap review"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_doc_series_duplicates(b)
+        assert result.status == "ok"
+        assert "claude/session-a" not in {
+            c.branch for c in result.candidates
+        }, "SQUASH 머지로 이미 트렁크에 존재하는 문서가 오탐됨 — 3점 diff 회귀 의심"
+
+    def test_변별력_미머지일때_뜨고_머지후_사라진다(self, bare_remote):
+        """⑤ — 같은 브랜치가 미머지 상태와 머지 후 상태에서 실제로 다른 값을 낸다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._add_doc(a, "docs/architecture/roundtrip_gap_review.md", "왕복 갭 리뷰\n")
+        subprocess.run(
+            ["git", "commit", "-m", "add roundtrip gap review"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        before = remote_claims.scan_doc_series_duplicates(b)
+        assert "claude/session-a" in {c.branch for c in before.candidates}  # 미머지 — 뜬다
+
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "merge", "--squash", "claude/session-a"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "squash merge roundtrip"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        after = remote_claims.scan_doc_series_duplicates(b)
+        assert "claude/session-a" not in {c.branch for c in after.candidates}  # 머지 후 — 사라진다
+
+    def test_원격_없음은_offline_판정(self, git_repo: Path):
+        result = remote_claims.scan_doc_series_duplicates(git_repo)
+        assert result.status == "offline"
+        assert result.candidates == []
+
+    def test_조회_실패는_빈_목록으로_위장되지_않는다(self, bare_remote, monkeypatch):
+        _, clone = bare_remote
+        a = clone("session-a")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "fetch":
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result = remote_claims.scan_doc_series_duplicates(a)
+        assert result.status != "ok"
+        assert result.candidates == []
+
+
 def _os_environ() -> dict[str, str]:
     import os
 
