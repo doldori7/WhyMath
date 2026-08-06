@@ -9,10 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from data_pipeline.graph_analytics.__main__ import app
 from data_pipeline.graph_analytics.analytics import build_report
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
