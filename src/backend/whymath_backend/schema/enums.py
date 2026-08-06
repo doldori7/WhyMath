@@ -1163,6 +1163,17 @@ class AuditEventKind(str, Enum):
     있도록 미리 세운다(가짜 이벤트 날조 금지 — 실 호출부가 생기기 전까지는 진짜로 0행이다).
     """
 
+    role_change = "role_change"
+    """`ops/role_grant_cli.py`(ADMIN-01) grant/revoke — `user_profile.role` 변경.
+
+    **이번 CLI가 진짜 첫 호출부다**(위 `admin_access`와 달리 "호출부 0곳"이 아니다) —
+    `Role.CONTENT_ADMIN`을 실 사용자에게 부여하는 경로가 저장소 전체에 0건이던 갭(콘텐츠 CUD
+    6라우터는 게이팅되지만 그 문을 열 열쇠를 아무도 발급할 수 없던 상태)을 이 CLI가 메우면서,
+    부여/회수와 `privacy.audit.record_role_change_audit`가 *같은 트랜잭션*으로 이 값을 적재한다
+    (`ops/role_grant_cli.py` 모듈 docstring 참조). HTTP 미노출 — 순수 ops CLI, 운영자 직접 실행
+    (`retention_purge_cli` 컨벤션 미러).
+    """
+
 
 class DefectCategory(str, Enum):
     """`defect_report.category` — 학생 결함 신고 카테고리(RPT-01, 폐쇄 6종).
