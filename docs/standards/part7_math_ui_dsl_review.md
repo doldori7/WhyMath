@@ -13,7 +13,7 @@
 | 항목 | 판정 | 조치 |
 |---|---|---|
 | ① 인지 인터페이스 생성 언어인가 | **✅** | `generate_learning_scene`=결정론 골격(UI Planner)·인지 인터페이스를 스키마 불변식으로 강제 |
-| ② 9블록 개념·오개념·행동영역 자동 분기 | **△ (재검토 정정 — 2/3 축)** | 개념·오개념 축은 분기하나 **행동영역(Skill)·학생모델 축은 미분기**·인터랙션 slider 단일·평가 장면 미합성. 상세 §재검토 |
+| ② 9블록 개념·오개념·행동영역 자동 분기 | **△ (재검토 정정 — 분기 4축 배선·잔여 △)** | 개념·오개념·**행동영역(S5k)·학생모델(mastery·S5l)** 4축 모두 분기하나 인터랙션 slider 단일·평가 장면 미합성으로 △ 유지. 상세 §재검토 |
 | ③ Core로 UI/런타임 상태 역류 없음 | **✅(거버넌스 동결 신설)** | 단방향 파이프라인·읽기전용 스냅샷·역의존 회피 배치. Part 7 전용 계층-방향/순수성 동결 테스트 추가 |
 
 구현 상태: Math UI DSL은 이미 `LearningScene` DSL로 **구현 완료**(S0~S5h·`l4/learning_scene.py`
@@ -56,7 +56,7 @@ cov 100%). 본 검토는 신규 기능이 아니라 *판정 + 발견된 갭 상�
   있는 가설), 신뢰도로 개입 패턴(반례/거꾸로/보류) 재분기(`select_intervention`).
 - `_decide_layout` → 배치(single/two_panel/vertical_stack) 분기.
 
-**택소노미 갭**: 플레이북은 9블록을 명명하나, 구현은 **6 element kind**다. 이는 `05a` §2·§10의
+**택소노미 갭**: 플레이북은 9블록을 명명하나, 구현은 **8 element kind**다. 이는 `05a` §2·§10의
 *의도적 설계*(anti-explosion·Concept Purity — 신규 엔진 0·기존 좌석 참조). 9블록 → 현 구현 크로스워크:
 
 | 플레이북 9블록 | 현 구현 좌석 | 형태 |
@@ -65,9 +65,9 @@ cov 100%). 본 검토는 신규 기능이 아니라 *판정 + 발견된 갭 상�
 | **Concept** | L1 `schema/concept.py`(`concept_id`로 *참조*) | 코어 개념(UI 블록 아님·참조가 정상) |
 | **Visualization** | `VisualizationElement`(kind=`visualization`) | element kind |
 | **Interaction** | `ParamControlElement`·`AnnotationElement` | element kind(조작·강조) |
-| **Skill** | `CognitiveType` enum 속성 + L2 숙달(`bkt`/`irt`) | 속성·모델(전용 블록 아님·Part 2 판정 동형) |
+| **Skill** | `SkillFocusElement`(kind=`skill_focus`·S5j) + `CognitiveType` 속성 | element kind(가시 focus)+속성 |
 | **Misconception** | `MisconceptionProbeElement`(kind=`misconception_probe`) | element kind |
-| **Tutoring** | `SocraticPromptElement` + `StepPanelElement` | element kind(발화·단계) |
+| **Tutoring** | `SocraticPromptElement`·`StepPanelElement` + `TutoringPromptElement`(kind=`tutoring_prompt`·mastery 적응·S5l) | element kind(발화·단계·LTHC 학생적응) |
 | **Assessment** | `schema/assessment.py`·`api/gating.py`·L2 | 별도 좌석(장면 요소 아님·외부화) |
 | **AIExplanation** | 같은 `LearningScene`을 AI가 렌더하는 *타깃*(`05a` §1) | 렌더 채널(전용 블록 아님) |
 
@@ -76,7 +76,7 @@ cov 100%). 본 검토는 신규 기능이 아니라 *판정 + 발견된 갭 상�
   스키마·렌더 타깃)에 산다. 갭의 실체는 *커버리지 누락*이 아니라 **9블록에 대한 명시적 크로스워크
   부재**였고, 본 표로 상환한다.
 - 회귀 방지: `test_scene_dsl_layer_governance.py::test_scene_kind_taxonomy_matches_crosswalk`가
-  6 kind 집합을 동결 — 블록 추가/삭제 시 red → 본 크로스워크 동반 갱신을 강제한다.
+  8 kind 집합을 동결 — 블록 추가/삭제 시 red → 본 크로스워크 동반 갱신을 강제한다.
 
 > 재검토 트리거: 실제 사용에서 Assessment/Skill/AIExplanation을 *장면 요소로* 합성해야 하는
 > 요구(예: 장면 내 즉석 평가 위젯)가 확인되면, 신규 element kind는 별도 기능 슬라이스(`05a` S5+
@@ -92,13 +92,13 @@ cov 100%). 본 검토는 신규 기능이 아니라 *판정 + 발견된 갭 상�
 - **역의존 회피가 배치로 강제**: `schema.*`는 L레이어 import 0 → `LearningScene`을 schema가 아니라
   **L4**에 배치. 생성기도 L3 아닌 **L4**에 두고 L3를 다운콜(L4→L3)한다(`scene_generation.py` ★배치
   정정 주석). L3(`l3.visualization`)는 L4를 import하지 않음(확인됨).
-- **런타임/interaction state 누출 0**: `LearningScene`·6 element kind에 세션·클릭·현재값 등 런타임
+- **런타임/interaction state 누출 0**: `LearningScene`·8 element kind에 세션·클릭·현재값 등 런타임
   상태 필드 부재. `layout`은 "선언적 배치 힌트(픽셀 아님)". 기존 방어: `TestConceptPurity`가 Concept
   노드에서 renderer·layout·`figure_spec` 슬롯 *부재* 단언, `math_dsl_risk_register.md`가 "interaction
   state 누출 0" 감사.
 - **신규 동결**(`tests/backend/l4/test_scene_dsl_layer_governance.py`): (a) L3 scene 좌석 L4 import 0,
-  (b) schema scene 좌석 L레이어 import 0, (c) SceneElement 6종 필드 화이트리스트 + 정답/판정/런타임
-  토큰 부재, (d) 9블록→6 kind 크로스워크 표류 감지. 검토 판정을 코드가 스스로 지킨다.
+  (b) schema scene 좌석 L레이어 import 0, (c) SceneElement 8종 필드 화이트리스트 + 정답/판정/런타임
+  토큰 부재, (d) 9블록→8 kind 크로스워크 표류 감지. 검토 판정을 코드가 스스로 지킨다.
 
 ---
 
@@ -142,13 +142,14 @@ Kiki가 제시한 재검토 관점은 9블록을 *이름*만이 아니라 **블�
 | InteractionBlock · Interaction Generator | slider·drag·tree expansion·단계선택 | `param_control`(slider)만 | 🔴 slider 단일(표의 5종 중 4종 미구현) |
 | SkillBlock | 행동영역 UI(조건 강조·경우분할 트리) | **S5j: `skill_focus` element kind**(선언적 조건 강조·행동영역별 자동 부여)·모바일 focus 카드 | 🟢 선언적 focus 블록(interactive 경우분할 트리는 Tier3 잔여) |
 | MisconceptionBlock | 오개념 "일부러 드러냄"(접근 vs 도달 대비) | reactive-only 사고 유도(preload·낙인 금지) | 🟡 설계 긴장(아래 해소) |
-| TutoringBlock | AI 설명·힌트·소크라테스 | `socratic_prompt`(개념 `cognitive_type` 분기) | 🟢 개념적응(단 *학생*적응 아님) |
+| TutoringBlock | AI 설명·힌트·소크라테스 | `socratic_prompt`(개념 분기) + **S5l: `tutoring_prompt`**(mastery→`adapt_lthc` 진입/비계/확장 자동 분기) | 🟢 개념적응 **+ 학생적응(mastery)**(모달리티 축은 의도적 미배선 — 아래 AIExplanationBlock 행) |
 | AssessmentBlock | 장면 내 문제생성·행동영역 측정·오개념 진단 | 장면 미합성(`schema/assessment`·L2·gating 분산) | 🔴 장면 미합성 |
 | AIExplanationBlock · Tutoring Adapter | 학생모델→설명 스타일(시각형→그래프·절차형→단계·직관형→비유) 자동선택 | 없음. **L2에 학습양식(modality) 신호 자체가 부재** | 🔴 미구현(상류 신호부터 없음) |
 
-**항목 ① 재확인**: ✅ 유지하되 경계 명시 — "인지 인터페이스"의 *개념* 적응(cognitive_type)은 되나
-*학생모델* 적응(Tutoring Adapter)은 아직 없다. 즉 현 DSL은 "개념→화면"은 자동이나 "학생→설명 스타일"은
-미자동이다. 항목 ①의 "인지"는 절반(개념측)만 능동.
+**항목 ① 재확인**: ✅ 유지하되 경계 명시 — "인지 인터페이스"의 *개념* 적응(cognitive_type)에 더해
+S5l로 *학생모델* 적응(mastery→LTHC 비계)이 배선됐다. 다만 이는 *비계 수준*(진입/비계/확장) 적응이지
+*설명 스타일(modality)* 적응은 아니다 — "학생→설명 스타일" 자동선택은 여전히 미자동(L2 학습양식 신호
+부재). 즉 항목 ①의 "인지"는 개념측 + 학생 숙달측은 능동, 설명 modality 축만 잔여.
 
 **항목 ③ 재확인**: ✅ 불변 — 재검토가 오히려 강화한다. `SceneLearnerContext`에 학습양식 축을 *추가하더라도*
 읽기전용 스냅샷·단방향 원칙은 유지되어야 하며(역류 금지), Tutoring Adapter는 코어로 상태를 되쓰지 않는다.
@@ -167,8 +168,12 @@ MisconceptionBlock을 확장한다.
 - **가시 SkillBlock element kind** ✅ **(완료·S5j·2026-07-03)**: `skill_focus`(7번째 kind·정답 필드 0)
   신설 — THEOREM/TECHNIQUE/PATTERN에 정본 조건-강조 focus cue 자동 부여(블록 유무 행동영역별 분기)·
   모바일 focus 카드·동결 6→7 갱신. **interactive 경우분할 트리는 잔여**(WH-S Tier3 종속).
-- **Tutoring Adapter**: *선행 조건 = L2 학습양식 신호 신설*(현재 부재). 신호 없이 explanationMode를
-  자동선택하면 근거 없는 추측 → 금지(AI 신뢰 금기). 신호 확보 후에야 설명 element에 modality 축 추가.
+- **Tutoring Adapter(학생적응)** ✅ **(완료·S5l·2026-08-05)**: 학생적응을 *반증된 학습양식(modality)이
+  아니라 BKT mastery*로 닫았다 — `tutoring_prompt`(8번째 kind·정답/hint_level 필드 0)를 신설해
+  `learner_context.mastery_level`→`mastery_to_level`→`adapt_lthc`(진입점/비계/확장)를 장면에 배선
+  (초보=진입+비계·숙달=확장·발전중=균형·축당 1개 캡·mastery 없으면 미방출·낙인 회피). 동결 7→8 갱신.
+  **modality(explanationMode) 축은 여전히 미배선**(아래 AIExplanationBlock 행) — L2 학습양식 신호
+  부재는 실재하고, 근거 없이 explanationMode를 자동선택하는 것은 여전히 금지(AI 신뢰 금기).
 - **Interaction/Viz 다양성(tree·drag·단계선택·트리/논리흐름 VizType)**: 기하·증명은 표기·작도 성숙도
   (WH-S Tier3/Lean)에 종속 — `05a` RS4 "초기 scope 제외"와 정합. 대수·함수 그래프부터 점증.
 - **AssessmentBlock**: 장면 내 평가 합성은 답 미루기·"빠른 정답 KPI 금지" 불변식과의 충돌을 먼저 검토한
