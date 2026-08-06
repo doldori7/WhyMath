@@ -19,6 +19,8 @@ acceptance:
   - "⑥ 범위 밖 동결 — refs/claims 403 자체의 해소(HARN-07 소유)·HARN-12 미머지 done 필터·문서 시리즈 인덱스 자동생성·태스크 편집 CLI 신설은 하지 않는다."
 artifacts:
   - fa934e997ff5c79987e6b86548b0a642514ba235
+  - 9afe03dd
+  - 87fc1b46
 paths:
   - "scripts/harness/**"
   - ".claude/settings.json"
