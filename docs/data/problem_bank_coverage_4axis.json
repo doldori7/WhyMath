@@ -10,8 +10,8 @@
   "band_totals": {
     "개념 [3.0,4.0)": 1852,
     "숙달 [4.0,5.0]": 162,
-    "인지 [1.0,2.0)": 950,
-    "절차 [2.0,3.0)": 2805
+    "인지 [1.0,2.0)": 1034,
+    "절차 [2.0,3.0)": 2881
   },
   "corpora": [
     {
@@ -75,6 +75,12 @@
       "status": "적재됨"
     },
     {
+      "name": "problem_bank_permutation_combination_v0",
+      "parse_errors": 0,
+      "problems": 160,
+      "status": "적재됨"
+    },
+    {
       "name": "problem_bank_probability_finite_v0",
       "parse_errors": 0,
       "problems": 34,
@@ -125,7 +131,7 @@
   ],
   "coverage_by_domain": {
     "경우의 수": {
-      "covered": 2,
+      "covered": 4,
       "total": 9
     },
     "공간도형과 공간좌표": {
@@ -307,7 +313,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 55,
+      "covered": 57,
       "total": 254
     },
     "대학교": {
@@ -330,6 +336,8 @@
     "[10공수1-02-05]",
     "[10공수1-02-07]",
     "[10공수1-02-11]",
+    "[10공수1-03-01]",
+    "[10공수1-03-02]",
     "[10공수1-03-03]",
     "[10공수1-04-02]",
     "[10공수2-01-01]",
@@ -418,14 +426,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 4153
+    "단답형": 4313
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 3551,
+    "problems_without_problem_type": 3711,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -467,6 +475,10 @@
     "problem_bank_misconception_mc_v0": {
       "개념 [3.0,4.0)": 605,
       "절차 [2.0,3.0)": 475
+    },
+    "problem_bank_permutation_combination_v0": {
+      "인지 [1.0,2.0)": 84,
+      "절차 [2.0,3.0)": 76
     },
     "problem_bank_probability_finite_v0": {
       "개념 [3.0,4.0)": 8,
@@ -529,6 +541,9 @@
     },
     "problem_bank_misconception_mc_v0": {
       "객관식": 1080
+    },
+    "problem_bank_permutation_combination_v0": {
+      "단답형": 160
     },
     "problem_bank_probability_finite_v0": {
       "단답형": 34
@@ -706,6 +721,8 @@
     "[10공수1-02-05]": 1,
     "[10공수1-02-07]": 60,
     "[10공수1-02-11]": 200,
+    "[10공수1-03-01]": 120,
+    "[10공수1-03-02]": 40,
     "[10공수1-03-03]": 24,
     "[10공수1-04-02]": 320,
     "[10공수2-01-01]": 200,
@@ -794,8 +811,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.20919540229885059,
-    "covered_code_count": 91,
+    "coverage_rate": 0.21379310344827587,
+    "covered_code_count": 93,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -804,9 +821,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 344
+    "zero_coverage_code_count": 342
   },
-  "total_problems": 5769,
+  "total_problems": 5929,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1031,6 +1048,9 @@
       "개념 [3.0,4.0)": 13,
       "절차 [2.0,3.0)": 11
     },
+    "PERMUTATION": {
+      "절차 [2.0,3.0)": 40
+    },
     "POINT-DISTANCE": {
       "절차 [2.0,3.0)": 200
     },
@@ -1131,6 +1151,10 @@
     "SUBTRACT-NEG": {
       "개념 [3.0,4.0)": 13,
       "절차 [2.0,3.0)": 11
+    },
+    "SUM-PRODUCT-PRINCIPLE": {
+      "인지 [1.0,2.0)": 84,
+      "절차 [2.0,3.0)": 36
     },
     "TRANSPOSE-SIGN": {
       "개념 [3.0,4.0)": 14,
@@ -2183,8 +2207,6 @@
     "[10공수1-02-08]",
     "[10공수1-02-09]",
     "[10공수1-02-10]",
-    "[10공수1-03-01]",
-    "[10공수1-03-02]",
     "[10공수1-04-01]",
     "[10공수2-01-03]",
     "[10공수2-01-05]",
