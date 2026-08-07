@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "me_screen.dart의 두 '준비 중' placeholder를 실 API 호출로 교체 — 신규 백엔드 엔드포인트 불요(기존 단일-개념 API만 소비)"
   - "반게임화 경계 동결 — 랭킹·스트릭·카운트다운 등 게임화 요소 추가 금지(docs/design/ui/00_index.md:41)"
   - "서버 정직 신호(has_cycle·빈 경로·401)를 그대로 노출 — 삼켜서 일반 오류로 뭉개지 않는다"
-artifacts: []
+artifacts:
+  - f9644016ffebab6fcd0e64a1317bbe8849d27f77
 paths:
   - src/mobile/lib/features/profile/presentation/me_screen.dart
   - "src/mobile/test/**"
-session: worktree-agent-a6e26595b30efb856
+session: null
 notes: "브랜치 claude/whymath-learning-path-design-gvku5q 재작성 — 원 브랜치의 PATH-01(전역 경로+난이도축)·PATH-02(전이엣지+max_nodes)는 main의 실제 PATH-01~04 계보(PR #671/#673/#706)와 learning_path_module_gap_review.md가 이미 각각 흡수/명시적 보류(4조건 AND 게이트 미충족)해 재작성하지 않음(폐기). 이 태스크는 그 브랜치의 net-new 발견 중 유일하게 FR-010(시즌 플랜) 결정에 의존하지 않는 항목만 분리: me_screen.dart의 두 '준비 중' 자리표시자를 기존 GET /v1/me/weak-concepts/{id}/learning-path·GET /v1/me/diagnosis/concepts 호출로 교체. PATH-04~08(시험 캘린더·시즌 플랜 도출·진도율 축·과목트랙 온보딩·커리큘럼 breadcrumb)은 FR-010 채택 여부가 main 문서(ai_tutor_module_gap_review.md §4-⑤)와 상충돼 Kiki 확인 전까지 보류 — 별도 미등재."
 updated: 2026-08-07
