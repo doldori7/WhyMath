@@ -15,7 +15,6 @@ from __future__ import annotations
 import re
 
 import pytest
-
 from data_pipeline.concept_graph.idmap import build_id_map
 from data_pipeline.concept_graph.models import (
     CONCEPT_ID_PATTERN,

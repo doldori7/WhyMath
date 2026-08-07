@@ -10,7 +10,6 @@ P2d로 canonical(build_id_map)은 `math.<area>.<slug>`를 산출하고, 옛 `{TR
 from __future__ import annotations
 
 import pytest
-
 from data_pipeline.concept_graph.idmap import (
     _AREA_SLUG_MAP,
     _TOPIC_AREA_MAP,

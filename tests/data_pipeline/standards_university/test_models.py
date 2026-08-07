@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.standards_university.models import (
     LICENSE_NOTICE,
     SOURCE_CITATION,
     UniversityConceptStandardLink,
     UniversityStandard,
 )
+from pydantic import ValidationError
 
 
 class TestUniversityStandard:

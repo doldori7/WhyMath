@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.concept_graph.models import (
     CONCEPT_ID_PATTERN,
     EVIDENCE_SOURCES,
@@ -21,6 +19,7 @@ from data_pipeline.concept_graph.models import (
     Relation,
     ReviewStatus,
 )
+from pydantic import ValidationError
 
 
 def _concept(**overrides: object) -> Concept:
