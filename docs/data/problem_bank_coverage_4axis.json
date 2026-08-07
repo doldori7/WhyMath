@@ -10,7 +10,7 @@
   "band_totals": {
     "개념 [3.0,4.0)": 2152,
     "숙달 [4.0,5.0]": 162,
-    "인지 [1.0,2.0)": 1434,
+    "인지 [1.0,2.0)": 2034,
     "절차 [2.0,3.0)": 2881
   },
   "corpora": [
@@ -48,6 +48,12 @@
       "name": "problem_bank_elementary_division_remainder_v0",
       "parse_errors": 0,
       "problems": 400,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_elementary_rounding_v0",
+      "parse_errors": 0,
+      "problems": 600,
       "status": "적재됨"
     },
     {
@@ -223,7 +229,7 @@
       "total": 5
     },
     "수와 연산": {
-      "covered": 9,
+      "covered": 10,
       "total": 55
     },
     "예술과 수학": {
@@ -337,7 +343,7 @@
       "total": 60
     },
     "초등학교": {
-      "covered": 13,
+      "covered": 14,
       "total": 121
     }
   },
@@ -403,6 +409,7 @@
     "[2수01-06]",
     "[4수01-07]",
     "[4수03-25]",
+    "[6수01-03]",
     "[6수01-06]",
     "[6수01-13]",
     "[6수03-01]",
@@ -440,14 +447,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 5013
+    "단답형": 5613
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 4411,
+    "problems_without_problem_type": 5011,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -473,6 +480,9 @@
     },
     "problem_bank_elementary_division_remainder_v0": {
       "인지 [1.0,2.0)": 400
+    },
+    "problem_bank_elementary_rounding_v0": {
+      "인지 [1.0,2.0)": 600
     },
     "problem_bank_elementary_v0": {
       "인지 [1.0,2.0)": 400
@@ -548,6 +558,9 @@
     },
     "problem_bank_elementary_division_remainder_v0": {
       "단답형": 400
+    },
+    "problem_bank_elementary_rounding_v0": {
+      "단답형": 600
     },
     "problem_bank_elementary_v0": {
       "단답형": 400
@@ -802,6 +815,7 @@
     "[2수01-06]": 400,
     "[4수01-07]": 400,
     "[4수03-25]": 24,
+    "[6수01-03]": 600,
     "[6수01-06]": 24,
     "[6수01-13]": 24,
     "[6수03-01]": 24,
@@ -839,8 +853,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.21839080459770116,
-    "covered_code_count": 95,
+    "coverage_rate": 0.2206896551724138,
+    "covered_code_count": 96,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -849,9 +863,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 340
+    "zero_coverage_code_count": 339
   },
-  "total_problems": 6629,
+  "total_problems": 7229,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -971,6 +985,9 @@
     },
     "ELEM-ADDSUB-2DIGIT": {
       "인지 [1.0,2.0)": 400
+    },
+    "ELEMENTARY-ROUNDING": {
+      "인지 [1.0,2.0)": 600
     },
     "EXP-EQ": {
       "인지 [1.0,2.0)": 30,
@@ -2504,7 +2521,6 @@
     "[4수04-03]",
     "[6수01-01]",
     "[6수01-02]",
-    "[6수01-03]",
     "[6수01-04]",
     "[6수01-05]",
     "[6수01-07]",
