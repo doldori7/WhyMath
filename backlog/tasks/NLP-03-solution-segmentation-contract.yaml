@@ -8,10 +8,10 @@ layer: backend
 status: todo
 priority: 3
 owner: claude
-depends_on: []
+depends_on: ["MATH-01-notation-normalization-authority"]
 requires_gates: []
 acceptance:
-  - "① 계약 정본 신설: 텍스트 풀이 → 단계 분해 규약을 data/ 계약 JSON + 백엔드 순수 함수로 정본화한다. notation_contract.json 선례를 그대로 따른다(tests/backend/l3/test_notation_contract.py ↔ src/web/graphing-calculator/test/notation_contract.test.js 교차 골든)"
+  - "① 계약 정본 신설: 텍스트 풀이 → 단계 분해 규약을 data/ 계약 JSON + 백엔드 순수 함수로 정본화한다. notation_contract.json 선례를 그대로 따른다(tests/backend/l3/test_notation_contract.py ↔ src/web/graphing-calculator/test/notation_contract.test.js 교차 골든). \\displaylines의 래퍼 해체(표기 정규화)와 행 구분자 \\\\ 분해(구조 분해)를 함수 단위로 나눈다 — 전자는 MATH-01의 latex_cases 계약이 이미 정한다(math_engine_gap_review.md §3 D1 경계 박스)"
   - "② 교차 골든 게이트: 계약 JSON 1개를 백엔드 테스트와 모바일 테스트가 동시에 읽어 동일 판정. 클라의 _splitSteps·latexToPlainSolution은 미러 재구현이 아니라 계약 소비로 전환(추가가 아니라 이관 — dead code 금지)"
   - "③ 2026-07-20 회귀 동결: MathLive \\\\displaylines{} 다행 입력이 0-전이 단일 스텝으로 뭉개지지 않음을 케이스로 동결"
   - "④ fail-closed 보류: 분해 불가·모호는 조용히 1스텝으로 뭉개지 않고 unverifiable 사유로 보류하고 관측한다(침묵 실패 0)"
@@ -24,5 +24,5 @@ paths:
   - "src/mobile/lib/features/chat/domain/**"
   - "tests/backend/l5/**"
 session: null
-notes: "docs/architecture/nlp_module_gap_review.md §3 D3. api/verify.py:8-10과 04a:605가 '분해는 L5 책임'이라 넘기는데 L5 assemble.py는 이미지 bbox 읽기순만 한다 — 텍스트 경로 분해는 Flutter chat_controller.dart:84 _splitSteps에 있다. 클라가 수학을 하는 위반은 아니나(줄 분해만) 규약이 코어에 없어 타 클라가 재구현해야 하고, latex_to_plain.dart:13이 백엔드 미러링 드리프트를 이미 주석으로 자인한다. 현재 실동작 중이므로 S4(긴급 아님)."
-updated: 2026-07-31
+notes: "docs/architecture/nlp_module_gap_review.md §3 D3. api/verify.py:8-10과 04a:605가 '분해는 L5 책임'이라 넘기는데 L5 assemble.py는 이미지 bbox 읽기순만 한다 — 텍스트 경로 분해는 Flutter chat_controller.dart:84 _splitSteps에 있다. 클라가 수학을 하는 위반은 아니나(줄 분해만) 규약이 코어에 없어 타 클라가 재구현해야 하고, latex_to_plain.dart:13이 백엔드 미러링 드리프트를 이미 주석으로 자인한다. 현재 실동작 중이므로 S4(긴급 아님). [2026-08-03 순서 제약 추가] docs/architecture/math_engine_gap_review.md §3 D1이 MATH-01(표기 정규화 계약)과 이 태스크(분해 계약)의 경계를 나눴다 — \\displaylines 래퍼 해체는 MATH-01, 행 구분자 분해는 여기. MATH-01이 먼저 서야 이 태스크가 그 위에 분해 계약을 얹을 수 있어 depends_on에 명시했다(문서 선언만으로는 하네스 next가 순서를 모른다)."
+updated: 2026-08-03
