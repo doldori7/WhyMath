@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -19,13 +19,14 @@ acceptance:
   - "problem_bank_middle_function_v0 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False"
   - coverage 리포트 재실행으로 중등 축 실제 이동 확인
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - b8e1aa20
 paths:
   - src/backend/whymath_backend/l3/equivalent/linear_function_value_skeleton_generator.py
   - src/backend/whymath_backend/harness/middle_function_batch.py
   - tests/backend/l3/equivalent/test_linear_function_value_skeleton_generator.py
   - tests/backend/harness/test_middle_function_batch.py
   - data/corpus/problem_bank_middle_function_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획 §3 W2 네 번째 슬라이스 — 중등 착점(4축 중 유일하게 W2에서 아직 안 건드린 축). elementary(S4-22)·matrix(S4-23)·university(S4-24) 확립 패턴 재사용: operation 필터 불요(단일 변형)·run_equivalent_generation(signature_index=None)·위생게이트 오탐 회피(등호 비인접 서술형 해설)."
 updated: 2026-08-07
