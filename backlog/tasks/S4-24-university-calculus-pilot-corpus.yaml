@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -19,13 +19,14 @@ acceptance:
   - "problem_bank_university_calc1_v0 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False"
   - "coverage 리포트 재실행으로 대학 축 실제 이동 확인(0/409 → 최소 1코드 커버)"
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - 17f2a53a
 paths:
   - src/backend/whymath_backend/l3/equivalent/calculus_product_rule_skeleton_generator.py
   - src/backend/whymath_backend/harness/university_calc1_batch.py
   - tests/backend/l3/equivalent/test_calculus_product_rule_skeleton_generator.py
   - tests/backend/harness/test_university_calc1_batch.py
   - data/corpus/problem_bank_university_calc1_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획 §3 W2 세 번째 슬라이스 — 4축 중 마지막 미착수축(대학) 최초 착점. elementary(S4-22)·matrix(S4-23)의 operation 필터 패턴 재사용. 신규 발견: 대학 콘텐츠는 원자 백본에만 있고 구 437 concept_graph_v1에는 없어 기존 개념 태깅 경로가 닿지 않는다(U2/U3와 별개 문제 — U2/U3는 성취기준↔원자 링크, 이건 problem_concept 태깅 크로스워크). concept_tags=() 정직 표시로 진행하고 원자 네이티브 태깅은 후속."
 updated: 2026-08-07
