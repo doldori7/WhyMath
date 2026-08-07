@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-05-root-symptom-slip-observation-report
+title: "root/symptom·slip 판별 관측 리포트(신규 분류축 0, 기존 신호 재해석만)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "신규 스키마·필드 0 — 가설 감쇠(반감기5턴)·강화횟수·judge 방향판별만으로 slip-like vs 지속오개념-like를 읽기전용 리포트로 산출"
+  - "04c §6-4가 예고한 '라이브 오진단 실측 시 결정'의 트리거 발화 조건을 리포트가 관측 가능하게 만듦"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/
+  - src/backend/whymath_backend/l4/misconception/hypothesis.py
+session: null
+notes: "04c_misconception_seven_stage_separation.md §6-4(최대 미구현 갭). 04e_misconception_remediation_design.md §3. 새 분류축 도입은 04c 자신의 유예 판단을 존중해 하지 않음."
+updated: 2026-08-03

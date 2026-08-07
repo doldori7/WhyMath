@@ -1208,6 +1208,39 @@ Phaiakes9 실 PG에서 `WHYMATH_RUN_INTEGRATION=1`로 재확인 필요.
 기기" 표시(액세스 토큰은 이 테이블에 없어 구분 불가 — 리프레시 세션 목록일 뿐).
 
 정본: `docs/architecture/account_security_gap_review.md` D4 · `docs/standards/security_privacy.md`.
+### 2026-08-03 (정정·병렬충돌·학습경로): **학습 경로(Path) 모듈 갭 점검을 별도 세션과 병렬로 착수 — 동일 경로에 동일 EOS 틀을 대조한 문서가 이미 main에 병합돼 있어(아래 항목·PR #~665계열) 전체 설계를 철회하고 그쪽이 다루지 않은 순net-new 발견 1건(코퍼스 677행 추적 소실)만 별도 등재** (claude 설계·claude 정정, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『08. 학습 경로(Path)』(기능 54~57 + 확장 후보 58~62)를
+독자적으로 대조하며 문서 `docs/architecture/learning_path_module_gap_review.md` + 태스크
+`PATH-01-learning-path-entrypoint`·`PATH-02-learning-path-corpus-ingestion`를 등재하고 PR #673을
+열었다. 병합 전 `git merge origin/main`에서 **"added in both" 충돌**로 발견: 같은 날 **병렬로 진행된
+다른 세션**이 정확히 같은 경로에 같은 틀(기능 54~57)을 대조한 문서를 이미 만들어 시리즈 **12번째
+자매편**으로 main에 먼저 병합했고(아래 바로 다음 항목), `PATH-01`~`PATH-03` ID도 이미 그쪽이 점유했다.
+
+**대조 결과 — 철회가 맞다**: 그쪽 문서는 위상 제약 밀도를 **실측 96.4%**(기본 `max_depth=1`에서
+제약 0)로 정량화했고, 특히 이 세션이 제안했던 "무인자 진입점 즉시 신설"(당초 `PATH-01`)은 그쪽이
+**4조건 AND 발화 게이트**(§5)로 이미 검토한 뒤 "지금 만들면 §6 반복 실수 4·5회차의 재현"이라는
+근거로 **의도적으로 보류**한 설계와 정면으로 배치된다. 코드 없이 판단을 겨루는 두 설계 중 실측
+정밀도가 더 높고 이미 main에 착지한 쪽을 따른다 — 재작업하지 않는다.
+
+**net-new 1건만 유지**: 그쪽 문서·§4 정직한 공백·§6 반복 실수 어디에도 **없는** 발견 — 자체 저작
+학습경로 코퍼스 677행(데이터 카드 2026-06-20 §B, `docs/data/concept_content_corpus_v1.md`)이 자매
+데이터셋 ③(7계층 본문 437개념, 적재기까지 착지)과 달리 **코퍼스 파일·store·로더·백로그 태스크가
+전부 0**인 채로 추적에서 소실된 사실. 이건 경로 *알고리즘*이 아니라 경로 *데이터 자산* 축이라 겹치지
+않는다. `PATH-04-learning-path-corpus-ingestion`(CLI 신규 번호 배정)로 재등재했다(아래 후속 항목).
+
+**철회 항목**: 당초 문서 전체·`PATH-01-learning-path-entrypoint`·`PATH-02-learning-path-corpus-
+ingestion`(ID 충돌분) 삭제. §정정 2곳(`service_ops_mgmt_gap_review_2026-07.md`·
+`concept_content_corpus_v1.md`)은 그쪽과 겹치지 않아 **유지**.
+
+**재발방지 등재**: 반복 실수 카운터(§6 "완비된 소비 경로+미도달 공급원")처럼 **HARN-10의 태스크 ID
+충돌 검사 밖에 있는 자유 서술 축**(문서 대조 범위·회차 번호)은 병렬 세션 간 충돌을 CLI가 잡아주지
+않는다. 이번엔 문서 범위 자체가 겹쳐 더 컸다 — 원격 claim이 이 세션 시작 시점에 `offline`(오프라인)
+이라 진행 중인 다른 세션의 착수 사실을 볼 수 없었다. **규칙**: 신규 갭 리뷰 문서 착수 전, 대상 파일
+경로(`docs/architecture/{module}_gap_review.md`)가 될 이름으로 이미 존재하는지 `git ls-files`뿐 아니라
+`git log --all --diff-filter=A -- 'docs/architecture/*_gap_review.md'`로 **다른 브랜치의 인플라이트
+동일 경로**도 확인한다(원격 claim이 offline이면 특히).
+
 ### 2026-08-03 (설계·학습경로): **학습 경로(Path) 모듈 갭 점검·설계(D1~D3+페이퍼 3) + 태스크 3건 등재(`PATH-01`~`PATH-03`) — 위상정렬이 기본값에서 96.4% 무력(D1)·강등이 응답에서 구분 불가(D2)·전이 의존 미반영 27.0%→69.9%(D3) — 외부 EOS 틀 1단계 4기능 대조** (claude 설계, Kiki 요청)
 
 **배경**: Kiki가 업로드한 외부 EOS 틀 문서(『1단계: 학습 경로(Path)』 4기능 — 54 개인별 학습
@@ -1377,6 +1410,83 @@ integration 마커 제외) 전수 green. 라이브 PG 통합테스트 3건(`test
 
 **문서 개정**: `04a_wh1_tutoring_harness.md` §5.1 "원문 재조회 강등"에 구현 완료 표기 추가.
 `ai_tutor_module_gap_review.md` §3 D1에 위 확정 결과·정정을 부기.
+### 2026-08-03 (설계·재검증·풀이): **풀이(Solution) 모듈 2차 재검증 — 1차 판정 변경 0 + 배선 축 신규 crosswalk에서 갭 1건 발견·D6/`S4-19` 등재 (라이브 3상태 단계 검증 결과가 응답에만 실리고 적재 0)** (claude 설계·등재, Kiki 재요청)
+
+**컨텍스트**: Kiki가 **1차와 동일한** 외부 EOS 틀 문서(『06. 풀이(Solution)』 기능 23~27)로
+재점검을 요청. 실측 확인 결과 같은 문서의 1차 갭 리뷰가 이미 존재했다
+(`solution_module_gap_review.md` 268줄·2026-07-29·`c4de268`/PR #635 — D1~D5·`S4-09~12`).
+**중복 재작성 대신 2차 패스**로 처리 — ①1차 판정을 현행 코드에 재대조 ②1차가 표에 넣지 않은
+문서 2절(「전체 구조에서의 위치」·「EOS 연계 구조」 = **모듈 간 배선 축**) 추가 crosswalk
+③거기서 나온 진짜 갭만 설계. 문서는 §5로 append(기존 §1~§4 불변).
+
+**재검증 결과 — 판정 변경 0**: 07-29 이후 머지분(`ARCH-21` QA 오케스트레이터·`S3-27`·`VIZ-01`·
+`SEC-07/08/09/11`) 중 D1~D5를 뒤집는 것은 없다. `S4-09~12` **전건 `todo`**이고 `S4-10`은 병렬
+세션(`claude/whymath-solution-review-40xspg`) 원격 claim이라 착수 금지. 1차의 "기능 26 3상태 ✅"는
+**학생 도달까지 성립** 재확인(`chat_controller.dart:107` → `api/coach.py:507-523`) — 최근 3개
+갭 리뷰(VIZ-01·NLP-01·REC-01)가 반복 발견한 "학생 도달 0회" 패턴은 이 축에 **없다**.
+
+**신규 갭(D6·`S4-19`)**: 코치는 학생 풀이 1건에 **서로 다른 두 검증**을 돌린다 —
+⑴ `verify_solution` **3상태**(카운트 3종·`unverified_ratio`·`first_incorrect_index`·단계별
+`evidence_weight`)는 HTTP 응답으로만 나가고 **적재 0**, ⑵ `_log_verify_event`의 **binary**
+텍스트 검산만 `attempt_event(검산결과)`에 적재된다(`api/coach.py:919`·docstring이 "binary
+검산이지 3-state가 아니다"라고 자인). 그래서 측정 ①은 binary만 읽고
+(`wh1_evaluation.py:302` description "…비율(binary)"), L2 환류는 문제 단위 1비트만 받으며
+(`api/me.py:679`), `evidence_weight`(`l3/verify_step.py:127`)는 **`l3/` 밖 소비처 0**.
+문서가 그린 폐루프의 종단 화살표(AI 채점→학생 모델)가 **시스템이 이미 가진 최량 신호가 아니라
+그보다 거친 신호로** 닫혀 있다. 3상태가 관측되는 유일 기존 경로는 shadow 하네스
+(`wh1_shadow.py:187`·S3-07)인데 *다른 계산*(LLM 트레이스)·플래그 게이팅·무영속이라 결정론
+라이브 경로엔 대응 좌석이 없다.
+
+**설계 경계**: D6-1단계(`S4-19`)는 **적재 좌석 + 이중 회계**까지다 — `VerifyEventData`에 additive
+optional 필드(전건 기본 None·하위호환 동결·`mode`/`persona` 선례), writer는 핸들러가 이미 쥔
+결과를 **운반만**(재계산 0)하고 binary `passed`는 유지(두 검증기 이중 회계), reader는
+`wh1_evaluation` ①을 *교체 아닌 병기*로 승격(표본 0이면 NO_DATA 정직 표기). 신규 테이블·
+마이그레이션·학생 대면 표면 0, 숙달 갱신 경로 무변경, 학생 원문·단계 텍스트 미적재(미성년 PII).
+**D6-2단계(BKT 부분 크레딧 승격)는 설계만·태스크 0** — 승격 전제는 `S3-01`/`S3-04` 실측(예측력
+증분 + 비퇴화 제약 `p_slip+p_guess<1` 무손상). 협상 불가 3종: **힌트 사용을 감점 신호로 쓰지
+않는다**(답 미루기 사다리 취지·부정 피드백 금기)·**`unverifiable`을 오답으로 강등하지 않는다**
+(0.5는 할인이지 부정 증거 아님)·**학생 대면 점수·등급 노출 0**(§2-① 승계).
+
+**중복 회피 확인**: `NLP-02`(답안 채점 shadow — 다른 검증기)·`S3-07`(shadow 트레이스 — D6가 그
+결정론 라이브 미러)·`S4-11`(힌트 콘텐츠 — D6-1단계는 힌트 미포함, 측정 축 ⑤⑧ 기존재)·`S4-09`
+**비의존**(기존 이벤트만 읽고 씀 → 병렬 착수 가능). 태스크 번호는 `backlog.py add` 경유 배정
+(HARN-10 준수). 잔여물 1건은 기록만: `verifyApiProvider`(`verify_api.dart:48`)가 `lib/` 소비처
+0 — 코치가 같은 검증을 하므로 기능 갭 아닌 중복 표면이라 dead task 방지 위해 미등재.
+### 2026-08-03 (설계·오개념): **오개념 모듈 갭 점검·설계 + 태스크 6건 등재 — 진단(12) 축은 성숙, 교정(13) 축은 8종 중 3종만 배선(시각화 코드완비·호출자0 포함) · 관계셋은 04c 요청 4종 아닌 실질 2종(caused_by·variant_of, misconception_of/repaired_by는 기존 메커니즘과 중복) · 외부 EOS 틀 기능 11~19 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『03. 오개념(Misconception)』(0단계: 기능 11 오개념DB·
+12 자동진단·13 맞춤교정전략, 1단계 이상: 14 지식그래프·15 원인분석·16 예측·17 버전관리·18 연구
+플랫폼·19 자동발견 — WhyMath 전용이 아닌 일반적 EOS 틀)을 코드베이스와 대조.
+`ai_recommendation_module_gap_review.md`(08-01)에 이은 **11번째 자매편**. Kiki 지정으로 갭점검과
+설계를 **2개 문서로 분리**(`misconception_module_gap_review.md`·`04e_misconception_remediation_
+design.md`) — 기존 시리즈의 "갭+설계 동거" 관행에서 의도적 이탈.
+
+**핵심 발견**: 착수 가설("오개념 분야가 얇다")은 반증. 카탈로그 843건(M-id)·런타임 탐지 64종
+(kebab)·distractor 태깅 1,616문항·가설/증거/임베딩 테이블·거버넌스 테스트 ~60개가 이미 프로덕션.
+진짜 갭은 **진단이 아니라 교정**이다 — 8종 전략 중 반례·거꾸로사고·AI대화형튜터 3종만 배선, 시각화
+(`visualize_misconception()`)는 코드·테스트 완비인데 production 호출자 0건(직접 grep 실측), 선수
+학습복습(`prerequisite_coaching.py:32`)은 misconception 파라미터가 아예 없음(직접 Read 실측),
+학습경로재설계·개념재설명·구체사례는 배선 자체가 없음.
+
+**중요한 재발견**: `edge_design_part3_review.md`가 이미 "pedagogy 엣지화(`misconception_of` 등) —
+채택 안 함, #407 신규 엣지 타입 0·참조 키 유지"를 결정해 놓았음을 직접 Read로 발견. 04c §6이 요구한
+4종 관계(`misconception_of/caused_by/repaired_by/variant_of`) 중 `misconception_of`는 이 결정으로
+이미 참조 키(`concept_src_id`)로 해결됐고, `repaired_by`는 04c Level6(Repair Strategy 분리,
+`intervene.py`)와 중복이라 신설 시 이중 진실원천이 된다 — 실제로 여는 것은 **`caused_by`·
+`variant_of` 2종뿐**. 이 축소가 04e §2의 핵심 설계 결정이며, 관계 타입 최소화 원칙(5~8개)을
+오히려 강화한다.
+
+**산출물**: `docs/architecture/misconception_module_gap_review.md`(갭 판정+근거) ·
+`docs/architecture/04e_misconception_remediation_design.md`(교정 배선 설계 + `misconception_
+relation` 격리 스키마 설계 + root/symptom 관측 리포트 설계 + 예측 축소 설계, 코드 변경 0) ·
+`04c_misconception_seven_stage_separation.md` §6에 두 후속 포인터 추가(Level2·6-4). 백로그
+6건 등재(`backlog.py add` 경유, validate green 159건): `MISC-01-visualization-shadow-rollout`
+(S3·시각화 shadow 롤아웃, 04b 패턴 재사용) · `MISC-02-prerequisite-coaching-misconception-link`
+(S4·PED-05 의존) · `MISC-03-misconception-similar-problem-serving`(S3·REC-02 의존, 역인덱스
+재사용) · `MISC-04-misconception-relation-isolated-schema`(S4·concept_edge와 물리 격리) ·
+`MISC-05-root-symptom-slip-observation-report`(S4·신규 분류축 0) ·
+`MISC-06-misconception-recurrence-signal`(S4·REC-02 의존, BKT/DKT 비결합 유지). 기존
+`REC-02`·`PED-05`·`S4-15`는 대체하지 않고 의존 관계로만 연결.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 
