@@ -79,6 +79,7 @@ formal_definition·core_proposition은 어디에도 유입되지 않는다** —
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -121,6 +122,42 @@ _SEAT: str = "prerequisite_recommendation"
 # 미채택·build_roadmap_part10_review §4). 그 seam 전까지 "전체 그래프 미열람" 경계는 거버넌스
 # 테스트 `tests/backend/l3/test_llm_subgraph_budget_invariant.py`로 CI 동결돼 있다.
 MAX_PREREQUISITE_DEPTH: int = 5
+
+# 선수 traversal 노드 수(breadth) 상한 — *단일 출처*. `MAX_PREREQUISITE_DEPTH`가 *깊이*를
+# bound하면 이것은 최종 반환 선수 *개수*를 bound하는 안전밸브다(재귀 CTE는 깊이당 fan-out이
+# 무제한이라 depth 상한만으로는 breadth 폭발을 못 막는다). 현재 규모(out-degree 평균 낮음·직접
+# 선수 소수)에선 절대 발동하지 않아 행동 변화 0이고, 규모 확장(hub 노드 out-degree↑·max_depth
+# 상향)에서 재귀 CTE 결과가 병리적으로 폭증해 다운스트림(mastery 조회·enrich)을 오염시키는 것만
+# 차단한다. 초과 절단은 *조용히 하지 않고* 로그로 남긴다(silent truncation 금지 — CLAUDE.md
+# "AI·신뢰" 축 원칙).
+# ⚠️ 이것은 *그래프 traversal 예산*이지 "LLM 컨텍스트 예산"(max_tokens)이 아니다 — 그 경계는
+# build_roadmap_part10_review.md §4가 별도로 다루며(소비처 부재·premature·미채택), 이 상수와는
+# 독립이다.
+MAX_PREREQUISITE_NODES: int = 64
+
+_logger = logging.getLogger(f"whymath.l2.{_SEAT}")
+
+
+def _cap_by_node_budget(
+    rows: list[PrerequisiteRow], *, cap: int = MAX_PREREQUISITE_NODES
+) -> list[PrerequisiteRow]:
+    """선수 traversal 결과를 노드 수 예산으로 bound — 초과 시 상위 `cap`만 유지하고 드롭 수를 로깅.
+
+    입력 `rows`는 이미 결정론 정렬(depth asc→edge_strength desc→concept_id)·dedup된 최종 목록이라
+    상위 `cap`은 "가장 가깝고 강한 선수"다(weakness 재정렬은 호출부 `recommend_prerequisite_gaps`라
+    여기선 구조 근접 우선을 보존한다). 현재 규모에선 `len(rows) <= cap`라 절단 0(행동 불변). 절단이
+    실제로 일어나면 조용히 넘기지 않고 warning으로 드롭 수를 남긴다(규모 도달 관측 신호). 순수
+    함수(리스트 in→리스트 out·부수효과=로그뿐)라 DB 없이 단위테스트한다.
+    """
+    if len(rows) <= cap:
+        return rows
+    _logger.warning(
+        "선수 traversal 노드 예산 초과 — %d개 중 상위 %d개만 유지(드롭 %d)",
+        len(rows),
+        cap,
+        len(rows) - cap,
+    )
+    return rows[:cap]
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,6 +348,9 @@ async def fetch_prerequisites(
 
     DAG 보장(validate.py prerequisite_cycle hard error)이라 재귀는 자연 종료하나, `max_depth`로
     방어적으로 bound한다(부분 적재·미래 데이터 대비). 실 SQL이라 단위테스트는 이 함수를 패치한다.
+
+    **breadth 안전밸브**: dedup 이후 최종 목록에 `MAX_PREREQUISITE_NODES` 상한을 적용한다
+    (`_cap_by_node_budget`) — `max_depth`가 깊이를, 이것이 노드 *개수*를 bound한다.
     """
     rows = (await session.execute(build_prerequisite_stmt(concept_id, max_depth))).all()
 
@@ -332,7 +372,9 @@ async def fetch_prerequisites(
                 atom_meta=atom_meta_from_row(meta_name, meta_area, meta_review),
             )
         )
-    return result
+    # breadth 안전밸브 — dedup 이후 최종 목록에 노드 수 예산을 적용(MIN-depth 선택 왜곡 없음).
+    # 현재 규모 미발동(행동 불변)·규모 폭발만 차단·초과 시 로깅(silent 금지).
+    return _cap_by_node_budget(result)
 
 
 async def recommend_prerequisite_gaps_detailed(
@@ -473,6 +515,7 @@ async def recommend_prerequisite_gaps(
 
 __all__ = [
     "MAX_PREREQUISITE_DEPTH",
+    "MAX_PREREQUISITE_NODES",
     "PrerequisiteGap",
     "PrerequisiteRecommendation",
     "PrerequisiteRow",

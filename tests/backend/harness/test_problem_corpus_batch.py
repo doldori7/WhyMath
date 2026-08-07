@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from whymath_backend.harness.needs_review_worklist import build_worklist
 from whymath_backend.harness.problem_corpus_batch import (
@@ -229,6 +230,87 @@ class TestRunCorpusBatch:
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
         assert len(slugs) == len(set(slugs))
+
+    def test_relations_form_linear_chain_within_group_only(self, tmp_path: Path) -> None:
+        # 다중 문제군(QUAD-EQ·ARITH-SEQ) 배치 — 그룹((unit_codes,question_format,answer_format))
+        # 내부에서만 "유사" 관계가 정렬순 인접 K=3 백엣지로 붙고, 그룹을 가로지르는 엣지는 0건
+        # (anti-explosion 상한 준수).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=5,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=5,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
+            seq_inductive_n=0,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        by_slug = {r.slug: r for r in records}
+
+        def group_key(r: ProblemBankRecord) -> tuple[Any, ...]:
+            return (
+                tuple(r.problem.unit_codes),
+                r.problem.question_format,
+                r.problem.answer_format,
+            )
+
+        groups: dict[tuple[Any, ...], list[ProblemBankRecord]] = {}
+        for r in records:
+            groups.setdefault(group_key(r), []).append(r)
+        assert len(groups) >= 2  # 다중 문제군·형식이 실제로 분리 그룹을 이룸(테스트 전제 확인)
+
+        for members in groups.values():
+            ordered = sorted(members, key=lambda r: (r.problem.difficulty_overall or 0.0, r.slug))
+            for pos, record in enumerate(ordered):
+                expected_parents = [ordered[j].slug for j in range(max(0, pos - 3), pos)]
+                assert [t.parent_slug for t in record.relations] == expected_parents
+                for tag in record.relations:
+                    assert tag.relation_type == "유사"
+                    assert tag.similarity_score == 0.6
+                    assert by_slug[tag.parent_slug] in members  # 그룹 내부만 참조(교차 0)
+
+    def test_relations_field_present_even_when_empty(self, tmp_path: Path) -> None:
+        # 관계 0건(단일 그룹 1레코드)도 "relations": [] 균일 기록 — 키 부재가 아니다(필드 존재
+        # 자체가 "관계 계산 배선됨" 신호 — test_corpus_quality 키 집합 정합 봉인과 정합).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=1,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
+            seq_inductive_n=0,
+            write=True,
+        )
+        raw = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+        assert raw["relations"] == []
 
 
 class TestCliEntry:

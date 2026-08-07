@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,7 +16,8 @@ acceptance:
   - "③ CI 배선 실재 확인: 신규 워크플로 없이 기존 harness 잡에 편입되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
   - "④ 변별력: 세 어휘 중 하나를 의도적으로 다른 값으로 바꿔 발산 건수가 실제로 변하는지 확인한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
   - "⑤ 범위 밖 명시: 3어휘를 1어휘로 통합하는 마이그레이션은 이 태스크에 포함하지 않는다(발산 규모가 관측되기 전에는 통합 방식을 결정할 수 없다)"
-artifacts: []
+artifacts:
+  - a40d9259
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"

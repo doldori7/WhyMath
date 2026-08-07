@@ -39,8 +39,10 @@ from whymath_backend.l4.learning_scene import (
     SceneLearnerContext,
     SkillFocusElement,
     SocraticPromptElement,
+    TutoringPromptElement,
     VisualizationElement,
 )
+from whymath_backend.l4.lthc import adapt_lthc, mastery_to_level
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.models import (
@@ -49,7 +51,11 @@ from whymath_backend.l4.misconception.models import (
 )
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
-from whymath_backend.l4.visualization_policy import is_visualizable, prefers_static_visual
+from whymath_backend.l4.visualization_policy import (
+    has_render_seat,
+    is_visualizable,
+    prefers_static_visual,
+)
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     BehaviorArea,
@@ -66,7 +72,10 @@ _COGNITIVE_SOCRATIC_MAP: dict[CognitiveType, tuple[SocraticCategory, PolyaStage]
     CognitiveType.THEOREM: (SocraticCategory.EVIDENCE, PolyaStage.PLAN),
     CognitiveType.TECHNIQUE: (SocraticCategory.PERSPECTIVE, PolyaStage.PLAN),
     CognitiveType.PATTERN: (SocraticCategory.IMPLICATION, PolyaStage.EXECUTE),
-    CognitiveType.VISUAL_REASONING: (SocraticCategory.ASSUMPTION, PolyaStage.UNDERSTAND),
+    CognitiveType.VISUAL_REASONING: (
+        SocraticCategory.ASSUMPTION,
+        PolyaStage.UNDERSTAND,
+    ),
 }
 # 인지 유형이 없을 때의 기본 메타인지 발화 — 장면은 최소 한 개의 유도 질문(CLAUDE.md 메타인지 중심).
 _DEFAULT_SOCRATIC: tuple[SocraticCategory, PolyaStage] = (
@@ -122,7 +131,9 @@ def _primary_behavior_area(
     return min(behavior_areas, key=lambda a: _BEHAVIOR_PRECEDENCE[a])
 
 
-def _lead_for(behavior_areas: list[BehaviorArea] | None) -> Literal["visual", "inquiry"]:
+def _lead_for(
+    behavior_areas: list[BehaviorArea] | None,
+) -> Literal["visual", "inquiry"]:
     """주 행동영역 → 인지 진입 순서(미매핑이면 기본 탐구 진입)."""
     primary = _primary_behavior_area(behavior_areas)
     return _LEAD_BY_BEHAVIOR[primary] if primary is not None else _DEFAULT_LEAD
@@ -170,6 +181,51 @@ def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
             )
         )
     return elements
+
+
+def _primary_polya_stage(concept: Concept) -> PolyaStage:
+    """개념 `cognitive_type` → 주 Polya 단계(소크라테스 매핑 재사용·기본 REVIEW).
+
+    `_socratic_elements`와 동일한 `_COGNITIVE_SOCRATIC_MAP`을 재사용해 첫 매핑 인지유형의 Polya
+    단계를 고른다 — 새 매핑 도입 0(재사용 우선). 미매핑이면 `_DEFAULT_SOCRATIC`의 단계(REVIEW).
+    """
+    for raw in concept.cognitive_type:
+        mapped = _COGNITIVE_SOCRATIC_MAP.get(CognitiveType(raw))
+        if mapped is not None:
+            return mapped[1]
+    return _DEFAULT_SOCRATIC[1]
+
+
+def _lthc_prompts(
+    concept: Concept,
+    learner_context: SceneLearnerContext | None,
+) -> list[TutoringPromptElement]:
+    """학습자 mastery → `adapt_lthc` 적응 튜터링 프롬프트(05a §5·S5l·학습자모델 축).
+
+    체크리스트 ②의 마지막 미배선 축(학습자모델). mastery 신호가 *있을 때만* 방출한다 —
+    `learner_context.mastery_level`(BKT 0~1)을 `mastery_to_level`로 밴딩(0.4/0.8→초보/발전중/
+    숙달)하고 주 Polya 단계와 함께 `adapt_lthc` 정본 발화를 진입점/비계/확장 3축으로 받아 각 축
+    1개(attention 보호·장면당 최대 3개)를 `tutoring_prompt`로 낸다 — 초보=진입+비계·숙달=확장·
+    발전중=균형(엔진 분기). mastery None(신호 없음)이면 빈 리스트: 없는 신호로 초보 비계를 날조하지
+    않는다(낙인·오판 회피). 발화는 `adapt_lthc` 정본 라이브러리라 LLM 환각 표면 0.
+    """
+    if learner_context is None or learner_context.mastery_level is None:
+        return []
+    adaptation = adapt_lthc(
+        _primary_polya_stage(concept),
+        mastery_to_level(learner_context.mastery_level),
+    )
+    # 3축 → 역할 태깅. role 타입을 Literal로 좁혀 mypy --strict 통과(축당 [:1] 캡).
+    axes: tuple[tuple[Literal["entry", "scaffold", "extension"], tuple[str, ...]], ...] = (
+        ("entry", adaptation.entry_suggestions),
+        ("scaffold", adaptation.scaffolds),
+        ("extension", adaptation.extensions),
+    )
+    prompts: list[TutoringPromptElement] = []
+    for role, axis in axes:
+        for text in axis[:1]:  # 축당 1개 캡 — attention 보호
+            prompts.append(TutoringPromptElement(role=role, prompt_text=text))
+    return prompts
 
 
 def _misconception_probes(
@@ -234,11 +290,14 @@ async def generate_learning_scene(
     표상/변형/계산은 시각화 먼저, 해석/추론/검증은 질문 먼저. 개념과 직교하므로 소크라테스
     프레이밍은 개념 축(`cognitive_type`)이 계속 담당한다. ⓪ 행동영역 focus: 주 행동영역이 있으면
     그 행동영역의 `skill_focus`를 맨 앞에 둔다(미매핑=미부여·05a §3.2). ① 시각화 블록:
-    `recommended_visual_styles`가 있고 `visualizability`가 허용할 때만 `visualization`(+graph_2d·
-    비정적이면 `param_control`)을 붙인다(bound index는 append 시점 계산이라 진입 순서와 무관 정합).
-    ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ 활성 가설 ∩ 카탈로그
-    → `misconception_probe`(적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·
-    param/annotation 정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
+    `recommended_visual_styles`가 있고 `visualizability`가 허용하고 그 양식에 렌더 좌석이 있을
+    때만(VIZ-04) `visualization`(+graph_2d·비정적이면 `param_control`)을 붙인다(bound index는
+    append 시점 계산이라 진입 순서와 무관 정합).
+    ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ LTHC 튜터링 프롬프트:
+    `learner_context.mastery_level`(BKT) → `adapt_lthc` 진입/비계/확장 발화(*학습자모델 축*·mastery
+    있을 때만·lead 분기 뒤·프로브 앞·05a §5·S5l). ④ 활성 가설 ∩ 카탈로그 → `misconception_probe`
+    (적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·param/annotation 정합)을
+    통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
 
     LLM 호출은 시각화 spec 1회뿐(스타일 있을 때)·나머지는 결정론 — 환각 표면을 최소화한다(RS5).
 
@@ -271,12 +330,19 @@ async def generate_learning_scene(
     async def _append_visual_block() -> None:
         """시각화(+graph_2d면 param_control)를 공유 `elements`에 append.
 
-        권장 양식이 있고 `visualizability`가 허용할 때만(추상·불가면 억지 그림 대신 폴백·05b Part 5
-        게이트·CLAUDE.md 교수학 정확성). `bound_visualization_index`를 append 시점 `len(elements)`로
-        계산하므로, 소크라테스가 앞서(inquiry) viz가 뒤 인덱스여도 정합(불변식 통과). LLM 호출은
-        여기 1회뿐(스타일 있을 때).
+        권장 양식이 있고 `visualizability`가 허용하고(추상·불가면 억지 그림 대신 폴백·05b Part 5
+        게이트·CLAUDE.md 교수학 정확성) 그 양식 중 하나라도 렌더 좌석이 있을 때만(좌석 0이면 LLM이
+        4종 중 하나를 억지로 골라 개념과 무관한 그림을 렌더할 위험 — VIZ-04·
+        `visualization_module_gap_review.md` §7.1 G1) 시각화 블록을 붙인다.
+        `bound_visualization_index`를 append 시점 `len(elements)`로 계산하므로, 소크라테스가
+        앞서(inquiry) viz가 뒤 인덱스여도 정합(불변식 통과). LLM 호출은 여기 1회뿐(양식·좌석 둘 다
+        있을 때).
         """
-        if not (concept.recommended_visual_styles and is_visualizable(visualizability)):
+        if not (
+            concept.recommended_visual_styles
+            and is_visualizable(visualizability)
+            and has_render_seat(concept.recommended_visual_styles)
+        ):
             return
         viz = await generate_visualization_spec(
             concept.name_ko,
@@ -310,7 +376,11 @@ async def generate_learning_scene(
         elements.extend(_socratic_elements(concept))
         await _append_visual_block()
 
-    # ③ 오개념 프로브(적응·reactive) — 항상 본문 뒤
+    # ③ LTHC 튜터링 프롬프트(mastery 적응·S5l) — lead 분기 뒤·프로브 앞 고정 슬롯.
+    # lead(visual/inquiry) 분기와 독립적인 유일 seam(프로브는 항상 마지막)이라 여기에 삽입한다.
+    elements.extend(_lthc_prompts(concept, learner_context))
+
+    # ④ 오개념 프로브(적응·reactive) — 항상 본문 뒤
     elements.extend(_misconception_probes(learner_context))
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.

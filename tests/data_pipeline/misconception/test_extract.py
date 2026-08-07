@@ -11,13 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
-
 from data_pipeline.misconception.__main__ import app
 from data_pipeline.misconception.extract import (
     extract_misconceptions,
     load_json,
 )
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

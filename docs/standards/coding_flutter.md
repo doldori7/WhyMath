@@ -73,7 +73,8 @@ class ChatMessage with _$ChatMessage {
 - 빨강 금지 (학생 좌절 강화)
 - 게이미피케이션 금지
 - 부정 표현 금지
-- 접근성 100% (Semantics·대비·탭 영역)
+- 접근성 목표 레벨 = **WCAG 2.1 AA**(Semantics·대비·탭 영역). 완료(100%) 주장 아님 — 현재 달성 현황은
+  `docs/design/ui/06_design_system.md` §7 표가 정본이다
 
 ## 디자인 토큰/테마 (`lib/theme/`)
 - **정본 = `lib/theme/app_theme.dart`**(`WhyMathTheme.light`/`dark`)·`brand_colors.dart`·`spacing.dart`. 화면은 `Theme.of(context).colorScheme.*`·`textTheme.*` 롤만 참조하고 색을 하드코딩하지 않는다.

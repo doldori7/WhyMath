@@ -25,29 +25,35 @@ dependencies:
   json_annotation: ^4.9.0
   # 네트워크
   dio: ^5.4.0
-  retrofit: ^4.1.0
+  # retrofit — *기능 확장 시* 재도입한다(현재 lib/test 사용처 0·선언만 있던 상태, MOB-09).
+  # 제거 이유: coach_api.dart·problems_api.dart 둘 다 "retrofit 코드젠 대신 명시적 메서드를
+  # 둔다(보수적·디버깅 용이)"를 이미 명시적으로 선택했고 @RestApi 실사용 0. dev_dependencies의
+  # retrofit_generator도 짝으로 함께 제거(생성 대상이 없어 무의미).
   # 보안
   flutter_secure_storage: ^9.2.0
   # localization — 앱 코드에서 직접 쓰지 않고 flutter_localizations가 전이 의존한다. SDK 버전이
   # 요구하는 intl을 그대로 따르도록 범위를 넓힌다(Flutter 3.24.x=0.19·최신=0.20.2 모두 해소).
   intl: ">=0.19.0 <0.21.0"
-  # 미디어
-  cached_network_image: ^3.3.1
+  # 미디어 — cached_network_image·video_player는 *기능 착수 시* 재도입한다(현재 lib/test
+  # 사용처 0·선언만 있던 상태, MOB-09). image_picker는 OCR 사진 업로드에 실사용 중이라 유지.
   image_picker: ^1.0.7
-  video_player: ^2.8.0
-  # 수식
-  flutter_math_fork: ^0.7.2
+  # 수식 렌더 — flutter_math_fork는 *기능 착수 시* 재도입한다(현재 lib/test 사용처 0·선언만
+  # 있던 상태, MOB-09. 수식 입력은 MathLive WebView 임베드로 이미 커버 — 별도 렌더 라이브러리
+  # 미필요 상태가 유지되고 있다).
   # 웹뷰 (Desmos·GeoGebra)
   webview_flutter: ^4.7.0
   # 음성 — 클라 TTS/STT는 *기능 착수 시* 재도입한다(현재 lib/test 사용처 0·선언만 있던 상태).
   # 제거 이유: speech_to_text 7.4.0은 자기 gradle에서 flutter.compileSdkVersion을 참조해
   # (Flutter 3.27+ 전용 주입) 고정판 3.24.5의 안드로이드 빌드를 치명 실패시키고, flutter_tts
   # 4.2.5는 compileSdk 36 하드코딩. 재도입 시 고정 Flutter와의 Gradle 호환을 실기기 빌드로 검증할 것.
-  # 차트
-  fl_chart: ^0.69.0
-  # 푸시
-  firebase_messaging: ^15.0.0
-  firebase_core: ^3.0.0
+  # 차트 — fl_chart는 *기능 착수 시* 재도입한다(현재 lib/test 사용처 0·선언만 있던 상태, MOB-09).
+  # 푸시 — 클라 FCM 연동은 *기능 착수 시* 재도입한다(현재 firebase_messaging·firebase_core
+  # lib/test 사용처 0·선언만 있던 상태 — MOB-08, TTS/STT 제거에 이은 2회차 반복실수).
+  # 제거 이유: google-services.json 파일 자체가 저장소에 없고, android/ Gradle(build.gradle·
+  # settings.gradle·app/build.gradle) 어디에도 Firebase 플러그인이 적용돼 있지 않으며, ios/
+  # 디렉터리 자체가 존재하지 않는다 — 두 패키지 모두 플랫폼 설정이 전혀 안 걸려 선언만 존재했다.
+  # 재도입 시 FCM을 실제 기능으로 구현하며(디바이스 토큰 발급·백엔드 저장·google-services.json·
+  # Gradle 플러그인 적용) 함께 진행할 것.
 
 dev_dependencies:
   flutter_test:
@@ -56,11 +62,9 @@ dev_dependencies:
   build_runner: ^2.4.0
   freezed: ^3.0.0
   json_serializable: ^6.7.0
-  # riverpod 3 = build 4.x 트랙 — freezed 3·retrofit_generator 10과 동일 트랙(2026-07-20 MOB-01).
+  # riverpod 3 = build 4.x 트랙 — freezed 3와 동일 트랙(2026-07-20 MOB-01). retrofit_generator는
+  # retrofit(dependencies) 제거와 짝으로 함께 제거했다(MOB-09 — 생성 대상이 없어 무의미).
   riverpod_generator: ^3.0.0
-  # generator 10.x = build 4.x 트랙 — freezed 3.x 이행(2026-07-20)과 짝. retrofit 4.7+의
-  # Parser.DartMappable도 전수 처리(구 9.x pin 사유 소멸).
-  retrofit_generator: ">=10.0.4 <11.0.0"
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 

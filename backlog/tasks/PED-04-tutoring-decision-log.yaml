@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "①세션 경로(create_session·append_turns)가 DialogueTurn 메타 컬럼(targeted_step·student_intent·student_understanding_signal·socratic_strategy — 재계산 0, 값 공간 정정은 §D1 참조)을 채움. stateless /v1/coach는 DB 무접근 계약 유지"
   - "②select_category에 recent_categories 회전(3연속 시 차선 카테고리, 결정론) + recall_session_context(원문 미복호·암호화 봉투 미개봉을 테스트로 동결)"
   - "③Polya 상태(polya_state·prev_hint_level)를 세션 경로에서 서버 파생으로 전환, 불일치 시 client_state_mismatch 플래그(침묵 실패 금지). 신규 스키마 0 — 기존 dead 컬럼 소생 + 순수 파생만"
-artifacts: []
+artifacts:
+  - "PED-04 구현: D1(교수 결정 로그 writer + 세션 간 회상) + D2(Polya 상태 서버 소유) — 신규 파일 l4/turn_meta.py·l4/session_recall.py, api/coach.py 세션 경로 배선, harness/wh1_evaluation.py 지표 3종(⑫⑬⑭). 전체 백엔드 스위트 8099 passed·0 failed(hermetic). 라이브 PG 통합테스트 3건 추가(이 세션 환경엔 PG 없어 skip만 확인)."
 paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/backend/whymath_backend/l4/socratic/**"
@@ -25,4 +26,4 @@ paths:
   - "tests/backend/harness/**"
 session: null
 notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D1·D2. PED-03 bandit 승격의 잠금 해제 조건(보상 신호 부재로 영구 미승격 상태였음). 04a §5.1 '원문 재조회'는 '메타 한정 회상'으로 강등 개정 동반(§2-⑤). socratic_strategy 컬럼 값 공간은 착수 시 첫 확인 항목(SocraticStrategy≠SocraticCategory, 두 enum이 직교 — 문서 §3 D1 정정 참조)."
-updated: 2026-07-29
+updated: 2026-08-03

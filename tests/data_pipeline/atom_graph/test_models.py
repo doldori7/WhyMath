@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.atom_graph.models import (
     ATOM_RELATIONS,
     COGNITIVE_TYPES,
@@ -21,6 +19,7 @@ from data_pipeline.atom_graph.models import (
     NodeLevel,
     SchoolLevel,
 )
+from pydantic import ValidationError
 
 
 def _atom(**over: object) -> AtomConcept:

@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-21-rephrase-lineage-identity-decision
+title: "리프레이즈 변형 계보 — identity_id/Canonical 분리 설계로 problem_relation 영속"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "Kiki 결정(2026-07-29, identity_id/Canonical 분리): Problem에 identity_id(계열 식별자·problem_id와 별개·UUID·nullable) 신설 — problem_id는 절대 불변, identity_id로 동일 계열(원본+rephrase 변형들)을 묶고 problem_relation(변형 타입·기존 5종 enum 재사용)으로 개별 변환 이력을 기록. 스켈레톤 동일 밴드 형제(S4-14)는 별개 문제라 identity_id 미공유(관계만). 구현: ①schema/problem.py·db/models/problem.py·alembic 마이그레이션 ②l1/problem_bank/populate.py relation upsert(멱등) ③기존 rephrased_v0 429건(당초 483은 S3-12 위생조치로 감소한 구수치) 소급 백필 — 원본과 slug 충돌하는 392건은 신규 slug/problem_id 채번 후 원본과 identity_id 공유+변형 relation 기록, 이미 분리된 37건은 identity_id·relation만 채움 ④향후 신규 rephrase 배치는 재실행 가능한 결정론 동기화 스크립트(scripts/backfill_rephrase_lineage_s4_18.py)로 slug 채번+identity_id+relation을 부여 — run_corpus_rephrase 자체는 의도적으로 slug/identity_id 미변경(소스 코퍼스 읽기전용 관례 유지) ⑤거버넌스 테스트(행>0·참조 무결·자기관계 금지 유지)"
+artifacts:
+  - "95421970"
+paths:
+  - src/backend/whymath_backend/harness/problem_corpus_rephrase.py
+  - src/backend/whymath_backend/l3/equivalent/rephrase.py
+  - "src/backend/whymath_backend/l1/problem_bank/**"
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/db/models/problem.py
+  - src/backend/whymath_backend/db/schema_version.py
+  - "src/backend/alembic/**"
+  - "data/corpus/**"
+  - scripts/backfill_rephrase_lineage_s4_18.py
+  - "tests/backend/db/**"
+  - "tests/backend/l1/problem_bank/**"
+session: null
+notes: "S4-14 착수 전 타당성 조사(2026-07-29, claude)에서 발견한 구조적 블로커(rephrased_v0 429건 중 392건(91%)이 populate.py slug ON CONFLICT upsert로 원본과 동일 DB 행에 병합돼 2행 관계 자체가 불가 — schema._no_self_relation이 구조적으로 막음)를 분리 등재. Kiki가 identity_id(계열)/problem_id(불변 개체) 분리 설계로 결정(2026-07-29) — 신규 problem_id/slug를 채번하되 별도 identity_id로 계열을 묶어 problem_id 불변과 계보 양쪽을 확보. 병합 정정(2026-08-04): 원래 브랜치(claude/whymath-problem-bank-design-65tsm4)에서 id=S4-18-rephrase-lineage-identity-decision(status:done, artifacts:95421970)으로 등재됐으나, 미머지 상태에서 main이 독립적으로 S4-18-review-time-axis를 착지시켜 번호 충돌. 전 ref(main+42개 브랜치) 스캔으로 S4-19·S4-20도 이미 타 미머지 브랜치가 선점 중임을 확인하고 S4-21로 재배번(HARN-10 규칙 — CLI가 배정, 추론 금지). 실 구현은 이미 완료돼 병합됐으므로(unmerged_branch_verdict_2026-08-04.md §1 고립 완료작업 표 참조) 이 add 직후 done 전환한다."
+updated: 2026-08-04

@@ -47,12 +47,22 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser
+from whymath_backend.api._growth_evidence_state import get_growth_evidence_counters
 from whymath_backend.api._query_filters import (
     _validate_time_window,
     _validate_tz_aware,
@@ -70,7 +80,7 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
@@ -89,6 +99,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
     estimate_ability,
+    learning_band_weight,
     select_weighted_item,
 )
 from whymath_backend.l2.learning_path import (
@@ -101,6 +112,7 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
+from whymath_backend.l2.recommendation_evidence import record_recommendation_treatment
 from whymath_backend.l2.skill_mastery_tracking import (
     record_problem_attempt_skill_mastery,
 )
@@ -1526,9 +1538,13 @@ async def get_my_learning_path(
          조회한다(`prerequisites`와 동일 인자).
       ② **L2 위상정렬** — `build_learning_path(session, gaps)`가 그 막힌 선수 집합 *내부*의
          직접 선수 엣지를 조회해 Kahn 위상정렬한다 — in-degree 0(선수 의존 없는 *근본*)을 먼저
-         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **추천의 depth/strength 정렬과 다르다**:
-         두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면 A를 먼저 다져야 한다(LTHC).
-         사이클(부분 적재 방어)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
+         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **제약 엣지가 있을 때만 추천의 depth/
+         strength 정렬과 달라진다**: 두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면
+         A를 먼저 다져야 한다(LTHC). 다만 기본값(`max_depth=1`)에서는 그런 제약 엣지가 0인
+         사례가 **96.4%**이고, 그때는 실질적으로 `_tiebreak`(weakness 등)만으로 정렬된다 —
+         응답의 `ordering_basis`(`"topological"|"tiebreak_only"|"empty"`)와
+         `ordering_edge_count`가 이 구분을 정직하게 노출한다(`PATH-02`). 사이클(부분 적재
+         방어, 실발생 0건)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
 
     L2 fetch + L2 정렬 *배선*만 여기(L5)가 소유하고(신규 로직 0), 순수 위상정렬·내부엣지 조회는
     L2(`build_learning_path`·`order_learning_path`)가 소유한다. user_id 스코핑·읽기 전용·
@@ -1575,6 +1591,20 @@ NextProblemMode = Annotated[
     Literal["suneung"] | None,
     Query(description="응용 모드. 'suneung'=수능 적응 추천(L6 게이팅×IRT CAT). 미지정=기본 CAT."),
 ]
+# REC-04: ?purpose=diagnosis|learning — 진단(현행 정보량 최대, 기본·회귀 0) vs 학습(목표
+# 성공률 밴드 70~85% 가중, l2.learning_band_weight). 근원 문제: Rasch 정보량 최대는 P≈0.5를
+# 지향해 학생이 절반을 틀리도록 설계된 출제가 학습 세션에도 그대로 적용된다(교수학 금기 —
+# 부정적 피드백 정서 강화 금지). mode(suneung)와 직교 축 — 둘 다 지정 가능.
+NextProblemPurpose = Annotated[
+    Literal["diagnosis", "learning"],
+    Query(
+        description=(
+            "출제 목적. 'diagnosis'(기본)=정보량 최대(측정 정밀도, 회귀 0). "
+            "'learning'=목표 성공률 밴드(70~85%, 문헌값·미보정) 가중 — 응답의 "
+            "band_calibrated=false로 미보정 상태를 표시한다."
+        )
+    ),
+]
 # S2-06: 수능 모드 대상 페르소나 — L6 게이팅(`is_suneung_eligible`)의 판정 축. mode=suneung
 # 에서만 쓰인다(기본 CAT 경로는 무시). 기본 A_일반고고3(MVP 정시 정면 대상 — L6 기본과 동일).
 SuneungPersona = Annotated[
@@ -1593,6 +1623,23 @@ HarnessMetricsMode = Annotated[
         )
     ),
 ]
+
+# REC-01: 응답 정직 표기 — 이번 요청에 *실제로* 적용된 가중 축 이름(NextProblemResponse
+# `weight_axes_applied`). "적용 안 됨"(빈 리스트)과 "적용했으나 신호가 없었음"
+# (`weak_concept_signal_count=0`)을 별도 필드로 구분하는 것이 이 상수들의 존재 이유다
+# (θ=0 콜드스타트·BKT 숙달 0행 상태를 응답에서 숨기지 않기 위함 — 배경은 모듈 상단 참조).
+# prioritize_weak_concepts=true면 항상 포함(기본/수능 공통).
+WEIGHT_AXIS_WEAK_CONCEPT = "weak_concept"
+# mode=suneung이면 항상 포함(수능 우선순위 가중).
+WEIGHT_AXIS_SUNEUNG_PRIORITY = "suneung_priority"
+
+# REC-01: candidate_zero_reason 값 — problem_id가 null일 때만 채워지는 사유 코드.
+# 기본 CAT 경로는 `best is None`이 곧 `candidate_rows`가 비었다는 뜻뿐이라(select_weighted_item은
+# items가 비면 루프가 안 돌아 None) 항상 NO_POOL이다. 수능 모드만 두 사유가 갈린다: SQL 사전필터
+# 자체가 0건인지(NO_POOL), 아니면 후보는 있었으나 L6 진실 게이트(is_suneung_eligible)가 전부
+# 부적격 처리했는지(ALL_GATED_INELIGIBLE — `recommend_suneung_index`가 None을 반환).
+CANDIDATE_ZERO_NO_POOL = "no_candidate_pool"
+CANDIDATE_ZERO_ALL_GATED_INELIGIBLE = "all_candidates_gated_ineligible"
 
 
 def _weak_concept_weights(
@@ -1650,6 +1697,81 @@ async def _load_weak_concept_weights(
     return _weak_concept_weights(candidate_ids, problem_concepts, mastery)
 
 
+# S4-14: CAT 형제 후보 필터 — problem_relation(변형·유사) 계보를 소비하는 첫 소비처(승격 없는
+# 영속 금지 원칙 — populate.py가 채운 관계를 여기서 처음 읽는다). 직전 오답 문항의 "형제"
+# (같은 뼈대 변형·인접 유사 문항)를 배제(같은 문제 반복 회피)하거나 가중 우대(약점 재출제)한다.
+_SIBLING_BOOST = 1.0
+"""형제 가중 배율 — `_WEAK_CONCEPT_BOOST`와 동일 스케일 정책(형제는 1+BOOST배·비형제는 중립)."""
+
+SiblingFilter = Annotated[
+    Literal["exclude", "include"] | None,
+    Query(
+        description=(
+            "직전 오답 문항의 형제(problem_relation 변형·유사) 후보 처리. 'exclude'=후보에서 "
+            "배제(같은 뼈대 연속 출제 회피), 'include'=정보량에 가중해 우대(오답 문항 변형 "
+            "재출제). 미지정(기본)=기존 동작 그대로(회귀 0 — 형제 조회 자체를 생략)."
+        )
+    ),
+]
+
+
+async def _last_incorrect_problem_id(session: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
+    """직전 오답 문항 id — `created_at` 최신순 1건.
+
+    `get_my_ability_history`(§6.1)와 동형으로 서버 default 컬럼 `created_at`을 쓴다(`started_at`은
+    nullable·미보장이라 정렬 축 부적합).
+    """
+    stmt = (
+        select(ProblemAttempt.problem_id)
+        .where(
+            ProblemAttempt.user_id == user_id,
+            ProblemAttempt.is_correct.is_(False),
+            ProblemAttempt.problem_id.isnot(None),
+        )
+        .order_by(ProblemAttempt.created_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _load_sibling_ids(session: AsyncSession, problem_id: uuid.UUID) -> set[uuid.UUID]:
+    """`problem_relation` 양방향(parent/related) 조회 — 변형·유사는 시맨틱상 *대칭 소비*라
+    방향 무관하게 상대편 id를 "형제"로 모은다(자기 자신은 스키마가 이미 금지하나 방어적 제외).
+    """
+    stmt = select(ProblemRelation.parent_problem_id, ProblemRelation.related_problem_id).where(
+        or_(
+            ProblemRelation.parent_problem_id == problem_id,
+            ProblemRelation.related_problem_id == problem_id,
+        )
+    )
+    siblings: set[uuid.UUID] = set()
+    for parent_id, related_id in (await session.execute(stmt)).all():
+        other = related_id if parent_id == problem_id else parent_id
+        if other != problem_id:
+            siblings.add(other)
+    return siblings
+
+
+def _sibling_weights(candidate_ids: list[uuid.UUID], sibling_ids: set[uuid.UUID]) -> list[float]:
+    """형제 후보 가중 — `_weak_concept_weights`와 동형(형제 1+BOOST배·비형제 중립 1.0)."""
+    return [1.0 + _SIBLING_BOOST if pid in sibling_ids else 1.0 for pid in candidate_ids]
+
+
+def _combine_weights(*weight_lists: list[float] | None) -> list[float] | None:
+    """None 아닌 가중 리스트들을 원소별 곱으로 합성(약점 가중 × 형제 가중 동시 사용 지원).
+
+    전부 None이면 None(가중 없음 — 기존 `select_weighted_item`/`recommend_suneung_index`의
+    "가중 없음=균등" 계약 보존).
+    """
+    present = [w for w in weight_lists if w is not None]
+    if not present:
+        return None
+    combined = list(present[0])
+    for other in present[1:]:
+        combined = [a * b for a, b in zip(combined, other, strict=True)]
+    return combined
+
+
 class NextProblemResponse(BaseModel):
     """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천 + 측정 정밀도."""
 
@@ -1670,6 +1792,46 @@ class NextProblemResponse(BaseModel):
         default=False,
         description=f"SE가 목표({_TARGET_SE}) 이하면 True — 적응 검사 중단 권고(CAT 중단 규칙).",
     )
+    # ── REC-01: 응답 정직 표기(추천 도달 관측) — 기존 5필드 불변·아래 4필드는 신규 추가 ──
+    weight_axes_applied: list[str] = Field(
+        default_factory=list,
+        description=(
+            "이번 응답에 실제로 적용된 가중 축 이름 목록(예: 'weak_concept'·'suneung_priority'). "
+            "prioritize_weak_concepts=false(기본)면 'weak_concept' 미포함 — 빈 리스트는 "
+            "'적용 안 됨'이지 신호 없음이 아니다. 'weak_concept'이 있어도 실제 가중 신호가 "
+            "있었는지는 weak_concept_signal_count로 별도 확인한다."
+        ),
+    )
+    candidate_pool_size: int = Field(
+        default=0,
+        description=(
+            "이번 요청의 실제 후보 풀 크기(θ 근방 SQL 선별 후 개수, 수능 모드는 L6 게이팅 전)."
+        ),
+    )
+    weak_concept_signal_count: int = Field(
+        default=0,
+        description=(
+            "후보 중 BKT 숙달 기록이 있어 약점 가중치가 1.0이 아니게 된 문항 수. "
+            "prioritize_weak_concepts=false거나 후보가 없으면 0 — 'weak_concept' 축이 "
+            "weight_axes_applied에 있는데 이 값이 0이면 '적용했으나 신호 없음'(콜드스타트 등)."
+        ),
+    )
+    candidate_zero_reason: str | None = Field(
+        default=None,
+        description=(
+            "problem_id가 null일 때만 채워지는 사유 코드. "
+            f"'{CANDIDATE_ZERO_NO_POOL}'=SQL 후보 조회 자체가 0건, "
+            f"'{CANDIDATE_ZERO_ALL_GATED_INELIGIBLE}'=후보는 있었으나 수능 모드 L6 게이팅이 "
+            "전부 부적격 처리(기본 CAT 경로에서는 발생하지 않음). problem_id가 있으면 null."
+        ),
+    )
+    band_calibrated: bool | None = Field(
+        default=None,
+        description=(
+            "REC-04: purpose=learning일 때만 False(문헌값 70~85%·실측 미보정 — S4-15 보정 "
+            "대기). purpose=diagnosis(기본)에서는 밴드 자체가 적용되지 않으므로 null."
+        ),
+    )
 
 
 @router.get(
@@ -1683,6 +1845,8 @@ async def recommend_next_problem(
     prioritize_weak_concepts: PrioritizeWeakConcepts = False,
     mode: NextProblemMode = None,
     persona: SuneungPersona = Persona.A_일반고고3,
+    purpose: NextProblemPurpose = "diagnosis",
+    sibling_filter: SiblingFilter = None,
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
@@ -1714,6 +1878,24 @@ async def recommend_next_problem(
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
       - `persona`는 수능 모드에서만 쓰인다(기본 A_일반고고3). D·E는 게이트에서 전부 차단 →
         problem_id=null. mode 미지정 경로는 코드 무변경(회귀 0)·응답 모델 동일.
+
+    REC-03: `problem_id`가 확정되면(null이 아니면) `evidence_event`에 처치 1건을 기록한다
+    (`record_recommendation_treatment` — 가짜 처치 금지, null 응답은 기록하지 않음). 결과
+    결합(추천→정답 여부)은 아직 없다(S3-01 파일럿 이후 후속).
+
+    REC-04: `purpose`는 `mode`와 직교하는 축이다(수능 여부와 무관하게 적용). 기본
+    `diagnosis`는 현행 그대로(정보량 최대, 회귀 0). `learning`이면 예상 정답확률이 목표
+    성공률 밴드(70~85%, 문헌값)에 드는 후보를 `l2.learning_band_weight`로 가중해 같은 곱
+    결합 축(약점 가중·수능 가중과 동일 자리)에 얹는다 — 새 선택기는 만들지 않는다. 밴드
+    임계는 실측 미보정이라 응답에 `band_calibrated=false`가 실린다(보정은 `S4-15` 승계).
+
+    CAT 형제 후보 필터(S4-14·`?sibling_filter`): `problem_relation`(변형·유사 계보)의 첫
+    소비처. 직전 오답 문항이 있을 때만 그 문항의 "형제"(양방향 관계로 이어진 문항)를 조회—
+    `exclude`는 후보 SQL에서 배제(같은 뼈대 연속 출제 회피), `include`는 정보량 가중을 곱해
+    우대(형제 = 변형·유사 문항 재출제로 오개념 재확인). 미지정이면 조회 자체를 생략해 기존
+    동작과 쿼리 수가 완전히 같다(회귀 0). 기본 CAT·수능 모드 양쪽에 동일 배선(형제 데이터는
+    mode 무관 — 일관성 우선). `prioritize_weak_concepts`·`purpose=learning`과 동시 지정 시
+    가중은 모두 곱으로 합성.
     """
     attempt_stmt = (
         select(
@@ -1737,11 +1919,22 @@ async def recommend_next_problem(
     theta = estimate_ability(responses)
     attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
 
+    # S4-14 — sibling_filter 지정 + 직전 오답 존재 시에만 형제 조회(쿼리 0회 증가 보존 원칙 —
+    # 미지정이면 이 블록 전체가 생략돼 기존 동작과 완전히 동일).
+    sibling_ids: set[uuid.UUID] = set()
+    if sibling_filter is not None:
+        last_incorrect_id = await _last_incorrect_problem_id(session, user.user_id)
+        if last_incorrect_id is not None:
+            sibling_ids = await _load_sibling_ids(session, last_incorrect_id)
+
     # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
     administered_items = [item for item, _ in responses]
     se = ability_standard_error(theta, administered_items)
     standard_error = None if math.isinf(se) else se
     measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
+    # REC-04: purpose=learning일 때만 False(문헌값·미보정 — S4-15 전까지). diagnosis는 밴드
+    # 자체가 적용되지 않으므로 null(응답 필드 docstring 참조).
+    band_calibrated = False if purpose == "learning" else None
 
     # ── S2-06: 수능 적응 추천 분기 — θ·SE는 위 공통, 후보 조회·선택만 다르다. ──
     if mode == "suneung":
@@ -1763,6 +1956,8 @@ async def recommend_next_problem(
         )
         if attempted_ids:
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
+        if sibling_filter == "exclude" and sibling_ids:
+            suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(sibling_ids))
         # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
         suneung_stmt = suneung_stmt.order_by(
             func.abs(
@@ -1776,6 +1971,8 @@ async def recommend_next_problem(
         candidates = [
             row.to_schema() for row in (await session.execute(suneung_stmt)).scalars().all()
         ]
+        # REC-01: SQL 사전필터 통과 직후(L6 게이팅 전) 실제 후보 풀 크기 — 정직 표기용.
+        candidate_pool_size = len(candidates)
 
         # 약점 가중(슬라이스 17)은 기본 CAT과 *같은 헬퍼*를 공유 — extra_weights로 곱 결합.
         extra_weights: list[float] | None = None
@@ -1783,19 +1980,70 @@ async def recommend_next_problem(
             extra_weights = await _load_weak_concept_weights(
                 session, user.user_id, [p.problem_id for p in candidates]
             )
+        # REC-01: 수능 모드는 suneung_priority가 항상 적용되고, 약점 가중은 플래그에 따른다.
+        # extra_weights는 곱 결합 *전*(순수 약점 가중) 값이라 신호 유무를 여기서 바로 셀 수 있다
+        # (새 쿼리 불요 — 이미 계산된 리스트에서 파생).
+        weight_axes_applied = [WEIGHT_AXIS_SUNEUNG_PRIORITY]
+        if prioritize_weak_concepts:
+            weight_axes_applied.append(WEIGHT_AXIS_WEAK_CONCEPT)
+        weak_concept_signal_count = (
+            sum(1 for w in extra_weights if w != 1.0) if extra_weights is not None else 0
+        )
+        # REC-04: purpose=learning이면 같은 곱 결합 축에 밴드 가중을 얹는다(새 선택기 0).
+        # b 미보유 후보는 어차피 recommend_suneung_index 내부에서 배제되므로 중립 1.0.
+        if purpose == "learning" and candidates:
+            band_weights = [
+                (
+                    learning_band_weight(theta, IrtItem(difficulty=b))
+                    if (b := resolve_item_difficulty_b(p.irt_difficulty_b, p.difficulty_overall))
+                    is not None
+                    else 1.0
+                )
+                for p in candidates
+            ]
+            extra_weights = (
+                band_weights
+                if extra_weights is None
+                else [w * b for w, b in zip(extra_weights, band_weights, strict=True)]
+            )
+        # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+        # _combine_weights가 무변경 통과 — 회귀 0).
+        if sibling_filter == "include" and sibling_ids and candidates:
+            suneung_sib_weights = _sibling_weights([p.problem_id for p in candidates], sibling_ids)
+            extra_weights = _combine_weights(extra_weights, suneung_sib_weights)
         chosen_index = recommend_suneung_index(
             theta, candidates, persona, extra_weights=extra_weights
         )
         if chosen_index is None:
             # 적격 후보 0(전부 차단·신호 없음·b 없음) — 기본 CAT과 동일한 null 계약.
+            # REC-01: 후보 풀 자체가 0건인지, 풀은 있었으나 L6 게이팅이 전부 배제했는지 구분.
+            zero_reason = (
+                CANDIDATE_ZERO_NO_POOL if not candidates else CANDIDATE_ZERO_ALL_GATED_INELIGIBLE
+            )
             return NextProblemResponse(
                 problem_id=None,
                 theta=theta,
                 difficulty=None,
                 standard_error=standard_error,
                 measurement_sufficient=measurement_sufficient,
+                weight_axes_applied=weight_axes_applied,
+                candidate_pool_size=candidate_pool_size,
+                weak_concept_signal_count=weak_concept_signal_count,
+                candidate_zero_reason=zero_reason,
+                band_calibrated=band_calibrated,
             )
         picked = candidates[chosen_index]
+        # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — null 분기(위)는
+        # 호출하지 않는다.
+        await record_recommendation_treatment(
+            session,
+            problem_id=picked.problem_id,
+            theta=theta,
+            pool_size=len(candidates),
+            applied_weights=extra_weights is not None,
+            mode=mode,
+        )
+        await session.commit()
         return NextProblemResponse(
             problem_id=picked.problem_id,
             theta=theta,
@@ -1805,6 +2053,11 @@ async def recommend_next_problem(
             ),
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            weight_axes_applied=weight_axes_applied,
+            candidate_pool_size=candidate_pool_size,
+            weak_concept_signal_count=weak_concept_signal_count,
+            candidate_zero_reason=None,
+            band_calibrated=band_calibrated,
         )
 
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
@@ -1815,6 +2068,8 @@ async def recommend_next_problem(
     ).where(Problem.difficulty_overall.isnot(None))
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
+    if sibling_filter == "exclude" and sibling_ids:
+        candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(sibling_ids))
     candidate_stmt = candidate_stmt.order_by(
         func.abs(
             func.coalesce(
@@ -1825,6 +2080,8 @@ async def recommend_next_problem(
         )
     ).limit(_CANDIDATE_POOL_SIZE)
     candidate_rows = (await session.execute(candidate_stmt)).all()
+    # REC-01: 실제 후보 풀 크기 — 정직 표기용(θ 근방 SQL 선별 후, 미응답·난이도 라벨 보유 개수).
+    candidate_pool_size = len(candidate_rows)
 
     # 보정 b 우선·없으면 휴리스틱(difficulty_overall NOT NULL 보장 → 항상 값·candidate_rows와 1:1).
     items = [
@@ -1839,23 +2096,67 @@ async def recommend_next_problem(
         weights = await _load_weak_concept_weights(
             session, user.user_id, [pid for pid, _d, _b in candidate_rows]
         )
+    # REC-04: purpose=learning이면 같은 곱 결합 축에 밴드 가중을 얹는다(새 선택기 0). 미지정
+    # (diagnosis)이면 weights는 위 그대로(None일 수 있음) — 현행과 바이트 동일(회귀 0).
+    if purpose == "learning" and candidate_rows:
+        band_weights = [learning_band_weight(theta, item) for item in items]
+        weights = (
+            band_weights
+            if weights is None
+            else [w * b for w, b in zip(weights, band_weights, strict=True)]
+        )
+    # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+    # _combine_weights가 무변경 통과 — 회귀 0).
+    if sibling_filter == "include" and sibling_ids and candidate_rows:
+        sib_weights = _sibling_weights([pid for pid, _d, _b in candidate_rows], sibling_ids)
+        weights = _combine_weights(weights, sib_weights)
+
+    # REC-01: 응답 정직 표기 — 기본 CAT은 weak_concept 축만 존재(수능 우선순위 없음).
+    # prioritize_weak_concepts=false면 축 자체가 빈 리스트('적용 안 됨'). true면 축은 항상
+    # 실리되(가중 로직은 "적용"됐다는 뜻), 실제 신호 유무는 weak_concept_signal_count로 구분한다
+    # (weights는 이미 계산된 리스트라 새 쿼리 없이 그대로 파생).
+    weight_axes_applied = [WEIGHT_AXIS_WEAK_CONCEPT] if prioritize_weak_concepts else []
+    weak_concept_signal_count = sum(1 for w in weights if w != 1.0) if weights is not None else 0
 
     best = select_weighted_item(theta, items, weights=weights)
     if best is None:
+        # REC-01: 기본 CAT 경로에서 best is None은 candidate_rows가 비었다는 뜻뿐이다
+        # (items는 candidate_rows와 1:1이라 다른 사유가 없음 — select_weighted_item docstring).
         return NextProblemResponse(
             problem_id=None,
             theta=theta,
             difficulty=None,
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
+            weight_axes_applied=weight_axes_applied,
+            candidate_pool_size=candidate_pool_size,
+            weak_concept_signal_count=weak_concept_signal_count,
+            candidate_zero_reason=CANDIDATE_ZERO_NO_POOL,
+            band_calibrated=band_calibrated,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
+    # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — 위 null 분기는
+    # 호출하지 않는다.
+    await record_recommendation_treatment(
+        session,
+        problem_id=chosen_id,
+        theta=theta,
+        pool_size=len(candidate_rows),
+        applied_weights=weights is not None,
+        mode=mode,
+    )
+    await session.commit()
     return NextProblemResponse(
         problem_id=chosen_id,
         theta=theta,
         difficulty=float(chosen_difficulty),
         standard_error=standard_error,
         measurement_sufficient=measurement_sufficient,
+        weight_axes_applied=weight_axes_applied,
+        candidate_pool_size=candidate_pool_size,
+        weak_concept_signal_count=weak_concept_signal_count,
+        candidate_zero_reason=None,
+        band_calibrated=band_calibrated,
     )
 
 
@@ -2179,34 +2480,43 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 4종 커버리지 맵 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — 본인 스코핑) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
 # 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-# value=None + status(NO_DATA) + note로 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다").
-# 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만*
-# 노출(타 학생 0·admin auth 범위 밖).
+# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)가
+# 3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)을 더 편입했다 — D1 writer가
+# 처음 만든 데이터의 첫 reader. 각 지표는 표본 0/부족이면 value=None + status(NO_DATA) + note로
+# 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다"). 코호트 전체 집계(user_id=None)는
+# ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만* 노출(타 학생 0·admin auth 범위 밖).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
+    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
+    request: Request,
     user: ConsentedUser,
     session: SessionDep,
     since: SinceParam = None,
     until: UntilParam = None,
     mode: HarnessMetricsMode = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 + PED-04 3종 + S3-16 1종 — *본인* 집계
+    커버리지 맵.
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
     모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-    value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
-    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
-    started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)
+    3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)도 편입됐다 — `DialogueTurn`
+    메타 컬럼 writer가 처음 만든 데이터의 첫 reader. S3-16(행동 텔레메트리 생산자 좌석)에서
+    ⑮ 도움 요청 대 제공 비(힌트요청/힌트제공 개수 비)도 편입됐다 — supply(힌트제공) 0건이면
+    NO_DATA. 각 지표는 표본 0/부족이면 value=None + status + note로 "무엇을 만들면 잴 수 있는지"를
+    정직하게 드러낸다(가짜 0/stub 금지). ⑨는 measured_at·⑩은 updated_at·⑪은 started_at
+    (resolution) 시간창을 쓰고, ⑫⑬은 대화 started_at·⑭⑮는 힌트제공/힌트요청 이벤트 event_at
+    시간창을 쓴다(mode 스코프는 ⑭⑮만 적용 — ⑫⑬은 대화 기반이라 mode 태그가 아직 실리지 않는다).
+    나머지는 started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·
+    서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
     422). user_id는 인증에서 주입(본인 집계만).
@@ -2214,8 +2524,16 @@ async def get_my_harness_metrics(
     **노출 계약(CLAUDE.md 미성년 PII·식별 분석 금기)**: 본인 집계 신호(완주율·턴당 토큰 등)만
     반환 — 타 학생 데이터 0·개념 본문 0·정답 0. 코호트 전체 집계는 admin auth 범위라 이
     엔드포인트에 미포함(ops/스크립트가 `compute_wh1_surrogate_metrics(user_id=None)` 직접 호출).
+
+    **PED-06 도달 관측**: 이 호출 자체를 `GrowthEvidenceReachCounters`가 센다(`GET /health/ready`
+    `growth_evidence.requests_total`에 노출) — `gamification_module_gap_review.md` §3 D1이
+    실측한 "클라가 이 엔드포인트를 호출하기로 결정한 적 자체가 없다"는 주장을 라이브로도
+    검증 가능하게 만든다. 응답 필드 자체는 이번 태스크로 변경하지 않는다(11지표 학생 노출
+    허용 여부는 `harness/growth_evidence_exposure.py` 계약을 클라이언트가 소비할 때의 몫 —
+    이 엔드포인트는 여전히 내부·집계 전용 원시 계측 표면이다).
     """
     # 시간창 검증(noexpose 계층): naive·since>until 거부. 검증된 경계를 harness에 그대로 전달.
+    get_growth_evidence_counters(request.app).record_request()
     since = _validate_tz_aware(since, "since")
     until = _validate_tz_aware(until, "until")
     _validate_time_window(since, until, "since", "until")

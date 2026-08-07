@@ -79,17 +79,22 @@
 
 ## 7. 접근성 규약 (Accessibility)
 
-`coding_flutter.md` "접근성 100%"의 구체 목표. **자동 검증 착지(MOB-13)** — 구조적으로 안전한 단순 화면부터 `meetsGuideline` 위젯 테스트(`test/accessibility_test.dart`)로 회귀를 막는다.
+**목표 준수 레벨 = WCAG 2.1 AA**(KWCAG 2.2 AA는 본 프로젝트가 실제로 검사하는 항목 — 텍스트 대비 4.5:1·탭
+영역 크기·라벨 — 에서 실질적으로 동등하다고 보고 이 레벨 하나로 정본 선언한다. AAA는 목표하지 않는다).
+
+이 표가 접근성 준수의 *현재 달성 현황 정본*이다(`coding_flutter.md`는 목표 레벨만 선언하고 이 표를 가리킨다 —
+"100%" 같은 완료 주장은 하지 않는다). **자동 검증 착지(MOB-13/14, 배율 축 A11Y-01)** — 구조적으로 안전한
+단순 화면부터 `meetsGuideline` 위젯 테스트(`test/accessibility_test.dart`)로 회귀를 막는다.
 
 | 항목 | 목표 | 현황 |
 |---|---|---|
-| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me + 조밀 위젯(`SceneRenderer`·`CoachSignalCard`)을 `textContrastGuideline`로 라이트/다크 검증(MOB-13/14). chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue)는 미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 사업자색이라 대비 테스트 제외 |
-| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증. chat 문제 배너 탭에 라벨·button 시맨틱(MOB-13) + 최소 48dp 보장(MOB-14·`maxHeight` clamp로 MOB-02 상한 불침범) |
-| Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. 전면 감사는 후속 |
+| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me + 조밀 위젯(`SceneRenderer`·`CoachSignalCard`)을 `textContrastGuideline`로 라이트/다크 검증(MOB-13/14), 배율 1.0×/1.3×/2.0×까지 확대(A11Y-01). chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue)는 미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 사업자색이라 대비 테스트 제외 |
+| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증(배율 1.0×/1.3×/2.0×, A11Y-01). chat 문제 배너 탭에 라벨·button 시맨틱(MOB-13) + 최소 48dp 보장(MOB-14·`maxHeight` clamp로 MOB-02 상한 불침범) |
+| Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. `SceneRenderer`의 시각화 placeholder(`_VisualizationSeed`)도 단일 `Semantics` 라벨 부착(A11Y-01). 전면 감사는 후속 |
 | 색만으로 정보 전달 금지 | 굵기·아이콘·문구 병행 | 🟢 `CoachEmphasisText`(굵기)·신호는 아이콘+문구·정오 채색 전무 |
 | TTS | `SpeechSpec` 소비(클라 합성) | 🔴 후속 |
 
-→ **후속**: chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue) 대비 검증(컨트롤러 override 하네스)·Semantics 라벨 전면 감사·TTS(`SpeechSpec`).
+→ **후속**: chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue) 대비·배율 검증(컨트롤러 override 하네스)·Semantics 라벨 전면 감사·TTS(`SpeechSpec`).
 
 ---
 

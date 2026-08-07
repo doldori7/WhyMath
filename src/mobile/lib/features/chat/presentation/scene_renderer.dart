@@ -90,6 +90,9 @@ class SceneRenderer extends StatelessWidget {
           icon: Icons.flag_outlined,
           label: element.focusPrompt ?? '',
         );
+      case 'tutoring_prompt':
+        // LTHC mastery 적응(S5l) — 역할 배지(진입점/비계/확장) + 정본 발화(정답 아님).
+        return _TutoringRow(role: element.role, text: element.promptText ?? '');
       default:
         return const SizedBox.shrink();
     }
@@ -162,20 +165,25 @@ class _VisualizationSeed extends StatelessWidget {
     final theme = Theme.of(context);
     final caption = viz?.caption;
     final label = (caption != null && caption.isNotEmpty) ? caption : '인터랙티브 시각화';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: AppSpacing.sm),
-          Flexible(child: Text(label, style: theme.textTheme.bodyMedium)),
-        ],
+    // 접근성(A11Y-01): 아이콘+텍스트로 흩어진 자식 대신 이 placeholder 블록 전체를 스크린리더가
+    // 하나의 일관된 라벨로 읽도록 명시 부착(구조는 그대로, 시맨틱만 보강).
+    return Semantics(
+      label: label,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(child: Text(label, style: theme.textTheme.bodyMedium)),
+          ],
+        ),
       ),
     );
   }
@@ -242,6 +250,68 @@ class _SocraticBubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// LTHC 튜터링 프롬프트 한 줄 — 역할 배지(진입점/비계/확장) + 정본 발화(정답 아님·S5l).
+///
+/// mastery 적응 발화(`adapt_lthc` 정본)를 그린다 — `role`은 *지원 선택이지 판정이 아니다*(낙인
+/// 회피). 정답·수정은 백엔드 스키마에 애초에 없어 여기서도 그릴 수 없다(발화 텍스트만).
+class _TutoringRow extends StatelessWidget {
+  const _TutoringRow({required this.role, required this.text});
+
+  /// LTHC 축 역할("entry"/"scaffold"/"extension"·판정 아님·없으면 배지 생략).
+  final String? role;
+
+  /// `adapt_lthc` 정본 발화(정답 아님).
+  final String text;
+
+  /// 역할 코드 → 학생용 한국어 배지 라벨. 미지/누락 role은 null(배지 생략·전방호환).
+  static String? _roleLabel(String? role) {
+    switch (role) {
+      case 'entry':
+        return '진입점';
+      case 'scaffold':
+        return '비계';
+      case 'extension':
+        return '확장';
+      default:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    final badge = _roleLabel(role);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.school_outlined, size: 16, color: color),
+        const SizedBox(width: AppSpacing.sm),
+        if (badge != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              badge,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        Flexible(
+          child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: color)),
+        ),
+      ],
     );
   }
 }

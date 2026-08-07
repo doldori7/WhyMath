@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from data_pipeline.ncic.extract_xlsx import (
     ExtractError,
     extract_file_a,

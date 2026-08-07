@@ -162,15 +162,19 @@ class Task:
         return errors
 
     def layer_drift_warnings(self) -> list[str]:
-        """paths가 layer 도메인 지도 밖을 가리키면 경고 목록 반환 (error 아님 — 횡단 태스크 허용)."""
+        """paths가 layer 도메인 지도 밖을 가리키면 경고 목록 반환
+
+        (error 아님 — 횡단 태스크 허용).
+        """
         hints = LAYER_PATH_HINTS.get(self.layer)
         if not hints or not self.paths:
             return []
         warnings: list[str] = []
         for pattern in self.paths:
             if not any(pattern.startswith(h) for h in hints):
+                domain = ", ".join(hints)
                 warnings.append(
-                    f"{self.id}: paths '{pattern}' 이 layer '{self.layer}' 도메인({', '.join(hints)}) 밖"
+                    f"{self.id}: paths '{pattern}' 이 layer '{self.layer}' 도메인({domain}) 밖"
                 )
         return warnings
 

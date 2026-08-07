@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from data_pipeline.citation import build_ncic_citation_core
 from data_pipeline.concept_graph.idmap import _AREA_TOKEN_PATTERN, _TOPIC_AREA_MAP
 

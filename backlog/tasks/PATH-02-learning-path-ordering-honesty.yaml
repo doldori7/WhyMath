@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 계약 안정: 추가 필드는 default 보유로 기존 소비자 회귀 0(OpenAPI 가산 변경만), 기존 테스트 18건(tests/backend/l2/test_learning_path.py) 회귀 0"
   - "⑤ 정본 정정 동반: l2/learning_path.py 모듈 docstring의 무조건적 '위상정렬 순서화' 서술과 api/me.py get_my_learning_path docstring의 '추천의 depth/strength 정렬과 다르다' 서술을 기본값 실측(96.4% tiebreak 강등)에 맞춰 조건부로 정정한다"
   - "⑥ 범위 밖 명시: 순서 알고리즘·엣지 공급 변경(PATH-03)·max_depth 기본값 변경·prerequisites/coaching 엔드포인트 응답 변경은 이 태스크에 포함하지 않는다"
-artifacts: []
+artifacts:
+  - 0ffbf2e7
 paths:
   - src/backend/whymath_backend/l2/learning_path.py
   - src/backend/whymath_backend/api/me.py

@@ -14,21 +14,41 @@ three.js)는 L5 ④ 국소 비상구의 책임이다(05 §5.2·CLAUDE.md "표현
 범위(슬라이스 92): 라우터 경유 생성 + 파싱·검증 게이트. 프롬프트는 기능적 최소형(자유
 JSON spec). 교수학적 프롬프트 정련(pedagogy-designer·Langfuse·A/B)·타입별 typed spec·
 spec 내 함수식 SymPy 검증은 후속.
+
+VIZ-02(렌더 계약 파생): LLM에 제시하는 type 목록은 **하드코딩이 아니라
+`data/render_contract.json`(invariant ⑩ 렌더 선택 단일 진실원)에서 파생**한다 —
+`web_adapter`가 있는(= 렌더 경로가 실재하는) 타입만 제시한다. 이전엔 프롬프트가 4종을
+문자열 리터럴로 제시해 `animation_prerendered`(계약상 `web_adapter: null`·Manim 구현 0건)를
+생성기가 고를 수 있었고, 그 명세는 어디서도 렌더되지 않았다(웹은 조용히 미렌더·Flutter는
+caption 카드로 강등 — LLM 비용 낭비 + caption이 예고한 시각화 불이행). 스키마·enum·계약의
+`animation_prerendered` 좌석은 **존치**한다(`S4-03`·Manim 배선 시 계약 한 줄로 복귀) —
+죽이는 것은 *생성 경로*뿐이다. 게이트: `tests/backend/schema/test_render_contract.py`.
+
+7계층: 계약 파일을 *읽는* 것은 L5(렌더러 구현)에 대한 의존이 아니다. L3가 소비하는 것은
+"이 type에 렌더 경로가 있는가"라는 **술어 하나**이며 렌더러 식별자·구현체를 코드에 담지
+않는다(Renderer=Plugin 유지). 배포 자산(`data/`)을 L3가 읽는 선례: `l3/render/
+assessment_bank.py`·`l3/notation_coverage.py`. import 방향은 그대로 L3→schema다.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Sequence
+from functools import lru_cache
+from pathlib import Path
 
 from pydantic import ValidationError
 
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import generate
+from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.visualization import Visualization
+
+logger = logging.getLogger("whymath.l3.visualization")
 
 
 class InvalidVisualizationSpecError(ValueError):
@@ -78,33 +98,143 @@ def parse_visualization_spec(text: str) -> Visualization:
         raise InvalidVisualizationSpecError(f"Visualization 스키마 위반: {exc}") from exc
 
 
-# 시스템 프롬프트 — 선언적 명세 JSON 하나만 출력(렌더 아님). 기능적 최소형(슬92 범위).
-_SYSTEM_PROMPT = (
-    "당신은 수학 학습 앱의 시각화 *명세* 생성기다. 개념을 가장 잘 드러내는 선언적 시각화 "
-    "명세를 JSON 객체 하나로만 출력한다(렌더 이미지가 아니라 명세 — 렌더는 클라이언트가 "
-    "한다). 설명·코드펜스 없이 아래 형태의 JSON 하나만 출력하라:\n"
-    '{"type": "<interactive_graph_2d|interactive_surface_3d|simulation_probabilistic|'
-    'animation_prerendered>", "spec": {렌더 파라미터·데이터·축·상호작용 규칙}, '
-    '"caption": "<한 줄 캡션>", "interactive": <true|false>}\n'
-    "규칙: type은 위 4종 중 하나의 영문 값. animation_prerendered는 조작 불가이므로 "
-    "interactive=false. spec은 해당 type에 맞는 자유 JSON. 사용자가 '권장 시각화 양식'을 "
-    "주면 그 교수학적 양식을 최대한 반영해 spec을 구성하라.\n"
-    "type별 spec 예시(가능하면 이 키를 채워라):\n"
-    '  - interactive_graph_2d: {"function":"a*x**2+b*x+c", "domain":[-3,3], '
-    '"parameters":[{"name":"a","min":-5,"max":5,"step":0.1,"default":1}]}\n'
-    '  - interactive_surface_3d: {"surface":"z = x**2 + y**2", "rotatable":true}\n'
-    '  - simulation_probabilistic: {"experiment":"동전 던지기", "trials":200, '
-    '"outcomes":[{"label":"앞면","weight":1},{"label":"뒷면","weight":1}]}\n'
-    "확률 시뮬은 outcomes(결과 라벨+확률 가중치)를 반드시 채워 임의 실험도 표현하라."
-)
+# ──────────────────────────────────────────────────────────────────────
+# 렌더 계약 파생 — "생성기가 제시하는 타입 ⊆ 렌더 경로가 있는 타입" (VIZ-02)
+# ──────────────────────────────────────────────────────────────────────
+# 계약 파일 경로 — 레포 루트 기준 고정(cwd 무관). 이 파일은
+# src/backend/whymath_backend/l3/visualization.py라 parents[4]가 레포 루트다
+# (`l3/render/assessment_bank.py`가 같은 관례로 코퍼스 산출물을 앵커한다).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+RENDER_CONTRACT_PATH = _REPO_ROOT / "data" / "render_contract.json"
+
+# 계약 최상위 키 — 이 로더와 계약 파일의 유일한 결합면(웹 vitest·백엔드 계약 테스트와 공유).
+RENDER_CONTRACT_RENDERERS_KEY = "renderers"
+# 렌더 경로 유무 판정 필드. null이면 "그 type을 그릴 수 있는 어댑터가 없다"는 계약의 선언이다
+# (Flutter도 WebView로 같은 웹 어댑터에 태우므로 이 필드가 두 클라 공통의 렌더 가능성 술어다).
+RENDER_CONTRACT_ADAPTER_KEY = "web_adapter"
+
+# type별 spec 예시 — LLM이 채울 키 힌트. 키 집합은 *계약상 렌더 가능한 타입 집합과 정확히
+# 일치*해야 한다: 렌더 불가 타입의 예시가 남으면 dead code이고, 렌더 가능한데 예시가 없으면
+# LLM이 그 type의 spec을 못 채운다. 이 등식은 게이트가 동결한다
+# (tests/backend/schema/test_render_contract.py).
+_SPEC_EXAMPLES: dict[str, str] = {
+    "interactive_graph_2d": (
+        '{"function":"a*x**2+b*x+c", "domain":[-3,3], '
+        '"parameters":[{"name":"a","min":-5,"max":5,"step":0.1,"default":1}]}'
+    ),
+    "interactive_surface_3d": '{"surface":"z = x**2 + y**2", "rotatable":true}',
+    "simulation_probabilistic": (
+        '{"experiment":"동전 던지기", "trials":200, '
+        '"outcomes":[{"label":"앞면","weight":1},{"label":"뒷면","weight":1}]}'
+    ),
+}
+
+
+@lru_cache(maxsize=1)
+def renderable_visualization_types() -> tuple[str, ...]:
+    """렌더 경로가 실재하는 `VisualizationType` 값들 — 계약 파생·1회 로드·인메모리 캐시.
+
+    매 LLM 호출마다 파일을 읽지 않는다(`lru_cache` — `l3/render/assessment_bank.py` 선례).
+    테스트는 `reset_render_contract_cache()`로 무효화한다.
+
+    실패 처리(침묵 실패 금지 — 예외 *타입명*을 로그에 싣는다. 경로 외 값은 싣지 않는다):
+        계약 파일 부재·파손처럼 **계약을 읽을 수 없는** 경우에는 `_SPEC_EXAMPLES`의 키로
+        강등한다. 이 키 집합은 게이트가 계약의 렌더 가능 집합과 동일함을 CI에서 동결하므로,
+        강등값은 *정상 배포에서 계약이 주는 답과 같다* — 강등 방향이 "생성 전면 붕괴"가 아니라
+        "직전 정상 동작 유지"다. 계약이 **정상인데 렌더 가능 0건**인 경우는 강등하지 않는다
+        (그건 계약이 명시적으로 "그릴 수 있는 것이 없다"고 말한 상태이므로, 예시 키로 폴백하면
+        계약 위반이다) — 빈 튜플을 그대로 돌려주고 `_system_prompt()`가 생성을 막는다.
+    """
+    try:
+        payload = json.loads(RENDER_CONTRACT_PATH.read_text(encoding="utf-8"))
+        renderers = payload[RENDER_CONTRACT_RENDERERS_KEY]
+        if not isinstance(renderers, dict) or not renderers:
+            raise TypeError(
+                f"{RENDER_CONTRACT_RENDERERS_KEY}가 비어있지 않은 dict가 아님: "
+                f"{type(renderers).__name__}"
+            )
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        logger.warning(
+            "렌더 계약 로드 실패 — 코드 측 예시 키 집합으로 강등(생성 타입 집합 유지). "
+            "error_type=%s path=%s",
+            type(exc).__name__,
+            RENDER_CONTRACT_PATH,
+        )
+        return tuple(sorted(_SPEC_EXAMPLES))
+    return tuple(
+        sorted(
+            name
+            for name, entry in renderers.items()
+            if isinstance(entry, dict) and entry.get(RENDER_CONTRACT_ADAPTER_KEY)
+        )
+    )
+
+
+def _build_system_prompt(types: Sequence[str]) -> str:
+    """렌더 가능 타입 목록 → 시스템 프롬프트(순수 함수 — 전역 상태 없음·정본 캐시 경유).
+
+    선언적 명세 JSON 하나만 출력시킨다(렌더 아님). 기능적 최소형(슬92 범위)이며, 목록 밖
+    타입을 제시하지 않는 것이 이 함수의 유일한 불변식이다.
+
+    OPS-16: *고정 문안*은 `docs/prompts/l3_visualization.md` 정본에서 인용하고, *타입 목록*은
+    VIZ-02의 렌더 계약 파생을 그대로 유지한다 — 문면의 정본은 문서, 렌더 가능성의 정본은
+    `data/render_contract.json`으로 갈라 두 진실 원천이 겹치지 않게 한다. spec 예시 줄은
+    산문이 아니라 *데이터*(`_SPEC_EXAMPLES`)라 계약 파생 목록으로 여기서 조립한다.
+    """
+    lines = [
+        fill(
+            prompt_text("l3.visualization.system"),
+            TYPE_UNION="|".join(types),
+            TYPE_COUNT=str(len(types)),
+        )
+    ]
+    lines.extend(f"  - {name}: {_SPEC_EXAMPLES[name]}" for name in types if name in _SPEC_EXAMPLES)
+    if "simulation_probabilistic" in types:
+        lines.append(prompt_text("l3.visualization.system_probability_note"))
+    return "\n".join(lines)
+
+
+@lru_cache(maxsize=1)
+def _system_prompt() -> str:
+    """프로덕션 시스템 프롬프트 — 계약에서 파생한 타입 목록으로 1회 조립·캐시.
+
+    렌더 가능 타입이 0건이면 프롬프트를 만들지 않고 `RuntimeError`로 막는다. 그 상태에서
+    생성하면 *무조건* 렌더 불가 명세가 나오므로(LLM 비용 100% 낭비 + caption 불이행),
+    조용히 진행하는 것보다 요청을 실패시키는 쪽이 안전하다.
+    """
+    types = renderable_visualization_types()
+    if not types:
+        logger.error(
+            "렌더 계약에 렌더 가능한 시각화 타입이 0건 — 명세 생성을 차단한다. path=%s",
+            RENDER_CONTRACT_PATH,
+        )
+        raise RuntimeError(
+            "렌더 가능한 시각화 타입이 없다(render_contract.json의 web_adapter 전건 null) — "
+            "생성해도 렌더될 수 없으므로 시각화 명세 생성을 중단한다."
+        )
+    return _build_system_prompt(types)
+
+
+def reset_render_contract_cache() -> None:
+    """렌더 계약·시스템 프롬프트 캐시 무효화 — 테스트 격리용 seam.
+
+    프로덕션은 계약이 프로세스 수명 동안 고정이라 호출할 일이 없다
+    (`l3/render/assessment_bank.py::reset_assessment_bank_cache` 동형). 프롬프트 *문면*의
+    정본 캐시는 별도다 — 정본 파일을 바꾼 테스트는 `prompt_assets.reset_prompt_asset_cache()`도
+    함께 호출해야 여기 캐시된 조립 결과가 갱신된다(OPS-16).
+    """
+    renderable_visualization_types.cache_clear()
+    _system_prompt.cache_clear()
 
 
 def _user_prompt(concept: str, level: str, recommended_styles: Sequence[str] | None = None) -> str:
-    """개념·수준(+권장 양식 힌트) → 사용자 프롬프트(시각화 명세 1개 요청)."""
-    lines = [f"개념: {concept}", f"대상 수준: {level}"]
+    """개념·수준(+권장 양식 힌트) → 사용자 프롬프트(시각화 명세 1개 요청·정본 인용)."""
+    lines = [fill(prompt_text("l3.visualization.user_head"), CONCEPT=concept, LEVEL=level)]
     if recommended_styles:
-        lines.append(f"권장 시각화 양식(참고): {', '.join(recommended_styles)}")
-    lines.append("이 개념을 가장 잘 드러내는 시각화 명세 JSON 하나를 출력하라.")
+        lines.append(
+            fill(prompt_text("l3.visualization.user_styles"), STYLES=", ".join(recommended_styles))
+        )
+    lines.append(prompt_text("l3.visualization.user_tail"))
     return "\n".join(lines)
 
 
@@ -120,9 +250,13 @@ def build_visualization_prompt(
     *동일한* 프롬프트로 모델을 호출하게 하기 위함이다 — 평가와 프로덕션의 프롬프트 드리프트 0.
 
     Returns:
-        (system_prompt, user_prompt) — `_SYSTEM_PROMPT`와 `_user_prompt(...)` 결과.
+        (system_prompt, user_prompt) — 렌더 계약 파생 시스템 프롬프트(`_system_prompt()`)와
+        `_user_prompt(...)` 결과.
+
+    Raises:
+        RuntimeError: 렌더 계약에 렌더 가능한 타입이 0건(생성해도 렌더 불가 — 생성 차단).
     """
-    return _SYSTEM_PROMPT, _user_prompt(concept, level, recommended_styles)
+    return _system_prompt(), _user_prompt(concept, level, recommended_styles)
 
 
 async def generate_visualization_spec(

@@ -6,14 +6,13 @@ hermetic: 외부 의존·DB·코퍼스 파일 불요(모델 검증만). openpyxl
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.concept_atom_crosswalk.models import (
     MATCH_METHODS,
     REVIEW_STATUS_AI_ESTIMATED,
     CrosswalkEntry,
     MatchMethod,
 )
+from pydantic import ValidationError
 
 
 def _entry(**overrides: object) -> CrosswalkEntry:

@@ -233,6 +233,38 @@ def ability_standard_error(theta: float, items: list[IrtItem]) -> float:
     return 1.0 / math.sqrt(info)
 
 
+# 학습 목적 성공률 밴드(REC-04) — 문헌값(70~85%), 실측 미보정. S4-15(실응답 난이도 루프)가
+# 언젠가 보정하기 전까지는 이 상수 자체가 "band_calibrated=false"의 근거다.
+LEARNING_BAND_LOW: float = 0.70
+LEARNING_BAND_HIGH: float = 0.85
+# 밴드 밖 후보의 가중치 — 0이 아니라 작은 양수다. 완전히 0이면 밴드 안 후보가 하나도 없을 때
+# select_weighted_item이 전 후보를 동률 0으로 봐 결정론이 깨진다(전부 배제되는 사고 방지).
+LEARNING_BAND_OUT_OF_RANGE_WEIGHT: float = 0.05
+
+
+def learning_band_weight(
+    theta: float,
+    item: IrtItem,
+    *,
+    band_low: float = LEARNING_BAND_LOW,
+    band_high: float = LEARNING_BAND_HIGH,
+) -> float:
+    """학습 목적 가중 — 예상 정답확률이 목표 밴드 안이면 1.0, 밖이면 낮은 가중(REC-04 D4②).
+
+    `select_weighted_item`의 기존 곱 결합 축에 그대로 얹는 가중치다(새 선택기 0) — 약점
+    가중·수능 가중과 같은 자리에서 곱해진다. **밴드 상한(`band_high`)이 없으면** 확률이
+    1.0에 가까운(지나치게 쉬운) 후보가 그대로 최고 가중을 받아 "쉬운 문제로 정답률을
+    꾸미는 장치"가 된다(금기 위반) — 상한을 실측으로 끄면(예: `band_high=1.0`) 이 배제가
+    풀리는지가 REC-04 acceptance⑤의 변별력 검증 대상이다.
+
+    `probability_correct(θ, item)`(Rasch 2PL)를 그대로 재사용한다 — 새 확률 모델 0.
+    """
+    p = probability_correct(theta, item)
+    if band_low <= p <= band_high:
+        return 1.0
+    return LEARNING_BAND_OUT_OF_RANGE_WEIGHT
+
+
 def select_weighted_item(
     theta: float,
     items: list[IrtItem],
@@ -282,11 +314,15 @@ def select_next_item(
 
 __all__ = [
     "IrtItem",
+    "LEARNING_BAND_HIGH",
+    "LEARNING_BAND_LOW",
+    "LEARNING_BAND_OUT_OF_RANGE_WEIGHT",
     "ability_standard_error",
     "estimate_ability",
     "estimate_difficulty",
     "fit_jmle",
     "item_information",
+    "learning_band_weight",
     "probability_correct",
     "select_next_item",
     "select_weighted_item",

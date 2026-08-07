@@ -1,17 +1,17 @@
 {
   "pool": "whymath-original",
   "corpus_name": "concept_visualization_v1",
-  "generated": "2026-07-29 (소급 작성 — 기존 산출물 근거 확인, EOS 운영 평면 공백 점검 §3-1)",
-  "generation_method": "WhyMath 자체 분류 작업 — 시각화 가능성 4분류(직접/동적/부분/추상, docs/architecture/05b_visualization_classification.md 정본) 대표 시드를 concept_graph_v1 개념에 태깅",
-  "record_count": 7,
-  "source_citation": "출처: WhyMath 자체 저작 — concept_graph_v1(자체 개념 그래프) 개념에 대한 시각화 분류 파생 메타데이터. code는 concept_graph_v1 concept_id(=backend concept.code) 참조.",
+  "generated": "2026-07-29 (소급 작성 — 기존 산출물 근거 확인, EOS 운영 평면 공백 점검 §3-1) · 2026-08-03 재정렬(VIZ-05 — 원자 백본 code 공간으로 축소·orphan 7/7 해소)",
+  "generation_method": "WhyMath 자체 분류 작업 — 시각화 가능성 4분류(직접/동적/부분/추상, docs/architecture/05b_visualization_classification.md 정본) 대표 시드를 개념에 태깅. 2026-08-03: v1.1의 7건 전건이 레거시 concept_graph_v1 code로 태깅돼 런타임 atom_graph_v1 code 공간과 전혀 겹치지 않음(orphan 7/7)이 실측돼, 추상 축 1건(대우증명·귀류법 → 10공수2-02-07-1)만 원자 백본 code로 보수적으로 재정렬하고 나머지 6건(직접·동적·부분)은 인지행동 판정이라 억지 재태깅하지 않고 제거(미태깅 존치)했다.",
+  "record_count": 1,
+  "source_citation": "출처: WhyMath 자체 저작 — 원자 백본(atom_graph_v1) 개념에 대한 시각화 분류 파생 메타데이터. code는 atom_graph_v1 concept.code(=backend concept.code) 참조(2026-08-03 이전에는 레거시 concept_graph_v1 concept_id를 참조해 런타임과 orphan이었다 — VIZ-05).",
   "license_notice": "WhyMath 자체 저작물(개념 시각화 분류·rationale). 원본 개념(concept_graph_v1)의 라이선스를 승계하며, 검정교과서·평가원 본문을 인용하지 않는다 — 순수 분류 산출물.",
   "copyright_rail": [
     "검정교과서·평가원·EBS 본문·도표 복제 0 — 개념 코드 태그 + 자체 rationale 서술만 존재.",
-    "\"명백히 분류 가능한 개념만 태깅(전면 분류는 전문가 검수·점진)\" — 대표 시드 7건, 전면 커버리지 아님(visualizability.json note 필드 그대로)."
+    "\"명백히 분류 가능한 개념만 태깅(전면 분류는 전문가 검수·점진)\" — 대표 시드 1건(2026-08-03 재정렬 후), 전면 커버리지 아님(visualizability.json note 필드 그대로)."
   ],
   "contract": [
-    "code 필드는 concept_graph_v1의 concept_id를 참조하는 FK류 문자열 — concept_graph_v1이 삭제/변경되면 이 파일도 갱신 필요(현재 자동 동기화 없음, 수동 관리)."
+    "code 필드는 원자 백본(atom_graph_v1)의 concept.code를 참조하는 FK류 문자열(2026-08-03 VIZ-05 재정렬 이전에는 레거시 concept_graph_v1 concept_id를 참조해 런타임 code 공간과 orphan이었다) — atom_graph_v1이 삭제/변경되면 이 파일도 갱신 필요(현재 자동 동기화 없음, 수동 관리. `tests/backend/l1/test_concept_visualization_orphan_gate.py`가 CI에서 orphan을 기계 차단한다)."
   ],
   "authoring_fields": {
     "note": "visualizability.json 스키마는 {version, note, entries[]} — entries 각 항목은 code/name_ko/visualizability/rationale."
