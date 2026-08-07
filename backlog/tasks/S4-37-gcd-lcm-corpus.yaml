@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -15,13 +15,14 @@ acceptance:
   - "[6수01-04](최대공약수·개념 B1)·[6수01-05](최소공배수·개념 B2) 0커버 해소 — kind(gcd/lcm) 필터 2밴드"
   - "SymPy gcd()/lcm() 함수 기반 Tier1 검증 실측 확인"
   - "전건 Tier1 게이트 통과·is_published=False·coverage 리포트 이동 확인·전체 스위트+4게이트 green"
-artifacts: []
+artifacts:
+  - df171e80
 paths:
   - src/backend/whymath_backend/l3/equivalent/elementary_gcd_lcm_skeleton_generator.py
   - src/backend/whymath_backend/harness/elementary_gcd_lcm_batch.py
   - tests/backend/l3/equivalent/test_elementary_gcd_lcm_skeleton_generator.py
   - tests/backend/harness/test_elementary_gcd_lcm_batch.py
   - data/corpus/problem_bank_elementary_gcd_lcm_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: W2 Phase2 웨이브1 항목3/5.
 updated: 2026-08-07
