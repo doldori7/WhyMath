@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -16,13 +16,14 @@ acceptance:
   - "[CALC1-02-04](연쇄법칙) 0커버 해소 — (ax+b)^n 합성함수 생성기"
   - "calculus_product_rule_skeleton_generator 관례 계승: Tier1 Derivative(...).doit() 검증·concept_tags=()(대학 원자 태깅 공백 정직 표시)·run_equivalent_generation(signature_index=None)"
   - "전건 Tier1 게이트 통과·is_published=False·coverage 리포트 이동 확인·전체 스위트+4게이트 green"
-artifacts: []
+artifacts:
+  - e4959b3c
 paths:
   - src/backend/whymath_backend/l3/equivalent/calculus_chain_quotient_rule_skeleton_generator.py
   - src/backend/whymath_backend/harness/university_calc1_chain_quotient_batch.py
   - tests/backend/l3/equivalent/test_calculus_chain_quotient_rule_skeleton_generator.py
   - tests/backend/harness/test_university_calc1_chain_quotient_batch.py
   - data/corpus/problem_bank_university_calc1_chain_quotient_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "w2_content_factory_completion_plan_v1.md §6 Phase 1 우선순위 6위. calculus_product_rule_skeleton_generator 형제 확장."
 updated: 2026-08-07
