@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -27,6 +27,6 @@ paths:
   - src/backend/whymath_backend/harness/growth_evidence_exposure.py
   - src/backend/whymath_backend/api/_growth_evidence_state.py
   - "tests/backend/api/test_me_growth_evidence*.py"
-session: null
+session: main
 notes: "docs/architecture/gamification_module_gap_review_r2.md §6 D5. 계약 모듈이 스스로 ':122 이 함수가 유일한 노출 판정 경로가 되게 한다'고 선언했으나 importer가 CLI 리포트(surrogate_baseline_report.py:39-41,206)와 자기 테스트뿐 — 학생 토큰(ConsentedUser)으로 부르는 GET /v1/me/harness-metrics(api/me.py:2380-2392)는 원시 11지표를 그대로 반환한다. api/me.py:2412-2414가 노출을 '클라이언트가 소비할 때의 몫'으로 위임하나 전역 UI 불변식 #1(00_index.md:41)은 클라에 판정을 두는 것을 금지 — 계약이 하필 그것을 가질 수 없는 계층에 위임됐다. v1 8회차 '규정하고 기계화 안 함'의 재발이되 규정 주체가 직전 슬라이스 자신(1일 만의 재발). 형태 신설=Kiki 확정(기존 라우트 수정 아닌 학생 안전 엔드포인트 신설)."
-updated: 2026-08-04
+updated: 2026-08-07
