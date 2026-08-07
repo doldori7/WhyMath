@@ -19,7 +19,8 @@
 | 영역 | 상태 | 증거 | 판정 |
 |---|---|---|---|
 | API 코어 | ✅ 14개 라우터(auth/users/me/coach/problems/verify/ocr/visualization/scene/speech/devices/gating/interactions/concepts) | `src/backend/whymath_backend/api/` | 성숙 |
-| 학습자 대면 진단·숙달·학습경로 | ✅ `/v1/me/*`에 mastery·ability·diagnosis·weak-concepts·learning-path·recommend 다수 | `api/me.py` | 성숙 |
+| 진단·숙달·학습경로 **엔드포인트** | ✅ `/v1/me/*`에 mastery·ability·diagnosis·weak-concepts·learning-path·recommend 다수 | `api/me.py` | 엔드포인트 성숙 |
+| 위 표면의 **학생 도달** | ❌ Flutter 실호출 `/v1/` **13종에 경로 API 0종**. 경로 3종은 `concept_id`를 인자로 요구하는데 그 값을 고르는 조립 좌석이 0이라 학생이 호출할 방법 자체가 없다 | `learning_path_module_gap_review.md` §0-③ | **미도달 — `PATH-01`** (2026-08-03 정정: 코드 성숙도와 학생 도달을 한 칸에 합쳐 "학습자 대면·성숙"으로 판정했던 것을 분리) |
 | E2E 제품 루프 (사진→OCR→진단→코칭 완주) | ⚠️ WH-1 하네스 primary 승격(S1-11 done)·실기기 15분 루프 시연 PASS. 파일럿 실사용 검증은 미착수 | `harness/wh1_*.py`, `api/coach.py`(1,719 loc) | **부분 — S3-01이 남은 조각** |
 | L6 응용 모드 | ⚠️ suneung(gating+recommendation 396 loc)·metacognition·thinking·gifted·retake 존재하나 수능 외 얇음 | `l6/` | 부분 (S2-06·S3-03 done, 심화는 S4) |
 | 결제·구독 | ❌ `subscription_tier`(free/basic/premium) **스키마 필드만**. 결제 라우터·토스페이먼츠·환불 전무 | `schema/user.py:259`, `schema/enums.py:782` | **의도된 지연** (Phase 2 M2.3) |
