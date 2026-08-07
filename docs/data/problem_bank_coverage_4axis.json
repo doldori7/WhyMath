@@ -8,7 +8,7 @@
     "범위밖(1.0~5.0 아님)"
   ],
   "band_totals": {
-    "개념 [3.0,4.0)": 2152,
+    "개념 [3.0,4.0)": 2217,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 2634,
     "절차 [2.0,3.0)": 2881
@@ -24,6 +24,12 @@
       "name": "problem_bank_conceptual_v0",
       "parse_errors": 0,
       "problems": 360,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_conic_section_focus_v0",
+      "parse_errors": 0,
+      "problems": 65,
       "status": "적재됨"
     },
     {
@@ -251,7 +257,7 @@
       "total": 3
     },
     "이차곡선": {
-      "covered": 0,
+      "covered": 3,
       "total": 4
     },
     "인공지능과 빅데이터": {
@@ -337,7 +343,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 58,
+      "covered": 61,
       "total": 254
     },
     "대학교": {
@@ -376,6 +382,9 @@
     "[10기수2-01-06]",
     "[10기수2-03-02]",
     "[10기수2-03-03]",
+    "[12기하01-01]",
+    "[12기하01-02]",
+    "[12기하01-03]",
     "[12기하02-05]",
     "[12기하03-01]",
     "[12기하03-02]",
@@ -455,14 +464,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 6213
+    "단답형": 6278
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 5611,
+    "problems_without_problem_type": 5676,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -475,6 +484,9 @@
     "problem_bank_conceptual_v0": {
       "개념 [3.0,4.0)": 224,
       "절차 [2.0,3.0)": 136
+    },
+    "problem_bank_conic_section_focus_v0": {
+      "개념 [3.0,4.0)": 65
     },
     "problem_bank_coordinate_geometry_v0": {
       "절차 [2.0,3.0)": 400
@@ -557,6 +569,9 @@
     },
     "problem_bank_conceptual_v0": {
       "객관식": 360
+    },
+    "problem_bank_conic_section_focus_v0": {
+      "단답형": 65
     },
     "problem_bank_coordinate_geometry_v0": {
       "단답형": 400
@@ -790,6 +805,9 @@
     "[10기수2-01-06]": 24,
     "[10기수2-03-02]": 24,
     "[10기수2-03-03]": 24,
+    "[12기하01-01]": 25,
+    "[12기하01-02]": 20,
+    "[12기하01-03]": 20,
     "[12기하02-05]": 24,
     "[12기하03-01]": 200,
     "[12기하03-02]": 200,
@@ -869,8 +887,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.22528735632183908,
-    "covered_code_count": 98,
+    "coverage_rate": 0.23218390804597702,
+    "covered_code_count": 101,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -879,9 +897,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 337
+    "zero_coverage_code_count": 334
   },
-  "total_problems": 7829,
+  "total_problems": 7894,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -964,6 +982,9 @@
     "CONE-VOLUME": {
       "개념 [3.0,4.0)": 14,
       "절차 [2.0,3.0)": 10
+    },
+    "CONIC-SECTION-FOCUS": {
+      "개념 [3.0,4.0)": 65
     },
     "CONJUGATE-PRODUCT": {
       "개념 [3.0,4.0)": 12,
@@ -2336,9 +2357,6 @@
     "[12경수04-02]",
     "[12경수04-03]",
     "[12경수04-04]",
-    "[12기하01-01]",
-    "[12기하01-02]",
-    "[12기하01-03]",
     "[12기하01-04]",
     "[12기하02-01]",
     "[12기하02-02]",
