@@ -1,7 +1,7 @@
 # 04c. 오개념 7레벨 분리 — Part 6 검토 + 정본 명세
 
 > **상태**: 정본 (2026-07-02, 재검토 교정) · **계층**: L4 교수학 엔진 (횡단: L1 저장·L2 그래프·L3 임베딩·L5 렌더)
-> **관련**: `04_pedagogy_engine.md` · `04b_misconception_judge_graduation.md` · `math_dsl_principles_review.md`(§3.4·§3.6) · `math_dsl_risk_register.md`(Q1·Q8) · `docs/standards/playbook_part_review_questions.md`(Part 6) · `CLAUDE.md`(§오개념 독립 DB·§8대 구조원칙 #6)
+> **관련**: `04_pedagogy_engine.md` · `04b_misconception_judge_graduation.md` · `04e_misconception_remediation_design.md`(§6 갭 장부의 후속 실행 설계) · `misconception_module_gap_review.md`(외부 EOS 틀 대조) · `math_dsl_principles_review.md`(§3.4·§3.6) · `math_dsl_risk_register.md`(Q1·Q8) · `docs/standards/playbook_part_review_questions.md`(Part 6) · `CLAUDE.md`(§오개념 독립 DB·§8대 구조원칙 #6)
 
 ---
 
@@ -142,6 +142,12 @@ embedding이 오염되어 AI가 *오개념 문장을 정상 개념의 일부처�
   M-id crosswalk만 가진 평면 카탈로그다. traversal 진입 차단은 이미 강제되므로 오염 위험은 없고, 이
   관계셋은 오개념 노드화 착수 시 도입한다(현 보류가 정당 — `enums.py:562`·`distractor.py`·
   `relation_crosswalk.py` 후속 노트).
+  **후속 설계(2026-08-03)**: `04e_misconception_remediation_design.md` §2가 이 갭을 실행 설계로
+  좁혔다 — 4종 중 `misconception_of`는 `edge_design_part3_review.md`가 이미 엣지화를 기각하고
+  참조 키로 확정한 축이라 재론하지 않고, `repaired_by`는 본 문서 Level6("Repair Strategy — ✅
+  분리")와 중복이라 제외했다. 실제로 여는 것은 `caused_by`·`variant_of` 2종뿐이며, `concept_edge`와
+  물리 격리된 신규 테이블 `misconception_relation`(M-id↔M-id FK만)로 설계했다 — 이 문서의 traversal
+  진입 차단 불변식은 그대로 유지된다. 백로그: `MISC-04-misconception-relation-isolated-schema`.
 - **[Level 6] 잔여** — M-id 콘텐츠 카탈로그가 `distractor_rule`·`correction_point`를 레코드에 병저장
   (런타임 엔진과 별개 체계·FK 무결·오염 아님·순수성 관점 잔여). `InterventionPattern.VISUALIZATION`
   (패턴3) 게이트는 미결선(신뢰도 게이트 재사용으로 우회·후속).
@@ -155,6 +161,10 @@ embedding이 오염되어 AI가 *오개념 문장을 정상 개념의 일부처�
     가설 감쇠(decay·반감기 5턴)**로 slip을 자연 배제한다(지속 증거 없으면 가설이 소멸).
   - **후속 트리거**: root/symptom·slip 축을 명시 도입할지는 라이브 오진단(slip을 오개념으로 오코칭)이
     실측될 때 결정(별도 설계 슬라이스). 현 미구현은 정당하되 *측정 대상*으로 기록.
+  - **후속 설계(2026-08-03)**: `04e_misconception_remediation_design.md` §3 — 새 분류축은 만들지
+    않고, 기존 신호(가설 감쇠·강화·judge 방향판별)만으로 slip-like/지속오개념-like를 구분하는
+    읽기전용 관측 리포트만 설계했다(위 후속 트리거를 발화 가능하게 만드는 것이 목적).
+    백로그: `MISC-05-root-symptom-slip-observation-report`.
 
 ---
 
