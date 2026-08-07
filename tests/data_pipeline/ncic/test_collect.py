@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 import respx
-
 from data_pipeline.ncic.collect import (
     DEFAULT_BASE_URL,
     NcicCrawler,

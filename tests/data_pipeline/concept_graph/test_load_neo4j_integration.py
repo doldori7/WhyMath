@@ -19,14 +19,13 @@ import pytest
 
 pytest.importorskip("neo4j")  # [neo4j] 미설치(CI data-pipeline)면 모듈 전체 skip
 
-from neo4j import GraphDatabase  # noqa: E402  (importorskip 뒤에 와야 함)
-
 from data_pipeline.concept_graph.load import (  # noqa: E402
     CONSTRAINT_NAME,
     NODE_LABEL,
     load_graph,
 )
 from data_pipeline.concept_graph.transform import transform_dataset  # noqa: E402
+from neo4j import GraphDatabase  # noqa: E402  (importorskip 뒤에 와야 함)
 
 pytestmark = pytest.mark.integration
 
