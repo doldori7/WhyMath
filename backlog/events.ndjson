@@ -1326,6 +1326,8 @@
 {"ts": "2026-08-03T08:00:38", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-23-qa-gate-enforcement"}
 {"ts": "2026-08-03T08:01:20", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-24-output-safety-filter-axis"}
 {"ts": "2026-08-03T08:02:02", "actor": "claude/whymath-eos-review-iyev91", "action": "add", "id": "ARCH-25-grandfather-expiry-contract"}
+{"ts": "2026-08-03T08:03:21", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-01-learning-path-entrypoint"}
+{"ts": "2026-08-03T08:04:08", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-02-learning-path-corpus-ingestion"}
 {"ts": "2026-08-03T06:48:37", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-01-curriculum-revision-vocabulary-consistency"}
 {"ts": "2026-08-03T06:48:59", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-02-objective-coverage-observability"}
 {"ts": "2026-08-03T06:49:13", "actor": "claude/whymath-curriculum-design-b7qav0", "action": "add", "id": "CUR-03-achievement-level-data-intake"}
@@ -1500,6 +1502,7 @@
 {"ts": "2026-08-03T10:16:50", "actor": "claude/drive-cur-nlp-observability", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "tests/backend/api/test_me.py", "mode": "warn", "detail": "'tests/backend/api/test_me.py' 은 claim 태스크 REC-01-recommendation-reach-observability의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-08-03T10:28:32", "actor": "claude/drive-cur-nlp-observability", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "tests/backend/ops/test_recommendation_reach_report.py", "mode": "warn", "detail": "'tests/backend/ops/test_recommendation_reach_report.py' 은 claim 태스크 REC-01-recommendation-reach-observability의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-08-03T11:11:12", "actor": "claude/drive-cur-nlp-observability", "action": "done", "id": "REC-01-recommendation-reach-observability", "artifacts": ["b6fa6ec5"]}
+{"ts": "2026-08-03T10:30:23", "actor": "claude/whymath-learning-analytics-abk8ea", "action": "add", "id": "PATH-04-learning-path-corpus-ingestion"}
 {"ts": "2026-08-03T09:51:36", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "CUR-02-objective-coverage-observability", "rule": "path_overlap", "other": "CUR-01-curriculum-revision-vocabulary-consistency", "detail": "실파일 교집합 5건 예: src/backend/whymath_backend/harness/__init__.py, src/backend/whymath_backend/harness/agreement_gate.py, src/backend/whymath_backend/harness/agreement_gate_cli.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/**", "mode": "warn"}
 {"ts": "2026-08-03T09:51:36", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "CUR-02-objective-coverage-observability", "rule": "path_overlap", "other": "REC-02-misconception-probe-supply", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/wh1_primary.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/wh1_primary.py", "mode": "warn"}
 {"ts": "2026-08-03T09:51:38", "actor": "claude/backlog-drive-next", "action": "start", "id": "CUR-02-objective-coverage-observability", "session": "claude/backlog-drive-next", "remote": "ok"}
