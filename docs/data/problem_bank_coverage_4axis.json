@@ -11,13 +11,19 @@
     "개념 [3.0,4.0)": 2417,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 2684,
-    "절차 [2.0,3.0)": 3131
+    "절차 [2.0,3.0)": 3252
   },
   "corpora": [
     {
       "name": "problem_bank_binomial_distribution_v0",
       "parse_errors": 0,
       "problems": 300,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_combination_binomial_v0",
+      "parse_errors": 0,
+      "problems": 121,
       "status": "적재됨"
     },
     {
@@ -173,7 +179,7 @@
   ],
   "coverage_by_domain": {
     "경우의 수": {
-      "covered": 4,
+      "covered": 6,
       "total": 9
     },
     "공간도형과 공간좌표": {
@@ -355,7 +361,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 62,
+      "covered": 64,
       "total": 254
     },
     "대학교": {
@@ -429,6 +435,8 @@
     "[12직수03-04]",
     "[12직수04-01]",
     "[12확통01-01]",
+    "[12확통01-02]",
+    "[12확통01-03]",
     "[12확통02-01]",
     "[12확통02-04]",
     "[12확통02-05]",
@@ -480,14 +488,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 6778
+    "단답형": 6899
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 6176,
+    "problems_without_problem_type": 6297,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -496,6 +504,9 @@
   "per_corpus_bands": {
     "problem_bank_binomial_distribution_v0": {
       "개념 [3.0,4.0)": 300
+    },
+    "problem_bank_combination_binomial_v0": {
+      "절차 [2.0,3.0)": 121
     },
     "problem_bank_conceptual_v0": {
       "개념 [3.0,4.0)": 224,
@@ -589,6 +600,9 @@
   "per_corpus_formats": {
     "problem_bank_binomial_distribution_v0": {
       "단답형": 300
+    },
+    "problem_bank_combination_binomial_v0": {
+      "단답형": 121
     },
     "problem_bank_conceptual_v0": {
       "객관식": 360
@@ -869,6 +883,8 @@
     "[12직수03-04]": 24,
     "[12직수04-01]": 48,
     "[12확통01-01]": 32,
+    "[12확통01-02]": 56,
+    "[12확통01-03]": 65,
     "[12확통02-01]": 50,
     "[12확통02-04]": 48,
     "[12확통02-05]": 24,
@@ -920,8 +936,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2413793103448276,
-    "covered_code_count": 105,
+    "coverage_rate": 0.24597701149425288,
+    "covered_code_count": 107,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -930,9 +946,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 330
+    "zero_coverage_code_count": 328
   },
-  "total_problems": 8394,
+  "total_problems": 8515,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -952,6 +968,9 @@
     "ARITH-SUM": {
       "인지 [1.0,2.0)": 7,
       "절차 [2.0,3.0)": 38
+    },
+    "BINOMIAL-COEFFICIENT": {
+      "절차 [2.0,3.0)": 65
     },
     "BINOMIAL-DISTRIBUTION": {
       "개념 [3.0,4.0)": 300
@@ -1236,6 +1255,9 @@
     "REMAINDER-THEOREM": {
       "개념 [3.0,4.0)": 13,
       "절차 [2.0,3.0)": 11
+    },
+    "REPEATED-COMBINATION": {
+      "절차 [2.0,3.0)": 56
     },
     "ROOT-LOSS-DIVIDE": {
       "개념 [3.0,4.0)": 16,
@@ -2515,8 +2537,6 @@
     "[12직수04-03]",
     "[12직수04-04]",
     "[12직수04-05]",
-    "[12확통01-02]",
-    "[12확통01-03]",
     "[12확통02-02]",
     "[12확통02-03]",
     "[12확통02-06]",
