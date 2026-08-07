@@ -2986,9 +2986,7 @@ async def get_my_growth_evidence(
         help_demand_supply_ratio=_render_growth_evidence_metric(
             metrics, "help_demand_supply_ratio", exposure_by_field
         ),
-        transfer_score=_render_growth_evidence_metric(
-            metrics, "transfer_score", exposure_by_field
-        ),
+        transfer_score=_render_growth_evidence_metric(metrics, "transfer_score", exposure_by_field),
         hint_depth_reached=_render_growth_evidence_metric(
             metrics, "hint_depth_reached", exposure_by_field
         ),

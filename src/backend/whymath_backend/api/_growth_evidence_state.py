@@ -103,6 +103,4 @@ def get_growth_evidence_exposure_counters(
     판정이 위장된다(모듈 docstring). 별도 클래스·별도 저장 로직 없이 제네릭 getter를 새
     키로 호출할 뿐이다.
     """
-    return get_growth_evidence_counters(
-        app_state_holder, key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY
-    )
+    return get_growth_evidence_counters(app_state_holder, key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY)

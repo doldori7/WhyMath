@@ -217,9 +217,9 @@ class TestForbiddenIdentifierSourceScan:
     def test_variance_true_positive_identifiers_are_flagged(self, identifier: str) -> None:
         """변별력 회귀 고정핀 — 실제 위반 식별자는 반드시 걸린다(함수 레벨 직접 호출)."""
         expected_label = _TRUE_POSITIVE_IDENTIFIERS_MUST_MATCH[identifier]
-        assert expected_label in _text_offending_labels(identifier), (
-            f"'{identifier}'가 '{expected_label}'로 탐지되지 않음 — 변별력 회귀"
-        )
+        assert expected_label in _text_offending_labels(
+            identifier
+        ), f"'{identifier}'가 '{expected_label}'로 탐지되지 않음 — 변별력 회귀"
 
     def test_help_reduction_slope_precision_regression_pin(self) -> None:
         """전용 회귀 고정핀(태스크 설계 명시) — 최고난도 정밀도 케이스를 별도 단정으로 고정."""

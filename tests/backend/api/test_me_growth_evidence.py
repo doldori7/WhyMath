@@ -53,7 +53,9 @@ _DECLARED_FIELDS = set(GrowthEvidenceResponse.model_fields)
 
 
 def _user() -> UserProfile:
-    return UserProfile.from_schema(UserProfileSchema(user_id=_UID, persona_primary=Persona.A_일반고고3))
+    return UserProfile.from_schema(
+        UserProfileSchema(user_id=_UID, persona_primary=Persona.A_일반고고3)
+    )
 
 
 class _FakeAsyncSession:
