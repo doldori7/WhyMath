@@ -260,6 +260,35 @@ class TestHygieneGate:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# LaTeX/문법 게이트(품질 15축 ⑩·ARCH-19) — 항상 실행(감사기와 달리 주입 불요).
+# ──────────────────────────────────────────────────────────────────────
+class TestLatexGate:
+    def test_broken_latex_in_question_text_rejected(self) -> None:
+        """발문에 중괄호 불균형 수식 → latex_ok=False·미수용(defect_seeder._break_latex 동형)."""
+        candidate = _valid_candidate(
+            question_text=r"주어진 이차식의 자연수 근을 구하시오. (참고: \frac{1}{2 계산 확인)"
+        )
+        verdict = _evaluate(candidate=candidate)
+        assert verdict.latex_ok is False
+        assert verdict.accepted is False
+        assert any("LaTeX" in reason for reason in verdict.reasons)
+
+    def test_valid_latex_in_question_text_accepted(self) -> None:
+        """균형 잡힌 LaTeX($\\frac{1}{2}$ 등)는 latex_ok=True — "아무 $나 있으면 거부"가 아니다."""
+        candidate = _valid_candidate(
+            question_text=r"주어진 이차식 $\frac{1}{2}x^2$ 의 자연수 근을 구하시오."
+        )
+        verdict = _evaluate(candidate=candidate)
+        assert verdict.latex_ok is True
+        assert verdict.accepted is True
+
+    def test_no_markup_question_text_latex_ok(self) -> None:
+        """실 코퍼스 관용 표기(`^`·평문) → latex_ok=True(정직한 공백 — latex_gate 모듈 참조)."""
+        verdict = _evaluate()
+        assert verdict.latex_ok is True
+
+
+# ──────────────────────────────────────────────────────────────────────
 # 동등성 분류.
 # ──────────────────────────────────────────────────────────────────────
 class TestEquivalenceClassification:

@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on:
@@ -24,6 +24,6 @@ paths:
   - "src/backend/whymath_backend/l1/problem_bank/**"
   - "src/backend/whymath_backend/l3/equivalent/**"
   - src/backend/whymath_backend/ops/provenance_audit.py
-session: null
+session: claude/rec-05-priority-d8q8vt
 notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-① · §3 R1. 선례: S3-24/S3-25(미병합 회수 Stage 2 — shadow-data-s3-pilot-nh5kbz) 동형. S4-14는 이 태스크 범위 밖 — 두 브랜치가 정반대 판정(974e933 '차단' vs ed040217 '구현 완료')이라 사람 게이트 선행(R2). 고립 브랜치: claude/education-os-architecture-mr0fbq(974e933, 2026-07-30 마지막 커밋·열린 PR 없음). 실피해 4건은 R2 문서 §0-① 참조. 재발 방지 메커니즘은 HARN-13(기존 등재·중복 신설 금지). [2026-08-03 중복 회피] S3-11(데이터 카드+사이드카) 회수와 ops/provenance_audit.py _KNOWN_GAPS 제거는 이 PR 착수 사이 다른 세션이 ARCH-25-grandfather-expiry-contract(a)로 이미 등재 — 그쪽이 더 구체적(태스크 ID 참조 계약+테스트 동결)이라 여기서 제거하고 depends_on으로 승계. 이 태스크는 ARCH-25가 다루지 않는 나머지(S3-10·ARCH-19·licensing 7종·S3-13 ID 충돌)만 남긴다."
-updated: 2026-08-03
+updated: 2026-08-07
