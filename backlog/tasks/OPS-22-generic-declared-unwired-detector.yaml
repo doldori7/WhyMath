@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-22-generic-declared-unwired-detector
+title: "공급-소비 정합 감사기 범용화 — '선언만 되고 배선 안 됨' 패턴 6회 반복을 자동 검출 (미병합 브랜치 8ceaf5 재작성)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "API 라우트 테이블(app.py 등록 경로)·EventType 프로듀서(AST 기반)·timeseries writer·harness CLI↔CI 배선 4축을 결정론으로 스캔해 '선언은 있는데 소비자/배선이 0'인 공급원을 자동 나열한다"
+  - "분류 장부(pending-task:<id> 등 임시 면제)는 착수 시점 실제 backlog 상태로 새로 만든다 — 원 브랜치 장부를 그대로 복사하지 않는다(REC-01·VIZ-01·NLP-01·S4-14 등 대부분 이미 done이라 그대로 쓰면 즉시 exit 1)"
+  - "면제 항목은 실존 태스크 ID를 참조해야 하고 그 태스크가 done인데 항목이 남으면 실패한다(ARCH-25 그랜드파더 만료 계약과 동형 — 무기한 면제 금지)"
+  - "기존 축별 bespoke reach report(recommendation_reach_report.py 등)를 대체하지 않는다 — 이 감사기는 '아직 아무 report도 안 만들어진' 신규 공급원의 재발만 잡는다"
+  - "변별력 실측 — 신규 미배선 엔드포인트/이벤트 타입 1건을 주입해 실제로 검출되는지, 이미 배선된 것을 흐트러뜨리면 잡히는지 확인"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/reach_audit.py
+  - tests/backend/ops/test_reach_audit.py
+  - tests/infra/test_reach_audit_wiring.py
+  - docs/architecture/data_platform_module_gap_review.md
+session: null
+notes: "브랜치 claude/whymath-data-platform-design-8ceaf5(원 OPS-17) 재작성 — 원 ops/reach_audit.py(855줄)의 pending-task 분류 장부는 stale(REC-01·REC-03·S3-16·S4-14·SEC-10·NLP-02·VIZ-01·VIZ-02·ARCH-21 등 당시 todo가 지금은 전부 done)이라 그대로 포트 불가, 구조(라우트 테이블 추출·EventType producer AST 탐지·timeseries writer 탐지·harness CLI-CI 배선 탐지)만 재사용하고 분류 장부는 현재 main 상태 기준으로 재작성. REC-01·VIZ-01·NLP-01·PED-06·ADMIN 계열 등 이미 존재하는 축별 bespoke reach report(ops/recommendation_reach_report.py 등)를 대체하지 않고, 그것들이 커버 못하는 신규 공급원의 향후 6번째 재발을 자동 검출하는 범용 게이트가 목적. tests/backend/ops/test_slo_contract.py:132의 _app_route_paths 재사용(재구현 금지)."
+updated: 2026-08-07

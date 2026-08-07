@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-32-learning-loop-closure-recovery
+title: "학습 루프 닫힘 — 서버검증 최종답→Polya 돌아보기→attempt 적재→다음 문항 (미병합 브랜치 tlthrr 재작성)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "새 l3/verify_final_answer.py: 학생 최종답을 3상태(correct/incorrect/unverifiable)로 판정 — 기존 l3/solution_set.py의 read_equation_step·equation_solution_set·solset_transition_status와 l3/symbolic_equivalence.py의 identity_status를 재사용(재구현 금지). unverifiable을 correct로 낙관 판정 금지(환각 금지 원칙), 정답을 학생에게 노출하지 않는다"
+  - "코치 대화 흐름이 correct 판정 시 즉시 완료가 아니라 Polya REVIEW/메타인지 turn을 먼저 거친다('정답을 빠르게'를 KPI로 쓰지 않는다는 CLAUDE.md 금기 준수) — l4/completion.py가 이 전이를 관장"
+  - "completion 시 서버측에서 ProblemAttempt를 적재(현재 api/me.py submit_attempt의 클라 보고 is_correct와 별도 경로 — 클라 자가보고 필드는 유지, 코치 경로는 자체 서버검증 결과를 씀) + CoachResponse에 completion 신호 필드 추가해 클라가 next-problem을 자동 호출할 수 있게 한다"
+  - "incorrect 판정 시 정답 공개 없는 재고 유도 코칭(부정적 피드백 정서 강화 금지)"
+  - "신규 alembic 리비전은 착수 시점 실제 main HEAD 기준으로 down_revision을 잡는다(브랜치의 stale down_revision 재사용 금지)"
+  - "전체 백엔드 스위트(부분 디렉터리 아님) 재검증 — coach.py·me.py drift가 커서 국지적 회귀 위험 높음"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/verify_final_answer.py
+  - src/backend/whymath_backend/l4/completion.py
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/db/models/dialogue.py
+  - "src/backend/alembic/**"
+session: null
+notes: "브랜치 claude/s3-02-live-remeasurement-tlthrr(원 S3-26 'learning-loop-closure') 재작성 — 원 코드는 merge-base 이후 api/coach.py 632줄·api/me.py 430줄 drift로 그대로 포트 불가, 현재 main 기준 재구현. l3/solution_set.py·l3/symbolic_equivalence.py 기존 primitive 재사용. 코치 대화의 정답 도달을 서버측 검증(3-state correct/incorrect/unverifiable)으로 게이팅, Polya REVIEW 단계 경유 후 completion 시 서버측 ProblemAttempt 적재 + CoachResponse에 completion 신호 노출. S3-28-canonicalize-answer-kind-scope-audit(claude/openrouter-setup-guide-e98dw4)이 l3/equivalent/canonicalize.py·qa_pipeline.py를 현재 다른 세션이 점유 중 — 그 파일들 건드리지 않음."
+updated: 2026-08-07

@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-04-blueprint-test-set-assembly
+title: "평가 청사진/테스트셋 조립 — 표준×난이도×문항수×배점×시간 선언적 명세 (미병합 브랜치 jkwdzn 재작성)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - ASM-03-assessment-writer-persist
+requires_gates: []
+acceptance: []
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l6/**"
+  - src/backend/whymath_backend/api/me.py
+session: null
+notes: "브랜치 jkwdzn의 원 ASM-03/D4 재작성. CAT은 학습시간 기본값으로 유지하고, 이 태스크는 '단원 마감 측정' 예외 상황에서만 쓰는 청사진 기반 테스트셋 조립. is_exposable() 게이트 통과 문항만 후보."
+updated: 2026-08-07
