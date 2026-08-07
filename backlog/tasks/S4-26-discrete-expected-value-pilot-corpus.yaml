@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -19,13 +19,14 @@ acceptance:
   - "problem_bank_discrete_ev_v0 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False"
   - "coverage 리포트 재실행으로 고등 통계 영역 실제 이동 확인(0.0%→상승)"
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - 33f31cf3
 paths:
   - src/backend/whymath_backend/l3/equivalent/discrete_expected_value_skeleton_generator.py
   - src/backend/whymath_backend/harness/discrete_ev_batch.py
   - tests/backend/l3/equivalent/test_discrete_expected_value_skeleton_generator.py
   - tests/backend/harness/test_discrete_ev_batch.py
   - data/corpus/problem_bank_discrete_ev_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획 §3 W2 다섯 번째 슬라이스 — 고등 통계 영역(집합과 명제·경우의 수와 함께 0% 3대 영역 중 하나이자 수치 검증에 가장 적합) 착점. elementary(S4-22)·matrix(S4-23)·university(S4-24)·middle(S4-25) 확립 패턴 재사용. 집합과 명제는 Tier1 수치 검증과 부적합(명제 논리는 비수치)이라 이 슬라이스 범위 밖으로 의도적 배제."
 updated: 2026-08-07
