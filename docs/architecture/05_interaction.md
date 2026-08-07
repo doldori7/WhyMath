@@ -43,7 +43,8 @@
 
 ### 5. 접근성
 - 텍스트 대비 4.5:1+
-- 최소 탭 영역 44x44 dp
+- 최소 탭 영역 48x48 dp (Android 탭 타깃 가이드라인·실 게이트 `androidTapTargetGuideline` 기준값 — 정본 단일값.
+  목표 준수 레벨·현재 달성 현황표는 `docs/design/ui/06_design_system.md` §7 참조)
 - TTS 통합 — **수식 음성화(Math-to-Speech)**: 어려운 본질은 오디오 합성(클라 `flutter_tts`)이
   아니라 *LaTeX/수식구조 → 모호성 없는·학년 적합 한국어 낭독 문자열 변환*이다(수학 의미 분해가
   필요한 코어 로직). 따라서 `Visualization`·`LearningScene`처럼 **`SpeechSpec`(선언적 낭독 명세)을

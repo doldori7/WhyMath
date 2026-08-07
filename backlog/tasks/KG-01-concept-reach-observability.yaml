@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-01-concept-reach-observability
+title: "개념 지식 자산 도달 관측 — concepts API 7라우트·flashcards 읽기 표면·prerequisites/learning-path 도달 0회 가시화"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: api/concepts.py의 POST /concepts · GET /concepts/{id} · GET /concepts · GET /concepts/search · GET /concepts/{id}/edges · PATCH /concepts/{id} · DELETE /concepts/{id} 7라우트가 Flutter 학생 앱이 호출하는 /v1/ 13종 목록(전수 grep)에 전부 없음을 재현한다. ConceptContent.flashcards(코퍼스 113건 적재)를 읽는 API 엔드포인트 0개(grep -rn flashcards api/ 무결과)를 재현한다. /v1/me/weak-concepts/{concept_id}/prerequisites · .../learning-path(api/me.py)도 같은 13종 목록에 없음을 재현한다(주장 확인 또는 반증 — 반증됨: 20종이 아니라 13종. concepts 7라우트·flashcards·prerequisites/learning-path가 13종에 없다는 결론 자체는 유지)"
+  - "② 도달 리포트 신설: harness/concept_reach_report.py(빌드타임 결정론 — DB read-only·LLM 0·HTTP 0·게이트 아님, visualization_reach_report.py 패턴 답습) — 위 concepts API 7라우트·flashcards 읽기 좌석·prerequisites·learning-path 각각의 클라 소비 참조 수(grep 기반)를 산출한다"
+  - "③ 정직 표기: 소비 0인 표면은 '0건 통과'가 아니라 '미도달'로 표시한다(분모 없는 0 금지 — VIZ-01·NLP-01·REC-01 이중 회계 선례). /concepts/search의 reviewed_only=true 결과 0(원자 전량 ai_estimated)과 '클라 미소비'(reach=0)는 서로 다른 축이므로 리포트에서 별개 필드로 구분한다"
+  - "④ 변별력: mobile dart 소스에 위 표면 중 하나를 참조하는 호출을 임시 주입하면 리포트의 해당 표면 값이 '미도달'에서 벗어나고, 원복하면 다시 '미도달'로 돌아오는지 양방향 실측한다. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑤ CI 배선 실재 확인: tests/backend/harness/test_concept_reach_report.py가 CI backend pytest 잡에서 실제로 수집·실행되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "⑥ 범위 밖 명시: concepts API 클라 배선·flashcards 학생 노출 화면 신설·prerequisites/learning-path 클라 소비 활성화는 포함하지 않는다(활성화가 아니라 가시화 — NLP-01·REC-01과 동형). GET /concepts/search는 학생 직접 경로에 노출하지 않는다 — ARCH-11(subgraph depth guard, blocked) 해제 전까지 nlp_module_gap_review.md §5-⑤ 판정을 승계한다. prerequisites/learning-path의 요청량·개인화 축 관측은 REC-01(ai_recommendation_module_gap_review.md D1 승계) 소관이고 이 태스크는 개념 콘텐츠·그래프 표면 자체의 도달 관측만 다룬다 — api/me.py 경로 중복은 path_overlap=warn(비block) 정책상 허용 범위"
+artifacts:
+  - "PR#664"
+paths:
+  - src/backend/whymath_backend/api/concepts.py
+  - src/backend/whymath_backend/db/models/concept_content.py
+  - src/backend/whymath_backend/harness/concept_reach_report.py
+  - src/backend/whymath_backend/api/me.py
+  - tests/backend/harness/test_concept_reach_report.py
+  - "tests/backend/api/test_concepts*.py"
+session: null
+notes: "docs/architecture/knowledge_module_gap_review.md §5-1(2026-08-03 재점검). concepts API 7라우트(POST/GET단건/GET목록/GET search/GET edges/PATCH/DELETE)·ConceptContent.flashcards(코퍼스 113건 적재, 읽기 API 0개)·GET /v1/me/weak-concepts/{id}/prerequisites·.../learning-path가 Flutter 앱 실호출 /v1/ 13종에 전부 없음(전수 실측 — 원래 acceptance①의 '20종' 표기는 test mock 리터럴 혼입 오류였고, concept_reach_report.py 구현 중 13종으로 반증·정정함). REC-01(ai_recommendation_module_gap_review.md D1)이 이미 '개념 추천 API 전군 클라 소비 0'을 지적했으나 그건 요청량·개인화 축 — KG-01은 개념 콘텐츠·그래프 표면 자체 축(중복 아님, path_overlap=warn 허용 범위). concepts/search는 ARCH-11 해제 전까지 학생 직접 노출 금지(nlp_module_gap_review.md §5-⑤ 승계) — 활성화가 아니라 가시화가 목표."
+updated: 2026-08-03

@@ -85,7 +85,7 @@ class SceneLearnerContext(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# SceneElement — kind 판별 유니온 6종(각 변형은 *기존 좌석*을 참조·신규 엔진 0)
+# SceneElement — kind 판별 유니온 8종(각 변형은 *기존 좌석*을 참조·신규 엔진 0)
 # ──────────────────────────────────────────────────────────────────────────
 class _ElementBase(BaseModel):
     """장면 요소 공통 베이스 — extra=forbid(미지 필드·정답 밀반입 차단)·enum 값 직렬화."""
@@ -199,6 +199,26 @@ class SkillFocusElement(_ElementBase):
     )
 
 
+class TutoringPromptElement(_ElementBase):
+    """LTHC 적응 튜터링 프롬프트 — 학습자 *mastery*가 튜터링 비계를 자동 분기(05a §5·S5l).
+
+    생성기가 `adapt_lthc(polya_stage, mastery_level)` 정본 발화를 *어느 역할로 낼지* 학습자모델
+    (BKT mastery)에 따라 자동 분기한다 — 초보=진입점+비계·숙달=확장·발전중=균형(축당 1개 캡).
+    `role`은 LTHC 3축(진입점/비계/확장)이며 *지원 선택이지 판정이 아니다*(낙인 회피).
+    `prompt_text`는 `adapt_lthc` 정본 라이브러리 발화(LLM 환각 표면 0). ★*정답·hint_level 필드가
+    없다*(extra=forbid가 구조 차단) — `socratic_prompt`(hint_level 보유)와 달리 답 미루기 불변식을
+    위반할 표면 자체가 없다.
+    """
+
+    kind: Literal["tutoring_prompt"] = "tutoring_prompt"
+    role: Literal["entry", "scaffold", "extension"] = Field(
+        description="LTHC 축 역할(진입점/비계/확장) — 지원 선택·판정 아님."
+    )
+    prompt_text: str = Field(
+        min_length=1, description="`adapt_lthc` 정본 발화(정답 아님·환각 표면 0)."
+    )
+
+
 SceneElement = Annotated[
     Union[
         VisualizationElement,
@@ -208,10 +228,11 @@ SceneElement = Annotated[
         SocraticPromptElement,
         AnnotationElement,
         SkillFocusElement,
+        TutoringPromptElement,
     ],
     Field(discriminator="kind"),
 ]
-"""장면 요소 7종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
+"""장면 요소 8종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

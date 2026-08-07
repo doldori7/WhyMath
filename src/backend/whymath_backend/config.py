@@ -629,6 +629,17 @@ class Settings(BaseSettings):
             "액세스 토큰 TTL이 24시간이라 정상 리프레시는 드물게 일어나므로 30이면 여유롭다."
         ),
     )
+    # ── RPT-01: 학생 결함 신고(무인증 표면) IP 단위 rate limit ──
+    defect_report_rate_limit_ip_per_minute: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "결함 신고(`POST /v1/reports/defects`)의 *IP 단위* 분당 요청 상한. 0=비활성. "
+            "`user_id`를 저장하지 않는 무인증 표면이라 IP만 검사한다(user·device 차원 N/A). "
+            "정상 사용자는 같은 세션에서 신고를 자주 반복하지 않으므로 20이면 여유롭고, "
+            "coach `write`(60)와 별도 카테고리라 상호 영향 0."
+        ),
+    )
     coach_rate_limit_device_read_per_minute: int = Field(
         default=90,
         ge=0,
@@ -1145,6 +1156,23 @@ class Settings(BaseSettings):
             "인프로세스 요청 계측의 최근 창 크기(요청 수·고정 deque maxlen). 에러율·p95는 "
             "이 창에서 계산한다 — 전 기간 평균은 최근 악화를 희석하므로 최근 창이 알림 "
             "판정선이다. 기본 500. WHYMATH_OPS_METRICS_WINDOW_SIZE로 조정."
+        ),
+    )
+
+    # ── OPS-17: 클라 버전 계약 게이트 ──
+    # 클라(`X-App-Version` 헤더)가 서버 계약과 어긋나는 구버전으로 고착되는 것을 막는 최소
+    # 허용 버전 임계(app.py `_service_metrics_middleware` 좌석 — 신규 미들웨어 아님). 형식은
+    # `X.Y.Z`(빌드번호 없음·클라가 그대로 보냄), 비교는 정수 3튜플(외부 semver 라이브러리 불요).
+    min_app_version: str = Field(
+        default="0.0.0",
+        description=(
+            "클라이언트 최소 허용 버전(`X.Y.Z`, 빌드번호 없음). 기본 0.0.0 — 사실상 게이트 "
+            "비활성(모든 버전이 통과, 기존 클라이언트 무영향). 올리면(예: 0.2.0) 그 미만 "
+            "`X-App-Version`은 426 Upgrade Required로 차단된다(app.py "
+            "_service_metrics_middleware 좌석 — 401/404/422와 구분되는 전용 사유코드). 헤더 "
+            "부재(이 기능 배포 이전의 구버전 클라)나 파싱 불가한 버전 문자열은 '미달'과 다른 "
+            "'미상'으로만 관측하고 차단하지 않는다(app.py 경량 카운터·기존 클라 보호). "
+            "WHYMATH_MIN_APP_VERSION으로 조정."
         ),
     )
 

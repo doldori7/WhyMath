@@ -168,7 +168,10 @@ def from_concept_content(row: Any) -> ConceptDSL:
         examples=(accepted,) if accepted else (),
         misconceptions=(misconception,) if misconception else (),
         relations=tuple(relations),
-        assessment=None,  # 평가 재료는 concept_content에 없다 — 공급원이 따로 주입한다.
+        # 평가 재료는 concept_content에 없다 — 공급원(`assessment_bank.attach_assessment`)이
+        # 검증 통과 문항의 verify 앵커를 참조 주입한다. 이 투영은 순수 ORM→DSL이라 파일·DB를
+        # 읽지 않으므로 여기서 채우지 않는다(주입 호출은 L4 공급 경로가 한다).
+        assessment=None,
     )
 
 

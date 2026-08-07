@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,11 +16,12 @@ acceptance:
   - "③ 변별력: attempt 1건을 주입하면 '미도달'이 실제로 해제되고, 되돌리면 다시 '미도달'이 나오는지 양방향 실측. 성공/실패가 같은 값을 내면 검증이 아니다"
   - "④ CI 배선 실재 확인: 리포트를 어떤 잡이 실제로 실행하는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
   - "⑤ 범위 밖 동결: 클라 attempt POST 배선·개인화 기본값 on 전환·개념 추천 화면 신설은 하지 않는다. 상류 원인은 채점 권위 공백(NLP-02)이며 활성화 판단은 그 관측 결과로 한다(NLP-01의 '활성화가 아니라 가시화'와 동형)"
-artifacts: []
+artifacts:
+  - b6fa6ec5
 paths:
   - src/backend/whymath_backend/api/me.py
   - "src/backend/whymath_backend/ops/*"
   - "tests/backend/api/test_me_next_problem*.py"
 session: null
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D1. Flutter 앱이 호출하는 /v1/ 엔드포인트 13종에 POST /v1/me/attempts가 없다(전수 실측) → ProblemAttempt 0행 → θ=0.0 고정(l2/irt.py:76)·BKT 숙달 0행으로 약점 가중이 전 후보 중립 1.0·/me/diagnosis/concepts 항상 빈 결과·/scenes/weak-concept 항상 404·irt_difficulty_b 코퍼스 0건(JMLE 미실행). 단건 응답은 standard_error=null로 이미 정직하나 집계 도달 관측 좌석이 없다. 반복 실수 4·5회차(§6) — '만들고 입력을 잇지 않음'·'만들고 켜지 않음'."
-updated: 2026-08-01
+updated: 2026-08-03

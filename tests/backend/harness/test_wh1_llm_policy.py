@@ -32,6 +32,9 @@ from whymath_backend.harness.wh1_loop import (
 )
 from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.models import PolyaStage
+from whymath_backend.l4.session_recall import SessionRecall
+from whymath_backend.schema.enums import SocraticStrategy
 
 # diagnose가 confidence 1.0으로 잡는 실 신호(wh1_loop 테스트와 동일).
 _MATCH_TEXT = "(a+b) a² + b²"
@@ -404,3 +407,92 @@ class TestMinimalReasoningSubgraphBudget:
         assert "context_truncated" not in summary
         assert "omitted_count" not in summary
         assert len(summary["active_hypotheses"]) == 2
+
+
+class TestSessionRecallInjection:
+    """PED-04 D1 reader ② — 세션 간 회상을 정책이 프롬프트에 어떻게 주입하는지.
+
+    구조적 전제: `SessionRecall`의 필드가 전부 enum/정수라 학생 원문을 실을 자리가 없다
+    (`test_session_recall.py`가 그 전제를 동결). 여기서는 *주입 지점*(정책·예산 가드)만 본다.
+    """
+
+    def test_recall_none_prompt_is_byte_identical_to_baseline(self) -> None:
+        """recall 미주입(기존 호출)이면 프롬프트가 recall 인자를 아예 모르는 것과 동일해야 한다
+        (회귀 0 — 이 테스트는 recall 키가 요약에 없음을 확인한다)."""
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider)  # session_recall 미지정 → None 기본값.
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=[])
+        _next(policy, state)
+        summary = _prompt_summary(provider)
+        assert "session_recall" not in summary
+
+    def test_recall_present_injects_three_axes_only(self) -> None:
+        """recall 주입 시 요약에 session_recall 키가 생기고 **3축만** 실린다 —
+        unresolved_hypothesis_ids는 모델에 있어도 프롬프트에는 나가지 않는다(오개념 preload
+        금지)."""
+        recall = SessionRecall(
+            last_polya_stage=PolyaStage.PLAN,
+            last_socratic_strategies=(SocraticStrategy.조건확인, SocraticStrategy.단계분해),
+            unresolved_hypothesis_ids=("M001", "M002"),
+            turns_since=5,
+        )
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider, session_recall=recall)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=[])
+        _next(policy, state)
+        summary = _prompt_summary(provider)
+        assert "session_recall" in summary
+        sr = summary["session_recall"]
+        assert isinstance(sr, dict)
+        assert set(sr) == {"last_polya_stage", "last_strategies", "turns_since"}
+        assert sr["last_polya_stage"] == "plan"
+        assert sr["last_strategies"] == ["조건확인", "단계분해"]
+        assert sr["turns_since"] == 5
+        # 활성 가설 id는 프롬프트 어디에도 리터럴로 없어야 한다(warmstart 전용 필드).
+        prompt, _system = provider.calls[0]
+        assert "M001" not in prompt
+        assert "M002" not in prompt
+
+    def test_recall_is_truncated_before_history_or_hypotheses(self) -> None:
+        """예산 초과 시 recall이 **1순위**로 잘린다 — history·가설이 아직 여유 있는 상태에서도
+        recall부터 사라져야 한다(세션 간 맥락이 이번 턴 결정에 가장 덜 급하다는 설계 우선순위)."""
+        # recall 자체는 고정 3키라 팽창 없음 — 다른 축(초장문 가설)으로 예산을 초과시켜 recall이
+        # 가장 먼저 절단되는지 본다.
+        huge = "y" * 6000
+        hyps = [_hyp(f"{huge}-{i}", 0.9 - i * 0.01) for i in range(2)]
+        recall = SessionRecall(
+            last_polya_stage=PolyaStage.REVIEW,
+            last_socratic_strategies=(SocraticStrategy.유사문제,),
+            unresolved_hypothesis_ids=(),
+            turns_since=1,
+        )
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider, session_recall=recall)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=hyps)
+        _next(policy, state)
+        prompt = provider.calls[0][0]
+        assert len(prompt) // 4 <= _MAX_PROMPT_TOKENS
+        summary = _prompt_summary(provider)
+        assert "session_recall" not in summary  # 예산 압박에 recall이 먼저 사라짐.
+        assert summary["context_truncated"] is True
+
+    def test_recall_absent_from_prompt_does_not_break_no_raw_leak(self) -> None:
+        """recall 필드 자체가 enum/정수뿐이라, 회상이 실려도 학생 원문 비노출 계약은 유지된다."""
+        recall = SessionRecall(
+            last_polya_stage=PolyaStage.UNDERSTAND,
+            last_socratic_strategies=(),
+            unresolved_hypothesis_ids=(),
+            turns_since=0,
+        )
+        provider = FakeProvider(['{"kind": "match_misconception"}'])
+        policy = LLMTutorPolicy(
+            provider,
+            student_text=_SECRET_STUDENT_TEXT,
+            solution_steps=[_SECRET_ANSWER_STEP],
+            session_recall=recall,
+        )
+        _next(policy, _state(has_solution_steps=True, verify_called=True))
+        prompt, system = provider.calls[0]
+        combined = prompt + system
+        assert _SECRET_STUDENT_TEXT not in combined
+        assert _SECRET_ANSWER_STEP not in combined

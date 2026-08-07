@@ -315,7 +315,10 @@ def build_seed() -> tuple[list[str], list[Track], list[Gate], list[Task]]:
     add(
         Task(
             id="E1-01-dimensional-consistency",
-            title="물리 검증 primitive — dimensional_consistency (sympy.physics.units 형제 primitive)",
+            title=(
+                "물리 검증 primitive — dimensional_consistency "
+                "(sympy.physics.units 형제 primitive)"
+            ),
             track="subject-expansion",
             stage="E1",
             layer="backend",
@@ -403,7 +406,10 @@ def build_seed() -> tuple[list[str], list[Track], list[Gate], list[Task]]:
             subject="social",
             depends_on=["E3-01-biology-pack"],
             acceptance=["서술형 근거-주장 평가 검수자 일치율 실측 + 사료 라이선스 법무 확인"],
-            notes="경제학·역사·세계사는 이 팩의 하위 코퍼스 (subject 세분: economics/history/world-history)",
+            notes=(
+                "경제학·역사·세계사는 이 팩의 하위 코퍼스 "
+                "(subject 세분: economics/history/world-history)"
+            ),
         )
     )
     add(

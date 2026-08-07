@@ -83,9 +83,13 @@ CREDENTIAL_SHAPE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}"),
 )
 
-# ── 1b) PII 형태 패턴 — 로그 마스킹 전용(시크릿 하드코딩 스캔에는 재사용하지 않음: 이메일은
-#      "시크릿"이 아니라 코드 주석·문서에 정당하게 등장할 수 있어 스캔에 넣으면 오탐 유발) ──
-_PII_SHAPE_PATTERNS: tuple[re.Pattern[str], ...] = (
+# ── 1b) PII 형태 패턴 — 로그 마스킹 전용으로 신설됐으나(시크릿 하드코딩 스캔에는 재사용하지
+#      않음: 이메일은 "시크릿"이 아니라 코드 주석·문서에 정당하게 등장할 수 있어 스캔에 넣으면
+#      오탐 유발), ARCH-24(`harness/banned_words_pii_eval.py`)가 학생 대면 산문의 타인 PII
+#      하드코딩·자기 PII 반사 스캔에 재사용하는 두 번째 소비처가 되어 공개(`_` 제거)했다.
+#      정규식 값 자체는 변경하지 않는다(재구현 금지 — 두 소비처 모두 같은 "PII의 모양"을
+#      봐야 한다, 단일 진실 원천).
+PII_SHAPE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # 이메일.
     re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
     # 한국 휴대전화(010-1234-5678 / 01012345678 등).
@@ -94,7 +98,7 @@ _PII_SHAPE_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 # 로그 마스킹(scrub_text)이 실제 검사하는 전체 패턴 집합 — 자격증명 + PII.
 _SIMPLE_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
-    CREDENTIAL_SHAPE_PATTERNS + _PII_SHAPE_PATTERNS
+    CREDENTIAL_SHAPE_PATTERNS + PII_SHAPE_PATTERNS
 )
 
 # 시크릿 하드코딩 저장소 스캔(`tests/backend/ops/test_secret_hardcoding_scan.py`)이 재사용하는
@@ -230,6 +234,7 @@ def install_log_scrubber(
 
 __all__ = [
     "CREDENTIAL_SHAPE_PATTERNS",
+    "PII_SHAPE_PATTERNS",
     "PiiSecretScrubberFilter",
     "SECRET_LITERAL_PATTERNS",
     "install_log_scrubber",

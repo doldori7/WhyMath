@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from data_pipeline.ncic.models import AchievementStandard, ConceptStandardLink
 from data_pipeline.ncic.transform import build_norm_id
 from data_pipeline.ncic.validate import validate_links, validate_standards

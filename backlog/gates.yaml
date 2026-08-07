@@ -63,12 +63,3 @@ gates:
     remind_after_days: null
     evidence: null
     notes: "수학 K-12 완성 전 어떤 과목도 착수 금지 (불변 전제)"
-  - id: G-s4-14-variant-identity
-    title: "변형 문항 정체성 결정 — rephrase 변형에 신규 slug/problem_id를 발급할 것인가 (S4-14 판정 충돌)"
-    kind: decision
-    assignee: kiki
-    status: pending
-    requested: 2026-08-03
-    remind_after_days: 14
-    evidence: null
-    notes: "두 미병합 브랜치가 정반대로 판정했다 — claude/education-os-architecture-mr0fbq(974e933) '차단: rephrase가 원본과 slug/problem_id를 공유하는 오버레이 구조' vs claude/s4-14-skeleton-cat-re24tk(ed040217) '구현 완료: 신규 slug 발급'. 쟁점은 구현 난이도가 아니라 '변형이 원본과 같은 문항인가'라는 코퍼스 정체성 의미론이다. 신규 slug 발급은 rephrased_v0 429건의 slug·problem_id를 바꾸고(slug가 standard_codes를 해시 입력으로 쓴다) 라이브 Phaiakes9 파이프라인의 정체성 의미론·데모 풀·감사 라벨 참조를 함께 건드린다. 되돌리기 비용이 커 기계 판단 대상이 아니다. 정본: docs/architecture/problem_bank_gap_review_r2.md §0-① · §3 R2. 이 게이트가 clear되기 전까지 S4-14 착수·회수를 잠근다(PB-01 회수 범위에서도 S4-14는 제외)."

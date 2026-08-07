@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-04-misconception-relation-isolated-schema
+title: "오개념 전용 관계셋(caused_by·variant_of) + 개념그래프 격리 스키마"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "misconception_relation 테이블 신설: PK(from_mis_id,relation_type,to_mis_id), FK 양쪽 misconception_catalog.mis_id만(개념 FK 0)"
+  - "relation_type 폐쇄 2종만(caused_by·variant_of) — misconception_of는 concept_src_id 참조키로 이미 해결(재론 안 함), repaired_by는 intervene.py와 중복이라 제외"
+  - "concept_edge 순회 함수가 신규 테이블을 join하지 않음을 신규 동결 테스트로 증명(test_misconception_seven_stage_manifest.py 패턴 확장)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/
+  - src/backend/whymath_backend/l1/misconception/
+  - tests/backend/l4/test_misconception_seven_stage_manifest.py
+session: null
+notes: "04c_misconception_seven_stage_separation.md §6 Level2 해소. 04e_misconception_remediation_design.md §2. edge_design_part3_review.md의 misconception_of 엣지화 기각 결정은 재론하지 않음(별개 축)."
+updated: 2026-08-03

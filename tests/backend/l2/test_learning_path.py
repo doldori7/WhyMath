@@ -58,6 +58,8 @@ def test_empty_input_yields_empty_path() -> None:
     path = order_learning_path([], [])
     assert path.steps == ()
     assert path.has_cycle is False
+    assert path.ordering_edge_count == 0
+    assert path.ordering_basis == "empty"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ def test_flat_no_edges_sorts_by_tiebreak() -> None:
     path = order_learning_path(gaps, [])
     assert [s.concept_id for s in path.steps] == [b, c, a]  # weakness asc
     assert path.has_cycle is False
+    assert path.ordering_edge_count == 0
+    assert path.ordering_basis == "tiebreak_only"
     _assert_monotonic(path)
 
 
@@ -89,6 +93,8 @@ def test_linear_chain_topological_order() -> None:
     assert [s.concept_id for s in path.steps] == [a, b, c]
     assert [s.position for s in path.steps] == [0, 1, 2]
     assert path.has_cycle is False
+    assert path.ordering_edge_count == 2  # A→B, B→C
+    assert path.ordering_basis == "topological"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -250,6 +256,77 @@ def test_weakness_none_sorted_last() -> None:
     gaps = [_gap(a, weakness=None), _gap(b, weakness=0.5)]
     path = order_learning_path(gaps, [])
     assert [s.concept_id for s in path.steps] == [b, a]  # 측정 있는 b 먼저·None은 뒤
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# PATH-02 — ordering_edge_count·ordering_basis (has_cycle과 대칭인 정직 표기)
+# ──────────────────────────────────────────────────────────────────────────
+def test_ordering_basis_topological_vs_tiebreak_only_with_identical_steps() -> None:
+    """핵심 변별력: `steps` 순서가 완전히 같아도 제약 유무에 따라 두 필드가 갈라진다.
+
+    A(weakness=0.1)가 B(weakness=0.5)보다 tiebreak상 항상 먼저다. 여기에 A→B 내부엣지를
+    더해도(위상정렬도 A를 먼저 방출) `steps` 순서는 *우연히* 동일하게 나온다 — 이 결함은
+    순서만 비교해서는 원리적으로 검출 불가능하고, ordering_edge_count·ordering_basis만이
+    "제약이 있어서 A가 먼저였는지, tiebreak만으로 그랬는지"를 구분해낸다.
+    """
+    a, b = uuid.uuid4(), uuid.uuid4()
+    gaps = [_gap(a, weakness=0.1), _gap(b, weakness=0.5)]
+
+    no_edge = order_learning_path(gaps, [])
+    with_edge = order_learning_path(gaps, [(a, b)])
+
+    # steps 순서는 완전히 동일 — 순서 비교만으로는 두 경우를 구분할 수 없다.
+    assert (
+        [s.concept_id for s in no_edge.steps]
+        == [s.concept_id for s in with_edge.steps]
+        == [
+            a,
+            b,
+        ]
+    )
+
+    assert no_edge.ordering_edge_count == 0
+    assert no_edge.ordering_basis == "tiebreak_only"
+
+    assert with_edge.ordering_edge_count == 1
+    assert with_edge.ordering_basis == "topological"
+
+
+def test_ordering_edge_count_excludes_outside_node_set_edges() -> None:
+    # test_edge_outside_node_set_ignored와 동일 fixture — 집합 밖 엣지는 count에도 안 잡힘.
+    a, b, ext = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    gaps = [_gap(a, weakness=0.5), _gap(b, weakness=0.1)]
+    edges = [(a, ext), (ext, b)]
+    path = order_learning_path(gaps, edges)
+    assert path.ordering_edge_count == 0
+    assert path.ordering_basis == "tiebreak_only"
+
+
+def test_ordering_edge_count_excludes_duplicate_edges() -> None:
+    # test_duplicate_edge_indeg_counted_once와 동일 fixture — 중복 (A,B)는 count 1로만.
+    a, b = uuid.uuid4(), uuid.uuid4()
+    gaps = [_gap(a), _gap(b)]
+    edges = [(a, b), (a, b)]
+    path = order_learning_path(gaps, edges)
+    assert path.ordering_edge_count == 1
+    assert path.ordering_basis == "topological"
+
+
+def test_ordering_basis_cycle_residual_still_topological_when_edges_exist() -> None:
+    # 사이클(§11 fixture)도 내부 엣지가 실제 존재하므로 topological — has_cycle과 독립 축.
+    a, b = uuid.uuid4(), uuid.uuid4()
+    gaps = [_gap(a), _gap(b)]
+    edges = [(a, b), (b, a)]
+    path = order_learning_path(gaps, edges)
+    assert path.has_cycle is True
+    assert path.ordering_edge_count == 2
+    assert path.ordering_basis == "topological"
+
+
+def test_path_ordering_fields_are_frozen() -> None:
+    path = order_learning_path([_gap(uuid.uuid4())], [])
+    with pytest.raises(ValidationError):
+        path.ordering_basis = "empty"  # type: ignore[misc]
 
 
 # ──────────────────────────────────────────────────────────────────────────

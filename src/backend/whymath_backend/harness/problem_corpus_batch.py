@@ -37,7 +37,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping, MutableSet
+from collections import defaultdict
+from collections.abc import Mapping, MutableSet, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ from whymath_backend.harness.needs_review_worklist import (
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankPopulateReport,
     ProblemBankRecord,
+    ProblemRelationTag,
 )
 from whymath_backend.l1.problem_bank.signature_tagger import apply_signatures
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
@@ -272,6 +274,17 @@ def _record_to_json(record: ProblemBankRecord) -> dict[str, Any]:
         {"concept_src_id": tag.concept_src_id, "role": tag.role, "relevance": tag.relevance}
         for tag in record.concept_tags
     ]
+    # S4-14 — relations는 빈 리스트라도 균일하게 기록한다(필드 존재 자체가 "관계 계산이 이
+    # 코퍼스에 배선돼 있다"는 신호 — 없는 키와 빈 리스트를 구분해야 하는 하류 테스트
+    # `test_corpus_quality.py`의 키 집합 정합 봉인과도 정합).
+    data["relations"] = [
+        {
+            "parent_slug": tag.parent_slug,
+            "relation_type": tag.relation_type,
+            "similarity_score": tag.similarity_score,
+        }
+        for tag in record.relations
+    ]
     verify: dict[str, Any] = {
         "conditions": record.verify.conditions,
         "answer_map": dict(record.verify.answer_map),
@@ -284,6 +297,8 @@ def _record_to_json(record: ProblemBankRecord) -> dict[str, Any]:
         verify["answer_aggregate"] = record.verify.answer_aggregate
     if record.verify.answer_kind is not None:
         verify["answer_kind"] = record.verify.answer_kind
+    if record.verify.verification_tier is not None:
+        verify["verification_tier"] = record.verify.verification_tier
     data["verify"] = verify
     return data
 
@@ -300,6 +315,57 @@ def _tagged_record(record: ProblemBankRecord) -> ProblemBankRecord:
     return replace(record, problem=problem)
 
 
+# S4-14 스켈레톤 동일 밴드 "유사" 관계 — 전 쌍 연결은 밴드당 최대 ~17,000행(QUAD-EQ 443건
+# 기준 C(443,2))이라 CLAUDE.md 관계 폭발 금지 위반. 정렬 후 인접 K건 백엣지만 잇는 선형 체인으로
+# 상한을 건다(밴드당 관계 수 ≤ K × 밴드 크기 — 선형).
+_SIMILAR_RELATION_TYPE = "유사"
+_SIMILAR_SCORE = 0.6
+_SIMILAR_BACK_EDGES = 3
+
+
+def _attach_similar_relations(
+    records: Sequence[ProblemBankRecord], *, k: int = _SIMILAR_BACK_EDGES
+) -> list[ProblemBankRecord]:
+    """스켈레톤 동일 밴드(문제군) 레코드에 "유사" 관계를 선형 체인으로 부여(anti-explosion).
+
+    그룹핑 키 `(unit_codes, question_format, answer_format)` — 같은 문제군·형식의 문제만
+    "유사" 후보. 그룹 내 `(difficulty_overall or 0.0, slug)` 정렬 후 인덱스 i(≥1)마다 직전
+    K건(`range(max(0, i-k), i)`)만 후방 "유사" 관계로 잇는다(전 쌍 연결 금지 — 그룹 크기 N이면
+    관계 O(N)만 생성, O(N²) 아님). 입력 리스트 순서는 보존한다(정렬은 관계 계산 내부 상태일 뿐 —
+    반환은 원 인덱스 순).
+    """
+    groups: dict[tuple[Any, ...], list[tuple[int, ProblemBankRecord]]] = defaultdict(list)
+    for idx, record in enumerate(records):
+        key = (
+            tuple(record.problem.unit_codes),
+            record.problem.question_format,
+            record.problem.answer_format,
+        )
+        groups[key].append((idx, record))
+
+    new_tags_by_index: dict[int, tuple[ProblemRelationTag, ...]] = {}
+    for members in groups.values():
+        ordered = sorted(
+            members, key=lambda pair: (pair[1].problem.difficulty_overall or 0.0, pair[1].slug)
+        )
+        for pos in range(1, len(ordered)):
+            idx, record = ordered[pos]
+            back_edges = tuple(
+                ProblemRelationTag(
+                    parent_slug=ordered[j][1].slug,
+                    relation_type=_SIMILAR_RELATION_TYPE,
+                    similarity_score=_SIMILAR_SCORE,
+                )
+                for j in range(max(0, pos - k), pos)
+            )
+            new_tags_by_index[idx] = record.relations + back_edges
+
+    return [
+        replace(record, relations=new_tags_by_index.get(idx, record.relations))
+        for idx, record in enumerate(records)
+    ]
+
+
 class JsonlCorpusSink:
     """JSONL 저장 좌석 — `ProblemBankSink` 구조 충족(populate만)·메모리 수집 후 `write`로 기록.
 
@@ -313,6 +379,10 @@ class JsonlCorpusSink:
     @property
     def records(self) -> list[ProblemBankRecord]:
         return list(self._records)
+
+    def set_records(self, records: list[ProblemBankRecord]) -> None:
+        """전 밴드 수집 후 후처리(S4-14 관계 부여 등) 반영 — 원소 교체(개수 불변 전제)."""
+        self._records = records
 
     def populate(self, records: list[ProblemBankRecord]) -> ProblemBankPopulateReport:
         """레코드 배치를 메모리에 적재 — DB store와 동일 좌석 계약(리포트 반환)."""
@@ -770,6 +840,9 @@ def run_corpus_batch(
 
     total_requested = sum(b.requested for b in bands)
     total_stored = sum(b.stored for b in bands)
+    # S4-14 — 전 밴드 누적 후 1회 유사 관계 부여(밴드별 개별 호출 아님 — 그룹핑이 문제군 전체
+    # 기준이라 밴드 경계와 무관하게 같은 (unit_codes, question_format, answer_format)는 한 그룹).
+    sink.set_records(_attach_similar_relations(sink.records))
     written = sink.write(resolved_out) if write else None
     return CorpusBatchReport(
         bands=bands,

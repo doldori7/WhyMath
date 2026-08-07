@@ -30,6 +30,12 @@ from whymath_backend.l3.render.adapters import (
     SocraticAdapter,
     WorkedExampleAdapter,
 )
+from whymath_backend.l3.render.assessment_bank import (
+    attach_assessment,
+    get_assessment_bank,
+    reset_assessment_bank_cache,
+    uncovered_concept_codes,
+)
 from whymath_backend.l3.render.dsl import (
     PEDAGOGY_METHOD_BLOCKLIST,
     ConceptAssessment,
@@ -53,7 +59,11 @@ __all__ = [
     "SegmentKind",
     "SocraticAdapter",
     "WorkedExampleAdapter",
+    "attach_assessment",
     "from_concept_content",
     "get_adapter",
+    "get_assessment_bank",
     "registered_strategies",
+    "reset_assessment_bank_cache",
+    "uncovered_concept_codes",
 ]

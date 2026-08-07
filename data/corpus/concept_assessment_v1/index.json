@@ -1,0 +1,1492 @@
+{
+  "source_citation": "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED)의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다.",
+  "license_notice": "WHYMATH_ORIGINAL — 원천 문항이 전량 자체 저작이므로 상속 재료도 자체 저작이다. 검정교과서·평가원·EBS 본문은 원천 코퍼스에 애초에 없다(저작권 위생 필터가 source_type/license를 이중 확인한다).",
+  "generated_by": "whymath_backend.harness.concept_assessment_index",
+  "concept_source": "data/corpus/concept_content_v1/content.json",
+  "index_version": 1,
+  "counts": {
+    "concepts_total": 437,
+    "concepts_covered": 61,
+    "concepts_uncovered": 376,
+    "problems_scanned": 2647,
+    "problems_eligible": 2133
+  },
+  "entries": [
+    {
+      "concept_code": "10기수2-01-04",
+      "concept_name": "원의 방정식",
+      "problem_slug": "wm-misc-eval-mc-5acdcf5b857e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CIRCLE-RADIUS"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[10기수2-01-04]",
+      "conditions": [
+        "x = sqrt(121)"
+      ],
+      "answer_map": {
+        "x": "11"
+      },
+      "prompt": "원 x^2 + y^2 = 121 의 반지름의 길이를 구하시오."
+    },
+    {
+      "concept_code": "10기수2-01-06",
+      "concept_name": "평행이동",
+      "problem_slug": "wm-misc-eval-mc-c5d19077ee13",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FUNC-TRANSLATE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "10기수2-01-06",
+      "conditions": [
+        "x = 7**2 + 4*7"
+      ],
+      "answer_map": {
+        "x": "77"
+      },
+      "prompt": "함수 f(x) = x^2 + 4x 에 대하여 g(x) = f(x - 1) 일 때, g(8) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "10기수2-03-02",
+      "concept_name": "함수의 합성",
+      "problem_slug": "wm-misc-eval-mc-30bee93a63ba",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FUNC-COMPOSE"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[10기수2-03-02]",
+      "conditions": [
+        "x = 2*6 + 3"
+      ],
+      "answer_map": {
+        "x": "15"
+      },
+      "prompt": "두 함수 f(x) = x + 3, g(x) = 2x 에 대하여 (f∘g)(6) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "F7",
+      "concept_name": "동치분수",
+      "problem_slug": "wm-misc-eval-mc-82b510e28d0e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FRACTION-CANCEL"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[6수01-06]",
+      "conditions": [
+        "x = (6+5)/6"
+      ],
+      "answer_map": {
+        "x": "11/6"
+      },
+      "prompt": "두 자연수 a = 6, b = 5 에 대하여 (a + b) / a 의 값을 구하시오."
+    },
+    {
+      "concept_code": "F8",
+      "concept_name": "약분",
+      "problem_slug": "wm-misc-eval-mc-82b510e28d0e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FRACTION-CANCEL"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[6수01-06]",
+      "conditions": [
+        "x = (6+5)/6"
+      ],
+      "answer_map": {
+        "x": "11/6"
+      },
+      "prompt": "두 자연수 a = 6, b = 5 에 대하여 (a + b) / a 의 값을 구하시오."
+    },
+    {
+      "concept_code": "F9",
+      "concept_name": "통분",
+      "problem_slug": "wm-misc-eval-mc-82b510e28d0e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FRACTION-CANCEL"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[6수01-06]",
+      "conditions": [
+        "x = (6+5)/6"
+      ],
+      "answer_map": {
+        "x": "11/6"
+      },
+      "prompt": "두 자연수 a = 6, b = 5 에 대하여 (a + b) / a 의 값을 구하시오."
+    },
+    {
+      "concept_code": "G25",
+      "concept_name": "삼각형·사각형 내각의 합",
+      "problem_slug": "wm-misc-eval-mc-92dbfd3cb0e8",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "POLYGON-ANGLE-SUM"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[4수03-25]",
+      "conditions": [
+        "x = (11-2)*180"
+      ],
+      "answer_map": {
+        "x": "1620"
+      },
+      "prompt": "11각형의 내각의 크기의 합을 구하시오. (단위: 도)"
+    },
+    {
+      "concept_code": "H:12기하02-05",
+      "concept_name": "구의 방정식",
+      "problem_slug": "wm-misc-eval-mc-5acdcf5b857e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CIRCLE-RADIUS"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12기하02-05]",
+      "conditions": [
+        "x = sqrt(121)"
+      ],
+      "answer_map": {
+        "x": "11"
+      },
+      "prompt": "원 x^2 + y^2 = 121 의 반지름의 길이를 구하시오."
+    },
+    {
+      "concept_code": "H:12대수01-01",
+      "concept_name": "거듭제곱과 거듭제곱근",
+      "problem_slug": "wm-misc-eval-mc-91b09ef06cd5",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SQRT-POS"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12대수01-01]",
+      "conditions": [
+        "x = sqrt((-22)**2)"
+      ],
+      "answer_map": {
+        "x": "22"
+      },
+      "prompt": "√((-22)^2) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수01-04",
+      "concept_name": "로그의 뜻과 성질",
+      "problem_slug": "wm-misc-eval-mc-63e6dd5860c3",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "LOG-DIST"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12대수01-04]",
+      "conditions": [
+        "x = log(2**22 + 2**22, 2)"
+      ],
+      "answer_map": {
+        "x": "23"
+      },
+      "prompt": "log_2(2^22 + 2^22) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수01-05",
+      "concept_name": "상용로그",
+      "problem_slug": "wm-misc-eval-mc-63e6dd5860c3",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "LOG-DIST"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수01-05",
+      "conditions": [
+        "x = log(2**22 + 2**22, 2)"
+      ],
+      "answer_map": {
+        "x": "23"
+      },
+      "prompt": "log_2(2^22 + 2^22) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수01-08",
+      "concept_name": "지수함수·로그함수의 활용",
+      "problem_slug": "wm-exp-16440cd711cc",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "EXP-EQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수01-08",
+      "conditions": [
+        "2**x - 4 = 0"
+      ],
+      "answer_map": {
+        "x": "2"
+      },
+      "prompt": "2^x = 4 일 때, x의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수02-02",
+      "concept_name": "삼각함수의 뜻과 그래프",
+      "problem_slug": "wm-trig-13f33b616fa4",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "TRIG-VAL"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수02-02",
+      "conditions": [
+        "x - sin(30*pi/180) = 0"
+      ],
+      "answer_map": {
+        "x": "1/2"
+      },
+      "prompt": "삼각함수 sin 30°의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수03-02",
+      "concept_name": "등차수열의 일반항과 합",
+      "problem_slug": "wm-arseq-28d2ef433232",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "ARITH-SEQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수03-02",
+      "conditions": [
+        "x - (1 + (5 - 1)*1) = 0"
+      ],
+      "answer_map": {
+        "x": "5"
+      },
+      "prompt": "첫째항이 1, 공차가 1인 등차수열의 제5항을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수03-03",
+      "concept_name": "등비수열의 일반항과 합",
+      "problem_slug": "wm-geseq-4c918ce28044",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "GEO-SEQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수03-03",
+      "conditions": [
+        "x - (5 * 2**(3 - 1)) = 0"
+      ],
+      "answer_map": {
+        "x": "20"
+      },
+      "prompt": "첫째항이 5, 공비가 2인 등비수열의 제3항을 구하시오."
+    },
+    {
+      "concept_code": "H:12대수03-06",
+      "concept_name": "수열의 귀납적 정의",
+      "problem_slug": "wm-indseq-2d4485f4cd31",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "IND-SEQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12대수03-06",
+      "conditions": [
+        "x - (2 + (7 - 1)*2) = 0"
+      ],
+      "answer_map": {
+        "x": "14"
+      },
+      "prompt": "수열 {aₙ}이 다음 조건을 만족시킨다.\n(가) a₁ = 2\n(나) aₙ₊₁ = aₙ + 2 (n ≥ 1)\na₇의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12미적Ⅰ02-01",
+      "concept_name": "미분계수",
+      "problem_slug": "wm-misc-eval-mc-3c0f538a9cfb",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CALC-PRODUCT"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12미적Ⅰ02-01",
+      "conditions": [
+        "x = 4*7**3"
+      ],
+      "answer_map": {
+        "x": "1372"
+      },
+      "prompt": "두 함수 f(x) = x^1, g(x) = x^3 에 대하여 함수 f(x)g(x) 의 x = 7 에서의 미분계수를 구하시오."
+    },
+    {
+      "concept_code": "H:12미적Ⅰ02-04",
+      "concept_name": "미분법과 다항함수의 도함수",
+      "problem_slug": "wm-misc-eval-mc-3c0f538a9cfb",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CALC-PRODUCT"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12미적Ⅰ-02-04]",
+      "conditions": [
+        "x = 4*7**3"
+      ],
+      "answer_map": {
+        "x": "1372"
+      },
+      "prompt": "두 함수 f(x) = x^1, g(x) = x^3 에 대하여 함수 f(x)g(x) 의 x = 7 에서의 미분계수를 구하시오."
+    },
+    {
+      "concept_code": "H:12미적Ⅰ02-07",
+      "concept_name": "함수의 증가·감소와 극대·극소",
+      "problem_slug": "wm-calc-ext-783de36f65d6",
+      "problem_bank": "problem_bank_generated_v0",
+      "problem_unit_codes": [
+        "CALC-EXTREMUM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12미적Ⅰ02-07",
+      "conditions": [
+        "x**2 - 2*x - 3 = 0"
+      ],
+      "answer_map": {
+        "x": "-1"
+      },
+      "prompt": "삼차함수 f(x) = x^3 - 3x^2 - 9x 가 극댓값을 가질 때, 그 x의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12미적Ⅱ02-02",
+      "concept_name": "삼각함수의 덧셈정리",
+      "problem_slug": "wm-misc-eval-mc-22e29cd55ca1",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "TRIG-ADD"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12미적Ⅱ02-02",
+      "conditions": [
+        "x = 1*sin(1*pi/12 + 10*pi/12)"
+      ],
+      "answer_map": {
+        "x": "-sqrt(2)/4 + sqrt(6)/4"
+      },
+      "prompt": "두 각 A = 1π/12, B = 10π/12 에 대하여 sin(A + B) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12미적Ⅱ02-05",
+      "concept_name": "합성함수의 미분법",
+      "problem_slug": "wm-misc-eval-mc-9505004d763d",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CALC-CHAIN"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12미적Ⅱ-02-05]",
+      "conditions": [
+        "x = 3*2*(2*3+3)**2"
+      ],
+      "answer_map": {
+        "x": "486"
+      },
+      "prompt": "함수 f(x) = (2x + 3)^3 의 x = 3 에서의 미분계수 f'(3) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "H:12수문02-02",
+      "concept_name": "게임과 수학",
+      "problem_slug": "wm-misc-eval-mc-5989fd8fd900",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "PROB-INDEPENDENT-TRIAL"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12수문02-02]",
+      "conditions": [
+        "x = 3/8"
+      ],
+      "answer_map": {
+        "x": "3/8"
+      },
+      "prompt": "앞면이 나올 확률이 3/8 인 동전을 던져 앞면이 3번 연속 나왔다. 다음 시행에서 앞면이 나올 확률을 구하시오."
+    },
+    {
+      "concept_code": "H:12인수04-01",
+      "concept_name": "확률과 예측",
+      "problem_slug": "wm-misc-eval-mc-5989fd8fd900",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "PROB-INDEPENDENT-TRIAL"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12인수04-01]",
+      "conditions": [
+        "x = 3/8"
+      ],
+      "answer_map": {
+        "x": "3/8"
+      },
+      "prompt": "앞면이 나올 확률이 3/8 인 동전을 던져 앞면이 3번 연속 나왔다. 다음 시행에서 앞면이 나올 확률을 구하시오."
+    },
+    {
+      "concept_code": "H:12직수03-04",
+      "concept_name": "평면도형의 둘레와 넓이",
+      "problem_slug": "wm-misc-eval-mc-03d4a68df85a",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "AREA-PERIMETER"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12직수03-04]",
+      "conditions": [
+        "x = 7*15"
+      ],
+      "answer_map": {
+        "x": "105"
+      },
+      "prompt": "가로가 7, 세로가 15 인 직사각형의 넓이를 구하시오."
+    },
+    {
+      "concept_code": "H:12직수04-01",
+      "concept_name": "직무 상황의 경우의 수",
+      "problem_slug": "wm-misc-eval-mc-0b17d14fc9e2",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SAME-ITEM-PERM"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[12직수04-01]",
+      "conditions": [
+        "x = 330"
+      ],
+      "answer_map": {
+        "x": "330"
+      },
+      "prompt": "4 개의 A 와 7 개의 B, 모두 11 개의 문자를 일렬로 배열하는 경우의 수를 구하시오."
+    },
+    {
+      "concept_code": "H:12확통01-01",
+      "concept_name": "중복순열·같은 것이 있는 순열",
+      "problem_slug": "wm-misc-eval-mc-0b17d14fc9e2",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SAME-ITEM-PERM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12확통01-01",
+      "conditions": [
+        "x = 330"
+      ],
+      "answer_map": {
+        "x": "330"
+      },
+      "prompt": "4 개의 A 와 7 개의 B, 모두 11 개의 문자를 일렬로 배열하는 경우의 수를 구하시오."
+    },
+    {
+      "concept_code": "H:12확통02-01",
+      "concept_name": "확률의 뜻과 기본 성질",
+      "problem_slug": "wm-misc-eval-mc-5989fd8fd900",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "PROB-INDEPENDENT-TRIAL"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "H:12확통02-01",
+      "conditions": [
+        "x = 3/8"
+      ],
+      "answer_map": {
+        "x": "3/8"
+      },
+      "prompt": "앞면이 나올 확률이 3/8 인 동전을 던져 앞면이 3번 연속 나왔다. 다음 시행에서 앞면이 나올 확률을 구하시오."
+    },
+    {
+      "concept_code": "HK02",
+      "concept_name": "항등식과 미정계수",
+      "problem_slug": "wm-misc-eval-mc-cc7d0ad3acc9",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "REMAINDER-THEOREM"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[10공수1-01-02]",
+      "conditions": [
+        "x = 4**2 + 4*5 + 2"
+      ],
+      "answer_map": {
+        "x": "38"
+      },
+      "prompt": "다항식 x² + 5x + 2 를 (x - 4)로 나눈 나머지를 구하시오."
+    },
+    {
+      "concept_code": "HK03",
+      "concept_name": "나머지정리·인수정리",
+      "problem_slug": "wm-misc-eval-mc-cc7d0ad3acc9",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "REMAINDER-THEOREM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK03",
+      "conditions": [
+        "x = 4**2 + 4*5 + 2"
+      ],
+      "answer_map": {
+        "x": "38"
+      },
+      "prompt": "다항식 x² + 5x + 2 를 (x - 4)로 나눈 나머지를 구하시오."
+    },
+    {
+      "concept_code": "HK06",
+      "concept_name": "이차방정식의 근(실근·허근)",
+      "problem_slug": "wm-quad-eq-larger-root",
+      "problem_bank": "problem_bank_v1",
+      "problem_unit_codes": [
+        "QUAD-EQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK06",
+      "conditions": [
+        "x**2 - 5*x + 6 = 0"
+      ],
+      "answer_map": {
+        "x": "3"
+      },
+      "prompt": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오."
+    },
+    {
+      "concept_code": "HK07",
+      "concept_name": "판별식",
+      "problem_slug": "wm-quad-eq-larger-root",
+      "problem_bank": "problem_bank_v1",
+      "problem_unit_codes": [
+        "QUAD-EQ"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[10공수1-02-02]",
+      "conditions": [
+        "x**2 - 5*x + 6 = 0"
+      ],
+      "answer_map": {
+        "x": "3"
+      },
+      "prompt": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오."
+    },
+    {
+      "concept_code": "HK08",
+      "concept_name": "근과 계수의 관계",
+      "problem_slug": "wm-misc-eval-mc-3b6cd9eb85da",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "VIETA-SUM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK08",
+      "conditions": [
+        "x = -11"
+      ],
+      "answer_map": {
+        "x": "-11"
+      },
+      "prompt": "x² + 11x + 12 = 0 의 두 근의 합을 구하시오."
+    },
+    {
+      "concept_code": "HK09",
+      "concept_name": "이차방정식과 이차함수의 관계",
+      "problem_slug": "wm-quad-eq-root-count-mc",
+      "problem_bank": "problem_bank_v1",
+      "problem_unit_codes": [
+        "QUAD-EQ"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK09",
+      "conditions": [
+        "x**2 - 2*x = 0"
+      ],
+      "answer_map": {
+        "x": "2"
+      },
+      "prompt": "이차방정식 x^2 = 2x 의 서로 다른 실근의 개수는?"
+    },
+    {
+      "concept_code": "HK10",
+      "concept_name": "이차함수의 그래프와 직선",
+      "problem_slug": "wm-quad-fn-axis",
+      "problem_bank": "problem_bank_v1",
+      "problem_unit_codes": [
+        "QUAD-FN"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK10",
+      "conditions": [
+        "2*x - 4 = 0"
+      ],
+      "answer_map": {
+        "x": "2"
+      },
+      "prompt": "이차함수 y = x^2 - 4x + 3 의 그래프의 축이 직선 x = a 일 때, a 의 값을 구하시오."
+    },
+    {
+      "concept_code": "HK11",
+      "concept_name": "이차함수의 최대·최소",
+      "problem_slug": "wm-quad-fn-axis",
+      "problem_bank": "problem_bank_v1",
+      "problem_unit_codes": [
+        "QUAD-FN"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK11",
+      "conditions": [
+        "2*x - 4 = 0"
+      ],
+      "answer_map": {
+        "x": "2"
+      },
+      "prompt": "이차함수 y = x^2 - 4x + 3 의 그래프의 축이 직선 x = a 일 때, a 의 값을 구하시오."
+    },
+    {
+      "concept_code": "HK22",
+      "concept_name": "원의 방정식",
+      "problem_slug": "wm-misc-eval-mc-5acdcf5b857e",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CIRCLE-RADIUS"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK22",
+      "conditions": [
+        "x = sqrt(121)"
+      ],
+      "answer_map": {
+        "x": "11"
+      },
+      "prompt": "원 x^2 + y^2 = 121 의 반지름의 길이를 구하시오."
+    },
+    {
+      "concept_code": "HK24",
+      "concept_name": "평행이동",
+      "problem_slug": "wm-misc-eval-mc-c5d19077ee13",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FUNC-TRANSLATE"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[10공수2-01-06]",
+      "conditions": [
+        "x = 7**2 + 4*7"
+      ],
+      "answer_map": {
+        "x": "77"
+      },
+      "prompt": "함수 f(x) = x^2 + 4x 에 대하여 g(x) = f(x - 1) 일 때, g(8) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "HK35",
+      "concept_name": "합성함수",
+      "problem_slug": "wm-misc-eval-mc-30bee93a63ba",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "FUNC-COMPOSE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK35",
+      "conditions": [
+        "x = 2*6 + 3"
+      ],
+      "answer_map": {
+        "x": "15"
+      },
+      "prompt": "두 함수 f(x) = x + 3, g(x) = 2x 에 대하여 (f∘g)(6) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "HK41",
+      "concept_name": "조합",
+      "problem_slug": "wm-misc-eval-mc-1e905e501397",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "COMBINATION-COUNT"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "HK41",
+      "conditions": [
+        "x = 56"
+      ],
+      "answer_map": {
+        "x": "56"
+      },
+      "prompt": "서로 다른 8 개에서 3 개를 뽑는 조합의 수 8C3 을 구하시오."
+    },
+    {
+      "concept_code": "J0102",
+      "concept_name": "최대공약수·최소공배수(소인수분해)",
+      "problem_slug": "wm-misc-eval-mc-290411dc586f",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "GCD-LCM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0102",
+      "conditions": [
+        "x = 117"
+      ],
+      "answer_map": {
+        "x": "117"
+      },
+      "prompt": "9 와 13 의 최소공배수를 구하시오."
+    },
+    {
+      "concept_code": "J0103",
+      "concept_name": "음수·정수·유리수의 개념",
+      "problem_slug": "wm-misc-eval-mc-04c2044247bf",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SUBTRACT-NEG"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0103",
+      "conditions": [
+        "x = 2+20"
+      ],
+      "answer_map": {
+        "x": "22"
+      },
+      "prompt": "2 - (-20) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0104",
+      "concept_name": "정수·유리수의 대소",
+      "problem_slug": "wm-misc-eval-mc-07393165891c",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "ABS-VALUE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0104",
+      "conditions": [
+        "x = 12+21"
+      ],
+      "answer_map": {
+        "x": "33"
+      },
+      "prompt": "|-12| + 21 의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0105",
+      "concept_name": "정수·유리수의 사칙계산",
+      "problem_slug": "wm-misc-eval-mc-0563a6ac50ca",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "MIXED-MULT"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0105",
+      "conditions": [
+        "x = (11*6)/2"
+      ],
+      "answer_map": {
+        "x": "33"
+      },
+      "prompt": "5와 1/2 (대분수)에 6 을 곱한 값을 구하시오."
+    },
+    {
+      "concept_code": "J0107",
+      "concept_name": "제곱근",
+      "problem_slug": "wm-misc-eval-mc-26378e54b4a0",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SQRT-SUM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0107",
+      "conditions": [
+        "x = 55"
+      ],
+      "answer_map": {
+        "x": "55"
+      },
+      "prompt": "√(1089 + 1936) 의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0204",
+      "concept_name": "일차방정식 풀이·활용",
+      "problem_slug": "wm-misc-eval-mc-5f6581f376f8",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "TRANSPOSE-SIGN"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0204",
+      "conditions": [
+        "x = 9 - 2"
+      ],
+      "answer_map": {
+        "x": "7"
+      },
+      "prompt": "일차방정식 x + 2 = 9 의 해를 구하시오."
+    },
+    {
+      "concept_code": "J0205",
+      "concept_name": "순서쌍과 좌표",
+      "problem_slug": "wm-misc-eval-mc-899b7aaae8f8",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "MIDPOINT-NO-HALF"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0205",
+      "conditions": [
+        "x = (3+19)/2"
+      ],
+      "answer_map": {
+        "x": "11"
+      },
+      "prompt": "수직선 위 두 점 3, 19 의 중점의 좌표를 구하시오."
+    },
+    {
+      "concept_code": "J0207",
+      "concept_name": "정비례·반비례",
+      "problem_slug": "wm-misc-eval-mc-436b443580ce",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SCALE-AREA"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0207",
+      "conditions": [
+        "x = 11**2"
+      ],
+      "answer_map": {
+        "x": "121"
+      },
+      "prompt": "닮음비가 11 인 두 도형의 넓이의 비를 구하시오."
+    },
+    {
+      "concept_code": "J0208",
+      "concept_name": "지수법칙",
+      "problem_slug": "wm-misc-eval-mc-0dfae5cc5265",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "NEG-EVEN-POWER"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0208",
+      "conditions": [
+        "x = 20**2"
+      ],
+      "answer_map": {
+        "x": "400"
+      },
+      "prompt": "(-20)^2 의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0209",
+      "concept_name": "다항식의 덧셈·뺄셈",
+      "problem_slug": "wm-misc-eval-mc-3a12fe662662",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "COMBINE-UNLIKE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0209",
+      "conditions": [
+        "x = 2*4 + 5*4**2"
+      ],
+      "answer_map": {
+        "x": "88"
+      },
+      "prompt": "2x + 5x² 에서 x = 4 일 때의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0210",
+      "concept_name": "단항식×다항식, 다항식÷단항식",
+      "problem_slug": "wm-misc-eval-mc-1aff96e4ef66",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "NEG-DISTRIBUTE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0210",
+      "conditions": [
+        "x = 9 - 2"
+      ],
+      "answer_map": {
+        "x": "7"
+      },
+      "prompt": "-(x - 9) 에서 x = 2 일 때의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0219",
+      "concept_name": "다항식의 곱셈·인수분해",
+      "problem_slug": "wm-misc-eval-mc-00a027b15dd5",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "COMPLETE-SQUARE"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0219",
+      "conditions": [
+        "x = 7**2 + 4*7"
+      ],
+      "answer_map": {
+        "x": "77"
+      },
+      "prompt": "x² + 4x 에서 x = 7 일 때의 값을 구하시오."
+    },
+    {
+      "concept_code": "J0220",
+      "concept_name": "이차방정식",
+      "problem_slug": "wm-skel-0e91b357b1b6",
+      "problem_bank": "problem_bank_rephrased_v0",
+      "problem_unit_codes": [
+        "QUAD-EQ"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[9수02-20]",
+      "conditions": [
+        "x**2 - 5*x + 6 = 0"
+      ],
+      "answer_map": {
+        "x": "2"
+      },
+      "prompt": "이차방정식 x^2 - 5x + 6 = 0의 작은 근을 구하시오."
+    },
+    {
+      "concept_code": "J0305",
+      "concept_name": "다각형의 성질",
+      "problem_slug": "wm-misc-eval-mc-92dbfd3cb0e8",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "POLYGON-ANGLE-SUM"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0305",
+      "conditions": [
+        "x = (11-2)*180"
+      ],
+      "answer_map": {
+        "x": "1620"
+      },
+      "prompt": "11각형의 내각의 크기의 합을 구하시오. (단위: 도)"
+    },
+    {
+      "concept_code": "J0306",
+      "concept_name": "부채꼴(중심각·호·넓이)",
+      "problem_slug": "wm-misc-eval-mc-071c13892717",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CIRCLE-AREA"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[9수03-06]",
+      "conditions": [
+        "x = 11**2"
+      ],
+      "answer_map": {
+        "x": "121"
+      },
+      "prompt": "반지름이 11 인 원의 넓이를 원주율 π로 나눈 값을 구하시오."
+    },
+    {
+      "concept_code": "J0308",
+      "concept_name": "입체도형의 겉넓이·부피",
+      "problem_slug": "wm-misc-eval-mc-86534071761f",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CONE-VOLUME"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0308",
+      "conditions": [
+        "x = 6**2*27/3"
+      ],
+      "answer_map": {
+        "x": "324"
+      },
+      "prompt": "밑면의 반지름이 6, 높이가 27 인 원뿔의 부피를 원주율 π로 나눈 값을 구하시오."
+    },
+    {
+      "concept_code": "J0312",
+      "concept_name": "도형의 닮음·닮음비",
+      "problem_slug": "wm-misc-eval-mc-495d63a19966",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "SCALE-VOLUME"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "J0312",
+      "conditions": [
+        "x = 22**3"
+      ],
+      "answer_map": {
+        "x": "10648"
+      },
+      "prompt": "닮음비가 1:22 인 두 입체도형의 부피비는 1:? 이다. ? 의 값을 구하시오."
+    },
+    {
+      "concept_code": "ME1",
+      "concept_name": "평면도형의 둘레",
+      "problem_slug": "wm-misc-eval-mc-03d4a68df85a",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "AREA-PERIMETER"
+      ],
+      "match_axis": "standard_code",
+      "matched_key": "[6수03-11]",
+      "conditions": [
+        "x = 7*15"
+      ],
+      "answer_map": {
+        "x": "105"
+      },
+      "prompt": "가로가 7, 세로가 15 인 직사각형의 넓이를 구하시오."
+    },
+    {
+      "concept_code": "ME3",
+      "concept_name": "직사각형·정사각형의 넓이",
+      "problem_slug": "wm-misc-eval-mc-03d4a68df85a",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "AREA-PERIMETER"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "ME3",
+      "conditions": [
+        "x = 7*15"
+      ],
+      "answer_map": {
+        "x": "105"
+      },
+      "prompt": "가로가 7, 세로가 15 인 직사각형의 넓이를 구하시오."
+    },
+    {
+      "concept_code": "ME4",
+      "concept_name": "평행사변형·삼각형·사다리꼴·마름모의 넓이",
+      "problem_slug": "wm-misc-eval-mc-93319a080f1c",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "TRAPEZOID-AREA"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "ME4",
+      "conditions": [
+        "x = (2+6)*4/2"
+      ],
+      "answer_map": {
+        "x": "16"
+      },
+      "prompt": "윗변이 2, 아랫변이 6, 높이가 4 인 사다리꼴의 넓이를 구하시오."
+    },
+    {
+      "concept_code": "ME6",
+      "concept_name": "원주와 원의 넓이",
+      "problem_slug": "wm-misc-eval-mc-071c13892717",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "CIRCLE-AREA"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "ME6",
+      "conditions": [
+        "x = 11**2"
+      ],
+      "answer_map": {
+        "x": "121"
+      },
+      "prompt": "반지름이 11 인 원의 넓이를 원주율 π로 나눈 값을 구하시오."
+    },
+    {
+      "concept_code": "S5",
+      "concept_name": "소수의 곱셈",
+      "problem_slug": "wm-misc-eval-mc-29b738d87126",
+      "problem_bank": "problem_bank_misconception_mc_v0",
+      "problem_unit_codes": [
+        "DECIMAL-MULT"
+      ],
+      "match_axis": "concept_src_id",
+      "matched_key": "S5",
+      "conditions": [
+        "x = 4*7/100"
+      ],
+      "answer_map": {
+        "x": "7/25"
+      },
+      "prompt": "0.4 × 0.7 의 값을 구하시오."
+    }
+  ],
+  "uncovered_concept_codes": [
+    "10기수1-01-01",
+    "10기수1-01-02",
+    "10기수1-01-03",
+    "10기수1-02-01",
+    "10기수1-02-02",
+    "10기수1-02-03",
+    "10기수1-02-04",
+    "10기수1-02-05",
+    "10기수1-02-06",
+    "10기수1-02-07",
+    "10기수1-02-08",
+    "10기수1-02-09",
+    "10기수1-03-01",
+    "10기수1-03-02",
+    "10기수1-03-03",
+    "10기수1-04-01",
+    "10기수1-04-02",
+    "10기수2-01-01",
+    "10기수2-01-02",
+    "10기수2-01-03",
+    "10기수2-01-05",
+    "10기수2-01-07",
+    "10기수2-02-01",
+    "10기수2-02-02",
+    "10기수2-02-03",
+    "10기수2-02-04",
+    "10기수2-02-05",
+    "10기수2-03-01",
+    "10기수2-03-03",
+    "10기수2-03-04",
+    "10기수2-03-05",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "AD",
+    "B1",
+    "B2",
+    "D1",
+    "D2",
+    "D3",
+    "E1",
+    "F1",
+    "F10",
+    "F11",
+    "F12",
+    "F13",
+    "F14",
+    "F15",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G06",
+    "G07",
+    "G08",
+    "G09",
+    "G10",
+    "G11",
+    "G12",
+    "G13",
+    "G14",
+    "G15",
+    "G16",
+    "G17",
+    "G18",
+    "G19",
+    "G20",
+    "G21",
+    "G22",
+    "G23",
+    "G24",
+    "G26",
+    "G27",
+    "G28",
+    "H:12경수01-01",
+    "H:12경수01-02",
+    "H:12경수01-03",
+    "H:12경수01-04",
+    "H:12경수01-05",
+    "H:12경수02-01",
+    "H:12경수02-02",
+    "H:12경수02-03",
+    "H:12경수02-04",
+    "H:12경수02-05",
+    "H:12경수02-06",
+    "H:12경수03-01",
+    "H:12경수03-02",
+    "H:12경수03-03",
+    "H:12경수04-01",
+    "H:12경수04-02",
+    "H:12경수04-03",
+    "H:12경수04-04",
+    "H:12기하01-01",
+    "H:12기하01-02",
+    "H:12기하01-03",
+    "H:12기하01-04",
+    "H:12기하02-01",
+    "H:12기하02-02",
+    "H:12기하02-03",
+    "H:12기하02-04",
+    "H:12기하03-01",
+    "H:12기하03-02",
+    "H:12기하03-03",
+    "H:12기하03-04",
+    "H:12기하03-05",
+    "H:12대수01-02",
+    "H:12대수01-03",
+    "H:12대수01-06",
+    "H:12대수01-07",
+    "H:12대수02-01",
+    "H:12대수02-03",
+    "H:12대수03-01",
+    "H:12대수03-04",
+    "H:12대수03-05",
+    "H:12대수03-07",
+    "H:12미적Ⅰ01-01",
+    "H:12미적Ⅰ01-02",
+    "H:12미적Ⅰ01-03",
+    "H:12미적Ⅰ01-04",
+    "H:12미적Ⅰ02-02",
+    "H:12미적Ⅰ02-03",
+    "H:12미적Ⅰ02-05",
+    "H:12미적Ⅰ02-06",
+    "H:12미적Ⅰ02-08",
+    "H:12미적Ⅰ02-09",
+    "H:12미적Ⅰ02-10",
+    "H:12미적Ⅰ03-01",
+    "H:12미적Ⅰ03-02",
+    "H:12미적Ⅰ03-03",
+    "H:12미적Ⅰ03-04",
+    "H:12미적Ⅰ03-05",
+    "H:12미적Ⅰ03-06",
+    "H:12미적Ⅱ01-01",
+    "H:12미적Ⅱ01-02",
+    "H:12미적Ⅱ01-03",
+    "H:12미적Ⅱ01-04",
+    "H:12미적Ⅱ01-05",
+    "H:12미적Ⅱ02-01",
+    "H:12미적Ⅱ02-03",
+    "H:12미적Ⅱ02-04",
+    "H:12미적Ⅱ02-06",
+    "H:12미적Ⅱ02-07",
+    "H:12미적Ⅱ02-08",
+    "H:12미적Ⅱ02-09",
+    "H:12미적Ⅱ02-10",
+    "H:12미적Ⅱ02-11",
+    "H:12미적Ⅱ03-01",
+    "H:12미적Ⅱ03-02",
+    "H:12미적Ⅱ03-03",
+    "H:12미적Ⅱ03-04",
+    "H:12미적Ⅱ03-05",
+    "H:12미적Ⅱ03-06",
+    "H:12미적Ⅱ03-07",
+    "H:12수과01-01",
+    "H:12수과01-02",
+    "H:12수과02-01",
+    "H:12수과02-02",
+    "H:12수과02-03",
+    "H:12수과02-04",
+    "H:12수과03-01",
+    "H:12수과03-02",
+    "H:12수과03-03",
+    "H:12수과03-04",
+    "H:12수문01-01",
+    "H:12수문01-02",
+    "H:12수문01-03",
+    "H:12수문01-04",
+    "H:12수문02-01",
+    "H:12수문02-03",
+    "H:12수문02-04",
+    "H:12수문03-01",
+    "H:12수문03-02",
+    "H:12수문03-03",
+    "H:12수문03-04",
+    "H:12수문04-01",
+    "H:12수문04-02",
+    "H:12수문04-03",
+    "H:12수문04-04",
+    "H:12실통01-01",
+    "H:12실통01-02",
+    "H:12실통01-03",
+    "H:12실통02-01",
+    "H:12실통02-02",
+    "H:12실통02-03",
+    "H:12실통02-04",
+    "H:12실통03-01",
+    "H:12실통03-02",
+    "H:12실통03-03",
+    "H:12실통03-04",
+    "H:12실통04-01",
+    "H:12실통04-02",
+    "H:12인수01-01",
+    "H:12인수01-02",
+    "H:12인수01-03",
+    "H:12인수02-01",
+    "H:12인수02-02",
+    "H:12인수02-03",
+    "H:12인수03-01",
+    "H:12인수03-02",
+    "H:12인수03-03",
+    "H:12인수04-02",
+    "H:12인수04-03",
+    "H:12인수04-04",
+    "H:12인수05-01",
+    "H:12인수05-02",
+    "H:12직수01-01",
+    "H:12직수01-02",
+    "H:12직수01-03",
+    "H:12직수02-01",
+    "H:12직수02-02",
+    "H:12직수02-03",
+    "H:12직수02-04",
+    "H:12직수02-05",
+    "H:12직수03-01",
+    "H:12직수03-02",
+    "H:12직수03-03",
+    "H:12직수03-05",
+    "H:12직수04-02",
+    "H:12직수04-03",
+    "H:12직수04-04",
+    "H:12직수04-05",
+    "H:12확통01-02",
+    "H:12확통01-03",
+    "H:12확통02-02",
+    "H:12확통02-03",
+    "H:12확통02-04",
+    "H:12확통02-05",
+    "H:12확통02-06",
+    "H:12확통03-01",
+    "H:12확통03-02",
+    "H:12확통03-03",
+    "H:12확통03-04",
+    "H:12확통03-05",
+    "H:12확통03-06",
+    "H:12확통03-07",
+    "HK01",
+    "HK04",
+    "HK05",
+    "HK12",
+    "HK13",
+    "HK14",
+    "HK15",
+    "HK16",
+    "HK17",
+    "HK18",
+    "HK19",
+    "HK20",
+    "HK21",
+    "HK23",
+    "HK25",
+    "HK26",
+    "HK27",
+    "HK28",
+    "HK29",
+    "HK30",
+    "HK31",
+    "HK32",
+    "HK33",
+    "HK34",
+    "HK36",
+    "HK37",
+    "HK38",
+    "HK39",
+    "HK40",
+    "HK42",
+    "HK43",
+    "J0101",
+    "J0106",
+    "J0108",
+    "J0109",
+    "J0110",
+    "J0201",
+    "J0202",
+    "J0203",
+    "J0206",
+    "J0211",
+    "J0212",
+    "J0213",
+    "J0214",
+    "J0215",
+    "J0216",
+    "J0217",
+    "J0218",
+    "J0221",
+    "J0222",
+    "J0301",
+    "J0302",
+    "J0303",
+    "J0304",
+    "J0307",
+    "J0309",
+    "J0310",
+    "J0311",
+    "J0313",
+    "J0314",
+    "J0315",
+    "J0316",
+    "J0317",
+    "J0318",
+    "J0319",
+    "J0401",
+    "J0402",
+    "J0403",
+    "J0404",
+    "J0405",
+    "J0406",
+    "J0407",
+    "J0408",
+    "J0409",
+    "L0",
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "M1",
+    "M2",
+    "M3",
+    "ME2",
+    "ME5",
+    "ME7",
+    "ME8",
+    "ME9",
+    "N1",
+    "N2",
+    "N3",
+    "N4",
+    "N5",
+    "N6",
+    "P1",
+    "P10",
+    "P11",
+    "P12",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7",
+    "P8",
+    "P9",
+    "Q1",
+    "Q10",
+    "Q2",
+    "Q3",
+    "Q4",
+    "Q5",
+    "Q6",
+    "Q7",
+    "Q8",
+    "Q9",
+    "R1",
+    "R2",
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S6",
+    "S7",
+    "T1",
+    "T2",
+    "T3",
+    "V1",
+    "V2",
+    "W1",
+    "W2",
+    "X1"
+  ]
+}

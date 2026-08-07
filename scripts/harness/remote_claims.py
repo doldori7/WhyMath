@@ -81,6 +81,7 @@ stale claim 청소: 세션이 release 없이 죽으면 claim 파일이 남는다
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -355,7 +356,7 @@ def _mutate_claims(
     조기반환이 있으면 push 없이 그대로 반환한다(예: 남의 claim이라 conflict).
     """
     last = ""
-    for attempt in range(CAS_RETRIES):
+    for _attempt in range(CAS_RETRIES):
         base_sha, status = _fetch_claims_branch(root)
         if status != "ok":
             return ClaimResult(status, message=f"claim 브랜치 조회 실패: {status}")
@@ -876,6 +877,390 @@ def scan_remote_done(
     except Exception as exc:  # pragma: no cover - 환경 의존
         # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
         return {}, f"error:{type(exc).__name__}"
+
+
+# ── 장기 미머지 브랜치 감지 (HARN-13) ──────────────────────────────────────
+#
+# HARN-11(미머지 done)이 다루는 축과 가깝지만 다른 신호다 — HARN-11은 "이 태스크,
+# 어디선가 이미 끝났나"(status: done 여부)를 backlog 사본에서 읽는 반면, 이 스캔은
+# 태스크 상태와 무관하게 "이 *브랜치*가 트렁크에 아직 안 흡수된 채 얼마나 오래
+# 방치됐는가"를 커밋 그래프 자체(committerdate·ahead count)로 잰다. 2026-07-30
+# 사고(claude/shadow-data-s3-pilot-nh5kbz 9일·40+커밋 고립)는 태스크 status와
+# 무관하게 벌어졌다 — 텍스트 재발방지 규칙("머지 타이밍은 Kiki의 pr 지시 대기")이
+# 2회 반복 무력화된 뒤에야 이 스캔을 코드로 대체한다(CLAUDE.md "시스템 실수 재발
+# 시 재발방지대책은 규칙 텍스트가 아니라 코드·CI로 등재").
+#
+# HARN-08이 claim(in_progress) 판정에 "나이" 휴리스틱을 **의도적으로 빼둔 것**과
+# 모순되지 않는다 — 그건 "아직 활성 세션인가"를 나이로 오판하지 않기 위한 결정이었고,
+# 여기는 "사람에게 존재 자체를 알릴 가치가 있는가"를 판정한다. 전자는 자동 판정을
+# 내리면 안 되는 축이고, 후자는 정보성 경고일 뿐 태스크 진행을 막지 않는다.
+
+STALE_BRANCH_DEFAULT_DAYS = 3
+
+
+@dataclass(frozen=True)
+class StaleBranch:
+    """N일 이상 트렁크에 흡수되지 않은 원격 브랜치 1건.
+
+    status(HARN-13 잔여 — 2026-08-05 3분류 확장):
+      · "unresolved" — 진짜 Kiki 결정 대기. 기본값.
+      · "ported"     — 이 브랜치의 유용한 부분이 이미 별도 소형 PR로 trunk에
+                        흡수된 흔적(커밋 메시지에 브랜치 세션 접미사 언급)이 있다.
+                        원본은 정리 대상일 뿐 결정 대기가 아니다.
+      · "active"     — 다른 세션이 지금 이 브랜치에서 태스크를 claim 중(원격
+                        claim 맵에 존재). 방치가 아니라 진행 중인 정상 작업.
+    evidence: ported일 때 근거 커밋(짧은 sha + 제목), 그 외 "".
+    """
+
+    branch: str
+    ref: str
+    last_commit_at: datetime
+    age_days: float
+    ahead: int
+    status: str = "unresolved"
+    evidence: str = ""
+
+
+_SESSION_SUFFIX_RE = re.compile(r"-([a-z0-9]{6})$")
+
+
+def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
+    """`branch`의 세션 접미사를 trunk 커밋 로그에서 찾는다 — 있으면 "이미 포팅됨" 근거.
+
+    이 저장소의 관측된 명명 관행(예 `claude/whymath-ai-tutor-design-953m1e`)은 세션마다
+    6자 영숫자 접미사를 붙인다. 그 브랜치의 유용한 부분을 뽑아 trunk에 흡수할 때(예:
+    `merge: claude/whymath-ai-tutor-design-953m1e (PED-05, S3-16)`) 커밋 메시지가 그
+    접미사를 그대로 인용하는 패턴이 반복 관측됐다(PR#705·#702·#707 등). 접미사가 이
+    패턴에 안 맞거나 grep이 실패하면 "포팅 근거 없음"으로 안전 폴백한다(전체 스캔을
+    막지 않음 — 이 브랜치만 unresolved로 남는다).
+    """
+    match = _SESSION_SUFFIX_RE.search(branch)
+    if not match:
+        return ""
+    suffix = match.group(1)
+    try:
+        found = _git(
+            root,
+            "log",
+            trunk_ref,
+            f"--grep={suffix}",
+            "--fixed-strings",
+            "--oneline",
+            "-n",
+            "5",
+            timeout=15,
+        )
+    except Exception:  # pragma: no cover - 환경 의존
+        return ""
+    if found.returncode != 0:
+        return ""
+    line = found.stdout.strip().splitlines()[0] if found.stdout.strip() else ""
+    return line
+
+
+@dataclass
+class StaleBranchScanResult:
+    """장기 미머지 브랜치 스캔 결과. status: ok | offline | error(판정 불가는 stale 무시 금지)."""
+
+    status: str
+    stale: list[StaleBranch] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+    trunk_ref: str = ""
+    trunk_branch: str = ""
+    trunk_source: str = ""
+
+
+def scan_stale_branches(
+    root: Path,
+    *,
+    days_threshold: int = STALE_BRANCH_DEFAULT_DAYS,
+    fetch: bool = True,
+    max_refs: int = SCAN_MAX_REFS,
+    now: datetime | None = None,
+    active_branches: frozenset[str] = frozenset(),
+) -> StaleBranchScanResult:
+    """트렁크에 `days_threshold`일 이상 흡수되지 않은 원격 브랜치를 찾는다.
+
+    "흡수되지 않음"의 판정은 두 조건의 AND다 — 둘 다 필요하다:
+      1. 최종 커밋(`committerdate`)이 `days_threshold`일 이상 경과.
+      2. 트렁크 기준 `ahead count > 0`(SQUASH 머지 저장소이므로 커밋 그래프 조상
+         관계가 아니라 `rev-list --count trunk..ref`로 판정 — `scan_remote_in_progress`
+         의 규칙 A·B가 같은 이유로 조상 검사 대신 트렁크 사본 상태를 쓰는 것과 동형
+         근거: SQUASH 머지 후에도 원본 브랜치의 커밋들은 트렁크의 조상이 되지 않는다).
+      ahead==0이면 실질적으로 머지됐거나 애초에 커밋이 없는 것이므로 stale이 아니다.
+
+    `fetch=True`(기본)는 이 스캔이 세션당 드물게(SessionStart 1회 또는 CI 1회) 도는
+    것을 전제로 한다 — `scan_remote_done`의 `fetch=False` 기본(고빈도 `next` 경로용)과
+    반대 선택이다. 최신 브랜치 목록이 없으면 "9일째 아무도 모른다"는 이 스캔의
+    존재 이유 자체가 무너진다(캐시된 오래된 remote-tracking ref만 보면 새로 생긴
+    방치 브랜치를 못 본다).
+
+    반환 status가 'ok'가 아니면 **판정 자체가 불가**했다는 뜻이며, 빈 stale 목록을
+    '방치 브랜치 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+
+    active_branches(HARN-13 잔여 — 2026-08-05): 호출부가 이미 계산해둔 원격 claim
+    맵의 브랜치 집합(`remote_claimed.values()`)을 그대로 넘긴다 — 새 스캔을 추가하지
+    않고 기존 데이터를 재사용해 "타 세션이 지금 이 브랜치에서 작업 중"을 판별한다.
+    """
+    if not has_remote(root):
+        return StaleBranchScanResult("offline", message="origin 원격 없음 — 브랜치 스캔 불가")
+    now = now or _utcnow()
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return StaleBranchScanResult(
+                    _classify_failure(fetched.stderr),
+                    message=f"원격 브랜치 fetch 실패: {fetched.stderr.strip()}",
+                )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)%09%(committerdate:iso-strict)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return StaleBranchScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+
+        entries: list[tuple[str, str]] = []
+        for line in listing.stdout.splitlines():
+            ref, _, date_str = line.partition("\t")
+            ref, date_str = ref.strip(), date_str.strip()
+            if not ref or ref.endswith("/HEAD"):
+                continue
+            entries.append((ref, date_str))
+        truncated = len(entries) > max_refs
+        entries = entries[:max_refs]
+
+        trunk_ref, trunk_source = _resolve_trunk_ref(root)
+        trunk_branch = (
+            trunk_ref[len(REMOTE_REF_PREFIX) :]
+            if trunk_ref.startswith(REMOTE_REF_PREFIX)
+            else trunk_ref
+        )
+
+        stale: list[StaleBranch] = []
+        for ref, date_str in entries:
+            if ref == trunk_ref:
+                continue
+            try:
+                last_commit_at = datetime.fromisoformat(date_str)
+            except ValueError:
+                continue  # 파싱 불가 — 이 브랜치만 조용히 제외(전체 스캔은 실패시키지 않음)
+            age_days = (now - last_commit_at).total_seconds() / 86400
+            if age_days < days_threshold:
+                continue
+            ahead_result = _git(root, "rev-list", "--count", f"{trunk_ref}..{ref}", timeout=15)
+            if ahead_result.returncode != 0:
+                continue
+            try:
+                ahead = int(ahead_result.stdout.strip() or "0")
+            except ValueError:
+                continue
+            if ahead <= 0:
+                continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 방치 아님
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            if branch in active_branches:
+                status, evidence = "active", ""
+            else:
+                evidence = _find_ported_evidence(root, trunk_ref, branch)
+                status = "ported" if evidence else "unresolved"
+            stale.append(
+                StaleBranch(
+                    branch=branch,
+                    ref=ref,
+                    last_commit_at=last_commit_at,
+                    age_days=age_days,
+                    ahead=ahead,
+                    status=status,
+                    evidence=evidence,
+                )
+            )
+
+        return StaleBranchScanResult(
+            "ok",
+            stale=stale,
+            scanned_refs=len(entries),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=trunk_branch,
+            trunk_source=trunk_source,
+        )
+    except subprocess.TimeoutExpired:
+        return StaleBranchScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return StaleBranchScanResult("error", message=f"{type(exc).__name__}: {exc}")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 설계 문서 중복 착수 탐지 (HARN-14 — HARN-13 나이 임계의 사각 보완)
+# ──────────────────────────────────────────────────────────────────────────
+# 2026-08-04 사고: 세션이 외부 틀(21. 운영 플랫폼)로 독립 착수했다가, 조사 중 미머지 브랜치
+# claude/whymath-operations-platform-cn6dxi(당시 1일 경과)가 같은 산출물을 이미 만든 것을
+# 발견했다 — 착수 전에 발견해 폐기 0줄로 끝났지만, HARN-13의 3일 나이 임계 아래였다면 브리핑에
+# 안 떴을 것이다(운으로 회피). 설계 문서 중복은 *나이가 아니라 존재 자체*가 위험 신호다
+# (착수 당일이 가장 위험 — 아무도 아직 모른다). 그래서 이 스캔은 나이 임계를 두지 않는다.
+_DOC_SERIES_PREFIX = "docs/"
+_DOC_SERIES_SUFFIX = "_review.md"  # *_gap_review.md도 이 접미어로 커버(예: "..._gap_review.md")
+
+
+def _is_doc_series_path(path: str) -> bool:
+    return path.startswith(_DOC_SERIES_PREFIX) and path.endswith(_DOC_SERIES_SUFFIX)
+
+
+@dataclass(frozen=True)
+class DocSeriesCandidate:
+    """미머지 원격 브랜치가 트렁크에 없는 설계 문서 시리즈 파일을 추가한 1건."""
+
+    branch: str
+    ref: str
+    files: tuple[str, ...]
+    last_commit_at: datetime
+
+
+@dataclass
+class DocSeriesScanResult:
+    """설계 문서 중복 착수 스캔 결과. status: ok | offline | error(판정 불가는 무시 금지)."""
+
+    status: str
+    candidates: list[DocSeriesCandidate] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+    trunk_ref: str = ""
+    trunk_branch: str = ""
+    trunk_source: str = ""
+
+
+def scan_doc_series_duplicates(
+    root: Path,
+    *,
+    fetch: bool = True,
+    max_refs: int = SCAN_MAX_REFS,
+) -> DocSeriesScanResult:
+    """트렁크에 없는 `docs/**/*_review.md`(`*_gap_review.md` 포함)를 추가한 미머지 원격
+    브랜치를 나이 무관하게 전부 찾는다.
+
+    "추가"의 판정은 **트렁크 커밋과 브랜치 커밋의 직접 트리 비교**(`git diff A B`, 점 없는
+    두 ref 형태)여야 한다 — `A...B`(공통 조상 기준 3점 diff)를 쓰면, 이미 SQUASH 머지돼
+    트렁크에 실제로 존재하는 파일도 그 브랜치의 오래된 merge-base 기준으로는 "새 파일"처럼
+    보여 **오탐**한다(SQUASH 머지는 원 브랜치 커밋을 트렁크의 조상으로 만들지 않으므로
+    merge-base가 머지 시점보다 훨씬 이전에 머무른다 — `scan_stale_branches`가 조상 관계
+    대신 `ahead` count를 쓰는 것과 같은 이유의 재발). 실측: 이미 머지된
+    `claude/whymath-gamification-design-n3mf50`이 `A...B`로는 오탐되고 `A B`(직접 비교)로는
+    정상적으로 빠짐을 이 스캔 설계 중 실제로 확인했다.
+
+    반환 status가 'ok'가 아니면 판정 자체가 불가했다는 뜻이며, 빈 candidates 목록을
+    '중복 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다 — CLAUDE.md).
+    """
+    if not has_remote(root):
+        return DocSeriesScanResult("offline", message="origin 원격 없음 — 문서 스캔 불가")
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return DocSeriesScanResult(
+                    _classify_failure(fetched.stderr),
+                    message=f"원격 브랜치 fetch 실패: {fetched.stderr.strip()}",
+                )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)%09%(committerdate:iso-strict)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return DocSeriesScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+
+        entries: list[tuple[str, str]] = []
+        for line in listing.stdout.splitlines():
+            ref, _, date_str = line.partition("\t")
+            ref, date_str = ref.strip(), date_str.strip()
+            if not ref or ref.endswith("/HEAD"):
+                continue
+            entries.append((ref, date_str))
+        truncated = len(entries) > max_refs
+        entries = entries[:max_refs]
+
+        trunk_ref, trunk_source = _resolve_trunk_ref(root)
+        trunk_branch = (
+            trunk_ref[len(REMOTE_REF_PREFIX) :]
+            if trunk_ref.startswith(REMOTE_REF_PREFIX)
+            else trunk_ref
+        )
+
+        candidates: list[DocSeriesCandidate] = []
+        for ref, date_str in entries:
+            if ref == trunk_ref:
+                continue
+            # 나이 임계 없음(HARN-14 존재 이유) — 직접 트리 비교(점 없는 두 ref)로 트렁크에
+            # 없는 신규 파일만 "추가"로 잡는다(3점 diff 오탐 회피, 함수 docstring 참조).
+            diff = _git(
+                root,
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                trunk_ref,
+                ref,
+                timeout=30,
+            )
+            if diff.returncode != 0:
+                continue  # 이 브랜치만 조용히 제외(전체 스캔은 실패시키지 않음 — stale 선례 동형)
+            files = tuple(
+                sorted(p for p in diff.stdout.splitlines() if _is_doc_series_path(p.strip()))
+            )
+            if not files:
+                continue
+            try:
+                last_commit_at = datetime.fromisoformat(date_str)
+            except ValueError:
+                continue
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            candidates.append(
+                DocSeriesCandidate(
+                    branch=branch, ref=ref, files=files, last_commit_at=last_commit_at
+                )
+            )
+
+        return DocSeriesScanResult(
+            "ok",
+            candidates=candidates,
+            scanned_refs=len(entries),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=trunk_branch,
+            trunk_source=trunk_source,
+        )
+    except subprocess.TimeoutExpired:
+        return DocSeriesScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return DocSeriesScanResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
 def _iter_batch_blobs(stdout: str):

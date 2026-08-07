@@ -838,9 +838,11 @@ class EventType(str, Enum):
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
 
-    페이로드 계약(invariant ⑫): *생산되는* 3종(검산결과·힌트제공·시각화조작)의 `event_data`
-    모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로 고정한다.
-    나머지 8종(문제읽기…답입력)은 생산자가 아직 0이라 계약 면제(휴면)다.
+    페이로드 계약(invariant ⑫): *생산되는* 6종(검산결과·힌트제공·시각화조작·막힘·힌트요청·답입력)의
+    `event_data` 모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로
+    고정한다. 나머지 5종(문제읽기·조건분석·그래프그리기·계산·지움)은 생산자가 아직 0이라 계약
+    면제(휴면)다. `막힘`·`힌트요청`·`답입력`은 S3-16에서 휴면→생산으로 소생됐다(신규 enum 값
+    추가 아님 — 기존 3종의 생산자를 `api/coach.py`에 배선).
     """
 
     문제읽기 = "문제읽기"
@@ -849,8 +851,29 @@ class EventType(str, Enum):
     계산 = "계산"
     지움 = "지움"
     막힘 = "막힘"
+    """WH-1 답 미루기 5회+ 막힘 임계 이벤트(S3-16 소생)·event_data={turn_count:int}.
+
+    `l4.hint_deferral.is_stuck_turn_count`(turn_count≥5)가 True일 때만 스테이트풀 coach가
+    적재한다 — `decide_hint_level`의 1번 규칙(5회+ 막힘→hint_level 최소 3)과 *같은 임계*를
+    관측 신호로 노출할 뿐 결정 로직 자체는 건드리지 않는다.
+    """
+
     힌트요청 = "힌트요청"
+    """학생이 *요청*한 도움 demand 이벤트(S3-16 소생)·event_data={mode, persona}(선택 태그만).
+
+    `l4.hint_deferral.is_answer_demand`(답 요구 토큰 포함)가 True일 때만 적재한다. `힌트제공`
+    (AI가 *제공*한 supply·hint_level)과 의미가 다르다 — 지표 ⑫(도움 요청/제공 비)는 이 둘의
+    개수 비다.
+    """
+
     답입력 = "답입력"
+    """학생 응답 제출의 서버 측 지연 이벤트(S3-16 소생)·event_data={server_latency_ms:int|None}.
+
+    직전 학생 턴(server 기준 spoken_at)과 이번 제출 시각의 차 — 서버 시각 차이므로 클라 신뢰가
+    불필요하고 조작 불가하다. 이전 학생 턴이 없으면(새 dialogue의 첫 턴) 기준선이 없어 적재하지
+    않는다(날조 회피) — `append_turns`에서만 생산된다.
+    """
+
     검산결과 = "검산결과"
     """WH-1 검산(verify) 결과 이벤트·event_data={passed:bool, error_kind}.
 
@@ -1139,6 +1162,37 @@ class AuditEventKind(str, Enum):
     writer(`privacy.audit.record_admin_access_audit`)는 그 콘솔이 착지할 때 바로 배선할 수
     있도록 미리 세운다(가짜 이벤트 날조 금지 — 실 호출부가 생기기 전까지는 진짜로 0행이다).
     """
+
+
+class DefectCategory(str, Enum):
+    """`defect_report.category` — 학생 결함 신고 카테고리(RPT-01, 폐쇄 6종).
+
+    `docs/architecture/service_operations_gap_review.md` §3 D1의 설계를 따른다: 학생이
+    문항·AI응답·수식 오류를 신고할 경로가 스키마·API·UI 전부 0건이었던 갭을 메우되, *자유서술은
+    받지 않는다*(미성년 자유서술은 PII이고 SEC-01 암호화 좌석을 끌어옴 — v0는 카테고리 +
+    `problem_id`만으로 QA 파이프라인을 특정 문항에 겨눌 수 있어 충분히 행동 가능하다).
+
+    `AuditResourceType` 선례를 따라 ORM은 `sa.String(32)`(네이티브 PG enum 미생성) — 코드
+    안전성은 이 Pydantic enum(`.value` 저장)으로, DB는 단순 문자열로 둔다.
+    """
+
+    콘텐츠오류 = "콘텐츠오류"
+    """문항 발문·보기·정답·해설 등 콘텐츠 자체의 오류."""
+
+    AI응답오류 = "AI응답오류"
+    """코치 AI(소크라테스 대화·힌트 등) 응답의 오류(사실 오류·부적절한 힌트 등)."""
+
+    수식오류 = "수식오류"
+    """수식 렌더링·동치 판정·계산 결과의 오류."""
+
+    오답의심 = "오답의심"
+    """제공된 정답 자체가 틀렸다고 의심되는 경우."""
+
+    UI문제 = "UI문제"
+    """앱 UI/UX 결함(표시 깨짐·조작 불가 등) — 콘텐츠·AI 응답과 무관한 표면 결함."""
+
+    기타 = "기타"
+    """위 5종에 속하지 않는 기타 결함."""
 
 
 class ConsentScope(str, Enum):

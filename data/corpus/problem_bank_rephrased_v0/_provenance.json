@@ -1,0 +1,31 @@
+{
+  "pool": "whymath-original",
+  "corpus_name": "problem_bank_rephrased_v0",
+  "generated": "2026-07-17",
+  "generation_method": "generated_v0 기반 LLM 발문 다양화(question_text만 재작성) — l3/equivalent/rephrase.py를 harness/problem_corpus_rephrase.py가 오케스트레이션. 해설·난이도·distractor_map·수치·정답·slug·problem_id는 generated_v0에서 그대로 복사(코드 소유·불변 봉인). 2026-07-17 S2-08(scripts/reconcile_rephrased_corpus_s2_08.py)이 조사 받침·난이도 앵커·op-code 방향 결함을 수정 불변 수학키로 재조정. 2026-07-29 S3-12가 rephrase 발문 위생 게이트(rephrase_hygiene.py)를 신설·확장하며 위생 미달 레코드를 소급 제거(483→429) — 수치·정답·distractor_map 등 코드 소유 필드는 불변, 제거는 발문 텍스트 품질 미달 레코드 한정.",
+  "generation_cli": "python -m whymath_backend.harness.problem_corpus_rephrase",
+  "record_count": 429,
+  "source_citation": "출처: WhyMath 자체 저작 동등문제(WHYMATH_GENERATED) — generated_v0(자체 저작)의 발문을 LLM으로 다양화한 파생물. 평가원·EBS·검정교과서 본문 복제 0.",
+  "license_notice": "본 코퍼스의 모든 문항은 WhyMath가 자체 생성한 저작물(license=WHYMATH_GENERATED, source_type=자체생성)의 발문 다양화 파생물이다. 저작권은 WhyMath에 있으며 본문 보유가 합법이다(schema/problem.py _METADATA_ONLY_SOURCES 규칙과 정합).",
+  "copyright_rail": [
+    "평가원·EBS·검정교과서의 본문·문항·풀이·그림 복제 0(CLAUDE.md 절대 금기·저작권 가이드 v2.0 §32 단서).",
+    "모든 레코드 source_type=자체생성·license=WHYMATH_GENERATED — 메타 전용 출처(평가원/EBS/교과서) 레코드 0.",
+    "LLM은 *발문 문장 표현*만 다양화한다 — 수치·정답·선지·distractor_map은 코드가 소유하고 LLM 산출을 신뢰하지 않는다(자체 저작 620건의 파생일 뿐 외부 자료 참조 없음)."
+  ],
+  "contract": [
+    "원본(generated_v0)이 저작 시점에 이미 S2-a 수용 게이트를 통과했다는 계약을 그대로 물려받는다 — rephrase는 발문 표현만 바꾸므로 정확성·저작권 판정에 영향이 없다.",
+    "적재 파이프라인(l1/problem_bank/populate.py)은 L1이라 L3 게이트를 부르지 않는다(import-linter L1→L3 금지) — 게이트 통과는 코퍼스 저작 계약.",
+    "S2-08 재조정은 조인 키(unit_codes·verify.conditions·verify.answer_selection·answer)가 수정 불변임을 별도 검증한 후 3필드(answer_explanation·difficulty_overall·distractor_map)만 덮어쓴다 — 발문·slug·problem_id는 LLM 원본 보존."
+  ],
+  "review_status": {
+    "note": "노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 '노출 적격' 단계 표본 검수 완료(2026-08-03 갱신 — ARCH-25 S3-11 회수 시 정정). 표본 감사가 3라운드 연속 FAIL(rotation-0 12%→rotation-1 5.5%→rotation-2 1%, 그러나 Wilson 상한이 매 라운드 2% 임계를 초과)했고, 근본원인을 표본 크기의 통계적 한계(n=200에서는 결함 2건만으로도 Wilson 상한이 임계를 넘음) + 반복 rotation이 코퍼스의 81.4%만 커버한 데서 찾아(S3-15) 반복 표본 대신 전수 감사로 전환했다.",
+    "sample_review": "전수 감사(census) 429/429 — 결함 0건, 점추정 0.0000, Wilson 95% 단측 상한 0.0063(0.63%, ≤2% 임계) → PASS(exit 0). rotation-2 잔여 결함 2건 + census-gap(미검토 80문) 결함 34건을 항목 단위로 직접 교정 후 확정.",
+    "evidence": "docs/data/ai_review_batch_v0_4corpora_2026-07.md §근본 설계 결정 — 반복 표본 감사 → 전수 감사 전환(S3-15) — corpus_audit_rephrased_v0_census.jsonl"
+  },
+  "authoring_fields": {
+    "note": "problems.jsonl 각 레코드의 concepts/verify/license/generation_type/original_source는 *저작 메타*(Problem 스키마 밖)로, populate가 Problem 본문 필드와 분리 처리한다.",
+    "concepts": "개념 태깅 — concept_src_id(개념그래프 src_id)·role(ConceptRole)·relevance. populate가 concept.source_id→concept_id 조인해 problem_concept 적재(미해석은 orphan skip).",
+    "verify": "S2-a 정확성 게이트 재료 — conditions(원 조건)·answer_map(치환맵)·(선택)solution_steps. test_corpus_quality가 소비.",
+    "license/generation_type/original_source": "S2-a 저작권 게이트용 ContentProvenance 재료(자체생성=WHYMATH_GENERATED)."
+  }
+}

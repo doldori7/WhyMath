@@ -1,25 +1,24 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S4-14-variant-lineage-persist
-title: "변형 계보 영속 — problem_relation dead seat 해소 + rephrased 429 소급"
+title: "변형 계보 영속(스켈레톤측) — problem_relation dead seat 해소 + CAT 소비처 (rephrase측은 S4-18로 분리)"
 track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 5
 owner: claude
 depends_on: []
-requires_gates:
-  - G-s4-14-variant-identity
+requires_gates: []
 acceptance:
-  - "⓪[선행·2026-08-03 R2 보정] 정본 좌석 결정 — 계보 좌석이 둘이고 둘 다 writer 0이다: problem_relation(db/models/problem.py:359)과 content_provenance.parent_problem_id(schema/provenance.py:172). 하나를 정본으로 고르지 않고 채우면 이중 진실원천이 된다(붕괴 연쇄 ④ 유지보수 지옥). 근거: ai_recommendation_module_gap_review.md §4-③·§5-⑤ 경고. 선택하지 않은 좌석은 사유와 함께 문서에 기록"
-  - "①생성 시점 계보 기록: rephrase 배치가 원본 slug→변형 slug problem_relation(변형·similarity_score) 동반 산출, 스켈레톤 동일 밴드 파생은 유사 관계 선택 기록 ②rephrased_v0 429건 소급 백필(생성 로그·canonical signature 역추적) ③populate.py relation upsert(L1 멱등·저작 계약 동형) ④행>0·참조 무결(slug 실재)·거버넌스 테스트. 첫 소비처 슬라이스 동반: CAT 후보 필터(직전 오답 문항의 형제 제외/포함)"
-  - "[2026-08-03 R2 보정] 착지 후 harness/problem_type_backfill.py의 rephrased_v0 429건 명시 제외(:12)를 해제해 유형 태깅을 2,218→2,647로 완결 — 이 태스크의 미착지가 S3-27 범위를 스스로 줄인 다운스트림 차단이었다"
-artifacts: []
+  - "①스켈레톤 동일 밴드 파생 생성 시점 계보 기록: 배치가 밴드 내 페어링 정책(전량 pairwise는 조합 폭발 — 정책 명시 필요)에 따라 유사 관계(problem_relation) 산출 ②populate.py relation upsert(L1 멱등·저작 계약 동형 — problem_concept upsert/reconcile 패턴 재사용) ③행>0·참조 무결(slug 실재)·거버넌스 테스트. 첫 소비처 슬라이스 동반: CAT 후보 필터(직전 오답 문항의 형제 제외/포함 — api/me.py recommend_next_problem의 attempted_ids 제외 패턴 확장). rephrase측 생성시점 기록·429건 소급 백필은 identity 설계 결정이 선행돼야 해 S4-18로 분리."
+artifacts:
+  - be8953c4
 paths:
   - "src/backend/whymath_backend/l1/problem_bank/**"
   - "src/backend/whymath_backend/harness/**"
+  - src/backend/whymath_backend/api/me.py
   - "data/corpus/**"
 session: null
-notes: "docs/architecture/problem_bank_gap_review.md §3 D8 — problem_relation(db/models/problem.py:359)을 채우는 경로 0건 실측. 계보 없는 변형 확대 금지(§5-④ 발화 조건과 연동). 구 S4-11에서 재번호(2026-07-29). [2026-08-03 R2 보정 — problem_bank_gap_review_r2.md §3 R2] ⓐ이 태스크는 두 미병합 브랜치에서 정반대로 판정됐다(974e933 '차단' vs ed040217 '구현 완료') → G-s4-14-variant-identity 사람 게이트 신설·clear 전 착수 잠금 ⓑ'483건'을 실측 429로 정정(S3-15가 54건 삭감) ⓒ계보 좌석 이중화(content_provenance.parent_problem_id) 선행 결정을 acceptance ⓪으로 추가 ⓓ착지 시 problem_type_backfill 429건 제외 해제가 후속으로 딸린다"
-updated: 2026-08-03
+notes: "docs/architecture/problem_bank_gap_review.md §3 D8 — problem_relation(db/models/problem.py:359)은 쓰기 경로 0건 실측(읽기 경로는 api/problems.py:151-169에 이미 존재 — 상시 빈 응답). 계보 없는 변형 확대 금지(§5-④ 발화 조건과 연동). 구 S4-11에서 재번호(2026-07-29). 2026-07-29 착수 전 타당성 조사(claude)로 원 범위를 분리: rephrase_v0는 483이 아니라 429건(S3-12 위생조치로 감소)이며 그중 392건(91%)이 populate.py slug upsert로 원본과 동일 DB 행에 병합돼(_no_self_relation 위반) 관계 자체가 구조적으로 불가 — identity 설계 결정이 필요해 S4-18로 분리 등재. 본 태스크는 그 결정과 무관하게 착수 가능한 스켈레톤측+인프라+CAT 소비처만 남김."
+updated: 2026-08-05

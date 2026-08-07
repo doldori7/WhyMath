@@ -21,4 +21,12 @@ class Env {
   /// 토큰을 주입해 인증 상태로 부팅한다(`AuthController.restore`가 저장소에 심어 인증). 미주입
   /// 시 빈 문자열 → prod 빌드는 이 define을 넘기지 않으므로 항상 빈 값(시연 경로 미실행·누출 없음).
   static const String demoToken = String.fromEnvironment('DEMO_TOKEN');
+
+  /// 앱 버전(`X.Y.Z`, 빌드번호 없음) — 서버 `X-App-Version` 계약 헤더에 그대로 실린다(OPS-17).
+  ///
+  /// `pubspec.yaml`의 `version:`(예: `0.1.0+1`의 `+1` 앞부분)과 **손으로** 동기화한다 — Dart는
+  /// 빌드타임에 pubspec.yaml을 읽을 수 없어(신규 코드생성 파이프라인은 과공학) 상수로 둔다.
+  /// 드리프트는 `tests/infra/test_app_version_pubspec_sync.py`가 CI에서 잡는다(둘이 다르면
+  /// fail) — pubspec의 `version:`을 올릴 땐 반드시 이 값도 함께 올린다.
+  static const String appVersion = '0.1.0';
 }

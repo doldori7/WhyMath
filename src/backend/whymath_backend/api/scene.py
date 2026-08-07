@@ -33,6 +33,7 @@ from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
 )
+from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
@@ -43,6 +44,9 @@ from whymath_backend.l4.misconception.evidence_store import net_support_by_misco
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.scene_generation import generate_learning_scene
 
+# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
+_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
+
 
 async def scene_for_concept_diagnosis(
     diagnosis: ConceptDiagnosis,
@@ -51,7 +55,7 @@ async def scene_for_concept_diagnosis(
     provider: LLMProvider,
     cache: CacheBackend,
     trace: TraceSink,
-    student_subscription: str = "free",
+    student_subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
     student_id: uuid.UUID | None = None,
 ) -> LearningScene | None:
     """진단된 개념 → Concept 로드 → 맞춤 학습 장면 생성. Concept 미존재면 None.
@@ -79,7 +83,8 @@ async def scene_for_concept_diagnosis(
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
         session: DB 세션(Concept 로드·가설 store 조회용·L5가 보유).
         provider/cache/trace: L3 `pipeline.generate` DI(라우터 경유 생성·캐시·관측).
-        student_subscription: 클라우드 승급 가드용 구독 등급(기본 free).
+        student_subscription: 클라우드 승급 가드용 구독 등급(기본값은
+            `escalation_defaults.default_student_escalation_signals()` 단일 좌석, 오늘은 free).
         student_id: 가설 store 조회용 학생 id(None이면 프로브 적응 생략).
 
     Returns:
@@ -125,6 +130,7 @@ async def scene_for_concept_diagnosis(
         difficulty="medium",
         requires_reasoning=True,
         student_subscription=student_subscription,
+        budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
         # sync 강제: 생성기의 parse 게이트가 텍스트를 *즉시* 필요로 함(visualization.py 선례).
         sync=True,
     )

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -30,8 +31,16 @@ from whymath_backend.db.models.assessment import (
 )
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.evidence_event import EvidenceEvent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.recommendation_evidence import (
+    EVENT_TYPE_RECOMMENDATION_TREATMENT,
+    META_KEY_APPLIED_WEIGHTS,
+    META_KEY_MODE,
+    META_KEY_POOL_SIZE,
+    META_KEY_PROBLEM_ID,
+)
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -816,6 +825,10 @@ class _AQResult:
     def first(self) -> Any:
         return self._rows[0] if self._rows else None
 
+    def scalar_one_or_none(self) -> Any:
+        # S4-14: _last_incorrect_problem_id의 단일-스칼라 조회 시뮬(직전 오답 문항 id 유/무).
+        return self._rows[0] if self._rows else None
+
 
 class _QueueSession:
     """execute 호출마다 큐잉 결과를 순서대로 반환 — 채점 엔드포인트의 다중 쿼리(개념 조회 →
@@ -1425,6 +1438,12 @@ class TestNextProblem:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀 0건 → '미도달' 사유 코드(응답 정직 표기 신규 4필드).
+            "weight_axes_applied": [],
+            "candidate_pool_size": 0,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "no_candidate_pool",
+            "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
         }
 
     def test_requires_auth(self) -> None:
@@ -1564,6 +1583,195 @@ class TestNextProblem:
         body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
         assert body["problem_id"] is None
 
+    def test_no_candidates_does_not_record_treatment(self) -> None:
+        """REC-03 — 가짜 처치 금지: problem_id=null이면 evidence_event를 기록하지 않는다."""
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem")
+        assert session.added == []
+        assert session.commits == 0
+
+    def test_recommendation_records_treatment_evidence(self) -> None:
+        """REC-03 — 추천이 실제로 반환되면 evidence_event 처치 1건이 기록·commit된다."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert isinstance(row, EvidenceEvent)
+        assert row.event_type == EVENT_TYPE_RECOMMENDATION_TREATMENT
+        assert row.meta[META_KEY_PROBLEM_ID] == str(pid)
+        assert row.meta[META_KEY_POOL_SIZE] == 1
+        assert row.meta[META_KEY_APPLIED_WEIGHTS] is False
+        assert META_KEY_MODE not in row.meta  # 기본 CAT은 mode 미기록
+        assert session.commits == 1
+
+    def test_recommendation_records_applied_weights_true_when_weak_concept_used(
+        self,
+    ) -> None:
+        c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),
+                _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, None)]),
+                _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),
+                _AQResult([(pid_a, c_strong), (pid_b, c_weak)]),
+            ]
+        )
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?prioritize_weak_concepts=true")
+        assert len(session.added) == 1
+        assert session.added[0].meta[META_KEY_APPLIED_WEIGHTS] is True
+
+    def test_purpose_learning_selects_in_band_candidate_and_sets_band_calibrated_false(
+        self,
+    ) -> None:
+        """REC-04 — purpose=learning은 밴드(70~85%) 안 후보를 고르고 band_calibrated=false."""
+        pid_mid, pid_band = uuid.uuid4(), uuid.uuid4()
+        band_b = -math.log(0.8 / 0.2)  # θ=0에서 P=0.8(밴드 안)
+        session = _QueueSession(
+            [
+                _AQResult([]),  # 이력 없음 → θ=0
+                _AQResult([(pid_mid, 3.0, 0.0), (pid_band, 3.0, band_b)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?purpose=learning").json()
+        assert body["problem_id"] == str(pid_band)  # 정보량 최대(pid_mid)가 아니라 밴드 안
+        assert body["band_calibrated"] is False
+
+    def test_purpose_diagnosis_explicit_matches_default_info_max_selection(self) -> None:
+        """대조군 — 명시적 diagnosis는 기본과 동일하게 정보량 최대(P≈0.5) 후보를 고른다."""
+        pid_mid, pid_band = uuid.uuid4(), uuid.uuid4()
+        band_b = -math.log(0.8 / 0.2)
+        session = _QueueSession(
+            [
+                _AQResult([]),
+                _AQResult([(pid_mid, 3.0, 0.0), (pid_band, 3.0, band_b)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?purpose=diagnosis").json()
+        assert body["problem_id"] == str(pid_mid)
+        assert body["band_calibrated"] is None
+
+    def test_purpose_invalid_value_returns_422(self) -> None:
+        """값 공간이 Literal로 닫혀 있어 오타는 422(mode 선례와 동형)."""
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.get("/v1/me/next-problem?purpose=bogus")
+        assert resp.status_code == 422
+
+    def test_purpose_learning_combines_with_weak_concept_weight(self) -> None:
+        """REC-04②·slice17 — 밴드 가중과 약점 가중이 같은 곱 결합 축에서 함께 적용된다."""
+        c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+        pid_mid_strong, pid_band_weak = uuid.uuid4(), uuid.uuid4()
+        band_b = -math.log(0.8 / 0.2)
+        session = _QueueSession(
+            [
+                _AQResult([]),
+                _AQResult([(pid_mid_strong, 3.0, 0.0), (pid_band_weak, 3.0, band_b)]),
+                _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),
+                _AQResult([(pid_mid_strong, c_strong), (pid_band_weak, c_weak)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get(
+            "/v1/me/next-problem?purpose=learning&prioritize_weak_concepts=true"
+        ).json()
+        # 밴드 안(P=0.8) + 약점(저숙달) 둘 다 만족하는 pid_band_weak가 이중 가중으로 선택.
+        assert body["problem_id"] == str(pid_band_weak)
+
+    # ── S4-14: ?sibling_filter — problem_relation(변형·유사) 첫 소비처 ──────────
+    def test_sibling_filter_unset_skips_extra_queries(self) -> None:
+        """미지정(기본) → 형제 조회 자체를 생략 — 쿼리 2회만(회귀 0 — 큐 소진 시 IndexError)."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_filter_set_but_no_prior_incorrect_skips_sibling_query(self) -> None:
+        """직전 오답이 없으면(2번째 쿼리가 None) 형제 조회 자체를 생략 — 쿼리 3회만."""
+        pid = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # ① 채점 이력 없음
+                _AQResult([]),  # ② _last_incorrect_problem_id → None(오답 이력 없음)
+                _AQResult([(pid, 3.0, None)]),  # ③ 후보(형제 조회 생략 — 4번째 큐 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=exclude").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_include_boosts_sibling_candidate(self) -> None:
+        """include — 직전 오답 문항의 형제 후보가 동일 정보량 경쟁자보다 가중으로 우선.
+
+        쿼리 4회: ①채점 이력 ②직전 오답 문항 id ③형제 id(양방향) ④후보 풀. pid_sibling·
+        pid_other는 난이도(=정보량) 동일이라 가중 없이는 인덱스(순서) 의존 동률 — 형제 가중
+        (1+BOOST=2.0배)이 그 동률을 결정론으로 깬다(순서 무관 — score가 2배 차이).
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling, pid_other = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),  # ① 오답 이력(θ 추정 겸용)
+                _AQResult([pid_wrong]),  # ② 직전 오답 문항 id
+                _AQResult([(pid_wrong, pid_sibling)]),  # ③ 형제(parent=오답, related=형제)
+                _AQResult(  # ④ 후보(동일 난이도)
+                    [(pid_other, 3.0, None), (pid_sibling, 3.0, None)]
+                ),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=include").json()
+        assert body["problem_id"] == str(pid_sibling)
+
+    def test_sibling_include_combines_with_weak_concept_weight(self) -> None:
+        """include + prioritize_weak_concepts 동시 지정 — 가중이 곱으로 합성(둘 다 강한 후보 승).
+
+        쿼리 6회: ①채점이력 ②직전오답 ③형제 ④후보 ⑤숙달스냅샷 ⑥후보개념매핑.
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling_weak, pid_plain = uuid.uuid4(), uuid.uuid4()
+        c_weak = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling_weak)]),
+                _AQResult([(pid_plain, 3.0, None), (pid_sibling_weak, 3.0, None)]),
+                _AQResult([(c_weak, 0.0)]),  # 숙달 스냅샷 — 저숙달
+                _AQResult([(pid_sibling_weak, c_weak)]),  # 후보 개념 매핑(pid_plain은 매핑 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get(
+            "/v1/me/next-problem?sibling_filter=include&prioritize_weak_concepts=true"
+        ).json()
+        assert body["problem_id"] == str(pid_sibling_weak)
+
+    def test_sibling_exclude_smoke_no_crash(self) -> None:
+        """exclude — FakeSession은 SQL notin_을 적용하지 않으므로(stmt 무시) 실 배제는
+        통합테스트가 검증. 여기선 쿼리 배선(4회)과 무크래시만 스모크."""
+        pid_wrong = uuid.uuid4()
+        pid_sibling = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling)]),
+                _AQResult([(pid_sibling, 3.0, None)]),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.get("/v1/me/next-problem?sibling_filter=exclude")
+        assert resp.status_code == 200
+
 
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
 def _suneung_problem(**over: object) -> SchemaProblem:
@@ -1608,17 +1816,57 @@ class TestNextProblemSuneungMode:
         session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?mode=suneung").json()
-        # 응답 모델(NextProblemResponse) 무변경 — 기본 CAT과 같은 5개 필드.
+        # 응답 모델(NextProblemResponse) — 기존 5필드 + REC-01 4필드 + REC-04 band_calibrated.
         assert set(body) == {
             "problem_id",
             "theta",
             "difficulty",
             "standard_error",
             "measurement_sufficient",
+            "weight_axes_applied",
+            "candidate_pool_size",
+            "weak_concept_signal_count",
+            "candidate_zero_reason",
+            "band_calibrated",
         }
         assert body["problem_id"] == str(problem.problem_id)
         assert body["difficulty"] == 3.0
         assert body["theta"] == 0.0
+        # 수능 모드는 suneung_priority 축이 항상 적용(약점 가중은 flag 미지정 → 미적용).
+        assert body["weight_axes_applied"] == ["suneung_priority"]
+        assert body["candidate_pool_size"] == 1
+        assert body["weak_concept_signal_count"] == 0
+        assert body["candidate_zero_reason"] is None
+        assert body["band_calibrated"] is None  # purpose 기본(diagnosis)은 밴드 미적용
+
+    def test_recommendation_records_mode_suneung_in_treatment_meta(self) -> None:
+        """REC-03 — 수능 모드 추천도 처치로 기록되며 meta.mode="suneung"이 남는다."""
+        problem = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?mode=suneung")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_MODE] == "suneung"
+        assert row.meta[META_KEY_PROBLEM_ID] == str(problem.problem_id)
+        assert session.commits == 1
+
+    def test_purpose_learning_applies_in_suneung_mode_too(self) -> None:
+        """REC-04 — purpose는 mode와 직교한다: 수능 모드에서도 밴드 안 후보가 선택된다."""
+        band_b = -math.log(0.8 / 0.2)  # θ=0에서 P=0.8(밴드 안)
+        mid = _suneung_problem(
+            signature_patterns=[SignaturePattern.COMPOUND_CHOICES], irt_difficulty_b=0.0
+        )
+        banded = _suneung_problem(
+            signature_patterns=[SignaturePattern.COMPOUND_CHOICES], irt_difficulty_b=band_b
+        )
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([_OrmProblemRow(mid), _OrmProblemRow(banded)])]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung&purpose=learning").json()
+        assert body["problem_id"] == str(banded.problem_id)
+        assert body["band_calibrated"] is False
 
     def test_no_eligible_candidates_null(self) -> None:
         """적격 0 → problem_id null(기본 CAT과 동일한 null 응답 계약)."""
@@ -1633,7 +1881,16 @@ class TestNextProblemSuneungMode:
             "difficulty": None,
             "standard_error": None,
             "measurement_sufficient": False,
+            # REC-01: 후보 풀은 1건 있었으나(SQL 사전필터 통과) L6 진실 게이트가 전부 배제
+            # — '후보 0건'과 '전부 부적격'을 사유 코드로 구분(candidate_pool_size 참고).
+            "weight_axes_applied": ["suneung_priority"],
+            "candidate_pool_size": 1,
+            "weak_concept_signal_count": 0,
+            "candidate_zero_reason": "all_candidates_gated_ineligible",
+            "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
         }
+        assert session.added == []  # REC-03: null 응답은 처치가 아니다(가짜 처치 금지)
+        assert session.commits == 0
 
     def test_copyright_blocked_source_null_even_if_sql_leaks(self) -> None:
         """평가원 출처가 후보에 섞여 들어와도(사전필터 실패 가정) 진실 게이트가 차단 → null.
