@@ -116,7 +116,8 @@ Phase 3 (별도 계획 필요 — 이 문서 범위 밖)
 | ⑧ 코퍼스 파일명 트리거 | `l1/test_legacy_snapshot_governance.py`가 docstring 내 "concept_graph_v1" 리터럴을 스캔 — 문서화 시 우회 표현 사용 | S4-24 실측 |
 | ⑨ 테스트 | 풀 유일성·게이트 전건 통과·독립 재계산 교차검증·저작결함 변별력(오답 주입)·바이트 결정론·(다변형이면) 밴드 분리 회귀 | 전 생성기 공통 |
 | ⑩ 코퍼스 생성·검증 | 배치 실행 → `problem_id` 전건 고유 확인 → 커버리지 리포트 재실행 → 실제 이동 확인 | 전 생성기 공통 |
-| ⑪ 하네스 | `backlog.py add`(번호는 CLI 제안값 그대로) → `start`(claim, 경로 겹침 경고는 새 파일이면 대부분 무해) → 커밋 → `done` → 커밋 → push | 전 생성기 공통 |
+| ⑪ 전체 스위트 호출 | `cd src/backend && python -m pytest -q`(**bare invocation만** — testpaths는 `pyproject.toml`이 이미 지정). **명시 경로 인자**(`pytest ../../tests/backend`·특정 파일·`-k` 등)로 부르면 `asyncio_mode`가 적용되지 않아 async 테스트(`test_coach.py` 등) 수백 건이 "async def functions are not natively supported"로 무더기 거짓 실패한다(`pyproject.toml` ARCH-22 결정 로그에 이미 기지 — bare invocation만 실 CI와 동일하게 green 확인됨) | S4-40 실측 사고(616건 거짓 실패 → 원인 격리 → bare 재실행으로 9087 passed 0 failed 확인) |
+| ⑫ 하네스 | `backlog.py add`(번호는 CLI 제안값 그대로) → `start`(claim, 경로 겹침 경고는 새 파일이면 대부분 무해) → 커밋 → `done` → 커밋 → push | 전 생성기 공통 |
 
 **이 SOP를 따르면 생성기 1개당 실측 소요가 계속 줄어든다**(5번째는 오탐 0건·첫 시도 60/60). 다음 세션(또는 이 세션의 계속)은 이 표를 그대로 실행 절차로 쓸 수 있다.
 
