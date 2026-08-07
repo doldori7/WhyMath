@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: HARN-14-gates-add-cli-path
+id: HARN-18-gates-add-cli-path
 title: "게이트 신설 CLI 경로 부재 — gates는 list/clear/waive만 있고 add가 없다 (HARN-06 동형 설계 공백)"
 track: infra-debt
 stage: S4
