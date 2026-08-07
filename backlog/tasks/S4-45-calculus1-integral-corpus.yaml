@@ -5,20 +5,21 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "[12미적Ⅰ-03-02]/[12미적Ⅰ-03-04]/[12미적Ⅰ-03-05]/[12미적Ⅰ-03-06] 0커버 해소 — kind 필터 4밴드 결정론 생성기 신설·전량 게이트 통과"
-artifacts: []
+artifacts:
+  - 01c454ac
 paths:
   - src/backend/whymath_backend/l3/equivalent/calculus1_integral_skeleton_generator.py
   - src/backend/whymath_backend/harness/calculus1_integral_batch.py
   - "data/corpus/problem_bank_calculus1_integral_v0/**"
   - tests/backend/l3/equivalent/test_calculus1_integral_skeleton_generator.py
   - tests/backend/harness/test_calculus1_integral_batch.py
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "w2_content_factory_completion_plan_v1.md 재확인 — 적분 영역 0/6(전량 0커버), wave 3 최우선. Tier1 SymPy Integral((x,a,b)) 정적분 신규 검증 경로 실측 확인(스파이크: 정적분·부정적분(F(0)=k 트릭)·삼각/지수 전부 pass). concept_src_id: H:12미적Ⅰ03-02/04/05/06 — concept graph 실존 확인. 넓이/속도 kind는 v1 단순화로 b=0·a,c≥1 강제(항상 양수 구간 보장·부호분석 불요)."
 updated: 2026-08-07
