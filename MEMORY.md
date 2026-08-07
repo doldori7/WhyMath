@@ -337,6 +337,35 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-07 (조사·S3 재채번 대기): **S3-24/25 stale claim 해제 + S3-26/27/28 3중 번호 충돌 실측 — 재채번·병합은 HARN-15 소관이라 미착수, 검증된 merge만 별도 브랜치에 보존** (claude 조사, Kiki 요청 "문제를 차근차근 해결해줘")
+
+**컨텍스트**: `ARCH-24` 착수 시도 중 `S3-24-shadow-recovery-bucket-b`·`S3-25-shadow-recovery-
+bucket-c`(브랜치 `claude/s3-02-live-remeasurement-tlthrr`)의 원격 claim이 정책 TTL(72h)을
+8일 초과한 채 방치돼 있음을 발견 — `claims release --force`로 해제(클레임은 조율 메타일 뿐
+코드 무영향, 안전). 그 회수 작업(원 S3-09~11 3건, "학습 루프 닫힘"·"완료를 풀이과정에 통합"·
+"대화 입력 최종답 감지")이 쓴 번호 `S3-26/27/28`이 그 사이 `main`에 **각각 다른 무관한
+작업**(개념 공급 무결성·문항 유형 태깅·`S3-28` canonicalize 스코프 감사)에 재사용돼 3중 충돌
+상태임을 `backlog.py validate`로 확인. 부가로 `S3-27`의 Alembic 리비전(`dialogue_review_
+turns_remaining`)도 1차 재채번값(`c5d6e7f0a2b3`)이 `main`의 `SEC-07`(`user_profile_role`)과
+**같은 슬라이딩 윈도우 다음 값으로 재충돌**한 상태(같은 분기점에서 같은 결정론 규칙을 두
+세션이 독립 적용한 구조적 충돌)까지 실측.
+
+**중단 사유**: 재채번 값(`S3-32/33/34`)과 재베이스 Alembic 리비전(`e7f0a2b3c4d7`, `main` 현재
+head 위)까지 계산·검증했으나, 백로그 YAML만 있고 그 태스크가 "완료"라 주장하는 실제
+애플리케이션 코드(서버 채점 권위 이관·`l4/completion.py`·`api/coach.py`·모바일 UI)가 없는
+채로 커밋하려다 스스로 제지 — 침묵 실패와 같은 부류의 문제(백로그는 완료·코드는 부재). 전체
+코드를 가져와 새 브랜치(`claude/s3-25-bucket-c-renumber-fix`)에서 `origin/main`과 실제
+merge(463파일·충돌 4건 수동 해결·`coach.py`의 중복 턴 생성 로직 제거 등 검증)까지 마쳤으나,
+그 직후 `docs/reviews/unmerged_branch_triage_2026-08-04.md` §4·`HARN-15-id-collision-cross-
+branch-scan`(브랜치 `q8tvcx`, acceptance: "재배번 대상·시점은 Kiki 판정")을 발견 — 이 정확한
+문제 부류(교차 브랜치 ID 이중 배정 처분)가 이미 **Kiki 전권 판정 영역으로 명시 유보**돼 있고,
+같은 문서가 "번호 재배번·브랜치 처분은 기계가 정할 수 없다"고 못 박아 뒀다. 재채번 적용·PR
+없이 중단.
+
+**남긴 것**: `claude/s3-25-bucket-c-renumber-fix`(push 완료, PR 미생성) — `s3-02-live-
+remeasurement-tlthrr`의 전체 코드 + 현재 `main`이 깨끗이 merge된 상태(재채번 미적용). Kiki가
+`HARN-15` 판정 시 재대조 없이 바로 재채번만 적용해 착지할 수 있는 형태로 준비만 해 둠. 신규
+백로그 태스크는 등재하지 않음(`HARN-15`가 이미 정본 소유자 — 중복 등재 금지 원칙). **운영(EOS) 모듈 2차 재점검 — 동일 문서 재제출 발견 후 델타 재점검으로 전환·QA 게이트가 상시 fail-open(D3)·학생 대면 금칙어/PII 검사기 0(D4)·v1 판정표 stale 4칸 정정, 태스크 3건 등재 + 1건 우선순위 상향** (claude 설계, Kiki 요청)
 ### 2026-08-07 (정리·하네스): **HARN-17 배선 이후 첫 실사용 — 재분류된 "미해결 15건" 중 실제 결정 대기 5건을 정리(4건 병합·1건 조사), 병합 도중 실물 conflict 1건과 태스크 ID 재충돌 1건을 실측 해결** (claude 정리, Kiki "남은 미해결 브랜치 정리 진행해줘")
 
 Kiki 요청 시점 기준 "미해결 6건"이 이미 15건으로 불어나 있었다(그 사이 병렬 세션들이 새
