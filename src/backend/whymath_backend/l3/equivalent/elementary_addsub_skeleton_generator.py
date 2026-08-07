@@ -147,6 +147,7 @@ class ElementaryAddSubSkeletonGenerator:
     def __init__(
         self,
         *,
+        operation: Operation | None = None,
         skip_conditions: AbstractSet[str] | None = None,
         slug_prefix: str = "wm-elem-addsub",
         subject: Subject = Subject.공통,
@@ -155,7 +156,19 @@ class ElementaryAddSubSkeletonGenerator:
         unit_codes: Sequence[str] = ("ELEM-ADDSUB-2DIGIT",),
         concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
     ) -> None:
-        self._pool = _build_pool()
+        # `operation` 필터(`SkeletonEquivalentProblemGenerator`의 `variant` 필터 선례 미러) —
+        # 미지정이면 덧셈·뺄셈 혼합 풀 전체를 순서대로 낸다. 배치가 밴드를 나누려면 *반드시*
+        # 이 필터로 인스턴스를 분리해야 한다: `_build_pool()`은 고정 시드라 필터 없이 별도
+        # 인스턴스를 여러 개 만들면 매번 *같은* 셔플 순서를 재생해 같은 뼈대가 중복 방출된다
+        # (2026-08-05 실측 사고 — 최초 배치가 이 함정에 빠져 "덧셈 밴드"·"뺄셈 밴드"가 실제로는
+        # 같은 혼합 뼈대를 두 번씩 낸 것으로 드러남 — `harness/elementary_addsub_batch.py`
+        # 수정 참조).
+        full_pool = _build_pool()
+        self._pool = (
+            full_pool
+            if operation is None
+            else tuple(s for s in full_pool if s.operation == operation)
+        )
         self._index = 0
         self._skip = skip_conditions
         self._slug_prefix = slug_prefix

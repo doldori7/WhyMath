@@ -84,7 +84,9 @@ def run_elementary_addsub_batch(
             answer_format=None,
         )
         seen: set[str] = set()
-        generator = ElementaryAddSubSkeletonGenerator(skip_conditions=seen)
+        # operation 필터 필수(2026-08-05 실측 사고 — 모듈 docstring 참조): 미지정이면 두 밴드가
+        # 고정 시드 풀을 각자 처음부터 재생해 *같은* 뼈대를 두 번 낸다(밴드 분리가 무효화됨).
+        generator = ElementaryAddSubSkeletonGenerator(operation=operation, skip_conditions=seen)
         # run_batch가 아니라 run_equivalent_generation을 signature_index=None으로 직접 반복
         # 호출한다 — 모듈 docstring 참조(S2-l 구조 dedup이 산술 해값으로 오탐하는 문제 회피).
         outcomes = [
