@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -18,13 +18,14 @@ acceptance:
   - "신규 Unicode 글리프 없이 순수 한국어+ASCII 표기(벡터는 a,b 등 알파벳 변수명·좌표는 콤마·괄호)"
   - "부호 결합 표기(+ -, - -) 위생 확인 — 계수 p,q가 음수일 때 겹부호 방지"
   - "전건 Tier1 게이트 통과·is_published=False·coverage 리포트 이동 확인·전체 스위트+4게이트 green"
-artifacts: []
+artifacts:
+  - 9b76c965
 paths:
   - src/backend/whymath_backend/l3/equivalent/vector_operations_skeleton_generator.py
   - src/backend/whymath_backend/harness/vector_operations_batch.py
   - tests/backend/l3/equivalent/test_vector_operations_skeleton_generator.py
   - tests/backend/harness/test_vector_operations_batch.py
   - data/corpus/problem_bank_vector_operations_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "w2_content_factory_completion_plan_v1.md §6 Phase 1 우선순위 5위. 행렬 생성기(matrix_ops)와 구조 유사(성분별 선형 연산)."
 updated: 2026-08-07
