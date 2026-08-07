@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-43-sample-mean-distribution-corpus
+title: "고등 표본평균의 평균·분산 파일럿 코퍼스 (W2 Phase3 #4)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[12확통03-06] 0커버 해소 — kind(mean/variance) 필터 2밴드 결정론 생성기 신설·전량 게이트 통과"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/equivalent/sample_mean_distribution_skeleton_generator.py
+  - src/backend/whymath_backend/harness/sample_mean_distribution_batch.py
+  - "data/corpus/problem_bank_sample_mean_distribution_v0/**"
+  - tests/backend/l3/equivalent/test_sample_mean_distribution_skeleton_generator.py
+  - tests/backend/harness/test_sample_mean_distribution_batch.py
+session: claude/whymath-mvp-plan-architecture-trjg5x
+notes: "w2_content_factory_completion_plan_v1.md B급 §6 항목8(통계) — binomial_distribution_skeleton_generator(S4-34) kind(mean/variance) 필터·단일코드 패턴 재사용. E(X-bar)=mu·V(X-bar)=sigma^2/n. concept_src_id: H:12확통03-06 — concept graph 실존 확인."
+updated: 2026-08-07
