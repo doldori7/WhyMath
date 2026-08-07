@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: QUAL-01-problem-corpus-duplication-audit
+title: "문항 코퍼스 중복 감사 — 서로 다른 코퍼스 간 슬러그 충돌 392건 + 데모/파일럿 풀 실중복 (미병합 브랜치 8ceaf5 재작성)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - OPS-22-generic-declared-unwired-detector
+requires_gates: []
+acceptance:
+  - "코퍼스 간 슬러그/문제 중복을 실측 재확인(원 문서의 392건·wm-quad-eq-larger-root 사례가 현재 main 코퍼스에서 재현되는지 먼저 확인 — 그 사이 S3-12/S3-15 등 위생조치로 이미 해소됐을 가능성 있음)"
+  - "실중복만 보고한다 — 정당한 유사 문항(스켈레톤 동일 밴드 형제 등 S4-14 CAT 필터가 다루는 관계)과 진짜 중복을 구분하는 기준을 문서화"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l1/problem_bank/**"
+  - "data/corpus/problem_bank_*/**"
+session: null
+notes: "브랜치 8ceaf5의 원 QUAL-01 재작성 — 원 문서가 지목한 실중복 사례(wm-quad-eq-larger-root ↔ wm-skel-92cd1ba2bbf5, 데모/파일럿 풀)가 현재 main 코퍼스에서도 재현되는지 먼저 실측 확인 후 착수. OPS-22의 감사기 구조 일부(코퍼스 전수 스캔 패턴) 재사용 가능하면 재사용."
+updated: 2026-08-07

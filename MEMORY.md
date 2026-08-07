@@ -337,6 +337,44 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-07 (등재·미해결 브랜치 재작성): **Kiki 판단 필요로 보류됐던 4개 미해결 브랜치를 병렬 조사 후 재작성 범위로 신규 태스크 10건 등재 — 1건은 main 문서와 상충하는 정책 결정(FR-010)이 걸려 있어 코드 미착수, 나머지는 착수 준비 완료** (claude 조사·등재, Kiki "나머지 4건도 재작성 진행해줘")
+
+직전 결정 로그(같은 날, "S3-24/25 stale claim")가 다룬 `claude/s3-02-live-remeasurement-tlthrr`를
+포함해 4개 브랜치(`s3-02-live-remeasurement-tlthrr`·`data-platform-design-8ceaf5`·
+`learning-path-design-gvku5q`·`assessment-design-jkwdzn`) 각각에 대해 현재 main과의 diff를
+재확인하는 조사를 병렬 실행했다.
+
+**핵심 발견 — 이전 조사(PR #720)와의 관계**: PR #720은 이 브랜치를 "S3-24/25 버킷 회수" 각도로
+보고 실제 merge까지 마쳤다가, 교차 브랜치 ID 충돌 재채번은 `HARN-15`(acceptance ④ "재배번
+대상·시점은 Kiki 판정")가 이미 Kiki 전권으로 유보해 둔 영역임을 확인하고 PR 없이 중단했다.
+이번 조사는 같은 브랜치를 **다른 각도**(코치 루프 완결성 — 서버검증 최종답·Polya 돌아보기·
+attempt 적재)로 재검토했고, **기존 S3-26~31 번호를 재사용/재채번하지 않고** 전부 `backlog.py add`
+경유 신규 번호(S3-32~34)로 등재해 HARN-15가 유보한 "재채번" 문제 자체를 우회했다 — Kiki의
+"재작성 진행" 지시가 "포팅이 아니라 새로 쓰라"는 뜻이었으므로 두 조사는 상충하지 않는다.
+
+**등재 10건**:
+- `S3-32-learning-loop-closure-recovery`(+`S3-33`·`S3-34` 후속) — 코치 대화의 정답 도달을
+  서버측 3상태 검증으로 게이팅 후 Polya REVIEW 경유 완료. merge-base 이후 `api/coach.py` 632줄·
+  `api/me.py` 430줄 drift로 원 코드 그대로 포트 불가 확인 → 현재 main 기준 재구현 필요.
+  `S3-28-canonicalize-answer-kind-scope-audit`(타 세션 진행 중)의 파일과 겹치지 않게 스코프 격리.
+- `OPS-22-generic-declared-unwired-detector`(+`QUAL-01` 후속) — "선언만 되고 배선 안 됨" 패턴이
+  이번까지 6회 반복 확인(REC-01·VIZ-01·NLP-01·S3-16 등). 원 브랜치의 분류 장부는 당시 todo였던
+  태스크가 지금은 대부분 done이라 stale — 구조만 재사용하고 장부는 재작성.
+- `ASM-03`~`ASM-06`(평가 결과 영속·청사진 조립·성취기준 도달 수요측 관측·오답→오개념 역배선) —
+  브랜치는 순수 설계/백로그(코드 변경 0)였고, main의 독립적 `ASM-01/02`(다른 주제)와 충돌해
+  전부 새 번호로 재등록. 4건 모두 main에 아직 없는 진짜 갭으로 확인.
+- `PATH-05-me-tab-learning-path-consumption` — `learning-path-design-gvku5q`의 net-new 발견
+  중 유일하게 정책 결정에 의존하지 않는 항목만 분리 등재. 같은 브랜치의 PATH-01/02는 main의
+  실제 PATH 계보(별도 세션 PR #671/#673/#706)가 이미 흡수했거나 명시적으로 보류해 재작성하지
+  않음(폐기).
+
+**보류 — Kiki 확인 필요(코드 미착수)**: `learning-path-design-gvku5q`의 PATH-04~08(시험 캘린더
+코퍼스·시즌 플랜 도출·진도율 축·과목트랙 온보딩·커리큘럼 breadcrumb)은 전부 "FR-010(시즌 플랜)
+언락"에 의존하는데, 그 브랜치의 MEMORY 기록(2026-07-30 Kiki 승인)과 main의 현재 정본
+`ai_tutor_module_gap_review.md` §4-⑤("미채택 — 실사용 데이터·파일럿 수요 확인 후")가 정면으로
+상충한다. 어느 쪽이 최신 결정인지 세션이 판단할 근거가 없어 AskUserQuestion으로 확인을 요청했으나
+무응답 — 등재하지 않고 보류. 다음 세션이나 Kiki 직접 확인 시 등재.
+
 ### 2026-08-07 (조사·S3 재채번 대기): **S3-24/25 stale claim 해제 + S3-26/27/28 3중 번호 충돌 실측 — 재채번·병합은 HARN-15 소관이라 미착수, 검증된 merge만 별도 브랜치에 보존** (claude 조사, Kiki 요청 "문제를 차근차근 해결해줘")
 
 **컨텍스트**: `ARCH-24` 착수 시도 중 `S3-24-shadow-recovery-bucket-b`·`S3-25-shadow-recovery-

@@ -2106,3 +2106,13 @@
 {"ts": "2026-08-03T07:05:55", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-06-misconception-recurrence-signal"}
 {"ts": "2026-08-07T05:24:25", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "HARN-18-gates-add-cli-path"}
 {"ts": "2026-08-07T05:24:25", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "id_rename", "id": "HARN-18-gates-add-cli-path", "detail": "PR #687 병합 시 HARN-14로 등재됐으나 main이 그 사이 HARN-14-doc-series-duplicate-detection(#714)을 선점 — HARN-15도 별도 충돌 사고로 이미 소진(HARN-16 notes 참조)이라 HARN-18로 재배정. 게이트 G-s4-14-variant-identity는 등재하지 않음 — S4-21(2026-07-29 Kiki 결정)이 이미 해소한 질문이었음을 병합 시점에 재확인."}
+{"ts": "2026-08-07T08:21:56", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "S3-32-learning-loop-closure-recovery"}
+{"ts": "2026-08-07T08:22:26", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "S3-33-coach-answer-input-surface-expansion"}
+{"ts": "2026-08-07T08:22:28", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "S3-34-coach-session-hygiene"}
+{"ts": "2026-08-07T08:23:10", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "OPS-22-generic-declared-unwired-detector"}
+{"ts": "2026-08-07T08:23:12", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "QUAL-01-problem-corpus-duplication-audit"}
+{"ts": "2026-08-07T08:23:51", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "ASM-03-assessment-writer-persist"}
+{"ts": "2026-08-07T08:23:55", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "ASM-04-blueprint-test-set-assembly"}
+{"ts": "2026-08-07T08:24:13", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "ASM-05-standard-attainment-observation"}
+{"ts": "2026-08-07T08:24:15", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "ASM-06-distractor-misconception-reverse-link"}
+{"ts": "2026-08-07T08:25:35", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "PATH-05-me-tab-learning-path-consumption"}
