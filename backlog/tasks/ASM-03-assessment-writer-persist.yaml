@@ -5,16 +5,17 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance: []
-artifacts: []
+artifacts:
+  - 28d23755
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/db/models/assessment.py
-session: worktree-agent-a013032106b5696e4
+session: null
 notes: "브랜치 claude/whymath-assessment-design-jkwdzn(원 ASM-02) 재작성 — main의 기존 ASM-01(assessment-seat-reachability-observability, done)이 관측 리포트만 만들고 '생성 API 신설·활성화는 포함하지 않는다'고 명시적으로 스코프 제외한 부분. 신규 계산 없이 기존 concept_diagnosis·weak_concept_recommendation·learning_path·오개념 가설을 measurement_sufficient 경계에서 Assessment 행으로 조립만 한다. 게임화 금기(등급·백분위·합격예측 4개 예측 필드) 제외."
 updated: 2026-08-07
