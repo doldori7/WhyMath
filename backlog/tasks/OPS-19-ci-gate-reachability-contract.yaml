@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - ".github/workflows/ci.yml"
   - tests/infra/test_qa_pipeline_wiring.py
   - tests/infra/test_ci_gate_reachability.py
-session: null
+session: claude/whymath-ai-recommendation-review-q8tvcx
 notes: "data_platform_module_gap_review_r2.md A1·A2·A3. 실측: 스텝 if=corpus(ci.yml:179) ∧ 부모 data-pipeline 잡 if=data_pipeline(ci.yml:114)이고 두 플래그 경로 필터의 교집합은 ci.yml 자기 자신뿐(ci.yml:74-75·95-96) — 코퍼스만 바꾸는 PR에서 부모 잡이 skip돼 최대 비용 게이트가 시작조차 안 한다(continue-on-error 무음화 이전 단계의 결함). 배선 동결 테스트 5건은 스텝 존재·조건 문자열만 보고 도달 가능성을 안 봐서 전부 green. '검증 장치를 만들고 배선 확인 없이 완료 선언 금지' 4회차(선례 OPS-03·OPS-08·OPS-11)."
-updated: 2026-08-04
+updated: 2026-08-07

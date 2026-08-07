@@ -111,7 +111,10 @@ jobs:
     timeout-minutes: 10
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: (github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true') && github.event_name != 'schedule'
+    # OPS-19: corpus 플래그도 포함한다 — 이 잡이 qa_pipeline·notation_coverage 스텝을 품고
+    # 있어서, data_pipeline 플래그만 봤을 때는 코퍼스만 바뀐 PR에서 잡 자체가 skip돼 그
+    # 스텝들이 시작조차 못 하는 결함이 있었다(tests/infra/test_ci_gate_reachability.py가 동결).
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true' || needs.changes.outputs.corpus == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/data-pipeline
@@ -169,12 +172,28 @@ jobs:
           path: src/data-pipeline/coverage.xml
           retention-days: 14
 
+      # OPS-19: 코퍼스 변경 시에만 트리거되는 표기 커버리지 게이트 — 이 스텝은 backend
+      # 잡(ci.yml notation_coverage 스텝)에도 있지만 backend 플래그(src/backend/ 변경)에만
+      # 물려 있어, 코퍼스만 바뀐 PR에서는 backend 잡 자체가 skip돼 코퍼스를 스캔하는 검사기가
+      # 코퍼스 PR에서 돌지 않는 축 어긋남이 있었다(data_platform_module_gap_review_r2.md A2).
+      # backend 잡 전체(35분)를 코퍼스 변경만으로 통째 트리거하지 않기 위해 이미 corpus에
+      # 반응하는 이 잡에 가볍게 추가한다 — working-directory 오버라이드는 qa_pipeline
+      # 스텝과 동일 사유(잡 기본값 src/data-pipeline에서는 backend 패키지를 못 찾는다).
+      - name: 게이트 — 표기 커버리지 (코퍼스 변경 시만·notation_coverage)
+        if: needs.changes.outputs.corpus == 'true'
+        working-directory: .
+        run: python -m whymath_backend.l3.notation_coverage
+
       # ARCH-21: 코퍼스 변경 시에만 트리거되는 옵션 스텝(상시 실행 아님 — changes 잡의
       # corpus 플래그 경유). harness/의 기존 검사 자산 8종(corpus_audit·수식동치·개념그래프·
       # 오개념crosswalk·코치프로즈누설·저작권·결함주입강등전 + wilson 경계)을 조립해 단일
       # JSON 리포트 + exit 0/1 게이트를 낸다. 이 스텝만 레포 루트로 working-directory를
       # 오버라이드한다 — 잡 기본값(defaults.run.working-directory: src/data-pipeline)에서는
-      # `-m whymath_backend.harness.qa_pipeline`이 backend 패키지를 못 찾는다.
+      # `-m whymath_backend.harness.qa_pipeline`이 backend 패키지를 못 찾는다. 8축 중
+      # content_provenance는 ops.provenance_audit(backend 잡의 별도 게이트)을 그대로 호출하는
+      # 축이라(qa_pipeline.py:_axis_content_provenance) 이 잡이 코퍼스 PR에서 돌게 되면서
+      # provenance_audit의 코퍼스 커버리지도 별도 스텝 없이 함께 회복된다(2026-08-07 실측
+      # 확인: 두 CLI 모두 현재 exit 0).
       - name: 게이트 — QA 파이프라인 오케스트레이터 (코퍼스 변경 시만·qa_pipeline)
         if: needs.changes.outputs.corpus == 'true'
         working-directory: .

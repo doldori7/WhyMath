@@ -114,7 +114,16 @@ def test_qa_pipeline_step_overrides_working_directory_to_repo_root() -> None:
 
 
 def test_changes_job_exposes_corpus_output() -> None:
-    """`changes` 잡이 `corpus` output을 노출해야 `data-pipeline` 잡의 `if` 조건이 유효하다."""
+    """`changes` 잡이 `corpus` output을 노출해야 `qa_pipeline` 스텝의 `if` 조건이 유효하다.
+
+    OPS-19 정정(2026-08-07): 이 도크스트링은 원래 "`data-pipeline` 잡의 `if` 조건이
+    유효하다"고 적었으나, 그건 스텝의 `if`(corpus)와 잡의 `if`(원래 data_pipeline)를
+    혼동한 것이었다 — 실제로 `corpus` output에 의존하는 것은 이 *스텝*이었지, 잡이 아니었다.
+    그 혼동이 바로 A1 결함(스텝 if=corpus ∧ 부모 잡 if=data_pipeline이라 도달 불가)을
+    이 테스트 자신이 놓친 이유다. OPS-19가 잡 `if`에도 `|| corpus == 'true'`를 추가해
+    지금은 잡 자체도 `corpus` output에 의존한다 — 도달 가능성 자체는
+    `test_ci_gate_reachability.py`가 구조적으로 계약한다(레지스트리 없이 스캔).
+    """
     spec = _load_ci_spec()
     jobs = spec.get("jobs") or {}
     if "changes" not in jobs:
