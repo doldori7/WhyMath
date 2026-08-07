@@ -1208,6 +1208,39 @@ Phaiakes9 실 PG에서 `WHYMATH_RUN_INTEGRATION=1`로 재확인 필요.
 기기" 표시(액세스 토큰은 이 테이블에 없어 구분 불가 — 리프레시 세션 목록일 뿐).
 
 정본: `docs/architecture/account_security_gap_review.md` D4 · `docs/standards/security_privacy.md`.
+### 2026-08-03 (정정·병렬충돌·학습경로): **학습 경로(Path) 모듈 갭 점검을 별도 세션과 병렬로 착수 — 동일 경로에 동일 EOS 틀을 대조한 문서가 이미 main에 병합돼 있어(아래 항목·PR #~665계열) 전체 설계를 철회하고 그쪽이 다루지 않은 순net-new 발견 1건(코퍼스 677행 추적 소실)만 별도 등재** (claude 설계·claude 정정, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『08. 학습 경로(Path)』(기능 54~57 + 확장 후보 58~62)를
+독자적으로 대조하며 문서 `docs/architecture/learning_path_module_gap_review.md` + 태스크
+`PATH-01-learning-path-entrypoint`·`PATH-02-learning-path-corpus-ingestion`를 등재하고 PR #673을
+열었다. 병합 전 `git merge origin/main`에서 **"added in both" 충돌**로 발견: 같은 날 **병렬로 진행된
+다른 세션**이 정확히 같은 경로에 같은 틀(기능 54~57)을 대조한 문서를 이미 만들어 시리즈 **12번째
+자매편**으로 main에 먼저 병합했고(아래 바로 다음 항목), `PATH-01`~`PATH-03` ID도 이미 그쪽이 점유했다.
+
+**대조 결과 — 철회가 맞다**: 그쪽 문서는 위상 제약 밀도를 **실측 96.4%**(기본 `max_depth=1`에서
+제약 0)로 정량화했고, 특히 이 세션이 제안했던 "무인자 진입점 즉시 신설"(당초 `PATH-01`)은 그쪽이
+**4조건 AND 발화 게이트**(§5)로 이미 검토한 뒤 "지금 만들면 §6 반복 실수 4·5회차의 재현"이라는
+근거로 **의도적으로 보류**한 설계와 정면으로 배치된다. 코드 없이 판단을 겨루는 두 설계 중 실측
+정밀도가 더 높고 이미 main에 착지한 쪽을 따른다 — 재작업하지 않는다.
+
+**net-new 1건만 유지**: 그쪽 문서·§4 정직한 공백·§6 반복 실수 어디에도 **없는** 발견 — 자체 저작
+학습경로 코퍼스 677행(데이터 카드 2026-06-20 §B, `docs/data/concept_content_corpus_v1.md`)이 자매
+데이터셋 ③(7계층 본문 437개념, 적재기까지 착지)과 달리 **코퍼스 파일·store·로더·백로그 태스크가
+전부 0**인 채로 추적에서 소실된 사실. 이건 경로 *알고리즘*이 아니라 경로 *데이터 자산* 축이라 겹치지
+않는다. `PATH-04-learning-path-corpus-ingestion`(CLI 신규 번호 배정)로 재등재했다(아래 후속 항목).
+
+**철회 항목**: 당초 문서 전체·`PATH-01-learning-path-entrypoint`·`PATH-02-learning-path-corpus-
+ingestion`(ID 충돌분) 삭제. §정정 2곳(`service_ops_mgmt_gap_review_2026-07.md`·
+`concept_content_corpus_v1.md`)은 그쪽과 겹치지 않아 **유지**.
+
+**재발방지 등재**: 반복 실수 카운터(§6 "완비된 소비 경로+미도달 공급원")처럼 **HARN-10의 태스크 ID
+충돌 검사 밖에 있는 자유 서술 축**(문서 대조 범위·회차 번호)은 병렬 세션 간 충돌을 CLI가 잡아주지
+않는다. 이번엔 문서 범위 자체가 겹쳐 더 컸다 — 원격 claim이 이 세션 시작 시점에 `offline`(오프라인)
+이라 진행 중인 다른 세션의 착수 사실을 볼 수 없었다. **규칙**: 신규 갭 리뷰 문서 착수 전, 대상 파일
+경로(`docs/architecture/{module}_gap_review.md`)가 될 이름으로 이미 존재하는지 `git ls-files`뿐 아니라
+`git log --all --diff-filter=A -- 'docs/architecture/*_gap_review.md'`로 **다른 브랜치의 인플라이트
+동일 경로**도 확인한다(원격 claim이 offline이면 특히).
+
 ### 2026-08-03 (설계·학습경로): **학습 경로(Path) 모듈 갭 점검·설계(D1~D3+페이퍼 3) + 태스크 3건 등재(`PATH-01`~`PATH-03`) — 위상정렬이 기본값에서 96.4% 무력(D1)·강등이 응답에서 구분 불가(D2)·전이 의존 미반영 27.0%→69.9%(D3) — 외부 EOS 틀 1단계 4기능 대조** (claude 설계, Kiki 요청)
 
 **배경**: Kiki가 업로드한 외부 EOS 틀 문서(『1단계: 학습 경로(Path)』 4기능 — 54 개인별 학습
