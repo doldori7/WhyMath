@@ -11,13 +11,19 @@
     "개념 [3.0,4.0)": 1452,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 811,
-    "절차 [2.0,3.0)": 1342
+    "절차 [2.0,3.0)": 1542
   },
   "corpora": [
     {
       "name": "problem_bank_conceptual_v0",
       "parse_errors": 0,
       "problems": 360,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_discrete_ev_v0",
+      "parse_errors": 0,
+      "problems": 200,
       "status": "적재됨"
     },
     {
@@ -223,7 +229,7 @@
       "total": 3
     },
     "통계": {
-      "covered": 0,
+      "covered": 1,
       "total": 7
     },
     "통계와 통계적 문제": {
@@ -265,7 +271,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 47,
+      "covered": 48,
       "total": 254
     },
     "대학교": {
@@ -329,6 +335,7 @@
     "[12확통02-01]",
     "[12확통02-04]",
     "[12확통02-05]",
+    "[12확통03-02]",
     "[2수01-06]",
     "[4수03-25]",
     "[6수01-06]",
@@ -366,14 +373,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 2151
+    "단답형": 2351
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 1549,
+    "problems_without_problem_type": 1749,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -383,6 +390,9 @@
     "problem_bank_conceptual_v0": {
       "개념 [3.0,4.0)": 224,
       "절차 [2.0,3.0)": 136
+    },
+    "problem_bank_discrete_ev_v0": {
+      "절차 [2.0,3.0)": 200
     },
     "problem_bank_elementary_v0": {
       "인지 [1.0,2.0)": 400
@@ -426,6 +436,9 @@
   "per_corpus_formats": {
     "problem_bank_conceptual_v0": {
       "객관식": 360
+    },
+    "problem_bank_discrete_ev_v0": {
+      "단답형": 200
     },
     "problem_bank_elementary_v0": {
       "단답형": 400
@@ -651,6 +664,7 @@
     "[12확통02-01]": 50,
     "[12확통02-04]": 48,
     "[12확통02-05]": 24,
+    "[12확통03-02]": 200,
     "[2수01-06]": 400,
     "[4수03-25]": 24,
     "[6수01-06]": 24,
@@ -688,8 +702,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.18620689655172415,
-    "covered_code_count": 81,
+    "coverage_rate": 0.18850574712643678,
+    "covered_code_count": 82,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -698,9 +712,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 354
+    "zero_coverage_code_count": 353
   },
-  "total_problems": 3767,
+  "total_problems": 3967,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -794,6 +808,9 @@
     "DISC-COUNT": {
       "개념 [3.0,4.0)": 12,
       "절차 [2.0,3.0)": 12
+    },
+    "DISCRETE-EXPECTED-VALUE": {
+      "절차 [2.0,3.0)": 200
     },
     "DISTRIBUTE-PARTIAL": {
       "개념 [3.0,4.0)": 15,
@@ -2231,7 +2248,6 @@
     "[12확통02-03]",
     "[12확통02-06]",
     "[12확통03-01]",
-    "[12확통03-02]",
     "[12확통03-03]",
     "[12확통03-04]",
     "[12확통03-05]",
