@@ -1452,6 +1452,41 @@ optional 필드(전건 기본 None·하위호환 동결·`mode`/`persona` 선례
 **비의존**(기존 이벤트만 읽고 씀 → 병렬 착수 가능). 태스크 번호는 `backlog.py add` 경유 배정
 (HARN-10 준수). 잔여물 1건은 기록만: `verifyApiProvider`(`verify_api.dart:48`)가 `lib/` 소비처
 0 — 코치가 같은 검증을 하므로 기능 갭 아닌 중복 표면이라 dead task 방지 위해 미등재.
+### 2026-08-03 (설계·오개념): **오개념 모듈 갭 점검·설계 + 태스크 6건 등재 — 진단(12) 축은 성숙, 교정(13) 축은 8종 중 3종만 배선(시각화 코드완비·호출자0 포함) · 관계셋은 04c 요청 4종 아닌 실질 2종(caused_by·variant_of, misconception_of/repaired_by는 기존 메커니즘과 중복) · 외부 EOS 틀 기능 11~19 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『03. 오개념(Misconception)』(0단계: 기능 11 오개념DB·
+12 자동진단·13 맞춤교정전략, 1단계 이상: 14 지식그래프·15 원인분석·16 예측·17 버전관리·18 연구
+플랫폼·19 자동발견 — WhyMath 전용이 아닌 일반적 EOS 틀)을 코드베이스와 대조.
+`ai_recommendation_module_gap_review.md`(08-01)에 이은 **11번째 자매편**. Kiki 지정으로 갭점검과
+설계를 **2개 문서로 분리**(`misconception_module_gap_review.md`·`04e_misconception_remediation_
+design.md`) — 기존 시리즈의 "갭+설계 동거" 관행에서 의도적 이탈.
+
+**핵심 발견**: 착수 가설("오개념 분야가 얇다")은 반증. 카탈로그 843건(M-id)·런타임 탐지 64종
+(kebab)·distractor 태깅 1,616문항·가설/증거/임베딩 테이블·거버넌스 테스트 ~60개가 이미 프로덕션.
+진짜 갭은 **진단이 아니라 교정**이다 — 8종 전략 중 반례·거꾸로사고·AI대화형튜터 3종만 배선, 시각화
+(`visualize_misconception()`)는 코드·테스트 완비인데 production 호출자 0건(직접 grep 실측), 선수
+학습복습(`prerequisite_coaching.py:32`)은 misconception 파라미터가 아예 없음(직접 Read 실측),
+학습경로재설계·개념재설명·구체사례는 배선 자체가 없음.
+
+**중요한 재발견**: `edge_design_part3_review.md`가 이미 "pedagogy 엣지화(`misconception_of` 등) —
+채택 안 함, #407 신규 엣지 타입 0·참조 키 유지"를 결정해 놓았음을 직접 Read로 발견. 04c §6이 요구한
+4종 관계(`misconception_of/caused_by/repaired_by/variant_of`) 중 `misconception_of`는 이 결정으로
+이미 참조 키(`concept_src_id`)로 해결됐고, `repaired_by`는 04c Level6(Repair Strategy 분리,
+`intervene.py`)와 중복이라 신설 시 이중 진실원천이 된다 — 실제로 여는 것은 **`caused_by`·
+`variant_of` 2종뿐**. 이 축소가 04e §2의 핵심 설계 결정이며, 관계 타입 최소화 원칙(5~8개)을
+오히려 강화한다.
+
+**산출물**: `docs/architecture/misconception_module_gap_review.md`(갭 판정+근거) ·
+`docs/architecture/04e_misconception_remediation_design.md`(교정 배선 설계 + `misconception_
+relation` 격리 스키마 설계 + root/symptom 관측 리포트 설계 + 예측 축소 설계, 코드 변경 0) ·
+`04c_misconception_seven_stage_separation.md` §6에 두 후속 포인터 추가(Level2·6-4). 백로그
+6건 등재(`backlog.py add` 경유, validate green 159건): `MISC-01-visualization-shadow-rollout`
+(S3·시각화 shadow 롤아웃, 04b 패턴 재사용) · `MISC-02-prerequisite-coaching-misconception-link`
+(S4·PED-05 의존) · `MISC-03-misconception-similar-problem-serving`(S3·REC-02 의존, 역인덱스
+재사용) · `MISC-04-misconception-relation-isolated-schema`(S4·concept_edge와 물리 격리) ·
+`MISC-05-root-symptom-slip-observation-report`(S4·신규 분류축 0) ·
+`MISC-06-misconception-recurrence-signal`(S4·REC-02 의존, BKT/DKT 비결합 유지). 기존
+`REC-02`·`PED-05`·`S4-15`는 대체하지 않고 의존 관계로만 연결.
 
 ### 2026-08-01 (설계·추천): **AI 추천 모듈 갭 점검·설계(D1~D5) + 태스크 4건 등재 — 학생 앱이 `POST /v1/me/attempts`를 한 번도 부르지 않아 추천 엔진의 입력이 0행(D1)·오개념 축은 공급원 0으로 도구6 상시 실패(D2)·정본 stale 4곳 정정 — 외부 EOS 틀 기능 80~83 대조** (claude 설계, Kiki 요청)
 
