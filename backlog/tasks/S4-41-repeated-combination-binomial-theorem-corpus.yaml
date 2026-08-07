@@ -5,20 +5,21 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "[12확통01-02]/[12확통01-03] 0커버 해소 — 2변형 결정론 생성기 신설·전량 게이트 통과"
-artifacts: []
+artifacts:
+  - a177b981
 paths:
   - src/backend/whymath_backend/l3/equivalent/combination_binomial_skeleton_generator.py
   - src/backend/whymath_backend/harness/combination_binomial_batch.py
   - "data/corpus/problem_bank_combination_binomial_v0/**"
   - tests/backend/l3/equivalent/test_combination_binomial_skeleton_generator.py
   - tests/backend/harness/test_combination_binomial_batch.py
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "w2_content_factory_completion_plan_v1.md B급 §6 항목7(경우의 수) — permutation_combination_skeleton_generator(S4-33) 형제·후속 명시 범위(원순열·중복순열·조합·이항정리) 중 중복조합·이항정리 착수. concept_src_id: H:12확통01-02(중복조합)·H:12확통01-03(이항정리) — concept graph 실존 확인. factorial 기반 Tier1(순열 생성기 선례 재사용)."
 updated: 2026-08-07
