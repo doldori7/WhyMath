@@ -109,14 +109,32 @@ area 학년독립·alias roundtrip 2 이벤트·재생성 멱등·충돌 접미 
 
 ---
 
-## 남은 후속 (별도 슬라이스·flag)
+## 종료 상태 (Part 9 코드 범위 완료 — 2026-08-05 close-out)
 
-- **`domain` 필드 정화**: `domain="[고]미적분"`은 여전히 교육과정 접두 보유 — 이번 범위(concept_id·
-  locale) 밖. Part 9 별건 후속으로 분리.
-- **seed 경로**: `seed.build_concept_id`는 NCIC 코드 경로라 name_ko가 없어 의미론 slug 불가 →
-  잠정 `math.seed.<code>` 네임스페이스(코퍼스 경로만 P2d 적용). 전문가 저작 시 canonical 발급.
-- **name_en/ja 저작**: `locales/en.json`·`ja.json` 충전은 i18n phase 후속(canonical 불변).
-- **RT/OLY 트랙**: 재수 유형카드·영재 정리 개통 시 area 어휘·registry migration 재검증.
+> **결론**: Part 9의 **코드 준수는 완료**됐다. 핵심 3항목(①②③)을 **P2d**(PR #409 머지)로,
+> [C] `domain` 정화를 **P2e**(PR #412 닫힘 → #709로 포팅·머지)로 시정했다. canonical ID 스킴
+> (`math.<area>.<slug>`)·locale 분리·`ids.yaml` registry·거버넌스 불변식(`curriculum_independence`·
+> `registry_parity`·`locale_parity`·`alias_roundtrip`)이 전부 정본화·CI 동결됐다. 실데이터 437 노드
+> 전건 canonical 준수·학년 토큰 0·domain 접두 0(재확인 2026-08-05).
+
+잔여 후속 3건은 **코드로 진전 불가**(콘텐츠 저작 또는 라이브 DB 필요)해 Part 9(코드 범위) **밖으로
+명시 이관**한다 — 스코핑(2026-08-05) 3중 blocker 확인:
+
+- **A. name_en/ja 저작** → **i18n 콘텐츠 저작 트랙**(도메인 파트너·검수). 실 산출물은 437 용어의
+  *번역*이라 AI 임의 생성 금지(CLAUDE.md). 현 `locales/{en,ja}.json == {}`이며 `test_en_ja_empty_phase1`이
+  이 빈 상태를 governance-lock. 백엔드 소비처 부재(`load_locale_en` 없음) — 저작이 착수돼도 별도 배선 필요.
+- **B. seed 경로** → **의도적 동결**(액션 불요). 의미 slug는 `name_ko`가 필요하나 NCIC-코드 seed 입력엔
+  없어 `math.seed.<code>` 잠정 네임스페이스를 쓴다(regex 준수·정상). seed 후보는 코퍼스에 도달하지 않고
+  전문가 저작 시 canonical 파이프라인에서 재발급 — Part 9 목적상 결함 아님.
+- **C. Alembic 라이브 재키** → **ops 트랙**(런바 유지). 재키 절차는 `backend_concept.py` 모듈 docstring에
+  런바로 보존(라이브 DB 형상 의존이라 무DB 저작·검증 불가·단일 head 유지). 게다가 대상 모듈이 이후
+  **S0-4b 레거시 격하**(`[LEGACY_SNAPSHOT · 런타임 호출자 0]`·런타임 진실원은 `atom_graph_v1`)라
+  재키 자체가 사실상 **moot** — 착수 전 우선순위·유효성 재검토 대상.
+- **RT/OLY 트랙**: 재수 유형카드·영재 정리 개통 시 area 어휘·registry migration 재검증(미래 콘텐츠 확장 시).
+
+**종료 근거**: 위 3건은 어느 것도 "무DB·무콘텐츠-생성 순수 코드 슬라이스"로 유의미한 진전이 없다
+(유일한 순수-코드 후보 = en/ja 커버리지 리포트 도구지만 소비처 없는 관측성 스캐폴딩·저가치). Part 9는
+코드 범위 완료로 종료하고, 잔여는 각 트랙(콘텐츠·ops)의 소관으로 넘긴다.
 
 ---
 

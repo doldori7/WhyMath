@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ADMIN-02-dead-tenancy-billing-columns
+title: "dead 스키마 정직화 — school_id·subscription_* 4컬럼 소비처 0건 정리"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — school_id·subscription_tier·subscription_started_at·subscription_renewed_at 4컬럼 소비처 0건 재현 + prod DB 비영행 존재 여부 확인(비영이면 드롭 대신 미사용 자인 주석+동결 테스트로 범위 재조정 — Kiki 확인 필요)"
+  - "② 드롭 마이그레이션 작성 + test_no_lockout_columns.py 컬럼 스냅샷 목록 동기화"
+  - "③ 유지 대상(school_type·school_region·grade — 실 소비처 있는 학생 프로필 속성)이 함께 지워지지 않음을 동결"
+  - "④ 전체 스위트 green(부분 스위트 통과를 전체 통과의 근거로 보고하지 않는다)"
+  - "⑤ 범위 밖 — organization/school/license 테이블 신설은 하지 않는다(D4·§5-③)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/user.py
+  - src/backend/whymath_backend/schema/user.py
+  - "src/backend/alembic/versions/*"
+  - tests/backend/api/test_no_lockout_columns.py
+session: null
+notes: "docs/architecture/operations_platform_gap_review.md §3 D2. user.py:93 school_id는 FK 없는 고아 컬럼, user.py:142-146 subscription_tier 등 3컬럼은 결제 시스템 부재로 읽는 코드 0건. account_security_gap_review.md:421 §4-⑧이 school_id 부재를 이미 자인했으나 정리는 안 됨. SEC-07이 좌석 없는 역할 3종은 안 만들었는데 같은 기준을 이미 있던 컬럼엔 적용 안 한 비대칭 해소. 반복 실수 8회차(§6) — 만들고 스키마를 읽지 않음."
+updated: 2026-08-03

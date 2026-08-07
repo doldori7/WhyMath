@@ -6,14 +6,13 @@ hermetic: 모델 생성만(DB·네트워크 불요).
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.strategy_graph.models import (
     STRATEGY_FAMILIES,
     STRATEGY_ID_PATTERN,
     STRATEGY_SLUGS,
     StrategyNode,
 )
+from pydantic import ValidationError
 
 
 def _valid(**overrides: object) -> StrategyNode:

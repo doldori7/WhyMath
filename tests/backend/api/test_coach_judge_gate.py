@@ -132,6 +132,15 @@ class _Result:
     def first(self) -> Any:
         return None
 
+    def scalar_one(self) -> Any:
+        # curate_hypothesis가 net_support(순지지도) 집계를 scalar_one으로 읽음 — 0.0(반박 아님).
+        return 0.0
+
+    def scalar_one_or_none(self) -> Any:
+        # PED-04: `_prev_hint_level_for`·`_session_recall_or_none`가 단일 스칼라를 이 API로
+        # 읽는다. 이력 없으니 None(첫 결정·회상 없음).
+        return None
+
 
 class _CapturingSession:
     """/v1/coach/sessions·turns용 — add/commit/refresh/get/execute 캡처(test_coach 패턴)."""

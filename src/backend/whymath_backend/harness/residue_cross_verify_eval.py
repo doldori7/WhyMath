@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Literal
 
 from whymath_backend.harness.corpus_audit_eval import AuditLabel, summarize
+from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
 from whymath_backend.l3.cross_verify import CrossVerifier, ResidueSubject
 from whymath_backend.l3.finite_probability import (
     FiniteProbabilityError,
@@ -47,7 +48,7 @@ from whymath_backend.l3.finite_probability import (
     verify_finite_count,
     verify_finite_probability,
 )
-from whymath_backend.l3.verification_tier import VerificationTier, read_verification_tier
+from whymath_backend.l3.verification_tier import VerificationTier
 
 __all__ = [
     "PilotRecord",
@@ -87,52 +88,40 @@ class PilotRecord:
     authored_by: str
 
 
-def _require_str(obj: dict[str, object], key: str, *, slug: str) -> str:
-    value = obj.get(key)
+def _require_str(value: object, *, slug: str, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"코퍼스 레코드 {slug}: 필수 문자열 필드 {key} 결측/형식오류")
+        raise ValueError(f"코퍼스 레코드 {slug}: 필수 문자열 필드 {field_name} 결측/형식오류")
     return value
 
 
 def load_pilot_records(path: Path) -> list[PilotRecord]:
-    """파일럿 코퍼스 JSONL → 레코드 목록. 파싱·필수 필드 오류는 즉시 예외(조용한 스킵 0).
+    """파일럿 코퍼스 JSONL → 레코드 목록. `load_problem_bank_records`(L1 정본) 경유(S4-17).
 
-    **왜 `load_problem_bank_records`(L1 정본)를 쓰지 않는가**: L1 `ProblemVerifyMeta`는 알려진
-    키만 옮기므로 신규 `verify.verification_tier`가 그 경로에서 **소실된다**. 이 감사 도구는
-    바로 그 등급을 읽어야 하므로 원시 JSONL을 직접 읽는다. 검증·적재 책임은 여전히 L1
-    정본의 몫이고, 여기서는 감사에 필요한 필드만 최소로 뽑는다(적재 경로 재구현 아님).
+    L1이 저작권 위생·`Problem` 스키마·`verify.verification_tier`(S4-17에서 L1 정식 필드로 승격)
+    를 이미 검증하므로 이 함수는 원시 JSONL을 다시 파싱하지 않는다 — 감사 도구가 로더를
+    우회하지 않는다. L1이 강제하지 않는 *감사 전용* 불변식(발문·정답·검산 조건이 비지 않아야
+    함)만 여기서 추가로 fail-loud 검증한다(조용한 스킵 0).
     """
     records: list[PilotRecord] = []
-    for line_num, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        stripped = raw.strip()
-        if not stripped:
-            continue
-        try:
-            obj = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"line {line_num}: JSON 파싱 실패({type(exc).__name__}) {exc}"
-            ) from exc
-        if not isinstance(obj, dict):
-            raise ValueError(f"line {line_num}: 레코드가 객체가 아님")
-        slug = _require_str(obj, "slug", slug=f"line {line_num}")
-        verify = obj.get("verify")
-        if not isinstance(verify, dict):
-            raise ValueError(f"코퍼스 레코드 {slug}: verify 절 결측 — 검산 재료 없이 감사 불가")
-        conditions = verify.get("conditions")
+    for bank_record in load_problem_bank_records(path):
+        slug = bank_record.slug
+        problem = bank_record.problem
+        conditions = bank_record.verify.conditions
         if not isinstance(conditions, str) or not conditions.strip():
-            raise ValueError(f"코퍼스 레코드 {slug}: verify.conditions가 단일 문자열이 아님")
-        generation_type = obj.get("generation_type")
+            raise ValueError(f"코퍼스 레코드 {slug}: verify 절 결측 — 검산 재료 없이 감사 불가")
+        tier_raw = bank_record.verify.verification_tier
         records.append(
             PilotRecord(
                 slug=slug,
-                question_text=_require_str(obj, "question_text", slug=slug),
-                answer=_require_str(obj, "answer", slug=slug),
-                answer_explanation=str(obj.get("answer_explanation", "")),
+                question_text=_require_str(
+                    problem.question_text, slug=slug, field_name="question_text"
+                ),
+                answer=_require_str(problem.answer, slug=slug, field_name="answer"),
+                answer_explanation=problem.answer_explanation or "",
                 conditions=conditions,
-                answer_kind=str(verify.get("answer_kind") or ""),
-                tier=read_verification_tier(verify),
-                authored_by=f"corpus:{generation_type}",
+                answer_kind=bank_record.verify.answer_kind or "",
+                tier=VerificationTier(tier_raw) if tier_raw is not None else None,
+                authored_by=f"corpus:{bank_record.provenance.generation_type}",
             )
         )
     return records

@@ -80,7 +80,7 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
@@ -1538,9 +1538,13 @@ async def get_my_learning_path(
          조회한다(`prerequisites`와 동일 인자).
       ② **L2 위상정렬** — `build_learning_path(session, gaps)`가 그 막힌 선수 집합 *내부*의
          직접 선수 엣지를 조회해 Kahn 위상정렬한다 — in-degree 0(선수 의존 없는 *근본*)을 먼저
-         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **추천의 depth/strength 정렬과 다르다**:
-         두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면 A를 먼저 다져야 한다(LTHC).
-         사이클(부분 적재 방어)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
+         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **제약 엣지가 있을 때만 추천의 depth/
+         strength 정렬과 달라진다**: 두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면
+         A를 먼저 다져야 한다(LTHC). 다만 기본값(`max_depth=1`)에서는 그런 제약 엣지가 0인
+         사례가 **96.4%**이고, 그때는 실질적으로 `_tiebreak`(weakness 등)만으로 정렬된다 —
+         응답의 `ordering_basis`(`"topological"|"tiebreak_only"|"empty"`)와
+         `ordering_edge_count`가 이 구분을 정직하게 노출한다(`PATH-02`). 사이클(부분 적재
+         방어, 실발생 0건)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
 
     L2 fetch + L2 정렬 *배선*만 여기(L5)가 소유하고(신규 로직 0), 순수 위상정렬·내부엣지 조회는
     L2(`build_learning_path`·`order_learning_path`)가 소유한다. user_id 스코핑·읽기 전용·
@@ -1693,6 +1697,81 @@ async def _load_weak_concept_weights(
     return _weak_concept_weights(candidate_ids, problem_concepts, mastery)
 
 
+# S4-14: CAT 형제 후보 필터 — problem_relation(변형·유사) 계보를 소비하는 첫 소비처(승격 없는
+# 영속 금지 원칙 — populate.py가 채운 관계를 여기서 처음 읽는다). 직전 오답 문항의 "형제"
+# (같은 뼈대 변형·인접 유사 문항)를 배제(같은 문제 반복 회피)하거나 가중 우대(약점 재출제)한다.
+_SIBLING_BOOST = 1.0
+"""형제 가중 배율 — `_WEAK_CONCEPT_BOOST`와 동일 스케일 정책(형제는 1+BOOST배·비형제는 중립)."""
+
+SiblingFilter = Annotated[
+    Literal["exclude", "include"] | None,
+    Query(
+        description=(
+            "직전 오답 문항의 형제(problem_relation 변형·유사) 후보 처리. 'exclude'=후보에서 "
+            "배제(같은 뼈대 연속 출제 회피), 'include'=정보량에 가중해 우대(오답 문항 변형 "
+            "재출제). 미지정(기본)=기존 동작 그대로(회귀 0 — 형제 조회 자체를 생략)."
+        )
+    ),
+]
+
+
+async def _last_incorrect_problem_id(session: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
+    """직전 오답 문항 id — `created_at` 최신순 1건.
+
+    `get_my_ability_history`(§6.1)와 동형으로 서버 default 컬럼 `created_at`을 쓴다(`started_at`은
+    nullable·미보장이라 정렬 축 부적합).
+    """
+    stmt = (
+        select(ProblemAttempt.problem_id)
+        .where(
+            ProblemAttempt.user_id == user_id,
+            ProblemAttempt.is_correct.is_(False),
+            ProblemAttempt.problem_id.isnot(None),
+        )
+        .order_by(ProblemAttempt.created_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _load_sibling_ids(session: AsyncSession, problem_id: uuid.UUID) -> set[uuid.UUID]:
+    """`problem_relation` 양방향(parent/related) 조회 — 변형·유사는 시맨틱상 *대칭 소비*라
+    방향 무관하게 상대편 id를 "형제"로 모은다(자기 자신은 스키마가 이미 금지하나 방어적 제외).
+    """
+    stmt = select(ProblemRelation.parent_problem_id, ProblemRelation.related_problem_id).where(
+        or_(
+            ProblemRelation.parent_problem_id == problem_id,
+            ProblemRelation.related_problem_id == problem_id,
+        )
+    )
+    siblings: set[uuid.UUID] = set()
+    for parent_id, related_id in (await session.execute(stmt)).all():
+        other = related_id if parent_id == problem_id else parent_id
+        if other != problem_id:
+            siblings.add(other)
+    return siblings
+
+
+def _sibling_weights(candidate_ids: list[uuid.UUID], sibling_ids: set[uuid.UUID]) -> list[float]:
+    """형제 후보 가중 — `_weak_concept_weights`와 동형(형제 1+BOOST배·비형제 중립 1.0)."""
+    return [1.0 + _SIBLING_BOOST if pid in sibling_ids else 1.0 for pid in candidate_ids]
+
+
+def _combine_weights(*weight_lists: list[float] | None) -> list[float] | None:
+    """None 아닌 가중 리스트들을 원소별 곱으로 합성(약점 가중 × 형제 가중 동시 사용 지원).
+
+    전부 None이면 None(가중 없음 — 기존 `select_weighted_item`/`recommend_suneung_index`의
+    "가중 없음=균등" 계약 보존).
+    """
+    present = [w for w in weight_lists if w is not None]
+    if not present:
+        return None
+    combined = list(present[0])
+    for other in present[1:]:
+        combined = [a * b for a, b in zip(combined, other, strict=True)]
+    return combined
+
+
 class NextProblemResponse(BaseModel):
     """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천 + 측정 정밀도."""
 
@@ -1767,6 +1846,7 @@ async def recommend_next_problem(
     mode: NextProblemMode = None,
     persona: SuneungPersona = Persona.A_일반고고3,
     purpose: NextProblemPurpose = "diagnosis",
+    sibling_filter: SiblingFilter = None,
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
@@ -1808,6 +1888,14 @@ async def recommend_next_problem(
     성공률 밴드(70~85%, 문헌값)에 드는 후보를 `l2.learning_band_weight`로 가중해 같은 곱
     결합 축(약점 가중·수능 가중과 동일 자리)에 얹는다 — 새 선택기는 만들지 않는다. 밴드
     임계는 실측 미보정이라 응답에 `band_calibrated=false`가 실린다(보정은 `S4-15` 승계).
+
+    CAT 형제 후보 필터(S4-14·`?sibling_filter`): `problem_relation`(변형·유사 계보)의 첫
+    소비처. 직전 오답 문항이 있을 때만 그 문항의 "형제"(양방향 관계로 이어진 문항)를 조회—
+    `exclude`는 후보 SQL에서 배제(같은 뼈대 연속 출제 회피), `include`는 정보량 가중을 곱해
+    우대(형제 = 변형·유사 문항 재출제로 오개념 재확인). 미지정이면 조회 자체를 생략해 기존
+    동작과 쿼리 수가 완전히 같다(회귀 0). 기본 CAT·수능 모드 양쪽에 동일 배선(형제 데이터는
+    mode 무관 — 일관성 우선). `prioritize_weak_concepts`·`purpose=learning`과 동시 지정 시
+    가중은 모두 곱으로 합성.
     """
     attempt_stmt = (
         select(
@@ -1830,6 +1918,14 @@ async def recommend_next_problem(
             responses.append((IrtItem(difficulty=b), bool(is_correct)))
     theta = estimate_ability(responses)
     attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
+
+    # S4-14 — sibling_filter 지정 + 직전 오답 존재 시에만 형제 조회(쿼리 0회 증가 보존 원칙 —
+    # 미지정이면 이 블록 전체가 생략돼 기존 동작과 완전히 동일).
+    sibling_ids: set[uuid.UUID] = set()
+    if sibling_filter is not None:
+        last_incorrect_id = await _last_incorrect_problem_id(session, user.user_id)
+        if last_incorrect_id is not None:
+            sibling_ids = await _load_sibling_ids(session, last_incorrect_id)
 
     # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
     administered_items = [item for item, _ in responses]
@@ -1860,6 +1956,8 @@ async def recommend_next_problem(
         )
         if attempted_ids:
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
+        if sibling_filter == "exclude" and sibling_ids:
+            suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(sibling_ids))
         # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
         suneung_stmt = suneung_stmt.order_by(
             func.abs(
@@ -1908,6 +2006,11 @@ async def recommend_next_problem(
                 if extra_weights is None
                 else [w * b for w, b in zip(extra_weights, band_weights, strict=True)]
             )
+        # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+        # _combine_weights가 무변경 통과 — 회귀 0).
+        if sibling_filter == "include" and sibling_ids and candidates:
+            suneung_sib_weights = _sibling_weights([p.problem_id for p in candidates], sibling_ids)
+            extra_weights = _combine_weights(extra_weights, suneung_sib_weights)
         chosen_index = recommend_suneung_index(
             theta, candidates, persona, extra_weights=extra_weights
         )
@@ -1965,6 +2068,8 @@ async def recommend_next_problem(
     ).where(Problem.difficulty_overall.isnot(None))
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
+    if sibling_filter == "exclude" and sibling_ids:
+        candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(sibling_ids))
     candidate_stmt = candidate_stmt.order_by(
         func.abs(
             func.coalesce(
@@ -2000,6 +2105,11 @@ async def recommend_next_problem(
             if weights is None
             else [w * b for w, b in zip(weights, band_weights, strict=True)]
         )
+    # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+    # _combine_weights가 무변경 통과 — 회귀 0).
+    if sibling_filter == "include" and sibling_ids and candidate_rows:
+        sib_weights = _sibling_weights([pid for pid, _d, _b in candidate_rows], sibling_ids)
+        weights = _combine_weights(weights, sib_weights)
 
     # REC-01: 응답 정직 표기 — 기본 CAT은 weak_concept 축만 존재(수능 우선순위 없음).
     # prioritize_weak_concepts=false면 축 자체가 빈 리스트('적용 안 됨'). true면 축은 항상
@@ -2370,17 +2480,18 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 4종 커버리지 맵 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — 본인 스코핑) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
 # 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-# value=None + status(NO_DATA) + note로 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다").
-# 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만*
-# 노출(타 학생 0·admin auth 범위 밖).
+# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)가
+# 3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)을 더 편입했다 — D1 writer가
+# 처음 만든 데이터의 첫 reader. 각 지표는 표본 0/부족이면 value=None + status(NO_DATA) + note로
+# 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다"). 코호트 전체 집계(user_id=None)는
+# ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만* 노출(타 학생 0·admin auth 범위 밖).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
+    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
     request: Request,
@@ -2390,15 +2501,22 @@ async def get_my_harness_metrics(
     until: UntilParam = None,
     mode: HarnessMetricsMode = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 + PED-04 3종 + S3-16 1종 — *본인* 집계
+    커버리지 맵.
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
     모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
-    value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
-    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
-    started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)
+    3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)도 편입됐다 — `DialogueTurn`
+    메타 컬럼 writer가 처음 만든 데이터의 첫 reader. S3-16(행동 텔레메트리 생산자 좌석)에서
+    ⑮ 도움 요청 대 제공 비(힌트요청/힌트제공 개수 비)도 편입됐다 — supply(힌트제공) 0건이면
+    NO_DATA. 각 지표는 표본 0/부족이면 value=None + status + note로 "무엇을 만들면 잴 수 있는지"를
+    정직하게 드러낸다(가짜 0/stub 금지). ⑨는 measured_at·⑩은 updated_at·⑪은 started_at
+    (resolution) 시간창을 쓰고, ⑫⑬은 대화 started_at·⑭⑮는 힌트제공/힌트요청 이벤트 event_at
+    시간창을 쓴다(mode 스코프는 ⑭⑮만 적용 — ⑫⑬은 대화 기반이라 mode 태그가 아직 실리지 않는다).
+    나머지는 started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·
+    서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
     422). user_id는 인증에서 주입(본인 집계만).

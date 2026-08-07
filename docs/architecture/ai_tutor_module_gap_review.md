@@ -190,6 +190,38 @@ policy) · `02_learner_model.md`(LearnerState·MasteryState 계약) · `03a_l3_r
 공통 원천이고, D3의 "이전 설명 성공" 필드는 D1 없이는 항상 None이며, D4는 파일럿(S3-01) *개시
 전*에 관측 기반을 깔아야 하므로 파일럿 잠금 대상이 아니다.
 
+**✅ D1·D2 구현 완료(2026-08-03, `PED-04-tutoring-decision-log`)** — 착수 시 첫 확인 항목 3건의
+확정 결과와 구현 중 발견한 설계 정정 1건을 기록한다:
+
+- **판정 ①(`socratic_strategy` 값 공간)**: 억지 매핑 대신 **이미 계산된 3값의 우선순위 사다리**로
+  채운다(`l4/turn_meta.resolve_socratic_strategy`) — ①개입 패턴(`InterventionPattern`→
+  `SocraticStrategy` 4종 매핑) ②답 미루기 2단계 이상(`reveals`가 단계 노출 계열)→단계분해
+  ③목표 Polya 단계 기본(REVIEW는 대응 없어 **NULL**). 현 생산 경로(`select_intervention`이
+  COUNTEREXAMPLE·REVERSE_REASONING 2종만 반환)에서 실제 도달 가능한 값은 4종
+  (`REACHABLE_STRATEGIES`)뿐 — 나머지 2종(예시제시·그래프그리기제안)은 매핑만 있고 생산자 0을
+  측정 note에 정직 표기(가짜 다양성 방지).
+- **판정 ②(턴 간 회전의 상태 원천)**: DB 조회도 인메모리 캐시도 아닌 **`targeted_step` 시퀀스에서
+  파생-온-리드**(`l4/turn_meta.derive_recent_categories`) — `SocraticCategory`를 담을 컬럼이
+  없고(위 정합상 다른 축), 신규 컬럼은 acceptance③(신규 스키마 0)과 충돌, 인메모리 세션 상태는
+  멀티 워커 HTTP에 존재하지 않는다. `targeted_step` 연속열을 `STAGE_DEFAULT`로 사영해 "기본
+  카테고리가 그대로 나갔던 턴"만 복원(오버라이드 의심 턴에서 절단 — 보수적).
+- **판정 ③(D2 새 dialogue의 `current_stage`)**: **구현 중 발견한 설계 정정** — 당초 설계는
+  "새 dialogue는 서버 파생 상태=기본값(UNDERSTAND)"이라 가정했으나, 기존 테스트
+  (`TestActiveHypothesesIntoSocratic`)가 **클라가 PLAN에서 직접 진입하는 것을 정당한 동작**으로
+  전제하고 있었다(실측 재확인 없이 문서만 보고 구현했으면 놓쳤을 회귀). `create_session`에는
+  *이 대화의* 턴 이력이 없어 서버가 arbitrate할 대상이 없다 — **`current_stage`는 클라가 고르는
+  초기 조건**(서버 역산 대상 아님)이고, `turn_count`(새 대화이므로 항상 0)·`prev_hint_level`
+  (진짜 서버 소유·타 세션에서 되찾음)만 D2가 관할한다. `append_turns`(턴 이력 있음)는 원안대로
+  세 필드 전부 서버 파생.
+- **`client_state_mismatch` 계측**: 리뷰가 "영속 좌석 없음"으로 축소를 예고한 항목 — 신규
+  `EventType`은 PG enum ALTER(마이그레이션)를 부르므로, 기존 `힌트제공` 이벤트의 `HintEventData`
+  페이로드에 `client_state_mismatch: bool` 필드로 동거시켜 신규 스키마 0을 지켰다.
+- **측정 3종**: ⑫ 발문 전략 다양성 ⑬ 연속 반복률(대화 경계 미교차) ⑭ 클라 상태 불일치율 —
+  `harness/wh1_evaluation.py` → `GET /v1/me/harness-metrics`.
+- **범위 밖으로 남긴 것**: `recent_categories`가 오버라이드 의심 턴(고신뢰 가설이 과거엔 있었고
+  지금은 없는 경우)을 완전히 재구성하지 못하는 잔여 오차 — 회전이 규칙①②보다 아래라 교수학적
+  손해는 없음(§8-③ 리스크로 설계 단계에서 이미 식별·수용).
+
 ### D1. 교수 결정 로그 writer + 세션 간 구조화 회상 (백로그 `PED-04`)
 
 **문제**: 결정은 이미 계산되는데 저장되지 않는다 → (a) 같은 전략을 반복해도 모른다 (b) 어떤

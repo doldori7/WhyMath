@@ -14,6 +14,7 @@ import '../../../theme/spacing.dart';
 import '../../ocr/data/ocr_models.dart';
 import '../../problems/application/active_problem.dart';
 import '../../problems/data/problem_models.dart';
+import '../../reports/presentation/defect_report_button.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
 import '../domain/latex_to_plain.dart';
@@ -203,6 +204,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             icon: const Icon(Icons.auto_awesome_outlined),
             tooltip: '약점 개념 장면 보기',
             onPressed: state.isSending ? null : _onRequestScene,
+          ),
+          // 결함 신고(RPT-01) — 문항·AI응답·수식 오류를 학생이 알릴 유일한 경로.
+          // 활성 문제가 있으면 대상 참조로 함께 실어 보낸다(자유 대화면 problemId=null).
+          DefectReportButton(
+            problemId: ref.watch(activeProblemProvider)?.problemId,
           ),
         ],
         // 슬로건을 부제로 — 답이 아닌 이유를 묻는다는 정체성을 항상 노출.

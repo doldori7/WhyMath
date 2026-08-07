@@ -131,7 +131,10 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
         overlap_block=_overlap_block_map(root, backlog, policy),
     )
     if remote_status not in ("ok", "disabled"):
-        print(f"⚠ 원격 claim 조회 불가({remote_status}) — 로컬 claim 정보만 반영", file=sys.stderr)
+        print(
+            f"⚠ 원격 claim 조회 불가({remote_status}) — 로컬 claim 정보만 반영",
+            file=sys.stderr,
+        )
 
     # 미머지 done 제외 (HARN-11) — 타 세션이 끝냈으나 머지 전인 태스크는 후보가 아니다.
     # fetch 없이 캐시된 remote-tracking ref만 본다(네트워크 0·실측 12ms): `next`는 자주
@@ -148,7 +151,8 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
             ready = [t for t in ready if t.id not in done_map]
         elif done_status != "ok":
             print(
-                f"⚠ 미머지 done 탐지 불가({done_status}) — 완료분이 섞였을 수 있음", file=sys.stderr
+                f"⚠ 미머지 done 탐지 불가({done_status}) — 완료분이 섞였을 수 있음",
+                file=sys.stderr,
             )
     if args.json:
         print(
@@ -269,7 +273,10 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
                 )
             return _fail(message)
         if result.status in ("offline", "error"):
-            print(f"⚠ 원격 CAS claim 불가({result.status}): {result.message}", file=sys.stderr)
+            print(
+                f"⚠ 원격 CAS claim 불가({result.status}): {result.message}",
+                file=sys.stderr,
+            )
             store.append_event(root, "claim_remote_unavailable", task.id, status=result.status)
             # [프리플라이트 3] 읽기측 교차 세션 탐지 (HARN-07) — CAS(쓰기)가 막힌
             # 환경의 2선 방어. HARN-09가 claim을 `harness-claims` 브랜치로 옮겨 CAS를
@@ -659,7 +666,11 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.notes = args.reason or gate.notes
     store.save_gates(root, sorted(backlog.gates.values(), key=lambda g: g.id))
     store.append_event(
-        root, f"gate_{args.gate_action}", gate.id, evidence=gate.evidence, reason=args.reason
+        root,
+        f"gate_{args.gate_action}",
+        gate.id,
+        evidence=gate.evidence,
+        reason=args.reason,
     )
     print(f"✔ {gate.id} → {gate.status}")
     return 0
@@ -793,22 +804,85 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     policy, _ = store.load_policy(root)
     try:
         remote_claimed, remote_status = _remote_claim_map(root, policy)
-    except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+    except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다(fail-open·침묵 금지)
         remote_claimed, remote_status = {}, "error"
+        print(
+            f"⚠ 원격 claim 조회 실패({type(exc).__name__}) — 로컬 정보만 반영",
+            file=sys.stderr,
+        )
 
-    # 장기 미머지 브랜치 경고 (HARN-13) — SessionStart 1회 비용, 정보성(브리핑을 막지 않음).
-    stale_branches: list[tuple[str, float, int]] = []
+    # 장기 미머지 브랜치 경고 (HARN-13 + 2026-08-05 3분류 확장) — SessionStart 1회 비용,
+    # 정보성(브리핑을 막지 않음). active_branches는 이미 계산해둔 remote_claimed의 브랜치
+    # 집합을 재사용한다 — 새 원격 조회 없이 "타 세션 진행중"을 판별하기 위함.
+    stale_branches: list[tuple[str, float, int, str, str]] = []
     stale_branch_status = "ok"
     if policy.remote_claims:
         try:
-            scan = remote_claims.scan_stale_branches(root)
+            scan = remote_claims.scan_stale_branches(
+                root, active_branches=frozenset(remote_claimed.values())
+            )
             stale_branch_status = scan.status
             if scan.status == "ok":
-                stale_branches = [(s.branch, s.age_days, s.ahead) for s in scan.stale]
+                stale_branches = [
+                    (s.branch, s.age_days, s.ahead, s.status, s.evidence) for s in scan.stale
+                ]
         except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
             stale_branch_status = "error"
     else:
         stale_branch_status = "disabled"
+
+    # 설계 문서 중복 착수 탐지 (HARN-14) — SessionStart 1회 비용, 나이 임계 없음(HARN-13의
+    # 3일 임계 아래에서 새는 것이 이 스캔의 존재 이유 — 문서 중복은 착수 당일이 가장 위험).
+    #
+    # 2026-08-06 병렬 세션 충돌 정정: 동일 브랜치명(claude/harn-14-doc-series-duplicate-
+    # detection)에서 독립 세션이 같은 태스크를 병행 구현해 커밋 41f42a82(scan_new_review_
+    # docs)를 먼저 푸시했다. 그 구현은 후보 파일을 3-dot diff(`{trunk}...{ref}`, merge-base
+    # 기준)로 얻는데, 이 저장소의 SQUASH 머지 관행에서는 **이미 병합된 브랜치도 오탐**한다
+    # — squash는 원본 브랜치 커밋을 트렁크의 조상으로 만들지 않아 merge-base가 옛 분기점에
+    # 고정되고, 그 시점 이후 트렁크에 흡수된 파일이 "신규 추가"로 계속 잡힌다(실측: 이미
+    # PR #666으로 머지된 claude/whymath-gamification-design-n3mf50에 대해 3-dot은
+    # gamification_module_gap_review.md를 거짓 양성으로 보고, 2-dot 직접 diff는 빈 목록을
+    # 정확히 반환 — 브랜치가 삭제되지 않는 한 이 오탐은 영구화된다). 이 아래 구현(2-dot
+    # 직접 diff, scan_doc_series_duplicates)을 정본으로 유지하고 3-dot 버전은 폐기한다.
+    doc_series_candidates: list[tuple[str, tuple[str, ...], str]] = []
+    doc_series_status = "ok"
+    if policy.remote_claims:
+        try:
+            doc_scan = remote_claims.scan_doc_series_duplicates(root)
+            doc_series_status = doc_scan.status
+            if doc_scan.status == "ok":
+                doc_series_candidates = [
+                    (c.branch, c.files, c.last_commit_at.isoformat()) for c in doc_scan.candidates
+                ]
+        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            doc_series_status = "error"
+    else:
+        doc_series_status = "disabled"
+
+    # 미머지 done 제외 (HARN-12 — next의 HARN-11 필터를 브리핑에도 배선). render_brief가
+    # 내부에서 계산하는 후보 집합과 동일하게(layer/subject/track 미지정) 구해 그 id만
+    # scan_remote_done에 묻는다 — fetch 없이 캐시 ref만(훅은 빠르고 네트워크 0이어야 함).
+    # 어떤 실패도 브리핑을 막지 않는다(fail-open) — 단 판정 불가를 조용히 넘기지 않는다.
+    done_excluded: dict[str, list[str]] = {}
+    try:
+        if policy.remote_claims:
+            ready, _ = selector.candidates(backlog, remote_claimed=remote_claimed)
+            if ready:
+                done_map, done_status = remote_claims.scan_remote_done(root, [t.id for t in ready])
+                done_excluded = {
+                    tid: [f.branch for f in finishers] for tid, finishers in done_map.items()
+                }
+                if done_status != "ok" and not done_excluded:
+                    print(
+                        f"⚠ 미머지 done 탐지 불가({done_status}) — 완료분이 후보에 섞였을 수 있음",
+                        file=sys.stderr,
+                    )
+    except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다(fail-open·침묵 금지)
+        done_excluded = {}
+        print(
+            f"⚠ 미머지 done 필터 실패({type(exc).__name__}) — 완료분이 후보에 섞였을 수 있음",
+            file=sys.stderr,
+        )
 
     print(
         report.render_brief(
@@ -820,6 +894,9 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             remote_status=remote_status,
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
+            done_excluded=done_excluded,
+            doc_series_candidates=doc_series_candidates,
+            doc_series_status=doc_series_status,
         )
     )
     return 0
@@ -906,7 +983,8 @@ def cmd_check_edit(root: Path, args: argparse.Namespace) -> int:
         errors = store.validate_backlog(backlog, schema_errors)
         if errors:
             print(
-                f"[빌드하네스] backlog 직접 편집 후 무결성 위반 {len(errors)}건:", file=sys.stderr
+                f"[빌드하네스] backlog 직접 편집 후 무결성 위반 {len(errors)}건:",
+                file=sys.stderr,
             )
             for error in errors[:10]:
                 print(f"  · {error}", file=sys.stderr)
@@ -1183,7 +1261,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--track")
     p.add_argument("--json", action="store_true")
     p.add_argument(
-        "--no-remote", action="store_true", dest="no_remote", help="원격 claim 조회 생략"
+        "--no-remote",
+        action="store_true",
+        dest="no_remote",
+        help="원격 claim 조회 생략",
     )
     p.set_defaults(func=cmd_next)
 
@@ -1283,7 +1364,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verbose", action="store_true", help="claim 메타(브랜치·시각) 포함")
     p.add_argument("--force", action="store_true", help="남의 claim 강제 해제")
     p.add_argument(
-        "--ttl-hours", type=int, dest="ttl_hours", help="reap TTL (기본: policy.claim_ttl_hours)"
+        "--ttl-hours",
+        type=int,
+        dest="ttl_hours",
+        help="reap TTL (기본: policy.claim_ttl_hours)",
     )
     p.add_argument("--apply", action="store_true", help="reap 실제 삭제 (기본 dry-run)")
     p.set_defaults(func=cmd_claims)

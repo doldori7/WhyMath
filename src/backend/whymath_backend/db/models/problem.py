@@ -86,6 +86,9 @@ class Problem(Base):
     )
     external_id: Mapped[str | None] = mapped_column(sa.String(64), unique=True)
     slug: Mapped[str | None] = mapped_column(sa.String(128), unique=True)
+    # 변형 계열 식별자(S4-18) — problem_id는 개체마다 불변, identity_id로 "같은 문제의
+    # 다른 표현" 계열(원본+rephrase 등)만 묶는다. FK 아님(자기 자신을 포함한 계열의 공유값).
+    identity_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid, index=True)
 
     # ===== 출처 =====
     source_type: Mapped[SourceType] = mapped_column(

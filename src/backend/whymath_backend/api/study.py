@@ -35,6 +35,7 @@ segments를 내므로(SOCRATIC=질문 중심·DIRECT=설명 중심…) 응답은
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -47,16 +48,19 @@ from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
 from whymath_backend.db.session import get_session
-from whymath_backend.l2.concept_diagnosis import compute_concept_diagnoses
+from whymath_backend.l2.irt import theta_to_mastery_proxy
+from whymath_backend.l2.learner_state import get_state
 from whymath_backend.l2.pedagogy_evidence import (
     record_pedagogy_outcome,
     record_pedagogy_treatment,
 )
-from whymath_backend.l4.content_supply import supply
+from whymath_backend.l4.content_supply import get_process_tally, supply
 from whymath_backend.l4.lthc import mastery_to_level
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
+
+logger = logging.getLogger("whymath.api.study")
 
 # 세션 의존성 — 모듈별 로컬 선언이 이 저장소 관례다(`api/scene.py`·`api/users.py` 동형).
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -123,26 +127,36 @@ async def _load_objective(session: AsyncSession, objective_id: str) -> LearningO
 async def _build_signals(
     session: AsyncSession, user_id: uuid.UUID, concept_code: str
 ) -> StudentSignals:
-    """L2 진단 → `StudentSignals` 조립 — **실재하는 신호만** 채운다.
+    """L2 학습자 상태(`get_state`) → `StudentSignals` 조립 — **실재하는 신호만** 채운다.
+
+    PED-05 리팩터: 예전엔 `compute_concept_diagnoses`를 직접 호출해 그 결과 리스트를 순회하며
+    `concept_code`가 일치하는 항목을 찾았다. `get_state()`가 내부적으로 *같은*
+    `compute_concept_diagnoses` 호출을 이미 하고 그 결과를 `mastery`/`domain_abilities` dict로
+    미리 인덱싱해 두므로, 이제 그 dict에서 O(1) lookup만 한다(쿼리 중복 0 — 리스트 순회가 dict
+    lookup으로 *방식만* 바뀌고 값은 비트동일).
+
+    `get_state().domain_abilities`는 raw IRT θ를 담는다(원래 `ConceptDiagnosis.irt_theta`와
+    동일 소스). `mastery_level` 산출은 원래처럼 **BKT 우선·없으면 IRT 프록시([0,1]) 폴백**이므로,
+    θ를 `theta_to_mastery_proxy`로 재환산한다(순수·결정론 함수라 원래 `irt_mastery_proxy`와
+    비트동일 값).
 
     진단이 없거나(신규 학생) 해당 개념이 진단 목록에 없으면 숙달 축은 비운 채로 둔다 — 없는 값을
     기본치로 채우면 선택기가 근거 없는 판단을 하게 된다(PED-02가 세운 "가짜 통과 금지" 규약).
     Polya 단계·턴 수·힌트는 대화 세션 축이라 여기서는 기본값이다(공급 진입 = 시도 전).
     """
-    diagnoses = await compute_concept_diagnoses(session, user_id)
-    for diagnosis in diagnoses:
-        if diagnosis.concept_code == concept_code:
-            mastery = (
-                diagnosis.bkt_mastery
-                if diagnosis.bkt_mastery is not None
-                else diagnosis.irt_mastery_proxy
-            )
-            return StudentSignals(
-                mastery_level=mastery_to_level(mastery) if mastery is not None else None,
-                bkt_mastery=diagnosis.bkt_mastery,
-                irt_theta=diagnosis.irt_theta,
-            )
-    return StudentSignals()
+    state = await get_state(session, user_id)
+    bkt_mastery = state.mastery.get(concept_code)
+    irt_theta = state.domain_abilities.get(concept_code)
+    mastery = (
+        bkt_mastery
+        if bkt_mastery is not None
+        else (theta_to_mastery_proxy(irt_theta) if irt_theta is not None else None)
+    )
+    return StudentSignals(
+        mastery_level=mastery_to_level(mastery) if mastery is not None else None,
+        bkt_mastery=bkt_mastery,
+        irt_theta=irt_theta,
+    )
 
 
 @router.post(
@@ -179,12 +193,27 @@ async def post_study_unit(
     concept_code = concept_codes[0]
 
     signals = await _build_signals(session, user.user_id, concept_code)
+    tally = get_process_tally()
     result = await supply(
         code=concept_code,
         signals=signals,
         session=session,
         cache=get_cache(request),
         k_type=str(objective.k_type),
+        tally=tally,
+    )
+    # 공급 경로 리포트 1줄 — 이중 회계의 in-process 축을 *프로덕션에서* 관측 가능하게 만든다.
+    # 어댑터별 비율을 함께 실어, 특정 교수법만 학생에게 도달하지 못하는 상태(전건 404)가 전체
+    # 평균에 묻히지 않게 한다. 학생 원문·식별자는 싣지 않는다(개념 code·전략·경로만).
+    logger.info(
+        "study supply — concept=%s strategy=%s source=%s fallback=%s "
+        "dsl_render_rate=%s strategy_render_rate=%s",
+        concept_code,
+        result.strategy.value,
+        result.content_source,
+        result.fallback_reason,
+        tally.dsl_render_rate,
+        tally.strategy_render_rate(result.strategy.value),
     )
     if result.rendered is None:
         # 생성 폴백을 켜지 않았으므로 렌더 실패 = 공급 불가. 처치도 기록하지 않는다 —
