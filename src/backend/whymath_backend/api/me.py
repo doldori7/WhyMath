@@ -80,7 +80,7 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
@@ -1697,6 +1697,81 @@ async def _load_weak_concept_weights(
     return _weak_concept_weights(candidate_ids, problem_concepts, mastery)
 
 
+# S4-14: CAT 형제 후보 필터 — problem_relation(변형·유사) 계보를 소비하는 첫 소비처(승격 없는
+# 영속 금지 원칙 — populate.py가 채운 관계를 여기서 처음 읽는다). 직전 오답 문항의 "형제"
+# (같은 뼈대 변형·인접 유사 문항)를 배제(같은 문제 반복 회피)하거나 가중 우대(약점 재출제)한다.
+_SIBLING_BOOST = 1.0
+"""형제 가중 배율 — `_WEAK_CONCEPT_BOOST`와 동일 스케일 정책(형제는 1+BOOST배·비형제는 중립)."""
+
+SiblingFilter = Annotated[
+    Literal["exclude", "include"] | None,
+    Query(
+        description=(
+            "직전 오답 문항의 형제(problem_relation 변형·유사) 후보 처리. 'exclude'=후보에서 "
+            "배제(같은 뼈대 연속 출제 회피), 'include'=정보량에 가중해 우대(오답 문항 변형 "
+            "재출제). 미지정(기본)=기존 동작 그대로(회귀 0 — 형제 조회 자체를 생략)."
+        )
+    ),
+]
+
+
+async def _last_incorrect_problem_id(session: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
+    """직전 오답 문항 id — `created_at` 최신순 1건.
+
+    `get_my_ability_history`(§6.1)와 동형으로 서버 default 컬럼 `created_at`을 쓴다(`started_at`은
+    nullable·미보장이라 정렬 축 부적합).
+    """
+    stmt = (
+        select(ProblemAttempt.problem_id)
+        .where(
+            ProblemAttempt.user_id == user_id,
+            ProblemAttempt.is_correct.is_(False),
+            ProblemAttempt.problem_id.isnot(None),
+        )
+        .order_by(ProblemAttempt.created_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _load_sibling_ids(session: AsyncSession, problem_id: uuid.UUID) -> set[uuid.UUID]:
+    """`problem_relation` 양방향(parent/related) 조회 — 변형·유사는 시맨틱상 *대칭 소비*라
+    방향 무관하게 상대편 id를 "형제"로 모은다(자기 자신은 스키마가 이미 금지하나 방어적 제외).
+    """
+    stmt = select(ProblemRelation.parent_problem_id, ProblemRelation.related_problem_id).where(
+        or_(
+            ProblemRelation.parent_problem_id == problem_id,
+            ProblemRelation.related_problem_id == problem_id,
+        )
+    )
+    siblings: set[uuid.UUID] = set()
+    for parent_id, related_id in (await session.execute(stmt)).all():
+        other = related_id if parent_id == problem_id else parent_id
+        if other != problem_id:
+            siblings.add(other)
+    return siblings
+
+
+def _sibling_weights(candidate_ids: list[uuid.UUID], sibling_ids: set[uuid.UUID]) -> list[float]:
+    """형제 후보 가중 — `_weak_concept_weights`와 동형(형제 1+BOOST배·비형제 중립 1.0)."""
+    return [1.0 + _SIBLING_BOOST if pid in sibling_ids else 1.0 for pid in candidate_ids]
+
+
+def _combine_weights(*weight_lists: list[float] | None) -> list[float] | None:
+    """None 아닌 가중 리스트들을 원소별 곱으로 합성(약점 가중 × 형제 가중 동시 사용 지원).
+
+    전부 None이면 None(가중 없음 — 기존 `select_weighted_item`/`recommend_suneung_index`의
+    "가중 없음=균등" 계약 보존).
+    """
+    present = [w for w in weight_lists if w is not None]
+    if not present:
+        return None
+    combined = list(present[0])
+    for other in present[1:]:
+        combined = [a * b for a, b in zip(combined, other, strict=True)]
+    return combined
+
+
 class NextProblemResponse(BaseModel):
     """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천 + 측정 정밀도."""
 
@@ -1771,6 +1846,7 @@ async def recommend_next_problem(
     mode: NextProblemMode = None,
     persona: SuneungPersona = Persona.A_일반고고3,
     purpose: NextProblemPurpose = "diagnosis",
+    sibling_filter: SiblingFilter = None,
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
@@ -1812,6 +1888,14 @@ async def recommend_next_problem(
     성공률 밴드(70~85%, 문헌값)에 드는 후보를 `l2.learning_band_weight`로 가중해 같은 곱
     결합 축(약점 가중·수능 가중과 동일 자리)에 얹는다 — 새 선택기는 만들지 않는다. 밴드
     임계는 실측 미보정이라 응답에 `band_calibrated=false`가 실린다(보정은 `S4-15` 승계).
+
+    CAT 형제 후보 필터(S4-14·`?sibling_filter`): `problem_relation`(변형·유사 계보)의 첫
+    소비처. 직전 오답 문항이 있을 때만 그 문항의 "형제"(양방향 관계로 이어진 문항)를 조회—
+    `exclude`는 후보 SQL에서 배제(같은 뼈대 연속 출제 회피), `include`는 정보량 가중을 곱해
+    우대(형제 = 변형·유사 문항 재출제로 오개념 재확인). 미지정이면 조회 자체를 생략해 기존
+    동작과 쿼리 수가 완전히 같다(회귀 0). 기본 CAT·수능 모드 양쪽에 동일 배선(형제 데이터는
+    mode 무관 — 일관성 우선). `prioritize_weak_concepts`·`purpose=learning`과 동시 지정 시
+    가중은 모두 곱으로 합성.
     """
     attempt_stmt = (
         select(
@@ -1834,6 +1918,14 @@ async def recommend_next_problem(
             responses.append((IrtItem(difficulty=b), bool(is_correct)))
     theta = estimate_ability(responses)
     attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
+
+    # S4-14 — sibling_filter 지정 + 직전 오답 존재 시에만 형제 조회(쿼리 0회 증가 보존 원칙 —
+    # 미지정이면 이 블록 전체가 생략돼 기존 동작과 완전히 동일).
+    sibling_ids: set[uuid.UUID] = set()
+    if sibling_filter is not None:
+        last_incorrect_id = await _last_incorrect_problem_id(session, user.user_id)
+        if last_incorrect_id is not None:
+            sibling_ids = await _load_sibling_ids(session, last_incorrect_id)
 
     # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
     administered_items = [item for item, _ in responses]
@@ -1864,6 +1956,8 @@ async def recommend_next_problem(
         )
         if attempted_ids:
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
+        if sibling_filter == "exclude" and sibling_ids:
+            suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(sibling_ids))
         # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
         suneung_stmt = suneung_stmt.order_by(
             func.abs(
@@ -1912,6 +2006,11 @@ async def recommend_next_problem(
                 if extra_weights is None
                 else [w * b for w, b in zip(extra_weights, band_weights, strict=True)]
             )
+        # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+        # _combine_weights가 무변경 통과 — 회귀 0).
+        if sibling_filter == "include" and sibling_ids and candidates:
+            suneung_sib_weights = _sibling_weights([p.problem_id for p in candidates], sibling_ids)
+            extra_weights = _combine_weights(extra_weights, suneung_sib_weights)
         chosen_index = recommend_suneung_index(
             theta, candidates, persona, extra_weights=extra_weights
         )
@@ -1969,6 +2068,8 @@ async def recommend_next_problem(
     ).where(Problem.difficulty_overall.isnot(None))
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
+    if sibling_filter == "exclude" and sibling_ids:
+        candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(sibling_ids))
     candidate_stmt = candidate_stmt.order_by(
         func.abs(
             func.coalesce(
@@ -2004,6 +2105,11 @@ async def recommend_next_problem(
             if weights is None
             else [w * b for w, b in zip(weights, band_weights, strict=True)]
         )
+    # S4-14 — 형제 가중은 다른 축들과 곱 결합(형제 필터 미지정이면 sibling_ids가 비어
+    # _combine_weights가 무변경 통과 — 회귀 0).
+    if sibling_filter == "include" and sibling_ids and candidate_rows:
+        sib_weights = _sibling_weights([pid for pid, _d, _b in candidate_rows], sibling_ids)
+        weights = _combine_weights(weights, sib_weights)
 
     # REC-01: 응답 정직 표기 — 기본 CAT은 weak_concept 축만 존재(수능 우선순위 없음).
     # prioritize_weak_concepts=false면 축 자체가 빈 리스트('적용 안 됨'). true면 축은 항상
