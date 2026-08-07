@@ -337,6 +337,64 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-07 (정리·하네스): **HARN-17 배선 이후 첫 실사용 — 재분류된 "미해결 15건" 중 실제 결정 대기 5건을 정리(4건 병합·1건 조사), 병합 도중 실물 conflict 1건과 태스크 ID 재충돌 1건을 실측 해결** (claude 정리, Kiki "남은 미해결 브랜치 정리 진행해줘")
+
+Kiki 요청 시점 기준 "미해결 6건"이 이미 15건으로 불어나 있었다(그 사이 병렬 세션들이 새
+브랜치를 만듦) — 이것 자체가 HARN-17의 3분류가 유용한 이유를 실증한다: 15건 중 실제
+Kiki 결정 대기는 이후 실측으로 5건뿐임이 드러났다.
+
+**처리 1 — 이미 열려 있던 docs/backlog 전용 triage PR 4건 병합**(#667 오개념 갭점검·#668
+풀이모듈 R2·#673 PATH-04·#687 문제은행 R2): 전부 4일 이상 방치돼 base가 stale했다.
+`mergeable_state: dirty/behind/unknown`이 반복 보고됐으나 매번 로컬 worktree dry-run
+(`git merge --no-commit --no-ff`)으로 **실제 충돌 0건**임을 먼저 확인한 뒤(이전 세션의
+false-dirty 패턴 재확인) `git merge origin/main`으로 각 브랜치를 갱신·재푸시해 CI를
+재구동시키는 방식으로 처리 — GitHub API가 보고하는 상태를 신뢰하지 않고 매번 로컬
+실측을 선행했다.
+
+**처리 2 — PR #707(S4-14 CAT 형제 필터) 병합**: 백엔드 lint·type·test 잡이 21분+ 걸려
+(전체 스위트 551초+커버리지) 다른 PR보다 오래 대기. 그린 확인 후 병합.
+
+**처리 3 — PR #687 병합 중 실제 conflict 발견·해결**: #667/#668/#673/#707이 먼저 병합되며
+main의 `backlog/tasks/S4-14-variant-lineage-persist.yaml`이 `status: done`(#707의 결과)으로
+바뀌어 있었는데, #687(4일 전 작성)은 같은 파일을 `status: todo` + 새 사람 게이트
+(`G-s4-14-variant-identity` — "rephrase 변형에 신규 slug를 발급할 것인가")로 덮어쓰려 했다
+— **텍스트 충돌이 아니라 판정 충돌**. 병합 전 `S4-21-rephrase-lineage-identity-decision.yaml`을
+직접 확인해, 그 게이트가 묻는 질문을 **Kiki가 이미 2026-07-29에 결정**(identity_id/Canonical
+분리 설계, artifacts 95421970)했고 #707도 이미 그 결정 위에서 구현했음을 실측 확인했다.
+main의 `done` 버전을 채택하고 **게이트는 등재하지 않았다**(이미 답 난 질문을 다시 묻는 게이트가
+됐을 것 — `problem_bank_gap_review_r2.md`에 편집자 부기로 기록). 동시에 #687의
+`HARN-14-gates-add-cli-path`가 그 사이 다른 세션의 `HARN-14-doc-series-duplicate-detection`
+(#714)과 ID 충돌 — HARN-15도 별도 사고로 이미 소진(HARN-16 notes)이라 **HARN-18**로 재배정,
+`events.ndjson`에 append-only 정정 이벤트(`id_rename`) 추가.
+
+**처리 4 — 6건 무-PR 브랜치 배경 조사**(서브에이전트 위임): PR이 아예 없거나 전부 closed·
+unmerged인 6개 브랜치를 각각 main 흡수 여부로 재판정. **2건은 이미 흡수 완료**(포팅 근거
+커밋 확인 — `eos-review-iyev91`→#669 merged 후 잔여는 사소, `eos-review-euolne`→#645·#648
+merged 후 남은 22줄도 main의 `ARCH-22` 정정문이 상위호환). **4건은 진짜 미해결**로 판정—
+`s3-02-live-remeasurement-tlthrr`(~3,664줄 실 코드: `l3/verify_final_answer.py`·
+`l4/completion.py` 신규 미착지 + `S3-26~28` ID 충돌), `data-platform-design-8ceaf5`
+(~2,035줄, `OPS-17/18` ID 충돌), `learning-path-design-gvku5q`·`assessment-design-jkwdzn`
+(둘 다 main이 같은 ID를 다른 주제로 이미 점유 — `PATH-01~03`·`ASM-01/02`). 이 4건은 병합이
+아니라 Kiki의 "재작성/명시적 폐기" 판단이 필요해 이 세션에서 처리하지 않고 보고만 한다.
+
+**처리 5 — 이미 폐기 확정된 4건 브랜치**(`service-review-9r21im`·`recommended-next-tasks-7isr8o`·
+`dsl-scalability-analysis-3rbgxr`·`math-dsl-risk-analysis-mwlomg`)는 이전 세션에서 이미
+전부 close 처리됐으나(#626/#490/#374 등, 전부 merged:false 확인) 브랜치 자체는 HARN-16의
+403 제약으로 컨테이너 세션이 못 지운다 — Kiki 로컬 삭제만 남음(코드 조치 불요).
+
+**재발방지 관점**: 이번 세션의 핵심 발견은 새 버그가 아니라 **HARN-17의 효용 실증**이다 —
+"미해결" 표기 자체가 브랜치의 실제 상태(이미 merged PR 존재·다른 세션 진행 중·완전 신규)를
+구분하지 못하던 과거와 달리, 이번엔 15건 중 5건만 실제 검토 대상임이 자동 분류로 즉시
+드러났다. 유일한 신규 패턴은 "동시 병합 중인 여러 PR이 같은 백로그 태스크 파일을 서로 다른
+전제로 편집"하는 경우 — 이는 자동 병합(git merge)이 텍스트 충돌 없이도 **의미 충돌**을
+통과시킬 수 있음을 보여준다. 대책은 새 규칙이 아니라 기존 원칙(CLAUDE.md "부분 스위트
+통과를 전체 통과 근거로 보고 금지"의 동형 — 부분 diff 병합을 전체 정합 근거로 보고 금지)의
+재확인: 백로그 파일이 얽힌 병합은 `validate` green만으로 끝내지 않고 해당 태스크의 최신
+main 상태를 직접 읽어 대조해야 한다.
+
+병합: #667(`c3ec44b7`)·#668(`d0639c78`)·#673(`1e146de2`→`f458453b`)·#707(`f37f4152`)·
+#687(`6e0027c9`). 코드 변경 0(전부 docs/backlog 전용 PR + #707은 이미 별도 세션이 완결).
+
 ### 2026-08-06 (구현·하네스): **HARN-14 구현 중 병렬 세션 충돌 실측 — 동일 브랜치명에 독립 세션이 같은 태스크를 선-구현·선-푸시, 그 구현의 3-dot diff가 SQUASH 머지 저장소에서 영구 오탐하는 버그를 발견해 정정 병합(강제푸시 없이)** (claude 구현·정정, Kiki "/drive")
 
 **컨텍스트**: `/drive`로 HARN-14(설계 문서 중복 착수 탐지 스캐너)를 구현하고
