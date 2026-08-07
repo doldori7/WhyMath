@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -19,13 +19,14 @@ acceptance:
   - "problem_bank_matrix_ops_v0 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False"
   - "coverage 리포트 재실행으로 실제 이동 확인(고등학교 커버율·행렬 영역 0커버 코드 감소)"
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - a6265ebb
 paths:
   - src/backend/whymath_backend/l3/equivalent/matrix_ops_skeleton_generator.py
   - src/backend/whymath_backend/harness/matrix_ops_batch.py
   - tests/backend/l3/equivalent/test_matrix_ops_skeleton_generator.py
   - tests/backend/harness/test_matrix_ops_batch.py
   - data/corpus/problem_bank_matrix_ops_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "학년축 최단경로 계획 §3 W2 두 번째 슬라이스(고등 0% 도메인). S4-22(초등 덧셈뺄셈)와 동일 패턴 — signature_index 답값기반 오탐 처방까지 그대로 재사용해 재발명 0으로 확인. 남은 고등 0% 도메인(집합과 명제·통계·적분법·이차곡선 등)·중등 증분·대학 축은 후속 슬라이스."
 updated: 2026-08-07
