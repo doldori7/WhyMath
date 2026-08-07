@@ -10,12 +10,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from typer.testing import CliRunner
-
 from data_pipeline.concept_graph.__main__ import app
 from data_pipeline.concept_graph.seed import build_concept_id
 from data_pipeline.ncic.load import write_json
 from data_pipeline.ncic.models import AchievementStandard
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

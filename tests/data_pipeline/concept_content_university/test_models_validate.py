@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.concept_content_university.models import (
     LICENSE_NOTICE,
     SOURCE_CITATION,
@@ -12,6 +10,7 @@ from data_pipeline.concept_content_university.models import (
     UniversityConceptContent,
 )
 from data_pipeline.concept_content_university.validate import validate_content
+from pydantic import ValidationError
 
 
 def _content(code: str = "CALC1-U1-S1", **over: object) -> UniversityConceptContent:

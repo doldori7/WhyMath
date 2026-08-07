@@ -419,6 +419,97 @@ v1에 배너 1줄.
 `ocr_controller.dart`가 503/401/422/네트워크를 **한 문구**로 흡수, 도달 카운터 0건. 미머지분이
 머지되면 무변별(②③)과 관측(④)은 해소되나 **학생 도달은 여전히 0회**다(활성화는 범위 밖) —
 달라지는 것은 "0회임이 보인다"는 점이다.
+### 2026-08-06 (구현·하네스): **HARN-14 구현 중 병렬 세션 충돌 실측 — 동일 브랜치명에 독립 세션이 같은 태스크를 선-구현·선-푸시, 그 구현의 3-dot diff가 SQUASH 머지 저장소에서 영구 오탐하는 버그를 발견해 정정 병합(강제푸시 없이)** (claude 구현·정정, Kiki "/drive")
+
+**컨텍스트**: `/drive`로 HARN-14(설계 문서 중복 착수 탐지 스캐너)를 구현하고
+`git push -u origin claude/harn-14-doc-series-duplicate-detection`을 실행하자
+non-fast-forward로 거부됐다. 원인은 네트워크 오류가 아니라 **동일 브랜치명에 독립
+세션(`session_01FDGzK95LSQfZbhMYVrdmjU`)이 같은 태스크를 병행 구현해 먼저 푸시**한
+것이었다(태스크 결정론적 브랜치명 규칙상 두 세션이 같은 이름으로 수렴). refs/claims
+403 상시 실패(2026-07-27 등재)가 만드는 바로 그 사각 — claim이 원격에 안 뜨니 두
+세션 다 "비어있다"로 보고 같은 next를 집었다. HARN-14 자신의 notes가 이미 기록한
+2026-08-04 사고(같은 원인·다른 형태: 그때는 설계 문서 중복, 이번은 구현 코드 중복)의
+**세 번째 반복**이자, 2026-07-27 OPS-07 병렬 구현 충돌의 재현이다.
+
+**판정**: 두 구현을 비교한 결과 **단순 폐기가 아니라 정정 병합**이 맞았다 — 상대 구현에
+검증 가능한 정합성 버그가 있었다. 상대는 신규 파일 판정에 3-dot diff(`{trunk}...{ref}`,
+merge-base 기준)를 썼는데, 이 저장소의 SQUASH 머지 관행에서는 **이미 병합된 브랜치도
+영구 오탐**한다 — squash는 원본 커밋을 트렁크의 조상으로 만들지 않아 merge-base가 옛
+분기점에 고정되기 때문이다(브랜치가 삭제되지 않는 한 오탐이 영구화됨). 실측: 이미
+PR #666으로 머지된 `claude/whymath-gamification-design-n3mf50`에 대해 3-dot diff는
+`gamification_module_gap_review.md`를 "신규 추가"로 오탐했고, 2-dot 직접 diff
+(`git diff A B`, 이 세션의 구현)는 정확히 빈 목록을 반환했다. 이 2-dot 대 3-dot 선택은
+사실 이 세션이 **구현 설계 단계에서 이미 한 번 발견하고 고친** 버그였다(HARN-14 자체
+설계 중 실측 → 회귀 테스트 `test_이미_SQUASH_머지된_문서는_오탐하지_않는다`로 고정) —
+상대 세션은 그 함정을 독립적으로 다시 밟았다.
+
+**처리**: `git merge origin/claude/harn-14-doc-series-duplicate-detection`(강제푸시
+없음 — "거부의 우회 금지"와 동형으로 "타 세션 작업의 무단 덮어쓰기 금지"도 지킨다)로
+양쪽 히스토리를 보존한 뒤, 충돌 4파일(`backlog.py`·`report.py`·`remote_claims.py`·
+`test_remote_claims.py`)에서 3-dot 구현(`scan_new_review_docs`·`ReviewDocFinding`
+등)과 그 전용 배선 테스트(`tests/infra/test_harness_brief_review_doc_wiring.py`)를
+전량 삭제하고 2-dot 구현(`scan_doc_series_duplicates`)만 정본으로 남겼다. 병합
+직후 비충돌 삽입 지점(conflict marker 밖)에 남아있던 `review_doc_findings` 참조
+1건이 `cmd_brief`를 NameError로 죽이고 있었는데, 정확히 이 부류를 잡으라고 같은
+세션에서 미리 만든 `tests/infra/test_session_start_brief_wiring.py`(엔드투엔드
+서브프로세스 실행 검증)가 즉시 잡아냈다 — 배선 실재성 테스트가 존재 이유를 스스로
+증명한 사례.
+
+**등재 없음**: 근본 원인(refs/claims 403)은 이미 `HARN-07` 소유이고 HARN-14 acceptance
+⑥이 명시적으로 범위 밖 동결했다 — 새 태스크나 규칙 대신 이 결정 로그로 세 번째 반복
+사례를 기록한다(재발방지대책은 기존 `HARN-07` 등재로 충족·CLAUDE.md "반복 실수" 조항).
+상세 진단·수정 커밋은 `claude/harn-14-doc-series-duplicate-detection` 브랜치 머지
+커밋 메시지 참조.
+
+### 2026-08-05 (진단·하네스): **"왜 머지가 안 되는가" Kiki 질문 진단 — 19개 stale-branch 경고 중 실제 방치는 6건뿐임을 `gh` 실측으로 확인, `HARN-13`을 3분류(`unresolved`/`ported`/`active`)로 확장 구현·완결(`HARN-17`)** (claude 진단·구현, Kiki 요청)
+
+**컨텍스트**: Kiki가 "작업이 꼬여서 머지·반영이 안 되는 문제를 지금 시스템이 걸러주지
+못한다"며 ①준비가 과했는데 부족한지 ②원래 놓칠 수밖에 없는 구조인지 ③Kiki 자신이 놓친
+작업이 있는지 ④기계적으로 했어야 하는데 안 한 게 있는지 진단·조치를 요청. 계기는
+SessionStart 브리핑의 "장기 미머지 브랜치" 19건 경고.
+
+**진단 방법**: `scripts/harness/*` 코드·`docs/standards/build_harness.md`·
+`parallel_sessions.md`·`MEMORY.md`·`backlog/tasks/HARN-*.yaml`을 Explore 에이전트 2건이
+교차 대조하고, 그 위에 **GitHub MCP(`list_pull_requests`)로 19개 브랜치 각각의 실제 PR
+이력을 직접 조회**했다 — 이 마지막 단계가 기존 진단(HARN-13/14/16 자신의 조사)에는 없던 축.
+
+**핵심 발견 — 19건은 균질하지 않았다**:
+  - **6건만 진짜 방치**: PR#374(34일)·#379(34일)·#412(32일)·#423(31일)·#490(27일)·
+    #626(8일)이 그냥 열린 채 대기 중 — 이게 Kiki가 실제로 챙겨야 할 대기열.
+  - **3건은 다른 세션이 지금 이 순간 claim 중**(`teaching-strategy-enfkqt`=PED-10,
+    `solution-review-40xspg`=S4-10, `s3-02-live-remeasurement-tlthrr`=S3-24/25) — 방치가
+    아니라 진행 중인 정상 작업인데 나이·ahead만 보는 기존 스캔은 구분하지 못했다.
+  - **10건은 이미 콘텐츠가 포팅 완료**됨 — `merge: claude/whymath-ai-tutor-design-953m1e
+    (PED-05, S3-16)`(PR#705), `merge: S3-26 손해 진행분 병합 — 65tsm4(...) 흡수`(PR#702),
+    `merge/S4-14-cat-sibling-filter`(PR#707) 등. 2026-07-30 Stage-1 회수 방법론("유용한
+    부분만 소형 PR로 뽑아 흡수")이 이후 표준 관행이 됐으나, **"뽑아냈으니 원본을 닫는다"가
+    빠져** 있어 이미 끝난 브랜치가 영구히 stale로 재경고됐다.
+
+**판정 — 질문 4개에 대한 답**: ①준비 과부족이 아니라 `HARN-06→…→16`이 정확히 의도대로
+반복 작동한 결과다 — 다만 모든 장치가 "경고"만 하고 "판단을 좁혀주지" 않았다. ②일부는
+구조적으로 불가피(컨테이너 세션 브랜치 삭제 403·`HARN-16`, 머지 확정은 Kiki 전유 관행)
+— 이 게이트 자체는 유지 대상. ③Kiki가 놓친 건 정확히 6건(위 PR 목록) — 19건 전체가
+아니다. ④기계 미비 3가지 확인: `Task` 스키마에 `branch`/`pr`/`merged` 필드 부재(설계상
+결정, HARN-11/12가 이미 다른 각도 커버) · `scan_stale_branches`가 CI 미배선·정보성뿐
+(`report.py` 주석에 명시) · **이번에 새로 확인**: 포팅됨/진행중/진짜미해결 3분류 부재가
+HARN-13·14·16 어디에도 없는 순수 미커버 구간이었다.
+
+**조치(같은 세션에서 구현 완결, Kiki가 "위에 더해 감지 로직도 지금 구현" 지시)**:
+`remote_claims.scan_stale_branches`에 `active_branches` 파라미터(호출부가 이미 계산해둔
+원격 claim 맵 재사용, 새 스캔 없음) + trunk 커밋 로그의 브랜치 세션 접미사(`-([a-z0-9]{6})$`)
+grep 기반 포팅 감지(`_find_ported_evidence`) 추가. `report.py` 브리핑 렌더링을 3섹션(미해결
+강조 / 포팅됨·진행중 참고)으로 분리 — 4-튜플 구입력은 전부 `unresolved`로 안전 폴백해
+하위호환 유지. `backlog.py cmd_brief`가 `active_branches`를 실제로 전달하도록 배선. 테스트
+229건(신규 12건 포함, 3분류 동시 변별력 실측 + CLI 레벨 배선 실재성 검증) 전체 통과,
+ruff·black(핀 버전) clean. `HARN-17-stale-branch-triage-classification` 등재(`backlog.py add`
+CLI 사용 — 손으로 번호 추론 금지 원칙 준수).
+
+**재발방지 관점**: "정보성 경고"는 항목 수가 늘어날수록 그 자체가 무시되기 쉬운 상태로
+열화한다(습관화) — 이번 조치는 새 텍스트 규칙이 아니라 **기존 HARN-13 신호의 신호 대
+잡음비를 낮추는 코드**로 등재했다(CLAUDE.md "텍스트 규칙 대신 코드/CI로" 원칙 재적용).
+범위 밖으로 남긴 것: GitHub PR API를 하네스 스캔 자체에 새로 연동(순수 git 기반 유지,
+새 외부 의존성 회피) · 브랜치 삭제·PR 머지 자동화(Kiki 전유 경계 유지) · CI 하드
+게이트로 승격(현재는 SessionStart 정보성 유지).
 ### 2026-08-05 (판정·문서): **Part 9(파일·ID 정책) 종료 처리 — 코드 범위 완료·잔여 3건 콘텐츠/ops 이관** (claude, Kiki 지시)
 
 **무엇/왜**: 플레이북 Part 9 준수 작업을 **종료**로 확정. 코드 범위는 완료됐다 — 핵심 ①(교육과정 무관 canonical `math.<area>.<slug>`)②(name_* locale 분리)③(`ids.yaml` registry)를 **P2d(PR #409)**로, [C] `domain` 접두 정화를 **P2e(PR #412 닫힘→#709 포팅·머지)**로 시정. ID 스킴·locale·registry·거버넌스 불변식(`curriculum_independence`·`registry_parity`·`locale_parity`·`alias_roundtrip`) 정본·CI 동결. 실데이터 437 노드 전건 canonical 준수·학년 토큰 0·domain 접두 0(재확인). **잔여 후속 3건은 코드로 진전 불가**해 범위 밖 명시 이관(스코핑 3중 blocker): **A. name_en/ja**=번역 콘텐츠(도메인 파트너 저작·검수·AI 임의생성 금지·소비처 부재·빈 상태 governance-lock), **B. seed 경로**=`name_ko` 부재로 의미 slug 불가·`math.seed.*` 잠정 **의도적 동결**(정상), **C. Alembic 재키**=라이브 DB 필요(런바 유지)+대상 모듈 S0-4b 레거시 격하(런타임 호출자 0)라 **moot**. 유일 순수-코드 후보(en/ja 커버리지 리포트)는 소비처 없는 저가치 스캐폴딩이라 미채택. **조치**: `docs/standards/part9_id_policy_review.md` "남은 후속"→"종료 상태" 개편(결론·이관 트랙 명시)·본 로그. **검증**: 문서 전용(코드/테스트/마이그레이션 0). **NOT**: en/ja 저작·seed 재발급·Alembic 재키(각 콘텐츠/ops 트랙 소관).

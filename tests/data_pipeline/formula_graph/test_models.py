@@ -6,9 +6,8 @@ hermetic: 모델 생성만(DB·네트워크 불요).
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from data_pipeline.formula_graph.models import FORMULA_ID_PATTERN, FormulaNode
+from pydantic import ValidationError
 
 
 def _valid(**overrides: object) -> FormulaNode:

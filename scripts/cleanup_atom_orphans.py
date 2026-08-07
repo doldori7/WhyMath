@@ -184,7 +184,9 @@ def _cleanup(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="prod 원자 코드 정리 — orphan(미적 raw)·은퇴 원자(ledger) 공용 (가드·dry-run 기본)"
+        description=(
+            "prod 원자 코드 정리 — orphan(미적 raw)·은퇴 원자(ledger) 공용 (가드·dry-run 기본)"
+        )
     )
     parser.add_argument(
         "--confirm",

@@ -11,9 +11,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import store
 
 import backlog as cli
-import store
 
 
 @pytest.fixture
@@ -31,10 +31,12 @@ def _run_git(repo: Path, *argv: str) -> str:
 
 
 class TestSeed:
-    def test_시딩_결과는_validate_green(self, seeded_repo: Path):
+    def test_seed_result_is_validate_green(self, seeded_repo: Path):
+        """시딩_결과는_validate_green"""
         assert cli.main(["validate"]) == 0
 
-    def test_게이트_6종_시딩(self, seeded_repo: Path):
+    def test_seeds_six_gate_types(self, seeded_repo: Path):
+        """게이트_6종_시딩"""
         backlog, _ = store.load_backlog(seeded_repo)
         assert set(backlog.gates) == {
             "G-phaiakes9-key",
@@ -45,14 +47,16 @@ class TestSeed:
             "G-s5-subject-expansion",
         }
 
-    def test_E축은_하드락_상태(self, seeded_repo: Path, capsys):
+    def test_e_axis_is_hard_locked(self, seeded_repo: Path, capsys):
+        """E축은_하드락_상태"""
         # S5 확장 게이트 통과 전에는 물리 등 E축 태스크가 next에 절대 등장하지 않는다
         assert cli.main(["next", "--n", "50", "--json"]) == 0
         ids = [item["id"] for item in json.loads(capsys.readouterr().out)]
         assert ids  # 후보 자체는 존재
         assert not any(tid.startswith("E") for tid in ids)
 
-    def test_다과목_태스크_시딩_확인(self, seeded_repo: Path):
+    def test_seeds_multi_subject_tasks(self, seeded_repo: Path):
+        """다과목_태스크_시딩_확인"""
         backlog, _ = store.load_backlog(seeded_repo)
         subjects = {t.subject for t in backlog.tasks.values()}
         # 물리·화학·생물·지구과학·역사사회·국어·영어가 백로그에 실재해야 한다
@@ -66,12 +70,14 @@ class TestSeed:
             "english",
         } <= subjects
 
-    def test_재시딩은_force_없이_거부(self, seeded_repo: Path):
+    def test_reseed_without_force_rejected(self, seeded_repo: Path):
+        """재시딩은_force_없이_거부"""
         assert cli.main(["seed"]) == 1
 
 
 class TestLifecycle:
-    def test_start_done_왕복(self, seeded_repo: Path, capsys):
+    def test_start_done_roundtrip(self, seeded_repo: Path, capsys):
+        """start_done_왕복"""
         # 게이트 없는 즉시 착수 가능 태스크 하나를 골라 start→done
         assert cli.main(["next", "--n", "1", "--json"]) == 0
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
@@ -87,17 +93,20 @@ class TestLifecycle:
         assert "PR #999" in backlog.tasks[task_id].artifacts
         assert backlog.tasks[task_id].session is None
 
-    def test_증적_없는_done_거부(self, seeded_repo: Path, capsys):
+    def test_done_without_artifact_rejected(self, seeded_repo: Path, capsys):
+        """증적_없는_done_거부"""
         assert cli.main(["next", "--n", "1", "--json"]) == 0
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
         assert cli.main(["start", task_id, "--session", "b"]) == 0
         assert cli.main(["done", task_id]) == 1  # --artifact 없음 → 거부
 
-    def test_게이트_대기_태스크는_start_거부(self, seeded_repo: Path):
+    def test_gate_pending_task_start_rejected(self, seeded_repo: Path):
+        """게이트_대기_태스크는_start_거부"""
         # S1-12는 G-phaiakes9-key(pending) 필요 → 착수 거부
         assert cli.main(["start", "S1-12-phaiakes9-live-verify"]) == 1
 
-    def test_todo가_아닌_태스크_start_거부(self, seeded_repo: Path, capsys):
+    def test_non_todo_task_start_rejected(self, seeded_repo: Path, capsys):
+        """todo가_아닌_태스크_start_거부"""
         assert cli.main(["next", "--n", "1", "--json"]) == 0
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
         assert cli.main(["start", task_id, "--session", "b1"]) == 0
@@ -116,10 +125,12 @@ class TestLifecycle:
 
 
 class TestGatesCli:
-    def test_evidence_없는_clear_거부(self, seeded_repo: Path):
+    def test_clear_without_evidence_rejected(self, seeded_repo: Path):
+        """evidence_없는_clear_거부"""
         assert cli.main(["gates", "clear", "G-phaiakes9-key"]) == 1
 
-    def test_clear_후_의존_태스크_해금(self, seeded_repo: Path, capsys):
+    def test_clear_unblocks_dependent_task(self, seeded_repo: Path, capsys):
+        """clear_후_의존_태스크_해금"""
         assert (
             cli.main(
                 ["gates", "clear", "G-phaiakes9-key", "--evidence", "라이브 키 투입 커밋 abc123"]
@@ -133,7 +144,8 @@ class TestGatesCli:
 
 
 class TestAdd:
-    def test_add로_태스크_생성(self, seeded_repo: Path):
+    def test_add_creates_task(self, seeded_repo: Path):
+        """add로_태스크_생성"""
         assert (
             cli.main(
                 [
@@ -155,7 +167,8 @@ class TestAdd:
         backlog, _ = store.load_backlog(seeded_repo)
         assert "S2-90-new-task" in backlog.tasks
 
-    def test_무결성_위반_add_거부(self, seeded_repo: Path):
+    def test_add_with_integrity_violation_rejected(self, seeded_repo: Path):
+        """무결성_위반_add_거부"""
         # 존재하지 않는 의존성 → 거부
         assert (
             cli.main(
@@ -201,19 +214,26 @@ class TestIdNumberCollision:
             ]
         )
 
-    def test_같은_번호_다른_슬러그_거부(self, seeded_repo: Path):
+    def test_same_number_different_slug_rejected(self, seeded_repo: Path):
+        """같은_번호_다른_슬러그_거부"""
         assert self._add("S2-90-first") == 0
         assert self._add("S2-90-second-slug") == 1  # 번호 충돌
         backlog, _ = store.load_backlog(seeded_repo)
         assert "S2-90-second-slug" not in backlog.tasks
 
-    def test_다른_번호는_통과(self, seeded_repo: Path):
-        """변별력 — 충돌이 아닌 것까지 막으면 그건 게이트가 아니라 고장이다."""
+    def test_different_number_passes(self, seeded_repo: Path):
+        """다른_번호는_통과
+
+        변별력 — 충돌이 아닌 것까지 막으면 그건 게이트가 아니라 고장이다.
+        """
         assert self._add("S2-90-first") == 0
         assert self._add("S2-91-different-number") == 0
 
-    def test_원격_claim이_점유한_번호도_거부(self, seeded_repo: Path, monkeypatch):
-        """로컬 백로그엔 없지만 *타 세션이 인플라이트*인 번호 — 실제 사고 형태."""
+    def test_number_held_by_remote_claim_rejected(self, seeded_repo: Path, monkeypatch):
+        """원격_claim이_점유한_번호도_거부
+
+        로컬 백로그엔 없지만 *타 세션이 인플라이트*인 번호 — 실제 사고 형태.
+        """
         import remote_claims
 
         claim = remote_claims.RemoteClaim(
@@ -224,8 +244,10 @@ class TestIdNumberCollision:
         backlog, _ = store.load_backlog(seeded_repo)
         assert "S2-95-my-slug" not in backlog.tasks
 
-    def test_같은_full_ID_재등재는_충돌이_아니다(self, seeded_repo: Path, monkeypatch):
-        """다른 클론에서 같은 태스크를 재등재하는 것(시딩·복제 세션)은 정상 경로다.
+    def test_same_full_id_readd_is_not_a_collision(self, seeded_repo: Path, monkeypatch):
+        """같은_full_ID_재등재는_충돌이_아니다
+
+        다른 클론에서 같은 태스크를 재등재하는 것(시딩·복제 세션)은 정상 경로다.
 
         구현 중 실제로 이걸 막아 기존 교차세션 테스트 5건을 깨뜨렸다 — 번호 참조가
         모호해지는 것은 **슬러그가 다를 때**뿐이므로, 동일 ID는 통과해야 한다.
@@ -238,10 +260,13 @@ class TestIdNumberCollision:
         monkeypatch.setattr(remote_claims, "list_claims", lambda root, **kw: ([claim], "ok"))
         assert self._add("S2-97-same-task") == 0
 
-    def test_원격_조회_실패는_등재를_막지_않되_경고한다(
+    def test_remote_lookup_failure_warns_but_does_not_block_add(
         self, seeded_repo: Path, monkeypatch, capsys
     ):
-        """fail-open — 단 침묵 금지(예외 타입명 노출·CLAUDE.md 침묵 실패 금지)."""
+        """원격_조회_실패는_등재를_막지_않되_경고한다
+
+        fail-open — 단 침묵 금지(예외 타입명 노출·CLAUDE.md 침묵 실패 금지).
+        """
         import remote_claims
 
         def _boom(root, **kw):
@@ -252,8 +277,11 @@ class TestIdNumberCollision:
         captured = capsys.readouterr()
         assert "RuntimeError" in captured.err
 
-    def test_validate가_머지된_충돌을_잡는다(self, seeded_repo: Path):
-        """2선 방어 — add를 우회해 손 편집으로 들어온 충돌도 validate가 실패시킨다."""
+    def test_validate_catches_merged_collision(self, seeded_repo: Path):
+        """validate가_머지된_충돌을_잡는다
+
+        2선 방어 — add를 우회해 손 편집으로 들어온 충돌도 validate가 실패시킨다.
+        """
         assert self._add("S2-90-first") == 0
         backlog, _ = store.load_backlog(seeded_repo)
         smuggled = backlog.tasks["S2-90-first"]
@@ -261,8 +289,11 @@ class TestIdNumberCollision:
         store.save_task(seeded_repo, smuggled)
         assert cli.main(["validate"]) == 1
 
-    def test_grandfather_번호는_통과(self, seeded_repo: Path):
-        """이미 머지된 과거 충돌(개명 시 참조 파손)은 사유와 함께 면제된다."""
+    def test_grandfathered_number_passes(self, seeded_repo: Path):
+        """grandfather_번호는_통과
+
+        이미 머지된 과거 충돌(개명 시 참조 파손)은 사유와 함께 면제된다.
+        """
         backlog, _ = store.load_backlog(seeded_repo)
         assert store._id_number_collisions(["ARCH-13-a", "ARCH-13-b"]) == []
         assert store._id_number_collisions(["ZZ-01-a", "ZZ-01-b"]), "면제 아닌 번호는 잡혀야 함"
@@ -288,11 +319,13 @@ class TestCheckStop:
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(stdin_payload)))
         return cli.main(["check-stop"])
 
-    def test_재진입은_즉시_통과(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_reentry_passes_immediately(self, seeded_repo: Path, monkeypatch, capsys):
+        """재진입은_즉시_통과"""
         self._claim_and_commit(seeded_repo, capsys)
         assert self._invoke(monkeypatch, {"stop_hook_active": True}) == 0
 
-    def test_진행중_태스크_미갱신이면_차단(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_blocks_when_in_progress_task_not_updated(self, seeded_repo: Path, monkeypatch, capsys):
+        """진행중_태스크_미갱신이면_차단"""
         # claim 커밋 이후 태스크 파일 변경 없이 코드 커밋만 있으면… claim 커밋이
         # 이미 태스크 파일을 포함하므로 통과 — 여기서는 claim을 base(main)에 합쳐
         # "브랜치 diff에 태스크 파일이 없는" 상태를 재현한다
@@ -308,16 +341,19 @@ class TestCheckStop:
         assert code == 2
         assert task_id in err
 
-    def test_태스크_갱신했으면_통과(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_passes_when_task_updated(self, seeded_repo: Path, monkeypatch, capsys):
+        """태스크_갱신했으면_통과"""
         self._claim_and_commit(seeded_repo, capsys)
         # claim 커밋(태스크 파일 변경 포함)이 브랜치 diff에 있으므로 통과해야 한다
         assert self._invoke(monkeypatch, {}) == 0
 
-    def test_claim_없으면_통과(self, seeded_repo: Path, monkeypatch):
+    def test_passes_when_no_claim(self, seeded_repo: Path, monkeypatch):
+        """claim_없으면_통과"""
         _run_git(seeded_repo, "checkout", "-b", "idle-branch")
         assert self._invoke(monkeypatch, {}) == 0
 
-    def test_main_브랜치는_통과(self, seeded_repo: Path, monkeypatch):
+    def test_main_branch_passes(self, seeded_repo: Path, monkeypatch):
+        """main_브랜치는_통과"""
         assert self._invoke(monkeypatch, {}) == 0
 
 
@@ -327,10 +363,12 @@ class TestCheckEdit:
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
         return cli.main(["check-edit"])
 
-    def test_backlog_외_파일은_무시(self, seeded_repo: Path, monkeypatch):
+    def test_non_backlog_file_ignored(self, seeded_repo: Path, monkeypatch):
+        """backlog_외_파일은_무시"""
         assert self._invoke(monkeypatch, "/repo/src/backend/app.py") == 0
 
-    def test_backlog_직접_편집으로_깨지면_차단(self, seeded_repo: Path, monkeypatch):
+    def test_blocked_when_direct_backlog_edit_breaks_it(self, seeded_repo: Path, monkeypatch):
+        """backlog_직접_편집으로_깨지면_차단"""
         path = seeded_repo / "backlog" / "tasks" / "S2-03-problem-concept-relink.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace("layer: backend", "layer: frontend"),
@@ -338,19 +376,22 @@ class TestCheckEdit:
         )
         assert self._invoke(monkeypatch, str(path)) == 2
 
-    def test_정상_편집은_통과(self, seeded_repo: Path, monkeypatch):
+    def test_valid_edit_passes(self, seeded_repo: Path, monkeypatch):
+        """정상_편집은_통과"""
         path = seeded_repo / "backlog" / "tasks" / "S2-03-problem-concept-relink.yaml"
         assert self._invoke(monkeypatch, str(path)) == 0
 
 
 class TestReporting:
-    def test_status_출력에_현재_스테이지와_게이트(self, seeded_repo: Path, capsys):
+    def test_status_output_has_current_stage_and_gates(self, seeded_repo: Path, capsys):
+        """status_출력에_현재_스테이지와_게이트"""
         assert cli.main(["status"]) == 0
         out = capsys.readouterr().out
         assert "S1" in out
         assert "G-phaiakes9-key" in out
 
-    def test_brief_출력에_다음_후보와_리마인드(self, seeded_repo: Path, capsys):
+    def test_brief_output_has_next_candidate_and_reminder(self, seeded_repo: Path, capsys):
+        """brief_출력에_다음_후보와_리마인드"""
         assert cli.main(["brief", "--format", "hook"]) == 0
         out = capsys.readouterr().out
         assert "[빌드하네스 브리핑]" in out
@@ -378,7 +419,8 @@ class TestRemoteClaimCli:
         assert cli.main(["next", "--n", str(n), "--json"]) == 0
         return [row["id"] for row in json.loads(capsys.readouterr().out)]
 
-    def test_start가_원격_claim을_생성한다(self, bare_remote, monkeypatch, capsys):
+    def test_start_creates_remote_claim(self, bare_remote, monkeypatch, capsys):
+        """start가_원격_claim을_생성한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -390,7 +432,8 @@ class TestRemoteClaimCli:
         assert status == "ok"
         assert [c.task_id for c in claims] == [task_id]
 
-    def test_레이스_두_세션_같은_태스크는_후발이_거부된다(self, bare_remote, monkeypatch, capsys):
+    def test_race_two_sessions_same_task_latecomer_rejected(self, bare_remote, monkeypatch, capsys):
+        """레이스_두_세션_같은_태스크는_후발이_거부된다"""
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -406,7 +449,8 @@ class TestRemoteClaimCli:
         backlog, _ = store.load_backlog(repo_b)
         assert backlog.tasks[task_id].status == "todo"
 
-    def test_done이_원격_claim을_해제한다(self, bare_remote, monkeypatch, capsys):
+    def test_done_releases_remote_claim(self, bare_remote, monkeypatch, capsys):
+        """done이_원격_claim을_해제한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -417,7 +461,8 @@ class TestRemoteClaimCli:
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
 
-    def test_block이_원격_claim을_해제한다(self, bare_remote, monkeypatch, capsys):
+    def test_block_releases_remote_claim(self, bare_remote, monkeypatch, capsys):
+        """block이_원격_claim을_해제한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -428,7 +473,8 @@ class TestRemoteClaimCli:
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
 
-    def test_no_remote_플래그는_원격을_생략한다(self, bare_remote, monkeypatch, capsys):
+    def test_no_remote_flag_skips_remote(self, bare_remote, monkeypatch, capsys):
+        """no_remote_플래그는_원격을_생략한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -439,7 +485,8 @@ class TestRemoteClaimCli:
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
 
-    def test_원격_없어도_start는_진행된다_fail_open(self, seeded_repo: Path, capsys):
+    def test_start_proceeds_without_remote_fail_open(self, seeded_repo: Path, capsys):
+        """원격_없어도_start는_진행된다_fail_open"""
         # origin이 아예 없는 저장소 — offline 경고 후 로컬 claim으로 진행
         [task_id] = self._next_ids(capsys)
         assert cli.main(["start", task_id]) == 0
@@ -460,7 +507,8 @@ class TestRemoteClaimCli:
         # 내 claim이므로 force 불필요
         assert cli.main(["claims", "release", task_id]) == 0
 
-    def test_claims_reap_고아_ref_청소(self, bare_remote, monkeypatch, capsys):
+    def test_claims_reap_cleans_orphan_refs(self, bare_remote, monkeypatch, capsys):
+        """claims_reap_고아_ref_청소"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         task_a, task_b = self._next_ids(capsys, n=2)
@@ -555,7 +603,8 @@ class TestReadSideFallback:
         raw = (repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
         return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
-    def test_CAS_성공이면_읽기측_탐지를_호출하지_않는다(self, bare_remote, monkeypatch, capsys):
+    def test_cas_success_skips_readside_scan(self, bare_remote, monkeypatch, capsys):
+        """CAS_성공이면_읽기측_탐지를_호출하지_않는다"""
         # 폴백은 CAS 실패 시에만 — 성공 경로에서 전체 브랜치 fetch(~5초)를 물면 안 된다
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
@@ -564,7 +613,8 @@ class TestReadSideFallback:
         assert "원격 claim: ok" in capsys.readouterr().out
         assert calls == []
 
-    def test_no_remote는_폴백도_건너뛴다(self, bare_remote, monkeypatch, capsys):
+    def test_no_remote_skips_fallback_too(self, bare_remote, monkeypatch, capsys):
+        """no_remote는_폴백도_건너뛴다"""
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
         self._force_cas_failure(monkeypatch)
@@ -573,7 +623,10 @@ class TestReadSideFallback:
         assert "원격 claim: disabled" in capsys.readouterr().out
         assert calls == []
 
-    def test_CAS_실패_타세션이_in_progress면_착수_거부(self, bare_remote, monkeypatch, capsys):
+    def test_cas_failure_other_session_in_progress_start_rejected(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """CAS_실패_타세션이_in_progress면_착수_거부"""
         # 사고 그대로의 재현: 두 세션이 같은 태스크를 잡되 CAS는 상시 실패한다
         _, clone = bare_remote
         repo_a = self._seeded_clone(clone, monkeypatch, "session-a")
@@ -599,9 +652,10 @@ class TestReadSideFallback:
         assert conflicts and conflicts[-1]["id"] == self.TASK_ID
         assert "claude/session-a:claude/session-a" in conflicts[-1]["holders"]
 
-    def test_CAS_실패_충돌_없으면_진행하고_부분방어임을_고지한다(
+    def test_cas_failure_no_conflict_proceeds_with_partial_protection_notice(
         self, bare_remote, monkeypatch, capsys
     ):
+        """CAS_실패_충돌_없으면_진행하고_부분방어임을_고지한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         self._force_cas_failure(monkeypatch)
@@ -613,7 +667,10 @@ class TestReadSideFallback:
         backlog, _ = store.load_backlog(repo)
         assert backlog.tasks[self.TASK_ID].status == "in_progress"
 
-    def test_CAS_실패_내_세션의_in_progress는_진행_허용(self, bare_remote, monkeypatch, capsys):
+    def test_cas_failure_own_session_in_progress_allows_proceeding(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """CAS_실패_내_세션의_in_progress는_진행_허용"""
         # 자기 claim을 자기가 막으면 안 된다 (브랜치를 이미 push한 세션의 재진입)
         _, clone = bare_remote
         repo_a = self._seeded_clone(clone, monkeypatch, "session-a")
@@ -626,9 +683,10 @@ class TestReadSideFallback:
         assert cli.main(["start", self.TASK_ID]) == 0
         assert "중복 in_progress 없음" in capsys.readouterr().err
 
-    def test_폴백까지_실패하면_보호없음을_명시하고_fail_open(
+    def test_fallback_failure_states_no_protection_and_fail_opens(
         self, bare_remote, monkeypatch, capsys
     ):
+        """폴백까지_실패하면_보호없음을_명시하고_fail_open"""
         import remote_claims
 
         _, clone = bare_remote
@@ -764,9 +822,10 @@ class TestReadSideStaleHandling:
         self._force_cas_failure(monkeypatch)
         return repo_b
 
-    def test_규칙A_트렁크가_done이면_착수를_허용하고_제외사유를_보고한다(
+    def test_rule_a_trunk_done_allows_start_and_reports_exclusion_reason(
         self, bare_remote, monkeypatch, capsys
     ):
+        """규칙A_트렁크가_done이면_착수를_허용하고_제외사유를_보고한다"""
         _, clone = bare_remote
         repo_b = self._setup(clone, monkeypatch, "done")
         capsys.readouterr()
@@ -782,7 +841,8 @@ class TestReadSideStaleHandling:
         ]
         assert skipped and "claude/session-a:trunk_done" in skipped[-1]["skipped"]
 
-    def test_규칙A_역_트렁크가_todo면_여전히_차단한다(self, bare_remote, monkeypatch, capsys):
+    def test_rule_a_inverse_trunk_todo_still_blocks(self, bare_remote, monkeypatch, capsys):
+        """규칙A_역_트렁크가_todo면_여전히_차단한다"""
         # 규칙 A가 보호를 과잉 무력화하면 안 된다 (착륙하지 않은 태스크)
         _, clone = bare_remote
         repo_b = self._setup(clone, monkeypatch, "todo")
@@ -795,9 +855,10 @@ class TestReadSideStaleHandling:
         backlog, _ = store.load_backlog(repo_b)
         assert backlog.tasks[self.TASK_ID].status == "todo"
 
-    def test_규칙B_트렁크의_잔존_in_progress는_홀더가_아니다(
+    def test_rule_b_trunk_residual_in_progress_is_not_a_holder(
         self, bare_remote, monkeypatch, capsys
     ):
+        """규칙B_트렁크의_잔존_in_progress는_홀더가_아니다"""
         # done 미기입 머지로 main에 in_progress가 남은 상태 (실측 OPS-07 사례)
         _, clone = bare_remote
         self._setup(
@@ -809,9 +870,10 @@ class TestReadSideStaleHandling:
         assert "trunk_not_session" in err
         assert "main" in err
 
-    def test_규칙C_플래그는_이_태스크만_무시하고_포기항목을_경고한다(
+    def test_rule_c_flag_ignores_only_this_task_and_warns_what_is_skipped(
         self, bare_remote, monkeypatch, capsys
     ):
+        """규칙C_플래그는_이_태스크만_무시하고_포기항목을_경고한다"""
         _, clone = bare_remote
         repo_b = self._setup(clone, monkeypatch, "todo")  # 규칙 A 미적용 = 실 홀더
         capsys.readouterr()
@@ -827,7 +889,10 @@ class TestReadSideStaleHandling:
         assert ignored and ignored[-1]["id"] == self.TASK_ID
         assert "claude/session-a:claude/session-a" in ignored[-1]["holders"]
 
-    def test_규칙C는_다른_태스크의_보호를_끄지_않는다(self, bare_remote, monkeypatch, capsys):
+    def test_rule_c_does_not_disable_protection_for_other_tasks(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """규칙C는_다른_태스크의_보호를_끄지_않는다"""
         # 세분 우회 — 플래그를 쓴 태스크 외에는 그대로 차단돼야 한다
         _, clone = bare_remote
         other = "T8-02-other-stale"
@@ -883,7 +948,8 @@ class TestReadSideStaleHandling:
         backlog, _ = store.load_backlog(repo_b)
         assert backlog.tasks[other].status == "todo"
 
-    def test_규칙C는_CAS_conflict를_무시하지_않는다(self, bare_remote, monkeypatch, capsys):
+    def test_rule_c_does_not_ignore_cas_conflict(self, bare_remote, monkeypatch, capsys):
+        """규칙C는_CAS_conflict를_무시하지_않는다"""
         # 확정 신호(CAS)는 우회 대상이 아니다 — 플래그의 사정거리를 명시한다
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
@@ -895,7 +961,8 @@ class TestReadSideStaleHandling:
         assert "이미 원격 claim" in err
         assert "읽기측" in err
 
-    def test_규칙C_무시할_판정이_없으면_효과없음을_말한다(self, bare_remote, monkeypatch, capsys):
+    def test_rule_c_states_no_effect_when_nothing_to_ignore(self, bare_remote, monkeypatch, capsys):
+        """규칙C_무시할_판정이_없으면_효과없음을_말한다"""
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         self._force_cas_failure(monkeypatch)
@@ -949,7 +1016,8 @@ class TestStartOverlapPreflight:
         capsys.readouterr()
         return "T9-01-overlap-a", "T9-02-overlap-b"
 
-    def test_warn_모드_경고_후_진행(self, seeded_repo: Path, capsys):
+    def test_warn_mode_warns_then_proceeds(self, seeded_repo: Path, capsys):
+        """warn_모드_경고_후_진행"""
         a, b = self._add_two_overlapping(capsys)
         assert cli.main(["start", a, "--session", "claude/other", "--no-remote"]) == 0
         capsys.readouterr()
@@ -961,7 +1029,8 @@ class TestStartOverlapPreflight:
         assert '"action": "policy_warn"' in events
         assert '"rule": "path_overlap"' in events
 
-    def test_block_모드_착수_거부(self, seeded_repo: Path, capsys):
+    def test_block_mode_start_rejected(self, seeded_repo: Path, capsys):
+        """block_모드_착수_거부"""
         import store as store_mod
         from models import Policy
 
@@ -974,7 +1043,10 @@ class TestStartOverlapPreflight:
         backlog, _ = store.load_backlog(seeded_repo)
         assert backlog.tasks[b].status == "todo"  # 거부 시 상태 불변
 
-    def test_paths_미선언_태스크는_겹침_검사_제외(self, seeded_repo: Path, capsys):
+    def test_task_without_declared_paths_excluded_from_overlap_check(
+        self, seeded_repo: Path, capsys
+    ):
+        """paths_미선언_태스크는_겹침_검사_제외"""
         capsys.readouterr()
         assert cli.main(["next", "--n", "1", "--json", "--no-remote"]) == 0
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
@@ -993,21 +1065,27 @@ class TestCheckEditPolicy:
     def _on_branch(self, repo: Path, name: str) -> None:
         subprocess.run(["git", "checkout", "-q", "-b", name], cwd=repo, check=True)
 
-    def test_main_브랜치는_전부_통과(self, seeded_repo: Path, monkeypatch):
+    def test_main_branch_all_pass(self, seeded_repo: Path, monkeypatch):
+        """main_브랜치는_전부_통과"""
         assert self._invoke(monkeypatch, str(seeded_repo / "src" / "x.py")) == 0
 
-    def test_adhoc_edit_claim_없이_코드_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_adhoc_edit_code_edit_without_claim_warns(self, seeded_repo: Path, monkeypatch, capsys):
+        """adhoc_edit_claim_없이_코드_편집_경고"""
         self._on_branch(seeded_repo, "claude/adhoc-session")
         code = self._invoke(monkeypatch, str(seeded_repo / "src" / "backend" / "app.py"))
         assert code == 0  # warn 모드 — 차단하지 않음
         assert "adhoc_edit" in capsys.readouterr().err
 
-    def test_adhoc_edit_비코드_파일은_해당_없음(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_adhoc_edit_non_code_file_not_applicable(self, seeded_repo: Path, monkeypatch, capsys):
+        """adhoc_edit_비코드_파일은_해당_없음"""
         self._on_branch(seeded_repo, "claude/adhoc-session")
         assert self._invoke(monkeypatch, str(seeded_repo / "MEMORY.md")) == 0
         assert "adhoc_edit" not in capsys.readouterr().err
 
-    def test_scope_drift_선언_범위_밖_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_scope_drift_edit_outside_declared_scope_warns(
+        self, seeded_repo: Path, monkeypatch, capsys
+    ):
+        """scope_drift_선언_범위_밖_편집_경고"""
         self._on_branch(seeded_repo, "claude/drift-session")
         assert (
             cli.main(
@@ -1036,7 +1114,10 @@ class TestCheckEditPolicy:
         assert self._invoke(monkeypatch, str(seeded_repo / "src/mobile/lib/main.dart")) == 0
         assert "scope_drift" in capsys.readouterr().err
 
-    def test_path_overlap_타_세션_범위_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_path_overlap_edit_in_other_session_scope_warns(
+        self, seeded_repo: Path, monkeypatch, capsys
+    ):
+        """path_overlap_타_세션_범위_편집_경고"""
         self._on_branch(seeded_repo, "claude/my-session")
         assert (
             cli.main(
@@ -1069,7 +1150,8 @@ class TestCheckEditPolicy:
         assert "path_overlap" in err
         assert "T9-04-other-task" in err
 
-    def test_block_모드는_편집을_차단한다(self, seeded_repo: Path, monkeypatch, capsys):
+    def test_block_mode_blocks_edit(self, seeded_repo: Path, monkeypatch, capsys):
+        """block_모드는_편집을_차단한다"""
         import store as store_mod
         from models import Policy
 
@@ -1078,7 +1160,8 @@ class TestCheckEditPolicy:
         code = self._invoke(monkeypatch, str(seeded_repo / "src" / "backend" / "app.py"))
         assert code == 2
 
-    def test_예외_시_무조건_통과_fail_open(self, seeded_repo: Path, monkeypatch):
+    def test_exception_always_passes_fail_open(self, seeded_repo: Path, monkeypatch):
+        """예외_시_무조건_통과_fail_open"""
         self._on_branch(seeded_repo, "claude/failopen-session")
         # 정책 로드가 터져도 훅은 개발을 볼모로 잡지 않는다
         monkeypatch.setattr(
@@ -1088,13 +1171,15 @@ class TestCheckEditPolicy:
 
 
 class TestPolicyCli:
-    def test_policy_show_기본값(self, seeded_repo: Path, capsys):
+    def test_policy_show_defaults(self, seeded_repo: Path, capsys):
+        """policy_show_기본값"""
         capsys.readouterr()
         assert cli.main(["policy", "show"]) == 0
         out = capsys.readouterr().out
         assert "path_overlap: warn" in out
 
-    def test_policy_report_경고_집계(self, seeded_repo: Path, capsys):
+    def test_policy_report_aggregates_warnings(self, seeded_repo: Path, capsys):
+        """policy_report_경고_집계"""
         # 인위적으로 policy_warn 이벤트 적재 후 리포트 확인
         store.append_event(
             seeded_repo, "policy_warn", "-", rule="adhoc_edit", file="src/x.py", mode="warn"
@@ -1155,9 +1240,10 @@ class TestCrossSessionOverlap:
         )
         return "T8-05-cross-a", "T8-06-cross-b"
 
-    def test_start_프리플라이트가_원격_claim_태스크와의_겹침을_잡는다(
+    def test_start_preflight_catches_overlap_with_remote_claimed_task(
         self, bare_remote, monkeypatch, capsys
     ):
+        """start_프리플라이트가_원격_claim_태스크와의_겹침을_잡는다"""
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
         a, b = self._add_overlapping_pair()
@@ -1174,7 +1260,10 @@ class TestCrossSessionOverlap:
         assert "파일 범위 겹침" in err
         assert a in err  # 원격 claim 기반으로 A와의 겹침을 식별
 
-    def test_check_edit이_캐시로_교차_세션_겹침을_잡는다(self, bare_remote, monkeypatch, capsys):
+    def test_check_edit_catches_cross_session_overlap_via_cache(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """check_edit이_캐시로_교차_세션_겹침을_잡는다"""
         _, clone = bare_remote
         self._seeded_clone(clone, monkeypatch, "session-a")
         a, _ = self._add_overlapping_pair()
@@ -1223,20 +1312,23 @@ class TestHumanOwnerLifecycle:
         capsys.readouterr()
         return task_id
 
-    def test_as_없이_start_거부_및_안내(self, seeded_repo: Path, capsys):
+    def test_start_without_as_rejected_with_guidance(self, seeded_repo: Path, capsys):
+        """as_없이_start_거부_및_안내"""
         task_id = self._add_human_task(capsys)
         assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 1
         err = capsys.readouterr().err
         assert "owner" in err
         assert "--as kiki" in err  # 거부→소유자 이관 안내(명령 동봉)
 
-    def test_as_불일치_거부(self, seeded_repo: Path, capsys):
+    def test_as_mismatch_rejected(self, seeded_repo: Path, capsys):
+        """as_불일치_거부"""
         task_id = self._add_human_task(capsys)
         assert cli.main(["start", task_id, "--as", "partner", "--session", "b", "--no-remote"]) == 1
         err = capsys.readouterr().err
         assert "불일치" in err
 
-    def test_소유자_본인_start_done_왕복(self, seeded_repo: Path, capsys):
+    def test_owner_self_start_done_roundtrip(self, seeded_repo: Path, capsys):
+        """소유자_본인_start_done_왕복"""
         task_id = self._add_human_task(capsys)
         # 소유자 본인 기입 — start
         assert (
@@ -1261,13 +1353,14 @@ class TestHumanOwnerLifecycle:
         ]
         assert {r["action"] for r in human_events} == {"start", "done"}
 
-    def test_사람_태스크는_next_후보_불변_미노출(self, seeded_repo: Path, capsys):
+    def test_human_task_never_shown_as_next_candidate(self, seeded_repo: Path, capsys):
+        """사람_태스크는_next_후보_불변_미노출"""
         task_id = self._add_human_task(capsys)
         assert cli.main(["next", "--n", "50", "--json", "--no-remote"]) == 0
         ids = [t["id"] for t in json.loads(capsys.readouterr().out)]
         assert task_id not in ids
 
-    def test_claude_태스크에_as는_불일치_거부(self, seeded_repo: Path, capsys):
+    def test_as_on_claude_task_rejected_as_mismatch(self, seeded_repo: Path, capsys):
         """owner=claude 태스크에 --as kiki를 주면 불일치로 거부(오용 방지)."""
         assert cli.main(["next", "--n", "1", "--json"]) == 0
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
@@ -1329,7 +1422,8 @@ class TestUnmergedDoneDetection:
         self._push_branch(other, "claude/finisher")
         return other
 
-    def test_start가_미머지_done을_차단한다(self, bare_remote, monkeypatch, capsys):
+    def test_start_blocks_unmerged_done(self, bare_remote, monkeypatch, capsys):
+        """start가_미머지_done을_차단한다"""
         _, clone = bare_remote
         self._finished_elsewhere(clone, monkeypatch)
 
@@ -1339,7 +1433,8 @@ class TestUnmergedDoneDetection:
         captured = capsys.readouterr()
         assert "이미" in captured.err and "claude/finisher" in captured.err
 
-    def test_next가_미머지_done을_후보에서_제외한다(self, bare_remote, monkeypatch, capsys):
+    def test_next_excludes_unmerged_done_from_candidates(self, bare_remote, monkeypatch, capsys):
+        """next가_미머지_done을_후보에서_제외한다"""
         _, clone = bare_remote
         self._finished_elsewhere(clone, monkeypatch)
 
@@ -1351,8 +1446,11 @@ class TestUnmergedDoneDetection:
         assert self.TASK_ID not in captured.out, "완료된 태스크가 후보로 노출되면 안 된다"
         assert "후보 제외" in captured.err and self.TASK_ID in captured.err
 
-    def test_미완료_태스크는_통과한다(self, bare_remote, monkeypatch, capsys):
-        """변별력 — 진행 중이 아닌 평범한 태스크까지 막으면 게이트가 아니라 고장이다."""
+    def test_incomplete_task_passes(self, bare_remote, monkeypatch, capsys):
+        """미완료_태스크는_통과한다
+
+        변별력 — 진행 중이 아닌 평범한 태스크까지 막으면 게이트가 아니라 고장이다.
+        """
         _, clone = bare_remote
         other = self._seeded_clone(clone, monkeypatch, "finisher")
         self._push_branch(other, "claude/finisher")  # todo 상태 그대로 push
@@ -1360,8 +1458,11 @@ class TestUnmergedDoneDetection:
         self._seeded_clone(clone, monkeypatch, "newcomer")
         assert cli.main(["start", self.TASK_ID]) == 0
 
-    def test_brief가_미머지_done을_후보에서_제외한다(self, bare_remote, monkeypatch, capsys):
-        """HARN-12 — next(HARN-11)의 필터가 브리핑(SessionStart 훅 진입점)에도 배선됐는지."""
+    def test_brief_excludes_unmerged_done_from_candidates(self, bare_remote, monkeypatch, capsys):
+        """brief가_미머지_done을_후보에서_제외한다
+
+        HARN-12 — next(HARN-11)의 필터가 브리핑(SessionStart 훅 진입점)에도 배선됐는지.
+        """
         _, clone = bare_remote
         self._finished_elsewhere(clone, monkeypatch)
 
@@ -1373,10 +1474,13 @@ class TestUnmergedDoneDetection:
         candidates = captured.out.split("다음 착수 후보")[-1]
         assert self.TASK_ID not in candidates, "완료된 태스크가 브리핑 후보로 노출되면 안 된다"
 
-    def test_brief는_미머지_done_필터_실패에도_막히지_않는다(
+    def test_brief_not_blocked_by_unmerged_done_filter_failure(
         self, bare_remote, monkeypatch, capsys
     ):
-        """변별력 — scan_remote_done이 예외를 던져도 브리핑은 fail-open으로 통과해야 한다."""
+        """brief는_미머지_done_필터_실패에도_막히지_않는다
+
+        변별력 — scan_remote_done이 예외를 던져도 브리핑은 fail-open으로 통과해야 한다.
+        """
         import remote_claims
 
         _, clone = bare_remote
@@ -1394,14 +1498,51 @@ class TestUnmergedDoneDetection:
         assert "RuntimeError" in captured.err, "예외를 삼키면 안 된다(무타입 침묵 실패 금지)"
         assert "[빌드하네스 브리핑]" in captured.out  # 정상 브리핑 본문은 그대로 출력됨
 
-    def test_ignore_remote_claim으로_우회_가능하다(self, bare_remote, monkeypatch, capsys):
-        """그 브랜치가 폐기된 경우의 탈출구 — 단 무엇을 감수하는지 경고한다."""
+    def test_ignore_remote_claim_allows_bypass(self, bare_remote, monkeypatch, capsys):
+        """ignore_remote_claim으로_우회_가능하다
+
+        그 브랜치가 폐기된 경우의 탈출구 — 단 무엇을 감수하는지 경고한다.
+        """
         _, clone = bare_remote
         self._finished_elsewhere(clone, monkeypatch)
 
         self._seeded_clone(clone, monkeypatch, "newcomer")
         assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 0
         assert "중복 구현 위험" in capsys.readouterr().err
+
+
+class TestStaleBranchClassificationWiring:
+    """brief(cmd_brief)가 active_branches를 실제로 scan_stale_branches에 넘기는지 —
+    "장치가 존재함"과 "실제로 배선됨"은 다르다(OPS-10 배선 실재성 패턴). 2026-08-05
+    3분류 확장(HARN-13 잔여)의 배선 축.
+    """
+
+    def test_brief_passes_remote_claim_branches_as_active_branches(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """brief가_원격_claim_브랜치를_active_branches로_전달한다"""
+        import remote_claims
+
+        _, clone = bare_remote
+        other = clone("claimer")
+        assert remote_claims.claim(other, "S1-01-claimed", "claude/claimer").status == "ok"
+
+        mine = clone("newcomer")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        captured_kwargs: dict = {}
+        original = remote_claims.scan_stale_branches
+
+        def spy(root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original(root, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "scan_stale_branches", spy)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+        assert "active_branches" in captured_kwargs, "cmd_brief가 active_branches를 안 넘기면 회귀"
+        assert "claude/claimer" in captured_kwargs["active_branches"]
 
 
 class TestBatchBlobParsing:
@@ -1422,7 +1563,8 @@ class TestBatchBlobParsing:
                 out.append(f"{'a' * 40} blob {size}\n{body}\n")
         return "".join(out)
 
-    def test_한국어_본문이_섞여도_요청_순서대로_정렬된다(self):
+    def test_korean_body_mixed_in_still_ordered_by_request_order(self):
+        """한국어_본문이_섞여도_요청_순서대로_정렬된다"""
         import remote_claims
 
         bodies = [
@@ -1438,7 +1580,8 @@ class TestBatchBlobParsing:
         assert remote_claims._top_level_field(parsed[2], "status") == "done"
         assert remote_claims._top_level_field(parsed[3], "status") == "in_progress"
 
-    def test_ascii_전용에서도_동일하다(self):
+    def test_ascii_only_behaves_identically(self):
+        """ascii_전용에서도_동일하다"""
         import remote_claims
 
         bodies = ["status: done\n", "status: todo\n"]
