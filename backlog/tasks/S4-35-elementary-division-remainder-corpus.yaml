@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -15,13 +15,14 @@ acceptance:
   - "[4수01-07](나눗셈(두 자리 수)·개념 D3) 0커버 해소 — 몫·나머지 kind 필터 2밴드"
   - "나눗셈 항등식(dividend = divisor*quotient + remainder, 0<=remainder<divisor) 구조로 정수 답 보장"
   - "전건 Tier1 게이트 통과·is_published=False·coverage 리포트 이동 확인·전체 스위트+4게이트 green"
-artifacts: []
+artifacts:
+  - 19a270a4
 paths:
   - src/backend/whymath_backend/l3/equivalent/elementary_division_remainder_skeleton_generator.py
   - src/backend/whymath_backend/harness/elementary_division_remainder_batch.py
   - tests/backend/l3/equivalent/test_elementary_division_remainder_skeleton_generator.py
   - tests/backend/harness/test_elementary_division_remainder_batch.py
   - data/corpus/problem_bank_elementary_division_remainder_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "W2 Phase2 착수 — 잔여 zero-coverage 341(K-12)+406(대학) 중 웨이브1. 계획: [4수01-07]÷·[6수01-03]어림·[6수01-04/05]최대공약수최소공배수·[12기하01-01~03]이차곡선·[12미적Ⅱ-02-04]몫의미분법 5건 순차. curriculum_revision 2015/2022 코드 중복 실측 확인(2022만 정본) 후 착수."
 updated: 2026-08-07
