@@ -24,7 +24,7 @@ from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ConceptEdge, ProblemConcept
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l2.ability_tracking import get_current_theta
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
@@ -41,10 +41,12 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EdgeType,
     Persona,
+    RelationType,
     SourceType,
     Subject,
 )
 from whymath_backend.schema.problem import Problem as ProblemSchema
+from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
 
@@ -925,6 +927,183 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
             resp = client.get("/v1/me/next-problem?prioritize_weak_concepts=true", headers=auth)
             assert resp.status_code == 200, resp.text
             assert resp.json()["problem_id"] == str(pid_weak)
+    finally:
+        asyncio.run(_cleanup_all())
+
+
+def test_me_next_problem_sibling_exclude_on_live_pg() -> None:
+    """GET /v1/me/next-problem?sibling_filter=exclude — problem_relation(변형·유사) 첫 소비처.
+
+    직전 오답 문항의 형제(problem_relation 양방향)가 유일한 미응답 후보면, 배제 시 후보 풀이
+    비어 problem_id=null(미필터 baseline은 그 형제를 추천 — 배선이 살아있음을 대조 확인).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid_wrong = uuid.uuid4()  # 직전 오답 문항
+    pid_sibling = uuid.uuid4()  # pid_wrong의 "변형" 형제 — 유일한 미응답 후보
+    suffix = uid.hex[:8]
+
+    def _problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_problem(pid_wrong), _problem(pid_sibling))
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(),
+                user_id=uid,
+                problem_id=pid_wrong,
+                is_correct=False,
+            )
+        )
+        await _add_all(
+            ProblemRelation.from_schema(
+                ProblemRelationSchema(
+                    parent_problem_id=pid_wrong,
+                    related_problem_id=pid_sibling,
+                    relation_type=RelationType.변형,
+                    similarity_score=0.95,
+                )
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "DELETE FROM problem_relation WHERE parent_problem_id=:p "
+                        "OR related_problem_id=:p"
+                    ),
+                    {"p": str(pid_wrong)},
+                )
+                await conn.execute(
+                    text("DELETE FROM problem_attempt WHERE user_id=:u"), {"u": str(uid)}
+                )
+                for pid in (pid_wrong, pid_sibling):
+                    await conn.execute(
+                        text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)}
+                    )
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 미필터 baseline — 유일한 미응답 후보(형제)가 추천됨(배선 자체는 정상 확인).
+            resp = client.get("/v1/me/next-problem", headers=auth)
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["problem_id"] == str(pid_sibling)
+
+            # exclude — 그 형제가 후보에서 빠져 풀이 비어 null.
+            resp = client.get("/v1/me/next-problem?sibling_filter=exclude", headers=auth)
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["problem_id"] is None
+    finally:
+        asyncio.run(_cleanup_all())
+
+
+def test_me_next_problem_sibling_include_on_live_pg() -> None:
+    """GET /v1/me/next-problem?sibling_filter=include — 형제 후보를 정보량 가중으로 우대.
+
+    직전 오답 문항의 형제(pid_sibling)와 무관 후보(pid_other)가 난이도(=정보량) 동일이면
+    가중 없이는 동률이나, include는 형제에 1+BOOST(2.0)배를 곱해 결정론으로 형제를 선택한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid_wrong = uuid.uuid4()
+    pid_sibling = uuid.uuid4()  # pid_wrong의 "유사" 형제
+    pid_other = uuid.uuid4()  # 무관 후보(동일 난이도)
+    suffix = uid.hex[:8]
+
+    def _problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_problem(pid_wrong), _problem(pid_sibling), _problem(pid_other))
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(),
+                user_id=uid,
+                problem_id=pid_wrong,
+                is_correct=False,
+            )
+        )
+        await _add_all(
+            ProblemRelation.from_schema(
+                ProblemRelationSchema(
+                    parent_problem_id=pid_wrong,
+                    related_problem_id=pid_sibling,
+                    relation_type=RelationType.유사,
+                    similarity_score=0.6,
+                )
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "DELETE FROM problem_relation WHERE parent_problem_id=:p "
+                        "OR related_problem_id=:p"
+                    ),
+                    {"p": str(pid_wrong)},
+                )
+                await conn.execute(
+                    text("DELETE FROM problem_attempt WHERE user_id=:u"), {"u": str(uid)}
+                )
+                for pid in (pid_wrong, pid_sibling, pid_other):
+                    await conn.execute(
+                        text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)}
+                    )
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get("/v1/me/next-problem?sibling_filter=include", headers=auth)
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["problem_id"] == str(pid_sibling)
     finally:
         asyncio.run(_cleanup_all())
 

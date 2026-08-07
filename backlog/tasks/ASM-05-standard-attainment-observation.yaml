@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-05-standard-attainment-observation
+title: "성취기준 도달 관측(수요측) — ARCH-18 공급측 커버리지 리포트의 짝 (미병합 브랜치 jkwdzn 재작성)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - ASM-03-assessment-writer-persist
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "ARCH-18과 동일 형식(결정론·NO_DATA 정직 표기)으로 학생별 성취기준 도달 커버리지를 산출 — atom_node.standard_codes 투영만 사용, 새 mastery/진도 테이블 신설 금지"
+  - "S3-01 파일럿 실학생 응답이 쌓이기 전까지는 NO_DATA를 정직하게 반환한다(가짜 수치 금지)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "브랜치 jkwdzn의 원 ASM-06/D7 재작성. ARCH-18-problem-bank-coverage-report(공급측: 코퍼스가 성취기준을 얼마나 덮는가)의 짝인 수요측(학생별 성취기준 도달 현황)이 없음 — atom_node.standard_codes 투영으로 산출, 새 mastery 테이블 신설 금지(교육과정은 overlay 원칙). S3-01 실학생 응답 파일럿 선행 필요."
+updated: 2026-08-07

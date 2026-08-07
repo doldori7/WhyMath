@@ -1,4 +1,4 @@
-# 풀이(Solution) 엔진 모듈 — 외부 EOS 틀 대조 갭 점검·설계 (2026-07-29)
+# 풀이(Solution) 엔진 모듈 — 외부 EOS 틀 대조 갭 점검·설계 (2026-07-29 · 2차 재검증 2026-08-03)
 
 > **범위**: 외부 참고 문서 『풀이(Solution) 엔진』(기능 23~27: 단계별 풀이 생성 · 다양한 풀이법
 > 생성 · 힌트 생성 · AI 채점 · 풀이 비교 — **WhyMath 전용이 아닌 일반적 EOS 틀**, Kiki 제공)을
@@ -10,6 +10,13 @@
 > 설계만(프롬프트·스키마 완비·소비 코드 0), 27은 전무. `SolutionPath` 실체화의 명시적 유보
 > 조건("다중 풀이 생성이라는 소비처가 설 때" — 03 문서)이 이번 설계로 성립한다.
 > 의도적 미채택 6건, 진짜 갭 설계 D1~D5, 실행 4건을 백로그에 등재했다(S4-09~12).
+> 2차에서 D6·`S4-19` 1건을 추가했다.
+>
+> **2차 재검증(2026-08-03·§5)**: 같은 문서로 재점검 요청이 들어와 ①1차 판정을 현행 코드에
+> 재대조 ②1차가 표에 넣지 않은 문서 2절(전체 구조에서의 위치·EOS 연계 구조 = **배선 축**)을
+> 추가 crosswalk 했다. 판정 뒤집기 0(D1~D5 전건 유효)이고, 배선 축에서 **신규 갭 1건**을 찾아
+> D6로 설계·등재했다 — 코치가 학생 풀이에 대해 *이미 산출해 클라에 노출까지 하는* 3상태 단계
+> 검증 결과가 **어디에도 적재되지 않는다**(적재되는 건 별도 binary 검산 1비트뿐).
 
 관련 정본: `03_content_generation.md`(SolutionPath 정본·동치성 정직 경계) ·
 `03b_wh_s_solver_harness.md`(WH-S 3-tier 검증) · `04_pedagogy_engine.md`·
@@ -242,6 +249,118 @@ D1 데이터 축적 + `S3-04` 측정, 증명·서술 축은 기존 `S4-02`(notes
 
 ---
 
+## §5. 2차 재검증 (2026-08-03) — 판정 재대조 + 배선 축 crosswalk + D6
+
+> 같은 외부 문서로 재점검 요청이 들어와 수행한 2차 패스. **1차(§1~§4)는 재작성하지 않는다** —
+> 판정이 바뀐 것만 델타로 적고, 1차가 표에 넣지 않은 축을 추가한다.
+
+### §5-1. 1차 판정 재검증 — **판정 변경 0**
+
+1차 리뷰(07-29) 이후 머지된 커밋 중 풀이 축에 닿는 것을 대조했다.
+
+| 커밋 | 풀이 축 영향 | 판정 델타 |
+|---|---|---|
+| `ARCH-21`(#662) QA 파이프라인 오케스트레이터 | `harness/qa_pipeline.py`가 기존 7축(코퍼스 감사·동치 canonicalize·개념그래프 도달성·크로스링크·prose leak·provenance·결함주입)을 **조립만**(신규 검사기 0·acceptance 제약) | 없음 — 검증 권위 서열의 게이트 조립이지 풀이 생성·검증 표면 변경 아님 |
+| `S3-27`(#653) Problem↔ProblemType 백필 | 문항 *유형* 축 해금(ARCH-18) | 없음 — 풀이 *구조* 축(approach_type·reasoning_type)과 직교(3축 disjoint 동결 유지) |
+| `VIZ-01`(#654) 시각화 공급원 적재 | 시각화 학생 도달 0회 해소 | 없음 — 1차 §1 기능 23 "단계별 시각화 자료 ⏸ `S4-03` 승계" 유지(적재 입도가 *문제* 단위·*단계* 단위 아님) |
+| `SEC-07/08/09/11` | 인가·PII·감사 축 | 없음 |
+
+**D1~D5 전건 유효.** 백로그 상태(2026-08-03 실측): `S4-09`·`S4-10`·`S4-11`·`S4-12` **전건 `todo`**.
+`S4-10`은 **병렬 세션**(`claude/whymath-solution-review-40xspg`)이 원격 claim 중 — 본 세션 착수 금지
+(CLAUDE.md 병렬 세션 규약).
+
+1차의 핵심 판정 2건은 이번에 코드로 재확인했다:
+
+- **기능 26의 "3상태 ✅"는 *학생 도달*까지 성립**한다 — 클라가 `solution_steps`를 실제로 보내고
+  (`src/mobile/lib/features/chat/application/chat_controller.dart:107`) 코치가 그것으로
+  `verify_solution`을 결선한다(`api/coach.py:507-523`). 최근 갭 리뷰 3건(VIZ-01·NLP-01·REC-01)이
+  반복 발견한 **"기능은 있는데 학생 도달 0회"** 패턴이 이 축에는 **해당하지 않는다**.
+- **잔여물 1건(태스크 미등재)**: 독립 검증 클라이언트 `verifyApiProvider`
+  (`src/mobile/lib/features/verify/data/verify_api.dart:48`)는 **`lib/` 소비처 0**(테스트만).
+  코치 경로가 같은 검증을 수행하므로 *기능 갭이 아니라 중복 표면*이다. 제거/유지 판단은 모바일
+  리팩터 시점 소관이라 태스크로 등재하지 않고 기록만 남긴다(dead task 방지).
+
+### §5-2. 배선 축 crosswalk — 1차가 표에 넣지 않은 문서 2절
+
+문서의 「WhyMath 전체 구조에서의 위치」·「EOS 관점에서의 연계 구조」 두 다이어그램은 *기능*이
+아니라 **모듈 간 화살표**를 그린다. 1차 §1은 기능 23~27만 표로 다뤄 이 축이 비어 있었다.
+
+| 문서 엣지 | WhyMath 현행 | 판정 |
+|---|---|---|
+| 교육과정·개념 DB → 풀이 | 성취기준 태그(콘텐츠 공통 규약) + `l2.get_primary_concept_id`(문항→PRIMARY 개념) | ✅ |
+| 오개념 DB → 풀이 | `l4/misconception/` reactive retrieval(진단→가설→judge→개입) — **preload 금지 준수** | ✅ |
+| 문제은행 → 풀이 | WH-S `whs/harness.py:422` `run_solver` → `verified_solutions` 뱅크(SymPy 통과분만) | ✅ |
+| 교수전략 → 풀이·힌트 | `l4/pedagogy/runtime_selector.decide`(전략 선택·GA) + `l2/pedagogy_evidence.py`(처치 기록·PED-03)는 실재하나, **힌트 발화 자체는 문제 무관 정적 템플릿**(`l4/polya/prompts.py:43-76`) | ⚠️ 기존 **D3**(`S4-11`)이 이미 덮는다 — 신규 등재 금지 |
+| **채점 → 학생 모델 업데이트** | 숙달 전파는 `api/me.py:679` `record_problem_attempt_mastery`(문제 단위 `is_correct` **1비트**)뿐. 코치가 산출한 3상태 단계 검증은 **적재 0** | ⚠️ **신규 갭 → D6** |
+| 풀이 비교 → 학생 모델 | `MasteryState.preferred_solution_style` 스키마만·코드 0 | ⏸ 1차 §4-⑤ 트리거 승계 |
+
+### §5-3. D6 — 라이브 3상태 단계 검증 결과의 적재 좌석 (백로그 `S4-19`)
+
+**갭의 정확한 진술**: 스테이트풀 코치는 학생 풀이 1건에 대해 **서로 다른 두 검증**을 돌린다.
+
+| | 계산 | 산출 | 어디로 가는가 |
+|---|---|---|---|
+| ⑴ 단계 검증 | `recommend_coaching_for_solution` 내부 `verify_solution`(`api/coach.py:523`) | **3상태** — `n_correct`/`n_incorrect`/`n_unverifiable`·`unverified_ratio`·`first_incorrect_index`·단계별 `evidence_weight`(1.0/0.5) | **HTTP 응답으로만**(`solution_coaching.solution_verification`) — 적재 0 |
+| ⑵ 텍스트 검산 | `_log_verify_event`의 `validate_response(arithmetic_validator(), …)`(`api/coach.py:919`) | **binary** — 거짓 수치관계 적발 여부 | `attempt_event(검산결과)`에 `passed`+`error_kind`로 적재(`schema/event_data_contract.py:35` `VerifyEventData`) |
+
+즉 **시스템이 이미 가진 가장 정밀한 채점 신호가 응답과 함께 사라진다.** 그 결과:
+
+- 측정 계층 ①(verify 통과율)은 ⑵의 binary만 읽는다 — `harness/wh1_evaluation.py:302`의 description이
+  "…비율(**binary**)"이라고 스스로 밝힌다.
+- L2 환류는 문제 단위 1비트만 받는다(`record_problem_attempt_mastery(…, body.is_correct)`).
+  `verify_step`의 `evidence_weight`(`l3/verify_step.py:127`)는 **`l3/` 밖 소비처 0**(실측: 문서 인용만).
+- 라이브 3상태 카운트가 관측되는 유일 경로는 **shadow 하네스**(`harness/wh1_shadow.py:187`
+  `_count_verify_verdicts`·S3-07)인데, 이는 ⑴과 **다른 계산**(LLM 하네스 트레이스)이고
+  플래그 게이팅·무영속(로그 sink)·오프라인 수확(`wh1_shadow_harvest`)이다. 결정론 라이브 경로에는
+  대응 좌석이 없다.
+
+**D6-1단계(태스크 범위) — 적재 좌석 + 이중 회계**
+
+- **계약 확장(additive)**: `VerifyEventData`에 선택 필드를 더한다 — `n_correct`·`n_incorrect`·
+  `n_unverifiable`·`unverified_ratio`·`first_incorrect_index`·`ocr_gated`. 전건 기본 `None`이라
+  단계 미제출 턴·기존 픽스처·기존 라이브 이벤트가 무손상(하위호환). `extra="forbid"` 계약이므로
+  필드 추가가 **정식 확장 경로**다(`mode`·`persona` 선례 동형·S3-03).
+- **writer(재계산 0)**: `_log_verify_event`가 핸들러가 **이미 손에 쥔** `solution_verification`을
+  인자로 받아 싣는다 — 검증을 다시 돌리지 않는 순수 데이터 운반. binary `passed`는 **그대로 유지**
+  (기존 ① 시계열 연속성 보존 + 두 검증기의 **이중 회계** — CLAUDE.md "핵심 판정치는 인프로세스
+  이중 회계"·`ops/cost_probe` 선례).
+- **reader**: `wh1_evaluation` ①을 *교체가 아니라 병기*로 승격 — `verify_pass_rate`(binary) 불변 +
+  파생 `step_decision_rate`=(n_correct+n_incorrect)/전체 전이·`step_incorrect_rate` 신설. 표본 0이면
+  **NO_DATA 정직 표기**(가짜 0 금지·기존 규약 승계). shadow 원장의 같은 3상태 분포와 **대조 가능**해져
+  두 회계가 서로를 검증한다.
+- **경계**: 신규 테이블 0·마이그레이션 0(JSONB `event_data` 안)·**신규 학생 대면 표면 0**·
+  숙달 갱신 경로(`record_problem_attempt_mastery`) **무변경**. 미성년 PII 규약 준수 — 싣는 것은
+  정수 카운트·비율·인덱스뿐이고 **학생 풀이 원문·단계 텍스트는 담지 않는다**(shadow `shadow.py:14`
+  규약 동형).
+- **검증**: 계약 왕복 테스트(구필드만 있는 이벤트 파싱 통과 = 하위호환 동결·신규 필드 왕복) ·
+  writer 회귀(단계 미제출 턴의 payload 키가 기존과 동일) · ① 지표 회귀(기존 값 불변) ·
+  NO_DATA 경로 · 원문 미포함 동결 테스트.
+
+**D6-2단계(설계만·태스크 0) — 부분 크레딧 승격 판정**
+
+단계 신호를 BKT에 실제로 반영할지는 **측정 후** 판정한다. 승격 전제: ⑴ 파일럿(`S3-01`)·측정
+하네스(`S3-04`) 데이터에서 단계 신호가 정/오답 대비 **예측력 증분**을 보일 것 ⑵ 가중 반영이 BKT
+비퇴화 제약(`p_slip + p_guess < 1`·`l2/bkt.py:46,77`)과 모델 B(역할 비대칭 부분 크레딧)의 기존
+불변식을 깨지 않을 것. **협상 불가 경계 3종**:
+
+- **힌트 사용을 감점 신호로 쓰지 않는다** — 도움 요청을 억제하는 설계는 답 미루기 사다리의 취지와
+  정면 충돌하고 부정 피드백 강화 금기에 걸린다. 힌트는 숙달 추정의 *맥락 변수*로만 관측한다
+  (측정 축 ⑤·⑧은 이미 존재 — D6-1단계는 힌트를 건드리지 않는다).
+- **`unverifiable`을 오답으로 강등하지 않는다** — `evidence_weight` 0.5는 *할인*이지 부정 증거가
+  아니다(3상태 정직 경계).
+- **학생 대면 점수·등급 노출 0** — §2-① 승계.
+
+**중복 경계(등재 전 확인)**
+
+| 인접 태스크 | 축 | D6와의 관계 |
+|---|---|---|
+| `NLP-02-server-answer-grading-shadow` | *답안* 채점(`verify_answer` 파생)의 클라 보고 대조 | 다른 검증기·다른 산출 — D6는 *단계* 검증(`verify_solution`)의 적재 |
+| `S3-07-shadow-transition-aggregate` | shadow 하네스 트레이스의 전이 카운트 | D6는 그 **결정론 라이브 미러** — S3-07이 선례이자 대조 상대 |
+| `S4-11-hint-content-generation` | 힌트 *콘텐츠* 생성·영속 | D6-1단계는 힌트 미포함(측정 축 ⑤·⑧ 기존재) |
+| `S4-09`(D1) | SolutionPath 구조 좌석 | **비의존** — D6는 기존 이벤트만 읽고 쓴다(병렬 착수 가능) |
+
+---
+
 ## 부록 — 실측 근거·관련 코드
 
 - WH-S 솔버 루프: `src/backend/whymath_backend/whs/harness.py:422`(`run_solver`·verify 없는
@@ -266,3 +385,24 @@ D1 데이터 축적 + `S3-04` 측정, 증명·서술 축은 기존 `S4-02`(notes
   `S4-03-visualization-type-expansion`(단계 시각화·그림 힌트 슬롯) · `ARCH-10`/`ARCH-12`(클라
   채점 게이트) · L7 Phase 3 갤러리(ROADMAP:164) · ROADMAP:67-68 체크박스 중 67은 `S4-09/10`으로
   실행화, 68(PRM 후보 평가)은 §4-② 트리거 관리(백로그 미등재 상태 정직 기록)
+
+**2차 재검증(§5) 추가 근거** — 배선 축·D6:
+
+- 채점→학생 모델 엣지: `api/me.py:679`(`record_problem_attempt_mastery(…, body.is_correct)` —
+  문제 단위 1비트) · `l2/mastery_tracking.py:202`(모델 B 역할 비대칭 부분 크레딧) ·
+  `l2/bkt.py:46,77`(비퇴화 제약 `p_slip + p_guess < 1`) · `l2/pedagogy_evidence.py:13`
+  ("결과 축은 `/v1/me`에 배선돼 살아 있으나" — 처치 축 공백을 닫은 PED-03의 자인. D6는 그
+  *결과 축의 입도* 문제라 별개)
+- 두 검증의 분기 실측: `api/coach.py:523`(`recommend_coaching_for_solution`에 `solution_steps`
+  전달 → 내부 `verify_solution`) vs `api/coach.py:919`(`_log_verify_event`의
+  `validate_response(arithmetic_validator(), …)` — binary) · `api/coach.py:888-899`
+  (docstring이 "**binary 검산**이지 3-state verify가 아니다"라고 자인) ·
+  `schema/event_data_contract.py:35`(`VerifyEventData` — `extra="forbid"`·`passed`/`error_kind`만) ·
+  `l4/solution_coaching.py:119-127`(3상태 결과가 응답으로 노출되는 좌석) ·
+  `harness/wh1_evaluation.py:302`(① description "…비율(binary)")
+- 3상태 관측의 유일 기존 경로(축이 다름): `harness/wh1_shadow.py:20,187`
+  (`_count_verify_verdicts` — LLM 하네스 트레이스·플래그 게이팅·무영속·S3-07) ·
+  `harness/wh1_shadow_harvest.py:1-12`(로그 수확 오프라인 파이프라인)
+- 클라 도달 실측: `src/mobile/lib/features/chat/application/chat_controller.dart:107`
+  (`solutionSteps` 전송) · `src/mobile/lib/features/verify/data/verify_api.dart:48`
+  (`verifyApiProvider` — `lib/` 소비처 0·중복 표면 기록만·태스크 미등재)
