@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-34-binomial-distribution-corpus
+title: "고등 통계 이항분포 평균·분산 파일럿 코퍼스 (W2 Phase1 #8)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 2
+owner: claude
+depends_on:
+  - S4-33-permutation-combination-corpus
+requires_gates: []
+acceptance:
+  - "[12확통03-03](이항분포의 뜻과 성질·평균과 표준편차·개념 H:12확통03-03) 0커버 해소"
+  - "discrete_expected_value_skeleton_generator 관례 계승 — Fraction 기약분수 답·kind(mean/variance) 필터로 밴드 분리"
+  - "평균 E(X)=np·분산 V(X)=np(1-p) 두 밴드 — 이항분포 공식 직접 계산, 신규 검증 경로 없음(Tier1 sympify 분수 재검증 재사용)"
+  - "전건 Tier1 게이트 통과·is_published=False·coverage 리포트 이동 확인·전체 스위트+4게이트 green"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/equivalent/binomial_distribution_skeleton_generator.py
+  - src/backend/whymath_backend/harness/binomial_distribution_batch.py
+  - tests/backend/l3/equivalent/test_binomial_distribution_skeleton_generator.py
+  - tests/backend/harness/test_binomial_distribution_batch.py
+  - data/corpus/problem_bank_binomial_distribution_v0/problems.jsonl
+session: claude/whymath-mvp-plan-architecture-trjg5x
+notes: "w2_content_factory_completion_plan_v1.md §6 Phase 1 우선순위 8위(최종). discrete_expected_value_skeleton_generator 형제 확장 — Phase 1 목록 완결."
+updated: 2026-08-07
