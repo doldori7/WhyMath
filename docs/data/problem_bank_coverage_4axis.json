@@ -8,10 +8,10 @@
     "범위밖(1.0~5.0 아님)"
   ],
   "band_totals": {
-    "개념 [3.0,4.0)": 2417,
+    "개념 [3.0,4.0)": 2717,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 2684,
-    "절차 [2.0,3.0)": 3252
+    "절차 [2.0,3.0)": 3676
   },
   "corpora": [
     {
@@ -132,6 +132,12 @@
       "name": "problem_bank_probability_finite_v0",
       "parse_errors": 0,
       "problems": 34,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_probability_law_v0",
+      "parse_errors": 0,
+      "problems": 724,
       "status": "적재됨"
     },
     {
@@ -351,7 +357,7 @@
       "total": 3
     },
     "확률": {
-      "covered": 3,
+      "covered": 6,
       "total": 6
     },
     "환경과 수학": {
@@ -361,7 +367,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 64,
+      "covered": 67,
       "total": 254
     },
     "대학교": {
@@ -438,8 +444,11 @@
     "[12확통01-02]",
     "[12확통01-03]",
     "[12확통02-01]",
+    "[12확통02-02]",
+    "[12확통02-03]",
     "[12확통02-04]",
     "[12확통02-05]",
+    "[12확통02-06]",
     "[12확통03-02]",
     "[12확통03-03]",
     "[2수01-06]",
@@ -488,14 +497,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 6899
+    "단답형": 7623
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 6297,
+    "problems_without_problem_type": 7021,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -570,6 +579,10 @@
     "problem_bank_probability_finite_v0": {
       "개념 [3.0,4.0)": 8,
       "절차 [2.0,3.0)": 26
+    },
+    "problem_bank_probability_law_v0": {
+      "개념 [3.0,4.0)": 300,
+      "절차 [2.0,3.0)": 424
     },
     "problem_bank_quad_ineq_v0": {
       "절차 [2.0,3.0)": 200
@@ -658,6 +671,9 @@
     },
     "problem_bank_probability_finite_v0": {
       "단답형": 34
+    },
+    "problem_bank_probability_law_v0": {
+      "단답형": 724
     },
     "problem_bank_quad_ineq_v0": {
       "단답형": 200
@@ -886,8 +902,11 @@
     "[12확통01-02]": 56,
     "[12확통01-03]": 65,
     "[12확통02-01]": 50,
+    "[12확통02-02]": 300,
+    "[12확통02-03]": 124,
     "[12확통02-04]": 48,
     "[12확통02-05]": 24,
+    "[12확통02-06]": 300,
     "[12확통03-02]": 200,
     "[12확통03-03]": 300,
     "[2수01-06]": 400,
@@ -936,8 +955,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.24597701149425288,
-    "covered_code_count": 107,
+    "coverage_rate": 0.25287356321839083,
+    "covered_code_count": 110,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -946,9 +965,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 328
+    "zero_coverage_code_count": 325
   },
-  "total_problems": 8515,
+  "total_problems": 9239,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1235,6 +1254,15 @@
     "PROB-INDEPENDENT-TRIAL": {
       "개념 [3.0,4.0)": 15,
       "절차 [2.0,3.0)": 9
+    },
+    "PROBABILITY-ADDITION-LAW": {
+      "절차 [2.0,3.0)": 300
+    },
+    "PROBABILITY-COMPLEMENT-LAW": {
+      "절차 [2.0,3.0)": 124
+    },
+    "PROBABILITY-MULTIPLICATION-LAW": {
+      "개념 [3.0,4.0)": 300
     },
     "QUAD-EQ": {
       "개념 [3.0,4.0)": 132,
@@ -2537,9 +2565,6 @@
     "[12직수04-03]",
     "[12직수04-04]",
     "[12직수04-05]",
-    "[12확통02-02]",
-    "[12확통02-03]",
-    "[12확통02-06]",
     "[12확통03-01]",
     "[12확통03-04]",
     "[12확통03-05]",
