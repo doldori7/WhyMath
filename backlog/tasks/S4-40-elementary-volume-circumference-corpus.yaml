@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-40-elementary-volume-circumference-corpus
+title: "초등 부피(직육면체)·부피 단위·원주율 파일럿 코퍼스 (W2 Phase3 #1)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[6수03-19]/[6수03-18]/[6수03-15] 0커버 해소 — 3변형 결정론 생성기 신설·전량 게이트 통과"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/equivalent/elementary_volume_measure_skeleton_generator.py
+  - src/backend/whymath_backend/harness/elementary_volume_measure_batch.py
+  - "data/corpus/problem_bank_elementary_volume_measure_v0/**"
+  - tests/backend/l3/equivalent/test_elementary_volume_measure_skeleton_generator.py
+  - tests/backend/harness/test_elementary_volume_measure_batch.py
+session: claude/whymath-mvp-plan-architecture-trjg5x
+notes: "w2_content_factory_completion_plan_v1.md B급 §6 항목4 확장 — S4-30(elementary_area_measure) 형제. concept_src_id: ME9(부피)·ME8(부피단위)·ME5(원주율) — concept_graph_v1 실존 확인."
+updated: 2026-08-07
