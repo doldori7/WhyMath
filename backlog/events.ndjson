@@ -1567,6 +1567,12 @@
 {"ts": "2026-07-29T10:23:48", "actor": "claude/education-os-architecture-mr0fbq", "action": "done", "id": "S3-11-problem-bank-data-card", "artifacts": ["docs/data/problem_bank_corpus_v1.md(데이터 카드: 6종 건수·생성 CLI·게이트·검수 현황·노출 4단 지위·재현 명령) + data/corpus/problem_bank_{conceptual,generated,killer,misconception_mc,rephrased}_v0/_provenance.json(5종 신설, v1 계약 문서 동형) + docs/data/licensing_safety.md 대장 1행 신설", "실측: 6종 중 generated_v0(620)만 표본 검수 완료(Wilson 95% 상한 1.11% PASS, 기존 문서 인용) — 나머지 4종은 이 브랜치 이력상 미기록임을 정직 기록(S3-09가 별도 세션에서 진행 중·미머지). 재현 명령(populate CLI 6회·test_corpus_quality.py)을 실행해 실제로 동작함을 확인(18 passed)"]}
 {"ts": "2026-08-03T13:13:49", "actor": "claude/drive-cur-nlp-observability", "action": "done", "id": "ARCH-25-grandfather-expiry-contract", "artifacts": ["d8151a0e"]}
 {"ts": "2026-08-03T12:01:51", "actor": "claude/whymath-gamification-design-n3mf50", "action": "add", "id": "ARCH-26-anti-gamification-source-governance-gate"}
+{"ts": "2026-08-03T08:04:48", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-01-unmerged-completion-recovery"}
+{"ts": "2026-08-03T08:05:33", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-02-declaration-wiring-reconciliation"}
+{"ts": "2026-08-03T08:06:29", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-03-exposure-path-gates"}
+{"ts": "2026-08-03T08:07:06", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-04-l6-mode-reach-observability"}
+{"ts": "2026-08-03T08:07:46", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "PB-05-item-content-safety-scan"}
+{"ts": "2026-08-03T08:10:24", "actor": "claude/whymath-05-problem-bank-design-bbyp3d", "action": "add", "id": "HARN-14-gates-add-cli-path"}
 {"ts": "2026-08-03T12:46:55", "actor": "claude/arch-26-anti-gamification-gate", "action": "start", "id": "ARCH-26-anti-gamification-source-governance-gate", "session": "claude/arch-26-anti-gamification-gate", "remote": "ok"}
 {"ts": "2026-08-03T13:41:15", "actor": "claude/arch-26-anti-gamification-gate", "action": "done", "id": "ARCH-26-anti-gamification-source-governance-gate", "artifacts": ["672be224"]}
 {"ts": "2026-08-03T11:57:54", "actor": "claude/backlog-drive-next", "action": "policy_warn", "id": "ARCH-25-grandfather-expiry-contract", "rule": "path_overlap", "other": "S3-28-canonicalize-answer-kind-scope-audit", "detail": "실파일 교집합 5건 예: data/corpus/problem_bank_conceptual_v0/problems.jsonl, data/corpus/problem_bank_generated_v0/problems.jsonl, data/corpus/problem_bank_killer_v0/problems.jsonl · 프리픽스 포함: data/corpus/** ⊇ data/corpus/problem_bank_*/problems.jsonl", "mode": "warn"}
@@ -2092,3 +2098,5 @@
 {"ts": "2026-08-03T07:05:46", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-04-misconception-relation-isolated-schema"}
 {"ts": "2026-08-03T07:05:51", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-05-root-symptom-slip-observation-report"}
 {"ts": "2026-08-03T07:05:55", "actor": "claude/whymath-misconception-review-h87afk", "action": "add", "id": "MISC-06-misconception-recurrence-signal"}
+{"ts": "2026-08-07T05:24:25", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "add", "id": "HARN-18-gates-add-cli-path"}
+{"ts": "2026-08-07T05:24:25", "actor": "claude/merge-failure-reflection-issues-560vwh", "action": "id_rename", "id": "HARN-18-gates-add-cli-path", "detail": "PR #687 병합 시 HARN-14로 등재됐으나 main이 그 사이 HARN-14-doc-series-duplicate-detection(#714)을 선점 — HARN-15도 별도 충돌 사고로 이미 소진(HARN-16 notes 참조)이라 HARN-18로 재배정. 게이트 G-s4-14-variant-identity는 등재하지 않음 — S4-21(2026-07-29 Kiki 결정)이 이미 해소한 질문이었음을 병합 시점에 재확인."}

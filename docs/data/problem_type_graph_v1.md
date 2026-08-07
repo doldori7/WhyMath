@@ -91,3 +91,11 @@ backend 거버넌스가 authoritative(형식은 `ptype.<slug>` vs UPPER_SNAKE로
   동형)은 생산자/소비처가 생길 때 추가한다 — 지금 넣으면 채울 좌석이 없어 dead code(소비처 없는 추상 미도입).
   발화 조건 구체화(2026-07-28): `../architecture/problem_bank_gap_review.md` §5-③ — 커버리지
   리포트(ARCH-18) 유형 축 수요 또는 L6 유형별 추천 소비처 실재 시.
+  > **⚠️ 유보 해제됨 (2026-07-30 · `S3-27` — 위 발화 조건 ⑴이 성립)**: `Problem.problem_type_codes`
+  > (참조 배열·`signature_patterns` 동형)가 **실제로 신설·백필됐다**(`harness/problem_type_backfill.py`
+  > — 생성기 identity 매핑표 기반 결정론·LLM 0). 위 "Phase 3b(미룸)·dead code" 서술은 **더 이상
+  > 현행이 아니다**(원문은 이력 보존을 위해 남긴다). **경계는 그대로 유지** — `problem_type_node`
+  > FK 연결·유형별 생성 확대·추천/출제 로직은 여전히 스코프 밖(관측 축 한정).
+  > 실측(2026-08-03): 태깅 **2,218/2,647(83.8%)** · 사용 유형 **8/17종**(0커버 9종) ·
+  > 미태깅 429건 = `problem_bank_rephrased_v0` 전량(`S4-14` 미착지 사유 명시 제외).
+  > 정본: `../architecture/problem_bank_gap_review_r2.md` §1 기능 20 · §정정 4.
