@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -18,13 +18,14 @@ acceptance:
   - "problem_bank_quad_ineq_v0 코퍼스 생성 — 전건 Tier1 게이트 통과·is_published=False"
   - coverage 리포트 재실행으로 실제 이동 확인
   - "단위테스트(생성기·배치) green, ruff·black·mypy --strict clean"
-artifacts: []
+artifacts:
+  - 9aa319cc
 paths:
   - src/backend/whymath_backend/l3/equivalent/quadratic_inequality_boundary_skeleton_generator.py
   - src/backend/whymath_backend/harness/quad_ineq_batch.py
   - tests/backend/l3/equivalent/test_quadratic_inequality_boundary_skeleton_generator.py
   - tests/backend/harness/test_quad_ineq_batch.py
   - data/corpus/problem_bank_quad_ineq_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "w2_content_factory_completion_plan_v1.md §6 Phase 1 우선순위 1위. 기존 이차방정식 생성기 인프라(근 선택·전개 로직)를 부등식 해 경계값 질문으로 재프레이밍 — 신규 수학 조작 최소."
 updated: 2026-08-07
