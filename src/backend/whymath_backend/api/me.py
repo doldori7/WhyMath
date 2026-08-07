@@ -87,6 +87,7 @@ from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.growth_evidence_exposure import (
+    MetricExposure,
     classify_metric_exposure,
     narrate_calibration_brier,
 )
@@ -2902,7 +2903,7 @@ _HINT_DEPTH_SUPPRESSED_MESSAGE = (
 
 
 def _render_growth_evidence_metric(
-    metrics: SurrogateMetrics, field: str, exposure_by_field: dict
+    metrics: SurrogateMetrics, field: str, exposure_by_field: dict[str, MetricExposure]
 ) -> GrowthEvidenceMetricView:
     """`SurrogateMetrics`의 `Metric` 1종 + 계약 판정 1종을 학생 노출 뷰로 렌더.
 
