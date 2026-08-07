@@ -62,6 +62,18 @@ class ProblemsApi {
         .toList(growable: false);
   }
 
+  /// `GET /v1/me/weak-concepts/{concept_id}/learning-path` — 약개념의 막힌 선수개념 학습 경로.
+  ///
+  /// 서버 기본 쿼리(threshold=0.7·weak_only=true·max_depth=1)를 그대로 쓴다(PATH-05 —
+  /// 신규 파라미터 도입 없이 기존 단일-개념 API만 소비). 응답 `has_cycle`·빈 `steps`는 이
+  /// 메서드가 그대로 통과시킨다(호출자가 정직하게 렌더 — 삼켜서 뭉개지 않음).
+  Future<LearningPath> getLearningPath(String conceptId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/v1/me/weak-concepts/$conceptId/learning-path',
+    );
+    return LearningPath.fromJson(_requireBody(response));
+  }
+
   /// 응답 본문이 null이 아님을 보장하고 반환한다(빈 본문은 DioException으로 승격).
   Map<String, dynamic> _requireBody(Response<Map<String, dynamic>> response) {
     final data = response.data;
