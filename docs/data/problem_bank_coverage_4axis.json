@@ -10,8 +10,8 @@
   "band_totals": {
     "개념 [3.0,4.0)": 1452,
     "숙달 [4.0,5.0]": 162,
-    "인지 [1.0,2.0)": 811,
-    "절차 [2.0,3.0)": 2274
+    "인지 [1.0,2.0)": 881,
+    "절차 [2.0,3.0)": 2474
   },
   "corpora": [
     {
@@ -30,6 +30,12 @@
       "name": "problem_bank_discrete_ev_v0",
       "parse_errors": 0,
       "problems": 200,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_elementary_area_measure_v0",
+      "parse_errors": 0,
+      "problems": 270,
       "status": "적재됨"
     },
     {
@@ -131,7 +137,7 @@
       "total": 6
     },
     "도형과 측정": {
-      "covered": 12,
+      "covered": 14,
       "total": 81
     },
     "도형의 방정식": {
@@ -301,7 +307,7 @@
       "total": 60
     },
     "초등학교": {
-      "covered": 10,
+      "covered": 12,
       "total": 121
     }
   },
@@ -365,9 +371,11 @@
     "[6수01-13]",
     "[6수03-01]",
     "[6수03-11]",
+    "[6수03-12]",
     "[6수03-13]",
     "[6수03-14]",
     "[6수03-16]",
+    "[6수03-17]",
     "[6수04-01]",
     "[9수01-02]",
     "[9수01-03]",
@@ -396,14 +404,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 3083
+    "단답형": 3353
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 2481,
+    "problems_without_problem_type": 2751,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -418,6 +426,10 @@
       "절차 [2.0,3.0)": 400
     },
     "problem_bank_discrete_ev_v0": {
+      "절차 [2.0,3.0)": 200
+    },
+    "problem_bank_elementary_area_measure_v0": {
+      "인지 [1.0,2.0)": 70,
       "절차 [2.0,3.0)": 200
     },
     "problem_bank_elementary_v0": {
@@ -474,6 +486,9 @@
     },
     "problem_bank_discrete_ev_v0": {
       "단답형": 200
+    },
+    "problem_bank_elementary_area_measure_v0": {
+      "단답형": 270
     },
     "problem_bank_elementary_v0": {
       "단답형": 400
@@ -717,9 +732,11 @@
     "[6수01-13]": 24,
     "[6수03-01]": 24,
     "[6수03-11]": 24,
+    "[6수03-12]": 70,
     "[6수03-13]": 24,
     "[6수03-14]": 24,
     "[6수03-16]": 24,
+    "[6수03-17]": 200,
     "[6수04-01]": 24,
     "[9수01-02]": 24,
     "[9수01-03]": 72,
@@ -748,8 +765,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2,
-    "covered_code_count": 87,
+    "coverage_rate": 0.2045977011494253,
+    "covered_code_count": 89,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -758,9 +775,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 348
+    "zero_coverage_code_count": 346
   },
-  "total_problems": 4699,
+  "total_problems": 4969,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -769,6 +786,9 @@
     "AREA-PERIMETER": {
       "개념 [3.0,4.0)": 10,
       "절차 [2.0,3.0)": 14
+    },
+    "AREA-UNIT-CONVERSION": {
+      "인지 [1.0,2.0)": 70
     },
     "ARITH-SEQ": {
       "인지 [1.0,2.0)": 54,
@@ -1021,6 +1041,9 @@
       "절차 [2.0,3.0)": 1
     },
     "QUAD-INEQ-BOUNDARY": {
+      "절차 [2.0,3.0)": 200
+    },
+    "RECT-PRISM-SURFACE-AREA": {
       "절차 [2.0,3.0)": 200
     },
     "REMAINDER-THEOREM": {
@@ -2410,9 +2433,7 @@
     "[6수03-08]",
     "[6수03-09]",
     "[6수03-10]",
-    "[6수03-12]",
     "[6수03-15]",
-    "[6수03-17]",
     "[6수03-18]",
     "[6수03-19]",
     "[6수04-02]",
