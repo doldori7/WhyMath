@@ -8,7 +8,7 @@
     "범위밖(1.0~5.0 아님)"
   ],
   "band_totals": {
-    "개념 [3.0,4.0)": 2917,
+    "개념 [3.0,4.0)": 3317,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 2841,
     "절차 [2.0,3.0)": 3899
@@ -18,6 +18,12 @@
       "name": "problem_bank_binomial_distribution_v0",
       "parse_errors": 0,
       "problems": 300,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_calculus1_integral_v0",
+      "parse_errors": 0,
+      "problems": 400,
       "status": "적재됨"
     },
     {
@@ -317,7 +323,7 @@
       "total": 4
     },
     "적분": {
-      "covered": 0,
+      "covered": 4,
       "total": 6
     },
     "적분법": {
@@ -379,7 +385,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 68,
+      "covered": 72,
       "total": 254
     },
     "대학교": {
@@ -441,6 +447,10 @@
     "[12미적Ⅰ-02-02]",
     "[12미적Ⅰ-02-04]",
     "[12미적Ⅰ-02-07]",
+    "[12미적Ⅰ-03-02]",
+    "[12미적Ⅰ-03-04]",
+    "[12미적Ⅰ-03-05]",
+    "[12미적Ⅰ-03-06]",
     "[12미적Ⅱ-01-03]",
     "[12미적Ⅱ-01-04]",
     "[12미적Ⅱ-01-05]",
@@ -513,14 +523,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 8203
+    "단답형": 8603
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 7601,
+    "problems_without_problem_type": 8001,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -529,6 +539,9 @@
   "per_corpus_bands": {
     "problem_bank_binomial_distribution_v0": {
       "개념 [3.0,4.0)": 300
+    },
+    "problem_bank_calculus1_integral_v0": {
+      "개념 [3.0,4.0)": 400
     },
     "problem_bank_combination_binomial_v0": {
       "절차 [2.0,3.0)": 121
@@ -637,6 +650,9 @@
   "per_corpus_formats": {
     "problem_bank_binomial_distribution_v0": {
       "단답형": 300
+    },
+    "problem_bank_calculus1_integral_v0": {
+      "단답형": 400
     },
     "problem_bank_combination_binomial_v0": {
       "단답형": 121
@@ -917,6 +933,10 @@
     "[12미적Ⅰ-02-02]": 24,
     "[12미적Ⅰ-02-04]": 24,
     "[12미적Ⅰ-02-07]": 269,
+    "[12미적Ⅰ-03-02]": 100,
+    "[12미적Ⅰ-03-04]": 100,
+    "[12미적Ⅰ-03-05]": 100,
+    "[12미적Ⅰ-03-06]": 100,
     "[12미적Ⅱ-01-03]": 24,
     "[12미적Ⅱ-01-04]": 24,
     "[12미적Ⅱ-01-05]": 24,
@@ -989,8 +1009,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2620689655172414,
-    "covered_code_count": 114,
+    "coverage_rate": 0.271264367816092,
+    "covered_code_count": 118,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -999,9 +1019,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 321
+    "zero_coverage_code_count": 317
   },
-  "total_problems": 9819,
+  "total_problems": 10219,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1057,6 +1077,9 @@
     },
     "CALC1-CHAIN-RULE": {
       "개념 [3.0,4.0)": 200
+    },
+    "CALC1-INTEGRAL": {
+      "개념 [3.0,4.0)": 400
     },
     "CALC1-PRODUCT-RULE": {
       "개념 [3.0,4.0)": 200
@@ -2518,11 +2541,7 @@
     "[12미적Ⅰ-02-09]",
     "[12미적Ⅰ-02-10]",
     "[12미적Ⅰ-03-01]",
-    "[12미적Ⅰ-03-02]",
     "[12미적Ⅰ-03-03]",
-    "[12미적Ⅰ-03-04]",
-    "[12미적Ⅰ-03-05]",
-    "[12미적Ⅰ-03-06]",
     "[12미적Ⅱ-01-01]",
     "[12미적Ⅱ-01-02]",
     "[12미적Ⅱ-02-01]",
