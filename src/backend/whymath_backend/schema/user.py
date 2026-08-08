@@ -62,7 +62,6 @@ from whymath_backend.schema.enums import (
     Persona,
     Role,
     SchoolType,
-    SubscriptionTier,
     TrackType,
 )
 
@@ -142,10 +141,7 @@ class UserProfile(BaseModel):
         "명시적 미완결, v1.1은 시도교육청 코드로 모델링) → str, 추후 Kiki 결정 시 enum 승격.",
         max_length=64,
     )
-    school_id: uuid.UUID | None = Field(
-        default=None,
-        description="학교 ID FK(있는 경우만)",
-    )
+    # school_id(FK 없는 고아 컬럼)는 ADMIN-02(2026-08-08)에서 드롭 — 소비처 0(실측).
     grade: int | None = Field(
         default=None,
         description="학년 — 10/11/12(고1~고3)/13(N수1)/14(N수2). DDL 주석 범위(10~14)를 "
@@ -257,18 +253,8 @@ class UserProfile(BaseModel):
     )
 
     # ===== 결제·구독 =====
-    subscription_tier: SubscriptionTier | None = Field(
-        default=None,
-        description="구독 티어 — free/basic/premium",
-    )
-    subscription_started_at: datetime | None = Field(
-        default=None,
-        description="구독 시작 시각",
-    )
-    subscription_renewed_at: datetime | None = Field(
-        default=None,
-        description="구독 갱신 시각",
-    )
+    # subscription_tier·subscription_started_at·subscription_renewed_at은 ADMIN-02
+    # (2026-08-08)에서 드롭 — 결제 시스템 부재로 소비처 0(실측).
 
     # ===== 보호자 정보 (특성 #94, 미성년자 보호) =====
     is_minor: bool | None = Field(

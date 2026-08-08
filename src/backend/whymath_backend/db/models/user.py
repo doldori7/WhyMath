@@ -46,7 +46,6 @@ from whymath_backend.schema.enums import (
     Persona,
     Role,
     SchoolType,
-    SubscriptionTier,
     TrackType,
 )
 from whymath_backend.schema.user import UserPersonaHistory as SchemaUserPersonaHistory
@@ -90,7 +89,8 @@ class UserProfile(Base):
     school_type: Mapped[SchoolType | None] = mapped_column(_pg_enum(SchoolType, "school_type_enum"))
     # region_enum 미확정 → String(schema str 정책 답습).
     school_region: Mapped[str | None] = mapped_column(sa.String(64))
-    school_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
+    # school_id(FK 없는 고아 컬럼)는 ADMIN-02(2026-08-08)에서 드롭 — 소비처 0(실측),
+    # 마이그레이션 d8559726a87a.
     grade: Mapped[int | None] = mapped_column(sa.Integer)
 
     # ===== 입시 트랙 =====
@@ -139,11 +139,8 @@ class UserProfile(Base):
     monthly_education_spend: Mapped[int | None] = mapped_column(sa.Integer)
 
     # ===== 결제·구독 =====
-    subscription_tier: Mapped[SubscriptionTier | None] = mapped_column(
-        _pg_enum(SubscriptionTier, "subscription_tier_enum")
-    )
-    subscription_started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
-    subscription_renewed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    # subscription_tier·subscription_started_at·subscription_renewed_at은 ADMIN-02
+    # (2026-08-08)에서 드롭 — 결제 시스템 부재로 소비처 0(실측), 마이그레이션 d8559726a87a.
 
     # ===== 보호자 정보 (미성년자 보호) =====
     is_minor: Mapped[bool | None] = mapped_column(sa.Boolean)

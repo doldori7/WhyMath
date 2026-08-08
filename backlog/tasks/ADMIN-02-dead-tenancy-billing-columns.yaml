@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/schema/user.py
   - "src/backend/alembic/versions/*"
   - tests/backend/api/test_no_lockout_columns.py
-session: null
+session: claude/whymath-mvp-plan-architecture-trjg5x
 notes: "docs/architecture/operations_platform_gap_review.md §3 D2. user.py:93 school_id는 FK 없는 고아 컬럼, user.py:142-146 subscription_tier 등 3컬럼은 결제 시스템 부재로 읽는 코드 0건. account_security_gap_review.md:421 §4-⑧이 school_id 부재를 이미 자인했으나 정리는 안 됨. SEC-07이 좌석 없는 역할 3종은 안 만들었는데 같은 기준을 이미 있던 컬럼엔 적용 안 한 비대칭 해소. 반복 실수 8회차(§6) — 만들고 스키마를 읽지 않음."
-updated: 2026-08-03
+updated: 2026-08-08

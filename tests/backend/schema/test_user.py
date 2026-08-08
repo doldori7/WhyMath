@@ -150,7 +150,6 @@ class TestUserProfileCreation:
     def test_full_fields_roundtrip(self) -> None:
         """전 필드를 채운 합법 인스턴스 — 값 보존 확인."""
         now = datetime.now(timezone.utc)
-        school = uuid.uuid4()
         u = UserProfile(
             email_hash="a" * 64,
             nickname="민준",
@@ -158,7 +157,6 @@ class TestUserProfileCreation:
             gender="남",
             school_type=SchoolType.일반고,
             school_region="강남",
-            school_id=school,
             grade=12,
             track_type=[TrackType.정시, TrackType.수시학종],
             target_universities=[{"univ": "서울대", "major": "의예", "priority": 1}],
@@ -180,9 +178,6 @@ class TestUserProfileCreation:
             inkang_provider=["메가스터디", "이투스"],
             uses_offline_academy=False,
             monthly_education_spend=500000,
-            subscription_tier=SubscriptionTier.premium,
-            subscription_started_at=now,
-            subscription_renewed_at=now,
             is_minor=True,
             parent_consent_at=now,
             parent_email_hash="b" * 64,
@@ -192,7 +187,6 @@ class TestUserProfileCreation:
             is_active=True,
             is_deleted=False,
         )
-        assert u.school_id == school
         assert u.track_type == [TrackType.정시, TrackType.수시학종]
         assert u.target_universities[0]["univ"] == "서울대"
         assert u.target_exam_date == date(2026, 11, 19)
@@ -229,7 +223,6 @@ class TestUserProfileCreation:
             school_type=SchoolType.일반고,
             primary_device=Device.아이패드,
             note_app=NoteApp.굿노트,
-            subscription_tier=SubscriptionTier.free,
             target_major_category=MajorCategory.이공계,
         )
         dumped = u.model_dump()
@@ -237,7 +230,6 @@ class TestUserProfileCreation:
         assert dumped["school_type"] == "일반고"
         assert dumped["primary_device"] == "아이패드"
         assert dumped["note_app"] == "굿노트"
-        assert dumped["subscription_tier"] == "free"
         assert dumped["target_major_category"] == "이공계"
 
     def test_list_enum_serialization(self) -> None:

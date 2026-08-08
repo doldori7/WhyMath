@@ -32,7 +32,6 @@ from whymath_backend.schema.enums import (
     Persona,
     Role,
     SchoolType,
-    SubscriptionTier,
     TrackType,
 )
 from whymath_backend.schema.user import (
@@ -167,7 +166,6 @@ def test_user_profile_roundtrip_preserves_core_fields() -> None:
         target_universities=[{"univ": "서울대", "major": "의예", "priority": 1}],
         target_exam_date=date(2026, 11, 19),
         accessibility_needs=[Accessibility.큰글씨],
-        subscription_tier=SubscriptionTier.premium,
         diagnostic_completed=True,
     )
     orm = OrmUserProfile.from_schema(s)

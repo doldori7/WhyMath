@@ -40,7 +40,12 @@ def test_user_profile_has_no_lockout_columns() -> None:
 
 
 def test_user_profile_column_snapshot_unchanged_by_lockout() -> None:
-    """참고용 — 현재 `UserProfile` 컬럼 전체 목록(변경 시 diff로 어떤 컬럼이 늘었는지 보인다)."""
+    """참고용 — 현재 `UserProfile` 컬럼 전체 목록(변경 시 diff로 어떤 컬럼이 늘었는지 보인다).
+
+    ADMIN-02(2026-08-08)에서 `school_id`·`subscription_tier`·`subscription_started_at`·
+    `subscription_renewed_at` 4컬럼 드롭(소비처 0 실측 — 마이그레이션 d8559726a87a) —
+    41개 → 37개로 스냅샷 동기화.
+    """
     expected = {
         "user_id",
         "email_hash",
@@ -49,7 +54,6 @@ def test_user_profile_column_snapshot_unchanged_by_lockout() -> None:
         "gender",
         "school_type",
         "school_region",
-        "school_id",
         "grade",
         "track_type",
         "target_universities",
@@ -72,9 +76,6 @@ def test_user_profile_column_snapshot_unchanged_by_lockout() -> None:
         "inkang_provider",
         "uses_offline_academy",
         "monthly_education_spend",
-        "subscription_tier",
-        "subscription_started_at",
-        "subscription_renewed_at",
         "is_minor",
         "parent_consent_at",
         "parent_email_hash",
