@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (시스템 결함·하네스): **하네스 git 서브프로세스가 로케일 인코딩으로 디코드해 cp949(한국어 Windows) 환경에서 붕괴 — HARN-11 미머지 done 탐지가 Kiki 머신에서 *상시* fail-open 이었음이 드러남. 태스크 `HARN-19` 등재(priority 1)** (Kiki 머신 실행 출력에서 관측, claude 원인 규명·등재)
+
+- **관측**: Kiki가 `ASM-02`를 `start` 할 때 `UnicodeDecodeError: 'cp949' codec can't decode byte 0xed` 스택트레이스와 `⚠ 미머지 done 탐지 불가(error:AttributeError)`가 함께 출력됐다.
+- **원인**: `scripts/` 내 subprocess 호출 **4곳**(`remote_claims.py:154`·`backlog.py:932`·`pathscope.py:80`·`store.py:275`)이 `text=True`만 쓰고 `encoding=`을 지정하지 않는다. 파이썬이 `locale.getpreferredencoding()`(한국어 Windows=**cp949**)으로 git의 **UTF-8** 출력을 디코드하다 깨진다.
+- **마스킹**: reader 스레드에서 `UnicodeDecodeError`가 터진 뒤 호출측이 `stdout=None`을 만져 `AttributeError`가 되고, 경고에는 그 타입만 남는다. "예외 타입명을 로그에 포함"(침묵 실패 금지) 자체는 지켜졌으나 **그 타입이 원인을 오도**했다 — 마스킹도 관측 결함으로 취급하고 `HARN-19` acceptance ②로 등재.
+- **영향**: `HARN-11`(미머지 done 탐지)은 타 세션이 이미 끝낸 태스크의 중복 구현을 막는 보호인데, fail-open 설계라 이 결함 아래 Kiki 머신에서는 **항상 무력**이었다. 브리핑 기준 원격 claim 11건이 병렬로 도는 중이라 실해 가능성이 낮지 않다.
+- **분류**: CLAUDE.md **"상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지"**(2026-07-27 `refs/claims` 403 → `OPS-07` 병렬 구현·735줄 폐기)의 **두 번째 사례**이고, **"외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다"**(2026-07-17 logconfig cp949 기동 실패)를 **서브프로세스 출력 축으로 확장**한 형태다. 두 기존 규칙이 이미 이 부류를 덮으므로 **신규 규칙은 등재하지 않고** 코드 수정 태스크(`HARN-19`)로 대책을 건다 — 대책은 규칙·코드·태스크 중 하나여야 한다는 실수 관리 절차 준수.
+- **주의(미확정)**: 이 결함은 로케일 의존이라 **CCR 컨테이너(UTF-8)에서는 재현되지 않는다**. 즉 CI green이 이 결함의 부재를 증명하지 못한다 — `HARN-19` acceptance ③이 cp949 강제 하 양방향 변별력 테스트를 요구하는 이유다.
+- **수정 착지(같은 날)**: 4곳 전건에 `encoding="utf-8", errors="replace"` 명시 + `GitOutputDecodeError` 신설로 마스킹 제거 + `tests/harness/test_subprocess_encoding.py`(8건) 신설. 로케일 재현은 **몽키패치가 듣지 않아**(`io.TextIOWrapper`가 C 레벨에서 로케일을 잡음 — 실측) 로케일 대신 **그 로케일이 골랐을 인코딩을 명시 고정**(`encoding="cp949"`)해 재현했고, 그 트윈이 실제로 `UnicodeDecodeError`를 내는 것까지 확인했다. 거버넌스 테스트는 옛 코드에서 red·새 코드에서 green 임을 실측(양방향 변별력). `errors='replace'` 채택 근거: strict면 바이트 하나에 호출 *전체*가 실패하고 소비자가 전부 fail-open이라 보호가 통째로 죽는다.
+- **부수 정정**: `errors='replace'`의 실효 범위는 **블롭 내용**(`cat-file`·`show`)뿐이다 — git은 기본 `core.quotepath=true`로 경로의 비ASCII 바이트를 C 인용해 내보내므로 `ls-files` **경로**는 애초에 ASCII다(실측). 처음 작성한 테스트 이름이 "비UTF-8 경로를 견딘다"로 과장돼 있어 실제 검증 내용에 맞게 축소했다.
+- **곁가지로 드러난 침묵 실패 2건**: `pathscope.repo_files`·`store.current_branch`의 `except Exception`이 **로그 한 줄 없이** 각각 `[]`·`"unknown"`을 반환하고 있었다. 특히 전자의 빈 목록은 '겹침 없음'과 같은 색이라 경로 겹침 보호가 조용히 죽는다 — 예외 타입명을 stderr로 남기도록 함께 고쳤다.
+
 ### 2026-08-08 (결정·노출 정책 / **전제 정정**): **`ASM-02` 등급·백분위·합격예측 학생 노출 정책 — 갭 리뷰 D2의 전제 "노출 코드 0건"이 부정확함을 실측 규명(실제는 "노출 대기": writer만 0건이고 노출 배관은 이미 완성). 권고 (c) 학생 영구 비노출 + 보호자/교사 Phase 3 이연, 봉인은 런타임 필터가 아닌 **구조적 배제**로 방향 확정, 집행 태스크 `ASM-07` 등재. `ASM-02` 상태 전환은 owner=kiki 본인 기입 대기** (claude 조사·설계·문서화, Kiki 요청 "ASM-02 결정부터 진행해줘")
 
 - **전제 정정이 이번 작업의 핵심 산출물**. `assessment_module_gap_review.md` D2와 `(횡단)` 절이 공통으로 "이 필드를 읽어 학생 대면 응답에 싣는 코드 0건"이라 적었으나, 축을 분리해 실측하니 **writer(값 채움)만 0건**이었다. 노출 경로는 이미 완성돼 있다 — `GET /v1/me/assessments`가 `response_model=list[AssessmentSchema]`이고 그 스키마가 예측 5필드를 전부 포함하며, `response_model_exclude_none`이 저장소 전체 **0건**·라우트 수준 `response_model_exclude`는 `api/users.py`의 PII 제외 2건뿐이라 **assessment 라우트엔 어떤 제외 설정도 없어** 학생 응답 JSON에 `"estimated_grade": null` 등이 **키째로 나가는 중**이다. OpenAPI에도 광고된다.
