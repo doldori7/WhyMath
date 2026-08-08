@@ -8,6 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/core/token_store.dart';
 import 'package:korean_math_app/features/auth/application/auth_controller.dart';
 import 'package:korean_math_app/features/auth/data/auth_api.dart';
+import 'package:korean_math_app/features/chat/application/chat_controller.dart';
+import 'package:korean_math_app/features/chat/data/coach_api.dart';
+import 'package:korean_math_app/features/chat/data/coach_models.dart';
+import 'package:korean_math_app/features/problems/application/active_problem.dart';
+import 'package:korean_math_app/features/problems/data/problem_models.dart';
 
 class _FakeAuthApi extends AuthApi {
   _FakeAuthApi({this.token, this.shouldThrow = false}) : super(Dio());
@@ -61,6 +66,35 @@ class _ThrowingTokenStore implements TokenStore {
   Future<void> clear() async {}
 }
 
+/// 세션 잔여 재현용 fake — 코치 응답 1개를 그대로 돌려준다(chat_controller_test 패턴 축약).
+class _FakeCoachApi extends CoachApi {
+  _FakeCoachApi() : super(Dio());
+
+  @override
+  Future<CoachTurnResult> createSession(
+    CoachRequest request, {
+    String? problemId,
+  }) async {
+    return CoachTurnResult(
+      dialogueId: 'prev-student-dialogue',
+      response: CoachResponse(
+        decision: PedagogyDecision(
+          polyaStageToAdvance: 'stay',
+          prompt: '이전 학생 발화에 대한 응답(테스트)',
+          system: '시스템(테스트)',
+          socraticCategory: '',
+        ),
+      ),
+      wh1TurnIndex: 1,
+    );
+  }
+
+  @override
+  Future<CoachTurnResult> addTurn(String dialogueId, CoachRequest request) {
+    throw UnimplementedError('이 테스트는 첫 턴만 쓴다');
+  }
+}
+
 ProviderContainer _container(AuthApi api, TokenStore store) {
   final container = ProviderContainer(
     overrides: [
@@ -105,6 +139,45 @@ void main() {
     await container.read(authControllerProvider.notifier).logout();
     expect(store.cleared, isTrue);
     expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test(
+      'logout → activeProblemProvider·코치 대화(dialogueId·메시지)도 함께 초기화된다'
+      '(다음 학생에게 잔여 노출 방지·MOB-12)', () async {
+    final store = _FakeTokenStore()..saved = 'tok';
+    final container = ProviderContainer(
+      overrides: [
+        authApiProvider.overrideWithValue(_FakeAuthApi(token: 'tok')),
+        tokenStoreProvider.overrideWithValue(store),
+        coachApiProvider.overrideWithValue(_FakeCoachApi()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // 이전 학생이 풀던 문제가 남아있는 상태를 재현한다. `overrideWith`로 초기값을 고정하면
+    // `invalidate`가 그 고정값으로 되돌아가 버려 리셋을 검증할 수 없으므로(실제 프로덕션
+    // 빌더는 `(ref) => null`), 실제 빌더를 그대로 두고 세팅만 직접 한다(problem_screen.onStart와
+    // 동형 — `.notifier.state =`).
+    container.read(activeProblemProvider.notifier).state = const Problem(
+      problemId: 'p-prev-student',
+      sourceType: '자체생성',
+      subject: '공통',
+      unitCodes: <String>['ALG'],
+    );
+
+    // 이전 학생의 코치 대화 잔여(dialogueId·메시지)를 재현한다.
+    await container.read(chatControllerProvider.notifier).send('이전 학생 발화');
+    expect(container.read(chatControllerProvider).dialogueId, isNotNull);
+    expect(container.read(chatControllerProvider).messages, isNotEmpty);
+    expect(container.read(activeProblemProvider), isNotNull);
+
+    await container.read(authControllerProvider.notifier).logout();
+
+    // 다음 학생이 같은 기기로 로그인해도 이전 학생의 문제·대화가 보이지 않아야 한다.
+    expect(container.read(activeProblemProvider), isNull);
+    final chatState = container.read(chatControllerProvider);
+    expect(chatState.dialogueId, isNull);
+    expect(chatState.messages, isEmpty);
   });
 
   test('restore: 저장된 토큰 있으면 → isAuthenticated', () async {

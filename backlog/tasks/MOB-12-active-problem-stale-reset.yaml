@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "결함: active_problem.dart:13 StateProvider<Problem?>(非autoDispose)를 null로 되돌리는 코드가 프로덕션 0건(세팅은 problem_screen.dart:83 1곳뿐). 앱 재시작 전까지 영구 활성 → 결함신고(chat_screen.dart:211)가 엉뚱한 problem_id로 접수, 새 코치세션(chat_controller.dart:188)이 낡은 문제에 묶임, 로그아웃(auth_controller.dart:88) 후 잔존."
   - "수정: 문제 종료·문제 전환·로그아웃 시 activeProblemProvider 리셋(null). auth_controller.logout()에 상태정리 추가(activeProblem·chat dialogueId 등 이전 학생 잔여 제거)."
   - "테스트(재현): 문제 A 시작 후 종료/전환 시 결함신고 problem_id가 stale A가 아님을 위젯 테스트로 확인. 로그아웃 후 activeProblem이 null인지 확인."
-artifacts: []
+artifacts:
+  - "activeProblemProvider(비autoDispose) 리셋 봉합 — problem_screen.dart onStart에서 문제 전환 시 null 리셋 후 재세팅(전환 계약을 코드로 명시), auth_controller.dart logout()에 ref.invalidate(activeProblemProvider)·ref.invalidate(chatControllerProvider) 추가(이전 학생 문제·코치 대화 잔여 정리). 신규 테스트 3건 — problem_screen_test.dart(container.listen으로 전환 도중 null 통과 실증, 직접 덮어쓰기였다면 검출 못함), auth_controller_test.dart(logout 전후 activeProblemProvider·chatController dialogueId/messages가 정리됨을 확인), chat_screen_test.dart(문제 전환 후 결함신고 problemId가 stale 아님을 종단 확인). 검증: Flutter SDK 3.41.9(CI 동일 버전) 신규 설치해 실행 — flutter analyze 0 issues, flutter test 267/267 all passed(신규 3건 포함 개별·전체 재확인), flutter test --coverage 86.98%(CI 게이트 임계 60% 통과, awk 게이트 재현). flutter-engineer 서브에이전트 구현 + 직접 모델/API 시그니처 대조 검토 + 실기 실행 검증."
 paths:
   - "src/mobile/lib/features/problems/**"
   - "src/mobile/lib/features/auth/**"

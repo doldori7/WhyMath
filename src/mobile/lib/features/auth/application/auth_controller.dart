@@ -10,6 +10,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/env.dart';
 import '../../../core/token_store.dart';
+import '../../chat/application/chat_controller.dart';
+import '../../problems/application/active_problem.dart';
 import '../data/auth_api.dart';
 import 'auth_state.dart';
 
@@ -85,8 +87,15 @@ class AuthController extends _$AuthController {
   }
 
   /// 로그아웃 — 저장된 토큰을 지우고 미인증 상태로 되돌린다.
+  ///
+  /// 토큰만 지우고 끝내면 이전 학생의 활성 문제·코치 대화(dialogueId·메시지 누적)가 provider에
+  /// 그대로 남는다(非autoDispose `activeProblemProvider`·앱 수명 내내 유지되는 `ChatController`
+  /// 상태) — 같은 기기로 다음 학생이 로그인하면 그 잔여가 그대로 보인다(MOB-12). `invalidate`로
+  /// 두 provider를 최초 빌드 상태(활성 문제 없음·빈 대화)로 되돌려 학생 간 경계를 보장한다.
   Future<void> logout() async {
     await ref.read(tokenStoreProvider).clear();
     state = state.copyWith(isAuthenticated: false);
+    ref.invalidate(activeProblemProvider);
+    ref.invalidate(chatControllerProvider);
   }
 }
