@@ -337,6 +337,47 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (구현·S3-32): **학습 루프 닫힘 — 서버검증 최종답→Polya REVIEW 게이트→attempt 적재→completion 신호** (미병합 브랜치 tlthrr 재작성)
+
+**무엇/왜**: 코치 대화에서 학생이 최종 답에 도달해도 서버가 그걸 검증·기록하지 않았다 — 정답
+판정이 클라 자가보고(`api/me.py::submit_attempt`)에만 의존. 원래 이 작업은 미병합 브랜치
+`claude/s3-02-live-remeasurement-tlthrr`(구 S3-26)에 있었으나 merge-base 이후 `api/coach.py`
+632줄·`api/me.py` 430줄 drift로 포트 불가 — 현재 main 기준 처음부터 재구현(backend-engineer
+위임 → 메인 독립 재검증).
+
+**구현**: 신규 `l3/verify_final_answer.py`(3상태 correct/incorrect/unverifiable — 기존
+`l3/solution_set.py`·`l3/symbolic_equivalence.py`의 4상태 `IdentityVerdict` 재사용, 재구현 0.
+환각 금지 — 판정 불가는 절대 correct로 낙관 판정하지 않음. 결과에 정답값 자체를 담지 않음) +
+신규 `l4/completion.py`(`decide_completion` — L3 3상태 + 기존 Polya 엔진의 `current_stage`를
+*조합만*. **"정답을 빠르게" KPI 금지** 핵심 규약: `correct`여도 `current_stage`가 이미 REVIEW일
+때만 완료 — UNDERSTAND/PLAN/EXECUTE의 correct는 아직 완료 아님. incorrect면 정답 미노출 재고
+유도 문구로 대체, 부정적 감정어 0). `api/coach.py`에 `_apply_completion`(멱등 가드 —
+`dialogue.server_verified_completed_at` 존재 시 재판정·재적재 없이 즉시 반환, `_ExplodingSession`
+테스트로 DB 미접근까지 증명) 결선 — `create_session`/`append_turns` 양쪽 동형 적용, completed=True
+시 서버검증 축 `ProblemAttempt` 신규 적재(클라 자가보고 축과 별도·중복 허용) + `dialogue.attempt_id`
+·`server_verified_completed_at` 갱신. `CoachResponse.dialogue_completed`(True/False/None 3값)
+신규 필드로 클라의 `next-problem` 자동 호출을 지원. `api/me.py`는 무변경(다른 두 세션이 동시
+점유 중이라 최소침습 원칙 — 손 안 댐). 신규 alembic 리비전 `7ef2b5a8e69e`(down_revision=착수
+시점 실제 head `090d254a5d43` 실측 확인 — stale down_revision 재사용 금지 원칙 준수), additive
+컬럼 1개(`dialogue.server_verified_completed_at`, nullable).
+
+**검증**: 신규 테스트 3파일(`l3/test_verify_final_answer.py`·`l4/test_completion.py`·
+`api/test_coach_completion.py`) — 3상태 전수·"정답을 빠르게" 금지 4단계 파라미터화 전수·환각
+금지/정답 비노출 sentinel 회귀·멱등 가드(`_ExplodingSession`)·API 레벨 `dialogue_completed` 3값
+전부 포함. 1차 구현엔 테스트가 0건이라 메인이 반려 후 재작업 요청(사유: CLAUDE.md "모든 PR에
+테스트 동반" 미충족) — 재작업으로 해소. **전체 백엔드 스위트 재검증**(canonical bare
+`pytest -q`, `src/backend`+`src/data-pipeline` 동시 설치): 신규 마이그레이션 착지 시 기존
+`db/test_schema_version_guard.py`의 `KNOWN_REVISIONS`/`EXPECTED_ALEMBIC_HEAD` 동결 테스트 2건이
+설계대로 발화(상수 미갱신 감지) → `db/schema_version.py`에 리비전 추가로 해소. 기존
+`api/test_coach.py::test_gate_off_skips_answer_lookup`(step-shadow 게이트 off 시 정답 미접근
+검증)이 신규 `_final_answer_for_verification`(완료 판정용 — step-shadow 플래그와 무관하게 항상
+켜져 있어야 하는 별도 경로)과 충돌해 실패 → 테스트를 `_expected_answer_for` 격리 직접호출로
+재설계해 원래 의도(step-shadow 전용 경로만 게이팅 확인)를 보존하며 해소. **최종**: 9019
+passed·296 skipped·1 failed(무관 — `test_concept_reach_report.py`, PATH-05가 이미 착지시킨
+학습경로 표면 도달 전환에 이 governance 테스트 고정 기대값이 아직 안 따라간 것, S3-32 변경
+stash 후 재현 확인). alembic upgrade/downgrade 오프라인 SQL 왕복·`lint-imports` 7계층 KEPT·
+ruff·black·mypy-strict 전부 green.
+
 ### 2026-08-08 (구현·REC-02): **WH-1 도구6 select_probe 공급선 배선 — L1 역인덱스 조회 + 하네스 조립, L4 무수정**
 
 **무엇/왜**: `ai_recommendation_module_gap_review.md` §3 D2 실측 — WH-1 하네스 도구6(`select_probe`,

@@ -89,6 +89,11 @@ class Dialogue(Base):
 
     # ===== 대화 결과 =====
     resolution: Mapped[Resolution | None] = mapped_column(_pg_enum(Resolution, "resolution_enum"))
+    # S3-32: 서버검증(verify_final_answer) + Polya REVIEW 게이트 완료 시각. NULL=미완료·
+    # api/coach.py의 멱등 가드(schema.dialogue.py 필드 docstring 참조).
+    server_verified_completed_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True)
+    )
 
     # ===== 턴 카운트 =====
     total_turns: Mapped[int | None] = mapped_column(sa.Integer)
