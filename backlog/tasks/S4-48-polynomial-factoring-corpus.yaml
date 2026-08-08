@@ -5,20 +5,21 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "[10공수1-01-03]/[10기수1-01-03] 0커버 해소 — kind 필터 2밴드(1코드씩) 결정론 생성기 신설·전량 게이트 통과"
-artifacts: []
+artifacts:
+  - 89de17c8
 paths:
   - src/backend/whymath_backend/l3/equivalent/polynomial_factoring_skeleton_generator.py
   - src/backend/whymath_backend/harness/polynomial_factoring_batch.py
   - tests/backend/l3/equivalent/test_polynomial_factoring_skeleton_generator.py
   - tests/backend/harness/test_polynomial_factoring_batch.py
   - data/corpus/problem_bank_polynomial_factoring_v0/problems.jsonl
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "S4-47(다항식 사칙연산)의 형제·후속 — 그 모듈이 인수분해를 후속으로 명시해 둠. W2 Phase4 #4."
 updated: 2026-08-08
