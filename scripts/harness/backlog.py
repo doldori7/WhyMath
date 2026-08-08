@@ -930,9 +930,15 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
 
     def _git(*argv: str) -> str:
         result = subprocess.run(
-            ["git", *argv], cwd=root, capture_output=True, text=True, timeout=15
+            ["git", *argv],
+            cwd=root,
+            capture_output=True,
+            # HARN-19: 로케일(cp949) 디코드 금지 — git 출력은 UTF-8이 정본이다.
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
         )
-        return result.stdout.strip()
+        return (result.stdout or "").strip()
 
     try:
         base = _git("merge-base", "origin/main", "HEAD") or _git("merge-base", "main", "HEAD")

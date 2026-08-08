@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - scripts/harness/pathscope.py
   - scripts/harness/store.py
   - tests/infra/test_harness_subprocess_encoding.py
-session: null
+session: claude/whymath-positioning-strategy-qumq9y
 notes: "발견 경위: 2026-08-08 Kiki 머신에서 ASM-02 start 실행 중 'UnicodeDecodeError: cp949 codec can't decode byte 0xed' 스택트레이스 + '⚠ 미머지 done 탐지 불가(error:AttributeError)' 관측. 영향: HARN-11(미머지 done 탐지)은 타 세션이 이미 끝낸 태스크의 중복 구현을 막는 보호인데, Kiki 머신에서는 이 결함 때문에 상시 fail-open 이었다. CLAUDE.md '상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지'(2026-07-27 refs/claims 403 → OPS-07 병렬 구현·735줄 폐기 경위)와 동일 부류의 두 번째 사례이며, '외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다'(2026-07-17 logconfig cp949 기동 실패)를 서브프로세스 출력 축으로 확장한 형태다. priority=1 근거: 보호가 죽은 채로 병렬 세션이 계속 돌고 있다(브리핑 기준 원격 claim 11건)."
 updated: 2026-08-08
