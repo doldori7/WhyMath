@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,11 +17,12 @@ acceptance:
   - "④ 후보 0의 사유별 계상: (가설 없음 / 오개념 미태깅 / 난이도 부재 / 전부 응답함)이 **서로 다른 값**을 낸다. 침묵 실패 금지 — l2/axis_exclusions.py 사유 계상 패턴 답습"
   - "⑤ 변별력: 공급 배선 전후로 select_probe의 ok=True 건수가 0 → >0으로 달라지는지 실측. 현재는 공급 있음/없음이 wh1_loop.py:472 '판별 문항 없음(억지 매칭 금지)'로 같은 값을 낸다"
   - "⑥ 7계층 동결: L1 조회 → 하네스 주입 → L4 순수 선택. L4(probe_selection)는 DB를 계속 모른다(현행 순수 계약 유지)"
-artifacts: []
+artifacts:
+  - d554ddad
 paths:
   - src/backend/whymath_backend/harness/wh1_primary.py
   - "src/backend/whymath_backend/l1/*"
   - "tests/backend/harness/test_wh1_*probe*.py"
-session: claude/human-bottleneck-tasks-6dszy0
+session: null
 notes: "docs/architecture/ai_recommendation_module_gap_review.md §3 D2. WH-1 도구6 select_probe가 라이브에서 구조적으로 항상 실패한다 — wh1_llm_policy.py:143 probe_candidates 기본 ()를 채우는 프로덕션 호출자 0건(wh1_primary.py:115·wh1_shadow.py:261 둘 다 outside_mids만 전달) → plan_probe([]) → 항상 None → '판별 문항 없음' 정상 폴백으로 위장. 재료는 이미 적재: distractor_map 1,616문항·오개념 64종·difficulty_overall 100%(=후보 자격 1,616). probe_selection.py:24의 '태그 스키마 현 레포 부재' 주석은 stale(§정정). 반복 실수 6회차 — '만들고 공급원을 잇지 않음'."
 updated: 2026-08-08
