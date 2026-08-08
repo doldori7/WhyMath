@@ -218,9 +218,7 @@ class ReviewStatusBackfillReport:
         }
 
 
-def _backfill_line(
-    stripped: str, review_status: ReviewStatus
-) -> tuple[str, dict[str, Any] | None]:
+def _backfill_line(stripped: str, review_status: ReviewStatus) -> tuple[str, dict[str, Any] | None]:
     """JSONL 한 줄을 백필 — (산출 줄, 감사 항목 또는 None(무변경)) 반환.
 
     `review_status`가 이미 채워져 있으면(pending/approved/rejected 어느 값이든) 원문 줄 그대로

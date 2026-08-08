@@ -17,9 +17,7 @@ from whymath_backend.schema.enums import ReviewStatus
 
 def _labels_jsonl(n_ok: int, n_defect: int) -> str:
     lines = [json.dumps({"problem_id": f"p{i}", "verdict": "ok"}) for i in range(n_ok)]
-    lines += [
-        json.dumps({"problem_id": f"d{i}", "verdict": "defect"}) for i in range(n_defect)
-    ]
+    lines += [json.dumps({"problem_id": f"d{i}", "verdict": "defect"}) for i in range(n_defect)]
     return "\n".join(lines)
 
 
