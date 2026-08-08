@@ -166,7 +166,9 @@ class TestNonEmptyPoolAssembly:
         assert p1.difficulty == pytest.approx(-1.0)
         assert p1.misconception_tags == frozenset({"mis.a", "mis.b"})
 
-    def test_irt_difficulty_b_preferred_over_heuristic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_irt_difficulty_b_preferred_over_heuristic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         async def _fake(session: object, mids: list[str], **kwargs: object) -> ProbeCandidateQuery:
             row = ProbeCandidateRow(
                 problem_id="p1",
@@ -214,7 +216,12 @@ class TestFunnelReasonDistinctness:
         assert funnel.reason is None
 
     def test_all_four_reasons_are_pairwise_distinct(self) -> None:
-        reasons = {REASON_NO_HYPOTHESIS, REASON_UNTAGGED, REASON_NO_DIFFICULTY, REASON_ALL_ADMINISTERED}
+        reasons = {
+            REASON_NO_HYPOTHESIS,
+            REASON_UNTAGGED,
+            REASON_NO_DIFFICULTY,
+            REASON_ALL_ADMINISTERED,
+        }
         assert len(reasons) == 4  # 변별력 — 네 값이 우연히도 서로 같으면 이 설계는 실패.
 
     def test_untagged_logged_end_to_end(

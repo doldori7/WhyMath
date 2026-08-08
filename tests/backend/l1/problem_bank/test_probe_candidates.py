@@ -38,7 +38,9 @@ def _row(
     irt_b: float | None = None,
 ) -> tuple[str, list[dict[str, object]] | None, float | None, float | None, float | None]:
     distractor_map = (
-        None if tags is None else [{"choice_index": i, "misconception_id": t} for i, t in enumerate(tags)]
+        None
+        if tags is None
+        else [{"choice_index": i, "misconception_id": t} for i, t in enumerate(tags)]
     )
     return (problem_id, distractor_map, difficulty, irt_a, irt_b)
 
@@ -47,7 +49,9 @@ class TestMatching:
     def test_untagged_problem_excluded_and_not_counted(self) -> None:
         rows = [_row("p1", [_MID_C]), _row("p2", None)]  # p1: 다른 오개념·p2: distractor_map 없음
         result = _match_probe_rows(rows, frozenset({_MID_A}))
-        assert result == ProbeCandidateQuery(rows=(), tagged_count=0, tagged_with_difficulty_count=0)
+        assert result == ProbeCandidateQuery(
+            rows=(), tagged_count=0, tagged_with_difficulty_count=0
+        )
 
     def test_tagged_problem_included(self) -> None:
         rows = [_row("p1", [_MID_A, _MID_B])]

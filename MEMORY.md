@@ -337,6 +337,39 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (구현·PB-02): **선언≠배선 봉합 — S6 상시 재검증 전 코퍼스 글롭 전환 + 커버리지 리포트 재생성-diff CI**
+
+**무엇/왜**: "만들고 배선 안 함" 반복 계열(OPS-03·08·11·VIZ-01·NLP-01·REC-01)의 3건 추가 재발.
+① 야간 S6 상시 재검증(`e2e-nightly`)이 코퍼스 3종(`generated_v0`·`rephrased_v0`·`killer_v0`)만
+하드코딩 — 실제 7종 중 4종(`conceptual_v0`·`misconception_mc_v0`·`probability_finite_v0`·`v1`,
+전체 1,478문·55.8%)이 야간 재검증을 한 번도 받지 못함. ② `problem_bank_coverage.py`(결정론
+관측 CLI) 산출물이 `docs/data/problem_bank_coverage_2026-07.json`에 커밋돼 있으나 재생성-대조
+CI가 없어 6종·2,667건 기준 stale 상태로 방치(실제 7종·2,647건과 불일치·S3-27 유형축도 미반영).
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): `ci.yml` 2곳 수정 — ① `e2e-nightly`의
+corpus_reverify 호출을 하드코딩 3파일 나열 → bash 글롭 `problem_bank_*/problems.jsonl`(harness
+`qa_pipeline.py`가 이미 쓰는 패턴과 통일). `--fuzz` 야간 배선은 **실측 후 보류**: 실행시간은
+무--fuzz 20초·--fuzz 36초로 부담 없으나, 켜면 `problem_bank_rephrased_v0`에서 진짜 데이터 결함
+12건(주장 극값이 실제 근과 불일치)이 새로 드러나 신규 게이트가 착지 직후부터 상시 빨강으로
+시작하게 됨 — 그 결함 조사·수정은 범위 무한 확장이라 별도 태스크로 분리, 사유·수치를 CI 주석에
+실측 기록. ② `data-pipeline` 잡의 기존 ARCH-21 `qa_pipeline` 스텝과 **동일한**
+`needs.changes.outputs.corpus` 트리거를 공유하는 신규 스텝 추가(새 CI 잡 신설 안 함) —
+`problem_bank_coverage` 재생성 → 커밋본과 `diff -u`, 불일치 시 `exit 1`. 도구 자체는 무수정(여전히
+게이트 아님·항상 exit 0) — stale 검출은 CI 스텝의 diff가 전담. 커밋된 리포트를 재생성해 갱신
+(2,667·6종→**2,647·7종**, 성취기준 커버 72/435→78/435, 유형(S3-27) 축 신규 반영).
+
+**검증**: `tests/infra/test_corpus_reverify_wiring.py`·`test_problem_bank_coverage_ci_wiring.py`
+신규(OPS-10·ARCH-21 배선 실재성 패턴 답습 — 실제 `ci.yml`을 `yaml.safe_load`로 파싱해 스텝
+존재·모듈 실행 형태·하드코딩 부재/글롭 존재·트리거 공유·diff+exit1 존재를 기계 확인, 파서
+실패는 무조건 예외). **변별력 실측**(CLAUDE.md 요구 — 양쪽 다 실측): 하드코딩을 되돌리면 4종
+누락이 실제로 재현되고 관련 테스트가 실제 FAIL함을 확인 후 원복·diff+exit1 스텝을 실제로 지우면
+커버리지 wiring 테스트 4건이 실제 FAIL함을 확인 후 원복. 전체 백엔드 스위트 재검증: 9019
+passed·296 skipped·1 pre-existing 무관 failure(REC-02·S3-32와 동일 건 — `test_concept_reach_
+report.py`, PATH-05 드리프트, stash로 무관 재확인). CI YAML 구문 검증(`yaml.safe_load`)·
+`lint-imports` KEPT·ruff·black·mypy-strict green. **부수 발견**: REC-02(`d554ddad`) 테스트 파일
+2건이 black 라인폭 100 위반 상태로 커밋됐던 것을 이번 스위트에서 뒤늦게 발견(REC-02 검증 시
+소스 파일만 black 체크하고 테스트 파일을 빠뜨림) — 이번 커밋에서 재포맷해 상환.
+
 ### 2026-08-08 (구현·S3-32): **학습 루프 닫힘 — 서버검증 최종답→Polya REVIEW 게이트→attempt 적재→completion 신호** (미병합 브랜치 tlthrr 재작성)
 
 **무엇/왜**: 코치 대화에서 학생이 최종 답에 도달해도 서버가 그걸 검증·기록하지 않았다 — 정답
