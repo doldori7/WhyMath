@@ -11,7 +11,7 @@
     "개념 [3.0,4.0)": 3447,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 4041,
-    "절차 [2.0,3.0)": 5843
+    "절차 [2.0,3.0)": 6443
   },
   "corpora": [
     {
@@ -120,6 +120,12 @@
       "name": "problem_bank_killer_v0",
       "parse_errors": 0,
       "problems": 120,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_linear_inequality_system_v0",
+      "parse_errors": 0,
+      "problems": 600,
       "status": "적재됨"
     },
     {
@@ -277,7 +283,7 @@
       "total": 11
     },
     "방정식과 부등식": {
-      "covered": 7,
+      "covered": 9,
       "total": 20
     },
     "벡터": {
@@ -415,7 +421,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 82,
+      "covered": 84,
       "total": 254
     },
     "대학교": {
@@ -440,6 +446,7 @@
     "[10공수1-02-03]",
     "[10공수1-02-05]",
     "[10공수1-02-07]",
+    "[10공수1-02-09]",
     "[10공수1-02-11]",
     "[10공수1-03-01]",
     "[10공수1-03-02]",
@@ -456,6 +463,7 @@
     "[10기수1-01-02]",
     "[10기수1-01-03]",
     "[10기수1-02-02]",
+    "[10기수1-02-07]",
     "[10기수2-01-04]",
     "[10기수2-01-06]",
     "[10기수2-03-02]",
@@ -563,14 +571,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 11877
+    "단답형": 12477
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 11275,
+    "problems_without_problem_type": 11875,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -636,6 +644,9 @@
     },
     "problem_bank_killer_v0": {
       "숙달 [4.0,5.0]": 120
+    },
+    "problem_bank_linear_inequality_system_v0": {
+      "절차 [2.0,3.0)": 600
     },
     "problem_bank_matrix_ops_v0": {
       "절차 [2.0,3.0)": 320
@@ -758,6 +769,9 @@
     },
     "problem_bank_killer_v0": {
       "단답형": 120
+    },
+    "problem_bank_linear_inequality_system_v0": {
+      "단답형": 600
     },
     "problem_bank_matrix_ops_v0": {
       "단답형": 320
@@ -967,6 +981,7 @@
     "[10공수1-02-03]": 84,
     "[10공수1-02-05]": 1,
     "[10공수1-02-07]": 60,
+    "[10공수1-02-09]": 300,
     "[10공수1-02-11]": 200,
     "[10공수1-03-01]": 120,
     "[10공수1-03-02]": 40,
@@ -983,6 +998,7 @@
     "[10기수1-01-02]": 300,
     "[10기수1-01-03]": 300,
     "[10기수1-02-02]": 24,
+    "[10기수1-02-07]": 300,
     "[10기수2-01-04]": 24,
     "[10기수2-01-06]": 24,
     "[10기수2-03-02]": 24,
@@ -1090,8 +1106,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2942528735632184,
-    "covered_code_count": 128,
+    "coverage_rate": 0.2988505747126437,
+    "covered_code_count": 130,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -1100,9 +1116,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 307
+    "zero_coverage_code_count": 305
   },
-  "total_problems": 13493,
+  "total_problems": 14093,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1319,6 +1335,9 @@
     },
     "LINEAR-FUNC-VALUE": {
       "인지 [1.0,2.0)": 200
+    },
+    "LINEAR-INEQUALITY-SYSTEM": {
+      "절차 [2.0,3.0)": 600
     },
     "LOG-DIST": {
       "개념 [3.0,4.0)": 12,
@@ -2548,7 +2567,6 @@
     "[10공수1-02-04]",
     "[10공수1-02-06]",
     "[10공수1-02-08]",
-    "[10공수1-02-09]",
     "[10공수1-02-10]",
     "[10공수1-04-01]",
     "[10공수2-01-03]",
@@ -2569,7 +2587,6 @@
     "[10기수1-02-04]",
     "[10기수1-02-05]",
     "[10기수1-02-06]",
-    "[10기수1-02-07]",
     "[10기수1-02-08]",
     "[10기수1-02-09]",
     "[10기수1-03-01]",
