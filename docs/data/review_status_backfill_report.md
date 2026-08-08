@@ -87,14 +87,29 @@ python -m whymath_backend.harness.problem_corpus_review_status_backfill --all
   보수적으로 상한만 올린 것이다. SQL 사전축소로의 재설계는 이번 범위 밖(성능 실측 후
   별도 후속).
 
-## 4. 변별력 테스트 (신규 4종)
+## 4. 변별력 테스트 (신규 — 문서-실물 정합 2026-08-08 수정)
 
-`tests/backend/harness/test_problem_corpus_review_status_backfill.py`(hermetic, tmp_path
-기반 — 실제 `docs/data/corpus_audit_*.jsonl`을 판정 근거로 그대로 사용하는 
-`compute_corpus_verdict`/`verdict_from_audit_labels` 단위 테스트 + CLI e2e)와
-`tests/backend/l6/test_review_status_gate.py`(hermetic, `Problem.model_construct` 기반 —
-`is_review_cleared` 단위 + L6 6모드 배선 확인), `tests/backend/api/test_gating_candidate_limit.py`
-(hermetic, monkeypatch로 `_CANDIDATE_FETCH_LIMIT` 축소 + caplog로 절단 로그 검증)로 구성했다.
+> 이 섹션은 최초 작성 시 아직 존재하지 않던 파일명(`test_problem_corpus_review_status_
+> backfill.py`·`l6/test_review_status_gate.py`·`test_gating_candidate_limit.py`)을 계획
+> 단계 이름 그대로 적어놓은 채였다(선언≠배선 — CLAUDE.md 금기) — 실제로 착지한 파일로
+> 정정한다.
+
+- `tests/backend/harness/test_review_status_backfill_verdict.py`(hermetic) —
+  `verdict_from_audit_labels`(코퍼스별 판정 순수 함수) 4갈래(라벨 없음→pending·min-n
+  미달→pending·결함율 상한 이하→approved·초과→rejected) 전부 실제 `corpus_audit_eval`
+  (`load_audit`·`summarize`)을 경유해 검증. 뮤테이션(분기 조건 `if False`로 치환) 후 재확인해
+  변별력 확보(제거 시 실패 재현 완료).
+- `tests/backend/l6/test_shared.py`의 `TestIsReviewCleared` — `is_review_cleared` 단위
+  (`approved`만 True, `pending`/`rejected`/`None` 전부 fail-closed False, `is_exposable`과
+  독립 판정 확인).
+- L6 6개 `test_gating.py`(`retake`·`suneung`·`school_progress`·`metacognition`·`gifted`·
+  `thinking`)의 `TestReviewStatusGateIndependentFromCopyrightGate` — 각 모드 배선 확인.
+- `tests/backend/api/test_me_review_status_gate.py` — 기본 CAT SQL(축①+②) 화이트박스 검증.
+- `tests/backend/api/test_gating_candidate_truncation.py`(hermetic, 신규 — 이번 정정에서
+  추가) — `_fetch_candidates`를 직접 호출해 `_CANDIDATE_FETCH_LIMIT` monkeypatch 후 상한
+  미만(로그 없음)·상한과 정확히 같음(count(*) 재조회 + `fetched=%d total=%d truncated=%d`
+  정확한 수치) 양쪽을 검증. 뮤테이션 후 재확인해 변별력 확보.
+
 축①(SQL where절에 `METADATA_ONLY_SOURCES` 조건 포함 여부)은 **실PG 라이브 검증이 필요**하나
 이 sandbox엔 살아있는 Postgres가 없어(기존 known 공백), `sqlalchemy.dialects.postgresql
 .dml`의 컴파일된 SQL 문자열(`str(candidate_stmt.compile(dialect=postgresql.dialect(),
