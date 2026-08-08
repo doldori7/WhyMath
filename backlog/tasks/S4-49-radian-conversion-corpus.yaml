@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-49-radian-conversion-corpus
+title: "고등 일반각과 호도법(도-라디안 변환) 파일럿 코퍼스"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[12대수02-01] 0커버 해소 — kind 필터 2밴드(deg_to_rad/rad_to_deg, 1코드 공유) 결정론 생성기 신설·전량 게이트 통과"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/equivalent/radian_conversion_skeleton_generator.py
+  - src/backend/whymath_backend/harness/radian_conversion_batch.py
+  - tests/backend/l3/equivalent/test_radian_conversion_skeleton_generator.py
+  - tests/backend/harness/test_radian_conversion_batch.py
+  - data/corpus/problem_bank_radian_conversion_v0/problems.jsonl
+session: claude/whymath-mvp-plan-architecture-trjg5x
+notes: "S4-47/S4-48(다항식 사칙연산·인수분해) 웨이브의 연속 — W2 Phase4 #5. AnswerFormat.식 세션 첫 사용(라디안 pi 분수 답)."
+updated: 2026-08-08

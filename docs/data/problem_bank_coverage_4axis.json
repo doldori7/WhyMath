@@ -11,7 +11,7 @@
     "개념 [3.0,4.0)": 3447,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 4041,
-    "절차 [2.0,3.0)": 4799
+    "절차 [2.0,3.0)": 4943
   },
   "corpora": [
     {
@@ -177,6 +177,12 @@
       "status": "적재됨"
     },
     {
+      "name": "problem_bank_radian_conversion_v0",
+      "parse_errors": 0,
+      "problems": 144,
+      "status": "적재됨"
+    },
+    {
       "name": "problem_bank_rephrased_v0",
       "parse_errors": 0,
       "problems": 429,
@@ -281,7 +287,7 @@
       "total": 4
     },
     "삼각함수": {
-      "covered": 1,
+      "covered": 2,
       "total": 3
     },
     "생활과 수학": {
@@ -403,7 +409,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 80,
+      "covered": 81,
       "total": 254
     },
     "대학교": {
@@ -458,6 +464,7 @@
     "[12대수01-04]",
     "[12대수01-05]",
     "[12대수01-08]",
+    "[12대수02-01]",
     "[12대수02-02]",
     "[12대수03-01]",
     "[12대수03-02]",
@@ -549,14 +556,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 10833
+    "단답형": 10977
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 10231,
+    "problems_without_problem_type": 10375,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -655,6 +662,9 @@
     },
     "problem_bank_quad_ineq_v0": {
       "절차 [2.0,3.0)": 200
+    },
+    "problem_bank_radian_conversion_v0": {
+      "절차 [2.0,3.0)": 144
     },
     "problem_bank_rephrased_v0": {
       "개념 [3.0,4.0)": 179,
@@ -765,6 +775,9 @@
     },
     "problem_bank_quad_ineq_v0": {
       "단답형": 200
+    },
+    "problem_bank_radian_conversion_v0": {
+      "단답형": 144
     },
     "problem_bank_rephrased_v0": {
       "객관식": 80,
@@ -971,6 +984,7 @@
     "[12대수01-04]": 24,
     "[12대수01-05]": 24,
     "[12대수01-08]": 80,
+    "[12대수02-01]": 144,
     "[12대수02-02]": 62,
     "[12대수03-01]": 48,
     "[12대수03-02]": 165,
@@ -1062,8 +1076,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2896551724137931,
-    "covered_code_count": 126,
+    "coverage_rate": 0.29195402298850576,
+    "covered_code_count": 127,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -1072,9 +1086,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 309
+    "zero_coverage_code_count": 308
   },
-  "total_problems": 12449,
+  "total_problems": 12593,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1397,6 +1411,9 @@
     },
     "QUAD-INEQ-BOUNDARY": {
       "절차 [2.0,3.0)": 200
+    },
+    "RADIAN-CONVERSION": {
+      "절차 [2.0,3.0)": 144
     },
     "RECT-PRISM-SURFACE-AREA": {
       "절차 [2.0,3.0)": 200
@@ -2586,7 +2603,6 @@
     "[12대수01-03]",
     "[12대수01-06]",
     "[12대수01-07]",
-    "[12대수02-01]",
     "[12대수02-03]",
     "[12대수03-07]",
     "[12미적Ⅰ-01-02]",
