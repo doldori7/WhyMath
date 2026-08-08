@@ -11,7 +11,7 @@
     "개념 [3.0,4.0)": 3447,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 4041,
-    "절차 [2.0,3.0)": 4199
+    "절차 [2.0,3.0)": 4799
   },
   "corpora": [
     {
@@ -153,6 +153,12 @@
       "status": "적재됨"
     },
     {
+      "name": "problem_bank_polynomial_factoring_v0",
+      "parse_errors": 0,
+      "problems": 600,
+      "status": "적재됨"
+    },
+    {
       "name": "problem_bank_probability_finite_v0",
       "parse_errors": 0,
       "problems": 34,
@@ -235,7 +241,7 @@
       "total": 4
     },
     "다항식": {
-      "covered": 4,
+      "covered": 6,
       "total": 6
     },
     "도형과 측정": {
@@ -397,7 +403,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 78,
+      "covered": 80,
       "total": 254
     },
     "대학교": {
@@ -416,6 +422,7 @@
   "covered_codes": [
     "[10공수1-01-01]",
     "[10공수1-01-02]",
+    "[10공수1-01-03]",
     "[10공수1-02-02]",
     "[10공수1-02-03]",
     "[10공수1-02-05]",
@@ -434,6 +441,7 @@
     "[10공수2-03-04]",
     "[10기수1-01-01]",
     "[10기수1-01-02]",
+    "[10기수1-01-03]",
     "[10기수1-02-02]",
     "[10기수2-01-04]",
     "[10기수2-01-06]",
@@ -541,14 +549,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 10233
+    "단답형": 10833
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 9631,
+    "problems_without_problem_type": 10231,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -633,6 +641,9 @@
     "problem_bank_polynomial_arithmetic_v0": {
       "인지 [1.0,2.0)": 1200,
       "절차 [2.0,3.0)": 300
+    },
+    "problem_bank_polynomial_factoring_v0": {
+      "절차 [2.0,3.0)": 600
     },
     "problem_bank_probability_finite_v0": {
       "개념 [3.0,4.0)": 8,
@@ -742,6 +753,9 @@
     },
     "problem_bank_polynomial_arithmetic_v0": {
       "단답형": 1500
+    },
+    "problem_bank_polynomial_factoring_v0": {
+      "단답형": 600
     },
     "problem_bank_probability_finite_v0": {
       "단답형": 34
@@ -921,6 +935,7 @@
   "problems_per_covered_code": {
     "[10공수1-01-01]": 600,
     "[10공수1-01-02]": 24,
+    "[10공수1-01-03]": 300,
     "[10공수1-02-02]": 27,
     "[10공수1-02-03]": 84,
     "[10공수1-02-05]": 1,
@@ -939,6 +954,7 @@
     "[10공수2-03-04]": 24,
     "[10기수1-01-01]": 600,
     "[10기수1-01-02]": 300,
+    "[10기수1-01-03]": 300,
     "[10기수1-02-02]": 24,
     "[10기수2-01-04]": 24,
     "[10기수2-01-06]": 24,
@@ -1046,8 +1062,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.2850574712643678,
-    "covered_code_count": 124,
+    "coverage_rate": 0.2896551724137931,
+    "covered_code_count": 126,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -1056,9 +1072,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 311
+    "zero_coverage_code_count": 309
   },
-  "total_problems": 11849,
+  "total_problems": 12449,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1332,6 +1348,9 @@
     "POLYNOMIAL-ARITHMETIC": {
       "인지 [1.0,2.0)": 1200,
       "절차 [2.0,3.0)": 300
+    },
+    "POLYNOMIAL-FACTORING": {
+      "절차 [2.0,3.0)": 600
     },
     "POSITION-VECTOR": {
       "인지 [1.0,2.0)": 69,
@@ -2492,7 +2511,6 @@
     ]
   },
   "zero_coverage_codes": [
-    "[10공수1-01-03]",
     "[10공수1-02-01]",
     "[10공수1-02-04]",
     "[10공수1-02-06]",
@@ -2513,7 +2531,6 @@
     "[10공수2-02-08]",
     "[10공수2-03-01]",
     "[10공수2-03-05]",
-    "[10기수1-01-03]",
     "[10기수1-02-01]",
     "[10기수1-02-03]",
     "[10기수1-02-04]",
