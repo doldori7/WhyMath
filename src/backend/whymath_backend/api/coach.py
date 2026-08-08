@@ -1533,6 +1533,9 @@ async def _wh1_primary_decision_or(
     dialogue_id: str | None,
     problem_id: uuid.UUID | None,
     session_recall: SessionRecall | None = None,
+    session: AsyncSession | None = None,
+    theta: float | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1544,6 +1547,10 @@ async def _wh1_primary_decision_or(
     solution_coaching·가설·증거 파이프라인은 기존 결정론 경로 그대로다(상태 오케스트레이션
     수렴은 후속·`run_persisted_turn` docstring 참조). 여기서도 방어적으로 try/except를 한 겹 더
     둔다 — 테스트 대체물·미래 리팩터가 예외를 전파해도 학생 응답이 500이 되지 않게(이중 방어).
+
+    `session`·`theta`·`user_id`(REC-02 ②)는 `run_wh1_primary_turn`의 select_probe 후보 공급으로
+    그대로 흐른다 — 호출자가 이미 조회한 `server_theta`·`user.user_id`를 재사용할 뿐 신규 쿼리는
+    없다(create_session·append_turns 두 핸들러가 이미 계산해 둔 값).
     """
     try:
         utterance = await run_wh1_primary_turn(
@@ -1556,6 +1563,9 @@ async def _wh1_primary_decision_or(
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
             session_recall=session_recall,
+            session=session,
+            theta=theta,
+            user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1734,6 +1744,12 @@ async def create_session(
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
                 session_recall=session_recall,
+                # REC-02 ②: session은 *의도적으로* 넘기지 않는다 — `_spawn`은 이 코루틴을
+                # 요청 핸들러와 *동시에* 돈다(fire-and-forget create_task). AsyncSession은
+                # 동시 사용이 안전하지 않아(SQLAlchemy 비동기 세션은 단일 실행 흐름 전제),
+                # 살아있는 요청 세션을 여기 넘기면 핸들러의 나머지 쿼리와 경합한다. shadow는
+                # 비노출 관측이라 이 턴의 probe_candidates가 비어도(session=None → skip)
+                # 학생 응답에 영향 없다 — 변별력(⑤)은 동기 실행되는 primary 경로로 증명한다.
             )
         )
     pack = await _pack_for(session, body.problem_id)
@@ -1792,6 +1808,11 @@ async def create_session(
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
             problem_id=body.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: primary는 이 자리에서 *동기 await*라 session 동시사용 위험이 없다
+            # (shadow의 _spawn과 달리 요청 핸들러가 이 호출이 끝날 때까지 다른 쿼리를 안 던진다).
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     now = datetime.now(timezone.utc)
@@ -2068,6 +2089,7 @@ async def append_turns(
                 problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
                 warmstart_outside_mids=warmstart_mids_turn,
                 session_recall=session_recall,
+                # REC-02 ②: create_session과 동형 이유로 session 미전달(_spawn 동시성·주석 참조).
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
@@ -2105,6 +2127,10 @@ async def append_turns(
             dialogue_id=str(dialogue_id),
             problem_id=dialogue.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: create_session과 동형 — 동기 await라 session 동시사용 위험 없음.
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     current_total = dialogue.total_turns or 0

@@ -337,6 +337,45 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (구현·REC-02): **WH-1 도구6 select_probe 공급선 배선 — L1 역인덱스 조회 + 하네스 조립, L4 무수정**
+
+**무엇/왜**: `ai_recommendation_module_gap_review.md` §3 D2 실측 — WH-1 하네스 도구6(`select_probe`,
+오개념 판별 문항 선택)이 라이브 경로에서 **구조적으로 항상 실패**했다. `LLMTutorPolicy(probe_candidates=...)`
+를 채우는 프로덕션 호출자가 0건(`wh1_primary.py`·`wh1_shadow.py` 둘 다 `outside_mids`만 전달)이라
+`probe_candidates=()` → `plan_probe([])` → 항상 `None` → "판별 문항 없음(억지 매칭 금지)"이 *정상
+폴백처럼 위장*했다(변별력 0 — 후보 공급했는데 매칭 실패한 경우와 같은 값). 재료(`distractor_map`
+1,616문항·오개념 64종·`difficulty_overall` 100% 보유)는 이미 적재돼 있었다 — 없던 것은 공급선 하나.
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): 신규 `l1/problem_bank/probe_candidates.py`
+(L1 역인덱스 조회 좌석 — `distractor_map` JSONB mids 매칭, 순수 코어 `_match_probe_rows` + 얇은 DB
+시암, 신규 컬럼·마이그레이션 0) + 신규 `harness/wh1_probe_supply.py`(하네스 전용 조립 —
+`assemble_probe_candidate_pool`이 L1 조회 + L2 `resolve_item_difficulty_b` 난이도 변환 + L4
+`ProbeCandidate` 조립을 잇는다. **L1은 L4를 모른다** — 조립은 7계층 밖 하네스만 담당). `wh1_primary.py`
+·`wh1_shadow.py`가 활성 가설이 선 뒤 이 풀을 `LLMTutorPolicy(probe_candidates=..., theta=...)`에
+주입(두 파라미터는 이미 존재했으나 공급자가 없었을 뿐). `api/coach.py`는 동기 경로(`create_session`
+·`append_turns`의 primary 호출)에만 `session`을 전달하고, `_spawn`(shadow fire-and-forget task)에는
+**의도적으로 미전달**(AsyncSession 동시성 위험 회피 — shadow는 비노출이라 후보가 비어도 무해, 변별력은
+동기 primary 경로로 증명). `l2/axis_exclusions.py` 사유 계상 패턴을 답습한 `ProbeSupplyFunnel`이
+후보 0의 4개 사유(가설 없음/오개념 미태깅/난이도 부재/전부 응답함)를 서로 다른 값으로 계상(침묵 실패
+금지). **L4 `probe_selection.py`는 무수정**(순수·DB 무관 계약 유지).
+
+**reactive retrieval 준수**: probe 후보는 `outside_mids`와 동일한 "사적 probe 컨텍스트" 계약으로만
+흐른다 — 프롬프트·로그 어디에도 problem_id·오개념 태그 원문이 실리지 않음을 sentinel 값 주입으로
+직접 실측(`TestNoPreloadInPrompt`·`TestNoPreloadInLogs`).
+
+**검증**: 신규 테스트 37건(`l1/problem_bank`·`harness/wh1_probe_supply`·`harness/wh1_select_probe_variance`)
++ 변별력 실측(`select_probe`의 `ok`가 배선 전 `False`→배선 후 `True`로 실제 전환, 모킹 0·실물
+`LLMTutorPolicy`+`run_tutoring_turn`) + ε-탐색 성립(활성 세트 밖 mids도 후보 풀에 실려 §2.2 규칙2가
+성립). **전체 백엔드 스위트 재실행**(`src/backend`+`src/data-pipeline` 설치, canonical
+`pytest -q` 무인자 호출): **8952 passed·296 skipped·1 failed**(무회귀). 그 1건
+(`test_concept_reach_report.py::test_real_corpus_smoke_...`)은 REC-02 변경 **stash 후 재현 확인 —
+main 기존 상태**(PATH-05가 `/v1/me/weak-concepts/{concept_id}/learning-path`를 실제로 배선해
+10종 표면 중 1개가 "도달"로 전환됐는데 이 governance 테스트의 고정 기대값이 아직 안 따라간 것 —
+REC-02와 무관, 별도 후속 필요). 7계층 `lint-imports` KEPT·ruff·black·mypy-strict 전부 green.
+구현 중 자체 발견 결함 1건 교정: `wh1_probe_supply.py` docstring이 문자열 리터럴로
+`run_wh1_primary_turn`을 언급해 `test_gate3_student_verification_governance.py`의 grep 기반
+allowlist 봉인을 오탐 발화시킴 — allowlist 확장 대신 docstring 표현을 바꿔 해소(봉인 취지 유지).
+
 ### 2026-08-07 (결정·ASM-02): **등급·백분위·합격예측 노출 정책 = (b)+(c) 혼합** (Kiki 결정)
 
 **무엇/왜**: `assessment_module_gap_review.md` §3 D2 — `assessment` 테이블의 `estimated_grade`
