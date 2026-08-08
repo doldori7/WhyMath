@@ -2138,3 +2138,4 @@
 {"ts": "2026-08-08T00:06:11", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "PED-14-time-to-mastery-normalization"}
 {"ts": "2026-08-08T00:06:45", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "ARCH-27-comparison-derivative-sealing-gate"}
 {"ts": "2026-08-08T04:36:20", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "ASM-07-prediction-field-student-exposure-sealing"}
+{"ts": "2026-08-08T08:13:53", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "HARN-19-harness-subprocess-locale-decode"}
