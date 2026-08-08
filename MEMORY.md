@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (집행·노출 봉인): **`ASM-07` 예측 5필드 학생 대면 봉인 착지 — 응답 스키마 구조적 배제(`StudentAssessment` 신설) + 3층 거버넌스 테스트. 노출 라우트가 2개가 아니라 **3개**였음이 실측에서 드러나 `ASM-02` §봉인 방향·`ASM-07` acceptance ②를 정정** (claude 구현, Kiki "ASM-07 진행해줘")
+
+- **구조**: `StudentAssessment`(12필드)가 **기반**이고 `Assessment`(17필드)가 예측 5필드를 *더한다*. 방향이 핵심 — 이러면 나중에 `Assessment`에 새 예측 필드가 붙어도 학생 응답에 자동으로 새지 않는다(**허용목록**이지 차단목록이 아니다). `STUDENT_HIDDEN_PREDICTION_FIELDS` 상수가 코드·테스트·`ARCH-27`이 함께 읽는 단일 진실 원천.
+- **⚠ 라우트 수 정정(2 → 3)**: `PATCH /v1/me/assessments/{id}/complete`가 §봉인 방향과 `ASM-07` acceptance ②에서 **빠져 있었다**. 세 번째는 `POST /capture`의 중첩 필드(`AssessmentCaptureResponse.assessment`). **교훈**: "집행 지점을 별항으로 적는다"는 규칙(2026-08-04)이 *빠짐없이* 적는 것까지 보장하지 않는다 — 그래서 거버넌스 테스트를 사람이 옮겨 적은 목록이 아니라 **라우트 열거 + 무력화 하한**(`route_count >= 3`)으로 짰다. 목록을 기계가 세게 한 것.
+- **변별력 실측(양방향)**: ①봉인 직후 기존 `test_me.py` capture 테스트가 예고대로 **`KeyError: 'estimated_grade'`**로 red 전환 → 그 red를 본 뒤 기대값을 '키 부재'로 갱신(acceptance ③) ②`GET /assessments` **하나만** 옛 모델로 되돌리면 거버넌스 3건 red, 복원하면 green.
+- **영속 축 불변**: 적재는 여전히 내부 정본(`Assessment.from_schema`)으로 하고 5필드는 컬럼째 남는다 — `ASM-02`가 (d) 필드 폐기를 미채택했으므로 봉인은 **노출 축에만** 건다. 거버넌스 테스트가 이 방향도 동결한다(내부 모델에서 5필드가 사라지면 red).
+- **런타임 필터 회피**: `api/users.py`의 `response_model_exclude=_PII_EXCLUDE` 선례를 의도적으로 **복사하지 않았다** — 데코레이터 인자 한 줄이 빠지면 조용히 무력화되고 스키마엔 필드가 남아 OpenAPI 광고도 계속된다(`PED-08` ③ 선례). PII는 별개 축이라 `users.py` 현행은 건드리지 않았다.
+- **환경 메모**: CCR 컨테이너 기본 파이썬이 3.11인데 백엔드는 3.12+ 요구라 `pip install -e src/backend`가 실패한다. `python3.12 -m venv`로 별도 venv를 만들어야 백엔드 테스트를 돌릴 수 있다(+`src/data-pipeline`도 설치해야 `tests/backend/l1/*`·`harness/test_qa_pipeline.py` 7건이 수집된다).
+
 ### 2026-08-08 (시스템 결함·하네스): **하네스 git 서브프로세스가 로케일 인코딩으로 디코드해 cp949(한국어 Windows) 환경에서 붕괴 — HARN-11 미머지 done 탐지가 Kiki 머신에서 *상시* fail-open 이었음이 드러남. 태스크 `HARN-19` 등재(priority 1)** (Kiki 머신 실행 출력에서 관측, claude 원인 규명·등재)
 
 - **관측**: Kiki가 `ASM-02`를 `start` 할 때 `UnicodeDecodeError: 'cp949' codec can't decode byte 0xed` 스택트레이스와 `⚠ 미머지 done 탐지 불가(error:AttributeError)`가 함께 출력됐다.

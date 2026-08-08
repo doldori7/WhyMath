@@ -387,8 +387,36 @@ QuizMode 채점 존치 결정 선례와 같은 급). 이 태스크는 **결정�
 **그대로 둘 수 있다**(학생 대면 스코프 한정). (b)를 골랐다면 그 어근을 빼야 했으므로, `ASM-02`가
 `ARCH-27` 착수의 선행인 것이 맞았다.
 
-**구현 태스크**: 신설 — 아래 `backlog.py add`로 등재(어근 목록·스캔 인프라는 `ARCH-27`과 공유해
-중복 인프라를 만들지 않는다).
+**구현 태스크**: `ASM-07-prediction-field-student-exposure-sealing`.
+
+#### D2 §집행 결과 — `ASM-07` 착지 (2026-08-08)
+
+봉인이 코드로 물렸다. 위 §봉인 방향에서 **한 가지가 정정**됐다 — 학생 대면 노출 라우트는
+2개가 아니라 **3개**였다:
+
+| 라우트 | 이전 | 이후 |
+|---|---|---|
+| `GET /v1/me/assessments` | `list[Assessment]` | `list[StudentAssessment]` |
+| `PATCH /v1/me/assessments/{id}/complete` | `Assessment` | `StudentAssessment` |
+| `POST /v1/me/assessments/capture` | `AssessmentCaptureResponse.assessment: Assessment` | `… : StudentAssessment` |
+
+`/complete`는 §봉인 방향을 쓸 때 빠뜨렸던 지점이다(`ASM-07` acceptance ②도 2개로 적었다).
+"집행 지점을 별항으로 적는다"는 규칙(2026-08-04)이 *빠짐없이* 적는 것까지 보장하지는
+않는다는 사례로 남긴다 — 그래서 거버넌스 테스트를 라우트 **열거**로 짜고 무력화 하한
+(`route_count >= 3`)을 함께 걸었다. 사람이 목록을 옮겨 적는 대신 기계가 세게 했다.
+
+**구조**: `StudentAssessment`(12필드)가 **기반**이고 `Assessment`(17필드)가 예측 5필드를
+*더한다*. 방향이 핵심이다 — 이러면 나중에 `Assessment`에 새 예측 필드가 붙어도 학생
+응답에 자동으로 새지 않는다(허용목록이지 차단목록이 아니다).
+
+**변별력 실측**: ①봉인 직후 기존 `test_me.py` capture 테스트가 예고대로 `KeyError:
+'estimated_grade'`로 red 전환 → 기대값을 '키 부재'로 갱신 ②`GET /assessments` 하나만
+옛 모델로 되돌리면 거버넌스 3건이 red, 복원하면 green.
+
+**영속 축 불변**: 적재는 여전히 내부 정본(`Assessment.from_schema`)으로 하며 5필드는
+컬럼째 남아 있다 — `ASM-02`가 (d) 필드 폐기를 미채택했으므로 봉인은 노출 축에만 건다.
+`test_prediction_field_sealing.py`가 이 방향도 함께 동결한다(내부 모델에서 5필드가
+사라지면 red).
 
 ---
 

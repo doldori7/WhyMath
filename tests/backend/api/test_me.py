@@ -49,6 +49,9 @@ from whymath_backend.l2.recommendation_evidence import (
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.assessment import (
+    STUDENT_HIDDEN_PREDICTION_FIELDS,
+)
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
@@ -2502,19 +2505,21 @@ class TestAssessmentCaptureEndpoint:
         assert body["measurement_sufficient"] is True
         assert body["assessment"] is not None
         assert body["assessment"]["user_id"] == str(_UID)
-        # 4개 예측 필드(+target_university_id) — 조립 스키마가 채우지 않았으므로 응답도 null.
-        for field in (
-            "estimated_grade",
-            "estimated_score",
-            "estimated_percentile",
-            "admission_probability",
-            "target_university_id",
-        ):
-            assert body["assessment"][field] is None
+        # ASM-07: 예측 5필드는 학생 대면 응답에 **키 자체가 없다**(구조적 배제).
+        #
+        # 이 단언은 원래 `body["assessment"][field] is None` 이었다 — 값이 null 임을
+        # 확인하면서 *키의 존재*를 함께 동결하고 있었고, 그게 2026-08-08에 "노출 대기"
+        # 상태(배관 완성·값만 빈 상태)를 드러낸 증거였다. 봉인 후 이 자리는 KeyError로
+        # red 전환되는 것을 실측한 뒤 아래 형태로 갱신했다(ASM-07 acceptance ③).
+        assert set(body["assessment"]) & STUDENT_HIDDEN_PREDICTION_FIELDS == set()
         # 실제로 Assessment ORM 행 1건 add + commit 1회(실 적재 발생).
         assert fake.commits == 1
         assert len(fake.added) == 1
         assert isinstance(fake.added[0], Assessment)
+        # 적재된 *내부* 정본에는 5필드가 그대로 있고 값은 None이다 — 봉인은 노출 축이지
+        # 영속 축이 아니다(필드 폐기는 ASM-02에서 (d) 미채택).
+        for field in STUDENT_HIDDEN_PREDICTION_FIELDS:
+            assert getattr(fake.added[0], field) is None
 
     def test_idempotent_within_same_window_no_double_write(
         self, monkeypatch: pytest.MonkeyPatch

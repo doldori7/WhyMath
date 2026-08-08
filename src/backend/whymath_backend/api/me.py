@@ -146,6 +146,7 @@ from whymath_backend.schema.assessment import (
 from whymath_backend.schema.assessment import (
     SkillMasteryHistory as SkillMasteryHistorySchema,
 )
+from whymath_backend.schema.assessment import StudentAssessment as StudentAssessmentSchema
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
@@ -381,7 +382,7 @@ async def list_my_sessions(
     return rows
 
 
-@router.get("/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력")
+@router.get("/assessments", response_model=list[StudentAssessmentSchema], summary="내 진단 이력")
 async def list_my_assessments(
     user: ConsentedUser,
     session: SessionDep,
@@ -394,8 +395,11 @@ async def list_my_assessments(
     completed_until: CloseUntil = None,
     order: OrderParam = "desc",
     include_total: IncludeTotal = False,
-) -> list[AssessmentSchema]:
+) -> list[StudentAssessmentSchema]:
     """본인 진단(Assessment) 이력 — 기본 최신순. user_id 스코핑.
+
+    ASM-07: 응답 모델은 `StudentAssessment`다 — 예측 5필드는 **스키마에 자리가 없다**
+    (런타임 필터가 아니라 구조적 배제 · ASM-02 결정 (c)).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
     slice 69: `completed_since`/`completed_until`(선택)로 `completed_at` 시간창 — 미완료는 제외.
@@ -422,7 +426,9 @@ async def list_my_assessments(
         .offset(offset)
     )
     result = await session.execute(stmt)
-    rows = [row.to_schema() for row in result.scalars().all()]
+    rows = [
+        StudentAssessmentSchema.from_assessment(row.to_schema()) for row in result.scalars().all()
+    ]
     await _maybe_set_total(
         session,
         response,
@@ -2365,16 +2371,18 @@ async def delete_my_dialogue(
 
 @router.patch(
     "/assessments/{assessment_id}/complete",
-    response_model=AssessmentSchema,
+    response_model=StudentAssessmentSchema,
     summary="내 진단 완료(completed_at 채움)",
 )
 async def complete_my_assessment(
     assessment_id: uuid.UUID,
     user: ConsentedUser,
     session: SessionDep,
-) -> AssessmentSchema:
+) -> StudentAssessmentSchema:
     """slice 53 (slice 55 리팩터): 본인 Assessment 완료(`completed_at`=now). 컬럼은
-    `completed_at`(ended_at 아님). idempotent·404 비누설."""
+    `completed_at`(ended_at 아님). idempotent·404 비누설.
+
+    ASM-07: 응답 모델은 `StudentAssessment` — 예측 5필드는 스키마에 자리가 없다."""
     row, _ = await _close_owned_resource(
         session,
         Assessment,
@@ -2383,7 +2391,7 @@ async def complete_my_assessment(
         "completed_at",
         "진단을 찾을 수 없습니다.",
     )
-    return row.to_schema()
+    return StudentAssessmentSchema.from_assessment(row.to_schema())
 
 
 @router.delete(
@@ -2532,10 +2540,11 @@ class AssessmentCaptureResponse(BaseModel):
             "적재 안 함·기존 행 반환)."
         )
     )
-    assessment: AssessmentSchema | None = Field(
+    assessment: StudentAssessmentSchema | None = Field(
         default=None,
         description="'captured'·'already_captured_window'면 해당 Assessment(신규 또는 기존). "
-        "'insufficient_measurement'면 null.",
+        "'insufficient_measurement'면 null. ASM-07: 학생 대면 모델이라 예측 5필드는 "
+        "스키마에 자리가 없다(적재는 내부 정본 `Assessment`로 그대로 수행).",
     )
     standard_error: float | None = Field(
         default=None,
@@ -2587,18 +2596,19 @@ async def capture_measurement_assessment(
         return AssessmentCaptureResponse(
             written=False,
             reason="already_captured_window",
-            assessment=existing.to_schema(),
+            assessment=StudentAssessmentSchema.from_assessment(existing.to_schema()),
             standard_error=state.standard_error,
             measurement_sufficient=True,
         )
 
     schema = await _assemble_measurement_assessment(session, user.user_id, now=now)
+    # 적재는 내부 정본(예측 5필드 포함 · 값은 항상 None)으로, 응답은 학생 대면 정본으로.
     session.add(Assessment.from_schema(schema))
     await session.commit()
     return AssessmentCaptureResponse(
         written=True,
         reason="captured",
-        assessment=schema,
+        assessment=StudentAssessmentSchema.from_assessment(schema),
         standard_error=state.standard_error,
         measurement_sufficient=True,
     )
