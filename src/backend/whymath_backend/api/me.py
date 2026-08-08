@@ -165,6 +165,7 @@ from whymath_backend.schema.enums import (
     AuditResourceType,
     Persona,
     Resolution,
+    ReviewStatus,
 )
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -1944,7 +1945,12 @@ async def recommend_next_problem(
         내부의 `is_suneung_eligible`(L6 진실 게이트)이 재수행**한다(저작권·페르소나 재검증 —
         사전필터가 느슨해도 부적격이 새지 않는다).
       - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항은 사전필터에 안 잡히는
-        *의도적 축소*다 — 현 코퍼스 persona_fit은 전부 {}라 실손실 0(적합도 적재 시 재검토).
+        *의도적 축소*다. **S3-10(2026-08-07 재실행) 백필 이후 이 축소는 더 이상 무손실이 아니다**
+        — `persona_fit`이 실값으로 채워져 코퍼스 2,647건 중 시그니처·기출유형이 없는 대다수가
+        `is_suneung_eligible`상으로는 적격인데도 이 SQL 사전필터가 θ 근방 50개 풀에서 원천
+        배제한다(진실 게이트가 재검증하는 건 "새는 부적격"뿐 — "새는 적격 후보"는 잡지 못한다).
+        SQL 사전필터를 persona_fit 조건까지 넓히는 것은 별도 태스크(`S3-17`)로 분리했다 — 이
+        엔드포인트의 실 트래픽·성능 영향을 함께 봐야 하는 변경이라 백필 태스크에 얹지 않는다.
       - 선택은 L6×L2 결합: 수능 우선순위 가중(`suneung_item_weight`) × 약점 가중
         (`prioritize_weak_concepts` — 기본 CAT과 공유하는 `_load_weak_concept_weights`)을
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
@@ -2118,7 +2124,16 @@ async def recommend_next_problem(
     # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
     candidate_stmt = select(
         Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
-    ).where(Problem.difficulty_overall.isnot(None))
+    ).where(
+        Problem.difficulty_overall.isnot(None),
+        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 본문 미보유 출처(평가원/EBS/교과서)는
+        # 기본 CAT 후보에서도 SQL 레벨로 배제한다(수능 분기가 이미 쓰는 것과 동일 상수 재사용 —
+        # 판정 기준 이원화 회피).
+        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+        # PB-03 축② — 검수 노출 게이트(운영 축, 축①과 독립 — 절대 합치지 않는다). approved만
+        # 후보. `corpus_audit_eval` 측정 판정만 review_status에 각인된다(사람 입력 경로 0).
+        Problem.review_status == ReviewStatus.approved,
+    )
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     if sibling_filter == "exclude" and sibling_ids:

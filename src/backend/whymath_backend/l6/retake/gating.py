@@ -99,6 +99,10 @@ def is_retake_eligible(problem: Problem, persona: Persona, *, min_fit: float = 0
     if not _shared.is_exposable(problem):
         return False
 
+    # ②-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ③ RT 적합 신호 — 재수전용형 라벨 또는 페르소나 적합도 임계 이상.
     is_retake_format = (
         _shared.normalize_enum_value(problem.question_format) == QuestionFormat.재수전용형.value

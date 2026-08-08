@@ -43,6 +43,7 @@ from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.enums import (
     Curriculum,
     Persona,
+    ReviewStatus,
     SignaturePattern,
     SourceType,
     Subject,
@@ -127,6 +128,8 @@ def _suneung_problem(pid: uuid.UUID, suffix: str) -> Problem:
         ProblemSchema(
             problem_id=pid,
             source_type=SourceType.자체생성,
+            # PB-03 — 검수 노출 게이트(`is_review_cleared`) 추가로 approved가 필요.
+            review_status=ReviewStatus.approved,
             curriculum_version=Curriculum.REVISION_2022,
             valid_from_year=2022,
             subject=Subject.공통,
@@ -144,6 +147,8 @@ def _plain_problem(pid: uuid.UUID, suffix: str) -> Problem:
         ProblemSchema(
             problem_id=pid,
             source_type=SourceType.자체생성,
+            # PB-03 — 기본 CAT SQL도 review_status=approved만 후보(축②)라 필요.
+            review_status=ReviewStatus.approved,
             curriculum_version=Curriculum.REVISION_2022,
             valid_from_year=2022,
             subject=Subject.공통,

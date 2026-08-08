@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from whymath_backend.schema.enums import Persona, SourceType
+from whymath_backend.schema.enums import Persona, ReviewStatus, SourceType
 from whymath_backend.schema.problem import Problem
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -162,9 +162,32 @@ def is_exposable(problem: Problem) -> bool:
     return source_value(problem) not in metadata_only_values
 
 
+def is_review_cleared(problem: Problem) -> bool:
+    """이 문항이 *검수*를 통과했는가 — 운영 축 노출 게이트(L6 공용, PB-03).
+
+    `is_exposable`(저작권·법적 축)과 **절대 합치지 않는다** — 이 함수는 검수(운영·정책 축)만
+    본다. 두 축은 호출부에서 각각 독립된 `if`로 확인한다(설계 핵심, `problem_bank_gap_review_r2.md`
+    노출 4단 중 ③단 "노출 적격"의 검수 절반).
+
+    `review_status`가 `approved`일 때만 True — `None`(미평가)·`pending`(평가 대기)·`rejected`
+    (기준 미달) 전부 fail-closed로 False다. §13.3: "모든 problem은 review_status=approved 후
+    노출"(`ReviewStatus` enum docstring). 각인되는 값은 사람 인상이 아니라
+    `harness/corpus_audit_eval.py`(`corpus_audit_eval`)의 측정 판정만이다(사람 입력 경로 0).
+
+    Args:
+      problem: 검수 상태를 판정할 문항(L1 `Problem`).
+
+    Returns:
+      `review_status == ReviewStatus.approved`이면 True, 그 외(`None`·`pending`·`rejected`)는
+      False.
+    """
+    return problem.review_status == ReviewStatus.approved
+
+
 __all__ = [
     "METADATA_ONLY_SOURCES",
     "is_exposable",
+    "is_review_cleared",
     "normalize_enum_value",
     "persona_fit",
     "source_value",
