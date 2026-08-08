@@ -1006,6 +1006,8 @@ API 7라우트(생성·조회·검색·
 스키마 stale은 문서 각주로만 기록(편집 소유는 다음 스키마 유지보수 세션에 위임). 신규 태스크
 1건만 등재(`KG-01-concept-reach-observability`) — 활성화가 아니라 가시화. 정본:
 `docs/architecture/knowledge_module_gap_review.md` §5.
+### 2026-08-03 (사고 규명·재발방지·S4-16): **cp949(한국어 Windows) 콘솔 print 크래시 — logconfig 사고 2회차, CLAUDE.md 규칙 확장 + `OPS-23` 등재**: `S4-16` 강등전 CLI(`residue_gate_demotion_battle.py`)를 Phaiakes9에서 실 Ollama로 라이브 실행하던 중, 계산·감사 JSONL(UTF-8) 저장까지는 성공했으나 콘솔에 최종 리포트를 print하는 단계에서 `UnicodeEncodeError` — em dash(—, U+2014)가 한국어 Windows 콘솔 기본 코드페이지 cp949에 없는 문자였다. 값 손실은 없었으나(파일은 이미 UTF-8로 저장됨) Kiki가 결과를 볼 수 없었다. 2026-07-17 uvicorn logconfig UnicodeDecodeError(`test_wh1_shadow_logconfig.py` 선례)와 같은 cp949 계열 **반복 사고**라 CLAUDE.md 실수 관리 규정상 등재 의무 — ①원인 실측(em dash 1개 문자, cp949 전수 스캔으로 확정) ②CLAUDE.md '코드' 규칙에 "Kiki 콘솔 print 문자열도 cp949 세이프해야" 확장 + `sys.stdout.reconfigure(errors="backslashreplace")` 방어선 패턴 명문화 ③`OPS-23-cp949-cli-output-safety-audit` 등재(저장소 전 harness/ops CLI 전수 재감사 — 같은 패턴의 다른 리포트 모듈도 잠재 위험). 즉시 수정은 `residue_gate_demotion_battle.py`에 반영·커밋(`cb369e7e`)·cp949 strict 인코딩 재현 검증 완료. (claude 규명·구현, Kiki 라이브 실행 중 발견)
+
 ### 2026-08-03 (재점검·AI 콘텐츠 생성): **AI 콘텐츠 생성 모듈 2차 재점검(`ai_content_generation_gap_review_2.md`) — 1차 판정(58~68) 전부 유지·`S3-27`/`ARCH-21` 착지 반영·404 체인(`S3-26`) 불변 재확인. 신규 발견: 학생 도달 상한 4는 `CUR-02`와 동일 근본원인이라 중복 등재 배제(G1) / 교수법 콘텐츠 슬롯 파이프라인(`slot_generator`→`prescreen`→`review`)이 프로덕션 호출자 0·학생 reader 0로 완전 격리 — "완비된 소비 경로+미도달 공급원" 계열의 역방향 8회차(G2/G3) — 태스크 1건(`PED-06`) 등재** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재대조)
 ### 2026-08-03 (설계·평가): **평가(Assessment) 모듈 갭 점검·설계(D1~D2+페이퍼) + 태스크 2건 등재(`ASM-02`는 owner=kiki) — 평가 결과 영속 좌석 writer 0(D1·"완비된 소비 경로+미도달 공급원" 8회차)·등급·백분위·합격예측 노출과 게임화 금기의 미기록 긴장(D2) — 외부 EOS 틀 1단계 모듈 49~53+확장54~58 대조** (claude 설계, Kiki 요청)
 

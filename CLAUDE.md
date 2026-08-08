@@ -155,6 +155,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - 모든 데이터베이스 접근은 ORM/쿼리 빌더 — 원시 SQL 최소화
 - 한국어 주석을 코드에 직접 작성 (Kiki 선호)
 - **외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다** — 로케일 인코딩(한국어 Windows=cp949)으로 읽는 파일(uvicorn `--log-config` 등)은 **ASCII 전용** + 회귀 테스트 동결. 한국어 설명은 파일이 아니라 런북/문서에 둔다. (2026-07-17 logconfig UnicodeDecodeError 기동 실패 실측 — `test_wh1_shadow_logconfig.py` 선례)
+- **Kiki 콘솔에 직접 print되는 문자열(하네스 CLI 리포트·argparse help 등)도 cp949 세이프해야 한다** — 한국어 텍스트 자체는 cp949로 안전하지만 em dash(—, U+2014) 같은 특수 문장부호는 아니다. 새 CLI 리포트를 작성할 때 인쇄 문자열에 `ch.encode('cp949')` 전수 검사를 자가검증으로 동반하고, 방어선으로 `sys.stdout.reconfigure(errors="backslashreplace")`(비UTF-8 콘솔 한정)를 CLI 진입점에 둔다. 파일 출력(JSONL 등)은 `encoding="utf-8"` 명시라 무관 — 화면 출력 경로만의 문제다. (2026-08-03 S4-16 강등전 CLI 실측: 계산·JSONL 저장은 성공했으나 콘솔 print에서 em dash로 UnicodeEncodeError — 위 logconfig 사고와 같은 cp949 계열 2회차, `residue_gate_demotion_battle.py` 선례)
 
 ### LLM 사용
 - 모든 LLM 호출 → Langfuse 추적

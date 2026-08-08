@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-23-cp949-cli-output-safety-audit
+title: "하네스/ops CLI 콘솔 출력 cp949 안전성 전수 감사 — 한국어 Windows 인쇄 크래시 재발 방지"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 저장소 전 harness/*.py·ops/*.py의 CLI(main() 등)가 stdout/stderr로 print하는 모든 문자열 리터럴을 전수 스캔해 cp949 인코딩 불가 문자(em dash 등)가 있는지 확인하는 회귀 테스트 신설 — CLAUDE.md '코드' 규칙(2026-08-03 S4-16 실측) 준수를 CI로 동결"
+  - "② residue_gate_demotion_battle.py 외 기존 CLI 리포트 모듈(visualization_reach_report.py·attempt_grading_shadow_report.py·pedagogy_content_slot_reach_report.py 등)도 같은 스캔으로 재확인해 발견된 위반은 이번 태스크에서 함께 수정(같은 클래스 사고 재발 방지)"
+  - "③ 변별력 검증: 의도적으로 em dash 1개를 주입한 상태에서 스캐너가 검출하는지 실측 후 복원 — 성공/실패 동일값이면 위장"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/**"
+session: null
+notes: "docs 근거: CLAUDE.md 코드 규칙(2026-08-03 추가분). S4-16 강등전 CLI를 Phaiakes9에서 라이브 실행하던 중 실측 발견 — em dash(U+2014)가 한국어 Windows 콘솔 기본 코드페이지(cp949)에 없어 계산·JSONL 저장은 성공했는데 최종 리포트 print에서 크래시. 2026-07-17 logconfig UnicodeDecodeError(test_wh1_shadow_logconfig.py 선례)와 같은 cp949 계열 반복 사고 2회차 — CLAUDE.md 실수 관리 규정상 등재 의무."
+updated: 2026-08-08
