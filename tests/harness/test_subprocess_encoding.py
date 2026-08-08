@@ -55,12 +55,22 @@ class TestGitOutputDecodedAsUtf8:
         assert result.returncode == 0
         assert _KOREAN in result.stdout
 
+    # 이 테스트는 결함을 **일부러** 재현하므로 Windows에서 reader 스레드 예외가 뜬다.
+    # 그건 성공 신호이지 문제가 아니다 — 경고로 남으면 "테스트가 뭔가 잘못됐다"로
+    # 오독되므로 여기서만 무음 처리한다(다른 테스트의 스레드 예외는 계속 보인다).
+    @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
     def test_locale_decode_would_have_failed(self, git_repo: Path) -> None:
         """cp949로_디코드하면_같은_출력이_보존되지_않음 — 위 테스트의 변별력 증명.
 
         이게 red 가 아니면 위 테스트는 '어떤 인코딩이든 통과하는' 무변별 검사다
         (CLAUDE.md "변별력 없는 검증 스텝 금지" — 2026-07-17 logconfig `delay:true`로
         사전 `Test-Path`가 정상 상태에서도 항상 False 였던 사고).
+
+        플랫폼별 실패 형태가 다르고 **둘 다 결함 재현으로 인정**한다 — 이 갈림이
+        곧 원 사고의 메커니즘이다:
+          · POSIX: `communicate()`가 직접 디코드 → `UnicodeDecodeError` 전파 (실측)
+          · Windows: reader **스레드**에서 터져 예외가 전파되지 못하고 `stdout=None`
+            (2026-08-08 Kiki 머신 실측 — 이게 `AttributeError` 마스킹의 원인)
         """
         root = _git_repo_with_korean(git_repo)
         try:
@@ -72,8 +82,8 @@ class TestGitOutputDecodedAsUtf8:
                 timeout=15,
             ).stdout
         except UnicodeDecodeError:
-            return  # 디코드 자체가 실패 — 결함 재현 성공
-        # 예외가 안 났다면 최소한 내용이 보존되지 않아야 한다(모지바케).
+            return  # POSIX 경로 — 디코드 자체가 실패
+        # Windows 경로 — 예외가 전파되지 않으므로 stdout이 None이거나 모지바케다.
         assert mangled is None or _KOREAN not in mangled
 
 
