@@ -1,7 +1,8 @@
 """강등전 하니스 hermetic 테스트 — 결함 주입기·기계 검출·Wilson·CLI(라이브 0).
 
-`defect_seeder`가 결정론으로 시험지를 만들고, 현 스택이 결함 ①~⑤를 검출·⑥을 미검출
-(정직한 공백)·무결함을 통과시킴을 동결한다. Wilson 경계는 손계산과 대조한다.
+`defect_seeder`가 결정론으로 시험지를 만들고, 현 스택이 결함 ①~⑤·⑦을 검출·⑥을 미검출
+(정직한 공백)·무결함을 통과시킴을 동결한다. Wilson 경계는 손계산과 대조한다. ⑦(broken_latex)은
+ARCH-19(품질 15축 ⑩) 확장 — 감사기 무관 결정론 100% 검출(구조 파스라 항상 걸림).
 """
 
 from __future__ import annotations
@@ -55,11 +56,11 @@ def test_seeder_deterministic_same_seed() -> None:
 
 
 def test_seeder_composition_counts() -> None:
-    items = build_defect_seeded_set(n_defective=60, n_clean=60, seed=7)
-    assert len(items) == 120
-    assert sum(1 for i in items if i.defect_class) == 60
-    assert sum(1 for i in items if not i.defect_class) == 60
-    # 6종 결함이 균형 배정(60/6=10)된다.
+    items = build_defect_seeded_set(n_defective=70, n_clean=70, seed=7)
+    assert len(items) == 140
+    assert sum(1 for i in items if i.defect_class) == 70
+    assert sum(1 for i in items if not i.defect_class) == 70
+    # 7종 결함이 균형 배정(70/7=10)된다.
     from collections import Counter
 
     counts = Counter(i.defect_class for i in items if i.defect_class)
@@ -83,14 +84,20 @@ def test_clean_items_pass_gate() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 기계 검출 baseline — ①~⑤ 검출·⑥ 미검출 동결(감사기 도입 시 반전할 앵커).
+# 기계 검출 baseline — ①~⑤·⑦ 검출·⑥ 미검출 동결(감사기 도입 시 반전할 앵커).
 # ──────────────────────────────────────────────────────────────────────────
 
 
 def test_baseline_detection_per_class() -> None:
-    items = build_defect_seeded_set(n_defective=60, n_clean=60, seed=20260708)
+    items = build_defect_seeded_set(n_defective=70, n_clean=70, seed=20260708)
     report = dd.summarize(dd._run_machine(items))
-    for name in ("answer_error", "explanation_slip", "condition_mismatch", "standard_tag_error"):
+    for name in (
+        "answer_error",
+        "explanation_slip",
+        "condition_mismatch",
+        "standard_tag_error",
+        "broken_latex",
+    ):
         detected, total = report.per_class[name]
         assert detected == total == 10, f"{name} 검출 실패"
     d_mc, t_mc = report.per_class["distractor_misattribution"]
@@ -99,30 +106,30 @@ def test_baseline_detection_per_class() -> None:
     d6, t6 = report.per_class["statement_mismatch"]
     assert t6 == 10 and d6 == 0
     # 무결함 오검출 0.
-    assert report.false_alarm == 0 and report.clean_total == 60
+    assert report.false_alarm == 0 and report.clean_total == 70
 
 
 def test_report_wilson_bounds_present() -> None:
-    items = build_defect_seeded_set(n_defective=60, n_clean=60, seed=20260708)
+    items = build_defect_seeded_set(n_defective=70, n_clean=70, seed=20260708)
     report = dd.summarize(dd._run_machine(items))
-    # 50/60 검출 → 하한 ≈0.74.
+    # 60/70 검출(⑥만 미검출) → 하한 ≈0.775.
     lb = report.detection_lower_bound(0.95)
-    assert lb is not None and 0.70 < lb < 0.78
+    assert lb is not None and 0.74 < lb < 0.80
     ub = report.false_alarm_upper_bound(0.95)
     assert ub is not None and ub < 0.05
 
 
-def test_with_auditor_detects_all_six_classes() -> None:
-    # 감사기 배선 시 statement_mismatch까지 검출 → 6종 전부 60/60, 오검출 0.
-    items = build_defect_seeded_set(n_defective=60, n_clean=60, seed=20260708)
+def test_with_auditor_detects_all_seven_classes() -> None:
+    # 감사기 배선 시 statement_mismatch까지 검출 → 7종 전부 70/70, 오검출 0.
+    items = build_defect_seeded_set(n_defective=70, n_clean=70, seed=20260708)
     report = dd.summarize(dd._run_machine(items, with_auditor=True))
     for name in DEFECT_CLASSES:
         detected, total = report.per_class[name]
         assert detected == total == 10, f"{name}: {detected}/{total}"
     assert report.false_alarm == 0
-    # 120/120 검출 → 하한이 baseline(~0.74)보다 크게 상승(≈0.95+).
+    # 140/140 검출 → 하한이 baseline(~0.775)보다 크게 상승(≈0.96+).
     lb = report.detection_lower_bound(0.95)
-    assert lb is not None and lb > 0.94
+    assert lb is not None and lb > 0.95
 
 
 def test_cli_with_auditor_passes_high_gate() -> None:
@@ -154,7 +161,7 @@ def test_cli_machine_measurement_exit_ok() -> None:
 
 
 def test_cli_gate_fails_on_high_detection_threshold() -> None:
-    # ⑥ 미검출 때문에 전체 검출률 하한(~0.74)은 0.95를 못 넘는다 → 게이트 exit 1.
+    # ⑥ 미검출 때문에 전체 검출률 하한(52/60·~0.78)은 0.95를 못 넘는다 → 게이트 exit 1.
     rc = dd.main(
         [
             "--n-defective",
