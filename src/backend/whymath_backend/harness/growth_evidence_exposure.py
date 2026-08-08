@@ -1,8 +1,9 @@
 """성장 증거(WH-1 대리 지표) 학생 대면 노출 계약 정본 (PED-06 D1 ①).
 
 `docs/architecture/gamification_module_gap_review.md` §3 D1의 설계를 그대로 승계한다(새 설계
-아님). `compute_wh1_surrogate_metrics`(`harness/wh1_evaluation.py`)의 11지표를 한 덩어리로
-노출하면 그 자체가 새 위험이다 — 일부는 학생에게 보이면 금기 위반이 된다:
+아님). `compute_wh1_surrogate_metrics`(`harness/wh1_evaluation.py`)의 지표(원 설계 11종 + 병합
+편입 `help_demand_supply_ratio` 1종 = 12종)를 한 덩어리로 노출하면 그 자체가 새 위험이다 —
+일부는 학생에게 보이면 금기 위반이 된다:
 
 - `help_reduction_validated`의 `GAMING_SUSPECT` — 학생 대면 노출 시 **낙인**
   (`CLAUDE.md` "부정 피드백 정서 강화 금지"). ⑧(답 미루기 도달 깊이)과 **단독 분리가 안 된다**
@@ -54,15 +55,20 @@ class ExposureTier(str, Enum):
     """운영·내부 전용 — 학생·보호자 어느 쪽에도 노출 금지(시스템 품질·비용 지표 등)."""
 
 
-# 11지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
+# 12지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
 # INTERNAL_ONLY — 나머지는 전부 STUDENT_VISIBLE(⑥·⑧은 아래 조합 규칙으로 *표현*이 추가 제약됨,
 # 계층 자체는 STUDENT_VISIBLE 유지 — "안 보임"이 아니라 "다르게 보임").
+# `help_demand_supply_ratio`(⑮·S3-16, 병합 시 편입)는 ⑤·⑧과 같은 축(학생 자신의 도움 요청·수신
+# 행태)이라 STUDENT_VISIBLE — ②·④(시스템 품질·비용)와는 성격이 다르다. 노출 문구 설계(서술 변환·
+# 조합 제약 필요 여부)는 이 모듈 최초 판정 당시 범위 밖이었던 지표라 **미확정**(발화조건: 보호자
+# 대시보드 UI 착수 시 재검토).
 _STATIC_TIER: dict[str, ExposureTier] = {
     "verify_pass_rate": ExposureTier.STUDENT_VISIBLE,
     "diagnosis_agreement_rate": ExposureTier.INTERNAL_ONLY,
     "session_completion_rate": ExposureTier.STUDENT_VISIBLE,
     "tokens_per_turn": ExposureTier.INTERNAL_ONLY,
     "help_reduction_slope": ExposureTier.STUDENT_VISIBLE,
+    "help_demand_supply_ratio": ExposureTier.STUDENT_VISIBLE,
     "calibration_brier": ExposureTier.STUDENT_VISIBLE,
     "transfer_score": ExposureTier.STUDENT_VISIBLE,
     "hint_depth_reached": ExposureTier.STUDENT_VISIBLE,
@@ -113,7 +119,7 @@ class MetricExposure(BaseModel):
 
 
 def classify_metric_exposure(metrics: SurrogateMetrics) -> dict[str, MetricExposure]:
-    """11지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
+    """12지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
 
     조합 제약(gap review 명시): ⑧(답 미루기 도달 깊이)은 `help_reduction_validated.verdict`가
     `GAMING_SUSPECT`이면 노출하지 않는다(R15가 교정기 함정으로 판정한 도움 감소를 "답 미루기

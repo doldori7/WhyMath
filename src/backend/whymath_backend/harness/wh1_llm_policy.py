@@ -65,6 +65,7 @@ from whymath_backend.l3.router import Router
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
+from whymath_backend.l4.session_recall import SessionRecall
 
 __all__ = ["LLMTutorPolicy"]
 
@@ -147,6 +148,7 @@ class LLMTutorPolicy:
         subscription: str = "free",
         difficulty: str = "medium",
         max_history: int = 6,
+        session_recall: SessionRecall | None = None,
     ) -> None:
         """정책 구성.
 
@@ -159,6 +161,9 @@ class LLMTutorPolicy:
             probe_candidates·theta·outside_mids·administered: select_probe용 진단 컨텍스트(비민감).
             subscription·difficulty: L3 라우팅 신호(도구 선택 호출의 비용·크기 결정용).
             max_history: 프롬프트에 요약할 최근 도구 트레이스 개수.
+            session_recall: 직전 세션의 교수 이력(PED-04 D1 reader ②·**메타 한정**). 필드가
+                전부 enum/정수라 학생 원문을 실을 자리가 타입상 없다. None(기본)이면 요약에
+                키 자체가 없어 프롬프트가 기존과 바이트 동일.
         """
         if provider is None:
             # 표준 구성 재사용(app.py·pregenerate 동형) — 지연 연결이라 구성만으로 네트워크 미발생.
@@ -178,6 +183,7 @@ class LLMTutorPolicy:
         self._subscription = subscription
         self._difficulty = difficulty
         self._max_history = max_history
+        self._session_recall = session_recall
 
     # ── TutorPolicy Protocol ──────────────────────────────────────────
     async def next_action(self, state: TurnState) -> Action:
@@ -224,10 +230,15 @@ class LLMTutorPolicy:
         recent = [{"kind": r.kind, "ok": r.ok} for r in state.history[-history_limit:]]
         omitted += max(0, len(state.history) - history_limit)
 
-        # ③ 토큰 근사 예산 — 초과 시 history부터, 그다음 저confidence 가설·match id를 결정론 절단.
-        prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted)
+        # ③ 토큰 근사 예산 — 초과 시 세션 회상부터, 그다음 history·저confidence 가설·match id를
+        #    결정론 절단. 회상이 1순위인 이유: 세션 *간* 맥락은 이번 턴 결정에 가장 덜 급하다.
+        recall = self._session_recall
+        prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted, recall)
         while self._approx_tokens(prompt) > _MAX_PROMPT_TOKENS:
-            if recent:
+            if recall is not None:
+                recall = None
+                omitted += 1
+            elif recent:
                 recent.pop(0)  # 가장 오래된 history 먼저
                 omitted += 1
             elif hyp_summaries:
@@ -243,7 +254,7 @@ class LLMTutorPolicy:
                 omitted += 1
             else:
                 break  # 고정 필드만 남아 더 줄일 수 없음(안전 탈출).
-            prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted)
+            prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted, recall)
         return prompt
 
     def _budget_context_nodes(
@@ -301,8 +312,15 @@ class LLMTutorPolicy:
         match_ids: list[str],
         recent: list[dict[str, object]],
         omitted: int,
+        recall: SessionRecall | None = None,
     ) -> str:
-        """예산 적용된 조각들로 최종 프롬프트 문자열을 조립(순수·결정론)."""
+        """예산 적용된 조각들로 최종 프롬프트 문자열을 조립(순수·결정론).
+
+        `recall`(PED-04)은 **3축만** 싣는다 — 단계·전략·경과. `unresolved_hypothesis_ids`는
+        의도적으로 제외한다: 활성 가설은 이미 `active_hypotheses`로 렌더 중이라 중복이고,
+        오개념을 초기 context에 preload하지 않는다는 금기(CLAUDE.md)에도 걸린다. 그 필드의
+        소비처는 warmstart `exclude_mids` 하나뿐이다.
+        """
         summary: dict[str, object] = {
             "turn_index": state.turn_index,
             "has_solution_steps": state.has_solution_steps,
@@ -314,6 +332,14 @@ class LLMTutorPolicy:
             "recent_tools": recent,
             "verify_obligation_pending": state.has_solution_steps and not state.verify_called,
         }
+        if recall is not None:
+            summary["session_recall"] = {
+                "last_polya_stage": (
+                    recall.last_polya_stage.value if recall.last_polya_stage else None
+                ),
+                "last_strategies": [s.value for s in recall.last_socratic_strategies],
+                "turns_since": recall.turns_since,
+            }
         if omitted > 0:
             # fail-closed 정직 신호 — 예산으로 컨텍스트를 절단했음을 LLM에 명시(조용한 무동작 금지).
             summary["context_truncated"] = True

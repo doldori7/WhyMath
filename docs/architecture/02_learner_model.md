@@ -178,6 +178,16 @@ class LearnerState(BaseModel):
 > `runtime_selector.py` 결정)는 원칙을 이 계약에도 동형 적용한다. 제외 필드는 **v0 클래스의
 > docstring에 사유와 함께 명시**하고, 두꺼운 목표 스키마(위 코드 블록)는 장기 지향점으로 보존한다.
 
+> **편집자 주 (2026-07-30, PED-05 — 위 2026-07-29 부기 정정)**: 구현 착수 직전 사실 확인 결과
+> `curriculum`(교육과정 버전)도 **생산자가 없다** — `user_profile`에 대응 컬럼이 없다(grep
+> 0건 실측). 위 2026-07-29 부기가 `curriculum`을 v0 포함 9개에 넣은 것은 검증 없는 추정이었다.
+> **정정**: v0 구현 범위는 원안 11필드 중 **실장 8개**(`mastery`·`general_ability`·
+> `domain_abilities`·`active_misconceptions`·`recent_struggles`·`recent_successes`·`grade`·
+> `goals`) + **제외 5개**(`curriculum`·`affect`·`mastery_states`·`active_textbook_id`·
+> `shadow_curriculum_progress`, 전부 생산자 부재)로 좁힌다. 실제 구현은
+> `src/backend/whymath_backend/l2/learner_state.py::LearnerState`(제외 사유 전문은 그 클래스
+> docstring 참조) — 이 문서의 두꺼운 목표 스키마(위 코드 블록)는 여전히 장기 지향점으로 보존.
+
 ## 인터페이스 (L4·L5 호출)
 
 ```python

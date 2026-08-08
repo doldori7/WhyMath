@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from data_pipeline.standards_university.transform import TransformError, transform_rows
 
 

@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-34-coach-session-hygiene
+title: "코치 세션 위생 — 문제별 dialogue 리셋 + 오답 최종답 재고 유도 피드백 (미병합 브랜치 tlthrr 재작성)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S3-32-learning-loop-closure-recovery
+requires_gates: []
+acceptance:
+  - "새 문제로 진입 시 dialogue가 이전 문제의 turn을 이어받지 않고 새로 시작한다 — 원 브랜치가 발견한 버그(완료 오기록으로 인한 반복/고갈)가 현재 main에서도 재현되는지 먼저 실측 확인 후 수정"
+  - "오답 최종답 판정 시 정답 공개 없이 재고를 유도하는 코칭 발화로 전환(일반 소크라테스 반복이 아니라 '이미 답을 시도했다'는 맥락을 반영) — 부정적 정서 강화 표현 금지(CLAUDE.md 교수학 금기)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "브랜치 tlthrr의 원 S3-30(문제별 dialogue 리셋 — 완료 오기록으로 인한 대화 반복/고갈 버그 수정)·S3-31(오답 최종답 피드백) 재작성. S3-32 완료 신호에 의존."
+updated: 2026-08-07

@@ -54,6 +54,11 @@ class _Row:
         self.concept_id = concept_id
 
 
+class _ProblemIdRow:
+    def __init__(self, problem_id: uuid.UUID) -> None:
+        self.problem_id = problem_id
+
+
 class _FakeResult:
     def __init__(self, rows: list[object] | None = None, scalar: object | None = None) -> None:
         self._rows = rows or []
@@ -64,6 +69,9 @@ class _FakeResult:
 
     def scalar_one(self) -> object:
         return self._scalar
+
+    def first(self) -> object | None:
+        return self._rows[0] if self._rows else None
 
 
 class _FakeConnection:
@@ -87,6 +95,10 @@ class _FakeConnection:
         # 원자 해석 SELECT — concept.code 조회(INSERT/DELETE 아님) → 가짜 concept 행 반환.
         if "concept.code" in compiled and "INSERT" not in compiled and "DELETE" not in compiled:
             return _FakeResult(rows=self._engine.code_rows)
+        # S4-18 계보 parent 해석 SELECT — problem.slug 조회(배치 밖 기존 행 시뮬레이션).
+        if "problem.slug" in compiled and "RETURNING" not in compiled and "INSERT" not in compiled:
+            match = self._engine.existing_problems.get(self._engine.last_bound_slug(statement))
+            return _FakeResult(rows=[_ProblemIdRow(match)] if match is not None else [])
         # 문제 upsert만 RETURNING problem_id → 결정 uuid 스칼라(problem_concept FK로 재사용).
         if "RETURNING" in compiled:
             return _FakeResult(scalar=uuid.uuid4())
@@ -94,15 +106,32 @@ class _FakeConnection:
 
 
 class _FakeEngine:
-    def __init__(self, concepts: dict[str, uuid.UUID]) -> None:
+    def __init__(
+        self,
+        concepts: dict[str, uuid.UUID],
+        *,
+        existing_problems: dict[str, uuid.UUID] | None = None,
+    ) -> None:
         self.executed: list[object] = []
         self.code_rows: list[object] = [_Row(c, cid) for c, cid in concepts.items()]
+        # S4-18 — 배치 밖(이전 실행분) 기존 problem 행 시뮬레이션 {slug: problem_id}.
+        self.existing_problems: dict[str, uuid.UUID] = existing_problems or {}
 
     def begin(self) -> _FakeConnection:
         return _FakeConnection(self)
 
     def connect(self) -> _FakeConnection:
         return _FakeConnection(self)
+
+    @staticmethod
+    def last_bound_slug(statement: object) -> str | None:
+        """parent_slug 해석 SELECT의 바인딩된 slug 값을 컴파일된 파라미터에서 뽑아낸다."""
+        compiled = statement.compile(dialect=_pg_dialect())  # type: ignore[attr-defined]
+        params = compiled.params
+        for value in params.values():
+            if isinstance(value, str):
+                return value
+        return None
 
 
 # 레포 루트 앵커(parents[4]) — 실 코퍼스 경로(크로스워크 거버넌스 테스트 `_ROOT` 방식).
@@ -346,6 +375,71 @@ def test_populate_collapse_treats_none_relevance_as_lowest(tmp_path: Path) -> No
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 계보(problem_relation) upsert — S4-18 identity_id/Canonical 분리
+# ──────────────────────────────────────────────────────────────────────────
+def test_populate_upserts_relation_resolved_within_same_batch(tmp_path: Path) -> None:
+    # 원본·변형이 같은 배치(같은 코퍼스 파일) 안에 함께 오면 slug_to_problem_id 배치 맵만으로
+    # parent_slug가 해석돼 relation이 upsert된다(DB 조회 불요).
+    original = _base_record(slug="wm-test-original")
+    variant = _base_record(
+        slug="wm-test-variant",
+        relations=[
+            {"parent_slug": "wm-test-original", "relation_type": "변형", "similarity_score": 0.95}
+        ],
+    )
+    path = _write(tmp_path, [original, variant])
+    engine = _FakeEngine(_ALL_CONCEPTS)
+    report = populate_problem_bank(None, problems_path=path, store=_store(engine))
+    assert report.problem_relations_loaded == 1
+    assert report.problem_relations_skipped == 0
+    compiled = _compiled(engine)
+    rel_inserts = [c for c in compiled if "INSERT INTO problem_relation" in c]
+    assert len(rel_inserts) == 1
+    assert "ON CONFLICT" in rel_inserts[0]
+
+
+def test_populate_resolves_relation_parent_from_existing_db_row(tmp_path: Path) -> None:
+    # 원본이 이번 배치엔 없고(과거 실행분) DB에 이미 있는 경우 — DB 조회 폴백으로 해석돼야 한다.
+    variant = _base_record(
+        slug="wm-test-variant-only",
+        relations=[{"parent_slug": "wm-test-prior-batch", "relation_type": "변형"}],
+    )
+    path = _write(tmp_path, [variant])
+    prior_parent_id = uuid.uuid4()
+    engine = _FakeEngine(_ALL_CONCEPTS, existing_problems={"wm-test-prior-batch": prior_parent_id})
+    report = populate_problem_bank(None, problems_path=path, store=_store(engine))
+    assert report.problem_relations_loaded == 1
+    assert report.problem_relations_skipped == 0
+
+
+def test_populate_skips_orphan_relation_when_parent_unresolvable(tmp_path: Path) -> None:
+    # 배치에도 DB에도 parent_slug가 없으면 조용히 실패하지 않고 orphan skip으로 집계·보고한다.
+    variant = _base_record(
+        slug="wm-test-orphan-variant",
+        relations=[{"parent_slug": "wm-test-does-not-exist", "relation_type": "변형"}],
+    )
+    path = _write(tmp_path, [variant])
+    engine = _FakeEngine(_ALL_CONCEPTS)
+    report = populate_problem_bank(None, problems_path=path, store=_store(engine))
+    assert report.problem_relations_loaded == 0
+    assert report.problem_relations_skipped == 1
+    assert any("orphan relation skip" in m for m in report.skipped_messages)
+    assert not any("INSERT INTO problem_relation" in c for c in _compiled(engine))
+
+
+def test_populate_rejects_self_relation(tmp_path: Path) -> None:
+    # ORM 직접 upsert 경로는 schema._no_self_relation을 거치지 않으므로 populate 자체가 재확인한다.
+    record = _base_record(
+        slug="wm-test-self",
+        relations=[{"parent_slug": "wm-test-self", "relation_type": "변형"}],
+    )
+    path = _write(tmp_path, [record])
+    engine = _FakeEngine(_ALL_CONCEPTS)
+    with pytest.raises(ProblemCorpusError, match="자기관계"):
+        populate_problem_bank(None, problems_path=path, store=_store(engine))
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 저작권 위생 거부 (source_type/license)
 # ──────────────────────────────────────────────────────────────────────────
 def test_load_rejects_non_self_generated_source(tmp_path: Path) -> None:
@@ -377,6 +471,99 @@ def test_load_rejects_invalid_concept_role(tmp_path: Path) -> None:
     record = _base_record(concepts=[{"concept_src_id": "HK06", "role": "MAIN"}])
     path = _write(tmp_path, [record])
     with pytest.raises(ProblemCorpusError, match="role"):
+        load_problem_bank_records(path)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# verification_tier (S4-17 — L1 정식 필드 승격)
+# ──────────────────────────────────────────────────────────────────────────
+def test_load_accepts_known_verification_tier(tmp_path: Path) -> None:
+    record = _base_record(
+        verify={
+            "conditions": "x**2 - 5*x + 6 = 0",
+            "answer_map": {"x": "3"},
+            "verification_tier": "machine_exhaustive",
+        }
+    )
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert records[0].verify.verification_tier == "machine_exhaustive"
+
+
+def test_load_defaults_verification_tier_to_none_when_absent(tmp_path: Path) -> None:
+    # 구코퍼스 호환 — verify에 verification_tier가 없으면 None(미각인)으로 남는다.
+    record = _base_record()
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert records[0].verify.verification_tier is None
+
+
+def test_load_rejects_unknown_verification_tier(tmp_path: Path) -> None:
+    # 안전 신호라 sibling authoring 필드(예 answer_kind)와 달리 조용히 None으로 떨구지 않는다.
+    record = _base_record(
+        verify={
+            "conditions": "x**2 - 5*x + 6 = 0",
+            "answer_map": {"x": "3"},
+            "verification_tier": "eyeballed",
+        }
+    )
+    path = _write(tmp_path, [record])
+    with pytest.raises(ProblemCorpusError, match="verification_tier"):
+        load_problem_bank_records(path)
+
+
+def test_load_accepts_finite_probability_and_finite_count_answer_kind(tmp_path: Path) -> None:
+    # S4-13 유한확률 코퍼스가 쓰는 answer_kind 2종 — 승격 전엔 화이트리스트 밖이라 조용히
+    # None으로 떨어지던 결함(S4-17 부수 발견·본 필드와 같은 함수·같은 결함류).
+    prob_record = _base_record(
+        slug="wm-test-finite-prob",
+        verify={"conditions": "space=...", "answer_map": {}, "answer_kind": "finite_probability"},
+    )
+    count_record = _base_record(
+        slug="wm-test-finite-count",
+        verify={"conditions": "space=...", "answer_map": {}, "answer_kind": "finite_count"},
+    )
+    path = _write(tmp_path, [prob_record, count_record])
+    records = load_problem_bank_records(path)
+    assert {r.verify.answer_kind for r in records} == {"finite_probability", "finite_count"}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 계보(relations) 파싱 — S4-18
+# ──────────────────────────────────────────────────────────────────────────
+def test_load_parses_valid_relation(tmp_path: Path) -> None:
+    record = _base_record(
+        relations=[
+            {"parent_slug": "wm-test-parent", "relation_type": "변형", "similarity_score": 0.9}
+        ]
+    )
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert len(records[0].relations) == 1
+    rel = records[0].relations[0]
+    assert rel.parent_slug == "wm-test-parent"
+    assert rel.relation_type == "변형"
+    assert rel.similarity_score == 0.9
+
+
+def test_load_defaults_relations_to_empty_when_absent(tmp_path: Path) -> None:
+    # 구코퍼스 호환 — relations 키가 없으면 빈 튜플(계보 없는 단일 개체).
+    path = _write(tmp_path, [_base_record()])
+    records = load_problem_bank_records(path)
+    assert records[0].relations == ()
+
+
+def test_load_rejects_relation_missing_parent_slug(tmp_path: Path) -> None:
+    record = _base_record(relations=[{"relation_type": "변형"}])
+    path = _write(tmp_path, [record])
+    with pytest.raises(ProblemCorpusError, match="parent_slug"):
+        load_problem_bank_records(path)
+
+
+def test_load_rejects_unknown_relation_type(tmp_path: Path) -> None:
+    record = _base_record(relations=[{"parent_slug": "wm-test-parent", "relation_type": "복제"}])
+    path = _write(tmp_path, [record])
+    with pytest.raises(ProblemCorpusError, match="relation_type"):
         load_problem_bank_records(path)
 
 

@@ -50,6 +50,7 @@ from whymath_backend.harness.wh1_prose import gate_policy_prose, rephrase_coach_
 from whymath_backend.harness.wh1_shadow import _extract_verify_verdict, emit_wh1_observation
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.session_recall import SessionRecall
 from whymath_backend.l4.tone_filter import filter_tone
 
 __all__ = ["run_wh1_primary_turn"]
@@ -99,6 +100,7 @@ async def run_wh1_primary_turn(
     dialogue_id: str | None = None,
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
+    session_recall: SessionRecall | None = None,
 ) -> str | None:
     """WH-1 하네스를 한 턴 돌려 *학생-대면 발화*를 산출한다 — flip primary 경로(S1-11).
 
@@ -120,6 +122,9 @@ async def run_wh1_primary_turn(
             # 웜스타트 outside_mids도 사적 probe 컨텍스트로만(select_probe→plan_probe 전용·
             # 코칭 context에 오개념 preload 0·reactive retrieval 유지·CLAUDE.md).
             outside_mids=list(warmstart_outside_mids),
+            # PED-04 D1 reader ②: 직전 세션의 교수 이력(메타 한정·원문 0·복호 0). 정책이
+            # 예산 가드 안에서 요약에 실어 "이미 시도한 결"을 알게 한다.
+            session_recall=session_recall,
         )
         timeout = (
             timeout_seconds

@@ -135,6 +135,15 @@ class _Result:
         # curate_hypothesis가 net_support(순지지도) 집계를 scalar_one으로 읽음 — 증거 행 없으니 0.0.
         return 0.0
 
+    def scalar_one_or_none(self) -> Any:
+        # PED-04: `_prev_hint_level_for`·`_session_recall_or_none`가 단일 스칼라를 이 API로
+        # 읽는다. 이력 없으니 None(첫 결정·회상 없음 — 기존 hermetic 기대와 정합).
+        return self._rows[0] if self._rows else None
+
+    def all(self) -> list[Any]:
+        # PED-04: `_turn_meta_rows`가 Row 튜플을 이 API로 읽는다.
+        return list(self._rows)
+
 
 class _CapturingSession:
     """/v1/coach/sessions·turns용 — add/commit/refresh/get/execute 캡처(test_coach.py 패턴)."""

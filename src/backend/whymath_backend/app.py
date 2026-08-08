@@ -48,6 +48,7 @@ from whymath_backend.api._device_store import (
     set_device_store,
 )
 from whymath_backend.api._growth_evidence_state import (
+    GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY,
     GrowthEvidenceReachCounters,
     GrowthEvidenceReachSnapshot,
     get_growth_evidence_counters,
@@ -343,6 +344,20 @@ class GrowthEvidenceReachBody(BaseModel):
     )
 
 
+class GrowthEvidenceExposureReachBody(BaseModel):
+    """/health/ready 성장 증거 *노출 계약* 도달 관측 섹션(PED-08) — `GET /v1/me/growth-evidence`.
+
+    위 `GrowthEvidenceReachBody`(원시 표면 `/harness-metrics`)와 *별도 슬롯*이다 — 합산되면
+    "노출 계약을 거쳐 학생에게 도달했다"는 주장과 "원시 표면에 도달했다"는 주장을 구분할 수
+    없게 된다(PED-06 3상태 도달 리포트가 이 구분에 의존). 이 값이 0이 아니게 되는 순간이
+    "노출 계약 경유 엔드포인트를 클라가 실제로 호출하기 시작했다"는 주장이 검증되는 순간이다.
+    """
+
+    requests_total: int = Field(
+        ..., description="GET /v1/me/growth-evidence 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+
+
 class ReadyBody(BaseModel):
     """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
 
@@ -356,7 +371,12 @@ class ReadyBody(BaseModel):
         description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축",
     )
     growth_evidence: GrowthEvidenceReachBody = Field(
-        ..., description="성장 증거(WH-1 대리 지표) 도달 관측(PED-06)"
+        ...,
+        description="성장 증거(WH-1 대리 지표) 도달 관측(PED-06) — 원시 표면(/harness-metrics).",
+    )
+    growth_evidence_exposure: GrowthEvidenceExposureReachBody = Field(
+        ...,
+        description="성장 증거 노출 계약 경유 도달 관측(PED-08) — /growth-evidence(구분 카운터).",
     )
 
 
@@ -373,6 +393,17 @@ def _component_body(check: ComponentCheck) -> ComponentCheckBody:
 def _growth_evidence_body(snapshot: GrowthEvidenceReachSnapshot) -> GrowthEvidenceReachBody:
     """GrowthEvidenceReachSnapshot(도메인) → GrowthEvidenceReachBody(HTTP 스키마) 변환."""
     return GrowthEvidenceReachBody(requests_total=snapshot.requests_total)
+
+
+def _growth_evidence_exposure_body(
+    snapshot: GrowthEvidenceReachSnapshot,
+) -> GrowthEvidenceExposureReachBody:
+    """GrowthEvidenceReachSnapshot(도메인) → GrowthEvidenceExposureReachBody(HTTP 스키마) 변환.
+
+    `_growth_evidence_body`의 미러(PED-08) — 입력 스냅샷 타입은 같지만 출력 스키마가
+    달라(다른 라우트를 명명하는 별도 docstring) 별도 변환 함수를 둔다.
+    """
+    return GrowthEvidenceExposureReachBody(requests_total=snapshot.requests_total)
 
 
 def _metrics_body(snapshot: MetricsSnapshot) -> MetricsSummaryBody:
@@ -581,6 +612,12 @@ def create_app(
     # PED-06 — 성장 증거(WH-1 대리 지표) 도달 관측 카운터. 앱 수명 동안 1개(재시작 시 리셋
     # — 인프로세스 계측이라 영속 저장 0, `ServiceMetrics`와 동형 전제).
     set_growth_evidence_counters(app, GrowthEvidenceReachCounters())
+    # PED-08 — `GET /v1/me/growth-evidence`(노출 계약 경유) 전용 슬롯. 위 카운터(원시 표면
+    # `/harness-metrics`)와 *별도 인스턴스*로 심는다 — 합산되면 도달 판정이 위장된다
+    # (`_growth_evidence_state.py` 모듈 docstring).
+    set_growth_evidence_counters(
+        app, GrowthEvidenceReachCounters(), key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY
+    )
 
     def _observe_request(elapsed_ms: float, status_code: int) -> None:
         """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
@@ -712,6 +749,9 @@ def create_app(
         svc_metrics: ServiceMetrics = getattr(request.app.state, _METRICS_KEY)
         notifier: AlertLogNotifier = getattr(request.app.state, _ALERT_NOTIFIER_KEY)
         growth_evidence_counters = get_growth_evidence_counters(request.app)
+        growth_evidence_exposure_counters = get_growth_evidence_counters(
+            request.app, key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY
+        )
         # 세 딥체크는 서로 독립이라 동시 실행한다. 각 체크는 예외를 던지지 않는 계약
         # (ops/service_health — 비크래시 보고)이라 gather에 예외 누수가 없다.
         db_check, redis_check, llm_check = await asyncio.gather(
@@ -738,6 +778,9 @@ def create_app(
                 for a in alerts
             ],
             growth_evidence=_growth_evidence_body(growth_evidence_counters.snapshot()),
+            growth_evidence_exposure=_growth_evidence_exposure_body(
+                growth_evidence_exposure_counters.snapshot()
+            ),
         )
         return JSONResponse(
             status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),

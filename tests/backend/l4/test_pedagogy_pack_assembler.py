@@ -172,6 +172,48 @@ class TestAssembler:
         assert render_misconceptions([]) == ""
         assert render_student_state(None) == ""
 
+    # ──────────────────────────────────────────────────────────────────
+    # PED-05 — grade·standard_code 개인화 슬롯
+    # ──────────────────────────────────────────────────────────────────
+    def test_render_student_state_grade_and_standard_code_alone(self) -> None:
+        # student_state 없이도 grade·standard_code만으로 블록이 렌더된다.
+        out = render_student_state(None, grade=2, standard_code="[10공수1-02-06]")
+        assert "학년: 2" in out
+        assert "성취기준: [10공수1-02-06]" in out
+        assert "학습자 숙달 수준" not in out  # student_state 없음 → 그 조각 생략
+
+    def test_render_student_state_all_three_combined(self) -> None:
+        out = render_student_state("숙달", grade=3, standard_code="[12미적01-01]")
+        assert "학습자 숙달 수준: 숙달" in out
+        assert "학년: 3" in out
+        assert "성취기준: [12미적01-01]" in out
+
+    def test_render_student_state_grade_only_no_pii_leak(self) -> None:
+        # grade(학년 정수)·standard_code 외에는 이 함수 시그니처에 자리가 없다 — 학교명·지역·
+        # 이름·목표점수/등급/대학 문자열이 등장할 자리 자체가 구조적으로 없음을 재확인.
+        out = render_student_state(None, grade=1)
+        for forbidden in ("학교", "지역", "목표", "대학", "이름"):
+            assert forbidden not in out
+
+    def test_build_system_prompt_threads_grade_and_standard_code(self) -> None:
+        reset_pack_cache()
+        base = STAGE_PROMPTS[PolyaStage.UNDERSTAND].system
+        concept = get_pack(_CONCEPT)
+        assert concept is not None
+        out = build_system_prompt(
+            base_system=base, pack=concept, grade=2, standard_code="[10공수1-02-06]"
+        )
+        assert "학년: 2" in out
+        assert "성취기준: [10공수1-02-06]" in out
+
+    def test_build_system_prompt_pack_none_ignores_grade_standard_code(self) -> None:
+        # pack None 회귀 0 계약 — grade/standard_code를 줘도 base_system 바이트 동일.
+        base = STAGE_PROMPTS[PolyaStage.UNDERSTAND].system
+        out = build_system_prompt(
+            base_system=base, pack=None, grade=2, standard_code="[10공수1-02-06]"
+        )
+        assert out == base
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 금지모드 가드
@@ -253,3 +295,57 @@ class TestDecideWiring:
         assert "지금 다루는 문제" in d.system  # 중립 domain_example(해석 seam 후속).
         # 나머지 결정 필드는 무변경(system만 대체).
         assert d.prompt == STAGE_PROMPTS[PolyaStage.UNDERSTAND].prompt
+
+    # ──────────────────────────────────────────────────────────────────
+    # PED-05 — decide()의 grade·standard_code 개인화 슬롯 회귀 + 착지
+    # ──────────────────────────────────────────────────────────────────
+    def test_decide_grade_standard_code_default_none_no_regression(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 기존 호출자(grade/standard_code 미전달) — 플래그 ON + pack 주입이어도 완전 동일 동작.
+        _enable_flag(monkeypatch)
+        reset_pack_cache()
+        concept = get_pack(_CONCEPT)
+        coach = PolyaCoach()
+        state = PolyaState(current_stage=PolyaStage.UNDERSTAND)
+        with_kwargs = coach.decide("음", state, pack=concept)
+        without_kwargs = coach.decide("음", state, pack=concept, grade=None, standard_code=None)
+        assert with_kwargs.system == without_kwargs.system
+
+    def test_decide_flag_off_ignores_grade_standard_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 플래그 OFF면 grade/standard_code를 줘도 조립기 미호출 → base_system 비트동일(회귀 0).
+        _disable_flag(monkeypatch)
+        reset_pack_cache()
+        concept = get_pack(_CONCEPT)
+        coach = PolyaCoach()
+        d = coach.decide(
+            "음",
+            PolyaState(current_stage=PolyaStage.UNDERSTAND),
+            pack=concept,
+            grade=2,
+            standard_code="[10공수1-02-06]",
+        )
+        assert d.system == STAGE_PROMPTS[PolyaStage.UNDERSTAND].system
+
+    def test_decide_flag_on_with_pack_lands_grade_and_standard_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 플래그 ON + pack 주입 + grade/standard_code 제공 → system에 실제로 착지.
+        _enable_flag(monkeypatch)
+        reset_pack_cache()
+        concept = get_pack(_CONCEPT)
+        coach = PolyaCoach()
+        d = coach.decide(
+            "음",
+            PolyaState(current_stage=PolyaStage.UNDERSTAND),
+            pack=concept,
+            grade=2,
+            standard_code="[10공수1-02-06]",
+        )
+        assert "학년: 2" in d.system
+        assert "성취기준: [10공수1-02-06]" in d.system
+        # PII 가드: decide()의 어떤 인자에도 학교·지역·이름·목표 필드가 없어 노출될 자리가 없음.
+        for forbidden in ("학교", "지역", "목표", "대학", "이름"):
+            assert forbidden not in d.system

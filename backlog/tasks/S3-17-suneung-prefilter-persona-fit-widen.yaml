@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-17-suneung-prefilter-persona-fit-widen
+title: 수능 SQL 사전필터 persona_fit 조건 확장
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance: []
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+session: null
+notes: "구현 후보: 고립 브랜치 education-os-architecture-mr0fbq 커밋 a20c851. 이 태스크(PB-01)는 등록만 하고 구현은 범위 밖 — 엔드포인트 실트래픽·성능 영향을 함께 봐야 하는 별개 변경(원 커밋 판단 승계)."
+updated: 2026-08-07

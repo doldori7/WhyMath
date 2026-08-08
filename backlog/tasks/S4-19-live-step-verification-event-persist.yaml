@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-19-live-step-verification-event-persist
+title: "라이브 3상태 단계 검증 결과 적재 — 검산결과 이벤트 additive 확장 + 지표 ① 이중 회계(binary 병기)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "코치가 이미 산출해 응답에만 싣던 verify_solution 3상태 결과(n_correct/n_incorrect/n_unverifiable·unverified_ratio·first_incorrect_index·ocr_gated)를 attempt_event(검산결과) event_data에 additive optional 필드로 적재 — VerifyEventData 계약 확장(mode/persona 선례 동형·전건 기본 None으로 하위호환 동결) + writer는 핸들러가 이미 쥔 solution_verification을 운반만(재계산 0)·binary passed 유지(이중 회계) + reader는 wh1_evaluation ①을 교체 아닌 병기로 승격(verify_pass_rate 불변 + step_decision_rate·step_incorrect_rate 파생·표본 0이면 NO_DATA 정직 표기) + 신규 테이블·마이그레이션·학생 대면 표면 0·record_problem_attempt_mastery 무변경 + 학생 풀이 원문·단계 텍스트 미포함 동결 테스트(미성년 PII) — BKT 부분 크레딧 반영은 본 태스크 범위 밖(측정 후 판정)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/event_data_contract.py
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+session: null
+notes: "docs/architecture/solution_module_gap_review.md §5-3 D6(2026-08-03 2차 재검증) — 외부 EOS 틀 문서의 종단 엣지(AI 채점→학생 모델)가 1비트로만 닫혀 있던 갭. S3-07(shadow 전이 카운트)의 결정론 라이브 미러. NLP-02(답안 채점 shadow)·S4-11(힌트 콘텐츠)와 축 상이·S4-09 비의존. D6-2단계(BKT 부분 크레딧 승격)는 S3-01/S3-04 측정 후 판정(설계만·태스크 0)"
+updated: 2026-08-03

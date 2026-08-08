@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-
 from data_pipeline.atom_graph.load import (
     CONSTRAINT_NAME,
     NODE_LABEL,

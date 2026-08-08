@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import uuid
 from collections.abc import AsyncIterator
@@ -16,10 +17,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api import me as me_module
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api.me import (
     ConceptAbilityItem,
     _add_ability_snapshot_if_attempts,
+    _AttemptHistoryState,
     _weak_concept_weights,
 )
 from whymath_backend.app import create_app
@@ -34,6 +37,8 @@ from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_event import EvidenceEvent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
+from whymath_backend.l2.learning_path import LearningPath, LearningStep
 from whymath_backend.l2.recommendation_evidence import (
     EVENT_TYPE_RECOMMENDATION_TREATMENT,
     META_KEY_APPLIED_WEIGHTS,
@@ -41,6 +46,8 @@ from whymath_backend.l2.recommendation_evidence import (
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
 )
+from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -51,12 +58,14 @@ from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import (
+    AssessmentType,
     AuditEventKind,
     AuditResourceType,
     Curriculum,
     ExamType,
     Persona,
     Resolution,
+    ReviewStatus,
     SignaturePattern,
     SourceType,
     Subject,
@@ -823,6 +832,10 @@ class _AQResult:
         return self._rows
 
     def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+    def scalar_one_or_none(self) -> Any:
+        # S4-14: _last_incorrect_problem_id의 단일-스칼라 조회 시뮬(직전 오답 문항 id 유/무).
         return self._rows[0] if self._rows else None
 
 
@@ -1681,12 +1694,101 @@ class TestNextProblem:
         # 밴드 안(P=0.8) + 약점(저숙달) 둘 다 만족하는 pid_band_weak가 이중 가중으로 선택.
         assert body["problem_id"] == str(pid_band_weak)
 
+    # ── S4-14: ?sibling_filter — problem_relation(변형·유사) 첫 소비처 ──────────
+    def test_sibling_filter_unset_skips_extra_queries(self) -> None:
+        """미지정(기본) → 형제 조회 자체를 생략 — 쿼리 2회만(회귀 0 — 큐 소진 시 IndexError)."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_filter_set_but_no_prior_incorrect_skips_sibling_query(self) -> None:
+        """직전 오답이 없으면(2번째 쿼리가 None) 형제 조회 자체를 생략 — 쿼리 3회만."""
+        pid = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # ① 채점 이력 없음
+                _AQResult([]),  # ② _last_incorrect_problem_id → None(오답 이력 없음)
+                _AQResult([(pid, 3.0, None)]),  # ③ 후보(형제 조회 생략 — 4번째 큐 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=exclude").json()
+        assert body["problem_id"] == str(pid)
+
+    def test_sibling_include_boosts_sibling_candidate(self) -> None:
+        """include — 직전 오답 문항의 형제 후보가 동일 정보량 경쟁자보다 가중으로 우선.
+
+        쿼리 4회: ①채점 이력 ②직전 오답 문항 id ③형제 id(양방향) ④후보 풀. pid_sibling·
+        pid_other는 난이도(=정보량) 동일이라 가중 없이는 인덱스(순서) 의존 동률 — 형제 가중
+        (1+BOOST=2.0배)이 그 동률을 결정론으로 깬다(순서 무관 — score가 2배 차이).
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling, pid_other = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),  # ① 오답 이력(θ 추정 겸용)
+                _AQResult([pid_wrong]),  # ② 직전 오답 문항 id
+                _AQResult([(pid_wrong, pid_sibling)]),  # ③ 형제(parent=오답, related=형제)
+                _AQResult(  # ④ 후보(동일 난이도)
+                    [(pid_other, 3.0, None), (pid_sibling, 3.0, None)]
+                ),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?sibling_filter=include").json()
+        assert body["problem_id"] == str(pid_sibling)
+
+    def test_sibling_include_combines_with_weak_concept_weight(self) -> None:
+        """include + prioritize_weak_concepts 동시 지정 — 가중이 곱으로 합성(둘 다 강한 후보 승).
+
+        쿼리 6회: ①채점이력 ②직전오답 ③형제 ④후보 ⑤숙달스냅샷 ⑥후보개념매핑.
+        """
+        pid_wrong = uuid.uuid4()
+        pid_sibling_weak, pid_plain = uuid.uuid4(), uuid.uuid4()
+        c_weak = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling_weak)]),
+                _AQResult([(pid_plain, 3.0, None), (pid_sibling_weak, 3.0, None)]),
+                _AQResult([(c_weak, 0.0)]),  # 숙달 스냅샷 — 저숙달
+                _AQResult([(pid_sibling_weak, c_weak)]),  # 후보 개념 매핑(pid_plain은 매핑 없음)
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get(
+            "/v1/me/next-problem?sibling_filter=include&prioritize_weak_concepts=true"
+        ).json()
+        assert body["problem_id"] == str(pid_sibling_weak)
+
+    def test_sibling_exclude_smoke_no_crash(self) -> None:
+        """exclude — FakeSession은 SQL notin_을 적용하지 않으므로(stmt 무시) 실 배제는
+        통합테스트가 검증. 여기선 쿼리 배선(4회)과 무크래시만 스모크."""
+        pid_wrong = uuid.uuid4()
+        pid_sibling = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(pid_wrong, False, 3.0, None)]),
+                _AQResult([pid_wrong]),
+                _AQResult([(pid_wrong, pid_sibling)]),
+                _AQResult([(pid_sibling, 3.0, None)]),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.get("/v1/me/next-problem?sibling_filter=exclude")
+        assert resp.status_code == 200
+
 
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
 def _suneung_problem(**over: object) -> SchemaProblem:
     """수능 모드 후보용 최소 자체생성 schema Problem 빌더(l6 test_gating `_problem` 답습)."""
     kwargs: dict[str, object] = {
         "source_type": SourceType.자체생성,
+        # PB-03 — 검수 노출 게이트(`is_review_cleared`) 추가로 기본값도 approved가 필요.
+        "review_status": ReviewStatus.approved,
         "curriculum_version": Curriculum.REVISION_2022,
         "valid_from_year": 2022,
         "subject": Subject.미적분,
@@ -2157,4 +2259,300 @@ class TestSessionEndConceptSnapshots:
         fake = FakeSession()
         await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
         # 채점 0 → 전과목·개념 θ 모두 미적재(개념 계산도 skip)
+        assert fake.added == []
+
+
+# ── ASM-03: POST /v1/me/assessments/capture ────────────────────────────────
+class TestAssessmentCaptureWindow:
+    """`_capture_window_start` — idempotency 창 시작 시각(UTC 자정) 순수 함수."""
+
+    def test_truncates_to_utc_midnight(self) -> None:
+        now = datetime(2026, 3, 15, 13, 45, 30, 123456, tzinfo=UTC)
+        start = me_module._capture_window_start(now)
+        assert start == datetime(2026, 3, 15, 0, 0, 0, 0, tzinfo=UTC)
+
+
+class TestAssembleMeasurementAssessment:
+    """`_assemble_measurement_assessment` — 기존 L2 산출물 4종 조립(신규 계산 0)을 단위검증.
+
+    실 DB 쿼리(compute_concept_diagnoses 등 내부)는 monkeypatch로 대체 — 이 함수 자체가 하는
+    일(호출 순서·필드 매핑·kind 판별자·예측 필드 하드 null)만 본다(실 쿼리는 통합테스트 몫).
+    """
+
+    def _patch_l2_outputs(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        diagnoses: list[ConceptDiagnosis],
+        hypotheses: list[MisconceptionHypothesis],
+        weak: list[WeakConceptRecommendation],
+        gaps_calls: list[uuid.UUID] | None = None,
+        path_steps: tuple[Any, ...] = (),
+    ) -> None:
+        async def _fake_diag(session: Any, user_id: Any) -> list[ConceptDiagnosis]:
+            return diagnoses
+
+        async def _fake_hyp(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
+            return hypotheses
+
+        async def _fake_weak(session: Any, user_id: Any) -> list[WeakConceptRecommendation]:
+            return weak
+
+        async def _fake_gaps(
+            session: Any, user_id: Any, concept_id: uuid.UUID, **kwargs: Any
+        ) -> list[Any]:
+            if gaps_calls is not None:
+                gaps_calls.append(concept_id)
+            return []
+
+        async def _fake_path(session: Any, gaps: Any) -> LearningPath:
+            return LearningPath(steps=path_steps)
+
+        monkeypatch.setattr("whymath_backend.api.me.compute_concept_diagnoses", _fake_diag)
+        monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _fake_hyp)
+        monkeypatch.setattr("whymath_backend.api.me.recommend_weak_concepts", _fake_weak)
+        monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _fake_gaps)
+        monkeypatch.setattr("whymath_backend.api.me.build_learning_path", _fake_path)
+
+    def test_never_populates_prediction_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """4개 예측 필드(등급·점수·백분위·합격예측)는 실 L2 산출물이 있어도 항상 null(게임화 금기)."""
+        cid = uuid.uuid4()
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[
+                ConceptDiagnosis(
+                    concept_id=cid,
+                    concept_code="C-1",
+                    concept_name="개념",
+                    bkt_mastery=0.4,
+                    irt_theta=-0.5,
+                    irt_mastery_proxy=0.3,
+                    response_count=5,
+                    agreement="agree",
+                )
+            ],
+            hypotheses=[
+                MisconceptionHypothesis(
+                    misconception_id="frac-add-denominator",
+                    confidence=0.8,
+                    turns_since_evidence=0,
+                    evidence_count=2,
+                )
+            ],
+            weak=[
+                WeakConceptRecommendation(
+                    concept_id=cid,
+                    concept_code="C-1",
+                    concept_name="개념",
+                    bkt_mastery=0.4,
+                    irt_mastery_proxy=0.3,
+                    weakness=0.3,
+                    agreement="agree",
+                )
+            ],
+        )
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=now
+            )
+        )
+        assert schema.estimated_grade is None
+        assert schema.estimated_score is None
+        assert schema.estimated_percentile is None
+        assert schema.admission_probability is None
+        assert schema.target_university_id is None
+
+    def test_concept_diagnosis_and_misconceptions_share_field_with_kind_tag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """concept_diagnosis JSONB 배열에 진단 1건 + 오개념 가설 1건이 kind로 구분돼 함께 담긴다."""
+        cid = uuid.uuid4()
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[
+                ConceptDiagnosis(
+                    concept_id=cid,
+                    response_count=3,
+                    agreement="insufficient",
+                )
+            ],
+            hypotheses=[
+                MisconceptionHypothesis(
+                    misconception_id="frac-add-denominator",
+                    confidence=0.6,
+                    turns_since_evidence=1,
+                    evidence_count=1,
+                )
+            ],
+            weak=[],
+        )
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(schema.concept_diagnosis) == 2
+        kinds = {item["kind"] for item in schema.concept_diagnosis}
+        assert kinds == {"concept_diagnosis", "misconception_hypothesis"}
+        misconception_item = next(
+            item for item in schema.concept_diagnosis if item["kind"] == "misconception_hypothesis"
+        )
+        assert misconception_item["misconception_id"] == "frac-add-denominator"
+        # 약개념 추천 0건 → weak_points·recommended_path 모두 빈 리스트(대상 개념 없음).
+        assert schema.weak_points == []
+        assert schema.recommended_path == []
+
+    def test_weak_points_and_recommended_path_from_weakest_concept(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """weak_points는 recommend_weak_concepts 그대로, recommended_path는 *가장 약한*
+        (첫 항목) 개념을 대상으로 build_learning_path를 호출해 얻는다(신규 계산 0)."""
+        weakest, second = uuid.uuid4(), uuid.uuid4()
+        gaps_calls: list[uuid.UUID] = []
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[],
+            hypotheses=[],
+            weak=[
+                WeakConceptRecommendation(concept_id=weakest, weakness=0.1, agreement="agree"),
+                WeakConceptRecommendation(concept_id=second, weakness=0.5, agreement="agree"),
+            ],
+            gaps_calls=gaps_calls,
+            path_steps=(
+                LearningStep(position=0, concept_id=weakest, depth=1, is_cycle_residual=False),
+            ),
+        )
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(schema.weak_points) == 2
+        # 학습 경로는 첫(가장 약한) 개념(weakest)만 대상으로 조회됨.
+        assert gaps_calls == [weakest]
+        assert len(schema.recommended_path) == 1
+        assert schema.recommended_path[0]["concept_id"] == str(weakest)
+
+
+class TestAssessmentCaptureEndpoint:
+    """`POST /v1/me/assessments/capture` — measurement_sufficient 경계 결선(조립 함수는
+    monkeypatch로 대체해 orchestration만 검증. 조립 자체는 `TestAssembleMeasurementAssessment`)."""
+
+    def test_requires_auth(self) -> None:
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[FakeSession]:
+            yield FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        assert TestClient(app).post("/v1/me/assessments/capture").status_code == 401
+
+    def test_insufficient_measurement_not_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _fake_state(session: Any, user_id: Any) -> _AttemptHistoryState:
+            return _AttemptHistoryState(
+                attempted_ids=set(), theta=0.0, standard_error=0.9, measurement_sufficient=False
+            )
+
+        async def _boom_assemble(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("측정 불충분이면 조립 함수가 호출되면 안 된다")
+
+        monkeypatch.setattr("whymath_backend.api.me._load_attempt_history_state", _fake_state)
+        monkeypatch.setattr(
+            "whymath_backend.api.me._assemble_measurement_assessment", _boom_assemble
+        )
+        client, fake = _client([])
+        resp = client.post("/v1/me/assessments/capture")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["written"] is False
+        assert body["reason"] == "insufficient_measurement"
+        assert body["assessment"] is None
+        assert body["measurement_sufficient"] is False
+        assert body["standard_error"] == 0.9
+        # 측정 불충분 → Assessment 적재 0(가짜 행 생성 금지 — CLAUDE.md).
+        assert fake.commits == 0
+        assert fake.added == []
+
+    def test_written_when_measurement_sufficient(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _fake_state(session: Any, user_id: Any) -> _AttemptHistoryState:
+            return _AttemptHistoryState(
+                attempted_ids=set(), theta=0.5, standard_error=0.2, measurement_sufficient=True
+            )
+
+        async def _no_existing(session: Any, user_id: Any, now: Any) -> Assessment | None:
+            return None
+
+        async def _fake_assemble(session: Any, user_id: Any, *, now: datetime) -> AssessmentSchema:
+            return AssessmentSchema(
+                user_id=user_id,
+                assessment_type=AssessmentType.단원진단,
+                started_at=now,
+                completed_at=now,
+            )
+
+        monkeypatch.setattr("whymath_backend.api.me._load_attempt_history_state", _fake_state)
+        monkeypatch.setattr("whymath_backend.api.me._find_existing_capture", _no_existing)
+        monkeypatch.setattr(
+            "whymath_backend.api.me._assemble_measurement_assessment", _fake_assemble
+        )
+        client, fake = _client([])
+        resp = client.post("/v1/me/assessments/capture")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["written"] is True
+        assert body["reason"] == "captured"
+        assert body["measurement_sufficient"] is True
+        assert body["assessment"] is not None
+        assert body["assessment"]["user_id"] == str(_UID)
+        # 4개 예측 필드(+target_university_id) — 조립 스키마가 채우지 않았으므로 응답도 null.
+        for field in (
+            "estimated_grade",
+            "estimated_score",
+            "estimated_percentile",
+            "admission_probability",
+            "target_university_id",
+        ):
+            assert body["assessment"][field] is None
+        # 실제로 Assessment ORM 행 1건 add + commit 1회(실 적재 발생).
+        assert fake.commits == 1
+        assert len(fake.added) == 1
+        assert isinstance(fake.added[0], Assessment)
+
+    def test_idempotent_within_same_window_no_double_write(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """동일 학생·동일 창(오늘)에 이미 캡처된 행이 있으면 재조립·재적재하지 않는다
+        (더블클릭·재시도 등 동일 요청 반복 시 이중 계상 방지)."""
+
+        async def _fake_state(session: Any, user_id: Any) -> _AttemptHistoryState:
+            return _AttemptHistoryState(
+                attempted_ids=set(), theta=0.5, standard_error=0.2, measurement_sufficient=True
+            )
+
+        existing_row = Assessment.from_schema(
+            AssessmentSchema(user_id=_UID, assessment_type=AssessmentType.단원진단)
+        )
+
+        async def _existing(session: Any, user_id: Any, now: Any) -> Assessment:
+            return existing_row
+
+        async def _boom_assemble(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("이미 캡처된 창이면 재조립하면 안 된다(이중 계상 방지)")
+
+        monkeypatch.setattr("whymath_backend.api.me._load_attempt_history_state", _fake_state)
+        monkeypatch.setattr("whymath_backend.api.me._find_existing_capture", _existing)
+        monkeypatch.setattr(
+            "whymath_backend.api.me._assemble_measurement_assessment", _boom_assemble
+        )
+        client, fake = _client([])
+        resp = client.post("/v1/me/assessments/capture")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["written"] is False
+        assert body["reason"] == "already_captured_window"
+        assert body["assessment"] is not None
+        assert body["assessment"]["assessment_id"] == str(existing_row.assessment_id)
+        # 재적재 없음 — 커밋 0·add 0(이중 계상 방지가 실제로 동작함을 확인).
+        assert fake.commits == 0
         assert fake.added == []
