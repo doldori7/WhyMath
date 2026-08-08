@@ -2138,3 +2138,7 @@
 {"ts": "2026-08-08T00:06:11", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "PED-14-time-to-mastery-normalization"}
 {"ts": "2026-08-08T00:06:45", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "ARCH-27-comparison-derivative-sealing-gate"}
 {"ts": "2026-08-08T04:36:20", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "add", "id": "ASM-07-prediction-field-student-exposure-sealing"}
+{"ts": "2026-08-08T17:11:47", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "start", "id": "ASM-02-grade-exposure-policy-decision", "session": "claude/whymath-positioning-strategy-qumq9y", "remote": "ok", "as_owner": "kiki"}
+{"ts": "2026-08-08T17:11:47", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "done", "id": "ASM-02-grade-exposure-policy-decision", "artifacts": ["d20a0644"], "as_owner": "kiki"}
+{"ts": "2026-08-08T20:57:39", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "start", "id": "CUR-03-achievement-level-data-intake", "session": "claude/whymath-positioning-strategy-qumq9y", "remote": "ok", "as_owner": "kiki"}
+{"ts": "2026-08-08T20:57:39", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "done", "id": "CUR-03-achievement-level-data-intake", "artifacts": ["98a34695"], "as_owner": "kiki"}
