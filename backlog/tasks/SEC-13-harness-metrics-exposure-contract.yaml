@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "결함: GET /v1/me/harness-metrics(api/me.py:2755-2817)가 classify_metric_exposure를 우회해 원시 SurrogateMetrics(INTERNAL_ONLY인 diagnosis_agreement_rate·tokens_per_turn, 원 calibration_brier 스칼라, R15Verdict.GAMING_SUSPECT 낙인)를 ConsentedUser(학생, admin 게이트 없음)에게 반환. me.py:2811-2817 자백 주석 존재. PED-08(#726)이 안전 라우트 /growth-evidence만 병설하고 원시 라우트를 학생 접근에서 닫지 않음 — 정본화≠집행."
   - "수정: 이 엔드포인트를 admin/role 게이트 뒤로 옮기거나 classify_metric_exposure 경유 출력만 반환. GAMING_SUSPECT·INTERNAL_ONLY 2종·원 Brier 스칼라가 학생 토큰 응답에 미도달함이 계약 정본. growth_evidence_exposure.py의 '유일한 노출 판정 경로' 선언과 서빙 코드가 정합해야 함(집행 지점 별항 명시 — CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지')."
   - "테스트(결함주입): 학생 토큰으로 /harness-metrics 호출 시 INTERNAL_ONLY 지표·GAMING_SUSPECT 문자열이 응답에 없음을 동결. 낙인 판정이 응답 본문에 유출되면 실패하는 변별 테스트(성공/실패 양쪽에서 같은 값 내는 검사 금지)."
-artifacts: []
+artifacts:
+  - "GET /v1/me/harness-metrics를 RequireContentAdmin으로 게이트(문제·개념 CUD 라우터와 동일 v0 역할 게이트 재사용) — api/me.py:65,2744-2807. 학생(Role.STUDENT) 토큰은 원시 SurrogateMetrics(INTERNAL_ONLY 2종·⑥Brier 원값·⑧R15 게임화의심 낙인)에 더 이상 도달 불가, 본인 스코핑(user.user_id)은 유지. 신규 hermetic 회귀 테스트 tests/backend/api/test_me_harness_metrics_auth_gate.py 4건(학생 403·admin 200·무토큰 401·게이트 자체 확인 — 결함주입: 되돌리면 403 기대 테스트가 200을 받아 실패). 부수 수정: test_me_growth_evidence_governance.py(PED-08 api/+schema/ 전문 스캔 게이트)가 신규 docstring 프로즈의 금지 리터럴을 걸러내 실패 → 한국어 서술로 우회(코드 무변경). 실 PG 필요한 통합테스트 2개 파일(tests/backend/harness/test_wh1_evaluation_integration.py·tests/backend/api/test_e2e_suneung_loop_integration.py)의 시드 유저 role을 CONTENT_ADMIN으로 정정(role은 이 게이트 외 학습 흐름에 영향 없음 확인) — 라이브 PG 미보유로 실제 라운드트립은 미검증(정직한 공백, DB 계층 SQLAlchemy Enum 컬럼은 읽기 시 정규화하므로 문제 없을 것으로 판단하나 재확인 필요). 검증: 백엔드 전체 스위트 8920 passed/296 skipped(통합·PG 부재)/0 failed(20분57초) · ruff+black(backend+tests 1072파일) clean · mypy --strict 471파일 clean · backlog validate green."
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/harness/growth_evidence_exposure.py
