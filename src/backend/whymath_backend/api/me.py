@@ -44,7 +44,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import (
@@ -81,6 +81,7 @@ from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.timeseries import DailyLearningMetrics
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
@@ -153,6 +154,9 @@ from whymath_backend.schema.enums import (
     AuditResourceType,
     Persona,
     Resolution,
+)
+from whymath_backend.schema.timeseries import (
+    DailyLearningMetrics as DailyLearningMetricsSchema,
 )
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -2372,6 +2376,73 @@ async def export_my_data(
         ", ".join(t.store for t in pending),
     )
     return export
+
+
+# ── COLLAB-03: GET /v1/me/learning-metrics (일별 학습 활동 집계 — writer 좌석) ──────────
+# `l2.learning_metrics_writer.run_daily_rollup`(cron/수동 실행, 새 스케줄러 없음)이 채우는
+# `daily_learning_metrics`의 *첫 reader*다. 세 테이블(daily_learning_metrics·
+# problem_solve_time_distribution·user_behavior_metrics)이 파기·반출·보존 배관에는 전부
+# 등재돼 있었으나 writer가 0건이었던 문제(collaboration_module_gap_review.md §3 D3)의 학생
+# 1인칭 좌석 — 여기 노출은 *본인* daily_learning_metrics만이다. `problem_solve_time_
+# distribution`(문항 교차사용자 집계 — PII 아님)·`user_behavior_metrics`(행동 분석)는 이
+# 태스크 범위 밖(학생 1인칭 "학습 시간 통계"만 — 기능 71-4). 부모·교사 노출은 COLLAB-01/
+# Phase 3 계약(이 엔드포인트는 `ConsentedUser`+user_id 스코핑으로 본인 전용 — 매트릭스상
+# 학생 본인 축만).
+MetricSince = Annotated[
+    date | None,
+    Query(description="이 날짜 *이후* 항목만(inclusive·YYYY-MM-DD). until과 함께 날짜창."),
+]
+MetricUntil = Annotated[
+    date | None,
+    Query(description="이 날짜 *이전* 항목만(inclusive·YYYY-MM-DD). since와 함께 날짜창."),
+]
+
+
+def _validate_date_window(since: date | None, until: date | None) -> None:
+    """날짜창 일관성 — since > until이면 422(`_validate_time_window`의 date 버전·동일 취지)."""
+    if since is not None and until is not None and since > until:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"`since`({since.isoformat()})은 `until`({until.isoformat()})보다 이전(또는 "
+                "같음)이어야 합니다. since > until은 빈 날짜창."
+            ),
+        )
+
+
+@router.get(
+    "/learning-metrics",
+    response_model=list[DailyLearningMetricsSchema],
+    summary="내 일별 학습 활동 집계(학습시간·문제풀이·소크라테스 턴 — COLLAB-03 writer 좌석)",
+)
+async def list_my_learning_metrics(
+    user: ConsentedUser,
+    session: SessionDep,
+    since: MetricSince = None,
+    until: MetricUntil = None,
+    order: OrderParam = "desc",
+) -> list[DailyLearningMetricsSchema]:
+    """본인의 `daily_learning_metrics` 일별 집계 — 기본 최신순(metric_date desc).
+
+    `since`/`until`(선택, YYYY-MM-DD)로 `metric_date` 날짜창(inclusive) 필터. 타인 데이터는
+    조회 불가(user_id 스코핑 — 다른 /me GET과 동형). 집계가 아직 실행되지 않은 날짜는 행이
+    없다(가짜 0 대신 행 부재 — writer가 그 날짜를 처리하기 전까지는 조용히 빈 배열이지,
+    0으로 채운 행이 아니다).
+    """
+    _validate_date_window(since, until)
+    conds = [DailyLearningMetrics.user_id == user.user_id]
+    if since is not None:
+        conds.append(DailyLearningMetrics.metric_date >= since)
+    if until is not None:
+        conds.append(DailyLearningMetrics.metric_date <= until)
+    primary = (
+        DailyLearningMetrics.metric_date.asc()
+        if order == "asc"
+        else DailyLearningMetrics.metric_date.desc()
+    )
+    stmt = select(DailyLearningMetrics).where(*conds).order_by(primary)
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
 
 
 # ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — 본인 스코핑) ──
