@@ -483,17 +483,17 @@ def render_report(
     pct = round(confidence * 100)
     lines = [
         "=" * 68,
-        "잔여 축 교차검증 게이트 강등전 — 결함 주입 검출률 측정 (S4-16 · D7)",
+        "잔여 축 교차검증 게이트 강등전 - 결함 주입 검출률 측정 (S4-16 · D7)",
         "=" * 68,
-        f"[커버리지 — 코퍼스 전체({corpus_size}건) 기준 결함류별 적용 가능 건수]",
+        f"[커버리지 - 코퍼스 전체({corpus_size}건) 기준 결함류별 적용 가능 건수]",
     ]
     for name in RESIDUE_DEFECT_CLASSES:
         n = report.coverage.get(name, 0)
         if n == 0:
-            lines.append(f"  {name:26s} 표본 없음(N=0/{corpus_size}) — 이 결함류는 적용 불가")
+            lines.append(f"  {name:26s} 표본 없음(N=0/{corpus_size}) - 이 결함류는 적용 불가")
         else:
             lines.append(f"  {name:26s} {n}/{corpus_size}건 적용 가능")
-    lines.append(f"[결함류별 검출 — 실 표본({pct}% Wilson 하한)]")
+    lines.append(f"[결함류별 검출 - 실 표본({pct}% Wilson 하한)]")
     for name in RESIDUE_DEFECT_CLASSES:
         detection = report.per_class.get(name)
         if detection is None or detection.sampled == 0:
@@ -515,16 +515,16 @@ def render_report(
         f"  무결함 오검출 : {report.clean_false_alarms}/{report.clean_resolved} "
         f"({pct}% 상한 {_fmt(fau)})  판정불가 {report.clean_unresolved}건"
     )
-    lines.append("[보정 제안 — residue_cross_verify_eval.py --max-defect-upper]")
+    lines.append("[보정 제안 - residue_cross_verify_eval.py --max-defect-upper]")
     if fau is not None:
         lines.append(
             f"  측정된 오검출 Wilson 상한이 {fau:.4f}이므로 --max-defect-upper는 최소 "
             f"{fau:.4f} 이상이어야 노이즈와 실결함을 구분 가능(현재 기본값 0.05는 이 실측 "
-            "이전의 근거 없는 초기값 — 실측치가 0.05를 넘으면 그 기본값 자체가 상시 FAIL을 "
+            "이전의 근거 없는 초기값 - 실측치가 0.05를 넘으면 그 기본값 자체가 상시 FAIL을 "
             "낳는 잘못 캘리브레이션된 임계다)."
         )
     else:
-        lines.append("  대조군 판정 표본이 없어(clean_resolved=0) 보정 제안 불가 — 측정 부족.")
+        lines.append("  대조군 판정 표본이 없어(clean_resolved=0) 보정 제안 불가 - 측정 부족.")
     lines.append("=" * 68)
     return "\n".join(lines)
 
@@ -561,11 +561,20 @@ def report_to_json(report: ResidueBattleReport, *, confidence: float = 0.95) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
-    """강등전 CLI — 실 코퍼스 로드 → 배터리 조립 → K=3 검증 → 리포트. 게이트는 opt-in."""
+    """강등전 CLI — 실 코퍼스 로드 → 배터리 조립 → K=3 검증 → 리포트. 게이트는 opt-in.
+
+    한국어 Windows 콘솔(cp949)에서 인코딩 불가 문자로 인쇄 단계가 죽지 않도록 stdout/stderr의
+    오류 처리를 완화한다(값 손실 없이 계산은 이미 끝난 뒤의 표시 단계만 보호 — 2026-08-03
+    Phaiakes9 실측: cp949가 em dash(U+2014)를 인코딩 못 해 리포트 출력 직전 크래시, 감사
+    JSONL은 UTF-8로 이미 저장돼 있어 값 손실은 없었으나 화면 표시가 막혔다).
+    """
+    if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+        sys.stdout.reconfigure(errors="backslashreplace")  # type: ignore[union-attr]
+        sys.stderr.reconfigure(errors="backslashreplace")  # type: ignore[union-attr]
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.residue_gate_demotion_battle",
         description=(
-            "잔여 축 교차검증 게이트 강등전 — 결함 주입 셋 + 무결함 대조군으로 검출률·"
+            "잔여 축 교차검증 게이트 강등전 - 결함 주입 셋 + 무결함 대조군으로 검출률·"
             "오검출률을 실측하고 --max-defect-upper 보정 제안을 낸다."
         ),
     )
@@ -574,7 +583,7 @@ def main(argv: list[str] | None = None) -> int:
         "--sample-n",
         type=int,
         default=5,
-        help="결함류별·대조군 표본 수(기본 5 — 실 provider 비용 통제. 결함류 4종 + 대조군 "
+        help="결함류별·대조군 표본 수(기본 5 - 실 provider 비용 통제. 결함류 4종 + 대조군 "
         "1종 × K=3 관점이라 기본값도 최대 ~75회 LLM 호출).",
     )
     parser.add_argument("--seed", default="S4-16", help="결정론 표본 추출 시드.")
@@ -583,13 +592,13 @@ def main(argv: list[str] | None = None) -> int:
         "--min-detection-lower",
         type=float,
         default=0.0,
-        help="전체 검출률 Wilson 하한 임계 — 미만이면 exit 1(기본 0=off).",
+        help="전체 검출률 Wilson 하한 임계 - 미만이면 exit 1(기본 0=off).",
     )
     parser.add_argument(
         "--max-false-alarm-upper",
         type=float,
         default=1.0,
-        help="대조군 오검출률 Wilson 상한 임계 — 초과면 exit 1(기본 1.0=off).",
+        help="대조군 오검출률 Wilson 상한 임계 - 초과면 exit 1(기본 1.0=off).",
     )
     parser.add_argument("--audit-out", type=Path, default=None, help="감사 JSONL 산출 경로.")
     parser.add_argument(
