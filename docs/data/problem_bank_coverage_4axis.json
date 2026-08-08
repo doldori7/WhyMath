@@ -8,7 +8,7 @@
     "범위밖(1.0~5.0 아님)"
   ],
   "band_totals": {
-    "개념 [3.0,4.0)": 3317,
+    "개념 [3.0,4.0)": 3447,
     "숙달 [4.0,5.0]": 162,
     "인지 [1.0,2.0)": 2841,
     "절차 [2.0,3.0)": 3899
@@ -24,6 +24,12 @@
       "name": "problem_bank_calculus1_integral_v0",
       "parse_errors": 0,
       "problems": 400,
+      "status": "적재됨"
+    },
+    {
+      "name": "problem_bank_calculus2_trig_integral_v0",
+      "parse_errors": 0,
+      "problems": 130,
       "status": "적재됨"
     },
     {
@@ -327,7 +333,7 @@
       "total": 6
     },
     "적분법": {
-      "covered": 0,
+      "covered": 3,
       "total": 7
     },
     "지수함수와 로그함수": {
@@ -385,7 +391,7 @@
   },
   "coverage_by_school_type": {
     "고등학교": {
-      "covered": 72,
+      "covered": 75,
       "total": 254
     },
     "대학교": {
@@ -457,6 +463,9 @@
     "[12미적Ⅱ-02-02]",
     "[12미적Ⅱ-02-04]",
     "[12미적Ⅱ-02-05]",
+    "[12미적Ⅱ-03-01]",
+    "[12미적Ⅱ-03-05]",
+    "[12미적Ⅱ-03-07]",
     "[12수문02-02]",
     "[12인수04-01]",
     "[12직수02-05]",
@@ -523,14 +532,14 @@
   ],
   "format_totals": {
     "객관식": 1616,
-    "단답형": 8603
+    "단답형": 8733
   },
   "honest_accounting": {
     "other_revision_only_codes": {},
     "parse_error_lines": 0,
     "parse_errors": [],
     "problems_without_difficulty": 0,
-    "problems_without_problem_type": 8001,
+    "problems_without_problem_type": 8131,
     "problems_without_question_format": 0,
     "problems_without_standard_codes": 0,
     "problems_without_unit_codes": 0,
@@ -542,6 +551,9 @@
     },
     "problem_bank_calculus1_integral_v0": {
       "개념 [3.0,4.0)": 400
+    },
+    "problem_bank_calculus2_trig_integral_v0": {
+      "개념 [3.0,4.0)": 130
     },
     "problem_bank_combination_binomial_v0": {
       "절차 [2.0,3.0)": 121
@@ -653,6 +665,9 @@
     },
     "problem_bank_calculus1_integral_v0": {
       "단답형": 400
+    },
+    "problem_bank_calculus2_trig_integral_v0": {
+      "단답형": 130
     },
     "problem_bank_combination_binomial_v0": {
       "단답형": 121
@@ -943,6 +958,9 @@
     "[12미적Ⅱ-02-02]": 24,
     "[12미적Ⅱ-02-04]": 200,
     "[12미적Ⅱ-02-05]": 24,
+    "[12미적Ⅱ-03-01]": 100,
+    "[12미적Ⅱ-03-05]": 15,
+    "[12미적Ⅱ-03-07]": 15,
     "[12수문02-02]": 24,
     "[12인수04-01]": 24,
     "[12직수02-05]": 24,
@@ -1009,8 +1027,8 @@
   },
   "revision": "2022 개정",
   "standards": {
-    "coverage_rate": 0.271264367816092,
-    "covered_code_count": 118,
+    "coverage_rate": 0.27816091954022987,
+    "covered_code_count": 121,
     "record_count": 895,
     "target_codes_total": 435,
     "target_revision": "2022 개정",
@@ -1019,9 +1037,9 @@
       "2015 개정": 460,
       "2022 개정": 435
     },
-    "zero_coverage_code_count": 317
+    "zero_coverage_code_count": 314
   },
-  "total_problems": 10219,
+  "total_problems": 10349,
   "unit_band_matrix": {
     "ABS-VALUE": {
       "개념 [3.0,4.0)": 13,
@@ -1086,6 +1104,9 @@
     },
     "CALC1-QUOTIENT-RULE": {
       "개념 [3.0,4.0)": 200
+    },
+    "CALC2-TRIG-INTEGRAL": {
+      "개념 [3.0,4.0)": 130
     },
     "CIRCLE-AREA": {
       "개념 [3.0,4.0)": 14,
@@ -2552,13 +2573,10 @@
     "[12미적Ⅱ-02-09]",
     "[12미적Ⅱ-02-10]",
     "[12미적Ⅱ-02-11]",
-    "[12미적Ⅱ-03-01]",
     "[12미적Ⅱ-03-02]",
     "[12미적Ⅱ-03-03]",
     "[12미적Ⅱ-03-04]",
-    "[12미적Ⅱ-03-05]",
     "[12미적Ⅱ-03-06]",
-    "[12미적Ⅱ-03-07]",
     "[12수과01-01]",
     "[12수과01-02]",
     "[12수과02-01]",
