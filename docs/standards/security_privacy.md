@@ -174,6 +174,29 @@ class AuditLog:
 > `target_user_id`(행위 대상 — 관리자접근에서만 행위자와 다름)·`consent_scope`(동의변경 구분
 > typed 메타)는 `deletion_audit`엔 없는 신규 컬럼.
 
+> **⚠️ 편집자 부기 — 감사 2테이블의 보존·파기 정책 (2026-08-06 · ADMIN-03 ·
+> `operations_platform_gap_review.md` §3 D3)**: 위 코드블록의 "보존: 5년 (개인정보보호법)"은
+> **잠정 참조값이며 아직 기계적으로 시행되지 않는다**. `deletion_audit`·`privacy_audit`
+> (`db/models/audit.py`) 두 감사 테이블은 학습 활동 PII 시계열 파기 계획(`privacy/retention.py`
+> `_RETENTION_PLAN`)에도, 삭제권 파기 계획(`privacy/erasure.py` `_ERASURE_PLAN`)에도
+> **의도적으로 포함하지 않는다**. 근거:
+>
+> ⑴ **법정 증빙 성격** — 두 테이블은 "언제·누가·무엇을 지웠는가/반출했는가"의 compliance 증빙
+> 이라 학습 PII와 달리 *즉시 파기 대상이 아니다*. 오히려 지우면 삭제·반출 사실 자체를 증빙할 수
+> 없어 목적이 무너진다(그래서 `user_id`가 FK 아닌 plain UUID — 계정 삭제 후에도 잔존).
+>
+> ⑵ **보존 연한은 미확정** — 이 제외는 "영원히 보존"의 확정이 **아니다**. 최종 보존 연한은
+> 개인정보보호법 유래 판단이라 **`MGMT-02`(이용약관·개인정보처리방침 변호사 검토) 회신이
+> 선행**한다. 연한을 코드·문서가 임의로 정하지 않는다(CLAUDE.md 「법령 유래 절차의 기계 대체
+> 금지」). 위 "5년"도 그 회신 전까지는 확정 연한이 아니라 방향 참조에 불과하다.
+>
+> ⑶ **현행 상태의 정직한 명문화** — 삭제권 쪽에는 이 제외 사유가 `_ERASURE_PLAN_EXEMPTIONS`에
+> 이미 사유와 함께 등재돼 있으나, 보존 파기 쪽에는 결정이 코드·문서 어디에도 없어 *사실상 무기한
+> 보존이 침묵으로* 남아 있었다. ADMIN-03은 그 공백을 명문화(retention.py 모듈 docstring + 본
+> 부기)하고 동결 테스트(`tests/backend/privacy/test_audit_retention_exclusion.py` — 감사 2테이블이
+> `_RETENTION_PLAN`에 없음)를 신설한다. **이 태스크의 범위는 명문화 + 동결까지** — 보존 연한 숫자
+> 확정·감사 전용 자동 파기 배선은 MGMT-02 선행 후 별도 태스크다(프로덕션 파기 로직 변경 0).
+
 ## 삭제·이전 권리
 
 ```python
