@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -19,11 +19,12 @@ acceptance:
   - "⑤ CI 배선 확인: 신설 테스트가 실제로 CI 잡에서 실행되는지 확인한 뒤 완료로 친다(tests/infra/test_test_suite_wiring.py 동결 대상 여부 포함). '존재함'과 '돌아감'은 다르다 — OPS-03/OPS-08/OPS-11 반복 사고."
   - "⑥ 회귀: 백엔드 소스·테스트를 건드리므로 전체 스위트를 돌린 뒤 회귀 없음을 말한다. 못 돌렸으면 '전체는 확인하지 못했다'를 명시하고 CI를 최종 판정으로 넘긴다(2026-07-26 OPS-06 경위)."
   - "⑦ 범위 밖: 보호자·교사 노출 형태 설계(Phase 3)·D-100예측 알고리즘 설계·필드 폐기 마이그레이션((d) 선택 시 별도)·ARCH-27 게이트 본체 구현은 포함하지 않는다."
-artifacts: []
+artifacts:
+  - 041a2e7f
 paths:
   - src/backend/whymath_backend/schema/assessment.py
   - src/backend/whymath_backend/api/me.py
   - tests/backend/api/test_prediction_field_sealing.py
-session: claude/whymath-positioning-strategy-qumq9y
+session: null
 notes: "ASM-02 결정의 집행 태스크. 착수 전제: ASM-02가 (c) 학생 비노출로 done 되어야 한다((b) 채택 시 이 태스크는 재설계 필요). 발단: 2026-08-08 실측에서 갭 리뷰 D2의 전제('노출 코드 0건')가 부정확함이 드러났다 — writer는 0건이나 GET /v1/me/assessments 가 AssessmentSchema를 그대로 반환하고 response_model_exclude_none 이 저장소 전체에 없어 학생 응답 JSON에 5필드가 null 키로 이미 나가는 '노출 대기' 상태였다. writer가 붙는 순간 API 층 코드 변경 0으로 유입된다. 근거 문서: docs/architecture/assessment_module_gap_review.md D2 §정정·§봉인 방향."
 updated: 2026-08-08

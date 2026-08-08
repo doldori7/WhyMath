@@ -344,7 +344,8 @@
 - **변별력 실측(양방향)**: ①봉인 직후 기존 `test_me.py` capture 테스트가 예고대로 **`KeyError: 'estimated_grade'`**로 red 전환 → 그 red를 본 뒤 기대값을 '키 부재'로 갱신(acceptance ③) ②`GET /assessments` **하나만** 옛 모델로 되돌리면 거버넌스 3건 red, 복원하면 green.
 - **영속 축 불변**: 적재는 여전히 내부 정본(`Assessment.from_schema`)으로 하고 5필드는 컬럼째 남는다 — `ASM-02`가 (d) 필드 폐기를 미채택했으므로 봉인은 **노출 축에만** 건다. 거버넌스 테스트가 이 방향도 동결한다(내부 모델에서 5필드가 사라지면 red).
 - **런타임 필터 회피**: `api/users.py`의 `response_model_exclude=_PII_EXCLUDE` 선례를 의도적으로 **복사하지 않았다** — 데코레이터 인자 한 줄이 빠지면 조용히 무력화되고 스키마엔 필드가 남아 OpenAPI 광고도 계속된다(`PED-08` ③ 선례). PII는 별개 축이라 `users.py` 현행은 건드리지 않았다.
-- **환경 메모**: CCR 컨테이너 기본 파이썬이 3.11인데 백엔드는 3.12+ 요구라 `pip install -e src/backend`가 실패한다. `python3.12 -m venv`로 별도 venv를 만들어야 백엔드 테스트를 돌릴 수 있다(+`src/data-pipeline`도 설치해야 `tests/backend/l1/*`·`harness/test_qa_pipeline.py` 7건이 수집된다).
+- **검증**: 전체 백엔드 스위트 **8793 passed · 296 skipped · 0 failed**를 **두 번** 확보했다 — ①정렬 순서(478초) ②**무작위 순서**(504초). 1회차를 `-p no:randomly`로 돌렸다는 걸 뒤늦게 발견해(=`pyproject.toml`이 `pytest-randomly`를 선언하는데 내가 껐다) 순서 의존 축을 못 본 상태였고, `OPS-09`가 정확히 그 축이라 재실행했다. 그 외 mypy `--strict` 465파일 · import-linter 7계층 계약 KEPT · ruff/black clean. 296 skip은 PostgreSQL 미도달·`WHYMATH_RUN_INTEGRATION` 미설정의 기존 관례 skip이다.
+- **환경 메모**: CCR 컨테이너 기본 파이썬이 3.11인데 백엔드는 3.12+ 요구라 `pip install -e src/backend`가 실패한다. `python3.12 -m venv`로 별도 venv를 만들어야 백엔드 테스트를 돌릴 수 있다(+`src/data-pipeline`도 절대경로로 설치해야 `tests/backend/l1/*`·`harness/test_qa_pipeline.py` 7건이 수집된다). **주의**: 리포 루트에서 `pytest`를 돌리면 루트 `pyproject.toml`이 잡혀 `asyncio_mode=auto`가 적용되지 않아 무관한 실패가 난다 — CI와 동일하게 `src/backend`에서 인자 없이 돌려야 한다.
 
 ### 2026-08-08 (시스템 결함·하네스): **하네스 git 서브프로세스가 로케일 인코딩으로 디코드해 cp949(한국어 Windows) 환경에서 붕괴 — HARN-11 미머지 done 탐지가 Kiki 머신에서 *상시* fail-open 이었음이 드러남. 태스크 `HARN-19` 등재(priority 1)** (Kiki 머신 실행 출력에서 관측, claude 원인 규명·등재)
 
