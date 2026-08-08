@@ -5,13 +5,14 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance: []
-artifacts: []
+artifacts:
+  - 28d23755
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/db/models/assessment.py

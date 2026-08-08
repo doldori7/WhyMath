@@ -44,6 +44,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
@@ -62,7 +63,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser
-from whymath_backend.api._growth_evidence_state import get_growth_evidence_counters
+from whymath_backend.api._growth_evidence_state import (
+    get_growth_evidence_counters,
+    get_growth_evidence_exposure_counters,
+)
 from whymath_backend.api._query_filters import (
     _validate_time_window,
     _validate_tz_aware,
@@ -82,7 +86,13 @@ from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.session import get_session
+from whymath_backend.harness.growth_evidence_exposure import (
+    MetricExposure,
+    classify_metric_exposure,
+    narrate_calibration_brier,
+)
 from whymath_backend.harness.wh1_evaluation import (
+    MetricStatus,
     SurrogateMetrics,
     compute_wh1_surrogate_metrics,
 )
@@ -122,6 +132,7 @@ from whymath_backend.l2.weak_concept_recommendation import (
 )
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l6.suneung import (
     METADATA_ONLY_SOURCES,
@@ -149,6 +160,7 @@ from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import (
     ASSESSED_ROLES,
+    AssessmentType,
     AuditEventKind,
     AuditResourceType,
     Persona,
@@ -1772,6 +1784,66 @@ def _combine_weights(*weight_lists: list[float] | None) -> list[float] | None:
     return combined
 
 
+@dataclass(slots=True, frozen=True)
+class _AttemptHistoryState:
+    """채점 이력 기반 CAT 상태 — `/next-problem`·ASM-03 평가 캡처 좌석이 *공유*하는 단일
+    진실 원천(single source of truth).
+
+    `attempted_ids`는 `/next-problem`의 후보 필터에만 쓰이는 부가 필드다 — 평가 캡처 좌석
+    (`POST /assessments/capture`)은 `theta`·`standard_error`·`measurement_sufficient`만
+    소비한다.
+    """
+
+    attempted_ids: set[uuid.UUID]
+    theta: float
+    standard_error: float | None
+    measurement_sufficient: bool
+
+
+async def _load_attempt_history_state(
+    session: AsyncSession, user_id: uuid.UUID
+) -> _AttemptHistoryState:
+    """채점 이력 조회 → θ 추정 → SE·`measurement_sufficient`(CAT 중단 규칙, slice 15).
+
+    `/next-problem`(slice 12~17)의 기존 인라인 로직을 *동작 무변경*으로 추출한 것 — 새 계산
+    0(같은 쿼리·같은 순서·같은 공식). ASM-03(`POST /assessments/capture`)이 "measurement_
+    sufficient 경계"를 `/next-problem`과 *같은 지점*에서 판정하기 위해 별도 함수로 뽑았다
+    (진실 원천이 둘로 갈라지면 유지보수 지옥 — CLAUDE.md 구축 플레이북 7대 붕괴 연쇄 방어).
+    """
+    attempt_stmt = (
+        select(
+            ProblemAttempt.problem_id,
+            ProblemAttempt.is_correct,
+            Problem.difficulty_overall,
+            Problem.irt_difficulty_b,
+        )
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .where(
+            ProblemAttempt.user_id == user_id,
+            ProblemAttempt.is_correct.isnot(None),
+        )
+    )
+    attempt_rows = (await session.execute(attempt_stmt)).all()
+    responses: list[tuple[IrtItem, bool]] = []
+    for _pid, is_correct, difficulty, irt_b in attempt_rows:
+        b = resolve_item_difficulty_b(irt_b, difficulty)
+        if b is not None:
+            responses.append((IrtItem(difficulty=b), bool(is_correct)))
+    theta = estimate_ability(responses)
+    attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
+    # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
+    administered_items = [item for item, _ in responses]
+    se = ability_standard_error(theta, administered_items)
+    standard_error = None if math.isinf(se) else se
+    measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
+    return _AttemptHistoryState(
+        attempted_ids=attempted_ids,
+        theta=theta,
+        standard_error=standard_error,
+        measurement_sufficient=measurement_sufficient,
+    )
+
+
 class NextProblemResponse(BaseModel):
     """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천 + 측정 정밀도."""
 
@@ -1897,27 +1969,13 @@ async def recommend_next_problem(
     mode 무관 — 일관성 우선). `prioritize_weak_concepts`·`purpose=learning`과 동시 지정 시
     가중은 모두 곱으로 합성.
     """
-    attempt_stmt = (
-        select(
-            ProblemAttempt.problem_id,
-            ProblemAttempt.is_correct,
-            Problem.difficulty_overall,
-            Problem.irt_difficulty_b,
-        )
-        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
-        .where(
-            ProblemAttempt.user_id == user.user_id,
-            ProblemAttempt.is_correct.isnot(None),
-        )
-    )
-    attempt_rows = (await session.execute(attempt_stmt)).all()
-    responses: list[tuple[IrtItem, bool]] = []
-    for _pid, is_correct, difficulty, irt_b in attempt_rows:
-        b = resolve_item_difficulty_b(irt_b, difficulty)
-        if b is not None:
-            responses.append((IrtItem(difficulty=b), bool(is_correct)))
-    theta = estimate_ability(responses)
-    attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
+    # 채점 이력 → θ·SE·measurement_sufficient. ASM-03 평가 캡처 좌석과 공유하는 단일 진실
+    # 원천(`_load_attempt_history_state`) — 동작은 기존 인라인 로직과 완전히 동일(회귀 0).
+    attempt_state = await _load_attempt_history_state(session, user.user_id)
+    theta = attempt_state.theta
+    attempted_ids = attempt_state.attempted_ids
+    standard_error = attempt_state.standard_error
+    measurement_sufficient = attempt_state.measurement_sufficient
 
     # S4-14 — sibling_filter 지정 + 직전 오답 존재 시에만 형제 조회(쿼리 0회 증가 보존 원칙 —
     # 미지정이면 이 블록 전체가 생략돼 기존 동작과 완전히 동일).
@@ -1927,11 +1985,6 @@ async def recommend_next_problem(
         if last_incorrect_id is not None:
             sibling_ids = await _load_sibling_ids(session, last_incorrect_id)
 
-    # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
-    administered_items = [item for item, _ in responses]
-    se = ability_standard_error(theta, administered_items)
-    standard_error = None if math.isinf(se) else se
-    measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
     # REC-04: purpose=learning일 때만 False(문헌값·미보정 — S4-15 전까지). diagnosis는 밴드
     # 자체가 적용되지 않으므로 null(응답 필드 docstring 참조).
     band_calibrated = False if purpose == "learning" else None
@@ -2364,6 +2417,202 @@ async def delete_my_assessment(
     )
 
 
+# ── ASM-03: POST /v1/me/assessments/capture (measurement_sufficient 경계 → Assessment 조립) ──
+# ASM-01(done)은 `assessment` 테이블에 writer가 0건임을 *관측*만 했다("생성 API 신설·활성화는
+# 범위 밖"으로 명시 제외). 이 좌석이 그 후속 — writer를 *신설*하되, 신규 진단·통계·ML은 0이다.
+# `/next-problem`이 이미 매 호출 판정하는 CAT 중단 경계(`_load_attempt_history_state`의
+# `measurement_sufficient`)를 그대로 재사용해, 그 경계에서 *이미 계산되어 있는* L2 산출물
+# 4종(개념 진단·약개념 추천·학습 경로·오개념 가설)을 Assessment 행 하나로 "조립"만 한다.
+#
+# 하드 제약(게임화 금기 — CLAUDE.md 절대 금기·backlog ASM-03 명시 조건): 등급(estimated_grade)·
+# 점수(estimated_score)·백분위(estimated_percentile)·합격예측(admission_probability) *4개
+# 예측 필드*는 이 경로에서 **절대 채우지 않는다**(항상 None). target_university_id도 합격예측과
+# 짝이라 함께 None. 이 4필드는 DB DDL이 이미 갖고 있으나(§8.1), 그 존재가 곧 이 경로의 책임이라는
+# 뜻은 아니다 — 예측·랭킹·등급화는 이 프로젝트가 만들지 않는 것(CLAUDE.md "우리가 만들지 않는 것").
+_CAPTURE_ASSESSMENT_TYPE = AssessmentType.단원진단
+"""캡처 Assessment의 assessment_type — 5종 중 개념 단위 진단과 가장 가까운 유형을 고른다.
+신규 enum 값 추가 없음(기존 5종 중 선택)."""
+
+_CAPTURE_WINDOW = "same_calendar_day_utc"
+"""idempotency 창 정의(문서용 상수 — 로직은 `_capture_window_start`) — UTC 자정 기준 하루."""
+
+_CAPTURE_ITEM_KIND_CONCEPT = "concept_diagnosis"
+_CAPTURE_ITEM_KIND_MISCONCEPTION = "misconception_hypothesis"
+"""`concept_diagnosis` JSONB 배열 안에서 두 산출물을 구분하는 판별자(discriminator) 키.
+ASM-01 관측 리포트가 `concept_diagnosis`를 "오개념 목록이 담길 자리"로 명시했으므로(설계
+정본 `assessment_seat_reach_report.py` 모듈 docstring), 오개념 가설도 같은 필드에 담되
+`kind`로 두 항목 형태를 구분한다(별도 컬럼 신설·마이그레이션 0)."""
+
+_CAPTURE_NOTE = (
+    "measurement_sufficient 경계 자동 캡처(ASM-03) — 등급·점수·백분위·합격예측 4개 예측 "
+    "필드는 게임화 금기(CLAUDE.md 절대 금기)로 이 경로에서 의도적으로 채우지 않음(항상 null)."
+)
+
+
+def _capture_window_start(now: datetime) -> datetime:
+    """캡처 idempotency 창의 시작 시각 — UTC 자정(하루 단위). 순수 함수(테스트 용이)."""
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def _find_existing_capture(
+    session: AsyncSession, user_id: uuid.UUID, now: datetime
+) -> Assessment | None:
+    """같은 창(오늘, UTC)에 이미 캡처된 Assessment가 있는지 조회 — 중복 적재 방지(idempotency).
+
+    동일 학생·동일 assessment_type·`started_at`이 오늘(UTC 자정 이후)인 행이 있으면 그 행을
+    돌려준다(있으면 새로 쓰지 않는다 — 이중 계상 방지). 없으면 None.
+    """
+    window_start = _capture_window_start(now)
+    stmt = (
+        select(Assessment)
+        .where(
+            Assessment.user_id == user_id,
+            Assessment.assessment_type == _CAPTURE_ASSESSMENT_TYPE,
+            Assessment.started_at >= window_start,
+        )
+        .order_by(Assessment.started_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
+async def _assemble_measurement_assessment(
+    session: AsyncSession, user_id: uuid.UUID, *, now: datetime
+) -> AssessmentSchema:
+    """기존 L2 산출물 4종을 *조립만* 해서 `AssessmentSchema`를 만든다 — 신규 계산 0.
+
+    ① `compute_concept_diagnoses`(개념별 BKT↔IRT 진단, 이미 약점 먼저 정렬) → `concept_
+       diagnosis`. ② `get_active_hypotheses`(활성 오개념 가설, confidence 내림차순) → 같은
+       `concept_diagnosis` 배열에 `kind` 판별자로 이어붙임(모듈 상단 주석 참조). ③
+       `recommend_weak_concepts`(BKT/IRT 약점 + atom_node 안전 메타) → `weak_points`. ④
+       가장 약한 개념(③의 첫 항목·이미 약점 정렬됨)을 대상으로 `recommend_prerequisite_gaps`
+       + `build_learning_path`(`/weak-concepts/{id}/learning-path`와 *동일 호출*·기본
+       파라미터)를 호출해 `recommended_path`를 얻는다. 약점 개념이 하나도 없으면 빈 리스트.
+
+    네 함수 전부 기존 L2 좌석 재사용(신규 진단·통계·ML 로직 0) — 이 함수가 하는 일은 *호출
+    순서 결정 + 필드 매핑*뿐이다. `estimated_grade`·`estimated_score`·`estimated_percentile`·
+    `admission_probability`·`target_university_id`는 명시적으로 None(모듈 상단 하드 제약 참조).
+    """
+    diagnoses = await compute_concept_diagnoses(session, user_id)
+    hypotheses = await get_active_hypotheses(session, user_id)
+    weak = await recommend_weak_concepts(session, user_id)
+
+    concept_diagnosis_items: list[dict[str, Any]] = [
+        {"kind": _CAPTURE_ITEM_KIND_CONCEPT, **d.model_dump(mode="json")} for d in diagnoses
+    ] + [
+        {"kind": _CAPTURE_ITEM_KIND_MISCONCEPTION, **h.model_dump(mode="json")} for h in hypotheses
+    ]
+    weak_point_items = [w.model_dump(mode="json") for w in weak]
+
+    recommended_path_items: list[dict[str, Any]] = []
+    if weak:
+        # ③이 이미 약점(weakness) 오름차순 정렬을 보존하므로 첫 항목이 가장 약한 개념이다.
+        weakest_concept_id = weak[0].concept_id
+        gaps = await recommend_prerequisite_gaps(session, user_id, weakest_concept_id)
+        path = await build_learning_path(session, gaps)
+        recommended_path_items = [step.model_dump(mode="json") for step in path.steps]
+
+    return AssessmentSchema(
+        user_id=user_id,
+        assessment_type=_CAPTURE_ASSESSMENT_TYPE,
+        started_at=now,
+        completed_at=now,
+        # 하드 제약(게임화 금기) — 이 경로는 이 5필드를 절대 채우지 않는다.
+        estimated_grade=None,
+        estimated_score=None,
+        estimated_percentile=None,
+        target_university_id=None,
+        admission_probability=None,
+        concept_diagnosis=concept_diagnosis_items,
+        weak_points=weak_point_items,
+        recommended_path=recommended_path_items,
+        notes=_CAPTURE_NOTE,
+    )
+
+
+class AssessmentCaptureResponse(BaseModel):
+    """`POST /v1/me/assessments/capture` 응답 — 실제로 썼는지·왜 안 썼는지를 정직하게 표기."""
+
+    written: bool = Field(description="이번 호출로 Assessment 행이 실제로 새로 생성됐는지.")
+    reason: Literal["captured", "insufficient_measurement", "already_captured_window"] = Field(
+        description=(
+            "'captured'=신규 적재. 'insufficient_measurement'=SE가 목표 이상이라 측정 미충분"
+            "(적재 안 함). 'already_captured_window'=같은 창(오늘)에 이미 캡처됨(idempotent — "
+            "적재 안 함·기존 행 반환)."
+        )
+    )
+    assessment: AssessmentSchema | None = Field(
+        default=None,
+        description="'captured'·'already_captured_window'면 해당 Assessment(신규 또는 기존). "
+        "'insufficient_measurement'면 null.",
+    )
+    standard_error: float | None = Field(
+        default=None,
+        description="판정에 쓰인 현재 SE(참고용 — `/next-problem`과 동일 계산). 응답 없으면 null.",
+    )
+    measurement_sufficient: bool = Field(
+        description="판정에 쓰인 measurement_sufficient(참고용 — `/next-problem`과 동일 경계)."
+    )
+
+
+@router.post(
+    "/assessments/capture",
+    response_model=AssessmentCaptureResponse,
+    summary="measurement_sufficient 경계에서 기존 L2 산출물을 Assessment로 조립·적재(신규 계산 0)",
+)
+async def capture_measurement_assessment(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AssessmentCaptureResponse:
+    """`/next-problem`이 이미 판정하는 CAT 중단 경계(measurement_sufficient)에서, *그 시점에
+    이미 존재하는* L2 산출물(개념 진단·오개념 가설·약개념 추천·학습 경로)을 `Assessment` 행
+    하나로 조립해 적재한다(ASM-01이 관측만 하고 남겨둔 writer 부재를 해소).
+
+    ① **경계 판정** — `_load_attempt_history_state`(=`/next-problem`과 *같은* 계산)로 현재
+       SE·measurement_sufficient를 구한다. False면 적재하지 않고 `insufficient_measurement`.
+    ② **idempotency** — 같은 학생·같은 창(오늘, UTC)에 이미 캡처된 행이 있으면 다시 쓰지
+       않고 `already_captured_window`(기존 행을 그대로 반환 — 이중 계상 방지).
+    ③ **조립·적재** — `_assemble_measurement_assessment`(신규 계산 0, 위 함수 참조)로
+       `AssessmentSchema`를 만들어 1행 commit. `assessment_id`는 스키마
+       `default_factory=uuid4`가 클라 측에서 발급(캡처 ability_snapshot과 동일 패턴 —
+       `session.refresh` 불요).
+
+    **하드 제약(게임화 금기)**: 등급·점수·백분위·합격예측 4개 예측 필드는 이 경로에서 절대
+    채우지 않는다(모듈 상단 주석·`_assemble_measurement_assessment` docstring 참조).
+    """
+    state = await _load_attempt_history_state(session, user.user_id)
+    if not state.measurement_sufficient:
+        return AssessmentCaptureResponse(
+            written=False,
+            reason="insufficient_measurement",
+            assessment=None,
+            standard_error=state.standard_error,
+            measurement_sufficient=False,
+        )
+
+    now = datetime.now(UTC)
+    existing = await _find_existing_capture(session, user.user_id, now)
+    if existing is not None:
+        return AssessmentCaptureResponse(
+            written=False,
+            reason="already_captured_window",
+            assessment=existing.to_schema(),
+            standard_error=state.standard_error,
+            measurement_sufficient=True,
+        )
+
+    schema = await _assemble_measurement_assessment(session, user.user_id, now=now)
+    session.add(Assessment.from_schema(schema))
+    await session.commit()
+    return AssessmentCaptureResponse(
+        written=True,
+        reason="captured",
+        assessment=schema,
+        standard_error=state.standard_error,
+        measurement_sufficient=True,
+    )
+
+
 # ── DELETE /v1/me : 계정·전체 데이터 영구 삭제(개인정보 삭제권·R11) ──
 # 단일 리소스 삭제(위 sessions/dialogues/assessments)와 달리, 본인 *계정 전체*(17개 테이블 +
 # user_profile)를 단일 트랜잭션으로 지운다(privacy.erase_user·#242). 오삭제 방지로 확인 문구를
@@ -2541,4 +2790,217 @@ async def get_my_harness_metrics(
     # 실린 이벤트만으로 집계한다(수능 세션 측정). 미지정이면 전 mode 포함(기존 동작 불변).
     return await compute_wh1_surrogate_metrics(
         session, user_id=user.user_id, since=since, until=until, mode=mode
+    )
+
+
+# ── PED-08: GET /v1/me/growth-evidence (성장 증거 학생 안전 노출 — 노출 계약 유일 경로) ──
+# `growth_evidence_exposure.py`가 스스로 "classify_metric_exposure가 유일한 노출 판정
+# 경로"라고 선언했으나(:122 부근) 그 함수를 실제로 부르는 학생 대면 라우트가 이번 태스크
+# 이전엔 0건이었다(위 `/harness-metrics`는 원시 SurrogateMetrics를 그대로 반환 — 계약을
+# 우회). 이 엔드포인트가 그 계약의 *첫이자 유일한* 집행 지점이다 — 계약 로직(노출 계층·
+# 조합 제약 판정)은 재구현하지 않고 `classify_metric_exposure`·`narrate_calibration_brier`를
+# 그대로 호출해서만 응답을 만든다.
+class GrowthEvidenceMetricView(BaseModel):
+    """성장 증거 지표 1종의 학생 노출 뷰 — `MetricExposure`(계약 판정) + `Metric.value` 조합.
+
+    `Metric.note`(자유 서술)는 의도적으로 이 뷰에 없다 — 학생 대면 톤으로 검수된 적 없는
+    내부 진단 문구라 범위 밖(태스크 설계 명시).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: MetricStatus = Field(description="계측 상태 — 실값/미계측 사유 구분(SurrogateMetrics).")
+    value: float | None = Field(
+        description=(
+            "실측값. 미계측·표본 0이면 null. exposable_now=False인 지표는 null로 강제한다"
+            "(계약이 노출을 보류한 값을 서빙 층이 흘려보내지 않는다)."
+        )
+    )
+    exposable_now: bool = Field(
+        description="이번 판정에서 실제로 노출 가능한지 — `classify_metric_exposure` 그대로."
+    )
+    suppressed_reason: str | None = Field(
+        default=None,
+        description=(
+            "exposable_now=False인 이유(한국어). `hint_depth_reached`가 R15 조합 제약으로 "
+            "보류되면 계약 모듈의 원문 대신 이 서빙 층이 소유한 문장으로 대체한다(금지 토큰 "
+            "미포함 보증 — 계약 모듈 원문은 낙인성 verdict 코드명을 리터럴로 포함해 그대로 "
+            "내보내면 학생 대면 JSON에 낙인 라벨이 유출된다)."
+        ),
+    )
+
+
+class GrowthEvidenceBrierView(BaseModel):
+    """⑥ 보정 점수(Brier) 학생 노출 뷰 — 3버킷 서술만(원 스칼라 구조적 배제).
+
+    `value` 필드가 *의도적으로 없다* — Brier는 "낮을수록 좋음" 역방향 스칼라라 그대로
+    노출하면 오독(계약 모듈 `narrate_calibration_brier` docstring). 필드 부재는 런타임
+    필터가 아니라 스키마 자체의 구조적 배제라 꺼질 수 없다(태스크 설계 원칙).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    narrative: str = Field(
+        description="`narrate_calibration_brier` 4문장 중 1개(NO_DATA/양호/보통/큰 편)."
+    )
+
+
+class GrowthEvidenceResponse(BaseModel):
+    """`GET /v1/me/growth-evidence` 응답 — 성장 증거 학생 안전 노출(노출 계약 경유 유일 표면).
+
+    `SurrogateMetrics`의 `STUDENT_VISIBLE` 9지표(`calibration_brier` 제외) + Brier 서술
+    1종만 필드로 존재한다. **내부 전용 2종(② 진단정확도·④ 턴당 토큰 — 시스템 품질/비용
+    지표)은 이 스키마 어디에도 필드가 없다** — `INTERNAL_ONLY` 계층이라 런타임에 걸러지는
+    것이 아니라 애초에 필드 자체가 없다(구조적 배제 — 필터는 꺼질 수 있으나 부재는 꺼질
+    수 없다는 태스크 설계 원칙). R15 결합 판정 원본(교정기 함정 verdict 포함)도 이 스키마에
+    필드가 없다 — `hint_depth_reached` 뷰의 `suppressed_reason`으로만 간접 반영된다(그마저
+    계약 모듈 원문이 아니라 이 서빙 층이 소유한 문장, 아래 엔드포인트 참조). 비교·서열·
+    순위(백분위·평균 대비·타 학생) 파생 필드도 의도적으로 0종이다(계약 모듈이 그런 파생
+    함수를 두지 않는 것과 동형 — `07_community.md` "❌ 익명·집계만" 승계).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    window_start: datetime | None = Field(description="집계 시간창 시작(since, 입력 그대로 echo).")
+    window_end: datetime | None = Field(description="집계 시간창 끝(until, 입력 그대로 echo).")
+    user_scoped: bool = Field(
+        default=True,
+        description="항상 true — 본인 집계만(타 학생 데이터 0, 코호트 집계는 범위 밖).",
+    )
+    mode_filter: str | None = Field(description="응용 모드 스코프(예: suneung). 미지정이면 null.")
+
+    verify_pass_rate: GrowthEvidenceMetricView = Field(description="① verify 통과율.")
+    session_completion_rate: GrowthEvidenceMetricView = Field(description="③ 세션 완주율.")
+    help_reduction_slope: GrowthEvidenceMetricView = Field(description="⑤ 도움 감소 곡선 기울기.")
+    help_demand_supply_ratio: GrowthEvidenceMetricView = Field(
+        description="⑮ 도움 요청 대 제공 비."
+    )
+    transfer_score: GrowthEvidenceMetricView = Field(description="⑦ 전이 점수(근사).")
+    hint_depth_reached: GrowthEvidenceMetricView = Field(
+        description=(
+            "⑧ 답 미루기 도달 깊이 — R15 결합 판정이 교정기 함정 verdict면 value=null + 이 "
+            "서빙 층 소유 서술(계약 모듈 원문 아님, 위 GrowthEvidenceMetricView 참조)."
+        )
+    )
+    mastery_gain_rate: GrowthEvidenceMetricView = Field(description="⑨ BKT 숙달 증가율.")
+    misconception_resolution_rate: GrowthEvidenceMetricView = Field(description="⑩ 오개념 해소율.")
+    self_solve_rate: GrowthEvidenceMetricView = Field(description="⑪ 스스로 풀이 도달율.")
+    # ② 진단정확도·④ 턴당 토큰 — INTERNAL_ONLY 2종은 여기 필드가 없다(구조적 배제. 값을
+    # 넣고 걸러내는 게 아니라 애초에 자리 자체를 만들지 않는다).
+
+    calibration_brier: GrowthEvidenceBrierView = Field(description="⑥ 보정 점수 — 3버킷 서술만.")
+
+
+# `hint_depth_reached`가 R15 교정기 함정 조합 제약으로 보류될 때 노출할 서빙 층 소유
+# 문장 — 계약 모듈의 `suppressed_reason` 원문(낙인성 verdict 코드명을 리터럴로 포함)을
+# 그대로 내보내면 학생 대면 JSON에 낙인 라벨이 유출된다(이 태스크의 핵심 랜드마인). 계약의
+# *판정*(exposable_now=False)은 그대로 신뢰하되 *서술*만 이 문장으로 교체한다 — 계약 로직
+# 재구현이 아니라 표현 계층 소유권 이전이다.
+_HINT_DEPTH_SUPPRESSED_MESSAGE = (
+    "지금은 이 지표만 따로 보여드리기 어려워요 — 힌트 사용 패턴과 정답률을 함께 살펴보는 "
+    "중이에요. 대신 다른 성장 지표로 진행 상황을 확인해보세요."
+)
+
+
+def _render_growth_evidence_metric(
+    metrics: SurrogateMetrics, field: str, exposure_by_field: dict[str, MetricExposure]
+) -> GrowthEvidenceMetricView:
+    """`SurrogateMetrics`의 `Metric` 1종 + 계약 판정 1종을 학생 노출 뷰로 렌더.
+
+    `hint_depth_reached`이면서 exposable_now=False(R15 결합 판정이 교정기 함정 verdict)인
+    단 하나의 경우만 value를 강제 null화하고 서술을 서빙 층 소유 문장으로 치환한다(랜드마인
+    방어 — 모듈 상단 주석·`GrowthEvidenceMetricView.suppressed_reason` docstring 참조).
+    그 밖의 모든 지표는 계약 판정을 그대로 통과시킨다.
+    """
+    metric = getattr(metrics, field)
+    exposure = exposure_by_field[field]
+    if field == "hint_depth_reached" and not exposure.exposable_now:
+        return GrowthEvidenceMetricView(
+            status=metric.status,
+            value=None,
+            exposable_now=False,
+            suppressed_reason=_HINT_DEPTH_SUPPRESSED_MESSAGE,
+        )
+    return GrowthEvidenceMetricView(
+        status=metric.status,
+        value=metric.value,
+        exposable_now=exposure.exposable_now,
+        suppressed_reason=exposure.suppressed_reason,
+    )
+
+
+@router.get(
+    "/growth-evidence",
+    response_model=GrowthEvidenceResponse,
+    summary="내 성장 증거(WH-1 대리 지표) 학생 안전 노출 — 노출 계약 경유",
+)
+async def get_my_growth_evidence(
+    request: Request,
+    user: ConsentedUser,
+    session: SessionDep,
+    since: SinceParam = None,
+    until: UntilParam = None,
+    mode: HarnessMetricsMode = None,
+) -> GrowthEvidenceResponse:
+    """성장 증거(WH-1 대리 지표)를 *노출 계약*(`growth_evidence_exposure.py`)을 거쳐서만 노출.
+
+    `GET /harness-metrics`(원시 표면·범위 밖 동결)와 달리 이 엔드포인트는
+    `classify_metric_exposure`가 유일한 노출 판정 경로가 되도록 강제한다 — R15 결합 판정
+    원본 필드·② 진단정확도·④ 턴당 토큰을 이 함수가 직접 읽지 않는다(계약 모듈만 읽는다).
+
+    **랜드마인 방어**: 계약이 `hint_depth_reached`를 보류(exposable_now=False)할 때 반환하는
+    `suppressed_reason` 원문은 낙인성 verdict 코드명을 리터럴로 포함한다 — 그대로 내보내면
+    낙인 라벨이 학생 대면 JSON에 유출된다. `_render_growth_evidence_metric`이 이 한 경우만
+    서빙 층 소유 문장으로 치환한다(계약의 *판정*은 그대로 신뢰 — 재구현 아님).
+
+    `calibration_brier`는 원 스칼라를 절대 직렬화하지 않고 `narrate_calibration_brier`의
+    3버킷 서술만 반환한다. 비교·서열·순위 파생 필드는 0종(계약 모듈의 의도적 부재를 API
+    층에서도 유지).
+
+    `since`/`until`/`mode`는 `GET /harness-metrics`와 동일 검증·의미(시간창 inclusive·
+    TZ-aware ISO8601·naive/역전 422·mode=suneung이면 attempt_event 기반 지표 스코프).
+    """
+    # PED-08 도달 관측 — 원시 표면(/harness-metrics) 카운터와 *별도 슬롯*(섞이면 도달
+    # 판정이 위장된다. `_growth_evidence_state.py` 모듈 docstring).
+    get_growth_evidence_exposure_counters(request.app).record_request()
+    since = _validate_tz_aware(since, "since")
+    until = _validate_tz_aware(until, "until")
+    _validate_time_window(since, until, "since", "until")
+    metrics = await compute_wh1_surrogate_metrics(
+        session, user_id=user.user_id, since=since, until=until, mode=mode
+    )
+    exposure_by_field = classify_metric_exposure(metrics)
+    return GrowthEvidenceResponse(
+        window_start=since,
+        window_end=until,
+        user_scoped=True,
+        mode_filter=mode,
+        verify_pass_rate=_render_growth_evidence_metric(
+            metrics, "verify_pass_rate", exposure_by_field
+        ),
+        session_completion_rate=_render_growth_evidence_metric(
+            metrics, "session_completion_rate", exposure_by_field
+        ),
+        help_reduction_slope=_render_growth_evidence_metric(
+            metrics, "help_reduction_slope", exposure_by_field
+        ),
+        help_demand_supply_ratio=_render_growth_evidence_metric(
+            metrics, "help_demand_supply_ratio", exposure_by_field
+        ),
+        transfer_score=_render_growth_evidence_metric(metrics, "transfer_score", exposure_by_field),
+        hint_depth_reached=_render_growth_evidence_metric(
+            metrics, "hint_depth_reached", exposure_by_field
+        ),
+        mastery_gain_rate=_render_growth_evidence_metric(
+            metrics, "mastery_gain_rate", exposure_by_field
+        ),
+        misconception_resolution_rate=_render_growth_evidence_metric(
+            metrics, "misconception_resolution_rate", exposure_by_field
+        ),
+        self_solve_rate=_render_growth_evidence_metric(
+            metrics, "self_solve_rate", exposure_by_field
+        ),
+        calibration_brier=GrowthEvidenceBrierView(
+            narrative=narrate_calibration_brier(metrics.calibration_brier.value)
+        ),
     )
