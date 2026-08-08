@@ -109,6 +109,10 @@ def is_metacognition_eligible(
     if not _shared.is_exposable(problem):
         return False
 
+    # ①-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ② 페르소나 적합 게이트 — 닫힌 집합으로 좁히지 않고 persona_fit 메커니즘만 쓴다
     #    (공유 메타인지 코어 — A 첫 노출부터 E까지 fit 충족이면 통과·thinking 동형).
     if _shared.persona_fit(problem, persona) < min_fit:

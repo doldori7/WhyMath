@@ -165,6 +165,7 @@ from whymath_backend.schema.enums import (
     AuditResourceType,
     Persona,
     Resolution,
+    ReviewStatus,
 )
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -2123,7 +2124,16 @@ async def recommend_next_problem(
     # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
     candidate_stmt = select(
         Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
-    ).where(Problem.difficulty_overall.isnot(None))
+    ).where(
+        Problem.difficulty_overall.isnot(None),
+        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 본문 미보유 출처(평가원/EBS/교과서)는
+        # 기본 CAT 후보에서도 SQL 레벨로 배제한다(수능 분기가 이미 쓰는 것과 동일 상수 재사용 —
+        # 판정 기준 이원화 회피).
+        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+        # PB-03 축② — 검수 노출 게이트(운영 축, 축①과 독립 — 절대 합치지 않는다). approved만
+        # 후보. `corpus_audit_eval` 측정 판정만 review_status에 각인된다(사람 입력 경로 0).
+        Problem.review_status == ReviewStatus.approved,
+    )
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     if sibling_filter == "exclude" and sibling_ids:

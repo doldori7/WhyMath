@@ -1,0 +1,381 @@
+"""검수 상태(`review_status`) 백필 후처리 CLI — 코퍼스 JSONL 제자리 갱신(PB-03).
+
+`problem_bank_gap_review_r2.md`가 규약한 노출 4단(①게이트 통과 → ②코퍼스 편입 → ③노출
+적격(`is_exposable`+검수) → ④실노출) 중 ③단의 *검수 절반*이 실제 코드에 빠져 있었다 —
+`review_status`가 전 레코드 `None`이라 `l6._shared.is_review_cleared`(PB-03 신설)가 fail-closed로
+전건을 차단하는 상태였다. 이 CLI는 그 공백을 메운다.
+
+`problem_corpus_persona_fit_backfill.py`(S3-10/PB-01)를 구조 선례로 삼되, 판정 단위가
+**레코드별**(persona_fit)이 아니라 **코퍼스별**(review_status)이라는 점이 다르다 — 코퍼스
+전체에 대해 `harness/corpus_audit_eval.py`(`load_audit`·`summarize`, 단일 권위)가 이미 존재하는
+감사 라벨 표본을 근거로 *하나의* 판정을 내리고, 그 판정을 코퍼스 내 미평가 레코드 전원에게
+적용한다. **각인되는 값은 사람 인상이 아니라 `corpus_audit_eval`의 측정 판정만이다**(사람 입력
+경로 0 — CLAUDE.md "PIPA·검수" 절 정신과 동형).
+
+판정 규칙(코퍼스당 1회):
+  - 감사 라벨 파일이 없으면 → `pending`(미평가 고정 — `probability_finite_v0`·`problem_bank_v1`).
+  - 있으면 `summarize(labels)`의 `report.n < 200`이면 → `pending`(증거 부족).
+  - 아니면 `report.defect_rate_upper_bound(0.95) <= 0.02`면 → `approved`, 아니면 → `rejected`.
+
+바이트 계약(결정론·비날조·비파괴, persona_fit 백필과 동형):
+  - `review_status`가 **이미 채워진**(pending/approved/rejected 어느 값이든) 레코드는 손대지
+    않는다(원문 줄 바이트 그대로) — 수동 재검수 결과를 조용히 덮어쓰지 않는다.
+  - 비어 있는(`None`/키 부재) 레코드만 `review_status` 한 키를 코퍼스 판정값으로 채운다.
+  - 2회 실행은 바이트 동일(멱등) — 첫 실행이 값을 채우므로 두 번째는 전건 원문 통과.
+  - 채운 레코드마다 코퍼스 판정 근거(표본 n·결함수·Wilson 상한·감사 라벨 경로)를 감사 JSONL
+    1줄로 남긴다.
+
+사용법:
+    python -m whymath_backend.harness.problem_corpus_review_status_backfill \\
+        --in <src.jsonl> --corpus <corpus_key> [--out <dst.jsonl>] [--audit-out <audit.jsonl>] \\
+        [--dry-run]
+
+    python -m whymath_backend.harness.problem_corpus_review_status_backfill --all
+        (코퍼스 7종 전부를 제자리 갱신 — `KNOWN_CORPORA` 경로 고정, `AUDIT_LABEL_MAP`으로 판정)
+
+`--out` 생략 시 제자리 갱신(--in 덮어쓰기). `--audit-out` 생략 시
+`docs/data/review_status_backfill_audit/<코퍼스 디렉터리명>.jsonl`에 쓴다. `--dry-run`은 파일
+미기록·통계만 출력.
+
+harness는 import-linter 계약 밖(조성/ops 층·상위 호출 정상 — persona_fit 백필 선례).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from whymath_backend.harness.corpus_audit_eval import load_audit, summarize
+from whymath_backend.harness.problem_corpus_persona_fit_backfill import (
+    KNOWN_CORPORA,
+)
+from whymath_backend.schema.enums import ReviewStatus
+
+__all__ = [
+    "AUDIT_LABEL_MAP",
+    "KNOWN_CORPORA",
+    "CorpusVerdict",
+    "ReviewStatusBackfillReport",
+    "compute_corpus_verdict",
+    "main",
+    "run_review_status_backfill",
+    "verdict_from_audit_labels",
+]
+
+# 코퍼스↔감사 라벨 파일 매핑(레포 루트 기준, `docs/data/`) — 전부 기존 실존 파일(새로 만들지
+# 않는다). 값이 `None`인 코퍼스는 감사 라벨이 없어 *평가하지 않고* pending 고정이다.
+#
+# `generated_v0` → `corpus_audit_240.jsonl`(파일명이 코퍼스명과 다른 이유: 그 감사가 S1 시절
+# 240건 표본으로 먼저 존재했고 이후 코퍼스명이 `generated_v0`로 정착했다 — 파일명 변경은 이
+# 태스크 범위 밖).
+# `rephrased_v0` → `_census`(표본 rotation-2가 아니라 *전수 감사* 파일이 정본 — 표본은 이미
+# 폐기된 이전 판정, PB-03 지시 그대로).
+AUDIT_LABEL_MAP: dict[str, Path | None] = {
+    "conceptual_v0": Path("docs/data/corpus_audit_conceptual_v0.jsonl"),
+    "generated_v0": Path("docs/data/corpus_audit_240.jsonl"),
+    "misconception_mc_v0": Path("docs/data/corpus_audit_mc_v0_r2.jsonl"),
+    "rephrased_v0": Path("docs/data/corpus_audit_rephrased_v0_census.jsonl"),
+    "killer_v0": Path("docs/data/corpus_audit_killer_v0.jsonl"),
+    "probability_finite_v0": None,  # 감사 라벨 없음 — 미평가 고정(pending). 범위 밖(신규 감사 금지).
+    "v1": None,  # KNOWN_CORPORA의 "v1" = problem_bank_v1(4건). 감사 라벨 없음 — pending 고정.
+}
+
+_MIN_N = 200
+_MAX_DEFECT_UPPER = 0.02
+_CONFIDENCE = 0.95
+
+_AUDIT_DIR = Path("docs/data/review_status_backfill_audit")
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusVerdict:
+    """코퍼스 1건에 대한 검수 판정 — 근거(표본 n·결함수·Wilson 상한) 동반(조용한 판정 금지)."""
+
+    review_status: ReviewStatus
+    reason: str
+    n: int | None
+    defects: int | None
+    upper_bound: float | None
+    label_path: str | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "review_status": self.review_status.value,
+            "reason": self.reason,
+            "n": self.n,
+            "defects": self.defects,
+            "upper_bound": self.upper_bound,
+            "label_path": self.label_path,
+        }
+
+
+def verdict_from_audit_labels(
+    labels_text: str | None, *, label_path: str | None = None
+) -> CorpusVerdict:
+    """감사 라벨 JSONL 텍스트(또는 부재)로부터 코퍼스 검수 판정을 낸다(순수 함수).
+
+    `labels_text`가 `None`이면(감사 라벨 파일 자체가 없는 코퍼스) 평가를 시도하지 않고
+    `pending` 고정 — "라벨 없음 = approved 아님"을 fail-closed로 보장한다. 판정 규칙은 모듈
+    docstring 참조(§ 판정 규칙).
+    """
+    if labels_text is None:
+        return CorpusVerdict(
+            review_status=ReviewStatus.pending,
+            reason="감사 라벨 파일 없음 — 평가하지 않고 pending 고정(증거 부재)",
+            n=None,
+            defects=None,
+            upper_bound=None,
+            label_path=label_path,
+        )
+    audit = load_audit(labels_text)
+    report = summarize(audit.labels)
+    if report.n < _MIN_N:
+        return CorpusVerdict(
+            review_status=ReviewStatus.pending,
+            reason=f"표본 n={report.n} < min_n {_MIN_N}(증거 부족 — 해금 불가)",
+            n=report.n,
+            defects=report.defects,
+            upper_bound=None,
+            label_path=label_path,
+        )
+    upper = report.defect_rate_upper_bound(_CONFIDENCE)
+    if upper is not None and upper <= _MAX_DEFECT_UPPER:
+        return CorpusVerdict(
+            review_status=ReviewStatus.approved,
+            reason=f"결함율 {int(_CONFIDENCE * 100)}% Wilson 상한 {upper:.4f} <= {_MAX_DEFECT_UPPER}",
+            n=report.n,
+            defects=report.defects,
+            upper_bound=upper,
+            label_path=label_path,
+        )
+    return CorpusVerdict(
+        review_status=ReviewStatus.rejected,
+        reason=(
+            f"결함율 {int(_CONFIDENCE * 100)}% Wilson 상한 "
+            f"{'n/a' if upper is None else f'{upper:.4f}'} > {_MAX_DEFECT_UPPER}(전수 검수 복귀)"
+        ),
+        n=report.n,
+        defects=report.defects,
+        upper_bound=upper,
+        label_path=label_path,
+    )
+
+
+def compute_corpus_verdict(corpus_key: str) -> CorpusVerdict:
+    """`AUDIT_LABEL_MAP`에서 코퍼스 키의 감사 라벨 경로를 읽어 판정한다(I/O 포함).
+
+    Args:
+      corpus_key: `AUDIT_LABEL_MAP`(= `KNOWN_CORPORA`와 동일 키 집합)의 코퍼스 키.
+
+    Raises:
+      KeyError: 알려지지 않은 코퍼스 키(오타 방지 — 조용히 pending 처리하지 않는다).
+    """
+    if corpus_key not in AUDIT_LABEL_MAP:
+        raise KeyError(
+            f"알 수 없는 코퍼스 키: {corpus_key!r}(AUDIT_LABEL_MAP={sorted(AUDIT_LABEL_MAP)})"
+        )
+    label_path = AUDIT_LABEL_MAP[corpus_key]
+    if label_path is None:
+        return verdict_from_audit_labels(None, label_path=None)
+    text = label_path.read_text(encoding="utf-8")
+    return verdict_from_audit_labels(text, label_path=str(label_path))
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewStatusBackfillReport:
+    """백필 리포트 — 총량·채움·기보유·적용 판정(조용한 실패 금지)."""
+
+    total: int
+    filled: int
+    already_set: int
+    review_status: str
+    verdict_reason: str
+    written: int | None = None
+    audit_written: int | None = None
+    in_path: str = ""
+    out_path: str = ""
+    audit_path: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "total": self.total,
+            "filled": self.filled,
+            "already_set": self.already_set,
+            "review_status": self.review_status,
+            "verdict_reason": self.verdict_reason,
+            "written": self.written,
+            "audit_written": self.audit_written,
+            "in_path": self.in_path,
+            "out_path": self.out_path,
+            "audit_path": self.audit_path,
+        }
+
+
+def _backfill_line(
+    stripped: str, review_status: ReviewStatus
+) -> tuple[str, dict[str, Any] | None]:
+    """JSONL 한 줄을 백필 — (산출 줄, 감사 항목 또는 None(무변경)) 반환.
+
+    `review_status`가 이미 채워져 있으면(pending/approved/rejected 어느 값이든) 원문 줄 그대로
+    (바이트 보존·수동 재검수 존중). 비어 있으면(`None`/키 부재) 코퍼스 판정값 한 키만 채운다.
+    """
+    data: dict[str, Any] = json.loads(stripped)
+    current = data.get("review_status")
+    if current:
+        return stripped, None  # 무변경 — 이미 채워짐(수동 재검수 등)을 덮어쓰지 않는다.
+
+    updated = dict(data)
+    updated["review_status"] = review_status.value
+    out_line = json.dumps(updated, ensure_ascii=False)
+
+    audit_entry = {
+        "problem_id": data.get("problem_id"),
+        "slug": data.get("slug"),
+        "review_status": review_status.value,
+    }
+    return out_line, audit_entry
+
+
+def run_review_status_backfill(
+    *,
+    in_path: Path,
+    out_path: Path,
+    audit_path: Path,
+    verdict: CorpusVerdict,
+    write: bool = True,
+) -> ReviewStatusBackfillReport:
+    """코퍼스 JSONL 전 레코드에 검수 판정을 백필 — 이미 채워진 레코드는 바이트 무변경·멱등.
+
+    빈 줄은 건너뛴다(populate 로더·persona_fit 백필과 동일 관대함).
+    """
+    text = in_path.read_text(encoding="utf-8")
+    out_lines: list[str] = []
+    audit_entries: list[dict[str, Any]] = []
+    total = 0
+    filled = 0
+    already_set = 0
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        total += 1
+        out_line, audit_entry = _backfill_line(stripped, verdict.review_status)
+        if audit_entry is None:
+            already_set += 1
+        else:
+            filled += 1
+            audit_entries.append(audit_entry)
+        out_lines.append(out_line)
+
+    written: int | None = None
+    audit_written: int | None = None
+    if write:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("\n".join(out_lines) + "\n" if out_lines else "", encoding="utf-8")
+        written = len(out_lines)
+        if audit_entries:
+            audit_path.parent.mkdir(parents=True, exist_ok=True)
+            audit_text = "\n".join(json.dumps(entry, ensure_ascii=False) for entry in audit_entries)
+            audit_path.write_text(audit_text + "\n", encoding="utf-8")
+            audit_written = len(audit_entries)
+
+    return ReviewStatusBackfillReport(
+        total=total,
+        filled=filled,
+        already_set=already_set,
+        review_status=verdict.review_status.value,
+        verdict_reason=verdict.reason,
+        written=written,
+        audit_written=audit_written,
+        in_path=str(in_path),
+        out_path=str(out_path),
+        audit_path=str(audit_path),
+    )
+
+
+def _default_audit_path(in_path: Path) -> Path:
+    """감사 경로 기본값 — 코퍼스 디렉터리명 기준(레포 루트 상대, persona_fit 백필 관례와 동일)."""
+    return _AUDIT_DIR / f"{in_path.parent.name}.jsonl"
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI 엔트리 — 백필 후 리포트를 JSON으로 stdout에 낸다(결정론·멱등·exit 0).
+
+    `--all`이면 `KNOWN_CORPORA` 7종을 순회해 각 코퍼스의 `AUDIT_LABEL_MAP` 판정을 적용한다.
+    단일 파일 처리는 `--in`(+ 필수 `--corpus`, 선택 `--out`/`--audit-out`)을 쓴다. 레포 루트에서
+    실행 전제(상대경로 규약).
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m whymath_backend.harness.problem_corpus_review_status_backfill",
+        description=(
+            "검수 상태(review_status) 백필(PB-03) — 코퍼스 JSONL의 빈 review_status만 "
+            "corpus_audit_eval 측정 판정으로 채운다(review_status 외 바이트 무변경·멱등·비날조)."
+        ),
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--in", dest="in_path", type=Path, help="입력 JSONL 경로(단일 파일).")
+    group.add_argument(
+        "--all", action="store_true", help=f"코퍼스 {len(KNOWN_CORPORA)}종 전부 제자리 갱신."
+    )
+    parser.add_argument(
+        "--corpus",
+        dest="corpus_key",
+        type=str,
+        default=None,
+        help=f"--in과 함께 지정하는 코퍼스 키({sorted(AUDIT_LABEL_MAP)}) — 판정 근거 조회용.",
+    )
+    parser.add_argument(
+        "--out",
+        dest="out_path",
+        type=Path,
+        default=None,
+        help="산출 JSONL 경로(생략 시 --in 제자리 갱신). --all과 함께 쓸 수 없다.",
+    )
+    parser.add_argument(
+        "--audit-out",
+        dest="audit_path",
+        type=Path,
+        default=None,
+        help="감사 JSONL 경로(생략 시 docs/data/review_status_backfill_audit/<코퍼스명>.jsonl).",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 통계만 출력.")
+    args = parser.parse_args(argv)
+
+    if args.all and args.out_path is not None:
+        parser.error("--all과 --out은 함께 쓸 수 없다(경로가 7개로 정해져 있다).")
+    if not args.all and args.corpus_key is None:
+        parser.error("--in 사용 시 --corpus 필수(코퍼스별 감사 라벨 매핑 조회에 필요).")
+
+    targets: list[tuple[str, Path]] = (
+        list(KNOWN_CORPORA.items()) if args.all else [(args.corpus_key, args.in_path)]
+    )
+    reports = []
+    for corpus_key, in_path in targets:
+        verdict = compute_corpus_verdict(corpus_key)
+        out_path = args.out_path if args.out_path is not None else in_path
+        audit_path = (
+            args.audit_path if args.audit_path is not None else _default_audit_path(in_path)
+        )
+        reports.append(
+            run_review_status_backfill(
+                in_path=in_path,
+                out_path=out_path,
+                audit_path=audit_path,
+                verdict=verdict,
+                write=not args.dry_run,
+            )
+        )
+
+    payload: Any = [r.to_json() for r in reports] if args.all else reports[0].to_json()
+    json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover — 모듈 실행 진입점
+    raise SystemExit(main())

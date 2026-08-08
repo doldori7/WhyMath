@@ -124,6 +124,10 @@ def is_thinking_eligible(
     if not _shared.is_exposable(problem):
         return False
 
+    # ①-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ② 페르소나 적합 게이트 — 닫힌 집합으로 좁히지 않고 persona_fit 메커니즘만 쓴다
     #    (학교진도 폴백 분기와 같은 메커니즘을 주 게이트로 — A 고3도 fit 높으면 통과).
     if _shared.persona_fit(problem, persona) < min_fit:

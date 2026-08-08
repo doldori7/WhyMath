@@ -42,6 +42,7 @@ from whymath_backend.schema.enums import (
     EdgeType,
     Persona,
     RelationType,
+    ReviewStatus,
     SourceType,
     Subject,
 )
@@ -777,6 +778,8 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                # PB-03 — 기본 CAT SQL도 review_status=approved만 후보(축②)라 필요.
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
@@ -856,6 +859,8 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                # PB-03 — 기본 CAT SQL도 review_status=approved만 후보(축②)라 필요.
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
@@ -950,6 +955,8 @@ def test_me_next_problem_sibling_exclude_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                # PB-03 — 기본 CAT SQL도 review_status=approved만 후보(축②)라 필요.
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
