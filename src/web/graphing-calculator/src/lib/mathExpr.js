@@ -1,11 +1,10 @@
 // ====== 순수 수학 헬퍼 (UI·캔버스·React 비의존) ======
-// GraphingCalculator/QuizMode가 import해 쓰는 순수 함수 모음. 캔버스·React state에 의존하지 않아
+// GraphingCalculator가 import해 쓰는 순수 함수 모음. 캔버스·React state에 의존하지 않아
 // 단위 테스트가 쉽다(커버리지 70%+ 게이트의 주 대상). 원본 graphingcalculator.jsx의 모듈 스코프
 // 헬퍼 + 컴포넌트 내부 순수 로직을 이곳으로 추출했다(시그니처·동작 동일 — 시각적 회귀 0 목표).
 //
-// 권위 경계(docs/architecture/notation_contract.md): 이 헬퍼들(extractVars·sameGraph·latexToMath 등)은
-// *렌더·수치 평가 전용*이다. 수식 동치/정오 판정의 단일 권위는 백엔드 SymPy(L3 verify_step·verify_answer)
-// 이며, mathjs 수치 비교(sameGraph)는 렌더 보조일 뿐 정오 판정 근거가 아니다.
+// 권위 경계(docs/architecture/notation_contract.md): 이 헬퍼들(extractVars·latexToMath 등)은
+// *렌더·수치 평가 전용*이다. 수식 동치/정오 판정의 단일 권위는 백엔드 SymPy(L3 verify_step·verify_answer).
 import * as math from "mathjs";
 
 // ====== LaTeX → mathjs 변환 ======
@@ -120,24 +119,8 @@ export const linearRegression = (points) => {
   return { m, b, r2 };
 };
 
-// ====== 두 식이 같은 그래프인지 채점 (여러 x 표본에서 y가 일치하는지) ======
-export const sameGraph = (expr1, expr2) => {
-  let n1, n2;
-  try { n1 = math.compile(expr1); n2 = math.compile(expr2); } catch { return false; }
-  const testXs = [-4.7, -3.1, -1.5, -0.3, 0.8, 2.2, 3.6, 4.9, 1.0, -2.0];
-  let matches = 0, valid = 0;
-  for (const x of testXs) {
-    let y1, y2;
-    try { y1 = n1.evaluate({ x }); y2 = n2.evaluate({ x }); } catch { continue; }
-    if (!isFinite(y1) || !isFinite(y2)) continue;
-    valid++;
-    if (Math.abs(y1 - y2) < 1e-6 * (1 + Math.abs(y1))) matches++;
-  }
-  return valid >= 5 && matches === valid;
-};
-
 // ====== 수치 미분 (중앙차분법): f'(x) ≈ (f(x+h) - f(x-h)) / (2h) ======
-// scope: 슬라이더 변수 등 추가 스코프(기본 {}). QuizMode는 scope 없이, GraphingCalculator는 scope와 함께 호출.
+// scope: 슬라이더 변수 등 추가 스코프(기본 {}).
 export const numDeriv = (node, x, scope = {}) => {
   const h = 1e-5;
   try {

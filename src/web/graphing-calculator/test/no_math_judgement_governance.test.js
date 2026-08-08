@@ -8,12 +8,13 @@
 // 동결한다. 새 파일이 채점 심볼을 들여오면 red, 화이트리스트 파일에서 심볼이 제거되면
 // (상환 완료) 화이트리스트를 줄이는 방향으로만 이 테스트를 수정한다.
 //
-// 화이트리스트 2건은 QuizMode의 기존 위반(클라 채점 sameGraph·오개념 진단 diagnose·
-// localStorage 점수 저장)이다 — **(a) 데모 전용 예외로 공식 존치** (ARCH-12 Kiki 결정
-// 2026-07-13·MEMORY 결정 로그). 근거: QuizMode는 학생 미노출(Flutter 앱 도달 경로 0·
-// 임베드는 spec 주입 렌더만). 강제 트리거: 화이트리스트 파일의 판정 로직이 학생 노출
-// 경로에 진입하는 순간 (b) 백엔드 verify(/v1/verify-answer) 리팩터가 강제된다.
-// 그 전까지 화이트리스트는 2건 동결 — 늘리는 방향의 수정은 금지(신규 유입 red 유지).
+// ARCH-27(2026-08-08) — 화이트리스트 2건(GraphingCalculator.jsx·lib/mathExpr.js)의
+// ARCH-12 예외 근거("QuizMode는 학생 미노출·Flutter 앱 도달 경로 0")가 실측 반증됐다:
+// GraphingCalculatorWebView가 이 번들(src/mobile/assets/graphing_calculator/)을 그대로
+// 학생 실기기에 로드하고, 조건부 렌더 없는 "문제" 버튼이 QuizMode(클라 채점 sameGraph·
+// 오개념 진단 diagnose·localStorage 점수)를 열었다(functional_security_audit_2026-08-08
+// H3). ARCH-27이 강제 트리거(b)를 발동시켜 QuizMode를 소스에서 완전 제거했다 —
+// 화이트리스트는 이제 0건. 새 판정 심볼 유입은 예외 없이 즉시 red.
 
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
@@ -32,8 +33,9 @@ const FORBIDDEN_PATTERNS = [
   { name: "gradeAnswer", re: /\bgradeAnswer\w*\s*\(/ },
 ];
 
-// 알려진 기존 위반 (ARCH-12 데모 전용 예외 공식 존치·2026-07-13) — 이 집합 밖의 등장은 전부 위반
-const WHITELIST = new Set(["GraphingCalculator.jsx", "lib/mathExpr.js"]);
+// 알려진 기존 위반 — ARCH-27(2026-08-08)이 QuizMode(유일한 소비처)를 제거해 0건으로 상환.
+// 이 집합 밖의 등장은 전부 위반. 늘리는 방향의 수정 금지.
+const WHITELIST = new Set();
 
 function walkSources(dir) {
   const out = [];

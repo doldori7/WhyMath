@@ -44,10 +44,10 @@ npm run preview    # 빌드 결과 미리보기
 ```
 src/
 ├── main.jsx              # 엔트리. installStorageShim() → <GraphingCalculator/> 렌더
-├── GraphingCalculator.jsx# 메인 컴포넌트 (MathField·Surface3D·QuizMode 포함, Phase 1~15)
+├── GraphingCalculator.jsx# 메인 컴포넌트 (MathField·Surface3D, Phase 1~11+13)
 └── lib/
     ├── mathExpr.js       # 순수 수학 헬퍼 (테스트 대상): latexToMath·classify·extractVars·
-    │                     #   asciiToLatex·linearRegression·sameGraph·numDeriv·num2Deriv
+    │                     #   asciiToLatex·linearRegression·numDeriv·num2Deriv
     ├── graph2dSpec.js    # 코어 Graph2dSpec(?spec=) → 계산기 상태 변환 어댑터
     └── storageShim.js    # window.storage(claude.ai 전용)를 localStorage로 재현
 test/
@@ -75,7 +75,9 @@ test/
 | `delete(key)` | `Promise<void>` | 예약어라 내부 함수명은 `del` |
 | `list(prefix)` | `Promise<{ keys: string[] }>` | prefix로 시작하는 키 목록 |
 
-저장 데이터: 이름 붙인 그래프(`graph:*`), 퀴즈 학습 기록(`quiz_history`). 브라우저 새로고침 후에도 유지된다.
+저장 데이터: 이름 붙인 그래프(`graph:*`). 브라우저 새로고침 후에도 유지된다.
+(ARCH-27 — 퀴즈 모드(문제 출제·클라 채점·오개념 진단·점수 기록 `quiz_history`)는 학생 실기기
+도달이 실측 확인돼 완전 제거됐다. 정오 판정 단일 권위는 백엔드 L3 verify — CLAUDE.md 슬89.)
 
 ---
 
@@ -122,9 +124,11 @@ URL 쿼리로 명세를 주입한다(백엔드·Flutter WebView가 계산기를 
 
 ---
 
-## 기능 (Phase 1~15)
+## 기능 (Phase 1~11, 13)
 
 함수 그래프·다중 함수·확대/이동 · 좌표 추적·근·절편 · 슬라이더 자동 감지·애니메이션 ·
 MathLive 수식 편집 · 점/음함수/부등식/극좌표/매개변수 · 데이터 표 + 선형 회귀(R²) ·
-저장/불러오기(JSON·이름) · 접선·도함수 · 적분(리만 합) · 3D 곡면 · 그래프 맞히기 퀴즈 ·
-단계별 진단 · 학습 분석 · 2022 개정 교육과정 성취기준 연계.
+저장/불러오기(JSON·이름) · 접선·도함수 · 적분(리만 합) · 3D 곡면 · 확률 시뮬(동전·주사위 Monte Carlo).
+
+(Phase 12·14·15의 문제 출제·클라 채점·오개념 진단·성취기준 연계 퀴즈 모드는 ARCH-27로 완전
+제거됐다 — 정오 판정 단일 권위는 백엔드 L3 verify, CLAUDE.md 슬89.)

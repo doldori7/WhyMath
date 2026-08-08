@@ -6,7 +6,6 @@ import {
   extractVars,
   asciiToLatex,
   linearRegression,
-  sameGraph,
   numDeriv,
   num2Deriv,
 } from "../src/lib/mathExpr";
@@ -83,13 +82,6 @@ describe("linearRegression — 최소제곱 회귀", () => {
   it("점 2개 미만 → null", () => expect(linearRegression([[1, 1]])).toBeNull());
   it("모든 x가 같으면 → null", () => expect(linearRegression([[1, 1], [1, 2]])).toBeNull());
   it("빈 입력 → null", () => expect(linearRegression()).toBeNull());
-});
-
-describe("sameGraph — 두 식의 그래프 동치 채점", () => {
-  it("같은 식 → true", () => expect(sameGraph("x^2", "x^2")).toBe(true));
-  it("다른 식 → false", () => expect(sameGraph("x^2", "x^2+1")).toBe(false));
-  it("동치 표현(전개) → true", () => expect(sameGraph("(x+1)^2", "x^2+2*x+1")).toBe(true));
-  it("파싱 불가 → false", () => expect(sameGraph("x^", "x")).toBe(false));
 });
 
 describe("numDeriv / num2Deriv — 수치 미분", () => {

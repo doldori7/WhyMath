@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: web
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -15,7 +15,8 @@ acceptance:
   - "수정: 학생 배포 번들에서 QuizMode(채점·진단·정답공개·점수) 제거 또는 학생 경로 배제. 그래프 렌더/입력만 남기고 정오 판정·오개념 진단은 백엔드 L3/L4 verify 경유로 이관(수학 판정 단일 권위)."
   - "거버넌스 게이트(집행 지점): 출하 자산 축 신설 — src/mobile/assets/**/*.js 문자열 스캔으로 판정 식별자(sameGraph·diagnose·giveUp·채점·quiz_history 등)를 검출하는 테스트를 tests/infra 또는 mobile test에 추가. Dart 게이트(lib/**.dart만)·웹 게이트(src/web/**/src/**만) 사이 사각을 봉합. 결함주입(판정 문자열 재삽입)으로 실패 재현 확인."
   - "정정: no_math_judgement_governance.test.js의 ARCH-12 화이트리스트 전제('학생 미노출·Flutter 도달 경로 0')가 실측 반증됨을 반영해 예외 근거 갱신 또는 예외 제거."
-artifacts: []
+artifacts:
+  - "QuizMode(sameGraph 채점·diagnose 오개념진단·giveUp 정답공개·quiz_history 점수) GraphingCalculator.jsx에서 완전 제거(568줄)+mathExpr.js sameGraph 동반삭제(dead code, 소비처 소실). npm run build+tool/sync_graphing_calculator.sh로 번들 재빌드·재동기화(index-BJtZV45X.js→index-DDvbbLIM.js) — 신 번들에 판정 심볼 전건 0 실측 확인(quiz_history·그래프 맞히기·정답 보기·채점하기·당신의 답·sameGraph 전부 0건). no_math_judgement_governance.test.js 화이트리스트 2건→0건 축소+ARCH-12 근거 정정. 신규 tests/infra/test_shipped_asset_judgement_governance.py(결함주입 5종·카테고리A[minification생존 문자열]/B[식별자] 이원화, minified 앵커가 실효 방어선임을 대조군으로 실증). MEMORY.md 결정로그+README.md 정합. 검증: npm test 9파일/109건 전건 green(coverage 무회귀)·npm run build 성공·tests/infra 294건(287+7신규) 전건 green·ruff+black clean. 미검증 고지: Flutter가 이 샌드박스에 없어 flutter test 미실행 — Dart 소스는 무접촉(신규 게이트를 의도적으로 tests/infra에 배치해 이 갭을 우회)."
 paths:
   - "src/web/graphing-calculator/**"
   - "src/mobile/assets/graphing_calculator/**"
