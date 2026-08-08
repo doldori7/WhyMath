@@ -173,6 +173,18 @@ class AuditLog:
 > (UPDATE/DELETE 라우터 없음)·`user_id`(행위자) FK 아님은 기존 `deletion_audit` 패턴 답습.
 > `target_user_id`(행위 대상 — 관리자접근에서만 행위자와 다름)·`consent_scope`(동의변경 구분
 > typed 메타)는 `deletion_audit`엔 없는 신규 컬럼.
+>
+> **⚠️ 편집자 부기 — 보존 정책 명문화 (2026-08-08 · ADMIN-03)**: 위 예시 코드의 "보존: 5년
+> (개인정보보호법)"은 **초기 설계 스케치의 미확정 참고값**이며, `deletion_audit`·`privacy_audit`
+> 실 구현에는 아직 적용되지 않았다 — 두 테이블 모두 `privacy/retention.py`의 `_RETENTION_PLAN`
+> (자동 파기 잡)에 **의도적으로 미등재**돼 현재 사실상 무기한 보존이다. 이유: 삭제권 `_ERASURE_
+> PLAN_EXEMPTIONS`(`privacy/erasure.py`)가 이미 같은 두 테이블을 계정 삭제 대상에서도 제외해
+> 뒀다 — GDPR/개인정보보호법 증빙 목적의 append-only 로그는 지우면(삭제권이든 시효 파기든)
+> 증빙 자체가 사라져 목적이 무너진다. 정확한 보존 연한(5년이 실제로 맞는지·기산점을 무엇으로
+> 잡는지)을 확정하고 그에 따른 자동 파기를 배선하는 일은 **법령 유래 판단**이라 변호사 검토
+> (MGMT-02) 없이 코드가 임의로 정하지 않는다 — 이 부기는 "정해지지 않았다"는 사실 자체를
+> 문서화할 뿐 연한을 확정하지 않는다. 회귀 가드: `tests/backend/privacy/test_retention.py::
+> TestPurgeExpiredRecords::test_excludes_account_and_evidence_tables`.
 
 ## 삭제·이전 권리
 

@@ -19,7 +19,7 @@ from whymath_backend.privacy.retention import (
     retention_cutoff,
 )
 
-# 계정/인증/동의/가설 테이블은 보존 의미가 달라 *제외*돼야 한다(회귀 가드).
+# 계정/인증/동의/가설/감사 테이블은 보존 의미가 달라 *제외*돼야 한다(회귀 가드).
 _EXCLUDED_TABLES = {
     "user_profile",
     "device_credential",
@@ -30,6 +30,11 @@ _EXCLUDED_TABLES = {
     "user_state_snapshot",
     "misconception_hypothesis",
     "evidence_links",  # purge_expired(retention_until)가 별도 처리
+    # ADMIN-03(2026-08-08): 법정 증빙 성격의 append-only 감사 로그 — 보존 연한은 개인정보
+    # 보호법 유래 판단이라 여기서 확정하지 않는다(연한 확정·자동 파기 배선은 범위 밖, MGMT-02
+    # 변호사 검토 선행). retention.py 모듈 docstring·security_privacy.md 참조.
+    "deletion_audit",
+    "privacy_audit",
 }
 
 

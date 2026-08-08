@@ -14,6 +14,18 @@
     의미가 다르다(토큰 자가만료·동의는 법적 증빙 보존·계정 상태는 현재값). evidence_links는
     `purge_expired`(retention_until)가 별도 처리(중복 0).
 
+**감사 2테이블(ADMIN-03, 2026-08-08)**: `deletion_audit`·`privacy_audit`(`db/models/audit.py`)도
+이 플랜에서 *의도적으로* 제외한다 — 둘 다 GDPR/개인정보보호법 증빙용 append-only 로그라
+`_ERASURE_PLAN_EXEMPTIONS`(`privacy/erasure.py`)가 이미 같은 이유로 삭제권 대상에서 제외해
+둔 것과 동형이다. 이 두 테이블은 현재 **어떤 자동 파기 로직에도 걸리지 않아 사실상 무기한
+보존**인데, 그 결정이 지금까지 문서화되지 않은 침묵 공백이었다. `docs/standards/
+security_privacy.md` "감사 로그" 섹션의 예시 코드가 "보존: 5년(개인정보보호법)"을 언급하지만
+이는 초기 설계 스케치의 미확정 참고값이며, 실제 두 테이블에 적용할 정확한 보존 연한 확정과
+그 연한에 따른 자동 파기 배선은 **법령 유래 판단**(CLAUDE.md "법령 유래 절차의 기계 대체
+금지")이라 변호사 검토(MGMT-02) 선행 없이 이 코드가 임의로 정하지 않는다. `tests/backend/
+privacy/test_retention.py::TestPurgeExpiredRecords::test_excludes_account_and_evidence_tables`
+가 이 두 테이블이 `_RETENTION_PLAN`에 재유입되지 않도록 동결한다.
+
 정직 스코프: NULL 타임스탬프(미시작 세션 등)는 `ts < cutoff`가 NULL이라 *파기 대상 아님*
 (보수적). 테이블별 차등 보존기한·졸업일 기반 정밀 보존은 후속(현 균일 `pii_retention_years`).
 """
