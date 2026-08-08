@@ -80,7 +80,8 @@ AUDIT_LABEL_MAP: dict[str, Path | None] = {
     "misconception_mc_v0": Path("docs/data/corpus_audit_mc_v0_r2.jsonl"),
     "rephrased_v0": Path("docs/data/corpus_audit_rephrased_v0_census.jsonl"),
     "killer_v0": Path("docs/data/corpus_audit_killer_v0.jsonl"),
-    "probability_finite_v0": None,  # 감사 라벨 없음 — 미평가 고정(pending). 범위 밖(신규 감사 금지).
+    # 감사 라벨 없음 — 미평가 고정(pending). 신규 감사는 범위 밖.
+    "probability_finite_v0": None,
     "v1": None,  # KNOWN_CORPORA의 "v1" = problem_bank_v1(4건). 감사 라벨 없음 — pending 고정.
 }
 
@@ -146,7 +147,9 @@ def verdict_from_audit_labels(
     if upper is not None and upper <= _MAX_DEFECT_UPPER:
         return CorpusVerdict(
             review_status=ReviewStatus.approved,
-            reason=f"결함율 {int(_CONFIDENCE * 100)}% Wilson 상한 {upper:.4f} <= {_MAX_DEFECT_UPPER}",
+            reason=(
+                f"결함율 {int(_CONFIDENCE * 100)}% Wilson 상한 {upper:.4f} <= {_MAX_DEFECT_UPPER}"
+            ),
             n=report.n,
             defects=report.defects,
             upper_bound=upper,

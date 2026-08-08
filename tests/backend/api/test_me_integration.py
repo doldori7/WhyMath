@@ -1049,6 +1049,7 @@ def test_me_next_problem_sibling_include_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
@@ -1131,6 +1132,7 @@ def test_me_ability_by_concept_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
@@ -1241,6 +1243,7 @@ def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
             ProblemSchema(
                 problem_id=pid,
                 source_type=SourceType.자체생성,
+                review_status=ReviewStatus.approved,
                 curriculum_version=Curriculum.REVISION_2022,
                 valid_from_year=2022,
                 subject=Subject.공통,
