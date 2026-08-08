@@ -2044,6 +2044,8 @@ class TestConceptDiagnosis:
         assert item["coaching"]["focus"] == "foundation"
         assert item["coaching"]["prompt"]
         assert item["coaching"]["rationale"]
+        # MOB-10: bkt_mastery=0.5 → mastery_to_level 발전 중 구간(0.4~0.8)
+        assert item["mastery_level"] == "발전 중"
 
     def test_irt_higher_signal(self) -> None:
         """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher·코칭 consolidate."""
@@ -2065,6 +2067,8 @@ class TestConceptDiagnosis:
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "bkt_higher"
         assert item["coaching"]["focus"] == "retrieval"
+        # MOB-10: bkt_mastery=0.9 → mastery_to_level 숙달 구간(>=0.8)
+        assert item["mastery_level"] == "숙달"
 
     def test_bkt_only_concept_insufficient(self) -> None:
         """IRT 채점 없는 개념 → theta·proxy null·insufficient·코칭 diagnose."""
@@ -2086,6 +2090,8 @@ class TestConceptDiagnosis:
         assert item["bkt_mastery"] is None
         assert item["irt_theta"] == 4.0
         assert item["agreement"] == "insufficient"
+        # MOB-10: bkt_mastery null이면 mastery_level도 null(무데이터 정직 표기 — 가짜 라벨 금지)
+        assert item["mastery_level"] is None
 
     def test_irt_row_without_b_source_skipped(self) -> None:
         """slice 81: IRT 행의 난이도·보정 b 둘 다 없으면 제외 — 그 개념 IRT 신호 없음."""
@@ -2097,6 +2103,25 @@ class TestConceptDiagnosis:
         assert item["irt_theta"] is None  # 유일 IRT 행 제외 → θ 없음
         assert item["response_count"] == 0
         assert item["agreement"] == "insufficient"
+
+    def test_mastery_level_boundary_labels(self) -> None:
+        """MOB-10: mastery_to_level 3구간 경계 — 0.4·0.8은 *상위* 라벨에 포함(≥)."""
+        below, at_dev, at_mastered = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [
+                (below, "C1", "개념1", 0.39),
+                (at_dev, "C2", "개념2", 0.4),
+                (at_mastered, "C3", "개념3", 0.8),
+            ],
+            [],
+        )
+        by_id = {
+            item["concept_id"]: item["mastery_level"]
+            for item in client.get("/v1/me/diagnosis/concepts").json()
+        }
+        assert by_id[str(below)] == "초보"
+        assert by_id[str(at_dev)] == "발전 중"
+        assert by_id[str(at_mastered)] == "숙달"
 
     def test_sorted_weakest_first(self) -> None:
         """약점(저신호) 개념 먼저 — BKT 0.1 < 0.9."""
