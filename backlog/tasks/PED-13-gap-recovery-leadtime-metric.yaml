@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-13-gap-recovery-leadtime-metric
+title: "결손 복구 리드타임 지표 신설 — 취약 노드 발견→숙달 전환 벽시계 간격(신규 컬럼 0·신규 계산축 0)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 계약 정본화 — ConceptMasteryHistory(PK user_id,concept_id,measured_at)의 '첫 취약 관측(mastery<0.7) → 0.8 도달' 벽시계 간격을 리드타임으로 정의. 신규 컬럼·신규 마이그레이션 0. 0.4/0.8 임계는 l4/lthc/adapt.py:123-124를 재사용(재선언 금지), 0.7 약점 임계는 l2/prerequisite_recommendation.py:385 재사용"
+  - "② 집행 지점 — harness/wh1_evaluation.py SurrogateMetrics에 ⑤와 동형 좌석으로 추가하고 compute_wh1_surrogate_metrics가 실제로 산출한다. 좌석만 만들고 계산을 잇지 않으면 미완(PED-06 §정본화≠집행 규칙)"
+  - "③ 노출 계층 편입 — harness/growth_evidence_exposure.py _STATIC_TIER에 STUDENT_VISIBLE로 등재. 계약 로직 재구현 금지(classify_metric_exposure 경유). 학생 대면 실제 노출 집행은 PED-08 소관이므로 이 태스크는 계층 배정까지"
+  - "④ 자기 대비만 — 백분위·랭킹·또래·평균대비 파생 함수를 두지 않는다(부재가 계약·growth_evidence_exposure.py:16-18 승계). reclaimed_time_positioning_v1.md §4 비교 축 폐기 결정 준수"
+  - "⑤ 미숙달·재하락 처리 명시 — 0.8 미도달 개념은 '미도달'로 분모에서 제외(가짜 0 금지), 도달 후 재하락 시 첫 도달 기준 고정. 자격 그룹 0이면 NO_DATA(⑨ mastery_gain_rate 관례 승계)"
+  - "⑥ 변별력 — ConceptMasteryHistory 행 주입 시 NO_DATA가 실제로 해제되고 되돌리면 다시 NO_DATA가 나오는지 양방향 실측"
+  - "⑦ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
+  - "⑧ 범위 밖 동결 — Time-to-Mastery 시간 정규화(별도 태스크·S3-32 의존)·보호자 대시보드·모바일 화면 신설·GET /v1/me/growth-evidence 신설(PED-08)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - src/backend/whymath_backend/harness/growth_evidence_exposure.py
+  - "tests/backend/harness/test_wh1_evaluation*.py"
+session: null
+notes: "docs/strategy/reclaimed_time_positioning_v1.md §3. 증명 지표 5종 중 유일하게 오늘 계산 가능한 축 — ConceptMasteryHistory의 measured_at이 복합 PK라 벽시계 간격이 신규 컬럼 없이 나온다. 나머지 4종은 입력 루프 단절(ProblemAttempt 0행·REC-01)로 막혀 있다. 학습 '시간'이 아니라 '경과 일수'임에 유의 — time-on-task 분모는 duration_seconds 클라 writer 부재로 없다."
+updated: 2026-08-08
