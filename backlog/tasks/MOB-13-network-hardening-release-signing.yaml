@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-13-network-hardening-release-signing
+title: "모바일 하드닝 — 401 미처리·sendTimeout 부재 + release 빌드 debug 서명키 게이트(스토어 배포 전 필수)"
+track: infra-debt
+stage: S4
+subject: math
+layer: mobile
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함A(401·timeout): auth_interceptor.dart:16이 onRequest만 구현·onError/onResponse 없어 401에도 만료 토큰 미삭제. api_client.dart:21이 sendTimeout 미설정 → OCR multipart 업로드 느린 네트워크에서 장시간 대기."
+  - "결함B(release 서명): android/app/build.gradle:35-39 release가 signingConfigs.debug(공개 debug 키)로 서명. 배포 CI·keystore 미배선(사전 릴리스)이나 스토어 배포 착수 시 서명 위조·업데이트 하이재킹."
+  - "수정: (A) onError에서 401→token_store.clear()+재로그인 유도, BaseOptions에 sendTimeout 추가. (B) release 서명 키 게이트 승격 — 스토어 배포 전 debug 키 사용 금지를 CI 또는 문서 게이트로 동결(TODO 주석을 게이트로)."
+  - "테스트: 401 응답 시 토큰 클리어·재로그인 라우팅 위젯 테스트. release 서명이 debug 키가 아님을 검증하는 게이트(배포 착수 시)."
+artifacts: []
+paths:
+  - "src/mobile/lib/core/**"
+  - src/mobile/android/app/build.gradle
+  - "src/mobile/test/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md L2·L3. 완화: 401은 문서화된 후속 슬라이스 유예(graceful 실패)·release 서명은 배포 CI 미배선(사전 릴리스). 스토어 배포 착수 시 결함B는 HIGH 승격 필수 선행."
+updated: 2026-08-08

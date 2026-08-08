@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-17-ocr-upload-limits
+title: "OCR 업로드 크기·MIME 검증 부재 봉합 — 인증 DoS(메모리 고갈), /pages 20배 동시적재 증폭"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: api/ocr.py:60(await image.read())·:93(최대 20장 리스트) 가 바이트 크기·content-type(MIME) 검증 없이 업로드 전량 메모리 적재. 페이지 수(20)만 캡. 앱 계층 body 상한 없음. /ocr/pages는 20배 동시 적재 증폭. ConsentedUser 게이트라 무인증은 아니나 인증된 남용/탈취 계정 메모리 고갈 DoS."
+  - "수정: 업로드 바이트 상한(단건·합계)·허용 MIME(image/*) 검증·앱 계층 body 크기 제한 추가. 초과 시 413/415로 명확 거부. verify.py의 _MAX_EXPR_LEN 선례처럼 캡 상수 중앙화."
+  - "테스트: 초과 크기·비이미지 MIME 업로드가 거부되는지, 20장 경계가 지켜지는지 결함주입 확인."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/ocr.py
+  - "src/backend/whymath_backend/l5/ocr/**"
+  - "tests/backend/api/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M4. 완화: ConsentedUser 게이트(인증된 남용)·Starlette SpooledTemporaryFile 부분 스풀. 프로덕션 ingress body 상한 가능성 있으나 리포 근거 없음 — 앱 계층 방어가 정본."
+updated: 2026-08-08

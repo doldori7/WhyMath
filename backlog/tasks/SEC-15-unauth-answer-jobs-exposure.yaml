@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-15-unauth-answer-jobs-exposure
+title: "무인증 노출 재검토 — 정답·풀이단계·distractor_map(problems GET) + /v1/jobs 폴링 결과 (SEC-07 D1 재검토)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함A(정답 무인증): api/problems.py:81/127 GET이 자체생성 문항의 answer(schema/problem.py:307)·answer_explanation·distractor_map·expected_answer(:684)를 무인증 노출. answer는 저작권 강제-비움 목록(:602-649)에서 빠짐 + is_published/is_premium 필터 없음. 교수학 무결성('막혔을 때 바로 정답 제공 금지') 위험. ProblemSchema를 학생용/관리용 구분 없이 단일 응답모델로 사용."
+  - "결함B(jobs 무인증): app.py:905 GET /v1/jobs/{job_id}가 인증·소유권 검사 없이 검증 전 원시 LLM 출력 반환(POST /v1/generate는 CurrentUser 봉인). job_id=UUID4라 열거는 어려우나 소유권 검사 부재. docstring이 'SEC-07 범위 밖' 자백하나 추적 태스크 부재."
+  - "수정: (A) 학생용/관리용 응답모델 분리 또는 정답 필드 인증 게이트(gating.py 포함 재검토) — SEC-07 D1 '공개 카탈로그' 설계와의 트레이드오프를 Kiki 판단으로 확정(정책 결정 포인트). (B) /v1/jobs에 인증+소유권(job↔user) 또는 최소 인증 게이트."
+  - "테스트: 정답 필드가 비인증/비관리 응답에서 제외되는지, /v1/jobs가 타 사용자 job 거부하는지 결함주입 확인."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/problems.py
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/schema/problem.py
+  - "tests/backend/api/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M1·M6. SEC-07 D1(GET 무인증=공개 카탈로그) 의도적 결정의 재검토 — 정답 노출 축은 Kiki 정책 판단 필요. L4 게이팅 무인증(L4/SEC-18)과 인접 축."
+updated: 2026-08-08

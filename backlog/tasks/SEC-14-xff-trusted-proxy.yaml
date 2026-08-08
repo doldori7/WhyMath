@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-14-xff-trusted-proxy
+title: "X-Forwarded-For 무조건 신뢰 봉합 — 감사 IP 위조·미인증 rate limit 우회 (공개 배포 전 필수)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: api/_rate_limit.py:938-956 _client_ip가 X-Forwarded-For 좌측 첫 값을 신뢰 프록시 검증 없이 채택. 위조 시 미인증 표면(auth 콜백/리프레시·/v1/reports/defects)의 IP 레이트리밋 전면 우회 + privacy/audit.hash_client_ip 기록(미성년 동의변경·개인정보 반출 감사 IP) 위조."
+  - "수정: XFF를 append가 아닌 overwrite하는 신뢰 프록시 전제 하에서만 신뢰(신뢰 프록시 IP 화이트리스트/홉 수 기반 우측-신뢰값 채택). 신뢰 프록시 미구성이면 request.client.host로 폴백. 주의: uvicorn --proxy-headers/--forwarded-allow-ips는 이 함수를 고치지 못함(raw 헤더 직접 판독) — 함수 자체를 고쳐야 함."
+  - "테스트(결함주입): 위조 XFF 헤더로 rate limit 우회·감사 IP 오염이 차단되는지 확인. 신뢰 프록시 없는 기본 자세에서 XFF가 무시되는지 동결."
+  - "배포 게이트: 공개 배포(APP_BIND_ADDR=0.0.0.0 또는 인터넷 노출) 전 이 봉합이 선행되어야 함을 명시(현재 127.0.0.1 바인딩이라 잠재 상태)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/_rate_limit.py
+  - src/backend/whymath_backend/privacy/audit.py
+  - "tests/backend/api/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md H2. 감사 IP 무결성=CLAUDE.md 우선순위 #2(법적·미성년 PIPA)·SEC-08(크리덴셜 스터핑 억제)와 직결. 완화: 기본 prod 127.0.0.1 바인딩(런북 §8 공개 노출 게이트)."
+updated: 2026-08-08

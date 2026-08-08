@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-18-prod-surface-hardening
+title: "프로덕션 표면 하드닝 — /docs·/openapi.json 무인증 노출 비활성 + CORS 정책 결정 동결"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함A(docs): app.py:550 FastAPI 생성이 docs_url/redoc_url/openapi_url 미지정·기본 활성이라 /docs·/redoc·/openapi.json이 프로덕션 무인증 노출(무인증 라우트 스키마 광고). prod 분기 부재."
+  - "결함B(CORS 결정 부재): 코드 전역에 CORSMiddleware 없음(현재 Flutter라 무해)이나 명시적 'CORS 없음' 결정을 동결하는 테스트도 없음 — 웹 클라 붙일 때 allow_origins=['*'] 급조 사고 경로 열림."
+  - "수정: (A) is_production_like일 때 docs_url=None 등으로 프로덕션 비활성(개발은 유지). (B) CORS 정책을 명시 결정하고(현행 '없음' 또는 화이트리스트) 그 결정을 동결 테스트로 고정."
+  - "notes: L4 게이팅 6종 무인증(api/gating.py)은 SEC-07 D1 공개 카탈로그로 현행 저위험이나, 향후 학생별 진단·약점 개념 등 개인 컨텍스트 반환 확장 시 인증/persona 바인딩 필수 — 확장 시 재검토 대상으로 기록."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - "tests/backend/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md L1·L4. docs 노출은 정보공개(정찰 조력)이지 접근 우회 아님(보호 라우트는 인증 유지). GCP/AWS WAF 차단 여지 있으나 리포 근거 없음."
+updated: 2026-08-08

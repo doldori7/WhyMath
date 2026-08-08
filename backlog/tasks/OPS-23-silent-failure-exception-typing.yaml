@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-23-silent-failure-exception-typing
+title: "침묵 실패 봉합 — 학생 대면 wh1 폴백·shadow 관측 5곳·OCR verify가 예외 타입명 없이 흡수 (CLAUDE.md 1급 금기)"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: harness/wh1_llm_policy.py:196 except Exception: return self._safe_fallback(state) 가 학생 대면(wh1_primary_enabled=True 기본·GA) LLM 장애를 예외 타입명 로그 없이 폴백 — 2026-07-16 langfuse 8일 무증상 사고 동형. config.py:180이 스스로 '폴백은 타입명 로그' 계약 명시하나 미이행."
+  - "수정: 위 폴백 + 동반 무타입 흡수 6곳(l4/step_shadow.py:136, l4/misconception/shadow.py:107·244, l4/misconception/crosslink_shadow.py:145·169, harness/wh1_shadow.py:289, l5/ocr/verify.py:126)에 type(exc).__name__ 로그 배선(시크릿·필드값 제외). l5/ocr/verify.py:126은 antlr 미설치(영구 열화)와 파싱 실패(일시)를 구별해 전자를 관측 가능하게."
+  - "테스트: 각 폴백 경로에서 예외 타입명이 로그에 남는지 확인하는 회귀 가드(무타입 경고 금지). 성공/실패 양쪽에서 같은 값 내는 검사 금지(변별력)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_llm_policy.py
+  - src/backend/whymath_backend/harness/wh1_shadow.py
+  - "src/backend/whymath_backend/l4/**"
+  - src/backend/whymath_backend/l5/ocr/verify.py
+  - "tests/backend/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M3. CLAUDE.md '침묵 실패 금지'(never-break 예외 삼킴 시 타입명 로그 의무). judge.py:171은 동일 상황 exc_info 로그 — 처우 비일관 해소. onboarding_controller.dart catch(e) 타입 미로깅(클라측)도 함께 검토 가능."
+updated: 2026-08-08

@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-12-active-problem-stale-reset
+title: "activeProblemProvider 영구 stale 봉합 — 결함신고·코치세션 오귀속, 로그아웃 후 잔존"
+track: infra-debt
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: active_problem.dart:13 StateProvider<Problem?>(非autoDispose)를 null로 되돌리는 코드가 프로덕션 0건(세팅은 problem_screen.dart:83 1곳뿐). 앱 재시작 전까지 영구 활성 → 결함신고(chat_screen.dart:211)가 엉뚱한 problem_id로 접수, 새 코치세션(chat_controller.dart:188)이 낡은 문제에 묶임, 로그아웃(auth_controller.dart:88) 후 잔존."
+  - "수정: 문제 종료·문제 전환·로그아웃 시 activeProblemProvider 리셋(null). auth_controller.logout()에 상태정리 추가(activeProblem·chat dialogueId 등 이전 학생 잔여 제거)."
+  - "테스트(재현): 문제 A 시작 후 종료/전환 시 결함신고 problem_id가 stale A가 아님을 위젯 테스트로 확인. 로그아웃 후 activeProblem이 null인지 확인."
+artifacts: []
+paths:
+  - "src/mobile/lib/features/problems/**"
+  - "src/mobile/lib/features/auth/**"
+  - "src/mobile/lib/features/chat/**"
+  - "src/mobile/test/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M5. 로그아웃 상태정리 부재는 router.dart:100-101 'c3 후속' 인정과도 연결. MOB-10(진단 렌더)과 화면 인접하나 별개."
+updated: 2026-08-08

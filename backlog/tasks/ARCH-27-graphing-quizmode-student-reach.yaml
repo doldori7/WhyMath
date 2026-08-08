@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-27-graphing-quizmode-student-reach
+title: "그래핑 계산기 QuizMode 수학판정 로직 학생 도달 봉합 + 출하 자산(assets) 거버넌스 게이트 신설"
+track: infra-debt
+stage: S3
+subject: math
+layer: web
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: GraphingCalculator.jsx:1871 무조건 렌더 '문제' 버튼이 QuizMode(클라 채점 sameGraph:566-594·오개념 진단 diagnose:539-563·정답공개 giveUp:597-608·점수누적 quiz_history:344)를 열고, 이 번들이 src/mobile/assets/graphing_calculator/assets/index-*.js로 출하돼 Flutter GraphingCalculatorWebView(chat_screen→SceneRenderer)로 학생 실기기 도달 — CLAUDE.md 슬89 무-수학판정 불변식·L1-L4 독립코어 위반."
+  - "수정: 학생 배포 번들에서 QuizMode(채점·진단·정답공개·점수) 제거 또는 학생 경로 배제. 그래프 렌더/입력만 남기고 정오 판정·오개념 진단은 백엔드 L3/L4 verify 경유로 이관(수학 판정 단일 권위)."
+  - "거버넌스 게이트(집행 지점): 출하 자산 축 신설 — src/mobile/assets/**/*.js 문자열 스캔으로 판정 식별자(sameGraph·diagnose·giveUp·채점·quiz_history 등)를 검출하는 테스트를 tests/infra 또는 mobile test에 추가. Dart 게이트(lib/**.dart만)·웹 게이트(src/web/**/src/**만) 사이 사각을 봉합. 결함주입(판정 문자열 재삽입)으로 실패 재현 확인."
+  - "정정: no_math_judgement_governance.test.js의 ARCH-12 화이트리스트 전제('학생 미노출·Flutter 도달 경로 0')가 실측 반증됨을 반영해 예외 근거 갱신 또는 예외 제거."
+artifacts: []
+paths:
+  - "src/web/graphing-calculator/**"
+  - "src/mobile/assets/graphing_calculator/**"
+  - "tests/infra/**"
+  - "src/mobile/test/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md H3. no_math_judgement_governance.test.js:11-16이 명시한 강제 재설계 트리거('판정 로직 학생 노출 경로 진입 시 백엔드 verify 리팩터 강제')가 이미 충족. CLAUDE.md 구조붕괴 금기(수학 로직 클라 침투)."
+updated: 2026-08-08

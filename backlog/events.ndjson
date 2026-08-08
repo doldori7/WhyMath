@@ -2257,3 +2257,14 @@
 {"ts": "2026-08-08T09:26:54", "actor": "claude/rec-05-priority-d8q8vt", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py' 은 다른 세션 태스크 S4-16-residue-gate-demotion-battle(세션: claude/whymath-ai-content-design-vafylb)의 작업 범위 — 동시 편집 충돌 위험"}
 {"ts": "2026-08-08T09:26:59", "actor": "claude/rec-05-priority-d8q8vt", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-08T09:26:59", "actor": "claude/rec-05-priority-d8q8vt", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py' 은 다른 세션 태스크 S4-16-residue-gate-demotion-battle(세션: claude/whymath-ai-content-design-vafylb)의 작업 범위 — 동시 편집 충돌 위험"}
+{"ts": "2026-08-08T11:57:05", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-13-harness-metrics-exposure-contract"}
+{"ts": "2026-08-08T11:58:01", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "ARCH-27-graphing-quizmode-student-reach"}
+{"ts": "2026-08-08T11:58:21", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-14-xff-trusted-proxy"}
+{"ts": "2026-08-08T11:58:41", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "OPS-23-silent-failure-exception-typing"}
+{"ts": "2026-08-08T11:59:23", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "MOB-12-active-problem-stale-reset"}
+{"ts": "2026-08-08T11:59:44", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-15-unauth-answer-jobs-exposure"}
+{"ts": "2026-08-08T12:00:04", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-16-outcome-write-ownership"}
+{"ts": "2026-08-08T12:00:20", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-17-ocr-upload-limits"}
+{"ts": "2026-08-08T12:00:38", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "MOB-13-network-hardening-release-signing"}
+{"ts": "2026-08-08T12:00:56", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "SEC-18-prod-surface-hardening"}
+{"ts": "2026-08-08T12:01:25", "actor": "claude/whymath-issues-review-k20m0w", "action": "add", "id": "MGMT-03-age-collection-prodsignal-policy"}

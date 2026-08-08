@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-13-harness-metrics-exposure-contract
+title: "성장증거 노출 계약 우회 봉합 — /harness-metrics가 GAMING_SUSPECT 낙인·INTERNAL_ONLY 원시지표를 학생 토큰에 노출"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: GET /v1/me/harness-metrics(api/me.py:2755-2817)가 classify_metric_exposure를 우회해 원시 SurrogateMetrics(INTERNAL_ONLY인 diagnosis_agreement_rate·tokens_per_turn, 원 calibration_brier 스칼라, R15Verdict.GAMING_SUSPECT 낙인)를 ConsentedUser(학생, admin 게이트 없음)에게 반환. me.py:2811-2817 자백 주석 존재. PED-08(#726)이 안전 라우트 /growth-evidence만 병설하고 원시 라우트를 학생 접근에서 닫지 않음 — 정본화≠집행."
+  - "수정: 이 엔드포인트를 admin/role 게이트 뒤로 옮기거나 classify_metric_exposure 경유 출력만 반환. GAMING_SUSPECT·INTERNAL_ONLY 2종·원 Brier 스칼라가 학생 토큰 응답에 미도달함이 계약 정본. growth_evidence_exposure.py의 '유일한 노출 판정 경로' 선언과 서빙 코드가 정합해야 함(집행 지점 별항 명시 — CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지')."
+  - "테스트(결함주입): 학생 토큰으로 /harness-metrics 호출 시 INTERNAL_ONLY 지표·GAMING_SUSPECT 문자열이 응답에 없음을 동결. 낙인 판정이 응답 본문에 유출되면 실패하는 변별 테스트(성공/실패 양쪽에서 같은 값 내는 검사 금지)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/harness/growth_evidence_exposure.py
+  - "tests/backend/api/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md H1. gamification_module_gap_review_r2 §2 G1·PED-08 계보. CLAUDE.md 금기 '부정 피드백 정서 강화 금지'+'정본화를 집행으로 착각한 완료 선언 금지'."
+updated: 2026-08-08

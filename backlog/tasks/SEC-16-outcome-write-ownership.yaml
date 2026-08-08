@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-16-outcome-write-ownership
+title: "/outcome 쓰기 소유권 공백 봉합 — 인증 학생이 임의 session_id로 효과측정 집계 오염"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결함: api/study.py:253-282 post_study_outcome가 ConsentedUser 인증은 하나 주입 user를 쓰지 않고 session_id를 클라 body(OutcomeRequest)로 받아 소유권 검증 없이 record_pedagogy_outcome(l2/pedagogy_evidence.py:127) → EvidenceEvent insert. 모델에 user_id 컬럼 부재(evidence_event.py:54-115). 인증 학생이 임의 session_id로 미검증 outcome 무제한 주입 → L4 교수법 효과측정 집계 오염."
+  - "수정: session↔user 소유권 검증을 가명화(user_id 미저장 의도 설계)와 양립하게 배선 — 예: 세션 발급 시 서버가 세션↔user 매핑을 별도 인증 테이블/Redis에 두고 outcome 기입 전 대조(evidence_event 자체는 가명 유지). 위조 session_id 기입 거부."
+  - "테스트(결함주입): 학생 A 토큰으로 학생 B/임의 session_id에 outcome 기입 시도가 거부되는지 확인. 정당 세션은 통과."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/study.py
+  - src/backend/whymath_backend/l2/pedagogy_evidence.py
+  - "tests/backend/**"
+session: null
+notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M2. 완화: 인증 필요·성적/숙달 갱신 아님(record_problem_attempt_mastery 별도)·session_id UUID4. 위험=데이터 무결성(가명 집계 오염). user_id 부재는 CLAUDE.md 우선순위 #2 가명화와 긴장 — 소유권 검증을 가명화 깨지 않게 설계."
+updated: 2026-08-08
