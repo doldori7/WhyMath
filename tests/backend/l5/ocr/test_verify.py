@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from pydantic import ValidationError
 
@@ -81,3 +83,37 @@ def test_result_is_frozen() -> None:
     result = parse_check_latex("x = 1")
     with pytest.raises(ValidationError):
         result.ok = False  # type: ignore[misc]
+
+
+def test_antlr_path_failure_logs_exception_type(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """antlr 파서 경로가 실패하면 예외 타입명이 로그에 남는다(침묵 실패 금지·CLAUDE.md).
+
+    실 환경 상태(antlr 미설치)에 의존하지 않도록 `parse_latex` 자체를 강제 실패시켜 검증한다
+    — 변별력 확인: 타입명이 없는 "실패했다"류 메시지만 찍혔다면 이 테스트는 실패해야 한다.
+    """
+
+    def _boom(_text: str) -> None:
+        raise RuntimeError("antlr 파서 강제 실패(테스트)")
+
+    monkeypatch.setattr("sympy.parsing.latex.parse_latex", _boom)
+    with caplog.at_level(logging.WARNING, logger="whymath.l5.ocr.verify"):
+        parse_check_latex("x = 2")
+    warnings = [r for r in caplog.records if r.name == "whymath.l5.ocr.verify"]
+    assert warnings, "antlr 경로 실패가 로그로 관측돼야 한다"
+    assert any("RuntimeError" in r.getMessage() for r in warnings)  # 예외 타입명이 로그에 남음
+    # 트레이스백(exc_info)은 의도적으로 미사용 — 파서 예외 메시지에 원문이 섞일 위험 회피.
+    assert all(r.exc_info is None for r in warnings)
+
+
+def test_antlr_not_installed_surfaces_as_import_error(caplog: pytest.LogCaptureFixture) -> None:
+    """실측(2026-08): 이 프로젝트 의존성엔 antlr4가 없어 `parse_latex` 호출이 항상 `ImportError`로
+    실패한다(영구 열화) — 파싱 자체는 폴백(sympify)으로 성공해야 하고, 실패 원인(ImportError)이
+    타입명으로 로그에 남아 "미설치"와 "파싱 실패"를 구분할 수 있어야 한다(요구사항 특별 조항)."""
+    with caplog.at_level(logging.WARNING, logger="whymath.l5.ocr.verify"):
+        result = parse_check_latex("x = 2")
+    assert result.ok is True  # 폴백(sympify)으로 정상 파싱
+    warnings = [r for r in caplog.records if r.name == "whymath.l5.ocr.verify"]
+    assert warnings, "antlr 미설치가 로그로 관측돼야 한다"
+    assert any("ImportError" in r.getMessage() for r in warnings)

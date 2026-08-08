@@ -13,6 +13,7 @@ True)` 보수적 파싱 패턴을 그대로 재사용한다(파싱 불가는 절
 
 from __future__ import annotations
 
+import logging
 import re
 
 import sympy
@@ -23,6 +24,8 @@ __all__ = [
     "demote_confidence_if_unparseable",
     "parse_check_latex",
 ]
+
+logger = logging.getLogger("whymath.l5.ocr.verify")
 
 # 인식 신뢰도 강등 계수 — 파싱 불가 LaTeX의 신뢰도에 곱한다(0으로 죽이지 않고 *낮춘다* —
 # 파싱 불가가 곧 오인식은 아니라 보수적). 0.5는 KPI 튜닝 대상(verify_answer 상수 노출 선례).
@@ -123,8 +126,13 @@ def _try_sympify(expr_text: str) -> bool:
         parsed = parse_latex(text)
         if parsed is not None:
             return True
-    except Exception:  # noqa: BLE001 — antlr 미설치·파싱 실패 모두 폴백으로 흡수
-        pass
+    except Exception as exc:  # noqa: BLE001 — antlr 미설치·파싱 실패 모두 폴백으로 흡수
+        # 타입명만 명시 로그(exc_info 트레이스백 미사용) — antlr/sympy 파서 예외는 메시지에 파싱
+        # 시도한 원문(학생 손글씨 OCR 결과)을 그대로 담는 경우가 흔해, 트레이스백을 남기면 학생
+        # 풀이 원문이 로그에 샐 위험이 있다(CLAUDE.md 미성년자 개인정보 비노출). 타입명(예:
+        # ImportError=antlr 미설치·영구 열화 vs 그 외=파싱 실패·일시)만으로 CLAUDE.md 요건
+        # ("예외 타입명을 로그에 포함")을 충족하면서 두 원인을 구분할 수 있다.
+        logger.warning("LaTeX antlr 파서 경로 실패 — sympify 폴백으로 진행: %s", type(exc).__name__)
     # ② 폴백: 가벼운 전처리 후 sympify(verify_answer convert_xor 패턴 재사용).
     try:
         sympy.sympify(_latex_to_sympifiable(text), convert_xor=True)

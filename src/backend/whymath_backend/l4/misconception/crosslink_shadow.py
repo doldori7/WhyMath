@@ -143,6 +143,7 @@ def observe_crosslink_shadow(
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:107 미러)
+        logger.warning("crosslink shadow 관측 실패", exc_info=True)
         return
 
 
@@ -167,6 +168,7 @@ async def observe_crosslink_shadow_async(
             min_confidence=min_confidence,
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단·to_thread 방어선)
+        logger.warning("crosslink shadow async 래퍼 실패(to_thread)", exc_info=True)
         return
 
 

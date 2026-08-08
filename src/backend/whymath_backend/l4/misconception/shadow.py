@@ -105,6 +105,7 @@ def observe_misconception_shadow(
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·테스트 커버)
+        logger.warning("오개념 semantic shadow 관측 실패", exc_info=True)
         return
 
 
@@ -242,4 +243,5 @@ async def observe_misconception_judge_shadow(
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:100 미러)
+        logger.warning("judge would-be shadow 관측 실패", exc_info=True)
         return

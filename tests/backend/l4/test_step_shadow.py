@@ -106,7 +106,8 @@ class TestObserveStepBreaks:
     def test_exception_swallowed(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        # detect_step_breaks가 던져도 observe_step_breaks는 조용히 반환(본류 비차단).
+        # detect_step_breaks가 던져도 observe_step_breaks는 조용히 반환(본류 비차단) —
+        # 단 침묵 실패가 아니라 예외 타입명이 warning 로그(exc_info)에 남는다(CLAUDE.md).
         monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
         get_settings.cache_clear()
 
@@ -117,7 +118,11 @@ class TestObserveStepBreaks:
         try:
             with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
                 observe_step_breaks(_NONPRESERVING)  # 예외 없이 반환해야
-            assert _shadow_messages(caplog) == []
+            warnings = [r for r in caplog.records if r.name == "whymath.l4.step_shadow"]
+            assert len(warnings) == 1
+            assert warnings[0].levelno == logging.WARNING
+            assert warnings[0].exc_info is not None
+            assert warnings[0].exc_info[0] is RuntimeError  # 예외 타입명이 로그에 남음
         finally:
             get_settings.cache_clear()
 

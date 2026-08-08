@@ -134,6 +134,7 @@ def observe_step_breaks(
                 ).model_dump_json()
             )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(방어선·테스트 커버)
+        logger.warning("step 관측 실패 — 비차단 방어선", exc_info=True)
         return
 
 

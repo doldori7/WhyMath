@@ -39,6 +39,7 @@ Protocol을 *프로덕션*으로 구현한다 — 지금까지 두뇌는 `Script
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Sequence
 
@@ -66,6 +67,8 @@ from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 from whymath_backend.l4.session_recall import SessionRecall
+
+logger = logging.getLogger("whymath.harness.wh1_llm_policy")
 
 __all__ = ["LLMTutorPolicy"]
 
@@ -194,6 +197,9 @@ class LLMTutorPolicy:
             # provider 반환은 GenerationResult(text, usage) — 도구 선택은 텍스트만 소비.
             raw = (await self._provider.generate(prompt, _SYSTEM_PROMPT, decision)).text
         except Exception:  # noqa: BLE001 — provider 장애 시 학생 앞 크래시 금지·안전 강등.
+            logger.warning(
+                "LLMTutorPolicy provider 호출 실패 — 안전 강등(결정론 폴백)", exc_info=True
+            )
             return self._safe_fallback(state)
         action = self._parse_action(raw, state)
         return self._enforce_invariants(action, state)

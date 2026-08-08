@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Sequence
+
+import pytest
 
 from whymath_backend.harness.wh1_llm_policy import (
     _MAX_CONTEXT_NODES,
@@ -238,6 +241,22 @@ class TestSafeFallback:
         action = _next(policy, _state())
         assert isinstance(action, EndTurnAction)
         assert action.action_type == "격려"
+
+    def test_provider_failure_logs_exception_type(self, caplog: pytest.LogCaptureFixture) -> None:
+        """provider 장애 → 침묵 실패 금지(CLAUDE.md): 폴백 직전 예외 타입명이 로그에 남는다.
+
+        `RaisingProvider`가 `RuntimeError`를 던지므로, `exc_info`에 그 타입이 실제로 잡히는지
+        (변별력 있게) 검증한다 — 무타입 경고("실패했다"만 찍고 타입 부재)는 실패로 잡아낸다.
+        """
+        policy = LLMTutorPolicy(RaisingProvider())
+        with caplog.at_level(logging.WARNING, logger="whymath.harness.wh1_llm_policy"):
+            _next(policy, _state())
+        warnings = [r for r in caplog.records if r.name == "whymath.harness.wh1_llm_policy"]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert (
+            warnings[0].exc_info[0] is RuntimeError
+        )  # 예외 타입명이 로그에 남음(무타입 경고 금지)
 
 
 class TestNoRawLeak:

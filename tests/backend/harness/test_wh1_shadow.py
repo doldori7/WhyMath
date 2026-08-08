@@ -256,7 +256,7 @@ class TestNeverBreak:
             raise RuntimeError("하네스 강제 실패(never-break 테스트)")
 
         monkeypatch.setattr(wh1_shadow, "run_tutoring_turn", _boom)
-        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+        with caplog.at_level(logging.WARNING, logger="whymath.harness.wh1_shadow"):
             result = asyncio.run(
                 observe_wh1_harness_shadow(
                     student_solution=_STUDENT_SOLUTION,
@@ -267,6 +267,11 @@ class TestNeverBreak:
             )
         assert result is None  # 예외 전파 0(never-break)
         assert _records(caplog) == []  # 실패라 부분 기록도 0
+        # 침묵 실패 금지(CLAUDE.md) — 예외 타입명이 warning 로그(exc_info)에 남는다.
+        warnings = [r for r in caplog.records if r.name == "whymath.harness.wh1_shadow"]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is RuntimeError
 
 
 # ──────────────────────────────────────────────────────────────────────────

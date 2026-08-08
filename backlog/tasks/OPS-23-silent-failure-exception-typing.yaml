@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "결함: harness/wh1_llm_policy.py:196 except Exception: return self._safe_fallback(state) 가 학생 대면(wh1_primary_enabled=True 기본·GA) LLM 장애를 예외 타입명 로그 없이 폴백 — 2026-07-16 langfuse 8일 무증상 사고 동형. config.py:180이 스스로 '폴백은 타입명 로그' 계약 명시하나 미이행."
   - "수정: 위 폴백 + 동반 무타입 흡수 6곳(l4/step_shadow.py:136, l4/misconception/shadow.py:107·244, l4/misconception/crosslink_shadow.py:145·169, harness/wh1_shadow.py:289, l5/ocr/verify.py:126)에 type(exc).__name__ 로그 배선(시크릿·필드값 제외). l5/ocr/verify.py:126은 antlr 미설치(영구 열화)와 파싱 실패(일시)를 구별해 전자를 관측 가능하게."
   - "테스트: 각 폴백 경로에서 예외 타입명이 로그에 남는지 확인하는 회귀 가드(무타입 경고 금지). 성공/실패 양쪽에서 같은 값 내는 검사 금지(변별력)."
-artifacts: []
+artifacts:
+  - "7곳 침묵 실패 봉합 — harness/wh1_llm_policy.py:200(학생대면 wh1_primary GA 폴백, 가장 중요)·l4/step_shadow.py:137·l4/misconception/shadow.py:108,246·l4/misconception/crosslink_shadow.py:146,171(sync+async 래퍼 이중 방어선 각각)·harness/wh1_shadow.py:290 — logger.warning(..., exc_info=True)로 예외 타입명 로그(judge.py:171 기존 관례 재사용). l5/ocr/verify.py:135는 판단 근거로 exc_info 대신 type(exc).__name__ 명시 포맷 채택(파싱 원문=학생 손글씨 OCR 결과가 예외 메시지에 섞여 트레이스백으로 새는 것을 막기 위함 — CLAUDE.md 미성년자 개인정보 비노출). antlr 미설치(영구 열화)=ImportError vs 파싱실패(일시)=기타 타입으로 실측 구분 확인(이 환경에 antlr4 미설치라 실제로 ImportError 재현됨). 신규/보강 회귀 테스트 10건(7곳 전부 커버, caplog로 exc_info[0]이 정확한 예외 타입인지 변별력 있게 확인 — 무타입 경고면 실패하도록 설계) 전부 통과. 검증: ruff+black(1072파일)+mypy --strict(471파일) clean, 백엔드 전체 스위트 8925 passed/296 skipped(통합·PG부재)/0 failed(8분17초). backend-engineer 서브에이전트 구현(병렬 세션 S4-16이 wh1_llm_policy.py·wh1_shadow.py 동시 작업 중이라는 실측 경고 확인 후 최소 surgical 변경만 — import 1줄+logger 1줄+로그 1줄) + 직접 diff 전수 검토 + 독립 재검증."
 paths:
   - src/backend/whymath_backend/harness/wh1_llm_policy.py
   - src/backend/whymath_backend/harness/wh1_shadow.py

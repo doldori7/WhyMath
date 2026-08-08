@@ -179,27 +179,72 @@ class TestObserveCrosslinkShadow:
 # ② never-break(비차단) — resolve가 raise해도 본류 안 깸
 # ──────────────────────────────────────────────────────────────────────────
 class TestNeverBreak:
-    def test_resolver_raises_returns_none(self) -> None:
-        """resolve(DB 미도달 등)가 raise → 예외 전파 0·반환 None(적재 본류 보호)."""
+    def test_resolver_raises_returns_none(self, caplog: pytest.LogCaptureFixture) -> None:
+        """resolve(DB 미도달 등)가 raise → 예외 전파 0·반환 None(적재 본류 보호).
+
+        침묵 실패 금지(CLAUDE.md) — 예외 타입명이 warning 로그(exc_info)에 남는다.
+        """
 
         class _BoomResolver:
             def resolve(self, *args: object, **kwargs: object) -> list[str]:
                 raise RuntimeError("DB 미도달")
 
         # raise를 삼키고 정상 반환(예외 전파 0)하면 통과 — 반환은 항상 None(비노출 불변).
-        observe_crosslink_shadow(_VALID_KEBAB, resolver=_BoomResolver())  # type: ignore[arg-type]
+        with caplog.at_level(logging.WARNING, logger="whymath.l4.misconception.crosslink_shadow"):
+            observe_crosslink_shadow(_VALID_KEBAB, resolver=_BoomResolver())  # type: ignore[arg-type]
+        warnings = [
+            r for r in caplog.records if r.name == "whymath.l4.misconception.crosslink_shadow"
+        ]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is RuntimeError
 
-    def test_async_wrapper_never_breaks(self) -> None:
-        """async 래퍼도 resolve raise를 삼킨다(to_thread 방어선)."""
+    def test_async_wrapper_never_breaks(self, caplog: pytest.LogCaptureFixture) -> None:
+        """async 래퍼도 resolve raise를 삼킨다(to_thread 방어선) — 예외 타입명은 로그에 남는다."""
 
         class _BoomResolver:
             def resolve(self, *args: object, **kwargs: object) -> list[str]:
                 raise RuntimeError("boom")
 
-        out = asyncio.run(
-            observe_crosslink_shadow_async(_VALID_KEBAB, resolver=_BoomResolver())  # type: ignore[arg-type]
-        )
+        with caplog.at_level(logging.WARNING, logger="whymath.l4.misconception.crosslink_shadow"):
+            out = asyncio.run(
+                observe_crosslink_shadow_async(_VALID_KEBAB, resolver=_BoomResolver())  # type: ignore[arg-type]
+            )
         assert out is None
+        warnings = [
+            r for r in caplog.records if r.name == "whymath.l4.misconception.crosslink_shadow"
+        ]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is RuntimeError
+
+    def test_to_thread_itself_raises_hits_async_wrapper_own_except(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """`asyncio.to_thread` 자체가 실패하는 (드문) 경로 — async 래퍼 자신의 except가 잡는다.
+
+        위 두 테스트는 *내부* sync 함수의 own except(관측 자체 실패)를 거치지만, 이 테스트는
+        `to_thread` 호출 자체의 실패를 흉내내 async 래퍼의 *자기* except(이중 방어선)를 직접
+        검증한다 — 메시지로 어느 except가 잡았는지 구분한다.
+        """
+
+        async def _boom_to_thread(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("to_thread 자체 실패(테스트)")
+
+        monkeypatch.setattr(
+            "whymath_backend.l4.misconception.crosslink_shadow.asyncio.to_thread",
+            _boom_to_thread,
+        )
+        with caplog.at_level(logging.WARNING, logger="whymath.l4.misconception.crosslink_shadow"):
+            out = asyncio.run(observe_crosslink_shadow_async(_VALID_KEBAB))
+        assert out is None
+        warnings = [
+            r for r in caplog.records if r.name == "whymath.l4.misconception.crosslink_shadow"
+        ]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is RuntimeError
+        assert "async 래퍼" in warnings[0].getMessage()  # sync own except 메시지와 구분
 
 
 # ──────────────────────────────────────────────────────────────────────────

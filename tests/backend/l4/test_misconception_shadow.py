@@ -29,6 +29,7 @@ from whymath_backend.l4.misconception.models import Misconception, Misconception
 from whymath_backend.l4.misconception.shadow import (
     MisconceptionJudgeShadowObservation,
     observe_misconception_judge_shadow,
+    observe_misconception_shadow,
 )
 
 # 카탈로그 실 id(2종) — would_remove/keep 분류가 id를 정확히 싣는지 검증용.
@@ -178,12 +179,35 @@ class TestNeverBreak:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         # judge가 raise → observe는 조용히 None 반환(예외가 fire-and-forget task를 안 깸).
-        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
+        with caplog.at_level(logging.WARNING, logger="whymath.l4.misconception.shadow"):
             result = asyncio.run(
                 observe_misconception_judge_shadow([_match(_DOP)], _STUDENT, judge=_BoomJudge())
             )
         assert result is None  # 예외 전파 0(never-break)
         assert _records(caplog) == []  # 실패라 레코드도 안 남음(부분 기록 0)
+        # 침묵 실패 금지(CLAUDE.md) — 예외 타입명이 warning 로그(exc_info)에 남는다.
+        warnings = [r for r in caplog.records if r.name == "whymath.l4.misconception.shadow"]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is RuntimeError
+
+
+class TestObserveMisconceptionShadowNeverBreak:
+    """`observe_misconception_shadow`(judge 아닌 substring↔semantic shadow)의 never-break."""
+
+    class _BadMatch:
+        """`misconception` 속성이 없는 가짜 match — try 내부에서 AttributeError를 유발."""
+
+    def test_bad_match_swallowed_and_logs_exception_type(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="whymath.l4.misconception.shadow"):
+            result = observe_misconception_shadow([self._BadMatch()], [])  # type: ignore[list-item]
+        assert result is None  # 예외 전파 0(never-break·비노출 불변)
+        warnings = [r for r in caplog.records if r.name == "whymath.l4.misconception.shadow"]
+        assert len(warnings) == 1
+        assert warnings[0].exc_info is not None
+        assert warnings[0].exc_info[0] is AttributeError  # 예외 타입명이 로그에 남음
 
 
 # ──────────────────────────────────────────────────────────────────────────
