@@ -55,10 +55,19 @@ class _FakeProblemsApi extends ProblemsApi {
   }
 }
 
-ConceptDiagnosisItem _diag({String conceptId = 'c1', String? name = '함수의 극한'}) =>
+ConceptDiagnosisItem _diag({
+  String conceptId = 'c1',
+  String? name = '함수의 극한',
+  String? masteryLevel,
+  double? bktMastery,
+  double? irtTheta,
+}) =>
     ConceptDiagnosisItem(
       conceptId: conceptId,
       conceptName: name,
+      bktMastery: bktMastery,
+      irtTheta: irtTheta,
+      masteryLevel: masteryLevel,
       coaching: const DiagnosisCoaching(
         focus: 'foundation',
         rationale: '기초 개념을 다시 확인해볼까요?',
@@ -76,7 +85,9 @@ Widget _wrap(ProblemsApi api) {
 void main() {
   testWidgets('성공: 진단 결과·학습 경로 데이터를 그대로 렌더한다', (tester) async {
     final api = _FakeProblemsApi(
-      diagnoses: <ConceptDiagnosisItem>[_diag(conceptId: 'weakest', name: '함수의 극한')],
+      diagnoses: <ConceptDiagnosisItem>[
+        _diag(conceptId: 'weakest', name: '함수의 극한', masteryLevel: '발전 중'),
+      ],
       learningPath: const LearningPath(
         steps: <LearningStep>[
           LearningStep(position: 0, conceptId: 'p0', conceptName: '함수의 정의', depth: 1),
@@ -92,11 +103,40 @@ void main() {
     // 진단 결과 섹션.
     expect(find.text('함수의 극한'), findsOneWidget);
     expect(find.text('기초 개념을 다시 확인해볼까요?'), findsOneWidget);
+    // MOB-10: 숙달 상태 라벨(서버 산출) 렌더.
+    expect(find.text('발전 중'), findsOneWidget);
     // 학습 경로 섹션 — 순서대로 두 단계.
     expect(find.text('함수의 정의'), findsOneWidget);
     expect(find.text('극한의 성질'), findsOneWidget);
     // "준비 중" placeholder는 설정 섹션에만 남아 있어야 한다(1건).
     expect(find.text('준비 중'), findsOneWidget);
+  });
+
+  testWidgets('MOB-10: mastery_level=null이면 라벨을 렌더하지 않는다(무데이터 정직 표기)', (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag(name: '이차방정식')],
+    );
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이차방정식'), findsOneWidget);
+    expect(find.text('초보'), findsNothing);
+    expect(find.text('발전 중'), findsNothing);
+    expect(find.text('숙달'), findsNothing);
+  });
+
+  testWidgets('MOB-10: 원시 BKT 확률·θ 숫자는 화면 어디에도 렌더되지 않는다', (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[
+        _diag(name: '삼각함수', masteryLevel: '숙달', bktMastery: 0.87, irtTheta: 1.42),
+      ],
+    );
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('숙달'), findsOneWidget);
+    expect(find.textContaining('0.87'), findsNothing);
+    expect(find.textContaining('1.42'), findsNothing);
   });
 
   testWidgets('빈 학습 경로(steps==0)는 정상 안내로 표시한다(에러 문구 아님)', (tester) async {
