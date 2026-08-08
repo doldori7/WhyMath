@@ -33,11 +33,12 @@ list[ProblemSchema]`이며, api 레이어는 "DB 조회 + L6 함수 호출 + sch
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.atom_node import AtomNode
@@ -58,6 +59,8 @@ from whymath_backend.schema.problem import Problem as ProblemSchema
 
 router = APIRouter(prefix="/v1/gating", tags=["gating"])
 
+_logger = logging.getLogger(__name__)
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 # 게이팅에 넘길 후보 문항 fetch 상한(합리적 상한) — 게이팅은 *메모리 안에서* 적격성·우선순위·
@@ -67,7 +70,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # 아니다. 응답 limit은 각 엔드포인트의 `limit` 쿼리 파라미터(기본 20·최대 200)가 정한다.
 # (사전 필터를 두지 않는 이유: 저작권·페르소나·진도 정합 판정을 SQL로 흩지 않고 L6 한 곳에
 # 모은다 — SQL 사전 필터가 없어도 게이팅이 부적격을 전부 차단해 *입증 가능한 단일 게이트*가 된다.)
-_CANDIDATE_FETCH_LIMIT = 1000
+# PB-03 축③ — 현재 코퍼스(2026-08 기준 7종 2,647건)+여유를 감안해 1000→3000으로 상향. 이
+# sandbox에는 살아있는 Postgres가 없어 실측 성능 비교는 못 했다(정직한 공백 — 보수적으로
+# 상향한 것뿐이다). SQL 사전축소로의 재설계는 이번 범위 밖(성능 실측 후 별도 후속).
+_CANDIDATE_FETCH_LIMIT = 3000
 
 
 async def _fetch_candidates(session: SessionDep) -> list[ProblemSchema]:
@@ -83,6 +89,10 @@ async def _fetch_candidates(session: SessionDep) -> list[ProblemSchema]:
     동일 created_at에서도 결정적 순서). 게이팅이 다시 우선순위로 재정렬하지만, fetch 상한에 걸릴
     때 *어떤* 후보가 잘리는지를 결정적으로 만들기 위함이다.
 
+    PB-03 축③ — 절단 관측: fetch 결과 건수가 정확히 `_CANDIDATE_FETCH_LIMIT`와 같으면(절단
+    의심 신호) 전체 행 수를 `SELECT count(*)`로 추가 조회해 `logger.warning`으로 남긴다. 조용한
+    절단(silent truncation)을 남기지 않는다(CLAUDE.md 침묵 실패 금지의 구체화).
+
     Args:
       session: 요청 수명 AsyncSession(`get_session` 주입).
 
@@ -95,7 +105,19 @@ async def _fetch_candidates(session: SessionDep) -> list[ProblemSchema]:
         .limit(_CANDIDATE_FETCH_LIMIT)
     )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = result.scalars().all()
+    if len(rows) == _CANDIDATE_FETCH_LIMIT:
+        # 절단 의심 — fetch 건수가 상한과 정확히 같다. 전체 행 수를 별도 조회해 실제 절단
+        # 여부·규모를 로그로 남긴다(조용히 넘기지 않는다).
+        total = (await session.execute(select(func.count()).select_from(Problem))).scalar_one()
+        truncated = max(total - _CANDIDATE_FETCH_LIMIT, 0)
+        _logger.warning(
+            "gating candidate fetch truncated: fetched=%d total=%d truncated=%d",
+            len(rows),
+            total,
+            truncated,
+        )
+    return [row.to_schema() for row in rows]
 
 
 CandidatesDep = Annotated[list[ProblemSchema], Depends(_fetch_candidates)]

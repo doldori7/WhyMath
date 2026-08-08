@@ -183,6 +183,10 @@ def is_school_progress_eligible(
     if not _shared.is_exposable(problem):
         return False
 
+    # ②-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ③ 교육과정 버전 정합 — 인자가 주어지면 일치해야 한다(진도는 교육과정 버전 정합 필수).
     if curriculum_version is not None:
         target_curriculum = _shared.normalize_enum_value(curriculum_version)

@@ -16,7 +16,7 @@ L6(`l6._shared`)만 import한다.
 from __future__ import annotations
 
 from whymath_backend.l6 import _shared
-from whymath_backend.schema.enums import Curriculum, Persona, SourceType, Subject
+from whymath_backend.schema.enums import Curriculum, Persona, ReviewStatus, SourceType, Subject
 from whymath_backend.schema.problem import Problem
 
 
@@ -107,6 +107,37 @@ class TestIsExposable:
         """평가원·EBS·교과서(본문 미보유)는 노출 불가(False)."""
         for source in (SourceType.평가원, SourceType.EBS, SourceType.교과서):
             assert _shared.is_exposable(_problem(source_type=source)) is False, source
+
+
+# ──────────────────────────────────────────────────────────────────────
+# is_review_cleared — 검수 노출 게이트(PB-03, is_exposable과 독립)
+# ──────────────────────────────────────────────────────────────────────
+class TestIsReviewCleared:
+    def test_approved_is_cleared(self) -> None:
+        """review_status=approved만 True."""
+        assert _shared.is_review_cleared(_problem(review_status=ReviewStatus.approved)) is True
+
+    def test_pending_is_not_cleared(self) -> None:
+        """pending(평가 대기)은 fail-closed로 False."""
+        assert _shared.is_review_cleared(_problem(review_status=ReviewStatus.pending)) is False
+
+    def test_rejected_is_not_cleared(self) -> None:
+        """rejected(기준 미달)는 False."""
+        assert _shared.is_review_cleared(_problem(review_status=ReviewStatus.rejected)) is False
+
+    def test_none_is_not_cleared_fail_closed(self) -> None:
+        """None(미평가)은 fail-closed로 False — §13.3 "approved 후 노출"."""
+        assert _shared.is_review_cleared(_problem(review_status=None)) is False
+
+    def test_independent_of_is_exposable(self) -> None:
+        """검수 축이 저작권 축과 무관하게 독립적으로 판정된다(평가원 출처라도 검수값만 본다).
+
+        `is_review_cleared` 자체는 `source_type`을 보지 않는다 — 두 게이트가 호출부에서
+        *각각* 확인되는 설계(합치지 않음)를 함수 시그니처 수준에서 재확인.
+        """
+        problem = _problem(source_type=SourceType.평가원, review_status=ReviewStatus.approved)
+        assert _shared.is_review_cleared(problem) is True  # 검수 자체는 통과(저작권은 별도 축)
+        assert _shared.is_exposable(problem) is False  # 저작권 축은 여전히 차단
 
 
 # ──────────────────────────────────────────────────────────────────────
