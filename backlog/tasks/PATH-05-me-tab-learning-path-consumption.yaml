@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "me_screen.dart의 두 '준비 중' placeholder를 실 API 호출로 교체 — 신규 백엔드 엔드포인트 불요(기존 단일-개념 API만 소비)"
   - "반게임화 경계 동결 — 랭킹·스트릭·카운트다운 등 게임화 요소 추가 금지(docs/design/ui/00_index.md:41)"
   - "서버 정직 신호(has_cycle·빈 경로·401)를 그대로 노출 — 삼켜서 일반 오류로 뭉개지 않는다"
-artifacts: []
+artifacts:
+  - f9644016ffebab6fcd0e64a1317bbe8849d27f77
 paths:
   - src/mobile/lib/features/profile/presentation/me_screen.dart
   - "src/mobile/test/**"
