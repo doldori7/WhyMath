@@ -89,6 +89,11 @@ abstract class ConceptDiagnosisItem with _$ConceptDiagnosisItem {
 
     /// 메타인지 코칭 트리거(focus가 코치 진입 시드).
     @JsonKey(name: 'coaching') required DiagnosisCoaching coaching,
+
+    /// 숙달 상태 라벨('초보'/'발전 중'/'숙달')·bktMastery가 null이면 null(MOB-10).
+    /// 서버(`mastery_to_level`)가 산출 — 클라는 원시 확률로 임계값을 계산하지 않는다
+    /// (전역 UI 불변식 #1: 표현≠의미).
+    @JsonKey(name: 'mastery_level') String? masteryLevel,
   }) = _ConceptDiagnosisItem;
 
   factory ConceptDiagnosisItem.fromJson(Map<String, dynamic> json) =>

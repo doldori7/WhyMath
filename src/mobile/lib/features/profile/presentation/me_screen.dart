@@ -212,6 +212,17 @@ class _DiagnosisSection extends ConsumerWidget {
             leading: const Icon(Icons.circle_outlined, size: 20),
             title: Text(item.conceptName ?? '(이름 미확인 개념)'),
             subtitle: Text(item.coaching.rationale),
+            // MOB-10: 숙달 상태 라벨(서버 mastery_to_level 산출) — 원시 BKT 확률·θ는
+            // 어디에도 노출하지 않는다. 순위·등급 표기가 아니라 상태 서술이므로
+            // _PlaceholderTile의 '준비 중'과 동일하게 절제된 trailing 텍스트로 렌더.
+            trailing: item.masteryLevel == null
+                ? null
+                : Builder(
+                    builder: (context) => Text(
+                      item.masteryLevel!,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
           ),
       ],
     );

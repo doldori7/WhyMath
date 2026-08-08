@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -25,6 +25,6 @@ paths:
   - "src/mobile/lib/features/problems/**"
   - src/backend/whymath_backend/api/me.py
   - "src/mobile/test/**"
-session: null
+session: main
 notes: "docs/architecture/gamification_module_gap_review_r2.md §6 D6. 반복실수 9회차 '도달했는데 렌더 0' 신규 형태 — DiagnosisController.load()가 문제 로드마다 3콜(next-problem→problems/{id}→diagnosis/concepts, diagnosis_controller.dart:7-8,32,59)을 하고 결과가 DiagnosisState에 전량 담기는데(nextProblem: θ·standard_error·measurement_sufficient / diagnoses: ConceptDiagnosisItem 9필드·problem_models.dart:63-91), problem_screen.dart:60-83의 _buildBody는 isLoading·error·noCandidate·problem 4개만 읽는다. v1 §6 7회차 '결정 부재' 판정의 정밀화(§4-③) — 네트워크 갭이 아니라 렌더 갭이라 서버 신규 계산 0·신규 엔드포인트 0으로 착지 가능한 유일한 성장 증거 축."
-updated: 2026-08-04
+updated: 2026-08-08

@@ -131,6 +131,8 @@ from whymath_backend.l2.weak_concept_recommendation import (
     recommend_weak_concepts,
 )
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
+from whymath_backend.l4.lthc.adapt import mastery_to_level
+from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
@@ -1198,6 +1200,14 @@ class ConceptDiagnosisItem(BaseModel):
     coaching: CoachingTrigger = Field(
         description="L4 메타인지 코칭 처방(focus·rationale·prompt·slice 20)."
     )
+    mastery_level: MasteryLevel | None = Field(
+        default=None,
+        description=(
+            "숙달 상태 라벨('초보'/'발전 중'/'숙달') — `mastery_to_level`(L4)로 bkt_mastery를 "
+            "변환(MOB-10). bkt_mastery가 null(미측정)이면 라벨도 null — 클라는 원시 확률 대신 "
+            "이 라벨만 노출한다(전역 UI 불변식 #1: 표현≠의미, 서열 신호 방지)."
+        ),
+    )
 
 
 # slice 26: 진단 필터·상한 — "주의 필요 개념 대시보드" 질의(전 개념 반환은 페이로드 과대).
@@ -1232,6 +1242,7 @@ async def _compute_concept_diagnosis(
         ConceptDiagnosisItem(
             **d.model_dump(),
             coaching=recommend_coaching(d.bkt_mastery, d.irt_theta),
+            mastery_level=(mastery_to_level(d.bkt_mastery) if d.bkt_mastery is not None else None),
         )
         for d in diagnoses
     ]
@@ -1257,7 +1268,9 @@ async def get_my_concept_diagnosis(
     *약점(저신호) 먼저* 정렬. 각 개념에 L4 메타인지 코칭 처방(`recommend_coaching`·slice 20)을
     붙여 *무엇을 할지*(focus·발화)까지 노출 — L2 진단→L4 결정→L5 노출 풀 스택. user_id
     스코핑·읽기(마이그레이션 불필요). `?agreement`(다중 OR·예: 불일치만)·`?limit`(약점 상위 N)으로
-    "주의 필요 개념" 질의 가능(slice 26).
+    "주의 필요 개념" 질의 가능(slice 26). `mastery_level`(MOB-10)은 `bkt_mastery`를
+    `mastery_to_level`(L4)로 변환한 학생 노출용 라벨 — 클라는 원시 확률 대신 이 라벨만
+    렌더해야 한다(표현≠의미·서열 신호 방지).
     """
     items = await _compute_concept_diagnosis(session, user.user_id)
     # slice 26: agreement OR 필터 → limit(약점 먼저 정렬 후 상위 N). 둘 다 선택적(기본 전체).
