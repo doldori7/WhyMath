@@ -67,6 +67,7 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
@@ -95,6 +96,7 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.verify_final_answer import verify_final_answer
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -102,6 +104,7 @@ from whymath_backend.l4 import (
     MasteryLevel,
     PedagogyDecision,
     PolyaCoach,
+    PolyaStage,
     PolyaState,
     SolutionCoaching,
     adapt_lthc,
@@ -109,6 +112,7 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
+from whymath_backend.l4.completion import CompletionDecision, decide_completion
 from whymath_backend.l4.hint_deferral import is_answer_demand, is_stuck_turn_count
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -152,7 +156,14 @@ from whymath_backend.l4.turn_meta import (
 )
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
+from whymath_backend.schema.enums import (
+    AttemptMode,
+    ContentType,
+    EventType,
+    Persona,
+    StepType,
+    TurnRole,
+)
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
@@ -359,6 +370,17 @@ class CoachResponse(BaseModel):
             "§3.3 게이트 ① — top-1 신뢰도가 0.65 미만이라 후보를 *비웠는지* 여부(억지 매칭 금지). "
             "True면 `misconceptions`는 빈 리스트다 — '매칭 없음'(애초에 후보 0)과 '약해서 비움'을 "
             "구분하는 신호. 게이트가 비우던 기존 동작의 *노출*일 뿐 매칭 결과 자체는 불변."
+        ),
+    )
+    dialogue_completed: bool | None = Field(
+        default=None,
+        description=(
+            "S3-32 — 서버측 `l3.verify_final_answer`(3상태 서버검증) + `l4.completion`(Polya "
+            "REVIEW 게이트) 조합으로 이번 턴에 코치 대화가 완료됐는지. True면 클라이언트는 "
+            "`GET /v1/me/next-problem`을 자동 호출할 수 있다. False=검증은 시도했으나 아직 "
+            "미완료(예: correct지만 REVIEW 단계 미도달, 또는 incorrect·unverifiable). "
+            "None=완료 판정 컨텍스트 없음(문항 미연결·정답 데이터 없음·stateless `/v1/coach`는 "
+            "항상 None). **정답 값 자체는 이 필드에도, 다른 어떤 필드에도 담기지 않는다.**"
         ),
     )
 
@@ -811,6 +833,125 @@ async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | No
         return None
     problem = await session.get(ProblemORM, problem_id)
     return problem.answer if problem is not None else None
+
+
+# S3-32: 최종답 검증을 시도할 만한 단계 — 학생이 아직 문제를 읽거나(UNDERSTAND) 전략을
+# 고르는(PLAN) 중이면 `student_input`(대화 잡담)을 "최종답"으로 오인해 검증을 시도할 이유가
+# 없다(불필요한 DB 왕복·SymPy 파싱 낭비 + 의미상으로도 부적절). EXECUTE(실행 중 결론 제시)·
+# REVIEW(검토 단계) 두 단계에서만 검증을 시도한다 — `decide_completion`이 실제 완료로 인정하는
+# 것은 REVIEW뿐이지만, EXECUTE에서도 verify_state=incorrect를 감지해 재고 유도를 태울 수 있게
+# 한 단계 앞서 연다(정답 도달 직후 EXECUTE→REVIEW 전이가 이미 일어난 뒤이므로, EXECUTE 시점의
+# incorrect 재고 유도가 유의미하다).
+_FINAL_ANSWER_ELIGIBLE_STAGES: frozenset[PolyaStage] = frozenset(
+    {PolyaStage.EXECUTE, PolyaStage.REVIEW}
+)
+
+
+async def _final_answer_for_verification(
+    session: AsyncSession, problem_id: uuid.UUID | None
+) -> str | None:
+    """S3-32: 문항 정답을 `verify_final_answer` 전용으로 조회 — `_expected_answer_for`와 별도.
+
+    `_expected_answer_for`는 `l4_step_shadow_enabled` 플래그에 게이트돼 있고 그 소비처
+    (`observe_step_breaks`)도 그 플래그 전용 shadow 진단이다. 코치 완료 판정(항상 켜져 있어야
+    하는 핵심 기능)에 같은 게이트를 재사용하면 플래그가 꺼졌을 때 완료 판정 자체가 죽는
+    의도치 않은 결합이 생긴다 — 그래서 별도 조회 경로를 둔다. `problem_id` 없거나 문항
+    부재면 None(호출자가 unverifiable/컨텍스트 없음으로 귀결). 반환값은 정답 그 자체이므로
+    호출자는 이 값을 *절대* HTTP 응답에 싣지 않는다(`verify_final_answer`의 3상태로만 소비).
+    """
+    if problem_id is None:
+        return None
+    problem = await session.get(ProblemORM, problem_id)
+    return problem.answer if problem is not None else None
+
+
+async def _decide_completion_for(
+    session: AsyncSession,
+    *,
+    problem_id: uuid.UUID | None,
+    state: PolyaState,
+    solution_text: str,
+) -> CompletionDecision:
+    """S3-32: 이번 턴의 완료 판정 — `verify_final_answer`(L3) → `decide_completion`(L4) 조합.
+
+    학생 풀이 텍스트가 비어 있거나, 아직 최종답을 낼 단계가 아니거나(UNDERSTAND·PLAN —
+    `_FINAL_ANSWER_ELIGIBLE_STAGES`), 문항 정답을 조회할 수 없으면(문항 미연결·코퍼스 미보유)
+    검증을 *시도하지 않는다*(`verify_state=None` → `completed=False`·정직 중립 — DB 왕복도
+    아낀다). 그 외엔 `verify_final_answer`로 3상태를 얻어 `decide_completion`(Polya REVIEW
+    게이트)에 위임한다. 정답 문자열은 이 함수 밖으로 반환되지 않는다(3상태 판정만 전파).
+    """
+    if state.current_stage not in _FINAL_ANSWER_ELIGIBLE_STAGES:
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    if not solution_text.strip():
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    expected_answer = await _final_answer_for_verification(session, problem_id)
+    if expected_answer is None:
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    verify_state = verify_final_answer(solution_text, expected_answer).state
+    return decide_completion(state, verify_state)
+
+
+async def _apply_completion(
+    session: AsyncSession,
+    *,
+    dialogue: DialogueORM,
+    decision: PedagogyDecision,
+    state: PolyaState,
+    solution_text: str,
+    user_id: uuid.UUID,
+    now: datetime,
+) -> tuple[PedagogyDecision, bool | None]:
+    """S3-32: 완료 판정을 조합·반영 — `create_session`/`append_turns` 공용.
+
+    이미 완료된 대화(`dialogue.server_verified_completed_at` 비어있지 않음)는 재판정 없이
+    `(decision, True)`를 그대로 돌려준다(멱등 가드) — `PolyaStage.REVIEW`는 self-loop 종착
+    단계라, 이 가드가 없으면 REVIEW에 머무는 매 턴마다 `ProblemAttempt`가 중복 적재된다.
+
+    미완료 대화는 `_decide_completion_for`로 이번 턴을 판정한다:
+      - `reconsider_prompt`가 채워지면(incorrect) `decision.prompt`를 그 문구로 교체한다 —
+        정답을 노출하지 않는 재고 유도(CLAUDE.md "부정적 피드백 정서 강화 금지"·"바로 정답
+        제공 금지"). 이 교체는 `decision.system`은 건드리지 않는다(톤·원칙 프롬프트는 불변,
+        `filter_tone`이 여전히 마지막 방어선).
+      - `completed=True`(correct + REVIEW 게이트 통과)면 **서버검증 축** `ProblemAttempt`를
+        신규 적재한다 — `api/me.py::submit_attempt`의 클라 자가보고 `is_correct` 경로와는
+        *별도*(중복 적재 허용, 서로 다른 신뢰 축 — 태스크 명세). `dialogue.attempt_id`를 새
+        attempt에 연결하고 `server_verified_completed_at`을 채워 이후 턴의 멱등 가드로 쓴다.
+        `dialogue.resolution`은 건드리지 않는다(`api/me.py`의 클라 자가보고 PATCH가 그 필드의
+        첫-기록-우선 소유자 — 서로 다른 신뢰 축을 섞지 않는다).
+
+    반환 `dialogue_completed`는 `CoachResponse.dialogue_completed` 노출값 그대로(3상태:
+    True=완료·False=평가했으나 미완료·None=판정 컨텍스트 없음).
+    """
+    if dialogue.server_verified_completed_at is not None:
+        return decision, True
+
+    completion = await _decide_completion_for(
+        session,
+        problem_id=dialogue.problem_id,
+        state=state,
+        solution_text=solution_text,
+    )
+    if completion.reconsider_prompt is not None:
+        decision = decision.model_copy(update={"prompt": completion.reconsider_prompt})
+
+    if not completion.completed:
+        dialogue_completed = None if completion.verify_state is None else False
+        return decision, dialogue_completed
+
+    attempt = ProblemAttemptORM(
+        attempt_id=uuid.uuid4(),
+        user_id=user_id,
+        problem_id=dialogue.problem_id,
+        is_correct=True,
+        student_answer=solution_text,
+        attempt_mode=AttemptMode.Socratic대화,
+        used_socratic=True,
+        ended_at=now,
+    )
+    session.add(attempt)
+    dialogue.attempt_id = attempt.attempt_id
+    dialogue.server_verified_completed_at = now
+    return decision, True
 
 
 async def _server_mastery_for(
@@ -1845,6 +1986,22 @@ async def create_session(
     await session.commit()
     await session.refresh(dialogue)
 
+    # S3-32: 서버검증 완료 판정(L3 verify_final_answer → L4 completion) — 새 dialogue는
+    # `server_state.current_stage`가 (거의 항상) UNDERSTAND라 구조적으로 completed=True가 되지
+    # 않지만(REVIEW 게이트 미도달), 클라가 `polya_state.current_stage=REVIEW`로 세션을 직접
+    # 열 수도 있어(PED-04 D2: 새 dialogue는 클라 제출 current_stage를 초기조건으로 그대로
+    # 받아들인다) `append_turns`와 동일 경로로 판정한다. `decision.prompt`는 incorrect 재고
+    # 유도로 교체될 수 있어 *턴 생성 전*에 반영한다(assistant 턴 content가 이 값을 그대로 쓴다).
+    decision, dialogue_completed = await _apply_completion(
+        session,
+        dialogue=dialogue,
+        decision=decision,
+        state=server_state,
+        solution_text=body.student_solution or body.student_input,
+        user_id=user.user_id,
+        now=now,
+    )
+
     # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
     # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
     content_cipher = require_dialogue_content_cipher(get_settings())
@@ -1995,6 +2152,7 @@ async def create_session(
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
+        dialogue_completed=dialogue_completed,
     )
 
 
@@ -2156,6 +2314,19 @@ async def append_turns(
     assistant_order = current_total + 2
 
     now = datetime.now(timezone.utc)
+    # S3-32: 서버검증 완료 판정(L3 verify_final_answer → L4 completion) — create_session과
+    # 동형. `server_state`(PED-04 D2 서버 파생 상태)가 이미 REVIEW면(직전 턴에서
+    # EXECUTE→REVIEW 전이가 일어난 뒤) 이번 턴 검증이 correct일 때 완료된다. `decision.prompt`가
+    # incorrect 재고 유도로 교체될 수 있어 *턴 생성 전*에 반영한다.
+    decision, dialogue_completed = await _apply_completion(
+        session,
+        dialogue=dialogue,
+        decision=decision,
+        state=server_state,
+        solution_text=body.student_solution or body.student_input,
+        user_id=user.user_id,
+        now=now,
+    )
     # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
     content_cipher = require_dialogue_content_cipher(get_settings())
     # S3-03 mode 태깅 — 멀티턴은 클라가 매 턴 같은 mode/persona를 실어 보낸다(dialogue 컬럼 대신
@@ -2320,6 +2491,7 @@ async def append_turns(
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
+        dialogue_completed=dialogue_completed,
     )
 
 
