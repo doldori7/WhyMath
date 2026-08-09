@@ -1453,6 +1453,8 @@ class TestNextProblem:
             "weak_concept_signal_count": 0,
             "candidate_zero_reason": "no_candidate_pool",
             "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
+            # PB-04: mode 미지정 → 기본 CAT 경로 정직 표기 문구가 채워진다.
+            "mode_note": "이 추천은 기본 CAT 경로이며 모드 게이팅이 적용되지 않았다",
         }
 
     def test_requires_auth(self) -> None:
@@ -1782,6 +1784,52 @@ class TestNextProblem:
         assert resp.status_code == 200
 
 
+class TestNextProblemModeNote:
+    """PB-04 — `mode_note`(응답 정직 표기 5번째 필드) 계약.
+
+    mode 미지정(None·기본 CAT 경로)일 때만 고정 문구가 채워지고, mode=suneung(이미 L6 게이팅이
+    적용됨)이면 null이어야 한다. 추천 성공/실패(problem_id 유무)와 무관하게 이 규칙이 성립함을
+    양쪽 분기 모두에서 확인한다(태스크 acceptance가 문구를 그대로 인용하므로 exact match).
+    """
+
+    _EXPECTED_NOTE = "이 추천은 기본 CAT 경로이며 모드 게이팅이 적용되지 않았다"
+
+    def test_mode_unspecified_null_result_fills_note(self) -> None:
+        """mode 미지정 + 후보 없음(null 추천) → mode_note가 고정 문구로 채워진다."""
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] is None
+        assert body["mode_note"] == self._EXPECTED_NOTE
+
+    def test_mode_unspecified_success_fills_note(self) -> None:
+        """mode 미지정 + 추천 성공 → mode_note가 고정 문구로 채워진다(성공/실패 무관)."""
+        pid = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid)
+        assert body["mode_note"] == self._EXPECTED_NOTE
+
+    def test_mode_suneung_success_note_is_null(self) -> None:
+        """mode=suneung + 추천 성공 → 이미 게이팅이 적용됐으므로 mode_note는 null."""
+        problem = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung").json()
+        assert body["problem_id"] == str(problem.problem_id)
+        assert body["mode_note"] is None
+
+    def test_mode_suneung_null_result_note_is_null(self) -> None:
+        """mode=suneung + 추천 없음(전부 부적격) → mode_note도 여전히 null."""
+        no_signal = _suneung_problem()
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(no_signal)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung").json()
+        assert body["problem_id"] is None
+        assert body["mode_note"] is None
+
+
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
 def _suneung_problem(**over: object) -> SchemaProblem:
     """수능 모드 후보용 최소 자체생성 schema Problem 빌더(l6 test_gating `_problem` 답습)."""
@@ -1827,7 +1875,8 @@ class TestNextProblemSuneungMode:
         session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?mode=suneung").json()
-        # 응답 모델(NextProblemResponse) — 기존 5필드 + REC-01 4필드 + REC-04 band_calibrated.
+        # 응답 모델(NextProblemResponse) — 기존 5필드 + REC-01 4필드 + REC-04 band_calibrated
+        # + PB-04 mode_note.
         assert set(body) == {
             "problem_id",
             "theta",
@@ -1839,6 +1888,7 @@ class TestNextProblemSuneungMode:
             "weak_concept_signal_count",
             "candidate_zero_reason",
             "band_calibrated",
+            "mode_note",
         }
         assert body["problem_id"] == str(problem.problem_id)
         assert body["difficulty"] == 3.0
@@ -1849,6 +1899,8 @@ class TestNextProblemSuneungMode:
         assert body["weak_concept_signal_count"] == 0
         assert body["candidate_zero_reason"] is None
         assert body["band_calibrated"] is None  # purpose 기본(diagnosis)은 밴드 미적용
+        # PB-04: mode=suneung이면 이미 L6 게이팅이 적용됐으므로 mode_note는 null.
+        assert body["mode_note"] is None
 
     def test_recommendation_records_mode_suneung_in_treatment_meta(self) -> None:
         """REC-03 — 수능 모드 추천도 처치로 기록되며 meta.mode="suneung"이 남는다."""
@@ -1899,6 +1951,8 @@ class TestNextProblemSuneungMode:
             "weak_concept_signal_count": 0,
             "candidate_zero_reason": "all_candidates_gated_ineligible",
             "band_calibrated": None,  # REC-04: purpose 기본(diagnosis)은 밴드 미적용
+            # PB-04: mode=suneung이면 이미 L6 게이팅이 적용됐으므로 mode_note는 null.
+            "mode_note": None,
         }
         assert session.added == []  # REC-03: null 응답은 처치가 아니다(가짜 처치 금지)
         assert session.commits == 0

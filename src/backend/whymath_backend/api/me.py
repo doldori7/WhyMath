@@ -1654,6 +1654,11 @@ WEIGHT_AXIS_SUNEUNG_PRIORITY = "suneung_priority"
 CANDIDATE_ZERO_NO_POOL = "no_candidate_pool"
 CANDIDATE_ZERO_ALL_GATED_INELIGIBLE = "all_candidates_gated_ineligible"
 
+# PB-04: mode 미지정(None) 응답에만 채워지는 정직 표기 문구 — mode='suneung'이면 이미 L6
+# 게이팅이 적용됐으므로 None(기본값)을 유지한다. 문구는 태스크 acceptance가 그대로 인용하는
+# 고정 텍스트라 상수화해 두 return 지점에서 완전히 동일한 문자열을 보장한다.
+NEXT_PROBLEM_MODE_NOTE_DEFAULT_CAT = "이 추천은 기본 CAT 경로이며 모드 게이팅이 적용되지 않았다"
+
 
 def _weak_concept_weights(
     candidate_problem_ids: list[uuid.UUID],
@@ -1903,6 +1908,15 @@ class NextProblemResponse(BaseModel):
         description=(
             "REC-04: purpose=learning일 때만 False(문헌값 70~85%·실측 미보정 — S4-15 보정 "
             "대기). purpose=diagnosis(기본)에서는 밴드 자체가 적용되지 않으므로 null."
+        ),
+    )
+    # PB-04: 응답 정직 표기 5번째 필드 — L6 응용 모드 게이팅 미적용을 명시.
+    mode_note: str | None = Field(
+        default=None,
+        description=(
+            "mode 파라미터가 None(미지정)일 때만 채워지는 안내 — 이 추천이 기본 CAT 경로이며 "
+            "L6 응용 모드 게이팅이 적용되지 않았음을 명시. mode='suneung'이면 이미 게이팅이 "
+            "적용되므로 null."
         ),
     )
 
@@ -2201,6 +2215,7 @@ async def recommend_next_problem(
             weak_concept_signal_count=weak_concept_signal_count,
             candidate_zero_reason=CANDIDATE_ZERO_NO_POOL,
             band_calibrated=band_calibrated,
+            mode_note=NEXT_PROBLEM_MODE_NOTE_DEFAULT_CAT,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
     # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — 위 null 분기는
@@ -2225,6 +2240,7 @@ async def recommend_next_problem(
         weak_concept_signal_count=weak_concept_signal_count,
         candidate_zero_reason=None,
         band_calibrated=band_calibrated,
+        mode_note=NEXT_PROBLEM_MODE_NOTE_DEFAULT_CAT,
     )
 
 
