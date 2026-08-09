@@ -56,7 +56,7 @@ def _no_data() -> Metric:
 
 
 def _all_measured_metrics() -> SurrogateMetrics:
-    """12 지표 전부 MEASURED인 SurrogateMetrics(커버리지 12/12 검증용)."""
+    """13 지표 전부 MEASURED인 SurrogateMetrics(커버리지 13/13 검증용)."""
     m = _measured(0.5)
     return SurrogateMetrics(
         verify_pass_rate=m,
@@ -120,16 +120,16 @@ class TestRenderBaselineReport:
             assert label in report
 
     def test_coverage_count_all_measured(self) -> None:
-        """전부 MEASURED → 커버리지 12/12."""
+        """전부 MEASURED → 커버리지 13/13."""
         report = render_baseline_report(_all_measured_metrics())
-        assert "MEASURED 12/12" in report
+        assert "MEASURED 13/13" in report
         assert "코호트 전체" in report  # user_scoped=False
 
     def test_coverage_count_mixed(self) -> None:
-        """혼합(2 MEASURED) → 커버리지 2/12·본인 스코프."""
+        """혼합(2 MEASURED) → 커버리지 2/13·본인 스코프."""
         report = render_baseline_report(_mixed_metrics())
-        assert "MEASURED 2/12" in report
-        assert "NO_DATA/미계측 10/12" in report
+        assert "MEASURED 2/13" in report
+        assert "NO_DATA/미계측 11/13" in report
         assert "본인(user)" in report  # user_scoped=True
 
     def test_no_data_shows_reason_not_zero(self) -> None:
