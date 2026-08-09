@@ -41,17 +41,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
 from whymath_backend.harness.wh1_loop import TurnOutcome, run_tutoring_turn
+from whymath_backend.harness.wh1_probe_supply import assemble_probe_candidate_pool
 from whymath_backend.harness.wh1_prose import gate_policy_prose, rephrase_coach_utterance
 from whymath_backend.harness.wh1_shadow import _extract_verify_verdict, emit_wh1_observation
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.session_recall import SessionRecall
 from whymath_backend.l4.tone_filter import filter_tone
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = ["run_wh1_primary_turn"]
 
@@ -101,6 +107,9 @@ async def run_wh1_primary_turn(
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
     session_recall: SessionRecall | None = None,
+    session: AsyncSession | None = None,
+    theta: float | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> str | None:
     """WH-1 하네스를 한 턴 돌려 *학생-대면 발화*를 산출한다 — flip primary 경로(S1-11).
 
@@ -112,13 +121,32 @@ async def run_wh1_primary_turn(
     `active_hypotheses`(post-apply 누적 가설 세트)가 §2.2 웜 스타트다 — 호출자(coach)가
     `_apply_hypotheses`로 영속·큐레이션한 세트를 그대로 실어 shadow와 동일 계약을 유지한다.
     `timeout_seconds` 미지정 시 설정(config)의 primary 타임아웃을 쓴다.
+
+    **도구6 select_probe 후보 공급(REC-02 ②)**: `session`이 주어지면 *활성 가설이 선 뒤*
+    (`active_hypotheses`)·`warmstart_outside_mids`로 `assemble_probe_candidate_pool`(L1 조회
+    → L4 `ProbeCandidate` 조립)을 호출해 `LLMTutorPolicy(probe_candidates=...)`에 실제 후보를
+    채운다 — 이전엔 이 인자가 항상 `()`라 `select_probe`가 라이브에서 구조적으로 항상 실패했다
+    (감사 §3 D2). `session=None`(기존 호출자·단위테스트)이면 조회를 skip해 후보가 빈 리스트로
+    남는다(기존 동작 완전 보존·회귀 0). `theta`는 IRT 정보량 계산에 쓰이는 학생 능력 추정값
+    (None이면 0.0 — 콜드스타트 폴백)이며, 후보 조립 자체는 **사적 probe 컨텍스트**로만 흐른다
+    (오개념 preload 0 불변 — 모듈 docstring·`wh1_probe_supply.py` docstring 참조).
     """
     try:
+        probe_candidates = await assemble_probe_candidate_pool(
+            session,
+            active_hypotheses=active_hypotheses,
+            outside_mids=warmstart_outside_mids,
+            user_id=user_id,
+            seat="wh1_primary",
+        )
         policy = LLMTutorPolicy(
             provider,
             # 학생 원문·풀이 단계는 프롬프트가 아니라 정책 보유값으로만 사적 사용(S1-a 계약).
             student_text=student_solution,
             solution_steps=list(solution_steps),
+            # select_probe 후보 공급(REC-02 ②) — 사적 probe 컨텍스트로만(프롬프트 미노출).
+            probe_candidates=probe_candidates,
+            theta=theta if theta is not None else 0.0,
             # 웜스타트 outside_mids도 사적 probe 컨텍스트로만(select_probe→plan_probe 전용·
             # 코칭 context에 오개념 preload 0·reactive retrieval 유지·CLAUDE.md).
             outside_mids=list(warmstart_outside_mids),
