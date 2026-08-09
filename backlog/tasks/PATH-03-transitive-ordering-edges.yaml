@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -23,6 +23,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l2/learning_path.py
   - "tests/backend/l2/**"
-session: null
+session: claude/whymath-mvp-plan-architecture-trjg5x
 notes: "docs/architecture/learning_path_module_gap_review.md §3 D3. learning_path.py:258이 스스로 '후속 범위'라 적어두고 백로그에 등재된 적 없는 항목이며, 실측상 위상정렬 무력화의 지배적 원인이다(1홉 96건 → 5홉 249건). depends는 측정 선행(PATH-01)과 런타임 계측기 확보(PATH-02)를 위한 것. 저장소 전수에서 '후속 범위' 표기는 이 1건뿐이라 docstring TODO 일제 점검 태스크는 만들지 않는다(패턴이 아니라 단발)."
-updated: 2026-08-03
+updated: 2026-08-09

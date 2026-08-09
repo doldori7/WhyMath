@@ -13,6 +13,18 @@ ordering_edge_count`·`ordering_basis`가 이 구분을 응답에 정직하게 �
 `is_cycle_residual`과 대칭인 정직 표기이며(사이클은 실제 발생 0건인 방어적 축, 제약 0은
 지배적 축), 결정 로직(`_tiebreak`·Kahn 루프·엣지 공급)은 이 태스크로 변경되지 않는다.
 
+**전이 순서 제약(`PATH-03`, 2026-08)**: 위 96.4%가 지배적이었던 근본 원인은 `build_learning_
+path`가 막힌 선수 집합 *내부의 직접(1-hop) 엣지만* 순서 신호로 썼다는 데 있다 — A→X→B에서
+X가 막힌 선수가 아니면(즉 학생이 X는 이미 아는데 A·B는 둘 다 막힌 경우) A·B 사이에 실제로는
+선수 의존이 있는데도 내부 직접 엣지가 0이라 무시됐다. `fetch_ordering_subgraph`(bounded
+재귀 CTE)·`derive_ordering_edges`(순수 함수)가 *비-막힌 중간 노드를 경유하는* 전이 의존까지
+`MAX_PREREQUISITE_DEPTH`(5홉) 예산 안에서 반영한다. PATH-01 리포트(`harness/
+learning_path_orderability_report.py`) 기준 코퍼스 구조적 상한 예측치는 **96/356(27.0%,
+직접 축) → 249/356(69.9%, 전이 축·5홉)**로 개선된다(87.1%는 무한 도달 천장이므로 목표치가
+아니다 — 진짜 병렬 집합이 존재해 100%가 정답이 아닌 것과 같은 이유). `order_learning_path`·
+`_tiebreak`·Kahn 루프는 이 태스크로 변경되지 않는다 — 바뀌는 것은 `build_learning_path`가
+그 함수에 *공급하는 엣지의 출처*뿐이다.
+
 ────────────────────────────────────────────────────────────────────────────
 왜 위상정렬인가 — depth 정렬과 다르다
 ────────────────────────────────────────────────────────────────────────────
@@ -63,11 +75,14 @@ from collections.abc import Collection, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.concept import ConceptEdge
-from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+from whymath_backend.l2.prerequisite_recommendation import (
+    MAX_PREREQUISITE_DEPTH,
+    PrerequisiteGap,
+)
 from whymath_backend.schema.enums import EdgeType
 
 
@@ -280,6 +295,11 @@ async def fetch_internal_prerequisite_edges(
 
     SQLAlchemy Core 쿼리빌더만(원시 SQL 0)·읽기 전용(commit 0). 실 SQL이라 단위테스트는
     `order_learning_path`(순수)를 직접 호출하고, 이 좌석은 통합 테스트에서만 검증된다.
+
+    **PATH-03(2026-08) 참고**: `build_learning_path`는 더 이상 이 함수를 쓰지 않는다(직접
+    1-hop 엣지만으로는 비-막힌 중간 노드를 경유하는 전이 의존을 못 잡음 — 모듈 docstring
+    "전이 순서 제약" 절 참조). 이 함수 자체는 삭제하지 않는다 — 다른 소비처(직접 엣지만
+    필요한 관측·디버그 용도)를 위해 공개 API로 남긴다.
     """
     ids = list(concept_ids)
     if len(ids) < 2:
@@ -293,21 +313,125 @@ async def fetch_internal_prerequisite_edges(
     return [(frm, to) for frm, to in rows]
 
 
+async def fetch_ordering_subgraph(
+    session: AsyncSession,
+    concept_ids: Collection[uuid.UUID],
+    *,
+    max_hops: int = MAX_PREREQUISITE_DEPTH,
+) -> list[tuple[uuid.UUID, uuid.UUID, int]]:
+    """막힌 선수 집합의 각 원소에서 *비-막힌 중간 노드를 경유해도* 도달 가능한 선수 조상을
+    bounded 재귀 CTE로 조회 — `derive_ordering_edges`의 원재료(가공 없는 raw 부분그래프).
+
+    반환은 `(descendant_id, ancestor_id, hops)` 삼중항이다 — `descendant_id`는 `concept_ids`
+    원소(순회 출발점), `ancestor_id`는 그로부터 `max_hops` 이내 선수 방향(`from_concept_id`)
+    으로 도달한 개념(집합 안·밖 모두 포함 — 필터링은 순수 함수 `derive_ordering_edges` 책임),
+    `hops`는 도달 거리(1=직접 선수). `ancestor_id`가 `concept_ids` 밖이어도(경유 중간 노드가
+    막힌 선수가 아닌 경우) 그대로 반환한다 — "이 경로가 실제로 순서 제약이 되는가"는 여기서
+    판단하지 않는다(fetch↔derive 관심사 분리).
+
+    **`build_prerequisite_stmt`(prerequisite_recommendation.py) 패턴 답습**: base(hops=1)
+    앵커를 `to_concept_id ∈ concept_ids`로 잡고(집합의 각 원소가 각자 독립된 BFS 출발점 —
+    다중 소스 탐색), recursive 가지가 `hops+1`로 선수의 선수를 계속 따라간다
+    (`WHERE hops < max_hops`로 bound). `descendant_id`는 재귀 내내 최초 출발점 그대로
+    전파되므로(join 시 값 보존) 여러 출발점의 BFS가 한 쿼리에서 섞이지 않는다.
+
+    max_hops=1이면 recursive 가지가 `hops<1`=false라 base만 반환 — 직접 1-hop 엣지와
+    동일 집합(계약 보존, `fetch_internal_prerequisite_edges`의 1-hop 계약과 정합).
+
+    **한계(모듈 docstring §전이 순서 제약 명시)**: bounded reachability는 *전이적이지 않다*
+    — `max_hops` 예산을 넘는 체인은 조용히 잘린다(방어적 상한이지 완전한 도달성 보장이 아님).
+    DAG 보장(`validate.py` prerequisite_cycle hard error)이라 자연 종료하나 부분 적재·미래
+    데이터를 대비해 방어적으로 bound한다(`fetch_prerequisites`와 동일 근거).
+
+    SQLAlchemy Core 쿼리빌더만(원시 SQL 0)·읽기 전용(commit 0). 실 SQL이라 단위테스트는
+    `derive_ordering_edges`(순수)를 직접 호출하고, 이 좌석은 통합 테스트에서만 검증된다.
+    """
+    ids = list(concept_ids)
+    if len(ids) < 2:
+        return []  # 순서 제약은 노드 2개 이상에서만 의미가 있다 — 단락.
+
+    base = (
+        select(
+            ConceptEdge.to_concept_id.label("descendant_id"),
+            ConceptEdge.from_concept_id.label("ancestor_id"),
+            literal(1).label("hops"),
+        )
+        .where(
+            ConceptEdge.to_concept_id.in_(ids),
+            ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
+        )
+        .cte(name="ordering_traversal", recursive=True)
+    )
+    recursive = (
+        select(
+            base.c.descendant_id,  # 출발점 보존 — join이 값을 바꾸지 않는다(다중 소스 분리).
+            ConceptEdge.from_concept_id.label("ancestor_id"),
+            (base.c.hops + 1).label("hops"),
+        )
+        .join(base, ConceptEdge.to_concept_id == base.c.ancestor_id)
+        .where(
+            ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
+            base.c.hops < max_hops,
+        )
+    )
+    traversal = base.union_all(recursive)
+    stmt = select(traversal.c.descendant_id, traversal.c.ancestor_id, traversal.c.hops)
+    rows = (await session.execute(stmt)).all()
+    return [(descendant, ancestor, hops) for descendant, ancestor, hops in rows]
+
+
+def derive_ordering_edges(
+    concept_ids: Collection[uuid.UUID],
+    subgraph: Sequence[tuple[uuid.UUID, uuid.UUID, int]],
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """bounded 부분그래프 → 막힌 선수 집합 *내부*의 전이 순서 엣지(순수·DB 무관).
+
+    `subgraph`(`fetch_ordering_subgraph` 결과 또는 동형 fixture)의 각 `(descendant, ancestor,
+    hops)`에서 **ancestor가 `concept_ids` 안에 있는 것만**(집합 밖 중간 노드는 조상 자체가
+    아니라 경유지일 뿐 — 이 함수가 필터한다) `(ancestor, descendant)` 순서 엣지로 뒤집어
+    반환한다(선수가 먼저 오는 `order_learning_path`의 `(from, to)` 계약과 정합). 자기 자신
+    (`ancestor == descendant`, DAG라 발생 안 하나 방어적)은 제외한다.
+
+    **합성 없음(acceptance⑤)**: `hops`는 필터링에만 쓰고 반환 튜플에 담기지 않는다 — 경로
+    edge_strength의 곱·최소·평균 등 어떤 합성값도 만들지 않는다(순수 존재 신호만). 여러
+    경로/깊이로 같은 (ancestor, descendant) 쌍이 반복 도달돼도 결과는 1건(dedup).
+
+    반환은 `order_learning_path`가 그대로 소비할 `(from, to)` 튜플 리스트 — 결정론 정렬
+    (str(ancestor), str(descendant))로 안정적 순서를 보장한다(호출부 재현성).
+
+    PATH-01 리포트(`harness/learning_path_orderability_report.py`)의 `_reach_within_hops`+
+    population 교집합 계산을 프로덕션화한 것이다 — 그 리포트는 코퍼스 JSON 위에서 이 계산의
+    *관측판*을 미리 구현해 뒀다(신규 Kahn·정렬 로직 0, 이 함수도 마찬가지로 순서 관계
+    *존재 여부*만 도출한다).
+    """
+    id_set = set(concept_ids)
+    edges: set[tuple[uuid.UUID, uuid.UUID]] = set()
+    for descendant, ancestor, _hops in subgraph:
+        if ancestor == descendant:
+            continue
+        if ancestor in id_set and descendant in id_set:
+            edges.add((ancestor, descendant))
+    return sorted(edges, key=lambda e: (str(e[0]), str(e[1])))
+
+
 async def build_learning_path(
     session: AsyncSession, gaps: Sequence[PrerequisiteGap]
 ) -> LearningPath:
-    """막힌 선수개념들 → 집합 내부 선수 엣지 조회 → 위상정렬 학습 경로(얇은 조합).
+    """막힌 선수개념들 → 집합 내부 *전이* 선수 엣지 조회 → 위상정렬 학습 경로(얇은 조합).
 
-    `gaps`(`recommend_prerequisite_gaps` 결과)의 concept_id를 모아 `fetch_internal_
-    prerequisite_edges`로 집합 *내부* 선수 엣지를 조회하고, `order_learning_path`로
-    위상정렬해 `LearningPath`를 돌려준다. 얇은 조합(신규 로직 0).
+    `gaps`(`recommend_prerequisite_gaps` 결과)의 concept_id를 모아 `fetch_ordering_subgraph`
+    로 bounded 전이 부분그래프를 조회하고, `derive_ordering_edges`로 집합 내부 순서 엣지만
+    도출한 뒤 `order_learning_path`로 위상정렬해 `LearningPath`를 돌려준다(PATH-03, 2026-08
+    — 이전엔 `fetch_internal_prerequisite_edges`로 직접 1-hop 엣지만 썼다). 얇은 조합
+    (`order_learning_path`·`_tiebreak`·Kahn 루프 변경 0 — 공급하는 엣지의 출처만 바뀐다).
 
-    정직 기록: 여기서 쓰는 내부 엣지는 막힌 선수 집합 *내* 직접 엣지만이다 — 두 막힌 선수
-    사이에 *비-막힌(weak 아닌)* 중간 노드를 경유하는 transitive 의존은 반영하지 않는다
-    (예: A→X→B에서 X가 막힌 선수가 아니면 A·B 사이 순서는 못 잡는다). 후속 범위.
+    정직 기록: `fetch_ordering_subgraph`는 `MAX_PREREQUISITE_DEPTH`(5홉) 예산으로 bound된
+    도달성이다 — *완전한* transitive closure가 아니라 방어적 상한이므로, 예산을 넘는 체인은
+    여전히 순서를 못 잡는다(모듈 docstring "전이 순서 제약" 절 참조).
     """
     ids = [gap.concept_id for gap in gaps]
-    edges = await fetch_internal_prerequisite_edges(session, ids)
+    subgraph = await fetch_ordering_subgraph(session, ids)
+    edges = derive_ordering_edges(ids, subgraph)
     return order_learning_path(gaps, edges)
 
 
@@ -315,6 +439,8 @@ __all__ = [
     "LearningPath",
     "LearningStep",
     "build_learning_path",
+    "derive_ordering_edges",
     "fetch_internal_prerequisite_edges",
+    "fetch_ordering_subgraph",
     "order_learning_path",
 ]

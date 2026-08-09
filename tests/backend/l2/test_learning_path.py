@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from whymath_backend.l2.learning_path import (
     LearningPath,
     LearningStep,
+    derive_ordering_edges,
     order_learning_path,
 )
 from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
@@ -363,3 +364,109 @@ def test_path_is_frozen() -> None:
     path = order_learning_path([], [])
     with pytest.raises(ValidationError):
         path.has_cycle = True  # type: ignore[misc]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# PATH-03 — 전이 순서 엣지(`derive_ordering_edges`) 재현·변별력
+# ──────────────────────────────────────────────────────────────────────────
+# acceptance① 재현: A→X→B(X는 막힌 선수 아님) 픽스처에서 *현행(PATH-03 이전) 직접 엣지만*
+# 공급하면 A·B 사이 순서를 못 잡는다 — internal_edges=[]는 옛 `fetch_internal_prerequisite_
+# edges([A,B])`가 이 그래프에서 실제로 돌려줬을 값과 동일하다(X가 집합 밖이라 A→X·X→B 둘 다
+# where에서 배제).
+def test_pre_path03_direct_edges_only_cannot_order_transitive_pair() -> None:
+    a, b = uuid.uuid4(), uuid.uuid4()
+    # B가 A보다 약함(weakness 낮음) → 엣지 없이 tiebreak만 적용되면 B가 먼저 나온다.
+    gaps = [_gap(a, weakness=0.5), _gap(b, weakness=0.1)]
+    path = order_learning_path(gaps, [])  # 옛 경로가 A→X→B에서 실제로 공급하던 빈 엣지.
+    assert path.ordering_edge_count == 0
+    assert path.ordering_basis == "tiebreak_only"
+    assert [s.concept_id for s in path.steps] == [b, a]  # weakness asc — B 먼저(순서 못 잡음).
+
+
+# acceptance④ 변별력: 같은 A·B 픽스처에 `derive_ordering_edges`가 도출한 전이 엣지를 공급하면
+# 순서가 *실제로 역전*된다(A가 X를 경유해 B의 선수이므로 위상정렬은 A를 먼저 방출해야 한다).
+def test_derive_ordering_edges_reverses_order_for_transitive_pair() -> None:
+    a, b, x = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    # fetch_ordering_subgraph가 이 A→X→B 그래프에서 실제로 돌려줄 raw 삼중항 — B에서 시작해
+    # 선수 방향으로 X(1홉)·A(2홉)까지 도달.
+    subgraph = [(b, x, 1), (b, a, 2)]
+    edges = derive_ordering_edges([a, b], subgraph)
+    assert edges == [(a, b)]  # X는 집합 밖이라 걸러지고 A→B만 남는다.
+
+    gaps = [_gap(a, weakness=0.5), _gap(b, weakness=0.1)]
+    path = order_learning_path(gaps, edges)
+    assert path.ordering_edge_count == 1
+    assert path.ordering_basis == "topological"
+    # before(위 테스트)는 [b, a](tiebreak) — after는 [a, b](위상정렬이 tiebreak를 뒤집는다).
+    assert [s.concept_id for s in path.steps] == [a, b]
+
+
+class TestDeriveOrderingEdges:
+    """`derive_ordering_edges` 순수 함수 단위(hermetic·DB 무관) — 필터·dedup·날조 방지."""
+
+    def test_ancestor_outside_gap_set_filtered_out(self) -> None:
+        a, x = uuid.uuid4(), uuid.uuid4()
+        # ancestor(x)가 concept_ids 밖 — 순서 엣지 아님(경유지일 뿐, 조상 자체가 아님).
+        assert derive_ordering_edges([a], [(a, x, 1)]) == []
+
+    def test_descendant_outside_gap_set_filtered_out(self) -> None:
+        a, b = uuid.uuid4(), uuid.uuid4()
+        # descendant(b)가 concept_ids 밖 — 호출부 계약상 발생 안 하나 방어적으로 걸러진다.
+        assert derive_ordering_edges([a], [(b, a, 1)]) == []
+
+    def test_self_loop_excluded_defensively(self) -> None:
+        a = uuid.uuid4()
+        assert derive_ordering_edges([a], [(a, a, 3)]) == []
+
+    def test_multiple_paths_to_same_pair_dedup_to_one_edge(self) -> None:
+        a, b = uuid.uuid4(), uuid.uuid4()
+        # 서로 다른 경로/깊이로 같은 (a,b) 쌍에 두 번 도달해도 결과는 1건.
+        edges = derive_ordering_edges([a, b], [(b, a, 2), (b, a, 4)])
+        assert edges == [(a, b)]
+
+    def test_no_synthetic_edge_strength_in_output(self) -> None:
+        """acceptance⑤ — 반환 튜플은 항상 (from, to) 2요소뿐, hops·강도 합성값이 섞이지 않는다."""
+        a, b = uuid.uuid4(), uuid.uuid4()
+        edges = derive_ordering_edges([a, b], [(b, a, 3)])
+        assert edges == [(a, b)]
+        assert all(len(e) == 2 for e in edges)
+
+    def test_empty_subgraph_yields_no_edges(self) -> None:
+        assert derive_ordering_edges([uuid.uuid4(), uuid.uuid4()], []) == []
+
+    def test_deterministic_sort_order(self) -> None:
+        """반환 순서가 (str(ancestor), str(descendant)) 정렬 — 호출 재현성."""
+        a, b, c, d = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        subgraph = [(b, a, 1), (d, c, 1)]
+        edges = derive_ordering_edges([a, b, c, d], subgraph)
+        assert edges == sorted(edges, key=lambda e: (str(e[0]), str(e[1])))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# PATH-03 acceptance③ — 후보 집합 불변(순서만 바뀌고 gap 개수·구성은 그대로)
+# ──────────────────────────────────────────────────────────────────────────
+class TestGapCandidateSetInvariant:
+    """`derive_ordering_edges`가 공급하는 엣지가 무엇이든 `order_learning_path`의 출력
+    concept_id 집합은 입력 `gaps`의 concept_id 집합과 항상 같다 — 순서만 바뀌고
+    `recommend_prerequisite_gaps`가 고른 막힌 선수의 개수·구성 자체는 이 태스크로 바뀌지
+    않는다(학생에게 제시되는 후보 집합 불변)."""
+
+    def test_transitive_edges_reorder_but_do_not_change_membership(self) -> None:
+        a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        gaps = [_gap(a), _gap(b), _gap(c)]
+        subgraph = [(c, b, 1), (c, a, 2), (b, a, 1)]  # A→B→C 전이 체인.
+        edges = derive_ordering_edges([a, b, c], subgraph)
+        path = order_learning_path(gaps, edges)
+        assert {s.concept_id for s in path.steps} == {a, b, c}
+        assert len(path.steps) == len(gaps)
+
+    def test_edges_referencing_ids_outside_gaps_do_not_leak_extra_steps(self) -> None:
+        """`derive_ordering_edges`가 실수로 집합 밖 concept_id를 담아도(방어적 케이스)
+        `order_learning_path`는 `gaps`에 없는 노드를 스텝으로 만들지 않는다."""
+        a, b, outside = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        gaps = [_gap(a), _gap(b)]
+        # outside를 억지로 섞은 엣지 리스트 — order_learning_path의 기존 "집합 밖 엣지 무시"
+        # 방어(구현 변경 0)가 그대로 적용되는지 회귀 확인.
+        edges = [(a, b), (b, outside)]
+        path = order_learning_path(gaps, edges)
+        assert {s.concept_id for s in path.steps} == {a, b}
