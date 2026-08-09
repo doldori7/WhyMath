@@ -344,6 +344,8 @@
 - **⚠ 태스크 paths 는 회수 범위의 신뢰할 근거가 아니다**: acceptance ①에 적은 8개 파일은 태스크 `paths`에서 뽑았는데 실제 표면은 **15개**였다(`app.py`·`coach.py`·`_segmentation_state.py`·모바일 테스트 2종·백엔드/JS 테스트 등). `ASM-07`의 "라우트 2개→3개" 누락과 **같은 형태의 두 번째 사례** — 사람이 옮겨 적은 목록을 신뢰하지 말고 `git diff --name-only`로 전수 열거해야 한다. acceptance ②에 정정 병기.
 - **범위 분리**: 고립본의 `visualization.py`·`graph2dSpec.js`에는 VIZ-03(좌석 3종)과 **극값 좌석이 뒤섞여** 있었다. 극값은 ①`NLP-04` 범위 밖이고 ②고립본이 `VIZ-04`로 달았으나 main은 그 번호를 `VIZ-04-visual-style-render-seat-contract`(done)에 쓰고 있어 **ID 충돌**(HARN-10)이며 ③좌석만 옮기면 렌더러 `findExtrema`/`drawExtrema`(+67줄)가 없어 계약이 허공에 뜬다 — 제외하고 **`VIZ-06`**으로 재등재. 제외 사유는 코드 주석에 남겼다.
 - **범위 밖 판정**: 같은 브랜치의 `l3/visualization.py`·`l4/visualization_policy.py`·`harness/visualization_reach_report.py`는 브랜치 태스크 `paths` 대조 결과 `S4-03`·`MISC-01` 소속이라 회수하지 않았다.
+- **검증**: 전체 백엔드 스위트 **8970 passed · 296 skipped · 0 failed**(무작위 순서·737초) — 직전 기준선 8793에서 회수분 **+177건**. graphing-calculator `npm test` 123건 green · mypy `--strict` 473파일 · import-linter 7계층 계약 KEPT · ruff/black clean.
+- **잔여**: 이 브랜치에는 아직 `S3-28`(코퍼스 상태 분기 — `PB-01`/`S3-32` 선행 판단 필요)과 `VIZ-06`(극값)이 남아 있다. 브랜치 삭제는 컨테이너 403(`HARN-16`)이라 Kiki 위임.
 
 ### 2026-08-08 (분류·미머지 done / **자기 정정**): **`HARN-19`로 드러난 미머지 done 13건 분류 — 6건은 고립분이 아니라 *작업 브랜치 노후화 착시*였음이 판명(내 직전 보고 정정). 실제 고립은 5건, 그중 3건을 `NLP-04`로 등재. 분류표 `docs/standards/unmerged_done_triage_2026-08-08.md`** (claude 조사·등재, Kiki "2" 지시)
 

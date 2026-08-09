@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 회수 후 각 태스크의 backlog 상태를 main 기준으로 done 전환하고 artifacts 에 회수 커밋을 남긴다. 고립본은 artifacts 가 비어 있었다(done 기입 시 증적 누락) — 같은 형태로 재발시키지 않는다."
   - "⑤ 회귀: 백엔드 전체 스위트를 src/backend 에서 인자 없이(무작위 순서 포함) 돌린 뒤 회귀 없음을 말한다. 리포 루트 실행은 루트 pyproject.toml 이 잡혀 asyncio_mode=auto 가 빠지므로 금지."
   - "⑥ 범위 밖: 브랜치 삭제(컨테이너 403·HARN-16 — Kiki 위임)·S3-28·S4-09·openrouter 설정 문서 자체."
-artifacts: []
+artifacts:
+  - c7e556f4
 paths:
   - src/backend/whymath_backend/api/_ocr_state.py
   - src/backend/whymath_backend/api/ocr.py
@@ -27,6 +28,6 @@ paths:
   - src/web/graphing-calculator/src/lib/graph2dSpec.js
   - tests/backend/api/test_ocr_reachability.py
   - "tests/backend/l5/ocr/**"
-session: claude/whymath-positioning-strategy-qumq9y
+session: null
 notes: "발단: 2026-08-08 HARN-19(하네스 cp949 디코드 붕괴) 수정으로 미머지 done 탐지가 되살아나며 13건이 드러났고, 그중 6건은 작업 브랜치가 main 보다 7커밋 뒤처져 생긴 착시(main 에서 이미 done)였다 — main 동기화로 7건으로 감소. 남은 7건 중 ADMIN-01(PR #713)·REC-02(PR #672)·MOB-10(PR #731)은 열린 PR 이 있는 정상 진행분이고, 열린 PR 이 없는 고립분이 이 태스크의 3건 + 범위 밖 2건이다. 참고: 이 브랜치는 SessionStart 브리핑의 '미해결 장기 미머지 브랜치(Kiki 결정 필요)' 목록에 이미 있었으나, 그 목록은 '브랜치가 오래됐다'만 말할 뿐 '안에 어떤 완료분이 갇혀 있는지'는 말하지 못했다 — HARN-13/17(나이)과 HARN-11(완료분)의 교차가 이번에 처음 성립했다."
 updated: 2026-08-09
