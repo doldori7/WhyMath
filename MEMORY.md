@@ -337,6 +337,28 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-07 (구현·OPS-22): **선언≠배선 일반 탐지기 신설 — HTTP 라우트/EventType/타임시리즈/harness CLI 4축 정적 감사 게이트, 반복 실수(REC-01·VIZ-01·NLP-01·COLLAB-03 등 6회차) 재발방지대책** (claude 구현, Kiki 요청 — 장기 미병합 브랜치 `claude/whymath-data-platform-design-8ceaf5`의 설계를 재구현)
+
+**컨텍스트**: 장기 방치 브랜치(`ops/reach_audit.py` 855줄·설계문서 510줄, 2026-08-03·미병합)가
+같은 아이디어를 이미 구현했었지만, 그 분류 대장(`pending-task:REC-01`·`SEC-10`·`VIZ-02` 등)이
+스냅샷 시점 상태라 대부분 stale(그 사이 `done` 전환)이었다. `src/backend/whymath_backend/
+ops/declared_unwired_audit.py`로 재구현 — 구조(4축 분리·그랜드파더 만료 계약·FastAPI 0.140
+`_IncludedRouter` 언랩)는 재사용하고, 분류 대장은 2026-08-07 `backlog/tasks/*.yaml` 현재
+상태로 재구축했다. HTTP 축은 dart 호출뿐 아니라 **백엔드 테스트 호출도 도달로 인정**하도록
+확장(구 브랜치보다 도달률이 훨씬 높아짐)하고, 리터럴 더미 ID(`client.get("/v1/jobs/j1")`)를
+정규식 템플릿 매칭으로 잡도록 개선했다. 구현 중 실측으로 **3건의 신규 "선언≠배선" 사례**를
+발견해 태스크로 등재했다: `S4-22`(막힘·답입력·시각화조작 EventType — 생산자만 있고 소비자
+0) · `MOB-10`(SEC-10이 서버 세션 가시성 엔드포인트만 배선, 모바일 화면 0) · `MOB-11`(PED-03
+학습 공급 루프 study/outcome을 부르는 쪽이 모바일에도 통합테스트에도 없음). `tests/backend/
+ops/test_slo_contract.py`의 `_app_route_paths()`를 `route_paths()`로 승격해 재사용(재구현
+금지 준수). CI에 상시 잡(`declared-unwired-audit`, `needs: changes` 미의존 — 이유는 이 감사가
+보는 축이 정확히 그 필터의 사각지대라서) 신설 + `tests/infra` 배선 실재성 동결 + required
+checks 문서 갱신. **사고 하나 자체 검출**: 이 감사 자신을 CI가 직접 실행하게 되는 순간
+`ops.declared_unwired_audit`이 매니페스트에 `by-design`으로 남아 있으면 `stale-waiver`가
+되는 자기참조 함정을 전체 스위트 1회차 실행에서 실제로 검출(변별력 실증) — 매니페스트에서
+제거해 해소. 검증: 백엔드 전체 스위트 8812 passed·296 skipped(부분 아님) · ruff·black·
+`mypy --strict`(467파일) · `backlog.py validate` green.
+
 ### 2026-08-07 (조사·S3 재채번 대기): **S3-24/25 stale claim 해제 + S3-26/27/28 3중 번호 충돌 실측 — 재채번·병합은 HARN-15 소관이라 미착수, 검증된 merge만 별도 브랜치에 보존** (claude 조사, Kiki 요청 "문제를 차근차근 해결해줘")
 
 **컨텍스트**: `ARCH-24` 착수 시도 중 `S3-24-shadow-recovery-bucket-b`·`S3-25-shadow-recovery-

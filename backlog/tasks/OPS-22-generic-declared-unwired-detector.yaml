@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-22-generic-declared-unwired-detector
+title: "선언≠배선 일반 탐지기 — HTTP 라우트/EventType/타임시리즈/harness CLI 4축 정적 감사 게이트"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "4축 정적 감사(python -m whymath_backend.ops.declared_unwired_audit): (a) create_app() 라우트 표 대비 테스트/Flutter 클라이언트 미호출 (b) EventType build_event_data 생산자 대비 쿼리 소비자 부재 (c) db/models/timeseries.py ORM 모델의 writer/reader 편측 부재 (d) harness/ops CLI(main() 보유) 대비 ci.yml -m 직접 실행 + in-process import 전이 미도달. 판정은 도달 수가 아니라 미분류가 exit 1(reached/by-design:<사유>/pending-task:<id> 3분류 중 하나 필수)"
+  - "그랜드파더 만료 계약(ARCH-25 GrandfatherEntry 패턴 이식) — pending-task:<id>는 backlog/tasks/<id>.yaml이 실재하고 status!=done일 때만 유효, 태스크 소멸/done 전환 시 expired-waiver로 exit 1. 새 대장 파일 신설 금지(backlog/가 단일 진실 원천)"
+  - "라우트 추출은 tests/backend/ops/test_slo_contract.py의 _app_route_paths 재구현 금지 — route_paths()로 승격해 그 테스트가 import하도록 리팩터"
+  - "변별력 실측(양방향) — 더미 라우트/EventType/CLI 추가 시 exit 1, 이미 도달한 항목 exit 0, pending-task 태스크를 done으로 바꾸면 expired-waiver exit 1. 수집기 파손(정규식 무력화) 시 exit 2(0건 통과 위장 금지)"
+  - "tests/infra/에 배선 실재성 동결 테스트 신설(신규 CI 잡이 -m whymath_backend.ops.declared_unwired_audit를 실제로 호출하는지) — 기존 test_provenance_audit_wiring.py 패턴 답습"
+  - "기존 축별 리포트(recommendation_reach_report·pedagogy_content_slot_reach_report·visualization_reach_report 등)를 대체하지 않는다 — 아직 추적되지 않는 신규 공급 표면 전용"
+  - "ruff·black --line-length 100·mypy --strict 통과 + 백엔드 전체 스위트(부분 아님) 회귀 0 + backlog validate green"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - tests/backend/ops/test_declared_unwired_audit.py
+  - tests/infra/test_declared_unwired_audit_wiring.py
+  - ".github/workflows/ci.yml"
+  - tests/backend/ops/test_slo_contract.py
+  - docs/architecture/data_platform_module_gap_review.md
+session: claude/ops-22-generic-declared-unwired-detector
+notes: "장기 방치 브랜치 claude/whymath-data-platform-design-8ceaf5의 ops/reach_audit.py(855줄)·docs/architecture/data_platform_module_gap_review.md(510줄) 구조를 참조하되, 그 분류 대장(pending-task:REC-01/S3-16/SEC-10/NLP-02/VIZ-02 등)은 2026-08-03 스냅샷이라 포팅하지 않고 backlog/tasks/*.yaml 현재 상태로 재구축(REC-01 등 상당수 done 전환). 반복 실수(REC-01·VIZ-01·NLP-01·PED-06·ADMIN 축 5~6회차) 재발방지대책 — CLAUDE.md 실수관리 규범상 등재 의무."
+updated: 2026-08-07
