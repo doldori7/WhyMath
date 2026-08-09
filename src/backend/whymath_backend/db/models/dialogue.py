@@ -95,6 +95,14 @@ class Dialogue(Base):
     student_turns: Mapped[int | None] = mapped_column(sa.Integer)
     assistant_turns: Mapped[int | None] = mapped_column(sa.Integer)
 
+    # ===== 완료 상태머신 (S3-32 완료를 풀이 제출에 통합) =====
+    # 정답 도달 후 완료 전 남은 *돌아보기(메타인지) 턴 수*. >0이면 돌아보기 대기(review_pending)·
+    # 0/NULL이면 아님. 완료 여부 자체는 `attempt_id` 존재로 판정(완료 시 링크·재완료 가드).
+    # 상태머신 상세는 `l4/completion.py`. 신규 컬럼 default 0(alembic — 아래 참조).
+    review_turns_remaining: Mapped[int | None] = mapped_column(
+        sa.Integer, nullable=True, server_default=sa.text("0")
+    )
+
     # ===== LLM 사용량 =====
     model_used: Mapped[str | None] = mapped_column(sa.String(50))
     total_tokens: Mapped[int | None] = mapped_column(sa.Integer)
