@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-35-mc-numbered-choice-list-recovery
+title: "객관식 선택지 세로 번호 목록 회수 — 섀도 S3-17(번호 탭→값 제출) main 이식 (S3-24 항목 ①)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 회수: 섀도 브랜치 S3-17(원 커밋 73b77a1/5481086)의 _ChoiceButtons/_ChoiceRow(세로 번호 목록·탭→값 제출)를 main의 현재 chat_screen 구조 위에 수동 이식. 원본 브랜치는 원격 삭제·main에 전제(S3-12 칩) 부재라 diff 재적용 불가 — 완료 시점 파일을 API로 받아 정본으로 사용."
+  - "② 검증: CI 핀 flutter 3.41.9·CI 동일 절차로 analyze No issues(exit 0)·test 303 passed(exit 0). 이식 테스트 7건 포함(번호 렌더·MC 판정·탭→값 매핑·긴 값 오버플로·주관식/자유대화 영향 0·풀이 모드 감춤)."
+  - "③ 의도적 차이: problemComplete·awaitingReflection 감춤 조건은 S3-32(타 세션 회수 중) 소관이라 제외 — S3-32 착지 시 가드에 추가(호출부 주석 명시)."
+artifacts:
+  - 0e99826a
+paths:
+  - src/mobile/lib/features/chat/presentation/chat_screen.dart
+  - src/mobile/test/chat_screen_test.dart
+session: null
+notes: "S3-24-shadow-recovery-bucket-b 항목 ①. 원본 ID S3-17-mc-numbered-choice-list는 main이 번호를 S3-17-suneung-prefilter-persona-fit-widen(#741)에 재사용해 HARN-10 충돌 — S3-35로 재배정(S3-33도 점유·CLI 제안 수용). 회수 커밋 0e99826a."
+updated: 2026-08-09
