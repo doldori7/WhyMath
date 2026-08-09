@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -20,11 +20,12 @@ acceptance:
   - "④ S4-03과의 경계를 양쪽 notes에 상호 참조 — S4-03=새 type(기하·벡터·행렬), 본 태스크=기존 2D type의 필드. 중복 아님"
   - "⑤ 변별력: 신규 필드 1개를 웹 어댑터에서 미소비 상태로 두고 계약 게이트가 red를 내는지 실측 → 배선해 green 실측"
   - "⑥ VIZ-04(양식↔렌더 좌석 계약)의 data/visual_style_contract.json에서 수직선의 status를 unseated→seated·seat_owner를 본 태스크 완료로 갱신(단위원·부등식영역은 이미 VIZ-04 구현에서 seated로 착륙 — 갱신 불요, 계약 파일이 착수 순서의 단일 진실원)"
-artifacts: []
+artifacts:
+  - 35e81dc1
 paths:
   - src/backend/whymath_backend/schema/visualization.py
   - src/web/graphing-calculator/src/lib/graph2dSpec.js
   - src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart
 session: null
 notes: "visualization_module_gap_review.md §3 D4. 기능 62 세부 10개 중 5개(함수비교·접선/법선·극대극소·적분영역·미분변화)가 '계산기는 하는데 명세가 지시 못 한다'에 걸린다. Graph2dSpec은 function·domain·y_range·parameters 4필드뿐. depends_on VIZ-01 — 도달 0회 상태에서 표현력을 늘리면 도달하지 않는 명세의 표현력을 늘리는 일이 된다. 2026-08-03 §7(2차 점검) 범위 확장: concept_visual_style_v1 코퍼스 실측(127건 태깅)에서 수직선 25·단위원 8·부등식영역 1=34건이 렌더 좌석 미보유로 드러났고, 셋 다 새 VisualizationType 없이 기존 interactive_graph_2d 필드 확장으로 흡수 가능 — 좌석 확보 효율이 기존 acceptance①(함수그래프 15건 내부 질 개선)보다 크다. depends_on VIZ-04 추가 — 좌석 계약이 먼저 있어야 '무엇을 좌석으로 칠지'가 단일 진실원에서 정의된다."
-updated: 2026-08-03
+updated: 2026-08-09

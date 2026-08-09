@@ -393,6 +393,25 @@ EOS 틀)을 코드베이스와 대조. `ai_recommendation_module_gap_review.md`(
 없음을 확인.
 
 정본: `docs/architecture/math_engine_gap_review.md`.
+### 2026-08-09 (신설·증명 지표): **`PED-13` 결손 복구 리드타임(⑯) — 첫 취약 관측(<0.7)→첫 숙달 도달(≥0.8) 경과 일수. 신규 컬럼·마이그레이션·DB왕복 0. required 좌석이 픽스처 33건을 깨뜨려 "선언≠배선" 하나를 추가로 드러냄** (claude 구현, Kiki `/drive`)
+
+- **설계**: `ConceptMasteryHistory.measured_at`이 복합 PK라 벽시계 간격이 원천에서 나온다. ⑨(`mastery_gain_rate`)의 조회에 `measured_at`만 얹어 재사용 — **DB 왕복 추가 0**.
+- **임계 재사용(베껴 적기 금지)**: 0.8은 `l4/lthc/adapt._MASTERED_THRESHOLD` import, 0.7은 모듈 상수가 아니라 **함수 기본 인자**라 `inspect.signature(recommend_prerequisite_gaps_detailed)`로 읽는다. 값을 복사했다면 정본이 바뀌어도 이 지표는 모른 채 남는다 — 회귀 테스트가 출처 일치를 동결.
+- **정직성 규약**: 0.8 미도달 그룹은 분모에서 빼고 **몇 개가 빠졌는지 note에 보고**(가짜 0 금지)·도달 후 재하락해도 **첫 도달 고정**(늘리면 "회복이 오래 걸렸다"로 오독)·자격 0이면 NO_DATA. 분모 좌석 `sample_gap_recovery_groups` 신설.
+- **⚠ required 좌석이 잡아낸 것**: 신설 필드를 required로 두자 전체 스위트가 **33건 실패**했다 — 기존 `SurrogateMetrics` 픽스처 4곳 + "12지표" 계약 테스트. 이건 결함이 아니라 **설계가 의도대로 작동한 증거**다(새 지표가 조용히 빠진 채 리포트가 도는 상태를 원천 차단). 그 과정에서 `surrogate_baseline_report._METRIC_ROWS`가 **별도 행 목록**을 갖고 있어 지표를 만들어도 커버리지 리포트에 안 나오는 선언≠배선을 발견해 함께 배선했다.
+- **⚠ 내 실수 — 규칙을 등재하고 스스로 어김**: 첫 전체 스위트를 `| tail -4`로 잘라 33건 중 3건만 보고 고쳤다(→5건 잔존→2라운드). 같은 날 등재한 "검사 출력을 잘라서 판정 금지"의 즉시 재발이다. exit code(`PYTEST_EXIT=1`)가 실패 자체는 잡아줬으나 진단 정보를 잃었다 — 이후 `grep -E "^FAILED"`로 전건 포착. **규칙 등재가 습관을 바꾸지는 않는다**는 실측.
+- **검증**: 최종 **9016 passed · 296 skipped · 0 failed**(무작위 순서·525초) · `RUFF_EXIT=0`·`BLACK_EXIT=0`·`MYPY_EXIT=0`(473파일).
+- **경로 겹침 잔존 위험**: `S4-16`(타 세션)이 `wh1_evaluation.py`·`growth_evidence_exposure.py`를 같이 잡고 있다. 원격 claim 충돌은 없었고 변경을 순수 추가로 좁혔으나, 그 세션이 살아 있으면 머지 충돌 가능.
+
+### 2026-08-09 (집행·비교 파생 봉인): **`ARCH-27` — 5원칙 #2("남과 비교하지 않는다")를 기계 강제로 전환. 서버·클라 양쪽 게이트에 비교 파생 어근 신설. 오탐 방어를 위해 **전부 복합어로만** 금지** (claude 구현, Kiki `/drive`)
+
+- **공백 실측(①)**: 기존 `_ROOTS` 8종(xp·streak·leaderboard·badge·level·quest·combo·coin)은 전부 *게임 메커니즘* 축이고 **비교 파생(percentile·rank·peer)을 하나도 잡지 않았다** — 5원칙 #2는 20곳 넘게 인용되면서 기계 강제가 0이었다.
+- **설계 핵심 — bare 단어 금지 불가**: 학생 대면 스코프(`api/`·`schema/`) 60파일을 실측하니 정당한 단일어가 이미 산다 — `class` **219×**(파이썬 예약어!)·`vs` 16×·`top`/`top_k` 23×·`estimated_percentile` 8×·`compare_digest` 6×·`national_standard_codes` 2×·`time_vs_expected`·`rate_top_grade`. bare로 걸었다면 게이트가 즉시 전멸해 소음이 됐다. 그래서 8종 전부 **연속 단어열**(위치별 허용 집합)로 정의했다: `PeerComparison`·`GroupRank`·`GroupAverage`·`PercentileRank`·`RankPercentile`·`TopPercentile`·`BetterThan`·`ComparedToGroup`.
+- **집행 지점 2곳(③)**: 서버(`tests/backend/l1/test_anti_gamification_governance.py`) + 클라(`src/mobile/test/governance/anti_gamification_governance_test.dart`). 서버만 막으면 클라가 자체 계산해 노출하는 경로가 열린다. Dart 쪽은 `\b`를 **앞에 두지 않았다** — Dart `\b`도 밑줄을 단어문자로 봐서 `studentClassRank` 같은 더 큰 식별자 *안*의 등장을 놓친다(파이썬 게이트가 이미 겪은 결함). `[_]?`로 camelCase·snake_case를 함께 잡는다(서버 JSON 키가 문자열 리터럴로 유입되는 벡터).
+- **변별력 양방향(⑤)**: 실제 파일 주입(`api/_zz_comparison_injection.py`에 `class_rank`·`peer_average_score`·`show_top_percentile`) → `GroupRank`·`PeerComparison`·`TopPercentile` red 확인 → 제거 후 64건 green. Dart는 flutter 미설치라 로컬 실행 불가라서 **정규식을 파이썬으로 옮겨 동등 검증**했다(위반 10건 전건 탐지·정당 10건 오탐 0) — 최종 판정은 CI.
+- **`estimated_percentile` 처리**: `ASM-02`가 (d) 필드 폐기를 미채택했고 `ASM-07`은 노출 축만 봉인했으므로 내부 정본의 잔존은 **의도된 것**이다. benign 목록에 명시 동결해 이 게이트가 그걸 red로 만들지 않게 했다(직전 세션의 `ARCH-27` 인계 메모가 예고한 지점 — 그대로 적중).
+- **범위 준수(⑧)**: `assessment` 테이블 필드의 존폐는 건드리지 않았다.
+
 ### 2026-08-09 (헌법 개정·CI 사고): **PR #732 CI red 2건 — ①`black --check -q | tail`로 실패를 통과로 오판(내 검증 호출 방식 결함) ②고립본 Dart 테스트의 `invalid_constant`(그 브랜치가 CI를 통과한 적 없음이 판명). CLAUDE.md에 "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 신설** (claude 진단·수정, Kiki "pr" 지시)
 
 - **①이 시스템 실수**: `$VP -m ruff check ... | tail -3 && $VP -m black --check -q ... | tail -3`로 돌렸다. black이 6파일 실패로 exit 1을 냈지만 **`-q`가 "would reformat" 출력을 억제**해, 화면에는 앞 명령(ruff)의 "All checks passed!"만 남았다. 나는 그걸 보고 "black clean"이라고 PR 본문에까지 적었다. **검사 자체는 변별력이 있었는데 호출 방식이 변별력을 없앤 것** — 기존 "변별력 없는 검증 스텝 금지"(2026-07-17 logconfig)의 *도구 사용* 축 변형이라 규칙을 신설했다(판정은 exit code로·`PIPESTATUS` 병기·CI가 쓰는 명령을 그대로 재현). 대상 경로도 달랐다(나는 `whymath_backend`, CI는 `.`).

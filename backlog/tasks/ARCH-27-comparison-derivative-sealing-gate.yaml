@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -19,10 +19,11 @@ acceptance:
   - "⑥ 무력화 하한 assert 유지 — 스캔 대상 파일 수가 0이 되면 통과하는 형태 금지(기존 ARCH-26 기법 답습)"
   - "⑦ CI 배선 실재 확인 — 어느 잡이 이 테스트를 실제로 수집하는지 확인한다(OPS-03·OPS-10·OPS-11 — 저장소에 존재함과 돌아감은 다르다)"
   - "⑧ 범위 밖 동결 — ASM-02(등급·백분위 학생 노출 정책, owner=kiki) 결정 자체는 침범하지 않는다. 이 게이트는 학생 대면 비교 파생만 막고 assessment 테이블 필드의 존폐는 ASM-02 소관"
-artifacts: []
+artifacts:
+  - 24c50a99
 paths:
   - tests/backend/l1/test_anti_gamification_governance.py
   - src/mobile/test/governance/anti_gamification_governance_test.dart
 session: null
 notes: "docs/strategy/reclaimed_time_positioning_v1.md §4. '더 빨리 도달' 포지셔닝 채택(2026-08-07)으로 백분위·선행개월 같은 비교 파생 필드의 유입 유인이 오른다. 그런데 5원칙 #2('비교가 아니라 자기 대비')는 문서 4곳(02_student_ui_master_plan.md:87-95·07_community.md:34·pipa_data_matrix.md·PED-08 acceptance ⑥)에만 있고 기계 게이트가 없다 — ARCH-26이 만든 스캔은 게임 메커니즘 어근만 잡는다. Kiki 결정(2026-08-07 비교 축 폐기)을 기계로 동결하는 태스크. ASM-02 선례(노출 정책 미결과 봉인 게이트 분리)를 따른다. [ASM-07 인계 2026-08-08] 이 게이트의 _STUDENT_FACING_DIRS 는 schema/ 를 포함하므로 percentile 어근을 넣으면 schema/assessment.py 의 내부 정본 Assessment.estimated_percentile 이 잡힌다. 이건 오탐이 아니라 의도된 잔존이다 — ASM-02가 (d) 필드 폐기를 미채택했고 ASM-07은 노출 축만 봉인했다(학생 대면 모델 StudentAssessment 에는 이미 없다). 이 필드를 지우지 말고 내부 정본에 한정한 허용을 두라. 판정 기준은 'schema 에 있는가'가 아니라 '학생 대면 응답 스키마에 있는가'이며 후자는 tests/backend/api/test_prediction_field_sealing.py 가 이미 동결한다. 공유 어휘는 schema.assessment.STUDENT_HIDDEN_PREDICTION_FIELDS 를 import 해서 쓰라(어근 목록 재타이핑 금지)."
-updated: 2026-08-08
+updated: 2026-08-09
