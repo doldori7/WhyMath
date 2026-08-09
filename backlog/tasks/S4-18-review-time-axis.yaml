@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on:
@@ -23,6 +23,6 @@ paths:
   - src/backend/whymath_backend/api/users.py
   - "tests/backend/l2/**"
   - "tests/backend/api/**"
-session: null
+session: claude/whymath-mvp-plan-architecture-trjg5x
 notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D5. depends는 goals 조립을 PED-05 LearnerState 경유로 받기 위한 후행 권장(엄격한 차단 의존은 아니나 코드 중복 방지). SM-2/FSRS·next_review_at 컬럼 불채택(§2-④), 점수·등급 예측 불채택(§2-⑧). FR-010 시즌 플랜·dead table 소생은 범위 밖(§4-⑤·⑦)."
-updated: 2026-07-29
+updated: 2026-08-09
