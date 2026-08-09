@@ -84,6 +84,7 @@ S3-16 편입(행동 텔레메트리 생산자 좌석 — `docs/architecture/ai_t
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
@@ -105,6 +106,10 @@ from whymath_backend.db.models.misconception_hypothesis import (
 )
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
+from whymath_backend.l2.prerequisite_recommendation import (
+    recommend_prerequisite_gaps_detailed,
+)
+from whymath_backend.l4.lthc.adapt import _MASTERED_THRESHOLD
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
 from whymath_backend.l4.turn_meta import REACHABLE_STRATEGIES
 from whymath_backend.schema.enums import EventType, Resolution, SignaturePattern
@@ -373,6 +378,14 @@ class SurrogateMetrics(BaseModel):
             "평균(증가 방향·크기). 시간 정규화 rate는 아님(후속)·자격 그룹 0이면 NO_DATA."
         )
     )
+    gap_recovery_leadtime_days: Metric = Field(
+        description=(
+            "⑯ 결손 복구 리드타임 — ConceptMasteryHistory (user,concept)별 '첫 취약 관측"
+            "(<0.7) → 첫 숙달 도달(>=0.8)' 벽시계 **경과 일수** 평균(낮을수록 회복이 빠름). "
+            "미도달 그룹은 분모에서 제외(가짜 0 금지)·첫 도달 기준 고정(재하락 무시)·"
+            "학습 시간이 아니라 경과 일수(time-on-task 분모 부재)·자격 그룹 0이면 NO_DATA."
+        )
+    )
     misconception_resolution_rate: Metric = Field(
         description=(
             "⑩ 오개념 해소율 — MisconceptionHypothesisRecord is_active=false 비율(해소 *근사*). "
@@ -479,6 +492,14 @@ class SurrogateMetrics(BaseModel):
         description=(
             "⑨ BKT 숙달 증가율 집계 대상 자격 (user,concept) 그룹 수(measured_at 측정점 "
             f">= {_MIN_MASTERY_POINTS}·mastery NOT NULL). 미만 그룹은 제외·0이면 NO_DATA."
+        ),
+    )
+    sample_gap_recovery_groups: int = Field(
+        default=0,
+        description=(
+            "⑯ 결손 복구 리드타임의 **분모** — 취약 관측 후 숙달까지 실제로 도달한 "
+            "(user,concept) 그룹 수. 미도달 그룹은 여기 포함되지 않는다(가짜 0 금지) — "
+            "제외 건수는 지표 note가 보고한다. 0이면 NO_DATA."
         ),
     )
     sample_misconception_hypotheses: int = Field(
@@ -1036,6 +1057,81 @@ def _hint_depth_from_levels(hint_levels: list[int]) -> Metric:
     )
 
 
+# ⑯ 결손 복구 리드타임(PED-13)의 두 임계 — **재선언하지 않고 정본에서 가져온다**(acceptance ①).
+#   · 숙달 도달 = `l4/lthc/adapt.py`의 `_MASTERED_THRESHOLD`(0.8) — 3구간 라벨의 상단 경계.
+#   · 취약 관측 = `l2/prerequisite_recommendation`의
+#     `recommend_prerequisite_gaps_detailed`가 가진 `mastery_threshold`
+#     기본값(0.7). 이쪽은 모듈 상수가 아니라 *함수 기본 인자*라 시그니처에서 읽는다 — 값을 여기
+#     0.7로 베껴 적으면 정본이 바뀌어도 이 파일은 모른 채 남는다(드리프트). 아래 회귀 테스트가
+#     두 임계의 출처 일치를 동결한다.
+_WEAK_MASTERY_THRESHOLD: float = float(
+    inspect.signature(recommend_prerequisite_gaps_detailed).parameters["mastery_threshold"].default
+)
+_RECOVERY_MASTERY_THRESHOLD: float = float(_MASTERED_THRESHOLD)
+
+
+def _gap_recovery_leadtimes_from_rows(
+    rows: Sequence[tuple[uuid.UUID, uuid.UUID, float, datetime]],
+) -> tuple[list[float], int]:
+    """⑯ (user,concept)별 '첫 취약 관측 → 첫 숙달 도달' 경과 일수 목록 + 미도달 그룹 수.
+
+    입력은 **(user_id, concept_id) 그룹 내 measured_at 오름차순** 행이다(호출부 order_by 보장).
+    각 그룹에서 `mastery < _WEAK_MASTERY_THRESHOLD`인 *첫* 관측을 결손 시점으로 잡고, 그 *이후*
+    처음으로 `mastery >= _RECOVERY_MASTERY_THRESHOLD`에 도달한 관측까지의 벽시계 간격을 일수로
+    낸다. 신규 컬럼 0 — `measured_at`이 복합 PK라 간격이 원천에서 그대로 나온다.
+
+    처리 규약(acceptance ⑤):
+      · **미도달 제외** — 취약은 관측됐으나 0.8에 아직 못 닿은 그룹은 분모에서 뺀다(가짜 0 금지).
+        몇 개가 그렇게 빠졌는지는 두 번째 반환값으로 정직하게 보고한다.
+      · **첫 도달 고정** — 도달 후 다시 떨어져도 리드타임은 *첫* 도달 기준이다(재하락은 복구
+        시간을 늘리지 않는다 — 늘리면 "회복이 오래 걸렸다"로 오독된다).
+      · 애초에 취약 관측이 없는 그룹(줄곧 숙달)은 결손이 없어 대상이 아니다.
+
+    ⚠️ '학습 시간'이 아니라 **경과 일수**다 — time-on-task 분모(`duration_seconds`)는 클라
+    writer 부재로 존재하지 않는다(태스크 notes). 같은 이유로 이 값을 학습 효율로 읽으면 안 된다.
+    """
+    weak_at: dict[tuple[uuid.UUID, uuid.UUID], datetime] = {}
+    recovered: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    for user_id, concept_id, mastery, measured_at in rows:
+        key = (user_id, concept_id)
+        if key in recovered:
+            continue  # 첫 도달 고정 — 이후 재하락·재도달은 무시.
+        if key not in weak_at:
+            if mastery < _WEAK_MASTERY_THRESHOLD:
+                weak_at[key] = measured_at
+            continue  # 결손 시점 이전의 관측은 리드타임 기산점이 아니다.
+        if mastery >= _RECOVERY_MASTERY_THRESHOLD:
+            recovered[key] = (measured_at - weak_at[key]).total_seconds() / 86400.0
+    unrecovered = len(weak_at) - len(recovered)
+    return [recovered[k] for k in weak_at if k in recovered], unrecovered
+
+
+def _gap_recovery_leadtime_metric(days: list[float], unrecovered: int) -> Metric:
+    """⑯ 경과 일수 목록 → Metric(순수·날조 0). 자격 그룹 0이면 NO_DATA(⑨ 관례 승계)."""
+    n = len(days)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"결손→숙달 복구가 완료된 (user,concept) 그룹 0개(미도달 {unrecovered}개는 "
+                "분모에서 제외 — 가짜 0 금지). 취약 관측(<"
+                f"{_WEAK_MASTERY_THRESHOLD}) 후 {_RECOVERY_MASTERY_THRESHOLD} 도달이 쌓이면 계측."
+            ),
+        )
+    mean_days = sum(days) / n
+    return Metric(
+        value=mean_days,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"{n}개 그룹의 결손→숙달 평균 {mean_days:.2f}일(낮을수록 회복이 빠름)·"
+            f"미도달 {unrecovered}개 제외(가짜 0 금지)·첫 도달 기준 고정(재하락 무시). "
+            "**학습 시간이 아니라 경과 일수**(time-on-task 분모 부재)·자기 대비 축이며 "
+            "또래·평균 대비 파생을 두지 않는다(5원칙 #2·ARCH-27 게이트)."
+        ),
+    )
+
+
 def _mastery_gains_from_rows(
     rows: Sequence[tuple[uuid.UUID, uuid.UUID, float]],
 ) -> list[float]:
@@ -1567,6 +1663,8 @@ async def compute_wh1_surrogate_metrics(
                 ConceptMasteryHistory.user_id,
                 ConceptMasteryHistory.concept_id,
                 ConceptMasteryHistory.mastery,
+                # ⑯(PED-13) 결손 복구 리드타임용 — 같은 조회를 재사용한다(추가 왕복 0).
+                ConceptMasteryHistory.measured_at,
             )
             .select_from(ConceptMasteryHistory)
             .where(*mastery_conds)
@@ -1580,11 +1678,22 @@ async def compute_wh1_surrogate_metrics(
     # (user, concept, mastery) — 그룹 내 measured_at 오름차순(order_by 보장). None은 방어적 제외.
     mastery_input: list[tuple[uuid.UUID, uuid.UUID, float]] = [
         (user, concept, float(mastery))
-        for user, concept, mastery in mastery_rows
+        for user, concept, mastery, _measured_at in mastery_rows
         if mastery is not None
     ]
     mastery_gains = _mastery_gains_from_rows(mastery_input)
     mastery_gain_metric = _mastery_gain_from_gains(mastery_gains)
+
+    # ── ⑯ 결손 복구 리드타임 (PED-13) — 위와 *같은* 행에서 measured_at을 함께 쓴다 ──
+    leadtime_input: list[tuple[uuid.UUID, uuid.UUID, float, datetime]] = [
+        (user, concept, float(mastery), measured_at)
+        for user, concept, mastery, measured_at in mastery_rows
+        if mastery is not None and measured_at is not None
+    ]
+    leadtime_days, leadtime_unrecovered = _gap_recovery_leadtimes_from_rows(leadtime_input)
+    gap_recovery_leadtime_metric = _gap_recovery_leadtime_metric(
+        leadtime_days, leadtime_unrecovered
+    )
 
     # ── ⑩ 오개념 해소율 (MisconceptionHypothesisRecord is_active=false 비율) ──
     # (비활성 수, 전체 수)를 한 행으로 — is_active=false=해소 *근사*(가지치기·비활성화 신호 재사용·
@@ -1686,6 +1795,7 @@ async def compute_wh1_surrogate_metrics(
         help_reduction_validated=help_reduction_validated,
         hint_depth_reached=hint_depth,
         mastery_gain_rate=mastery_gain_metric,
+        gap_recovery_leadtime_days=gap_recovery_leadtime_metric,
         misconception_resolution_rate=misconception_resolution,
         self_solve_rate=self_solve,
         strategy_diversity=strategy_diversity,
@@ -1703,6 +1813,7 @@ async def compute_wh1_surrogate_metrics(
         sample_transfer_probes=len(transfer_outcomes),
         sample_diagnostic_probes=diagnostic_total,
         sample_mastery_groups=len(mastery_gains),
+        sample_gap_recovery_groups=len(leadtime_days),
         sample_misconception_hypotheses=misconception_total,
         sample_resolved_dialogues=resolved_total,
         window_start=since,
