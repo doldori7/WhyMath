@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 3
 owner: claude
 depends_on: []
@@ -15,5 +15,5 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/me.py
 session: null
-notes: "구현 후보: 고립 브랜치 education-os-architecture-mr0fbq 커밋 a20c851. 이 태스크(PB-01)는 등록만 하고 구현은 범위 밖 — 엔드포인트 실트래픽·성능 영향을 함께 봐야 하는 별개 변경(원 커밋 판단 승계)."
-updated: 2026-08-07
+notes: "acceptance 미정의 + notes가 명시적으로 '구현은 범위 밖 — 엔드포인트 실트래픽·성능 영향을 함께 판단해야 하는 별개 변경(원 커밋 판단 승계)'이라 밝힘. /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당 — Kiki가 acceptance 정의 + 트래픽/성능 판단 후 재개 필요."
+updated: 2026-08-09
