@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-35-mc-numbered-choice-list
+title: "객관식 세로 번호목록 UI(모바일) — S3-24 버킷B①"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 73b77a1/5481086)에서 객관식 세로 번호목록 UI 로직을 main 현재 파일 위에 수동 재적용(git merge/cherry-pick 자동해결 의존 금지 — main이 MOB-09~13 디자인 토큰화로 같은 파일을 이미 크게 고쳤다)"
+  - "flutter analyze 0 · flutter test green(원 구현 시점 실측값을 회귀 기준으로)"
+  - "착수 전 이 항목이 다른 미머지 브랜치에서 이미 동등하게 구현됐는지 backlog.py next로 재확인(HARN-11 미머지 done 필터)"
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+session: null
+notes: "S3-24-shadow-recovery-bucket-b(버킷B①)에서 분리 등록. 출처 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f에서 분기)."
+updated: 2026-08-09

@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NS-01-mathlive-step-render
+title: "풀이단계 MathLive 스텝 렌더(모바일 chat) — S3-24 버킷B⑧"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 224043f/2e2587e)에서 풀이단계 MathLive 스텝 렌더 로직을 main 현재 chat 파일 위에 수동 재적용(자동병합 의존 금지)"
+  - flutter analyze 0 · flutter test green
+  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11)"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "S3-24-shadow-recovery-bucket-b(버킷B⑧)에서 분리 등록."
+updated: 2026-08-09

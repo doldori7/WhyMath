@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-38-coach-default-mode-by-type
+title: "문제유형별 코치 기본모드(모바일) — S3-24 버킷B④"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 fa08081 묶음)에서 문제유형별 코치 기본모드 선택 로직을 main 현재 파일 위에 수동 재적용(자동병합 의존 금지)"
+  - flutter analyze 0 · flutter test green
+  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11)"
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+session: null
+notes: "S3-24-shadow-recovery-bucket-b(버킷B④)에서 분리 등록. 원 커밋은 S3-18/19/20 3건 묶음(fa08081) 중 마지막 항목."
+updated: 2026-08-09

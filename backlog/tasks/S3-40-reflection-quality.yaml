@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-40-reflection-quality
+title: "돌아보기 응답검증(백엔드) — S3-24 버킷B⑥"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 5598e6f/edd0ab3)에서 Polya 돌아보기 응답검증 로직을 main 현재 l4/**·api/coach.py 위에 수동 재적용 — main이 SEC-01/PED-01로 coach.py를 이미 크게 재작성했으므로 재조정 필수(자동병합 의존 금지)"
+  - "백엔드 전체 pytest 스위트 green(경로 인자 없이 전체 실행)"
+  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11) + SEC-01/PED-01 이후 coach.py 현재 구조와 충돌 지점 먼저 매핑"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+  - src/backend/whymath_backend/api/coach.py
+session: null
+notes: "S3-24-shadow-recovery-bucket-b(버킷B⑥)에서 분리 등록. 모바일 무관·백엔드 전용. main의 SEC-01/PED-01 재작성과 충돌 위험 명시 승계 — 9건 중 두 번째로 위험."
+updated: 2026-08-09

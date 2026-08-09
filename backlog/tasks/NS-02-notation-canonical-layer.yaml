@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NS-02-notation-canonical-layer
+title: "표기 canonical 계층(모바일 shared/math+widgets) — S3-24 버킷B⑨"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 33ae6a7/baf76cb)에서 표기 canonical 계층 로직을 main 현재 shared/math+widgets 위에 수동 재적용(자동병합 의존 금지) — notation_support_manifest.json 데이터 자체는 Stage1에서 NS-03과 함께 이미 회수됨(재작업 금지, 그 부분은 스코프 밖)"
+  - flutter analyze 0 · flutter test green
+  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11)"
+artifacts: []
+paths:
+  - "src/mobile/lib/shared/math/**"
+  - "src/mobile/lib/**/widgets/**"
+session: null
+notes: "S3-24-shadow-recovery-bucket-b(버킷B⑨)에서 분리 등록. notation_support_manifest.json 생산원 로직만 대상 — 데이터 자체는 이미 회수됨(NS-03)."
+updated: 2026-08-09
