@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on: []
@@ -18,17 +18,9 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/**"
-  - "src/backend/whymath_backend/api/coach.py"
+  - src/backend/whymath_backend/api/coach.py
   - "src/backend/whymath_backend/l4/**"
   - "src/backend/alembic/versions/**"
-notes: "[출처] 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f에서 분기·9일 미병합·2026-07-30 발견 — MEMORY 결정 로그 'Stage 1' 참조). 아래 7건은 shadow에서 쓴 번호를 main이 착수 시점(07-22~24) 이후 **전혀 다른 작업에 재사용**해 그대로는 회수 불가 — HARN-10 번호충돌 가드가 등재 시점에 거부한다(그랜드파더 대상 아님 — 아직 미머지).
-  ① 원 S3-09(학습 루프 닫힘 G1/G2·client+server) 원 커밋 7cc0e98/5041487/479163a — main의 현 S3-09는 무관한 별개 작업
-  ② 원 S3-10(완료를 풀이과정에 통합·client+server+**alembic**) 원 커밋 2f6433b/ead23ef/557485f
-  ③ 원 S3-11(대화 입력 최종답 감지·서버만) 원 커밋 a5dee77/fc09405/35f6061
-  ④ 원 S3-12(객관식 선택지 버튼 UX·모바일) 원 커밋 0bd16aa/b1ec9fa
-  ⑤ 원 S3-14(코치 dialogue 문제별 리셋·모바일) 원 커밋 2825c4a/b2e8612/cc7a5f3
-  ⑥ 원 S3-15(오답 최종답 피드백·서버) 원 커밋 66fb2b4/631f6d9/f8585d2
-  ⑦ 원 S3-16(오답 targeted 소크라테스 힌트·서버) 원 커밋 a495222/879ad99/3ab4e20
-  [번호 제안] S3-26=구S3-09 · S3-27=구S3-10 · S3-28=구S3-11 · S3-29=구S3-12 · S3-30=구S3-14 · S3-31=구S3-15 · S3-32=구S3-16 (착수 시점 main 최신 상태로 재확인 필수 — 이 목록 작성 시점 main S3 최대 번호=16, S3-24/25는 본 회수 태스크 자신이 이미 점유).
-  ⑨~⑦ 순서 의존: ①→②(같은 '완료' 상태머신)→③(같은 계열)·⑥→⑦(같은 오답 피드백 계열) 순으로 회수하면 diff 충돌이 적을 가능성(원 개발 순서와 동일)."
-updated: 2026-07-30
+session: null
+notes: "[2026-08-09 재조사] S3-24(버킷B)와 동일한 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz 참조 — 해당 브랜치가 origin에서 완전히 삭제됨을 실측 확인(git ls-remote --heads origin 전체 43건에 부재, 원 커밋 해시 fetch도 전부 실패). '원본 diff 참고 후 새 번호로 재등재·회수'라는 acceptance 전제가 불가능해짐 — 7개 항목 전부 title/notes 설명만으로 재설계해야 하는데 이는 원 기능 범위·UX 디테일 보장이 안 되는 디자인 판단 위험. S3-10 소속 alembic 마이그레이션 재채번(리비전 d5e6f0a1b2c3 충돌)도 원본 마이그레이션 내용 없이는 처음부터 다시 설계해야 함. Kiki 판단 필요 — /drive 안전장치(acceptance 판단 불가·모호성)에 해당해 차단."
+updated: 2026-08-09

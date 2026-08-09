@@ -21,5 +21,6 @@ paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/l4/**"
 session: null
-notes: "9개 항목을 개별 태스크로 분리 등록 완료(S3-35~41·NS-01·NS-02, 각자 원 커밋·hot file 위험·notes 승계). 사전조사로 2건 위험신호 발견: ⑤(S3-39)는 main이 MOB-09에서 flutter_math_fork를 '미사용'으로 이미 제거하고 'MathLive WebView로 커버됨' 명시 — 단순회수 아닌 아키텍처 재검토 필요. ②(S3-36)는 problem_screen.dart에 유사 '건너뛰기' 버튼이 이미 존재 — 동등성 미확인. 이 버킷 태스크 자체는 실제 코드 회수를 하지 않았으므로(acceptance① 미충족) done 처리하지 않고 차단 — 향후 진행은 개별 태스크 9건에서."
+notes: "9개 항목을 개별 태스크로 분리 등록 완료(S3-35~41·NS-01·NS-02, 각자 원 커밋·hot file 위험·notes 승계). 사전조사로 2건 위험신호 발견: ⑤(S3-39)는 main이 MOB-09에서 flutter_math_fork를 '미사용'으로 이미 제거하고 'MathLive WebView로 커버됨' 명시 — 단순회수 아닌 아키텍처 재검토 필요. ②(S3-36)는 problem_screen.dart에 유사 '건너뛰기' 버튼이 이미 존재 — 동등성 미확인. 이 버킷 태스크 자체는 실제 코드 회수를 하지 않았으므로(acceptance① 미충족) done 처리하지 않고 차단 — 향후 진행은 개별 태스크 9건에서.
+  [2026-08-09 후속 재조사 — 근본 차단 사유] 분리 등록 직후 실제 착수를 시도하며 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz를 fetch했더니 origin에서 완전히 삭제된 상태였다(git ls-remote --heads origin 전체 43건에 부재, 원 커밋 해시 fa08081/73b77a1/75c3dda 등 직접 fetch도 전부 실패). 이 태스크와 9개 하위 태스크 전부가 전제하던 '원본 diff를 참고해 수동 재적용'이 이제 물리적으로 불가능 — 남은 선택지는 title/notes 한 줄 설명만으로 처음부터 재설계하는 것뿐이라 원 기능 범위·UX 디테일을 보장 못 한다. 9개 하위 태스크 전부 이 사유로 재차단함. 참고: 다른 세션이 이미 이 브랜치명(claude/s3-24-shadow-recovery-bucket-b)으로 한 차례 시도했었고(원격 존재, top commit 928b2ac4) 그때는 'Flutter SDK 부재+MOB-10/PB-04 동시편집' 사유로 즉시 차단 — 그 세션은 소스 브랜치 소실을 발견하기 전에 멈췄다."
 updated: 2026-08-09
