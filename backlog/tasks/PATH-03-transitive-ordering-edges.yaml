@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -19,10 +19,11 @@ acceptance:
   - "④ 변별력: A→X→B fixture에서 순서가 실제로 역전되는지 확인한다(before: ordering_edge_count=0·tiebreak_only·B 먼저 / after: count=1·topological·A 먼저). 순서가 뒤집히지 않는 fixture만으로 검증하면 위장이다"
   - "⑤ 날조 방지·계약 회귀: 전이 엣지에 합성 edge_strength(곱·최소·평균)를 부여하지 않음을 테스트로 동결한다. has_cycle·is_cycle_residual 계약 회귀 0(bounded 도달은 참 ancestor의 부분집합이고 ancestor는 DAG 위에서 비순환). bounded reachability가 전이적이지 않다는 한계를 docstring에 명시한다"
   - "⑥ 범위 밖 명시: max_depth 기본값 변경(페이퍼 P1)·전역 학습 경로(§5 유보)·Assessment.recommended_path 소생(페이퍼 P3)·prerequisites/coaching 엔드포인트 정렬 변경은 이 태스크에 포함하지 않는다"
-artifacts: []
+artifacts:
+  - 7fb49e4d
 paths:
   - src/backend/whymath_backend/l2/learning_path.py
   - "tests/backend/l2/**"
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "docs/architecture/learning_path_module_gap_review.md §3 D3. learning_path.py:258이 스스로 '후속 범위'라 적어두고 백로그에 등재된 적 없는 항목이며, 실측상 위상정렬 무력화의 지배적 원인이다(1홉 96건 → 5홉 249건). depends는 측정 선행(PATH-01)과 런타임 계측기 확보(PATH-02)를 위한 것. 저장소 전수에서 '후속 범위' 표기는 이 1건뿐이라 docstring TODO 일제 점검 태스크는 만들지 않는다(패턴이 아니라 단발)."
 updated: 2026-08-09
