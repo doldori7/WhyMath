@@ -599,6 +599,57 @@ jobs:
           }' coverage/lcov.info
 
   # ─────────────────────────────────────────────────────────────────
+  # concept-reach 회귀 가드 (OPS-23) — mobile-only PR 사각 봉합·경량 실행
+  #
+  # 배선 근거(2026-08-08 실측): concept_reach_report 회귀 가드
+  # (tests/backend/harness/test_concept_reach_report.py의 test_real_corpus_smoke_...)는
+  # 실제 `src/mobile/lib`를 스캔해 모바일의 `/v1/` 호출 표면 도달을 동결한다. 그런데 이 가드는
+  # backend 잡 소속이라 `changes` 필터의 backend 조건(src/backend|tests/backend|...)으로만
+  # 켜진다 — **src/mobile/-only PR은 backend=false → backend 잡 스킵 → 가드도 스킵**.
+  # PATH-05가 정확히 그 경로로 우회했고(모바일만 건드림), 서버·클라를 동시에 건드린 다음
+  # PR인 MOB-10에서야 분모 증가가 드러났다(그 경위는 위 테스트 docstring에 기록). 이 잡은
+  # **전체 backend 잡을 돌리지 않고** 이 가드 한 파일만 mobile==true에서 경량 실행해 그 공백을
+  # 닫는다(backend 잡은 그대로 — 순수 신규 잡). 이 파일은 async 테스트가 없어 명시 경로 실행 OK.
+  # ─────────────────────────────────────────────────────────────────
+  concept-reach-guard:
+    name: concept-reach — mobile 호출 표면 회귀 가드
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    # mobile 변경 PR에서 발화(사각 봉합) + push(main)는 항상. schedule은 제외(무거운 잡 가드와 동형).
+    # backend 잡과 달리 backend 필터가 아니라 **mobile 필터**로 켠다 — 이 가드가 감시하는 표면이
+    # src/mobile/lib의 호출 콜사이트라 mobile-only PR에서도 반드시 돌아야 한다(OPS-23 핵심).
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true') && github.event_name != 'schedule'
+    defaults:
+      run:
+        working-directory: src/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # 이 가드 테스트는 `whymath_backend.harness.concept_reach_report` import 시 harness/__init__
+      # → wh1_evaluation → pydantic을 당기므로 backend 설치가 필요하다. 실측(2026-08-08):
+      # `.[dev]`만으로 이 파일이 import·17건 전건 통과한다(data_pipeline 불요 — 이 가드 체인은
+      # data_pipeline을 import하지 않는다). 무거운 backend 전체 대신 이 최소 설치만 한다.
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # 실제 src/mobile/lib·src/backend/whymath_backend/api를 스캔하는 회귀 스모크를 실행한다.
+      # 모바일이 새 `/v1/` 표면을 호출하기 시작하면 이 파일이 깨져 "가시화 리포트가 낡았다"를
+      # 신호한다(회귀 감시). 명시 파일 경로 실행 — 이 파일엔 async 테스트가 없다.
+      - name: Pytest (concept_reach 회귀 가드 — 단일 파일 경량)
+        run: python3 -m pytest ../../tests/backend/harness/test_concept_reach_report.py -q
+
+  # ─────────────────────────────────────────────────────────────────
   # L5 웹 (그래프 계산기 — 격리 Vite + React SPA·국소 비상구)
   # backend/mobile 잡을 미러링하되 Node 툴체인을 쓴다. 수학 코어(src/lib/**) 단위 테스트 +
   # 스모크 렌더(Vitest·jsdom)와 정적 번들 빌드를 검증한다. 커버리지 게이트(70%+)는

@@ -60,6 +60,7 @@ main
 - `data-pipeline — 적재 통합 (실 PG)`
 - `data-pipeline — 적재 통합 (실 Neo4j)`
 - `mobile — flutter analyze·test`
+- `concept-reach — mobile 호출 표면 회귀 가드`
 - `web — graphing-calculator test·build`
 - `infra-contracts — 운영 자산 계약 테스트 (tests/infra)`
 - `docker-build — 이미지 빌드·기동 스모크(/health/live)`
