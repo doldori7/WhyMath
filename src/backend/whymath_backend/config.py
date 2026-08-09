@@ -958,6 +958,33 @@ class Settings(BaseSettings):
         ),
     )
 
+    misconception_visualization_mode: Literal["off", "shadow", "on"] = Field(
+        default="off",
+        description=(
+            "L4 coach의 *오개념 교정 시각화*(`visualize_misconception`·슬93) 노출 모드(MISC-01). "
+            "코드는 완비·테스트 통과 상태이나 production 호출자가 0건이었다 — 이 플래그가 결선의 "
+            "게이트다. 3값(`misconception_semantic_mode` 롤아웃 패턴 재사용): "
+            "**`off`(기본·opt-in)** = coach가 `visualize_misconception`을 *호출하지 않는다*"
+            "(LLM 0·현행 비트동일 — 지금까지의 실제 프로덕션 상태). **`shadow`** = 확정 진단"
+            "(select_intervention 임계로 개입이 결정된 경우 — intervene.py와 *동일 임계*, 이미 "
+            "visualize_misconception 내부 게이트가 재사용 중)일 때만 생성을 *비차단*"
+            "(`_spawn`=asyncio.create_task)으로 시도하고, 성공/실패를 *로그로만* 남긴다(judge "
+            "shadow 패턴 답습 — `misconception_judge_shadow`·`shadow.py` "
+            "`observe_misconception_judge_shadow` 미러). 노출(응답 payload)은 `off`와 비트동일 "
+            "— `CoachResponse.visualization`은 항상 None. 학생 원문은 레코드에 담지 않는다"
+            "(오개념 id·도메인·패턴·수준·성공 여부·시각화 타입만 — judge_shadow 레코드 규약). "
+            "실 트래픽에서 생성 성공률·LLM 왕복 실패율을 노출 전에 관측하기 위함(04b Phase 1 "
+            "미러). **`on`** = 확정 진단이면 `visualize_misconception`을 *await*해 "
+            "`CoachResponse.visualization`에 실어 노출한다. 검증 실패"
+            "(`InvalidVisualizationSpecError`) 또는 그 밖의 예외는 잡아 예외 타입명을 로그에 "
+            "남기고(침묵 실패 금지) `visualization=None`으로 그레이스풀 폴백한다 — 시각화는 "
+            "*보완재*라 소크라테스 발화(`decision`/`intervention`)를 절대 막지 않는다. 세 모드 "
+            "모두 개입이 진단 보류(None)면 즉시 스킵(불필요한 LLM 호출 회피 — "
+            "`visualize_misconception`이 어차피 None을 돌려줄 것이므로). "
+            "WHYMATH_MISCONCEPTION_VISUALIZATION_MODE=shadow|on으로 켠다."
+        ),
+    )
+
     misconception_judge_enabled: bool = Field(
         default=False,
         description=(

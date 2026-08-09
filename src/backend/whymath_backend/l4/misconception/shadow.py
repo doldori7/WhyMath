@@ -24,8 +24,11 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
+from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.judge import JudgeProtocol, JudgeVerdict, judge_verdicts
 from whymath_backend.l4.misconception.models import MisconceptionMatch
+from whymath_backend.l4.misconception.visualize import visualize_misconception
 
 logger = logging.getLogger("whymath.l4.misconception.shadow")  # step_shadow 네이밍 동형
 # 구조화 레코드 JSON 한 줄(harvest 입력) — 평문 로그와 분리된 자식 로거(step_shadow.record 미러).
@@ -34,6 +37,12 @@ record_logger = logging.getLogger("whymath.l4.misconception.shadow.record")
 # G1: judge would-be shadow 전용 자식 로거(`shadow.record`와 동형으로 한 단계 더 분리) —
 # judge shadow 레코드만 따로 harvest/필터할 수 있게 한다.
 judge_record_logger = logging.getLogger("whymath.l4.misconception.judge_shadow.record")
+
+# MISC-01: 시각화 would-be shadow 전용 자식 로거(judge_shadow.record와 동형) — 시각화 shadow
+# 레코드만 따로 harvest/필터할 수 있게 한다.
+visualization_record_logger = logging.getLogger(
+    "whymath.l4.misconception.visualization_shadow.record"
+)
 
 
 class MisconceptionShadowObservation(BaseModel):
@@ -239,6 +248,119 @@ async def observe_misconception_judge_shadow(
                 candidate_count=len(semantic_matches),
                 feed_threshold=feed_threshold,
                 judge_routing=judge_routing,
+            ).model_dump_json()
+        )
+    except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:100 미러)
+        return
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# MISC-01: 오개념 교정 시각화 would-be shadow — `visualize_misconception`(슬93)을 *비차단*으로
+# 돌려 생성 성공/실패만 로깅 (04b 롤아웃 패턴 재사용·`misconception_visualization_mode`)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class MisconceptionVisualizationShadowObservation(BaseModel):
+    """시각화 would-be shadow 관측 1건의 *구조화 레코드* — visualization_record_logger JSON emit.
+
+    `misconception_visualization_mode=="shadow"`에서, 확정 진단(개입 결정)에 대해
+    `visualize_misconception`을 *비차단*으로 돌려 생성 성공/실패를 무노출로 수집한다 → 노출
+    (`mode="on"`) 전 실 트래픽에서 L3 생성 성공률·LLM 왕복 실패 유형을 검증한다(04b Phase 1
+    미러 — `MisconceptionJudgeShadowObservation`과 동형 목적).
+
+    **프라이버시(미성년 PII)**: 학생 진술 원문도, 생성된 시각화의 `spec`/`caption`(학생 풀이를
+    반영해 재구성된 교정 콘텐츠라 간접적으로 학생 입력을 인코딩할 수 있음)도 *담지 않는다* —
+    필드 자체가 없고 `extra="forbid"`라 구조적으로 차단된다(`MisconceptionShadowObservation`
+    규약 계승). 담는 건 추상화된 오개념 id·도메인·개입 패턴·수준 라벨·성공 여부·(성공 시)
+    렌더 기술 타입 라벨 하나·(실패 시) 예외 타입명(비식별·로그 sink 한정·비노출 불변).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    misconception_id: str
+    """대상 오개념 id — `MisconceptionMatch.misconception.id`."""
+
+    domain: str
+    """오개념 카탈로그 영역(`Misconception.domain`)."""
+
+    pattern: str
+    """개입 패턴(`InterventionPattern` 값 — counterexample/reverse_reasoning). select_intervention
+    이 이 match로 재산출한 값이라 `visualize_misconception`의 내부 게이트와 항상 일치한다."""
+
+    level: str
+    """학생 수준 라벨(예: '고1'·'초보') — 원문 아님, 라벨 문자열만."""
+
+    success: bool
+    """`visualize_misconception`이 검증된 `Visualization`을 반환했는지."""
+
+    visualization_type: str | None = None
+    """성공 시 `Visualization.type`(렌더 기술 라벨 — 4종 중 1개). 실패면 None."""
+
+    error_type: str | None = None
+    """실패 시 예외 타입명(CLAUDE.md 침묵 실패 금지 — `reason`/원문 없이 타입명만).
+    성공이면 None."""
+
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+async def observe_misconception_visualization_shadow(
+    match: MisconceptionMatch,
+    level: str,
+    *,
+    provider: LLMProvider,
+    cache: CacheBackend,
+    trace: TraceSink,
+) -> None:
+    """확정 진단에 `visualize_misconception`을 돌려 *성공/실패*를 로그로만 관측(shadow·비노출).
+
+    반환 `None`이라 호출자(coach `_spawn`)가 신호를 받을 변수가 없다 — student-facing 누출이
+    구조적으로 차단된다(`observe_misconception_judge_shadow` 동형). coach는
+    `mode == "shadow"` ∧ intervention 확정에서만 호출하므로, 여기서 `select_intervention(match)`
+    로 *다시* 게이트를 확인하는 건 재검사가 아니라 레코드의 `pattern` 필드를 이 `match`와 항상
+    정합하게 유도하기 위함이다(호출자가 넘긴 intervention이 가설-기반이라 다른 misconception을
+    가리킬 수 있는 경우와 무관하게, 이 함수가 실제로 시각화하는 대상은 항상 `match`).
+
+    `visualize_misconception` 자체의 예외(`InvalidVisualizationSpecError` 포함 임의 예외)는 여기서
+    *삼킨다* — 이건 shadow 관측이지 산출물이 아니므로(비차단 방어선), 단 예외 타입명은 레코드에
+    남는다(침묵 실패 금지). 레코드 직렬화·로깅 자체의 실패는 별도 바깥 `try`로 방어한다
+    (`observe_misconception_judge_shadow` 2단 방어 동형).
+    """
+    success = False
+    visualization_type: str | None = None
+    error_type: str | None = None
+    try:
+        v = await visualize_misconception(match, level, provider=provider, cache=cache, trace=trace)
+    except Exception as exc:  # noqa: BLE001 — 생성 실패도 shadow 관측 대상(타입명만 기록·비차단)
+        error_type = type(exc).__name__
+    else:
+        if v is not None:
+            success = True
+            # Visualization.type은 use_enum_values=True라 이미 str(enum 값)이지만, 계약이 바뀌어도
+            # 방어적으로 str()을 통과시킨다(레코드 직렬화가 enum 인스턴스에 깨지지 않게).
+            visualization_type = str(v.type)
+
+    intervention = select_intervention(match)  # 레코드용 pattern 라벨 — match와 항상 정합.
+    pattern = intervention.pattern.value if intervention is not None else "unknown"
+    try:
+        logger.info(
+            "시각화 shadow(비노출) — misconception=%s pattern=%s level=%s success=%s "
+            "visualization_type=%s error_type=%s",
+            match.misconception.id,
+            pattern,
+            level,
+            success,
+            visualization_type,
+            error_type,
+        )
+        visualization_record_logger.info(
+            MisconceptionVisualizationShadowObservation(
+                misconception_id=match.misconception.id,
+                domain=match.misconception.domain,
+                pattern=pattern,
+                level=level,
+                success=success,
+                visualization_type=visualization_type,
+                error_type=error_type,
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:100 미러)

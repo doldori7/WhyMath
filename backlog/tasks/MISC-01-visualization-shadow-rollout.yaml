@@ -17,6 +17,10 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/l4/misconception/visualize.py
+  - src/backend/whymath_backend/l4/misconception/shadow.py
+  - src/backend/whymath_backend/config.py
+  - tests/backend/l4/test_misconception_visualization_shadow.py
+  - tests/backend/api/test_coach_visualization.py
 session: claude/human-bottleneck-tasks-6dszy0
 notes: "docs/architecture/misconception_module_gap_review.md §3 + 04e_misconception_remediation_design.md §1-1. visualize_misconception() 코드 완비·테스트 존재·production 호출자 0건."
 updated: 2026-08-09
