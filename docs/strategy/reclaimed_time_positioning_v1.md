@@ -125,9 +125,24 @@ WhyMath가 파는 것은 실력이 아니라 **회수된 시간**이다. 그 시
 대외 카피에서도 **'또래'를 언급하지 않고 시간 회수만 말한다** — "남들보다 빠르다"가 아니라
 "낭비가 줄었다".
 
-> 이 결정을 기계로 봉인하는 게이트 확장이 별도 태스크로 등재됐다(§7) —
-> 현행 `tests/backend/l1/test_anti_gamification_governance.py`의 어근 목록은 streak·leaderboard·
-> xp·badge·combo 계열만 잡고 **비교 파생(percentile·rank·peer)은 잡지 않는다**(실측 확인).
+> ~~이 결정을 기계로 봉인하는 게이트 확장이 별도 태스크로 등재됐다(§7)~~ — **`ARCH-27` 착지
+> (2026-08-09)로 해소됐다.** 아래 갱신 참조.
+
+**게이트 착지 (`ARCH-27` · 2026-08-09)** — 이 결정은 더 이상 문서 규범이 아니라 기계 강제다.
+
+- **서버**: `tests/backend/l1/test_anti_gamification_governance.py`에 비교 파생 어근
+  (`percentile`·`rank`·`peer`·`cohort`)과 8종 금지 연속-단어열(`PeerComparison`·`GroupRank`·
+  `GroupAverage`·`PercentileRank`·`RankPercentile`·`TopPercentile`·`BetterThan`·
+  `ComparedToGroup`)을 신설. 스코프는 학생 대면(`api/`·`schema/`)에 한정한다.
+- **클라**: `src/mobile/test/governance/anti_gamification_governance_test.dart`에 같은 계약을
+  건다 — 서버만 막으면 클라가 자체 계산해 노출하는 경로가 열린다.
+- **전부 복합어로만 금지한다.** 학생 대면 스코프에는 정당한 단일어가 이미 산다(2026-08-09
+  실측: `class` 219× — 파이썬 예약어 · `vs` 16× · `top`/`top_k` 23× · `estimated_percentile`
+  8× · `compare_digest` 6× · `national_standard_codes` 2× · `time_vs_expected` ·
+  `rate_top_grade`). bare 단어를 금지했다면 게이트가 즉시 전멸해 소음이 됐을 것이다.
+- **`estimated_percentile`은 의도된 잔존이다** — `ASM-02`가 필드 폐기(옵션 d)를 미채택했고
+  `ASM-07`은 *노출 축*만 봉인했다(학생 대면 응답 스키마 `StudentAssessment`에는 이미 없다).
+  판정 기준은 "schema에 있는가"가 아니라 "학생 대면 응답 스키마에 있는가"다.
 
 ---
 

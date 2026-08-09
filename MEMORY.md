@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (집행·비교 파생 봉인): **`ARCH-27` — 5원칙 #2("남과 비교하지 않는다")를 기계 강제로 전환. 서버·클라 양쪽 게이트에 비교 파생 어근 신설. 오탐 방어를 위해 **전부 복합어로만** 금지** (claude 구현, Kiki `/drive`)
+
+- **공백 실측(①)**: 기존 `_ROOTS` 8종(xp·streak·leaderboard·badge·level·quest·combo·coin)은 전부 *게임 메커니즘* 축이고 **비교 파생(percentile·rank·peer)을 하나도 잡지 않았다** — 5원칙 #2는 20곳 넘게 인용되면서 기계 강제가 0이었다.
+- **설계 핵심 — bare 단어 금지 불가**: 학생 대면 스코프(`api/`·`schema/`) 60파일을 실측하니 정당한 단일어가 이미 산다 — `class` **219×**(파이썬 예약어!)·`vs` 16×·`top`/`top_k` 23×·`estimated_percentile` 8×·`compare_digest` 6×·`national_standard_codes` 2×·`time_vs_expected`·`rate_top_grade`. bare로 걸었다면 게이트가 즉시 전멸해 소음이 됐다. 그래서 8종 전부 **연속 단어열**(위치별 허용 집합)로 정의했다: `PeerComparison`·`GroupRank`·`GroupAverage`·`PercentileRank`·`RankPercentile`·`TopPercentile`·`BetterThan`·`ComparedToGroup`.
+- **집행 지점 2곳(③)**: 서버(`tests/backend/l1/test_anti_gamification_governance.py`) + 클라(`src/mobile/test/governance/anti_gamification_governance_test.dart`). 서버만 막으면 클라가 자체 계산해 노출하는 경로가 열린다. Dart 쪽은 `\b`를 **앞에 두지 않았다** — Dart `\b`도 밑줄을 단어문자로 봐서 `studentClassRank` 같은 더 큰 식별자 *안*의 등장을 놓친다(파이썬 게이트가 이미 겪은 결함). `[_]?`로 camelCase·snake_case를 함께 잡는다(서버 JSON 키가 문자열 리터럴로 유입되는 벡터).
+- **변별력 양방향(⑤)**: 실제 파일 주입(`api/_zz_comparison_injection.py`에 `class_rank`·`peer_average_score`·`show_top_percentile`) → `GroupRank`·`PeerComparison`·`TopPercentile` red 확인 → 제거 후 64건 green. Dart는 flutter 미설치라 로컬 실행 불가라서 **정규식을 파이썬으로 옮겨 동등 검증**했다(위반 10건 전건 탐지·정당 10건 오탐 0) — 최종 판정은 CI.
+- **`estimated_percentile` 처리**: `ASM-02`가 (d) 필드 폐기를 미채택했고 `ASM-07`은 노출 축만 봉인했으므로 내부 정본의 잔존은 **의도된 것**이다. benign 목록에 명시 동결해 이 게이트가 그걸 red로 만들지 않게 했다(직전 세션의 `ARCH-27` 인계 메모가 예고한 지점 — 그대로 적중).
+- **범위 준수(⑧)**: `assessment` 테이블 필드의 존폐는 건드리지 않았다.
+
 ### 2026-08-09 (헌법 개정·CI 사고): **PR #732 CI red 2건 — ①`black --check -q | tail`로 실패를 통과로 오판(내 검증 호출 방식 결함) ②고립본 Dart 테스트의 `invalid_constant`(그 브랜치가 CI를 통과한 적 없음이 판명). CLAUDE.md에 "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 신설** (claude 진단·수정, Kiki "pr" 지시)
 
 - **①이 시스템 실수**: `$VP -m ruff check ... | tail -3 && $VP -m black --check -q ... | tail -3`로 돌렸다. black이 6파일 실패로 exit 1을 냈지만 **`-q`가 "would reformat" 출력을 억제**해, 화면에는 앞 명령(ruff)의 "All checks passed!"만 남았다. 나는 그걸 보고 "black clean"이라고 PR 본문에까지 적었다. **검사 자체는 변별력이 있었는데 호출 방식이 변별력을 없앤 것** — 기존 "변별력 없는 검증 스텝 금지"(2026-07-17 logconfig)의 *도구 사용* 축 변형이라 규칙을 신설했다(판정은 exit code로·`PIPESTATUS` 병기·CI가 쓰는 명령을 그대로 재현). 대상 경로도 달랐다(나는 `whymath_backend`, CI는 `.`).
