@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on:
@@ -15,7 +15,8 @@ acceptance:
   - "①GET /v1/me/review-queue 신설 — concept_mastery_history의 MAX(measured_at) + bkt.apply_forgetting을 조회 시점에 적용한 순수 파생(decayed_mastery·days_since_practice·due_rank). next_review_at 컬럼·마이그레이션 신설 0(리뷰 게이트로 확인). 관측 이력 없는 개념은 due 산출 제외"
   - "②target_exam_date/target_grade/target_score의 첫 reader — D-day + 목표 성취기준 커버리지 %. 점수·등급 예측 필드 부재를 테스트로 동결(학생 대면 점수 서열화 금지)"
   - "③응답에 decay_model='bkt_p_forget'·calibrated=false 정직 표기 + 정렬 결정론 재현 + user_id 스코핑 읽기 전용 권한 회귀. SM-2/FSRS 등 카드형 알고리즘 미도입(이중 진실원천 회피)"
-artifacts: []
+artifacts:
+  - 2c0916ec
 paths:
   - src/backend/whymath_backend/l2/bkt.py
   - src/backend/whymath_backend/l2/weak_concept_recommendation.py
@@ -23,6 +24,6 @@ paths:
   - src/backend/whymath_backend/api/users.py
   - "tests/backend/l2/**"
   - "tests/backend/api/**"
-session: claude/whymath-mvp-plan-architecture-trjg5x
+session: null
 notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D5. depends는 goals 조립을 PED-05 LearnerState 경유로 받기 위한 후행 권장(엄격한 차단 의존은 아니나 코드 중복 방지). SM-2/FSRS·next_review_at 컬럼 불채택(§2-④), 점수·등급 예측 불채택(§2-⑧). FR-010 시즌 플랜·dead table 소생은 범위 밖(§4-⑤·⑦)."
 updated: 2026-08-09
