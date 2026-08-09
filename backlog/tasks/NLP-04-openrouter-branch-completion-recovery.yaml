@@ -1,0 +1,33 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-04-openrouter-branch-completion-recovery
+title: "고립 브랜치 완료분 회수 — openrouter-setup-guide-e98dw4의 NLP-01·NLP-03·VIZ-03 (열린 PR 없음·5일 고립)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 회수 대상 고정(실측 근거): origin/claude/openrouter-setup-guide-e98dw4 의 backlog 사본이 done 인데 main 은 todo 인 3건 — NLP-01(OCR 도달성 관측: _ocr_state.py +204, ocr.py +27, ocr_controller.dart +17, test_ocr_reachability.py 신규 416줄) · NLP-03(풀이 분절 계약: data/segmentation_contract.json 신규 70줄, l5/ocr/text_segmentation.py 신규 95줄, 테스트 67줄) · VIZ-03(graph2d 표현력: schema/visualization.py +47, graph2dSpec.js +61/-9). 2026-08-08 git diff origin/main..origin/<branch> 실측."
+  - "② 병합이 아니라 이식: 이 브랜치는 main 대비 +692 커밋(2026-08-03 최종·열린 PR 없음)이라 통째 머지하면 무관한 692커밋이 딸려온다. 위 파일 단위로 cherry-pick/재적용하고, 재적용 후 main 최신 코드와의 정합을 각 파일마다 확인한다. [2026-08-08 실측 정정] ①에 적은 8개 파일은 태스크 paths 에서 뽑은 것이라 **불완전**했다. 실제 표면은 15개다 — NLP-01: app.py(_activate_ocr 분리·OcrReachBody·카운터 배선)·src/mobile/test/ocr_controller_test.dart 추가. NLP-03: api/_segmentation_state.py(신규)·api/coach.py(핸들러 3곳 record)·app.py(SolutionSegmentationBody)·tests/backend/api/test_solution_segmentation_observability.py·src/mobile/test/segmentation_contract_test.dart 추가. VIZ-03: tests/backend/schema/test_visualization_spec.py·src/web/graphing-calculator/test/graph2dSpec.test.js 추가. **결정적 제약**: 이 브랜치는 main 과 공통 조상이 없어(merge-base 빈 값) 패치 추출이 불가능하고, app.py·coach.py 는 브랜치 쪽이 오히려 낡아(각 -177·-621줄) 통째 채택 시 PED-08·OPS-17 등을 되돌린다 — 두 파일은 손으로 해당 부분만 이식했다."
+  - "③ 중복 착수 회피: S3-28(같은 브랜치·canonicalize.py)은 이 태스크 범위 밖이다 — 코퍼스 jsonl 2647± 대칭 차이가 얽혀 있어 PB-01/S3-32 계열의 코퍼스 정합 판단이 선행돼야 한다(S3-32 notes가 이미 이 브랜치의 S3-28을 참조). S4-09(whymath-solution-review-40xspg·200파일·-28472줄)도 범위 밖 — Kiki 결정 큐 소관."
+  - "④ 회수 후 각 태스크의 backlog 상태를 main 기준으로 done 전환하고 artifacts 에 회수 커밋을 남긴다. 고립본은 artifacts 가 비어 있었다(done 기입 시 증적 누락) — 같은 형태로 재발시키지 않는다."
+  - "⑤ 회귀: 백엔드 전체 스위트를 src/backend 에서 인자 없이(무작위 순서 포함) 돌린 뒤 회귀 없음을 말한다. 리포 루트 실행은 루트 pyproject.toml 이 잡혀 asyncio_mode=auto 가 빠지므로 금지."
+  - "⑥ 범위 밖: 브랜치 삭제(컨테이너 403·HARN-16 — Kiki 위임)·S3-28·S4-09·openrouter 설정 문서 자체."
+artifacts:
+  - c7e556f4
+paths:
+  - src/backend/whymath_backend/api/_ocr_state.py
+  - src/backend/whymath_backend/api/ocr.py
+  - "src/backend/whymath_backend/l5/ocr/**"
+  - src/backend/whymath_backend/schema/visualization.py
+  - data/segmentation_contract.json
+  - src/web/graphing-calculator/src/lib/graph2dSpec.js
+  - tests/backend/api/test_ocr_reachability.py
+  - "tests/backend/l5/ocr/**"
+session: null
+notes: "발단: 2026-08-08 HARN-19(하네스 cp949 디코드 붕괴) 수정으로 미머지 done 탐지가 되살아나며 13건이 드러났고, 그중 6건은 작업 브랜치가 main 보다 7커밋 뒤처져 생긴 착시(main 에서 이미 done)였다 — main 동기화로 7건으로 감소. 남은 7건 중 ADMIN-01(PR #713)·REC-02(PR #672)·MOB-10(PR #731)은 열린 PR 이 있는 정상 진행분이고, 열린 PR 이 없는 고립분이 이 태스크의 3건 + 범위 밖 2건이다. 참고: 이 브랜치는 SessionStart 브리핑의 '미해결 장기 미머지 브랜치(Kiki 결정 필요)' 목록에 이미 있었으나, 그 목록은 '브랜치가 오래됐다'만 말할 뿐 '안에 어떤 완료분이 갇혀 있는지'는 말하지 못했다 — HARN-13/17(나이)과 HARN-11(완료분)의 교차가 이번에 처음 성립했다."
+updated: 2026-08-09

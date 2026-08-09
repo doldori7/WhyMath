@@ -53,6 +53,7 @@ from whymath_backend.schema.enums import (
     EdgeType,
     MajorCategory,
     Persona,
+    ReviewStatus,
     SourceType,
     Subject,
 )
@@ -188,6 +189,8 @@ def _problem_with_answer(pid: uuid.UUID, suffix: str) -> Problem:
         ProblemSchema(
             problem_id=pid,
             source_type=SourceType.자체생성,
+            # PB-03 — 기본 CAT SQL도 review_status=approved만 후보(축②)라 필요.
+            review_status=ReviewStatus.approved,
             curriculum_version=Curriculum.REVISION_2022,
             valid_from_year=2022,
             subject=Subject.공통,

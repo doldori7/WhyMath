@@ -131,6 +131,8 @@ from whymath_backend.l2.weak_concept_recommendation import (
     recommend_weak_concepts,
 )
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
+from whymath_backend.l4.lthc.adapt import mastery_to_level
+from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
@@ -155,6 +157,7 @@ from whymath_backend.schema.assessment import (
 from whymath_backend.schema.assessment import (
     SkillMasteryHistory as SkillMasteryHistorySchema,
 )
+from whymath_backend.schema.assessment import StudentAssessment as StudentAssessmentSchema
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
@@ -165,6 +168,7 @@ from whymath_backend.schema.enums import (
     AuditResourceType,
     Persona,
     Resolution,
+    ReviewStatus,
 )
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -390,7 +394,7 @@ async def list_my_sessions(
     return rows
 
 
-@router.get("/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력")
+@router.get("/assessments", response_model=list[StudentAssessmentSchema], summary="내 진단 이력")
 async def list_my_assessments(
     user: ConsentedUser,
     session: SessionDep,
@@ -403,8 +407,11 @@ async def list_my_assessments(
     completed_until: CloseUntil = None,
     order: OrderParam = "desc",
     include_total: IncludeTotal = False,
-) -> list[AssessmentSchema]:
+) -> list[StudentAssessmentSchema]:
     """본인 진단(Assessment) 이력 — 기본 최신순. user_id 스코핑.
+
+    ASM-07: 응답 모델은 `StudentAssessment`다 — 예측 5필드는 **스키마에 자리가 없다**
+    (런타임 필터가 아니라 구조적 배제 · ASM-02 결정 (c)).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
     slice 69: `completed_since`/`completed_until`(선택)로 `completed_at` 시간창 — 미완료는 제외.
@@ -431,7 +438,9 @@ async def list_my_assessments(
         .offset(offset)
     )
     result = await session.execute(stmt)
-    rows = [row.to_schema() for row in result.scalars().all()]
+    rows = [
+        StudentAssessmentSchema.from_assessment(row.to_schema()) for row in result.scalars().all()
+    ]
     await _maybe_set_total(
         session,
         response,
@@ -1197,6 +1206,14 @@ class ConceptDiagnosisItem(BaseModel):
     coaching: CoachingTrigger = Field(
         description="L4 메타인지 코칭 처방(focus·rationale·prompt·slice 20)."
     )
+    mastery_level: MasteryLevel | None = Field(
+        default=None,
+        description=(
+            "숙달 상태 라벨('초보'/'발전 중'/'숙달') — `mastery_to_level`(L4)로 bkt_mastery를 "
+            "변환(MOB-10). bkt_mastery가 null(미측정)이면 라벨도 null — 클라는 원시 확률 대신 "
+            "이 라벨만 노출한다(전역 UI 불변식 #1: 표현≠의미, 서열 신호 방지)."
+        ),
+    )
 
 
 # slice 26: 진단 필터·상한 — "주의 필요 개념 대시보드" 질의(전 개념 반환은 페이로드 과대).
@@ -1231,6 +1248,7 @@ async def _compute_concept_diagnosis(
         ConceptDiagnosisItem(
             **d.model_dump(),
             coaching=recommend_coaching(d.bkt_mastery, d.irt_theta),
+            mastery_level=(mastery_to_level(d.bkt_mastery) if d.bkt_mastery is not None else None),
         )
         for d in diagnoses
     ]
@@ -1256,7 +1274,9 @@ async def get_my_concept_diagnosis(
     *약점(저신호) 먼저* 정렬. 각 개념에 L4 메타인지 코칭 처방(`recommend_coaching`·slice 20)을
     붙여 *무엇을 할지*(focus·발화)까지 노출 — L2 진단→L4 결정→L5 노출 풀 스택. user_id
     스코핑·읽기(마이그레이션 불필요). `?agreement`(다중 OR·예: 불일치만)·`?limit`(약점 상위 N)으로
-    "주의 필요 개념" 질의 가능(slice 26).
+    "주의 필요 개념" 질의 가능(slice 26). `mastery_level`(MOB-10)은 `bkt_mastery`를
+    `mastery_to_level`(L4)로 변환한 학생 노출용 라벨 — 클라는 원시 확률 대신 이 라벨만
+    렌더해야 한다(표현≠의미·서열 신호 방지).
     """
     items = await _compute_concept_diagnosis(session, user.user_id)
     # slice 26: agreement OR 필터 → limit(약점 먼저 정렬 후 상위 N). 둘 다 선택적(기본 전체).
@@ -1944,7 +1964,12 @@ async def recommend_next_problem(
         내부의 `is_suneung_eligible`(L6 진실 게이트)이 재수행**한다(저작권·페르소나 재검증 —
         사전필터가 느슨해도 부적격이 새지 않는다).
       - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항은 사전필터에 안 잡히는
-        *의도적 축소*다 — 현 코퍼스 persona_fit은 전부 {}라 실손실 0(적합도 적재 시 재검토).
+        *의도적 축소*다. **S3-10(2026-08-07 재실행) 백필 이후 이 축소는 더 이상 무손실이 아니다**
+        — `persona_fit`이 실값으로 채워져 코퍼스 2,647건 중 시그니처·기출유형이 없는 대다수가
+        `is_suneung_eligible`상으로는 적격인데도 이 SQL 사전필터가 θ 근방 50개 풀에서 원천
+        배제한다(진실 게이트가 재검증하는 건 "새는 부적격"뿐 — "새는 적격 후보"는 잡지 못한다).
+        SQL 사전필터를 persona_fit 조건까지 넓히는 것은 별도 태스크(`S3-17`)로 분리했다 — 이
+        엔드포인트의 실 트래픽·성능 영향을 함께 봐야 하는 변경이라 백필 태스크에 얹지 않는다.
       - 선택은 L6×L2 결합: 수능 우선순위 가중(`suneung_item_weight`) × 약점 가중
         (`prioritize_weak_concepts` — 기본 CAT과 공유하는 `_load_weak_concept_weights`)을
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
@@ -2118,7 +2143,16 @@ async def recommend_next_problem(
     # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
     candidate_stmt = select(
         Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
-    ).where(Problem.difficulty_overall.isnot(None))
+    ).where(
+        Problem.difficulty_overall.isnot(None),
+        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 본문 미보유 출처(평가원/EBS/교과서)는
+        # 기본 CAT 후보에서도 SQL 레벨로 배제한다(수능 분기가 이미 쓰는 것과 동일 상수 재사용 —
+        # 판정 기준 이원화 회피).
+        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+        # PB-03 축② — 검수 노출 게이트(운영 축, 축①과 독립 — 절대 합치지 않는다). approved만
+        # 후보. `corpus_audit_eval` 측정 판정만 review_status에 각인된다(사람 입력 경로 0).
+        Problem.review_status == ReviewStatus.approved,
+    )
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     if sibling_filter == "exclude" and sibling_ids:
@@ -2374,16 +2408,18 @@ async def delete_my_dialogue(
 
 @router.patch(
     "/assessments/{assessment_id}/complete",
-    response_model=AssessmentSchema,
+    response_model=StudentAssessmentSchema,
     summary="내 진단 완료(completed_at 채움)",
 )
 async def complete_my_assessment(
     assessment_id: uuid.UUID,
     user: ConsentedUser,
     session: SessionDep,
-) -> AssessmentSchema:
+) -> StudentAssessmentSchema:
     """slice 53 (slice 55 리팩터): 본인 Assessment 완료(`completed_at`=now). 컬럼은
-    `completed_at`(ended_at 아님). idempotent·404 비누설."""
+    `completed_at`(ended_at 아님). idempotent·404 비누설.
+
+    ASM-07: 응답 모델은 `StudentAssessment` — 예측 5필드는 스키마에 자리가 없다."""
     row, _ = await _close_owned_resource(
         session,
         Assessment,
@@ -2392,7 +2428,7 @@ async def complete_my_assessment(
         "completed_at",
         "진단을 찾을 수 없습니다.",
     )
-    return row.to_schema()
+    return StudentAssessmentSchema.from_assessment(row.to_schema())
 
 
 @router.delete(
@@ -2541,10 +2577,11 @@ class AssessmentCaptureResponse(BaseModel):
             "적재 안 함·기존 행 반환)."
         )
     )
-    assessment: AssessmentSchema | None = Field(
+    assessment: StudentAssessmentSchema | None = Field(
         default=None,
         description="'captured'·'already_captured_window'면 해당 Assessment(신규 또는 기존). "
-        "'insufficient_measurement'면 null.",
+        "'insufficient_measurement'면 null. ASM-07: 학생 대면 모델이라 예측 5필드는 "
+        "스키마에 자리가 없다(적재는 내부 정본 `Assessment`로 그대로 수행).",
     )
     standard_error: float | None = Field(
         default=None,
@@ -2596,18 +2633,19 @@ async def capture_measurement_assessment(
         return AssessmentCaptureResponse(
             written=False,
             reason="already_captured_window",
-            assessment=existing.to_schema(),
+            assessment=StudentAssessmentSchema.from_assessment(existing.to_schema()),
             standard_error=state.standard_error,
             measurement_sufficient=True,
         )
 
     schema = await _assemble_measurement_assessment(session, user.user_id, now=now)
+    # 적재는 내부 정본(예측 5필드 포함 · 값은 항상 None)으로, 응답은 학생 대면 정본으로.
     session.add(Assessment.from_schema(schema))
     await session.commit()
     return AssessmentCaptureResponse(
         written=True,
         reason="captured",
-        assessment=schema,
+        assessment=StudentAssessmentSchema.from_assessment(schema),
         standard_error=state.standard_error,
         measurement_sufficient=True,
     )

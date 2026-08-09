@@ -16,6 +16,22 @@
 
 정직 스코프: NULL 타임스탬프(미시작 세션 등)는 `ts < cutoff`가 NULL이라 *파기 대상 아님*
 (보수적). 테이블별 차등 보존기한·졸업일 기반 정밀 보존은 후속(현 균일 `pii_retention_years`).
+
+감사 2테이블 의도적 제외 — 무기한 보존의 *명문화된* 침묵 (ADMIN-03):
+  `deletion_audit`(`DeletionAudit`)·`privacy_audit`(`PrivacyAudit`, `db/models/audit.py`)는
+  이 `_RETENTION_PLAN`에도, 삭제권 `_ERASURE_PLAN`에도 **의도적으로 넣지 않는다**. 두 테이블은
+  "언제·누가·무엇을 지웠는가/반출했는가"의 **법정 증빙(compliance evidence)** 성격이라, 학습 활동
+  PII와 달리 *즉시 파기 대상이 아니다* — 오히려 지우면 삭제·반출 사실 자체를 증빙할 수 없어 목적이
+  무너진다(그래서 `user_id`가 FK 아닌 plain UUID라 계정 삭제 후에도 잔존한다 — `audit.py` 설계
+  메모). 삭제권 쪽에는 이 제외 사유가 `erasure.py`의 `_ERASURE_PLAN_EXEMPTIONS`에 이미 사유와
+  함께 등재돼 있으나, 보존 파기(retention) 쪽에는 그 결정이 코드·문서 어디에도 없어 *사실상
+  무기한 보존이 침묵으로 남아* 있었다 — 이 문단이 그 공백을 정직하게 명문화한다.
+  다만 이 제외는 "영원히 보존한다"는 확정이 **아니다**. 감사 로그의 최종 **보존 연한은 미확정**
+  이며, 그 확정은 법령(개인정보보호법) 유래 판단이라 **MGMT-02(이용약관·개인정보처리방침 변호사
+  검토) 회신이 선행**한다(CLAUDE.md 「법령 유래 절차의 기계 대체 금지」 — 연한을 코드가 임의로
+  정하지 않는다). 연한이 확정되면 그때 별도 태스크로 감사 전용 파기 경로를 배선한다 — 이 모듈에는
+  지금 그 로직·연한 숫자를 넣지 않는다. 이 제외는 `tests/backend/privacy/
+  test_audit_retention_exclusion.py`가 동결한다(감사 2테이블이 `_RETENTION_PLAN`에 없음).
 """
 
 from __future__ import annotations

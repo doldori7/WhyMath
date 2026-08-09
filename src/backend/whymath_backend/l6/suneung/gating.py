@@ -127,6 +127,10 @@ def is_suneung_eligible(
     if not _shared.is_exposable(problem):
         return False
 
+    # ②-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ③ 수능 적합 신호 — 기출 유형 / 시그니처 패턴 / 페르소나 적합도 중 하나라도.
     suneung_exam_values = {e.value for e in SUNEUNG_EXAM_TYPES}
     is_exam_signal = _shared.normalize_enum_value(problem.exam_type) in suneung_exam_values

@@ -49,6 +49,9 @@ from whymath_backend.l2.recommendation_evidence import (
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.assessment import (
+    STUDENT_HIDDEN_PREDICTION_FIELDS,
+)
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
@@ -65,6 +68,7 @@ from whymath_backend.schema.enums import (
     ExamType,
     Persona,
     Resolution,
+    ReviewStatus,
     SignaturePattern,
     SourceType,
     Subject,
@@ -1786,6 +1790,8 @@ def _suneung_problem(**over: object) -> SchemaProblem:
     """수능 모드 후보용 최소 자체생성 schema Problem 빌더(l6 test_gating `_problem` 답습)."""
     kwargs: dict[str, object] = {
         "source_type": SourceType.자체생성,
+        # PB-03 — 검수 노출 게이트(`is_review_cleared`) 추가로 기본값도 approved가 필요.
+        "review_status": ReviewStatus.approved,
         "curriculum_version": Curriculum.REVISION_2022,
         "valid_from_year": 2022,
         "subject": Subject.미적분,
@@ -2041,6 +2047,8 @@ class TestConceptDiagnosis:
         assert item["coaching"]["focus"] == "foundation"
         assert item["coaching"]["prompt"]
         assert item["coaching"]["rationale"]
+        # MOB-10: bkt_mastery=0.5 → mastery_to_level 발전 중 구간(0.4~0.8)
+        assert item["mastery_level"] == "발전 중"
 
     def test_irt_higher_signal(self) -> None:
         """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher·코칭 consolidate."""
@@ -2062,6 +2070,8 @@ class TestConceptDiagnosis:
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "bkt_higher"
         assert item["coaching"]["focus"] == "retrieval"
+        # MOB-10: bkt_mastery=0.9 → mastery_to_level 숙달 구간(>=0.8)
+        assert item["mastery_level"] == "숙달"
 
     def test_bkt_only_concept_insufficient(self) -> None:
         """IRT 채점 없는 개념 → theta·proxy null·insufficient·코칭 diagnose."""
@@ -2083,6 +2093,8 @@ class TestConceptDiagnosis:
         assert item["bkt_mastery"] is None
         assert item["irt_theta"] == 4.0
         assert item["agreement"] == "insufficient"
+        # MOB-10: bkt_mastery null이면 mastery_level도 null(무데이터 정직 표기 — 가짜 라벨 금지)
+        assert item["mastery_level"] is None
 
     def test_irt_row_without_b_source_skipped(self) -> None:
         """slice 81: IRT 행의 난이도·보정 b 둘 다 없으면 제외 — 그 개념 IRT 신호 없음."""
@@ -2094,6 +2106,25 @@ class TestConceptDiagnosis:
         assert item["irt_theta"] is None  # 유일 IRT 행 제외 → θ 없음
         assert item["response_count"] == 0
         assert item["agreement"] == "insufficient"
+
+    def test_mastery_level_boundary_labels(self) -> None:
+        """MOB-10: mastery_to_level 3구간 경계 — 0.4·0.8은 *상위* 라벨에 포함(≥)."""
+        below, at_dev, at_mastered = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [
+                (below, "C1", "개념1", 0.39),
+                (at_dev, "C2", "개념2", 0.4),
+                (at_mastered, "C3", "개념3", 0.8),
+            ],
+            [],
+        )
+        by_id = {
+            item["concept_id"]: item["mastery_level"]
+            for item in client.get("/v1/me/diagnosis/concepts").json()
+        }
+        assert by_id[str(below)] == "초보"
+        assert by_id[str(at_dev)] == "발전 중"
+        assert by_id[str(at_mastered)] == "숙달"
 
     def test_sorted_weakest_first(self) -> None:
         """약점(저신호) 개념 먼저 — BKT 0.1 < 0.9."""
@@ -2502,19 +2533,21 @@ class TestAssessmentCaptureEndpoint:
         assert body["measurement_sufficient"] is True
         assert body["assessment"] is not None
         assert body["assessment"]["user_id"] == str(_UID)
-        # 4개 예측 필드(+target_university_id) — 조립 스키마가 채우지 않았으므로 응답도 null.
-        for field in (
-            "estimated_grade",
-            "estimated_score",
-            "estimated_percentile",
-            "admission_probability",
-            "target_university_id",
-        ):
-            assert body["assessment"][field] is None
+        # ASM-07: 예측 5필드는 학생 대면 응답에 **키 자체가 없다**(구조적 배제).
+        #
+        # 이 단언은 원래 `body["assessment"][field] is None` 이었다 — 값이 null 임을
+        # 확인하면서 *키의 존재*를 함께 동결하고 있었고, 그게 2026-08-08에 "노출 대기"
+        # 상태(배관 완성·값만 빈 상태)를 드러낸 증거였다. 봉인 후 이 자리는 KeyError로
+        # red 전환되는 것을 실측한 뒤 아래 형태로 갱신했다(ASM-07 acceptance ③).
+        assert set(body["assessment"]) & STUDENT_HIDDEN_PREDICTION_FIELDS == set()
         # 실제로 Assessment ORM 행 1건 add + commit 1회(실 적재 발생).
         assert fake.commits == 1
         assert len(fake.added) == 1
         assert isinstance(fake.added[0], Assessment)
+        # 적재된 *내부* 정본에는 5필드가 그대로 있고 값은 None이다 — 봉인은 노출 축이지
+        # 영속 축이 아니다(필드 폐기는 ASM-02에서 (d) 미채택).
+        for field in STUDENT_HIDDEN_PREDICTION_FIELDS:
+            assert getattr(fake.added[0], field) is None
 
     def test_idempotent_within_same_window_no_double_write(
         self, monkeypatch: pytest.MonkeyPatch

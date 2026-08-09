@@ -27,6 +27,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     Persona,
     QuestionFormat,
+    ReviewStatus,
     SourceType,
     Subject,
 )
@@ -43,6 +44,9 @@ def _problem(**over: object) -> Problem:
     """
     kwargs: dict[str, object] = {
         "source_type": SourceType.자체생성,
+        # PB-03 — 검수 노출 게이트(`is_review_cleared`) 추가로 기본값도 approved가 필요(다른
+        # 조건은 손대지 않고 review_status만 오버라이드하면 검수 미달 케이스를 시험할 수 있다).
+        "review_status": ReviewStatus.approved,
         "curriculum_version": Curriculum.REVISION_2022,
         "valid_from_year": 2022,
         "subject": Subject.미적분,
@@ -139,6 +143,78 @@ class TestIsRetakeEligible:
         """
         problem = _problem(persona_fit={Persona.C_검정고시N수.value: 0.7})
         assert is_retake_eligible(problem, Persona.C_검정고시N수) is True
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PB-03 축② — 검수 노출 게이트(is_review_cleared, 저작권 축과 독립)
+# ──────────────────────────────────────────────────────────────────────
+class TestReviewStatusGateIndependentFromCopyrightGate:
+    """`is_review_cleared`가 `is_exposable`과 *독립*으로 RT 적격성을 차단하는지 확인.
+
+    L6 6모드 중 retake를 대표로 검증(PB-03 지시 — 최소 1개 모드). 다른 5모드는 동일 코드
+    패턴(`if not _shared.is_exposable(...): return False` 바로 다음 줄에 독립된
+    `if not _shared.is_review_cleared(...): return False`)이라 회귀 위험은 동형이나, 전건
+    반복은 범위 밖(retake가 대표 검증).
+    """
+
+    def test_pending_review_status_blocks_even_when_copyright_and_persona_pass(self) -> None:
+        """저작권(자체생성)·페르소나(B+재수전용형) 둘 다 통과해도 review_status=pending이면 차단."""
+        problem = _problem(
+            question_format=QuestionFormat.재수전용형,
+            review_status=ReviewStatus.pending,
+        )
+        assert is_retake_eligible(problem, Persona.B_자사고N수) is False
+
+    def test_rejected_review_status_blocks(self) -> None:
+        """review_status=rejected면 차단(기준 미달로 명시 거부된 문항)."""
+        problem = _problem(
+            question_format=QuestionFormat.재수전용형,
+            review_status=ReviewStatus.rejected,
+        )
+        assert is_retake_eligible(problem, Persona.B_자사고N수) is False
+
+    def test_none_review_status_blocks_fail_closed(self) -> None:
+        """review_status=None(미평가)이면 fail-closed로 차단 — §13.3 "approved 후 노출"."""
+        problem = _problem(
+            question_format=QuestionFormat.재수전용형,
+            review_status=None,
+        )
+        assert is_retake_eligible(problem, Persona.B_자사고N수) is False
+
+    def test_approved_review_status_with_metadata_only_source_still_blocked(self) -> None:
+        """검수를 통과(approved)해도 저작권 축(본문 미보유 출처)이 여전히 독립적으로 차단한다.
+
+        두 축이 하나로 합쳐지지 않았다는 확인 — approved 하나만으로는 저작권 게이트를 우회할
+        수 없다(설계 핵심: 두 함수·두 독립 `if`).
+        """
+        problem = _problem(
+            source_type=SourceType.평가원,
+            question_format=QuestionFormat.재수전용형,
+            review_status=ReviewStatus.approved,
+        )
+        assert is_retake_eligible(problem, Persona.B_자사고N수) is False
+
+    def test_approved_review_status_restores_eligibility(self) -> None:
+        """자체생성 + approved + RT 신호 → 적격(양쪽 축 통과 시 정상 통과 확인 — 대조군)."""
+        problem = _problem(
+            question_format=QuestionFormat.재수전용형,
+            review_status=ReviewStatus.approved,
+        )
+        assert is_retake_eligible(problem, Persona.B_자사고N수) is True
+
+    def test_select_retake_items_excludes_unreviewed_from_mixed_pool(self) -> None:
+        """`select_retake_items` — approved 문항만 남고 pending/rejected는 혼합 풀에서 제외."""
+        approved = _problem(
+            question_format=QuestionFormat.재수전용형, review_status=ReviewStatus.approved
+        )
+        pending = _problem(
+            question_format=QuestionFormat.재수전용형, review_status=ReviewStatus.pending
+        )
+        rejected = _problem(
+            question_format=QuestionFormat.재수전용형, review_status=ReviewStatus.rejected
+        )
+        selected = select_retake_items([approved, pending, rejected], Persona.B_자사고N수)
+        assert selected == [approved]
 
 
 # ──────────────────────────────────────────────────────────────────────
