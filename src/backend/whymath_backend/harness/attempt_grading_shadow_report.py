@@ -40,9 +40,28 @@ parsed[*].formal`(자유서술 수식 문자열, 전 레포 소비자 0건 확�
 교수학 금기(acceptance②): `unverifiable`은 오답으로 강등하지 않는다 — `client_grade_mismatch`
 집계는 verdict가 `pass`/`fail`일 때만 클라 보고와 대조한다.
 
+채점 가능성 상한(REC-05·`ai_recommendation_module_gap_review_2.md` §2 G1): 위 shadow 채점의
+파생 게이트(`derive_verify_inputs`)는 코퍼스 2,647문항 중 **0건**만 통과한다(조건 보유 30건
+전부 `formal` 결측) — 이 경로만으로는 attempt가 아무리 쌓여도 채점 가능성 관측이 영구히 0건
+이다. `classify_gradability`/`build_gradability_ceiling_report`는 **attempt 없이 코퍼스만으로**
+채점 가능성의 실제 상한(선택형 정확일치·수치 단답 후보·조건 기반 파생 3버킷)을 측정하는
+별도 정적 리포트다 — `derive_verify_inputs`를 C버킷 판정에 그대로 재사용하되(중복 로직 0),
+attempt 유무와 무관하게 코퍼스 전량을 스캔한다.
+
+구조적 0 원인 구분(acceptance②): `ShadowGradingReport.verifiable_zero_reason`이 "표본
+없음(attempt 0행)"과 "파생 가능 문항 0(코퍼스 formal 결측)"을 구분한다 — 이전에는 둘 다
+`mismatch_rate=None`으로 같은 값이었다(변별력 없음).
+
+CI 배선(acceptance⑤): 이 모듈의 CLI는 독립 CI job으로 배선돼 있지 않다(게이트가 아닌 관측
+리포트라 실익 없음 — `ops/recommendation_reach_report.py`와 동일 패턴). `tests/backend/
+harness/test_attempt_grading_shadow_report.py`가 pytest로 이 모듈의 순수 로직·CLI 분기를
+검증하고, 그 pytest 경로 자체의 실재성은 `tests/infra/test_test_suite_wiring.py`가 결함주입
+으로 상시 보증한다("저장소에 존재함"과 "돌아감"의 간극은 이 두 겹으로 이미 분리돼 있다).
+
 사용:
     python -m whymath_backend.harness.attempt_grading_shadow_report
     python -m whymath_backend.harness.attempt_grading_shadow_report --json out/shadow.json
+    python -m whymath_backend.harness.attempt_grading_shadow_report --mode ceiling
 """
 
 from __future__ import annotations
@@ -53,9 +72,10 @@ import json
 import logging
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import sympy
 from sqlalchemy import select
@@ -64,16 +84,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
+from whymath_backend.schema.enums import AnswerFormat, QuestionFormat
 from whymath_backend.schema.problem import Problem
 
 __all__ = [
     "AttemptRecord",
+    "GradabilityBucket",
+    "GradabilityCeilingReport",
     "ShadowGradingReport",
+    "build_gradability_ceiling_report",
     "build_report",
+    "classify_gradability",
     "derive_verify_inputs",
+    "fetch_all_problems",
     "fetch_attempt_records",
     "grade_attempt",
+    "gradability_report_to_json",
     "main",
+    "render_gradability_ceiling_report",
     "render_report",
     "report_to_json",
 ]
@@ -203,6 +231,20 @@ async def fetch_attempt_records(
     return records
 
 
+async def fetch_all_problems(session: AsyncSession) -> list[Problem]:
+    """`problem` 테이블 전량 스캔(REC-05 채점 가능성 상한 리포트 전용 — attempt 무관).
+
+    페이지네이션 없이 `.all()`로 전량 로드한다(이 저장소의 확립된 관례 —
+    `fetch_attempt_records`·`api/gating.py:_fetch_candidates`와 동형, 코퍼스 규모(수천 건)에
+    적합). 각 row는 `to_schema()`로 Pydantic 스키마 변환한다 — ORM 컬럼을 직접 select하면
+    `conditions_parsed`가 raw `list[dict]`로 나와 `derive_verify_inputs`가 기대하는
+    `Condition` 객체 속성 접근(`condition.formal`)이 깨진다.
+    """
+    stmt = select(ProblemORM)
+    rows = (await session.execute(stmt)).scalars().all()
+    return [row.to_schema() for row in rows]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 집계 — 이중 회계 리포트(순수 코어 — DB·LLM·HTTP 0)
 # ──────────────────────────────────────────────────────────────────────────
@@ -239,6 +281,19 @@ class ShadowGradingReport:
         if self.verifiable_count == 0:
             return None
         return self.verdict_counts.get("unverifiable", 0) / self.verifiable_count
+
+    @property
+    def verifiable_zero_reason(self) -> Literal["no_sample", "not_derivable"] | None:
+        """`verifiable_count == 0`의 원인 구분(REC-05 acceptance②).
+
+        이전에는 "표본 자체가 없음"(`total_attempts == 0`)과 "표본은 있으나 전량 파생
+        실패"(`not_derivable_count == total_attempts > 0`)가 둘 다 `mismatch_rate=None`으로
+        같은 값이었다 — 변별력 없는 검증 스텝(CLAUDE.md 2026-07-17 등재)이었다. `verifiable_
+        count > 0`이면 원인 구분이 필요 없으므로 `None`.
+        """
+        if self.verifiable_count > 0:
+            return None
+        return "no_sample" if self.total_attempts == 0 else "not_derivable"
 
     def to_json(self) -> dict[str, Any]:
         return report_to_json(self)
@@ -289,6 +344,77 @@ def build_report(records: list[AttemptRecord]) -> ShadowGradingReport:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 채점 가능성 상한 — 코퍼스 정적 리포트(REC-05, attempt 무관·순수 코어)
+# ──────────────────────────────────────────────────────────────────────────
+GradabilityBucket = Literal[
+    "selectable_exact_match",
+    "numeric_short_answer_candidate",
+    "condition_formal_derivable",
+    "unclassified",
+]
+
+_GRADABILITY_BUCKETS: tuple[GradabilityBucket, ...] = get_args(GradabilityBucket)
+
+# 식(자유서술 수식)은 정규화 규칙이 없어 제외 — B버킷은 수치 3종만(REC-05 §2 G1 정의 그대로).
+_NUMERIC_ANSWER_FORMATS: frozenset[AnswerFormat] = frozenset(
+    {AnswerFormat.자연수, AnswerFormat.실수, AnswerFormat.분수}
+)
+
+
+def classify_gradability(problem: Problem) -> GradabilityBucket:
+    """문항 1건 → 채점 가능성 버킷(순수·하드 우선순위 A→B→C→unclassified — 상호배타 계약).
+
+    - **A**(`selectable_exact_match`): `choices` 보유 ∧ `answer` 보유 ∧ `answer`가 `choices`
+      원소와 문자열 일치 — 서버 채점이 자명(정확일치 1회 비교).
+    - **B**(`numeric_short_answer_candidate`): `question_format`이 단답형이고 `answer_format`이
+      수치 3종(`자연수`/`실수`/`분수`) 중 하나 — 정규화 규칙(권위는 SymPy) 도입 시 채점 가능.
+    - **C**(`condition_formal_derivable`): `derive_verify_inputs`가 성공(기존 게이트 재사용 —
+      중복 판정 로직 0).
+    - 그 외 **unclassified**: 셋 다 불성립. `choices`는 있는데 `answer`가 그 안에 없는
+      데이터 이상치도 A로 오분류되지 않고 여기로 정직하게 떨어진다(조용한 은폐 금지).
+
+    우선순위는 하드 계약이다 — A와 C를 동시에 만족하는 문항도 A로 계상한다(선택형이 더
+    자명한 채점이므로).
+    """
+    if problem.choices and problem.answer and problem.answer in problem.choices:
+        return "selectable_exact_match"
+    if (
+        problem.question_format == QuestionFormat.단답형
+        and problem.answer_format in _NUMERIC_ANSWER_FORMATS
+    ):
+        return "numeric_short_answer_candidate"
+    if derive_verify_inputs(problem) is not None:
+        return "condition_formal_derivable"
+    return "unclassified"
+
+
+@dataclass(slots=True, frozen=True)
+class GradabilityCeilingReport:
+    """코퍼스 전량의 채점 가능성 버킷 집계(불변) — 4버킷 합은 항상 `total_problems`와 같다."""
+
+    total_problems: int
+    bucket_counts: dict[GradabilityBucket, int] = field(default_factory=dict)
+
+    def bucket_rate(self, bucket: GradabilityBucket) -> float | None:
+        """버킷 비율. `total_problems == 0`이면 `None`(분모 없는 0 금지)."""
+        if self.total_problems == 0:
+            return None
+        return self.bucket_counts.get(bucket, 0) / self.total_problems
+
+    def to_json(self) -> dict[str, Any]:
+        return gradability_report_to_json(self)
+
+
+def build_gradability_ceiling_report(problems: Sequence[Problem]) -> GradabilityCeilingReport:
+    """문항 목록 → `GradabilityCeilingReport`(순수·부작용 0). 각 문항을 정확히 한 버킷에 계상."""
+    counts: dict[GradabilityBucket, int] = dict.fromkeys(_GRADABILITY_BUCKETS, 0)
+    for problem in problems:
+        bucket = classify_gradability(problem)
+        counts[bucket] += 1
+    return GradabilityCeilingReport(total_problems=len(problems), bucket_counts=counts)
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 렌더 — 사람이 읽는 마크다운 + 기계가 읽는 JSON
 # ──────────────────────────────────────────────────────────────────────────
 def render_report(report: ShadowGradingReport) -> str:
@@ -321,6 +447,15 @@ def render_report(report: ShadowGradingReport) -> str:
     ]
     if report.verifiable_count == 0:
         lines.append("- 검산 가능 표본 0건 — 불일치율 측정 불가(데이터없음, 0%로 위장하지 않음).")
+        if report.verifiable_zero_reason == "no_sample":
+            lines.append(
+                "  - 원인: 표본 없음(attempt 0행) — `POST /v1/me/attempts`가 아직 호출되지 않음."
+            )
+        else:
+            lines.append(
+                "  - 원인: 파생 가능 문항 0건(코퍼스 `conditions_parsed[*].formal` 전건 결측) "
+                "— 표본이 있어도 채점 불가(REC-05 `--mode ceiling` 리포트 참조)."
+            )
     else:
         rate = report.mismatch_rate
         rate_text = f"{rate:.2%}" if rate is not None else "데이터없음"
@@ -348,6 +483,59 @@ def report_to_json(report: ShadowGradingReport) -> dict[str, Any]:
         "client_grade_mismatch_count": report.client_grade_mismatch_count,
         "mismatch_rate": report.mismatch_rate,
         "unverifiable_rate": report.unverifiable_rate,
+        "verifiable_zero_reason": report.verifiable_zero_reason,
+    }
+
+
+_GRADABILITY_BUCKET_LABELS: dict[GradabilityBucket, str] = {
+    "selectable_exact_match": "A. 선택형 정확일치",
+    "numeric_short_answer_candidate": "B. 수치 단답 후보",
+    "condition_formal_derivable": "C. 조건 기반 symbolic 파생",
+    "unclassified": "미분류(데이터 품질 이상치 후보)",
+}
+
+
+def render_gradability_ceiling_report(report: GradabilityCeilingReport) -> str:
+    """채점 가능성 상한 리포트를 마크다운으로 렌더(순수). C=0은 "파생 불가"로 명시한다
+    (acceptance① — "0건 통과"가 아니라 파생 불가 사유를 적는다. 분모 없는 0 금지 승계).
+    """
+    lines = [
+        "# 코퍼스 채점 가능성 상한 리포트 (REC-05)",
+        "",
+        "> 관측 전용 리포트다 — 신규 스키마·마이그레이션·클라 배선·권위 이관 0. exit 게이트 "
+        "아님(항상 exit 0). attempt와 무관하게 코퍼스 전량만으로 산출된다.",
+        "",
+        f"- 코퍼스 전체 문항: **{report.total_problems}**",
+        "",
+        "## 버킷별 채점 가능성 (상호배타 — 합은 항상 전체 문항 수)",
+        "",
+    ]
+    if report.total_problems == 0:
+        lines.append("- 코퍼스 0건 — 관측 불가(분모 없음, 0%로 위장하지 않음).")
+        lines.append("")
+        return "\n".join(lines)
+
+    for bucket in _GRADABILITY_BUCKETS:
+        count = report.bucket_counts.get(bucket, 0)
+        rate = report.bucket_rate(bucket)
+        rate_text = f"{rate:.1%}" if rate is not None else "데이터없음"
+        label = _GRADABILITY_BUCKET_LABELS[bucket]
+        if bucket == "condition_formal_derivable" and count == 0:
+            lines.append(
+                f"- {label}: **{count} / {report.total_problems}** — 파생 불가(formal 전건 결측)"
+            )
+        else:
+            lines.append(f"- {label}: **{count} / {report.total_problems}** ({rate_text})")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gradability_report_to_json(report: GradabilityCeilingReport) -> dict[str, Any]:
+    """리포트 → JSON 직렬화 가능 dict(분모 0이면 `bucket_rates` 전부 `None`)."""
+    return {
+        "total_problems": report.total_problems,
+        "bucket_counts": {b: report.bucket_counts.get(b, 0) for b in _GRADABILITY_BUCKETS},
+        "bucket_rates": {b: report.bucket_rate(b) for b in _GRADABILITY_BUCKETS},
     }
 
 
@@ -358,9 +546,30 @@ _EXIT_OK = 0
 _EXIT_INPUT_ERROR = 2
 
 
+async def _run_shadow(args: argparse.Namespace) -> ShadowGradingReport:
+    # lazy import — CLI를 실제로 실행할 때만 DB 세션 팩토리를 물게 한다(다른 함수의
+    # 모듈 top-level import는 순수 유지).
+    from whymath_backend.db.session import get_session
+
+    async for session in get_session():
+        records = await fetch_attempt_records(session, user_id=args.user_id, limit=args.limit)
+        return build_report(records)
+    raise RuntimeError("DB 세션을 얻지 못함")  # pragma: no cover — get_session은 항상 1회 yield
+
+
+async def _run_ceiling(args: argparse.Namespace) -> GradabilityCeilingReport:
+    from whymath_backend.db.session import get_session
+
+    async for session in get_session():
+        problems = await fetch_all_problems(session)
+        return build_gradability_ceiling_report(problems)
+    raise RuntimeError("DB 세션을 얻지 못함")  # pragma: no cover — get_session은 항상 1회 yield
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI — DB에서 attempt를 읽어 shadow 채점 리포트를 출력. **게이트가 아니다**(항상 exit 0,
-    DB 접속 실패만 exit 2).
+    """CLI — `--mode shadow`(기본): DB에서 attempt를 읽어 shadow 채점 리포트를 출력.
+    `--mode ceiling`: 코퍼스 전량을 채점 가능성 3버킷으로 분류(REC-05, attempt 무관). 둘 다
+    **게이트가 아니다**(항상 exit 0, DB 접속 실패만 exit 2).
 
     불일치·unverifiable 비율이 얼마든 exit 0이다 — 권위 이관 여부는 이 수치를 본 사람이
     판단한다(Kiki 결정 2026-07-31 "측정 없는 도입 없음" — 이 CLI는 그 측정만 낸다).
@@ -369,39 +578,56 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m whymath_backend.harness.attempt_grading_shadow_report",
         description=(
             "POST /v1/me/attempts 적재분을 verify_answer로 shadow 재검산해 클라/서버 불일치·"
-            "unverifiable 비율을 관측한다(NLP-02·관측 전용·게이트 아님)."
+            "unverifiable 비율을 관측하거나(--mode shadow, 기본), 코퍼스 전량의 채점 가능성 "
+            "상한을 관측한다(--mode ceiling). 둘 다 NLP-02/REC-05·관측 전용·게이트 아님."
         ),
     )
     parser.add_argument(
-        "--user-id", type=uuid.UUID, default=None, help="특정 사용자로 스코핑(선택·기본 전량)"
+        "--mode",
+        choices=("shadow", "ceiling"),
+        default="shadow",
+        help="shadow(기본, 회귀 0) 또는 ceiling(REC-05 코퍼스 정적 리포트)",
     )
-    parser.add_argument("--limit", type=int, default=None, help="조회할 attempt 상한(선택)")
+    parser.add_argument(
+        "--user-id",
+        type=uuid.UUID,
+        default=None,
+        help="특정 사용자로 스코핑(--mode shadow 전용·선택·기본 전량)",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None, help="조회할 attempt 상한(--mode shadow 전용·선택)"
+    )
     parser.add_argument(
         "--json", dest="json_path", type=Path, default=None, help="JSON 산출물 경로(선택)"
     )
     args = parser.parse_args(argv)
 
-    async def _run() -> ShadowGradingReport:
-        # lazy import — CLI를 실제로 실행할 때만 DB 세션 팩토리를 물게 한다(다른 함수의
-        # 모듈 top-level import는 순수 유지).
-        from whymath_backend.db.session import get_session
-
-        async for session in get_session():
-            records = await fetch_attempt_records(session, user_id=args.user_id, limit=args.limit)
-            return build_report(records)
-        raise RuntimeError("DB 세션을 얻지 못함")  # pragma: no cover — get_session은 항상 1회 yield
+    if args.mode == "ceiling" and (args.user_id is not None or args.limit is not None):
+        print(
+            "--mode ceiling에서는 --user-id/--limit이 무시됩니다(코퍼스 전량 관측).",
+            file=sys.stderr,
+        )
 
     try:
-        report = asyncio.run(_run())
+        if args.mode == "ceiling":
+            ceiling_report = asyncio.run(_run_ceiling(args))
+        else:
+            shadow_report = asyncio.run(_run_shadow(args))
     except Exception as exc:  # noqa: BLE001 — DB 접속 실패 등은 타입명과 함께 보고 후 exit 2
         print(f"입력/접속 오류({type(exc).__name__}): {exc}", file=sys.stderr)
         return _EXIT_INPUT_ERROR
 
-    print(render_report(report))
+    if args.mode == "ceiling":
+        print(render_gradability_ceiling_report(ceiling_report))
+        json_payload = gradability_report_to_json(ceiling_report)
+    else:
+        print(render_report(shadow_report))
+        json_payload = report_to_json(shadow_report)
+
     if args.json_path is not None:
         args.json_path.parent.mkdir(parents=True, exist_ok=True)
         args.json_path.write_text(
-            json.dumps(report_to_json(report), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            json.dumps(json_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         print(f"JSON 산출물: {args.json_path}")
