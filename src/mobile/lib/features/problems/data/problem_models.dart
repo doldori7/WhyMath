@@ -1,7 +1,8 @@
 // 문제·진단 API 데이터 모델 — S1 E2E 루프의 진단(CAT)→문제제시 구간 계약을 구조 그대로 옮긴다.
 //
 // 정본: `src/backend/whymath_backend/schema/problem.py`(`Problem`),
-// `api/me.py`(`NextProblemResponse`·`ConceptDiagnosisItem`).
+// `api/me.py`(`NextProblemResponse`·`ConceptDiagnosisItem`),
+// `l2/learning_path.py`(`LearningPath`·`LearningStep`, PATH-05).
 //
 // **경계(CLAUDE.md)**: 이 클래스들은 *수신 컨테이너*일 뿐이다 — 출제·진단 로직은 전부 서버
 // (L2 IRT/BKT)가 내리고 클라는 구조 그대로 받아 렌더만 한다(표현≠의미·수학 로직 클라 미구현).
@@ -88,6 +89,11 @@ abstract class ConceptDiagnosisItem with _$ConceptDiagnosisItem {
 
     /// 메타인지 코칭 트리거(focus가 코치 진입 시드).
     @JsonKey(name: 'coaching') required DiagnosisCoaching coaching,
+
+    /// 숙달 상태 라벨('초보'/'발전 중'/'숙달')·bktMastery가 null이면 null(MOB-10).
+    /// 서버(`mastery_to_level`)가 산출 — 클라는 원시 확률로 임계값을 계산하지 않는다
+    /// (전역 UI 불변식 #1: 표현≠의미).
+    @JsonKey(name: 'mastery_level') String? masteryLevel,
   }) = _ConceptDiagnosisItem;
 
   factory ConceptDiagnosisItem.fromJson(Map<String, dynamic> json) =>
@@ -178,4 +184,73 @@ abstract class Problem with _$Problem {
 
   factory Problem.fromJson(Map<String, dynamic> json) =>
       _$ProblemFromJson(json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GET /v1/me/weak-concepts/{concept_id}/learning-path — LearningPath (l2/learning_path.py)
+// PATH-05: me_screen.dart '학습 경로' 섹션 소비.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 학습 경로의 단일 단계 — 위상정렬된 막힌 선수개념 1건 + 순서·구조 메타.
+///
+/// [position]은 0-based 학습 순서(0=가장 먼저 다질 근본 선수). [isCycleResidual]이 true면
+/// 이 노드가 위상정렬로 방출되지 못한 *사이클 잔여*임을 뜻한다(정직 표시·조용히 숨기지 않음).
+/// 백엔드 `LearningStep`과 동형 — **본문(description·formal_definition) 필드가 없다**
+/// (frozen 스키마·redaction 계약, `problem_models.dart` 상단 안전 주석과 동일 원칙).
+@freezed
+abstract class LearningStep with _$LearningStep {
+  const factory LearningStep({
+    /// 0-based 학습 순서(0=가장 먼저 다질 근본 선수).
+    @JsonKey(name: 'position') required int position,
+
+    /// 막힌 선수개념 PK(UUID 문자열).
+    @JsonKey(name: 'concept_id') required String conceptId,
+
+    /// 선수개념 코드·orphan이면 null.
+    @JsonKey(name: 'concept_code') String? conceptCode,
+
+    /// 선수개념 표시명(안전 메타·본문 아님)·미적재 시 null.
+    @JsonKey(name: 'concept_name') String? conceptName,
+
+    /// 두 신호(bkt·irt) 중 최저값(막힘 정도)·미측정이면 null.
+    @JsonKey(name: 'weakness') double? weakness,
+
+    /// 원래 후행 개념으로부터의 선수 거리(1=직접 선수).
+    @JsonKey(name: 'depth') @Default(1) int depth,
+
+    /// 선수관계 강도 [0,1]·미기재 시 null.
+    @JsonKey(name: 'edge_strength') double? edgeStrength,
+
+    /// 위상정렬로 방출되지 못한 사이클 잔여 노드 표시(정직·기본 false).
+    @JsonKey(name: 'is_cycle_residual') @Default(false) bool isCycleResidual,
+  }) = _LearningStep;
+
+  factory LearningStep.fromJson(Map<String, dynamic> json) =>
+      _$LearningStepFromJson(json);
+}
+
+/// 막힌 선수개념들의 위상정렬된 학습 경로 — 근본(먼저)→말단(나중) 순서.
+///
+/// **정직 신호(CLAUDE.md — 삼켜서 일반 오류로 뭉개지 않는다)**: [hasCycle]이 true면 선수
+/// 그래프에 사이클이 있어 일부 노드가 위상정렬로 방출되지 못하고 잔여로 붙었다는 뜻이다
+/// (`is_cycle_residual` 단계로 식별) — 화면은 이 상태를 숨기지 않고 그대로 알린다.
+/// [steps]가 비어 있으면 "막힌 선수개념이 없음"이라는 *정상* 신호다(에러 아님).
+@freezed
+abstract class LearningPath with _$LearningPath {
+  const factory LearningPath({
+    /// 위상정렬된 학습 단계들(position 0..n-1 연속·근본 먼저). 비어 있을 수 있다(정상).
+    @JsonKey(name: 'steps') @Default(<LearningStep>[]) List<LearningStep> steps,
+
+    /// 선수 그래프에 사이클이 있어 잔여 노드가 발생했는지(정직 표시·기본 false).
+    @JsonKey(name: 'has_cycle') @Default(false) bool hasCycle,
+
+    /// Kahn이 실제로 소비한 집합 내부 제약 엣지 수(0이면 tiebreak만으로 정렬됨).
+    @JsonKey(name: 'ordering_edge_count') @Default(0) int orderingEdgeCount,
+
+    /// 'topological'|'tiebreak_only'|'empty' — 순서가 실제 제약 엣지로 정해졌는지의 정직 표기.
+    @JsonKey(name: 'ordering_basis') @Default('empty') String orderingBasis,
+  }) = _LearningPath;
+
+  factory LearningPath.fromJson(Map<String, dynamic> json) =>
+      _$LearningPathFromJson(json);
 }

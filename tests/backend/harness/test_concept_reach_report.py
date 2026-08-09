@@ -251,25 +251,38 @@ def test_main_writes_json_artifact(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 6. 실 코퍼스 스모크(회귀 감시 — 핵심 신호)
 # ──────────────────────────────────────────────────────────────────────────
-def test_real_corpus_smoke_all_ten_surfaces_unreached_and_fourteen_callsites() -> None:
+def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_fifteen_callsites() -> None:
     """실제 src/mobile/lib·src/backend/whymath_backend/api를 읽어 확인한다.
 
-    `total_v1_literal_callsites`가 기대값이 아니게 되면(모바일이 실제로 이 표면들 중 하나를
-    호출하기 시작하면) 이 테스트가 깨져서 "가시화 리포트가 낡았다"를 자동으로 신호한다 —
-    의도된 동작(회귀 감시이지 임의 임계값이 아니다).
+    `total_v1_literal_callsites`·표면 도달 상태가 기대값이 아니게 되면(모바일이 실제로 이
+    표면들 중 하나를 호출하기 시작하면) 이 테스트가 깨져서 "가시화 리포트가 낡았다"를 자동으로
+    신호한다 — 의도된 동작(회귀 감시이지 임의 임계값이 아니다).
 
-    **분모 갱신 이력**: 13 → 14 (2026-08-04, RPT-01). 학생 결함 신고 버튼이
-    `features/reports/data/defect_report_api.dart`에서 `/v1/reports/defects`를 호출하기
-    시작해 프로덕션 `/v1/` 리터럴 콜사이트가 하나 늘었다. 이 가드가 설계대로 발화해
-    분모 변화를 잡았고(회귀가 아니라 정당한 증가), 10종 표면의 `미도달` 판정 자체는
-    그대로다 — 새 콜사이트는 개념 표면이 아니라 신고 표면이기 때문이다.
+    **분모 갱신 이력**:
+    - 13 → 14 (2026-08-04, RPT-01). 학생 결함 신고 버튼이
+      `features/reports/data/defect_report_api.dart`에서 `/v1/reports/defects`를 호출하기
+      시작해 프로덕션 `/v1/` 리터럴 콜사이트가 하나 늘었다 — 새 콜사이트는 개념 표면이
+      아니라 신고 표면이라 10종 표면의 `미도달` 판정 자체는 그대로였다.
+    - 14 → 15 + `me_learning_path` 미도달→도달 (2026-08-08, MOB-10 관측 — 근본 원인은
+      이미 병합된 PATH-05). `features/problems/data/problems_api.dart`가
+      `GET /v1/me/weak-concepts/{concept_id}/learning-path`를 실제로 호출하기 시작해
+      리터럴 총계가 늘고 해당 표면이 처음으로 '도달'로 전환됐다 — 이번에는 정당한 증가가
+      10종 표면 중 하나에도 반영된 경우다. PATH-05는 `src/mobile/`만 건드려 `ci.yml`의
+      `changes` 필터가 backend 잡을 스킵시켰기 때문에 이 가드(backend pytest 소속)가
+      그 시점엔 발화하지 못했고, 서버·클라를 동시에 건드린 다음 PR(MOB-10)에서야
+      드러났다 — mobile-only PR이 backend 소재 가드를 우회하는 CI 배선 공백은 별도
+      등재(재발방지대책).
     """
     if not crr.DEFAULT_MOBILE_LIB_ROOT.is_dir() or not crr.DEFAULT_BACKEND_API_ROOT.is_dir():
         pytest.skip("실 mobile/backend 경로 미존재")
 
     report = crr.build_report()
-    assert all(s.status == "미도달" for s in report.surfaces)
-    assert all(s.reach_count == 0 for s in report.surfaces)
-    assert report.total_v1_literal_callsites == 14
+    by_key = {s.key: s for s in report.surfaces}
+    assert by_key["me_learning_path"].status == "도달"
+    assert by_key["me_learning_path"].reach_count == 1
+    assert by_key["me_learning_path"].matched_files == ("features/problems/data/problems_api.dart",)
+    assert all(s.status == "미도달" for k, s in by_key.items() if k != "me_learning_path")
+    assert all(s.reach_count == 0 for k, s in by_key.items() if k != "me_learning_path")
+    assert report.total_v1_literal_callsites == 15
     assert isinstance(crr.render_report(report), str)
     assert isinstance(crr.dump_json(report), str)

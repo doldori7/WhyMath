@@ -60,6 +60,10 @@ from whymath_backend.api._rate_limit import (
     RateLimitedTripleRead,
     RateLimitedTripleWrite,
 )
+from whymath_backend.api._segmentation_state import (
+    SolutionSegmentationCounters,
+    get_segmentation_counters,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
@@ -154,6 +158,11 @@ from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# NLP-03 acceptance ③ — 0-전이 제출 관측 카운터(`api/_segmentation_state.py`). 세 핸들러
+# (`/coach`·`/coach/sessions`·`/coach/sessions/{id}/turns`) 공통 주입 좌석.
+SegmentationCountersDep = Annotated[
+    SolutionSegmentationCounters, Depends(get_segmentation_counters)
+]
 
 logger = logging.getLogger(__name__)
 
@@ -1626,12 +1635,15 @@ async def coach_decide(
     body: CoachRequest,
     user: ConsentedUser,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
     *DB 무접근* — 영속이 필요하면 `/v1/coach/sessions`를 호출. `user`는 인증 게이트만.
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
@@ -1665,6 +1677,7 @@ async def create_session(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> SessionCreateResponse:
     """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
 
@@ -1672,6 +1685,8 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     # slice 64: 문항 기대정답을 서버 DB에서 조회해 step shadow 진단 맥락으로 주입(비노출 — 응답엔
     # 결코 싣지 않음·정답 누출 차단). 문항 부재/없음이면 None(graceful).
     expected_answer = await _expected_answer_for(session, body.problem_id)
@@ -1975,6 +1990,7 @@ async def append_turns(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> TurnAppendResponse:
     """기존 dialogue에 학생/AI 2턴 추가.
 
@@ -1983,6 +1999,8 @@ async def append_turns(
     `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
     LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     dialogue = await session.get(DialogueORM, dialogue_id)
     if dialogue is None or dialogue.user_id != user.user_id:
         raise HTTPException(

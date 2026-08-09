@@ -36,6 +36,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.equivalent.latex_gate import validate_problem_latex
 from whymath_backend.l3.equivalent.retag import TagAuditor
 from whymath_backend.l3.finite_probability import (
     verify_finite_count,
@@ -208,6 +209,13 @@ class AcceptanceVerdict(BaseModel):
         description=(
             "발문-수식 정합 감사(초인간 검증 S3·독립 주체) — 감사기 미주입 시 True(기존 동작 "
             "비트동일). 발문의 수식/선택 문구가 검산 조건과 확정적으로 어긋나면만 False."
+        ),
+    )
+    latex_ok: bool = Field(
+        default=True,
+        description=(
+            "LaTeX/문법 게이트(품질 15축 ⑩·ARCH-19) — 발문·해설·선택지의 $ /중괄호/"
+            "\\left\\right 구조 정합(결정론 파스). 깨진 표기(렌더 불가) 검출 시 False."
         ),
     )
     reasons: list[str] = Field(
@@ -419,6 +427,19 @@ def _evaluate_hygiene(
     return ok, reasons
 
 
+def _evaluate_latex(candidate: Problem) -> tuple[bool, list[str]]:
+    """LaTeX 게이트(품질 15축 ⑩) — 발문·해설·선택지 구조 정합성(결정론 파스, ARCH-19).
+
+    실 코퍼스는 현재 `$`/역슬래시 마크업이 0건(정직한 공백·`latex_gate` 모듈 docstring)이라
+    기존 문항 전량 트리비얼하게 통과한다 — 이 게이트는 결함 주입 강등전(합성 데이터)과 향후
+    LaTeX 콘텐츠 유입에 대한 선제 방어선이다.
+    """
+    issues = validate_problem_latex(candidate)
+    if not issues:
+        return True, []
+    return False, [f"LaTeX 게이트 — {issue}" for issue in issues]
+
+
 def _standard_score(spec_codes: frozenset[str], cand_codes: frozenset[str]) -> float:
     """성취기준 점수 — spec ⊆ cand면 1.0·부분 교집합 비율·공집합이면 0. 빈 spec=만점."""
     if not spec_codes:
@@ -488,13 +509,15 @@ def evaluate_equivalent_candidate(
     tag_auditor: TagAuditor | None = None,
     difficulty_tol: float = 0.5,
 ) -> AcceptanceVerdict:
-    """자체생성 동등문제 후보를 4종 게이트로 평가 — 순수·결정론·DB 0·LLM 0.
+    """자체생성 동등문제 후보를 게이트로 평가 — 순수·결정론·DB 0·LLM 0.
 
-    게이트 4종을 *순서·단락평가 무관*하게 전부 평가해 `reasons`를 모은다(조용한 실패 금지):
+    다음을 *순서·단락평가 무관*하게 전부 평가해 `reasons`를 모은다(조용한 실패 금지):
       1. 저작권(`_evaluate_copyright`) — 값 확인(불변식 재구현 0).
       2. 정확성(`_evaluate_verification`) — Tier1 답 검산 + (있으면) Tier2 단계 동치 결합.
       3. 위생(`_evaluate_hygiene`) — 본문 슬립 검출.
       4. 동등성(성분 가중 평균 → 3등급 분류).
+      5. 발문-수식 정합(`tag_auditor` 주입 시만 — 미주입은 True).
+      6. LaTeX/문법(`_evaluate_latex`, 품질 15축 ⑩·ARCH-19) — 항상 실행.
 
     인자:
       - `conditions`·`answer_map`: 후보 답 검산용 원 조건·치환맵(호출자 제공·L5 파싱 밖).
@@ -507,7 +530,8 @@ def evaluate_equivalent_candidate(
       - `difficulty_tol`: 난이도 격차 허용치(만점 밴드).
 
     최종 `accepted` = copyright_ok AND verification=="verified" AND hygiene_ok AND
-    equivalence=="동치후보". 그 외는 사람 큐(검수필요) 또는 거부(비동치·실패)다.
+    equivalence=="동치후보" AND consistency_ok AND latex_ok. 그 외는 사람 큐(검수필요) 또는
+    거부(비동치·실패)다.
 
     동등성은 미해결 연구 난제이므로 스코어러는 *확정이 아니라 분류*만 한다(§03). 정확성 판정 불가·
     중간 점수는 `검수필요`로 보낸다.
@@ -570,12 +594,18 @@ def evaluate_equivalent_candidate(
         if not consistency_ok and audit.reason is not None:
             reasons.append(f"발문-수식 정합 감사 실패 — {audit.reason}")
 
+    # ⑥ LaTeX/문법 게이트 (품질 15축 ⑩·ARCH-19). 감사기와 달리 항상 실행(주입 불필요 —
+    #    순수 텍스트 구조 검사라 컨텍스트가 없다).
+    latex_ok, latex_reasons = _evaluate_latex(candidate)
+    reasons.extend(latex_reasons)
+
     accepted = (
         copyright_ok
         and verification == "verified"
         and hygiene_ok
         and equivalence == "동치후보"
         and consistency_ok
+        and latex_ok
     )
     return AcceptanceVerdict(
         accepted=accepted,
@@ -585,5 +615,6 @@ def evaluate_equivalent_candidate(
         verification=verification,
         hygiene_ok=hygiene_ok,
         consistency_ok=consistency_ok,
+        latex_ok=latex_ok,
         reasons=reasons,
     )

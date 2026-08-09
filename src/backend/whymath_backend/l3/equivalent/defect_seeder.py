@@ -7,7 +7,7 @@
 
 무결함 후보는 기존 결정론 스켈레톤 생성기(`SkeletonEquivalentProblemGenerator`)가
 만든다 — 근을 코드가 고르고 방정식을 역산하므로 **구성상 참**이며 수용 게이트를
-통과한다(테스트가 전수 확인). 결함 후보는 그 무결함 후보에 아래 6종을 결정론
+통과한다(테스트가 전수 확인). 결함 후보는 그 무결함 후보에 아래 7종을 결정론
 변조(seed 고정)해 만든다:
 
   ① `answer_error`            정답+1 — 진답(선택된 근)보다 크므로 근이 될 수 없음이
@@ -24,6 +24,9 @@
                               **현 스택 미검출이 예상되는 정직한 공백**. 발문-수식
                               교차 검사(`retag.StatementConsistencyAuditor`)의 존재
                               이유이며, 강등전 baseline에 눈가림 없이 공개한다.
+  ⑦ `broken_latex`           발문 끝에 중괄호 짝이 안 맞는 수식 조각 삽입(품질 15축
+                              ⑩·ARCH-19) — `latex_gate.scan_latex_issue`가 항상
+                              검출하는 구조적 결함(감사기 무관·결정론 100%).
 
 평가 스펙(`EquivalenceSpec`)은 *변조 전* 후보에서 역구성한다 — 스펙이 곧 "원 의도"
 이고, 태그류 변조(④⑤)는 그 의도와의 불일치로 검출된다. 무결함 후보는 스펙과 완전
@@ -57,7 +60,8 @@ __all__ = [
     "build_defect_seeded_set",
 ]
 
-# 결함 6종 — superhuman_verification_standard.md §3.1과 1:1. 순서는 순환 배정 순서.
+# 결함 7종 — ①~⑥은 superhuman_verification_standard.md §3.1과 1:1, ⑦(broken_latex)은
+# ARCH-19(품질 15축 ⑩) 확장. 순서는 순환 배정 순서.
 DefectClass = Literal[
     "answer_error",
     "explanation_slip",
@@ -65,6 +69,7 @@ DefectClass = Literal[
     "standard_tag_error",
     "distractor_misattribution",
     "statement_mismatch",
+    "broken_latex",
 ]
 DEFECT_CLASSES: tuple[DefectClass, ...] = (
     "answer_error",
@@ -73,6 +78,7 @@ DEFECT_CLASSES: tuple[DefectClass, ...] = (
     "standard_tag_error",
     "distractor_misattribution",
     "statement_mismatch",
+    "broken_latex",
 )
 
 # 객관식 결함(⑤)만 객관식 후보가 필요 — 나머지는 단답형 후보에 주입한다.
@@ -230,6 +236,18 @@ def _mismatch_statement(candidate: CandidateProblem) -> tuple[CandidateProblem, 
     return rebuilt, f"발문 수식 숫자 변조: …{text[max(0, last.start() - 8) : anchor + 3]!r}"
 
 
+# ⑦이 발문 끝에 삽입하는 깨진 수식 조각 — "{2" 가 짝 없는 열림 중괄호(닫힘 0)라 항상 검출됨.
+_BROKEN_LATEX_FRAGMENT = r" (참고: \frac{1}{2 계산 확인)"
+
+
+def _break_latex(candidate: CandidateProblem) -> tuple[CandidateProblem, str]:
+    """⑦ broken_latex — 발문 끝에 중괄호 짝이 안 맞는 수식 조각 삽입(품질 15축 ⑩)."""
+    old = candidate.problem.question_text or ""
+    new = old + _BROKEN_LATEX_FRAGMENT
+    rebuilt = _rebuild(candidate, problem_updates={"question_text": new})
+    return rebuilt, f"발문에 중괄호 불균형 수식 삽입: {_BROKEN_LATEX_FRAGMENT!r}"
+
+
 # 결함별 주입 함수 디스패치 — 전부 (변조 후보, 기록) 반환.
 _MUTATORS = {
     "answer_error": _shift_answer,
@@ -238,6 +256,7 @@ _MUTATORS = {
     "standard_tag_error": _corrupt_standard_code,
     "distractor_misattribution": _misattribute_distractors,
     "statement_mismatch": _mismatch_statement,
+    "broken_latex": _break_latex,
 }
 
 
@@ -249,7 +268,7 @@ def build_defect_seeded_set(
 ) -> list[SeededItem]:
     """강등전 시험지 셋 — 결함 n_defective + 무결함 n_clean, seed 고정 결정론.
 
-    결함은 6종을 순환 배정한다(클래스별 균형). ⑤(객관식 전용)는 객관식 생성기에서,
+    결함은 7종을 순환 배정한다(클래스별 균형). ⑤(객관식 전용)는 객관식 생성기에서,
     나머지는 단답형 생성기에서 후보를 뽑는다. 무결함도 두 형식을 섞는다(형식만으로
     결함 여부를 추측할 수 없게 — 객관식 무결함이 존재해야 블라인드가 성립).
     최종 순서는 seed 셔플(블라인드 제출 순서) — 같은 seed면 바이트 동일 셋이다.
@@ -287,7 +306,7 @@ def build_defect_seeded_set(
 
     items: list[SeededItem] = []
 
-    # ① 결함 문항 — 6종 순환 배정(클래스별 균형·결정론).
+    # ① 결함 문항 — 7종 순환 배정(클래스별 균형·결정론).
     for index in range(n_defective):
         defect: DefectClass = DEFECT_CLASSES[index % len(DEFECT_CLASSES)]
         variant: GeneratorVariant = (

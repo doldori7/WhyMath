@@ -55,37 +55,53 @@ from whymath_backend.schema.enums import (
     MentalPhase,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # 핵심: Assessment (§8.1 assessment — 초기 진단 + 주기적 재진단, 17필드)
 # ──────────────────────────────────────────────────────────────────────────
-class Assessment(BaseModel):
-    """진단 평가 — §8.1 `assessment`. 초기 진단·주간/단원 진단·실전 모의고사·D-100 예측의
-    종합 결과를 담는 도메인6 핵심 모델(특성 #14/#15/#29/#45/#50/#78/#86).
+#: ASM-02 결정으로 **학생에게 노출하지 않는** 예측 필드 (ASM-07 집행).
+#: 이 집합은 거버넌스 테스트·`ARCH-27` 봉인 스캔이 함께 읽는 단일 진실 원천이다 —
+#: 이름을 여기서만 바꾸면 검사도 따라온다.
+STUDENT_HIDDEN_PREDICTION_FIELDS: frozenset[str] = frozenset(
+    {
+        "estimated_grade",
+        "estimated_score",
+        "estimated_percentile",
+        "target_university_id",
+        "admission_probability",
+    }
+)
 
-    PK `assessment_id`만 있고 나머지는 모두 nullable/기본값(DDL 그대로). 진단 시작 직후
-    결과가 아직 비어 있는 *진행 중* 레코드도 표현할 수 있어야 하기 때문이다.
 
-    5개 진단 결과 필드(`concept_diagnosis`·`pattern_diagnosis`·`weak_points`·
-    `strong_points`·`recommended_path`)는 모두 *컬렉션*이라 `list[dict[str, Any]]`로 둔다.
-    weak/strong_points는 코드 배열(`list[str]`)로도 모델링 가능하나, 약점 단원명만이 아니라
-    개념 점수·추세 등 상세를 담을 수 있도록 `list[dict[str, Any]]`로 둔다(JSONB 자유형).
+class StudentAssessment(BaseModel):
+    """진단 평가 — **학생 대면 응답 정본**(ASM-02 결정 (c)의 구조적 집행 · ASM-07).
 
-    개인정보 메모(모듈 docstring 참조): 이 모델은 *미성년 학생 진단 데이터*(추정 등급·
-    약점·합격 예측)다. CLAUDE.md 절대 금기(미성년 개인정보 분석·외부 공유 금지·개인 식별
-    분석 결과 외부 노출 금지)는 *저장·노출 계층*(PIPA 권한 매트릭스·암호화·미들웨어) 책임
-    이며, 이 모델 필드는 그 사실을 *상기*시키되 가짜 validator를 두지 않는다(문서화만 —
-    `user.py`/`activity.py`/`concept.py` 방침과 동일). 여기엔 강제할 구조 신호가 없다.
+    `Assessment`(내부·영속 정본)에서 예측 5필드(`STUDENT_HIDDEN_PREDICTION_FIELDS`)를
+    **뺀 것이 아니라**, 이쪽이 기반이고 `Assessment`가 그 5필드를 *더한다*. 방향이
+    중요하다 — 나중에 누가 `Assessment`에 새 예측 필드를 붙여도 학생 응답에는
+    자동으로 새지 않는다(허용목록이지 차단목록이 아니다).
+
+    **왜 런타임 필터가 아닌가**: `response_model_exclude`·`exclude_none` 같은 필터는
+    데코레이터 인자 한 줄이 빠지면 조용히 무력화되고 스키마에는 필드가 남아 OpenAPI
+    광고도 계속된다. 필터는 꺼질 수 있으나 *필드의 부재*는 꺼지지 않는다
+    (`PED-08` acceptance ③ 선례).
+
+    **사고 경위**: 2026-08-08 실측 전까지 `GET /v1/me/assessments`가 `Assessment`를
+    그대로 `response_model`로 써서, 값이 비어 있을 뿐 `"admission_probability": null`이
+    학생 응답 JSON에 키째로 나가고 OpenAPI에도 광고되고 있었다.
     """
 
     model_config = ConfigDict(
-        # 추가 필드 금지 — Pydantic 모델이 스키마의 단일 진실
         extra="forbid",
-        # 직렬화 시 enum 값을 그대로(한글 값 보존: assessment_type="단원진단" 등)
         use_enum_values=True,
-        # 문자열 양끝 공백 제거
         str_strip_whitespace=True,
     )
+
+    @classmethod
+    def from_assessment(cls, assessment: Assessment) -> StudentAssessment:
+        """내부 정본 → 학생 대면 정본. 예측 필드는 애초에 대상 모델에 자리가 없다."""
+        return cls.model_validate(
+            assessment.model_dump(exclude=set(STUDENT_HIDDEN_PREDICTION_FIELDS))
+        )
 
     # ===== 기본 식별 =====
     assessment_id: uuid.UUID = Field(
@@ -104,39 +120,6 @@ class Assessment(BaseModel):
     # ===== 시간 =====
     started_at: datetime | None = Field(default=None, description="진단 시작 시각")
     completed_at: datetime | None = Field(default=None, description="진단 완료 시각")
-
-    # ===== 종합 결과 (특성 #14, #15, #45) =====
-    estimated_grade: float | None = Field(
-        default=None,
-        description="추정 등급 1-9 (DDL 'DECIMAL(3,2)' → 등급 척도이므로 `user.py` "
-        "estimated_grade 선례를 따라 ge=1 le=9 설정).",
-        ge=1.0,
-        le=9.0,
-    )
-    estimated_score: int | None = Field(
-        default=None,
-        description="추정 표준점수. DDL에 범위 미명시 → 점수라 음수 불가 ge=0만 설정.",
-        ge=0,
-    )
-    estimated_percentile: float | None = Field(
-        default=None,
-        description="추정 백분위 0-100 (DDL 'DECIMAL(5,2)' → 백분위 척도이므로 ge=0 le=100, "
-        "`user.py` estimated_percentile 선례).",
-        ge=0.0,
-        le=100.0,
-    )
-
-    # ===== 합격 예측 (특성 #86) =====
-    target_university_id: uuid.UUID | None = Field(
-        default=None,
-        description="합격 예측 대상 대학 FK",
-    )
-    admission_probability: float | None = Field(
-        default=None,
-        description="합격 확률 0-1 (DDL 주석 '0-1' → ge=0 le=1, DECIMAL(3,2)).",
-        ge=0.0,
-        le=1.0,
-    )
 
     # ===== 단원·패턴별 진단 =====
     concept_diagnosis: list[dict[str, Any]] = Field(
@@ -174,6 +157,71 @@ class Assessment(BaseModel):
 
     # ===== 메모 =====
     notes: str | None = Field(default=None, description="진단 코멘트(자유 서술)")
+
+
+class Assessment(StudentAssessment):
+    """진단 평가 — §8.1 `assessment`. 초기 진단·주간/단원 진단·실전 모의고사·D-100 예측의
+    종합 결과를 담는 도메인6 핵심 모델(특성 #14/#15/#29/#45/#50/#78/#86).
+
+    **내부·영속 정본**이다. 학생 대면 응답에는 이 모델을 쓰지 않는다 — `StudentAssessment`
+    를 쓴다(ASM-02 결정 (c) · ASM-07). 보호자·교사 노출 형태는 Phase 3 미결이다.
+
+    PK `assessment_id`만 있고 나머지는 모두 nullable/기본값(DDL 그대로). 진단 시작 직후
+    결과가 아직 비어 있는 *진행 중* 레코드도 표현할 수 있어야 하기 때문이다.
+
+    5개 진단 결과 필드(`concept_diagnosis`·`pattern_diagnosis`·`weak_points`·
+    `strong_points`·`recommended_path`)는 모두 *컬렉션*이라 `list[dict[str, Any]]`로 둔다.
+    weak/strong_points는 코드 배열(`list[str]`)로도 모델링 가능하나, 약점 단원명만이 아니라
+    개념 점수·추세 등 상세를 담을 수 있도록 `list[dict[str, Any]]`로 둔다(JSONB 자유형).
+
+    개인정보 메모(모듈 docstring 참조): 이 모델은 *미성년 학생 진단 데이터*(추정 등급·
+    약점·합격 예측)다. CLAUDE.md 절대 금기(미성년 개인정보 분석·외부 공유 금지·개인 식별
+    분석 결과 외부 노출 금지)는 *저장·노출 계층*(PIPA 권한 매트릭스·암호화·미들웨어) 책임
+    이며, 이 모델 필드는 그 사실을 *상기*시키되 가짜 validator를 두지 않는다(문서화만 —
+    `user.py`/`activity.py`/`concept.py` 방침과 동일). 여기엔 강제할 구조 신호가 없다.
+    """
+
+    model_config = ConfigDict(
+        # 추가 필드 금지 — Pydantic 모델이 스키마의 단일 진실
+        extra="forbid",
+        # 직렬화 시 enum 값을 그대로(한글 값 보존: assessment_type="단원진단" 등)
+        use_enum_values=True,
+        # 문자열 양끝 공백 제거
+        str_strip_whitespace=True,
+    )
+
+    # ===== 종합 결과 (특성 #14, #15, #45) =====
+    estimated_grade: float | None = Field(
+        default=None,
+        description="추정 등급 1-9 (DDL 'DECIMAL(3,2)' → 등급 척도이므로 `user.py` "
+        "estimated_grade 선례를 따라 ge=1 le=9 설정).",
+        ge=1.0,
+        le=9.0,
+    )
+    estimated_score: int | None = Field(
+        default=None,
+        description="추정 표준점수. DDL에 범위 미명시 → 점수라 음수 불가 ge=0만 설정.",
+        ge=0,
+    )
+    estimated_percentile: float | None = Field(
+        default=None,
+        description="추정 백분위 0-100 (DDL 'DECIMAL(5,2)' → 백분위 척도이므로 ge=0 le=100, "
+        "`user.py` estimated_percentile 선례).",
+        ge=0.0,
+        le=100.0,
+    )
+
+    # ===== 합격 예측 (특성 #86) =====
+    target_university_id: uuid.UUID | None = Field(
+        default=None,
+        description="합격 예측 대상 대학 FK",
+    )
+    admission_probability: float | None = Field(
+        default=None,
+        description="합격 확률 0-1 (DDL 주석 '0-1' → ge=0 le=1, DECIMAL(3,2)).",
+        ge=0.0,
+        le=1.0,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────

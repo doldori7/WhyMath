@@ -113,6 +113,10 @@ def is_gifted_eligible(
     if not _shared.is_exposable(problem):
         return False
 
+    # ②-b 검수 노출 게이트 — 저작권 축과 독립(합치지 않음, PB-03). review_status=approved만 통과.
+    if not _shared.is_review_cleared(problem):
+        return False
+
     # ③ 페르소나 적합 게이트 — 영재는 높은 적합(기본 0.7)만 통과.
     if _shared.persona_fit(problem, persona) < min_fit:
         return False

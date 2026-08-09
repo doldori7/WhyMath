@@ -43,6 +43,7 @@ from whymath_backend.schema.enums import (
     Persona,
     QuestionFormat,
     RequiredDepth,
+    ReviewStatus,
     ScoringType,
     SignaturePattern,
     SourceType,
@@ -66,6 +67,8 @@ def _problem(**over: object) -> Problem:
     """
     kwargs: dict[str, object] = {
         "source_type": SourceType.자체생성,
+        # PB-03 — 검수 노출 게이트(`is_review_cleared`) 추가로 기본값도 approved가 필요.
+        "review_status": ReviewStatus.approved,
         "curriculum_version": Curriculum.REVISION_2022,
         "valid_from_year": 2022,
         "subject": Subject.미적분,

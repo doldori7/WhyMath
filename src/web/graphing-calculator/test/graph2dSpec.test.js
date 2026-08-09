@@ -78,6 +78,82 @@ describe("graph2dSpecToState — 코어 Graph2dSpec → 계산기 상태", () =>
   });
 });
 
+// VIZ-03 — tangent_point·integral_region·functions: 렌더러가 이미 지원하는 행별 상태
+// (showTangent/tangentX·showIntegral/intA/intB·rows 배열)에 좌석을 주는 필드들.
+describe("graph2dSpecToState — VIZ-03 필드 확장", () => {
+  it("tangent_point → 주 함수 행에 showTangent/tangentX", () => {
+    const st = graph2dSpecToState({ function: "x^2", tangent_point: 2 });
+    expect(st.rows).toHaveLength(1);
+    expect(st.rows[0].showTangent).toBe(true);
+    expect(st.rows[0].tangentX).toBe(2);
+  });
+
+  it("tangent_point 없으면 showTangent 미설정(undefined — 기본값 폴백은 applyState 몫)", () => {
+    const st = graph2dSpecToState({ function: "x^2" });
+    expect(st.rows[0].showTangent).toBeUndefined();
+  });
+
+  it("함수 없이 tangent_point만 있으면 무시(행이 없어 실을 곳이 없음)", () => {
+    expect(graph2dSpecToState({ tangent_point: 2 })).toBeNull();
+  });
+
+  it("integral_region [a,b] → 주 함수 행에 showIntegral/intA/intB", () => {
+    const st = graph2dSpecToState({ function: "x^2", integral_region: [0, 3] });
+    expect(st.rows[0].showIntegral).toBe(true);
+    expect(st.rows[0].intA).toBe(0);
+    expect(st.rows[0].intB).toBe(3);
+  });
+
+  it("integral_region이 a>=b(비정상)면 무시", () => {
+    const st = graph2dSpecToState({ function: "x^2", integral_region: [3, 3] });
+    expect(st.rows[0].showIntegral).toBeUndefined();
+  });
+
+  it("integral_region 2원소 아니면 무시", () => {
+    const st = graph2dSpecToState({ function: "x^2", integral_region: [1] });
+    expect(st.rows[0].showIntegral).toBeUndefined();
+  });
+
+  it("functions → 주 함수 뒤에 비교 함수 행 추가(함수 비교)", () => {
+    const st = graph2dSpecToState({ function: "x^2", functions: ["x^3", "2*x"] });
+    expect(st.rows).toHaveLength(3);
+    expect(st.rows[0].expr).toBe("x^2");
+    expect(st.rows[1].expr).toBe("x^3");
+    expect(st.rows[2].expr).toBe("2*x");
+  });
+
+  it("functions만 있고 function 없어도 비교 함수들만으로 행 구성", () => {
+    const st = graph2dSpecToState({ functions: ["x", "x^2"] });
+    expect(st.rows).toHaveLength(2);
+    expect(st.rows[0].expr).toBe("x");
+    expect(st.rows[1].expr).toBe("x^2");
+  });
+
+  it("functions의 빈 문자열·비문자열 항목은 건너뜀", () => {
+    const st = graph2dSpecToState({ function: "x", functions: ["", "  ", "x^2", 42, null] });
+    expect(st.rows).toHaveLength(2);
+    expect(st.rows[1].expr).toBe("x^2");
+  });
+
+  it("tangent_point·integral_region은 functions로 추가된 행이 아니라 주 함수(rows[0])에만 실린다", () => {
+    const st = graph2dSpecToState({
+      function: "x^2",
+      functions: ["x^3"],
+      tangent_point: 1,
+      integral_region: [0, 2],
+    });
+    expect(st.rows[0].showTangent).toBe(true);
+    expect(st.rows[0].showIntegral).toBe(true);
+    expect(st.rows[1].showTangent).toBeUndefined();
+    expect(st.rows[1].showIntegral).toBeUndefined();
+  });
+
+
+
+
+
+});
+
 describe("parseSpecParam — URL 파라미터 파싱", () => {
   const spec = { function: "x**2", domain: [-2, 2] };
 
