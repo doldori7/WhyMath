@@ -337,6 +337,37 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (구현·MISC-03): **유사문제 실시간 서빙 — REC-02 L1 역인덱스 좌석 재사용, 신규 조회 로직 0**
+
+**무엇/왜**: `04e_misconception_remediation_design.md` §1-3 결정 실행. 오개념 확정 진단
+(`intervention` not None — `select_intervention` 임계 통과) 시 같은 mis_id 태깅·미응답 문항
+1건을 서빙한다. REC-02가 이미 만든 L1 역인덱스 조회 좌석(`l1/problem_bank/probe_candidates.py::
+fetch_probe_candidates_by_mids`)을 *그대로* 재사용 — 신규 인덱스·신규 조회 로직 0(설계가
+명시적으로 요구). REC-02는 이 좌석을 진단 프로브 선택(WH-1 하네스) 용도로 쓰고 이 태스크는
+교정 서빙 용도로 쓴다 — 소비 목적만 다르고 조회는 하나(유지보수 지옥 방지).
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): `api/coach.py`에 `_similar_problem_for
+(session, user_id, intervention)` 헬퍼 — `intervention is None`이면 DB 무접근 즉시 None(reactive
+retrieval·초기 context preload 금지), 아니면 좌석을 `mids=[intervention.misconception_id]`
+(단일 원소)·`limit=1`로 호출해 "1건"을 좌석 자체에서 받는다(별도 슬라이싱 0). `CoachResponse.
+similar_problem_id: uuid.UUID | None` 필드 신설 — 문항 id만 담고 본문·정답은 담지 않는다(클라가
+별도 문항 조회 엔드포인트로 내용을 가져옴). **세션 기반 두 엔드포인트(`/v1/coach/sessions`·
+`.../turns`)에서만** 채워진다 — DB·user_id가 필요한 "미응답" 필터라 stateless `/v1/coach`(DB
+무접근 계약)는 항상 None. 계층 결정: L5(`api/coach.py`)가 L1을 직접 호출(L4 래퍼 신설 안 함) —
+`api/coach.py`가 이미 `l1.embedding_provider.build_provider`를 직접 import하는 선례 존재,
+import-linter layers 계약(`api > l6 > l5 > l4 > l3 > l2 > l1 > schema`)상 api→l1 직접 호출은
+합법적 순방향 의존(`lint-imports` 통과 확인) — REC-02의 다른 소비처 `harness/wh1_probe_supply.py`
+가 L4를 경유하는 건 그 모듈이 "import-linter 계약 밖" 횡단 하네스라서이지, 일반 HTTP 핸들러
+헬퍼에는 해당 사항 없음.
+
+**검증**: 신규 테스트 13건(`test_coach_similar_problem.py`) — 게이트(None intervention → DB
+무접근), 좌석 위임(mids 단일원소·user_id·limit=1로 정확히 호출), 실좌석 경유(mids 매칭·미응답
+제외·난이도 부재 시 None — L1 로직 재구현 없이 그대로 통과 증명), HTTP 결선(세션 두 엔드포인트만
+채움·stateless는 좌석조차 호출 안 함) 전부 green. ruff·black·mypy·`lint-imports` clean. 전체
+백엔드 스위트 재검증: 9046 passed·296 skipped·1 pre-existing 무관 failure(`test_concept_reach_
+report.py` — PB-02/S3-32/REC-02/MISC-01 결정 로그에 이미 반복 기록된 `me_learning_path` 표면
+드리프트와 동일 건, stash로 무관 재확인).
+
 ### 2026-08-09 (구현·MISC-01): **오개념 교정 시각화 결선 — `visualize_misconception` production 호출자 0건 해소(shadow→on 롤아웃)**
 
 **무엇/왜**: `l4/misconception/visualize.py::visualize_misconception()`(슬93)이 코드 완비·테스트
