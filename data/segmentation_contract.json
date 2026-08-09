@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "note": "텍스트 풀이 → 단계(step) 분해 규약(NLP-03·D3). 줄바꿈('\\n'·'\\r\\n')으로 구분된 여러 줄이 여러 스텝이 된다. MathLive가 내는 '\\displaylines{...}' 여러 줄 LaTeX 직렬화는 언랩한 뒤 행 구분자 '\\\\'(백슬래시 2개)를 줄바꿈과 동일하게 취급한다. 이 규약은 형태(구조) 판별이지 수학 의미 판정이 아니다 — LLM 미사용, 기호 치환(\\frac 등)도 이 계약 밖(별도 규약: l5/ocr/verify.py _latex_to_sympifiable ↔ latex_to_plain.dart, 이미 존재하는 별개 미러). 'ambiguous=true' 케이스는 fail-closed 관측 대상 — displaylines 마커가 있는데 행 구분자가 없어 1스텝으로 뭉개진, 2026-07-20 실기기 사고와 같은 구조적 의심 신호다(그 사고 자체는 latex_to_plain.dart가 이미 고쳤다 — 이건 재발 감지 회귀 케이스).",
+  "authority": "backend l5/ocr/text_segmentation.py segment_solution_text",
+  "mirror": "mobile chat_controller._splitSteps + latex_to_plain.dart(displaylines 언랩)",
+  "cases": [
+    {
+      "id": "plain_two_lines",
+      "input": "x + 1 = 2\nx = 1",
+      "steps": ["x + 1 = 2", "x = 1"],
+      "ambiguous": false
+    },
+    {
+      "id": "trailing_and_blank_lines",
+      "input": "x=1\n\n\ny=2\n",
+      "steps": ["x=1", "y=2"],
+      "ambiguous": false
+    },
+    {
+      "id": "crlf_line_endings",
+      "input": "a=1\r\nb=2\r\n",
+      "steps": ["a=1", "b=2"],
+      "ambiguous": false
+    },
+    {
+      "id": "surrounding_whitespace_trimmed",
+      "input": "  x + 1 = 2  \n  x = 1  ",
+      "steps": ["x + 1 = 2", "x = 1"],
+      "ambiguous": false
+    },
+    {
+      "id": "single_line_plain",
+      "input": "x = 1",
+      "steps": ["x = 1"],
+      "ambiguous": false
+    },
+    {
+      "id": "empty_input",
+      "input": "",
+      "steps": [],
+      "ambiguous": false
+    },
+    {
+      "id": "whitespace_only",
+      "input": "   \n\n  ",
+      "steps": [],
+      "ambiguous": false
+    },
+    {
+      "id": "displaylines_two_rows",
+      "input": "\\displaylines{x + 1 = 2 \\\\ x = 1}",
+      "steps": ["x + 1 = 2", "x = 1"],
+      "ambiguous": false,
+      "regression_note": "2026-07-20 실기기 사고 — displaylines 행 구분자가 '\\n' 분해에 걸리지 않아 단일 0-전이 스텝이 됐던 케이스. 두 스텝으로 분해돼야 한다."
+    },
+    {
+      "id": "displaylines_three_rows",
+      "input": "\\displaylines{a=1 \\\\ b=2 \\\\ c=3}",
+      "steps": ["a=1", "b=2", "c=3"],
+      "ambiguous": false
+    },
+    {
+      "id": "displaylines_undersplit_is_ambiguous",
+      "input": "\\displaylines{x + 1 = 2}",
+      "steps": ["x + 1 = 2"],
+      "ambiguous": true,
+      "note": "displaylines 마커는 있으나 행 구분자('\\\\')가 없어 1스텝 — 구조적으로 의심스러워 fail-closed 관측 대상(재발 감지 신호로 관측만 — 조용히 정상 취급하지 않는다)."
+    }
+  ]
+}

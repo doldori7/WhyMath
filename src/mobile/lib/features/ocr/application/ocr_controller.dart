@@ -67,8 +67,23 @@ class OcrController extends _$OcrController {
       );
       final result = await ref.read(ocrApiProvider).recognize(multipart);
       state = OcrState(status: OcrStatus.result, result: result);
+    } on DioException catch (e) {
+      // 503(OCR 비활성)은 학생 잘못이 아니라 "기능이 꺼져 있음"이라 문구를 분리한다
+      // (변별력 없는 에러 메시지 금지 — CLAUDE.md). 그 외(401 미인증·422 이미지 누락·
+      // 네트워크 실패 등)는 기존 graceful 문구를 유지한다.
+      if (e.response?.statusCode == 503) {
+        state = const OcrState(
+          status: OcrStatus.error,
+          error: '지금은 손글씨 인식 기능을 이용할 수 없어요. 잠시 후 다시 시도해 주세요.',
+        );
+      } else {
+        state = const OcrState(
+          status: OcrStatus.error,
+          error: '풀이를 인식하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        );
+      }
     } catch (e) {
-      // 503(OCR 비활성)·401(미인증)·422(이미지 누락)·네트워크 실패 모두 graceful.
+      // DioException이 아닌 그 외 예외도 graceful 에러로 기록한다(회귀 방지).
       state = const OcrState(
         status: OcrStatus.error,
         error: '풀이를 인식하지 못했어요. 잠시 후 다시 시도해 주세요.',
