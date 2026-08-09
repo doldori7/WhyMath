@@ -85,6 +85,46 @@ _ROOTS: dict[str, str] = {
     "coin": _compose("co", "in"),
 }
 
+# 비교 파생 어근 (ARCH-27) — 위 8종이 *게임 메커니즘* 축이라면 이쪽은 *사회적 비교* 축이다.
+# 5원칙 #2("남과 비교하지 않는다")는 그동안 문서로만 강제됐고 기계 강제가 0이었다
+# (acceptance① 실측: 기존 _ROOTS 8종은 percentile·rank·peer를 하나도 잡지 않는다).
+#
+# ⚠️ 전부 **복합어로만** 금지한다. 학생 대면 스코프(api/·schema/)에는 정당한 단일어가 이미
+# 산다 — 2026-08-09 실측: `class`(219× · 파이썬 예약어)·`vs`(16×)·`top`/`top_k`(15×+8×)·
+# `estimated_percentile`(8× · ASM-02가 필드 폐기를 미채택했고 ASM-07이 노출 축만 봉인)·
+# `compare_digest`(6×)·`national_standard_codes`(2×)·`time_vs_expected`·`rate_top_grade`.
+# 이들이 red를 내면 게이트가 아니라 소음이 된다.
+_COMPARISON_ROOTS: dict[str, str] = {
+    "percentile": _compose("percent", "ile"),
+    "rank": _compose("ra", "nk"),
+    "peer": _compose("pe", "er"),
+    "cohort": _compose("coh", "ort"),
+}
+
+# 순위 표현의 어미 변화형 — rank/ranks/ranking/rankings를 한 집합으로 묶는다.
+_RANK_WORDS = frozenset(
+    {
+        _COMPARISON_ROOTS["rank"],
+        _COMPARISON_ROOTS["rank"] + "s",
+        _COMPARISON_ROOTS["rank"] + "ing",
+        _COMPARISON_ROOTS["rank"] + "ings",
+    }
+)
+# "누구와 비교하는가"의 주체 — 또래 집단을 가리키는 단어들.
+_PEER_GROUP_WORDS = frozenset(
+    {
+        _COMPARISON_ROOTS["peer"],
+        _COMPARISON_ROOTS["peer"] + "s",
+        _COMPARISON_ROOTS["cohort"],
+        "classmate",
+        "classmates",
+        "others",
+    }
+)
+# 비교 기준 집단(학급·학교·전국·학년) — 단독으로는 정당하나 순위·평균과 붙으면 비교 파생이다.
+_GROUP_SCOPE_WORDS = frozenset({"class", "school", "national", "nationwide", "grade", "cohort"})
+_AVERAGE_WORDS = frozenset({"average", "avg", "mean"})
+
 
 def _iter_py_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if p.is_file())
@@ -155,6 +195,33 @@ _FORBIDDEN_WORD_SEQUENCES: dict[str, tuple[frozenset[str], ...]] = {
         frozenset({"multiplier", "bonus", "counter"}),
     ),
     "CoinReward": (frozenset({_ROOTS["coin"]}), frozenset({"reward", "balance"})),
+    # ── 비교 파생 (ARCH-27) — 5원칙 #2 기계화 ────────────────────────────────
+    # 또래 대비: peer_average·peerPercentile·cohortRank …
+    "PeerComparison": (
+        _PEER_GROUP_WORDS,
+        _AVERAGE_WORDS
+        | _RANK_WORDS
+        | {_COMPARISON_ROOTS["percentile"], "comparison", "compare", "score", "gap", "delta"},
+    ),
+    # 집단 순위: class_rank·schoolRanking·national_rank …  (`class` 단독은 미매치)
+    "GroupRank": (_GROUP_SCOPE_WORDS, _RANK_WORDS),
+    # 집단 평균 대비: class_average·gradeMean …  (`national_standard_codes`는 미매치)
+    "GroupAverage": (_GROUP_SCOPE_WORDS, _AVERAGE_WORDS),
+    # 백분위의 *순위화*: percentile_rank·rankPercentile — `estimated_percentile`은 미매치.
+    "PercentileRank": (frozenset({_COMPARISON_ROOTS["percentile"]}), _RANK_WORDS),
+    "RankPercentile": (_RANK_WORDS, frozenset({_COMPARISON_ROOTS["percentile"], "percent"})),
+    # 상위 N% 노출: top_percentile·upperPercent —  `top_k`·`rate_top_grade`는 미매치.
+    "TopPercentile": (
+        frozenset({"top", "upper", "bottom"}),
+        frozenset({_COMPARISON_ROOTS["percentile"], "percent"}),
+    ),
+    # 우열 서술: better_than·worseThan — 비교급 자체가 서열 신호다.
+    "BetterThan": (frozenset({"better", "worse", "ahead", "behind"}), frozenset({"than"})),
+    # 대비 서술: compared_to_peers·vsAverage — `time_vs_expected`·`compare_digest`는 미매치.
+    "ComparedToGroup": (
+        frozenset({"compared", "versus", "vs"}),
+        _PEER_GROUP_WORDS | _AVERAGE_WORDS | {"to", "with"},
+    ),
 }
 
 
@@ -189,6 +256,19 @@ _BENIGN_IDENTIFIERS_MUST_NOT_MATCH: tuple[str, ...] = (
     "level",  # bare "level"은 금지 대상 아님(교육과정 등에서 정당 서식)
     "achievement_standard",  # 성취기준 — 게임 업적 아님(l1/standards 정당 어휘, 방어적 이중 확인)
     "gambler_streak",  # 도박사의 오류 오개념 ID(l4/misconception 정당 어휘, 방어적 이중 확인)
+    # ── 비교 파생 게이트(ARCH-27)의 오탐 방어 — 전부 2026-08-09 학생 대면 스코프 실측 채집 ──
+    "class",  # 파이썬 예약어(219× — bare 단어를 금지하면 게이트가 즉시 전멸한다)
+    "vs",  # 16× (_degradation.py 등)
+    "top",  # 15×
+    "top_k",  # 8× (coach.py 검색 top-k — 상위 N% 노출과 무관)
+    "estimated_percentile",  # 8× — ASM-02가 필드 폐기 미채택·ASM-07은 노출 축만 봉인
+    "compare_digest",  # 6× (_device_store.py 다이제스트 비교)
+    "national_standard_codes",  # 2× (성취기준 코드 — 전국 순위 아님)
+    "time_vs_expected",  # schema/activity.py (예상 시간 대비 — 또래 대비 아님)
+    "rate_top_grade",  # schema/problem.py (최상위 등급 정답률 — 학생 순위 아님)
+    "percentile",  # bare 단어는 금지 대상 아님(IRT 통계 내부에서 정당)
+    "rank",  # bare 단어(SQL window·행렬 rank)
+    "peer_review",  # 동료 검수 — 학생 간 성적 비교가 아니다
 )
 
 # 실측 로그(변별력 확인 — acceptance④): 최초 `\b` 기반 구현으로
@@ -199,6 +279,18 @@ _BENIGN_IDENTIFIERS_MUST_NOT_MATCH: tuple[str, ...] = (
 _TRUE_POSITIVE_IDENTIFIERS_MUST_MATCH: dict[str, str] = {
     "leaderboard_rank": "Leaderboard",
     "award_badge_earned": "BadgeEarned",
+    # ── 비교 파생(ARCH-27) 변별력 고정 — 이 목록이 red를 못 내면 게이트는 위장이다 ──
+    "peer_average_score": "PeerComparison",
+    "peerPercentile": "PeerComparison",
+    "class_rank": "GroupRank",
+    "schoolRanking": "GroupRank",
+    "class_average": "GroupAverage",
+    "percentile_rank": "PercentileRank",
+    "rankPercentile": "RankPercentile",
+    "top_percentile": "TopPercentile",
+    "better_than_peers": "BetterThan",
+    "compared_to_peers": "ComparedToGroup",
+    "vsAverage": "ComparedToGroup",
 }
 
 

@@ -55,7 +55,7 @@ class ExposureTier(str, Enum):
     """운영·내부 전용 — 학생·보호자 어느 쪽에도 노출 금지(시스템 품질·비용 지표 등)."""
 
 
-# 12지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
+# 13지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
 # INTERNAL_ONLY — 나머지는 전부 STUDENT_VISIBLE(⑥·⑧은 아래 조합 규칙으로 *표현*이 추가 제약됨,
 # 계층 자체는 STUDENT_VISIBLE 유지 — "안 보임"이 아니라 "다르게 보임").
 # `help_demand_supply_ratio`(⑮·S3-16, 병합 시 편입)는 ⑤·⑧과 같은 축(학생 자신의 도움 요청·수신
@@ -73,6 +73,9 @@ _STATIC_TIER: dict[str, ExposureTier] = {
     "transfer_score": ExposureTier.STUDENT_VISIBLE,
     "hint_depth_reached": ExposureTier.STUDENT_VISIBLE,
     "mastery_gain_rate": ExposureTier.STUDENT_VISIBLE,
+    # ⑯ 결손 복구 리드타임(PED-13) — 자기 대비 축이라 학생 노출 가능. 또래·평균 대비 파생은
+    # 두지 않는다(부재가 계약 · 5원칙 #2 · ARCH-27 게이트가 기계로 막는다).
+    "gap_recovery_leadtime_days": ExposureTier.STUDENT_VISIBLE,
     "misconception_resolution_rate": ExposureTier.STUDENT_VISIBLE,
     "self_solve_rate": ExposureTier.STUDENT_VISIBLE,
 }
@@ -119,7 +122,7 @@ class MetricExposure(BaseModel):
 
 
 def classify_metric_exposure(metrics: SurrogateMetrics) -> dict[str, MetricExposure]:
-    """12지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
+    """13지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
 
     조합 제약(gap review 명시): ⑧(답 미루기 도달 깊이)은 `help_reduction_validated.verdict`가
     `GAMING_SUSPECT`이면 노출하지 않는다(R15가 교정기 함정으로 판정한 도움 감소를 "답 미루기

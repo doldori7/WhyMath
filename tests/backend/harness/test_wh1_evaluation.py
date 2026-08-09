@@ -48,6 +48,12 @@ from whymath_backend.harness.wh1_evaluation import (
 )
 from whymath_backend.schema.enums import SignaturePattern
 
+# ⑯ 리드타임(PED-13) 도입으로 mastery 행이 (user, concept, mastery, measured_at) 4-튜플이
+# 됐다. ⑨ 테스트는 간격에 관심이 없으므로 고정 2점만 둔다(간격 자체는 리드타임 전용
+# 테스트 test_wh1_evaluation_gap_recovery_leadtime.py가 본다).
+_MEASURED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+_MEASURED_AT2 = datetime(2026, 1, 8, tzinfo=UTC)
+
 # ⑦ 전이 테스트 단축 별칭(긴 enum 이름 회피·가독).
 _P_COND = SignaturePattern.CONDITION_LIST
 _P_GRAPH = SignaturePattern.GRAPH_SHAPE_INFERENCE
@@ -88,7 +94,7 @@ class _FakeSession:
       9) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
      10) transfer rows(started_at 오름차순 (problem_id, signature_patterns, is_correct) 행
          목록·all·Problem join) — ⑦ 근사 전이 점수 식별 입력.
-     11) mastery rows((user_id, concept_id, mastery) 행 목록·all·(user,concept,measured_at)
+     11) mastery rows((user_id, concept_id, mastery, measured_at) 행 목록·all·(user,concept,measured_at)
          오름차순) — ⑨ BKT 숙달 증가율(그룹별 첫→마지막 차) 입력.
      12) misconception row((inactive_count, total_count)·one 튜플) — ⑩ 오개념 해소율
          (is_active=false 비율) 카운트.
@@ -123,7 +129,7 @@ def _make_session(
     difficulty_rows: list[tuple[float | None, float | None]] | None = None,
     calibration_pairs: list[tuple[float | None, bool | None]] | None = None,
     transfer_rows: list[tuple[Any, Any, bool]] | None = None,
-    mastery_rows: list[tuple[Any, Any, float | None]] | None = None,
+    mastery_rows: list[tuple[Any, Any, float | None, Any]] | None = None,
     misconception_inactive: int = 0,
     misconception_total: int = 0,
     self_solved: int = 0,
@@ -918,10 +924,10 @@ class TestMetaAndFieldSet:
             ],
             # ⑨ 숙달 — 2그룹 각 2점(그룹 내 measured_at 오름차순) → 자격 그룹 2·증가량 평균.
             mastery_rows=[
-                (u1, c1, 0.3),  # (u1,c1) 첫
-                (u1, c1, 0.7),  # (u1,c1) 마지막 → gain +0.4
-                (u2, c2, 0.5),  # (u2,c2) 첫
-                (u2, c2, 0.6),  # (u2,c2) 마지막 → gain +0.1
+                (u1, c1, 0.3, _MEASURED_AT),  # (u1,c1) 첫
+                (u1, c1, 0.7, _MEASURED_AT2),  # (u1,c1) 마지막 → gain +0.4
+                (u2, c2, 0.5, _MEASURED_AT),  # (u2,c2) 첫
+                (u2, c2, 0.6, _MEASURED_AT2),  # (u2,c2) 마지막 → gain +0.1
             ],
             # ⑩ 오개념 — 전체 5건 중 비활성(해소 근사) 2건 → rate 0.4.
             misconception_inactive=2,
@@ -1435,10 +1441,10 @@ class TestMasteryGainIntegratedWithCompute:
             avg_tokens=None,
             token_sample=0,
             mastery_rows=[
-                (u1, c1, 0.3),
-                (u1, c1, 0.9),  # gain +0.6
-                (u2, c2, 0.4),
-                (u2, c2, 0.6),  # gain +0.2
+                (u1, c1, 0.3, _MEASURED_AT),
+                (u1, c1, 0.9, _MEASURED_AT2),  # gain +0.6
+                (u2, c2, 0.4, _MEASURED_AT),
+                (u2, c2, 0.6, _MEASURED_AT2),  # gain +0.2
             ],
         )
         m = await compute_wh1_surrogate_metrics(session)
@@ -1456,8 +1462,8 @@ class TestMasteryGainIntegratedWithCompute:
             avg_tokens=None,
             token_sample=0,
             mastery_rows=[
-                (u1, c1, None),
-                (u1, c1, 0.5),
+                (u1, c1, None, _MEASURED_AT),
+                (u1, c1, 0.5, _MEASURED_AT2),
             ],  # None 제외 → 1점 → 그룹 미자격
         )
         m = await compute_wh1_surrogate_metrics(session)

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "① ci.yml changes 필터 재설계 — src/mobile/-only 변경이어도 backend pytest 안에 있으면서 mobile 소스를 스캔 대상으로 삼는 가드(예: tests/backend/harness/test_concept_reach_report.py의 실 코퍼스 스모크)는 최소한 함께 실행되도록 배선(전체 backend 잡을 다 돌릴 필요는 없음 — 해당 가드만 최소 실행하는 경량 잡 또는 mobile 잡에 이 가드 실행 스텝 추가 중 택1)"
   - "② 회귀 재현 테스트 — mobile lib에 신규 /v1/ 리터럴을 주입한 PR 시나리오를 흉내낸 결정론 테스트로, 이 배선이 실제로 mobile-only diff에서도 가드를 발화시키는지 검증(현재는 backend=false PR에서 조용히 스킵되는 상태를 반증 테스트로 고정)"
   - "③ 문서화 — 사고 경위(PATH-05 mobile-only PR이 concept_reach_report 가드를 우회, MOB-10에서야 드러남) MEMORY.md 결정 로그 1건 병기"
-artifacts: []
+artifacts:
+  - 253fa94d
 paths:
   - ".github/workflows/ci.yml"
   - tests/backend/harness/test_concept_reach_report.py
 session: null
 notes: "사고 경위(2026-08-08): PATH-05(#728, mobile-only)가 problems_api.dart에 GET /v1/me/weak-concepts/{concept_id}/learning-path 실호출을 착륙시켜 concept_reach_report의 me_learning_path 표면이 미도달→도달, 리터럴 총계 14→15로 바뀌었는데 ci.yml changes 필터가 backend=false를 매겨 backend 잡(이 가드가 속한 곳) 자체가 스킵돼 그 시점에 전혀 발화하지 못했다. 서버+클라를 동시에 건드린 다음 PR(MOB-10, #730)에서 backend 잡이 마침내 돌면서 드리프트가 드러남 — 가드는 설계대로 작동했으나 발화 기회 자체가 CI 배선상 막혀 있었던 구조적 공백. PR #730에서 test_concept_reach_report.py의 하드코딩 기대값(14→15·표면 상태)만 실측에 맞춰 갱신, 배선 공백 자체는 이 태스크로 분리 등재."
-updated: 2026-08-08
+updated: 2026-08-09
