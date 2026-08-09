@@ -69,6 +69,7 @@ def _all_measured_metrics() -> SurrogateMetrics:
         transfer_score=m,
         hint_depth_reached=_measured(2.5),
         mastery_gain_rate=_measured(0.3),
+        gap_recovery_leadtime_days=_measured(0.3),
         misconception_resolution_rate=m,
         self_solve_rate=m,
         help_reduction_validated=HelpReductionValidation(
@@ -100,6 +101,7 @@ def _mixed_metrics() -> SurrogateMetrics:
         transfer_score=_no_data(),
         hint_depth_reached=_no_data(),
         mastery_gain_rate=_no_data(),
+        gap_recovery_leadtime_days=_no_data(),
         misconception_resolution_rate=_no_data(),
         self_solve_rate=_no_data(),
         help_reduction_validated=HelpReductionValidation(

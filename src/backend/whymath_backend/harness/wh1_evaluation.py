@@ -494,6 +494,14 @@ class SurrogateMetrics(BaseModel):
             f">= {_MIN_MASTERY_POINTS}·mastery NOT NULL). 미만 그룹은 제외·0이면 NO_DATA."
         ),
     )
+    sample_gap_recovery_groups: int = Field(
+        default=0,
+        description=(
+            "⑯ 결손 복구 리드타임의 **분모** — 취약 관측 후 숙달까지 실제로 도달한 "
+            "(user,concept) 그룹 수. 미도달 그룹은 여기 포함되지 않는다(가짜 0 금지) — "
+            "제외 건수는 지표 note가 보고한다. 0이면 NO_DATA."
+        ),
+    )
     sample_misconception_hypotheses: int = Field(
         default=0,
         description=(
@@ -1805,6 +1813,7 @@ async def compute_wh1_surrogate_metrics(
         sample_transfer_probes=len(transfer_outcomes),
         sample_diagnostic_probes=diagnostic_total,
         sample_mastery_groups=len(mastery_gains),
+        sample_gap_recovery_groups=len(leadtime_days),
         sample_misconception_hypotheses=misconception_total,
         sample_resolved_dialogues=resolved_total,
         window_start=since,

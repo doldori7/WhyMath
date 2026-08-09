@@ -105,6 +105,7 @@ def _surrogate_metrics(
         transfer_score=m,
         hint_depth_reached=_metric(value=hint_depth_value),
         mastery_gain_rate=m,
+        gap_recovery_leadtime_days=m,
         misconception_resolution_rate=m,
         self_solve_rate=m,
         help_reduction_validated=HelpReductionValidation(

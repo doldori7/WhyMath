@@ -41,6 +41,7 @@ def _metrics(verdict: R15Verdict) -> SurrogateMetrics:
         transfer_score=m,
         hint_depth_reached=m,
         mastery_gain_rate=m,
+        gap_recovery_leadtime_days=m,
         misconception_resolution_rate=m,
         self_solve_rate=m,
         help_reduction_validated=HelpReductionValidation(
@@ -98,8 +99,11 @@ def test_gaming_suspect_label_not_exposed_as_a_field() -> None:
     assert field_names == {"field", "tier", "exposable_now", "suppressed_reason"}
 
 
-def test_all_twelve_fields_classified() -> None:
-    """12지표(원 설계 11종 + 병합 편입 help_demand_supply_ratio) 전부가 판정에 나타난다(누락 0)."""
+def test_all_thirteen_fields_classified() -> None:
+    """13지표 전부가 판정에 나타난다(누락 0).
+
+    원 설계 11종 + 병합 편입 `help_demand_supply_ratio` + `gap_recovery_leadtime_days`(⑯·PED-13).
+    """
     result = classify_metric_exposure(_metrics(R15Verdict.GENUINE_IMPROVEMENT))
     assert set(result) == {
         "verify_pass_rate",
@@ -114,6 +118,7 @@ def test_all_twelve_fields_classified() -> None:
         "mastery_gain_rate",
         "misconception_resolution_rate",
         "self_solve_rate",
+        "gap_recovery_leadtime_days",
     }
 
 
