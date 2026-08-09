@@ -60,7 +60,9 @@ class TestValidSpecs:
             {
                 "function": "a*x**2",
                 "domain": [-3, 3],
-                "parameters": [{"name": "a", "min": -5, "max": 5, "step": 0.1, "default": 1}],
+                "parameters": [
+                    {"name": "a", "min": -5, "max": 5, "step": 0.1, "default": 1}
+                ],
             }
         )
         assert s.function == "a*x**2"
@@ -70,7 +72,9 @@ class TestValidSpecs:
 
     def test_graph2d_y_range(self) -> None:
         # y_range(치역·선택) 타입 검증 — domain 동형. 미지정 시 None(렌더러 기본 폴백).
-        s = Graph2dSpec.model_validate({"function": "x", "domain": [-3, 3], "y_range": [-5, 5]})
+        s = Graph2dSpec.model_validate(
+            {"function": "x", "domain": [-3, 3], "y_range": [-5, 5]}
+        )
         assert s.y_range == [-5.0, 5.0]
         assert Graph2dSpec.model_validate({"function": "x"}).y_range is None
 
@@ -78,8 +82,47 @@ class TestValidSpecs:
         with pytest.raises(ValidationError):
             Graph2dSpec.model_validate({"y_range": "x"})
 
+    def test_graph2d_tangent_point(self) -> None:
+        # tangent_point(접선 x좌표·선택) — 미지정 시 None(렌더러가 접선 미표시).
+        s = Graph2dSpec.model_validate({"function": "x**2", "tangent_point": 2})
+        assert s.tangent_point == 2.0
+        assert Graph2dSpec.model_validate({"function": "x"}).tangent_point is None
+
+    def test_graph2d_tangent_point_not_number(self) -> None:
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"tangent_point": "not-a-number"})
+
+    def test_graph2d_integral_region(self) -> None:
+        # integral_region([a,b]·선택) — domain·y_range와 동형(타입만 검증).
+        s = Graph2dSpec.model_validate({"function": "x**2", "integral_region": [0, 3]})
+        assert s.integral_region == [0.0, 3.0]
+        assert Graph2dSpec.model_validate({"function": "x"}).integral_region is None
+
+    def test_graph2d_integral_region_not_list(self) -> None:
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"integral_region": "x"})
+
+    def test_graph2d_functions(self) -> None:
+        # functions(비교 함수 목록·선택) — function을 대체하지 않고 추가.
+        s = Graph2dSpec.model_validate(
+            {"function": "x**2", "functions": ["x**3", "2*x"]}
+        )
+        assert s.function == "x**2"
+        assert s.functions == ["x**3", "2*x"]
+        assert Graph2dSpec.model_validate({"function": "x"}).functions is None
+
+    def test_graph2d_functions_not_list(self) -> None:
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"functions": "x**2"})
+
+    def test_graph2d_functions_element_not_str(self) -> None:
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"functions": [1, 2]})
+
     def test_surface3d_valid(self) -> None:
-        s = Surface3dSpec.model_validate({"surface": "z = x**2 + y**2", "rotatable": True})
+        s = Surface3dSpec.model_validate(
+            {"surface": "z = x**2 + y**2", "rotatable": True}
+        )
         assert s.surface == "z = x**2 + y**2"
         assert s.rotatable is True
 
@@ -105,7 +148,9 @@ class TestValidSpecs:
         assert s.outcomes[0].weight == 1.0
 
     def test_animation_valid(self) -> None:
-        s = AnimationSpec.model_validate({"asset_id": "manim-001", "duration_seconds": 12.5})
+        s = AnimationSpec.model_validate(
+            {"asset_id": "manim-001", "duration_seconds": 12.5}
+        )
         assert s.duration_seconds == 12.5
 
 
@@ -181,5 +226,7 @@ class TestVisualizationTypedSpecIntegration:
         assert v.spec["model"] == "circle"
 
     def test_validate_spec_for_type_helper(self) -> None:
-        m = validate_spec_for_type(VisualizationType.simulation_probabilistic, {"trials": 5})
+        m = validate_spec_for_type(
+            VisualizationType.simulation_probabilistic, {"trials": 5}
+        )
         assert isinstance(m, SimulationSpec)

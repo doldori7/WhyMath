@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-08 (회수·고립 브랜치): **`NLP-04` — `openrouter-setup-guide-e98dw4`에 갇힌 `NLP-01`·`NLP-03`·`VIZ-03` 이식. **공통 조상 없음**(merge-base 빈 값)이 판명돼 패치 추출 불가·파일 내용 대조로 이식. 극값 좌석은 ID 충돌(`VIZ-04`)로 분리해 `VIZ-06` 등재** (claude 구현, Kiki "1" 지시)
+
+- **⚠ 결정적 제약 — 두 히스토리에 공통 조상이 없다**: `git merge-base origin/main origin/claude/openrouter-setup-guide-e98dw4`가 **빈 값**이다. "+692커밋 앞섬"은 작업량이 아니라 이 분리의 산물이었다. 따라서 `cherry-pick`·분기점 대비 패치 추출이 **원천적으로 불가능**하고, 이식은 파일 내용 대조로만 가능하다. 향후 이 계열 회수 태스크는 이걸 전제로 설계해야 한다.
+- **⚠ 브랜치가 오히려 낡은 파일**: `app.py`(-177줄)·`coach.py`(-621줄)는 브랜치 쪽이 main보다 낡아 **통째 채택하면 `PED-08`(growth_evidence)·`OPS-17`(버전 게이트)·`reports_router`를 되돌린다**. 두 파일은 손으로 해당 부분만 이식했다(`_activate_ocr` 분리·`OcrReachBody`/`SolutionSegmentationBody` 추가·`create_app` 카운터 좌석·ready 반환부·coach 핸들러 3곳 `record()`). "순수 추가(deletions 0)"를 먼저 확인하고 통째 채택 여부를 가르는 것이 안전 절차다.
+- **⚠ 태스크 paths 는 회수 범위의 신뢰할 근거가 아니다**: acceptance ①에 적은 8개 파일은 태스크 `paths`에서 뽑았는데 실제 표면은 **15개**였다(`app.py`·`coach.py`·`_segmentation_state.py`·모바일 테스트 2종·백엔드/JS 테스트 등). `ASM-07`의 "라우트 2개→3개" 누락과 **같은 형태의 두 번째 사례** — 사람이 옮겨 적은 목록을 신뢰하지 말고 `git diff --name-only`로 전수 열거해야 한다. acceptance ②에 정정 병기.
+- **범위 분리**: 고립본의 `visualization.py`·`graph2dSpec.js`에는 VIZ-03(좌석 3종)과 **극값 좌석이 뒤섞여** 있었다. 극값은 ①`NLP-04` 범위 밖이고 ②고립본이 `VIZ-04`로 달았으나 main은 그 번호를 `VIZ-04-visual-style-render-seat-contract`(done)에 쓰고 있어 **ID 충돌**(HARN-10)이며 ③좌석만 옮기면 렌더러 `findExtrema`/`drawExtrema`(+67줄)가 없어 계약이 허공에 뜬다 — 제외하고 **`VIZ-06`**으로 재등재. 제외 사유는 코드 주석에 남겼다.
+- **범위 밖 판정**: 같은 브랜치의 `l3/visualization.py`·`l4/visualization_policy.py`·`harness/visualization_reach_report.py`는 브랜치 태스크 `paths` 대조 결과 `S4-03`·`MISC-01` 소속이라 회수하지 않았다.
+
 ### 2026-08-08 (분류·미머지 done / **자기 정정**): **`HARN-19`로 드러난 미머지 done 13건 분류 — 6건은 고립분이 아니라 *작업 브랜치 노후화 착시*였음이 판명(내 직전 보고 정정). 실제 고립은 5건, 그중 3건을 `NLP-04`로 등재. 분류표 `docs/standards/unmerged_done_triage_2026-08-08.md`** (claude 조사·등재, Kiki "2" 지시)
 
 - **⚠ 직전 보고 정정**: `HARN-19` 착지 직후 나는 "이 12건은 그동안 Kiki 머신에서 전부 중복 구현 후보로 노출돼 있었다"고 보고했다. **절반이 틀렸다.** 작업 브랜치가 `main`보다 7커밋 뒤처져 있었고(분기점 `9d50a278`), 그 7커밋이 `ARCH-19`·`PATH-05`·`PB-01`·`PED-08`·`S3-10`·`MOB-10`을 이미 머지한 상태였다 — 즉 **로컬 사본만 todo**였다. `git merge origin/main` 후 경고는 13 → **7**로 줄었다.

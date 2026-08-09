@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-06-graph2d-extrema-marker-recovery
+title: "graph2d 극값 마커 좌석 회수 — 고립 브랜치가 VIZ-04로 달았으나 그 번호는 main이 이미 점유(ID 충돌)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - NLP-04-openrouter-branch-completion-recovery
+requires_gates: []
+acceptance:
+  - "① ID 충돌 해소 확인: 고립 브랜치 origin/claude/openrouter-setup-guide-e98dw4 는 이 작업을 VIZ-04-graph2d-extrema-marker 로 등재했으나, main 의 VIZ-04 는 VIZ-04-visual-style-render-seat-contract(done)다. 이 태스크(VIZ-06)가 재배정된 번호이며, 회수 시 고립본의 코드 주석·docstring에 남은 'VIZ-04' 참조를 전부 VIZ-06 으로 정정한다(HARN-10 유형)."
+  - "② 렌더러 먼저: schema/visualization.py 의 show_extrema 좌석만 옮기면 계약이 허공에 뜬다 — GraphingCalculator.jsx 의 findExtrema/drawExtrema(고립본 +67줄·numDeriv 부호 변화 스캔)를 먼저 이식한 뒤 좌석을 준다. NLP-04 가 좌석을 의도적으로 제외한 이유가 이것이다."
+  - "③ 이식 방법: 이 브랜치는 main 과 **공통 조상이 없다**(git merge-base 가 빈 값 — 히스토리 분리). 패치 추출·cherry-pick 이 원천적으로 불가능하므로 파일 내용 대조로 이식한다. 특히 GraphingCalculator.jsx 는 main 쪽이 더 새로울 수 있으니 통째 채택 금지·삭제 줄 전건 확인."
+  - "④ 테스트 회수: 고립본의 극값 테스트(파이썬 2건 test_visualization_spec.py · JS 5건 graph2dSpec.test.js · GraphingCalculator.smoke.test.jsx 일부)를 NLP-04 가 제거해 뒀다 — 함께 복원한다."
+  - "⑤ 회귀: 백엔드 전체 스위트(src/backend 에서 인자 없이·무작위 순서) + graphing-calculator npm test 양쪽 green."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/visualization.py
+  - src/web/graphing-calculator/src/GraphingCalculator.jsx
+  - src/web/graphing-calculator/src/lib/graph2dSpec.js
+session: null
+notes: "발단: NLP-04(고립 브랜치 완료분 회수) 수행 중 발견. 고립본의 visualization.py·graph2dSpec.js 변경분에 VIZ-03(좌석 3종)과 극값 좌석이 뒤섞여 있었고, 후자는 NLP-04 범위(VIZ-03) 밖이라 제외했다. 제외 사유와 위치는 schema/visualization.py 의 Graph2dSpec docstring 및 graph2dSpec.js 상단 주석에 남겨 뒀다. 우선순위 3 근거: 렌더러 신규 기능이라 회수 안 해도 기존 계약이 깨지지 않는다(NLP-04 의 3건과 달리 '이미 만든 것이 잠긴' 성격이 약함)."
+updated: 2026-08-09
