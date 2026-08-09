@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - src/backend/whymath_backend/api/_rate_limit.py
   - src/backend/whymath_backend/privacy/audit.py
   - "tests/backend/api/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md H2. 감사 IP 무결성=CLAUDE.md 우선순위 #2(법적·미성년 PIPA)·SEC-08(크리덴셜 스터핑 억제)와 직결. 완화: 기본 prod 127.0.0.1 바인딩(런북 §8 공개 노출 게이트)."
-updated: 2026-08-08
+updated: 2026-08-09
