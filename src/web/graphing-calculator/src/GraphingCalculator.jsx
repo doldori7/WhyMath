@@ -56,6 +56,8 @@ const makeRow = (id) => ({
   intA: 0,             // 적분 구간 시작
   intB: 3,             // 적분 구간 끝
   intN: 10,            // 리만 합 직사각형 개수
+  // [VIZ-06] 극값(임계점) 마커 표시 on/off — numDeriv 부호 변화 지점을 화면 스캔으로 찾는다.
+  showExtrema: false,
 });
 
 // ====== MathLive 입력칸 컴포넌트 ======
@@ -1202,6 +1204,64 @@ export default function GraphingCalculator() {
     ctx.setLineDash([]); ctx.globalAlpha = 1;
   };
 
+  // ====== [VIZ-06] 극값(임계점) 마커 찾기+그리기 ======
+  // 새 수치 primitive 도입 없이 numDeriv(접선·도함수 곡선이 이미 쓰는 것)만 재사용한다.
+  // 화면을 픽셀 단위로 훑어 도함수 부호가 바뀌는 지점(=임계점 후보)을 찾고, 그 구간에서
+  // 이분법으로 x를 정련한다(볼록성 판별용 num2Deriv는 쓰지 않는다 — 극대/극소 구분은
+  // 부호가 +→-(극대)냐 -→+(극소)냐로 충분하고, 새 판정 축을 늘리지 않는다).
+  const findExtrema = (node, scope) => {
+    const points = [];
+    let prevSlope = null, prevX = null;
+    for (let px = 0; px <= size.w; px++) {
+      const xVal = toMathX(px);
+      const slope = numDeriv(node, xVal, scope);
+      if (
+        prevSlope !== null && isFinite(prevSlope) && isFinite(slope) &&
+        prevSlope !== 0 && slope !== 0 && (prevSlope > 0) !== (slope > 0)
+      ) {
+        // 부호 변화 구간 [prevX, xVal] — 이분법 20회로 근사 x를 정련.
+        let lo = prevX, hi = xVal;
+        const loPositive = prevSlope > 0;
+        for (let i = 0; i < 20; i++) {
+          const mid = (lo + hi) / 2;
+          const midSlope = numDeriv(node, mid, scope);
+          if (!isFinite(midSlope)) break;
+          if ((midSlope > 0) === loPositive) lo = mid; else hi = mid;
+        }
+        const xExt = (lo + hi) / 2;
+        let y;
+        try { y = node.evaluate({ ...scope, x: xExt }); } catch { y = NaN; }
+        if (isFinite(y)) points.push({ x: xExt, y, kind: loPositive ? "max" : "min" });
+      }
+      prevSlope = slope; prevX = xVal;
+    }
+    return points;
+  };
+
+  const drawExtrema = (ctx, body, scope) => {
+    const node = math.compile(body);
+    findExtrema(node, scope).forEach(({ x, y, kind }) => {
+      if (y < view.yMin || y > view.yMax) return; // 화면 밖 극값은 라벨이 안 보이므로 생략
+      const markColor = kind === "max" ? "#e0459b" : "#3b82c4";
+      const px = toPxX(x), py = toPxY(y);
+      ctx.fillStyle = markColor;
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2); ctx.fill();
+
+      const label = `${kind === "max" ? "극댓값" : "극솟값"} ${formatNum(y)}`;
+      ctx.font = "12px sans-serif";
+      const tw = ctx.measureText(label).width;
+      let bx = px + 10, by = py - 26;
+      if (bx + tw + 12 > size.w) bx = px - tw - 22;
+      if (by < 0) by = py + 10;
+      ctx.fillStyle = markColor + "eb";
+      ctx.fillRect(bx, by, tw + 12, 20);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, bx + 6, by + 14);
+    });
+  };
+
   // ====== [Phase 10] 적분 시각화: 넓이 색칠 + 리만 합 직사각형 ======
   // 구간 [a,b]에서 곡선 아래 넓이를 보여주고, n개의 직사각형으로 근사합니다.
   // n을 키울수록 직사각형 합(리만 합)이 실제 적분값에 가까워집니다.
@@ -1432,6 +1492,7 @@ export default function GraphingCalculator() {
           // [Phase 9] 이 줄에 미분 옵션이 켜져 있으면 추가로 그림
           if (row.showDeriv) drawDerivative(ctx, info.body, row.color, scope);
           if (row.showTangent) drawTangent(ctx, info.body, row.color, scope, row.tangentX);
+          if (row.showExtrema) drawExtrema(ctx, info.body, scope);
         }
         else if (info.type === "point") drawPoints(ctx, info.points, row.color);
         else if (info.type === "implicit") drawImplicit(ctx, info.lhs, info.rhs, row.color, scope);
@@ -1623,7 +1684,7 @@ export default function GraphingCalculator() {
   // 함수·슬라이더·표·화면범위를 묶어 저장 단위로 만듦
   const collectState = () => ({
     version: 1,
-    rows: rows.map((r) => ({ latex: r.latex, expr: r.expr, color: r.color, visible: r.visible, showTangent: r.showTangent, tangentX: r.tangentX, showDeriv: r.showDeriv, showIntegral: r.showIntegral, intA: r.intA, intB: r.intB, intN: r.intN })),
+    rows: rows.map((r) => ({ latex: r.latex, expr: r.expr, color: r.color, visible: r.visible, showTangent: r.showTangent, tangentX: r.tangentX, showDeriv: r.showDeriv, showIntegral: r.showIntegral, intA: r.intA, intB: r.intB, intN: r.intN, showExtrema: r.showExtrema })),
     sliders,
     table,
     view,
@@ -1659,6 +1720,7 @@ export default function GraphingCalculator() {
       visible: r.visible !== false, error: null,
       showTangent: r.showTangent || false, tangentX: r.tangentX ?? 1, showDeriv: r.showDeriv || false,
       showIntegral: r.showIntegral || false, intA: r.intA ?? 0, intB: r.intB ?? 3, intN: r.intN ?? 10,
+      showExtrema: r.showExtrema || false,
     }));
     nextId.current = restored.length + 1;
     setRows(restored.length ? restored : [makeRow(1)]);
@@ -1931,6 +1993,10 @@ export default function GraphingCalculator() {
                       <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                         <input type="checkbox" checked={row.showIntegral} onChange={(e) => updateRowField(row.id, "showIntegral", e.target.checked)} style={{ accentColor: "#388c46" }} />
                         적분(넓이)
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={row.showExtrema} onChange={(e) => updateRowField(row.id, "showExtrema", e.target.checked)} style={{ accentColor: "#e0459b" }} />
+                        극값
                       </label>
                     </div>
                     {/* 접선이 켜지면 접점 위치 슬라이더 표시 */}

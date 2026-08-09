@@ -69,11 +69,14 @@ class Graph2dSpec(BaseModel):
     (근·절편 표시만 있음) "렌더러가 이미 하는 것에 좌석을 준다"는 제약(렌더러 신규 구현
     금지)을 충족할 수 없었다.
 
-    극값 표시(`show_extrema`) 좌석은 **이 태스크에서 제외**했다(NLP-04 회수 범위 = VIZ-03).
-    고립 브랜치는 그 좌석을 `VIZ-04`로 달았으나 그 번호는 main에서 이미
-    `VIZ-04-visual-style-render-seat-contract`(done)가 쓰고 있어 **ID 충돌**이며, 좌석만
-    옮기면 렌더러의 `findExtrema`/`drawExtrema`(+67줄)가 없어 계약이 허공에 뜬다.
-    별 ID로 재등재해 렌더러와 함께 이식한다.
+    VIZ-06(2026-08-09) — `show_extrema` 추가로 그 공백을 닫는다: 렌더러 자체에
+    `findExtrema`/`drawExtrema`(`numDeriv` 부호 변화 스캔 — 새 수치 primitive 도입 0)를
+    **먼저** 이식한 뒤 그 결과 상태(`showExtrema`)에 이 필드로 좌석을 준다. VIZ-03의 세
+    필드와 동형으로 주 함수(`function`) 행에만 적용한다.
+
+    ⚠️ 번호 주의: 고립 브랜치는 이 작업을 `VIZ-04`로 등재했으나 main의 `VIZ-04`는
+    `VIZ-04-visual-style-render-seat-contract`(done)라 **ID 충돌**이었다. `VIZ-06`이
+    재배정된 번호다(HARN-10 유형).
     """
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
@@ -105,6 +108,14 @@ class Graph2dSpec(BaseModel):
             "주 함수(`function`)의 정적분 영역 [a, b](2원소) — 렌더러의 기존 적분 시각화"
             "(`showIntegral`/`intA`/`intB`)에 좌석을 준다. domain·y_range와 동형(타입만"
             "검증·2원소·well-formed는 렌더러)."
+        ),
+    )
+    show_extrema: bool | None = Field(
+        default=None,
+        description=(
+            "주 함수(`function`)의 극값(임계점) 마커 표시 여부(VIZ-06) — 렌더러의 극값 스캔 "
+            "기능(`findExtrema`/`drawExtrema` — `numDeriv` 부호 변화 지점)에 좌석을 준다. "
+            "`tangent_point`·`integral_region`과 동형으로 주 함수 행에만 적용."
         ),
     )
     functions: list[str] | None = Field(
