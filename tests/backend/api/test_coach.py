@@ -2659,7 +2659,8 @@ class TestIpRateLimit:
         )
 
     def test_x_forwarded_for_extraction(self) -> None:
-        # `_client_ip`가 X-Forwarded-For 첫 항목을 우선 사용
+        # SEC-14: 직접 피어가 신뢰 프록시 목록에 있을 때만 X-Forwarded-For를 신뢰(우측-신뢰).
+        # 상세 매트릭스는 tests/backend/api/test_client_ip_trusted_proxy.py.
         from unittest.mock import MagicMock
 
         from whymath_backend.api._rate_limit import _client_ip
@@ -2668,7 +2669,11 @@ class TestIpRateLimit:
         request.headers = {"x-forwarded-for": "198.51.100.1, 10.0.0.5"}
         request.client = MagicMock()
         request.client.host = "10.0.0.99"
-        assert _client_ip(request) == "198.51.100.1"
+        settings = Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            trusted_proxy_ip_allowlist="10.0.0.99, 10.0.0.5",
+        )
+        assert _client_ip(request, settings=settings) == "198.51.100.1"
 
     def test_direct_client_host_fallback(self) -> None:
         from unittest.mock import MagicMock
@@ -2679,7 +2684,8 @@ class TestIpRateLimit:
         request.headers = {}
         request.client = MagicMock()
         request.client.host = "192.0.2.99"
-        assert _client_ip(request) == "192.0.2.99"
+        settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
+        assert _client_ip(request, settings=settings) == "192.0.2.99"
 
     def test_no_client_returns_none(self) -> None:
         # request.client None → 알 수 없는 IP라 한도 미적용 신호
@@ -2690,7 +2696,8 @@ class TestIpRateLimit:
         request = MagicMock()
         request.headers = {}
         request.client = None
-        assert _client_ip(request) is None
+        settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
+        assert _client_ip(request, settings=settings) is None
 
     def test_empty_xff_header_falls_back(self) -> None:
         # X-Forwarded-For: "  " (공백) → 빈 head → request.client.host로 폴백
@@ -2702,7 +2709,11 @@ class TestIpRateLimit:
         request.headers = {"x-forwarded-for": "   "}
         request.client = MagicMock()
         request.client.host = "192.0.2.50"
-        assert _client_ip(request) == "192.0.2.50"
+        settings = Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            trusted_proxy_ip_allowlist="192.0.2.50",
+        )
+        assert _client_ip(request, settings=settings) == "192.0.2.50"
 
     def test_ip_dep_enforces_limit_via_test_endpoint(self) -> None:
         # 임시 미인증 엔드포인트로 IP dep 결선 검증

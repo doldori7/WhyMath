@@ -135,7 +135,8 @@ def record_admin_access_audit(
     함수를 실제로 부르는 엔드포인트가 없다(가짜 이벤트 날조 금지 — `AuditEventKind.admin_access`
     docstring 동형). 그 콘솔이 착지할 때 "관리자가 학생 A의 데이터를 조회" 지점에서
     `record_admin_access_audit(session, actor_user_id=admin.user_id, target_user_id=student_id,
-    ip=_client_ip(request), settings=settings)`로 바로 배선할 수 있도록 미리 세운다.
+    ip=_client_ip(request, settings=settings), settings=settings)`로 바로 배선할 수 있도록 미리
+    세운다.
 
     `actor_user_id`(관리자)와 `target_user_id`(피조회 사용자)가 반드시 다름을 전제하지는
     않는다(자기 자신 접근을 관리자접근으로 부를 이유는 없으나, 이 함수는 그 판단을 호출자에게

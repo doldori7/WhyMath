@@ -2746,7 +2746,9 @@ async def export_my_data(
     이 엔드포인트 최초의 쓰기다.
     """
     export = await export_user_data(session, user_id=user.user_id)
-    record_export_audit(session, user_id=user.user_id, ip=_client_ip(request), settings=settings)
+    record_export_audit(
+        session, user_id=user.user_id, ip=_client_ip(request, settings=settings), settings=settings
+    )
     await session.commit()
     # ops 가시화 — RDB 밖 store는 이 export(PG)에 미포함(store명·user_id만·키 패턴 미로깅).
     pending = external_export_pending(user.user_id)
