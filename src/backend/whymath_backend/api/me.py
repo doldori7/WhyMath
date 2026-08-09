@@ -138,6 +138,7 @@ from whymath_backend.l4.misconception.hypothesis_store import get_active_hypothe
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l6.suneung import (
     METADATA_ONLY_SOURCES,
+    SUNEUNG_DEFAULT_MIN_FIT,
     SUNEUNG_EXAM_TYPES,
     recommend_suneung_index,
 )
@@ -1963,13 +1964,14 @@ async def recommend_next_problem(
         미응답·θ 근방 50개) — 성능 장치일 뿐, **최종 적격 판정은 `recommend_suneung_index`
         내부의 `is_suneung_eligible`(L6 진실 게이트)이 재수행**한다(저작권·페르소나 재검증 —
         사전필터가 느슨해도 부적격이 새지 않는다).
-      - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항은 사전필터에 안 잡히는
-        *의도적 축소*다. **S3-10(2026-08-07 재실행) 백필 이후 이 축소는 더 이상 무손실이 아니다**
-        — `persona_fit`이 실값으로 채워져 코퍼스 2,647건 중 시그니처·기출유형이 없는 대다수가
-        `is_suneung_eligible`상으로는 적격인데도 이 SQL 사전필터가 θ 근방 50개 풀에서 원천
-        배제한다(진실 게이트가 재검증하는 건 "새는 부적격"뿐 — "새는 적격 후보"는 잡지 못한다).
-        SQL 사전필터를 persona_fit 조건까지 넓히는 것은 별도 태스크(`S3-17`)로 분리했다 — 이
-        엔드포인트의 실 트래픽·성능 영향을 함께 봐야 하는 변경이라 백필 태스크에 얹지 않는다.
+      - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항도 이제 사전필터를 통과한다
+        (S3-17). S3-10(2026-08-07 재실행) persona_fit 백필 이후 `exam_type`·`signature_patterns`
+        조건만으로는 시그니처·기출유형이 없는 대다수 문항이 `is_suneung_eligible`상 적격인데도
+        θ 근방 50개 풀에서 원천 배제되는 손실이 있었다(진실 게이트는 "새는 부적격"만 재검증하지
+        "새는 적격 후보"는 못 잡는다) — 세 번째 OR 조건(`persona_fit[persona] >=
+        SUNEUNG_DEFAULT_MIN_FIT`, L6 진실 게이트와 동일 상수 공유)으로 해소했다. 이 JSONB
+        표현식 비교는 persona_fit의 GIN 인덱스를 타지 못해 순차 스캔이나, 코퍼스 규모(2,647건)
+        에서는 감내 가능하다고 판단했다(실 트래픽 QPS·latency 재검증은 범위 밖).
       - 선택은 L6×L2 결합: 수능 우선순위 가중(`suneung_item_weight`) × 약점 가중
         (`prioritize_weak_concepts` — 기본 CAT과 공유하는 `_load_weak_concept_weights`)을
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
@@ -2025,11 +2027,16 @@ async def recommend_next_problem(
             # 저작권 사전축소 — 본문 미보유 출처(평가원/EBS/교과서)는 SQL에서 미리 배제
             # (게이트가 어차피 재차단하지만, 차단될 행이 θ 근방 50개 풀을 잠식하지 않게).
             Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
-            # 수능 신호 사전축소 — 기출 유형(수능/모평/학평) 또는 시그니처 패턴 보유
-            # (signature_patterns는 enum ARRAY — cardinality>0, GIN 인덱스 활용 가능).
+            # 수능 신호 사전축소 — 기출 유형(수능/모평/학평) 또는 시그니처 패턴 또는 persona_fit
+            # 적합도(S3-17). signature_patterns는 enum ARRAY(cardinality>0, GIN 인덱스 활용
+            # 가능) — persona_fit 조건은 JSONB 표현식 비교라 GIN을 못 타고 순차 스캔이지만
+            # 코퍼스 규모(2,647건)에서는 감내 가능(실 트래픽 QPS·latency 재검증은 범위 밖).
+            # 임계값은 L6 진실 게이트(`is_suneung_eligible`)와 같은 상수를 공유해 이원화를
+            # 막는다(METADATA_ONLY_SOURCES와 동일 원칙).
             or_(
                 Problem.exam_type.in_([e.value for e in SUNEUNG_EXAM_TYPES]),
                 func.cardinality(Problem.signature_patterns) > 0,
+                Problem.persona_fit[persona.value].as_float() >= SUNEUNG_DEFAULT_MIN_FIT,
             ),
         )
         if attempted_ids:
