@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -18,7 +18,8 @@ acceptance:
   - "tests/infra/에 배선 실재성 동결 테스트 신설(신규 CI 잡이 -m whymath_backend.ops.declared_unwired_audit를 실제로 호출하는지) — 기존 test_provenance_audit_wiring.py 패턴 답습"
   - "기존 축별 리포트(recommendation_reach_report·pedagogy_content_slot_reach_report·visualization_reach_report 등)를 대체하지 않는다 — 아직 추적되지 않는 신규 공급 표면 전용"
   - "ruff·black --line-length 100·mypy --strict 통과 + 백엔드 전체 스위트(부분 아님) 회귀 0 + backlog validate green"
-artifacts: []
+artifacts:
+  - 0a7157f2
 paths:
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - tests/backend/ops/test_declared_unwired_audit.py
@@ -26,6 +27,6 @@ paths:
   - ".github/workflows/ci.yml"
   - tests/backend/ops/test_slo_contract.py
   - docs/architecture/data_platform_module_gap_review.md
-session: claude/ops-22-generic-declared-unwired-detector
+session: null
 notes: "장기 방치 브랜치 claude/whymath-data-platform-design-8ceaf5의 ops/reach_audit.py(855줄)·docs/architecture/data_platform_module_gap_review.md(510줄) 구조를 참조하되, 그 분류 대장(pending-task:REC-01/S3-16/SEC-10/NLP-02/VIZ-02 등)은 2026-08-03 스냅샷이라 포팅하지 않고 backlog/tasks/*.yaml 현재 상태로 재구축(REC-01 등 상당수 done 전환). 반복 실수(REC-01·VIZ-01·NLP-01·PED-06·ADMIN 축 5~6회차) 재발방지대책 — CLAUDE.md 실수관리 규범상 등재 의무."
-updated: 2026-08-07
+updated: 2026-08-09
