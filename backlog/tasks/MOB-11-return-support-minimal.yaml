@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -19,7 +19,8 @@ acceptance:
   - "⑥ 알림 미사용 — MOB-08(#694)이 firebase 2종을 제거해 전제가 소멸했다(gap_review_r2 §3-③·§5-④). 푸시 기반 복귀 유도는 이 태스크 범위 밖"
   - "⑦ 변별력 — 재실행 시 온보딩이 실제로 건너뛰어지는지, 저장소를 비우면 다시 뜨는지 양방향 실측"
   - "⑧ 범위 밖 동결 — 경로 복원·마지막 목표 복원 화면(§5-③ 잔여)·알림·연속 학습 통계 화면"
-artifacts: []
+artifacts:
+  - "shared_preferences 기반 OnboardingStore/DialogueStore 도입 — 온보딩 1회노출(router redirect 확장) + 마지막 대화 이어하기(GET /v1/coach/sessions/{id} 재사용, 신규 엔드포인트 0). flutter analyze 0 issues, flutter test 279/279 pass(신규 15건 포함). flutter_test_config.dart로 shared_preferences 미모킹 무한대기 버그 발견·수정(기존 테스트 회귀 방지)."
 paths:
   - src/mobile/lib/core/router.dart
   - "src/mobile/lib/features/onboarding/**"
@@ -27,4 +28,4 @@ paths:
   - "src/mobile/test/**"
 session: null
 notes: "docs/architecture/gamification_module_gap_review_r2.md §6 D7. 기능 79(Streak) 11개 세부 중 유일하게 채택된 축인데 현행이 역행한다 — 온보딩이 매 실행마다 뜨고(router.dart:96 + onboarding_screen.dart:12-14 자인) 마지막 대화 복원이 0이라(dialogueId 인메모리·coach_api.dart:82 호출처 0·lib/ 전체 '이어하기' 0건) 복귀 학생과 신규 학생이 동일 화면을 본다. D3가 02_student_ui_master_plan.md:92-94에 원칙 4('연속성은 압박이 아니라 복귀 지원')를 정본화했으나 백로그 176건 전수에서 streak·retention·재진입·대시보드 열린 태스크가 0건 — 정본은 있는데 추적이 없다."
-updated: 2026-08-04
+updated: 2026-08-09
