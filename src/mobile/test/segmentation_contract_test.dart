@@ -62,7 +62,9 @@ class _FakeCoachApi extends CoachApi {
     CoachRequest request,
   ) async {
     lastRequest = request;
-    return const CoachTurnResult(
+    // `dialogueId`가 런타임 인자라 const 불가(고립본은 const로 적혀 있었다 — 그 브랜치는
+    // 열린 PR이 없어 flutter analyze를 통과한 적이 없다. NLP-04 회수 시 정정).
+    return CoachTurnResult(
       dialogueId: dialogueId,
       response: _fixedResponse,
       wh1TurnIndex: 2,

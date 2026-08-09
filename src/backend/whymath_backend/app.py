@@ -386,12 +386,8 @@ class OcrReachBody(BaseModel):
     필드와 같은 취지를 bool 플래그로 표현).
     """
 
-    enabled: bool = Field(
-        ..., description="OCR 활성 의도(부품 로드 성공 또는 적재 시도함)"
-    )
-    requests_total: int = Field(
-        ..., description="get_ocr_components 디펜던시 도달 총 횟수"
-    )
+    enabled: bool = Field(..., description="OCR 활성 의도(부품 로드 성공 또는 적재 시도함)")
+    requests_total: int = Field(..., description="get_ocr_components 디펜던시 도달 총 횟수")
     succeeded: int = Field(..., description="OCR 파이프라인 정상 완료(200 응답) 횟수")
     unavailable_disabled: int = Field(..., description="503 — 사유: 비활성(config off)")
     unavailable_load_failed: int = Field(..., description="503 — 사유: 부품 적재 실패")
@@ -724,9 +720,7 @@ def create_app(
     # NLP-01: OCR 도달 관측 카운터 — ServiceMetrics와 같은 타이밍(create_app에서 심고,
     # lifespan은 OCR 부품 자체만 늦게 결정)에 앱 수명 동안 1개를 심는다. 테스트가 폭발하는
     # 가짜를 주입할 좌석(metrics·readiness_probes와 동형).
-    resolved_ocr_counters = (
-        ocr_counters if ocr_counters is not None else OcrReachCounters()
-    )
+    resolved_ocr_counters = ocr_counters if ocr_counters is not None else OcrReachCounters()
     app.state.__setattr__(_OCR_COUNTERS_KEY, resolved_ocr_counters)
 
     # NLP-03: 단계 분해 0-전이 제출 관측 카운터 — ocr_counters와 같은 타이밍(create_app에서
@@ -908,9 +902,7 @@ def create_app(
                 for a in alerts
             ],
             ocr=_ocr_reach_body(_get_ocr_reach_snapshot(request.app)),
-            solution_segmentation=_segmentation_body(
-                _get_segmentation_snapshot(request.app)
-            ),
+            solution_segmentation=_segmentation_body(_get_segmentation_snapshot(request.app)),
             growth_evidence=_growth_evidence_body(growth_evidence_counters.snapshot()),
             growth_evidence_exposure=_growth_evidence_exposure_body(
                 growth_evidence_exposure_counters.snapshot()

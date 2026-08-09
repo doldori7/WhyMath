@@ -221,9 +221,7 @@ def get_ocr_components(request: Request) -> OcrComponents:
     """
     counters = ensure_ocr_counters(request.app)
     counters.record_request()
-    components: OcrComponents | None = getattr(
-        request.app.state, OCR_COMPONENTS_KEY, None
-    )
+    components: OcrComponents | None = getattr(request.app.state, OCR_COMPONENTS_KEY, None)
     if components is None:
         reason: OcrUnavailableReason = (
             getattr(request.app.state, OCR_UNAVAILABLE_REASON_KEY, None)

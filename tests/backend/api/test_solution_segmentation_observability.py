@@ -170,9 +170,7 @@ def _fake_probes() -> ReadinessProbes:
     return ReadinessProbes(database=_db, redis=_redis, llm=_llm)
 
 
-def _client(
-    *, segmentation_counters: SolutionSegmentationCounters | None = None
-) -> TestClient:
+def _client(*, segmentation_counters: SolutionSegmentationCounters | None = None) -> TestClient:
     app: FastAPI = create_app(
         segmentation_counters=segmentation_counters, readiness_probes=_fake_probes()
     )
@@ -246,9 +244,7 @@ class TestHealthReadyExposure:
     def test_mixed_traffic_surfaces_in_ready_body(self) -> None:
         """1스텝 1건 + 2스텝 1건 + None 1건 ⇒ ready body가 total=2·single_or_zero_step=1."""
         client = _client()
-        client.post(
-            "/v1/coach", json={"student_input": "음", "solution_steps": ["x = 1"]}
-        )
+        client.post("/v1/coach", json={"student_input": "음", "solution_steps": ["x = 1"]})
         client.post(
             "/v1/coach",
             json={"student_input": "음", "solution_steps": ["x + 1 = 2", "x = 1"]},
@@ -262,9 +258,7 @@ class TestHealthReadyExposure:
     def test_ready_gate_is_unaffected_by_segmentation_observation(self) -> None:
         """solution_segmentation은 ready 판정(200/503)에 관여하지 않는다 — DB 도달성만 게이트."""
         client = _client()
-        client.post(
-            "/v1/coach", json={"student_input": "음", "solution_steps": ["x = 1"]}
-        )
+        client.post("/v1/coach", json={"student_input": "음", "solution_steps": ["x = 1"]})
         resp = client.get("/health/ready")
         assert resp.status_code == 200
         assert resp.json()["ready"] is True

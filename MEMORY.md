@@ -337,6 +337,12 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (헌법 개정·CI 사고): **PR #732 CI red 2건 — ①`black --check -q | tail`로 실패를 통과로 오판(내 검증 호출 방식 결함) ②고립본 Dart 테스트의 `invalid_constant`(그 브랜치가 CI를 통과한 적 없음이 판명). CLAUDE.md에 "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 신설** (claude 진단·수정, Kiki "pr" 지시)
+
+- **①이 시스템 실수**: `$VP -m ruff check ... | tail -3 && $VP -m black --check -q ... | tail -3`로 돌렸다. black이 6파일 실패로 exit 1을 냈지만 **`-q`가 "would reformat" 출력을 억제**해, 화면에는 앞 명령(ruff)의 "All checks passed!"만 남았다. 나는 그걸 보고 "black clean"이라고 PR 본문에까지 적었다. **검사 자체는 변별력이 있었는데 호출 방식이 변별력을 없앤 것** — 기존 "변별력 없는 검증 스텝 금지"(2026-07-17 logconfig)의 *도구 사용* 축 변형이라 규칙을 신설했다(판정은 exit code로·`PIPESTATUS` 병기·CI가 쓰는 명령을 그대로 재현). 대상 경로도 달랐다(나는 `whymath_backend`, CI는 `.`).
+- **②는 고립본의 결함**: `segmentation_contract_test.dart:66`이 런타임 인자 `dialogueId`를 `const CoachTurnResult(...)`에 넘겨 `invalid_constant`. 첫 번째 생성자는 리터럴이라 정상이고 두 번째만 틀렸다. **`openrouter-setup-guide-e98dw4`는 열린 PR이 없어 `flutter analyze`를 한 번도 통과한 적이 없다**는 뜻이다 — 고립 브랜치 회수 시 "그 브랜치에서 돌았을 것"이라는 가정을 하지 말아야 한다는 실측 근거. 이식한 다른 Dart 파일도 같은 패턴을 스캔해 추가 발견 0건 확인.
+- **로컬 검증 한계**: 이 컨테이너에 flutter가 없어 `flutter analyze`를 돌릴 수 없다 — 모바일 축은 CI 판정에 의존한다(정직한 공백으로 PR에 명시).
+
 ### 2026-08-08 (회수·고립 브랜치): **`NLP-04` — `openrouter-setup-guide-e98dw4`에 갇힌 `NLP-01`·`NLP-03`·`VIZ-03` 이식. **공통 조상 없음**(merge-base 빈 값)이 판명돼 패치 추출 불가·파일 내용 대조로 이식. 극값 좌석은 ID 충돌(`VIZ-04`)로 분리해 `VIZ-06` 등재** (claude 구현, Kiki "1" 지시)
 
 - **⚠ 결정적 제약 — 두 히스토리에 공통 조상이 없다**: `git merge-base origin/main origin/claude/openrouter-setup-guide-e98dw4`가 **빈 값**이다. "+692커밋 앞섬"은 작업량이 아니라 이 분리의 산물이었다. 따라서 `cherry-pick`·분기점 대비 패치 추출이 **원천적으로 불가능**하고, 이식은 파일 내용 대조로만 가능하다. 향후 이 계열 회수 태스크는 이걸 전제로 설계해야 한다.

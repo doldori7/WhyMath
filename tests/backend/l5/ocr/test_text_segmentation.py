@@ -36,9 +36,7 @@ def _load_contract() -> dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"단계 분해 계약 fixture 파싱 실패: {_FIXTURE} ({exc})"
-        ) from exc
+        raise ValueError(f"단계 분해 계약 fixture 파싱 실패: {_FIXTURE} ({exc})") from exc
 
 
 _CONTRACT = _load_contract()

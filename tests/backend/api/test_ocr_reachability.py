@@ -230,9 +230,7 @@ class TestSilentFailureCompliance:
         snapshot = get_ocr_reach_snapshot(app)
         assert snapshot.enabled is True  # 설정 의도는 켜짐(적재만 실패)
 
-    def test_disabled_config_does_not_attempt_build(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_disabled_config_does_not_attempt_build(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ocr_enabled=False ⇒ build_ocr_components 시도 자체를 안 한다(비활성 사유 즉시 기록)."""
         called = False
 
@@ -311,9 +309,7 @@ class TestReachObservability:
         assert ready["unavailable_load_failed"] == 1
         assert ready["succeeded"] == 0
 
-    def test_success_increments_succeeded(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_success_increments_succeeded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """정상 부품 + 파이프라인 성공 ⇒ succeeded=1, 양 unavailable=0.
 
         `get_ocr_components`는 dependency_overrides로 우회되므로 `requests_total`(사유별
@@ -321,9 +317,7 @@ class TestReachObservability:
         직접 기록해 우회와 무관하다.
         """
 
-        async def _fake_pipeline(
-            image_bytes: bytes, *, components: object
-        ) -> OcrResult:
+        async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
             return _ocr_result()
 
         monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
@@ -363,9 +357,7 @@ class TestReachObservability:
     ) -> None:
         """변별력 실측(CLAUDE.md) — 비활성/적재실패/성공 세 상태가 서로 다른 카운터 조합을 낸다."""
 
-        async def _fake_pipeline(
-            image_bytes: bytes, *, components: object
-        ) -> OcrResult:
+        async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
             return _ocr_result()
 
         monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
