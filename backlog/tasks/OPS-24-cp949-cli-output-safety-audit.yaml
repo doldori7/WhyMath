@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-23-cp949-cli-output-safety-audit
+id: OPS-24-cp949-cli-output-safety-audit
 title: "하네스/ops CLI 콘솔 출력 cp949 안전성 전수 감사 — 한국어 Windows 인쇄 크래시 재발 방지"
 track: infra-debt
 stage: S3
