@@ -73,6 +73,9 @@ _STATIC_TIER: dict[str, ExposureTier] = {
     "transfer_score": ExposureTier.STUDENT_VISIBLE,
     "hint_depth_reached": ExposureTier.STUDENT_VISIBLE,
     "mastery_gain_rate": ExposureTier.STUDENT_VISIBLE,
+    # ⑯ 결손 복구 리드타임(PED-13) — 자기 대비 축이라 학생 노출 가능. 또래·평균 대비 파생은
+    # 두지 않는다(부재가 계약 · 5원칙 #2 · ARCH-27 게이트가 기계로 막는다).
+    "gap_recovery_leadtime_days": ExposureTier.STUDENT_VISIBLE,
     "misconception_resolution_rate": ExposureTier.STUDENT_VISIBLE,
     "self_solve_rate": ExposureTier.STUDENT_VISIBLE,
 }
