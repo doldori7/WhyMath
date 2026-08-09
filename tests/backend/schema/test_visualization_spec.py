@@ -113,6 +113,18 @@ class TestValidSpecs:
         with pytest.raises(ValidationError):
             Graph2dSpec.model_validate({"functions": [1, 2]})
 
+    def test_graph2d_show_extrema(self) -> None:
+        # show_extrema(극값 표시·선택) — 미지정 시 None(렌더러가 극값 미표시).
+        s = Graph2dSpec.model_validate({"function": "x**3-3*x", "show_extrema": True})
+        assert s.show_extrema is True
+        assert Graph2dSpec.model_validate({"function": "x"}).show_extrema is None
+
+    def test_graph2d_show_extrema_not_bool(self) -> None:
+        # 문자열은 pydantic lax 모드가 일부("yes"/"1" 등) bool로 강제 변환하므로, 강제
+        # 불가능한 타입(list)으로 위반을 확인한다.
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"show_extrema": [1, 2]})
+
     def test_surface3d_valid(self) -> None:
         s = Surface3dSpec.model_validate({"surface": "z = x**2 + y**2", "rotatable": True})
         assert s.surface == "z = x**2 + y**2"
