@@ -78,6 +78,7 @@ from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l1.embedding_provider import build_provider
+from whymath_backend.l1.problem_bank.probe_candidates import fetch_probe_candidates_by_mids
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -398,6 +399,22 @@ class CoachResponse(BaseModel):
             "`on`이어도 `intervention`이 None(진단 보류)이거나 시각화 생성이 실패"
             "(`InvalidVisualizationSpecError` 등)하면 None(그레이스풀 폴백) — 이 필드는 항상 "
             "*보완재*이며 `decision`/`intervention`(소크라테스 발화)을 절대 대체·차단하지 않는다."
+        ),
+    )
+    similar_problem_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "MISC-03 — 확정 오개념 진단(`intervention` not None, 개입 신뢰도 게이트 통과)에 대한 "
+            "*미응답* 유사문제 1건(같은 misconception_id 태깅) 식별자. REC-02가 만든 L1 역인덱스 "
+            "조회 좌석(`fetch_probe_candidates_by_mids`)을 그대로 재사용한다 — 신규 인덱스·신규 "
+            "조회 로직 0. **세션 기반 두 엔드포인트(`/v1/coach/sessions`·`/v1/coach/sessions/"
+            "{id}/turns`)에서만 채워진다** — DB·user_id가 필요한 '미응답' 필터라 stateless "
+            "`/v1/coach`는 DB에 접근하지 않으므로 이 필드가 항상 None이다(엔드포인트 docstring "
+            "'*DB 무접근*' 정합). `intervention`이 None(진단 보류)이거나, 태깅됐지만 난이도 미보유·"
+            "이미 전부 응답한 문항뿐이면 None(그레이스풀 — 서빙할 문제가 없을 뿐 오류 아님). "
+            "**이 필드는 문항 id만 담는다** — 문항 본문·정답은 여기 담기지 않으며, 클라이언트는 "
+            "기존 문항 조회 엔드포인트로 내용을 별도 조회한다(콘텐츠 중복·유출 방지). 오개념 확정 "
+            "*이후*에만 계산되는 reactive 조회다(초기 context preload 금지 — CLAUDE.md)."
         ),
     )
 
@@ -928,6 +945,60 @@ async def _maybe_visualize(
             type(exc).__name__,
         )
         return None
+
+
+async def _similar_problem_for(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    intervention: InterventionDecision | None,
+) -> uuid.UUID | None:
+    """MISC-03 — 확정 오개념 진단에 대한 유사문제(미응답·같은 mis_id) 1건 서빙.
+
+    **좌석 재사용(신규 인덱스·신규 조회 로직 0)**: REC-02가 만든 L1 역인덱스 조회 좌석
+    (`l1.problem_bank.probe_candidates.fetch_probe_candidates_by_mids`)을 *그대로* 호출한다 —
+    mids 매칭·난이도 보유 필터·미응답(`user_id`) 필터·`problem_id` 오름차순 결정론 정렬·절단은
+    전부 그 함수(와 그 안의 순수 코어 `_match_probe_rows`)가 이미 수행한다. 여기서는 재구현하지
+    않고 `limit=1`로 "1건"을 좌석 자체에서 직접 받는다(별도 슬라이싱 로직 0). REC-02는 이 좌석을
+    *진단 프로브 선택*(WH-1 하네스 도구6 재료) 용도로 쓰지만, 이 함수는 *확정 진단에 대한 서빙*
+    (연습 문항 추천) 용도다 — 목적은 다르나 조회는 하나(§소비처 분리·구현 공유).
+
+    **계층 결정**: L5(`api/coach.py`)가 L1(`l1.problem_bank.probe_candidates`)을 직접 호출한다.
+    이 파일이 이미 `l1.embedding_provider.build_provider`를 직접 import하는 선례가 있고,
+    import-linter 계약(`pyproject.toml` `[tool.importlinter]`)의 layers는
+    `api > l6 > l5 > l4 > l3 > l2 > l1 > schema`라 api(L5 서버)가 l1을 직접 호출하는 것은
+    합법적 순방향 의존이다(L4를 거치는 건 REC-02 소비처인 `harness/wh1_probe_supply.py`가
+    L1·L2·L4를 넘나드는 *하네스*라서 필요했던 것이지 — 그 모듈 docstring이 명시하듯 하네스는
+    "import-linter 계약 밖"인 횡단 인프라다). `_similar_problem_for`는 하네스가 아니라 얇은
+    HTTP 핸들러 헬퍼이므로, 여기서 L4 래퍼를 새로 만드는 것은 불필요한 간접 계층 추가다 —
+    L1 좌석을 직접 부르는 편이 계층 원칙과 기존 코드 관례 둘 다에 더 부합한다.
+
+    **게이트(reactive retrieval — CLAUDE.md "오개념을 초기 context에 preload 금지")**:
+    `intervention`이 None(오개념 confidence 게이트 미통과 — `select_intervention`이 진단을
+    보류)이면 DB를 전혀 건드리지 않고 즉시 None을 반환한다. 게이트를 통과했을 때만(확정 진단
+    *이후*) L1 조회가 발생한다 — 예측적 선탐색이 아니라 이번 턴 확정 결과에 대한 반응적 조회다.
+
+    Args:
+      session: 읽기 전용 async 세션(세션 기반 두 엔드포인트만 — stateless `/v1/coach`는 DB가
+        없어 이 함수를 아예 호출하지 않는다).
+      user_id: 이 학생의 "미응답" 필터 기준(`fetch_probe_candidates_by_mids`의 `user_id`).
+      intervention: 이번 턴 최종 개입 결정(가설-기반 재결정 이후의 *최종* 값 — 호출자가
+        `_intervention_from_hypotheses_or` 적용 뒤의 변수를 넘긴다. MISC-01 `_maybe_visualize`와
+        동일한 "최종 intervention" 규약).
+
+    Returns:
+      미응답·난이도 보유·같은 misconception_id 태깅 문항 중 `problem_id` 오름차순 최상단 1건의
+      UUID. 후보가 없으면(오개념 미태깅·난이도 부재·전부 응답함 중 어느 사유든) None — 서빙할
+      문제가 없을 뿐 오류가 아니므로 그레이스풀 폴백(예외를 던지지 않는다). 문항 *내용*은 담기지
+      않는다(id만) — 본문·정답은 별도 문항 조회 엔드포인트가 소유한다.
+    """
+    if intervention is None:
+        return None
+    query = await fetch_probe_candidates_by_mids(
+        session, [intervention.misconception_id], user_id=user_id, limit=1
+    )
+    if not query.rows:
+        return None
+    return uuid.UUID(query.rows[0].problem_id)
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
@@ -2262,6 +2333,9 @@ async def create_session(
         intervention,
         judge_deps=judge_deps,
     )
+    # MISC-03 — REC-02 L1 좌석 재사용(신규 인덱스·조회 로직 0). visualization과 동형: 커밋
+    # *뒤*(DB 트랜잭션에 얹지 않음)·최종(가설-기반 재결정 후) intervention 재사용.
+    similar_problem_id = await _similar_problem_for(session, user.user_id, intervention)
 
     # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(0)
@@ -2284,6 +2358,7 @@ async def create_session(
         client_state_mismatch=bool(mismatch_fields),
         dialogue_completed=dialogue_completed,
         visualization=visualization,
+        similar_problem_id=similar_problem_id,
     )
 
 
@@ -2609,6 +2684,8 @@ async def append_turns(
         intervention,
         judge_deps=judge_deps,
     )
+    # MISC-03 — create_session과 동형(REC-02 L1 좌석 재사용·커밋 뒤·최종 intervention).
+    similar_problem_id = await _similar_problem_for(session, user.user_id, intervention)
 
     # WH-1 멀티턴 연속성 — 이번 교환 *전* total_turns(current_total)에서 누적 턴 번호 유도(§2.2).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(current_total)
@@ -2632,6 +2709,7 @@ async def append_turns(
         client_state_mismatch=bool(mismatch_fields),
         dialogue_completed=dialogue_completed,
         visualization=visualization,
+        similar_problem_id=similar_problem_id,
     )
 
 
