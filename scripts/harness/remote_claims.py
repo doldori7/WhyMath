@@ -135,6 +135,15 @@ class ClaimResult:
     message: str = ""
 
 
+class GitOutputDecodeError(RuntimeError):
+    """git 출력 디코드 실패 (HARN-19).
+
+    이 이름이 존재하는 이유는 *분류* 때문이다. 디코드는 subprocess의 reader 스레드에서
+    터지므로 호출측에는 예외가 아니라 `stdout=None`으로 도착하고, 그대로 두면 소비자가
+    None을 만져 `AttributeError`가 된다 — 경고에 찍히는 타입명이 원인을 오도한다.
+    """
+
+
 def _git(
     root: Path,
     *argv: str,
@@ -151,15 +160,29 @@ def _git(
     import os
 
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env_extra or {})}
-    return subprocess.run(
+    result = subprocess.run(
         ["git", *argv],
         cwd=root,
         capture_output=True,
-        text=True,
+        # HARN-19: encoding을 명시하지 않으면 파이썬이 locale.getpreferredencoding()으로
+        # 디코드한다 — 한국어 Windows는 cp949라 git이 내보내는 UTF-8(태스크 YAML의 한글
+        # 본문 등)에서 UnicodeDecodeError가 난다. git 출력은 UTF-8이 정본이므로 고정한다.
+        # errors='replace' 근거: strict면 바이트 하나 때문에 호출 *전체*가 실패하고,
+        # 이 함수의 소비자들은 fail-open이라 보호가 통째로 죽는다(HARN-11 미머지 done
+        # 탐지가 그렇게 상시 무력이었다). 한 항목만 깨진 문자로 남기는 편이 낫다.
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         input=input_text,
         env=env,
     )
+    # HARN-19 ②(마스킹 제거): reader 스레드에서 디코드가 터지면 subprocess는 예외를
+    # 전파하지 못하고 stdout을 None으로 남긴다 → 소비자가 None을 만져 AttributeError가
+    # 되고, 경고에는 'error:AttributeError'만 찍혀 진짜 원인(인코딩)이 가려진다.
+    # 정상 동작에서는 도달 불가능한 상태이므로, 원인을 이름에 담아 크게 실패시킨다.
+    if result.stdout is None and result.returncode == 0:
+        raise GitOutputDecodeError(f"git {argv[0]}: stdout 디코드 실패 (stdout=None)")
+    return result
 
 
 # claim 커밋의 고정 신원 — 전역 git 설정 부재 환경에서도 commit-tree가 성립하게 한다.

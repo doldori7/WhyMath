@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: data-pipeline
-status: todo
+status: done
 priority: 3
 owner: kiki
 depends_on: []
@@ -15,10 +15,11 @@ acceptance:
   - "② curriculum-node-builder 스킬로 노드 엑셀(노드_계층표·노드_트리구조·성취기준_목록)을 변환한다"
   - "③ 산출 엑셀을 data/ 아래 반입하고 라이선스·출처 데이터 카드를 동반한다(KICE 보고서 라이선스는 NCIC와 다를 수 있어 반입 시 재확인)"
   - "④ 범위 밖 명시: 반입 후 AchievementStandard 스키마 확장(신규 컬럼·마이그레이션)은 이 태스크에 포함하지 않는다 — 별도 후속 태스크로 분리 등재한다(데이터가 스키마보다 먼저)"
-artifacts: []
+artifacts:
+  - 98a34695
 paths:
   - "data/corpus/**"
   - "docs/data/**"
 session: null
 notes: "docs/architecture/curriculum_module_gap_review.md §3 D3. 성취수준(A~E)·평가기준(상/중/하) 축이 저장소 전체 0건인데 상류 도구(curriculum-node-builder 스킬)는 이미 산출 가능. NCIC PDF 403 차단 선례(docs/data/ncic.md §3.1)와 동일하게 데이터 반입은 사람 소유 액션."
-updated: 2026-08-03
+updated: 2026-08-08

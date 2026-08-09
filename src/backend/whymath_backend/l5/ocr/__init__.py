@@ -8,6 +8,8 @@
                        QwenVlRecognizer(C 스텁·L3 라우터 경유)·PaddleTextRecognizer(A).
   ④ 조립(`assemble`) — `assemble_regions` 순수 함수(읽기순 정렬·집계).
   ④-검증(`verify`)   — `parse_check_latex` SymPy 왕복(결정론·LLM 0).
+  텍스트 단계 분해(`text_segmentation`) — `segment_solution_text`(구조 판별만·LLM 0·
+                       `data/segmentation_contract.json` 골든 계약).
   오케스트레이션(`pipeline`) — `run_ocr_pipeline`(부품 주입).
   부품 조립(`factory`) — `build_ocr_components(settings)`.
 
@@ -43,6 +45,10 @@ from whymath_backend.l5.ocr.router import (
     classify_by_text,
     merge_text_and_math_regions,
 )
+from whymath_backend.l5.ocr.text_segmentation import (
+    SegmentationResult,
+    segment_solution_text,
+)
 from whymath_backend.l5.ocr.verify import (
     LatexParseResult,
     demote_confidence_if_unparseable,
@@ -75,6 +81,9 @@ __all__ = [
     "assemble_regions",
     "demote_confidence_if_unparseable",
     "parse_check_latex",
+    # 텍스트 단계 분해(NLP-03)
+    "SegmentationResult",
+    "segment_solution_text",
     # 오케스트레이션·조립
     "OcrComponents",
     "build_ocr_components",

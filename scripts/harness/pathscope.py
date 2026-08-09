@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,11 +82,16 @@ def repo_files(root: Path) -> list[str]:
             ["git", "ls-files"],
             cwd=root,
             capture_output=True,
-            text=True,
+            # HARN-19: 로케일(cp949) 디코드 금지 — git 출력은 UTF-8이 정본이다.
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
-        return out.stdout.splitlines()
-    except Exception:  # pragma: no cover - 환경 의존
+        return (out.stdout or "").splitlines()
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 빈 목록은 '겹침 없음'과 같은 색이라 겹침 보호가 통째로
+        # 죽는다. 측정 실패는 통과처럼 보이면 안 된다 (CLAUDE.md AI·신뢰).
+        print(f"⚠ git ls-files 실패({type(exc).__name__}) — 경로 겹침 검사 불가", file=sys.stderr)
         return []
 
 
