@@ -89,13 +89,16 @@ from whymath_backend.l2 import (
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
 from whymath_backend.l3.interfaces import (
     CacheBackend,
+    InMemoryCache,
     LLMProvider,
+    RecordingTraceSink,
     TraceSink,
 )
 from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.providers.ollama import OllamaProvider
 from whymath_backend.l3.verify_final_answer import verify_final_answer
 from whymath_backend.l4 import (
     CoachingFocus,
@@ -135,7 +138,9 @@ from whymath_backend.l4.misconception.shadow import (
     _spawn,
     observe_misconception_judge_shadow,
     observe_misconception_shadow,
+    observe_misconception_visualization_shadow,
 )
+from whymath_backend.l4.misconception.visualize import visualize_misconception
 from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
 from whymath_backend.l4.models import next_polya_stage
 from whymath_backend.l4.pedagogy.k_type_resolver import k_type_query
@@ -166,6 +171,7 @@ from whymath_backend.schema.enums import (
 )
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.visualization import Visualization
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -383,6 +389,17 @@ class CoachResponse(BaseModel):
             "항상 None). **정답 값 자체는 이 필드에도, 다른 어떤 필드에도 담기지 않는다.**"
         ),
     )
+    visualization: Visualization | None = Field(
+        default=None,
+        description=(
+            "MISC-01 — 확정 오개념 진단(`intervention` not None)에 대한 맞춤 교정 시각화 명세"
+            "(`visualize_misconception`·슬93). `misconception_visualization_mode == 'on'`일 "
+            "*때만* 채워진다 — `off`·`shadow`는 항상 None(shadow는 비노출 로그로만 관측). "
+            "`on`이어도 `intervention`이 None(진단 보류)이거나 시각화 생성이 실패"
+            "(`InvalidVisualizationSpecError` 등)하면 None(그레이스풀 폴백) — 이 필드는 항상 "
+            "*보완재*이며 `decision`/`intervention`(소크라테스 발화)을 절대 대체·차단하지 않는다."
+        ),
+    )
 
 
 class SessionCreateRequest(CoachRequest):
@@ -500,6 +517,28 @@ def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLev
     return mastery_to_level(sum(parts) / len(parts))
 
 
+def _mastery_level_for(
+    body: CoachRequest,
+    *,
+    server_mastery: float | None = None,
+    server_theta: float | None = None,
+) -> MasteryLevel | None:
+    """명시 `mastery_level` 우선·없으면 BKT+θ 라벨 산출 — `_build_response_payload`의 slice 25/77
+    로직을 그대로 뽑은 단일 계산(중복 0). `_build_response_payload` 내부와 MISC-01
+    `_maybe_visualize`(핸들러가 별도로 level을 필요로 함) 양쪽이 이 함수를 공유한다.
+
+    반환 튜플 계약(6-튜플)을 건드리지 않기 위한 선택 — 다수 기존 테스트가 `decision, *_rest, sol
+    = _build_response_payload(...)` 형태로 *마지막 원소=solution_coaching*을 전제해 언패킹하므로
+    (`tests/backend/api/test_coach.py:1309` 등), level을 7번째 반환값으로 추가하면 그 전제가
+    깨진다 — 대신 핸들러가 *같은 입력*으로 이 헬퍼를 한 번 더 불러 재계산(순수·저비용)한다.
+    """
+    effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
+    level = body.mastery_level
+    if level is None:
+        level = _ability_level(effective_bkt, server_theta)
+    return level
+
+
 def _build_response_payload(
     body: CoachRequest,
     *,
@@ -557,10 +596,11 @@ def _build_response_payload(
     # mastery_level은 여전히 최우선·stateless는 server_mastery=None(클라값). 숙달도는 비노출.
     # slice 77: 능력 라벨에 신뢰 θ도 통합 — BKT+θ(logistic) 평균→라벨. 힌트·전이·LTHC가 같은
     # 라벨을 쓰므로 θ가 적응형 스캐폴딩 전반에 일관 반영(θ None=stateless·희소면 BKT만·현행 동일).
+    # MISC-01: level 산출은 _mastery_level_for로 추출(핸들러가 시각화용으로 동일 계산을 재사용·
+    # 중복 로직 0). effective_bkt는 solution coaching(아래 recommend_coaching_for_solution)이
+    # 별도로 계속 쓰므로 그대로 둔다(level과 독립적인 소비처).
     effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
-    level = body.mastery_level
-    if level is None:
-        level = _ability_level(effective_bkt, server_theta)
+    level = _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta)
     # PED-04 D2: 세션 경로는 서버 파생 상태가 진실원천(클라 제출은 참고값). stateless는 override
     # None이라 클라 제출 그대로 — 두 경로의 계약 차이가 이 한 줄에 모인다.
     state = polya_state_override if polya_state_override is not None else body.polya_state
@@ -817,6 +857,77 @@ async def _compute_matches(
         return await _gate(substr[:_DEFAULT_TOP_K])
     # on — substring 아래에 semantic-only 후보를 결합해 *노출*(substring 우선·재정렬 없음).
     return await _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
+
+
+def _l3_deps_or_default(
+    judge_deps: _JudgeSeamDeps,
+) -> tuple[LLMProvider, CacheBackend, TraceSink]:
+    """`judge_deps`(app.state 공유 인스턴스, 미구성 시 None) → 항상 값이 있는 3종 반환.
+
+    `L3JudgeSeam.__init__`의 폴백(`OllamaProvider`·`InMemoryCache`·`RecordingTraceSink`)을
+    그대로 미러한다 — `visualize_misconception`(L3 `generate_visualization_spec` 위임)은
+    `L3JudgeSeam`처럼 seam 어댑터가 아니라 provider/cache/trace를 *직접* 받으므로, 이 좌석이
+    seam 없이 같은 폴백을 재현한다(app.state 미구성 경로 — hermetic 단위테스트 하위호환).
+    """
+    provider = judge_deps.provider if judge_deps.provider is not None else OllamaProvider()
+    cache = judge_deps.cache if judge_deps.cache is not None else InMemoryCache()
+    trace = judge_deps.trace if judge_deps.trace is not None else RecordingTraceSink()
+    return provider, cache, trace
+
+
+async def _maybe_visualize(
+    matches: list[MisconceptionMatch],
+    level: MasteryLevel | None,
+    intervention: InterventionDecision | None,
+    *,
+    judge_deps: _JudgeSeamDeps,
+) -> Visualization | None:
+    """MISC-01 결선 — `misconception_visualization_mode`(off/shadow/on) 3값 분기.
+
+    04b 롤아웃 패턴(`misconception_semantic_mode`)·judge shadow 패턴(`observe_misconception_
+    judge_shadow`) 재사용: `off`는 호출 0(현행 비트동일), `shadow`는 `_spawn`(fire-and-forget)
+    으로 관측만(비노출), `on`은 `await`해 응답에 싣는다. 3모드 공통 게이트: `intervention`이
+    None(진단 보류)이거나 이번 턴 `matches`가 비었으면(시각화할 구체 대상이 없음) 즉시 None —
+    `visualize_misconception`이 내부에서 `select_intervention`으로 다시 게이트하므로 여기서
+    미리 거르는 건 *불필요한 LLM 호출/spawn을 피하기 위한 효율*이지 이중 정책이 아니다.
+
+    `matches[0]`(이번 턴 top-1 원시 진단)을 시각화 대상으로 쓴다 — `intervention`이 누적 가설
+    세트 기반으로 재결정됐을 수 있어(`_intervention_from_hypotheses_or`) 이론상 `matches[0]`과
+    다른 misconception을 가리킬 수 있지만, `visualize_misconception`은 어차피 `match` 자체의
+    confidence로 재게이트하므로(임계 불일치 시 조용히 None) 안전하다 — 별도 hypotheses→match
+    역산은 하지 않는다(재구현 0·`select_intervention_from_hypotheses`가 이미 임시 `Misconception
+    Match`를 합성하는 로직을 여기서 중복하지 않는다).
+
+    `level`이 None(숙달도·θ 신호 모두 희소)이면 시각화 대상 수준을 정할 수 없어 스킵한다(LTHC의
+    `level is not None` 게이트와 동형).
+
+    `on` 모드 예외(`InvalidVisualizationSpecError` 포함 임의 예외)는 잡아 *예외 타입명을 로그에
+    남기고*(CLAUDE.md 침묵 실패 금지) `None`으로 그레이스풀 폴백한다 — 시각화는 보완재라 소크라
+    테스 발화(`decision`/`intervention`)를 절대 막지 않는다(우선순위: 학생 경험 > 시각화 산출물).
+    """
+    mode = get_settings().misconception_visualization_mode
+    if mode == "off" or intervention is None or not matches or level is None:
+        return None
+    match = matches[0]
+    provider, cache, trace = _l3_deps_or_default(judge_deps)
+    if mode == "shadow":
+        _spawn(
+            observe_misconception_visualization_shadow(
+                match, level, provider=provider, cache=cache, trace=trace
+            )
+        )
+        return None
+    # on — 응답을 지연시켜서라도(await) 검증된 시각화를 싣는다. 실패는 그레이스풀 폴백.
+    try:
+        return await visualize_misconception(
+            match, level, provider=provider, cache=cache, trace=trace
+        )
+    except Exception as exc:  # noqa: BLE001 — 시각화는 보완재, 소크라테스 발화는 절대 안 막는다
+        logger.warning(
+            "오개념 시각화 생성 실패(%s) — visualization=None 폴백(intervention/decision 불변)",
+            type(exc).__name__,
+        )
+        return None
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
@@ -1804,6 +1915,14 @@ async def coach_decide(
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(body, matches=outcome.matches)
     )
+    # MISC-01 — stateless라 server_mastery/server_theta 없음(클라 제출값만·_build_response_payload
+    # 와 동일 입력으로 level 재계산). off(기본)면 호출 0(현행 비트동일).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body),
+        intervention,
+        judge_deps=judge_deps,
+    )
     return CoachResponse(
         decision=decision,
         misconceptions=matches,
@@ -1813,6 +1932,7 @@ async def coach_decide(
         solution_coaching=solution_coaching,
         match_low_quality=outcome.low_quality,
         no_confident_match=outcome.no_confident_match,
+        visualization=visualization,
     )
 
 
@@ -2133,6 +2253,16 @@ async def create_session(
     )
     await session.commit()
 
+    # MISC-01 — 커밋 *뒤*(DB 트랜잭션에 LLM 왕복을 얹지 않음). `intervention`은 위에서 이미
+    # 가설-기반으로 재결정된 *최종* 값(select_intervention 임계 일관 재사용). level은
+    # `_build_response_payload`와 동일 입력으로 재계산(7-튜플화 대신 — `_mastery_level_for` 참조).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta),
+        intervention,
+        judge_deps=judge_deps,
+    )
+
     # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(0)
     return SessionCreateResponse(
@@ -2153,6 +2283,7 @@ async def create_session(
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
         dialogue_completed=dialogue_completed,
+        visualization=visualization,
     )
 
 
@@ -2471,6 +2602,14 @@ async def append_turns(
     )
     await session.commit()
 
+    # MISC-01 — create_session과 동형(커밋 뒤·최종 intervention 재사용·level 재계산).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta),
+        intervention,
+        judge_deps=judge_deps,
+    )
+
     # WH-1 멀티턴 연속성 — 이번 교환 *전* total_turns(current_total)에서 누적 턴 번호 유도(§2.2).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(current_total)
     return TurnAppendResponse(
@@ -2492,6 +2631,7 @@ async def append_turns(
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
         dialogue_completed=dialogue_completed,
+        visualization=visualization,
     )
 
 

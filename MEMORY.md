@@ -338,6 +338,34 @@
 ## 🧭 핵심 결정 로그 (시간 역순)
 
 ### 2026-08-10 (회수·성취수준 데이터): **CUR-03(성취수준 A~E·평가기준 상/중/하) 실물이 미병합 고립 브랜치에만 있던 상태를 cherry-pick으로 해소 — 같은 브랜치에서 PB-02·S3-32·MISC-01·MISC-03 완료분 4건 추가 미회수 발견(Kiki 결정 대기)** (claude 회수, Kiki "회수" 지시)
+### 2026-08-09 (구현·MISC-01): **오개념 교정 시각화 결선 — `visualize_misconception` production 호출자 0건 해소(shadow→on 롤아웃)**
+
+**무엇/왜**: `l4/misconception/visualize.py::visualize_misconception()`(슬93)이 코드 완비·테스트
+통과 상태로 production 호출자가 0건이었다(`misconception_module_gap_review.md` §3). 새 3값 롤아웃
+플래그 `misconception_visualization_mode`(`off`/`shadow`/`on`, 기본 `off`)를
+`misconception_semantic_mode` 패턴 그대로 재사용해 `api/coach.py` 3개 핸들러(`/v1/coach`·
+`/v1/coach/sessions`·`/v1/coach/sessions/{id}/turns`)에 결선했다.
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): ①`config.py`에 플래그 신설. ②`l4/misconception/
+shadow.py`에 `observe_misconception_visualization_shadow`(judge shadow 패턴 미러 — 비노출·비차단
+`_spawn`·별도 record_logger·`extra="forbid"`) 신설 — judge_shadow와의 의도적 차이 1건: 생성
+*실패*도 레코드에 남긴다(성공률 자체가 이 shadow의 관측 대상이므로). 레코드엔 학생 원문·생성된
+spec/caption 미포함(오개념 id·도메인·개입 패턴·수준 라벨·성공 여부·타입 라벨·예외 타입명만).
+③`api/coach.py`에 `_maybe_visualize`(off/shadow/on 공통 분기, `intervention is None`이면 즉시
+스킵 — `select_intervention` 임계 재사용) + `CoachResponse.visualization` 필드. `on`은 커밋 *뒤*
+await(DB 트랜잭션에 LLM 왕복 안 얹음), 실패는 예외 타입명 로그 후 `None` 그레이스풀 폴백(시각화는
+소크라테스 발화의 보완재 — 절대 차단·대체 안 함). `_build_response_payload`의 6-튜플 반환 계약은
+불변(기존 테스트의 `*_rest, sol = ...` 언패킹 보존) — `level`은 별도 헬퍼(`_mastery_level_for`)로
+추출해 핸들러가 재계산(중복 로직 0, 튜플 확장 회피).
+
+**검증**: 신규 테스트 14건(`test_misconception_visualization_shadow.py` 7건 — 성공/보류/L3검증
+실패/provider예외/프라이버시, `test_coach_visualization.py` 7건 — off/shadow/on 3모드 HTTP 결선)
+전부 green. ruff·black clean. 전체 백엔드 스위트 재검증: 9033 passed·296 skipped·1 pre-existing
+무관 failure(`test_concept_reach_report.py::test_real_corpus_smoke_all_ten_surfaces_unreached_
+and_fourteen_callsites` — `me_learning_path` 표면이 mobile `problems_api.dart`에서 이미 호출되기
+시작해 도달로 전환된 기존 드리프트, PB-02/S3-32/REC-02 결정 로그에 이미 반복 기록된 동일 건과
+같은 계열, stash로 무관 재확인 — 이 태스크 범위 밖이라 별도 미등재).
+
 ### 2026-08-08 (구현·PB-02): **선언≠배선 봉합 — S6 상시 재검증 전 코퍼스 글롭 전환 + 커버리지 리포트 재생성-diff CI**
 
 **무엇/왜**: "만들고 배선 안 함" 반복 계열(OPS-03·08·11·VIZ-01·NLP-01·REC-01)의 3건 추가 재발.
