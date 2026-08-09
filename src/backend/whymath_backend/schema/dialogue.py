@@ -109,6 +109,18 @@ class Dialogue(BaseModel):
         default=None,
         description="대화 종결 결과 — 학생자력해결/Socratic유도성공/힌트필요/풀이공개로종결/포기",
     )
+    # S3-32: l3.verify_final_answer(서버검증 3상태) + l4.completion(REVIEW 게이트) 조합이
+    # 완료를 확정한 시각. NULL=미완료. api/coach.py가 이 값을 "이미 완료됐는지" 멱등 가드로도
+    # 쓴다(REVIEW는 self-loop 종착 단계라, 가드 없이 재판정하면 턴마다 ProblemAttempt가
+    # 중복 적재된다). 클라 자가보고 `resolution`(PATCH, 첫 기록 우선)과는 별도 신뢰 축이라
+    # `resolution`을 덮어쓰지 않는다.
+    server_verified_completed_at: datetime | None = Field(
+        default=None,
+        description=(
+            "서버검증(verify_final_answer) + Polya REVIEW 게이트 통과로 대화가 완료 확정된 "
+            "시각. NULL=미완료."
+        ),
+    )
 
     # ===== 턴 카운트 =====
     total_turns: int | None = Field(

@@ -425,6 +425,203 @@
 
 **남는 제약(문서가 스스로 명시)**: Time-to-Mastery는 `S3-32` 착지 전까지 **대외 주장 불가**(마케팅이 측정을 앞지르면 "측정 없는 판정") · 오개념 재발률은 `MISC-06` 선행 · BKT 파라미터는 문헌 전형값 하드코딩(EM 적합 없음·`l2/bkt.py:36-40`)이라 "정밀 진단" 주장의 강도 상한 · 위상정렬 비자명 케이스 3.6%. IMO/KMO는 "입상"이 아니라 **"도전할 수 있는 상태에 더 빨리 도달"**로만 프레이밍(통제 못 하는 변수를 약속하지 않음).
 ### 2026-08-08 (CI 사고·재발방지): **PR #730(MOB-10) backend CI가 MOB-10 diff와 무관한 사전 드리프트로 실패 — `test_concept_reach_report.py`의 실 코퍼스 스모크가 기대하던 "14 콜사이트·10종 표면 전량 미도달"이 이미 `origin/main`에서 15·`me_learning_path` 도달로 어긋나 있었다. 근본 원인: 이미 병합된 PATH-05(#728, mobile-only)가 `problems_api.dart`에서 `GET /v1/me/weak-concepts/{concept_id}/learning-path`를 실제로 호출하기 시작했는데, `ci.yml`의 `changes` 필터가 `src/mobile/`-only PR엔 `backend=false`를 매겨 이 가드(backend pytest 소속)가 속한 잡 자체를 스킵시켜 그 시점에 전혀 발화하지 못했다 — 서버+클라를 동시에 건드린 다음 PR(MOB-10)에서야 드러남(가드는 설계대로 작동, CI 배선상 발화 기회가 막혀 있었을 뿐). `git worktree add`로 `origin/main`을 직접 스캔해 PR 착수 전부터 존재한 드리프트임을 실측 확증한 뒤, 테스트의 하드코딩 기대값만 실측에 맞춰 갱신(14→15·표면별 단언 분리)하고 근본 원인(CI 배선 공백)은 `OPS-23-mobile-only-pr-backend-guard-blindspot`로 분리 등재 — "시스템 실수는 재발방지대책 등재 의무" 절차 준수** (claude 진단·수정·등재, PR #730 웹훅 CI 실패 이벤트 대응)
+### 2026-08-09 (구현·MISC-03): **유사문제 실시간 서빙 — REC-02 L1 역인덱스 좌석 재사용, 신규 조회 로직 0**
+
+**무엇/왜**: `04e_misconception_remediation_design.md` §1-3 결정 실행. 오개념 확정 진단
+(`intervention` not None — `select_intervention` 임계 통과) 시 같은 mis_id 태깅·미응답 문항
+1건을 서빙한다. REC-02가 이미 만든 L1 역인덱스 조회 좌석(`l1/problem_bank/probe_candidates.py::
+fetch_probe_candidates_by_mids`)을 *그대로* 재사용 — 신규 인덱스·신규 조회 로직 0(설계가
+명시적으로 요구). REC-02는 이 좌석을 진단 프로브 선택(WH-1 하네스) 용도로 쓰고 이 태스크는
+교정 서빙 용도로 쓴다 — 소비 목적만 다르고 조회는 하나(유지보수 지옥 방지).
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): `api/coach.py`에 `_similar_problem_for
+(session, user_id, intervention)` 헬퍼 — `intervention is None`이면 DB 무접근 즉시 None(reactive
+retrieval·초기 context preload 금지), 아니면 좌석을 `mids=[intervention.misconception_id]`
+(단일 원소)·`limit=1`로 호출해 "1건"을 좌석 자체에서 받는다(별도 슬라이싱 0). `CoachResponse.
+similar_problem_id: uuid.UUID | None` 필드 신설 — 문항 id만 담고 본문·정답은 담지 않는다(클라가
+별도 문항 조회 엔드포인트로 내용을 가져옴). **세션 기반 두 엔드포인트(`/v1/coach/sessions`·
+`.../turns`)에서만** 채워진다 — DB·user_id가 필요한 "미응답" 필터라 stateless `/v1/coach`(DB
+무접근 계약)는 항상 None. 계층 결정: L5(`api/coach.py`)가 L1을 직접 호출(L4 래퍼 신설 안 함) —
+`api/coach.py`가 이미 `l1.embedding_provider.build_provider`를 직접 import하는 선례 존재,
+import-linter layers 계약(`api > l6 > l5 > l4 > l3 > l2 > l1 > schema`)상 api→l1 직접 호출은
+합법적 순방향 의존(`lint-imports` 통과 확인) — REC-02의 다른 소비처 `harness/wh1_probe_supply.py`
+가 L4를 경유하는 건 그 모듈이 "import-linter 계약 밖" 횡단 하네스라서이지, 일반 HTTP 핸들러
+헬퍼에는 해당 사항 없음.
+
+**검증**: 신규 테스트 13건(`test_coach_similar_problem.py`) — 게이트(None intervention → DB
+무접근), 좌석 위임(mids 단일원소·user_id·limit=1로 정확히 호출), 실좌석 경유(mids 매칭·미응답
+제외·난이도 부재 시 None — L1 로직 재구현 없이 그대로 통과 증명), HTTP 결선(세션 두 엔드포인트만
+채움·stateless는 좌석조차 호출 안 함) 전부 green. ruff·black·mypy·`lint-imports` clean. 전체
+백엔드 스위트 재검증: 9046 passed·296 skipped·1 pre-existing 무관 failure(`test_concept_reach_
+report.py` — PB-02/S3-32/REC-02/MISC-01 결정 로그에 이미 반복 기록된 `me_learning_path` 표면
+드리프트와 동일 건, stash로 무관 재확인).
+
+### 2026-08-09 (구현·MISC-01): **오개념 교정 시각화 결선 — `visualize_misconception` production 호출자 0건 해소(shadow→on 롤아웃)**
+
+**무엇/왜**: `l4/misconception/visualize.py::visualize_misconception()`(슬93)이 코드 완비·테스트
+통과 상태로 production 호출자가 0건이었다(`misconception_module_gap_review.md` §3). 새 3값 롤아웃
+플래그 `misconception_visualization_mode`(`off`/`shadow`/`on`, 기본 `off`)를
+`misconception_semantic_mode` 패턴 그대로 재사용해 `api/coach.py` 3개 핸들러(`/v1/coach`·
+`/v1/coach/sessions`·`/v1/coach/sessions/{id}/turns`)에 결선했다.
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): ①`config.py`에 플래그 신설. ②`l4/misconception/
+shadow.py`에 `observe_misconception_visualization_shadow`(judge shadow 패턴 미러 — 비노출·비차단
+`_spawn`·별도 record_logger·`extra="forbid"`) 신설 — judge_shadow와의 의도적 차이 1건: 생성
+*실패*도 레코드에 남긴다(성공률 자체가 이 shadow의 관측 대상이므로). 레코드엔 학생 원문·생성된
+spec/caption 미포함(오개념 id·도메인·개입 패턴·수준 라벨·성공 여부·타입 라벨·예외 타입명만).
+③`api/coach.py`에 `_maybe_visualize`(off/shadow/on 공통 분기, `intervention is None`이면 즉시
+스킵 — `select_intervention` 임계 재사용) + `CoachResponse.visualization` 필드. `on`은 커밋 *뒤*
+await(DB 트랜잭션에 LLM 왕복 안 얹음), 실패는 예외 타입명 로그 후 `None` 그레이스풀 폴백(시각화는
+소크라테스 발화의 보완재 — 절대 차단·대체 안 함). `_build_response_payload`의 6-튜플 반환 계약은
+불변(기존 테스트의 `*_rest, sol = ...` 언패킹 보존) — `level`은 별도 헬퍼(`_mastery_level_for`)로
+추출해 핸들러가 재계산(중복 로직 0, 튜플 확장 회피).
+
+**검증**: 신규 테스트 14건(`test_misconception_visualization_shadow.py` 7건 — 성공/보류/L3검증
+실패/provider예외/프라이버시, `test_coach_visualization.py` 7건 — off/shadow/on 3모드 HTTP 결선)
+전부 green. ruff·black clean. 전체 백엔드 스위트 재검증: 9033 passed·296 skipped·1 pre-existing
+무관 failure(`test_concept_reach_report.py::test_real_corpus_smoke_all_ten_surfaces_unreached_
+and_fourteen_callsites` — `me_learning_path` 표면이 mobile `problems_api.dart`에서 이미 호출되기
+시작해 도달로 전환된 기존 드리프트, PB-02/S3-32/REC-02 결정 로그에 이미 반복 기록된 동일 건과
+같은 계열, stash로 무관 재확인 — 이 태스크 범위 밖이라 별도 미등재).
+
+### 2026-08-08 (구현·PB-02): **선언≠배선 봉합 — S6 상시 재검증 전 코퍼스 글롭 전환 + 커버리지 리포트 재생성-diff CI**
+
+**무엇/왜**: "만들고 배선 안 함" 반복 계열(OPS-03·08·11·VIZ-01·NLP-01·REC-01)의 3건 추가 재발.
+① 야간 S6 상시 재검증(`e2e-nightly`)이 코퍼스 3종(`generated_v0`·`rephrased_v0`·`killer_v0`)만
+하드코딩 — 실제 7종 중 4종(`conceptual_v0`·`misconception_mc_v0`·`probability_finite_v0`·`v1`,
+전체 1,478문·55.8%)이 야간 재검증을 한 번도 받지 못함. ② `problem_bank_coverage.py`(결정론
+관측 CLI) 산출물이 `docs/data/problem_bank_coverage_2026-07.json`에 커밋돼 있으나 재생성-대조
+CI가 없어 6종·2,667건 기준 stale 상태로 방치(실제 7종·2,647건과 불일치·S3-27 유형축도 미반영).
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): `ci.yml` 2곳 수정 — ① `e2e-nightly`의
+corpus_reverify 호출을 하드코딩 3파일 나열 → bash 글롭 `problem_bank_*/problems.jsonl`(harness
+`qa_pipeline.py`가 이미 쓰는 패턴과 통일). `--fuzz` 야간 배선은 **실측 후 보류**: 실행시간은
+무--fuzz 20초·--fuzz 36초로 부담 없으나, 켜면 `problem_bank_rephrased_v0`에서 진짜 데이터 결함
+12건(주장 극값이 실제 근과 불일치)이 새로 드러나 신규 게이트가 착지 직후부터 상시 빨강으로
+시작하게 됨 — 그 결함 조사·수정은 범위 무한 확장이라 별도 태스크로 분리, 사유·수치를 CI 주석에
+실측 기록. ② `data-pipeline` 잡의 기존 ARCH-21 `qa_pipeline` 스텝과 **동일한**
+`needs.changes.outputs.corpus` 트리거를 공유하는 신규 스텝 추가(새 CI 잡 신설 안 함) —
+`problem_bank_coverage` 재생성 → 커밋본과 `diff -u`, 불일치 시 `exit 1`. 도구 자체는 무수정(여전히
+게이트 아님·항상 exit 0) — stale 검출은 CI 스텝의 diff가 전담. 커밋된 리포트를 재생성해 갱신
+(2,667·6종→**2,647·7종**, 성취기준 커버 72/435→78/435, 유형(S3-27) 축 신규 반영).
+
+**검증**: `tests/infra/test_corpus_reverify_wiring.py`·`test_problem_bank_coverage_ci_wiring.py`
+신규(OPS-10·ARCH-21 배선 실재성 패턴 답습 — 실제 `ci.yml`을 `yaml.safe_load`로 파싱해 스텝
+존재·모듈 실행 형태·하드코딩 부재/글롭 존재·트리거 공유·diff+exit1 존재를 기계 확인, 파서
+실패는 무조건 예외). **변별력 실측**(CLAUDE.md 요구 — 양쪽 다 실측): 하드코딩을 되돌리면 4종
+누락이 실제로 재현되고 관련 테스트가 실제 FAIL함을 확인 후 원복·diff+exit1 스텝을 실제로 지우면
+커버리지 wiring 테스트 4건이 실제 FAIL함을 확인 후 원복. 전체 백엔드 스위트 재검증: 9019
+passed·296 skipped·1 pre-existing 무관 failure(REC-02·S3-32와 동일 건 — `test_concept_reach_
+report.py`, PATH-05 드리프트, stash로 무관 재확인). CI YAML 구문 검증(`yaml.safe_load`)·
+`lint-imports` KEPT·ruff·black·mypy-strict green. **부수 발견**: REC-02(`d554ddad`) 테스트 파일
+2건이 black 라인폭 100 위반 상태로 커밋됐던 것을 이번 스위트에서 뒤늦게 발견(REC-02 검증 시
+소스 파일만 black 체크하고 테스트 파일을 빠뜨림) — 이번 커밋에서 재포맷해 상환.
+
+### 2026-08-08 (구현·S3-32): **학습 루프 닫힘 — 서버검증 최종답→Polya REVIEW 게이트→attempt 적재→completion 신호** (미병합 브랜치 tlthrr 재작성)
+
+**무엇/왜**: 코치 대화에서 학생이 최종 답에 도달해도 서버가 그걸 검증·기록하지 않았다 — 정답
+판정이 클라 자가보고(`api/me.py::submit_attempt`)에만 의존. 원래 이 작업은 미병합 브랜치
+`claude/s3-02-live-remeasurement-tlthrr`(구 S3-26)에 있었으나 merge-base 이후 `api/coach.py`
+632줄·`api/me.py` 430줄 drift로 포트 불가 — 현재 main 기준 처음부터 재구현(backend-engineer
+위임 → 메인 독립 재검증).
+
+**구현**: 신규 `l3/verify_final_answer.py`(3상태 correct/incorrect/unverifiable — 기존
+`l3/solution_set.py`·`l3/symbolic_equivalence.py`의 4상태 `IdentityVerdict` 재사용, 재구현 0.
+환각 금지 — 판정 불가는 절대 correct로 낙관 판정하지 않음. 결과에 정답값 자체를 담지 않음) +
+신규 `l4/completion.py`(`decide_completion` — L3 3상태 + 기존 Polya 엔진의 `current_stage`를
+*조합만*. **"정답을 빠르게" KPI 금지** 핵심 규약: `correct`여도 `current_stage`가 이미 REVIEW일
+때만 완료 — UNDERSTAND/PLAN/EXECUTE의 correct는 아직 완료 아님. incorrect면 정답 미노출 재고
+유도 문구로 대체, 부정적 감정어 0). `api/coach.py`에 `_apply_completion`(멱등 가드 —
+`dialogue.server_verified_completed_at` 존재 시 재판정·재적재 없이 즉시 반환, `_ExplodingSession`
+테스트로 DB 미접근까지 증명) 결선 — `create_session`/`append_turns` 양쪽 동형 적용, completed=True
+시 서버검증 축 `ProblemAttempt` 신규 적재(클라 자가보고 축과 별도·중복 허용) + `dialogue.attempt_id`
+·`server_verified_completed_at` 갱신. `CoachResponse.dialogue_completed`(True/False/None 3값)
+신규 필드로 클라의 `next-problem` 자동 호출을 지원. `api/me.py`는 무변경(다른 두 세션이 동시
+점유 중이라 최소침습 원칙 — 손 안 댐). 신규 alembic 리비전 `7ef2b5a8e69e`(down_revision=착수
+시점 실제 head `090d254a5d43` 실측 확인 — stale down_revision 재사용 금지 원칙 준수), additive
+컬럼 1개(`dialogue.server_verified_completed_at`, nullable).
+
+**검증**: 신규 테스트 3파일(`l3/test_verify_final_answer.py`·`l4/test_completion.py`·
+`api/test_coach_completion.py`) — 3상태 전수·"정답을 빠르게" 금지 4단계 파라미터화 전수·환각
+금지/정답 비노출 sentinel 회귀·멱등 가드(`_ExplodingSession`)·API 레벨 `dialogue_completed` 3값
+전부 포함. 1차 구현엔 테스트가 0건이라 메인이 반려 후 재작업 요청(사유: CLAUDE.md "모든 PR에
+테스트 동반" 미충족) — 재작업으로 해소. **전체 백엔드 스위트 재검증**(canonical bare
+`pytest -q`, `src/backend`+`src/data-pipeline` 동시 설치): 신규 마이그레이션 착지 시 기존
+`db/test_schema_version_guard.py`의 `KNOWN_REVISIONS`/`EXPECTED_ALEMBIC_HEAD` 동결 테스트 2건이
+설계대로 발화(상수 미갱신 감지) → `db/schema_version.py`에 리비전 추가로 해소. 기존
+`api/test_coach.py::test_gate_off_skips_answer_lookup`(step-shadow 게이트 off 시 정답 미접근
+검증)이 신규 `_final_answer_for_verification`(완료 판정용 — step-shadow 플래그와 무관하게 항상
+켜져 있어야 하는 별도 경로)과 충돌해 실패 → 테스트를 `_expected_answer_for` 격리 직접호출로
+재설계해 원래 의도(step-shadow 전용 경로만 게이팅 확인)를 보존하며 해소. **최종**: 9019
+passed·296 skipped·1 failed(무관 — `test_concept_reach_report.py`, PATH-05가 이미 착지시킨
+학습경로 표면 도달 전환에 이 governance 테스트 고정 기대값이 아직 안 따라간 것, S3-32 변경
+stash 후 재현 확인). alembic upgrade/downgrade 오프라인 SQL 왕복·`lint-imports` 7계층 KEPT·
+ruff·black·mypy-strict 전부 green.
+
+### 2026-08-08 (구현·REC-02): **WH-1 도구6 select_probe 공급선 배선 — L1 역인덱스 조회 + 하네스 조립, L4 무수정**
+
+**무엇/왜**: `ai_recommendation_module_gap_review.md` §3 D2 실측 — WH-1 하네스 도구6(`select_probe`,
+오개념 판별 문항 선택)이 라이브 경로에서 **구조적으로 항상 실패**했다. `LLMTutorPolicy(probe_candidates=...)`
+를 채우는 프로덕션 호출자가 0건(`wh1_primary.py`·`wh1_shadow.py` 둘 다 `outside_mids`만 전달)이라
+`probe_candidates=()` → `plan_probe([])` → 항상 `None` → "판별 문항 없음(억지 매칭 금지)"이 *정상
+폴백처럼 위장*했다(변별력 0 — 후보 공급했는데 매칭 실패한 경우와 같은 값). 재료(`distractor_map`
+1,616문항·오개념 64종·`difficulty_overall` 100% 보유)는 이미 적재돼 있었다 — 없던 것은 공급선 하나.
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): 신규 `l1/problem_bank/probe_candidates.py`
+(L1 역인덱스 조회 좌석 — `distractor_map` JSONB mids 매칭, 순수 코어 `_match_probe_rows` + 얇은 DB
+시암, 신규 컬럼·마이그레이션 0) + 신규 `harness/wh1_probe_supply.py`(하네스 전용 조립 —
+`assemble_probe_candidate_pool`이 L1 조회 + L2 `resolve_item_difficulty_b` 난이도 변환 + L4
+`ProbeCandidate` 조립을 잇는다. **L1은 L4를 모른다** — 조립은 7계층 밖 하네스만 담당). `wh1_primary.py`
+·`wh1_shadow.py`가 활성 가설이 선 뒤 이 풀을 `LLMTutorPolicy(probe_candidates=..., theta=...)`에
+주입(두 파라미터는 이미 존재했으나 공급자가 없었을 뿐). `api/coach.py`는 동기 경로(`create_session`
+·`append_turns`의 primary 호출)에만 `session`을 전달하고, `_spawn`(shadow fire-and-forget task)에는
+**의도적으로 미전달**(AsyncSession 동시성 위험 회피 — shadow는 비노출이라 후보가 비어도 무해, 변별력은
+동기 primary 경로로 증명). `l2/axis_exclusions.py` 사유 계상 패턴을 답습한 `ProbeSupplyFunnel`이
+후보 0의 4개 사유(가설 없음/오개념 미태깅/난이도 부재/전부 응답함)를 서로 다른 값으로 계상(침묵 실패
+금지). **L4 `probe_selection.py`는 무수정**(순수·DB 무관 계약 유지).
+
+**reactive retrieval 준수**: probe 후보는 `outside_mids`와 동일한 "사적 probe 컨텍스트" 계약으로만
+흐른다 — 프롬프트·로그 어디에도 problem_id·오개념 태그 원문이 실리지 않음을 sentinel 값 주입으로
+직접 실측(`TestNoPreloadInPrompt`·`TestNoPreloadInLogs`).
+
+**검증**: 신규 테스트 37건(`l1/problem_bank`·`harness/wh1_probe_supply`·`harness/wh1_select_probe_variance`)
++ 변별력 실측(`select_probe`의 `ok`가 배선 전 `False`→배선 후 `True`로 실제 전환, 모킹 0·실물
+`LLMTutorPolicy`+`run_tutoring_turn`) + ε-탐색 성립(활성 세트 밖 mids도 후보 풀에 실려 §2.2 규칙2가
+성립). **전체 백엔드 스위트 재실행**(`src/backend`+`src/data-pipeline` 설치, canonical
+`pytest -q` 무인자 호출): **8952 passed·296 skipped·1 failed**(무회귀). 그 1건
+(`test_concept_reach_report.py::test_real_corpus_smoke_...`)은 REC-02 변경 **stash 후 재현 확인 —
+main 기존 상태**(PATH-05가 `/v1/me/weak-concepts/{concept_id}/learning-path`를 실제로 배선해
+10종 표면 중 1개가 "도달"로 전환됐는데 이 governance 테스트의 고정 기대값이 아직 안 따라간 것 —
+REC-02와 무관, 별도 후속 필요). 7계층 `lint-imports` KEPT·ruff·black·mypy-strict 전부 green.
+구현 중 자체 발견 결함 1건 교정: `wh1_probe_supply.py` docstring이 문자열 리터럴로
+`run_wh1_primary_turn`을 언급해 `test_gate3_student_verification_governance.py`의 grep 기반
+allowlist 봉인을 오탐 발화시킴 — allowlist 확장 대신 docstring 표현을 바꿔 해소(봉인 취지 유지).
+
+### 2026-08-07 (결정·ASM-02): **등급·백분위·합격예측 노출 정책 = (b)+(c) 혼합** (Kiki 결정)
+
+**무엇/왜**: `assessment_module_gap_review.md` §3 D2 — `assessment` 테이블의 `estimated_grade`
+(1~9)·`estimated_score`·`estimated_percentile`·`target_university_id`·`admission_probability`
+(PRD 특성 #14/#15/#45/#86, D-100예측 전용)가 CLAUDE.md 게임화 금기("정답률만으로 우열 매기는
+게임화 금지"·"부정적 피드백 정서적 강화 금지")와 정면 긴장하는데 이 긴장이 어디에도 기록된 적
+없었다(`ARCH-12` QuizMode 채점 존치 선례와 동급 — Kiki가 직접 결정). **현행 실측 재확인(①)**:
+이 필드들을 읽어 학생 대면 응답에 싣는 서빙 코드 0건 재확인(스키마·모델·마이그레이션에만 존재 —
+`schema/assessment.py`·`db/models/assessment.py`).
+
+**결정(②)**: 4개 옵션[(a)원시값 노출 (b)구간·방향성 서술로 감싸 노출 (c)학생 비노출·교사/학부모
+대시보드(Phase 3)만 (d)영구 비노출·필드 폐기] 중 **(b)+(c) 혼합** 채택 — 학생 대면 응답에는
+원시 등급·백분위·합격확률 대신 구간·방향성 서술(예: "이 개념은 안정적으로 다졌어요")로만 노출하고,
+원시값은 Phase 3 교사·학부모 대시보드에서만 조건부 노출한다. 근거: 메타인지 중심 브랜드(서열화·
+경쟁 프레이밍 회피)와 PRD 특성(#14/#15/#45/#86 D-100 합격예측) 보존을 동시에 만족.
+
+**봉인 게이트 방향(③)**: **화이트리스트 방식**(`ARCH-12` `no_math_judgement_governance.test.js`
+선례 승계) — 결정 전까지 위 5개 필드를 읽어 학생 대면 응답에 싣는 신규 코드 유입을 화이트리스트
+거버넌스 테스트로 차단한다. 실제 게이트 코드 구현·서술 문구 설계·D-100 알고리즘 설계는
+범위 밖(⑤) — 후속 태스크로 분리.
+
+**처리**: 결정(사람 몫)은 이 세션에서 `AskUserQuestion`으로 확보, 기록·공식화(서기 몫)는
+claude(S2-05·`ARCH-12` 선례). **잔여**: `ASM-02` backlog `done` 마킹은 owner=kiki 소유자
+본인 기입 필수(HARN-06) — Kiki가 아래 명령 직접 실행. 후속 태스크(게이트 코드 구현·노출
+서술 UI 설계)는 이 결정 확정 후 별도 등재.
 
 ### 2026-08-04 (헌법 개정): **CLAUDE.md 프로세스·안내 절에 "정본화를 집행으로 착각한 완료 선언 금지" 신설(:135 다음) — 노출·안전·억제 계약 태스크의 acceptance는 ①정본화(계약 자체)와 ②집행 지점(서빙 코드가 실제로 그 계약을 경유하는지)을 별항으로 분리 의무화. 기존 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"(CI 실행 여부)의 특수형(서빙 경로 호출 여부). 사고 경위는 아래 게임화 r2 항목의 G1(`PED-06` acceptance ①이 "정본화"로만 적혀 집행 없이 통과) — 재발방지대책 의무 등재 절차(반복 실수 2회+) 준수** (claude 등재, Kiki "헌법개정해줘" 명시 지시)
 

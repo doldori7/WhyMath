@@ -67,6 +67,7 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
@@ -77,6 +78,7 @@ from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l1.embedding_provider import build_provider
+from whymath_backend.l1.problem_bank.probe_candidates import fetch_probe_candidates_by_mids
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -88,13 +90,17 @@ from whymath_backend.l2 import (
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
 from whymath_backend.l3.interfaces import (
     CacheBackend,
+    InMemoryCache,
     LLMProvider,
+    RecordingTraceSink,
     TraceSink,
 )
 from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.providers.ollama import OllamaProvider
+from whymath_backend.l3.verify_final_answer import verify_final_answer
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -102,6 +108,7 @@ from whymath_backend.l4 import (
     MasteryLevel,
     PedagogyDecision,
     PolyaCoach,
+    PolyaStage,
     PolyaState,
     SolutionCoaching,
     adapt_lthc,
@@ -109,6 +116,7 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
+from whymath_backend.l4.completion import CompletionDecision, decide_completion
 from whymath_backend.l4.hint_deferral import is_answer_demand, is_stuck_turn_count
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -131,7 +139,9 @@ from whymath_backend.l4.misconception.shadow import (
     _spawn,
     observe_misconception_judge_shadow,
     observe_misconception_shadow,
+    observe_misconception_visualization_shadow,
 )
+from whymath_backend.l4.misconception.visualize import visualize_misconception
 from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
 from whymath_backend.l4.models import next_polya_stage
 from whymath_backend.l4.pedagogy.k_type_resolver import k_type_query
@@ -152,9 +162,17 @@ from whymath_backend.l4.turn_meta import (
 )
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
+from whymath_backend.schema.enums import (
+    AttemptMode,
+    ContentType,
+    EventType,
+    Persona,
+    StepType,
+    TurnRole,
+)
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.visualization import Visualization
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -361,6 +379,44 @@ class CoachResponse(BaseModel):
             "구분하는 신호. 게이트가 비우던 기존 동작의 *노출*일 뿐 매칭 결과 자체는 불변."
         ),
     )
+    dialogue_completed: bool | None = Field(
+        default=None,
+        description=(
+            "S3-32 — 서버측 `l3.verify_final_answer`(3상태 서버검증) + `l4.completion`(Polya "
+            "REVIEW 게이트) 조합으로 이번 턴에 코치 대화가 완료됐는지. True면 클라이언트는 "
+            "`GET /v1/me/next-problem`을 자동 호출할 수 있다. False=검증은 시도했으나 아직 "
+            "미완료(예: correct지만 REVIEW 단계 미도달, 또는 incorrect·unverifiable). "
+            "None=완료 판정 컨텍스트 없음(문항 미연결·정답 데이터 없음·stateless `/v1/coach`는 "
+            "항상 None). **정답 값 자체는 이 필드에도, 다른 어떤 필드에도 담기지 않는다.**"
+        ),
+    )
+    visualization: Visualization | None = Field(
+        default=None,
+        description=(
+            "MISC-01 — 확정 오개념 진단(`intervention` not None)에 대한 맞춤 교정 시각화 명세"
+            "(`visualize_misconception`·슬93). `misconception_visualization_mode == 'on'`일 "
+            "*때만* 채워진다 — `off`·`shadow`는 항상 None(shadow는 비노출 로그로만 관측). "
+            "`on`이어도 `intervention`이 None(진단 보류)이거나 시각화 생성이 실패"
+            "(`InvalidVisualizationSpecError` 등)하면 None(그레이스풀 폴백) — 이 필드는 항상 "
+            "*보완재*이며 `decision`/`intervention`(소크라테스 발화)을 절대 대체·차단하지 않는다."
+        ),
+    )
+    similar_problem_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "MISC-03 — 확정 오개념 진단(`intervention` not None, 개입 신뢰도 게이트 통과)에 대한 "
+            "*미응답* 유사문제 1건(같은 misconception_id 태깅) 식별자. REC-02가 만든 L1 역인덱스 "
+            "조회 좌석(`fetch_probe_candidates_by_mids`)을 그대로 재사용한다 — 신규 인덱스·신규 "
+            "조회 로직 0. **세션 기반 두 엔드포인트(`/v1/coach/sessions`·`/v1/coach/sessions/"
+            "{id}/turns`)에서만 채워진다** — DB·user_id가 필요한 '미응답' 필터라 stateless "
+            "`/v1/coach`는 DB에 접근하지 않으므로 이 필드가 항상 None이다(엔드포인트 docstring "
+            "'*DB 무접근*' 정합). `intervention`이 None(진단 보류)이거나, 태깅됐지만 난이도 미보유·"
+            "이미 전부 응답한 문항뿐이면 None(그레이스풀 — 서빙할 문제가 없을 뿐 오류 아님). "
+            "**이 필드는 문항 id만 담는다** — 문항 본문·정답은 여기 담기지 않으며, 클라이언트는 "
+            "기존 문항 조회 엔드포인트로 내용을 별도 조회한다(콘텐츠 중복·유출 방지). 오개념 확정 "
+            "*이후*에만 계산되는 reactive 조회다(초기 context preload 금지 — CLAUDE.md)."
+        ),
+    )
 
 
 class SessionCreateRequest(CoachRequest):
@@ -478,6 +534,28 @@ def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLev
     return mastery_to_level(sum(parts) / len(parts))
 
 
+def _mastery_level_for(
+    body: CoachRequest,
+    *,
+    server_mastery: float | None = None,
+    server_theta: float | None = None,
+) -> MasteryLevel | None:
+    """명시 `mastery_level` 우선·없으면 BKT+θ 라벨 산출 — `_build_response_payload`의 slice 25/77
+    로직을 그대로 뽑은 단일 계산(중복 0). `_build_response_payload` 내부와 MISC-01
+    `_maybe_visualize`(핸들러가 별도로 level을 필요로 함) 양쪽이 이 함수를 공유한다.
+
+    반환 튜플 계약(6-튜플)을 건드리지 않기 위한 선택 — 다수 기존 테스트가 `decision, *_rest, sol
+    = _build_response_payload(...)` 형태로 *마지막 원소=solution_coaching*을 전제해 언패킹하므로
+    (`tests/backend/api/test_coach.py:1309` 등), level을 7번째 반환값으로 추가하면 그 전제가
+    깨진다 — 대신 핸들러가 *같은 입력*으로 이 헬퍼를 한 번 더 불러 재계산(순수·저비용)한다.
+    """
+    effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
+    level = body.mastery_level
+    if level is None:
+        level = _ability_level(effective_bkt, server_theta)
+    return level
+
+
 def _build_response_payload(
     body: CoachRequest,
     *,
@@ -535,10 +613,11 @@ def _build_response_payload(
     # mastery_level은 여전히 최우선·stateless는 server_mastery=None(클라값). 숙달도는 비노출.
     # slice 77: 능력 라벨에 신뢰 θ도 통합 — BKT+θ(logistic) 평균→라벨. 힌트·전이·LTHC가 같은
     # 라벨을 쓰므로 θ가 적응형 스캐폴딩 전반에 일관 반영(θ None=stateless·희소면 BKT만·현행 동일).
+    # MISC-01: level 산출은 _mastery_level_for로 추출(핸들러가 시각화용으로 동일 계산을 재사용·
+    # 중복 로직 0). effective_bkt는 solution coaching(아래 recommend_coaching_for_solution)이
+    # 별도로 계속 쓰므로 그대로 둔다(level과 독립적인 소비처).
     effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
-    level = body.mastery_level
-    if level is None:
-        level = _ability_level(effective_bkt, server_theta)
+    level = _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta)
     # PED-04 D2: 세션 경로는 서버 파생 상태가 진실원천(클라 제출은 참고값). stateless는 override
     # None이라 클라 제출 그대로 — 두 경로의 계약 차이가 이 한 줄에 모인다.
     state = polya_state_override if polya_state_override is not None else body.polya_state
@@ -797,6 +876,131 @@ async def _compute_matches(
     return await _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
 
 
+def _l3_deps_or_default(
+    judge_deps: _JudgeSeamDeps,
+) -> tuple[LLMProvider, CacheBackend, TraceSink]:
+    """`judge_deps`(app.state 공유 인스턴스, 미구성 시 None) → 항상 값이 있는 3종 반환.
+
+    `L3JudgeSeam.__init__`의 폴백(`OllamaProvider`·`InMemoryCache`·`RecordingTraceSink`)을
+    그대로 미러한다 — `visualize_misconception`(L3 `generate_visualization_spec` 위임)은
+    `L3JudgeSeam`처럼 seam 어댑터가 아니라 provider/cache/trace를 *직접* 받으므로, 이 좌석이
+    seam 없이 같은 폴백을 재현한다(app.state 미구성 경로 — hermetic 단위테스트 하위호환).
+    """
+    provider = judge_deps.provider if judge_deps.provider is not None else OllamaProvider()
+    cache = judge_deps.cache if judge_deps.cache is not None else InMemoryCache()
+    trace = judge_deps.trace if judge_deps.trace is not None else RecordingTraceSink()
+    return provider, cache, trace
+
+
+async def _maybe_visualize(
+    matches: list[MisconceptionMatch],
+    level: MasteryLevel | None,
+    intervention: InterventionDecision | None,
+    *,
+    judge_deps: _JudgeSeamDeps,
+) -> Visualization | None:
+    """MISC-01 결선 — `misconception_visualization_mode`(off/shadow/on) 3값 분기.
+
+    04b 롤아웃 패턴(`misconception_semantic_mode`)·judge shadow 패턴(`observe_misconception_
+    judge_shadow`) 재사용: `off`는 호출 0(현행 비트동일), `shadow`는 `_spawn`(fire-and-forget)
+    으로 관측만(비노출), `on`은 `await`해 응답에 싣는다. 3모드 공통 게이트: `intervention`이
+    None(진단 보류)이거나 이번 턴 `matches`가 비었으면(시각화할 구체 대상이 없음) 즉시 None —
+    `visualize_misconception`이 내부에서 `select_intervention`으로 다시 게이트하므로 여기서
+    미리 거르는 건 *불필요한 LLM 호출/spawn을 피하기 위한 효율*이지 이중 정책이 아니다.
+
+    `matches[0]`(이번 턴 top-1 원시 진단)을 시각화 대상으로 쓴다 — `intervention`이 누적 가설
+    세트 기반으로 재결정됐을 수 있어(`_intervention_from_hypotheses_or`) 이론상 `matches[0]`과
+    다른 misconception을 가리킬 수 있지만, `visualize_misconception`은 어차피 `match` 자체의
+    confidence로 재게이트하므로(임계 불일치 시 조용히 None) 안전하다 — 별도 hypotheses→match
+    역산은 하지 않는다(재구현 0·`select_intervention_from_hypotheses`가 이미 임시 `Misconception
+    Match`를 합성하는 로직을 여기서 중복하지 않는다).
+
+    `level`이 None(숙달도·θ 신호 모두 희소)이면 시각화 대상 수준을 정할 수 없어 스킵한다(LTHC의
+    `level is not None` 게이트와 동형).
+
+    `on` 모드 예외(`InvalidVisualizationSpecError` 포함 임의 예외)는 잡아 *예외 타입명을 로그에
+    남기고*(CLAUDE.md 침묵 실패 금지) `None`으로 그레이스풀 폴백한다 — 시각화는 보완재라 소크라
+    테스 발화(`decision`/`intervention`)를 절대 막지 않는다(우선순위: 학생 경험 > 시각화 산출물).
+    """
+    mode = get_settings().misconception_visualization_mode
+    if mode == "off" or intervention is None or not matches or level is None:
+        return None
+    match = matches[0]
+    provider, cache, trace = _l3_deps_or_default(judge_deps)
+    if mode == "shadow":
+        _spawn(
+            observe_misconception_visualization_shadow(
+                match, level, provider=provider, cache=cache, trace=trace
+            )
+        )
+        return None
+    # on — 응답을 지연시켜서라도(await) 검증된 시각화를 싣는다. 실패는 그레이스풀 폴백.
+    try:
+        return await visualize_misconception(
+            match, level, provider=provider, cache=cache, trace=trace
+        )
+    except Exception as exc:  # noqa: BLE001 — 시각화는 보완재, 소크라테스 발화는 절대 안 막는다
+        logger.warning(
+            "오개념 시각화 생성 실패(%s) — visualization=None 폴백(intervention/decision 불변)",
+            type(exc).__name__,
+        )
+        return None
+
+
+async def _similar_problem_for(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    intervention: InterventionDecision | None,
+) -> uuid.UUID | None:
+    """MISC-03 — 확정 오개념 진단에 대한 유사문제(미응답·같은 mis_id) 1건 서빙.
+
+    **좌석 재사용(신규 인덱스·신규 조회 로직 0)**: REC-02가 만든 L1 역인덱스 조회 좌석
+    (`l1.problem_bank.probe_candidates.fetch_probe_candidates_by_mids`)을 *그대로* 호출한다 —
+    mids 매칭·난이도 보유 필터·미응답(`user_id`) 필터·`problem_id` 오름차순 결정론 정렬·절단은
+    전부 그 함수(와 그 안의 순수 코어 `_match_probe_rows`)가 이미 수행한다. 여기서는 재구현하지
+    않고 `limit=1`로 "1건"을 좌석 자체에서 직접 받는다(별도 슬라이싱 로직 0). REC-02는 이 좌석을
+    *진단 프로브 선택*(WH-1 하네스 도구6 재료) 용도로 쓰지만, 이 함수는 *확정 진단에 대한 서빙*
+    (연습 문항 추천) 용도다 — 목적은 다르나 조회는 하나(§소비처 분리·구현 공유).
+
+    **계층 결정**: L5(`api/coach.py`)가 L1(`l1.problem_bank.probe_candidates`)을 직접 호출한다.
+    이 파일이 이미 `l1.embedding_provider.build_provider`를 직접 import하는 선례가 있고,
+    import-linter 계약(`pyproject.toml` `[tool.importlinter]`)의 layers는
+    `api > l6 > l5 > l4 > l3 > l2 > l1 > schema`라 api(L5 서버)가 l1을 직접 호출하는 것은
+    합법적 순방향 의존이다(L4를 거치는 건 REC-02 소비처인 `harness/wh1_probe_supply.py`가
+    L1·L2·L4를 넘나드는 *하네스*라서 필요했던 것이지 — 그 모듈 docstring이 명시하듯 하네스는
+    "import-linter 계약 밖"인 횡단 인프라다). `_similar_problem_for`는 하네스가 아니라 얇은
+    HTTP 핸들러 헬퍼이므로, 여기서 L4 래퍼를 새로 만드는 것은 불필요한 간접 계층 추가다 —
+    L1 좌석을 직접 부르는 편이 계층 원칙과 기존 코드 관례 둘 다에 더 부합한다.
+
+    **게이트(reactive retrieval — CLAUDE.md "오개념을 초기 context에 preload 금지")**:
+    `intervention`이 None(오개념 confidence 게이트 미통과 — `select_intervention`이 진단을
+    보류)이면 DB를 전혀 건드리지 않고 즉시 None을 반환한다. 게이트를 통과했을 때만(확정 진단
+    *이후*) L1 조회가 발생한다 — 예측적 선탐색이 아니라 이번 턴 확정 결과에 대한 반응적 조회다.
+
+    Args:
+      session: 읽기 전용 async 세션(세션 기반 두 엔드포인트만 — stateless `/v1/coach`는 DB가
+        없어 이 함수를 아예 호출하지 않는다).
+      user_id: 이 학생의 "미응답" 필터 기준(`fetch_probe_candidates_by_mids`의 `user_id`).
+      intervention: 이번 턴 최종 개입 결정(가설-기반 재결정 이후의 *최종* 값 — 호출자가
+        `_intervention_from_hypotheses_or` 적용 뒤의 변수를 넘긴다. MISC-01 `_maybe_visualize`와
+        동일한 "최종 intervention" 규약).
+
+    Returns:
+      미응답·난이도 보유·같은 misconception_id 태깅 문항 중 `problem_id` 오름차순 최상단 1건의
+      UUID. 후보가 없으면(오개념 미태깅·난이도 부재·전부 응답함 중 어느 사유든) None — 서빙할
+      문제가 없을 뿐 오류가 아니므로 그레이스풀 폴백(예외를 던지지 않는다). 문항 *내용*은 담기지
+      않는다(id만) — 본문·정답은 별도 문항 조회 엔드포인트가 소유한다.
+    """
+    if intervention is None:
+        return None
+    query = await fetch_probe_candidates_by_mids(
+        session, [intervention.misconception_id], user_id=user_id, limit=1
+    )
+    if not query.rows:
+        return None
+    return uuid.UUID(query.rows[0].problem_id)
+
+
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
     """문항 기대정답을 서버 DB에서 조회 — step shadow 진단 맥락 전용(slice 64·비노출).
 
@@ -811,6 +1015,125 @@ async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | No
         return None
     problem = await session.get(ProblemORM, problem_id)
     return problem.answer if problem is not None else None
+
+
+# S3-32: 최종답 검증을 시도할 만한 단계 — 학생이 아직 문제를 읽거나(UNDERSTAND) 전략을
+# 고르는(PLAN) 중이면 `student_input`(대화 잡담)을 "최종답"으로 오인해 검증을 시도할 이유가
+# 없다(불필요한 DB 왕복·SymPy 파싱 낭비 + 의미상으로도 부적절). EXECUTE(실행 중 결론 제시)·
+# REVIEW(검토 단계) 두 단계에서만 검증을 시도한다 — `decide_completion`이 실제 완료로 인정하는
+# 것은 REVIEW뿐이지만, EXECUTE에서도 verify_state=incorrect를 감지해 재고 유도를 태울 수 있게
+# 한 단계 앞서 연다(정답 도달 직후 EXECUTE→REVIEW 전이가 이미 일어난 뒤이므로, EXECUTE 시점의
+# incorrect 재고 유도가 유의미하다).
+_FINAL_ANSWER_ELIGIBLE_STAGES: frozenset[PolyaStage] = frozenset(
+    {PolyaStage.EXECUTE, PolyaStage.REVIEW}
+)
+
+
+async def _final_answer_for_verification(
+    session: AsyncSession, problem_id: uuid.UUID | None
+) -> str | None:
+    """S3-32: 문항 정답을 `verify_final_answer` 전용으로 조회 — `_expected_answer_for`와 별도.
+
+    `_expected_answer_for`는 `l4_step_shadow_enabled` 플래그에 게이트돼 있고 그 소비처
+    (`observe_step_breaks`)도 그 플래그 전용 shadow 진단이다. 코치 완료 판정(항상 켜져 있어야
+    하는 핵심 기능)에 같은 게이트를 재사용하면 플래그가 꺼졌을 때 완료 판정 자체가 죽는
+    의도치 않은 결합이 생긴다 — 그래서 별도 조회 경로를 둔다. `problem_id` 없거나 문항
+    부재면 None(호출자가 unverifiable/컨텍스트 없음으로 귀결). 반환값은 정답 그 자체이므로
+    호출자는 이 값을 *절대* HTTP 응답에 싣지 않는다(`verify_final_answer`의 3상태로만 소비).
+    """
+    if problem_id is None:
+        return None
+    problem = await session.get(ProblemORM, problem_id)
+    return problem.answer if problem is not None else None
+
+
+async def _decide_completion_for(
+    session: AsyncSession,
+    *,
+    problem_id: uuid.UUID | None,
+    state: PolyaState,
+    solution_text: str,
+) -> CompletionDecision:
+    """S3-32: 이번 턴의 완료 판정 — `verify_final_answer`(L3) → `decide_completion`(L4) 조합.
+
+    학생 풀이 텍스트가 비어 있거나, 아직 최종답을 낼 단계가 아니거나(UNDERSTAND·PLAN —
+    `_FINAL_ANSWER_ELIGIBLE_STAGES`), 문항 정답을 조회할 수 없으면(문항 미연결·코퍼스 미보유)
+    검증을 *시도하지 않는다*(`verify_state=None` → `completed=False`·정직 중립 — DB 왕복도
+    아낀다). 그 외엔 `verify_final_answer`로 3상태를 얻어 `decide_completion`(Polya REVIEW
+    게이트)에 위임한다. 정답 문자열은 이 함수 밖으로 반환되지 않는다(3상태 판정만 전파).
+    """
+    if state.current_stage not in _FINAL_ANSWER_ELIGIBLE_STAGES:
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    if not solution_text.strip():
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    expected_answer = await _final_answer_for_verification(session, problem_id)
+    if expected_answer is None:
+        return CompletionDecision(completed=False, verify_state=None, reconsider_prompt=None)
+    verify_state = verify_final_answer(solution_text, expected_answer).state
+    return decide_completion(state, verify_state)
+
+
+async def _apply_completion(
+    session: AsyncSession,
+    *,
+    dialogue: DialogueORM,
+    decision: PedagogyDecision,
+    state: PolyaState,
+    solution_text: str,
+    user_id: uuid.UUID,
+    now: datetime,
+) -> tuple[PedagogyDecision, bool | None]:
+    """S3-32: 완료 판정을 조합·반영 — `create_session`/`append_turns` 공용.
+
+    이미 완료된 대화(`dialogue.server_verified_completed_at` 비어있지 않음)는 재판정 없이
+    `(decision, True)`를 그대로 돌려준다(멱등 가드) — `PolyaStage.REVIEW`는 self-loop 종착
+    단계라, 이 가드가 없으면 REVIEW에 머무는 매 턴마다 `ProblemAttempt`가 중복 적재된다.
+
+    미완료 대화는 `_decide_completion_for`로 이번 턴을 판정한다:
+      - `reconsider_prompt`가 채워지면(incorrect) `decision.prompt`를 그 문구로 교체한다 —
+        정답을 노출하지 않는 재고 유도(CLAUDE.md "부정적 피드백 정서 강화 금지"·"바로 정답
+        제공 금지"). 이 교체는 `decision.system`은 건드리지 않는다(톤·원칙 프롬프트는 불변,
+        `filter_tone`이 여전히 마지막 방어선).
+      - `completed=True`(correct + REVIEW 게이트 통과)면 **서버검증 축** `ProblemAttempt`를
+        신규 적재한다 — `api/me.py::submit_attempt`의 클라 자가보고 `is_correct` 경로와는
+        *별도*(중복 적재 허용, 서로 다른 신뢰 축 — 태스크 명세). `dialogue.attempt_id`를 새
+        attempt에 연결하고 `server_verified_completed_at`을 채워 이후 턴의 멱등 가드로 쓴다.
+        `dialogue.resolution`은 건드리지 않는다(`api/me.py`의 클라 자가보고 PATCH가 그 필드의
+        첫-기록-우선 소유자 — 서로 다른 신뢰 축을 섞지 않는다).
+
+    반환 `dialogue_completed`는 `CoachResponse.dialogue_completed` 노출값 그대로(3상태:
+    True=완료·False=평가했으나 미완료·None=판정 컨텍스트 없음).
+    """
+    if dialogue.server_verified_completed_at is not None:
+        return decision, True
+
+    completion = await _decide_completion_for(
+        session,
+        problem_id=dialogue.problem_id,
+        state=state,
+        solution_text=solution_text,
+    )
+    if completion.reconsider_prompt is not None:
+        decision = decision.model_copy(update={"prompt": completion.reconsider_prompt})
+
+    if not completion.completed:
+        dialogue_completed = None if completion.verify_state is None else False
+        return decision, dialogue_completed
+
+    attempt = ProblemAttemptORM(
+        attempt_id=uuid.uuid4(),
+        user_id=user_id,
+        problem_id=dialogue.problem_id,
+        is_correct=True,
+        student_answer=solution_text,
+        attempt_mode=AttemptMode.Socratic대화,
+        used_socratic=True,
+        ended_at=now,
+    )
+    session.add(attempt)
+    dialogue.attempt_id = attempt.attempt_id
+    dialogue.server_verified_completed_at = now
+    return decision, True
 
 
 async def _server_mastery_for(
@@ -1542,6 +1865,9 @@ async def _wh1_primary_decision_or(
     dialogue_id: str | None,
     problem_id: uuid.UUID | None,
     session_recall: SessionRecall | None = None,
+    session: AsyncSession | None = None,
+    theta: float | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1553,6 +1879,10 @@ async def _wh1_primary_decision_or(
     solution_coaching·가설·증거 파이프라인은 기존 결정론 경로 그대로다(상태 오케스트레이션
     수렴은 후속·`run_persisted_turn` docstring 참조). 여기서도 방어적으로 try/except를 한 겹 더
     둔다 — 테스트 대체물·미래 리팩터가 예외를 전파해도 학생 응답이 500이 되지 않게(이중 방어).
+
+    `session`·`theta`·`user_id`(REC-02 ②)는 `run_wh1_primary_turn`의 select_probe 후보 공급으로
+    그대로 흐른다 — 호출자가 이미 조회한 `server_theta`·`user.user_id`를 재사용할 뿐 신규 쿼리는
+    없다(create_session·append_turns 두 핸들러가 이미 계산해 둔 값).
     """
     try:
         utterance = await run_wh1_primary_turn(
@@ -1565,6 +1895,9 @@ async def _wh1_primary_decision_or(
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
             session_recall=session_recall,
+            session=session,
+            theta=theta,
+            user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1653,6 +1986,14 @@ async def coach_decide(
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(body, matches=outcome.matches)
     )
+    # MISC-01 — stateless라 server_mastery/server_theta 없음(클라 제출값만·_build_response_payload
+    # 와 동일 입력으로 level 재계산). off(기본)면 호출 0(현행 비트동일).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body),
+        intervention,
+        judge_deps=judge_deps,
+    )
     return CoachResponse(
         decision=decision,
         misconceptions=matches,
@@ -1662,6 +2003,7 @@ async def coach_decide(
         solution_coaching=solution_coaching,
         match_low_quality=outcome.low_quality,
         no_confident_match=outcome.no_confident_match,
+        visualization=visualization,
     )
 
 
@@ -1749,6 +2091,12 @@ async def create_session(
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
                 session_recall=session_recall,
+                # REC-02 ②: session은 *의도적으로* 넘기지 않는다 — `_spawn`은 이 코루틴을
+                # 요청 핸들러와 *동시에* 돈다(fire-and-forget create_task). AsyncSession은
+                # 동시 사용이 안전하지 않아(SQLAlchemy 비동기 세션은 단일 실행 흐름 전제),
+                # 살아있는 요청 세션을 여기 넘기면 핸들러의 나머지 쿼리와 경합한다. shadow는
+                # 비노출 관측이라 이 턴의 probe_candidates가 비어도(session=None → skip)
+                # 학생 응답에 영향 없다 — 변별력(⑤)은 동기 실행되는 primary 경로로 증명한다.
             )
         )
     pack = await _pack_for(session, body.problem_id)
@@ -1807,6 +2155,11 @@ async def create_session(
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
             problem_id=body.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: primary는 이 자리에서 *동기 await*라 session 동시사용 위험이 없다
+            # (shadow의 _spawn과 달리 요청 핸들러가 이 호출이 끝날 때까지 다른 쿼리를 안 던진다).
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     now = datetime.now(timezone.utc)
@@ -1823,6 +2176,22 @@ async def create_session(
     session.add(dialogue)
     await session.commit()
     await session.refresh(dialogue)
+
+    # S3-32: 서버검증 완료 판정(L3 verify_final_answer → L4 completion) — 새 dialogue는
+    # `server_state.current_stage`가 (거의 항상) UNDERSTAND라 구조적으로 completed=True가 되지
+    # 않지만(REVIEW 게이트 미도달), 클라가 `polya_state.current_stage=REVIEW`로 세션을 직접
+    # 열 수도 있어(PED-04 D2: 새 dialogue는 클라 제출 current_stage를 초기조건으로 그대로
+    # 받아들인다) `append_turns`와 동일 경로로 판정한다. `decision.prompt`는 incorrect 재고
+    # 유도로 교체될 수 있어 *턴 생성 전*에 반영한다(assistant 턴 content가 이 값을 그대로 쓴다).
+    decision, dialogue_completed = await _apply_completion(
+        session,
+        dialogue=dialogue,
+        decision=decision,
+        state=server_state,
+        solution_text=body.student_solution or body.student_input,
+        user_id=user.user_id,
+        now=now,
+    )
 
     # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
     # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
@@ -1955,6 +2324,19 @@ async def create_session(
     )
     await session.commit()
 
+    # MISC-01 — 커밋 *뒤*(DB 트랜잭션에 LLM 왕복을 얹지 않음). `intervention`은 위에서 이미
+    # 가설-기반으로 재결정된 *최종* 값(select_intervention 임계 일관 재사용). level은
+    # `_build_response_payload`와 동일 입력으로 재계산(7-튜플화 대신 — `_mastery_level_for` 참조).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta),
+        intervention,
+        judge_deps=judge_deps,
+    )
+    # MISC-03 — REC-02 L1 좌석 재사용(신규 인덱스·조회 로직 0). visualization과 동형: 커밋
+    # *뒤*(DB 트랜잭션에 얹지 않음)·최종(가설-기반 재결정 후) intervention 재사용.
+    similar_problem_id = await _similar_problem_for(session, user.user_id, intervention)
+
     # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(0)
     return SessionCreateResponse(
@@ -1974,6 +2356,9 @@ async def create_session(
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
+        dialogue_completed=dialogue_completed,
+        visualization=visualization,
+        similar_problem_id=similar_problem_id,
     )
 
 
@@ -2086,6 +2471,7 @@ async def append_turns(
                 problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
                 warmstart_outside_mids=warmstart_mids_turn,
                 session_recall=session_recall,
+                # REC-02 ②: create_session과 동형 이유로 session 미전달(_spawn 동시성·주석 참조).
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
@@ -2123,6 +2509,10 @@ async def append_turns(
             dialogue_id=str(dialogue_id),
             problem_id=dialogue.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: create_session과 동형 — 동기 await라 session 동시사용 위험 없음.
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     current_total = dialogue.total_turns or 0
@@ -2130,6 +2520,19 @@ async def append_turns(
     assistant_order = current_total + 2
 
     now = datetime.now(timezone.utc)
+    # S3-32: 서버검증 완료 판정(L3 verify_final_answer → L4 completion) — create_session과
+    # 동형. `server_state`(PED-04 D2 서버 파생 상태)가 이미 REVIEW면(직전 턴에서
+    # EXECUTE→REVIEW 전이가 일어난 뒤) 이번 턴 검증이 correct일 때 완료된다. `decision.prompt`가
+    # incorrect 재고 유도로 교체될 수 있어 *턴 생성 전*에 반영한다.
+    decision, dialogue_completed = await _apply_completion(
+        session,
+        dialogue=dialogue,
+        decision=decision,
+        state=server_state,
+        solution_text=body.student_solution or body.student_input,
+        user_id=user.user_id,
+        now=now,
+    )
     # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
     content_cipher = require_dialogue_content_cipher(get_settings())
     # S3-03 mode 태깅 — 멀티턴은 클라가 매 턴 같은 mode/persona를 실어 보낸다(dialogue 컬럼 대신
@@ -2274,6 +2677,16 @@ async def append_turns(
     )
     await session.commit()
 
+    # MISC-01 — create_session과 동형(커밋 뒤·최종 intervention 재사용·level 재계산).
+    visualization = await _maybe_visualize(
+        matches,
+        _mastery_level_for(body, server_mastery=server_mastery, server_theta=server_theta),
+        intervention,
+        judge_deps=judge_deps,
+    )
+    # MISC-03 — create_session과 동형(REC-02 L1 좌석 재사용·커밋 뒤·최종 intervention).
+    similar_problem_id = await _similar_problem_for(session, user.user_id, intervention)
+
     # WH-1 멀티턴 연속성 — 이번 교환 *전* total_turns(current_total)에서 누적 턴 번호 유도(§2.2).
     wh1_turn_index, wh1_exploration = _wh1_turn_state(current_total)
     return TurnAppendResponse(
@@ -2294,6 +2707,9 @@ async def append_turns(
         wh1_turn_index=wh1_turn_index,
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
+        dialogue_completed=dialogue_completed,
+        visualization=visualization,
+        similar_problem_id=similar_problem_id,
     )
 
 

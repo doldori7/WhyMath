@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "incorrect 판정 시 정답 공개 없는 재고 유도 코칭(부정적 피드백 정서 강화 금지)"
   - "신규 alembic 리비전은 착수 시점 실제 main HEAD 기준으로 down_revision을 잡는다(브랜치의 stale down_revision 재사용 금지)"
   - "전체 백엔드 스위트(부분 디렉터리 아님) 재검증 — coach.py·me.py drift가 커서 국지적 회귀 위험 높음"
-artifacts: []
+artifacts:
+  - a9f6e23a
 paths:
   - src/backend/whymath_backend/l3/verify_final_answer.py
   - src/backend/whymath_backend/l4/completion.py
@@ -27,4 +28,4 @@ paths:
   - "src/backend/alembic/**"
 session: null
 notes: "브랜치 claude/s3-02-live-remeasurement-tlthrr(원 S3-26 'learning-loop-closure') 재작성 — 원 코드는 merge-base 이후 api/coach.py 632줄·api/me.py 430줄 drift로 그대로 포트 불가, 현재 main 기준 재구현. l3/solution_set.py·l3/symbolic_equivalence.py 기존 primitive 재사용. 코치 대화의 정답 도달을 서버측 검증(3-state correct/incorrect/unverifiable)으로 게이팅, Polya REVIEW 단계 경유 후 completion 시 서버측 ProblemAttempt 적재 + CoachResponse에 completion 신호 노출. S3-28-canonicalize-answer-kind-scope-audit(claude/openrouter-setup-guide-e98dw4)이 l3/equivalent/canonicalize.py·qa_pipeline.py를 현재 다른 세션이 점유 중 — 그 파일들 건드리지 않음."
-updated: 2026-08-07
+updated: 2026-08-08

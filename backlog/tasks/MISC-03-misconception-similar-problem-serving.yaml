@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -14,10 +14,12 @@ requires_gates: []
 acceptance:
   - "REC-02가 만드는 L1 역인덱스 조회 좌석 재사용, 신규 인덱스·신규 조회 로직 0"
   - 오개념 confidence 게이트 통과 시에만 같은 mis_id 태깅·미응답 문항 1건 반환
-artifacts: []
+artifacts:
+  - 7096d16c
 paths:
   - src/backend/whymath_backend/l1/misconception/
   - src/backend/whymath_backend/api/coach.py
+  - tests/backend/api/test_coach_similar_problem.py
 session: null
 notes: "04e_misconception_remediation_design.md §1-3. REC-02와 조회 좌석 공유(진단용 vs 교정용 소비 목적만 다름)."
-updated: 2026-08-03
+updated: 2026-08-09

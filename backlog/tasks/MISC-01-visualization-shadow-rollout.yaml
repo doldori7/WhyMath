@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -13,10 +13,15 @@ requires_gates: []
 acceptance:
   - "04b 롤아웃 패턴(shadow→canary→full) 재사용, select_intervention 임계 일관 재사용"
   - "shadow 단계에서 학생 원문 미포함(judge shadow 패턴 답습)"
-artifacts: []
+artifacts:
+  - 0be94d00
 paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/l4/misconception/visualize.py
+  - src/backend/whymath_backend/l4/misconception/shadow.py
+  - src/backend/whymath_backend/config.py
+  - tests/backend/l4/test_misconception_visualization_shadow.py
+  - tests/backend/api/test_coach_visualization.py
 session: null
 notes: "docs/architecture/misconception_module_gap_review.md §3 + 04e_misconception_remediation_design.md §1-1. visualize_misconception() 코드 완비·테스트 존재·production 호출자 0건."
-updated: 2026-08-03
+updated: 2026-08-09

@@ -1841,26 +1841,28 @@ class TestStepShadowProblemContext:
             get_settings.cache_clear()
 
     def test_gate_off_skips_answer_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 게이트 off(프로덕션 기본) → 정답 조회·접근 자체를 안 함(불필요 적재 차단·비용).
-        from whymath_backend.db.models.problem import Problem as ProblemORM
+        # 게이트 off(프로덕션 기본) → `_expected_answer_for`(step-shadow 전용 정답 조회)는
+        # 내부에서 즉시 None을 반환하고 DB(`session.get`)를 건드리지 않는다(불필요 적재 차단·
+        # 비용). S3-32 이후: 코치 HTTP 왕복 전체는 완료 판정용 `_final_answer_for_verification`
+        # (이 플래그와 *무관하게* 항상 켜져 있어야 하는 별도 경로 — 함수 docstring 참조)도 함께
+        # 도는 합성 경로가 됐으므로, "정답 접근 0"을 HTTP 레벨에서 통째로 검증할 수 없다
+        # (완료 판정이 정당하게 `Problem.answer`에 접근한다). 그래서 이 테스트는 `_expected_
+        # answer_for` 자체를 *직접* 호출해 격리 검증한다 — HTTP 왕복·완료 판정과 무관.
+        import asyncio
 
         monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
         get_settings.cache_clear()
         pid = uuid.uuid4()
 
-        class _ExplodingProblem:
-            @property
-            def answer(self) -> str:
+        class _ExplodingSession:
+            async def get(self, model: object, pk: object) -> object:
                 raise AssertionError("게이트 off면 정답을 조회·접근하지 않아야 한다.")
 
-        preload = {(ProblemORM, pid): _ExplodingProblem()}
-        client, _ = _session_client(preload=preload)
         try:
-            resp = client.post(
-                "/v1/coach/sessions",
-                json={"student_input": "음", "problem_id": str(pid)},
+            result = asyncio.run(
+                coach._expected_answer_for(_ExplodingSession(), pid)  # type: ignore[arg-type]
             )
-            assert resp.status_code == 201, resp.text
+            assert result is None
         finally:
             get_settings.cache_clear()
 
