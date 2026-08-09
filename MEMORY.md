@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (회수·버킷 B 부분): **`S3-24` 항목 ①(객관식 세로 번호 목록)을 `S3-35`로 회수·완료. 잔여 8건은 컨텍스트 한계로 새 세션 인계(`S3-24` blocked + notes 인수인계). 모바일 검증 환경을 이 컨테이너에 처음 구축하며 함정 4종 실측** (claude 구현, Kiki "1" — 부분 PR 후 마무리 지시)
+
+- **전제 부재 발견**: 회수 패치(S3-17)는 S3-12(가로 칩)의 리팩터 diff였는데 **main에는 S3-12 자체가 없었다**(main의 S3-12는 문제은행 태스크 — 번호만 같음). diff 재적용 대신 섀도 완료 시점(5481086) 파일을 GitHub API로 받아 main 구조 위에 수동 이식(상수·헬퍼 2종·핸들러·높이 계산·호출부·위젯 143줄 + 테스트 7건).
+- **원본 브랜치는 원격 삭제됨** — `shadow-data-s3-pilot-nh5kbz`는 fetch·cherry-pick 불가·커밋은 GitHub API로만 생존(`commits/<sha>` + `contents?ref=<sha>`). 향후 버킷 회수는 전부 이 경로다.
+- **모바일 검증 환경 함정 4종(실측·S3-24 notes에도 기록)**: ①flutter는 CI 핀 **3.41.9**를 태그 fetch로 맞춘다(`ci.yml`의 flutter-version) ②analyze 전 `dart run build_runner build` 필수 — 생성 파일이 gitignore라 없으면 **가짜 오류 594건** ③SDK 버전을 갈아타면 `flutter clean` 필수 — 3.44.9 엔진이 컴파일한 `ink_sparkle.frag`(포맷 v2)를 3.41.9가 못 읽어 **무관 테스트 13건이 위장 실패**(login·onboarding 등 전방위 — 내 변경 포함/제외 양쪽에서 동일 실패로 무죄 판정) ④검증 절차는 CI 그대로: `pub get --enforce-lockfile` → codegen → analyze → test.
+- **의도적 차이 1건**: 완료·돌아보기 중 목록 감춤 조건은 S3-32(타 세션 done-미머지) 소관이라 제외 — 착지 시 추가하라는 주석을 가드 자리에 남김.
+- **검증**: analyze No issues(exit 0) · **test 303 passed**(exit 0 · 기존 289+이식분). 백엔드 무접촉.
+- **ID 재배정 2회**: 원본 S3-17 번호는 #741이 점유, S3-33도 점유 — CLI 제안 S3-35 수용(HARN-10 절차 준수).
+
 ### 2026-08-09 (회수·극값 좌석): **`VIZ-06` — 고립 브랜치의 graph2d 극값 마커를 **렌더러 먼저** 이식한 뒤 좌석 부여. 고립본이 쓴 `VIZ-04` 번호는 main이 이미 점유한 ID 충돌이라 재배정** (claude 구현, Kiki 지시)
 
 - **순서가 계약이다**: `NLP-04`가 이 좌석을 의도적으로 제외한 이유가 "좌석만 옮기면 렌더러가 없어 계약이 허공에 뜬다"였다. 그래서 `GraphingCalculator.jsx`의 `findExtrema`/`drawExtrema`(+67줄 — `numDeriv` 부호 변화 화면 스캔 + 이분법 20회 정련, **새 수치 primitive 도입 0**)를 **먼저** 이식하고 그 다음에 `Graph2dSpec.show_extrema` 좌석과 웹 어댑터를 배선했다.
