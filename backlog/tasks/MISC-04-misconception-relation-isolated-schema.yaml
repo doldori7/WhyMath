@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/db/models/
   - src/backend/whymath_backend/l1/misconception/
   - tests/backend/l4/test_misconception_seven_stage_manifest.py
-session: null
+session: claude/misc-04-misconception-relation-recovery
 notes: "04c_misconception_seven_stage_separation.md §6 Level2 해소. 04e_misconception_remediation_design.md §2. edge_design_part3_review.md의 misconception_of 엣지화 기각 결정은 재론하지 않음(별개 축)."
-updated: 2026-08-03
+updated: 2026-08-09

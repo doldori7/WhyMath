@@ -338,6 +338,56 @@
 ## 🧭 핵심 결정 로그 (시간 역순)
 
 ### 2026-08-09 (회수·버킷 B 부분): **`S3-24` 항목 ①(객관식 세로 번호 목록)을 `S3-35`로 회수·완료. 잔여 8건은 컨텍스트 한계로 새 세션 인계(`S3-24` blocked + notes 인수인계). 모바일 검증 환경을 이 컨테이너에 처음 구축하며 함정 4종 실측** (claude 구현, Kiki "1" — 부분 PR 후 마무리 지시)
+### 2026-08-09 (구현·MISC-04): **오개념 전용 관계셋(caused_by·variant_of) — 개념그래프와 물리적으로 격리된 신규 테이블**
+
+**무엇/왜**: `04c_misconception_seven_stage_separation.md` §6 Level2("오개념 간 관계 그래프가
+없다")·`04e_misconception_remediation_design.md` §2 해소. 4종 후보 관계(`misconception_of`·
+`repaired_by`·`caused_by`·`variant_of`) 중 재검토 결과 실제로 비어 있는 축은 2종뿐 —
+`misconception_of`(개념 방향)는 이미 `concept_src_id` 느슨참조로 해결(재론 안 함),
+`repaired_by`는 `intervene.py` confidence 결정트리와 이중 진실원천 위험이라 제외. 이번 태스크는
+**저장소(storage)만** 세운다 — traversal 엔진·조회 API·소비 로직은 신설하지 않는다(reactive
+후보 확장용 미래 작업).
+
+**구현**(backend-engineer 위임 → 메인 독립 재검증): 신규 테이블 `misconception_relation` —
+서로게이트 PK 없이 복합 PK `(from_mis_id, relation_type, to_mis_id)` 자체가 식별자
+(`db/models/problem.py::ProblemRelation` 선례). 양쪽 FK 모두 `misconception_catalog.mis_id`만
+(CASCADE), 개념 테이블 FK 0개(Storage 레벨 불변식). `relation_type`은 DB CHECK가 아니라 schema
+`Literal["caused_by","variant_of"]` 재검증이 강제(`misconception_crosslink.link_type` 선례 —
+DB는 값만 담음, 오타는 `ValidationError`). DAG 강제 없음 — 둘 다 순회 알고리즘에 태우지 않는
+단건 조회 전용이라 순환이 있어도 무해(설계 문서 §2-3 판단 그대로 인용). 신규 Alembic 리비전
+`374fb620de9e`(원 브랜치에서는 `down_revision=7ef2b5a8e69e`였으나 **회수 시 `090d254a5d43`으로
+재지정** — 아래 회수 경위 참조) + `schema_version.py
+KNOWN_REVISIONS` 갱신.
+
+**검증(acceptance③ — traversal 미진입 이중 방어)**: ①스키마 레벨 — 기존
+`test_misconception_seven_stage_manifest.py`의 `_MISCONCEPTION_MODELS` 튜플에 신규 모델을
+추가해 "개념 테이블에 FK 결합 안 됨" 검사를 신규 테스트 코드 0으로 확장. ②소스 스캔 — `concept_
+edge`를 실제로 순회하는 두 backend 소스(`l2/prerequisite_recommendation.py`의 재귀 CTE·
+`l2/learning_path.py`의 내부 엣지 조회)에 `"misconception_relation"` 문자열이 등장하지 않음을
+새 회귀 트립와이어 테스트로 동결 — 지금은 자명하게 통과하나 향후 누군가 개념 traversal에 이
+테이블을 얹으면 즉시 red. 신규 테스트 21건(`test_misconception_relation.py` — 복합 PK·FK
+개수/타깃/CASCADE·컬럼폭·역방향 인덱스·닫힌 어휘 거부(오타·`repaired_by`·`misconception_of`
+포함)·roundtrip, 전부 hermetic·DB 불요) + manifest 확장 1건 전부 green. ruff·black clean.
+전체 백엔드 스위트 재검증: 9067 passed·296 skipped·1 pre-existing 무관 failure(기존에 이미
+반복 기록된 `test_concept_reach_report.py` 드리프트와 동일 건 — 그 드리프트는 이후 `#730`에서
+해소돼 회수 시점 재검증에서는 0 failure).
+
+**회수 경위(2026-08-09 후속 세션)**: 위 구현은 `claude/human-bottleneck-tasks-6dszy0`에 done으로
+있었으나 **미머지**였고, 그 브랜치를 회수하는 PR `#739`(MISC-01·MISC-03·PB-02·REC-02·S3-32)에는
+MISC-04가 **포함되지 않았다**(머지 브랜치를 자른 뒤 소스 브랜치에 올라간 것으로 보인다 — `#739`의
+사본은 `status: todo`, 관련 파일 0건). 그대로 두면 `#739` 머지 시 소스 브랜치가 브리핑에서
+"이미 포팅됨 — 원본 정리만 필요"로 분류돼 삭제 후보가 되고, MISC-04 구현 전량이 함께 소실될
+경로였다(고아 브랜치 탐지의 사각 — "회수 PR이 있다"가 "전부 회수됐다"를 뜻하지 않는다).
+
+**마이그레이션 체인 재지정**: 원 브랜치에서 `374fb620de9e`는 `7ef2b5a8e69e`(S3-32
+`dialogue.server_verified_completed_at`) 위에 쌓여 있었는데, S3-32는 PR `#738`/`#739` **두
+독립 구현이 경합 중**이라(각각 다른 마이그레이션·다른 `verify_final_answer.py` 321줄 vs 139줄)
+착륙 시점이 미정이다. MISC-04는 `misconception_catalog`만 FK로 참조하는 신규 테이블 생성이라
+`dialogue` 컬럼 추가와 순서 의존이 0이므로, `down_revision`을 main의 실제 head
+(`090d254a5d43`)로 재지정해 S3-32 결착과 **무관하게 독립 착륙**시켰다. `KNOWN_REVISIONS`에도
+`7ef2b5a8e69e`는 넣지 않고 `374fb620de9e`만 추가한다.
+
+### 2026-08-09 (구현·MISC-03): **유사문제 실시간 서빙 — REC-02 L1 역인덱스 좌석 재사용, 신규 조회 로직 0**
 
 - **전제 부재 발견**: 회수 패치(S3-17)는 S3-12(가로 칩)의 리팩터 diff였는데 **main에는 S3-12 자체가 없었다**(main의 S3-12는 문제은행 태스크 — 번호만 같음). diff 재적용 대신 섀도 완료 시점(5481086) 파일을 GitHub API로 받아 main 구조 위에 수동 이식(상수·헬퍼 2종·핸들러·높이 계산·호출부·위젯 143줄 + 테스트 7건).
 - **원본 브랜치는 원격 삭제됨** — `shadow-data-s3-pilot-nh5kbz`는 fetch·cherry-pick 불가·커밋은 GitHub API로만 생존(`commits/<sha>` + `contents?ref=<sha>`). 향후 버킷 회수는 전부 이 경로다.

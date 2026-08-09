@@ -92,6 +92,7 @@ from whymath_backend.db.models.misconception_embedding import MisconceptionEmbed
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
+from whymath_backend.db.models.misconception_relation import MisconceptionRelation
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.pedagogy_dsl import (
     CONTENT_SLOT_STATUS_DEFAULT,
@@ -201,6 +202,8 @@ __all__ = [
     "MisconceptionEmbedding",
     # WH-1 2단계: MisconceptionHypothesisRecord (활성 오개념 가설 per-student 영속·§8.4)
     "MisconceptionHypothesisRecord",
+    # MISC-04: MisconceptionRelation (오개념 전용 관계셋 — caused_by·variant_of·개념그래프 격리)
+    "MisconceptionRelation",
     # WH-1 2단계 §2.3: EvidenceLink (학습 증거 그래프·삭제권 FK CASCADE·polarity CHECK)
     "EvidenceLink",
     # 교수법 DSL(L2): EvidenceEvent (학습목표별 유형 달성 증거 하이퍼테이블·B1 봉투 암호화)
