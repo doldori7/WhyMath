@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (회수·극값 좌석): **`VIZ-06` — 고립 브랜치의 graph2d 극값 마커를 **렌더러 먼저** 이식한 뒤 좌석 부여. 고립본이 쓴 `VIZ-04` 번호는 main이 이미 점유한 ID 충돌이라 재배정** (claude 구현, Kiki 지시)
+
+- **순서가 계약이다**: `NLP-04`가 이 좌석을 의도적으로 제외한 이유가 "좌석만 옮기면 렌더러가 없어 계약이 허공에 뜬다"였다. 그래서 `GraphingCalculator.jsx`의 `findExtrema`/`drawExtrema`(+67줄 — `numDeriv` 부호 변화 화면 스캔 + 이분법 20회 정련, **새 수치 primitive 도입 0**)를 **먼저** 이식하고 그 다음에 `Graph2dSpec.show_extrema` 좌석과 웹 어댑터를 배선했다.
+- **통째 채택 안전성 확인**: 이 브랜치는 main과 공통 조상이 없어 패치 추출이 불가능하다. `GraphingCalculator.jsx`는 67추가/**1삭제**였고 그 1줄도 `rows.map`에 `showExtrema`를 더하는 재작성이라 브랜치 ⊇ main임을 확인한 뒤 통째 채택했다(`app.py`·`coach.py`가 오히려 낡았던 `NLP-04` 사례와 달랐다).
+- **ID 충돌 정정(HARN-10)**: 고립본 주석의 `[VIZ-04]` 2건을 `[VIZ-06]`으로 바꾸고, main의 `VIZ-04`가 `VIZ-04-visual-style-render-seat-contract`(done)라는 경위를 스키마·어댑터 주석에 남겼다.
+- **테스트 복원**: `NLP-04`가 제외해 둔 파이썬 2건·JS 5건.
+- **PR 순서 관리**: 착수 시점에 PR #736이 열려 있어 그대로 커밋하면 이미 본문을 확정한 PR의 범위가 바뀌는 상황이었다. 커밋을 만들되 `viz06-hold` ref로 보존하고 브랜치를 되감아 #736을 먼저 통과시킨 뒤 최신 main 위로 cherry-pick했다(충돌 0). #736이 `mergeable_state: behind`로 막혀 있어 브랜치 갱신이 선행 필요했던 것도 이때 처리했다.
+- **검증**: 백엔드 전체 **9018 passed · 296 skipped · 0 failed**(무작위 순서·529초) · JS 128건(123→+5) · `RUFF/BLACK/MYPY EXIT=0`. ⚠️ 직전에 낸 9018은 실행 중 브랜치를 되감아 신뢰 불가였고, 이번이 깨끗한 실행이다.
+
 ### 2026-08-09 (신설·증명 지표): **`PED-13` 결손 복구 리드타임(⑯) — 첫 취약 관측(<0.7)→첫 숙달 도달(≥0.8) 경과 일수. 신규 컬럼·마이그레이션·DB왕복 0. required 좌석이 픽스처 33건을 깨뜨려 "선언≠배선" 하나를 추가로 드러냄** (claude 구현, Kiki `/drive`)
 
 - **설계**: `ConceptMasteryHistory.measured_at`이 복합 PK라 벽시계 간격이 원천에서 나온다. ⑨(`mastery_gain_rate`)의 조회에 `measured_at`만 얹어 재사용 — **DB 왕복 추가 0**.

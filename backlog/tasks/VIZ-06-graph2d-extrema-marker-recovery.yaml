@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -17,7 +17,8 @@ acceptance:
   - "③ 이식 방법: 이 브랜치는 main 과 **공통 조상이 없다**(git merge-base 가 빈 값 — 히스토리 분리). 패치 추출·cherry-pick 이 원천적으로 불가능하므로 파일 내용 대조로 이식한다. 특히 GraphingCalculator.jsx 는 main 쪽이 더 새로울 수 있으니 통째 채택 금지·삭제 줄 전건 확인."
   - "④ 테스트 회수: 고립본의 극값 테스트(파이썬 2건 test_visualization_spec.py · JS 5건 graph2dSpec.test.js · GraphingCalculator.smoke.test.jsx 일부)를 NLP-04 가 제거해 뒀다 — 함께 복원한다."
   - "⑤ 회귀: 백엔드 전체 스위트(src/backend 에서 인자 없이·무작위 순서) + graphing-calculator npm test 양쪽 green."
-artifacts: []
+artifacts:
+  - 3ffe5ecf
 paths:
   - src/backend/whymath_backend/schema/visualization.py
   - src/web/graphing-calculator/src/GraphingCalculator.jsx
