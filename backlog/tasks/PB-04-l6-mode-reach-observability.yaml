@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/api/gating.py
   - "src/mobile/lib/features/problems/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-②-나 · §3 R5. '완비된 소비 경로 + 미도달 공급원' 반복 패턴의 변형 — 이번엔 공급원이 아니라 경로 자체가 미도달이다. depends_on PB-03: 이 태스크가 모드를 켜는 순간 _CANDIDATE_FETCH_LIMIT=1000 < 2,647 절단(R2 문서 §0-②-마)이 즉시 발화한다."
-updated: 2026-08-03
+updated: 2026-08-09
