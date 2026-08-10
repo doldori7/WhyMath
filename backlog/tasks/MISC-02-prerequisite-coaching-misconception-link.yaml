@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -13,7 +13,8 @@ depends_on:
 requires_gates: []
 acceptance:
   - "recommend_prerequisite_coaching(gaps) 시그니처 불변(회귀 0), concept_src_id 느슨참조 재사용해 PrerequisiteGap 변환 어댑터만 신설"
-artifacts: []
+artifacts:
+  - 43e5d6d8
 paths:
   - src/backend/whymath_backend/l4/prerequisite_coaching.py
   - src/backend/whymath_backend/l2/learner_state.py
@@ -23,6 +24,6 @@ paths:
   - tests/backend/l4/misconception/test_prerequisite_link.py
   - tests/backend/api/test_coach.py
   - tests/backend/api/test_me.py
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "04e_misconception_remediation_design.md §1-2. PED-05의 active_misconceptions 슬롯 선착지가 자연스러운 신호원. [2026-08-10 구현 중 범위 확정] 오개념 id가 kebab(CATALOG_BY_ID)·M-id(MisconceptionCatalog.mis_id) 두 체계로 분리돼 있어 신규 어댑터 l4/misconception/prerequisite_link.py::gaps_from_active_misconceptions가 필요(crosslink_resolve→resolve.py 체인 재사용, 신규 매칭 로직 0). misconception_crosslink_mode!=off 게이트를 기존 4개 소비처와 동일 패턴으로 재사용 — off(기본값)면 조회 자체가 0이라 오늘 동작 불변(회귀 0). 배선은 api/coach.py::_prerequisite_coaching_for·api/me.py::get_my_concept_coaching 양쪽 모두, 그래프 traversal이 빈 경우에만 보충(구조적 선수 우선). paths를 실제 건드린 파일로 확장(scope_drift 경고 다수 — 전부 이 확정 범위 안)."
 updated: 2026-08-10
