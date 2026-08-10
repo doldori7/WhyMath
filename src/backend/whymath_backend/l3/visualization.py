@@ -118,9 +118,17 @@ RENDER_CONTRACT_ADAPTER_KEY = "web_adapter"
 # LLM이 그 type의 spec을 못 채운다. 이 등식은 게이트가 동결한다
 # (tests/backend/schema/test_render_contract.py).
 _SPEC_EXAMPLES: dict[str, str] = {
+    # 관계식·부등식 두 예시는 PR #703 스쿼시에서 유실된 VIZ-04 예시의 복원이다(VIZ-07에서
+    # 재착륙). 수직선 예시는 VIZ-07 신설 — 값 문자열만 확장하며 키 집합은 불변이다(키 집합 ==
+    # 렌더 가능 타입 등식을 test_render_contract.py가 동결).
     "interactive_graph_2d": (
         '{"function":"a*x**2+b*x+c", "domain":[-3,3], '
         '"parameters":[{"name":"a","min":-5,"max":5,"step":0.1,"default":1}]}'
+        ' / 관계식·음함수(원 등) 허용: {"function":"x**2 + y**2 = 1", "domain":[-2,2]}'
+        ' / 부등식 영역: {"function":"y > x**2", "domain":[-3,3]}'
+        " / 수직선(1D 축 — 정수·부등식 해·구간): "
+        '{"number_line":{"points":[{"value":2}],'
+        '"intervals":[{"start":2,"end":null,"start_open":false}]},"domain":[-5,5]}'
     ),
     "interactive_surface_3d": '{"surface":"z = x**2 + y**2", "rotatable":true}',
     "simulation_probabilistic": (
