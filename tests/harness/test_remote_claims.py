@@ -625,7 +625,7 @@ class TestReadSideStaleHandling:
 
 class TestStaleAndReap:
     def test_stale_triple_criteria(self):
-        """stale_3중_기준"""
+        """stale_3중_기준 + task_missing_recent 4번째 사유(HARN-21)"""
         now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
         fresh_ts = "2026-07-16T10:00:00Z"  # 2시간 전 — TTL(72h) 이내
         old_ts = "2026-07-10T10:00:00Z"  # 6일 전 — TTL 초과
@@ -634,6 +634,10 @@ class TestStaleAndReap:
             remote_claims.RemoteClaim("S1-02-done-task", "sha2", "claude/b", fresh_ts),
             remote_claims.RemoteClaim("S1-03-ghost-task", "sha3", "claude/c", fresh_ts),
             remote_claims.RemoteClaim("S1-04-old-task", "sha4", "claude/d", old_ts),
+            # HARN-21 신규 — 오래된 missing claim(진짜 정리 대상)과
+            # ts 없는 missing claim(나이 불명 → 보수적 보류) 두 축 추가.
+            remote_claims.RemoteClaim("S1-05-old-ghost-task", "sha5", "claude/e", old_ts),
+            remote_claims.RemoteClaim("S1-06-no-ts-ghost-task", "sha6", "claude/f", ""),
         ]
         backlog = _mk_backlog()
         backlog.tasks["S1-02-done-task"] = Task(
@@ -656,29 +660,44 @@ class TestStaleAndReap:
         reasons = {c.task_id: reason for c, reason in stale}
         assert TASK not in reasons  # 신선 + in_progress → 유지
         assert reasons["S1-02-done-task"] == "task_done"  # 로컬 이미 done
-        assert reasons["S1-03-ghost-task"] == "task_missing"  # 태스크 미존재
+        # HARN-21 결함③ 수정: 신선한 missing claim은 "task_missing"이 아니라
+        # "task_missing_recent"(경합 조건 가능성 — 즉시 삭제 금지).
+        assert reasons["S1-03-ghost-task"] == "task_missing_recent"
         assert reasons["S1-04-old-task"] == "ttl"  # TTL 초과
+        assert reasons["S1-05-old-ghost-task"] == "task_missing"  # 오래된 missing은 여전히 정리
+        assert reasons["S1-06-no-ts-ghost-task"] == "task_missing_recent"  # ts 없음 = 보수적 보류
 
-    def test_reap_dry_run_does_not_delete(self, bare_remote):
-        """reap_dry_run은_삭제하지_않는다"""
+    def test_reap_dry_run_does_not_delete(self, bare_remote, monkeypatch):
+        """reap_dry_run은_삭제하지_않는다 — 오래된(TTL 초과) claim 기준"""
         _, clone = bare_remote
         a = clone("session-a")
+        old_ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: old_ts)
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
-        backlog = _mk_backlog()  # ghost-task 미포함 → task_missing
-        reaped, status = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=True)
+        later_now = old_ts + timedelta(hours=200)  # TTL(72h) 초과 — 진짜 stale
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: later_now)
+        backlog = _mk_backlog()  # ghost-task 미포함 + 오래됨 → task_missing
+        reaped, status, warnings = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=True)
         assert status == "ok"
         assert len(reaped) == 1 and "task_missing" in reaped[0]
+        assert "task_missing_recent" not in reaped[0]
+        assert warnings == []
         claims, _ = remote_claims.list_claims(a)
         assert len(claims) == 1  # dry-run — 아직 남아 있음
 
-    def test_reap_apply_actually_deletes(self, bare_remote):
-        """reap_apply는_실제_삭제"""
+    def test_reap_apply_actually_deletes(self, bare_remote, monkeypatch):
+        """reap_apply는_실제_삭제 — 오래된(TTL 초과) claim 기준"""
         _, clone = bare_remote
         a = clone("session-a")
+        old_ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: old_ts)
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
+        later_now = old_ts + timedelta(hours=200)  # TTL(72h) 초과 — 진짜 stale
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: later_now)
         backlog = _mk_backlog()
-        reaped, status = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
+        reaped, status, warnings = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
         assert status == "ok" and len(reaped) == 1
+        assert warnings == []
         claims, _ = remote_claims.list_claims(a)
         assert claims == []
 
@@ -704,9 +723,64 @@ class TestStaleAndReap:
             return original(root, *argv, **kwargs)
 
         monkeypatch.setattr(remote_claims, "_git", fake_git)
-        reaped, status = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=True)
+        reaped, status, warnings = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=True)
         assert reaped == []
+        assert warnings == []
         assert status != "ok", "조회 실패가 ok로 보고되면 '0건 통과' 위장이 된다"
+
+
+class TestTaskMissingRecentRaceGuard:
+    """HARN-21 결함③ — 신선한 missing claim은 reap에서 제외되고, 오래된 것은 여전히
+    정리된다. 실제 `bare_remote`(진짜 로컬 원격)로 양방향(변별력)을 hermetic하게 검증.
+
+    사고 시나리오: 세션 A가 add+start(claim)를 원격에 방금 반영했는데, 그 직후 세션 B가
+    `claims reap --apply`를 돌리면 — B의 로컬 클론엔 A가 방금 추가한 태스크 파일이 아직
+    없다(A가 아직 안 머지했으므로). `task is None`이 참이 되어 나이와 무관하게 즉시
+    task_missing으로 지워지던 것이 구 버그다.
+    """
+
+    def test_freshly_created_claim_not_reaped_when_task_missing_locally(
+        self, bare_remote, monkeypatch
+    ):
+        """방금_생성된_claim은_로컬에_태스크가_없어도_reap_안_됨"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        fixed_now = datetime(2026, 8, 10, 15, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: fixed_now)
+        assert remote_claims.claim(a, "HARN-99-race-task", "claude/session-a").status == "ok"
+
+        backlog = _mk_backlog()  # HARN-99-race-task 미포함 → A가 아직 안 머지한 상태 모사
+        reaped, status, warnings = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
+        assert status == "ok"
+        assert reaped == [], "방금 생성된 claim이 task_missing으로 즉시 reap되면 안 된다"
+        assert any(
+            "HARN-99-race-task" in w and "task_missing_recent" in w for w in warnings
+        ), "삭제하지 않되 경고로는 노출해야 한다(침묵 실패 금지)"
+        claims, _ = remote_claims.list_claims(a)
+        assert [c.task_id for c in claims] == ["HARN-99-race-task"], "claim이 살아있어야 한다"
+
+    def test_old_claim_still_reaped_as_task_missing(self, bare_remote, monkeypatch):
+        """오래된_claim은_여전히_task_missing으로_reap된다 — 변별력의 반대 축
+
+        진짜 취소·삭제된 태스크의 잔존 claim을 정리하는 정상 기능은 유지해야 한다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        old_ts = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: old_ts)
+        assert remote_claims.claim(a, "HARN-98-stale-task", "claude/session-a").status == "ok"
+
+        later_now = old_ts + timedelta(hours=100)  # TTL(72h) 초과
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: later_now)
+        backlog = _mk_backlog()  # HARN-98-stale-task 미존재(진짜 삭제된 태스크 모사)
+        reaped, status, warnings = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
+        assert status == "ok"
+        assert len(reaped) == 1
+        assert "HARN-98-stale-task" in reaped[0] and "task_missing" in reaped[0]
+        assert "task_missing_recent" not in reaped[0]
+        assert warnings == []
+        claims, _ = remote_claims.list_claims(a)
+        assert claims == [], "오래된 claim은 실제로 삭제돼야 한다"
 
 
 class TestScanStaleBranches:

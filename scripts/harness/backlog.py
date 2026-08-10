@@ -32,6 +32,7 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 
@@ -864,11 +865,17 @@ def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, 
     return taken
 
 
-def _next_free_number(prefix: str, taken: dict[str, str]) -> str:
-    """`<PREFIX>-<n>` 다음 빈 번호 — **최대 사용 번호 +1**부터 찾는다.
+def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str | None:
+    """`<PREFIX>-<n>` 다음 빈 번호(2자리 zero-padded) — **최대 사용 번호 +1**부터 찾는다.
 
     가장 작은 빈 번호를 주면 과거에 비워진 낮은 번호(예 HARN-01)를 제안하게 되는데,
     그건 "이 트랙의 다음 작업"이라는 사람의 기대와 어긋나 제안이 오히려 혼선을 준다.
+
+    `{index:02d}`는 **최소** 2자리이지 **정확히** 2자리가 아니다 — index가 100을 넘으면
+    "100"(3자리)을 내는데, `models.TASK_ID_RE`는 `\\d{2}` 정확히 2자리만 허용한다. 즉
+    프리픽스가 00~99번을 다 쓰면 다음 제안이 형식 위반 ID가 된다(HARN-21 결함②). 그래서
+    index가 99를 넘어서면 날조된 3자리를 내지 않고 **`None`을 반환** — 호출부(`cmd_add`)가
+    사람에게 "이 프리픽스가 소진됐다"는 명시적 오류를 낸다.
     """
     used = [
         int(number.rsplit("-", 1)[1])
@@ -876,8 +883,10 @@ def _next_free_number(prefix: str, taken: dict[str, str]) -> str:
         if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
     ]
     index = max(used) + 1 if used else 1
-    while f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken:
+    while index <= 99 and (f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken):
         index += 1
+    if index > 99:
+        return None
     return f"{prefix}-{index:02d}"
 
 
@@ -906,9 +915,20 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         # 다를 때만 번호 참조가 모호해진다.
         if owner and owner != args.id:
             prefix = number.rsplit("-", 1)[0]
+            suggestion = _next_free_number(prefix, taken)
+            if suggestion is None:
+                # 프리픽스가 00~99번을 이미 다 썼다 — 3자리 제안은 TASK_ID_RE 위반이라
+                # 날조하지 않는다(HARN-21 결함②). 사람의 결정(새 프리픽스 분리 등)이 필요.
+                return _fail(
+                    f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
+                    f"게다가 프리픽스 '{prefix}'는 00~99번을 모두 소진해 TASK_ID_RE(정확히 "
+                    "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다 — 새 프리픽스로 "
+                    "분리하는 등 사람의 결정이 필요하다(HARN-21). "
+                    "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                )
             return _fail(
                 f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                f"다음 빈 번호 제안: {_next_free_number(prefix, taken)}. "
+                f"다음 빈 번호 제안: {suggestion}. "
                 "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
             )
         if not remote_ok:
@@ -1255,12 +1275,23 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
-        reaped, scan_status = remote_claims.reap(root, backlog, ttl, dry_run=not args.apply)
+        reaped, scan_status, warnings = remote_claims.reap(
+            root, backlog, ttl, dry_run=not args.apply
+        )
         if scan_status != "ok":
             # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
             # 교차검증이 공전했다(HARN-09). 판정 불가는 판정 불가라고 말한다.
             print(f"원격 claim 조회 불가 ({scan_status}) — stale 판정 불가")
             return 0 if scan_status == "offline" else 1
+        if warnings:
+            # task_missing이지만 TTL 이내라 reap에서 제외된 claim — 경합 조건 가능성이
+            # 있으므로 침묵시키지 않고 경고로 노출한다(HARN-21, CLAUDE.md 침묵 실패 금지).
+            print(
+                f"⚠ 최근 claim {len(warnings)}건 — task_missing이지만 TTL 이내라 reap 제외"
+                "(경합 조건 가능성: 다른 세션이 방금 add+claim했을 수 있다):"
+            )
+            for item in warnings:
+                print(f"  · {item}")
         if not reaped:
             print("stale claim 없음")
             return 0

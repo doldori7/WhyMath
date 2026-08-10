@@ -406,7 +406,14 @@ _GRANDFATHERED_ID_NUMBERS: dict[str, str] = {
 
 # 접두는 영숫자 혼합을 허용한다 — 이 저장소 ID의 다수파가 스테이지형(`S2-04`·`S4-07`)이라
 # `[A-Za-z]+`로 잡으면 정작 가장 많은 축을 통째로 못 본다(HARN-10 구현 중 실측).
-_ID_NUMBER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)-")
+#
+# 캡처 그룹 뒤는 `(?:-|$)` — 슬러그가 이어지거나(`-`) 문자열이 거기서 끝나야(`$`) 매치한다.
+# `models.TASK_ID_RE`(`^[A-Z][A-Z0-9]{0,7}-\d{2}(-[a-z0-9]+(-[a-z0-9]+)*)?$`)는 슬러그가
+# **옵션**이라 `HARN-20`처럼 슬러그 없는 ID도 유효한데, 구 정규식(`...-\d+)-`)은 캡처 그룹
+# 뒤에 반드시 `-`가 와야 매치해서 슬러그 없는 ID를 전부 놓쳤다(HARN-21 결함① — 그 결과
+# `_taken_id_numbers`·`_id_number_collisions`가 슬러그 없는 ID의 번호를 점유 목록에서
+# 누락시켜 1선(add)·2선(validate) 번호 충돌 검사를 양쪽 다 우회할 수 있었다).
+_ID_NUMBER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)(?:-|$)")
 
 
 def id_number_of(task_id: str) -> str | None:

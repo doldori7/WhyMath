@@ -752,13 +752,40 @@ def scan_remote_in_progress(
 def stale_claims(
     claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int, now: datetime | None = None
 ) -> list[tuple[RemoteClaim, str]]:
-    """stale claim 판정 — (claim, 사유) 목록. 사유: ttl | task_done | task_missing."""
+    """stale claim 판정 — (claim, 사유) 목록.
+
+    사유: ttl | task_done | task_missing | task_missing_recent.
+
+    `task_missing`(로컬 백로그에 해당 태스크가 아예 없음) 판정은 **경합 조건**을 낳을 수
+    있었다(HARN-21 결함③): 세션 A가 `add`+`start`(claim)를 원격에 방금 반영했는데, 그
+    직후 세션 B가 `claims reap`을 돌리면 — B의 로컬 클론엔 A가 방금 추가한 태스크 파일이
+    아직 없다(A가 아직 안 머지했으므로). 구 구현은 이때 claim의 나이(`c.ts`)를 전혀 안
+    보고 즉시 stale로 판정했다 — 몇 초 전에 생성된 claim도 지워버릴 수 있었다.
+
+    수정: `ttl` 분기가 이미 쓰는 "나이 비교" 패턴을 `task_missing`에도 그대로 적용한다.
+      - claim이 TTL 이내로 신선하면 → `task_missing_recent`(reap 대상 **아님** — 호출부가
+        경고로만 노출한다. 완전히 침묵시키지 않는다 — CLAUDE.md 침묵 실패 금지).
+      - claim에 ts가 없거나 파싱 불가면 → 나이를 모르므로 보수적으로 `task_missing_recent`
+        (기존 `ttl` 분기의 "파싱 불가 메타는 판정 보류" 관례와 동형).
+      - claim이 TTL을 넘겨 오래됐으면 → 기존대로 `task_missing`(진짜 삭제·취소된 태스크의
+        잔재를 정리하는 정상 기능은 유지).
+    """
     now = now or _utcnow()
     result: list[tuple[RemoteClaim, str]] = []
     for c in claims:
         task = backlog.tasks.get(c.task_id)
         if task is None:
-            result.append((c, "task_missing"))
+            reason = "task_missing"
+            if c.ts:
+                try:
+                    ts = datetime.strptime(c.ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                    if now - ts < timedelta(hours=ttl_hours):
+                        reason = "task_missing_recent"
+                except ValueError:
+                    reason = "task_missing_recent"  # 파싱 불가 메타는 판정 보류 (보수적)
+            else:
+                reason = "task_missing_recent"  # ts 없음 = 나이 불명 → 즉시 삭제 금지(보수적)
+            result.append((c, reason))
             continue
         if task.status in ("done", "cancelled"):
             result.append((c, "task_done"))
@@ -775,29 +802,39 @@ def stale_claims(
 
 def reap(
     root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str, list[str]]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
-    반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error).
+    반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error, ["경고 문자열", ...]).
 
     **상태를 함께 돌려주는 이유**(HARN-09): 구 구현은 조회 실패 시 빈 목록만 돌려줘서
     호출자가 "stale 없음"과 "판정 불가"를 구분할 수 없었다. CI의 교차검증 스텝이 정확히
     그 상태로 공전했다 — 인프라가 죽어도 "0건 통과"로 보였다. 측정·게이트 도구가 실패를
     통과로 위장하면 안 된다(CLAUDE.md AI·신뢰).
+
+    **세 번째 반환값(경고 목록, HARN-21)**: `stale_claims`가 `task_missing_recent`로
+    분류한 claim은 reap 대상에서 제외되지만(경합 조건 방지), 그 사실을 조용히 넘기지
+    않는다 — 방금 생성된 claim이 로컬에 안 보인다고 침묵하면, 그게 진짜 경합 조건인지
+    다음 reap 실행자가 알 방법이 없다(CLAUDE.md 침묵 실패 금지).
     """
     claims, status = list_claims(root)
     if status != "ok":
-        return [], status
+        return [], status, []
     stale = stale_claims(claims, backlog, ttl_hours)
     reaped: list[str] = []
+    warnings: list[str] = []
     for c, reason in stale:
         label = f"{c.task_id} ({reason}" + (f", {c.branch}" if c.branch else "") + ")"
+        if reason == "task_missing_recent":
+            # 경합 조건 가능성 — 삭제하지 않고 경고로만 노출한다.
+            warnings.append(label)
+            continue
         if not dry_run:
             result = release(root, c.task_id, branch="", force=True)
             if result.status != "ok":
                 continue
         reaped.append(label)
-    return reaped, "ok"
+    return reaped, "ok", warnings
 
 
 # ── 미머지 done 탐지 (HARN-11) ────────────────────────────────────────────────
