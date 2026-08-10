@@ -2414,6 +2414,9 @@
 {"ts": "2026-08-09T15:35:39", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "start", "id": "S3-35-mc-numbered-choice-list-recovery", "session": "claude/whymath-positioning-strategy-qumq9y", "remote": "ok"}
 {"ts": "2026-08-09T15:35:39", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "done", "id": "S3-35-mc-numbered-choice-list-recovery", "artifacts": ["0e99826a"]}
 {"ts": "2026-08-09T20:53:01", "actor": "claude/whymath-positioning-strategy-qumq9y", "action": "block", "id": "S3-24-shadow-recovery-bucket-b", "reason": "부분 완료 1/9(항목①=S3-35·0e99826a) — 세션 컨텍스트 한계로 중단, 잔여 8건은 새 세션 재개(인수인계는 notes 참조)"}
+{"ts": "2026-08-10T02:03:45", "actor": "claude/whymath-ai-tutor-design-iu9qk5", "action": "start_ignored_unmerged_done", "id": "S4-18-review-time-axis", "branches": "claude/whymath-mvp-plan-architecture-trjg5x"}
+{"ts": "2026-08-10T02:03:47", "actor": "claude/whymath-ai-tutor-design-iu9qk5", "action": "start", "id": "S4-18-review-time-axis", "session": "claude/whymath-ai-tutor-design-iu9qk5", "remote": "ok"}
+{"ts": "2026-08-10T02:26:24", "actor": "claude/whymath-ai-tutor-design-iu9qk5", "action": "done", "id": "S4-18-review-time-axis", "artifacts": ["9de96fea"]}
 {"ts": "2026-08-10T02:06:31", "actor": "claude/rec-05-priority-d8q8vt", "action": "start", "id": "S3-25-shadow-recovery-bucket-c", "session": "claude/rec-05-priority-d8q8vt", "remote": "ok"}
 {"ts": "2026-08-10T02:07:56", "actor": "claude/rec-05-priority-d8q8vt", "action": "claim_release", "id": "S3-25-shadow-recovery-bucket-c", "forced": false}
 {"ts": "2026-08-10T02:20:11", "actor": "claude/harn-18-gates-add-cli-path", "action": "start", "id": "HARN-18-gates-add-cli-path", "session": "claude/harn-18-gates-add-cli-path", "remote": "ok"}
