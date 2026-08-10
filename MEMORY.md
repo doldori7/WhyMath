@@ -346,6 +346,13 @@
 - **드라이브 부수**: `PATH-04` block(e7f69601) — acceptance ① 선행 자산(경로 xlsx sha256 f4ee650b…) 부재 실측·Kiki 제공 대기. `MISC-06` 착수 거부(7n9n72 원격 claim 08:23Z) 존중.
 - **실수 기록(1회차·세션 내 시정, 20c6d2c8)**: ASM-05 진행 중 S4-19를 선점 claim → `validate` exit 1("1세션=1태스크" 위반) — 즉시 `claims release --force`(본인 claim 정규 경로) + 상태 원복. 하네스 판정 존중.
 - **공유 가치 발견**: 리포 루트 `pyproject.toml`에 pytest 섹션이 없어 **경로 인자 호출**(`python -m pytest ../../tests/backend/harness`)이 리포 루트에 config 앵커링 → `asyncio_mode`가 STRICT로 떨어져 무관 async 테스트 62건이 가짜 전멸한다. CI(cwd=src/backend bare pytest)는 무관·재현 시 `-c pyproject.toml` 결합 필요. `tests/backend/db/test_assessment_seat_reach_report_integration.py` docstring 3곳의 "writer 0" 역사 서술은 잔존(assert는 델타 전용이라 기능 영향 0).
+### 2026-08-10 (재발방지·감사기 정밀도): **`OPS-25` — 선언≠배선 감사기의 *상수 간접참조 맹점* 해소. 같은 원인의 오탐 2건이 이미 유령 태스크 1건(`PED-15`)과 허위 유예 1건(`S4-22`의 막힘)을 만들어냈다** (claude 구현, Kiki 지시)
+
+- **사고 경위(반복 실수 — 동일 원인 2회)**: `ops/declared_unwired_audit.py`가 도달을 *리터럴*로만 판정했다. ①HTTP 축 — 호출부에 경로 문자열이 직접 있어야 도달로 인정 → `_ENDPOINT = "/v1/me/growth-evidence"` 상수를 쓰는 `test_me_growth_evidence.py`의 호출이 안 보여 "미도달"로 보고 → **`PED-15`가 그 오탐만으로 등재**됐다(#755에서 리터럴 스모크로 우회했으나 근본 원인은 잔존). ②EventType 축 — `ast.Compare` 피연산자에 `EventType.X`가 직접 있어야 소비로 인정 → `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로 거는 `not in` 필터(:279)·SQL `.in_()` 필터(:563)를 못 봐 **이미 소비 중인 `EventType.막힘`**이 `S4-22` 유예 3종에 허위로 끼었다.
+- **대책(형태 = 코드 + 동결 테스트)**: 두 축에 **모듈 최상위 상수 1홉 해석**을 넣었다(`_module_path_constants`·`_module_event_type_constants`). 범위 절제는 축 3의 기존 선례 `_insert_helpers`(모듈 내 헬퍼 1홉)를 그대로 따른다 — import된 상수·함수 지역 변수·동적 컨테이너(`tuple(EventType)`)는 풀지 않는다. 넓히면 감사기가 사실상 인터프리터가 된다.
+- **양방향 변별력 실측**(acceptance ④ — 양성만 확인하면 "전부 도달"로 뭉개는 반대 방향 오탐을 못 잡는다): (양성) `막힘` 소비 인정 · `POST /v1/ocr/pages`(리터럴 0건·상수만) 도달 인정. (음성) `답입력`·`시각화조작`은 **수정 후에도 미도달 유지** — 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타난다. 상수를 *정의만* 하고 비교에 안 쓰면 소비 아님, 함수 지역 상수·import 상수·`+` 연결 표현식은 미해석. 신규 테스트 25건 중 **양성 14건은 수정을 무력화하면 전부 실패·음성 11건은 양쪽 상태에서 통과**함을 임시 패치로 실측했다(변별력 있는 검사임을 확인).
+- **수치**: 감사기 exit 0 유지. HTTP 도달 80→87(+7) · EventType 소비 3→4(+1) — 증가분 8건 전부 상수 간접참조 오탐 해소분이고 신규 배선 0. 대장에서 유예 8건 제거(HTTP 7·EventType 1). 감사기 테스트 42→67건.
+- **정직한 잔여**: 이 축의 `reached` = "dart 클라 호출 ∪ 백엔드 테스트 호출"이므로 해제된 7건이 reached라는 건 *테스트가 관통한다*는 뜻이지 *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히 0건**이며 이 축은 그 구분을 표현하지 못한다(클라 소비 공백 전용 축은 후속 과제). SQL `.in_(상수)` 단독 소비·`Model.field.in_()` 형태도 Compare가 아니라 미탐이다.
 
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
@@ -566,6 +573,27 @@ attempt 적재)로 재검토했고, **기존 S3-26~31 번호를 재사용/재채
 `ai_tutor_module_gap_review.md` §4-⑤("미채택 — 실사용 데이터·파일럿 수요 확인 후")가 정면으로
 상충한다. 어느 쪽이 최신 결정인지 세션이 판단할 근거가 없어 AskUserQuestion으로 확인을 요청했으나
 무응답 — 등재하지 않고 보류. 다음 세션이나 Kiki 직접 확인 시 등재.
+### 2026-08-07 (구현·OPS-22): **선언≠배선 일반 탐지기 신설 — HTTP 라우트/EventType/타임시리즈/harness CLI 4축 정적 감사 게이트, 반복 실수(REC-01·VIZ-01·NLP-01·COLLAB-03 등 6회차) 재발방지대책** (claude 구현, Kiki 요청 — 장기 미병합 브랜치 `claude/whymath-data-platform-design-8ceaf5`의 설계를 재구현)
+
+**컨텍스트**: 장기 방치 브랜치(`ops/reach_audit.py` 855줄·설계문서 510줄, 2026-08-03·미병합)가
+같은 아이디어를 이미 구현했었지만, 그 분류 대장(`pending-task:REC-01`·`SEC-10`·`VIZ-02` 등)이
+스냅샷 시점 상태라 대부분 stale(그 사이 `done` 전환)이었다. `src/backend/whymath_backend/
+ops/declared_unwired_audit.py`로 재구현 — 구조(4축 분리·그랜드파더 만료 계약·FastAPI 0.140
+`_IncludedRouter` 언랩)는 재사용하고, 분류 대장은 2026-08-07 `backlog/tasks/*.yaml` 현재
+상태로 재구축했다. HTTP 축은 dart 호출뿐 아니라 **백엔드 테스트 호출도 도달로 인정**하도록
+확장(구 브랜치보다 도달률이 훨씬 높아짐)하고, 리터럴 더미 ID(`client.get("/v1/jobs/j1")`)를
+정규식 템플릿 매칭으로 잡도록 개선했다. 구현 중 실측으로 **3건의 신규 "선언≠배선" 사례**를
+발견해 태스크로 등재했다: `S4-22`(막힘·답입력·시각화조작 EventType — 생산자만 있고 소비자
+0) · `MOB-10`(SEC-10이 서버 세션 가시성 엔드포인트만 배선, 모바일 화면 0) · `MOB-11`(PED-03
+학습 공급 루프 study/outcome을 부르는 쪽이 모바일에도 통합테스트에도 없음). `tests/backend/
+ops/test_slo_contract.py`의 `_app_route_paths()`를 `route_paths()`로 승격해 재사용(재구현
+금지 준수). CI에 상시 잡(`declared-unwired-audit`, `needs: changes` 미의존 — 이유는 이 감사가
+보는 축이 정확히 그 필터의 사각지대라서) 신설 + `tests/infra` 배선 실재성 동결 + required
+checks 문서 갱신. **사고 하나 자체 검출**: 이 감사 자신을 CI가 직접 실행하게 되는 순간
+`ops.declared_unwired_audit`이 매니페스트에 `by-design`으로 남아 있으면 `stale-waiver`가
+되는 자기참조 함정을 전체 스위트 1회차 실행에서 실제로 검출(변별력 실증) — 매니페스트에서
+제거해 해소. 검증: 백엔드 전체 스위트 8812 passed·296 skipped(부분 아님) · ruff·black·
+`mypy --strict`(467파일) · `backlog.py validate` green.
 
 ### 2026-08-07 (조사·S3 재채번 대기): **S3-24/25 stale claim 해제 + S3-26/27/28 3중 번호 충돌 실측 — 재채번·병합은 HARN-15 소관이라 미착수, 검증된 merge만 별도 브랜치에 보존** (claude 조사, Kiki 요청 "문제를 차근차근 해결해줘")
 

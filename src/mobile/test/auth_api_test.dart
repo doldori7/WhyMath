@@ -41,17 +41,32 @@ AuthApi _apiWith(_Adapter adapter) {
 }
 
 void main() {
-  test('login: access_token을 반환하고 콜백 경로로 POST한다', () async {
-    final adapter = _Adapter({'access_token': 'tok', 'token_type': 'bearer'});
+  test('login: 액세스+리프레시 토큰을 반환하고 콜백 경로로 POST한다', () async {
+    final adapter = _Adapter({
+      'access_token': 'tok',
+      'refresh_token': 'ref',
+      'token_type': 'bearer',
+    });
     final api = _apiWith(adapter);
-    final token = await api.login(provider: 'kakao', code: 'c', redirectUri: 'r');
-    expect(token, 'tok');
+    final tokens = await api.login(provider: 'kakao', code: 'c', redirectUri: 'r');
+    expect(tokens.accessToken, 'tok');
+    // MOB-12: 예전에는 리프레시 토큰을 버렸다 — 이제 함께 돌려줘야 갱신 배선이 성립한다.
+    expect(tokens.refreshToken, 'ref');
     expect(adapter.captured!.path, '/v1/auth/kakao/callback');
     expect(adapter.captured!.method, 'POST');
   });
 
   test('login: access_token이 없으면 DioException', () async {
     final api = _apiWith(_Adapter({'token_type': 'bearer'}));
+    await expectLater(
+      api.login(provider: 'kakao', code: 'c', redirectUri: 'r'),
+      throwsA(isA<DioException>()),
+    );
+  });
+
+  test('login: refresh_token이 없으면 DioException(MOB-12)', () async {
+    // 리프레시 토큰이 빠진 응답을 조용히 통과시키면 갱신이 영구히 불가한 상태로 로그인된다.
+    final api = _apiWith(_Adapter({'access_token': 'tok', 'token_type': 'bearer'}));
     await expectLater(
       api.login(provider: 'kakao', code: 'c', redirectUri: 'r'),
       throwsA(isA<DioException>()),

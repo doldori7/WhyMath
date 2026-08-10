@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-24-review-status-backfill-ci-wiring
+title: "코퍼스 후처리 백필 CLI 2종이 CI 어디에도 안 걸림 — review_status·persona_fit backfill (OPS-22 감사기 실측 발견)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance: []
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py
+  - src/backend/whymath_backend/harness/problem_corpus_persona_fit_backfill.py
+session: null
+notes: "PB-03(done)이 만든 harness.problem_corpus_review_status_backfill과 S3-10/PB-01(done)이 만든 harness.problem_corpus_persona_fit_backfill 둘 다 직접 실행·프로덕션 import·CI 배선 어디에도 도달하지 않음 — OPS-22 declared_unwired_audit 실측(2026-08-09)으로 신규 발견. 둘 다 결정론(LLM 0)·코퍼스 JSONL 제자리 갱신이라 같은 부류. 배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요."
+updated: 2026-08-09

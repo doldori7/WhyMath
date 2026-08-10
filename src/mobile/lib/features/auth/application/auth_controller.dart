@@ -5,9 +5,11 @@
 // 뿐이다. provider 리다이렉트(code 획득·webview/딥링크)는 *호출자*(로그인 화면·c2)가 담당하고
 // 여기엔 code만 들어온다. `ChatController`(@riverpod) 패턴을 따른다.
 // riverpod 3: riverpod_annotation이 수동 Provider를 재수출하지 않는다 — 명시 import.
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/api_client.dart';
 import '../../../core/env.dart';
 import '../../../core/token_store.dart';
 import '../data/auth_api.dart';
@@ -69,24 +71,43 @@ class AuthController extends _$AuthController {
     }
     state = state.copyWith(isSubmitting: true, error: null);
     try {
-      final token = await ref.read(authApiProvider).login(
-            provider: provider,
-            code: code,
-            redirectUri: redirectUri,
-          );
-      await ref.read(tokenStoreProvider).saveAccessToken(token);
+      final tokens = await ref
+          .read(authApiProvider)
+          .login(provider: provider, code: code, redirectUri: redirectUri);
+      await ref.read(tokenStoreProvider).saveAccessToken(tokens.accessToken);
+      // MOB-12: 리프레시 토큰도 저장해야 액세스 만료 시 인터셉터가 무중단 갱신할 수 있다.
+      await ref.read(refreshTokenStoreProvider).saveRefreshToken(tokens.refreshToken);
       state = state.copyWith(isSubmitting: false, isAuthenticated: true);
     } catch (e) {
-      state = state.copyWith(
-        isSubmitting: false,
-        error: '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.',
-      );
+      state = state.copyWith(isSubmitting: false, error: '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.');
     }
   }
 
-  /// 로그아웃 — 저장된 토큰을 지우고 미인증 상태로 되돌린다.
+  /// 로그아웃 — **서버 세션을 취소**하고 저장된 토큰을 지운 뒤 미인증 상태로 되돌린다.
+  ///
+  /// MOB-12: 예전에는 로컬 토큰만 지웠다. 그러면 서버의 리프레시 세션은 살아 있어서, 그 토큰을
+  /// 손에 넣은 쪽은 계속 액세스 토큰을 재발급받을 수 있었다(로그아웃이 기기 안에서만 일어남).
+  /// 이제 `POST /v1/auth/logout`으로 서버 세션을 먼저 취소한다.
+  ///
+  /// 서버 호출이 실패해도(오프라인 등) **로컬 정리는 반드시 수행한다** — 학생이 로그아웃을
+  /// 눌렀는데 로그인 상태로 남는 것이 더 나쁘다. 실패를 조용히 삼키지 않도록 예외 타입을 로그에
+  /// 남긴다(CLAUDE.md 침묵 실패 금지).
   Future<void> logout() async {
+    final refreshStore = ref.read(refreshTokenStoreProvider);
+    try {
+      final refreshToken = await refreshStore.readRefreshToken();
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ref.read(tokenRefreshApiProvider).logout(refreshToken);
+      }
+    } on Object catch (e) {
+      debugPrint('로그아웃 서버 세션 취소 실패(${e.runtimeType}) — 로컬 정리는 계속한다.');
+    }
     await ref.read(tokenStoreProvider).clear();
+    try {
+      await refreshStore.clearRefreshToken();
+    } on Object catch (e) {
+      debugPrint('리프레시 토큰 삭제 실패(${e.runtimeType}).');
+    }
     state = state.copyWith(isAuthenticated: false);
   }
 }
