@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
+
+- **경로 확정까지 실패 2단**: ①`git push --delete` — 프로브 재실측 403(HARN-16 유효) ②MCP `actions_run_trigger` dispatch — **403 "Resource not accessible by integration"**(세션 MCP 토큰에 workflow 실행 권한 없음·신규 실측). → ③`.github/branch-cleanup-request.txt`를 PR로 main에 머지하면 push 이벤트가 `branch-cleanup.yml`을 발동해 **Actions 러너가 저장소 토큰(contents: write)으로 삭제**. 매 배치가 PR 감사 기록으로 남는다(#746이 첫 사례).
+- **가드**: 수동 dispatch(Kiki UI용) + 요청 파일 2경로 · `main`·허용 패턴(claude/*·tmp-*) 밖 거부 · 삭제 직전 SHA 런 로그 스냅샷 · 빈 목록 no-op · 실패 1건이라도 잡 red.
+- **제외 유지**: `openrouter-setup-guide-e98dw4`(S3-28 미회수)와 "미해결" 7건은 건드리지 않았다.
+- **후속 배치 사용법**: 요청 파일에 브랜치를 1줄 1개 적어 PR 머지(또는 Kiki가 Actions 탭 dispatch). 지금은 주석만 남긴 no-op 상태.
+
+### 2026-08-09 (정리·브랜치 삭제 위임): **"포팅됨" 분류 15건 + 프로브 1건의 삭제를 Kiki에 위임(HARN-16 — 세션 삭제 403 재실측 확인). 삭제 전 head SHA 전건 스냅샷(복구 경로 = GitHub API `contents?ref=<sha>` — 섀도 브랜치 회수로 실증된 경로)** (claude 준비, Kiki "브랜치 삭제" 지시)
+
+- **403 재실측**: 프로브(`tmp-delete-probe-ignore`) 생성 성공·삭제만 403·`ls-remote` 잔존 확인 — 2026-08-04 HARN-16 실측이 여전히 유효하다. GitHub MCP에도 브랜치 삭제 도구는 없다(`create_branch`만 존재).
+- **제외 2종**: ①브리핑 "미해결" 7건(Kiki 결정 대기 — `S4-09` 등) ②**`openrouter-setup-guide-e98dw4`** — 하네스는 "포팅됨"(#740 근거)으로 분류했으나 **S3-28 코퍼스 분기가 미회수**라 삭제 금지(하네스 분류가 브랜치 안의 *모든* 내용 회수를 보장하진 않는다는 실례 — HARN-17 나이 휴리스틱과 같은 한계).
+- **삭제 전 SHA 스냅샷(복구용)**: collab-03=cf6c3249 · 05-problem-bank-bbyp3d=50ac1077 · curriculum-b7qav0=fc198c23 · data-platform-8ceaf5=437ae13e · learning-path-gvku5q=a7428d1c · collaboration-ur7l4v=24345812 · visualization-zl2v1b=86cf28f2 · s3-02-tlthrr=e74d2e7b · s4-14-re24tk=ed040217 · s3-10-2xk548=fc7c9663 · ai-tutor-953m1e=2449a269 · assessment-jkwdzn=d1d0a8f6 · education-os-mr0fbq=974e933a · problem-bank-65tsm4=3ec96cbd · learning-analytics-9t71oh=f94651b4 · ai-tutor-iu9qk5=4620f747(=현 main head와 동일 커밋) · tmp-delete-probe-ignore=eb1db6d2. 삭제 후에도 이 SHA로 `commits/<sha>`·`contents?ref=<sha>` API 접근 가능.
+
 ### 2026-08-09 (회수·버킷 B 부분): **`S3-24` 항목 ①(객관식 세로 번호 목록)을 `S3-35`로 회수·완료. 잔여 8건은 컨텍스트 한계로 새 세션 인계(`S3-24` blocked + notes 인수인계). 모바일 검증 환경을 이 컨테이너에 처음 구축하며 함정 4종 실측** (claude 구현, Kiki "1" — 부분 PR 후 마무리 지시)
 ### 2026-08-09 (구현·MISC-04): **오개념 전용 관계셋(caused_by·variant_of) — 개념그래프와 물리적으로 격리된 신규 테이블**
 
