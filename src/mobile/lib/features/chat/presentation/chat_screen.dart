@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../shared/math/math_notation.dart';
 import '../../../shared/widgets/math_text.dart';
 import '../../../theme/spacing.dart';
 import '../../ocr/data/ocr_models.dart';
@@ -1123,51 +1124,117 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
     );
   }
 
-  /// 단계 한 행 — 번호 라벨 + 단일라인 필드(Enter=다음 단계) + 삭제 버튼.
+  /// 단계 한 행 — 번호 라벨 + 단일라인 필드(Enter=다음 단계) + 삭제 버튼, 그 아래 렌더 프리뷰.
   Widget _buildStepRow(int index) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs6),
-      child: Row(
+      // 편집 행(raw) 위에, 같은 내용을 교과서 표기로 조판한 읽기 전용 프리뷰를 세로로 얹는다(NS-01).
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 번호 라벨 — 필드가 채워져도 단계 구조가 계속 보인다(사고 구조의 시각화).
-          SizedBox(
-            width: 24,
-            child: Text(
-              '${index + 1}',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.primary,
+          Row(
+            children: [
+              // 번호 라벨 — 필드가 채워져도 단계 구조가 계속 보인다(사고 구조의 시각화).
+              SizedBox(
+                width: 24,
+                child: Text(
+                  '${index + 1}',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: TextField(
-              controller: _controllers[index],
-              focusNode: _focusNodes[index],
-              enabled: widget.enabled,
-              maxLines: 1,
-              // Enter=다음 단계(마지막이면 추가) — 줄바꿈이 아니라 단계 이동이 자연 흐름.
-              textInputAction: TextInputAction.next,
-              onSubmitted: (_) => _handleStepSubmitted(index),
-              decoration: InputDecoration(
-                // 번호는 왼쪽 라벨에 있으므로 힌트는 *입력 형태 예시*로 안내한다(MOB-05).
-                hintText: _stepHintExamples[index % _stepHintExamples.length],
-                border: const OutlineInputBorder(),
-                isDense: true,
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: TextField(
+                  controller: _controllers[index],
+                  focusNode: _focusNodes[index],
+                  enabled: widget.enabled,
+                  maxLines: 1,
+                  // Enter=다음 단계(마지막이면 추가) — 줄바꿈이 아니라 단계 이동이 자연 흐름.
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _handleStepSubmitted(index),
+                  decoration: InputDecoration(
+                    // 번호는 왼쪽 라벨에 있으므로 힌트는 *입력 형태 예시*로 안내한다(MOB-05).
+                    hintText:
+                        _stepHintExamples[index % _stepHintExamples.length],
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
               ),
-            ),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                tooltip: '단계 삭제',
+                onPressed: (widget.enabled && _controllers.length > 1)
+                    ? () => _removeStep(index)
+                    : null,
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.remove_circle_outline, size: 20),
-            tooltip: '단계 삭제',
-            onPressed: (widget.enabled && _controllers.length > 1)
-                ? () => _removeStep(index)
-                : null,
-          ),
+          // 교과서 표기 렌더 프리뷰 — 왼쪽 번호(24)+간격(4) 폭만큼 들여써 필드 아래에 정렬한다.
+          _StepRenderPreview(controller: _controllers[index]),
         ],
       ),
+    );
+  }
+}
+
+/// 풀이 단계 필드의 교과서 표기 렌더 프리뷰 (NS-01) — 편집 [TextField]는 raw(소프트웨어 표기)를
+/// 그대로 유지하고, 그 아래에 같은 내용을 한국 수학교과서 표기로 조판한 *읽기 전용* 프리뷰를 얹는다.
+///
+/// 왜(실기기 실측 2026-07-23): "수식으로 입력"(MathLive)으로 넣은 수식이 단계 필드에 raw LaTeX
+/// (`f^{\prime\prime}(x)`·`\frac{dy}{dx}`)로 보였다. 필드는 편집 가능해야 하므로 내부에 raw 소스가
+/// 있는 게 정상이지만, 학생에겐 교과서 표기가 보여야 한다. 그래서 필드는 손대지 않고(편집·제출 계약
+/// 불변) 프리뷰만 덧붙인다.
+///
+/// - 컨트롤러([ValueListenable])를 구독해 *타이핑마다* 프리뷰만 다시 그린다(편집기 전체 리빌드 없이
+///   이 프리뷰 서브트리만 갱신). MathLive "완료"로 채워질 때도 컨트롤러 변경으로 자동 반영된다(MOB-07).
+/// - 비었거나 조판할 수식이 없으면([hasRenderableMath] false) 아무것도 그리지 않는다 — 빈 공간·순수
+///   프로즈 중복 표시를 억제한다.
+/// - 렌더는 [MathText](S3-21)에 위임 — 유니코드·캐럿·MathLive LaTeX(`\prime`·`\frac`)를 조판하고,
+///   파싱 불가 시 원문 그대로 폴백한다(fail-closed·표현≠의미). 수학 판정·검증은 백엔드 몫이다.
+class _StepRenderPreview extends StatelessWidget {
+  const _StepRenderPreview({required this.controller});
+
+  /// 이 프리뷰가 비추는 단계 필드의 컨트롤러(구독 대상·raw 원문 보유).
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final text = value.text;
+        // 비었거나 조판할 수식이 없으면 프리뷰를 만들지 않는다(빈 공간·중복 표시 최소화).
+        if (text.trim().isEmpty || !hasRenderableMath(text)) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          // 들여쓰기 24 = 번호 라벨 폭(위 SizedBox와 동일 값) — 간격 토큰이 아니라 정렬 기준 폭이다.
+          padding: const EdgeInsets.only(
+            left: 24 + AppSpacing.xs,
+            top: AppSpacing.hairline,
+          ),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm10,
+              vertical: AppSpacing.xs6,
+            ),
+            decoration: BoxDecoration(
+              // 편집 필드와 구분되는 은은한 배경 — "이렇게 보여요" 프리뷰임을 시각화(정오 강조 없음).
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            // 원문(raw) 그대로 넘긴다 — MathText가 교과서 표기로 조판하고 실패 시 원문 폴백한다.
+            child: MathText(text, style: theme.textTheme.bodyMedium),
+          ),
+        );
+      },
     );
   }
 }

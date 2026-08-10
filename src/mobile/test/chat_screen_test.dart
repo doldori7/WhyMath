@@ -677,4 +677,93 @@ void main() {
     await tester.pump();
     expect(find.byType(OutlinedButton), findsNWidgets(4));
   });
+
+  // ── NS-01 풀이 단계 편집기 교과서 표기 렌더 프리뷰 ─────────────────────────────
+  // "수식으로 입력"(MathLive)으로 넣은 수식이 단계 필드에 raw LaTeX(f^{\prime\prime}(x))로
+  // 보이던 문제(실기기 2026-07-23). 편집 TextField는 raw를 유지하되, 그 아래에 같은 내용을
+  // 교과서 표기로 조판한 read-only 프리뷰(MathText → Math)를 얹는다. 편집·제출 계약은 불변.
+  // 변별력: _wrap은 활성 문제가 없어 배너가 없으므로 Math 위젯은 *프리뷰에서만* 나온다 —
+  // 빈/프로즈 단계에서 findsNothing, 수식 단계에서 findsWidgets로 대비가 성립한다.
+  testWidgets('NS-01: 단계 필드에 LaTeX 입력 시 교과서 표기 렌더 프리뷰(Math)가 노출된다',
+      (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    // 초기 빈 2필드 → 프리뷰 없음(빈 공간 최소화).
+    expect(find.byType(Math), findsNothing);
+
+    // MathLive가 낼 법한 raw LaTeX(이계도함수)를 단계 필드에 넣는다.
+    await tester.enterText(find.byType(TextField).at(0), r'f^{\prime\prime}(x)');
+    await tester.pump();
+
+    // 교과서 표기로 조판된 프리뷰(Math)가 생긴다 — raw만 노출되지 않는다(크래시 0).
+    expect(find.byType(Math), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    // 편집 필드는 raw 원문을 그대로 보유한다(편집 가능성 불변 — 필드 값 무변경).
+    final field = tester.widget<TextField>(find.byType(TextField).at(0));
+    expect(field.controller?.text, r'f^{\prime\prime}(x)');
+  });
+
+  testWidgets('NS-01: 단계 필드에 유니코드 수식(x³) 입력 시 렌더 프리뷰가 노출된다',
+      (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    expect(find.byType(Math), findsNothing);
+    // 유니코드 상첨자(x³)는 캐럿 LaTeX로 정규화돼 조판된다(S3-23).
+    await tester.enterText(find.byType(TextField).at(0), 'x³-3x');
+    await tester.pump();
+    expect(find.byType(Math), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('NS-01: 빈 필드·순수 프로즈 단계엔 렌더 프리뷰가 없다(빈 공간 최소화)',
+      (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    // 초기 빈 2필드 → 프리뷰 없음.
+    expect(find.byType(Math), findsNothing);
+
+    // 수식 신호가 없는 순수 한국어 단계 → 프리뷰를 만들지 않는다(중복 표시 억제).
+    await tester.enterText(find.byType(TextField).at(0), '식을 표준형으로 정리한다');
+    await tester.pump();
+    expect(find.byType(Math), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('NS-01: 프리뷰가 떠 있어도 제출은 raw 원문을 그대로 sendSolution으로 보낸다',
+      (tester) async {
+    final fake = _FakeCoachApi(response: _response());
+    await tester.pumpWidget(_wrap(fake));
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField).at(0), r'f^{\prime}(x)=2x');
+    await tester.enterText(find.byType(TextField).at(1), r'f^{\prime}(1)=2');
+    await tester.pump();
+    // 두 단계 모두 교과서 표기 프리뷰(Math)가 떠 있다.
+    expect(find.byType(Math), findsWidgets);
+
+    await tester.tap(find.text('2단계 제출'));
+    await tester.pumpAndSettle();
+
+    // 제출 계약 불변 — 프리뷰는 표시일 뿐, 전송 원문은 raw 그대로다(줄 분해 왕복 무손실).
+    expect(
+      fake.lastRequest?.studentInput,
+      r'f^{\prime}(x)=2x' '\n' r'f^{\prime}(1)=2',
+    );
+    expect(
+      fake.lastRequest?.solutionSteps,
+      <String>[r'f^{\prime}(x)=2x', r'f^{\prime}(1)=2'],
+    );
+
+    // 제출 후 편집기는 초기 상태(빈 2필드)로 돌아온다 — 필드가 비어 프리뷰도 사라진다
+    // (제출된 학생 버블 수식은 S3-21로 조판되어 대화에 남는 것이 정상이라 Math 총량은 검사하지 않는다).
+    expect(find.byType(TextField), findsNWidgets(2));
+  });
 }

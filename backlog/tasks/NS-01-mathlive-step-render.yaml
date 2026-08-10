@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -15,9 +15,10 @@ acceptance:
   - "[회수 — 원본 SHA는 GitHub API로 접근 가능(2026-08-10 전제 정정)] 코치 대화(chat) 안에서 학생의 풀이 단계별 수식 입력을 MathLive로 스텝별 렌더링하는 기능을 현재 main 기준으로 재설계한다. 착수 전 필수: 현재 chat_screen.dart·mathlive_input_screen.dart의 메시지 렌더링 구조를 먼저 읽고, '스텝'을 무엇으로 구분할지(턴 단위? 명시적 구분자?) 새로 정의"
   - flutter analyze 0 · flutter test green
   - "표현≠의미 경계 준수(CLAUDE.md) — 렌더는 클라 몫, 스텝의 정오 판정은 서버 응답으로만"
-artifacts: []
+artifacts:
+  - "풀이단계 렌더 프리뷰 회수 완료 — 원 커밋 224043f를 GitHub API full_patch로 받아 이식. '스텝' 구분 정의(acceptance①): 현행 _SolutionStepsEditor의 필드 단위(줄분해→sendSolution 계약 그대로) — 원본과 동일. 내용: ①math_notation.dart에 hasRenderableMath 공개 헬퍼(+9, 원본 그대로 — MathText 내부 판정과 같은 기준을 프리뷰 게이트가 재사용) ②chat_screen.dart _buildStepRow Row→Column + _StepRenderPreview 신설(ValueListenableBuilder로 해당 필드 컨트롤러만 구독 — 타이핑마다 그 프리뷰만 갱신, 빈/프로즈/무신호면 SizedBox.shrink, 수식이면 surfaceContainerHighest 중립 배경에 MathText 조판·정오 강조 0) ③chat_screen_test.dart NS-01 테스트 4건(LaTeX 프리뷰+raw 보존·유니코드 x³·빈/프로즈 무프리뷰·제출 raw 무손실+편집기 초기화). 편집·제출 계약 불변(TextField 값·sendSolution 경로 무접촉 — 프리뷰만 부가). 원본과 의도적 차이 3건(전부 런타임 값 동일): 간격을 현행 AppSpacing 토큰으로(MOB-10 관례, 합산값 원본과 동일·주석 병기), _buildStepRow 컨텍스트의 기존 토큰화 줄 보존, _StepRenderPreview 삽입 위치는 현재 파일 구조상 파일 끝(상대 위치 동일). 검증(독립 재실행): 핵심 구조(ValueListenableBuilder·hasRenderableMath 게이트·shrink·중립 배경) 원본 대조 일치, flutter analyze 0, flutter test 378→382 all passed(+4). 정직한 공백: 실기기 육안 확인 미실시(원 커밋도 동일 수준 — 위젯 테스트가 프리뷰 존재·raw 보존·제출 무손실까지 증명)."
 paths:
   - "src/mobile/lib/features/chat/**"
-session: claude/whymath-issues-review-k20m0w
+session: null
 notes: "[2026-08-10 claim 실수 정정] 3건을 동시 claim한 것은 하네스 '1세션=1태스크' 규칙 위반 — 세션이 감지해 무결성 위반으로 거부됐다. S3-41→NS-01→NS-02 순차 처리 계획 자체는 유효(진짜 파일 의존 체인)하나, 각 태스크는 개별적으로 start/done을 거쳐야 한다. 이 태스크는 S3-41 완료 후 재착수한다."
 updated: 2026-08-10

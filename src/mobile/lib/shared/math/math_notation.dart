@@ -290,3 +290,12 @@ List<MathSegment> segmentMathText(String text) {
   flushProse();
   return result;
 }
+
+/// [text]에 교과서 조판으로 렌더할 *수식 조각*이 하나라도 있는지 판정한다(순수).
+///
+/// [MathText] 위젯의 내부 판정(유니코드 정규화 → 세그먼트 → 수식 조각 존재)과 *같은 기준*이다 —
+/// 렌더 프리뷰를 *수식일 때만* 띄우는 호출부(풀이 단계 편집기·NS-01)가 재사용해, 빈 필드·순수
+/// 프로즈·신호 없는 단순 값(`x=2`·`0`·`ㄱ`)엔 프리뷰를 만들지 않게 한다(빈 공간·중복 표시 억제).
+/// 수학 의미·정오 판정은 없다(표현≠의미) — "조판할 수식 표기가 있는가"만 본다.
+bool hasRenderableMath(String text) =>
+    segmentMathText(normalizeUnicodeMath(text)).any((s) => s.isMath);
