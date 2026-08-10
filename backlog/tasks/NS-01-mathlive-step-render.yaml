@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -18,6 +18,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/features/chat/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "[2026-08-10 claim 실수 정정] 3건을 동시 claim한 것은 하네스 '1세션=1태스크' 규칙 위반 — 세션이 감지해 무결성 위반으로 거부됐다. S3-41→NS-01→NS-02 순차 처리 계획 자체는 유효(진짜 파일 의존 체인)하나, 각 태스크는 개별적으로 start/done을 거쳐야 한다. 이 태스크는 S3-41 완료 후 재착수한다."
 updated: 2026-08-10
