@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/prerequisite_coaching.py
   - src/backend/whymath_backend/l2/learner_state.py
-session: null
+session: claude/subject-problems-theory-check-7n9n72
 notes: "04e_misconception_remediation_design.md §1-2. PED-05의 active_misconceptions 슬롯 선착지가 자연스러운 신호원."
-updated: 2026-08-03
+updated: 2026-08-10
