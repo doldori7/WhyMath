@@ -15,7 +15,9 @@
 // 게임 레벨이 아니다.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router.dart';
 import '../../../theme/spacing.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../problems/data/problem_models.dart';
@@ -62,6 +64,16 @@ class _MeScreenState extends ConsumerState<MeScreen> {
               title: '설정',
               subtitle: '알림·표시·계정',
             ),
+            // 내 기기 관리(MOB-12) — 인증 세션에서만 노출한다(미인증이면 목록이 401이라
+            // 진입해도 볼 것이 없다). 톤은 "보안 경고"가 아니라 "관리"다(정서 안전).
+            if (isAuthenticated)
+              ListTile(
+                leading: const Icon(Icons.devices_outlined),
+                title: const Text('내 기기 관리'),
+                subtitle: const Text('로그인되어 있는 기기 확인·로그아웃'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.accountSecurityPath),
+              ),
             if (isAuthenticated) ...[
               const Divider(height: 24),
               Padding(

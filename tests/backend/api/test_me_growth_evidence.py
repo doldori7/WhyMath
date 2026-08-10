@@ -151,6 +151,41 @@ class TestAuthGate:
         assert resp.status_code == 401
 
 
+class TestStaticReachVisibility:
+    """리터럴 경로 스모크 — 정적 도달 가시성 (PED-15).
+
+    **왜 이 파일에 이 테스트가 더 붙었나(정직 표기)**: PED-15는 "`GET /v1/me/growth-evidence`를
+    부르는 테스트·모바일 클라이언트가 0건"이라는 전제로 등재됐는데, **테스트 쪽 전제는 실측상
+    사실이 아니었다** — 이 파일의 나머지 케이스가 이미 `TestClient`로 이 라우트를 때리고 있다.
+    OPS-22 `declared_unwired_audit`가 그것을 못 본 이유는 호출부가 `_ENDPOINT` *상수*를 쓰고
+    감사기의 도달 판정이 리터럴 문자열만 매칭하기 때문이다(대장의 `POST /v1/ocr/pages` 항목이
+    같은 정밀도 한계로 이미 by-design 처리돼 있다 — 동형 오탐).
+
+    유예(by-design)로 덮지 않고 리터럴 호출을 하나 두는 쪽을 택했다. 유예는 "의도적 미도달"을
+    선언하는 것인데 이 라우트는 미도달이 *아니므로*, 사실대로 도달로 잡히게 두는 편이 대장을
+    정직하게 유지한다. 나머지 케이스의 `_ENDPOINT` 사용은 그대로 둔다(파일 스타일 보존).
+
+    **잔여 — 감사기가 이 테스트로 덮어 버리는 진짜 공백**: 이 엔드포인트를 소비하는 **모바일
+    클라이언트는 여전히 0건**이다. 성장 증거 화면은 아직 없고, 그 배선은 이 태스크 범위 밖이다.
+    """
+
+    def test_endpoint_reachable_via_literal_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _fake_compute(*_args: Any, **_kwargs: Any) -> SurrogateMetrics:
+            return _surrogate_metrics()
+
+        monkeypatch.setattr("whymath_backend.api.me.compute_wh1_surrogate_metrics", _fake_compute)
+        client = _client_with_auth()
+        resp = client.get("/v1/me/growth-evidence")
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        # 본인 집계만 — 코호트·타 학생 축은 이 표면에 존재하지 않는다.
+        assert body["user_scoped"] is True
+        # 비교·서열 파생 필드 0종(계약 모듈의 의도적 부재를 서빙 표면에서도 유지).
+        forbidden = {"percentile", "rank", "peer_average", "class_rank", "cohort_average"}
+        assert forbidden.isdisjoint(body.keys())
+
+
 class TestHappyPathStructuralFields:
     def test_200_and_exact_top_level_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _fake_compute(*_args: Any, **_kwargs: Any) -> SurrogateMetrics:
