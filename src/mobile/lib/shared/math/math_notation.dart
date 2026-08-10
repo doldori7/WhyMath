@@ -63,16 +63,72 @@ final RegExp _caretDigitsRe = RegExp(r'\^(\d+)');
 /// `_12` → `_{12}` — 괄호 없는 아래첨자 숫자런을 그룹으로(캐럿과 대칭).
 final RegExp _subDigitsRe = RegExp(r'_(\d+)');
 
+// ── flutter_math_fork(KaTeX) 미지원 매크로 → 지원 등가물 정규화 ────────────────
+// 실측(S3-23 프로브·flutter_math_fork 0.7.4): 아래 매크로는 파서가 예외를 던져 raw 폴백된다.
+// MathLive가 이 형태를 내보내므로(번들 v0.110.0 직렬화 실측) 입력 팔레트 산출이 깨진다.
+// 방어: *표기 등가*(수학 의미 불변)인 지원 매크로로 되돌린다 — 표현≠의미, 검증은 백엔드.
+
+/// `\doubleprime`(2계·핵심 누락) → `{\prime\prime}`. MathLive는 이계도함수(■″ 버튼)를
+/// `f^\doubleprime`로 직렬화하는데(번들 실측: `\u2033`→`^\\doubleprime`), flutter_math_fork에
+/// `\doubleprime`가 없어 raw로 새는 게 이계도함수 표기가 교과서 아니던 원인이다(Kiki #2).
+/// 중괄호로 감싸는 이유: 무괄호 `^\prime\prime`은 캐럿이 첫 `\prime`만 잡아 둘째가 baseline로
+/// 떨어진다 — `{\prime\prime}`로 그룹화하면 `f^\doubleprime`→`f^{\prime\prime}`로 붙는다.
+/// 경계 가드 `(?![a-zA-Z])`로 더 긴 명령(가상)에 부분매치되지 않게 한다.
+final RegExp _doublePrimeRe = RegExp(r'\\(?:doubleprime|dprime|backdoubleprime)(?![a-zA-Z])');
+
+/// `\trprime`(3계·삼중 프라임 ‴) → `{\prime\prime\prime}` — 고차도함수 대칭 처리.
+final RegExp _triplePrimeRe = RegExp(r'\\(?:trprime|backtrprime)(?![a-zA-Z])');
+
+/// `\differentialD`/`\differentialE`/`\capitalDifferentialD`/`\exponentialE`(MathLive d·e 버튼)
+/// → `\mathrm{d}`/`\mathrm{e}`/`\mathrm{D}` — MathLive 자체 내부 매핑과 동일한 교과서 정립체.
+final RegExp _differentialDRe = RegExp(r'\\differentialD(?![a-zA-Z])');
+final RegExp _differentialERe = RegExp(r'\\(?:differentialE|exponentialE)(?![a-zA-Z])');
+final RegExp _capitalDifferentialDRe = RegExp(r'\\capitalDifferentialD(?![a-zA-Z])');
+
+/// `\mleft(`/`\mright)`(MathLive 자동 크기 괄호) → `\left(`/`\right)` — KaTeX 표준 등가.
+final RegExp _mleftRe = RegExp(r'\\mleft(?![a-zA-Z])');
+final RegExp _mrightRe = RegExp(r'\\mright(?![a-zA-Z])');
+
+/// `\abs{X}` → `\left|X\right|`, `\norm{X}` → `\left\|X\right\|` — KaTeX엔 없는 매크로.
+/// 인자 중첩 중괄호는 다루지 않는다(`[^{}]*`) — 걸리면 fail-closed 원문 폴백(안전).
+final RegExp _absRe = RegExp(r'\\abs\s*\{([^{}]*)\}');
+final RegExp _normRe = RegExp(r'\\norm\s*\{([^{}]*)\}');
+
+/// `\placeholder{X}` → `X`(빈 필드면 빈 문자열) — MathLive 미완성 필드 자리표시자 제거.
+final RegExp _placeholderRe = RegExp(r'\\placeholder\s*\{([^{}]*)\}');
+
+/// 강세(accent) 매크로가 latex_to_plain의 `{}`→`()` 변환으로 인자 그룹이 깨진 것을 되돌린다.
+/// 예: 학생이 MathLive로 넣은 `\overline{AB}`는 전송 경로에서 `\overline(AB)`가 되는데, KaTeX는
+/// `\overline`가 여는 괄호 한 글자만 인자로 잡아 오버바가 `(`에만 걸린다 — `{}`로 되돌려야
+/// `AB` 전체에 걸린다. 벡터·화살표·바 등 1-인자 강세를 모두 대칭 처리한다(비-중첩 괄호만).
+final RegExp _accentParenRe = RegExp(
+  r'\\(overline|underline|overrightarrow|overleftarrow|vec|bar|hat|widehat|widetilde|tilde|dot|ddot|check|breve|acute|grave)\(([^()]*)\)',
+);
+
 /// 평문/캐럿 수식 문자열을 KaTeX가 받는 LaTeX로 정규화한다(순수·표기 매핑만).
 ///
 /// 되돌리는 것: 분수 `((a)/(b))`→`\frac{a}{b}`, 근호 `sqrt((x))`→`\sqrt{x}`, 캐럿/아래첨자
-/// 그룹 `^(...)`·`_(...)`→`^{...}`·`_{...}`, 캐럿/아래첨자 숫자런 `x^2`→`x^{2}`, 곱셈 `*`→`\cdot`.
-/// 이미 유효한 LaTeX(`f^{\prime}`·`\lbrack`·`\frac{..}{..}`)는 건드리지 않는다. 수학 판정은 없다.
+/// 그룹 `^(...)`·`_(...)`→`^{...}`·`_{...}`, 캐럿/아래첨자 숫자런 `x^2`→`x^{2}`, 곱셈 `*`→`\cdot`,
+/// 그리고 flutter_math_fork 미지원 매크로(`\doubleprime`·`\differentialD`·`\mleft`·`\abs`·
+/// `\placeholder`·괄호형 강세)를 지원 등가물로(S3-23 감사). 이미 유효한 LaTeX(`f^{\prime}`·
+/// `\lbrack`·`\frac{..}{..}`·`\overline{AB}`)는 건드리지 않는다. 수학 판정은 없다(표현≠의미).
 ///
 /// 실패 안전: 이 함수는 순수 문자열 치환이라 예외를 던지지 않는다. 여기서 만든 LaTeX가
 /// 렌더러에서 파싱 불가하면 호출부(위젯)가 원문으로 폴백한다(fail-closed).
 String plainMathToLatex(String input) {
   var s = input;
+  // 0) 미지원 매크로 정규화(다른 치환보다 먼저 — 산출 `{...}`가 이후 단계에 안 걸리게).
+  s = s.replaceAll(_mleftRe, r'\left');
+  s = s.replaceAll(_mrightRe, r'\right');
+  s = s.replaceAll(_doublePrimeRe, r'{\prime\prime}');
+  s = s.replaceAll(_triplePrimeRe, r'{\prime\prime\prime}');
+  s = s.replaceAll(_differentialDRe, r'\mathrm{d}');
+  s = s.replaceAll(_differentialERe, r'\mathrm{e}');
+  s = s.replaceAll(_capitalDifferentialDRe, r'\mathrm{D}');
+  s = s.replaceAllMapped(_absRe, (m) => '\\left|${m[1]}\\right|');
+  s = s.replaceAllMapped(_normRe, (m) => '\\left\\|${m[1]}\\right\\|');
+  s = s.replaceAllMapped(_placeholderRe, (m) => m[1] ?? '');
+  s = s.replaceAllMapped(_accentParenRe, (m) => '\\${m[1]}{${m[2]}}');
   // 1) 분수·근호 환원(괄호 그룹을 소비하므로 캐럿 변환보다 먼저).
   s = s.replaceAllMapped(_fracRe, (m) => '\\frac{${m[1]}}{${m[2]}}');
   s = s.replaceAllMapped(_sqrtDoubleRe, (m) => '\\sqrt{${m[1]}}');
@@ -85,6 +141,58 @@ String plainMathToLatex(String input) {
   s = s.replaceAllMapped(_subDigitsRe, (m) => '_{${m[1]}}');
   // 4) 곱셈 별표 → \cdot(양옆 공백으로 토큰 접합 방지·`3*x`→`3 \cdot x`).
   s = s.replaceAll('*', r' \cdot ');
+  return s;
+}
+
+// ── 유니코드 수학 조판 → 캐럿 LaTeX 사전 정규화 ──────────────────────────────
+// 코퍼스·코치 발화는 유니코드 상첨자(x³·x²)·프라임(f′·f″·f‴)을 그대로 쓴다(오개념 카탈로그
+// 실측: `f′(0)`·`x³`). 이 문자들은 비-ASCII라 segmentMathText가 프로즈로 분류해 KaTeX에 닿지
+// 못하고 *날 글리프*로 보인다 — 특히 이계도함수 `f″`(‷ U+2033)는 교과서 위첨자 조판이 아니라
+// 겹따옴표 모양으로 새는 게 Kiki #2의 코퍼스 측 원인이다. 세그먼트 *전에* 이들을 캐럿 LaTeX로
+// 되돌려(`x³`→`x^{3}`·`f″`→`f^{\prime\prime}`) `^` 신호로 수식 라우팅을 성립시킨다(표현≠의미).
+
+/// 유니코드 상첨자 글리프 → 기저 문자(런으로 모아 `^{...}`로 감싼다).
+const Map<String, String> _superscriptMap = <String, String>{
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+  '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+  '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')',
+  'ⁿ': 'n', 'ⁱ': 'i',
+};
+
+/// 유니코드 프라임 글리프 → `\prime` 개수(런으로 모아 `^{\prime...}`로 감싼다).
+const Map<String, int> _primeMap = <String, int>{
+  '′': 1, // ′ 프라임(1계)
+  '″': 2, // ″ 더블프라임(2계·핵심)
+  '‴': 3, // ‴ 트리플프라임(3계)
+};
+
+/// 상첨자 글리프 1개 이상의 런.
+final RegExp _superscriptRunRe =
+    RegExp('[⁰ⁱ¹²³⁴-ⁿ]+');
+
+/// 프라임 글리프 1개 이상의 런.
+final RegExp _primeRunRe = RegExp('[′″‴]+');
+
+/// 유니코드 수학 조판(상첨자·프라임)을 캐럿 LaTeX로 되돌린다(순수·세그먼트 전에 적용).
+///
+/// 예: `x³`→`x^{3}`, `x⁻¹`→`x^{-1}`, `f′`→`f^{\prime}`, `f″`→`f^{\prime\prime}`.
+/// 프라임/상첨자만 다룬다 — 가운뎃점(·)·그리스 등 프로즈에서도 쓰이는 문자는 라우팅을
+/// 흔들 수 있어 손대지 않는다(과잉 정규화 금지·한글 프로즈 무회귀). 실패 안전: 순수 치환.
+String normalizeUnicodeMath(String input) {
+  var s = input.replaceAllMapped(_superscriptRunRe, (m) {
+    final buf = StringBuffer();
+    for (final ch in m[0]!.split('')) {
+      buf.write(_superscriptMap[ch] ?? '');
+    }
+    return '^{${buf.toString()}}';
+  });
+  s = s.replaceAllMapped(_primeRunRe, (m) {
+    var count = 0;
+    for (final ch in m[0]!.split('')) {
+      count += _primeMap[ch] ?? 0;
+    }
+    return '^{${r'\prime' * count}}';
+  });
   return s;
 }
 

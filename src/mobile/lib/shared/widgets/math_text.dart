@@ -31,10 +31,13 @@ class MathText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final segments = segmentMathText(text);
+    // 유니코드 조판(x³·f″)을 캐럿 LaTeX로 되돌려 세그먼트가 수식으로 라우팅하게 한다(S3-23).
+    final normalized = normalizeUnicodeMath(text);
+    final segments = segmentMathText(normalized);
     final mathCount = segments.where((s) => s.isMath).length;
 
     // 순수 프로즈 — 기존 렌더와 바이트 단위 동일(무회귀·find.text 호환).
+    // (수식이 하나도 없으면 정규화가 아무것도 안 바꾼 것이므로 원문 [text]와 동일하다.)
     if (mathCount == 0) {
       return Text(text, style: style, textAlign: textAlign);
     }
@@ -103,7 +106,7 @@ List<InlineSpan> mathInlineSpans(List<MathSegment> segments, TextStyle style) {
 ///
 /// 예: 선택지 "N. [값]"의 값 부분을 번호 접두사 TextSpan 뒤에 이어 붙일 때.
 List<InlineSpan> mathInlineSpansFor(String text, TextStyle style) =>
-    mathInlineSpans(segmentMathText(text), style);
+    mathInlineSpans(segmentMathText(normalizeUnicodeMath(text)), style);
 
 /// 수식 한 덩어리를 가로 스크롤 박스로 그린다 — 긴 풀이 수식이 버블·배너 폭을 넘어도
 /// 넘침(RenderFlex/클리핑) 없이 옆으로 스크롤해 전체를 볼 수 있게 한다(MOB-02 정합).
