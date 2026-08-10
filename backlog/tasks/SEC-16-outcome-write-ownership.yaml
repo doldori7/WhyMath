@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/api/study.py
   - src/backend/whymath_backend/l2/pedagogy_evidence.py
   - "tests/backend/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M2. 완화: 인증 필요·성적/숙달 갱신 아님(record_problem_attempt_mastery 별도)·session_id UUID4. 위험=데이터 무결성(가명 집계 오염). user_id 부재는 CLAUDE.md 우선순위 #2 가명화와 긴장 — 소유권 검증을 가명화 깨지 않게 설계."
-updated: 2026-08-08
+updated: 2026-08-10
