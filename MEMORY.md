@@ -337,6 +337,12 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-09 (정리·브랜치 삭제 위임): **"포팅됨" 분류 15건 + 프로브 1건의 삭제를 Kiki에 위임(HARN-16 — 세션 삭제 403 재실측 확인). 삭제 전 head SHA 전건 스냅샷(복구 경로 = GitHub API `contents?ref=<sha>` — 섀도 브랜치 회수로 실증된 경로)** (claude 준비, Kiki "브랜치 삭제" 지시)
+
+- **403 재실측**: 프로브(`tmp-delete-probe-ignore`) 생성 성공·삭제만 403·`ls-remote` 잔존 확인 — 2026-08-04 HARN-16 실측이 여전히 유효하다. GitHub MCP에도 브랜치 삭제 도구는 없다(`create_branch`만 존재).
+- **제외 2종**: ①브리핑 "미해결" 7건(Kiki 결정 대기 — `S4-09` 등) ②**`openrouter-setup-guide-e98dw4`** — 하네스는 "포팅됨"(#740 근거)으로 분류했으나 **S3-28 코퍼스 분기가 미회수**라 삭제 금지(하네스 분류가 브랜치 안의 *모든* 내용 회수를 보장하진 않는다는 실례 — HARN-17 나이 휴리스틱과 같은 한계).
+- **삭제 전 SHA 스냅샷(복구용)**: collab-03=cf6c3249 · 05-problem-bank-bbyp3d=50ac1077 · curriculum-b7qav0=fc198c23 · data-platform-8ceaf5=437ae13e · learning-path-gvku5q=a7428d1c · collaboration-ur7l4v=24345812 · visualization-zl2v1b=86cf28f2 · s3-02-tlthrr=e74d2e7b · s4-14-re24tk=ed040217 · s3-10-2xk548=fc7c9663 · ai-tutor-953m1e=2449a269 · assessment-jkwdzn=d1d0a8f6 · education-os-mr0fbq=974e933a · problem-bank-65tsm4=3ec96cbd · learning-analytics-9t71oh=f94651b4 · ai-tutor-iu9qk5=4620f747(=현 main head와 동일 커밋) · tmp-delete-probe-ignore=eb1db6d2. 삭제 후에도 이 SHA로 `commits/<sha>`·`contents?ref=<sha>` API 접근 가능.
+
 ### 2026-08-09 (회수·버킷 B 부분): **`S3-24` 항목 ①(객관식 세로 번호 목록)을 `S3-35`로 회수·완료. 잔여 8건은 컨텍스트 한계로 새 세션 인계(`S3-24` blocked + notes 인수인계). 모바일 검증 환경을 이 컨테이너에 처음 구축하며 함정 4종 실측** (claude 구현, Kiki "1" — 부분 PR 후 마무리 지시)
 
 - **전제 부재 발견**: 회수 패치(S3-17)는 S3-12(가로 칩)의 리팩터 diff였는데 **main에는 S3-12 자체가 없었다**(main의 S3-12는 문제은행 태스크 — 번호만 같음). diff 재적용 대신 섀도 완료 시점(5481086) 파일을 GitHub API로 받아 main 구조 위에 수동 이식(상수·헬퍼 2종·핸들러·높이 계산·호출부·위젯 143줄 + 테스트 7건).
