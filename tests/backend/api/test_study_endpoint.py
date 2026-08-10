@@ -1,0 +1,313 @@
+"""학습 공급 엔드포인트 HTTP 관통 — `POST /v1/me/objectives/{id}/study`·`/outcome` (MOB-13).
+
+`api/study.py` 모듈 docstring은 "이 라우터가 그 사슬을 학생 요청에 연결한다"고 현재형으로
+서술하지만, OPS-22 `declared_unwired_audit` 실측(2026-08-09) 결과 **그 요청을 실제로 보내는
+쪽이 어디에도 없었다** — 기존 `test_study_integration.py`는 `record_pedagogy_treatment`/
+`record_pedagogy_outcome`을 *함수로 직접* 호출할 뿐 라우터를 경유하지 않는다. 즉 라우팅·의존성
+주입(`ConsentedUser`·`SessionDep`·`get_cache`)·요청/응답 스키마·상태코드는 한 번도 실행된 적이
+없는 구간이었다.
+
+이 파일이 그 구간을 HTTP로 관통한다(hermetic — 실 PG·LLM·네트워크 0):
+
+  ① `/study` 201 — 라우팅·DI·`supply()` 호출 인자·처치 기록·응답 직렬화
+  ② `/outcome` 201 — `/study`가 준 `session_id`를 되돌려 보내 결과 행이 같은 축으로 묶이는지
+  ③ 목표 없음 404 · 개념 미연결 404 · 렌더 불가 404 — 정직한 에러 구분(500이 아니다)
+  ④ 무토큰 401 — 학생 스코프 보호
+
+**정직 표기**: 이것은 *도달 증명*이지 학생 앱 배선이 아니다. Flutter 학습 화면이 이 두 경로를
+부르는 것은 아직 없다(MOB-13 acceptance가 "학생 학습 화면 **또는** 최소 HTTP 관통 통합테스트"를
+둘 다 인정해 후자를 택했다). 실 PG 왕복 축은 `test_study_integration.py`가 계속 담당한다.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import AsyncIterator
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from whymath_backend.api import study as study_module
+from whymath_backend.api._auth import get_consented_user
+from whymath_backend.app import create_app
+from whymath_backend.db.models.pedagogy_dsl import LearningObjective
+from whymath_backend.db.session import get_session
+from whymath_backend.l3.render.adapter import RenderedUnit, RenderSegment
+from whymath_backend.l4.content_supply import SupplyResult
+from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
+from whymath_backend.schema.enums import PedagogyStrategy
+
+_OBJECTIVE_ID = "obj-mob13"
+_CONCEPT_CODE = "math.calculus.limit"
+
+_USER_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+
+# 경로는 호출부에 **리터럴로 인라인**한다(상수로 묶지 않는다). OPS-22 감사기의 도달 판정은
+# `.post("/v1/...")` 형태의 리터럴만 잡고 상수 경유 호출은 못 본다(대장에 명시된 알려진 정밀도
+# 한계 — `POST /v1/ocr/pages` 항목이 같은 이유로 by-design 처리돼 있다). 여기서 상수를 쓰면
+# 테스트가 실제로 라우터를 때리는데도 감사기에는 "미도달"로 남아, 이 태스크가 없애려는 바로 그
+# 신호를 다시 만든다. 중복 문자열 4곳의 비용보다 도달 가시성이 크다.
+
+
+class _User:
+    """`ConsentedUser`가 반환하는 최소 표면 — 라우터는 `user_id`만 읽는다."""
+
+    user_id = _USER_ID
+
+
+async def _user() -> _User:
+    return _User()
+
+
+class _FakeSession:
+    """`session.get`/`add`/`commit`만 쓰는 좁은 대역 — stmt는 무시한다(test_me.py 동형).
+
+    `_build_signals`가 부르는 `get_state()`는 이 세션으로 빈 행셋을 받아 "신규 학생"(숙달 신호
+    없음) 경로를 탄다 — 그 경로 자체가 라우터의 정상 분기라 대역으로 충분하다.
+    """
+
+    def __init__(self, get_map: dict[Any, Any] | None = None) -> None:
+        self._get_map = get_map or {}
+        self.added: list[Any] = []
+        self.commits = 0
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def execute(self, _stmt: Any) -> Any:
+        return _EmptyResult()
+
+    async def get(self, _model: Any, pk: Any) -> Any:
+        return self._get_map.get(pk)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+class _EmptyScalars:
+    def all(self) -> list[Any]:
+        return []
+
+    def first(self) -> None:
+        return None
+
+
+class _EmptyResult:
+    def scalars(self) -> _EmptyScalars:
+        return _EmptyScalars()
+
+    def all(self) -> list[Any]:
+        return []
+
+    def scalar(self) -> int:
+        return 0
+
+    def scalar_one_or_none(self) -> None:
+        return None
+
+    def first(self) -> None:
+        return None
+
+
+def _objective(concept_nodes: list[str] | None = None) -> LearningObjective:
+    """`k_type`(팩 축)·`concept_nodes`(원자 code)가 라우터가 읽는 두 축이다."""
+    return LearningObjective(
+        id=_OBJECTIVE_ID,
+        unit_id="unit-mob13",
+        unit_version=1,
+        statement="테스트 학습목표",
+        achievement_std="[9수02-01]",
+        k_type="CONCEPT",
+        concept_nodes=[_CONCEPT_CODE] if concept_nodes is None else concept_nodes,
+        slot_manifest={},
+        exit_evidence={},
+    )
+
+
+def _supply_result(rendered: bool = True) -> SupplyResult:
+    """`supply()`가 돌려주는 형태 — 렌더 성공(dsl_render) 또는 렌더 불가(rendered=None)."""
+    unit = (
+        RenderedUnit(
+            strategy=PedagogyStrategy.SOCRATIC,
+            dsl_code=_CONCEPT_CODE,
+            segments=(
+                RenderSegment(kind="question", content=r"$\lim_{x\to 0}$ 는 무엇을 묻고 있을까?"),
+            ),
+        )
+        if rendered
+        else None
+    )
+    return SupplyResult(
+        content_source="dsl_render",
+        strategy=PedagogyStrategy.SOCRATIC,
+        rendered=unit,
+        gate_reason_code=None,
+    )
+
+
+_DEFAULT = object()  # "미지정"과 "명시적 None(목표 없음)"을 구분하는 센티널.
+
+
+def _client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    objective: Any = _DEFAULT,
+    result: SupplyResult | None = None,
+) -> tuple[TestClient, _FakeSession, list[dict[str, Any]]]:
+    """라우터를 HTTP로 때리는 hermetic 클라이언트.
+
+    `supply()`만 대역으로 바꾼다 — 그 안쪽(선택·게이트·렌더)은 L4 자체 테스트가 검증하는 축이고,
+    여기서 증명할 것은 *라우터가 그것을 실제로 부르는가*다. 호출 인자를 캡처해 라우터가 개념
+    code·k_type을 올바로 넘기는지도 함께 본다(가짜 통과 방지).
+    """
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_supply(**kwargs: Any) -> SupplyResult:
+        calls.append(kwargs)
+        return result if result is not None else _supply_result()
+
+    monkeypatch.setattr(study_module, "supply", _fake_supply)
+
+    obj = _objective() if objective is _DEFAULT else objective
+    fake = _FakeSession(get_map={_OBJECTIVE_ID: obj} if obj is not None else {})
+
+    app = create_app()
+    app.dependency_overrides[get_consented_user] = _user
+
+    async def _sess() -> AsyncIterator[_FakeSession]:
+        yield fake
+
+    app.dependency_overrides[get_session] = _sess
+    return TestClient(app), fake, calls
+
+
+class TestStudyEndpointReach:
+    """`POST /{objective_id}/study` — 라우터 관통(도달 증명의 본체)."""
+
+    def test_study_201_returns_rendered_unit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """201 + 응답 스키마 — 전략·공급경로·세그먼트가 그대로 직렬화된다."""
+        client, fake, calls = _client(monkeypatch)
+        resp = client.post("/v1/me/objectives/obj-mob13/study", json={})
+
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["objective_id"] == _OBJECTIVE_ID
+        assert body["concept_code"] == _CONCEPT_CODE
+        assert body["strategy"] == PedagogyStrategy.SOCRATIC.value
+        assert body["content_source"] == "dsl_render"
+        assert body["gate_reason_code"] is None
+        assert [seg["kind"] for seg in body["segments"]] == ["question"]
+        # session_id는 결과 기록 시 되돌려 보내야 하는 축 — UUID로 파싱돼야 한다.
+        uuid.UUID(body["session_id"])
+        # 처치가 실제로 stage되고 commit됐는가(가짜 처치 금지).
+        assert fake.added, "처치 행이 stage되지 않았다"
+        assert fake.commits >= 1
+
+    def test_study_calls_supply_with_objective_axes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """라우터가 `supply()`에 개념 code·k_type·신호를 넘긴다 — 배선의 실체."""
+        client, _fake, calls = _client(monkeypatch)
+        assert client.post("/v1/me/objectives/obj-mob13/study", json={}).status_code == 201
+
+        assert len(calls) == 1
+        kwargs = calls[0]
+        assert kwargs["code"] == _CONCEPT_CODE
+        assert kwargs["k_type"] == "CONCEPT"
+        assert isinstance(kwargs["signals"], StudentSignals)
+
+    def test_study_404_when_objective_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """목표 없음 → 404(서버 결함이 아니라 데이터 상태)."""
+        client, _fake, _calls = _client(monkeypatch, objective=None)
+        assert client.post("/v1/me/objectives/obj-mob13/study", json={}).status_code == 404
+
+    def test_study_404_when_no_concept_linked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """목표에 개념 미연결 → 404."""
+        client, _fake, _calls = _client(monkeypatch, objective=_objective(concept_nodes=[]))
+        assert client.post("/v1/me/objectives/obj-mob13/study", json={}).status_code == 404
+
+    def test_study_404_when_render_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """렌더 불가(DSL 미적재) → 404이고 **처치를 기록하지 않는다**(가짜 처치 금지)."""
+        client, fake, _calls = _client(monkeypatch, result=_supply_result(rendered=False))
+        assert client.post("/v1/me/objectives/obj-mob13/study", json={}).status_code == 404
+        assert fake.added == [], "학생이 아무것도 못 봤는데 처치가 기록됐다"
+
+
+class TestOutcomeEndpointReach:
+    """`POST /{objective_id}/outcome` — 처치와 같은 session_id로 결과를 잇는다."""
+
+    def test_outcome_201_records(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """201 + `recorded=true` + 결과 행 stage."""
+        client, fake, _calls = _client(monkeypatch)
+        session_id = str(uuid.uuid4())
+        resp = client.post(
+            "/v1/me/objectives/obj-mob13/outcome",
+            json={"session_id": session_id, "correct": True, "rt_ms": 4200},
+        )
+
+        assert resp.status_code == 201, resp.text
+        assert resp.json() == {"recorded": True}
+        assert fake.added, "결과 행이 stage되지 않았다"
+        assert fake.commits >= 1
+
+    def test_study_then_outcome_share_session_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """관통 루프 — `/study`가 준 session_id를 `/outcome`이 그대로 받는다(집계 조인 축).
+
+        `session_id`가 어긋나면 결과 행은 남되 처치 미상으로 집계에서 제외된다(effectiveness
+        규약). 두 호출이 같은 축으로 묶이는지가 이 슬라이스의 실질이다.
+        """
+        client, fake, _calls = _client(monkeypatch)
+        study = client.post("/v1/me/objectives/obj-mob13/study", json={})
+        assert study.status_code == 201
+        session_id = study.json()["session_id"]
+
+        outcome = client.post(
+            "/v1/me/objectives/obj-mob13/outcome", json={"session_id": session_id, "correct": False}
+        )
+        assert outcome.status_code == 201
+        # 처치 1행 + 결과 1행이 같은 세션 축으로 stage됐다.
+        assert len(fake.added) == 2
+        assert {str(getattr(row, "session_id", "")) for row in fake.added} == {session_id}
+
+    def test_outcome_404_when_objective_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """목표 없음 → 404."""
+        client, _fake, _calls = _client(monkeypatch, objective=None)
+        resp = client.post(
+            "/v1/me/objectives/obj-mob13/outcome",
+            json={"session_id": str(uuid.uuid4()), "correct": True},
+        )
+        assert resp.status_code == 404
+
+    def test_outcome_422_rejects_student_freeform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """학생 원문 풀이 슬롯 부재(B1 구조적 차단) — extra 필드는 422로 거부된다."""
+        client, _fake, _calls = _client(monkeypatch)
+        resp = client.post(
+            "/v1/me/objectives/obj-mob13/outcome",
+            json={
+                "session_id": str(uuid.uuid4()),
+                "correct": True,
+                "student_work": "x=1 이라고 풀었어요",
+            },
+        )
+        assert resp.status_code == 422
+
+
+class TestStudyAuthScope:
+    """무토큰 401 — 학생 스코프 보호(의존성 override 없이 실 인증 경로)."""
+
+    def test_endpoints_require_auth(self) -> None:
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+
+        assert client.post("/v1/me/objectives/obj-mob13/study", json={}).status_code == 401
+        assert (
+            client.post(
+                "/v1/me/objectives/obj-mob13/outcome",
+                json={"session_id": str(uuid.uuid4()), "correct": True},
+            ).status_code
+            == 401
+        )

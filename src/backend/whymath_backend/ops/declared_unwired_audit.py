@@ -713,14 +713,11 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "GET /redoc": _FRAMEWORK,
         # OAuth 콜백 짝 — 앱은 provider 리다이렉트로 받으므로 직접 호출하지 않는다(SEC-08)
         "GET /v1/auth/{param}/state": _OAUTH_CALLBACK,
-        # 세션 가시성·전체 로그아웃 — SEC-10(2026-08-03 done)이 서버만 배선, 모바일 화면 미착수
-        "GET /v1/auth/sessions": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
-        "DELETE /v1/auth/sessions": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
-        "DELETE /v1/auth/sessions/{param}": (
-            "pending-task:MOB-12-auth-session-lifecycle-client-wiring"
-        ),
-        "POST /v1/auth/refresh": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
-        "POST /v1/auth/logout": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
+        # 세션 가시성·전체 로그아웃·토큰 수명주기(구 MOB-12 유예 5건) — 2026-08-10 유예 해제.
+        # MOB-12가 Flutter 계정 보안 화면(`features/auth/presentation/account_security_screen.dart`
+        # + `data/auth_sessions_api.dart`)과 401 자동 갱신 인터셉터(`core/auth_interceptor.dart`
+        # + `core/token_refresh_api.dart`)를 배선해 5개 라우트 전부 dart 호출로 reached 전환됐다.
+        # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
         # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
         # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
         "GET /v1/gating/gifted": _INTERNAL_TOOL,
@@ -749,17 +746,17 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:api/me.py list_my_skill_mastery — Phase 2b-2로 명시된 신규 축, 개념 축 "
             "/v1/me/mastery는 이미 클라·테스트가 호출한다(reached) — 스킬 축 화면만 후속"
         ),
-        # 성장 증거 노출 계약 유일 경로 — PED-08(done)이 서버만 배선, 클라 호출자 0건
-        "GET /v1/me/growth-evidence": (
-            "pending-task:PED-15-growth-evidence-endpoint-client-wiring"
-        ),
-        # 학습 공급 루프 — PED-03이 HTTP 라우터까지 배선했으나 호출자(모바일·관통테스트) 부재
-        "POST /v1/me/objectives/{param}/study": (
-            "pending-task:MOB-13-content-supply-loop-client-wiring"
-        ),
-        "POST /v1/me/objectives/{param}/outcome": (
-            "pending-task:MOB-13-content-supply-loop-client-wiring"
-        ),
+        # 성장 증거 노출 계약 유일 경로(구 PED-15 유예) — 2026-08-10 유예 해제.
+        # 정직 표기: PED-15의 전제("부르는 테스트 0건")는 **실측상 사실이 아니었다** —
+        # `test_me_growth_evidence.py`가 처음부터 TestClient로 이 라우트를 때리고 있었고,
+        # 감사기가 `_ENDPOINT` 상수 경유 호출을 리터럴 매칭으로 못 본 오탐이었다(아래
+        # `POST /v1/ocr/pages` 항목과 동형 정밀도 한계). 같은 파일에 리터럴 경로 스모크를
+        # 하나 더해 도달이 정적으로도 보이게 했다 — 미도달이 아니므로 by-design 유예로
+        # 덮지 않는다. **잔여**: 이 엔드포인트를 소비하는 모바일 클라이언트는 여전히 0건이다.
+        # 학습 공급 루프(구 MOB-13 유예 2건) — 2026-08-10 유예 해제.
+        # `tests/backend/api/test_study_endpoint.py`(신설)가 두 라우트를 HTTP로 관통한다.
+        # 정직 표기: 이것은 *도달 증명*이며 학생 학습 화면 배선은 아직 없다(acceptance가
+        # "학생 학습 화면 또는 최소 HTTP 관통 통합테스트"를 둘 다 인정 — 후자를 택했다).
         # OCR 다중 페이지 변형 — NLP-01(done) 이후 재확인(2026-08-09): 실제로는
         # tests/backend/api/test_ocr_endpoint.py가 이 경로를 호출한다(`_PAGES_PATH` 상수 경유
         # `.post(_PAGES_PATH, ...)`) — 감사기의 라우트 매칭이 리터럴 문자열만 잡고 상수 경유

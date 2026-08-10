@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: mobile
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -13,11 +13,14 @@ requires_gates: []
 acceptance:
   - "PED-03(2026-08-03 done)이 supply() 사슬(REND-01→PED-02→CACHE-01)을 POST /v1/me/objectives/{objective_id}/study·POST /v1/me/objectives/{objective_id}/outcome HTTP 엔드포인트로 연결했으나, Flutter 학생 앱과 백엔드 HTTP 통합테스트 어느 쪽도 이 두 엔드포인트를 실제로 호출하지 않는다(OPS-22 declared_unwired_audit 실측 — test_study_integration.py는 record_pedagogy_treatment/outcome 함수를 직접 호출할 뿐 라우터를 경유하지 않는다). 학생 학습 화면(또는 최소 HTTP 관통 통합테스트)에서 이 두 경로를 실제로 호출하도록 배선한다"
   - "완료 후 OPS-22 declared_unwired_audit 재실행 시 이 2개 라우트가 reached로 전환됨을 확인 — 이 태스크가 done되면 대장의 pending-task 항목도 제거(방치 시 expired-waiver가 잡는다)"
-artifacts: []
+artifacts:
+  - "efa35ed — tests/backend/api/test_study_endpoint.py 신설(10건)로 POST /v1/me/objectives/{id}/study·/outcome를 라우터 경유 관통(라우팅·DI·스키마·상태코드·처치/결과 session_id 연결). 기존 test_study_integration.py는 함수 직접 호출이라 라우터를 안 탔고 실 PG 의존이라 skip되므로, ARCH-13(skip을 통과로 보고 금지) 규약상 CI에서 실제로 도는 hermetic 파일을 따로 뒀다. acceptance가 '학생 학습 화면 또는 최소 HTTP 관통 통합테스트'를 둘 다 인정해 후자 선택. 감사기 재실행: 2개 라우트 reached 전환·대장 pending-task 제거·exit 0. 정직한 잔여: 도달 증명이지 클라 배선이 아니다 — 학습 공급 화면은 여전히 없다."
 paths:
   - "src/mobile/lib/features/**"
   - tests/backend/api/test_study_integration.py
   - src/backend/whymath_backend/api/study.py
+  - tests/backend/api/test_study_endpoint.py
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
 session: null
 notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — api/study.py 모듈 docstring이 '이 라우터가 그 사슬을 학생 요청에 연결한다'고 현재형으로 서술하나, 실제로 그 요청을 보내는 쪽(모바일 또는 관통 통합테스트)이 없다. VIZ-01·NLP-01·REC-01과 동형인 '완비된 소비 경로 + 미도달' 패턴의 축소 재발 — 심각도는 다르다(공급 자체는 정상 동작, 관측/호출 경로만 부재)."
-updated: 2026-08-07
+updated: 2026-08-10
