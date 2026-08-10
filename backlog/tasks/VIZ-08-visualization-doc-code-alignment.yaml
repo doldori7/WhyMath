@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-08-visualization-doc-code-alignment
+title: "시각화 문서·주석 정합 일괄(행동 무변경) — 05 §5.2 앵커 실체화·Desmos/GeoGebra 서술 정정·stale 주석 (§8.3)"
+track: math-completion
+stage: S4
+subject: math
+layer: docs
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 05_interaction.md의 선언적 시각화 섹션(:120-151)에 §5.2 번호를 실체화 — 저장소 전역 수십 곳(코드 docstring·테스트·CLAUDE.md:55·render_contract.json authority·MEMORY 로그)이 인용하는 앵커를 문서 쪽에 부여한다(인용 측 일괄 수정은 오답 — MEMORY 이력은 불변). 번호 부여가 기존 인용 문맥과 일치하는지 대조 후 반영"
+  - "② 05_interaction.md:124-128,142,148 + CLAUDE.md:80 스택 표의 Desmos·GeoGebra 임베드 서술을 §2-⑤ 의도적 미채택 판정·실코드(자체 계산기 SPA·구현체명 금칙어 게이트)로 정정. CLAUDE.md 스택 표 변경은 MEMORY 결정 로그 의무 동반. Manim은 dormant(S4-03 복귀 조건) 표기 유지"
+  - "③ 00_overview.md:13 L5 블록 Mathpix→PaddleOCR+Qwen3-VL 정정(2026-05-28 결정 반영)"
+  - "④ Flutter stale 주석 정정: scene_renderer.dart:9-10(실 WebView 배선 완료 사실 반영)·:103-105(webViewTypes와의 직접 모순 해소)·scene_models.dart:24-25·pubspec.yaml:43(웹뷰 실소비 = 자체 계산기+MathLive). 전부 주석·문서만 — 코드 행동 변경 0·전방호환 서술 유지"
+artifacts: []
+paths:
+  - docs/architecture/05_interaction.md
+  - docs/architecture/00_overview.md
+  - CLAUDE.md
+  - src/mobile/lib/features/chat/presentation/scene_renderer.dart
+  - src/mobile/lib/features/chat/data/scene_models.dart
+  - src/mobile/pubspec.yaml
+session: null
+notes: "visualization_module_gap_review.md §8.3 — 1차 점검과 반대 방향 drift(코드가 문서·주석을 앞지름) 일괄. l4/visualization_policy.py:41-42 주석 정정만 VIZ-07 ③ 소관으로 제외. Dart 파일은 주석만 건드리므로 행동 무변경이나 mobile CI(analyze)는 통과 확인 필요 — 이 컨테이너에 flutter 부재 시 CI 판정 의존을 정직하게 명시(2026-08-07 선례)."
+updated: 2026-08-10
