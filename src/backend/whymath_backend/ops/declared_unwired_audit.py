@@ -255,6 +255,114 @@ _TEST_CLIENT_REQUEST_CALL = re.compile(
 )
 
 
+# ── 모듈 레벨 상수 경유 호출 (2026-08-10 OPS-25 정밀도 수정) ────────────────────────────
+# 테스트는 경로를 `_ENDPOINT = "/v1/me/growth-evidence"` 같은 모듈 상수로 빼고
+# `client.get(_ENDPOINT)`로 부르는 관용구를 즐겨 쓴다(실측 15파일 20상수). 리터럴 문자열만 보는
+# 위 정규식은 그 호출을 통째로 못 봐서 **실재하지 않는 미도달**을 만들어냈다 — `PED-15`는 그
+# 오탐 하나 때문에 등재된 유령 태스크였고(`test_me_growth_evidence.py`가 처음부터 그 라우트를
+# 때리고 있었다), `POST /v1/ocr/pages`는 같은 한계를 자인하는 by-design 유예로 덮여 있었다.
+#
+# 추적 범위는 축 3의 `_insert_helpers`(모듈 내 헬퍼 1홉)와 **같은 절제**를 따른다: 같은 모듈
+# 최상위에서 정의된 상수 1홉만 푼다. import된 상수·클래스 속성·조건부 재대입은 풀지 않는다 —
+# 넓히면 이 감사기가 사실상 인터프리터가 되고, 못 잡는 경우는 미도달로 남아 대장 등재를
+# 강제받으므로(안전 방향) 정직한 잔여로 두는 편이 낫다.
+_HTTP_METHOD_ATTRS = frozenset({"get", "post", "put", "patch", "delete"})
+_HTTP_METHOD_LITERALS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+# 위 `_TEST_CLIENT_CALL` 정규식과 동일한 접두 제한 — `payload.get(_SOME_KEY)` 같은 무관 호출이
+# 라우트 도달로 새지 않게 하는 유일한 방어선이다(상수 경유는 인자 모양만으론 구분이 안 된다).
+_PATH_PREFIXES = ("/v1/", "/health", "/status")
+
+
+def _module_level_assignments(module: ast.Module) -> Iterator[tuple[str, ast.expr]]:
+    """모듈 **최상위**(들여쓰기 0) `NAME = <값>` / `NAME: T = <값>` 대입만 낸다.
+
+    함수·클래스 몸통 안의 지역 대입은 내지 않는다 — "모듈 레벨 상수 1홉"이라는 범위 제한이
+    이 정밀도 개선의 안전 장치이므로 수집 단계에서부터 지킨다.
+    """
+    for node in module.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    yield target.id, node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.value is not None
+        ):
+            yield node.target.id, node.value
+
+
+def _module_path_constants(module: ast.Module) -> dict[str, str]:
+    """모듈 최상위 경로 문자열 상수 `이름 → 경로`(`/v1/`·`/health`·`/status` 접두만)."""
+    found: dict[str, str] = {}
+    for name, value in _module_level_assignments(module):
+        if (
+            isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and value.value.startswith(_PATH_PREFIXES)
+        ):
+            found[name] = value.value
+    return found
+
+
+def _resolve_path_expr(node: ast.expr, constants: dict[str, str]) -> str | None:
+    """호출 인자 표현식 → 정규화 경로. 상수 이름과 *상수로 시작하는* f-string만 푼다.
+
+    f-string은 `f"{_ENDPOINT}?limit=1"`(쿼리 덧붙임)·`f"{_BASE}/{jti}/end"`(하위 경로) 둘 다
+    흔해서 접두 매칭까지 본다. 값을 모르는 보간은 `{param}`으로 접어 서버 템플릿 매칭에
+    맡긴다(`_template_pattern`). 그 외 표현식(`+` 연결·`.format()`·`str()` 등)은 풀지 않고
+    `None`을 돌려 미도달로 남긴다 — 못 잡는 것을 도달로 뭉개는 쪽이 더 나쁜 오류다.
+    """
+    if isinstance(node, ast.Name):
+        raw = constants.get(node.id)
+        return None if raw is None else normalize_client_path(_strip_query(raw))
+    if not isinstance(node, ast.JoinedStr):
+        return None
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+        elif isinstance(value, ast.FormattedValue):
+            inner = value.value
+            if isinstance(inner, ast.Name) and inner.id in constants:
+                parts.append(constants[inner.id])
+            else:
+                parts.append(_PARAM_TOKEN)
+        else:  # pragma: no cover - JoinedStr는 Constant|FormattedValue만 담는다
+            return None
+    joined = "".join(parts)
+    if not joined.startswith(_PATH_PREFIXES):
+        return None
+    return normalize_client_path(_strip_query(joined))
+
+
+def _constant_indirect_calls(
+    module: ast.Module, constants: dict[str, str]
+) -> Iterator[tuple[str, str]]:
+    """`client.get(_ENDPOINT)`·`client.request("DELETE", _PATH)` 형태의 상수 경유 호출."""
+    if not constants:
+        return
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if not node.args:
+            continue
+        attr = node.func.attr
+        if attr in _HTTP_METHOD_ATTRS:
+            path = _resolve_path_expr(node.args[0], constants)
+            if path is not None:
+                yield attr.upper(), path
+        elif attr == "request" and len(node.args) >= 2:
+            method = node.args[0]
+            if not isinstance(method, ast.Constant) or not isinstance(method.value, str):
+                continue
+            if method.value.upper() not in _HTTP_METHOD_LITERALS:
+                continue
+            path = _resolve_path_expr(node.args[1], constants)
+            if path is not None:
+                yield method.value.upper(), path
+
+
 def dart_call_entries(mobile_lib: Path) -> frozenset[tuple[str, str]]:
     """Flutter가 실제로 호출하는 `(METHOD, 정규화 경로)` 집합."""
     found: set[tuple[str, str]] = set()
@@ -271,7 +379,12 @@ def dart_call_entries(mobile_lib: Path) -> frozenset[tuple[str, str]]:
 
 
 def test_call_entries(tests_backend_root: Path) -> frozenset[tuple[str, str]]:
-    """백엔드 테스트가 `TestClient`류로 실제로 호출하는 `(METHOD, 정규화 경로)` 집합."""
+    """백엔드 테스트가 `TestClient`류로 실제로 호출하는 `(METHOD, 정규화 경로)` 집합.
+
+    두 경로를 합친다 — ⑴ 리터럴 문자열 인자(정규식) ⑵ **모듈 레벨 경로 상수 1홉**(AST,
+    `_constant_indirect_calls`). ⑵가 없던 탓에 상수 관용구를 쓰는 파일의 호출이 통째로
+    사라져 실재하지 않는 미도달이 만들어졌다(OPS-25 — 위 상수 블록 주석 참조).
+    """
     found: set[tuple[str, str]] = set()
     if not tests_backend_root.is_dir():
         return frozenset(found)
@@ -285,6 +398,8 @@ def test_call_entries(tests_backend_root: Path) -> frozenset[tuple[str, str]]:
         for match in _TEST_CLIENT_REQUEST_CALL.finditer(text):
             path = _strip_query(match.group(2))
             found.add((match.group(1).upper(), normalize_client_path(path)))
+        module = ast.parse(text, filename=str(source))
+        found.update(_constant_indirect_calls(module, _module_path_constants(module)))
     return frozenset(found)
 
 
@@ -355,24 +470,75 @@ def produced_event_types(package_root: Path) -> frozenset[str]:
     return frozenset(produced)
 
 
+# 컨테이너 상수 생성자 — `frozenset({...})`·`set([...])`·`tuple((...))`·`list([...])`. 1겹만 푼다.
+_EVENT_CONTAINER_FUNCS = frozenset({"frozenset", "set", "tuple", "list"})
+
+
+def _event_type_elements(node: ast.expr, names: frozenset[str]) -> set[str]:
+    """컨테이너 리터럴(또는 그것을 1겹 감싼 생성자 호출)에 담긴 `EventType.X` 원소 이름."""
+    if isinstance(node, ast.Call):
+        func = node.func
+        called = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        if called in _EVENT_CONTAINER_FUNCS and len(node.args) == 1:
+            return _event_type_elements(node.args[0], names)
+        return set()
+    if not isinstance(node, ast.Set | ast.List | ast.Tuple):
+        return set()
+    members: set[str] = set()
+    for element in node.elts:
+        if _is_event_type_attr(element, names):
+            members.add(element.attr)
+    return members
+
+
+def _module_event_type_constants(
+    module: ast.Module, names: frozenset[str]
+) -> dict[str, frozenset[str]]:
+    """모듈 최상위 `NAME = frozenset({EventType.A, …})` 류 상수 `이름 → EventType 이름들`.
+
+    범위는 HTTP 축의 경로 상수와 동일하게 **모듈 최상위 1홉**으로 묶는다(`_insert_helpers` 선례).
+    `tuple(EventType)`처럼 원소가 리터럴이 아닌 동적 구성은 풀지 않는다 — 미도달로 남아 대장
+    등재를 강제받는 안전 방향이다.
+    """
+    found: dict[str, frozenset[str]] = {}
+    for name, value in _module_level_assignments(module):
+        members = _event_type_elements(value, names)
+        if members:
+            found[name] = frozenset(members)
+    return found
+
+
 def consumed_event_types(package_root: Path) -> frozenset[str]:
     """`AttemptEvent(ORM).event_type == EventType.X` 형태의 비교 필터로 실제 *읽히는* EventType.
 
     생산 좌석(`event_type=EventType.X` 키워드 인자·`build_event_data` 첫 인자)은 `ast.Compare`가
     아니므로 이 스캔에 잡히지 않는다 — 생산과 소비를 같은 AST 패턴으로 뭉개지 않기 위한 설계다.
     계약 정의 파일(`enums.py`·`event_data_contract.py`) 자신은 정의이지 소비가 아니라 제외한다.
+
+    상수 간접참조 (2026-08-10 OPS-25 정밀도 수정)
+    ---------------------------------------------
+    필터가 EventType을 **모듈 상수 집합**으로 묶어 쓰는 관용구가 실재한다:
+    `l2/learning_metrics_rollup.py`의 `_SOCRATIC_EVENT_TYPES = frozenset({EventType.막힘, …})`를
+    `if event.event_type not in _SOCRATIC_EVENT_TYPES`(파이썬 필터)로 쓴다. `in`/`not in`도
+    `ast.Compare`지만 피연산자가 `Name`이라 예전 구현은 못 봤고, 그래서 `EventType.막힘`이
+    **이미 소비 중인데도** 미도달로 보고돼 `S4-22` 유예에 3종 중 1종이 허위로 끼어 있었다.
+    이제 모듈 최상위 상수를 1홉 해석해 담긴 EventType들을 소비로 인정한다.
     """
     names = _event_type_names()
     consumed: set[str] = set()
     for source in _iter_python_sources(package_root):
         if source.name in _EVENT_CONTRACT_FILES:
             continue
-        for node in ast.walk(_parse_module(source)):
+        module = _parse_module(source)
+        constants = _module_event_type_constants(module, names)
+        for node in ast.walk(module):
             if not isinstance(node, ast.Compare):
                 continue
             for operand in (node.left, *node.comparators):
                 if _is_event_type_attr(operand, names):
                     consumed.add(operand.attr)
+                elif isinstance(operand, ast.Name):
+                    consumed.update(constants.get(operand.id, frozenset()))
     return frozenset(consumed)
 
 
@@ -674,9 +840,6 @@ _PRIVACY_RIGHT = (
     "by-design:법정 권리 이행 표면(PIPA 열람·삭제·감사) — 학생 앱 UI가 아니라 요청 처리 경로다"
 )
 _INTERNAL_TOOL = "by-design:내부 도구·하네스 소비 표면 — 학생 클라이언트 대상이 아니다"
-_OAUTH_CALLBACK = (
-    "by-design:OAuth 콜백/상태 표면 — 앱은 provider 리다이렉트로 받으므로 직접 호출하지 않는다"
-)
 
 _BATCH_GENERATOR = (
     "by-design:코퍼스 생성·가공 배치 — 운영자가 입력·비용·판단을 쥐고 손으로 돌리는 것이 "
@@ -711,8 +874,27 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "GET /docs/oauth2-redirect": _FRAMEWORK,
         "GET /openapi.json": _FRAMEWORK,
         "GET /redoc": _FRAMEWORK,
-        # OAuth 콜백 짝 — 앱은 provider 리다이렉트로 받으므로 직접 호출하지 않는다(SEC-08)
-        "GET /v1/auth/{param}/state": _OAUTH_CALLBACK,
+        # ⚠️ 2026-08-10 OPS-25 유예 일괄 해제 7건 — 아래 항목들이 여기서 사라진 이유
+        # ------------------------------------------------------------------------
+        #   GET  /v1/auth/{param}/state          (구 _OAUTH_CALLBACK)
+        #   GET  /v1/visualizations/spec         (구 슬라이스 95 이연)
+        #   POST /v1/visualizations/spec         (구 슬라이스 95 이연)
+        #   POST /v1/visualizations/weak-concept (구 슬라이스 95 이연)
+        #   POST /v1/me/assessments/assemble     (구 ASM-04 범위 밖)
+        #   POST /v1/ocr/pages                   (구 "감사기 정밀도 한계" 자인 유예)
+        #   POST /v1/speech/latex                (구 Phase 2+ 이연)
+        # 이 7건은 **처음부터 미도달이 아니었다**. 전부 백엔드 테스트가 모듈 상수(`_PATH`·
+        # `_ENDPOINT`·`_STATE_PATH` …)로 실제 호출하고 있었고, 감사기가 리터럴 문자열만 보는
+        # 한계로 못 봤을 뿐이다(OPS-25가 상수 1홉 해석을 넣어 해소 — `_constant_indirect_calls`).
+        # 도달했으므로 유예를 남기면 `stale-waiver`로 exit 1이다. "탐지되지 않으니 유예를 계속
+        # 둔다"가 아니라 "탐지기가 틀렸으니 탐지기를 고친다" — 축 3 유예 해제와 같은 대응이다.
+        #
+        # **정직한 잔여**(유예 문구가 실제로 말하던 것): 이 축의 `reached`는 "dart 클라 호출 ∪
+        # 백엔드 테스트 호출"이므로, 위 7건이 reached라는 사실은 *테스트가 관통한다*는 뜻이지
+        # *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히
+        # 0건**이고 그 배선은 각각 L5 프런트 착수·Phase 2+·시행/채점 폐루프 시점의 일이다.
+        # 이 축은 그 구분을 표현하지 못한다 — 클라 소비 공백을 보려면 dart 호출만 따로 세는
+        # 별도 축이 필요하고, 그것은 이 태스크 범위 밖이다(OPS-25 리포트에 잔여로 기록).
         # 세션 가시성·전체 로그아웃·토큰 수명주기(구 MOB-12 유예 5건) — 2026-08-10 유예 해제.
         # MOB-12가 Flutter 계정 보안 화면(`features/auth/presentation/account_security_screen.dart`
         # + `data/auth_sessions_api.dart`)과 401 자동 갱신 인터셉터(`core/auth_interceptor.dart`
@@ -724,22 +906,6 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "GET /v1/gating/metacognition": _INTERNAL_TOOL,
         "GET /v1/gating/suneung": _INTERNAL_TOOL,
         "GET /v1/gating/thinking": _INTERNAL_TOOL,
-        # L5 시각화 — api/visualization.py 모듈 docstring이 명시: "HTTP 엔드포인트 + provider/
-        # cache/trace의 FastAPI DI 배선은 후속(L5 프런트 착수 시)" — 슬라이스 95 설계상 의도적
-        # 미배선(VIZ-01이 배선한 것은 별도 라우트 /v1/scenes/weak-concept — 동명이 아니다).
-        "GET /v1/visualizations/spec": (
-            "by-design:api/visualization.py 슬라이스 95 — HTTP 엔드포인트의 클라 소비는 L5 "
-            "프런트 착수 시로 명시적으로 후속 이연(모듈 docstring 원문)"
-        ),
-        "POST /v1/visualizations/spec": (
-            "by-design:api/visualization.py 슬라이스 95 — HTTP 엔드포인트의 클라 소비는 L5 "
-            "프런트 착수 시로 명시적으로 후속 이연(모듈 docstring 원문)"
-        ),
-        "POST /v1/visualizations/weak-concept": (
-            "by-design:api/visualization.py 슬라이스 95 — HTTP 엔드포인트의 클라 소비는 L5 "
-            "프런트 착수 시로 명시적으로 후속 이연(모듈 docstring 원문). VIZ-01이 배선한 것은 "
-            "별도 라우트 POST /v1/scenes/weak-concept다(동명이 아님 — 혼동 주의)"
-        ),
         # 스킬 축 숙달 곡선 — api/me.py docstring이 "Phase 2b-2"로 명시(개념 축 /v1/me/mastery는
         # 이미 reached·스킬 축은 아직 화면 미착수)
         "GET /v1/me/skill-mastery": (
@@ -757,38 +923,28 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # `tests/backend/api/test_study_endpoint.py`(신설)가 두 라우트를 HTTP로 관통한다.
         # 정직 표기: 이것은 *도달 증명*이며 학생 학습 화면 배선은 아직 없다(acceptance가
         # "학생 학습 화면 또는 최소 HTTP 관통 통합테스트"를 둘 다 인정 — 후자를 택했다).
-        # OCR 다중 페이지 변형 — NLP-01(done) 이후 재확인(2026-08-09): 실제로는
-        # tests/backend/api/test_ocr_endpoint.py가 이 경로를 호출한다(`_PAGES_PATH` 상수 경유
-        # `.post(_PAGES_PATH, ...)`) — 감사기의 라우트 매칭이 리터럴 문자열만 잡고 상수 경유
-        # 호출은 못 잡는 정밀도 한계로 인한 오탐. 실제 미도달 아님(모바일 소비는 별도 축).
-        "POST /v1/ocr/pages": (
-            "by-design:test_ocr_endpoint.py가 _PAGES_PATH 상수로 실제 호출함(2026-08-09 재확인) "
-            "— 감사기가 상수 경유 호출을 리터럴 매칭으로 못 잡는 알려진 정밀도 한계"
-        ),
+        # OCR 다중 페이지 변형(구 유예) — 2026-08-10 OPS-25로 해제. 이 항목의 사유 자체가
+        # "감사기가 상수 경유 호출을 못 잡는 알려진 정밀도 한계"라고 자인하고 있었다. 유예로
+        # 덮는 대신 탐지기를 고쳤으므로(`_constant_indirect_calls`) 이제 reached다.
         # 검증 원시 도구 — verify-step은 verify-solution이 내부에서 연쇄 적용하는 하위 빌딩
         # 블록(api/verify.py 모듈 docstring)이고, 학생 앱은 조립된 verify-solution만 부른다.
         "POST /v1/verify-step": (
             "by-design:api/verify.py — verify-step은 verify-solution이 연쇄 적용하는 하위 도구 "
             "표면(모듈 docstring). 학생 경로는 조립된 POST /v1/verify-solution만 쓴다(reached)"
         ),
-        # 청사진 기반 총괄평가 세트 조립 — ASM-04(done)가 *구성까지*를 범위로 명시했다.
-        "POST /v1/me/assessments/assemble": (
-            "by-design:ASM-04 — 세트 구성까지가 범위이고 시행·채점 폐루프는 후속이다(태스크 "
-            "'정직한 잔여' 원문: 「세트 시행·채점 폐루프는 범위 밖(구성까지)」). 클라이언트 "
-            "소비는 그 폐루프가 생기는 시점의 화면과 함께 오므로 지금 추적할 태스크가 없다"
-        ),
-        # 음성 입력 — Phase 2+ 노출 대상, 서버 좌석만 선행 배선(구 branch 판정과 동일 근거)
-        "POST /v1/speech/latex": (
-            "by-design:음성 입력은 Phase 2+ 노출 대상 — 서버 좌석만 선행 배선된 상태이고 앱 "
-            "진입점 자체가 없다(활성화 판단은 이 게이트 밖)"
-        ),
     },
     # ── 축 2. EventType(생산자 보유·소비자 없음) ──────────────────────────
     # 실측(2026-08-07): 검산결과·힌트제공·힌트요청은 `wh1_evaluation.py`/`coach.py`가 소비한다.
-    # 막힘·답입력·시각화조작은 S3-16/슬96-J에서 생산자가 생겼으나 아직 어떤 쿼리도 필터링하지
-    # 않는다(관측 신호로 적재만 되는 상태) — 신규 발견, 추적 태스크 없어 이번에 등재.
+    # 답입력·시각화조작은 S3-16/슬96-J에서 생산자가 생겼으나 아직 어떤 쿼리도 필터링하지
+    # 않는다(관측 신호로 적재만 되는 상태) — 신규 발견, 추적 태스크 없어 등재.
+    #
+    # ⚠️ 2026-08-10 OPS-25: `막힘` 유예를 해제했다. 등재 당시 3종 묶음이었으나 **막힘은 처음부터
+    # 소비되고 있었다** — `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로
+    # `not in` 필터(파이썬)와 `.in_()` 필터(SQL)를 모두 걸고 있고, 감사기가 `ast.Compare`
+    # 피연산자에 `EventType.X`가 *직접* 나타나야만 소비로 인정하던 한계 때문에 못 봤다. 남은
+    # 2종(답입력·시각화조작)은 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타나므로 실제
+    # 미도달이 맞다(음성 대조 실측 — 이 정밀도 수정 후에도 미도달로 유지됨).
     AXIS_EVENT: {
-        "막힘": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
         "답입력": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
         "시각화조작": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
     },

@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (재발방지·감사기 정밀도): **`OPS-25` — 선언≠배선 감사기의 *상수 간접참조 맹점* 해소. 같은 원인의 오탐 2건이 이미 유령 태스크 1건(`PED-15`)과 허위 유예 1건(`S4-22`의 막힘)을 만들어냈다** (claude 구현, Kiki 지시)
+
+- **사고 경위(반복 실수 — 동일 원인 2회)**: `ops/declared_unwired_audit.py`가 도달을 *리터럴*로만 판정했다. ①HTTP 축 — 호출부에 경로 문자열이 직접 있어야 도달로 인정 → `_ENDPOINT = "/v1/me/growth-evidence"` 상수를 쓰는 `test_me_growth_evidence.py`의 호출이 안 보여 "미도달"로 보고 → **`PED-15`가 그 오탐만으로 등재**됐다(#755에서 리터럴 스모크로 우회했으나 근본 원인은 잔존). ②EventType 축 — `ast.Compare` 피연산자에 `EventType.X`가 직접 있어야 소비로 인정 → `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로 거는 `not in` 필터(:279)·SQL `.in_()` 필터(:563)를 못 봐 **이미 소비 중인 `EventType.막힘`**이 `S4-22` 유예 3종에 허위로 끼었다.
+- **대책(형태 = 코드 + 동결 테스트)**: 두 축에 **모듈 최상위 상수 1홉 해석**을 넣었다(`_module_path_constants`·`_module_event_type_constants`). 범위 절제는 축 3의 기존 선례 `_insert_helpers`(모듈 내 헬퍼 1홉)를 그대로 따른다 — import된 상수·함수 지역 변수·동적 컨테이너(`tuple(EventType)`)는 풀지 않는다. 넓히면 감사기가 사실상 인터프리터가 된다.
+- **양방향 변별력 실측**(acceptance ④ — 양성만 확인하면 "전부 도달"로 뭉개는 반대 방향 오탐을 못 잡는다): (양성) `막힘` 소비 인정 · `POST /v1/ocr/pages`(리터럴 0건·상수만) 도달 인정. (음성) `답입력`·`시각화조작`은 **수정 후에도 미도달 유지** — 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타난다. 상수를 *정의만* 하고 비교에 안 쓰면 소비 아님, 함수 지역 상수·import 상수·`+` 연결 표현식은 미해석. 신규 테스트 25건 중 **양성 14건은 수정을 무력화하면 전부 실패·음성 11건은 양쪽 상태에서 통과**함을 임시 패치로 실측했다(변별력 있는 검사임을 확인).
+- **수치**: 감사기 exit 0 유지. HTTP 도달 80→87(+7) · EventType 소비 3→4(+1) — 증가분 8건 전부 상수 간접참조 오탐 해소분이고 신규 배선 0. 대장에서 유예 8건 제거(HTTP 7·EventType 1). 감사기 테스트 42→67건.
+- **정직한 잔여**: 이 축의 `reached` = "dart 클라 호출 ∪ 백엔드 테스트 호출"이므로 해제된 7건이 reached라는 건 *테스트가 관통한다*는 뜻이지 *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히 0건**이며 이 축은 그 구분을 표현하지 못한다(클라 소비 공백 전용 축은 후속 과제). SQL `.in_(상수)` 단독 소비·`Model.field.in_()` 형태도 Compare가 아니라 미탐이다.
+
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
 - **경로 확정까지 실패 2단**: ①`git push --delete` — 프로브 재실측 403(HARN-16 유효) ②MCP `actions_run_trigger` dispatch — **403 "Resource not accessible by integration"**(세션 MCP 토큰에 workflow 실행 권한 없음·신규 실측). → ③`.github/branch-cleanup-request.txt`를 PR로 main에 머지하면 push 이벤트가 `branch-cleanup.yml`을 발동해 **Actions 러너가 저장소 토큰(contents: write)으로 삭제**. 매 배치가 PR 감사 기록으로 남는다(#746이 첫 사례).
