@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "[재구현 — 원본 diff 없음, Kiki 승인 2026-08-09] mathlive_input_screen.dart 진입 시 MathLive WebView 입력창에 자동으로 포커스가 가서 학생이 바로 입력을 시작할 수 있게 한다(수식 입력 화면 진입→탭 없이 바로 타이핑 가능). 착수 전 실측 확인: 이 세션 grep으로 현재 파일에 autofocus 관련 로직이 없음을 이미 확인했음(2026-08-09) — 순수 신규 기능"
   - flutter analyze 0 · flutter test green
   - "위젯 테스트로 화면 진입 시 포커스가 실제로 입력 필드에 가는지 확인(WebView 내부라 직접 검증이 어려우면 최소한 포커스 요청 호출이 트리거되는지 확인)"
-artifacts: []
+artifacts:
+  - "수식 입력 화면 진입 시 자동 포커스 배선. 핵심 발견: 웹 자산(assets/mathlive_input/index.html)에 window.whymathFocus 훅이 MathLive 경로·textarea 폴백 경로 양쪽에 *이미 정의돼 있었으나 Dart 호출처가 0건*이었다 — '선언만 되고 배선 안 됨' 패턴(OPS-22 계열)의 7번째 사례. 구현: mathliveFocusScript 상수(&&가드) + MathliveInputWebView에 autofocus 파라미터(기본 false·opt-in — 인라인 임베드가 원치 않는 키보드를 띄우지 않게) + setNavigationDelegate(onPageFinished)에서 호출(graphing_calculator_webview의 whymathApplySpec 주입과 동일 타이밍 계약 — 로드 전 호출은 훅 미정의라 무증상 무시). MathliveInputScreen이 autofocus:true로 opt-in. 테스트 12건 신설(test/mathlive_autofocus_test.dart): 웹 훅 존재(2경로 각각)·Dart 배선 순서(onPageFinished 이후)·화면 opt-in·기본값 false + 결함주입 7건(훅 없는 html·한쪽 경로만·호출 없음·순서 역전·opt-in 누락·autofocus:false). WebView는 플랫폼 뷰라 헤드리스 테스트에서 컨트롤러 생성 불가 → 자산/소스 스캔으로 두 축을 각각 동결(기존 mathlive_input_asset_config_test 선례). 검증: flutter analyze 0 issues, flutter test 291/291 all passed(신규 12건 포함, 이전 기준선 279에서 순증). 실기기에서의 실제 포커스 이동은 미검증(정직한 공백 — 플랫폼 뷰 제약)."
 paths:
   - "src/mobile/lib/**"
 session: null

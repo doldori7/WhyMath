@@ -5,8 +5,8 @@
 // (자족 비상구)로, Flutter는 자산 번들(assets/mathlive_input/)을 오프라인 로드한다.
 //
 // 통신: 웹은 `WhymathMathInput` JS 채널로 LaTeX 변경을 push하고, Flutter는 `window.whymathClear()`·
-// `window.whymathSetLatex(v)`를 runJavaScript로 호출한다(단방향 상태 + 명령 훅). MathLive 로드 실패
-// 시 웹이 textarea로 폴백하므로 입력 자체는 끊기지 않는다(HTML 참조).
+// `window.whymathSetLatex(v)`·`window.whymathFocus()`를 runJavaScript로 호출한다(단방향 상태 +
+// 명령 훅). MathLive 로드 실패 시 웹이 textarea로 폴백하므로 입력 자체는 끊기지 않는다(HTML 참조).
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -16,6 +16,15 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// 수학 의미 추론·치환은 하지 않는다(LaTeX 원문 보존·검증은 백엔드).
 String normalizeLatexInput(String raw) => raw.trim();
 
+/// 웹의 포커스 훅을 부르는 JS — 자동 포커스(S3-37) 배선의 유일한 호출 문자열.
+///
+/// 훅은 index.html이 MathLive 경로(`mf.focus()`)와 textarea 폴백 경로(`ta.focus()`) *양쪽*에
+/// 정의한다 — 즉 MathLive가 로드 실패해 강등돼도 자동 포커스는 그대로 동작한다. 그럼에도
+/// `&&`로 존재를 먼저 확인하는 이유는 훅 정의 *이전*(스크립트 실행 중)에 onPageFinished가
+/// 먼저 도달하는 경우 ReferenceError로 죽지 않게 하기 위함이다(`whymathClear` 호출과 동일
+/// 방어 패턴). 포커스는 코스메틱이라 실패해도 입력 자체는 탭 한 번으로 정상 진행된다.
+const String mathliveFocusScript = 'window.whymathFocus && window.whymathFocus()';
+
 /// MathLive 수식 입력 WebView — 입력 변경을 [onChanged]로 콜백한다.
 ///
 /// 플랫폼 뷰라 헤드리스 flutter test에서 렌더 불가 — 위젯 테스트는 pump하지 않고 순수
@@ -24,11 +33,20 @@ class MathliveInputWebView extends StatefulWidget {
   const MathliveInputWebView({
     required this.onChanged,
     this.height,
+    this.autofocus = false,
     super.key,
   });
 
   /// 입력된 LaTeX(정규화 후)를 흘리는 콜백. 빈 문자열도 전달한다(호출자가 전송 여부 판정).
   final ValueChanged<String> onChanged;
+
+  /// 페이지 로드 완료 시 입력 필드에 자동으로 포커스를 줄지 (S3-37).
+  ///
+  /// 수식 입력 *전용 화면*(MathliveInputScreen)처럼 "진입했다 = 지금 입력하려는 것"이 확실한
+  /// 자리에서만 true로 준다 — 학생이 화면에 들어와서 필드를 한 번 더 탭해야 하는 마찰을 없앤다.
+  /// 인라인 임베드(`height` 지정)에서 true면 학생이 의도하지 않은 시점에 키보드가 떠 다른
+  /// 콘텐츠를 덮으므로 **기본값은 false**다(opt-in).
+  final bool autofocus;
 
   /// 인라인 표시 높이(px). null이면 부모 제약을 그대로 채운다(전체 높이 배치용).
   ///
@@ -56,6 +74,18 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
         onMessageReceived: (JavaScriptMessage message) {
           widget.onChanged(normalizeLatexInput(message.message));
         },
+      )
+      // 자동 포커스(S3-37) — 로드 *완료 후*에만 훅을 부른다. loadFlutterAsset 직후에 부르면
+      // index.html의 스크립트가 아직 window.whymathFocus를 정의하기 전이라 아무 일도 일어나지
+      // 않는다(graphing_calculator_webview의 whymathApplySpec 주입과 동일한 타이밍 계약).
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (widget.autofocus) {
+              _controller.runJavaScript(mathliveFocusScript);
+            }
+          },
+        ),
       )
       ..loadFlutterAsset('assets/mathlive_input/index.html');
   }
