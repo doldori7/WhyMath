@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on: []
@@ -18,5 +18,5 @@ artifacts: []
 paths:
   - "src/mobile/lib/**"
 session: null
-notes: "[2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch origin <브랜치명> → 'couldn't find remote ref', git ls-remote --heads origin 전체 43건 스캔에도 부재). 원 커밋 해시(fa08081·73b77a1·75c3dda 등) 직접 fetch도 전부 실패 — GitHub가 reachable하지 않은 SHA는 노출하지 않음. 즉 '원본 diff를 main 위에 수동 재적용'이라는 acceptance 전제 자체가 이제 불가능 — 실행 가능한 대안은 title/notes의 짧은 설명만으로 처음부터 다시 설계·구현하는 것뿐인데, 이는 '포팅'이 아니라 '재설계'라 원 기능의 정확한 범위·UX 디테일을 보장할 수 없다(디자인 판단 위험). 이 기능들을 그대로 재구현할지, 범위를 다시 정의할지, 혹은 지금 시점에 더는 필요 없다고 보고 폐기할지는 Kiki 판단이 필요 — /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당해 차단."
+notes: "[2026-08-10 착수 조사 — 교차계층 설계 결정 필요] acceptance①의 선행 판정을 수행한 결과: 현행 problem_screen.dart:48-51의 '건너뛰기' 버튼은 context.go(chatPath)로 *코치 화면으로 이탈*할 뿐 '이 문제를 건너뛰고 다른 문제를 받는' 동작이 아니다 → 불충분(재구현 필요) 판정. 그런데 올바른 재구현은 mobile-only로 불가능함이 실측으로 확인됨: 서버 GET /v1/me/next-problem은 후보에서 attempted_ids(=채점 이력이 있는 문제)만 제외하므로(api/me.py candidate_stmt), 건너뛰기를 아무 데도 기록하지 않으면 load()를 다시 불러도 결정론적으로 *같은 문제*가 반환된다. 즉 클라만으로는 '건너뛰기'가 성립하지 않는다. 필요한 결정 2건 — ①서버 계약: 후보 제외 목록을 클라가 넘기는 방식(예: ?exclude=<uuid>,... — 기존 attempted/sibling_filter 배제와 동형 SQL 필터, 학습자 모델 무영향·상한 필요) vs 서버가 skip을 기록하는 방식(테이블/이벤트 신설) ②교수학 정책: 건너뛴 문제가 θ 추정·숙달(BKT/IRT)에 어떻게 반영되(지 않)는가 — acceptance③이 '오답 처리 금지·단순 미응답과 구분'을 요구하므로 L2 의미론 결정이 선행돼야 한다. 이 태스크는 layer=mobile·paths=src/mobile/lib/** 로 등록돼 있어 백엔드 확장은 선언 범위 밖 — 범위 재정의(백엔드 포함) 또는 별도 백엔드 태스크 분리가 필요하다. /drive 안전장치(acceptance 판단 불가·교차계층 모호성)에 해당해 차단."
 updated: 2026-08-10

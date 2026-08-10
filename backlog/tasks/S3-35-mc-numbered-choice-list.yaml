@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,7 +15,8 @@ acceptance:
   - flutter analyze 0 · flutter test green
   - "정답·정오 강조 없음(CLAUDE.md 절대 금기) — 선택 여부만 표시, 정오 색상/아이콘 등 금지"
   - "S3-45(버킷C④, 객관식 선택지 버튼 UX)와 범위 겹침 가능 — 착수 전 그 태스크와 조정"
-artifacts: []
+artifacts:
+  - "판정: 객관식 세로 번호목록 UI는 이미 main에 완전히 구현돼 있었다 — problem_screen.dart _ProblemView가 choices를 for 루프로 각각 독립 Padding+Text에 세로로 쌓고, _circledNumber(i+1)로 ①~⑨ 라벨(10 이상은 괄호 숫자)을 붙이며, 정오 강조 없이 중립 bodyLarge로 렌더한다. 즉 acceptance①의 UX 골자(세로 번호목록)·③(정오 강조 없음)이 코드상 이미 충족 — S3-37과 동일하게 '원본 소실로 재설계 필요'라 봤던 항목이 실제로는 main에 이미 들어와 있던 사례(2건째). 다만 **어떤 테스트도 이 UI를 동결하지 않아** 가로 배치(Wrap/Row) 전환·번호 라벨 제거·정오 색 차등이 전부 조용히 통과할 수 있는 상태였으므로, 회귀 방지 테스트 4건을 problem_screen_test.dart에 신설: ①①②③ 번호 부착 ②세로 배치(y좌표 증가 단언 — Wrap/Row 회귀를 실제로 잡는다) ③보기 없는 주관식엔 번호 없음(변별력 반대 사례) ④보기끼리 색이 갈리지 않고 error 롤도 아님(정오 차등 강조 금기). 검증 과정 실측: M3 textTheme.bodyLarge는 기본 onSurface 색을 이미 갖고 있어 'style.color == null' 단언은 성립하지 않는다 → '보기 간 색 동일성'이라는 실질 불변식으로 교정(레드 1회 경유). S3-45(버킷C④)와의 경계 확정: S3-35=보기의 *표시 방식*(세로 번호목록·본 태스크 완료), S3-45=보기의 *선택 상호작용*(탭 가능 버튼화) — 서로 다른 축이라 중복 아님, S3-45 notes에 기록. 검증: flutter analyze 0 issues, flutter test 295/295 all passed(신규 4건 포함, 직전 기준선 291에서 순증)."
 paths:
   - "src/mobile/lib/**"
 session: null
