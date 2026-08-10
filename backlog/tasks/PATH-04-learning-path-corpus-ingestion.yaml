@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: blocked
 priority: 4
 owner: claude
 depends_on: []
@@ -23,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - docs/data/concept_content_corpus_v1.md
 session: null
-notes: "docs/data/concept_content_corpus_v1.md §B(2026-06-20 데이터 카드). 데이터 카드가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 원래 PATH-01/PATH-02로 등재하려다 같은 날 병렬 세션이 docs/architecture/learning_path_module_gap_review.md(#665계열·PATH-01~03)를 이미 main에 병합해 ID·문서 범위가 충돌 → 문서 전체·중복 태스크 철회 후 이 net-new 발견만 재등재(2026-08-03 MEMORY 결정 로그 참조). PATH-01~03(위상정렬 알고리즘 축)과 무관 — 이건 코퍼스 데이터 자산 축. 중복 없음."
-updated: 2026-08-03
+notes: "acceptance ① 선행 자산(7주체 S1~S7 경로 xlsx, sha256 앞16 f4ee650b734ac854) 부재 실측(2026-08-10: 저장소 xlsx는 ai_llm_inventory 1건뿐·data/corpus/learning_paths_v1 무) — Kiki 소유 행동 대기. '자산 없이 store만 만들면 dead table'이라 코드 선행 불가. unblock 트리거: Kiki가 파일 제공·sha256 일치 확인 시"
+updated: 2026-08-10
