@@ -2,7 +2,8 @@
 
 `docs/architecture/gamification_module_gap_review.md` §3 D1의 설계를 그대로 승계한다(새 설계
 아님). `compute_wh1_surrogate_metrics`(`harness/wh1_evaluation.py`)의 지표(원 설계 11종 + 병합
-편입 `help_demand_supply_ratio` 1종 = 12종)를 한 덩어리로 노출하면 그 자체가 새 위험이다 —
+편입 `help_demand_supply_ratio` 1종 + PED-13 `gap_recovery_leadtime_days` 1종 + PED-14
+`mastery_gain_rate_time_normalized` 1종 = 14종)를 한 덩어리로 노출하면 그 자체가 새 위험이다 —
 일부는 학생에게 보이면 금기 위반이 된다:
 
 - `help_reduction_validated`의 `GAMING_SUSPECT` — 학생 대면 노출 시 **낙인**
@@ -55,9 +56,10 @@ class ExposureTier(str, Enum):
     """운영·내부 전용 — 학생·보호자 어느 쪽에도 노출 금지(시스템 품질·비용 지표 등)."""
 
 
-# 13지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
-# INTERNAL_ONLY — 나머지는 전부 STUDENT_VISIBLE(⑥·⑧은 아래 조합 규칙으로 *표현*이 추가 제약됨,
-# 계층 자체는 STUDENT_VISIBLE 유지 — "안 보임"이 아니라 "다르게 보임").
+# 14지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)·
+# `mastery_gain_rate_time_normalized`(⑰·PED-14)만 INTERNAL_ONLY — 나머지는 전부
+# STUDENT_VISIBLE(⑥·⑧은 아래 조합 규칙으로 *표현*이 추가 제약됨, 계층 자체는 STUDENT_VISIBLE
+# 유지 — "안 보임"이 아니라 "다르게 보임").
 # `help_demand_supply_ratio`(⑮·S3-16, 병합 시 편입)는 ⑤·⑧과 같은 축(학생 자신의 도움 요청·수신
 # 행태)이라 STUDENT_VISIBLE — ②·④(시스템 품질·비용)와는 성격이 다르다. 노출 문구 설계(서술 변환·
 # 조합 제약 필요 여부)는 이 모듈 최초 판정 당시 범위 밖이었던 지표라 **미확정**(발화조건: 보호자
@@ -73,6 +75,13 @@ _STATIC_TIER: dict[str, ExposureTier] = {
     "transfer_score": ExposureTier.STUDENT_VISIBLE,
     "hint_depth_reached": ExposureTier.STUDENT_VISIBLE,
     "mastery_gain_rate": ExposureTier.STUDENT_VISIBLE,
+    # ⑰ 시간 정규화 숙달 증가율(PED-14) — `reclaimed_time_positioning_v1.md` §1-1이 "개인의
+    # 속도·효율 수치"(예: 문제 효율 지수)를 명시적으로 INTERNAL_ONLY 고정으로 분류한 형태와
+    # 정확히 같다(분/개념 원 스칼라 — "정답을 빠르게"로 오독될 위험). 같은 문서 §3 표의
+    # "(배선 후) STUDENT_VISIBLE" 목표는 *서술 변환*(자기 대비 문구로 바꾸는 L4/카피 작업)이
+    # 함께 있어야 안전하다는 뜻이고, 그 서술 변환은 이 태스크 범위 밖(narrate_calibration_brier
+    # 동형의 후속 과제 — 원 스칼라는 절대 그대로 노출하지 않는다).
+    "mastery_gain_rate_time_normalized": ExposureTier.INTERNAL_ONLY,
     # ⑯ 결손 복구 리드타임(PED-13) — 자기 대비 축이라 학생 노출 가능. 또래·평균 대비 파생은
     # 두지 않는다(부재가 계약 · 5원칙 #2 · ARCH-27 게이트가 기계로 막는다).
     "gap_recovery_leadtime_days": ExposureTier.STUDENT_VISIBLE,

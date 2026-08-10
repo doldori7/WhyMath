@@ -60,10 +60,15 @@ def _metrics(verdict: R15Verdict) -> SurrogateMetrics:
 
 
 def test_internal_only_fields_never_exposable() -> None:
-    """②(진단정확도)·④(턴당 토큰)는 R15 판정과 무관하게 항상 내부 전용."""
+    """②(진단정확도)·④(턴당 토큰)·⑰(시간 정규화 숙달 증가율·PED-14)는 R15 판정과 무관하게
+    항상 내부 전용(acceptance ⑥ — 원 스칼라 속도 지표 노출 금지)."""
     for verdict in (R15Verdict.GENUINE_IMPROVEMENT, R15Verdict.GAMING_SUSPECT):
         result = classify_metric_exposure(_metrics(verdict))
-        for field in ("diagnosis_agreement_rate", "tokens_per_turn"):
+        for field in (
+            "diagnosis_agreement_rate",
+            "tokens_per_turn",
+            "mastery_gain_rate_time_normalized",
+        ):
             assert result[field].tier is ExposureTier.INTERNAL_ONLY
             assert result[field].exposable_now is False
             assert result[field].suppressed_reason is not None
@@ -99,10 +104,11 @@ def test_gaming_suspect_label_not_exposed_as_a_field() -> None:
     assert field_names == {"field", "tier", "exposable_now", "suppressed_reason"}
 
 
-def test_all_thirteen_fields_classified() -> None:
-    """13지표 전부가 판정에 나타난다(누락 0).
+def test_all_fourteen_fields_classified() -> None:
+    """14지표 전부가 판정에 나타난다(누락 0).
 
-    원 설계 11종 + 병합 편입 `help_demand_supply_ratio` + `gap_recovery_leadtime_days`(⑯·PED-13).
+    원 설계 11종 + 병합 편입 `help_demand_supply_ratio` + `gap_recovery_leadtime_days`(⑯·PED-13)
+    + `mastery_gain_rate_time_normalized`(⑰·PED-14).
     """
     result = classify_metric_exposure(_metrics(R15Verdict.GENUINE_IMPROVEMENT))
     assert set(result) == {
@@ -116,6 +122,7 @@ def test_all_thirteen_fields_classified() -> None:
         "transfer_score",
         "hint_depth_reached",
         "mastery_gain_rate",
+        "mastery_gain_rate_time_normalized",
         "misconception_resolution_rate",
         "self_solve_rate",
         "gap_recovery_leadtime_days",

@@ -8,6 +8,8 @@
     `server_verified_completed_at` 갱신
   - `CoachResponse.dialogue_completed`가 True/False/None 세 값 모두 실제 HTTP 응답에 실리는지
   - incorrect일 때 `decision.prompt`가 재고 유도 문구로 교체되고 `decision.system`은 불변인지
+  - PED-14: `attempt.duration_seconds`가 `now − dialogue.started_at`(서버 벽시계)로 채워지고,
+    `dialogue.started_at`이 없으면 0이 아니라 None인지(가짜 0 금지)
 
 `_CapturingSession`/`_session_client` 등은 `tests/backend/api/test_coach.py`의 관례를 그대로
 따른 로컬 사본이다(이 코드베이스의 기존 패턴 — 파일마다 독립 사본을 둔다,
@@ -215,6 +217,60 @@ class TestApplyCompletionHelper:
         assert attempt.used_socratic is True
         # decision.prompt는 correct 경로에서 건드리지 않는다(재고 유도는 incorrect 전용).
         assert decision.prompt == _decision(PolyaStage.REVIEW).prompt
+
+    def test_duration_seconds_derived_from_dialogue_started_at(self) -> None:
+        """PED-14 — attempt.duration_seconds = now − dialogue.started_at(서버 벽시계, 초)."""
+        pid = uuid.uuid4()
+        uid = uuid.uuid4()
+        started = datetime(2026, 8, 10, 9, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 10, 9, 3, 20, tzinfo=timezone.utc)  # 200초 후
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(user_id=uid, problem_id=pid, started_at=started)
+        )
+        sess = _HelperFakeSession(preload={(ProblemORM, pid): SimpleNamespace(answer="x=2")})
+
+        _, completed = asyncio.run(
+            coach._apply_completion(
+                sess,  # type: ignore[arg-type]
+                dialogue=dialogue,
+                decision=_decision(PolyaStage.REVIEW),
+                state=PolyaState(current_stage=PolyaStage.REVIEW),
+                solution_text="x=2",
+                user_id=uid,
+                now=now,
+            )
+        )
+
+        assert completed is True
+        attempt = sess.added[0]
+        assert isinstance(attempt, ProblemAttemptORM)
+        assert attempt.duration_seconds == 200
+
+    def test_duration_seconds_none_when_dialogue_started_at_missing(self) -> None:
+        """PED-14 방어 케이스 — dialogue.started_at이 없으면 0이 아니라 None(가짜 0 금지)."""
+        pid = uuid.uuid4()
+        uid = uuid.uuid4()
+        # started_at 미지정 — schema 기본값 None(이론상 방어 케이스, create_session은 항상 채움).
+        dialogue = DialogueORM.from_schema(DialogueSchema(user_id=uid, problem_id=pid))
+        assert dialogue.started_at is None
+        sess = _HelperFakeSession(preload={(ProblemORM, pid): SimpleNamespace(answer="x=2")})
+
+        _, completed = asyncio.run(
+            coach._apply_completion(
+                sess,  # type: ignore[arg-type]
+                dialogue=dialogue,
+                decision=_decision(PolyaStage.REVIEW),
+                state=PolyaState(current_stage=PolyaStage.REVIEW),
+                solution_text="x=2",
+                user_id=uid,
+                now=datetime.now(timezone.utc),
+            )
+        )
+
+        assert completed is True
+        attempt = sess.added[0]
+        assert isinstance(attempt, ProblemAttemptORM)
+        assert attempt.duration_seconds is None
 
     def test_correct_before_review_does_not_complete_or_persist(self) -> None:
         # REVIEW 미도달(EXECUTE) — correct여도 완료 아님·ProblemAttempt 미적재("정답을 빠르게" 금지).

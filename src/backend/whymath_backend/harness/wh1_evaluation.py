@@ -57,8 +57,10 @@ S3 세션 대리 지표 4종 추가(`status_roadmap_2026-07.md` §3): 기존 7�
                             캐비엇·R15 참조를 정직 표기(단독 해석 금지).
   ⑨ BKT 숙달 증가율       — 🟢 MEASURED/NO_DATA: `ConceptMasteryHistory` (user,concept)별 첫→
                             마지막 mastery 차의 평균(증가 *방향·크기*). measured_at 간격으로
-                            나눈 *시간 정규화 rate*는 아님(후속)·그룹당 최소 `_MIN_MASTERY_
-                            POINTS`점 요구(가짜 0 금지).
+                            나눈 시간 정규화 rate는 **아니다** — 그 rate는 `mastery_gain_rate_
+                            time_normalized`(PED-14, 아래 별도 좌석)가 담당한다. ⑨ 자체는 이
+                            분리로 계산·의미가 전혀 바뀌지 않는다(회귀 0)·그룹당 최소
+                            `_MIN_MASTERY_POINTS`점 요구(가짜 0 금지).
   ⑩ 오개념 해소율         — 🟢 MEASURED/NO_DATA: `MisconceptionHypothesisRecord`의 is_active=
                             false 비율(가지치기·비활성화=*해소 근사*). 전용 resolved_at 컬럼
                             부재라 "학습적 해소"와 "stale 정리"를 구분 못 함(후속)·note 정직 표기.
@@ -75,6 +77,22 @@ S3-16 편입(행동 텔레메트리 생산자 좌석 — `docs/architecture/ai_t
                             제공) 0건이면 NO_DATA(분모 0 방지·가짜 0 금지) — 힌트제공 0이면 ⑤⑧도
                             이미 NO_DATA이므로 이 지표만 홀로 값을 내지 않는다(일관성). demand=0·
                             supply>0이면 ratio=0.0(MEASURED·실측 0·날조 아님).
+
+PED-14 편입(시간 정규화 — `docs/strategy/reclaimed_time_positioning_v1.md` §3·§7): S3-32가
+`ProblemAttempt`를 처음 착지시키며 분자(⑨ 숙달 델타)·분모(attempt duration)가 동시에 생겼다.
+`api/coach.py::_apply_completion`이 이제 `duration_seconds`를 서버 벽시계(ended_at−dialogue.
+started_at)로 채운다 — Flutter writer 배선은 불필요(재조사 결과, 코치 대화 경로가 실제
+라이브 경로이고 `api/me.py::submit_attempt`의 클라 자기보고 경로는 현재 모바일 미사용).
+  ⑰ 시간 정규화 숙달 증가율 — 🟢 MEASURED/NO_DATA: `mastery_gain_rate_time_normalized`.
+                            ⑨와 *같은* (user,concept) 자격 그룹(≥`_MIN_MASTERY_POINTS`점)의
+                            mastery 증분을, 그 개념에 PRIMARY로 연결된 `ProblemAttempt.
+                            duration_seconds`(non-null) 합(초)으로 나눈 평균. 근사(note 정직
+                            표기): TESTED 전용 문항의 attempt duration은 분모에 반영되지
+                            않는다(`get_primary_concept_id`의 PRIMARY 우선 관례와 일관). 두
+                            writer(coach 서버 파생·me.py 클라 자기보고)가 같은 컬럼에 섞여
+                            적재될 수 있음을 note가 표기한다. **INTERNAL_ONLY**(원 스칼라
+                            속도 지표 — `growth_evidence_exposure.py` 노출 계약 §1-1 안전선,
+                            서술 변환은 후속).
 
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
 모듈은 L1(활동 로그 `LearningSession`·`AttemptEvent`)·L2(`ConceptMasteryHistory`)·L4(오개념
@@ -100,6 +118,7 @@ from whymath_backend.db.models.activity import (
     ProblemAttempt,
 )
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.concept import ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
@@ -112,7 +131,7 @@ from whymath_backend.l2.prerequisite_recommendation import (
 from whymath_backend.l4.lthc.adapt import _MASTERED_THRESHOLD
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
 from whymath_backend.l4.turn_meta import REACHABLE_STRATEGIES
-from whymath_backend.schema.enums import EventType, Resolution, SignaturePattern
+from whymath_backend.schema.enums import ConceptRole, EventType, Resolution, SignaturePattern
 
 __all__ = [
     "HelpReductionValidation",
@@ -375,8 +394,27 @@ class SurrogateMetrics(BaseModel):
     mastery_gain_rate: Metric = Field(
         description=(
             "⑨ BKT 숙달 증가율 — ConceptMasteryHistory (user,concept)별 첫→마지막 mastery 차 "
-            "평균(증가 방향·크기). 시간 정규화 rate는 아님(후속)·자격 그룹 0이면 NO_DATA."
+            "평균(증가 방향·크기). 시간 정규화 rate는 *아니다* — 그 rate는 "
+            "`mastery_gain_rate_time_normalized`(PED-14)가 담당(이 필드 자체는 불변·회귀 0). "
+            "자격 그룹 0이면 NO_DATA."
         )
+    )
+    mastery_gain_rate_time_normalized: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑰ 시간 정규화 숙달 증가율(PED-14) — ⑨와 같은 (user,concept) 자격 그룹의 mastery "
+            "증분을, 그 개념에 PRIMARY로 연결된 ProblemAttempt.duration_seconds(non-null) 합"
+            "(초)으로 나눈 평균(단위: 초당 mastery 증가). 근사 — TESTED 전용 문항의 attempt "
+            "duration은 분모에 미반영(get_primary_concept_id PRIMARY 우선 관례와 일관). "
+            "duration_seconds는 코치 대화 완료 시 서버 벽시계 파생과 `POST /v1/me/attempts` "
+            "클라 자기보고 두 출처를 가질 수 있다(정직 표기). mastery·duration 교집합 그룹 "
+            "0이면 NO_DATA(가짜 0 금지). ⑨(mastery_gain_rate)는 이 필드 도입으로 값이 바뀌지 "
+            "않는다(회귀 0). 기본값은 미집계 호출자와의 회귀 0을 위함 — 실 집계 경로는 항상 "
+            "명시 주입(compute_wh1_surrogate_metrics). **INTERNAL_ONLY**(비교·서열 파생 금지 "
+            "— growth_evidence_exposure.py 노출 계약)."
+        ),
     )
     gap_recovery_leadtime_days: Metric = Field(
         description=(
@@ -494,6 +532,14 @@ class SurrogateMetrics(BaseModel):
             f">= {_MIN_MASTERY_POINTS}·mastery NOT NULL). 미만 그룹은 제외·0이면 NO_DATA."
         ),
     )
+    sample_time_normalized_mastery_groups: int = Field(
+        default=0,
+        description=(
+            "⑰ 시간 정규화 숙달 증가율(PED-14)의 분모 — mastery 자격(⑨와 동일 기준)과 "
+            "PRIMARY 개념 귀속 duration_seconds 합(>0)이 *둘 다* 있는 (user,concept) 교집합 "
+            "그룹 수. 한쪽만 있는 그룹은 제외(가짜 매칭 금지)·0이면 NO_DATA."
+        ),
+    )
     sample_gap_recovery_groups: int = Field(
         default=0,
         description=(
@@ -530,7 +576,7 @@ class SurrogateMetrics(BaseModel):
         description=(
             "S3-03 응용 모드 스코프 — 설정 시(예: 'suneung') 이 집계가 그 mode 태그가 실린 "
             "*attempt_event 기반 지표*(① verify 통과율·⑤ 도움 감소·⑧ 도달 깊이)만 mode-scoped로 "
-            "필터한 값이다. **다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관 집계 "
+            "필터한 값이다. **다른 지표(③④⑥⑦⑨⑩⑪⑰·R15)는 아직 mode를 싣지 않아 mode 무관 집계 "
             "그대로**다(완전한 mode별 집계는 후속 S3-04). None이면 모든 mode 포함(기존 동작 불변)."
         ),
     )
@@ -1167,9 +1213,11 @@ def _mastery_gain_from_gains(gains: list[float]) -> Metric:
     **NO_DATA**(value None·가짜 0 금지) — mastery 시계열이 아직 그룹당 2점을 못 채운 상태.
 
     정직 note(중요): 이는 *증가 방향·크기*(mean Δmastery)이지 **measured_at 간격으로 나눈 시간
-    정규화 rate가 아니다** — "증가율"의 rate는 그룹마다 다른 측정 간격을 정규화해야 비교 가능하고
-    그건 후속 설계다. 또 mastery는 BKT/능력추정 파생이라 모델 가정(전이·망각)에 의존한다(원천
-    `ConceptMasteryHistory`는 append-only 시계열). 세션별 분해가 아니라 user/시간창 집계다.
+    정규화 rate가 아니다** — 그 rate는 `_time_normalized_mastery_gain_metric`(PED-14, 초 단위
+    attempt duration으로 정규화)이 별도 좌석으로 담당한다. 이 함수 자체는 그 분리로 계산·의미가
+    전혀 바뀌지 않는다(회귀 0). 또 mastery는 BKT/능력추정 파생이라 모델 가정(전이·망각)에
+    의존한다(원천 `ConceptMasteryHistory`는 append-only 시계열). 세션별 분해가 아니라
+    user/시간창 집계다.
     """
     n = len(gains)
     if n == 0:
@@ -1187,8 +1235,105 @@ def _mastery_gain_from_gains(gains: list[float]) -> Metric:
         status=MetricStatus.MEASURED,
         note=(
             f"(user,concept) {n}개 그룹 첫→마지막 mastery 차 평균 {mean_gain:+.4f}(양수=숙달↑). "
-            "**증가 방향·크기이지 시간 정규화 rate 아님**(measured_at 간격 정규화는 후속)·"
-            "mastery는 BKT 파생(모델 가정 의존)·세션별 분해는 후속(현재 user/시간창 집계)."
+            "**증가 방향·크기이지 시간 정규화 rate 아님**(그 rate는 "
+            "mastery_gain_rate_time_normalized·PED-14가 별도 좌석)·mastery는 BKT 파생(모델 "
+            "가정 의존)·세션별 분해는 후속(현재 user/시간창 집계)."
+        ),
+    )
+
+
+# ⑰ 시간 정규화 숙달 증가율(PED-14)의 세 함수 — ⑯(_gap_recovery_leadtimes_from_rows/
+# _gap_recovery_leadtime_metric, PED-13)을 그대로 미러한 패턴: 신규 컬럼 0·순수 함수·NO_DATA
+# 가드·자격 그룹 0이면 가짜 0 대신 NO_DATA. ⑨(_mastery_gains_from_rows/_mastery_gain_from_gains)
+# 는 이 세 함수 신설로 전혀 바뀌지 않는다(회귀 0 — 별도 함수로 완전히 분리했다).
+def _mastery_gains_by_group_from_rows(
+    rows: Sequence[tuple[uuid.UUID, uuid.UUID, float]],
+) -> dict[tuple[uuid.UUID, uuid.UUID], float]:
+    """⑨와 *같은* (user,concept)별 첫→마지막 mastery 차를 dict로(순수·날조 0).
+
+    입력·알고리즘은 `_mastery_gains_from_rows`(⑨)와 완전히 동일하다 — 차이는 반환 꼴뿐이다.
+    ⑨는 `list[float]`(집계용, 키가 필요 없음)를 돌려주지만, 이 지표는 같은 (user,concept)
+    그룹의 `_duration_seconds_by_group` 결과와 *키로 짝지어야* 하므로 dict가 필요하다. 그룹당
+    측정점이 `_MIN_MASTERY_POINTS` 미만이면 ⑨와 동일하게 제외한다(가짜 0/증가량 금지).
+    """
+    first: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    last: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    counts: dict[tuple[uuid.UUID, uuid.UUID], int] = {}
+    for user_id, concept_id, mastery in rows:
+        key = (user_id, concept_id)
+        if key not in first:  # 그룹 내 measured_at 오름차순이라 첫 등장 = 최이른 측정(⑨ 동형).
+            first[key] = mastery
+        last[key] = mastery  # 매번 덮어써 최종 = 최근 측정.
+        counts[key] = counts.get(key, 0) + 1
+    return {key: last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS}
+
+
+def _duration_seconds_by_group(
+    rows: Sequence[tuple[uuid.UUID, uuid.UUID, int]],
+) -> dict[tuple[uuid.UUID, uuid.UUID], int]:
+    """(user_id, concept_id, duration_seconds) → (user,concept)별 duration_seconds 합(순수·날조 0).
+
+    입력은 `ProblemAttempt.duration_seconds`(non-null)를 그 attempt가 *PRIMARY*로 연결된
+    concept_id에 귀속시킨 행이다(호출부가 `problem_concept.role == PRIMARY`로 join) — 근사:
+    TESTED 전용(PRIMARY 미매핑) 문항의 attempt는 이 집계에 들어오지 않는다
+    (`l2.mastery_tracking.get_primary_concept_id`의 PRIMARY 우선 관례와 일관). 순수 합산이라
+    입력 순서 무관(⑨/⑯과 달리 시계열이 아니라 총합).
+    """
+    totals: dict[tuple[uuid.UUID, uuid.UUID], int] = {}
+    for user_id, concept_id, duration in rows:
+        key = (user_id, concept_id)
+        totals[key] = totals.get(key, 0) + duration
+    return totals
+
+
+def _time_normalized_mastery_gains_from_groups(
+    gains_by_group: dict[tuple[uuid.UUID, uuid.UUID], float],
+    duration_by_group: dict[tuple[uuid.UUID, uuid.UUID], int],
+) -> list[float]:
+    """(mastery 증분 dict, duration 합 dict) **교집합** 키의 Δmastery/Σduration_seconds 목록.
+
+    두 딕셔너리에 *공통으로* 있는 키만 비율을 낸다 — mastery는 늘었지만 그 개념에 귀속된
+    duration 표본이 없는 그룹, 또는 duration은 있지만 mastery 자격(≥`_MIN_MASTERY_POINTS`점)이
+    안 되는 그룹은 어느 쪽도 임의로 조합하지 않는다(가짜 매칭 금지 — 짝 없는 분자/분모 조합
+    없음). `duration_by_group`에 없거나 합이 0 이하인 키도 제외(0/음수 나눗셈 방지 — 실제로는
+    non-null 합이 존재하면 항상 양수이나 방어적으로 재확인).
+    """
+    return [
+        gains_by_group[key] / duration_by_group[key]
+        for key in gains_by_group
+        if duration_by_group.get(key, 0) > 0
+    ]
+
+
+def _time_normalized_mastery_gain_metric(rates: list[float]) -> Metric:
+    """⑰ 시간 정규화 숙달 증가율(PED-14) — Δmastery/Σduration_seconds(초) 평균을 Metric으로
+    (순수·날조 0). 교집합 그룹이 0이면 ⑨/⑯ 관례를 승계해 NO_DATA(가짜 0 금지).
+    """
+    n = len(rates)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "mastery 증분(⑨ 자격 그룹)과 PRIMARY 개념 귀속 duration_seconds가 *둘 다* 있는 "
+                "(user,concept) 그룹 0개 — coach 대화 완료(서버 벽시계 파생 duration, PED-14)와 "
+                "mastery 시계열이 같은 그룹에서 함께 쌓이면 계측(가짜 0 금지)."
+            ),
+        )
+    mean_rate = sum(rates) / n
+    return Metric(
+        value=mean_rate,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"{n}개 그룹의 Δmastery/Σduration_seconds(초) 평균 {mean_rate:.6f}(양수=시간당 숙달"
+            "↑·단위는 초당 mastery 증가). 분모는 그 개념에 PRIMARY로 연결된 ProblemAttempt."
+            "duration_seconds non-null 합(근사 — TESTED 전용 문항 attempt 미포함·다중 PRIMARY "
+            "매핑 문항은 각 개념에 duration 전액 중복 귀속 가능·희귀 케이스). duration_seconds는 "
+            "코치 대화 완료 시 서버 벽시계 파생(ended_at−dialogue.started_at, PED-14)과 "
+            "`POST /v1/me/attempts` 클라 자기보고 두 출처가 섞여 있을 수 있다(정직 표기 — "
+            "서버/클라 신뢰축을 구분하지 않고 합산). ⑨(mastery_gain_rate)는 이 지표와 *무관하게* "
+            "그대로다(회귀 0). 세션별 분해는 후속(현재 user/시간창 집계)·자기 대비 축이며 또래·"
+            "평균 대비 파생을 두지 않는다(INTERNAL_ONLY — 원 스칼라 비교/서열 파생 금지)."
         ),
     )
 
@@ -1296,7 +1441,7 @@ async def compute_wh1_surrogate_metrics(
             계층(api/me·time_window_conditions)이 수행 — 여기선 받은 경계를 그대로 비교.
         mode: S3-03 응용 모드 스코프(예: "suneung"). 설정 시 *attempt_event 기반 지표*
             (① verify·⑤ 도움 감소·⑧ 도달 깊이)를 `event_data->>'mode' == mode`로 필터한다
-            (수능 세션만 집계). **다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관
+            (수능 세션만 집계). **다른 지표(③④⑥⑦⑨⑩⑪⑰·R15)는 아직 mode를 싣지 않아 mode 무관
             집계 그대로**다 — 완전한 mode별 집계는 후속 S3-04(여기선 데이터가 mode를 실어나르는
             것을 보장하고 그 데이터를 scope할 수 있음을 증명). None(기본)이면 전 mode 포함(회귀 0).
 
@@ -1779,6 +1924,51 @@ async def compute_wh1_surrogate_metrics(
     strategy_diversity = _strategy_diversity_from_values(flat_strategies)
     strategy_repeat_rate = _strategy_repeat_from_sequences(list(strategy_sequences.values()))
 
+    # ── ⑰ 시간 정규화 숙달 증가율(PED-14) — ProblemAttempt.duration_seconds ⨝ problem_concept
+    # (role=PRIMARY)로 (user,concept)별 duration 합을 뽑는다. ⑨의 mastery 증분(위 mastery_input,
+    # 추가 쿼리 없이 재사용)과 짝지어 나눈다. 시간창은 **ended_at** 기준이다 — started_at은
+    # 두 writer(coach.py _apply_completion·api/me.py submit_attempt) 모두 채우지 않아(항상
+    # NULL) 시간창 필터에 쓸 수 없다(ended_at만 실제로 채워진다). mode 필터는 미적용(⑨·R15와
+    # 동형 — mode_filter 필드 docstring의 "mode 무관 집계" 목록 참조).
+    duration_conds: list[ColumnElement[bool]] = [
+        ProblemAttempt.duration_seconds.isnot(None),
+        ProblemConcept.role == ConceptRole.PRIMARY,
+    ]
+    if user_id is not None:
+        duration_conds.append(ProblemAttempt.user_id == user_id)
+    if since is not None:
+        duration_conds.append(ProblemAttempt.ended_at >= since)
+    if until is not None:
+        duration_conds.append(ProblemAttempt.ended_at <= until)
+
+    duration_rows = (
+        await session.execute(
+            select(
+                ProblemAttempt.user_id,
+                ProblemConcept.concept_id,
+                ProblemAttempt.duration_seconds,
+            )
+            .select_from(ProblemAttempt)
+            .join(ProblemConcept, ProblemAttempt.problem_id == ProblemConcept.problem_id)
+            .where(*duration_conds)
+        )
+    ).all()
+    # (user, concept, duration) — None은 방어적으로 제외(WHERE로 이미 좁혀졌으나 컬럼 타입 자체는
+    # nullable이라 재확인 — R15 is_correct bool() 변환과 동형 관례).
+    duration_input: list[tuple[uuid.UUID, uuid.UUID, int]] = [
+        (user, concept, int(duration))
+        for user, concept, duration in duration_rows
+        if user is not None and concept is not None and duration is not None
+    ]
+    duration_by_group = _duration_seconds_by_group(duration_input)
+    mastery_gains_by_group = _mastery_gains_by_group_from_rows(mastery_input)
+    time_normalized_rates = _time_normalized_mastery_gains_from_groups(
+        mastery_gains_by_group, duration_by_group
+    )
+    time_normalized_mastery_gain_metric = _time_normalized_mastery_gain_metric(
+        time_normalized_rates
+    )
+
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
     diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
@@ -1795,6 +1985,7 @@ async def compute_wh1_surrogate_metrics(
         help_reduction_validated=help_reduction_validated,
         hint_depth_reached=hint_depth,
         mastery_gain_rate=mastery_gain_metric,
+        mastery_gain_rate_time_normalized=time_normalized_mastery_gain_metric,
         gap_recovery_leadtime_days=gap_recovery_leadtime_metric,
         misconception_resolution_rate=misconception_resolution,
         self_solve_rate=self_solve,
@@ -1813,6 +2004,7 @@ async def compute_wh1_surrogate_metrics(
         sample_transfer_probes=len(transfer_outcomes),
         sample_diagnostic_probes=diagnostic_total,
         sample_mastery_groups=len(mastery_gains),
+        sample_time_normalized_mastery_groups=len(time_normalized_rates),
         sample_gap_recovery_groups=len(leadtime_days),
         sample_misconception_hypotheses=misconception_total,
         sample_resolved_dialogues=resolved_total,

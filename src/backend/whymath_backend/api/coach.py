@@ -1107,6 +1107,16 @@ async def _apply_completion(
         `dialogue.resolution`은 건드리지 않는다(`api/me.py`의 클라 자가보고 PATCH가 그 필드의
         첫-기록-우선 소유자 — 서로 다른 신뢰 축을 섞지 않는다).
 
+    **PED-14**: 이 attempt의 `duration_seconds`를 `now − dialogue.started_at`(초)로 채운다 —
+    `create_session`이 대화 생성 시 이미 `started_at=now`를 적재해 두므로(신규 컬럼 0), 클라가
+    별도로 소요시간을 보고할 필요 없이 *서버 벽시계* 기반으로 attempt 소요시간이 나온다.
+    `dialogue.started_at`이 비어 있는 이론상 방어 케이스만 `duration_seconds=None`(가짜 0
+    금지 — 0초로 채우면 "즉시 풀었다"로 오독된다). 이 필드는 `api/me.py::submit_attempt`의
+    기존 `duration_seconds=body.duration_seconds`(클라 자기보고) 경로와 *별개 출처*를 갖는다 —
+    coach 대화 경로는 서버 파생, me.py 경로는 클라 보고이며 이 함수는 후자를 건드리지 않는다
+    (두 출처가 같은 컬럼에 섞여 적재될 수 있음을 `harness/wh1_evaluation.py`의 시간 정규화
+    지표 note가 정직하게 표기한다).
+
     반환 `dialogue_completed`는 `CoachResponse.dialogue_completed` 노출값 그대로(3상태:
     True=완료·False=평가했으나 미완료·None=판정 컨텍스트 없음).
     """
@@ -1135,6 +1145,13 @@ async def _apply_completion(
         attempt_mode=AttemptMode.Socratic대화,
         used_socratic=True,
         ended_at=now,
+        # PED-14: 서버 벽시계 기반 소요시간(초) — dialogue.started_at은 create_session이 이미
+        # 채워 둔다(신규 컬럼 0). 극단적으로 비어 있으면 None(가짜 0 금지 — docstring 참조).
+        duration_seconds=(
+            int((now - dialogue.started_at).total_seconds())
+            if dialogue.started_at is not None
+            else None
+        ),
     )
     session.add(attempt)
     dialogue.attempt_id = attempt.attempt_id

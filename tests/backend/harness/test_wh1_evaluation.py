@@ -31,11 +31,13 @@ from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
     _calibration_from_pairs,
     _diagnosis_agreement_offline,
+    _duration_seconds_by_group,
     _help_demand_supply_ratio_from_counts,
     _hint_depth_from_levels,
     _identify_transfer_probes,
     _judge_r15,
     _mastery_gain_from_gains,
+    _mastery_gains_by_group_from_rows,
     _mastery_gains_from_rows,
     _misconception_resolution_from_counts,
     _ols_slope,
@@ -43,6 +45,8 @@ from whymath_backend.harness.wh1_evaluation import (
     _state_mismatch_from_counts,
     _strategy_diversity_from_values,
     _strategy_repeat_from_sequences,
+    _time_normalized_mastery_gain_metric,
+    _time_normalized_mastery_gains_from_groups,
     _transfer_from_probes,
     compute_wh1_surrogate_metrics,
 )
@@ -102,7 +106,10 @@ class _FakeSession:
          도달율(resolution=학생자력해결 / resolution NOT NULL) 카운트.
      14) strategy rows((dialogue_id, socratic_strategy) 행 목록·all·turn_order 오름차순) —
          ⑫⑬ 발문 전략 다양성·연속 반복률(PED-04) 입력.
-    이 14개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+     15) duration rows((user_id, concept_id, duration_seconds) 행 목록·all·problem_concept
+         role=PRIMARY join) — ⑰ 시간 정규화 숙달 증가율(PED-14)의 분모 입력. 분자는 11)의
+         mastery rows를 재사용(새 mastery 쿼리 아님).
+    이 15개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -136,6 +143,7 @@ def _make_session(
     resolved_total: int = 0,
     hint_mismatch_flags: list[bool | None] | None = None,
     strategy_rows: list[tuple[Any, Any]] | None = None,
+    duration_rows: list[tuple[Any, Any, int | None]] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 이제 2컬럼(hint_level·client_state_mismatch, PED-04 ⑭ 동거)을 event_at
     # 오름차순으로 뽑으므로 행은 (level, mismatch) 튜플. `hint_mismatch_flags` 미지정이면 전부
@@ -161,6 +169,10 @@ def _make_session(
     # — 행은 (user, concept, mastery) 튜플. 그룹 내 오름차순은 본문 order_by가 보장하므로 여기선
     # 그 순서대로 주입한다(첫 등장=최이른·마지막=최근). mastery None은 본문이 필터로 제외한다.
     mstry_rows = list(mastery_rows or [])
+    # ⑰ 시간 정규화 숙달 증가율(PED-14) 쿼리는 problem_concept(role=PRIMARY) join으로
+    # (user_id, concept_id, duration_seconds)를 뽑는다 — 정렬 요구 없음(순수 합산, ⑨/⑯과 달리
+    # 시계열이 아니다). `duration_rows` 미지정이면 빈 목록(NO_DATA·기존 호출자 회귀 0).
+    dur_rows = list(duration_rows or [])
     return cast(
         AsyncSession,
         _FakeSession(
@@ -179,6 +191,7 @@ def _make_session(
                 _FakeScalarResult(one=(misconception_inactive, misconception_total)),
                 _FakeScalarResult(one=(self_solved, resolved_total)),
                 _FakeScalarResult(all_rows=list(strategy_rows or [])),
+                _FakeScalarResult(all_rows=dur_rows),
             ]
         ),
     )
@@ -1470,6 +1483,163 @@ class TestMasteryGainIntegratedWithCompute:
         assert m.mastery_gain_rate.status is MetricStatus.NO_DATA
         assert m.mastery_gain_rate.value is None
         assert m.sample_mastery_groups == 0
+
+
+# ── ⑰ 시간 정규화 숙달 증가율(PED-14) — Δmastery/Σduration_seconds ──────────────────
+class TestTimeNormalizedMasteryGainsPure:
+    def test_groups_by_key_same_algorithm_as_flat_list(self) -> None:
+        """dict 반환이 ⑨(_mastery_gains_from_rows)의 flat list와 *같은 값*을 낸다(알고리즘 동형)."""
+        u1, u2, u3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (u1, c1, 0.2),
+            (u1, c1, 0.6),  # (u1,c1) gain +0.4
+            (u2, c2, 0.5),
+            (u2, c2, 0.5),  # (u2,c2) gain 0.0
+            (u3, c1, 0.9),  # 1점만 → 제외
+        ]
+        by_group = _mastery_gains_by_group_from_rows(rows)
+        assert by_group == {(u1, c1): pytest_approx(0.4), (u2, c2): pytest_approx(0.0)}
+        # ⑨ 자체(list 반환)와 값 집합이 동일 — 반환 꼴만 다르다(회귀 0 확인).
+        assert sorted(by_group.values()) == sorted(_mastery_gains_from_rows(rows))
+
+    def test_duration_sums_by_group(self) -> None:
+        """(user,concept)별 duration_seconds 합 — 순서 무관 단순 합산."""
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        totals = _duration_seconds_by_group([(u1, c1, 100), (u1, c1, 50), (u2, c2, 30)])
+        assert totals == {(u1, c1): 150, (u2, c2): 30}
+
+    def test_intersection_only_unmatched_groups_excluded(self) -> None:
+        """mastery·duration 양쪽에 다 있는 키만 비율을 낸다 — 짝 없는 그룹은 가짜 매칭 금지."""
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        gains = {(u1, c1): 0.4, (u2, c2): 0.2}  # (u2,c2)는 duration 없음
+        durations = {(u1, c1): 200, (u1, c2): 100}  # (u1,c2)는 mastery 자격 없음
+        rates = _time_normalized_mastery_gains_from_groups(gains, durations)
+        assert rates == [pytest_approx(0.4 / 200)]  # (u1,c1)만 교집합
+
+    def test_zero_duration_group_excluded(self) -> None:
+        """duration 합이 0인 그룹은 0 나눗셈 방지로 제외(방어적 — 실제로는 도달 불가)."""
+        u1 = uuid.uuid4()
+        c1 = uuid.uuid4()
+        rates = _time_normalized_mastery_gains_from_groups({(u1, c1): 0.5}, {(u1, c1): 0})
+        assert rates == []
+
+
+class TestTimeNormalizedMasteryGainMetric:
+    def test_measured_mean(self) -> None:
+        m = _time_normalized_mastery_gain_metric([0.002, 0.004])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == pytest_approx(0.003)
+
+    def test_empty_no_data(self) -> None:
+        """교집합 그룹 0 → NO_DATA·value None(가짜 0 금지)."""
+        m = _time_normalized_mastery_gain_metric([])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "그룹 0개" in m.note
+
+    def test_bidirectional_rate_moves_inversely_with_duration(self) -> None:
+        """변별력(양방향, acceptance ⑦) — 같은 mastery 증분에서 duration 합이 클수록/작을수록
+        값이 정확히 반대로 움직인다(더 오래 걸릴수록 시간당 증가율은 낮아진다)."""
+        u1 = uuid.uuid4()
+        c1 = uuid.uuid4()
+        gains = {(u1, c1): 0.4}
+        short = _time_normalized_mastery_gain_metric(
+            _time_normalized_mastery_gains_from_groups(gains, {(u1, c1): 100})
+        )
+        long = _time_normalized_mastery_gain_metric(
+            _time_normalized_mastery_gains_from_groups(gains, {(u1, c1): 400})
+        )
+        assert short.value is not None and long.value is not None
+        assert short.value == pytest_approx(0.4 / 100)
+        assert long.value == pytest_approx(0.4 / 400)
+        assert short.value > long.value  # duration↑(400>100) → rate↓ — 정확히 반대 방향
+
+
+class TestTimeNormalizedMasteryGainIntegratedWithCompute:
+    async def test_measured_via_compute(self) -> None:
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            mastery_rows=[
+                (u1, c1, 0.3, _MEASURED_AT),
+                (u1, c1, 0.9, _MEASURED_AT2),  # gain +0.6
+                (u2, c2, 0.4, _MEASURED_AT),
+                (u2, c2, 0.6, _MEASURED_AT2),  # gain +0.2
+            ],
+            duration_rows=[(u1, c1, 600), (u2, c2, 400)],
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.mastery_gain_rate_time_normalized.status is MetricStatus.MEASURED
+        # (0.6/600 + 0.2/400) / 2 = (0.001 + 0.0005) / 2
+        assert m.mastery_gain_rate_time_normalized.value == pytest_approx(0.00075)
+        assert m.sample_time_normalized_mastery_groups == 2
+
+    async def test_no_duration_sample_is_no_data(self) -> None:
+        """acceptance ⑦(b) — non-null duration 표본 0 → NO_DATA(가짜 0 금지)."""
+        u1 = uuid.uuid4()
+        c1 = uuid.uuid4()
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            mastery_rows=[
+                (u1, c1, 0.3, _MEASURED_AT),
+                (u1, c1, 0.9, _MEASURED_AT2),
+            ],
+            duration_rows=[],  # ProblemAttempt.duration_seconds 표본 0건
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.mastery_gain_rate_time_normalized.status is MetricStatus.NO_DATA
+        assert m.mastery_gain_rate_time_normalized.value is None
+        assert m.sample_time_normalized_mastery_groups == 0
+
+    async def test_mastery_gain_rate_unaffected_by_duration_rows(self) -> None:
+        """acceptance ⑦(c) — 회귀 0. 같은 mastery_rows에서 duration_rows 유무와 무관하게
+        ⑨(mastery_gain_rate)는 정확히 같은 값을 낸다(⑰ 신설이 ⑨ 경로를 건드리지 않는다)."""
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        mastery_rows = [
+            (u1, c1, 0.3, _MEASURED_AT),
+            (u1, c1, 0.9, _MEASURED_AT2),
+            (u2, c2, 0.4, _MEASURED_AT),
+            (u2, c2, 0.6, _MEASURED_AT2),
+        ]
+        without_duration = await compute_wh1_surrogate_metrics(
+            _make_session(
+                total_sessions=1,
+                completed_sessions=1,
+                avg_tokens=None,
+                token_sample=0,
+                mastery_rows=mastery_rows,
+                duration_rows=[],
+            )
+        )
+        with_duration = await compute_wh1_surrogate_metrics(
+            _make_session(
+                total_sessions=1,
+                completed_sessions=1,
+                avg_tokens=None,
+                token_sample=0,
+                mastery_rows=mastery_rows,
+                duration_rows=[(u1, c1, 600), (u2, c2, 400)],
+            )
+        )
+        assert without_duration.mastery_gain_rate.status is MetricStatus.MEASURED
+        assert with_duration.mastery_gain_rate.status is MetricStatus.MEASURED
+        assert without_duration.mastery_gain_rate.value == with_duration.mastery_gain_rate.value
+        assert without_duration.mastery_gain_rate.value == pytest_approx(0.4)  # (0.6+0.2)/2
+        assert without_duration.sample_mastery_groups == with_duration.sample_mastery_groups == 2
+        # ⑰만 갈린다(있고 없고) — ⑨는 완전히 무관.
+        assert without_duration.mastery_gain_rate_time_normalized.status is MetricStatus.NO_DATA
+        assert with_duration.mastery_gain_rate_time_normalized.status is MetricStatus.MEASURED
 
 
 # ── ⑩ 오개념 해소율 (is_active=false 비율·해소 근사) ─────────────────────────────────
