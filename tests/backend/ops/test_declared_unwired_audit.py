@@ -234,6 +234,105 @@ class TestTimeseriesUsage:
         assert usage["Foo"].writers == ()
         assert usage["Foo"].readers == ("privacy.erasure",)
 
+    def test_writer_detected_through_aliased_import(self, tmp_path: Path) -> None:
+        """`import Foo as FooORM` 별칭 import도 writer로 잡혀야 한다 (2026-08-10 오탐 동결).
+
+        예전 구현은 `alias.asname or alias.name`으로 **로컬명만** 모은 뒤 모델명 집합과 교집합을
+        냈다 — 별칭이 붙으면 교집합이 비어 그 모듈을 통째로 건너뛰었다. 하필 이 감사기가
+        "schema/timeseries.py에 동명 Pydantic 클래스가 있어 이름 기반 탐지는 위험하다"고 경고했고
+        코드베이스가 그 모호성을 푸는 방법이 정확히 `as ...ORM` 별칭이라, 감사기가 자기가 지적한
+        문제의 해법에 눈이 먼 상태였다(실측 결과: 시계열 3종 전부 '적재 0' 오탐).
+        """
+        pkg = tmp_path / "fakepkg"
+        _write_timeseries_models(pkg, ["Foo"])
+        writer_dir = pkg / "l2"
+        writer_dir.mkdir()
+        (writer_dir / "rollup.py").write_text(
+            "from fakepkg.db.models.timeseries import Foo as FooORM\n"
+            "def run():\n    return FooORM(x=1)\n",
+            encoding="utf-8",
+        )
+        usage = dua.timeseries_usage(pkg, ("Foo",))
+        assert usage["Foo"].writers == ("l2.rollup",)
+
+    def test_writer_detected_via_pg_insert_call(self, tmp_path: Path) -> None:
+        """`pg_insert(Model).values(...)` bulk upsert도 적재다 (2026-08-10 오탐 동결).
+
+        생성자 호출(`Model(...)`)만 writer로 보면 이 저장소의 **멱등 적재 정본 관용구**
+        (`l1/problem_bank/populate.py` 이하 15개 projection/loader)를 통째로 놓친다.
+        """
+        pkg = tmp_path / "fakepkg"
+        _write_timeseries_models(pkg, ["Foo"])
+        writer_dir = pkg / "l2"
+        writer_dir.mkdir()
+        (writer_dir / "rollup.py").write_text(
+            "from fakepkg.db.models.timeseries import Foo as FooORM\n"
+            "from sqlalchemy.dialects.postgresql import insert as pg_insert\n"
+            "def run(rows):\n"
+            "    return pg_insert(FooORM).values(rows)\n",
+            encoding="utf-8",
+        )
+        usage = dua.timeseries_usage(pkg, ("Foo",))
+        assert usage["Foo"].writers == ("l2.rollup",)
+
+    def test_writer_detected_through_module_local_upsert_helper(self, tmp_path: Path) -> None:
+        """모델을 인자로 받아 insert하는 *모듈 내 헬퍼* 경유 적재(1-홉)도 writer다.
+
+        `l2/learning_metrics_rollup.py::_upsert(session, orm_model, rows, …)` 실물 관용구.
+        """
+        pkg = tmp_path / "fakepkg"
+        _write_timeseries_models(pkg, ["Foo"])
+        writer_dir = pkg / "l2"
+        writer_dir.mkdir()
+        (writer_dir / "rollup.py").write_text(
+            "from fakepkg.db.models.timeseries import Foo as FooORM\n"
+            "from sqlalchemy.dialects.postgresql import insert as pg_insert\n"
+            "def _upsert(session, orm_model, rows):\n"
+            "    return pg_insert(orm_model).values(rows)\n"
+            "def run(session, rows):\n"
+            "    return _upsert(session, FooORM, rows)\n",
+            encoding="utf-8",
+        )
+        usage = dua.timeseries_usage(pkg, ("Foo",))
+        assert usage["Foo"].writers == ("l2.rollup",)
+
+    def test_helper_without_insert_does_not_make_writer(self, tmp_path: Path) -> None:
+        """변별력 음성 — 모델을 인자로 받기만 하고 insert하지 않는 헬퍼는 writer가 아니다."""
+        pkg = tmp_path / "fakepkg"
+        _write_timeseries_models(pkg, ["Foo"])
+        writer_dir = pkg / "l2"
+        writer_dir.mkdir()
+        (writer_dir / "rollup.py").write_text(
+            "from fakepkg.db.models.timeseries import Foo as FooORM\n"
+            "def _describe(session, orm_model):\n    return str(orm_model)\n"
+            "def run(session):\n    return _describe(session, FooORM)\n",
+            encoding="utf-8",
+        )
+        usage = dua.timeseries_usage(pkg, ("Foo",))
+        assert usage["Foo"].writers == ()
+        assert usage["Foo"].readers == ("l2.rollup",)
+
+    def test_orm_alias_and_schema_plain_name_coexist(self, tmp_path: Path) -> None:
+        """같은 파일이 ORM은 별칭·Pydantic은 원명으로 가져오는 실물 배치(rollup)에서, 스키마
+        쪽 사용이 ORM 적재로 새지 않는다 — 별칭 매핑의 부수 효과인 정밀도 향상을 동결한다."""
+        pkg = tmp_path / "fakepkg"
+        _write_timeseries_models(pkg, ["Foo"])
+        schema_dir = pkg / "schema"
+        schema_dir.mkdir()
+        (schema_dir / "timeseries.py").write_text("class Foo:\n    pass\n", encoding="utf-8")
+        writer_dir = pkg / "l2"
+        writer_dir.mkdir()
+        (writer_dir / "rollup.py").write_text(
+            "from fakepkg.db.models.timeseries import Foo as FooORM\n"
+            "from fakepkg.schema.timeseries import Foo\n"
+            "def build():\n    return Foo(x=1)\n"  # Pydantic — 적재가 아니다
+            "PLAN = ((FooORM, 'user_id'),)\n",  # ORM — reader
+            encoding="utf-8",
+        )
+        usage = dua.timeseries_usage(pkg, ("Foo",))
+        assert usage["Foo"].writers == ()
+        assert usage["Foo"].readers == ("l2.rollup",)
+
     def test_neither_writer_nor_reader_when_unreferenced(self, tmp_path: Path) -> None:
         pkg = tmp_path / "fakepkg"
         _write_timeseries_models(pkg, ["Foo"])

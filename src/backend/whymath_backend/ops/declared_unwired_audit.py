@@ -393,6 +393,70 @@ class TimeseriesUsage:
     readers: tuple[str, ...]
 
 
+# `insert(Model)`·`pg_insert(Model)` — SQLAlchemy Core/PG 방언 insert 생성자. 이 저장소의 적재는
+# ORM 인스턴스화보다 **멱등 upsert**(`INSERT ... ON CONFLICT DO UPDATE`)가 정본 관용구라
+# (`l1/problem_bank/populate.py` 이하 15개 projection/loader 모듈), 생성자 호출만 보면 실제
+# 적재 경로 대부분을 놓친다. 첫 위치 인자만 본다 — `list.insert(0, X)` 같은 동명 메서드 오탐 차단.
+_INSERT_FUNC_NAMES = frozenset({"insert", "pg_insert"})
+
+
+@dataclass(frozen=True, slots=True)
+class _InsertHelper:
+    """모델을 인자로 받아 insert 문을 만드는 *모듈 내 헬퍼*의 서명 요약.
+
+    `l2/learning_metrics_rollup.py`의 `_upsert(session, orm_model, rows, …)`처럼 적재를 공통
+    헬퍼로 빼는 관용구를 1-홉만 추적한다(전역 콜그래프 추적 아님 — 같은 모듈 안에서 정의되고
+    호출되는 경우로 한정한다. 범위를 넓히면 이 감사기가 사실상 타입 추론기가 된다).
+    """
+
+    positional: tuple[str, ...]  # 위치 인자 순서의 파라미터 이름
+    sinks: frozenset[str]  # 그 함수 안에서 insert 첫 인자로 흘러드는 파라미터 이름
+
+
+def _insert_first_arg_name(node: ast.Call) -> str | None:
+    """`insert(X)`/`pg_insert(X)`/`sa.insert(X)` 호출이면 첫 위치 인자의 `Name` id."""
+    func = node.func
+    called = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    if called not in _INSERT_FUNC_NAMES or not node.args:
+        return None
+    first = node.args[0]
+    return first.id if isinstance(first, ast.Name) else None
+
+
+def _insert_helpers(module: ast.Module) -> dict[str, _InsertHelper]:
+    """모듈이 정의한 함수 중 "파라미터로 받은 모델을 insert에 넘기는" 것들의 서명 요약."""
+    helpers: dict[str, _InsertHelper] = {}
+    for node in ast.walk(module):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        args = node.args
+        positional = tuple(a.arg for a in (*args.posonlyargs, *args.args))
+        param_names = set(positional) | {a.arg for a in args.kwonlyargs}
+        if not param_names:
+            continue
+        sinks = {
+            name
+            for child in ast.walk(node)
+            if isinstance(child, ast.Call)
+            for name in (_insert_first_arg_name(child),)
+            if name in param_names
+        }
+        if sinks:
+            helpers[node.name] = _InsertHelper(positional=positional, sinks=frozenset(sinks))
+    return helpers
+
+
+def _forwarded_sink_args(node: ast.Call, helper: _InsertHelper) -> Iterator[ast.Name]:
+    """헬퍼 호출부에서 *싱크 파라미터 자리*에 실제로 놓인 `Name` 인자만 낸다."""
+    for index, arg in enumerate(node.args):
+        if index < len(helper.positional) and helper.positional[index] in helper.sinks:
+            if isinstance(arg, ast.Name):
+                yield arg
+    for keyword in node.keywords:
+        if keyword.arg in helper.sinks and isinstance(keyword.value, ast.Name):
+            yield keyword.value
+
+
 def timeseries_models(package_root: Path) -> tuple[str, ...]:
     """`db/models/timeseries.py`가 선언한 ORM 모델 클래스명."""
     path = package_root / "db" / "models" / "timeseries.py"
@@ -409,10 +473,29 @@ def timeseries_usage(package_root: Path, models: tuple[str, ...]) -> dict[str, T
 
     ⚠️ 이름만 보면 안 된다 — `schema/timeseries.py`에 **동명의 Pydantic 클래스**가 있어서
     이름 기반 탐지는 스키마 사용을 ORM 적재로 오인한다. `db.models`(또는 그 서브모듈)에서
-    import한 모듈만 대상으로 한다. writer = `ClassName(...)` 생성자 호출의 `func`. reader =
-    그 외 문맥의 `Name` 참조(예: `(DailyLearningMetrics, "user_id")` 삭제·반출 계획 튜플처럼
-    나중에 `getattr(model, column)`으로 간접 사용하는 패턴도 포함 — 생성자 호출 그 자체만
-    제외한다).
+    import한 모듈만 대상으로 한다.
+
+    별칭 import (2026-08-10 오탐 수정)
+    ---------------------------------
+    바로 그 동명 충돌 때문에 코드베이스는 `from ...db.models.timeseries import X as XORM`으로
+    ORM 쪽에 별칭을 단다(`l2/learning_metrics_rollup.py`가 3모델 전부 그렇게 가져온다). 예전
+    구현은 `alias.asname or alias.name`으로 **로컬명만** 모은 뒤 모델명 집합과 교집합을 냈으므로
+    별칭이 붙은 순간 교집합이 비어 그 모듈을 통째로 건너뛰었다 — 감사기가 자기가 경고한 모호성의
+    *해법*에 눈이 먼 상태였다. 이제 `로컬명 → 원래 모델명` 사전을 유지하고, 집계는 원래 이름으로
+    한다. 부수 효과로 정밀도도 오른다: 같은 파일이 ORM은 `XORM`, Pydantic은 `X`로 가져오면
+    로컬명 `X`는 사전에 없으므로 스키마 사용이 ORM 소비로 새지 않는다.
+
+    writer 판정 (2026-08-10 오탐 수정)
+    ----------------------------------
+      ⑴ `Model(...)` 생성자 호출
+      ⑵ `insert(Model)`·`pg_insert(Model)` — 이 저장소의 멱등 적재 정본 관용구
+      ⑶ ⑵를 감싼 *모듈 내 헬퍼*에 모델을 인자로 넘기는 호출(`_upsert(session, ModelORM, …)`)
+    ⑵·⑶이 없던 탓에 bulk upsert만 하는 writer는 전부 "적재 0"으로 오탐됐다.
+
+    reader = 위 writer 자리를 뺀 나머지 `Name` 참조(예: `(DailyLearningMetrics, "user_id")`
+    삭제·반출 계획 튜플처럼 나중에 `getattr(model, column)`으로 간접 사용하는 패턴도 포함).
+    writer 자리의 참조를 reader로도 세면 "쓰기만 하고 아무도 안 읽는" 상태가 통과로 위장되므로
+    제외한다.
     """
     model_set = set(models)
     writers: dict[str, set[str]] = {m: set() for m in models}
@@ -423,32 +506,46 @@ def timeseries_usage(package_root: Path, models: tuple[str, ...]) -> dict[str, T
         if source.parts[-3:-1] == ("db", "models"):
             continue  # 선언 자신은 소비가 아니다
         module = _parse_module(source)
-        imported: set[str] = set()
+        # 로컬명(별칭 포함) → 원래 모델명. 별칭을 원명으로 되돌리지 않으면 모듈을 통째로 놓친다.
+        local_to_model: dict[str, str] = {}
         for node in ast.walk(module):
             if isinstance(node, ast.ImportFrom) and node.module:
                 if node.module == timeseries_module or node.module.endswith("db.models"):
-                    imported.update(alias.asname or alias.name for alias in node.names)
-        candidates = imported & model_set
-        if not candidates:
+                    for alias in node.names:
+                        if alias.name in model_set:
+                            local_to_model[alias.asname or alias.name] = alias.name
+        if not local_to_model:
             continue
 
         rel = _module_dotted_name(package_root, source)
-        constructor_func_ids: set[int] = set()
+        helpers = _insert_helpers(module)
+        write_ref_ids: set[int] = set()  # writer 자리에 쓰인 Name 노드 — reader로 이중 계상 금지
         for node in ast.walk(module):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in candidates
-            ):
-                constructor_func_ids.add(id(node.func))
-                writers[node.func.id].add(rel)
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in local_to_model:  # ⑴ 생성자
+                write_ref_ids.add(id(func))
+                writers[local_to_model[func.id]].add(rel)
+                continue
+            first = _insert_first_arg_name(node)  # ⑵ 직접 insert/pg_insert
+            if first is not None and first in local_to_model:
+                write_ref_ids.add(id(node.args[0]))
+                writers[local_to_model[first]].add(rel)
+                continue
+            helper = helpers.get(func.id) if isinstance(func, ast.Name) else None
+            if helper is not None:  # ⑶ 모듈 내 insert 헬퍼로 모델 전달
+                for arg in _forwarded_sink_args(node, helper):
+                    if arg.id in local_to_model:
+                        write_ref_ids.add(id(arg))
+                        writers[local_to_model[arg.id]].add(rel)
         for node in ast.walk(module):
             if (
                 isinstance(node, ast.Name)
-                and node.id in candidates
-                and id(node) not in constructor_func_ids
+                and node.id in local_to_model
+                and id(node) not in write_ref_ids
             ):
-                readers[node.id].add(rel)
+                readers[local_to_model[node.id]].add(rel)
 
     return {
         m: TimeseriesUsage(writers=tuple(sorted(writers[m])), readers=tuple(sorted(readers[m])))
@@ -597,6 +694,10 @@ _OFFLINE_REPORT = (
     "by-design:빌드타임 관측 리포트(게이트 아님) — 수치를 보려고 사람이 돌린다. exit 0/2로 "
     "머지를 막는 판정기가 아니므로 CI 상시 배선 대상이 아니다"
 )
+_OPERATIONS_BATCH = (
+    "by-design:운영 집계 배치 — 일 1회 크론/수동 실행이 설계 확정값이고(COLLAB-03 acceptance ⑥) "
+    "새 스케줄러 도입은 같은 태스크가 금지했다. 실 PG 왕복이라 CI 상시 실행 대상도 아니다"
+)
 _MANUAL_COMPARISON_TOOL = (
     "by-design:후보 모델 결선용 수동 비교 도구 — 상시 게이트가 아니라 승격 판정 시점에 사람이 "
     "돌린다"
@@ -673,6 +774,12 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:api/verify.py — verify-step은 verify-solution이 연쇄 적용하는 하위 도구 "
             "표면(모듈 docstring). 학생 경로는 조립된 POST /v1/verify-solution만 쓴다(reached)"
         ),
+        # 청사진 기반 총괄평가 세트 조립 — ASM-04(done)가 *구성까지*를 범위로 명시했다.
+        "POST /v1/me/assessments/assemble": (
+            "by-design:ASM-04 — 세트 구성까지가 범위이고 시행·채점 폐루프는 후속이다(태스크 "
+            "'정직한 잔여' 원문: 「세트 시행·채점 폐루프는 범위 밖(구성까지)」). 클라이언트 "
+            "소비는 그 폐루프가 생기는 시점의 화면과 함께 오므로 지금 추적할 태스크가 없다"
+        ),
         # 음성 입력 — Phase 2+ 노출 대상, 서버 좌석만 선행 배선(구 branch 판정과 동일 근거)
         "POST /v1/speech/latex": (
             "by-design:음성 입력은 Phase 2+ 노출 대상 — 서버 좌석만 선행 배선된 상태이고 앱 "
@@ -689,13 +796,13 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "시각화조작": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
     },
     # ── 축 3. TimescaleDB 집계 테이블 ───────────────────────────────────
-    # writer 0(3종 전부) — `COLLAB-03-learning-metrics-writer`(status: todo)가 정확히 이 갭을
-    # 추적한다(erasure/export/retention이 이미 reader로 등재돼 있다는 사실까지 그 notes가 인용).
-    AXIS_TIMESERIES: {
-        "DailyLearningMetrics": "pending-task:COLLAB-03-learning-metrics-writer",
-        "UserBehaviorMetrics": "pending-task:COLLAB-03-learning-metrics-writer",
-        "ProblemSolveTimeDistribution": "pending-task:COLLAB-03-learning-metrics-writer",
-    },
+    # 비어 있는 것이 정상이다(2026-08-10). 등재됐던 3종은 `COLLAB-03-learning-metrics-writer`
+    # 유예였는데, 그 태스크가 done이 되며 `l2/learning_metrics_rollup.py`가 실제 writer가 됐다
+    # → 유예를 걷었다(도달했으므로 면제 불요. 남겨 두면 `stale-waiver`로 exit 1이다).
+    # ⚠️ 유예를 걷기 전에 감사기 자체의 오탐 2종을 먼저 고쳤다 — 별칭 import(`X as XORM`) 실명
+    # 문제와 bulk upsert writer 미탐지(`timeseries_usage` 도크스트링 참조). "탐지되지 않으니
+    # 유예를 계속 둔다"가 아니라 "탐지기가 틀렸으니 탐지기를 고친다"가 이 게이트의 정본 대응이다.
+    AXIS_TIMESERIES: {},
     # ── 축 4. harness/ops CLI ───────────────────────────────────────────
     AXIS_CLI: {
         # 코퍼스 생성·가공 배치 — 운영자 실행이 정상(입력·비용·판단이 사람 몫)
@@ -725,6 +832,8 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
         "harness.root_aggregate_batch": _BATCH_GENERATOR,
         "harness.reviewer_sample_package": _BATCH_GENERATOR,
+        # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
+        "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다
         "ops.cost_probe": _LIVE_DEPENDENT,
         "ops.cost_report": _LIVE_DEPENDENT,
