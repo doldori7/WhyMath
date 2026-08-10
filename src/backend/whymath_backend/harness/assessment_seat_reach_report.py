@@ -1,28 +1,30 @@
 """평가 결과 영속 좌석(`assessment` 4테이블) 도달 관측 리포트 — ASM-01 acceptance②.
 
 설계 정본: `docs/architecture/assessment_module_gap_review.md` §3 D1. `assessment`·
-`concept_mastery_history`·`skill_mastery_history`·`ability_snapshot` 4테이블 중 `assessment`
-본체는 조회(`GET /v1/me/assessments`)·완료(`PATCH .../complete`)·삭제(`DELETE`)·프라이버시
-내보내기/파기까지 5개 표면이 완비돼 있는데 `Assessment(...)` 생성 코드가 저장소 전체에 0건이다
-(이 시리즈 "완비된 소비 경로+미도달 공급원" 8회차). 이 모듈은 그 사실을 *영구히 눈에 보이게* 한다.
+`concept_mastery_history`·`skill_mastery_history`·`ability_snapshot` 4테이블의 행 수·분포·결손을
+관측한다. ASM-01 동결 시점(2026-08)에는 `assessment` 본체가 조회·완료·삭제·프라이버시 5개 표면
+완비 상태에서 `Assessment(...)` 생성 코드 0건이었고(이 시리즈 "완비된 소비 경로+미도달 공급원"
+8회차) 이 모듈이 그 사실을 눈에 보이게 하는 좌석이었다. **2026-08-10(ASM-05 세션) 실측 정정**:
+ASM-03(capture)·ASM-04(assemble)·mastery 트래킹 착지로 4테이블 전부 라이브 writer가 실재한다 —
+지금 이 리포트가 감시하는 것은 "writer 부재"가 아니라 "writer 실재 상태의 실호출 여부"다.
 
 **게이트가 아니다**(`visualization_reach_report`·`problem_bank_coverage`와 동일 원칙) — 카운트가
-0이어도 exit 1을 내지 않는다. 목표는 활성화가 아니라 가시화다: `POST /v1/me/assessments`(생성
-API) 신설·활성화는 이 태스크 범위 밖이다(설계 문서 §3 D1 acceptance⑤).
+0이어도 exit 1을 내지 않는다. 목표는 활성화가 아니라 가시화다.
 
-**"0건"과 "writer 부재"를 혼동하지 않는다** — 형제 테이블 중 `ability_snapshot`은 실제 writer가
-있다(`POST /v1/me/ability/snapshots` → `capture_ability_snapshot`, `api/me.py:965`). 이 테이블이
-카운트 0이어도 "생성 경로 부재"라고 말하면 거짓 주장이 된다. `_KNOWN_WRITER_CITATION`이 테이블별
-writer 유무를 정적으로 기록해 두 상태("생성 경로 자체가 없음" vs "생성 경로는 있으나 아직 호출된
-적 없음")를 구분해 렌더한다.
+**"0건"과 "writer 부재"를 혼동하지 않는다** — `_KNOWN_WRITER_CITATION`이 테이블별 writer 유무를
+정적으로 기록해 두 상태("생성 경로 자체가 없음" vs "생성 경로는 있으나 아직 호출된 적 없음")를
+구분해 렌더한다. 카운트 0인 테이블에 writer가 실재하는데 "생성 경로 부재"라고 말하면 거짓 주장이
+된다(ASM-01 당시 `ability_snapshot`이 그 반례였고, 지금은 4테이블 전부가 그렇다). 향후 writer
+없는 테이블이 이 대장에 추가되면 값 None으로 "생성 경로 부재"가 다시 렌더된다 — 두 상태의
+변별력은 hermetic 테스트가 합성 writerless 항목으로 동결한다.
 
 산출 3축:
   1. **4테이블 행 수** — 테이블별 row count + writer 유무에 따른 정직한 사유 문구.
   2. **`AssessmentType` 5종 분포** — DB에 실재하는 값만이 아니라 5종 전부를 보여준다(데이터 없는
      값도 0으로 명시 — 조용한 생략 금지).
   3. **진단 산출물 JSONB 결손** — `concept_diagnosis`(오개념 목록이 여기 담길 자리)·
-     `recommended_path`(추천 학습경로)가 비어있지 않은 row 수. `assessment` writer가 0이므로
-     현재는 반드시 0이지만, 그 사실 자체를 하드코딩하지 않고 실제 쿼리 결과를 그대로 신뢰한다.
+     `recommended_path`(추천 학습경로)가 비어있지 않은 row 수. 하드코딩이 아니라 실제 쿼리
+     결과를 그대로 신뢰한다(측정 없는 도입 없음).
 
 사용:
     python -m whymath_backend.harness.assessment_seat_reach_report
@@ -71,15 +73,29 @@ _REASON_OBSERVED = "관측됨"
 _REASON_NO_PRODUCER = "생성 경로 부재"
 _REASON_UNCALLED_WRITER = "writer 존재하나 미호출 관측"
 
-# 테이블별 실제 writer 인용 — None이면 저장소 전체에 생성 코드 0(전수 grep 실측,
-# `assessment_module_gap_review.md` §3 D1 부록). 있으면 그 writer가 아직 호출되지 않았을
-# 뿐임을 렌더가 구분해야 한다(그렇지 않으면 ability_snapshot에 대해 거짓 주장이 된다).
+# 테이블별 실제 writer 인용 — None이면 저장소 전체에 생성 코드 0(전수 grep 실측). 있으면 그
+# writer가 아직 호출되지 않았을 뿐임을 렌더가 구분해야 한다(혼동하면 거짓 주장이 된다).
+# [ASM-05 stale 정정·2026-08-10 실측] ASM-01 동결 당시 assessment·concept_mastery_history·
+# skill_mastery_history는 None(생성 경로 부재)이었으나 ASM-03(capture)·ASM-04(assemble)·
+# mastery 트래킹 착지로 라이브 writer가 실재한다 — 인용을 실측 갱신했다(행 번호는 2026-08-10
+# 기준·기존 ability_snapshot 인용 :965도 드리프트해 :1030으로 재실측 정정). '오류 발견 시
+# 조용히 넘어가지 않기' 집행이며, 빈 테이블의 사유가 '생성 경로 부재'→'writer 존재하나 미호출
+# 관측'으로 바뀌는 것은 의도된 진실 갱신이다(동결 테스트도 새 진실로 재작성).
 _KNOWN_WRITER_CITATION: dict[str, str | None] = {
-    "assessment": None,
-    "concept_mastery_history": None,
-    "skill_mastery_history": None,
+    "assessment": (
+        "POST /v1/me/assessments/capture — capture_measurement_assessment (api/me.py:2714)"
+        " · POST /v1/me/assessments/assemble — assemble_blueprint_assessment (api/me.py:2927)"
+    ),
+    "concept_mastery_history": (
+        "POST /v1/me/attempts — submit_attempt → record_problem_attempt_mastery"
+        " (api/me.py:738 → l2/mastery_tracking.py:134)"
+    ),
+    "skill_mastery_history": (
+        "POST /v1/me/attempts — submit_attempt → record_problem_attempt_skill_mastery"
+        " (api/me.py:743 → l2/skill_mastery_tracking.py:136)"
+    ),
     "ability_snapshot": (
-        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:965)"
+        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:1030)"
     ),
 }
 
@@ -249,8 +265,9 @@ def render_report(report: SeatReachReport, *, max_listed: int = 40) -> str:
         f"**{report.concept_diagnosis_nonempty_count}**",
         f"- `recommended_path`(추천 학습경로) 비어있지 않은 행: "
         f"**{report.recommended_path_nonempty_count}**",
-        "- 두 값 모두 `assessment` writer가 0이므로 구조적으로 0이 될 수밖에 없다 — 그러나 이"
-        " 값은 하드코딩이 아니라 실제 쿼리 결과다(측정 없는 도입 없음).",
+        "- 이 값은 하드코딩이 아니라 실제 쿼리 결과다(측정 없는 도입 없음) — `assessment`"
+        " writer가 0이던 ASM-01 시점엔 구조적 0이었으나, capture/assemble writer 착지"
+        "(ASM-03·ASM-04) 후에는 실측값이다.",
         "",
     ]
     return "\n".join(lines)

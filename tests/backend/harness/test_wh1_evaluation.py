@@ -316,7 +316,12 @@ class TestVerifyPassRate:
         assert m.sample_verify_events == 0
 
     async def test_note_is_honest_binary_verify(self) -> None:
-        """MEASURED note에 '미적발'·'unverifiable 미구분'(binary·3-state 아님) 정직 표기."""
+        """MEASURED note에 '미적발'(binary)·S4-19 3상태 병기 안내 정직 표기.
+
+        S4-19 갱신: 3상태 파생 회계(compute_step_verification_accounting)가 병기 착지해
+        'unverifiable 미구분' 한계 서술이 3상태 병기 안내로 바뀌었다 — binary 값·계산식은
+        불변(이중 회계)임을 note가 스스로 밝힌다.
+        """
         session = _make_session(
             total_sessions=1,
             completed_sessions=1,
@@ -327,7 +332,10 @@ class TestVerifyPassRate:
         )
         m = await compute_wh1_surrogate_metrics(session)
         assert "미적발" in m.verify_pass_rate.note
-        assert "unverifiable 미구분" in m.verify_pass_rate.note
+        assert "binary" in m.verify_pass_rate.note  # 이 지표 자체는 여전히 binary(값 불변)
+        assert "3상태" in m.verify_pass_rate.note  # S4-19 병기 파생으로 한계가 커버됨을 안내
+        assert "S4-19" in m.verify_pass_rate.note
+        assert "unverifiable 미구분" not in m.verify_pass_rate.note  # 구 한계 서술은 갱신됨
 
 
 # ── ⑤ 도움 감소 곡선(OLS 기울기) ─────────────────────────────────────────────
