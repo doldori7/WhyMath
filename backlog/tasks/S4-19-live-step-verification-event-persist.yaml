@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - src/backend/whymath_backend/schema/event_data_contract.py
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/harness/wh1_evaluation.py
-session: null
+session: claude/remaining-track-34zvse
 notes: "docs/architecture/solution_module_gap_review.md §5-3 D6(2026-08-03 2차 재검증) — 외부 EOS 틀 문서의 종단 엣지(AI 채점→학생 모델)가 1비트로만 닫혀 있던 갭. S3-07(shadow 전이 카운트)의 결정론 라이브 미러. NLP-02(답안 채점 shadow)·S4-11(힌트 콘텐츠)와 축 상이·S4-09 비의존. D6-2단계(BKT 부분 크레딧 승격)는 S3-01/S3-04 측정 후 판정(설계만·태스크 0). [2026-08-10 acceptance 정리 — 착수 전 선행 정리(세션 remaining-track-34zvse, ASM-05 완료 대기 중이라 1세션=1태스크 준수로 claim 보류)] 지형 실측으로 1줄 acceptance를 ①~⑦ 분해, 등재 전제 2건이 실측과 달라 정정: (a)'핸들러가 이미 쥔 값 운반'은 코칭 노출 게이트(coach.py:596-599)에 걸려 전단계-correct·ocr_gated 표본이 유실되는 구조 — 게이트 이전 값 운반으로 정정 (b)'학생 대면 표면 0'은 SurrogateMetrics 확장과 양립 불가(GET /v1/me/harness-metrics가 전 필드 자동 서빙 실측) — 파생 지표는 내부 산출로 분리. 겹침 실측: 7n9n72(S3-32)가 coach.py +416/-7 수정 중 — _build_response_payload 시그니처 영역·두 핸들러의 _log_verify_event 호출 인접 라인이라 병합 텍스트 충돌 예상, 그 브랜치가 '마지막 원소=solution_coaching' 언패킹 전제를 명문화하므로 반환 확장 시 그 위치 보존 필수. S4-16(vafylb)은 대상 3파일 무접촉 실측. 설계 문서의 행 번호는 stale(coach.py:523→실측 :582 등) — acceptance 행 번호가 2026-08-10 실측 정본"
 updated: 2026-08-10
