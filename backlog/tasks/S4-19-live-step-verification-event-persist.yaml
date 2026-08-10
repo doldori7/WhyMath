@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: todo
 priority: 4
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - src/backend/whymath_backend/schema/event_data_contract.py
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/harness/wh1_evaluation.py
-session: claude/remaining-track-34zvse
+session: null
 notes: "docs/architecture/solution_module_gap_review.md §5-3 D6(2026-08-03 2차 재검증) — 외부 EOS 틀 문서의 종단 엣지(AI 채점→학생 모델)가 1비트로만 닫혀 있던 갭. S3-07(shadow 전이 카운트)의 결정론 라이브 미러. NLP-02(답안 채점 shadow)·S4-11(힌트 콘텐츠)와 축 상이·S4-09 비의존. D6-2단계(BKT 부분 크레딧 승격)는 S3-01/S3-04 측정 후 판정(설계만·태스크 0)"
 updated: 2026-08-10
