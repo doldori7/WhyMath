@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/schema/problem.py
   - "tests/backend/api/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M1·M6. SEC-07 D1(GET 무인증=공개 카탈로그) 의도적 결정의 재검토 — 정답 노출 축은 Kiki 정책 판단 필요. L4 게이팅 무인증(L4/SEC-18)과 인접 축."
-updated: 2026-08-08
+updated: 2026-08-10
