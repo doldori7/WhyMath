@@ -140,7 +140,11 @@ def _dump_component(obj: object) -> str:
 
 
 def _serialize_payload(payload: tuple[object, ...]) -> str:
-    """`_build_response_payload` 6-튜플 전체를 하나의 직렬화 blob으로(누출 스캔용)."""
+    """`_build_response_payload` 반환 튜플 *전체*를 하나의 직렬화 blob으로(누출 스캔용).
+
+    S4-19로 7-튜플(carry 삽입·마지막 원소=solution_coaching 불변)이 됐다 — 스캔은 길이에
+    무관하게 전 원소를 훑으므로 carry(NamedTuple)도 str 폴백으로 blob에 포함된다.
+    """
     return "".join(_dump_component(component) for component in payload)
 
 
@@ -158,7 +162,8 @@ class TestGate3CoachNeverExposesAnswer:
             student_solution=_FALSE_RELATION_SOLUTION,
         )
         payload = coach._build_response_payload(body, expected_answer=_SECRET_ANSWER)
-        _decision, _matches, _interv, _lthc, _entry, sol = payload
+        # S4-19: 7-튜플(carry 삽입) — 마지막 원소=solution_coaching 불변식으로 언패킹한다.
+        *_head, sol = payload
         # 전제 확인 — 미검증(계산 슬립)이 실제로 검출돼 verify 코칭이 깨어난 상황이어야 의미가 있다.
         assert (
             sol is not None and sol.arithmetic_error is True

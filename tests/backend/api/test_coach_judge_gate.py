@@ -346,7 +346,8 @@ class TestDirectPayloadCallUngated:
         _enable_judge(monkeypatch)
         result = coach._build_response_payload(coach.CoachRequest(student_input=_SUBSTR_FULL))
         assert calls["n"] == 0  # 직접 경로는 judge 무관
-        _decision, matches, _intervention, _lthc, _entry, _sol = result
+        # S4-19: 7-튜플(carry 삽입) — matches 위치(인덱스 1)는 불변이라 앞쪽 언패킹만 확장.
+        _decision, matches, _intervention, _lthc, _entry, _carry, _sol = result
         assert matches and matches[0].misconception.id == _DOP  # diagnose 폴백·유지
 
 

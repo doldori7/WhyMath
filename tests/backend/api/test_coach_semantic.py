@@ -464,11 +464,12 @@ class TestSessionAndTurnsCombine:
 # ──────────────────────────────────────────────────────────────────────────
 class TestBuildPayloadDirectCallUnchanged:
     def test_direct_sync_call_falls_back_to_diagnose(self) -> None:
-        # matches 미주입(잠긴 TestThetaIntoScaffolding 호출 형태) → diagnose 폴백·sync·6튜플.
+        # matches 미주입(잠긴 TestThetaIntoScaffolding 호출 형태) → diagnose 폴백·sync·7튜플
+        # (S4-19: carry 삽입 — 마지막 원소=solution_coaching 불변식은 보존).
         body = coach.CoachRequest(student_input=_SUBSTR_FULL)
         result = coach._build_response_payload(body)
-        assert isinstance(result, tuple) and len(result) == 6  # 반환 튜플 형태 불변
-        _decision, matches, intervention, _lthc, _entry, _sol = result
+        assert isinstance(result, tuple) and len(result) == 7  # 반환 튜플 형태(S4-19 확장 후)
+        _decision, matches, intervention, _lthc, _entry, _carry, _sol = result
         assert matches  # distribution-over-power 풀매칭
         assert all(m.semantic_similarity is None for m in matches)  # diagnose만(현행 비트동일)
         assert matches[0].misconception.id == "distribution-over-power"
