@@ -902,6 +902,102 @@ def scan_remote_done(
         return {}, f"error:{type(exc).__name__}"
 
 
+# ── 원격 브랜치 backlog/tasks/ 파일명 스캔 (HARN-15) ──────────────────────────
+#
+# HARN-10 가드(`cmd_add`의 번호 충돌 검사)의 3회차 결함 교정이다. 기존 `_taken_id_numbers`는
+# ①로컬 백로그 ②원격 claim 대장(harness-claims 브랜치, in_progress만 기록)만 본다. 그런데
+# "다른 브랜치에 이미 backlog/tasks/<ID>.yaml로 **등재만 되고 아직 claim(in_progress)되지
+# 않은** 번호"는 claim 대장에 실리지 않으므로 구조적으로 안 보인다 — OPS-17·OPS-18이 main과
+# 미머지 브랜치에 각각 다른 슬러그로 중복 등재된 사고(2026-08-03)가 정확히 이 맹점이다.
+#
+# scan_remote_done과 원칙을 공유한다: `fetch=False`(기본)는 **이미 있는 remote-tracking
+# ref만** 본다 — 네트워크 비용 없음. cmd_add는 next처럼 자주 도는 경로는 아니지만, 그래도
+# 사람이 대화형으로 호출하는 명령이 매번 원격 fetch(초 단위)로 지연되는 것은 바람직하지
+# 않다 — 이미 세션 시작·next 등에서 최신화된 remote-tracking ref를 재사용한다.
+
+
+@dataclass(frozen=True)
+class RemoteTaskFile:
+    """원격 브랜치 사본의 backlog/tasks/ 아래에서 발견한 태스크 파일 1건."""
+
+    task_id: str  # 파일명에서 .yaml 을 뗀 값 = 그 브랜치가 실제로 쓰는 full task id
+    ref: str  # refs/remotes/origin/<branch>
+    branch: str  # <branch>
+
+
+def scan_remote_task_files(
+    root: Path, *, fetch: bool = False, max_refs: int = SCAN_MAX_REFS
+) -> tuple[list[RemoteTaskFile], str]:
+    """원격 브랜치들의 `backlog/tasks/*.yaml` 파일명 전부를 스캔한다 (HARN-15).
+
+    `cmd_add`의 번호 충돌 가드가 "등재만 되고 아직 claim되지 않은 원격 번호"까지
+    보게 하는 것이 목적이다 — 원격 claim 대장은 in_progress 상태만 기록하므로,
+    등재만 하고 아직 손대지 않은 태스크 파일은 그 대장에 원천적으로 안 잡힌다.
+
+    `scan_remote_done`(cat-file --batch로 *알고 있는* task_id들의 파일 하나씩을 조회)과
+    달리, 여기서는 애초에 어떤 파일이 있는지 자체를 몰라 나열해야 한다 — 그래서
+    `git ls-tree`로 브랜치별 backlog/tasks/ 디렉터리를 직접 나열한다
+    (`scan_remote_in_progress`가 이미 쓰는 "브랜치당 git 프로세스 1회" 패턴과 동형).
+
+    `fetch=False`(기본)는 **이미 있는 remote-tracking ref만** 본다 — 네트워크 0.
+    `fetch=True`는 최신 상태가 필요한 호출부(테스트 등)용.
+
+    트렁크 ref를 특별 취급하지 않는다(스킵하지 않음) — 어차피 로컬 백로그가 이미
+    트렁크 사본을 기준으로 로드돼 있으므로, 트렁크 브랜치가 여기서도 잡혀 중복
+    판정되는 것은 무해하다(호출부가 "같은 full ID면 충돌 아님" 규칙으로 걸러낸다).
+
+    두 번째 반환값은 status(`ok`/`offline`/`error`)다. `ok`가 아니면 **판정 불가**이며,
+    빈 결과를 '없음'으로 읽으면 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+    """
+    if not has_remote(root):
+        return [], "offline"
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return [], _classify_failure(fetched.stderr)
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return [], _classify_failure(listing.stderr)
+        refs = [
+            r.strip()
+            for r in listing.stdout.splitlines()
+            if r.strip() and not r.strip().endswith("/HEAD")
+        ][:max_refs]
+
+        found: list[RemoteTaskFile] = []
+        for ref in refs:
+            # <ref>:backlog/tasks 를 트리 자체로 지정 — 나오는 이름엔 경로 접두가 안
+            # 붙는다(_trunk_task_status가 쓰는 <ref>:<path> blob 조회와 동형 문법).
+            tree = _git(root, "ls-tree", "--name-only", f"{ref}:backlog/tasks", timeout=10)
+            if tree.returncode != 0:
+                continue  # backlog/tasks/ 자체가 없는 브랜치(구세대 등) — 조용히 건너뜀
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            for line in tree.stdout.splitlines():
+                name = line.strip()
+                if not name.endswith(".yaml"):
+                    continue
+                found.append(RemoteTaskFile(task_id=name[: -len(".yaml")], ref=ref, branch=branch))
+        return found, "ok"
+    except subprocess.TimeoutExpired:
+        return [], "offline"
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
+        return [], f"error:{type(exc).__name__}"
+
+
 # ── 장기 미머지 브랜치 감지 (HARN-13) ──────────────────────────────────────
 #
 # HARN-11(미머지 done)이 다루는 축과 가깝지만 다른 신호다 — HARN-11은 "이 태스크,

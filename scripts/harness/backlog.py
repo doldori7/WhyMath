@@ -744,15 +744,29 @@ def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:
 def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, tuple[str, str]]:
     """이미 쓰인 `<PREFIX>-<번호>` → (점유 태스크의 full ID, 출처 라벨).
 
-    **로컬 백로그 + 원격 claim 대장** 양쪽을 본다. 원격을 보는 것이 핵심이다 —
-    ARCH-13·OPS-15 두 사고 모두 병렬 세션이 *서로의 브랜치를 못 봐서* 같은 번호를
-    각각 등재한 것이라, 로컬만 검사하면 재발을 하나도 막지 못한다(HARN-10).
+    **로컬 백로그 + 원격 claim 대장 + 원격 브랜치 backlog/tasks/ 파일명** 세 곳을 본다.
+    원격을 보는 것이 핵심이다 — ARCH-13·OPS-15 두 사고 모두 병렬 세션이 *서로의
+    브랜치를 못 봐서* 같은 번호를 각각 등재한 것이라, 로컬만 검사하면 재발을 하나도
+    막지 못한다(HARN-10).
+
+    세 번째 출처(원격 브랜치 파일명 스캔)는 HARN-15 — 원격 claim 대장은 **in_progress로
+    claim된** 태스크만 기록하므로, "다른 브랜치에 이미 backlog/tasks/<ID>.yaml로
+    등재만 되고 아직 착수(claim)되지 않은" 번호는 claim 대장에 원천적으로 안 잡힌다
+    (OPS-17·OPS-18이 main과 미머지 브랜치에 각각 다른 슬러그로 이중 등재된 사고,
+    HARN-10의 3번째 재발). `remote_claims.scan_remote_task_files`가 이미 있는
+    remote-tracking ref만 읽어(fetch 없음) 이 맹점을 메운다.
 
     full ID를 함께 돌려주는 이유: 충돌은 **슬러그가 다를 때만** 성립한다. 같은 태스크를
     다른 클론에서 재등재하는 것(시딩·복제 세션)은 정상이므로 막으면 안 된다.
 
     원격 조회 실패는 등재를 막지 않는다(fail-open) — 다만 호출부가 그 사실을
     **경고로 표시**한다. 조용한 축소는 "검사했는데 안 걸림"으로 위장되기 때문이다.
+    claim 대장 조회는 기존 관례대로 상태를 조용히 버린다(genuine 예외만 이 함수를
+    벗어나 cmd_add의 fail-open 경로로 흘러간다). 파일명 스캔은 "offline"(원격 자체가
+    없음 — 로컬 테스트·오프라인 클론의 일상적 상태)은 같은 관례로 조용히 넘기되,
+    "error:<타입명>"(scan_remote_task_files 내부에서 이미 예외 타입명을 포장해 돌려줌)
+    은 **여기서 바로 경고**한다 — list_claims는 이미 성공했는데 파일명 스캔만 실패한
+    경우까지 통째로 예외로 승격하면 이미 확보한 claim 정보까지 버리게 되기 때문이다.
     """
     taken: dict[str, tuple[str, str]] = {}
     for task_id in getattr(backlog, "tasks", {}):
@@ -765,6 +779,22 @@ def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, 
             number = store.id_number_of(claim.task_id)
             if number:
                 taken.setdefault(number, (claim.task_id, "원격 claim"))
+        task_files, files_status = remote_claims.scan_remote_task_files(root)
+        if files_status.startswith("error"):
+            # 침묵 금지(CLAUDE.md) — status 자체에 이미 예외 타입명이 담겨 있다
+            # (scan_remote_task_files 내부의 f"error:{type(exc).__name__}" 포장).
+            print(
+                f"  ⚠ 원격 브랜치 backlog/tasks/ 파일명 스캔 실패({files_status}) — "
+                "등재만 되고 아직 claim되지 않은 원격 번호는 놓칠 수 있다",
+                file=sys.stderr,
+            )
+        for task_file in task_files:
+            number = store.id_number_of(task_file.task_id)
+            if number:
+                taken.setdefault(
+                    number,
+                    (task_file.task_id, f"원격 브랜치 backlog/tasks/({task_file.branch})"),
+                )
     return taken
 
 
