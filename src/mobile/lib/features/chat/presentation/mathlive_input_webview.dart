@@ -16,13 +16,13 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// 수학 의미 추론·치환은 하지 않는다(LaTeX 원문 보존·검증은 백엔드).
 String normalizeLatexInput(String raw) => raw.trim();
 
-/// 웹의 포커스 훅을 부르는 JS — 자동 포커스(S3-37) 배선의 유일한 호출 문자열.
+/// 웹의 포커스 훅을 부르는 JS — 자동 포커스(S3-37→S3-50) 배선의 유일한 호출 문자열.
 ///
-/// 훅은 index.html이 MathLive 경로(`mf.focus()`)와 textarea 폴백 경로(`ta.focus()`) *양쪽*에
-/// 정의한다 — 즉 MathLive가 로드 실패해 강등돼도 자동 포커스는 그대로 동작한다. 그럼에도
-/// `&&`로 존재를 먼저 확인하는 이유는 훅 정의 *이전*(스크립트 실행 중)에 onPageFinished가
-/// 먼저 도달하는 경우 ReferenceError로 죽지 않게 하기 위함이다(`whymathClear` 호출과 동일
-/// 방어 패턴). 포커스는 코스메틱이라 실패해도 입력 자체는 탭 한 번으로 정상 진행된다.
+/// 훅은 index.html이 MathLive 경로(`mf.focus()` + 가상 키보드 `show()`)와 textarea 폴백
+/// 경로(`ta.focus()`) *양쪽*에 정의한다 — MathLive가 로드 실패해 강등돼도 자동 포커스는
+/// 그대로 동작한다. 호출 시점은 `WhymathMathReady` 신호 수신 직후(훅 정의 완료가 보장됨 —
+/// S3-50)지만, `&&` 존재 가드는 방어적으로 유지한다(`whymathClear` 호출과 동일 패턴).
+/// 포커스는 코스메틱이라 실패해도 입력 자체는 탭 한 번으로 정상 진행된다.
 const String mathliveFocusScript = 'window.whymathFocus && window.whymathFocus()';
 
 /// MathLive 수식 입력 WebView — 입력 변경을 [onChanged]로 콜백한다.
@@ -40,7 +40,7 @@ class MathliveInputWebView extends StatefulWidget {
   /// 입력된 LaTeX(정규화 후)를 흘리는 콜백. 빈 문자열도 전달한다(호출자가 전송 여부 판정).
   final ValueChanged<String> onChanged;
 
-  /// 페이지 로드 완료 시 입력 필드에 자동으로 포커스를 줄지 (S3-37).
+  /// 웹 훅 준비 완료(WhymathMathReady) 시 입력 필드에 자동으로 포커스를 줄지 (S3-37→S3-50).
   ///
   /// 수식 입력 *전용 화면*(MathliveInputScreen)처럼 "진입했다 = 지금 입력하려는 것"이 확실한
   /// 자리에서만 true로 준다 — 학생이 화면에 들어와서 필드를 한 번 더 탭해야 하는 마찰을 없앤다.
@@ -75,17 +75,19 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
           widget.onChanged(normalizeLatexInput(message.message));
         },
       )
-      // 자동 포커스(S3-37) — 로드 *완료 후*에만 훅을 부른다. loadFlutterAsset 직후에 부르면
-      // index.html의 스크립트가 아직 window.whymathFocus를 정의하기 전이라 아무 일도 일어나지
-      // 않는다(graphing_calculator_webview의 whymathApplySpec 주입과 동일한 타이밍 계약).
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) {
-            if (widget.autofocus) {
-              _controller.runJavaScript(mathliveFocusScript);
-            }
-          },
-        ),
+      // 자동 포커스(S3-50·원 S3-19) — 웹이 명령 훅 정의를 *마친 뒤* 보내는 WhymathMathReady
+      // 신호에서 훅을 부른다. S3-37이 쓰던 onPageFinished는 이 자산에선 타이밍이 틀렸다:
+      // index.html의 모듈 스크립트는 top-level await로 비동기 실행되므로 페이지 로드 완료
+      // 시점엔 whymathFocus가 아직 미정의일 수 있고, && 가드 때문에 *무증상 no-op*이 된다
+      // (헤드리스 테스트로는 못 잡는 실기기 전용 실패 — fa08081 원본 대조로 발견).
+      // ready 신호는 MathLive 경로·textarea 폴백 경로 양쪽에서 온다(자산 계약 테스트가 동결).
+      ..addJavaScriptChannel(
+        'WhymathMathReady',
+        onMessageReceived: (JavaScriptMessage message) {
+          if (widget.autofocus) {
+            _controller.runJavaScript(mathliveFocusScript);
+          }
+        },
       )
       ..loadFlutterAsset('assets/mathlive_input/index.html');
   }

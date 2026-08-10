@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "S3-37 회수의 실기기 공백 2건 봉합(원 커밋 fa08081의 S3-19 부분과 대조로 확인): ①타이밍 — onPageFinished 시점엔 index.html의 모듈 스크립트(top-level await)가 whymathFocus를 아직 미정의일 수 있어 && 가드로 무증상 no-op → 원본 방식(웹이 훅 정의 직후 WhymathMathReady 채널로 ready 신호·Flutter는 그때 포커스 요청 + addPostFrameCallback 1차 요청 병행)으로 교체 ②키보드 — mathVirtualKeyboardPolicy=manual에선 mf.focus()만으로 가상 키보드가 안 뜸 → whymathFocus가 mathVirtualKeyboard.show()까지 호출(폴백 textarea 경로도 ready 신호 동봉)"
   - "기존 S3-37 산출물과의 정합 — mathliveFocusScript 상수·autofocus opt-in 파라미터·test/mathlive_autofocus_test.dart의 순서 스캔은 유지하되 ready 채널 기반으로 갱신(테스트가 onPageFinished 순서를 동결하고 있어 그대로 두면 새 구현과 어긋남 — 동등 강도로 갱신)"
   - "flutter analyze 0 · flutter test green + mathlive_input_asset_config_test 스타일의 자산 정적 동결(emitReady 위치·show() 호출 존재)"
-artifacts: []
+artifacts:
+  - "자동포커스 실기기 공백 2건 봉합 완료(원 커밋 fa08081의 S3-19 부분 이식 + S3-37 opt-in 설계와 병합). ①타이밍: index.html에 emitReady()(WhymathMathReady 채널 post) 신설 — MathLive 경로·textarea 폴백 경로 양쪽에서 훅 정의 직후 발신. Dart는 onPageFinished(setNavigationDelegate) 배선을 제거하고 WhymathMathReady 채널 핸들러에서 autofocus 시 mathliveFocusScript 실행(모듈 스크립트가 top-level await로 비동기라 onPageFinished 시점엔 훅 미정의 가능 → && 가드로 무증상 no-op이던 실기기 전용 실패 해소). ②키보드: whymathFocus가 mf.focus()에 더해 mathVirtualKeyboard.show() 호출(manual 정책에선 focus만으로 키보드가 안 뜸 — 방어적 존재 확인 동반). S3-37 산출물 정합: mathliveFocusScript 상수·autofocus opt-in 파라미터(기본 false·인라인 임베드 보호)는 유지, 화면의 autofocus:true opt-in 불변. 테스트 갱신: mathlive_autofocus_test.dart를 ready 채널 기반으로 재작성(15건) — 웹 계약 4건(훅 2경로·show 존재·emitReady 2경로), Dart 배선 4건(가드·ready 채널 순서+setNavigationDelegate 재유입 금지·opt-in·기본값), 결함주입 7건(구형 단일식 훅·ready 한쪽만·onPageFinished 구형 배선 재유입 등). 술어 교정 1회: onPageFinished 토큰 전체 금지가 새 구현의 주석 언급에 오탐 → setNavigationDelegate 코드 마커로 변경(변별력 유지·레드 1회 경유 실증). 검증: flutter analyze 0, flutter test 401→404 all passed(+3). 정직한 공백: 실기기에서 키보드가 실제로 뜨는지는 미검증(위젯 테스트 불가 영역 — 자산·소스 계약 동결까지가 헤드리스 한계, 실기기 확인은 /demo-doctor 절차)."
 paths:
   - "src/mobile/lib/features/chat/**"
   - src/mobile/assets/mathlive_input/index.html
