@@ -189,23 +189,29 @@ jobs:
         continue-on-error: true
         run: python -m whymath_backend.harness.qa_pipeline --json qa_report.json
 
-      # PB-02(2026-08): 커버리지 리포트(D4 관측 도구·problem_bank_coverage)를 재생성해 커밋본
-      # `docs/data/problem_bank_coverage_2026-07.json`과 diff — 어긋나면 실패. 도구 자체는
-      # 게이트가 아니라 항상 exit 0(모듈 docstring 명시)이라 stale 검출은 이 CI 스텝의 diff가
-      # 전담한다(도구 코드는 수정하지 않는다). 새 CI 잡을 만들지 않고 qa_pipeline과 동일한
-      # corpus 트리거(`needs.changes.outputs.corpus`)에 얹는다 — 코퍼스가 안 바뀌면 이 스텝도
-      # 안 돈다(성취기준·유형 카탈로그만 단독으로 바뀌는 경우는 corpus 플래그 사각지대로 남지만,
-      # 산출물 diff 자체가 최종 방어선이라 그 경우도 다음 코퍼스 변경 PR에서 잡힌다).
-      # working-directory는 qa_pipeline 스텝과 동일하게 레포 루트로 오버라이드(도구는 __file__
-      # 기준 절대경로를 쓰므로 cwd 무관 — 산출물 diff 대상 경로 표기만 단순화).
+      # PB-02(2026-08): 커버리지 리포트(D4 관측 도구·problem_bank_coverage)를 재생성해 커밋본과
+      # diff — 어긋나면 실패. 도구 자체는 게이트가 아니라 항상 exit 0(모듈 docstring 명시)이라
+      # stale 검출은 이 CI 스텝의 diff가 전담한다(도구 코드는 수정하지 않는다). 새 CI 잡을 만들지
+      # 않고 qa_pipeline과 동일한 corpus 트리거(`needs.changes.outputs.corpus`)에 얹는다 — 코퍼스가
+      # 안 바뀌면 이 스텝도 안 돈다(성취기준·유형 카탈로그만 단독으로 바뀌는 경우는 corpus 플래그
+      # 사각지대로 남지만, 산출물 diff 자체가 최종 방어선이라 그 경우도 다음 코퍼스 변경 PR에서
+      # 잡힌다). working-directory는 qa_pipeline 스텝과 동일하게 레포 루트로 오버라이드(도구는
+      # __file__ 기준 절대경로를 쓰므로 cwd 무관 — 산출물 diff 대상 경로 표기만 단순화).
+      #
+      # 대조 대상 파일은 **날짜 파일명 관례**(측정 이력 보존 — supersede 배너로 구본을 얼리고
+      # 새 측정마다 새 날짜 파일 생성, `problem_bank_coverage_2026-07.md` 상단 배너 참조)를 따라
+      # "현재 활성 리포트"로 갱신한다 — 원 PB-02 구현(2026-08-08)은 `2026-07.json`을 살아있는
+      # 파일로 가정했으나, 이후(2026-08-10) 재실측이 `2026-08.json`을 신설하고 `2026-07.json`은
+      # 동결했다. 이 게이트가 얼린 파일과 영원히 diff하면 다음 코퍼스 변경 즉시 상시 빨강이 되므로
+      # **재측정마다 이 경로를 최신 날짜 파일로 갱신하는 것이 이 게이트 관례의 일부**다.
       - name: 게이트 — 문제은행 커버리지 리포트 재생성-diff (코퍼스 변경 시만·stale 방지)
         if: needs.changes.outputs.corpus == 'true'
         working-directory: .
         run: |
           python -m whymath_backend.harness.problem_bank_coverage \
             --json /tmp/problem_bank_coverage_regenerated.json > /dev/null
-          if ! diff -u docs/data/problem_bank_coverage_2026-07.json /tmp/problem_bank_coverage_regenerated.json; then
-            echo "::error::문제은행 커버리지 리포트가 stale — 코퍼스/성취기준/유형 카탈로그가 바뀌었는데 docs/data/problem_bank_coverage_2026-07.json을 재생성해 커밋하지 않았다. 위 diff 참조. 재생성: cd src/backend && python -m whymath_backend.harness.problem_bank_coverage --json ../../docs/data/problem_bank_coverage_2026-07.json (.md도 함께 갱신할 것)"
+          if ! diff -u docs/data/problem_bank_coverage_2026-08.json /tmp/problem_bank_coverage_regenerated.json; then
+            echo "::error::문제은행 커버리지 리포트가 stale — 코퍼스/성취기준/유형 카탈로그가 바뀌었는데 docs/data/problem_bank_coverage_2026-08.json을 재생성해 커밋하지 않았다. 위 diff 참조. 재생성: cd src/backend && python -m whymath_backend.harness.problem_bank_coverage --json ../../docs/data/problem_bank_coverage_2026-08.json (.md도 함께 갱신할 것. 코퍼스 변경이 새 날짜의 재측정을 요구하면 새 파일 생성 + 이 스텝의 경로도 함께 갱신할 것)"
             exit 1
           fi
 

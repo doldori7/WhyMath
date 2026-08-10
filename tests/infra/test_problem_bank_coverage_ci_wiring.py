@@ -3,7 +3,7 @@
 왜 이 테스트가 있는가
 --------------------
 `problem_bank_coverage.py`(결정론 CLI·게이트 아님·항상 exit 0)가 산출하는 리포트는
-`docs/data/problem_bank_coverage_2026-07.json`(+`.md`)에 커밋돼 있었지만, 그 산출물을
+`docs/data/problem_bank_coverage_2026-08.json`(+`.md`)에 커밋돼 있었지만, 그 산출물을
 재생성해 커밋본과 대조하는 CI가 없었다(배선 갭 2) — 코퍼스가 6종→7종으로 바뀌어도 문서가
 "자기 도구와 모순" 상태로 방치될 수 있는 구조였다. 이 테스트는 그 대조 스텝이 실제 CI YAML에
 존재하는지 확인한다(CLAUDE.md "검증 장치를 만들고 배선 확인 없이 완료 선언 금지" —
@@ -16,7 +16,7 @@
 ② 그 스텝이 `-m whymath_backend.harness.problem_bank_coverage` 형태로 호출한다(패키지 모듈 실행)
 ③ 그 스텝은 `qa_pipeline` 스텝과 **같은** 코퍼스 변경 트리거(`needs.changes.outputs.corpus ==
    'true'`)를 공유한다 — 별도 트리거를 새로 만들지 않았다
-④ 그 스텝의 실행부(주석 제외)가 커밋된 `docs/data/problem_bank_coverage_2026-07.json` 경로를
+④ 그 스텝의 실행부(주석 제외)가 커밋된 `docs/data/problem_bank_coverage_2026-08.json` 경로를
    diff 대상으로 실제로 참조한다
 ⑤ 도구 자체(`problem_bank_coverage.py`)는 여전히 게이트가 아니다 — 이 CI 스텝만 실패를 낸다는
    설계 의도를 코드에서 재확인(도구 모듈이 `exit 1`을 스스로 내지 않는다는 사실은
@@ -51,7 +51,7 @@ _CI_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _JOB_KEY = "data-pipeline"
 _MODULE_INVOCATION = "-m whymath_backend.harness.problem_bank_coverage"
 _QA_PIPELINE_INVOCATION = "-m whymath_backend.harness.qa_pipeline"
-_COMMITTED_JSON_REL = "docs/data/problem_bank_coverage_2026-07.json"
+_COMMITTED_JSON_REL = "docs/data/problem_bank_coverage_2026-08.json"
 _COMMITTED_JSON_PATH = _REPO_ROOT / _COMMITTED_JSON_REL
 
 
@@ -174,7 +174,7 @@ def test_committed_json_exists_and_is_valid_json() -> None:
 def test_diff_check_actually_catches_a_perturbed_committed_json(tmp_path: Path) -> None:
     """변별력 실측 — 커밋본을 한 필드만 흐트러뜨려도 diff가 실제로 불일치를 검출하는지 확인.
 
-    CI 스텝의 diff 로직 자체(`docs/data/problem_bank_coverage_2026-07.json` vs 재생성본)를
+    CI 스텝의 diff 로직 자체(`docs/data/problem_bank_coverage_2026-08.json` vs 재생성본)를
     파이썬으로 직접 재현한다 — 도구를 다시 실행하지 않고(무거움), 커밋본 사본을 "재생성 결과"로
     간주해 ①원본 그대로면 diff 없음 ②한 필드를 바꾸면 diff 있음, 두 상태를 모두 확인한다.
     """
