@@ -123,9 +123,11 @@ from whymath_backend.l2.prerequisite_recommendation import (
     recommend_prerequisite_gaps,
 )
 from whymath_backend.l2.recommendation_evidence import record_recommendation_treatment
+from whymath_backend.l2.review_queue import ReviewQueue, fetch_review_queue
 from whymath_backend.l2.skill_mastery_tracking import (
     record_problem_attempt_skill_mastery,
 )
+from whymath_backend.l2.target_progress import TargetProgress, get_target_progress
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -1399,6 +1401,45 @@ async def get_my_weak_concepts(
         mastery_threshold=threshold,
         reviewed_only=reviewed_only,
     )
+
+
+# ── S4-18: GET /v1/me/review-queue — BKT 망각 역산 기반 복습 우선순위 큐 ──
+@router.get(
+    "/review-queue",
+    response_model=ReviewQueue,
+    summary="내 복습 우선순위 큐(BKT 망각 역산 — decayed_mastery 오름차순)",
+)
+async def get_my_review_queue(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> ReviewQueue:
+    """BKT 최신 숙달에 조회시점 망각 감쇠(`apply_forgetting`)를 적용해 복습이 급한 개념부터 정렬.
+
+    저장 컬럼(`next_review_at` 등)·마이그레이션 없이 매 호출 순수 재계산한다(`l2/review_queue.py`
+    모듈 docstring 참조). λ는 문헌 전형값(`calibrated=False`로 정직 표기) — 개인·개념별 EM 적합은
+    후속. 관측 이력이 전혀 없는 개념은 자동으로 제외된다(측정 안 됨 ≠ 복습 불필요).
+    """
+    return await fetch_review_queue(session, user.user_id)
+
+
+# ── S4-18: GET /v1/me/target-progress — 목표(D-day·목표 등급/점수·성취기준 커버리지) ──
+@router.get(
+    "/target-progress",
+    response_model=TargetProgress,
+    summary="내 목표 진행 상황(D-day·목표 echo·성취기준 커버리지 — 예측 필드 없음)",
+)
+async def get_my_target_progress(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> TargetProgress:
+    """`target_exam_date`/`target_grade`/`target_score`의 첫 조회 좌석(지금까지 쓰기 전용이었음).
+
+    목표 등급·목표 점수는 학생이 입력한 값을 *그대로 echo*할 뿐 예측하지 않는다(CLAUDE.md
+    "학생을 우열로 매기지 않는다" — `l2/target_progress.py` 모듈 docstring 참조). 성취기준
+    커버리지는 v0 정책('2022 개정' × '고등학교' 전체를 단일 스코프)이며, `school_type`이 없는
+    학생은 스코프 계산 불가로 관련 필드가 전부 null이다.
+    """
+    return await get_target_progress(session, user.user_id)
 
 
 # ── 원자그래프 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites ──
