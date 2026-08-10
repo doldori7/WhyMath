@@ -9,6 +9,12 @@
 범위(슬라이스 95): 단일 진단 → 시각화 서비스 함수(약점 선택은 `compute_concept_diagnoses`가
 weakest-first 정렬 → 호출자가 [0]을 넘김). HTTP 엔드포인트 + provider/cache/trace의 FastAPI DI
 배선은 후속(L5 프런트 착수 시).
+
+PED-16(2026-08-10): `api/scene.py`와의 서빙 오케스트레이션 미러(~40행 — 개념 로드→Overlay 조회→
+숙달도 라벨화→생성용 RoutingRequest 조립)는 공유 헬퍼(`api/_concept_orchestration.py`)로 해소했다.
+`/v1/visualizations/*` 3라우트(본 파일의 `/weak-concept`·`/spec` POST·GET)의 by-design 미배선
+상태(클라 호출자 0으로 이미 등재된 *별개 축*의 기존 결정)는 이 리팩터로 바뀌지 않는다 — 라우트
+삭제도 신규 클라 배선도 하지 않았다(회귀 확인: 엔드포인트 시그니처·경로·응답 모델 무변경).
 """
 
 from __future__ import annotations
@@ -22,32 +28,30 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._concept_orchestration import (
+    STUDENT_ESCALATION_DEFAULTS as _STUDENT_ESCALATION_DEFAULTS,
+)
+from whymath_backend.api._concept_orchestration import (
+    generate_routing_request,
+    load_concept_with_overlays,
+    mastery_level_for_diagnosis,
+)
 from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
-from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
-from whymath_backend.l1.concept_visual_style import get_recommended_visual_styles
-from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
 )
-from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
-from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.visualization import (
     InvalidVisualizationSpecError,
     visualization_spec_for_concept,
 )
-from whymath_backend.l4.lthc import mastery_to_level
 from whymath_backend.l4.visualization_policy import is_visualizable
 from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import Visualization, VisualizationShareLink
-
-# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18). 값 자체는 불변(회귀 0),
-# 실 구독·예산 배선은 이 좌석의 소스만 바뀌면 된다(`escalation_defaults` 참조).
-_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
 
 async def visualize_for_concept_diagnosis(
@@ -82,36 +86,20 @@ async def visualize_for_concept_diagnosis(
     Returns:
         검증된 `Visualization`, Concept 미존재 또는 시각화 보류(추상·불가) 시 None.
     """
-    concept_orm = await session.get(Concept, diagnosis.concept_id)
-    if concept_orm is None:
+    # 공유 오케스트레이션 헬퍼(PED-16④, `api/_concept_orchestration.py`) — Concept 로드 + 권장
+    # 시각화 양식(슬88)·시각화 가능성(Part 5) Overlay 조회를 `scene.py`와 함께 쓴다.
+    ctx = await load_concept_with_overlays(session, diagnosis.concept_id)
+    if ctx.concept_orm is None:
         return None
-    # 권장 시각화 양식(슬88)은 ARCH-14 ③으로 *노드 비내장* — 전용 Overlay(`concept_visual_style`)
-    # 에서 code 키로 조회해 스키마 필드에 주입한다(행 부재→[]·기존 동작). L3
-    # (`visualization_spec_for_concept`)가 이 필드를 프롬프트 힌트로 읽는다(계약·소비 경로 불변,
-    # 값의 출처만 노드→Overlay로 이동).
-    styles = await get_recommended_visual_styles(session, concept_orm.code)
-    concept_schema = concept_orm.to_schema().model_copy(
-        update={"recommended_visual_styles": styles}
+    concept_schema = ctx.concept_orm.to_schema().model_copy(
+        update={"recommended_visual_styles": ctx.recommended_visual_styles}
     )
-    # 시각화 가능성 게이트(Part 5·05b) — 시각화 계층 Overlay에서 4분류 조회(노드 비내장).
-    # 추상·불가 개념은 억지 시각화를 하지 않는다(행 부재=미태깅→기존 동작).
-    visualizability = await get_visualizability(session, concept_orm.code)
-    if not is_visualizable(visualizability):
+    # 시각화 가능성 게이트(Part 5·05b) — 추상·불가 개념은 억지 시각화를 하지 않는다
+    # (`visualization.py` 전용 — `scene.py`는 이 게이트를 두지 않는다).
+    if not is_visualizable(ctx.visualizability):
         return None
-    mastery = (
-        diagnosis.bkt_mastery if diagnosis.bkt_mastery is not None else diagnosis.irt_mastery_proxy
-    )
-    level = mastery_to_level(mastery) if mastery is not None else "초보"
-    req = RoutingRequest(
-        task_type="generate",
-        difficulty="medium",
-        requires_reasoning=True,
-        student_subscription=student_subscription,
-        budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
-        # sync 강제(슬97): parse_visualization_spec 게이트가 텍스트를 *즉시* 필요로 하므로
-        # QUALITY 비동기(빈 text·job_id)로 가면 안 된다 — sync=True면 라우터가 async 미선택.
-        sync=True,
-    )
+    _mastery, level = mastery_level_for_diagnosis(diagnosis)
+    req = generate_routing_request(student_subscription)
     return await visualization_spec_for_concept(
         concept_schema,
         level,
