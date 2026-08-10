@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-17-study-generate-fallback-decision
+title: "학습 공급 생성 폴백 후속 결정 소유 — study 좌석 generate_request 미주입(선언된 유보) 판정 + SupplyTally 학생 수신 무변별 해소"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① api/study.py 경계 docstring이 선언한 '생성 폴백(LLM)은 이 좌석에서 켜지 않는다(후속 결정)'의 그 후속 결정을 소유 — (a) 개방: supply()에 generate_request·prompt·system·provider·trace 전달 배선 + 비용·환각 표면 통제(레이트리밋·PRM/도구 검증 경유) 동반 + DSL 미보유 개념에서 404→생성 응답 실측·미주입 복귀 시 404 재현(양방향 변별) 또는 (b) 비개방 확정: by-design 근거 명문화 + 404 사유 유지 — 어느 쪽인지 판정으로 확정"
+  - "② 판정과 무관하게: SupplyTally 무변별 해소 — guard 단락(학생 404·content_supply.py:326-334)과 실제 생성(학생 수신·:345-356)이 동일 (content_source=generate, strategy, fallback_reason) 튜플로 합산돼 학생 수신 여부가 회계에서 소실된다. served 축 추가 또는 content_source 분리로 'generate로 집계되나 학생은 못 봄' 왜곡을 기계 판정 가능하게"
+  - "③ MOB-13(클라이언트 호출 배선·타 세션 in-flight)과 축 분리 — 본 태스크는 서버 좌석 판정·배선만, 클라 배선은 범위 밖"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/study.py
+  - src/backend/whymath_backend/l4/content_supply.py
+  - "tests/backend/api/**"
+  - "tests/backend/l4/**"
+session: null
+notes: "ai_integration_gap_review.md D4(2026-08-10). study.py:29-30이 유보를 정직하게 선언했으나 추적 태스크가 없었다 — SEC-15 등재 선례('docstring 자백·추적 부재→태스크化')와 동형. MOB-13 paths(api/study.py) 의도적 겹침 — 겹침 경고는 대기 신호, MOB-13 착지 후 착수 권장(기능 의존 아님)."
+updated: 2026-08-10

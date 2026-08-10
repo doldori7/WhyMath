@@ -1253,6 +1253,13 @@ Desmos/GeoGebra·백엔드 `sympy.latex` 생성 — 기존 미채택 결정 승�
 - **등재(전건 `backlog.py add` 경유·번호 충돌 0)**: `WEB-01-landing-static-v1`(랜딩 v1·외부 폼 CTA·변호사 게이트 선결) → `WEB-02-landing-deploy`(Kiki 확정 후 집행) / `ADMIN-04-module-registry` → `ADMIN-05-bff-readonly` → `ADMIN-06-admin-web-shell`(+CORS) → `ADMIN-07-review-ui` — 04 §8 제안 4건(ADMIN-MODULE-REGISTRY·BFF·REVIEW-UI·WEB)의 번호 부여 등재. 랜딩 공개 전 변호사 검토(광고 규제 §4.1 효과 단정 금지·KWCAG·개인정보 처리위탁)는 gates add CLI 부재(HARN-18)로 acceptance 인코딩 — HARN-18 착지 후 gates 대장 등재.
 - **동반 현행화**: CLAUDE.md 스택 표 "별도 웹" 행 비고 갱신(행 신설 0 — 공개 랜딩 명시·"Phase 3+는 교사 웹 한정"으로 정제) · 04 §8 등재 ID 부기(v1.3) · ui/00_index 정본 경계에 링크 1줄.
 - **범위 밖(의도적 미등재)**: 교사 웹 착수(TEACHER role 부재 — dead code 금지)·백오피스 prod 내부망 배선(Phase B)·코드 스캐폴딩(WEB-01 몫)·graphing-calculator(슬89 ④ 불변).
+### 2026-08-10 (설계·AI 통합점검): **AI 기능 통합점검 — 기능×배선×관측 교차 재점검(`ai_integration_gap_review.md`), 태스크 5건 등재 + 정본 정정 4파일. 최대 발견 = 학생 대면 LLM 트래픽 100%가 비용 게이트② 표본 밖** (claude 설계, Kiki "AI기능 통합점검")
+
+- **프레임**: AI 리뷰 4편(콘텐츠생성×2·튜터·추천·NLP — 등재 태스크 전건 done)과 `ai_llm_inventory_2026-07.xlsx`를 1차 스냅샷으로 승계하고, {선언·배선·관측} 3축 곱에서 한 축이 0인 지점만 전수 재점검(3축 Explore + 원격 미머지 브랜치 대조 실측).
+- **등재 5건**(전건 `backlog.py add`·ID는 미머지 7브랜치 천장(OPS-25·SEC-18·PED-16) 너머로 사전 청소): ①`OPS-26` WH-1 primary(기본 ON·07-20 GA)가 `l3.pipeline` 우회 → Langfuse `l3_routing` 0·Redis 캐시 0 — `wh1_primary.py`가 "범위 밖(후속)"으로 스스로 선언한 유보의 발화 조건이 GA flip으로 기충족 ②`OPS-27` QUALITY 워커가 prod compose에 없어 202 작업 영구 pending(producer-only 배포 축) ③`SEC-19` `POST /v1/generate` 레이트리밋 0(유일한 무제한 LLM 비용 표면 — jobs 무인증 축은 점검 중 타 세션 `SEC-15` 선점 확인·승계) ④`PED-17` study 생성 폴백 "후속 결정"의 추적 태스크 부재 + SupplyTally가 학생 404와 실수신을 동일 튜플로 합산하는 무변별 ⑤`OPS-28` OPS-22 감사기 사각 3종(CLI 축 2패키지 비재귀·HTTP reached=dart|테스트 합집합·dart 리터럴 한계).
+- **정정 4파일**(같은 커밋): `api/coach.py` "LLM 호출 0" ×3(primary GA와 모순) · `wh1_llm_policy.py` "트레이스는 라우터가 붙이며"(라우터는 순수 결정 — 미결선이 사실) · `l5/ocr/__init__.py`·`factory.py` "스텁/NotImplementedError" 표기(전 부품 동작 — recognize.py 07-31 정정의 미전파 재발, 요약 docstring에 "모듈 docstring이 정본" 각인으로 방어).
+- **xlsx 8월판 미발행 결정**: 모델 핀은 전건 문자 일치(ARCH-15 acceptance 유지 — openpyxl 재대조)라 바이너리 재발행 없이 리뷰 문서 부록 A-3이 델타 텍스트 정본(상태 stale 3곳: TexTeller "B 스텁"→C·동작 / QwenVL "보류(NotImplementedError)"→비동기 실배선 / WH-1 "현재 Claude Haiku"→코드는 LOCAL 라우팅).
+- **유보 8건 발화 조건 표**(§5)와 **중복 등재 금지 대장 15항**(§3 — SEC-15/17/18·PED-16 ④ 등 원격 미머지 소유 포함) 명문화. 검증: 감사기 exit 0·ruff/black/mypy strict/lint-imports 전건 green.
 
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
