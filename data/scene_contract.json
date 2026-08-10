@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "note": "scene DSL 서버↔클라 필드셋 계약(MOB-14·2026-08-10). 백엔드 `LearningScene`·`SceneElement` 8종·`SceneLearnerContext`(l4/learning_scene.py) + `Visualization`(schema/visualization.py) 응답 필드셋을 한 곳에 선언한다. 이전엔 이 계약이 아예 없어(scene_models.dart를 참조하는 백엔드·크로스 테스트 0건) json_serializable이 미지 키를 조용히 무시해 필드 드리프트 4건이 CI를 무증상 통과했다(`docs/architecture/dsl_integration_gap_review.md` §2-④). 백엔드(pytest)는 이 파일의 각 필드셋이 Pydantic 모델 필드셋과 정확히 일치하는지, 모바일(flutter test)은 Dart freezed 모델의 실제 직렬화 키 집합(`toJson().keys`)이 이 파일과 정확히 일치하는지 동결한다(render_contract·notation_contract 선례).",
+  "authority": "backend whymath_backend/l4/learning_scene.py (LearningScene·SceneElement 8종·SceneLearnerContext) + whymath_backend/schema/visualization.py (Visualization) — 05a §3 정본",
+  "consumers": [
+    "backend field-set governance: tests/backend/l4/test_scene_contract.py",
+    "flutter field-set governance: src/mobile/test/scene_contract_test.dart"
+  ],
+  "models": {
+    "Visualization": [
+      "visualization_id",
+      "type",
+      "spec",
+      "caption",
+      "interactive"
+    ],
+    "SceneLearnerContext": [
+      "mastery_level",
+      "active_hypothesis_ids",
+      "active_hypothesis_confidences",
+      "theta"
+    ],
+    "LearningScene": [
+      "scene_id",
+      "concept_id",
+      "topic_label",
+      "layout",
+      "answer_deferral_max_level",
+      "learner_context",
+      "elements"
+    ]
+  },
+  "scene_elements": {
+    "visualization": ["kind", "ref"],
+    "param_control": ["kind", "targets", "bound_visualization_index"],
+    "step_panel": ["kind", "solution_path_id", "reveal_policy"],
+    "misconception_probe": ["kind", "misconception_id", "intervention"],
+    "socratic_prompt": ["kind", "socratic_category", "polya_stage", "hint_level", "prompt_text"],
+    "annotation": ["kind", "target_element_index", "highlight_spec"],
+    "skill_focus": ["kind", "behavior_area", "focus_prompt"],
+    "tutoring_prompt": ["kind", "role", "prompt_text"]
+  }
+}

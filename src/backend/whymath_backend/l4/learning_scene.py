@@ -105,6 +105,13 @@ class ParamControlElement(_ElementBase):
 
     `bound_visualization_index`는 같은 elements 안의 `visualization` 요소를 가리키고,
     `targets`는 그 graph_2d spec이 *선언한* 파라미터 이름의 부분집합이어야 한다(불변식 ②).
+
+    MOB-14(2026-08-10) — `value_range`·`step` 필드 제거: 유일한 생산자
+    `scene_generation.py`의 `ParamControlElement(...)` 호출이 `targets`·
+    `bound_visualization_index`만 채우고 이 두 필드는 채운 적이 없다(전수 grep 확인, 다른
+    생산자 0 — 슬라이더 범위·증분은 이미 `Graph2dParam.min/max/step`이 선언한다). 죽은
+    좌석이라 채울 생산자가 생기기 전까지 제거한다(`docs/architecture/dsl_integration_gap_review.md`
+    §2-④). 클라 `scene_models.dart`엔 애초에 대응 필드가 없었다(드리프트 무영향).
     """
 
     kind: Literal["param_control"] = "param_control"
@@ -115,10 +122,6 @@ class ParamControlElement(_ElementBase):
     bound_visualization_index: int = Field(
         ge=0, description="조작 대상 `visualization` 요소의 elements 인덱스."
     )
-    value_range: list[float] | None = Field(
-        default=None, description="슬라이더 범위 [min, max](선택·UI 힌트)."
-    )
-    step: float | None = Field(default=None, description="슬라이더 증분(선택·UI 힌트).")
 
 
 class StepPanelElement(_ElementBase):
