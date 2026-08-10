@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/harness/rephrased_corpus_hygiene.py
   - "data/corpus/problem_bank_rephrased_v0/**"
-session: null
+session: claude/remaining-track-34zvse
 notes: "QUAL-01(harness/problem_duplication_audit.py §5.2·§6.1, 2026-08-10) 부산물 발견 — 교차코퍼스 실중복 스캔에서 배제된 282쌍(lineage_excluded_pair_count) 전부가 '변형 관계로 자기 원본을 직접 지목 + 텍스트 완전 동일'인 패턴이었다. 이 방법은 원본이 다른 코퍼스에 있고 텍스트가 우연히 매칭될 때만 포착되는 간접 신호라 하한값 — 진짜 비율은 rephrased_v0 429건 전체를 relations로 직접 훑어야 안다. rephrased_corpus_hygiene.py는 문법 결함만 보고 이 축은 검사하지 않음을 QUAL-01 작성 중 확인."
 updated: 2026-08-10
