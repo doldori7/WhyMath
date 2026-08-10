@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: blocked
+status: todo
 priority: 2
 owner: claude
 depends_on:

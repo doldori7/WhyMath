@@ -3,6 +3,7 @@
 // coachApiProvider를 fake로 override해 네트워크 없이 화면 동작을 확인한다.
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/data/coach_api.dart';
@@ -432,19 +433,17 @@ void main() {
       ),
     );
 
-    // 기본 펼침 — 발문이 보인다.
-    expect(
-      find.text('이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.'),
-      findsOneWidget,
-    );
+    // 기본 펼침 — 발문이 보인다(수식 x^2는 조판되므로 프로즈 부분은 textContaining으로 확인·S3-39).
+    expect(find.textContaining('두 근 중 큰 근을 구하시오'), findsOneWidget);
+    // 캐럿 수식(x^2-5x+6=0)은 raw가 아니라 Math로 조판된다.
+    expect(find.byType(Math), findsWidgets);
+    expect(find.textContaining('x^2-5x+6=0'), findsNothing);
 
     // 배너를 탭하면 접혀 발문이 숨고 요약 행만 남는다.
     await tester.tap(find.textContaining('풀이 중인 문제'));
     await tester.pump();
-    expect(
-      find.text('이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.'),
-      findsNothing,
-    );
+    expect(find.textContaining('두 근 중 큰 근을 구하시오'), findsNothing);
+    expect(find.byType(Math), findsNothing); // 접히면 수식도 사라진다.
     expect(find.textContaining('풀이 중인 문제'), findsOneWidget);
   });
 

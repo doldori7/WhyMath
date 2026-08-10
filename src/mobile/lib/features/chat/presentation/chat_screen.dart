@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../shared/widgets/math_text.dart';
 import '../../../theme/spacing.dart';
 import '../../ocr/data/ocr_models.dart';
 import '../../problems/application/active_problem.dart';
@@ -414,13 +415,15 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
                   ),
                   if (_expanded && question != null) ...[
                     const SizedBox(height: AppSpacing.xs6),
-                    Text(question, style: theme.textTheme.bodyMedium),
+                    // 발문은 프로즈+수식 혼합 — 캐럿/평문 수식만 교과서 조판으로 렌더(표현≠의미).
+                    MathText(question, style: theme.textTheme.bodyMedium),
                     if (problem.choices != null &&
                         problem.choices!.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
                       for (var i = 0; i < problem.choices!.length; i++)
-                        Text(
-                          '${i + 1}. ${problem.choices![i]}',
+                        _BannerChoiceLine(
+                          number: i + 1,
+                          value: problem.choices![i],
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -433,6 +436,37 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// 배너 선택지 한 줄 — "N. " 접두사(평문) + 값(수식이면 조판·S3-39 회수).
+///
+/// 번호 접두사는 항상 평문으로 두고 값만 [mathInlineSpansFor]로 세그먼트한다 — 번호가 값 수식에
+/// 섞여 조판되지 않게(예: "1. x^2=4"에서 "1."은 평문·"x^2=4"만 수식). 값이 평문이면 결과는 기존
+/// "N. 값" 한 줄과 동일하다(무회귀). 배너는 탭 어포던스가 없는 요약 표시라 Text.rich로 충분하다.
+class _BannerChoiceLine extends StatelessWidget {
+  const _BannerChoiceLine({
+    required this.number,
+    required this.value,
+    required this.style,
+  });
+
+  final int number;
+  final String value;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final effective = style ?? DefaultTextStyle.of(context).style;
+    return Text.rich(
+      TextSpan(
+        style: effective,
+        children: <InlineSpan>[
+          TextSpan(text: '$number. '),
+          ...mathInlineSpansFor(value, effective),
+        ],
       ),
     );
   }
@@ -571,9 +605,9 @@ class _ChoiceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // 값 — 길면 자연스럽게 줄바꿈(멀티라인)·짧으면 한 줄. 번호는 앞에 고정된다.
+          // 값 — 수식이면 교과서 조판, 아니면 평문(길면 줄바꿈). 번호는 앞에 고정된다(S3-39 회수).
           Expanded(
-            child: Text(value, softWrap: true),
+            child: MathText(value),
           ),
         ],
       ),
@@ -643,14 +677,15 @@ class _MessageBubble extends StatelessWidget {
             if (showBadge) _SocraticBadge(category: category),
             if (showBadge) const SizedBox(height: AppSpacing.xs6),
             // 코치 발화만 템플릿 `*...*` 강조를 굵게 렌더한다(MOB-04·표현≠의미).
-            // 학생 버블은 원문 그대로 — 학생 입력의 별표는 곱셈 기호(`3*4`)일 수
-            // 있어 어떤 해석도 하지 않는다.
+            // 학생 버블도 수식 조판(캐럿/평문 표기)한다 — 별표는 강조가 아니라 곱셈(\cdot)으로만
+            // 다뤄 강조 오해가 없다(표현≠의미·의미추론 없음·MathText가 fail-closed 폴백·S3-39).
             if (isCoach)
               CoachEmphasisText(message.text)
             else
               // 접근성(MOB-13): primaryContainer 위 텍스트는 onPrimaryContainer 롤로
-              // (기본 onSurface는 다크에서 대비 부족). 기본 스타일에 색만 병합한다.
-              Text(
+              // (기본 onSurface는 다크에서 대비 부족). 기본 스타일에 색만 병합한다 —
+              // MathText가 이 색을 수식 조판(Math.tex textStyle)에도 그대로 물려준다.
+              MathText(
                 message.text,
                 style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
               ),
