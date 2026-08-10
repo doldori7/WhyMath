@@ -337,7 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
-### 2026-08-10 (회수·성취수준 데이터): **CUR-03(성취수준 A~E·평가기준 상/중/하) 실물이 미병합 고립 브랜치에만 있던 상태를 cherry-pick으로 해소 — 같은 브랜치에서 PB-02·S3-32·MISC-01·MISC-03 완료분 4건 추가 미회수 발견(Kiki 결정 대기)** (claude 회수, Kiki "회수" 지시)
+### 2026-08-10 (회수·성취수준 데이터): **CUR-03(성취수준 A~E·평가기준 상/중/하) 실물이 미병합 고립 브랜치에만 있던 상태를 cherry-pick으로 해소 — 같은 브랜치에서 PB-02·S3-32·MISC-01·MISC-03 완료분 4건 추가 미회수 발견, Kiki 지시로 4건 전부 이어서 회수(아래 각 항목 참조)** (claude 회수, Kiki "회수" 지시 → "전체 4건")
+
+- **발견 경위**: 직전 커버리지 점검(§0-③)이 CUR-03(status=done·owner=kiki)의 artifact 커밋 `98a34695`가 HEAD 조상이 아님을 실측 — `origin/claude/human-bottleneck-tasks-6dszy0`(HEAD 대비 21커밋·세션 `01CQLKsNtZF9…`)에만 존재(HARN-11 "미머지 done" 유형).
+- **CUR-03 회수**: `98a34695`를 `cherry-pick -x`로 현재 브랜치에 이식(커밋 `cb238424`) — 무충돌(신규 파일 3종+`licensing_safety.md` 애디티브 1줄). 검증: JSON 유효성·PDF 원본 잔존 0(원 커밋이 반입 후 자체 제거)·라이선싱 표 반영 확인·`backlog.py validate` green. CUR-03 acceptance ①~④ 그대로 충족(스키마 확장은 범위 밖 명시 승계).
+- **부수 발견**: 같은 고립 브랜치를 전수 조사한 결과 5건이 더 있었다 — ① `REC-02`는 이미 정상 회수됨(PR #735) ② `PB-02`(CI 코퍼스 글롭 전환+커버리지 재생성-diff 게이트)가 **직전 세션에서 "PB-02 소관이라 여기서 안 한다"고 명시했던 그 작업의 완성본으로 이미 존재** ③ `S3-32`(학습 루프 닫힘·Polya REVIEW 게이트)·`MISC-01`(오개념 시각화 shadow rollout)·`MISC-03`(유사 미도전 문제 서빙) 3건은 전부 `api/coach.py`를 건드려 함께 회수하려면 충돌 해소 필요 ④ `MISC-04`는 타 세션이 현재 회수 중(`claude/misc-04-misconception-relation-recovery` 원격 claim) — 손대지 않음.
+- **회수 방법**: PB-02(무충돌 예상)→S3-32→MISC-01→MISC-03 순서(원 브랜치의 실제 생성 순서 그대로 — `api/coach.py`를 잇달아 건드리는 3건은 이 순서라야 각 커밋이 자신의 직전 상태 위에 적용돼 충돌이 최소화된다)로 `cherry-pick -x` 진행. `backlog/tasks/*.yaml`·`MEMORY.md`처럼 라인 단위 3-way 병합이 서사를 망가뜨리는 파일은 매번 HEAD를 유지하고(`git checkout --ours`), 코드·테스트 파일의 실제 충돌만 직접 해소했다. 각 태스크는 코드 회수 후 `backlog.py start --ignore-remote-claim`(고립 브랜치 done 재사용 케이스임을 명시)→`done --artifact <회수 커밋>`으로 CLI 경유 전환.
+- **PB-02 회수 시 발견한 설계 드리프트**: 원 구현(2026-08-08)의 커버리지 재생성-diff 게이트가 `docs/data/problem_bank_coverage_2026-07.json`을 대상으로 삼았는데, 이 브랜치는 오늘(2026-08-10) 그 파일을 이미 동결(supersede)하고 `2026-08.json`을 활성 리포트로 삼는 관례로 바꿨다 — 얼린 파일과 영원히 diff하면 다음 코퍼스 변경 즉시 상시 빨강이 되므로 게이트·배선 테스트의 대상 경로를 `2026-08.json`으로 갱신(로컬 재현으로 현재 게이트가 실제로 통과함을 확인).
+- **각 회수분의 독립 재검증**: 4건 전부 cherry-pick 직후 백엔드 전체 스위트·ruff·black·mypy --strict·lint-imports를 이 세션에서 재실행해 원 커밋의 자체 보고("9019 passed" 등)를 그대로 신뢰하지 않고 확인했다(아래 각 항목 정본 참조).
+- **등재·검증**: CUR-03 yaml artifacts·notes에 회수 사실 기록. PB-02는 기존 태스크를 CLI로 done 전환. S3-32/MISC-01/MISC-03도 각자 기존 태스크가 있어 신규 등재 없음(코드 회수 문제였을 뿐). `backlog.py validate` green.
+- 정본: `docs/architecture/subject_content_coverage_gap_review.md` §0-③(발견) · 이 로그(회수 경위) · 아래 각 태스크 원 구현 로그(PB-02·S3-32·MISC-01)
+
 ### 2026-08-09 (구현·MISC-01): **오개념 교정 시각화 결선 — `visualize_misconception` production 호출자 0건 해소(shadow→on 롤아웃)**
 
 **무엇/왜**: `l4/misconception/visualize.py::visualize_misconception()`(슬93)이 코드 완비·테스트
@@ -398,14 +408,6 @@ report.py`, PATH-05 드리프트, stash로 무관 재확인). CI YAML 구문 검
 `lint-imports` KEPT·ruff·black·mypy-strict green. **부수 발견**: REC-02(`d554ddad`) 테스트 파일
 2건이 black 라인폭 100 위반 상태로 커밋됐던 것을 이번 스위트에서 뒤늦게 발견(REC-02 검증 시
 소스 파일만 black 체크하고 테스트 파일을 빠뜨림) — 이번 커밋에서 재포맷해 상환.
-
-### 2026-08-08 (구현·S3-32): **학습 루프 닫힘 — 서버검증 최종답→Polya REVIEW 게이트→attempt 적재→completion 신호** (미병합 브랜치 tlthrr 재작성)
-
-- **발견 경위**: 직전 커버리지 점검(§0-③)이 CUR-03(status=done·owner=kiki)의 artifact 커밋 `98a34695`가 HEAD 조상이 아님을 실측 — `origin/claude/human-bottleneck-tasks-6dszy0`(HEAD 대비 21커밋·세션 `01CQLKsNtZF9…`)에만 존재(HARN-11 "미머지 done" 유형).
-- **회수**: `98a34695`를 `cherry-pick -x`로 현재 브랜치에 이식(커밋 `cb238424`) — 무충돌(신규 파일 3종+`licensing_safety.md` 애디티브 1줄). 검증: JSON 유효성·PDF 원본 잔존 0(원 커밋이 반입 후 자체 제거)·라이선싱 표 반영 확인·`backlog.py validate` green. CUR-03 acceptance ①~④ 그대로 충족(스키마 확장은 범위 밖 명시 승계).
-- **부수 발견(범위 밖·Kiki 결정 대기)**: 같은 고립 브랜치를 전수 조사한 결과 5건이 더 있었다 — ① `REC-02`는 이미 정상 회수됨(PR #735) ② `PB-02`(CI 코퍼스 글롭 전환+커버리지 재생성-diff 게이트, `ci.yml`만·9019 passed 검증됨)가 **직전 세션에서 "PB-02 소관이라 여기서 안 한다"고 명시했던 그 작업의 완성본으로 이미 존재** ③ `S3-32`(학습 루프 닫힘·Polya REVIEW 게이트)·`MISC-01`(오개념 시각화 shadow rollout)·`MISC-03`(유사 미도전 문제 서빙) 3건은 전부 `api/coach.py`를 건드려 함께 회수하려면 충돌 해소 필요 ④ `MISC-04`는 타 세션이 현재 회수 중(`claude/misc-04-misconception-relation-recovery` 원격 claim) — 손대지 않음.
-- **등재·검증**: CUR-03 yaml artifacts·notes에 회수 사실 기록(직접 편집+validate green). 이 발견 자체는 별도 태스크 미등재 — PB-02는 기존 태스크가 이미 있고(실행만 하면 됨), S3-32/MISC-01/MISC-03은 신규 태스크가 아니라 기존 태스크의 코드 회수 문제라 등재 대상이 아니다. 범위(추가 회수 여부)는 Kiki 결정.
-- 정본: `docs/architecture/subject_content_coverage_gap_review.md` §0-③(발견) · 이 로그(회수 경위)
 
 ### 2026-08-10 (점검·콘텐츠 커버리지): **과목(19)×콘텐츠(문제 5축·이론 6축) 첫 자체 대조 — 0문 4과목(2수·12경수·12실통·12수과)·수능 선택 3과목 박약·이론 검수 0 실측. 커버리지 도구 과목 축(ARCH-28, 세션 내 완료)+이론 검수 승격(KG-02) 등재, 저작 실행은 R7 v2 페이퍼 유지** (claude 설계, Kiki "문제와 이론 파트 각 과목별 빠진 부분 점검과 대책")
 
