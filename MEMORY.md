@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·MISC-05): **root/symptom·slip 판별 관측 리포트 — 04c §6-4가 유예한 신규 분류축 도입 없이, 스냅샷(`misconception_hypothesis`)×이력(`evidence_links`) 교차로 slip-like/지속오개념-like를 5-way 정직 분류. "slip 오코칭 비율" 트리거 지표까지 산출해 04c의 "명시 도입 결정" 트리거를 발화 가능하게 만듦(결정 자체는 별도)** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
+
+- **정본**: `docs/architecture/04c_misconception_seven_stage_separation.md` §6-4(root/symptom·slip 판별 = "최대 미구현 갭", 도입 여부는 "라이브 오진단 실측 시 결정"으로 유예) · `docs/architecture/04e_misconception_remediation_design.md` §3(신규 축 대신 기존 신호 재해석 관측 리포트로 트리거만 발화 가능하게 만드는 설계).
+- **설계 변경(권장안 대비 — 더 나은 판단으로 채택)**: 04e §3의 "3분류(slip-like/지속오개념-like/불일치)"를 문자 그대로 구현하면 완전분할이 깨진다 — `evidence_count`(1 또는 ≥2)×`is_active`(T/F) 조합 중 "1회·아직 활성"·"≥2회·비활성"은 두 정의 어느 쪽에도 안 맞는다. 이를 억지로 어느 한쪽에 밀어 넣는 대신 **5-way**(slip-like·persistent-like·mismatch_disagreement·mismatch_absent·undetermined 잔여)로 완전분할하고 `total_pairs == 네 버킷 합`을 테스트로 동결(`attempt_grading_shadow_report.not_derivable_count`와 동형인 "정직한 잔여 버킷" 관례).
+- **데이터 소스 교차**: `misconception_hypothesis`는 스냅샷 테이블(매 턴 덮어써짐, 과거 confidence 이력 조회 불가) — `evidence_links`는 append-only 이력(반복성은 여기서만 재구성 가능). 두 값(스냅샷 evidence_count vs 이력 polarity=+1 개수)이 불일치하면 다수결로 임의 분류하지 않고 정직하게 `mismatch` 버킷으로 분리.
+- **judge 방향판별 갭 발견**: `JudgeVerdict`(EXPRESSES/NOT_EXPRESSES/UNCERTAIN)는 (student, misconception) 단위로 **DB 어디에도 영속되지 않는다** — `judge_filter()`는 필터링된 리스트만 반환하고 개별 판정은 버려지며, shadow 로그(`MisconceptionJudgeShadowObservation`)조차 student_id 필드 자체가 없다(PII 회피 설계). 리포트는 이 갭을 침묵하지 않고 고정 문구(`judge_gap_note`)로 항상 명시 — 쓸 수 있는 유일한 신호는 "judge_enabled=True 기간의 생존자"라는 간접 전제뿐, EXPRESSES/UNCERTAIN 구분은 불가능.
+- **부수 발견(문서 stale)**: `config.py`의 `misconception_judge_enabled` docstring이 "coach 미배선"이라 적혀 있으나 실측(`api/coach.py`의 judge_filter 호출부)은 이미 배선돼 있다 — 리포트에 정정 기록(문서 직접 수정은 범위 밖).
+- **핵심 트리거 지표**: slip-like로 분류된 쌍 중 감쇠 전 최고점 confidence(evidence_links 강화 이벤트의 weight 최댓값으로 근사 — `hypothesis.reinforce()` 재시뮬레이션 없음, 순수 관측)가 개입 임계(`intervene.py::_LOW_CONFIDENCE=0.5` 값 미러) 이상이었던 비율. weight 전무 표본은 판정불가로 분모에서 제외(0%로 위장 금지).
+- **협업 안전**: `harness/`가 다른 세션(S4-16)과 declared-path 프리픽스 겹침 경고를 냈으나 실제로는 신규 파일 1개만 생성(`agreement_gate*.py` 등 그 세션이 만지는 기존 파일은 무접촉) — 사전 지시대로 회피 확인.
+- **검증(메인 독립 재검증)**: 코드·테스트 전량 직접 읽고 임계값 미러(`_LOW_CONFIDENCE=0.5` 일치)·yaml 변경 범위(paths/notes만) 재확인. 신규 테스트 31 passed·정적 검사 4종 clean 독립 재실행. **전체 스위트 최초 재실행에서 저장소 루트(잘못된 cwd)로 돌려 무관한 `tests/data_pipeline/`·`tests/harness/` 42건 수집 오류 발생 — MISC-05 결함이 아니라 내 실행 실수임을 확인 후 `src/backend`에서 재실행해 9,227 passed·0 failed 확정**(자체 보고와 정확히 일치, 직전 MISC-02 완료 9,196+신규 31=9,227 정합).
+- 정본: 커밋 `5d544abc`
+
 ### 2026-08-10 (구현·MISC-02): **선수학습 복습 ↔ 오개념 연동 — `gaps_from_active_misconceptions` 신규 어댑터. `misconception_crosslink_mode`가 `off→shadow`로 바뀌는 순간부터 이 경로는 "관측"이 아니라 실제 코칭 행동에 영향을 준다는 의미론적 확장을 발견·기록(운영 전환 시 결정 필요)** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
 
 - **난관**: `recommend_prerequisite_coaching(gaps)` 시그니처는 불변으로 두고 PED-05의 `active_misconceptions`(kebab-id)를 신호원으로 삼으려 했으나, 오개념 id가 **두 개의 분리된 체계**임이 선행조사로 드러났다 — `active_misconceptions`는 `l4/misconception/catalog.py::CATALOG_BY_ID` 공간(kebab, ASM-06의 `distractor_map.misconception_id`와 동일 공간)인데 `concept_src_id`는 `MisconceptionCatalog.mis_id`(M-id) 공간에만 있다. 다리는 `l1/misconception/crosslink_resolve.py::MisconceptionCrosslinkResolver`(**동기 엔진**)뿐이고, 이건 `misconception_crosslink_mode`(기본 `off`) 게이트 뒤에 있는 아직 프로덕션 미신뢰 브릿지다.

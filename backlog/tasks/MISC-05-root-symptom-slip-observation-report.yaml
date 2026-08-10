@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -13,10 +13,12 @@ requires_gates: []
 acceptance:
   - "신규 스키마·필드 0 — 가설 감쇠(반감기5턴)·강화횟수·judge 방향판별만으로 slip-like vs 지속오개념-like를 읽기전용 리포트로 산출"
   - "04c §6-4가 예고한 '라이브 오진단 실측 시 결정'의 트리거 발화 조건을 리포트가 관측 가능하게 만듦"
-artifacts: []
+artifacts:
+  - 5d544abc
 paths:
   - src/backend/whymath_backend/harness/
   - src/backend/whymath_backend/l4/misconception/hypothesis.py
   - tests/backend/harness/test_misconception_slip_report.py
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "04c_misconception_seven_stage_separation.md §6-4(최대 미구현 갭). 04e_misconception_remediation_design.md §3. 새 분류축 도입은 04c 자신의 유예 판단을 존중해 하지 않음. 2026-08-10 구현 세션: paths에 tests/backend/harness/test_misconception_slip_report.py 추가(scope_drift 경고 해소 — 태스크 프롬프트 '# 테스트' 절이 이 파일을 명시 요구했음, backlog.py에 in-flight paths 수정 서브커맨드가 없어 이 필드만 직접 편집·status/acceptance는 무변경). 신규 파일 src/backend/whymath_backend/harness/misconception_slip_report.py는 harness/ 프리픽스 내부라 별도 선언 불요하나, S4-16(다른 세션)이 harness/** 전체를 paths로 선언해둔 탓에 path_overlap 경고가 뜬다 — 실제 겹치는 기존 파일(agreement_gate*.py 등)은 무수정, 신규 파일 1개만 생성했으므로 실질 충돌 아님(prompt 지시 준수 확인)."
+updated: 2026-08-10
