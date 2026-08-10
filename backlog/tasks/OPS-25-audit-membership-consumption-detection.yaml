@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-25-audit-membership-consumption-detection
+title: "declared_unwired_audit EVENT 축 멤버십 소비 탐지 보강 — 막힘 오탐(세 번째 사각) 해소 + 유예 정리 (§8.2)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① consumed_event_types가 멤버십 소비(컨테이너 리터럴·모듈 상수 경유 .in_() — l2/learning_metrics_rollup._SOCRATIC_EVENT_TYPES 실사례)를 탐지하도록 보강. 생산 좌석(event_type=X 키워드 인자·build_event_data 첫 인자)을 소비로 오인하지 않는 기존 설계(declared_unwired_audit.py:361-362)는 유지"
+  - "② 보강 후 막힘이 reached로 전환됨을 실측하고 AXIS_EVENT에서 막힘 유예 제거 — 미제거 시 stale-waiver exit 1이 정정을 강제하는 순서(OPS-22 회수 커밋의 TIMESERIES 축 선례) 그대로"
+  - "③ frozenset/.in_() 픽스처 회귀 테스트로 사각 재발 동결 + 변별력(탐지 보강을 되돌리면 red가 나는지 실측)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - "tests/backend/ops/*"
+session: null
+notes: "visualization_module_gap_review.md §8.2 — OPS-22가 고친 오탐 2종(별칭 import·bulk upsert)과 동일 클래스의 세 번째 사각. COLLAB-03(#752)이 막힘을 frozenset+.in_()으로 실소비(l2/learning_metrics_rollup.py:124-126,563 — 소크라테스 상호작용 집계)하는데 탐지기가 ast.Compare만 봐서 대장(:794)에 producer-only 유예 잔존·stale-waiver 미발화(성공/실패가 같은 화면). S4-22 범위 정정(3종→2종)은 2026-08-10 R3 점검 커밋에서 선행 완료 — 본 태스크는 탐지기·대장 축만."
+updated: 2026-08-10
