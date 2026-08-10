@@ -337,6 +337,23 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (실수 관리·위임 에이전트 detached 대기 3회차): **backend-engineer가 전체 스위트를 백그라운드로 던지고 보고 없이 턴을 끝내려 한 사례가 MISC-02·MISC-06에 이어 PED-14에서 세 번째 재발 — 매번 위임 프롬프트에 개별 명시하던 완화책이 실패했다고 보고 `.claude/agents/backend-engineer.md`에 상시 규칙으로 등재** (claude 발견·정정, `/drive` 루프)
+
+- **재발 경위**: PED-14 위임 중 에이전트가 "백그라운드 태스크(bu65kgw69)의 완료 알림을 기다리겠다"며 턴을 종료 — MISC-06 결정 로그가 이미 "재발 시 위임 프롬프트에 명시할 것"이라 적어 뒀으나, 이번 PED-14 위임 프롬프트를 쓸 때 그 메모를 실제로 반영하지 않아 그대로 재발했다. "다음엔 프롬프트에 적겠다"는 대책이 위임자(나)의 기억에 의존하는 한 반복된다는 걸 이번에 실증.
+- **정정 조치**: SendMessage로 에이전트를 재개시켜 진행 중이던 프로세스를 포그라운드로 블로킹 대기하도록 지시 — 정상 완주(전체 스위트 9264 passed·298 skipped·0 failed, 메인 재실행과 정확히 일치).
+- **재발방지대책(더 durable한 형태로 승격)**: `.claude/agents/backend-engineer.md`에 "검증 명령 실행 규약" 절 신설 — 오래 걸리는 검증은 항상 포그라운드로 실행하고 이 턴 안에서 완료까지 대기하라는 상시 규칙. 위임 프롬프트 내용과 무관하게 이 페르소나를 쓰는 모든 위임에 자동 적용된다(프롬프트 개별 명시 방식의 실패를 반영한 구조적 승격).
+- 정본: `.claude/agents/backend-engineer.md` §"검증 명령 실행 규약" (커밋 `c7f481a4`에 포함).
+
+### 2026-08-10 (구현·PED-14): **Time-to-Mastery 시간 정규화 — S3-32가 착지시킨 ProblemAttempt 서버검증 축 위에 신규 Metric 좌석(⑰ `mastery_gain_rate_time_normalized`) 추가. 선행조사로 acceptance②("Flutter가 duration_seconds를 보내야 함")가 stale한 전제였음을 발견해 클라 변경 없이 서버 벽시계만으로 재설계 — 부수적으로 기존 R15/Brier/전이점수 3개 지표의 잠재 버그(`ProblemAttempt.started_at` 상시 NULL)를 발견해 `PED-15`로 분리 등재** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
+
+- **acceptance② 재조사(권장안 대비 설계 변경)**: 태스크 YAML은 "`api/me.py::submit_attempt`(`POST /v1/me/attempts`)의 `duration_seconds` 필드를 Flutter가 채워 보내야 한다"고 전제했으나, `src/mobile/lib/` 전체를 grep해 그 엔드포인트 호출이 **0건**임을 재확인 — 모바일의 실제 라이브 경로는 `api/coach.py`의 대화(`coach_api.dart`의 `createSession`/`addTurn`) 플로우였다. `Dialogue.started_at`이 `create_session`에서 이미 `now`로 채워지고 있어, `_apply_completion`(S3-32가 만든 완료 판정 함수)의 `ProblemAttemptORM` 생성부에 `duration_seconds=int((now−dialogue.started_at).total_seconds())`만 추가하면 **클라이언트 변경 없이** 서버 벽시계 기반 소요시간이 채워진다 — 자기보고보다 오히려 신뢰도 높은 신호. `api/me.py`의 기존 클라 자기보고 경로는 회귀 없이 그대로 보존(제거 0).
+- **⑨/⑰ 분리 설계(acceptance③④)**: 기존 `mastery_gain_rate`(⑨, 증분 지표)의 계산 함수(`_mastery_gains_from_rows`/`_mastery_gain_from_gains`)는 전혀 손대지 않고, ⑯ `gap_recovery_leadtime_days`(PED-13)의 패턴을 그대로 미러한 3개 신규 순수 함수(`_mastery_gains_by_group_from_rows`·`_duration_seconds_by_group`·`_time_normalized_mastery_gains_from_groups`)로 완전히 분리 — 새 지표 도입이 기존 지표 값에 영향을 주지 않음을 전용 테스트(`test_mastery_gain_rate_unaffected_by_duration_rows`)로 직접 assert. 분모는 그 개념에 PRIMARY로 연결된 attempt duration 합만 사용(TESTED 전용 문항은 근사상 제외 — `get_primary_concept_id` 관례와 일관), `learning_session`은 미참조(acceptance⑤ 결정 유지).
+- **부수 발견 — `PED-15`로 분리**: 구현 중 `wh1_evaluation.py`의 R15 결합판정·⑥ Brier·⑦ 전이점수 3개 쿼리 블록이 `since`/`until` 시간창이 지정될 때 `ProblemAttempt.started_at`으로 필터링하는데, 이 컬럼이 **두 writer(coach.py·me.py) 어디서도 채워지지 않아 항상 NULL**이라는 걸 발견 — `NULL >= since`는 SQL에서 falsy라 시간창을 지정하는 모든 호출이 조용히 0행(가짜 NO_DATA로 위장)이 된다. PED-14 자신은 이 3개 쿼리를 건드리지 않고(⑰은 `ended_at` 기준 별도 쿼리) 범위 확대를 피하기 위해 그 자리에서 고치지 않았다 — `PED-15`로 원인·영향범위·해법 후보를 등재해 추적을 보존.
+- **노출 계층(acceptance⑥)**: `_STATIC_TIER`에 `INTERNAL_ONLY`로 등록(`STUDENT_VISIBLE` 아님) — `reclaimed_time_positioning_v1.md` §1-1이 "개인의 속도·효율 원 스칼라"를 명시적으로 INTERNAL_ONLY 고정 분류한 것과 정확히 같은 형태(분/개념 수치는 "정답을 빠르게"로 오독 위험). 같은 문서 §3의 "(배선 후) STUDENT_VISIBLE" 목표는 서술 변환(자기 대비 문구 변환) 작업이 함께 있어야 안전하다는 뜻이라 이 태스크 범위 밖으로 명시적으로 남겨둠(후속 과제).
+- **검증(메인 독립 재검증)**: 코드 3개 파일 diff 전량 직접 검토(coach.py의 None 가드·wh1_evaluation.py의 4개 순수 함수·growth_evidence_exposure.py의 INTERNAL_ONLY 배정) · 신규+영향 테스트 파일 7개 232 passed 직접 재실행 · 정적 검사 4종(ruff·black·mypy --strict·lint-imports) 전부 fresh 재실행 EXIT=0 · alembic heads 단일(`0afd40ce1867`, 신규 마이그레이션 없음 확인) · **전체 백엔드 스위트 재실행 9,264 passed·298 skipped·0 failed(510.52s)** — 자체 보고 수치와 정확히 일치.
+- **협업 안전**: `harness/wh1_evaluation.py`·`growth_evidence_exposure.py`가 S4-16과 path_overlap 경고 — merge-base 이후 그 브랜치의 두 파일 diff가 완전히 비어 있음을 실측해 허위경보 확정(ASM-06 `db/models/activity.py` 선례와 동형).
+- 정본: 커밋 `c7f481a4`(WIP 체크포인트로 선커밋, 메인 재검증 후 이 로그로 최종 확정) + PED-15 등재.
+
 ### 2026-08-10 (실수 관리·S3-32 bookkeeping 정정): **회수(cherry-pick) 4건 중 1건이 backlog 상태 갱신 없이 2일간 `todo`로 방치된 걸 발견·정정 — "backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략" 금기(build_harness.md §8)를 스스로 어긴 사례, 재발방지 체크리스트 추가** (claude 발견·정정, `/drive` 루프 중 PATH-04 착수 전 점검이 계기)
 
 - **발견 경위**: PATH-04 착수 전 원본 자산 부재를 이유로 `block` 처리한 뒤 `backlog.py next`를 재실행했더니 `S3-32-learning-loop-closure-recovery`가 "이미 완료(미머지)" 사유로 후보에서 제외됐다 — 그런데 같은 세션이 바로 그 태스크를 이미 회수했다고 기록해 둔 바 있어(2026-08-10 CUR-03 회수 항목 참조) 모순을 인지, 실제 파일 상태를 확인했다.

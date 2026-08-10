@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-15-problem-attempt-started-at-null-time-window-bug
+title: "ProblemAttempt.started_at 상시 NULL — R15·Brier·전이점수 시간창(since/until) 지정 시 조용한 0행 버그"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 원인 실측 확인 — api/coach.py::_apply_completion과 api/me.py::submit_attempt 양쪽 다 ProblemAttempt.started_at을 채우지 않음(PED-14 조사 중 발견)을 재확인. duration_seconds가 채워지는 ended_at과 달리 started_at은 두 writer 어디서도 대입되지 않는다"
+  - "② 영향 범위 확정 — wh1_evaluation.py의 accuracy_conds/calibration_conds/transfer 3개 쿼리 블록(R15 결합판정·⑥ Brier·⑦ 전이점수)이 since/until이 지정될 때만 ProblemAttempt.started_at >= / <= 로 필터한다. NULL >= X는 SQL에서 falsy라 시간창 지정 호출은 항상 0행(가짜 NO_DATA로 위장) — since/until이 둘 다 None인 기본 호출(현재 대부분의 실사용 경로로 추정)은 영향 없음을 실측으로 구분한다"
+  - "③ 해법 후보 비교 — (a) 두 writer에 started_at 실제 대입(coach.py는 dialogue.started_at 이미 있어 자연스러움·me.py는 클라가 안 주면 서버 now로 폴백할지 결정 필요) (b) 이 3개 쿼리 블록만 PED-14 선례(ended_at 사용)를 따라 필터 컬럼을 ended_at으로 교체 — 둘 중 하나를 택하되 과거 이미 적재된 attempt 행의 started_at 백필 필요 여부까지 판단"
+  - "④ 회귀 0 — R15/Brier/전이점수 기존 no-window(since=until=None) 호출 결과가 수정 후에도 동일해야 한다(전체 스위트로 확인)"
+  - "⑤ 변별력 테스트 — since/until 지정 시 기존에는 0건이 나오던 케이스가 수정 후 정확한 건수를 반환하는지 assert(수정 전 상태를 재현하는 회귀 테스트를 먼저 추가해 실패시킨 뒤 고치는 순서 권장)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/harness/test_wh1_evaluation*.py"
+session: null
+notes: "PED-14(시간 정규화 mastery 지표) 구현 중 발견 — duration_seconds를 ended_at-started_at으로 계산하려다 started_at이 항상 NULL임을 확인, PED-14는 영향받는 3개 쿼리를 건드리지 않으므로(자기 자신은 ended_at만 사용) 그 자리에서 고치지 않고 별도 태스크로 분리(범위 확대 방지). CLAUDE.md '가짜 0 금지'·'환각 발견 시 조용히 넘어가지 말고 로그·수정' 해당 — since/until 시간창을 지정하는 어떤 호출자든(현재 존재 여부는 ②에서 확인) 이 버그의 영향을 받는다."
+updated: 2026-08-10
