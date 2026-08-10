@@ -636,10 +636,78 @@ void main() {
       ),
     );
 
-    // 선택지 목록·안내가 없고, 기존 대화 입력(단일 필드+전송)은 그대로다.
+    // S3-38(원 S3-20): 주관식은 '풀이 단계' 모드로 시작한다 — 대화로 전환해도(선택지 목록이
+    // 뜰 수 있는 모드) 주관식엔 선택지 목록이 없다(주관식 흐름 영향 0). 대화로 전환해 최악
+    // 케이스에서 확인한다.
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.pump();
+
+    // 선택지 목록·안내가 없고, 대화 입력(단일 필드+전송)은 그대로다.
     expect(find.byType(OutlinedButton), findsNothing);
     expect(find.text('보기 번호를 골라 보세요'), findsNothing);
     expect(find.byIcon(Icons.send), findsOneWidget);
+  });
+
+  // ── S3-38(원 S3-20) 코치 첫 화면 기본 모드 문제유형별(Kiki 결정) ─────────────
+  // 객관식 → '대화' 모드(선택지 번호 목록 바로 노출)·주관식 → '풀이단계' 모드(단계 풀이 바로 시작)·
+  // 자유 대화 → 기존 기본 '대화'. 학생의 수동 모드 전환은 그대로 가능(토글 UI·기존 동작 불변).
+  testWidgets('S3-38: 객관식 활성 문제는 대화 모드로 시작한다(선택지 목록 바로 노출)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc-start',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 대화 모드로 시작 — 모드 라벨 '대화'·선택지 번호 목록이 바로 노출된다(풀이 편집기 아님).
+    expect(find.text('대화'), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+    expect(find.byIcon(Icons.send), findsOneWidget);
+    expect(find.text('풀이 제출'), findsNothing);
+    expect(find.text('단계 추가'), findsNothing);
+  });
+
+  testWidgets('S3-38: 주관식 활성 문제는 풀이단계 모드로 시작한다(단계 풀이 바로 시작)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-sub-start',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '서술형',
+          questionText: '이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.',
+          // choices 없음(주관식) → 풀이 단계 모드로 시작.
+        ),
+      ),
+    );
+
+    // 풀이 단계 모드로 시작 — 모드 라벨 '풀이 단계'·단계 편집기(제출/추가 버튼)가 바로 보인다.
+    expect(find.text('풀이 단계'), findsOneWidget);
+    expect(find.text('풀이 제출'), findsOneWidget); // 빈 필드 → "풀이 제출"(비활성).
+    expect(find.text('단계 추가'), findsOneWidget);
+    // 대화 모드 어포던스(단일 전송·선택지 목록)는 없다.
+    expect(find.byIcon(Icons.send), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('S3-38: 활성 문제가 없으면(자유 대화) 기존 기본 대화 모드로 시작한다',
+      (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+
+    // 자유 대화는 기존 기본 — 대화 모드(단일 입력+전송)로 시작한다.
+    expect(find.text('대화'), findsOneWidget);
+    expect(find.byIcon(Icons.send), findsOneWidget);
+    expect(find.text('풀이 제출'), findsNothing);
   });
 
   testWidgets('활성 문제가 없으면(자유 대화) 선택지 목록을 렌더하지 않는다', (tester) async {

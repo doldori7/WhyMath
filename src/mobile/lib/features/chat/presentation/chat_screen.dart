@@ -122,7 +122,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       GlobalKey<_SolutionStepsEditorState>();
 
   /// 현재 입력 모드(기본=대화). 토글로 풀이 단계 모드와 전환한다.
+  /// 초기값은 [initState]에서 활성 문제 유형에 맞춰 조정한다(S3-38·원 S3-20).
   _InputMode _mode = _InputMode.conversation;
+
+  @override
+  void initState() {
+    super.initState();
+    // S3-38(원 S3-20·Kiki 결정): 코치 첫 화면 기본 모드를 문제 유형별로 정한다 —
+    //  · 객관식 → '대화' 모드(선택지 번호 목록이 바로 노출돼 탭 선택이 자연스럽다).
+    //  · 주관식(그 외) → '풀이 단계' 모드(단계 풀이를 바로 시작한다).
+    //  · 활성 문제 없음(자유 대화) → 기존 기본 '대화' 모드.
+    // initState라 ref.watch가 아닌 ref.read로 활성 문제를 한 번 읽어 초기 모드만 정한다(이후
+    // 학생의 수동 모드 전환은 그대로 가능·모드 토글 UI·기존 동작 불변). 문제 유형 판정은 선택지
+    // 목록과 동일한 [_isMultipleChoice] 기준을 재사용한다(객관식=대화, 그 외=풀이단계 일관).
+    final problem = ref.read(activeProblemProvider);
+    if (problem != null && !_isMultipleChoice(problem)) {
+      _mode = _InputMode.solution;
+    }
+  }
 
   @override
   void dispose() {

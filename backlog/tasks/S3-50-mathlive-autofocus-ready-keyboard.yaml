@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-50-mathlive-autofocus-ready-keyboard
+title: "수식 자동포커스 실기기 공백 봉합 — ready 신호 + 가상 키보드 표시(원 S3-19 완전 회수)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "S3-37 회수의 실기기 공백 2건 봉합(원 커밋 fa08081의 S3-19 부분과 대조로 확인): ①타이밍 — onPageFinished 시점엔 index.html의 모듈 스크립트(top-level await)가 whymathFocus를 아직 미정의일 수 있어 && 가드로 무증상 no-op → 원본 방식(웹이 훅 정의 직후 WhymathMathReady 채널로 ready 신호·Flutter는 그때 포커스 요청 + addPostFrameCallback 1차 요청 병행)으로 교체 ②키보드 — mathVirtualKeyboardPolicy=manual에선 mf.focus()만으로 가상 키보드가 안 뜸 → whymathFocus가 mathVirtualKeyboard.show()까지 호출(폴백 textarea 경로도 ready 신호 동봉)"
+  - "기존 S3-37 산출물과의 정합 — mathliveFocusScript 상수·autofocus opt-in 파라미터·test/mathlive_autofocus_test.dart의 순서 스캔은 유지하되 ready 채널 기반으로 갱신(테스트가 onPageFinished 순서를 동결하고 있어 그대로 두면 새 구현과 어긋남 — 동등 강도로 갱신)"
+  - "flutter analyze 0 · flutter test green + mathlive_input_asset_config_test 스타일의 자산 정적 동결(emitReady 위치·show() 호출 존재)"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/chat/**"
+  - src/mobile/assets/mathlive_input/index.html
+  - "src/mobile/test/**"
+session: null
+notes: "S3-38 착수 조사 중 발견(fa08081 full_patch의 S3-19 부분 대조). S3-37은 done 유지 — 그 산출물(훅 배선·opt-in 설계·테스트)은 유효하며 이 태스크는 그 위에 실기기 성립 조건 2건을 얹는 증분. 원본 diff: index.html emitReady()+show() 확장, mathlive_input_webview.dart WhymathMathReady 채널+onReady 콜백+focus() 메서드, mathlive_input_screen.dart initState addPostFrameCallback+onReady 배선+debugAutofocus 테스트 관찰점."
+updated: 2026-08-10
