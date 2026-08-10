@@ -45,7 +45,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import (
@@ -85,6 +85,9 @@ from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem, ProblemRelation
+
+# COLLAB-03: 학습시간 통계 좌석의 공급원(l2.learning_metrics_rollup이 적재).
+from whymath_backend.db.models.timeseries import DailyLearningMetrics
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.growth_evidence_exposure import (
     MetricExposure,
@@ -170,6 +173,9 @@ from whymath_backend.schema.enums import (
     Persona,
     Resolution,
     ReviewStatus,
+)
+from whymath_backend.schema.timeseries import (
+    DailyLearningMetrics as DailyLearningMetricsSchema,
 )
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -3049,3 +3055,150 @@ async def get_my_growth_evidence(
             narrative=narrate_calibration_brier(metrics.calibration_brier.value)
         ),
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# COLLAB-03: 학습시간 통계 (학생 1인칭 좌석)
+#
+# `l2.learning_metrics_rollup`이 적재한 `daily_learning_metrics`를 **본인 것만** 노출한다.
+# 이 좌석이 COLLAB-03의 존재 근거다 — 적재만 하고 조회 좌석을 배선하지 않으면
+# `visualization_module_gap_review.md` D1(만들어 놓고 연결하지 않음)의 재발이다.
+#
+# 노출 경계(acceptance ⑦ — 절대 확장 금지):
+#   · 축은 **학생 본인까지**다. `ConsentedUser.user_id`로만 스코핑하며 `user_id` 질의 파라미터를
+#     받지 않는다(타인 조회 경로 자체가 없다).
+#   · 부모·교사 등 **제3자 노출 엔드포인트를 여기에 만들지 않는다**. PIPA 권한 매트릭스상
+#     이용 시간대는 교사 ✕·부모 ◐이므로, 제3자 축은 COLLAB-01 계약과 Phase 3 좌석을 거친다.
+#   · `user_behavior_metrics`(hint 의존도 등 행동 지표)와 `problem_solve_time_distribution`
+#     (교차 사용자 집계)은 이 좌석에서 노출하지 않는다 — 학습시간 통계에 필요하지 않고,
+#     행동 지표의 학생 직노출은 게임화 억제 계약(PED-08)을 먼저 거쳐야 한다. 두 테이블은
+#     본인 반출(`privacy/export.py`)·삭제권 경로로만 학생에게 닿는다.
+# ──────────────────────────────────────────────────────────────────────────
+MetricSince = Annotated[
+    date | None,
+    Query(description="이 날짜 *이후*(inclusive) 집계일만. YYYY-MM-DD. until과 함께 기간 필터."),
+]
+MetricUntil = Annotated[
+    date | None,
+    Query(description="이 날짜 *이전*(inclusive) 집계일만. YYYY-MM-DD. since와 함께 기간 필터."),
+]
+
+
+class LearningMetricsSummary(BaseModel):
+    """조회 기간 전체(limit/offset 무관)의 학습시간 통계 합계 — 미측정은 None(0 아님)."""
+
+    days_counted: int = Field(description="집계 행이 존재하는 날 수(활동이 있던 날).")
+    total_minutes_active: int | None = Field(description="총 학습 시간(분). 측정치 없으면 null.")
+    total_problems_attempted: int | None = Field(description="총 시도 문항 수.")
+    total_problems_correct: int | None = Field(description="총 정답 문항 수.")
+    total_socratic_turns: int | None = Field(description="총 소크라테스 상호작용 턴 수.")
+    accuracy_rate: float | None = Field(
+        description="정답률(정답/시도). 시도 0이면 null — 0.0으로 날조하지 않는다."
+    )
+    avg_minutes_per_active_day: float | None = Field(
+        description="활동일 1일 평균 학습 시간(분). 활동일 0이면 null."
+    )
+    avg_focus_score: float | None = Field(description="기간 평균 집중도(0~1). 미측정이면 null.")
+
+
+class LearningMetricsResponse(BaseModel):
+    """`GET /v1/me/learning-metrics` 응답 — 기간 요약 + 일자별 원자료."""
+
+    summary: LearningMetricsSummary
+    days: list[DailyLearningMetricsSchema]
+
+
+@router.get(
+    "/learning-metrics",
+    response_model=LearningMetricsResponse,
+    summary="내 학습시간 통계",
+)
+async def get_my_learning_metrics(
+    user: ConsentedUser,
+    session: SessionDep,
+    response: Response,
+    limit: Limit = 90,
+    offset: Offset = 0,
+    since: MetricSince = None,
+    until: MetricUntil = None,
+    order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
+) -> LearningMetricsResponse:
+    """본인 일별 학습 지표 — 기본 최신순 90일. 타인 데이터는 조회 불가(user_id 스코핑).
+
+    공급원은 `l2.learning_metrics_rollup`(하루 1회 CLI 롤업)이다. 롤업이 아직 돌지 않은 구간은
+    행이 없으며 그때 `summary.days_counted == 0`으로 **비어 있음이 그대로 보인다** — 0으로
+    채워 "활동 없음"처럼 위장하지 않는다.
+
+    `summary`는 `limit`/`offset`과 무관하게 **필터 전체 구간**을 SQL 집계한 값이고, `days`는
+    페이지 슬라이스다(총 건수는 `include_total=true` 시 `X-Total-Count` 헤더 — 기존 /me 규약).
+    """
+    # 뒤집힌 기간은 조용한 빈 결과가 아니라 422로 알린다(`_query_filters` 시간창 규약과 동형).
+    if since is not None and until is not None and since > until:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="since가 until보다 늦습니다.",
+        )
+
+    # 본인 스코핑이 항상 첫 조건 — 이 줄이 빠지면 전 학생 지표가 새어 나간다(⑦).
+    conds = [DailyLearningMetrics.user_id == user.user_id]
+    if since is not None:
+        conds.append(DailyLearningMetrics.metric_date >= since)
+    if until is not None:
+        conds.append(DailyLearningMetrics.metric_date <= until)
+
+    primary = (
+        DailyLearningMetrics.metric_date.asc()
+        if order == "asc"
+        else DailyLearningMetrics.metric_date.desc()
+    )
+    page = await session.execute(
+        select(DailyLearningMetrics).where(*conds).order_by(primary).limit(limit).offset(offset)
+    )
+    days = [row.to_schema() for row in page.scalars().all()]
+
+    # 요약은 필터 전체 구간 SQL 집계(페이지와 독립). SUM은 표본 0이면 NULL을 반환하므로
+    # "미측정"이 0으로 뭉개지지 않는다.
+    agg = (
+        await session.execute(
+            select(
+                func.count().label("days_counted"),
+                func.sum(DailyLearningMetrics.minutes_active).label("minutes_active"),
+                func.sum(DailyLearningMetrics.problems_attempted).label("attempted"),
+                func.sum(DailyLearningMetrics.problems_correct).label("correct"),
+                func.sum(DailyLearningMetrics.socratic_turns).label("socratic_turns"),
+                func.avg(DailyLearningMetrics.avg_focus_score).label("avg_focus"),
+            ).where(*conds)
+        )
+    ).one()
+
+    days_counted = int(agg.days_counted or 0)
+    minutes_active = None if agg.minutes_active is None else int(agg.minutes_active)
+    attempted = None if agg.attempted is None else int(agg.attempted)
+    correct = None if agg.correct is None else int(agg.correct)
+    summary = LearningMetricsSummary(
+        days_counted=days_counted,
+        total_minutes_active=minutes_active,
+        total_problems_attempted=attempted,
+        total_problems_correct=correct,
+        total_socratic_turns=None if agg.socratic_turns is None else int(agg.socratic_turns),
+        accuracy_rate=(
+            round(correct / attempted, 4)
+            if attempted not in (None, 0) and correct is not None
+            else None
+        ),
+        avg_minutes_per_active_day=(
+            round(minutes_active / days_counted, 2)
+            if minutes_active is not None and days_counted > 0
+            else None
+        ),
+        avg_focus_score=None if agg.avg_focus is None else round(float(agg.avg_focus), 2),
+    )
+
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(DailyLearningMetrics).where(*conds),
+    )
+    return LearningMetricsResponse(summary=summary, days=days)

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,12 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/l2/**"
   - src/backend/whymath_backend/api/me.py
-session: null
+  # 구현 중 확장(하네스 scope_drift 경고의 안내대로 등재) — 집계 CLI 좌석·보존 플랜 편입·테스트.
+  - src/backend/whymath_backend/harness/learning_metrics_rollup_cli.py
+  - src/backend/whymath_backend/privacy/retention.py
+  - tests/backend/l2/test_learning_metrics_rollup.py
+  - tests/backend/api/test_learning_metrics_rollup_integration.py
+  - tests/backend/privacy/test_learning_metrics_privacy_plan.py
+session: claude/rec-05-priority-d8q8vt
 notes: "collaboration_module_gap_review.md §3 D3. DailyLearningMetrics 등 3테이블이 파기(erasure.py:92)·반출(export.py:103)·보존(retention.py:55) 배관에 전부 등재돼 있으나 프로덕션 writer가 0건(인스턴스화가 ORM/Pydantic 정의와 테스트에만 존재). 기능 71-4 '학습 시간 통계'·70-5 '성취도 분석'의 공급원 부재. visualization_module_gap_review.md D1과 동일 실패 유형(완비된 배관 + 미적재 공급원)의 다른 도메인 재발. 협업(Phase 3)을 기다릴 필요 없음 — /v1/me/* 학생 1인칭이 Phase 1~2 좌석이고 매트릭스상 학생 본인은 ● 전체 공개."
-updated: 2026-07-31
+updated: 2026-08-10
