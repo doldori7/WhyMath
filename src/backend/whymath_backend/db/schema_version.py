@@ -120,6 +120,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "db8ae6d2d91c",
     "090d254a5d43",
     "7ef2b5a8e69e",  # S3-32: dialogue.server_verified_completed_at
+    "0afd40ce1867",  # ASM-06: problem_attempt.selected_choice_index
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

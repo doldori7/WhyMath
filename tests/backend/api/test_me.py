@@ -963,6 +963,115 @@ class TestSubmitAttempt:
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
 
+    # ── ASM-06: selected_choice_index → distractor_map 오개념 역추적 ──────────
+    def test_submit_with_selected_choice_index_matches_misconception(self) -> None:
+        """일치하는 distractor_map 엔트리 → matched_misconception_id 채움 + attempt에
+        selected_choice_index 그대로 적재. 개념/스킬 매핑 없음 시나리오(test_submit_no_
+        mapped_concepts와 동형 4건 큐) 앞에 ASM-06 조회 1건만 추가된다."""
+        raw_distractor_map = [
+            {"choice_index": 0, "misconception_id": "mis.sign-error"},
+            {"choice_index": 1, "misconception_id": "mis.distribute-fail"},
+        ]
+        session = _QueueSession(
+            [
+                _AQResult([raw_distractor_map]),  # ASM-06: distractor_map scalar_one_or_none
+                _AQResult([]),  # 개념 PRIMARY
+                _AQResult([]),  # 개념 TESTED 폴백
+                _AQResult([]),  # 스킬 PRIMARY
+                _AQResult([]),  # 스킬 TESTED 폴백
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "selected_choice_index": 1,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["matched_misconception_id"] == "mis.distribute-fail"
+        assert session.added[0].selected_choice_index == 1
+
+    def test_submit_with_selected_choice_index_no_match_returns_none(self) -> None:
+        """distractor_map에 없는 인덱스(예: 정답 선택) → matched_misconception_id는 None이지만
+        선택 인덱스가 왔으므로 distractor_map 조회 자체는 수행된다(reactive — 조회는 하되 결과가
+        없을 뿐)."""
+        raw_distractor_map = [{"choice_index": 0, "misconception_id": "mis.sign-error"}]
+        session = _QueueSession(
+            [
+                _AQResult([raw_distractor_map]),
+                _AQResult([]),
+                _AQResult([]),
+                _AQResult([]),
+                _AQResult([]),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "selected_choice_index": 2,  # 매핑엔 0만 있음 — 불일치
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["matched_misconception_id"] is None
+
+    def test_submit_with_selected_choice_index_but_problem_has_no_distractor_map(self) -> None:
+        """문제에 distractor_map 자체가 없음(NULL) → matched_misconception_id는 None."""
+        session = _QueueSession(
+            [
+                _AQResult([None]),  # Problem.distractor_map NULL
+                _AQResult([]),
+                _AQResult([]),
+                _AQResult([]),
+                _AQResult([]),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "selected_choice_index": 0,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["matched_misconception_id"] is None
+
+    def test_submit_without_selected_choice_index_skips_distractor_lookup(self) -> None:
+        """selected_choice_index 미제출(기존 v1 동작) → matched_misconception_id는 None이고
+        distractor_map 조회 자체를 생략한다 — reactive retrieval의 핵심 불변식. 큐가 기존
+        4건 패턴(test_submit_no_mapped_concepts와 동일) 그대로 소진되는 것 자체가 '신규
+        SELECT 0'의 증거다(조회를 했다면 5번째 execute에서 IndexError로 즉시 드러난다)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["matched_misconception_id"] is None
+        assert session.added[0].selected_choice_index is None
+
+    def test_submit_negative_selected_choice_index_422(self) -> None:
+        """selected_choice_index는 ge=0(Pydantic 구조 검증) — 음수는 422."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "selected_choice_index": -1,
+            },
+        )
+        assert resp.status_code == 422
+
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""
         app = create_app()

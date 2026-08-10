@@ -174,6 +174,11 @@ class ProblemAttempt(Base):
     is_correct: Mapped[bool | None] = mapped_column(sa.Boolean)
     # *미성년 풀이 데이터* — 평문 저장 금지는 저장계층 책임(모듈 docstring).
     student_answer: Mapped[str | None] = mapped_column(sa.Text)
+    # ASM-06 신규: 학생이 실제로 고른 객관식 보기 인덱스(0-기반) — distractor_map 대조로
+    # 오개념 역추적(l4.misconception.distractor_link)에 쓰인다. student_answer와 동일하게
+    # *미성년 풀이 데이터*(모듈 docstring 참조). ge=0 구조 검증은 schema.activity 책임(가짜
+    # DB CHECK 미생성 — 모듈 docstring 방침과 정합).
+    selected_choice_index: Mapped[int | None] = mapped_column(sa.Integer)
     confidence_self_reported: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
     # ===== 풀이 방식 (특성 #96) =====

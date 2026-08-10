@@ -134,6 +134,9 @@ from whymath_backend.l4.calibration_coaching import recommend_calibration_coachi
 from whymath_backend.l4.lthc.adapt import mastery_to_level
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+from whymath_backend.l4.misconception.distractor_link import (
+    resolve_misconception_from_choice,
+)
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l6.suneung import (
@@ -625,6 +628,16 @@ class AttemptSubmitRequest(BaseModel):
     problem_id: uuid.UUID = Field(description="채점 대상 문제 FK.")
     is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
     student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
+    # ASM-06 신규: student_answer(자유텍스트)엔 없던 "몇 번 보기를 골랐는가"를 별도로 받는다
+    # — distractor_map 대조 오개념 역추적(l4.misconception.distractor_link)의 입력.
+    selected_choice_index: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "학생이 실제로 고른 객관식 보기의 0-기반 인덱스(`Problem.choices` 위치). "
+            "자유응답형 등 객관식이 아니면 생략."
+        ),
+    )
     duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
     session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
     confidence_self_reported: float | None = Field(
@@ -672,6 +685,15 @@ class AttemptSubmitResponse(BaseModel):
             "확신 미제출(None)이면 null. 적재 로직과 무관한 순수 L4 결정(측정→코칭)."
         ),
     )
+    matched_misconception_id: str | None = Field(
+        default=None,
+        description=(
+            "ASM-06: 학생이 고른 보기가 유발한 오개념 id(`l4.misconception.catalog."
+            "CATALOG_BY_ID` 키). `selected_choice_index` 미제출·문제에 distractor_map "
+            "없음·정답 선택·매핑에 없는 인덱스면 null(reactive retrieval — 오개념 카탈로그를 "
+            "미리 로드하지 않고 이 문제의 distractor_map만 대조)."
+        ),
+    )
 
 
 @router.post(
@@ -695,6 +717,10 @@ async def submit_attempt(
     이어서 `record_problem_attempt_skill_mastery`로 *스킬 축* 숙달도 같은 모델 B로 전파한다(Phase
     2b-2·행동 축) — 평가 개념을 `Concept.behavior_skills` 브리지로 mastery-estimable 스킬에 해소해
     갱신한다. 응답 `skill_mastery_updates`는 실제 갱신된 스킬만(매핑/해소 없으면 빈 목록).
+
+    ASM-06: `selected_choice_index`가 왔을 때만(reactive) 이 문제의 `distractor_map` 하나를
+    조회해 `resolve_misconception_from_choice`로 오개념 id를 역추적하고 `matched_misconception_id`
+    로 응답한다 — 인덱스 미제출이면 이 조회 자체를 생략(신규 SELECT 0, 기존 흐름 무영향).
     """
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
@@ -703,12 +729,24 @@ async def submit_attempt(
         session_id=body.session_id,
         is_correct=body.is_correct,
         student_answer=body.student_answer,
+        selected_choice_index=body.selected_choice_index,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
         ended_at=datetime.now(UTC),
     )
     session.add(attempt)
     await session.commit()
+    # ASM-06 오개념 역추적: 선택 인덱스가 실제로 왔을 때만 이 문제의 distractor_map을 조회한다
+    # (reactive retrieval — 카탈로그 전체·다른 오개념을 미리 로드하지 않음, CLAUDE.md 협상 불가).
+    matched_misconception_id: str | None = None
+    if body.selected_choice_index is not None:
+        distractor_map_result = await session.execute(
+            select(Problem.distractor_map).where(Problem.problem_id == body.problem_id)
+        )
+        raw_distractor_map = distractor_map_result.scalar_one_or_none()
+        matched_misconception_id = resolve_misconception_from_choice(
+            raw_distractor_map, body.selected_choice_index
+        )
     # 숙달 전파(평가 개념별 측정 적재·개념 매핑 없으면 빈 리스트)
     records = await record_problem_attempt_mastery(
         session, user.user_id, body.problem_id, body.is_correct
@@ -745,6 +783,7 @@ async def submit_attempt(
             for r in skill_records
         ],
         calibration_coaching=calibration_coaching,
+        matched_misconception_id=matched_misconception_id,
     )
 
 
