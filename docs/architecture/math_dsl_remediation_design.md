@@ -6,7 +6,13 @@
 > **동반 구현(이미 반영)**: cycle 방어선(populate/load)·교육과정 grade/semester 노드 제거는
 > 같은 변경분에서 *구현 완료*. 본 문서는 *남은* 고위험 항목의 청사진이다.
 
----
+> ✅ **2026-08-10 개정 배너(DSL 통합 점검 — `dsl_integration_gap_review.md` §5)**: 실측 대조로
+> 두 서술이 코드에 추월·역전됐다. ① §1.3-2 "*(잔여)* 매핑 채택·적재" → **완료됨** —
+> `data/corpus/misconception_crosslinks_v1/crosslinks.json`에 64건 채택·적재(검수:Kiki
+> 2026-07-12). ② §1.3-3 "`learning_scene.py`·`wh1_loop.py` shadow 배선 **불필요로 종결**" →
+> **코드는 반대다** — 두 곳 모두 배선 실재(`l4/learning_scene.py:369`·`harness/wh1_loop.py:498`
+> `observe_crosslink_shadow`). 종결 근거였던 in-memory 제약이 이후 구현에서 해소된 것으로,
+> 현행 정본은 "배선됨"이다. §1.3-3의 *(잔여)* canary/full 플립만 미착수 상태로 유효.
 
 ## 0. 이번에 구현된 것(맥락) vs 설계로 남긴 것
 

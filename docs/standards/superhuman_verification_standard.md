@@ -36,7 +36,7 @@
 
 | 축 | 기준(수치) | 인간 상한 | 구현 |
 |---|---|---|---|
-| **S1 전수성** | 학생 노출 문항의 기계 검증 커버리지 **100%**(전 문항·전 스텝 — Tier1 답 검산+Tier2 단계 동치) | 표본 30문 | `l3/verify_answer`·`l3/verify_solution` (배선 완료·590문 전수 통과). 사각지대(unverifiable)는 PRM Tier3로 축소(라이브 트랙) |
+| **S1 전수성** | 학생 노출 문항의 기계 검증 커버리지 **100%**(전 문항·전 스텝 — Tier1 답 검산+Tier2 단계 동치) | 표본 30문 | `l3/verify_answer`·`l3/verify_solution` (배선 완료·전 코퍼스 전수 — §4.5 실측 620문·as-found 4/620 병기. 초판 표기 590문은 코퍼스 확장 전 수치 — 2026-08-10 통합점검 정정). 사각지대(unverifiable)는 PRM Tier3로 축소(라이브 트랙) |
 | **S2 적대성** | 문항당 수치 반례 공격 **≥10,000 시행**(결정론 grid+jitter sweep) 반례 0 | ~3안 | `l3/equivalent/counterexample_fuzz.py` |
 | **S3 독립 다관점** | 원리가 다른 검증기 **K≥3 전원 통과**(심볼릭 SymPy·수치 fuzzing·프로세스 PRM) + **생성자≠검증자 주체 분리**(발문-수식 정합 독립 감사 — 생성기 자기신고 태그 불신) | 1관점 | `l3/equivalent/retag.py` (StatementConsistencyAuditor·TagAuditor 좌석) |
 | **S4 재현성** | 동일 입력 재판정 일치율 **100%**(결정론·seed 고정) | 미보장 | 전 게이트 순수 함수·`_POOL_SEED` 문화·회귀 테스트 동결 |
@@ -88,7 +88,7 @@ reviewer 서명 하드 요구). 여기에 §3 강등전을 적용하되, **정�
 - **독립 신호(비순환)**: kebab이 문항 `distractor_map`에 쓰일 때 그 문항의 성취기준으로
   kebab 성취기준을 **역유도**해 M-id `standard_code`와 대조(`l4/misconception/
   crosslink_standard_signal.py`) — 코사인과 독립·완전 결정론·임베딩 0.
-- **강등전**(`harness/crosslink_demotion_eval.py` + `crosslink_demotion_seeder.py`):
+- **강등전**(`harness/crosslink_demotion_eval.py` + `l4/misconception/crosslink_demotion_seeder.py`):
   by-construction 정답(M-id를 kebab에 직접 대응 저작·인간 라벨 0) + injected 오매핑 2 tier.
 - **측정된 경계(실측 2026-07-09)**: cross-standard 오매핑 거부 **240/240·Wilson 하한 0.989**·
   정답 오거부 **0/4** — 성취기준을 가로지르는 오매핑은 기계가 자동 거부(인간 부하↓). 그러나

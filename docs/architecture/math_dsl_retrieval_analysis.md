@@ -6,7 +6,14 @@
 > **근거**: L1 개념그래프·임베딩·오개념 코드 정밀 조사(2026-07-01, 파일:라인 인용).
 > **범위**: 분석 + *이번 PR 안전 결선*(§전략 D 일부 실제 반영). 대규모·조기 항목은 §후속 권고로 분리.
 
----
+> ✅ **2026-08-10 개정 배너(DSL 통합 점검 — `dsl_integration_gap_review.md` §5)**: §4의 전제
+> **"skill 엔티티는 존재하지 않는다"는 무효**가 됐다 — 리치 Part 2 전면 채택
+> (`concept_node_layering_decision.md` §0·2026-07-03)으로 `skill_node`·`problem_type_node`·
+> `formula_node`·`strategy_node`·`solution_node` 5종 ORM 노드가 실재한다("승격 여부는
+> `principles_review` 결정 대기" 포인터도 그 결정으로 종결). §4의 *혼동 시나리오 분석* 자체는
+> 여전히 유효하나, 처방("cognitive_type 분산으로 감당")은 노드 승격 이후 체계로 대체됐다.
+> §0 "traversal 조회 코드 부재"도 이후 `l2/prerequisite_recommendation.py`(depth 5·breadth 64
+> 가드 동반)로 대체 — 본 문서가 요구한 가드-선행 원칙은 지켜졌다.
 
 ## 0. 현재 retrieval 스택 스냅샷
 

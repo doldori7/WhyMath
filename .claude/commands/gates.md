@@ -35,6 +35,14 @@ python3 scripts/harness/backlog.py gates waive <G-id> --reason "<사유>"
 ```
 waive 사유는 MEMORY.md 결정로그에도 append한다.
 
+### 4. add (게이트 등재 — 대장 손편집 금지)
+게이트 신설은 반드시 CLI 경유(HARN-18 — gates.yaml 직접 편집은 "거부의 우회 금지" 위반):
+```bash
+python3 scripts/harness/backlog.py gates add <G-id> --title "..." \
+  --kind <human|external|decision> --assignee kiki --remind-after-days <N>
+```
+등재 후 `backlog.py validate` green 확인.
+
 ## 원칙
 - G-s5-subject-expansion(E축 하드락)은 S5 판정 태스크를 거치지 않고 clear/waive 금지
-- 게이트 추가가 필요하면 backlog/gates.yaml에 스키마를 지켜 추가 후 `validate`
+- 게이트 추가는 `gates add` CLI로만 — backlog/gates.yaml 손편집 금지 (HARN-18 · 2026-08-10 통합점검 정정: 종전 이 줄이 손편집을 안내하고 있었다)

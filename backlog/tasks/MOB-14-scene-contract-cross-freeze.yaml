@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-14-scene-contract-cross-freeze
+title: "scene DSL 서버↔클라 계약 동결 — 응답 필드 드리프트 4건(무감지 통과) 판정 + webViewTypes 렌더 계약 결선"
+track: infra-debt
+stage: S4
+subject: cross
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 드리프트 4필드 각각 판정·상환 — active_hypothesis_confidences(서버가 채워 보내는데 클라 미파싱)·Visualization.visualization_id(클라 부재)는 파싱 추가 or 백엔드 좌석 제거, ParamControlElement.value_range/step(생산자도 안 채우는 죽은 좌석 2)은 채울 생산자 없으면 제거 우선"
+  - "② scene 응답 계약 게이트 신설 — 백엔드 스키마 필드셋 ↔ Dart 파서 필드셋 교차 검증(계약 fixture 또는 응답 골든의 Dart판). 결함 주입 시 실패·정상 통과 양쪽 실측(변별력 없는 검증 금지)"
+  - "③ scene_renderer.dart:107 webViewTypes 하드코딩을 data/render_contract.json 소비로 결선 — invariant ⑩ 렌더 선택 단일 진실원의 Flutter 잔여 1/3 완결"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/chat/**"
+  - src/backend/whymath_backend/l4/learning_scene.py
+  - data/render_contract.json
+  - "src/mobile/test/**"
+session: null
+notes: "docs/architecture/dsl_integration_gap_review.md §2-④ 실측 근거(2026-08-10). 드리프트 4건이 CI를 통과한 원인은 계약 게이트 부재(scene_models.dart 참조 테스트 0건) — json_serializable 미지 키 무시로 런타임 파손 없이 침묵 통과. render_contract·notation_contract py↔js 교차 골든 선례의 Dart 확장."
+updated: 2026-08-10

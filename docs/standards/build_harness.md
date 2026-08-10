@@ -1,6 +1,6 @@
 # 빌드 하네스 (Build Harness) — 작업일정 관리·순차 조율 표준
 
-> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.1 (2026-07-16 병렬 조율 확장)
+> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.2 (2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
 >
 > 이 문서의 "빌드 하네스"는 프로젝트 *구축을 관리하는* 레이어다.
 > `src/backend`의 WH-1(튜터링)·WH-S(솔버)는 **제품 런타임 하네스**로 완전히 별개다.
@@ -229,7 +229,7 @@ python3 scripts/harness/backlog.py start <id> --no-remote            # 원격 �
 python3 scripts/harness/backlog.py done <id> --artifact "<PR/커밋>"   # 증적 필수
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
-python3 scripts/harness/backlog.py gates list|clear|waive
+python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
@@ -239,8 +239,11 @@ python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 ```
 
-테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (188건 — CI
-`harness-integrity` 잡이 `pytest tests/harness -q`로 무작위 순서 포함 실행).
+테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (2026-08-10 실측 251건 —
+문서 수치는 스냅샷이며 정확 수는 pytest 수집이 정본. CI `harness-integrity` 잡이
+`pytest tests/harness -q`로 무작위 순서 포함 실행 — CI의 `-q`는 화면 축약일 뿐 판정이
+exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 2026-08-09)의 위반이 아니라
+준수 사례다. 사람이 손으로 재현할 때는 `-q` 없이 돌리고 exit code를 병기할 것).
 
 ## 8. 금기
 

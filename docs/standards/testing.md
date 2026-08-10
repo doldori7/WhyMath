@@ -102,6 +102,10 @@ def mock_llm(monkeypatch):
     monkeypatch.setattr("services.l3_llm.generate", fake_generate)
 ```
 
+모킹은 *동작* 검증용이다 — **SDK 표면 정합**(우리가 호출하는 메서드가 pin 허용 범위의 *실물*
+SDK에 존재하는가)은 모킹 테스트로 선언하지 않는다 (CLAUDE.md 절대 금기 "외부 SDK 표면을
+시임 테스트만으로 정합 선언 금지" · `langfuse>=2.50,<5` 선례 — 2026-08-10 통합점검 부기).
+
 ## 부하 테스트 (Phase 2+)
 
 - 도구: `locust` 또는 `k6`
