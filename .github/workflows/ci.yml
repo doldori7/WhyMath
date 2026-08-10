@@ -1055,6 +1055,9 @@ jobs:
   # `docs/architecture/data_platform_module_gap_review.md`가 동일 함정을 기록해 둔 선례를
   # 그대로 따른다). schedule 이벤트에서는 스킵(정적 감사라 커밋 변경 없이 매일 다시 돌 이유가
   # 없다 — 상시성은 push/PR로 이미 충분).
+  #
+  # OPS-24 — 이 잡에 코퍼스 후처리 백필 드리프트 가드 2종(`--check`)이 함께 탄다. 잡 이름은
+  # 바꾸지 않는다(브랜치 보호 required check 이름이 잡 name에 걸려 있다 — 개명은 별건).
   # ─────────────────────────────────────────────────────────────────
   declared-unwired-audit:
     name: declared-unwired-audit — 선언≠배선 4축 정적 감사 (OPS-22)
@@ -1084,6 +1087,31 @@ jobs:
 
       - name: 게이트 — 선언≠배선 4축 정적 감사 (declared_unwired_audit)
         run: python -m whymath_backend.ops.declared_unwired_audit
+
+      # ── OPS-24 — 코퍼스 후처리 백필 드리프트 가드 2종 ────────────────────────
+      # 위 감사기가 "CI 어디에도 도달하지 않는다"고 잡아낸 harness CLI 2종을 여기에 태운다
+      # (신규 잡 증설 0 — 이 잡은 base install만 하는 경량 잡이고, `if: != 'schedule'`이라
+      # push/PR마다 돌며, `needs: changes` 게이팅이 없어 코퍼스 파일만 바뀐 PR에서도 반드시
+      # 돈다. 같은 "선언≠배선" 계열이라 맥락도 일치).
+      #
+      # ①분류 판정: 두 CLI는 "일회성 운영자 스크립트라 의도적 미배선"이 **아니다**.
+      #   `review_status`가 빈 채로 남은 레코드가 생기면 `l6/_shared.py`의 `is_review_cleared`가
+      #   fail-closed로 그 문항의 **노출을 전건 차단**한다 — 백필 누락은 서빙 영향을 갖는 회귀다.
+      # ②그러므로 CI에 거는 것은 *변이형*(제자리 갱신)이 아니라 **드리프트 가드**(`--check`)다.
+      #   CI가 레포 데이터를 재작성해서는 안 된다 — 백필은 사람이 돌려 커밋하고, CI는 "빠진 게
+      #   있다"만 빨갛게 알린다. `--dry-run`은 채울 게 있어도 항상 exit 0이라 게이트로 쓸 수
+      #   없다(CLAUDE.md "변별력 없는 검증 스텝 금지").
+      #
+      # `working-directory`를 워크스페이스 루트로 되돌린다 — 이 잡의 기본값은 `src/backend`인데
+      # 두 CLI는 레포 루트 기준 상대경로(`data/corpus/...`·`docs/data/...`)를 읽는다. 절대경로
+      # (`${{ github.workspace }}`)로 지정해 잡 기본값과의 상대 해석 모호성을 없앤다.
+      - name: 게이트 — 코퍼스 review_status 백필 드리프트 (OPS-24)
+        working-directory: ${{ github.workspace }}
+        run: python -m whymath_backend.harness.problem_corpus_review_status_backfill --all --check
+
+      - name: 게이트 — 코퍼스 persona_fit 백필 드리프트 (OPS-24)
+        working-directory: ${{ github.workspace }}
+        run: python -m whymath_backend.harness.problem_corpus_persona_fit_backfill --all --check
 
   # ─────────────────────────────────────────────────────────────────
   # 야간 E2E 관통 슬라이스 (schedule 전용) — S1 게이트 안전망
