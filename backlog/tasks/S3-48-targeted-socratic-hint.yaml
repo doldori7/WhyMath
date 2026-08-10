@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-48-targeted-socratic-hint
+title: "오답 targeted 소크라테스 힌트(서버) — S3-25 버킷C⑦(재설계, 원본 소실)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[재구현 — 원본 diff 없음] 원 S3-16이 다루던 '오답에 대한 targeted 소크라테스식 힌트'를 현재 main 기준으로 재설계. 기존 오개념 진단(l4/misconception) 파이프라인과 연결해 오개념 후보에 맞춘 힌트를 생성하는 설계일 것(CLAUDE.md: 모든 오답은 오개념 후보 분석 시도) — 새 프롬프트가 필요하면 llm-architect/pedagogy-designer 검토 경유"
+  - 백엔드 전체 pytest green
+  - "힌트가 정답을 직접 노출하지 않는지 결함주입 테스트로 확인(Polya 4단계 경로 유지)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/**"
+session: null
+notes: "S3-25-shadow-recovery-bucket-c(버킷C⑦)에서 분리 등록. 원본 브랜치 완전 삭제(2026-08-09) — 포팅 아닌 재설계. S3-47(버킷C⑥)과 같은 오답 피드백 계열 — 원 개발 순서(⑥→⑦)를 참고해 함께 설계하면 안전. 원 커밋 a495222/879ad99/3ab4e20은 더 이상 참조 불가."
+updated: 2026-08-10

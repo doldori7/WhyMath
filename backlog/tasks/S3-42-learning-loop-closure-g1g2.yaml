@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-42-learning-loop-closure-g1g2
+title: "학습 루프 닫힘 G1/G2(client+server) — S3-25 버킷C①(재설계, 원본 소실)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[재구현 — 원본 diff 없음] 원 소스 브랜치(claude/shadow-data-s3-pilot-nh5kbz, 삭제됨)의 원 S3-09가 다루던 '학습 루프 닫힘 G1/G2'를 현재 main 코드 기준으로 새로 설계·구현한다. 정확한 원래 범위·UX 디테일은 보장할 수 없음 — 착수자가 현재 main의 학습 루프(coach.py·진단→풀이→완료 흐름)를 먼저 읽고, '무엇이 닫히지 않은 상태인가'부터 재정의할 것"
+  - "flutter analyze 0 · flutter test green (client 부분) + 백엔드 전체 pytest green (server 부분)"
+  - CLAUDE.md 7계층 경계·게임화 금지·정답 즉시제공 금지 준수
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+  - src/backend/whymath_backend/api/coach.py
+session: null
+notes: "S3-25-shadow-recovery-bucket-c(버킷C①)에서 분리 등록. 원본 브랜치 claude/shadow-data-s3-pilot-nh5kbz 완전 삭제 확인(2026-08-09) — 포팅 아닌 재설계. 원 커밋 7cc0e98/5041487/479163a는 더 이상 참조 불가."
+updated: 2026-08-10

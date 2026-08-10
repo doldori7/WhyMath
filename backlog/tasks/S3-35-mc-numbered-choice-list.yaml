@@ -5,18 +5,19 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: blocked
+status: todo
 priority: 2
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 73b77a1/5481086)에서 객관식 세로 번호목록 UI 로직을 main 현재 파일 위에 수동 재적용(git merge/cherry-pick 자동해결 의존 금지 — main이 MOB-09~13 디자인 토큰화로 같은 파일을 이미 크게 고쳤다)"
-  - "flutter analyze 0 · flutter test green(원 구현 시점 실측값을 회귀 기준으로)"
-  - "착수 전 이 항목이 다른 미머지 브랜치에서 이미 동등하게 구현됐는지 backlog.py next로 재확인(HARN-11 미머지 done 필터)"
+  - "[재구현 — 원본 diff 없음, Kiki 승인 2026-08-09] 객관식 문제의 세로 번호목록 UI(1·2·3·4·5 형태로 세로 나열되는 선택지 표시)를 현재 main 코드 기준으로 새로 설계·구현한다. 원본 커밋(73b77a1/5481086, 소실)의 정확한 시각 디자인은 재현 대상이 아니다 — '세로 번호목록'이라는 UX 골자만 승계, 세부 스타일은 현재 main의 디자인 토큰(MOB-09~13)에 맞춰 새로 결정"
+  - flutter analyze 0 · flutter test green
+  - "정답·정오 강조 없음(CLAUDE.md 절대 금기) — 선택 여부만 표시, 정오 색상/아이콘 등 금지"
+  - "S3-45(버킷C④, 객관식 선택지 버튼 UX)와 범위 겹침 가능 — 착수 전 그 태스크와 조정"
 artifacts: []
 paths:
   - "src/mobile/lib/**"
 session: null
 notes: "[2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch origin <브랜치명> → 'couldn't find remote ref', git ls-remote --heads origin 전체 43건 스캔에도 부재). 원 커밋 해시(fa08081·73b77a1·75c3dda 등) 직접 fetch도 전부 실패 — GitHub가 reachable하지 않은 SHA는 노출하지 않음. 즉 '원본 diff를 main 위에 수동 재적용'이라는 acceptance 전제 자체가 이제 불가능 — 실행 가능한 대안은 title/notes의 짧은 설명만으로 처음부터 다시 설계·구현하는 것뿐인데, 이는 '포팅'이 아니라 '재설계'라 원 기능의 정확한 범위·UX 디테일을 보장할 수 없다(디자인 판단 위험). 이 기능들을 그대로 재구현할지, 범위를 다시 정의할지, 혹은 지금 시점에 더는 필요 없다고 보고 폐기할지는 Kiki 판단이 필요 — /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당해 차단."
-updated: 2026-08-09
+updated: 2026-08-10

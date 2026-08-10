@@ -11,12 +11,14 @@ owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 75c3dda)에서 flutter_math_fork 기반 수식렌더링 전환을 main 현재 파일 위에 수동 재적용 — S3-24 notes가 9건 중 diff가 가장 크다고 명시한 항목, 신중히 범위 재확인 후 착수"
-  - flutter analyze 0 · flutter test green
-  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11) + main의 현재 수식렌더링 방식(패키지·구현)과 실제로 상충하는지 먼저 diff 규모 재산정"
+  - "[재구현 여부 자체가 별도 미결 — 아래 notes 참조] flutter_math_fork 기반 수식렌더링을 도입할지부터 재확인 필요 — main이 MOB-09에서 이 패키지를 '사용처 0'으로 이미 제거하며 '수식 입력은 MathLive WebView로 이미 커버 — 별도 렌더 라이브러리 미필요'라고 명시한 바 있다(pubspec.yaml:44-46). 이 결정을 유지한 채 이 기능이 다른 방식(예: MathLive 자체의 수식 표시 기능 재사용)으로 가능한지, 아니면 그 결정을 뒤집고 flutter_math_fork를 재도입할지 Kiki 확인 후 착수"
+  - "재구현 시: flutter analyze 0 · flutter test green"
 artifacts: []
 paths:
   - "src/mobile/lib/**"
 session: null
-notes: "[2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch origin <브랜치명> → 'couldn't find remote ref', git ls-remote --heads origin 전체 43건 스캔에도 부재). 원 커밋 해시(fa08081·73b77a1·75c3dda 등) 직접 fetch도 전부 실패 — GitHub가 reachable하지 않은 SHA는 노출하지 않음. 즉 '원본 diff를 main 위에 수동 재적용'이라는 acceptance 전제 자체가 이제 불가능 — 실행 가능한 대안은 title/notes의 짧은 설명만으로 처음부터 다시 설계·구현하는 것뿐인데, 이는 '포팅'이 아니라 '재설계'라 원 기능의 정확한 범위·UX 디테일을 보장할 수 없다(디자인 판단 위험). 이 기능들을 그대로 재구현할지, 범위를 다시 정의할지, 혹은 지금 시점에 더는 필요 없다고 보고 폐기할지는 Kiki 판단이 필요 — /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당해 차단."
+notes: "S3-24-shadow-recovery-bucket-b(버킷B⑤)에서 분리 등록 — 9건 중 diff가 가장 크다고 명시된 항목.
+  [2026-08-09 사전조사 발견] pubspec.yaml:44-46 주석: flutter_math_fork는 MOB-09가 '사용처 0·선언만 있던 상태'로 이미 제거했고 '기능 착수 시 재도입'·'수식 입력은 MathLive WebView 임베드로 이미 커버 — 별도 렌더 라이브러리 미필요 상태가 유지되고 있다'고 명시. 즉 이 항목은 main이 이미 내린 아키텍처 결정과 정면으로 상충할 수 있다.
+  [2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch·ls-remote 전부 실패, 원 커밋 75c3dda도 fetch 불가) — '원본 diff 재적용'은 이제 불가능.
+  [2026-08-09 Kiki '재구현' 승인 이후에도 별도 미결 — 의도적으로 unblock 보류] S3-24/S3-25 나머지 15개 항목은 '원본 소실 → 재구현' 승인으로 unblock했으나, 이 항목엔 그 승인이 다루지 않은 추가 질문(main의 기존 아키텍처 결정을 뒤집을지)이 걸려 있어 같은 승인으로 자동 해소됐다고 보지 않는다. Kiki에게 이 항목만 별도로 한 번 더 확인 후 unblock할 것."
 updated: 2026-08-09

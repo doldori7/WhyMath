@@ -5,18 +5,18 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: blocked
+status: todo
 priority: 2
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 fa08081 묶음/7f0d84e)에서 문제 건너뛰기 로직을 main 현재 파일 위에 수동 재적용(자동병합 의존 금지)"
-  - flutter analyze 0 · flutter test green
-  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11)"
+  - "[재구현 — 원본 diff 없음, Kiki 승인 2026-08-09] '문제 건너뛰기' 기능을 현재 main 코드 기준으로 새로 설계·구현한다. 착수 전 반드시 먼저 확인: problem_screen.dart:48-51에 이미 '건너뛰기' TextButton이 존재(단순히 /chat으로 직행). 이게 원 기능의 의도(다음 문제로 교체·스킵 이력 기록 등)를 충분히 충족하는지 판단 — 충족한다고 판단되면 이 태스크는 그 사실을 artifact로 기록하고 done, 불충분하면 실제 재구현 진행"
+  - "재구현 시: flutter analyze 0 · flutter test green"
+  - "재구현 시: 건너뛴 문제가 학습 진행 기록에 어떻게 남는지(오답 처리 금지 — 단순 미응답과 구분) 명시"
 artifacts: []
 paths:
   - "src/mobile/lib/**"
 session: null
 notes: "[2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch origin <브랜치명> → 'couldn't find remote ref', git ls-remote --heads origin 전체 43건 스캔에도 부재). 원 커밋 해시(fa08081·73b77a1·75c3dda 등) 직접 fetch도 전부 실패 — GitHub가 reachable하지 않은 SHA는 노출하지 않음. 즉 '원본 diff를 main 위에 수동 재적용'이라는 acceptance 전제 자체가 이제 불가능 — 실행 가능한 대안은 title/notes의 짧은 설명만으로 처음부터 다시 설계·구현하는 것뿐인데, 이는 '포팅'이 아니라 '재설계'라 원 기능의 정확한 범위·UX 디테일을 보장할 수 없다(디자인 판단 위험). 이 기능들을 그대로 재구현할지, 범위를 다시 정의할지, 혹은 지금 시점에 더는 필요 없다고 보고 폐기할지는 Kiki 판단이 필요 — /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당해 차단."
-updated: 2026-08-09
+updated: 2026-08-10

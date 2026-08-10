@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-43-completion-solution-integration
+title: "완료를 풀이과정에 통합(client+server+alembic) — S3-25 버킷C②(재설계, 원본 소실)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[재구현 — 원본 diff 없음] 원 S3-10이 다루던 '완료를 풀이과정에 통합'을 현재 main 기준으로 재설계. 원본은 dialogue_review_turns_remaining 관련 alembic 컬럼을 추가했었다(리비전 d5e6f0a1b2c3, 이미 main과 값 충돌 — 원본 마이그레이션 내용은 소실돼 그대로 재사용 불가) — 착수자가 현재 main의 dialogue/review 스키마를 먼저 읽고 이 컬럼이 정말 필요한지, 필요하면 sliding-window hex 스킴으로 새 리비전을 처음부터 설계할 것(무작위 hex 금지·versions/ 전수 grep 무충돌 확인 — MEMORY 2026-07-03 결정 로그 참조)"
+  - "flutter analyze 0 · flutter test green (client) + 백엔드 전체 pytest green (server, alembic 마이그레이션 포함)"
+  - CLAUDE.md 7계층 경계 준수
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/alembic/versions/**"
+session: null
+notes: "S3-25-shadow-recovery-bucket-c(버킷C②)에서 분리 등록. 원본 브랜치 완전 삭제(2026-08-09) — 포팅 아닌 재설계. alembic 리비전은 원본 내용 없이 처음부터 새로 설계해야 함(원 리비전 d5e6f0a1b2c3 내용 소실). 원 커밋 2f6433b/ead23ef/557485f는 더 이상 참조 불가."
+updated: 2026-08-10

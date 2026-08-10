@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-45-mc-choice-button-ux
+title: "객관식 선택지 버튼 UX(모바일) — S3-25 버킷C④(재설계, 원본 소실)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[재구현 — 원본 diff 없음] 원 S3-12가 다루던 '객관식 선택지 버튼 UX'를 현재 main 기준으로 재설계 — S3-35(버킷B①, 세로 번호목록)와 겹치는 영역일 수 있으니 착수 전 그 태스크와 범위 중복 여부 먼저 확인·조정"
+  - flutter analyze 0 · flutter test green
+  - "정답·정오 강조 없음(CLAUDE.md 절대 금기) — 버튼 UX 변경이 그 경계를 넘지 않는지 확인"
+artifacts: []
+paths:
+  - "src/mobile/lib/**"
+session: null
+notes: "S3-25-shadow-recovery-bucket-c(버킷C④)에서 분리 등록. 원본 브랜치 완전 삭제(2026-08-09) — 포팅 아닌 재설계. S3-35(버킷B①)와 범위 중복 가능성 — 함께 검토 권장. 원 커밋 0bd16aa/b1ec9fa는 더 이상 참조 불가."
+updated: 2026-08-10

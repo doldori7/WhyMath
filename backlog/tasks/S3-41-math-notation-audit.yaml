@@ -5,19 +5,19 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: blocked
+status: todo
 priority: 2
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "고립 브랜치 claude/shadow-data-s3-pilot-nh5kbz(원 커밋 bcb5eeb/c8fff19)에서 수식 표기 전수감사 로직을 main 현재 파일 위에 수동 재적용(자동병합 의존 금지)"
+  - "[재구현 — 원본 diff 없음, Kiki 승인 2026-08-09] 앱 전체에서 수식 표기가 렌더러 미지원 문법으로 깨지는 곳이 없는지 전수 점검하는 감사 로직(정적 스캔 또는 런타임 검증)을 현재 main 기준으로 새로 설계한다. 착수 전 필수: NS-03(notation_support_manifest.json, Stage1에서 이미 회수 완료)이 이 항목과 얼마나 겹치는지 먼저 확인 — 겹치면 이 태스크는 NS-03 위에 얹는 증분만, 안 겹치면 독립 신규"
   - flutter analyze 0 · flutter test green
-  - "착수 전 backlog.py next로 다른 미머지 브랜치의 중복 완료 여부 재확인(HARN-11) — NS-03(notation_support_manifest.json)이 이미 Stage1에서 회수됐으므로 중복 범위 없는지 특히 확인"
+  - "감사 결과가 빌드/CI에서 실제로 확인 가능한 형태(테스트 또는 게이트)로 남는지 확인 — 감사만 하고 강제 없는 산출물 금지"
 artifacts: []
 paths:
   - "src/mobile/lib/**"
   - "src/mobile/lib/shared/math/**"
 session: null
 notes: "[2026-08-09 재조사] 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz가 origin에서 완전히 삭제됨(git fetch origin <브랜치명> → 'couldn't find remote ref', git ls-remote --heads origin 전체 43건 스캔에도 부재). 원 커밋 해시(fa08081·73b77a1·75c3dda 등) 직접 fetch도 전부 실패 — GitHub가 reachable하지 않은 SHA는 노출하지 않음. 즉 '원본 diff를 main 위에 수동 재적용'이라는 acceptance 전제 자체가 이제 불가능 — 실행 가능한 대안은 title/notes의 짧은 설명만으로 처음부터 다시 설계·구현하는 것뿐인데, 이는 '포팅'이 아니라 '재설계'라 원 기능의 정확한 범위·UX 디테일을 보장할 수 없다(디자인 판단 위험). 이 기능들을 그대로 재구현할지, 범위를 다시 정의할지, 혹은 지금 시점에 더는 필요 없다고 보고 폐기할지는 Kiki 판단이 필요 — /drive 안전장치(acceptance 판단 불가·모호성에서 정지)에 해당해 차단."
-updated: 2026-08-09
+updated: 2026-08-10

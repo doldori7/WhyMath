@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-44-dialogue-final-answer-detection
+title: "대화 입력 최종답 감지(서버) — S3-25 버킷C③(재설계, 원본 소실)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "[재구현 — 원본 diff 없음] 원 S3-11이 다루던 '대화 입력에서 학생이 최종답을 말했는지 감지'를 현재 main 기준으로 재설계. coach.py의 현재 대화 처리 흐름을 먼저 읽고, 최종답 감지가 SymPy 동치판정 등 기존 도구 검증 계약과 어떻게 연결돼야 하는지부터 정의할 것(CLAUDE.md: LLM 응답 검증 없이 학생에게 제공 금지)"
+  - 백엔드 전체 pytest green
+  - "결함주입 테스트: 최종답이 아닌 중간 발화를 최종답으로 오판하지 않는지 확인"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "src/backend/whymath_backend/l4/**"
+session: null
+notes: "S3-25-shadow-recovery-bucket-c(버킷C③)에서 분리 등록. 원본 브랜치 완전 삭제(2026-08-09) — 포팅 아닌 재설계. 원 커밋 a5dee77/fc09405/35f6061은 더 이상 참조 불가."
+updated: 2026-08-10
