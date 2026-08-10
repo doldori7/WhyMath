@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -16,10 +16,12 @@ acceptance:
   - "harness/rephrased_corpus_hygiene.py(현재 문법 결함만 검사)에 무변화 검출 축을 추가 — 신규 재서술 생성 시 원본과 바이트 단위 동일하면 위생 위반으로 잡히는지 결함주입으로 변별력 실측"
   - "기존 무변화 레코드(전수 측정 결과)의 처리 방침 결정 — 재생성/은퇴/현행유지 중 판정 근거 기록. 재생성이면 별도 태스크로 분리 가능(콘텐츠 생성 비용 판단)"
   - "범위 밖: QUAL-02(실중복 쌍 자체의 은퇴/유지 판정 — 이쪽은 재서술 파이프라인 결함 축)"
-artifacts: []
+artifacts:
+  - df3cee9f
+  - "검증(전건 exit code, 독립 재실행): ruff 0·black 0·mypy --strict 0(485파일)·lint-imports 0(7계층 KEPT)·영향 테스트 192 passed·라이브 CLI 실사(실행 전후 data/corpus/ 무수정 재확인)·전체 백엔드 스위트 9412 passed/304 skipped/0 failed(594s). 직접측정 429건 전량: 무변화 282(65.7%)·정상변화 147·부모미선언 0·고아참조 0 — QUAL-01 간접 하한(282)과 정확 일치. 위생게이트 ⑦축(무변화) additive 확장 + QuestionRephraser 실제 생성 게이트 배선 완료(결함주입 변별력 실측) — 기존 호출부(sweep 도구 포함) 회귀 0. 코퍼스 미수정 원칙 준수(sweep 도구엔 의도적으로 미배선 — write=True 기본값이라 배선 시 대량삭제 위험). 후속 등재: QUAL-04(파이프라인 fail-closed 구조 재검토)"
 paths:
   - src/backend/whymath_backend/harness/rephrased_corpus_hygiene.py
   - "data/corpus/problem_bank_rephrased_v0/**"
-session: claude/remaining-track-34zvse
+session: null
 notes: "QUAL-01(harness/problem_duplication_audit.py §5.2·§6.1, 2026-08-10) 부산물 발견 — 교차코퍼스 실중복 스캔에서 배제된 282쌍(lineage_excluded_pair_count) 전부가 '변형 관계로 자기 원본을 직접 지목 + 텍스트 완전 동일'인 패턴이었다. 이 방법은 원본이 다른 코퍼스에 있고 텍스트가 우연히 매칭될 때만 포착되는 간접 신호라 하한값 — 진짜 비율은 rephrased_v0 429건 전체를 relations로 직접 훑어야 안다. rephrased_corpus_hygiene.py는 문법 결함만 보고 이 축은 검사하지 않음을 QUAL-01 작성 중 확인."
 updated: 2026-08-10
