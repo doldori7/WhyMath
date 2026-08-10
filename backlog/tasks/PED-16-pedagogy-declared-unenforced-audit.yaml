@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,13 +15,17 @@ acceptance:
   - "② pedagogy_pack 테이블 dead write 거취 — ORM reader 0 실측. 제거 vs pack_registry의 DB 전환 vs 유지 중 판정, 유지면 YAML↔DB 정합 감사 신설(reader 0 테이블은 조용히 갈라지는 두 번째 정본)"
   - "③ unit_spec 테이블 동일 판정 — reader 0(objective_coverage조차 .unit.yaml 직접 glob으로 테이블 우회)"
   - "④ api/scene.py↔api/visualization.py 서빙 오케스트레이션 미러 ~40행과 /v1/visualizations/* 3라우트(by-design 미배선 등재 상태) 거취를 이 판정에 병합 — 별건 등재 금지(전부 선언과 집행의 거리 한 축)"
-artifacts: []
+artifacts:
+  - "커밋(예정) — 교수법 DSL 선언≠집행 4축 판정(오케스트레이터 직접 코드 추적으로 판정 확정 후 위임, 서브에이전트 구현 + 오케스트레이터 독립 재검증).\n\n① mode_guard.check_forbidden_modes 집행 지점 — by-design 미배선 확정. 근거: /v1/coach(CoachResponse)는 LLM 생성 텍스트 필드가 아예 없어 검사할 응답 문면 자체가 없음, 실제 생성→서빙 경로(harness/wh1_primary.py, filter_tone 실배선)는 PedagogyPack을 전혀 참조하지 않음(전수 grep 0건) — 배선하려면 WH-1 루프 전체에 PedagogyPack 주입을 새로 도입해야 하는 별도 대형 작업. 완화 요인: 규칙 검출기를 가진 유일 모드(WORKED_EXAMPLE_FIRST)는 runtime_selector.forbids_worked_first가 이미 선택 시점에 사전 강등. config.py·l4/pedagogy/__init__.py·mode_guard.py 모듈 docstring에 판정·근거·완화요인·재검토조건(WH-1이 PedagogyPack 참조하게 되는 시점) 명문화. 오프라인 결함주입 측정(pedagogy_pack_fidelity_eval) 무변경 유지. 오케스트레이터가 mode_guard.py의 인용 오탈(§2-①→§2-⑤, 잘못된 절 참조)을 발견해 직접 정정.\n\n② pedagogy_pack DB 테이블 — 제거 배제, 유지+YAML↔DB 정합 감사 신설. blast radius 실측(서브에이전트가 test_pack_loader.py 7건·test_e2e_pedagogy_pilot_integration.py 전문 읽음): 후자는 step①에서 7팩을 DB에 쓰지만 step⑧ 런타임 조립(get_pack)은 YAML만 읽어 테스트 자기 자신도 쓴 값을 재조회 안 함(가장 강한 dead-write 증거). pack_registry가 'DB 무접근·순수 파일' 설계 경계를 문서화한 의도적 대체 — 완전 제거는 7테스트+E2E 구조 축소+compile.py CLI까지 연쇄돼 태스크 범위 초과로 판단. 신규 tests/backend/l1/test_pedagogy_pack_yaml_db_parity.py — schema.PedagogyPack.model_fields ↔ PedagogyPackORM 컬럼셋 상시 대조(하드코딩 스냅샷 없음, mapper 실시간 introspection).\n\n③ unit_spec DB 테이블 — ②와 겉보기 같은 패턴이나 서로 다른 근거로 같은 결론(유지+정합감사). 서브에이전트의 독자 발견: learning_objective가 복합 FK(unit_id, unit_version)로 unit_spec을 참조(CASCADE)하고 learning_objective 자체는 api/study.py·k_type_resolver.py가 실제 읽는 live 테이블 — unit_spec은 '고아 테이블'이 아니라 'live 테이블의 FK 부모'. 오케스트레이터가 db/models/pedagogy_dsl.py에서 ForeignKeyConstraint 직접 확인해 이 발견을 독립 검증 완료. 신규 tests/backend/l1/test_unit_spec_yaml_db_parity.py — 실 파일럿 코퍼스(units_v1/quadratic_maxmin.unit.yaml) 컴파일 결과의 행 dict 키와 UnitSpec/LearningObjective ORM 컬럼셋·PK-FK 정합을 상시 대조.\n\n④ api/scene.py↔api/visualization.py 오케스트레이션 미러(~40행) — 신규 api/_concept_orchestration.py로 공통분(Concept 로드→Overlay 조회→숙달도 라벨화→RoutingRequest 조립) 추출, 두 파일 전용분(behavior_areas/WH-1 프로브 vs is_visualizable 게이트)은 공유 안 함(과잉 추상화 회피). /v1/visualizations/* 3라우트의 기존 by-design 미배선 상태는 무변경(재론하지 않음) — 엔드포인트 시그니처·경로·응답모델 불변, 오케스트레이터가 diff로 순수 기계적 추출임을 확인.\n\n변별력 실증(오케스트레이터 독립 재실행, cp 백업/복원만 — git checkout 미사용): PedagogyPackORM에 스키마에 없는 유령 컬럼 삽입 → test_pedagogy_pack_yaml_db_parity.py RED(AssertionError: PedagogyPackORM에만 있고 schema에 없는 컬럼), cp 원복 후 GREEN 재확인.\n\n검증: tests/backend/l1/test_pedagogy_pack_yaml_db_parity.py+test_unit_spec_yaml_db_parity.py+test_pack_loader.py+test_unit_compiler.py 49 passed · scene/visualization 엔드포인트 테스트 39 passed · ruff/black 전부 EXIT=0 · backlog.py validate green(236건) · declared_unwired_audit exit 0(위반 0) · 전체 스위트 tests/backend+tests/infra 9634 passed·304 skipped·0 failed(640초).\n\n정직한 잔여: ②③의 정합 감사는 필드셋 일치만 검증(값의 의미적 정합은 범위 밖) · pack_registry의 DB 전환은 명시적으로 배제(재검토조건만 문서화) · docs/architecture/dsl_integration_gap_review.md 원문은 갱신 안 함(MOB-14 선례와 동일하게 과거 실측 기록 성격상 범위 밖) · 뮤테이션 검증은 ②만 수행(①④는 순수 추가/리팩터라 삭제 검증 대상 없음, ③은 ②와 동형 메커니즘이라 별도 뮤테이션 생략)."
 paths:
   - "src/backend/whymath_backend/l4/pedagogy/**"
   - "src/backend/whymath_backend/l1/pedagogy/**"
   - src/backend/whymath_backend/api/visualization.py
   - src/backend/whymath_backend/api/scene.py
+  - src/backend/whymath_backend/api/_concept_orchestration.py
   - src/backend/whymath_backend/config.py
+  - tests/backend/l1/test_pedagogy_pack_yaml_db_parity.py
+  - tests/backend/l1/test_unit_spec_yaml_db_parity.py
 session: null
 notes: "docs/architecture/dsl_integration_gap_review.md §2-⑤·⑥·§2-① 실측 근거(2026-08-10). PED-06→PED-08 정본화≠집행 유형의 재발형(그때는 노출 계약, 이번은 억제 계약) — 사전 가드(runtime_selector)는 배선돼 있고 사후 문면 가드만 오프라인 측정 전용. PED-07 ④ 경계(슬롯 합류 유보·CUR-02 스케일 트리거)와 별개 축. OPS-22 탐지기 4축 사각(일반 테이블 dead write 미감사)의 첫 실측 사례 2건 포함."
 updated: 2026-08-10

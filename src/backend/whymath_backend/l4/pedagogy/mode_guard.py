@@ -24,6 +24,30 @@
 검출기는 `FORBIDDEN_MODE_DETECTORS` 레지스트리에 모드 토큰→Callable로 등록해 커버리지를 *명시적·
 확장 가능*하게 둔다. `check_forbidden_modes`는 팩이 실제로 금지한 모드만, 그 중 검출기가 등록된
 것만 검사한다.
+
+────────────────────────────────────────────────────────────────────────────
+집행 지점 판정 — PED-16(2026-08-10): by-design 미배선으로 확정
+────────────────────────────────────────────────────────────────────────────
+이 함수는 라이브 코치 응답 경로 **어디에도 배선돼 있지 않다** — 호출자는
+`harness/pedagogy_pack_fidelity_eval.py`(오프라인 결함주입 측정·CI 상시) 하나뿐이다. 이는
+누락이 아니라 **의도적 선언**이다.
+
+  - **근거**: `/v1/coach`(`api/coach.py`)의 `CoachResponse`는 "무엇을 프롬프트할지"(system·prompt·
+    hint_level 등)만 반환하고 LLM이 생성한 실제 응답 텍스트 필드가 없다 — 이 가드는 *응답 문면*을
+    검사하는 함수인데 이 엔드포인트엔 검사할 문면 자체가 없다. 실제 생성→서빙 경로는 WH-1 루프
+    (`harness/wh1_primary.py`, `filter_tone`이 노출 직전 마지막 방어선으로 실배선)인데, 이 루프는
+    `PedagogyPack`을 전혀 참조하지 않는다(grep 0건) — 여기 배선하려면 PedagogyPack 주입 자체를
+    WH-1 루프 전체에 새로 도입해야 하는 별도 대형 작업이라 이 태스크 범위를 넘는다.
+  - **완화 요인**: 사전(pre-hoc) 가드는 실재한다 — `runtime_selector.py`의 `forbids_worked_first`가
+    팩이 `WORKED_EXAMPLE_FIRST`를 금지하면 전략 *선택* 시점에 이미 강등한다. 이 가드가 규칙
+    검출기를 가진 유일한 모드(`RULE_DETECTABLE_MODES`)가 바로 `WORKED_EXAMPLE_FIRST`이므로,
+    사후 문면 가드 부재의 실질 위험은 사전 축에서 이미 흡수되고 있다.
+  - **재검토 조건**: WH-1 루프(`harness/wh1_primary.py`)가 `PedagogyPack`을 참조하게 되는 시점 —
+    그때는 `check_forbidden_modes`를 노출 직전(`filter_tone` 인근)에 fail-closed로 배선하는 것을
+    재검토한다.
+  - **불변**: 오프라인 결함주입 측정(`pedagogy_pack_fidelity_eval`)은 그대로 CI 상시 유지 — 이
+    가드의 규칙 검출 정확도 자체는 계속 측정된다.
+    상세: `docs/architecture/dsl_integration_gap_review.md` §2-⑤.
 """
 
 from __future__ import annotations
