@@ -9,6 +9,8 @@
     python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋> [--artifact ...]
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
+    python3 scripts/harness/backlog.py review <id>                (in_progress → review)
+    python3 scripts/harness/backlog.py cancel <id> --reason <사유>  (todo/blocked → cancelled)
     python3 scripts/harness/backlog.py gates [list]
     python3 scripts/harness/backlog.py gates add <G-id> --title <제목>
                                                  [--kind human|external|decision]
@@ -67,6 +69,20 @@ def _transition(task: Task, new_status: str) -> str | None:
             f"(허용: {list(allowed) or '없음(종결 상태)'})"
         )
     return None
+
+
+def _append_note(original: str, reason: str, tag: str) -> str:
+    """사유를 원 notes 뒤에 append — 원문을 지우지 않는다 (HARN-20).
+
+    구 구현(`task.notes = args.reason`)은 태스크의 발견 경위·설계 근거를 호출마다
+    통째로 덮어써 데이터 손실을 냈다(2026-08-10 통합점검 실측 — blocked 4건 전건
+    원 notes 소실). append 방식은 원문 뒤에 `[tag YYYY-MM-DD] 사유`를 이어붙여
+    이력을 누적한다 — unblock 이후에도 "왜 한번 막혔었는지"가 notes에 남는다.
+    """
+    stamp = f"[{tag} {_today()}] {reason}"
+    if not original.strip():
+        return stamp
+    return f"{original}\n\n{stamp}"
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -600,12 +616,62 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     prev_session = task.session
     task.status = "blocked"
     task.session = None
-    task.notes = args.reason
+    task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "block", task.id, reason=args.reason)
     _release_remote_claim(root, task.id, prev_session)
     print(f"✖ {task.id} 차단 — {args.reason}")
+    return 0
+
+
+def cmd_review(root: Path, args: argparse.Namespace) -> int:
+    """in_progress → review 전이 (HARN-20) — 구현 완료·검토 대기 상태로 전환.
+
+    review는 여전히 in-flight(원격 claim 유지·session 필드 보존) — done/block과 달리
+    세션이 계속 이 태스크를 들고 있다는 뜻이라 `_release_remote_claim`을 부르지 않는다.
+    전이표(STATUS_TRANSITIONS)가 `in_progress → review`만 허용하므로 다른 상태에서의
+    호출은 `_transition`이 자연히 거부한다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+    error = _transition(task, "review")
+    if error:
+        return _fail(error)
+    task.status = "review"
+    task.updated = _today()
+    store.save_task(root, task)
+    store.append_event(root, "review", task.id)
+    print(f"👀 {task.id} 검토 대기 (세션: {task.session or '?'})")
+    return 0
+
+
+def cmd_cancel(root: Path, args: argparse.Namespace) -> int:
+    """todo/blocked → cancelled 전이 (HARN-20) — 종결 상태.
+
+    전이표는 `in_progress`에서 `cancelled`로의 직접 경로를 열지 않는다 — 진행 중인
+    태스크를 취소하려면 먼저 `block` 또는 `todo`로 내린 뒤 취소해야 한다는 기존 설계를
+    그대로 존중한다(우회 아님). cancelled는 종결 상태이므로 block과 동일하게 원격
+    claim을 해제한다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+    error = _transition(task, "cancelled")
+    if error:
+        return _fail(error)
+    prev_session = task.session
+    task.status = "cancelled"
+    task.session = None
+    task.notes = _append_note(task.notes, args.reason, "취소")  # block과 동일 — 덮어쓰지 않음
+    task.updated = _today()
+    store.save_task(root, task)
+    store.append_event(root, "cancel", task.id, reason=args.reason)
+    _release_remote_claim(root, task.id, prev_session)
+    print(f"🗑 {task.id} 취소 — {args.reason}")
     return 0
 
 
@@ -1414,6 +1480,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("unblock", help="차단 해제")
     p.add_argument("id")
     p.set_defaults(func=cmd_unblock)
+
+    p = sub.add_parser("review", help="검토 대기로 전환 (in_progress → review, HARN-20)")
+    p.add_argument("id")
+    p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("cancel", help="태스크 취소 (todo/blocked → cancelled, HARN-20)")
+    p.add_argument("id")
+    p.add_argument("--reason", required=True)
+    p.set_defaults(func=cmd_cancel)
 
     p = sub.add_parser("gates", help="사람 게이트 대장")
     p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive"])
