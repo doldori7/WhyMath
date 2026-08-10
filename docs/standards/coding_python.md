@@ -46,9 +46,8 @@ async def get_student(student_id: str) -> Student | None:
 
 ## 테스트
 - `pytest` + `pytest-asyncio`
-- 커버리지 70%+
-- 핵심 도메인은 80%+
-- LLM 호출은 *반드시* 모킹
+- 커버리지 게이트 정본 = `docs/standards/testing.md` — 집계 70% + 계층별 floor(l4=90% · l1/l2/api=80% · l3=70%). 수치의 단일 진실 원천은 `scripts/coverage/check_layer_coverage.py`의 `LAYER_FLOORS` (2026-08-10 통합점검 정정: 종전 이 자리의 "핵심 도메인 80%+"는 l4 floor 90%에 미달하는 낡은 수치였다)
+- LLM 호출은 *반드시* 모킹 — 단, **SDK 표면 정합은 모킹으로 선언 금지**: 우리가 호출하는 메서드가 pin 허용 범위의 *실물* SDK에 존재하는지 실측 검증한다 (CLAUDE.md 절대 금기 · `langfuse>=2.50,<5` 선례)
 
 ## 의존성 주입
 - FastAPI `Depends`

@@ -39,7 +39,7 @@
 
 ```
 L7. 커뮤니티·소셜          [학생 풀이 공유, 학부모·교사 대시보드]
-L6. 응용 모드             [학교진도/수능/사고력/영재/메타인지]
+L6. 응용 모드             [학교진도/수능내신/사고력/메타인지/영재/자유학기/디버깅 — 7모드]
 L5. 상호작용              [PaddleOCR+Qwen3-VL · Manim · Desmos · 대화]
 L4. 교수학 엔진            [Polya 4단계 · 소크라테스 · LTHC · 오개념]
 L3. 콘텐츠 생성·검증        [LLM 라우팅 · PRM · 도구호출 · 다중풀이]
@@ -68,7 +68,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 수식 입력 | MathLive | 학생 수식 입력 표준 |
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |
 | RDB | PostgreSQL 16 + TimescaleDB (시계열) | AVAC 자산 |
-| Graph DB | Neo4j 5.x (Community) | 개념 연결 그래프 (노드·엣지) |
+| Graph DB | ~~Neo4j 5.x (Community)~~ — **런타임 미도입**(2026-08-03 정정·확정) | 개념 연결 그래프의 정본은 **PG 단일 평면**(실측 원자 백본 2,683노드·2,210엣지). Neo4j는 data-pipeline 옵셔널 extra(적재 실험 경로)로만 존재 — backend 의존·docker 서비스 0건. 상세 = `00_overview.md` 5블록 DB·컴포넌트 표 |
 | Vector DB | **pgvector** (PostgreSQL 16 확장) | 임베딩·의미 검색 — 메타 동거 하이브리드(단일 SQL)·6번째 store 회피. 대규모 시 Qdrant 이관 (MEMORY 슬98) |
 | 행동 로그 | ClickHouse | 학습 행동 로그 분석 |
 | 객체 저장소 | S3 / MinIO | 영상·이미지 |
@@ -85,7 +85,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | CI/CD | GitHub Actions | |
 | 인프라 | Phaiakes9 (개발), GCP/AWS (프로덕션) | |
 
-**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28`, 벡터 DB(ChromaDB→**pgvector** Postgres 통합)는 `2026-06-10 슬98`, 스택 표 모델 표기 정합(패밀리명→실제 핀 ID 병기·AI/LLM 인벤토리 신설)은 `2026-07-24` 결정 로그 참조.
+**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28`, 벡터 DB(ChromaDB→**pgvector** Postgres 통합)는 `2026-06-10 슬98`, 스택 표 모델 표기 정합(패밀리명→실제 핀 ID 병기·AI/LLM 인벤토리 신설)은 `2026-07-24`, Graph DB 행 실측 단서 병기(Neo4j 런타임 미도입)는 `2026-08-10 통합점검` 결정 로그 참조.
 
 ---
 
@@ -137,6 +137,10 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 - ❌ **정본화를 집행으로 착각한 완료 선언 금지 (2026-08-04 등재)** — 노출·안전·억제 계약(무엇을 보여주고 무엇을 감출지 정하는 모듈)을 acceptance에 "정본화"라고만 적으면 그 모듈이 실제로 **서빙 경로에서 호출되는지 확인하지 않고도** 완료 처리된다. 계약을 만드는 태스크의 acceptance는 반드시 ①정본화(계약 자체)와 ②**집행 지점**(그 계약을 실제로 경유하는 서빙 코드 경로가 무엇인지)을 **별항으로 분리**해 적는다. 위 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 특수형이다 — 그 항목이 "테스트가 CI에서 도는가"를 묻는다면 이 항목은 "계약을 서빙 코드가 실제로 부르는가"를 묻는다. (사고 경위: `PED-06`이 `growth_evidence_exposure.py`에 3계층 노출 계약을 만들며 스스로 "이 함수가 유일한 노출 판정 경로가 되게 한다"고 선언했으나, acceptance ①이 "노출 계약 정본화"로만 적혀 있어 그대로 통과 → 실제로는 CLI 리포트와 자기 테스트만 그 함수를 부르고, 학생 토큰으로 호출되는 `GET /v1/me/harness-metrics`는 원시 11지표를 `GAMING_SUSPECT`까지 포함해 그대로 반환하는 상태로 1일간 방치됐다 — 게임화 모듈 2차 재점검(`gamification_module_gap_review_r2.md` §2 G1·§4-④·§7)에서 발견·`PED-08`로 재설계)
 
+- ❌ **작동 신호 없는 알고리즘 부착 금지 — "작동한 비율" 원칙 (2026-08-03 결정·2026-08-10 통합점검이 본문 등재)** — 알고리즘·전략을 붙였으면 **그 알고리즘이 실제로 작동한 비율**을 응답·리포트가 말해야 한다. 정상 응답 200은 알고리즘이 일했다는 증거가 아니다. 부수 원칙: docstring 속 계획은 백로그를 대신하지 못한다 — 추적하려면 태스크로 등재한다. (사고 경위: 학습경로 설계에서 알고리즘 부착 후 무작동을 정상 응답으로 오인 — 반복 실수 8회차·MEMORY 2026-08-03. 결정 로그에 "등재"로 선언됐으나 본문 반영이 누락됐던 것을 2026-08-10 통합점검이 발견해 정정)
+
+- ❌ **만료 없는 유예·제외 금지 (2026-08-03 결정·2026-08-10 통합점검이 본문 등재)** — 미머지 완료분을 전제로 한 유예·제외(그랜드파더)는 반드시 **만료 또는 재확인 지점**을 동반한다. 1차 집행은 규칙 산문이 아니라 코드다(PB-02 그랜드파더 만료 계약 — 동일 유형 텍스트 규칙 2회 실패 후 코드 착지). (사고 경위: 미병합 고립 3회차 — MEMORY 2026-08-03 문제은행 R2. 코드 착지만 있고 CLAUDE.md만 읽는 세션은 원칙 자체를 모르는 상태를 통합점검이 발견해 등재)
+
 ### 구조 붕괴 (구축 플레이북 2대 철칙 — 어기면 시스템은 반드시 무너진다)
 - ❌ 수학 *전체*를 완벽 모델링 금지 — *교육적으로 압축된 인지 그래프*만 (개념 원자 단위, 핵심만 노드·나머지는 속성/AI 생성)
 - ❌ LLM에 *전체 그래프*를 통째로 주기 금지 — Minimal Reasoning Subgraph만 (depth ≤ 2, max_nodes ≤ 12~20, max_tokens ≤ 3000). "더 많이 넣을수록 더 멍청해진다"
@@ -154,7 +158,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - LLM 호출은 항상 라우터 경유 — 직접 호출 금지
 - 모든 데이터베이스 접근은 ORM/쿼리 빌더 — 원시 SQL 최소화
 - 한국어 주석을 코드에 직접 작성 (Kiki 선호)
-- **외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다** — 로케일 인코딩(한국어 Windows=cp949)으로 읽는 파일(uvicorn `--log-config` 등)은 **ASCII 전용** + 회귀 테스트 동결. 한국어 설명은 파일이 아니라 런북/문서에 둔다. (2026-07-17 logconfig UnicodeDecodeError 기동 실패 실측 — `test_wh1_shadow_logconfig.py` 선례)
+- **외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다** — 로케일 인코딩(한국어 Windows=cp949)으로 읽는 파일(uvicorn `--log-config` 등)은 **ASCII 전용** + 회귀 테스트 동결. 한국어 설명은 파일이 아니라 런북/문서에 둔다. **같은 원리로, 우리가 파싱하는 외부 서브프로세스 출력(git 등)의 디코딩도 인코딩을 명시한다** — Windows 로케일(cp949)에서 기본 인코딩 디코드는 붕괴한다(HARN-19 실측 2026-08-08 — 대책 코드 = `GitOutputDecodeError`·`tests/harness/test_subprocess_encoding.py` 동결). (2026-07-17 logconfig UnicodeDecodeError 기동 실패 실측 — `test_wh1_shadow_logconfig.py` 선례)
 
 ### LLM 사용
 - 모든 LLM 호출 → Langfuse 추적
@@ -283,6 +287,11 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 4. A/B 테스트                ← 효과 검증
 ```
 
+### 배포 시
+```
+/deploy                     ← 개발→스테이징→프로덕션 안전 배포 (.claude/commands/deploy.md)
+```
+
 ---
 
 ## 🚦 의사결정 우선순위
@@ -337,6 +346,16 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `docs/strategy/*.md` — 시장·차별화·리스크
 - `docs/data/licensing_safety.md` — 데이터 라이선스 매트릭스
 - `docs/prompts/*.md` — 프롬프트 템플릿 라이브러리
+- `docs/standards/testing.md` — 테스트 피라미드·**커버리지 게이트 정본**(집계 70% + 계층 floor l4=90%·l1/l2/api=80%·l3=70% — 수치의 단일 진실 원천은 `scripts/coverage/check_layer_coverage.py`의 `LAYER_FLOORS`)
+- `docs/standards/security_privacy.md` — 미성년 PII·암호화·보존 파기 정본
+- `docs/standards/incident_response_slo.md` — 인시던트 런북·최소 SLO 정본(`test_slo_contract.py` 기계 대조)
+- `docs/standards/crosswalk_gate_contract.md` — 오개념 kebab↔M-id 승인·적재 게이트 계약 정본(코드 동결)
+- `docs/standards/coding_python.md`·`coding_flutter.md` — 언어별 코딩 표준
+- `docs/standards/data_pipeline.md` — 데이터 6단계 흐름·도구 표준
+- `docs/standards/parallel_sessions.md` — 병렬 세션 규약(1 세션 = 1 도메인 = 1 브랜치 = 1 worktree)
+- `docs/standards/current_phase_checklist.md` — Phase 1 완수 체크리스트
+
+*(2026-08-10 통합점검: 위 8줄은 인덱스 누락 보강 — 규범 문서가 헌법 인덱스에서 안 보이던 상태 해소)*
 
 ---
 
@@ -404,5 +423,5 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ---
 
-**버전**: 0.1.0 | **최종 수정**: 2026-05  
-**다음 검토일**: Phase 1 종료 시점
+**버전**: 0.2.0 | **최종 수정**: 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
+**다음 검토일**: Phase 1 종료 시점 또는 다음 분기 SSM 스캔 중 먼저 오는 쪽 · **본문 규칙을 바꾸는 커밋은 이 버전·수정일 표기도 함께 갱신한다** (2026-08-10 통합점검: 표기가 실체보다 3개월 뒤처져 있던 상태 재발 방지)
