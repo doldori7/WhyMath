@@ -1194,6 +1194,15 @@ Desmos/GeoGebra·백엔드 `sympy.latex` 생성 — 기존 미채택 결정 승�
 - **양방향 변별력 실측**(acceptance ④ — 양성만 확인하면 "전부 도달"로 뭉개는 반대 방향 오탐을 못 잡는다): (양성) `막힘` 소비 인정 · `POST /v1/ocr/pages`(리터럴 0건·상수만) 도달 인정. (음성) `답입력`·`시각화조작`은 **수정 후에도 미도달 유지** — 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타난다. 상수를 *정의만* 하고 비교에 안 쓰면 소비 아님, 함수 지역 상수·import 상수·`+` 연결 표현식은 미해석. 신규 테스트 25건 중 **양성 14건은 수정을 무력화하면 전부 실패·음성 11건은 양쪽 상태에서 통과**함을 임시 패치로 실측했다(변별력 있는 검사임을 확인).
 - **수치**: 감사기 exit 0 유지. HTTP 도달 80→87(+7) · EventType 소비 3→4(+1) — 증가분 8건 전부 상수 간접참조 오탐 해소분이고 신규 배선 0. 대장에서 유예 8건 제거(HTTP 7·EventType 1). 감사기 테스트 42→67건.
 - **정직한 잔여**: 이 축의 `reached` = "dart 클라 호출 ∪ 백엔드 테스트 호출"이므로 해제된 7건이 reached라는 건 *테스트가 관통한다*는 뜻이지 *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히 0건**이며 이 축은 그 구분을 표현하지 못한다(클라 소비 공백 전용 축은 후속 과제). SQL `.in_(상수)` 단독 소비·`Model.field.in_()` 형태도 Compare가 아니라 미탐이다.
+### 2026-08-10 (설계·웹 전략): **통합 웹 전략 정본 신설(`docs/architecture/web_strategy.md`) — 공개 랜딩을 슬89 ③ "별도 웹" 정의에 편입(정제·역전 아님) + 웹 태스크 6건 등재 + 배치 비교·권고(최종 배포 대상 확정 대기: Kiki)** (claude 설계·등재, Kiki "웹페이지 구현 계획·배치·아키텍처" 요청·AskUserQuestion 3건으로 범위 확정)
+
+- **Kiki 확정 3건**(AskUserQuestion): ①범위=통합 웹 전략(공개 랜딩+백오피스·교사 웹) ②산출물=설계 문서+백로그 등재(코드 스캐폴딩 0) ③배포=문서에서 비교·권고까지(확정은 Kiki).
+- **편입 논리(슬89 불변)**: 슬89 ③ 별도 웹의 목적에 "SEO·검색유입·공유"가 이미 명시 — 공개 랜딩은 그 목적의 첫 실체화. 랜딩은 학습 경험이 아니라 소개·유입 표면(학습 기능·수학 로직 0·ARCH-10 대상)이므로 "학생 경험 아님" 원칙과 무충돌. 4층 구조 불변·새 층 아님. 랜딩 실체 설계는 전 저장소 최초(실측 grep 0건).
+- **웹 자산 4종 지도**: ①공개 랜딩(공개 정적·인증 없음) ②운영 백오피스(내부망/VPN·04 정본) ③교사 웹 B2B(Phase 3+·TEACHER RBAC 선결) ④비상구 graphing-calculator(불가침). 스택 불변 — React 19+Next.js 15 **단일 코드베이스 `src/web/webapp/`**(라우트 그룹 `(public)`/`admin`·배포·인증 도메인만 분리·04 §1 정합). 공개 산출물에 admin 번들 미포함이 배포 요건.
+- **배치 = 노출 프로파일 3분(web_strategy.md §4 비교표)**: 랜딩=정적 export→관리형 CDN 1순위·GCP/AWS 2순위(**Kiki 확정+본 로그 후속 기록이 WEB-02 착수 선결**·외부 서비스 계약은 Kiki+법무) / 백오피스=Phaiakes9 내부망(04 §5 공개 금지 정합·관리형 부적합) / 교사 웹=Phase 3 시점 재평가. 선결 실측 3건: CORSMiddleware 0건(첫 배선=ADMIN-06·fail-closed 허용 목록)·TLS·리버스 프록시 미프로비저닝(runbook §8)·기존 CI web 잡은 graphing-calculator 전용(webapp 잡 신설=WEB-01 집행 별항).
+- **등재(전건 `backlog.py add` 경유·번호 충돌 0)**: `WEB-01-landing-static-v1`(랜딩 v1·외부 폼 CTA·변호사 게이트 선결) → `WEB-02-landing-deploy`(Kiki 확정 후 집행) / `ADMIN-04-module-registry` → `ADMIN-05-bff-readonly` → `ADMIN-06-admin-web-shell`(+CORS) → `ADMIN-07-review-ui` — 04 §8 제안 4건(ADMIN-MODULE-REGISTRY·BFF·REVIEW-UI·WEB)의 번호 부여 등재. 랜딩 공개 전 변호사 검토(광고 규제 §4.1 효과 단정 금지·KWCAG·개인정보 처리위탁)는 gates add CLI 부재(HARN-18)로 acceptance 인코딩 — HARN-18 착지 후 gates 대장 등재.
+- **동반 현행화**: CLAUDE.md 스택 표 "별도 웹" 행 비고 갱신(행 신설 0 — 공개 랜딩 명시·"Phase 3+는 교사 웹 한정"으로 정제) · 04 §8 등재 ID 부기(v1.3) · ui/00_index 정본 경계에 링크 1줄.
+- **범위 밖(의도적 미등재)**: 교사 웹 착수(TEACHER role 부재 — dead code 금지)·백오피스 prod 내부망 배선(Phase B)·코드 스캐폴딩(WEB-01 몫)·graphing-calculator(슬89 ④ 불변).
 
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
