@@ -969,14 +969,14 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.problem_corpus_rephrase_sweep": _BATCH_GENERATOR,
         "harness.problem_corpus_tag": _BATCH_GENERATOR,
         "harness.problem_type_backfill": _BATCH_GENERATOR,
-        # PB-03·S3-10/PB-01(둘 다 done) 신설 — 결정론(LLM 0)이라 _BATCH_GENERATOR(LLM 비용
-        # 회피 명분)는 안 맞음. 수동 실행이 의도인지 CI 배선이 맞는지는 별도 판단 필요 — OPS-24 참조
-        "harness.problem_corpus_review_status_backfill": (
-            "pending-task:OPS-24-review-status-backfill-ci-wiring"
-        ),
-        "harness.problem_corpus_persona_fit_backfill": (
-            "pending-task:OPS-24-review-status-backfill-ci-wiring"
-        ),
+        # ⚠️ 2026-08-10 OPS-24 — 백필 CLI 2종(`problem_corpus_review_status_backfill`·
+        # `problem_corpus_persona_fit_backfill`)의 `pending-task` 유예를 해제했다. 판정은
+        # "수동 실행 의도"가 아니라 **CI 배선이 맞다**였다 — review_status가 빈 레코드는
+        # `l6/_shared.is_review_cleared`가 fail-closed로 노출을 전건 차단하므로 백필 누락은
+        # 서빙 영향을 갖는 회귀다. 다만 CI가 레포 데이터를 재작성하면 안 되므로 *변이형*이
+        # 아니라 신설 `--check`(미기록·미백필 1건이라도 있으면 exit 1) **드리프트 가드**를
+        # `declared-unwired-audit` 잡에 스텝으로 얹었다(신규 잡 0). 이제 둘 다 reached이므로
+        # 유예를 남기면 `stale-waiver`로 exit 1이다.
         # 강등전(demotion battle) — 게이트 검출력 자체를 실측 교정하는 운영자용 CLI. S4-16
         # 등 다른 강등전과 동형으로 상시 CI가 아니라 사람이 판단 시점에 돌린다(ARCH-19 done).
         "harness.answer_distribution_battle": (
