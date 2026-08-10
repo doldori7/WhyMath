@@ -60,6 +60,38 @@
 - 승격 재도전은 검증기 개선 후 **재강등전 승리**로만 가능하다(아래 후속 방향). S4-16 acceptance의
   "Wilson 게이트 CLI PASS"는 미충족 — 태스크는 개선·재도전 컨테이너로 열린 채 유지한다.
 
+## 부록 — 항목별 원자료 (`battle_audit_night.jsonl` 전문)
+
+```jsonl
+{"problem_id": "wm-finite-bf467bc92512", "role": "seeded", "defect_class": "missing_condition", "mutation_note": "조건 결측: '서로 구별되는 ' 제거(구별 가능 전제 소실)", "aggregate": "ok"}
+{"problem_id": "wm-finite-53bcd6a36208", "role": "seeded", "defect_class": "missing_condition", "mutation_note": "조건 결측: '서로 구별되는 ' 제거(구별 가능 전제 소실)", "aggregate": "ok"}
+{"problem_id": "wm-finite-2457627c3b5d", "role": "seeded", "defect_class": "missing_condition", "mutation_note": "조건 결측: '서로 구별되는 ' 제거(구별 가능 전제 소실)", "aggregate": "ok"}
+{"problem_id": "wm-finite-162069932205", "role": "seeded", "defect_class": "unstated_equiprobability", "mutation_note": "등확률 미명시: '매번 앞면과 뒷면이 나올 가능성이 같을 때, ' 제거(균등분포 가정 미서술)", "aggregate": "ok"}
+{"problem_id": "wm-finite-53bcd6a36208", "role": "seeded", "defect_class": "unstated_equiprobability", "mutation_note": "등확률 미명시: '각 주사위의 여섯 눈이 나올 가능성이 모두 같을 때, ' 제거(균등분포 가정 미서술)", "aggregate": "ok"}
+{"problem_id": "wm-finite-c49dec23e37c", "role": "seeded", "defect_class": "unstated_equiprobability", "mutation_note": "등확률 미명시: '매번 앞면과 뒷면이 나올 가능성이 같을 때, ' 제거(균등분포 가정 미서술)", "aggregate": "ok"}
+{"problem_id": "wm-finite-14edcb97ce41", "role": "seeded", "defect_class": "ambiguous_wording", "mutation_note": "중의성: '모두' 제거(전부 빨간지 일부인지 모호)", "aggregate": "defect"}
+{"problem_id": "wm-finite-79f76e668779", "role": "seeded", "defect_class": "ambiguous_wording", "mutation_note": "중의성: '앞면이 정확히 ' 제거(정확히 M번 vs M번 이상 모호)", "aggregate": "ok"}
+{"problem_id": "wm-finite-625d20e10738", "role": "seeded", "defect_class": "ambiguous_wording", "mutation_note": "중의성: '의 합' 소실(두 눈의 수의 합이 N일 → 두 눈의 수가 N일)", "aggregate": "ok"}
+{"problem_id": "wm-finite-a8cb473c65dc", "role": "seeded", "defect_class": "multiple_valid_answers", "mutation_note": "복수 정답: '동시에' 제거(비복원·무순서 추출 가정 소실 → 대안 해석 발생)", "aggregate": "defect"}
+{"problem_id": "wm-finite-cd43a94bbe38", "role": "seeded", "defect_class": "multiple_valid_answers", "mutation_note": "복수 정답: '동시에' 제거(비복원·무순서 추출 가정 소실 → 대안 해석 발생)", "aggregate": "ok"}
+{"problem_id": "wm-finite-14edcb97ce41", "role": "seeded", "defect_class": "multiple_valid_answers", "mutation_note": "복수 정답: '동시에' 제거(비복원·무순서 추출 가정 소실 → 대안 해석 발생)", "aggregate": "ok"}
+{"problem_id": "wm-finite-9471f2dd9b2d", "role": "clean", "defect_class": null, "mutation_note": "", "aggregate": "ok"}
+{"problem_id": "wm-finite-430b6612cd7f", "role": "clean", "defect_class": null, "mutation_note": "", "aggregate": "unclear"}
+{"problem_id": "wm-finite-a7ae58c7d484", "role": "clean", "defect_class": null, "mutation_note": "", "aggregate": "ok"}
+{"as_found_overall_detected": 2, "as_found_overall_resolved": 12, "as_found_clean_false_alarms": 0, "as_found_clean_resolved": 2}
+```
+
+항목 단위 관찰 (개선 설계의 표적):
+
+- **검출 2건이 전부 공 추출(그룹 C) 문항** — `wm-finite-14edcb97ce41`('모두' 제거)·
+  `wm-finite-a8cb473c65dc`('동시에' 제거). 주사위·동전 그룹의 결함은 전건 놓쳤다.
+- **같은 문항·다른 변조의 비대칭** — `wm-finite-14edcb97ce41`에서 '모두' 제거(중의성)는 잡고
+  '동시에' 제거(복수 정답)는 놓쳤다. 같은 변조('동시에' 제거)도 `a8cb473c65dc`에서는 잡고
+  `cd43a94bbe38`·`14edcb97ce41`에서는 놓쳤다 — 검출이 결함 유형의 함수라기보다 문항별
+  우연에 가깝다는 신호(재현성 낮음). 재강등전 설계 시 같은 변조의 반복 시행으로 검출의
+  일관성 자체를 측정할 가치가 있다.
+- as-found 요약(2/12·0/2)은 본문 리포트 집계와 일치 — 이중 회계 무결.
+
 ## 후속 방향 (태스크화 전 후보 — 채택은 별도 결정)
 
 1. **관점 프롬프트 개선** — 조건 완전성·등확률 명시 여부를 직접 조준하는 점검 축 추가.
