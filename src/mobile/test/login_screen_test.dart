@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:korean_math_app/core/router.dart';
+import 'package:korean_math_app/core/token_refresh_api.dart';
 import 'package:korean_math_app/core/token_store.dart';
 import 'package:korean_math_app/features/auth/data/auth_api.dart';
 import 'package:korean_math_app/features/auth/data/oauth_code_requester.dart';
@@ -38,12 +39,27 @@ class _FakeAuthApi extends AuthApi {
   final String token;
 
   @override
-  Future<String> login({
+  Future<AuthTokens> login({
     required String provider,
     required String code,
     required String redirectUri,
   }) async =>
-      token;
+      // MOB-12: 서버는 액세스+리프레시를 함께 준다.
+      AuthTokens(accessToken: token, refreshToken: 'refresh-$token');
+}
+
+/// fake RefreshTokenStore — 메모리 저장(MOB-12·플랫폼 채널 회피).
+class _FakeRefreshTokenStore implements RefreshTokenStore {
+  String? saved;
+
+  @override
+  Future<String?> readRefreshToken() async => saved;
+
+  @override
+  Future<void> saveRefreshToken(String token) async => saved = token;
+
+  @override
+  Future<void> clearRefreshToken() async => saved = null;
 }
 
 /// fake TokenStore — 메모리 저장(플랫폼 채널 회피).
@@ -88,6 +104,8 @@ Widget _app({
       oauthCodeRequesterProvider.overrideWithValue(requester),
       authApiProvider.overrideWithValue(api),
       tokenStoreProvider.overrideWithValue(store),
+      // MOB-12: 로그인이 리프레시 토큰도 저장하므로 그 저장소도 fake로 둔다(플랫폼 채널 회피).
+      refreshTokenStoreProvider.overrideWithValue(_FakeRefreshTokenStore()),
     ],
     child: MaterialApp.router(routerConfig: _router()),
   );
