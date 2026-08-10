@@ -10,6 +10,16 @@
 > **교차참조**: `math_dsl_risk_register.md` · `math_dsl_remediation_design.md` ·
 > `math_dsl_principles_review.md` · `math_dsl_evolution.md` · `notation_contract.md`
 
+> ✅ **2026-08-10 개정 배너(DSL 통합 점검 — `dsl_integration_gap_review.md` §5)**: 본 문서만
+> 자매 문서(evolution·risk_register)의 **2026-07-08 FormulaNode 재판정 배너를 누락**해 계열 내
+> 정면 충돌 상태였다 — Part A #1("FormulaNode 미도입 = 정답")·Q9-1("premature 금지")은 그
+> 재판정으로 **대체**됐다(canonical 참조 노드 도입·경계는 `test_formula_governance`가 동결.
+> 상세는 `math_dsl_evolution.md` 상단 배너·`concept_node_layering_decision.md` §0). 또한 Part C
+> 우선순위표 중 **invariant ⑫(event_data 타입 스키마)는 완료**(`schema/event_data_contract.py`+
+> 게이트), **invariant ⑩(렌더 선택 단일 진실원)은 py/js 2/3 완료**(`data/render_contract.json`
+> 계약·잔여 Flutter 1/3은 MOB-14). §0 수치 스냅샷은 stale — 최신 실측은
+> `dsl_integration_gap_review.md` §5 정오표(그래프 2,683/2,210·kebab 64·M-id 843)가 정본.
+
 ---
 
 ## 0. 배경 사실 (조사 확정 스냅샷)

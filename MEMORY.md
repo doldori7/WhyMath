@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (점검·DSL 통합): **DSL 표면 전수 8종+준표면 2종 끝-끝 실측 — 몸통은 건강·이음매 4곳 뚫림. Scene↔Visualization 중복 아님(기지 미검토 축 해소)·S3-28 오탐 130건 원인 확정·신규 등재 3건(MOB-14·NS-04·PED-16)·CI 계약 fixture 사각 봉합** (claude 점검, Kiki "Whymath dsl 통합 점검")
+
+**산출**: `docs/architecture/dsl_integration_gap_review.md` — 저장소 실측 자체 대조 형식 2번째(subject 리뷰 계보). 인벤토리: ConceptDSL·LearningScene·Visualization·교수법 팩·소단원 DSL·condition DSL·표본공간 DSL·formula dsl 필드(+준표면: schemas/v1.1 9종·speech AST). 학생 대면 완결 체인 5개 전건 라우트 마운트 실측.
+
+**핵심 판정 4건**: ① **Scene↔Visualization 중복 아님 — 합성 확정**(`VisualizationElement.ref` 참조 임베드·모바일 파서 1벌·05a 불변식 게이트 이중 실재) — 시각화 인벤토리(2026-07)의 기지 미검토 축을 닫음. ② **S3-28 "오탐 가능성" → 오탐 확정**: 같은 `verify.conditions` 필드를 3문법이 공유(맨 등식/CSV 리스트/`space=;event=` 미니 DSL)하는데 `condition_dsl_violation`은 문법 ①만 알고 `answer_kind` 스코프 필터가 없음. 130건 재현 분해 = 문법② 96(mean_equals_median·events_independent·conditional_equal·dot_product_scalar 각 24) + 문법③ 34(finite_probability 26·finite_count 8) — 전건 자체 파서가 정상 소비하는 정당 데이터·결함 0. 부차: 검사기가 `to_sympy_source` 정규화 단일 권위를 우회(sympify 직접). ③ **formula latex↔dsl 의미 정합 게이트 0** — 실결함 1건(`formula.quadratic.roots` latex `±` vs dsl `+`근 하나·write-only라 피해 0·Phase 5b 소비 전 봉인 적기). ④ **정본화≠집행 재발형**: `mode_guard.check_forbidden_modes` 프로덕션 호출 0(오프라인 결함주입 측정 전용)인데 `config.py` 플래그 설명·`l4/pedagogy/__init__` docstring이 배선 주장 — 과대 진술 2곳 즉시 정정(동작 무변경). `pedagogy_pack`·`unit_spec` 테이블 reader 0(dead write — YAML 직독이 실정본·OPS-22 4축 사각).
+
+**직접 수정**: ⓐ CI 경로필터에 `data/notation_contract.json`·`data/render_contract.json` 추가(backend·web) — fixture-only PR이 양쪽 골든 잡을 모두 skip하던 사각(`notation_contract.md` §4 "자동 검증" 약속이 거짓이었음 → 참으로). `schemas/` 교차영역 방어(2026-07-21)와 동일 원리·시뮬레이션으로 변별력 확인. ⓑ 과대 진술 2곳 정정. ⓒ math_dsl 문서 stale 배너 3곳(failure_mode_qa FormulaNode 계열 내 정면 충돌·remediation_design §1.3-2/3 완료·역전·retrieval_analysis §4 skill 엔티티 실재) — 잔여 stale 10건 정오표는 리뷰 문서 §5가 정본(그래프 2,683/2,210·kebab 64·M-id 843).
+
+**등재 3건**: `MOB-14`(scene 서버↔클라 계약 동결 — 드리프트 4필드 무감지 통과·webViewTypes 계약 결선·invariant ⑩ Flutter 잔여) · `NS-04`(formula latex↔dsl 정합 게이트+± 결함 봉인) · `PED-16`(교수법 선언≠집행 3건 판정 — mode_guard 집행 지점·dead write 2테이블 거취·scene/viz 서빙 미러 병합). **재등재 금지 목록**(§4)에 발주서→슬롯 동결(PED-07)·`/v1/visualizations/*` by-design·figure.spec 거부·AST 미구축 유효 등 10건 명시.
+
+**검증**: OPS-22 4축 감사 exit 0 · DSL 게이트 103건+영향권 29건+tests/infra 294건 통과 · ruff/black/mypy 전건 exit 0(CI 동일 명령) · condition 130건 재현 일치 · ci.yml 필터 시뮬레이션(대상 true/비대상 false). 전체 pytest 스위트는 미실행(22분+) — CI가 최종 판정. 로컬 함정 재확인 1건: 명시 경로 pytest invocation의 asyncio_mode 미적용(ARCH-22 기지 quirk·`-o asyncio_mode=auto`로 확증·활성 장애 아님).
 ### 2026-08-10 (점검·거버넌스): **하네스·헌법·규칙파일 통합점검 — 결함 3축 41건 판정: 문서·스킬 22건 즉시 정정, HARN-15 비가시 부채 회수, 신규 태스크 HARN-20·21 등재** (claude, Kiki "통합점검" 지시)
 
 - **정본**: `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md` (결함 표 D-1~D-29 + 하네스 G1~G8 + 추적성·CI 축, 부록 실측 근거). 커밋 ① `150da189`(문서·스킬 정정 11파일) ② `5151b987`(backlog 회수·등재).
