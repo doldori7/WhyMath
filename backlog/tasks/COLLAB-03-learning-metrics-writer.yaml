@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -18,10 +18,16 @@ acceptance:
   - "⑤ 변별력(도달 축): 인증 학생으로 /v1/me/* 라이브 호출 → 응답에 통계가 실제로 실리는지 실측. 테이블만 차고 도달 0이면 목표 미달"
   - "⑥ 파기·반출·보존 정합 확인 — 세 테이블은 이미 erasure.py:92·export.py:103·retention.py:55에 등재돼 있다. 적재가 시작되면 기존 보존기간 정책이 실제로 이 데이터에 적용되는지 확인(집계 주기·보존기간을 이 태스크에서 확정)"
   - "⑦ 부모·교사 노출 금지 — 이 태스크의 산출은 학생 본인 축까지다. 매트릭스상 이용 시간대는 교사 ✕·부모 ◐이므로 제3자 노출은 COLLAB-01 계약과 Phase 3 좌석을 거친다"
-artifacts: []
+artifacts:
+  - "커밋 9e605bfd — l2/learning_metrics_rollup.py(집계 본체·순수함수+DB어댑터 분리·PG ON CONFLICT\nDO UPDATE 멱등)·harness/learning_metrics_rollup_cli.py(argparse·--dry-run·새 스케줄러 0)·\napi/me.py GET /v1/me/learning-metrics(추가만·기존 함수 무수정)·retention.py에\nproblem_solve_time_distribution 편입.\n\nacceptance 7항: ①writer 0건 전수 grep 재확인(src는 클래스 정의문뿐·tests 72곳) — 단 prod\n실행수는 샌드박스에 그 DB가 없어 미측정(정직 표기) ②기존 populate 멱등 upsert 규약 재사용·\nCLI 3회 실행에도 중복 0 ③/v1/me 좌석 배선 ④적재 축 라이브 실측(전 daily=0/behavior=0 →\n후 daily=1/behavior=5·값 대조 성공·--dry-run은 쓰기 0) ⑤도달 축 라이브 실측(실 토큰 200·\nsummary/days 적재·무토큰 401·롤업 전엔 days=[]로 전후가 갈림) ⑥반출/파기 라이브 확인 +\n집계 주기 1일 1회(재집계 창 2일)·보존기간 기존 pii_retention_years 3년 상속으로 확정\n⑦제3자 노출 0(OpenAPI 전 경로 스캔 결과 학습지표 경로는 1건·user_id 질의 파라미터 없음·\nConsentedUser 단일 스코핑).\n\n검증(이 세션 독립 재실행): ruff/black 통과 · 신규 hermetic 46 passed(실PG 통합 2건은 현재\nPG 미가동으로 skip — CI 실PG 잡이 최종 판정) · 회귀 스코프 tests/backend/{api,l2,privacy}\n1678 passed·132 skipped·0 failed. 서브에이전트는 샌드박스에 PG16+pgvector를 세워 전체\n스위트 9101 passed·실PG 통합 271 passed·mypy --strict·import-linter KEPT까지 확인했다고\n보고.\n\n정직한 잔여: prod 행수 미측정 · concepts_practiced는 learning_session.target_concept_id만\n원천(문항→개념 조인 미도입) · churn_risk 등 추론 지표 미생산(모델 부재·날조 금지) · 창 안\n활동이 전무해진 사용자의 잔여 행은 reconcile 대상 아님(삭제권·보존 담당)."
 paths:
   - "src/backend/whymath_backend/l2/**"
   - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/harness/learning_metrics_rollup_cli.py
+  - src/backend/whymath_backend/privacy/retention.py
+  - tests/backend/l2/test_learning_metrics_rollup.py
+  - tests/backend/api/test_learning_metrics_rollup_integration.py
+  - tests/backend/privacy/test_learning_metrics_privacy_plan.py
 session: null
 notes: "collaboration_module_gap_review.md §3 D3. DailyLearningMetrics 등 3테이블이 파기(erasure.py:92)·반출(export.py:103)·보존(retention.py:55) 배관에 전부 등재돼 있으나 프로덕션 writer가 0건(인스턴스화가 ORM/Pydantic 정의와 테스트에만 존재). 기능 71-4 '학습 시간 통계'·70-5 '성취도 분석'의 공급원 부재. visualization_module_gap_review.md D1과 동일 실패 유형(완비된 배관 + 미적재 공급원)의 다른 도메인 재발. 협업(Phase 3)을 기다릴 필요 없음 — /v1/me/* 학생 1인칭이 Phase 1~2 좌석이고 매트릭스상 학생 본인은 ● 전체 공개."
-updated: 2026-07-31
+updated: 2026-08-10

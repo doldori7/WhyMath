@@ -52,7 +52,11 @@ from whymath_backend.db.models.assessment import (
     SkillMasteryHistory,
 )
 from whymath_backend.db.models.dialogue import Dialogue
-from whymath_backend.db.models.timeseries import DailyLearningMetrics, UserBehaviorMetrics
+from whymath_backend.db.models.timeseries import (
+    DailyLearningMetrics,
+    ProblemSolveTimeDistribution,
+    UserBehaviorMetrics,
+)
 
 __all__ = ["purge_expired_records", "retention_cutoff"]
 
@@ -70,6 +74,13 @@ _RETENTION_PLAN: tuple[tuple[type[Base], str], ...] = (
     (AbilitySnapshot, "measured_at"),  # IRT θ 이력·느슨참조
     (DailyLearningMetrics, "metric_date"),  # 일 집계·DATE 컬럼·느슨참조
     (UserBehaviorMetrics, "measured_at"),  # 행동 지표·느슨참조
+    # COLLAB-03: 풀이 시간 분포는 `user_id`가 없는 *교차 사용자 집계*라 삭제권(`_ERASURE_PLAN`)·
+    # 본인 반출(`export.py`) 대상이 아니다(비-PII — export.py 모듈 docstring의 기존 결정 유지).
+    # 그러나 *보존*은 다르다: `l2.learning_metrics_rollup`이 매일 (문항, 페르소나)별 행을 새
+    # `measured_at`으로 적재하기 시작했으므로, 파기 경로가 없으면 상한 없이 증가한다. 「무기한
+    # 보존 금지」(GDPR 데이터 최소화)는 PII 여부와 무관한 원칙이라 같은 `pii_retention_years`
+    # 창으로 파기한다. 파기해도 원천(problem_attempt)이 남아 있는 한 재집계로 복원 가능하다.
+    (ProblemSolveTimeDistribution, "measured_at"),  # 문항×페르소나 교차집계·비-PII·느슨참조
 )
 
 

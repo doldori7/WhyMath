@@ -34,8 +34,19 @@ CLAUDE.md 7계층의 L6(응용 모드). L1~L4(독립 수학 코어)·L5(상호�
     (홈스쿨링 영재) 전용 닫힌 집합**(RT가 재수 B·C를 닫은 것과 동형 — 학습 환경이 본질). 영재
     콘텐츠(KMO·올림피아드)는 코퍼스 미존재라 데이터가 차면 자동 활성(데이터0 안전).
 
-여섯 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅 로직만** 더한다.
-얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다). 여섯 모드가
+  - 평가 청사진(`blueprint/`) — 위 여섯과 *결이 다른* 입주자다. 게이팅(노출 판정)이 아니라
+    **선언 명세(성취기준×난이도 밴드×유형·문항 수·배점·시험시간)를 만족하는 테스트셋 조립**이라
+    파일명도 `assembly.py`다(ASM-04·D4). 후보 적격은 새로 만들지 않고 `_shared`의 두 축
+    (`is_exposable` 저작권 · `is_review_cleared` 검수)을 *각각 독립된 if*로 호출한다. 학습 중
+    노출 정본은 CAT 단건(`/v1/me/next-problem`)이고, 이 세트는 "단원 마감 측정" 예외에만 쓴다
+    (CAT 대체 아님 — `BLUEPRINT_USE_CASE`로 동결). `Problem.points`의 첫 소비처이나 코퍼스가
+    전량 NULL이라 총점은 정직 회계(미부여 섞이면 None + 미부여 건수)로 다룬다.
+
+여섯 게이팅 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅
+로직만** 더한다(blueprint도 같은 오버레이 규칙을 지킨다 — 신규 마이그레이션 0).
+얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다). **유일한 예외는
+`blueprint`**로, 부분점수를 신규 채점기 없이 기존 `l3.verify_solution` 결과로 계산하려고 L3를
+import한다(L6→L3는 하향 의존이라 계층 규칙 위반이 아니다 — import-linter 통과). 여섯 모드가
 공통으로 쓰는 저작권 게이트·enum 정규화는 L6 공용 모듈 `_shared.py`로 추출했다(Rule of three).
 
 후속(범위 밖): 영재·메타인지 *콘텐츠 코퍼스·태깅*(L1 데이터 — KMO/올림피아드 문항·distractor_map
@@ -44,6 +55,14 @@ CLAUDE.md 7계층의 L6(응용 모드). L1~L4(독립 수학 코어)·L5(상호�
 
 from __future__ import annotations
 
+from whymath_backend.l6.blueprint import (
+    BLUEPRINT_USE_CASE,
+    AssembledTestSet,
+    BlueprintCell,
+    ExamBlueprint,
+    assemble_test_set,
+    is_blueprint_eligible,
+)
 from whymath_backend.l6.gifted import (
     GIFTED_MIN_DIFFICULTY,
     GIFTED_PERSONAS,
@@ -86,6 +105,7 @@ from whymath_backend.l6.thinking import (
 )
 
 __all__ = [
+    "BLUEPRINT_USE_CASE",
     "GIFTED_MIN_DIFFICULTY",
     "GIFTED_PERSONAS",
     "METACOGNITION_SCORING_TYPES",
@@ -94,7 +114,12 @@ __all__ = [
     "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "THINKING_BLOOM_LEVELS",
+    "AssembledTestSet",
+    "BlueprintCell",
+    "ExamBlueprint",
+    "assemble_test_set",
     "gifted_priority",
+    "is_blueprint_eligible",
     "is_gifted_eligible",
     "is_metacognition_eligible",
     "is_retake_eligible",

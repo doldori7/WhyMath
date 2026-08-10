@@ -67,6 +67,7 @@ main
 - `infra/phaiakes9 — bash syntax`
 - `policy-guard — CLAUDE.md 금기 가드`
 - `harness-integrity — backlog 무결성·claim 교차 검증`
+- `declared-unwired-audit — 선언≠배선 4축 정적 감사 (OPS-22)`
 <!-- REQUIRED_CHECKS_END -->
 
   **제외 1종**: `e2e-nightly — 관통 슬라이스 (실 PG·야간)`는 `if: github.event_name == 'schedule'`
