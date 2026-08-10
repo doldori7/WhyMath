@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-26-vendored-calculator-asset-freshness-gate
+title: "vendored 그래프 계산기 번들 신선도 CI 게이트 — 웹 소스↔모바일 자산 표류 기계 차단 (VIZ-07 착수 중 실측 발견)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① CI에서 src/web/graphing-calculator 빌드 산출물과 src/mobile/assets/graphing_calculator/ 일치를 기계 검증 — 불일치 시 exit 1. 해시 청크 파일명 변동을 고려한 대조 방식(디렉터리 diff·매니페스트·소스 커밋 스탬프 등)은 구현 재량 — 단 「성공/실패가 같은 값을 내는 검사 금지」 준수(빌드 비재현성이면 대안 설계)"
+  - "② 변별력 실측: 웹 소스만 수정·자산 미동기 상태 → red 실측 → sync_graphing_calculator.sh 후 green 실측"
+  - "③ tests/infra/test_test_suite_wiring.py 패턴(OPS-10)으로 게이트 잡 배선 자체를 정적 동결(ci.yml 파싱 단언 — 「저장소에 존재함」과 「돌아감」은 다르다)"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/*"
+  - src/mobile/tool/sync_graphing_calculator.sh
+session: null
+notes: "사고 경위(2026-08-10 VIZ-07 착수 중 실측): vendored 번들이 생성 커밋(c3376c42 #698)에서부터 그 커밋 자신의 소스보다 낡은 빌드로 동기화됐고(번들 문자열 프로브: interactive_graph_2d·tangent_point·unwrapSpecEnvelope 전부 0 — 앞 둘은 리터럴/프로퍼티명이라 미니파이 생존 대상), 이후 VIZ-03(#732)·VIZ-06(#740) 웹 소스 변경에도 무동기. WebView 임베드 Dart 파일·봉투 인코더(encodeVisualizationParam)가 같은 커밋 착륙이므로 실기기 WebView spec 렌더는 기능 착륙 시점부터 한 번도 성립하지 않았을 가능성이 높다(구번들이 봉투 {type,spec}을 언랩 못 함 → 어댑터 null → 빈 계산기 — 코드 경로 추론이며 실기기 실측 아님). 즉시 해소(재동기화 + 번들 프로브)는 VIZ-07 커밋이 수행 — 본 태스크는 재발 방지 게이트만. sync 스크립트 헤더가 「표류하지 않게 한다」고 선언하나 강제 장치 0인 선언≠집행 유형. visualization_module_gap_review.md §8.1 각주·MEMORY 2026-08-10 참조."
+updated: 2026-08-10
