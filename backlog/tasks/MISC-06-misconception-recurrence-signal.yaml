@@ -17,7 +17,9 @@ acceptance:
 artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/hypothesis_store.py
-  - src/backend/whymath_backend/harness/wh1_primary.py
+  - src/backend/whymath_backend/l4/misconception/warmstart.py
+  - src/backend/whymath_backend/api/coach.py
+  - tests/backend/l4/misconception/test_recurrence_signal.py
 session: claude/subject-problems-theory-check-7n9n72
-notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지)."
+notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지). 2026-08-10 구현 세션: 소비 좌석을 A안(l4/misconception 격리)으로 확정 — 신호 산출은 hypothesis_store.py(get_recurrence_signals·order_mids_by_recurrence), 소비는 warmstart.py ⓔ 재정렬(outside_mids → resolve_probe_target ε-탐색 표적) + api/coach.py user_id 배선뿐이라 harness/** 무수정(S4-16·ASM-05가 harness/**를 선언 범위로 claim 중 — 충돌 회피). 이에 따라 paths에서 wh1_primary.py 제거·실제 변경 파일(warmstart/coach/테스트) 추가(backlog.py에 in-flight paths 수정 서브커맨드가 없어 이 필드만 직접 편집·status/acceptance/owner 무변경 — MISC-05 선례). 04e §4의 '이미 존재하는 시계열' 표현은 실측(스냅샷 테이블)과 달라 신규 함수 docstring에 정직 기록(문서 직접 수정은 범위 밖)."
 updated: 2026-08-10

@@ -1846,7 +1846,11 @@ async def _session_recall_or_none(
 
 
 async def _warmstart_hints_or_empty(
-    session: AsyncSession, *, problem_id: uuid.UUID | None, exclude_mids: Sequence[str] = ()
+    session: AsyncSession,
+    *,
+    problem_id: uuid.UUID | None,
+    exclude_mids: Sequence[str] = (),
+    user_id: uuid.UUID | None = None,
 ) -> list[str]:
     """웜스타트 probe 힌트(outside_mids) 조립 — WH-1 shadow·primary 공용(never-break).
 
@@ -1856,6 +1860,11 @@ async def _warmstart_hints_or_empty(
     감싸 빈 리스트로 폴백한다(가용성 #1≫진단 관측 #6·예외 타입명 로그 — 침묵 실패 금지). 직전엔
     create/append 두 핸들러에 인라인 중복이던 블록을 primary flip(S1-11)이 세 번째 소비처가 되며
     단일 헬퍼로 모았다(동작 불변).
+
+    MISC-06(04e §4): `user_id`가 있으면 warmstart 내부에서 그 학생의 *재발신호*(비활성 오개념의
+    evidence_links 지지 이력·읽기 전용)로 outside_mids를 재정렬한다 — ε-탐색 우선순위 신호
+    **전용**이며 학생 노출 라벨·코칭 강도 결정엔 흐르지 않는다(낙인 방지). None이면(stateless
+    경로) 재정렬 없이 기존 순서 그대로다(graceful).
     """
     try:
         return await assemble_warmstart_probe_hints(
@@ -1865,6 +1874,8 @@ async def _warmstart_hints_or_empty(
             # PED-04: 이미 활성인 가설은 탐색 표적에서 뺀다(warmstart=무엇을 의심할지 /
             # recall=무엇을 이미 시도했는지 — 교집합 0으로 상보 유지).
             exclude_mids=exclude_mids,
+            # MISC-06: 재발신호 재정렬 귀속 키(probe 우선순위 전용·재발 이력 mid를 앞세움).
+            user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
         logger.warning(
@@ -2094,10 +2105,12 @@ async def create_session(
             exclude_dialogue_id=None,  # 아직 dialogue 미생성 — 제외할 대상 없음.
         )
         # S1-c: 웜스타트 probe 힌트 조립(진단 probe 타깃팅 전용·never-break·헬퍼 docstring 참조).
+        # MISC-06: user_id를 넘겨 재발 이력 있는 오개념을 ε-탐색 첫 표적으로 앞세운다(정렬 전용).
         warmstart_mids = await _warmstart_hints_or_empty(
             session,
             problem_id=body.problem_id,
             exclude_mids=(session_recall.unresolved_hypothesis_ids if session_recall else ()),
+            user_id=user.user_id,
         )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(
@@ -2472,10 +2485,12 @@ async def append_turns(
             active_hypotheses=active_hypotheses,
             exclude_dialogue_id=dialogue_id,
         )
+        # MISC-06: create_session과 동형 — user_id로 재발신호 재정렬(probe 우선순위 전용).
         warmstart_mids_turn = await _warmstart_hints_or_empty(
             session,
             problem_id=dialogue.problem_id,
             exclude_mids=(session_recall.unresolved_hypothesis_ids if session_recall else ()),
+            user_id=user.user_id,
         )
     if wh1_shadow_on and not wh1_primary_on:
         _spawn(

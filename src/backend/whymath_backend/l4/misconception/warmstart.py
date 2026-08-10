@@ -39,7 +39,10 @@
    빈 결과를 돌려주므로(조용한 무동작 금지) 확장은 자연히 0이다.
 
 두 원천을 이어붙여 *순서 보존* 중복 제거(고빈도 우선)하고 `limit`으로 자른다. 결과 순서는
-결정론이라 `outside_mids[0]`(첫 탐색 표적)이 재현 가능하다.
+결정론이라 `outside_mids[0]`(첫 탐색 표적)이 재현 가능하다. `user_id`가 주어지면(MISC-06·04e §4)
+그 학생의 *재발신호*(`hypothesis_store.get_recurrence_signals` — 비활성 오개념의 evidence_links
+지지 이력)로 결과를 재정렬해 재발 이력 있는 오개념을 첫 표적으로 앞세운다 — 우선순위 신호일 뿐
+공급원이 아니며(풀 구성 불변·정렬만), 신호·user_id가 없으면 순서까지 기존과 완전 동일하다.
 
 7계층: L4 교수학(진단). L1(`atom_graph`·`misconception_catalog`)을 *조회*만 하며(하위 호출·
 역방향 의존 0), L2/L3 로직은 건드리지 않는다. 학생-대면 결정론 코칭 경로는 무변경(웜스타트는
@@ -49,6 +52,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections.abc import Callable, Sequence
 from decimal import Decimal
@@ -62,6 +66,10 @@ from whymath_backend.db.models.misconception_catalog import (
 )
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.l1.atom_graph.retrieval import AtomSearchHit, search_atoms
+from whymath_backend.l4.misconception.hypothesis_store import (
+    get_recurrence_signals,
+    order_mids_by_recurrence,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,6 +77,8 @@ if TYPE_CHECKING:
     from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
 __all__ = ["assemble_warmstart_probe_hints"]
+
+_logger = logging.getLogger("whymath.l4.misconception.warmstart")  # prerequisite_link 네이밍 동형
 
 # 기본 outside_mids 상한 — 탐색 표적 풀은 *작게* 유지한다(plan_probe는 outside_mids[0]만 쓰고,
 # ε-탐색 주기마다 앞에서부터 소비). 12는 Minimal Reasoning Subgraph max_nodes 하한(12~20·Part 8)
@@ -208,13 +218,20 @@ async def assemble_warmstart_probe_hints(
          `search_atoms`로 근접 원자 top-k → 그 code들의 오개념을 카탈로그에서 조회해 뒤에 잇는다.
          provider/텍스트 없으면 생략(graceful). memory 모드면 search_atoms가 빈 결과(무동작).
       ⓓ 순서 보존 중복 제거(고빈도 우선) 후 `limit`으로 절단.
+      ⓔ 재발신호 재정렬(MISC-06·04e §4): `user_id`가 있으면 그 학생의 *비활성* 오개념 재발 이력
+         (`get_recurrence_signals` — evidence_links 지지 이력×스냅샷 교차·읽기 전용)로 결과를
+         재정렬해 재발 이력 있는 오개념이 ε-탐색 첫 표적(`outside_mids[0]`)에 먼저 오게 한다.
+         **우선순위 신호일 뿐 신규 공급원이 아니다** — 풀 구성(ⓐ~ⓓ)·반환 타입(`list[str]`)은
+         불변이고, 신호가 없거나 `user_id=None`(stateless 경로)이면 순서까지 기존과 완전 동일.
+         신호 조회 실패는 힌트 자체를 깨지 않는다(never-break·예외 타입명 로그·기존 순서 진행).
 
     Args:
         session: 카탈로그·문항 조회용 async 세션(읽기 전용·신규 테이블·쓰기 0).
         problem_id: 단원 맥락 소싱용 문항 id(domain/standard_code 미주입 시). 안전 메타만 읽는다.
         domain·standard_code: 단원 필터(명시 주입 시 problem 조회보다 우선).
         concept_query: atom search 질의 개념 텍스트(약점/문제 개념). 미주입+problem_id면 subunit.
-        user_id: 호출 귀속·후속 per-student 약점 개념 소싱용 자리표시(현재 조립에 미사용).
+        user_id: 재발신호 재정렬(ⓔ)의 학생 귀속 키. None(stateless — 인증 없는 `/v1/coach` 등)
+            이면 재정렬 생략·기존 순서 그대로(graceful — MISC-03 "stateless는 None" 선례).
         provider: atom search 임베딩 제공자. None이면 atom 확장 생략(고빈도만·graceful).
         limit: 반환 outside_mids 상한(기본 12·탐색 표적 풀은 작게).
         atom_top_k: atom search 근접 원자 top-k(기본 5).
@@ -226,7 +243,6 @@ async def assemble_warmstart_probe_hints(
         outside_mids(mis_id `list[str]`) — 결정론 순서·중복 제거·limit 이내. 단원 맥락이 없거나
         매칭이 없으면 빈 리스트(콜드스타트·조용한 무동작 금지).
     """
-    del user_id  # 후속 per-student 약점 개념 소싱 자리표시 — 현재 조립 로직엔 미사용(정직).
 
     # ⓐ 단원 맥락 해석 — 명시 domain/standard_code 우선, 아니면 problem_id로 안전 메타 소싱.
     if domain is None and standard_code is None and problem_id is not None:
@@ -264,4 +280,18 @@ async def assemble_warmstart_probe_hints(
             ordered.append(mid)
         if len(ordered) >= limit:
             break
+
+    # ⓔ MISC-06 재발신호 재정렬 — reactive retrieval(원칙6: probe 타깃팅 시점에만 조회·preload 0)·
+    # 읽기 전용·우선순위 신호 전용. 신호가 있어도 풀 구성원은 그대로다(정렬만 — 04e §5 "REC-02
+    # 확장하지 않는다"). 실패는 기본 힌트를 깨지 않는다(never-break·타입명 로그 — 침묵 실패 금지).
+    if user_id is not None and ordered:
+        try:
+            signals = await get_recurrence_signals(session, user_id)
+            ordered = order_mids_by_recurrence(ordered, signals)
+        except Exception as exc:  # noqa: BLE001 — 신호 실패가 웜스타트 힌트를 깨면 안 된다.
+            _logger.warning(
+                "재발신호 재정렬 실패(%s) — 기존 순서 그대로 진행",
+                type(exc).__name__,
+                exc_info=True,
+            )
     return ordered
