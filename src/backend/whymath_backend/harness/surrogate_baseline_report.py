@@ -25,6 +25,11 @@ reach_report`가 그 위에 세 가지를 더한다 — ① 지표별 노출 계
 `GET /health/ready` `growth_evidence.requests_total`에서 읽은 값을 CLI 인자로 받는다. 이
 CLI는 DB만 조회하는 별도 프로세스라 실행 중인 API 서버의 인프로세스 카운터를 직접 읽을 수
 없다 — 값을 합성하지 않고 인자로 명시 요구한다). 새 계산·새 지표는 없다(렌더 전용 원칙 유지).
+
+**S4-19 확장(3상태 단계 검증 회계 내부 섹션)**: `compute_step_verification_accounting`
+(wh1_evaluation)의 결과를 두 리포트 끝에 내부 전용 섹션으로 덧붙인다 — 파생 지표
+(step_decision_rate·step_incorrect_rate)는 `SurrogateMetrics`에 넣지 않아(학생 라우트
+자동 서빙 실측·노출 집행 별항) 이 CLI가 유일한 렌더 표면이다. 학생 라우트 무변경.
 """
 
 from __future__ import annotations
@@ -42,7 +47,9 @@ from whymath_backend.harness.growth_evidence_exposure import (
 )
 from whymath_backend.harness.wh1_evaluation import (
     MetricStatus,
+    StepVerificationAccounting,
     SurrogateMetrics,
+    compute_step_verification_accounting,
     compute_wh1_surrogate_metrics,
 )
 
@@ -51,6 +58,7 @@ __all__ = [
     "classify_reach_state",
     "render_baseline_report",
     "render_growth_evidence_reach_report",
+    "render_step_verification_section",
     "main",
 ]
 
@@ -232,6 +240,44 @@ def render_growth_evidence_reach_report(metrics: SurrogateMetrics, requests_tota
     return "\n".join(lines)
 
 
+def render_step_verification_section(accounting: StepVerificationAccounting) -> str:
+    """S4-19 — 3상태 단계 검증 회계를 내부 전용 섹션으로 렌더(순수·DB 무관·결정론).
+
+    지표 ①(verify 통과율·binary)의 병기 파생이다 — 교체가 아니라 이중 회계. "가짜 0 금지"를
+    승계한다: 전이 표본 0이면 파생 비율을 0이 아니라 'NO_DATA(—)'로 표기한다. 카운트 비보유
+    이벤트는 "구판 *또는* 검증 미실행 제출"의 한 버킷으로 정직 계상한다(저장 모양이 같아 구분
+    불가 — 구분한다고 주장하지 않는다). 이 섹션은 학생 라우트(`GET /v1/me/harness-metrics`)에
+    나가지 않는다 — `SurrogateMetrics` 무변경(노출 집행 별항·2026-08-04 헌법).
+    """
+    # 두 비율은 같은 분모라 계산 계층에서 함께 None이거나 함께 값이다 — 렌더는 방어적으로 둘 다
+    # 확인한다(한쪽만 None인 비정상 입력도 NO_DATA로 정직 표기·크래시 없음).
+    if accounting.step_decision_rate is None or accounting.step_incorrect_rate is None:
+        rate_line = (
+            "- step_decision_rate — · step_incorrect_rate — "
+            "(counted 전이 표본 0 — NO_DATA·가짜 0 아님)"
+        )
+    else:
+        rate_line = (
+            f"- step_decision_rate {accounting.step_decision_rate:.4f} · "
+            f"step_incorrect_rate {accounting.step_incorrect_rate:.4f} "
+            "(분모=counted 이벤트의 전체 전이 합·D6 정의)"
+        )
+    lines = [
+        "## [내부 전용] 3상태 단계 검증 회계 (S4-19 — 지표 ① binary와 이중 회계)",
+        f"- counted(3카운트 보유·신판 유검증) {accounting.counted_events}건 · "
+        "uncounted(구판 또는 검증 미실행 제출 — 구분 불가·한 버킷) "
+        f"{accounting.uncounted_events}건",
+        f"- 전이 합계: correct {accounting.n_correct_total} · "
+        f"incorrect {accounting.n_incorrect_total} · "
+        f"unverifiable {accounting.n_unverifiable_total}",
+        rate_line,
+        f"- ocr_gated(저신뢰 OCR로 step-incorrect 코칭 보류) {accounting.ocr_gated_events}건",
+        "- 학생 라우트 비노출(SurrogateMetrics 무변경) — 이 CLI 섹션이 유일한 렌더 표면.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def _resolve_params(
     user_id: str | None,
     since: str | None,
@@ -260,16 +306,22 @@ async def _run(  # pragma: no cover — 라이브 PG 연결 glue(단위테스트
 
     `requests_total`이 주어지면(PED-06) 도달 3상태 + 노출 계약을 얹은 확장 리포트를,
     아니면(기본) 기존 베이스라인 리포트를 낸다 — 기존 호출자(스크립트·문서)의 기본 동작은
-    바뀌지 않는다.
+    바뀌지 않는다. S4-19: 두 리포트 모두 끝에 3상태 단계 검증 회계 내부 섹션을 덧붙인다
+    (이 CLI가 유일한 렌더 표면 — 학생 라우트 비노출).
     """
     sessionmaker = get_sessionmaker()
     async with sessionmaker() as session:
         metrics = await compute_wh1_surrogate_metrics(
             session, user_id=user_id, since=since, until=until
         )
+        step_accounting = await compute_step_verification_accounting(
+            session, user_id=user_id, since=since, until=until
+        )
     if requests_total is not None:
-        return render_growth_evidence_reach_report(metrics, requests_total)
-    return render_baseline_report(metrics)
+        report = render_growth_evidence_reach_report(metrics, requests_total)
+    else:
+        report = render_baseline_report(metrics)
+    return report + "\n" + render_step_verification_section(step_accounting)
 
 
 def main(argv: list[str] | None = None) -> int:

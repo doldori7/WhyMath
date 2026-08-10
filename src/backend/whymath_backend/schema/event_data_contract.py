@@ -46,6 +46,16 @@ class VerifyEventData(_EventPayload):
     (기존 동작 완전 불변)이라 기존 픽스처·라이브 이벤트가 무손상이다. 측정 계층
     (`wh1_evaluation`)이 `event_data->>'mode'`로 mode-scoped 집계를 낼 수 있게 하는 *데이터
     운반* 필드다(완전한 mode별 집계는 후속 S3-04). 값은 문자열(Literal/enum의 *값*)로 싣는다.
+
+    S4-19(라이브 3상태 적재·2026-08-10): `n_correct`·`n_incorrect`·`n_unverifiable`·
+    `unverified_ratio`·`first_incorrect_index`·`ocr_gated`는 코치가 응답에만 싣고 버리던
+    `verify_solution` 3상태 결과(`l3/verify_solution.py` `SolutionVerificationResult`)의
+    *비식별 요약*을 병기하는 선택 필드다 — 재계산 0(핸들러가 이미 쥔 값 운반)·binary `passed`는
+    불변(두 검증기의 이중 회계). 전건 None=미지정(구판 이벤트 또는 단계 미제출/검증 미실행 턴)
+    으로 기존 동작 완전 불변이고, 0은 실측 0(전이 0회 제출)이라 None과 구분한다(S3-07 규약).
+    `n_transitions`는 싣지 않는다 — 세 카운트의 합이 항상 n_transitions와 같음을
+    `SolutionVerificationResult`가 보장하므로 재구성 가능하다. `steps`(reason 텍스트)는 절대
+    싣지 않는다 — 비식별 정수/비율/인덱스/불리언만(`wh1_shadow.py` 관측 레코드 규약 동형).
     """
 
     passed: bool = Field(..., description="거짓 수치관계 미적발(통과)=True·적발=False")
@@ -59,6 +69,42 @@ class VerifyEventData(_EventPayload):
     persona: str | None = Field(
         default=None,
         description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
+    )
+    n_correct: int | None = Field(
+        default=None,
+        description=(
+            "S4-19: verify_solution correct 전이 수. None=미지정(구판/검증 미실행·기존 동작 "
+            "불변)·0=실측 0(전이 0회 제출) — None과 0을 구분한다."
+        ),
+    )
+    n_incorrect: int | None = Field(
+        default=None,
+        description="S4-19: incorrect 전이 수. None=미지정(구판/검증 미실행·기존 동작 불변).",
+    )
+    n_unverifiable: int | None = Field(
+        default=None,
+        description="S4-19: unverifiable 전이 수. None=미지정(구판/검증 미실행·기존 동작 불변).",
+    )
+    unverified_ratio: float | None = Field(
+        default=None,
+        description=(
+            "S4-19: 검증 불가 비율(n_unverifiable/n_transitions·전이 0이면 0.0). "
+            "None=미지정(구판/검증 미실행·기존 동작 불변)."
+        ),
+    )
+    first_incorrect_index: int | None = Field(
+        default=None,
+        description=(
+            "S4-19: 첫 incorrect 전이 인덱스(0-based). None=미지정 *또는* incorrect 없음 — "
+            "둘은 n_incorrect(None vs 0)로 구분한다."
+        ),
+    )
+    ocr_gated: bool | None = Field(
+        default=None,
+        description=(
+            "S4-19: 저신뢰 OCR(<0.8)로 step-incorrect 신호를 코칭 결정에서 보류했는지"
+            "(SolutionCoaching.verification_ocr_gated 운반). None=미지정(구판/검증 미실행)."
+        ),
     )
 
 

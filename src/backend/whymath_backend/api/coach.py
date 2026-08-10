@@ -95,6 +95,7 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.verify_solution import SolutionVerificationResult
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -478,6 +479,23 @@ def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLev
     return mastery_to_level(sum(parts) / len(parts))
 
 
+class _StepVerificationCarry(NamedTuple):
+    """S4-19: *게이트 이전* 단계 검증 결과의 적재 전용 운반 컨테이너(노출 아님).
+
+    `_build_response_payload`의 노출 게이트(`_THETA_SURFACED_FOCI`)는 전단계-correct 제출·
+    ocr_gated 보류 케이스에서 `solution_coaching`을 None으로 걸러낸다 — 게이트 *이후* 값만
+    적재하면 불합격 편향 회계가 되므로, 적재(`_log_verify_event`)는 이 컨테이너로 게이트
+    *이전* 값(sol.solution_verification·sol.verification_ocr_gated)을 받는다. HTTP 응답
+    (CoachResponse)에는 싣지 않는다 — 노출은 기존 solution_coaching 게이트 그대로다.
+    """
+
+    verification: SolutionVerificationResult | None
+    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다."""
+
+    ocr_gated: bool | None
+    """SolutionCoaching.verification_ocr_gated(verification 객체가 아닌 형제 필드) 운반."""
+
+
 def _build_response_payload(
     body: CoachRequest,
     *,
@@ -498,6 +516,7 @@ def _build_response_payload(
     InterventionDecision | None,
     LthcAdaptation | None,
     SocraticCategory | None,
+    _StepVerificationCarry,
     SolutionCoaching | None,
 ]:
     """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions`·turns append 셋 다 사용.
@@ -528,6 +547,11 @@ def _build_response_payload(
     None이라 미주입 호출자(stateless `/v1/coach`·sync 직접호출)는 완전 회귀 0. 실제 프롬프트
     반영은 `decide()` 내부에서 pack 주입 ∧ `pedagogy_pack_prompt_enabled` 플래그 ON일 때만
     일어난다(기존 옵트인 게이트 그대로 재사용 — 별도 플래그 신설 0).
+
+    **S4-19(2026-08-10)**: 반환이 7-튜플로 확장됐다 — `_StepVerificationCarry`(게이트 *이전*
+    단계 검증 운반값·적재 전용)를 끝이 아닌 위치에 삽입해 **마지막 원소=solution_coaching
+    불변식은 보존**한다(S3-32 브랜치가 그 언패킹 전제를 명문화). 노출(payload)은 불변 —
+    carry는 세션 핸들러의 `_log_verify_event`만 소비한다.
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -596,7 +620,14 @@ def _build_response_payload(
     solution_coaching = (
         sol if (sol.arithmetic_error or sol.trigger.focus in _THETA_SURFACED_FOCI) else None
     )
-    return decision, resolved, intervention, lthc, entry_category, solution_coaching
+    # S4-19: 적재용 운반값은 노출 게이트 *이전* sol에서 뽑는다 — 전단계-correct·ocr_gated 제출도
+    # 카운트가 적재돼야 한다(게이트 이후 값이면 불합격 편향 회계). 마지막 원소는 여전히
+    # solution_coaching(불변식 보존 — carry는 끝이 아닌 위치에 삽입).
+    step_carry = _StepVerificationCarry(
+        verification=sol.solution_verification,
+        ocr_gated=sol.verification_ocr_gated,
+    )
+    return decision, resolved, intervention, lthc, entry_category, step_carry, solution_coaching
 
 
 class _MatchOutcome(NamedTuple):
@@ -989,6 +1020,8 @@ async def _log_verify_event(
     student_solution: str | None,
     mode: str | None = None,
     persona: str | None = None,
+    verification: SolutionVerificationResult | None = None,
+    verification_ocr_gated: bool | None = None,
 ) -> bool | None:
     """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
 
@@ -1016,6 +1049,16 @@ async def _log_verify_event(
     페르소나 세션에서 나왔는지 표식한다(수능 세션 식별·측정 계층 도달). 둘 다 None(기본)이면
     mode-agnostic으로 기존 event_data 모양과 *비트동일*은 아니지만(계약이 mode/persona=None 키를
     항상 채움) 의미상 완전 불변이다 — 측정 필터가 None을 mode 미지정으로 취급(회귀 0).
+
+    **S4-19 3상태 병기(2026-08-10)**: `verification`(코치 본문이 이미 계산한 `verify_solution`
+    결과·게이트 *이전* 값)이 있으면 비식별 카운트 6필드(n_correct·n_incorrect·n_unverifiable·
+    unverified_ratio·first_incorrect_index·ocr_gated)를 additive로 병기 적재한다 — **재계산 0**
+    (값 운반만·전이 0회 제출도 카운트 0으로 기록해 None과 구분). 없으면(단계 미제출/검증 미실행)
+    6필드 전부 None — 구판 이벤트와 같은 NULL 회계로 읽힌다. 위 binary `passed` 재검산 축은
+    **무변경**(두 검증기의 이중 회계 — CLAUDE.md 인프로세스 이중 회계). `verification.steps`
+    (reason 텍스트)는 절대 싣지 않는다 — 미성년 PII 규약(`wh1_shadow.py` 관측 레코드 동형).
+    `verification_ocr_gated`는 `SolutionCoaching.verification_ocr_gated`(verification 객체가
+    아닌 형제 필드)를 그대로 받는다.
     """
     solution_text = student_solution or ""
     if not solution_text.strip():
@@ -1024,6 +1067,9 @@ async def _log_verify_event(
     signal = validate_response(arithmetic_validator(), solution_text)
     passed = signal is None  # None=거짓관계 미적발(통과)·아니면 적발(실패).
 
+    # S4-19: verification이 있을 때만 6필드를 값으로 채운다(없으면 전부 None — 정직 NULL 회계).
+    # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(SolutionVerificationResult)으로
+    # 재구성 가능하다. ocr_gated도 verification 없으면 None(False로 위장하지 않음).
     event = AttemptEventORM(
         event_at=datetime.now(timezone.utc),
         attempt_id=attempt_id,
@@ -1036,6 +1082,14 @@ async def _log_verify_event(
             error_kind=(signal.kind if signal else None),
             mode=mode,
             persona=persona,
+            n_correct=verification.n_correct if verification is not None else None,
+            n_incorrect=verification.n_incorrect if verification is not None else None,
+            n_unverifiable=verification.n_unverifiable if verification is not None else None,
+            unverified_ratio=verification.unverified_ratio if verification is not None else None,
+            first_incorrect_index=(
+                verification.first_incorrect_index if verification is not None else None
+            ),
+            ocr_gated=verification_ocr_gated if verification is not None else None,
         ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
@@ -1660,7 +1714,9 @@ async def coach_decide(
     outcome = await _compute_matches(
         body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
     )
-    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+    # S4-19: carry(게이트 이전 단계 검증 운반값)는 stateless 경로에선 미소비(DB 무접근 계약 —
+    # 적재 좌석 없음). 마지막 원소=solution_coaching 불변식은 유지된다.
+    decision, matches, intervention, lthc, entry_category, _step_carry, solution_coaching = (
         _build_response_payload(body, matches=outcome.matches)
     )
     return CoachResponse(
@@ -1793,7 +1849,8 @@ async def create_session(
     # 개념의 성취기준 고시코드) — 둘 다 비노출 개인화 슬롯(_grade_for/_standard_code_for docstring).
     grade = await _grade_for(session, user.user_id)
     standard_code = await _standard_code_for(session, body.problem_id)
-    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+    # S4-19: step_carry = 게이트 이전 단계 검증 운반값(아래 _log_verify_event 적재 전용·비노출).
+    decision, matches, intervention, lthc, entry_category, step_carry, solution_coaching = (
         _build_response_payload(
             body,
             problem_id=body.problem_id,
@@ -1858,6 +1915,7 @@ async def create_session(
     # `verify_passed`를 축으로 쓰기 때문이다. 두 `session.add`는 같은 트랜잭션·FK 의존 0이라
     # 순서 교환이 의미상 무해하고, `_log_match_evidence`→`_log_refutation_evidence` 상대 순서
     # (curate 뒤·no-match 게이트)는 손대지 않았다.
+    # S4-19: 게이트 이전 운반값(step_carry)으로 3상태 카운트를 병기 적재 — binary passed 불변.
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
@@ -1866,6 +1924,8 @@ async def create_session(
         student_solution=body.student_solution,
         mode=body.mode,
         persona=event_persona,
+        verification=step_carry.verification,
+        verification_ocr_gated=step_carry.ocr_gated,
     )
     # WH-1 지표 ⑤ 적재 — 이미 계산된 decision.hint_level(supply·1~4)을 그대로 기록(재계산 0·
     # _build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도 commit 없음).
@@ -2115,7 +2175,8 @@ async def append_turns(
     # problem_id 출처(append 규약과 정합·expected_answer/server_mastery와 같은 출처 패턴).
     grade = await _grade_for(session, user.user_id)
     standard_code = await _standard_code_for(session, dialogue.problem_id)
-    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+    # S4-19: create_session과 동형 — step_carry(게이트 이전 운반값)는 verify 적재 전용·비노출.
+    decision, matches, intervention, lthc, entry_category, step_carry, solution_coaching = (
         _build_response_payload(
             body,
             problem_id=dialogue.problem_id,
@@ -2166,6 +2227,7 @@ async def append_turns(
     # S3-03: body.mode·persona를 실어 수능 세션 후속 턴의 검산결과도 측정 계층에서 식별 가능.
     # PED-04 재정렬: create_session과 동형 — 이해도 신호가 verify 판정을 축으로 쓰므로 턴 생성
     # *앞*에서 계산한다(같은 트랜잭션·FK 의존 0·증거 적재 상대 순서 불변).
+    # S4-19: create_session과 동형 — 게이트 이전 운반값으로 3상태 병기(binary passed 불변).
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
@@ -2174,6 +2236,8 @@ async def append_turns(
         student_solution=body.student_solution,
         mode=body.mode,
         persona=event_persona,
+        verification=step_carry.verification,
+        verification_ocr_gated=step_carry.ocr_gated,
     )
     # WH-1 지표 ⑤ 적재 — create_session과 동형(이미 계산된 decision.hint_level·supply 1~4을 그대로
     # 기록·재계산 0·_build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도

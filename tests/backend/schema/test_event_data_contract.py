@@ -73,9 +73,16 @@ def test_harness_consumed_keys_are_in_contract() -> None:
 
     `wh1_evaluation.py`가 `event_data['passed']`(지표 ①)·`event_data['hint_level']`(지표 ⑤)를
     읽는다. 이 키가 계약에서 빠지면 지표가 조용히 깨지므로 여기서 고정한다.
+
+    S4-19: `compute_step_verification_accounting`이 읽는 3상태 키(n_correct·n_incorrect·
+    n_unverifiable·ocr_gated)도 같은 이유로 고정한다(reader↔계약 정합).
     """
     assert "passed" in VerifyEventData.model_fields
     assert "hint_level" in HintEventData.model_fields
+    assert "n_correct" in VerifyEventData.model_fields
+    assert "n_incorrect" in VerifyEventData.model_fields
+    assert "n_unverifiable" in VerifyEventData.model_fields
+    assert "ocr_gated" in VerifyEventData.model_fields
 
 
 def test_s3_16_producer_fields_exist_in_contract() -> None:
@@ -96,15 +103,38 @@ def test_verify_normalizes_missing_error_kind() -> None:
     """`검산결과`를 passed만 주면 error_kind·mode·persona=None으로 정규화 — 드리프트 무해화.
 
     S3-03: 계약에 mode/persona(선택 태그)가 추가돼 미지정 시 None으로 채워진다(mode-agnostic·
-    기존 생산 경로 의미 불변).
+    기존 생산 경로 의미 불변). S4-19: 3상태 6키도 미지정 시 None으로 채워진다(구판/무검증
+    모양 — 신판 payload에는 키가 항상 존재하되 값 None 가능).
     """
     data = build_event_data(EventType.검산결과, passed=True)
-    assert data == {"passed": True, "error_kind": None, "mode": None, "persona": None}
+    assert data == {
+        "passed": True,
+        "error_kind": None,
+        "mode": None,
+        "persona": None,
+        "n_correct": None,
+        "n_incorrect": None,
+        "n_unverifiable": None,
+        "unverified_ratio": None,
+        "first_incorrect_index": None,
+        "ocr_gated": None,
+    }
 
 
 def test_verify_full_shape() -> None:
     data = build_event_data(EventType.검산결과, passed=False, error_kind="arithmetic")
-    assert data == {"passed": False, "error_kind": "arithmetic", "mode": None, "persona": None}
+    assert data == {
+        "passed": False,
+        "error_kind": "arithmetic",
+        "mode": None,
+        "persona": None,
+        "n_correct": None,
+        "n_incorrect": None,
+        "n_unverifiable": None,
+        "unverified_ratio": None,
+        "first_incorrect_index": None,
+        "ocr_gated": None,
+    }
 
 
 def test_verify_mode_persona_tag() -> None:
@@ -115,6 +145,57 @@ def test_verify_mode_persona_tag() -> None:
         "error_kind": None,
         "mode": "suneung",
         "persona": "A_일반고고3",
+        "n_correct": None,
+        "n_incorrect": None,
+        "n_unverifiable": None,
+        "unverified_ratio": None,
+        "first_incorrect_index": None,
+        "ocr_gated": None,
+    }
+
+
+def test_s4_19_step_verification_fields_exist_in_contract() -> None:
+    """S4-19 신규 페이로드 6필드 존재 — writer(coach `_log_verify_event`)↔계약 정합(S3-16형).
+
+    `api/coach.py`의 `_log_verify_event`가 verify_solution 3상태 결과를 이 6키로 싣는다.
+    키가 계약에서 빠지면 writer가 즉시 깨지므로(build_event_data가 ValidationError) 계약
+    자체의 형태를 여기서 고정한다. 전건 default None(구판/무검증 하위호환)도 함께 고정.
+    """
+    for field in (
+        "n_correct",
+        "n_incorrect",
+        "n_unverifiable",
+        "unverified_ratio",
+        "first_incorrect_index",
+        "ocr_gated",
+    ):
+        assert field in VerifyEventData.model_fields
+        assert VerifyEventData.model_fields[field].default is None  # 미지정=None(기존 동작 불변)
+
+
+def test_s4_19_verify_step_counts_round_trip() -> None:
+    """S4-19: 3상태 카운트를 실으면 그대로 보존 — 0은 0으로(None과 구분·S3-07 규약)."""
+    data = build_event_data(
+        EventType.검산결과,
+        passed=True,
+        n_correct=2,
+        n_incorrect=0,
+        n_unverifiable=1,
+        unverified_ratio=1 / 3,
+        first_incorrect_index=None,
+        ocr_gated=False,
+    )
+    assert data == {
+        "passed": True,
+        "error_kind": None,
+        "mode": None,
+        "persona": None,
+        "n_correct": 2,
+        "n_incorrect": 0,  # 실측 0 — None(미지정)과 구분 보존
+        "n_unverifiable": 1,
+        "unverified_ratio": 1 / 3,
+        "first_incorrect_index": None,  # n_incorrect==0이라 '없음'(미지정 아님 — 카운트로 구분)
+        "ocr_gated": False,
     }
 
 
