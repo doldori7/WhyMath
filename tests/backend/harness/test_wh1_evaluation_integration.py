@@ -632,6 +632,214 @@ def test_harness_metrics_transfer_score_measured_on_live_pg() -> None:
         asyncio.run(_cleanup_problems(pids))
 
 
+def test_harness_metrics_since_until_excludes_null_started_at_accuracy_attempts_on_live_pg() -> (
+    None
+):
+    """PED-15 — R15 정답률(accuracy_conds) since/until 지정 시 started_at NULL 행은 제외되고
+    시간창 안에서 채워진 행만 정확히 집계된다.
+
+    수정 전엔 `ProblemAttempt.started_at`이 두 writer(`api/coach.py::_apply_completion`·
+    `api/me.py::submit_attempt`) 어디서도 채워지지 않아 상시 NULL이었다. `NULL >= since`는 SQL
+    에서 falsy이므로 since/until을 지정하는 순간 accuracy_conds 필터를 통과하는 행이 0건이
+    되어(가짜 NO_DATA로 위장) `sample_accuracy_attempts`가 항상 0이었다(since/until 둘 다
+    None인 기본 호출은 이 필터 자체가 안 붙어 영향 없었음 — 이 테스트가 굳이 시간창을
+    *지정*하는 이유).
+
+    시간창 안 attempt 3건(started_at 채워짐·순서 F→T→T)은 잡혀야 하고, 시간창 *밖*(과거)
+    attempt 1건과 `started_at=None`(PED-15 수정 전 상시 NULL이던 레거시 행 시뮬) attempt
+    1건은 정직하게 제외돼야 한다 — 둘 다 같은 최종 개수(3)로 나타나야 "제외가 실제로 일어난다"
+    는 변별력이 생긴다(포함/제외가 우연히 같은 결과를 내는 무변별 검증 금지).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    window_end = datetime(2026, 1, 31, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                # 시간창 *안* — 잡혀야 하는 3건(F→T→T·started_at 오름차순).
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=1),
+                        is_correct=False,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=2),
+                        is_correct=True,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=3),
+                        is_correct=True,
+                    )
+                ),
+                # 시간창 *밖*(과거) — since 필터로 자연 제외(대조군 — NULL 배제와는 별개 경로).
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=datetime(2020, 1, 1, tzinfo=UTC),
+                        is_correct=True,
+                    )
+                ),
+                # started_at=None — PED-15 수정 전 상시 NULL이던 레거시 행 시뮬(예: duration_
+                # seconds 없이 제출된 오래된 me.py 경로 attempt). NULL >= since가 falsy라 시간창
+                # 필터에서 정직하게 빠져야 한다(가짜 포함 금지).
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=None,
+                        is_correct=True,
+                    )
+                ),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/harness-metrics",
+                headers=auth,
+                params={"since": window_start.isoformat(), "until": window_end.isoformat()},
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            # 시간창 안의 3건만 — 시간창 밖 1건 + NULL 1건은 제외(수정 전엔 since/until 지정 시
+            # 이 값이 데이터 유무와 무관하게 항상 0이었다).
+            assert body["sample_accuracy_attempts"] == 3
+            hrv = body["help_reduction_validated"]
+            # 표본 3 >= _MIN_SLOPE_POINTS(3) → 기울기 계산 가능(NO_DATA 아님). F→T→T는 상승 추세.
+            assert hrv["accuracy_slope"] is not None
+            assert hrv["accuracy_slope"] > 0
+    finally:
+        asyncio.run(_cleanup([uid]))
+
+
+def test_harness_metrics_since_until_excludes_null_started_at_calibration_pairs_on_live_pg() -> (
+    None
+):
+    """PED-15 — ⑥ Brier(calibration_conds) since/until 지정 시 started_at NULL 행은 제외.
+
+    R15 정답률(accuracy_conds)과 동일한 버그가 calibration_conds(별도 조건 리스트 객체)에도
+    있었다 — 이 테스트는 그 필터를 독립적으로 검증한다(accuracy_conds가 고쳐졌다고 calibration_
+    conds도 자동으로 맞다고 가정하지 않는다 — 코드가 중복돼 있어 한쪽만 고쳐질 위험이 실재했다).
+
+    시간창 안 완벽보정 쌍 5개(conf=outcome → Brier 0·>= _MIN_CALIBRATION_SAMPLES라 MEASURED)는
+    잡혀야 하고, 시간창 밖 1건과 `started_at=None`(레거시 행 시뮬) 1건은 confidence·is_correct가
+    둘 다 채워진 "유효 쌍"이어도 시간창 필터에서 정직하게 제외돼야 한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    window_end = datetime(2026, 1, 31, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                # 시간창 안 — 완벽 보정 5쌍(conf=outcome → Brier 0). >= _MIN_CALIBRATION_SAMPLES
+                # (5)라 MEASURED로 격상되는지까지 함께 확인.
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=1),
+                        is_correct=True,
+                        confidence_self_reported=1.0,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=2),
+                        is_correct=True,
+                        confidence_self_reported=1.0,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=3),
+                        is_correct=False,
+                        confidence_self_reported=0.0,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=4),
+                        is_correct=False,
+                        confidence_self_reported=0.0,
+                    )
+                ),
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=window_start + timedelta(days=5),
+                        is_correct=True,
+                        confidence_self_reported=1.0,
+                    )
+                ),
+                # 시간창 *밖*(과거) — 유효 쌍이지만 since 필터로 자연 제외(대조군).
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=datetime(2020, 1, 1, tzinfo=UTC),
+                        is_correct=True,
+                        confidence_self_reported=1.0,
+                    )
+                ),
+                # started_at=None — 레거시 행 시뮬. confidence·is_correct 둘 다 채워진 유효
+                # 쌍이어도 시간창 필터(NULL >= since falsy)에서 정직하게 제외돼야 한다.
+                ProblemAttempt.from_schema(
+                    ProblemAttemptSchema(
+                        attempt_id=uuid.uuid4(),
+                        user_id=uid,
+                        started_at=None,
+                        is_correct=True,
+                        confidence_self_reported=1.0,
+                    )
+                ),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/harness-metrics",
+                headers=auth,
+                params={"since": window_start.isoformat(), "until": window_end.isoformat()},
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            # 시간창 안의 5쌍만 — 시간창 밖 1건 + NULL 1건은 제외(수정 전엔 이 값이 항상 0이었다).
+            assert body["sample_calibration_pairs"] == 5
+            cb = body["calibration_brier"]
+            assert cb["status"] == "measured"
+            assert cb["value"] == 0.0  # 완벽 보정 5쌍만 잡혔으면 Brier 0(오염 행 섞이면 0이 아님).
+    finally:
+        asyncio.run(_cleanup([uid]))
+
+
 def test_harness_metrics_call_increments_growth_evidence_reach_counter_on_live_pg() -> None:
     """PED-06 — `GET /v1/me/harness-metrics` 호출이 `/health/ready` 도달 카운터에 반영된다.
 

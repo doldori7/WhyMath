@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·PED-15): **`ProblemAttempt.started_at` 상시 NULL 근본수정 — 두 writer(`api/coach.py`·`api/me.py`) 모두 이 컬럼을 채우지 않아 R15/Brier/전이점수 3개 지표가 시간창(since/until) 지정 시 조용히 0행을 반환하던 버그. 부수적으로 `privacy/retention.py`의 PII 보존기한 파기 로직도 같은 컬럼을 써서 지금까지 `ProblemAttempt` 파기가 0건이었다는 사실을 발견 — 코드는 그대로 두고 `PED-16`(Kiki 결정 사안)으로 분리 등재** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
+
+- **채택 설계(후보 a·근본수정)**: `db/models/activity.py`의 `idx_attempt_user`(`user_id`, `started_at DESC`) 인덱스가 애초에 이 컬럼이 채워질 것을 전제로 존재한다는 걸 근거로, 3개 쿼리만 `ended_at`으로 갈아타는 임시방편(후보 b) 대신 두 writer를 직접 고쳤다. `api/coach.py::_apply_completion`은 `dialogue.started_at`(PED-14가 이미 `duration_seconds` 계산에 쓴 값)을 그대로 옮기고, `api/me.py::submit_attempt`는 클라가 시작 시각을 직접 안 보내므로 `started_at = ended_at − duration_seconds`로 역산(이미 신뢰하는 클라 자기보고 값의 재표현 — 새 날조 아님)하되 `duration_seconds` 미제출이면 `None`으로 정직하게 남긴다. 과거 이미 적재된 행의 `started_at`은 백필하지 않는다(모르는 값을 지어내지 않는다는 원칙 — 새 행부터 자연 정상화).
+- **부수 발견 — `PED-16`으로 분리(Kiki 결정 사안)**: 메인 세션의 acceptance② 사전조사는 `ProblemAttempt\.started_at`(속성 접근 문자열) grep만 돌려 "3개 쿼리 블록 외 참조 없음"이라 결론 내렸으나, 위임 에이전트가 `privacy/retention.py`의 `_RETENTION_PLAN = ((Dialogue, "started_at"), (ProblemAttempt, "started_at"), ...)`가 **문자열 튜플로 컬럼을 참조**해 그 grep 패턴에 안 걸렸음을 발견했다 — 검색 패턴의 사각지대(속성접근 구문만 찾고 리플렉션/문자열 참조는 놓침). `purge_expired_records()`는 NULL 타임스탬프를 "비교 불가로 미파기"(보수적, 이미 정직하게 docstring에 명시된 설계)로 처리하므로, 이 버그가 있던 전체 기간 동안 `ProblemAttempt` 행이 PII 보존기한(기본 3년)이 지나도 **단 한 건도 자동 파기되지 않았다**는 사실이 드러났다. 이건 코드 결함이 아니라(설계 자체는 정직) 그 설계가 전제한 컬럼이 채워지지 않고 있었다는 사실적 공백이며, "법령 유래 절차(PII 보호)의 기계 대체 금지" 원칙상 소급 조치 필요 여부는 claude가 판단하지 않고 `PED-16`(owner: kiki)으로 분리 등재해 넘겼다 — 코드는 무변경(PED-15 fix가 착지되는 순간부터 신규 행은 자연히 파기 대상 자격을 회복하므로 이 자체로는 추가 수정 불필요, 남은 건 과거분 소급 판단뿐).
+- **검증(메인 독립 재검증)**: 코드 diff 2개 파일 전량 직접 검토 · 신규 discriminative 통합테스트(같은 (user, 시간창) 안에 F→T→T 3건 + 시간창 밖 1건 + `started_at=None` 1건을 섞어 `sample_accuracy_attempts==3`만 통과함을 검증) 직접 읽고 **독립적으로 실 PostgreSQL을 세팅**(위임 에이전트가 켜 둔 클러스터를 그대로 신뢰하지 않고 직접 새 비밀번호로 접속 재구성) → **8 passed** 재현 · 정적 검사 4종 fresh 재실행 EXIT=0 · 영향 hermetic 테스트 4파일 345 passed · **전체 백엔드 스위트 재실행 9,266 passed·300 skipped·0 failed(543.50s)** — 자체 보고 수치와 정확히 일치 · `alembic heads` 단일(`0afd40ce1867`, 신규 마이그레이션 없음) 확인.
+- **RED/GREEN 변별력 실측**: 위임 에이전트가 `git stash`로 fix만 일시 원복 후 재실행해 신규 assert 2건만 정확히 FAIL(나머지 20건 그대로 PASS)함을 직접 실측 — 우연히 통과하는 무변별 테스트가 아님을 증명.
+- 정본: 커밋(이 로그 직후) + `PED-16` 등재.
+
 ### 2026-08-10 (실수 관리·위임 에이전트 detached 대기 3회차): **backend-engineer가 전체 스위트를 백그라운드로 던지고 보고 없이 턴을 끝내려 한 사례가 MISC-02·MISC-06에 이어 PED-14에서 세 번째 재발 — 매번 위임 프롬프트에 개별 명시하던 완화책이 실패했다고 보고 `.claude/agents/backend-engineer.md`에 상시 규칙으로 등재** (claude 발견·정정, `/drive` 루프)
 
 - **재발 경위**: PED-14 위임 중 에이전트가 "백그라운드 태스크(bu65kgw69)의 완료 알림을 기다리겠다"며 턴을 종료 — MISC-06 결정 로그가 이미 "재발 시 위임 프롬프트에 명시할 것"이라 적어 뒀으나, 이번 PED-14 위임 프롬프트를 쓸 때 그 메모를 실제로 반영하지 않아 그대로 재발했다. "다음엔 프롬프트에 적겠다"는 대책이 위임자(나)의 기억에 의존하는 한 반복된다는 걸 이번에 실증.

@@ -915,6 +915,39 @@ class TestSubmitAttempt:
         assert resp.json()["skill_mastery_updates"] == []
         assert len(session.added) == 1  # attempt만
 
+    def test_submit_sets_started_at_from_duration_seconds(self) -> None:
+        """PED-15 — duration_seconds가 오면 started_at = ended_at − duration_seconds로 역산.
+
+        클라가 시작 시각을 직접 보내지 않으므로(`AttemptSubmitRequest`엔 duration_seconds만
+        있음) 이미 신뢰하는 클라 자기보고 값을 재표현한다 — 이 컬럼이 두 writer 중 하나에서
+        상시 NULL이던 버그의 근본 수정(다른 writer는 `api/coach.py::_apply_completion`).
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False, "duration_seconds": 90},
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert attempt.started_at is not None
+        assert attempt.ended_at is not None
+        assert (attempt.ended_at - attempt.started_at).total_seconds() == 90
+
+    def test_submit_started_at_none_without_duration_seconds(self) -> None:
+        """PED-15 — duration_seconds 미제출이면 started_at을 지어내지 않고 None으로 남긴다
+        (CLAUDE.md "가짜 0 금지"와 동일 원칙 — 0이나 now를 채우면 시간창 필터가 실제로 모르는
+        행을 아는 것처럼 취급하게 된다)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert attempt.started_at is None
+
     def test_submit_overconfident_returns_coaching(self) -> None:
         """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
         # 오답(모델 B): 개념 PRIMARY→[]·TESTED→[]·스킬 PRIMARY→[]·TESTED→[](매핑 없음).

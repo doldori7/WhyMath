@@ -45,7 +45,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import (
@@ -724,7 +724,13 @@ async def submit_attempt(
     ASM-06: `selected_choice_index`가 왔을 때만(reactive) 이 문제의 `distractor_map` 하나를
     조회해 `resolve_misconception_from_choice`로 오개념 id를 역추적하고 `matched_misconception_id`
     로 응답한다 — 인덱스 미제출이면 이 조회 자체를 생략(신규 SELECT 0, 기존 흐름 무영향).
+
+    PED-15: `started_at`은 `duration_seconds`가 왔을 때만 `ended_at − duration_seconds`로
+    역산해 채운다(클라가 시작 시각을 직접 보내지 않으므로). 미제출이면 None으로 남긴다 — 이 컬럼이
+    상시 NULL이던 버그의 근본 수정이며, `harness/wh1_evaluation.py`의 since/until 시간창 필터가
+    참조하는 컬럼이다.
     """
+    now = datetime.now(UTC)
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
@@ -735,7 +741,17 @@ async def submit_attempt(
         selected_choice_index=body.selected_choice_index,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
-        ended_at=datetime.now(UTC),
+        # PED-15: 클라가 시작 시각을 직접 보내지 않는다(`AttemptSubmitRequest`엔 duration_seconds만
+        # 있음) — duration_seconds가 왔을 때만 ended_at에서 역산한다. 이미 신뢰하는 클라 자기보고
+        # 값을 재표현하는 것뿐이라 새 날조가 아니다. duration_seconds가 없으면 모르는 값을 지어내지
+        # 않고 None으로 정직하게 남긴다(CLAUDE.md "가짜 0 금지"와 동일 원칙 — 0이나 now를 채우면
+        # since/until 시간창 필터가 실제로 모르는 행을 아는 것처럼 취급하게 된다).
+        started_at=(
+            now - timedelta(seconds=body.duration_seconds)
+            if body.duration_seconds is not None
+            else None
+        ),
+        ended_at=now,
     )
     session.add(attempt)
     await session.commit()

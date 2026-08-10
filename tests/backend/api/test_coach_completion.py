@@ -10,6 +10,10 @@
   - incorrect일 때 `decision.prompt`가 재고 유도 문구로 교체되고 `decision.system`은 불변인지
   - PED-14: `attempt.duration_seconds`가 `now − dialogue.started_at`(서버 벽시계)로 채워지고,
     `dialogue.started_at`이 없으면 0이 아니라 None인지(가짜 0 금지)
+  - PED-15(이 파일에 최소 assert만 추가 — declared paths는 `harness/wh1_evaluation.py`·
+    `api/coach.py`·`api/me.py`가 정본): `attempt.started_at`이 `dialogue.started_at`을 그대로
+    옮기는지(채워진 값·None 둘 다 대칭 전파) — 이 컬럼이 두 writer 중 하나에서 상시 NULL이던
+    버그의 근본 수정 확인
 
 `_CapturingSession`/`_session_client` 등은 `tests/backend/api/test_coach.py`의 관례를 그대로
 따른 로컬 사본이다(이 코드베이스의 기존 패턴 — 파일마다 독립 사본을 둔다,
@@ -215,6 +219,10 @@ class TestApplyCompletionHelper:
         assert attempt.problem_id == pid
         assert attempt.student_answer == "x=2"
         assert attempt.used_socratic is True
+        # PED-15: attempt.started_at은 dialogue.started_at을 그대로 옮긴다(여기선 둘 다
+        # 미지정 기본값 None — 값 자체보다 "배선돼 있음"을 확인. 채워진 케이스는 아래
+        # test_duration_seconds_derived_from_dialogue_started_at가 담당).
+        assert attempt.started_at == dialogue.started_at
         # decision.prompt는 correct 경로에서 건드리지 않는다(재고 유도는 incorrect 전용).
         assert decision.prompt == _decision(PolyaStage.REVIEW).prompt
 
@@ -245,6 +253,9 @@ class TestApplyCompletionHelper:
         attempt = sess.added[0]
         assert isinstance(attempt, ProblemAttemptORM)
         assert attempt.duration_seconds == 200
+        # PED-15: attempt.started_at도 같은 dialogue.started_at을 그대로 옮긴다(근본 수정 —
+        # 이 필드가 상시 NULL이던 버그의 두 writer 중 하나가 여기다).
+        assert attempt.started_at == started
 
     def test_duration_seconds_none_when_dialogue_started_at_missing(self) -> None:
         """PED-14 방어 케이스 — dialogue.started_at이 없으면 0이 아니라 None(가짜 0 금지)."""
@@ -271,6 +282,9 @@ class TestApplyCompletionHelper:
         attempt = sess.added[0]
         assert isinstance(attempt, ProblemAttemptORM)
         assert attempt.duration_seconds is None
+        # PED-15: started_at도 대칭적으로 None — 모르는 값을 지어내지 않는다(가짜 0 금지와
+        # 동일 원칙, duration_seconds와 동형).
+        assert attempt.started_at is None
 
     def test_correct_before_review_does_not_complete_or_persist(self) -> None:
         # REVIEW 미도달(EXECUTE) — correct여도 완료 아님·ProblemAttempt 미적재("정답을 빠르게" 금지).

@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -16,12 +16,15 @@ acceptance:
   - "③ 해법 후보 비교 — (a) 두 writer에 started_at 실제 대입(coach.py는 dialogue.started_at 이미 있어 자연스러움·me.py는 클라가 안 주면 서버 now로 폴백할지 결정 필요) (b) 이 3개 쿼리 블록만 PED-14 선례(ended_at 사용)를 따라 필터 컬럼을 ended_at으로 교체 — 둘 중 하나를 택하되 과거 이미 적재된 attempt 행의 started_at 백필 필요 여부까지 판단"
   - "④ 회귀 0 — R15/Brier/전이점수 기존 no-window(since=until=None) 호출 결과가 수정 후에도 동일해야 한다(전체 스위트로 확인)"
   - "⑤ 변별력 테스트 — since/until 지정 시 기존에는 0건이 나오던 케이스가 수정 후 정확한 건수를 반환하는지 assert(수정 전 상태를 재현하는 회귀 테스트를 먼저 추가해 실패시킨 뒤 고치는 순서 권장)"
-artifacts: []
+artifacts:
+  - "구현: backend-engineer 위임(agentId a0602a7034f51d8b8) — coach.py(dialogue.started_at 이관)·me.py(ended_at-duration_seconds 역산) 근본수정. 백필 없음. RED/GREEN 변별력 git stash로 실측 증명"
+  - "부수 발견 → PED-16 분리 등재: privacy/retention.py의 PII 보존기한 파기 로직도 같은 컬럼 참조 — 지금까지 ProblemAttempt 파기 0건, Kiki 결정 사안이라 코드 미수정"
+  - "메인 독립 재검증(2026-08-10): 코드 2파일 diff 전량 검토·신규 discriminative 통합테스트를 독립적으로 세팅한 실 PostgreSQL(직접 재구성한 접속정보)로 8 passed 재현·정적 검사 4종 fresh EXIT=0·영향 hermetic 4파일 345 passed·전체 백엔드 스위트 9266 passed 300 skipped 0 failed(543.50s, 자체 보고와 정확히 일치)·alembic heads 단일 확인"
 paths:
   - src/backend/whymath_backend/harness/wh1_evaluation.py
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/api/me.py
   - "tests/backend/harness/test_wh1_evaluation*.py"
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "PED-14(시간 정규화 mastery 지표) 구현 중 발견 — duration_seconds를 ended_at-started_at으로 계산하려다 started_at이 항상 NULL임을 확인, PED-14는 영향받는 3개 쿼리를 건드리지 않으므로(자기 자신은 ended_at만 사용) 그 자리에서 고치지 않고 별도 태스크로 분리(범위 확대 방지). CLAUDE.md '가짜 0 금지'·'환각 발견 시 조용히 넘어가지 말고 로그·수정' 해당 — since/until 시간창을 지정하는 어떤 호출자든(현재 존재 여부는 ②에서 확인) 이 버그의 영향을 받는다."
 updated: 2026-08-10

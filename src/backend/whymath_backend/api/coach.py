@@ -1117,6 +1117,13 @@ async def _apply_completion(
     (두 출처가 같은 컬럼에 섞여 적재될 수 있음을 `harness/wh1_evaluation.py`의 시간 정규화
     지표 note가 정직하게 표기한다).
 
+    **PED-15**: 같은 `dialogue.started_at`을 attempt의 `started_at`에도 그대로 옮긴다 — 이전엔
+    두 writer(이 함수·`api/me.py::submit_attempt`) 어디서도 `started_at`을 채우지 않아 상시
+    NULL이었고, `harness/wh1_evaluation.py`의 R15/Brier/전이점수 3개 쿼리가 `since`/`until`
+    시간창을 지정할 때 `NULL >= X`가 SQL에서 falsy라 조용히 0행(가짜 NO_DATA)을 반환하는
+    버그였다. `idx_attempt_user`(`user_id`, `started_at DESC`) 인덱스는 애초에 이 컬럼이
+    채워질 것을 전제로 설계돼 있었다.
+
     반환 `dialogue_completed`는 `CoachResponse.dialogue_completed` 노출값 그대로(3상태:
     True=완료·False=평가했으나 미완료·None=판정 컨텍스트 없음).
     """
@@ -1144,6 +1151,12 @@ async def _apply_completion(
         student_answer=solution_text,
         attempt_mode=AttemptMode.Socratic대화,
         used_socratic=True,
+        # PED-15: 이 문제에 대한 대화가 실제로 시작된 시각 — create_session이 이미 채워 둔
+        # dialogue.started_at을 그대로 옮긴다(신규 컬럼 0). R15/Brier/전이점수 시간창 필터가
+        # 참조하는 컬럼이 지금까지 항상 NULL이었던 버그의 근본 수정(PED-15 docstring 참조).
+        # dialogue.started_at이 비어 있는 이론상 방어 케이스는 None을 그대로 옮긴다(가짜 값
+        # 금지 — duration_seconds와 동형 원칙).
+        started_at=dialogue.started_at,
         ended_at=now,
         # PED-14: 서버 벽시계 기반 소요시간(초) — dialogue.started_at은 create_session이 이미
         # 채워 둔다(신규 컬럼 0). 극단적으로 비어 있으면 None(가짜 0 금지 — docstring 참조).

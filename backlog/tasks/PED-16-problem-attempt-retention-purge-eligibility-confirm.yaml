@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-16-problem-attempt-retention-purge-eligibility-confirm
+title: "Kiki 결정: ProblemAttempt PII 보존기한 파기 대상 소급 확인 — started_at NULL 버그로 지금까지 0건 파기"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 배경 확인 — PED-15가 발견: privacy/retention.py의 _RETENTION_PLAN이 ProblemAttempt 파기 기준 컬럼으로 started_at을 쓰는데, 그 컬럼이 두 writer(api/coach.py·api/me.py) 어디서도 채워지지 않아 상시 NULL이었다(PED-15가 근본수정 — 지금부터의 신규 attempt 행은 정상적으로 시간이 채워짐). purge_expired_records()는 NULL 타임스탬프를 '비교 불가로 미파기'(보수적) 처리하므로, 이 버그가 있던 기간의 ProblemAttempt 행은 pii_retention_years(기본 3년)가 지나도 단 한 건도 자동 파기되지 않았다"
+  - "② 이것은 claude가 판단할 사안이 아니다(CLAUDE.md '법령 유래 절차의 기계 대체 금지') — Kiki가 직접 확인·결정: (a) 이 컨테이너·개발 환경에 실제 학생 개인정보가 쌓인 적이 있는지(파일럿 미착수 시점이면 실무 영향 0일 가능성 높음) (b) 만약 실 운영 DB에 이 기간 동안 쌓인 실 사용자 데이터가 있다면, 그 행들을 소급 파기 대상으로 볼지 아니면 정책상 예외로 둘지 (c) 필요 시 개인정보보호법 준수 관점에서 법률 검토 필요 여부"
+  - "③ Kiki 확인 후 done --as kiki --artifact <결정 내용>으로 직접 기입(HARN-06). 코드 변경이 필요하면(예: 실 운영 DB 소급 파기 스크립트) 별도 태스크로 claude에게 위임"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/privacy/retention.py
+session: null
+notes: "PED-15(started_at NULL 버그 근본수정) 구현 중 위임 에이전트가 발견 — 메인 세션의 사전 조사(grep 'ProblemAttempt\\.started_at' 속성 접근 패턴)가 놓친 참조였다(retention.py는 (ProblemAttempt, \"started_at\") 문자열 튜플로 참조해 속성접근 grep에 안 걸림). 코드 자체는 이미 정직하게 설계돼 있다(NULL을 '모름'으로 보수적 처리·가짜 파기 없음) — 문제는 그 설계가 전제한 '컬럼이 채워진다'는 가정이 PED-15 이전엔 성립하지 않았다는 사실적 공백이다. PED-15는 이 파일을 건드리지 않았다(코드 수정 불필요·범위 밖) — 남은 건 순수 정책/사실 확인 판단."
+updated: 2026-08-10
