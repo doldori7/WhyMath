@@ -33,6 +33,7 @@ from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l4.lthc import mastery_to_level
+from whymath_backend.schema.enums import VisualizationStyle
 
 # 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18). scene.py·visualization.py가
 # 이제 이 모듈 하나에서 가져온다(이전엔 두 파일이 각자 `default_student_escalation_signals()`를
@@ -50,7 +51,7 @@ class ConceptOverlayContext:
 
     concept_orm: Concept | None
     visualizability: Any = None
-    recommended_visual_styles: list[str] | None = None
+    recommended_visual_styles: list[VisualizationStyle] | None = None
 
 
 async def load_concept_with_overlays(
