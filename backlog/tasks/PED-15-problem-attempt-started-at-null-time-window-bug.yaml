@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/api/me.py
   - "tests/backend/harness/test_wh1_evaluation*.py"
-session: null
+session: claude/subject-problems-theory-check-7n9n72
 notes: "PED-14(시간 정규화 mastery 지표) 구현 중 발견 — duration_seconds를 ended_at-started_at으로 계산하려다 started_at이 항상 NULL임을 확인, PED-14는 영향받는 3개 쿼리를 건드리지 않으므로(자기 자신은 ended_at만 사용) 그 자리에서 고치지 않고 별도 태스크로 분리(범위 확대 방지). CLAUDE.md '가짜 0 금지'·'환각 발견 시 조용히 넘어가지 말고 로그·수정' 해당 — since/until 시간창을 지정하는 어떤 호출자든(현재 존재 여부는 ②에서 확인) 이 버그의 영향을 받는다."
 updated: 2026-08-10
