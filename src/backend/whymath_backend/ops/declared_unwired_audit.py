@@ -998,6 +998,9 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,
+        # ASM-05(2026-08-10): 수요측 성취기준 도달 관측 — CMH(실학생 숙달 측정) 의존,
+        # S3-01 파일럿 전에는 NO_DATA 정직 렌더가 설계값(acceptance ③)이라 CI 상시 배선 비대상.
+        "harness.standard_attainment_report": _NEEDS_LIVE_SAMPLE,
         # 빌드타임 관측 리포트(게이트 아님) — 사람이 필요할 때 돌린다
         "harness.problem_bank_coverage": _OFFLINE_REPORT,
         "harness.visualization_reach_report": _OFFLINE_REPORT,
