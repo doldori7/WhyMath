@@ -5,17 +5,23 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
-acceptance: []
+acceptance:
+  - "①분류 판정을 먼저 기록 — 두 CLI는 '일회성 운영자 스크립트라 의도적 미배선'이 **아니다**. 근거(2026-08-10 실측): `--all --dry-run` 결과 7코퍼스 2,647건 전량 이미 백필 완료(filled=0)이나, 백필 누락 레코드가 생기면 `l6/_shared.is_review_cleared`가 fail-closed로 그 문항의 **노출을 전건 차단**한다 — 즉 누락은 서빙 영향을 갖는 회귀다. ②따라서 CI에는 *변이형*(제자리 갱신)이 아니라 **드리프트 가드**로 배선한다 — CI가 레포 데이터를 재작성해서는 안 된다"
+  - "`--check` 모드를 양 CLI에 신설 — 파일·감사로그 **미기록**(write 경로 미진입을 테스트로 동결)이고, 채울 레코드가 1건이라도 있으면 **exit 1**·0건이면 exit 0. `--all`과 조합 가능. 기존 `--dry-run`(항상 exit 0·통계 출력)과의 차이를 docstring에 명시한다. 백필 *판정 규칙*·임계값·바이트 계약은 무변경"
+  - "CI 배선 — **신규 잡 증설 0**, 기존 push/PR 경로 잡에 스텝으로 얹는다(schedule 전용 잡 금지 — 드리프트는 PR에서 잡아야 한다). CLI는 레포 루트 기준 상대경로(`data/corpus/...`)를 쓰므로 working-directory 정합을 실제로 맞춘다"
+  - "변별력 실증(측정 없는 게이트 금지) — 코퍼스 레코드 1건의 `review_status`/`persona_fit`를 각각 뮤테이션 제거하면 `--check`가 **exit 1**로 실패하고 원복 시 exit 0으로 복귀함을 실행 로그로 증명. 성공/실패 양쪽에서 같은 값을 내지 않음을 확인한다"
+  - "OPS-22 감사기 반영 — `python -m whymath_backend.ops.declared_unwired_audit` 실행 시 `harness_clis` 축 도달 수가 **+2**되고(현 53/11 기준) 위반 0·exit 0. CI 스텝이 감사기가 인식하는 `python -m whymath_backend.harness.<모듈>` 형태인지 실측 확인"
+  - "반-스코프 동결: 백필 판정 로직·임계값·`KNOWN_CORPORA` 목록 무변경 · 신규 코퍼스 판정 0건 · 새 CI 잡 0 · 감사 라벨(`AUDIT_LABEL_MAP`) 신규 작성 0"
 artifacts: []
 paths:
   - ".github/workflows/ci.yml"
   - src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py
   - src/backend/whymath_backend/harness/problem_corpus_persona_fit_backfill.py
-session: null
+session: claude/rec-05-priority-d8q8vt
 notes: "PB-03(done)이 만든 harness.problem_corpus_review_status_backfill과 S3-10/PB-01(done)이 만든 harness.problem_corpus_persona_fit_backfill 둘 다 직접 실행·프로덕션 import·CI 배선 어디에도 도달하지 않음 — OPS-22 declared_unwired_audit 실측(2026-08-09)으로 신규 발견. 둘 다 결정론(LLM 0)·코퍼스 JSONL 제자리 갱신이라 같은 부류. 배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요."
-updated: 2026-08-09
+updated: 2026-08-10
