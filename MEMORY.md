@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·/drive 3회차): **`NS-04` formula latex↔dsl 의미 정합 게이트(quadratic.roots ± 근 소실 결함 봉인) + `QUAL-01` 문항 코퍼스 중복 감사(T1 392건 해소 확인·T2 실중복 9쌍 확정·T3 비-기준 문서화) — 신규 발견 2건을 `QUAL-02`·`QUAL-03`으로 등재. `PED-16`은 타 세션(`rec-05-priority-d8q8vt`) 미머지 done 확인 후 불가침** (claude 구현, Kiki `/drive`)
+
+- **NS-04**: `test_formula_governance.py`에 축⑤(latex↔dsl 의미 정합) 신설 — 값-공식 축(±, dsl 잔차에 두 근 각각 대입해 identity_status로 판정)과 구조 축(좌우변 개별 대조 + vieta류 α/β↔r_1/r_2 명시 별칭)으로 분리. 최종 판정은 항상 l3 `identity_status`(단일 권위)에 위임 — LaTeX 전처리는 표기 변환일 뿐 SymPy 재구현이 아님. **L1 src에서 L3 import는 lint-imports 위반**(7계층 계약 실측 확인 — 신규 로직을 src 대신 테스트 파일에 유지, 기존 축④ 선례 답습). `quadratic.roots` dsl을 `x==(-b+√D)/(2a)`(+근만·± 소실)→`(2*a*x+b)**2==b**2-4*a*c`(±-중립 음함수형)로 정정(formulas.jsonl·graph.json·_provenance.json 동기화). 변별력: 결함 원본 문자열을 판정 함수에 직접 넣어 red, 정정본으로 green 확인.
+- **QUAL-01**: `harness/problem_duplication_audit.py` 신설(ARCH-18/ASM-05 4단 골격 답습) — T1(슬러그 충돌, 원 문서 392건→**현재 0건 해소 확인**, 원인 미조사)·T2(실중복, 정규화 텍스트 완전일치+`relations` 계보 그래프 배제 — S4-14/S4-18과 동일 필드, **9쌍 확정**: 원 문서 지목 1쌍은 `scripts/demo/seed_demo.py` `_CORPORA` 정적 스크레이핑으로 데모풀 동시노출 재확인 + 신규 발견 8쌍)·T3(verify.conditions 서명 동일은 판정 기준 아님 — 반례 `wm-skel-f50f96b5a691`↔`wm-calc-ext-8c193941df77`로 재확인, **코드로 계산하지 않고 문서화만**). 새 휴리스틱 발명 없이 "계보 필드가 형식 트윈(단답/객관식)을 포착 못 한다"는 공백을 있는 그대로 노출(CLAUDE.md 정직 회계). 부수 발견: 재서술(rephrase) 무변화 282쌍(간접법 하한값).
+- **후속 등재**(콘텐츠/파이프라인 판단이라 이 세션 범위 밖 — QUAL-01 acceptance가 "가시화까지"로 명시 스코프): `QUAL-02-real-duplicate-pair-disposition`(실중복 9쌍 은퇴/유지 콘텐츠 판정, 데모노출 1쌍 최우선) · `QUAL-03-rephrase-noop-defect-measurement`(전수 직접 측정으로 진짜 무변화 비율 재확정 + `rephrased_corpus_hygiene.py` 위생 게이트 확장).
+- **드라이브 부수**: `PED-16-pedagogy-declared-unenforced-audit`는 미머지 브랜치 `claude/rec-05-priority-d8q8vt`에 done 실물 존재 확인(하네스 착수 거부 존중, 재구현 회피 — OPS-07 재발 방지).
+- **정정**: 두 태스크 모두 신규 harness CLI가 main의 선언≠배선 감사기(OPS-22)에 `unclassified`로 걸림(ASM-05 때와 동일 패턴) — `declared_unwired_audit.py` 대장에 `_OFFLINE_REPORT`/`_NEEDS_LIVE_SAMPLE`로 즉시 등재해 해소.
+- **검증**: 두 태스크 모두 전건 exit code 판정(ruff·black·mypy --strict·lint-imports)·**전체 백엔드 스위트 각 1~2회씩 재실행**(NS-04 후 9339 passed, QUAL-01 감사기 정정 전 1 failed→정정 후 9375 passed) — main이 이 세션 도중 여러 차례 전진(HARN-20/21·MOB-14 등)해 브랜치를 origin/main에서 재시작(머지 완료된 이전 PR #760 위에 새로 쌓지 않음, CLAUDE.md "머지된 PR은 재사용 불가" 원칙).
+
 ### 2026-08-10 (구현·ASM 트랙 / acceptance 정리): **`ASM-05` 수요측 성취기준 도달 관측 리포트 착지(ARCH-18 공급측의 짝) + 동일 시리즈 ASM-01 writer 대장 stale 정정. 착수 전 acceptance를 실측 표준형으로 재작성하는 "acceptance 정리 후 착수" 패턴 답습(ASM-04·ASM-06 같은 날 선례) — S3-01 의존 모순 해소 포함. 이어 `S4-19` 라이브 3상태 단계 검증 적재도 같은 패턴(acceptance 정리→구현)으로 착지·`PATH-04`는 자산 부재로 block·`MISC-06`은 타 세션 claim 존중** (claude 구현, Kiki "남은 트랙"→"acceptance 정리 후 ASM 트랙"→/drive)
 
 - **ASM 트랙 판정**: 잔여는 ASM-05·ASM-06 2건이었고, ASM-06은 `subject-problems-theory-check-7n9n72` 브랜치에 실물 done(distractor_link·selected_choice_index·alembic·테스트, artifacts 087859bd) — 셀렉터 제외 확인 후 불가침(OPS-07 병렬 중복 구현 재발 방지). ASM 트랙 실작업 = ASM-05 하나.
