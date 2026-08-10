@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,7 +15,8 @@ acceptance:
   - "② data/visual_style_contract.json 수직선 status unseated→seated·seat_owner 갱신 + l4/visualization_policy._SEATED_STYLES 동기 — 기존 JSON↔Python drift 교차 테스트(test_visual_style_render_contract.py) green"
   - "③ 접선도함수: 웹 어댑터가 tangent_point를 실제 소비·렌더함을 실측(JS 테스트 또는 브라우저)한 뒤에만 seated 갱신 — 실측 없이 계약만 갱신 금지. l4/visualization_policy.py:41-42 주석(「접선도함수…렌더 타입 없다」)도 함께 정정"
   - "④ 변별력: 신규 필드 1개를 웹 어댑터 미소비 상태로 두고 계약 게이트 red 실측 → 배선해 green 실측(VIZ-03 acceptance ⑤ 준용)"
-artifacts: []
+artifacts:
+  - 6d24a585
 paths:
   - src/backend/whymath_backend/schema/visualization.py
   - src/web/graphing-calculator/src/lib/graph2dSpec.js
@@ -27,8 +28,8 @@ paths:
   - src/backend/whymath_backend/l3/viz_eval.py
   - src/backend/whymath_backend/harness/visualization_reach_report.py
   - tests/backend/schema/test_visualization_spec.py
-  - tests/backend/l3/*
-  - src/mobile/assets/graphing_calculator/**
-session: claude/whymath-visualization-review-r3
+  - "tests/backend/l3/*"
+  - "src/mobile/assets/graphing_calculator/**"
+session: null
 notes: "visualization_module_gap_review.md §8.1 — VIZ-03(done)의 §7 확장 acceptance ①-b·⑥ 미이행 승계. 고립 브랜치 회수(NLP-04 #732)가 확장 이전 아티팩트(접선·적분·함수비교)만 이식하고 done 처리해, 코퍼스 2위 덩어리 수직선 25건이 주인 없는 상태 + 계약 파일이 done 태스크를 seat_owner로 지목하는 결정 불가 상태. 접선도함수는 역방향 drift(구현 착륙·계약 미갱신 — 코퍼스 태깅 0건이라 도달 변화는 없고 계약 진실성 회복)."
 updated: 2026-08-10
