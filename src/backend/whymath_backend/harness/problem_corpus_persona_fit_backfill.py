@@ -16,15 +16,34 @@
 
 사용법:
     python -m whymath_backend.harness.problem_corpus_persona_fit_backfill \\
-        --in <src.jsonl> [--out <dst.jsonl>] [--audit-out <audit.jsonl>] [--dry-run]
+        --in <src.jsonl> [--out <dst.jsonl>] [--audit-out <audit.jsonl>] [--dry-run | --check]
 
     python -m whymath_backend.harness.problem_corpus_persona_fit_backfill --all
         (코퍼스 6종 전부를 제자리 갱신 — `_KNOWN_CORPORA` 경로 고정)
 
+    python -m whymath_backend.harness.problem_corpus_persona_fit_backfill --all --check
+        (CI 드리프트 가드 — 아무것도 쓰지 않고, 미백필 레코드가 1건이라도 있으면 exit 1)
+
 `--out` 생략 시 제자리 갱신(--in 덮어쓰기). `--audit-out` 생략 시
 `docs/data/persona_fit_backfill_audit/<코퍼스 디렉터리명>.jsonl`에 쓴다(레포 루트 기준 상대경로
-— populate.py `_DEFAULT_PROBLEMS` 관례와 동일하게 레포 루트에서 실행 전제). `--dry-run`은 파일
-미기록·통계만 출력.
+— populate.py `_DEFAULT_PROBLEMS` 관례와 동일하게 레포 루트에서 실행 전제).
+
+세 실행 모드(OPS-24):
+  - **기본**(플래그 없음) — 제자리 갱신(변이형). 사람이 돌리고 결과를 커밋한다.
+  - `--dry-run` — 파일·감사로그 미기록·통계만 출력. **채울 게 있든 없든 항상 exit 0**이라
+    게이트로 쓸 수 없다(관측용).
+  - `--check` — 파일·감사로그 미기록(`--dry-run`과 동일하게 write 경로에 진입하지 않는다)이되,
+    채울 레코드가 **1건이라도 있으면 exit 1**·0건이면 exit 0. 계산 규칙·바이트 계약은
+    `--dry-run`과 완전히 동일하고 *종료 코드만* 다르다.
+
+CI 배선 판정(OPS-24 — 왜 `--check`인가):
+  ① 이 CLI는 "일회성 운영자 스크립트라 의도적 미배선"이 **아니다**. `persona_fit`이 빈 채로
+     남은 레코드는 페르소나 기반 추천·노출 산정에서 조용히 누락된다(자매 CLI인 review_status
+     백필의 경우 `l6/_shared.py`의 `is_review_cleared`가 fail-closed로 노출을 전건 차단한다) —
+     둘 다 결정론(LLM 0)이라 CI가 지킬 수 있는 회귀다.
+  ② 그럼에도 CI에 거는 것은 *변이형*(제자리 갱신)이 아니라 **드리프트 가드**(`--check`)다 —
+     CI가 레포 데이터를 재작성해서는 안 된다. 백필 자체는 사람이 돌려 커밋하고, CI는 "빠진 게
+     있다"만 빨갛게 알린다.
 
 harness는 import-linter 계약 밖(조성/ops 층·상위 호출 정상 — problem_corpus_batch 선례).
 """
@@ -190,10 +209,13 @@ def _default_audit_path(in_path: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI 엔트리 — 백필 후 리포트를 JSON으로 stdout에 낸다(결정론·멱등·exit 0).
+    """CLI 엔트리 — 백필 후 리포트를 JSON으로 stdout에 낸다(결정론·멱등).
 
     `--all`이면 `KNOWN_CORPORA` 6종을 순회해 각각 백필하고 리포트 목록을 낸다. 단일 파일
     처리는 `--in`(+선택 `--out`/`--audit-out`)을 쓴다. 레포 루트에서 실행 전제(상대경로 규약).
+
+    Returns:
+      `--check`에서 미백필 레코드가 1건 이상이면 1, 그 밖에는 0(기본·`--dry-run`은 항상 0).
     """
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.problem_corpus_persona_fit_backfill",
@@ -221,7 +243,15 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="감사 JSONL 경로(생략 시 docs/data/persona_fit_backfill_audit/<코퍼스명>.jsonl).",
     )
-    parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 통계만 출력.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--dry-run", action="store_true", help="파일 미기록 — 통계만 출력(항상 exit 0·관측용)."
+    )
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="드리프트 가드(OPS-24) — 파일 미기록, 미백필 레코드가 1건이라도 있으면 exit 1.",
+    )
     args = parser.parse_args(argv)
 
     if args.all and args.out_path is not None:
@@ -239,14 +269,38 @@ def main(argv: list[str] | None = None) -> int:
                 in_path=in_path,
                 out_path=out_path,
                 audit_path=audit_path,
-                write=not args.dry_run,
+                write=not (args.dry_run or args.check),
             )
         )
 
     payload: Any = [r.to_json() for r in reports] if args.all else reports[0].to_json()
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+
+    if args.check:
+        return _check_exit_code(reports)
     return 0
+
+
+def _check_exit_code(reports: list[PersonaFitBackfillReport]) -> int:
+    """`--check` 판정 — 미백필 레코드가 남아 있으면 1(무엇이 왜 남았는지 stderr에 명시).
+
+    조용히 exit 1만 내지 않는다(침묵 실패 금지) — 코퍼스 경로·잔여 건수를 함께 적어 사람이 바로
+    백필 명령을 돌릴 수 있게 한다.
+    """
+    pending = [r for r in reports if r.filled > 0]
+    if not pending:
+        return 0
+    for report in pending:
+        sys.stderr.write(
+            f"[check] persona_fit 미백필 {report.filled}건 / 총 {report.total}건 — "
+            f"{report.in_path}\n"
+        )
+    sys.stderr.write(
+        "드리프트 감지: persona_fit이 빈 레코드는 페르소나 기반 추천·노출 산정에서 조용히 "
+        "누락된다. `--check` 없이 같은 명령을 돌려 백필하고 결과를 커밋하라.\n"
+    )
+    return 1
 
 
 if __name__ == "__main__":  # pragma: no cover — 모듈 실행 진입점

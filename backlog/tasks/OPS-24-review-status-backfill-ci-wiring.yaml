@@ -5,17 +5,24 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
-acceptance: []
-artifacts: []
+acceptance:
+  - "①분류 판정을 먼저 기록 — 두 CLI는 '일회성 운영자 스크립트라 의도적 미배선'이 **아니다**. 근거(2026-08-10 실측): `--all --dry-run` 결과 7코퍼스 2,647건 전량 이미 백필 완료(filled=0)이나, 백필 누락 레코드가 생기면 `l6/_shared.is_review_cleared`가 fail-closed로 그 문항의 **노출을 전건 차단**한다 — 즉 누락은 서빙 영향을 갖는 회귀다. ②따라서 CI에는 *변이형*(제자리 갱신)이 아니라 **드리프트 가드**로 배선한다 — CI가 레포 데이터를 재작성해서는 안 된다"
+  - "`--check` 모드를 양 CLI에 신설 — 파일·감사로그 **미기록**(write 경로 미진입을 테스트로 동결)이고, 채울 레코드가 1건이라도 있으면 **exit 1**·0건이면 exit 0. `--all`과 조합 가능. 기존 `--dry-run`(항상 exit 0·통계 출력)과의 차이를 docstring에 명시한다. 백필 *판정 규칙*·임계값·바이트 계약은 무변경"
+  - "CI 배선 — **신규 잡 증설 0**, 기존 push/PR 경로 잡에 스텝으로 얹는다(schedule 전용 잡 금지 — 드리프트는 PR에서 잡아야 한다). CLI는 레포 루트 기준 상대경로(`data/corpus/...`)를 쓰므로 working-directory 정합을 실제로 맞춘다"
+  - "변별력 실증(측정 없는 게이트 금지) — 코퍼스 레코드 1건의 `review_status`/`persona_fit`를 각각 뮤테이션 제거하면 `--check`가 **exit 1**로 실패하고 원복 시 exit 0으로 복귀함을 실행 로그로 증명. 성공/실패 양쪽에서 같은 값을 내지 않음을 확인한다"
+  - "OPS-22 감사기 반영 — `python -m whymath_backend.ops.declared_unwired_audit` 실행 시 `harness_clis` 축 **도달 11→13(+2)**·공급 53 불변·위반 0·exit 0. CI 스텝이 감사기가 인식하는 `python -m whymath_backend.harness.<모듈>` 형태인지 실측 확인. (착수 시 이 항목을 '53→55'로 적었던 것은 축 표기 `53/11`을 공급/도달이 아니라 잘못 읽은 것 — 실측으로 정정)"
+  - "반-스코프 동결: 백필 판정 로직·임계값·`KNOWN_CORPORA` 목록 무변경 · 신규 코퍼스 판정 0건 · 새 CI 잡 0 · 감사 라벨(`AUDIT_LABEL_MAP`) 신규 작성 0"
+artifacts:
+  - "커밋 4b4bac4 — `--check` 드리프트 가드 모드 신설(양 백필 CLI)·ci.yml declared-unwired-audit 잡에 스텝 2개(신규 잡 0)·감사기 _MANIFEST의 pending-task:OPS-24 유예 2건 해제·신규 테스트 16건(check-mode 12 + CI 배선 동결 4).\n\n분류 판정(acceptance ①): '일회성 운영자 스크립트라 의도적 미배선'이 아니다 — review_status가 빈 레코드는 l6/_shared.is_review_cleared가 fail-closed로 노출을 전건 차단하므로 백필 누락은 서빙 영향을 갖는 회귀. 다만 CI가 레포 데이터를 재작성하면 안 되므로 변이형이 아니라 드리프트 가드로 배선. 판정 근거를 두 CLI docstring·CI 스텝 주석·감사기 _MANIFEST 주석 세 곳에 명시.\n\n변별력 실증(acceptance ④, 오케스트레이터 독립 재실행): 실코퍼스 rephrased_v0 1건의 review_status·persona_fit 동시 제거 → 양 CLI --check EXIT=1(코퍼스 경로·잔여 건수·적용될 판정을 stderr에 명시), 원복 후 EXIT=0. 뮤테이션 상태로 2회 실행 후에도 git status -- data/ docs/data/ 빈 출력(--check 비기록 실증). CI 스텝 --check→--dry-run 뮤테이션 → tests/infra 1 failed·EXIT=1, 원복 후 4 passed. _check_exit_code 항상 0 반환 뮤테이션 → tests/backend/harness 3 failed·EXIT=1.\n\n측정(acceptance ⑤): declared_unwired_audit → [harness_clis] 공급 53 · 도달 11→13(+2) · 위반 0 · exit 0. 착수 시 acceptance에 '53→55'로 적었던 것은 축 표기 53/11을 공급/도달로 잘못 읽은 것 — 실측으로 정정해 acceptance 본문에 경위 병기.\n\n반-스코프(acceptance ⑥): 판정 로직·임계값(_MIN_N 200·_MAX_DEFECT_UPPER 0.02·_CONFIDENCE 0.95)·KNOWN_CORPORA·AUDIT_LABEL_MAP diff 0건 · 신규 CI 잡 0 · 신규 코퍼스 판정 0건.\n\n전체 검증: ruff/black(569파일)/mypy --strict(482파일)/lint-imports 전부 exit 0. 전체 스위트 tests/backend+tests/infra 9570 passed·302 skipped·0 failed(순서 무작위화 유지·605초·EXIT=0).\n\n정직한 잔여: ①GitHub Actions 러너에서의 실제 실행은 미측정 — 로컬에서 잡 기본 wd(src/backend)로 돌리면 FileNotFoundError, 루트에서 돌리면 성공까지만 동형 재현했고 러너의 working-directory 해석은 CI가 최종 판정 ②--check 비기록 동결은 Path.write_text/Path.mkdir 두 표면만 검사(open(...,'w')·os.replace 등 다른 쓰기 표면이 추가되면 못 잡음) ③백필 변이형을 누가 언제 돌리는지에 대한 런북 미작성 — CI는 빨개질 뿐 자동 복구하지 않는다(설계 의도) ④docs/ 문서에 --check 존재 미반영(태스크 paths 범위 밖)\n\n프로세스 사고 1건: 오케스트레이터가 뮤테이션 원복에 git checkout --를 써서 미커밋 구현분(review_status 백필 +65)을 통째로 날렸다가 서브에이전트 재적용으로 복구. 신규 테스트 16건이 동작을 고정하고 있어 복구 충실도는 테스트가 판정."
 paths:
   - ".github/workflows/ci.yml"
   - src/backend/whymath_backend/harness/problem_corpus_review_status_backfill.py
   - src/backend/whymath_backend/harness/problem_corpus_persona_fit_backfill.py
 session: null
 notes: "PB-03(done)이 만든 harness.problem_corpus_review_status_backfill과 S3-10/PB-01(done)이 만든 harness.problem_corpus_persona_fit_backfill 둘 다 직접 실행·프로덕션 import·CI 배선 어디에도 도달하지 않음 — OPS-22 declared_unwired_audit 실측(2026-08-09)으로 신규 발견. 둘 다 결정론(LLM 0)·코퍼스 JSONL 제자리 갱신이라 같은 부류. 배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요."
-updated: 2026-08-09
+updated: 2026-08-10
