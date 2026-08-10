@@ -22,30 +22,29 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._concept_orchestration import (
+    STUDENT_ESCALATION_DEFAULTS as _STUDENT_ESCALATION_DEFAULTS,
+)
+from whymath_backend.api._concept_orchestration import (
+    generate_routing_request,
+    load_concept_with_overlays,
+    mastery_level_for_diagnosis,
+)
 from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
-from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
-from whymath_backend.l1.concept_visual_style import get_recommended_visual_styles
-from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l1.skill_graph.resolve import get_behavior_areas
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
 )
-from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
-from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import LearningScene, SceneLearnerContext
-from whymath_backend.l4.lthc import mastery_to_level
 from whymath_backend.l4.misconception.evidence_store import net_support_by_misconception
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.scene_generation import generate_learning_scene
-
-# 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
-_STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
 
 async def scene_for_concept_diagnosis(
@@ -90,22 +89,16 @@ async def scene_for_concept_diagnosis(
     Returns:
         검증된 `LearningScene`, Concept 미존재면 None.
     """
-    concept_orm = await session.get(Concept, diagnosis.concept_id)
-    if concept_orm is None:
+    # 공유 오케스트레이션 헬퍼(PED-16④, `api/_concept_orchestration.py`) — Concept 로드 + 권장
+    # 시각화 양식(슬88)·시각화 가능성(Part 5) Overlay 조회를 `visualization.py`와 함께 쓴다.
+    ctx = await load_concept_with_overlays(session, diagnosis.concept_id)
+    if ctx.concept_orm is None:
         return None
-    # 시각화 가능성 4분류(Part 5)를 시각화 계층 Overlay에서 조회(노드 비내장·ADR 계층분리).
-    visualizability = await get_visualizability(session, concept_orm.code)
-    # 권장 시각화 양식(슬88)도 노드 비내장 — 전용 Overlay(`concept_visual_style`)에서 조회해 스키마
-    # 필드에 주입한다(ARCH-14 ③·행 부재→[]·기존 동작). L4 결정론 골격이 이 필드를 읽는다.
-    styles = await get_recommended_visual_styles(session, concept_orm.code)
     # 행동영역(BehaviorArea)을 concept→skill 조인으로 해소(S5k·미매핑=중립). 진입 순서·focus에 반영.
-    # concept_node.behavior_skills → skill_node.behavior_area(L1 `get_behavior_areas`).
-    behavior_areas = await get_behavior_areas(session, concept_orm.code)
-    mastery = (
-        diagnosis.bkt_mastery if diagnosis.bkt_mastery is not None else diagnosis.irt_mastery_proxy
-    )
-    level = mastery_to_level(mastery) if mastery is not None else "초보"
-    # WH-1 활성 가설 → 적응형 오개념 프로브(student_id 있을 때만 조회·근거 있는 가설만).
+    # concept_node.behavior_skills → skill_node.behavior_area(L1 `get_behavior_areas`) — scene 전용.
+    behavior_areas = await get_behavior_areas(session, ctx.concept_orm.code)
+    mastery, level = mastery_level_for_diagnosis(diagnosis)
+    # WH-1 활성 가설 → 적응형 오개념 프로브(student_id 있을 때만 조회·근거 있는 가설만·scene 전용).
     # 신뢰도 맵도 함께 넘겨 개입 패턴을 가설별로 다양화한다(scene_generation 결정트리).
     # 렌더 시점 *증거 재확인*: evidence_links 순지지도가 음수(반박 우세)인 가설은 프로브를
     # 억제한다(RS2 거짓 낙인 차단·curate net_support<0 archived 규약 동형·턴 후 신규 증거 반영).
@@ -125,24 +118,18 @@ async def scene_for_concept_diagnosis(
         active_hypothesis_ids=active_hypothesis_ids,
         active_hypothesis_confidences=active_hypothesis_confidences,
     )
-    req = RoutingRequest(
-        task_type="generate",
-        difficulty="medium",
-        requires_reasoning=True,
-        student_subscription=student_subscription,
-        budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
-        # sync 강제: 생성기의 parse 게이트가 텍스트를 *즉시* 필요로 함(visualization.py 선례).
-        sync=True,
-    )
+    req = generate_routing_request(student_subscription)
     return await generate_learning_scene(
-        concept_orm.to_schema().model_copy(update={"recommended_visual_styles": styles}),
+        ctx.concept_orm.to_schema().model_copy(
+            update={"recommended_visual_styles": ctx.recommended_visual_styles}
+        ),
         level,
         req,
         provider=provider,
         cache=cache,
         trace=trace,
         learner_context=learner_context,
-        visualizability=visualizability,
+        visualizability=ctx.visualizability,
         behavior_areas=behavior_areas,
     )
 

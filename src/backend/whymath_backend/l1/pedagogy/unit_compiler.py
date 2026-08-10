@@ -18,6 +18,40 @@ freeze discipline (v0.1 최소)
 
 7계층: L1 데이터 기반의 소단원 명세 컴파일. 팩 로더(`_as_collection`)·sync 엔진 빌더를 재사용한다
 (신규 seam 최소). `db`·`config`는 계층 밖 인프라라 import 가능(pack_loader 선례).
+
+────────────────────────────────────────────────────────────────────────────
+PED-16(2026-08-10) 판정 — unit_spec: 유지 + 컴파일 산출물↔DB 정합 감사 신설(제거 배제)
+────────────────────────────────────────────────────────────────────────────
+`unit_spec` 테이블 자체는 애플리케이션 코드에서 **한 번도 SELECT되지 않는다**(전수 grep 확인 —
+`UnitSpec` 참조는 이 파일의 insert 구문·CLI(`compile.py`)·테스트뿐). `harness/objective_coverage.py`
+는 이 테이블을 우회해 `.unit.yaml`을 직접 glob한다(그 모듈 자신이 "hermetic·DB 0"으로 명시하는
+의도적 설계 — 커버리지 관측이 이 태스크 판정을 바꾸지 않는다).
+
+**다만 pedagogy_pack(PED-16②)과 겉보기엔 같은 "reader 0" 패턴이지만 구조가 다르다**: `learning_
+objective`가 복합 FK `(unit_id, unit_version)`로 `unit_spec`을 참조하고(ON DELETE CASCADE), 그
+`learning_objective` 자체는 **live 테이블**이다 — `api/study.py`(`session.get(LearningObjective,
+...)`)와 `l4/pedagogy/k_type_resolver.py`(`select(LearningObjective.k_type)...`)가 실제로 읽는다.
+즉 `unit_spec`은 "아무도 안 읽는 고아 테이블"이 아니라 "그 자체는 안 읽히지만 live 테이블의 FK
+부모"다 — 제거하려면 `learning_objective`의 FK·스키마·시더(`UnitSpecStore.seed`, 한 트랜잭션에서
+unit_spec을 먼저 upsert해야 하는 순서 전제)까지 재설계해야 하는 훨씬 큰 리팩터가 된다.
+
+**판정: 제거하지 않고 유지 + 정합 감사 신설**. blast radius 실측(읽은 파일):
+  - `tests/backend/l1/test_unit_compiler.py::TestSeedSql`(2건)이 `UnitSpecStore.seed`가 만드는
+    unit_spec/learning_objective 두 INSERT의 ON CONFLICT SQL을 직접 검증 — unit_spec 쪽만 걷어
+    내려 해도 이 클래스의 절반이 무의미해진다(seed()가 두 테이블을 한 트랜잭션으로 묶어 쓰므로
+    분리 자체가 리팩터).
+  - `tests/backend/api/test_e2e_pedagogy_pilot_integration.py`가 `unit_spec.status`를 DRAFT→
+    ACTIVE로 직접 갱신·재조회하는 릴리스 게이트 관통(step⑥)을 증명 대상으로 삼는다 — 테이블을
+    없애면 이 파일럿 E2E 자체의 acceptance("5단계 전 구간 1회 관통")가 바뀐다.
+  - `l1/pedagogy/compile.py` CLI는 `UnitSpecStore().seed(compiled)`로 `learning_objective`(live)
+    를 채우는 **실 운영 진입점**이다 — unit_spec을 없애려면 이 CLI의 쓰기 순서 전제 자체를
+    다시 설계해야 한다.
+  이중 정본 위험(컴파일러 출력과 ORM 스키마가 조용히 갈라짐)은 제거 대신 **감시**로 상쇄한다 —
+  `tests/backend/l1/test_unit_spec_yaml_db_parity.py`가 `compile_unit()`이 실제로 만드는 행 dict
+  키 집합과 `UnitSpec`/`LearningObjective` ORM 컬럼셋을 상시 대조한다(하드코딩 스냅샷 없음 — 서로
+  대조).
+  재검토 조건: `learning_objective`의 FK 부모 축을 다른 방식(예: unit_id만·버전 없는 소단원 식별)
+  으로 재설계하는 별도 스키마 변경이 착수되는 시점.
 """
 
 from __future__ import annotations
