@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-24-silent-failure-exception-typing
+id: OPS-25-silent-failure-exception-typing
 title: "침묵 실패 봉합 — 학생 대면 wh1 폴백·shadow 관측 5곳·OCR verify가 예외 타입명 없이 흡수 (CLAUDE.md 1급 금기)"
 track: infra-debt
 stage: S3

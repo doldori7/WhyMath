@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: MOB-13-network-hardening-release-signing
+id: MOB-15-network-hardening-release-signing
 title: "모바일 하드닝 — 401 미처리·sendTimeout 부재 + release 빌드 debug 서명키 게이트(스토어 배포 전 필수)"
 track: infra-debt
 stage: S4

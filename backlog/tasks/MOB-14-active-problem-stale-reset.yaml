@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: MOB-12-active-problem-stale-reset
+id: MOB-14-active-problem-stale-reset
 title: "activeProblemProvider 영구 stale 봉합 — 결함신고·코치세션 오귀속, 로그아웃 후 잔존"
 track: infra-debt
 stage: S3
