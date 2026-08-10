@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-20-cli-transition-wiring-and-block-notes
+title: "하네스 CLI 선언≠배선 — review·cancelled 상태 CLI 도달 불가 + block --reason의 notes 덮어쓰기 파괴"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 결정·해소: STATUS_TRANSITIONS(models.py:76-83)가 선언한 review·cancelled 전이에 대응 CLI 동사가 없다(도달 경로 0·실데이터 0건/229). 동사 신설(예: review <id>·cancel <id>) 또는 전이표 축소 중 하나로 선언≠배선을 해소하고 결정 근거를 남긴다. in-flight 취급 코드(backlog.py:105·484·1222, selector.py:160)와 reap의 cancelled 소비(remote_claims.py:763)도 결정에 맞춰 정합화한다."
+  - "② block 데이터 파괴 수정: backlog.py:603의 task.notes = args.reason 덮어쓰기를 중단 — 차단 사유는 별도 필드 또는 notes append로 보존하고 unblock 후에도 원 notes가 남는다. 현행 blocked 4건의 notes가 이미 차단 사유 문장으로 대체된 상태의 마이그레이션 여부도 판정한다."
+  - "③ 변별력 회귀 테스트: 수정 전 red·수정 후 green 양방향(전이 도달성·notes 보존)."
+  - "④ CI 배선 확인: 신설 테스트가 harness-integrity 잡(pytest tests/harness)에서 실제 실행됨을 확인한 뒤 완료로 친다."
+  - "⑤ 범위 밖: declared_unwired_audit(제품 하네스 감사기)에 빌드 하네스 축을 추가하는 일은 포함하지 않는다(통합점검 보고서 §정직한 공백)."
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/models.py
+  - scripts/harness/selector.py
+  - "tests/harness/**"
+session: null
+notes: "발견 경위: 2026-08-10 하네스·헌법·규칙파일 통합점검(docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md §1). 상태 분포 실측 review·cancelled 0건/229 — 전이표가 선언한 상태가 CLI로 도달 불가한 선언≠배선. block은 호출마다 태스크의 발견 경위·설계 근거 notes를 파괴한다(blocked 4건 전건 차단 사유 문장만 남은 흔적). priority=2 근거: notes 파괴는 block 호출 시마다 실데이터 손실이 진행 중."
+updated: 2026-08-10

@@ -68,7 +68,10 @@ jobs:
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
           be=false; dp=false; mo=false; web=false; dk=false; cp=false
-          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
+          # data/{notation,render}_contract.json(py↔js 공유 계약 fixture)은 backend·web
+          # 골든이 함께 읽는다 — fixture-only PR이 두 골든 잡을 모두 skip하던 사각 봉합
+          # (schemas/ 교차영역 방어와 동일 원리 · dsl_integration_gap_review §2-⑦).
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/notation_contract\.json$|data/render_contract\.json$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
@@ -80,7 +83,7 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(src/mobile/|schemas/|\.github/workflows/ci\.yml$)'; then
             mo=true
           fi
-          if printf '%s\n' "$files" | grep -qE '^(src/web/|schemas/|\.github/workflows/ci\.yml$)'; then
+          if printf '%s\n' "$files" | grep -qE '^(src/web/|schemas/|data/notation_contract\.json$|data/render_contract\.json$|\.github/workflows/ci\.yml$)'; then
             web=true
           fi
           # OPS-03: 배포 산출물(이미지·compose) 변경 또는 백엔드 소스 변경 시 이미지 빌드·

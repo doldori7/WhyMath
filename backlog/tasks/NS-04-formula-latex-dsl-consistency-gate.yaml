@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NS-04-formula-latex-dsl-consistency-gate
+title: "formula latex↔dsl 의미 정합 게이트 — quadratic.roots ± 근 소실 결함 봉인 (Phase 5b 소비 전 선결)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① formulas.jsonl 25건 전수의 latex↔dsl 의미 동치 게이트를 test_formula_governance 계열에 추가 — ± 소실·해집합 불일치 검출축 포함, 결함 주입 시 실패·정상 통과 양쪽 실측"
+  - "② formula.quadratic.roots dsl 정정 — latex의 ±(두 근)에 대응하는 ±-중립 동치형(예: (2*a*x + b)**2 == b**2 - 4*a*c) 또는 근 열거형으로 봉인, 게이트 통과 확인"
+  - "③ formula_node_projection.py Phase 5b(dsl 소비) 착수의 선결 조건임을 해당 모듈 docstring에 명시 — 소비 시작 전 봉인 순서 제약 동결"
+artifacts: []
+paths:
+  - "data/corpus/formula_graph_v1/**"
+  - tests/backend/l1/test_formula_governance.py
+  - "src/backend/whymath_backend/l1/formula_graph/**"
+session: null
+notes: "docs/architecture/dsl_integration_gap_review.md §2-⑧ 실측 근거(2026-08-10). latex(표시)↔dsl(검증)은 같은 레코드의 병렬 필드인데 상호 정합 게이트 0 — validate.py는 id 유일성·family 단일성만, test_formula_governance는 dsl 파싱 가능성만. 실결함 1건 확정: quadratic.roots latex는 ± 두 근, dsl은 +근 하나. dsl은 현재 write-only라 학생 피해 0 — 소비 시작 전이 봉인 적기."
+updated: 2026-08-10

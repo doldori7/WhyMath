@@ -48,10 +48,12 @@ python3 scripts/harness/backlog.py add \
   --stage <S0~S5|E1~E6> --layer <worktree 7종> --subject <과목> \
   --priority <1~5> \
   --depends <선행 태스크 id> --gates <G-id> \
-  --acceptance "완료 기준 1" --acceptance "완료 기준 2"
+  --acceptance "완료 기준 1" --acceptance "완료 기준 2" \
+  --path "src/backend/모듈/**" --path "tests/backend/모듈/**"
 ```
 
 - 의존성·게이트·acceptance를 빠뜨리지 않는다 (순차 조율의 입력이다)
+- **`--path`(작업 파일 범위 glob)를 빠뜨리지 않는다** — start 프리플라이트·check-edit 훅의 겹침 사전 감지 입력이다(빌드 하네스 v1.1 관례. 2026-08-10 통합점검 정정: 종전 이 블록에 --path가 빠져 있어 /plan 산출 태스크가 구조적으로 paths 없이 등재됐다)
 - 사람이 해야 하는 작업은 `--owner kiki` (자동 착수 제외)
 - 등록 후 `backlog.py validate` green 확인
 
