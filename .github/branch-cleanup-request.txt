@@ -1,23 +1,6 @@
 # 브랜치 정리 요청 — branch-cleanup.yml이 main 머지 시 이 목록을 삭제한다.
 # 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/* 와 tmp-* 뿐.
+# 목록이 비어 있으면 no-op(다음 배치 준비 상태).
 #
-# 2026-08-10 배치: SessionStart 브리핑 "이미 포팅됨·결정 불요" 분류 16건 중
-# openrouter-setup-guide-e98dw4 제외(S3-28 코퍼스 분기 미회수 — 삭제 금지)
-# + HARN-16 재실측 프로브 1건. 삭제 전 head SHA 스냅샷은 MEMORY 0f9894a4.
-claude/collab-03-learning-metrics-writer
-claude/whymath-05-problem-bank-design-bbyp3d
-claude/whymath-curriculum-design-b7qav0
-claude/whymath-data-platform-design-8ceaf5
-claude/whymath-learning-path-design-gvku5q
-claude/whymath-collaboration-design-ur7l4v
-claude/whymath-visualization-review-zl2v1b
-claude/s3-02-live-remeasurement-tlthrr
-claude/s4-14-skeleton-cat-re24tk
-claude/s3-10-persona-fit-2xk548
-claude/whymath-ai-tutor-design-953m1e
-claude/whymath-assessment-design-jkwdzn
-claude/education-os-architecture-mr0fbq
-claude/whymath-problem-bank-design-65tsm4
-claude/whymath-learning-analytics-9t71oh
-claude/whymath-ai-tutor-design-iu9qk5
-tmp-delete-probe-ignore
+# 직전 배치: 2026-08-10 · 17건 전건 삭제 성공(런 #31346141938 · 잔존 0/17 ls-remote 검증).
+# 삭제 전 head SHA 스냅샷은 MEMORY 결정 로그(0f9894a4) 참조.
