@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on: []
@@ -19,5 +19,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/backend/whymath_backend/l4/**"
 session: null
-notes: "S3-25-shadow-recovery-bucket-c(버킷C⑥)에서 분리 등록. 원본 브랜치 완전 삭제(2026-08-09) — 포팅 아닌 재설계. S3-22(버킷B⑥, 돌아보기 응답검증)·S3-40과 같은 coach.py 영역 — 함께 조정 권장. 원 커밋 66fb2b4/631f6d9/f8585d2는 더 이상 참조 불가."
+notes: "[2026-08-10 중복 등재 철회 — 착수 금지] 이 태스크는 내가 잘못된 전제(원본 브랜치 소실로 회수 불가 → 7건 전부 재설계 필요)로 등록했다. main이 #748(4de03ccb)에서 같은 버킷을 실측 조사해 '7건 중 5건은 이미 다른 태스크가 커버, 잔여는 2건뿐'으로 축소했고 그쪽이 정본이다. 이 항목: 원S3-15 → S3-34-coach-session-hygiene이 커버. 착수하지 말고 해당 태스크를 보라 — 중복 구현 방지."
 updated: 2026-08-10

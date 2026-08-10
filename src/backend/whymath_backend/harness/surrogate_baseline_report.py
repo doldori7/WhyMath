@@ -78,6 +78,7 @@ _METRIC_ROWS: list[tuple[str, str, str | None]] = [
     ("⑨ BKT 숙달 증가율", "mastery_gain_rate", "sample_mastery_groups"),
     ("⑩ 오개념 해소율", "misconception_resolution_rate", "sample_misconception_hypotheses"),
     ("⑪ 스스로 풀이 도달율", "self_solve_rate", "sample_resolved_dialogues"),
+    ("⑯ 결손 복구 리드타임", "gap_recovery_leadtime_days", "sample_gap_recovery_groups"),
     ("⑮ 도움 요청 대 제공 비", "help_demand_supply_ratio", "sample_demand_events"),
 ]
 

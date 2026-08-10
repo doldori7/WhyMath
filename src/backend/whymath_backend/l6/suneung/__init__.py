@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from whymath_backend.l6.suneung.gating import (
     METADATA_ONLY_SOURCES,
+    SUNEUNG_DEFAULT_MIN_FIT,
     SUNEUNG_EXAM_TYPES,
     SUNEUNG_PERSONAS,
     is_suneung_eligible,
@@ -41,6 +42,7 @@ from whymath_backend.l6.suneung.recommendation import (
 
 __all__ = [
     "METADATA_ONLY_SOURCES",
+    "SUNEUNG_DEFAULT_MIN_FIT",
     "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "is_suneung_eligible",

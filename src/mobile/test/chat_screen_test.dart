@@ -103,6 +103,17 @@ Widget _wrap(CoachApi fake) {
   );
 }
 
+/// 활성 문제를 함께 주입해 감싸는 헬퍼(객관식 선택지 버튼 테스트용·S3-12).
+Widget _wrapWithProblem(CoachApi fake, Problem problem) {
+  return ProviderScope(
+    overrides: [
+      coachApiProvider.overrideWithValue(fake),
+      activeProblemProvider.overrideWith((ref) => problem),
+    ],
+    child: const MaterialApp(home: ChatScreen()),
+  );
+}
+
 void main() {
   testWidgets('슬로건과 빈 안내가 보인다', (tester) async {
     await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
@@ -491,5 +502,180 @@ void main() {
     expect(reportApi.callCount, 1);
     expect(reportApi.lastProblemId, 'p-new');
     expect(reportApi.lastProblemId, isNot('p-old'));
+  });
+
+  // ── S3-12→S3-17 객관식 선택지 세로 번호 목록 ─────────────────────────────
+  // 학생은 값을 고르는 게 아니라 *번호*를 고른다: 보기를 "N. [값]" 세로 목록으로 렌더하고
+  // (번호는 문항 배너의 1-기반 "N." 표기와 일치), 번호 행을 탭하면 클라가 그 항목의 *값*
+  // (choices[i])을 기존 send(student_input) 경로로 제출한다(번호 타이핑 모호성 0·서버 계약 무변경).
+  testWidgets('객관식 문항이면 선택지를 세로 번호 목록으로 렌더한다("N." 번호 + 값)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '이차방정식 x^2-5x+6=0의 서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 선택지 4개가 각각 탭 가능한 세로 행(OutlinedButton)으로 렌더된다.
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+    // 각 행 앞에 1-기반 번호 "N."(배너 표기와 일치). 배너는 "N. 값"을 한 Text로 합쳐 렌더하므로
+    // "1."(마침표까지)만의 정확 일치는 목록 행 번호에서만 잡힌다.
+    expect(find.text('1.'), findsOneWidget);
+    expect(find.text('4.'), findsOneWidget);
+    // 값은 번호 뒤에 별도 Text로 렌더된다(길면 줄바꿈).
+    expect(find.widgetWithText(OutlinedButton, '0'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '2'), findsOneWidget);
+    // 은근한 안내(정오·정답률 강조 없음)·번호 선택임을 명시.
+    expect(find.text('보기 번호를 골라 보세요'), findsOneWidget);
+  });
+
+  testWidgets('choices만 있고 question_format이 없어도 세로 번호 목록을 렌더한다',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc2',
+          sourceType: '자체생성',
+          subject: '공통',
+          // question_format 미지정 — choices 보유만으로 MC로 취급.
+          questionText: '다음 중 옳은 것은?',
+          choices: ['ㄱ', 'ㄴ', 'ㄷ'],
+        ),
+      ),
+    );
+    expect(find.byType(OutlinedButton), findsNWidgets(3));
+    expect(find.text('3.'), findsOneWidget); // 1-기반 번호가 붙는다.
+  });
+
+  testWidgets('번호 행 탭 → 그 항목의 값(choices[i])이 send(student_input) 경로로 나간다',
+      (tester) async {
+    final fake = _FakeCoachApi(response: _response());
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        fake,
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 3번 보기(번호 "3.")를 탭한다 — 그 항목의 값은 choices[2] = "2"다(번호≠값). 탭은 번호로
+    // 하고 제출은 값으로 나가는 매핑을 봉인한다(번호 타이핑 모호성 우회의 핵심).
+    // 세로 목록은 상한+내부 스크롤이라 좁은 창에선 뒤 행이 뷰포트 밖일 수 있어 먼저 노출시킨다.
+    final target = find.widgetWithText(OutlinedButton, '3.');
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+
+    // 타이핑과 동일한 경로 — student_input에 *번호가 아닌 값* "2"가 실려 나간다(풀이 단계 아님).
+    expect(fake.lastRequest?.studentInput, '2');
+    expect(fake.lastRequest?.solutionSteps, isNull);
+    // 학생 버블로 선택 값이 보이고 코치 응답이 이어진다.
+    expect(find.text('먼저 무엇이 주어졌는지 정리해 볼까요?'), findsOneWidget);
+  });
+
+  testWidgets('선택지 값이 길어도 세로 목록이 줄바꿈으로 렌더되고 오버플로가 없다(MOB-02)',
+      (tester) async {
+    // 폰급 창 + 키보드(IME 300px)로 body 가용 높이를 좁혀 최악 케이스를 만든다 —
+    // 값이 길어도 목록은 상한+내부 스크롤로 가둬져 RenderFlex 오버플로가 나지 않는다.
+    tester.view.physicalSize = const Size(411, 756);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.reset);
+
+    const longValue = '이차함수의 그래프가 x축과 서로 다른 두 점에서 만나고 '
+        '그 두 점의 x좌표의 합이 4, 곱이 3이 되도록 하는 실수 k의 값';
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc-long',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '다음 중 옳은 것은?',
+          choices: ['짧은 보기', longValue, '또 다른 보기', '마지막 보기'],
+        ),
+      ),
+    );
+
+    // 첫 레이아웃부터 오버플로 예외가 없어야 한다.
+    expect(tester.takeException(), isNull);
+    // 긴 값도 하나의 행(OutlinedButton) 안에 값 Text로 렌더된다(멀티라인 수용).
+    expect(find.widgetWithText(OutlinedButton, longValue), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+  });
+
+  testWidgets('주관식 문항이면 선택지 목록을 렌더하지 않는다(주관식 흐름 영향 0)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-sub',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '단답형',
+          questionText: '이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.',
+          // choices 없음(단답형) → MC 아님.
+        ),
+      ),
+    );
+
+    // 선택지 목록·안내가 없고, 기존 대화 입력(단일 필드+전송)은 그대로다.
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.text('보기 번호를 골라 보세요'), findsNothing);
+    expect(find.byIcon(Icons.send), findsOneWidget);
+  });
+
+  testWidgets('활성 문제가 없으면(자유 대화) 선택지 목록을 렌더하지 않는다', (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('풀이 단계 모드로 전환하면 선택지 목록을 감춘다(풀이 편집기와 겹치지 않음·MOB-02 불변식)',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProblem(
+        _FakeCoachApi(response: _response()),
+        const Problem(
+          problemId: 'p-mc',
+          sourceType: '자체생성',
+          subject: '공통',
+          questionFormat: '객관식',
+          questionText: '서로 다른 실근의 개수는?',
+          choices: ['0', '1', '2', '3'],
+        ),
+      ),
+    );
+
+    // 대화 모드(기본) — 선택지 목록이 주 어포던스로 보인다.
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
+
+    // 풀이 단계 모드로 토글 → 단계 편집기가 답 구성 어포던스를 넘겨받고 선택지 목록은 감춰진다.
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.text('보기 번호를 골라 보세요'), findsNothing);
+
+    // 대화로 돌아오면 다시 선택지 목록이 나타난다.
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.pump();
+    expect(find.byType(OutlinedButton), findsNWidgets(4));
   });
 }

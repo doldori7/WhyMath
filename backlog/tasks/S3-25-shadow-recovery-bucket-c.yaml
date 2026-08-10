@@ -1,27 +1,62 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S3-25-shadow-recovery-bucket-c
-title: "미병합 브랜치 회수 Stage 2 — 버킷 C(ID 충돌 7건, main이 같은 번호를 다른 작업에 재사용)"
+title: "미병합 브랜치 회수 Stage 2 — 버킷 C 잔여 2건(② S3-10 클라 · ⑦ S3-16 targeted 힌트)"
 track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: done
+status: todo
 priority: 2
 owner: claude
-depends_on: []
+depends_on:
+  - S3-32-learning-loop-closure-recovery
+  - S3-34-coach-session-hygiene
 requires_gates: []
 acceptance:
-  - "아래 7개 항목을 각각 main에서 비어 있는 새 번호(S3-26~32 제안 — 착수 시점 재확인 필수, main이 계속 전진 중)로 재등재 후 회수"
-  - "S3-10 소속 alembic 마이그레이션(dialogue_review_turns_remaining, 리비전 d5e6f0a1b2c3 — main과 동일값 충돌) 재채번 필요: sliding-window hex 스킴으로 main 현재 head 위에 새 리비전 작성(무작위 hex 금지·versions/ 전수 grep 무충돌 확인 — MEMORY 2026-07-03 결정 로그 참조)"
-  - "S3-24(버킷 B)와 동일하게 모바일 hot file(chat_screen.dart 등) 수동 재적용 — 특히 S3-09/10/11/12/14가 이 파일들을 건드림"
-  - "S3-22(버킷 B)와 함께 api/coach.py 재조정 — S3-10/11/15/16이 같은 파일을 건드림. 한 세션에서 버킷 B·C의 coach.py 관련 항목을 함께 처리하는 편이 안전(파편화된 반복 재조정 방지)"
-artifacts:
-  - "7개 항목 개별 태스크로 신규 등록(S3-42~48, 원본 번호 S3-09~16 재사용 대신 CLI 신규 채번). Kiki '재구현' 결정에 따라 전건 '현재 main 기준 재설계' acceptance로 처음부터 작성. alembic 마이그레이션(S3-43)도 원본 리비전 내용 없이 새로 설계하도록 명시."
+  - "② 원S3-10 **클라만** 회수 — `ead23ef3abc47758dfb1e12f00c9e84ef08ba0f0`(+318/-893). ✓ 버튼·answer sheet·result card 제거, `problem_complete`/`awaiting_reflection`/`completed_attempt_id` 3신호 소비로 전환, 직접 attempt 제출 경로(attempts_api·attempts_models·attempt_controller + 테스트 3종) 폐기, `completion_flow_test.dart` 신설. **서버(`2f6433b`)는 회수 대상 아님 — S3-32가 동일 구현**(아래 §중복 실측). S3-32가 main에 착지한 뒤 그 응답 필드명을 실측 확인하고 클라를 맞춘다(섀도 필드명을 그대로 신뢰하지 말 것)"
+  - "⑦ 원S3-16 회수 — `879ad99a4b3c2094456e157a478c85556e49b7d8`(+1350/-2). harness/wh1_targeted_hint.py(생성+게이트)·harness/targeted_hint_leak_eval.py(결함주입 Wilson 게이트)·coach.py `_resolve_completion` REDIRECT 분기·config `wh1_targeted_hint_enabled`(기본 False canary). **S3-34 선행 필수** — 실패/타임아웃/GT부재 시 S3-15 `_REDIRECT_PROMPT`로 폴백하는 구조라 그 폴백 대상이 main에 없으면 성립하지 않는다"
+  - "⑦의 변별력 게이트를 그대로 살릴 것 — 원본이 게이트 ON exit 0(72결함 노출 0·Wilson 상한 0.036≤0.05) / 우회 exit 1(72/72 노출)로 변별력을 실증했다. 게이트 없이 힌트만 이식하면 정답 누출 위험(측정 없는 도입 금지)"
+  - "회수 경로는 GitHub API 고정 — 원본 브랜치 `shadow-data-s3-pilot-nh5kbz`는 2026-08-10 삭제 배치(#746/#747)로 원격에서 사라졌다. `git fetch`·`cherry-pick` 불가, `commits/<sha>`·`contents?ref=<sha>`로만 접근(MEMORY.md 2026-08-09 'S3-35' 결정 로그 선례)"
+  - "모바일 검증은 CI 절차 그대로 — flutter 3.41.9 태그 fetch → `pub get --enforce-lockfile` → `dart run build_runner build` → analyze → test. SDK 전환 시 `flutter clean` 필수(함정 4종은 S3-24 notes 참조)"
+artifacts: []
 paths:
   - "src/mobile/lib/**"
-  - src/backend/whymath_backend/api/coach.py
-  - "src/backend/whymath_backend/l4/**"
-  - "src/backend/alembic/versions/**"
-session: null
-notes: "[2026-08-09 재조사] S3-24(버킷B)와 동일한 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz 참조 — 해당 브랜치가 origin에서 완전히 삭제됨을 실측 확인(git ls-remote --heads origin 전체 43건에 부재, 원 커밋 해시 fetch도 전부 실패). '원본 diff 참고 후 새 번호로 재등재·회수'라는 acceptance 전제가 불가능해짐 — Kiki 판단 요청. [2026-08-09 Kiki 결정 — '재구현'] 7개 항목을 개별 태스크로 분리 등록(S3-42~48, '재설계·재구현' acceptance로 처음부터 작성 — 원본 포팅 acceptance 아님). alembic 마이그레이션(원 S3-10, →S3-43)도 원본 리비전 d5e6f0a1b2c3 내용 없이 sliding-window hex로 처음부터 새로 설계하도록 명시. 이 버킷 태스크(S3-25) 자체는 개별 태스크 7건으로 최종 등재됐으므로 done 처리 — 실제 기능 전달은 S3-42~48이 담당."
+  - "src/mobile/test/**"
+  - "src/backend/whymath_backend/api/coach.py"
+  - "src/backend/whymath_backend/harness/**"
+notes: |
+  [출처] 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f 분기 · 2026-07-30 발견 ·
+  2026-08-10 원격 삭제됨). 회수는 GitHub API SHA 접근만 가능.
+
+  [2026-08-10 범위 축소 — 7건 → 2건] 착수 전 실측으로 7건 중 5건이 **이미 다른 태스크가
+  커버**함을 확인해 축소했다. main이 같은 기능을 *다른* 섀도 브랜치(tlthrr)에서 재작성하는
+  쪽으로 이미 진행했기 때문이며, 그대로 두면 중복 구현이 된다.
+    · ① 원S3-09(학습 루프 닫힘 G1/G2) → **S3-32**가 커버
+    · ② 원S3-10 **서버분**(2f6433b) → **S3-32**가 커버. 커밋 메시지 실측 대조: l4/completion.py
+      상태머신(NONE/ENTER_REVIEW/CONTINUE_REVIEW/COMPLETE) · 정답 도달 시 Polya 돌아보기 1턴 후
+      완료 · ProblemAttempt 적재 · 응답 3필드 — S3-32 notes의 "서버측 검증 게이팅 → Polya REVIEW
+      경유 → ProblemAttempt 적재 → completion 신호 노출"과 동일 설계다. alembic d5e6f0a1b2c3
+      (dialogue.review_turns_remaining)도 S3-32가 현재 main 기준으로 새로 잡는다(원 리비전
+      재채번 문제 소멸 — 구 acceptance의 sliding-window hex 항목을 제거한 이유).
+    · ③ 원S3-11(대화 입력 최종답 감지) → **S3-33**(notes에 "원 S3-28" 명시)
+    · ④ 원S3-12(객관식 선택지 버튼) → **S3-33**(원 S3-29) + **S3-35**(done, 세로 번호 목록)
+    · ⑤ 원S3-14(문제별 dialogue 리셋) → **S3-34**(원 S3-30)
+    · ⑥ 원S3-15(오답 최종답 피드백) → **S3-34**(원 S3-31)
+  잔여는 ②의 **클라 절반**과 ⑦뿐이며, 둘 다 위 태스크들의 하류라 depends_on으로 고정했다
+  (S3-32 → ② 클라가 소비할 서버 신호 · S3-34 → ⑦이 폴백할 S3-15 `_REDIRECT_PROMPT`).
+
+  [보존 SHA — 브랜치 삭제 후 유일한 회수 좌표]
+    · ② 원S3-10: 서버 2f6433bad2fb5bdd2bd31850beb9e0e20fc08449(회수 안 함·S3-32 소관) ·
+      **클라 ead23ef3abc47758dfb1e12f00c9e84ef08ba0f0**(회수 대상) ·
+      기록 557485f992481a3a9fc744b09eb07ab5a8ca7a83
+    · ⑦ 원S3-16: 등재 a495222eac157eec088856be62076fd8bb9a9973 ·
+      **구현 879ad99a4b3c2094456e157a478c85556e49b7d8**(회수 대상) ·
+      기록 3ab4e20d60f9ae2a684d78bf1631bb2bf4779347
+
+  [구 acceptance에서 삭제한 항목과 사유]
+    · "7개 항목을 S3-26~32로 재등재" — 제안 번호가 전부 선점됐고(S3-26·27·28·32·33·34·35 점유,
+      빈 번호는 S3-29·30·31), 애초에 5건은 재등재 자체가 불필요해졌다.
+    · "alembic d5e6f0a1b2c3 재채번" — S3-32 소관으로 이관(위 참조).
+    · "S3-22와 함께 coach.py 재조정" — 잔여 2건 중 coach.py를 건드리는 건 ⑦뿐이고 그마저
+      S3-34 착지 후라 파편화 우려가 해소됐다.
 updated: 2026-08-10

@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: S3-35-mc-numbered-choice-list
+id: S3-49-problem-screen-choice-display-freeze
 title: "객관식 세로 번호목록 UI(모바일) — S3-24 버킷B①"
 track: math-completion
 stage: S3

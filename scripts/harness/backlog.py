@@ -10,6 +10,9 @@
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
     python3 scripts/harness/backlog.py gates [list]
+    python3 scripts/harness/backlog.py gates add <G-id> --title <제목>
+                                                 [--kind human|external|decision]
+                                                 [--assignee <담당자>] [--remind-after-days N]
     python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
@@ -37,7 +40,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import OWNERS, STATUS_TRANSITIONS, Task
+from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Gate, Task
 from seed_data import build_seed
 
 
@@ -653,6 +656,9 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
                 print(f"  {gate.id} ({gate.status}) {gate.title}")
         return 0
 
+    if args.gate_action == "add":
+        return _cmd_gates_add(root, args, backlog)
+
     gate = backlog.gates.get(args.gate_id)
     if gate is None:
         return _fail(f"게이트 '{args.gate_id}' 없음")
@@ -673,6 +679,65 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         reason=args.reason,
     )
     print(f"✔ {gate.id} → {gate.status}")
+    return 0
+
+
+def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:
+    """게이트 대장(gates.yaml)에 새 게이트를 CLI로 등재한다 (HARN-18).
+
+    "대장은 CLI로만 조작한다"(손편집 금지) 규약의 구멍을 메운다 — 기존에는 gates에
+    add 경로가 없어 새 게이트 등재가 손편집뿐이었다(HARN-06과 동형 설계 공백).
+
+    task `add`(cmd_add)와 동일한 검사 골격을 답습한다:
+      ① id 필수·형식 ② title 필수 ③ id 중복 거부 ④ 스키마 무결성(Gate.validate)
+      ⑤ events.ndjson 감사 로그 append(누가·언제·무엇을 만들었나).
+    거부는 전부 명확한 종료코드(1)+메시지 — 침묵 실패 금지.
+    """
+    gate_id = args.gate_id
+    # ② 필수 필드 검증 — 누락 시 명확한 거부 (argparse required로 걸면 list/clear/waive가
+    #    같이 --title을 요구하게 되므로, add 액션 안에서 수동 검증한다)
+    if not gate_id:
+        return _fail("gates add <G-id> — 게이트 ID 필수")
+    if not args.title:
+        return _fail(f"{gate_id}: gates add 에는 --title <제목> 필수 (필수 필드 누락)")
+    # ③ id 중복 거부 — 게이트는 원격 claim 대상이 아니다(원격 claim 대장은 task_id 전용이라
+    #    G-* 게이트 id는 애초에 그 대장에 실리지 않는다). 따라서 gates.yaml 내 중복만 본다.
+    if gate_id in backlog.gates:
+        return _fail(f"게이트 ID 중복: {gate_id} (이미 gates.yaml에 존재)")
+
+    gate = Gate(
+        id=gate_id,
+        title=args.title,
+        kind=args.kind,
+        assignee=args.assignee,
+        status="pending",
+        requested=_today(),
+        remind_after_days=args.remind_after_days,
+    )
+    backlog.gates[gate.id] = gate
+    # ④ 스키마/무결성 검증 — 새 게이트가 유발한 오류만 걸러 거부(기존 대장의 무관한
+    #    경고에 볼모 잡히지 않게 — cmd_add의 own_errors 패턴 답습). id 형식 위반(예:
+    #    소문자 kebab·G- 접두 아님)은 여기서 잡힌다.
+    errors = store.validate_backlog(backlog)
+    own_errors = [e for e in errors if gate_id in e]
+    if own_errors:
+        for e in own_errors:
+            print(f"  · {e}", file=sys.stderr)
+        return _fail(f"{gate_id}: 스키마/무결성 위반으로 게이트 추가 거부")
+
+    store.save_gates(root, sorted(backlog.gates.values(), key=lambda g: g.id))
+    # ⑤ 감사 로그 — gate clear/waive·task add의 이벤트 append 패턴 답습
+    store.append_event(
+        root,
+        "gate_add",
+        gate.id,
+        kind=gate.kind,
+        assignee=gate.assignee,
+        title=gate.title,
+    )
+    print(
+        f"＋ 게이트 {gate.id} 추가 " f"(kind={gate.kind}, assignee={gate.assignee}, status=pending)"
+    )
     return 0
 
 
@@ -930,9 +995,15 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
 
     def _git(*argv: str) -> str:
         result = subprocess.run(
-            ["git", *argv], cwd=root, capture_output=True, text=True, timeout=15
+            ["git", *argv],
+            cwd=root,
+            capture_output=True,
+            # HARN-19: 로케일(cp949) 디코드 금지 — git 출력은 UTF-8이 정본이다.
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
         )
-        return result.stdout.strip()
+        return (result.stdout or "").strip()
 
     try:
         base = _git("merge-base", "origin/main", "HEAD") or _git("merge-base", "main", "HEAD")
@@ -1315,10 +1386,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_unblock)
 
     p = sub.add_parser("gates", help="사람 게이트 대장")
-    p.add_argument("gate_action", nargs="?", choices=["list", "clear", "waive"])
+    p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive"])
     p.add_argument("gate_id", nargs="?")
     p.add_argument("--evidence")
     p.add_argument("--reason")
+    # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
+    p.add_argument("--title", help="gates add: 게이트 제목 (필수)")
+    p.add_argument(
+        "--kind",
+        choices=list(GATE_KINDS),
+        default="human",
+        help="gates add: 게이트 종류 (기본 human)",
+    )
+    p.add_argument("--assignee", default="kiki", help="gates add: 담당자 (기본 kiki)")
+    p.add_argument(
+        "--remind-after-days",
+        type=int,
+        dest="remind_after_days",
+        default=None,
+        help="gates add: 경과 시 SessionStart 브리핑 리마인드 일수",
+    )
     p.set_defaults(func=cmd_gates)
 
     p = sub.add_parser("add", help="태스크 추가 (/plan의 산출물)")

@@ -58,6 +58,25 @@ class Graph2dSpec(BaseModel):
 
     명시 필드(함수식·정의역·슬라이더 파라미터)만 타입 검증하고, 미지 필드(예: 'model')는
     extra="allow"로 허용한다(기존 자유 JSON 명세 호환).
+
+    VIZ-03(2026-08-03) — `tangent_point`·`integral_region`·`functions` 3필드 추가: 웹 계산기
+    (`GraphingCalculator.jsx`)가 *이미* 접선(`showTangent`/`tangentX`)·적분 영역
+    (`showIntegral`/`intA`/`intB`)·다중 함수 행(`rows` 배열)을 렌더하지만, 그 능력을 선언할
+    spec 좌석이 없어 코어가 지시할 수 없었다(`visualization_module_gap_review.md` §3 D4).
+    새 렌더러 구현 0 — 기존 렌더러 상태 필드에 좌석만 준다(웹 어댑터 `graph2dSpec.js`가
+    번역). VIZ-03은 D4의 5항목 중 "극값 표시"만 제외했다 — D4 문서(§1 기능62 표, "극대·극소
+    자동 표시" 행)가 이미 정확히 지적하듯 당시 계산기엔 극값 자동 표시 기능 자체가 없어서
+    (근·절편 표시만 있음) "렌더러가 이미 하는 것에 좌석을 준다"는 제약(렌더러 신규 구현
+    금지)을 충족할 수 없었다.
+
+    VIZ-06(2026-08-09) — `show_extrema` 추가로 그 공백을 닫는다: 렌더러 자체에
+    `findExtrema`/`drawExtrema`(`numDeriv` 부호 변화 스캔 — 새 수치 primitive 도입 0)를
+    **먼저** 이식한 뒤 그 결과 상태(`showExtrema`)에 이 필드로 좌석을 준다. VIZ-03의 세
+    필드와 동형으로 주 함수(`function`) 행에만 적용한다.
+
+    ⚠️ 번호 주의: 고립 브랜치는 이 작업을 `VIZ-04`로 등재했으나 main의 `VIZ-04`는
+    `VIZ-04-visual-style-render-seat-contract`(done)라 **ID 충돌**이었다. `VIZ-06`이
+    재배정된 번호다(HARN-10 유형).
     """
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
@@ -74,6 +93,38 @@ class Graph2dSpec(BaseModel):
     )
     parameters: list[Graph2dParam] | None = Field(
         default=None, description="학생 조작 슬라이더 파라미터 목록"
+    )
+    tangent_point: float | None = Field(
+        default=None,
+        description=(
+            "주 함수(`function`)의 접선을 그릴 x좌표(점) — 렌더러의 기존 접선 기능"
+            "(`showTangent`/`tangentX` 행 상태)에 좌석을 준다. well-formed 여부(도메인 내 등)는"
+            "렌더러가 판정(타입만 검증)."
+        ),
+    )
+    integral_region: list[float] | None = Field(
+        default=None,
+        description=(
+            "주 함수(`function`)의 정적분 영역 [a, b](2원소) — 렌더러의 기존 적분 시각화"
+            "(`showIntegral`/`intA`/`intB`)에 좌석을 준다. domain·y_range와 동형(타입만"
+            "검증·2원소·well-formed는 렌더러)."
+        ),
+    )
+    show_extrema: bool | None = Field(
+        default=None,
+        description=(
+            "주 함수(`function`)의 극값(임계점) 마커 표시 여부(VIZ-06) — 렌더러의 극값 스캔 "
+            "기능(`findExtrema`/`drawExtrema` — `numDeriv` 부호 변화 지점)에 좌석을 준다. "
+            "`tangent_point`·`integral_region`과 동형으로 주 함수 행에만 적용."
+        ),
+    )
+    functions: list[str] | None = Field(
+        default=None,
+        description=(
+            "`function`(주 함수)과 비교할 추가 함수식 목록 — 렌더러가 이미 지원하는 다중 함수 행"
+            "(`rows` 배열)에 좌석을 준다. `function`을 대체하지 않고 *추가*한다(주 함수 +"
+            "비교 함수들 — 함수 비교 시각화)."
+        ),
     )
 
 

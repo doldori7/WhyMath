@@ -85,7 +85,27 @@ from whymath_backend.api._l6_mode_reach_state import (
     set_l6_mode_reach_counters,
 )
 from whymath_backend.api._misconception_state import get_semantic_matcher
-from whymath_backend.api._ocr_state import set_ocr_components
+from whymath_backend.api._ocr_state import (
+    OCR_COUNTERS_KEY as _OCR_COUNTERS_KEY,
+)
+from whymath_backend.api._ocr_state import (
+    OcrReachCounters,
+    OcrReachSnapshot,
+    set_ocr_components,
+)
+from whymath_backend.api._ocr_state import (
+    get_ocr_reach_snapshot as _get_ocr_reach_snapshot,
+)
+from whymath_backend.api._segmentation_state import (
+    SEGMENTATION_COUNTERS_KEY as _SEGMENTATION_COUNTERS_KEY,
+)
+from whymath_backend.api._segmentation_state import (
+    SolutionSegmentationCounters,
+    SolutionSegmentationSnapshot,
+)
+from whymath_backend.api._segmentation_state import (
+    get_segmentation_snapshot as _get_segmentation_snapshot,
+)
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
 )
@@ -111,7 +131,7 @@ from whymath_backend.api.study import router as study_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
-from whymath_backend.config import get_settings
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
@@ -393,6 +413,41 @@ class L6ModeReachBody(BaseModel):
     )
 
 
+class OcrReachBody(BaseModel):
+    """/health/ready OCR 도달 관측 요약 (NLP-01) — 요청·성공·사유별 503 인프로세스 카운트.
+
+    `enabled=False`면 나머지 카운트가 전부 0이어도 '측정했더니 0건'이 아니라 '이 인스턴스는
+    OCR을 켜지 않았다(config off)'로 읽는다(None-vs-zero — `MetricsSummaryBody`의 None
+    필드와 같은 취지를 bool 플래그로 표현).
+    """
+
+    enabled: bool = Field(..., description="OCR 활성 의도(부품 로드 성공 또는 적재 시도함)")
+    requests_total: int = Field(..., description="get_ocr_components 디펜던시 도달 총 횟수")
+    succeeded: int = Field(..., description="OCR 파이프라인 정상 완료(200 응답) 횟수")
+    unavailable_disabled: int = Field(..., description="503 — 사유: 비활성(config off)")
+    unavailable_load_failed: int = Field(..., description="503 — 사유: 부품 적재 실패")
+
+
+class SolutionSegmentationBody(BaseModel):
+    """/health/ready 단계 분해 0-전이 제출 관측 요약 (NLP-03 acceptance ③).
+
+    클라이언트가 이미 분해해 보낸 `CoachRequest.solution_steps`의 길이 분포를 관측한다
+    (백엔드가 원문을 직접 분해하는 라이브 경로는 없다 — `api/_segmentation_state.py` 모듈
+    docstring 참조). `total`이 분모, `single_or_zero_step`이 분자다. `total=0`이면 관측
+    대상 요청 자체가 없었다는 뜻이라 별도 enabled 플래그는 두지 않는다(OCR 축과 달리
+    "요청 0건"과 "0-전이 0건"이 total로 자연스럽게 구분됨).
+    """
+
+    total: int = Field(
+        ...,
+        description="solution_steps가 있고(None 아님) 비어있지 않은 요청 총계(분모)",
+    )
+    single_or_zero_step: int = Field(
+        ...,
+        description="그중 len(solution_steps) <= 1인 건수(분자·클라 분해 degenerate 의심 신호)",
+    )
+
+
 class ReadyBody(BaseModel):
     """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
 
@@ -404,6 +459,13 @@ class ReadyBody(BaseModel):
     alerts: list[AlertBody] = Field(
         ...,
         description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축",
+    )
+    ocr: OcrReachBody = Field(
+        ...,
+        description="OCR 도달 관측(NLP-01) — 활성 의도 + 요청/성공/사유별 503 카운트",
+    )
+    solution_segmentation: SolutionSegmentationBody = Field(
+        ..., description="단계 분해 0-전이 제출 관측(NLP-03) — solution_steps 길이 분포"
     )
     growth_evidence: GrowthEvidenceReachBody = Field(
         ...,
@@ -426,6 +488,27 @@ def _component_body(check: ComponentCheck) -> ComponentCheckBody:
         reachable=check.reachable,
         required=check.required,
         error=check.error,
+    )
+
+
+def _ocr_reach_body(snapshot: OcrReachSnapshot) -> OcrReachBody:
+    """OcrReachSnapshot(도메인, `api._ocr_state`) → OcrReachBody(HTTP 스키마) 변환."""
+    return OcrReachBody(
+        enabled=snapshot.enabled,
+        requests_total=snapshot.requests_total,
+        succeeded=snapshot.succeeded,
+        unavailable_disabled=snapshot.unavailable_disabled,
+        unavailable_load_failed=snapshot.unavailable_load_failed,
+    )
+
+
+def _segmentation_body(
+    snapshot: SolutionSegmentationSnapshot,
+) -> SolutionSegmentationBody:
+    """SolutionSegmentationSnapshot(도메인, `api._segmentation_state`) → HTTP 스키마 변환."""
+    return SolutionSegmentationBody(
+        total=snapshot.total,
+        single_or_zero_step=snapshot.single_or_zero_step,
     )
 
 
@@ -488,6 +571,50 @@ def _get_skip_cache_on_signal(request: Request) -> bool:
     return skip
 
 
+def _activate_ocr(_app: FastAPI, settings: Settings) -> None:
+    """L5 OCR 부품 구성 시도 + 비활성/실패 사유를 app.state에 기록 (NLP-01).
+
+    lifespan 본문에서 분리한 이유: 이 함수는 순수하게 `settings.ocr_enabled` 분기·
+    `build_ocr_components` 호출·실패 로깅·`set_ocr_components` 호출만 하고 I/O 의존
+    (DB 스키마 검증·store ping 등 lifespan의 다른 단계)이 없어, DB·Redis 없이도 가짜
+    `FastAPI()` 인스턴스로 단위테스트할 수 있다(사유 분리·로그 타입명 회귀 동결).
+
+    `ocr_enabled`면 부품(검출기·라우터·인식기)을 1회 구성해 app.state에 올린다(모델 1회
+    로드·매 요청 재구성 회피·세만틱 매처 웜업 미러). 부품 생성은 *지연 import*라 모델
+    다운로드·네트워크가 일어나지 않는다(첫 인식 시 적재). 실패해도 *학생 경로 게이트가
+    아니라* OCR 기능만 비활성(/v1/ocr → 503)이라 fail-fast시키지 않고 경고만 남긴다
+    (부팅 보호·CLAUDE.md 가용성 우선 #1≫#6). off(기본)면 `unavailable_reason="disabled"`로
+    비활성 표시(getter가 503) — 켰다가 적재에 실패하면 `"load_failed"`로 구분한다(§3 D1
+    "config off"와 "부품 적재 실패"의 무변별 해소).
+    """
+    if not settings.ocr_enabled:
+        set_ocr_components(_app, None, unavailable_reason="disabled")
+        return
+    try:
+        # qwen_vl 인식기는 L3 라우터 경유라 provider/cache/trace 주입이 필요하다 —
+        # app.state에 이미 올린 L3 의존을 넘긴다(다른 백엔드는 미사용·무영향).
+        set_ocr_components(
+            _app,
+            build_ocr_components(
+                settings,
+                llm_provider=getattr(_app.state, _PROVIDER_KEY, None),
+                llm_cache=getattr(_app.state, _CACHE_KEY, None),
+                trace_sink=getattr(_app.state, _TRACE_KEY, None),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 — 비크래시 보고(타입명 필수·침묵 실패 금지)
+        # NLP-01: 침묵 실패 금지는 메시지 *본문*에 예외 타입명을 요구한다(exc_info의
+        # 트레이스백만으로는 부족 — langfuse 8일 무증상 전멸 교훈, _degradation.py 관례).
+        # 사유(load_failed)를 명시해 set_ocr_components에 넘겨 "비활성(config off)"과
+        # 무변별이던 503을 사유 분리한다(§3 D1).
+        logger.warning(
+            "OCR 부품 구성 실패 — /v1/ocr 비활성(503) — 예외 타입: %s",
+            type(exc).__name__,
+            exc_info=True,
+        )
+        set_ocr_components(_app, None, unavailable_reason="load_failed")
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """앱 수명 — 시작 시 device store 활성(slice 27), 종료 시 store 해제 + DB 엔진 풀 반납.
@@ -536,29 +663,8 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception:
             logger.warning("오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도", exc_info=True)
-    # L5 OCR: `ocr_enabled`면 부품(검출기·라우터·인식기)을 1회 구성해 app.state에 올린다(모델
-    # 1회 로드·매 요청 재구성 회피·세만틱 매처 웜업 미러). 부품 생성은 *지연 import*라 모델
-    # 다운로드·네트워크가 일어나지 않는다(첫 인식 시 적재). 실패해도 *학생 경로 게이트가 아니라*
-    # OCR 기능만 비활성(/v1/ocr → 503)이라 fail-fast시키지 않고 경고만 남긴다(부팅 보호·CLAUDE.md
-    # 가용성 우선 #1≫#6). off(기본)면 set_ocr_components(None)으로 비활성 표시(getter가 503).
-    if settings.ocr_enabled:
-        try:
-            # qwen_vl 인식기는 L3 라우터 경유라 provider/cache/trace 주입이 필요하다 —
-            # app.state에 이미 올린 L3 의존을 넘긴다(다른 백엔드는 미사용·무영향).
-            set_ocr_components(
-                _app,
-                build_ocr_components(
-                    settings,
-                    llm_provider=getattr(_app.state, _PROVIDER_KEY, None),
-                    llm_cache=getattr(_app.state, _CACHE_KEY, None),
-                    trace_sink=getattr(_app.state, _TRACE_KEY, None),
-                ),
-            )
-        except Exception:
-            logger.warning("OCR 부품 구성 실패 — /v1/ocr 비활성(503)", exc_info=True)
-            set_ocr_components(_app, None)
-    else:
-        set_ocr_components(_app, None)
+    # L5 OCR: 사유 분리·로그 타입명 회귀 동결이 가능하도록 별도 함수로 분리(`_activate_ocr`).
+    _activate_ocr(_app, settings)
     try:
         yield
     finally:
@@ -576,6 +682,8 @@ def create_app(
     oauth_providers: dict[str, OAuthProvider] | None = None,
     metrics: ServiceMetrics | None = None,
     readiness_probes: ReadinessProbes | None = None,
+    ocr_counters: OcrReachCounters | None = None,
+    segmentation_counters: SolutionSegmentationCounters | None = None,
 ) -> FastAPI:
     """FastAPI 앱 팩토리 — 의존성 주입 가능.
 
@@ -659,6 +767,22 @@ def create_app(
     # 없음 — Prometheus/StatsD 등은 과공학. 모듈 전역이 아니라 app.state에 둬 앱 인스턴스별
     # (테스트 격리 포함) 카운터가 섞이지 않는다).
     app.state.__setattr__(_VERSION_UNKNOWN_COUNT_KEY, 0)
+
+    # NLP-01: OCR 도달 관측 카운터 — ServiceMetrics와 같은 타이밍(create_app에서 심고,
+    # lifespan은 OCR 부품 자체만 늦게 결정)에 앱 수명 동안 1개를 심는다. 테스트가 폭발하는
+    # 가짜를 주입할 좌석(metrics·readiness_probes와 동형).
+    resolved_ocr_counters = ocr_counters if ocr_counters is not None else OcrReachCounters()
+    app.state.__setattr__(_OCR_COUNTERS_KEY, resolved_ocr_counters)
+
+    # NLP-03: 단계 분해 0-전이 제출 관측 카운터 — ocr_counters와 같은 타이밍(create_app에서
+    # 즉시 심음·lifespan 무관, `api/coach.py` 핸들러가 매 요청 Depends로 record). 테스트가
+    # 초기값·폭발 가짜를 주입할 좌석(ocr_counters와 동형).
+    resolved_segmentation_counters = (
+        segmentation_counters
+        if segmentation_counters is not None
+        else SolutionSegmentationCounters()
+    )
+    app.state.__setattr__(_SEGMENTATION_COUNTERS_KEY, resolved_segmentation_counters)
 
     # PED-06 — 성장 증거(WH-1 대리 지표) 도달 관측 카운터. 앱 수명 동안 1개(재시작 시 리셋
     # — 인프로세스 계측이라 영속 저장 0, `ServiceMetrics`와 동형 전제).
@@ -833,6 +957,8 @@ def create_app(
                 AlertBody(metric=a.metric, observed=a.observed, threshold=a.threshold)
                 for a in alerts
             ],
+            ocr=_ocr_reach_body(_get_ocr_reach_snapshot(request.app)),
+            solution_segmentation=_segmentation_body(_get_segmentation_snapshot(request.app)),
             growth_evidence=_growth_evidence_body(growth_evidence_counters.snapshot()),
             growth_evidence_exposure=_growth_evidence_exposure_body(
                 growth_evidence_exposure_counters.snapshot()

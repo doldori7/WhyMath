@@ -16,11 +16,16 @@ import 'package:korean_math_app/features/ocr/data/ocr_api.dart';
 import 'package:korean_math_app/features/ocr/data/ocr_models.dart';
 
 /// 미리 짠 결과를 그대로 돌려주는 fake — 또는 [shouldThrow]면 예외를 던진다.
+///
+/// [statusCode]를 지정하면 그 상태코드를 담은 [DioException]을 던진다(503 비활성
+/// 문구 분기 검증용). 지정하지 않으면 상태코드 없는 네트워크 오류로 던진다.
 class _FakeOcrApi extends OcrApi {
-  _FakeOcrApi({this.result, this.shouldThrow = false}) : super(Dio());
+  _FakeOcrApi({this.result, this.shouldThrow = false, this.statusCode})
+      : super(Dio());
 
   final OcrResult? result;
   final bool shouldThrow;
+  final int? statusCode;
 
   /// 업로드 호출 횟수(중복 업로드 방지·재진입 가드 검증).
   int calls = 0;
@@ -29,8 +34,20 @@ class _FakeOcrApi extends OcrApi {
   Future<OcrResult> recognize(MultipartFile image) async {
     calls++;
     if (shouldThrow) {
+      final requestOptions = RequestOptions(path: '/v1/ocr');
+      if (statusCode != null) {
+        throw DioException(
+          requestOptions: requestOptions,
+          response: Response(
+            requestOptions: requestOptions,
+            statusCode: statusCode,
+          ),
+          type: DioExceptionType.badResponse,
+          error: '인식 실패(테스트, $statusCode)',
+        );
+      }
       throw DioException(
-        requestOptions: RequestOptions(path: '/v1/ocr'),
+        requestOptions: requestOptions,
         error: '인식 실패(테스트)',
       );
     }
@@ -173,6 +190,34 @@ void main() {
       expect(state.result, isNull);
       expect(state.error, isNotNull);
       expect(api.calls, 1); // 업로드는 시도됨.
+    });
+
+    test('503(OCR 비활성)은 "인식 실패"가 아닌 기능 비활성 전용 문구를 보여준다', () async {
+      final api = _FakeOcrApi(shouldThrow: true, statusCode: 503);
+      final picker = _FakeImageSourceService();
+      final container = _containerWith(api: api, picker: picker);
+      final notifier = container.read(ocrControllerProvider.notifier);
+
+      await notifier.pickAndRecognize(OcrImageSource.camera);
+
+      final state = container.read(ocrControllerProvider);
+      expect(state.status, OcrStatus.error);
+      expect(state.error, contains('이용할 수 없어요'));
+      expect(state.error, isNot(contains('인식하지 못했어요'))); // 학생 잘못 아님을 구분.
+    });
+
+    test('401(미인증)은 기존 일반 실패 문구를 유지한다(503과 구분)', () async {
+      final api = _FakeOcrApi(shouldThrow: true, statusCode: 401);
+      final picker = _FakeImageSourceService();
+      final container = _containerWith(api: api, picker: picker);
+      final notifier = container.read(ocrControllerProvider.notifier);
+
+      await notifier.pickAndRecognize(OcrImageSource.camera);
+
+      final state = container.read(ocrControllerProvider);
+      expect(state.status, OcrStatus.error);
+      expect(state.error, contains('인식하지 못했어요'));
+      expect(state.error, isNot(contains('이용할 수 없어요')));
     });
   });
 

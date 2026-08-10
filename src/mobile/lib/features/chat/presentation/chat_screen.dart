@@ -45,6 +45,13 @@ const double _stepAreaMaxHeightFraction = 0.25;
 /// 값이 걸리고, 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽).
 const double _stepAreaMaxHeight = 162;
 
+/// 객관식 선택지 목록 영역이 차지할 수 있는 body 가용 높이 비율 상한(S3-17).
+const double _choiceAreaMaxHeightFraction = 0.25;
+
+/// 선택지 목록 영역 절대 상한(px) — 행 ~48px 3개 분량. 공간이 넉넉하면 이 값이 걸리고,
+/// 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽·단계 영역과 동일 규칙).
+const double _choiceAreaMaxHeight = 160;
+
 /// 빈 단계 필드 예시 힌트 (MOB-05) — 학생에게 *앱이 알아듣는 입력 형태*를 스스로 안내한다.
 /// 등식 한 줄·근 나열 등 백엔드 verify가 결정하는 자연 표기(MOB-06·S3-06)라, 그대로 따라 쓰면
 /// 검증 결정 구간에 들어간다. 왼쪽 번호 라벨과 중복되던 "단계 N"을 대체. 정오 강조·부정 표현 없음.
@@ -54,6 +61,33 @@ const List<String> _stepHintExamples = <String>[
   '예: x=2',
   '예: (x-2)(x-3)=0',
 ];
+
+/// 활성 문항이 객관식인지 판정한다(S3-12→S3-17 — 섀도 브랜치 회수).
+///
+/// 규칙: `questionFormat == '객관식'`이거나 `choices`가 비어있지 않으면 객관식으로 취급한다
+/// (둘 중 하나면 MC). 단, 실제 *목록 렌더*는 보수적으로 [_renderableChoices]가 결정한다 —
+/// 탭할 선택지(choices)가 없으면 어포던스를 만들 수 없기 때문이다.
+bool _isMultipleChoice(Problem problem) {
+  if (problem.questionFormat == '객관식') {
+    return true;
+  }
+  final choices = problem.choices;
+  return choices != null && choices.isNotEmpty;
+}
+
+/// 렌더 가능한 선택지 목록(객관식이고 choices 보유)·아니면 null(주관식·선택지 없음).
+///
+/// 이 함수가 null을 돌려주면 선택지 목록을 아예 그리지 않는다 — 주관식 문항엔 영향이 0이다.
+List<String>? _renderableChoices(Problem? problem) {
+  if (problem == null || !_isMultipleChoice(problem)) {
+    return null;
+  }
+  final choices = problem.choices;
+  if (choices == null || choices.isEmpty) {
+    return null; // MC지만 탭할 선택지가 없으면 목록을 만들 수 없다(보수적).
+  }
+  return choices;
+}
 
 /// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
@@ -108,6 +142,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   ///
   /// 이 메서드는 *대화 모드 전용* — 풀이 단계 제출은 [_onSendSolutionSteps]가 담당한다
   /// (단계 리스트 편집기가 합친 원문을 받는다).
+  /// 선택지 행 탭 → 그 항목의 *값*을 기존 `send`(`student_input`) 경로로 제출한다(S3-17).
+  /// 번호→값 매핑은 화면 표현일 뿐 정답 판정·완료는 서버 권위다(클라는 값 제출만·표현≠의미).
+  Future<void> _onChoiceSelected(String choice) async {
+    await ref.read(chatControllerProvider.notifier).send(choice);
+  }
+
   Future<void> _onSend() async {
     final text = _inputController.text;
     if (text.trim().isEmpty) {
@@ -232,6 +272,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _stepAreaMaxHeight,
             bodyHeight * _stepAreaMaxHeightFraction,
           );
+          final double choiceAreaMaxHeight = math.min(
+            _choiceAreaMaxHeight,
+            bodyHeight * _choiceAreaMaxHeightFraction,
+          );
           return Column(
             children: [
               // 풀이 중인 문제를 채팅 위에 상시 노출(접기 가능) — 실기기 시연 피드백:
@@ -249,6 +293,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
               // 코치 응답 대기 중 선형 인디케이터(은근한 로딩·도파민 카운트다운 아님).
               if (state.isSending) const LinearProgressIndicator(minHeight: 2),
+              // 객관식 선택지 세로 번호 목록(S3-12→S3-17 — 섀도 브랜치 회수) — 활성 문항이
+              // 객관식일 때 보기를 "N. [값]" 세로 목록으로 노출하고, 학생은 *번호 행을 탭*해
+              // 그 값을 제출한다(입력 영역 바로 위·주 어포던스).
+              //  · *대화 모드에서만* 렌더한다 — 풀이 단계 모드는 학생이 다단계 풀이를 *직접
+              //    구성*하는 별도 어포던스이고, 그 편집기가 이미 좁은 세로 공간을 쓰므로
+              //    선택지 목록을 겹쳐 넣지 않는다(MOB-02 오버플로 불변식 보존).
+              //  · 원 구현(섀도)은 완료(problemComplete)·돌아보기(awaitingReflection) 중에도
+              //    감췄으나 그 두 상태는 S3-32(학습 루프 닫힘·타 세션 회수 중) 소관이라 main엔
+              //    아직 없다 — S3-32 착지 시 같은 조건을 이 가드에 추가할 것.
+              // 주관식 문항엔 위젯이 스스로 빈 자리를 반환해 영향이 0이다(주관식 흐름 무변경).
+              if (_mode == _InputMode.conversation)
+                _ChoiceButtons(
+                  enabled: !state.isSending,
+                  maxHeight: choiceAreaMaxHeight,
+                  onSelected: _onChoiceSelected,
+                ),
               _InputBar(
                 controller: _inputController,
                 stepsEditorKey: _stepsEditorKey,
@@ -373,6 +433,149 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// 객관식 선택지 세로 번호 목록 — 활성 문항이 객관식일 때 보기를 "N. [값]" 세로 목록으로
+/// 렌더하고, 각 행을 탭하면 그 항목의 *값*을 제출한다(S3-17 — S3-12 가로 칩에서 리팩터).
+///
+/// 배경(Kiki UX·실기기 실측 2026-07-22): ① 서버 `verify_final_answer`는 *정확한 선택지 값*("2")만
+/// correct로 판정하고 자연 표현("답은 2"·"2개요")·근 나열은 unverifiable로 떨어져 완료가 안 됐다.
+/// ② S3-12는 값을 가로 칩에 통째로 넣어, 값이 길어 여러 줄이 되면 어색했다. 그래서 값이 아니라
+/// *번호*를 고르는 게 자연스럽다는 방향으로, 각 보기를 "N. [값]" 세로 행으로 렌더한다(번호는 문항
+/// 배너의 1-기반 "N." 표기와 시각 일치·값은 길면 줄바꿈).
+///
+/// 탭 → *값 제출*(서버 계약 무변경): 번호를 *타이핑*하면 "2"가 2번인지 값 2인지 모호해(서버 거짓
+/// correct 위험) 학생은 번호 행을 *탭*만 하고, 클라가 `choices[i]`(값)를 기존 `send`(`student_input`)
+/// 경로로 제출한다 — 모호성 0·서버는 정확한 값으로 correct→돌아보기→완료(주관식과 동일 흐름·S3-10).
+/// 번호→값 매핑은 화면 표현일 뿐이고 정답 판정·완료는 서버 권위다(클라는 값 제출만·정답 미보유·표현≠의미).
+///
+/// 경계(CLAUDE.md): WhyMath는 객관식 양산 앱이 아니다 — 객관식은 부차이고 이 목록은 *우아한 완료*만
+/// 보장한다. 정오·정답률·빨강 카운트다운 등 부정 강화 UI는 두지 않는다(정서 안전·표현≠의미).
+/// 주관식·선택지 없음이면 스스로 빈 자리(SizedBox.shrink)를 반환해 주관식 흐름엔 영향이 0이다.
+class _ChoiceButtons extends ConsumerWidget {
+  const _ChoiceButtons({
+    required this.enabled,
+    required this.maxHeight,
+    required this.onSelected,
+  });
+
+  /// 행 활성 여부(전송 중엔 비활성 — 기존 입력 행과 동일 규칙·중복 제출 방지).
+  final bool enabled;
+
+  /// 선택지 목록 영역 최대 높이 — 화면(LayoutBuilder)이 키보드로 줄어든 body 가용 높이에
+  /// 맞춰 계산해 내려준다(MOB-02). 보기가 많거나 값이 길어 초과하면 내부 스크롤로 가둔다(Column 안 넘침).
+  final double maxHeight;
+
+  /// 선택지 행 탭 콜백 — 그 항목의 *값*을 그대로(`student_input`) 코치 턴으로 제출한다.
+  final Future<void> Function(String choice) onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choices = _renderableChoices(ref.watch(activeProblemProvider));
+    if (choices == null) {
+      return const SizedBox.shrink(); // 주관식·선택지 없음 → 아무것도 그리지 않는다.
+    }
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 은근한 안내 — 답을 재촉·정오 강조하지 않는 톤(정서 안전). 번호 선택임을 명시한다.
+          Text(
+            '보기 번호를 골라 보세요',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // 세로 번호 목록 — 각 행 "N. [값]"(번호 앞 고정·값은 길면 줄바꿈). 탭하면 그 항목의
+          // *값*(choices[i])을 서버 verify가 받는 정확한 형태로 제출한다(자유 타이핑 브리틀함 우회).
+          // 높이를 가둬(내부 스크롤) 보기가 많거나 값이 길어도 화면(입력 영역)을 밀어내지 않는다(MOB-02).
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < choices.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ChoiceRow(
+                        // 1-기반 번호 — 문항 배너("N. [값]")와 표기 일치(혼동 방지).
+                        number: i + 1,
+                        value: choices[i],
+                        enabled: enabled,
+                        onTap: () => onSelected(choices[i]),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 선택지 한 행 — 앞에 1-기반 번호("N.")·뒤에 값(길면 줄바꿈)을 담은 탭 가능한 전폭 행.
+///
+/// 배너의 "N. [값]" 표기와 번호 스타일을 맞춰 시각 일관을 유지하고, 값이 길어 여러 줄이 돼도
+/// 번호는 앞(위)에 고정된다(멀티라인 수용). 탭하면 [onTap]이 그 항목의 값을 제출한다. 접근성:
+/// 최소 높이 48dp(44dp+)·번호+값이 하나의 시맨틱 버튼으로 읽힌다.
+class _ChoiceRow extends StatelessWidget {
+  const _ChoiceRow({
+    required this.number,
+    required this.value,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  /// 1-기반 보기 번호(배너 표기와 일치).
+  final int number;
+
+  /// 보기 값 — 서버 verify가 받는 정확한 형태 그대로(길면 줄바꿈).
+  final String value;
+
+  /// 활성 여부(전송 중엔 비활성).
+  final bool enabled;
+
+  /// 행 탭 콜백 — 이 항목의 값을 제출한다.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return OutlinedButton(
+      onPressed: enabled ? onTap : null,
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft, // 값이 짧아도 번호가 왼쪽에 고정.
+        minimumSize: const Size.fromHeight(48), // 접근성 44dp+ 탭 타겟.
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start, // 멀티라인 값 첫 줄에 번호 정렬.
+        children: [
+          // 번호 라벨 — 배너와 같은 "N." 표기(1-기반). 어포던스라 primary 색으로 도드라지게.
+          Text(
+            '$number.',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 값 — 길면 자연스럽게 줄바꿈(멀티라인)·짧으면 한 줄. 번호는 앞에 고정된다.
+          Expanded(
+            child: Text(value, softWrap: true),
+          ),
+        ],
       ),
     );
   }

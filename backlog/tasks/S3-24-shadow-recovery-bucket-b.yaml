@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: done
+status: blocked
 priority: 2
 owner: claude
 depends_on: []
@@ -15,12 +15,11 @@ acceptance:
   - "특히 hot file 3종(chat_screen.dart·mathlive_input_screen.dart·problem_screen.dart)은 main 현재 버전을 베이스로 diff 재작성 — git merge/cherry-pick 자동 해결에 의존하지 않는다"
   - "각 항목 회수 후 flutter analyze 0·flutter test green(원 구현 시점 실측값을 회귀 기준으로)"
   - "회수분은 이 태스크 하나로 뭉치지 말고 개별 커밋/PR로 분리 가능(원 구현 순서 참고) — 단 최종 backlog 등재는 각자 개별 태스크 ID로"
-artifacts:
-  - "9개 항목 개별 태스크로 최종 등재(S3-35~41·NS-01·NS-02, acceptance④ 충족). 원 소스 브랜치 소실 발견 후 Kiki가 '재구현'으로 결정 — 8건은 '현재 main 기준 재설계' acceptance로 정정해 unblock, S3-39(수식렌더링)는 main의 기존 아키텍처 결정(flutter_math_fork 불필요)과 상충해 별도 확인 필요로 계속 차단."
+artifacts: []
 paths:
   - "src/mobile/lib/**"
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/l4/**"
 session: null
-notes: "9개 항목을 개별 태스크로 분리 등록 완료(S3-35~41·NS-01·NS-02, 각자 원 커밋·hot file 위험·notes 승계). 사전조사로 2건 위험신호 발견: ⑤(S3-39)는 main이 MOB-09에서 flutter_math_fork를 '미사용'으로 이미 제거하고 'MathLive WebView로 커버됨' 명시 — 단순회수 아닌 아키텍처 재검토 필요. ②(S3-36)는 problem_screen.dart에 유사 '건너뛰기' 버튼이 이미 존재 — 동등성 미확인. [2026-08-09 후속 재조사 — 근본 차단 사유] 분리 등록 직후 실제 착수를 시도하며 원 소스 브랜치 claude/shadow-data-s3-pilot-nh5kbz를 fetch했더니 origin에서 완전히 삭제된 상태였다(git ls-remote --heads origin 전체 43건에 부재, 원 커밋 해시 fa08081/73b77a1/75c3dda 등 직접 fetch도 전부 실패). '원본 diff를 참고해 수동 재적용'이 물리적으로 불가능해져 9개 하위 태스크 전부를 재차단하고 Kiki 판단을 요청했다. [2026-08-09 Kiki 결정 — '재구현'] Kiki가 '재구현'으로 답변 — 9개 하위 태스크의 acceptance를 '원본 포팅'에서 '현재 main 기준 재설계·재구현'으로 정정하고 unblock(단 S3-39는 별도 아키텍처 충돌 확인이 더 필요해 계속 차단). 이 버킷 태스크(S3-24) 자체는 acceptance④(개별 태스크 ID로 최종 등재)가 이미 충족된 것으로 보고 done 처리 — 실제 기능 전달은 이제 개별 태스크 9건이 담당."
-updated: 2026-08-10
+notes: "부분 완료 1/9(항목①=S3-35·0e99826a) — 세션 컨텍스트 한계로 중단, 잔여 8건은 새 세션 재개(인수인계는 notes 참조)"
+updated: 2026-08-09

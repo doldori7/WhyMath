@@ -84,6 +84,9 @@ def _surrogate_metrics() -> SurrogateMetrics:
         mastery_gain_rate=m,
         misconception_resolution_rate=m,
         self_solve_rate=m,
+        # PED-13(main 병합분)이 추가한 ⑯번째 지표 — 이 게이트 테스트는 "원시 지표가 학생
+        # 토큰에 도달하지 않는다"를 보는 것이라 값 자체는 의미 없고 전 필드 MEASURED만 유지한다.
+        gap_recovery_leadtime_days=m,
         help_reduction_validated=HelpReductionValidation(
             verdict=R15Verdict.GAMING_SUSPECT,
             help_slope=-1.0,

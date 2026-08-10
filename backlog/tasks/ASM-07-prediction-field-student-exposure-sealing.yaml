@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-07-prediction-field-student-exposure-sealing
+title: "예측 5필드 학생 대면 봉인 — 응답 스키마 구조적 배제 + 거버넌스 테스트 (ASM-02 결정 집행)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on:
+  - ASM-02-grade-exposure-policy-decision
+requires_gates: []
+acceptance:
+  - "① 정본화(계약): 학생 대면 응답 스키마에서 estimated_grade·estimated_score·estimated_percentile·target_university_id·admission_probability 5필드를 구조적으로 배제한 별도 스키마를 정본으로 만든다. AssessmentSchema 자체는 내부·영속 계약으로 존치한다(런타임 필터 금지 — 필터는 꺼지지만 필드 부재는 안 꺼진다·PED-08 ③ 선례)."
+  - "② 집행 지점(별항): 그 스키마를 실제로 경유하는 서빙 경로를 명시·확인한다 — GET /v1/me/assessments · PATCH /v1/me/assessments/{id}/complete · POST /v1/me/assessments/capture (중첩 assessment 필드) 3개 라우트의 response_model. [2026-08-08 정정] 등재 시 2개로 적었으나 실측 결과 /complete 가 누락돼 있었다 — 그래서 거버넌스 테스트를 라우트 열거 + 무력화 하한(route_count>=3)으로 짰다. '저장소에 존재함'이 아니라 '학생 토큰 응답 바디에 5필드 키가 실제로 없음'을 응답 페이로드로 확인한다."
+  - "③ 변별력(red 전환 확인): 현재 tests/backend/api/test_me.py 의 capture 테스트가 5필드에 assert body['assessment'][field] is None 을 걸어 키 존재를 동결하고 있다. 봉인 후 이 테스트가 KeyError로 red 전환되는 것을 먼저 확인한 뒤 기대값을 '키 부재'로 갱신한다 — red를 보지 않고 갱신하면 변별력 미검증이다."
+  - "④ 거버넌스 테스트: 학생 대면 라우트 응답 모델에 5필드명이 재등장하면 red인 테스트를 신설한다. ARCH-26·ARCH-27 기법(경로 스코프·무력화 하한 assert·양방향 변별력) 답습. 어근 목록·스캔 인프라는 ARCH-27과 공유해 중복 인프라를 만들지 않는다."
+  - "⑤ CI 배선 확인: 신설 테스트가 실제로 CI 잡에서 실행되는지 확인한 뒤 완료로 친다(tests/infra/test_test_suite_wiring.py 동결 대상 여부 포함). '존재함'과 '돌아감'은 다르다 — OPS-03/OPS-08/OPS-11 반복 사고."
+  - "⑥ 회귀: 백엔드 소스·테스트를 건드리므로 전체 스위트를 돌린 뒤 회귀 없음을 말한다. 못 돌렸으면 '전체는 확인하지 못했다'를 명시하고 CI를 최종 판정으로 넘긴다(2026-07-26 OPS-06 경위)."
+  - "⑦ 범위 밖: 보호자·교사 노출 형태 설계(Phase 3)·D-100예측 알고리즘 설계·필드 폐기 마이그레이션((d) 선택 시 별도)·ARCH-27 게이트 본체 구현은 포함하지 않는다."
+artifacts:
+  - 041a2e7f
+paths:
+  - src/backend/whymath_backend/schema/assessment.py
+  - src/backend/whymath_backend/api/me.py
+  - tests/backend/api/test_prediction_field_sealing.py
+session: null
+notes: "ASM-02 결정의 집행 태스크. 착수 전제: ASM-02가 (c) 학생 비노출로 done 되어야 한다((b) 채택 시 이 태스크는 재설계 필요). 발단: 2026-08-08 실측에서 갭 리뷰 D2의 전제('노출 코드 0건')가 부정확함이 드러났다 — writer는 0건이나 GET /v1/me/assessments 가 AssessmentSchema를 그대로 반환하고 response_model_exclude_none 이 저장소 전체에 없어 학생 응답 JSON에 5필드가 null 키로 이미 나가는 '노출 대기' 상태였다. writer가 붙는 순간 API 층 코드 변경 0으로 유입된다. 근거 문서: docs/architecture/assessment_module_gap_review.md D2 §정정·§봉인 방향."
+updated: 2026-08-08

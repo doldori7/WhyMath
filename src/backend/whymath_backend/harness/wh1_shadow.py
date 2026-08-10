@@ -27,16 +27,22 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
 from whymath_backend.harness.wh1_loop import ToolResult, TurnOutcome, run_tutoring_turn
+from whymath_backend.harness.wh1_probe_supply import assemble_probe_candidate_pool
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.session_recall import SessionRecall
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = ["Wh1HarnessShadowObservation", "emit_wh1_observation", "observe_wh1_harness_shadow"]
 
@@ -234,6 +240,9 @@ async def observe_wh1_harness_shadow(
     problem_id: str | None = None,
     warmstart_outside_mids: Sequence[str] = (),
     session_recall: SessionRecall | None = None,
+    session: AsyncSession | None = None,
+    theta: float | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> None:
     """WH-1 하네스를 한 턴 돌려 *거동 요약만* 로그로 관측(shadow·비노출·무영속). 반환 `None`.
 
@@ -254,17 +263,34 @@ async def observe_wh1_harness_shadow(
     개입 발화에 오개념을 preload하지 않는다(reactive retrieval 유지·CLAUDE.md). student_text·
     solution_steps와 같은 사적 주입 계약이라 LLM 프롬프트에도, shadow 레코드에도 실리지 않는다.
 
+    **select_probe 후보 공급(REC-02 ②)**: `session`이 주어지면 `assemble_probe_candidate_pool`
+    (L1 조회 → L4 `ProbeCandidate` 조립)로 활성 가설 mids + `warmstart_outside_mids` 후보 풀을
+    조립해 `probe_candidates`를 채운다 — 이전엔 이 인자가 항상 빈 리스트라 `select_probe`가
+    라이브에서 구조적으로 항상 실패했다(감사 §3 D2). `session=None`(기존 호출자·단위테스트)이면
+    조회를 skip한다(회귀 0). `theta`는 IRT 정보량 계산용 능력 추정값(None→0.0).
+
     **never-break**(비차단 방어선·judge shadow의 async 미러): 정책 구성·하네스 실행·직렬화·로깅을
     한 `try`로 감싸 *어떤 예외도* 본류(fire-and-forget task)를 깨지 않는다. 정책(`LLMTutorPolicy`)은
     provider 장애를 안전 강등으로 흡수하지만(never-break), 그 위 직렬화·로깅 실패까지 방어한다
     (우선순위: 학생 경험 > 진단 관측).
     """
     try:
+        # select_probe 후보 공급(REC-02 ②) — session=None(기존 호출자·단위테스트)이면 조회
+        # skip해 빈 리스트(회귀 0). 사적 probe 컨텍스트로만 흐른다(모듈 docstring 참조).
+        probe_candidates = await assemble_probe_candidate_pool(
+            session,
+            active_hypotheses=active_hypotheses,
+            outside_mids=warmstart_outside_mids,
+            user_id=user_id,
+            seat="wh1_shadow",
+        )
         policy = LLMTutorPolicy(
             provider,
             # 학생 원문·풀이 단계는 프롬프트가 아니라 정책 보유값으로만 사적 사용(S1-a·요구사항 ⑥).
             student_text=student_solution,
             solution_steps=list(solution_steps),
+            probe_candidates=probe_candidates,
+            theta=theta if theta is not None else 0.0,
             # 웜스타트 outside_mids도 사적 probe 컨텍스트로만 주입 — select_probe→plan_probe 전용
             # (진단 타깃팅). 코칭 context·프롬프트·레코드에 오개념 preload 0(감사 Q5·CLAUDE.md).
             outside_mids=list(warmstart_outside_mids),

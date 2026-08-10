@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: ARCH-27-graphing-quizmode-student-reach
+id: ARCH-29-graphing-quizmode-student-reach
 title: "그래핑 계산기 QuizMode 수학판정 로직 학생 도달 봉합 + 출하 자산(assets) 거버넌스 게이트 신설"
 track: infra-debt
 stage: S3

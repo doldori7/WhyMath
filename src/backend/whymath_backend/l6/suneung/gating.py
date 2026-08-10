@@ -12,9 +12,10 @@
   - `suneung_priority(problem)` — 노출 우선순위 가중치(높을수록 먼저). 교수학 근거 반영.
   - `select_suneung_items(problems, persona, *, min_fit, limit)` — 적격 필터 → 우선순위
     내림차순 안정정렬 → limit 적용.
-  - `SUNEUNG_PERSONAS`·`METADATA_ONLY_SOURCES`·`SUNEUNG_EXAM_TYPES` — 게이팅 상수(아래
-    docstring에 근거). `SUNEUNG_EXAM_TYPES`는 S2-06(수능 적응 추천)에서 api의 SQL 사전축소가
-    같은 기출 유형 신호 집합을 참조해야 해서 공개로 승격했다(정본은 여전히 이 모듈).
+  - `SUNEUNG_PERSONAS`·`METADATA_ONLY_SOURCES`·`SUNEUNG_EXAM_TYPES`·`SUNEUNG_DEFAULT_MIN_FIT`
+    — 게이팅 상수(아래 docstring에 근거). `SUNEUNG_EXAM_TYPES`는 S2-06(수능 적응 추천)에서,
+    `SUNEUNG_DEFAULT_MIN_FIT`는 S3-17(수능 SQL 사전필터 persona_fit 확장)에서 api의 SQL
+    사전축소가 같은 신호 집합·임계값을 참조해야 해서 공개로 승격했다(정본은 여전히 이 모듈).
 
 레이어 규칙(CLAUDE.md): L6→L1만 의존(`schema.problem`·`schema.enums`). L4/L2/L3를 import하지
 않는다 — 이 모듈은 기존 `Problem` 필드의 *존재·값*만 보므로 하위 카탈로그·검증자·모델이
@@ -48,6 +49,7 @@ from whymath_backend.schema.problem import Problem
 # 정의 정본은 `l6/_shared.py`(Rule of three 추출 완료). `__all__`에도 그대로 둔다.
 __all__ = [
     "METADATA_ONLY_SOURCES",
+    "SUNEUNG_DEFAULT_MIN_FIT",
     "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "is_suneung_eligible",
@@ -86,12 +88,18 @@ PRD 5종 페르소나(`enums.Persona`) 중 *정시(수능)* 트랙에 있는 셋
 # 같은 집합을 참조한다(중복 재정의 방지 — 정본은 이 모듈 하나).
 SUNEUNG_EXAM_TYPES: frozenset[ExamType] = frozenset({ExamType.수능, ExamType.모평, ExamType.학평})
 
+# persona_fit 적합도 임계값(기본값) — is_suneung_eligible·select_suneung_items의 min_fit 기본과
+# api/me.py의 수능 SQL 사전필터(S3-17)가 *같은 이름으로 공유*하는 단일 권위. 게이트(파이썬)와
+# SQL(사전축소)이 서로 다른 임계를 쓰면 "SQL은 통과시켰는데 게이트가 막는다"류 이원화가 생긴다
+# (METADATA_ONLY_SOURCES를 api가 그대로 재사용하는 것과 동일 원칙).
+SUNEUNG_DEFAULT_MIN_FIT: float = 0.5
+
 
 def is_suneung_eligible(
     problem: Problem,
     persona: Persona = Persona.A_일반고고3,
     *,
-    min_fit: float = 0.5,
+    min_fit: float = SUNEUNG_DEFAULT_MIN_FIT,
 ) -> bool:
     """이 문항을 이 페르소나에게 수능(정시) 모드로 노출해도 되는가(불리언 게이트).
 
@@ -190,7 +198,7 @@ def select_suneung_items(
     problems: Iterable[Problem],
     persona: Persona = Persona.A_일반고고3,
     *,
-    min_fit: float = 0.5,
+    min_fit: float = SUNEUNG_DEFAULT_MIN_FIT,
     limit: int | None = None,
 ) -> list[Problem]:
     """수능 모드 노출 문항을 *선별·정렬*한다 — 적격 필터 → 우선순위 내림차순 → limit.

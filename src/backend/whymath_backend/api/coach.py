@@ -60,6 +60,10 @@ from whymath_backend.api._rate_limit import (
     RateLimitedTripleRead,
     RateLimitedTripleWrite,
 )
+from whymath_backend.api._segmentation_state import (
+    SolutionSegmentationCounters,
+    get_segmentation_counters,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
@@ -154,6 +158,11 @@ from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# NLP-03 acceptance ③ — 0-전이 제출 관측 카운터(`api/_segmentation_state.py`). 세 핸들러
+# (`/coach`·`/coach/sessions`·`/coach/sessions/{id}/turns`) 공통 주입 좌석.
+SegmentationCountersDep = Annotated[
+    SolutionSegmentationCounters, Depends(get_segmentation_counters)
+]
 
 logger = logging.getLogger(__name__)
 
@@ -1533,6 +1542,9 @@ async def _wh1_primary_decision_or(
     dialogue_id: str | None,
     problem_id: uuid.UUID | None,
     session_recall: SessionRecall | None = None,
+    session: AsyncSession | None = None,
+    theta: float | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1544,6 +1556,10 @@ async def _wh1_primary_decision_or(
     solution_coaching·가설·증거 파이프라인은 기존 결정론 경로 그대로다(상태 오케스트레이션
     수렴은 후속·`run_persisted_turn` docstring 참조). 여기서도 방어적으로 try/except를 한 겹 더
     둔다 — 테스트 대체물·미래 리팩터가 예외를 전파해도 학생 응답이 500이 되지 않게(이중 방어).
+
+    `session`·`theta`·`user_id`(REC-02 ②)는 `run_wh1_primary_turn`의 select_probe 후보 공급으로
+    그대로 흐른다 — 호출자가 이미 조회한 `server_theta`·`user.user_id`를 재사용할 뿐 신규 쿼리는
+    없다(create_session·append_turns 두 핸들러가 이미 계산해 둔 값).
     """
     try:
         utterance = await run_wh1_primary_turn(
@@ -1556,6 +1572,9 @@ async def _wh1_primary_decision_or(
             problem_id=str(problem_id) if problem_id is not None else None,
             warmstart_outside_mids=warmstart_mids,
             session_recall=session_recall,
+            session=session,
+            theta=theta,
+            user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -1626,12 +1645,15 @@ async def coach_decide(
     body: CoachRequest,
     user: ConsentedUser,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
     *DB 무접근* — 영속이 필요하면 `/v1/coach/sessions`를 호출. `user`는 인증 게이트만.
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
@@ -1665,6 +1687,7 @@ async def create_session(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> SessionCreateResponse:
     """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
 
@@ -1672,6 +1695,8 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     # slice 64: 문항 기대정답을 서버 DB에서 조회해 step shadow 진단 맥락으로 주입(비노출 — 응답엔
     # 결코 싣지 않음·정답 누출 차단). 문항 부재/없음이면 None(graceful).
     expected_answer = await _expected_answer_for(session, body.problem_id)
@@ -1734,6 +1759,12 @@ async def create_session(
                 # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
                 warmstart_outside_mids=warmstart_mids,
                 session_recall=session_recall,
+                # REC-02 ②: session은 *의도적으로* 넘기지 않는다 — `_spawn`은 이 코루틴을
+                # 요청 핸들러와 *동시에* 돈다(fire-and-forget create_task). AsyncSession은
+                # 동시 사용이 안전하지 않아(SQLAlchemy 비동기 세션은 단일 실행 흐름 전제),
+                # 살아있는 요청 세션을 여기 넘기면 핸들러의 나머지 쿼리와 경합한다. shadow는
+                # 비노출 관측이라 이 턴의 probe_candidates가 비어도(session=None → skip)
+                # 학생 응답에 영향 없다 — 변별력(⑤)은 동기 실행되는 primary 경로로 증명한다.
             )
         )
     pack = await _pack_for(session, body.problem_id)
@@ -1792,6 +1823,11 @@ async def create_session(
             dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
             problem_id=body.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: primary는 이 자리에서 *동기 await*라 session 동시사용 위험이 없다
+            # (shadow의 _spawn과 달리 요청 핸들러가 이 호출이 끝날 때까지 다른 쿼리를 안 던진다).
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     now = datetime.now(timezone.utc)
@@ -1975,6 +2011,7 @@ async def append_turns(
     user: ConsentedUser,
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
+    segmentation_counters: SegmentationCountersDep,
 ) -> TurnAppendResponse:
     """기존 dialogue에 학생/AI 2턴 추가.
 
@@ -1983,6 +2020,8 @@ async def append_turns(
     `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
     LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
     """
+    # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
+    segmentation_counters.record(body.solution_steps)
     dialogue = await session.get(DialogueORM, dialogue_id)
     if dialogue is None or dialogue.user_id != user.user_id:
         raise HTTPException(
@@ -2068,6 +2107,7 @@ async def append_turns(
                 problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
                 warmstart_outside_mids=warmstart_mids_turn,
                 session_recall=session_recall,
+                # REC-02 ②: create_session과 동형 이유로 session 미전달(_spawn 동시성·주석 참조).
             )
         )
     pack = await _pack_for(session, dialogue.problem_id)
@@ -2105,6 +2145,10 @@ async def append_turns(
             dialogue_id=str(dialogue_id),
             problem_id=dialogue.problem_id,
             session_recall=session_recall,
+            # REC-02 ②: create_session과 동형 — 동기 await라 session 동시사용 위험 없음.
+            session=session,
+            theta=server_theta,
+            user_id=user.user_id,
         )
 
     current_total = dialogue.total_turns or 0
