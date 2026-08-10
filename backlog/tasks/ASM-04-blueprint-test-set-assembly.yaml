@@ -5,17 +5,27 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
   - ASM-03-assessment-writer-persist
 requires_gates: []
-acceptance: []
+acceptance:
+  - "①선언적 blueprint 명세(성취기준×난이도 밴드×유형 비율·문항 수·배점 배분·시험시간)를 만족하는 세트를 자체 동등문제 코퍼스에서 조립 ②후보 필터는 `l6/_shared.py`의 `is_exposable`(저작권·법적 축)과 `is_review_cleared`(검수·운영 축)를 **각각 독립된 if 2개**로 통과시킨다(PB-03 설계 — 두 축을 합치지 않는다)"
+  - "①CAT vs blueprint 역할 분담을 주석·테스트로 동결 — 학습 중 노출은 CAT 단건(`GET /v1/me/next-problem`)이 정본이고 blueprint는 '단원 마감 측정'에만 쓰는 예외, 세트가 CAT을 대체하지 않는다 ②좌석 증설 회피: 새 테이블 없이 `Assessment` 행 + 문항 id 배열로 표현(`AssessmentType.실전모의고사` 첫 발화) ③**신규 마이그레이션 0**"
+  - "배점·총점 — `points`(`schema/problem.py:266`) 첫 소비처로 총점을 합산하되, **코퍼스 2,647건 전량 `points=NULL`이 실측 확인된 상태**(2026-08-10)라 NULL을 0으로 접어 가짜 총점을 만들지 않는다. 배점 미부여 문항이 섞이면 총점을 `None`으로 두고 미부여 건수를 함께 보고한다(날조 금지·침묵 실패 금지). 부분점수는 신규 채점기 없이 기존 `l3/verify_solution.py`의 `first_incorrect_index` 재사용"
+  - "시험시간 제약은 **선언 측에서만** 표현 — `Problem`에 `estimated_time` 류 필드가 없음을 실측 확인(2026-08-10). 문항별 소요시간을 추정해 채우지 말고(날조 금지), blueprint가 선언한 총 시험시간을 메타로 보존하는 데 그친다"
+  - "변별력 — 제약을 만족하는 코퍼스와 만족 못 하는 코퍼스가 **서로 다른 결과**를 내는지 실측(예: 요구 문항수 > 적격 후보수면 조립 실패가 명시적으로 드러나야 하고, 조용히 부족한 세트를 반환하면 안 된다). `is_exposable`/`is_review_cleared` 각각을 뮤테이션해 실제로 후보가 빠지는지 확인"
+  - "반-스코프 동결: 평가원·EBS 본문 0건(구조 메타만·자체 동등문제 대체) · 교사용 시험지 빌더 UI·인쇄·PDF 출력 미포함(Phase 3+) · 루브릭·서술형 채점 미포함"
 artifacts: []
 paths:
   - "src/backend/whymath_backend/l6/**"
   - src/backend/whymath_backend/api/me.py
-session: null
+  # 구현 동반 테스트(CLAUDE.md "모든 PR에 테스트 동반") — 하네스 scope_drift warn의 안내대로
+  # 선언 범위에 추가. 소스 두 경로에 대응하는 테스트 좌석이며 신규 도메인 확장이 아니다.
+  - "tests/backend/l6/blueprint/**"
+  - tests/backend/api/test_me_blueprint_assemble.py
+session: claude/rec-05-priority-d8q8vt
 notes: "브랜치 jkwdzn의 원 ASM-03/D4 재작성. CAT은 학습시간 기본값으로 유지하고, 이 태스크는 '단원 마감 측정' 예외 상황에서만 쓰는 청사진 기반 테스트셋 조립. is_exposable() 게이트 통과 문항만 후보."
-updated: 2026-08-07
+updated: 2026-08-10
