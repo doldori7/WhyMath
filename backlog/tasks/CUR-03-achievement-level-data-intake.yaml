@@ -17,9 +17,10 @@ acceptance:
   - "④ 범위 밖 명시: 반입 후 AchievementStandard 스키마 확장(신규 컬럼·마이그레이션)은 이 태스크에 포함하지 않는다 — 별도 후속 태스크로 분리 등재한다(데이터가 스키마보다 먼저)"
 artifacts:
   - 98a34695
+  - "회수(cherry-pick -x): cb238424 (2026-08-10, claude/subject-problems-theory-check-7n9n72)"
 paths:
   - "data/corpus/**"
   - "docs/data/**"
 session: null
-notes: "docs/architecture/curriculum_module_gap_review.md §3 D3. 성취수준(A~E)·평가기준(상/중/하) 축이 저장소 전체 0건인데 상류 도구(curriculum-node-builder 스킬)는 이미 산출 가능. NCIC PDF 403 차단 선례(docs/data/ncic.md §3.1)와 동일하게 데이터 반입은 사람 소유 액션."
-updated: 2026-08-08
+notes: "docs/architecture/curriculum_module_gap_review.md §3 D3. 성취수준(A~E)·평가기준(상/중/하) 축이 저장소 전체 0건인데 상류 도구(curriculum-node-builder 스킬)는 이미 산출 가능. NCIC PDF 403 차단 선례(docs/data/ncic.md §3.1)와 동일하게 데이터 반입은 사람 소유 액션. [2026-08-10 회수] 원 커밋 98a34695가 미병합 고립 브랜치(claude/human-bottleneck-tasks-6dszy0)에만 존재해 HEAD 기준 실질 0건이던 상태(HARN-11 유형·subject_content_coverage_gap_review.md §0-③에서 실측 발견)를 cherry-pick(cb238424, 무충돌·라이선싱 정정 없이 원본 그대로)으로 해소. JSON 유효성·PDF 잔존 0·licensing_safety.md 반영 확인. 같은 브랜치의 PB-02·S3-32·MISC-01·MISC-03도 완료분이 미회수 상태로 발견됐으나(REC-02는 이미 정상 회수됨, MISC-04는 타 세션이 회수 중) 이 태스크 범위 밖 — Kiki 결정 대기."
+updated: 2026-08-10
