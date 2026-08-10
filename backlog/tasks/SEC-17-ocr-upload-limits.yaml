@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,11 +14,12 @@ acceptance:
   - "결함: api/ocr.py:60(await image.read())·:93(최대 20장 리스트) 가 바이트 크기·content-type(MIME) 검증 없이 업로드 전량 메모리 적재. 페이지 수(20)만 캡. 앱 계층 body 상한 없음. /ocr/pages는 20배 동시 적재 증폭. ConsentedUser 게이트라 무인증은 아니나 인증된 남용/탈취 계정 메모리 고갈 DoS."
   - "수정: 업로드 바이트 상한(단건·합계)·허용 MIME(image/*) 검증·앱 계층 body 크기 제한 추가. 초과 시 413/415로 명확 거부. verify.py의 _MAX_EXPR_LEN 선례처럼 캡 상수 중앙화."
   - "테스트: 초과 크기·비이미지 MIME 업로드가 거부되는지, 20장 경계가 지켜지는지 결함주입 확인."
-artifacts: []
+artifacts:
+  - "api/ocr.py에 SEC-17 업로드 상한 봉합 — 단건 10MB(_MAX_IMAGE_BYTES)·MIME 허용목록(PNG/JPEG/WEBP·_ALLOWED_IMAGE_CONTENT_TYPES) 검증 헬퍼(_read_and_validate_image) 신설, post_ocr/post_ocr_pages 양쪽 적용. /pages는 개별 검증 + 누적 합계 50MB(_MAX_PAGES_TOTAL_BYTES) 초과 시 조기 중단(20배 증폭 방어 — 개별 상한만으론 200MB까지 열림). 위반 시 413(크기)/415(MIME). 결함주입 테스트 8건(경계값 정확·+1바이트, 단건/합계 초과, MIME 위반, content-type 부재). 전체 스위트 9317 passed/0 failed·infra 310·ruff/black/mypy --strict green (브랜치 claude/whymath-issues-review-k20m0w)"
 paths:
   - src/backend/whymath_backend/api/ocr.py
   - "src/backend/whymath_backend/l5/ocr/**"
   - "tests/backend/api/**"
-session: claude/whymath-issues-review-k20m0w
+session: null
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M4. 완화: ConsentedUser 게이트(인증된 남용)·Starlette SpooledTemporaryFile 부분 스풀. 프로덕션 ingress body 상한 가능성 있으나 리포 근거 없음 — 앱 계층 방어가 정본."
 updated: 2026-08-10
