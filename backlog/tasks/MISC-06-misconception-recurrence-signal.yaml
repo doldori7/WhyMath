@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/hypothesis_store.py
   - src/backend/whymath_backend/harness/wh1_primary.py
-session: null
+session: claude/subject-problems-theory-check-7n9n72
 notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지)."
-updated: 2026-08-03
+updated: 2026-08-10
