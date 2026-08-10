@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -18,7 +18,9 @@ acceptance:
   - "⑤ 노출 집행(별항 — 2026-08-04 헌법): '학생 대면 표면 0'과 SurrogateMetrics 필드 추가는 양립 불가임을 실측 고정 — GET /v1/me/harness-metrics(api/me.py:3063-3067)가 response_model=SurrogateMetrics로 전 필드를 학생 토큰에 자동 서빙하며 _STATIC_TIER는 이 라우트를 막지 않는다. 따라서 파생 지표는 SurrogateMetrics에 넣지 않고 별도 내부 산출(3상태 회계 dataclass — harvest transition_counts 선례 동형)로 병기하고 surrogate_baseline_report 내부 섹션으로만 렌더(정확한 함수 배치는 구현 재량·원칙: SurrogateMetrics와 학생 라우트 무변경). 학생 라우트 응답 페이로드 신규 키 0을 실바디 테스트로 동결(ASM-07 3층 동결 패턴)·growth_evidence_exposure 13필드 정확 집합 테스트(:102-122) green 유지"
   - "⑥ 변별력·CI·회귀: 신구 혼재 픽스처에서 파생 분모가 신판만 세고 구판 건수가 분리 표기되는지·게이트 이전 운반의 변별력(전단계-correct 제출과 ocr_gated 케이스가 실제 적재됨 — 게이트 이후 값으로 구현하면 red)·경계 케이스(전이 0 제출=카운트 0 적재). 검사는 CI 명령 그대로(ruff/black --line-length 100/mypy --strict/lint-imports/pytest)·판정은 exit code. 전체 스위트를 돌린 뒤 회귀 없음을 말한다 — 못 돌렸으면 '전체는 확인하지 못했다' 명시(CI 최종 판정). 테스트 경로는 기존 배선(testpaths) — 신규 배선 불요"
   - "⑦ 범위 밖: BKT 부분 크레딧 반영(D6-2단계 — S3-01/S3-04 측정 후 판정)·record_problem_attempt_mastery 무변경·학생 대면 지표 노출(⑤로 구조 차단)·S3-32(7n9n72) 서버검증 완료 판정 축과의 결합(별 태스크 — coach.py 병합 인접 충돌만 notes 기록)·신규 테이블/마이그레이션"
-artifacts: []
+artifacts:
+  - 65f3133d
+  - "검증(전건 exit code): ruff 0·black 0·mypy --strict 0(482파일)·lint-imports 0·스코프 pytest 2140 passed + 언패킹 갱신 2파일 43 passed·전체 백엔드 스위트 9229 passed/304 skipped/0 failed(705s·PYTEST_EXIT=0·회귀 없음). acceptance ① 등재 전제 2건 실측 정정 반영(게이트 이전 값 운반 — _StepVerificationCarry·마지막 원소=solution_coaching 불변식 보존 / 파생 지표 SurrogateMetrics 비확장 — 학생 라우트 무변경·ASM-07 3층 동결). 잔여 정직 표기: 실 JSONB 왕복 통합테스트 미추가(기존 관례 축·PG 방언 컴파일 실증까지)·S3-32(7n9n72) 병합 시 coach.py 텍스트 충돌 예상(의미 충돌 없음)"
 paths:
   - src/backend/whymath_backend/schema/event_data_contract.py
   - src/backend/whymath_backend/api/coach.py
@@ -32,6 +34,6 @@ paths:
   - tests/backend/harness/test_surrogate_baseline_report.py
   - tests/backend/harness/test_wh1_evaluation.py
   - tests/backend/harness/test_wh1_step_verification_accounting.py
-session: claude/remaining-track-34zvse
+session: null
 notes: "docs/architecture/solution_module_gap_review.md §5-3 D6(2026-08-03 2차 재검증) — 외부 EOS 틀 문서의 종단 엣지(AI 채점→학생 모델)가 1비트로만 닫혀 있던 갭. S3-07(shadow 전이 카운트)의 결정론 라이브 미러. NLP-02(답안 채점 shadow)·S4-11(힌트 콘텐츠)와 축 상이·S4-09 비의존. D6-2단계(BKT 부분 크레딧 승격)는 S3-01/S3-04 측정 후 판정(설계만·태스크 0). [2026-08-10 acceptance 정리 — 착수 전 선행 정리(세션 remaining-track-34zvse, ASM-05 완료 대기 중이라 1세션=1태스크 준수로 claim 보류)] 지형 실측으로 1줄 acceptance를 ①~⑦ 분해, 등재 전제 2건이 실측과 달라 정정: (a)'핸들러가 이미 쥔 값 운반'은 코칭 노출 게이트(coach.py:596-599)에 걸려 전단계-correct·ocr_gated 표본이 유실되는 구조 — 게이트 이전 값 운반으로 정정 (b)'학생 대면 표면 0'은 SurrogateMetrics 확장과 양립 불가(GET /v1/me/harness-metrics가 전 필드 자동 서빙 실측) — 파생 지표는 내부 산출로 분리. 겹침 실측: 7n9n72(S3-32)가 coach.py +416/-7 수정 중 — _build_response_payload 시그니처 영역·두 핸들러의 _log_verify_event 호출 인접 라인이라 병합 텍스트 충돌 예상, 그 브랜치가 '마지막 원소=solution_coaching' 언패킹 전제를 명문화하므로 반환 확장 시 그 위치 보존 필수. S4-16(vafylb)은 대상 3파일 무접촉 실측. 설계 문서의 행 번호는 stale(coach.py:523→실측 :582 등) — acceptance 행 번호가 2026-08-10 실측 정본"
 updated: 2026-08-10
