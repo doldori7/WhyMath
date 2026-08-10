@@ -19,6 +19,7 @@ paths:
   - "src/backend/whymath_backend/harness/problem_duplication_audit.py"
   - "tests/backend/harness/test_problem_duplication_audit.py"
   - "data/corpus/problem_bank_*/**"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
 session: claude/remaining-track-34zvse
 notes: "브랜치 8ceaf5의 원 QUAL-01 재작성 — 원 문서가 지목한 실중복 사례(wm-quad-eq-larger-root ↔ wm-skel-92cd1ba2bbf5, 데모/파일럿 풀)가 현재 main 코퍼스에서도 재현되는지 먼저 실측 확인 후 착수. OPS-22의 감사기 구조 일부(코퍼스 전수 스캔 패턴) 재사용 가능하면 재사용."
 updated: 2026-08-10
