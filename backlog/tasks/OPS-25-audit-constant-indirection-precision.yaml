@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-25-audit-constant-indirection-precision
+title: "감사기 상수 간접참조 맹점 해소 — 유령 태스크 생성 차단(PED-15·S4-22 막힘 실측 오탐 2건)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "event_consumers 축: 모듈 레벨 상수(frozenset/set/tuple 등)에 담긴 EventType.X가 Compare에 이름으로 쓰이면 소비로 인정 — 실측 오탐: EventType.막힘은 l2/learning_metrics_rollup.py:279(파이썬 필터)·:563(SQL 필터)로 이미 소비 중인데 _SOCRATIC_EVENT_TYPES 상수 경유라 미탐지"
+  - "http_routes 축: 모듈 레벨 경로 리터럴 상수를 호출부에서 이름으로 써도 도달로 인정 — 실측 오탐: /v1/me/growth-evidence는 test_me_growth_evidence.py:48 _ENDPOINT 상수로 이미 호출 중이었다(PED-15가 이 오탐 때문에 등재됐다)"
+  - "추적 범위는 같은 모듈 1홉으로 한정 — 전역 콜그래프 금지. 기존 _insert_helpers(timeseries 축 헬퍼 1홉 추적) 선례와 동일 절제"
+  - "변별력 양방향 필수 — (양성) 고친 뒤 막힘·growth-evidence가 도달로 잡히는지, (음성 대조) 상수를 실제로 안 쓰는 미도달 항목이 여전히 미도달로 남는지. 음성 대조가 없으면 '전부 도달'로 뭉개는 반대 방향 오탐이 된다"
+  - "감사기 exit 0 유지 + 도달 수가 오탐 해소분만큼 정확히 증가(막힘 1건 + 기존 도달분). 대장에서 불필요해진 유예 항목 제거"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - tests/backend/ops/test_declared_unwired_audit.py
+session: claude/rec-05-priority-d8q8vt
+notes: "OPS-22(#754) 회수·PED-15(#755) 처리 중 실측 발견한 체계적 맹점. 두 오탐이 같은 원인(상수 간접참조)이며, 방치하면 실재하지 않는 미도달을 계속 태스크로 등재해 유령 작업을 만든다 — PED-15가 그 첫 사례이고 S4-22가 두 번째(3종 중 막힘 1종이 오탐). 감사기 자신의 정밀도 문제이므로 축별 bespoke report와 무관."
+updated: 2026-08-10
