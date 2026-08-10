@@ -1,0 +1,63 @@
+# 브랜치 정리 워크플로 (HARN-16 후속 — 원격 삭제 경로)
+#
+# 배경: 컨테이너(Claude Code 웹) 세션은 원격 브랜치를 삭제할 수 없다 — CCR git 프록시가
+# ref 삭제 연산 자체를 HTTP 403으로 차단한다(HARN-16 · 2026-08-04 40건 실측 + 2026-08-09
+# 프로브 재실측). 기존 위임 경로는 Kiki 로컬 PowerShell뿐이었는데, 이 워크플로는 그
+# 세 번째 경로를 연다: 사람이 목록을 확정하고 세션이 workflow_dispatch로 트리거하면
+# **GitHub Actions 러너가 저장소 자체 토큰으로** 삭제를 수행한다.
+#
+# 안전장치(협상 불가):
+#   · 수동 트리거 전용(workflow_dispatch) — 자동 실행 경로 없음.
+#   · `main` 및 허용 패턴(claude/*, tmp-*) 밖 브랜치는 거부한다.
+#   · 삭제 직전 각 브랜치의 head SHA를 런 로그에 남긴다 — 삭제 후에도 그 SHA로
+#     `commits/<sha>`·`contents?ref=<sha>` API 접근이 가능하다(섀도 브랜치 회수로 실증).
+#   · 한 브랜치의 실패가 나머지를 막지 않되, 실패가 하나라도 있으면 잡은 red로 끝난다.
+name: branch-cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "삭제할 브랜치(쉼표 구분·claude/* 또는 tmp-* 만 허용)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  delete-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 브랜치 삭제 (SHA 스냅샷 동반)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCHES: ${{ inputs.branches }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          fail=0
+          IFS=',' read -ra list <<< "$BRANCHES"
+          for raw in "${list[@]}"; do
+            b="$(echo "$raw" | xargs)"   # 공백 트림
+            [ -z "$b" ] && continue
+            case "$b" in
+              main)
+                echo "::error::거부 — 'main'은 삭제 대상이 될 수 없다"; fail=1; continue ;;
+              claude/*|tmp-*)
+                : ;;
+              *)
+                echo "::error::거부 — 허용 패턴(claude/*, tmp-*) 밖: $b"; fail=1; continue ;;
+            esac
+            sha=$(gh api "repos/$REPO/git/refs/heads/$b" --jq .object.sha 2>/dev/null || true)
+            if [ -z "$sha" ]; then
+              echo "::warning::부재(이미 삭제됨?): $b"; continue
+            fi
+            echo "삭제 전 스냅샷: $sha  $b"
+            if gh api -X DELETE "repos/$REPO/git/refs/heads/$b" >/dev/null 2>&1; then
+              echo "삭제 완료: $b"
+            else
+              echo "::error::삭제 실패: $b"; fail=1
+            fi
+          done
+          exit $fail
