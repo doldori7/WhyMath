@@ -138,6 +138,9 @@ from whymath_backend.l4.misconception.distractor_link import (
     resolve_misconception_from_choice,
 )
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
+from whymath_backend.l4.misconception.prerequisite_link import (
+    gaps_from_active_misconceptions,
+)
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l6.suneung import (
     METADATA_ONLY_SOURCES,
@@ -1543,12 +1546,20 @@ async def get_my_concept_coaching(
     첫 L4→L2 결선(L_n→L_{n-1} 허용). 오케스트레이션:
       ① **L2 fetch** — `recommend_prerequisite_gaps(weak_only=True)`로 C의 *막힌 선수개념*을
          조회한다(weakness asc 정렬·`gaps[0]`=top blocker).
-      ② **선수 차단 우선** — `recommend_prerequisite_coaching(gaps)`이 *막힌 선수가 있으면*
-         `prerequisite_review` 코칭(선수부터 복습 권유)을 돌려준다. 이걸 *최우선*으로 반환한다 —
-         후행을 바로 코칭하면 비계가 허공에 뜨기 때문(LTHC·기초 우선·CLAUDE.md 교수학 #1·#3).
-      ③ **fallback(막힌 선수 없음)** — `compute_concept_diagnoses`에서 이 개념의 BKT/IRT 진단을
-         찾아 일반 메타인지 코칭(`recommend_coaching`)으로 넘어간다(verify/foundation/advance 등).
-         진단이 아예 없으면 `recommend_coaching(None, None)`(→ diagnose·추가 진단 권유).
+      ①-b (MISC-02) L2 traversal이 **막힌 선수를 하나도 못 찾았을 때만** 활성 오개념
+         (`get_active_hypotheses`)을 `gaps_from_active_misconceptions`로 보충한다. 그래프
+         구조적 선수(①)를 항상 우선하는 이유: 오개념 연결 개념은 "개념 C의 선수"라는 보장이
+         없다(전역적으로 활성인 오개념일 뿐 — 다른 단원일 수 있음). `misconception_crosslink_
+         mode == "off"`(기본)면 이 보충 경로 자체를 타지 않아 활성 오개념 조회조차 하지 않는다
+         (오늘 동작 100% 그대로·회귀 0 — 어댑터 내부에도 동일 게이트가 있어 이중 방어).
+      ② **선수 차단 우선** — `recommend_prerequisite_coaching(gaps)`이 *막힌 선수(또는 보충된
+         오개념 연결 개념)가 있으면* `prerequisite_review` 코칭(선수부터 복습 권유)을 돌려준다.
+         이걸 *최우선*으로 반환한다 — 후행을 바로 코칭하면 비계가 허공에 뜨기 때문(LTHC·기초
+         우선·CLAUDE.md 교수학 #1·#3).
+      ③ **fallback(막힌 선수·오개념 신호 둘 다 없음)** — `compute_concept_diagnoses`에서 이
+         개념의 BKT/IRT 진단을 찾아 일반 메타인지 코칭(`recommend_coaching`)으로 넘어간다
+         (verify/foundation/advance 등). 진단이 아예 없으면 `recommend_coaching(None, None)`
+         (→ diagnose·추가 진단 권유).
 
     `threshold`(막힘 판정 숙달 임계)·`max_depth`(다단계 선수 traversal 깊이)는 선수 슬1과 동일
     재사용. user_id 스코핑·읽기 전용(마이그레이션 0). L4 순수 결정은 `recommend_prerequisite_
@@ -1569,6 +1580,12 @@ async def get_my_concept_coaching(
         weak_only=True,
         max_depth=max_depth,
     )
+    if not gaps and get_settings().misconception_crosslink_mode != "off":
+        # ①-b (MISC-02) — 그래프 선수가 비었을 때만 오개념 신호로 보충(우선순위 근거는 위 ①-b).
+        hypotheses = await get_active_hypotheses(session, user.user_id)
+        gaps = await gaps_from_active_misconceptions(
+            session, [h.misconception_id for h in hypotheses]
+        )
     trigger = recommend_prerequisite_coaching(gaps)
     if trigger is not None:
         return trigger  # 막힌 선수 있음 → 선수 복습 우선(후행 코칭 보류).

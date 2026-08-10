@@ -3744,6 +3744,134 @@ class TestPrerequisiteCoachingHelper:
             assert forbidden not in result.prompt
 
 
+class TestPrerequisiteCoachingMisconceptionSupplement:
+    """MISC-02 배선 — `_prerequisite_coaching_for`가 L2 traversal 빈 결과일 때만 오개념으로 보충.
+
+    `gaps_from_active_misconceptions` 자체(crosswalk→catalog→concept 체인)는
+    `tests/backend/l4/misconception/test_prerequisite_link.py`가 검증한다 — 여기선 *오케스트레이션
+    분기*(mode 게이팅·"traversal 우선·오개념은 보충"의 우선순위)만 monkeypatch로 고립해 확인한다.
+    """
+
+    _PID = uuid.uuid4()
+
+    async def test_mode_off_skips_misconception_supplement(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=off(기본) → gaps=[]에도 오개념 신호 조회 자체를 안 함(회귀 0 핵심 증거).
+
+        `_FakeSession.execute`는 raise하므로, `get_active_hypotheses`를 monkeypatch하지 않고도
+        "off일 때 이 어댑터/그 입력 조회의 부작용(DB 조회 포함)이 전혀 없다"를 직접 증명한다 —
+        만약 off인데도 그 경로가 호출된다면 이 fake session이 AssertionError로 즉시 드러낸다.
+        """
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "off")
+        get_settings.cache_clear()
+        cid = uuid.uuid4()
+
+        async def _concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return cid
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr("whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps)
+        try:
+            result = await coach._prerequisite_coaching_for(
+                cast(AsyncSession, _FakeSession()), _UID, self._PID
+            )
+        finally:
+            get_settings.cache_clear()
+        assert result is None  # 기존 동작과 100% 동일(오개념 신호 없음 — 회귀 0).
+
+    async def test_mode_shadow_supplements_when_traversal_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=shadow + L2 gaps=[] → 활성 오개념 신호로 보충해 prerequisite_review trigger 생성."""
+        from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        cid = uuid.uuid4()
+        supplied_gap = PrerequisiteGap(
+            concept_id=uuid.uuid4(),
+            concept_code="UC.test.supp",
+            concept_name="분수",
+            agreement="insufficient",
+        )
+
+        async def _concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return cid
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        async def _hyps(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
+            return [_hyp(0.9, mid="fraction-add-denominator")]
+
+        async def _supplement(session: Any, active: list[str]) -> list[PrerequisiteGap]:
+            # get_active_hypotheses 결과가 그대로(변환 없이) 배선되는지 확인.
+            assert active == ["fraction-add-denominator"]
+            return [supplied_gap]
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr("whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps)
+        monkeypatch.setattr("whymath_backend.api.coach.get_active_hypotheses", _hyps)
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.gaps_from_active_misconceptions", _supplement
+        )
+        try:
+            result = await coach._prerequisite_coaching_for(
+                cast(AsyncSession, _FakeSession()), _UID, self._PID
+            )
+        finally:
+            get_settings.cache_clear()
+        assert result is not None
+        assert result.focus == "prerequisite_review"
+        assert "분수" in result.prompt
+
+    async def test_mode_shadow_traversal_gaps_take_priority(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=shadow이나 L2 traversal이 이미 gaps를 찾음 → 오개념 보충 경로 자체를 안 탐(우선순위).
+
+        구조적 선수(그래프 traversal)가 오개념 연결 개념보다 항상 우선한다 — 후자는 "이 개념의
+        선수"라는 보장이 없는 전역 신호이기 때문(prerequisite_link.py 모듈 docstring 근거).
+        """
+        from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        cid = uuid.uuid4()
+        structural_gap = PrerequisiteGap(
+            concept_id=uuid.uuid4(),
+            concept_code="UC.struct",
+            concept_name="구조선수",
+            agreement="agree",
+            weakness=0.1,
+        )
+
+        async def _concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return cid
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[PrerequisiteGap]:
+            return [structural_gap]
+
+        async def _boom(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("traversal gaps가 있으면 오개념 보충을 조회하면 안 됨")
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr("whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps)
+        monkeypatch.setattr("whymath_backend.api.coach.get_active_hypotheses", _boom)
+        try:
+            result = await coach._prerequisite_coaching_for(
+                cast(AsyncSession, _FakeSession()), _UID, self._PID
+            )
+        finally:
+            get_settings.cache_clear()
+        assert result is not None
+        assert "구조선수" in result.prompt
+
+
 class TestPrerequisiteCoachingField:
     """`prerequisite_coaching` 필드 직렬화 — CoachResponse 기본 None·trigger 직렬화·핸들러 배선."""
 

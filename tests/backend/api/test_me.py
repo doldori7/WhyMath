@@ -26,6 +26,7 @@ from whymath_backend.api.me import (
     _weak_concept_weights,
 )
 from whymath_backend.app import create_app
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -2694,4 +2695,142 @@ class TestAssessmentCaptureEndpoint:
         assert body["assessment"]["assessment_id"] == str(existing_row.assessment_id)
         # 재적재 없음 — 커밋 0·add 0(이중 계상 방지가 실제로 동작함을 확인).
         assert fake.commits == 0
-        assert fake.added == []
+
+
+# ── MISC-02: GET /v1/me/weak-concepts/{id}/coaching — 오개념 신호 보충 배선 ─────────────
+class TestConceptCoachingMisconceptionSupplement:
+    """`get_my_concept_coaching` — L2 traversal이 빈 결과일 때만 활성 오개념으로 보충(hermetic).
+
+    L2/L4 좌석 자체(recommend_prerequisite_gaps·recommend_prerequisite_coaching·
+    gaps_from_active_misconceptions)는 각 계층 단위테스트가 이미 검증한다 — 여기선 *오케스트레이션
+    분기*(mode 게이팅·"traversal 우선·오개념은 보충"의 우선순위)만 monkeypatch로 고립해 확인한다.
+    라이브 PG e2e는 `test_me_integration.py::
+    test_me_concept_coaching_prereq_block_and_fallback_on_live_pg`가 mode=off 기본값 경로를 실
+    DB로 이미 커버한다(이 테스트는 hermetic 층에서 같은 회귀-0 계약을 재확인 + shadow 분기를 추가).
+    """
+
+    _CID = uuid.uuid4()
+
+    def _client(self) -> TestClient:
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+
+        async def _sess() -> AsyncIterator[FakeSession]:
+            yield FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        return TestClient(app)
+
+    def test_mode_off_skips_supplement_and_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=off(기본) → traversal 빈 결과에도 오개념 보충 조회 자체를 안 함(회귀 0 핵심 증거).
+
+        `get_active_hypotheses`/`gaps_from_active_misconceptions`를 "호출되면 AssertionError"로
+        고정해, off일 때 실제로 *조회 자체가 없음*(빈 결과를 리턴하는 스텁이 아니라 미호출)을
+        증명한다 — 기존 fallback(diagnose) 동작이 100% 그대로 보존됨을 함께 확인한다.
+        """
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "off")
+        get_settings.cache_clear()
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        async def _diagnoses(*args: Any, **kwargs: Any) -> list[Any]:
+            return []  # 진단 없음 → recommend_coaching(None, None) → diagnose.
+
+        async def _boom(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("mode=off인데 오개념 보충 경로가 호출됨(회귀)")
+
+        monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _gaps)
+        monkeypatch.setattr("whymath_backend.api.me.compute_concept_diagnoses", _diagnoses)
+        monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _boom)
+        monkeypatch.setattr("whymath_backend.api.me.gaps_from_active_misconceptions", _boom)
+        try:
+            resp = self._client().get(f"/v1/me/weak-concepts/{self._CID}/coaching")
+        finally:
+            get_settings.cache_clear()
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["focus"] == "diagnose"  # 기존 폴백 동작 그대로(오개념 신호 미개입).
+
+    def test_mode_shadow_supplements_when_traversal_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=shadow + traversal 빈 결과 → 오개념 보충이 만든 gap으로 prerequisite_review."""
+        from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        gap = PrerequisiteGap(
+            concept_id=uuid.uuid4(),
+            concept_code="UC.test.supp",
+            concept_name="분수",
+            agreement="insufficient",
+        )
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        async def _hyps(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
+            return [
+                MisconceptionHypothesis(
+                    misconception_id="fraction-add-denominator",
+                    confidence=0.8,
+                    turns_since_evidence=0,
+                    evidence_count=1,
+                )
+            ]
+
+        async def _supplement(session: Any, active: list[str]) -> list[PrerequisiteGap]:
+            # get_active_hypotheses 결과가 그대로 배선되는지(중간 변환 없이) 확인.
+            assert active == ["fraction-add-denominator"]
+            return [gap]
+
+        monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _gaps)
+        monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _hyps)
+        monkeypatch.setattr("whymath_backend.api.me.gaps_from_active_misconceptions", _supplement)
+        try:
+            resp = self._client().get(f"/v1/me/weak-concepts/{self._CID}/coaching")
+        finally:
+            get_settings.cache_clear()
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["focus"] == "prerequisite_review"
+        assert "분수" in body["prompt"]
+
+    def test_mode_shadow_traversal_priority_over_supplement(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mode=shadow이나 traversal이 이미 gaps를 찾음 → 오개념 보충 조회 자체를 안 탐(우선순위).
+
+        구조적 선수(그래프 traversal)가 오개념 연결 개념보다 항상 우선한다 — 후자는 "이 개념의
+        선수"라는 보장이 없는 전역 신호이기 때문(prerequisite_link.py 모듈 docstring 근거).
+        """
+        from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        structural_gap = PrerequisiteGap(
+            concept_id=uuid.uuid4(),
+            concept_code="UC.struct",
+            concept_name="구조선수",
+            agreement="agree",
+            weakness=0.1,
+        )
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[PrerequisiteGap]:
+            return [structural_gap]
+
+        async def _boom(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("traversal gaps가 있으면 오개념 보충을 조회하면 안 됨")
+
+        monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _gaps)
+        monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _boom)
+        try:
+            resp = self._client().get(f"/v1/me/weak-concepts/{self._CID}/coaching")
+        finally:
+            get_settings.cache_clear()
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["focus"] == "prerequisite_review"
+        assert "구조선수" in body["prompt"]

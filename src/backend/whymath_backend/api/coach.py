@@ -130,10 +130,16 @@ from whymath_backend.l4.misconception import (
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.evidence_store import log_evidence
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
-from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
+from whymath_backend.l4.misconception.hypothesis_store import (
+    curate_hypothesis,
+    get_active_hypotheses,
+)
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
+from whymath_backend.l4.misconception.prerequisite_link import (
+    gaps_from_active_misconceptions,
+)
 from whymath_backend.l4.misconception.probe_selection import is_exploration_turn
 from whymath_backend.l4.misconception.shadow import (
     _spawn,
@@ -1279,8 +1285,15 @@ async def _prerequisite_coaching_for(
          (문항-개념 미매핑).
       ③ L2 `recommend_prerequisite_gaps(weak_only=True)`로 그 개념의 *막힌 선수*(weakness asc·
          `gaps[0]`=top blocker)를 조회.
-      ④ L4 `recommend_prerequisite_coaching(gaps)` — 막힌 선수가 있으면 `prerequisite_review`
-         코칭 trigger·없으면 None(순수 결정·L5는 fetch만).
+      ③-b (MISC-02) 그래프 traversal이 **막힌 선수를 하나도 못 찾았을 때만** 활성 오개념
+         (`get_active_hypotheses`)을 `gaps_from_active_misconceptions`로 보충한다. 그래프
+         구조적 선수(③)를 오개념 연결 개념보다 *항상 우선*하는 이유: 오개념은 "이 문제 개념의
+         선수"라는 보장이 없다(전역적으로 활성인 오개념일 뿐 — 완전히 다른 단원일 수 있음).
+         `misconception_crosslink_mode == "off"`(기본)면 이 보충 경로 자체를 타지 않는다 —
+         활성 오개념 조회조차 하지 않아 오늘 동작이 100% 그대로다(회귀 0. 어댑터 내부에도 동일
+         게이트가 있지만, 여기서 먼저 걸러 그 조회 자체를 피한다 — 이중 방어).
+      ④ L4 `recommend_prerequisite_coaching(gaps)` — 막힌 선수(또는 보충된 오개념 연결 개념)가
+         있으면 `prerequisite_review` 코칭 trigger·없으면 None(순수 결정·L5는 fetch만).
 
     redaction: `CoachingTrigger`의 rationale/prompt에는 *안전 표시 필드*(name_ko)만 들어가고
     개념 본문·정답은 구조적으로 흐를 수 없다(`PrerequisiteGap`/`recommend_prerequisite_coaching`이
@@ -1300,6 +1313,12 @@ async def _prerequisite_coaching_for(
         weak_only=True,
         max_depth=max_depth,
     )
+    if not gaps and get_settings().misconception_crosslink_mode != "off":
+        # MISC-02 — 그래프 선수가 비었을 때만 오개념 신호로 보충(우선순위 근거는 위 ③-b).
+        hypotheses = await get_active_hypotheses(session, user_id)
+        gaps = await gaps_from_active_misconceptions(
+            session, [h.misconception_id for h in hypotheses]
+        )
     return recommend_prerequisite_coaching(gaps)  # 막힌 선수 없으면 None.
 
 
