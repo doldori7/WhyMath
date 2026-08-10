@@ -1,10 +1,25 @@
-// 수식 표기 정규화·세그먼트 (S3-21) — 화면에 도착한 평문/캐럿 표기를 한국 수학교과서처럼
-// 조판할 수 있게 준비하는 *순수* 함수 모음.
+// 수식 표기 정규화·세그먼트·canonical 파이프라인 (S3-21·S3-23·NS-02) — 화면에 도착한
+// 평문/캐럿 표기를 한국 수학교과서처럼 조판할 수 있게 준비하는 *순수* 함수 모음이자,
+// 표기·의미 계층(notation_semantics_layer.md §3 L5)의 정규화·렌더 서비스 단일 조립점.
 //
 // 경계(CLAUDE.md 표현≠의미): 여기서 하는 일은 **표기(notation) 정규화·세그먼트**뿐이다.
-// 수학 의미·동치·약분·정오 판정은 절대 하지 않는다 — 그 단일 권위는 백엔드(L3 verify)다.
+// 수학 의미·동치·약분·정오 판정은 절대 하지 않는다 — 그 단일 권위는 백엔드(L3 verify·SymPy)다.
 // latex_to_plain.dart(LaTeX→평문·*전송* 방향)의 짝으로, 이 파일은 *표시* 방향을 담당한다:
 // 이미 화면 상태에 들어온 평문/캐럿 표기를 다시 렌더러(KaTeX)가 받는 LaTeX로 되돌린다.
+//
+// ── 지원 입력형 디스패치 (NS-02) ─────────────────────────────────────────────
+// canonical 진입점([renderSegments]·[toRenderLatex])이 통합해 받는 입력형은 세 가지다:
+//   ① MathLive 직렬화 LaTeX — 입력 팔레트 산출(`\frac`·`\doubleprime`·`\mleft`·`\placeholder` …).
+//   ② 유니코드 수학 조판 — 코퍼스·코치 발화의 상첨자/프라임(`x²`·`f″`·`x⁻¹`).
+//   ③ 캐럿/평문(caret/plain) — 전송 경로 산출·계약 canonical(`x^2`·`((a)/(b))`·`sqrt(x)`·명시 `*`).
+// 자연어 표기("선분 AB")는 **미지원 stub**이다 — Phase B(NL↔Entity 매핑·reasoning_type 확장)에서
+// 이 진입점에 합류한다(notation_semantics_layer.md §6). 지원 표기 집합의 열거 가능한 정본은
+// `data/notation_support_manifest.json`(단일 진실 원천 — NS-03 커버리지 게이트가 소비하며,
+// 이 파일과의 정합은 notation_canonical_test.dart가 동결한다).
+//
+// canonical 표현 = **LaTeX 문자열**(렌더·notation_contract 친화 — 구조 토큰 채택은 과공학이라
+// 반려·notation_semantics_layer.md §8 열린 결정 확정). 의미 동치는 이 canonical을 보지 않는다 —
+// 의미는 L3 SymPy가 자체 canonicalize로 판정한다(표현≠의미 경계 유지).
 //
 // 왜 필요한가(2026-07-22 실기기 실측·S3-21): 문항("삼차함수 f(x) = x^3 …")·코치 발화·풀이
 // 수식이 raw 캐럿(x^2)·평문 LaTeX(\lbrack·f^(\prime))로 노출됐다. flutter_math_fork(KaTeX)는
@@ -291,11 +306,80 @@ List<MathSegment> segmentMathText(String text) {
   return result;
 }
 
+// ── canonical 파이프라인 단일 진입점 (NS-02) ─────────────────────────────────
+// 위 순수 함수 4종의 조합 순서(normalizeUnicodeMath → segmentMathText → 조각별
+// plainMathToLatex)가 위젯마다 재조립되면 드리프트한다(NS-01까지의 실측 — math_text.dart의
+// 4개 좌석이 각자 조립). 그래서 조합을 *이 한 곳*에 캡슐화한다: 위젯·프리뷰·게이트는 아래
+// 진입점만 소비하고, 개별 함수는 감사 테스트(S3-23)·전송 짝 검증을 위해 공개로 남긴다.
+// fail-closed 계약은 불변이다 — 여기서 만든 canonical LaTeX가 렌더러에서 파싱 불가하면
+// 호출부(onErrorFallback)가 *세그먼트 원문*으로 폴백한다(크래시 0·의도된 graceful 폴백).
+
+/// 원문 [raw]를 canonical 파이프라인 1단(유니코드 정규화 → 세그먼트)에 태운다 — 단일 조립점.
+///
+/// 지원 입력형(모듈 doc 참조: MathLive LaTeX·유니코드 조판·캐럿/평문)을 통합해 받아
+/// 프로즈/수식 조각으로 나눈다(무손실·수학 판정 없음). 수식 조각의 canonical LaTeX 산출은
+/// [renderLatexFor]가 담당한다(2단). 위젯이 [normalizeUnicodeMath]·[segmentMathText]를
+/// 직접 조합하지 않게 하는 것이 목적이다(조합 순서 단일 진실·NS-02).
+List<MathSegment> renderSegments(String raw) =>
+    segmentMathText(normalizeUnicodeMath(raw));
+
+/// [segment]의 *렌더용 canonical LaTeX*를 산출하는 단일 지점(파이프라인 2단).
+///
+/// 수식 조각은 [plainMathToLatex]로 canonical LaTeX를 만들고, 프로즈 조각은 원문 그대로
+/// 돌려준다(프로즈에 표기 정규화를 적용하지 않는다 — 무손실·한글 무회귀). 위젯은 이 함수만
+/// 소비하고 [plainMathToLatex]를 직접 조합하지 않는다(NS-02). [MathSegment]의 공개 계약
+/// (생성자·`==`·hashCode)은 불변 — 이 함수는 조각을 감싸는 얇은 helper일 뿐이다.
+///
+/// fail-closed: 산출 LaTeX가 파싱 불가하면 호출부가 [MathSegment.text](원문)로 폴백한다.
+String renderLatexFor(MathSegment segment) =>
+    segment.isMath ? plainMathToLatex(segment.text) : segment.text;
+
+/// 원문 [raw] 전체를 한 번에 canonical 표기 문자열로 — 단일식 편의 진입점.
+///
+/// [renderSegments]로 나눈 뒤 수식 조각만 [renderLatexFor]로 canonical LaTeX로 바꾸고
+/// 프로즈는 그대로 이어 붙인다. 순수 수식 입력(`x^2`·`f″`)이면 산출이 canonical LaTeX 그
+/// 자체(`x^{2}`·`f^{\prime\prime}`)다. 계약 교차검증(notation_contract)·매니페스트 golden이
+/// 이 함수를 기준으로 canonical을 고정한다. 수학 의미·동치 판정은 없다(표현≠의미).
+String toRenderLatex(String raw) =>
+    renderSegments(raw).map(renderLatexFor).join();
+
 /// [text]에 교과서 조판으로 렌더할 *수식 조각*이 하나라도 있는지 판정한다(순수).
 ///
-/// [MathText] 위젯의 내부 판정(유니코드 정규화 → 세그먼트 → 수식 조각 존재)과 *같은 기준*이다 —
-/// 렌더 프리뷰를 *수식일 때만* 띄우는 호출부(풀이 단계 편집기·NS-01)가 재사용해, 빈 필드·순수
-/// 프로즈·신호 없는 단순 값(`x=2`·`0`·`ㄱ`)엔 프리뷰를 만들지 않게 한다(빈 공간·중복 표시 억제).
+/// canonical 진입점 [renderSegments]를 그대로 소비하므로 [MathText] 위젯의 내부 판정과
+/// *같은 기준*임이 구조적으로 보장된다(NS-02 — 별도 재조립 없음). 렌더 프리뷰를 *수식일
+/// 때만* 띄우는 호출부(풀이 단계 편집기·NS-01)가 재사용해, 빈 필드·순수 프로즈·신호 없는
+/// 단순 값(`x=2`·`0`·`ㄱ`)엔 프리뷰를 만들지 않게 한다(빈 공간·중복 표시 억제).
 /// 수학 의미·정오 판정은 없다(표현≠의미) — "조판할 수식 표기가 있는가"만 본다.
-bool hasRenderableMath(String text) =>
-    segmentMathText(normalizeUnicodeMath(text)).any((s) => s.isMath);
+bool hasRenderableMath(String text) => renderSegments(text).any((s) => s.isMath);
+
+// ── Entity 앵커 seam (NS-02 스켈레톤 — Phase B 예약) ─────────────────────────
+
+/// L1 Symbol Entity Registry 앵커의 자리표시 타입(스켈레톤).
+///
+/// Phase B에서 정규화된 표기 토큰이 L1 Symbol Entity(학년·교육과정 코드 태그를 단 사실
+/// 데이터·단일 진실 원천)로 매핑될 자리다. Entity가 정본이고 {LaTeX·유니코드·NL·Display}는
+/// 투영이라는 관계(notation_semantics_layer.md §3 L1)만 계약으로 예약해 둔다. 이 타입은
+/// 표기 식별자만 담는다 — 수학 의미·판정·렌더 정보는 담지 않는다(표현≠의미·Concept Purity).
+class NotationEntity {
+  const NotationEntity({required this.id});
+
+  /// Entity 식별자(예: `math.symbol.prime`) — 파일명·언어·교육과정과 독립(플레이북 게이트).
+  final String id;
+
+  @override
+  bool operator ==(Object other) => other is NotationEntity && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'NotationEntity($id)';
+}
+
+/// 정규화된 표기 토큰 → L1 Symbol Entity 앵커(스켈레톤 — 지금은 항상 null).
+///
+/// Phase B에서 L1 Symbol Entity Registry로 매핑될 자리·지금은 Registry 미구현(노드 폭발
+/// 방어 — notation_semantics_layer.md §5: 커버리지 *측정*이 적재를 구동해야 하며, 한 번에
+/// 전학년 심볼 적재는 금지). null = "앵커 없음"이며 렌더 경로는 이 값에 의존하지 않는다
+/// (seam·계약만 예약 — 기능 무영향, fail-closed 불변).
+NotationEntity? anchorFor(String token) => null;

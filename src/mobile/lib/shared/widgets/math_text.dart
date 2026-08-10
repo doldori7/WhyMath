@@ -1,8 +1,12 @@
-// 수식 렌더 위젯 (S3-21) — 프로즈+수식이 섞인 문자열을 한국 수학교과서 조판으로 그린다.
+// 수식 렌더 위젯 (S3-21·NS-02) — 프로즈+수식이 섞인 문자열을 한국 수학교과서 조판으로 그린다.
 //
 // 경계(CLAUDE.md 표현≠의미): 렌더(표현)만 한다 — 수학 의미·정오·동치 판정은 백엔드(L3) 몫.
 // 세그먼트·표기 정규화는 math_notation.dart(순수)가, 실제 조판은 flutter_math_fork(KaTeX·순수
 // Dart 렌더러·WebView 불요)가 한다. 여기서는 그 둘을 이어 위젯으로 만들 뿐이다.
+//
+// NS-02: 이 파일은 정규화·세그먼트·LaTeX 산출을 *직접 조합하지 않는다* — canonical 진입점
+// (renderSegments·renderLatexFor)만 소비한다. 조합 순서의 단일 진실은 math_notation.dart다
+// (위젯마다 재조립하며 생기던 드리프트 위험 제거·산출 바이트는 종전과 동일).
 //
 // fail-closed(절대 원칙·크래시 0): 수식 조각이 파싱 불가하면 그 조각만 *원문 그대로* 평문으로
 // 폴백한다(Math.tex의 onErrorFallback). 앱은 어떤 입력에도 죽지 않고, 최악의 경우 오늘과 같은
@@ -31,9 +35,8 @@ class MathText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 유니코드 조판(x³·f″)을 캐럿 LaTeX로 되돌려 세그먼트가 수식으로 라우팅하게 한다(S3-23).
-    final normalized = normalizeUnicodeMath(text);
-    final segments = segmentMathText(normalized);
+    // canonical 진입점(NS-02): 유니코드 정규화 → 세그먼트를 단일 조립점에 위임한다(S3-23 동작 동일).
+    final segments = renderSegments(text);
     final mathCount = segments.where((s) => s.isMath).length;
 
     // 순수 프로즈 — 기존 렌더와 바이트 단위 동일(무회귀·find.text 호환).
@@ -46,7 +49,7 @@ class MathText extends StatelessWidget {
 
     // 수식 한 덩어리(프로즈 없음) — 가로 스크롤 박스로 그려 긴 풀이도 넘치지 않게 한다.
     if (segments.length == 1) {
-      return _ScrollableMath(latexSource: segments.first.text, style: baseStyle);
+      return _ScrollableMath(segment: segments.first, style: baseStyle);
     }
 
     // 혼합 — 프로즈 TextSpan + 수식 WidgetSpan을 흐르는 텍스트로 조판한다.
@@ -69,7 +72,8 @@ class MathText extends StatelessWidget {
 /// [MathSegment] 리스트를 인라인 스팬으로 바꾼다(프로즈=TextSpan·수식=WidgetSpan).
 ///
 /// 인접 프로즈는 하나의 TextSpan으로 병합한다(불필요한 스팬 방지·기존 강조 테스트 호환).
-/// 수식 조각은 표기 정규화 후 [Math.tex]로 그리되, 파싱 실패 시 원문 평문으로 폴백한다(fail-closed).
+/// 수식 조각의 canonical LaTeX는 [renderLatexFor](단일 지점·NS-02)가 산출하고 [Math.tex]로
+/// 그리되, 파싱 실패 시 *세그먼트 원문* 평문으로 폴백한다(fail-closed).
 List<InlineSpan> mathInlineSpans(List<MathSegment> segments, TextStyle style) {
   final spans = <InlineSpan>[];
   final proseBuf = StringBuffer();
@@ -90,7 +94,7 @@ List<InlineSpan> mathInlineSpans(List<MathSegment> segments, TextStyle style) {
       WidgetSpan(
         alignment: PlaceholderAlignment.middle,
         child: Math.tex(
-          plainMathToLatex(seg.text),
+          renderLatexFor(seg),
           mathStyle: MathStyle.text,
           textStyle: style,
           onErrorFallback: (_) => Text(seg.text, style: style),
@@ -105,16 +109,18 @@ List<InlineSpan> mathInlineSpans(List<MathSegment> segments, TextStyle style) {
 /// 원문 문자열을 곧장 인라인 스팬으로(세그먼트 포함) — 접두사와 함께 조립할 때 쓴다.
 ///
 /// 예: 선택지 "N. [값]"의 값 부분을 번호 접두사 TextSpan 뒤에 이어 붙일 때.
+/// 세그먼트는 canonical 진입점 [renderSegments]에 위임한다(NS-02·재조립 금지).
 List<InlineSpan> mathInlineSpansFor(String text, TextStyle style) =>
-    mathInlineSpans(segmentMathText(normalizeUnicodeMath(text)), style);
+    mathInlineSpans(renderSegments(text), style);
 
 /// 수식 한 덩어리를 가로 스크롤 박스로 그린다 — 긴 풀이 수식이 버블·배너 폭을 넘어도
 /// 넘침(RenderFlex/클리핑) 없이 옆으로 스크롤해 전체를 볼 수 있게 한다(MOB-02 정합).
 class _ScrollableMath extends StatelessWidget {
-  const _ScrollableMath({required this.latexSource, required this.style});
+  const _ScrollableMath({required this.segment, required this.style});
 
-  /// 정규화 전 원문 수식(폴백 시 이 원문을 그대로 보인다).
-  final String latexSource;
+  /// 렌더할 수식 조각 — canonical LaTeX는 [renderLatexFor]가 산출하고(NS-02 단일 지점),
+  /// 파싱 실패 시 [MathSegment.text](정규화 전 원문)를 그대로 보인다(fail-closed 불변).
+  final MathSegment segment;
 
   /// 조판 스타일(fontSize·color 확정).
   final TextStyle style;
@@ -124,10 +130,10 @@ class _ScrollableMath extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Math.tex(
-        plainMathToLatex(latexSource),
+        renderLatexFor(segment),
         mathStyle: MathStyle.text,
         textStyle: style,
-        onErrorFallback: (_) => Text(latexSource, style: style),
+        onErrorFallback: (_) => Text(segment.text, style: style),
       ),
     );
   }
