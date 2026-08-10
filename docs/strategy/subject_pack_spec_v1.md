@@ -115,6 +115,7 @@
   - 물리: `dimensional_consistency(expr, expected_dim) → {consistent/inconsistent/undecidable/parse_error}` · `sympy.physics.units` 기반. 트리거 = 물리 문항 검증 소비처 첫 등장(§8).
   - 생물: 수식 동치 부재 → **성취기준 근거 인용 사실 검증**(자체 코퍼스 RAG, 환각 시 undecidable 보수). 신규 검증 계열.
   - 영어: 루브릭 LLM 평가(평가 근거 강제 인용) — 가장 먼 검증축, E6 소관.
+  - 코딩/정보(후보, 순서 미확정 — `subject_expansion_e_axis_v1.md` §2 "E7"): `code_execution_verdict(code, tests) → {pass/fail/timeout/sandbox_error}`. 유일하게 "SymPy 형제 primitive"가 아니라 완전 신규 엔진(코드 실행 채점) — 3-tier 정직성 규약(판정 불가=undecidable 보수 처리)은 승계. 상세: `subject_expansion_candidate_review_v1.md` §3.
 - 게이트 인터페이스(`evaluate_equivalent_candidate`)는 과목 중립 — SymPy는 "수학 커널 plugin"이지 파이프라인 본체 아님(§4.1 불변식).
 
 ---

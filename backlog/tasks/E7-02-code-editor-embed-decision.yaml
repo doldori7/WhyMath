@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E7-02-code-editor-embed-decision
+title: "L5 코드 에디터 임베드 — 국소 임베드 3번째 비상구 결정 (CLAUDE.md 기술스택 개정 필요)"
+track: subject-expansion
+stage: E1
+subject: coding
+layer: mobile
+status: todo
+priority: 4
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "CLAUDE.md 기술스택 표 '국소 임베드 2 비상구' 개정 여부 결정 + MEMORY.md 결정 로그 등재 + (승인 시) 컴포넌트 선택(CodeMirror/Monaco 등)"
+artifacts: []
+paths:
+  - "docs/**"
+session: null
+notes: "subject_expansion_readiness.md §8 보류 대장 항목(2026-08-10 등재). MathLive·three.js와 동급 예외 신설이라 Claude가 임의로 못 정함 — Kiki 결정 필요. 코딩 콘텐츠 착수 전 선결"
+updated: 2026-08-10

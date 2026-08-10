@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (설계·E축 후보 제안 / **채택 아님**): **코딩/정보를 E축(다과목 확장) 후보로 제안 등재 — 순서 미확정, Kiki 승인 대기** (claude 설계, Kiki "2차 진입 과목군 중 코딩관련 과목 진입계획·아키텍처 설계" 지시 → 후속으로 "2차 과목 후보 폭넓게 검토" 확장 요청)
+
+- **요청 배경과 발견한 충돌**: Kiki가 코딩 과목의 진입계획·아키텍처를 요청했으나, 조사 결과 `subject_expansion_e_axis_v1.md`(MEMORY 2026-07-02 locked)의 E1~E6(물리→화학→생물→역사·사회→국어→영어) 확정 순서에 코딩/정보가 없었다. AskUserQuestion으로 확인해 **"E축 신규 추가(E7) — 기존 E1~E6 순서는 그대로"**로 답변받았다. 후속 요청("적극적으로 EOS 조기 달성할 과목 검토")은 `knowledge_fabric_vision_v1.md` §4가 스스로 "이 비전 문서는 확장을 서두르는 근거가 아니다"·"순서는 게이트가 결정하며 달력이 결정하지 않는다"고 명시한 것과 충돌해, **비교 분석 자료로 스코프를 좁혔다**(착수 순서를 바꾸는 근거로 쓰지 않음).
+- **채택된 형태**: 지구과학(`E1-90-earth-science-placement.yaml`, owner: kiki, "순서 날조 금지")과 동일한 성격 — "후보 등재 = 순서 확정 아님". 배치는 신규 태스크 `E7-90-coding-placement`(owner: kiki)가 결정한다. Claude는 순서를 대신 정하지 않았다.
+- **산출물**: ①신규 문서 `docs/strategy/subject_expansion_candidate_review_v1.md`(Fabric §3 지표로 후보 비교 — 교차 엣지 잠재력·엔진 재사용률·저작권 위험) ②`subject_expansion_e_axis_v1.md` §2에 "E7. 코딩/정보 — 후보(순서 미확정)" 절 신설(5종 데이터 팩 명세) ③`subject_expansion_readiness.md` §1·§8에 신규 축 2건(코드 실행 채점기·L5 코드 에디터 임베드) 등재 ④`licensing_safety.md`에 정보과·KOI·BOJ/프로그래머스 가등록 3행 ⑤`06_application_modes.md`(디버깅 도장)·`prd_v1.2.md` #90(정보올림피아드)과의 관계 명시(축이 다름 — 혼동 방지) ⑥backlog 태스크 6건(`E7-01`~`E7-05`·`E7-90`, 전부 `status: todo`·subject-expansion 트랙, `models.py SUBJECTS`에 `coding` 1줄 추가).
+- **핵심 구조적 차이(재사용률 최저)**: 코딩/정보는 E1~E6 어느 과목과도 달리 검증축(팩 5번)이 SymPy 형제 primitive가 아니라 **완전 신규 엔진**(코드 실행 채점, `code_execution_verdict`)을 요구 — "재사용률 최대인 첫 과목"이라는 E1 물리의 전략적 지위와 정반대 프로파일. 또한 L5 시각화(코드 에디터·실행 트레이스)는 CLAUDE.md 기술스택 "국소 임베드 2 비상구"(MathLive·three.js) 잠금의 3번째 예외를 요구 — 이번 세션은 **CLAUDE.md 본문을 수정하지 않았다**(결정 미확정, `E7-02` owner: kiki로 별도 등재).
+- **정직한 잔여**: NCIC 정보과 2022 개정 교육과정 원문 미조회(AREA 니모닉 `ALGO`·`DATASTRUCT`·`CTRL`·`COMPSYS`는 가칭) · 샌드박스 기술·MVP 언어 범위 미정 · 코드 에디터 컴포넌트 미선택 · E축 내 실제 순서(E6 뒤인지 더 앞인지) 미정 — 전부 `E7-0x`·`E7-90` 태스크로 추적, `G-s5-subject-expansion` 게이트(수학 완성) 뒤에만 착수 가능.
+
 ### 2026-08-10 (구현·OPS-24 + 재발방지): **코퍼스 백필 CLI 2종을 CI에 배선 — "의도적 미배선"이 아니라 **드리프트 가드**(`--check`)로 판정. 감사기 CLI 도달 11→13** (claude 구현·backend-engineer 위임, Kiki "/drive")
 
 - **판단이 본체였던 태스크**: OPS-22 감사기가 발견한 미도달 CLI 2종(`problem_corpus_review_status_backfill`·`problem_corpus_persona_fit_backfill`)에 대해 등록 시 acceptance가 비어 있었고 notes가 *"배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요"*라고 판단 자체를 남겨뒀다. 실측(`--all --dry-run` → 7코퍼스 2,647건 전량 백필 완료·filled 0)을 근거로 **배선**으로 판정 — `review_status`가 빈 레코드는 `l6/_shared.is_review_cleared`가 fail-closed로 그 문항의 **노출을 전건 차단**하므로 백필 누락은 서빙 영향을 갖는 회귀다.

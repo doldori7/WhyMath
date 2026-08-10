@@ -54,6 +54,7 @@ SUBJECTS: tuple[str, ...] = (
     "chemistry",  # E2 화학
     "biology",  # E3 생물
     "earth-science",  # 지구과학 (E축 배치 미정 — 결정 태스크로 추적)
+    "coding",  # 코딩/정보 후보 (E축 배치 미정 — 결정 태스크로 추적, 2026-08-10 등재)
     "social",  # E4 역사·사회 (경제·역사·세계사 포함)
     "economics",  # 경제학 (E4 세분)
     "history",  # 역사 (E4 세분)

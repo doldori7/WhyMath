@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E7-04-coding-misconception-seed
+title: "코딩/정보 후보 오개념 시드 — code- 접두 kebab-id"
+track: subject-expansion
+stage: E1
+subject: coding
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "code- 접두 오개념 카탈로그 시드 + reactive retrieval 유지(초기 context preload 금지) + canonical 수렴 완료 후 착수"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+session: null
+notes: "subject_expansion_readiness.md §8 보류 대장 항목(2026-08-10 등재). 기존 예약 접두(phys-/chem-/bio-/hist-/kor-/eng-)와 충돌 없음 확인됨"
+updated: 2026-08-10

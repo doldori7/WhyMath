@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E7-01-code-execution-verdict-primitive
+title: "코딩/정보 후보 검증 primitive — code_execution_verdict (SymPy 형제 아닌 신규 엔진)"
+track: subject-expansion
+stage: E1
+subject: coding
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "{pass/fail/timeout/sandbox_error} 4상태 계약 + 테스트, 3-tier 정직성 규약(판정불가=undecidable 보수 처리) 승계"
+artifacts: []
+paths:
+  - "src/backend/**"
+  - "tests/backend/**"
+session: null
+notes: "subject_expansion_readiness.md §8 보류 대장 항목(2026-08-10 등재). 코딩/정보 후보 — E축 순서 미확정(E7-90-coding-placement 선행 필요), stage=E1은 지구과학(E1-90) 선례와 동일한 파킹 스테이지일 뿐 물리 소관 아님. 샌드박스 기술·MVP 언어 범위는 Kiki 결정 필요"
+updated: 2026-08-10

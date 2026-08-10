@@ -14,7 +14,10 @@
 ## 1. 수학 종속 지점 전수 목록 (계층별·3등급)
 
 등급: **하드**(코드·enum·정규식에 수학이 물리적으로 박힘 — seam 필요) / **soft**(콘텐츠·데이터가
-수학일 뿐 구조는 중립 — 과목 팩 추가로 해소) / **중립**(이미 과목 독립).
+수학일 뿐 구조는 중립 — 과목 팩 추가로 해소) / **중립**(이미 과목 독립) / **신규 축**(과목이
+수학에 박혀 있는 게 아니라, 해당 지점 자체가 수학 완성 시점까지 아예 존재하지 않았던 완전
+신규 엔진 — seam이 아니라 새 구성요소가 필요. 코딩/정보 후보 전용, E1~E6 어느 과목에도
+해당 없음).
 
 | 계층 | 지점 | 등급 | 실측 근거 |
 |---|---|---|---|
@@ -32,6 +35,8 @@
 | L5/schema | `VisualizationStyle` 16종 수학 표상 | soft | `schema/enums.py:304-363`. 자체 docstring이 "ADD VALUE로 확장" 설계 명시 — 물리 양식(벡터장·파동 등)은 콘텐츠 착수 시 추가 |
 | L5 | 시각화 spec·LearningScene DSL | **중립** | 선언적 spec + 렌더러 플러그인("표현≠의미") — 과목별 spec 타입 추가로 수용, 새 추상 불요 |
 | L6 | 수능 게이팅·시그니처 패턴(수학 55+108) | soft | 구조(시그니처 방법론)는 재사용, 패턴 데이터는 과목 팩 |
+| L3 | 코드 실행 채점기 부재 | **신규 축** | 코딩/정보 후보 전용 — SymPy 형제 primitive로 흡수 불가(§6은 수식 동치 확장만 다룸). `subject_expansion_e_axis_v1.md` §2 "E7" 참조 |
+| L5 | 코드 에디터·실행 트레이스 임베드 부재 | **신규 축** | CLAUDE.md 기술스택 "국소 임베드 2 비상구"(MathLive·three.js) 확장 필요 — 콘텐츠 착수 전 별도 결정 로그 필수 |
 
 ## 2. 조정 원칙 — 값싼 seam 3조건 판별식
 
@@ -124,6 +129,10 @@
 | 물리 도해 OCR | 콘텐츠 Phase 소관 | 물리 손글씨 입력 요구 확정 | 기존 PaddleOCR+Qwen3-VL 하이브리드에 도해 프롬프트 축 추가 검토 |
 | 오개념 subject 필드·유형 5분류 | 3중 표현 부채 상호작용 | canonical 수렴 트랙 | 수렴 스키마에 과목 축·유형 축 동시 반영 |
 | ~~임베딩 namespace 과목 축~~ | **해소(2026-07-02)** — invariant ⑨ 트랙에서 구현 완료: 임베딩 3테이블 subject 컬럼 + (provider, model, subject) 3축 스코프 + 거버넌스 게이트(재임베딩 0) | (트리거 도달·완료) | Alembic `b6c7d8e9f0a1`·`test_embedding_namespace_governance.py` |
+| `code_execution_verdict` primitive (코딩/정보 후보, 2026-08-10 등재) | 소비처 0 + 배치 미확정(§8 상단 참조) | 코딩 문항 검증 소비처 첫 등장 **+** `E7-90-coding-placement` 배치 확정 | `l3/code_execution_verdict.py` — `(code: str, tests: TestSpec) -> CodeVerdict(pass/fail/timeout/sandbox_error)`, 샌드박스 기술·언어 범위 미정(`E7-01` 참조) — SymPy 형제 아닌 완전 신규 엔진(§1 "신규 축") |
+| L5 코드 에디터 임베드 (코딩/정보 후보) | 소비처 0 + CLAUDE.md 기술스택 미개정 | 코딩 콘텐츠 착수 **+** "국소 임베드 2 비상구" 표 개정에 대한 Kiki 결정 로그 | 3번째 국소 임베드 예외(`E7-02`) — MathLive·three.js와 동급 "모듈 한정·전체 앱 아님" 원칙 승계 |
+| CODE AREA 실등록·idmap 개편 | 코딩 원천 코퍼스 category 목록 0 | 코딩 원천 코퍼스 category 확정 | `_TOPIC_AREA_MAP` → `ALGO`·`DATASTRUCT`·`CTRL`·`COMPSYS` 예약 후보 소비(`subject_expansion_e_axis_v1.md` §2 "E7") — 정본 확인 필요(NCIC 정보과 원문 미조회) |
+| 코딩 오개념 시드 | canonical 수렴 선행 | 수렴 완료 + 코딩 콘텐츠 착수 | `code-` 접두 kebab (기존 예약 접두와 충돌 없음 확인됨) |
 
 ## 9. 검증 invariant (S1~S3가 코드로 동결하는 것)
 

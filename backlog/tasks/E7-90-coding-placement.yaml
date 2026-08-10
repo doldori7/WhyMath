@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E7-90-coding-placement
+title: "코딩/정보 E축 배치 결정 (현 E축 문서에 순서 미배정 — 순서 날조 금지)"
+track: subject-expansion
+stage: E1
+subject: coding
+layer: docs
+status: todo
+priority: 3
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "subject_expansion_e_axis_v1.md §2 E7 절 개정으로 코딩/정보 E축 내 순서(배치) 확정"
+artifacts: []
+paths:
+  - "docs/**"
+session: null
+notes: "지구과학(E1-90-earth-science-placement)과 동일 패턴 — 배치는 Kiki 결정, Claude가 순서를 대신 정하지 않는다. 비교 근거: subject_expansion_candidate_review_v1.md"
+updated: 2026-08-10
