@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -18,6 +18,11 @@ paths:
   - "src/mobile/lib/features/**"
   - tests/backend/api/test_study_integration.py
   - src/backend/whymath_backend/api/study.py
-session: null
+  # 실제 착지점: 신설 hermetic 관통 테스트. 기존 test_study_integration.py는 실 PG 의존이라
+  # PG 미도달 환경에서 skip되고, skip을 통과로 보고하지 않는다는 규약(ARCH-13 교훈) 때문에
+  # 도달 증명을 그 파일에 얹지 않고 CI에서 실제로 도는 hermetic 파일을 새로 뒀다.
+  - tests/backend/api/test_study_endpoint.py
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+session: claude/rec-05-priority-d8q8vt
 notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — api/study.py 모듈 docstring이 '이 라우터가 그 사슬을 학생 요청에 연결한다'고 현재형으로 서술하나, 실제로 그 요청을 보내는 쪽(모바일 또는 관통 통합테스트)이 없다. VIZ-01·NLP-01·REC-01과 동형인 '완비된 소비 경로 + 미도달' 패턴의 축소 재발 — 심각도는 다르다(공급 자체는 정상 동작, 관측/호출 경로만 부재)."
-updated: 2026-08-07
+updated: 2026-08-10

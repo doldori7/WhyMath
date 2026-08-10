@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/application/auth_controller.dart';
+import '../features/auth/presentation/account_security_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/chat/presentation/mathlive_input_screen.dart';
@@ -66,6 +67,12 @@ abstract final class AppRoutes {
   /// 로그인 라우트 이름.
   static const String loginName = 'login';
 
+  /// 계정 보안(내 기기 관리) 경로 — "나" 탭에서 push해 진입한다(MOB-12).
+  static const String accountSecurityPath = '/account-security';
+
+  /// 계정 보안 라우트 이름.
+  static const String accountSecurityName = 'account-security';
+
   /// 풀이 사진 OCR 경로 — 채팅에서 push해 진입하고, 인식 결과를 pop 결과로 돌려준다(S1-d).
   static const String ocrPath = '/ocr';
 
@@ -103,8 +110,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final authenticated = ref.read(authControllerProvider).isAuthenticated;
       final location = state.matchedLocation;
       if (authenticated &&
-          (location == AppRoutes.onboardingPath ||
-              location == AppRoutes.loginPath)) {
+          (location == AppRoutes.onboardingPath || location == AppRoutes.loginPath)) {
         return AppRoutes.chatPath;
       }
       return null;
@@ -120,8 +126,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       // errorBuilder·`context.go(chatPath)` 호출이 변경 없이 학습 탭으로 도달한다. 온보딩·로그인·
       // OCR·문제·수식 입력은 셸 *밖* 최상위 라우트라 탭 바 없이 전체 화면으로 뜬다(플로우·모달성).
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            AppShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
             routes: [
@@ -167,6 +172,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.loginPath,
         name: AppRoutes.loginName,
         builder: (context, state) => const LoginScreen(),
+      ),
+      // 계정 보안 — 내 기기 관리(MOB-12). "나" 탭에서 push로 진입한다. 셸 밖 최상위 라우트라
+      // 탭 바 없이 전체 화면으로 뜬다(설정성 화면·로그인/OCR과 동형).
+      GoRoute(
+        path: AppRoutes.accountSecurityPath,
+        name: AppRoutes.accountSecurityName,
+        builder: (context, state) => const AccountSecurityScreen(),
       ),
       // 풀이 사진 OCR(S1-d) — 채팅에서 push로 진입한다. 인식 결과를 코치에게 넘길 땐
       // `context.pop(result)`로 `OcrResult`를 호출자(채팅)에게 돌려주고, 채팅이

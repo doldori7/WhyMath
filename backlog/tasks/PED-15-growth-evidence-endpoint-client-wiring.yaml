@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ artifacts: []
 paths:
   - "src/mobile/lib/features/**"
   - tests/backend/api/test_me.py
-session: null
+session: claude/rec-05-priority-d8q8vt
 notes: "PED-08(done)이 노출 계약 유일 경로로 신설한 GET /v1/me/growth-evidence를 부르는 테스트·모바일 클라이언트가 0건 — OPS-22 declared_unwired_audit 실측(2026-08-09)으로 신규 발견. '완비된 소비 경로+미도달 공급원' 계열의 반복(REC-01·VIZ-01 등)과 반대 방향 — 이번엔 서버 표면은 있는데 도달이 0."
-updated: 2026-08-09
+updated: 2026-08-10
