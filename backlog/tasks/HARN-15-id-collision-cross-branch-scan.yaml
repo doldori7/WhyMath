@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,11 +15,13 @@ acceptance:
   - "네트워크 비용 가드 — 캐시된 remote-tracking ref만 읽고 fetch하지 않는다(cmd_next의 scan_remote_done 선례·실측 12ms). 조회 실패 시 침묵 금지, 예외 타입명을 경고에 포함(기존 :728 관례 유지)."
   - "변별력 검증(양방향): 타 브랜치에만 존재하는 번호로 add하면 거부되고 다음 빈 번호를 제안해야 하며, 그 브랜치를 지운 상태에서는 통과해야 한다."
   - "이미 발생한 이중 배정 2쌍의 처분 판정 — OPS-17(client-version-contract-gate @main ↔ supply-demand-reach-audit @claude/whymath-data-platform-design-8ceaf5)·OPS-18(cloud-escalation-reach-observability @main ↔ qa-verdict-retention @동 브랜치). 슬러그가 달라 validate는 통과하므로 사람·문서·커밋의 번호 참조만 결정 불가가 된다. 재배번 대상·시점은 Kiki 판정."
-artifacts: []
+artifacts:
+  - "커밋(예정) — cmd_add 번호 충돌 가드에 세 번째 관측 표면(원격 브랜치 backlog/tasks/ 파일명) 추가.\n\n① remote_claims.scan_remote_task_files() 신설 — has_remote 가드 + fetch=False 기본(캐시된 refs/remotes/origin/* for-each-ref만, git fetch 없음) + 브랜치별 git ls-tree <ref>:backlog/tasks로 파일명 나열. scan_remote_done과 동일 원칙(원칙 공유 주석 명시). backlog.py:_taken_id_numbers()가 이를 세 번째 출처로 합류, 라벨 '원격 브랜치 backlog/tasks/(<브랜치명>)'.\n\n② 네트워크 비용 가드 — 오케스트레이터 독립 재실행 뮤테이션: 'if fetch:'를 'if True:'로 바꿔 항상 fetch하도록 뮤테이션 → test_default_call_never_invokes_git_fetch RED(AssertionError: fetch=False 기본값인데 git fetch가 호출됐다). cp 백업으로 원복(git checkout 미사용 — CLAUDE.md 신규 규칙 준수) → git diff --stat 96 insertions 그대로 확인, 6테스트 전건 GREEN 재확인. 실패 시 예외 타입명 포장(f'error:{type(exc).__name__}')·offline은 조용히·error는 cmd_add 경로에서 경고.\n\n③ 변별력 검증(양방향, hermetic bare_remote 픽스처로 실제 git push/clone/ls-tree, 시임 아님) 신규 6테스트(tests/harness/test_backlog_add_id_collision.py) — 타 브랜치 전용 번호 add 거부+다음 빈 번호 제안 / remote-tracking ref 삭제 후 통과 / 같은 full ID 재등재는 비충돌(HARN-10 유지) / 스캔 실패 시 경고+fail-open / fetch 인자 분기 2건.\n\n④ 이중 배정 2쌍 처분 — 재채번 미실행, 사실만 실측·기록. 상대 브랜치 claude/whymath-data-platform-design-8ceaf5가 원격 삭제 확인(git branch -r 부재, SHA 437ae13e 복구 가능). 그 브랜치의 OPS-17-supply-demand-reach-audit·OPS-18-qa-verdict-retention은 main backlog/tasks/에 등재된 적 없음(현재 OPS-17/18은 다른 슬러그로만 존재). 실질 내용은 OPS-22(reach_audit.py 구조 참조)·QUAL-01(원 QUAL-01 재작성)이 이미 흡수 — 각 태스크 기존 notes에 명시돼 있음을 대조 확인. 결론: 재채번 대상 소멸로 처분 판정 moot — 재채번 미실행, 근거를 이 태스크 notes에 기록. 재채번 실행 권한은 여전히 Kiki 전권(HARN-15 acceptance 원문 그대로 유지).\n\n⑤ 반-스코프: _next_free_number 알고리즘 무변경 · claim 대장·로컬 백로그 검사 로직 무변경(추가만) · remote_ok fail-open 시맨틱 무변경 — diff로 확인(기존 라인은 그대로, 추가만 있음).\n\n검증(오케스트레이터 독립 재실행): tests/harness 전체 257 passed(venv pytest, CI 동일 명령 python3 -m pytest tests/harness -q와 동형) · ruff/black(scripts tests/harness, CI와 동일 대상) 전부 EXIT=0 · backlog.py validate green(236건) · 전체 스위트 tests/backend+tests/infra 9570 passed·302 skipped·0 failed(623초·EXIT=0) · CI 배선 확인(harness-integrity 잡이 tests/harness 전체를 allowlist 없이 수집 + 동일 ruff/black 대상 — 배선 공백 없음).\n\n정직한 잔여: GitHub Actions 러너에서의 실제 실행은 미측정(로컬 동형 재현까지) · scan_remote_task_files는 브랜치 수만큼 git ls-tree 순차 호출(현재 저장소 실측 약 35개 브랜치 ≈200ms, cmd_add가 저빈도 대화형 경로라 허용 범위로 판단·별도 배치 최적화 없음) · 트렁크 ref도 스캔 대상에서 제외하지 않음(무해한 중복 판정만 발생한다고 판단했으나 별도 실증 테스트는 없음)."
 paths:
   - scripts/harness/backlog.py
+  - scripts/harness/remote_claims.py
   - scripts/harness/store.py
   - tests/harness/test_backlog_add_id_collision.py
 session: null
-notes: "HARN-10(ARCH-13·OPS-15 2회 실측 후 등재)의 3회차 — 가드는 실재하나 그것이 보는 표면이 실제 위험 표면과 다르다(OPS-19 A1과 같은 형태의 결함). 실측 경위: 브랜치 f3d312f0이 2026-08-03 07:03 UTC에 OPS-17/18을 등재했고, main PR #677(a2bfa85c)이 같은 날 13:00 UTC에 서로 다른 OPS-17/18을 등재했다. 이 환경은 refs/claims/* push가 프록시 403으로 상시 실패해(HARN-07) claim 경로가 fail-open 상태라 2선 방어도 없었다."
-updated: 2026-08-04
+notes: "HARN-10(ARCH-13·OPS-15 2회 실측 후 등재)의 3회차 — 가드는 실재하나 그것이 보는 표면이 실제 위험 표면과 다르다(OPS-19 A1과 같은 형태의 결함). 실측 경위: 브랜치 f3d312f0이 2026-08-03 07:03 UTC에 OPS-17/18을 등재했고, main PR #677(a2bfa85c)이 같은 날 13:00 UTC에 서로 다른 OPS-17/18을 등재했다. 이 환경은 refs/claims/* push가 프록시 403으로 상시 실패해(HARN-07) claim 경로가 fail-open 상태라 2선 방어도 없었다.\nacceptance ④ 처분 판정(2026-08-10 실측 — 재채번 미실행): 충돌 상대 브랜치 claude/whymath-data-platform-design-8ceaf5가 원격에서 삭제되어 더 이상 존재하지 않는다(`git branch -r`에 부재, SHA 437ae13e로 GitHub API 복구는 가능). 그 브랜치의 OPS-17-supply-demand-reach-audit·OPS-18-qa-verdict-retention은 main의 backlog/tasks/에 등재된 적이 없다 — 현재 main엔 OPS-17-client-version-contract-gate·OPS-18-cloud-escalation-reach-observability만 존재(`ls backlog/tasks/`로 실측). 그 브랜치의 실질 내용물은 이미 독립적으로 다른 태스크가 흡수했다: ops/reach_audit.py 구조는 OPS-22-generic-declared-unwired-detector가 참조해 재구현(해당 태스크 notes에 '브랜치 claude/whymath-data-platform-design-8ceaf5의 ops/reach_audit.py(855줄) 구조를 참조' 명시), 문항 코퍼스 중복 감사는 QUAL-01-problem-corpus-duplication-audit이 원 QUAL-01을 현재 main 기준으로 재작성(해당 태스크 notes에 '브랜치 8ceaf5의 원 QUAL-01 재작성' 명시). 결론: 재채번 대상 자체가 사라져 처분 판정이 moot(무의미)해졌다 — 재채번을 실행하지 않았다."
+updated: 2026-08-10
