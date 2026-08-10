@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "data/corpus/formula_graph_v1/**"
   - tests/backend/l1/test_formula_governance.py
   - "src/backend/whymath_backend/l1/formula_graph/**"
-session: null
+session: claude/remaining-track-34zvse
 notes: "docs/architecture/dsl_integration_gap_review.md §2-⑧ 실측 근거(2026-08-10). latex(표시)↔dsl(검증)은 같은 레코드의 병렬 필드인데 상호 정합 게이트 0 — validate.py는 id 유일성·family 단일성만, test_formula_governance는 dsl 파싱 가능성만. 실결함 1건 확정: quadratic.roots latex는 ± 두 근, dsl은 +근 하나. dsl은 현재 write-only라 학생 피해 0 — 소비 시작 전이 봉인 적기."
 updated: 2026-08-10
