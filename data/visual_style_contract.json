@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "note": "양식↔렌더 좌석 계약(05b §3 첫 화살표 — Concept.recommended_visual_styles → Visualization.type — 을 문서에서 기계로 승격). data/render_contract.json(두 번째 화살표 — type → 렌더러)과 동형 확장이며 그 파일을 대체·병합하지 않는다. VisualizationStyle 16종 각각에 render_types(표현 가능한 VisualizationType 부분집합)·render_mode(interactive_graph_2d가 소비되면 웹 classify()의 어떤 형태(function|implicit|inequality)로 소비되는지, 그 외는 n/a)·status(seated|unseated)·seat_owner(미좌석이면 담당 태스크 id, 없으면 null)를 선언한다. l4/visualization_policy.has_render_seat의 _SEATED_STYLES 리터럴 상수와 status==seated 집합이 일치해야 한다(JSON↔Python 이중 진실원 drift 방지 — tests/backend/schema/test_visual_style_render_contract.py가 교차검증). 2026-08-03 재감사(docs/architecture/visualization_module_gap_review.md §7.1 정정) — 웹 계산기(src/web/graphing-calculator/src/lib/mathExpr.js::classify)가 문자열 1개를 6가지(function/implicit/inequality/polar/parametric/point)로 분류하고 GraphingCalculator.jsx가 타입별로 그리므로, Graph2dSpec.function에 관계식('x**2+y**2=1')이나 부등식('y > x**2')을 넣으면 스키마 변경 없이 오늘 코드로 이미 렌더된다 — 좌석 5종(함수그래프·단위원·부등식영역·분포곡선·확률시뮬레이션)은 이 사실의 반영이다.",
+  "note": "양식↔렌더 좌석 계약(05b §3 첫 화살표 — Concept.recommended_visual_styles → Visualization.type — 을 문서에서 기계로 승격). data/render_contract.json(두 번째 화살표 — type → 렌더러)과 동형 확장이며 그 파일을 대체·병합하지 않는다. VisualizationStyle 16종 각각에 render_types(표현 가능한 VisualizationType 부분집합)·render_mode(interactive_graph_2d가 소비되면 웹의 어떤 렌더 형태로 소비되는지 — classify() 분류형(function|implicit|inequality) 또는 classify() 밖 전용 경로(number_line — 함수식 없이 spec.number_line을 소비하는 1D 수직선 렌더 drawNumberLine), 그 외 타입은 n/a)·status(seated|unseated)·seat_owner(미좌석이면 담당 태스크 id, 없으면 null)를 선언한다. l4/visualization_policy.has_render_seat의 _SEATED_STYLES 리터럴 상수와 status==seated 집합이 일치해야 한다(JSON↔Python 이중 진실원 drift 방지 — tests/backend/schema/test_visual_style_render_contract.py가 교차검증). 2026-08-03 재감사(docs/architecture/visualization_module_gap_review.md §7.1 정정) — 웹 계산기(src/web/graphing-calculator/src/lib/mathExpr.js::classify)가 문자열 1개를 6가지(function/implicit/inequality/polar/parametric/point)로 분류하고 GraphingCalculator.jsx가 타입별로 그리므로, Graph2dSpec.function에 관계식('x**2+y**2=1')이나 부등식('y > x**2')을 넣으면 스키마 변경 없이 오늘 코드로 이미 렌더된다 — 당시 좌석 5종(함수그래프·단위원·부등식영역·분포곡선·확률시뮬레이션)은 이 사실의 반영이다. 2026-08-10 VIZ-07 갱신 — 수직선(신설 1D 렌더 경로 drawNumberLine + Graph2dSpec.number_line 좌석)·접선도함수(기존 tangent_point→showTangent/drawTangent 렌더 소비 경로 소스 실측 확정)에 좌석을 주어 좌석 7종이 되었다.",
   "authority": "backend schema/enums.py::VisualizationStyle (슬라이스 87) — render_contract.json::VisualizationType과 합류(교집합)해 l3/visualization.py 프롬프트 타입 제시를 파생",
   "consumers": [
     "backend seat gate: src/backend/whymath_backend/l4/visualization_policy.py::has_render_seat",
@@ -39,16 +39,16 @@
       "seat_owner": null
     },
     "수직선": {
-      "render_types": [],
-      "render_mode": "n/a",
-      "status": "unseated",
-      "seat_owner": "VIZ-03-graph2d-spec-expressiveness"
+      "render_types": ["interactive_graph_2d"],
+      "render_mode": "number_line",
+      "status": "seated",
+      "seat_owner": null
     },
     "접선도함수": {
-      "render_types": [],
-      "render_mode": "n/a",
-      "status": "unseated",
-      "seat_owner": "VIZ-03-graph2d-spec-expressiveness"
+      "render_types": ["interactive_graph_2d"],
+      "render_mode": "function",
+      "status": "seated",
+      "seat_owner": null
     },
     "입체도형": {
       "render_types": [],

@@ -38,8 +38,11 @@ def is_visualizable(visualizability: Visualizability | None) -> bool:
 # 상수로 박는다(VIZ-04). 근거(양식↔실제 렌더 경로): 함수그래프·단위원(관계식)·부등식영역(영역
 # 색칠)은 `interactive_graph_2d`(웹 `classify()`가 각각 function/implicit/inequality로 분류해
 # 그린다) · 분포곡선은 PDF가 x의 함수라 `interactive_graph_2d` · 확률시뮬레이션은
-# `simulation_probabilistic`. 나머지 11종(수직선·접선도함수·입체도형·평면도형·벡터도·점화도·
-# 수형도·넓이모델·통계차트·산점도·상자그림)은 표현할 렌더 타입이 없다(unseated).
+# `simulation_probabilistic` · 수직선은 VIZ-07이 신설한 1D 렌더 경로(`Graph2dSpec.number_line`
+# → 웹 `drawNumberLine` — classify() 6형 밖 전용 경로) · 접선도함수는 기존 접선 렌더
+# (`Graph2dSpec.tangent_point` → 웹 `showTangent`/`drawTangent` — 소비 경로 소스 실측 확정,
+# VIZ-07)에 좌석. 나머지 9종(입체도형·평면도형·벡터도·점화도·수형도·넓이모델·통계차트·산점도·
+# 상자그림)은 표현할 렌더 타입이 없다(unseated).
 _SEATED_STYLES: frozenset[VisualizationStyle] = frozenset(
     {
         VisualizationStyle.함수그래프,
@@ -47,6 +50,8 @@ _SEATED_STYLES: frozenset[VisualizationStyle] = frozenset(
         VisualizationStyle.부등식영역,
         VisualizationStyle.분포곡선,
         VisualizationStyle.확률시뮬레이션,
+        VisualizationStyle.수직선,
+        VisualizationStyle.접선도함수,
     }
 )
 

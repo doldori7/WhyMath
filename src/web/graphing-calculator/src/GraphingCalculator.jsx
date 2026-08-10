@@ -1038,6 +1038,9 @@ export default function GraphingCalculator() {
   const [simTrials, setSimTrials] = useState(200);
   const [simCounts, setSimCounts] = useState(null); // null=미실행, 배열=라벨별 카운트
   const [simOutcomes, setSimOutcomes] = useState(null); // 구조화 outcomes(있으면 키워드보다 우선)
+  // [VIZ-07] 1D 수직선 모드 상태 — null=일반 2D 모드, {points, intervals}=수직선 전용 렌더.
+  // 코어 Graph2dSpec.number_line을 graph2dSpec.js 어댑터가 정규화해 채운다(정수·부등식 해·구간).
+  const [numberLine, setNumberLine] = useState(null);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -1262,6 +1265,70 @@ export default function GraphingCalculator() {
     });
   };
 
+  // ====== [VIZ-07] 1D 수직선(number line) 그리기 ======
+  // 코어 Graph2dSpec.number_line(정수·부등식 해·구간 표시)을 소비하는 전용 1D 렌더 경로.
+  // "뷰 축소" 방식 — 새 수치 primitive 0: 기존 관용구(2D 축선·niceStep 눈금·formatNum 라벨·
+  // drawPoints의 닫힌 원·drawTangent 접점의 이중원)만 세로 중앙 한 줄로 재조합한다.
+  // 수학 판정 0 — 해집합 계산·정오 판정 없이 spec이 준 점·구간을 그리기만 한다(권위는 백엔드 L3).
+  const drawNumberLine = (ctx) => {
+    const yMid = size.h / 2; // 세로 중앙 높이의 수평 축선(1D 축)
+    const xStep = niceStep(view.xMax - view.xMin, 10);
+
+    // 끝점/점 마커 공용: 닫힘(●)=색 채움 원(drawPoints 관용구), 열림(○)=색+흰색 이중원
+    // (drawTangent 접점 관용구 — 테두리 있는 빈 원으로 보인다).
+    const drawMarker = (px, y, open, color) => {
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(px, y, open ? 7 : 6, 0, Math.PI * 2); ctx.fill();
+      if (open) {
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(px, y, 4, 0, Math.PI * 2); ctx.fill();
+      }
+    };
+
+    // 축선(2D 축 관용구를 수평 한 줄로)
+    ctx.strokeStyle = "#888"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, yMid); ctx.lineTo(size.w, yMid); ctx.stroke();
+
+    // 눈금 + 숫자 라벨(2D x축 라벨 관용구 — 원점 근처 라벨 skip 유지, 라벨은 축 아래)
+    ctx.font = "12px sans-serif";
+    for (let x = Math.ceil(view.xMin / xStep) * xStep; x <= view.xMax; x += xStep) {
+      const px = toPxX(x);
+      ctx.strokeStyle = "#888"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px, yMid - 5); ctx.lineTo(px, yMid + 5); ctx.stroke();
+      if (Math.abs(x) < xStep / 2) continue;
+      ctx.fillStyle = "#333";
+      ctx.fillText(formatNum(x), px + 3, yMid + 18);
+    }
+
+    // 구간·반직선 — 축 위 굵은 선분(COLORS 순환). start/end가 null이면 캔버스 좌/우 끝까지
+    // (반직선). 다중 구간은 인덱스별 수직 오프셋으로 층을 분리해 연립부등식의 겹침을 가시화.
+    (numberLine.intervals || []).forEach((iv, idx) => {
+      const color = COLORS[idx % COLORS.length];
+      const y = yMid - idx * 14; // idx 0은 축 위, 이후 층층이 위로
+      const fromPx = iv.start === null ? 0 : toPxX(iv.start);
+      const toPxEnd = iv.end === null ? size.w : toPxX(iv.end);
+      ctx.strokeStyle = color; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(fromPx, y); ctx.lineTo(toPxEnd, y); ctx.stroke();
+      // 끝점 마커: 유한 끝점만(반직선 쪽은 캔버스 끝까지 이어져 마커 없음)
+      if (iv.start !== null) drawMarker(toPxX(iv.start), y, iv.startOpen === true, color);
+      if (iv.end !== null) drawMarker(toPxX(iv.end), y, iv.endOpen === true, color);
+    });
+
+    // 점 마커 — 축 높이에 닫힘/열림 원 + 라벨(label 또는 값). 경계 회피는 간단히 clamp만.
+    (numberLine.points || []).forEach((p, idx) => {
+      const color = COLORS[idx % COLORS.length];
+      const px = toPxX(p.value);
+      drawMarker(px, yMid, p.open === true, color);
+      const label = typeof p.label === "string" && p.label ? p.label : formatNum(p.value);
+      ctx.font = "12px sans-serif";
+      const tw = ctx.measureText(label).width;
+      let bx = px - tw / 2; // 점 위 중앙 정렬
+      bx = Math.max(2, Math.min(bx, size.w - tw - 2)); // 화면 경계 간단 clamp
+      ctx.fillStyle = "#333";
+      ctx.fillText(label, bx, yMid - 14);
+    });
+  };
+
   // ====== [Phase 10] 적분 시각화: 넓이 색칠 + 리만 합 직사각형 ======
   // 구간 [a,b]에서 곡선 아래 넓이를 보여주고, n개의 직사각형으로 근사합니다.
   // n을 키울수록 직사각형 합(리만 합)이 실제 적분값에 가까워집니다.
@@ -1452,6 +1519,9 @@ export default function GraphingCalculator() {
     ctx.clearRect(0, 0, size.w, size.h);
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size.w, size.h);
 
+    // [VIZ-07] 1D 수직선 모드 — 2D 격자·축·함수 행 대신 전용 수평 축 렌더로 조기 반환.
+    if (numberLine) { drawNumberLine(ctx); return; }
+
     const xStep = niceStep(view.xMax - view.xMin, 10);
     const yStep = niceStep(view.yMax - view.yMin, 10);
     const scope = sliderValues();
@@ -1575,7 +1645,7 @@ export default function GraphingCalculator() {
       }
       return changed ? newIntegralResults : prev;
     });
-  }, [rows, view, size, hover, sliders, sliderValues, toPxX, toPxY, toMathX, toMathY, findRoots, tablePoints, regression, showRegression]);
+  }, [rows, view, size, hover, sliders, sliderValues, toPxX, toPxY, toMathX, toMathY, findRoots, tablePoints, regression, showRegression, numberLine]);
 
   useEffect(() => { draw(); }, [draw]);
 
@@ -1689,6 +1759,7 @@ export default function GraphingCalculator() {
     table,
     view,
     showRegression,
+    numberLine, // [VIZ-07] 1D 수직선 상태(null=2D 모드) — 저장·복원 라운드트립 좌석
   });
 
   // 저장된 상태를 화면에 다시 적용
@@ -1698,6 +1769,7 @@ export default function GraphingCalculator() {
     if (st.simulationMode) {
       setSimMode(true);
       setMode3D(false);
+      setNumberLine(null); // 시뮬 명세 적용 시 1D 수직선 모드 해제(잔류 방지)
       if (typeof st.experiment === "string" && st.experiment.trim()) setSimExperiment(st.experiment);
       if (typeof st.trials === "number") setSimTrials(st.trials);
       setSimOutcomes(Array.isArray(st.outcomes) ? st.outcomes : null); // 구조화 outcomes 통과
@@ -1708,8 +1780,22 @@ export default function GraphingCalculator() {
     if (st.mode3D) {
       setMode3D(true);
       setSimMode(false);
+      setNumberLine(null); // 3D 명세 적용 시 1D 수직선 모드 해제(잔류 방지)
       if (typeof st.expr3D === "string" && st.expr3D.trim()) setExpr3D(st.expr3D);
       if (typeof st.range3D === "number") setRange3D(st.range3D);
+      return true;
+    }
+    // [VIZ-07] 1D 수직선 상태 — 함수 행 없이 numberLine·view만 적용(전용 1D 렌더 경로).
+    // 반드시 아래 `if (!st.rows) return false` *위*에 두어야 한다 — 1D 전용 spec은 rows가
+    // 빈 배열이라 rows 게이트에 걸리면 유효 명세가 거부된다. 함수 공존 spec도 1D 우선.
+    if (st.numberLine) {
+      setNumberLine(st.numberLine);
+      setRows([]); // 1D 축 전용 — 함수 행 없음(draw가 numberLine 분기로 조기 반환)
+      nextId.current = 1;
+      setSliders(st.sliders || {});
+      if (st.view) setView(st.view);
+      setMode3D(false); // 잔류 해제(다른 모드와 대칭)
+      setSimMode(false);
       return true;
     }
     if (!st.rows) return false;
@@ -1730,6 +1816,7 @@ export default function GraphingCalculator() {
     if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
     setMode3D(false); // 2D 명세 적용 시 3D 모드 해제(잔류 방지)
     setSimMode(false); // 2D 명세 적용 시 시뮬 모드 해제(잔류 방지)
+    setNumberLine(null); // 2D 명세 적용 시 1D 수직선 모드 해제(잔류 방지 — 대칭)
     return true;
   };
 
