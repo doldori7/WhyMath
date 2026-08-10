@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/api/ocr.py
   - "src/backend/whymath_backend/l5/ocr/**"
   - "tests/backend/api/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M4. 완화: ConsentedUser 게이트(인증된 남용)·Starlette SpooledTemporaryFile 부분 스풀. 프로덕션 ingress body 상한 가능성 있으나 리포 근거 없음 — 앱 계층 방어가 정본."
-updated: 2026-08-08
+updated: 2026-08-10
