@@ -8,7 +8,8 @@ layer: mobile
 status: todo
 priority: 2
 owner: claude
-depends_on: []
+depends_on:
+  - S3-39-math-notation-rendering
 requires_gates: []
 acceptance:
   - "[회수 — 원본 SHA는 GitHub API로 접근 가능(2026-08-10 전제 정정)] 앱 전체에서 수식 표기가 렌더러 미지원 문법으로 깨지는 곳이 없는지 전수 점검하는 감사 로직(정적 스캔 또는 런타임 검증)을 현재 main 기준으로 새로 설계한다. 착수 전 필수: NS-03(notation_support_manifest.json, Stage1에서 이미 회수 완료)이 이 항목과 얼마나 겹치는지 먼저 확인 — 겹치면 이 태스크는 NS-03 위에 얹는 증분만, 안 겹치면 독립 신규"

@@ -8,7 +8,8 @@ layer: mobile
 status: todo
 priority: 2
 owner: claude
-depends_on: []
+depends_on:
+  - S3-39-math-notation-rendering
 requires_gates: []
 acceptance:
   - "[회수 — 원본 SHA는 GitHub API로 접근 가능(2026-08-10 전제 정정)] 여러 표기 방식(예: LaTeX 변형)을 하나의 정본 형태로 정규화하는 계층을 현재 main의 shared/math 기준으로 재설계한다. notation_support_manifest.json 데이터 자체는 Stage1에서 NS-03과 함께 이미 회수됨(재작업 금지, 그 데이터의 *생산 로직*만 이 태스크 대상) — 착수 전 NS-03 산출물과의 경계를 먼저 명확히 할 것"
