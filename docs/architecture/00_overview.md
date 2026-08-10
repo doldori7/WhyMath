@@ -8,9 +8,9 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ L7. 커뮤니티·소셜          [학생 풀이 공유, 학부모·교사 대시보드]    │
 ├─────────────────────────────────────────────────────────────┤
-│ L6. 응용 모드             [학교진도/수능/사고력/영재/메타인지/디버깅] │
+│ L6. 응용 모드             [학교진도/수능내신/사고력/메타인지/영재/자유학기/디버깅] │
 ├─────────────────────────────────────────────────────────────┤
-│ L5. 상호작용              [Mathpix OCR·Manim·Desmos·음성·대화]   │
+│ L5. 상호작용              [PaddleOCR+Qwen3-VL·Manim·Desmos·음성·대화] │
 ├─────────────────────────────────────────────────────────────┤
 │ L4. 교수학 엔진            [Polya 4단계·소크라테스·LTHC·오개념 진단] │
 ├─────────────────────────────────────────────────────────────┤
@@ -128,7 +128,7 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
 | LLM 라우터 | L3 | P0 | 비용 구조 핵심 |
 | PRM 검증기 | L3 | P1 | 환각 방어 |
 | SymPy 도구 | L3 | P0 | 계산은 SymPy로 |
-| Mathpix OCR | L3 | P0 | 손글씨 핵심 |
+| PaddleOCR+Qwen3-VL OCR | L5 | P0 | 손글씨 핵심 — 2026-05-28 결정(Mathpix 대체)·계층은 L5 상호작용(CLAUDE.md 7계층 정본, 2026-08-10 통합점검 정정) |
 | Polya 엔진 | L4 | P0 | 교수학 코어 |
 | 소크라테스 프롬프트 | L4 | P0 | 코어 IP |
 | 오개념 카탈로그 | L4 | P1 | 30개 → 100개 |
@@ -163,8 +163,8 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 | **Client** | Flutter 단일 학생앱(패드 중심·모드 분기) + 별도 웹(교사·SEO·Phase3+) | L5 일부, L6/L7 UI | 앱: Flutter 3.x+Riverpod·MathLive/three.js WebView · 별도 웹: React/Next |
 | **Backend** | FastAPI + uvicorn | L1 서비스·L2·L3·L4·L5 오케스트레이터·L6 모드 로직 | Python 3.12 + FastAPI |
 | **DB** | 다중 저장소 | L1·L2 자산의 영속 계층 | PostgreSQL 16 + TimescaleDB + pgvector, ClickHouse, Redis 7, S3/MinIO (Neo4j는 2026-08-03 정정 — 런타임 미도입, 개념 그래프는 PG 단일 평면) |
-| **ML** | 추론·검증 런타임 | L3 모델 호출, L3 도구 검증 | Claude Sonnet/Opus, Qwen3-Math(Phaiakes9 로컬), SymPy, OpenAI text-embedding-3-large |
-| **Content Pipeline** | 배치·ETL | L1 수집·정형화·검증 | Prefect/Airflow, httpx + playwright, Mathpix API, pdfplumber |
+| **ML** | 추론·검증 런타임 | L3 모델 호출, L3 도구 검증 | Claude Sonnet/Opus, Qwen3-Math(Phaiakes9 로컬), SymPy, 임베딩 bge-m3(기본·로컬 — 클라우드 옵션 te-3-large, 정본 = CLAUDE.md 스택 표) |
+| **Content Pipeline** | 배치·ETL | L1 수집·정형화·검증 | Prefect/Airflow, httpx + playwright, PaddleOCR+Qwen3-VL(로컬 OCR — 2026-05-28 Mathpix 대체), pdfplumber |
 
 ### 블록별 보충 메모
 

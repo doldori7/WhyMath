@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-21-id-guard-parser-and-reap-hardening
+title: "번호 가드 파서 구멍(슬러그 없는 ID 미인식·100번대 형식 위반 제안) + reap task_missing 즉시삭제 방어"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① store.id_number_of(_ID_NUMBER_RE)가 슬러그 없는 정규 ID(예: HARN-20)에서 None을 반환해 1선(add)·2선(validate) 번호 충돌 검사를 양쪽 다 통과하는 구멍을 막는다 — TASK_ID_RE가 허용하는 전 형태에서 번호를 추출(수정 전 red 회귀 테스트)."
+  - "② _next_free_number가 index 100 이상에서 TASK_ID_RE(두 자리) 위반 3자리 ID를 제안하는 경로를 제거 — 99 소진 시 형식 위반 제안 대신 명시적 오류로 사람 결정(프리픽스 분리 등)을 유도한다(E1-90 실재 — E1-99 도달 시 즉시 발현). 호출부와의 시그니처 애노테이션 불일치(backlog.py:798·dict[str, tuple])도 함께 정리한다."
+  - "③ reap의 task_missing 분류(remote_claims.py:759-762)에 유예를 도입 — 타 세션이 add+claim한 직후 내 클론에 그 YAML이 없다는 이유만으로 TTL 무관 즉시 reap 대상이 되는 오판을 막는다(예: claim 나이가 TTL 미만이면 task_missing 단독 사유 reap 금지·경고 강등)."
+  - "④ 변별력 회귀 테스트 + harness-integrity 잡에서 실제 실행됨을 확인한 뒤 완료로 친다."
+  - "⑤ 범위 밖: 번호 가드의 관측 표면 확장(타 브랜치 backlog/tasks/ 스캔)은 HARN-15 소유 — 중복 착수 금지."
+artifacts: []
+paths:
+  - scripts/harness/store.py
+  - scripts/harness/backlog.py
+  - scripts/harness/remote_claims.py
+  - "tests/harness/**"
+session: null
+notes: "발견 경위: 2026-08-10 통합점검(docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md §1). HARN-15(관측 표면 결함)의 형제 — 이쪽은 같은 가드의 파서·제안기·reap 분류기 결함. 실측: id_number_of('HARN-20')=None(검사 제외), 제안기는 {prefix}-{index:02d} 포맷이라 100부터 3자리. reap task_missing은 병렬 add+claim 직후 창에서 살아있는 claim을 삭제할 수 있다."
+updated: 2026-08-10

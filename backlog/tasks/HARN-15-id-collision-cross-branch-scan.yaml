@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-15-id-collision-cross-branch-scan
+title: "태스크 ID 번호 충돌 가드의 관측 표면 확장 — 원격 claim 대장만 봐서 타 브랜치 backlog/tasks/ 선점을 못 본다(OPS-17·18 이중 배정 실측)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "backlog.py add 의 번호 충돌 검사에 원격 브랜치 backlog/tasks/ 파일명 스캔을 추가 — 현행 _taken_id_numbers는 로컬 백로그 + 원격 claim 대장만 본다(backlog.py:718-743). claim은 in_progress만 기록하므로 '등재만 되고 미착수'인 번호는 구조적으로 안 보인다."
+  - "네트워크 비용 가드 — 캐시된 remote-tracking ref만 읽고 fetch하지 않는다(cmd_next의 scan_remote_done 선례·실측 12ms). 조회 실패 시 침묵 금지, 예외 타입명을 경고에 포함(기존 :728 관례 유지)."
+  - "변별력 검증(양방향): 타 브랜치에만 존재하는 번호로 add하면 거부되고 다음 빈 번호를 제안해야 하며, 그 브랜치를 지운 상태에서는 통과해야 한다."
+  - "이미 발생한 이중 배정 2쌍의 처분 판정 — OPS-17(client-version-contract-gate @main ↔ supply-demand-reach-audit @claude/whymath-data-platform-design-8ceaf5)·OPS-18(cloud-escalation-reach-observability @main ↔ qa-verdict-retention @동 브랜치). 슬러그가 달라 validate는 통과하므로 사람·문서·커밋의 번호 참조만 결정 불가가 된다. 재배번 대상·시점은 Kiki 판정."
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/store.py
+  - tests/harness/test_backlog_add_id_collision.py
+session: null
+notes: "HARN-10(ARCH-13·OPS-15 2회 실측 후 등재)의 3회차 — 가드는 실재하나 그것이 보는 표면이 실제 위험 표면과 다르다(OPS-19 A1과 같은 형태의 결함). 실측 경위: 브랜치 f3d312f0이 2026-08-03 07:03 UTC에 OPS-17/18을 등재했고, main PR #677(a2bfa85c)이 같은 날 13:00 UTC에 서로 다른 OPS-17/18을 등재했다. 이 환경은 refs/claims/* push가 프록시 403으로 상시 실패해(HARN-07) claim 경로가 fail-open 상태라 2선 방어도 없었다."
+updated: 2026-08-04

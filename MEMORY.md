@@ -348,6 +348,24 @@
 **등재 3건**: `MOB-14`(scene 서버↔클라 계약 동결 — 드리프트 4필드 무감지 통과·webViewTypes 계약 결선·invariant ⑩ Flutter 잔여) · `NS-04`(formula latex↔dsl 정합 게이트+± 결함 봉인) · `PED-16`(교수법 선언≠집행 3건 판정 — mode_guard 집행 지점·dead write 2테이블 거취·scene/viz 서빙 미러 병합). **재등재 금지 목록**(§4)에 발주서→슬롯 동결(PED-07)·`/v1/visualizations/*` by-design·figure.spec 거부·AST 미구축 유효 등 10건 명시.
 
 **검증**: OPS-22 4축 감사 exit 0 · DSL 게이트 103건+영향권 29건+tests/infra 294건 통과 · ruff/black/mypy 전건 exit 0(CI 동일 명령) · condition 130건 재현 일치 · ci.yml 필터 시뮬레이션(대상 true/비대상 false). 전체 pytest 스위트는 미실행(22분+) — CI가 최종 판정. 로컬 함정 재확인 1건: 명시 경로 pytest invocation의 asyncio_mode 미적용(ARCH-22 기지 quirk·`-o asyncio_mode=auto`로 확증·활성 장애 아님).
+### 2026-08-10 (점검·거버넌스): **하네스·헌법·규칙파일 통합점검 — 결함 3축 41건 판정: 문서·스킬 22건 즉시 정정, HARN-15 비가시 부채 회수, 신규 태스크 HARN-20·21 등재** (claude, Kiki "통합점검" 지시)
+
+- **정본**: `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md` (결함 표 D-1~D-29 + 하네스 G1~G8 + 추적성·CI 축, 부록 실측 근거). 커밋 ① `150da189`(문서·스킬 정정 11파일) ② `5151b987`(backlog 회수·등재).
+- **골격 판정**: validate green·CLAUDE.md 참조 아티팩트 9/9 실재·깨진 참조 0·CI 테스트 배선 사각 0·규칙→사고 추적성 6/6 — 건강. 부패는 표기·전파 축(폐기 스택 잔존·버전 표기 stale·하위 문서 미전파)에 집중.
+- **최대 발견 = HARN-15 비가시 부채 회수**: `HARN-15-id-collision-cross-branch-scan`(번호 가드 관측 표면 확장·OPS-17/18 이중 배정 처분)이 미머지 브랜치 q8tvcx에만 존재해 main 백로그·next/status 어디에도 안 보이던 상태 — "backlog=단일 진실 원천"의 유일한 실측 파손점. 브랜치 정리 파이프라인 실가동(직전 항목 17건 삭제) + q8tvcx가 "이미 포팅됨" 분류라 소실 직전이었다. 정본 YAML 그대로 회수(`git checkout origin/...q8tvcx -- backlog/tasks/HARN-15-*.yaml`·ID/acceptance 보존). **재채번 실행 판정은 여전히 Kiki 전권 유보** — 회수는 가시화까지만.
+- **헌법 결함 정정(D-5)**: dev_constitution §0.1 우선순위에서 3번 "교수학적 정확성"이 "데이터 무결성"으로 통째 대체돼 있었다(웰빙 누락은 자각 상태였으나 이건 미자각) — 프로젝트 정체성 축이 헌법 우선순위에서 실종. CLAUDE.md 정본 7항으로 정렬, "데이터 무결성"은 §0 원칙으로 존속.
+- **CLAUDE.md 개정(v0.1.0→v0.2.0)**: ①MEMORY 선언 후 미등재였던 규칙 2건 본문 등재 — "작동한 비율" 원칙(:1616 계보)·"만료 없는 유예·제외 금지"(:1780 계보) ②HARN-19 서브프로세스 출력 인코딩 축 확장 ③**스택 표 Graph DB 행 실측 단서 병기**(Neo4j 런타임 미도입·PG 단일 평면 정본·data-pipeline 옵셔널 한정 — 스택 표 변경 시 결정 로그 의무의 이행 근거가 본 항목) ④L6 7모드 정렬 ⑤핵심 문서 인덱스 8줄 보강 ⑥푸터 버전·수정일 실체 정렬(3개월 괴리)+갱신 의무 부기.
+- **스킬↔규약 정정**: /gates가 gates.yaml 손편집을 지시(HARN-18 CLI 미반영)·/plan add 블록에 --path 부재 — 스킬이 규약 위반을 유도하던 두 곳 정정. 폐기 스택 잔존 청소: Mathpix 6곳(00_overview·data_pipeline·ROADMAP)·KoSimCSE·te-3-large 옛 표기·OCR L3→L5.
+- **신규 태스크(add CLI 경유)**: HARN-20(CLI 선언≠배선 review·cancelled 도달 불가 + block의 notes 덮어쓰기 파괴·priority 2) · HARN-21(번호 가드 파서 구멍 — 슬러그 없는 ID 미인식·100번대 형식 위반 제안 + reap task_missing 즉시삭제 방어·priority 3).
+- **MEMORY 자체 정정 부기(본문 소급 수정 없음)**: :490의 "PED-08 경위"는 **PED-06** 오기(CLAUDE.md:138이 정확) · :519의 "CLAUDE.md :135 다음" 줄번호는 이후 증보로 드리프트(줄-앵커는 신뢰 불가 — 절 제목 앵커 권장) · "시간 역순" 선언이 07~08 구간에서 미준수(날짜 뒤섞임) · 트레일러 "최종 수정 2026-05-28"·"매월 정기 리뷰"는 실행 기록 없음.
+- **정직한 공백**: 재채번 실행(Kiki 전권)·시점 리포트(ssm_scan 등) 원본 불변·노드 수치 4종 정본화(DB 실측 불가)·CI 경로 필터 재설계·정책 warn 승격(측정 미충족)은 하지 않았다. pytest 미설치 환경이라 **로컬 전체 테스트 미실행 — CI가 최종 판정**(CLAUDE.md 동결 마커 61건은 AST 추출 대조로 전건 보존 확인).
+### 2026-08-10 (재발방지·감사기 정밀도): **`OPS-25` — 선언≠배선 감사기의 *상수 간접참조 맹점* 해소. 같은 원인의 오탐 2건이 이미 유령 태스크 1건(`PED-15`)과 허위 유예 1건(`S4-22`의 막힘)을 만들어냈다** (claude 구현, Kiki 지시)
+
+- **사고 경위(반복 실수 — 동일 원인 2회)**: `ops/declared_unwired_audit.py`가 도달을 *리터럴*로만 판정했다. ①HTTP 축 — 호출부에 경로 문자열이 직접 있어야 도달로 인정 → `_ENDPOINT = "/v1/me/growth-evidence"` 상수를 쓰는 `test_me_growth_evidence.py`의 호출이 안 보여 "미도달"로 보고 → **`PED-15`가 그 오탐만으로 등재**됐다(#755에서 리터럴 스모크로 우회했으나 근본 원인은 잔존). ②EventType 축 — `ast.Compare` 피연산자에 `EventType.X`가 직접 있어야 소비로 인정 → `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로 거는 `not in` 필터(:279)·SQL `.in_()` 필터(:563)를 못 봐 **이미 소비 중인 `EventType.막힘`**이 `S4-22` 유예 3종에 허위로 끼었다.
+- **대책(형태 = 코드 + 동결 테스트)**: 두 축에 **모듈 최상위 상수 1홉 해석**을 넣었다(`_module_path_constants`·`_module_event_type_constants`). 범위 절제는 축 3의 기존 선례 `_insert_helpers`(모듈 내 헬퍼 1홉)를 그대로 따른다 — import된 상수·함수 지역 변수·동적 컨테이너(`tuple(EventType)`)는 풀지 않는다. 넓히면 감사기가 사실상 인터프리터가 된다.
+- **양방향 변별력 실측**(acceptance ④ — 양성만 확인하면 "전부 도달"로 뭉개는 반대 방향 오탐을 못 잡는다): (양성) `막힘` 소비 인정 · `POST /v1/ocr/pages`(리터럴 0건·상수만) 도달 인정. (음성) `답입력`·`시각화조작`은 **수정 후에도 미도달 유지** — 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타난다. 상수를 *정의만* 하고 비교에 안 쓰면 소비 아님, 함수 지역 상수·import 상수·`+` 연결 표현식은 미해석. 신규 테스트 25건 중 **양성 14건은 수정을 무력화하면 전부 실패·음성 11건은 양쪽 상태에서 통과**함을 임시 패치로 실측했다(변별력 있는 검사임을 확인).
+- **수치**: 감사기 exit 0 유지. HTTP 도달 80→87(+7) · EventType 소비 3→4(+1) — 증가분 8건 전부 상수 간접참조 오탐 해소분이고 신규 배선 0. 대장에서 유예 8건 제거(HTTP 7·EventType 1). 감사기 테스트 42→67건.
+- **정직한 잔여**: 이 축의 `reached` = "dart 클라 호출 ∪ 백엔드 테스트 호출"이므로 해제된 7건이 reached라는 건 *테스트가 관통한다*는 뜻이지 *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히 0건**이며 이 축은 그 구분을 표현하지 못한다(클라 소비 공백 전용 축은 후속 과제). SQL `.in_(상수)` 단독 소비·`Model.field.in_()` 형태도 Compare가 아니라 미탐이다.
 
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
