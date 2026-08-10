@@ -73,6 +73,17 @@ from whymath_backend.api._query_filters import (
     time_window_conditions,
 )
 from whymath_backend.api._rate_limit import _client_ip
+
+# ASM-04: 청사진 조립 후보 조회는 게이팅 라우터(같은 L5 레이어)의 헬퍼를 *재사용*한다 —
+# 후보 조회(절단 경고 포함)와 성취기준 원자 축 조인을 두 번 구현하지 않는다(단일 진실 원천).
+# private 이름 import는 `l2.ability_estimation._DIFFICULTY_MIDPOINT` 선례와 동형(같은 패키지
+# 내부 계약). 순환 없음 — `api/gating.py`는 `api/me.py`를 import하지 않는다.
+from whymath_backend.api.gating import (
+    _fetch_achievement_codes as _fetch_gating_achievement_codes,
+)
+from whymath_backend.api.gating import (
+    _fetch_candidates as _fetch_gating_candidates,
+)
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import (
@@ -141,6 +152,11 @@ from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
+from whymath_backend.l6.blueprint import (
+    AssembledTestSet,
+    ExamBlueprint,
+    assemble_test_set,
+)
 from whymath_backend.l6.suneung import (
     METADATA_ONLY_SOURCES,
     SUNEUNG_DEFAULT_MIN_FIT,
@@ -176,6 +192,7 @@ from whymath_backend.schema.enums import (
     Resolution,
     ReviewStatus,
 )
+from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.timeseries import (
     DailyLearningMetrics as DailyLearningMetricsSchema,
 )
@@ -2702,6 +2719,219 @@ async def capture_measurement_assessment(
         assessment=StudentAssessmentSchema.from_assessment(schema),
         standard_error=state.standard_error,
         measurement_sufficient=True,
+    )
+
+
+# ── ASM-04: POST /v1/me/assessments/assemble (평가 청사진 → 테스트셋 조립 → Assessment 좌석) ──
+# 설계 정본 `assessment_module_gap_review.md` §3 D4. ASM-03(위)이 *측정 경계에서 이미 계산된*
+# L2 산출물을 Assessment로 조립했다면, 이 좌석은 *선언 명세(blueprint)를 만족하는 문항 집합*을
+# 조립해 같은 테이블의 다른 유형(`실전모의고사`) 행으로 앉힌다. 조립 로직 자체는 L6
+# (`l6.blueprint.assemble_test_set` — 순수·결정론)이고, 이 핸들러는 "DB 후보 조회 + L6 호출 +
+# 적재" 조합만 한다(계층 경계 — api는 게이팅·조립을 *구현하지 않는다*).
+#
+# **CAT 대체 아님(D4-2 동결)**: 학습 중 문항 노출의 정본은 CAT 단건(`GET /v1/me/next-problem`)
+# 이고, 이 세트는 "단원 마감 측정"(`BLUEPRINT_USE_CASE`) 예외에만 쓴다. `/next-problem` 핸들러는
+# 이 좌석을 알지 못하며(코드 참조 0), 그 사실을 테스트가 기계로 동결한다.
+#
+# 하드 제약(ASM-02·ASM-03 승계): 등급·점수·백분위·합격예측 4개 예측 필드는 이 경로에서도
+# **절대 채우지 않는다**(항상 None). 게임화 금기 — 세트 시행 결과로 점수·등급을 산출하는 것은
+# 이 프로젝트가 만들지 않는 것(CLAUDE.md)이다. 이 좌석은 *세트 구성*까지만 책임진다.
+_BLUEPRINT_ASSESSMENT_TYPE = AssessmentType.실전모의고사
+"""청사진 세트 Assessment의 `assessment_type` — 기존 5종 중 '실전모의고사'의 **첫 발화**.
+
+신규 enum 값 추가 0(§8.1 DDL이 이미 가진 5종 중 선택). `단원진단`(ASM-03 캡처)과 다른 유형이라
+두 좌석의 행이 서로 섞이지 않는다(조회·집계에서 자연 분리).
+"""
+
+_BLUEPRINT_ITEM_KIND_SET = "blueprint_test_set"
+_BLUEPRINT_ITEM_KIND_ITEM = "blueprint_item"
+"""`pattern_diagnosis` JSONB 배열 안에서 두 항목 형태를 구분하는 판별자(discriminator).
+
+세트를 **새 테이블 없이** 표현하기 위한 좌석이다(D4-4 — 신규 마이그레이션 0). `Assessment`의
+JSONB 5종 중 `pattern_diagnosis`가 비어 있고 소비처가 없어 이 용도로 쓴다. 한 JSONB 배열에
+이종 항목(세트 헤더 1건 + 문항 N건)을 `kind`로 구분해 담는 방식은 ASM-03이 `concept_diagnosis`
+에서 만든 선례를 그대로 답습한다.
+"""
+
+_BLUEPRINT_NOTE = (
+    "평가 청사진 기반 테스트셋 조립(ASM-04) — 단원 마감 측정 전용(CAT 대체 아님). 등급·점수·"
+    "백분위·합격예측 4개 예측 필드는 게임화 금기로 이 경로에서 의도적으로 채우지 않음(항상 null)."
+)
+
+_BLUEPRINT_CANDIDATE_FETCH_LIMIT = 3000
+"""청사진 조립에 먹일 후보 문항 fetch 상한 — `api/gating.py`의 후보 상한과 같은 값(코퍼스
+2,647건 + 여유). L6 조립기가 적격·제약·개수를 전부 판정하므로 이 상한은 "후보 풀 크기"일 뿐
+응답 크기가 아니다. 상한과 정확히 같은 건수를 읽으면 절단 의심이므로 경고 로그를 남긴다."""
+
+
+def _blueprint_pattern_diagnosis(assembly: AssembledTestSet) -> list[dict[str, Any]]:
+    """조립 결과를 `pattern_diagnosis` JSONB 배열로 직렬화한다(세트 헤더 1 + 문항 N).
+
+    첫 항목은 세트 헤더(`kind=blueprint_test_set`)로 총점 2축 회계·시험시간·용도를 담고,
+    이어서 문항마다 1건(`kind=blueprint_item`)이 문항 id·소속 칸·세트 내 위치를 담는다.
+    **문항 본문은 담지 않는다** — id 참조만이라 저작권·PII 표면이 늘지 않는다.
+
+    `corpus_total_points`가 `None`인 경우 그 null을 그대로 보존한다(0으로 접지 않는다 —
+    "총점 미산출"과 "총점 0점"은 다른 사실이다). 왜 None인지는 `points_missing_count`가 말한다.
+
+    Args:
+      assembly: `assemble_test_set` 결과.
+
+    Returns:
+      JSONB에 그대로 넣을 수 있는 dict 리스트(헤더 1건 + 문항 건수).
+    """
+    header: dict[str, Any] = {
+        "kind": _BLUEPRINT_ITEM_KIND_SET,
+        "title": assembly.title,
+        "use_case": assembly.use_case,
+        "requested_item_count": assembly.requested_item_count,
+        "selected_item_count": assembly.selected_item_count,
+        # 총점 2축 — 선언(청사진) / 실측(코퍼스 points). None은 None으로 보존.
+        "declared_total_points": assembly.declared_total_points,
+        "declared_points_missing_cells": assembly.declared_points_missing_cells,
+        "corpus_total_points": assembly.corpus_total_points,
+        "points_missing_count": assembly.points_missing_count,
+        # 시험시간은 청사진 선언값의 *보존*일 뿐 문항별 배분·추정이 아니다(D4 정직 회계 ②).
+        "time_limit_minutes": assembly.time_limit_minutes,
+    }
+    items: list[dict[str, Any]] = []
+    position = 0
+    for fill in assembly.cells:
+        for problem_id in fill.selected_problem_ids:
+            items.append(
+                {
+                    "kind": _BLUEPRINT_ITEM_KIND_ITEM,
+                    "problem_id": str(problem_id),
+                    "cell_index": fill.cell_index,
+                    "position": position,
+                }
+            )
+            position += 1
+    return [header, *items]
+
+
+async def _fetch_blueprint_candidates(session: AsyncSession) -> list[ProblemSchema]:
+    """청사진 조립에 넘길 후보 문항을 읽고 *성취기준 코드*(비영속)를 주입해 돌려준다.
+
+    `api/gating.py`의 두 헬퍼를 **그대로 재사용**한다(같은 L5 레이어·같은 조인을 두 번 쓰지
+    않는다 — 단일 진실 원천). `_fetch_candidates`는 후보 조회 + 절단 경고를, `_fetch_achievement
+    _codes`는 원자 축 조인(problem_concept→concept→atom_node.standard_codes) 일괄 IN 조회를
+    담당한다. 성취기준 코드는 ORM 비매핑(비영속) 필드라 주입이 없으면 빈 리스트이고, 그러면
+    `standard_code`를 지정한 청사진 칸은 후보가 0이 되어 **조립이 명시적으로 실패**한다
+    (조용히 아무 문항이나 채우지 않는다).
+
+    `curriculum_required_depth` 주입(`_fetch_candidates_with_standards`가 추가로 하는 일)은
+    부르지 않는다 — 청사진은 요구 깊이 축을 쓰지 않으므로 sync 엔진·리졸버 비용을 지지 않는다.
+
+    Args:
+      session: 요청 수명 AsyncSession.
+
+    Returns:
+      성취기준 코드가 주입된 후보 `schema.Problem` 리스트(L6 조립기 입력).
+    """
+    candidates = await _fetch_gating_candidates(session)
+    codes = await _fetch_gating_achievement_codes(session, [p.problem_id for p in candidates])
+    for problem in candidates:
+        if problem.problem_id in codes:
+            # sorted로 결정적 순서(집합→리스트). 키 부재 문항은 기본 빈 리스트 유지.
+            problem.achievement_standard_codes = sorted(codes[problem.problem_id])
+    return candidates
+
+
+class AssessmentAssembleResponse(BaseModel):
+    """`POST /v1/me/assessments/assemble` 응답 — 적재 여부·이유 + 조립 회계 전문."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    written: bool = Field(description="이번 호출로 Assessment 행이 실제로 생성됐는지.")
+    reason: Literal["assembled", "blueprint_unsatisfied"] = Field(
+        description="'assembled'=청사진 전 칸 충족·적재 완료. 'blueprint_unsatisfied'=요구 "
+        "문항 수를 채우지 못해 **적재하지 않음**(부족한 세트를 조용히 남기지 않는다). 부족 "
+        "사유는 `assembly.unsatisfied_reasons`·칸별 `shortfall` 참조."
+    )
+    assessment: StudentAssessmentSchema | None = Field(
+        default=None,
+        description="'assembled'면 적재된 Assessment(학생 대면 모델 — 예측 5필드는 스키마에 "
+        "자리가 없다). 'blueprint_unsatisfied'면 null.",
+    )
+    assembly: AssembledTestSet = Field(
+        description="조립 결과 전문 — 세트 문항 id·칸별 충족/부족·총점 2축(선언/실측) 회계·"
+        "선언 시험시간. 실패 시에도 *무엇이 얼마나 모자랐는지* 진단할 수 있게 항상 채운다."
+    )
+    candidate_pool_size: int = Field(
+        ge=0,
+        description="조립기에 실제로 넘어간 후보 문항 수(정직 표기 — 후보가 애초에 적었는지 "
+        "제약이 셌는지를 구분할 수 있게 한다).",
+    )
+
+
+@router.post(
+    "/assessments/assemble",
+    response_model=AssessmentAssembleResponse,
+    summary="평가 청사진(성취기준×난이도×유형·문항수·배점·시간)으로 테스트셋 조립·적재",
+)
+async def assemble_blueprint_assessment(
+    blueprint: ExamBlueprint,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AssessmentAssembleResponse:
+    """선언 청사진을 만족하는 테스트셋을 자체 동등문제 코퍼스에서 조립해 `Assessment`로 적재한다.
+
+    ① **후보 조회** — `_fetch_blueprint_candidates`(문항 + 성취기준 코드 원자 축 조인 주입).
+    ② **조립** — L6 `assemble_test_set`(순수·결정론). 적격 게이트는 저작권 축
+       (`is_exposable`)과 검수 축(`is_review_cleared`)을 *각각 독립된 if*로 통과시킨다 —
+       평가원·EBS·교과서(본문 미보유) 출처와 미검수 문항은 세트에 들어갈 수 없다.
+    ③ **충족 판정** — 한 칸이라도 요구 문항 수를 못 채우면 `blueprint_unsatisfied`로
+       **적재하지 않고** 부족 명세를 그대로 돌려준다(조용한 부분 세트 금지·D4 정직 회계 ③).
+    ④ **적재** — 충족이면 `AssessmentType.실전모의고사` 행 1건. 세트는 새 테이블이 아니라
+       `pattern_diagnosis` JSONB(세트 헤더 + 문항 id 배열)로 표현한다(신규 마이그레이션 0).
+       `completed_at`은 **None** — 세트는 *조립*됐을 뿐 아직 시행·완료되지 않았다(완료는 기존
+       `PATCH /v1/me/assessments/{id}/complete` 좌석이 찍는다).
+
+    **총점의 정직한 한계**: 2026-08-10 실측 기준 코퍼스 2,647건이 전량 `points=NULL`이라,
+    실측 총점(`assembly.corpus_total_points`)은 사실상 항상 `null`이고 `points_missing_count`가
+    그 이유(미부여 건수)를 말한다. NULL을 0으로 접어 가짜 총점을 만들지 않는다. 청사진이 배점을
+    선언했다면 `declared_total_points`(선언 축)가 따로 채워진다 — 두 축을 섞지 않는다.
+
+    **CAT 대체 아님**: 이 좌석은 "단원 마감 측정" 예외 전용이다(모듈 상단 주석·`BLUEPRINT_
+    USE_CASE`). 학습 중 문항은 계속 `/v1/me/next-problem`(CAT 단건)이 정본이다.
+    """
+    candidates = await _fetch_blueprint_candidates(session)
+    assembly = assemble_test_set(blueprint, candidates)
+    if not assembly.satisfied:
+        # 부족한 세트는 적재하지 않는다 — "조용히 부족한 세트 반환" 금지(D4 정직 회계 ③).
+        return AssessmentAssembleResponse(
+            written=False,
+            reason="blueprint_unsatisfied",
+            assessment=None,
+            assembly=assembly,
+            candidate_pool_size=len(candidates),
+        )
+
+    now = datetime.now(UTC)
+    schema = AssessmentSchema(
+        user_id=user.user_id,
+        assessment_type=_BLUEPRINT_ASSESSMENT_TYPE,
+        started_at=now,
+        # 조립 시점은 *시행 전*이라 완료가 아니다(완료는 complete 좌석이 찍는다).
+        completed_at=None,
+        # 하드 제약(게임화 금기) — 이 경로도 이 5필드를 절대 채우지 않는다(ASM-02·03 승계).
+        estimated_grade=None,
+        estimated_score=None,
+        estimated_percentile=None,
+        target_university_id=None,
+        admission_probability=None,
+        pattern_diagnosis=_blueprint_pattern_diagnosis(assembly),
+        notes=_BLUEPRINT_NOTE,
+    )
+    session.add(Assessment.from_schema(schema))
+    await session.commit()
+    return AssessmentAssembleResponse(
+        written=True,
+        reason="assembled",
+        assessment=StudentAssessmentSchema.from_assessment(schema),
+        assembly=assembly,
+        candidate_pool_size=len(candidates),
     )
 
 
