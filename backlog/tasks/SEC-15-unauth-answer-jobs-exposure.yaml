@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,13 +15,14 @@ acceptance:
   - "결함B(jobs 무인증): app.py:905 GET /v1/jobs/{job_id}가 인증·소유권 검사 없이 검증 전 원시 LLM 출력 반환(POST /v1/generate는 CurrentUser 봉인). job_id=UUID4라 열거는 어려우나 소유권 검사 부재. docstring이 'SEC-07 범위 밖' 자백하나 추적 태스크 부재."
   - "수정: (A) 학생용/관리용 응답모델 분리 또는 정답 필드 인증 게이트(gating.py 포함 재검토) — SEC-07 D1 '공개 카탈로그' 설계와의 트레이드오프를 Kiki 판단으로 확정(정책 결정 포인트). (B) /v1/jobs에 인증+소유권(job↔user) 또는 최소 인증 게이트."
   - "테스트: 정답 필드가 비인증/비관리 응답에서 제외되는지, /v1/jobs가 타 사용자 job 거부하는지 결함주입 확인."
-artifacts: []
+artifacts:
+  - "무인증 정답·jobs 노출 봉합 완료(감사 M1·M6). 결함A: PublicProblem/PublicProblemStep 공개 투영 신설 — **허용목록 방향**(Problem이 정답류를 *더하는* 구조라 미래 필드도 자동으로 안 샘·ASM-07 StudentAssessment 선례 동형·키 부재가 계약=PED-08 선례). 숨김 필드: Problem 6종(answer·answer_explanation·distractor_map·multiple_answers·answer_transform·answer_constraint — 감사 지목 3종에 스키마 전수 검토로 3종 추가) + ProblemStep 2종(expected_answer·common_mistakes 힌트류). 무인증 GET 9곳 교체(problems 단건/목록/steps + gating 6종 — acceptance의 gating 재검토 이행). 관리자 CUD(RequireContentAdmin)는 전체 스키마 유지. **D1 유지·재량 판단 명시**: 카탈로그 공개는 불변, 정답 동봉은 D1의 결정이 아니라 강제-비움 누락이었음(감사 실측) + '정답 즉시 제공 금지' 절대 금기 + 공식 클라 answer 키 미선언 → 안전측으로 닫고 가역성(Kiki가 확장 결정 시 response_model 되돌리면 됨)을 스키마 docstring에 명시. 결함B: GET /v1/jobs/{job_id}에 CurrentUser 게이트(POST /v1/generate와 동일) — 소유권은 JobStatus에 user 매핑이 없어 후속 명시(acceptance 허용 최소치). 테스트: test_problems_public_projection.py 15건(키 부재 단언·결함주입 양성대조 포함) + TestJobsAuthGate(무토큰 401·실 JWT 200 양방향). 서브에이전트가 세션 한도로 검증 전 중단 → 메인 세션이 마무리: ①health 계측 테스트 2건이 /v1/jobs를 무인증 200 표본으로 쓰던 것을 오버라이드 관례로 갱신 ②OPS-22 감사기 stale-waiver 4건(gating 4종 — PB-04 테스트가 도달시켜 면제 무효)을 의식적 제거 ③black 미포맷 2파일·ruff 1건 정정. 최종(전부 직접 실행): 백엔드 전체 9282 passed/302 skipped/0 failed, tests/infra 310 passed, ruff·black·mypy --strict green."
 paths:
   - src/backend/whymath_backend/api/problems.py
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/schema/problem.py
   - "tests/backend/api/**"
-session: claude/whymath-issues-review-k20m0w
+session: null
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md M1·M6. SEC-07 D1(GET 무인증=공개 카탈로그) 의도적 결정의 재검토 — 정답 노출 축은 Kiki 정책 판단 필요. L4 게이팅 무인증(L4/SEC-18)과 인접 축."
 updated: 2026-08-10

@@ -25,7 +25,11 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 불문)로 게이팅한다: 콘텐츠 CUD(`Role.CONTENT_ADMIN`)와 달리 이 엔드포인트는 *인증된 어느
 사용자든* 호출할 수 있어야 하는 저수준 L3 raw 생성 표면이라(orchestrator·teacher tooling 등
 소비처가 아직 특정 역할로 좁혀지지 않음) `require_content_admin`이 아니라 인증 존재만 요구한다.
-`/v1/jobs/{id}`(폴링)는 SEC-07 범위 밖 — 이 태스크는 콘텐츠 CUD 6라우터 + `/v1/generate`만 봉인.
+`/v1/jobs/{id}`(폴링)도 같은 `CurrentUser` 게이트다(SEC-15 —
+`functional_security_audit_2026-08-08.md` M6): SEC-07 당시 "범위 밖"으로 남겨졌던 폴링이
+무인증인 채 검증 전 원시 LLM 출력을 반환하고 있었다(짝인 POST는 봉인·폴링만 열림). 소유권
+(job↔user) 검사는 현재 job 저장 구조(`JobStatus` — job_id·state·text·error뿐)에 user 매핑이
+없어 불가 — job→user 저장이 생길 때 후속(그전까지 최소 인증 게이트·job_id는 UUID4라 열거 곤란).
 """
 
 from __future__ import annotations
@@ -1086,8 +1090,13 @@ def create_app(
         )
 
     @app.get("/v1/jobs/{job_id}", tags=["l3"], response_model=JobStatusBody)
-    async def get_job(job_id: str, request: Request) -> JobStatusBody:
+    async def get_job(job_id: str, request: Request, user: CurrentUser) -> JobStatusBody:
         """QUALITY 비동기 작업 폴링 — 상태 + (완료 시) 생성 텍스트 (03a §D.3).
+
+        인증 필수(`CurrentUser` — SEC-15 M6, POST /v1/generate와 동일 게이트): 무인증
+        폴링은 검증 전 원시 LLM 출력의 무인증 노출 표면이었다. **소유권(job↔user) 검사는
+        후속** — 현재 job 저장 구조(`JobStatus`)에 user 매핑이 없어 인증 게이트만 건다.
+        job→user 저장이 생기면 타 사용자 job 폴링을 403/404로 거부하도록 확장한다.
 
         완료(success) 시 `text`는 *검증 전 원시 출력*이다(앱 docstring 경계 메모) —
         학생 직접 노출 금지. 진행 중(pending)·실패(failure)·판정 불가(unknown)는 모두

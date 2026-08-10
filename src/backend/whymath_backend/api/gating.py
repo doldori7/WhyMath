@@ -27,7 +27,12 @@ list[ProblemSchema]`이며, api 레이어는 "DB 조회 + L6 함수 호출 + sch
 이 라우터는 그 차단을 우회하지 않는다(테스트로 입증).
 
 세션 결선·`SessionDep` 의존성 패턴은 problems.py와 동일(session.py 계약). 응답은 게이팅이
-선별·우선순위 정렬·limit 적용을 마친 `list[ProblemSchema]`를 그대로 돌려준다.
+선별·우선순위 정렬·limit 적용을 마친 목록을 **공개 투영(`PublicProblem`)으로 변환해**
+돌려준다(SEC-15 — `functional_security_audit_2026-08-08.md` M1): 이 6개 엔드포인트는
+무인증이라 정답류 필드(`PUBLIC_HIDDEN_ANSWER_FIELDS` — answer·distractor_map 등)를 키째
+싣지 않는다(키 부재가 계약·problems.py GET과 동일). 게이팅 *입력*은 전체 `ProblemSchema`
+그대로다 — 메타인지 모드의 주신호(distractor_map 존재) 같은 판정 재료는 서버 내부에서만
+쓰고 응답에는 싣지 않는다(신호는 쓰되 노출하지 않음).
 
 **도달 관측(PB-04)**: 6개 핸들러 각각이 본문 시작에서 `L6ModeReachCounters.record(mode명)`을
 호출해 "이 핸들러에 요청이 도달했다"를 1 증가시킨다(성공/실패 무관 — growth_evidence
@@ -81,6 +86,7 @@ from whymath_backend.l6 import (
 )
 from whymath_backend.schema.enums import Curriculum, Persona, RequiredDepth
 from whymath_backend.schema.problem import Problem as ProblemSchema
+from whymath_backend.schema.problem import PublicProblem
 
 router = APIRouter(prefix="/v1/gating", tags=["gating"])
 
@@ -326,9 +332,18 @@ SchoolProgressCandidatesDep = Annotated[
 ]
 
 
+def _to_public(items: list[ProblemSchema]) -> list[PublicProblem]:
+    """게이팅 결과(내부 정본) → 공개 투영 목록(SEC-15).
+
+    정답류 필드(`PUBLIC_HIDDEN_ANSWER_FIELDS`)는 대상 모델에 자리가 없어 변환에서
+    구조적으로 사라진다(키 부재가 계약 — 모듈 docstring 참조).
+    """
+    return [PublicProblem.from_problem(item) for item in items]
+
+
 @router.get(
     "/retake",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="RT(재수전용) 트랙 게이팅",
 )
 async def gating_retake(
@@ -337,7 +352,7 @@ async def gating_retake(
     persona: Annotated[Persona, Query(description="노출 대상 페르소나(필수). RT는 B·C 대상")],
     min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """RT(재수전용/N수) 트랙 노출 문항을 게이팅해 반환한다(페르소나 B·C 대상).
 
     후보를 L1에서 읽어(`_fetch_candidates`) `select_retake_items`에 넘긴다 — 적격 필터(대상
@@ -346,12 +361,12 @@ async def gating_retake(
     걸러 빈 리스트가 된다. 평가원/EBS/교과서(본문 미보유) 출처는 저작권 게이트가 차단한다.
     """
     get_l6_mode_reach_counters(request.app).record(_MODE_RETAKE)
-    return select_retake_items(candidates, persona, min_fit=min_fit, limit=limit)
+    return _to_public(select_retake_items(candidates, persona, min_fit=min_fit, limit=limit))
 
 
 @router.get(
     "/suneung",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="수능(정시) 모드 게이팅",
 )
 async def gating_suneung(
@@ -362,7 +377,7 @@ async def gating_suneung(
     ] = Persona.A_일반고고3,
     min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """수능(정시) 모드 노출 문항을 게이팅해 반환한다(페르소나 A·B·C 대상).
 
     후보를 L1에서 읽어 `select_suneung_items`에 넘긴다 — 적격 필터(대상 페르소나·저작권 노출
@@ -377,12 +392,12 @@ async def gating_suneung(
     `select_suneung_items`류 로직을 IRT CAT과 결합해 별도로 재사용한다.
     """
     get_l6_mode_reach_counters(request.app).record(_MODE_SUNEUNG)
-    return select_suneung_items(candidates, persona, min_fit=min_fit, limit=limit)
+    return _to_public(select_suneung_items(candidates, persona, min_fit=min_fit, limit=limit))
 
 
 @router.get(
     "/school-progress",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="학교진도 모드 게이팅",
 )
 async def gating_school_progress(
@@ -415,7 +430,7 @@ async def gating_school_progress(
         float, Query(description="persona_fit 임계값(0~1·진도 미지정 시 폴백)")
     ] = 0.5,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """학교진도 모드 노출 문항을 게이팅해 반환한다(페르소나 A·D 대상).
 
     후보를 L1에서 읽어(`_fetch_candidates_with_standards` — 후보 + 성취기준 코드 원자 축 조인 주입)
@@ -438,20 +453,22 @@ async def gating_school_progress(
     # 부재로 보고 persona_fit으로 판정한다(school_progress.gating 계약).
     unit_code_set = set(target_unit_codes) if target_unit_codes else None
     achievement_code_set = set(target_achievement_codes) if target_achievement_codes else None
-    return select_school_progress_items(
-        candidates,
-        persona,
-        target_unit_codes=unit_code_set,
-        target_achievement_codes=achievement_code_set,
-        curriculum_version=curriculum_version,
-        min_fit=min_fit,
-        limit=limit,
+    return _to_public(
+        select_school_progress_items(
+            candidates,
+            persona,
+            target_unit_codes=unit_code_set,
+            target_achievement_codes=achievement_code_set,
+            curriculum_version=curriculum_version,
+            min_fit=min_fit,
+            limit=limit,
+        )
     )
 
 
 @router.get(
     "/thinking",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="사고력 모드 게이팅",
 )
 async def gating_thinking(
@@ -462,7 +479,7 @@ async def gating_thinking(
     ] = Persona.D_학종고2,
     min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """사고력 모드 노출 문항을 게이팅해 반환한다(Bloom 상위 3단계가 주신호·D·E 주 대상).
 
     후보를 L1에서 읽어(`_fetch_candidates`) `select_thinking_items`에 넘긴다 — 적격 필터(저작권
@@ -477,12 +494,12 @@ async def gating_thinking(
     출처는 저작권 게이트가 차단하고, 학생에겐 자체생성 동등문제만 노출된다(CLAUDE.md 우선순위 #2).
     """
     get_l6_mode_reach_counters(request.app).record(_MODE_THINKING)
-    return select_thinking_items(candidates, persona, min_fit=min_fit, limit=limit)
+    return _to_public(select_thinking_items(candidates, persona, min_fit=min_fit, limit=limit))
 
 
 @router.get(
     "/metacognition",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="메타인지 모드 게이팅",
 )
 async def gating_metacognition(
@@ -494,7 +511,7 @@ async def gating_metacognition(
     ] = Persona.A_일반고고3,
     min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """메타인지 모드 노출 문항을 게이팅해 반환한다(distractor_map 주신호·전 페르소나 공유 코어).
 
     후보를 L1에서 읽어(`_fetch_candidates`) `select_metacognition_items`에 넘긴다 — 적격 필터
@@ -509,12 +526,12 @@ async def gating_metacognition(
     평가원/EBS/교과서(본문 미보유) 출처는 저작권 게이트가 차단한다(CLAUDE.md 우선순위 #2).
     """
     get_l6_mode_reach_counters(request.app).record(_MODE_METACOGNITION)
-    return select_metacognition_items(candidates, persona, min_fit=min_fit, limit=limit)
+    return _to_public(select_metacognition_items(candidates, persona, min_fit=min_fit, limit=limit))
 
 
 @router.get(
     "/gifted",
-    response_model=list[ProblemSchema],
+    response_model=list[PublicProblem],
     summary="영재 트랙 게이팅",
 )
 async def gating_gifted(
@@ -530,7 +547,7 @@ async def gating_gifted(
         float, Query(ge=1.0, le=5.0, description="종합 난이도 하한(영재 심화 기본 4.0)")
     ] = 4.0,
     limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """영재 트랙 노출 문항을 게이팅해 반환한다(심화+창안/융합·페르소나 E 전용).
 
     후보를 L1에서 읽어(`_fetch_candidates`) `select_gifted_items`에 넘긴다 — 적격 필터(대상
@@ -545,6 +562,8 @@ async def gating_gifted(
     학교진도 성취기준 선례). 평가원/EBS/교과서(본문 미보유) 출처는 저작권 게이트가 차단한다.
     """
     get_l6_mode_reach_counters(request.app).record(_MODE_GIFTED)
-    return select_gifted_items(
-        candidates, persona, min_fit=min_fit, min_difficulty=min_difficulty, limit=limit
+    return _to_public(
+        select_gifted_items(
+            candidates, persona, min_fit=min_fit, min_difficulty=min_difficulty, limit=limit
+        )
     )

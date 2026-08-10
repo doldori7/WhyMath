@@ -14,11 +14,13 @@ create_app() 팩토리에 가짜(provider·cache·trace·queue + metrics·readin
 from __future__ import annotations
 
 import logging
+import uuid
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from whymath_backend.api._auth import UserProfile, get_current_user
 from whymath_backend.app import create_app
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import GenerationResult, RoutingDecision
@@ -34,10 +36,14 @@ from whymath_backend.ops.service_health import (
     check_database,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # 가짜 의존성 — 라이브 Ollama·Redis·PG·broker 차단(hermetic).
 # ──────────────────────────────────────────────────────────────────────────
+# 계측 표본용 고정 인증 사용자 — `/v1/jobs` 경로가 SEC-15 CurrentUser 게이트를 얻은 뒤에도
+# 이 파일의 미들웨어 테스트가 그 경로를 2xx 표본으로 계속 쓸 수 있게 한다(_build_app 참조).
+_FAKE_METRICS_USER = UserProfile(user_id=uuid.uuid4())
+
+
 class _BoomError(Exception):
     """주입 실패용 커스텀 예외 — 로그·body의 타입명 검증이 이 이름을 찾는다(변별력)."""
 
@@ -106,6 +112,11 @@ def _build_app(
         metrics=resolved_metrics,
         readiness_probes=probes if probes is not None else _probes(),
     )
+    # 이 파일의 관심사는 계측 미들웨어·health 게이트다 — 인증은 관심 밖이라 고정 사용자로
+    # 오버라이드한다(test_app.py `_client()` 동형). `/v1/jobs`가 SEC-15로 CurrentUser 게이트를
+    # 얻어, 계측 표본용으로 그 경로를 쓰는 아래 테스트들이 401을 받지 않게 한다(인증 자체의
+    # 양방향 검증은 test_app.py `TestJobsAuthGate`가 오버라이드 없이 담당).
+    app.dependency_overrides[get_current_user] = lambda: _FAKE_METRICS_USER
     return app, resolved_metrics
 
 

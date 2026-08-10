@@ -721,12 +721,11 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
         "POST /v1/auth/refresh": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
         "POST /v1/auth/logout": "pending-task:MOB-12-auth-session-lifecycle-client-wiring",
-        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
-        # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
-        "GET /v1/gating/gifted": _INTERNAL_TOOL,
-        "GET /v1/gating/metacognition": _INTERNAL_TOOL,
-        "GET /v1/gating/suneung": _INTERNAL_TOOL,
-        "GET /v1/gating/thinking": _INTERNAL_TOOL,
+        # 내부 도구·게이팅 축 — 6종 전부 reached로 전환돼 면제 잔존분 0 (PB-04 도달 관측
+        # 테스트(test_l6_mode_reach_observability.py)가 6개 엔드포인트를 각각 TestClient로
+        # 호출 + SEC-15 공개 투영 테스트도 도달). stale-waiver 판정에 따라 의식적으로 제거 —
+        # 학생 클라이언트 화면이 아직 없다는 사실은 불변이나, 이 감사기의 reached 기준은
+        # "테스트가 호출하는가"이므로 면제가 더는 성립하지 않는다.
         # L5 시각화 — api/visualization.py 모듈 docstring이 명시: "HTTP 엔드포인트 + provider/
         # cache/trace의 FastAPI DI 배선은 후속(L5 프런트 착수 시)" — 슬라이스 95 설계상 의도적
         # 미배선(VIZ-01이 배선한 것은 별도 라우트 /v1/scenes/weak-concept — 동명이 아니다).
