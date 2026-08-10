@@ -2,7 +2,8 @@
 
 설계 정본: `docs/architecture/04a_wh1_tutoring_harness.md` §8.4. WH-1 0단계의 산출물은
 **"커버리지 맵 + 베이스라인 수치"**(무엇을 *지금* 잴 수 있고, 무엇이 *아직* 못 재는지)다.
-`wh1_evaluation.compute_wh1_surrogate_metrics`가 지표 12종(7 + S3 세션 4 + S3-16 ⑫)을 계산하지만,
+`wh1_evaluation.compute_wh1_surrogate_metrics`가 지표 16종(7 + S3 세션 4 + ⑯ + ⑮ + S4-22
+⑰⑱⑲)을 계산하지만,
 그 결과는 지금까지 per-user API(`GET /v1/me/harness-metrics`)로만 소비됐다 — 설계가 명시한
 **코호트 전체 집계(`user_id=None`)를 ops/스크립트가 직접 호출**하는 진입점(그 산출물을 사람이
 읽을 리포트로 렌더)이 비어 있었다. 본 모듈이 그 결선이다.
@@ -64,8 +65,9 @@ _STATUS_ICON: dict[MetricStatus, str] = {
     MetricStatus.REQUIRES_TOOL: "🔴",
 }
 
-# 렌더 순서·라벨·표본 필드 — (라벨, SurrogateMetrics 지표 attr, 표본 수 attr). 12 지표 정본 순서
-# (7종 + S3 세션 4종 + S3-16 ⑫). 표본 attr은 그 지표의 대표 표본 수(없으면 None).
+# 렌더 순서·라벨·표본 필드 — (라벨, SurrogateMetrics 지표 attr, 표본 수 attr). 16 지표 정본 순서
+# (7종 + S3 세션 4종 + ⑯ PED-13 + S3-16 ⑮ + S4-22 ⑰⑱⑲). 표본 attr은 그 지표의 대표 표본 수
+# (없으면 None).
 _METRIC_ROWS: list[tuple[str, str, str | None]] = [
     ("① verify 통과율", "verify_pass_rate", "sample_verify_events"),
     ("② 진단정확도(오프라인)", "diagnosis_agreement_rate", "sample_diagnostic_probes"),
@@ -80,6 +82,9 @@ _METRIC_ROWS: list[tuple[str, str, str | None]] = [
     ("⑪ 스스로 풀이 도달율", "self_solve_rate", "sample_resolved_dialogues"),
     ("⑯ 결손 복구 리드타임", "gap_recovery_leadtime_days", "sample_gap_recovery_groups"),
     ("⑮ 도움 요청 대 제공 비", "help_demand_supply_ratio", "sample_demand_events"),
+    ("⑰ 막힘 도달 심도", "stuck_turn_depth", "sample_stuck_events"),
+    ("⑱ 답입력 응답 지연 p50(ms)", "response_latency_p50_ms", "sample_latency_events"),
+    ("⑲ 시각화 조작 다양성", "visualization_interaction_diversity", "sample_interaction_events"),
 ]
 
 
@@ -89,7 +94,7 @@ def _format_value(value: float | None) -> str:
 
 
 def render_baseline_report(metrics: SurrogateMetrics) -> str:
-    """대리 지표 12종 커버리지 맵 + 베이스라인을 사람이 읽을 마크다운으로 렌더(순수·DB 무관).
+    """대리 지표 16종 커버리지 맵 + 베이스라인을 사람이 읽을 마크다운으로 렌더(순수·DB 무관).
 
     헤더에 집계 범위(코호트/본인·시간창)와 커버리지 카운트(MEASURED n/전체)를, 이어 지표별로
     상태 아이콘·값·표본 수·사유(note)를, 끝에 R15 결합 판정을 낸다. "가짜 0 금지" — NO_DATA/
@@ -277,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.surrogate_baseline_report",
         description=(
-            "WH-1 0단계 대리 지표 12종의 커버리지 맵 + 베이스라인 리포트를 낸다(기본 코호트 "
+            "WH-1 0단계 대리 지표 16종의 커버리지 맵 + 베이스라인 리포트를 낸다(기본 코호트 "
             "전체·가짜 0 금지 — 미측정은 사유 표기). DB 조회 전용."
         ),
     )

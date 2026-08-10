@@ -8,6 +8,12 @@
     MEASURED·음수 기울기. 데이터 없으면 NO_DATA(날조 0).
   - ⑮ 도움 요청 대 제공 비(S3-16): user A의 힌트요청 attempt_event N개(⑤의 힌트제공 표본과
     동형 scope) → MEASURED·정확 ratio. supply 0건이면 NO_DATA(분모 0 방지).
+  - ⑰ 막힘 도달 심도(S4-22): user A의 막힘 attempt_event N개(turn_count) → MEASURED·정확
+    평균·note 최대. 0건이면 NO_DATA.
+  - ⑱ 답입력 응답 지연(S4-22): user A의 답입력 attempt_event N개(server_latency_ms) →
+    MEASURED·정확 p50. 0건이면 NO_DATA.
+  - ⑲ 시각화 조작 다양성(S4-22): user A의 시각화조작 attempt_event N개(interaction) →
+    MEASURED·distinct/total. `_MIN_INTERACTION_EVENTS` 미만이면 NO_DATA.
   - ②⑥⑦ 미계측 3종: 고정 status·value None(날조 0).
   - 401(무토큰)·user 스코핑(타 user B 세션은 A 집계에서 제외).
 
@@ -195,6 +201,47 @@ def _demand_event_row(uid: uuid.UUID, *, order: int) -> AttemptEvent:
     )
 
 
+def _stuck_event_row(uid: uuid.UUID, *, turn_count: int) -> AttemptEvent:
+    """막힘 attempt_event 1행(event_data.turn_count) — ⑰ 막힘 도달 심도 표본(S4-22).
+
+    평균·최대 집계라 정렬 요구가 없어 order 어긋내기가 불필요하다(개수·값만 집계).
+    """
+    return AttemptEvent(
+        event_at=datetime.now(UTC),
+        user_id=uid,
+        event_type=EventType.막힘,
+        event_data={"turn_count": turn_count},
+    )
+
+
+def _latency_event_row(uid: uuid.UUID, *, latency_ms: int, order: int) -> AttemptEvent:
+    """답입력 attempt_event 1행(event_data.server_latency_ms) — ⑱ 응답 지연 표본(S4-22).
+
+    p50/p90은 헬퍼가 정렬 후 계산하므로 적재 순서와 무관하지만, `order`로 event_at을 어긋내
+    행이 서로 구분되게 한다(힌트 이벤트 헬퍼의 결정성 관례 승계).
+    """
+    return AttemptEvent(
+        event_at=datetime.now(UTC) + timedelta(seconds=order),
+        user_id=uid,
+        event_type=EventType.답입력,
+        event_data={"server_latency_ms": latency_ms},
+    )
+
+
+def _interaction_event_row(uid: uuid.UUID, *, kind: str, order: int) -> AttemptEvent:
+    """시각화조작 attempt_event 1행(event_data.interaction 봉투) — ⑲ 다양성 표본(S4-22).
+
+    봉투 계약(`InteractionEventData`)대로 interaction(조작 종류)+빈 payload만 싣는다 —
+    mode 키가 없는 봉투라 ⑲는 mode 무관 집계다(계산 계층 주석 참조).
+    """
+    return AttemptEvent(
+        event_at=datetime.now(UTC) + timedelta(seconds=order),
+        user_id=uid,
+        event_type=EventType.시각화조작,
+        event_data={"interaction": kind, "payload": {}},
+    )
+
+
 def _attempt_row(uid: uuid.UUID, *, is_correct: bool, order: int) -> ProblemAttempt:
     """ProblemAttempt 1행(is_correct) — R15 정답률 추세 표본.
 
@@ -359,6 +406,33 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
                 _attempt_row(uid_b, is_correct=False, order=0),
             )
         )
+        # A: 막힘 이벤트 3개(turn_count 5·7·9) → ⑰ 평균 7.0·최대 9(S4-22). B는 1개(스코핑·제외).
+        asyncio.run(
+            _add_all(
+                _stuck_event_row(uid_a, turn_count=5),
+                _stuck_event_row(uid_a, turn_count=7),
+                _stuck_event_row(uid_a, turn_count=9),
+                _stuck_event_row(uid_b, turn_count=6),
+            )
+        )
+        # A: 답입력 이벤트 3개(100·300·200ms) → ⑱ p50 200(정렬 후 중앙값·S4-22). B는 1개(제외).
+        asyncio.run(
+            _add_all(
+                _latency_event_row(uid_a, latency_ms=100, order=0),
+                _latency_event_row(uid_a, latency_ms=300, order=1),
+                _latency_event_row(uid_a, latency_ms=200, order=2),
+                _latency_event_row(uid_b, latency_ms=999, order=0),
+            )
+        )
+        # A: 시각화조작 이벤트 3개(서로 다른 조작 3종) → ⑲ 3/3=1.0(S4-22). B는 1개(스코핑·제외).
+        asyncio.run(
+            _add_all(
+                _interaction_event_row(uid_a, kind="param_change", order=0),
+                _interaction_event_row(uid_a, kind="surface_range", order=1),
+                _interaction_event_row(uid_a, kind="param_play", order=2),
+                _interaction_event_row(uid_b, kind="param_change", order=0),
+            )
+        )
         token_a = create_access_token(uid_a, settings=_settings())
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
@@ -400,6 +474,27 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert hdsr["status"] == "measured"
             assert hdsr["value"] == 0.5
             assert body["sample_demand_events"] == 2
+
+            # ⑰ 막힘 도달 심도(S4-22) — MEASURED·평균 (5+7+9)/3=7.0·표본 3(B의 1건 제외).
+            std = body["stuck_turn_depth"]
+            assert std["status"] == "measured"
+            assert std["value"] == 7.0
+            assert body["sample_stuck_events"] == 3
+            assert "최대 9" in std["note"]
+
+            # ⑱ 답입력 응답 지연(S4-22) — MEASURED·p50 200ms(100·300·200 정렬 후 중앙값)·표본 3
+            # (B의 1건 제외 — 스코핑). note에 p90(꼬리 지연) 병기.
+            rlt = body["response_latency_p50_ms"]
+            assert rlt["status"] == "measured"
+            assert rlt["value"] == 200.0
+            assert body["sample_latency_events"] == 3
+            assert "p90" in rlt["note"]
+
+            # ⑲ 시각화 조작 다양성(S4-22) — MEASURED·distinct 3/전체 3=1.0·표본 3(B 제외).
+            vid = body["visualization_interaction_diversity"]
+            assert vid["status"] == "measured"
+            assert vid["value"] == 1.0
+            assert body["sample_interaction_events"] == 3
 
             # R15 결합 판정 — 도움↓(−1.0)·정답률↑(F→T→T→T) → GENUINE_IMPROVEMENT·표본 4
             # (B의 1건 제외 — 스코핑). is_correct 추세(① 검산 proxy 아님)로 교차.
@@ -460,6 +555,17 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             # ⑮ 도움 요청 대 제공 비 — 힌트제공(supply) 0건 → NO_DATA(분모 0 방지·가짜 0 금지).
             assert body["help_demand_supply_ratio"]["status"] == "no_data"
             assert body["help_demand_supply_ratio"]["value"] is None
+            # ⑰⑱⑲(S4-22) — 이벤트 0건 → 전부 NO_DATA·value None·표본 0(가짜 0/1.0 금지).
+            for s4_key in (
+                "stuck_turn_depth",
+                "response_latency_p50_ms",
+                "visualization_interaction_diversity",
+            ):
+                assert body[s4_key]["status"] == "no_data"
+                assert body[s4_key]["value"] is None
+            assert body["sample_stuck_events"] == 0
+            assert body["sample_latency_events"] == 0
+            assert body["sample_interaction_events"] == 0
             # R15 결합 판정 — 도움/정답률 둘 다 표본 0 → INSUFFICIENT_DATA(날조 판정 금지).
             hrv = body["help_reduction_validated"]
             assert hrv["verdict"] == "insufficient_data"

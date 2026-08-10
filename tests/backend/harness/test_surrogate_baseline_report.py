@@ -4,7 +4,7 @@
 검증한다. DB 조회 glue(`_run`·`main`의 asyncio.run)는 실 PG 통합검증 소관(pragma no cover).
 
 핵심 불변(계산 계층과 동일 철학·CLAUDE.md "모르면 모른다"): 렌더는 "가짜 0 금지"를 표면화한다 —
-MEASURED만 값을 보이고 NO_DATA는 값 대신 '—' + 사유(note)를 옮긴다. 12 지표 전부·R15 판정·
+MEASURED만 값을 보이고 NO_DATA는 값 대신 '—' + 사유(note)를 옮긴다. 16 지표 전부·R15 판정·
 커버리지 카운트가 리포트에 나타나야 한다.
 """
 
@@ -30,7 +30,7 @@ from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
 )
 
-# 12 지표 라벨(리포트에 전부 나타나야 함).
+# 16 지표 라벨(리포트에 전부 나타나야 함).
 _METRIC_LABELS = (
     "① verify 통과율",
     "② 진단정확도(오프라인)",
@@ -44,6 +44,9 @@ _METRIC_LABELS = (
     "⑩ 오개념 해소율",
     "⑪ 스스로 풀이 도달율",
     "⑮ 도움 요청 대 제공 비",
+    "⑰ 막힘 도달 심도",
+    "⑱ 답입력 응답 지연 p50(ms)",
+    "⑲ 시각화 조작 다양성",
 )
 
 
@@ -56,7 +59,7 @@ def _no_data() -> Metric:
 
 
 def _all_measured_metrics() -> SurrogateMetrics:
-    """13 지표 전부 MEASURED인 SurrogateMetrics(커버리지 13/13 검증용)."""
+    """16 지표 전부 MEASURED인 SurrogateMetrics(커버리지 16/16 검증용)."""
     m = _measured(0.5)
     return SurrogateMetrics(
         verify_pass_rate=m,
@@ -72,6 +75,10 @@ def _all_measured_metrics() -> SurrogateMetrics:
         gap_recovery_leadtime_days=_measured(0.3),
         misconception_resolution_rate=m,
         self_solve_rate=m,
+        # S4-22 관측 소비 3종 — ⑱은 ms 스칼라(예: 850.0ms)·⑰⑲는 평균/비율.
+        stuck_turn_depth=_measured(6.5),
+        response_latency_p50_ms=_measured(850.0),
+        visualization_interaction_diversity=_measured(0.6),
         help_reduction_validated=HelpReductionValidation(
             verdict=R15Verdict.GENUINE_IMPROVEMENT,
             help_slope=-1.0,
@@ -104,6 +111,9 @@ def _mixed_metrics() -> SurrogateMetrics:
         gap_recovery_leadtime_days=_no_data(),
         misconception_resolution_rate=_no_data(),
         self_solve_rate=_no_data(),
+        stuck_turn_depth=_no_data(),
+        response_latency_p50_ms=_no_data(),
+        visualization_interaction_diversity=_no_data(),
         help_reduction_validated=HelpReductionValidation(
             verdict=R15Verdict.INSUFFICIENT_DATA,
             note="표본 부족 note",
@@ -114,22 +124,30 @@ def _mixed_metrics() -> SurrogateMetrics:
 
 class TestRenderBaselineReport:
     def test_all_metric_labels_present(self) -> None:
-        """12 지표 라벨이 전부 리포트에 렌더된다(빠짐 없음)."""
+        """16 지표 라벨이 전부 리포트에 렌더된다(빠짐 없음)."""
         report = render_baseline_report(_all_measured_metrics())
         for label in _METRIC_LABELS:
             assert label in report
 
-    def test_coverage_count_all_measured(self) -> None:
-        """전부 MEASURED → 커버리지 13/13."""
+    def test_s4_22_new_metric_labels_rendered(self) -> None:
+        """S4-22 신규 3종(⑰⑱⑲) 라벨이 리포트에 렌더된다(소비 좌석의 리포트 표면화)."""
         report = render_baseline_report(_all_measured_metrics())
-        assert "MEASURED 13/13" in report
+        assert "⑰ 막힘 도달 심도" in report
+        assert "⑱ 답입력 응답 지연 p50(ms)" in report
+        assert "⑲ 시각화 조작 다양성" in report
+        assert "값 850.0000" in report  # ⑱ ms 스칼라가 값 칸에 그대로 렌더
+
+    def test_coverage_count_all_measured(self) -> None:
+        """전부 MEASURED → 커버리지 16/16."""
+        report = render_baseline_report(_all_measured_metrics())
+        assert "MEASURED 16/16" in report
         assert "코호트 전체" in report  # user_scoped=False
 
     def test_coverage_count_mixed(self) -> None:
-        """혼합(2 MEASURED) → 커버리지 2/13·본인 스코프."""
+        """혼합(2 MEASURED) → 커버리지 2/16·본인 스코프."""
         report = render_baseline_report(_mixed_metrics())
-        assert "MEASURED 2/13" in report
-        assert "NO_DATA/미계측 11/13" in report
+        assert "MEASURED 2/16" in report
+        assert "NO_DATA/미계측 14/16" in report
         assert "본인(user)" in report  # user_scoped=True
 
     def test_no_data_shows_reason_not_zero(self) -> None:

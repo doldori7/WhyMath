@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,12 +14,18 @@ acceptance:
   - "막힘·답입력·시각화조작 3종 EventType은 S3-16/슬96-J에서 build_event_data 생산자가 배선됐으나(attempt_event에 실제로 적재됨), 그 값을 event_type==EventType.X로 필터링해 읽는 소비자가 0건이다(OPS-22 declared_unwired_audit AST 실측). 각 신호를 실제로 소비하는 지표/리포트/API 좌석을 최소 1곳 배선한다 — 예: 막힘(wh1_evaluation 지표 확장 또는 harness-metrics 노출), 답입력(server_latency_ms 분포 리포트), 시각화조작(visualization_reach_report 소비 축 추가)"
   - "새 EventType enum 신설 0(기존 3종의 소비자만 배선) — 학생 대면 응답 페이로드 무변경 회귀"
   - "완료 후 OPS-22 declared_unwired_audit 재실행 시 이 3종이 reached로 전환됨을 확인(그랜드파더 만료 계약상 이 태스크가 done되면 대장의 pending-task 항목도 함께 제거 — 방치 시 expired-waiver가 잡는다)"
-artifacts: []
+artifacts:
+  - "wh1_evaluation ⑰⑱⑲ 신규 지표(막힘 도달 심도·답입력 응답 지연 p50·시각화 조작 다양성)로 producer-only 3종 EventType 첫 소비 배선 + growth_evidence_exposure INTERNAL_ONLY 3종 등재 + surrogate_baseline_report 16종 확장 + declared_unwired_audit AXIS_EVENT 유예 3건 철거(감사 재실행: 공급 6·도달 6·미도달 0·exit 0) — 전체 스위트 9293 passed/0 failed·infra 310·ruff/black/mypy --strict green (브랜치 claude/whymath-issues-review-k20m0w)"
 paths:
   - src/backend/whymath_backend/harness/wh1_evaluation.py
-  - src/backend/whymath_backend/harness/visualization_reach_report.py
+  - src/backend/whymath_backend/harness/growth_evidence_exposure.py
+  - src/backend/whymath_backend/harness/surrogate_baseline_report.py
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - src/backend/whymath_backend/api/me.py
-  - src/backend/whymath_backend/api/coach.py
-session: claude/whymath-issues-review-k20m0w
-notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — S3-16이 3종의 생산자만 소생시키고(관측 신호로 적재) 소비자는 범위 밖으로 남겼다(S3-16 acceptance ②는 힌트요청/힌트제공만 지표 ⑫로 소비). 반복 실수(생산 좌석 완비 + 소비 미배선) 패턴의 축소판 인스턴스 — 즉시 해소보다 추적이 우선이라 유예(pending-task) 대상으로 등재."
+  - tests/backend/harness/test_wh1_evaluation.py
+  - tests/backend/harness/test_wh1_evaluation_integration.py
+  - tests/backend/harness/test_growth_evidence_exposure.py
+  - tests/backend/harness/test_surrogate_baseline_report.py
+session: null
+notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — S3-16이 3종의 생산자만 소생시키고(관측 신호로 적재) 소비자는 범위 밖으로 남겼다(S3-16 acceptance ②는 힌트요청/힌트제공만 지표 ⑫로 소비). 반복 실수(생산 좌석 완비 + 소비 미배선) 패턴의 축소판 인스턴스 — 즉시 해소보다 추적이 우선이라 유예(pending-task) 대상으로 등재. [구현 시 paths 정정] 소비 좌석은 세 신호 모두 wh1_evaluation 지표 ⑰⑱⑲로 확정 — acceptance 예시의 visualization_reach_report.py는 'DB 0 결정론 리포트'가 설계 정체성이라 DB 소비 축 주입 시 설계가 깨져 의도적으로 제외(파일 무변경), api/coach.py도 무변경(생산자 좌석은 이미 완비·다른 세션 S4-19 작업 범위와 겹침 회피). 신규 3종은 growth_evidence_exposure에 INTERNAL_ONLY 등재(막힘=부정 신호 낙인·응답지연=속도 KPI 금기·조작 다양성=노출 문구 미설계)."
 updated: 2026-08-10

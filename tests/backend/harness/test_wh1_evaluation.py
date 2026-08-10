@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.harness.wh1_evaluation import (
     _MIN_CALIBRATION_SAMPLES,
+    _MIN_INTERACTION_EVENTS,
     _MIN_MASTERY_POINTS,
     _MIN_TRANSFER_PROBES,
     HelpReductionValidation,
@@ -102,7 +103,12 @@ class _FakeSession:
          도달율(resolution=학생자력해결 / resolution NOT NULL) 카운트.
      14) strategy rows((dialogue_id, socratic_strategy) 행 목록·all·turn_order 오름차순) —
          ⑫⑬ 발문 전략 다양성·연속 반복률(PED-04) 입력.
-    이 14개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+     15) stuck rows((turn_count,) 단일 컬럼 행 목록·all) — ⑰ 막힘 도달 심도(S4-22) 입력.
+     16) latency rows((server_latency_ms,) 단일 컬럼 행 목록·all) — ⑱ 답입력 응답 지연
+         p50(S4-22) 입력(정렬 무관 — 헬퍼가 정렬 후 중앙값·p90 계산).
+     17) interaction rows((interaction,) 단일 컬럼 행 목록·all) — ⑲ 시각화 조작 다양성
+         (S4-22) 입력.
+    이 17개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -136,6 +142,9 @@ def _make_session(
     resolved_total: int = 0,
     hint_mismatch_flags: list[bool | None] | None = None,
     strategy_rows: list[tuple[Any, Any]] | None = None,
+    stuck_turn_counts: list[int | None] | None = None,
+    latency_values: list[int | None] | None = None,
+    interaction_kinds: list[str | None] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 이제 2컬럼(hint_level·client_state_mismatch, PED-04 ⑭ 동거)을 event_at
     # 오름차순으로 뽑으므로 행은 (level, mismatch) 튜플. `hint_mismatch_flags` 미지정이면 전부
@@ -161,6 +170,12 @@ def _make_session(
     # — 행은 (user, concept, mastery) 튜플. 그룹 내 오름차순은 본문 order_by가 보장하므로 여기선
     # 그 순서대로 주입한다(첫 등장=최이른·마지막=최근). mastery None은 본문이 필터로 제외한다.
     mstry_rows = list(mastery_rows or [])
+    # ⑰⑱⑲(S4-22) 쿼리는 각각 단일 컬럼(turn_count·server_latency_ms·interaction)을 뽑으므로
+    # 행은 (값,) 1-튜플이다. 미지정이면 빈 목록(=이벤트 0건·NO_DATA 경로) — 기존 호출자는
+    # 무수정으로 그대로 동작한다(큐 끝에 3개가 항상 append되므로 IndexError 없음).
+    stuck_rows = [(v,) for v in (stuck_turn_counts or [])]
+    latency_rows = [(v,) for v in (latency_values or [])]
+    interaction_rows = [(v,) for v in (interaction_kinds or [])]
     return cast(
         AsyncSession,
         _FakeSession(
@@ -179,6 +194,9 @@ def _make_session(
                 _FakeScalarResult(one=(misconception_inactive, misconception_total)),
                 _FakeScalarResult(one=(self_solved, resolved_total)),
                 _FakeScalarResult(all_rows=list(strategy_rows or [])),
+                _FakeScalarResult(all_rows=stuck_rows),
+                _FakeScalarResult(all_rows=latency_rows),
+                _FakeScalarResult(all_rows=interaction_rows),
             ]
         ),
     )
@@ -1659,3 +1677,116 @@ class TestStateMismatchRate:
         m = _state_mismatch_from_counts(0, 5)
         assert m.status is MetricStatus.MEASURED
         assert m.value == 0.0
+
+
+# ── ⑰ 막힘 도달 심도 (attempt_event event_type=막힘 turn_count 평균·S4-22 소비 배선) ──────
+class TestStuckDepth:
+    async def _metrics(self, stuck_turn_counts: list[int | None] | None) -> SurrogateMetrics:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            stuck_turn_counts=stuck_turn_counts,
+        )
+        return await compute_wh1_surrogate_metrics(session)
+
+    async def test_measured_mean_and_note_max(self) -> None:
+        """turn_count [5,7,9] → MEASURED·평균 7.0·note에 최대 9·표본 3."""
+        m = await self._metrics([5, 7, 9])
+        assert m.stuck_turn_depth.status is MetricStatus.MEASURED
+        assert m.stuck_turn_depth.value == pytest_approx(7.0)
+        assert "최대 9" in m.stuck_turn_depth.note
+        assert m.sample_stuck_events == 3
+
+    async def test_zero_events_is_no_data_not_zero(self) -> None:
+        """막힘 이벤트 0건 → NO_DATA·value None(가짜 0 금지)."""
+        m = await self._metrics(None)
+        assert m.stuck_turn_depth.status is MetricStatus.NO_DATA
+        assert m.stuck_turn_depth.value is None
+        assert m.sample_stuck_events == 0
+        assert "0건" in m.stuck_turn_depth.note
+
+    async def test_none_rows_filtered_then_aggregated(self) -> None:
+        """JSONB 파싱 실패(None) 행은 걸러지고 유효 행만 집계(표본에서도 제외)."""
+        m = await self._metrics([5, None, 9])
+        assert m.stuck_turn_depth.status is MetricStatus.MEASURED
+        assert m.stuck_turn_depth.value == pytest_approx(7.0)  # (5+9)/2
+        assert m.sample_stuck_events == 2
+
+
+# ── ⑱ 답입력 응답 지연 (attempt_event event_type=답입력 server_latency_ms p50·S4-22) ─────
+class TestResponseLatency:
+    async def _metrics(self, latency_values: list[int | None] | None) -> SurrogateMetrics:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            latency_values=latency_values,
+        )
+        return await compute_wh1_surrogate_metrics(session)
+
+    async def test_odd_count_median(self) -> None:
+        """홀수 n [100,300,200] → 정렬 후 가운데 값 200(MEASURED·표본 3)."""
+        m = await self._metrics([100, 300, 200])
+        assert m.response_latency_p50_ms.status is MetricStatus.MEASURED
+        assert m.response_latency_p50_ms.value == pytest_approx(200.0)
+        assert m.sample_latency_events == 3
+
+    async def test_even_count_median_is_mean_of_middle_two(self) -> None:
+        """짝수 n [100,200,300,400] → 가운데 두 값(200·300)의 평균 250."""
+        m = await self._metrics([100, 200, 300, 400])
+        assert m.response_latency_p50_ms.status is MetricStatus.MEASURED
+        assert m.response_latency_p50_ms.value == pytest_approx(250.0)
+        assert m.sample_latency_events == 4
+
+    async def test_note_reports_p90_and_max(self) -> None:
+        """note에 p90·최대 표기(꼬리 지연 관측 — 평균은 꼬리에 왜곡되므로 함께 보고)."""
+        m = await self._metrics([100, 300, 200])
+        note = m.response_latency_p50_ms.note
+        # n=3: ceil(0.9*3)=3 → sorted[2]=300 → p90 300ms·최대 300ms.
+        assert "p90 300" in note
+        assert "최대 300" in note
+
+    async def test_zero_events_is_no_data(self) -> None:
+        """답입력 이벤트 0건 → NO_DATA·value None(가짜 0 금지)."""
+        m = await self._metrics(None)
+        assert m.response_latency_p50_ms.status is MetricStatus.NO_DATA
+        assert m.response_latency_p50_ms.value is None
+        assert m.sample_latency_events == 0
+
+
+# ── ⑲ 시각화 조작 다양성 (attempt_event event_type=시각화조작 interaction·S4-22·⑫ 동형) ──
+class TestInteractionDiversity:
+    async def _metrics(self, interaction_kinds: list[str | None] | None) -> SurrogateMetrics:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            interaction_kinds=interaction_kinds,
+        )
+        return await compute_wh1_surrogate_metrics(session)
+
+    async def test_all_distinct_measured_one(self) -> None:
+        """서로 다른 조작 3종/3건 → MEASURED·value 1.0(다각 탐구)·표본 3."""
+        m = await self._metrics(["param_change", "surface_range", "param_play"])
+        assert m.visualization_interaction_diversity.status is MetricStatus.MEASURED
+        assert m.visualization_interaction_diversity.value == pytest_approx(1.0)
+        assert m.sample_interaction_events == 3
+
+    async def test_repeated_single_kind_low_diversity(self) -> None:
+        """같은 조작 5건 반복 → MEASURED·value 1/5=0.2(단일 파라미터 반복·실측 저다양성)."""
+        m = await self._metrics(["param_change"] * 5)
+        assert m.visualization_interaction_diversity.status is MetricStatus.MEASURED
+        assert m.visualization_interaction_diversity.value == pytest_approx(0.2)
+        assert m.sample_interaction_events == 5
+
+    async def test_too_few_events_no_data_not_fake_one(self) -> None:
+        """2건(< _MIN_INTERACTION_EVENTS) → NO_DATA·value None(가짜 1.0 금지)."""
+        m = await self._metrics(["param_change", "surface_range"])
+        assert 2 < _MIN_INTERACTION_EVENTS
+        assert m.visualization_interaction_diversity.status is MetricStatus.NO_DATA
+        assert m.visualization_interaction_diversity.value is None
+        assert m.sample_interaction_events == 2

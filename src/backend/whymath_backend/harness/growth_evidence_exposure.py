@@ -2,7 +2,8 @@
 
 `docs/architecture/gamification_module_gap_review.md` §3 D1의 설계를 그대로 승계한다(새 설계
 아님). `compute_wh1_surrogate_metrics`(`harness/wh1_evaluation.py`)의 지표(원 설계 11종 + 병합
-편입 `help_demand_supply_ratio` 1종 = 12종)를 한 덩어리로 노출하면 그 자체가 새 위험이다 —
+편입 `help_demand_supply_ratio` 1종 = 12종, 이후 ⑯[PED-13]·S4-22 3종[⑰⑱⑲·전부
+INTERNAL_ONLY] 편입으로 16종)를 한 덩어리로 노출하면 그 자체가 새 위험이다 —
 일부는 학생에게 보이면 금기 위반이 된다:
 
 - `help_reduction_validated`의 `GAMING_SUSPECT` — 학생 대면 노출 시 **낙인**
@@ -55,9 +56,10 @@ class ExposureTier(str, Enum):
     """운영·내부 전용 — 학생·보호자 어느 쪽에도 노출 금지(시스템 품질·비용 지표 등)."""
 
 
-# 13지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)만
-# INTERNAL_ONLY — 나머지는 전부 STUDENT_VISIBLE(⑥·⑧은 아래 조합 규칙으로 *표현*이 추가 제약됨,
-# 계층 자체는 STUDENT_VISIBLE 유지 — "안 보임"이 아니라 "다르게 보임").
+# 16지표 attr → 정적 노출 계층(안전 축). `diagnosis_agreement_rate`(②)·`tokens_per_turn`(④)과
+# S4-22 3종(⑰⑱⑲ — 말미 주석 참조)만 INTERNAL_ONLY — 나머지는 전부 STUDENT_VISIBLE(⑥·⑧은
+# 아래 조합 규칙으로 *표현*이 추가 제약됨, 계층 자체는 STUDENT_VISIBLE 유지 — "안 보임"이
+# 아니라 "다르게 보임").
 # `help_demand_supply_ratio`(⑮·S3-16, 병합 시 편입)는 ⑤·⑧과 같은 축(학생 자신의 도움 요청·수신
 # 행태)이라 STUDENT_VISIBLE — ②·④(시스템 품질·비용)와는 성격이 다르다. 노출 문구 설계(서술 변환·
 # 조합 제약 필요 여부)는 이 모듈 최초 판정 당시 범위 밖이었던 지표라 **미확정**(발화조건: 보호자
@@ -78,6 +80,16 @@ _STATIC_TIER: dict[str, ExposureTier] = {
     "gap_recovery_leadtime_days": ExposureTier.STUDENT_VISIBLE,
     "misconception_resolution_rate": ExposureTier.STUDENT_VISIBLE,
     "self_solve_rate": ExposureTier.STUDENT_VISIBLE,
+    # ── S4-22 관측 소비 3종(⑰⑱⑲) — 전부 INTERNAL_ONLY ──
+    # ⑰ 막힘 도달 심도: "막힘"은 부정 신호 — 학생 대면 노출 시 낙인이 된다(CLAUDE.md "부정
+    # 피드백 정서 강화 금지"). hint_deferral 임계 캘리브레이션용 운영 계기판으로만 쓴다.
+    "stuck_turn_depth": ExposureTier.INTERNAL_ONLY,
+    # ⑱ 답입력 응답 지연: 응답 속도 노출은 속도 압박 = CLAUDE.md "'정답을 빠르게'를 KPI로
+    # 사용 금지" 위반 벡터다. 운영 관측(서버 체감 지연·이상 탐지) 전용.
+    "response_latency_p50_ms": ExposureTier.INTERNAL_ONLY,
+    # ⑲ 시각화 조작 다양성: 행동 텔레메트리 — 학생 대면 문구·의미 설계가 수행되지 않았다
+    # (발화조건: 노출 설계 착수 시 재검토. 그 전까지 내부 전용).
+    "visualization_interaction_diversity": ExposureTier.INTERNAL_ONLY,
 }
 
 # SurrogateMetrics 필드 순서(정본 순서 — surrogate_baseline_report._METRIC_ROWS와 동일 순서).
@@ -122,7 +134,7 @@ class MetricExposure(BaseModel):
 
 
 def classify_metric_exposure(metrics: SurrogateMetrics) -> dict[str, MetricExposure]:
-    """13지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
+    """16지표 전체의 노출 판정 — 정적 계층 + ⑧×R15 조합 제약을 적용한 최종 표.
 
     조합 제약(gap review 명시): ⑧(답 미루기 도달 깊이)은 `help_reduction_validated.verdict`가
     `GAMING_SUSPECT`이면 노출하지 않는다(R15가 교정기 함정으로 판정한 도움 감소를 "답 미루기

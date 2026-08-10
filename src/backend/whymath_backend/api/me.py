@@ -3096,7 +3096,10 @@ async def export_my_data(
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="[admin 전용] WH-1 0단계 대리 지표 원시값(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
+    summary=(
+        "[admin 전용] WH-1 0단계 대리 지표 원시값"
+        "(7종 + S3 세션 4종 + PED-04 3종 + S4-22 3종 커버리지 맵)"
+    ),
 )
 async def get_my_harness_metrics(
     request: Request,
@@ -3116,10 +3119,13 @@ async def get_my_harness_metrics(
     3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)도 편입됐다 — `DialogueTurn`
     메타 컬럼 writer가 처음 만든 데이터의 첫 reader. S3-16(행동 텔레메트리 생산자 좌석)에서
     ⑮ 도움 요청 대 제공 비(힌트요청/힌트제공 개수 비)도 편입됐다 — supply(힌트제공) 0건이면
-    NO_DATA. 각 지표는 표본 0/부족이면 value=None + status + note로 "무엇을 만들면 잴 수 있는지"를
+    NO_DATA. S4-22가 관측 소비 좌석 3종(⑰ 막힘 도달 심도·⑱ 답입력 응답 지연 p50·⑲ 시각화
+    조작 다양성 — producer-only였던 attempt_event 3종의 첫 reader·전부 INTERNAL_ONLY)을
+    편입했다. 각 지표는 표본 0/부족이면 value=None + status + note로 "무엇을 만들면 잴 수 있는지"를
     정직하게 드러낸다(가짜 0/stub 금지). ⑨는 measured_at·⑩은 updated_at·⑪은 started_at
-    (resolution) 시간창을 쓰고, ⑫⑬은 대화 started_at·⑭⑮는 힌트제공/힌트요청 이벤트 event_at
-    시간창을 쓴다(mode 스코프는 ⑭⑮만 적용 — ⑫⑬은 대화 기반이라 mode 태그가 아직 실리지 않는다).
+    (resolution) 시간창을 쓰고, ⑫⑬은 대화 started_at·⑭⑮⑰⑱⑲는 attempt_event event_at
+    시간창을 쓴다(mode 스코프는 ⑭⑮⑰⑱에 적용 — ⑲는 봉투에 mode 키가 없어 mode 무관·⑫⑬은
+    대화 기반이라 mode 태그가 아직 실리지 않는다).
     나머지는 started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·
     서버 미판정).
 

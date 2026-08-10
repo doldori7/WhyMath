@@ -85,6 +85,7 @@ S3-16 편입(행동 텔레메트리 생산자 좌석 — `docs/architecture/ai_t
 from __future__ import annotations
 
 import inspect
+import math
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
@@ -428,6 +429,39 @@ class SurrogateMetrics(BaseModel):
         ),
     )
 
+    # ── S4-22 관측 소비 3종(producer-only attempt_event의 첫 reader — S3-16·96-J 신호) ──
+    stuck_turn_depth: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑰ 막힘 도달 심도 — 막힘 이벤트 turn_count 평균(S4-22 소비 배선·INTERNAL_ONLY — "
+            "부정 신호라 학생 대면 노출 금지). 생산 임계(is_stuck_turn_count·turn_count>=5)"
+            "에서만 적재되므로 평균은 항상 5 이상 — 절대 수준이 아니라 hint_deferral 임계 "
+            "캘리브레이션 계기판·note에 건수/평균/최대·0건이면 NO_DATA."
+        ),
+    )
+    response_latency_p50_ms: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑱ 답입력 응답 지연 — server_latency_ms 중앙값(ms·S4-22·INTERNAL_ONLY·속도 KPI "
+            "금지 — CLAUDE.md \"'정답을 빠르게'를 KPI로 사용 금지\"). 서버 시각 차라 조작 불가·"
+            "note에 건수/평균/p90/최대·운영 관측 전용·0건이면 NO_DATA."
+        ),
+    )
+    visualization_interaction_diversity: Metric = Field(
+        default_factory=lambda: Metric(
+            value=None, status=MetricStatus.NO_DATA, note="미집계(기본값)."
+        ),
+        description=(
+            "⑲ 시각화 조작 다양성 — distinct 조작 종류/전체 이벤트(S4-22·⑫ 동형). 96-J 능동 "
+            "탐구 신호(낮으면 단일 파라미터 반복·높으면 다각 탐구·절대 임계 아님)·"
+            "`_MIN_INTERACTION_EVENTS` 미만이면 NO_DATA(가짜 1.0 금지)."
+        ),
+    )
+
     # ── 표본·범위 메타 ──
     sample_sessions: int = Field(
         default=0, description="③ 집계 대상 LearningSession 수(시간창·user 필터 적용)."
@@ -516,6 +550,18 @@ class SurrogateMetrics(BaseModel):
             "필터). 분모 — 이 중 학생자력해결이 분자·0이면 NO_DATA(미보고 NULL은 제외)."
         ),
     )
+    sample_stuck_events: int = Field(
+        default=0,
+        description="⑰ 집계 대상 막힘 attempt_event 수(turn_count 채워진 행·S4-22).",
+    )
+    sample_latency_events: int = Field(
+        default=0,
+        description="⑱ 집계 대상 답입력 attempt_event 수(server_latency_ms 채워진 행·S4-22).",
+    )
+    sample_interaction_events: int = Field(
+        default=0,
+        description="⑲ 집계 대상 시각화조작 attempt_event 수(interaction 채워진 행·S4-22).",
+    )
     window_start: datetime | None = Field(
         default=None, description="집계 시간창 시작(since·생략 시 None=무한 과거)."
     )
@@ -529,8 +575,11 @@ class SurrogateMetrics(BaseModel):
         default=None,
         description=(
             "S3-03 응용 모드 스코프 — 설정 시(예: 'suneung') 이 집계가 그 mode 태그가 실린 "
-            "*attempt_event 기반 지표*(① verify 통과율·⑤ 도움 감소·⑧ 도달 깊이)만 mode-scoped로 "
-            "필터한 값이다. **다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관 집계 "
+            "*attempt_event 기반 지표*(① verify 통과율·⑤ 도움 감소·⑧ 도달 깊이·⑰ 막힘 도달 "
+            "심도·⑱ 답입력 응답 지연)만 mode-scoped로 필터한 값이다 — ⑰⑱은 event_data에 mode "
+            "태그를 싣는다(`StuckEventData`·`ResponseLatencyEventData` 계약 참조). ⑲ 시각화 "
+            "조작 다양성은 `InteractionEventData` 봉투에 mode 키가 없어 mode 무관 집계다. "
+            "**다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관 집계 "
             "그대로**다(완전한 mode별 집계는 후속 S3-04). None이면 모든 mode 포함(기존 동작 불변)."
         ),
     )
@@ -1057,6 +1106,136 @@ def _hint_depth_from_levels(hint_levels: list[int]) -> Metric:
     )
 
 
+def _stuck_depth_from_turn_counts(turn_counts: list[int]) -> Metric:
+    """⑰ 막힘 도달 심도 — 막힘 이벤트 turn_count의 평균·최대를 Metric으로(순수·날조 0).
+
+    입력 `turn_counts`는 attempt_event(event_type=막힘)의 event_data.turn_count 목록이다
+    (S4-22 — S3-16이 생산만 하고 아무도 읽지 않던 신호의 첫 소비 좌석). value는 **평균
+    turn_count**, note에 건수·평균·최대를 싣는다.
+
+    해석(중요): 막힘 이벤트는 `l4.hint_deferral.is_stuck_turn_count` 임계(turn_count>=5)에
+    도달했을 때*만* 생산되므로 **평균은 항상 5 이상**이다 — 절대 수준이 아니라 *임계 대비
+    얼마나 깊은 막힘인지*(5에 붙어 있으면 임계 직후 해소·크면 오래 갇힘)가 hint_deferral
+    임계 캘리브레이션의 계기판이다.
+
+    **INTERNAL_ONLY — 학생 대면 노출 금지**: "막힘"은 부정 신호라 학생에게 보이면 낙인이 된다
+    (CLAUDE.md "부정 피드백 정서 강화 금지"). 노출 계층은 `growth_evidence_exposure.
+    _STATIC_TIER`가 INTERNAL_ONLY로 고정한다 — 운영·임계 교정 전용.
+
+    표본 가드(날조 0): 막힘 이벤트 0건이면 **NO_DATA**(value None·가짜 0 금지) — ⑧과 동형으로
+    total==0만 막는다(단순 평균·종단 최소점 요구 없음).
+    """
+    n = len(turn_counts)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "막힘 이벤트 0건 — coach 답 미루기(5회+ 막힘 임계)가 쌓이면 도달 심도 계측"
+                "(가짜 0 아님). 임계 미도달 세션은 애초에 생산되지 않는다(날조 회피)."
+            ),
+        )
+    mean_depth = sum(turn_counts) / n
+    max_depth = max(turn_counts)
+    return Metric(
+        value=mean_depth,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"막힘 이벤트 {n}건 turn_count 평균 {mean_depth:.4f}·최대 {max_depth}. 생산 임계"
+            "(is_stuck_turn_count·turn_count>=5)에서만 적재되므로 평균은 항상 5 이상 — 절대 "
+            "수준이 아니라 임계 대비 막힘 깊이(hint_deferral 임계 캘리브레이션 계기판). "
+            "부정 신호라 학생 대면 노출 금지(INTERNAL_ONLY)."
+        ),
+    )
+
+
+def _response_latency_from_values(latencies_ms: list[int]) -> Metric:
+    """⑱ 답입력 응답 지연 — server_latency_ms의 p50(중앙값·ms)을 Metric으로(순수·날조 0).
+
+    입력 `latencies_ms`는 attempt_event(event_type=답입력)의 event_data.server_latency_ms
+    목록이다(S4-22 — S3-16이 생산만 하던 신호의 첫 소비 좌석·서버 시각 차라 클라 신뢰 불요·
+    조작 불가). value는 **중앙값(p50·ms)** — 정렬 후 홀수 n이면 가운데 값, 짝수 n이면 가운데
+    두 값의 평균. note에 건수·평균·p90(정렬 후 `sorted[max(0, ceil(0.9*n)-1)]` 방식)·최대를
+    싣는다 — 평균은 꼬리 지연에 왜곡되므로 p50을 대표값으로 쓰고 꼬리는 p90·최대로 관측한다.
+
+    **속도 KPI 금지·INTERNAL_ONLY**: 응답 속도를 학생 KPI로 쓰지 않는다(CLAUDE.md "'정답을
+    빠르게'를 KPI로 사용 금지"). 이 지표는 *운영 관측 전용*(서버 체감 지연·이상 탐지)이며 노출
+    계층은 `growth_evidence_exposure._STATIC_TIER`가 INTERNAL_ONLY로 고정한다 — 학생 대면
+    노출은 속도 압박 벡터다.
+
+    표본 가드(날조 0): 답입력 이벤트 0건이면 **NO_DATA**(value None·가짜 0 금지).
+    """
+    n = len(latencies_ms)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "답입력 이벤트 0건 — coach 멀티턴 제출(직전 학생 턴 기준선)이 쌓이면 응답 지연 "
+                "계측(가짜 0 아님). 첫 턴은 기준선이 없어 애초에 생산되지 않는다(날조 회피)."
+            ),
+        )
+    ordered = sorted(latencies_ms)
+    if n % 2 == 1:
+        p50 = float(ordered[n // 2])
+    else:
+        p50 = (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+    mean_ms = sum(ordered) / n
+    p90 = ordered[max(0, math.ceil(0.9 * n) - 1)]
+    return Metric(
+        value=p50,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"답입력 이벤트 {n}건 server_latency_ms p50 {p50:.1f}ms·평균 {mean_ms:.1f}ms·"
+            f"p90 {p90}ms(정렬 후 sorted[max(0, ceil(0.9*n)-1)])·최대 {ordered[-1]}ms. "
+            "서버 시각 차(클라 신뢰 불요·조작 불가)·**속도 KPI 금지**(학생 대면 노출 없음·"
+            "운영 관측 전용 INTERNAL_ONLY)."
+        ),
+    )
+
+
+# ⑲ 시각화 조작 다양성의 *최소 이벤트 수*. 값은 ⑫의 `_MIN_STRATEGY_TURNS`와 같은 3이지만
+# **의미가 다른 별도 상수**다 — ⑫는 "발문 전략 기록 턴", ⑲는 "시각화 조작 이벤트"의 최소
+# 표본이라, 한쪽 임계를 조정할 때 다른 쪽이 따라 움직이면 안 된다(우연한 값 일치·의미 분리).
+_MIN_INTERACTION_EVENTS = 3
+
+
+def _interaction_diversity_from_kinds(kinds: list[str]) -> Metric:
+    """⑲ 시각화 조작 다양성 — distinct 조작 종류/전체 이벤트(⑫ 동형·순수·날조 0).
+
+    입력 `kinds`는 attempt_event(event_type=시각화조작)의 event_data.interaction(조작 종류 —
+    param_change·surface_range 등) 목록이다(S4-22 — 슬라이스 96-J가 생산만 하던 신호의 첫
+    소비 좌석). `distinct/total`이라 1.0은 "매 이벤트 다른 조작", 낮을수록 같은 조작의
+    반복이다(⑫ `_strategy_diversity_from_values`와 동형 집계).
+
+    해석(96-J 능동 탐구 신호): 낮으면 단일 파라미터 반복 조작(한 슬라이더만 계속), 높으면
+    다각 탐구(여러 조작을 오가며 탐색)다 — **절대 임계가 아니라** 추세·분포로 읽는다(반복
+    조작이 항상 나쁜 것도 아니다 — 한 파라미터의 정밀 탐구일 수 있다).
+
+    표본 가드(날조 0): `_MIN_INTERACTION_EVENTS` 미만이면 NO_DATA — N=1이면 다양성이 항상
+    1.0이라 극단값이 추세를 오도한다(가짜 1.0 금지·⑫와 동일 이유).
+    """
+    total = len(kinds)
+    if total < _MIN_INTERACTION_EVENTS:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"시각화조작 이벤트 {total}건 — 표본 부족(최소 {_MIN_INTERACTION_EVENTS}건)으로 "
+                "다양성 산출 불가(가짜 1.0 아님). 시각화 탐구 조작이 쌓이면 계측."
+            ),
+        )
+    distinct = len(set(kinds))
+    return Metric(
+        value=distinct / total,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"시각화조작 이벤트 {total}건 중 서로 다른 조작 {distinct}종(96-J 능동 탐구 신호). "
+            "낮으면 단일 파라미터 반복 조작·높으면 다각 탐구 — 절대 임계가 아니라 추세로 읽는다."
+        ),
+    )
+
+
 # ⑯ 결손 복구 리드타임(PED-13)의 두 임계 — **재선언하지 않고 정본에서 가져온다**(acceptance ①).
 #   · 숙달 도달 = `l4/lthc/adapt.py`의 `_MASTERED_THRESHOLD`(0.8) — 3구간 라벨의 상단 경계.
 #   · 취약 관측 = `l2/prerequisite_recommendation`의
@@ -1288,6 +1467,14 @@ async def compute_wh1_surrogate_metrics(
     REQUIRES_DATA→MEASURED(오프라인)가 됐다 — **LIVE 학생별 ground-truth가 아니라 시스템 진단엔진
     품질 지표**(전 user 동일값·user/since/until 무관·DB 0). LIVE per-user 일치율은 문항-오개념
     태깅·attempt별 진단 기록 부재로 여전히 데이터 기반 없음(후속)·recall 프로브 0건이면 NO_DATA.
+
+    ⑰⑱⑲(S4-22 — producer-only 3종의 첫 소비 좌석): S3-16(막힘·답입력)·슬라이스 96-J(시각화
+    조작)가 생산자만 배선하고 아무도 `event_type == EventType.X`로 읽지 않던(OPS-22 AST 실측)
+    attempt_event 3종을 소비한다 — ⑰ 막힘 도달 심도(turn_count 평균·INTERNAL_ONLY·hint_deferral
+    임계 캘리브레이션 계기판), ⑱ 답입력 응답 지연 p50(server_latency_ms 중앙값·INTERNAL_ONLY·
+    속도 KPI 금지), ⑲ 시각화 조작 다양성(interaction distinct/total·⑫ 동형·96-J 능동 탐구
+    신호). ⑰⑱은 event_data의 mode 태그로 mode-scoped 집계·⑲는 봉투에 mode 키가 없어 mode
+    무관이다. 각각 표본 0(⑲는 `_MIN_INTERACTION_EVENTS` 미만)이면 NO_DATA(가짜 0/1.0 금지).
 
     Args:
         session: 조회 전용 AsyncSession(쓰기 없음·ORM/쿼리빌더만·원시 SQL 회피).
@@ -1779,6 +1966,76 @@ async def compute_wh1_surrogate_metrics(
     strategy_diversity = _strategy_diversity_from_values(flat_strategies)
     strategy_repeat_rate = _strategy_repeat_from_sequences(list(strategy_sequences.values()))
 
+    # ── ⑰ 막힘 도달 심도 (attempt_event event_type=막힘의 turn_count 평균·S4-22 소비 배선) ──
+    # producer-only였던 S3-16 신호의 첫 소비 좌석. user/since/until: verify(①)와 동형(event_at
+    # 기준). mode: StuckEventData가 mode 태그를 실으므로 ①⑤⑧⑮와 동형 적용.
+    stuck_conds = [AttemptEvent.event_type == EventType.막힘]
+    if user_id is not None:
+        stuck_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        stuck_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        stuck_conds.append(AttemptEvent.event_at <= until)
+    if mode is not None:
+        stuck_conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
+
+    stuck_rows = (
+        await session.execute(
+            select(AttemptEvent.event_data["turn_count"].as_integer())
+            .select_from(AttemptEvent)
+            .where(*stuck_conds)
+        )
+    ).all()
+    # JSONB 파싱 실패(키 부재 등)로 None이 섞일 수 있으니 정수만 채택(⑤ 동형·결손 행 제외).
+    turn_counts = [int(row[0]) for row in stuck_rows if row[0] is not None]
+    stuck_depth = _stuck_depth_from_turn_counts(turn_counts)
+
+    # ── ⑱ 답입력 응답 지연 (attempt_event event_type=답입력의 server_latency_ms p50·S4-22) ──
+    # mode: ResponseLatencyEventData가 mode 태그를 실으므로 ⑰과 동형 적용.
+    latency_conds = [AttemptEvent.event_type == EventType.답입력]
+    if user_id is not None:
+        latency_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        latency_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        latency_conds.append(AttemptEvent.event_at <= until)
+    if mode is not None:
+        latency_conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
+
+    latency_rows = (
+        await session.execute(
+            select(AttemptEvent.event_data["server_latency_ms"].as_integer())
+            .select_from(AttemptEvent)
+            .where(*latency_conds)
+        )
+    ).all()
+    # server_latency_ms는 계약상 int|None(방어적 여유) — None 행은 집계에서 제외(날조 회피).
+    latencies = [int(row[0]) for row in latency_rows if row[0] is not None]
+    response_latency = _response_latency_from_values(latencies)
+
+    # ── ⑲ 시각화 조작 다양성 (attempt_event event_type=시각화조작의 interaction distinct/total) ──
+    # user/since/until만 건다 — **mode 필터를 걸지 않는다**: InteractionEventData 봉투에 mode
+    # 키가 없어 `event_data["mode"].as_string()`이 전 행 NULL이고, `== mode` 비교는 NULL을 전부
+    # 제외하므로 mode 지정 시 이 지표만 *항상* 가짜 NO_DATA가 된다(측정 실패를 표본 0으로 위장
+    # — 금지). mode별 분해가 필요해지면 봉투 계약에 mode를 실은 *뒤에만* 필터를 건다(후속).
+    interaction_conds = [AttemptEvent.event_type == EventType.시각화조작]
+    if user_id is not None:
+        interaction_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        interaction_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        interaction_conds.append(AttemptEvent.event_at <= until)
+
+    interaction_rows = (
+        await session.execute(
+            select(AttemptEvent.event_data["interaction"].as_string())
+            .select_from(AttemptEvent)
+            .where(*interaction_conds)
+        )
+    ).all()
+    kinds = [str(row[0]) for row in interaction_rows if row[0] is not None]
+    interaction_diversity = _interaction_diversity_from_kinds(kinds)
+
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
     diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
@@ -1801,6 +2058,9 @@ async def compute_wh1_surrogate_metrics(
         strategy_diversity=strategy_diversity,
         strategy_repeat_rate=strategy_repeat_rate,
         client_state_mismatch_rate=state_mismatch_metric,
+        stuck_turn_depth=stuck_depth,
+        response_latency_p50_ms=response_latency,
+        visualization_interaction_diversity=interaction_diversity,
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
@@ -1816,6 +2076,9 @@ async def compute_wh1_surrogate_metrics(
         sample_gap_recovery_groups=len(leadtime_days),
         sample_misconception_hypotheses=misconception_total,
         sample_resolved_dialogues=resolved_total,
+        sample_stuck_events=len(turn_counts),
+        sample_latency_events=len(latencies),
+        sample_interaction_events=len(kinds),
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,

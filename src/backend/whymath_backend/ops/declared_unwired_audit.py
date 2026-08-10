@@ -786,14 +786,11 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
     },
     # ── 축 2. EventType(생산자 보유·소비자 없음) ──────────────────────────
-    # 실측(2026-08-07): 검산결과·힌트제공·힌트요청은 `wh1_evaluation.py`/`coach.py`가 소비한다.
-    # 막힘·답입력·시각화조작은 S3-16/슬96-J에서 생산자가 생겼으나 아직 어떤 쿼리도 필터링하지
-    # 않는다(관측 신호로 적재만 되는 상태) — 신규 발견, 추적 태스크 없어 이번에 등재.
-    AXIS_EVENT: {
-        "막힘": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
-        "답입력": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
-        "시각화조작": "pending-task:S4-22-attempt-event-signal-consumer-wiring",
-    },
+    # 비어 있는 것이 정상이다(2026-08-10). 등재됐던 3종(막힘·답입력·시각화조작)은
+    # `S4-22-attempt-event-signal-consumer-wiring` 유예였는데, 그 태스크가
+    # `harness/wh1_evaluation.py`의 ⑰⑱⑲ 지표(`event_type == EventType.X` Compare 필터
+    # 소비)를 배선해 reached로 전환됐다 → 유예를 걷었다(남겨 두면 stale-waiver로 exit 1).
+    AXIS_EVENT: {},
     # ── 축 3. TimescaleDB 집계 테이블 ───────────────────────────────────
     # 비어 있는 것이 정상이다(2026-08-10). 등재됐던 3종은 `COLLAB-03-learning-metrics-writer`
     # 유예였는데, 그 태스크가 done이 되며 `l2/learning_metrics_rollup.py`가 실제 writer가 됐다
