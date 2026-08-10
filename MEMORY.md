@@ -346,7 +346,8 @@
 - **PB-02 회수 시 발견한 설계 드리프트**: 원 구현(2026-08-08)의 커버리지 재생성-diff 게이트가 `docs/data/problem_bank_coverage_2026-07.json`을 대상으로 삼았는데, 이 브랜치는 오늘(2026-08-10) 그 파일을 이미 동결(supersede)하고 `2026-08.json`을 활성 리포트로 삼는 관례로 바꿨다 — 얼린 파일과 영원히 diff하면 다음 코퍼스 변경 즉시 상시 빨강이 되므로 게이트·배선 테스트의 대상 경로를 `2026-08.json`으로 갱신(로컬 재현으로 현재 게이트가 실제로 통과함을 확인).
 - **각 회수분의 독립 재검증**: 4건 전부 cherry-pick 직후 백엔드 전체 스위트·ruff·black·mypy --strict·lint-imports를 이 세션에서 재실행해 원 커밋의 자체 보고("9019 passed" 등)를 그대로 신뢰하지 않고 확인했다(아래 각 항목 정본 참조).
 - **등재·검증**: CUR-03 yaml artifacts·notes에 회수 사실 기록. PB-02는 기존 태스크를 CLI로 done 전환. S3-32/MISC-01/MISC-03도 각자 기존 태스크가 있어 신규 등재 없음(코드 회수 문제였을 뿐). `backlog.py validate` green.
-- 정본: `docs/architecture/subject_content_coverage_gap_review.md` §0-③(발견) · 이 로그(회수 경위) · 아래 각 태스크 원 구현 로그(PB-02·S3-32·MISC-01)
+- 정본: `docs/architecture/subject_content_coverage_gap_review.md` §0-③(발견) · 이 로그(회수 경위) · 아래 각 태스크 원 구현 로그(PB-02·S3-32·MISC-01·MISC-03)
+
 ### 2026-08-09 (구현·MISC-03): **유사문제 실시간 서빙 — REC-02 L1 역인덱스 좌석 재사용, 신규 조회 로직 0**
 
 **무엇/왜**: `04e_misconception_remediation_design.md` §1-3 결정 실행. 오개념 확정 진단
