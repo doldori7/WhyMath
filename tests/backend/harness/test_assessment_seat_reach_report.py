@@ -5,10 +5,12 @@
 `tests/backend/db/test_assessment_seat_reach_report_integration.py`(acceptance④ 변별력)에 별도로
 있다.
 
-**변별력**(CLAUDE.md "변별력 없는 검증 스텝 금지"): `ability_snapshot`이 count==0이어도
-"생성 경로 부재"로 오분류하지 않는지가 이 파일의 핵심 검증 대상이다 — writer citation이 있는
-테이블과 없는 테이블이 *같은 0이라는 값에서 다른 문구*를 내는지를 직접 비교한다(같은 값을
-내면 이 리포트 설계 자체가 실패다).
+**변별력**(CLAUDE.md "변별력 없는 검증 스텝 금지"): writer citation이 있는 테이블과 없는
+테이블이 *같은 0이라는 값에서 다른 문구*를 내는지가 이 파일의 핵심 검증 대상이다(같은 값을
+내면 이 리포트 설계 자체가 실패다). [ASM-05 stale 정정·2026-08-10] ASM-01 동결 당시엔
+`ability_snapshot`(writer 有) vs 나머지 3테이블(writer 無)의 실물 대비로 이를 검증했으나,
+ASM-03(capture)·ASM-04(assemble)·mastery 트래킹 착지로 **4테이블 전부 writer가 실재**하게 돼
+실물로는 그 대비를 더 만들 수 없다 — 변별력은 합성(synthetic) writerless 항목으로 보존한다.
 """
 
 from __future__ import annotations
@@ -71,34 +73,68 @@ def test_build_report_reflects_all_four_table_counts_exactly() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 2. writer 없는 테이블 — count 0 → "생성 경로 부재"
+# 2. [ASM-05 진실 갱신] 4테이블 전부 writer 실재 — 빈 테이블 사유는 "writer 존재하나 미호출 관측"
 # ──────────────────────────────────────────────────────────────────────────
-def test_writerless_tables_report_no_producer_when_empty() -> None:
+def test_all_four_tables_report_uncalled_writer_when_empty() -> None:
+    """[ASM-05 의도된 진실 갱신·2026-08-10] 빈 테이블의 사유가 '생성 경로 부재'→'writer 존재하나
+    미호출 관측'으로 바뀌었다 — ASM-01 동결 당시 writer 0이던 assessment·concept_mastery_history·
+    skill_mastery_history에 ASM-03(capture)·ASM-04(assemble)·mastery 트래킹으로 라이브 writer가
+    착지해, 옛 동결('생성 경로 부재')을 유지하면 그것이 거짓 주장이 되기 때문이다."""
     report = asrr.build_report(_counts())
-    for name in ("assessment", "concept_mastery_history", "skill_mastery_history"):
+    for name in (
+        "assessment",
+        "concept_mastery_history",
+        "skill_mastery_history",
+        "ability_snapshot",
+    ):
         seat = _seat(report, name)
-        assert seat.reason == asrr._REASON_NO_PRODUCER
-        assert seat.writer_citation is None
+        assert seat.reason == asrr._REASON_UNCALLED_WRITER
+        assert seat.writer_citation is not None
+
+
+def test_writer_citations_anchor_measured_code_paths() -> None:
+    """인용 문자열이 2026-08-10 실측 앵커(핸들러·경로·행 번호)를 담는지 동결 — 드리프트 감시.
+
+    기존 ability_snapshot 인용(api/me.py:965)도 드리프트해 :1030으로 재실측 정정됐다 — 이
+    테스트가 다음 드리프트 때 같은 방식의 재실측 갱신을 강제한다.
+    """
+    report = asrr.build_report(_counts())
+    cmh = _seat(report, "concept_mastery_history").writer_citation
+    smh = _seat(report, "skill_mastery_history").writer_citation
+    asm = _seat(report, "assessment").writer_citation
+    abs_ = _seat(report, "ability_snapshot").writer_citation
+    assert cmh is not None and "record_problem_attempt_mastery" in cmh
+    assert cmh is not None and "api/me.py:738" in cmh
+    assert smh is not None and "record_problem_attempt_skill_mastery" in smh
+    assert smh is not None and "api/me.py:743" in smh
+    assert asm is not None and "capture_measurement_assessment" in asm
+    assert asm is not None and "assemble_blueprint_assessment" in asm
+    assert abs_ is not None and "capture_ability_snapshot" in abs_
+    assert abs_ is not None and "api/me.py:1030" in abs_
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 3. 오분류 방지 — ability_snapshot은 count==0이어도 "생성 경로 부재"가 아니다
+# 3. 변별력 보존 — '생성 경로 부재' vs 'writer 존재하나 미호출'은 합성 writerless 항목으로 검증
 # ──────────────────────────────────────────────────────────────────────────
-def test_ability_snapshot_empty_is_not_misclassified_as_no_producer() -> None:
-    """핵심 변별력 테스트 — writer가 있는 테이블과 없는 테이블이 같은 0에서 다른 문구를 내는지."""
-    report = asrr.build_report(_counts(ability_snapshot=0))
-    ability_seat = _seat(report, "ability_snapshot")
-    assessment_seat = _seat(report, "assessment")
+def test_no_producer_vs_uncalled_writer_discrimination_via_synthetic_entry() -> None:
+    """[ASM-05 재작성] 핵심 변별력 테스트 — 같은 0에서 writer 유무에 따라 *다른* 문구가 나오는지.
 
-    assert ability_seat.row_count == 0
-    assert assessment_seat.row_count == 0
-    # 같은 값(0)인데 사유가 달라야 한다 — 같으면 이 리포트의 존재 이유가 무너진다.
-    assert ability_seat.reason != assessment_seat.reason
-    assert ability_seat.reason == asrr._REASON_UNCALLED_WRITER
-    assert assessment_seat.reason == asrr._REASON_NO_PRODUCER
-    assert ability_seat.writer_citation is not None
-    assert "capture_ability_snapshot" in ability_seat.writer_citation
-    assert "api/me.py:965" in ability_seat.writer_citation
+    실물 4테이블이 전부 writer를 갖게 돼(위 진실 갱신) 실물 대비로는 이 변별을 더 만들 수 없다 —
+    대장에 없는 합성 테이블명과 명시 None 항목으로 `_reason_for`의 분기 자체를 직접 검증한다
+    (같은 값을 내면 이 리포트의 존재 이유가 무너진다는 원칙은 ASM-01 그대로다).
+    """
+    synthetic = "__asm05_synthetic_writerless__"
+    # 전제 확인: 합성 이름은 writer 대장에 없다(있다면 이 테스트 설계 자체가 무효).
+    assert synthetic not in asrr._KNOWN_WRITER_CITATION
+    # 대장 밖 이름(get→None)과 명시 None 항목 둘 다 '생성 경로 부재'로 분류돼야 한다.
+    assert asrr._reason_for(synthetic, 0) == asrr._REASON_NO_PRODUCER
+    with patch.dict(asrr._KNOWN_WRITER_CITATION, {synthetic: None}):
+        assert asrr._reason_for(synthetic, 0) == asrr._REASON_NO_PRODUCER
+    # 같은 0인데 writer가 실재하는 테이블과는 사유가 달라야 한다 — 변별력의 심장.
+    assert asrr._reason_for("ability_snapshot", 0) == asrr._REASON_UNCALLED_WRITER
+    assert asrr._reason_for(synthetic, 0) != asrr._reason_for("ability_snapshot", 0)
+    # count>0이면 writer 유무와 무관하게 '관측됨'(3분류 상호 배타의 나머지 한 축).
+    assert asrr._reason_for(synthetic, 3) == asrr._REASON_OBSERVED
 
 
 # ──────────────────────────────────────────────────────────────────────────
