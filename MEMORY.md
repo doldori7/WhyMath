@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·ASM-06): **오답 선택지→오개념 역방향 배선 — `selected_choice_index` 신규 additive 컬럼 + `distractor_map` 대조 reactive 조회. 착수 전 선행조사로 "NLP-02가 선택 인덱스를 이미 포착하는가"를 실측(No)해 스코프를 재정의** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
+
+- **선행조사(acceptance①)**: 전체 백엔드 grep으로 확정 — `student_answer`는 시스템 전 구간에서 자유텍스트(`str|None`)뿐이고 "몇 번 보기를 골랐는가" 개념이 요청 스키마·ORM 어디에도 없다. NLP-02(`harness/attempt_grading_shadow_report.py`)는 `student_answer`를 수치/기호식으로 검산하는 오프라인 배치 CLI이지 `submit_attempt` 라이브 경로에 결선돼 있지 않다(모듈 docstring이 "신규 SELECT·지연 0 유지" 명시). 반면 `Problem.distractor_map`(`DistractorEntry.choice_index→misconception_id`)엔 매핑 정보가 이미 있었다 — 빠진 건 "학생이 실제로 고른 인덱스"뿐.
+- **구현**: ①`AttemptSubmitRequest`·`ProblemAttempt`(schema+ORM)에 `selected_choice_index: int|None`(ge=0) additive 컬럼 — alembic `0afd40ce1867`(down `7ef2b5a8e69e`=S3-32 head 위, nullable만·백필 0). ②신규 `l4/misconception/distractor_link.py::resolve_misconception_from_choice` 순수 함수 — `l1/problem_bank/probe_candidates`(REC-02) 선례를 따라 raw dict 시퀀스를 받아 형태 불량 원소를 조용히 건너뛴다(참조 무결성 재검증은 콘텐츠 생성 시점 `validate.py` 소관 — 학생 제출 경로가 콘텐츠 결함으로 크래시하면 안 됨). `selected_choice_index`가 없으면 즉시 `None`(reactive retrieval — 오개념 카탈로그 preload 금지, CLAUDE.md 협상 불가). ③`submit_attempt`: 인덱스가 왔을 때만 `distractor_map` 1건 SELECT → 매칭 → `AttemptSubmitResponse.matched_misconception_id`로 노출(미제출 시 신규 쿼리 0).
+- **권장안 대비 설계 변경**: 순수 함수 시그니처를 `problem: Problem`이 아니라 `distractor_map: Sequence[Mapping]`로 — L4→L1 스키마 의존조차 없애고, 라이브 학생 제출 경로가 Pydantic 재검증 실패로 죽지 않게 했다(위임 시 권장한 안보다 나은 판단으로 채택).
+- **충돌 위험 검증(2세션 동시 편집)**: `db/models/activity.py`가 `MISC-04`(타 세션 회수 중) 선언 범위와 path_overlap 경고 — 그 브랜치의 실제 diff를 직접 확인해 activity.py 무접촉을 재확인(허위 경보). `api/me.py`가 `rec-05`(ASM-04 재작성 세션) 선언 범위와 겹쳐 그 브랜치가 +480줄 대규모 수정 중이나, hunk 위치 분석으로 이 태스크가 편집한 블록(615~748행)과 겹치지 않음을 확인(가장 가까운 hunk는 import 블록 근접만).
+- **검증(메인 독립 재검증 — 위임 보고를 그대로 신뢰하지 않음)**: `alembic heads` 단일(`0afd40ce1867`) 재확인 · 신규+영향 테스트 239건 재실행 green · ruff·black·mypy --strict·lint-imports 4종 재실행 전부 clean · **전체 백엔드 스위트 재실행 9,177 passed·298 skipped·0 failed**(자체 보고 수치와 정확히 일치 확인) · 충돌 위험 주장 2건을 실제 브랜치 diff로 재검증(둘 다 사실 확인).
+- **부수 발견**: `db/schema_version.py`의 `KNOWN_REVISIONS`/`EXPECTED_ALEMBIC_HEAD` 동결 테스트가 신규 마이그레이션마다 갱신을 요구한다는 사실이 위임 프롬프트에 없었으나 전체 스위트 실행 중 발견해 자체 해소(재발 패턴 — PB-02·S3-32 회수 시에도 유사 사전 조건 문서화 누락이 실행 중 발견된 바 있음).
+- **해금**: `ASM-04-blueprint-test-set-assembly`(평가 청사진 조립, 의존 1건 해소).
+- 정본: 커밋 `087859bd`
+
 ### 2026-08-10 (회수·성취수준 데이터): **CUR-03(성취수준 A~E·평가기준 상/중/하) 실물이 미병합 고립 브랜치에만 있던 상태를 cherry-pick으로 해소 — 같은 브랜치에서 PB-02·S3-32·MISC-01·MISC-03 완료분 4건 추가 미회수 발견, Kiki 지시로 4건 전부 이어서 회수(아래 각 항목 참조)** (claude 회수, Kiki "회수" 지시 → "전체 4건")
 
 - **발견 경위**: 직전 커버리지 점검(§0-③)이 CUR-03(status=done·owner=kiki)의 artifact 커밋 `98a34695`가 HEAD 조상이 아님을 실측 — `origin/claude/human-bottleneck-tasks-6dszy0`(HEAD 대비 21커밋·세션 `01CQLKsNtZF9…`)에만 존재(HARN-11 "미머지 done" 유형).

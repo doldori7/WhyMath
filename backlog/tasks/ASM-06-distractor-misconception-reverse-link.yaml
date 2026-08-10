@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -13,7 +13,8 @@ requires_gates: []
 acceptance:
   - "선행 확인: NLP-02 서버 채점 shadow 경로가 학생이 고른 MC 인덱스를 이미 포착하는지 실측 확인 — 포착 안 하면 이 태스크는 그 확장부터 선행해야 하므로 스코프를 그에 맞게 재정의하고 착수"
   - "포착된 선택 인덱스를 오개념 ID로 매핑 — 오개념을 초기 context에 preload하지 않고 reactive retrieval만 사용(CLAUDE.md 원칙)"
-artifacts: []
+artifacts:
+  - 087859bd
 paths:
   - "src/backend/whymath_backend/l4/misconception/**"
   - src/backend/whymath_backend/schema/problem.py
@@ -26,6 +27,6 @@ paths:
   - tests/backend/api/test_me.py
   - tests/backend/db/test_activity_orm.py
   - tests/backend/schema/test_activity.py
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "브랜치 jkwdzn의 원 ASM-04/D5 재작성. REC-02(오개념 표적 프로브 공급)가 정방향(가설→프로브 선택)만 다룸 — 이건 역방향(학생이 고른 실제 오답 인덱스→오개념 ID). 선행조건: 현재 student_answer가 자유텍스트라 '어느 보기를 골랐는지' 자체가 채점 레이어에 없음 — NLP-02 shadow 채점이 선택 인덱스를 이미 포착하는지 먼저 확인 후 스코프 확정. [2026-08-10 구현 착수 시 범위 확정 갱신] 선행 조사 결론: NLP-02는 미포착 → 스코프는 (A)선택 인덱스 포착(AttemptSubmitRequest.selected_choice_index 신규 + ProblemAttempt schema/ORM additive 컬럼 + alembic 0afd40ce1867) + (B)인덱스→오개념 매핑(l4/misconception/distractor_link.py 신규 순수 함수, reactive). paths를 실제 건드린 파일로 확장(scope_drift 경고 다수 — 전부 이 재정의된 범위 안). db/schema_version.py는 KNOWN_REVISIONS 동결 테스트(test_schema_version_guard.py) 정합을 위해 신규 마이그레이션마다 필수 갱신임을 구현 중 확인. path_overlap 경고 — db/models/activity.py는 MISC-04(claude/misc-04-misconception-relation-recovery) 선언 범위와 겹치나 그 브랜치의 실제 diff는 activity.py를 건드리지 않음(검증됨, 실충돌 없음). api/me.py는 ASM-04/rec-05(claude/rec-05-priority-d8q8vt) 선언 범위와 겹치고 그 브랜치도 api/me.py를 크게 수정 중(+480줄)이나 hunk 위치 분석상 이 태스크가 편집한 AttemptSubmitRequest/Response/submit_attempt 블록(원본 615~748행)과는 겹치지 않음(가장 가까운 hunk가 122~132행 — import 블록 근접만, 실제 함수/클래스 충돌 없음) — 병합 시 import 정렬 정도의 사소한 충돌 가능성만 있고 로직 충돌은 없을 것으로 판단(재확인 권장)."
 updated: 2026-08-10
