@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/l4/misconception/**"
   - src/backend/whymath_backend/schema/problem.py
-session: null
+session: claude/subject-problems-theory-check-7n9n72
 notes: "브랜치 jkwdzn의 원 ASM-04/D5 재작성. REC-02(오개념 표적 프로브 공급)가 정방향(가설→프로브 선택)만 다룸 — 이건 역방향(학생이 고른 실제 오답 인덱스→오개념 ID). 선행조건: 현재 student_answer가 자유텍스트라 '어느 보기를 골랐는지' 자체가 채점 레이어에 없음 — NLP-02 shadow 채점이 선택 인덱스를 이미 포착하는지 먼저 확인 후 스코프 확정."
-updated: 2026-08-07
+updated: 2026-08-10
