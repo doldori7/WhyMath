@@ -579,6 +579,187 @@ def test_demo_pool_corpora_missing_file_returns_empty(tmp_path: Path) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# QUAL-03 — 재서술 무변화 직접 측정(순수 로직·파일 I/O 없음)
+# ──────────────────────────────────────────────────────────────────────────
+class TestBuildGlobalSlugIndex:
+    def test_first_wins_by_corpus_name_alphabetical(self) -> None:
+        # 방어적 규칙 — 슬러그 충돌(T1)이 0건인 현재 코퍼스 상태에 의존하지 않는다는 확인.
+        beta = _load("problem_bank_beta", (_rec("problem_bank_beta", "shared", "베타 텍스트"),))
+        alpha = _load("problem_bank_alpha", (_rec("problem_bank_alpha", "shared", "알파 텍스트"),))
+        index = pda.build_global_slug_index((beta, alpha))  # 입력 순서는 역순으로 준다
+        corpus, record = index["shared"]
+        assert corpus == "problem_bank_alpha"  # 코퍼스명 오름차순 first-wins
+        assert record.question_text == "알파 텍스트"
+
+    def test_missing_slug_absent_from_index(self) -> None:
+        load = _load("problem_bank_a", (_rec("problem_bank_a", None, "슬러그 없는 문항"),))
+        assert pda.build_global_slug_index((load,)) == {}
+
+
+class TestMeasureRephraseNoopDefect:
+    """직접 측정 4분류(무변화/정상변화/부모미선언/고아참조) — 정직 회계 각각 정확히 계상."""
+
+    _PARENT_TEXT = "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오."
+
+    def _corpora(
+        self, rephrased_records: tuple[pda.DuplicationRecord, ...]
+    ) -> tuple[pda.CorpusLoad, ...]:
+        generated = _load(
+            "problem_bank_generated_v0",
+            (_rec("problem_bank_generated_v0", "parent-1", self._PARENT_TEXT),),
+        )
+        rephrased = _load("problem_bank_rephrased_v0", rephrased_records)
+        return (generated, rephrased)
+
+    def test_unchanged_when_normalized_text_matches_parent(self) -> None:
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-1",
+            self._PARENT_TEXT,  # 원본과 완전 동일
+            relations=(pda.RelationTag("parent-1", "변형"),),
+        )
+        report = pda.measure_rephrase_noop_defect(self._corpora((child,)))
+        assert report.total == 1
+        assert (report.unchanged_count, report.changed_count) == (1, 0)
+        assert report.records[0].status == "무변화"
+        assert report.records[0].parent_corpus == "problem_bank_generated_v0"
+
+    def test_unchanged_via_whitespace_only_normalization(self) -> None:
+        # 직접 측정도 정규화 비교를 쓴다(단순 `==`이 아님) — 공백만 다른 사례도 무변화로 잡는다.
+        variant = "이차방정식  x^2 - 5x + 6 = 0 의  두 근 중 큰 근을 구하시오."
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-2",
+            variant,
+            relations=(pda.RelationTag("parent-1", "변형"),),
+        )
+        report = pda.measure_rephrase_noop_defect(self._corpora((child,)))
+        assert report.records[0].status == "무변화"
+
+    def test_changed_when_text_differs(self) -> None:
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-3",
+            "완전히 다른 발문입니다.",
+            relations=(pda.RelationTag("parent-1", "변형"),),
+        )
+        report = pda.measure_rephrase_noop_defect(self._corpora((child,)))
+        assert (report.unchanged_count, report.changed_count) == (0, 1)
+        assert report.records[0].status == "정상변화"
+
+    def test_no_parent_declared_when_relations_empty(self) -> None:
+        child = _rec("problem_bank_rephrased_v0", "child-4", "발문", relations=())
+        report = pda.measure_rephrase_noop_defect(self._corpora((child,)))
+        assert report.no_parent_declared_count == 1
+        assert report.records[0].status == "부모미선언"
+        assert report.records[0].parent_slug is None
+        # 측정 불가 — 무변화/정상변화 분모에서 제외(조용히 넣거나 빼지 않는다, 정직 회계).
+        assert report.measurable_count == 0
+
+    def test_orphan_when_parent_slug_not_found_anywhere(self) -> None:
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-5",
+            "발문",
+            relations=(pda.RelationTag("ghost-slug-없음", "변형"),),
+        )
+        report = pda.measure_rephrase_noop_defect(self._corpora((child,)))
+        assert report.orphan_parent_count == 1
+        assert report.records[0].status == "고아참조"
+        assert report.records[0].parent_slug == "ghost-slug-없음"
+        assert report.measurable_count == 0
+
+    def test_first_relation_used_when_multiple_declared(self) -> None:
+        # 다중 관계 — relations[0]만 참조 부모로 쓴다(문서화된 결정, 실측 데이터는 항상 1개뿐).
+        # 첫 번째는 텍스트가 다른(정상변화) 부모, 두 번째는 텍스트가 같은(무변화) 부모를 가리켜
+        # 두 판정이 서로 달라지게 만들어 "첫 번째만 본다"는 규칙 자체를 고정한다.
+        other_parent_same_text = _rec(
+            "problem_bank_generated_v0", "parent-same-text", self._PARENT_TEXT
+        )
+        generated = _load(
+            "problem_bank_generated_v0",
+            (
+                _rec("problem_bank_generated_v0", "parent-1", self._PARENT_TEXT),
+                other_parent_same_text,
+            ),
+        )
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-multi",
+            "완전히 다른 발문입니다.",  # parent-1과는 다름, parent-same-text와도 다름(자기 텍스트 자체가 다름)
+            relations=(
+                pda.RelationTag("parent-1", "변형"),
+                pda.RelationTag("parent-same-text", "유사"),
+            ),
+        )
+        rephrased = _load("problem_bank_rephrased_v0", (child,))
+        report = pda.measure_rephrase_noop_defect((generated, rephrased))
+        assert report.records[0].parent_slug == "parent-1"  # 두 번째 관계는 무시됨
+        assert report.records[0].status == "정상변화"
+
+    def test_target_corpus_absent_returns_empty_report(self) -> None:
+        loads = (_load("problem_bank_other", (_rec("problem_bank_other", "s1", "텍스트"),)),)
+        report = pda.measure_rephrase_noop_defect(loads)
+        assert report.total == 0
+        assert report.records == ()
+        assert report.unchanged_rate is None
+        assert report.measurable_count == 0
+
+    def test_unchanged_rate_and_measurable_count(self) -> None:
+        # 무변화 2 · 정상변화 1 · 부모미선언 1 · 고아참조 1 → 분모 3, 비율 2/3.
+        records = (
+            _rec(
+                "problem_bank_rephrased_v0",
+                "c-unchanged-1",
+                self._PARENT_TEXT,
+                relations=(pda.RelationTag("parent-1", "변형"),),
+            ),
+            _rec(
+                "problem_bank_rephrased_v0",
+                "c-unchanged-2",
+                self._PARENT_TEXT,
+                relations=(pda.RelationTag("parent-1", "변형"),),
+            ),
+            _rec(
+                "problem_bank_rephrased_v0",
+                "c-changed",
+                "다른 텍스트",
+                relations=(pda.RelationTag("parent-1", "변형"),),
+            ),
+            _rec("problem_bank_rephrased_v0", "c-no-parent", "발문", relations=()),
+            _rec(
+                "problem_bank_rephrased_v0",
+                "c-orphan",
+                "발문",
+                relations=(pda.RelationTag("없음", "변형"),),
+            ),
+        )
+        report = pda.measure_rephrase_noop_defect(self._corpora(records))
+        assert report.total == 5
+        assert report.measurable_count == 3
+        assert report.unchanged_rate == pytest.approx(2 / 3)
+
+    def test_build_report_integrates_rephrase_noop(self) -> None:
+        # build_report가 자동으로 QUAL-03 측정을 계산해 DuplicationReport에 싣는지 배선 확인.
+        child = _rec(
+            "problem_bank_rephrased_v0",
+            "child-1",
+            self._PARENT_TEXT,
+            relations=(pda.RelationTag("parent-1", "변형"),),
+        )
+        report = pda.build_report(
+            self._corpora((child,)), demo_pool=frozenset(), demo_pool_status="파일없음"
+        )
+        assert report.rephrase_noop.target_corpus == "problem_bank_rephrased_v0"
+        assert report.rephrase_noop.unchanged_count == 1
+        rendered = pda.render_report(report)
+        assert "QUAL-03" in rendered
+        assert "무변화" in rendered
+        payload = pda.report_to_json(report)
+        assert payload["qual03_rephrase_noop_direct_measurement"]["unchanged_count"] == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # CLI — exit 0/2(게이트 아님)·JSON 결정론
 # ──────────────────────────────────────────────────────────────────────────
 def _cli_corpus_root(tmp_path: Path) -> Path:
@@ -639,6 +820,19 @@ def test_cli_warns_but_does_not_gate_when_seed_demo_missing(tmp_path: Path) -> N
     assert rc == pda._EXIT_OK
 
 
+def test_cli_qual03_section_present_and_graceful_without_target_corpus(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """QUAL-03 §7이 CLI 출력에 배선돼 있고, rephrased_v0가 없는 코퍼스 루트에서도 크래시 없이
+    "측정 불가"를 정직하게 표기하는지(exit 0 유지) 확인한다."""
+    root = _cli_corpus_root(tmp_path)  # problem_bank_alpha/beta뿐 — rephrased_v0 없음
+    rc = pda.main(["--corpus-root", str(root), "--seed-demo-path", str(tmp_path / "absent.py")])
+    captured = capsys.readouterr()
+    assert rc == pda._EXIT_OK
+    assert "QUAL-03" in captured.out
+    assert "측정 불가" in captured.out
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 실제 코퍼스 스냅샷 — QUAL-01 실측 회귀 고정 (2026-08-10)
 # ──────────────────────────────────────────────────────────────────────────
@@ -690,3 +884,41 @@ def test_real_corpus_snapshot_t1_resolved_and_t2_nine_pairs() -> None:
             "problem_bank_rephrased_v0",
         }
         assert pair.demo_pool_co_exposed is False
+
+
+def test_real_corpus_snapshot_rephrase_noop_direct_measurement() -> None:
+    """실제 `data/corpus/` 전수 스캔 — QUAL-03 직접 측정 실측(2026-08-10)을 회귀 고정한다.
+
+    rephrased_v0 429건 전량을 relations[0].parent_slug로 직접 대조한 결과: 무변화 282 ·
+    정상변화 147 · 부모미선언 0 · 고아참조 0. QUAL-01의 간접 하한(lineage_excluded_pair_count)과
+    **정확히 일치**한다 — 이 코퍼스 상태에서는 간접 하한이 타이트했다는 뜻(우연 아님, 모든
+    관계가 1:1이고 부모가 항상 다른 코퍼스(generated_v0)에 있기 때문 — render_report §7 참고).
+    코퍼스 내용이 바뀌면(의도된 콘텐츠 작업) 이 테스트가 깨진다 — 그때는 값을 재실측해 갱신한다.
+    """
+    loads, problems = pda._resolve_loads(pda.DEFAULT_CORPUS_ROOT, None)
+    if problems:
+        pytest.skip(f"코퍼스 루트를 찾지 못함(이 환경엔 data/corpus가 없을 수 있음): {problems}")
+
+    report = pda.build_report(loads, demo_pool=frozenset(), demo_pool_status="파일없음")
+    noop = report.rephrase_noop
+
+    assert noop.target_corpus == "problem_bank_rephrased_v0"
+    assert noop.total == 429
+    assert noop.unchanged_count == 282
+    assert noop.changed_count == 147
+    assert noop.no_parent_declared_count == 0
+    assert noop.orphan_parent_count == 0
+    assert noop.measurable_count == 429
+    assert noop.unchanged_rate == pytest.approx(282 / 429)
+
+    # QUAL-01 간접 하한과의 교차검증 — 이 코퍼스 상태에서는 정확히 일치(정직 회계 비교 대상).
+    assert report.lineage_excluded_pair_count == noop.unchanged_count == 282
+
+    # 429건 전부 부모가 problem_bank_generated_v0에 있다(실측 — 다른 코퍼스로의 rephrase는 없음).
+    parent_corpora = {r.parent_corpus for r in noop.records}
+    assert parent_corpora == {"problem_bank_generated_v0"}
+
+    # 모든 rephrased_v0 레코드가 정확히 1개 관계만 선언한다(측정 함수의 "첫 번째만 사용" 결정이
+    # 현재 데이터에 영향을 주지 않는다는 전제 — 위 pure-logic 테스트가 그 결정 자체를 고정한다).
+    rephrased_load = next(ld for ld in loads if ld.name == "problem_bank_rephrased_v0")
+    assert all(len(r.relations) == 1 for r in rephrased_load.records)

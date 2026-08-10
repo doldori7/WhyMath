@@ -156,6 +156,35 @@ class TestClassifyInvarianceFailure:
         josa = "이차방정식 3x^2 - 7x + 4 = 0 의 두 근의 합 10 를 구하시오."
         assert classify_invariance_failure(josa, equation=_EQ) == REASON_QUESTION_HYGIENE
 
+    def test_original_text_omitted_no_regression(self) -> None:
+        # QUAL-03 회귀 0 봉인 — original_text를 안 넘기면(기존 호출부 전부) 무변화 축은 계산조차
+        # 안 되므로, 출력이 입력과 바이트 동일해도(그 자체로는 위반이 아니었던 과거 동작) 이
+        # 함수 단독 호출만으로는 그 사실을 알 방법이 없다(원본이 애초에 없으므로) — 통과.
+        assert classify_invariance_failure(_Q, equation=_EQ) is None
+
+    def test_unchanged_from_original_maps_to_no_change(self) -> None:
+        # 결함주입 — 바이트 완전 동일 출력에 original_text를 넘기면 NO_CHANGE(기존 taxonomy
+        # 재사용 — QUAL-03). original_text 없이는 통과(위 test_pass_returns_none과 대조).
+        assert classify_invariance_failure(_Q, equation=_EQ, original_text=_Q) == REASON_NO_CHANGE
+
+    def test_normalized_near_duplicate_caught_via_original_text(self) -> None:
+        # 결함주입(핵심) — 공백만 다른 "재서술"은 정규화하면 원문과 완전 동일하다. original_text
+        # 없이는(기존 동작) 통과했을 사례(바이트가 다르므로) — original_text를 넘기면 정규화
+        # 비교로 NO_CHANGE가 잡는지 실측한다. 이 축이 없으면 아래 두 번째 assert가 실패한다.
+        variant = "이차방정식 3x^2 - 7x + 4 = 0  의 두 근 중  큰 근을 구하시오."  # 공백 2연속
+        assert variant != _Q  # 사전조건 — 바이트 불일치
+        assert (
+            classify_invariance_failure(variant, equation=_EQ) is None
+        )  # original_text 없으면 통과
+        assert (
+            classify_invariance_failure(variant, equation=_EQ, original_text=_Q) == REASON_NO_CHANGE
+        )
+
+    def test_genuinely_rephrased_text_passes_even_with_original_text(self) -> None:
+        # 과잉 차단 방지 — 진짜 다양화된 출력은 original_text를 넘겨도 통과해야 한다.
+        out = "이차방정식 3x^2 - 7x + 4 = 0 을 풀어 두 해 중 더 큰 값을 답하시오."
+        assert classify_invariance_failure(out, equation=_EQ, original_text=_Q) is None
+
 
 class TestRephrase:
     def test_valid_rephrase_returns_diversified(self) -> None:
@@ -227,3 +256,16 @@ class TestRephrase:
         assert result.text == _Q
         assert result.reason_code == REASON_NO_CHANGE
         assert result.raw_output == _Q
+
+    def test_whitespace_only_variant_fails_closed_via_rephraser(self) -> None:
+        # 결함주입(E2E, QUAL-03) — LLM이 공백만 다른(정규화하면 원문과 동일) 출력을 냈을 때,
+        # QuestionRephraser.rephrase()가 이를 "성공한 다양화"로 오판하지 않고 fail-closed로
+        # 원문을 유지하는지 실측한다. .rephrase()가 original_text=question_text를 배선하지
+        # 않았다면 이 사례는 (바이트가 다르므로) rephrased=True로 잘못 판정됐을 것이다.
+        variant = "이차방정식 3x^2 - 7x + 4 = 0  의 두 근 중  큰 근을 구하시오."  # 공백 2연속
+        provider = _FakeProvider([variant])
+        result = QuestionRephraser(provider).rephrase(_Q)
+        assert result.rephrased is False
+        assert result.text == _Q  # fail-closed — 원문 유지
+        assert result.reason_code == REASON_NO_CHANGE
+        assert result.raw_output == variant  # 실제 LLM 출력은 보존(사후 dump 가능)

@@ -33,6 +33,11 @@ S3-09 AI 검수(720문)가 rephrased 코퍼스에서 확정한 **발문 텍스�
      허위·무의미 주장이었다(3/3 결함 — 정상 용법이 관찰되지 않아 발견 즉시 차단). sqrt_sum
      밴드의 "N의 제곱이므로 그 제곱근은"(참으로 연결된 서술 — 오탐 24건 실측)은 부정
      lookahead로 제외(아래 참조).
+  ⑦ 무변화(원본과 동일, QUAL-03 2026-08-10) — `original_text`(선택 인자·기본 None)를 넘겼을
+     때만 활성화되는 축. `question_text`가 원 발문과 정규화(NFC+공백축약) 후 완전 일치하면
+     위반이다. 다른 6축과 달리 "발문 자체의 문법 결함"이 아니라 "발문이 원본에서 실질적으로
+     안 바뀜"을 검사한다 — rephrase 수용 게이트(`rephrase.classify_invariance_failure`)가
+     rephrase 직후 원문을 넘겨줄 때만 의미가 있다(상세는 아래 함수 정의 앞 주석).
 
   ②③⑥은 "이 문구가 나오면 반드시 결함"이 아니라 "이 문구는 이 코퍼스 맥락에서 관찰된 적
   없는 정상 용법이 없다"는 경험적 근거로 차단한다(정직 한계 — 향후 정상 용법 발견 시 재검토).
@@ -47,9 +52,10 @@ S3-09 AI 검수(720문)가 rephrased 코퍼스에서 확정한 **발문 텍스�
   않는 활용형)은 이 결정론 게이트가 못 잡는다 — 형태소 분석·맞춤법 검사기 없이는 일반화된
   탐지가 불가능하다(과공학 방지). 이런 결함은 사람/AI 감사 표본 폴백으로 남는다.
 
-발문 텍스트 결함은 결정론 교정이 불가하므로(LLM 재생성 없이는 고칠 수 없다) **탈락(제거)이
+발문 텍스트 결함(①~⑥)은 결정론 교정이 불가하므로(LLM 재생성 없이는 고칠 수 없다) **탈락(제거)이
 정본**이다 — 적용 CLI는 `harness.rephrased_corpus_hygiene`, rephrase 수용 게이트 배선은
-`rephrase.classify_invariance_failure`의 ⑤축(REASON_QUESTION_HYGIENE).
+`rephrase.classify_invariance_failure`의 ⑤축(REASON_QUESTION_HYGIENE). ⑦(무변화·QUAL-03)은 같은
+함수 안에서 별도 게이트 축(REASON_NO_CHANGE 재사용)으로 분리 매핑된다 — 상세는 그 함수 docstring.
 
 7계층: L3 지역(동일 패키지 josa만 import·표준 라이브러리 외 의존 0·순수 함수).
 """
@@ -57,6 +63,7 @@ S3-09 AI 검수(720문)가 rephrased 코퍼스에서 확정한 **발문 텍스�
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from whymath_backend.l3.equivalent.josa import TailReading, tail_reading
 
@@ -67,6 +74,7 @@ __all__ = [
     "REASON_META_LABEL_LEAK",
     "REASON_NONSTANDARD_TERM",
     "REASON_REQUEST_ANSWER_MISMATCH",
+    "REASON_UNCHANGED_FROM_ORIGINAL",
     "question_hygiene_violations",
 ]
 
@@ -77,6 +85,7 @@ REASON_NONSTANDARD_TERM = "NONSTANDARD_TERM"
 REASON_REQUEST_ANSWER_MISMATCH = "REQUEST_ANSWER_MISMATCH"
 REASON_JOSA_ERROR = "JOSA_ERROR"
 REASON_DANGLING_EXPONENT_PHRASE = "DANGLING_EXPONENT_PHRASE"
+REASON_UNCHANGED_FROM_ORIGINAL = "UNCHANGED_FROM_ORIGINAL"
 
 # ① 비한글 스크립트 — CJK 한자(기본·확장A·호환)·가나(히라가나·가타카나). 한글·라틴·수식 기호는
 # 검사하지 않는다(허용 목록이 아니라 금지 범위 검사 — 오탐 0 지향).
@@ -142,6 +151,37 @@ _JOSA_TOKEN_RE = re.compile(
 # 걸리지 않는다(정상 용법 미관찰 폐쇄 목록이 아니라 이 한 지점만 정밀 제외).
 _DANGLING_EXPONENT_RE = re.compile(r"\d+\s*의\s*(?:\d*제곱근|거듭제곱근|제곱|세제곱)(?!이므로)")
 
+# ⑦ 무변화(원본과 동일) — QUAL-03(2026-08-10). `original_text`(선택 인자·기본 None)가 주어지고
+# `question_text`가 그것과 **정규화 후** 완전 일치하면 "다양화가 실질적으로 일어나지 않았다"는
+# 신호다. 기본 None이면 이 축은 계산조차 되지 않는다(additive 확장 — 기존 호출부 회귀 0).
+#
+# 배선 지점은 `rephrase.classify_invariance_failure`뿐이다(그 함수가 rephrase 직후 `raw` 출력을
+# 검사할 때 `original_text=`원 발문을 넘긴다 — 그 함수 docstring 참고). `harness.
+# rephrased_corpus_hygiene`(커밋 코퍼스 일괄 스캔)는 **의도적으로 넘기지 않는다** — 그 도구는
+# 라인 단위 순회라 원본을 조인하려면 코퍼스 전체를 미리 인덱싱해야 하고(구조 부적합), 무엇보다
+# write=True가 기본값이라 이 축을 켠 채로 잘못 돌리면 기존 무변화 레코드 전부가 조용히
+# 삭제된다(그 모듈 docstring 참고 — 소급 삭제는 이 함수가 아니라 사람/오케스트레이터의 판단
+# 몫이다).
+#
+# 정규화 기준은 `harness.problem_duplication_audit.normalize_question_text`(NFC + 공백 연속
+# 축약 + 양끝 trim)와 **동등**해야 한다(QUAL-01 간접 측정·QUAL-03 직접 측정이 같은 정의를 써야
+# 두 수치가 어긋나지 않는다 — CLAUDE.md 정직 회계). 다만 그 함수는 harness(조성/ops) 계층이라
+# 여기서 import하면 "L3 지역·표준 라이브러리 외 의존 0"(모듈 docstring)이 깨진다 — 같은 로직을
+# 로컬로 재구현한다(`_normalize_for_comparison`). 표류(drift) 방지는 `test_rephrase_hygiene.py`의
+# 교차검증 테스트가 두 함수가 같은 표본 집합에서 항상 같은 출력을 내는지 고정한다.
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def _normalize_for_comparison(text: str) -> str:
+    """비교용 정규화 — NFC + 공백 연속 축약 + 양끝 trim(순수 함수).
+
+    `harness.problem_duplication_audit.normalize_question_text`와 동등 로직의 L3 지역
+    재구현이다(위 ⑦ 주석 — import 방향 때문에 공유 불가). 그 함수와 달리 입력이 항상 `str`
+    (Optional 아님)이라 None 분기가 없다 — 호출부(`question_hygiene_violations`)가 이미
+    `original_text is not None`을 보장한 뒤에만 부른다.
+    """
+    return _WHITESPACE_RUN.sub(" ", unicodedata.normalize("NFC", text)).strip()
+
 
 def _expected_josa(reading: TailReading, particle: str) -> str | None:
     """받침 사실(reading)에 맞는 올바른 조사 — particle이 속한 쌍 기준. 미지원 조사면 None."""
@@ -174,11 +214,17 @@ def _josa_mismatches(text: str) -> list[str]:
     return found
 
 
-def question_hygiene_violations(question_text: str) -> tuple[str, ...]:
+def question_hygiene_violations(
+    question_text: str, *, original_text: str | None = None
+) -> tuple[str, ...]:
     """발문 1건의 위생 위반 사유 코드 튜플 — 비면 통과(순수·결정론).
 
     사유 코드는 검사 순서대로 담기며 중복 없이 한 축당 최대 1개다. 상세(어느 토큰/용어인지)는
     사유 코드 뒤에 `:` 구분으로 병기해 사람이 탈락 근거를 재검증할 수 있게 한다(정직 산출).
+
+    `original_text`(선택 인자·기본 None) — rephrase 이전 원 발문을 넘기면 ⑦ 무변화 축이 추가로
+    활성화된다(QUAL-03, 위 ⑦ 주석 참고). 넘기지 않으면(기존 호출부 전부) 이 축은 계산되지 않아
+    회귀가 없다(additive 확장).
     """
     violations: list[str] = []
     foreign = _FOREIGN_SCRIPT_RE.findall(question_text)
@@ -201,4 +247,9 @@ def question_hygiene_violations(question_text: str) -> tuple[str, ...]:
     dangling = _DANGLING_EXPONENT_RE.findall(question_text)
     if dangling:
         violations.append(f"{REASON_DANGLING_EXPONENT_PHRASE}:{'·'.join(dangling)}")
+    if original_text is not None:
+        normalized_current = _normalize_for_comparison(question_text)
+        normalized_original = _normalize_for_comparison(original_text)
+        if normalized_current and normalized_original and normalized_current == normalized_original:
+            violations.append(f"{REASON_UNCHANGED_FROM_ORIGINAL}:{len(normalized_current)}자")
     return tuple(violations)
