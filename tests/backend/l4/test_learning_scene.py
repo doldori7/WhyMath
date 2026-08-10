@@ -85,9 +85,10 @@ class TestElementConstruction:
         assert el.ref.type == "interactive_graph_2d"
 
     def test_param_control_element(self) -> None:
-        el = ParamControlElement(targets=["a"], bound_visualization_index=0, step=0.1)
+        # MOB-14(2026-08-10) — value_range·step 필드 제거(죽은 좌석·생산자 0). 남은 필드만 검증.
+        el = ParamControlElement(targets=["a"], bound_visualization_index=0)
         assert el.targets == ["a"]
-        assert el.step == 0.1
+        assert el.bound_visualization_index == 0
 
     def test_step_panel_defaults_deferred(self) -> None:
         el = StepPanelElement(solution_path_id="sp-1")

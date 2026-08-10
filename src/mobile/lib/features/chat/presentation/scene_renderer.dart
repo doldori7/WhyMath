@@ -25,6 +25,22 @@ class SceneRenderer extends StatelessWidget {
   /// 백엔드가 검증해 내려준 장면 명세.
   final LearningScene scene;
 
+  /// 실 WebView(D3.js/Plotly/Desmos·three.js)로 렌더하는 `Visualization.type` 집합.
+  ///
+  /// `data/render_contract.json`의 `renderers`에서 `interactive: true`인 3개 키(즉
+  /// `animation_prerendered` 제외)와 *일치해야 한다*(invariant ⑩ 렌더 선택 단일 진실원).
+  /// 결선 방식(MOB-14·2026-08-10): 런타임에 JSON을 읽지 않는다 — 이 위젯은 단순 kind 분기라
+  /// 프로덕션 빌드 메서드에 파일 I/O를 넣는 게 과공학이다. 대신 이 상수를 `@visibleForTesting`로
+  /// 노출해 `scene_render_contract_test.dart`가 *테스트 시점*에 계약 파일과 대조·동결한다
+  /// (`segmentation_contract_test.dart`가 확립한 "런타임 번들링이 아니라 테스트 시점 교차검증"
+  /// 관례를 답습).
+  @visibleForTesting
+  static const Set<String> webViewTypes = {
+    'interactive_graph_2d',
+    'interactive_surface_3d',
+    'simulation_probabilistic',
+  };
+
   @override
   Widget build(BuildContext context) {
     if (scene.elements.isEmpty) {
@@ -104,11 +120,6 @@ class SceneRenderer extends StatelessWidget {
   /// 않은 `spec`일 때만 임베드 계산기를 띄운다(확률·사전렌더 애니메이션·spec 없는 명세는 아직 seed —
   /// 점층 확장·전방호환). 인코더/WebView는 type-무관이라 spec Map을 그대로 웹에 주입한다.
   Widget _buildVisualization(Visualization? viz) {
-    const webViewTypes = {
-      'interactive_graph_2d',
-      'interactive_surface_3d',
-      'simulation_probabilistic',
-    };
     if (viz != null &&
         webViewTypes.contains(viz.type) &&
         viz.interactive &&

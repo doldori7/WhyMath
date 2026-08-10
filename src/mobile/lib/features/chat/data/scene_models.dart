@@ -38,6 +38,11 @@ abstract class Visualization with _$Visualization {
 
     /// 학생 파라미터 조작 가능 여부(animation_prerendered는 false).
     @JsonKey(name: 'interactive') @Default(true) bool interactive,
+
+    /// 시각화 명세 PK(UUID 문자열) — 백엔드 `visualization_id`(schema/visualization.py).
+    /// MOB-14(2026-08-10): 백엔드가 항상 채워 보내는 PK를 이전엔 파싱하지 않고 버렸다(드리프트).
+    /// UI 미사용이어도 향후 시각화 추적·재사용을 위해 계약 차원에서 좌석을 유지한다.
+    @JsonKey(name: 'visualization_id') String? visualizationId,
   }) = _Visualization;
 
   factory Visualization.fromJson(Map<String, dynamic> json) =>
@@ -58,6 +63,13 @@ abstract class SceneLearnerContext with _$SceneLearnerContext {
     /// WH-1 활성 오개념 가설 id(근거 있는 프로브 한정).
     @JsonKey(name: 'active_hypothesis_ids')
     @Default(<String>[]) List<String> activeHypothesisIds,
+
+    /// WH-1 활성 가설의 누적 신뢰도 맵(id→confidence·0~1) — 백엔드
+    /// `active_hypothesis_confidences`(l4/learning_scene.py). MOB-14(2026-08-10): 형제 필드
+    /// `activeHypothesisIds`와 대칭으로 신설(드리프트 상환) — 서버가 개입 패턴 다양화에 실제로
+    /// 쓰는 값이지만 렌더 UI는 아직 이 값을 쓰지 않는다(계약 정합이 목적, 신규 UI 기능 아님).
+    @JsonKey(name: 'active_hypothesis_confidences')
+    Map<String, double>? activeHypothesisConfidences,
 
     /// L2 IRT 능력 추정치·없으면 null.
     @JsonKey(name: 'theta') double? theta,
