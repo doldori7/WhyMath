@@ -337,6 +337,21 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (실수 관리·S3-32 bookkeeping 정정): **회수(cherry-pick) 4건 중 1건이 backlog 상태 갱신 없이 2일간 `todo`로 방치된 걸 발견·정정 — "backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략" 금기(build_harness.md §8)를 스스로 어긴 사례, 재발방지 체크리스트 추가** (claude 발견·정정, `/drive` 루프 중 PATH-04 착수 전 점검이 계기)
+
+- **발견 경위**: PATH-04 착수 전 원본 자산 부재를 이유로 `block` 처리한 뒤 `backlog.py next`를 재실행했더니 `S3-32-learning-loop-closure-recovery`가 "이미 완료(미머지)" 사유로 후보에서 제외됐다 — 그런데 같은 세션이 바로 그 태스크를 이미 회수했다고 기록해 둔 바 있어(2026-08-10 CUR-03 회수 항목 참조) 모순을 인지, 실제 파일 상태를 확인했다.
+- **근본 원인**: `af2e9b39`(S3-32 코드, `a9f6e23a`의 cherry-pick)는 정상적으로 HEAD 조상이었으나, 원 브랜치(`claude/human-bottleneck-tasks-6dszy0`)에서 상태를 `done`으로 바꾼 bookkeeping 커밋(`27129729`·`2ceca464`)은 cherry-pick 대상에 포함되지 않았다 — 코드만 옮기고 각 태스크에 대해 `backlog.py start`+`done`을 현재 브랜치에서 직접 재실행해야 하는데, 그 라운드에 회수한 5건(CUR-03·PB-02·S3-32·MISC-01·MISC-03) 중 4건은 맞게 했고 S3-32 한 건만 누락됐다. MEMORY.md(`b876aa9b`)는 "회수 완료"라고 산문으로 기록했지만 실제 CLI 상태는 그대로 `todo`였다 — build_harness.md §8이 이미 명시적으로 금지하는 바로 그 패턴("backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략")을 자기 자신이 범한 사례.
+- **왜 2일간 안 걸렸는가**: 이 세션의 `next` 로직이 다른 브랜치의 완료 흔적을 교차 확인해 후보에서 제외하는 보호 장치(HARN-11류) 덕에 실질적 피해(중복 구현)는 없었다 — 그러나 backlog 자체는 "정본"이라는 지위에 걸맞지 않게 2일간 거짓 상태를 보유했다.
+- **정정**: `backlog.py start S3-32-learning-loop-closure-recovery --ignore-remote-claim`(원 브랜치가 이미 폐기 대상·중복 구현 아님 확인) → 오늘 독립 재검증(전용 테스트 3파일 67 passed·0 failed, `l3/test_verify_final_answer.py`·`l4/test_completion.py`·`api/test_coach_completion.py`) → `done --artifact af2e9b39 ...`(경위 전문 artifact 필드에 기록). 전체 스위트는 이미 `b876aa9b`(9,155 passed·0 failed, 회수 4건 공동검증 — S3-32 코드 포함)로 커버됨.
+- **재발방지대책**: `docs/standards/build_harness.md` §8에 "다건 동시 cherry-pick 회수 시 각 태스크의 start+done CLI 실행 여부를 회수 라운드 종료 시 `grep status` 전수 확인" 체크리스트 항목 신설(코드 형태가 아니라 절차 규칙 — 이 실수 자체가 프로세스 결함이라 코드 테스트로 동결할 대상이 없음).
+- 정본: 이 로그 항목 직후 커밋(backlog done 정정 + build_harness.md §8 갱신).
+
+### 2026-08-10 (착수 전 점검·차단·PATH-04): **7주체 S1~S7 학습경로 코퍼스(677행) 적재 태스크 — acceptance①이 예고한 대로 원본 Path xlsx(sha256 `f4ee650b734ac854`)가 저장소 어디에도 없음을 재확인, S3-25·KG-02와 동형의 "Kiki 소유 행동 선결" 사유로 차단** (claude 점검, `/drive` 루프)
+
+- 저장소 전체 검색(`.xlsx`·`learning_path*corpus*`·sha256 프리픽스·"677" 매치) 결과 원본도 추출본(`data/corpus/learning_paths_v1/**`)도 0건 — `concept_content_corpus_v1.md` B.1이 2026-08-03 정정에서 이미 "코퍼스 파일·store·로더 전부 0"이라 기록해 둔 사실과 정합.
+- 자산 없이 store/로더만 만들면 태스크 자신이 경고한 "dead table"이 되므로 코드 착수 없이 차단만 하고 다음 후보로 넘어감. 재개 조건: Kiki가 원본(또는 동등 재추출본) 제공 → sha256 앞 16자리 일치 확인.
+- 정본: `backlog.py block PATH-04-learning-path-corpus-ingestion` 이벤트(오늘자).
+
 ### 2026-08-10 (구현·MISC-06): **오개념 재발신호 관측 좌석 — 04e §4의 좁힌 "예측"(같은 오개념의 재발 가능성만)을 outside_mids 정렬 키 한 경로로만 배선. BKT/DKT θ 비융합(원칙6·θ를 읽지도 않음)·개입/코칭 경로 무접촉(낙인 방지)·harness/** 무수정(병행 세션 충돌 소멸)** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
 
 - **소비 좌석 판정(선행 조사·5개 후보 전수 배제 근거)**: ✅`outside_mids` 정렬 키가 유일 정답 — `resolve_probe_target`이 ε-탐색 턴에 `outside_mids[0]`만 소비하고, outside_mids는 `list[str]`+warmstart docstring("진단 probe 타깃팅 전용·코칭 preload 금지")으로 낙인방지가 구조 봉인돼 있다. ❌`active_hypotheses` 순서(같은 리스트가 `select_intervention_from_hypotheses` 개입 경로에 쓰임 — 건드리면 acceptance 정면 위반) ❌`ProbeCandidate` 필드(문항 단위 모델에 학생·오개념 단위 신호 — 의미론 불일치) ❌`select_probe` 파라미터(target 확정 후 호출) ❌`_target_mids` 순서(**무효 배선** — L1 절단·후보 전량 순회라 최종 선택 영향 0).

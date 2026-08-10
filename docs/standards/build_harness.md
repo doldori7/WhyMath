@@ -253,3 +253,4 @@ python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn �
 - ❌ 홀더 브랜치 생존 확인 없이 `--ignore-remote-claim` 사용 — 확인 명령(`git log -1 --format='%cr %h %s' origin/<branch>`)은 거부 메시지에 동봉된다. 살아 있는 세션이면 그 순간부터 중복 구현이다
 - ❌ 과탐 1건 때문에 `--no-remote`로 보호 전체 끄기 — 태스크 단위 우회(`--ignore-remote-claim`)가 있다
 - ❌ 측정(policy report) 없이 warn→block 승격, 또는 결정로그 없는 승격
+- ❌ 다건 동시 cherry-pick 회수 시 코드 커밋만 옮기고 개별 태스크의 `start`+`done` CLI 실행 생략 — 원 브랜치의 상태전이 커밋(claim/done 이벤트)은 코드 커밋과 별개라 cherry-pick 대상에 자동으로 포함되지 않는다. 회수 라운드 종료 시 대상 태스크 전체를 `grep status backlog/tasks/<id>*.yaml`로 전수 확인해 실제 코드 반입 여부와 backlog 상태가 일치하는지 검산한다(2026-08-10 S3-32 사고 — 5건 회수 중 1건이 코드는 HEAD에 있는데 backlog만 2일간 `todo`로 방치, MEMORY 결정 로그 참조)

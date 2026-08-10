@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: blocked
 priority: 4
 owner: claude
 depends_on: []
@@ -23,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - docs/data/concept_content_corpus_v1.md
 session: null
-notes: "docs/data/concept_content_corpus_v1.md §B(2026-06-20 데이터 카드). 데이터 카드가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 원래 PATH-01/PATH-02로 등재하려다 같은 날 병렬 세션이 docs/architecture/learning_path_module_gap_review.md(#665계열·PATH-01~03)를 이미 main에 병합해 ID·문서 범위가 충돌 → 문서 전체·중복 태스크 철회 후 이 net-new 발견만 재등재(2026-08-03 MEMORY 결정 로그 참조). PATH-01~03(위상정렬 알고리즘 축)과 무관 — 이건 코퍼스 데이터 자산 축. 중복 없음."
-updated: 2026-08-03
+notes: "착수 전 현실 점검(2026-08-10) — acceptance①이 명시한 전제가 이 세션에서 그대로 성립: 저장소 전체를 검색해도 Path xlsx(sha256 앞 f4ee650b734ac854)나 그 추출본(data/corpus/learning_paths_v1/**)이 존재하지 않는다(저장소 내 .xlsx는 ai_llm_inventory_2026-07.xlsx 1건뿐, 나머지 'path' 매치는 전부 pathlib류 무관 코드). concept_content_corpus_v1.md B.1도 '2026-08-03 정정'에서 이 사실을 이미 기록해 뒀다 — 자매 데이터셋(7계층 본문 437개념)은 착지했는데 이 §B(7주체 경로 677행)만 코퍼스 파일·store·로더가 전부 0인 채 원본조차 없다. 원본 자산 확보(Kiki 소유 행동 — 2026-06-20 업로드했던 Path xlsx 재제공 또는 소재 확인)가 acceptance①의 명시적 선결 조건이며, 자산 없이 store/로더만 만들면 태스크 자신이 경고한 'dead table'이 된다. 재개 조건: Kiki가 원본 Path xlsx(또는 동등 재추출본)를 제공 → sha256 앞 16자리가 f4ee650b734ac854와 일치 확인 → 그때 착수."
+updated: 2026-08-10
