@@ -27,7 +27,7 @@
 - **콘텐츠 = 법적 안전조합**. NCIC 성취기준·공공누리 AI유형·AIHub + LLM 학습용 NuminaMath/PRM800K/PhET. **EBS·평가원은 구조 메타데이터(단원·코드·문항번호)만 + 자체 동등문제로 본문 대체** (저작권 가이드 v2.0: 영리금지).
 - **PRD 버전 ↔ Phase**: Phase 1=v1.0 코어(고3) · Phase 2=v1.5(검정고시·학종 세특·결제) · Phase 3=v2.0(2028 수능·수리논술) · Phase 4/5=v3.0(영재·면접·글로벌).
 - **1인 capacity 가드**: Phase 1은 P0 FR 14 중 *핵심 모트 우선* — 조건파서·시그니처 패턴·동등문제 생성·소크라테스/Polya. 멀티모달·세특은 Phase 2+.
-- **후속(미반영)**: docs/data/licensing_safety.md·CLAUDE.md(페르소나 5종) 갱신 · 스키마 v1.0↔v1.1 통합 · FR 31 P0 매트릭스 · OCR 스택 결정 · Phase 3~5 전면 재구조화.
+- **후속**: ~~CLAUDE.md(페르소나 5종) 갱신~~·~~OCR 스택 결정~~ — 반영 완료(CLAUDE.md §타깃 페르소나·스택 표, 2026-08-10 통합점검 확인). 미반영 잔여: docs/data/licensing_safety.md 갱신 · 스키마 v1.0↔v1.1 통합 · FR 31 P0 매트릭스 · Phase 3~5 전면 재구조화.
 
 ### 하네스 도입 단계화 (2026-06-12 채택 — `docs/architecture/03b·04a`)
 
@@ -45,7 +45,7 @@
 ### Day 1~14: 토대 작업
 - [ ] 하네스 셋업 및 첫 세션 (`/status`, `/plan Phase1`)
 - [ ] Phaiakes9에 Qwen3-Math 배포 + 응답 속도 측정
-- [ ] Mathpix API 계정 + 첫 OCR 테스트
+- [ ] ~~Mathpix API 계정~~ → PaddleOCR+Qwen3-VL 로컬 OCR 첫 테스트 (2026-05-28 스택 교정 — 위 "스택 정합" 항목과 정렬, 2026-08-10 통합점검 정정)
 - [ ] Langfuse 셋업 (LLM 추적)
 - [ ] **수학 교육 도메인 파트너 후보 3명 접촉** (KAIST 영재교육원, 한국수학교육학회, 대학 수학교육과)
 
