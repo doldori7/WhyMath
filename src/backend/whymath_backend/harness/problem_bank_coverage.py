@@ -26,6 +26,12 @@
 "카탈로그 미상"으로 정직하게 빠지고(exit 코드에 영향 없음) 나머지 축(성취기준·단원×난이도 등)은
 그대로 낸다 — 유형 축은 관측의 *일부*일 뿐 전체 리포트의 필수 선결 조건이 아니다.
 
+**과목 축(ARCH-28 확장·2026-08-10)**: 성취기준 대장의 `subject` 필드(2022 개정 19과목·2015 개정
+13과목, 전 레코드 채움)를 투영해 과목별 커버·문항 참조 수·**0문 과목 목록**을 §1.3에 낸다 —
+`Problem.subject`(코퍼스 전량 "공통"·카디널리티 1)는 과목 축으로 무효라 쓰지 않고, 고시코드
+prefix 파싱도 신설하지 않는다(대장 필드가 유일한 원천 — hermetic 원칙 유지). "과목별 빠진 부분"
+관측의 정본 축이며 저작 우선순위 입력이다(`subject_content_coverage_gap_review.md` §3 D1).
+
 사용:
     python -m whymath_backend.harness.problem_bank_coverage
     python -m whymath_backend.harness.problem_bank_coverage --json out/coverage.json
@@ -201,13 +207,18 @@ class CorpusLoad:
 
 @dataclass(slots=True, frozen=True)
 class StandardEntry:
-    """NCIC 성취기준 1건(대장 투영·불변) — 코드는 개정별로 중복될 수 있다."""
+    """NCIC 성취기준 1건(대장 투영·불변) — 코드는 개정별로 중복될 수 있다.
+
+    `subject`(과목명 토큰 — 예 `10공수1`·`12확통`)는 과목 축(ARCH-28)의 유일한 원천이다.
+    대장에 없는 필드는 빈 문자열로 투영하고 집계 시 `(미상)`으로 드러낸다(정직 회계).
+    """
 
     norm_id: str
     code: str
     revision: str
     school_type: str
     domain: str
+    subject: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -277,6 +288,7 @@ def load_standards(payload: object) -> StandardsCatalog:
                 revision=str(item.get("curriculum_revision") or ""),
                 school_type=str(item.get("school_type") or ""),
                 domain=str(item.get("domain") or ""),
+                subject=str(item.get("subject") or ""),
             )
         )
     return StandardsCatalog(entries=tuple(entries))
@@ -424,6 +436,9 @@ class CoverageReport:
     problems_per_covered_code: dict[str, int]
     coverage_by_school_type: dict[str, tuple[int, int]]
     coverage_by_domain: dict[str, tuple[int, int]]
+    # 과목 축(ARCH-28) — 분모=대장 subject별 고유 코드, 참조=커버 코드의 문항 수 합(중복 가산).
+    coverage_by_subject: dict[str, tuple[int, int]]
+    problems_per_subject: dict[str, int]
     other_revision_only_codes: dict[str, int]
     unknown_standard_codes: dict[str, int]
     # 단원 × 난이도 밴드 축
@@ -453,6 +468,17 @@ class CoverageReport:
         if self.target_codes_total == 0:
             return None
         return self.covered_code_count / self.target_codes_total
+
+    @property
+    def zero_problem_subjects(self) -> tuple[str, ...]:
+        """대장에 성취기준이 있는데(분모>0) 커버 코드 0인 과목 — "과목별 빠진 부분"의 발화 계측기.
+
+        커버 코드 0 ⟺ 문항 참조 0(`problems_per_subject`에 키 부재)이므로 "그 과목 문항이 대상
+        개정 기준 1건도 없다"와 동치다. subject 결측(`(미상)`) 키도 숨기지 않는다(정직 회계).
+        """
+        return tuple(
+            sorted(s for s, (cov, tot) in self.coverage_by_subject.items() if tot > 0 and cov == 0)
+        )
 
     @property
     def unit_totals(self) -> dict[str, int]:
@@ -563,16 +589,29 @@ def build_report(
     covered = tuple(sorted(per_code))
     zero = tuple(sorted(target_codes - set(covered)))
 
-    # 학교급·영역별 커버(분모=해당 개정 고유 코드, 분자=그중 커버된 코드).
+    # 학교급·영역·과목별 커버(분모=해당 개정 고유 코드, 분자=그중 커버된 코드).
     by_school: dict[str, list[int]] = {}
     by_domain: dict[str, list[int]] = {}
+    by_subject: dict[str, list[int]] = {}
     covered_set = set(covered)
+    subject_of: dict[str, str] = {}
     for entry in catalog.entries_for(revision):
-        for bucket, key in ((by_school, entry.school_type), (by_domain, entry.domain)):
+        subject_of[entry.code] = entry.subject or "(미상)"
+        for bucket, key in (
+            (by_school, entry.school_type),
+            (by_domain, entry.domain),
+            (by_subject, entry.subject),
+        ):
             slot = bucket.setdefault(key or "(미상)", [0, 0])
             slot[1] += 1
             if entry.code in covered_set:
                 slot[0] += 1
+
+    # 과목별 문항 참조 수 — 커버 코드의 문항 수를 과목으로 합산. 한 문항이 같은 과목 코드를
+    # 여러 개 가지면 코드마다 1씩 세므로 과목 합계 ≠ 총 문항 수(unit_totals와 동일 관례).
+    per_subject: Counter[str] = Counter()
+    for code, count in per_code.items():
+        per_subject[subject_of[code]] += count
 
     return CoverageReport(
         revision=revision,
@@ -588,6 +627,8 @@ def build_report(
         problems_per_covered_code=dict(per_code),
         coverage_by_school_type={k: (v[0], v[1]) for k, v in by_school.items()},
         coverage_by_domain={k: (v[0], v[1]) for k, v in by_domain.items()},
+        coverage_by_subject={k: (v[0], v[1]) for k, v in by_subject.items()},
+        problems_per_subject=dict(per_subject),
         other_revision_only_codes=dict(other_revision),
         unknown_standard_codes=dict(unknown),
         unit_band_matrix={unit: dict(bands) for unit, bands in unit_matrix.items()},
@@ -679,13 +720,39 @@ def render_report(report: CoverageReport, *, max_zero_codes: int = 40) -> str:
     ):
         lines.append(f"| {domain} | {cov} | {tot} | {_pct(cov, tot)} |")
 
-    lines += ["", "### 1.3 커버된 코드 상위 (문항 수)", "", "| 성취기준 | 문항 |", "|---|---:|"]
+    lines += [
+        "",
+        "### 1.3 과목별 커버리지 (ARCH-28)",
+        "",
+        "> 과목은 성취기준 대장의 `subject` 필드다(`Problem.subject`·코드 prefix 파싱 아님).",
+        "> 문항 참조는 커버 코드의 문항 수 합 — 한 문항이 같은 과목 코드를 여러 개 가지면",
+        "> 코드마다 1씩 센다(§2 단원 축과 동일한 중복 가산 관례).",
+        "",
+        "| 과목 | 커버 | 분모 | 커버율 | 문항 참조 |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for subject, (cov, tot) in sorted(
+        report.coverage_by_subject.items(), key=lambda kv: (-kv[1][1], kv[0])
+    ):
+        refs = report.problems_per_subject.get(subject, 0)
+        lines.append(f"| {subject} | {cov} | {tot} | {_pct(cov, tot)} | {refs} |")
+    if report.zero_problem_subjects:
+        lines += [
+            "",
+            f"- **0문 과목 {len(report.zero_problem_subjects)}종**: "
+            + " ".join(f"`{s}`" for s in report.zero_problem_subjects)
+            + " — 대장에 성취기준이 있는데 대상 개정 기준 문항이 1건도 없다.",
+        ]
+    else:
+        lines += ["", "- 0문 과목: 없음(대장 전 과목이 1문 이상 참조됨)."]
+
+    lines += ["", "### 1.4 커버된 코드 상위 (문항 수)", "", "| 성취기준 | 문항 |", "|---|---:|"]
     for code, count in _sorted_counts(report.problems_per_covered_code)[:20]:
         lines.append(f"| `{code}` | {count} |")
 
     shown = report.zero_coverage_codes[:max_zero_codes]
     remainder = len(report.zero_coverage_codes) - len(shown)
-    lines += ["", "### 1.4 0커버 코드 목록", ""]
+    lines += ["", "### 1.5 0커버 코드 목록", ""]
     if not report.zero_coverage_codes:
         lines.append("- 없음(대상 개정 전 코드가 1문 이상 커버됨).")
     else:
@@ -842,6 +909,11 @@ def report_to_json(report: CoverageReport) -> dict[str, Any]:
         "coverage_by_domain": {
             k: {"covered": v[0], "total": v[1]} for k, v in report.coverage_by_domain.items()
         },
+        "coverage_by_subject": {
+            k: {"covered": v[0], "total": v[1]} for k, v in report.coverage_by_subject.items()
+        },
+        "problems_per_subject": report.problems_per_subject,
+        "zero_problem_subjects": list(report.zero_problem_subjects),
         "band_labels": list(BAND_LABELS),
         "unit_band_matrix": report.unit_band_matrix,
         "band_totals": report.band_totals,
