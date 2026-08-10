@@ -673,6 +673,22 @@ D1 상태에서는 시각화 블록이 아예 `return`돼 학생이 아무것도
 - ③ `접선도함수`는 웹 어댑터가 `tangent_point`를 실제 소비함을 실측한 뒤 seated 갱신(계약
   갱신만으로 해소되는 반대 방향 drift — 실측 없이 갱신 금지).
 
+> **2026-08-10 구현 완료(각주 — 본 점검과 같은 날 `/drive`로 착지·커밋 `6d24a585`).**
+> `Graph2dSpec.number_line`(NumberLinePoint·Interval·Spec — 점 ●/○·구간·반직선·개폐 끝점, 축
+> 범위는 `domain` 재사용) + 웹 계산기 1D 렌더 경로 `drawNumberLine` 신설(기존 관용구만 조합 —
+> 축·눈금·이중원·구간 색칠층, 신규 수치 primitive 0 — VIZ-06 「렌더러 먼저」 순서 준수) +
+> 수직선(`render_mode: "number_line"` 신규 어휘)·접선도함수 seated·`_SEATED_STYLES` 7종 동기 +
+> 프롬프트 예시 확장(#703에서 유실된 VIZ-04 관계식·부등식 예시 복원 동반) + `viz_eval` 1D 완성도
+> 분기. 변별력 실측: JSON↔Python drift 게이트 red→green / JS 테스트 선작성 red(4 failed)→green
+> (68→134 passed). 검증: 백엔드 전체 스위트 **9230 passed·302 skipped·0 failed**(무작위 순서·
+> 558s) · 웹 134건(커버리지 4축 98%+) · ruff/black/mypy strict(482파일)/lint-imports 전부 exit 0.
+> **정직한 이연**: 점프 화살표류 4건·내분 비율분할 전용 표기는 v1 미지원(points/intervals 조합
+> 근사 — 스키마 docstring 명기). **부수 발견·해소**: vendored 계산기 번들이 생성 커밋(`c3376c42`)
+> 부터 자기 소스보다 낡게 동기화돼 VIZ-03·VIZ-06 좌석·봉투 디스패치가 실기기 번들에 없었음(문자열
+> 프로브 실측 — WebView 임베드·봉투 인코더가 같은 커밋 착륙이라 실기기 spec 렌더는 착륙 후 한 번도
+> 성립하지 않았을 가능성이 높다. 코드 경로 추론이며 실기기 실측 아님). 본 커밋이 번들 재동기화로
+> 해소(신규 번들 `index-DJ9D7N0L.js` 프로브 6종 전부 존재), 재발 방지 CI 게이트는 `OPS-26` 등재.
+
 ### §8.2 R2 — 감사기 EVENT 축의 세 번째 탐지 사각: `막힘`은 이미 소비되고 `S4-22` 범위가 낡았다
 
 `OPS-22` 회수 커밋(#754)은 TIMESERIES 축에서 감사기 오탐 2종(별칭 import·bulk upsert 미탐지)을
