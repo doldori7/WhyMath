@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -14,12 +14,13 @@ requires_gates: []
 acceptance:
   - "misconception_hypothesis 시계열을 읽기전용 노출 — BKT/DKT θ와 융합하지 않음(원칙6 준수), 학생 노출 라벨·코칭강도 결정엔 미사용"
   - "select_probe 우선순위 신호로만 소비, 낙인방지(is_active 가지치기 원칙과 정합)"
-artifacts: []
+artifacts:
+  - caf4520a
 paths:
   - src/backend/whymath_backend/l4/misconception/hypothesis_store.py
   - src/backend/whymath_backend/l4/misconception/warmstart.py
   - src/backend/whymath_backend/api/coach.py
   - tests/backend/l4/misconception/test_recurrence_signal.py
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지). 2026-08-10 구현 세션: 소비 좌석을 A안(l4/misconception 격리)으로 확정 — 신호 산출은 hypothesis_store.py(get_recurrence_signals·order_mids_by_recurrence), 소비는 warmstart.py ⓔ 재정렬(outside_mids → resolve_probe_target ε-탐색 표적) + api/coach.py user_id 배선뿐이라 harness/** 무수정(S4-16·ASM-05가 harness/**를 선언 범위로 claim 중 — 충돌 회피). 이에 따라 paths에서 wh1_primary.py 제거·실제 변경 파일(warmstart/coach/테스트) 추가(backlog.py에 in-flight paths 수정 서브커맨드가 없어 이 필드만 직접 편집·status/acceptance/owner 무변경 — MISC-05 선례). 04e §4의 '이미 존재하는 시계열' 표현은 실측(스냅샷 테이블)과 달라 신규 함수 docstring에 정직 기록(문서 직접 수정은 범위 밖)."
 updated: 2026-08-10

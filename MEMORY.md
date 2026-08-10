@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·MISC-06): **오개념 재발신호 관측 좌석 — 04e §4의 좁힌 "예측"(같은 오개념의 재발 가능성만)을 outside_mids 정렬 키 한 경로로만 배선. BKT/DKT θ 비융합(원칙6·θ를 읽지도 않음)·개입/코칭 경로 무접촉(낙인 방지)·harness/** 무수정(병행 세션 충돌 소멸)** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
+
+- **소비 좌석 판정(선행 조사·5개 후보 전수 배제 근거)**: ✅`outside_mids` 정렬 키가 유일 정답 — `resolve_probe_target`이 ε-탐색 턴에 `outside_mids[0]`만 소비하고, outside_mids는 `list[str]`+warmstart docstring("진단 probe 타깃팅 전용·코칭 preload 금지")으로 낙인방지가 구조 봉인돼 있다. ❌`active_hypotheses` 순서(같은 리스트가 `select_intervention_from_hypotheses` 개입 경로에 쓰임 — 건드리면 acceptance 정면 위반) ❌`ProbeCandidate` 필드(문항 단위 모델에 학생·오개념 단위 신호 — 의미론 불일치) ❌`select_probe` 파라미터(target 확정 후 호출) ❌`_target_mids` 순서(**무효 배선** — L1 절단·후보 전량 순회라 최종 선택 영향 0).
+- **04e §4 사실오류 발견·기록**: 문서가 `misconception_hypothesis`를 "이미 존재하는 시계열"이라 부르나 실측은 **스냅샷 테이블**(재활성화도 같은 행 in-place upsert — 기존 통합 테스트가 "행 1개"를 동결). 추세는 append-only `evidence_links`에서만 재구성 — 신규 함수 docstring에 MISC-05 관례(`_JUDGE_DOCSTRING_STALE_NOTE`)로 정직 기록, 문서 직접 수정은 범위 밖.
+- **재발의 조작적 정의**(04e가 정의하지 않아 이 태스크가 확정): 현재 활성 집합에 없는 mid 중 지지(polarity=+1) 이력이 있는 것 — `prior_support_count` 내림차순 → `last_support_at` 최신순 → 원순서 보존(안정 정렬 동률 결정론). 반박(−1)은 카운트·최근성 어느 쪽에도 배제. 감쇠 재시뮬레이션 안 함(created_at은 벽시계·감쇠는 턴 인덱스 — MISC-05 동일 판단). `is_active=False` 사유(감쇠 vs 반박) 구별 불가는 정직 한계로 명시.
+- **구현**: `hypothesis_store.py`에 `MisconceptionRecurrenceSignal`(frozen)·`get_recurrence_signals`(쿼리 2회 고정 — 스냅샷 최소 투영+`get_evidence_for_student` 재사용·쓰기 0)·`order_mids_by_recurrence`(순수·입력 비변형·**mids 주입 0** — 우선순위 신호일 뿐 공급원 아님, 04e §5 "REC-02 확장하지 않는다" 정합). 소비는 warmstart ⓔ 단계 — 기존 `user_id` 파라미터(그동안 `del user_id` 자리표시)가 정확히 이 신호의 좌석이라 **시그니처 무변경** 배선, `api/coach.py` 두 핸들러가 `user.user_id` 전달(집행 지점 — 정본화≠집행 규칙). user_id=None(stateless)이면 조회 0·순서까지 기존 동일. 신호 실패는 warmstart 내부 never-break(호출자 never-break에 맡기면 힌트 전체가 죽는 가용성 역전 — 위임 에이전트의 정당한 설계 조정).
+- **충돌 회피**: 태스크 paths의 `wh1_primary.py`는 두 병행 세션(S4-16·ASM-05)의 선언 범위와 겹쳤으나 A안(l4/misconception 격리)으로 **harness/** 파일 0개 수정** — YAML paths를 실변경 파일로 정정(wh1_primary 제거).
+- **검증(메인 독립 재검증)**: 코드 전량 검토(정렬 키·활성 배제·개입 경로 무접촉·coach 배선)·신규+영향 테스트 314 passed·정적 검사 4종 clean·**전체 스위트 9,246 passed·0 failed**(9,227+신규 19 정합 — 컨테이너 재시작으로 1차 실행이 중단돼 재실행으로 확정, 자체 보고와 일치). 변별력 양방향(재정렬이 `resolve_probe_target` 탐색 표적을 실제로 바꿈) 테스트 포함.
+- **위임 운영 메모**: 위임 에이전트가 detached 전체 스위트를 기다리다 보고 없이 턴 종료(직전 MISC-02와 같은 계열·2회차) → SendMessage 재개 지시로 커밋·정상 보고까지 완주. 재발 시 위임 프롬프트에 "스위트는 포그라운드 until-루프로 대기"를 명시할 것.
+- 정본: 커밋 `caf4520a`
+
 ### 2026-08-10 (구현·MISC-05): **root/symptom·slip 판별 관측 리포트 — 04c §6-4가 유예한 신규 분류축 도입 없이, 스냅샷(`misconception_hypothesis`)×이력(`evidence_links`) 교차로 slip-like/지속오개념-like를 5-way 정직 분류. "slip 오코칭 비율" 트리거 지표까지 산출해 04c의 "명시 도입 결정" 트리거를 발화 가능하게 만듦(결정 자체는 별도)** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
 
 - **정본**: `docs/architecture/04c_misconception_seven_stage_separation.md` §6-4(root/symptom·slip 판별 = "최대 미구현 갭", 도입 여부는 "라이브 오진단 실측 시 결정"으로 유예) · `docs/architecture/04e_misconception_remediation_design.md` §3(신규 축 대신 기존 신호 재해석 관측 리포트로 트리거만 발화 가능하게 만드는 설계).
