@@ -14,6 +14,11 @@
 #   · 한 브랜치의 실패가 나머지를 막지 않되, 실패가 하나라도 있으면 잡은 red로 끝난다.
 name: branch-cleanup
 
+# 트리거 2경로:
+#   ① workflow_dispatch — Kiki가 GitHub UI Actions 탭에서 수동 실행(입력: 쉼표 목록).
+#      세션의 MCP 토큰은 dispatch 권한이 없어(403 · 2026-08-10 실측) 세션은 ②를 쓴다.
+#   ② push(main) — `.github/branch-cleanup-request.txt`가 main에 *머지*될 때 발동해 그
+#      파일의 목록을 처리한다. main은 PR로만 갱신되므로 매 배치가 PR 감사 기록으로 남는다.
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +26,9 @@ on:
         description: "삭제할 브랜치(쉼표 구분·claude/* 또는 tmp-* 만 허용)"
         required: true
         type: string
+  push:
+    branches: [main]
+    paths: [".github/branch-cleanup-request.txt"]
 
 permissions:
   contents: write
@@ -29,6 +37,7 @@ jobs:
   delete-branches:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: 브랜치 삭제 (SHA 스냅샷 동반)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -37,6 +46,14 @@ jobs:
         run: |
           set -u
           fail=0
+          # push 트리거면 요청 파일에서, dispatch면 입력에서 목록을 읽는다.
+          if [ -z "${BRANCHES:-}" ] && [ -f .github/branch-cleanup-request.txt ]; then
+            # 파일 형식: 브랜치 1줄 1개 · '#' 시작 줄은 주석.
+            BRANCHES=$(grep -v '^#' .github/branch-cleanup-request.txt | tr '\n' ',')
+          fi
+          if [ -z "${BRANCHES:-}" ]; then
+            echo "삭제 목록이 비어 있음 — 종료(no-op)"; exit 0
+          fi
           IFS=',' read -ra list <<< "$BRANCHES"
           for raw in "${list[@]}"; do
             b="$(echo "$raw" | xargs)"   # 공백 트림
