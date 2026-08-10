@@ -20,6 +20,15 @@ sync 엔진 재사용(신규 seam 0): 슬3 `embedding._build_sync_engine`을 그
 
 7계층: L1 데이터 기반의 *영속 프로젝션 적재*. 조회·소비(formula_refs·resolution)는 Phase 5b(역방향
 의존 금지).
+
+Phase 5b 선결 조건(NS-04·2026-08-10): dsl 필드의 *소비*(이 프로젝션의 적재가 아니라 Phase 5b의
+조회·resolution 쪽)를 시작하기 전에 `tests/backend/l1/test_formula_governance.py`의 latex↔dsl
+의미 정합 게이트(축⑤)가 25건 전수 green이어야 한다 — dsl은 이 프로젝션(적재 전용)에선 write-only라
+latex↔dsl 정합 결함이 있어도 지금은 학생 피해가 없지만, Phase 5b가 dsl을 실제로 SymPy 검증(동치
+판정·풀이 채점 등)에 쓰기 시작하는 순간 latex와 다른 관계를 말하는 dsl이 그대로 판정 결과에 반영
+된다. `formula.quadratic.roots`(±두 근 중 +근만 남는 소실 결함)가 이미 그 게이트로 한 번 봉인됐다
+— 이후에도 코퍼스에 레코드를 추가할 때는 이 봉인 순서(정합 게이트 green 확인 → 소비 코드 작성)를
+지킨다.
 """
 
 from __future__ import annotations
