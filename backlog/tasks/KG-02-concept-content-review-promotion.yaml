@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-02-concept-content-review-promotion
+title: "이론 콘텐츠 검수 승격 — concept_content 437 ai_estimated→reviewed 배치 (AI 자기승인 금지)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 표본 검수 배치: concept_content_v1 437건을 S2-05 ①~⑥ 판정 축·Wilson min-n 샘플링(superhuman_verification_standard.md 게이트 CLI 관례)으로 검수한다"
+  - "② AI 자기승인 금지(knowledge_module_gap_review.md §2-③ 협상 불가) — 승격 권위는 사람 검수 경유 또는 결함 주입 강등전을 통과한 기계 게이트만. 문항 선례(2026-07-10 AI 검수 전환 결정·S4-16 강등전)와 동형, 실 LLM 필요 시 Kiki 머신 동반"
+  - "③ PASS 스코프만 review_status를 결정론 각인(사람 인상 입력 경로 0 — PB-03 축② 선례)하고, 승격 후 /concepts/search reviewed_only=true 재측정 N>0으로 KG-01 ③ 관측 축이 실제로 소비됨을 확인한다"
+  - "④ 미통과분은 ai_estimated 유지 + 결함 목록 산출(침묵 승격 금지). 변별력: 결함 주입 표본(오류 정의 삽입)이 검수 배치에서 실제 FAIL로 나오는지 실측한다"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "data/corpus/concept_content_v1/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "정본: docs/architecture/subject_content_coverage_gap_review.md §3 D2. 검수 축이 세 태스크(S3-26 ③ 축 도입·S2-05 문항 30문·KG-01 관측)에 걸쳐 각자 done인데 사이의 승격 실행이 무주공산(backlog 224건 전수 확인). 스코프는 K-12 437 우선 — 대학 409는 review_status 필드 자체가 없어(전량 None) 별도 판단."
+updated: 2026-08-10

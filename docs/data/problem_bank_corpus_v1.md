@@ -1,7 +1,9 @@
-# 문제은행 코퍼스 (자체 저작 6종) — 데이터 카드
+# 문제은행 코퍼스 (자체 저작 7종) — 데이터 카드
 
-> **요약**: 연습·평가용 문항 코퍼스 6종, 전 2,613건(2026-08-03 갱신 — `rephrased_v0`가 위생 게이트
-> 확장으로 483→429건 소급 조정), **전량 자체 저작**(`source_type=자체생성`·`license=WHYMATH_GENERATED`)
+> **요약**: 연습·평가용 문항 코퍼스 7종, 전 2,647건(2026-08-10 갱신 — 6종 2,613 표기가
+> `probability_finite_v0` 34건 누락 stale이라 정정, `subject_content_coverage_gap_review.md`
+> §정정-ⓐ. 2026-08-03 갱신분: `rephrased_v0` 위생 게이트 확장으로 483→429건 소급 조정),
+> **전량 자체 저작**(`source_type=자체생성`·`license=WHYMATH_GENERATED`)
 > — 평가원·EBS·검정교과서 본문 복제 0. 진단문항(`atom_probe`)과는 별개 자산이며, 이 문서의 범위는
 > 연습·모드별 출제용 문제은행이다.
 >
@@ -10,7 +12,7 @@
 
 ---
 
-## 0. 코퍼스 6종 요약
+## 0. 코퍼스 7종 요약
 
 | 코퍼스 | 건수 | 생성 방식(LLM 개입) | 생성 CLI | 표본 검수 | `_provenance.json` |
 |---|---:|---|---|---|---|
@@ -20,7 +22,8 @@
 | `problem_bank_killer_v0` | 120 | Vieta 근집계 킬러 단답형(LLM 0) | `python -m whymath_backend.harness.root_aggregate_batch` | ⚠ rotation-1 120/120 전수 결함 0건이나 min-n 200 미달로 게이트 판정 불가(구조적 미해결) | ✅ |
 | `problem_bank_misconception_mc_v0` | 1,080 | 오개념 수치평가 객관식 45서브밴드(LLM 0) | `python -m whymath_backend.harness.misconception_mc_batch` | ✅ rotation-0 FAIL 63.60%→rotation-1 FAIL 7.58%→rotation-2 PASS(Wilson 상한 1.33%) | ✅ |
 | `problem_bank_rephrased_v0` | 429 | generated_v0 발문만 LLM 재작성(수치·정답·distractor_map 등은 코드가 그대로 복사) | `python -m whymath_backend.harness.problem_corpus_rephrase` | ✅ 표본 3라운드 연속 FAIL(12%→5.5%→1%) 후 전수 감사(429/429) Wilson 상한 0.63% PASS | ✅ |
-| **합계** | **2,613** | | | **5/6 표본 검수 완료(PASS)·1/6 구조적 미해결(killer, 코퍼스 확장 대기)** | **6/6 완료** |
+| `problem_bank_probability_finite_v0` | 34 | 확률(유한 표본공간 전수검증) 동등문제 단답형(LLM 0 — S4-13 대체 검증 스택) | `python -m whymath_backend.harness.finite_probability_batch` | ⚠ 노출 부적격 — S4-16 잔차 게이트 강등전 승격 대기(34건은 표본 게이트 min-n 200 미만이라 표본 판정도 구조적 불가) | ✅ (2026-07-29) |
+| **합계** | **2,647** | | | **5/7 표본 검수 완료(PASS)·2/7 미해결(killer 확장 대기·probability_finite S4-16 대기)** | **7/7 완료** |
 
 `problem_bank_rephrased_v0`가 유일하게 LLM을 쓰는 축은 *발문 문장 표현*뿐이다 — 수치·정답·선지·
 `distractor_map`·난이도·`slug`·`problem_id`는 원본(`generated_v0`)에서 그대로 복사돼 LLM 산출을
@@ -74,14 +77,15 @@ S3-15(rephrased 근본 설계 재검토·전수 감사 전환)를 거쳐 대부�
 ④ 실노출(L6 모드 게이팅 통과 → CAT 선택)
 ```
 
-6종 전부 ①·②는 실측 완료(코퍼스에 존재 = 게이트 통과 계약). ③은 `generated_v0`·`conceptual_v0`·
+7종 전부 ①·②는 실측 완료(코퍼스에 존재 = 게이트 통과 계약). ③은 `generated_v0`·`conceptual_v0`·
 `misconception_mc_v0`·`rephrased_v0` 4종 완료(PASS, 2026-08-03 갱신 — S3-09/S3-12/S3-14/S3-15
 경유), `killer_v0`는 코퍼스 크기(120)가 표본 게이트 min-n(200) 미만이라 게이트가 구조적으로
-판정을 낼 수 없어 노출 부적격 유지(코퍼스 확장 대기). ④는 `persona_fit` 백필(S3-10, 2026-07-29)로
+판정을 낼 수 없어 노출 부적격 유지(코퍼스 확장 대기), `probability_finite_v0`(34)는 S4-16 잔차
+게이트 강등전 승격 대기라 노출 부적격이다. ④는 `persona_fit` 백필(S3-10, 2026-07-29)로
 L6 6개 모드의 페르소나 적합도 경로가 살아났으나(§4 참조), 실제 학생 트래픽은 아직 0이라 "실노출"은
 코드 경로 활성화 이상의 의미는 아직 없다.
 
-## 3. 저작권 보증 (전 6종 공통)
+## 3. 저작권 보증 (전 7종 공통)
 
 - **전량 자체 저작**: `source_type=자체생성` · `license=WHYMATH_GENERATED`. 평가원·EBS·검정교과서
   *본문·문항·풀이·그림* 복제 0(CLAUDE.md 절대 금기·저작권 가이드 v2.0 §32 단서).
@@ -106,6 +110,7 @@ python -m whymath_backend.harness.conceptual_count_mc_batch          # conceptua
 python -m whymath_backend.harness.root_aggregate_batch               # killer_v0
 python -m whymath_backend.harness.misconception_mc_batch             # misconception_mc_v0
 python -m whymath_backend.harness.problem_corpus_rephrase            # rephrased_v0(generated_v0 선행)
+python -m whymath_backend.harness.finite_probability_batch           # probability_finite_v0
 
 # DB 재적재(멱등 upsert — 코퍼스별 반복 실행)
 python -m whymath_backend.l1.problem_bank.populate --problems data/corpus/problem_bank_v1/problems.jsonl

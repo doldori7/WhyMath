@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-28-coverage-subject-axis
+title: "문제은행 커버리지 과목 축 — 대장 subject 투영·0문 과목 관측 + 2026-08 리포트 재생성"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "대장 subject 투영으로 과목 축 3종(coverage_by_subject·problems_per_subject·zero_problem_subjects) 추가 — standards.json의 subject 필드만 사용, 성취기준 코드 prefix 파싱 신설 금지(hermetic 유지)"
+  - "렌더/JSON 하위호환(기존 키 불변) + 결정론(2회 연속 생성 바이트 diff 0) 유지"
+  - "0문 과목 판별 변별력 양방향 실측 — fixture에서 특정 과목 문항을 제거하면 zero_problem_subjects에 나타나고 복원하면 사라진다"
+  - "docs/data/problem_bank_coverage_2026-08.{md,json} 재생성(7종 2,647·과목 축 포함) + 2026-07 구본 상단 supersede 주기(본문 불변). CI 재생성 배선은 PB-02 acceptance ③ 소관 — 여기서 하지 않는다(중복 금지)"
+artifacts:
+  - 98fb462b
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+  - "docs/data/**"
+session: null
+notes: "정본: docs/architecture/subject_content_coverage_gap_review.md §3 D1. ARCH-18 도구의 school_type/domain 축과 동형 확장 — 저작 우선순위 입력(S4-01·R7 v2)이 과목 축을 요구. 날짜 파일명(안정 경로 필요) 문제는 PB-02 배선 시 함께 판단."
+updated: 2026-08-10

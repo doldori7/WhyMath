@@ -17,5 +17,5 @@ paths:
   - "src/backend/**"
   - "tests/backend/**"
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "[2026-08-10 승계 부기] 수학 내부 과목 축 카디널리티 1 실측(subject_content_coverage_gap_review.md §0-①): Problem.subject는 2,647건 전량 '공통'이고 유일 소비처 api/problems.py:121 필터도 무변별. subject_area 도입 시 achievement_standard_codes→성취기준 대장 subject 유도 백필로 수학 내부 과목 축도 함께 해소한다(과목 관측 정본은 그때까지 ARCH-28 리포트)."
+updated: 2026-08-10

@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (점검·콘텐츠 커버리지): **과목(19)×콘텐츠(문제 5축·이론 6축) 첫 자체 대조 — 0문 4과목(2수·12경수·12실통·12수과)·수능 선택 3과목 박약·이론 검수 0 실측. 커버리지 도구 과목 축(ARCH-28, 세션 내 완료)+이론 검수 승격(KG-02) 등재, 저작 실행은 R7 v2 페이퍼 유지** (claude 설계, Kiki "문제와 이론 파트 각 과목별 빠진 부분 점검과 대책")
+
+- **컨텍스트**: 기존 갭 리뷰 22건은 전부 모듈 축(외부 EOS 틀 대조) — 과목 축 커버리지를 정면으로 다룬 점검은 이번이 처음. 문제 축은 ARCH-18 리포트가 있었으나 stale(6종 2,667 기준·과목 축 없음), 이론 축은 실측 자체가 없었다.
+- **문제 파트 실측**(정본 = `problem_bank_coverage_2026-08.json`, 7종 2,647문): `Problem.subject` 전량 "공통"(카디널리티 1·무효) → 과목 축 정본은 대장 `subject` 필드. 성취기준 커버 78/435(17.9%)·0문 4과목·확통 82(34문 S4-16 대기)/기하 24/미적Ⅱ 24·합답형 0건·4밴드 관통 과목 0·유형 0커버 9종. 재측정에서 최다 코드가 `[10공수1-02-02]` 517→27로 이동(재태깅)·신 최다 `[9수02-20]` 379.
+- **이론 파트 실측**: 원자 2,683은 전 과목 존재(공백 아님) — 진짜 공백은 본문 신뢰 축: K-12 핵심명제 1,311 전량 redaction(저작권 설계·의도적 미채택)·콘텐츠 437은 원자 대비 1/3 해상도·**전량 ai_estimated 검수 0(승격 태스크 무주공산 → KG-02 신설)**·chunk 0(S4-05 승계)·성취수준 HEAD 0(**CUR-03 done인데 artifact `98a34695` 미병합 — HARN-11 유형, Kiki 회수 결정 필요**).
+- **D1 ARCH-28**(제안 ARCH-27이 CLI 번호 충돌 거부 → 제안 번호 수용·HARN-10): `problem_bank_coverage.py`에 대장 subject 투영 3축(`coverage_by_subject`·`problems_per_subject`·`zero_problem_subjects`) — 0문 과목 양방향 변별력 테스트·JSON 하위호환·리포트 2026-08 재생성+2026-07 supersede. CI 재생성 배선은 PB-02 ③ 소관(중복 등재 금지). **D2 KG-02**: 437건 검수 승격 배치 — AI 자기승인 금지(사람 검수 또는 강등전 통과 게이트만)·PASS만 결정론 각인·`reviewed_only=true` 재측정. **D3 저작 우선순위 v2 = 페이퍼**(S4-01 acceptance가 "초·중·고+대학"이라 신규 등재는 중복 — notes 승계 부기로 갈음).
+- **등재·검증**: 신규 2건 CLI add·`validate` green(226건)·승계 부기 2건(S4-01·E1-02 notes). stale 정정 3곳(problem_bank_corpus_v1 6종 2,613→7종 2,647·atom_graph_v1 2,697→2,683·커버리지 2026-07 supersede). 도구 테스트 46건 통과·ruff/black/mypy --strict/lint-imports 전부 exit 0·전체 스위트는 커밋 시점 결과를 PR 본문에 기재.
+- 정본: `docs/architecture/subject_content_coverage_gap_review.md` (§0 전제 4건·§1 전수 대조 표2장·§2 의도적 미채택 5건·§3 D1~D3·§5 발화 조건 4건·부록 재현 명령 ㉮~㉳)
+
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
 - **경로 확정까지 실패 2단**: ①`git push --delete` — 프로브 재실측 403(HARN-16 유효) ②MCP `actions_run_trigger` dispatch — **403 "Resource not accessible by integration"**(세션 MCP 토큰에 workflow 실행 권한 없음·신규 실측). → ③`.github/branch-cleanup-request.txt`를 PR로 main에 머지하면 push 이벤트가 `branch-cleanup.yml`을 발동해 **Actions 러너가 저장소 토큰(contents: write)으로 삭제**. 매 배치가 PR 감사 기록으로 남는다(#746이 첫 사례).
