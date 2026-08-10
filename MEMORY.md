@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-10 (구현·OPS-24 + 재발방지): **코퍼스 백필 CLI 2종을 CI에 배선 — "의도적 미배선"이 아니라 **드리프트 가드**(`--check`)로 판정. 감사기 CLI 도달 11→13** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+- **판단이 본체였던 태스크**: OPS-22 감사기가 발견한 미도달 CLI 2종(`problem_corpus_review_status_backfill`·`problem_corpus_persona_fit_backfill`)에 대해 등록 시 acceptance가 비어 있었고 notes가 *"배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요"*라고 판단 자체를 남겨뒀다. 실측(`--all --dry-run` → 7코퍼스 2,647건 전량 백필 완료·filled 0)을 근거로 **배선**으로 판정 — `review_status`가 빈 레코드는 `l6/_shared.is_review_cleared`가 fail-closed로 그 문항의 **노출을 전건 차단**하므로 백필 누락은 서빙 영향을 갖는 회귀다.
+- **다만 변이형이 아니라 가드**: CI가 레포 데이터를 재작성해서는 안 된다. 백필은 사람이 돌려 커밋하고 CI는 "빠진 게 있다"만 빨갛게 알린다. 기존 `--dry-run`은 **채울 게 있어도 항상 exit 0**이라 그대로 CI에 걸면 위장 게이트가 되므로(CLAUDE.md "변별력 없는 검증 스텝 금지"), `--check`(파일·감사로그 미기록 + 미백필 1건이라도 있으면 exit 1)를 신설해 걸었다. 판정 근거를 두 CLI docstring·CI 스텝 주석·감사기 `_MANIFEST` 주석 **세 곳**에 남겼다.
+- **배선 위치**: 신규 잡 0 — 기존 `declared-unwired-audit` 잡(base install만·`if != 'schedule'`·`needs` 게이팅 없음 → 코퍼스만 바뀐 PR에서도 반드시 돎)에 스텝 2개. 두 CLI가 레포 루트 기준 상대경로를 읽으므로 step `working-directory`를 워크스페이스 루트로 되돌렸다(잡 기본값 `src/backend`로 돌리면 `FileNotFoundError`임을 실측).
+- **변별력 실측**(오케스트레이터 독립 재실행): 실코퍼스 1건의 두 필드 동시 제거 → 양 CLI `--check` exit 1, 원복 후 exit 0 · 뮤테이션 상태로 2회 실행 후에도 `git status -- data/ docs/data/` 빈 출력(비기록 실증) · CI 스텝 `--check`→`--dry-run` 뮤테이션 → `tests/infra` red · `_check_exit_code` 항상 0 뮤테이션 → `tests/backend/harness` red.
+- **수치**: 감사기 `[harness_clis]` 공급 53(불변) · 도달 11→13 · 위반 0 · exit 0. 전체 스위트 9,570 passed·302 skipped·0 failed. 착수 시 acceptance에 "53→55"로 적었던 것은 축 표기 `53/11`을 공급/도달로 잘못 읽은 것 — 실측으로 정정하고 경위를 acceptance 본문에 병기했다.
+- **재발방지 등재(시스템 실수)**: 오케스트레이터가 뮤테이션 원복에 `git checkout --`를 써서 **미커밋 구현분 +59/-6을 무증상 소실**시켰다. git 계열 원복은 뮤테이션과 미커밋 작업분을 구분하지 못한다. 대책은 CLAUDE.md 규칙(`git checkout --`·`restore`·`stash`로 뮤테이션 원복 금지 → `cp` 백업/복원 + 원복 규모 `git diff --stat` 대조)으로 등재했다. 이번엔 서브에이전트의 스크래치패드 백업으로 **바이트 동일 복원**됐고, 신규 테스트 16건이 `--check` 동작을 계약으로 고정하고 있어 복원 충실도를 기계가 판정했다 — 백업도 테스트도 없었으면 재작성이었다.
+- **정직한 잔여**: GitHub Actions 러너에서의 실제 실행은 미측정(로컬 동형 재현까지) · `--check` 비기록 동결은 `Path.write_text`/`Path.mkdir` 두 표면만 검사 · 백필 변이형을 누가 언제 돌리는지에 대한 런북 미작성(CI는 빨개질 뿐 자동 복구하지 않는다 — 설계 의도).
+
 ### 2026-08-10 (재발방지·감사기 정밀도): **`OPS-25` — 선언≠배선 감사기의 *상수 간접참조 맹점* 해소. 같은 원인의 오탐 2건이 이미 유령 태스크 1건(`PED-15`)과 허위 유예 1건(`S4-22`의 막힘)을 만들어냈다** (claude 구현, Kiki 지시)
 
 - **사고 경위(반복 실수 — 동일 원인 2회)**: `ops/declared_unwired_audit.py`가 도달을 *리터럴*로만 판정했다. ①HTTP 축 — 호출부에 경로 문자열이 직접 있어야 도달로 인정 → `_ENDPOINT = "/v1/me/growth-evidence"` 상수를 쓰는 `test_me_growth_evidence.py`의 호출이 안 보여 "미도달"로 보고 → **`PED-15`가 그 오탐만으로 등재**됐다(#755에서 리터럴 스모크로 우회했으나 근본 원인은 잔존). ②EventType 축 — `ast.Compare` 피연산자에 `EventType.X`가 직접 있어야 소비로 인정 → `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로 거는 `not in` 필터(:279)·SQL `.in_()` 필터(:563)를 못 봐 **이미 소비 중인 `EventType.막힘`**이 `S4-22` 유예 3종에 허위로 끼었다.
