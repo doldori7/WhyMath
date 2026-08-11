@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - src/backend/whymath_backend/privacy/audit.py
   - src/backend/whymath_backend/schema/enums.py
   - "tests/backend/ops/**"
-session: null
+session: claude/whymath-eos-review-64f81f
 notes: "docs/architecture/operations_platform_gap_review.md §3 D1. require_content_admin(api/_auth.py:123)이 CUD 6라우터를 지키나 Role.CONTENT_ADMIN 부여 경로가 저장소 전체 0건(.role= 대입 grep 무일치, api/auth.py:146 resolve_user가 role kwarg 없이 생성). AuditEventKind(schema/enums.py:1114)에 role_change 어휘 없어 부여를 만들어도 기록할 곳이 없음. 반복 실수 7회차(§6) — 만들고 인가 통로를 잇지 않음."
-updated: 2026-08-03
+updated: 2026-08-11

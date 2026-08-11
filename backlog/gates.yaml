@@ -54,6 +54,47 @@ gates:
     remind_after_days: 14
     evidence: "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk"
     notes: ""
+  - id: G-operator-seat-first-grant
+    title: "운영자 좌석 1호 발급 (prod whymath-pg) — 이걸 해야 콘텐츠 CUD 전건 403이 실제로 풀린다. ADMIN-01 회수로 CLI는 착지했으나 prod 좌석은 0건"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 7
+    evidence: null
+    notes: |
+      [과제] 운영자 좌석 1호 발급 — prod DB의 특정 사용자에게 CONTENT_ADMIN 부여
+      [목적] 현재 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가
+        전건 403이다. 봉인(SEC-07)이 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다.
+        이 게이트를 통과해야 "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
+      [선행] ① 이 브랜치(ADMIN-01 회수분)가 main에 머지돼 있을 것 ② Docker Desktop 가동
+        ③ prod DB 컨테이너 whymath-pg(호스트 포트 5433) 실행 중
+      [성공] grant 명령이 {"user_id","old_role","new_role":"content_admin"} JSON + 종료코드 0,
+        이어지는 list가 그 user_id를 1건 이상 보여준다. 실패 시 비0 종료코드 + stderr JSON 사유
+        (미존재 user_id면 "사용자를 찾을 수 없습니다").
+      [실행 환경] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+      [창 구분] 새 창 1개. 서버를 점유하지 않으므로 이후 조작 가능.
+
+      # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)
+      cd C:\Users\kiki\Desktop\__AI\WhyMath
+      git fetch origin main
+      git checkout main
+      git pull origin main
+      $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath"
+
+      # 1) 현재 좌석 확인 — 처음엔 total: 0 이 정상
+      python -m whymath_backend.ops.role_grant_cli list
+
+      # 2) 좌석 부여 — <여기에_실제_user_id_전체>를 실제 UUID로 치환
+      python -m whymath_backend.ops.role_grant_cli grant <여기에_실제_user_id_전체> content_admin
+
+      # 3) 자가검증 — 방금 부여한 user_id가 목록에 보여야 성공
+      python -m whymath_backend.ops.role_grant_cli list
+
+      [회수 방법] python -m whymath_backend.ops.role_grant_cli revoke <user_id> content_admin
+        (revoke는 역할 인자가 필요하고, 그 역할을 실제로 보유 중일 때만 STUDENT로 되돌린다)
+      [주의] pip/pytest 같은 실행기 단독 호출 금지 — 위처럼 python -m 형태를 쓴다(다중 환경 결합 사고 방지).
+      [clear 증적] 3)의 list 출력(user_id 포함 JSON)을 evidence로 남긴다.
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
     kind: human

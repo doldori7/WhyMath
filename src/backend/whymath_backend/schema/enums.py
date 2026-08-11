@@ -1136,13 +1136,18 @@ class AuditResourceType(str, Enum):
 
 
 class AuditEventKind(str, Enum):
-    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 3종 폐쇄 택소노미.
+    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 폐쇄 택소노미(현 4종).
 
     `docs/architecture/account_security_gap_review.md` D3의 경계 확정: `security_privacy.md:
     88-100`의 "모든 PII 접근 로그"는 **채택하지 않는다**(본인 조회 29개 엔드포인트 전수 감사는
     미성년 프로파일링 자산화·볼륨 소음 — 정정 경위는 `docs/standards/security_privacy.md` §감사
-    로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근"
-    3종뿐이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와 정확히 일치시킨다.
+    로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"·"본인 아닌 주체의 접근"·
+    **"계정 권한 자체의 변경"**이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와
+    정확히 일치시킨다(부기에 값을 추가할 때 이 enum도 함께 늘린다 — 단일 진실원천).
+
+    **4번째 값 `role_change`는 ADMIN-01(2026-08-11 회수)이 추가**했다. SEC-09 시점의 "3종"은
+    그 시점 실측이었을 뿐 상한이 아니다 — 폐쇄 택소노미의 뜻은 "임의 문자열 금지"이지
+    "영원히 3개"가 아니다.
 
     `deletion_audit`(별도 테이블·`DeletionAudit`)이 삭제 감사의 **단일 권위**를 유지하므로
     `resource_type`류의 삭제 이벤트는 여기 포함하지 않는다(이중 진실원천 금지 — D3 판단 근거).

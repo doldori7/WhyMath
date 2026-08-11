@@ -369,7 +369,7 @@ Kiki 결정에 따라 이번 범위는 **목표 형태와 발화조건만** 문�
 
 | 태스크 | 설계 | stage | priority | 근거 |
 |---|---|---|---|---|
-| `ADMIN-01-operator-seat-grant-audit` | D1 | S4 | 2 | **CONTENT_ADMIN 부여 경로 0건** — 게이트는 섰으나 아무도 통과 못함. 최우선(되돌릴 수 없음은 아니지만 다른 모든 관리자 표면의 선결) |
+| ~~`ADMIN-01-operator-seat-grant-audit`~~ **done(2026-08-11 회수 착지)** | D1 | S4 | 2 | **CONTENT_ADMIN 부여 경로 0건** — 게이트는 섰으나 아무도 통과 못함. 최우선(되돌릴 수 없음은 아니지만 다른 모든 관리자 표면의 선결). **경위**: 구현(`8924a2e2`)이 미머지 브랜치에 6일 고립돼 있던 것을 cherry-pick으로 회수(충돌 0). 상세·회수 교훈 = `operations_module_gap_review_r3.md` §6-1. **주의 — 코드 착지 ≠ 데드락 해소**: prod 좌석이 0건인 동안 CUD 6라우터는 여전히 전건 403이며, `G-operator-seat-first-grant`(Kiki) clear 후에야 닫힌다 |
 | `ADMIN-02-dead-tenancy-billing-columns` | D2 | S4 | 3 | dead 컬럼 4개 — "부분 구현된 것처럼" 오독 제거. **신규 컬럼 0**(제거만) |
 | `ADMIN-03-audit-retention-policy` | D3 | S4 | 3 | 감사 2테이블 보존 정책 미결정 명문화 + 동결. **코드 로직 0** |
 | D4(조직·학교·라이선스) | 페이퍼 | — | — | **태스크 신설 없음** — B2B 계약 체결 시 발화(§5-③) |
