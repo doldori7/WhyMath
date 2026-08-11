@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-19-concept-question-routing-seam
+title: "개념 질의 라우팅 seam — student_intent '질문'의 첫 교수 결정 reader + 개념 식별 분기(내용은 S4-05 승계)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PED-18-tutor-primary-operation-rate
+requires_gates: []
+acceptance:
+  - "① 의도의 첫 교수 결정 reader — l4/turn_meta.classify_student_intent의 '질문' 값을 실제로 읽는 분기를 만든다(현재 reader는 api/coach.py:1458 회상 컬럼 투영 1곳뿐이고 PolyaCoach.decide:51·select_category:110·decide_hint_level:84 어느 것도 인자로 받지 않는다). 분기 조건 = '질문' 의도 + 활성 문항·풀이 부재(문제 푸는 중의 '왜?'는 기존 소크라테스 축이 옳다). 분기가 student_intent를 실제로 읽는지(원문 재토큰화 우회 아님)를 테스트로 동결"
+  - "② 개념 식별은 기존 검색기 재사용 — l1/atom_graph/retrieval.py:92 search_atoms(query_text, top_k, provider, min_similarity). 신규 검색·임베딩 인프라 0. 임계 미달이면 분기하지 않고 기존 경로 유지(fail-closed — 엉뚱한 개념으로 답하느니 기존 스캐폴드가 낫다·날조 금지)"
+  - "③ 원문 미유입 불변 — 학생 원문은 프롬프트에 넣지 않는다. v1 §2-⑤(대화 원문 LLM 재주입 영구 불채택)·wh1_primary.py:144 S1-a 계약·wh1_llm_policy.py:202-203 비민감 요약 계약 전부 무변경. 발화 조립에 넘어가는 것은 구조화된 개념 식별자 + 질문 유형뿐. 검색 질의로 쓰는 것은 임베딩 계산 입력이지 LLM 프롬프트가 아니라는 구분을 테스트로 동결(기존 사적 필드 테스트 확장)"
+  - "④ 응답은 답이 아니라 소크라테스 역질문 — 헌법 '막혔을 때 바로 정답 제공 금지'. 카테고리 선택은 l4/socratic/select.py:110 select_category 재사용(신규 선택기 0). 정답 억제 백스톱 통과 + 응답이 질문 형태임을 pedagogical_rubric 또는 동형 검사로 가드"
+  - "⑤ 작동 비율 노출 — 분기 발동 비율·임계 미달 기각 비율을 리포트가 말한다. 정상 200은 라우팅 작동의 증거가 아니다(CLAUDE.md 2026-08-03). PED-18의 ⑰가 서 있어야 '분기가 발화에 반영됐는가'와 '전부 폴백됐는가'를 구분할 수 있다"
+  - "⑥ 기존 문제풀이 대화 회귀 0 — Polya 전이·힌트 사다리·톤 필터 불변"
+  - "⑦ 범위 밖 동결 — ConceptContent.explanation/metaphor 원문의 학생 직접 노출 금지(api/concepts.py:31,206 노출 계약) · 자유 Q&A 챗봇화 금지(콴다 영역·헌법) · 오개념 preload 금지(reactive retrieval 유지) · 설명 내용(눈높이별 정의·예시·반례)은 S4-05 소유이므로 만들지 않는다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/turn_meta.py
+  - "src/backend/whymath_backend/l4/socratic/**"
+  - src/backend/whymath_backend/api/coach.py
+  - "tests/backend/api/test_coach*.py"
+session: null
+notes: "docs/architecture/ai_tutor_module_gap_review_r2.md §2 G1·G2 · §3 D7. 외부 틀 문서 §37의 대표 대화('왜 음수끼리 곱하면 양수가 되나요?')에 현행 코치는 문항·개념 무관 정적 스캐폴드(l4/polya/prompts.py:43-85 '이 문제, 잠깐 같이 읽어볼까?')를 반환한다. v1이 '자연어 QA·개념설명'을 한 행으로 압축해 ✅를 준 것이 오판정이었다(표면 존재를 능력으로 읽음). G2는 선언≠집행이 아니라 v1 D1이 writer만 약속하고 student_intent 소비를 처음부터 범위에 두지 않은 설계 절반 — PED-04는 약속한 것을 전부 지켰다. 경계: S4-05-concept-definition-registers가 정의 레지스터 내용 + L4 눈높이 선택 소비를 소유하고 이 태스크는 라우팅·식별 seam만 — D7 착지 시 S4-05가 채울 소비처가 처음 생긴다. S4-11(힌트 본문)·S3-32(최종답 검증 루프)와도 축이 다르다."
+updated: 2026-08-11
