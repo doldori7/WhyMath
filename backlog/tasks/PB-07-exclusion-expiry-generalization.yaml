@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/harness/problem_type_backfill.py
   - "tests/backend/harness/**"
   - "data/corpus/problem_bank_rephrased_v0/**"
-session: null
+session: claude/whymath-dsl-integration-check-bmjic8
 notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G2·§6-ⓑ. CLAUDE.md 금기 '만료 없는 유예·제외 금지'(2026-08-03 등재)의 2회차 — 1회차 대책 ARCH-25가 코드로 착지한 것은 옳았으나 좌석 단위였고, 같은 성격의 다른 좌석이 계약 밖에 남아 있었다. R2 §1 기능20이 429건 구멍의 사유를 'S4-14 미착지'로 기록한 지 8일, S4-14 done 이후 6일 방치."
 updated: 2026-08-11
