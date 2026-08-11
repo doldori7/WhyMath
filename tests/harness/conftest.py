@@ -69,3 +69,29 @@ def bare_remote(tmp_path: Path):
         return path
 
     return bare, clone
+
+
+@pytest.fixture
+def shallow_clone(bare_remote, tmp_path: Path):
+    """shallow 클론 생성 헬퍼 — 트렁크 히스토리가 잘린 상태 재현(2026-08-11 사고).
+
+    ⚠ **로컬 *경로* 클론은 git이 `--depth`를 무시한다**(`warning: --depth is ignored in
+    local clones` — hardlink 클론이 만들어진다). 반드시 `file://` URL을 써야 한다.
+
+    픽스처가 스스로 `--is-shallow-repository == true`를 assert하는 이유: 조용히
+    non-shallow가 만들어지면 이 축의 테스트가 전부 *공허하게 통과*한다 — 정확히 이
+    수정이 고치려는 결함(측정 실패와 통과가 같은 색)의 재발이다.
+    """
+    bare, _clone = bare_remote
+
+    def make(name: str = "shallow-session", depth: int = 1) -> Path:
+        path = tmp_path / name
+        _run_git("clone", "--depth", str(depth), f"file://{bare}", str(path), cwd=tmp_path)
+        _run_git("config", "user.email", "test@whymath.local", cwd=path)
+        _run_git("config", "user.name", "harness-test", cwd=path)
+        assert (
+            _run_git("rev-parse", "--is-shallow-repository", cwd=path) == "true"
+        ), "픽스처가 shallow 클론을 만들지 못했다 — file:// URL 없이는 --depth가 무시된다"
+        return path
+
+    return make

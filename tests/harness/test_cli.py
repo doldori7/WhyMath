@@ -1649,6 +1649,46 @@ class TestStaleBranchClassificationWiring:
         assert "active_branches" in captured_kwargs, "cmd_brief가 active_branches를 안 넘기면 회귀"
         assert "claude/claimer" in captured_kwargs["active_branches"]
 
+    def test_brief_forwards_scan_message_to_render(self, bare_remote, monkeypatch, capsys):
+        """brief가_스캔_실패_사유를_렌더까지_전달한다
+
+        `remote_claims → cmd_brief → render_brief` 전 구간 배선. 스캐너가 사유를
+        만들어도 호출부가 안 넘기면 화면에는 여전히 사유 없는 "판정 보류"만 뜬다 —
+        "장치 존재 ≠ 배선"(OPS-10). 2026-08-11 shallow 사고의 복구 명령 노출 축.
+        """
+        import remote_claims
+        import report
+
+        _, clone = bare_remote
+        mine = clone("brief-message")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "shallow", message=remote_claims.SHALLOW_PENDING_MESSAGE
+            ),
+        )
+        captured_kwargs: dict = {}
+        original_render = report.render_brief
+
+        def spy(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original_render(*args, **kwargs)
+
+        monkeypatch.setattr(report, "render_brief", spy)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+
+        assert captured_kwargs.get("stale_branch_status") == "shallow"
+        assert "--unshallow" in captured_kwargs.get("stale_branch_message", "")
+        out = capsys.readouterr().out
+        assert "판정 보류" in out
+        assert "--unshallow" in out
+        assert "미해결 장기 미머지 브랜치" not in out
+
 
 class TestBatchBlobParsing:
     """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.

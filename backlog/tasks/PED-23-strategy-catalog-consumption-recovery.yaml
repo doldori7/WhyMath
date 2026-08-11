@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-23-strategy-catalog-consumption-recovery
+title: "고립된 교수전략 카탈로그 소비 배선 회수 ② — select 후보 필터·전략 카드 + mode_guard fail-closed (uqyg79 PED-06·PED-07)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - PED-22-strategy-catalog-canon-recovery
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — uqyg79의 842ed2a5(PED-06 카탈로그 소비 배선: select 학년·난이도 후보 필터 + 프롬프트 전략 카드)·2874e7b0(PED-07 mode_guard 런타임 fail-closed, WH-1 primary 톤필터 직전)가 done인데 main에 미착지다"
+  - "② **현행 정합 판정 선행** — main에는 그 사이 l4/pedagogy/runtime_selector.py(사전 가드)와 mode_guard.py(사후 가드)가 이미 있다. 원 구현을 그대로 얹기 전에 현행 설계와 중복·상충하는지 판정하고, 상충하면 이식 대신 현행 위 재구현을 택한다(S4-14 선례). 판정 근거를 기록한다"
+  - "③ 정본화와 집행 지점을 별항으로 확인 — 카탈로그가 '존재한다'와 '서빙 경로가 실제로 부른다'는 다르다. 소비 좌석이 학생 도달 경로에서 호출되는 지점을 명시하고 실측한다(CLAUDE.md 정본화≠집행)"
+  - "④ 변별력 — 플래그 OFF 시 기존 동작 무변경, ON 시 후보 집합이 실제로 좁혀지는 양방향 대조. 공집합이면 규칙표 원판정 폴백"
+  - "⑤ 검증 재수행 + CI 배선 실재 확인(OPS-03·OPS-10). 판정은 exit code"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/pedagogy/**"
+  - "src/backend/whymath_backend/harness/wh1_*.py"
+  - "tests/backend/l4/**"
+session: null
+notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 uqyg79 head=5dc040b3. 원 태스크 PED-06-catalog-consumption(842ed2a5)·PED-07-mode-guard-wiring(2874e7b0) — main의 PED-06/PED-07과 번호 이중 배정이라 재배정했다."
+updated: 2026-08-11
