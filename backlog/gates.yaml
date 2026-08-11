@@ -1,5 +1,23 @@
 # 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)
 gates:
+  - id: G-backup-offsite-move
+    title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 30
+    evidence: null
+    notes: ""
+  - id: G-backup-restore-rehearsal
+    title: "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 30
+    evidence: null
+    notes: ""
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human
@@ -8,6 +26,15 @@ gates:
     requested: 2026-07-08
     remind_after_days: 14
     evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08 2건·07-10 20건·07-12 42건, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프 — 스탬프는 clear 14시간 전 커밋 fbbcc53에 선존·ARCH-07 적대 검증)·validation success·기계 reject-only·프로덕션 적재 0. Kiki 본인 승인 확인: 2026-07-13 세션 결정(대장 정합까지 선택·AskUserQuestion 기록). arch_audit_2026-07-13_r6 §3 대장 비정합 지적의 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
+    notes: ""
+  - id: G-deploy-environment-approval
+    title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 14
+    evidence: null
     notes: ""
   - id: G-domain-partner
     title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"
