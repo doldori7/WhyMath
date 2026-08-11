@@ -37,13 +37,25 @@ def _jwt_settings() -> Settings:
     return Settings(jwt_secret_key=SecretStr(_JWT_SECRET))
 
 
-def _body(subject: str = "미적분") -> dict[str, object]:
+def _body(
+    subject: str = "미적분",
+    *,
+    source_type: str = "자체생성",
+    review_status: str = "approved",
+) -> dict[str, object]:
+    """POST 본문 — PB-08 공개 노출 계약 기본 통과값(자체생성·approved).
+
+    계약 도입 전에는 `review_status`가 없어 None으로 저장됐고, 지금 기준으로는
+    `is_review_cleared`가 fail-closed로 막아 이어지는 GET이 전부 404가 된다. 노출 차단을
+    *일부러* 만드는 테스트는 인자로 두 축 중 하나를 뒤집는다.
+    """
     return {
-        "source_type": "자체생성",
+        "source_type": source_type,
         "curriculum_version": "2015_REVISION",
         "valid_from_year": 2014,
         "subject": subject,
         "unit_codes": ["CAL-INT-DEF"],
+        "review_status": review_status,
     }
 
 
@@ -221,7 +233,12 @@ def test_problem_patch_delete_roundtrip_on_live_pg(admin_auth: dict[str, str]) -
             assert patched.json()["answer"] == "42"
             assert patched.json()["subject"] == "미적분"  # 기존 필드 보존
 
-            assert client.get(f"/v1/problems/{problem_id}").json()["answer"] == "42"
+            # PB-08: 공개 GET은 정답 축을 리댁션한다 — PATCH 응답(관리자 write 경로)에는 남고
+            # GET 응답에는 None. 값이 실제로 저장됐다는 증거는 바로 위 PATCH 응답이다.
+            got = client.get(f"/v1/problems/{problem_id}")
+            assert got.status_code == 200, got.text
+            assert got.json()["answer"] is None
+            assert got.json()["subject"] == "미적분"
 
             assert client.delete(f"/v1/problems/{problem_id}").status_code == 204
             deleted = True
@@ -260,3 +277,51 @@ def test_problem_get_without_auth_still_public_on_live_pg(admin_auth: dict[str, 
     finally:
         if problem_id is not None:
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))
+
+
+def test_public_catalog_gates_drop_rows_on_live_pg(admin_auth: dict[str, str]) -> None:
+    """PB-08 — 노출 부적격 행이 *실 PG SQL로* 목록·단건에서 실제로 빠진다.
+
+    hermetic 단위테스트(`test_problems.py::TestPublicCatalogExposure`)는 FakeSession이 WHERE를
+    무시하므로 목록의 *SQL 필터링 자체*는 검증하지 못한다(그쪽은 컴파일 SQL 화이트박스 + 행 단위
+    재확인 두 겹으로 본다). 여기서만 실 PG가 WHERE를 실행하므로, 이 테스트가 그 공백을 메운다.
+
+    세 행을 넣고 각각을 축별로 변별한다:
+      - approved·자체생성 → 목록·단건 모두 노출(대조군)
+      - pending·자체생성  → 검수 축 차단(목록 제외 + 단건 404)
+      - approved·평가원   → 저작권 축 차단(목록 제외 + 단건 404)
+    """
+    created: list[str] = []
+    try:
+        with _app_with_jwt_settings() as client:
+            client.headers.update(admin_auth)
+            visible = client.post("/v1/problems", json=_body()).json()["problem_id"]
+            created.append(visible)
+            pending = client.post("/v1/problems", json=_body(review_status="pending")).json()[
+                "problem_id"
+            ]
+            created.append(pending)
+            metadata_only = client.post("/v1/problems", json=_body(source_type="평가원")).json()[
+                "problem_id"
+            ]
+            created.append(metadata_only)
+
+            # ── 목록: SQL WHERE 두 축이 실제로 걸러낸다 ──
+            listed = client.get("/v1/problems?subject=미적분&limit=200")
+            assert listed.status_code == 200, listed.text
+            ids = {item["problem_id"] for item in listed.json()}
+            assert visible in ids
+            assert pending not in ids, "검수 축 SQL 게이트가 pending 행을 못 걸렀다"
+            assert metadata_only not in ids, "저작권 축 SQL 게이트가 평가원 행을 못 걸렀다"
+
+            # ── 단건: 존재하지만 부적격 → 404(존재 여부 미노출) ──
+            assert client.get(f"/v1/problems/{visible}").status_code == 200
+            assert client.get(f"/v1/problems/{pending}").status_code == 404
+            assert client.get(f"/v1/problems/{metadata_only}").status_code == 404
+
+            # ── 하위 리소스도 부모와 함께 닫힌다 ──
+            assert client.get(f"/v1/problems/{pending}/steps").status_code == 404
+            assert client.get(f"/v1/problems/{pending}/relations").status_code == 404
+    finally:
+        for pid in created:
+            asyncio.run(_delete_problem(uuid.UUID(pid)))

@@ -7,6 +7,12 @@ concept 라우터 테스트(test_concepts.py)와 동형. 실제 SQL·필터는 �
 `require_content_admin`을 CONTENT_ADMIN 고정 사용자로 오버라이드해 이 파일의 결선 테스트를
 유지하고(test_concepts.py 패턴 동형), `TestAuthGate`가 오버라이드 없는 실제 인증·인가 회귀
 (401/403)와 GET 무인증 유지를 검증한다.
+
+노출 계약(PB-08): GET 4개는 노출 2축(저작권 `is_exposable`·검수 `is_review_cleared`)을 경유하고
+정답 축 4필드를 리댁션한다. 그래서 이 파일의 표본 `_sample_problem()`은 **approved·자체생성**
+(=노출 적격)이다 — 계약 도입 전에는 `review_status`가 None이라 지금 기준으로는 전부 404가 된다.
+`TestPublicCatalogExposure`가 차단·리댁션을 검증하고, `TestAuthGate`의 GET 3건은 *무인증 유지*
+회귀를 그대로 지킨다(이 태스크는 "누가 보는가"가 아니라 "무엇이 보이는가"만 바꾼다).
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 
 from whymath_backend.api._auth import require_content_admin
@@ -25,7 +32,15 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.enums import Curriculum, RelationType, Role, SourceType, Subject
+from whymath_backend.schema.enums import (
+    Curriculum,
+    RelationType,
+    ReviewStatus,
+    Role,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import DistractorEntry
 from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
 from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
@@ -35,13 +50,19 @@ _ADMIN_USER = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
 
 
 def _valid_schema() -> ProblemSchema:
-    """최소 유효 schema.Problem(자체생성 — 본문 보유 허용)."""
+    """최소 유효 schema.Problem(자체생성 — 본문 보유 허용).
+
+    PB-08 공개 노출 계약을 통과하도록 `review_status=approved`(검수 축)를 명시한다. 출처는
+    `자체생성`이라 저작권 축도 통과한다. 이 값이 없으면(=계약 도입 전 상태) `is_review_cleared`가
+    fail-closed로 막아 GET이 전부 404가 된다.
+    """
     return ProblemSchema(
         source_type=SourceType.자체생성,
         curriculum_version=Curriculum.REVISION_2015,
         valid_from_year=2014,
         subject=Subject.미적분,
         unit_codes=["CAL-INT-DEF"],
+        review_status=ReviewStatus.approved,
     )
 
 
@@ -82,6 +103,8 @@ class FakeSession:
         self.deleted: list[Any] = []
         self.committed = False
         self.rolled_back = False
+        # PB-08: 목록 라우트가 실행에 넘긴 실제 Select 객체(노출 게이트 SQL 화이트박스 검사용).
+        self.executed_stmts: list[Any] = []
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -107,6 +130,7 @@ class FakeSession:
         return self._get_map.get(pk)
 
     async def execute(self, stmt: Any) -> _FakeResult:
+        self.executed_stmts.append(stmt)
         return _FakeResult(self._list_rows)
 
 
@@ -123,7 +147,50 @@ def _client(fake: FakeSession) -> TestClient:
 
 
 def _sample_problem() -> Problem:
+    """노출 적격 표본(자체생성·approved) — PB-08 두 축 모두 통과."""
     return Problem.from_schema(_valid_schema())
+
+
+def _pending_problem() -> Problem:
+    """검수 축 위반 표본 — `review_status=pending`.
+
+    실측 코퍼스의 pending 158건(killer_v0 120·probability_finite_v0 34·v1 4)과 동형이다.
+    저작권 축(자체생성)은 통과하므로 *검수 축만* 단독으로 변별한다.
+    """
+    schema = _valid_schema().model_copy(update={"review_status": ReviewStatus.pending})
+    return Problem.from_schema(schema)
+
+
+def _metadata_only_problem() -> Problem:
+    """저작권 축 위반 표본 — 평가원 출처(본문 미보유·구조 메타 전용).
+
+    `review_status=approved`로 두어 *저작권 축만* 단독으로 변별한다(검수 축은 통과).
+    """
+    return Problem.from_schema(
+        ProblemSchema(
+            source_type=SourceType.평가원,
+            curriculum_version=Curriculum.REVISION_2015,
+            valid_from_year=2014,
+            subject=Subject.미적분,
+            unit_codes=["CAL-INT-DEF"],
+            review_status=ReviewStatus.approved,
+        )
+    )
+
+
+def _answer_bearing_problem() -> Problem:
+    """정답 축 4필드를 모두 채운 노출 적격 표본 — 리댁션 검증용."""
+    schema = _valid_schema().model_copy(
+        update={
+            "answer": "42",
+            "answer_explanation": "적분 구간을 나눠 계산하면 42가 나온다.",
+            "multiple_answers": {"has_multiple": True, "candidates": ["42", "-42"]},
+            "distractor_map": [
+                DistractorEntry(choice_index=1, misconception_id="M-CAL-001", op_code=None)
+            ],
+        }
+    )
+    return Problem.from_schema(schema)
 
 
 def _sample_step(problem_id: uuid.UUID, order: int) -> ProblemStep:
@@ -493,3 +560,131 @@ class TestAuthGate:
         fake = FakeSession(get_map={problem.problem_id: problem})
         resp = self._client_real_auth(fake).get(f"/v1/problems/{problem.problem_id}/steps")
         assert resp.status_code == 200
+
+
+class TestPublicCatalogExposure:
+    """PB-08 — 공개 카탈로그 노출 계약(무엇이 보이는가).
+
+    두 축을 *따로* 변별한다: `_pending_problem()`은 검수 축만, `_metadata_only_problem()`은
+    저작권 축만 위반하므로, 한쪽 게이트만 무력화해도 대응하는 테스트가 red가 된다(두 축을
+    하나로 합치는 회귀도 잡힌다).
+
+    목록 경로의 *실제 SQL 필터링*은 살아있는 Postgres가 필요해 이 sandbox에서는 검증하지
+    못한다(`test_me_review_status_gate.py`가 인정한 것과 같은 한계). 그래서 목록은 두 겹으로
+    본다 — ① 라우터가 실행에 넘긴 Select에 두 조건이 실려 나가는지(컴파일 SQL 화이트박스)
+    ② FakeSession이 where를 무시하고 부적격 행을 그대로 돌려줘도 라우터의 행 단위 재확인
+    (`_public_catalog_row`)이 응답에서 그 행을 실제로 뺐는지(행동 검증).
+    """
+
+    # ── 단건: 두 축 각각 404 ──
+    def test_single_pending_problem_returns_404(self) -> None:
+        """검수 축 — pending은 존재해도 404(존재 여부를 흘리지 않는다)."""
+        problem = _pending_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 404, resp.text
+
+    def test_single_metadata_only_source_returns_404(self) -> None:
+        """저작권 축 — 평가원(본문 미보유)은 approved여도 404."""
+        problem = _metadata_only_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 404, resp.text
+
+    def test_single_approved_own_source_returns_200(self) -> None:
+        """대조군 — 두 축 통과 문항은 그대로 200(게이트가 전부를 막지 않는다)."""
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 200, resp.text
+
+    # ── 목록 ①: 두 조건이 SQL에 실려 나가는가 ──
+    def test_list_sql_carries_both_gates(self) -> None:
+        fake = FakeSession()
+        assert _client(fake).get("/v1/problems").status_code == 200
+        assert len(fake.executed_stmts) == 1
+        compiled = str(
+            fake.executed_stmts[0].compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        # 축① 저작권 — 본문 미보유 출처 3종이 NOT IN에 실려야 한다.
+        assert "NOT IN" in compiled
+        for blocked in ("평가원", "EBS", "교과서"):
+            assert blocked in compiled, compiled
+        # 축② 검수 — approved 등호 조건이 *별도로* 있어야 한다(두 축을 합치지 않는다).
+        assert "review_status" in compiled and "approved" in compiled, compiled
+
+    # ── 목록 ②: 부적격 행이 응답에서 실제로 빠지는가 ──
+    def test_list_drops_pending_and_metadata_only_rows(self) -> None:
+        approved = _sample_problem()
+        fake = FakeSession(
+            list_rows=[_pending_problem(), approved, _metadata_only_problem()],
+        )
+        resp = _client(fake).get("/v1/problems")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert [row["problem_id"] for row in body] == [str(approved.problem_id)]
+
+    # ── 하위 리소스: 부모가 부적격이면 함께 404 ──
+    def test_steps_404_when_parent_pending(self) -> None:
+        problem = _pending_problem()
+        fake = FakeSession(
+            get_map={problem.problem_id: problem},
+            list_rows=[_sample_step(problem.problem_id, 1)],
+        )
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 404, resp.text
+
+    def test_steps_404_when_parent_metadata_only(self) -> None:
+        problem = _metadata_only_problem()
+        fake = FakeSession(
+            get_map={problem.problem_id: problem},
+            list_rows=[_sample_step(problem.problem_id, 1)],
+        )
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 404, resp.text
+
+    def test_relations_404_when_parent_pending(self) -> None:
+        problem = _pending_problem()
+        fake = FakeSession(
+            get_map={problem.problem_id: problem},
+            list_rows=[_sample_relation(problem.problem_id, uuid.uuid4())],
+        )
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/relations")
+        assert resp.status_code == 404, resp.text
+
+    # ── 정답 축 리댁션(결정 동결) ──
+    def test_single_get_redacts_answer_fields(self) -> None:
+        """무인증 공개 GET은 정답 축 4필드를 서버가 None으로 비운다."""
+        problem = _answer_bearing_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        for field in ("answer", "answer_explanation", "multiple_answers", "distractor_map"):
+            assert body[field] is None, f"{field}가 공개 GET 응답에 남아 있다: {body[field]!r}"
+        # 리댁션이 응답 전체를 비우지는 않는다(비정답 필드는 그대로).
+        assert body["subject"] == "미적분"
+
+    def test_list_get_redacts_answer_fields(self) -> None:
+        problem = _answer_bearing_problem()
+        resp = _client(FakeSession(list_rows=[problem])).get("/v1/problems")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body) == 1
+        for field in ("answer", "answer_explanation", "multiple_answers", "distractor_map"):
+            assert body[0][field] is None, f"{field}가 공개 목록 응답에 남아 있다"
+
+    def test_admin_write_path_is_not_redacted(self) -> None:
+        """PATCH(=RequireContentAdmin) 응답은 리댁션 대상이 아니다 — 관리자는 정답을 봐야 한다."""
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}",
+            json={"answer": "42", "answer_explanation": "해설"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["answer"] == "42"
+        assert resp.json()["answer_explanation"] == "해설"
