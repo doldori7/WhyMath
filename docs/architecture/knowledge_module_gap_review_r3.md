@@ -190,7 +190,9 @@ r1은 모듈 8을 "의도적 연기 + 설계 공백"으로 **정확히** 판정�
 | 겹 | 판정 | 처리 |
 |---|---|---|
 | (i) **감사기 사각** — `OPS-22`가 YAML 스펙↔코드 축을 보지 않아, main에 스펙만 있고 구현이 0인 상태가 커밋 시점에 발화하지 않는다 | ⚠️ **진짜 갭 · 유효** | → `OPS-33`. 이 사각이 없었으면 main의 미배선이 잡혔을 것이다 |
-| (ii) **배선분의 미병합 고립** — ⓑⓒⓓ 구현이 657커밋 앞선 고립 브랜치에 갇혀 있다 | ⏸ **기존 추적** | 이미 "Kiki 결정 필요" 목록에 있는 브랜치 — **신규 등재하지 않고 지목만** 한다 |
+| (ii) **배선분의 미병합 고립** — ⓑⓒⓓ 구현이 657커밋 앞선 고립 브랜치에 갇혀 있다 | ⏸ **기존 추적 → 이제 소유자 있음** | **`SOL-01-isolated-solution-path-recovery`**(priority 1·아래 교차 확인) — **신규 등재하지 않고 지목만** 한다 |
+
+**교차 독립 확인(같은 날·다른 세션)**: 이 절을 쓴 직후 main에 병합된 `solution_module_gap_review_r3.md`(#774)가 **같은 고립 브랜치를 독립적으로 실측**하고 `SOL-01`을 priority 1로 등재했다. 그 태스크 acceptance①의 수치는 이 절보다 정밀하다 — 문제의 커밋은 `86212c43`이고 **20파일 2,153줄**(`l3/solution_path.py` 233 · `whs/path_promotion.py` 523 · `db/models/solution_path.py` 93 · alembic `c6d7e8f1a2b4` · 테스트 7파일 998줄)이며, `git merge-base`가 **exit 1(공통 조상 소실)**이라 merge/rebase가 아니라 **이식(re-port)** 이 필요하다. 두 세션이 서로 모른 채 같은 고립을 지목했다는 사실 자체가 §2 G3 교훈("`origin/main`만 보면 미배선과 미병합 고립을 구별할 수 없다")의 **독립 재현**이다. 이 문서는 `SOL-01`의 수치를 정본으로 승계하고 회수 작업을 중복 등재하지 않는다.
 
 **ⓓ에는 추가 위험이 하나 더 있다(이름 충돌 — 고립과 무관하게 main에 실재)**:
 `l3/pedagogy/slot_generator.py:102,123`이 payload에 `"reasoning_type": slot_type`을 넣는데
@@ -198,8 +200,14 @@ r1은 모듈 8을 "의도적 연기 + 설계 공백"으로 **정확히** 판정�
 `ReasoningType` 7종(`DEDUCTION`·`SUBSTITUTION`·`CASE_SPLIT`·`INDUCTION`·`TRANSFORMATION`·
 `HEURISTIC`·`BACKWARD`)과 **교집합이 0**이다. 게다가 `l3/pedagogy/review.py:77`은 이 필드의
 **존재만** 검사하고(`missing_reasoning_type`) 값을 폐쇄 enum에 대조하지 않는다. 즉 고립분이
-병합되면 **같은 이름의 필드가 두 어휘를 담는 상태**가 된다 — 개명·결속은 `S4-09` 소관이며
-`OPS-33`는 이 충돌을 *발화시키는 것*까지만 한다.
+병합되면 **같은 이름의 필드가 두 어휘를 담는 상태**가 된다 — 개명·결속은 `S4-09`(회수는 `SOL-01`)
+소관이며 `OPS-33`은 이 충돌을 *발화시키는 것*까지만 한다.
+
+**`SOL-03`과의 경계**: 같은 날 병합된 `SOL-03`도 `ops/declared_unwired_audit.py`에 축을 신설하며
+(scene DSL 요소 kind) 그 acceptance①이 **`ReasoningType` 실사용 0을 어느 축도 못 잡는 사례로
+독립 지목**했다 — 이 문서 ⓓ와 같은 발견이다. 두 태스크는 축 내용이 달라 중복이 아니지만
+**같은 파일을 건드리므로**(`path_overlap=warn`) `OPS-33` acceptance⑦에 경계를 명시했다:
+축은 서수가 아니라 **이름으로 식별**하고, `ReasoningType` 항목의 분류 소유를 한 곳으로 정한다.
 
 **교훈(이 문서가 남기는 것)**: 존재 렌즈로 4건이 다 "있음"으로 보였고, 도달 렌즈로 보니 "main에
 0"이었고, **미머지 브랜치까지 보니 3건은 이미 구현돼 있었다.** 스펙↔코드 갭을 판정할 때
@@ -398,8 +406,9 @@ ID를 수기로 확정하지 않았다.
 blocked — `l2/reasoning_subgraph.py` 부재를 `test_llm_subgraph_budget_invariant.py`의 **부재 동결
 테스트**가 지킨다) · `PATH-03`(전이 순서 제약 27.0%→69.9% · 학습 경로의 유일한 열린 알고리즘 갭) ·
 `PATH-04`(blocked) · `S4-09`(SolutionPath/SolutionStep 실체화 — G3-ⓑⓒⓓ 구현 소유 + 이름 충돌
-개명 소관) · **`origin/claude/whymath-solution-review-40xspg`**(657커밋 앞선 고립 브랜치 —
-G3-ⓑⓒⓓ 구현 보유 · 병합 결정은 Kiki 대기 항목이며 이 문서는 지목만) ·
+개명 소관) · **`SOL-01`**(고립 브랜치 `claude/whymath-solution-review-40xspg`의 `86212c43`
+20파일 2,153줄 이식 — G3-ⓑⓒⓓ 회수 소유·priority 1·**이 문서는 지목만 하고 회수하지 않는다**) ·
+**`SOL-03`**(같은 감사기 모듈의 다른 축 — `OPS-33` acceptance⑦이 경계 명시) ·
 Phase 5b `formula_refs` 충전 · chunk 임베딩(D1 착지 트리거) · `S3-28`(QA 게이트
 `continue-on-error` 제거 조건 — ci.yml 주석에 만료 조건이 명시된 유예. **대장은 `todo`이나
 미머지 done 마커가 있다** — 브리핑 분류상 "이미 포팅됨" 계열이며 고립 여부 판정은 이 문서 범위 밖) ·

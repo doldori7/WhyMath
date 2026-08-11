@@ -1,6 +1,6 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: OPS-33-yaml-spec-unwired-audit-axis
-title: "선언≠배선 감사기 5번째 축 — YAML 스펙 선언↔코드 구현(main 미배선 4건 발화 + 미병합 고립 구별)"
+title: "선언≠배선 감사기 신규 축(yaml_spec_impl) — YAML 스펙 선언↔코드 구현(main 미배선 4건 발화 + 미병합 고립 구별)"
 track: infra-debt
 stage: S4
 subject: cross
@@ -11,7 +11,8 @@ owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "① 정본화: ops/declared_unwired_audit.py에 축 (e) YAML 스펙↔코드 신설 — schemas/**/*.yaml이 선언한 필드·enum 중 src/ 구현이 0인 것을 열거한다. 기존 4축((a)HTTP 라우트 (b)EventType 생산자↔소비자 (c)Timescale writer↔reader (d)harness/ops CLI↔CI 실행)과 동일 모듈·동일 판정 규약을 쓴다"
+  - "① 정본화: ops/declared_unwired_audit.py에 축 `yaml_spec_impl` 신설 — schemas/**/*.yaml이 선언한 필드·enum 중 src/ 구현이 0인 것을 열거한다. 기존 4축((a)HTTP 라우트 (b)EventType 생산자↔소비자 (c)Timescale writer↔reader (d)harness/ops CLI↔CI 실행)과 동일 모듈·동일 판정 규약을 쓴다. **축 이름으로 식별하고 서수(‘5번째’)로 부르지 않는다** — 아래 ⑦ 경계 참조"
+  - "⑦ SOL-03과의 경계(중복·충돌 회피 · path_overlap=warn): SOL-03(merged·todo·priority 2)도 **같은 파일** ops/declared_unwired_audit.py에 축을 신설하며 스스로를 '5번째 축(scene_element_kinds)'이라 부른다. 두 태스크는 **축 내용이 다르므로 중복이 아니다** — SOL-03은 scene DSL 요소 kind의 실방출을, 이쪽은 YAML 스펙 선언↔코드 구현을 본다. 다만 ①먼저 착지하는 쪽이 서수를 점유하므로 **양쪽 모두 축을 이름으로 식별**하고 ②나중에 착수하는 쪽은 먼저 착지한 축의 등록 구조를 재사용하며(축 목록 상수·_FLOORS·_MANIFEST 관용구) ③SOL-03 acceptance①이 이미 지목한 `schema/enums.py:535 ReasoningType 실사용 0`은 **이쪽 축이 잡는 사례**이므로, 착수 시 어느 축이 그 항목을 분류하는지 한 곳으로 정해 이중 보고를 만들지 않는다"
   - "② 집행 지점: 판정 규약을 새로 만들지 않고 기존 것을 상속한다 — reached / by-design:<사유> / pending-task:<id> / 선언 없음 → unclassified·exit 1. pending-task는 backlog/tasks/<id>.yaml이 실재하고 status != done일 때만 유효한 그랜드파더 만료 계약(ARCH-25 패턴)도 상속해 유예의 조용한 영구화를 차단한다. 새 대장 파일을 만들지 않는다(backlog/가 단일 진실 원천)"
   - "③ 변별력(최우선): knowledge_module_gap_review_r3.md §2 G3이 origin/main 기준으로 실측한 미배선 선언 4건이 축 (e)에서 실제로 발화하는지 양방향 확인한다 — ⓐ CognitiveType.THEOREM(enums.py:603, 개념 437건 전량 cognitive_type=None → 정리 분류 0건) ⓑ Justification.theorem_concept_ids(solution_path.schema.yaml:216, src/ 0건) ⓒ lean_verified(같은 스키마 :205, VerificationTier 실값은 MACHINE_EXHAUSTIVE·MACHINE_SAMPLED 2종뿐) ⓓ ReasoningType 7종(enums.py:535, docstring이 명시한 대상 SolutionStep이 클래스로 부재·ORM reasoning_type 컬럼 0건). 4건 중 하나도 발화하지 않으면 축을 추가한 것이 아니라 위장을 추가한 것이다(2026-07-17 변별력 없는 검증 스텝 금지)"
   - "④ CI 실행 여부 확인: OPS-22가 이미 CI에 배선돼 있으므로 축 추가만으로 돌 것이라 가정하지 않고, 축 (e)를 포함한 감사가 CI에서 실제로 수집·실행되는지 실측한다(OPS-03·OPS-10·OPS-11 — 저장소에 존재함과 돌아감은 다르다). 판정은 exit code로 한다(출력 억제·절단 금지 — 2026-08-09 헌법 항목)"
@@ -22,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/ops/**"
 session: null
-notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G3 — 외부 EOS 틀(모듈 8 정리) 3차 대조 신규 갭. 원인은 OPS-22 감사기가 YAML 스펙↔코드 축을 보지 않는 것 — OPS-25(상수 간접참조 맹점)와 같은 계열의 감사기 정밀도 갭. 존재 렌즈로는 enum·필드·검사가 다 '있음'이라 잡히지 않는다. r3 초판은 이 4건을 '유령 선언'으로 판정했으나 자기 정정: ⓑⓒⓓ 구현이 claude/whymath-solution-review-40xspg에 이미 존재하는 미병합 고립이며 발견 경로는 backlog.py next의 '이미 완료(미머지)' 경고였다. 감사기 축 자체는 유효(그 사각이 없었으면 main 미배선이 커밋 시점에 발화). 번호 경위: 최초 OPS-26 시도는 원격 선점으로 거부→CLI 제안 OPS-29 채택했으나, PR 대기 중 main에 OPS-29-ci-enforcement-declaration-contract(#775)가 먼저 머지돼 validate가 충돌을 잡았다 → 상대가 머지분이라 이쪽을 OPS-33으로 개명(그랜드파더 등재 아님). 병합된 OPS-29(CI 강제 상태 선언)와 관심사는 상보·중복 아님."
+notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G3 — 외부 EOS 틀(모듈 8 정리) 3차 대조 신규 갭. 원인은 OPS-22 감사기가 YAML 스펙↔코드 축을 보지 않는 것 — OPS-25(상수 간접참조 맹점)와 같은 계열의 감사기 정밀도 갭. 존재 렌즈로는 enum·필드·검사가 다 '있음'이라 잡히지 않는다. r3 초판은 이 4건을 '유령 선언'으로 판정했으나 자기 정정: ⓑⓒⓓ 구현이 claude/whymath-solution-review-40xspg에 이미 존재하는 미병합 고립이며 발견 경로는 backlog.py next의 '이미 완료(미머지)' 경고였다. 감사기 축 자체는 유효(그 사각이 없었으면 main 미배선이 커밋 시점에 발화). 번호 경위: 최초 OPS-26 시도는 원격 선점으로 거부→CLI 제안 OPS-29 채택했으나, PR 대기 중 main에 OPS-29-ci-enforcement-declaration-contract(#775)가 먼저 머지돼 validate가 충돌을 잡았다 → 상대가 머지분이라 이쪽을 OPS-33으로 개명(그랜드파더 등재 아님). 병합된 OPS-29(CI 강제 상태 선언)와 관심사는 상보·중복 아님. 2026-08-11 2차 병합에서 SOL-03(#774)이 같은 파일에 scene_element_kinds 축을 신설하며 '5번째 축'을 자칭함이 드러나 acceptance⑦로 경계를 명시하고 제목·①에서 서수 표기를 제거했다(축은 이름으로 식별). SOL-03 acceptance①이 지목한 ReasoningType 실사용 0은 이쪽 축의 사례이므로 분류 소유를 한 곳으로 정할 것."
 updated: 2026-08-11
