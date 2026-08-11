@@ -22,10 +22,26 @@ paths:
   - src/backend/whymath_backend/l3/verify_step.py
   - src/backend/whymath_backend/l3/verify_solution.py
   - src/backend/whymath_backend/l3/symbolic_equivalence.py
+  # 범위 확장(2026-08-11 구현 실측 — scope_drift warn의 지시대로 등재):
+  # solution_set.py = 등식 경로 undecidable 가드 3종(이질 형태·진부분집합·계산 불가)의 분기
+  # 발생 지점 — 라벨을 발생 지점에서 내지 않으면 verify_step에 가드 재검사(병렬 진실)가 생긴다.
+  # event_data_contract.py·api/coach.py = acceptance ④ 측정 좌석(S4-19 동형 additive 병기 +
+  # 분모 동반 INFO 로그 — verify 집계 기존 리포트가 전부 harness/** claim이라 응답 로그 대체).
+  - src/backend/whymath_backend/l3/solution_set.py
+  - src/backend/whymath_backend/schema/event_data_contract.py
+  - src/backend/whymath_backend/api/coach.py
   - src/mobile/lib/features/chat/data/coach_models.dart
   - src/mobile/lib/features/chat/presentation/coach_signal_card.dart
   - tests/backend/l3/test_verify_step.py
+  - tests/backend/l3/test_verify_solution.py
+  - tests/backend/l3/test_solution_set.py
+  - tests/backend/l3/test_symbolic_equivalence.py
+  - tests/backend/api/test_verify.py
+  - tests/backend/api/test_coach.py
+  - tests/backend/schema/test_event_data_contract.py
+  - tests/backend/l5/ocr/test_verify.py
   - src/mobile/test/coach_signal_card_test.dart
+  - src/mobile/test/coach_models_test.dart
 session: claude/whymath-dsl-integration-check-bmjic8
 notes: "docs/architecture/math_engine_gap_review.md §3 D3. 기능 30(수식 검증) 대조 — CAS 축은 초과 충족인데 그 세밀한 판정이 학생에게 도달하기 전에 두 번 접힌다. verify_step docstring이 'CLAUDE.md 확실하지 않으면 모른다'를 선언하지만 '모른다'의 종류를 학생이 구분할 수 없으면 그건 정보가 아니다 — 내 표기가 잘못된 것과 이 단계가 원래 계산으로 확인 못 하는 종류인 것은 학생 행동이 정반대인데 같은 문구를 받는다. ocr_controller.dart:71-74의 503·401·422 무변별(NLP-01 ③)에 이은 '사용자 대면 실패의 무변별' 2회차(§6 계열 A) — 두 번 모두 검증 스텝이 아니라 학생 대면 표현에서 재발했다."
 updated: 2026-08-11

@@ -127,7 +127,10 @@ class TestVerifyStep200:
 
 
 class TestVerifyStepExposureContract:
-    """노출 계약 — 응답은 판정만(state·reason·evidence_weight·step_type). 정답/본문 누출 0."""
+    """노출 계약 — 응답은 판정만(state·reason·reason_code·evidence_weight·step_type).
+
+    정답/본문 누출 0. reason_code(MATH-03)는 폐쇄 7종 코드라 누출 표면이 아니다.
+    """
 
     def test_response_field_set(self) -> None:
         resp = _client().post("/v1/verify-step", json={"expr_before": "2+3", "expr_after": "5"})
@@ -135,8 +138,20 @@ class TestVerifyStepExposureContract:
             "state",
             "step_type",
             "reason",
+            "reason_code",
             "evidence_weight",
         }
+
+    def test_reason_code_serialized_as_string(self) -> None:
+        # MATH-03 직렬화 경유 실측 — HTTP 응답까지 코드가 평문 문자열로 온다(rephrase 선례 동형).
+        resp = _client().post("/v1/verify-step", json={"expr_before": "2 +* 3", "expr_after": "5"})
+        body = resp.json()
+        assert body["state"] == "unverifiable"
+        assert body["reason_code"] == "parse_error"
+
+    def test_reason_code_null_on_correct(self) -> None:
+        resp = _client().post("/v1/verify-step", json={"expr_before": "2+3", "expr_after": "5"})
+        assert resp.json()["reason_code"] is None
 
 
 class TestVerifyStepAuth:
@@ -234,7 +249,7 @@ class TestVerifySolution200:
 
 
 class TestVerifySolutionExposureContract:
-    """노출 계약 — 응답은 검증 집계뿐(상태·카운트·비율). 정답/본문 누출 0."""
+    """노출 계약 — 응답은 검증 집계뿐(상태·카운트·비율·폐쇄 사유 코드). 정답/본문 누출 0."""
 
     def test_response_field_set(self) -> None:
         resp = _client().post("/v1/verify-solution", json={"steps": ["2+3", "5"]})
@@ -243,10 +258,29 @@ class TestVerifySolutionExposureContract:
             "n_correct",
             "n_incorrect",
             "n_unverifiable",
+            "unverifiable_by_reason",
             "n_transitions",
             "unverified_ratio",
             "first_incorrect_index",
             "has_incorrect",
+        }
+
+    def test_unverifiable_by_reason_discriminates_over_http(self) -> None:
+        # MATH-03 ⑤ 직렬화 경유 실측 — 표기 문제(parse_error)와 비대수 단계가 HTTP 응답에서
+        # *서로 다른 문자열 키* 카운터로 도착한다(같은 키면 클라 3분기가 성립 불가·red).
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={
+                "steps": ["2+3", "5", "2 +* 3", "5"],
+                "step_types": ["계산", None, "조건해석"],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["n_unverifiable"] == 2
+        assert body["unverifiable_by_reason"] == {
+            "parse_error": 1,
+            "non_algebraic_step": 1,
         }
 
 
