@@ -34,6 +34,14 @@ golden test가 보증한다(`numeric_cases`). 동치 판정(`equivalence_cases`)
 아래는 *공유 계약*(SymPy↔mathjs interop)의 canonical(explicit `*` + caret + ASCII)이 **아니다** —
 계약 canonical은 불변이다. 다만 학생/LLM/OCR의 messy 입력은 *백엔드 진입 시* `l3/symbolic_equivalence.py`
 의 `to_sympy_source`(입력 정규화 단일 권위)가 canonical로 접는다(Part 4 항목4 마감·`math_dsl_part4_ast_review.md`).
+
+> **[2026-08-11 `MATH-01` 정정]** 이 절은 오랫동안 "단일 권위 = `to_sympy_source`"라고만 적었으나,
+> **LaTeX 계층 정규화는 그 함수 안에 없었다** — `\frac`·`\sqrt`·`\cdot` 해체는 L5(OCR)와 Dart에
+> 흩어져 있었고, 그중 학생 제출 경로에 있는 것은 Dart였다(권위가 사실상 클라이언트에 있던 상태).
+> `MATH-01`이 그것을 같은 모듈의 public `latex_to_plain`으로 이관했다. **이제 입력 정규화 단일
+> 권위 = `latex_to_plain`(LaTeX 계층) + `to_sympy_source`(유니코드·전각·그리스 계층)** 이며, 둘은
+> 상류→하류 순서로 이어진다. 클라이언트 구현(Dart)은 원리적으로 남지만(Dart는 Python을 import할
+> 수 없다) *권위*는 하나다 — 그 일치를 §4의 `latex_cases` 3자 골든이 기계로 지킨다.
 mathjs(web 렌더)는 무영향 — 전각/그리스/chained는 py-only 정규화다.
 
 - **implicit multiplication**(`2x`·`(x+1)(x-1)`): `identity_status`가 `parse_expr`(`implicit_multiplication`
@@ -54,7 +62,16 @@ mathjs(web 렌더)는 무영향 — 전각/그리스/chained는 py-only 정규�
 - 단일 fixture `data/notation_contract.json` 을 양 CI가 각자 읽는다(backend `pytest`·web `vitest`).
 - py: `numeric_cases`를 `sympify(...).evalf` 로 평가해 기대값 일치 + `equivalence_cases`를 `verify_step`로 판정.
 - js: `numeric_cases`를 `math.evaluate`로 평가해 기대값 일치 + `**`→`^` 어댑터 1건. (동치 판정 없음.)
-- 새 표기 케이스는 **fixture에만 추가**하면 양측이 자동 검증한다(계약 단일 출처).
+- **`latex_cases`(2026-08-11 `MATH-01` 신설) — 3자 교차 골든**: py는 `latex_to_plain(latex) == plain`
+  (문자열 일치), dart(`src/mobile/test/latex_to_plain_test.dart`)도 같은 문자열 일치, js는
+  `math.evaluate(latexToMath(latex))`가 `value`와 같은지(**수치 일치** — 렌더 전용 경계라 문자열을
+  요구하지 않는다). 세 소비자가 같은 파일을 읽으므로 한쪽 규칙만 바뀌면 반대편이 red가 된다.
+- 세 소비자 모두 **fixture 부재를 skip이 아니라 실패로** 다룬다. py의 `pytest.skip` 흡수는
+  `MATH-01`에서 제거했다 — 모듈 스코프 skip이라 fixture가 사라지면 스위트가 조용히 green이었다.
+- **CI 트리거**: `data/notation_contract.json`은 backend·web·**mobile** 세 잡의 경로 필터에 모두
+  들어 있다(mobile은 `MATH-01`에서 추가 — 그전까지 fixture-only PR이 mobile 잡을 통째로 skip했고,
+  skip은 required check에서 *충족*으로 계상돼 조용했다).
+- 새 표기 케이스는 **fixture에만 추가**하면 세 소비자가 자동 검증한다(계약 단일 출처).
 
 ## 5. 프레젠테이션 계층(speech) 경계 — 이 계약 밖이 설계상 정상 (2026-07-02 명문화)
 

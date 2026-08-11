@@ -17,6 +17,7 @@ canonical/CAS 정규화가 아니다(Part 4 항목4·`math_dsl_part4_ast_review.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from enum import Enum
 
@@ -74,6 +75,155 @@ _GREEK_MAP = {
 # 쓰게 해 "동치 권위 이원화"(risk_register #6) drift를 막는다. 순수 문자 병치(`xy`)는 단일 심볼로
 # 남는다(x*y로 *추정하지 않음* — CLAUDE.md "확실하지 않으면 모른다").
 _PARSE_TRANSFORMS = standard_transformations + (implicit_multiplication, convert_xor)
+
+# ── LaTeX 계층 정규화(`latex_to_plain`) 상수 ─────────────────────────────────
+# 이 블록은 원래 `l5/ocr/verify.py`의 private `_latex_to_sympifiable`에 있었다.
+# `notation_contract.md §3`가 "입력 정규화 단일 권위 = to_sympy_source"라고 선언했는데
+# 정작 LaTeX 계층은 그 함수 밖
+# (L5·OCR 스코프)에 있었고, 학생 제출 경로의 같은 변환은 Dart에 따로 있었다 — 권위가 사실상
+# 클라이언트에 있던 상태다(MATH-01 D1). 여기로 옮겨 선언과 코드의 불일치를 코드 쪽에서 닫는다.
+
+# `\frac(a)(b)` → `((a)/(b))`. 중괄호를 괄호로 바꾼 *뒤* 매칭한다. 인자 내 중첩 괄호는 다루지
+# 않는다(`[^()]*`) — 1패스라 중첩 분수(`\frac{\frac{1}{2}}{3}`)는 리터럴이 남아 파싱 실패하고
+# 상류가 unverifiable로 보수 처리한다(거짓 판정보다 안전). 웹 mathjs는 6패스라 여기서 갈리며,
+# 이는 MATH-01이 범위 밖으로 둔 유보 항목이다(math_engine_gap_review.md 부록 A).
+_FRAC_RE = re.compile(r"\\frac\s*\(([^()]*)\)\s*\(([^()]*)\)")
+
+# `\sqrt(x)` → `sqrt((x))`. 괄호를 2겹으로 두는 이유는 인자가 식일 때(`\sqrt{x+1}`) 우선순위를
+# 보존하기 위함이다(웹은 렌더 전용이라 1겹 — 수치가 같으므로 계약은 수치로 교차검증한다).
+_SQRT_RE = re.compile(r"\\sqrt\s*\(([^()]*)\)")
+
+# `\displaylines{...}`·`\begin{env}...\end{env}` 껍데기 — 래퍼만 벗기고 행 구분자 `\\`는 **남긴다**.
+# 행 분해(str→list[str])는 `NLP-03`의 축이고 이 모듈은 표기 정규화(str→str)만 한다(MATH-01 ⑥-d).
+_DISPLAYLINES_MARKER = r"\displaylines"
+_ENVIRONMENT_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\\begin\{[a-zA-Z*]+\}(\{[^{}]*\})?"),
+    re.compile(r"\\end\{[a-zA-Z*]+\}"),
+)
+
+# 명시 연산자·구획 명령 — 값이 명시 기호(`*`·`/`·빈문자)라 **뒤따르는 공백 1개를 함께 삼켜도**
+# 안전하다(`2\times x`→`2*x`). LaTeX 제어어의 공백 삼킴 관례와도 일치한다.
+_OPERATOR_COMMANDS: tuple[tuple[str, str], ...] = (
+    (r"\left", ""),
+    (r"\right", ""),
+    (r"\cdot", "*"),
+    (r"\times", "*"),
+    (r"\div", "/"),
+)
+
+# 식별자·관계로 바뀌는 명령 — 뒤 공백을 삼키면 토큰이 병합돼(`\pi r`→`pir`=단일 심볼) 의미가
+# 깨지므로 **공백을 보존**한다. 관계 연산자(`\leq` 등)는 이전엔 py가 아예 처리하지 않아 원문
+# 백슬래시가 남고 파싱이 실패 → OCR 신뢰도가 잘못 강등됐다(MATH-01 ① 실측 결함).
+_SYMBOL_COMMANDS: tuple[tuple[str, str], ...] = (
+    (r"\displaystyle", ""),
+    (r"\pi", "pi"),
+    (r"\leq", "<="),
+    (r"\le", "<="),
+    (r"\geq", ">="),
+    (r"\ge", ">="),
+    (r"\neq", "!="),
+    (r"\ne", "!="),
+)
+
+# 간격 매크로·정렬 기호 — 표기에 의미 없음(제거 또는 공백). 제어어 경계 검사가 필요 없는
+# 리터럴 치환이다(뒤가 알파벳일 수 없는 형태).
+_SPACING_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (r"\quad", " "),
+    (r"\qquad", " "),
+    (r"\,", ""),
+    (r"\;", ""),
+    (r"\:", ""),
+    (r"\!", ""),
+    ("\\ ", " "),
+    ("~", " "),
+    ("&", ""),
+)
+
+# 다중 공백 접기 — 단일 공백은 보존한다(식별자 병합 방지).
+_MULTI_SPACE_RE = re.compile(r" +")
+
+# 제어어 경계 `(?![A-Za-z])` — 부분매치 오염 방지. 경계가 없으면 `\right`가 `\rightarrow`의
+# 앞부분에 매칭돼 `a \rightarrow b`가 `a arrow b`로 오염된다(MATH-01 ① 실측 결함이자 정렬 대상).
+# 이 경계 덕에 `\le`가 `\left`·`\leq` 안에서 오탐되지 않아 **치환 순서에 의존하지 않는다**.
+# Dart `_commandPattern`과 같은 규칙이다.
+_COMMAND_BOUNDARY = r"(?![A-Za-z])"
+# 연산자는 뒤 공백 1개까지 삼키고(` ?`), 기호·관계는 공백을 보존한다 — 위 두 상수 블록의 주석이
+# 그 비대칭의 이유다. 모듈 임포트 시 1회만 컴파일한다.
+_OPERATOR_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(re.escape(cmd) + _COMMAND_BOUNDARY + " ?"), repl)
+    for cmd, repl in _OPERATOR_COMMANDS
+)
+_SYMBOL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(re.escape(cmd) + _COMMAND_BOUNDARY), repl) for cmd, repl in _SYMBOL_COMMANDS
+)
+
+
+def _extract_balanced_braces(s: str, open_idx: int) -> str | None:
+    """[open_idx]의 여는 `{`부터 짝이 맞는 `}`까지 안쪽 내용 — 불균형이면 None(원문 보존).
+
+    Dart `_extractBalancedBraces` 미러. 중첩 중괄호를 세므로 `\\displaylines{a{b}c}`도 올바로
+    벗긴다.
+    """
+    depth = 0
+    for i in range(open_idx, len(s)):
+        if s[i] == "{":
+            depth += 1
+        elif s[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return s[open_idx + 1 : i]
+    return None
+
+
+def latex_to_plain(latex: str) -> str:
+    """LaTeX을 평문 수식 표기로 되돌린다 — LaTeX 계층 정규화 단일 권위(순수·결정론·LLM 0).
+
+    `to_sympy_source`의 **상류**다: 이 함수가 LaTeX 매크로를 평문으로 접고, `to_sympy_source`가
+    그 결과의 유니코드·전각·그리스를 접는다. 둘을 합친 것이 "입력 정규화 단일 권위"다.
+
+    **절차(Dart `latexToPlainSolution`과 동일 규칙 — `data/notation_contract.json` `latex_cases`가
+    두 구현의 산출 일치를 골든으로 동결한다)**:
+      1. `strip()`.
+      2. `\\displaylines{...}` 래퍼 해체(균형 중괄호 스캔) — 행 구분자 `\\\\`는 **남긴다**
+         (NLP-03 축).
+      3. `\\begin{env}`·`\\end{env}` 환경 껍데기 제거.
+      4. 중괄호 → 괄호 — `x^{2}`→`x^(2)`로 **caret과 그룹을 보존**한다. 캐럿 없는 지수(`x2`)를
+         절대 만들지 않는다(수열 표기 `a1`과 모호해 상류가 unverifiable로 떨군다).
+      5. `\\frac`·`\\sqrt` 환원(중괄호 치환 후·각 1패스).
+      6. 연산자 명령 치환 — 경계 검사 + 뒤 공백 1개 삼킴.
+      7. 기호·관계 명령 치환 — 경계 검사만(뒤 공백 보존).
+      8. 간격 매크로·정렬 기호 제거 → 다중 공백 접기 → `strip()`.
+
+    caret(`^`)은 건드리지 않는다 — `_PARSE_TRANSFORMS`의 `convert_xor`가 거듭제곱으로 해석한다.
+    표기(notation) 변환일 뿐 **수학 의미 판정이 아니다**(동치·정오는 `identity_status` 권위).
+    """
+    s = latex.strip()
+    # 2) `\displaylines{...}` 래퍼 해체 — 래퍼 밖 텍스트는 버린다(래퍼 전체가 곧 풀이).
+    idx = s.find(_DISPLAYLINES_MARKER)
+    if idx >= 0:
+        brace_start = s.find("{", idx)
+        if brace_start >= 0:
+            inner = _extract_balanced_braces(s, brace_start)
+            if inner is not None:
+                s = inner
+    # 3) 환경 껍데기 제거.
+    for env_re in _ENVIRONMENT_RES:
+        s = env_re.sub("", s)
+    # 4) 중괄호 → 괄호 (caret 보존).
+    s = s.replace("{", "(").replace("}", ")")
+    # 5) 분수·근호 환원.
+    s = _FRAC_RE.sub(r"((\1)/(\2))", s)
+    s = _SQRT_RE.sub(r"sqrt((\1))", s)
+    # 6) 연산자 명령 — 경계 + 뒤 공백 1개 삼킴.
+    for pattern, repl in _OPERATOR_RES:
+        s = pattern.sub(repl, s)
+    # 7) 기호·관계 명령 — 경계만(공백 보존).
+    for pattern, repl in _SYMBOL_RES:
+        s = pattern.sub(repl, s)
+    # 8) 간격 매크로 제거 → 공백 접기.
+    for token, repl in _SPACING_REPLACEMENTS:
+        s = s.replace(token, repl)
+    return _MULTI_SPACE_RE.sub(" ", s).strip()
 
 
 def _parse(src: str) -> sympy.Expr:
@@ -214,6 +364,7 @@ def verify_relation_chain(src: str) -> IdentityVerdict:
 __all__ = [
     "IdentityVerdict",
     "identity_status",
+    "latex_to_plain",
     "split_relation_chain",
     "to_sympy_source",
     "verify_relation_chain",
