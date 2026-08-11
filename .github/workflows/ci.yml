@@ -94,7 +94,12 @@ jobs:
           # schemas/(공유 엔티티·계약 명세) 변경은 클라이언트(mobile/web) 잡도 트리거 —
           # 교차영역 계약 드리프트 방어(2026-07-21 정합성 검토: backend-only PR에서 클라
           # 잡이 skip돼 계약 변경이 클라 기대를 깨도 통과 가능했던 사각 보완).
-          if printf '%s\n' "$files" | grep -qE '^(src/mobile/|schemas/|\.github/workflows/ci\.yml$)'; then
+          # data/*_contract.json 4종은 src/mobile/test/의 Dart 골든이 File('../../data/...')로
+          # 직접 읽는 fixture다 — 필터에 없으면 fixture만 고친 PR에서 mobile 잡이 통째 skip돼
+          # **이미 착륙한 계약 골든이 집행되지 않는다**(MATH-01 ④ 실측: notation=이번 편입,
+          # segmentation=NLP-03, scene=MOB-14, render=VIZ-02 골든이 각각 미집행 상태였다).
+          # skip은 red도 green도 아니지만 required check에서는 충족으로 계상돼 조용하다.
+          if printf '%s\n' "$files" | grep -qE '^(src/mobile/|schemas/|data/notation_contract\.json$|data/segmentation_contract\.json$|data/scene_contract\.json$|data/render_contract\.json$|\.github/workflows/ci\.yml$)'; then
             mo=true
           fi
           # web도 backend와 **같은 접두 패턴**을 쓴다(COLLAB-04). 오늘 web 골든이 실제로 읽는

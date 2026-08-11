@@ -337,6 +337,52 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·/drive·MATH-01): **표기 정규화 권위 단일화 — LaTeX 계층을 L5→L3로 이관하고 py를 dart 규칙집합에 정렬. py 실결함 2건 해소 + 3자 교차 골든(py/js/dart) + mobile CI 필터 구멍 4건 봉인** (claude 구현, Kiki `/drive`)
+
+**착수 가설 반증**: 태스크 acceptance ①은 "불일치 0이면 이 태스크는 과잉"이라는 탈출구를 달고
+있었다. 26개 LaTeX 입력을 세 구현에 실제로 통과시키니 **3자 완전 일치는 4건뿐**이었다. 사본이
+아니라 서로 다른 규칙 엔진 3개다.
+
+**핵심 설계 판단 — ③이 ②에 의존한다(Kiki 확정)**: 계약 `latex_cases`가 조건 분기 없이 단일
+`plain` 필드를 가지려면 py·dart가 같은 canonical을 내야 한다. 그런데 둘은 `\leq`·`\displaystyle`·
+간격매크로·`&`에서 갈렸다(dart만 처리). 그래서 이관은 "옮기기"로 끝날 수 없고 **py를 dart
+규칙집합에 정렬**해야 계약이 성립한다. 이 정렬이 py의 **순수 결함 2건**을 함께 닫았다:
+①제어어 경계 검사 부재로 `a \rightarrow b` → `a arrow b` 오염 ②`\leq`·`\geq`·`\neq` 미처리로
+부등식 인식 결과의 OCR 신뢰도가 **항상** 강등. 이관 후 py·dart 18/18 일치 실측.
+
+**권위 서술 정정**: `notation_contract.md §3`의 "입력 정규화 단일 권위 = `to_sympy_source`"는
+**실제보다 넓은 선언**이었다(LaTeX 계층이 그 함수 밖에 있었고, 학생 제출 경로의 그 변환은 Dart
+단독이었다). 이제 **`latex_to_plain`(LaTeX 계층) + `to_sympy_source`(유니코드 계층)** 가 그
+권위이며 상류→하류로 이어진다. 구현 3벌은 원리적으로 남지만(Dart는 Python을 import 못 한다)
+*권위*는 하나다 — 일치는 `latex_cases` 3자 골든이 기계로 지킨다.
+
+**웹 경계 유지**: 웹은 문자열 일치를 요구받지 않는다(렌더 전용). 자신의 `latexToMath` 산출이
+계약 `value`로 평가되는지만 본다 — `\sqrt`는 웹 1겹·백엔드 2겹이지만 수치가 같다. 웹의 `\div`
+미처리·`\leq` 부분매치(`x<=q*5`)는 **실측 확인된 웹 버그**지만 렌더 전용 경로라 이번 범위 밖으로
+두고, 해당 케이스에 수치 필드를 주지 않는 방식으로 격리했다(고치면 필드를 붙이는 것이 회귀 방지).
+
+**CI 필터 구멍은 3건이 아니라 4건이었다**: 백로그 ④가 적은 `notation`·`segmentation`·`scene`에
+더해 `render_contract.json`도 mobile 필터에 없었다(`scene_render_contract_test.dart`가 읽는다).
+네 계약 모두 **이미 착륙한 Dart 골든이 미집행 상태**였다 — skip은 red도 green도 아니면서 required
+check에서 **충족으로 계상**되므로 조용하다. 판정 기준을 한 단계 더 민다: "게이트가 도는가" →
+"근거가 실재하는가"(`MATH-02`) → **"트리거 경로가 그 게이트가 지키는 파일을 덮는가"**.
+
+**skip 함정 제거**: `test_notation_contract.py`의 `pytest.skip`(모듈 스코프·`# pragma: no cover`)을
+실패로 바꿨다. fixture가 사라지면 *모듈 전체*가 조용히 사라지는 구조였다 — 계약 골든의 존재
+이유를 정면으로 거스른다. 이제 py·js·dart 셋 다 부재를 실패로 다룬다.
+
+**NOT**: 중첩 `\frac` 1패스 한계는 **고치지 않았다**(Kiki 범위 제외) — 학생이 중첩 분수를 쓰면
+`unverifiable`이 되는 실동작임을 §8 대장에 기록하고 발화 조건(`MATH-03`의 `parse_error` 분포)을
+달았다. 3벌을 1벌로 줄이지 않았고, `parse_check_latex`의 bool 계약·`_PARSE_TRANSFORMS`의 보수
+선택(`implicit_multiplication`만)·`to_sympy_source` 5단계 순서는 모두 불변으로 뒀다.
+
+**환경 실측(재발방지 가치)**: 이 컨테이너는 백엔드 의존이 전무했고 python도 3.11(프로젝트는
+`>=3.12`)이었다. `command -v pytest`는 **실패 상태에서도 성공**한다(uv 도구로 따로 깔려 있어서) —
+변별력 있는 자가검증은 `pytest --collect-only`의 EXIT(2→0 전환)였다. 또 명시 경로 인자로 pytest를
+부르면 `asyncio_mode="auto"`가 적용되지 않아 async 테스트가 무더기 실패한다(`pyproject.toml:98`이
+이미 자인한 로컬 전용 현상) — **CI가 쓰는 bare `pytest`를 그대로 재현**해야 판정이 성립한다.
+
+정본: `docs/architecture/math_engine_gap_review.md` §8(드리프트 대장) · `notation_contract.md` §3·§4.
 ### 2026-08-11 (점검·문제은행 R3): **외부 EOS 틀 기능 18~22 **3차 대조** — R2가 연 축은 전부 닫혔고(7건 중 4해소·3건은 설계 갭 아님), 진짜 갭은 시야 밖에 있었다: 저작 11,446문(코퍼스 30종·main의 4.3배)이 PR 없는 브랜치에 고립 — **미병합 고립 4회차·규모 최대**. 신규 등재 `PB-06`~`PB-10` 5건, 정본 stale 5곳 정정** (claude 점검, Kiki "05. 문제은행 빠진 부분 점검·설계")
 
 **문서**: `docs/architecture/problem_bank_gap_review_r3.md`(1·2차는 덮어쓰지 않음 — 시리즈 관례).

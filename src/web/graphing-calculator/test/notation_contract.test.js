@@ -16,6 +16,7 @@ import * as math from "mathjs";
 import { describe, expect, it } from "vitest";
 
 import { graph2dSpecToState } from "../src/lib/graph2dSpec";
+import { latexToMath } from "../src/lib/mathExpr";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // test/ → graphing-calculator → web → src → 레포 루트(4단계 상위)/data.
@@ -27,6 +28,29 @@ describe("notation contract — mathjs가 canonical 표기를 기대 수치로 �
   it.each(contract.numeric_cases)("$id: $expr", ({ expr, vars, value, tol }) => {
     const result = math.evaluate(expr, vars);
     expect(result).toBeCloseTo(value, Math.round(-Math.log10(tol ?? 1e-9)));
+  });
+
+  // MATH-01 ③ — LaTeX→평문 3자 교차 골든의 웹 몫.
+  //
+  // 백엔드(l3 latex_to_plain)와 모바일(latexToPlainSolution)은 같은 fixture의 `plain`과 **문자열
+  // 일치**를 단언한다. 웹은 그러지 않는다 — mathjs는 렌더·수치 평가 전용이고 자체 변환 규칙이
+  // 의도적으로 다르기 때문이다(예: `\sqrt{x}`를 웹은 `sqrt(x)`, 백엔드는 `sqrt((x))`로 낸다.
+  // 괄호 겹수는 달라도 값은 같다). 그래서 웹은 **자신의 latexToMath 산출이 계약의 value로
+  // 평가되는지**를 본다. 이 단언이 py의 문자열 골든과 만나 "표기는 달라도 같은 수를 뜻한다"를
+  // 보증한다(notation_contract.md §1 권위 경계 불변).
+  //
+  // `value`가 없는 케이스는 제외한다 — 웹 latexToMath가 아직 못 다루는 토큰(`\div`·`\leq`)이거나
+  // 관계식이라 단일 수치로 평가되지 않는다. 그 목록은 부록 A 드리프트 대장이 소유한다.
+  const numericLatexCases = contract.latex_cases.filter((c) => c.value !== undefined);
+  it.each(numericLatexCases)("latex_case $id: $latex", ({ latex, vars, value, tol }) => {
+    const result = math.evaluate(latexToMath(latex), vars ?? {});
+    expect(result).toBeCloseTo(value, Math.round(-Math.log10(tol ?? 1e-9)));
+  });
+
+  it("계약에 latex_cases가 실재한다 — 블록이 사라지면 위 골든이 조용히 0건이 된다", () => {
+    // it.each는 빈 배열이면 테스트를 0개 만들고 스위트는 green이다 — 침묵 통과 방지 단언.
+    expect(Array.isArray(contract.latex_cases)).toBe(true);
+    expect(numericLatexCases.length).toBeGreaterThan(0);
   });
 
   it("렌더 어댑터 경계: 파이썬식 ** → mathjs ^ 변환(graph2dSpecToState)", () => {

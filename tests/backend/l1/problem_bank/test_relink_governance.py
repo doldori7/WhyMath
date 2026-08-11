@@ -40,8 +40,10 @@ _ATOM_GRAPH = _ROOT / "data" / "corpus" / "atom_graph_v1" / "graph.json"
 _PROBLEM_CORPORA: dict[str, tuple[Path, int]] = {
     "problem_bank_v1": (_ROOT / "data" / "corpus" / "problem_bank_v1" / "problems.jsonl", 6),
     "problem_bank_generated_v0": (
+        # QUAL-02 실중복 은퇴(2026-08-11)로 620→619 — 데모풀 동시노출 쌍의 스켈레톤 측
+        # 1건(wm-skel-92cd1ba2bbf5) 제거. 판정 정본 docs/data/problem_duplicate_disposition_2026-08.md.
         _ROOT / "data" / "corpus" / "problem_bank_generated_v0" / "problems.jsonl",
-        620,
+        619,
     ),
     "problem_bank_rephrased_v0": (
         # S3-12 발문 위생 일괄 적용(rephrased_corpus_hygiene)으로 483→446→443→429 정직 축소 —
@@ -49,8 +51,10 @@ _PROBLEM_CORPORA: dict[str, tuple[Path, int]] = {
         # 지수 서술구 허상 삽입 3건(⑥축 신설) +
         # rotation-1 재검수 발견 신규 3축(괄호 메타 누출·차원 오기술·개념 오치환) 12건 +
         # 어형 붕괴 수기감사 확정 2건(`_KNOWN_DEFECTIVE_SLUGS`) = 14건 추가 탈락.
+        # QUAL-02 실중복 은퇴(2026-08-11)로 429→421 — 무변화 재서술 사본 8건(위생 위반이
+        # 아니라 중복 은퇴). 판정 정본 동상.
         _ROOT / "data" / "corpus" / "problem_bank_rephrased_v0" / "problems.jsonl",
-        429,
+        421,
     ),
     "problem_bank_misconception_mc_v0": (
         # S3-12 rotation-1이 45밴드 중 13개의 concept_src_id(`_TEMPLATE_META`)가 재태깅된
