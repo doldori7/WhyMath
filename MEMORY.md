@@ -337,6 +337,60 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·/drive): **`MATH-02` 표기 지원집합의 근거를 산문→데이터로 승격 — 유령 근거 24건 격리·참조 무결성 검사 신설·NS-02 "포기" 판정. 유령 24건 중 실질 피해는 5건(코퍼스 등장분)이라는 분해가 격리 덕에 드러남** (claude 구현, Kiki `/drive`)
+
+**착수 경위(후보 2건 건너뜀)**: 1순위 `CUR-04`는 02:55에 타 세션(`claude/remaining-track-34zvse`)이
+원격 claim → 착수 금지. 새 1순위 `MATH-01`은 acceptance ⑤가 **py·js·dart 3자 동시 뮤테이션**을
+요구하는데 이 컨테이너에 flutter·dart 부재(node는 있음) — 태스크 자신이 *"한 언어라도 green을
+유지하면 그 언어는 계약을 읽지 않는 것"*이라 경고하므로 2/3 검증 후 done은 취지 위반. **`block`
+처리하지 않고 이번 세션이 claim하지 않는 것으로 처리**했다(block은 전역 상태라 flutter 있는
+세션까지 막는다 — 환경 제약을 태스크 속성으로 오등재하지 않는다).
+
+**문제**: `NS-03` 게이트가 `ci.yml:296`에서 매 PR 돌고 **green**인데, 판정 근거인
+`KATEX_PROVEN_MACROS` **24건**(audit 21 + math_text 3)의 출처 주석이 지목하는 Dart 실증 파일이
+하나도 없었다. `NS-02` 고립의 잔재다. 선례(`OPS-03`·`VIZ-01`·`NLP-01`)가 "만들었는데 안 돈다"
+(증상=부재)라면 이건 **"도는데 근거가 없다"(증상=green)** — green이라 아무도 안 본다.
+
+**착지**: ①5종 부재 exit code 재현(반증 0) ②`_PROVEN_MACRO_EVIDENCE` 매핑 신설·
+`KATEX_PROVEN_MACROS`를 여기서 파생(이중 정의 0)·manifest에 `provenance{claims[6]}` 추가
+③`test_notation_evidence_integrity.py` 8건 신설(이 축 검사 저장소 0건이었음) ④24건 전량
+`unproven` 격리(삭제 0)·지원 파생 제외 ⑤변별력 3단 실측 ⑥NS-02 **포기**.
+
+**가장 값진 수치 — 유령 24 : 실질 피해 5**. 격리 후 게이트를 돌리자 신규 누락이 5건
+(`\sin`·`\log`·`\alpha`·`\beta`·`\theta`, 전부 `formula_graph_v1`)만 나왔다. 나머지 19건은
+코퍼스 미등장이거나 manifest `cases`가 **독립 출처로 지원**하고 있었다(예: `\frac`은 allowlist가
+unproven이어도 cases 때문에 지원에 남는다). **삭제했으면 이 5:19 분해가 보이지 않았다** — ④가
+"삭제가 아니라 격리"를 택한 이유가 사후에 정당화됐다. 5건은 베이스라인에 의식적 수동 계상
+(31→36·항목별 `added_by`/`reason` 병기·자동 갱신 금지 원칙 유지).
+
+**`xfail(strict=True)` 선택 근거**: 근거 실재 검사는 지금 red가 정직한데, `skip`은 "검사가 없는
+것"과 구별되지 않고(침묵 실패) 생 `fail`은 알려진 공백으로 CI를 상시 red로 만들어 경고를
+습관화시킨다(CLAUDE.md "상시 실패하는 fail-open 보호" 항목의 대칭 문제). `strict=True`라 근거가
+생기면 **XPASS로 실패**해 표식 제거를 알린다 — 공백을 숨기지 않으면서 해소도 놓치지 않는 형태.
+
+**전체 스위트가 회귀 1건을 잡았다(부분 스위트 금지 규칙의 실사례)**. 1차 전체 실행에서
+`test_notation_coverage_eval.py::test_real_manifest_derivation` 1건 실패 — 그 테스트가
+`KATEX_PROVEN_MACROS <= support.macros`라는 **옛 계약**을 단언하고 있었고 이 태스크가 그 계약을
+의도적으로 바꿨다. 옛 단언 1개를 ①`proven ⊆ support` ②`(support − manifest_only) ∩ unproven = ∅`
+둘로 나눠 **정밀화**(약화 아님 — 두 번째 축이 옛 단언에 없었다). 신규 테스트만 돌렸을 때는
+green이었으므로 전체를 안 돌렸으면 놓쳤다. **역방향 함정도 있었다**: 수정 후 `tests/backend/l3/`만
+돌리니 130건 red였으나 전부 `test_redis_cache.py` 계열의 격리 실행 민감성이고 전체에선 통과한다
+(연관 확인용 `grep notation`이 `from __future__ import annotations`에 걸린 오탐이었음). **부분
+스위트는 통과·실패 어느 쪽으로도 판정 근거가 아니다.**
+
+**검증(CI 명령 그대로·exit code 판정)**: 전체 스위트 **9,419 passed·304 skipped·1 xfailed**
+(28분 54초·EXIT=0) · ruff 0 · black 0(2건 지적→적용. `-q` 미사용이 값을 함) · mypy --strict
+0(485파일) · lint-imports 0 · 계층 커버리지 전 계층 PASS(api 97.2·l1 87.1·l2 97.8·l3 95.0·l4 95.3) ·
+게이트 EXIT=0 · 대조군 `--control-empty-support` EXIT=1 · provenance_audit 위반 0 ·
+prompt_asset_audit(l3) EXIT=0. **미확인**: 실 PG·Docker 부재로 integration 축(304 skip)은
+검증되지 않았다 — "전체 green"이 "DB 경로 검증됨"을 뜻하지 않는다(`MATH-02`는 DB 무접촉).
+
+**부수 정정 2건**: ⓐ manifest를 `json.dump(indent=2)`로 재작성했다가 원본의 한 줄 압축 배열
+형식이 전부 펼쳐져 **336줄 재포맷 노이즈** 발생 → 되돌리고 외과적 편집으로 18줄 추가·2줄 수정으로
+축소(리뷰 가림 방지). ⓑ 하네스 `scope_drift` 경고대로 실제 작업 범위 2건을 태스크 `paths`에 추가.
+`path_overlap`(타 세션 `CUR-04`가 `tests/backend/**` 통째 선언)은 내가 좁힐 수 없어 미해소·기록만.
+
+**증적**: `167bc3f1`(본체) · `09e34ff6`(회귀 수정) · `dd91672c`(범위 정합).
 ### 2026-08-11 (회수·증보·학교급/과목 완비 점검): **고립된 과목 축 점검분 회수(미병합 고립 **5회차**) + 1차본이 유보한 **대학 32과목 축** 실측 증보. 최대 발견은 "대학은 뼈대만 있고 연결·문항·검수가 전부 0" — 고등→대학 엣지 **0**·대학 문항 **0/2,638**·대학 내부 481엣지가 같은 과목 479/과목 간 2로 **32개 고립 사슬**. 신규 태스크 등재 **0건**(전부 기존 좌석 승계)** (claude 회수·설계, Kiki "초에서 대학교까지 학교별 과목별 이론 문제 완비 체크")
 
 - **착수 시 발견**: 전날(2026-08-10) 거의 동일한 점검이 이미 수행됐고 `claude/subject-problems-theory-check-7n9n72`에 **미머지 고립**돼 있었다. 더구나 main이 이미 **4곳**에서 그 산출물을 참조 중이었다(`KG-03` notes·`knowledge_module_gap_review_r3.md`·`dsl_integration_gap_review.md`·MEMORY) — 회수는 갭 해소이자 **매달린 참조의 실재화**. Kiki 판단: "회수 후 대학 축 증보" + 과목 축 범위는 **수학 내 과목만**(타 교과는 데이터 0건·`Subject` enum이 타 교과 값 추가를 금지).
