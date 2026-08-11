@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-31-backup-encryption-offsite-schedule
+title: "백업의 미성년 PII 축 — 파일 암호화 미도입·오프사이트 사본 부재·스케줄 자동화 0"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — db_backup_dr_runbook.md §6이 자인한 3종(오프사이트 사본 부재=prod와 같은 디스크 / 백업 파일 자체 암호화 미도입=§4-1에 규칙만 있고 도구 절차 없음 / 스케줄 로그온 의존)과 '스케줄 자동화 코드 0건'(schtasks·crontab·systemd timer 전수 grep 무일치, 사람이 손으로 돌린다)을 먼저 재확인한다. 반증되면 범위를 재조정한다."
+  - "② 백업 파일 암호화 절차 착지 — 규칙(§4-1)만 있는 상태를 실행 가능한 도구 절차로 바꾼다. 덤프에는 미성년 PII가 포함되므로(대화 본문은 앱 계층 암호화이나 이메일·학적·페르소나 등은 평문) 의사결정 우선순위 2위(법적·윤리적 준수) 축이다. scripts/backup/backup_whymath_pg.ps1의 기존 안전장치(demo DB 거부·pg_restore --list 자가검증·최신본 보존)를 유지하며 확장하고, ASCII 전용 규약(cp949 사고)을 지킨다."
+  - "③ 스케줄 자동화 — 로그온 의존(§2 한계)으로 회차가 조용히 누락되는 구조를 고친다. 누락 자체가 관측되게 한다(마지막 성공 백업 시각을 읽을 수 있는 형태) — 조용한 누락을 남기지 않는 것이 요건이다."
+  - "④ 변별력 실측 — 암호화된 백업이 실제로 복호 없이는 읽히지 않는지, 그리고 복호 후 pg_restore --list가 통과하는지를 양방향 실측한다. 암호화했다고 선언만 하고 산출물을 열어보지 않는 검증은 위장이다."
+  - "⑤ 범위 밖 동결 — WAL 아카이빙/PITR은 포함하지 않는다(pg_dump 스냅샷 방식 유지·r3 §4 정직한 공백). 오프사이트 '이동 실행' 자체는 Kiki 소유 물리 행동이라 gates.yaml 게이트로 분리한다."
+artifacts: []
+paths:
+  - "scripts/backup/**"
+  - tests/infra/test_backup_script.py
+  - docs/architecture/db_backup_dr_runbook.md
+session: null
+notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D9-2. OPS-02는 done이나 런북 §6 자인 공백 4종의 백로그 추적이 0건이었다."
+updated: 2026-08-11

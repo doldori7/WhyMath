@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SOL-01-isolated-solution-path-recovery
+title: "고립된 S4-09(SolutionPath/SolutionStep 실체화) 완료분 회수 — 40xspg 브랜치 2,153줄 trunk 이식 + 전체 스위트 재검증"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정(2026-08-11): claude/whymath-solution-review-40xspg의 86212c43이 S4-09 acceptance 전건을 구현했고(20파일 2,153줄 — l3/solution_path.py 233·whs/path_promotion.py 523·db/models/solution_path.py 93·l3/solution_path_store.py 56·alembic c6d7e8f1a2b4·테스트 7파일 998줄) 커밋 메시지가 backend 7,637 passed·infra 258·harness 195·ruff/black/mypy --strict/import-linter green을 증적으로 남겼으나 main에는 해당 파일이 전건 부재하다. git merge-base가 exit 1(공통 조상 소실·trunk 657커밋 앞섬)이므로 merge/rebase가 아니라 **이식(re-port)** 이다 — PB-01(0f143076)·S3-17(00bc2706)·VIZ-06(ddfb130c)·REC-02(4620f747)·S4-18(e71ede5b)이 확립한 회수 패턴을 따른다"
+  - "② 이식 범위: 86212c43의 13개 src + 7개 테스트 파일만. 21e35d28·707c5665의 S4-10 WIP(ApproachType 좌석·l3/multi_solution.py·alembic d7e8f1a2b4c6·프롬프트 정합)는 **범위 밖** — 알려진 실패 1건(같은 문제 2경로 시 solution_paths 헤더 1건만 적재·기대 2)이 미해결이라 S4-10이 처리한다. 이식분이 그 실패 테스트를 끌고 오지 않는지 확인"
+  - "③ 재조정 3곳(이식만으로 성립하지 않는 부분): (a) alembic c6d7e8f1a2b4의 down_revision을 trunk head db8ae6d2d91c로 재연결·단일 head 유지·up/down 대칭 (b) db/schema_version.py의 KNOWN_REVISIONS·EXPECTED_ALEMBIC_HEAD 갱신(SEC-03 규약) (c) trunk 드리프트 흡수 — c3882ab6(S5l Tutoring Adapter·2026-08-06)이 api/problems.py·db/models/problem.py·l4/scene_generation.py·schema/problem.py 4파일을 전부 수정했으므로 충돌 해소를 눈으로 확인한다"
+  - "④ 검증 재수행 필수 — 원 커밋의 7,637 통과 증적을 **승계하지 않는다**(657커밋 드리프트). CI가 실제로 쓰는 명령을 대상 경로·플래그까지 그대로 재실행하고 판정은 **exit code**로 한다(-q·| tail 금지·'; echo EXIT=${PIPESTATUS[0]}' 병기 — 2026-08-09 규칙). 백엔드 소스를 건드리므로 **전체 스위트**를 돌린 뒤 회귀 없음을 말한다 — 못 돌렸으면 '전체는 확인하지 못했다'를 명시하고 CI를 최종 판정으로 넘긴다"
+  - "⑤ 완료 조건: S4-09 status를 main에서 done으로 전이(artifacts에 이식 커밋 증적) + 원 브랜치 claude/whymath-solution-review-40xspg를 정리 대상으로 기록. 뮤테이션 검증을 한다면 원복은 cp 백업으로만 한다(git checkout --/restore/stash 금지 — 2026-08-10 OPS-24 규칙)"
+  - "⑥ 범위 밖: S4-10~S4-12 착수·S4-09 acceptance 수정·신규 학생 대면 노출(이식분은 기존 표면 소생만·GET /v1/problems/{id}/steps 실데이터와 learning_scene 댕글링 해소). step_panel 서버 생산자 배선은 SOL-02"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/whs/**"
+  - "src/backend/whymath_backend/db/**"
+  - src/backend/whymath_backend/api/problems.py
+  - src/backend/whymath_backend/l4/scene_generation.py
+  - "src/backend/alembic/**"
+session: null
+notes: "docs/architecture/solution_module_gap_review_r3.md §4 R1. 미병합 고립 4회차(PB-02 그랜드파더 만료 계약의 사각 — 고립분 done이 고립 브랜치 YAML에만 기록돼 main 대장은 todo로 보였다)."
+updated: 2026-08-11
