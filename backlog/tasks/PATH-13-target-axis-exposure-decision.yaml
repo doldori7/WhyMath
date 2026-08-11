@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-13-target-axis-exposure-decision
+title: "목표축 학생 노출 판정·집행 — days_until_exam(D-day)이 카운트다운 금지 불변식과 충돌하는데 결정이 아니라 방치 상태"
+track: math-completion
+stage: S4
+subject: math
+layer: mobile
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①현행 실측 고정 — GET /v1/me/target-progress의 클라 소비 0건 + 불변식 충돌(days_until_exam vs 카운트다운 금지)이 코드·문서·대장 어디에도 결정으로 적혀 있지 않음을 재현한다"
+  - "②본체(커버리지만 노출 — Kiki 확정 2026-08-11) — Me 탭에 standard_coverage_percent/observed/scope만 렌더한다. school_type이 None이라 세 필드가 전부 None인 경우를 0%로 위장하지 않고 '아직 스코프를 정할 수 없음'으로 정직하게 구분한다"
+  - "③미노출 동결 — days_until_exam·target_grade·target_score 세 숫자가 위젯 트리에 부재함을 테스트로 동결한다(전역 UI 불변식 2 카운트다운 금지 + 점수 서열화 금지). 값을 렌더하면 red가 나는 변별력 양방향 실측"
+  - "④어조 — 커버리지 문구는 학생의 결손·부족을 고발하지 않고 관측 범위와 성장을 서술한다. 말하는 대상은 데이터이지 학생이 아니다(CLAUDE.md 부정적 피드백 강화 금지)"
+  - "⑤표면 구분 명시 — 이 노출은 PED-08 GET /v1/me/growth-evidence(WH-1 대리 지표 9종)와 다른 표면(성취기준 커버리지)임을 확인하고, 노출 계약 중복·우회 표면을 신설하지 않음을 리뷰 게이트로 확인한다"
+  - "⑥범위 밖 명시 — 점수·등급 예측(ASM-07 봉인) · 학교/모의고사 일정 · 하루 학습 가능 시간·요일별 학습량(v1 §2-②③ 영구 미채택) · 복습 섹션(PATH-12 소관)은 이 태스크 범위 밖"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/profile/**"
+  - "src/mobile/test/governance/**"
+  - "src/mobile/test/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review_r3.md §3 D8. 1차 산출물은 화면이 아니라 결정이다 — 틀의 기능 57('남은 기간 45일'·'목표 90점')을 의도적으로 거절하면서 '목표 대비 어디까지 왔나'만 답한다. 근거: docs/design/ui/00_index.md:43 전역 UI 불변식 2 + 기계 게이트 src/mobile/test/governance/anti_gamification_governance_test.dart + me_screen.dart:13 자체 선언. 전면 미노출을 택하지 않은 이유는 커버리지가 카운트다운·서열화 축이 아니기 때문."
+updated: 2026-08-11

@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-16-coaching-time-goal-axis-reach
+title: "코칭 시간축·목표축 학생 도달 — review-queue·D-day 첫 클라이언트 호출자(서버 신규 0)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 첫 호출자 — Flutter가 GET /v1/me/review-queue(api/me.py:1429-1431)와 목표 좌석(api/me.py:1458 target_exam_date/target_grade/target_score 첫 조회)을 실제 호출·렌더한다. 현재 src/mobile/lib 전체에서 review-queue grep 0건이고 호출하는 /v1/me/*는 next-problem·diagnosis/concepts·weak-concepts/{id}/learning-path 3종뿐(problems_api.dart:30,54,72). 서버 신규·스키마 변경 0 — 순수 도달 배선"
+  - "② 호출 0건 상태로 되돌아가면 red가 되는 회귀 가드 — 도달이 다시 무증상으로 사라지지 않게(PED-15가 정확히 그렇게 생겼다)"
+  - "③ 압박 금지 승계 — ai_tutor v1 §2-③(게임화)·§2-⑧(학생 대면 점수·등급 예측 금지) + anti_gamification_governance_test.dart. 연속일수 0 · '며칠 만이에요'류 공백 환기 문구 0 · 점수·등급 예측 0 · 비교·서열·순위 파생 0. D-day는 사실 표기, 목표는 성취기준 커버리지 %로만"
+  - "④ 정직 신호를 화면이 삼키지 않는다 — 서버가 내리는 calibrated=false·decay_model='bkt_p_forget'을 UI가 조용히 버리면 '보정된 예측'으로 오독된다. 미보정임이 학생에게 읽히는 형태로 표기"
+  - "⑤ 도달 관측 배선 — 호출 도달을 센다(세지 않으면 ②의 가드만으로는 실사용 여부를 모른다)"
+  - "⑥ MOB-11과 경계 분리 확인 — MOB-11은 온보딩 1회 노출 + 마지막 대화 재수화를 소유하고 이 태스크는 복습 큐·D-day 노출이다. 화면·상태 소유가 겹치지 않음을 착수 시 확인하고 겹치면 경계를 먼저 합의"
+  - "⑦ 범위 밖 동결 — 서버 응답 스키마 변경 · 학습계획 엔티티(v1 §4-⑤) · 푸시 알림(MOB-08이 firebase 2종 제거로 전제 소멸) · 차트(fl_chart는 MOB-09로 제거·재도입은 선언↔사용 동시 착지 요구)"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/reports/**"
+  - "src/mobile/lib/features/home/**"
+  - "src/mobile/test/**"
+session: null
+notes: "docs/architecture/ai_tutor_module_gap_review_r2.md §2 G4 · §3 D9 · §6 반복 실수 10회차. S4-18(v1 D5)이 서버에 정확히 착지했으나 클라 호출 0건 — 서버는 답을 계산해 두고 아무도 묻지 않는다. target_exam_date는 onboarding_controller.dart:86에서 쓰기만 하고 되읽지 않는다. 10회차가 7회차(PED-15)보다 나쁜 점: 갭 리뷰가 최대 갭이라 지목하고 설계·구현까지 마친 뒤에 빠졌다 — v1 D5 acceptance 3항이 전부 서버 항목이었고 학생 도달을 묻는 항목이 없었다. acceptance가 서버에서 끝나면 완료도 서버에서 끝난다."
+updated: 2026-08-11

@@ -58,7 +58,8 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from enum import Enum
+from typing import Any, NamedTuple
 
 import sympy
 
@@ -79,10 +80,13 @@ logger = logging.getLogger("whymath.l3.solution_set")
 __all__ = [
     "EquationReading",
     "EquationSolset",
+    "SolsetTransitionDetail",
+    "SolsetUndecidableKind",
     "as_single_equation",
     "equation_solution_set",
     "read_equation_step",
     "roots_enumeration_solset",
+    "solset_transition_detail",
     "solset_transition_status",
     "solution_set_status",
 ]
@@ -227,6 +231,64 @@ def _finite_nonempty_proper_subset(after: EquationSolset, before: EquationSolset
     return all(any(_num_equal(x, y) for y in before.values) for x in after.values)
 
 
+class SolsetUndecidableKind(str, Enum):
+    """해집합 전이 undecidable의 *가드 세부 라벨* 3종 — 발생 지점 단일 진실(MATH-03).
+
+    `solset_transition_status`가 undecidable 하나로 접기 전에 **어느 보수 가드가 발화했는지**의
+    구조 라벨이다 — 판정은 불변(3분기 모두 undecidable 유지)이고 라벨만 노출한다. verify_step이
+    이 라벨을 학생/운영용 `reason_code`(taxonomy)로 사상한다. 호출부에서 가드를 *재검사*해
+    라벨을 재유도하면 이 함수와 병렬 진실이 생기므로(가드 추가 시 조용한 오라벨) 라벨은 여기,
+    분기가 실제로 갈리는 곳에서만 낸다.
+    """
+
+    incomputable_side = "incomputable_side"
+    """한쪽 해집합 계산 불가(None) — 파싱 불가·다변수·비다항·복소·미정·연쇄 미결속."""
+
+    heterogeneous_form = "heterogeneous_form"
+    """ℝ↔유한 이질 형태 — 항등 재작성 ↔ 값 선언 전이는 해집합 보존 의무가 없다(S3-06)."""
+
+    proper_subset = "proper_subset"
+    """유한↔유한 비어있지 않은 진부분집합 — 답 선택↔근 유실이 구조 동일해 구별 불가(S3-08)."""
+
+
+class SolsetTransitionDetail(NamedTuple):
+    """`solset_transition_detail` 반환 — 4상태 verdict + undecidable일 때만 가드 라벨."""
+
+    verdict: IdentityVerdict
+    undecidable_kind: SolsetUndecidableKind | None
+
+
+def solset_transition_detail(
+    before: EquationSolset | None,
+    after: EquationSolset | None,
+) -> SolsetTransitionDetail:
+    """`solset_transition_status`의 세부판 — 같은 판정 + 어느 undecidable 가드였는지(단일 본체).
+
+    판정 기준·가드 순서는 `solset_transition_status` docstring이 정본이다(그쪽이 이 함수에
+    위임). undecidable 3분기(계산 불가·이질 형태·진부분집합)에 각각 `SolsetUndecidableKind`
+    라벨을 붙일 뿐 — 신규 판정 로직 0(MATH-03 라벨링 전용). verdict가 undecidable이면 kind는
+    항상 채워지고, identity/not_identity면 None이다.
+    """
+    if before is None or after is None:
+        # 한쪽이라도 판정 불가 → correct/incorrect로 위장하지 않는다(정직).
+        return SolsetTransitionDetail(
+            IdentityVerdict.undecidable, SolsetUndecidableKind.incomputable_side
+        )
+    if before.all_reals != after.all_reals:
+        # 이질 형태(항등식 ℝ ↔ 값 선언/유한) — 해집합 보존 전제가 성립하지 않음 → 보수(정직).
+        return SolsetTransitionDetail(
+            IdentityVerdict.undecidable, SolsetUndecidableKind.heterogeneous_form
+        )
+    if _solsets_equal(before, after):
+        return SolsetTransitionDetail(IdentityVerdict.identity, None)
+    if _finite_nonempty_proper_subset(after, before):
+        # S3-08: 답 선택(정당)과 근 유실(오류)이 구조 동일 — 기대정답 없이는 구별 불가 → 보수.
+        return SolsetTransitionDetail(
+            IdentityVerdict.undecidable, SolsetUndecidableKind.proper_subset
+        )
+    return SolsetTransitionDetail(IdentityVerdict.not_identity, None)
+
+
 def solset_transition_status(
     before: EquationSolset | None,
     after: EquationSolset | None,
@@ -254,19 +316,11 @@ def solset_transition_status(
     선례)를 이 판정에 문맥으로 주입하면 "선택 = 기대정답과 일치하는 부분집합 → correct / 그 외
     부분집합(기대정답 불일치·근 유실) → incorrect"로 진부분집합 전이의 판정을 복원할 수 있다.
     verify_step은 문맥 없는 순수 primitive이므로 앵커는 선택 인자·상위 배선으로 후속 슬라이스에서.
+
+    구현은 `solset_transition_detail`(가드 라벨 병기·MATH-03)에 위임한다 — 4상태 반환 계약은
+    불변이다(기존 호출부 무영향).
     """
-    if before is None or after is None:
-        # 한쪽이라도 판정 불가 → correct/incorrect로 위장하지 않는다(정직).
-        return IdentityVerdict.undecidable
-    if before.all_reals != after.all_reals:
-        # 이질 형태(항등식 ℝ ↔ 값 선언/유한) — 해집합 보존 전제가 성립하지 않음 → 보수(정직).
-        return IdentityVerdict.undecidable
-    if _solsets_equal(before, after):
-        return IdentityVerdict.identity
-    if _finite_nonempty_proper_subset(after, before):
-        # S3-08: 답 선택(정당)과 근 유실(오류)이 구조 동일 — 기대정답 없이는 구별 불가 → 보수.
-        return IdentityVerdict.undecidable
-    return IdentityVerdict.not_identity
+    return solset_transition_detail(before, after).verdict
 
 
 def solution_set_status(before: tuple[str, str], after: tuple[str, str]) -> IdentityVerdict:

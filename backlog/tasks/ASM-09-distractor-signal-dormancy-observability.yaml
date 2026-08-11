@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-09-distractor-signal-dormancy-observability
+title: "오답 선지 오개념 신호 사장 규모 관측 — distractor_map 1,616건 완비 vs 선택 인덱스 포착 슬롯 부재"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정(2026-08-11 r2 §3 D4 재현·주장 확인 또는 반증): MC 선지(choices) 보유 1,616/2,647건(61.1%)·distractor_map 보유 1,616건(동일 집합)·DistractorEntry 스키마(choice_index·misconception_id·op_code) 완비·오개념 카탈로그 참조 무결성 검증 완비(l4/misconception/*). 반면 AttemptSubmitRequest(api/me.py:641-657)에는 선택 인덱스 슬롯이 없고 model_config가 extra='forbid'라 클라가 임의 필드를 실어 보낼 수도 없다 — 즉 61%의 오개념 신호가 원천적으로 미사용. 반증되면 범위 재조정"
+  - "② 정합 설계 본체 — 사장 규모 리포트(신규 스키마 0·마이그레이션 0·엔드포인트 0): ASM-01 harness/assessment_seat_reach_report.py의 DB형 4단 분리(collect_*(AsyncSession 주입·ORM 쿼리빌더만) → build_report(순수) → render_report/report_to_json/dump_json(정렬 고정·sort_keys) → main CLI(exit 0/2·게이트 아님))를 답습한다. 낼 것 = distractor_map 보유 문항 수 · 그 문항들에 대한 실제 시도 수 · **그 시도 중 오개념으로 역추적 가능한 건수**. 마지막 값은 '0건'이 아니라 **'포착 슬롯 부재로 원천 불가(unreachable_no_capture_slot)'**라는 명시 상태로 표기한다 — ASM-01 '생성 경로 부재' 선례. '아무도 안 풀었다'와 '풀었지만 신호를 못 읽었다'가 서로 다른 값이어야 한다"
+  - "③ 교수학 제약 선고정(리포트 단계에서도): 오답을 오개념으로 **단정하지 않는다** — distractor_map은 가설의 근거이지 판정이 아니다. 리포트 어휘도 '오개념 검출'이 아니라 '오개념 가설 역추적 가능성'으로 쓴다. 학생별 오답률·정답률·서열 산출 0(v1 §2-① 게임화 금기 승계)"
+  - "④ 변별력(양방향): distractor_map 보유 문항에 합성 시도를 넣어 분모가 실제로 오르는지 → 제거 시 복원되는지 실측. distractor_map이 없는 문항의 시도는 분모에서 제외되는지도 확인. 뮤테이션 원복은 cp 백업으로만(git checkout/restore/stash 금지 — CLAUDE.md 2026-08-10)"
+  - "⑤ CI 배선 실재 확인: tests/backend/harness/**는 backend 잡 testpaths(src/backend/pyproject.toml)로 기수집됨을 확인하고 신규 워크플로를 만들지 않는다('저장소에 존재함'과 '돌아감'은 다르다 — OPS-03·OPS-10). 오프라인 관측 리포트이므로 declared_unwired_audit 면제 등재가 필요한지 확인하고 필요하면 _OFFLINE_REPORT로 등재한다. 판정은 exit code"
+  - "⑥ 범위 밖(명시): AttemptSubmitRequest에 selected_choice_index 신설·적재·클라 변경·마이그레이션은 **ASM-06 재정의 소관**(이 태스크는 관측 좌석만) · 오개념 가설 갱신 로직 변경 0(기존 misconception_hypothesis 좌석을 신설·분기하지 않는다 — 이중 진실원천 금지) · 오개념 preload 0(reactive retrieval만) · 서버 채점 권위 축은 ASM-08 소관"
+artifacts:
+  - "#797"
+  - "검증(오케스트레이터 독립 재실행·exit code): 신규 테스트 25 passed/1 skipped(3.6s)·ruff 0·black 0(1120파일)·declared_unwired_audit exit 0(공급 57·미분류 0)·리포트 CLI exit 2 정상 분기(DB 부재 컨테이너·예외 타입명 로그). acceptance ① 재실측 1,612/2,638(61.1%) — r2 1,616/2,647 델타 전량 QUAL-02 은퇴로 diff 실측 설명. probe_capture_slot 런타임 조사(ASM-06 착지 시 상태 자동 반전). 전체 스위트는 서브에이전트 백그라운드 + PR #797 CI가 최종 판정"
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+session: null
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D4. v1은 이 축(모듈 57 오답·오개념 분석)을 'NLP-02 선결 조건'으로 승계했으나 그 진단은 틀렸다 — NLP-02가 done이 된 지금도 여전히 불가이고, 막는 것은 채점 권위가 아니라 요청 슬롯의 정수 하나다. 선택 인덱스는 클라이언트만 아는 사실이라 슬롯이 없으면 서버는 영원히 알 수 없다. ASM-06 acceptance ①의 선행 확인('NLP-02 shadow가 MC 인덱스를 포착하는지')은 r2 실측으로 **불충족 확정**됐다."
+updated: 2026-08-11

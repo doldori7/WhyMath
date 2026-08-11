@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-30-coding-e-axis-design-recovery
+title: "iws58k 회수 — 코딩/정보 E축 후보(E7) 설계 문서 + models.py 변경"
+track: subject-expansion
+stage: E1
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 본문 대조(선행) — origin/claude/whymath-coding-architecture-iws58k(head a8e01be2)의 E7 설계·2차 과목 비교 검토가 subject_expansion_e_axis_v1.md 현행과 정합인지 읽고 채택 여부 판정"
+  - "② 채택 시 문서 착지 + scripts/harness/models.py 변경분 판정(하네스 코드이므로 tests/harness 회귀 확인). 기각 시 사유 기록"
+artifacts: []
+paths:
+  - "docs/strategy/**"
+  - scripts/harness/models.py
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A6. subject-expansion 트랙 유일 미회수 설계 산출물. 회수 완료 전 원 브랜치 삭제 금지"
+updated: 2026-08-11

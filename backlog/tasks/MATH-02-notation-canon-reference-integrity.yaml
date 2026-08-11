@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,13 +17,16 @@ acceptance:
   - "④ 회계 정직화: 근거 부재 항목을 삭제하지 않고 status='unproven'으로 격리하고, 지원집합 파생에서 제외한다. 그 결과 늘어난 코퍼스 누락은 의식적 수동 편집으로 data/notation_missing_baseline.json에 계상한다(자동 갱신 금지 원칙 유지). 리포트에 'unproven 출처 파생 심볼 N건'을 별도 줄로 노출한다 — 공백을 숨기지 않고 세는 것이 목표다"
   - "⑤ 변별력: ②의 매핑에서 경로 하나를 실재 파일로 바꾸면 green, 부재 파일로 되돌리면 red가 실측되는지 확인한다. 그리고 이 검사를 현행 코드에 처음 적용하면 즉시 red여야 한다 — 지금 전 항목이 유령이므로 red가 안 나오면 검사 자체가 무변별(위장)이다"
   - "⑥ 범위 밖 명시 + 결정 기록: NS-02(Dart 표기 파이프라인) 본체의 재구현·회수는 이 태스크에 포함하지 않는다. 미병합 브랜치 claude/shadow-data-s3-pilot-nh5kbz의 실재·회수 가능성만 실측하고 '회수' 또는 '포기'를 결정해 기록한다 — 어느 쪽이든 고아 정본 참조는 남기지 않는다. 착륙 발화 조건은 math_engine_gap_review.md §5-②"
-artifacts: []
+artifacts:
+  - "167bc3f1,09e34ff6,dd91672c"
 paths:
   - src/backend/whymath_backend/l3/notation_coverage.py
   - data/notation_support_manifest.json
   - data/notation_missing_baseline.json
   - tests/backend/l3/test_notation_coverage_eval.py
+  - tests/backend/l3/test_notation_evidence_integrity.py
+  - docs/architecture/math_engine_gap_review.md
   - ".github/workflows/ci.yml"
 session: null
 notes: "docs/architecture/math_engine_gap_review.md §3 D2. 기능 29·30 대조 중 발견 — NS-03 게이트가 ci.yml:290에서 실제로 돌고 green인데 지원집합 정본이 지목하는 파일 5종이 전부 부재한다. 원인은 NS-03 notes와 MEMORY.md:1137에 이미 자인: NS-02-notation-canonical-layer가 미병합 브랜치에 고립돼 착륙 못 했고 순수 데이터인 manifest만 회수됐다. 실수의 형태가 선례와 다르다 — OPS-03·VIZ-01·NLP-01은 '만들었는데 안 돈다'(증상=부재)였는데 이건 '도는데 근거가 없다'(증상=green)다. green이라 아무도 안 본다는 점에서 더 조용하다. 판정 기준을 '게이트가 돌아가는가'에서 '게이트가 지목하는 근거가 실재하는가'로 한 단계 더 밀어야 하는 1회차(§6 계열 B)."
-updated: 2026-08-03
+updated: 2026-08-11

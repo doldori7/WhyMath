@@ -268,6 +268,26 @@
 
 **태스크**: `MATH-02-notation-canon-reference-integrity` (stage S3 · priority 2)
 
+#### 착지 기록 (2026-08-11 · `MATH-02` 완료)
+
+D2 판정은 **전건 확인**됐다(반증 0) — 5종 부재를 exit code로 재현했다. 착지 내용과 실측:
+
+| 항목 | 결과 |
+|---|---|
+| 근거의 데이터 승격(②) | `_PROVEN_MACRO_EVIDENCE`(매크로→근거 경로) 신설·`KATEX_PROVEN_MACROS`를 여기서 파생(이중 정의 0). manifest에 `provenance{_note, ns02_disposition, claims[6]}` 추가 |
+| 참조 무결성 검사(③) | `tests/backend/l3/test_notation_evidence_integrity.py` 8건 — 회계 정합 7(상시 green) + 근거 실재 1(`xfail(strict=True)`) |
+| 회계 정직화(④) | allowlist 24건이 `unproven`으로 격리(삭제 0). 그중 **코퍼스에 실제 등장하는 5건**(`\sin`·`\log`·`\alpha`·`\beta`·`\theta`, 전부 `formula_graph_v1`)이 누락으로 드러나 베이스라인에 **수동 계상**(31→36건). 나머지 19건은 코퍼스 미등장이거나 manifest `cases`로 독립 지원 |
+| 변별력(⑤) | 3단 실측 — ⓐ`xfail` 제거 시 근거 부재 5건으로 **red**(EXIT=1) ⓑ근거 경로만 실재 파일로 바꾸면 status 불일치로 **red** ⓒstatus까지 맞추면 **green**. 원복은 `cp` 백업(git 원복 금지 규칙 준수) |
+| NS-02 거취(⑥) | **포기(abandoned)**. `git ls-remote --heads origin '*shadow-data-s3-pilot*'` **0건** — 회수 대상 자체가 원격에 없다. manifest `provenance.ns02_disposition`에 근거·측정일과 함께 기록 |
+
+**남은 것(의도된 red 아님·의도된 xfail)**: `test_all_declared_evidence_files_exist`는 `xfail(strict=True)`
+로 동결돼 있다. `skip`은 검사 부재와 구별되지 않고(침묵 실패), 생 `fail`은 알려진 공백으로 CI를
+상시 red로 만들어 경고를 습관화시킨다. `strict=True`라 **근거가 실제로 생기면 `XPASS`로 실패**해
+표식을 지우라고 알린다 — 공백을 숨기지 않으면서 해소도 놓치지 않는 형태다.
+
+**severity 재확인**: 게이트 자체는 계속 유효하다. 이번 변경으로 지원집합이 좁아졌을 뿐
+측정 기계·래칫·대조군은 그대로이며, `--control-empty-support`가 여전히 EXIT=1로 변별력을 낸다.
+
 ---
 
 ### D3 — 검증 실패가 학생에게 무변별하다 (`MATH-03`)
@@ -457,9 +477,9 @@
 | 위치 | 현재 기술 | 실측 |
 |---|---|---|
 | `notation_contract.md §4` `[→ §7-Δ1]` | *"새 표기 케이스는 fixture에만 추가하면 양측이 자동 검증한다"* | **(2026-08-03 시점) PR에서 거짓.** `ci.yml:71,79,82` 경로 필터에 `data/`가 없어 `data/notation_contract.json`만 고친 PR은 backend·mobile·web 잡을 **전부 skip**한다(main push에서만 참). 2026-07-21 `schemas/` 사각 보완과 같은 구멍이 `data/`에 남았다 → D1-④가 봉인 |
-| `latex_to_plain.dart:13-15` | *"백엔드 `_latex_to_sympifiable`의 치환 규칙을 그대로 미러"* | **부분 거짓.** 미러는 `_FRAC_RE`·`_SQRT_RE`·연산자 치환까지이고, `\leq`·`\neq`·간격 매크로·`\displaylines`는 Dart 고유 확장이다. "미러 + 확장"이 정확한 서술 |
+| `latex_to_plain.dart:13-15` **[MATH-01로 해소]** | *"백엔드 `_latex_to_sympifiable`의 치환 규칙을 그대로 미러"* | **부분 거짓이었다.** 미러는 `_FRAC_RE`·`_SQRT_RE`·연산자 치환까지이고, `\leq`·`\neq`·간격 매크로·`\displaylines`는 Dart 고유 확장이다. "미러 + 확장"이 정확한 서술 |
 | `l3/notation_coverage.py:11-13` | 지원집합 정본 = manifest + *"Dart 위젯 렌더 테스트가 실증한"* allowlist | **실증 파일 5종 전부 부재**(D2) |
-| `symbolic_equivalence.py` / `notation_contract.md §3` | *"입력 정규화 단일 권위 = `to_sympy_source`"* | **LaTeX 계층은 그 안에 없다.** 권위 선언이 실제 커버리지보다 넓다 → D1-②가 코드 쪽에서 닫음 |
+| `symbolic_equivalence.py` / `notation_contract.md §3` **[MATH-01로 해소]** | *"입력 정규화 단일 권위 = `to_sympy_source`"* | **LaTeX 계층이 그 안에 없었다.** 권위 선언이 실제 커버리지보다 넓었다 → `latex_to_plain`을 같은 모듈로 이관해 코드 쪽에서 닫았다(2026-08-11). 이제 두 함수를 합친 것이 그 권위다 |
 | `l3/visualization.py:22` | *"spec 내 함수식 SymPy 검증은 후속"* | 자인은 정확. 다만 **소유 태스크가 어디에도 없었다** → §5-⑤로 `VIZ-03`에 귀속 |
 
 네 번째 항목만 방향이 다르다 — 앞 셋은 *"실제보다 못하다"*고 말하는 조용한 stale인데, `to_sympy_source`
@@ -474,6 +494,54 @@
   `mathExpr.js:12-28`. 중첩 `\frac`(1패스 vs 1패스 vs 6루프) · 암묵 곱셈 삽입(무·무·**유**) ·
   `\div`(유·유·**무**) · `\sqrt`(`sqrt((x))`·`sqrt((x))`·`sqrt(x)`) · `\leq`(무·`<=`·**부분매치
   잠재결함**) · `\operatorname`/`\mathrm`(무·무·유) · `\displaylines`(무·**유**·무)
+  → **`MATH-01` 구현 시 전수 실측·처분 완료. 아래 §8이 그 대장이다.**
+
+---
+
+## §8. 드리프트 대장 — `MATH-01` ① 전수 실측·처분 (2026-08-11 · 구현 시점)
+
+26개 LaTeX 입력을 세 구현에 실제로 통과시킨 결과 **3자 완전 일치는 4건뿐**이었다. 착수 가설
+("불일치 0이면 이 태스크는 과잉")은 **반증**됐다. 각 불일치를 **버그 / 렌더 경계 / 유보** 3분류하고
+처분했다.
+
+### ⓐ 버그 → `MATH-01`이 닫음 (py 정렬)
+
+py에 있던 아래 2건은 렌더 경계가 아니라 **순수 결함**이었고, 학생 판정에 실제로 영향을 줬다.
+
+| 결함 | 증상 | 학생 영향 | 처분 |
+|---|---|---|---|
+| 제어어 경계 검사 부재 | `a \rightarrow b` → **`a arrow b`**(`\right`가 `\rightarrow` 앞부분에 매칭) | 표기 오염 → 파싱 실패 → OCR 신뢰도 오강등 | `_command_re`의 `(?![A-Za-z])` 도입으로 해소 |
+| `\leq`·`\geq`·`\neq` 미처리 | 원문 백슬래시 잔존 → `sympify` 실패 | 부등식을 쓴 인식 결과의 신뢰도가 **항상** 강등 | dart 규칙집합 편입으로 해소 |
+
+부수 정렬(파생 아님·같은 규칙집합에 속함): 간격 매크로(`\,`·`\quad` 등) · `&` · `\displaystyle` ·
+`\displaylines` 래퍼 · `\begin{env}` 껍데기 · 연산자 뒤 공백 삼킴. **이관 후 py·dart 산출이 18/18
+일치**함을 실측했고, `latex_cases` 16건이 그 일치를 골든으로 동결한다.
+
+`_latex_to_sympifiable`에 있던 **dead store 1건**(69행이 계산한 값을 70행이 원문에서 다시 계산해
+덮어씀)도 이관하며 정리했다 — 동작은 같았으나 읽는 사람을 오도한다.
+
+### ⓑ 렌더 경계 → 고치지 않음 (정상 동작)
+
+웹 mathjs는 **렌더·수치 평가 전용**이라 산출 문자열이 백엔드와 다른 것이 정상이다. 그래서 계약도
+웹에는 문자열 일치를 요구하지 않고 **수치 일치**만 요구한다.
+
+| 차이 | 웹 | 백엔드·Dart | 판정 |
+|---|---|---|---|
+| `\sqrt` 괄호 겹수 | `sqrt(x)` | `sqrt((x))` | 수치 동일 — 경계 |
+| 암묵 곱셈 삽입 | `pi*r`·`2*x` | `pi r`·`2 x` | 웹은 mathjs 평가를 위해 삽입, 백엔드는 파싱 단계(`implicit_multiplication`)에서 처리 — 경계 |
+
+### ⓒ 유보 → 대장에만 기록 (이번 범위 밖 · Kiki 확정)
+
+| 항목 | 현상 | 왜 지금 안 고치나 | 발화 조건 |
+|---|---|---|---|
+| **중첩 `\frac` 1패스** | `\frac{\frac{1}{2}}{3}` → py·dart 모두 `\frac` 리터럴 잔존 → 파싱 실패 → **학생이 중첩 분수를 쓰면 `unverifiable`**. 웹만 6패스로 해결 | 파생 확산 방지(범위 봉인). 거짓 판정이 아니라 보수 실패라 안전 쪽으로 틀림 | `MATH-03`의 `parse_error` 실측 분포에서 중첩 분수 비중이 확인될 때 |
+| 웹 `\div` 미처리 | `6\div 2` → `6\div*2` → 평가 실패 | 웹은 렌더 전용이고 그래프 입력에 `\div`가 오는 경로가 아직 없음 | 웹 수식 입력이 `\div`를 받는 경로가 생길 때 |
+| 웹 `\leq` 부분매치 | `x \leq 5` → `x<=q*5` (`\le`가 경계 없이 매칭) | 위와 동일 — 다만 **버그임이 확정**됐으므로 대장에 남긴다 | 위와 동일 |
+| 웹 전용 `\operatorname`·`\mathrm`·`\sin` 해체 | 백엔드·Dart는 미처리 | 백엔드는 함수 병치를 **의도적으로 거부**한다(§2-⑧) — 정렬하면 그 결정을 깬다 | 발화하지 않음(영구) |
+
+> ⓒ의 웹 결함 2건은 `latex_cases`에서 **수치 필드를 주지 않는 방식**으로 격리했다 — 웹이 그
+> 케이스를 수치 검증하지 않는다는 사실이 계약 파일에 드러나 있고(`latex_cases_note`), 고치면
+> 수치 필드를 붙이는 것이 그대로 회귀 방지가 된다.
 - **B. CI 경로 필터** — `.github/workflows/ci.yml:71`(backend) · `:79`(mobile) · `:82`(web) —
   `data/` 부재(실측 확인). `:290` NS-03 게이트 스텝 실재.
 - **C. 유령 정본** — `math_notation.dart`·`notation_canonical_test.dart`·

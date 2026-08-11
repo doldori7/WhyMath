@@ -56,6 +56,10 @@ class VerifyEventData(_EventPayload):
     `n_transitions`는 싣지 않는다 — 세 카운트의 합이 항상 n_transitions와 같음을
     `SolutionVerificationResult`가 보장하므로 재구성 가능하다. `steps`(reason 텍스트)는 절대
     싣지 않는다 — 비식별 정수/비율/인덱스/불리언만(`wh1_shadow.py` 관측 레코드 규약 동형).
+
+    MATH-03(2026-08-11): `unverifiable_by_reason`은 n_unverifiable의 *사유 코드별* 세분
+    (폐쇄 7종 코드 → 건수)이다 — "학생이 실제로 어디서 막히는가"의 첫 실측 데이터이며 S4-19와
+    같은 additive optional 규약(None=구판·비식별 코드/정수만)을 따른다.
     """
 
     passed: bool = Field(..., description="거짓 수치관계 미적발(통과)=True·적발=False")
@@ -84,6 +88,16 @@ class VerifyEventData(_EventPayload):
     n_unverifiable: int | None = Field(
         default=None,
         description="S4-19: unverifiable 전이 수. None=미지정(구판/검증 미실행·기존 동작 불변).",
+    )
+    unverifiable_by_reason: dict[str, int] | None = Field(
+        default=None,
+        description=(
+            "MATH-03: unverifiable 전이의 *사유 코드별* 카운트(키=VerifyStepReasonCode 값·폐쇄 "
+            "7종·값 합=n_unverifiable). None=미지정(구판/검증 미실행·기존 동작 불변)·{}=검증 "
+            "실행·보류 0. 비식별 폐쇄 코드·정수만 — 자유문 reason·steps 미적재(S4-19 규약 동형). "
+            "parse_error 비중이 MATH-01(표기 권위)·자연표기 확장(math_engine_gap_review.md "
+            "§5-③)의 발화 조건 데이터다."
+        ),
     )
     unverified_ratio: float | None = Field(
         default=None,

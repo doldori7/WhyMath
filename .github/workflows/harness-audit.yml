@@ -1,0 +1,80 @@
+# 하네스 대장 자동 감사 — 원격 claim 청소 집행 지점 (HARN-27)
+#
+# 배경: `claims reap --apply`는 **CLI에 존재했지만 그것을 부르는 자동 경로가 저장소
+# 어디에도 없었다**. ci.yml의 harness-integrity 잡은 dry-run만 돌리고 "`--apply`로
+# 청소 권장"이라는 ::warning:: 을 냈을 뿐이다 — 아무도 실행하지 않는 명령을 권하는
+# 상태였고, 그래서 main에서 이미 `done`인 태스크의 claim조차(HARN-20 실측) 영구히
+# 남아 새 세션의 착수를 막았다. CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"·
+# "상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지"에 정면으로 걸린 상태다.
+#
+# **왜 ci.yml이 아니라 별도 워크플로인가** (협상 불가):
+#   · ci.yml의 `harness-integrity`에는 `if:` 가드가 없어 PR 이벤트에서도 돈다. 거기에
+#     apply를 얹으면 "PR에서는 절대 지우지 않는다"가 **조건문 한 줄**에만 의존한다.
+#     이 파일은 `on:`에 `pull_request`가 **아예 없어** 그 보장이 구조적 불가능이 된다.
+#   · 쓰기 권한(`contents: write`)이 이 파일 안에 격리된다. ci.yml 잡은 required status
+#     check 후보라, 거기에 권한 상승을 붙이면 PR 검증 경로가 쓰기 권한을 갖는다.
+#   · ci.yml의 `concurrency: cancel-in-progress: true`가 main push마다 실행 중인 야간
+#     잡을 취소한다 — 청소 작업에는 부적합한 취소 정책이다.
+#
+# 트리거 3경로:
+#   ① push(main) — `done`이 머지되는 **바로 그 순간**이 task_done 잔재가 생기는 시점이다.
+#      가장 짧은 지연으로 그 자리에서 청소한다.
+#   ② 야간 schedule — push가 없는 날에도 branch_gone(홀더 브랜치 소멸)은 발생한다.
+#   ③ workflow_dispatch — 온디맨드.
+#
+# `GITHUB_TOKEN`으로 한 push는 워크플로를 재발화시키지 않으므로 루프가 생기지 않는다.
+# 또 대상은 `harness-claims` 브랜치이지 `main`이 아니라 트리거 조건에도 걸리지 않는다.
+name: harness-audit
+
+on:
+  push:
+    branches: [main]
+  # 야간(KST 03시 = UTC 18시) — ci.yml e2e-nightly와 같은 창.
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 취소 금지 — 청소는 CAS라 직렬 실행이면 충분하고, 중간 취소는 대장을 어중간한
+  # 상태로 남길 이유가 없다(ci.yml의 cancel-in-progress와 반대 선택).
+  group: harness-audit
+  cancel-in-progress: false
+
+jobs:
+  claim-reap:
+    name: 원격 claim 자동 청소 (확정 사유만)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # `harness-claims` 브랜치에 해제 커밋을 push한다. branch-cleanup.yml이 같은
+      # github.token으로 ref *삭제*에 성공한 선례가 있다(삭제는 갱신보다 강한 권한).
+      contents: write
+
+    steps:
+      - name: Checkout
+        # actions/checkout 기본 persist-credentials: true — origin에 토큰이 심겨
+        # `_push_claims`의 `git push origin <sha>:refs/heads/harness-claims`가 통한다.
+        # fetch-depth 기본(1)로 충분하다 — claim 대장은 별도 orphan 브랜치이고
+        # `--force-with-lease=<ref>:<sha>`는 명시적 기대값 형태라 remote-tracking ref를
+        # 요구하지 않는다(얕은 체크아웃에서도 CAS가 성립).
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      # 판정은 exit code로 한다. `-q`·`| tail`로 출력을 죽이거나 잘라서 판정하지 않는다
+      # (CLAUDE.md — 조용한 도구는 실패해도 성공과 같은 화면을 낸다).
+      #
+      # `--auto`는 삭제를 켜되 사유를 `remote_claims.AUTO_REAP_REASONS`
+      # (= task_done · branch_gone)로 좁힌다. 안전 범위가 이 YAML의 문자열이 아니라
+      # 파이썬 상수에 있으므로, 여기를 고쳐서 `ttl`까지 지우게 만들 수 없다.
+      - name: 원격 claim 자동 청소 (--auto)
+        run: python3 scripts/harness/backlog.py claims reap --auto

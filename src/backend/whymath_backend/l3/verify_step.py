@@ -41,6 +41,9 @@
   - **정직성(CLAUDE.md "확실하지 않으면 모른다")**: 판정 불가(SymPy `is_zero is None`)·파싱
     불가·예외·빈 입력은 *절대 `correct`로 위장하지 않고* `unverifiable`로 보수 처리한다.
     `unverifiable`이면 evidence_weight를 0.5로 할인한다(설계 §3.1).
+  - **사유 코드 직교 필드(MATH-03·gap review §3 D3)**: "모른다"의 *종류*를 학생·운영이 구분할
+    수 있게 unverifiable에 `reason_code`(폐쇄 7종 enum)를 병기한다 — state 3상태·reason 문장·
+    가중치는 불변(라벨 부착이지 판정 변경 아님·`VerifyStepReasonCode` docstring이 분기 1:1 표).
 
 정직 스코프(범위 밖 — 후속 슬라이스):
   - **PRM 점수**(PRM800K 가중치·§3.1 후반)는 *0단계 과제*라 본 슬라이스 범위 밖이다(여긴
@@ -60,13 +63,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.solution_set import (
     EquationReading,
+    SolsetUndecidableKind,
     read_equation_step,
-    solset_transition_status,
+    solset_transition_detail,
 )
-from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
+from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status_detail
 from whymath_backend.schema.enums import StepType
 
 __all__ = [
+    "VerifyStepReasonCode",
     "VerifyStepResult",
     "VerifyStepState",
     "verify_step",
@@ -94,6 +99,70 @@ class VerifyStepState(str, Enum):
 _WEIGHT_DECISIVE = 1.0  # correct·incorrect — 결정론 판정 완료.
 _WEIGHT_UNVERIFIABLE = 0.5  # unverifiable — 판정 불가, 증거력 할인.
 
+
+class VerifyStepReasonCode(str, Enum):
+    """unverifiable *사유 코드* — 폐쇄 7종 운영 taxonomy(MATH-03·gap review §3 D3).
+
+    `state` 3상태는 **불변**이다(4·5상태 확장 금지 — BKT·코치·집계·모바일 계약이 전부
+    흔들린다). 이 코드는 `step_type`처럼 **직교 필드**로만 붙는다: `reason`(사람용 자유문)과
+    병렬인 구조 라벨 — `l3/equivalent/rephrase.py`의 reason_code(taxonomy)+reason(문장) 병렬
+    필드 선례를 그대로 답습한다(신규 패턴 발명 0·`str, Enum`이라 직렬화는 평문 문자열 동일).
+
+    분기 1:1 실측(2026-08-11 — 전 분기가 기존 코드에 실재·신규 판정 로직 0, 라벨링만):
+      - `non_algebraic_step` ← 비대수 step_type 게이트(조건해석·케이스분류·그래프스케치).
+      - `empty_input` ← 빈 입력 가드.
+      - `parse_error` ← 표현식 경로 `IdentityVerdict.parse_error`(sympify 예외·정규화 공백).
+      - `undecidable` ← 표현식 경로 비다항 미결정 **및** 등식 경로 해집합 계산 불가
+        (`SolsetUndecidableKind.incomputable_side` — 다변수·비다항·복소·미정·연쇄 미결속).
+      - `variable_mismatch` ← 표현식 경로 undecidable 중 *다항 + 자유변수 집합 불일치*(치환
+        맥락 — `identity_status_detail`이 이미 계산하던 불리언의 노출).
+      - `heterogeneous_form` ← 등식 경로 ℝ↔유한 이질 형태(S3-06) **및** 등호 방정식↔표현식
+        혼합 단계. 초안 조정 실측 근거: 혼합 분기는 초안 7종에 별도 코드가 없었는데, 두 분기
+        모두 "두 변의 *형태*가 이질적이라 비교 전제 불성립"이라 한 코드로 묶는다(운영 세부는
+        `reason` 문장이 이미 달라 코드 폭발 없이 구분 가능).
+      - `subset_ambiguous` ← 등식 경로 유한↔유한 진부분집합(답 선택↔근 유실 구별 불가·S3-08).
+
+    노출 비대칭(의도·검증기 내부 미노출): 운영은 7종 전부, 학생 화면은 **3분기**만 — 고칠 수
+    있는 것(parse_error·empty_input)/고칠 게 없는 것(non_algebraic_step)/단정하지 않는 것
+    (나머지 4종). 접는 쪽은 모바일 `coach_signal_card.dart`다.
+
+    D5 경계(범위 밖 명시): 이 코드는 *"왜 판정 못 했는가"*(검증 메타데이터)이지 *"이 단계가
+    어떤 종류의 추론인가"*(`ReasoningStep` 도메인 모델)가 아니다 — D5를 앞당기지 않는다.
+    """
+
+    parse_error = "parse_error"
+    """파싱 불가 — 표기를 시스템이 못 읽음(학생이 고칠 수 있는 축·MATH-01 발화 조건 데이터)."""
+
+    undecidable = "undecidable"
+    """SymPy 미결정 — 증명도 반증도 못 함(비다항·정의역 의존·해집합 계산 불가·보류 톤)."""
+
+    non_algebraic_step = "non_algebraic_step"
+    """비대수 단계 — 원래 계산으로 확인하는 종류가 아님(학생이 고칠 게 없는 축)."""
+
+    empty_input = "empty_input"
+    """빈 입력 — 검증할 식 자체가 없음(학생이 고칠 수 있는 축)."""
+
+    heterogeneous_form = "heterogeneous_form"
+    """형태 이질 — ℝ↔유한(항등 재작성↔값 선언) 또는 등식↔표현식 혼합·비교 전제 불성립."""
+
+    subset_ambiguous = "subset_ambiguous"
+    """진부분집합 전이 — 답 선택(정당)↔근 유실(오류)이 구조 동일해 단정 불가(S3-08)."""
+
+    variable_mismatch = "variable_mismatch"
+    """변수 집합 불일치 — 치환 맥락 의존이라 항등 반증 봉인(거짓 incorrect 회피)."""
+
+
+# 등식 경로 undecidable 가드 라벨(`solset_transition_detail`) → 운영 reason_code 사상.
+# 라벨은 분기 발생 지점(solution_set)이 내고 여기는 어휘 번역만 한다 — 가드 재검사(병렬 진실)
+# 금지. incomputable_side는 세부 원인(파싱·다변수·비다항·복소·미정)이 해집합 계산 안에서 이미
+# 합쳐져 있으므로(solution_set_status docstring "parse_error를 따로 두지 않고 undecidable로
+# 통합") 정직하게 undecidable로 접는다.
+_SOLSET_KIND_TO_REASON: dict[SolsetUndecidableKind, VerifyStepReasonCode] = {
+    SolsetUndecidableKind.incomputable_side: VerifyStepReasonCode.undecidable,
+    SolsetUndecidableKind.heterogeneous_form: VerifyStepReasonCode.heterogeneous_form,
+    SolsetUndecidableKind.proper_subset: VerifyStepReasonCode.subset_ambiguous,
+}
+
 # SymPy 검증을 시도하지 *않는* 비대수 step_type — 서술형·경우 나누기·보조선 기하 등.
 # 이 단계들은 식 변형이 아니라 대수 동치로 옳고 그름을 가릴 수 없다(unverifiable·정직).
 # `계산`·`검산`은 대수(SymPy 검증 가능)라 이 집합에 *없다*(아래 동치 경로로 간다).
@@ -103,12 +172,14 @@ _NON_ALGEBRAIC_STEP_TYPES: frozenset[StepType] = frozenset(
 
 
 class VerifyStepResult(BaseModel):
-    """`verify_step`의 결과 — 3상태 판정 + 사유·증거 가중치 + 입력 step_type 전파.
+    """`verify_step`의 결과 — 3상태 판정 + 사유(문장·코드)·증거 가중치 + step_type 전파.
 
     `state`는 항상 채워진다(3상태 중 하나). `reason`은 incorrect/unverifiable일 때 *왜*인지
-    한국어 사유(correct이면 None — 사유 불필요). `evidence_weight`는 correct/incorrect=1.0·
-    unverifiable=0.5(설계 §3.1 할인). `step_type`은 입력을 그대로 전파(하류가 어떤 종류의
-    단계였는지 안다·None 가능).
+    한국어 사유(correct이면 None — 사유 불필요). `reason_code`는 unverifiable일 때만 채워지는
+    폐쇄 7종 구조 라벨(MATH-03 — `reason`과 병렬·rephrase.py 선례)이고 correct/incorrect는
+    None이다(코드의 질문이 "왜 판정 못 했는가"라서). `evidence_weight`는 correct/incorrect=
+    1.0·unverifiable=0.5(설계 §3.1 할인 — 라벨 부착과 무관하게 불변). `step_type`은 입력을
+    그대로 전파(하류가 어떤 종류의 단계였는지 안다·None 가능).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -124,17 +195,31 @@ class VerifyStepResult(BaseModel):
         default=None,
         description="incorrect/unverifiable 사유(한국어). correct이면 None(사유 불필요).",
     )
+    reason_code: VerifyStepReasonCode | None = Field(
+        default=None,
+        description=(
+            "unverifiable *사유 코드*(폐쇄 7종·MATH-03). unverifiable이면 항상 채워지고 "
+            "correct/incorrect는 None — reason(자유문)과 병렬인 구조 라벨(rephrase.py 선례)."
+        ),
+    )
     evidence_weight: float = Field(
         description="증거 가중치 — correct/incorrect=1.0·unverifiable=0.5(설계 §3.1 할인).",
     )
 
 
-def _unverifiable(reason: str, step_type: StepType | None) -> VerifyStepResult:
-    """unverifiable 결과 조립 — 사유·step_type 전파·가중치 0.5(정직 회피의 단일 출구)."""
+def _unverifiable(
+    reason: str, step_type: StepType | None, reason_code: VerifyStepReasonCode
+) -> VerifyStepResult:
+    """unverifiable 결과 조립 — 사유·step_type 전파·가중치 0.5(정직 회피의 단일 출구).
+
+    `reason_code`는 필수 인자다(MATH-03) — 모든 unverifiable 분기가 구조 라벨을 갖게 시그니처
+    수준에서 강제한다(코드 없는 unverifiable을 만들 수 없음 → 집계 총합 불변식의 구조 보장).
+    """
     return VerifyStepResult(
         state=VerifyStepState.unverifiable,
         step_type=step_type,
         reason=reason,
+        reason_code=reason_code,
         evidence_weight=_WEIGHT_UNVERIFIABLE,
     )
 
@@ -160,8 +245,14 @@ def _equation_step_result(
 
     표현식 경로(`identity_status`)와 *같은 매핑 형태*를 유지해 하류(verify_solution 집계)가 두
     경로를 구분 없이 흡수하게 한다. `reason`은 학생 제출 등식 원문만 반향한다(정답 미조회·미누출).
+
+    MATH-03: undecidable일 때 `solset_transition_detail`의 가드 라벨(계산 불가·이질 형태·
+    진부분집합)을 `reason_code`로 사상한다 — state·reason 문장·가중치는 라벨 부착 전과 동일
+    (판정 변경 아님).
     """
-    verdict = solset_transition_status(before_reading.solset, after_reading.solset)
+    verdict, undecidable_kind = solset_transition_detail(
+        before_reading.solset, after_reading.solset
+    )
     if verdict is IdentityVerdict.identity:
         return VerifyStepResult(
             state=VerifyStepState.correct,
@@ -177,7 +268,14 @@ def _equation_step_result(
             evidence_weight=_WEIGHT_DECISIVE,
         )
     # undecidable/parse_error → 위장 없이 unverifiable(다변수·비다항·복소·미정·파싱 불가).
-    return _unverifiable("해집합 판정 불가 — 검증 안전 회피", step_type)
+    # 가드 라벨은 발생 지점(solution_set)이 낸 것을 어휘 번역만 한다(가드 재검사 금지). 계약상
+    # undecidable이면 kind가 항상 채워지지만, 만약 비면 가장 보수적인 undecidable로 접는다.
+    reason_code = (
+        _SOLSET_KIND_TO_REASON[undecidable_kind]
+        if undecidable_kind is not None
+        else VerifyStepReasonCode.undecidable
+    )
+    return _unverifiable("해집합 판정 불가 — 검증 안전 회피", step_type, reason_code)
 
 
 def verify_step(
@@ -222,11 +320,14 @@ def verify_step(
         return _unverifiable(
             "비대수 단계(서술형/경우나누기/기하) — SymPy 검증 불가",
             step_type,
+            VerifyStepReasonCode.non_algebraic_step,
         )
 
     # 빈 입력은 동치 판정 불가 — 파싱 전에 보수적 unverifiable(빈 문자열을 0으로 오인 회피).
     if not expr_before.strip() or not expr_after.strip():
-        return _unverifiable("빈 입력 — 검증 안전 회피", step_type)
+        return _unverifiable(
+            "빈 입력 — 검증 안전 회피", step_type, VerifyStepReasonCode.empty_input
+        )
 
     # ①.4 등식 형태 해석(S3-06) — 단일 등식·연쇄 등식(a=b=c)·근 나열(x=2, x=3)을 통합해 읽는다.
     before_reading = read_equation_step(expr_before)
@@ -254,13 +355,21 @@ def verify_step(
             expr_before, expr_after, before_reading, after_reading, step_type
         )
     if before_reading is not None or after_reading is not None:
-        return _unverifiable("등호 방정식↔표현식 혼합 단계 — 검증 대상 불일치·안전 회피", step_type)
+        # 형태 이질(등식↔표현식)이라 비교 전제 불성립 — ℝ↔유한 가드와 같은 계열이므로 같은
+        # heterogeneous_form 코드로 라벨한다(운영 세부는 reason 문장으로 이미 구분·MATH-03).
+        return _unverifiable(
+            "등호 방정식↔표현식 혼합 단계 — 검증 대상 불일치·안전 회피",
+            step_type,
+            VerifyStepReasonCode.heterogeneous_form,
+        )
 
     # ② 대수 단계(계산·검산·None·등호 없는 식) — 동치 권위 primitive(`identity_status`·SymPy) 위임.
     # 자유변수 OK·convert_xor로 ^=거듭제곱·같은 변수 다항 비항등식은 not_identity로 *증명*된다
     # ((a+b)²−(a²+b²)=2ab는 a=b=1에서 거짓·freshman's dream). 변수 집합이 다른 치환 등은 primitive
-    # 가 undecidable로 보수 처리해 거짓 incorrect를 회피한다(정확성 #1).
-    verdict = identity_status(expr_before, expr_after)
+    # 가 undecidable로 보수 처리해 거짓 incorrect를 회피한다(정확성 #1). MATH-03: detail판을 불러
+    # undecidable의 변수 불일치 라벨(variable_mismatch)까지 받는다 — 판정(verdict)은 동일 본체.
+    detail = identity_status_detail(expr_before, expr_after)
+    verdict = detail.verdict
     if verdict is IdentityVerdict.identity:
         return VerifyStepResult(
             state=VerifyStepState.correct,
@@ -275,8 +384,23 @@ def verify_step(
             reason=f"동치 아님 — SymPy: {expr_before} ≠ {expr_after}",
             evidence_weight=_WEIGHT_DECISIVE,
         )
-    # parse_error(빈 입력은 위에서 거름·sympify 예외) → "파싱 불가" 표기로 보수.
+    # parse_error(빈 입력은 위에서 거름·sympify 예외) → "파싱 불가" 표기로 보수. 이 코드의 비중이
+    # 곧 MATH-01(표기 권위)·자연표기 확장(gap review §5-③)의 발화 조건 데이터다.
     if verdict is IdentityVerdict.parse_error:
-        return _unverifiable("SymPy 판정 불가/파싱 불가 — 검증 안전 회피", step_type)
+        return _unverifiable(
+            "SymPy 판정 불가/파싱 불가 — 검증 안전 회피",
+            step_type,
+            VerifyStepReasonCode.parse_error,
+        )
     # undecidable — 항등성을 *증명도 반증도* 못 함(예: √(x²) vs x는 정의역 의존)·correct 위장 금지.
-    return _unverifiable("SymPy 판정 불가 — 검증 안전 회피", step_type)
+    # 변수 집합 불일치(치환 맥락·detail이 이미 계산한 불리언)면 별도 라벨 — 운영이 "치환 맥락"과
+    # "비다항 미결정"을 구분하게 한다(reason 문장·state·가중치는 두 경우 동일).
+    return _unverifiable(
+        "SymPy 판정 불가 — 검증 안전 회피",
+        step_type,
+        (
+            VerifyStepReasonCode.variable_mismatch
+            if detail.variable_mismatch
+            else VerifyStepReasonCode.undecidable
+        ),
+    )

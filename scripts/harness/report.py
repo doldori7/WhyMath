@@ -155,6 +155,7 @@ def render_brief(
     remote_status: str = "ok",
     stale_branches: list[tuple[str, float, int, str, str]] | None = None,
     stale_branch_status: str = "ok",
+    stale_branch_message: str = "",
     done_excluded: dict[str, list[str]] | None = None,
     doc_series_candidates: list[tuple[str, tuple[str, ...], str]] | None = None,
     doc_series_status: str = "ok",
@@ -168,6 +169,10 @@ def render_brief(
     구분 없이 하나로 뭉쳐 보여주면 매 세션 전부를 훑어야 해서 신호 대 잡음비가 나빠진다
     (2026-08-05 실측: 19건 중 실제 결정 대기는 6건뿐이었다). 하위호환을 위해 4-튜플
     (status·evidence 생략)도 받아들인다 — 그 경우 전부 "unresolved"로 취급.
+    stale_branch_message: 판정 불가 사유의 사람이 읽는 설명(선택). status가 "ok"가 아닐
+    때 "판정 보류" 줄에 덧붙는다 — shallow 클론처럼 *복구 명령이 있는* 실패에서 화면만
+    보고 고칠 수 있게 한다(2026-08-11: 브리핑이 shallow 위에서 10건을 오분류하고도
+    "ok"로 보고했다). 비면 종전 문구 그대로 — 하위호환.
     done_excluded: task_id → 완료 브랜치 목록(HARN-12) — 타 세션이 이미 끝냈으나 아직
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
@@ -194,7 +199,7 @@ def render_brief(
         for task in mine:
             lines.append(
                 f"이 브랜치의 진행 중 태스크: {task.id} — {task.title}"
-                f" (완료 시 `backlog.py done {task.id} --artifact <PR/커밋>`)"
+                f" (완료 시 PR을 연 뒤 `backlog.py done {task.id} --artifact <PR 번호 포함>`)"
             )
 
     # 병렬 세션 가시성 — 다른 세션의 원격 claim을 브리핑에 노출 (중복 착수 예방)
@@ -238,7 +243,11 @@ def render_brief(
                     f"trunk 대비 {ahead}커밋 앞섬"
                 )
     elif stale_branch_status not in ("ok", "disabled"):
-        lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status} — 판정 보류)")
+        # 판정 보류는 무기한 침묵이 아니라 *매 세션 화면에 뜨는 명시적 미측정 신고*다.
+        # 복구 명령을 함께 실어 보류가 "고칠 수 있는 상태"임을 화면에서 알 수 있게 한다
+        # (shallow 클론이 대표 사례 — remote_claims.SHALLOW_PENDING_MESSAGE).
+        detail = f" — {stale_branch_message}" if stale_branch_message else ""
+        lines.append(f"(장기 미머지 브랜치 조회 불가: {stale_branch_status}{detail} — 판정 보류)")
 
     # 설계 문서 중복 착수 (HARN-14) — 나이 임계 없음. 정보성 경고일 뿐 착수를 막지 않는다.
     if doc_series_candidates:

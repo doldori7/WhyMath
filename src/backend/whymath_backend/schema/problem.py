@@ -38,6 +38,7 @@ from whymath_backend.schema.enums import (
     ExamType,
     Persona,
     QuestionFormat,
+    ReasoningType,
     RelationType,
     RequiredDepth,
     ReviewStatus,
@@ -338,7 +339,13 @@ class Problem(BaseModel):
     # ===== 문제 유형(problem_type) 참조 =====
     # S3-27 신규(Problem↔ProblemType 연결 — `problem_bank_gap_review.md` §5-③ 유보 해제,
     # `ai_content_generation_gap_review.md` D3). `signature_patterns` 동형의 *순수 참조 배열*
-    # (문자열 목록·ORM 관계 아님) — `data/corpus/problem_type_graph_v1/problem_types.jsonl`의
+    # (문자열 목록·ORM 관계 아님) — 단 **영속 축에서는 `signature_patterns`와 동형이 아니다**:
+    # 후자는 ORM 컬럼(`db/models/problem.py:157`)이고 이 필드는 아니라서 `from_schema`의
+    # `mapper.column_attrs` 필터(`db/models/problem.py:295-297`)가 적재 시 **드롭**한다. 즉 이
+    # 필드는 코퍼스 JSONL·빌드타임 관측에만 존재하고 DB에는 없다(2026-08-11 R3 §정정-4 · G6).
+    # 의도된 스코프이나(`S3-27` acceptance ② "관측 축 한정"), "동형"이라는 표현이 "DB에도
+    # 있겠지"라는 가정을 낳을 수 있어 명시한다. 영속화 발화 조건은 R3 §5-⑤ 참조.
+    # `data/corpus/problem_type_graph_v1/problem_types.jsonl`의
     # `problem_type_id`(예 'ptype.solve-for-unknown')를 가리키는 문자열만 담는다. 이 필드는
     # **관측 축 한정**이다: problem_type_node FK 연결·유형별 생성 확대·유형 기반 추천/출제는
     # 스코프 밖(`problem_bank_gap_review.md` §5-③ 판정 준수) — L1 스키마가 L6(응용 모드) 소비
@@ -657,6 +664,10 @@ class ProblemStep(BaseModel):
 
     `UNIQUE(problem_id, step_order)` — 한 문제 안에서 step_order는 유일(런타임/DB
     제약; 단일 모델 레벨에서는 표현하지 않음).
+
+    S4-09(D1) additive 필드 6종: SolutionPath 실체화(`l3/solution_path.py`)의 단계가
+    `problem_step`에 영속되면서 이 스키마로 서빙된다(`GET /v1/problems/{id}/steps`).
+    전부 기본 None(선택)이라 기존 필드 제거·의미 변경 0 — 기존 소비자 호환 유지.
     """
 
     model_config = ConfigDict(
@@ -688,6 +699,46 @@ class ProblemStep(BaseModel):
     common_mistakes: list[dict[str, Any]] = Field(
         default_factory=list,
         description='흔한 실수 목록 [{"error":"...","hint":"..."}](자유형 JSONB)',
+    )
+
+    # ===== S4-09(D1) additive — SolutionPath 단계 실체화(전부 선택·기본 None·비파괴) =====
+    solution_path_id: str | None = Field(
+        default=None,
+        description="소속 풀이 경로 ID(`solution_paths` FK). None=경로 미소속(레거시 단계).",
+    )
+    concept_node_id: str | None = Field(
+        default=None,
+        description="이 단계가 통과하는 L1 개념 노드 ID. None=매칭 검수 대기(사람 검수 큐).",
+    )
+    reasoning_type: ReasoningType | None = Field(
+        default=None,
+        description=(
+            "스텝 추론 유형 — 기존 단일 좌석 ReasoningType(폐쇄 7종) 소비. "
+            "폐쇄집합 밖은 검증 거부. None=미태깅(하위호환)."
+        ),
+    )
+    justification: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "정당화 근거 참조 JSONB — 구조 정본은 `l3.solution_path.Justification`"
+            "(theorem_concept_ids·concept_node_ids·prior_step_orders 얇은 3종 묶음). "
+            "schema 계층은 L 계층을 import하지 않으므로(역방향 의존 금지) 여기서는 자유형 "
+            "dict로 통과시킨다."
+        ),
+    )
+    common_errors: list[str] | None = Field(
+        default=None,
+        description=(
+            "이 단계의 흔한 오류(오개념 카탈로그 코드/패턴 서술) — yaml SolutionStep."
+            "common_errors 1:1 좌석. 기존 common_mistakes(자유형 dict 리스트)와 별개 축."
+        ),
+    )
+    sympy_verified: bool | None = Field(
+        default=None,
+        description=(
+            "SymPy 자동 검증 통과 여부(WH-S 승계 시 직전 스텝→이 스텝 전이 Tier2 correct). "
+            "None=미판정(레거시 단계)."
+        ),
     )
 
 

@@ -318,6 +318,12 @@ class ProblemStep(Base):
     """문항 풀이 단계 영속 ORM — §3.2 `problem_step`(Socratic 코칭).
 
     `UNIQUE(problem_id, step_order)` — 한 문제 안에서 step_order 유일(DDL 제약).
+
+    S4-09(D1) additive 컬럼: SolutionPath 실체화의 *단계 영속 좌석*을 겸한다(단계 전용 테이블
+    신설 대신 — 테이블 증식 최소화). 전부 nullable additive라 기존 행·기존 API 응답과 호환
+    파괴 0. `UNIQUE(problem_id, step_order)`는 불변 유지 — 한 문제에 *한 경로*의 단계만
+    실체화 가능하다(다중 경로 단계 영속은 제약 재론과 함께 S4-10 몫·승격 어댑터가 초과분을
+    스킵·리포트).
     """
 
     __tablename__ = "problem_step"
@@ -338,6 +344,24 @@ class ProblemStep(Base):
     common_mistakes: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
+
+    # ===== S4-09(D1) additive — SolutionPath 단계 실체화 좌석(전부 nullable·비파괴) =====
+    # 소속 풀이 경로(solution_paths FK). NULL=경로 미소속(레거시 Socratic 단계 하위호환).
+    solution_path_id: Mapped[str | None] = mapped_column(
+        sa.Text, sa.ForeignKey("solution_paths.solution_path_id")
+    )
+    # 이 단계가 통과하는 L1 개념 노드 ID. NULL=매칭 검수 대기(사람 검수 큐 — l3 Pydantic 경계).
+    concept_node_id: Mapped[str | None] = mapped_column(sa.Text)
+    # 스텝 추론 유형 — 폐쇄 7종 강제는 schema/enums.py ReasoningType(Pydantic)·DB는 TEXT 좌석만
+    # (PG enum 신설 안 함 — approach_type과 동일 방침·`_pg_enum` 추가 없이 additive 유지).
+    reasoning_type: Mapped[str | None] = mapped_column(sa.Text)
+    # 정당화 근거 참조(얇은 3종 묶음·l3 Justification 직렬화). NULL=근거 미명시(하위호환).
+    justification: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # 흔한 오류(list[str] — 오개념 카탈로그 코드/패턴 서술). 기존 common_mistakes(자유형 dict
+    # 리스트)와 별개 축: yaml SolutionStep.common_errors의 1:1 좌석. NULL=미기록.
+    common_errors: Mapped[list[str] | None] = mapped_column(JSONB(none_as_null=True))
+    # SymPy 검증 통과 여부(WH-S 승계 시 *직전 스텝→이 스텝 전이* Tier2 correct). NULL=미판정.
+    sympy_verified: Mapped[bool | None] = mapped_column(sa.Boolean)
 
     __table_args__ = (sa.UniqueConstraint("problem_id", "step_order"),)
 

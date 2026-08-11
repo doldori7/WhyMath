@@ -1,5 +1,15 @@
 # 문제은행 코퍼스 (자체 저작 6종) — 데이터 카드
 
+> **⚠️ 정정 (2026-08-11 · 문제은행 R3 §정정-1 → 커버리지 회수 시 재정정)**: 아래 요약의
+> **"6종 · 전 2,613건"은 stale**이다. **현행 실측은 7종 2,638건**이다. 두 단계로 움직였다:
+> ① `S4-13`이 7번째 코퍼스 `problem_bank_probability_finite_v0` **34건**을 신설(2,613 + 34 =
+> 2,647) ② `QUAL-02`(PR #777·`50b43b6e`)가 실중복 **9레코드를 은퇴**(`generated_v0` 620→619 ·
+> `rephrased_v0` 429→421)해 **2,647 − 9 = 2,638**. `probability_finite_v0`의 34문은 `S4-16`
+> 강등전 통과 전까지 **노출 부적격**(`review_status=pending`) 상태다. 본문(§0 표 포함)은 이력
+> 보존을 위해 개정하지 않는다 — 정본 수치는 이 배너다.
+> 근거: `docs/architecture/problem_bank_gap_review_r3.md` §부록 ·
+> `docs/data/problem_duplicate_disposition_2026-08.md` · `docs/data/problem_bank_coverage_2026-08.md` §8.1.
+
 > **요약**: 연습·평가용 문항 코퍼스 6종, 전 2,613건(2026-08-03 갱신 — `rephrased_v0`가 위생 게이트
 > 확장으로 483→429건 소급 조정), **전량 자체 저작**(`source_type=자체생성`·`license=WHYMATH_GENERATED`)
 > — 평가원·EBS·검정교과서 본문 복제 0. 진단문항(`atom_probe`)과는 별개 자산이며, 이 문서의 범위는

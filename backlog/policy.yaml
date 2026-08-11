@@ -5,4 +5,5 @@ path_overlap: warn
 scope_drift: warn
 adhoc_edit: warn
 claim_ttl_hours: 72
+claim_branch_grace_hours: 24
 remote_claims: true

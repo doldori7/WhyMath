@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-24-analogy-generator-diag-slot-recovery
+title: "고립된 비유·예시 생성기 + 형성평가 diag_item 슬롯 회수 ③ (uqyg79 PED-09·PED-10)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PED-22-strategy-catalog-canon-recovery
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — uqyg79의 6a367c5f(PED-09 비유·예시 생성기 L3 + analogy_fidelity_eval 강등전 846행)·3dcb3e93(PED-10 형성평가 diag_item 슬롯 채움, atom_probe 투영)가 done인데 main에 l3/pedagogy/analogy_generator.py·analogy_checker.py·analogy_demand.py·example_generator.py·diag_item_projector.py·harness/analogy_fidelity_eval.py가 전건 부재다"
+  - "② 라우터 경유 확인 — 생성기는 LLM 라우터를 경유해야 하고 산출은 DRAFT(prescreen→review 상태기계 재사용)여야 한다. 직접 호출이면 헌법 위반이므로 이식하며 확인한다"
+  - "③ 작동한 비율 보고 — 채움 건수·prescreen 통과율을 리포트가 말해야 한다. 표본 0은 None으로 보고하고 0%로 위장하지 않는다(CLAUDE.md '작동한 비율' 원칙)"
+  - "④ 강등전 게이트 — analogy_fidelity_eval이 Wilson 경계 CLI exit 0/1로 판정하는지 확인한다(점추정·인상 판정 금지)"
+  - "⑤ 검증 재수행 + CI 배선 실재 확인. 판정은 exit code"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/pedagogy/**"
+  - src/backend/whymath_backend/harness/analogy_fidelity_eval.py
+  - "tests/backend/l3/**"
+session: null
+notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 uqyg79 head=5dc040b3. 원 태스크 PED-09-analogy-example-generator(6a367c5f)·PED-10-diag-item-slot-fill(3dcb3e93)."
+updated: 2026-08-11

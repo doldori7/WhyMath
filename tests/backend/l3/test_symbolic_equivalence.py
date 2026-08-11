@@ -3,6 +3,7 @@
 `verify_step`이 위임하는 SymPy 관용구를 *직접* 검증한다 — identity(항등 확정)·not_identity(거짓
 증명)·undecidable(정의역 의존·초월·미결정)·parse_error(빈/파싱 불가). 카탈로그
 `canonical_wrong_form` 무결성과 verify_step 3상태가 *같은 권위*를 거치게 됐음을 못 박는다.
+MATH-03: `identity_status_detail`(undecidable 변수 불일치 라벨·status 위임 정합) 추가.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import pytest
 from whymath_backend.l3.symbolic_equivalence import (
     IdentityVerdict,
     identity_status,
+    identity_status_detail,
     to_sympy_source,
 )
 
@@ -67,6 +69,59 @@ class TestParseError:
     )
     def test_parse_error(self, lhs: str, rhs: str) -> None:
         assert identity_status(lhs, rhs) is IdentityVerdict.parse_error
+
+
+class TestIdentityStatusDetail:
+    """MATH-03 — `identity_status_detail`: 같은 판정 + undecidable 변수 불일치 라벨.
+
+    라벨은 판정이 *이미 계산하던* `is_poly`·`same_symbols` 불리언의 노출이다(신규 판정 0).
+    `identity_status`는 이 함수에 위임하므로 두 반환의 verdict가 갈리면 판정 이원화다.
+    """
+
+    def test_substitution_labelled_variable_mismatch(self) -> None:
+        # 치환 맥락(a vs b+1) — 다항 + 자유변수 집합 불일치 → undecidable + 라벨 True.
+        detail = identity_status_detail("a", "b+1")
+        assert detail.verdict is IdentityVerdict.undecidable
+        assert detail.variable_mismatch is True
+
+    def test_nonpoly_undecidable_not_labelled(self) -> None:
+        # 비다항 미결정(sqrt(x²) vs x·같은 변수) — 변수와 무관한 미결정이므로 라벨 False.
+        detail = identity_status_detail("sqrt(x**2)", "x")
+        assert detail.verdict is IdentityVerdict.undecidable
+        assert detail.variable_mismatch is False
+
+    def test_nonpoly_same_symbols_transcendental_not_labelled(self) -> None:
+        # 초월 미결정(log) — 양변 변수 집합이 같아 라벨 False(일반 undecidable).
+        detail = identity_status_detail("log(a+b)", "log(a) + log(b)")
+        assert detail.verdict is IdentityVerdict.undecidable
+        assert detail.variable_mismatch is False
+
+    @pytest.mark.parametrize(
+        ("lhs", "rhs"),
+        [
+            ("2*(x+1)", "2*x + 2"),  # identity
+            ("(a+b)**2", "a**2 + b**2"),  # not_identity
+            ("2 +* 3", "5"),  # parse_error
+        ],
+    )
+    def test_decisive_and_parse_error_not_labelled(self, lhs: str, rhs: str) -> None:
+        # 라벨은 undecidable 전용 — 확정 판정·파싱 실패는 항상 False.
+        assert identity_status_detail(lhs, rhs).variable_mismatch is False
+
+    @pytest.mark.parametrize(
+        ("lhs", "rhs"),
+        [
+            ("2*(x+1)", "2*x + 2"),
+            ("(a+b)**2", "a**2 + b**2"),
+            ("sqrt(x**2)", "x"),
+            ("a", "b+1"),
+            ("", "x"),
+            ("2 +* 3", "5"),
+        ],
+    )
+    def test_status_delegates_to_detail(self, lhs: str, rhs: str) -> None:
+        # 위임 동결 — 4상태 계약 불변(status ≡ detail.verdict).
+        assert identity_status(lhs, rhs) is identity_status_detail(lhs, rhs).verdict
 
 
 class TestSuperscriptNormalization:

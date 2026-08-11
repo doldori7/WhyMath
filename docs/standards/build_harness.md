@@ -86,9 +86,36 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 - **conflict만 차단**(신호가 확정적) — offline/권한 오류는 경고 + 이벤트 로그 후
   로컬 claim으로 진행한다(fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다).
 - `done`/`block`이 claim을 해제한다. 세션이 죽어 claim이 남으면 `claims reap`이
-  3중 기준(TTL 초과 · 태스크 이미 done/cancelled · 태스크 미존재)으로 청소한다
-  (기본 dry-run, 실삭제는 `--apply`). `reap`은 **(목록, 조회상태)** 를 돌려준다 —
-  조회 실패를 "stale 없음"으로 위장하면 CI 교차검증이 공전한다(HARN-09 실측 사례).
+  **4중 기준**(TTL 초과 · 태스크 이미 done/cancelled · 태스크 미존재 ·
+  **홀더 브랜치가 origin에 부재**)으로 청소한다 (기본 dry-run, 실삭제는 `--apply`).
+  `reap`은 **(목록, 조회상태, 경고목록)** 을 돌려준다 — 조회 실패를 "stale 없음"으로
+  위장하면 CI 교차검증이 공전한다(HARN-09 실측 사례).
+- **홀더 브랜치 부재(`branch_gone`·HARN-26)**: 컨테이너 세션은 원격 브랜치를 스스로
+  지우지 못하므로(HARN-16), 홀더 브랜치가 없다는 것은 그 세션의 작업이 원격에 도달한
+  적조차 없다는 뜻이다 — TTL 72시간을 기다릴 이유가 없는 확정 신호다.
+  단 `start`와 첫 push 사이에는 브랜치가 없는 **정상 구간**이 있으므로
+  `policy.claim_branch_grace_hours`(기본 24h) 이내는 `branch_gone_recent`로 분류해
+  삭제하지 않고 경고만 낸다(`task_missing_recent`와 같은 규칙).
+  - grace를 TTL과 같게 두면 안 된다 — 실측(events.ndjson start→done/block 199건)에서
+    **72h 초과 세션이 0건**이라, grace=72h면 `branch_gone`이 잡는 집합이 `ttl`이 잡는
+    집합의 부분집합이 되어 탐지력을 1건도 추가하지 못한다. 24h 오탐 상한은 2.0%.
+  - 유예가 이론이 아님을 보여준 실측: 2026-08-11 03:00Z에 "홀더 브랜치 없음"이던
+    claim 3건 중 2건이 40분 뒤 정상 push됐다(살아 있는 세션이었다). 유예 없이 집행했다면
+    CAS가 막아둔 중복 착수를 직접 열어줬을 것이다.
+  - 원격 브랜치 조회가 실패하면 이 기준만 **보류**한다(빈 집합을 "브랜치 전멸"로 읽으면
+    대장을 통째로 지운다). 보류 사실은 경고 목록에 실린다 — 침묵하지 않는다.
+- **집행 지점(HARN-27)**: `.github/workflows/harness-audit.yml`이 main push·야간·수동
+  트리거에서 `claims reap --auto`를 돌린다. `--auto`는 삭제를 켜되 사유를
+  `remote_claims.AUTO_REAP_REASONS`(= `task_done`·`branch_gone`)로 좁힌다.
+  - **왜 별도 워크플로인가**: `on:`에 `pull_request`가 아예 없어 "PR에서는 지우지 않는다"가
+    조건문이 아니라 **구조적 불가능**이 된다. ci.yml의 `harness-integrity`에는 `if:` 가드가
+    없어 PR에서도 돌고, 거기에 `contents: write`를 붙이면 PR 검증 경로가 쓰기 권한을 갖는다.
+  - **왜 안전 집합이 코드에 있는가**: 사유를 워크플로 인자(`--reasons ttl,...`)로 두면
+    YAML을 고쳐 범위를 넓힐 수 있고 파이썬 테스트가 그것을 동결하지 못한다.
+    `ttl`(살아 있는 장기 세션일 수 있다)·`task_missing`(CI 러너는 main만 보므로 다른
+    브랜치 등재 태스크를 구조적으로 "없음"으로 본다 — HARN-15 맹점)은 제외한다.
+  - ci.yml의 dry-run 스텝은 **유지**한다 — PR마다 도는 관측 채널이고, 자동 집행에서
+    제외된 사유(사람 판단 필요분)를 드러내는 유일한 화면이다.
 - `next`/`brief`(SessionStart)가 원격 claim을 조회해 다른 세션의 작업을
   후보 제외·브리핑 노출한다.
 
@@ -193,7 +220,7 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 ```
 세션 시작   → (자동) SessionStart 브리핑: 현재 스테이지·next 3·게이트 리마인드
 주도 진행   → /drive              # 순차 루프 (기본 3태스크, 사람 게이트에서 정지)
-단건 작업   → /implement <id>     # start → 구현 → done --artifact
+단건 작업   → /implement <id>     # start → 구현 → PR 생성 → done --artifact
 새 계획     → /plan <주제>        # 산출물 = backlog add 태스크 등록
 사람 게이트 → /gates              # clear는 evidence 필수
 상세 상태   → /status
@@ -226,7 +253,8 @@ python3 scripts/harness/backlog.py next --n 3      # 착수 가능 후보 + 선�
 python3 scripts/harness/backlog.py start <id>      # claim (규칙 위반 시 거부)
 python3 scripts/harness/backlog.py start <id> --ignore-remote-claim  # 이 태스크의 읽기측 판정만 무시(stale 확인 후·HARN-08)
 python3 scripts/harness/backlog.py start <id> --no-remote            # 원격 보호 전체 생략(오프라인·긴급)
-python3 scripts/harness/backlog.py done <id> --artifact "<PR/커밋>"   # 증적 필수
+python3 scripts/harness/backlog.py done <id> --artifact "<PR 번호를 담은 증적>"   # 증적·PR 참조 필수
+python3 scripts/harness/backlog.py done <id> --artifact "<커밋>" --no-pr ci-red   # 예외 4종만(HARN-23)
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
@@ -235,6 +263,7 @@ python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
 python3 scripts/harness/backlog.py claims release <id> [--force]  # claim 해제 (남의 것은 --force)
 python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 (기본 dry-run)
+python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 ```
@@ -249,6 +278,7 @@ exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 
 
 - ❌ backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략
 - ❌ 증적(artifact) 없는 done
+- ❌ **PR 참조 없는 done** — 산출물이 있으면 요청 없이 PR을 여는 것이 기본값이다(CLAUDE.md "완료·병합"). 증적에 `#12`·`.../pull/12`가 없으면 CLI가 exit 1로 거부하며, 예외는 `--no-pr {investigation|incomplete|ci-red|kiki-hold}`로만 통과한다(HARN-23). 스쿼시 머지 커밋의 `(#758)` 관례는 그대로 통과 — 기존 증적 표기를 바꿀 필요 없다
 - ❌ evidence 없는 게이트 clear
 - ❌ E축 게이트 우회 착수 (waive는 Kiki 전용 결정)
 - ❌ ROADMAP "현재 위치"를 backlog와 어긋나게 단독 편집
