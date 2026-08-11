@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MATH-05-reverse-notation-display-surface
+title: "역방향 표기의 학생 대면 공백 — MathLive 미리보기·OCR 결과의 원문 LaTeX 노출 차단"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: mathlive_input_screen.dart:83-89이 Text(_latex)로 입력 미리보기를, ocr_capture_screen.dart:201이 SelectableText(result.plainLatex)로 인식 결과를 원문 LaTeX 그대로 학생에게 노출함을 재현한다. 대조로 chat_screen.dart:204는 latexToPlainSolution 경유라 이미 닫혀 있음을(MOB-06) 확인 — 같은 앱 안에서 세 표면의 처리가 갈린다는 것이 이 태스크의 근거다. 주장 확인 또는 반증 — 두 표면이 이미 변환을 거치면 이 태스크는 불필요하므로 취소한다"
+  - "② 문항 본문 축은 측정으로 범위에서 제외: problem_screen.dart도 plain Text지만 코퍼스 실측(problem_bank_* 7뱅크 2,647건 본문+해설+선지)에서 LaTeX 매크로가 0.00%라 라이브 갭이 아니다. 이 측정을 재현해 기록하고 범위 밖으로 봉인한다(발화 조건: 코퍼스에 매크로가 관측될 때). 측정 없이 갭을 크게 부르지 않는다"
+  - "③ 기존 자산 적용(신규 의존 0): 두 표면에 이미 정본인 latexToPlainSolution을 적용한다. flutter_math_fork 재도입 금지 — pubspec.yaml:40-42의 \"기능 착수 시 재도입\" 주석을 유지하고, 이 태스크는 수식 조판 엔진 도입이 아니라 이미 존재하는 표기 변환이 미적용된 표면 2곳을 닫는 것임을 코드 주석에 명시한다. 코어에 렌더러를 넣지 않는다(Renderer=Plugin 불변)"
+  - "④ 위젯 테스트 동결: 두 화면이 백슬래시 매크로를 포함한 원문 LaTeX를 학생에게 표시하지 않음을 위젯 테스트로 동결한다(mathlive_input_screen_test.dart·ocr 화면 테스트 확장)"
+  - "⑤ 변별력: 변환 적용을 의도적으로 되돌리면 두 테스트가 red, 복원하면 green이 되는지 실측한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑥ 범위 밖 명시: (a) 수식 조판 렌더(KaTeX·flutter_math_fork) — 별개 축이며 미채택 유지. (b) 백엔드 LaTeX 생성(sympy.latex) — 렌더 권위 이원화라 영구 미채택(math_engine_gap_review.md §2-⑨). (c) 문항 본문 표면 — ②의 측정으로 제외. (d) MathLive 위젯 자체 접근성(스크린리더 낭독) — math_engine_gap_review.md §4-①"
+artifacts: []
+paths:
+  - src/mobile/lib/features/chat/presentation/mathlive_input_screen.dart
+  - src/mobile/lib/features/ocr/presentation/ocr_capture_screen.dart
+  - src/mobile/test/mathlive_input_screen_test.dart
+session: null
+notes: "docs/architecture/math_engine_gap_review.md §3 D6(2026-08-11 재검증에서 신규 발견). 1차 대조(2026-08-03)는 기능 29의 \"역방향 변환\"을 백엔드 sympy.latex 생성으로 읽고 §2-⑨ 의도적 미채택으로 닫았는데, 외부 틀이 그린 역방향(LaTeX→AST→자연표기)은 학생이 읽을 표기로 되돌리는 표시 축이다. 그 축은 미채택된 적이 없고 실측하면 두 표면이 뚫려 있다. MOB-06이 채팅 버블 한 곳만 닫았고 나머지 두 표면은 같은 함수를 부르지 않는다 — \"만들었는데 일부 표면에만 배선\" 계열."
+updated: 2026-08-11
