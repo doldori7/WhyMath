@@ -1,26 +1,28 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: NLP-06-contract-golden-ci-trigger
-title: "계약 골든 CI 트리거 봉합 — data/*_contract.json이 backend·mobile 필터 양쪽에 없어 계약만 고친 PR은 잡 0개"
+title: "교차 골든의 mobile 축 트리거 봉합 — Dart 계약 골든이 src/mobile/ 변경 없이는 어떤 경로로도 안 깨어난다 (backend·web 축은 COLLAB-04 소유)"
 track: infra-debt
 stage: S3
 subject: cross
-layer: backend
+layer: mobile
 status: todo
 priority: 2
 owner: claude
-depends_on: []
+depends_on:
+  - COLLAB-04-contract-fixture-ci-trigger-axis
 requires_gates: []
 acceptance:
-  - "① 현행 실측 고정: ci.yml:74(backend)·:83(mobile)·:86(web) 필터에 대해 data/ 계약 파일별 트리거 여부를 표로 확정한다 — 2026-08-11 실측은 segmentation_contract.json·scene_contract.json이 세 필터 어디에도 없어 잡 0개(주장 확인 또는 반증)"
-  - "② 정본화: data/*_contract.json 계열을 파일 하나씩 열거하는 현행 방식(누락이 조용하다) 대신 글롭/디렉터리 축으로 올려 backend·mobile·web 필터가 함께 덮게 한다"
-  - "③ 집행 지점(별항): 계약 파일만 고친 PR에서 실제로 어느 잡이 켜지는지 실측한다 — 필터 문자열 수정만으로 완료 처리하지 않는다(2026-08-04 '정본화를 집행으로 착각한 완료 선언 금지')"
-  - "④ 배선 실재성 동결: tests/infra에 '계약 파일 ↔ 트리거 잡' 대응 테스트를 둔다. tests/infra/test_test_suite_wiring.py의 Wiring/_all_wirings를 import 재사용하고 새 YAML 파서를 만들지 않는다(test_pedagogy_content_slot_pipeline_ci_wiring.py:22-25 원칙). 신규 계약 파일이 필터에 없으면 exit 1"
-  - "⑤ 변별력: 계약 JSON만 바꾼 브랜치를 만들어 필터 판정을 재현하고, 수정 전 '잡 0개'·수정 후 'backend+mobile 켜짐'이 서로 다른 값으로 나오는지 실측한다. skip은 red도 green도 아니면서 required check에서 충족으로 계상된다(ci.yml 자인)"
-  - "⑥ 범위 밖 명시: 계약 내용·골든 케이스 수정, mobile 잡 자체의 커버리지 게이트 조정, notation/render 이외 축의 신규 계약 도입"
+  - "① 선행 확인(COLLAB-04 승계): COLLAB-04가 backend·web 필터에 data/*.json 계약 축을 넣고 재발 차단 장치(계약 목록 ↔ ci.yml 필터 대조)를 세운 뒤 착수한다. 그 패턴을 mobile 축에 답습하는 것이 이 태스크이며, 필터 설계·재발 차단 장치를 재발명하지 않는다"
+  - "② 현행 실측 고정: ci.yml:83 mobile 필터가 ^(src/mobile/|schemas/|ci.yml)뿐이라 data/ 계약이 통째로 빠져 있음을 재확인한다. 그 결과 src/mobile/test/segmentation_contract_test.dart(NLP-03)·scene_contract_test.dart·scene_render_contract_test.dart가 '계약 파일만 바뀐 PR'과 '백엔드 구현만 바뀐 PR' 양쪽에서 미실행임을 표로 확정한다(주장 확인 또는 반증 — 반증되면 범위 재조정)"
+  - "③ 정본화: mobile 필터에 계약 fixture 축을 추가한다. 신규 CI 잡 0 · 계약 파일 내용 변경 0 · Dart 테스트 내용 변경 0. 개별 나열 vs data/ 접두 패턴은 COLLAB-04가 정한 쪽을 따른다(두 필터가 서로 다른 규약을 쓰면 다음 누락이 어느 쪽에서 날지 알 수 없다)"
+  - "④ 집행 지점(별항): 봉합 후 계약 JSON만 바꾼 상태를 합성해 mobile 잡이 실제로 켜지고 그 안에서 해당 Dart 골든이 실행되는지 확인한다 — 필터 문자열 수정만으로 완료 처리하지 않는다(2026-08-04 '정본화를 집행으로 착각한 완료 선언 금지'). '저장소에 존재함 ≠ 돌아감'(OPS-03·10·11)"
+  - "⑤ 교차 골든의 양방향 강제: 백엔드 구현(src/backend/.../l5/ocr/text_segmentation.py)만 바뀐 PR에서도 Dart 미러가 검사되는지 판정한다. 안 되면 그 사실을 정직하게 기록하고 해소 여부를 이 태스크에서 결정한다 — NLP-03 D3의 설계 목적이 '같은 파일을 읽는 교차 골든'이었으므로 한 방향만 강제되면 드리프트 방어는 절반이다"
+  - "⑥ 변별력: 수정 전 '해당 PR에서 mobile 잡 skip'·수정 후 '실행'이 서로 다른 값으로 나오는지 실측한다. skip은 red도 green도 아니면서 required check에서 충족으로 계상되므로(ci.yml 자인) 눈으로 green을 보는 것은 판정이 아니다"
+  - "⑦ 범위 밖 명시: backend·web 필터 확장(COLLAB-04 소유 — 중복 금지) · 계약 내용·골든 케이스 수정 · mobile 잡의 커버리지 게이트 조정 · data-pipeline 필터 · 신규 계약 도입"
 artifacts: []
 paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
 session: null
-notes: "docs/architecture/nlp_module_gap_review_r2.md §8.3(Δ3). NLP-03(v1 D3)이 만든 교차 골든의 설계 목적은 '백엔드 pytest와 클라 테스트가 같은 파일을 읽는' 것인데, 그 계약 파일 data/segmentation_contract.json이 backend 필터(notation·render 2개만 열거)에도 mobile 필터(src/mobile/|schemas/ 뿐)에도 없다 — 계약만 고친 PR은 자기를 지키는 두 테스트 어느 쪽도 트리거하지 않고, 백엔드 구현만 고친 PR은 Dart 미러를 검사하지 않아 드리프트가 백엔드→클라 방향으로 열려 있다. math_engine_gap_review.md §7 Δ2가 mobile 필터 구멍을 지적했으나 data/ 축은 그 관찰에도 없었다. 판정 기준: '게이트를 트리거하는 경로가 그 게이트가 지키는 파일을 실제로 덮는가'."
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.3(Δ3)·§8.11-⑥(범위 축소 근거). **2026-08-11 병합 시점 축소**: 최초 등재는 backend·mobile·web 3축이었으나, 같은 날 main에 착륙한 COLLAB-04-contract-fixture-ci-trigger-axis(협업 r3 §3 D5·PR #784)가 backend·web 축을 이미 소유함이 확인돼 중복을 제거했다. 다만 COLLAB-04 acceptance ⑥이 '다른 잡(mobile/data-pipeline)의 필터 확장은 이 태스크 범위 밖'이라 **명시적으로 그었으므로** mobile 축은 여전히 무주공산이며 이 태스크가 그것만 가져간다. 두 태스크는 중복이 아니라 분업이고, 순서는 COLLAB-04가 먼저다(필터 규약·재발 차단 장치를 그쪽이 정한다). 고유 사실: ci.yml:83 mobile 필터가 ^(src/mobile/|schemas/|ci.yml)뿐이라 data/ 계약이 통째로 빠져 있고, 그 결과 NLP-03이 만든 교차 골든이 백엔드→클라 방향으로 미강제다 — 계약을 고쳐도 Dart가 안 돌고, 백엔드 구현을 고쳐도 Dart 미러가 안 돈다. math_engine_gap_review.md §7 Δ2가 mobile 필터 구멍을 지적했으나 data/ 축은 그 관찰에도 없었다. 판정 기준: '게이트를 트리거하는 경로가 그 게이트가 지키는 파일을 실제로 덮는가'."
 updated: 2026-08-11
