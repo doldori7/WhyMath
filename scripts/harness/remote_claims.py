@@ -81,7 +81,6 @@ stale claim 청소: 세션이 release 없이 죽으면 claim 파일이 남는다
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -200,6 +199,44 @@ def has_remote(root: Path) -> bool:
         return _git(root, "remote", "get-url", "origin", timeout=10).returncode == 0
     except Exception:
         return False
+
+
+def is_shallow_repo(root: Path) -> bool:
+    """이 저장소가 shallow 클론인가 — 트렁크 히스토리 기반 판정의 전제 조건.
+
+    2026-08-11 사고: CCR 컨테이너 클론이 shallow(`origin/main` 50커밋·경계 2026-08-06)
+    였는데 `scan_stale_branches`가 그걸 모른 채 판정했다. 결과는 브리핑 "미해결 19건"
+    중 10건 오분류 — 예컨대 `claude/whymath-ai-tutor-design-953m1e`는 PR #705로 이미
+    trunk에 흡수됐는데도 "Kiki 결정 필요"로 떴다(흡수 커밋이 절단면 밖이라 grep이 못 봄).
+    `ahead` 수치도 같은 이유로 667까지 부풀었다.
+
+    실패를 실패로 신고하지 않으면 "근거 없음"과 "히스토리가 없어 못 봄"이 같은 화면이
+    된다 — CLAUDE.md "침묵 실패 금지"·"변별력 없는 검증 스텝 금지"의 직접 위반이다.
+
+    폴백이 True(=판정 보류)인 이유: 판정 불가를 신뢰로 오해하는 쪽이 사고를 만든다.
+    worktree 세션에서는 `.git`이 파일이라 `root/".git"/"shallow"` 직접 조회가 틀리므로
+    2차 판정도 `--git-common-dir`를 경유한다.
+    """
+    try:
+        result = _git(root, "rev-parse", "--is-shallow-repository", timeout=10)
+        if result.returncode == 0 and result.stdout is not None:
+            return result.stdout.strip().lower() == "true"
+    except Exception:
+        pass
+    # 2차 — git < 2.15 등 `--is-shallow-repository` 미지원 환경
+    try:
+        common = _git(root, "rev-parse", "--git-common-dir", timeout=10)
+        if common.returncode == 0 and common.stdout:
+            return (root / common.stdout.strip() / "shallow").exists()
+    except Exception:
+        pass
+    return True
+
+
+SHALLOW_PENDING_MESSAGE = (
+    "shallow 클론 — 트렁크 히스토리가 잘려 ahead 수치·포팅 근거를 신뢰할 수 없다. "
+    "`git fetch --unshallow origin` 후 재실행하면 판정이 복원된다."
+)
 
 
 def _classify_failure(stderr: str) -> str:
@@ -664,6 +701,7 @@ def scan_remote_in_progress(
             root,
             "fetch",
             "--quiet",
+            "--prune",
             "origin",
             "+refs/heads/*:refs/remotes/origin/*",
             timeout=SCAN_FETCH_TIMEOUT,
@@ -894,6 +932,7 @@ def scan_remote_done(
                 root,
                 "fetch",
                 "--quiet",
+                "--prune",
                 "origin",
                 "+refs/heads/*:refs/remotes/origin/*",
                 timeout=SCAN_FETCH_TIMEOUT,
@@ -994,6 +1033,7 @@ def scan_remote_task_files(
                 root,
                 "fetch",
                 "--quiet",
+                "--prune",
                 "origin",
                 "+refs/heads/*:refs/remotes/origin/*",
                 timeout=SCAN_FETCH_TIMEOUT,
@@ -1077,46 +1117,91 @@ class StaleBranch:
     evidence: str = ""
 
 
-_SESSION_SUFFIX_RE = re.compile(r"-([a-z0-9]{6})$")
+# 근거 needle 길이 하한 — 짧은 문자열은 우연 매칭 생성기다.
+_MIN_EVIDENCE_NEEDLE = 12
+
+# "원장" 최상위 경로 — 이것만 고친 커밋은 브랜치를 *언급*했을 뿐 *흡수*하지 않았다.
+_LEDGER_ONLY_TOPS = frozenset(
+    {"MEMORY.md", "backlog", "docs", ".github", "ROADMAP.md", "README.md", "CLAUDE.md"}
+)
+
+# git log 레코드 구분자(RS) — 커밋 제목에 개행이 없다는 가정에 의존하지 않기 위함.
+_EVIDENCE_RECORD_SEP = "\x1e"
 
 
 def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
-    """`branch`의 세션 접미사를 trunk 커밋 로그에서 찾는다 — 있으면 "이미 포팅됨" 근거.
+    """브랜치명을 trunk 커밋 로그에서 찾는다 — 코드를 실제로 옮긴 커밋만 "포팅됨" 근거.
 
-    이 저장소의 관측된 명명 관행(예 `claude/whymath-ai-tutor-design-953m1e`)은 세션마다
-    6자 영숫자 접미사를 붙인다. 그 브랜치의 유용한 부분을 뽑아 trunk에 흡수할 때(예:
-    `merge: claude/whymath-ai-tutor-design-953m1e (PED-05, S3-16)`) 커밋 메시지가 그
-    접미사를 그대로 인용하는 패턴이 반복 관측됐다(PR#705·#702·#707 등). 접미사가 이
-    패턴에 안 맞거나 grep이 실패하면 "포팅 근거 없음"으로 안전 폴백한다(전체 스캔을
-    막지 않음 — 이 브랜치만 unresolved로 남는다).
+    브랜치의 유용한 부분을 trunk에 흡수할 때 커밋 메시지가 브랜치명을 인용하는 패턴이
+    반복 관측됐다(`merge: claude/whymath-curriculum-design-b7qav0 (PATH-02)` #706,
+    `PATH-05: … 고아 브랜치 회수` #728의 본문 등). needle은 네임스페이스를 뗀 basename
+    전체다 — 제목뿐 아니라 본문도 훑는다.
+
+    ⚠ 여기서 가장 위험한 오류는 미탐이 아니라 **오탐**이다. 잘못된 "포팅됨" 강등은
+    브리핑에서 "결정 불요"로 표시돼 실작업이 든 브랜치를 삭제 대상으로 만든다. 그래서
+    두 겹으로 막는다:
+
+      ① needle 길이 하한(12자) — 옛 구현은 `-([a-z0-9]{6})$` 6자 접미사를 needle로
+         썼는데, 이건 세션 해시뿐 아니라 평범한 영단어도 잡았다(`…-metrics-writer`의
+         "writer"가 무관한 커밋에 매칭돼 그 브랜치를 오강등한 것이 실측됐다). 동시에
+         6자 접미사가 *없는* 브랜치(`claude/harn-14-…`, `worktree-agent-…`)는 아예
+         시도조차 못 해 항구적 "미해결"이었다 — 좁으면서 동시에 헐거웠다.
+      ② 원장 전용 커밋 배제 — `MEMORY.md`/`backlog`/`docs`만 고친 커밋은 버린다.
+         *"이 브랜치들은 미해결이다"*라고 적은 판정 문서가 바로 그 브랜치를 "해결됨"
+         으로 뒤집던 사고를 막는다(2026-08-11 실측: 오탐 5건이 전부 이 형태였고,
+         `claude/whymath-solution-review-40xspg`는 미회수 S4-09를 안은 채 "포팅됨"으로
+         분류돼 있었다).
+
+    정직한 잔존 한계:
+      · 순수 문서·백로그 PR로 정리된 브랜치는 미탐된다(→ unresolved로 남음). 과보고는
+        사람이 훑으면 되고 과소보고는 사고가 되므로 **의도된 비대칭**이다.
+      · trunk에 진짜 머지 커밋이 있으면 `--name-only`가 빈 목록을 내 원장 취급으로
+        버려진다(미탐·안전 방향).
+      · 코드 커밋이 다른 브랜치를 *충돌 상대*로 언급하는 경우는 텍스트로 구분 불가라
+        통과한다 — 그래서 브리핑은 `ported` 항목에 근거 커밋을 항상 함께 노출한다.
+
+    예외·비0 종료는 `""`로 안전 폴백한다(이 브랜치만 unresolved로 남고 전체 스캔은
+    실패하지 않는다).
     """
-    match = _SESSION_SUFFIX_RE.search(branch)
-    if not match:
+    needle = branch.split("/", 1)[-1]
+    if len(needle) < _MIN_EVIDENCE_NEEDLE:
         return ""
-    suffix = match.group(1)
     try:
         found = _git(
             root,
             "log",
             trunk_ref,
-            f"--grep={suffix}",
+            f"--grep={needle}",
             "--fixed-strings",
-            "--oneline",
+            "--name-only",
+            f"--format={_EVIDENCE_RECORD_SEP}%h%x09%s",
             "-n",
             "5",
-            timeout=15,
+            timeout=30,
         )
     except Exception:  # pragma: no cover - 환경 의존
         return ""
-    if found.returncode != 0:
+    if found.returncode != 0 or not found.stdout:
         return ""
-    line = found.stdout.strip().splitlines()[0] if found.stdout.strip() else ""
-    return line
+    for record in found.stdout.split(_EVIDENCE_RECORD_SEP):
+        header, _, files_blob = record.strip("\n").partition("\n")
+        header = header.strip()
+        if not header:
+            continue
+        tops = {line.split("/", 1)[0] for line in files_blob.splitlines() if line.strip()}
+        if not tops - _LEDGER_ONLY_TOPS:
+            continue  # 원장·문서만 고친 커밋 = 언급이지 흡수가 아니다
+        return header.replace("\t", " ")
+    return ""
 
 
 @dataclass
 class StaleBranchScanResult:
-    """장기 미머지 브랜치 스캔 결과. status: ok | offline | error(판정 불가는 stale 무시 금지)."""
+    """장기 미머지 브랜치 스캔 결과.
+
+    status: ok | offline | error | shallow (판정 불가는 stale 무시 금지).
+    `shallow`는 트렁크 히스토리가 잘려 판정 자체가 불가능한 상태다 — `is_shallow_repo`.
+    """
 
     status: str
     stale: list[StaleBranch] = field(default_factory=list)
@@ -1162,6 +1247,10 @@ def scan_stale_branches(
     """
     if not has_remote(root):
         return StaleBranchScanResult("offline", message="origin 원격 없음 — 브랜치 스캔 불가")
+    # shallow 가드는 fetch *앞*에 둔다 — 어차피 못 믿을 결과를 위해 SessionStart마다
+    # 90초 예산의 전체 fetch를 물지 않는다(fetch는 shallow를 해제하지 않는다).
+    if is_shallow_repo(root):
+        return StaleBranchScanResult("shallow", message=SHALLOW_PENDING_MESSAGE)
     now = now or _utcnow()
     try:
         if fetch:
@@ -1169,6 +1258,7 @@ def scan_stale_branches(
                 root,
                 "fetch",
                 "--quiet",
+                "--prune",
                 "origin",
                 "+refs/heads/*:refs/remotes/origin/*",
                 timeout=SCAN_FETCH_TIMEOUT,
@@ -1212,6 +1302,12 @@ def scan_stale_branches(
         for ref, date_str in entries:
             if ref == trunk_ref:
                 continue
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            # 하네스가 스스로 만드는 claim 저장 브랜치는 사람이 결정할 작업 브랜치가
+            # 아니다 — 정의상 대상 밖이지 유예가 아니다. claim이 3일만 조용하면
+            # "Kiki 결정 필요"로 뜨는 것을 막는다.
+            if branch == CLAIMS_BRANCH:
+                continue
             try:
                 last_commit_at = datetime.fromisoformat(date_str)
             except ValueError:
@@ -1228,7 +1324,6 @@ def scan_stale_branches(
                 continue
             if ahead <= 0:
                 continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 방치 아님
-            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
             if branch in active_branches:
                 status, evidence = "active", ""
             else:
@@ -1331,6 +1426,7 @@ def scan_doc_series_duplicates(
                 root,
                 "fetch",
                 "--quiet",
+                "--prune",
                 "origin",
                 "+refs/heads/*:refs/remotes/origin/*",
                 timeout=SCAN_FETCH_TIMEOUT,
