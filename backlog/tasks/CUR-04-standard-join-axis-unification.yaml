@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,11 +17,14 @@ acceptance:
   - "④ 변별력: /v1/me/target-progress의 standard_coverage_percent와 harness/standard_attainment_report의 도달 집계를 같은 fixture에서 대조해 수정 전 불일치·수정 후 일치를 테스트로 동결한다. 양쪽에서 같은 값이 나오는 fixture만으로 검증하면 위장이다"
   - "⑤ 작동 신호 부착: 조인 성립 건수를 응답 또는 로그가 보고하게 한다 — 0%가 '도달 실패'인지 '조인 실패'인지 구분 가능해야 한다(CLAUDE.md '작동한 비율' 원칙·침묵 실패 금지). graceful None/0 폴백을 무계수로 두지 않는다"
   - "⑥ 범위 밖 명시: ConceptStandardLink 테이블의 거취(드롭·보존) 결정과 2015 개정 460건의 링크 보강은 포함하지 않는다(curriculum_module_gap_review_r2.md §4-⑧·§5-⑦에 발화조건 기록)"
-artifacts: []
+artifacts:
+  - 35c5693b
+  - "4520d9f0(black 포맷 후속수정)"
+  - "독립 재검증(오케스트레이터 별도 실행, 서브에이전트 자가보고와 별개): ruff/mypy/lint-imports exit0 · black --check --line-length 100 . ../../tests/backend에서 서브에이전트가 놓친 위반 1건 발견·수정 후 exit0 · 전체 스위트 9413 passed/305 skipped/0 failed(550s, PYTEST_EXIT=0, 자가보고와 수치 일치)"
 paths:
   - "src/backend/whymath_backend/api/**"
   - "src/backend/whymath_backend/l2/**"
   - "tests/backend/**"
-session: claude/remaining-track-34zvse
+session: null
 notes: "docs/architecture/curriculum_module_gap_review_r2.md §3 D4. S2-03 원자 재연결로 성취기준 조인 축이 갈렸는데 옛 축 소비자 2곳이 남았고 둘 다 graceful 폴백이라 침묵 무신호. /v1/me/target-progress는 성취기준의 유일한 학생 대면 표면이라 0%가 조인 실패의 위장이 된다. 반복 실수 10회차(§6) — 1~9회차의 '만들고 잇지 않음'과 달리 '이었다가 끊었는데 끊긴 걸 아무도 안 봄' 형태라 정적 스캔으로 안 잡히고, ASM-05가 다른 축으로 착지한 뒤에야 대조가 가능해졌다."
 updated: 2026-08-11
