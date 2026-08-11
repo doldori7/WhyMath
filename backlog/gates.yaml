@@ -1,5 +1,14 @@
 # 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)
 gates:
+  - id: G-android-release-store-signing
+    title: "Android 스토어 배포 전 release 서명키 생성·keystore 배선 필수(현재 debug 키로 서명 중)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 30
+    evidence: null
+    notes: ""
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human
