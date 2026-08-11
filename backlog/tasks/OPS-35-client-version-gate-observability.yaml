@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,13 +17,14 @@ acceptance:
   - "④ 임계 상향 트리거 명문화 — min_app_version 기본 0.0.0(게이트 비활성)은 유지한다(fail-open이 옳다). 대신 '언제·누가 올리는가'를 문서에 적는다: ②의 미상 계상이 실제로 관측 가능해지고 미상 비율이 충분히 낮음이 확인된 뒤 Kiki가 올린다. 트리거 없는 영구 무력 상태를 남기지 않는 것이 목적."
   - "⑤ 변별력 실측(양방향·3상태 분리) — 헤더 없는 요청 1건 → unknown +1, 임계 상향 후 구버전 요청 1건 → blocked +1, 임계 하향 → 정상 복귀. 세 값이 서로 다른 값으로 나와야 하며 같은 값이면 검증 실패다."
   - "⑥ 범위 밖 동결 — 강제 업데이트 유도 UI·스토어 링크·자동 업데이트·릴리스노트·롤백·Canary/Blue-Green·Crash 수집·서명·스토어 업로드(MGMT-02 blocked 선행 미충족)."
-artifacts: []
+artifacts:
+  - 7df9ff8d
 paths:
   - src/backend/whymath_backend/app.py
   - "src/backend/whymath_backend/schema/**"
   - "src/mobile/lib/core/**"
   - "tests/backend/**"
   - "src/mobile/test/**"
-session: claude/whymath-service-operations-review-5t5lmv
+session: null
 notes: "정본: docs/architecture/service_operations_gap_review_r2.md §6 D7. OPS-17(done)이 게이트 자체는 정확히 착지시켰으나 '작동한 비율'이 관측되지 않는다 — CLAUDE.md '작동 신호 없는 알고리즘 부착 금지' 해당. RPT-02(신고 접수만 되고 판독 0)와 같은 형태의 다른 평면."
 updated: 2026-08-11
