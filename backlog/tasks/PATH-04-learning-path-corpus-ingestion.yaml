@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: blocked
 priority: 4
 owner: claude
 depends_on: []
@@ -23,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/l1/**"
   - docs/data/concept_content_corpus_v1.md
 session: null
-notes: "docs/data/concept_content_corpus_v1.md §B(2026-06-20 데이터 카드). 데이터 카드가 자매 데이터셋 둘을 함께 명세했는데 ③(7계층 본문 437개념)은 코퍼스+적재기(l1/concept_content/populate.py)까지 착지하고 ②(7주체 S1~S7 경로 677행)는 코퍼스 파일·store·로더·백로그 태스크가 전부 0 — external_corpus_ingestion_v1.md §3이 'Phase C'로 예고했으나 이를 가리키는 태스크가 백로그에 한 건도 없다(추적 소실). 원래 PATH-01/PATH-02로 등재하려다 같은 날 병렬 세션이 docs/architecture/learning_path_module_gap_review.md(#665계열·PATH-01~03)를 이미 main에 병합해 ID·문서 범위가 충돌 → 문서 전체·중복 태스크 철회 후 이 net-new 발견만 재등재(2026-08-03 MEMORY 결정 로그 참조). PATH-01~03(위상정렬 알고리즘 축)과 무관 — 이건 코퍼스 데이터 자산 축. 중복 없음."
-updated: 2026-08-03
+notes: "acceptance ①이 Kiki 소유 선행 행동을 요구 — Path xlsx(7주체 S1~S7 학습경로·8시트·677행) 원본이 저장소에 없음(docs/data/concept_content_corpus_v1.md §B.1 2026-08-03 정정 확인·저장소 내 .xlsx는 ai_llm_inventory_2026-07.xlsx 1건뿐). sha256(앞 16)=f4ee650b734ac854로 사전 고정돼 있으므로 파일 확보 후 해시 검증이 선행돼야 하고, 불일치 시엔 코드가 아니라 데이터 카드부터 정정해야 한다. 자산 없이 store/로더만 만들면 dead table(acceptance ① 원문 경고) — 677행 데이터를 가짜로 지어내는 것은 CLAUDE.md 데이터 정합성 원칙 위반이라 시도하지 않는다. Kiki 실행 필요: 원본 xlsx 파일을 확보해 저장소(예: data/incoming/ 또는 별도 경로)에 두고 해시 검증 통과를 알려주면 재개 가능."
+updated: 2026-08-11
