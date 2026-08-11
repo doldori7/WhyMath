@@ -63,6 +63,7 @@ from whymath_backend.l2.pedagogy_evidence import (
 from whymath_backend.l4.content_supply import get_process_tally, supply
 from whymath_backend.l4.lthc import mastery_to_level
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
+from whymath_backend.schema.enums import KnowledgeType
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
 
@@ -213,7 +214,7 @@ async def post_study_unit(
         signals=signals,
         session=session,
         cache=get_cache(request),
-        k_type=str(objective.k_type),
+        k_type=KnowledgeType(objective.k_type).value,
         tally=tally,
     )
     # 공급 경로 리포트 1줄 — 이중 회계의 in-process 축을 *프로덕션에서* 관측 가능하게 만든다.
@@ -243,7 +244,7 @@ async def post_study_unit(
     await record_pedagogy_treatment(
         session,
         objective_id=objective.id,
-        k_type=str(objective.k_type),
+        k_type=KnowledgeType(objective.k_type).value,
         session_id=session_id,
         user_id=user.user_id,
         settings=settings,
@@ -297,7 +298,7 @@ async def post_study_outcome(
         await record_pedagogy_outcome(
             session,
             objective_id=objective.id,
-            k_type=str(objective.k_type),
+            k_type=KnowledgeType(objective.k_type).value,
             session_id=body.session_id,
             user_id=user.user_id,
             settings=settings,

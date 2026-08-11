@@ -37,7 +37,7 @@ from whymath_backend.db.session import get_session
 from whymath_backend.l3.render.adapter import RenderedUnit, RenderSegment
 from whymath_backend.l4.content_supply import SupplyResult
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
-from whymath_backend.schema.enums import PedagogyStrategy
+from whymath_backend.schema.enums import KnowledgeType, PedagogyStrategy
 
 _OBJECTIVE_ID = "obj-mob13"
 _CONCEPT_CODE = "math.calculus.limit"
@@ -179,14 +179,20 @@ class _EmptyResult:
 
 
 def _objective(concept_nodes: list[str] | None = None) -> LearningObjective:
-    """`k_type`(팩 축)·`concept_nodes`(원자 code)가 라우터가 읽는 두 축이다."""
+    """`k_type`(팩 축)·`concept_nodes`(원자 code)가 라우터가 읽는 두 축이다.
+
+    `k_type`은 **enum 멤버**로 둔다 — ORM이 `Mapped[KnowledgeType]`이라 실제 DB에서 읽어온
+    objective는 항상 멤버다. 예전엔 여기서 평문 `"CONCEPT"`을 썼는데, 그 불일치가
+    `str(objective.k_type)` 결함을 *fake에서만 통과시켜* 실 PG 잡에서야 드러나게 했다
+    (2026-08-11 SEC-24 회수 실측). fake가 실물과 다르면 검출기가 아니라 위장이 된다.
+    """
     return LearningObjective(
         id=_OBJECTIVE_ID,
         unit_id="unit-mob13",
         unit_version=1,
         statement="테스트 학습목표",
         achievement_std="[9수02-01]",
-        k_type="CONCEPT",
+        k_type=KnowledgeType.CONCEPT,
         concept_nodes=[_CONCEPT_CODE] if concept_nodes is None else concept_nodes,
         slot_manifest={},
         exit_evidence={},
