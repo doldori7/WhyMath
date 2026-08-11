@@ -504,6 +504,57 @@
 - **회귀 판정(전체 스위트 실측 대조)**: 이 컨테이너는 전체 백엔드 스위트가 green을 못 낸다(**639 failed** — `test_devices` 149건 등, 대표 사유 `async def functions are not natively supported`·pytest-asyncio strict). 부분 통과를 "회귀 없음"으로 보고하지 않기 위해 **`origin/main` worktree + 별도 venv로 베이스라인을 실측**해 대조했다: 실패 **집합**이 643건으로 **완전히 동일**(양방향 차집합 0건)이고 통과는 **8992 → 8998(+6 = 신규 테스트)**. 회귀 0. 다만 이 환경 실패 자체는 미해결이라 **최종 판정은 CI에 넘긴다**.
 - **로컬 게이트**: ruff/mypy --strict(491파일)/lint-imports 전건 EXIT=0. black은 **최초 EXIT=1**(내 테스트 1건)이라 포맷 적용 후 통과 — 출력이 아니라 exit code로 판정한 덕에 잡혔다(2026-08-09 규칙). mobile은 CI pin과 동일한 **Flutter 3.41.9**를 설치하고 `build_runner` codegen 선행 후 `analyze` clean·**366건 통과**·커버리지 게이트 **86.6%**(최소 60%) PASS. concept-reach 가드(OPS-23) 17건도 통과(모바일 변경 시 분모 확인).
 - **하네스 판정 존중**: `backlog.py done`이 **PR 참조 없는 증적을 거부**(산출물 있으면 PR이 기본값)했고 `validate`가 **1세션=2태스크 동시 claim**을 지적했다. 우회하지 않고 PR #818을 연 뒤 순차로 done 처리해 둘 다 해소. **`PATH-11`(D6)은 미착수** — r2 설계 3건 중 2건만 상환했다.
+### 2026-08-11 (구현·SEC-20): **미성년 동의 만료·철회 집행 — `revoked_at`·`expires_at`의 첫 reader + `DELETE /v1/users/me/parental-consent` 신설. "한 번 받은 동의가 영구히 유효"하던 상태 해소** (claude 구현, Kiki 지정)
+
+**배경**: `account_security_gap_review_r2.md` D9(최대 갭). `get_consented_user`(`api/_auth.py`)가
+`parent_consent_at` **하나만** 읽어서 한 번 받은 동의가 영구히 유효했다. `ParentalConsent.
+revoked_at`·`expires_at`은 writer가 상수 `None` 1곳뿐이고 **reader 0** — 모델 docstring이
+인덱스 `idx_parental_consent_user`의 용도를 "만료 재확인·감사"라고 쓰는데 **읽는 사람이 없었다**.
+정본 `security_privacy.md:11`의 "매 분기 재확인"은 v1 갭 리뷰가 그 파일을 5블록 부기 정정하면서
+**유일하게 손대지 않은 줄**이라 "규정은 살아 있고 집행은 0"인 상태가 남아 있었다.
+
+**정본 결정 4건**:
+1. **문안 ≠ 집행 — 경계를 코드로 그었다**. 동의 *문구*·scope·**재확인 주기 숫자**는 법률 판단이라
+   `MGMT-02`(변호사 회신)에 남기고, **"철회·만료된 동의는 게이트를 통과시키지 않는다"는 집행만**
+   착지시켰다. 근거: 철회를 *표현할 수 없는* 상태를 유지하는 쪽이 법적 위험이 크다(CLAUDE.md
+   "법령 유래 절차의 기계 대체 금지"는 *법률 판단*을 금지하는 것이지 *집행*을 금지하지 않는다).
+2. **`expires_at`은 writer 없이 reader만 먼저 세운다**. 주기 숫자가 확정되면 GRANT 경로 1줄로
+   발화한다 — **읽는 쪽을 먼저 세우는 것이 dead 컬럼을 만들지 않는 순서**다(운영플랫폼 r2의
+   "만들고 읽지 않음" 8회차의 역방향 적용). 대가: 만료 분기는 현재 실데이터에서 미발화(계약만).
+3. **접근 주체 v0 축소 — 학생 본인 토큰만**. 법정대리인 전용 철회는 *보호자를 어떻게 인증하는가*
+   (`MGMT-01` blocked)가 정해져야 만들 수 있고 그전에 만들면 가짜 법적 의사표시가 된다. 본인이
+   자기 계정의 동의를 거두는 방향은 그 판단 없이도 안전하다.
+4. **철회에 기능 플래그를 걸지 않는다(의도적 비대칭)**. GRANT는 `parental_consent_grant_enabled`
+   off면 404(stub self-consent 우회 방지)지만 철회는 항상 열린다 — *안전을 늘리는 조작*을 플래그로
+   잠그는 것은 방향이 반대다. **귀결(정직 표기)**: 플래그 off 환경에서 철회하면 재동의 경로가 없어
+   계속 403이다. 결함이 아니라 철회의 정당한 결과이며 docstring에 명시했다.
+
+**설계 세부**: 게이트는 `is_minor`가 참일 때만 원장을 조회한다(성인·미상은 쿼리 0 — `scalar`
+호출 시 터지는 세션을 주입해 **쿼리 부재를 직접 단언**하는 성능 계약 테스트 동반). 원장 행이
+없으면 **차단하지 않는다** — "판정 근거 부재"는 "철회됨"이 아니다(`is_minor` None 미상 불차단
+방침 동형·원장 도입 이전 데이터가 조용히 잠기는 것 방지). 철회는 원장을 **지우지 않고**
+미철회 행 *전부*에 `revoked_at`을 찍는다(최신 1건만 찍으면 게이트의 "최신 1건 읽기"와 원장이
+어긋난다). 감사는 `SEC-09`의 `record_consent_change_audit` **재사용**(신규 감사 테이블 0).
+신규 인덱스 0 · 마이그레이션 0 · 스키마 변경 0 — **기존 컬럼을 읽기 시작했을 뿐이다**.
+
+**부수 발견(hermetic 공백 보강)**: 게이트·철회의 `select()`가 실 DB 없이는 **한 번도 컴파일된 적이
+없었다**(통합 테스트는 `WHYMATH_RUN_INTEGRATION` 없이 skip). `FakeSession.scalar`/`scalars`가 받은
+statement를 **PG 방언으로 컴파일**하게 해, 잘못된 컬럼·연산자면 hermetic 테스트에서 터지게 했다 —
+가짜 세션을 *컴파일러 검사*로 승격시킨 패턴(후속 ORM 쿼리 테스트에 재사용 가능).
+
+**검증(전건 exit code·CI 충실 재현)**: 전체 백엔드 스위트 **9647 passed / 309 skipped / 1 xfailed /
+0 failed**(813s·bare `pytest`) · ruff 0(src+tests) · black 0(line-length 100·1131파일) ·
+mypy --strict 0(491파일) · lint-imports 0 · `validate` 0(315건). **변별력 뮤테이션 2회**: 철회 판정
+비활성 → 2건 red, 만료 판정 비활성 → 1건 red; `cp` 백업 복원 후 md5 동일·`MUTATION` 잔존 0
+(git 계열 원복 미사용 — 2026-08-10 금기).
+
+**NOT**: 동의 문안·scope 확장·재확인 주기 숫자 0(`MGMT-02`) · 실 법정대리인 본인확인 0(`MGMT-01`) ·
+법정대리인 전용 철회 경로 0 · `AuditEventKind` 확장 0(철회/부여가 감사에서 구분되지 않는다 —
+현 `ConsentScope` 1값이라 실익 작아 별건) · **모바일 화면 0**(서버 좌석만 — SEC-10→MOB-12 부류의
+후속 필요) · 실 PG 왕복 미검증(환경에 PG 없음·통합 3건 skip).
+
+정본: `docs/architecture/account_security_gap_review_r2.md` D9 · `api/_auth.py`(`get_consented_user`) ·
+`docs/standards/security_privacy.md`(14세 미만 절 부기).
 
 ### 2026-08-11 (전수 감사·회수 등재): **미머지 브랜치 46건 전수 감사 — 선행 판정(#785, 브리핑 7건 대상)이 못 본 미추적 고립 7건 발견·태스크 8건 등재. 최대 건은 보안 하드닝 45커밋(k20m0w SEC-13~18: OCR 상한·XFF·프로덕션 /docs — main에 grep 0건 실측)→`SEC-24`(P1). 신규 발견 2건: ①교수전략 카탈로그 3차 구현(gdmwhk)이 PR 없이 떠 있고 main엔 4차 구현 태스크(PED-22~25)가 대기 — `PED-26`이 4차 중복 차단 ②고립 탐지가 "done 표기" 대조뿐이라 구현만 있는 브랜치는 항구 사각(gdmwhk가 실증)→`HARN-31`** (claude 감사·등재, Kiki "머지 안 된 떠도는 코드 검토"+"판정·등재까지, 보안 최우선" 결정)
 - **경위**: 컨테이너 shallow로 브리핑 "판정 보류" → `--unshallow`(793커밋)+`--prune` 후 재측정. 열린 PR 15건 대조로 **PR 미오픈 브랜치 31건** 분리, main 백로그·문서 grep으로 추적/미추적 판정. 정본 = `docs/reviews/unmerged_branch_audit_full_2026-08-11.md`(재현 명령 전문 포함).
