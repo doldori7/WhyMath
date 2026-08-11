@@ -158,14 +158,18 @@ git branch -D claude/backend-prm-verify   # 로컬 브랜치 — 원격 머지 �
 | 도메인/파일 범위 밖 수정 금지 | 태스크 `paths` 선언 + `start` 프리플라이트·check-edit 훅 (`scope_drift`) | warn→block |
 | 타 세션 작업 범위 침범 금지 | check-edit 훅 (`path_overlap`) — 편집 파일 vs in-flight paths | warn→block |
 | 작업은 태스크로 등록 후 착수 | check-edit 훅 (`adhoc_edit`) — claim 없이 `src/*` 편집 감지 | warn |
-| 죽은 세션의 claim 잔존 | `claims reap` (TTL·done·미존재·**홀더 브랜치 부재** 4중 기준·HARN-26) + CI harness-integrity | **탐지만 — 수동 청소**<sup>†</sup> |
+| 죽은 세션의 claim 잔존 | `claims reap` (TTL·done·미존재·**홀더 브랜치 부재** 4중 기준·HARN-26) + `harness-audit.yml`의 `--auto` 집행(HARN-27) | 확정 사유 자동 청소<sup>†</sup> |
 | backlog 무결성 | PostToolUse 훅 + CI `harness-integrity` job | 차단 |
 
 <sup>†</sup> **"자동 청소"는 2026-08-11까지 사실이 아니었다.** CI(`ci.yml` harness-integrity)는
 `claims reap`을 **dry-run으로만** 돌리고 "`--apply`로 청소 권장"이라는 경고를 냈을 뿐,
 그 명령을 부르는 자동 경로가 저장소 어디에도 없었다. 그래서 main에서 이미 `done`인
-태스크의 claim조차(HARN-20 실측) 영구히 남아 새 세션의 착수를 막았다. 집행 지점 배선은
-`HARN-27`이 다룬다 — 그때까지 이 칸은 "탐지만"이 정직한 표기다.
+태스크의 claim조차(HARN-20 실측) 영구히 남아 새 세션의 착수를 막았다.
+HARN-27이 `harness-audit.yml`로 집행 지점을 배선한 뒤에야 이 칸이 참이 된다.
+**단 자동 청소는 확정 사유(`task_done`·`branch_gone`)에 한정**되며, `ttl`·`task_missing`은
+여전히 경고로만 남아 사람 판단을 기다린다 — 자동 삭제 범위를 넓히면 살아 있는 장기
+세션의 claim을 지우거나(ttl), 다른 브랜치에서 등재된 태스크를 "없음"으로 오판한다
+(task_missing — CI 러너는 main만 본다).
 
 - 정책 수준은 `backlog/policy.yaml`이 정본 — 전 rule warn으로 시작, 측정
   (`policy report`) 후 rule별 block 승격.

@@ -1280,12 +1280,17 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
+        # `--auto`(HARN-27) = 무인 집행 모드. 삭제를 켜되 사유를 확정 신호로 좁힌다.
+        # 사람이 치는 `--apply`는 기존대로 전 사유를 지운다(판단 주체가 사람이므로).
+        auto = getattr(args, "auto", False)
+        apply_ = args.apply or auto
         reaped, scan_status, warnings = remote_claims.reap(
             root,
             backlog,
             ttl,
-            dry_run=not args.apply,
+            dry_run=not apply_,
             branch_grace_hours=policy.claim_branch_grace_hours,
+            reasons=remote_claims.AUTO_REAP_REASONS if auto else None,
         )
         if scan_status != "ok":
             # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
@@ -1306,12 +1311,12 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
         if not reaped:
             print("stale claim 없음")
             return 0
-        label = "삭제됨" if args.apply else "삭제 대상 (dry-run — 실제 삭제는 --apply)"
+        label = "삭제됨" if apply_ else "삭제 대상 (dry-run — 실제 삭제는 --apply)"
         print(f"stale claim {len(reaped)}건 {label}:")
         for item in reaped:
             print(f"  · {item}")
-        if args.apply:
-            store.append_event(root, "claim_reap", "-", reaped=reaped)
+        if apply_:
+            store.append_event(root, "claim_reap", "-", reaped=reaped, auto=auto)
         return 0
 
     # list (기본)
@@ -1604,6 +1609,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="reap TTL (기본: policy.claim_ttl_hours)",
     )
     p.add_argument("--apply", action="store_true", help="reap 실제 삭제 (기본 dry-run)")
+    p.add_argument(
+        "--auto",
+        action="store_true",
+        help="reap 무인 집행 — 삭제하되 확정 사유(task_done·branch_gone)로만 한정. CI 전용",
+    )
     p.set_defaults(func=cmd_claims)
 
     p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")

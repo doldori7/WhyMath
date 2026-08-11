@@ -939,6 +939,76 @@ class TestReapBranchGoneIntegration:
         assert [c.task_id for c in claims] == [TASK]
 
 
+class TestReapReasonFilter:
+    """HARN-27 — 자동 청소는 확정 사유만 지운다. 걸러진 건은 버리지 않고 경고로 올린다."""
+
+    def test_auto_reap_reasons_contains_only_confirmed_signals(self):
+        """자동_청소_사유_집합_동결 — 이것이 안전 범위의 유일한 잠금장치다
+
+        `ttl`은 살아 있는 장기 세션일 수 있고(실측 max 지속 66.4h로 TTL 72h에 근접),
+        `task_missing`은 CI 러너가 main만 보기 때문에 다른 브랜치에서 등재된 태스크를
+        구조적으로 '없음'으로 본다(HARN-15 비가시 부채 맹점). 둘 다 자동 삭제 부적합.
+        """
+        assert remote_claims.AUTO_REAP_REASONS == frozenset({"task_done", "branch_gone"})
+
+    def test_filter_limits_deletion_and_preserves_others(self, bare_remote, monkeypatch):
+        """확정_사유만_삭제되고_나머지는_원격에_남는다
+
+        `task_done`(확정) 1건과 `ttl`(비확정) 1건을 동시에 두고 `--auto` 상당 호출을
+        한다. 필터가 없으면 둘 다 사라져 RED가 된다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        assert remote_claims.claim(a, "S1-09-ttl-task", "claude/session-a").status == "ok"
+
+        backlog = _mk_backlog(status="done", session=None)
+        backlog.tasks[TASK].artifacts = ["PR#1"]
+        backlog.tasks["S1-09-ttl-task"] = Task(
+            id="S1-09-ttl-task",
+            title="장기 세션",
+            track="math-completion",
+            stage="S1",
+            status="in_progress",
+            session="claude/session-a",
+        )
+        # TTL(72h) 초과 시점 — 브랜치는 살아 있으므로 branch_gone은 성립하지 않는다.
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=200))
+        reaped, status, warnings = remote_claims.reap(
+            a,
+            backlog,
+            ttl_hours=72,
+            dry_run=False,
+            reasons=remote_claims.AUTO_REAP_REASONS,
+        )
+        assert status == "ok"
+        assert len(reaped) == 1 and "task_done" in reaped[0]
+        remaining, _ = remote_claims.list_claims(a)
+        assert [c.task_id for c in remaining] == [
+            "S1-09-ttl-task"
+        ], "확정 사유가 아닌 ttl claim이 자동 청소로 사라졌다 — 살아 있는 장기 세션을 지운다"
+        assert any(
+            "자동 청소 제외" in w and "ttl" in w for w in warnings
+        ), "걸러진 건이 조용히 버려졌다 — '지우지 않았다'가 보이지 않으면 침묵 실패다"
+
+    def test_no_filter_deletes_everything_stale(self, bare_remote, monkeypatch):
+        """필터_없으면_전_사유_삭제 — 사람이 치는 --apply의 기존 동작 보존(음성 대조)"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=200))
+        reaped, status, _ = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=False)
+        assert status == "ok"
+        assert len(reaped) == 1 and "ttl" in reaped[0]
+        assert remote_claims.list_claims(a)[0] == []
+
+
 class TestTaskMissingRecentRaceGuard:
     """HARN-21 결함③ — 신선한 missing claim은 reap에서 제외되고, 오래된 것은 여전히
     정리된다. 실제 `bare_remote`(진짜 로컬 원격)로 양방향(변별력)을 hermetic하게 검증.

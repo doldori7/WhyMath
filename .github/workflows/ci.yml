@@ -1023,7 +1023,12 @@ jobs:
           if echo "$out" | grep -q "조회 불가"; then
             echo "::warning::원격 claim 조회 불가 — stale 판정이 수행되지 않았다"
           elif ! echo "$out" | grep -q "stale claim 없음"; then
-            echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
+            # HARN-27 — 이 경고는 오래도록 **아무도 실행하지 않는 명령을 권하고** 있었다
+            # ('--apply로 청소 권장'). 집행 지점이 없으니 상시 경고가 습관화됐고, main에서
+            # 이미 done인 태스크의 claim조차 영구히 남았다. 이제 확정 사유(task_done·
+            # branch_gone)는 harness-audit.yml이 자동 청소하므로, 여기 남는 목록은
+            # **사람 판단이 필요한 잔여**(ttl·task_missing)라는 뜻이다.
+            echo "::warning::stale 원격 claim 발견 — 확정 사유는 harness-audit이 자동 청소한다. 위 목록에 ttl/task_missing이 남아 있으면 사람 판단이 필요하다"
           fi
 
       # OPS-12 — `tests/harness`·`scripts/harness`를 lint/format하는 잡이 **하나도 없었다**

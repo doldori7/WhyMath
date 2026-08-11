@@ -934,6 +934,23 @@ def stale_claims(
     return result
 
 
+# 자동 청소가 허용되는 사유 — **확정 신호만**(HARN-27).
+#
+# 이 집합을 워크플로 YAML의 문자열 인자로 두지 않는 이유: 안전 범위의 정의가 YAML에
+# 살면 워크플로를 고치는 누구든 `ttl`을 끼워 넣어 넓힐 수 있고, 그 변경은 파이썬
+# 테스트가 아니라 인프라 배선 테스트로만 잡힌다. 집합을 코드에 두면 단위 테스트가
+# 직접 동결한다(`test_auto_reap_reasons_contains_only_confirmed_signals`).
+#
+# 제외한 사유와 근거:
+#   · `ttl`          — 72h 무소식이 세션 사망은 아니다(실측 max 지속 66.4h로 경계에
+#                      매우 가깝다). 살아 있는 장기 세션의 claim을 밤중에 지울 수 있다.
+#   · `task_missing` — 판정 입력이 *실행 주체의 로컬 백로그*다. CI 러너는 main만 보므로
+#                      다른 브랜치에서 등재된 태스크는 구조적으로 "missing"이다
+#                      (HARN-15가 기록한 비가시 부채 맹점). 자동 삭제 대상으로 부적합.
+#   · `*_recent`     — 정의상 유예 중.
+AUTO_REAP_REASONS = frozenset({"task_done", "branch_gone"})
+
+
 def reap(
     root: Path,
     backlog: Backlog,
@@ -941,10 +958,15 @@ def reap(
     dry_run: bool = True,
     *,
     branch_grace_hours: int = 24,
+    reasons: frozenset[str] | None = None,
 ) -> tuple[list[str], str, list[str]]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
     반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error, ["경고 문자열", ...]).
+
+    **`reasons`(HARN-27)**: 삭제 대상을 이 사유 집합으로 좁힌다. `None`이면 전체(기존
+    동작 — 사람이 직접 `--apply`를 치는 경우). 자동 집행 경로는 `AUTO_REAP_REASONS`를
+    넘겨 확정 신호만 지운다. 걸러진 건은 버리지 않고 경고 목록으로 올라간다.
 
     **홀더 브랜치 조회(HARN-26)**: `list_remote_branches`를 **1회** 호출해 `stale_claims`에
     넘긴다. 조회가 실패하면 `None`이 넘어가 `branch_gone` 판정만 조용히 빠지고 나머지
@@ -988,9 +1010,17 @@ def reap(
             # 둘 다 "다른 세션의 상태가 아직 내게 보이지 않는 창"이고, 해답도 같다.
             warnings.append(label)
             continue
+        if reasons is not None and reason not in reasons:
+            # 자동 집행에서 제외된 사유 — 사람 판단이 필요하다는 뜻이지 "없음"이 아니다.
+            warnings.append(f"{label} — 자동 청소 제외 사유(사람 판단 필요)")
+            continue
         if not dry_run:
             result = release(root, c.task_id, branch="", force=True)
             if result.status != "ok":
+                # 삭제하지 못했으면 삭제했다고 보고하지 않는다. 다만 조용히 넘기지도
+                # 않는다 — 토큰·권한 문제로 자동 청소가 상시 무력화되면 그 사실 자체가
+                # 보여야 한다(CLAUDE.md 침묵 실패 금지·상시 실패 fail-open 금지).
+                warnings.append(f"{label} — 해제 실패({result.status})")
                 continue
         reaped.append(label)
     return reaped, "ok", warnings

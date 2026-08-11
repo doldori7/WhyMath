@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ paths:
   - "scripts/harness/**"
   - "tests/harness/**"
   - ".github/workflows/ci.yml"
-session: null
+session: claude/multi-session-conflict-resolution-3tpr0u
 notes: "실측 2026-08-11: ci.yml:1017이 reap을 dry-run으로만 돌리고 1026행에서 'backlog.py claims reap --apply로 청소 권장' ::warning:: 을 낸다 — 아무도 실행하지 않는 명령을 권하는 상태. 그래서 main에서 이미 done인 HARN-20의 claim이 기존 task_done 기준에 해당하는데도 안 지워졌다. CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지'·'상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지' 위반."
 updated: 2026-08-11

@@ -104,6 +104,18 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
     CAS가 막아둔 중복 착수를 직접 열어줬을 것이다.
   - 원격 브랜치 조회가 실패하면 이 기준만 **보류**한다(빈 집합을 "브랜치 전멸"로 읽으면
     대장을 통째로 지운다). 보류 사실은 경고 목록에 실린다 — 침묵하지 않는다.
+- **집행 지점(HARN-27)**: `.github/workflows/harness-audit.yml`이 main push·야간·수동
+  트리거에서 `claims reap --auto`를 돌린다. `--auto`는 삭제를 켜되 사유를
+  `remote_claims.AUTO_REAP_REASONS`(= `task_done`·`branch_gone`)로 좁힌다.
+  - **왜 별도 워크플로인가**: `on:`에 `pull_request`가 아예 없어 "PR에서는 지우지 않는다"가
+    조건문이 아니라 **구조적 불가능**이 된다. ci.yml의 `harness-integrity`에는 `if:` 가드가
+    없어 PR에서도 돌고, 거기에 `contents: write`를 붙이면 PR 검증 경로가 쓰기 권한을 갖는다.
+  - **왜 안전 집합이 코드에 있는가**: 사유를 워크플로 인자(`--reasons ttl,...`)로 두면
+    YAML을 고쳐 범위를 넓힐 수 있고 파이썬 테스트가 그것을 동결하지 못한다.
+    `ttl`(살아 있는 장기 세션일 수 있다)·`task_missing`(CI 러너는 main만 보므로 다른
+    브랜치 등재 태스크를 구조적으로 "없음"으로 본다 — HARN-15 맹점)은 제외한다.
+  - ci.yml의 dry-run 스텝은 **유지**한다 — PR마다 도는 관측 채널이고, 자동 집행에서
+    제외된 사유(사람 판단 필요분)를 드러내는 유일한 화면이다.
 - `next`/`brief`(SessionStart)가 원격 claim을 조회해 다른 세션의 작업을
   후보 제외·브리핑 노출한다.
 
@@ -250,6 +262,7 @@ python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
 python3 scripts/harness/backlog.py claims release <id> [--force]  # claim 해제 (남의 것은 --force)
 python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 (기본 dry-run)
+python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 ```
