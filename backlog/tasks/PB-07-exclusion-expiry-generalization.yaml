@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,12 +16,14 @@ acceptance:
   - "③ 일반화가 본체다 — ARCH-25가 ops/provenance_audit._KNOWN_GAPS 한 좌석에만 건 만료 계약(항목이 추적 태스크 ID를 필수 포함 + 그 태스크가 done인데 항목이 남으면 테스트 red)을 EXCLUDED_CORPORA 좌석에도 적용한다. 자동 해제는 아니다(면제 해제는 사람 판단) — 방치만 구조적으로 막는다."
   - "④ 변별력 의무 — 존재하지 않는 태스크 ID 참조 / done 태스크 잔존, 두 경우 모두에서 테스트가 실제 red를 내는지 실측한다. 정상 상태 green도 함께 실측(성공·실패 양쪽에서 같은 값을 내는 검사는 위장)."
   - "⑤ 스코프 밖 — 세 번째 좌석을 찾아 좌석 열거 자체를 기계화하는 것은 하지 않는다(2회차에 일반화 도구를 만들면 과공학). problem_type_node FK 연결·유형 기반 생성/추천 확대도 스코프 밖(S3-27 판정 승계·관측 축 한정)."
-artifacts: []
+artifacts:
+  - "#797"
+  - "검증(오케스트레이터 독립 재실행·exit code): 코퍼스 실측 421줄 불변·problem_type_codes 421/421·영향 테스트(type_mapping·backfill·l1/problem_bank) 200 passed exit 0·ruff 0·black 0·중복 감사 실중복 0쌍 유지·validate green. 서브에이전트 1차: harness 전체 1,267 passed·백필 2회 cmp 0·mypy --strict 0(487)·양 감사기 exit 0·변별력 양방향(미실재 task_id red·done 잔존 red·cp 원복 green). 계보 추적 421/421 성립 실측 후 백필 2,217/2,638→2,638/2,638 전건 도달·ARCH-25 동형 만료 계약을 EXCLUDED_CORPORA에 이식(빈 좌석 유효·task_id 강제). 잔여 인계: problem_bank_coverage.py:23 stale 산문(타 세션 claim 경계 무접촉)"
 paths:
   - src/backend/whymath_backend/harness/problem_type_mapping.py
   - src/backend/whymath_backend/harness/problem_type_backfill.py
   - "tests/backend/harness/**"
   - "data/corpus/problem_bank_rephrased_v0/**"
-session: claude/whymath-dsl-integration-check-bmjic8
+session: null
 notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G2·§6-ⓑ. CLAUDE.md 금기 '만료 없는 유예·제외 금지'(2026-08-03 등재)의 2회차 — 1회차 대책 ARCH-25가 코드로 착지한 것은 옳았으나 좌석 단위였고, 같은 성격의 다른 좌석이 계약 밖에 남아 있었다. R2 §1 기능20이 429건 구멍의 사유를 'S4-14 미착지'로 기록한 지 8일, S4-14 done 이후 6일 방치."
 updated: 2026-08-11
