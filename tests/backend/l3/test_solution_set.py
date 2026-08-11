@@ -16,10 +16,12 @@ from __future__ import annotations
 
 from whymath_backend.l3.solution_set import (
     EquationSolset,
+    SolsetUndecidableKind,
     as_single_equation,
     equation_solution_set,
     read_equation_step,
     roots_enumeration_solset,
+    solset_transition_detail,
     solset_transition_status,
     solution_set_status,
 )
@@ -199,6 +201,75 @@ class TestSolsetTransitionStatus:
         b = EquationSolset(all_reals=False, values=frozenset({3}))
         assert solset_transition_status(a, a) is IdentityVerdict.identity
         assert solset_transition_status(a, b) is IdentityVerdict.not_identity
+
+
+class TestSolsetTransitionDetail:
+    """MATH-03 — undecidable 가드 세부 라벨(`solset_transition_detail`)·status 위임 정합.
+
+    라벨은 분기 발생 지점(이 모듈)이 단일 진실로 낸다 — verify_step은 어휘 번역만 한다.
+    verdict는 `solset_transition_status`와 항상 같아야 하고(위임 동결), undecidable일 때만
+    kind가 채워진다.
+    """
+
+    _FINITE_2 = EquationSolset(all_reals=False, values=frozenset({2}))
+    _FINITE_23 = EquationSolset(all_reals=False, values=frozenset({2, 3}))
+    _ALL_REALS = EquationSolset(all_reals=True, values=frozenset())
+
+    def test_none_side_labelled_incomputable(self) -> None:
+        verdict, kind = solset_transition_detail(self._FINITE_2, None)
+        assert verdict is IdentityVerdict.undecidable
+        assert kind is SolsetUndecidableKind.incomputable_side
+
+    def test_all_reals_mismatch_labelled_heterogeneous(self) -> None:
+        verdict, kind = solset_transition_detail(self._ALL_REALS, self._FINITE_2)
+        assert verdict is IdentityVerdict.undecidable
+        assert kind is SolsetUndecidableKind.heterogeneous_form
+
+    def test_proper_subset_labelled(self) -> None:
+        verdict, kind = solset_transition_detail(self._FINITE_23, self._FINITE_2)
+        assert verdict is IdentityVerdict.undecidable
+        assert kind is SolsetUndecidableKind.proper_subset
+
+    def test_decisive_verdicts_have_no_kind(self) -> None:
+        # identity/not_identity는 라벨 대상이 아니다(kind None) — 코드는 "왜 판정 못 했는가"다.
+        assert solset_transition_detail(self._FINITE_2, self._FINITE_2) == (
+            IdentityVerdict.identity,
+            None,
+        )
+        other = EquationSolset(all_reals=False, values=frozenset({3}))
+        assert solset_transition_detail(self._FINITE_2, other) == (
+            IdentityVerdict.not_identity,
+            None,
+        )
+
+    def test_status_delegates_to_detail(self) -> None:
+        # 위임 동결 — status와 detail.verdict가 갈리면 판정 이원화(병렬 진실)다.
+        pairs = [
+            (None, None),
+            (self._FINITE_2, None),
+            (self._ALL_REALS, self._FINITE_2),
+            (self._FINITE_23, self._FINITE_2),
+            (self._FINITE_2, self._FINITE_2),
+            (self._FINITE_2, self._FINITE_23),
+        ]
+        for before, after in pairs:
+            assert (
+                solset_transition_status(before, after)
+                is solset_transition_detail(before, after).verdict
+            )
+
+    def test_undecidable_always_carries_kind(self) -> None:
+        # 계약: verdict가 undecidable이면 kind는 항상 채워진다(verify_step 사상 총부착의 전제).
+        undecidable_pairs = [
+            (None, None),
+            (self._FINITE_2, None),
+            (self._ALL_REALS, self._FINITE_2),
+            (self._FINITE_23, self._FINITE_2),
+        ]
+        for before, after in undecidable_pairs:
+            verdict, kind = solset_transition_detail(before, after)
+            assert verdict is IdentityVerdict.undecidable
+            assert kind is not None
 
 
 class TestProperSubsetTransitionGuard:

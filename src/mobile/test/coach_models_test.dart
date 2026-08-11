@@ -69,6 +69,8 @@ void main() {
               'n_correct': 1,
               'n_incorrect': 1,
               'n_unverifiable': 0,
+              // MATH-03 — 사유 코드별 보류 카운트(폐쇄 enum 값 키·여기선 보류 0 = 빈 맵).
+              'unverifiable_by_reason': <String, dynamic>{},
               'n_transitions': 2,
               'unverified_ratio': 0.0,
               'first_incorrect_index': 1,
@@ -121,6 +123,7 @@ void main() {
       expect(sv!.nTransitions, 2);
       expect(sv.hasIncorrect, isTrue);
       expect(sv.firstIncorrectIndex, 1);
+      expect(sv.unverifiableByReason, isEmpty); // MATH-03 — 보류 0이면 빈 맵.
 
       // §3.3 게이트 플래그.
       expect(res.matchLowQuality, isTrue);
@@ -133,6 +136,51 @@ void main() {
       final roundTripped = CoachResponse.fromJson(res.toJson());
       // freezed 값 동치(==)로 라운드트립 보존을 단언한다.
       expect(roundTripped, equals(res));
+    });
+
+    test('unverifiable_by_reason 파싱 — 사유 코드별 카운트 보존(MATH-03)', () {
+      // 백엔드 verify_solution의 사유 분포(문자열 키 → 정수)를 그대로 받는다 — 클라는
+      // 이 카운트로만 3분기 문구를 가른다(steps 리스트 미파싱·노출 계약 유지).
+      final json = sampleJson();
+      (json['solution_coaching'] as Map<String, dynamic>)['solution_verification'] =
+          <String, dynamic>{
+        'n_correct': 1,
+        'n_incorrect': 0,
+        'n_unverifiable': 2,
+        'unverifiable_by_reason': <String, dynamic>{
+          'parse_error': 1,
+          'non_algebraic_step': 1,
+        },
+        'n_transitions': 3,
+        'unverified_ratio': 0.6666666666666666,
+        'first_incorrect_index': null,
+        'has_incorrect': false,
+      };
+      final sv =
+          CoachResponse.fromJson(json).solutionCoaching!.solutionVerification!;
+      expect(sv.unverifiableByReason, <String, int>{
+        'parse_error': 1,
+        'non_algebraic_step': 1,
+      });
+    });
+
+    test('unverifiable_by_reason 키 부재(구판 서버) → 빈 맵 기본값(MATH-03 하위호환)', () {
+      // MATH-03 이전 백엔드 응답에는 키 자체가 없다 — 파싱이 깨지지 않고 빈 맵으로 채워져
+      // 카드가 기존 '확인 보류 일부' 문구로 폴백할 수 있어야 한다.
+      final json = sampleJson();
+      (json['solution_coaching'] as Map<String, dynamic>)['solution_verification'] =
+          <String, dynamic>{
+        'n_correct': 1,
+        'n_incorrect': 1,
+        'n_unverifiable': 0,
+        'n_transitions': 2,
+        'unverified_ratio': 0.0,
+        'first_incorrect_index': 1,
+        'has_incorrect': true,
+      };
+      final sv =
+          CoachResponse.fromJson(json).solutionCoaching!.solutionVerification!;
+      expect(sv.unverifiableByReason, isEmpty);
     });
   });
 
