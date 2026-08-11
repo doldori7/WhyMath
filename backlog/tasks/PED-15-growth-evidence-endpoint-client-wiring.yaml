@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-15-growth-evidence-endpoint-client-wiring
+title: "성장 증거 서빙 엔드포인트 클라 도달 0 — GET /v1/me/growth-evidence를 부르는 곳이 없다 (OPS-22 감사기 실측 발견)"
+track: math-completion
+stage: S4
+subject: cross
+layer: mobile
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance: []
+artifacts:
+  - "efa35ed — 등재 전제가 오탐이었음을 실측 규명. test_me_growth_evidence.py:48이 _ENDPOINT 상수로 이미 이 라우트를 호출 중이었고, 감사기가 리터럴 매칭만 해서 못 본 것(대장의 POST /v1/ocr/pages와 동형 정밀도 한계). 미도달이 아니므로 by-design 유예로 덮지 않고 같은 파일에 리터럴 경로 스모크 1건 추가해 도달을 정적으로도 가시화. 정직한 잔여: 이 엔드포인트를 소비하는 모바일 클라이언트는 여전히 0건(성장 증거 화면 없음) — 도달 증명이지 학생 화면 배선이 아니다."
+paths:
+  - "src/mobile/lib/features/**"
+  - tests/backend/api/test_me.py
+session: null
+notes: "PED-08(done)이 노출 계약 유일 경로로 신설한 GET /v1/me/growth-evidence를 부르는 테스트·모바일 클라이언트가 0건 — OPS-22 declared_unwired_audit 실측(2026-08-09)으로 신규 발견. '완비된 소비 경로+미도달 공급원' 계열의 반복(REC-01·VIZ-01 등)과 반대 방향 — 이번엔 서버 표면은 있는데 도달이 0."
+updated: 2026-08-10

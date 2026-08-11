@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-21-id-guard-parser-and-reap-hardening
+title: "번호 가드 파서 구멍(슬러그 없는 ID 미인식·100번대 형식 위반 제안) + reap task_missing 즉시삭제 방어"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① store.id_number_of(_ID_NUMBER_RE)가 슬러그 없는 정규 ID(예: HARN-20)에서 None을 반환해 1선(add)·2선(validate) 번호 충돌 검사를 양쪽 다 통과하는 구멍을 막는다 — TASK_ID_RE가 허용하는 전 형태에서 번호를 추출(수정 전 red 회귀 테스트)."
+  - "② _next_free_number가 index 100 이상에서 TASK_ID_RE(두 자리) 위반 3자리 ID를 제안하는 경로를 제거 — 99 소진 시 형식 위반 제안 대신 명시적 오류로 사람 결정(프리픽스 분리 등)을 유도한다(E1-90 실재 — E1-99 도달 시 즉시 발현). 호출부와의 시그니처 애노테이션 불일치(backlog.py:798·dict[str, tuple])도 함께 정리한다."
+  - "③ reap의 task_missing 분류(remote_claims.py:759-762)에 유예를 도입 — 타 세션이 add+claim한 직후 내 클론에 그 YAML이 없다는 이유만으로 TTL 무관 즉시 reap 대상이 되는 오판을 막는다(예: claim 나이가 TTL 미만이면 task_missing 단독 사유 reap 금지·경고 강등)."
+  - "④ 변별력 회귀 테스트 + harness-integrity 잡에서 실제 실행됨을 확인한 뒤 완료로 친다."
+  - "⑤ 범위 밖: 번호 가드의 관측 표면 확장(타 브랜치 backlog/tasks/ 스캔)은 HARN-15 소유 — 중복 착수 금지."
+artifacts:
+  - "커밋(예정) — 번호 가드 파서·제안기·reap 분류기 3건 결함 수정(HARN-15 형제).\n\n① id_number_of 슬러그 없는 ID 파싱: _ID_NUMBER_RE를 '^([A-Za-z][A-Za-z0-9]*-\\d+)-'에서\n'^([A-Za-z][A-Za-z0-9]*-\\d+)(?:-|$)'로 수정 — 캡처 그룹 뒤에 슬러그(-...)가 오거나 문자열이\n거기서 끝나도 매치. 신규 tests/harness/test_id_number_parser.py(16건 파라미터화 테이블) —\nTASK_ID_RE가 허용하는 전 형태(슬러그 유/무·접두 1~8자·다단 슬러그)와 규약 밖 ID(빈 문자열\n등은 여전히 None)를 실증.\n\n② _next_free_number 99 상한: index가 99를 초과하면 3자리 형식위반 ID를 내지 않고 None 반환\n→ cmd_add가 '프리픽스 소진, 새 프리픽스로 분리 등 사람 결정 필요'를 명시적 오류로 안내.\n시그니처 애노테이션을 dict[str, str](거짓)에서 Mapping[str, tuple[str, str]](실제\n_taken_id_numbers 반환 타입)로 정정. 신규 tests/harness/test_next_free_number_format_guard.py\n(6건) — 경계값(98/99/100+)·cmd_add 종단 오류 메시지 실증.\n\n③ reap task_missing 경합 조건: stale_claims가 task is None일 때도 ttl 분기와 동형으로 claim\n나이(c.ts)를 본다 — TTL 이내면 task_missing_recent(reap 대상 아님, 경고만), ts 없음/파싱\n불가면 보수적으로 task_missing_recent(기존 ttl 분기의 '파싱 불가는 판정 보류' 관례와 동형),\nTTL 초과면 기존대로 task_missing(정상 정리 유지). reap()이 3-tuple(reaped, status, warnings)\n반환하도록 확장, cmd_claims가 경고를 침묵시키지 않고 출력. tests/harness/test_remote_claims.py\n기존 3건 갱신(TTL 초과로 명시) + 신규 TestTaskMissingRecentRaceGuard 2건(bare_remote 실제\n원격으로 방금 생성된 claim 생존 vs 오래된 claim 정리 양방향 실증).\n\n검증(오케스트레이터 독립 재실행 — 서브에이전트가 자체 Monitor 대기 루프에 갇혀 최종 보고를\n못 내 직접 코드 리뷰+뮤테이션 재검증 수행): 3개 뮤테이션 전부 cp 백업/복원으로 확인\n(id_number_of 정규식 원복·_next_free_number 99상한 제거·stale_claims 나이판정 제거 각각\n관련 테스트 red, 원복 후 green 및 git diff --stat 규모 일치). tests/harness 300 passed(기존\n282+신규 18) · ruff/black(scripts tests/harness, CI 동일 대상) 전부 EXIT=0 · backlog.py\nvalidate green(236건) · 전체 스위트 tests/backend+tests/infra 9570 passed·302 skipped·0\nfailed(663초·EXIT=0, 1차 시도는 환경 중단(exit 144·무관한 테스트 실패 0건)으로 재시도).\n\n⑤ 범위 밖 준수: HARN-15가 이미 완료한 원격 브랜치 관측 표면 확장은 손대지 않음.\n\n정직한 잔여: GitHub Actions 러너 실제 실행 미측정(로컬 동형 재현까지) · task_missing_recent를\ncmd_claims reap의 dry-run이 아닌 실제 --apply 흐름에서 반복 호출 시 경고가 계속 재노출되는\n사용성(같은 claim이 매번 경고로 뜸)은 설계상 의도(진짜 사라질 때까지 침묵하지 않음)이나 별도\n억제 메커니즘은 만들지 않음."
+paths:
+  - scripts/harness/store.py
+  - scripts/harness/backlog.py
+  - scripts/harness/remote_claims.py
+  - "tests/harness/**"
+session: null
+notes: "발견 경위: 2026-08-10 통합점검(docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md §1). HARN-15(관측 표면 결함)의 형제 — 이쪽은 같은 가드의 파서·제안기·reap 분류기 결함. 실측: id_number_of('HARN-20')=None(검사 제외), 제안기는 {prefix}-{index:02d} 포맷이라 100부터 3자리. reap task_missing은 병렬 add+claim 직후 창에서 살아있는 claim을 삭제할 수 있다."
+updated: 2026-08-10

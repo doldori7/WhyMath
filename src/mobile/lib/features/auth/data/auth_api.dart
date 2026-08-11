@@ -7,18 +7,23 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api_client.dart';
+import '../../../core/token_refresh_api.dart';
 
-/// OAuth 콜백 호출 래퍼 — code 교환으로 액세스 토큰을 받는다.
+/// OAuth 콜백 호출 래퍼 — code 교환으로 액세스·리프레시 토큰을 받는다.
 class AuthApi {
   AuthApi(this._dio);
 
   final Dio _dio;
 
-  /// `POST /v1/auth/{provider}/callback` — authorization code → 액세스 토큰.
+  /// `POST /v1/auth/{provider}/callback` — authorization code → 액세스+리프레시 토큰.
   ///
   /// [provider]='kakao'·'naver', [code]=provider redirect의 code, [redirectUri]=인가 요청과 동일.
-  /// 응답에 `access_token`이 없으면 [DioException].
-  Future<String> login({
+  /// 응답에 두 토큰 중 하나라도 없으면 [DioException].
+  ///
+  /// MOB-12: 예전에는 액세스 토큰만 꺼내 쓰고 **리프레시 토큰을 버렸다**. 그래서 액세스가 만료되면
+  /// 갱신할 재료가 아예 없어 학생이 재로그인 외엔 방법이 없었다(서버는 처음부터 두 토큰을 줬다).
+  /// 이제 둘 다 돌려주고 호출자가 함께 저장한다.
+  Future<AuthTokens> login({
     required String provider,
     required String code,
     required String redirectUri,
@@ -34,7 +39,14 @@ class AuthApi {
         error: '로그인 응답에 access_token이 없습니다.',
       );
     }
-    return token;
+    final refreshToken = response.data?['refresh_token'];
+    if (refreshToken is! String || refreshToken.isEmpty) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        error: '로그인 응답에 refresh_token이 없습니다.',
+      );
+    }
+    return AuthTokens(accessToken: token, refreshToken: refreshToken);
   }
 }
 

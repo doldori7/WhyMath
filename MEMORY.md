@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (병합·origin/main 동기화): **Kiki가 "12건의 이미 완료(미머지) 브랜치"를 물어 조사하다가, 그 12건이 실제로는 개별 고립 브랜치가 아니라 이 세션의 브랜치가 origin/main보다 18커밋 뒤처져 있던 결과임을 발견 — main을 merge해 따라잡음(6건 즉시 해소, 6건은 여전히 Kiki 결정 대기인 진짜 고립 브랜치로 재확인). 병합 중 PED-15·PED-16 태스크 ID가 main과 독립적으로 충돌했음을 발견해 그랜드파더 등재, 감사기 stale-waiver 1건·신규 미분류 1건도 함께 해소** (claude 조사·병합, Kiki "12건의 '이미 완료(미머지)' 브랜치")
+
+- **재분류**: `next`가 제외한 12건 중 origin/main에서 직접 상태를 대조한 결과 — **6건은 이미 main에 `done`으로 머지돼 있었다**(ASM-04·COLLAB-03·HARN-18·OPS-22·S4-18·S4-19, PR #749~760) — 이 세션의 브랜치가 단지 그 지점을 못 따라간 것뿐이었다. **나머지 6건(ADMIN-03·MOB-11·PATH-03·PB-04·S3-28·S4-09)은 origin/main에서도 여전히 `todo`** — SessionStart 브리핑의 "미해결 장기 미머지 브랜치 10건"과 겹치는 진짜 고립 브랜치로, Kiki 결정이 그대로 필요하다.
+- **병합 충돌 4건, 전부 저위험으로 확인 후 해소**:
+  - `api/coach.py`(2곳)·`api/me.py`(1곳) — 전부 "양쪽이 근처 위치에 서로 다른 걸 추가"한 형태(내 import/함수 vs main의 import/`_StepVerificationCarry`)였고 실제 로직 경쟁은 0건 — 양쪽 다 유지하는 걸로 병합.
+  - `PATH-04` — main도 독립적으로 같은 결론(Kiki 소유 행동 대기)에 도달해 있어 사실상 무충돌, 내 note를 유지.
+  - `S3-25` — **main의 버전을 채택**(status를 `blocked`→`todo`로 되돌림). main의 재조사가 내가 블록한 3가지 사유(원본 브랜치 삭제·번호 선점·버킷 B 의존)를 항목별로 정확히 해소하며 7건→2건(② S3-10 클라 절반·⑦ S3-16 targeted 힌트)으로 범위를 좁혀 뒀고, `depends_on: [S3-32, S3-34]`가 둘 다 이 세션에서 `done`이 된 지금 실제로 착수 가능한 상태다. 더 중요하게, main의 조사가 **내가 이번 세션에서 독립적으로 내린 S3-33·S3-34 판정(다른 계보가 이미 충족시켰다)을 정확히 같은 매핑으로 재확인**하고 있었다(원S3-11→S3-33, 원S3-14/15→S3-34 등) — 교차검증 성격.
+- **PED-15·PED-16 ID 충돌 발견(HARN-10 유형)**: `backlog.py check-edit` 훅이 병합 직후 차단 — main이 독립적으로 `PED-15-growth-evidence-endpoint-client-wiring`(done, OPS-22 감사기 리터럴 오탐 진단)과 `PED-16-pedagogy-declared-unenforced-audit`(done)을 등재했는데, 이 세션도 같은 번호로 `PED-15-problem-attempt-started-at-null-time-window-bug`·`PED-16-problem-attempt-retention-purge-eligibility-confirm`을 이미 done/등재해 뒀다 — 서로의 브랜치를 못 본 전형적 HARN-10 유형(ARCH-13·OPS-15 선례와 동형). 양쪽 다 이미 커밋·MEMORY에 박제된 뒤라 개명은 참조 파손을 낳는다 — `store._GRANDFATHERED_ID_NUMBERS`에 ARCH-13/OPS-15와 동일한 형식으로 등재해 해소(코드 변경 0, 문서화만).
+- **감사기(`declared_unwired_audit`) 2건 추가 해소**: 병합 후 전체 스위트에서 유일하게 실패한 테스트(`test_real_repo_report_passes`)가 드러낸 것 — ①`harness.misconception_slip_report`(이 세션의 MISC-05)가 by-design 선언이 없어 `unclassified`였다(감사기 자체가 이 세션에 없던 채로 MISC-05를 만들었으니 당연한 공백) → 형제 리포트들과 동일한 `_OFFLINE_REPORT`(빌드타임 관측·게이트 아님) 사유로 등재. ②`harness.problem_bank_coverage`가 `stale-waiver`(이미 도달했는데 유예가 안 걷힘)였다 — 이 세션의 PB-02 회수가 `.github/workflows/ci.yml`에 이 CLI를 커버리지 diff 게이트로 직접 호출하도록 이미 배선해 뒀는데, 그 사실을 반영하지 못한 유예가 남아 있었다 — 유예 삭제.
+- **검증(전량 재실행)**: 4종 정적 검사(ruff·black·mypy --strict·lint-imports) fresh 재실행 EXIT=0(490 source files, main 병합분 반영) · `backlog.py validate` green(태스크 228→243건) · **전체 백엔드 스위트 재실행 9,623 passed·306 skipped·0 failed(533.94s)** — 감사기 수정 전 1차 실행은 위 2건으로 1 failed였고, 수정 후 재실행에서 완전히 clean 확인.
+- **정직한 잔여**: alembic 마이그레이션은 이 병합으로 늘지 않음(heads 단일 유지) · mobile 쪽(`src/mobile/test/**` 8파일 등 main이 가져온 변경)은 이 컨테이너에 Flutter 툴체인이 없어 코드 리뷰로만 확인(회귀 신호 없음 — 전부 새 파일 추가이거나 무관 영역) · S3-25는 todo로 되돌렸을 뿐 착수하지 않음(다음 `/drive` 라운드 후보).
+- 정본: 이 로그 항목 직후 병합 커밋.
+
 ### 2026-08-11 (구현·S3-34): **코치 세션 위생 — 활성 문제 전환 시 대화(dialogue)가 리셋되지 않던 버그(같은 "학습" 탭 안에서 문제 A→B 전환해도 `ChatController`가 스스로 리셋될 계기가 코드에 전혀 없었음) 근본수정. acceptance②(오답 재고 유도 발화)는 S3-32의 기존 `RECONSIDER_PROMPT`로 이미 충족돼 있다고 판단해 코드 변경 없이 종결** (claude 구현 — `/drive`, flutter-engineer 위임 → 메인 독립 재검증)
 
 - **버그 재현 확인(acceptance①이 요구한 "먼저 실측")**: `router.dart`의 `StatefulShellRoute.indexedStack`가 "학습" 탭의 위젯 트리를 탭 전환 중에도 보존하도록 의도적으로 설계돼 있는데(스크롤 위치 등을 지키기 위함), `chat_controller.dart`의 `ChatController.build()`가 `ChatState build() => const ChatState();`로 **아무 provider도 watch하지 않아** — Riverpod auto-dispose Notifier가 스스로 재빌드(=리셋)될 계기가 없었다. `activeProblemProvider`는 `send()` 안에서 `dialogueId == null`일 때만 읽히므로, 문제가 바뀌어도 기존 dialogue에 계속 turn이 쌓인다 — grep으로 `chatControllerProvider` 참조가 `chat_screen.dart` 단 한 곳뿐임을 확인해 리셋 로직이 코드 어디에도 없음을 재확인.
@@ -549,6 +562,64 @@ report.py`, PATH-05 드리프트, stash로 무관 재확인). CI YAML 구문 검
 - **D1 ARCH-28**(제안 ARCH-27이 CLI 번호 충돌 거부 → 제안 번호 수용·HARN-10): `problem_bank_coverage.py`에 대장 subject 투영 3축(`coverage_by_subject`·`problems_per_subject`·`zero_problem_subjects`) — 0문 과목 양방향 변별력 테스트·JSON 하위호환·리포트 2026-08 재생성+2026-07 supersede. CI 재생성 배선은 PB-02 ③ 소관(중복 등재 금지). **D2 KG-02**: 437건 검수 승격 배치 — AI 자기승인 금지(사람 검수 또는 강등전 통과 게이트만)·PASS만 결정론 각인·`reviewed_only=true` 재측정. **D3 저작 우선순위 v2 = 페이퍼**(S4-01 acceptance가 "초·중·고+대학"이라 신규 등재는 중복 — notes 승계 부기로 갈음).
 - **등재·검증**: 신규 2건 CLI add·`validate` green(226건)·승계 부기 2건(S4-01·E1-02 notes). stale 정정 3곳(problem_bank_corpus_v1 6종 2,613→7종 2,647·atom_graph_v1 2,697→2,683·커버리지 2026-07 supersede). 도구 테스트 46건 통과·ruff/black/mypy --strict/lint-imports 전부 exit 0·전체 스위트는 커밋 시점 결과를 PR 본문에 기재.
 - 정본: `docs/architecture/subject_content_coverage_gap_review.md` (§0 전제 4건·§1 전수 대조 표2장·§2 의도적 미채택 5건·§3 D1~D3·§5 발화 조건 4건·부록 재현 명령 ㉮~㉳)
+### 2026-08-10 (구현·/drive 3회차): **`NS-04` formula latex↔dsl 의미 정합 게이트(quadratic.roots ± 근 소실 결함 봉인) + `QUAL-01` 문항 코퍼스 중복 감사(T1 392건 해소 확인·T2 실중복 9쌍 확정·T3 비-기준 문서화) + `QUAL-03` 재서술 무변화 결함 전수 직접측정(429건 중 282건·65.7% — QUAL-01 간접 하한과 정확 일치) + 위생 게이트 확장(신규 생성 방어, 코퍼스는 무수정). 신규 발견 3건을 `QUAL-02`·`QUAL-03`(완료)·`QUAL-04`로 등재. `PED-16`은 타 세션(`rec-05-priority-d8q8vt`) 미머지 done 확인 후 불가침** (claude 구현, Kiki `/drive`)
+
+- **NS-04**: `test_formula_governance.py`에 축⑤(latex↔dsl 의미 정합) 신설 — 값-공식 축(±, dsl 잔차에 두 근 각각 대입해 identity_status로 판정)과 구조 축(좌우변 개별 대조 + vieta류 α/β↔r_1/r_2 명시 별칭)으로 분리. 최종 판정은 항상 l3 `identity_status`(단일 권위)에 위임 — LaTeX 전처리는 표기 변환일 뿐 SymPy 재구현이 아님. **L1 src에서 L3 import는 lint-imports 위반**(7계층 계약 실측 확인 — 신규 로직을 src 대신 테스트 파일에 유지, 기존 축④ 선례 답습). `quadratic.roots` dsl을 `x==(-b+√D)/(2a)`(+근만·± 소실)→`(2*a*x+b)**2==b**2-4*a*c`(±-중립 음함수형)로 정정(formulas.jsonl·graph.json·_provenance.json 동기화). 변별력: 결함 원본 문자열을 판정 함수에 직접 넣어 red, 정정본으로 green 확인.
+- **QUAL-01**: `harness/problem_duplication_audit.py` 신설(ARCH-18/ASM-05 4단 골격 답습) — T1(슬러그 충돌, 원 문서 392건→**현재 0건 해소 확인**, 원인 미조사)·T2(실중복, 정규화 텍스트 완전일치+`relations` 계보 그래프 배제 — S4-14/S4-18과 동일 필드, **9쌍 확정**: 원 문서 지목 1쌍은 `scripts/demo/seed_demo.py` `_CORPORA` 정적 스크레이핑으로 데모풀 동시노출 재확인 + 신규 발견 8쌍)·T3(verify.conditions 서명 동일은 판정 기준 아님 — 반례 `wm-skel-f50f96b5a691`↔`wm-calc-ext-8c193941df77`로 재확인, **코드로 계산하지 않고 문서화만**). 새 휴리스틱 발명 없이 "계보 필드가 형식 트윈(단답/객관식)을 포착 못 한다"는 공백을 있는 그대로 노출(CLAUDE.md 정직 회계). 부수 발견: 재서술(rephrase) 무변화 282쌍(간접법 하한값).
+- **QUAL-03**(같은 세션 즉시 착수·완료): `problem_duplication_audit.py`에 `measure_rephrase_noop_defect` 추가 — rephrased_v0 429건 전량을 `relations[0].parent_slug`로 전 코퍼스에서 원본을 직접 조회해 정규화 텍스트 대조(4분류 정직회계). **무변화 282건(65.7%)** — QUAL-01 간접 하한과 정확 일치(우연 아님, generated_v0↔rephrased_v0가 전부 1:1). `rephrase_hygiene.question_hygiene_violations`에 ⑦무변화 축 additive 확장(`original_text` 선택 인자, L3 계층 독립 유지 위해 정규화 로직 로컬 재구현+교차검증 테스트) + `QuestionRephraser.rephrase()`가 실제로 원문을 넘기도록 배선(신규 생성 방어). **안전 경계**: `rephrased_corpus_hygiene.py`(write=True 기본값 sweep 도구)엔 의도적으로 미배선 — 배선하면 커밋된 코퍼스 대량 삭제 위험이라 명시적으로 회피. 리포트 §7.1이 비율 조건부(과반→파이프라인 구조 문제) 방침을 자동 서술.
+- **후속 등재**(콘텐츠/파이프라인 판단이라 이 세션 범위 밖 — QUAL-01 acceptance가 "가시화까지"로 명시 스코프): `QUAL-02-real-duplicate-pair-disposition`(실중복 9쌍 은퇴/유지 콘텐츠 판정, 데모노출 1쌍 최우선) · `QUAL-04-rephrase-pipeline-fail-closed-review`(QUAL-03이 코드 추적으로 확정한 근본원인 — `run_corpus_rephrase`가 실패 사유 불문 원문 그대로 편입 — 의 실 LLM 기반 사유별 분포 진단 + 드롭/status필드 설계 결정, 무변화 282건 재생성 실행은 owner=kiki 별도 판단).
+- **드라이브 부수**: `PED-16-pedagogy-declared-unenforced-audit`는 미머지 브랜치 `claude/rec-05-priority-d8q8vt`에 done 실물 존재 확인(하네스 착수 거부 존중, 재구현 회피 — OPS-07 재발 방지).
+- **정정**: 두 태스크 모두 신규 harness CLI가 main의 선언≠배선 감사기(OPS-22)에 `unclassified`로 걸림(ASM-05 때와 동일 패턴) — `declared_unwired_audit.py` 대장에 `_OFFLINE_REPORT`/`_NEEDS_LIVE_SAMPLE`로 즉시 등재해 해소.
+- **검증**: 3태스크 모두 전건 exit code 판정(ruff·black·mypy --strict·lint-imports)·**전체 백엔드 스위트 4회 재실행**(NS-04 후 9339 passed, QUAL-01 감사기 정정 전 1 failed→정정 후 9375 passed, QUAL-03 후 9412 passed — 전부 0 failed) — main이 이 세션 도중 여러 차례 전진(HARN-20/21·MOB-14·rec-05-priority-d8q8vt의 PED-16 등)해 브랜치를 origin/main에서 재시작(머지 완료된 이전 PR #760 위에 새로 쌓지 않음, CLAUDE.md "머지된 PR은 재사용 불가" 원칙). 신규 harness CLI 2건(QUAL-01·이후 재확인 불요) 모두 main의 선언≠배선 감사기(OPS-22)에 즉시 등재해 해소.
+
+### 2026-08-10 (구현·ASM 트랙 / acceptance 정리): **`ASM-05` 수요측 성취기준 도달 관측 리포트 착지(ARCH-18 공급측의 짝) + 동일 시리즈 ASM-01 writer 대장 stale 정정. 착수 전 acceptance를 실측 표준형으로 재작성하는 "acceptance 정리 후 착수" 패턴 답습(ASM-04·ASM-06 같은 날 선례) — S3-01 의존 모순 해소 포함. 이어 `S4-19` 라이브 3상태 단계 검증 적재도 같은 패턴(acceptance 정리→구현)으로 착지·`PATH-04`는 자산 부재로 block·`MISC-06`은 타 세션 claim 존중** (claude 구현, Kiki "남은 트랙"→"acceptance 정리 후 ASM 트랙"→/drive)
+
+- **ASM 트랙 판정**: 잔여는 ASM-05·ASM-06 2건이었고, ASM-06은 `subject-problems-theory-check-7n9n72` 브랜치에 실물 done(distractor_link·selected_choice_index·alembic·테스트, artifacts 087859bd) — 셀렉터 제외 확인 후 불가침(OPS-07 병렬 중복 구현 재발 방지). ASM 트랙 실작업 = ASM-05 하나.
+- **acceptance 정리(981cbe01)**: 등재 시(08-07 일괄) 2줄 acceptance를 실측 ①~⑦로 재작성. depends_on에서 `S3-01` 제거 — 원 acceptance ②가 스스로 "파일럿 이전 NO_DATA 정직 반환"을 규정해 의존과 모순이었고, 관측 좌석은 0행 정직 표기로 선착륙이 시리즈 선례(ASM-01·ARCH-18). PED-14형 차단(입력 0행 위 '지표' 금지)과 구분 — 관측 리포트는 값을 주장하지 않고 상태를 드러낸다. 전수 조사 부기: 미완료 54건 중 acceptance 1~2줄이 36건 — 단 일괄 재작성은 하지 않음(실측 없는 acceptance는 날조·타 브랜치 done 사본과 전면 충돌·정리 시점 관례는 "착수 세션이 실측으로").
+- **구현(d6b7654a)**: `harness/standard_attainment_report.py` 642줄 — ASM-01 4단 골격, CMH(user·concept 최신 1건 DISTINCT ON)→Concept→AtomNode.standard_codes 투영만(신규 테이블·마이그레이션 0), 도달 경계는 L4 정본 0.8 재사용(임계 신설 0), 정직 회계(결손 4상태 분리·코드 3분류·**관측 불가≠미도달**·분모 이중 회계·느슨참조 불일치 계상), user_id 미나열 테스트 동결(미성년 집계 원칙). stale 정정: ASM-01 `_KNOWN_WRITER_CITATION` 3건이 "생성 경로 부재"로 동결돼 있었으나 ASM-03/04·mastery 트래킹 착지로 라이브 writer 실재 — 4건 실측 인용 갱신(기존 ability_snapshot 인용 :965 자체 드리프트 발견→:1030 정정), 동결 테스트는 새 진실로 재작성하되 변별력은 합성 writerless 항목으로 보존. 검증 전건 exit code: ruff/black/mypy --strict/lint-imports 0 · **전체 스위트 9201 passed/304 skipped/0 failed** · 실PG 델타 2 passed(0.80/0.79 경계 변별) + ASM-01 통합 5 passed.
+- **S4-19 acceptance 선행 정리(9fe502ce) 후 구현 착지(65f3133d·done)**: 지형 실측으로 등재 전제 2건 정정 — (a)"핸들러가 이미 쥔 solution_verification 운반"은 코칭 노출 게이트(`_build_response_payload`)가 전단계-correct·ocr_gated 표본을 유실시키는 구조라 **게이트 이전 값 운반**으로 정정(불합격 편향 회계 방지 — `_StepVerificationCarry`를 7-튜플의 끝이 아닌 위치에 삽입해 "마지막 원소=solution_coaching" 언패킹 불변식 보존) (b)"학생 대면 표면 0"은 SurrogateMetrics 확장과 양립 불가(`GET /v1/me/harness-metrics`가 전 필드 자동 서빙 실측) — 파생 지표(step_decision_rate·step_incorrect_rate)는 `compute_step_verification_accounting` 내부 산출로 분리·SurrogateMetrics/학생 라우트/`_METRIC_ROWS` 무변경·ASM-07 3층 동결 테스트. VerifyEventData 6필드 additive(전건 None 기본·S3-03 선례)·binary passed 축 무변경(이중 회계)·카운트 비보유는 "구판 또는 검증 미실행" 한 버킷(구분 주장 없음·S3-07 규약). 6-튜플 언패킹 전제 3파일 전수 grep 선제 갱신. 검증 전건 exit code green·**전체 스위트 9229 passed/0 failed**. 잔여: 실 JSONB 왕복 통합테스트 미추가(PG 방언 컴파일 실증까지)·7n9n72(S3-32) 병합 시 coach.py 텍스트 충돌 예상(의미 충돌 없음 — 불변식 보존).
+- **드라이브 부수**: `PATH-04` block(e7f69601) — acceptance ① 선행 자산(경로 xlsx sha256 f4ee650b…) 부재 실측·Kiki 제공 대기. `MISC-06` 착수 거부(7n9n72 원격 claim 08:23Z) 존중.
+- **실수 기록(1회차·세션 내 시정, 20c6d2c8)**: ASM-05 진행 중 S4-19를 선점 claim → `validate` exit 1("1세션=1태스크" 위반) — 즉시 `claims release --force`(본인 claim 정규 경로) + 상태 원복. 하네스 판정 존중.
+- **공유 가치 발견**: 리포 루트 `pyproject.toml`에 pytest 섹션이 없어 **경로 인자 호출**(`python -m pytest ../../tests/backend/harness`)이 리포 루트에 config 앵커링 → `asyncio_mode`가 STRICT로 떨어져 무관 async 테스트 62건이 가짜 전멸한다. CI(cwd=src/backend bare pytest)는 무관·재현 시 `-c pyproject.toml` 결합 필요. `tests/backend/db/test_assessment_seat_reach_report_integration.py` docstring 3곳의 "writer 0" 역사 서술은 잔존(assert는 델타 전용이라 기능 영향 0).
+### 2026-08-10 (구현·OPS-24 + 재발방지): **코퍼스 백필 CLI 2종을 CI에 배선 — "의도적 미배선"이 아니라 **드리프트 가드**(`--check`)로 판정. 감사기 CLI 도달 11→13** (claude 구현·backend-engineer 위임, Kiki "/drive")
+
+- **판단이 본체였던 태스크**: OPS-22 감사기가 발견한 미도달 CLI 2종(`problem_corpus_review_status_backfill`·`problem_corpus_persona_fit_backfill`)에 대해 등록 시 acceptance가 비어 있었고 notes가 *"배선할지, 일회성 운영자 실행 스크립트로 의도적 미배선인지부터 판단 필요"*라고 판단 자체를 남겨뒀다. 실측(`--all --dry-run` → 7코퍼스 2,647건 전량 백필 완료·filled 0)을 근거로 **배선**으로 판정 — `review_status`가 빈 레코드는 `l6/_shared.is_review_cleared`가 fail-closed로 그 문항의 **노출을 전건 차단**하므로 백필 누락은 서빙 영향을 갖는 회귀다.
+- **다만 변이형이 아니라 가드**: CI가 레포 데이터를 재작성해서는 안 된다. 백필은 사람이 돌려 커밋하고 CI는 "빠진 게 있다"만 빨갛게 알린다. 기존 `--dry-run`은 **채울 게 있어도 항상 exit 0**이라 그대로 CI에 걸면 위장 게이트가 되므로(CLAUDE.md "변별력 없는 검증 스텝 금지"), `--check`(파일·감사로그 미기록 + 미백필 1건이라도 있으면 exit 1)를 신설해 걸었다. 판정 근거를 두 CLI docstring·CI 스텝 주석·감사기 `_MANIFEST` 주석 **세 곳**에 남겼다.
+- **배선 위치**: 신규 잡 0 — 기존 `declared-unwired-audit` 잡(base install만·`if != 'schedule'`·`needs` 게이팅 없음 → 코퍼스만 바뀐 PR에서도 반드시 돎)에 스텝 2개. 두 CLI가 레포 루트 기준 상대경로를 읽으므로 step `working-directory`를 워크스페이스 루트로 되돌렸다(잡 기본값 `src/backend`로 돌리면 `FileNotFoundError`임을 실측).
+- **변별력 실측**(오케스트레이터 독립 재실행): 실코퍼스 1건의 두 필드 동시 제거 → 양 CLI `--check` exit 1, 원복 후 exit 0 · 뮤테이션 상태로 2회 실행 후에도 `git status -- data/ docs/data/` 빈 출력(비기록 실증) · CI 스텝 `--check`→`--dry-run` 뮤테이션 → `tests/infra` red · `_check_exit_code` 항상 0 뮤테이션 → `tests/backend/harness` red.
+- **수치**: 감사기 `[harness_clis]` 공급 53(불변) · 도달 11→13 · 위반 0 · exit 0. 전체 스위트 9,570 passed·302 skipped·0 failed. 착수 시 acceptance에 "53→55"로 적었던 것은 축 표기 `53/11`을 공급/도달로 잘못 읽은 것 — 실측으로 정정하고 경위를 acceptance 본문에 병기했다.
+- **재발방지 등재(시스템 실수)**: 오케스트레이터가 뮤테이션 원복에 `git checkout --`를 써서 **미커밋 구현분 +59/-6을 무증상 소실**시켰다. git 계열 원복은 뮤테이션과 미커밋 작업분을 구분하지 못한다. 대책은 CLAUDE.md 규칙(`git checkout --`·`restore`·`stash`로 뮤테이션 원복 금지 → `cp` 백업/복원 + 원복 규모 `git diff --stat` 대조)으로 등재했다. 이번엔 서브에이전트의 스크래치패드 백업으로 **바이트 동일 복원**됐고, 신규 테스트 16건이 `--check` 동작을 계약으로 고정하고 있어 복원 충실도를 기계가 판정했다 — 백업도 테스트도 없었으면 재작성이었다.
+- **정직한 잔여**: GitHub Actions 러너에서의 실제 실행은 미측정(로컬 동형 재현까지) · `--check` 비기록 동결은 `Path.write_text`/`Path.mkdir` 두 표면만 검사 · 백필 변이형을 누가 언제 돌리는지에 대한 런북 미작성(CI는 빨개질 뿐 자동 복구하지 않는다 — 설계 의도).
+
+### 2026-08-10 (점검·DSL 통합): **DSL 표면 전수 8종+준표면 2종 끝-끝 실측 — 몸통은 건강·이음매 4곳 뚫림. Scene↔Visualization 중복 아님(기지 미검토 축 해소)·S3-28 오탐 130건 원인 확정·신규 등재 3건(MOB-14·NS-04·PED-16)·CI 계약 fixture 사각 봉합** (claude 점검, Kiki "Whymath dsl 통합 점검")
+
+**산출**: `docs/architecture/dsl_integration_gap_review.md` — 저장소 실측 자체 대조 형식 2번째(subject 리뷰 계보). 인벤토리: ConceptDSL·LearningScene·Visualization·교수법 팩·소단원 DSL·condition DSL·표본공간 DSL·formula dsl 필드(+준표면: schemas/v1.1 9종·speech AST). 학생 대면 완결 체인 5개 전건 라우트 마운트 실측.
+
+**핵심 판정 4건**: ① **Scene↔Visualization 중복 아님 — 합성 확정**(`VisualizationElement.ref` 참조 임베드·모바일 파서 1벌·05a 불변식 게이트 이중 실재) — 시각화 인벤토리(2026-07)의 기지 미검토 축을 닫음. ② **S3-28 "오탐 가능성" → 오탐 확정**: 같은 `verify.conditions` 필드를 3문법이 공유(맨 등식/CSV 리스트/`space=;event=` 미니 DSL)하는데 `condition_dsl_violation`은 문법 ①만 알고 `answer_kind` 스코프 필터가 없음. 130건 재현 분해 = 문법② 96(mean_equals_median·events_independent·conditional_equal·dot_product_scalar 각 24) + 문법③ 34(finite_probability 26·finite_count 8) — 전건 자체 파서가 정상 소비하는 정당 데이터·결함 0. 부차: 검사기가 `to_sympy_source` 정규화 단일 권위를 우회(sympify 직접). ③ **formula latex↔dsl 의미 정합 게이트 0** — 실결함 1건(`formula.quadratic.roots` latex `±` vs dsl `+`근 하나·write-only라 피해 0·Phase 5b 소비 전 봉인 적기). ④ **정본화≠집행 재발형**: `mode_guard.check_forbidden_modes` 프로덕션 호출 0(오프라인 결함주입 측정 전용)인데 `config.py` 플래그 설명·`l4/pedagogy/__init__` docstring이 배선 주장 — 과대 진술 2곳 즉시 정정(동작 무변경). `pedagogy_pack`·`unit_spec` 테이블 reader 0(dead write — YAML 직독이 실정본·OPS-22 4축 사각).
+
+**직접 수정**: ⓐ CI 경로필터에 `data/notation_contract.json`·`data/render_contract.json` 추가(backend·web) — fixture-only PR이 양쪽 골든 잡을 모두 skip하던 사각(`notation_contract.md` §4 "자동 검증" 약속이 거짓이었음 → 참으로). `schemas/` 교차영역 방어(2026-07-21)와 동일 원리·시뮬레이션으로 변별력 확인. ⓑ 과대 진술 2곳 정정. ⓒ math_dsl 문서 stale 배너 3곳(failure_mode_qa FormulaNode 계열 내 정면 충돌·remediation_design §1.3-2/3 완료·역전·retrieval_analysis §4 skill 엔티티 실재) — 잔여 stale 10건 정오표는 리뷰 문서 §5가 정본(그래프 2,683/2,210·kebab 64·M-id 843).
+
+**등재 3건**: `MOB-14`(scene 서버↔클라 계약 동결 — 드리프트 4필드 무감지 통과·webViewTypes 계약 결선·invariant ⑩ Flutter 잔여) · `NS-04`(formula latex↔dsl 정합 게이트+± 결함 봉인) · `PED-16`(교수법 선언≠집행 3건 판정 — mode_guard 집행 지점·dead write 2테이블 거취·scene/viz 서빙 미러 병합). **재등재 금지 목록**(§4)에 발주서→슬롯 동결(PED-07)·`/v1/visualizations/*` by-design·figure.spec 거부·AST 미구축 유효 등 10건 명시.
+
+**검증**: OPS-22 4축 감사 exit 0 · DSL 게이트 103건+영향권 29건+tests/infra 294건 통과 · ruff/black/mypy 전건 exit 0(CI 동일 명령) · condition 130건 재현 일치 · ci.yml 필터 시뮬레이션(대상 true/비대상 false). 전체 pytest 스위트는 미실행(22분+) — CI가 최종 판정. 로컬 함정 재확인 1건: 명시 경로 pytest invocation의 asyncio_mode 미적용(ARCH-22 기지 quirk·`-o asyncio_mode=auto`로 확증·활성 장애 아님).
+### 2026-08-10 (점검·거버넌스): **하네스·헌법·규칙파일 통합점검 — 결함 3축 41건 판정: 문서·스킬 22건 즉시 정정, HARN-15 비가시 부채 회수, 신규 태스크 HARN-20·21 등재** (claude, Kiki "통합점검" 지시)
+
+- **정본**: `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md` (결함 표 D-1~D-29 + 하네스 G1~G8 + 추적성·CI 축, 부록 실측 근거). 커밋 ① `150da189`(문서·스킬 정정 11파일) ② `5151b987`(backlog 회수·등재).
+- **골격 판정**: validate green·CLAUDE.md 참조 아티팩트 9/9 실재·깨진 참조 0·CI 테스트 배선 사각 0·규칙→사고 추적성 6/6 — 건강. 부패는 표기·전파 축(폐기 스택 잔존·버전 표기 stale·하위 문서 미전파)에 집중.
+- **최대 발견 = HARN-15 비가시 부채 회수**: `HARN-15-id-collision-cross-branch-scan`(번호 가드 관측 표면 확장·OPS-17/18 이중 배정 처분)이 미머지 브랜치 q8tvcx에만 존재해 main 백로그·next/status 어디에도 안 보이던 상태 — "backlog=단일 진실 원천"의 유일한 실측 파손점. 브랜치 정리 파이프라인 실가동(직전 항목 17건 삭제) + q8tvcx가 "이미 포팅됨" 분류라 소실 직전이었다. 정본 YAML 그대로 회수(`git checkout origin/...q8tvcx -- backlog/tasks/HARN-15-*.yaml`·ID/acceptance 보존). **재채번 실행 판정은 여전히 Kiki 전권 유보** — 회수는 가시화까지만.
+- **헌법 결함 정정(D-5)**: dev_constitution §0.1 우선순위에서 3번 "교수학적 정확성"이 "데이터 무결성"으로 통째 대체돼 있었다(웰빙 누락은 자각 상태였으나 이건 미자각) — 프로젝트 정체성 축이 헌법 우선순위에서 실종. CLAUDE.md 정본 7항으로 정렬, "데이터 무결성"은 §0 원칙으로 존속.
+- **CLAUDE.md 개정(v0.1.0→v0.2.0)**: ①MEMORY 선언 후 미등재였던 규칙 2건 본문 등재 — "작동한 비율" 원칙(:1616 계보)·"만료 없는 유예·제외 금지"(:1780 계보) ②HARN-19 서브프로세스 출력 인코딩 축 확장 ③**스택 표 Graph DB 행 실측 단서 병기**(Neo4j 런타임 미도입·PG 단일 평면 정본·data-pipeline 옵셔널 한정 — 스택 표 변경 시 결정 로그 의무의 이행 근거가 본 항목) ④L6 7모드 정렬 ⑤핵심 문서 인덱스 8줄 보강 ⑥푸터 버전·수정일 실체 정렬(3개월 괴리)+갱신 의무 부기.
+- **스킬↔규약 정정**: /gates가 gates.yaml 손편집을 지시(HARN-18 CLI 미반영)·/plan add 블록에 --path 부재 — 스킬이 규약 위반을 유도하던 두 곳 정정. 폐기 스택 잔존 청소: Mathpix 6곳(00_overview·data_pipeline·ROADMAP)·KoSimCSE·te-3-large 옛 표기·OCR L3→L5.
+- **신규 태스크(add CLI 경유)**: HARN-20(CLI 선언≠배선 review·cancelled 도달 불가 + block의 notes 덮어쓰기 파괴·priority 2) · HARN-21(번호 가드 파서 구멍 — 슬러그 없는 ID 미인식·100번대 형식 위반 제안 + reap task_missing 즉시삭제 방어·priority 3).
+- **MEMORY 자체 정정 부기(본문 소급 수정 없음)**: :490의 "PED-08 경위"는 **PED-06** 오기(CLAUDE.md:138이 정확) · :519의 "CLAUDE.md :135 다음" 줄번호는 이후 증보로 드리프트(줄-앵커는 신뢰 불가 — 절 제목 앵커 권장) · "시간 역순" 선언이 07~08 구간에서 미준수(날짜 뒤섞임) · 트레일러 "최종 수정 2026-05-28"·"매월 정기 리뷰"는 실행 기록 없음.
+- **정직한 공백**: 재채번 실행(Kiki 전권)·시점 리포트(ssm_scan 등) 원본 불변·노드 수치 4종 정본화(DB 실측 불가)·CI 경로 필터 재설계·정책 warn 승격(측정 미충족)은 하지 않았다. pytest 미설치 환경이라 **로컬 전체 테스트 미실행 — CI가 최종 판정**(CLAUDE.md 동결 마커 61건은 AST 추출 대조로 전건 보존 확인).
+### 2026-08-10 (재발방지·감사기 정밀도): **`OPS-25` — 선언≠배선 감사기의 *상수 간접참조 맹점* 해소. 같은 원인의 오탐 2건이 이미 유령 태스크 1건(`PED-15`)과 허위 유예 1건(`S4-22`의 막힘)을 만들어냈다** (claude 구현, Kiki 지시)
+
+- **사고 경위(반복 실수 — 동일 원인 2회)**: `ops/declared_unwired_audit.py`가 도달을 *리터럴*로만 판정했다. ①HTTP 축 — 호출부에 경로 문자열이 직접 있어야 도달로 인정 → `_ENDPOINT = "/v1/me/growth-evidence"` 상수를 쓰는 `test_me_growth_evidence.py`의 호출이 안 보여 "미도달"로 보고 → **`PED-15`가 그 오탐만으로 등재**됐다(#755에서 리터럴 스모크로 우회했으나 근본 원인은 잔존). ②EventType 축 — `ast.Compare` 피연산자에 `EventType.X`가 직접 있어야 소비로 인정 → `l2/learning_metrics_rollup.py`가 `_SOCRATIC_EVENT_TYPES` 상수로 거는 `not in` 필터(:279)·SQL `.in_()` 필터(:563)를 못 봐 **이미 소비 중인 `EventType.막힘`**이 `S4-22` 유예 3종에 허위로 끼었다.
+- **대책(형태 = 코드 + 동결 테스트)**: 두 축에 **모듈 최상위 상수 1홉 해석**을 넣었다(`_module_path_constants`·`_module_event_type_constants`). 범위 절제는 축 3의 기존 선례 `_insert_helpers`(모듈 내 헬퍼 1홉)를 그대로 따른다 — import된 상수·함수 지역 변수·동적 컨테이너(`tuple(EventType)`)는 풀지 않는다. 넓히면 감사기가 사실상 인터프리터가 된다.
+- **양방향 변별력 실측**(acceptance ④ — 양성만 확인하면 "전부 도달"로 뭉개는 반대 방향 오탐을 못 잡는다): (양성) `막힘` 소비 인정 · `POST /v1/ocr/pages`(리터럴 0건·상수만) 도달 인정. (음성) `답입력`·`시각화조작`은 **수정 후에도 미도달 유지** — 코드베이스 전체에서 생산 좌석과 계약 정의에만 나타난다. 상수를 *정의만* 하고 비교에 안 쓰면 소비 아님, 함수 지역 상수·import 상수·`+` 연결 표현식은 미해석. 신규 테스트 25건 중 **양성 14건은 수정을 무력화하면 전부 실패·음성 11건은 양쪽 상태에서 통과**함을 임시 패치로 실측했다(변별력 있는 검사임을 확인).
+- **수치**: 감사기 exit 0 유지. HTTP 도달 80→87(+7) · EventType 소비 3→4(+1) — 증가분 8건 전부 상수 간접참조 오탐 해소분이고 신규 배선 0. 대장에서 유예 8건 제거(HTTP 7·EventType 1). 감사기 테스트 42→67건.
+- **정직한 잔여**: 이 축의 `reached` = "dart 클라 호출 ∪ 백엔드 테스트 호출"이므로 해제된 7건이 reached라는 건 *테스트가 관통한다*는 뜻이지 *학생 앱이 쓴다*는 뜻이 아니다. 시각화 3종·speech·assemble의 **모바일 소비는 여전히 0건**이며 이 축은 그 구분을 표현하지 못한다(클라 소비 공백 전용 축은 후속 과제). SQL `.in_(상수)` 단독 소비·`Model.field.in_()` 형태도 Compare가 아니라 미탐이다.
 
 ### 2026-08-10 (정리·원격 삭제 완료): **브랜치 17건 전건 삭제 성공 — GitHub Actions 경유(잔존 0/17 `ls-remote` 검증·런 #31346141938 success). HARN-16 403의 세 번째 경로(요청 파일 + push 트리거) 신설** (claude 구현, Kiki "원격으로 처리해줘")
 
@@ -810,6 +881,27 @@ attempt 적재)로 재검토했고, **기존 S3-26~31 번호를 재사용/재채
 `ai_tutor_module_gap_review.md` §4-⑤("미채택 — 실사용 데이터·파일럿 수요 확인 후")가 정면으로
 상충한다. 어느 쪽이 최신 결정인지 세션이 판단할 근거가 없어 AskUserQuestion으로 확인을 요청했으나
 무응답 — 등재하지 않고 보류. 다음 세션이나 Kiki 직접 확인 시 등재.
+### 2026-08-07 (구현·OPS-22): **선언≠배선 일반 탐지기 신설 — HTTP 라우트/EventType/타임시리즈/harness CLI 4축 정적 감사 게이트, 반복 실수(REC-01·VIZ-01·NLP-01·COLLAB-03 등 6회차) 재발방지대책** (claude 구현, Kiki 요청 — 장기 미병합 브랜치 `claude/whymath-data-platform-design-8ceaf5`의 설계를 재구현)
+
+**컨텍스트**: 장기 방치 브랜치(`ops/reach_audit.py` 855줄·설계문서 510줄, 2026-08-03·미병합)가
+같은 아이디어를 이미 구현했었지만, 그 분류 대장(`pending-task:REC-01`·`SEC-10`·`VIZ-02` 등)이
+스냅샷 시점 상태라 대부분 stale(그 사이 `done` 전환)이었다. `src/backend/whymath_backend/
+ops/declared_unwired_audit.py`로 재구현 — 구조(4축 분리·그랜드파더 만료 계약·FastAPI 0.140
+`_IncludedRouter` 언랩)는 재사용하고, 분류 대장은 2026-08-07 `backlog/tasks/*.yaml` 현재
+상태로 재구축했다. HTTP 축은 dart 호출뿐 아니라 **백엔드 테스트 호출도 도달로 인정**하도록
+확장(구 브랜치보다 도달률이 훨씬 높아짐)하고, 리터럴 더미 ID(`client.get("/v1/jobs/j1")`)를
+정규식 템플릿 매칭으로 잡도록 개선했다. 구현 중 실측으로 **3건의 신규 "선언≠배선" 사례**를
+발견해 태스크로 등재했다: `S4-22`(막힘·답입력·시각화조작 EventType — 생산자만 있고 소비자
+0) · `MOB-10`(SEC-10이 서버 세션 가시성 엔드포인트만 배선, 모바일 화면 0) · `MOB-11`(PED-03
+학습 공급 루프 study/outcome을 부르는 쪽이 모바일에도 통합테스트에도 없음). `tests/backend/
+ops/test_slo_contract.py`의 `_app_route_paths()`를 `route_paths()`로 승격해 재사용(재구현
+금지 준수). CI에 상시 잡(`declared-unwired-audit`, `needs: changes` 미의존 — 이유는 이 감사가
+보는 축이 정확히 그 필터의 사각지대라서) 신설 + `tests/infra` 배선 실재성 동결 + required
+checks 문서 갱신. **사고 하나 자체 검출**: 이 감사 자신을 CI가 직접 실행하게 되는 순간
+`ops.declared_unwired_audit`이 매니페스트에 `by-design`으로 남아 있으면 `stale-waiver`가
+되는 자기참조 함정을 전체 스위트 1회차 실행에서 실제로 검출(변별력 실증) — 매니페스트에서
+제거해 해소. 검증: 백엔드 전체 스위트 8812 passed·296 skipped(부분 아님) · ruff·black·
+`mypy --strict`(467파일) · `backlog.py validate` green.
 
 ### 2026-08-07 (조사·S3 재채번 대기): **S3-24/25 stale claim 해제 + S3-26/27/28 3중 번호 충돌 실측 — 재채번·병합은 HARN-15 소관이라 미착수, 검증된 merge만 별도 브랜치에 보존** (claude 조사, Kiki 요청 "문제를 차근차근 해결해줘")
 

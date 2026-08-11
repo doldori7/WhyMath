@@ -38,7 +38,10 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
+from whymath_backend.l3.equivalent.rephrase_hygiene import (
+    REASON_UNCHANGED_FROM_ORIGINAL,
+    question_hygiene_violations,
+)
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import ModelFamily, RoutingDecision, RoutingRequest
@@ -74,7 +77,15 @@ _logger = logging.getLogger(__name__)
 #   HYGIENE_REJECT    위생 validator 거부(격리된 거짓 수치 등식·틀린 해 등)
 #   QUESTION_HYGIENE  발문 텍스트 위생 위반(S3-12 — 비한글 스크립트·메타 라벨 누출·비표준
 #                     용어·요구-정답 부정합·조사 오류: rephrase_hygiene 결정론 게이트)
-#   NO_CHANGE         출력이 원문과 동일 — 다양화 실패(오염 아님·안전)
+#   NO_CHANGE         출력이 원문과 동일 — 다양화 실패(오염 아님·안전). QUAL-03(2026-08-10):
+#                     `classify_invariance_failure`에 `original_text`를 넘기면(.rephrase()가
+#                     항상 넘긴다) 이 사유가 **정규화 비교**(rephrase_hygiene ⑦축)로 여기서
+#                     더 일찍 조기 반환된다 — 공백·유니코드 정규화 차이만 있는 근접 무변화까지
+#                     잡는다(바이트 완전일치만 보던 기존 사후 검사보다 촘촘함). 아래
+#                     `.rephrase()`의 사후 바이트-완전일치 검사는 그대로 남아 있으나(이중 회계 —
+#                     이 배선이 빠지는 회귀가 나도 바이트 완전일치만큼은 계속 잡는다), 현재는
+#                     이 축이 항상 먼저 걸려 실질적으로 도달하지 않는다(수학적으로: 바이트
+#                     완전일치는 정규화 완전일치를 항상 함의하므로).
 REASON_NO_EQUATION = "NO_EQUATION"
 REASON_PROVIDER_ERROR = "PROVIDER_ERROR"
 REASON_EMPTY = "EMPTY"
@@ -139,6 +150,7 @@ def classify_invariance_failure(
     *,
     equation: str,
     validator: SeedValidator | None = None,
+    original_text: str | None = None,
 ) -> str | None:
     """rephrase 결과가 수치 불변 봉인을 어겼으면 *어느 관문*인지 reason-code로 분류 — 통과=None.
 
@@ -146,7 +158,10 @@ def classify_invariance_failure(
     (`EQUATION_ALTERED` — 표기·공백·지수·부호 변형) ③ 방정식 외 추가 `=`(`EXTRA_EQUATION` —
     거짓 등식 주입) ④ 위생 validator 거부(`HYGIENE_REJECT`) ⑤ 발문 텍스트 위생 위반
     (`QUESTION_HYGIENE` — S3-12 결정론 게이트: 비한글 스크립트·메타 라벨·비표준 용어·
-    요구-정답 부정합·조사 오류). 모두 통과면 None(수치 불변).
+    요구-정답 부정합·조사 오류) ⑥ 무변화(`NO_CHANGE` — QUAL-03·`original_text`가 주어지고
+    정규화 후 원문과 일치하면. `rephrase_hygiene`의 ⑦축을 재사용하되, 반환 코드는 새로 만들지
+    않고 기존 `NO_CHANGE` taxonomy를 그대로 쓴다 — "다양화가 실질적으로 안 됨"이라는 같은 실패
+    범주이기 때문이다, 위 `REASON_NO_CHANGE` 정의부 주석 참고). 모두 통과면 None(수치 불변).
 
     이것이 검증의 단일 진실 원천이다 — `verify_numeric_invariance`가 이 위에 얇게 얹힌다(중복
     로직 금지). reason-code는 진단 harness가 실패를 taxonomy로 집계하고 raw 출력을 dump해 "왜
@@ -167,7 +182,12 @@ def classify_invariance_failure(
     active = validator if validator is not None else default_seed_validator()
     if validate_response(active, text) is not None:
         return REASON_HYGIENE_REJECT  # 위생 게이트 — 격리된 거짓 수치 등식/부등식/틀린 해.
-    if question_hygiene_violations(text):
+    violations = question_hygiene_violations(text, original_text=original_text)
+    if violations:
+        if any(v.split(":", 1)[0] == REASON_UNCHANGED_FROM_ORIGINAL for v in violations):
+            # 무변화(⑦) — 발문 문법 자체는 정상이라 QUESTION_HYGIENE이 아니라 기존 NO_CHANGE
+            # taxonomy로 매핑한다(QUAL-03 — 위 함수 docstring ⑥ 참고).
+            return REASON_NO_CHANGE
         # 발문 텍스트 위생(S3-12) — 한자·가나 주입/메타 라벨/비표준 용어/방법-값 부정합/조사
         # 오류는 결정론 교정이 불가하므로 fail-closed(원문 유지)로 차단한다(감사 결함 5류 ⑤).
         return REASON_QUESTION_HYGIENE
@@ -179,14 +199,18 @@ def verify_numeric_invariance(
     *,
     equation: str,
     validator: SeedValidator | None = None,
+    original_text: str | None = None,
 ) -> str | None:
     """rephrase 결과의 수치 불변을 결정론으로 검증 — 통과=정제 문자열, 실패=None.
 
     `classify_invariance_failure`에 위임한다(단일 진실 원천) — 사유 코드가 없으면(통과) strip한
-    문자열을, 있으면 None을 돌려 호출부가 원문을 유지하게 한다(fail-closed).
+    문자열을, 있으면 None을 돌려 호출부가 원문을 유지하게 한다(fail-closed). `original_text`는
+    그대로 전달만 한다(선택 인자·기본 None — QUAL-03 무변화 축, 기존 호출부 회귀 0).
     """
     if (
-        classify_invariance_failure(rephrased_text, equation=equation, validator=validator)
+        classify_invariance_failure(
+            rephrased_text, equation=equation, validator=validator, original_text=original_text
+        )
         is not None
     ):
         return None
@@ -240,13 +264,21 @@ class QuestionRephraser:
                 question_text, False, f"provider 예외: {error}", REASON_PROVIDER_ERROR
             )
 
-        failure = classify_invariance_failure(raw, equation=equation, validator=self._validator)
+        # original_text=question_text — QUAL-03 실제 생성 수용 게이트 배선(rephrase_hygiene ⑦축).
+        # 정규화 비교라 아래의 사후 바이트-완전일치 검사보다 먼저·더 촘촘하게 무변화를 잡는다.
+        failure = classify_invariance_failure(
+            raw, equation=equation, validator=self._validator, original_text=question_text
+        )
         if failure is not None:
             return RephraseOutcome(
                 question_text, False, "수치 불변 검증 실패 — 원문 유지", failure, raw_output=raw
             )
         verified = raw.strip()
         if verified == question_text:
+            # 방어적 이중 검사(현재는 도달 전에 위 classify_invariance_failure의 무변화 축이
+            # 항상 먼저 걸러낸다 — 바이트 완전일치는 정규화 완전일치를 함의하므로). original_text
+            # 배선이 위 호출부에서 빠지는 회귀가 나더라도 바이트 완전일치만큼은 여전히 잡는다
+            # (CLAUDE.md 이중 회계 원칙과 동형 — 판정 경로를 하나로 좁히지 않는다).
             return RephraseOutcome(
                 question_text, False, "출력이 원문과 동일 — 다양화 없음", REASON_NO_CHANGE, raw
             )

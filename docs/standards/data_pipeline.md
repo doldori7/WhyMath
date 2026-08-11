@@ -12,12 +12,12 @@ collect  clean  transform validate load    index
 | 단계 | 도구 |
 |---|---|
 | 수집 (웹) | httpx + playwright (JS 필요 시) |
-| 수집 (PDF) | pdfplumber + Mathpix (수식) |
-| 수집 (이미지) | Mathpix API |
+| 수집 (PDF) | pdfplumber + PaddleOCR+Qwen3-VL (수식 — 2026-05-28 Mathpix 대체·2026-08-10 통합점검 정정) |
+| 수집 (이미지) | PaddleOCR + Qwen3-VL 하이브리드 (로컬 — Mathpix 대체) |
 | 정제 | pandas / polars |
 | 검증 | Pydantic + great_expectations |
 | ETL | Prefect 또는 Airflow |
-| 임베딩 | sentence-transformers (한국어: BM-K/KoSimCSE) |
+| 임베딩 | bge-m3(`BAAI/bge-m3`·기본 로컬) — 클라우드 옵션 te-3-large. `embedding_provider` 셀렉터, 정본 = CLAUDE.md 스택 표 (구 표기 KoSimCSE는 코드 미사용 — 2026-08-10 통합점검 정정) |
 | 저장 (RDB) | PostgreSQL 16 + TimescaleDB |
 | 저장 (벡터) | pgvector (PostgreSQL 16 확장·슬98) |
 | 캐시 | Redis 7 |

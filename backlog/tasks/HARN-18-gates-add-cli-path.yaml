@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "backlog.py gates add <id> --title --kind --assignee [--remind-after-days] 서브커맨드 신설 — 현재 gates.yaml에 새 게이트를 등재할 CLI 경로가 없어 손편집만 가능하다. '대장은 CLI로만 조작한다'는 규약에 구멍"
   - "add가 태스크 add와 동일한 검사를 수행 — id 중복 거부·필수 필드 검증·events.ndjson 감사 로그 append(누가 언제 왜 게이트를 만들었는지가 남아야 한다)"
   - "변별력 실측 — 중복 id로 add 시 실제로 거부되는지, 필수 필드 누락 시 거부되는지 확인"
-artifacts: []
+artifacts:
+  - 6e256d13
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
 session: null
 notes: "발견 경위(2026-08-03·문제은행 R2 설계): G-s4-14-variant-identity를 등재하려는데 gates 서브커맨드가 list/clear/waive뿐이라 gates.yaml을 손편집했다. 이 손편집 자체는 거부 우회가 아니다 — 거부된 것은 '미존재 게이트 참조'(check-edit 훅이 정상 차단)였고 게이트 생성은 애초에 CLI 동사가 없다. CLAUDE.md '거부의 우회 금지' 처리 순서 ③(CLI 경로 자체가 없는 설계 공백이면 태스크로 등재)에 따라 여기 등재한다. 선례: HARN-06(사람 소유 태스크의 CLI 완료 경로 부재 → --as 신설). 부수 관찰: check-edit 훅이 dangling requires_gates를 실제로 잡아냈다(훅은 정상 작동)."
-updated: 2026-08-03
+updated: 2026-08-10

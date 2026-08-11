@@ -226,17 +226,27 @@ class Settings(BaseSettings):
     pedagogy_pack_prompt_enabled: bool = Field(
         default=True,
         description=(
-            "교수법 팩(PedagogyPack) 4계층 발문 조립기·forbidden_modes 가드를 stateless "
+            "교수법 팩(PedagogyPack) 4계층 발문 조립기를 stateless "
             "`/v1/coach`(`PolyaCoach.decide`) 경로에 얹을지(PED-01 슬라이스 ③). "
             "**True(기본·2026-07-27 GA)** — 호출자가 `decide(pack=...)`로 팩을 명시 주입한 "
             "경우에만 base_system 위에 팩 socratic_prompt(`{domain_example}` 치환)·오개념·학습자 "
             "상태를 4계층으로 조립해 `PedagogyDecision.system`을 대체한다. 팩 미주입(pack=None) "
             "시에는 플래그와 무관하게 base_system 무변경(옵트인·역호환) — 현재 팩 주입은 "
             "`_pack_for`가 파일럿 목표 개념에 매핑된 문항에서만 팩을 해석하므로 blast radius가 "
-            "파일럿 단원으로 한정된다. OFF(킬스위치)면 팩 조립기/guard 미호출로 기존 발문 경로와 "
+            "파일럿 단원으로 한정된다. OFF(킬스위치)면 팩 조립기 미호출로 기존 발문 경로와 "
             "비트동일(`decision.system`은 `_BASE_SYSTEM` 그대로). WH-1 라이브 측정 경로(`wh1_*`)· "
             "톤필터는 무변경. GA 전환 근거: 결함주입 측정(pedagogy_pack_fidelity_eval exit 0·CI "
             "상시) 통과 + Kiki 사인오프(2026-07-27·blast radius 파일럿 1단원 한정 간이 갈음). "
+            "주의(2026-08-10 정정 → PED-16(2026-08-10)이 by-design 미배선으로 확정): "
+            "forbidden_modes *문면* 가드(`mode_guard`)는 이 플래그와 무관하게 코치 응답 경로에 "
+            "배선돼 있지 않다 — 오프라인 결함주입 측정(`pedagogy_pack_fidelity_eval`) 전용으로 "
+            "유지하기로 확정했다(근거: 실제 생성→서빙 경로는 WH-1 루프인데 `wh1_primary.py`가 "
+            "PedagogyPack을 참조하지 않아 배선하려면 PedagogyPack 주입을 WH-1 전체에 새로 "
+            "도입해야 함 — 이 태스크 범위 밖의 별도 대형 작업. 완화 요인: `check_forbidden_modes`"
+            "가 규칙 검출기를 가진 유일한 모드 WORKED_EXAMPLE_FIRST는 이미 `runtime_selector`의 "
+            "사전 가드 `forbids_worked_first`가 선택 시점에 강등하므로 사후 가드 부재의 실질 "
+            "위험은 낮다). 재검토 조건: WH-1 루프가 PedagogyPack을 참조하게 되는 시점. 사전 "
+            "가드는 `runtime_selector` supply 경로에 별도 배선. "
             "WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false 킬스위치."
         ),
     )

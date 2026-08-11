@@ -35,6 +35,36 @@ sync 엔진은 슬3 `_build_sync_engine`을 재사용한다(신규 seam 0 — mi
 
 7계층: L1 데이터 기반의 *런타임 엔티티 적재*. ORM 이름 충돌(schema `PedagogyPack` vs ORM
 `PedagogyPack`)은 ORM을 `PedagogyPackORM` alias로 import해 피한다.
+
+────────────────────────────────────────────────────────────────────────────
+PED-16(2026-08-10) 판정 — dead write 확정, 유지 + YAML↔DB 정합 감사 신설
+────────────────────────────────────────────────────────────────────────────
+이 모듈이 쓰는 `pedagogy_pack` 테이블은 **실 판독자가 전무**하다(전수 grep 확인 — `PedagogyPackORM.`
+참조는 이 파일의 upsert 구문 자체 외엔 0건). 런타임 실 소비자(`l4/pedagogy/pack_registry.get_pack`)
+는 이 테이블이 아니라 YAML을 직접 읽는다(모듈 docstring이 "DB 무접근·순수 파일 로드"로 명시하는
+*의도적* 설계 경계) — 컴파일러가 참조 검증에 쓰는 `unit_compiler.load_packs`(동명이나 별개 함수·
+DB 접근 없는 순수 메모리 리더)도 마찬가지로 YAML 직독이다. 즉 원래 PED-01 의도(DB 경유 조회)는
+이후 세션이 의도적으로 YAML-직접 경로로 대체했고, DB 테이블 자체는 그 이전 설계의 **잔재**로
+남았다. `test_e2e_pedagogy_pilot_integration.py`(파일럿 E2E)조차 step①에서 이 테이블에 7팩을
+쓰지만, step⑧ 런타임 조립은 `get_pack`(YAML 경로)만 쓴다 — 그 테스트 **자기 자신 안에서도**
+쓴 값을 다시 읽지 않는다(가장 강한 dead-write 증거).
+
+**판정: 제거하지 않고 유지 + 정합 감사 신설**(완전 제거는 배제). 근거(blast radius 실측):
+  - `tests/backend/l1/test_pack_loader.py`의 `TestPackUpsert`(3)·`TestDedupAndIdempotency`(3)·
+    `test_pack_store_uses_default_settings_when_unset`(1) = 7건이 `PedagogyPackStore`의 SQL
+    생성·멱등·dedup 동작을 직접 검증한다 — DB 쓰기 경로를 통째로 걷어내면 이 7건이 무의미해져
+    삭제가 필요해진다.
+  - `test_e2e_pedagogy_pilot_integration.py` step①(`assert seeded == 7`)도 제거해야 하는데, 이
+    테스트는 "PED-01 파일럿 5단계 전 구간 1회 관통" 증명이라 구조를 함부로 축소하면 그 증명
+    범위가 바뀐다(PED-16 태스크 범위 밖 판단 필요).
+  - `l1/pedagogy/compile.py` CLI(`UnitSpecStore`와 짝인 `PedagogyPackStore` 시딩 경로)도 함께
+    손봐야 하는 연쇄가 있어, "제거"는 이 태스크의 좁은 범위를 넘는 별도 스키마 변경(alembic
+    downgrade 포함)이 된다.
+  이중 정본 위험(둘이 조용히 갈라짐)은 제거 대신 **감시**로 상쇄한다 —
+  `tests/backend/l1/test_pedagogy_pack_yaml_db_parity.py`가 `schema.PedagogyPack.model_fields`
+  (YAML 진실원)와 `PedagogyPackORM` 컬럼셋을 상시 대조해 한쪽만 바뀌면 즉시 RED가 되게 한다.
+  재검토 조건: `pack_registry`가 DB 경유 조회로 전환되는 시점(권장하지 않음 — 이 판정문 작성
+  시점 기준 YAML 경로가 안정적으로 작동 중이라 대형 리팩터의 시간 대비 가치가 낮다고 봄).
 """
 
 from __future__ import annotations

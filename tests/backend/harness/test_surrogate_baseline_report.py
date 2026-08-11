@@ -21,12 +21,14 @@ from whymath_backend.harness.surrogate_baseline_report import (
     classify_reach_state,
     render_baseline_report,
     render_growth_evidence_reach_report,
+    render_step_verification_section,
 )
 from whymath_backend.harness.wh1_evaluation import (
     HelpReductionValidation,
     Metric,
     MetricStatus,
     R15Verdict,
+    StepVerificationAccounting,
     SurrogateMetrics,
 )
 
@@ -283,3 +285,75 @@ class TestRenderGrowthEvidenceReachReport:
         report = render_growth_evidence_reach_report(_all_measured_metrics(), requests_total=7)
         assert "누적 요청 7건" in report
         assert "도달상태 도달" in report
+
+
+# ── S4-19 — 3상태 단계 검증 회계 내부 섹션 렌더 ─────────────────────────────────────
+def _accounting(
+    *,
+    counted: int = 2,
+    uncounted: int = 3,
+    correct: int = 3,
+    incorrect: int = 1,
+    unverifiable: int = 1,
+    decision_rate: float | None = 0.8,
+    incorrect_rate: float | None = 0.2,
+    ocr_gated: int = 1,
+) -> StepVerificationAccounting:
+    return StepVerificationAccounting(
+        counted_events=counted,
+        uncounted_events=uncounted,
+        n_correct_total=correct,
+        n_incorrect_total=incorrect,
+        n_unverifiable_total=unverifiable,
+        step_decision_rate=decision_rate,
+        step_incorrect_rate=incorrect_rate,
+        ocr_gated_events=ocr_gated,
+    )
+
+
+class TestRenderStepVerificationSection:
+    """S4-19 — 내부 전용 섹션 렌더(결정론·NO_DATA 정직 표기·비보유 버킷 분리)."""
+
+    def test_values_rendered_when_measured(self) -> None:
+        """카운트·비율·ocr_gated가 전부 렌더되고 '내부 전용' 라벨이 붙는다."""
+        section = render_step_verification_section(_accounting())
+        assert "[내부 전용]" in section
+        assert "S4-19" in section
+        assert "counted(3카운트 보유·신판 유검증) 2건" in section
+        assert "uncounted(구판 또는 검증 미실행 제출 — 구분 불가·한 버킷) 3건" in section
+        assert "correct 3" in section
+        assert "incorrect 1" in section
+        assert "unverifiable 1" in section
+        assert "step_decision_rate 0.8000" in section
+        assert "step_incorrect_rate 0.2000" in section
+        assert "ocr_gated" in section and "1건" in section
+
+    def test_no_data_shows_dash_not_zero(self) -> None:
+        """전이 표본 0 → 비율은 0이 아니라 '—' + NO_DATA 사유(가짜 0 금지)."""
+        section = render_step_verification_section(
+            _accounting(
+                counted=0,
+                uncounted=4,
+                correct=0,
+                incorrect=0,
+                unverifiable=0,
+                decision_rate=None,
+                incorrect_rate=None,
+                ocr_gated=0,
+            )
+        )
+        assert "step_decision_rate —" in section
+        assert "NO_DATA" in section
+        assert "가짜 0 아님" in section
+        assert "0.0000" not in section  # 비율 자리에 가짜 0이 렌더되지 않는다
+
+    def test_deterministic(self) -> None:
+        """같은 입력 → 같은 출력(결정론) — 리포트 diff 안정성."""
+        acc = _accounting()
+        assert render_step_verification_section(acc) == render_step_verification_section(acc)
+
+    def test_student_route_non_exposure_stated(self) -> None:
+        """섹션이 스스로 '학생 라우트 비노출'을 명시한다(노출 집행 별항의 가시화)."""
+        section = render_step_verification_section(_accounting())
+        assert "학생 라우트 비노출" in section
+        assert "SurrogateMetrics 무변경" in section

@@ -5,19 +5,27 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
   - ASM-03-assessment-writer-persist
-  - S3-01-pilot-cohort
 requires_gates: []
 acceptance:
-  - "ARCH-18과 동일 형식(결정론·NO_DATA 정직 표기)으로 학생별 성취기준 도달 커버리지를 산출 — atom_node.standard_codes 투영만 사용, 새 mastery/진도 테이블 신설 금지"
-  - "S3-01 파일럿 실학생 응답이 쌓이기 전까지는 NO_DATA를 정직하게 반환한다(가짜 수치 금지)"
-artifacts: []
+  - "① 현행 실측 고정(2026-08-10): 수요측(학생별 성취기준 도달) 리포트가 harness에 0건임을 재확인(harness grep에 attain/standard 계열 리포트 모듈 무 — ARCH-18 problem_bank_coverage는 공급측). 입력 지형 실측: 조인 경로 ConceptMasteryHistory.concept_id→Concept.concept_id→Concept.code→AtomNode.code→AtomNode.standard_codes(TEXT[], atom_node.py:109-113)가 전부 실재해 새 mastery/진도 테이블·마이그레이션 0으로 달성 가능. 코드 형식은 대괄호 포함 '[2수01-01]'('9수01-01'류 아님), standard_codes 보유 노드는 세부개념 1,823/2,683(단원·소단원 전부 빈 배열)·distinct 844, 표준 대장 standards_v1는 895레코드(2022 개정 고유 435 — ARCH-18 분모 관례)"
+  - "② 정합 설계 본체: 원 acceptance의 'ARCH-18과 동일 형식'은 결정론·NO_DATA 정직 원칙을 뜻하고, 구현 골격의 실체는 ASM-01 assessment_seat_reach_report의 DB형 4단 분리다(ARCH-18은 hermetic 파일 기반이라 atom_node DB 투영이 구조적으로 불가 — 실측) — collect_*(AsyncSession 주입·ORM 쿼리빌더만)→build_report(순수·DB 불요)→render_report/report_to_json/dump_json(정렬 고정·sort_keys)→main CLI(exit 0/2·게이트 아님). 학생별 최신 측정 1건은 DISTINCT ON(l2/concept_diagnosis.py:80-94 선례), 도달 경계는 기존 L2 정본 숙달 0.8 재사용(threshold 신설 금지·import 계약(lint-imports) 통과 경로로), 분모 이중 회계(user_profile role=STUDENT 전체 vs 측정 이력 보유 학생 — 두 수를 혼동 금지), 성취기준 축은 3분류 계상(대상 개정/타 개정/대장 밖 — ARCH-18 관례·조용한 유실 금지)"
+  - "③ NO_DATA 정직(원 acceptance ② 승계): S3-01 파일럿 실학생 응답이 쌓이기 전 상태에서 가짜 수치 금지 — 측정 학생 0이면 비율은 None·렌더는 '데이터없음'(0.0% 위장 금지 — ARCH-18 _pct 관례), '측정 이력 0'과 'standard_codes 매핑 부재'와 '대장 밖 코드'를 서로 다른 상태로 구분 표기한다"
+  - "④ 동일 시리즈 stale 정정: ASM-01 리포트의 _KNOWN_WRITER_CITATION(assessment_seat_reach_report.py:77-84)이 assessment·concept_mastery_history·skill_mastery_history를 writer 부재('생성 경로 부재')로 동결 중이나 라이브 writer가 실재한다(concept_mastery=api/me.py:738·skill_mastery=:743·assessment=capture :2714/assemble :2873 — ASM-03·ASM-04·mastery 트래킹 착지 후 stale). 인용을 실측으로 갱신하고 동결 hermetic 테스트(test_writerless_tables_report_no_producer_when_empty)를 새 진실로 재작성하되 변별력('생성 경로 부재' vs 'writer 존재하나 미호출 관측'이 다른 값)은 합성 writerless 항목으로 보존한다 — '오류 발견 시 조용히 넘어가지 않기' 집행"
+  - "⑤ 변별력: 실PG 통합 델타 테스트(CMH 행+Concept+AtomNode 매핑을 삽입→도달/커버 카운터가 실제로 증가, 삭제→복원. 절대값 0 assert 금지 — test_assessment_seat_reach_report_integration.py 델타 패턴)·hermetic에서 경계값(0.8 대비 ±ε)이 도달/미도달을 실제로 가르는지·standard_codes 빈 노드와 원자 축 밖 개념이 조용히 사라지지 않고 각각 계상되는지 확인"
+  - "⑥ CI 배선·회귀: tests/backend/harness/**는 backend 잡 testpaths(src/backend/pyproject.toml:206)로 기수집·실PG 통합은 tests/backend/db/*_integration.py(-m integration, backend-migrations 잡) — 신규 배선 불요를 확인하고 완료로 친다. 검사 명령은 CI 그대로 재현(ruff check . ../../tests/backend / black --check --line-length 100 / mypy --strict whymath_backend / lint-imports / pytest)·판정은 exit code(출력 억제·절단 판정 금지). 전체 스위트를 돌린 뒤 회귀 없음을 말한다 — 못 돌렸으면 '전체는 확인하지 못했다'를 명시하고 CI를 최종 판정으로 넘긴다"
+  - "⑦ 범위 밖: skill 축 도달(skill_id에는 성취기준 매핑 자체가 없음)·학생 대면 노출(API/UI — 이 태스크는 관측 좌석만)·도달 threshold 신설·BKT 재적합·실학생/데모 판별 축(S3-01 코호트 태깅이 생기면 후속)·ClickHouse 적재"
+artifacts:
+  - d6b7654a
+  - "검증(전건 exit code 판정): ruff 0·black 0·mypy --strict 0(482파일)·lint-imports 0·전체 백엔드 스위트 9201 passed/304 skipped/0 failed(735s·PYTEST_EXIT=0·회귀 없음)·실PG(로컬 PG16+pgvector·alembic head) 델타 테스트 2 passed(0.80 도달 +1/0.79 도달 불변·cleanup 복원)+ASM-01 통합 5 passed·라이브 CLI exit 0(빈 DB 데이터없음 정직 렌더 실사). acceptance ④ stale 정정 포함(writer 인용 4건 실측 갱신·ability_snapshot :965→:1030 드리프트 정정·변별력 합성 항목 보존). CI 배선 신규 불요(testpaths 기수집) 확인"
 paths:
   - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+  - tests/backend/db/test_standard_attainment_report_integration.py
 session: null
-notes: "브랜치 jkwdzn의 원 ASM-06/D7 재작성. ARCH-18-problem-bank-coverage-report(공급측: 코퍼스가 성취기준을 얼마나 덮는가)의 짝인 수요측(학생별 성취기준 도달 현황)이 없음 — atom_node.standard_codes 투영으로 산출, 새 mastery 테이블 신설 금지(교육과정은 overlay 원칙). S3-01 실학생 응답 파일럿 선행 필요."
-updated: 2026-08-07
+notes: "브랜치 jkwdzn의 원 ASM-06/D7 재작성. ARCH-18-problem-bank-coverage-report(공급측: 코퍼스가 성취기준을 얼마나 덮는가)의 짝인 수요측(학생별 성취기준 도달 현황)이 없음 — atom_node.standard_codes 투영으로 산출, 새 mastery 테이블 신설 금지(교육과정은 overlay 원칙). [2026-08-10 acceptance 정리(착수 세션, Kiki 'acceptance 정리 후 ASM 트랙' 지시)] ①등재 시 2줄이던 acceptance를 실측 기반 표준형(①~⑦)으로 재작성 — ASM-04(2026-08-10)·ASM-06(2026-08-10)의 '착수 세션이 실측으로 acceptance 확정' 선례 답습. ②depends_on에서 S3-01-pilot-cohort 제거 — 원 acceptance ②가 스스로 '파일럿 이전엔 NO_DATA 정직 반환'으로 파일럿 이전 동작을 규정해 의존과 모순이었고, 관측 좌석은 데이터 이전에 착륙해 0행을 정직 표기하는 것이 시리즈 선례다(ASM-01 '생성 경로 부재' 표기·ARCH-18 공급측). PED-14형 차단(입력 0행 위에 '지표'를 만들지 않는 명시적 의존)과 구분: 이 태스크는 값을 주장하는 지표가 아니라 상태를 드러내는 관측 리포트다. ③겹침 실측: S4-16(in_progress, vafylb)이 harness/** 선언 겹침이나 실파일은 agreement_gate*뿐이고 harness/__init__.py는 그 브랜치에서 미변경(diff 실측) — 신규 파일로만 구현해 회피. 7n9n72(ASM-06 done 보유)는 tests/backend/harness에 2파일 추가 중이나 파일명 충돌 없음."
+updated: 2026-08-10

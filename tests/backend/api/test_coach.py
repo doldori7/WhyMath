@@ -4069,6 +4069,252 @@ class TestLogVerifyEvent:
         assert sess.added[0].problem_id is None
 
 
+# S4-19 — 검산결과 이벤트에 병기 적재되는 verify_solution 3상태 6키(전건 additive optional).
+_STEP_COUNT_KEYS = (
+    "n_correct",
+    "n_incorrect",
+    "n_unverifiable",
+    "unverified_ratio",
+    "first_incorrect_index",
+    "ocr_gated",
+)
+
+
+class TestLogVerifyEventStepCounts:
+    """S4-19 — `_log_verify_event`의 3상태 카운트 additive 병기(재계산 0·binary passed 불변).
+
+    verification(게이트 *이전* verify_solution 결과)이 주어지면 6키를 값으로, 없으면 전부
+    None으로 적재한다(구판 이벤트와 같은 NULL 회계 — 정직). 비제출 턴 무적재 가드는
+    verification이 있어도 불변이다(false-pass 방지가 우선). verify_solution은 결정론·순수라
+    패치 없이 실제 호출로 픽스처를 만든다(TestLogVerifyEvent 관례 동형).
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+
+    async def test_no_verification_records_six_none_keys(self) -> None:
+        """단계 미제출(검증 미실행) 제출 턴 → 6키가 *존재하되 전부 None*·binary 축 불변."""
+        from whymath_backend.api.coach import _log_verify_event
+
+        sess = _CaptureSession()
+        result = await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="2+3=5 이므로 답은 5입니다",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        for key in _STEP_COUNT_KEYS:
+            assert key in event.event_data  # 신판 payload에는 키가 항상 존재(계약 model_dump)
+            assert event.event_data[key] is None  # 값은 None(검증 미실행 — 0으로 위장 금지)
+        assert event.event_data["passed"] is True  # 기존 binary 재검산 축 불변(이중 회계)
+        assert result is True
+
+    async def test_verification_carried_records_counts(self) -> None:
+        """verification 운반 → 카운트·비율·인덱스 그대로 적재(값 운반만·재계산 0)."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        verification = verify_solution(["2*x + 4", "2*x + 5"])  # incorrect 전이 1회
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="이렇게 정리했다",
+            verification=verification,
+            verification_ocr_gated=False,
+        )
+        assert len(sess.added) == 1
+        data = sess.added[0].event_data
+        assert data["n_correct"] == 0
+        assert data["n_incorrect"] == 1
+        assert data["n_unverifiable"] == 0
+        assert data["unverified_ratio"] == 0.0
+        assert data["first_incorrect_index"] == 0
+        assert data["ocr_gated"] is False
+        # steps(reason 텍스트)는 절대 싣지 않는다 — 비식별 카운트만(미성년 PII 규약).
+        assert "steps" not in data
+
+    async def test_zero_transition_verification_records_zero_not_none(self) -> None:
+        """전이 0회 제출(빈 verification)도 카운트 0으로 기록 — None(미지정)과 구분(S3-07)."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        verification = verify_solution([])  # 전이 0 — 정직한 빈 집계(카운트 전부 0)
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="한 줄 풀이",
+            verification=verification,
+            verification_ocr_gated=False,
+        )
+        data = sess.added[0].event_data
+        assert data["n_correct"] == 0  # None 아님 — 실측 0
+        assert data["n_incorrect"] == 0
+        assert data["n_unverifiable"] == 0
+        assert data["unverified_ratio"] == 0.0
+        assert data["first_incorrect_index"] is None  # incorrect 없음(n_incorrect==0로 구분)
+
+    async def test_ocr_gated_true_carried(self) -> None:
+        """ocr_gated=True(저신뢰 OCR 보류) 운반 → event_data에 그대로 적재."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        verification = verify_solution(["2*x + 4", "2*x + 5"])
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="이렇게 정리했다",
+            verification=verification,
+            verification_ocr_gated=True,
+        )
+        assert sess.added[0].event_data["ocr_gated"] is True
+
+    async def test_empty_solution_no_event_even_with_verification(self) -> None:
+        """비제출 턴 무적재 가드 불변 — verification이 있어도 적재 0(false-pass 방지 우선)."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        sess = _CaptureSession()
+        result = await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution=None,
+            verification=verify_solution(["2*x + 4", "2*(x + 2)"]),
+            verification_ocr_gated=False,
+        )
+        assert sess.added == []
+        assert result is None
+
+
+class TestStepVerificationCarryPreGate:
+    """S4-19 — `_build_response_payload`의 carry는 노출 게이트 *이전* 값이다(변별력 테스트).
+
+    노출 게이트(coach.py `_THETA_SURFACED_FOCI`)는 전단계-correct 제출·ocr_gated 보류 케이스의
+    `solution_coaching`을 None으로 걸러낸다 — 게이트 *이후* 값으로 carry를 구현하면 이 두
+    케이스에서 carry가 비어(red) 불합격 편향 회계가 된다. 마지막 원소=solution_coaching
+    불변식(S3-32 언패킹 전제)도 함께 고정한다.
+    """
+
+    def test_all_correct_submission_still_carries_counts(self) -> None:
+        """전단계-correct 제출(게이트 탈락·sol None)에서도 carry에 카운트가 실린다."""
+        body = coach.CoachRequest(
+            student_input="다 풀었어요",
+            student_solution="2*x + 4",  # clean(거짓 수치관계 없음) → arithmetic_error False
+            solution_steps=["2*x + 4", "2*(x + 2)"],  # 전이 1회·correct(동치)
+        )
+        *_head, carry, sol = coach._build_response_payload(body)
+        assert sol is None  # 전제: bkt/θ 없음 → focus=diagnose·계산오류 없음 → 노출 게이트 탈락
+        assert carry.verification is not None  # 게이트 이후 값이었다면 여기서 red
+        assert carry.verification.n_correct == 1
+        assert carry.verification.n_incorrect == 0
+        assert carry.ocr_gated is False
+
+    def test_ocr_gated_submission_carries_flag(self) -> None:
+        """ocr_gated 보류 제출(게이트 탈락)에서도 carry에 보류 플래그·카운트가 실린다."""
+        body = coach.CoachRequest(
+            student_input="정리했어요",
+            student_solution="x를 정리했다",  # clean 텍스트(게이팅과 무관)
+            solution_steps=["2*x + 4", "2*x + 5"],  # incorrect 전이
+            ocr_confidence=0.5,  # <0.8 → step 신호 보류(verification_ocr_gated=True)
+        )
+        *_head, carry, sol = coach._build_response_payload(body)
+        assert sol is None  # 보류로 arithmetic_error False → 게이트 탈락(전제)
+        assert carry.ocr_gated is True
+        assert carry.verification is not None
+        assert carry.verification.n_incorrect == 1
+
+    def test_no_steps_carry_verification_is_none(self) -> None:
+        """단계 미제출이면 carry.verification=None — writer가 6키 None으로 정직 적재할 재료."""
+        body = coach.CoachRequest(student_input="음", student_solution="2+3=5")
+        *_head, carry, _sol = coach._build_response_payload(body)
+        assert carry.verification is None
+
+    def test_seven_tuple_last_element_is_solution_coaching(self) -> None:
+        """반환은 7튜플·carry는 인덱스 5·**마지막 원소=solution_coaching 불변식 보존**."""
+        body = coach.CoachRequest(student_input="음", student_solution="2+3=6")  # 계산오류 노출
+        result = coach._build_response_payload(body)
+        assert isinstance(result, tuple) and len(result) == 7
+        assert isinstance(result[5], coach._StepVerificationCarry)
+        assert isinstance(result[-1], coach.SolutionCoaching)  # 게이트 통과(arithmetic_error)
+
+
+class TestStepCountWiring:
+    """S4-19 — 두 핸들러(create_session·append_turns)가 게이트 이전 carry를 적재에 결선.
+
+    엔드포인트 레벨 변별력: 응답 `solution_coaching`은 None(노출 게이트 탈락)인데도 검산결과
+    이벤트에는 카운트가 적재된다 — 핸들러가 carry 대신 solution_coaching을 운반하면 red.
+    """
+
+    def _verify_events(self, captured: Any) -> list[Any]:
+        from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+        from whymath_backend.schema.enums import EventType
+
+        return [
+            o
+            for o in captured.added
+            if isinstance(o, AttemptEventORM) and o.event_type is EventType.검산결과
+        ]
+
+    def test_session_create_persists_pre_gate_counts(self) -> None:
+        """세션 생성: 전단계-correct 제출 → 응답 코칭 None·이벤트 카운트 적재(게이트 이전)."""
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "이렇게 풀었어",
+                "student_solution": "2*x + 4",
+                "solution_steps": ["2*x + 4", "2*(x + 2)"],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["solution_coaching"] is None  # 노출 게이트 탈락(전제 확인)
+        [verify] = self._verify_events(captured)
+        assert verify.event_data["n_correct"] == 1
+        assert verify.event_data["n_incorrect"] == 0
+        assert verify.event_data["n_unverifiable"] == 0
+        assert verify.event_data["ocr_gated"] is False
+        assert verify.event_data["passed"] is True  # binary 축 불변(이중 회계)
+
+    def test_append_turn_persists_pre_gate_counts(self) -> None:
+        """멀티턴 append: create와 동형 결선 — 후속 턴 제출도 카운트 적재."""
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(
+                dialogue_id=did, user_id=_UID, total_turns=2, student_turns=1, assistant_turns=1
+            )
+        )
+        client, captured = _session_client(preload={(DialogueORM, did): dialogue})
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={
+                "student_input": "다음 단계로 정리했어",
+                "student_solution": "2*x + 4",
+                "solution_steps": ["2*x + 4", "2*(x + 2)"],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        [verify] = self._verify_events(captured)
+        assert verify.event_data["n_correct"] == 1
+        assert verify.event_data["n_incorrect"] == 0
+        assert verify.event_data["ocr_gated"] is False
+
+
 class TestLogHintEvent:
     """`_log_hint_event` — 힌트제공 attempt_event 적재 단위(스테이트풀 coach 전용·지표 ⑤).
 

@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import pytest
 
+from whymath_backend.harness.problem_duplication_audit import (
+    normalize_question_text as harness_normalize_question_text,
+)
 from whymath_backend.l3.equivalent.rephrase_hygiene import (
     REASON_DANGLING_EXPONENT_PHRASE,
     REASON_FOREIGN_SCRIPT,
@@ -15,6 +18,8 @@ from whymath_backend.l3.equivalent.rephrase_hygiene import (
     REASON_META_LABEL_LEAK,
     REASON_NONSTANDARD_TERM,
     REASON_REQUEST_ANSWER_MISMATCH,
+    REASON_UNCHANGED_FROM_ORIGINAL,
+    _normalize_for_comparison,
     question_hygiene_violations,
 )
 
@@ -230,3 +235,113 @@ class TestCleanPass:
         # 스켈레톤 원 발문(rephrase 소스) 대표 문면 — 전 축 통과(게이트가 원문을 다치지 않음).
         clean = "이차방정식 3x^2 - 7x + 4 = 0 의 두 근 중 큰 근을 구하시오."
         assert question_hygiene_violations(clean) == ()
+
+
+class TestUnchangedFromOriginal:
+    """⑦ 무변화(QUAL-03) — `original_text` 선택 인자로만 활성화되는 additive 축.
+
+    변별력: 아래 결함주입 케이스(바이트 동일·정규화만 동일)는 이 축이 없으면 실패한다. 기존
+    호출부(원본 텍스트를 안 넘기는 모든 호출)의 회귀 0도 함께 봉인한다.
+    """
+
+    _ORIGINAL = "이차방정식 3x^2 - 7x + 4 = 0 의 두 근 중 큰 근을 구하시오."
+
+    def test_byte_identical_text_flagged(self) -> None:
+        # 결함주입 — 바이트 단위 완전 동일(가장 흔한 무변화 형태).
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(self._ORIGINAL, original_text=self._ORIGINAL)
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL in codes
+
+    def test_whitespace_only_variant_flagged_by_normalization(self) -> None:
+        # 결함주입 — 공백만 다른 변형(바이트는 다르지만 정규화하면 원문과 완전 동일). 정규화
+        # 비교가 없으면(단순 `==`) 이 사례는 절대 못 잡는다 — 이 축의 핵심 존재 이유.
+        variant = "이차방정식 3x^2 - 7x + 4 = 0  의 두 근 중  큰 근을 구하시오."  # 공백 2연속 2곳
+        assert variant != self._ORIGINAL  # 사전조건 — 바이트 불일치 확인
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(variant, original_text=self._ORIGINAL)
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL in codes
+
+    def test_nfc_variant_flagged_by_normalization(self) -> None:
+        # 결함주입 — NFD(자모 분리) 인코딩 변형은 바이트 비교로는 다르지만 NFC 정규화 후 동일.
+        import unicodedata
+
+        nfd_variant = unicodedata.normalize("NFD", self._ORIGINAL)
+        assert nfd_variant != self._ORIGINAL  # 사전조건 — 바이트 불일치(자모 분리) 확인
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(nfd_variant, original_text=self._ORIGINAL)
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL in codes
+
+    def test_genuinely_different_text_not_flagged(self) -> None:
+        different = "이차방정식 3x^2 - 7x + 4 = 0 을 풀어 두 해 중 더 큰 값을 답하시오."
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(different, original_text=self._ORIGINAL)
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL not in codes
+
+    def test_default_none_never_flags_even_for_identical_call(self) -> None:
+        # additive 확장 봉인 — original_text를 넘기지 않으면(기존 호출부 전부) 축 자체가
+        # 계산되지 않는다. 같은 문자열을 question_text로만 넘겨도(즉 "원본과 같음"을 판단할
+        # 근거가 애초에 없음) 위반이 나면 안 된다.
+        assert question_hygiene_violations(self._ORIGINAL) == ()
+
+    def test_blank_original_text_not_treated_as_unchanged(self) -> None:
+        # 원본이 공백/빈 문자열이면(정규화 후 빈 문자열) "무변화"로 세면 안 된다 — 비교 대상이
+        # 없다는 뜻이지 일치한다는 뜻이 아니다.
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(self._ORIGINAL, original_text="   ")
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL not in codes
+
+    def test_blank_question_text_not_treated_as_unchanged(self) -> None:
+        codes = {
+            v.split(":", 1)[0] for v in question_hygiene_violations("   ", original_text="   ")
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL not in codes
+
+    def test_other_axes_still_apply_alongside_unchanged_check(self) -> None:
+        # ⑦축이 다른 축의 검사를 대체하지 않는다 — 무변화이면서 동시에 다른 결함도 있으면 둘 다.
+        hanja_original = "이차방정식 x^2 - 9x + 20 = 0 의 두解 중 더 큰 解의 값을 구하시오."
+        codes = {
+            v.split(":", 1)[0]
+            for v in question_hygiene_violations(hanja_original, original_text=hanja_original)
+        }
+        assert REASON_UNCHANGED_FROM_ORIGINAL in codes
+        assert REASON_FOREIGN_SCRIPT in codes
+
+
+class TestNormalizeForComparisonCrossValidation:
+    """`_normalize_for_comparison`(L3 로컬)과 `harness.problem_duplication_audit.
+    normalize_question_text`(QUAL-01/QUAL-03 하한·직접 측정 정본)가 표류하지 않는지 고정.
+
+    두 함수가 다른 정규화를 쓰면 QUAL-01 간접 수치와 QUAL-03 직접 수치가 어긋난다(모듈
+    docstring ⑦ 주석 "정직 회계" 참고) — 이 테스트가 그 불변식을 봉인한다.
+    """
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "이차방정식 3x^2 - 7x + 4 = 0 의 두 근 중 큰 근을 구하시오.",
+            "  앞뒤 공백과   내부   연속 공백이  섞인 문장.  ",
+            "탭\t과\t줄바꿈\n이 섞인 문장",
+            "",
+            "   ",
+            "특수문자 √3/2 와 π 비교.",
+        ],
+    )
+    def test_equivalent_normalization_on_shared_samples(self, text: str) -> None:
+        local_result = _normalize_for_comparison(text)
+        # harness 쪽은 빈 문자열/공백만 있는 입력에 None을 돌리므로(정직 회계 — "구분"), 로컬
+        # 쪽의 빈 문자열과 의미가 같은지(둘 다 "내용 없음") 그 지점만 별도 비교한다.
+        harness_result = harness_normalize_question_text(text)
+        if harness_result is None:
+            assert local_result == ""
+        else:
+            assert local_result == harness_result

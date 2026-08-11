@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-12-auth-session-lifecycle-client-wiring
+title: "모바일 계정 보안 화면 — 세션 목록/전체 로그아웃/토큰 갱신 클라이언트 배선(SEC-10 서버 좌석 전용 완비, OPS-22 신규 발견)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: mobile
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "SEC-10이 신설한 GET/DELETE /v1/auth/sessions·DELETE /v1/auth/sessions/{jti}와 기존 POST /v1/auth/refresh·POST /v1/auth/logout를 실제로 부르는 Flutter 계정 보안 화면(낯선 기기 인지·전체 로그아웃) 또는 인증 인터셉터(토큰 만료 시 자동 갱신)를 배선한다(OPS-22 declared_unwired_audit 실측: 서버 라우트는 done 상태로 완비됐으나 mobile dart 호출 0건)"
+  - "완료 후 OPS-22 declared_unwired_audit 재실행 시 이 4개 라우트가 reached로 전환됨을 확인 — 이 태스크가 done되면 대장의 pending-task 항목도 제거(방치 시 expired-waiver가 잡는다)"
+artifacts:
+  - "efa35ed — Flutter 실배선(3건 중 유일). 계정 보안 '내 기기 관리' 화면 신설(GET/DELETE /v1/auth/sessions·DELETE .../{jti}, '나' 탭 진입, 위협 어휘 부재를 테스트로 동결) + 401 자동 갱신 인터셉터(POST /v1/auth/refresh 회전 후 원요청 1회 재시도, 동시 401 단일 비행 묶음 — 리프레시 1회용이라 동시 회전은 서버 재사용 탐지에 걸림, 재시도 표식으로 루프 차단, 인터셉터 없는 별도 Dio로 재귀 구조적 차단) + logout이 POST /v1/auth/logout으로 서버 세션 취소(종전엔 로컬 토큰만 삭제해 서버 리프레시 세션 생존) + login이 리프레시 토큰 저장(종전엔 폐기해 갱신 재료 부재). RefreshTokenStore를 별도 인터페이스로 분리(기존 TokenStore 확장 시 fake 7종 파손). 실측: flutter 3.41.9 analyze 0 issues·test 329 passed(기존 303+신규 26). 감사기 도달 72→80·exit 0. 정직한 잔여: 전체 로그아웃은 리프레시 세션만 취소하고 발급된 액세스 토큰은 자체 만료까지 유효(SEC-10 서버 한계 — 화면 문구도 '잠시 뒤'로 한계를 그대로 말함)·실기기 검증 없음(위젯·단위 테스트까지)."
+paths:
+  - "src/mobile/lib/features/auth/**"
+  - "src/mobile/lib/core/**"
+  - src/mobile/lib/features/profile/presentation/me_screen.dart
+  - "src/mobile/test/**"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+session: null
+notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — SEC-10(2026-08-03 done)의 paths는 src/backend/**만 포함해 서버 엔드포인트만 배선하고 모바일 소비 화면은 범위 밖으로 남았다. account_security_gap_review.md D4가 '학생이 기기를 분실해도 자기 세션을 끊을 방법 0'을 지적했는데, 서버 좌석이 생긴 지금도 학생이 실제로 그 기능에 접근할 UI가 없어 원 문제가 여전히 미해소다. POST /v1/auth/refresh·POST /v1/auth/logout는 SEC-10 이전부터 있었으나 같은 축(mobile 미호출)이라 함께 묶는다."
+updated: 2026-08-10

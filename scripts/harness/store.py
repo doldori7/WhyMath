@@ -402,11 +402,33 @@ _GRANDFATHERED_ID_NUMBERS: dict[str, str] = {
         "기존 충돌(2026-07-29 repo-root-lint-config · wh1-caplog-order-flake) — "
         "HARN-10 착수 시점에 타 세션 2곳에서 인플라이트였다. 사후 개명은 타 세션 볼모."
     ),
+    # 2026-08-11 origin/main 병합 시 발견 — 두 세션이 서로의 브랜치를 못 본 채(HARN-10
+    # 서문의 "병렬 세션이 서로의 브랜치를 못 봐서" 유형 재현) 같은 번호를 독립 등재했다.
+    "PED-15": (
+        "기존 충돌(2026-08-09 growth-evidence-endpoint-client-wiring, PR #755로 main 머지 · "
+        "2026-08-10 problem-attempt-started-at-null-time-window-bug, 이 브랜치에서 done) — "
+        "둘 다 done. 전자는 OPS-22 감사기 리터럴 오탐(엔드포인트는 실제로 이미 도달돼 있었음)"
+        "임을 규명하고 종결한 진단 태스크, 후자는 ProblemAttempt.started_at 상시 NULL 근본수정. "
+        "양쪽 다 커밋·MEMORY 결정 로그·PR에 'PED-15'로 이미 참조돼 있어 개명 시 파손."
+    ),
+    "PED-16": (
+        "기존 충돌(2026-08-09 pedagogy-declared-unenforced-audit, PR #767로 main 머지 · "
+        "2026-08-10 problem-attempt-retention-purge-eligibility-confirm, owner: kiki, 이 "
+        "브랜치에서 등재) — 전자는 done, 후자는 Kiki 결정 대기 중이라도 이미 커밋·MEMORY에 "
+        "'PED-16'으로 참조돼 있어 개명 시 파손."
+    ),
 }
 
 # 접두는 영숫자 혼합을 허용한다 — 이 저장소 ID의 다수파가 스테이지형(`S2-04`·`S4-07`)이라
 # `[A-Za-z]+`로 잡으면 정작 가장 많은 축을 통째로 못 본다(HARN-10 구현 중 실측).
-_ID_NUMBER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)-")
+#
+# 캡처 그룹 뒤는 `(?:-|$)` — 슬러그가 이어지거나(`-`) 문자열이 거기서 끝나야(`$`) 매치한다.
+# `models.TASK_ID_RE`(`^[A-Z][A-Z0-9]{0,7}-\d{2}(-[a-z0-9]+(-[a-z0-9]+)*)?$`)는 슬러그가
+# **옵션**이라 `HARN-20`처럼 슬러그 없는 ID도 유효한데, 구 정규식(`...-\d+)-`)은 캡처 그룹
+# 뒤에 반드시 `-`가 와야 매치해서 슬러그 없는 ID를 전부 놓쳤다(HARN-21 결함① — 그 결과
+# `_taken_id_numbers`·`_id_number_collisions`가 슬러그 없는 ID의 번호를 점유 목록에서
+# 누락시켜 1선(add)·2선(validate) 번호 충돌 검사를 양쪽 다 우회할 수 있었다).
+_ID_NUMBER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)(?:-|$)")
 
 
 def id_number_of(task_id: str) -> str | None:

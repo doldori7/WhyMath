@@ -102,9 +102,9 @@ def test_scene_schema_seat_imports_no_layer(module: str) -> None:
 # 상태인가?"를 의식적으로 판정하게 강제하는 하드 게이트. 정답·수정·판정·interaction state 부재 고정.
 _ELEMENT_ALLOWED_FIELDS: dict[type, frozenset[str]] = {
     VisualizationElement: frozenset({"kind", "ref"}),
-    ParamControlElement: frozenset(
-        {"kind", "targets", "bound_visualization_index", "value_range", "step"}
-    ),
+    # MOB-14(2026-08-10) — value_range·step 제거(죽은 좌석·생산자 0). 계약 게이트는
+    # tests/backend/l4/test_scene_contract.py.
+    ParamControlElement: frozenset({"kind", "targets", "bound_visualization_index"}),
     StepPanelElement: frozenset({"kind", "solution_path_id", "reveal_policy"}),
     MisconceptionProbeElement: frozenset({"kind", "misconception_id", "intervention"}),
     SocraticPromptElement: frozenset(

@@ -15,6 +15,9 @@
 7종 대리 지표 커버리지(설계안 §8.4):
   ① verify 통과율          — 🟢 MEASURED/NO_DATA: attempt_event(event_type=검산결과)의
                              passed=거짓 수치관계 *미적발* 비율(binary 검산·3-state 아님).
+                             S4-19: 같은 이벤트에 병기 적재된 verify_solution 3상태 카운트의
+                             파생 회계(`compute_step_verification_accounting`)가 이중 회계로
+                             병존한다 — SurrogateMetrics 밖 내부 전용(학생 라우트 비노출).
   ② 진단-실제 오개념 일치율 — 🟡 MEASURED(오프라인)/NO_DATA: 라벨 프로브(틀린 진술→expected_id
                              오개념)에 substring 매처 `diagnose` top-1 recall(오프라인 진단정확도).
                              **LIVE 학생별 ground-truth가 아니라 시스템 진단엔진 품질 지표**(전
@@ -105,11 +108,12 @@ from __future__ import annotations
 import inspect
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
-from sqlalchemy import ColumnElement, Float, cast, func, select
+from sqlalchemy import ColumnElement, Float, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.activity import (
@@ -138,7 +142,9 @@ __all__ = [
     "Metric",
     "MetricStatus",
     "R15Verdict",
+    "StepVerificationAccounting",
     "SurrogateMetrics",
+    "compute_step_verification_accounting",
     "compute_wh1_surrogate_metrics",
 ]
 
@@ -1603,8 +1609,9 @@ async def compute_wh1_surrogate_metrics(
             status=MetricStatus.MEASURED,
             note=(
                 f"검산결과 이벤트 기반 — passed(거짓 수치관계 *미적발*) {passed_count}/"
-                f"{verify_total}건. binary 검산(3-state verify 아님·unverifiable 미구분·"
-                "풀이 제출 턴 한정)."
+                f"{verify_total}건. binary 검산(값·계산식 불변·풀이 제출 턴 한정). 3상태"
+                "(correct/incorrect/unverifiable) 파생 회계는 S4-19 병기 — "
+                "compute_step_verification_accounting(내부 리포트 전용·학생 라우트 비노출)."
             ),
         )
 
@@ -2012,4 +2019,127 @@ async def compute_wh1_surrogate_metrics(
         window_end=until,
         user_scoped=user_id is not None,
         mode_filter=mode,
+    )
+
+
+# ── S4-19 — 3상태 단계 검증 회계(지표 ① binary와 이중 회계·내부 전용) ─────────────────
+@dataclass(frozen=True)
+class StepVerificationAccounting:
+    """검산결과 이벤트에 병기 적재된 verify_solution 3상태 카운트의 파생 회계(S4-19).
+
+    **노출 집행(2026-08-04 헌법 별항)**: `SurrogateMetrics` 필드가 *아니다* — `GET /v1/me/
+    harness-metrics`가 response_model=SurrogateMetrics로 전 필드를 학생 토큰에 자동 서빙하므로
+    (2026-08-10 실측), 파생 지표를 거기 넣으면 '학생 대면 표면 0'과 양립 불가다. 이 dataclass는
+    `surrogate_baseline_report` 내부 섹션(ops CLI)으로만 렌더된다 — 학생 라우트 무변경.
+
+    **정직 회계(S3-07·`wh1_shadow_harvest.summarize` 동형)**: 3카운트 전부 non-NULL인 이벤트만
+    분모(`counted_events`)로 세고, 카운트 비보유는 `uncounted_events`로 분리 계상한다 —
+    **"카운트 비보유 = 구판 이벤트 *또는* 검증 미실행 제출"은 저장 모양이 같아(둘 다 SQL NULL)
+    구분 불가**이므로 하나의 정직한 버킷이다(둘을 구분한다고 주장하지 않는다).
+    """
+
+    counted_events: int
+    """3카운트(n_correct·n_incorrect·n_unverifiable) 전부 보유한 검산결과 이벤트 수(신판 유검증)."""
+
+    uncounted_events: int
+    """카운트 비보유 이벤트 수 — 구판 *또는* 단계 미제출/검증 미실행 제출(구분 불가·한 버킷)."""
+
+    n_correct_total: int
+    """counted 이벤트의 correct 전이 합."""
+
+    n_incorrect_total: int
+    """counted 이벤트의 incorrect 전이 합."""
+
+    n_unverifiable_total: int
+    """counted 이벤트의 unverifiable 전이 합."""
+
+    step_decision_rate: float | None
+    """(n_correct+n_incorrect)/전체 전이 — 판정(비-unverifiable) 비율(D6 정의). 전이 0이면 None."""
+
+    step_incorrect_rate: float | None
+    """n_incorrect/전체 전이 — incorrect 전이 비율(D6 정의). 전이 0이면 None(가짜 0 금지)."""
+
+    ocr_gated_events: int
+    """ocr_gated=true 이벤트 수 — 저신뢰 OCR로 step-incorrect 코칭이 보류된 제출 건수."""
+
+
+async def compute_step_verification_accounting(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    mode: str | None = None,
+) -> StepVerificationAccounting:
+    """검산결과 이벤트의 3상태 카운트를 집계 — 지표 ①(binary)의 S4-19 병기 파생(교체 아님).
+
+    설계 정본: `docs/architecture/solution_module_gap_review.md` §5-3 D6. `verify_pass_rate`
+    (binary·값·계산식 불변)와 *같은 조건*(event_type=검산결과·user/시간창/mode 스코프)으로
+    필터하되, 파생 비율의 분모는 **3카운트 전부 non-NULL인 이벤트의 전이 합만** 쓴다(S3-07
+    정직 회계 — 구판/무검증 이벤트를 '전이 0'으로 위장하지 않는다). 전이 합 0이면 비율 None
+    (NO_DATA — 가짜 0 금지). JSONB 접근은 쿼리빌더(`as_integer`/`as_boolean`)만 — 저장된
+    구판 이벤트(키 부재)와 신판 무검증(명시 null)은 SQL에서 똑같이 NULL로 읽힌다.
+
+    shadow 원장(`wh1_shadow_harvest.summarize`의 transition_counts)과 같은 3상태 분포를 내는
+    **결정론 라이브 미러**다 — 두 회계가 서로를 검증한다(D6 취지).
+    """
+    conds = [AttemptEvent.event_type == EventType.검산결과]
+    if user_id is not None:
+        conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        conds.append(AttemptEvent.event_at <= until)
+    # S3-03 mode 스코프 — 지표 ①과 동형(태그 없는 구판·mode=null은 as_string() NULL이라 제외).
+    if mode is not None:
+        conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
+
+    n_correct_col = AttemptEvent.event_data["n_correct"].as_integer()
+    n_incorrect_col = AttemptEvent.event_data["n_incorrect"].as_integer()
+    n_unverifiable_col = AttemptEvent.event_data["n_unverifiable"].as_integer()
+    # 신판 유검증 판정 — 3카운트 *전부* non-NULL(S3-07 `summarize` 동형·하나라도 NULL이면 비보유).
+    counted = and_(
+        n_correct_col.is_not(None),
+        n_incorrect_col.is_not(None),
+        n_unverifiable_col.is_not(None),
+    )
+    row = (
+        await session.execute(
+            select(
+                func.count(),
+                func.count().filter(counted),
+                func.sum(n_correct_col).filter(counted),
+                func.sum(n_incorrect_col).filter(counted),
+                func.sum(n_unverifiable_col).filter(counted),
+                func.count().filter(AttemptEvent.event_data["ocr_gated"].as_boolean().is_(True)),
+            )
+            .select_from(AttemptEvent)
+            .where(*conds)
+        )
+    ).one()
+    total_raw, counted_raw, correct_raw, incorrect_raw, unverifiable_raw, ocr_gated_raw = row
+    total = int(total_raw or 0)
+    counted_events = int(counted_raw or 0)
+    n_correct_total = int(correct_raw or 0)
+    n_incorrect_total = int(incorrect_raw or 0)
+    n_unverifiable_total = int(unverifiable_raw or 0)
+
+    # 파생 비율(D6) — 분모는 counted 이벤트의 전체 전이 합. 0이면 None(표본 0을 0%로 위장 금지).
+    transitions_total = n_correct_total + n_incorrect_total + n_unverifiable_total
+    if transitions_total > 0:
+        step_decision_rate: float | None = (n_correct_total + n_incorrect_total) / transitions_total
+        step_incorrect_rate: float | None = n_incorrect_total / transitions_total
+    else:
+        step_decision_rate = None
+        step_incorrect_rate = None
+
+    return StepVerificationAccounting(
+        counted_events=counted_events,
+        uncounted_events=total - counted_events,
+        n_correct_total=n_correct_total,
+        n_incorrect_total=n_incorrect_total,
+        n_unverifiable_total=n_unverifiable_total,
+        step_decision_rate=step_decision_rate,
+        step_incorrect_rate=step_incorrect_rate,
+        ocr_gated_events=int(ocr_gated_raw or 0),
     )

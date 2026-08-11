@@ -35,8 +35,10 @@ from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import Visualization
 
 # Math·Pedagogy 명세에 새어들면 안 되는 *런타임/UI 상태* 부분문자열(소문자 비교). 선언적 힌트
-# (value_range·step·highlight_spec·bound_*·target_*)는 상태가 아니므로 제외한다 — 여기 있는 건
-# "지금 화면이 어떤 상태인가"(가변 런타임)에 해당하는 것들이다. 하나라도 필드명에 박히면 red.
+# (highlight_spec·bound_*·target_*)는 상태가 아니므로 제외한다 — 여기 있는 건 "지금 화면이 어떤
+# 상태인가"(가변 런타임)에 해당하는 것들이다. 하나라도 필드명에 박히면 red.
+# (MOB-14 2026-08-10 — value_range·step은 죽은 좌석이라 ParamControlElement에서 제거됨. 이
+# 주석은 원래 "상태 아닌 선언적 힌트" 예시였을 뿐 이 테스트가 직접 참조하지는 않는다.)
 _RUNTIME_STATE_SUBSTRINGS: tuple[str, ...] = (
     "current_",
     "selected",

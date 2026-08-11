@@ -143,6 +143,111 @@ class TestGatesCli:
         assert "S1-12-phaiakes9-live-verify" in ids
 
 
+class TestGatesAdd:
+    """HARN-18 — gates add CLI 경로 (손편집 금지 규약의 구멍 메움).
+
+    task add와 동일하게 (a)정상 등재+감사로그 (b)중복 id 거부 (c)필수 필드 누락 거부의
+    *변별력*을 동결한다 — (b)(c)는 정상 케이스가 0을 내는 것과 대비해 실제 거부(1)를 확인.
+    """
+
+    def test_add_creates_gate_and_appends_event(self, seeded_repo: Path):
+        """정상_add로_게이트_생성_및_감사로그_기록"""
+        assert (
+            cli.main(
+                [
+                    "gates",
+                    "add",
+                    "G-new-human-approval",
+                    "--title",
+                    "새 사람 승인 게이트",
+                    "--kind",
+                    "human",
+                    "--assignee",
+                    "kiki",
+                    "--remind-after-days",
+                    "7",
+                ]
+            )
+            == 0
+        )
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "G-new-human-approval" in backlog.gates
+        gate = backlog.gates["G-new-human-approval"]
+        assert gate.status == "pending"
+        assert gate.kind == "human"
+        assert gate.remind_after_days == 7
+        assert gate.requested  # requested 자동 스탬프(YYYY-MM-DD)
+        # events.ndjson 감사 로그에 gate_add 이벤트가 남는다 (누가·언제·무엇)
+        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        assert any(
+            json.loads(line).get("action") == "gate_add"
+            and json.loads(line).get("id") == "G-new-human-approval"
+            for line in events.splitlines()
+        )
+
+    def test_added_gate_keeps_validate_green(self, seeded_repo: Path):
+        """add_후_대장_validate_green (기존 대장 무결성 불변)"""
+        assert cli.main(["gates", "add", "G-extra-check", "--title", "추가 점검"]) == 0
+        assert cli.main(["validate"]) == 0
+        backlog, _ = store.load_backlog(seeded_repo)
+        # 기본값 정합 — kind=human, assignee=kiki, pending
+        gate = backlog.gates["G-extra-check"]
+        assert (gate.kind, gate.assignee, gate.status) == ("human", "kiki", "pending")
+
+    def test_added_decision_gate_can_gate_task(self, seeded_repo: Path):
+        """add한_게이트가_실제로_태스크를_게이팅한다 (배선 실재 확인)"""
+        assert (
+            cli.main(
+                ["gates", "add", "G-live-gate", "--title", "라이브 게이트", "--kind", "decision"]
+            )
+            == 0
+        )
+        # 이 게이트를 requires_gates로 건 태스크는 게이트가 pending인 동안 착수 거부돼야 한다
+        assert (
+            cli.main(
+                [
+                    "add",
+                    "--id",
+                    "S2-93-gated-task",
+                    "--title",
+                    "게이트 대기 태스크",
+                    "--track",
+                    "math-completion",
+                    "--stage",
+                    "S2",
+                    "--gates",
+                    "G-live-gate",
+                ]
+            )
+            == 0
+        )
+        assert cli.main(["start", "S2-93-gated-task", "--session", "b"]) == 1  # pending → 거부
+
+    def test_duplicate_id_rejected(self, seeded_repo: Path):
+        """중복_id_add_거부 (변별력 — 정상 0 대비 실제 거부 1)"""
+        assert cli.main(["gates", "add", "G-phaiakes9-key", "--title", "중복 시도"]) == 1
+        # 대장 오염 없음 — 기존 게이트 제목이 덮이지 않았다
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.gates["G-phaiakes9-key"].title != "중복 시도"
+
+    def test_missing_title_rejected(self, seeded_repo: Path):
+        """필수_필드(title)_누락_add_거부"""
+        assert cli.main(["gates", "add", "G-no-title"]) == 1
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "G-no-title" not in backlog.gates
+
+    def test_missing_id_rejected(self, seeded_repo: Path):
+        """필수_필드(id)_누락_add_거부"""
+        assert cli.main(["gates", "add", "--title", "id 없음"]) == 1
+
+    def test_invalid_id_format_rejected(self, seeded_repo: Path):
+        """잘못된_id_형식_거부 (스키마 무결성 — G- 소문자 kebab 아님)"""
+        assert cli.main(["gates", "add", "BadId", "--title", "형식 위반"]) == 1
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "BadId" not in backlog.gates
+        assert cli.main(["validate"]) == 0  # 거부됐으므로 대장은 여전히 green
+
+
 class TestAdd:
     def test_add_creates_task(self, seeded_repo: Path):
         """add로_태스크_생성"""

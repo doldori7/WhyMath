@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-14-scene-contract-cross-freeze
+title: "scene DSL 서버↔클라 계약 동결 — 응답 필드 드리프트 4건(무감지 통과) 판정 + webViewTypes 렌더 계약 결선"
+track: infra-debt
+stage: S4
+subject: cross
+layer: mobile
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 드리프트 4필드 각각 판정·상환 — active_hypothesis_confidences(서버가 채워 보내는데 클라 미파싱)·Visualization.visualization_id(클라 부재)는 파싱 추가 or 백엔드 좌석 제거, ParamControlElement.value_range/step(생산자도 안 채우는 죽은 좌석 2)은 채울 생산자 없으면 제거 우선"
+  - "② scene 응답 계약 게이트 신설 — 백엔드 스키마 필드셋 ↔ Dart 파서 필드셋 교차 검증(계약 fixture 또는 응답 골든의 Dart판). 결함 주입 시 실패·정상 통과 양쪽 실측(변별력 없는 검증 금지)"
+  - "③ scene_renderer.dart:107 webViewTypes 하드코딩을 data/render_contract.json 소비로 결선 — invariant ⑩ 렌더 선택 단일 진실원의 Flutter 잔여 1/3 완결"
+artifacts:
+  - "커밋(예정) — scene DSL 서버↔클라 계약 동결, 필드 드리프트 4건 상환 + webViewTypes 결선.\n\n① 드리프트 4필드 판정·상환: active_hypothesis_confidences(서버가 net_support_by_misconception\n실계산 결과로 실제 채워 보내는 유의미 데이터)·Visualization.visualization_id(PK)는 형제 필드와\n대칭으로 Dart 파싱 추가(scene_models.dart의 SceneLearnerContext·Visualization). \nParamControlElement.value_range/step은 유일 생산자 scene_generation.py:367이 한 번도 채운 적\n없음을 전수 grep 확인(부수 발견: 슬라이더 범위/증분은 이미 Graph2dParam.min/max/step이 선언 —\n진짜 중복 죽은 좌석) → learning_scene.py에서 Field 정의 삭제, 영향받은 백엔드 테스트 3개\n(test_scene_dsl_layer_governance.py 화이트리스트·test_learning_scene.py·\ntest_visualization_state_separation.py 주석) 갱신.\n\n② scene 응답 계약 게이트 신설(방식 A) — data/scene_contract.json 신규(render_contract·\nnotation_contract 동형 위치/명명), Visualization·SceneLearnerContext·LearningScene·\nSceneElement 8종 kind 필드셋 선언. 백엔드 tests/backend/l4/test_scene_contract.py(12건,\ntyping.get_args로 판별 유니온 멤버 직접 추출·하드코딩 이중화 회피) + 모바일\nsrc/mobile/test/scene_contract_test.dart(5건, toJson().keys 대조 — Dart엔 @JsonKey 정적\n리플렉션이 없어 최소 인스턴스 생성 후 직렬화 키 집합으로 대조).\n\n③ webViewTypes 결선 — scene_renderer.dart의 로컬 const를 @visibleForTesting static const로\n승격(런타임 동작 불변·프로덕션 코드에 파일 I/O 없음, segmentation_contract_test.dart 관례 답습:\n런타임 번들링이 아니라 테스트 시점 교차검증). 신규 scene_render_contract_test.dart(3건)가\nrender_contract.json의 interactive:true 3개 키와 정확히 일치함을 동결.\n\n변별력 실증(②③, 서브에이전트 + 오케스트레이터 독립 재실행 이중 확인 — 둘 다 cp 백업/복원만\n사용, git checkout 미사용): scene_contract.json에 유령 필드 주입 → 백엔드/모바일 게이트 양쪽\nRED, 원복 후 GREEN(md5 바이트 동일 확인). render_contract.json의\nanimation_prerendered.interactive를 true로 뮤테이션 → webViewTypes 게이트 RED, 원복 후 GREEN\n(git status 무변경 확인 — 이 파일은 이미 추적 중이던 파일이라 diff 0으로도 원복 실증).\n\n측정: flutter test 전체 337 passed(기존 329+신규 8)·flutter analyze 0 issues·\ntests/backend/l4+schema 130 passed·전체 스위트 tests/backend+tests/infra 9629 passed·304\nskipped·0 failed(663초)·ruff/black 전부 EXIT=0. Flutter 3.41.9(CI 핀 일치) 확인 후 진행.\n\n정직한 잔여: docs/architecture/dsl_integration_gap_review.md의 원 리뷰 서술은 과거 실측\n기록이라 갱신하지 않음(범위 밖 판단) · data/scene_contract.json은 SceneElement 8종 kind\n필드셋만 다루고 Visualization.spec 내부 typed 모델(Graph2dSpec 등, extra=allow 자유 JSON)은\n계약 대상 밖(이번 드리프트 4건과 무관 판단이나 별도 검토는 안 함) · Dart SceneElement가 단일\nflat 모델이라(판별 유니온 미채택) 8종 kind 필드를 합집합으로만 대조 — kind 간 교차 오배선은\n이 게이트가 못 잡음(기존 설계 선택의 한계, 이번 태스크 범위 밖)."
+paths:
+  - "src/mobile/lib/features/chat/**"
+  - src/backend/whymath_backend/l4/learning_scene.py
+  - data/render_contract.json
+  - "src/mobile/test/**"
+session: null
+notes: "docs/architecture/dsl_integration_gap_review.md §2-④ 실측 근거(2026-08-10). 드리프트 4건이 CI를 통과한 원인은 계약 게이트 부재(scene_models.dart 참조 테스트 0건) — json_serializable 미지 키 무시로 런타임 파손 없이 침묵 통과. render_contract·notation_contract py↔js 교차 골든 선례의 Dart 확장."
+updated: 2026-08-10

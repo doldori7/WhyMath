@@ -251,7 +251,7 @@ def test_main_writes_json_artifact(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 6. 실 코퍼스 스모크(회귀 감시 — 핵심 신호)
 # ──────────────────────────────────────────────────────────────────────────
-def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_fifteen_callsites() -> None:
+def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_twenty_callsites() -> None:
     """실제 src/mobile/lib·src/backend/whymath_backend/api를 읽어 확인한다.
 
     `total_v1_literal_callsites`·표면 도달 상태가 기대값이 아니게 되면(모바일이 실제로 이
@@ -272,6 +272,13 @@ def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_fifteen_calls
       그 시점엔 발화하지 못했고, 서버·클라를 동시에 건드린 다음 PR(MOB-10)에서야
       드러났다 — mobile-only PR이 backend 소재 가드를 우회하는 CI 배선 공백은 별도
       등재(재발방지대책).
+    - 15 → 20 (2026-08-10, MOB-12). 계정 보안(내 기기 관리) 화면과 토큰 자동 갱신
+      인터셉터가 배선되며 모바일이 인증 수명주기 표면 5종을 새로 호출하기 시작했다 —
+      `core/token_refresh_api.dart`의 `POST /v1/auth/refresh`·`POST /v1/auth/logout`,
+      `features/auth/data/auth_sessions_api.dart`의 `GET /v1/auth/sessions`·
+      `DELETE /v1/auth/sessions`·`DELETE /v1/auth/sessions/{jti}`. 전부 인증/세션 표면이라
+      10종 *개념* 표면의 도달 판정은 그대로다(`me_learning_path`만 도달 유지). 이번엔 이
+      가드가 mobile 필터 잡(OPS-23으로 신설)에서도 켜지므로 mobile-only PR 우회는 없다.
     """
     if not crr.DEFAULT_MOBILE_LIB_ROOT.is_dir() or not crr.DEFAULT_BACKEND_API_ROOT.is_dir():
         pytest.skip("실 mobile/backend 경로 미존재")
@@ -283,6 +290,6 @@ def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_fifteen_calls
     assert by_key["me_learning_path"].matched_files == ("features/problems/data/problems_api.dart",)
     assert all(s.status == "미도달" for k, s in by_key.items() if k != "me_learning_path")
     assert all(s.reach_count == 0 for k, s in by_key.items() if k != "me_learning_path")
-    assert report.total_v1_literal_callsites == 15
+    assert report.total_v1_literal_callsites == 20
     assert isinstance(crr.render_report(report), str)
     assert isinstance(crr.dump_json(report), str)

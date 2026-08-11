@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-20-cli-transition-wiring-and-block-notes
+title: "하네스 CLI 선언≠배선 — review·cancelled 상태 CLI 도달 불가 + block --reason의 notes 덮어쓰기 파괴"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 결정·해소: STATUS_TRANSITIONS(models.py:76-83)가 선언한 review·cancelled 전이에 대응 CLI 동사가 없다(도달 경로 0·실데이터 0건/229). 동사 신설(예: review <id>·cancel <id>) 또는 전이표 축소 중 하나로 선언≠배선을 해소하고 결정 근거를 남긴다. in-flight 취급 코드(backlog.py:105·484·1222, selector.py:160)와 reap의 cancelled 소비(remote_claims.py:763)도 결정에 맞춰 정합화한다."
+  - "② block 데이터 파괴 수정: backlog.py:603의 task.notes = args.reason 덮어쓰기를 중단 — 차단 사유는 별도 필드 또는 notes append로 보존하고 unblock 후에도 원 notes가 남는다. 현행 blocked 4건의 notes가 이미 차단 사유 문장으로 대체된 상태의 마이그레이션 여부도 판정한다."
+  - "③ 변별력 회귀 테스트: 수정 전 red·수정 후 green 양방향(전이 도달성·notes 보존)."
+  - "④ CI 배선 확인: 신설 테스트가 harness-integrity 잡(pytest tests/harness)에서 실제 실행됨을 확인한 뒤 완료로 친다."
+  - "⑤ 범위 밖: declared_unwired_audit(제품 하네스 감사기)에 빌드 하네스 축을 추가하는 일은 포함하지 않는다(통합점검 보고서 §정직한 공백)."
+artifacts:
+  - "커밋(예정) — 하네스 CLI 선언≠배선 해소(review·cancel 동사 신설) + block notes 파괴 버그 수정.\n\n① review·cancelled 결정: 전이표 축소가 아니라 동사 신설로 판정 — downstream 코드(backlog.py:105·484·1252, selector.py:160가 review를 in_progress와 동급 in-flight로, remote_claims.py:522·763이 cancelled를 done과 동급 종결로 이미 취급 중이라 축소는 더 큰 blast radius. cmd_review(in_progress→review, 원격 claim·session 유지)·cmd_cancel(todo/blocked→cancelled, --reason 필수, 원격 claim 해제) 신설, 둘 다 기존 _transition() 재사용. TestReviewInFlightWiring이 review 상태 태스크로 실제 path_overlap block 모드 겹침 판정과 selector.stall_reason 집계가 작동함을 실증(수정 전엔 한 번도 실행 안 된 분기였음).\n\n② block notes 파괴 수정: _append_note() 헬퍼 신설, cmd_block의 task.notes = args.reason 덮어쓰기를 append 방식으로 교체(원문 뒤 '[차단 YYYY-MM-DD] 사유' 이어붙임). unblock은 기존대로 notes 무변경 유지(차단 이력 존치). 마이그레이션 판정(git log로 main 트렁크 히스토리 추적): S3-24는 pre-block 원문을 커밋 39ced12에서 발견해 복구(오케스트레이터가 git show로 원문 대조 확인 완료) — '[복구된 원본] ... [차단 이력] ...' 형식. ARCH-11·MGMT-01·MGMT-02는 main 최초 커밋부터 이미 blocked+사유뿐이라(add와 block이 같은 squash 커밋 안에서 발생) 복구 불가 — 각 notes에 '[복구 불가 — 2026-08-10 확인] ...' 사실 그대로 명시(날조 없음).\n\n③ 변별력(오케스트레이터 독립 재실행): block notes 보존 로직을 'task.notes = args.reason'으로 뮤테이션 → TestBlockNotesPreservation 3 failed(1 passed는 무관 케이스) EXIT=1. cp 백업으로 원복(git checkout 미사용) → git diff --stat 76 insertions 그대로 확인, 4테스트 전건 GREEN. 전이 거부 테스트(in_progress→cancel·todo→review·review→cancel)로 양방향 확인.\n\n④ CI 배선: harness-integrity 잡의 python3 -m pytest tests/harness -q가 신규 파일을 allowlist 없이 자동 수집. 오케스트레이터 독립 재실행 tests/harness 282 passed(기존 257+신규 25) · ruff/black(scripts tests/harness, CI 동일 대상) 전부 EXIT=0 · backlog.py validate green(236건) · 전체 스위트 tests/backend+tests/infra 9570 passed·302 skipped·0 failed(616초·EXIT=0).\n\n⑤ declared_unwired_audit(제품 감사기)는 무변경 — 범위 밖 준수.\n\n정직한 잔여: GitHub Actions 러너 실제 실행 미측정(로컬 동형 재현까지) · tests/infra 로컬 실행은 CI의 별도 최소 venv가 아니라 src/backend/.venv로 돌림(결과는 green이나 완전 동일 환경 아님) · review→in_progress 역방향 전이는 cmd_start가 우연히 처리 가능하나 이 태스크 범위 밖이라 별도 검증 없음."
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/models.py
+  - scripts/harness/selector.py
+  - "tests/harness/**"
+session: null
+notes: "발견 경위: 2026-08-10 하네스·헌법·규칙파일 통합점검(docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md §1). 상태 분포 실측 review·cancelled 0건/229 — 전이표가 선언한 상태가 CLI로 도달 불가한 선언≠배선. block은 호출마다 태스크의 발견 경위·설계 근거 notes를 파괴한다(blocked 4건 전건 차단 사유 문장만 남은 흔적). priority=2 근거: notes 파괴는 block 호출 시마다 실데이터 손실이 진행 중."
+updated: 2026-08-10

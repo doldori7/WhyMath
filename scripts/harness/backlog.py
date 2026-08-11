@@ -9,7 +9,12 @@
     python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋> [--artifact ...]
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
+    python3 scripts/harness/backlog.py review <id>                (in_progress → review)
+    python3 scripts/harness/backlog.py cancel <id> --reason <사유>  (todo/blocked → cancelled)
     python3 scripts/harness/backlog.py gates [list]
+    python3 scripts/harness/backlog.py gates add <G-id> --title <제목>
+                                                 [--kind human|external|decision]
+                                                 [--assignee <담당자>] [--remind-after-days N]
     python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
@@ -27,6 +32,7 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 
@@ -37,7 +43,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import OWNERS, STATUS_TRANSITIONS, Task
+from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Gate, Task
 from seed_data import build_seed
 
 
@@ -64,6 +70,20 @@ def _transition(task: Task, new_status: str) -> str | None:
             f"(허용: {list(allowed) or '없음(종결 상태)'})"
         )
     return None
+
+
+def _append_note(original: str, reason: str, tag: str) -> str:
+    """사유를 원 notes 뒤에 append — 원문을 지우지 않는다 (HARN-20).
+
+    구 구현(`task.notes = args.reason`)은 태스크의 발견 경위·설계 근거를 호출마다
+    통째로 덮어써 데이터 손실을 냈다(2026-08-10 통합점검 실측 — blocked 4건 전건
+    원 notes 소실). append 방식은 원문 뒤에 `[tag YYYY-MM-DD] 사유`를 이어붙여
+    이력을 누적한다 — unblock 이후에도 "왜 한번 막혔었는지"가 notes에 남는다.
+    """
+    stamp = f"[{tag} {_today()}] {reason}"
+    if not original.strip():
+        return stamp
+    return f"{original}\n\n{stamp}"
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -597,12 +617,62 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     prev_session = task.session
     task.status = "blocked"
     task.session = None
-    task.notes = args.reason
+    task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "block", task.id, reason=args.reason)
     _release_remote_claim(root, task.id, prev_session)
     print(f"✖ {task.id} 차단 — {args.reason}")
+    return 0
+
+
+def cmd_review(root: Path, args: argparse.Namespace) -> int:
+    """in_progress → review 전이 (HARN-20) — 구현 완료·검토 대기 상태로 전환.
+
+    review는 여전히 in-flight(원격 claim 유지·session 필드 보존) — done/block과 달리
+    세션이 계속 이 태스크를 들고 있다는 뜻이라 `_release_remote_claim`을 부르지 않는다.
+    전이표(STATUS_TRANSITIONS)가 `in_progress → review`만 허용하므로 다른 상태에서의
+    호출은 `_transition`이 자연히 거부한다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+    error = _transition(task, "review")
+    if error:
+        return _fail(error)
+    task.status = "review"
+    task.updated = _today()
+    store.save_task(root, task)
+    store.append_event(root, "review", task.id)
+    print(f"👀 {task.id} 검토 대기 (세션: {task.session or '?'})")
+    return 0
+
+
+def cmd_cancel(root: Path, args: argparse.Namespace) -> int:
+    """todo/blocked → cancelled 전이 (HARN-20) — 종결 상태.
+
+    전이표는 `in_progress`에서 `cancelled`로의 직접 경로를 열지 않는다 — 진행 중인
+    태스크를 취소하려면 먼저 `block` 또는 `todo`로 내린 뒤 취소해야 한다는 기존 설계를
+    그대로 존중한다(우회 아님). cancelled는 종결 상태이므로 block과 동일하게 원격
+    claim을 해제한다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+    error = _transition(task, "cancelled")
+    if error:
+        return _fail(error)
+    prev_session = task.session
+    task.status = "cancelled"
+    task.session = None
+    task.notes = _append_note(task.notes, args.reason, "취소")  # block과 동일 — 덮어쓰지 않음
+    task.updated = _today()
+    store.save_task(root, task)
+    store.append_event(root, "cancel", task.id, reason=args.reason)
+    _release_remote_claim(root, task.id, prev_session)
+    print(f"🗑 {task.id} 취소 — {args.reason}")
     return 0
 
 
@@ -653,6 +723,9 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
                 print(f"  {gate.id} ({gate.status}) {gate.title}")
         return 0
 
+    if args.gate_action == "add":
+        return _cmd_gates_add(root, args, backlog)
+
     gate = backlog.gates.get(args.gate_id)
     if gate is None:
         return _fail(f"게이트 '{args.gate_id}' 없음")
@@ -676,18 +749,91 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:
+    """게이트 대장(gates.yaml)에 새 게이트를 CLI로 등재한다 (HARN-18).
+
+    "대장은 CLI로만 조작한다"(손편집 금지) 규약의 구멍을 메운다 — 기존에는 gates에
+    add 경로가 없어 새 게이트 등재가 손편집뿐이었다(HARN-06과 동형 설계 공백).
+
+    task `add`(cmd_add)와 동일한 검사 골격을 답습한다:
+      ① id 필수·형식 ② title 필수 ③ id 중복 거부 ④ 스키마 무결성(Gate.validate)
+      ⑤ events.ndjson 감사 로그 append(누가·언제·무엇을 만들었나).
+    거부는 전부 명확한 종료코드(1)+메시지 — 침묵 실패 금지.
+    """
+    gate_id = args.gate_id
+    # ② 필수 필드 검증 — 누락 시 명확한 거부 (argparse required로 걸면 list/clear/waive가
+    #    같이 --title을 요구하게 되므로, add 액션 안에서 수동 검증한다)
+    if not gate_id:
+        return _fail("gates add <G-id> — 게이트 ID 필수")
+    if not args.title:
+        return _fail(f"{gate_id}: gates add 에는 --title <제목> 필수 (필수 필드 누락)")
+    # ③ id 중복 거부 — 게이트는 원격 claim 대상이 아니다(원격 claim 대장은 task_id 전용이라
+    #    G-* 게이트 id는 애초에 그 대장에 실리지 않는다). 따라서 gates.yaml 내 중복만 본다.
+    if gate_id in backlog.gates:
+        return _fail(f"게이트 ID 중복: {gate_id} (이미 gates.yaml에 존재)")
+
+    gate = Gate(
+        id=gate_id,
+        title=args.title,
+        kind=args.kind,
+        assignee=args.assignee,
+        status="pending",
+        requested=_today(),
+        remind_after_days=args.remind_after_days,
+    )
+    backlog.gates[gate.id] = gate
+    # ④ 스키마/무결성 검증 — 새 게이트가 유발한 오류만 걸러 거부(기존 대장의 무관한
+    #    경고에 볼모 잡히지 않게 — cmd_add의 own_errors 패턴 답습). id 형식 위반(예:
+    #    소문자 kebab·G- 접두 아님)은 여기서 잡힌다.
+    errors = store.validate_backlog(backlog)
+    own_errors = [e for e in errors if gate_id in e]
+    if own_errors:
+        for e in own_errors:
+            print(f"  · {e}", file=sys.stderr)
+        return _fail(f"{gate_id}: 스키마/무결성 위반으로 게이트 추가 거부")
+
+    store.save_gates(root, sorted(backlog.gates.values(), key=lambda g: g.id))
+    # ⑤ 감사 로그 — gate clear/waive·task add의 이벤트 append 패턴 답습
+    store.append_event(
+        root,
+        "gate_add",
+        gate.id,
+        kind=gate.kind,
+        assignee=gate.assignee,
+        title=gate.title,
+    )
+    print(
+        f"＋ 게이트 {gate.id} 추가 " f"(kind={gate.kind}, assignee={gate.assignee}, status=pending)"
+    )
+    return 0
+
+
 def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, tuple[str, str]]:
     """이미 쓰인 `<PREFIX>-<번호>` → (점유 태스크의 full ID, 출처 라벨).
 
-    **로컬 백로그 + 원격 claim 대장** 양쪽을 본다. 원격을 보는 것이 핵심이다 —
-    ARCH-13·OPS-15 두 사고 모두 병렬 세션이 *서로의 브랜치를 못 봐서* 같은 번호를
-    각각 등재한 것이라, 로컬만 검사하면 재발을 하나도 막지 못한다(HARN-10).
+    **로컬 백로그 + 원격 claim 대장 + 원격 브랜치 backlog/tasks/ 파일명** 세 곳을 본다.
+    원격을 보는 것이 핵심이다 — ARCH-13·OPS-15 두 사고 모두 병렬 세션이 *서로의
+    브랜치를 못 봐서* 같은 번호를 각각 등재한 것이라, 로컬만 검사하면 재발을 하나도
+    막지 못한다(HARN-10).
+
+    세 번째 출처(원격 브랜치 파일명 스캔)는 HARN-15 — 원격 claim 대장은 **in_progress로
+    claim된** 태스크만 기록하므로, "다른 브랜치에 이미 backlog/tasks/<ID>.yaml로
+    등재만 되고 아직 착수(claim)되지 않은" 번호는 claim 대장에 원천적으로 안 잡힌다
+    (OPS-17·OPS-18이 main과 미머지 브랜치에 각각 다른 슬러그로 이중 등재된 사고,
+    HARN-10의 3번째 재발). `remote_claims.scan_remote_task_files`가 이미 있는
+    remote-tracking ref만 읽어(fetch 없음) 이 맹점을 메운다.
 
     full ID를 함께 돌려주는 이유: 충돌은 **슬러그가 다를 때만** 성립한다. 같은 태스크를
     다른 클론에서 재등재하는 것(시딩·복제 세션)은 정상이므로 막으면 안 된다.
 
     원격 조회 실패는 등재를 막지 않는다(fail-open) — 다만 호출부가 그 사실을
     **경고로 표시**한다. 조용한 축소는 "검사했는데 안 걸림"으로 위장되기 때문이다.
+    claim 대장 조회는 기존 관례대로 상태를 조용히 버린다(genuine 예외만 이 함수를
+    벗어나 cmd_add의 fail-open 경로로 흘러간다). 파일명 스캔은 "offline"(원격 자체가
+    없음 — 로컬 테스트·오프라인 클론의 일상적 상태)은 같은 관례로 조용히 넘기되,
+    "error:<타입명>"(scan_remote_task_files 내부에서 이미 예외 타입명을 포장해 돌려줌)
+    은 **여기서 바로 경고**한다 — list_claims는 이미 성공했는데 파일명 스캔만 실패한
+    경우까지 통째로 예외로 승격하면 이미 확보한 claim 정보까지 버리게 되기 때문이다.
     """
     taken: dict[str, tuple[str, str]] = {}
     for task_id in getattr(backlog, "tasks", {}):
@@ -700,14 +846,36 @@ def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, 
             number = store.id_number_of(claim.task_id)
             if number:
                 taken.setdefault(number, (claim.task_id, "원격 claim"))
+        task_files, files_status = remote_claims.scan_remote_task_files(root)
+        if files_status.startswith("error"):
+            # 침묵 금지(CLAUDE.md) — status 자체에 이미 예외 타입명이 담겨 있다
+            # (scan_remote_task_files 내부의 f"error:{type(exc).__name__}" 포장).
+            print(
+                f"  ⚠ 원격 브랜치 backlog/tasks/ 파일명 스캔 실패({files_status}) — "
+                "등재만 되고 아직 claim되지 않은 원격 번호는 놓칠 수 있다",
+                file=sys.stderr,
+            )
+        for task_file in task_files:
+            number = store.id_number_of(task_file.task_id)
+            if number:
+                taken.setdefault(
+                    number,
+                    (task_file.task_id, f"원격 브랜치 backlog/tasks/({task_file.branch})"),
+                )
     return taken
 
 
-def _next_free_number(prefix: str, taken: dict[str, str]) -> str:
-    """`<PREFIX>-<n>` 다음 빈 번호 — **최대 사용 번호 +1**부터 찾는다.
+def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str | None:
+    """`<PREFIX>-<n>` 다음 빈 번호(2자리 zero-padded) — **최대 사용 번호 +1**부터 찾는다.
 
     가장 작은 빈 번호를 주면 과거에 비워진 낮은 번호(예 HARN-01)를 제안하게 되는데,
     그건 "이 트랙의 다음 작업"이라는 사람의 기대와 어긋나 제안이 오히려 혼선을 준다.
+
+    `{index:02d}`는 **최소** 2자리이지 **정확히** 2자리가 아니다 — index가 100을 넘으면
+    "100"(3자리)을 내는데, `models.TASK_ID_RE`는 `\\d{2}` 정확히 2자리만 허용한다. 즉
+    프리픽스가 00~99번을 다 쓰면 다음 제안이 형식 위반 ID가 된다(HARN-21 결함②). 그래서
+    index가 99를 넘어서면 날조된 3자리를 내지 않고 **`None`을 반환** — 호출부(`cmd_add`)가
+    사람에게 "이 프리픽스가 소진됐다"는 명시적 오류를 낸다.
     """
     used = [
         int(number.rsplit("-", 1)[1])
@@ -715,8 +883,10 @@ def _next_free_number(prefix: str, taken: dict[str, str]) -> str:
         if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
     ]
     index = max(used) + 1 if used else 1
-    while f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken:
+    while index <= 99 and (f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken):
         index += 1
+    if index > 99:
+        return None
     return f"{prefix}-{index:02d}"
 
 
@@ -745,9 +915,20 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         # 다를 때만 번호 참조가 모호해진다.
         if owner and owner != args.id:
             prefix = number.rsplit("-", 1)[0]
+            suggestion = _next_free_number(prefix, taken)
+            if suggestion is None:
+                # 프리픽스가 00~99번을 이미 다 썼다 — 3자리 제안은 TASK_ID_RE 위반이라
+                # 날조하지 않는다(HARN-21 결함②). 사람의 결정(새 프리픽스 분리 등)이 필요.
+                return _fail(
+                    f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
+                    f"게다가 프리픽스 '{prefix}'는 00~99번을 모두 소진해 TASK_ID_RE(정확히 "
+                    "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다 — 새 프리픽스로 "
+                    "분리하는 등 사람의 결정이 필요하다(HARN-21). "
+                    "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                )
             return _fail(
                 f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                f"다음 빈 번호 제안: {_next_free_number(prefix, taken)}. "
+                f"다음 빈 번호 제안: {suggestion}. "
                 "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
             )
         if not remote_ok:
@@ -1094,12 +1275,23 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
-        reaped, scan_status = remote_claims.reap(root, backlog, ttl, dry_run=not args.apply)
+        reaped, scan_status, warnings = remote_claims.reap(
+            root, backlog, ttl, dry_run=not args.apply
+        )
         if scan_status != "ok":
             # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
             # 교차검증이 공전했다(HARN-09). 판정 불가는 판정 불가라고 말한다.
             print(f"원격 claim 조회 불가 ({scan_status}) — stale 판정 불가")
             return 0 if scan_status == "offline" else 1
+        if warnings:
+            # task_missing이지만 TTL 이내라 reap에서 제외된 claim — 경합 조건 가능성이
+            # 있으므로 침묵시키지 않고 경고로 노출한다(HARN-21, CLAUDE.md 침묵 실패 금지).
+            print(
+                f"⚠ 최근 claim {len(warnings)}건 — task_missing이지만 TTL 이내라 reap 제외"
+                "(경합 조건 가능성: 다른 세션이 방금 add+claim했을 수 있다):"
+            )
+            for item in warnings:
+                print(f"  · {item}")
         if not reaped:
             print("stale claim 없음")
             return 0
@@ -1320,11 +1512,36 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.set_defaults(func=cmd_unblock)
 
+    p = sub.add_parser("review", help="검토 대기로 전환 (in_progress → review, HARN-20)")
+    p.add_argument("id")
+    p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("cancel", help="태스크 취소 (todo/blocked → cancelled, HARN-20)")
+    p.add_argument("id")
+    p.add_argument("--reason", required=True)
+    p.set_defaults(func=cmd_cancel)
+
     p = sub.add_parser("gates", help="사람 게이트 대장")
-    p.add_argument("gate_action", nargs="?", choices=["list", "clear", "waive"])
+    p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive"])
     p.add_argument("gate_id", nargs="?")
     p.add_argument("--evidence")
     p.add_argument("--reason")
+    # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
+    p.add_argument("--title", help="gates add: 게이트 제목 (필수)")
+    p.add_argument(
+        "--kind",
+        choices=list(GATE_KINDS),
+        default="human",
+        help="gates add: 게이트 종류 (기본 human)",
+    )
+    p.add_argument("--assignee", default="kiki", help="gates add: 담당자 (기본 kiki)")
+    p.add_argument(
+        "--remind-after-days",
+        type=int,
+        dest="remind_after_days",
+        default=None,
+        help="gates add: 경과 시 SessionStart 브리핑 리마인드 일수",
+    )
     p.set_defaults(func=cmd_gates)
 
     p = sub.add_parser("add", help="태스크 추가 (/plan의 산출물)")

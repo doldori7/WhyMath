@@ -752,13 +752,40 @@ def scan_remote_in_progress(
 def stale_claims(
     claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int, now: datetime | None = None
 ) -> list[tuple[RemoteClaim, str]]:
-    """stale claim 판정 — (claim, 사유) 목록. 사유: ttl | task_done | task_missing."""
+    """stale claim 판정 — (claim, 사유) 목록.
+
+    사유: ttl | task_done | task_missing | task_missing_recent.
+
+    `task_missing`(로컬 백로그에 해당 태스크가 아예 없음) 판정은 **경합 조건**을 낳을 수
+    있었다(HARN-21 결함③): 세션 A가 `add`+`start`(claim)를 원격에 방금 반영했는데, 그
+    직후 세션 B가 `claims reap`을 돌리면 — B의 로컬 클론엔 A가 방금 추가한 태스크 파일이
+    아직 없다(A가 아직 안 머지했으므로). 구 구현은 이때 claim의 나이(`c.ts`)를 전혀 안
+    보고 즉시 stale로 판정했다 — 몇 초 전에 생성된 claim도 지워버릴 수 있었다.
+
+    수정: `ttl` 분기가 이미 쓰는 "나이 비교" 패턴을 `task_missing`에도 그대로 적용한다.
+      - claim이 TTL 이내로 신선하면 → `task_missing_recent`(reap 대상 **아님** — 호출부가
+        경고로만 노출한다. 완전히 침묵시키지 않는다 — CLAUDE.md 침묵 실패 금지).
+      - claim에 ts가 없거나 파싱 불가면 → 나이를 모르므로 보수적으로 `task_missing_recent`
+        (기존 `ttl` 분기의 "파싱 불가 메타는 판정 보류" 관례와 동형).
+      - claim이 TTL을 넘겨 오래됐으면 → 기존대로 `task_missing`(진짜 삭제·취소된 태스크의
+        잔재를 정리하는 정상 기능은 유지).
+    """
     now = now or _utcnow()
     result: list[tuple[RemoteClaim, str]] = []
     for c in claims:
         task = backlog.tasks.get(c.task_id)
         if task is None:
-            result.append((c, "task_missing"))
+            reason = "task_missing"
+            if c.ts:
+                try:
+                    ts = datetime.strptime(c.ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                    if now - ts < timedelta(hours=ttl_hours):
+                        reason = "task_missing_recent"
+                except ValueError:
+                    reason = "task_missing_recent"  # 파싱 불가 메타는 판정 보류 (보수적)
+            else:
+                reason = "task_missing_recent"  # ts 없음 = 나이 불명 → 즉시 삭제 금지(보수적)
+            result.append((c, reason))
             continue
         if task.status in ("done", "cancelled"):
             result.append((c, "task_done"))
@@ -775,29 +802,39 @@ def stale_claims(
 
 def reap(
     root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str, list[str]]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
-    반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error).
+    반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error, ["경고 문자열", ...]).
 
     **상태를 함께 돌려주는 이유**(HARN-09): 구 구현은 조회 실패 시 빈 목록만 돌려줘서
     호출자가 "stale 없음"과 "판정 불가"를 구분할 수 없었다. CI의 교차검증 스텝이 정확히
     그 상태로 공전했다 — 인프라가 죽어도 "0건 통과"로 보였다. 측정·게이트 도구가 실패를
     통과로 위장하면 안 된다(CLAUDE.md AI·신뢰).
+
+    **세 번째 반환값(경고 목록, HARN-21)**: `stale_claims`가 `task_missing_recent`로
+    분류한 claim은 reap 대상에서 제외되지만(경합 조건 방지), 그 사실을 조용히 넘기지
+    않는다 — 방금 생성된 claim이 로컬에 안 보인다고 침묵하면, 그게 진짜 경합 조건인지
+    다음 reap 실행자가 알 방법이 없다(CLAUDE.md 침묵 실패 금지).
     """
     claims, status = list_claims(root)
     if status != "ok":
-        return [], status
+        return [], status, []
     stale = stale_claims(claims, backlog, ttl_hours)
     reaped: list[str] = []
+    warnings: list[str] = []
     for c, reason in stale:
         label = f"{c.task_id} ({reason}" + (f", {c.branch}" if c.branch else "") + ")"
+        if reason == "task_missing_recent":
+            # 경합 조건 가능성 — 삭제하지 않고 경고로만 노출한다.
+            warnings.append(label)
+            continue
         if not dry_run:
             result = release(root, c.task_id, branch="", force=True)
             if result.status != "ok":
                 continue
         reaped.append(label)
-    return reaped, "ok"
+    return reaped, "ok", warnings
 
 
 # ── 미머지 done 탐지 (HARN-11) ────────────────────────────────────────────────
@@ -900,6 +937,102 @@ def scan_remote_done(
     except Exception as exc:  # pragma: no cover - 환경 의존
         # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
         return {}, f"error:{type(exc).__name__}"
+
+
+# ── 원격 브랜치 backlog/tasks/ 파일명 스캔 (HARN-15) ──────────────────────────
+#
+# HARN-10 가드(`cmd_add`의 번호 충돌 검사)의 3회차 결함 교정이다. 기존 `_taken_id_numbers`는
+# ①로컬 백로그 ②원격 claim 대장(harness-claims 브랜치, in_progress만 기록)만 본다. 그런데
+# "다른 브랜치에 이미 backlog/tasks/<ID>.yaml로 **등재만 되고 아직 claim(in_progress)되지
+# 않은** 번호"는 claim 대장에 실리지 않으므로 구조적으로 안 보인다 — OPS-17·OPS-18이 main과
+# 미머지 브랜치에 각각 다른 슬러그로 중복 등재된 사고(2026-08-03)가 정확히 이 맹점이다.
+#
+# scan_remote_done과 원칙을 공유한다: `fetch=False`(기본)는 **이미 있는 remote-tracking
+# ref만** 본다 — 네트워크 비용 없음. cmd_add는 next처럼 자주 도는 경로는 아니지만, 그래도
+# 사람이 대화형으로 호출하는 명령이 매번 원격 fetch(초 단위)로 지연되는 것은 바람직하지
+# 않다 — 이미 세션 시작·next 등에서 최신화된 remote-tracking ref를 재사용한다.
+
+
+@dataclass(frozen=True)
+class RemoteTaskFile:
+    """원격 브랜치 사본의 backlog/tasks/ 아래에서 발견한 태스크 파일 1건."""
+
+    task_id: str  # 파일명에서 .yaml 을 뗀 값 = 그 브랜치가 실제로 쓰는 full task id
+    ref: str  # refs/remotes/origin/<branch>
+    branch: str  # <branch>
+
+
+def scan_remote_task_files(
+    root: Path, *, fetch: bool = False, max_refs: int = SCAN_MAX_REFS
+) -> tuple[list[RemoteTaskFile], str]:
+    """원격 브랜치들의 `backlog/tasks/*.yaml` 파일명 전부를 스캔한다 (HARN-15).
+
+    `cmd_add`의 번호 충돌 가드가 "등재만 되고 아직 claim되지 않은 원격 번호"까지
+    보게 하는 것이 목적이다 — 원격 claim 대장은 in_progress 상태만 기록하므로,
+    등재만 하고 아직 손대지 않은 태스크 파일은 그 대장에 원천적으로 안 잡힌다.
+
+    `scan_remote_done`(cat-file --batch로 *알고 있는* task_id들의 파일 하나씩을 조회)과
+    달리, 여기서는 애초에 어떤 파일이 있는지 자체를 몰라 나열해야 한다 — 그래서
+    `git ls-tree`로 브랜치별 backlog/tasks/ 디렉터리를 직접 나열한다
+    (`scan_remote_in_progress`가 이미 쓰는 "브랜치당 git 프로세스 1회" 패턴과 동형).
+
+    `fetch=False`(기본)는 **이미 있는 remote-tracking ref만** 본다 — 네트워크 0.
+    `fetch=True`는 최신 상태가 필요한 호출부(테스트 등)용.
+
+    트렁크 ref를 특별 취급하지 않는다(스킵하지 않음) — 어차피 로컬 백로그가 이미
+    트렁크 사본을 기준으로 로드돼 있으므로, 트렁크 브랜치가 여기서도 잡혀 중복
+    판정되는 것은 무해하다(호출부가 "같은 full ID면 충돌 아님" 규칙으로 걸러낸다).
+
+    두 번째 반환값은 status(`ok`/`offline`/`error`)다. `ok`가 아니면 **판정 불가**이며,
+    빈 결과를 '없음'으로 읽으면 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+    """
+    if not has_remote(root):
+        return [], "offline"
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return [], _classify_failure(fetched.stderr)
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return [], _classify_failure(listing.stderr)
+        refs = [
+            r.strip()
+            for r in listing.stdout.splitlines()
+            if r.strip() and not r.strip().endswith("/HEAD")
+        ][:max_refs]
+
+        found: list[RemoteTaskFile] = []
+        for ref in refs:
+            # <ref>:backlog/tasks 를 트리 자체로 지정 — 나오는 이름엔 경로 접두가 안
+            # 붙는다(_trunk_task_status가 쓰는 <ref>:<path> blob 조회와 동형 문법).
+            tree = _git(root, "ls-tree", "--name-only", f"{ref}:backlog/tasks", timeout=10)
+            if tree.returncode != 0:
+                continue  # backlog/tasks/ 자체가 없는 브랜치(구세대 등) — 조용히 건너뜀
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            for line in tree.stdout.splitlines():
+                name = line.strip()
+                if not name.endswith(".yaml"):
+                    continue
+                found.append(RemoteTaskFile(task_id=name[: -len(".yaml")], ref=ref, branch=branch))
+        return found, "ok"
+    except subprocess.TimeoutExpired:
+        return [], "offline"
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
+        return [], f"error:{type(exc).__name__}"
 
 
 # ── 장기 미머지 브랜치 감지 (HARN-13) ──────────────────────────────────────
