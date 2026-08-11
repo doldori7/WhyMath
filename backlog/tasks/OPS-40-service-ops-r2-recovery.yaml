@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-40-service-ops-r2-recovery
+title: "5t5lmv 회수 — 서비스 운영 r2 점검 문서 + speech 코드 변경 + 전체 스위트 통과 실측 기록"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 본문 대조(선행) — origin/claude/whymath-service-operations-review-5t5lmv(head 7052c34a)의 r2 문서·검증 실행 함정 2건 등재분이 main 현행과 여전히 정합인지 읽고 판정한다(추측 채택 금지). 코드 2파일(api/speech.py·schema/speech.py) 변경의 채택 여부 포함"
+  - "② 채택분 파일 단위 이식 + 문서는 docs/reviews 착지. 기각분은 기각 사유를 이 태스크 notes에 기록"
+artifacts: []
+paths:
+  - "docs/reviews/**"
+  - src/backend/whymath_backend/api/speech.py
+  - src/backend/whymath_backend/schema/speech.py
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A5. 회수 완료 전 원 브랜치 삭제 금지"
+updated: 2026-08-11
