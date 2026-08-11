@@ -72,6 +72,15 @@ gates:
     remind_after_days: 7
     evidence: "READY:True (check_status 6모델 전부·2026-07-09) + 라이브 rephrase 184/590 성공. '키 투입'(서버 라이브·도달·첫 파이프라인 동작) 충족. '실측 비용 검증'은 S1-12(클라우드 티어)로 이관"
     notes: "ROADMAP 병목 ② — S1 라이브 선행분 전체의 선결 조건"
+  - id: G-prod-dead-column-check
+    title: "prod DB(whymath-pg:5433) user_profile 미소비 컬럼 비영행 확인 — school_id·subscription_tier/_started_at/_renewed_at·school_region·gender 각각 NOT NULL 행이 있는지 실측(ADMIN-02 acceptance① 선결·샌드박스에서 접근 불가)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 7
+    evidence: null
+    notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
     kind: human
