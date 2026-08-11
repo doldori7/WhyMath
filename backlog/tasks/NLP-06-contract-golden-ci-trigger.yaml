@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-06-contract-golden-ci-trigger
+title: "계약 골든 CI 트리거 봉합 — data/*_contract.json이 backend·mobile 필터 양쪽에 없어 계약만 고친 PR은 잡 0개"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: ci.yml:74(backend)·:83(mobile)·:86(web) 필터에 대해 data/ 계약 파일별 트리거 여부를 표로 확정한다 — 2026-08-11 실측은 segmentation_contract.json·scene_contract.json이 세 필터 어디에도 없어 잡 0개(주장 확인 또는 반증)"
+  - "② 정본화: data/*_contract.json 계열을 파일 하나씩 열거하는 현행 방식(누락이 조용하다) 대신 글롭/디렉터리 축으로 올려 backend·mobile·web 필터가 함께 덮게 한다"
+  - "③ 집행 지점(별항): 계약 파일만 고친 PR에서 실제로 어느 잡이 켜지는지 실측한다 — 필터 문자열 수정만으로 완료 처리하지 않는다(2026-08-04 '정본화를 집행으로 착각한 완료 선언 금지')"
+  - "④ 배선 실재성 동결: tests/infra에 '계약 파일 ↔ 트리거 잡' 대응 테스트를 둔다. tests/infra/test_test_suite_wiring.py의 Wiring/_all_wirings를 import 재사용하고 새 YAML 파서를 만들지 않는다(test_pedagogy_content_slot_pipeline_ci_wiring.py:22-25 원칙). 신규 계약 파일이 필터에 없으면 exit 1"
+  - "⑤ 변별력: 계약 JSON만 바꾼 브랜치를 만들어 필터 판정을 재현하고, 수정 전 '잡 0개'·수정 후 'backend+mobile 켜짐'이 서로 다른 값으로 나오는지 실측한다. skip은 red도 green도 아니면서 required check에서 충족으로 계상된다(ci.yml 자인)"
+  - "⑥ 범위 밖 명시: 계약 내용·골든 케이스 수정, mobile 잡 자체의 커버리지 게이트 조정, notation/render 이외 축의 신규 계약 도입"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/**"
+session: null
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.3(Δ3). NLP-03(v1 D3)이 만든 교차 골든의 설계 목적은 '백엔드 pytest와 클라 테스트가 같은 파일을 읽는' 것인데, 그 계약 파일 data/segmentation_contract.json이 backend 필터(notation·render 2개만 열거)에도 mobile 필터(src/mobile/|schemas/ 뿐)에도 없다 — 계약만 고친 PR은 자기를 지키는 두 테스트 어느 쪽도 트리거하지 않고, 백엔드 구현만 고친 PR은 Dart 미러를 검사하지 않아 드리프트가 백엔드→클라 방향으로 열려 있다. math_engine_gap_review.md §7 Δ2가 mobile 필터 구멍을 지적했으나 data/ 축은 그 관찰에도 없었다. 판정 기준: '게이트를 트리거하는 경로가 그 게이트가 지키는 파일을 실제로 덮는가'."
+updated: 2026-08-11
