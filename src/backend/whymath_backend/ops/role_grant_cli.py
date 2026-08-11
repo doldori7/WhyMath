@@ -50,15 +50,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.user import UserProfile
-from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.db.session import dispose_engine, get_sessionmaker
 from whymath_backend.privacy.audit import record_role_change_audit
 from whymath_backend.schema.enums import Role
 
 __all__ = [
     "GrantFn",
     "ListFn",
+    "PreflightFn",
     "RevokeFn",
     "RoleGrantError",
+    "SchemaPreflightError",
     "apply_role_change",
     "main",
 ]
@@ -73,12 +75,26 @@ class RoleGrantError(Exception):
     """grant/revoke 거부 사유 — 존재하지 않는 user_id, 또는 revoke 시 역할 불일치."""
 
 
+class SchemaPreflightError(Exception):
+    """DB 스키마가 이 코드와 맞지 않아 어떤 서브커맨드도 실행할 수 없는 상태.
+
+    2026-08-11 실측 사고: 이 CLI를 마이그레이션이 뒤처진 DB에 실행하자
+    `column user_profile.role does not exist`가 **raw SQLAlchemy 트레이스백 100여 줄**로
+    터졌다. 운영자는 그 출력에서 "무엇을 해야 하는지"를 읽어낼 수 없다 — CLAUDE.md가 금지하는
+    *침묵 실패*의 반대편인 **소음 실패**다(정보가 있어도 행동으로 이어지지 않으면 같은 실패).
+
+    이 예외는 그 상태를 실행 *전에* 잡아 한 줄의 행동 지시로 바꾼다.
+    """
+
+
 # grant/revoke/list 좌석 — 기본은 실 DB(단일 TX·커밋), 테스트는 합성 함수를 주입해 DB 없이
 # CLI 배선(인자 파싱·거부 경로·JSON 직렬화·종료 코드)을 검증한다(`retention_purge_cli.PurgeFn`
 # 미러).
 GrantFn = Callable[[uuid.UUID, Role], Coroutine[Any, Any, dict[str, str]]]
 RevokeFn = Callable[[uuid.UUID, Role], Coroutine[Any, Any, dict[str, str]]]
 ListFn = Callable[[], Coroutine[Any, Any, list[dict[str, str]]]]
+# 스키마 프리플라이트 좌석 — 실 DB 왕복이라 hermetic 테스트는 합성 함수를 주입한다.
+PreflightFn = Callable[[], Coroutine[Any, Any, None]]
 
 
 async def apply_role_change(
@@ -150,6 +166,69 @@ async def _default_list_fn() -> list[dict[str, str]]:  # pragma: no cover — �
     return [{"user_id": str(uid), "role": role.value} for uid, role in rows]
 
 
+async def _default_preflight_fn() -> None:  # pragma: no cover — 실 DB(integration)
+    """DB 스키마가 이 코드의 기대 head와 일치하는지 *실행 전에* 확인한다.
+
+    **`verify_schema_version()`을 쓰지 않는 이유**(실측 판단): 그 함수는 `is_production_like`
+    (실 OAuth provider 구성 여부)가 True일 때만 raise하고, 그 밖에서는 **경고 로그만 남기고
+    통과**시킨다. 운영자가 PowerShell에서 `WHYMATH_DATABASE_URL`만 지정하고 이 CLI를 돌리면
+    provider가 미구성이라 `production_like=False`가 되어 **뒤처진 스키마인데도 통과**한다 —
+    프리플라이트로서 변별력이 없다. 그래서 환경에 의존하지 않는 하위 순수 함수
+    (`read_applied_heads` + `classify_applied_head`)를 직접 조합한다.
+
+    좌석 부여는 *어느 환경에서든* 스키마가 맞아야 한다 — 여기서 환경에 따라 판정이 갈리면
+    안 된다.
+
+    Raises:
+        SchemaPreflightError: 스키마가 뒤처졌거나(BEHIND) 확인 자체가 실패한 경우.
+            확인 실패를 "통과"로 위장하지 않는다(측정 실패 ≠ 정상).
+    """
+    from whymath_backend.db.schema_version import (
+        EXPECTED_ALEMBIC_HEAD,
+        SchemaVersionVerdict,
+        classify_applied_head,
+        read_applied_heads,
+    )
+
+    try:
+        async with get_sessionmaker()() as session:
+            applied_heads = await read_applied_heads(session)
+    except Exception as exc:
+        raise SchemaPreflightError(
+            f"DB 스키마 버전을 확인하지 못했습니다({type(exc).__name__}) — "
+            f"DB 도달성(WHYMATH_DATABASE_URL)과 `alembic_version` 접근 권한을 확인하세요."
+        ) from exc
+    finally:
+        # 전역 엔진을 반드시 정리한다 — `main()`이 프리플라이트와 본 명령을 **서로 다른**
+        # `asyncio.run()`으로 돌리므로, 여기서 만든 asyncpg 풀을 살려두면 다음 루프가 그 커넥션을
+        # 물려받아 "attached to a different loop"로 죽는다(2026-08-11 실측: 프리플라이트를 붙인
+        # 직후 `upgrade head` 뒤의 `list`가 바로 이 오류로 실패했다 — 통합 테스트는
+        # `WHYMATH_DB_DISABLE_POOL=1`로 이 함정을 우회하고 있어 잡히지 않았다).
+        # `recommendation_reach_report.py`의 `finally: await dispose_engine()` 선례와 동형.
+        await dispose_engine()
+
+    applied = applied_heads[0] if len(applied_heads) == 1 else None
+    if len(applied_heads) > 1:
+        verdict = (
+            SchemaVersionVerdict.MATCH
+            if EXPECTED_ALEMBIC_HEAD in applied_heads
+            else SchemaVersionVerdict.BEHIND
+        )
+    else:
+        verdict = classify_applied_head(applied)
+
+    if verdict is SchemaVersionVerdict.BEHIND:
+        applied_desc = ", ".join(applied_heads) if applied_heads else "(미적용)"
+        raise SchemaPreflightError(
+            f"DB 스키마가 코드보다 뒤처졌습니다 — 적용={applied_desc} / 코드 기대="
+            f"{EXPECTED_ALEMBIC_HEAD}. 이 상태에서는 `user_profile.role` 등 신규 컬럼이 없어 "
+            f"모든 서브커맨드가 실패합니다. 먼저 `alembic upgrade head`를 적용하세요 "
+            f"(대상 DB가 맞는지 `alembic current`로 먼저 대조할 것)."
+        )
+    # AHEAD는 막지 않는다 — 코드만 되돌린 정상 롤백 상태이고, 앞선 스키마의 추가 컬럼을
+    # 이 코드가 쓰지 않는다(`schema_version.verify_schema_version`의 동일 판단 승계).
+
+
 def _uuid_arg(value: str) -> uuid.UUID:
     try:
         return uuid.UUID(value)
@@ -194,36 +273,45 @@ def main(
     grant_fn: GrantFn = _default_grant_fn,
     revoke_fn: RevokeFn = _default_revoke_fn,
     list_fn: ListFn = _default_list_fn,
+    preflight_fn: PreflightFn = _default_preflight_fn,
 ) -> int:
     """CLI 엔트리 — grant/revoke/list 서브커맨드. 결과를 JSON으로 stdout, 거부는 stderr.
 
-    반환 종료 코드: 0(성공) / 1(런타임 거부 — 사용자 없음·역할 불일치) / 2(argparse 파싱 실패 —
-    잘못된 UUID·알 수 없는 역할명, argparse가 자체적으로 stderr+SystemExit(2)를 낸다).
+    반환 종료 코드: 0(성공) / 1(런타임 거부 — 스키마 프리플라이트 실패·사용자 없음·역할 불일치·
+    그 밖의 DB 오류) / 2(argparse 파싱 실패 — 잘못된 UUID·알 수 없는 역할명, argparse가
+    자체적으로 stderr+SystemExit(2)를 낸다).
+
+    **세 서브커맨드 전부가 DB를 왕복하므로 프리플라이트를 공통 선행**시킨다(2026-08-11 사고:
+    `list`는 아예 try 블록이 없어 raw 트레이스백이 그대로 나왔다). 예상 못 한 DB 예외도
+    타입명과 함께 한 줄 JSON으로 바꾼다 — 트레이스백을 운영자에게 떠넘기지 않는다.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "grant":
-        try:
+    def _fail(message: str) -> int:
+        print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    try:
+        asyncio.run(preflight_fn())
+    except SchemaPreflightError as exc:
+        return _fail(str(exc))
+
+    try:
+        if args.command == "grant":
             result = asyncio.run(grant_fn(args.user_id, args.role))
-        except RoleGrantError as exc:
-            print(json.dumps({"error": str(exc)}), file=sys.stderr)
-            return 1
-        print(json.dumps(result))
-        return 0
-
-    if args.command == "revoke":
-        try:
+        elif args.command == "revoke":
             result = asyncio.run(revoke_fn(args.user_id, args.role))
-        except RoleGrantError as exc:
-            print(json.dumps({"error": str(exc)}), file=sys.stderr)
-            return 1
-        print(json.dumps(result))
-        return 0
+        else:  # command == "list"
+            users = asyncio.run(list_fn())
+            print(json.dumps({"users": users, "total": len(users)}))
+            return 0
+    except RoleGrantError as exc:
+        return _fail(str(exc))
+    except Exception as exc:  # noqa: BLE001 — 침묵 실패 금지: 타입명을 남기고 종료 코드로 판정
+        return _fail(f"실행 실패({type(exc).__name__}): {exc}")
 
-    # command == "list"
-    users = asyncio.run(list_fn())
-    print(json.dumps({"users": users, "total": len(users)}))
+    print(json.dumps(result))
     return 0
 
 

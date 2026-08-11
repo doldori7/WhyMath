@@ -32,6 +32,15 @@ from whymath_backend.schema.enums import Role
 _UID = uuid.uuid4()
 
 
+async def _preflight_ok() -> None:
+    """스키마 프리플라이트 통과 좌석 — hermetic 테스트는 DB를 왕복하지 않는다.
+
+    `main()`은 세 서브커맨드 **전부**에 프리플라이트를 선행시키므로, 주입하지 않으면 기본값
+    (`_default_preflight_fn`)이 실 DB에 붙으려 한다. 아래 테스트들은 CLI *배선*만 보는 것이
+    목적이라 통과 좌석을 명시 주입한다(프리플라이트 자체의 판정은 `TestSchemaPreflight`).
+    """
+
+
 # ===========================================================================
 # argparse 배선 — 잘못된 인자는 CLI 함수 호출 전에 거부(SystemExit(2))
 # ===========================================================================
@@ -66,7 +75,9 @@ class TestGrantSubcommand:
             assert role is Role.CONTENT_ADMIN
             return {"user_id": str(user_id), "old_role": "student", "new_role": role.value}
 
-        code = cli.main(["grant", str(_UID), "content_admin"], grant_fn=_fn)
+        code = cli.main(
+            ["grant", str(_UID), "content_admin"], grant_fn=_fn, preflight_fn=_preflight_ok
+        )
         assert code == 0
         out = json.loads(capsys.readouterr().out)
         assert out == {"user_id": str(_UID), "old_role": "student", "new_role": "content_admin"}
@@ -75,7 +86,9 @@ class TestGrantSubcommand:
         async def _fn(user_id: uuid.UUID, role: Role) -> dict[str, str]:
             raise cli.RoleGrantError(f"사용자를 찾을 수 없습니다: {user_id}")
 
-        code = cli.main(["grant", str(_UID), "content_admin"], grant_fn=_fn)
+        code = cli.main(
+            ["grant", str(_UID), "content_admin"], grant_fn=_fn, preflight_fn=_preflight_ok
+        )
         assert code == 1
         captured = capsys.readouterr()
         assert captured.out == ""
@@ -89,7 +102,9 @@ class TestRevokeSubcommand:
             assert role is Role.CONTENT_ADMIN
             return {"user_id": str(user_id), "old_role": role.value, "new_role": "student"}
 
-        code = cli.main(["revoke", str(_UID), "content_admin"], revoke_fn=_fn)
+        code = cli.main(
+            ["revoke", str(_UID), "content_admin"], revoke_fn=_fn, preflight_fn=_preflight_ok
+        )
         assert code == 0
         out = json.loads(capsys.readouterr().out)
         assert out == {"user_id": str(_UID), "old_role": "content_admin", "new_role": "student"}
@@ -100,7 +115,9 @@ class TestRevokeSubcommand:
                 "사용자가 보유한 역할이 아닙니다(현재: student, 회수 요청: content_admin)"
             )
 
-        code = cli.main(["revoke", str(_UID), "content_admin"], revoke_fn=_fn)
+        code = cli.main(
+            ["revoke", str(_UID), "content_admin"], revoke_fn=_fn, preflight_fn=_preflight_ok
+        )
         assert code == 1
         captured = capsys.readouterr()
         assert captured.out == ""
@@ -113,7 +130,7 @@ class TestListSubcommand:
         async def _fn() -> list[dict[str, str]]:
             return [{"user_id": str(_UID), "role": "content_admin"}]
 
-        code = cli.main(["list"], list_fn=_fn)
+        code = cli.main(["list"], list_fn=_fn, preflight_fn=_preflight_ok)
         assert code == 0
         out = json.loads(capsys.readouterr().out)
         assert out == {"users": [{"user_id": str(_UID), "role": "content_admin"}], "total": 1}
@@ -122,7 +139,7 @@ class TestListSubcommand:
         async def _fn() -> list[dict[str, str]]:
             return []
 
-        code = cli.main(["list"], list_fn=_fn)
+        code = cli.main(["list"], list_fn=_fn, preflight_fn=_preflight_ok)
         assert code == 0
         out = json.loads(capsys.readouterr().out)
         assert out == {"users": [], "total": 0}
@@ -234,3 +251,93 @@ class TestRecordRoleChangeAudit:
             session, user_id=_UID, ip=None, settings=_settings()  # type: ignore[arg-type]
         )
         assert row.ip_hash is None
+
+
+# ===========================================================================
+# 스키마 프리플라이트 — 2026-08-11 사고 재현 테스트
+# ===========================================================================
+#
+# 사고: 마이그레이션이 뒤처진 DB에 이 CLI를 실행하자 `column user_profile.role does not
+# exist`가 raw SQLAlchemy 트레이스백 100여 줄로 터졌고, 운영자는 그 출력에서 "무엇을 해야
+# 하는지"를 읽어낼 수 없었다. 아래는 그 상태가 **실행 전에** 한 줄 지시로 바뀌는지를 본다.
+
+
+class TestSchemaPreflight:
+    def test_behind_schema_blocks_every_subcommand(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """뒤처진 스키마면 grant/revoke/list 셋 다 DB를 건드리기 전에 거부된다."""
+
+        async def _behind() -> None:
+            raise cli.SchemaPreflightError(
+                "DB 스키마가 코드보다 뒤처졌습니다 — 적용=f3a4b5c6d7e8 / 코드 기대=090d254a5d43. "
+                "먼저 `alembic upgrade head`를 적용하세요."
+            )
+
+        async def _must_not_run(*args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+            raise AssertionError("프리플라이트가 막았어야 하는데 러너가 호출됐다")
+
+        for argv in (
+            ["grant", str(_UID), "content_admin"],
+            ["revoke", str(_UID), "content_admin"],
+            ["list"],
+        ):
+            code = cli.main(
+                argv,
+                grant_fn=_must_not_run,
+                revoke_fn=_must_not_run,
+                list_fn=_must_not_run,
+                preflight_fn=_behind,
+            )
+            captured = capsys.readouterr()
+            assert code == 1, f"{argv[0]}가 프리플라이트를 우회했다"
+            assert captured.out == "", "거부인데 stdout에 결과가 찍혔다"
+            err = json.loads(captured.err)
+            # 행동 지시가 실제로 담겨 있어야 한다 — 트레이스백 대신 "무엇을 하라"가 나와야 의미가 있다.
+            assert "alembic upgrade head" in err["error"]
+
+    def test_passing_preflight_lets_subcommand_run(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """대조군 — 프리플라이트가 통과하면 종전대로 동작한다(변별력의 반대편)."""
+
+        async def _fn() -> list[dict[str, str]]:
+            return []
+
+        code = cli.main(["list"], list_fn=_fn, preflight_fn=_preflight_ok)
+        assert code == 0
+        assert json.loads(capsys.readouterr().out) == {"users": [], "total": 0}
+
+    def test_unreachable_db_is_named_not_swallowed(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """확인 자체가 실패해도 '통과'로 위장하지 않고, 예외 타입명을 남긴다(침묵 실패 금지)."""
+
+        async def _unreachable() -> None:
+            raise cli.SchemaPreflightError(
+                "DB 스키마 버전을 확인하지 못했습니다(OperationalError) — "
+                "DB 도달성(WHYMATH_DATABASE_URL)과 `alembic_version` 접근 권한을 확인하세요."
+            )
+
+        code = cli.main(["list"], preflight_fn=_unreachable)
+        assert code == 1
+        err = json.loads(capsys.readouterr().err)
+        assert "OperationalError" in err["error"]
+
+    def test_unexpected_db_error_becomes_one_line_not_traceback(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """프리플라이트를 통과한 뒤 터지는 예상 못 한 DB 오류도 한 줄 JSON이 된다.
+
+        사고 당시 `list`는 try 블록 자체가 없어 raw 트레이스백이 그대로 나왔다.
+        """
+
+        async def _boom() -> list[dict[str, str]]:
+            raise RuntimeError("연결이 끊겼습니다")
+
+        code = cli.main(["list"], list_fn=_boom, preflight_fn=_preflight_ok)
+        assert code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        err = json.loads(captured.err)
+        assert "RuntimeError" in err["error"]

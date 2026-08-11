@@ -337,6 +337,21 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (사고·런북 3중 결함): **좌석 발급 게이트 1차 실행 실패 — 원인 3건 중 2건이 CLAUDE.md에 문장으로 있는 규칙을 claude가 어긴 것. 대책은 산문이 아니라 코드(프리플라이트)와 런북 교체** (claude, Kiki가 게이트 실행 후 실패 출력 제보)
+
+- **사고**: `G-operator-seat-first-grant` 명령 블록을 Kiki가 실행 → 3곳에서 막힘.
+  | # | 증상 | 진짜 원인 | 성격 |
+  |---|---|---|---|
+  | ① | `column user_profile.role does not exist` (트레이스백 100여 줄) | **whymath-pg 마이그레이션 뒤처짐** | claude 잘못 — "가정 기반 런북 금지" 위반. 게이트 선행조건에 "스키마가 최신인가"를 안 적었다 |
+  | ② | `'<' 연산자는 나중에 사용하도록 예약` | `<여기에_실제_user_id_전체>` 꺾쇠 | claude 잘못 — CLAUDE.md가 *"자리표시 `<...>` 직접 타이핑 금지 — PowerShell `<` 예약어 거부"*라고 **명시**하는데 어김 |
+  | ③ | `git pull` → `00_overview.md` 충돌·머지 중단 | 로컬 main이 2커밋 diverged | claude 잘못 — CLAUDE.md가 *"diverged 가능 브랜치는 `fetch`+`checkout -B`로만 안내"*라고 **명시**하는데 `pull`을 줌 |
+- **핵심 교훈**: ②③은 **규칙을 몰라서가 아니라 명령 블록을 쓸 때 그 규칙을 조회하지 않아서** 났다. 규칙이 자동 로드되는 것과 *산출물에 적용되는 것*은 다른 사건이다. 그래서 대책을 산문 규칙 추가로 하지 않았다(4번째 문장을 더해도 같은 실패가 난다) — **코드와 런북 구조**로 옮겼다.
+- **대책 1(코드·본체) — `role_grant_cli` 스키마 프리플라이트**: 세 서브커맨드 **전부**에 선행. `db/schema_version.py`의 `read_applied_heads`+`classify_applied_head` **재사용**(신규 판정 로직 0). **`verify_schema_version()`을 쓰지 않은 이유**: 그 함수는 `is_production_like`(실 OAuth provider 구성)일 때만 raise하고 그 밖에선 경고 후 **통과**시킨다 — Kiki 셸은 provider 미구성이라 뒤처진 스키마인데도 통과했을 것이다(프리플라이트로서 변별력 0). 좌석 부여는 어느 환경이든 스키마가 맞아야 하므로 환경 의존 판정을 배제했다. **실측: 100여 줄 트레이스백 → 1줄 행동 지시**(`적용=b4c5d6e7f0a2 / 기대=090d254a5d43 … alembic upgrade head`). 아울러 `list`에 try 블록이 아예 없던 것(사고 시 raw 트레이스백의 직접 원인)과 예상 못 한 DB 예외도 타입명 포함 한 줄 JSON으로 봉합.
+- **대책 1이 잡아낸 2차 버그(실 DB 실행이 아니었으면 못 봤다)**: 프리플라이트를 붙이자 `upgrade head` 뒤의 `list`가 `attached to a different loop`로 죽었다 — `main()`이 프리플라이트와 본 명령을 **서로 다른 `asyncio.run()`**으로 돌리는데 전역 asyncpg 풀이 살아남아 다음 루프로 새는 것. `finally: await dispose_engine()`으로 봉합(`recommendation_reach_report` 선례 동형). **통합 테스트는 `WHYMATH_DB_DISABLE_POOL=1`로 이 함정을 우회하고 있어 끝까지 안 잡혔다** — hermetic·통합 다 green인데 실 실행만 깨지는 형태였다.
+- **대책 2(런북) — 게이트를 "측정 우선"으로 전면 교체**: `upgrade head`를 지금 안내하지 **않는다**. 저장소의 마지막 whymath-pg 실측 head가 `f3a4b5c6d7e8`(2026-06-30)이고 그게 그대로면 밀린 마이그레이션이 **29개**, 그중 **upgrade 단계가 파괴적인 것이 6건**(concept 컬럼 drop 4·제약 drop·타입 확대)이며 `a5b6c7d8e9f0`은 기존 행 길이 초과 시 **DELETE 선행**을 요구한다. 1단계는 **읽기 전용 측정 3줄**(컨테이너 생존·`alembic_version`·`mis_id` 길이 초과 행 수)로 끝내고, 그 값을 보고 2단계를 설계한다. **직전 답변에서 "additive라 안전"이라고 한 것은 가장 가까운 3건만 보고 일반화한 오판이었고 여기서 정정한다.**
+- **대책 3(등재)**: `OPS-39-prod-schema-drift-observability` — whymath-pg가 코드 head와 벌어져도 **감시하는 장치가 0건**이다(앱 기동 가드는 그 DB에 앱을 띄울 때만 발화하므로 CLI 위주 운영에선 구조적 침묵). 저장소에 **whymath-pg 대상 마이그레이션 절차 문서 자체가 없다**는 것도 함께 등재(`deployment_cd_runbook.md`의 명령은 전부 별개 compose 스택 대상이고 같은 문서가 "기존 whymath-pg 이관 미실시"를 자인).
+- **부수 확인**: 부여 대상 `user_id`를 찾을 수단이 저장소에 **0건**이다(`list`는 비기본 역할자만 보여줘 좌석 0일 땐 빈 목록, `email_hash`는 해시라 이메일로 특정 불가). 2단계 안내 시 토큰 `sub` 디코드 또는 `email_hash` 조회를 쓴다.
+
 ### 2026-08-11 (구현·/drive·MATH-01): **표기 정규화 권위 단일화 — LaTeX 계층을 L5→L3로 이관하고 py를 dart 규칙집합에 정렬. py 실결함 2건 해소 + 3자 교차 골든(py/js/dart) + mobile CI 필터 구멍 4건 봉인** (claude 구현, Kiki `/drive`)
 
 **착수 가설 반증**: 태스크 acceptance ①은 "불일치 0이면 이 태스크는 과잉"이라는 탈출구를 달고
