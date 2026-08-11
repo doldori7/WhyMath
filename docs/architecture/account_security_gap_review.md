@@ -418,6 +418,11 @@ CLAUDE.md "법령 유래 절차의 기계 대체 금지"의 직접 적용이다.
    조직·프로세스 자산이고 코드 축이 아니다.
 7. **Admin BFF·콘솔 UI·역할 관리 화면** — `04_admin_console_architecture.md` §8 ADMIN-BFF·
    ADMIN-WEB 승계(**중복 등재 금지**). D1은 그 정본의 선결분(RBAC)만 떼어 등재한다.
+   **[2026-08-11 부기 — 순서 정정]** 방향은 유효하나 **CLI 경로가 화면보다 먼저**다. 운영자가
+   1명도 없는 상태(`CONTENT_ADMIN` 부여 경로 main 0건)에서 화면부터 만드는 것은 순서 오류이며,
+   좌석 발급은 `ops/role_grant_cli.py`(HTTP 미노출) 축으로 이미 설계·구현돼 회수 대기 중이다 —
+   `operations_platform_gap_review.md` §3 D1·§정정, `operations_platform_gap_review_r2.md`
+   §4 D5(`ADMIN-08`).
 8. **조직(학교·학원·반)·멀티테넌시** — `school_id` 컬럼만 있고 `school` 테이블 없음. Phase 4
    B2B 계약이 실체를 가질 때(후보 50).
 9. **클라 refresh-on-401 배선·액세스 TTL 15분·PII 접근 전수 감사** — 각각 MOB 축(§5-⑧)·
