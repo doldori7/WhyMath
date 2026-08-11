@@ -1281,7 +1281,11 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
         reaped, scan_status, warnings = remote_claims.reap(
-            root, backlog, ttl, dry_run=not args.apply
+            root,
+            backlog,
+            ttl,
+            dry_run=not args.apply,
+            branch_grace_hours=policy.claim_branch_grace_hours,
         )
         if scan_status != "ok":
             # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
@@ -1289,11 +1293,13 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
             print(f"원격 claim 조회 불가 ({scan_status}) — stale 판정 불가")
             return 0 if scan_status == "offline" else 1
         if warnings:
-            # task_missing이지만 TTL 이내라 reap에서 제외된 claim — 경합 조건 가능성이
-            # 있으므로 침묵시키지 않고 경고로 노출한다(HARN-21, CLAUDE.md 침묵 실패 금지).
+            # reap에서 제외됐지만 침묵시키면 안 되는 것들 — 유예 구간 claim
+            # (`task_missing_recent` HARN-21 · `branch_gone_recent` HARN-26)과
+            # 홀더 브랜치 조회 실패(판정 미수행). 둘 다 "지우지 않았다"인데 이유가 다르므로
+            # 사유 문자열을 그대로 노출한다(CLAUDE.md 침묵 실패 금지).
             print(
-                f"⚠ 최근 claim {len(warnings)}건 — task_missing이지만 TTL 이내라 reap 제외"
-                "(경합 조건 가능성: 다른 세션이 방금 add+claim했을 수 있다):"
+                f"⚠ reap 제외 {len(warnings)}건 — 유예 구간이거나 판정 불가"
+                "(경합 조건 가능성: 다른 세션이 방금 add+claim했거나 아직 첫 push 전일 수 있다):"
             )
             for item in warnings:
                 print(f"  · {item}")

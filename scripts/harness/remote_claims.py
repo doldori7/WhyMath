@@ -81,6 +81,7 @@ stale claim 청소: 세션이 release 없이 죽으면 claim 파일이 남는다
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -199,6 +200,47 @@ def has_remote(root: Path) -> bool:
         return _git(root, "remote", "get-url", "origin", timeout=10).returncode == 0
     except Exception:
         return False
+
+
+def list_remote_branches(root: Path) -> tuple[frozenset[str] | None, str]:
+    """origin의 브랜치 단축명 집합. 반환 `(집합, 상태)` — 상태 `ok|offline|error`.
+
+    **반환값이 `None`인 것과 `frozenset()`인 것은 완전히 다르다**:
+      · `None`   = 조회 실패 → 이 집합에 기대는 판정은 **건너뛴다**(판정 보류).
+      · 빈 집합  = 조회 성공했고 브랜치가 정말 하나도 없다.
+
+    이 구분이 없으면 네트워크 한 번 끊긴 것이 "원격에 브랜치가 전멸했다"로 읽혀
+    살아 있는 claim을 전부 지운다 — 측정 실패가 판정으로 위장되는 전형이다
+    (CLAUDE.md AI·신뢰 / HARN-09 CI 공전 선례와 같은 축).
+
+    왕복은 **1회**다. claim 건당 `ls-remote`를 부르면 대장이 커질수록 SessionStart가
+    느려지므로, 호출부가 이 집합을 한 번 받아 `stale_claims`에 그대로 넘긴다.
+    """
+    if not has_remote(root):
+        return None, "offline"
+    try:
+        result = _git(root, "ls-remote", "--heads", "origin", timeout=20)
+    except subprocess.TimeoutExpired:
+        return None, "offline"
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다(시크릿·값은 제외).
+        logging.getLogger("whymath.harness.claims").warning(
+            "원격 브랜치 조회 실패: %s", type(exc).__name__
+        )
+        return None, "error"
+    if result.returncode != 0:
+        return None, _classify_failure(result.stderr or "")
+    branches: set[str] = set()
+    for line in (result.stdout or "").splitlines():
+        _, _, ref = line.partition("\t")
+        ref = ref.strip()
+        if ref.startswith("refs/heads/"):
+            branches.add(ref[len("refs/heads/") :])
+    if not branches:
+        # rc=0인데 브랜치가 0개 = 정상 저장소에서 나올 수 없는 출력(최소 트렁크는 있다).
+        # 파싱 실패·응답 절단을 "원격에 브랜치가 전멸했다"로 읽으면 대장을 통째로 지운다.
+        return None, "error"
+    return frozenset(branches), "ok"
 
 
 def is_shallow_repo(root: Path) -> bool:
@@ -787,12 +829,69 @@ def scan_remote_in_progress(
         return ScanResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
+def _claim_older_than(c: RemoteClaim, now: datetime, hours: int) -> bool | None:
+    """claim이 `hours`보다 오래됐는가. `None` = 나이 불명(ts 없음·파싱 불가).
+
+    "모른다"를 "오래됐다"로 반올림하면 방금 만들어진 claim을 지운다(HARN-21 결함③).
+    그래서 bool이 아니라 3값을 돌려주고, 판정부가 명시적으로 보수 처리하게 한다.
+    """
+    if not c.ts:
+        return None
+    try:
+        ts = datetime.strptime(c.ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return now - ts > timedelta(hours=hours)
+
+
 def stale_claims(
-    claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int, now: datetime | None = None
+    claims: list[RemoteClaim],
+    backlog: Backlog,
+    ttl_hours: int,
+    now: datetime | None = None,
+    *,
+    existing_branches: frozenset[str] | None = None,
+    branch_grace_hours: int = 24,
 ) -> list[tuple[RemoteClaim, str]]:
     """stale claim 판정 — (claim, 사유) 목록.
 
-    사유: ttl | task_done | task_missing | task_missing_recent.
+    사유: ttl | task_done | task_missing | task_missing_recent
+          | branch_gone | branch_gone_recent.
+
+    **`branch_gone`(HARN-26)**: claim의 홀더 브랜치가 origin에 더 이상 없다. 세션
+    컨테이너는 수명이 짧고 브랜치를 스스로 지우지 못하는데(HARN-16), 그래도 홀더
+    브랜치가 없다는 것은 그 세션의 작업이 원격에 도달한 적조차 없다는 뜻이다 —
+    TTL 72시간을 기다릴 이유가 없는 확정 신호다.
+
+    실측 근거(2026-08-11 03:00Z): 대장 5건 중 3건이 존재하지 않는 브랜치를 홀더로
+    지목했다(MATH-01·MATH-02·HARN-20). 셋 다 "다른 세션이 작업 중"으로 표시돼 새 세션의
+    착수가 막혀 있었다. HARN-20은 홀더 브랜치가 사라진 데다 로컬에서 이미 `done`이었다.
+
+    **그런데 40분 뒤 재측정에서 MATH-01·MATH-02의 브랜치는 존재했다**(원격 브랜치
+    44→47개). 두 세션은 죽은 게 아니라 `start`와 첫 push 사이의 정상 구간에 있었다.
+    유예 없이 이 기준을 집행했다면 살아 있는 세션 2건의 claim을 지워 CAS가 막아둔
+    중복 착수를 우리 손으로 열어줬을 것이다 — `branch_grace_hours`가 이론이 아니라
+    관측된 경합에 대한 방어인 이유다. 실제 고아는 5건 중 1건(HARN-20)뿐이었다.
+
+    **`existing_branches`가 `None`이면 이 기준 자체를 건너뛴다.** 조회 실패로 얻은 빈
+    집합을 "브랜치 전멸"로 읽으면 살아 있는 claim을 모두 지운다 — `list_remote_branches`가
+    `None`과 빈 집합을 구분해 돌려주는 이유이며, 이 함수는 그 구분을 그대로 존중한다.
+
+    **`branch_grace_hours`(기본 24)**: `start`(claim)와 첫 push 사이에는 브랜치가 원격에
+    없는 정상 구간이 있다. 그 창에서 남의 claim을 지우면 CAS로 막아둔 중복 착수를 우리가
+    직접 열어주는 셈이다.
+
+    TTL(72h)을 재사용하지 **않는** 이유는 그러면 이 기준의 변별력이 0이 되기 때문이다.
+    `backlog/events.ndjson`의 start→done/block 쌍 199건 실측(2026-08-11):
+
+        p50 0.46h · p75 0.89h · p90 1.50h · p95 5.15h · p99 54.0h · max 66.4h
+        4h 초과 10건(5.0%) · 24h 초과 4건(2.0%) · **72h 초과 0건(0.0%)**
+
+    72h를 넘긴 세션이 하나도 없으므로 grace=72h면 `branch_gone`이 잡는 집합은 이미
+    `ttl`이 잡는 집합의 부분집합이 된다 — 성공/실패에 같은 값을 내는 검사와 같은 위장이다
+    (CLAUDE.md "변별력 없는 검증 스텝 금지"). 24h는 오탐 상한이 2.0%로 측정됐고 TTL보다
+    48시간 빠르다. 실제 오탐은 이보다 낮다 — 분포가 재는 것은 "완료까지 걸린 시간"인데
+    이 기준이 요구하는 건 그보다 좁은 "24시간 동안 push를 단 한 번도 안 함"이다.
 
     `task_missing`(로컬 백로그에 해당 태스크가 아예 없음) 판정은 **경합 조건**을 낳을 수
     있었다(HARN-21 결함③): 세션 A가 `add`+`start`(claim)를 원격에 방금 반영했는데, 그
@@ -813,37 +912,45 @@ def stale_claims(
     for c in claims:
         task = backlog.tasks.get(c.task_id)
         if task is None:
-            reason = "task_missing"
-            if c.ts:
-                try:
-                    ts = datetime.strptime(c.ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                    if now - ts < timedelta(hours=ttl_hours):
-                        reason = "task_missing_recent"
-                except ValueError:
-                    reason = "task_missing_recent"  # 파싱 불가 메타는 판정 보류 (보수적)
-            else:
-                reason = "task_missing_recent"  # ts 없음 = 나이 불명 → 즉시 삭제 금지(보수적)
-            result.append((c, reason))
+            # 나이 불명(None)·TTL 이내는 모두 `_recent`(경합 조건 가능성 — 즉시 삭제 금지).
+            older_than_ttl = _claim_older_than(c, now, ttl_hours)
+            result.append((c, "task_missing" if older_than_ttl else "task_missing_recent"))
             continue
         if task.status in ("done", "cancelled"):
             result.append((c, "task_done"))
             continue
-        if c.ts:
-            try:
-                ts = datetime.strptime(c.ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                if now - ts > timedelta(hours=ttl_hours):
-                    result.append((c, "ttl"))
-            except ValueError:
-                pass  # 파싱 불가 메타는 판정 보류 (보수적)
+        # 홀더 브랜치 부재 (HARN-26) — TTL보다 앞에 둔다. 둘 다 해당하면 "브랜치가 없다"가
+        # "오래됐다"보다 구체적이고 조치도 명확하기 때문이다.
+        # `c.branch`가 비어 있으면(메타 파손) 판정하지 않는다 — 홀더를 특정할 수 없는 것과
+        # 홀더가 사라진 것은 다르며, 전자는 `claims release --force`가 다루는 영역이다.
+        if existing_branches is not None and c.branch and c.branch not in existing_branches:
+            older = _claim_older_than(c, now, branch_grace_hours)
+            # 나이 불명(None)은 유예 쪽으로 반올림한다 — 즉시 삭제 금지(보수적).
+            result.append((c, "branch_gone" if older else "branch_gone_recent"))
+            continue
+        older_than_ttl = _claim_older_than(c, now, ttl_hours)
+        if older_than_ttl:
+            result.append((c, "ttl"))
     return result
 
 
 def reap(
-    root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True
+    root: Path,
+    backlog: Backlog,
+    ttl_hours: int,
+    dry_run: bool = True,
+    *,
+    branch_grace_hours: int = 24,
 ) -> tuple[list[str], str, list[str]]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
     반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error, ["경고 문자열", ...]).
+
+    **홀더 브랜치 조회(HARN-26)**: `list_remote_branches`를 **1회** 호출해 `stale_claims`에
+    넘긴다. 조회가 실패하면 `None`이 넘어가 `branch_gone` 판정만 조용히 빠지고 나머지
+    기준(ttl·task_done·task_missing)은 그대로 작동한다 — 한 축의 조회 실패가 reap 전체를
+    멈추게 하지도, 반대로 살아 있는 claim을 쓸어버리지도 않는다. 다만 침묵하지는 않는다:
+    실패 시 경고 목록에 그 사실을 싣는다.
 
     **상태를 함께 돌려주는 이유**(HARN-09): 구 구현은 조회 실패 시 빈 목록만 돌려줘서
     호출자가 "stale 없음"과 "판정 불가"를 구분할 수 없었다. CI의 교차검증 스텝이 정확히
@@ -858,13 +965,27 @@ def reap(
     claims, status = list_claims(root)
     if status != "ok":
         return [], status, []
-    stale = stale_claims(claims, backlog, ttl_hours)
     reaped: list[str] = []
     warnings: list[str] = []
+    branches, branch_status = list_remote_branches(root)
+    if branch_status != "ok":
+        warnings.append(
+            f"홀더 브랜치 조회 불가({branch_status}) — "
+            "branch_gone 판정을 이번 실행에서 수행하지 않았다"
+        )
+    stale = stale_claims(
+        claims,
+        backlog,
+        ttl_hours,
+        existing_branches=branches,
+        branch_grace_hours=branch_grace_hours,
+    )
     for c, reason in stale:
         label = f"{c.task_id} ({reason}" + (f", {c.branch}" if c.branch else "") + ")"
-        if reason == "task_missing_recent":
-            # 경합 조건 가능성 — 삭제하지 않고 경고로만 노출한다.
+        if reason.endswith("_recent"):
+            # 유예 구간(경합 조건 가능성) — 삭제하지 않고 경고로만 노출한다.
+            # `task_missing_recent`(HARN-21)·`branch_gone_recent`(HARN-26) 공통 규칙:
+            # 둘 다 "다른 세션의 상태가 아직 내게 보이지 않는 창"이고, 해답도 같다.
             warnings.append(label)
             continue
         if not dry_run:
