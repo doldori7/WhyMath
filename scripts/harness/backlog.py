@@ -997,18 +997,22 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     # 집합을 재사용한다 — 새 원격 조회 없이 "타 세션 진행중"을 판별하기 위함.
     stale_branches: list[tuple[str, float, int, str, str]] = []
     stale_branch_status = "ok"
+    stale_branch_message = ""
     if policy.remote_claims:
         try:
             scan = remote_claims.scan_stale_branches(
                 root, active_branches=frozenset(remote_claimed.values())
             )
             stale_branch_status = scan.status
+            stale_branch_message = scan.message
             if scan.status == "ok":
                 stale_branches = [
                     (s.branch, s.age_days, s.ahead, s.status, s.evidence) for s in scan.stale
                 ]
-        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+        except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            # 침묵 실패 금지 — 예외 타입명을 브리핑 문자열에 남긴다(훅은 stderr를 버린다).
             stale_branch_status = "error"
+            stale_branch_message = f"{type(exc).__name__}: {exc}"
     else:
         stale_branch_status = "disabled"
 
@@ -1075,6 +1079,7 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             remote_status=remote_status,
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
+            stale_branch_message=stale_branch_message,
             done_excluded=done_excluded,
             doc_series_candidates=doc_series_candidates,
             doc_series_status=doc_series_status,

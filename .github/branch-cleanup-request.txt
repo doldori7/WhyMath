@@ -1,6 +1,38 @@
 # 브랜치 정리 요청 — branch-cleanup.yml이 main 머지 시 이 목록을 삭제한다.
-# 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/* 와 tmp-* 뿐.
+# 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/*, tmp-*, worktree-agent-* 뿐.
 # 목록이 비어 있으면 no-op(다음 배치 준비 상태).
 #
 # 직전 배치: 2026-08-10 · 17건 전건 삭제 성공(런 #31346141938 · 잔존 0/17 ls-remote 검증).
 # 삭제 전 head SHA 스냅샷은 MEMORY 결정 로그(0f9894a4) 참조.
+#
+# ── 2026-08-11 배치 (6건) ──────────────────────────────────────────────
+# 근거: docs/reviews/unmerged_branch_verdict_2026-08-11.md (브랜치별 판정표·실측 근거).
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   enfkqt=469ee9ad · h87afk=b849bb04 · harn-14=215b45ff
+#   backlog-drive-next=de446ec3 · 973iv1=8810bc8b · worktree-agent=6059043d
+#
+# ⚠ 회수 태스크가 등재된 브랜치는 이 배치에서 **의도적으로 제외**한다 —
+#   admin-01(ADMIN-08) · uqyg79(PED-22~25) · q8tvcx(OPS-38) · 40xspg(SOL-01) · admin-02.
+#   "하네스가 포팅됨으로 분류했다"가 "브랜치 안의 모든 내용이 회수됐다"를 뜻하지 않는다
+#   (openrouter-setup-guide-e98dw4 선례 — 분류는 포팅됨이었으나 S3-28 코퍼스 분기 미회수).
+
+# 교수전략 계열 — uqyg79의 진부분집합(공통 조상 커밋 대조 실측: 고유 커밋 0건).
+# uqyg79는 PED-22~25로 회수 등재돼 보존되므로 이 브랜치는 잃는 내용이 없다.
+claude/whymath-teaching-strategy-enfkqt
+
+# REC-02 중복 구현의 패자. main의 REC-02는 done이며 다른 브랜치
+# (human-bottleneck-tasks-6dszy0 · 커밋 d554ddad)에서 회수돼 이미 착지했다.
+claude/whymath-probe-supply-h87afk
+
+# PR #714로 포팅 완료(main 커밋 b4b0153d "HARN-14: 설계 문서 중복 착수 탐지 스캐너").
+# main의 HARN-14는 done. 고립된 done 0건.
+claude/harn-14-doc-series-duplicate-detection
+
+# trunk 대비 ahead=0 — 전량 흡수됐다. 남길 내용이 없다.
+claude/backlog-drive-next
+claude/whymath-account-security-973iv1
+
+# PR #728로 포팅 완료(main 커밋 4adc6870). main의 PATH-05는 done이고 artifacts가
+# 이 브랜치의 커밋 f9644016을 직접 인용한다. 허용 패턴이 없어 그동안 삭제 경로가
+# 아예 없던 건 — 이번에 worktree-agent-*를 패턴에 추가했다.
+worktree-agent-a6e26595b30efb856

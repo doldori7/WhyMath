@@ -893,6 +893,12 @@ class TestScanStaleBranches:
         2026-08-05 실측: SessionStart가 경고하던 19개 브랜치 중 10개가 이미 이 패턴으로
         trunk에 흡수된 뒤 원본만 방치돼 있었다 — unresolved와 뭉뚱그리면 Kiki가 매번
         이미 끝난 일까지 다시 훑어야 한다.
+
+        2026-08-11 갱신: needle이 6자 세션 접미사에서 **브랜치 basename 전체**로 바뀌어
+        커밋 메시지도 전체명을 인용하도록 고쳤다(6자 needle은 평범한 영단어까지 잡는
+        오탐 생성기였다 — `_find_ported_evidence` docstring). 흡수 커밋이 `ported.txt`
+        (원장 경로 밖)를 건드리는 것도 계약의 일부다 — 원장만 고친 커밋은 "언급"으로
+        버려진다.
         """
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
@@ -906,7 +912,7 @@ class TestScanStaleBranches:
         (a / "ported.txt").write_text("ported content\n", encoding="utf-8")
         subprocess.run(["git", "add", "ported.txt"], cwd=a, check=True, capture_output=True)
         subprocess.run(
-            ["git", "commit", "-m", "merge: 953m1e 유용분 흡수"],
+            ["git", "commit", "-m", f"merge: {branch} 유용분 흡수"],
             cwd=a,
             check=True,
             capture_output=True,
@@ -918,7 +924,7 @@ class TestScanStaleBranches:
         branches = {s.branch: s for s in result.stale}
         assert branch in branches
         assert branches[branch].status == "ported"
-        assert "953m1e" in branches[branch].evidence
+        assert "흡수" in branches[branch].evidence
 
     def test_remote_claimed_branch_classified_as_active(self, bare_remote):
         """원격_claim_중인_브랜치는_active로_분류한다
@@ -977,7 +983,11 @@ class TestScanStaleBranches:
         (a / "port_commit.txt").write_text("ported\n", encoding="utf-8")
         subprocess.run(["git", "add", "port_commit.txt"], cwd=a, check=True, capture_output=True)
         subprocess.run(
-            ["git", "commit", "-m", "merge: 953m1e 흡수"], cwd=a, check=True, capture_output=True
+            # needle은 브랜치 basename 전체다(2026-08-11) — 6자 접미사 인용으로는 안 잡힌다.
+            ["git", "commit", "-m", f"merge: {ported_branch} 흡수"],
+            cwd=a,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
 
@@ -998,6 +1008,223 @@ class TestScanStaleBranches:
         result = remote_claims.scan_stale_branches(git_repo, days_threshold=3)
         assert result.status == "offline"
         assert result.stale == []
+
+    # ────────────────────────────────────────────────────────────────────
+    # 2026-08-11 결함 4종 봉인 — shallow 맹점 · 유령 ref · needle 오탐/미탐 · 인프라 브랜치
+    # ────────────────────────────────────────────────────────────────────
+
+    def _push_stale_branch(self, repo: Path, branch: str, filename: str) -> None:
+        """9일 방치 브랜치 1건을 원격에 만든다(나이 임계 위)."""
+        subprocess.run(["git", "checkout", "main"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "checkout", "-b", branch], cwd=repo, check=True, capture_output=True)
+        self._commit_backdated(repo, days_ago=9, filename=filename, message=f"{branch} work")
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=repo, check=True, capture_output=True
+        )
+
+    def test_shallow_clone_is_pending_not_ok(self, bare_remote, shallow_clone):
+        """shallow_클론은_ok가_아니라_판정_보류다
+
+        사고(2026-08-11): CCR 컨테이너 클론이 shallow였는데 스캐너가 그걸 모른 채
+        판정해 브리핑 "미해결 19건" 중 10건을 오분류했다. 흡수 커밋이 절단면 밖이라
+        grep이 못 본 것을 "포팅 근거 없음"과 같은 값으로 처리한 결과다.
+
+        빈 목록을 '방치 없음'으로 읽으면 안 되는 것과 같은 이유로, *틀린* 목록을
+        'ok'로 내보내서도 안 된다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        self._push_stale_branch(a, "claude/whymath-shallow-victim-example", "victim.txt")
+
+        result = remote_claims.scan_stale_branches(shallow_clone("shallow-b"), days_threshold=3)
+
+        assert result.status == "shallow"
+        assert result.stale == []
+        assert "--unshallow" in result.message
+
+    def test_full_clone_still_detects_same_branch(self, bare_remote):
+        """같은_저장소의_full_클론은_그_브랜치를_정상_검출한다
+
+        위 테스트의 **음성 대조**. shallow 가드가 무차별 보류로 퍼지면(=어떤 클론에서도
+        판정 안 함) 이 테스트가 실패한다 — 가드가 shallow에만 걸리는지 변별한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_stale_branch(a, "claude/whymath-shallow-victim-example", "victim.txt")
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.status == "ok"
+        assert "claude/whymath-shallow-victim-example" in {s.branch for s in result.stale}
+
+    def test_shallow_guard_runs_before_fetch(self, shallow_clone, monkeypatch):
+        """shallow_가드는_fetch보다_먼저_돈다
+
+        어차피 못 믿을 결과를 위해 SessionStart마다 90초 예산의 전체 fetch를 물지
+        않는다(fetch는 shallow를 해제하지도 못한다). 가드를 fetch 뒤로 옮기면 실패한다.
+        """
+        calls: list[tuple[str, ...]] = []
+        real_git = remote_claims._git
+
+        def spy(root, *argv: str, **kwargs):
+            calls.append(argv)
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", spy)
+        result = remote_claims.scan_stale_branches(shallow_clone("shallow-c"), days_threshold=3)
+
+        assert result.status == "shallow"
+        assert not [argv for argv in calls if argv and argv[0] == "fetch"]
+
+    def test_deleted_upstream_branch_is_pruned(self, bare_remote):
+        """원격에서_삭제된_브랜치는_스캔에서_사라진다
+
+        사고(2026-08-11): fetch에 `--prune`이 없어 GitHub에서 이미 삭제된 브랜치의
+        remote-tracking ref가 남았다. 스캐너는 그걸 "trunk 대비 N커밋 앞섬, Kiki 결정
+        필요"로 계속 보고했지만 **결정할 대상이 존재하지 않았다**(실측 유령 23건).
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-ghost-branch-example"
+        self._push_stale_branch(a, branch, "ghost.txt")
+
+        # b가 한 번 관측해 remote-tracking ref를 캐시한 뒤, 원격에서 삭제한다.
+        assert branch in {
+            s.branch for s in remote_claims.scan_stale_branches(b, days_threshold=3).stale
+        }
+        subprocess.run(
+            ["git", "push", "origin", "--delete", branch], cwd=a, check=True, capture_output=True
+        )
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.status == "ok"
+        assert branch not in {s.branch for s in result.stale}
+
+    def test_claims_branch_never_reported_as_stale(self, bare_remote):
+        """하네스_claim_브랜치는_결정_대기로_뜨지_않는다
+
+        `harness-claims`는 하네스가 스스로 만드는 claim 저장소이지 사람이 결정할 작업
+        브랜치가 아니다 — claim이 3일만 조용하면 "Kiki 결정 필요"로 뜨던 구멍을 막는다.
+        정의상 대상 밖이라 만료 없는 유예에 해당하지 않는다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        subprocess.run(
+            ["git", "checkout", "-b", remote_claims.CLAIMS_BRANCH],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        self._commit_backdated(a, days_ago=9, filename="claims.json", message="claim record")
+        subprocess.run(
+            ["git", "push", "-u", "origin", remote_claims.CLAIMS_BRANCH],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.status == "ok"
+        assert remote_claims.CLAIMS_BRANCH not in {s.branch for s in result.stale}
+
+    def test_suffixless_branch_can_be_classified_ported(self, bare_remote):
+        """6자_접미사가_없는_브랜치도_포팅_근거를_찾는다
+
+        결함 ② 핵심. 옛 needle `-([a-z0-9]{6})$`는 세션 접미사가 없는 브랜치
+        (`claude/harn-14-…`·`worktree-agent-…`)를 **시도조차 못 해** 항구적으로
+        "미해결"에 남겼다. 실측: `worktree-agent-a6e26595b30efb856`은 PR #728로 이미
+        포팅됐는데도 매 세션 결정 대기로 떴다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/harn-99-no-session-suffix-here"
+        self._push_stale_branch(a, branch, "suffixless.txt")
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        (a / "src_change.py").write_text("x = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "src_change.py"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            # 제목이 아니라 **본문**에 브랜치명을 인용한다(#728의 실제 패턴).
+            ["git", "commit", "-m", "HARN-99: 고아 브랜치 회수", "-m", f"원본 = {branch}"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "ported"
+        assert "HARN-99" in branches[branch].evidence
+
+    def test_ledger_only_mention_stays_unresolved(self, bare_remote):
+        """원장만_고친_커밋의_언급은_포팅_근거가_아니다
+
+        결함 ② 역방향(더 위험한 쪽). *"이 브랜치들은 미해결이다"*라고 적은 판정 문서
+        커밋이 바로 그 브랜치를 "해결됨"으로 뒤집던 사고를 봉인한다.
+
+        실측(2026-08-11): `claude/whymath-solution-review-40xspg`는 미회수 S4-09 완료분을
+        안은 채 "이미 포팅됨 — 원본 정리만 필요, 결정 불요"로 분류돼 있었다. 근거로
+        잡힌 커밋(`807aa479`)은 MEMORY.md·backlog·docs만 고친 판정 문서였다. 잘못된
+        강등은 실작업이 든 브랜치를 삭제 대상으로 만든다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-solution-review-example"
+        self._push_stale_branch(a, branch, "real_work.txt")
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        (a / "docs").mkdir(exist_ok=True)
+        (a / "docs" / "verdict.md").write_text(f"# 판정\n\n- {branch}: 미해결\n", encoding="utf-8")
+        (a / "MEMORY.md").write_text("결정 로그\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"docs: 미머지 브랜치 판정 — {branch} 포함"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "unresolved"
+        assert branches[branch].evidence == ""
+
+    def test_common_word_suffix_does_not_match(self, bare_remote):
+        """평범한_영단어_접미사는_근거로_잡히지_않는다
+
+        옛 6자 needle의 오탐 회귀 봉인. `…-metrics-writer`의 "writer"가 무관한 커밋에
+        매칭돼 그 브랜치를 "결정 불요"로 강등한 것이 실측됐다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/collab-99-learning-metrics-writer"
+        self._push_stale_branch(a, branch, "metrics.txt")
+        subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+        (a / "unrelated.py").write_text("writer = None\n", encoding="utf-8")
+        subprocess.run(["git", "add", "unrelated.py"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "ASM-99: 무관한 writer 배선"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "unresolved"
+
+    def test_short_branch_name_skips_evidence_lookup(self, bare_remote):
+        """너무_짧은_브랜치명은_근거_조회를_건너뛴다
+
+        짧은 needle은 우연 매칭 생성기다 — 길이 하한(12자) 아래면 grep 자체를 하지 않는다.
+        """
+        assert remote_claims._find_ported_evidence(Path("."), "origin/main", "claude/ab") == ""
 
     def test_query_failure_not_disguised_as_empty_list(self, bare_remote, monkeypatch):
         """조회_실패는_빈_목록으로_위장되지_않는다
