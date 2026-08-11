@@ -194,7 +194,7 @@ def render_brief(
         for task in mine:
             lines.append(
                 f"이 브랜치의 진행 중 태스크: {task.id} — {task.title}"
-                f" (완료 시 `backlog.py done {task.id} --artifact <PR/커밋>`)"
+                f" (완료 시 PR을 연 뒤 `backlog.py done {task.id} --artifact <PR 번호 포함>`)"
             )
 
     # 병렬 세션 가시성 — 다른 세션의 원격 claim을 브리핑에 노출 (중복 착수 예방)

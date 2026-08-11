@@ -7,6 +7,7 @@
     python3 scripts/harness/backlog.py start <id> [--session <branch>]
                                                  [--no-remote | --ignore-remote-claim]
     python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋> [--artifact ...]
+                                                 [--no-pr <예외사유>]
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
     python3 scripts/harness/backlog.py review <id>                (in_progress → review)
@@ -30,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -84,6 +86,34 @@ def _append_note(original: str, reason: str, tag: str) -> str:
     if not original.strip():
         return stamp
     return f"{original}\n\n{stamp}"
+
+
+# ── PR 증적 게이트 (HARN-23) ────────────────────────────────────────────────
+# 규칙 정본은 CLAUDE.md "✅ 절대 원칙 → 완료·병합": 산출물이 있으면 요청 없이 PR을 연다.
+# 여기는 그 규칙의 *집행 지점*이다 — 정본화만 하고 집행을 빠뜨리면 규칙은 세션 기억에만
+# 의존하게 되고, 이 저장소는 그 실패를 이미 겪었다(미병합 고립 4회차·미머지 브랜치 19건).
+#
+# 판정은 "artifact 문자열에 PR 참조가 있는가" 하나뿐이다. 스쿼시 머지 커밋 메시지의
+# `(#758)` 관례를 그대로 수용하므로 머지된 커밋 해시 증적도 손댈 필요 없이 통과한다.
+#
+# 한계(의도적): PR의 *실재*는 확인하지 않는다 — `#999` 같은 유령 번호도 통과한다.
+# GitHub API 조회는 오프라인·프록시 환경에서 fail-open이 되고, 상시 실패하는 보호는
+# 보호가 아니다(CLAUDE.md 금기). 이 게이트가 막는 것은 *망각*이지 *위조*가 아니다.
+_PR_REFERENCE_RE = re.compile(r"#\d+|/pull/\d+")
+
+# PR 없이 done을 허용하는 예외 4종 (2026-08-11 Kiki 지정 — 이외의 사유로 보류 금지).
+# 자유 서술을 받지 않고 choices로 강제한다: 사유를 적을 수 있으면 무엇이든 사유가 된다.
+NO_PR_REASONS: tuple[str, ...] = (
+    "investigation",  # 조사·계획 전용 — 코드·문서 산출물이 없음
+    "incomplete",  # 미완 또는 사람 게이트 대기 — 아직 열 PR이 아님
+    "ci-red",  # CI 적색 — 먼저 고친다
+    "kiki-hold",  # Kiki의 명시적 보류 지시
+)
+
+
+def _has_pr_reference(artifacts: list[str]) -> bool:
+    """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
+    return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -574,6 +604,19 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
             f"{task.id}: 사람 소유 태스크({task.owner}) — 소유자 본인이 직접 기입하세요: "
             f"python3 scripts/harness/backlog.py done {task.id} --as {task.owner} --artifact <증적>"
         )
+    # PR 증적 게이트 (HARN-23) — 증적에 PR 참조가 없으면 거부한다.
+    # 거부는 장애물이 아니라 판정이다. 다만 예외 4종에 해당하면 `--no-pr <사유>`로
+    # 언제든 통과할 수 있으므로 이 게이트가 세션을 볼모로 잡지는 않는다.
+    no_pr_reason = getattr(args, "no_pr", None)
+    if no_pr_reason is None and not _has_pr_reference(args.artifact):
+        return _fail(
+            f"{task.id}: 증적에 PR 참조(#12 또는 .../pull/12)가 없습니다 — "
+            f"산출물이 있으면 요청 없이 PR을 여는 것이 기본값입니다(CLAUDE.md 완료·병합). "
+            f"PR을 열었다면 그 번호를 증적에 담고, 예외라면 사유를 명시하세요: "
+            f"--no-pr {{{'|'.join(NO_PR_REASONS)}}} "
+            f"(investigation=산출물 없는 조사·계획 / incomplete=미완·게이트 대기 / "
+            f"ci-red=CI 적색 / kiki-hold=Kiki 보류 지시)"
+        )
     error = _transition(task, "done")
     if error:
         return _fail(error)
@@ -581,14 +624,22 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
     task.status = "done"
     task.artifacts = list(dict.fromkeys(task.artifacts + args.artifact))
     task.session = None
+    if no_pr_reason is not None:
+        # PR 없이 종결한 사실을 태스크에 남긴다 — 나중에 "왜 이건 PR이 없지"를
+        # 브랜치 고고학으로 되짚지 않아도 되게(미병합 고립 4회차의 실제 비용).
+        task.notes = _append_note(task.notes, no_pr_reason, "PR 보류")
     task.updated = _today()
     store.save_task(root, task)
     done_extra: dict[str, object] = {"artifacts": args.artifact}
     if as_owner is not None:
         done_extra["as_owner"] = as_owner
+    if no_pr_reason is not None:
+        done_extra["no_pr_reason"] = no_pr_reason
     store.append_event(root, "done", task.id, **done_extra)
     _release_remote_claim(root, task.id, prev_session)
     print(f"✔ {task.id} 완료 — 증적: {', '.join(args.artifact)}")
+    if no_pr_reason is not None:
+        print(f"⚠ PR 없이 완료 — 사유: {no_pr_reason}")
     # 이 완료로 해금된 후속 태스크 안내 (순차 조율의 연결 고리)
     unlocked = [
         t
@@ -1141,7 +1192,8 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
     ids = ", ".join(t.id for t in stale)
     print(
         f"[빌드하네스] 이 브랜치가 claim한 태스크({ids})의 상태가 갱신되지 않았습니다. "
-        f"완료했다면 `python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋>`, "
+        f"완료했다면 PR을 연 뒤 "
+        f"`python3 scripts/harness/backlog.py done <id> --artifact <PR 번호를 담은 증적>`, "
         f"미완이면 태스크 파일의 notes에 진행 메모를 남기거나 "
         f"`block <id> --reason ...` 처리 후 종료하세요.",
         file=sys.stderr,
@@ -1491,7 +1543,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_start)
 
-    p = sub.add_parser("done", help="태스크 완료 (증적 필수)")
+    p = sub.add_parser("done", help="태스크 완료 (증적 필수 · PR 참조 필수)")
     p.add_argument("id")
     p.add_argument("--artifact", action="append", default=[])
     p.add_argument(
@@ -1500,6 +1552,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=[o for o in OWNERS if o != "claude"],
         help="사람-소유 태스크를 소유자 본인이 기입할 때 명시 (HARN-06)",
+    )
+    p.add_argument(
+        "--no-pr",
+        dest="no_pr",
+        default=None,
+        choices=list(NO_PR_REASONS),
+        help="PR 없이 완료하는 예외 사유 (HARN-23 — 예외 4종만 허용)",
     )
     p.set_defaults(func=cmd_done)
 

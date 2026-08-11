@@ -1443,13 +1443,13 @@ class TestHumanOwnerLifecycle:
         backlog, _ = store.load_backlog(seeded_repo)
         assert backlog.tasks[task_id].status == "in_progress"
         # done도 --as 필수 (없으면 안내와 함께 거부)
-        assert cli.main(["done", task_id, "--artifact", "판정 문서"]) == 1
+        assert cli.main(["done", task_id, "--artifact", "판정 문서 (#77)"]) == 1
         assert "--as kiki" in capsys.readouterr().err
         # 소유자 본인 기입 — done
-        assert cli.main(["done", task_id, "--as", "kiki", "--artifact", "판정 문서"]) == 0
+        assert cli.main(["done", task_id, "--as", "kiki", "--artifact", "판정 문서 (#77)"]) == 0
         backlog, _ = store.load_backlog(seeded_repo)
         assert backlog.tasks[task_id].status == "done"
-        assert "판정 문서" in backlog.tasks[task_id].artifacts
+        assert "판정 문서 (#77)" in backlog.tasks[task_id].artifacts
         # 이벤트 대장에 as_owner가 남아 claude 기입과 구분된다
         events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
         records = [json.loads(line) for line in events.splitlines() if line.strip()]
@@ -1523,7 +1523,7 @@ class TestUnmergedDoneDetection:
         """타 세션이 태스크를 done 처리하고 브랜치를 push한 상태를 만든다."""
         other = self._seeded_clone(clone, monkeypatch, "finisher")
         assert cli.main(["start", self.TASK_ID]) == 0
-        assert cli.main(["done", self.TASK_ID, "--artifact", "abc123"]) == 0
+        assert cli.main(["done", self.TASK_ID, "--artifact", "abc123 (#42)"]) == 0
         self._push_branch(other, "claude/finisher")
         return other
 

@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-23-pr-by-default-and-done-pr-evidence
+title: "PR 기본값 전환 — '요청 없으면 PR 안 함'이 낳은 완료작업 고립을 규칙 정본화 + done PR 증적 게이트로 차단"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 규칙 정본화: CLAUDE.md에 '산출물이 있으면 요청 없이 PR을 연다'를 ALWAYS 소절(완료·병합)로, 대칭 금기 1줄을 NEVER(프로세스·안내)로 등재. 예외 4종(조사·계획 전용/미완·게이트 대기/CI red/Kiki 명시 보류)을 열거하고 예외 종료 시 사유 1줄 보고를 의무화한다. 'pr' 단축어 항목은 이제 CI 대기+자동 머지 지시임을 명시하고 버전·수정일을 갱신한다."
+  - "② 집행 지점(정본화와 별항 — '정본화를 집행으로 착각한 완료 선언 금지' 준수): backlog.py cmd_done이 artifact에 PR 참조(#N 또는 /pull/N)가 없고 --no-pr <사유>도 없으면 exit 1로 거부한다. --no-pr는 예외 4종 choices로 강제하고 통과 시 done 이벤트 extra(no_pr_reason)와 태스크 notes에 흔적을 남긴다."
+  - "③ 워크플로 공백 메우기: /drive 루프(커밋→done 사이에 PR 단계 부재)와 /implement(서브에이전트 내부 'f. PR 준비' 한 줄)에 PR 생성 단계를 명시 신설한다 — 규칙 위반의 실제 원인은 망각이 아니라 절차 공백이었다."
+  - "④ 변별력 회귀 테스트: 거부 경로(맨 커밋 해시)가 실제로 exit 1을 내고 허용 경로(PR #N·pull URL·스쿼시 '(#758)' 관례·--no-pr)가 exit 0을 내는 양방향. 게이트 제거 뮤테이션에서 red가 나는지 확인한다."
+  - "⑤ CI 배선 확인: 신설 테스트가 harness-integrity 잡(pytest tests/harness)에서 실제 실행됨을 확인한 뒤 완료로 친다."
+  - "⑥ 범위 밖(의도적 미채택·잔여 리스크 명시): PR 실재 검증(#999 같은 유령 번호는 통과 — 이 게이트는 망각을 막지 위조를 막지 않는다) · Stop 훅 확장(태스크 없는 문서 세션까지 잡으려면 매 세션 무차별 경고가 되어 변별력 없는 검증 스텝이 된다)."
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/report.py
+  - "tests/harness/**"
+  - CLAUDE.md
+  - MEMORY.md
+  - docs/standards/build_harness.md
+  - ".claude/commands/**"
+session: claude/pr-without-request-1me42b
+notes: "발견 경위: 2026-08-11 Kiki 입장 표명 — 'PR을 요청받지 않아 PR하지 않는다는 것은 사용자 의도 존중이지, PR이 필요한 상황이면 PR해야 한다'. 실측 근거: SessionStart 브리핑 미해결 장기 미머지 브랜치 19건(최대 trunk 대비 720커밋) · 미병합 고립 4회차(MEMORY 2026-08-11) · 2026-08-04 브랜치 82→42 정리 시 9개 브랜치가 완료작업 13건 고립, 그 현상을 고치는 태스크(HARN-12) 자신이 고립돼 있었음."
+updated: 2026-08-11
