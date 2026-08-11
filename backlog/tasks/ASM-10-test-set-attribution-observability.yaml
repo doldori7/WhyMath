@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ASM-10-test-set-attribution-observability
+title: "조립 세트 시행 귀속 관측 — 세트는 조립되는데 시도가 세트로 귀속되지 않음(assessment_id 부재) 가시화"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정(2026-08-11 r2 §3 D5 재현·주장 확인 또는 반증): ProblemAttempt(db/models/activity.py:137-205)에 session_id는 있으나 **assessment_id 컬럼이 없다**(전수 grep). POST /v1/me/assessments/assemble(api/me.py:2869)은 AssessmentType.실전모의고사 행 + pattern_diagnosis JSONB(헤더 kind=blueprint_test_set 1건 + 문항 kind=blueprint_item N건)로 세트를 앉히고 completed_at=None으로 둔다. PATCH /assessments/{id}/complete(api/me.py:2481-2503)는 _close_owned_resource로 completed_at 시각만 갱신하고 결과 산출 코드 0. 백로그에 '시행·폐루프'를 소유한 태스크 0건. 반증되면 범위 재조정"
+  - "② 정합 설계 본체 — 귀속 관측 리포트(신규 스키마 0·마이그레이션 0·엔드포인트 0): ASM-01 harness/assessment_seat_reach_report.py의 DB형 4단 분리를 답습(collect_*(AsyncSession 주입·ORM 쿼리빌더만) → build_report(순수) → render/json(정렬 고정) → main CLI(exit 0/2·게이트 아님)). 낼 것 = ⑴실전모의고사 행 수와 각 세트 선언 문항 수(pattern_diagnosis 헤더 파싱) ⑵세트 문항 id들에 대한 problem_attempt 존재 여부 ⑶**그 시도가 이 세트에서 나왔는지 판별 불가**를 unattributable 명시 상태로 표기 ⑷completed_at이 찍혔으나 결과 산출물이 0인 '빈 완료' 세트 건수 ⑸같은 청사진의 중복 세트 건수(ASM-04가 자인한 멱등 창 미설정의 실제 영향 — 0일 수도 있다)"
+  - "③ 정직 표기: '귀속 0건'으로 적으면 '아무도 안 풀었다'와 구분되지 않는다 — 세트 문항에 시도가 있으나 귀속 판별이 불가한 상태를 별도 버킷으로 계상한다(ops/cost_probe 이중 회계 선례). pattern_diagnosis 헤더가 없거나 형태가 다른 행은 조용히 버리지 않고 별도 계상(조용한 유실 금지 — ARCH-18 3분류 관례)"
+  - "④ 게임화 금기 하드 제약: 점수·등급·평균·표준편차·문항별 정답률·성취도 등급을 **산출하지 않는다**(v1 §2-① 승계·CLAUDE.md). 이 리포트가 내는 것은 성적이 아니라 분석의 *가능성* 여부다. 예측 5필드는 스키마상 이미 부재(ASM-07 봉인)이며 이 리포트도 읽지 않는다"
+  - "⑤ 변별력(양방향): 합성 세트 + 그 세트 문항에 대한 합성 시도를 넣어 unattributable 카운터가 실제로 오르는지 → 제거 시 복원되는지 실측(절대값 0 assert 금지 — 델타 패턴). 세트에 없는 문항의 시도는 카운터에 잡히지 않는지도 확인. 뮤테이션 원복은 cp 백업으로만"
+  - "⑥ CI 배선 실재 확인: tests/backend/harness/**가 backend 잡 testpaths로 기수집됨을 확인하고 신규 워크플로 0. 실PG 통합 델타 테스트가 필요하면 tests/backend/db/*_integration.py(-m integration·backend-migrations 잡) 관례를 따른다. 판정은 exit code(출력 억제·절단 금지)"
+  - "⑦ 범위 밖(명시·Kiki 결정 2026-08-11 '관측 먼저'): problem_attempt.assessment_id 컬럼 신설·마이그레이션은 **이 태스크에 포함하지 않는다**(관측 결과를 발화 조건으로 삼는 별도 결정) · 채점·점수 산출 0 · partial_credit(l6/blueprint/assembly.py:526) 호출자 배선 0 · 멱등 창 설계 0 · 학생 대면 노출 0(ASM-11 소관)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D5. ASM-04가 '세트 시행·채점 폐루프는 범위 밖(구성까지)'이라 스스로 정직하게 자인했으나 후속 소유자가 붙지 않아 무주공산이 됐다(같은 artifacts가 자인한 partial_credit 호출자 0·멱등 창 미설정도 동일). 귀속이 없으면 외부 EOS 틀 모듈 51의 분석 축(문항별 정답률·성취도·교육과정 달성률)이 원천 불가이고 세트 단위 심리측정(신뢰도)도 정의 자체가 불가능하다 — r2 §5-⑦ 발화 조건의 근거."
+updated: 2026-08-11
