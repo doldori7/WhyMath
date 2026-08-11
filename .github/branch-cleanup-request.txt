@@ -2,37 +2,37 @@
 # 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/*, tmp-*, worktree-agent-* 뿐.
 # 목록이 비어 있으면 no-op(다음 배치 준비 상태).
 #
-# 직전 배치: 2026-08-10 · 17건 전건 삭제 성공(런 #31346141938 · 잔존 0/17 ls-remote 검증).
-# 삭제 전 head SHA 스냅샷은 MEMORY 결정 로그(0f9894a4) 참조.
+# 직전 배치: 2026-08-11 2차 · 6건 전건 삭제 성공(560vwh·path-05·mob-10·s3-17·s3-24·misc-02 —
+#   ls-remote 잔존 0/6 실측). 1차 6건도 동일하게 잔존 0. 두 배치의 SHA 스냅샷·판정 근거는
+#   이 파일의 git 이력과 docs/reviews/unmerged_branch_audit_full_2026-08-11.md 참조.
 #
-# ── 2026-08-11 배치 (6건) ──────────────────────────────────────────────
-# 근거: docs/reviews/unmerged_branch_verdict_2026-08-11.md (브랜치별 판정표·실측 근거).
+# ── 2026-08-11 3차 배치 (1건) ──────────────────────────────────────────
 # 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
-#   enfkqt=469ee9ad · h87afk=b849bb04 · harn-14=215b45ff
-#   backlog-drive-next=de446ec3 · 973iv1=8810bc8b · worktree-agent=6059043d
+#   admin-01-operator-seat-grant-audit = 53a06c4f
 #
-# ⚠ 회수 태스크가 등재된 브랜치는 이 배치에서 **의도적으로 제외**한다 —
-#   admin-01(ADMIN-08) · uqyg79(PED-22~25) · q8tvcx(OPS-38) · 40xspg(SOL-01) · admin-02.
-#   "하네스가 포팅됨으로 분류했다"가 "브랜치 안의 모든 내용이 회수됐다"를 뜻하지 않는다
-#   (openrouter-setup-guide-e98dw4 선례 — 분류는 포팅됨이었으나 S3-28 코퍼스 분기 미회수).
+# ⚠ 회수 태스크가 등재된 브랜치는 계속 **의도적으로 제외**한다(2차 배치 목록 승계) —
+#   k20m0w(SEC-24·MOB-18) · gdmwhk(PED-26) · 34zvse(CUR-08) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · fleet 5건(OPS-41) · 28d0yx(PR #759 교체 권고) ·
+#   trjg5x(PB-06) · 40xspg(SOL-01 회수 진행 중) · uqyg79(PED-22~25·PED-26 대조 대상).
 
-# 교수전략 계열 — uqyg79의 진부분집합(공통 조상 커밋 대조 실측: 고유 커밋 0건).
-# uqyg79는 PED-22~25로 회수 등재돼 보존되므로 이 브랜치는 잃는 내용이 없다.
-claude/whymath-teaching-strategy-enfkqt
-
-# REC-02 중복 구현의 패자. main의 REC-02는 done이며 다른 브랜치
-# (human-bottleneck-tasks-6dszy0 · 커밋 d554ddad)에서 회수돼 이미 착지했다.
-claude/whymath-probe-supply-h87afk
-
-# PR #714로 포팅 완료(main 커밋 b4b0153d "HARN-14: 설계 문서 중복 착수 탐지 스캐너").
-# main의 HARN-14는 done. 고립된 done 0건.
-claude/harn-14-doc-series-duplicate-detection
-
-# trunk 대비 ahead=0 — 전량 흡수됐다. 남길 내용이 없다.
-claude/backlog-drive-next
-claude/whymath-account-security-973iv1
-
-# PR #728로 포팅 완료(main 커밋 4adc6870). main의 PATH-05는 done이고 artifacts가
-# 이 브랜치의 커밋 f9644016을 직접 인용한다. 허용 패턴이 없어 그동안 삭제 경로가
-# 아예 없던 건 — 이번에 worktree-agent-*를 패턴에 추가했다.
-worktree-agent-a6e26595b30efb856
+# ADMIN-01 회수 완료 — 1차 배치의 제외 사유가 소멸했다.
+#
+# 1차 배치가 이 브랜치를 뺀 이유는 회수 태스크 `ADMIN-08`이 열려 있어서였다. 그 태스크는
+# 그 뒤 `cancelled`(중복 좌석 흡수 — 회수 대상 커밋이 8924a2e2 하나뿐이라 좌석도 하나여야
+# 한다)가 됐고, 실제 회수는 `ADMIN-01` 경로가 수행해 **PR #786(main d1d8f28a)**으로 착지했다.
+# 뒤이어 **PR #789(main ceaf527c)**가 그 회수가 놓친 감사 택소노미 표기 정합 7곳을 상환했다.
+#
+# 파일 단위 전수 대조(브랜치 고유 커밋 8924a2e2·53a06c4f가 건드린 7파일):
+#   동일     ops/role_grant_cli.py · privacy/audit.py
+#            tests/backend/ops/test_role_grant_cli{,_integration}.py
+#   main우세 schema/enums.py — 브랜치 고유 줄은 **폐기된 "감사 3종" docstring 3줄**뿐이고
+#            main은 #786·#789가 이를 4종으로 갱신한 상태다(role_change 멤버는 main에 존재).
+#   main우세 backlog/tasks/ADMIN-01-*.yaml — main이 artifacts 2건(#786·e6c7d9a1)을 더 들고
+#            있고 status는 양쪽 done.
+#   main우세 backlog/events.ndjson — 브랜치 고유 2줄은 그 세션의 start/done이며, main이
+#            `start_ignored_unmerged_done`으로 그 미머지 done을 **명시적으로 인지한 뒤**
+#            자신의 start/done(artifacts 8924a2e2 + e6c7d9a1)을 기록해 승계했다.
+#
+# 즉 브랜치에만 있고 main에 없는 내용은 **0건**이다(폐기된 옛 문구 제외).
+# 열린 PR #713은 이 브랜치가 head라 삭제 시 자동으로 닫힌다 — 그 PR의 내용은 #786이 회수했다.
+claude/admin-01-operator-seat-grant-audit

@@ -1,0 +1,156 @@
+"""SolutionPath ORM(`solution_paths`) + problem_step additive 컬럼 — DB 연결 없이 검증 (S4-09).
+
+`test_problem_orm.py` 컨벤션 미러: 살아있는 PostgreSQL을 요구하지 않는다(메타데이터 등록·
+PG DDL 컴파일·컬럼 계약만). 실제 PG 적용(마이그레이션·FK 강제·CRUD)은 실 PG 통합검증 몫.
+
+검증 핵심:
+  - 메타데이터 등록: `solution_paths` 테이블·인덱스가 Base.metadata에 존재.
+  - PG DDL 컴파일: TEXT PK·problem FK·JSONB·server_default가 DDL 문자열에 나타남.
+  - problem_step additive 6컬럼: 전부 nullable(비파괴)·FK·JSONB `none_as_null=True`
+    (SEC-06 — 전수 스캔은 `test_jsonb_none_as_null_governance.py`가 자동 검출·여기서는
+    신규 컬럼을 이름으로 못박아 회귀를 지역화).
+  - `embedding` 컬럼 부재(acceptance — S4-12에서 판정).
+  - alembic 마이그레이션 파일 존재·단일 head 체인(파일 시스템 검사 — DB 불요).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import CreateTable
+
+from whymath_backend.db.base import Base
+from whymath_backend.db.models.problem import ProblemStep
+from whymath_backend.db.models.solution_path import SolutionPath
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_VERSIONS_DIR = _REPO_ROOT / "src" / "backend" / "alembic" / "versions"
+
+# S4-09가 problem_step에 더한 additive 컬럼 6종(전부 nullable — 비파괴 계약).
+_ADDITIVE_COLUMNS = (
+    "solution_path_id",
+    "concept_node_id",
+    "reasoning_type",
+    "justification",
+    "common_errors",
+    "sympy_verified",
+)
+
+
+class TestSolutionPathTable:
+    def test_registered_in_metadata(self) -> None:
+        """`solution_paths`가 Base.metadata에 등록(모델 패키지 import 경유)."""
+        assert "solution_paths" in Base.metadata.tables
+
+    def test_pg_ddl_compiles_with_expected_shapes(self) -> None:
+        """PG DDL 컴파일 — TEXT PK·problem FK·JSONB·기본값이 연결 없이 생성된다."""
+        ddl = str(CreateTable(SolutionPath.__table__).compile(dialect=postgresql.dialect()))
+        assert "solution_paths" in ddl
+        assert "PRIMARY KEY (solution_path_id)" in ddl
+        assert "REFERENCES problem (problem_id)" in ddl  # 참조 실재의 DB 강제(적재 시점 책임)
+        assert "JSONB" in ddl  # concept_sequence
+        assert "'[]'::jsonb" in ddl  # 빈 골격 기본값(매칭 확정분만 — 날조 금지)
+        assert "false" in ddl  # verified_by_human 기본 미검수(AI 자기승인 금지)
+
+    def test_problem_index_exists(self) -> None:
+        """문제 단위 조회 인덱스(`idx_solution_paths_problem`)가 선언돼 있다."""
+        index_names = {index.name for index in SolutionPath.__table__.indexes}
+        assert "idx_solution_paths_problem" in index_names
+
+    def test_no_embedding_column(self) -> None:
+        """`embedding` 컬럼 부재 — S4-12에서 판정(acceptance 명시)."""
+        assert "embedding" not in SolutionPath.__table__.columns
+
+    def test_concept_sequence_jsonb_none_as_null(self) -> None:
+        """concept_sequence JSONB가 `none_as_null=True`(SEC-06 방침)."""
+        column = SolutionPath.__table__.columns["concept_sequence"]
+        assert isinstance(column.type, JSONB)
+        assert column.type.none_as_null is True
+
+
+class TestProblemStepAdditiveColumns:
+    def test_all_additive_columns_exist_and_nullable(self) -> None:
+        """additive 6컬럼 전부 존재·nullable — 기존 행·응답 비파괴 계약."""
+        columns = ProblemStep.__table__.columns
+        for name in _ADDITIVE_COLUMNS:
+            assert name in columns, f"problem_step.{name} 부재"
+            assert columns[name].nullable is True, f"problem_step.{name}은 nullable이어야 한다"
+
+    def test_solution_path_fk_targets_new_table(self) -> None:
+        """solution_path_id FK가 `solution_paths.solution_path_id`를 가리킨다."""
+        fks = {
+            fk.target_fullname
+            for fk in ProblemStep.__table__.columns["solution_path_id"].foreign_keys
+        }
+        assert fks == {"solution_paths.solution_path_id"}
+
+    def test_new_jsonb_columns_declare_none_as_null(self) -> None:
+        """신규 JSONB 2컬럼(justification·common_errors)이 `none_as_null=True`(SEC-06).
+
+        전수 스캔은 거버넌스 테스트가 자동 검출하지만, S4-09 신규분을 이름으로 못박아
+        회귀 원인을 지역화한다.
+        """
+        for name in ("justification", "common_errors"):
+            column = ProblemStep.__table__.columns[name]
+            assert isinstance(column.type, JSONB)
+            assert column.type.none_as_null is True, f"problem_step.{name}: none_as_null 필요"
+
+    def test_existing_columns_untouched(self) -> None:
+        """기존 컬럼 8종이 그대로 남아 있다(additive만 — 제거·개명 0)."""
+        columns = set(ProblemStep.__table__.columns.keys())
+        assert {
+            "step_id",
+            "problem_id",
+            "step_order",
+            "step_type",
+            "step_title",
+            "socratic_prompt",
+            "expected_answer",
+            "common_mistakes",
+        } <= columns
+
+    def test_unique_constraint_unchanged(self) -> None:
+        """`UNIQUE(problem_id, step_order)` 불변 — 다중 경로 단계 영속은 S4-10 재론 경계."""
+        unique_sets = [
+            tuple(constraint.columns.keys())
+            for constraint in ProblemStep.__table__.constraints
+            if constraint.__class__.__name__ == "UniqueConstraint"
+        ]
+        assert ("problem_id", "step_order") in unique_sets
+
+
+class TestMigrationFileChain:
+    def test_migration_file_exists_with_symmetric_updown(self) -> None:
+        """S4-09 마이그레이션 파일이 존재하고 up/down이 대칭 대상(테이블·6컬럼)을 다룬다."""
+        matches = list(_VERSIONS_DIR.glob("*solution_path_materialization.py"))
+        assert len(matches) == 1, "S4-09 마이그레이션 파일이 정확히 1개여야 한다"
+        source = matches[0].read_text(encoding="utf-8")
+        assert 'op.create_table(\n        "solution_paths"' in source
+        assert 'op.drop_table("solution_paths")' in source
+        for name in _ADDITIVE_COLUMNS:
+            assert f'sa.Column("{name}"' in source, f"upgrade에 {name} 추가 누락"
+            assert (
+                f'op.drop_column("problem_step", "{name}")' in source
+            ), f"downgrade에 {name} 제거 누락(대칭 위반)"
+
+    def test_single_head_chain(self) -> None:
+        """versions 전체가 단일 head — down_revision으로 참조되지 않는 revision이 1개뿐."""
+        revisions: set[str] = set()
+        downs: set[str] = set()
+        for path in _VERSIONS_DIR.glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            # 타입 주석 유무 두 형식 모두 실재(무주석 선례: dialogue_image_envelope) — 둘 다 수용.
+            rev = re.search(r'^revision(?:: str)? = "([0-9a-f]+)"', source, re.MULTILINE)
+            down = re.search(
+                r'^down_revision(?:: str \| None)? = "([0-9a-f]+)"', source, re.MULTILINE
+            )
+            if rev:
+                revisions.add(rev.group(1))
+            if down:
+                downs.add(down.group(1))
+        heads = revisions - downs
+        assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
+        assert heads == {"c6d7e8f1a2b4"}  # S4-09 리비전이 현 head

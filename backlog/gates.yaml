@@ -55,7 +55,7 @@ gates:
     evidence: "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk"
     notes: ""
   - id: G-operator-seat-first-grant
-    title: "운영자 좌석 1호 발급 (whymath-pg) — 1단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 2단계는 스키마 실태 조사"
+    title: "운영자 좌석 1호 발급 (whymath-pg) — 1·2단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 3단계는 리비전 확정"
     kind: human
     assignee: kiki
     status: pending
@@ -63,38 +63,57 @@ gates:
     remind_after_days: 7
     evidence: null
     notes: |
+      [목적] 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가 전건 403이다.
+        봉인(SEC-07)은 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다. 이 게이트를 통과해야
+        "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
+
+      [중요 — 왜 바로 grant를 하지 않는가] 2026-08-11 1차 실행이 실패했다:
+        `column user_profile.role does not exist`. whymath-pg의 스키마가 코드와 맞지 않는다.
+        PR #800이 정비한 실행 블록(venv $Py 고정·user_id 조회)은 그 자체로 옳지만,
+        **스키마가 이 상태인 한 grant에서 반드시 같은 오류로 실패한다.** 그래서 스키마를 먼저 세운다.
+
       [1단계 결과 — 2026-08-11 Kiki 실측, 완료]
         · 컨테이너 생존 = true
-        · alembic_version = d6e7f8a9b0c1
+        · alembic_version = d6e7f8a9b0c1  ← **현재 코드의 마이그레이션 체인에 없는 값**
         · misconception_catalog에서 length(mis_id) > 16 인 행 = 0건
-      [측정이 뒤집은 것] 사전 예상은 "f3a4b5c6d7e8(29개 밀림·파괴적 6건)"이었으나 실제 값은
-        d6e7f8a9b0c1이고, 이 값은 **현재 코드의 마이그레이션 체인에 존재하지 않는다**
-        (versions/ 전수 grep 0건). 따라서 상황은 단순 '뒤처짐'이 아니다.
-      [실측된 결과] 이 상태에서는 alembic이 아예 동작하지 않는다 — 컨테이너에서 동일 상태를
-        재현해 확인: `alembic current`·`alembic upgrade head` 둘 다 exit 255,
-        "Can't locate revision identified by 'd6e7f8a9b0c1'". 즉 upgrade로는 진행 불가.
-      [하지 말 것] `alembic stamp`로 임의의 리비전을 찍지 말 것. 스키마 실태와 다른 값을
-        찍으면 이후 마이그레이션이 이미 있는 객체를 만들려다 깨지거나, 없는 객체를 있다고
-        믿고 건너뛴다. stamp는 실태 조사 뒤 마지막에 하는 조치다.
-      [3)의 의미] 0건이므로, 장차 a5b6c7d8e9f0(mis_id 길이 확대)을 적용할 때 요구되는
-        DELETE 선행은 불필요하다 — 그 전제는 이미 충족돼 있다.
+      [2단계 결과 — 2026-08-11 Kiki 실측, 완료]
+        · public 테이블 68개
+        · privacy_audit=없음 · defect_report=없음 · concept_visual_style=있음
+        · user_profile 41컬럼 — **role 없음**(c5d6e7f0a2b3 미적용 확정)
+      [해석] 실제 스키마는 a9b8c7d6e5f4(concept_visual_style 있음)와 c5d6e7f0a2b3(role 없음)
+        사이다. 즉 밀린 것은 4~5개뿐이고 **전부 additive**다 — 기록된 버전 문자열만 실태와 무관한
+        값이다. 1단계의 mis_id 0건으로 a5b6c7d8e9f0의 DELETE 선행 전제도 이미 충족.
+      [실측된 제약] 이 상태에서 alembic은 아예 동작하지 않는다 — 컨테이너에서 동일 상태를 재현해
+        확인: `alembic current`·`alembic upgrade head` 둘 다 exit 255,
+        "Can't locate revision identified by 'd6e7f8a9b0c1'". 그래서 upgrade 전에 stamp가 필요하다.
 
-      [2단계 — 스키마 실태 조사. 읽기 전용, 데이터 변경 0]
+      [3단계 — 리비전 확정. 읽기 전용, 데이터 변경 0]
       # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)
       cd C:\Users\kiki\Desktop\__AI\WhyMath
 
-      # 어떤 테이블이 실재하는지 (개수와 목록)
-      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT count(*) AS tables FROM information_schema.tables WHERE table_schema='public';"
-      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name;"
+      # A) constraints/mnemonic이 나오면(2행) b4c5d6e7f0a2까지 적용, 안 나오면(0행) a9b8c7d6e5f4
+      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT column_name FROM information_schema.columns WHERE table_name='formula_node' AND column_name IN ('constraints','mnemonic');"
 
-      # 리비전 판별에 결정적인 컬럼·테이블 존재 여부 (있으면 t, 없으면 f)
-      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT to_regclass('public.privacy_audit') IS NOT NULL AS privacy_audit, to_regclass('public.defect_report') IS NOT NULL AS defect_report, to_regclass('public.concept_visual_style') IS NOT NULL AS concept_visual_style;"
-      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT column_name FROM information_schema.columns WHERE table_name='user_profile' ORDER BY column_name;"
+      # B) 뒤쪽 리비전 혼입 확인 — 0행이어야 정상(뭔가 나오면 스키마가 뒤섞인 것이라 stamp 위험)
+      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT table_name, column_name FROM information_schema.columns WHERE (table_name='refresh_token_session' AND column_name='platform') OR (table_name='problem' AND column_name='identity_id');"
 
-      [보고] 위 4개 출력을 그대로 알려주시면, 실태에 맞는 리비전을 특정하고
-        (백업 → stamp → upgrade) 순서를 설계해 드립니다.
-      [주의] 실행기 단독 호출 금지 — python이 필요한 단계는 python -m 형태로 드립니다.
-      [clear 증적] 최종 clear는 좌석 발급 후 role_grant_cli list 출력으로 합니다.
+      [보고] A)와 B)의 출력을 알려주시면 4단계(백업 → stamp → upgrade → 좌석 부여)를 설계해 드린다.
+      [금지] `alembic stamp`를 임의의 값으로 먼저 실행하지 말 것. 실태와 다른 값을 찍으면 이후
+        마이그레이션이 이미 있는 객체를 만들려다 깨지거나, 없는 객체를 있다고 믿고 건너뛴다.
+        stamp는 A)·B)로 리비전이 확정된 뒤에만, 백업을 뜬 다음에 한다.
+
+      [4단계 예고 — 실행하지 말 것. 3단계 확정 후 값이 채워진 블록을 다시 드린다]
+        · 백업: scripts\backup\backup_whymath_pg.ps1 (기본 대상이 이미 whymath-pg)
+        · stamp(확정된 리비전) → upgrade head → 좌석 부여
+        · 좌석 부여 블록은 PR #800이 정비한 형태를 승계한다 — venv 고정($Py) + user_profile
+          조회로 user_id를 고른 뒤 grant/list, 판정은 $LASTEXITCODE로.
+        · 승계 시 함께 정정할 #800 잔여 결함 2건:
+          ① `git pull origin main` → diverged 시 add/add 충돌을 낸다(2026-08-11 실측).
+             `git fetch origin main` + `git checkout -B main origin/main` 형태로 교체.
+          ② [회수 방법]의 꺾쇠 `<user_id>` → PowerShell이 `<`를 예약어로 거부한다. 꺾쇠 없는
+             자리표시자로 교체(같은 사유로 grant 쪽은 이미 정정돼 있다).
+      [clear 증적] 최종 clear는 좌석 부여 후 role_grant_cli list 출력(user_id 포함 JSON)
+        + GRANT_EXIT=0 으로 한다.
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
     kind: human
