@@ -32,11 +32,13 @@ _GOLDEN_CORPUS_TYPE_TOTALS: dict[str, dict[str, int]] = {
         ptm.PTYPE_DETERMINE_COEFFICIENT: 1,
         ptm.PTYPE_COUNT_SOLUTIONS: 1,
     },
-    # QUAD-EQ(185)+CALC-TANGENT(40)+EXP-EQ(25)+LOG-EQ(20)+TRIG-EQ(12)=282(solve) ·
+    # QUAD-EQ(184)+CALC-TANGENT(40)+EXP-EQ(25)+LOG-EQ(20)+TRIG-EQ(12)=281(solve) ·
     # CALC-EXTREMUM(40)+VALUE(40)+MC(30)+IRR(30)=140(optimize) ·
     # ARITH-SEQ(60)+GEO-SEQ(30)+ARITH-SUM(45)+GEO-SUM(20)+TRIG-VAL(13)=168(evaluate) · IND-SEQ=30.
+    # (QUAD-EQ 185→184: 2026-08-11 QUAL-02가 `wm-skel-92cd1ba2bbf5`를 실중복 은퇴 —
+    #  docs/data/problem_duplicate_disposition_2026-08.md)
     ptm.CORPUS_GENERATED_V0: {
-        ptm.PTYPE_SOLVE_FOR_UNKNOWN: 282,
+        ptm.PTYPE_SOLVE_FOR_UNKNOWN: 281,
         ptm.PTYPE_OPTIMIZE_EXTREMUM: 140,
         ptm.PTYPE_EVALUATE_EXPRESSION: 168,
         ptm.PTYPE_GENERALIZE_PATTERN: 30,
@@ -61,8 +63,8 @@ _GOLDEN_CORPUS_TYPE_TOTALS: dict[str, dict[str, int]] = {
     },
 }
 
-_GOLDEN_TOTAL_TAGGED = 2218  # 2,647 - 429(rephrased_v0 명시 제외)
-_GOLDEN_EXCLUDED_TOTAL = 429
+_GOLDEN_TOTAL_TAGGED = 2217  # 2,638 - 421(rephrased_v0 명시 제외 — QUAL-02 은퇴 9건 반영)
+_GOLDEN_EXCLUDED_TOTAL = 421
 
 
 def _load_corpus_lines(name: str) -> list[dict[str, object]]:
@@ -143,7 +145,7 @@ class TestMutationDetection:
         # 오염 전 — 정상 매핑은 골든과 일치해야 한다(대조군).
         assert dict(_distribution_for(ptm.CORPUS_GENERATED_V0)) == golden
 
-        # 오염 — QUAD-EQ(185건) 매핑을 일부러 틀린 유형으로 바꾼다.
+        # 오염 — QUAD-EQ(184건 — QUAL-02 은퇴 1건 반영) 매핑을 일부러 틀린 유형으로 바꾼다.
         corrupted = dict(ptm._GENERATED_V0_UNIT_TO_TYPE)
         corrupted[("QUAD-EQ",)] = ptm.PTYPE_SKETCH_GRAPH  # 명백히 틀린 유형(방정식 풀이가 아님).
         monkeypatch.setattr(ptm, "_GENERATED_V0_UNIT_TO_TYPE", corrupted)
@@ -153,10 +155,10 @@ class TestMutationDetection:
         # 잡아낸다). 이 단언 자체가 통과하지 못하면(=오염 전후가 같으면) 골든 체크가 무의미하다는
         # 뜻이라 이 테스트가 실패해야 정상이다.
         assert mutated_distribution != golden
-        assert mutated_distribution[ptm.PTYPE_SKETCH_GRAPH] == 185
+        assert mutated_distribution[ptm.PTYPE_SKETCH_GRAPH] == 184
         assert (
             mutated_distribution[ptm.PTYPE_SOLVE_FOR_UNKNOWN]
-            == golden[ptm.PTYPE_SOLVE_FOR_UNKNOWN] - 185
+            == golden[ptm.PTYPE_SOLVE_FOR_UNKNOWN] - 184
         )
 
         # 원복(monkeypatch.undo는 fixture teardown에서도 자동 실행되지만, 같은 테스트 안에서
