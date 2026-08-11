@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: COLLAB-06-learning-metrics-freshness-signal
+title: "학습지표 롤업의 작동 신호 — 미집계와 무활동이 days_counted==0으로 같은 값이고 롤업을 부르는 주체가 0건"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: learning_metrics_rollup CLI를 호출하는 주체가 scripts/·.github/·docker-compose*.yml·infra/·celery beat_schedule 전건 0임을 재확인·기록한다. 그리고 롤업 미실행 상태와 '활동이 실제로 없었던' 상태가 GET /v1/me/learning-metrics 응답에서 구분되지 않음(둘 다 days_counted==0)을 재현하는 테스트를 먼저 세운다"
+  - "② 정합 설계 본체(신규 스케줄러 0·신규 테이블 0·마이그레이션 0): COLLAB-03 acceptance ②의 '새 스케줄러 도입 금지'를 승계한다 — 만들 것은 스케줄러가 아니라 작동 신호다. 응답에 마지막 집계 시각과 요청 구간 중 롤업이 실제 처리한 커버리지 일수를 싣는다. 원천은 이미 적재된 행이며 신규 저장소 0"
+  - "③ 변별력: 롤업 미실행 상태와 실행 후 상태에서 응답이 갈리는지 assert한다 — 현행에서는 두 상태가 days_counted==0으로 동일하다. 갈리지 않으면 실패다"
+  - "④ 날조 방지: 없는 데이터를 0으로 채워 '활동 없음'처럼 위장하지 않는다(현행 docstring이 이미 지키는 규율 — SUM 표본 0이면 null 유지). 추론 지표(churn_risk 등)는 모델이 없으므로 생산하지 않는다. 롤업이 안 돈 구간을 '집계됨 0'으로 표기하는 것도 날조다"
+  - "⑤ 선언 정합: api/me.py 엔드포인트 docstring의 '하루 1회 CLI 롤업'과 COLLAB-03 artifacts의 '집계 주기 1일 1회 확정' 문구를 실태에 맞춘다 — 강제 코드가 없으므로 '주기가 확정됐다'가 아니라 '수동 실행이며 신선도는 응답이 말한다'로 정정한다(작동 신호 없는 알고리즘 부착 금지·CLAUDE.md 2026-08-03)"
+  - "⑥ 범위 밖: cron·celery beat 신설(정기 실행 주체를 둘지 여부는 신호가 관측된 뒤 별도 판단 — 관측 없이 붙이는 것이 같은 실수의 반복)·교사/부모 노출(COLLAB-03 acceptance ⑦ 승계)·Flutter 소비 배선(학생 클라 도달 0은 모바일 축 별건)·신규 집계 지표 추가는 이 태스크 범위 밖"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - "src/backend/whymath_backend/l2/**"
+  - "tests/backend/api/**"
+session: null
+notes: "docs/architecture/collaboration_module_gap_review_r3.md §3 D6. v1 D3이 지목한 병('배관만 있고 데이터가 없다')은 해소된 것이 아니라 한 단계 뒤로 이동했다 — 이전에는 표를 채울 코드가 없었고 지금은 코드를 부를 주체가 없다. 세부 71-4 판정을 ✅이 아니라 △ 부분으로 정밀화한 근거. 공정 기재: 0으로 채워 위장하지 않는 부분은 이미 정직하게 돼 있고 빠진 것은 '비어 있음의 원인'이다."
+updated: 2026-08-11

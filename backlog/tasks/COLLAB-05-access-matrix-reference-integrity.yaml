@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: COLLAB-05-access-matrix-reference-integrity
+title: "권한 매트릭스 계약의 참조 무결성 + #8 실태 정합 — produced_by가 ASM-07이 삭제한 필드를 가리키는데 게이트가 green"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정(정본화 축): data/access_matrix.json의 produced_by 좌표를 전수 해석해 파일·심볼 실재 여부를 기록한다. #8 peer_comparison이 지목한 assessment.py::AssessmentSchema는 클래스가 아니라 api/me.py:175의 별칭이고, GET /v1/me/assessments의 response_model인 StudentAssessment에는 estimated_percentile이 없음(ASM-07 봉인)을 재현하는 테스트를 먼저 세운다"
+  - "② 정본화: #8 칸을 실태에 맞춰 좁힌다 — student·teacher를 summary→none으로 하고 design_note에 ASM-02(c) 학생 영구 비노출·ASM-07 3층 봉인을 근거로 기재한다. 넓히는 방향이 아니라 좁히는 방향이므로 landing_design §5 deny by default와 정합. produced_by는 v2가 14·15번에 도입한 '권한 ✕가 아니라 미산출' 분류로 교체해 봉인 사실을 표현한다"
+  - "③ 집행 지점(②와 별항): 거버넌스 테스트에 참조 무결성 축을 신설한다 — test_access_matrix.py:169-181의 _produced_by_violations는 '비어있지 않은 문자열인가'만 보고 심볼 실재를 해석하지 않는다. path::symbol 좌표를 실제로 해석해 파일·심볼 부재를 red로 낸다. 좌표 표기를 한 형식으로 통일한다(현재 저장소상대 src/backend/...와 짧은 api/me.py 두 형식 혼재)"
+  - "④ 변별력: produced_by에 존재하지 않는 심볼을 넣어 red 실측 → 되돌려 green. 그리고 계약 #8을 none→full로 훼손했을 때 red를 내는 기존 변별력(COLLAB-01 acceptance ④)이 여전히 작동하는지 재확인한다. 갈리지 않으면 실패다"
+  - "⑤ 계약 안정·날조 방지: ASM-07 봉인 테스트(tests/backend/api/test_prediction_field_sealing.py)와 이중 진실원이 되지 않게 한다 — 이 태스크는 계약이 봉인 사실을 정확히 기술하게 할 뿐 봉인을 재구현하지 않는다. STUDENT_HIDDEN_PREDICTION_FIELDS를 유일 원천으로 참조한다"
+  - "⑥ 범위 밖: 역할별 응답 필터링 미들웨어 신설(planned 역할 좌석 — Phase 3+)·PARENT/TEACHER 역할 개설·Assessment(내부 정본)에서 필드 폐기(ASM-02가 (d) 미채택)·pipa_data_matrix.md §2.2 표의 ●/◐/✕ 기호 변경(§2.4 변호사 검토 절차 소관)은 이 태스크 범위 밖"
+artifacts: []
+paths:
+  - data/access_matrix.json
+  - "tests/backend/schema/**"
+session: null
+notes: "docs/architecture/collaboration_module_gap_review_r3.md §3 D7. 계약은 2026-08-05 작성이고 ASM-07 봉인은 2026-08-08이다 — 나중 결정이 계약을 무효화했는데 아무도 red로 받지 못했다. 코드가 계약보다 엄격하므로(계약 summary vs 실태 none) 학생 안전 축은 문제 없으나, 계약이 정본인데 실태보다 느슨한 상태이며 Phase 3에 teacher가 열릴 때 '요약은 허용'으로 읽히면 ASM-02(c)와 충돌한다. MATH-02(유령 근거 위에서 green인 CI 게이트 정직화)와 같은 계열. v1 §4 트리거 5(역할 개방)의 선행 조건 — 계약이 실태와 어긋난 채로 역할을 열면 안 된다."
+updated: 2026-08-11
