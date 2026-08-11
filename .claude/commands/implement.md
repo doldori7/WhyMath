@@ -59,8 +59,9 @@ b. 표준 읽기 (docs/standards/*.md)
 c. 코드 작성 (TDD 권장)
 d. 테스트 작성·실행
 e. 문서 업데이트
-f. PR 준비
 ```
+(PR은 서브에이전트 내부 절차가 아니라 아래 **5.5 단계**에서 오케스트레이터가 연다 —
+"f. PR 준비"라는 한 줄에 맡겨 뒀더니 실제로 열리지 않았다.)
 
 ### 5. 검증
 구현 완료 후 자동 점검:
@@ -71,11 +72,22 @@ f. PR 준비
 - [ ] CLAUDE.md 금기 위반 없음
 - [ ] MEMORY.md 결정 기록 필요한가?
 
-### 6. 백로그 완료 처리 (필수 — 커밋/PR 증적 동반)
+### 5.5 PR 생성 (필수 — 요청을 기다리지 않는다)
+커밋한 산출물이 있으면 **PR을 연다**. "PR 지시를 못 받았다"는 보류 사유가 아니다
+(CLAUDE.md "✅ 절대 원칙 → 완료·병합"). **머지는 하지 않는다** — CI green 후 SQUASH 머지는
+`"pr"` 지시 또는 Kiki 판단이다.
+
+예외 4종이면 건너뛰되 **어느 예외인지 보고에 1줄로 적는다**:
+조사·계획 전용(산출물 없음) / 미완·게이트 대기 / CI red / Kiki 명시 보류.
+
+### 6. 백로그 완료 처리 (필수 — PR 증적 동반)
 ```bash
-python3 scripts/harness/backlog.py done <태스크 id> --artifact "<커밋 해시 또는 PR>"
+python3 scripts/harness/backlog.py done <태스크 id> --artifact "<PR 번호를 담은 증적>"
+# 예외로 PR 없이 종결할 때만:
+#   ... --artifact "<커밋>" --no-pr {investigation|incomplete|ci-red|kiki-hold}
 ```
-증적 없는 done은 CLI가 거부한다. 해금된 후속 태스크를 확인해 보고에 포함.
+증적 없는 done, 그리고 PR 참조(`#12`·`.../pull/12`) 없는 done은 CLI가 거부한다(exit 1).
+해금된 후속 태스크를 확인해 보고에 포함.
 (이 단계를 건너뛰면 Stop 훅이 세션 종료를 차단한다.)
 
 ### 7. 결과 보고
