@@ -445,10 +445,21 @@ v1 D4의 목표 스케치(3엔티티 — 조직이 학교를 흡수)·인가 설
 
 헌법 개정은 별도 판단이므로 제안만 한다(`learning_path_module_gap_review_r2.md` §9 선례).
 
-**부수 관측(중복 등재 없음)**: `HARN-22`(인플라이트 · `claude/whymath-account-security-dw9lww`)가
-지적한 `remote_claims.py:1274` `_DOC_SERIES_SUFFIX='_review.md'` 사각에 **이 문서 자신이
-해당**한다 — `..._r2.md`는 중복 탐지 브리핑에 뜨지 않는다. 즉 **이 시리즈의 모든 r2/r3 문서가
-구조적으로 비가시**다. `HARN-22`가 이미 그 좌석이므로 **근거 사례로만 부기**하고 등재하지 않는다.
+**부수 관측 ⓐ(중복 등재 없음)**: 미머지 브랜치 `claude/whymath-account-security-dw9lww`가 지적한
+`remote_claims.py:1274` `_DOC_SERIES_SUFFIX='_review.md'` 사각에 **이 문서 자신이 해당**한다 —
+`..._r2.md`는 중복 탐지 브리핑에 뜨지 않는다. 즉 **이 시리즈의 모든 r2/r3 문서가 구조적으로
+비가시**다. 그 브랜치가 이미 좌석을 들고 있으므로 **근거 사례로만 부기**하고 등재하지 않는다.
+
+> ⚠️ **좌석은 번호가 아니라 브랜치로 지목한다** — 그 브랜치가 이 태스크에 붙인 번호(`HARN-22`)는
+> main의 **`HARN-22-id-number-suggestion-race`와 이중 배정 상태**다(슬러그가 달라 `validate`는
+> 통과한다). 따라서 이 문서는 접미어 사각 좌석을 **번호로 인용하지 않는다** — 번호로 쓰면
+> 머지 후 틀린 참조가 된다.
+
+**부수 관측 ⓑ — 이 문서를 쓰는 동안 그 사고가 재발했다**: main의 `HARN-22-id-number-suggestion-race`
+("번호 가드의 예약 부재 — 두 세션에 같은 빈 번호를 동시 제안")가 예측한 경합이 **이 문서의
+등재 과정에서 실제로 발생**했다 — 병렬 세션이 `ADMIN-08`을 같은 ID·같은 슬러그·같은 목적으로
+동시 등재했다(§9 말미). **회차를 새로 만들지 않는다** — 이미 그 태스크가 좌석이고, 이 건은
+그 태스크의 실사례 증거로 기록한다.
 
 ---
 
@@ -471,7 +482,7 @@ v1 D4의 목표 스케치(3엔티티 — 조직이 학교를 흡수)·인가 설
 
 | 태스크 | 설계 | stage | prio | layer | 근거 |
 |---|---|---|---|---|---|
-| `ADMIN-08-operator-seat-grant-recovery` | D5 | S4 | **1** | backend | 고립 815줄 이식 — 회수는 3번째 권고가 아니라 **좌석**이어야 한다 |
+| `ADMIN-08-operator-seat-grant-recovery` | D5 | S4 | **1** | backend | 고립 815줄 이식 — 회수는 3번째 권고가 아니라 **좌석**이어야 한다. ⚠️ **병렬 세션과 ID 충돌**(아래 ⓒ) |
 | `ADMIN-09-profile-collection-inventory-contract` | D7 | S4 | 2 | backend | 수집 항목 대장 + ORM↔대장 동기 게이트 |
 | `HARN-24-task-acceptance-amend-cli` | D8 | S4 | 2 | infra | 정정 도달 경로 — 11회차 재발방지의 코드 축 |
 
@@ -479,6 +490,29 @@ v1 D4의 목표 스케치(3엔티티 — 조직이 학교를 흡수)·인가 설
 `claude/whymath-webpage-plan-8pma1f`의 인플라이트 `ADMIN-04-module-registry`가 선점하고 있었다.
 CLI 제안대로 `ADMIN-08`을 수용했다. **로컬 백로그만 봤다면 비어 보였을 번호**이므로 눈으로
 골랐다면 중복이 났다(HARN-15가 막아낸 실사례 — v1 시리즈에서 반복 확인되는 패턴).
+
+**ⓒ 그런데 그 제안 번호에서 충돌이 났다 — `ADMIN-08` 이중 등재(미해소·병합 순서에 위임)**
+
+| | 이 문서(브랜치 `claude/whymath-operations-platform-i5iu61`) | 병렬 세션(브랜치 `claude/unresolved-long-term-branches-ph1ad7`·`9d002a1a`) |
+|---|---|---|
+| 파일 | `backlog/tasks/ADMIN-08-operator-seat-grant-recovery.yaml` | **완전 동일 경로** |
+| 목적 | `ADMIN-01` 고립분(`8924a2e2`) 회수 | **동일** |
+| `ADMIN-02` 처분 | `blocked` + 3분할 정정 | **같은 판정에 독립 도달** |
+| 병합 상태 | 미머지 | 미머지(main 대비 3커밋) |
+
+**이것은 판정 충돌이 아니라 수렴이다** — 두 세션이 같은 근거(`admin-02` 브랜치 `d42fbd40`)에서
+같은 결론에 독립 도달했으므로 서로가 서로의 교차검증이다. 다만 **같은 번호를 동시에 받았다**:
+`backlog.py add`의 번호 가드는 *이미 쓰인* 번호는 막지만 **자신이 방금 제안한 번호를 예약하지
+않는다**. 이것이 정확히 main `HARN-22-id-number-suggestion-race`가 등재한 결함이며,
+**그 태스크가 머지되기도 전에 재발**했다(§8 ⓑ).
+
+**해소 규칙(둘 다 미머지이므로 순서에 위임)**: 나중에 머지되는 쪽은 **새 번호를 만들지 않고
+흡수**한다 — add/add 충돌이 나면 양쪽 acceptance를 **합쳐 한 파일로** 만들고 중복 좌석을
+만들지 않는다(`PB-01` 편집자 부기 선례). 회수 대상 커밋(`8924a2e2`)이 하나뿐이므로 좌석도
+하나여야 한다.
+
+> 부기: 착수 시점에 `ADMIN-01`은 **또 다른 세션**(`claude/whymath-eos-review-64f81f`)이
+> claim 중이었다. 회수 실행 전에 그 세션의 산출을 먼저 확인한다 — 3중 착수 위험.
 
 ### 기존 태스크 처분 2건 (신규 등재 없음)
 
@@ -500,7 +534,8 @@ CLI 제안대로 `ADMIN-08`을 수용했다. **로컬 백로그만 봤다면 비
 | 운영자 좌석 발급 자체 | `ADMIN-01`(회수 대상 — `ADMIN-08`이 실행) |
 | 컬럼 처분 | `ADMIN-02`(blocked 유지 — 신규 태스크 아님) |
 | 감사 보존 명문화 | `ADMIN-03`(**완료**) / 연한 숫자 = `MGMT-02` |
-| 문서 접미어 탐지 사각 | `HARN-22`(인플라이트 — §8 부기만) |
+| 문서 접미어 탐지 사각 | 미머지 브랜치 `claude/whymath-account-security-dw9lww`(§8 ⓐ — **번호 인용 금지**: 그 번호는 main `HARN-22`와 이중 배정) |
+| 번호 가드 예약 부재 | `HARN-22-id-number-suggestion-race`(main·todo — §8 ⓑ가 실사례) |
 | 2차원 인가 계약 | `COLLAB-01`(done) |
 | Admin BFF·콘솔 UI·모듈 레지스트리 | `04_admin_console_architecture.md` §8 (발화 전 **미등재가 의도**) · `ADMIN-04-module-registry`(타 브랜치 인플라이트) |
 | 조직·라이선스 테넌시 | D4 페이퍼 — **태스크 없음** |
