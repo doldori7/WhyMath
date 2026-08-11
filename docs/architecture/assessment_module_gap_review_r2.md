@@ -405,6 +405,11 @@ JSONB(세트 헤더 1 + 문항 N)로 앉힌다(`api/me.py:2869` `POST /assessmen
 
 **의존**: `S3-01-pilot-cohort` · D5(`ASM-10`).
 
+**인접 축(중복 아님·착수 시 조율)**: `REC-10-next-problem-honesty-fields-render`(todo·mobile)가
+같은 계열의 Flutter 렌더 갭을 소유한다 — 다만 대상 표면이 다르다(`NextProblemResponse`의 추천
+정직 표기 필드 vs 이 D6의 `/me/assessments` **좌석 뷰**). 두 태스크가 `src/mobile`을 같이
+건드리므로 병렬 착수 시 파일 겹침을 먼저 확인한다(`docs/standards/parallel_sessions.md`).
+
 ---
 
 ### §3 등재 요약
