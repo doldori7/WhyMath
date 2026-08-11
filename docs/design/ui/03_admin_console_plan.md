@@ -26,7 +26,7 @@
 
 ### 1. 콘텐츠·지식자산 (L1)
 - **대상**: concept·atom·problem·solution·misconception·visualization·PedagogyPack/UnitDSL.
-- **현재 위치**: `api/concepts.py`·`api/problems.py`(CRUD 존재·**무인증** ⚠️), 코퍼스 `data/corpus/*`(+`_provenance.json`), ORM `db/models/`.
+- **현재 위치**: `api/concepts.py`·`api/problems.py`(CRUD 존재·**`RequireContentAdmin` 봉인 6라우터** — `SEC-07` 착지. 단 `CONTENT_ADMIN` 부여 경로가 main에 0건이라 **현재 전건 403** ⚠️ — `operations_platform_gap_review_r2.md` §1 정정 ③·`ADMIN-08` 회수 대기), 코퍼스 `data/corpus/*`(+`_provenance.json`), ORM `db/models/`.
 - **필요 기능**: CRUD + **검수 워크플로우** + 성취기준 태깅 확인 + 라이선스·provenance 표시.
 - **검수 워크플로우(실측)**: `pedagogy_dsl.py`에 이미 fail-closed 상태 흐름 존재 — 콘텐츠 슬롯 `DRAFT → PRESCREENED → APPROVED | REJECTED`, 소단원 `DRAFT → ACTIVE`. **게이트 통과 전에는 학생에게 노출 안 됨**. 콘솔은 이 상태 전이를 사람이 승격/반려하는 UI.
 
