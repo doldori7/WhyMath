@@ -235,7 +235,9 @@ def test_scope_excludes_out_of_revision_and_counts_observed_correctly() -> None:
         asyncio.run(_setup())
         progress = asyncio.run(_run())
         assert progress.standard_coverage_scope == 2  # n1·n2만(n_out 제외).
-        assert progress.standard_coverage_observed == 1  # n1만 관측(n2는 미관측, n_out은 스코프 밖).
+        assert (
+            progress.standard_coverage_observed == 1
+        )  # n1만 관측(n2는 미관측, n_out은 스코프 밖).
         assert progress.standard_coverage_percent == pytest.approx(50.0)
         # 작동 신호(CUR-04 acceptance⑤) — 측정 이력은 X·Z 2개념, 둘 다 원자 축에 매칭됐다
         # (Z가 스코프 밖으로 관측에서 빠지는 것과 "원자 축 매칭 자체"는 별개임을 증명).
