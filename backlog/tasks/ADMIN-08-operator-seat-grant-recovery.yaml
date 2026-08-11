@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: cancelled
 priority: 1
 owner: claude
 depends_on: []
@@ -26,5 +26,5 @@ paths:
   - src/backend/whymath_backend/schema/enums.py
   - "tests/backend/ops/**"
 session: null
-notes: "정본 2개(병합됨): docs/reviews/unmerged_branch_verdict_2026-08-11.md(#785) + docs/architecture/operations_platform_gap_review_r2.md §4 D5·§9-ⓒ. 원 브랜치 claude/admin-01-operator-seat-grant-audit head=53a06c4f·구현 커밋=8924a2e2 — 브랜치 삭제 후에도 GitHub API commits/<sha>·contents?ref=<sha>로 회수 가능(MEMORY 2026-08-09 실증 경로). 미병합 고립 5회차.\n\n[병합 2026-08-11] 이 파일은 **두 병렬 세션이 같은 ID·같은 슬러그·같은 목적으로 동시 등재**한 것을 한 좌석으로 합친 결과다(#785 claude/unresolved-long-term-branches-ph1ad7 9d002a1a ↔ claude/whymath-operations-platform-i5iu61). 판정 충돌이 아니라 **수렴**(같은 근거 d42fbd40/8924a2e2에서 독립 도달 = 상호 교차검증)이며, 원인은 backlog.py add의 번호 가드가 *이미 쓰인* 번호는 막아도 **자신이 방금 제안한 번호를 예약하지 않는** 것 — main HARN-22-id-number-suggestion-race가 등재한 결함이 그 태스크 머지 전에 재발한 실사례다. 나중에 머지되는 쪽(i5iu61)이 새 번호를 만들지 않고 흡수했다(PB-01 편집자 부기 선례). priority는 1을 채택 — 회수 태스크 선례(PB-01·SOL-01 모두 1)를 따르며, #785 원본의 2에서 올린 것이므로 되돌리려면 이 부기를 근거로 하면 된다."
+notes: "정본 2개(병합됨): docs/reviews/unmerged_branch_verdict_2026-08-11.md(#785) + docs/architecture/operations_platform_gap_review_r2.md §4 D5·§9-ⓒ. 원 브랜치 claude/admin-01-operator-seat-grant-audit head=53a06c4f·구현 커밋=8924a2e2 — 브랜치 삭제 후에도 GitHub API commits/<sha>·contents?ref=<sha>로 회수 가능(MEMORY 2026-08-09 실증 경로). 미병합 고립 5회차.\n\n[병합 2026-08-11] 이 파일은 **두 병렬 세션이 같은 ID·같은 슬러그·같은 목적으로 동시 등재**한 것을 한 좌석으로 합친 결과다(#785 claude/unresolved-long-term-branches-ph1ad7 9d002a1a ↔ claude/whymath-operations-platform-i5iu61). 판정 충돌이 아니라 **수렴**(같은 근거 d42fbd40/8924a2e2에서 독립 도달 = 상호 교차검증)이며, 원인은 backlog.py add의 번호 가드가 *이미 쓰인* 번호는 막아도 **자신이 방금 제안한 번호를 예약하지 않는** 것 — main HARN-22-id-number-suggestion-race가 등재한 결함이 그 태스크 머지 전에 재발한 실사례다. 나중에 머지되는 쪽(i5iu61)이 새 번호를 만들지 않고 흡수했다(PB-01 편집자 부기 선례). priority는 1을 채택 — 회수 태스크 선례(PB-01·SOL-01 모두 1)를 따르며, #785 원본의 2에서 올린 것이므로 되돌리려면 이 부기를 근거로 하면 된다.\n\n[취소 2026-08-11] 중복 좌석 흡수 — 회수 대상 커밋(8924a2e2)이 하나뿐이라 좌석도 하나여야 한다(operations_platform_gap_review_r2.md §해소 규칙이 정한 '나중 머지 쪽이 흡수'). 그 회수를 ADMIN-01이 실제로 실행·완료했다(artifacts: 8924a2e2 원구현 + e6c7d9a1 회수·계약등재·docstring동기화). 실측 증적: hermetic 16 + 실PG 통합 4 통과(3상태 왕복 403->201->403·트랜잭션 원자성), 전체 백엔드 스위트 9428 passed/0 failed, declared_unwired_audit EXIT 1->0 양방향. 3중 착수였고(이 세션·operations-platform-i5iu61·unresolved-long-term-branches-ph1ad7) 코드를 실제로 착지시킨 것은 ADMIN-01 경로다. 이 태스크를 todo로 두면 이미 착지한 일을 대장이 미완으로 말하게 된다(r2가 지적한 '대장-코드 분기'의 재생산)."
 updated: 2026-08-11
