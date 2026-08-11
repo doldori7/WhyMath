@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-24-task-acceptance-amend-cli
+title: "태스크 판정 정정의 CLI 경로 부재 — acceptance를 고칠 verb가 없어 정정 전 지시가 그대로 집행됨"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — backlog.py의 cmd_ 서브커맨드 전수 18개(status·next·start·done·block·unblock·review·cancel·gates·add·validate·brief·check-stop·check-edit·claims·overlap·policy·seed) 중 acceptance를 수정하는 것이 0건임을 재현. HARN-20이 review/cancel 상태와 notes append 보존은 만들었으나 acceptance 축은 손대지 않았음을 확인"
+  - "② 실피해 고정 — ADMIN-02의 정정(operations_platform_gap_review.md §독립검증 ②, main 병합 c3376c42)이 acceptance에 도달하지 못해, 그 정정을 조상으로 가진 브랜치의 세션이 stale acceptance ②('드롭 마이그레이션 작성')를 그대로 집행해 subscription_* 3컬럼까지 드롭했음을 커밋(b3a58b02)으로 고정"
+  - "③ amend verb 신설 — 기존 acceptance를 파괴하지 않고 정정 항을 append한다(HARN-20의 notes append 교훈 승계·덮어쓰기 금지). 이벤트(backlog/events.ndjson)에 amend 액션과 사유를 남긴다. requires_gates 부착 경로도 함께 연다(현재 add 시점 외에는 게이트를 붙일 방법이 없다 — ADMIN-02에 G-prod-dead-column-check를 붙이지 못한 실사례)"
+  - "④ 변별력 — 정정 전/후 YAML을 착수 세션이 실제로 다르게 읽는지 확인한다. amend 후 acceptance 목록에 정정 항이 나타나고, 되돌리면 사라져야 한다. 성공/실패 양쪽에서 같은 목록이면 검증이 아니라 위장이다"
+  - "⑤ 대장 무결성 — PostToolUse 훅·validate가 amend 산출 YAML을 정상으로 판정하는지, 그리고 amend가 status·session·artifacts 등 다른 필드를 건드리지 않는지 동결"
+  - "⑥ CI 배선 실재성 — 신규 테스트가 tests/harness 잡에서 실제로 실행되는지 확인(OPS-10·OPS-12)"
+  - "⑦ 범위 밖 — 태스크 삭제·ID 변경·acceptance 항목 개별 제거는 열지 않는다(대장 손편집 우회 표면이 된다). cancel+재등재 우회를 정본 경로로 승격하지도 않는다 — 그것은 태스크 ID 계보를 끊는다"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - "tests/harness/*"
+  - docs/standards/build_harness.md
+session: null
+notes: "docs/architecture/operations_platform_gap_review_r2.md §4 D8. operations_platform_gap_review.md §독립검증 ③이 이 공백을 정확히 예견하고 '실사례 1건(그것도 우회 성립)뿐이라 설계 근거가 얇다'며 등재를 미뤘는데, 2번째 사례가 발생했고 이번엔 우회가 실패했다. 일반형: '문서가 소유자'라는 우회는 착수 세션이 그 문서를 읽을 때만 성립한다 — 태스크 YAML은 반드시 읽히지만 참조 문서는 선택이다. 반복 실수 11회차(정정이 대장에 도달하지 못해 정정 전 지시가 그대로 집행됨)의 코드 축 대책."
+updated: 2026-08-11
