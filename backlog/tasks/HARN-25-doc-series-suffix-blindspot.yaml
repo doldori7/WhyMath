@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: HARN-22-doc-series-suffix-blindspot
+id: HARN-25-doc-series-suffix-blindspot
 title: "미머지 문서 탐지 접미어 사각 — _review.md 1종만 봐서 보안 감사 문서 미탐지(SEC-14 중복 설계 직전까지)"
 track: infra-debt
 stage: S4
@@ -16,11 +16,11 @@ acceptance:
   - "③ 변별력 — 확장을 되돌리면 그 문서가 다시 사라지는지 확인한다. 성공/실패 양쪽에서 같은 목록을 내면 검증이 아니다."
   - "④ 오탐 확인 — 확장으로 무관 문서가 대량 유입되지 않는지 전 원격 브랜치 스캔 결과 수치로 확인(스캔 실패를 0건으로 위장 금지 — HARN-14 계약 승계)."
   - "⑤ 배선 실재성 — 확장된 스캔이 SessionStart 브리핑 경로에서 실제로 호출됨을 테스트로 동결('저장소에 존재함 ≠ 돌아감')."
-  - "⑥ 범위 밖: HARN-14(나이 임계)·HARN-15(태스크 번호 충돌 원격 스캔) 소관 — 중복 착수 금지. 고립 브랜치 회수(포팅) 자체도 범위 밖."
+  - "⑥ 범위 밖: HARN-14(나이 임계)·HARN-15(태스크 번호 충돌 원격 스캔)·HARN-22(번호 제안 경쟁) 소관 — 중복 착수 금지. 고립 브랜치 회수(포팅) 자체도 범위 밖."
 artifacts: []
 paths:
   - scripts/harness/remote_claims.py
   - "tests/harness/*"
 session: null
-notes: "docs/architecture/account_security_gap_review_r2.md G5→D12(시스템 실수 등재). 사고 경위: remote_claims.py:1274 _DOC_SERIES_SUFFIX='_review.md' 때문에 k20m0w의 functional_security_audit_2026-08-08.md가 SessionStart 브리핑에 뜨지 않았고, 2026-08-11 계정·보안 r2 세션이 그 감사가 이미 SEC-14로 봉합한 XFF 무검증 신뢰를 '최대 갭'으로 판정해 등재 직전까지 갔다. 막은 것은 하네스가 아니라 수동 브랜치 조사였다 — 폐기 0줄로 끝났지만 그것은 운이다. 일반형: 보호 장치의 관측 범위가 명명 관례에 의존하면, 관례를 지키지 않은 산출물이 정확히 가장 위험한 산출물이 된다(관례를 어긴 문서일수록 새로운 형태의 작업이고, 새로운 형태일수록 중복 시 폐기량이 크다). HARN-14 설계 주석(:1270-1272)이 '설계 문서 중복은 나이가 아니라 존재 자체가 위험 신호'라고 정확히 썼는데 존재 판정 필터가 파일명 관례 1종에 묶여 있었다."
+notes: "docs/architecture/account_security_gap_review_r2.md G5→D12(시스템 실수 등재). 사고 경위: remote_claims.py:1274 _DOC_SERIES_SUFFIX='_review.md' 때문에 k20m0w의 functional_security_audit_2026-08-08.md가 SessionStart 브리핑에 뜨지 않았고, 2026-08-11 계정·보안 r2 세션이 그 감사가 이미 SEC-14로 봉합한 XFF 무검증 신뢰를 '최대 갭'으로 판정해 등재 직전까지 갔다. 막은 것은 하네스가 아니라 수동 브랜치 조사였다 — 폐기 0줄로 끝났지만 그것은 운이다. 일반형: 보호 장치의 관측 범위가 명명 관례에 의존하면, 관례를 지키지 않은 산출물이 정확히 가장 위험한 산출물이 된다. HARN-14 설계 주석(:1270-1272)이 '설계 문서 중복은 나이가 아니라 존재 자체가 위험 신호'라고 정확히 썼는데 존재 판정 필터가 파일명 관례 1종에 묶여 있었다. 개명 경위: 최초 HARN-22 등재 → main 머지 시 HARN-22-id-number-suggestion-race(#778) 충돌을 validate가 검출 → HARN-23도 원격(claude/pr-without-request-1me42b) 선점으로 CLI 거부 → CLI 제안 HARN-25 채택(번호는 전건 CLI 배정·손편집 0)."
 updated: 2026-08-11

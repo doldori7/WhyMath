@@ -2721,3 +2721,4 @@
 {"ts": "2026-08-11T00:57:11", "actor": "claude/whymath-math-engine-design-ns3fc1", "action": "add", "id": "MATH-05-reverse-notation-display-surface"}
 {"ts": "2026-08-11T01:23:12", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "OPS-33-yaml-spec-unwired-audit-axis"}
 {"ts": "2026-08-11T01:25:23", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "HARN-22-id-number-suggestion-race"}
+{"ts": "2026-08-11T02:17:02", "actor": "claude/whymath-account-security-dw9lww", "action": "add", "id": "HARN-25-doc-series-suffix-blindspot"}

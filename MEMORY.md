@@ -393,7 +393,7 @@
 `SEC-10`+`MOB-12` 2단계 착지. 단 SEC-10 done 시점에도 학생 체감은 미해소였고 **그 구간을 발견한
 것은 갭 리뷰가 아니라 `ops/declared_unwired_audit.py`(OPS-22)**였다.
 
-**등재·검증**: 태스크 5건 CLI add — `SEC-20`(D9·p1) · `SEC-21`(D8·p2) · `HARN-22`(D12·p2) ·
+**등재·검증**: 태스크 5건 CLI add — `SEC-20`(D9·p1) · `SEC-21`(D8·p2) · `HARN-25`(D12·p2) ·
 `SEC-22`(D10·p3) · `SEC-23`(D11·p4). `validate` green **239 → 244건**. **번호 가드가 작동했다** —
 첫 시도 `SEC-19`가 `SEC-19-generate-rate-limit`(원격 `whymath-ai-integration-check-5qqcp4`)와
 충돌해 거부되고 CLI가 `SEC-20`을 제안(HARN-10/15 설계대로). 그 과정에서 **`SEC-13`이 두 브랜치에
@@ -401,13 +401,13 @@
 `SEC-13-harness-metrics-exposure-contract`) — `ARCH-13`·`OPS-15`와 같은 유형의 **3회차**이며,
 가드는 신규 등재를 막을 뿐 **이미 착지한 충돌을 소급 해소하지 못한다**.
 
-**시스템 실수 등재(신규·`HARN-22`)**: `scripts/harness/remote_claims.py:1274`
+**시스템 실수 등재(신규·`HARN-25`)**: `scripts/harness/remote_claims.py:1274`
 `_DOC_SERIES_SUFFIX = "_review.md"` — 미머지 설계 문서 탐지가 **파일명 접미어 1종**에만 묶여
 있어 `functional_security_audit_2026-08-08.md`가 브리핑에 뜨지 않았다. 일반형: **보호 장치의
 관측 범위가 명명 관례에 의존하면, 관례를 지키지 않은 산출물이 정확히 가장 위험한 산출물이
 된다**(관례를 어긴 문서일수록 새로운 형태의 작업이고, 새로운 형태일수록 중복 시 폐기량이 크다).
 `HARN-14` 설계 주석이 "문서 중복은 나이가 아니라 **존재 자체**가 위험 신호"라고 정확히 썼는데
-**존재를 판정하는 필터**가 관례에 묶여 있었다. 대책은 규칙이 아니라 **코드**(`HARN-22`).
+**존재를 판정하는 필터**가 관례에 묶여 있었다. 대책은 규칙이 아니라 **코드**(`HARN-25`).
 
 **미머지 고립 4회차**: 이번 고립의 새로운 점은 **`done` 상태의 완성 산출물**이라는 것이다.
 main의 `ADMIN-01`은 `todo`라 `backlog.py next`가 재구현을 능동적으로 권한다. `HARN-11`(미머지

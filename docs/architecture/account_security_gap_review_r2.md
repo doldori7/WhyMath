@@ -392,11 +392,20 @@ v1의 crosswalk 표는 촘촘했지만 **외부 문서의 12개 항목에 대해
 |---|---|---|---|
 | D9 | `SEC-20-minor-consent-expiry-revocation-enforcement` | S4 / 1 | backend |
 | D8 | `SEC-21-account-identity-key-provider-subject` | S4 / 2 | backend |
-| D12 | `HARN-22-doc-series-suffix-blindspot` | S4 / 2 | infra |
+| D12 | `HARN-25-doc-series-suffix-blindspot` | S4 / 2 | infra |
 | D10 | `SEC-22-supply-chain-secret-scan-gaps` | S4 / 3 | infra |
 | D11 | `SEC-23-token-typ-grandfather-sunset` | S4 / 4 | backend |
 
-`validate` green — 태스크 **239 → 244건**, 게이트 7건, 트랙 3건.
+`validate` green — 등재 직후 태스크 **239 → 244건**, 이후 main 머지 반영으로 **267건**(게이트 10건).
+
+**후속 개명 1건(`HARN-22` → `HARN-25`)**: 등재 직후 main을 머지하자 `validate`가
+`❌ 번호 충돌 'HARN-22'` **exit 1**로 포착했다 — 같은 시각 `HARN-22-id-number-suggestion-race`가
+#778로 **먼저 머지**돼 있었다(공교롭게도 상대 태스크의 주제가 *번호 제안 경쟁* 그 자체다).
+상대가 머지분이므로 이쪽을 개명했고, 재시도한 `HARN-23`도 원격
+`claude/pr-without-request-1me42b`에 선점돼 **또 거부**돼 CLI 제안값 `HARN-25`를 채택했다.
+번호는 전건 CLI 배정이고 YAML 손편집은 0이다. **이 사건 자체가 D12의 근거를 강화한다** —
+가드는 관측만 하고 번호를 *예약*하지 않으므로, 두 세션이 각각 `add`를 돌리는 구간에서 같은 빈
+번호가 양쪽에 제안된다(`HARN-22`가 추적하는 TOCTOU). 이번엔 머지 시점의 `validate`가 잡았다.
 
 **번호 가드가 실제로 작동했고, 동시에 기존 충돌 1건을 드러냈다**: 첫 시도(`SEC-19`)가
 `SEC-19-generate-rate-limit`(원격 `claude/whymath-ai-integration-check-5qqcp4`)와 충돌해 **거부**되고
