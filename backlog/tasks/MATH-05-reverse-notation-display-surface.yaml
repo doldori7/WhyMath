@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/mobile/lib/features/chat/presentation/mathlive_input_screen.dart
   - src/mobile/lib/features/ocr/presentation/ocr_capture_screen.dart
   - src/mobile/test/mathlive_input_screen_test.dart
-session: null
+session: claude/remaining-track-34zvse
 notes: "docs/architecture/math_engine_gap_review.md §3 D6(2026-08-11 재검증에서 신규 발견). 1차 대조(2026-08-03)는 기능 29의 \"역방향 변환\"을 백엔드 sympy.latex 생성으로 읽고 §2-⑨ 의도적 미채택으로 닫았는데, 외부 틀이 그린 역방향(LaTeX→AST→자연표기)은 학생이 읽을 표기로 되돌리는 표시 축이다. 그 축은 미채택된 적이 없고 실측하면 두 표면이 뚫려 있다. MOB-06이 채팅 버블 한 곳만 닫았고 나머지 두 표면은 같은 함수를 부르지 않는다 — \"만들었는데 일부 표면에만 배선\" 계열."
 updated: 2026-08-11
