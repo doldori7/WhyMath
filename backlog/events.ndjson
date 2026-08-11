@@ -2685,6 +2685,9 @@
 {"ts": "2026-08-11T01:02:49", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "KG-03-formula-reach-observability"}
 {"ts": "2026-08-11T01:03:18", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "KG-04-graph-analytics-artifact-landing"}
 {"ts": "2026-08-11T01:04:11", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "OPS-29-yaml-spec-unwired-audit-axis"}
+{"ts": "2026-08-11T00:57:51", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-01-isolated-solution-path-recovery"}
+{"ts": "2026-08-11T00:58:24", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-02-step-panel-producer-wiring"}
+{"ts": "2026-08-11T00:59:01", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-03-solution-seat-reach-and-audit-axis"}
 {"ts": "2026-08-11T01:02:58", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-29-ci-enforcement-declaration-contract"}
 {"ts": "2026-08-11T01:03:25", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-30-alerting-last-hop-and-uptime-probe"}
 {"ts": "2026-08-11T01:03:49", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-31-backup-encryption-offsite-schedule"}

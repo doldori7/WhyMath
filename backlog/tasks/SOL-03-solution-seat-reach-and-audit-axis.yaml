@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SOL-03-solution-seat-reach-and-audit-axis
+title: "풀이 좌석 도달 리포트 + 선언≠배선 탐지기 5번째 축(scene_element_kinds) — '좌석·소비자 있고 공급 0' 미탐 유형 봉합"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 미탐 유형 실측 고정(2026-08-11): ops/declared_unwired_audit.py의 4축(http_routes·event_consumers·timeseries_tables·harness_clis)은 풀이 축의 미배선을 **어느 축으로도 못 잡는다** — (a) HTTP 축은 *라우트 호출 유무*를 보므로 GET /v1/problems/{id}/steps는 테스트 호출이 있어 reached로 분류되나 ProblemStep(...) 생성이 프로덕션 0건이라 **항상 빈 배열**이다 (b) 타임시리즈 축은 _FLOORS['timeseries_models']=1 기준 3모델만 — problem_step은 대상 밖 (c) scene DSL 요소 kind는 라우트도 이벤트도 테이블도 CLI도 아니다 (d) ORM 선언 vs writer 부재, enum 선언 vs 소비처 0(schema/enums.py:535 ReasoningType — 실사용 0·주석만)도 축에 없다. 현 _MANIFEST의 풀이 인접 등재는 :931 POST /v1/verify-step(by-design)과 :951-952 답입력·시각화조작(pending-task:S4-22) 둘뿐"
+  - "② 도달 리포트 신설 — harness/assessment_seat_reach_report.py 패턴을 **재구현하지 않고 이식**한다. 특히 그 모듈의 _KNOWN_WRITER_CITATION 관용구('생성 경로 자체가 없음' vs '생성 경로는 있으나 아직 호출된 적 없음'을 구분해 렌더)를 그대로 승계 — 카운트 0인 테이블에 writer가 실재하는데 '생성 경로 부재'라고 말하면 거짓 주장이 된다. 관측 3축: (1) problem_step·verified_solutions·solution_nodes(+SOL-01 후 solution_path) 행 수 + writer 유무 정직 사유 (2) strategy_tag·reasoning_type 분포(값 없어도 0으로 명시 — 조용한 생략 금지) (3) scene DSL 요소 kind별 실방출 카운트"
+  - "③ 게이트 아님 — visualization_reach_report·problem_bank_coverage 원칙 승계: 카운트가 0이어도 exit 1을 내지 않는다. 목표는 활성화가 아니라 **가시화**다(NLP-01 ⑥·REC-01 ⑤ 동형)"
+  - "④ 탐지기 5번째 축 신설 — declared_unwired_audit.py에 scene_element_kinds(l4/learning_scene.py의 kind Literal 좌석 ↔ 서버 생산자 실재)를 추가. 판정 규약은 기존 그대로: reached / by-design:<사유> / pending-task:<id>, **미분류가 exit 1**. 그랜드파더 만료 계약(backlog/tasks/<id>.yaml 실재 + status != done, 아니면 expired-waiver로 exit 1) 자동 승계. _FLOORS에 수집기 파손 하한 추가(추출기 자체가 깨지면 exit 2). 착지 시점에 step_panel은 pending-task:SOL-02로 등재"
+  - "⑤ 배선 확인 의무(CLAUDE.md — '저장소에 존재함'과 '돌아감'은 다르다): 새 리포트 CLI와 새 축이 **실제로 CI에서 실행되는지** 확인한 뒤 완료로 친다. tests/infra/test_test_suite_wiring.py·test_declared_unwired_audit_wiring.py 짝 갱신 + 새 CLI가 harness_clis 축 자기감사에 잡히는지 확인"
+  - "⑥ 변별력: 새 축이 **실패 상태에서 실제로 실패 신호를 내는지** 확인한다 — 미분류 kind를 합성 주입해 exit 1이 나는지, by-design 사유 문자열 누락이 거부되는지, expired-waiver(done 태스크 참조)가 exit 1인지. 성공/실패 양쪽에서 같은 값을 내는 검사는 금지. 검사는 CI 명령 그대로·판정은 exit code"
+  - "⑦ 범위 밖: 미도달 항목의 활성화·배선 신설(가시화와 차단까지만) · 기존 4축 리포트 대체 · problem_step writer 신설(SOL-01) · step_panel 생산자(SOL-02)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - "tests/infra/**"
+session: null
+notes: "docs/architecture/solution_module_gap_review_r3.md §4 R3. SOL-01/SOL-02와 비의존 — 병렬 착수 가능(리포트는 writer 0 상태를 0으로 정직 렌더하는 것이 초기 가치)."
+updated: 2026-08-11
