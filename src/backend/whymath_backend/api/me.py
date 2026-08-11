@@ -222,8 +222,8 @@ EventKindFilter = Annotated[
     list[AuditEventKind] | None,
     Query(
         description=(
-            "개인정보 감사 이벤트 종류 필터(export_data·consent_change·admin_access). 반복 지정 "
-            "시 OR(IN). 생략 시 전체."
+            "개인정보 감사 이벤트 종류 필터(export_data·consent_change·admin_access·"
+            "role_change). 반복 지정 시 OR(IN). 생략 시 전체."
         )
     ),
 ]
@@ -587,7 +587,7 @@ async def list_my_deletions(
 @router.get(
     "/privacy-audit",
     response_model=list[PrivacyAuditSchema],
-    summary="내 개인정보 감사 이력(반출·동의변경·관리자접근)",
+    summary="내 개인정보 감사 이력",
 )
 async def list_my_privacy_audit(
     user: ConsentedUser,
@@ -603,14 +603,19 @@ async def list_my_privacy_audit(
 ) -> list[PrivacyAuditSchema]:
     """SEC-09: 본인 개인정보 감사 이력 — 기본 최신순(occurred_at desc·audit_id 안정 정렬).
 
-    `privacy.audit`의 세 writer(`record_export_audit`·`record_consent_change_audit`·
-    `record_admin_access_audit`)가 적재한 `privacy_audit`를 `user_id`(행위자) 스코핑으로
+    `privacy.audit`의 writer들이 적재한 `privacy_audit`를 `user_id`(행위자) 스코핑으로
     조회한다(`GET /v1/me/deletions`와 동형 패턴 — `list_my_deletions` 참조). 삭제 이벤트는
     여기 없다(`deletion_audit`가 단일 권위 — 이중 진실원천 금지).
 
-    `event_kind`(선택)로 종류 필터(export_data·consent_change·admin_access), `since`/`until`
-    (선택)로 `occurred_at` 시간창(inclusive), `order`로 정렬 방향(기본 desc), `include_total=true`
-    면 `X-Total-Count` 헤더. 모두 생략 시 전체.
+    **이 docstring은 감사 종류를 다시 열거하지 않는다** — 종류의 단일 진실원천은
+    `AuditEventKind`(`schema/enums.py`)이고, 값 목록이 사람에게 노출되는 자리는 `event_kind`
+    파라미터 description 한 곳뿐이다(그 한 곳은 `tests/backend/api/
+    test_privacy_audit_kind_doc_sync.py`가 enum과 동기됨을 기계로 동결한다). 산문이 값을
+    복창하면 멤버가 늘 때마다 어긋나고, 어긋나도 기계가 못 본다 — ADMIN-01 회수(#786)에서
+    실제로 발생한 드리프트다.
+
+    `event_kind`(선택)로 종류 필터, `since`/`until`(선택)로 `occurred_at` 시간창(inclusive),
+    `order`로 정렬 방향(기본 desc), `include_total=true`면 `X-Total-Count` 헤더. 모두 생략 시 전체.
     """
     conds = [
         PrivacyAudit.user_id == user.user_id,

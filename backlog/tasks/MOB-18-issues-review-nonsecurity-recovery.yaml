@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-18-issues-review-nonsecurity-recovery
+title: "k20m0w 비보안분 회수 — 모바일 하드닝·수식 표기(NS-01/02)·온보딩·코치 UX 고립 done 15건"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - SEC-24-issues-review-security-hardening-recovery
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — origin/claude/whymath-issues-review-k20m0w(head 2330a095)의 비보안 고립 done: MOB-14(활성문제 stale 리셋)·MOB-15(401·sendTimeout·release 서명 게이트)·NS-01(MathLive step 렌더)·NS-02(표기 정준화 계층)·S3-37/38/39/41/49/50(수식 렌더·자동포커스·선지 동결)·ARCH-29·OPS-25·PB-04·MOB-11·S4-22. main 대비 신규 파일: math_notation.dart·math_text.dart·dialogue_store.dart·onboarding 2종 + 테스트 10종"
+  - "② 파일 단위 이식(통째 머지 금지 — 39커밋 뒤) + 원 번호 재사용 금지: 브랜치 MOB-14·OPS-25는 main의 동번호와 내용이 다른 ID 충돌(감사 §4-3). NS-01/02는 main NS 계열이 03부터 시작해 번호 충돌 없음 — CLI로 재배정"
+  - "③ 집행 지점 — 이식한 위젯·표기 계층이 실제 화면 경로에서 소비되는지(problem_screen·chat_screen 배선), 테스트가 CI에서 도는지 확인"
+  - "④ SEC-24와 같은 브랜치를 공유하므로 이식 순서·공유 파일(me.py·app.py 등) 충돌을 SEC-24 완료 후 재실측"
+artifacts: []
+paths:
+  - "src/mobile/**"
+  - "tests/backend/**"
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A1. SEC-24와 동일 브랜치(2330a095) — 보안분 선행 회수 후 착수. 회수 완료 전 원 브랜치 삭제 금지. 최초 제안 번호 MOB-17은 원격 브랜치(8ap436)의 MOB-17-growth-evidence-render 선점으로 CLI가 거부 — 제안 번호 MOB-18 채택"
+updated: 2026-08-11

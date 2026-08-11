@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -16,10 +16,14 @@ acceptance:
   - "데모/파일럿 풀에 동시 노출된 1쌍(wm-quad-eq-larger-root↔wm-skel-92cd1ba2bbf5)을 최우선 처리 — 실사용자 노출 중인 유일한 쌍"
   - "판정 결과를 코퍼스에 반영(은퇴 시 해당 레코드 제거 또는 review_status 마킹 — 방식은 착수 세션 판단)하고, 반영 후 QUAL-01 리포트를 재실행해 해당 쌍이 목록에서 사라짐을 확인"
   - "범위 밖: 신규 코퍼스 생성·재서술 파이프라인 자체 수정(QUAL-03 소관)"
-artifacts: []
+artifacts:
+  - d465d478
+  - "검증(전건 exit code·독립 재실행): 감사 재실행 2회 — 확정 실중복 9→0·데모풀 동시노출 1→0·total 2647→2638·계보제외 282→274(등식 유지)·orphan 0. tests/backend/harness/ 전체 1225 passed/10 skipped(309s) exit 0·ruff 0·black 0(CI 동일 명령). 쌍별 개별 판정 9건(병합 0·전 쌍 한쪽 은퇴·실질 변형 0건)·판정 정본 docs/data/problem_duplicate_disposition_2026-08.md·매달린 유사 참조 3건 정리·골든 핀 4파일 전수 갱신(grep이 못 잡는 >= 하한 핀은 전체 스위트 실행이 검출). backend 전체 스위트 미실행(변경이 corpus·harness 한정) — CI 최종 판정"
 paths:
   - "data/corpus/problem_bank_*/**"
   - src/backend/whymath_backend/harness/problem_duplication_audit.py
+  - "tests/backend/harness/**"
+  - docs/data/problem_duplicate_disposition_2026-08.md
 session: null
 notes: "QUAL-01(harness/problem_duplication_audit.py, 2026-08-10 완료)이 가시화만 하고 해소는 명시적으로 범위 밖에 남긴 후속. 실측 9쌍 중 1쌍은 원 설계문서(브랜치 8ceaf5)가 지목한 사례(데모풀 동시노출 확인됨), 8쌍은 이번 재실측에서 신규 발견(전부 generated_v0↔rephrased_v0, 스켈레톤 단답형/객관식 트윈 + 재서술 무변화 교차매칭 — QUAL-03과 근원 공유하나 해소 축은 이쪽이 콘텐츠·그쪽은 파이프라인)."
-updated: 2026-08-10
+updated: 2026-08-11

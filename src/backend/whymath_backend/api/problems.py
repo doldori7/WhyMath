@@ -134,6 +134,11 @@ async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list
 
     하위 리소스 read 전용(단계 생성/수정은 범위 밖). 부모 부재를 빈 목록과 구분하기 위해
     먼저 문제 존재를 확인한다.
+
+    S4-09(D1) reader ① 소생: WH-S 승격 어댑터(`whs/path_promotion.py`)가 `problem_step`에
+    실데이터를 적재하면서 빈 테이블 위 dead API에서 벗어났다. 승격 단계는 additive 필드
+    (`solution_path_id`·`concept_node_id`·`reasoning_type`·`justification`·`common_errors`·
+    `sympy_verified`)를 함께 싣는다 — 기존 필드 제거·의미 변경 0(스키마 하위호환).
     """
     if await session.get(Problem, problem_id) is None:
         raise HTTPException(

@@ -13,10 +13,12 @@ UUID) — 미성년 PII 비저촉(CLAUDE.md). 자식(cascade·slice 56)은 DB �
     `AuditResourceType`(.value 저장)으로 확보, DB는 단순 문자열(감사 메타 태그).
   - append-only — UPDATE/DELETE 라우터 없음. 읽기는 slice 58 `GET /v1/me/deletions`(본인 스코핑).
 
-`PrivacyAudit`(SEC-09)은 개인정보 감사 3종(반출·동의변경·관리자접근)의 append-only 기록이다 —
-`docs/architecture/account_security_gap_review.md` D3의 경계 확정(본인 조회 29개 엔드포인트
-전수 감사는 *하지 않는다*)에 따라 "시스템 밖으로 나가는 사건"·"본인 아닌 주체의 접근"만
-기록한다. `DeletionAudit`의 append-only·plain-UUID·String(32) 패턴을 그대로 답습하되
+`PrivacyAudit`(SEC-09)은 개인정보 감사 4종(반출·동의변경·관리자접근·**역할변경**)의 append-only
+기록이다 — `docs/architecture/account_security_gap_review.md` D3의 경계 확정(본인 조회 29개
+엔드포인트 전수 감사는 *하지 않는다*)에 따라 "시스템 밖으로 나가는 사건"·"본인 아닌 주체의
+접근"·"계정 권한 자체의 변경"만 기록한다(역할변경은 ADMIN-01이 추가 — `ops/role_grant_cli.py`가
+유일 생산자이고 역할 UPDATE와 **동일 트랜잭션**으로 적재된다). `DeletionAudit`의
+append-only·plain-UUID·String(32) 패턴을 그대로 답습하되
 **삭제 이벤트는 중복 기록하지 않는다**(`deletion_audit`가 삭제 감사의 단일 권위 — 이중
 진실원천 금지).
 
@@ -84,7 +86,7 @@ class DeletionAudit(Base):
 
 
 class PrivacyAudit(Base):
-    """SEC-09 개인정보 감사 1행 — 반출·동의변경·관리자접근 3종 중 1건의 append-only 기록.
+    """SEC-09 개인정보 감사 1행 — 반출·동의변경·관리자접근·역할변경 4종 중 1건의 append-only 기록.
 
     `user_id`는 **행위자**(action을 수행한 주체)다 — 본인 반출·동의변경이면 본인, 관리자접근
     이면 그 관리자. `target_user_id`는 *행위자와 다른 사용자의 데이터가 대상일 때만* 채운다

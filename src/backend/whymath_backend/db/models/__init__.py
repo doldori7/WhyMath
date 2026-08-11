@@ -22,7 +22,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 원자 Phase 2b AtomEmbedding (L1 원자 의미검색 pgvector 영속 — code 키·`vector` 컬럼).
   - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
   - PIPA §22-2 ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사 — user_profile FK).
-  - SEC-09 PrivacyAudit (개인정보 감사 3종 — 반출·동의변경·관리자접근·user_id FK 아님).
+  - SEC-09 PrivacyAudit (개인정보 감사 4종 — 반출·동의변경·관리자접근·역할변경·user_id FK 아님).
   - RPT-01 DefectReport (학생 결함 신고 — 카테고리+problem_id만, user_id 컬럼 자체 없음).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
 `concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
@@ -123,6 +123,7 @@ from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
 )
+from whymath_backend.db.models.solution_path import SolutionPath
 from whymath_backend.db.models.strategy_node import (
     STRATEGY_REVIEW_STATUS_DEFAULT,
     StrategyNode,
@@ -189,7 +190,7 @@ __all__ = [
     "DeviceCredential",
     # 슬라이스 57: DeletionAudit
     "DeletionAudit",
-    # SEC-09: PrivacyAudit (개인정보 감사 3종 — 반출·동의변경·관리자접근)
+    # SEC-09: PrivacyAudit (개인정보 감사 4종 — 반출·동의변경·관리자접근·역할변경)
     "PrivacyAudit",
     # RPT-01: DefectReport (학생 결함 신고 — user_id 컬럼 없음, append-only)
     "DefectReport",
@@ -243,6 +244,8 @@ __all__ = [
     "WhsSolutionGrade",
     # WH-S S1 §2.2: VerifiedLemma (검증 중간 결과 저장소·재사용·멱등 (problem,key) UNIQUE)
     "VerifiedLemma",
+    # S4-09(D1): SolutionPath (풀이 경로 헤더·solution_paths·단계는 problem_step additive 컬럼)
+    "SolutionPath",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
     # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)

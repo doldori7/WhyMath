@@ -47,9 +47,15 @@
 
 | 태스크 | 브랜치 | PR | 최종 |
 |---|---|---|---|
-| `ADMIN-01` | `claude/admin-01-operator-seat-grant-audit` | **#713** open | 2026-08-06 |
+| ~~`ADMIN-01`~~ **회수 완료(2026-08-11)** | `claude/admin-01-operator-seat-grant-audit` | **#713** — 회수로 내용 착지, PR은 정리 대상 | 2026-08-06 |
 | `REC-02` | `claude/human-bottleneck-tasks-6dszy0` | **#672** open(별 브랜치) | 2026-08-08 |
 | `MOB-10` | `claude/mob-10-done-bookkeeping` | **#731** open | 2026-08-08 |
+
+> **`ADMIN-01` 후속(2026-08-11)**: "진행 중·조치 불요"로 분류했으나 **3일 더 방치돼 총 6일
+> 고립**됐고, 그동안 콘텐츠 CUD 6라우터가 전건 403으로 남았다. 결국 `cherry-pick 8924a2e2`로
+> **회수**했다(충돌 0 — 상세는 `operations_module_gap_review_r3.md` §6-1). **분류 교훈**: "PR이
+> 열려 있음"은 "누군가 머지할 것"을 뜻하지 않는다. B층(조치 불요)에 넣더라도 **재확인 시점**이
+> 없으면 A층(고립)과 같은 결말이 된다 — 만료 없는 유예 금지의 분류 판.
 
 `REC-02`는 done을 들고 있는 브랜치(`human-bottleneck-tasks-6dszy0`)와 열린 PR의 브랜치
 (`whymath-probe-supply-h87afk`)가 **다르다**. 같은 태스크를 두 브랜치가 만지고 있다는 뜻이므로,

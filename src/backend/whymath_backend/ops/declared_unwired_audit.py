@@ -865,6 +865,12 @@ _MANUAL_COMPARISON_TOOL = (
     "by-design:후보 모델 결선용 수동 비교 도구 — 상시 게이트가 아니라 승격 판정 시점에 사람이 "
     "돌린다"
 )
+_PRIVILEGE_ESCALATION_CLI = (
+    "by-design:권한 상승 경로 — HTTP 미노출이 설계 확정값이다(operations_platform_gap_review.md "
+    "§3 D1: 관리자 HTTP API·콘솔 UI는 범위 밖). 즉 '미도달'이 결함이 아니라 *의도한 봉인*이다 — "
+    "인터넷에 열린 표면도, CI가 자동으로 돌리는 표면도 만들지 않고 운영자가 실 PG 앞에서 손으로 "
+    "돌린다. CI 배선은 오히려 계약 위반이 된다"
+)
 
 _MANIFEST: dict[str, dict[str, str]] = {
     # ── 축 1. HTTP 라우트 ────────────────────────────────────────────────
@@ -1018,8 +1024,13 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.concept_assessment_index": _OFFLINE_REPORT,
         "harness.concept_content_audit": _OFFLINE_REPORT,
         "harness.attempt_grading_shadow_report": _OFFLINE_REPORT,
+        # ASM-09(2026-08-11): distractor_map 오개념 신호 사장 규모 관측 — assessment_seat_
+        # reach_report와 동형(DB 실측·게이트 아님·exit 0/2). 사장 규모가 얼마든 머지를 막지
+        # 않으므로 CI 상시 배선 비대상.
+        "harness.distractor_signal_dormancy_report": _OFFLINE_REPORT,
         "ops.recommendation_reach_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
+        "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
         "harness.agreement_gate_cli": _MANUAL_COMPARISON_TOOL,
         # S4-16(진행 중) 산출물 — 게이트 승격 조건 측정 도구, 승격 전까지는 CI 상시 배선 대상
         # 아님(LLM K=3 교차검증 라이브 의존)

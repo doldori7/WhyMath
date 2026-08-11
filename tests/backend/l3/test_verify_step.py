@@ -2,13 +2,17 @@
 
 correct(심볼릭 동치)·incorrect(거짓 증명)·unverifiable(비대수 step_type·파싱 불가·빈 입력·
 판정 불가)·evidence_weight·step_type 전파·결정론·`VerifyStepResult` 필드셋·convert_xor 확인.
+MATH-03: unverifiable 사유 코드(`reason_code` 폐쇄 7종) 분기 1:1·변별력·3상태 불변 동결 추가.
 
 PRM 점수·step 파싱·coach 결선은 *후속*이라 여기 없다(본 슬라이스는 도구 primitive만).
 """
 
 from __future__ import annotations
 
+import pytest
+
 from whymath_backend.l3.verify_step import (
+    VerifyStepReasonCode,
     VerifyStepResult,
     VerifyStepState,
     verify_step,
@@ -268,11 +272,12 @@ class TestDeterminismAndFields:
     def test_result_field_set(self) -> None:
         result = verify_step("2+3", "5")
         assert isinstance(result, VerifyStepResult)
-        # frozen·extra=forbid 모델 — 4필드 정확히.
+        # frozen·extra=forbid 모델 — 5필드 정확히(MATH-03에서 reason_code 직교 추가).
         assert set(result.model_dump().keys()) == {
             "state",
             "step_type",
             "reason",
+            "reason_code",
             "evidence_weight",
         }
 
@@ -285,3 +290,167 @@ class TestDeterminismAndFields:
         # 검산도 대수 경로 — 거짓이면 incorrect.
         result = verify_step("3*4", "11", StepType.검산)
         assert result.state == VerifyStepState.incorrect
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# MATH-03 — 검증 실패의 변별력 회복(reason_code 직교 필드·gap review §3 D3)
+# ──────────────────────────────────────────────────────────────────────────
+
+# 분기 1:1 실측 배터리 — (사유 코드, 입력 3튜플). 각 입력이 해당 unverifiable 분기를 실제로
+# 발화시킴은 아래 TestReasonCodeBranchMap이 고정한다. 입력 선정 근거(2026-08-11 실측):
+#   - parse_error: "2 +* 3"은 sympify 예외(TestUnverifiableParsing 기존 케이스).
+#   - undecidable(표현식): sqrt(x²) vs x — 비다항·정의역 의존(identity_status docstring 예).
+#     주의: "f(x)" vs "g(x)"는 implicit_multiplication이 f*x·g*x로 접어 *변수 집합 불일치*가
+#     되므로(실측) 일반 undecidable 대표가 아니다.
+#   - variable_mismatch: "a" vs "b+1" — 다항 + 자유변수 집합 불일치(치환 맥락). 한글 산문
+#     ("어쩌고" vs "저쩌고")도 심볼 강제로 같은 분기다(identity_status docstring "산문이 심볼로
+#     강제" — 문서화된 의미 그대로).
+#   - heterogeneous_form: 항등식(ℝ)↔값 선언({2}) 전이(S3-06) + 등식↔표현식 혼합(같은 코드 —
+#     둘 다 형태 이질·운영 세부는 reason 문장으로 구분).
+#   - subset_ambiguous: x²=4 → x=2({−2,2}→{2} 진부분집합·S3-08).
+#   - undecidable(등식): 다변수 등식 — 해집합 계산 불가(incomputable_side → undecidable).
+_REASON_BRANCH_CASES: list[tuple[VerifyStepReasonCode, tuple[str, str, StepType | None]]] = [
+    (VerifyStepReasonCode.parse_error, ("2 +* 3", "5", None)),
+    (VerifyStepReasonCode.empty_input, ("", "5", None)),
+    (VerifyStepReasonCode.non_algebraic_step, ("2+3", "5", StepType.조건해석)),
+    (VerifyStepReasonCode.undecidable, ("sqrt(x^2)", "x", None)),
+    (VerifyStepReasonCode.variable_mismatch, ("a", "b+1", None)),
+    (VerifyStepReasonCode.heterogeneous_form, ("(x+1)^2=x^2+2*x+1", "x=2", None)),
+    (VerifyStepReasonCode.heterogeneous_form, ("2x+3=7", "x", None)),
+    (VerifyStepReasonCode.subset_ambiguous, ("x^2=4", "x=2", None)),
+    (VerifyStepReasonCode.undecidable, ("x+y=2", "y=2-x", None)),
+]
+
+
+class TestFoldPointBackend:
+    """MATH-03 ① — 백엔드 접힘 지점의 실측 고정(무변별 재현 + reason_code만이 가른다).
+
+    접힘 ①(백엔드): IdentityVerdict 4상태·해집합 가드 3종이 VerifyStepState 3상태 하나
+    (unverifiable)로 접히고, 자유문 `reason`도 분기 간 *동일 문장*이라 state·reason 두 축
+    모두 원인을 구분하지 못한다 — 이 무변별은 설계상 유지되고(3상태 불변·문장 불변),
+    변별은 오직 직교 `reason_code`가 회복한다. 접힘 ②(클라 폐기)는 모바일
+    coach_signal_card_test.dart가 재현한다 — 한쪽만 고치면(코드만 싣고 클라가 안 읽으면,
+    또는 클라만 분기하고 데이터가 없으면) 학생 화면의 변별은 회복되지 않는다(두 손실 분리).
+    """
+
+    def test_state_axis_is_indiscriminate_by_design(self) -> None:
+        # 표기 문제(parse_error)·비대수 단계·수학적 미결정 — 학생 행동이 정반대인 세 원인이
+        # state 축에서는 전부 같은 unverifiable(접힘 재현·3상태 불변이 의도이므로 계속 참).
+        parse = verify_step("2 +* 3", "5")
+        non_alg = verify_step("2+3", "5", StepType.조건해석)
+        undec = verify_step("sqrt(x^2)", "x")
+        assert parse.state == non_alg.state == undec.state == VerifyStepState.unverifiable
+
+    def test_reason_text_axis_is_indiscriminate_within_equation_path(self) -> None:
+        # 등식 경로의 이질 형태·진부분집합·계산 불가는 자유문 reason이 *한 글자까지 같다* —
+        # 문장 축으로도 무변별(접힘 ① 재현). reason_code만이 세 분기를 가른다.
+        hetero = verify_step("(x+1)^2=x^2+2*x+1", "x=2")
+        subset = verify_step("x^2=4", "x=2")
+        incomputable = verify_step("x+y=2", "y=2-x")
+        assert hetero.reason == subset.reason == incomputable.reason  # 자유문 무변별 실측
+        codes = {hetero.reason_code, subset.reason_code, incomputable.reason_code}
+        assert codes == {
+            VerifyStepReasonCode.heterogeneous_form,
+            VerifyStepReasonCode.subset_ambiguous,
+            VerifyStepReasonCode.undecidable,
+        }
+
+
+class TestReasonCodeBranchMap:
+    """MATH-03 ② — 폐쇄 7종 코드 ↔ 실분기 1:1(라벨링만·판정 불변)."""
+
+    @pytest.mark.parametrize(("expected_code", "args"), _REASON_BRANCH_CASES)
+    def test_branch_yields_expected_code(
+        self,
+        expected_code: VerifyStepReasonCode,
+        args: tuple[str, str, StepType | None],
+    ) -> None:
+        result = verify_step(args[0], args[1], args[2])
+        assert result.state == VerifyStepState.unverifiable
+        assert result.reason_code == expected_code
+        # 라벨 부착이지 판정 변경 아님 — 가중치 할인(0.5)은 전 분기 불변(⑥c 동결).
+        assert result.evidence_weight == 0.5
+
+    def test_all_seven_codes_are_reachable(self) -> None:
+        # 배터리가 폐쇄 7종을 전부 발화시킨다 — 죽은 코드(도달 불가 라벨) 없음.
+        reached = {code for code, _ in _REASON_BRANCH_CASES}
+        assert reached == set(VerifyStepReasonCode)
+
+    def test_prose_symbols_labelled_variable_mismatch(self) -> None:
+        # 한글 산문은 sympify가 서로 다른 심볼로 강제(실측) → 변수 집합 불일치 라벨.
+        # identity_status docstring의 "산문이 심볼로 강제" 문서화 의미 그대로다.
+        result = verify_step("어쩌고저쩌고", "음음음")
+        assert result.state == VerifyStepState.unverifiable
+        assert result.reason_code == VerifyStepReasonCode.variable_mismatch
+
+
+class TestReasonCodeDiscrimination:
+    """MATH-03 ⑤ — 변별력 실측: 다른 원인 입력이 같은 값을 내면 이 태스크 자체가 실패."""
+
+    def test_parse_error_and_non_algebraic_differ(self) -> None:
+        # "내 표기가 잘못됨"(고칠 수 있음)과 "원래 계산으로 확인 못 하는 단계"(고칠 게 없음)는
+        # 학생 행동이 정반대다 — 두 입력이 서로 다른 코드를 내는지 실측(같으면 red).
+        parse = verify_step("2 +* 3", "5")
+        non_alg = verify_step("포물선", "위로 볼록", StepType.그래프스케치)
+        assert parse.reason_code == VerifyStepReasonCode.parse_error
+        assert non_alg.reason_code == VerifyStepReasonCode.non_algebraic_step
+        assert parse.reason_code != non_alg.reason_code
+
+    def test_every_unverifiable_carries_a_code(self) -> None:
+        # 총부착 — 모든 unverifiable 분기가 코드를 갖는다(`_unverifiable` 필수 인자의 실측 확인·
+        # verify_solution의 사유별 카운트 합 == n_unverifiable 불변식의 전제).
+        for _, args in _REASON_BRANCH_CASES:
+            result = verify_step(args[0], args[1], args[2])
+            assert result.state == VerifyStepState.unverifiable
+            assert result.reason_code is not None
+
+
+class TestReasonCodeInvariants:
+    """MATH-03 ⑥ — 불변식 동결: 3상태·폐쇄 7종·correct/incorrect 무코드·판정 무변경."""
+
+    def test_verify_step_state_stays_three(self) -> None:
+        # state는 3상태 불변 — 4·5상태 확장 금지(BKT·코치·집계·모바일 계약·acceptance ②).
+        assert {s.value for s in VerifyStepState} == {"correct", "incorrect", "unverifiable"}
+
+    def test_reason_code_is_closed_seven(self) -> None:
+        # 폐쇄 enum 7종 — 코드 추가는 학생 3분기 사상·이벤트 계약 재검토를 요구하는 결정이다.
+        assert {c.value for c in VerifyStepReasonCode} == {
+            "parse_error",
+            "undecidable",
+            "non_algebraic_step",
+            "empty_input",
+            "heterogeneous_form",
+            "subset_ambiguous",
+            "variable_mismatch",
+        }
+
+    def test_correct_and_incorrect_have_no_reason_code(self) -> None:
+        # reason_code의 질문은 "왜 판정 못 했는가" — 판정이 *된* 결과(correct/incorrect)는
+        # None이다(검증 메타데이터·ReasoningStep 도메인 모델 아님 — D5 앞당기기 금지·⑥d).
+        assert verify_step("2+3", "5").reason_code is None
+        assert verify_step("2*x+1", "2*x+3").reason_code is None
+        # 연쇄 등식 내부 위반 승격(incorrect)도 무코드.
+        assert verify_step("x=(1+3)/2=3", "x=3").reason_code is None
+
+    def test_labelling_did_not_change_verdicts_or_reasons(self) -> None:
+        # 라벨 부착 전 관측 문장·상태·가중치의 바이트 동결(⑥c — 판정 변경 아님). 문장이 바뀌면
+        # 여기서 red — reason은 학생/운영 노출 표면이라 이 슬라이스에서 불변이어야 한다.
+        frozen: list[tuple[tuple[str, str, StepType | None], str]] = [
+            (("2 +* 3", "5", None), "SymPy 판정 불가/파싱 불가 — 검증 안전 회피"),
+            (("", "5", None), "빈 입력 — 검증 안전 회피"),
+            (
+                ("2+3", "5", StepType.조건해석),
+                "비대수 단계(서술형/경우나누기/기하) — SymPy 검증 불가",
+            ),
+            (("sqrt(x^2)", "x", None), "SymPy 판정 불가 — 검증 안전 회피"),
+            (("a", "b+1", None), "SymPy 판정 불가 — 검증 안전 회피"),
+            (("(x+1)^2=x^2+2*x+1", "x=2", None), "해집합 판정 불가 — 검증 안전 회피"),
+            (("x^2=4", "x=2", None), "해집합 판정 불가 — 검증 안전 회피"),
+            (("x+y=2", "y=2-x", None), "해집합 판정 불가 — 검증 안전 회피"),
+            (("2x+3=7", "x", None), "등호 방정식↔표현식 혼합 단계 — 검증 대상 불일치·안전 회피"),
+        ]
+        for args, expected_reason in frozen:
+            result = verify_step(args[0], args[1], args[2])
+            assert result.state == VerifyStepState.unverifiable
+            assert result.reason == expected_reason
+            assert result.evidence_weight == 0.5

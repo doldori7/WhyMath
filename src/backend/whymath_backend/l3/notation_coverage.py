@@ -2,15 +2,16 @@
 
 정본: `docs/architecture/notation_semantics_layer.md` §3(L3 완전성 하네스)·§4·§5 — 표기 완전성을
 인상이 아니라 *측정*으로 관리한다(측정 없는 도입 없음). 지원 표기의 열거 정본은
-`data/notation_support_manifest.json`(NS-02 신설·Dart canonical 파이프라인과의 정합은
-`src/mobile/test/notation_canonical_test.dart`가 동결)이고, 이 모듈은 리포 커밋 코퍼스
+`data/notation_support_manifest.json`(NS-02 신설)이고, 이 모듈은 리포 커밋 코퍼스
 (`data/corpus/problem_bank_*/problems.jsonl` 표기 필드 + `formula_graph_v1/formulas.jsonl`의
 `latex`)에서 표기 토큰을 전수 추출해 지원 집합과 대조한다(hermetic·LLM 0·DB 0·결정론).
 
 측정 축(2축 — 구조 표기는 과잉이라 제외):
   ① **LaTeX 매크로**: `\\[a-zA-Z]+` 전수 추출. 지원 = manifest 파생(정규화 매크로 입력측 +
-     canonical 산출측 + accent_macros) ∪ KaTeX 렌더 *실증* allowlist(`KATEX_PROVEN_MACROS` —
-     Dart 위젯 렌더 테스트가 실제 조판을 확인한 매크로만·실증 없는 심볼 추가 금지).
+     canonical 산출측 + accent_macros) ∪ KaTeX 렌더 *실증* allowlist 중 **근거 파일이 실재하는
+     부분집합**(`proven_macros()` — 실증 없는 심볼 추가 금지). 근거가 부재한 항목은 삭제하지 않고
+     `unproven`으로 격리해 리포트가 별도로 계상한다(MATH-02 ④ — 유령 근거로 지원을 넓히지 않되
+     공백을 지워 없애지도 않는다).
   ② **비-ASCII 수학 글리프**: 유니코드 카테고리·블록 기반 정밀 판별(`is_math_glyph`) —
      한글·CJK·일반 문장부호는 제외해 한국어 프로즈 오탐 0을 지킨다. 지원 = manifest
      `unicode_glyph_classes`(상첨자·프라임).
@@ -30,6 +31,12 @@ red가 되는 것과 공백 은폐를 동시에 방지). 베이스라인 갱신�
 권위·`l3/verify_step.py`). 침묵 실패 금지: 코퍼스·manifest·베이스라인 부재나 파싱 실패는 예외
 타입명을 포함해 명시 실패한다(skip 은폐 금지).
 
+근거 무결성(MATH-02): 지원집합이 *근거로 지목한 파일*이 실재하는지는 이 게이트가 판정하지 않고
+`tests/backend/l3/test_notation_evidence_integrity.py`가 본다 — 축이 다르기 때문이다. 이 게이트는
+"코퍼스에 뭐가 빠졌나"를, 그 테스트는 "우리 근거가 뭐가 유령인가"를 묻는다. 2026-08-11 실측 기준
+`NS-02` 미착륙으로 Dart 실증 파일 5종이 전부 부재하며(포기 판정 — manifest `provenance`
+`ns02_disposition`), 그로 인해 allowlist 24건이 `unproven`으로 격리돼 있다.
+
 7계층: L3이 L1 로더(`l1.problem_bank.populate.load_problem_bank_records`)를 *호출*한다
 (L3→L1 정방향·import-linter layers 계약 내).
 
@@ -48,9 +55,10 @@ import re
 import sys
 import unicodedata
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final
 
 from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
@@ -66,43 +74,74 @@ _MACRO_RE: Final[re.Pattern[str]] = re.compile(r"\\[a-zA-Z]+")
 # ──────────────────────────────────────────────────────────────────────────
 # KaTeX 렌더 실증 매크로 allowlist — *실측 근거 있는 것만*(실증 없는 심볼 추가 금지)
 # ──────────────────────────────────────────────────────────────────────────
-# 출처(전 항목 실측): Dart 위젯 렌더 테스트가 flutter_math_fork(KaTeX 계열)로 실제 조판됨
-# (폴백 아님·크래시 0)을 단언한 매크로만 담는다. manifest 파생분(정규화 매크로·accent)과
-# 합집합으로 지원 집합을 이룬다. 새 매크로는 반드시 렌더 실증 테스트를 먼저 추가한 뒤 여기
+# 근거를 **기계 판독 데이터로** 보유한다(MATH-02 ②). 이전에는 매크로 위 *산문 주석*이 출처를
+# 적었는데, 주석은 어떤 검사도 읽지 않으므로 근거 파일이 사라져도 게이트가 계속 green이었다 —
+# 실제로 `NS-02`가 미병합 브랜치에 고립돼 착륙하지 못하면서 아래 실증 파일이 전부 부재하게 됐고,
+# 그 사실을 8일간 아무도 보지 못했다(증상이 red가 아니라 green이라 더 조용했다).
+# 주석을 파싱하지 않는다(취약) — 매핑 자체가 정본이고 `KATEX_PROVEN_MACROS`는 여기서 파생한다
+# (이중 정의 금지). 참조 무결성은 `tests/backend/l3/test_notation_evidence_integrity.py`가 동결.
+#
+# 출처 규약: Dart 위젯 렌더 테스트가 flutter_math_fork(KaTeX 계열)로 실제 조판됨(폴백 아님·
+# 크래시 0)을 단언한 매크로만 담는다. 새 매크로는 반드시 렌더 실증 테스트를 먼저 추가한 뒤 여기
 # 등재한다 — 여기 없는 코퍼스 매크로(`\cos`·`\int`·`\pm`·`\pi` 등)는 누락으로 측정되어
 # 베이스라인에 남는 것이 정직한 회계다.
-KATEX_PROVEN_MACROS: Final[frozenset[str]] = frozenset(
+_EVIDENCE_AUDIT: Final[str] = "src/mobile/test/math_notation_audit_test.dart"
+_EVIDENCE_MATH_TEXT: Final[str] = "src/mobile/test/math_text_test.dart"
+
+_PROVEN_MACRO_EVIDENCE: Final[Mapping[str, str]] = MappingProxyType(
     {
-        # src/mobile/test/math_notation_audit_test.dart — `_expectRenders` 위젯 조판 실증(S3-23):
-        "\\partial",  # 편미분 ∂·\frac{\partial f}{\partial x}
-        "\\frac",  # 분수형 편도함수
-        "\\lim",  # 극한 \lim_{x\to\infty}
-        "\\to",
-        "\\infty",
-        "\\iint",  # 이중적분
-        "\\iiint",  # 삼중적분
-        "\\sqrt",  # n제곱근 \sqrt[3]{x}
-        "\\log",  # 로그 하첨자 \log_{10}x
-        "\\sin",  # 역삼각 \sin^{-1}x
-        # 그리스 대표(같은 파일 '그리스 대표' 루프에서 개별 조판 실증):
-        "\\alpha",
-        "\\beta",
-        "\\theta",
-        "\\varepsilon",
-        "\\varkappa",
-        "\\varphi",
-        "\\omega",
-        "\\Gamma",
-        "\\Delta",
-        "\\Sigma",
-        "\\Omega",
-        # src/mobile/test/math_text_test.dart:118-125 — `f^(\prime)(x)=3\lbrack x+8\rbrack(x-6)`
-        # 조판 실증:
-        "\\prime",
-        "\\lbrack",
-        "\\rbrack",
+        # `_expectRenders` 위젯 조판 실증(S3-23).
+        "\\partial": _EVIDENCE_AUDIT,  # 편미분 ∂·\frac{\partial f}{\partial x}
+        "\\frac": _EVIDENCE_AUDIT,  # 분수형 편도함수
+        "\\lim": _EVIDENCE_AUDIT,  # 극한 \lim_{x\to\infty}
+        "\\to": _EVIDENCE_AUDIT,
+        "\\infty": _EVIDENCE_AUDIT,
+        "\\iint": _EVIDENCE_AUDIT,  # 이중적분
+        "\\iiint": _EVIDENCE_AUDIT,  # 삼중적분
+        "\\sqrt": _EVIDENCE_AUDIT,  # n제곱근 \sqrt[3]{x}
+        "\\log": _EVIDENCE_AUDIT,  # 로그 하첨자 \log_{10}x
+        "\\sin": _EVIDENCE_AUDIT,  # 역삼각 \sin^{-1}x
+        # 그리스 대표(같은 파일 '그리스 대표' 루프에서 개별 조판 실증).
+        "\\alpha": _EVIDENCE_AUDIT,
+        "\\beta": _EVIDENCE_AUDIT,
+        "\\theta": _EVIDENCE_AUDIT,
+        "\\varepsilon": _EVIDENCE_AUDIT,
+        "\\varkappa": _EVIDENCE_AUDIT,
+        "\\varphi": _EVIDENCE_AUDIT,
+        "\\omega": _EVIDENCE_AUDIT,
+        "\\Gamma": _EVIDENCE_AUDIT,
+        "\\Delta": _EVIDENCE_AUDIT,
+        "\\Sigma": _EVIDENCE_AUDIT,
+        "\\Omega": _EVIDENCE_AUDIT,
+        # `f^(\prime)(x)=3\lbrack x+8\rbrack(x-6)` 조판 실증(math_text_test.dart:118-125).
+        "\\prime": _EVIDENCE_MATH_TEXT,
+        "\\lbrack": _EVIDENCE_MATH_TEXT,
+        "\\rbrack": _EVIDENCE_MATH_TEXT,
     }
 )
+
+# 하위 호환 — 이 이름을 읽는 기존 소비처(`test_unproven_symbols_not_included` 등)를 위해 유지한다.
+# **주의**: 이것은 *주장된* allowlist이지 지원집합이 아니다. 실제 지원 파생은 근거 파일이 실재하는
+# 부분집합(`proven_macros()`)만 쓴다 — 유령 근거로 지원을 넓히지 않기 위해서다(MATH-02 ④).
+KATEX_PROVEN_MACROS: Final[frozenset[str]] = frozenset(_PROVEN_MACRO_EVIDENCE)
+
+
+def proven_macros(repo_root: Path) -> tuple[frozenset[str], frozenset[str]]:
+    """근거 파일 실재 여부로 allowlist를 둘로 가른다 — `(proven, unproven)`.
+
+    `_PROVEN_MACRO_EVIDENCE`의 `evidence_path`가 `repo_root` 기준으로 **실재하는** 매크로만
+    `proven`이다. 부재 근거 항목은 삭제하지 않고 `unproven`으로 격리해 반환한다 — 지우면 공백이
+    사라져 보이고, 남겨두면 유령 근거가 지원을 넓힌다. 격리는 "숨기지 않고 세기" 위한 선택이다
+    (MATH-02 ④·CLAUDE.md "정직한 공백").
+
+    순수 파일 IO(존재 검사만)·결정론. 반환 집합은 정렬 불변(frozenset)이며 호출자가 정렬한다.
+    """
+    proven: set[str] = set()
+    unproven: set[str] = set()
+    for macro, evidence in _PROVEN_MACRO_EVIDENCE.items():
+        (proven if (repo_root / evidence).exists() else unproven).add(macro)
+    return frozenset(proven), frozenset(unproven)
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # NS-02 정합 검토 잔여 3건 — 게이트 *밖* 기록(notation_contract.md §6 전재)
@@ -189,12 +228,22 @@ class SupportSet:
 EMPTY_SUPPORT: Final[SupportSet] = SupportSet(macros=frozenset(), glyphs=frozenset())
 
 
-def load_support_set(manifest_path: Path) -> SupportSet:
+def load_support_set(manifest_path: Path, *, repo_root: Path | None = None) -> SupportSet:
     """`notation_support_manifest.json`(NS-02 정본) → 지원 표기 집합 파생(순수 파일 IO).
 
     매크로 = cases[].input(정규화 매크로 입력측) ∪ cases[].canonical(산출측) ∪ accent_macros
-    ∪ `KATEX_PROVEN_MACROS`(렌더 실증 allowlist). 글리프 = unicode_glyph_classes 전 문자.
-    manifest가 정본이므로 여기서 별도 열거를 만들지 않는다(단일 진실 원천).
+    ∪ **근거가 실재하는** 렌더 실증 allowlist(`proven_macros`). 글리프 =
+    unicode_glyph_classes 전 문자. manifest가 정본이므로 여기서 별도 열거를 만들지 않는다
+    (단일 진실 원천).
+
+    **allowlist 전량이 아니라 실증 부분집합만 쓴다**(MATH-02 ④): 근거 파일이 부재한 매크로를
+    지원으로 세면 유령 근거가 커버리지를 넓혀 게이트가 거짓 green이 된다. 부재분은 삭제하지 않고
+    `proven_macros`가 `unproven`으로 격리해 리포트가 별도로 계상한다 — 공백을 숨기지 않고 센다.
+
+    Args:
+        manifest_path: 지원 표기 정본 경로.
+        repo_root: 근거 파일 실재를 판정할 기준 루트. None이면 manifest의 조부모
+            (`<root>/data/x.json` → `<root>`)로 추론한다.
 
     Raises:
         FileNotFoundError: manifest 부재.
@@ -205,7 +254,9 @@ def load_support_set(manifest_path: Path) -> SupportSet:
         if key not in payload:
             raise ValueError(f"manifest 필수 키 부재: {key!r} ({manifest_path})")
 
-    macros: set[str] = set(KATEX_PROVEN_MACROS)
+    root = repo_root if repo_root is not None else manifest_path.resolve().parents[1]
+    proven, _unproven = proven_macros(root)
+    macros: set[str] = set(proven)
     for case in payload["cases"]:
         if not isinstance(case, dict) or "input" not in case or "canonical" not in case:
             raise ValueError(f"manifest cases 항목 구조 위반: {case!r} ({manifest_path})")
@@ -376,6 +427,9 @@ class CoverageReport:
     missing: tuple[MissingToken, ...]
     new_missing: tuple[MissingToken, ...]  # 베이스라인 밖 누락 — 게이트 위반(exit 1)
     baseline_resolved: tuple[str, ...]  # 베이스라인엔 있으나 이번 측정에 없음(수동 정리 후보)
+    # 근거 파일이 부재해 지원 파생에서 제외된 allowlist 매크로(MATH-02 ④ — 공백을 세는 칸).
+    # 게이트 판정에 쓰지 않는다: 이건 "코퍼스에 뭐가 빠졌나"가 아니라 "우리 근거가 뭐가 유령인가"다.
+    unproven_evidence_macros: tuple[str, ...] = ()
 
     @property
     def gate_ok(self) -> bool:
@@ -454,6 +508,15 @@ def render_report(report: CoverageReport, *, control_empty_support: bool) -> str
     ]
     if control_empty_support:
         lines.append("[변별력 대조군] 지원 집합 공집합 강제 — exit 1이 나와야 검출기 정상.")
+    if report.unproven_evidence_macros:
+        # 공백을 숨기지 않고 센다(MATH-02 ④). 게이트 판정과 분리된 별도 줄 — 이 수가 0이 아니라는
+        # 것은 "지원집합 일부가 유령 근거 위에 있었다"는 뜻이고, 그만큼 지원에서 빠졌다는 뜻이다.
+        lines.append(
+            f"[unproven 출처 파생 심볼 {len(report.unproven_evidence_macros)}건 — "
+            "근거 파일 부재로 지원 집합에서 제외됨(삭제 아님·격리)]"
+        )
+        for token in report.unproven_evidence_macros:
+            lines.append(f"  {token} — 근거 {_PROVEN_MACRO_EVIDENCE[token]} 부재")
     known_missing = [m for m in report.missing if m not in report.new_missing]
     if known_missing:
         lines.append(f"[누락 심볼 — 베이스라인 내 {len(known_missing)}건(리포트만·래칫)]")
@@ -549,14 +612,18 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # manifest는 대조군 모드에서도 *먼저* 로드한다(정본 구조 검증 자체는 항상 수행).
-    support = load_support_set(manifest_path)
+    support = load_support_set(manifest_path, repo_root=root)
+    _proven, unproven = proven_macros(root)
     if args.control_empty_support:
         support = EMPTY_SUPPORT
 
     problem_paths = sorted(corpus_root.glob("problem_bank_*/problems.jsonl"))
     scan = scan_corpora(problem_paths, corpus_root / "formula_graph_v1" / "formulas.jsonl")
     baseline = load_baseline(baseline_path)
-    report = evaluate(scan, support, baseline)
+    report = dataclasses.replace(
+        evaluate(scan, support, baseline),
+        unproven_evidence_macros=tuple(sorted(unproven)),
+    )
 
     print(render_report(report, control_empty_support=args.control_empty_support))
     if args.json is not None:

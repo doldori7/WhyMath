@@ -128,8 +128,10 @@ class TestCommittedCorpusClean:
     def test_committed_rephrased_corpus_has_zero_violations(self) -> None:
         # 커밋 코퍼스 청정 동결 — S3-12 일괄 적용(483→446→429, 1차 37건+rotation-1 재검수
         # 발견 신규 3축 14건 추가 탈락) 후 위반 0. 재오염 시 red.
+        # (하한 429→421: 2026-08-11 QUAL-02가 실중복 무변화 사본 8건 은퇴 —
+        #  docs/data/problem_duplicate_disposition_2026-08.md. 위생 위반 제거가 아니라 중복 은퇴.)
         corpus = _default_corpus_path()
         assert corpus.exists()
         report = run_corpus_hygiene_sweep(corpus, None, write=False)
         assert report.dropped == 0, report.dropped_items[:10]
-        assert report.kept == report.total >= 429
+        assert report.kept == report.total >= 421

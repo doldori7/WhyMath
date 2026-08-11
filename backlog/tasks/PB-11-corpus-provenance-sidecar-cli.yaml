@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-11-corpus-provenance-sidecar-cli
+title: "코퍼스 사이드카 생성 CLI 부재 — 계약은 있는데 만들 도구가 없어 손 작성이 유일 경로"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 부재 재확인(주장 확인 또는 반증): pool 키를 쓰는 non-test 코드가 schema/corpus_provenance.py·schema/enums.py 정의부 2개뿐이고, 실 사이드카 26개의 pool은 ARCH-20이 손 백필한 것임을 재현한다. 하나라도 생성 경로가 있으면 이 태스크는 취소한다"
+  - "② 기존 _write_provenance()의 두 결함 실측: src/data-pipeline의 8개 빌드 CLI가 만드는 payload에 pool이 없어 provenance_audit이 SCHEMA_INVALID를 내는지, 그리고 write_text 통째 덮어쓰기라 기존 코퍼스에 재실행하면 손으로 넣은 pool이 소실되는지 — 임시 트리에서 양쪽 다 실측한다(리포 코퍼스 무수정)"
+  - "③ 생성 CLI 구현: 코퍼스 디렉터리를 받아 최소 유효 사이드카({pool, source_citation|license_notice 중 최소 1개})를 만들거나 갱신한다. 멱등·비파괴가 핵심 계약 — 기존 파일이 있으면 pool을 보존하고 지정 키만 갱신한다(atom_graph/university_standard_fill.py::_append_provenance 선례). 덮어쓰기 기본값 금지"
+  - "④ 변별력: 사이드카 없는 임시 코퍼스에 CLI를 돌리면 provenance_audit이 exit 1에서 0으로 바뀌는지, 그리고 pool이 든 기존 사이드카에 재실행해도 pool이 살아남는지(멱등) 양쪽 실측. 성공·실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑤ 범위 밖 명시: (a) 미머지 브랜치 회수·병합 — PB-06이 조건만 확정했고 실행은 Kiki 소유 (b) data-pipeline 8개 CLI의 payload에 pool을 소급 추가 — 별건(원본 xlsx 파이프라인 전용이라 저작 문제은행에 적용 불가) (c) ci.yml 경로 필터 — PB-02 소유"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/ops/**"
+  - "scripts/**"
+  - "tests/backend/ops/**"
+session: null
+notes: "정본: docs/data/authoring_expansion_recovery_conditions_2026-08.md §3(PB-06 acceptance ③의 산출). 계약(schema/corpus_provenance.py)과 게이트(ops/provenance_audit.py·ci.yml:306-307)는 있는데 계약을 만족하는 파일을 만들어 주는 도구가 저장소에 0개다 — 실 사이드카 26개는 ARCH-20의 손 백필이고 data-pipeline의 _write_provenance() 8종은 pool을 누락해 그대로 쓰면 SCHEMA_INVALID다. PB-06이 실측한 회수 차단 조건 1(신규 30종 사이드카 부재)의 해소 비용이 '30개 손 작성'인 이유가 이 부재다. '계약은 있는데 생산 수단이 없다' 계열."
+updated: 2026-08-11
