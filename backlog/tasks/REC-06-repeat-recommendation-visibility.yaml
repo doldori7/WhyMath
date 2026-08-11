@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-06-repeat-recommendation-visibility
+title: "반복 추천 고정 가시화 — 연속 호출 시 동일 문항 반환 + 후보 정렬 2차 키 부재 해소"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 반복 리포트: 동일 조건 N회 연속 호출 시 서로 다른 problem_id 개수(=진도 폭)와 후보 풀 50의 개념·유형 집중도(S3-27 problem_type 축)를 산출한다. attempt 0행에서도 산출된다(합성 프로브·코퍼스만 — 라이브 학생 데이터 불요)"
+  - "② 원인 구분: 반복이 '제외 축 0행(attempt 미도달)' 때문인지 '후보 풀이 실제로 1건' 때문인지 서로 다른 값을 낸다. 침묵 실패 금지 — l2/axis_exclusions.py 사유 계상 패턴 답습"
+  - "③ 후보 조회 결정론: candidate_stmt의 ORDER BY |b−θ|에 2차 키(problem_id)를 더해 동률 구간 순서를 동결한다. 무작위화가 아니며 기존 선택 결과 회귀 0을 테스트로 동결"
+  - "④ 변별력: attempt 1건을 주입하면 그 문항이 후보에서 빠져 반환 문항이 실제로 바뀌는지 양방향 실측(되돌리면 원복)"
+  - "⑤ 범위 밖 동결: 노출 통제(randomesque top-k)·다양성 가중·학생 축 노출 이력 좌석 신설은 하지 않는다 — evidence_event에 user_id가 없고 session_id는 추천마다 uuid4라 학생 축 이력원이 0이다(입력 없는 파이프라인 금지)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - "src/backend/whymath_backend/ops/*"
+  - "tests/backend/api/test_me*.py"
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review_2.md §2 G2. θ=0 고정(l2/irt.py:76) + attempted_ids 0행(api/me.py:1832 — ProblemAttempt 0행) → 후보 SQL 제외 0(:1966) + select_weighted_item 결정론 argmax·동률=낮은 인덱스(l2/irt.py:267) ⇒ 같은 학생이 GET /v1/me/next-problem을 몇 번을 불러도 같은 문항 1건을 받는다. 1차 문서는 'θ=0 콜드스타트'까지만 짚고 이 학생 대면 귀결은 짚지 않았다. 더해 후보 정렬에 2차 키가 없어 동률 구간 순서가 PG 임의다 — 결정론이 선택기에만 있고 후보 조회에는 없다."
+updated: 2026-08-04

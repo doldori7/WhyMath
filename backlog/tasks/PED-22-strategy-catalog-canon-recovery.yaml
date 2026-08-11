@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-22-strategy-catalog-canon-recovery
+title: "고립된 교수전략 카탈로그 정본 회수 ① — 04e 설계 문서 + schema/YAML 10건/registry (uqyg79 PED-04·PED-05)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — claude/whymath-pedagogy-review-uqyg79(head 5dc040b3)가 PED-04(68b04481)·PED-05(d8e38646)를 done 처리했으나 main에는 docs/architecture/04e_pedagogy_strategy_catalog.md·data/corpus/pedagogy_strategies_v1/(YAML 10건+_provenance.json)·schema/pedagogy_strategy.py·l4/pedagogy/strategy_registry.py가 **전건 부재**다"
+  - "② ID 재배정 — 브랜치의 PED-04/PED-05는 main의 PED-04(교수 결정 로그)·PED-05(학습자 상태 조립)와 **번호만 같고 내용이 다른 이중 배정**이다(MEMORY 2026-08-04 13건 계보). 원 번호를 재사용하지 않고 이 번호로 회수하며 매핑을 notes에 남긴다"
+  - "③ 이식(머지 아님) — 브랜치는 main보다 낡다(main 대비 75,383줄 삭제). 신규 추가 파일만 파일 단위로 옮기고, 브랜치 쪽이 낡은 기존 파일은 채택하지 않는다"
+  - "④ provenance 게이트 통과 — 카탈로그 사이드카(_provenance.json)에 pool 필드가 빠져 원 브랜치 CI가 깨진 전력이 있다(5dc040b3이 그 수정). 이식 후 provenance_audit을 실제로 돌려 exit 0을 확인한다"
+  - "⑤ 검증 재수행 — 원 커밋의 7,621 passed 증적을 승계하지 않는다. CI 동일 명령·판정은 exit code·전체 스위트 실행 후에만 '회귀 없음'을 말한다"
+  - "⑥ 범위 — 소비 배선(PED-06/07)은 PED-18 소관. 이 태스크는 정본·데이터·registry 좌석까지다. 좌석만 옮기고 소비자가 없으면 계약이 허공에 뜨므로 후속을 반드시 잇는다(VIZ-06 교훈)"
+artifacts: []
+paths:
+  - "data/corpus/pedagogy_strategies_v1/**"
+  - src/backend/whymath_backend/schema/pedagogy_strategy.py
+  - src/backend/whymath_backend/l4/pedagogy/strategy_registry.py
+  - "docs/architecture/*"
+session: null
+notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 claude/whymath-pedagogy-review-uqyg79 head=5dc040b3. 원 태스크 PED-04-strategy-gap-design-doc(68b04481)·PED-05-strategy-catalog-data(d8e38646). claude/whymath-teaching-strategy-enfkqt는 이 브랜치의 진부분집합(공통 조상 대조 실측)이라 별도 회수 불요."
+updated: 2026-08-11
