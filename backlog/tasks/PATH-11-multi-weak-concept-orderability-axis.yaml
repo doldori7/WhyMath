@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PATH-11-multi-weak-concept-orderability-axis
+title: "다중 약개념 교차 집합 제약 밀도 축 — 전역 학습 경로 유보 발화조건③의 계측기(v1이 소유자를 두지 않아 측정 불가 상태)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①현행 실측 고정 — OrderabilityReport에 다중 약개념 교차 집합 축이 부재함을 재현하는 테스트를 먼저 세운다(v1 §5-③이 요구한 수치가 산출 불가임을 고정)"
+  - "②정합 설계 본체 — build_report에 k개(k=2,3,5) 결정론적 표집 집합의 합집합 제약 밀도 축을 추가하고, 같은 개념들의 개별 산출과 비교한 수치를 리포트·JSON 양쪽에 낸다"
+  - "③상한·재사용 — order_learning_path를 그대로 재호출하고 Kahn·_tiebreak를 재구현 0으로 확인한다. 모든 비율에 weak_only 이전 구조적 상한임을 명기한다"
+  - "④날조 방지·재현성 — 표집은 결정론적이며 동일 입력에 동일 산출임을 확인한다. 난수·시각 의존 0"
+  - "⑤변별력 — 교차 밀도 高/低 합성 그래프 2종에서 산출 수치가 갈리는지 assert한다. 갈리지 않으면 실패다"
+  - "⑥범위 밖 명시 — 전역 경로 구현·실 DB 접근·엔드포인트/응답 스키마 변경·유보 해제 판정 자체는 이 태스크 범위 밖이다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/learning_path_orderability_report.py
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/learning_path_module_gap_review_r2.md §3 D6. v1 §5-③이 '이 축은 PATH-01 확장으로 가능(신규 태스크 0)'이라 적었으나 PATH-01은 done인데 그 축이 없다 — CLAUDE.md '만료 없는 유예·제외 금지'(2026-08-03) 사례. 코퍼스만 읽으므로 입력 루프(problem_attempt 0행)와 무관하게 즉시 착수 가능. PATH-03과 독립(PATH-03은 밀도를 올리고 이 태스크는 재기만 한다). 결과가 '병합이 순서를 더 결정하지 못한다'면 전역 경로 유보는 영구 미채택으로 승격된다."
+updated: 2026-08-11

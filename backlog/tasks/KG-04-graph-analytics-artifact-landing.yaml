@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-04-graph-analytics-artifact-landing
+title: "그래프 분석 리포트 아티팩트 착지 — 허브·영향도·오개념 전파 산출물 + 저작 우선순위 워크시트 + 관계 타입별 실적재 분포"
+track: math-completion
+stage: S4
+subject: math
+layer: data-pipeline
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화: data_pipeline/graph_analytics의 build_report 산출을 docs/data/에 2종으로 남긴다 — (a) 기계 판독 JSON (b) 사람 검수 워크시트 MD(허브 상위 N·severity=blocking 오개념 하류 도달 상위 N = 저작 우선순위). 형식 선례는 ARCH-16이 남긴 3-아티팩트(atom_dedup_candidates_bge_m3.json·atom_dedup_review_queue.json·atom_dedup_review_worksheet.md)"
+  - "② 집행 지점: 이 아티팩트를 실제로 읽는 쪽을 별항으로 적는다 — ARCH-17 acceptance가 소비처를 '저작·검수 우선순위(ops)'로 적었으나 산출물 0·CI 배선 0·참조처가 자기 테스트뿐이어서 아무도 본 적이 없다. 최소 요건은 워크시트가 저장소에 실재하고 그 경로가 문서·런북에서 참조되는 것. 드리프트 가드(--check: 아티팩트가 코퍼스와 어긋나면 red)를 OPS-24 선례로 배선 검토한다"
+  - "③ 관계 타입별 실적재 분포 포함: 허용 어휘(백엔드 EdgeType 6종 / 파이프라인 Relation 7종 / AtomRelation 1종)와 실적재 건수(개념 엣지 581 전량 prerequisite · 원자 엣지 2,210 전량 prerequisite)를 나란히 산출한다. 목적은 '어휘 존재'가 '충족'으로 읽히지 않게 하는 것 — r1 crosswalk의 '어휘 기존재(적재는 소비처 대기)' 표기를 기계 산출물이 교정한다"
+  - "④ 불변 유지: 빌드타임 오프라인 산출만 — LLM 컨텍스트 투입·튜터링 preload 금지(graph_analytics/__main__.py의 _NOTICE 승계). 전체 그래프 열람은 오프라인 집계에서만 허용된다는 r1 D5 판정을 그대로 승계한다(금지 대상은 LLM 투입이지 오프라인 집계가 아님)"
+  - "⑤ 변별력: 코퍼스를 임시 변형하면(엣지 1건 추가·오개념 severity 변경) 아티팩트의 해당 수치가 바뀌고 원복하면 돌아오는지 양방향 실측한다. 원복은 cp 백업으로 한다(git checkout/restore 금지)"
+  - "⑥ 범위 밖 명시: 허브·영향도 산출물을 런타임 추천·학습경로에 물리는 배선은 포함하지 않는다(활성화가 아니라 사람 도달). ARCH-17을 재구현하지 않는다 — 이미 done인 CLI 위에 아티팩트·분포만 얹는다"
+artifacts: []
+paths:
+  - "src/data-pipeline/data_pipeline/graph_analytics/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/graph_analytics/**"
+session: null
+notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G2(+G3 부수 흡수) — 외부 EOS 틀(모듈 10 그래프 기능) 3차 대조 신규 갭. ARCH-17(done)이 CLI·테스트는 남겼으나 docs/data/ 산출 아티팩트 0·ci.yml 내 graph_analytics grep 0건·참조처는 자기 테스트 2건+MEMORY뿐. 같은 날 같은 문서에서 나온 D4(ARCH-16)는 아티팩트 3건을 남겨 사람 검수 경로가 실재한다 — 두 설계의 착지 품질 차이가 판정 근거다. 관계 실적재 분포는 별도 태스크로 만들지 않고 이 리포트에 흡수(r3 §2 G2 부수)."
+updated: 2026-08-11

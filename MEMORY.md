@@ -337,6 +337,121 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·QUAL 시리즈 마무리): **`QUAL-04` 재서술 계보 백필(`backfill_rephrase_lineage_s4_18.py`)의 무변화 오식별 수정 — QUAL-03이 측정한 무변화 282건의 실제 위험 지점을 재확정(run_corpus_rephrase가 아니라 이 백필 스크립트)하고 원천 차단** (claude 구현, Kiki `/drive`)
+
+- **재확정된 근본원인**: 오케스트레이터가 코드를 직접 추적해 QUAL-03의 애초 가설을 정정했다 — `problem_corpus_rephrase.run_corpus_rephrase`의 "fail-closed=원문유지"는 `test_failed_rephrase_keeps_original` 등 기존 테스트가 이미 의도적으로 고정한 안전 계약(검증 실패 시 드롭이 아니라 검증된 원본 유지)이라 건드리지 않았다. 실제 위험은 `scripts/backfill_rephrase_lineage_s4_18.py`에 있었다 — 이 스크립트는 무변화 레코드에도 예외 없이 slug 재채번·identity_id·`relations`(변형·similarity_score=1.0)를 부여해 왔고, **실측 확인 결과 커밋된 rephrased_v0 429건 전량이 이미 이 처리를 거쳐 identity_id를 보유**(392건 재슬러그) — 즉 무변화 282건 전부가 `populate.py` 적재 시 부모와 구분되는 **가짜 중복 DB 행**이 된다. QUAL-01의 "8쌍"보다 실질적으로 훨씬 큰 위험이었다(QUAL-01의 `is_legitimate_sibling`은 `relations` 선언 자체를 "정당한 형제"로 보므로 이 282건을 구조상 잡지 못한다 — QUAL-01 로직 결함이 아니라, "선언된 변형인데 내용이 실제로 안 바뀐" 축을 다루는 게 이 프로젝트에 여태 없었다는 뜻).
+- **결정**: backfill 루프에서 parent 판정 직후 — slug 재채번·identity 부여 전에 — `question_text`가 정규화 후 parent와 완전히 같으면 slug·problem_id·identity_id·relations를 전부 미부여하고 건너뛴다(`noop_skipped` 카운터). colliding 레코드는 원래 slug 그대로 남아 `populate.py`의 ON CONFLICT upsert가 부모와 같은 DB 행으로 자연 병합한다 — JSONL에서 줄을 지우는 "드롭"이 아니라 **DB에서 별도 행이 되는 것을 막는** 방식. (b)"rephrase_status 필드 신설로 소비측이 필터"안은 기각 — 이 저장소에 반복되는 "선언됐으나 소비자가 안 지키는 필드" 패턴(PED-06→PED-08·OPS-22 존재 이유 자체)을 또 만들 위험이라, 식별 자체를 원천 차단하는 쪽이 소비측 규율에 의존하지 않아 구조적으로 더 안전하다고 판단(근거 기록 — acceptance② 요구). 신규 마이그레이션 0(필드 추가가 아니라 오히려 미부여 쪽 결정).
+- **acceptance①**(사유 분포 진단): 이 환경엔 LLM이 없어 기존 282건의 개별 실패 사유는 복원 불가(정직한 한계, 사후 재실행은 오늘 시점 LLM 응답이라 "그때"의 진짜 재현이 아님) — `classify_invariance_failure`의 6단계 reason 분기(EMPTY→EQUATION_ALTERED→EXTRA_EQUATION→HYGIENE_REJECT→NO_CHANGE→QUESTION_HYGIENE)를 정적 분석으로 문서화. 라이브 재진단은 신규 도구를 만들지 않고 기존 `harness/problem_corpus_rephrase_diagnose.py`(Phaiakes9 전용)를 재사용 지점으로 명시.
+- **변별력**: cp 기반 뮤테이션(미커밋 트리에서 git checkout/stash 금지 원칙 준수)으로 구코드를 재현 → 신규 테스트 5건 중 3건이 실제로 red(무변화 레코드가 조용히 새 identity를 받음·`noop_skipped` 카운터 부재·근접무변화도 재슬러그됨) → 원복 후 5건 전부 green 재확인.
+- **실측**: `--check` 드라이런 결과 `already_done=429`·`noop_skipped=0`(전량 이미 1회 처리돼 `already_done` 단락에 먼저 걸림 — 예상과 일치, 새 로직은 향후 신규 배치에만 발동). 별도 읽기전용 스크립트로 `relations` 기반 직접 재계산 시 무변화 282/429(65.7%) — QUAL-03과 정확 일치 재확인. 코퍼스 실행 전후 무수정 확인.
+- **검증**: CI 3개 잡 명령 그대로(backend·infra-contracts·harness-integrity) 독립 재실행 — 전체 백엔드 스위트 9,412 passed·`tests/infra` 303 passed·`scripts`/`tests/harness` lint 0/0. 신규 테스트는 `tests/infra/`에 배치(스크립트가 `whymath_backend` 밖 독립 파일이라 `scripts/cleanup_atom_orphans.py`→`tests/infra/test_cleanup_atom_orphans.py` 선례 답습).
+- **QUAL 시리즈 정리**: QUAL-01(완료)→QUAL-02(실중복 9쌍 콘텐츠 판정, 미착수)·QUAL-03(완료)→QUAL-04(완료, 이 항목). 남은 건 QUAL-02뿐 — 콘텐츠 판정이라 데모풀 노출 1쌍이 최우선.
+### 2026-08-11 (재점검·교육과정): **교육과정 관리 모듈 2차 재점검(`curriculum_module_gap_review_r2.md`) — v1 미채택 6건 전건 승계, 진짜 갭 3건 신설(D4~D6) + v1 스코프 누락 1건 정정. 최대 갭 = 성취기준 조인 축 이원화로 학생 대면 표면이 조인 실패를 "도달 0%"로 위장(D4·반복 실수 10회차) · `CUR-03`이 done인데 산출물 main 미착륙(D5) · 선수 그래프 학교급 경계 통과 20/2,210(D6). 태스크 3건 등재(`CUR-04`~`CUR-06`)** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재제출)
+
+**배경**: Kiki가 외부 EOS 틀 문서 『0단계: 교육과정 관리』(5모듈)를 제출하며 빠진 부분 점검·설계를
+요청했다. **v1(2026-08-03)과 동일 문서의 재제출**임을 구조로 확정했다(모듈 ID·개수·관리항목
+8/6/9/7·관계 6종·AI기능 5종 일치 — r2 §0-①). 따라서 처음부터의 재대조가 아니라 **델타 재점검**으로
+처리했고, `operations_r2`·`gamification_r2`가 확립한 r2 규약을 승계했다(v1 §2 미채택 전건 승계·
+v1 in-place 수정 0 — v1은 `CUR-01`~`CUR-03`의 `notes`가 판정 근거로 지목하는 원본이다).
+
+**v1 스코프 누락 1건 정정**: 제출 docx의 마지막 문단(EOS 추가 5종 — 개념 Ontology 관리·개념–성취기준
+매핑·용어 사전·교육 메타데이터 관리·버전/변경 이력 관리)과 7소비자 흐름도에 v1이 **판정을 부여하지
+않았다**(전수 grep 9어휘 전건 0). v1 §0이 흐름도를 "AI 엔진들"로 축약하며 함께 탈락한 것 — 오판이
+아니라 미도달이다. r2 §1B가 전수 판정했다(㉮온톨로지 ✅초과 · ㉯매핑 D4로 흡수 · ㉰용어사전 🚫중복
+배제(`NS-03` 소유) · ㉱메타데이터 ✅ · ㉲변경이력 △정직한 공백).
+
+**진짜 갭 3건**
+1. **D4 성취기준 런타임 조인 축 이원화 (최우선·`CUR-04`·pri 1)**. `S2-03` 원자 재연결 후
+   `api/gating.py:149-151`이 구 4단계 조인을 **"재연결 후 0행"**으로 판정하고 원자 축으로 갈아탔는데,
+   `api/coach.py:917-921`·`l2/target_progress.py:102-107`은 **여전히 구 축**이고 둘 다 graceful
+   `None`/`0` 폴백이다. 성취기준의 **유일한 학생 대면 표면** `GET /v1/me/target-progress`에서 이는
+   "도달 0%"가 아니라 **조인 실패의 위장** — CLAUDE.md 침묵 실패 금지·"측정 실패가 미달로 위장 금지"·
+   "작동한 비율" 3중 위반이며 의사결정 우선순위 1번(부정확)에 직접 걸린다. **변별력**: 같은 질문을
+   재는 `ASM-05`(`standard_attainment_report.py:10`, 원자 축)와 API를 대조 — 수정 전 불일치·수정 후
+   일치. `ASM-05`가 다른 축으로 착지했기 때문에 비로소 대조가 가능해졌다.
+2. **D5 `CUR-03` 완료 선언 ≠ 착지 (`CUR-05`)**. artifact `98a34695`가 `origin/main` 조상이 아니고
+   (`git merge-base --is-ancestor` exit 1) `data/corpus/achievement_criteria_v1/`가 부재. 즉 v1 D3이
+   지적한 "성취수준 0건"이 **main 기준 여전히 0건**이며 이제 `status: done`에 가려 보이지 않는다.
+   게다가 `CUR-03` acceptance ④가 약속한 스키마 확장 후속 태스크가 백로그 239건 전수에 **없다**.
+   `unmerged_done_triage_2026-08-08.md`도 `CUR-03`을 놓쳤다. **단발이 아니라 계통**이다 — 같은 날
+   `backlog.py next`가 미머지 완료로 제외한 태스크가 17건이다. `CUR-03`이 특별한 이유는 ⑴ YAML이
+   `done`이라 후보 계산에서 빠져 **"미머지 done" 경고를 받을 기회 자체가 없고**(17건은 전부
+   todo/in_progress라 잡혔다) ⑵ 산출물이 코드가 아니라 **데이터**라 어떤 테스트도 부재를 못 본다.
+   구조적 대응은 `HARN-11/12`·`unmerged_done_triage` 축 소관이라 새 태스크를 만들지 않고 판정만 기록.
+3. **D6 학교급 경계 선수 연결 20건 (`CUR-06`)**. 원자 백본 2,210엣지 중 양끝점 학교급이 다른 것이
+   **20건**(초→중 9·중→고 11·**고→대 0**), 같은 학교급 내부가 2,190건(99.1%). 이 수는 **이중 확인**
+   됐다 — 소스 자체의 경계 표시 필드 `school_link=true`가 정확히 20건이고 양끝점 유도 집합과
+   불일치 0(`flag only 0·endpoint only 0·both 20`). 즉 유도한 해석이 아니라 소스가 그렇게 표시한
+   사실이다(별개로 `relation_subtype` 라벨 합 16은 20과 어긋나는 코퍼스 내부 라벨 불일치). MVP 페르소나 A가
+   "중학교 결손을 가진 고3"인데 그 복구 경로가 그래프에 없다 — 알고리즘이 아니라 **데이터 위상**
+   문제다. v1 §1 모듈5의 "✅ 초과"는 내부 밀도만 본 판정이었다. 엣지 저작은 범위 밖(신호 없는 관계
+   = 교수학 날조)이고, 계측기 + `S4-01` acceptance 정밀화만 한다 — `S4-01`의 acceptance가
+   `"초·중·고+대학 4축 활성"` 한 줄이라 **노드 존재만으로 갭을 통과시키는 구조**였다.
+
+**반복 실수 10회차 등재** (8회차=`ai_content_generation_gap_review_2`, 9회차=`gamification_r2`):
+D4가 10회차다. 1~9회차는 전부 "만들고 잇지 않음"(한 번도 이어진 적 없음)인데 **10회차는 "이었다가
+끊었는데 끊긴 걸 아무도 안 봄"**이다. 앞 회차들은 "호출자 0·적재 0·렌더 0"처럼 **셀 수 있는 0**이
+있어 정적 스캔으로 잡혔지만(`concept_reach_report.py`), 10회차는 호출자도 응답 200도 값도 있고
+그 값이 `None`/`0%`일 뿐이라 정당한 경우와 구분되지 않는다. **재발방지 방향**: 축 이주는 "새 축을
+만들었다"가 아니라 **"옛 축 소비자가 0이 됐다"**로 완료를 판정하고, 조인 기반 지표는 조인 성립
+건수를 함께 보고한다(`CUR-04` acceptance ⑤에 반영).
+
+**v1 stale 정정 4곳** (r2 §정정이 보유·v1 파일 무수정): 모듈3 "관련 단원 연결 ✅"→⚠️ / 모듈3
+"895건 초과 충족"→2022 축에 한함(링크 443건 전량 2022·**2015 개정 460건 링크 0·소비자 0**) /
+모듈5 "prerequisite ✅ 초과"→경계 밀도 미판정 / 부록 "성취수준 0건→`CUR-03` 해소"→여전히 0건.
+
+**발화조건 재판정**: v1 §5-⑥(학습목표 자동 생성) — 앞 조건("`CUR-02` 관측이 필요를 수치로")은
+충족(착지 8일 경과·`units_v1/` 여전히 소단원 1·목표 4·0.11% 불변), **뒤 조건(사람 검수 리뷰 큐
+선설계) 미충족 → 계속 유보. 순서를 바꾸지 않는다.** 신규 유보 ⑦ = 2015 개정 460건 링크 보강
+(페르소나 C 검정고시·N수는 v1.5 — 수요가 먼저다).
+
+**중복 등재 배제 3건**: 용어 사전→`NS-03`(done) · 전이 순서→`PATH-03`(축 다름) · `unit_spec`
+reader 0→`PED-16`(done, 이미 판정). **범위 밖 부기 1건**: `/v1/gating/*` 6라우트 인증 의존성 부재를
+관측했으나 SEC 축이므로 `account_security_gap_review.md` 소관으로 넘김(침묵으로 버리지 않음).
+
+**측정 한계 명시**: 실행 환경에 백엔드 의존성이 없어 harness·pytest·DB 조회를 하지 못했다. D4의
+"구 축 0행"은 저장소 자체 판정 기록(`gating.py:149-151`)+코드 독해에 근거한 **주장**이며 DB 실측은
+`CUR-04` acceptance ①(확인 **또는 반증**)이 수행한다. D5(git exit code)·D6/§4-⑧(코퍼스 직접 파싱)은
+이 한계에 해당하지 않는다. 이 PR은 문서·백로그만 바꾸며 **코드 변경 0**이라 회귀 주장을 하지 않는다.
+
+**등재 3건** (전건 `backlog.py add` 경유·ID 수기 배정 0·`--path` 겹침 검사 on·validate green 242건):
+`CUR-04-standard-join-axis-unification`(infra-debt/S3/**pri 1**) ·
+`CUR-05-achievement-criteria-corpus-recovery`(infra-debt/S1/pri 2 — acceptance ③이 약속된 후속
+태스크 등재를 **done 선행 조건**으로 강제, `CUR-03`의 "약속만 남김" 재발 차단) ·
+`CUR-06-cross-school-prerequisite-connectivity`(math-completion/S4/pri 3).
+### 2026-08-11 (점검·개념 축 r3): **개념(Knowledge) 관리 모듈 외부 EOS 틀 **3차 대조**(`knowledge_module_gap_review_r3.md`) — 동일 문서 3차 제출 확정 후 델타 재점검. r1 설계 D1~D5 중 3건 착지·2건 의도적 대기, 신규 갭 3건 등재(`KG-03`·`KG-04`·`OPS-33`) + r1/r2 stale 정정 6건 + **오판 방지 2건**·**자기 정정 1건** 기록** (claude 점검, Kiki 요청·동일 문서 재제출)
+
+- **회차 계보**: r1=`knowledge_module_gap_review.md` §1~§4(2026-07-27) · r2=같은 파일 §5(2026-08-03·in-place — 2026-08-04 헌법 개정 *이전*) · **r3=별도 파일**(r1/r2가 완료 태스크 4건 `S4-06`·`ARCH-16`·`ARCH-17`·`KG-01`의 판정 근거 원본이라 in-place 금지). 동일 문서임을 관계 11종·기능 10종·예시 `C-ALG-001` 전건 일치로 **수치 확정**(추론 아님) → 게임화 r2 선례 답습. **r1 §2 의도적 미채택 6건 전건 승계·재판정 없음.**
+- **새 렌즈**: r1=존재 렌즈, r2=도달 렌즈를 개념 API에만 적용. r3은 도달 렌즈를 **개념 축 전체(공식·분석 리포트·스펙 선언)로 확장** — 신규 갭 3건 전부 이 확장에서만 나왔고 존재 렌즈로는 모두 "있음"으로 읽힌다.
+- **G1 → `KG-03`**: 공식(모듈 9)이 **write-only**. r1이 ✅로 판정하고 D3(`S4-06`)가 `constraints` 15/25·`mnemonic` 14/25까지 채웠으나 `api/` 내 formula grep **0건**·`formula_id`의 자기 모듈 밖 참조가 **주석 1건**(`db/models/__init__.py:254`)·`canonical_signature` **0/25**. 적재기 docstring이 스스로 write-only를 선언. **`S4-06`의 사후 판정은 바꾸지 않는다** — acceptance 전건 충족했고, 갭은 그 acceptance가 소비 축을 묻지 않았다는 것(2026-08-04 "①정본화/②집행 지점 별항 분리" 개정이 `S4-06` 등재 *이후*에 생긴 시점 사실).
+- **G2 → `KG-04`**: D5(`ARCH-17`·done)가 CLI·테스트는 남겼으나 `docs/data/` 산출 아티팩트 **0**·`ci.yml` 내 `graph_analytics` **0건**·참조처는 자기 테스트 2건+MEMORY뿐. **같은 날 같은 문서에서 나온 D4(`ARCH-16`)는 아티팩트 3건을 남겨 사람 검수 경로가 실재한다** — 두 설계의 착지 품질 차이가 판정 근거. 관계 어휘 실적재(개념 581·원자 2,210 **전량 `prerequisite`** = 허용 7종 중 1종)는 별도 등재 없이 이 리포트에 흡수.
+- **G3 → `OPS-33` / ⚠ 자기 정정**: 초판은 정리(모듈 8) 축 스펙 선언 4건을 "**유령 선언**"으로 판정했으나 **부정확했다**. `backlog.py next`의 *"이미 완료(미머지)"* 경고를 추적하니 `origin/claude/whymath-solution-review-40xspg`(main 대비 **657커밋** 앞섬·Kiki 결정 대기)에 ⓑ`theorem_concept_ids`(`l3/solution_path.py:107`)·ⓒ`lean_verified`(`:179`)·ⓓ`reasoning_type: ReasoningType`(`schema/problem.py:681`)가 **이미 구현돼 있었다**(`class SolutionStep(BaseModel)` `:126`). 정확한 진단은 두 겹 — (i) **감사기 사각**(`OPS-22`가 YAML 스펙↔코드 축을 안 봄)은 진짜 갭이므로 `OPS-33` 유효 (ii) **배선분의 미병합 고립**은 기존 추적(지목만·신규 등재 안 함). ⓐ`CognitiveType.THEOREM`(개념 437건 전량 `cognitive_type: None`)은 그 브랜치에서도 미해소. **교훈: `origin/main`만 보면 "미배선"과 "미병합 고립"을 구별할 수 없고, 진단이 달라지면 처방도 달라진다**(전자=구현 태스크, 후자=병합 결정) — `OPS-33` acceptance⑥이 이 구별을 요구한다.
+- **오판 방지 2건(갭으로 보고할 뻔한 것)**: ① 원자 백본 세부개념 1,823건 중 `core_proposition` 512(28.1%)·`transfer_example` 1,311(71.9%)이 **정확히 배타적** — "정의 축 공급 부족"으로 보였으나 512건은 **전량 대학 트랙**이고 `core_proposition`은 **저작권 redaction으로 적재가 구조적 차단**된 필드(`l1/atom_graph/__init__.py:14`). ② 진단·소크라테스 필드 0인 노드 860건은 **단원 217+소단원 643 = 구조 컨테이너**(엣지 2,210건은 세부개념만 연결·세부개념 4요소 충전율 100%). **공통 교훈: 분모를 2,683(대장) 대신 1,823(세부개념)으로 잡고 K-12/대학 트랙을 나눠야 의도적 설계가 결함으로 보이지 않는다.**
+- **D1·D2 발화 조건 명문화(r3 §6)**: 모듈 7(정의)은 **3회 연속 최대 갭**, 모듈 8은 3회 연속 설계 공백이나 `S4-05`·`S4-02` 둘 다 `S3-01`(파일럿·owner=kiki) 의존으로 `todo`다. **의존 유지**(Kiki 확정) — 근거는 "소비처 없는 저작 선행 금지"(만들면 저작 부채+dead data)와 `S3-01`의 조기 착수 금지(희소 자원 소진 방지). 대신 발화 조건 2종(`S3-01` done, 또는 `S3-01`과 무관한 소비처 선착지)을 못 박아 **4차 제출이 같은 갭을 또 "발견"하지 않게** 했다 — r1→r2→r3에서 세 번 발견된 것 자체가 이 명문화 부재 탓.
+- **번호 가드가 두 번 막고 한 번 뚫렸다 → 신규 `HARN-22`**: 전건 `backlog.py add` 경유·ID 수기 확정 0. ①**막힘 2회** — `KG-02`·`OPS-26`이 다른 세션 원격 브랜치에 선점돼 거부(`KG-02-concept-content-review-promotion`·`OPS-26-wh1-llm-observability-cache-wiring`) → CLI 제안값 채택. ②**뚫림 1회** — 제안받은 `OPS-29`를 채택했는데, PR 대기 중 **운영 EOS r3 세션이 똑같이 `OPS-29`를 제안받아** `OPS-29-ci-enforcement-declaration-contract`로 먼저 머지(#775). main 병합 순간 `validate`가 `❌ 번호 충돌 'OPS-29'` exit 1로 포착 → 상대가 머지분이라 **이쪽을 `OPS-33`으로 개명**(그랜드파더 등재 아님). **원인 = 가드가 관측만 하고 번호를 예약하지 않는 TOCTOU**: 두 세션이 각각 `add`를 돌릴 때 어느 쪽도 아직 푸시하지 않았으면 같은 빈 번호가 양쪽에 제안된다. `HARN-10`(신설)·`HARN-15`(원격 스캔)·`HARN-21`(파서 구멍) 전부 done이나 이 경쟁 구간은 미추적이라 **`HARN-22-id-number-suggestion-race` 등재**(시스템 실수 = 재발방지 등재 의무). ID 충돌은 ARCH-13(07-18/25)·OPS-15(07-29)에 이어 **3회차 이상**이며 **가드 존재 하에 발생한 첫 사례**. 개명 비용 실측: 문서 7곳·MEMORY 3곳·태스크 1건. 병합된 `OPS-29`("돌아감≠막음")와 `OPS-33`("선언함≠구현됨")은 상보·중복 아님.
+- **교차 독립 확인 2건(같은 날·다른 세션이 같은 것을 따로 발견)**: PR 대기 중 main에 병합된 `solution_module_gap_review_r3.md`(#774)가 ① **같은 고립 브랜치를 독립 실측**해 `SOL-01`(priority 1)로 등재했다 — 그 수치가 더 정밀해(커밋 `86212c43`·20파일 2,153줄·`git merge-base` exit 1로 **merge 불가·이식 필요**) 이 문서가 **정본으로 승계**하고 회수를 중복 등재하지 않는다. ② `SOL-03`이 같은 감사기 모듈에 다른 축(scene DSL 요소 kind)을 신설하며 acceptance①에서 **`ReasoningType` 실사용 0을 어느 축도 못 잡는 사례로 독립 지목** — G3-ⓓ와 같은 발견이다. 두 태스크는 축 내용이 달라 중복이 아니나 같은 파일을 건드리므로(`path_overlap=warn`) `OPS-33` acceptance⑦에 경계를 명시했다(축은 **서수가 아니라 이름으로 식별**·`ReasoningType` 분류 소유를 한 곳으로). **두 세션이 서로 모른 채 같은 고립을 지목했다는 사실 자체가 G3 교훈의 독립 재현이다.**
+- **산출물 범위**(Kiki 확정): 문서 + 백로그 등재 + 이 결정 로그. **코드 0** — `backlog validate` green(256건), 코드 미변경이라 전체 스위트 미실행. 실측 한계 정직 표기: 이 컨테이너에 백엔드 의존성이 없어(`pydantic` 미설치) 리포트 CLI 미실행·**DB 라이브 행 수 미확인**(추론으로 채우지 않음), 모든 수치는 부록에 재현 명령 병기.
+### 2026-08-11 (점검·학습 경로 r2): **외부 EOS 틀 『08. 학습 경로(Path)』 2차 재점검 — 확장 제안 58~62를 merged 정본 최초 대조(신규 태스크 0·전부 미채택/승계/착지) + `PATH-02` 정직 표기가 영속·렌더 두 경계에서 소실되는 결함 발견(반복 실수 9회차 = 새로운 축). 태스크 3건 등재(`PATH-09`·`PATH-10`·`PATH-11`)** (claude 점검, Kiki 첨부 docx + "빠진 부분 점검·설계")
+
+- **범위 판정**: 첨부 docx의 기능 54~57은 v1(`learning_path_module_gap_review.md`, 2026-08-03, merged)이 이미 전수 대조했다. 그러나 **확장 제안 58~62는 어떤 merged 정본에도 없다** — v1 본문 전수 grep 0건. 유일한 선행 대조는 같은 날 병렬 세션이 쓴 커밋 `85981e97`인데 파일 경로 충돌로 **설계 전량 회수**된 브랜치라 트렁크 미도달(MEMORY 2026-08-03 참조). 따라서 v1을 덮어쓰지 않고 **r2(델타 재점검)**로 신설 — `gamification_module_gap_review_r2.md` 선례 답습. 산출물 = `docs/architecture/learning_path_module_gap_review_r2.md`.
+- **§1 확장 제안 58~62 (최초 대조·신규 태스크 0)**: 58 적응형 엔진 = 무상태 재계산이 이미 그 역할(영속 plan 없음) + Thompson bandit(`l4/pedagogy/adaptive/policy.py`)은 승격 게이트 표본 미달로 **정직한 미승격** → 회수 커밋 판정("경로는 상태가 아니라 파생") 승계 / 59 일정 최적화 = v1 §2-②③(생산자 없는 신호) 승계 / **60 목표 추적 = v1 `△` → 현재 `✅`**(`S4-18` 착지로 `GET /v1/me/target-progress` 라이브) / 61 추천 엔진 = 문제·개념 완비, **영상·인강은 코드 0이며 저작권 레일 차단**(EBS 영리금지·학원 자료 금지 → 신규 의도적 미채택 ⑩ 등재) / 62 시뮬레이션 = `model_fields` 집합 동등 assert로 **테스트 동결**됨. **번호는 본 편 기준**(58~61은 ai_content_generation, 62~65는 visualization이 이미 다른 의미로 사용 — 교차 참조 금지 하우스 룰).
+- **최대 발견 — 정직 표기가 두 경계에서 소실(D4·D5)**: `PATH-02`가 만든 `ordering_basis`(96.4%가 `tiebreak_only`)가 ⑴**영속**에서 유실 — `api/me.py:2620`이 `[step.model_dump() for step in path.steps]`로 **자식만** 꺼내 부모 `LearningPath`의 표기가 통째로 버려지고, 그 스냅샷을 `GET /v1/me/assessments`(`StudentAssessment`)가 학생에게 반환한다. ⑵**렌더**에서 유실 — Flutter가 `problem_models.dart:248,251`에서 **파싱은 하는데 읽는 위젯이 0개**(전수 grep 2줄이 전부). **두 경계 모두 `has_cycle`은 생존하고 `ordering_basis`만 죽는다** — 그런데 `has_cycle`은 발생률 **0%**(DAG 보장 코퍼스)이고 `tiebreak_only`는 **96.4%**다. 즉 **한 번도 발생하지 않는 축의 정직 표기만 완비**돼 있어 표면적으로는 성실해 보인다(`me_screen.dart`엔 "서버 정직 신호를 삼키지 않고 알린다" 주석까지 있다). v1 D2가 진단한 비대칭이 `PATH-02` 착지 후 **한 겹 바깥에서 두 번 재생산**됐다.
+- **세 번째 발견(D6)**: v1 §5-③이 전역 경로 유보의 해제 조건을 "`PATH-01` 리포트 확장으로 가능(**신규 태스크 0**)"이라 산문으로만 적었는데, `PATH-01`은 done인데 `OrderabilityReport`에 **다중 약개념 교차 집합 축이 없다**(단일 개념 셀 × 깊이·축 그리드뿐). 유보가 **해제도 영구화도 불가한 상태** — CLAUDE.md "만료 없는 유예·제외 금지"(2026-08-03) 사례. 같은 형태로 v1 페이퍼 갭 P3("writer가 reader보다 먼저 가지 않는다")도 `ASM-03`이 writer를 착지시켜 **넘어섰다** — 둘 다 *산문 규칙이 다른 태스크를 막지 못한* 사례.
+- **반복 실수 9회차 등재(새로운 축)**: v1 §6의 8회차는 전부 `만들고 **X하지 않음**`(배선/적재/배포/입력/켜기/공급/분해/기본값)이었으나 이번은 **좌석이 완성돼 정상 작동하는데 경계를 넘을 때 흘림**이다. 남길 원칙 = **"정직 표기는 그것을 만든 응답 밖으로 나갈 때 함께 가야 한다 — 영속·렌더·재조회 어느 경계에서든 떨어지면 그 순간부터 침묵 실패다. 그리고 정직 표기를 여러 개 내보내는 좌석은 소비처가 그 *전부*를 다루는지 한 검사에서 확인한다 — 일부만 다루는 소비처는 성실해 *보이기* 때문에 가장 오래 살아남는다."** 이 원칙은 기존 두 금기의 **빈칸**이다(침묵 실패 금지 = 예외를 삼킴 / 정본화≠집행 = 계약이 서빙 경로에 없음 / **이번 = 계약도 서빙 경로도 있는데 경계에서 필드가 떨어짐**). **CLAUDE.md 등재 후보로 r2 §9에 제안만 하고 이번 커밋에서 헌법은 고치지 않았다**(헌법 개정은 별도 판단).
+- **등재**: `PATH-09-learning-path-ordering-honesty-persistence`(S3·backend·D4) · `PATH-10-learning-path-ordering-basis-render`(S3·**mobile**·D5·`src/backend` 0줄) · `PATH-11-multi-weak-concept-orderability-axis`(S4·backend·D6 — 코퍼스만 읽으므로 입력 루프와 무관하게 즉시 착수 가능, 결과가 "병합이 순서를 더 결정하지 못한다"면 전역 경로 유보는 **영구 미채택으로 승격**). 페이퍼 갭 P4 신설(망각 λ `_REVIEW_QUEUE_LAMBDA=0.05` 하드코딩·`calibrated=false`가 true가 될 경로 0 — 단 정직 표기가 이미 붙어 침묵 실패가 아니므로 태스크 미신설, 발화조건은 `problem_attempt` 미도달 해제).
+- **번호 배정 실측**: 최초 시도한 `PATH-06`을 CLI가 **거부** — 원격 브랜치 `claude/whymath-learning-path-design-gvku5q`가 `PATH-06-progress-rate-axis`로 선점. 로컬 백로그만 봤다면 비어 보였을 번호이므로 **눈으로 골랐다면 중복이 났다**(HARN-15가 막아낸 실사례 — "태스크 ID 번호를 추론으로 배정 금지" 근거 보강). CLI 제안대로 09~11 배정.
+- **범위 규율**: `src/` 변경 **0**(문서·백로그만) · **v1 파일 무수정**(stale 4곳은 r2 §8에만 기록 — 어느 판정이 언제 무엇 때문에 바뀌었는지가 r2의 기록 가치). 착수 전 `git log --all --diff-filter=A -- 'docs/architecture/learning_path*'`로 인플라이트 동일 경로 0건 확인(v1이 겪은 병렬 충돌 재발 방지 규칙).
+### 2026-08-11 (점검·풀이 R3): **외부 EOS 틀 『06. 풀이(Solution)』 3차 대조 — 기능 판정 뒤집기 0·D6 완결. 최대 갭이 "기능"에서 "고립"으로 이동: D1(`S4-09`) 완료분 2,153줄이 13일째 미병합(고립 4회차)이고, `step_panel`은 테스트 양쪽 초록·계약 동결까지 됐는데 학생 도달 0. 두 유형 모두 선언≠배선 탐지기의 사각. 신규 등재 `SOL-01`~`SOL-03`, 원본 정정 3건** (claude 점검, Kiki "06 풀이 분야 빠진 부분 점검·설계")
+
+- **문서**: `docs/architecture/solution_module_gap_review_r3.md` 신규. 원본(`solution_module_gap_review.md`)은 **비수정 + 포인터 1블록**만 추가 — `problem_bank_gap_review_r2.md`·`gamification_module_gap_review_r2.md`가 확립한 별도 파일 규약 답습(원본 408줄에 3차를 섞으면 판정 시점 정보가 소실된다).
+- **판정 재대조**: 기능 23~27 **뒤집기 0**. 기능 26의 D6 행만 ✅로 닫힘 — `S4-19`(#760)가 `VerifyEventData` 6필드 additive·`wh1_evaluation` `step_decision_rate`/`step_incorrect_rate`·`SurrogateMetrics` 비확장 노출 차단까지 실측 확인됐다. 미채택 6건·잔여 트리거 6종 전건 승계, `S4-09`~`S4-12` acceptance 무수정.
+- **최대 갭(고립 4회차)**: `claude/whymath-solution-review-40xspg`의 `86212c43`이 S4-09를 20파일 2,153줄로 구현하고 커밋 메시지에 backend 7,637 passed·infra 258·harness 195·전 린터 green 증적까지 남겼으나 main에는 `l3/solution_path.py`·`db/models/solution_path.py`·`ApproachType` 전건 부재. `git merge-base` **exit 1**(공통 조상 소실·trunk 657커밋 앞섬)이라 merge가 아니라 **이식**이 유일 경로다. `S4-10`~`S4-12`·D3가 전부 여기 depends라 풀이 축 전체가 이 한 건에 막혀 있었다. **사각의 정체**: 고립분의 `done`이 *고립 브랜치의 YAML*에만 있어 main 대장은 `todo`로 보였고, `next`의 "이미 완료(미머지)" 경고는 **착수를 막을 뿐 회수를 시작하지 않는다**. 최근 일주일 고립 회수 7건(`PB-01`·`PATH-05`·`S3-17`·`REC-02`·`VIZ-06`·`NLP-04`·`S4-18`)에서 풀이 축만 빠졌다.
+- **신규 유형(테스트 초록 + 학생 도달 0)**: `step_panel`이 서버 스키마(`learning_scene.py:127`)·클라 모델(`scene_models.dart:113`)·클라 렌더러 stub(`scene_renderer.dart:204` `_StepPanelSeed` — "차근차근 단계를 펼쳐 볼 수 있어요" 고정 문구)·테스트 6곳·`MOB-14` 계약 동결까지 완비됐는데 **서버 생산자 0·데이터 0**. `POST /v1/scenes/*`는 학생 서빙 라이브 경로이므로 미출시 기능이 아니라 **가동 중인 표면의 영구 빈칸**이다. 기존 금기("검증 장치를 만들고 배선 확인 없이 완료 선언 금지")의 **역방향 변형** — 장치는 정확히 도는데 대상이 없다. 테스트는 계약을 인증할 뿐 도달을 인증하지 않는다.
+- **탐지기 사각**: `ops/declared_unwired_audit.py` 4축이 이 유형을 못 잡는다 — HTTP 축은 *라우트 호출*을 보므로 `GET /v1/problems/{id}/steps`는 테스트 호출 덕에 `reached`인데 `ProblemStep(...)` 생성이 프로덕션 0건이라 응답이 **항상 빈 배열**이다. 타임시리즈 축은 3모델만, scene kind·enum 소비처 0(`ReasoningType`)은 축 자체가 없다. 미탐 유형의 이름 = **"좌석 있음 + 소비자 있음 + 공급 데이터 0"**.
+- **등재 3건**(전부 `backlog.py add` CLI 경유·번호 추론 금지): `SOL-01`(고립분 이식 — alembic down_revision 재연결·KNOWN_REVISIONS 갱신·`c3882ab6` 드리프트 흡수·**원 커밋 증적 승계 금지**·전체 스위트 재검증) · `SOL-02`(step_panel 서버 생산자 — `solution_path` 실재할 때만 방출·빈 껍데기 금지·**집행 별항** 분리·deferred 점층 노출 유지) · `SOL-03`(도달 리포트 + 탐지기 5번째 축 `scene_element_kinds` — `assessment_seat_reach_report`의 `_KNOWN_WRITER_CITATION` 관용구 승계·게이트 아님·변별력 확인 의무).
+- **원본 정정 3건**(원본 비수정·R3 §정정에 기록): ㉮ §2-② 4단 수준축 불채택 근거 — 동형 4단 enum이 **이미 실재**한다(`schema/speech.py:33` `SpeechGradeBand` + `POST /v1/speech/latex`). 판정은 유효하나 근거는 "4단 축이 없어서"가 아니라 "낭독 축에만 소비처가 있어서"다 ㉯ 기능 26 OCR ✅는 "구현 실재" 축에서만 성립 — `config.py:1067` `ocr_enabled` **기본 False(opt-in)** ㉰ D3의 `detect_answer_leakage` 재사용은 **오프라인 하네스 전용**(호출 전건 `harness/` 안)이라 서빙 게이트가 아니다. 서빙 억제는 별개 장치(`coach.py:1606` `run_wh1_primary_turn` §3.4·`wh1_primary_enabled` 게이팅).
+- **실측 정정 1건(하네스 규약)**: selector 정렬은 `(stage, priority, −해금 수, id)` **오름차순** — **숫자가 작을수록 먼저**다(`build_harness.md:48`). 회수 선례 `PB-01`이 `priority: 1`인 것과 같은 이유로 `SOL-01`을 1로 정정했다(등재 직후 `next` 1순위 확인). 인접 실측: 기존 `S4-09`(5)·`S4-10`(5)·`S4-12`(4)는 이 방향과 **역방향**으로 매겨져 있다("5=가장 중요"로 읽은 흔적 — depends가 막아 실피해는 없다). 태스크 priority에 CLI 세터가 없어 값 정정은 YAML 편집이 유일 경로다.
+- **범위 경계(정직)**: 이번 세션은 **설계·등재까지**다. `SOL-01`의 2,153줄 이식·`S4-10`~`S4-12` 착수는 하지 않았다(1 세션 = 1 도메인·컨텍스트 위생). `S4-11`(D3 힌트 내용)은 "최대 실행 갭" 판정 유지하되 `S3-01` 파일럿 미착지로 계속 블록. 검증은 `backlog validate`(exit 0)·`tests/harness` 300 passed(exit 0)·`tests/infra` 298 passed(exit 0) — 컨테이너에 pytest·pytest-asyncio·sqlalchemy 미설치로 초기 34건 실패가 났으나 **추정하지 않고 설치 후 재판정**해 green 확인. 백엔드 src는 건드리지 않았다.
 ### 2026-08-11 (점검·운영(EOS) 3차): **외부 EOS 틀(모듈 42~50) 3차 재점검 — 42·45는 강화 확인, 최대 갭은 "게이트가 9일째 아무것도 막지 않음"이고 블로커가 2개임을 실측. 46·49·50의 "상환 승계" 판정을 정정(런북 3종 자인 공백 25종 추적 0건). 신규 등재 5건 + `ARCH-23` 보강 + 운영 축 게이트 3건** (claude 점검, Kiki "10. 운영(EOS) 분야의 빠진 부분 점검·설계")
 
 - **정본**: `docs/architecture/operations_module_gap_review_r3.md`(D7~D11 + §2 트리거 3차 재심 + §7 반복 실수 10회차 + 부록 실측 근거 22행). v1(07-29)·r2(08-03)에 이은 **13번째 자매편**이자 3차 델타 재점검. r2에는 배너 1줄만 추가(완료 태스크 `ARCH-24`·`ARCH-25`의 판정 근거 원본이라 소급 수정 금지 — v1→r2 선례).
