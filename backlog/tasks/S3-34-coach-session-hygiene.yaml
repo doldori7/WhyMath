@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -14,10 +14,13 @@ requires_gates: []
 acceptance:
   - "새 문제로 진입 시 dialogue가 이전 문제의 turn을 이어받지 않고 새로 시작한다 — 원 브랜치가 발견한 버그(완료 오기록으로 인한 반복/고갈)가 현재 main에서도 재현되는지 먼저 실측 확인 후 수정"
   - "오답 최종답 판정 시 정답 공개 없이 재고를 유도하는 코칭 발화로 전환(일반 소크라테스 반복이 아니라 '이미 답을 시도했다'는 맥락을 반영) — 부정적 정서 강화 표현 금지(CLAUDE.md 교수학 금기)"
-artifacts: []
+artifacts:
+  - "구현: flutter-engineer 위임(agentId a8a893d20f7c45e07) — chat_controller.dart build()가 activeProblemProvider.problemId를 select-watch하도록 근본수정(auto-dispose 표준 관용구). 신규 테스트 4건"
+  - "acceptance② 판단: S3-32의 기존 RECONSIDER_PROMPT가 이미 '이미 답을 시도했다' 문맥을 구조적으로 담보 — 코드 변경 없이 종결(api/coach.py·l4/completion.py 무접촉)"
+  - "메인 독립 재검증: chat_controller.dart+테스트 diff 전량 직접 검토, Problem/CoachTurnResult 타입·_FakeCoachApi 필드 소스 대조로 신규 테스트 4건의 정합성 확인. Flutter 툴체인 부재(리포 전체 .g.dart/.freezed.dart 0건 — build_runner 미실행) 확인, flutter test 직접 실행 불가를 정직 표기"
 paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/mobile/lib/features/chat/**"
-session: claude/subject-problems-theory-check-7n9n72
+session: null
 notes: "브랜치 tlthrr의 원 S3-30(문제별 dialogue 리셋 — 완료 오기록으로 인한 대화 반복/고갈 버그 수정)·S3-31(오답 최종답 피드백) 재작성. S3-32 완료 신호에 의존."
 updated: 2026-08-11

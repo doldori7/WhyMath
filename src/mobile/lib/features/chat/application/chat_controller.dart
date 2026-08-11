@@ -53,7 +53,17 @@ String _applyTransition(String current, String transition) {
 @riverpod
 class ChatController extends _$ChatController {
   @override
-  ChatState build() => const ChatState();
+  ChatState build() {
+    // 활성 문제(problemId)만 좁혀 watch한다(S3-34 세션 위생) — 같은 "학습" 탭 안에서
+    // 문제 A→B로 활성 문제가 바뀌면 auto-dispose Notifier 표준 관용구에 따라 build()가
+    // 재실행돼 상태가 const ChatState()로 리셋된다(messages·dialogueId 포함 전부).
+    // 리셋 후 다음 send()는 dialogueId==null을 보고 새 세션(createSession)을 다시 만든다
+    // (기존 로직 무변경). Problem의 다른 필드(예: 메타데이터)만 바뀌고 problemId가 그대로면
+    // .select가 걸러내 불필요한 리셋을 막는다(과도한 리셋 방지) — router.dart의
+    // StatefulShellRoute.indexedStack 탭 상태 보존은 그대로 유지된다(탭 전환 자체는 건드리지 않음).
+    ref.watch(activeProblemProvider.select((p) => p?.problemId));
+    return const ChatState();
+  }
 
   /// 학생 발화(대화 모드)를 보내고 코치 응답으로 상태를 갱신한다.
   ///

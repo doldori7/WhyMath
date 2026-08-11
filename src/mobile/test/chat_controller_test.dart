@@ -51,7 +51,11 @@ class _FakeCoachApi extends CoachApi {
       throw _fail();
     }
     return CoachTurnResult(
-      dialogueId: 'test-dialogue',
+      // 첫 호출은 기존 테스트 호환을 위해 'test-dialogue' 고정. 같은 fake로 세션이 *다시*
+      // 생성되는 경우(S3-34 활성 문제 전환 리셋 테스트)는 호출 순번을 붙여 이전 dialogueId와
+      // 구별 가능한 값을 준다 — 기존 단일 호출 테스트는 전부 createCalls==1로 끝나 영향 없다.
+      dialogueId:
+          createCalls == 1 ? 'test-dialogue' : 'test-dialogue-$createCalls',
       response: response!,
       wh1TurnIndex: 1,
     );
@@ -88,6 +92,14 @@ PedagogyDecision _decision({
     socraticCategory: socraticCategory,
   );
 }
+
+/// 최소 Problem 빌더 — 활성 문제 전환 테스트용(problemId만 다르면 충분).
+Problem _problem(String id) => Problem(
+      problemId: id,
+      sourceType: '자체생성',
+      subject: '미적분',
+      unitCodes: const <String>['CAL'],
+    );
 
 ProviderContainer _containerWith(CoachApi fake) {
   final container = ProviderContainer(
@@ -477,6 +489,101 @@ void main() {
       await notifier.send('이 문제 도와주세요');
 
       expect(fake.lastProblemId, 'prob-99');
+    });
+  });
+
+  group('ChatController 활성 문제 전환 시 리셋', () {
+    // S3-34 acceptance①: 같은 "학습" 탭 안에서(화면 이탈 없이) 활성 문제만 바뀌어도
+    // build()가 activeProblemProvider의 problemId를 watch하므로 상태가 리셋돼야 한다 —
+    // 그래야 문제 A의 dialogue 위에 문제 B의 turn이 계속 쌓이는 버그가 재발하지 않는다.
+
+    test('문제 A→B로 활성 문제가 바뀌면 다음 send는 새 dialogueId로 세션을 다시 만든다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+
+      // 문제 A로 진입해 첫 세션을 만든다.
+      container.read(activeProblemProvider.notifier).state = _problem('prob-A');
+      await container.read(chatControllerProvider.notifier).send('문제 A 질문');
+
+      final afterA = container.read(chatControllerProvider);
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 0);
+      expect(fake.lastProblemId, 'prob-A');
+      expect(afterA.dialogueId, isNotNull);
+      final dialogueIdA = afterA.dialogueId;
+
+      // 화면을 나가지 않고(라우터 탭 전환 없이) 활성 문제만 B로 바뀐다.
+      container.read(activeProblemProvider.notifier).state = _problem('prob-B');
+
+      // build()가 재실행돼 리셋된 뒤의 *현재* notifier로 다시 읽어 보낸다(실제 화면에서
+      // `ref.read(chatControllerProvider.notifier)`가 호출 시점마다 최신 인스턴스를 돌려주는
+      // 것과 동일 — chat_screen.dart의 각 전송 콜백이 이 패턴을 그대로 쓴다).
+      await container.read(chatControllerProvider.notifier).send('문제 B 질문');
+
+      final afterB = container.read(chatControllerProvider);
+      // 기존 세션에 턴을 잇는(addTurn) 게 아니라 createSession이 재호출됐다 — 새 세션.
+      expect(fake.createCalls, 2);
+      expect(fake.turnCalls, 0);
+      expect(fake.lastProblemId, 'prob-B');
+      expect(afterB.dialogueId, isNotNull);
+      expect(afterB.dialogueId, isNot(equals(dialogueIdA)));
+    });
+
+    test('활성 문제가 바뀌지 않으면(같은 문제로 여러 턴) 세션이 유지된다(회귀 없음)', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+
+      container.read(activeProblemProvider.notifier).state = _problem('prob-A');
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.send('첫 번째 질문');
+      await notifier.send('두 번째 질문');
+      await notifier.send('세 번째 질문');
+
+      // 세션은 한 번만 생성되고 나머지는 전부 턴으로 이어진다(기존 로직 무변경 확인).
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 2);
+      final state = container.read(chatControllerProvider);
+      expect(state.dialogueId, isNotNull);
+      // 학생 3 + 코치 3 = 6개 메시지가 리셋 없이 누적된다.
+      expect(state.messages.length, 6);
+    });
+
+    test('활성 문제가 계속 null이면(자유 대화 모드) 리셋 없이 세션이 유지된다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      // activeProblemProvider를 건드리지 않는다 — 기본값 null 유지(문제 미연결 자유 대화).
+
+      final notifier = container.read(chatControllerProvider.notifier);
+      await notifier.send('자유 대화 첫 질문');
+      await notifier.send('자유 대화 두 번째 질문');
+
+      // null → null은 problemId가 안 바뀐 것과 같다(Riverpod select가 걸러냄) — 리셋 없음.
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 1);
+      expect(fake.lastProblemId, isNull);
+      expect(container.read(chatControllerProvider).messages.length, 4);
+    });
+
+    test('문제 전환 시 이전 문제의 대화 이력(messages)도 함께 비워진다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+
+      container.read(activeProblemProvider.notifier).state = _problem('prob-A');
+      await container.read(chatControllerProvider.notifier).send('문제 A에서 막혔어요');
+      // 리셋 전: 대화가 쌓여 있고 세션도 생성돼 있다(리셋 후와 대비할 기준선).
+      expect(container.read(chatControllerProvider).messages, isNotEmpty);
+      expect(container.read(chatControllerProvider).dialogueId, isNotNull);
+
+      container.read(activeProblemProvider.notifier).state = _problem('prob-B');
+
+      // 다음 send를 보내기 전, read 시점에 이미 리셋이 반영돼 있어야 한다(ChatState() 통째
+      // 리셋 — messages·dialogueId·polyaState 전부 초기값으로 돌아간다).
+      final resetState = container.read(chatControllerProvider);
+      expect(resetState.messages, isEmpty);
+      expect(resetState.dialogueId, isNull);
+      expect(resetState.polyaState, 'understand');
+      expect(resetState.error, isNull);
     });
   });
 }

@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·S3-34): **코치 세션 위생 — 활성 문제 전환 시 대화(dialogue)가 리셋되지 않던 버그(같은 "학습" 탭 안에서 문제 A→B 전환해도 `ChatController`가 스스로 리셋될 계기가 코드에 전혀 없었음) 근본수정. acceptance②(오답 재고 유도 발화)는 S3-32의 기존 `RECONSIDER_PROMPT`로 이미 충족돼 있다고 판단해 코드 변경 없이 종결** (claude 구현 — `/drive`, flutter-engineer 위임 → 메인 독립 재검증)
+
+- **버그 재현 확인(acceptance①이 요구한 "먼저 실측")**: `router.dart`의 `StatefulShellRoute.indexedStack`가 "학습" 탭의 위젯 트리를 탭 전환 중에도 보존하도록 의도적으로 설계돼 있는데(스크롤 위치 등을 지키기 위함), `chat_controller.dart`의 `ChatController.build()`가 `ChatState build() => const ChatState();`로 **아무 provider도 watch하지 않아** — Riverpod auto-dispose Notifier가 스스로 재빌드(=리셋)될 계기가 없었다. `activeProblemProvider`는 `send()` 안에서 `dialogueId == null`일 때만 읽히므로, 문제가 바뀌어도 기존 dialogue에 계속 turn이 쌓인다 — grep으로 `chatControllerProvider` 참조가 `chat_screen.dart` 단 한 곳뿐임을 확인해 리셋 로직이 코드 어디에도 없음을 재확인.
+- **채택한 수정**: `build()`가 `ref.watch(activeProblemProvider.select((p) => p?.problemId))`로 **problemId만 좁혀 watch**하도록 변경 — Riverpod의 표준 관용구(watch한 의존성이 바뀌면 build()가 재실행돼 상태가 초기값으로 리셋)를 그대로 활용, 수동 리셋 로직을 새로 발명하지 않았다. `.select`로 좁힌 이유는 `Problem`의 다른 필드(메타데이터 등)만 바뀌었을 때 불필요하게 리셋되는 걸 막기 위함. `send()`의 기존 `dialogueId == null` 분기(새 세션 생성)는 무변경 — 리셋된 상태가 그 기존 로직을 자연스럽게 다시 태운다.
+- **acceptance② 판단(코드 변경 없이 종결)**: `l4/completion.py`의 `RECONSIDER_PROMPT`(S3-32가 이미 만듦)는 `verify_state == incorrect`일 때만 등장하는 고정 문구다 — 그 조건 자체가 "학생이 이미 최종답을 제출해 틀렸다고 막 판정된 직후"라는 문맥을 구조적으로 담보하므로(제출 전엔 이 분기가 아예 안 탐), "일반 소크라테스 반복이 아니라 이미 시도했다는 맥락을 반영"이라는 요구를 이미 만족한다고 판단했다. 정답 미노출·부정적 정서 강화 어휘 없음도 기존 `tone_filter` 기준과 정합. 이 판단에 따라 `api/coach.py`·`l4/completion.py`는 이 태스크에서 전혀 열지 않았다(순수 판단, 코드 근거는 이미 존재하는 docstring·상수 값).
+- **검증(메인 독립 재검증)**: `chat_controller.dart`·`chat_controller_test.dart` diff 전량 직접 읽고 `Problem` 모델 필수 필드(`problemId`·`sourceType`·`subject`)·`_FakeCoachApi`의 `createCalls`/`turnCalls`/`lastProblemId` 필드·`CoachTurnResult.dialogueId`(non-null) 타입을 각각 소스에서 대조해 신규 테스트 4건(전환 시 재생성·미전환 시 유지·null 유지 시 무영향·전환 시 messages도 초기화)이 실제로 주장하는 바를 정확히 assert함을 확인. **정직한 한계**: 이 컨테이너엔 Flutter/Dart 툴체인 자체가 없고(위임 에이전트가 추가로 확인 — 리포 전체에 `*.g.dart`/`*.freezed.dart` 코드젠 산출물이 단 하나도 없어 `build_runner` 없이는 이 환경에서 애초에 어떤 Flutter 테스트도 실행 불가), `flutter test`를 직접 실행하지 못했다 — 코드 읽기·기존 패턴과의 교차대조가 이 세션에서 가능한 검증의 상한(모바일 실행 검증은 CLAUDE.md 기존 규칙대로 Kiki 머신/Phaiakes9 소관).
+- 정본: 이 로그 항목 직후 커밋.
+
 ### 2026-08-11 (점검·S3-33 이미 충족 발견): **"코치 답안 입력면 확장"(자유입력 최종답 감지 + MC 탭 즉시 제출) 태스크가 착수 전 조사에서 신규 구현 0건으로 이미 전량 충족돼 있음을 발견 — 등재 시점(2026-08-07·tlthrr 브랜치 재작성 계획) 이후 무관한 별개 계보(S3-24/S3-35 버킷 B 회수, 2026-08-09)가 우연히 같은 acceptance를 채웠다** (claude 점검, `/drive` 루프)
 
 - **① 자유입력 감지**: `api/coach.py`의 `_FINAL_ANSWER_ELIGIBLE_STAGES = {EXECUTE, REVIEW}` 게이트 + `solution_text = student_solution or student_input`가 S3-32(af2e9b39/a9f6e23a)로 이미 무조건 `verify_final_answer`를 태운다 — 별도 정규식/휴리스틱 감지 0. `test_coach_completion.py::test_completed_none_when_correct_but_before_execute`가 "UNDERSTAND 단계는 정답을 쳐도 검증 시도 자체를 안 함(잡담 오인 방지)"을 이미 동결.
