@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-26-gdmwhk-catalog-recovery-reconciliation
+title: "교수전략 카탈로그 3차 완성본(gdmwhk) 회수 + PED-22~25 관계 정리 — 4차 중복 구현 차단"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 대조 실측(선행 조건) — origin/claude/whymath-pedagogy-review-gdmwhk(head 2915bf4e)와 uqyg79(PR #675)·main PED-22~25의 겹침을 파일 단위로 고정한다. 이 세션 실측: 코퍼스 11건·코드 10건이 uqyg79와 대상 일치(gdmwhk가 최신·정정 4곳 포함), uqyg79 생성기 5파일은 gdmwhk에 없음"
+  - "② gdmwhk의 카탈로그·소비 배선(schema/pedagogy_strategy.py·strategy_registry.py·runtime_selector.narrow_candidates·prompt_assembler.attach_strategy_card·YAML 10종·04f 문서)을 파일 단위 이식. 브랜치의 백로그 태스크 PED-18~21·REND-05는 main PED-18/19와 ID 충돌이므로 그대로 이식 금지 — 필요분만 CLI 재배정"
+  - "③ PED-22·23 처분 판정 — gdmwhk 이식으로 충족되면 done(증적=이 태스크 PR) 또는 cancel 처리하고 사유를 notes에 기록. PED-24(생성기)·PED-25는 잔존 확인"
+  - "④ 집행 지점 — 플래그 OFF 캔어리 상태에서 기존 경로 비트동일·ON에서 카탈로그 조회 실측(작동한 비율 원칙). 전체 backend 스위트 + exit code 판정"
+artifacts: []
+paths:
+  - "data/corpus/pedagogy_strategies_v1/**"
+  - "src/backend/whymath_backend/l4/pedagogy/**"
+  - src/backend/whymath_backend/schema/pedagogy_strategy.py
+  - docs/architecture/04f_pedagogy_strategy_catalog.md
+  - "tests/backend/l4/**"
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §3-②. 카탈로그 계보: uqyg79(1차)→enfkqt(부분집합·삭제)→gdmwhk(3차 완성본·PR 미오픈)→main PED-22~25(4차 구현 대기). gdmwhk는 브랜치 태스크가 todo라 고립-done 탐지기 사각(HARN-31 등재 근거). 회수 완료 전 gdmwhk·uqyg79 삭제 금지"
+updated: 2026-08-11

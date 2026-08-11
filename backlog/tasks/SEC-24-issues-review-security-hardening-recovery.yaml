@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-24-issues-review-security-hardening-recovery
+title: "고립 보안 하드닝 회수 — k20m0w의 SEC-13~18 6건(미인증 노출·XFF·OCR 상한·프로덕션 /docs·outcome 소유권·노출계약)이 main에 전무"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — origin/claude/whymath-issues-review-k20m0w(head 2330a095)의 SEC-13(harness-metrics 노출계약)·SEC-14(XFF trusted proxy)·SEC-15(미인증 answer/jobs 노출)·SEC-16(outcome 쓰기 소유권)·SEC-17(OCR 업로드 크기·MIME)·SEC-18(프로덕션 /docs 비활성+CORS 동결)이 main에 부재임을 재확인한다. 재현: git show origin/main:src/backend/whymath_backend/api/ocr.py | grep -cE 'content_type|max_bytes' → 0, app.py의 docs_url grep → 0"
+  - "② 정본화(계약) — 6건의 코드·테스트를 main 기준으로 파일 단위 이식한다. 통째 머지 금지(브랜치가 main 대비 39커밋 뒤 — 낡은 파일 통째 채택 시 회귀·NLP-04 선례). 브랜치 태스크 원 번호 SEC-13~18은 재사용하지 않는다(main SEC 계열이 20~23으로 이미 진행 — 이 태스크 번호로 회수하고 매핑을 notes에 유지)"
+  - "③ 집행 지점(정본화와 별항) — 이식한 각 계약이 실제 서빙 경로에서 경유되는지 확인한다: OCR 상한은 업로드 라우트가 실제 호출, /docs 비활성은 prod-like 설정에서 404 실측, CORS 동결·XFF·outcome 소유권·노출계약은 해당 테스트가 CI에서 실행됨을 확인(tests/infra/test_test_suite_wiring.py 축). '저장소에 존재함'≠'돌아감'"
+  - "④ 전체 backend 스위트 통과 + exit code 판정(-q/tail 금지) — 부분 스위트 통과를 전체 통과 근거로 보고 금지"
+  - "⑤ 범위 밖 동결 — k20m0w의 비보안분(MOB·NS·S3 표기)은 MOB-17 소유. 회수 완료 전 원 브랜치 삭제 금지"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - "src/backend/whymath_backend/l5/ocr/**"
+  - "tests/backend/**"
+  - "tests/infra/**"
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A1·§3-①. 원 브랜치 head 2330a095(45커밋·133파일·고립 done 21건). 미탐 원인 = HARN-25(_DOC_SERIES_SUFFIX 사각 — 보안 감사 문서 미탐지). 계정·보안 r2 세션이 SEC-14를 최대 갭으로 재등재 직전까지 간 실피해 있음. 원번호 매핑: SEC-13-harness-metrics-exposure-contract·SEC-14-xff-trusted-proxy·SEC-15-unauth-answer-jobs-exposure·SEC-16-outcome-write-ownership·SEC-17-ocr-upload-limits·SEC-18-prod-surface-hardening"
+updated: 2026-08-11

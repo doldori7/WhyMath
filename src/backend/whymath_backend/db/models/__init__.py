@@ -123,6 +123,7 @@ from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
 )
+from whymath_backend.db.models.solution_path import SolutionPath
 from whymath_backend.db.models.strategy_node import (
     STRATEGY_REVIEW_STATUS_DEFAULT,
     StrategyNode,
@@ -243,6 +244,8 @@ __all__ = [
     "WhsSolutionGrade",
     # WH-S S1 §2.2: VerifiedLemma (검증 중간 결과 저장소·재사용·멱등 (problem,key) UNIQUE)
     "VerifiedLemma",
+    # S4-09(D1): SolutionPath (풀이 경로 헤더·solution_paths·단계는 problem_step additive 컬럼)
+    "SolutionPath",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
     # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 4
 owner: claude
 depends_on:
@@ -18,5 +18,5 @@ paths:
   - src/backend/whymath_backend/l4/prerequisite_coaching.py
   - src/backend/whymath_backend/l2/learner_state.py
 session: null
-notes: "04e_misconception_remediation_design.md §1-2. PED-05의 active_misconceptions 슬롯 선착지가 자연스러운 신호원."
-updated: 2026-08-03
+notes: "04e_misconception_remediation_design.md §1-2. PED-05의 active_misconceptions 슬롯 선착지가 자연스러운 신호원.\n\n[차단 2026-08-11] 고립 브랜치 claude/misc-02-prerequisite-coaching-misconception-link(6d61321d) block 사유 이관: ①acceptance 필드 오류 — 'PrerequisiteGap.concept_src_id'는 실재하지 않음(concept_src_id는 MisconceptionCatalog 필드·PrerequisiteGap은 concept_code, id공간 상이) ②입력 소스 미정 — MisconceptionHypothesis(kebab)에 개념 링크 부재, kebab→M-id→source_id→Concept 다중 홉 crosslink 필요(현재 빈 테이블)와 '얇은 어댑터' 상충 ③교수학 미승인 — '오개념이 관한 개념'≠'선수'이므로 recommend_prerequisite_coaching에 흘리면 선수로 오라벨. 리뷰어 확정점: 재사용 필드·입력 소스·오라벨 승인 여부 — 옵션 A(순수 삼중쌍 어댑터)/B(별도 recommend_misconception_review_coaching)/C(crosslink 전배선·비권장) 택1 시 착수 가능. 상세 원문 = 해당 브랜치 태스크 yaml notes"
+updated: 2026-08-11

@@ -313,9 +313,16 @@ async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list
     하위 리소스 read 전용(단계 생성/수정은 범위 밖). 부모 부재를 빈 목록과 구분하기 위해
     먼저 문제 존재를 확인한다.
 
+    S4-09(D1) reader ① 소생: WH-S 승격 어댑터(`whs/path_promotion.py`)가 `problem_step`에
+    실데이터를 적재하면서 빈 테이블 위 dead API에서 벗어났다. 승격 단계는 additive 필드
+    (`solution_path_id`·`concept_node_id`·`reasoning_type`·`justification`·`common_errors`·
+    `sympy_verified`)를 함께 싣는다 — 기존 필드 제거·의미 변경 0(스키마 하위호환).
+
     PB-08: 부모 문항이 노출 부적격이면(저작권·검수 두 축) 이 하위 리소스도 **함께 404**다.
     풀이 단계는 정답보다 민감하다 — 단계별 유도가 곧 해답 경로이기 때문이다. 부모 판정 결과는
-    버리고 접근 가부로만 쓴다(`_load_public_problem`).
+    버리고 접근 가부로만 쓴다(`_load_public_problem`). S4-09가 이 테이블을 실데이터로 채웠으므로
+    이 게이트가 없으면 **pending 문항의 해답 경로가 무인증으로 나간다** — 두 변경이 만나는
+    지점이라 순서와 무관하게 둘 다 필요하다.
     """
     await _load_public_problem(session, problem_id)
     stmt = (
