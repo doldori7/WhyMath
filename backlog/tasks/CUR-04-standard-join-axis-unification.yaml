@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "src/backend/whymath_backend/api/**"
   - "src/backend/whymath_backend/l2/**"
   - "tests/backend/**"
-session: null
+session: claude/remaining-track-34zvse
 notes: "docs/architecture/curriculum_module_gap_review_r2.md §3 D4. S2-03 원자 재연결로 성취기준 조인 축이 갈렸는데 옛 축 소비자 2곳이 남았고 둘 다 graceful 폴백이라 침묵 무신호. /v1/me/target-progress는 성취기준의 유일한 학생 대면 표면이라 0%가 조인 실패의 위장이 된다. 반복 실수 10회차(§6) — 1~9회차의 '만들고 잇지 않음'과 달리 '이었다가 끊었는데 끊긴 걸 아무도 안 봄' 형태라 정적 스캔으로 안 잡히고, ASM-05가 다른 축으로 착지한 뒤에야 대조가 가능해졌다."
 updated: 2026-08-11
