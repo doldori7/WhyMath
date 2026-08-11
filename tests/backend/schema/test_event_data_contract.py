@@ -104,7 +104,7 @@ def test_verify_normalizes_missing_error_kind() -> None:
 
     S3-03: 계약에 mode/persona(선택 태그)가 추가돼 미지정 시 None으로 채워진다(mode-agnostic·
     기존 생산 경로 의미 불변). S4-19: 3상태 6키도 미지정 시 None으로 채워진다(구판/무검증
-    모양 — 신판 payload에는 키가 항상 존재하되 값 None 가능).
+    모양 — 신판 payload에는 키가 항상 존재하되 값 None 가능). MATH-03: 사유 분포 키도 동형.
     """
     data = build_event_data(EventType.검산결과, passed=True)
     assert data == {
@@ -115,6 +115,7 @@ def test_verify_normalizes_missing_error_kind() -> None:
         "n_correct": None,
         "n_incorrect": None,
         "n_unverifiable": None,
+        "unverifiable_by_reason": None,
         "unverified_ratio": None,
         "first_incorrect_index": None,
         "ocr_gated": None,
@@ -131,6 +132,7 @@ def test_verify_full_shape() -> None:
         "n_correct": None,
         "n_incorrect": None,
         "n_unverifiable": None,
+        "unverifiable_by_reason": None,
         "unverified_ratio": None,
         "first_incorrect_index": None,
         "ocr_gated": None,
@@ -148,6 +150,7 @@ def test_verify_mode_persona_tag() -> None:
         "n_correct": None,
         "n_incorrect": None,
         "n_unverifiable": None,
+        "unverifiable_by_reason": None,
         "unverified_ratio": None,
         "first_incorrect_index": None,
         "ocr_gated": None,
@@ -181,6 +184,7 @@ def test_s4_19_verify_step_counts_round_trip() -> None:
         n_correct=2,
         n_incorrect=0,
         n_unverifiable=1,
+        unverifiable_by_reason={"parse_error": 1},
         unverified_ratio=1 / 3,
         first_incorrect_index=None,
         ocr_gated=False,
@@ -193,10 +197,29 @@ def test_s4_19_verify_step_counts_round_trip() -> None:
         "n_correct": 2,
         "n_incorrect": 0,  # 실측 0 — None(미지정)과 구분 보존
         "n_unverifiable": 1,
+        "unverifiable_by_reason": {"parse_error": 1},  # MATH-03 — 문자열 키 그대로 보존
         "unverified_ratio": 1 / 3,
         "first_incorrect_index": None,  # n_incorrect==0이라 '없음'(미지정 아님 — 카운트로 구분)
         "ocr_gated": False,
     }
+
+
+def test_math03_unverifiable_by_reason_contract() -> None:
+    """MATH-03: 사유 분포 필드 — additive optional(default None)·writer↔계약 정합(S4-19 동형).
+
+    `api/coach.py._log_verify_event`가 폐쇄 사유 코드(VerifyStepReasonCode 값) → 건수 dict를
+    문자열 키로 싣는다. None=미지정(구판)·{}=검증 실행·보류 0 — 두 상태를 구분한다(분모 없는
+    0 금지의 적재 축). 자유문 reason·steps는 계약에 아예 없다(비식별 규약).
+    """
+    assert "unverifiable_by_reason" in VerifyEventData.model_fields
+    assert VerifyEventData.model_fields["unverifiable_by_reason"].default is None
+    # {}(보류 0)와 None(미지정) 구분 보존.
+    data = build_event_data(EventType.검산결과, passed=True, unverifiable_by_reason={})
+    assert data["unverifiable_by_reason"] == {}
+    # 자유문·단계 본문 키는 계약에 부재(넣으면 extra=forbid로 즉시 거부됨을 아래 stray 테스트가
+    # 일반 검증) — 필드 목록 자체로 고정한다.
+    assert "steps" not in VerifyEventData.model_fields
+    assert "reason" not in VerifyEventData.model_fields
 
 
 def test_hint_shape() -> None:
