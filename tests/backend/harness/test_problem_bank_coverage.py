@@ -677,3 +677,112 @@ def test_cli_missing_problem_types_warns_but_does_not_gate(
     assert rc == 0
     assert "경고 — 유형 카탈로그 적재 실패" in captured.err
     assert "카탈로그 미상" in captured.out
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 8. 과목(subject) 축 (ARCH-28)
+# ──────────────────────────────────────────────────────────────────────────
+def _subject_report(tmp_path: Path, *, with_geometry_problem: bool) -> pbc.CoverageReport:
+    """과목 축 픽스처 — 대수 코드 2종(한 문항이 둘 다 태그)·기하 코드 1종.
+
+    `with_geometry_problem=False`면 기하 성취기준은 대장에만 있고 문항이 없다 —
+    `zero_problem_subjects` 변별력(양방향)의 조작 변수다.
+    """
+    problems = [
+        _problem(problem_id="s1", standards=["[12대수01-08]", "[12대수03-02]"]),
+    ]
+    if with_geometry_problem:
+        problems.append(_problem(problem_id="s2", standards=["[12기하01-01]"]))
+    corpus = _write_corpus(tmp_path, "problem_bank_subject", problems)
+    catalog = pbc.load_standards(
+        {
+            "standards": [
+                {**_standard("[12대수01-08]"), "subject": "12대수"},
+                {**_standard("[12대수03-02]"), "subject": "12대수"},
+                {**_standard("[12기하01-01]", domain="기하"), "subject": "12기하"},
+            ]
+        }
+    )
+    return pbc.build_report(
+        (pbc.load_corpus_file(corpus, name="problem_bank_subject"),), catalog, revision=_STD_2022
+    )
+
+
+def test_load_standards_projects_subject_field() -> None:
+    """대장의 `subject`를 투영하고, 결측은 빈 문자열로 남긴다(조용한 발명 금지)."""
+    catalog = pbc.load_standards(
+        {
+            "standards": [
+                {**_standard("[10공수1-02-02]"), "subject": "10공수1"},
+                _standard("[12대수03-02]"),  # subject 키 자체가 없음
+            ]
+        }
+    )
+    assert {e.code: e.subject for e in catalog.entries} == {
+        "[10공수1-02-02]": "10공수1",
+        "[12대수03-02]": "",
+    }
+
+
+def test_coverage_by_subject_counts_and_multi_code_refs(tmp_path: Path) -> None:
+    """과목별 커버(코드 기준)와 문항 참조(중복 가산) — 같은 과목 코드 2개 태그면 참조는 2."""
+    report = _subject_report(tmp_path, with_geometry_problem=True)
+    assert report.coverage_by_subject == {"12대수": (2, 2), "12기하": (1, 1)}
+    assert report.problems_per_subject == {"12대수": 2, "12기하": 1}
+    assert report.zero_problem_subjects == ()
+
+
+def test_zero_problem_subject_detection_is_bidirectional(tmp_path: Path) -> None:
+    """변별력 실측(ARCH-28 acceptance) — 과목 문항을 빼면 0문 과목으로 *나타나고*,
+    다시 넣으면 *사라진다*. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다."""
+    present = _subject_report(tmp_path / "with", with_geometry_problem=True)
+    assert present.zero_problem_subjects == ()
+
+    absent = _subject_report(tmp_path / "without", with_geometry_problem=False)
+    assert absent.zero_problem_subjects == ("12기하",)
+    assert absent.coverage_by_subject["12기하"] == (0, 1)
+    assert "12기하" not in absent.problems_per_subject
+
+
+def test_subject_missing_is_reported_as_misang(tmp_path: Path) -> None:
+    """대장 subject 결측을 숨기지 않는다 — `(미상)` 버킷으로 드러낸다(정직 회계)."""
+    report = _sample_report(tmp_path)  # 픽스처 대장 4건 전부 subject 없음
+    assert report.coverage_by_subject == {"(미상)": (2, 4)}
+    assert report.problems_per_subject == {"(미상)": 3}
+    # 커버가 0이 아니므로 0문 과목은 아니다 — 결측과 0문을 혼동하지 않는다.
+    assert report.zero_problem_subjects == ()
+
+
+def test_render_shows_subject_section_and_zero_subject_list(tmp_path: Path) -> None:
+    absent = _subject_report(tmp_path / "without", with_geometry_problem=False)
+    text = pbc.render_report(absent)
+    assert "### 1.3 과목별 커버리지 (ARCH-28)" in text
+    assert "| 12대수 | 2 | 2 | 100.0% | 2 |" in text
+    assert "**0문 과목 1종**: `12기하`" in text
+    # 기존 소절은 번호만 밀리고 그대로 있다(하위호환 렌더).
+    assert "### 1.4 커버된 코드 상위 (문항 수)" in text
+    assert "### 1.5 0커버 코드 목록" in text
+
+    present = _subject_report(tmp_path / "with", with_geometry_problem=True)
+    assert "- 0문 과목: 없음" in pbc.render_report(present)
+
+
+def test_json_adds_subject_axis_and_keeps_existing_keys(tmp_path: Path) -> None:
+    """JSON 하위호환 — 신규 키 3종이 추가되고 기존 키는 그대로다."""
+    absent = _subject_report(tmp_path / "without", with_geometry_problem=False)
+    payload = json.loads(pbc.dump_json(absent))
+    assert payload["coverage_by_subject"] == {
+        "12대수": {"covered": 2, "total": 2},
+        "12기하": {"covered": 0, "total": 1},
+    }
+    assert payload["problems_per_subject"] == {"12대수": 2}
+    assert payload["zero_problem_subjects"] == ["12기하"]
+    for existing_key in (
+        "coverage_by_school_type",
+        "coverage_by_domain",
+        "unit_band_matrix",
+        "standards",
+        "problems_per_covered_code",
+        "honest_accounting",
+    ):
+        assert existing_key in payload
