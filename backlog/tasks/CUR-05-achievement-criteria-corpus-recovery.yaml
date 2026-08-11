@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: data-pipeline
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,7 +16,8 @@ acceptance:
   - "③ 약속 이행 강제: CUR-03 acceptance ④가 약속한 AchievementStandard 스키마 확장 후속 태스크를 backlog.py add로 이 태스크 done 이전에 등재한다. 등재하지 않으면 done 불가 — 약속만 남기고 추적이 사라진 CUR-03의 재발을 구조로 막는다"
   - "④ 변별력: 회수 전 git merge-base --is-ancestor가 exit 1, 회수 후 코퍼스 파일이 main 경로에 존재하고 데이터 카드가 동반됨을 확인한다. 판정은 exit code로 한다(출력 억제·절단 금지). 성공/실패 양쪽에서 같은 신호를 내는 검사(브랜치 목록 출력만 보기 등)는 쓰지 않는다"
   - "⑤ 범위 밖 명시: 스키마 확장 구현(신규 컬럼·마이그레이션)과 성취수준 데이터의 런타임 노출은 포함하지 않는다 — ③에서 등재하는 후속 태스크 소관이다(데이터가 스키마보다 먼저·CUR-03 원설계 승계)"
-artifacts: []
+artifacts:
+  - "#810 — CUR-08 파일 단위 회수(원 구현=34zvse 178639f2, cmp 바이트 동일). 코퍼스 13세트(230/459/54=사이드카 counts 실측 일치)+데이터카드+licensing 2행. provenance_audit 27코퍼스 EXIT=0·변별력: pool 오류값 뮤테이션→SCHEMA_INVALID EXIT=1→cp 원복 green. acceptance③=CUR-07 재등재(backlog.py add·todo/session null 정규화). acceptance① 소스 브랜치 지목은 원 브랜치가 실측 반증(98a34695 보유=human-bottleneck 계열)"
 paths:
   - "data/corpus/**"
   - "docs/data/**"
