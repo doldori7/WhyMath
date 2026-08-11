@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: QUAL-02-real-duplicate-pair-disposition
+title: "실중복 9쌍 콘텐츠 판정 — 은퇴/유지 결정 (QUAL-01 가시화 후속)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - QUAL-01-problem-corpus-duplication-audit
+requires_gates: []
+acceptance:
+  - "QUAL-01이 확정한 실중복 9쌍(harness/problem_duplication_audit.py 재실행으로 재확인) 각각에 은퇴/유지/병합 판정을 내리고 근거를 기록한다 — 일괄 삭제·자동 규칙 금지, 쌍별 개별 판단(콘텐츠 판정이라 자동화 불가)"
+  - "데모/파일럿 풀에 동시 노출된 1쌍(wm-quad-eq-larger-root↔wm-skel-92cd1ba2bbf5)을 최우선 처리 — 실사용자 노출 중인 유일한 쌍"
+  - "판정 결과를 코퍼스에 반영(은퇴 시 해당 레코드 제거 또는 review_status 마킹 — 방식은 착수 세션 판단)하고, 반영 후 QUAL-01 리포트를 재실행해 해당 쌍이 목록에서 사라짐을 확인"
+  - "범위 밖: 신규 코퍼스 생성·재서술 파이프라인 자체 수정(QUAL-03 소관)"
+artifacts: []
+paths:
+  - "data/corpus/problem_bank_*/**"
+  - src/backend/whymath_backend/harness/problem_duplication_audit.py
+session: null
+notes: "QUAL-01(harness/problem_duplication_audit.py, 2026-08-10 완료)이 가시화만 하고 해소는 명시적으로 범위 밖에 남긴 후속. 실측 9쌍 중 1쌍은 원 설계문서(브랜치 8ceaf5)가 지목한 사례(데모풀 동시노출 확인됨), 8쌍은 이번 재실측에서 신규 발견(전부 generated_v0↔rephrased_v0, 스켈레톤 단답형/객관식 트윈 + 재서술 무변화 교차매칭 — QUAL-03과 근원 공유하나 해소 축은 이쪽이 콘텐츠·그쪽은 파이프라인)."
+updated: 2026-08-10

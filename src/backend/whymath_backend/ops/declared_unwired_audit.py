@@ -1003,6 +1003,9 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.standard_attainment_report": _NEEDS_LIVE_SAMPLE,
         # 빌드타임 관측 리포트(게이트 아님) — 사람이 필요할 때 돌린다
         "harness.problem_bank_coverage": _OFFLINE_REPORT,
+        # QUAL-01(2026-08-10): 코퍼스 JSONL만 읽는 빌드타임 관측 리포트(DB 0) — problem_bank_
+        # coverage와 동일 취급. 실중복이 나와도 exit 1을 내지 않는 게이트 아님 원칙도 동일.
+        "harness.problem_duplication_audit": _OFFLINE_REPORT,
         "harness.visualization_reach_report": _OFFLINE_REPORT,
         "harness.concept_reach_report": _OFFLINE_REPORT,
         "harness.assessment_seat_reach_report": _OFFLINE_REPORT,

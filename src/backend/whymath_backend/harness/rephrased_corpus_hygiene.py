@@ -15,6 +15,20 @@ JSON으로 낸다(재검수 근거·조용한 축소 금지).
 방지) 명시 slug로 소급 제거한다. 패턴 축(①~⑥)과 달리 이 목록은 **범용 게이트가 아니다** —
 신규 재서술 배치의 같은 결함은 여기서 안 잡힌다(정직 한계).
 
+QUAL-03(2026-08-10)이 `question_hygiene_violations`에 ⑦축(무변화 — `original_text` 선택 인자)을
+추가했지만, **이 CLI는 의도적으로 그 인자를 넘기지 않는다**. 이유 둘: ① 이 도구는 라인 단위
+순회(`run_corpus_hygiene_sweep`이 한 줄씩 읽고 그 자리에서 판정한다)라 "이 레코드의 원본"을
+알려면 `relations[].parent_slug`로 다른 레코드(같은 파일 또는 다른 코퍼스)를 찾아 조인해야
+하는데, 그건 현재 구조와 맞지 않는다(전체 코퍼스를 먼저 인덱싱해야 함 — 별도 설계). ② 더
+결정적으로, `write=True`가 기본값이다(위 경고 그대로) — ⑦축을 여기 켠 채로 실수로 write 모드를
+돌리면 무변화 레코드 전부가 **조용히 코퍼스에서 사라진다**. 무변화 레코드의 처리(재생성/은퇴/
+현행유지)는 콘텐츠 판정이라 사람/오케스트레이터의 몫이지 이 자동 스윕의 몫이 아니다. 재서술
+*신규 생성* 시점의 무변화 차단은 `l3/equivalent/rephrase.classify_invariance_failure`가
+담당한다(그 함수는 rephrase 직후 `original_text=`원 발문을 넘겨 ⑦축을 활성화한다 — 아직
+코퍼스에 편입되기 *전*에 막으므로 삭제 위험이 없다). 기존(커밋된) 429건의 무변화 실측치는
+`harness.problem_duplication_audit`(QUAL-01/QUAL-03 통합 리포트 §7)를 참고한다 — 이 파일은
+`write=False`(`--dry-run`)로 실행해도 무변화를 계산하지 않는다(위 이유대로 배선하지 않았으므로).
+
 사용:
     python -m whymath_backend.harness.rephrased_corpus_hygiene            # 커밋 코퍼스 in-place
     python -m whymath_backend.harness.rephrased_corpus_hygiene --dry-run       # 판정만 출력

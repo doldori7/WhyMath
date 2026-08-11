@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: QUAL-04-rephrase-pipeline-fail-closed-review
+title: "재서술 파이프라인 fail-closed 설계 재검토 — 실패 레코드가 원문 그대로 코퍼스에 편입되는 구조 (QUAL-03 근본원인)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - QUAL-03-rephrase-noop-defect-measurement
+requires_gates: []
+acceptance:
+  - "QUAL-03이 확정한 근본원인(problem_corpus_rephrase.run_corpus_rephrase가 실패 사유 불문 outcome.rephrased=False 레코드를 원문 그대로 코퍼스에 편입 — reason_code는 표본 10건에만 남고 레코드 자체엔 미영속)을 실측 재확인하고, 실패 사유 분포(수식추출 실패/provider 예외/수치불변 위반/위생 위반/무변화 각각 몇 건)를 실제로 진단(가능하면 Phaiakes9 라이브 재실행·불가하면 코드 경로 정적 분석으로 사유별 발생 가능성만이라도)"
+  - "설계 변경 결정 — (a)실패 레코드를 코퍼스에서 드롭 (b)rephrase_status 필드 신설로 영속화 후 소비측이 필터 중 판정, 근거를 기록. 어느 쪽이든 신규 마이그레이션 최소화 원칙 확인"
+  - "결정 반영 후 QUAL-03 무변화 282건(재실행 시점 재측정치로 갱신) 처리는 이 태스크가 실행하지 않는다 — 콘텐츠 재생성은 Phaiakes9 라이브 LLM 필요·비용 판단이라 owner=kiki 후속 결정 또는 별도 태스크"
+  - "범위 밖: QUAL-02(실중복 9쌍 자체 판정)·기존 429건 중 무변화 레코드의 실제 재생성 실행"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l1/problem_bank/problem_corpus_rephrase.py
+  - src/backend/whymath_backend/l3/equivalent/rephrase.py
+session: null
+notes: "QUAL-03(harness/problem_duplication_audit.py §7.1, 2026-08-10) 권고 ②를 등재 — 무변화 비율 65.7%(429건 중 282건)가 개별 결함이 아니라 파이프라인 구조(드롭 옵션 부재)의 산물이라는 근본원인은 코드 추적으로 확정했으나(run_corpus_rephrase가 실패 사유 불문 원문 그대로 편입), 실 LLM 재실행 기반 사유별 분포 진단과 설계 변경 자체는 QUAL-03 범위 밖으로 명시적으로 분리했다. QUAL-03이 추가한 위생 게이트 ⑦축(무변화 검출)은 *신규* 생성만 방어 — 기존 429건·이 구조적 결함 자체는 무변경."
+updated: 2026-08-10

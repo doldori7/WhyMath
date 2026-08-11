@@ -111,7 +111,7 @@
       "name_ko": "이차방정식 근의 공식",
       "family": "근의공식",
       "latex": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
-      "dsl": "x == (-b + sqrt(b**2 - 4*a*c))/(2*a)",
+      "dsl": "(2*a*x + b)**2 == b**2 - 4*a*c",
       "canonical_signature": null,
       "aliases": [
         "x = \\frac{-b - \\sqrt{b^2-4ac}}{2a}"
@@ -124,7 +124,7 @@
         "실근은 b² − 4ac ≥ 0일 때 (실수 범위)"
       ],
       "mnemonic": null,
-      "notes": "canonical은 한 근·다른 부호 근은 SymPy 동치로 판정(변형 노드화 아님)."
+      "notes": "dsl은 ±-중립 음함수형(NS-04·2026-08-10 정정) — x=(-b±√(b²-4ac))/(2a) 양변에서 2ax+b=±√(b²-4ac)이므로 제곱하면 (2ax+b)²=b²-4ac로 부호 무관 단일식이 된다. 이전 dsl(x==(-b+√(b²-4ac))/(2a))은 +근 하나만 표현해 latex의 ± 두 근 중 한쪽이 소실되는 결함이었다(두 근은 SymPy 항등이 아니다 — 판별식>0이면 서로 다른 값. 구 notes의 '다른 부호 근은 SymPy 동치로 판정'은 이 오류를 그대로 반영한 잘못된 서술이었음). 정정 근거: tests/backend/l1/test_formula_governance.py(NS-04 latex↔dsl 정합 게이트)."
     },
     {
       "formula_id": "formula.quadratic.discriminant",
