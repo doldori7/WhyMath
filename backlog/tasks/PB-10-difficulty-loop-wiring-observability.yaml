@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-10-difficulty-loop-wiring-observability
+title: "난이도 갱신 루프 배선·관측 — calibrate_items 호출자 0건(데이터 잠금이 아니라 미배선)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 관측 먼저(VIZ-01·NLP-01·PB-04 선례 동형) — irt_difficulty_b 채움률·마지막 보정 시각·보정 제외 사유(응답 5회 미만·l2/item_calibration.py:27)를 리포트로 낸다. '휴면 중'이 숫자로 보이게 만드는 것이 1단계다. 현 실측: irt_difficulty_b 0건(MEMORY 2026-08-01)."
+  - "② 스케줄 좌석 결정 — l2/calibrate_items.py:1-13이 '이 명령이 없으면 irt_difficulty_b는 전량 NULL로 남아 보정이 휴면한다 / ops가 cron·k8s CronJob으로 주기 실행한다 / 스케줄은 외부 책임'이라 선언하나 호출자가 .github/workflows·docker-compose*.yml·infra/ 전수 grep 무일치다(infra/phaiakes9/systemd에는 api·worker 유닛만). 저장소 안에 배선할지 밖(ops)에 남길지를 결정하고 기록한다."
+  - "③ 배선한다면 tests/infra 배선 실재성 테스트를 동반한다 — run: 문자열이 실제 CI/유닛에 박혀 있는지 기계 확인(OPS-10 test_test_suite_wiring.py 선례). '저장소에 존재함'과 '돌아감'은 다르다. 응답 0행인 현재는 no-op으로 도는 것이 정상이며 그 사실을 로그가 말해야 한다(침묵 실패 금지)."
+  - "④ 정답률·CTT 변별도 산출은 S4-15 승계 — historical_correct_rate·rate_top/mid/low_grade·discrimination_D·irt_a는 쓰기 코드 0건이나 이는 S3-01 파일럿 잠금의 정상 상태다. 이 태스크는 IRT 축과 관측만 다룬다(중복 등재 금지)."
+  - "⑤ 스코프 밖 — 5축 세분 난이도 채움(l3/equivalent/difficulty.py가 '추정 근거 없는 축을 날조하지 않는다'고 명시한 판정 존중)·난이도 8축 신규 필드 증설(1차 §2-④ 승계·anti-explosion)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/calibrate_items.py
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/infra/**"
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G4·§2 기능19. R1·R2는 기능 19를 '실학생 응답 0이라 S4-15 정상 잠금'으로 판정했으나 R3 실측이 한 겹 더 드러냈다 — 응답이 생겨도 루프는 자동으로 돌지 않는다. 스케줄 좌석이 저장소 밖(ops)으로 위임됐는데 그 좌석의 실재를 확인하는 관측이 없다. CLAUDE.md '작동 신호 없는 알고리즘 부착 금지 — 작동한 비율 원칙' 해당."
+updated: 2026-08-11
