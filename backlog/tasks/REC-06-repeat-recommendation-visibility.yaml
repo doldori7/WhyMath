@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - "src/backend/whymath_backend/ops/*"
   - "tests/backend/api/test_me*.py"
-session: null
+session: claude/whymath-dsl-integration-check-bmjic8
 notes: "docs/architecture/ai_recommendation_module_gap_review_2.md §2 G2. θ=0 고정(l2/irt.py:76) + attempted_ids 0행(api/me.py:1832 — ProblemAttempt 0행) → 후보 SQL 제외 0(:1966) + select_weighted_item 결정론 argmax·동률=낮은 인덱스(l2/irt.py:267) ⇒ 같은 학생이 GET /v1/me/next-problem을 몇 번을 불러도 같은 문항 1건을 받는다. 1차 문서는 'θ=0 콜드스타트'까지만 짚고 이 학생 대면 귀결은 짚지 않았다. 더해 후보 정렬에 2차 키가 없어 동률 구간 순서가 PG 임의다 — 결정론이 선택기에만 있고 후보 조회에는 없다."
-updated: 2026-08-04
+updated: 2026-08-11
