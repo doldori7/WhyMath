@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: data-pipeline
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - "data/corpus/**"
   - "docs/data/**"
-session: null
+session: claude/remaining-track-34zvse
 notes: "docs/architecture/curriculum_module_gap_review_r2.md §3 D5. CUR-03이 status=done·artifact 98a34695인데 그 커밋은 main 조상이 아니고 코퍼스가 작업 트리에 부재 — v1 D3이 지적한 '성취수준 0건'이 main 기준 여전히 0건이며, 이제 done 표기에 가려 보이지 않는다. CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지'의 데이터 축 변형이자 '만료 없는 유예·제외 금지'(재확인 지점 부재) 위반. unmerged_done_triage_2026-08-08.md에도 CUR-03 미등재라 기존 미머지 done 탐지 장치가 놓쳤다."
 updated: 2026-08-11
