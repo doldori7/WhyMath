@@ -41,12 +41,19 @@ parsed[*].formal`(자유서술 수식 문자열, 전 레포 소비자 0건 확�
 집계는 verdict가 `pass`/`fail`일 때만 클라 보고와 대조한다.
 
 채점 가능성 상한(REC-05·`ai_recommendation_module_gap_review_2.md` §2 G1): 위 shadow 채점의
-파생 게이트(`derive_verify_inputs`)는 코퍼스 2,647문항 중 **0건**만 통과한다(조건 보유 30건
+파생 게이트(`derive_verify_inputs`)는 코퍼스 2,638문항 중 **0건**만 통과한다(조건 보유 30건
 전부 `formal` 결측) — 이 경로만으로는 attempt가 아무리 쌓여도 채점 가능성 관측이 영구히 0건
 이다. `classify_gradability`/`build_gradability_ceiling_report`는 **attempt 없이 코퍼스만으로**
 채점 가능성의 실제 상한(선택형 정확일치·수치 단답 후보·조건 기반 파생 3버킷)을 측정하는
 별도 정적 리포트다 — `derive_verify_inputs`를 C버킷 판정에 그대로 재사용하되(중복 로직 0),
 attempt 유무와 무관하게 코퍼스 전량을 스캔한다.
+
+  *수치 현행화(REC-09 회수 시점 2026-08-11)*: 원 구현(REC-05·2026-08-09)은 위 자리를
+  **2,647**문항으로 적었다. 그 사이 main이 전진해 `QUAL-02`(PR #777)가 실중복 9레코드를
+  은퇴시켰다(2,647 − 9 = **2,638** · 근거 `docs/data/problem_duplicate_disposition_2026-08.md`).
+  회수 세션 실측(`data/corpus/problem_bank_*/problems.jsonl` 7종 합계 2,638 · 버킷
+  A 1,612 / B 1,026 / C 0 / unclassified 0)으로 갱신했다. **구조적 결론은 불변**이다 —
+  C버킷 0건과 그 원인(조건 보유 30건 전부 `formal` 결측)은 코퍼스가 줄기 전후로 동일하다.
 
 구조적 0 원인 구분(acceptance②): `ShadowGradingReport.verifiable_zero_reason`이 "표본
 없음(attempt 0행)"과 "파생 가능 문항 0(코퍼스 formal 결측)"을 구분한다 — 이전에는 둘 다
