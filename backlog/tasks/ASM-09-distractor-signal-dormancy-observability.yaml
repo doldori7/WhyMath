@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,12 +17,13 @@ acceptance:
   - "④ 변별력(양방향): distractor_map 보유 문항에 합성 시도를 넣어 분모가 실제로 오르는지 → 제거 시 복원되는지 실측. distractor_map이 없는 문항의 시도는 분모에서 제외되는지도 확인. 뮤테이션 원복은 cp 백업으로만(git checkout/restore/stash 금지 — CLAUDE.md 2026-08-10)"
   - "⑤ CI 배선 실재 확인: tests/backend/harness/**는 backend 잡 testpaths(src/backend/pyproject.toml)로 기수집됨을 확인하고 신규 워크플로를 만들지 않는다('저장소에 존재함'과 '돌아감'은 다르다 — OPS-03·OPS-10). 오프라인 관측 리포트이므로 declared_unwired_audit 면제 등재가 필요한지 확인하고 필요하면 _OFFLINE_REPORT로 등재한다. 판정은 exit code"
   - "⑥ 범위 밖(명시): AttemptSubmitRequest에 selected_choice_index 신설·적재·클라 변경·마이그레이션은 **ASM-06 재정의 소관**(이 태스크는 관측 좌석만) · 오개념 가설 갱신 로직 변경 0(기존 misconception_hypothesis 좌석을 신설·분기하지 않는다 — 이중 진실원천 금지) · 오개념 preload 0(reactive retrieval만) · 서버 채점 권위 축은 ASM-08 소관"
-artifacts: []
+artifacts:
+  - "#797"
+  - "검증(오케스트레이터 독립 재실행·exit code): 신규 테스트 25 passed/1 skipped(3.6s)·ruff 0·black 0(1120파일)·declared_unwired_audit exit 0(공급 57·미분류 0)·리포트 CLI exit 2 정상 분기(DB 부재 컨테이너·예외 타입명 로그). acceptance ① 재실측 1,612/2,638(61.1%) — r2 1,616/2,647 델타 전량 QUAL-02 은퇴로 diff 실측 설명. probe_capture_slot 런타임 조사(ASM-06 착지 시 상태 자동 반전). 전체 스위트는 서브에이전트 백그라운드 + PR #797 CI가 최종 판정"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-  # acceptance ⑤가 요구한 신규 CLI 분류 등재(scope_drift 경고 반영)
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
-session: claude/whymath-dsl-integration-check-bmjic8
+session: null
 notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D4. v1은 이 축(모듈 57 오답·오개념 분석)을 'NLP-02 선결 조건'으로 승계했으나 그 진단은 틀렸다 — NLP-02가 done이 된 지금도 여전히 불가이고, 막는 것은 채점 권위가 아니라 요청 슬롯의 정수 하나다. 선택 인덱스는 클라이언트만 아는 사실이라 슬롯이 없으면 서버는 영원히 알 수 없다. ASM-06 acceptance ①의 선행 확인('NLP-02 shadow가 MC 인덱스를 포착하는지')은 r2 실측으로 **불충족 확정**됐다."
 updated: 2026-08-11
