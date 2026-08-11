@@ -129,10 +129,10 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 ## 감사 로그
 
 ```python
-# 감사 대상 3종 (아래 부기 — "모든 PII 접근"이 아니다)
+# 감사 대상 4종 (아래 부기 — "모든 PII 접근"이 아니다)
 class AuditLog:
     user_id: str        # FK 아님 — 계정 삭제 후에도 감사 잔존
-    action: str         # 'export_data' | 'consent_change' | 'admin_access'
+    action: str         # 'export_data' | 'consent_change' | 'admin_access' | 'role_change'
     target: str
     timestamp: datetime
     ip_hash: str        # sha256(salt+ip) — 평문 IP 저장 금지
@@ -146,8 +146,11 @@ class AuditLog:
 > (언제·무엇을 몇 번 봤는가) 미성년자 보호 원칙과 역행하고, 볼륨도 소음이다. 규정을 그대로 남겨
 > 두면 **영구 미달 상태**가 되므로 경계를 확정해 정정한다.
 >
-> **감사 대상 = 3종만** — "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근":
-> ⑴ **데이터 반출**(`GET /v1/me/export`) ⑵ **동의 변경** ⑶ **관리자 접근**(SEC-07 착지 후).
+> **감사 대상 = 폐쇄 4종** — "시스템 밖으로 나가는 사건"·"본인 아닌 주체의 접근"·"계정 권한
+> 자체의 변경": ⑴ **데이터 반출**(`GET /v1/me/export`) ⑵ **동의 변경** ⑶ **관리자 접근**
+> (SEC-07 착지 후) ⑷ **역할 변경**(`role_change` — ADMIN-01, 2026-08-11 회수 착지).
+> "폐쇄"의 뜻은 *임의 문자열 금지*이지 *영원히 3개*가 아니다 — 값을 늘릴 때는 이 목록과
+> `AuditEventKind`를 **함께** 늘린다(그 enum의 docstring이 이 부기와의 일치를 계약으로 선언).
 >
 > **구현 현황(SEC-09 착지 — 2026-07-30)**: 삭제 감사는 여전히 `deletion_audit`
 > (`db/models/audit.py:32`·writer `api/me.py:291`·본인 조회 `GET /v1/me/deletions`)가 **단일
@@ -158,11 +161,14 @@ class AuditLog:
 > `tests/backend/api/test_privacy_audit_integration.py::TestDeletionDoesNotWritePrivacyAudit`가
 > 동결). 두 테이블 통합은 관리자 콘솔 Phase B에서 재론.
 >
-> writer 3곳(`whymath_backend/privacy/audit.py`): `record_export_audit`(`api/me.py:
+> writer 4곳(`whymath_backend/privacy/audit.py`): `record_export_audit`(`api/me.py:
 > export_my_data` 호출·반출 payload 조립 *후*) · `record_consent_change_audit`(`api/users.py:
 > grant_parental_consent` 호출·`parental_consent` 행 삽입과 **같은 트랜잭션**) · 
 > `record_admin_access_audit`(**현재 호출부 0곳** — 관리자 콘솔 Phase B가 착지할 때 배선,
-> `AuditEventKind.admin_access` docstring 참조 — 가짜 이벤트 날조 금지). 본인 조회
+> `AuditEventKind.admin_access` docstring 참조 — 가짜 이벤트 날조 금지) ·
+> `record_role_change_audit`(**`ops/role_grant_cli.py`가 유일 생산자** — 역할 UPDATE와 **같은
+> 트랜잭션**. HTTP 표면 없음이 설계이며, 그래서 `declared_unwired_audit`의 CLI 축에
+> `_PRIVILEGE_ESCALATION_CLI` 사유로 등재돼 있다). 본인 조회
 > (`GET /v1/me/*`, 이제 29개 — 신규 `GET /v1/me/privacy-audit` 자기 자신 포함) 경로는 **감사
 > 0행**을 경계로 동결한다
 > (`test_privacy_audit_integration.py::TestSelfScopedRoutesProduceZeroPrivacyAuditRows`).

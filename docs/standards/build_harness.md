@@ -220,7 +220,7 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 ```
 세션 시작   → (자동) SessionStart 브리핑: 현재 스테이지·next 3·게이트 리마인드
 주도 진행   → /drive              # 순차 루프 (기본 3태스크, 사람 게이트에서 정지)
-단건 작업   → /implement <id>     # start → 구현 → done --artifact
+단건 작업   → /implement <id>     # start → 구현 → PR 생성 → done --artifact
 새 계획     → /plan <주제>        # 산출물 = backlog add 태스크 등록
 사람 게이트 → /gates              # clear는 evidence 필수
 상세 상태   → /status
@@ -253,7 +253,8 @@ python3 scripts/harness/backlog.py next --n 3      # 착수 가능 후보 + 선�
 python3 scripts/harness/backlog.py start <id>      # claim (규칙 위반 시 거부)
 python3 scripts/harness/backlog.py start <id> --ignore-remote-claim  # 이 태스크의 읽기측 판정만 무시(stale 확인 후·HARN-08)
 python3 scripts/harness/backlog.py start <id> --no-remote            # 원격 보호 전체 생략(오프라인·긴급)
-python3 scripts/harness/backlog.py done <id> --artifact "<PR/커밋>"   # 증적 필수
+python3 scripts/harness/backlog.py done <id> --artifact "<PR 번호를 담은 증적>"   # 증적·PR 참조 필수
+python3 scripts/harness/backlog.py done <id> --artifact "<커밋>" --no-pr ci-red   # 예외 4종만(HARN-23)
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
@@ -277,6 +278,7 @@ exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 
 
 - ❌ backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략
 - ❌ 증적(artifact) 없는 done
+- ❌ **PR 참조 없는 done** — 산출물이 있으면 요청 없이 PR을 여는 것이 기본값이다(CLAUDE.md "완료·병합"). 증적에 `#12`·`.../pull/12`가 없으면 CLI가 exit 1로 거부하며, 예외는 `--no-pr {investigation|incomplete|ci-red|kiki-hold}`로만 통과한다(HARN-23). 스쿼시 머지 커밋의 `(#758)` 관례는 그대로 통과 — 기존 증적 표기를 바꿀 필요 없다
 - ❌ evidence 없는 게이트 clear
 - ❌ E축 게이트 우회 착수 (waive는 Kiki 전용 결정)
 - ❌ ROADMAP "현재 위치"를 backlog와 어긋나게 단독 편집
