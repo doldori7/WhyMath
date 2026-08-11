@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MATH-04-curriculum-notation-range-gate
+title: "교육과정 표기 범위 게이트 — 생성물 전용(학생 입력 거부 금지 기계 봉인)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 재료 실측 고정: l4/speech/profiles.py:18-70이 학년밴드 4종 × 도입 구조 12종(introduced_constructs)을 이미 보유하고 거부 없이 unresolved 표시만 함을, l3/notation_coverage.py:64의 _MACRO_RE·is_math_glyph가 토큰 전수 추출을 이미 함을 확인한다. 없는 것은 '토큰 → 구조 키' 매핑 하나뿐임을 주장 확인 또는 반증 — 반증되면(예: 매핑이 이미 어딘가 있음) 범위 재조정"
+  - "② 매핑 데이터 신설: data/curriculum_notation_ranges.json에 {token, construct} 폐쇄 표를 둔다. construct 어휘는 profiles.py의 12종을 그대로 쓴다(새 어휘 생성 금지 — 학년 구조 어휘 이원화는 truth source 이중화다). 매핑 없는 토큰은 unmapped로 남기고 판정에서 제외하되 리포트에 건수를 노출한다(침묵 통과 금지)"
+  - "③ 게이트 CLI 신설: l3/curriculum_notation_gate.py를 notation_coverage와 동형 규약(exit 0/1 · --json · 베이스라인 래칫 · 대조군 플래그)으로 만들고 ci.yml backend 잡의 notation_coverage 스텝 옆에 배선한다. 초과 표기를 발견해도 콘텐츠를 삭제하지 않는다 — 래칫에 계상하고 사람이 판단한다(notation_coverage 철학 답습)"
+  - "④ 학생 경로 차단의 기계화: api/·l4/polya/·l4/socratic/에서 이 모듈의 import가 0건임을 소스 스캔 거버넌스 테스트로 동결한다(tests/backend/의 금지 토큰 방식·no_math_logic_governance_test.dart 동형). 결함 주입 실측 필수 — 금지 디렉터리에 임시 import를 넣어 red가 실측되는지 확인한 뒤 되돌린다(현재도 모듈이 없어 자명하게 green이므로 이 실측 없이는 검사 자체가 무변별하다). 선언으로만 두면 다음 세션이 학생 입력 경로에 배선한다 — 그건 교수학 금기(부정적 피드백의 정서적 강화·앞서 배운 방법으로 푸는 학생을 처벌)의 정면 위반이다"
+  - "⑤ 변별력: 같은 코퍼스에 고등 프로파일을 적용하면 exit 0, 초등 프로파일을 적용하면 exit 1이 나오는지 --force-grade-band 대조군으로 실측한다. 두 경우가 같은 값이면 측정기가 학년 축을 실제로 보지 않는 것이다. 그리고 첫 실측에서 초과 표기 0건이면 이 축이 불필요했다는 정직한 신호이므로 그대로 리포트에 기록한다"
+  - "⑥ 범위 밖 명시: (a) 학생 입력에 대한 교육과정 범위 거부 — 영구 미채택(math_engine_gap_review.md §2-⑤). (b) 성취기준 코드 자동 태깅 — 교육과정 축이며 curriculum-node-builder 자산의 소관. (c) 생성 프롬프트에 학년 제약을 주입하는 것 — 생성 축·후속. 이 태스크는 회계이지 개입이 아니다"
+artifacts: []
+paths:
+  - data/curriculum_notation_ranges.json
+  - src/backend/whymath_backend/l3/curriculum_notation_gate.py
+  - src/backend/whymath_backend/l4/speech/profiles.py
+  - src/backend/whymath_backend/l3/notation_coverage.py
+  - tests/backend/l3/test_curriculum_notation_gate.py
+  - ".github/workflows/ci.yml"
+session: null
+notes: "docs/architecture/math_engine_gap_review.md §3 D4. 기능 30의 4단계 검증 중 '교육과정 범위 검증'만 축 자체가 없다 — 중3 문항에 \\int이 들어가도 어떤 게이트도 반응하지 않는다. 가장 가까운 자산은 l4/speech/profiles.py 학년밴드(거부 안 하고 unresolved 표시만)와 l3/notation_coverage.py(학년이 아니라 렌더 가능성 축)다. 설계의 핵심 제약은 좌표 이동이다 — 이 축을 학생 입력 거부에 쓰면 교수학 금기이므로 생성물(문항·풀이·시각화) 게이트 전용으로만 성립하고, 그 제약을 acceptance ④의 소스 스캔+결함주입으로 기계화한다. 차원 검증은 E1-01-dimensional-consistency가 소유하므로 이 태스크에 편입하지 않는다(중복 등재 금지)."
+updated: 2026-08-03
