@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - "data/corpus/problem_bank_*/**"
   - src/backend/whymath_backend/harness/problem_duplication_audit.py
-session: null
+session: claude/whymath-dsl-integration-check-bmjic8
 notes: "QUAL-01(harness/problem_duplication_audit.py, 2026-08-10 완료)이 가시화만 하고 해소는 명시적으로 범위 밖에 남긴 후속. 실측 9쌍 중 1쌍은 원 설계문서(브랜치 8ceaf5)가 지목한 사례(데모풀 동시노출 확인됨), 8쌍은 이번 재실측에서 신규 발견(전부 generated_v0↔rephrased_v0, 스켈레톤 단답형/객관식 트윈 + 재서술 무변화 교차매칭 — QUAL-03과 근원 공유하나 해소 축은 이쪽이 콘텐츠·그쪽은 파이프라인)."
-updated: 2026-08-10
+updated: 2026-08-11
