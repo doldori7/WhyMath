@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-29-yaml-spec-unwired-audit-axis
+title: "선언≠배선 감사기 5번째 축 — YAML 스펙 선언↔코드 구현(main 미배선 4건 발화 + 미병합 고립 구별)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화: ops/declared_unwired_audit.py에 축 (e) YAML 스펙↔코드 신설 — schemas/**/*.yaml이 선언한 필드·enum 중 src/ 구현이 0인 것을 열거한다. 기존 4축((a)HTTP 라우트 (b)EventType 생산자↔소비자 (c)Timescale writer↔reader (d)harness/ops CLI↔CI 실행)과 동일 모듈·동일 판정 규약을 쓴다"
+  - "② 집행 지점: 판정 규약을 새로 만들지 않고 기존 것을 상속한다 — reached / by-design:<사유> / pending-task:<id> / 선언 없음 → unclassified·exit 1. pending-task는 backlog/tasks/<id>.yaml이 실재하고 status != done일 때만 유효한 그랜드파더 만료 계약(ARCH-25 패턴)도 상속해 유예의 조용한 영구화를 차단한다. 새 대장 파일을 만들지 않는다(backlog/가 단일 진실 원천)"
+  - "③ 변별력(최우선): r3 §2 G3이 origin/main 기준으로 실측한 미배선 선언 4건이 축 (e)에서 실제로 발화하는지 양방향 확인한다 — ⓐ CognitiveType.THEOREM(enums.py:603, 개념 437건 전량 cognitive_type=None → 정리 분류 0건) ⓑ Justification.theorem_concept_ids(solution_path.schema.yaml:216, src/ 0건) ⓒ lean_verified(같은 스키마 :205, VerificationTier 실값은 MACHINE_EXHAUSTIVE·MACHINE_SAMPLED 2종뿐) ⓓ ReasoningType 7종(enums.py:535, docstring이 명시한 대상 SolutionStep이 클래스로 부재·ORM reasoning_type 컬럼 0건). 4건 중 하나도 발화하지 않으면 축을 추가한 것이 아니라 위장을 추가한 것이다(2026-07-17 '변별력 없는 검증 스텝 금지')"
+  - "⑥ 미배선 vs 미병합 고립 구별(r3 G3 자기 정정의 산물): 이 감사기가 origin/main만 보는 정적 감사임을 모듈 docstring에 명시한다. main 구현 0과 '아무도 구현하지 않음'은 다르다 — ⓑⓒⓓ는 실제로 origin/claude/whymath-solution-review-40xspg(main 대비 657커밋 앞섬)에 이미 구현돼 있다(l3/solution_path.py:126 class SolutionStep(BaseModel)·:107 theorem_concept_ids·:179 lean_verified·schema/problem.py:681 reasoning_type: ReasoningType). pending-task 분류 슬롯이 바로 이 구별을 담으므로, 그 분류가 '미배선'으로 오독되지 않게 사유 문자열 규약에 고립 여부를 적을 수 있게 한다. ⓐ는 그 브랜치에서도 미해소(코퍼스 437건 전량 None)"
+  - "④ CI 실행 여부 확인: OPS-22가 이미 CI에 배선돼 있으므로 축 추가만으로 돌 것이라 가정하지 않고, 축 (e)를 포함한 감사가 CI에서 실제로 수집·실행되는지 실측한다(OPS-03·OPS-10·OPS-11 — '저장소에 존재함'과 '돌아감'은 다르다). 판정은 exit code로 한다(출력 억제·절단 금지 — 2026-08-09 헌법 항목)"
+  - "⑤ 범위 밖 명시: 감사기는 고치지 않는다(OPS-22 자신의 '이 모듈이 하지 않는 것' 승계) — 분류를 강제할 뿐이다. G3-ⓓ의 이름 충돌 해소(main의 l3/pedagogy/slot_generator.py:102,123이 reasoning_type 필드에 슬롯 유형 example_pair·contrast_case·boundary_probe·diag_item을 담는데 동명 enum ReasoningType 7종과 교집합 0이고 review.py:77은 존재만 검사 — 고립분이 병합되면 한 이름이 두 어휘를 담는 상태가 된다)는 S4-09 소관이며 이 태스크에서 개명·enum 결속을 하지 않는다. 고립 브랜치 병합·회수도 범위 밖(Kiki 결정 대기 항목)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/ops/**"
+session: null
+notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G3 — 외부 EOS 틀(모듈 8 정리) 3차 대조 신규 갭. r1은 모듈 8을 '의도적 연기+설계 공백'으로 정확히 판정했으나, 그 연기된 축을 가리키는 스펙 선언 4건이 origin/main에 미배선인 상태는 잡히지 않았다. 원인은 OPS-22 감사기가 YAML 스펙↔코드 축을 보지 않는 것 — OPS-25(상수 간접참조 맹점)와 같은 계열의 감사기 정밀도 갭. 존재 렌즈로는 enum·필드·검사가 다 '있음'이라 잡히지 않는다. ⚠ r3 초판은 이 4건을 '유령 선언'으로 판정했으나 자기 정정했다: ⓑⓒⓓ 구현이 origin/claude/whymath-solution-review-40xspg(657커밋 앞섬·Kiki 결정 대기)에 이미 존재하는 미병합 고립이며, 발견 경로는 backlog.py next의 '이미 완료(미머지)' 경고였다. 감사기 축 자체는 유효(그 사각이 없었으면 main 미배선이 커밋 시점에 발화했을 것) — 다만 acceptance⑥이 미배선/고립 구별을 요구한다. 번호: OPS-26은 원격 브랜치가 선점(OPS-26-wh1-llm-observability-cache-wiring) — HARN-10 가드 제안값 채택."
+updated: 2026-08-11
