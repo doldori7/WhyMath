@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-28-isolation-scan-shallow-relocation
+title: "고립 브랜치 스캔이 세션 환경에서 구조적으로 꺼져 있다 — 모든 CCR 컨테이너가 shallow, 실행 위치를 CI로 이설"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①계약: scan_stale_branches() 결과를 기계 판독 가능한 리포트(isolation.json)로 직렬화 — 생성 시각·판정 기준·브랜치별 ahead/최종커밋일 포함"
+  - "②집행 지점: CI 야간 스케줄 잡이 actions/checkout fetch-depth:0(full clone)에서 스캔을 돌려 전용 orphan 브랜치 harness-reports 에 발행한다. harness-claims 에 얹지 않는다 — _write_claims()가 mktree로 루트 트리를 재생성하며 claims/ 만 넣으므로 다른 경로는 다음 claim 쓰기에 무증상 삭제된다"
+  - "③소비 지점: cmd_brief 가 그 리포트를 읽어 SessionStart 브리핑에 노출한다. 리포트 생성 시각을 항상 병기하고, 부재·조회 실패는 '미측정'으로 명시한다(고립 없음과 다른 출력이어야 한다)"
+  - "④변별력: 리포트 없음/손상/정상 3케이스가 각각 다른 상태를 내는 테스트 + 신규 CI 잡이 실제 배선됐는지 검사하는 tests/infra 계약"
+artifacts: []
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/**"
+  - "tests/infra/**"
+  - ".github/workflows/ci.yml"
+session: null
+notes: "실측 2026-08-11: scan_stale_branches(remote_claims.py:1216)가 shallow 클론이면 1252행에서 status=shallow로 판정 포기. 모든 CCR 세션 컨테이너가 shallow라 이 탐지기는 세션 환경에서 한 번도 실행된 적이 없다. docs/reviews/unmerged_branch_verdict_2026-08-11.md 가 이 상태를 예언했고('모든 세션 컨테이너가 shallow라면 이 스캐너는 다시는 목록을 내지 않는다') --unshallow 자동 실행은 타당한 사유로 기각했다 — 그 기각을 뒤집지 않고 실행 위치를 옮긴다. 미측정 상태의 실제 규모: 미머지 커밋 392·열린 PR 없는 브랜치 27·최장 고립 8일."
+updated: 2026-08-11
