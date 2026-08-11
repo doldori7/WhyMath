@@ -131,6 +131,32 @@ def test_achievement_standard_indexes() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 2b) CUR-07 확장 — evaluation_criteria_codes (additive 배열 컬럼)
+# ──────────────────────────────────────────────────────────────────────────
+def test_achievement_standard_evaluation_criteria_codes_column() -> None:
+    """evaluation_criteria_codes는 parent_codes와 동일 패턴(TEXT[] NOT NULL·빈 배열 기본)이다."""
+    col = OrmAchievementStandard.__table__.c.evaluation_criteria_codes
+    assert col.nullable is False
+    ddl = _pg_ddl(OrmAchievementStandard.__table__)
+    assert "evaluation_criteria_codes" in ddl
+    # parent_codes와 동일 배열 기본값 표현이 최소 2회(parent_codes 1 + evaluation_criteria_codes 1).
+    assert ddl.count("'{}'::text[]") >= 2
+
+
+def test_achievement_standard_roundtrip_evaluation_criteria_codes() -> None:
+    """schema → ORM → schema가 evaluation_criteria_codes를 보존(기본 빈 리스트 포함)."""
+    s = _valid_standard(evaluation_criteria_codes=["[10수학01-01-00]", "[10수학01-02-00]"])
+    orm = OrmAchievementStandard.from_schema(s)
+    assert orm.evaluation_criteria_codes == ["[10수학01-01-00]", "[10수학01-02-00]"]
+    back = orm.to_schema()
+    assert back.evaluation_criteria_codes == ["[10수학01-01-00]", "[10수학01-02-00]"]
+
+    # 미지정 시 schema default_factory=list와 동일하게 빈 리스트.
+    default_orm = OrmAchievementStandard.from_schema(_valid_standard())
+    assert default_orm.evaluation_criteria_codes == []
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 3) concept_standard_link PG DDL — UUID PK·실 FK CASCADE·느슨 concept_code·UNIQUE
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_standard_link_uuid_pk() -> None:

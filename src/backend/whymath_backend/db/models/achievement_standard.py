@@ -31,6 +31,15 @@ PK 판단(이 모듈의 핵심 결정):
 법적 메모(공공누리 제1유형): 성취기준 본문(`statement`)·해설(`commentary`)은 NCIC 공공누리
 제1유형 자료라 본문 보유가 *허용*된다(검정교과서·EBS·평가원 본문 금지와 대비 —
 `licensing_safety.md` 가이드 v2.0). 출처 표시 의무는 수집기·노출 계층이 동봉한다.
+
+CUR-07 확장(additive): `evaluation_criteria_codes`(평가준거 코드, `ARRAY(sa.Text)` NOT NULL
+`server_default '{}'::text[]` — `parent_codes`와 동일 배열 패턴) 컬럼을 추가한다.
+`achievement_criteria_v1` 코퍼스의 `standard_criteria_coverage`(official_code 단위 1:N)를 실측
+근거로 `(curriculum_revision, official_code)` 대조 매칭한 값을 로더(`l1/standards/
+criteria_loader.py`)가 채운다 — 기존 행은 server_default가 빈 배열을 채우므로 무충돌(additive).
+같은 코퍼스의 `achievement_levels_by_unit`(unit 문자열 단위)은 이 테이블에 컬럼을 추가하지
+*않는다* — `schema/standard.py` 모듈 docstring "CUR-07 확장" §2가 그 판단 근거를 기록한다
+(별도 테이블 `AchievementLevelUnit`, `db/models/achievement_level_unit.py`).
 """
 
 from __future__ import annotations
@@ -89,6 +98,12 @@ class AchievementStandard(Base):
     )
     source_url: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_document: Mapped[str | None] = mapped_column(sa.Text)
+
+    # ===== 평가준거 코드 커버리지 (CUR-07 — additive, achievement_criteria_v1 매칭 결과) =====
+    # official_code 1건 : 평가준거 코드 다건 — parent_codes와 동일 NOT NULL 배열 패턴(빈 배열 기본).
+    evaluation_criteria_codes: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
 
     # ── 제약·인덱스 (복합 UNIQUE + 조회 경로 인덱스) ──
     __table_args__ = (

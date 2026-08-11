@@ -21,6 +21,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 개념그래프 소비 슬1 ConceptNode (L1 개념 메타 PG 프로젝션 — UC 키·검색 enrichment 백킹).
   - 원자 Phase 2b AtomEmbedding (L1 원자 의미검색 pgvector 영속 — code 키·`vector` 컬럼).
   - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
+  - CUR-07 AchievementLevelUnit (단원 단위 성취수준 등급 커버리지 — FK 없음·독립 테이블).
   - PIPA §22-2 ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사 — user_profile FK).
   - SEC-09 PrivacyAudit (개인정보 감사 3종 — 반출·동의변경·관리자접근·user_id FK 아님).
   - RPT-01 DefectReport (학생 결함 신고 — 카테고리+problem_id만, user_id 컬럼 자체 없음).
@@ -36,6 +37,7 @@ problem_solve_time_distribution·user_behavior_metrics)은 ORM에선 *일반 테
 
 from __future__ import annotations
 
+from whymath_backend.db.models.achievement_level_unit import AchievementLevelUnit
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import (
     AttemptEvent,
@@ -263,4 +265,7 @@ __all__ = [
     "AchievementStandard",
     # P1-2: ConceptStandardLink (개념↔성취기준 N:M 연결·norm_id 실 FK·link_id UUID PK)
     "ConceptStandardLink",
+    # CUR-07: AchievementLevelUnit (단원 단위 성취수준 등급 커버리지·자연키(school_level,subject,
+    # unit)·FK 없음 — 개별 성취기준 연결은 실측 근거 부족으로 범위 밖)
+    "AchievementLevelUnit",
 ]
