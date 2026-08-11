@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-41-doc-fleet-pr-backfill
+title: "08-11 설계문서 fleet 5건 PR 백필 — PR 미오픈 브랜치의 리뷰 문서 일괄 착지"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 대상 5건: a3ysut(AI콘텐츠 R3)·8ap436(게임화 r3)·t608mk(데이터플랫폼 r2)·p1hubt(학습경로 r3)·azdnov(헌법 통합감사+재채번 판정). 각 브랜치 문서를 본문 대조 후 PR로 착지시킨다 — '산출물이 있으면 요청 없이 PR' 규칙(2026-08-11)의 소급분"
+  - "② t608mk는 OPS-38 acceptance ③(q8tvcx의 동명 데이터플랫폼 r2 문서 판정)과 겹침 — 두 문서 관계를 먼저 판정하고 중복 착지 금지"
+  - "③ 8ap436은 MOB-17-growth-evidence-render 신규 태스크를 동반 — 이식 시 ID 충돌 재검(이 감사에서 MOB-18이 그 번호를 피해 발급된 상태)"
+artifacts: []
+paths:
+  - "docs/architecture/**"
+  - "docs/reviews/**"
+session: null
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A7. head: a3ysut=88dc9261·8ap436=885f6920·t608mk=d876b523·p1hubt=4dc64bb5·azdnov=c335a787"
+updated: 2026-08-11
