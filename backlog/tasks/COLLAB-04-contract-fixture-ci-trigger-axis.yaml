@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
-session: null
+session: claude/whymath-collaboration-design-qlzq5m
 notes: "docs/architecture/collaboration_module_gap_review_r3.md §3 D5. COLLAB-01 acceptance ⑥이 'CI에서 실행되는지'를 테스트 파일 축(tests/backend/**)에서 정당하게 확인·통과했으나 계약 파일 축은 보지 않았다 — data/access_matrix.json이 ci.yml:74 필터에 없어 계약 단독 수정 PR에서 test_access_matrix.py가 skip된다. notation_contract·render_contract는 정확히 같은 사유로 이미 등재돼 주석까지 달려 있는데 답습 실패. 같은 사각이 visual_style·scene·segmentation·notation_support_manifest 4건 더. 반복 실수 10회차(트리거 축 부분 배선 — 테스트는 CI에 있는데 그것을 깨울 입력 경로가 필터 밖이라 정상 상태와 구분되지 않는다)."
 updated: 2026-08-11
