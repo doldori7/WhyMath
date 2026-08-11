@@ -1014,6 +1014,11 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.problem_duplication_audit": _OFFLINE_REPORT,
         "harness.visualization_reach_report": _OFFLINE_REPORT,
         "harness.concept_reach_report": _OFFLINE_REPORT,
+        # KG-03(2026-08-11): 공식 축 도달 관측 — concept_reach_report와 동일 성격(정적 스캔·
+        # DB 0·게이트 아님). 판정 소비처는 tests/backend/harness/test_formula_reach_report.py
+        # (backend 잡 testpaths가 수집)이며 전용 CI 잡은 의도적으로 신설하지 않았다 —
+        # concept-reach(OPS-23)와 달리 mobile-only PR 회귀 가드가 아니라 관측 리포트다.
+        "harness.formula_reach_report": _OFFLINE_REPORT,
         "harness.assessment_seat_reach_report": _OFFLINE_REPORT,
         "harness.recommendation_outcome_report": _OFFLINE_REPORT,
         "harness.learning_path_orderability_report": _OFFLINE_REPORT,
