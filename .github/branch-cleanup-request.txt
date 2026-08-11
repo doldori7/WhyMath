@@ -2,35 +2,37 @@
 # 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/*, tmp-*, worktree-agent-* 뿐.
 # 목록이 비어 있으면 no-op(다음 배치 준비 상태).
 #
-# 직전 배치: 2026-08-11 1차 · 6건 전건 삭제 성공(ls-remote 잔존 0/6 실측 — 이 커밋 작성 세션 확인).
-# 삭제 전 head SHA 스냅샷은 unmerged_branch_verdict_2026-08-11.md·직전 배치 주석 참조.
+# 직전 배치: 2026-08-11 2차 · 6건 전건 삭제 성공(560vwh·path-05·mob-10·s3-17·s3-24·misc-02 —
+#   ls-remote 잔존 0/6 실측). 1차 6건도 동일하게 잔존 0. 두 배치의 SHA 스냅샷·판정 근거는
+#   이 파일의 git 이력과 docs/reviews/unmerged_branch_audit_full_2026-08-11.md 참조.
 #
-# ── 2026-08-11 2차 배치 (6건) ──────────────────────────────────────────
-# 근거: docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2 🟢 (전수 감사 46건).
+# ── 2026-08-11 3차 배치 (1건) ──────────────────────────────────────────
 # 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
-#   560vwh=e93d36bc · path-05=36e3eb13 · mob-10=8af55fa5
-#   s3-17=f23feb76 · s3-24=928b2ac4 · misc-02=6d61321d
+#   admin-01-operator-seat-grant-audit = 53a06c4f
 #
-# ⚠ 회수 태스크가 등재된 브랜치는 이 배치에서 **의도적으로 제외**한다 —
+# ⚠ 회수 태스크가 등재된 브랜치는 계속 **의도적으로 제외**한다(2차 배치 목록 승계) —
 #   k20m0w(SEC-24·MOB-18) · gdmwhk(PED-26) · 34zvse(CUR-08) · 5t5lmv(OPS-40) ·
 #   iws58k(ARCH-30) · fleet 5건(OPS-41) · 28d0yx(PR #759 교체 권고) ·
 #   trjg5x(PB-06) · 40xspg(SOL-01 회수 진행 중) · uqyg79(PED-22~25·PED-26 대조 대상).
 
-# trunk 대비 ahead=0 · 내용 diff 0파일 — 전량 흡수됐다.
-claude/merge-failure-reflection-issues-560vwh
-
-# main PATH-05 = done(PR #728 포팅, artifacts가 이 브랜치 커밋 f9644016 직접 인용). 고립 done 0건.
-claude/path-05-me-tab-learning-path-consumption
-
-# main MOB-10-diagnosis-evidence-render = done — 상태전이(done 증적 기록) 전량 반영됨.
-claude/mob-10-done-bookkeeping
-
-# 브랜치는 S3-17 blocked 기록이나 main은 이미 done(교차 회수 착지·events 2426) — 브랜치 기록이 낡음.
-claude/s3-17-suneung-prefilter-persona-fit-widen
-
-# main S3-24도 동일 사유(Flutter SDK 부재+hot file 게이트)로 blocked — 반영 완료.
-claude/s3-24-shadow-recovery-bucket-b
-
-# 유일 내용이던 block 사유(acceptance 필드 오류+교수학 결정 필요)를 이 배치와 같은 PR이
-# main MISC-02에 CLI block으로 이관 — 머지 시점에 잃을 내용 없음이 보장된다.
-claude/misc-02-prerequisite-coaching-misconception-link
+# ADMIN-01 회수 완료 — 1차 배치의 제외 사유가 소멸했다.
+#
+# 1차 배치가 이 브랜치를 뺀 이유는 회수 태스크 `ADMIN-08`이 열려 있어서였다. 그 태스크는
+# 그 뒤 `cancelled`(중복 좌석 흡수 — 회수 대상 커밋이 8924a2e2 하나뿐이라 좌석도 하나여야
+# 한다)가 됐고, 실제 회수는 `ADMIN-01` 경로가 수행해 **PR #786(main d1d8f28a)**으로 착지했다.
+# 뒤이어 **PR #789(main ceaf527c)**가 그 회수가 놓친 감사 택소노미 표기 정합 7곳을 상환했다.
+#
+# 파일 단위 전수 대조(브랜치 고유 커밋 8924a2e2·53a06c4f가 건드린 7파일):
+#   동일     ops/role_grant_cli.py · privacy/audit.py
+#            tests/backend/ops/test_role_grant_cli{,_integration}.py
+#   main우세 schema/enums.py — 브랜치 고유 줄은 **폐기된 "감사 3종" docstring 3줄**뿐이고
+#            main은 #786·#789가 이를 4종으로 갱신한 상태다(role_change 멤버는 main에 존재).
+#   main우세 backlog/tasks/ADMIN-01-*.yaml — main이 artifacts 2건(#786·e6c7d9a1)을 더 들고
+#            있고 status는 양쪽 done.
+#   main우세 backlog/events.ndjson — 브랜치 고유 2줄은 그 세션의 start/done이며, main이
+#            `start_ignored_unmerged_done`으로 그 미머지 done을 **명시적으로 인지한 뒤**
+#            자신의 start/done(artifacts 8924a2e2 + e6c7d9a1)을 기록해 승계했다.
+#
+# 즉 브랜치에만 있고 main에 없는 내용은 **0건**이다(폐기된 옛 문구 제외).
+# 열린 PR #713은 이 브랜치가 head라 삭제 시 자동으로 닫힌다 — 그 PR의 내용은 #786이 회수했다.
+claude/admin-01-operator-seat-grant-audit
