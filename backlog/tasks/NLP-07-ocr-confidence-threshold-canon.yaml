@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-07-ocr-confidence-threshold-canon
+title: "OCR 저신뢰 임계 단일 정본화 — needs_reconfirmation이 기본값(0.0)으로 상시 False이고 클라 소비도 0"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: 저신뢰 임계가 세 곳(config.py:1130 ocr_min_confidence 기본 0.0 / api/coach.py:347 match_low_quality 0.8 하드코딩 / ocr_models.dart:142 lowConfidenceThreshold 자체 상수)에 흩어져 있고 그중 정본이 없음을, 그리고 assemble.py:60의 review_threshold>0.0 가드 때문에 needs_review·needs_reconfirmation이 기본 설정에서 상시 False임을 재확인한다(확인 또는 반증)"
+  - "② 정본화: 저신뢰 임계의 단일 진실 원천을 정하고 세 지점이 그것을 참조하게 한다. 새 임계값을 발명하지 않는다 — 실동작 중인 0.8이 사실상의 정본이므로 그것을 명시적 정본으로 승격하는 것이 기본안"
+  - "③ 집행 지점(별항): needs_reconfirmation을 (a) 기본값을 살려 실제로 발화시키거나 (b) 정직하게 제거한다. '스키마에 있는데 항상 False'가 최악이다 — 존재가 작동으로 읽힌다. 어느 쪽이든 그 필드를 읽는 코드 경로가 무엇인지(또는 없어졌는지) 별항으로 적는다"
+  - "④ 경계 통과 확인: (a)를 택하면 서버 needs_reconfirmation이 클라 재확인 cue의 실제 입력이 되는지 확인한다 — 현재 클라는 이 필드를 읽지 않고 자체 임계로 재구현하고 있다(정직 표기가 경계에서 소실되는 형태·learning_path r2 D4/D5 동형)"
+  - "⑤ 변별력: 저신뢰 영역이 있는 입력과 없는 입력에서 판정이 서로 다른 값을 내는지 실측한다. 양쪽에서 같은 값이면 이 설계 자체가 실패다(2026-07-17 '변별력 없는 검증 스텝 금지'의 런타임 판)"
+  - "⑥ 범위 밖 명시: OCR 활성화(nlp_module_gap_review.md §5-① 유보 유지 — Dockerfile [ocr] 미설치·run_demo.ps1 env 0건·ocr_enabled=False는 그대로 둔다) · 인식 결과 편집 UI 신설 · 임계값의 라이브 튜닝"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l5/ocr/assemble.py
+  - src/backend/whymath_backend/schema/ocr.py
+  - src/mobile/lib/features/ocr/data/ocr_models.dart
+session: null
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.4(Δ4). v1 §1 기능 69는 'OCR 오류 자동 보정'을 ✅(더 엄격)로 판정하며 '저신뢰는 low_quality 플래그로 보류'를 근거로 들었는데, 실측하면 그 엄격함을 떠받치는 것은 코치 0.8 게이트 하나이고 이름이 붙은 축(needs_review→needs_reconfirmation)은 죽어 있다: config.py:1130 기본 0.0 → assemble.py:60 가드가 상시 False → :91 페이지 OR도 상시 False, 그리고 schema/ocr.py:181·:249·:282까지 완비됐는데 클라 소비자가 0(ocr_models.dart:69-71이 자체 임계로 재구현). 이 축의 목적은 오인식을 학생 오류로 거짓 지적하지 않는 것이라 의사결정 우선순위 1위(학생 안전·웰빙)다. 기본값이 축을 끄는 좌석은 opt-in이 아니라 상시 미작동으로 회계한다(§8.7 원칙)."
+updated: 2026-08-11
