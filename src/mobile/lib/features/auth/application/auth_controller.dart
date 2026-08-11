@@ -12,6 +12,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/api_client.dart';
 import '../../../core/env.dart';
 import '../../../core/token_store.dart';
+import '../../../core/update_required.dart';
 import '../data/auth_api.dart';
 import 'auth_state.dart';
 
@@ -79,7 +80,10 @@ class AuthController extends _$AuthController {
       await ref.read(refreshTokenStoreProvider).saveRefreshToken(tokens.refreshToken);
       state = state.copyWith(isSubmitting: false, isAuthenticated: true);
     } catch (e) {
-      state = state.copyWith(isSubmitting: false, error: '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      state = state.copyWith(
+        isSubmitting: false,
+        error: updateRequiredMessageOf(e) ?? '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }
 

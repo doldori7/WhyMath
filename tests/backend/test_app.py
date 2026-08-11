@@ -775,6 +775,124 @@ class TestAppVersionGate:
             get_settings.cache_clear()
 
 
+class TestAppVersionObservability:
+    """OPS-35 — 버전 게이트 3상태(통과/미달/미상) 관측면.
+
+    OPS-17 게이트는 정확히 작동했지만 "작동한 비율"이 어디에도 보이지 않았다 — 426 차단이
+    계측 이전 early-return으로 요청 회계에서 사라지고, '미상' 카운터는 프로덕션 리더가 0인
+    write-only였다(`service_operations_gap_review_r2.md` §2 G2). 이 클래스가 그 관측 계약을
+    동결한다: ⑴ 3상태가 /health/ready `client_version` 블록에 **서로 다른 값**으로 나온다
+    ⑵ 426 차단이 요청 회계(`metrics.total_requests`)에 계상된다 ⑶ 임계 상향→차단 계상,
+    하향→정상 복귀가 양방향으로 실측된다.
+
+    /health/ready를 읽는 테스트는 실 DB·Redis·LLM 진입을 막는 가짜 probes를 주입한다
+    (`db.session._engine` 전역 오염 — 2026-07-26 CI 순서 의존 사고 선례). /health/ready
+    자체는 ops 프로브 경로라 계측·게이트 대상이 아니므로, 읽기가 카운터를 오염시키지 않는다.
+    """
+
+    def _make_app(self) -> Any:
+        from whymath_backend.ops.service_health import (
+            COMPONENT_DATABASE,
+            COMPONENT_LLM_ROUTER,
+            COMPONENT_REDIS,
+            ComponentCheck,
+            ReadinessProbes,
+        )
+
+        async def _ok(name: str, *, required: bool) -> ComponentCheck:
+            return ComponentCheck(
+                name=name, configured=True, reachable=True, required=required, error=None
+            )
+
+        async def _db() -> ComponentCheck:
+            return await _ok(COMPONENT_DATABASE, required=True)
+
+        async def _redis() -> ComponentCheck:
+            return await _ok(COMPONENT_REDIS, required=False)
+
+        async def _llm() -> ComponentCheck:
+            return await _ok(COMPONENT_LLM_ROUTER, required=False)
+
+        return create_app(
+            provider=StubProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(statuses={"jv": JobStatus(job_id="jv", state="pending")}),
+            readiness_probes=ReadinessProbes(database=_db, redis=_redis, llm=_llm),
+        )
+
+    def test_health_ready_exposes_three_distinct_version_states(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """통과 3·미달 2·미상 1을 만들면 client_version 블록이 정확히 그 값을, **서로 다른
+        값으로** 노출한다 — 어떤 두 상태가 하나의 카운터로 합산되면 이 단정이 깨진다
+        (acceptance ⑤: 세 값이 같으면 검증 실패)."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "2.0.0")
+        get_settings.cache_clear()
+        try:
+            client = TestClient(self._make_app())
+            for _ in range(3):  # 통과 3건 — 임계 이상 버전.
+                assert (
+                    client.get("/v1/jobs/jv", headers={"X-App-Version": "3.0.0"}).status_code == 200
+                )
+            for _ in range(2):  # 미달 2건 — 임계 미만 버전(426 차단).
+                assert (
+                    client.get("/v1/jobs/jv", headers={"X-App-Version": "1.0.0"}).status_code == 426
+                )
+            assert client.get("/v1/jobs/jv").status_code == 200  # 미상 1건 — 헤더 없음(차단 안 함).
+
+            block = client.get("/health/ready").json()["client_version"]
+            assert block == {
+                "min_app_version": "2.0.0",
+                "passed_total": 3,
+                "blocked_total": 2,
+                "unknown_total": 1,
+            }
+            counts = (block["passed_total"], block["blocked_total"], block["unknown_total"])
+            assert len(set(counts)) == 3, f"3상태가 서로 다른 값이어야 한다: {counts}"
+        finally:
+            get_settings.cache_clear()
+
+    def test_blocked_request_enters_request_accounting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """426 차단도 요청 회계(metrics.total_requests)에 계상된다 — 이전에는 계측 이전
+        early-return이라 차단된 요청이 요청 수·에러율·p95 어디에도 없었다(G2 핵심 결함).
+        426은 4xx이므로 5xx 카운터(total_5xx)는 증가하지 않아야 한다(에러율 비오염)."""
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "2.0.0")
+        get_settings.cache_clear()
+        try:
+            client = TestClient(self._make_app())
+            before = client.get("/health/ready").json()["metrics"]
+            assert client.get("/v1/jobs/jv", headers={"X-App-Version": "1.0.0"}).status_code == 426
+            after = client.get("/health/ready").json()["metrics"]
+            assert after["total_requests"] == before["total_requests"] + 1
+            assert after["total_5xx"] == before["total_5xx"]
+        finally:
+            get_settings.cache_clear()
+
+    def test_version_state_counters_bidirectional(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """변별력 양방향 — 임계 상향 후 구버전 요청은 blocked +1, 임계 하향 후 **같은 요청**은
+        200으로 복귀하며 passed +1(blocked는 불변). 카운터가 상태를 실제로 구분하는지의 실측."""
+        client = TestClient(self._make_app())
+        headers = {"X-App-Version": "1.0.0"}
+
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "2.0.0")
+        get_settings.cache_clear()
+        assert client.get("/v1/jobs/jv", headers=headers).status_code == 426
+        raised = client.get("/health/ready").json()["client_version"]
+        assert (raised["blocked_total"], raised["passed_total"]) == (1, 0)
+
+        monkeypatch.setenv("WHYMATH_MIN_APP_VERSION", "0.5.0")
+        get_settings.cache_clear()
+        assert client.get("/v1/jobs/jv", headers=headers).status_code == 200
+        lowered = client.get("/health/ready").json()["client_version"]
+        assert (lowered["blocked_total"], lowered["passed_total"]) == (1, 1)
+        assert lowered["min_app_version"] == "0.5.0"
+
+        get_settings.cache_clear()
+
+
 def test_create_app_defaults_are_real_implementations() -> None:
     """기본 팩토리(주입 없음)는 CompositeProvider(Ollama+Anthropic, S5)
     +RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.

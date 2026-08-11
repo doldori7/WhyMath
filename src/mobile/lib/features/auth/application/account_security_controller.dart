@@ -12,6 +12,7 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/update_required.dart';
 import '../data/auth_sessions_api.dart';
 import 'account_security_state.dart';
 
@@ -39,11 +40,13 @@ class AccountSecurityController extends _$AccountSecurityController {
         state = state.copyWith(status: AccountSectionStatus.unauthenticated);
         return;
       }
+      // 426(최소버전 미달)만 전용 문구(판정 좌석 = core/update_required 단일·OPS-35).
       state = state.copyWith(
         status: AccountSectionStatus.error,
-        error: '기기 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        error: updateRequiredMessageOf(e) ?? '기기 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
       );
     } on Object {
+      // 426은 항상 DioException으로 도착하므로(위 블록이 처리) 여기는 그 외 예외 전용.
       state = state.copyWith(
         status: AccountSectionStatus.error,
         error: '기기 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -64,8 +67,11 @@ class AccountSecurityController extends _$AccountSecurityController {
       await ref.read(authSessionsApiProvider).revokeSession(sessionId);
       state = state.copyWith(revokingSessionId: null, notice: '기기를 로그아웃했어요.');
       await load();
-    } on Object {
-      state = state.copyWith(revokingSessionId: null, notice: '기기를 로그아웃하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } on Object catch (e) {
+      state = state.copyWith(
+        revokingSessionId: null,
+        notice: updateRequiredMessageOf(e) ?? '기기를 로그아웃하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }
 
@@ -86,8 +92,11 @@ class AccountSecurityController extends _$AccountSecurityController {
         sessions: const <AuthSessionInfo>[],
         notice: '모든 기기에서 로그아웃했어요. 이 기기도 잠시 뒤 다시 로그인이 필요해요.',
       );
-    } on Object {
-      state = state.copyWith(isRevokingAll: false, notice: '전체 로그아웃에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } on Object catch (e) {
+      state = state.copyWith(
+        isRevokingAll: false,
+        notice: updateRequiredMessageOf(e) ?? '전체 로그아웃에 실패했어요. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }
 

@@ -7,6 +7,7 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/update_required.dart';
 import '../data/image_source_service.dart';
 import '../data/ocr_api.dart';
 import '../data/ocr_models.dart';
@@ -77,9 +78,10 @@ class OcrController extends _$OcrController {
           error: '지금은 손글씨 인식 기능을 이용할 수 없어요. 잠시 후 다시 시도해 주세요.',
         );
       } else {
-        state = const OcrState(
+        // 426(최소버전 미달)만 전용 문구(판정 좌석 = core/update_required 단일·OPS-35).
+        state = OcrState(
           status: OcrStatus.error,
-          error: '풀이를 인식하지 못했어요. 잠시 후 다시 시도해 주세요.',
+          error: updateRequiredMessageOf(e) ?? '풀이를 인식하지 못했어요. 잠시 후 다시 시도해 주세요.',
         );
       }
     } catch (e) {

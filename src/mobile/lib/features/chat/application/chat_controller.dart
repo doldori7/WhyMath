@@ -6,6 +6,7 @@
 // 부수효과는 [CoachApi] 호출 하나뿐 — 나머지는 순수 상태 전이다.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/update_required.dart';
 import '../../ocr/data/ocr_models.dart';
 import '../../problems/application/active_problem.dart';
 import '../data/coach_api.dart';
@@ -230,9 +231,10 @@ class ChatController extends _$ChatController {
       );
     } catch (e) {
       // ④ 실패는 graceful — 에러만 기록하고 입력 상태를 복구한다(앱 안 죽음).
+      // 426(최소버전 미달)만 전용 문구(판정 좌석 = core/update_required 단일·OPS-35).
       state = state.copyWith(
         isSending: false,
-        error: '코치와 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        error: updateRequiredMessageOf(e) ?? '코치와 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
       );
     }
   }
@@ -276,7 +278,7 @@ class ChatController extends _$ChatController {
     } catch (e) {
       state = state.copyWith(
         isSending: false,
-        error: '학습 장면을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        error: updateRequiredMessageOf(e) ?? '학습 장면을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
       );
     }
   }

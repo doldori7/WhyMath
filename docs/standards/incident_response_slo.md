@@ -76,6 +76,7 @@
 | `metrics.total_requests` · `total_5xx` · `latency_max_ms` | 같은 body | ❌ | 프로세스 시작 이후 누적 |
 | `metrics.uptime_seconds` | 같은 body | ❌ | **가용성 이력이 아니다** — 재시작하면 0 |
 | `components.*` (database/redis/llm_router) | 같은 body | ❌ | 실패 시 `error`에 **예외 타입명**만 |
+| `client_version.{passed,blocked,unknown}_total` · `min_app_version` | 같은 body | ❌ | 클라 버전 계약 3상태(OPS-35). `blocked_total` 증가 = 426으로 끊긴 학생 수. **`min_app_version` 상향은 이 블록 관측이 선행한다** — unknown 비율이 충분히 낮음을 확인한 뒤 Kiki가 올린다(관측 없이 올리면 몇 명이 끊겼는지 사후에도 모른다). 세 값은 합산되지 않는다 |
 | LLM 호출 지연·토큰·비용 | Langfuse `l3_routing` | ✅ 있음 | 죽으면 "측정 실패"로 드러나야 함 |
 | 로컬/클라우드 비율·캐시 적중률 | `ops/cost_probe.py`(인프로세스) + `ops/cost_report.py` | ❌/✅ 이중 회계 | |
 | **시간 기준 가용성** | — | — | **없음**(§6 공백) |

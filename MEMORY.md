@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·OPS-35): **버전 계약 관측·집행 완결 — 426 차단을 요청 회계에 편입 + `/health/ready` `client_version` 3상태 노출 + 클라 426 판정 단일 좌석. 같은 세션이 설계(r2 D7)하고 구현까지 착지** (claude 구현, 이어서 지시)
+
+- **왜**: `OPS-17`(done)이 게이트 자체는 정확히 만들었는데 **작동한 비율이 안 보였다** — ⑴ 426이 `_observe_request` *이전* early-return이라 차단이 요청 수·에러율·p95 어디에도 없고 ⑵ `app_version_unknown_count`는 프로덕션 리더 0인 write-only ⑶ 클라 426 분기가 7개 컨트롤러 중 1개. CLAUDE.md "작동 신호 없는 알고리즘 부착 금지" 해당.
+- **① 차단의 요청 회계 편입**: `started = time.monotonic()`를 게이트 **앞으로** 옮기고 426 반환 직전 `_observe_request(elapsed, 426)`. **426은 4xx라 `total_5xx`(에러율)를 오염시키지 않는다** — 차단은 계상되지만 알림 임계를 흔들지 않는 설계.
+- **② 3상태 노출**: `ClientVersionBody` + `ReadyBody.client_version`. `_ocr_reach_body`·`_segmentation_body` 좌석 관용구 답습·**새 엔드포인트 0**. 카운터 3종을 합산하지 않는다(합산되면 "몇 명 차단" vs "몇 명 미신고" 구분이 위장 — PED-08 별도 슬롯 원리).
+- **③ 클라 판정 단일 좌석 — acceptance 문자 이탈 1건(정직 기록)**: acceptance ③은 좌석으로 **Dio 인터셉터**를 지목했으나 `core/update_required.dart`의 판정 함수로 착지시켰다. 이유 = 인터셉터는 각 컨트롤러가 자기 state에 대입하는 **고정 문구 문자열을 바꿀 수 없고**(catch가 하드코딩), 전역 배너는 acceptance ⑥이 동결한 UI 작업이다. 계약("판정 1곳·앱 전역 같은 문구·복제 0")은 충족 — 7개 컨트롤러가 `updateRequiredMessageOf(e) ?? '<기존 문구>'` 한 줄로 소비. r2 §6 D7에 구현 정정으로 병기.
+- **④ 상향 트리거**: 기본 `0.0.0` **유지**(fail-open이 옳다). "언제·누가"를 `config.py` description + `incident_response_slo.md` §1-4 인벤토리 행에 명문화 — ②의 unknown 비율 관측이 선행하고 Kiki가 올린다.
+- **⑤ 뮤테이션 검증**: 426 판정을 `false`로 뮤테이션 → 모바일 2건 red(exit 1), `cp` 백업 복원 → green·`diff -q` 바이트 동일. 원복은 CLAUDE.md 금기대로 **git 계열이 아니라 `cp`** (미커밋 신규 파일이라 `git checkout --`은 통째로 삭제한다).
+- **검증**: backend 전체 스위트(bare `pytest`·CI 동일 invocation)·`tests/infra` 298·mobile `flutter analyze` No issues·`flutter test` 342 passed·커버리지 86.5%(게이트 60%)·`ruff`/`black` exit 0. **컨테이너에 Flutter가 없어 3.41.9(CI pin과 동일)를 설치**해 mobile을 실측했다 — 이전 세션들이 mobile을 CI에만 맡긴 것과 달리 이번엔 로컬 실측.
+
 ### 2026-08-11 (점검·서비스 운영 r2): **외부 EOS 틀(모듈 91~95) 2차 재점검 — v1 설계 D1~D5 전건 착지 확인. 최대 갭은 "새 기능 부재"가 아니라 **v1이 스스로 적은 §정정 9곳 중 6곳이 8일간 미집행**(위임이 acceptance·paths로 안 내려감·반복 실수 11회차). 정정 9곳은 이 세션이 직접 상환하고, 신규 등재 3건(`OPS-34`·`OPS-35`·`A11Y-02`) + CLAUDE.md 프로세스 금기 1건** (claude 점검, Kiki 첨부 docx + "22. 서비스 운영 빠진 부분 점검·설계")
 
 - **정본**: `docs/architecture/service_operations_gap_review_r2.md`(§0 재점검 사유 ~ §8 실행 + 부록 실측 근거 20행). v1(08-03)에 이은 델타 재점검이자 EOS 자매편 **14번째**. v1에는 **배너 1줄 + 오기 1건 정정**만 얹었다(완료 태스크 5건의 판정 근거 원본이라 소급 수정 금지 — v1→r2 선례).

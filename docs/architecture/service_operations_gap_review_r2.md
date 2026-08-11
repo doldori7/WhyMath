@@ -311,6 +311,12 @@ D7이 앞선 이유는 파일럿(S3-01) 중 임계를 올려야 하는 상황이
 - **클라 426 판정을 단일 좌석으로** — `api_client.dart`의 Dio 인터셉터 1곳
   (`auth_refresh_interceptor` 선례)에서 판정해 앱 전역이 같은 문구를 낸다. 7개 컨트롤러
   개별 수정이 아니다. `diagnosis_controller`의 기존 분기는 유지·정합(중복 처리 금지).
+  *(구현 정정 — 착지 세션 2026-08-11)*: 단일 좌석은 인터셉터가 아니라
+  **`core/update_required.dart`의 판정 함수**로 착지했다. 인터셉터는 각 컨트롤러가 자기
+  상태에 담는 **고정 문구 문자열을 바꿔줄 수 없고**(컨트롤러 catch가 하드코딩 문구를 대입),
+  전역 배너 방식은 ⑥이 동결한 UI 작업이다. 판정(426 검사)은 함수 1곳이고 각 컨트롤러
+  catch는 `updateRequiredMessageOf(e) ?? '<기존 문구>'` 한 줄로 소비한다 — "판정 1곳·앱
+  전역 같은 문구" 계약은 그대로 충족.
 - **임계 상향 트리거 명문화** — 기본 `0.0.0`은 **유지**한다(fail-open이 옳다). 대신
   "언제·누가 올리는가"를 적는다(§5-⑪).
 - **범위 밖**: 강제 업데이트 UI·스토어 링크·자동 업데이트·릴리스노트·롤백·Canary/
@@ -370,11 +376,34 @@ v1 §6이 9회차까지, 운영 r3 §7이 10회차까지 확장한 표를 11회�
 
 ### 신규 등재 (ID는 `backlog.py add`가 배정 — 번호 추론 금지·HARN-10)
 
-| 설계 | 태스크 | stage/prio |
-|---|---|---|
-| **D7** | `OPS-35-client-version-gate-observability` | S3 / 2 |
-| **D8** | `A11Y-02-accessibility-coverage-drift-gate` | S3 / 3 |
-| **D6** | `OPS-34-removed-dependency-canon-sync-gate` | S3 / 3 |
+| 설계 | 태스크 | stage/prio | 상태 |
+|---|---|---|---|
+| **D7** | `OPS-35-client-version-gate-observability` | S3 / 2 | ✅ **착지**(같은 세션·아래 §착지 기록) |
+| **D8** | `A11Y-02-accessibility-coverage-drift-gate` | S3 / 3 | todo |
+| **D6** | `OPS-34-removed-dependency-canon-sync-gate` | S3 / 3 | todo |
+
+### D7(`OPS-35`) 착지 기록 — 2026-08-11 같은 세션
+
+| acceptance | 착지 내용 |
+|---|---|
+| ① 차단의 요청 회계 편입 | `app.py` 미들웨어에서 `started = time.monotonic()`를 게이트 **앞으로** 옮기고, 426 반환 직전 `_observe_request(elapsed, 426)` 호출. 차단이 `metrics.total_requests`에 잡히고 426은 4xx라 `total_5xx`(에러율)를 오염시키지 않는다 |
+| ② 3상태 노출 | `ClientVersionBody`(신규 스키마) + `ReadyBody.client_version` 필드. `_ocr_reach_body`·`_segmentation_body` 좌석 관용구 답습 — **새 엔드포인트 0**. 카운터 3종(`_VERSION_{PASSED,BLOCKED,UNKNOWN}_COUNT_KEY`)은 합산하지 않는다 |
+| ③ 클라 판정 단일 좌석 | `core/update_required.dart` 신설(`updateRequiredMessageOf`). 7개 컨트롤러(diagnosis·chat×2·auth·account_security×3·ocr·onboarding·me_tab×2)가 `?? '<기존 문구>'` 한 줄로 소비 — 426 검사 로직 복제 0. `diagnosis_controller`의 기존 하드코딩 상수·분기는 이 좌석으로 흡수(중복 제거). *인터셉터가 아닌 이유는 §6 D7 구현 정정 참조* |
+| ④ 상향 트리거 명문화 | `config.py` `min_app_version` description + `docs/standards/incident_response_slo.md` §1-4 측정 수단 인벤토리 행. 기본 `0.0.0`은 **유지**(fail-open이 옳다) |
+| ⑤ 변별력(양방향·3상태) | 백엔드 `TestAppVersionObservability` 3건 — 통과3·미달2·미상1을 만들어 **세 값이 서로 다름**을 `len(set(...)) == 3`으로 단정 / 차단이 `total_requests` +1·`total_5xx` 불변 / 임계 상향→blocked+1, 하향→같은 요청이 passed+1(blocked 불변). 모바일 `update_required_test.dart` 5건 — 426만 문구·401/404/422/503은 null·컨트롤러 레벨 426 vs 500 문구 분리 |
+| ⑥ 범위 밖 동결 | 강제 업데이트 UI·스토어 링크·자동 업데이트·롤백·Crash 수집 전부 미착수(확인) |
+
+**뮤테이션 검증 3건(변별력이 위장이 아님을 실측 — 각 뮤테이션이 *의도한 테스트만* red)**:
+
+| 뮤테이션 | 결과 |
+|---|---|
+| 모바일: `updateRequiredMessageOf`의 426 판정을 `false`로 | **2 failed**(exit 1) — 판정 계약 + 컨트롤러 소비 양쪽 |
+| 백엔드 A: 426 반환 직전 `_observe_request` 제거(= 회귀 전 상태 재현) | **1 failed**(exit 1) — `test_blocked_request_enters_request_accounting`만 |
+| 백엔드 B: `blocked` 카운터를 `passed`에 합산 | **2 failed**(exit 1) — 3상태 구분·양방향 테스트만 |
+
+각 복원 후 green(exit 0)·`diff -q` **바이트 동일** 확인. 원복은 CLAUDE.md 금기대로
+**git 계열이 아니라 `cp` 백업**으로 했다 — 미커밋 작업분이 있는 트리에서 `git checkout --`
+는 뮤테이션과 구현분을 구분하지 못하고 신규 파일은 통째로 지운다(2026-08-10 OPS-24 사고).
 
 > **번호 가드 실동작 기록**: 최초 `OPS-33`으로 등재 시도 → CLI가 **원격 브랜치
 > `claude/whymath-knowledge-design-4rxrax`의 `OPS-33-yaml-spec-unwired-audit-axis`와 충돌**을

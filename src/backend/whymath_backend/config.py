@@ -1182,7 +1182,13 @@ class Settings(BaseSettings):
             "_service_metrics_middleware 좌석 — 401/404/422와 구분되는 전용 사유코드). 헤더 "
             "부재(이 기능 배포 이전의 구버전 클라)나 파싱 불가한 버전 문자열은 '미달'과 다른 "
             "'미상'으로만 관측하고 차단하지 않는다(app.py 경량 카운터·기존 클라 보호). "
-            "WHYMATH_MIN_APP_VERSION으로 조정."
+            "WHYMATH_MIN_APP_VERSION으로 조정. "
+            "**상향 트리거(OPS-35 — 기본 0.0.0 자체는 유지가 옳다·fail-open)**: 올리는 판단은 "
+            "관측이 선행한다 — GET /health/ready의 client_version 블록(통과/미달/미상 3상태 "
+            "카운터)에서 unknown 비율이 충분히 낮음을 확인한 뒤 **Kiki가** 올린다(예: API "
+            "파괴 변경으로 구계약 클라를 끊어야 할 때). 관측 없이 올리면 몇 명이 끊겼는지 "
+            "사후에도 알 수 없다. 상향 후에는 같은 블록의 blocked_total 증가로 차단 규모를 "
+            "실측 확인한다."
         ),
     )
 

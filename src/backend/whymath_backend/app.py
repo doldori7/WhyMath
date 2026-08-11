@@ -174,12 +174,20 @@ _READY_PROBES_KEY = "readiness_probes"
 # *자기증폭*시킨다(관측이 관측을 오염). 학생·API 트래픽만 계측한다.
 _OPS_PROBE_PATHS = frozenset({"/health", "/health/live", "/health/ready", "/status"})
 
-# OPS-17: 클라 최소 버전 게이트 — 헤더 이름 + '미상(unknown)' 경량 카운터의 app.state 키.
+# OPS-17: 클라 최소 버전 게이트 — 헤더 이름 + 상태별 경량 카운터의 app.state 키.
 # 신규 미들웨어를 만들지 않고 기존 `_service_metrics_middleware`(OPS-01) 좌석에 얹는다(아래
 # create_app 참조). 헤더 부재/파싱 불가는 '미달'(426 차단)과 다른 '미상'으로, 차단과 무관한
 # 롤아웃 추적 신호로만 계상한다(임계는 `Settings.min_app_version`).
+#
+# OPS-35: 3상태(통과/미달/미상)를 각각 별도 카운터로 계상하고 `/health/ready`의
+# `client_version` 블록으로 노출한다 — 게이트가 정확히 작동해도 "작동한 비율"이 어디에도
+# 안 보이면 임계(`min_app_version`)를 올릴 판정 재료가 없다(카운터가 write-only였던 결함
+# 실측 = `service_operations_gap_review_r2.md` §2 G2). 어떤 두 상태도 하나의 값으로
+# 합산하지 않는다(합산되면 상태 구분 주장이 위장된다 — PED-08 별도 슬롯과 같은 원리).
 _APP_VERSION_HEADER = "X-App-Version"
 _VERSION_UNKNOWN_COUNT_KEY = "app_version_unknown_count"
+_VERSION_BLOCKED_COUNT_KEY = "app_version_blocked_count"
+_VERSION_PASSED_COUNT_KEY = "app_version_passed_count"
 
 logger = logging.getLogger(__name__)
 
@@ -413,6 +421,34 @@ class SolutionSegmentationBody(BaseModel):
     )
 
 
+class ClientVersionBody(BaseModel):
+    """/health/ready 클라 버전 계약 3상태 관측 섹션 (OPS-35) — 통과/미달(426)/미상 카운터.
+
+    OPS-17 게이트는 정확히 작동했지만 "작동한 비율"이 어디에도 보이지 않았다 — 426 차단은
+    계측 이전에 early-return돼 요청 회계에서 사라졌고, '미상' 카운터는 프로덕션 리더가 0인
+    write-only였다(`service_operations_gap_review_r2.md` §2 G2 실측). 이 블록이 그 관측면이다.
+
+    세 카운터는 서로 다른 상태를 계상하며 **합산하지 않는다** — 합산되면 "몇 명이 차단됐는가"
+    와 "몇 명이 버전 미신고인가"를 구분할 수 없게 된다. `min_app_version` 상향 판단의 실측
+    재료가 이 블록이다: unknown 비율이 충분히 낮음을 여기서 확인한 뒤 Kiki가 올린다
+    (`config.py` `min_app_version` 트리거 문서). 관측 없이 올리면 몇 명이 끊겼는지 사후에도
+    알 수 없다.
+    """
+
+    min_app_version: str = Field(
+        ..., description="현재 임계(X.Y.Z). 0.0.0 = 게이트 사실상 비활성(전 버전 통과)"
+    )
+    passed_total: int = Field(
+        ..., description="통과 — 헤더 있고 파싱 성공·임계 이상(fail-open 통과 포함) 누적 건수"
+    )
+    blocked_total: int = Field(
+        ..., description="미달 — 426 Upgrade Required로 차단된 누적 건수(임계 미만 버전)"
+    )
+    unknown_total: int = Field(
+        ..., description="미상 — 헤더 부재/파싱 불가(차단하지 않음·롤아웃 추적 신호) 누적 건수"
+    )
+
+
 class ReadyBody(BaseModel):
     """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
 
@@ -439,6 +475,10 @@ class ReadyBody(BaseModel):
     growth_evidence_exposure: GrowthEvidenceExposureReachBody = Field(
         ...,
         description="성장 증거 노출 계약 경유 도달 관측(PED-08) — /growth-evidence(구분 카운터).",
+    )
+    client_version: ClientVersionBody = Field(
+        ...,
+        description="클라 버전 계약 3상태 관측(OPS-35) — 임계 + 통과/미달(426)/미상 카운터.",
     )
 
 
@@ -470,6 +510,20 @@ def _segmentation_body(
     return SolutionSegmentationBody(
         total=snapshot.total,
         single_or_zero_step=snapshot.single_or_zero_step,
+    )
+
+
+def _client_version_body(app_obj: FastAPI, min_app_version: str) -> ClientVersionBody:
+    """app.state 3상태 카운터 → ClientVersionBody(HTTP 스키마) 변환 (OPS-35).
+
+    `getattr(..., 0)` 폴백은 create_app을 거치지 않은 앱이 없으므로 사실상 도달하지 않지만,
+    관측 경로가 /health/ready 자체를 깨는 일이 없도록 방어한다(계측은 요청을 깨지 않는다).
+    """
+    return ClientVersionBody(
+        min_app_version=min_app_version,
+        passed_total=getattr(app_obj.state, _VERSION_PASSED_COUNT_KEY, 0),
+        blocked_total=getattr(app_obj.state, _VERSION_BLOCKED_COUNT_KEY, 0),
+        unknown_total=getattr(app_obj.state, _VERSION_UNKNOWN_COUNT_KEY, 0),
     )
 
 
@@ -712,10 +766,12 @@ def create_app(
     app.state.__setattr__(_METRICS_KEY, resolved_metrics)
     app.state.__setattr__(_ALERT_NOTIFIER_KEY, alert_notifier)
     app.state.__setattr__(_READY_PROBES_KEY, resolved_probes)
-    # OPS-17: 클라 버전 게이트 — 헤더 부재/파싱 실패("미상") 경량 카운터(신규 SaaS 의존
+    # OPS-17·OPS-35: 클라 버전 게이트 3상태(통과/미달/미상) 경량 카운터(신규 SaaS 의존
     # 없음 — Prometheus/StatsD 등은 과공학. 모듈 전역이 아니라 app.state에 둬 앱 인스턴스별
-    # (테스트 격리 포함) 카운터가 섞이지 않는다).
+    # (테스트 격리 포함) 카운터가 섞이지 않는다). 노출면은 /health/ready `client_version`.
     app.state.__setattr__(_VERSION_UNKNOWN_COUNT_KEY, 0)
+    app.state.__setattr__(_VERSION_BLOCKED_COUNT_KEY, 0)
+    app.state.__setattr__(_VERSION_PASSED_COUNT_KEY, 0)
 
     # NLP-01: OCR 도달 관측 카운터 — ServiceMetrics와 같은 타이밍(create_app에서 심고,
     # lifespan은 OCR 부품 자체만 늦게 결정)에 앱 수명 동안 1개를 심는다. 테스트가 폭발하는
@@ -763,22 +819,21 @@ def create_app(
         except Exception as exc:  # noqa: BLE001 — 계측 실패 흡수(요청 보호)·타입명 로그 필수
             logger.warning("요청 계측 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__)
 
-    def _observe_version_unknown() -> None:
-        """`X-App-Version` 헤더 부재/파싱 불가 — '미달'과 다른 '미상' 경량 관측(OPS-17).
+    def _observe_version_state(counter_key: str) -> None:
+        """클라 버전 게이트 3상태(통과/미달/미상) 경량 관측 — app.state 카운터 +1 (OPS-17·35).
 
-        차단 여부와 무관한 롤아웃 추적 신호(app.state 카운터)다. 계측(`_observe_request`)과
-        같은 정책 — 관측 실패가 요청을 절대 깨지 않되 **무타입 경고 금지**(예외 타입명을
-        warning에 남긴다·CLAUDE.md 침묵 실패 금지).
+        차단 여부와 무관한 롤아웃 추적 신호다(미달 카운터는 차단 *사실*의 기록이지 차단
+        로직이 아니다). 계측(`_observe_request`)과 같은 정책 — 관측 실패가 요청을 절대
+        깨지 않되 **무타입 경고 금지**(예외 타입명을 warning에 남긴다·CLAUDE.md 침묵 실패
+        금지).
         """
         try:
-            setattr(
-                app.state,
-                _VERSION_UNKNOWN_COUNT_KEY,
-                getattr(app.state, _VERSION_UNKNOWN_COUNT_KEY) + 1,
-            )
+            setattr(app.state, counter_key, getattr(app.state, counter_key) + 1)
         except Exception as exc:  # noqa: BLE001 — 카운터 실패 흡수(요청 보호)·타입명 로그 필수
             logger.warning(
-                "버전 미상 카운터 갱신 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__
+                "버전 상태 카운터(%s) 갱신 실패(요청은 정상 반환) — 예외 타입: %s",
+                counter_key,
+                type(exc).__name__,
             )
 
     @app.middleware("http")
@@ -794,8 +849,14 @@ def create_app(
           Required**로 즉시 차단한다(`call_next` 미호출 — 401/404/422와 구분되는 전용
           사유코드). 헤더가 아예 없으면(이 기능 배포 이전의 구버전 클라) *차단하지 않는다*
           (`call_next` 정상 호출 — 기존 클라이언트를 즉시 깨뜨리지 않는다) — 대신 "미상"으로
-          `_observe_version_unknown`이 경량 관측한다(롤아웃 추적용 신호일 뿐 차단과 무관).
-          파싱 불가한 버전 문자열(형식 위반)도 침묵 실패 없이 동일하게 "미상"으로 계상한다.
+          경량 관측한다(롤아웃 추적용 신호일 뿐 차단과 무관). 파싱 불가한 버전 문자열
+          (형식 위반)도 침묵 실패 없이 동일하게 "미상"으로 계상한다.
+        - **OPS-35 차단의 요청 회계 편입**: 426 차단도 `_observe_request`를 거친다 — 이전에는
+          `started` 이전 early-return이라 차단이 요청 수·에러율·p95 어디에도 계상되지 않아,
+          임계를 올려 학생 N명이 끊겨도 서비스 지표가 무변화였다(r2 §2 G2). 426은 4xx라
+          에러율(5xx 비율)을 오염시키지 않는다. 3상태(통과/미달/미상)는 각각
+          `_observe_version_state`로 별도 카운터에 계상되고 /health/ready `client_version`
+          블록이 노출한다.
         - 핸들러의 미처리 예외는 5xx(500)로 회계한 뒤 **그대로 재던진다** — 계측은
           예외를 삼키지 않는다(바깥 ServerErrorMiddleware가 500 응답으로 변환).
         - 계측 자체의 실패는 `_observe_request`가 흡수한다(요청 무영향·예외 타입명 로그).
@@ -803,10 +864,11 @@ def create_app(
         if request.url.path in _OPS_PROBE_PATHS:
             return await call_next(request)
 
+        started = time.monotonic()
         version_header = request.headers.get(_APP_VERSION_HEADER)
         if version_header is None:
             # 헤더 없음 — 이 기능 배포 이전 구버전 클라. 차단하지 않고 '미상'으로만 관측.
-            _observe_version_unknown()
+            _observe_version_state(_VERSION_UNKNOWN_COUNT_KEY)
         else:
             client_version = _parse_app_version(version_header)
             if client_version is None:
@@ -816,19 +878,27 @@ def create_app(
                     _APP_VERSION_HEADER,
                     version_header,
                 )
-                _observe_version_unknown()
+                _observe_version_state(_VERSION_UNKNOWN_COUNT_KEY)
             else:
                 min_version = _parse_app_version(get_settings().min_app_version)
                 if min_version is not None and client_version < min_version:
                     # 미달 — 426(401/404/422와 구분되는 전용 사유코드). call_next 미호출.
+                    # 차단도 관측 대상이다: 전용 카운터 + 요청 회계 양쪽에 계상(OPS-35 —
+                    # "차단이 사라지지 않는다"가 계약).
+                    _observe_version_state(_VERSION_BLOCKED_COUNT_KEY)
+                    _observe_request(
+                        (time.monotonic() - started) * 1000.0,
+                        status.HTTP_426_UPGRADE_REQUIRED,
+                    )
                     return JSONResponse(
                         status_code=status.HTTP_426_UPGRADE_REQUIRED,
                         content={"detail": "앱을 최신 버전으로 업데이트해주세요."},
                     )
                 # min_version 파싱 불가(Settings 오구성)면 게이트 자체를 적용하지 않는다
                 # (fail-open — 서버 설정 오류로 전 클라를 차단하는 것이 더 나쁜 실패 모드).
-
-        started = time.monotonic()
+                # 통과 계상은 fail-open 통과를 포함한다(헤더가 정상이고 차단되지 않았다는
+                # 사실의 기록 — 게이트 적용 여부와 무관).
+                _observe_version_state(_VERSION_PASSED_COUNT_KEY)
         try:
             response = await call_next(request)
         except Exception:
@@ -907,6 +977,7 @@ def create_app(
             growth_evidence_exposure=_growth_evidence_exposure_body(
                 growth_evidence_exposure_counters.snapshot()
             ),
+            client_version=_client_version_body(request.app, ready_settings.min_app_version),
         )
         return JSONResponse(
             status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),

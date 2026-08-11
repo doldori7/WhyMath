@@ -10,6 +10,7 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/update_required.dart';
 import '../../problems/data/problem_models.dart';
 import '../../problems/data/problems_api.dart';
 import 'me_tab_state.dart';
@@ -54,9 +55,11 @@ class MeTabController extends _$MeTabController {
         );
         return;
       }
+      // 426(최소버전 미달)만 전용 문구(판정 좌석 = core/update_required 단일·OPS-35).
       state = state.copyWith(
         diagnosisStatus: SectionStatus.error,
-        diagnosisError: '진단 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        diagnosisError:
+            updateRequiredMessageOf(e) ?? '진단 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
         learningPathStatus: SectionStatus.error,
         learningPathError: '진단 결과를 불러오지 못해 학습 경로를 확인할 수 없어요.',
       );
@@ -112,7 +115,8 @@ class MeTabController extends _$MeTabController {
       }
       state = state.copyWith(
         learningPathStatus: SectionStatus.error,
-        learningPathError: '학습 경로를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        learningPathError:
+            updateRequiredMessageOf(e) ?? '학습 경로를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
       );
     } catch (_) {
       state = state.copyWith(

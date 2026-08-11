@@ -6,6 +6,7 @@
 // 따르고, 부수효과는 [UserApi.patchMe] 호출 하나뿐(나머지는 순수 상태 전이)다.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/update_required.dart';
 import '../data/user_api.dart';
 import 'onboarding_state.dart';
 
@@ -59,10 +60,11 @@ class OnboardingController extends _$OnboardingController {
       state = state.copyWith(isSubmitting: false, isSubmitted: true);
     } catch (e) {
       // graceful — 403(미성년 미동의)·네트워크 실패 모두 온보딩을 막지 않는다.
+      // 426(최소버전 미달)만 전용 문구(판정 좌석 = core/update_required 단일·OPS-35).
       state = state.copyWith(
         isSubmitting: false,
         isSubmitted: true,
-        error: '입력을 저장하지 못했어요. 나중에 설정에서 다시 입력할 수 있어요.',
+        error: updateRequiredMessageOf(e) ?? '입력을 저장하지 못했어요. 나중에 설정에서 다시 입력할 수 있어요.',
       );
     }
   }
