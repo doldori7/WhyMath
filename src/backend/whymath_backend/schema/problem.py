@@ -338,7 +338,13 @@ class Problem(BaseModel):
     # ===== 문제 유형(problem_type) 참조 =====
     # S3-27 신규(Problem↔ProblemType 연결 — `problem_bank_gap_review.md` §5-③ 유보 해제,
     # `ai_content_generation_gap_review.md` D3). `signature_patterns` 동형의 *순수 참조 배열*
-    # (문자열 목록·ORM 관계 아님) — `data/corpus/problem_type_graph_v1/problem_types.jsonl`의
+    # (문자열 목록·ORM 관계 아님) — 단 **영속 축에서는 `signature_patterns`와 동형이 아니다**:
+    # 후자는 ORM 컬럼(`db/models/problem.py:157`)이고 이 필드는 아니라서 `from_schema`의
+    # `mapper.column_attrs` 필터(`db/models/problem.py:295-297`)가 적재 시 **드롭**한다. 즉 이
+    # 필드는 코퍼스 JSONL·빌드타임 관측에만 존재하고 DB에는 없다(2026-08-11 R3 §정정-4 · G6).
+    # 의도된 스코프이나(`S3-27` acceptance ② "관측 축 한정"), "동형"이라는 표현이 "DB에도
+    # 있겠지"라는 가정을 낳을 수 있어 명시한다. 영속화 발화 조건은 R3 §5-⑤ 참조.
+    # `data/corpus/problem_type_graph_v1/problem_types.jsonl`의
     # `problem_type_id`(예 'ptype.solve-for-unknown')를 가리키는 문자열만 담는다. 이 필드는
     # **관측 축 한정**이다: problem_type_node FK 연결·유형별 생성 확대·유형 기반 추천/출제는
     # 스코프 밖(`problem_bank_gap_review.md` §5-③ 판정 준수) — L1 스키마가 L6(응용 모드) 소비
