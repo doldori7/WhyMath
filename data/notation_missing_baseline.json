@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "task": "NS-03",
-  "note": "표기 누락 베이스라인(Missing Symbol Report 정본) — 코퍼스에 등장하나 지원 표기 집합(data/notation_support_manifest.json 파생 + KaTeX 렌더 실증 allowlist) 밖인 심볼의 첫 실측(2026-07-23) 산출. l3/notation_coverage 게이트가 래칫으로 소비한다: 여기 없는 신규 누락 발견 시 exit 1, 여기 있는 누락은 리포트만. 갱신은 의식적 수동 편집만 — 자동 갱신(--rebaseline 류)은 래칫을 무력화하므로 존재하지 않는다. 항목 해소 경로: ①렌더 실증 테스트 추가 후 지원 승격(manifest/KATEX_PROVEN_MACROS 등재) → 본 파일에서 제거 ②코퍼스 표기 정리 → 제거. occurrences·sources는 첫 실측 시점 스냅샷(참고용).",
+  "note": "표기 누락 베이스라인(Missing Symbol Report 정본) — 코퍼스에 등장하나 지원 표기 집합(data/notation_support_manifest.json 파생 + KaTeX 렌더 실증 allowlist) 밖인 심볼의 첫 실측(2026-07-23) 산출. l3/notation_coverage 게이트가 래칫으로 소비한다: 여기 없는 신규 누락 발견 시 exit 1, 여기 있는 누락은 리포트만. 갱신은 의식적 수동 편집만 — 자동 갱신(--rebaseline 류)은 래칫을 무력화하므로 존재하지 않는다. 항목 해소 경로: ①렌더 실증 테스트 추가 후 지원 승격(manifest/KATEX_PROVEN_MACROS 등재) → 본 파일에서 제거 ②코퍼스 표기 정리 → 제거. occurrences·sources는 첫 실측 시점 스냅샷(참고용). [2026-08-11 MATH-02 ④] 매크로 5건(\\sin·\\log·\\alpha·\\beta·\\theta)을 의식적 수동 편집으로 추가했다 — 새로 생긴 공백이 아니라 **원래 있었는데 유령 근거에 가려져 있던 공백**이다. KATEX_PROVEN_MACROS 24건이 부재 파일(NS-02 미착륙)을 근거로 지원집합을 넓히고 있었고, 근거 실재를 확인해 지원 파생에서 제외하자 그중 코퍼스에 실제 등장하는 5건이 누락으로 드러났다(나머지 19건은 코퍼스 미등장이거나 manifest cases로 독립 지원). 항목별 added_by·reason 참조.",
   "measured_at": "2026-07-23",
   "measured_by": "python -m whymath_backend.l3.notation_coverage (첫 실측·부트스트랩)",
   "known_gaps_out_of_scope": [
@@ -322,6 +322,61 @@
       "sources": {
         "formula_graph_v1": 1
       }
+    },
+    {
+      "token": "\\sin",
+      "kind": "macro",
+      "occurrences": 6,
+      "sources": {
+        "formula_graph_v1": 6
+      },
+      "added_by": "MATH-02",
+      "added_at": "2026-08-11",
+      "reason": "유령 근거 해소로 드러난 기존 공백 — 신규 발생 아님. KATEX_PROVEN_MACROS가 근거로 든 src/mobile/test/math_notation_audit_test.dart가 부재(NS-02 미착륙)라 지원 파생에서 제외되면서 이제야 누락으로 측정된다. 해소 경로는 기존과 동일(렌더 실증 후 승격)."
+    },
+    {
+      "token": "\\log",
+      "kind": "macro",
+      "occurrences": 5,
+      "sources": {
+        "formula_graph_v1": 5
+      },
+      "added_by": "MATH-02",
+      "added_at": "2026-08-11",
+      "reason": "동상 — math_notation_audit_test.dart 부재로 지원 파생 제외."
+    },
+    {
+      "token": "\\alpha",
+      "kind": "macro",
+      "occurrences": 2,
+      "sources": {
+        "formula_graph_v1": 2
+      },
+      "added_by": "MATH-02",
+      "added_at": "2026-08-11",
+      "reason": "동상 — math_notation_audit_test.dart '그리스 대표' 조판 실증 부재로 지원 파생 제외."
+    },
+    {
+      "token": "\\beta",
+      "kind": "macro",
+      "occurrences": 2,
+      "sources": {
+        "formula_graph_v1": 2
+      },
+      "added_by": "MATH-02",
+      "added_at": "2026-08-11",
+      "reason": "동상 — math_notation_audit_test.dart '그리스 대표' 조판 실증 부재로 지원 파생 제외."
+    },
+    {
+      "token": "\\theta",
+      "kind": "macro",
+      "occurrences": 2,
+      "sources": {
+        "formula_graph_v1": 2
+      },
+      "added_by": "MATH-02",
+      "added_at": "2026-08-11",
+      "reason": "동상 — math_notation_audit_test.dart '그리스 대표' 조판 실증 부재로 지원 파생 제외."
     }
   ]
 }

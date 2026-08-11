@@ -133,7 +133,8 @@ _ERASURE_PLAN_EXEMPTIONS: dict[str, str] = {
         "있다(지우면 증빙이 함께 사라져 목적이 무너진다). 협업 5분류(E형 감사)와 동형."
     ),
     "privacy_audit": (
-        "SEC-09 개인정보 감사(반출·동의변경·관리자접근) append-only 로그(`privacy/audit.py` "
+        "SEC-09 개인정보 감사(반출·동의변경·관리자접근·역할변경) append-only 로그"
+        "(`privacy/audit.py` "
         "`PrivacyAudit`) — user_id·target_user_id 둘 다 FK가 아닌 plain UUID. deletion_audit와 "
         "동일 근거로 계정 삭제 후에도 잔존해야 감사 목적을 달성한다. 협업 5분류(E형 감사)와 동형."
     ),

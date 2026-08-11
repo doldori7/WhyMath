@@ -1059,6 +1059,15 @@ async def _log_verify_event(
     (reason 텍스트)는 절대 싣지 않는다 — 미성년 PII 규약(`wh1_shadow.py` 관측 레코드 동형).
     `verification_ocr_gated`는 `SolutionCoaching.verification_ocr_gated`(verification 객체가
     아닌 형제 필드)를 그대로 받는다.
+
+    **MATH-03 사유 분포 병기 + 분포 리포트(2026-08-11)**: `unverifiable_by_reason`(폐쇄 사유
+    코드 → 건수·값 합=n_unverifiable)을 S4-19 동형 additive 필드로 병기 적재하고, 같은 분포를
+    분모 동반 형식("전이 N건 중 보류 M건")의 INFO 로그로도 노출한다. 리포트 좌석 실측(태스크
+    ④): verify 집계를 읽는 기존 리포트(`harness/wh1_evaluation`·`surrogate_baseline_report`)는
+    전부 `harness/**`(타 세션 claim)라 이번 슬라이스에서 확장 불가 → 백엔드 응답 로그 대체
+    (본 모듈 client_state_mismatch logger.info 선례). 이벤트 병기 덕에 harness 리포트의 사유별
+    집계 확장은 후속에서 데이터 소급 가능하다. 코드·정수만 싣는다(자유문·steps 미적재 —
+    비식별 규약 불변).
     """
     solution_text = student_solution or ""
     if not solution_text.strip():
@@ -1067,9 +1076,28 @@ async def _log_verify_event(
     signal = validate_response(arithmetic_validator(), solution_text)
     passed = signal is None  # None=거짓관계 미적발(통과)·아니면 적발(실패).
 
+    # MATH-03: 보류 사유 분포(폐쇄 enum 코드 → 건수)를 문자열 키로 접는다 — 값 운반만(재계산 0)·
+    # 비식별(코드·정수뿐). None=검증 미실행(구판 NULL 회계)·{}=검증 실행·보류 0.
+    unverifiable_by_reason = (
+        {code.value: count for code, count in verification.unverifiable_by_reason.items()}
+        if verification is not None
+        else None
+    )
+    # MATH-03 ④ 분포 리포트 — 분모 없는 0 금지: "전이 N건 중 보류 M건" 형식(보류 0건도 분모와
+    # 함께 남긴다). parse_error 비중이 곧 MATH-01(표기 권위)·자연표기 확장(gap review §5-③)의
+    # 발화 조건 데이터다. 좌석 근거는 위 docstring(harness 리포트 claim 충돌 → 응답 로그 대체).
+    if verification is not None:
+        logger.info(
+            "verify_solution 확인 보류 분포 — 전이 %d건 중 보류 %d건: %s",
+            verification.n_transitions,
+            verification.n_unverifiable,
+            unverifiable_by_reason,
+        )
+
     # S4-19: verification이 있을 때만 6필드를 값으로 채운다(없으면 전부 None — 정직 NULL 회계).
     # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(SolutionVerificationResult)으로
     # 재구성 가능하다. ocr_gated도 verification 없으면 None(False로 위장하지 않음).
+    # MATH-03: unverifiable_by_reason(사유 코드 분포)도 같은 additive 규약으로 병기한다.
     event = AttemptEventORM(
         event_at=datetime.now(timezone.utc),
         attempt_id=attempt_id,
@@ -1085,6 +1113,7 @@ async def _log_verify_event(
             n_correct=verification.n_correct if verification is not None else None,
             n_incorrect=verification.n_incorrect if verification is not None else None,
             n_unverifiable=verification.n_unverifiable if verification is not None else None,
+            unverifiable_by_reason=unverifiable_by_reason,
             unverified_ratio=verification.unverified_ratio if verification is not None else None,
             first_incorrect_index=(
                 verification.first_incorrect_index if verification is not None else None

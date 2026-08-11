@@ -4050,6 +4050,97 @@ class TestLogVerifyEventStepCounts:
         )
         assert sess.added[0].event_data["ocr_gated"] is True
 
+    async def test_unverifiable_by_reason_carried_with_string_keys(self) -> None:
+        """MATH-03 — 사유 분포가 *문자열 키*로 병기 적재된다(값 운반만·서로 다른 카운터).
+
+        parse_error 유발 전이와 비대수 전이가 이벤트에서 다른 키로 도착해야 한다(⑤ 변별력의
+        적재 축 — 같은 키에 합산되면 red). JSONB 세계라 enum이 아닌 평문 키를 고정한다.
+        """
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+        from whymath_backend.schema.enums import StepType
+
+        verification = verify_solution(
+            ["2+3", "5", "2 +* 3", "5"],
+            [StepType.계산, None, StepType.조건해석],
+        )
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="이렇게 정리했다",
+            verification=verification,
+            verification_ocr_gated=False,
+        )
+        data = sess.added[0].event_data
+        assert data["unverifiable_by_reason"] == {"parse_error": 1, "non_algebraic_step": 1}
+        # 자유문 reason·steps는 여전히 미적재(비식별 규약 불변 — 코드·정수만).
+        assert "steps" not in data
+
+    async def test_unverifiable_by_reason_none_without_verification(self) -> None:
+        """단계 미제출(검증 미실행)이면 사유 분포도 None — S4-19 NULL 회계 동형."""
+        from whymath_backend.api.coach import _log_verify_event
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="2+3=5 이므로 답은 5입니다",
+        )
+        assert sess.added[0].event_data["unverifiable_by_reason"] is None
+
+    async def test_unverifiable_by_reason_empty_dict_when_no_holds(self) -> None:
+        """검증 실행·보류 0이면 {}(빈 dict) — None(미실행)과 구분(분모 없는 0 금지의 적재 축)."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        verification = verify_solution(["2*(x+1)", "2*x+2"])  # correct 전이 1회·보류 0
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="이렇게 정리했다",
+            verification=verification,
+            verification_ocr_gated=False,
+        )
+        assert sess.added[0].event_data["unverifiable_by_reason"] == {}
+
+    async def test_distribution_log_has_denominator(self, caplog: pytest.LogCaptureFixture) -> None:
+        """MATH-03 ④ — 분포 INFO 로그가 '전이 N건 중 보류 M건' 분모 동반 형식으로 남는다.
+
+        리포트 좌석 실측: verify 집계 기존 리포트는 전부 harness/**(타 세션 claim)라 응답 로그
+        대체(coach client_state_mismatch logger.info 선례) — 이 테스트가 그 좌석을 동결한다.
+        """
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.l3.verify_solution import verify_solution
+        from whymath_backend.schema.enums import StepType
+
+        verification = verify_solution(
+            ["2+3", "5", "2 +* 3", "5"],
+            [StepType.계산, None, StepType.조건해석],
+        )
+        sess = _CaptureSession()
+        with caplog.at_level(logging.INFO, logger="whymath_backend.api.coach"):
+            await _log_verify_event(
+                cast(AsyncSession, sess),
+                user_id=self._UID,
+                problem_id=self._PID,
+                attempt_id=None,
+                student_solution="이렇게 정리했다",
+                verification=verification,
+                verification_ocr_gated=False,
+            )
+        joined = "\n".join(r.getMessage() for r in caplog.records)
+        assert "전이 3건 중 보류 2건" in joined  # 분모 없는 0 금지 — N·M 병기 형식
+        assert "parse_error" in joined
+        assert "non_algebraic_step" in joined
+
     async def test_empty_solution_no_event_even_with_verification(self) -> None:
         """비제출 턴 무적재 가드 불변 — verification이 있어도 적재 0(false-pass 방지 우선)."""
         from whymath_backend.api.coach import _log_verify_event

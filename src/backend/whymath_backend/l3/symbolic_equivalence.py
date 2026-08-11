@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from enum import Enum
 
 import sympy
@@ -279,6 +280,56 @@ class IdentityVerdict(str, Enum):
     parse_error = "parse_error"  # 파싱 실패·빈 입력(검증 안전 회피).
 
 
+@dataclass(frozen=True, slots=True)
+class IdentityDetail:
+    """`identity_status_detail`의 결과 — 4상태 verdict + undecidable *세부 라벨*(MATH-03).
+
+    `variable_mismatch`는 verdict가 `undecidable`이고 그 원인이 **다항인데 자유변수 집합이
+    달라**(치환 맥락 — 예: `a` vs `b+1`·산문이 심볼로 강제) 비항등 *증명*이 봉인된 경우만
+    True다. 비다항 미결정(`√(x²)` vs `x`·미지 함수 등)은 변수와 무관하게 미결정이므로 False
+    (일반 undecidable). 이 불리언은 판정이 *이미 계산하던* `is_poly`·`same_symbols`를 반환에
+    노출한 것뿐이다 — 신규 판정 로직 0(라벨링 전용·verify_step reason_code
+    `variable_mismatch`의 발생 지점 단일 진실).
+    """
+
+    verdict: IdentityVerdict
+    variable_mismatch: bool = False
+
+
+def identity_status_detail(lhs: str, rhs: str) -> IdentityDetail:
+    """`identity_status`의 세부판 — 같은 판정 + undecidable 원인 라벨(판정 로직 단일 본체).
+
+    4상태 판정 기준은 `identity_status` docstring이 정본이다(그쪽이 이 함수에 위임). 추가로
+    undecidable일 때 *다항 + 자유변수 집합 불일치*(치환 맥락)면 `variable_mismatch=True`를
+    함께 돌린다 — not_identity 조건 `(is_poly and same_symbols)`의 여집합 불리언을 그대로
+    노출하는 라벨이지 새 판정이 아니다(MATH-03 ②).
+    """
+    lhs_src = to_sympy_source(lhs)
+    rhs_src = to_sympy_source(rhs)
+    if not lhs_src or not rhs_src:
+        return IdentityDetail(IdentityVerdict.parse_error)
+    try:
+        left = _parse(lhs_src)
+        right = _parse(rhs_src)
+        diff = sympy.sympify(left - right)
+        expanded = sympy.expand(diff)  # 다항식은 전개가 완전한 정규형(항등식이면 0).
+        is_zero = sympy.simplify(diff).is_zero  # 비다항 항등식(삼각 등)까지 보강 판정.
+        is_poly = bool(diff.is_polynomial())  # 다항식이면 전개 0-여부로 결정 가능.
+        same_symbols = left.free_symbols == right.free_symbols
+    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 parse_error(위장 금지)
+        return IdentityDetail(IdentityVerdict.parse_error)
+
+    if expanded == 0 or is_zero is True:
+        return IdentityDetail(IdentityVerdict.identity)
+    if is_zero is False or (is_poly and same_symbols):
+        return IdentityDetail(IdentityVerdict.not_identity)
+    # undecidable — 다항인데 변수 집합이 다르면(치환 맥락) 그 불일치가 곧 반증 봉인 원인이다
+    # (같은 변수였다면 위 not_identity로 *증명*됐을 것). 비다항이면 변수와 무관한 일반 미결정.
+    return IdentityDetail(
+        IdentityVerdict.undecidable, variable_mismatch=is_poly and not same_symbols
+    )
+
+
 def identity_status(lhs: str, rhs: str) -> IdentityVerdict:
     """`lhs`와 `rhs`가 *항등적으로 같은지* SymPy로 판정한다 — 동치 권위 단일 primitive.
 
@@ -293,27 +344,11 @@ def identity_status(lhs: str, rhs: str) -> IdentityVerdict:
         맥락) 거짓 not_identity를 피하려 undecidable로 둔다.
       - **undecidable**: 비다항·simplify 미정(예: `√(x²)` vs `x`는 정의역 의존) — 위장 없이 보수.
       - **parse_error**: 빈 입력·파싱 예외.
-    """
-    lhs_src = to_sympy_source(lhs)
-    rhs_src = to_sympy_source(rhs)
-    if not lhs_src or not rhs_src:
-        return IdentityVerdict.parse_error
-    try:
-        left = _parse(lhs_src)
-        right = _parse(rhs_src)
-        diff = sympy.sympify(left - right)
-        expanded = sympy.expand(diff)  # 다항식은 전개가 완전한 정규형(항등식이면 0).
-        is_zero = sympy.simplify(diff).is_zero  # 비다항 항등식(삼각 등)까지 보강 판정.
-        is_poly = bool(diff.is_polynomial())  # 다항식이면 전개 0-여부로 결정 가능.
-        same_symbols = left.free_symbols == right.free_symbols
-    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 parse_error(위장 금지)
-        return IdentityVerdict.parse_error
 
-    if expanded == 0 or is_zero is True:
-        return IdentityVerdict.identity
-    if is_zero is False or (is_poly and same_symbols):
-        return IdentityVerdict.not_identity
-    return IdentityVerdict.undecidable
+    구현은 `identity_status_detail`에 위임한다(판정 본체 단일·MATH-03 라벨 노출과 동일 경로) —
+    4상태 반환 계약은 불변이다.
+    """
+    return identity_status_detail(lhs, rhs).verdict
 
 
 # `=` 체인 분리 시 대상이 *아닌* 관계·비교 연산자 — 있으면 등식 체인이 아니므로 명시 거부한다
@@ -362,8 +397,10 @@ def verify_relation_chain(src: str) -> IdentityVerdict:
 
 
 __all__ = [
+    "IdentityDetail",
     "IdentityVerdict",
     "identity_status",
+    "identity_status_detail",
     "latex_to_plain",
     "split_relation_chain",
     "to_sympy_source",

@@ -380,11 +380,15 @@ def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # problem_id는 rephrase가 LLM 원본을 보존하므로 재슬러그된 레코드에서 소스와 다를 수 있어
     # 비교에서 제외한다(S2-08·발문 조사 수정으로 소스 slug만 바뀐 경우).
     #
-    # S3-27(2026-07-30) 편집자 참고: `problem_type_codes`는 소스(generated_v0)에만 있고 rephrased_v0
-    # 에는 없는 *의도된* 비대칭 필드다 — `S4-14`(변형 계보 영속) 미착지로 원 생성기를 추적할 수 없어
-    # rephrased_v0 429건은 유형 백필에서 명시 제외됐다(`problem_bank_gap_review.md` §5-③ 편집자
-    # 부기·`harness/problem_type_backfill.py`). 오염이 아니라 설계이므로 키 집합·값 비교 양쪽에서
-    # 제외한다.
+    # S3-27(2026-07-30) 편집자 참고 → PB-07(2026-08-11) 갱신: `problem_type_codes`는 한때
+    # 소스(generated_v0)에만 있는 *의도된* 비대칭 필드였다 — `S4-14`(변형 계보 영속) 미착지로
+    # 원 생성기를 추적할 수 없어 rephrased_v0는 유형 백필에서 명시 제외됐었다. 그 사유가
+    # 소멸해(S4-14/S4-18 done·계보 421/421 실측) `PB-07`이 제외를 해제하고 계보(relations
+    # "변형" parent_slug → 부모 유형 승계)로 rephrased에도 백필했다
+    # (`problem_bank_gap_review_r3.md` §3 G2·`harness/problem_type_backfill.py`). 이제 키 집합은
+    # 완전 대칭이고 값도 소스와 동일해야 한다 — 수학키 조인 소스와 unit_codes가 같고(아래 값
+    # 비교가 봉인) generated_v0 분류는 unit_codes의 순수 함수이므로, 계보 승계 값과 소스 저장
+    # 값이 필연 일치한다. 비대칭 제외를 걷어 값 일치까지 봉인한다.
     #
     # 병합 경위(2026-08-04, S4-18 병합): 이 병합 시점의 `rephrased_v0`는 병합 대상 브랜치와
     # 별개로 main에서 rotation-2 이후 재생성돼(S3-15 재설계) problem_id 429건 중 37건만 원
@@ -398,15 +402,14 @@ def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # 존재하되(키 집합 비교는 별도 제외 불요), *값*은 의도적으로 비대칭이다 — 소스는 자신의
     # "유사" 형제 태깅, rephrase 성공 레코드는 parent_slug를 향한 "변형" 태깅(S4-18)으로
     # 서로 다른 관계를 가리킨다(계보가 곧 이 차이의 요점) — 값 비교에서만 제외한다.
-    source_only_fields = {"problem_type_codes"}
     source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
     exclude = {"question_text", "slug", "problem_id", "relations"}
     for slug, rec in rephrased.items():
         src = source[_math_key(rec)]
-        assert set(rec) == set(src) - source_only_fields, f"{slug} 키 집합 변화"
+        assert set(rec) == set(src), f"{slug} 키 집합 변화"
         for key in src:
-            if key in exclude or key in source_only_fields:
+            if key in exclude:
                 continue
             assert rec[key] == src[key], f"{slug} 필드 변조: {key}"
 
