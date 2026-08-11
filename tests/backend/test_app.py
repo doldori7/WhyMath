@@ -681,6 +681,61 @@ class TestJobsAuthGate:
         assert resp.json()["state"] == "pending"
 
 
+class TestDocsProdSurfaceGate:
+    """SEC-18 결함A — `/docs`·`/redoc`·`/openapi.json`은 프로덕션 추정에서만 비활성.
+
+    `create_app`이 FastAPI 생성자에 `docs_url`/`redoc_url`/`openapi_url`을 넘기지 않아
+    기본값(항상 활성)이 적용돼, 프로덕션에서도 API 스키마가 무인증 노출되고 있었다
+    (`docs/reviews/functional_security_audit_2026-08-08.md` L1). `is_production_like`
+    (실 OAuth kakao/naver 구성 여부, `config.py`)가 True일 때만 세 경로를 라우트 자체가
+    없는 404로 봉인한다 — 개발·CI(이 저장소 CI에 kakao/naver 키 없음)는 항상 dev 분기라
+    기존 200 동작이 완전 무회귀여야 한다(`test_reports.py::TestAppendOnly`가 이미
+    `/openapi.json` 200을 전제).
+    """
+
+    def test_docs_enabled_in_dev(self) -> None:
+        """kakao/naver 미설정(개발·CI 기본) → 기존 동작 무회귀: 셋 다 200."""
+        get_settings.cache_clear()  # 환경 기본값(off) 확정 — 다른 테스트 env 누수 방지.
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            client = TestClient(app)
+            assert client.get("/docs").status_code == 200
+            assert client.get("/redoc").status_code == 200
+            assert client.get("/openapi.json").status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+    def test_docs_disabled_when_production_like(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """kakao 구성(프로덕션 추정) → 셋 다 404(라우트 자체가 등록되지 않음).
+
+        env+cache_clear로 프로덕션 유사 `Settings`를 만든다 — `docs_url` 등은 FastAPI
+        생성자에 한 번만 넘겨져 앱 구성 *시점*에 확정되므로(런타임 재설정 불가),
+        `dependency_overrides`(요청 시점 Depends 대체)로는 이 결정을 되돌릴 수 없다.
+        `get_settings()`가 실제로 kakao_configured=True인 인스턴스를 돌려주게 만들어야
+        `create_app` 내부의 `production_like` 계산이 그 값을 본다.
+        """
+        monkeypatch.setenv("WHYMATH_KAKAO_CLIENT_ID", "prod-kakao-id")
+        get_settings.cache_clear()
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            client = TestClient(app)
+            assert client.get("/docs").status_code == 404
+            assert client.get("/redoc").status_code == 404
+            assert client.get("/openapi.json").status_code == 404
+        finally:
+            get_settings.cache_clear()  # 다음 테스트로 kakao 구성 누수 방지.
+
+
 class TestParseAppVersion:
     """`_parse_app_version` 순수 함수 단위테스트(OPS-17) — 외부 semver 라이브러리 없이 정수
     3튜플 비교로 버전을 가른다."""

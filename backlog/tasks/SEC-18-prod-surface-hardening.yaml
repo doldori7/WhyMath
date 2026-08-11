@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -15,11 +15,12 @@ acceptance:
   - "결함B(CORS 결정 부재): 코드 전역에 CORSMiddleware 없음(현재 Flutter라 무해)이나 명시적 'CORS 없음' 결정을 동결하는 테스트도 없음 — 웹 클라 붙일 때 allow_origins=['*'] 급조 사고 경로 열림."
   - "수정: (A) is_production_like일 때 docs_url=None 등으로 프로덕션 비활성(개발은 유지). (B) CORS 정책을 명시 결정하고(현행 '없음' 또는 화이트리스트) 그 결정을 동결 테스트로 고정."
   - "notes: L4 게이팅 6종 무인증(api/gating.py)은 SEC-07 D1 공개 카탈로그로 현행 저위험이나, 향후 학생별 진단·약점 개념 등 개인 컨텍스트 반환 확장 시 인증/persona 바인딩 필수 — 확장 시 재검토 대상으로 기록."
-artifacts: []
+artifacts:
+  - "create_app에 production_like 시 docs_url/redoc_url/openapi_url=None(FastAPI 생성자 인자 — 스키마 표면 라우트 자체 미등록) 배선, 개발·CI(kakao/naver 미설정)는 기존 200 무회귀. CORS 정책(현재 미들웨어 없음 — Flutter 네이티브라 무해, 웹 클라 추가 시 재검토)을 test_cors_policy_freeze.py로 동결(결함주입 포함). 신규 테스트 test_app.py::TestDocsProdSurfaceGate(dev 200×3·prod 404×3, get_settings 캐시 누수 방지) + test_cors_policy_freeze.py. 전체 스위트 9321 passed/0 failed·infra 310·ruff/black/mypy --strict green — 메인 세션 독립 재검증(diff 전건 검토+lint/mypy 직접 실행+백그라운드 pytest 완주 확인) (브랜치 claude/whymath-issues-review-k20m0w)"
 paths:
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/config.py
   - "tests/backend/**"
-session: claude/whymath-issues-review-k20m0w
+session: null
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md L1·L4. docs 노출은 정보공개(정찰 조력)이지 접근 우회 아님(보호 라우트는 인증 유지). GCP/AWS WAF 차단 여지 있으나 리포 근거 없음."
 updated: 2026-08-11
