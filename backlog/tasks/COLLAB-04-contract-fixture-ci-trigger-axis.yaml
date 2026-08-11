@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,10 +17,11 @@ acceptance:
   - "④ 재발 차단 장치: 새 계약 fixture를 data/에 추가할 때 트리거 등재를 강제하는 장치를 함께 둔다(예: data/*.json 계약 목록 ↔ ci.yml 필터 대조 검사). 이것이 없으면 다음 계약에서 그대로 재발한다 — 산문 규칙은 대책이 아니다"
   - "⑤ 집행 정합: 봉합 후 각 계약의 소비 테스트가 실제로 그 잡에서 실행되는지 확인한다(저장소에 존재함 ≠ 돌아감 — OPS-03·OPS-10·OPS-11 선례). tests/infra/test_test_suite_wiring.py 규약 준수. 판정은 exit code로 한다(-q·| tail 금지)"
   - "⑥ 범위 밖: 계약 내용의 실태 정합(access_matrix #8은 COLLAB-05 소관)·계약 테스트를 infra-contracts로 이관(백엔드 의존성 필요·29초 경량 잡 설계를 깬다)·새 CI 잡 신설·다른 잡(mobile/data-pipeline)의 필터 확장은 이 태스크 범위 밖"
-artifacts: []
+artifacts:
+  - "PR #792 (https://github.com/doldori7/WhyMath/pull/792) — 커밋 d2777138.\n\nci.yml changes 잡 backend·web 필터를 개별 나열(계약 8종 중 2종만 등재) → data/[^/]+\\.json$ 접두\n패턴으로 전환 + tests/infra/test_ci_contract_fixture_trigger_wiring.py 신설(339줄·9건, 항상 도는\ninfra-contracts 잡 소속이라 가드 자신이 트리거 사각에 빠지지 않는다).\n\nacceptance 6항: ①현행 실측 고정 — ci.yml에서 정규식 추출해 grep -qE(CI와 같은 엔진)로 8종 판정,\naccess_matrix 등 6종 SKIP 재현. r3 §3 D5 표와 일치(ADMIN-01 머지 후에도 불변) + 표 초과 실측 1건\n(notation_missing_baseline 소비처 = tests/backend/l3/test_notation_coverage_eval.py → 8종 전부\n소비 테스트 보유·예외 후보 0) ②접두 패턴 채택·근거 주석화, 신규 잡 0·신규 추상 0·data/*.json\n내용 변경 0, 과트리거 경계 실측(data/corpus/*·data/ncic/* SKIP 유지) ③변별력 — 수정 전 프로브\nEXIT=1·가드 1 failed(12위반 파일명 단위 지목), 수정 후 8종 전건 RUN·EXIT=0. 추가 뮤테이션 2종\n(패턴 과협착 / 개별 나열 회귀) 주입 시 EXIT=1 재현, cp 백업으로 원복(git 계열 미사용)\n④재발 차단 = 가드가 계약 전건의 필터 매치 + 소비 테스트 실재를 강제. 예외는 사유 명시 허용목록\n으로만(현재 0건)·죽은 예외도 red·파서 위장 금지 6종 ⑤집행 정합 — test_test_suite_wiring.py 규약\n준수·중복 파싱 회피, 소비 테스트 8건이 backend 잡 수집 범위에 듦 확인 ⑥범위 밖 준수(계약 내용\n무수정·infra-contracts 이관 안 함·새 잡 0·mobile 필터 미접촉).\n\n로컬 검증: pytest tests/infra 312 passed EXIT=0 · ruff/black CI 원문 명령 EXIT=0.\nCI 실측(PR #792, sha 2a9cf69a): 체크 16건 중 15 success + 1 skipped(e2e-nightly), 실패 0.\nbackend lint·type·test(전체 스위트)·backend 마이그레이션·통합(실 PG)·mobile·web·data-pipeline\n3종·docker-build 전건 success. infra-contracts success = 신규 가드가 CI에서 실제로 실행됨\n(저장소에 존재함 ≠ 돌아감의 CI 실측 충족).\n\n정직한 잔여: ①mobile 잡 필터의 동형 사각은 범위 밖이며 타 세션 MATH-01(claude/whymath-math-\nengine-design-ns3fc1)이 개별 나열 4종으로 작업 중 — 효과는 상보적이나 표기 관례가 갈리며 나중\n머지 쪽이 해소(OPS-07 병렬 중복 회피). 신규 가드는 mobile 필터 미검사라 테스트 수준 충돌 없음\n②'계약 파일만 고친 PR에서 backend 잡이 깨어나는가'는 이 PR로 미증명 — 이 PR은 ci.yml을 건드려\n전 잡이 트리거됐다. 로컬 정적·shell 실측까지 ③정규식 방언 전제(CI=POSIX ERE, 가드=Python re)\n— 현행 문법은 동치이며 docstring 명기, red/green은 실제 grep -qE로도 수행 ④과트리거 비용 감수\n(미트리거는 사고, 과트리거는 비용) ⑤r3:123,395·dsl_integration_gap_review:221의 구 필터 인용이\nstale해짐 — 날짜 있는 실측 기록이라 in-place 무수정."
 paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
-session: claude/whymath-collaboration-design-qlzq5m
+session: null
 notes: "docs/architecture/collaboration_module_gap_review_r3.md §3 D5. COLLAB-01 acceptance ⑥이 'CI에서 실행되는지'를 테스트 파일 축(tests/backend/**)에서 정당하게 확인·통과했으나 계약 파일 축은 보지 않았다 — data/access_matrix.json이 ci.yml:74 필터에 없어 계약 단독 수정 PR에서 test_access_matrix.py가 skip된다. notation_contract·render_contract는 정확히 같은 사유로 이미 등재돼 주석까지 달려 있는데 답습 실패. 같은 사각이 visual_style·scene·segmentation·notation_support_manifest 4건 더. 반복 실수 10회차(트리거 축 부분 배선 — 테스트는 CI에 있는데 그것을 깨울 입력 경로가 필터 밖이라 정상 상태와 구분되지 않는다)."
 updated: 2026-08-11
