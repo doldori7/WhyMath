@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/privacy/export.py
   - "tests/backend/privacy/**"
   - "tests/backend/api/**"
-session: null
+session: claude/unresolved-long-term-branches-ph1ad7
 notes: "2026-08-11 협업 r3 자체 재검증에서 발견(서브에이전트 독립 실측 + 부모 세션 재확인: _EXPORT_PLAN:93 · _row_to_json:190 필터 0 · 봉인테스트의 export 참조 0건 · export테스트의 봉인필드 참조 0건). ASM-07(#732, 08-09)이 학생 대면 예측 5필드를 3층 봉인했으나 export는 그보다 먼저(#668, 08-06) 내부 정본 Assessment를 실었고 나중 봉인이 이 경로를 덮지 않았다 — r3 D7이 계약 파일에서 지적한 형태(먼저 있던 배선을 나중 결정이 무효화했는데 아무도 red로 못 받음)가 코드 축에서 반복. 현재 유출값은 null(estimated_percentile writer 0건)이라 라이브 피해 0의 잠재 결함이나, 봉인 설계 취지가 'writer가 붙는 순간'을 막는 것이므로 값 부재를 안전 근거로 쓸 수 없다. ★COLLAB-05 선행: r3 D7 설계 ②가 계약 #8을 summary→none으로 좁히라 하는데 export 실태가 full이라 그대로 집행하면 계약-실태 어긋남이 위험한 방향으로 벌어진다 — 이 태스크 ②의 판정이 COLLAB-05보다 먼저 와야 한다."
 updated: 2026-08-11
