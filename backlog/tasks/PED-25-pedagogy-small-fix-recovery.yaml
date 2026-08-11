@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-25-pedagogy-small-fix-recovery
+title: "고립된 소액 정정 3건 회수 ④ — 문서 부채·k_type 라벨 맹글링·WH-1 caplog 플레이크 (uqyg79 PED-11·PED-12·OPS-15)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 재확인 선행 — 3건 모두 소액이고 main이 그 사이 독립적으로 고쳤을 수 있다. 이식 전에 각 건이 **지금도 결함인지** 실측하고, 이미 해소됐으면 그 근거를 적고 제외한다(낡은 주장 이식 금지)"
+  - "② PED-12 k_type 라벨 — adaptive/effectiveness.py의 str(enum) 맹글링이 현행에 남아 있으면 .value로 수정하고 소스 스캔 동결 테스트를 확장한다"
+  - "③ OPS-15 caplog 플레이크 — WH-1 harness 테스트의 로거 상태 오염(dictConfig propagate)이 현행에서 재현되는지 무작위 시드 10회로 확인한 뒤에만 격리 장치를 넣는다. 재현 안 되면 제외하고 근거를 남긴다"
+  - "④ PED-11 문서 부채 — preferred_solution_style 유령 필드 서술이 02_learner_model.md·03_content_generation.md에 아직 있는지 확인 후 실측 부기"
+  - "⑤ 3건 중 제외한 것이 있으면 **무엇을 왜 제외했는지** 완료 보고에 명시한다(침묵하면 전건 처리로 읽힌다)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - "tests/backend/harness/**"
+  - "docs/architecture/*"
+session: null
+notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 uqyg79 head=5dc040b3. 원 태스크 PED-11-doc-debt-ghost-fields(8b2e5c60)·PED-12-effectiveness-ktype-label(4fd8684a)·OPS-15-wh1-caplog-order-flake(e1401c8a). 원 OPS-15 번호는 main에서 다른 태스크가 2회 이중 배정된 이력이 있다(CLAUDE.md HARN-10 사고 경위)."
+updated: 2026-08-11
