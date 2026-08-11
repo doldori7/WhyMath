@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: infra
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -16,11 +16,16 @@ acceptance:
   - "③ 사이드카 생성 경로 조사 — 기존 CLI가 있으면 지목하고, 없으면 그 부재를 별도 태스크로 분리 등재한다(여기서 만들지 않는다 — 범위 폭발 방지)."
   - "④ 커버리지 델타 산정 — 브랜치 코퍼스에 harness/problem_bank_coverage.py를 돌려 회수 시 성취기준 커버(현 72/435)·학교급별(초등 5/121)·0커버 영역 25개의 변화를 수치로 낸다. R3 선측정으로 신규분 고유 성취기준 코드는 55개이고 main 78개와 교집합 0(합집합 133)이나 2022 개정 대장 대조는 미실시 — 그 대조가 이 항의 산출물이다. 이 수치가 Kiki 병합 결정의 유일한 정량 입력이다."
   - "⑤ 스코프 밖 명시 — 병합·충돌 해소·문항 내용 재검수·품질 재감사. PB-02(열린 PR #739)가 커버리지 리포트 재생성 CI를 다루므로 ci.yml·리포트 재생성 축은 건드리지 않는다(파일 분리). 감지 자체는 HARN-13이 이미 작동한다 — 이 태스크는 감지 이후의 공백만 다룬다."
-artifacts: []
+artifacts:
+  - "PR #795 (https://github.com/doldori7/WhyMath/pull/795)"
+  - "검증(전건 exit code): ② 변별력 양측 실측 — provenance_audit --corpus-root <임시트리>로 사이드카 부재 시 EXIT=1·SIDECAR_MISSING 30건(다른 종류 0), 최소 사이드카 부여 후 EXIT=0·위반 0건. 두 상태가 서로 다른 exit code를 내므로 이 게이트가 회수의 실제 차단 조건임이 확인됨. ④ 커버리지 main 기준선 EXIT=0(78/435 재현)·union EXIT=0(130/435), --standards를 main 파일로 명시 고정해 분모 고정. backlog.py validate EXIT=0(299건)·overlap PB-11 EXIT=0(겹침 0). 문서 인용 파일·라인 전건 재확인(유령 참조 0). 리포 data/corpus/ 무수정 확인 — 임시 사이드카 30개는 scratch에서만 생성 후 정리."
+  - "산출: docs/data/authoring_expansion_recovery_conditions_2026-08.md(290줄) — 차단 조건 3건 확정(⑴사이드카 30/30 부재 ⑵S4-19·S4-22 ID 충돌 신규 발견: git도 validate도 못 잡음 ⑶shallow로 merge-base 부재). 커버리지 델타 78→130/435(+52·+12.0%p)·초등 9→22·0커버 영역 24→19(해소 5: 이차곡선·적분·적분법·통계·행렬), 남는 19영역은 회수로도 미해소. 대학 미적분 600문은 대장 밖 코드라 분자 0 기여. 병합 방식(브랜치 단독 vs union)이 결론을 바꾸지 않음. ③ 판정: 사이드카 생성 CLI 부재 확정(3중 근거) → PB-11 등재(PB-07 번호 충돌로 CLI 제안 번호 사용)."
+  - "정정 6건: 기준선 72/435→78/435·초등 5/121→9/121·0커버 25→24(리포트 stale — 문서 인용 금지) · ci.yml:301-302→306-307 · 브랜치 전체 사이드카 7→26(problem_bank 기준 7/37) · 신규 고유 코드 55→52(대장 실재)+3(대장 밖) · 생성기 35→30파일 · 저작 태스크 22→32건(S4-19~51). 마지막 건은 회수 범위 자체를 바꾼다 — 누락 10건이 만든 코퍼스 10종이 태스크 없이 고아가 된다. 생성기 35는 R3 부록에서 유일하게 재현 명령이 없던 수치였다."
+  - "정직한 공백: 사이드카 30개 실제 생성 안 함(회수 행위·Kiki 소유) · 사이드카 CLI 구현 안 함(③ 명시 금지·PB-11 등재만) · data/corpus/가 backend 경로 필터에 없어 코퍼스만 바꾸는 PR은 provenance_audit이 한 번도 안 도는 결함 발견했으나 수정 대상이 전부 PB-02 paths라 고치지 않고 PB-02 notes에 판정 재료로 등재(MATH-01 ④와 동일 유형·트리거 축 세 번째 사례) · S4-16(타 세션 claim)과 problem_bank_coverage.py paths 겹침 경고 있었으나 그 파일 미수정으로 실충돌 0"
 paths:
   - "docs/data/**"
   - src/backend/whymath_backend/harness/problem_bank_coverage.py
   - "backlog/tasks/**"
-session: claude/pb-06-authoring-recovery-conditions
+session: null
 notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G1·§6-ⓐ. 미병합 고립 4회차이며 규모 최대(main 코퍼스 2,647의 4.3배). R2 §3 R7이 '소비처 S4-01이 잠겨 저작 큐는 페이퍼로만'이라 판단한 그 저작이 같은 주에 이미 실행되고 있었다 — 고립이 상위 설계의 판단을 사실과 반대로 만든 첫 사례. S4-09(다중 풀이) 완료본도 claude/whymath-solution-review-40xspg에 있다는 감지 경고가 있어 회수 대장에 함께 올린다. PB-05는 폐기 브랜치 bbyp3d가 선점(ARCH-24로 흡수된 유령)이라 PB-06 발급."
 updated: 2026-08-11
