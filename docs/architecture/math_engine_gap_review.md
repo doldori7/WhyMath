@@ -268,6 +268,26 @@
 
 **태스크**: `MATH-02-notation-canon-reference-integrity` (stage S3 · priority 2)
 
+#### 착지 기록 (2026-08-11 · `MATH-02` 완료)
+
+D2 판정은 **전건 확인**됐다(반증 0) — 5종 부재를 exit code로 재현했다. 착지 내용과 실측:
+
+| 항목 | 결과 |
+|---|---|
+| 근거의 데이터 승격(②) | `_PROVEN_MACRO_EVIDENCE`(매크로→근거 경로) 신설·`KATEX_PROVEN_MACROS`를 여기서 파생(이중 정의 0). manifest에 `provenance{_note, ns02_disposition, claims[6]}` 추가 |
+| 참조 무결성 검사(③) | `tests/backend/l3/test_notation_evidence_integrity.py` 8건 — 회계 정합 7(상시 green) + 근거 실재 1(`xfail(strict=True)`) |
+| 회계 정직화(④) | allowlist 24건이 `unproven`으로 격리(삭제 0). 그중 **코퍼스에 실제 등장하는 5건**(`\sin`·`\log`·`\alpha`·`\beta`·`\theta`, 전부 `formula_graph_v1`)이 누락으로 드러나 베이스라인에 **수동 계상**(31→36건). 나머지 19건은 코퍼스 미등장이거나 manifest `cases`로 독립 지원 |
+| 변별력(⑤) | 3단 실측 — ⓐ`xfail` 제거 시 근거 부재 5건으로 **red**(EXIT=1) ⓑ근거 경로만 실재 파일로 바꾸면 status 불일치로 **red** ⓒstatus까지 맞추면 **green**. 원복은 `cp` 백업(git 원복 금지 규칙 준수) |
+| NS-02 거취(⑥) | **포기(abandoned)**. `git ls-remote --heads origin '*shadow-data-s3-pilot*'` **0건** — 회수 대상 자체가 원격에 없다. manifest `provenance.ns02_disposition`에 근거·측정일과 함께 기록 |
+
+**남은 것(의도된 red 아님·의도된 xfail)**: `test_all_declared_evidence_files_exist`는 `xfail(strict=True)`
+로 동결돼 있다. `skip`은 검사 부재와 구별되지 않고(침묵 실패), 생 `fail`은 알려진 공백으로 CI를
+상시 red로 만들어 경고를 습관화시킨다. `strict=True`라 **근거가 실제로 생기면 `XPASS`로 실패**해
+표식을 지우라고 알린다 — 공백을 숨기지 않으면서 해소도 놓치지 않는 형태다.
+
+**severity 재확인**: 게이트 자체는 계속 유효하다. 이번 변경으로 지원집합이 좁아졌을 뿐
+측정 기계·래칫·대조군은 그대로이며, `--control-empty-support`가 여전히 EXIT=1로 변별력을 낸다.
+
 ---
 
 ### D3 — 검증 실패가 학생에게 무변별하다 (`MATH-03`)

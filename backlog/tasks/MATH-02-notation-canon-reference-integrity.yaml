@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - data/notation_missing_baseline.json
   - tests/backend/l3/test_notation_coverage_eval.py
   - ".github/workflows/ci.yml"
-session: null
+session: claude/whymath-curriculum-design-6eejrv
 notes: "docs/architecture/math_engine_gap_review.md §3 D2. 기능 29·30 대조 중 발견 — NS-03 게이트가 ci.yml:290에서 실제로 돌고 green인데 지원집합 정본이 지목하는 파일 5종이 전부 부재한다. 원인은 NS-03 notes와 MEMORY.md:1137에 이미 자인: NS-02-notation-canonical-layer가 미병합 브랜치에 고립돼 착륙 못 했고 순수 데이터인 manifest만 회수됐다. 실수의 형태가 선례와 다르다 — OPS-03·VIZ-01·NLP-01은 '만들었는데 안 돈다'(증상=부재)였는데 이건 '도는데 근거가 없다'(증상=green)다. green이라 아무도 안 본다는 점에서 더 조용하다. 판정 기준을 '게이트가 돌아가는가'에서 '게이트가 지목하는 근거가 실재하는가'로 한 단계 더 밀어야 하는 1회차(§6 계열 B)."
-updated: 2026-08-03
+updated: 2026-08-11
