@@ -1,0 +1,34 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MATH-01-notation-normalization-authority
+title: "LaTeX→canonical 정규화 권위 단일화 — 계약 확장 + py/js/dart 3자 교차 골든"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 드리프트 실측 고정: l5/ocr/verify.py:61-74·latex_to_plain.dart:131-140·mathExpr.js:12-28 세 구현이 같은 LaTeX 입력에 대해 서로 다른 산출을 내는 케이스를 실측으로 열거한다(중첩 \\frac·암묵 곱셈 삽입·\\div 미처리·\\sqrt 괄호 수·\\leq 부분매치). 주장 확인 또는 반증 — 불일치 0이면 이 태스크는 과잉이므로 범위를 ④로 축소한다"
+  - "② 권위 실체화(이관): l5/ocr/verify.py의 private _latex_to_sympifiable를 l3/symbolic_equivalence.py의 public 순수 함수로 이관하고 L5는 그것을 호출한다. notation_contract.md §3이 이미 to_sympy_source를 '입력 정규화 단일 권위'로 선언했으므로 새 추상이 아니라 선언과 코드의 불일치를 코드 쪽에서 닫는 것이다. import-linter layers 계약(L5→L3 정방향)을 실측 확인"
+  - "③ 3자 교차 골든: data/notation_contract.json에 latex_cases 블록을 추가(신규 계약 파일 0 — VIZ-02 ① '기존 계약 파일을 단일 진실원으로 확장' 선례)하고 tests/backend/l3/test_notation_contract.py(py) ↔ src/web/graphing-calculator/test/notation_contract.test.js(js) ↔ src/mobile/test/latex_to_plain_test.dart(dart·신규 편입)가 같은 fixture를 읽는다. dart/js 어느 쪽도 fixture 부재를 skip으로 흡수하지 않는다(파일 부재=실패 — test_notation_contract.py:31 pytest.skip 함정 회피). 웹은 canonical 문자열 일치가 아니라 mathjs 동일 수치로 검증한다(렌더 전용 경계·notation_contract.md §1 불변)"
+  - "④ CI 트리거 구멍 봉인 — [2026-08-11 재검증으로 범위 정정] backend(ci.yml:74)·web(:86)은 이미 data/notation_contract.json·render_contract.json을 포함하도록 메워졌다(1차 대조 시점의 '셋 다 부재'는 낡음). 남은 것은 mobile(:83) 하나이며, 봉인 대상은 3건이다 — notation_contract.json(이 태스크가 dart를 3자로 편입하므로) + segmentation_contract.json + scene_contract.json. 뒤 2건은 미래 대비가 아니라 현재 결함이다: 이미 착륙한 Dart 골든 2개(src/mobile/test/segmentation_contract_test.dart:96·scene_contract_test.dart:29)가 그 파일들을 File('../../data/...')로 읽는데 mobile 필터에 없어 fixture-only PR에서 mobile 잡이 통째 skip된다. 이걸 빼면 이 태스크가 만든 게이트가 MATH-02가 지적하는 유령이 된다"
+  - "⑤ 변별력: latex_cases의 canonical 한 줄을 의도적으로 틀리게 바꿔 py·js·dart 셋이 전부 red가 되는지 실측 → 복원해 green 실측. 한 언어라도 green을 유지하면 그 언어는 계약을 읽지 않는 것이다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑥ 범위 밖 명시 + 경계 동결: (a) 3벌 구현을 1벌로 줄이지 않는다 — Dart가 Python을 import할 수 없어 원리적으로 불가하며 이 태스크가 줄이는 것은 권위이지 구현체 수가 아니다. (b) 원문 LaTeX 전송 + 백엔드 재변환 shadow는 API 계약 변경이라 범위 밖(발화 조건 math_engine_gap_review.md §5-①). (c) latex_cases는 입력→산출 쌍만 담고 조건 분기를 넣지 않는다(재작성 규칙 트리 금지 — math_dsl_evolution.md anti-goal). (d) NLP-03과의 경계: 이 태스크는 단계 문자열 1개의 표기 정규화(str→str)이고 NLP-03은 1 제출→N 단계 분해(str→list[str])다. \\displaylines의 래퍼 해체는 여기, 행 구분자 \\\\ 분해는 NLP-03"
+artifacts: []
+paths:
+  - data/notation_contract.json
+  - src/backend/whymath_backend/l3/symbolic_equivalence.py
+  - src/backend/whymath_backend/l5/ocr/verify.py
+  - src/mobile/lib/features/chat/domain/latex_to_plain.dart
+  - src/web/graphing-calculator/src/lib/mathExpr.js
+  - tests/backend/l3/test_notation_contract.py
+  - src/mobile/test/latex_to_plain_test.dart
+  - data/segmentation_contract.json
+  - data/scene_contract.json
+  - ".github/workflows/ci.yml"
+session: null
+notes: "docs/architecture/math_engine_gap_review.md §3 D1. 기능 29(양방향 변환)의 LaTeX→평문이 3벌인데 실측하면 사본이 아니라 서로 다른 3개 규칙이다(부록 A 대조표) — 웹은 암묵 곱셈을 강제 삽입하는데 백엔드는 그 해석을 의도적으로 거부한다(symbolic_equivalence.py:74-75). 그리고 학생 제출 경로에 있는 구현은 Dart라 수식 판정의 입력 권위가 사실상 클라이언트에 있다. latex_to_plain.dart:13-15의 '백엔드 미러' 자인은 부분 거짓(미러+확장 — \\leq·\\displaylines는 Dart 고유). notation_contract.json(py↔js) 선례에 Dart를 3자로 편입하는 형태. VIZ-01(적재 0행)·OPS-03(테스트 미실행)·NLP-01(배포 미포함)이 '부재'가 증상이었다면 이 건은 '권위 소재 불명'이 증상이다 — 다른 계열. [2026-08-11 재검증] ④의 CI 구멍이 좁아지는 동시에 넓어졌다 — backend·web는 그 사이 메워졌고(구멍 좁아짐) mobile 하나만 남았는데, 그 하나가 이미 착륙한 Dart 계약 골든 2개를 미집행 상태로 만들고 있음이 실측됐다(가설→라이브 결함). NLP-03은 그 사이 done이 됐으므로 depends_on을 걸지 않고 경계 서술만 유지한다."
+updated: 2026-08-11
