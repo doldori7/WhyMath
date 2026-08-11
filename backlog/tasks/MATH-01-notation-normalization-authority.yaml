@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,10 @@ acceptance:
   - "④ CI 트리거 구멍 봉인 — [2026-08-11 재검증으로 범위 정정] backend(ci.yml:74)·web(:86)은 이미 data/notation_contract.json·render_contract.json을 포함하도록 메워졌다(1차 대조 시점의 '셋 다 부재'는 낡음). 남은 것은 mobile(:83) 하나이며, 봉인 대상은 3건이다 — notation_contract.json(이 태스크가 dart를 3자로 편입하므로) + segmentation_contract.json + scene_contract.json. 뒤 2건은 미래 대비가 아니라 현재 결함이다: 이미 착륙한 Dart 골든 2개(src/mobile/test/segmentation_contract_test.dart:96·scene_contract_test.dart:29)가 그 파일들을 File('../../data/...')로 읽는데 mobile 필터에 없어 fixture-only PR에서 mobile 잡이 통째 skip된다. 이걸 빼면 이 태스크가 만든 게이트가 MATH-02가 지적하는 유령이 된다"
   - "⑤ 변별력: latex_cases의 canonical 한 줄을 의도적으로 틀리게 바꿔 py·js·dart 셋이 전부 red가 되는지 실측 → 복원해 green 실측. 한 언어라도 green을 유지하면 그 언어는 계약을 읽지 않는 것이다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
   - "⑥ 범위 밖 명시 + 경계 동결: (a) 3벌 구현을 1벌로 줄이지 않는다 — Dart가 Python을 import할 수 없어 원리적으로 불가하며 이 태스크가 줄이는 것은 권위이지 구현체 수가 아니다. (b) 원문 LaTeX 전송 + 백엔드 재변환 shadow는 API 계약 변경이라 범위 밖(발화 조건 math_engine_gap_review.md §5-①). (c) latex_cases는 입력→산출 쌍만 담고 조건 분기를 넣지 않는다(재작성 규칙 트리 금지 — math_dsl_evolution.md anti-goal). (d) NLP-03과의 경계: 이 태스크는 단계 문자열 1개의 표기 정규화(str→str)이고 NLP-03은 1 제출→N 단계 분해(str→list[str])다. \\displaylines의 래퍼 해체는 여기, 행 구분자 \\\\ 분해는 NLP-03"
-artifacts: []
+artifacts:
+  - "833f46af (PR #791, squash)"
+  - "검증(전건 exit code·CI 동일 호출 재현): ruff 0 · black 0(1118파일) · mypy --strict 0(485파일) · lint-imports 0(7계층 KEPT — L5→L3 정방향 실측으로 acceptance ② 충족) · 백엔드 전체 스위트 9435 passed/304 skipped/0 failed(1866s, bare pytest=CI 동일) · 계층 커버리지 전 계층 PASS(l3 95.0%/floor 70) · 웹 npm coverage·build 0 · PR CI 16잡 ALL_GREEN. ① 드리프트 26건 실측 — 3자 완전 일치 4건뿐이라 '불일치 0이면 과잉' 탈출구는 반증됐고, py 순수 결함 2건을 발견·해소했다(제어어 경계 부재로 'a \\\\rightarrow b'가 'a arrow b'로 오염 · \\\\leq/\\\\geq/\\\\neq 미처리로 부등식 인식 결과의 OCR 신뢰도가 항상 강등). 이관 후 py·dart 18/18 일치. ③ latex_cases 16건을 기존 계약 파일에 추가(신규 계약 파일 0), py 33건·dart 16건·web 수치가 CI에서 전부 green. py의 pytest.skip 함정 제거(모듈 스코프라 fixture 부재 시 스위트가 조용히 green이었다). ⑤ 변별력 3자 red 실측: 계약의 latex 한 줄 파손 → py 로컬 EXIT=1 · web CI failure · mobile CI failure(351 passed/1 failed — 파손 케이스만 red인 정밀 실패, 나머지 15건 green); 복원 후 전 잡 green. 원복은 cp 백업(git 계열 금지·OPS-24 교훈), git diff --stat로 되돌린 규모가 뮤테이션 크기와 일치함을 확인."
+  - "정직한 공백 — ④의 끝-끝 미증명: mobile 경로 필터에 계약 4종(notation·segmentation·scene·render — 백로그가 적은 3건 + 실측 발견 1건)을 추가했고 로컬에서 정규식 변별력을 실측했으나(4종 매칭·visual_style/corpus/docs 비매칭), '필터가 실제로 mobile 잡을 깨우는가'는 이 PR에서 증명 불가였다. ci.yml:68이 PR 전체 diff로 필터를 계산하므로 ci.yml이 diff에 있는 한 mobile은 필터와 무관하게 돈다. 끝-끝 증명은 머지 후 계약 파일만 건드리는 PR에서만 가능하다. 그 외 유보: 중첩 \\\\frac 1패스 한계(학생이 중첩 분수를 쓰면 unverifiable — 발화 조건은 MATH-03의 parse_error 분포) · 웹 \\\\div 미처리·\\\\leq 부분매치(실측 확인된 웹 버그이나 렌더 전용 경로) — 전건 math_engine_gap_review.md §8 드리프트 대장에 처분과 발화 조건 기록."
 paths:
   - data/notation_contract.json
   - src/backend/whymath_backend/l3/symbolic_equivalence.py
@@ -30,6 +33,6 @@ paths:
   - data/segmentation_contract.json
   - data/scene_contract.json
   - ".github/workflows/ci.yml"
-session: claude/whymath-math-engine-design-ns3fc1
+session: null
 notes: "docs/architecture/math_engine_gap_review.md §3 D1. 기능 29(양방향 변환)의 LaTeX→평문이 3벌인데 실측하면 사본이 아니라 서로 다른 3개 규칙이다(부록 A 대조표) — 웹은 암묵 곱셈을 강제 삽입하는데 백엔드는 그 해석을 의도적으로 거부한다(symbolic_equivalence.py:74-75). 그리고 학생 제출 경로에 있는 구현은 Dart라 수식 판정의 입력 권위가 사실상 클라이언트에 있다. latex_to_plain.dart:13-15의 '백엔드 미러' 자인은 부분 거짓(미러+확장 — \\leq·\\displaylines는 Dart 고유). notation_contract.json(py↔js) 선례에 Dart를 3자로 편입하는 형태. VIZ-01(적재 0행)·OPS-03(테스트 미실행)·NLP-01(배포 미포함)이 '부재'가 증상이었다면 이 건은 '권위 소재 불명'이 증상이다 — 다른 계열. [2026-08-11 재검증] ④의 CI 구멍이 좁아지는 동시에 넓어졌다 — backend·web는 그 사이 메워졌고(구멍 좁아짐) mobile 하나만 남았는데, 그 하나가 이미 착륙한 Dart 계약 골든 2개를 미집행 상태로 만들고 있음이 실측됐다(가설→라이브 결함). NLP-03은 그 사이 done이 됐으므로 depends_on을 걸지 않고 경계 서술만 유지한다."
 updated: 2026-08-11

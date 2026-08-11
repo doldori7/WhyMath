@@ -247,6 +247,9 @@ class Policy:
     scope_drift: str = "warn"  # 내 claim 태스크의 paths 밖 편집 (check-edit ①)
     adhoc_edit: str = "warn"  # claim 없이 코드 도메인 편집 (check-edit ③)
     claim_ttl_hours: int = 72  # 원격 claim stale 판정 TTL
+    # 홀더 브랜치 부재(branch_gone) 판정의 유예 — claim 직후 첫 push 전 구간을 보호한다.
+    # 24h 근거(실측 199건): 24h 초과 4건(2.0%)·72h 초과 0건. TTL(72h) 재사용은 변별력 0.
+    claim_branch_grace_hours: int = 24
     remote_claims: bool = True  # 원격 claim(refs/claims/*) 사용 여부
 
     def validate(self) -> list[str]:
@@ -258,6 +261,11 @@ class Policy:
         if not isinstance(self.claim_ttl_hours, int) or self.claim_ttl_hours < 1:
             errors.append(
                 f"policy.claim_ttl_hours: 1 이상 정수여야 함 (현재 {self.claim_ttl_hours!r})"
+            )
+        if not isinstance(self.claim_branch_grace_hours, int) or self.claim_branch_grace_hours < 1:
+            errors.append(
+                "policy.claim_branch_grace_hours: 1 이상 정수여야 함 "
+                f"(현재 {self.claim_branch_grace_hours!r})"
             )
         if not isinstance(self.remote_claims, bool):
             errors.append(f"policy.remote_claims: bool이어야 함 (현재 {self.remote_claims!r})")
