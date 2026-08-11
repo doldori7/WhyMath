@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
-session: null
+session: claude/whymath-collaboration-design-qlzq5m
 notes: "2026-08-11 COLLAB-04 착지 직후 자체 재검증에서 발견(서브에이전트 적대적 검증 + 부모 세션 재확인). COLLAB-04의 변경 자체는 옳고 방향도 맞으나, 같은 태스크가 세운 논리('계약 파일이 트리거 축에 있는가는 테스트 파일 축과 다르다')를 data/corpus 축에 적용하지 않았고 그 미적용을 정당화한 근거(corpus 플래그가 담당)가 실측상 작동하지 않는다. 규모: data/corpus를 참조하는 tests/backend 파일 63개 — COLLAB-04가 봉합한 최상위 계약 소비 테스트 10개의 6배. 반복 실수 10회차(트리거 축 부분 배선 — 연결이 조건부라 정상 상태에서는 완전히 정상으로 보인다)가 더 큰 표면에 그대로 남아 있다. 정본: docs/architecture/collaboration_module_gap_review_r3.md §3 D5 + §8 사후 정정."
 updated: 2026-08-11

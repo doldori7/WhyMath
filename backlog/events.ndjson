@@ -3014,3 +3014,5 @@
 {"ts": "2026-08-11T12:52:41", "actor": "claude/whymath-collaboration-design-qlzq5m", "action": "add", "id": "COLLAB-07-trigger-axis-completion-corpus-schemas"}
 {"ts": "2026-08-11T12:39:40", "actor": "claude/pr-without-request-1me42b", "action": "add", "id": "HARN-32-merge-race-ci-duration-vs-main-cadence"}
 {"ts": "2026-08-11T13:34:28", "actor": "claude/whymath-learning-path-design-p1hubt", "action": "add", "id": "OPS-42-client-reach-axis"}
+{"ts": "2026-08-11T14:02:51", "actor": "claude/whymath-collaboration-design-qlzq5m", "action": "policy_warn", "id": "COLLAB-07-trigger-axis-completion-corpus-schemas", "rule": "path_overlap", "other": "SEC-24-issues-review-security-hardening-recovery", "detail": "실파일 교집합 5건 예: tests/infra/__init__.py, tests/infra/test_app_version_pubspec_sync.py, tests/infra/test_backfill_rephrase_lineage_s4_18.py · 프리픽스 포함: tests/infra/** ⊇ tests/infra/**", "mode": "warn"}
+{"ts": "2026-08-11T14:02:54", "actor": "claude/whymath-collaboration-design-qlzq5m", "action": "start", "id": "COLLAB-07-trigger-axis-completion-corpus-schemas", "session": "claude/whymath-collaboration-design-qlzq5m", "remote": "ok"}
