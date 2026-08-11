@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "src/mobile/lib/features/profile/**"
   - "src/mobile/test/**"
-session: null
+session: claude/whymath-learning-analytics-3pbkcx
 notes: "docs/architecture/learning_path_module_gap_review_r2.md §3 D5. src/backend 0줄. PATH-05가 회수 브랜치 85981e97 D3의 '서버 정직 신호를 삼키지 않고 노출' 조항 중 has_cycle만 승계하고 ordering_basis(나중에 PATH-02가 만든 필드)를 누락한 결과. 선례 동형 = gamification_module_gap_review_r2.md D6(렌더 갭). 경로 시각화는 UI 불변식 2가 명시 허용."
 updated: 2026-08-11

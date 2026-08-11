@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/me.py
   - "tests/backend/api/**"
-session: null
+session: claude/whymath-learning-analytics-3pbkcx
 notes: "docs/architecture/learning_path_module_gap_review_r2.md §3 D4. v1 페이퍼 갭 P3('writer가 reader보다 먼저 가지 않는다')이 ASM-03 writer 착지로 넘어선 뒤의 상환. is_cycle_residual(자식 필드·발생률 0%)은 생존하고 ordering_basis(부모 필드·96.4%)만 소실되는 비대칭이 근거. SM-2/FSRS·next_review_at 컬럼 불채택(v1 §2-④), 점수·등급 예측 불채택(v1 §2-⑤·ASM-07)."
 updated: 2026-08-11
