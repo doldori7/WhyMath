@@ -341,3 +341,50 @@ class TestSchemaPreflight:
         assert captured.out == ""
         err = json.loads(captured.err)
         assert "RuntimeError" in err["error"]
+
+
+class TestJudgeSchemaReadiness:
+    """판정 순수 함수 — 두 신호(컬럼 실재 × 버전 테이블)의 4조합 전수.
+
+    2026-08-11 2차 실측: 첫 구현은 버전 테이블만 봤고, 그래서 **실제 사고를 못 잡았다**.
+    대상 DB의 기록 head가 `d6e7f8a9b0c1`(코드가 모르는 값)이라 AHEAD로 분류돼 통과했는데
+    컬럼은 실제로 없었다. 아래 `test_unknown_head_with_missing_column`이 바로 그 케이스다.
+    """
+
+    _HEAD = "090d254a5d43"  # EXPECTED_ALEMBIC_HEAD와 동일해야 의미가 있다(아래에서 대조)
+
+    def test_head_and_column_present_passes(self) -> None:
+        from whymath_backend.db.schema_version import EXPECTED_ALEMBIC_HEAD
+
+        assert cli.judge_schema_readiness((EXPECTED_ALEMBIC_HEAD,), role_column_exists=True) is None
+
+    def test_unknown_head_with_missing_column(self) -> None:
+        """★ Kiki가 실제로 겪은 상태 — 버전 테이블만 보면 '통과'가 나오는 조합."""
+        msg = cli.judge_schema_readiness(("d6e7f8a9b0c1",), role_column_exists=False)
+        assert msg is not None, "버전 테이블이 AHEAD라고 통과시키면 실제 사고를 못 잡는다"
+        assert "user_profile.role" in msg
+        # 이 상태에서 alembic이 실제로 거부한다는 사실(실측)을 안내에 담아야 한다.
+        assert "Can't locate revision" in msg
+        assert "d6e7f8a9b0c1" in msg
+
+    def test_known_behind_head_with_missing_column(self) -> None:
+        msg = cli.judge_schema_readiness(("b4c5d6e7f0a2",), role_column_exists=False)
+        assert msg is not None
+        assert "alembic upgrade head" in msg
+        # 알려진 리비전이면 'Can't locate revision' 경고는 오히려 오도다.
+        assert "Can't locate revision" not in msg
+
+    def test_behind_head_but_column_present_still_blocked(self) -> None:
+        """컬럼은 있어도 다른 신규 컬럼이 빌 수 있으므로 뒤처짐은 여전히 막는다."""
+        msg = cli.judge_schema_readiness(("b4c5d6e7f0a2",), role_column_exists=True)
+        assert msg is not None
+        assert "뒤처졌습니다" in msg
+
+    def test_unknown_head_with_column_present_passes(self) -> None:
+        """AHEAD(정상 롤백)인데 필요한 컬럼이 실재하면 막지 않는다 — 가드가 장애 원인이 되면 안 된다."""
+        assert cli.judge_schema_readiness(("d6e7f8a9b0c1",), role_column_exists=True) is None
+
+    def test_never_migrated_db(self) -> None:
+        msg = cli.judge_schema_readiness((), role_column_exists=False)
+        assert msg is not None
+        assert "(미적용)" in msg

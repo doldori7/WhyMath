@@ -352,6 +352,13 @@
 - **대책 3(등재)**: `OPS-39-prod-schema-drift-observability` — whymath-pg가 코드 head와 벌어져도 **감시하는 장치가 0건**이다(앱 기동 가드는 그 DB에 앱을 띄울 때만 발화하므로 CLI 위주 운영에선 구조적 침묵). 저장소에 **whymath-pg 대상 마이그레이션 절차 문서 자체가 없다**는 것도 함께 등재(`deployment_cd_runbook.md`의 명령은 전부 별개 compose 스택 대상이고 같은 문서가 "기존 whymath-pg 이관 미실시"를 자인).
 - **부수 확인**: 부여 대상 `user_id`를 찾을 수단이 저장소에 **0건**이다(`list`는 비기본 역할자만 보여줘 좌석 0일 땐 빈 목록, `email_hash`는 해시라 이메일로 특정 불가). 2단계 안내 시 토큰 `sub` 디코드 또는 `email_hash` 조회를 쓴다.
 
+- **⚠️ 정정(같은 날 2차 실측) — 첫 프리플라이트는 실제 사고를 못 잡는 물건이었다**: Kiki가 1단계 측정을 실행한 결과 `alembic_version = d6e7f8a9b0c1`이었고, 이 값은 **현재 코드의 마이그레이션 체인에 없다**(versions/ 전수 grep 0건). `classify_applied_head`는 미지 리비전을 `AHEAD`로 분류하고, AHEAD는 정상 롤백이라 통과시킨다 — 즉 **버전 테이블만 보던 내 프리플라이트는 그 상태를 그대로 통과시켰을 것**이다(컬럼은 실제로 없는데). 나는 내가 *만든* 시나리오(BEHIND)로만 검증했고 *실제* 상태로는 검증하지 않았다.
+  - **근본 오류 = 간접 신호를 판정에 썼다.** `alembic_version`은 무엇이든 적혀 있을 수 있는 테이블이고 컬럼 실재를 증명하지 않는다 — CLAUDE.md "간접 신호를 성공 판정으로 쓰기 금지"에 정확히 해당한다. **직접 신호**(`information_schema`로 `user_profile.role` 실재 확인)를 1차 판정으로 올리고 버전 정보는 안내 메시지를 풍부하게 하는 부가 재료로 강등했다.
+  - 판정부를 순수 함수 `judge_schema_readiness(applied_heads, *, role_column_exists)`로 분리해 두 신호의 **4조합을 hermetic으로 전수** 시험한다. **뮤테이션 실측**: 직접 신호 판정을 무력화하면 정확히 `test_unknown_head_with_missing_column`(=Kiki 케이스)만 red → 그 테스트가 이 수정을 실제로 지킨다.
+  - **실측 확인**: 그 상태에서 `alembic current`·`alembic upgrade head` **둘 다 exit 255**(`Can't locate revision identified by 'd6e7f8a9b0c1'`) — 즉 upgrade로는 진행 자체가 불가하다. 오류 메시지에 이 사실을 담되 "거부될 수 있습니다"(추측)가 아니라 "거부됩니다(실측)"로 적었다.
+  - **게이트 2단계 = 스키마 실태 조사**(읽기 전용). `alembic stamp`로 임의 리비전을 찍는 것은 **금지**로 명시 — 실태와 다른 값을 찍으면 이후 마이그레이션이 이미 있는 객체를 만들려다 깨지거나 없는 객체를 있다고 믿고 건너뛴다. 1단계에서 `mis_id` 길이 초과 0건이 나와 `a5b6c7d8e9f0`의 DELETE 선행 전제는 이미 충족.
+  - **교훈**: "사고를 재현했다"고 말하려면 *내가 상상한 실패 모드*가 아니라 *실제로 관측된 상태*를 재현해야 한다. 이번엔 Kiki의 실측값이 도착한 뒤에야 내 수정이 헛다리였음이 드러났다.
+
 ### 2026-08-11 (구현·/drive·MATH-01): **표기 정규화 권위 단일화 — LaTeX 계층을 L5→L3로 이관하고 py를 dart 규칙집합에 정렬. py 실결함 2건 해소 + 3자 교차 골든(py/js/dart) + mobile CI 필터 구멍 4건 봉인** (claude 구현, Kiki `/drive`)
 
 **착수 가설 반증**: 태스크 acceptance ①은 "불일치 0이면 이 태스크는 과잉"이라는 탈출구를 달고

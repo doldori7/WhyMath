@@ -62,6 +62,7 @@ __all__ = [
     "RoleGrantError",
     "SchemaPreflightError",
     "apply_role_change",
+    "judge_schema_readiness",
     "main",
 ]
 
@@ -166,6 +167,63 @@ async def _default_list_fn() -> list[dict[str, str]]:  # pragma: no cover — �
     return [{"user_id": str(uid), "role": role.value} for uid, role in rows]
 
 
+def judge_schema_readiness(
+    applied_heads: tuple[str, ...] | list[str],
+    *,
+    role_column_exists: bool,
+) -> str | None:
+    """스키마 준비 판정(순수 — DB 무관·단위 시험 가능). 문제 없으면 `None`.
+
+    **판정 순서가 설계의 핵심**이다. 1차는 *직접 신호*(`user_profile.role` 실재), 2차가
+    *간접 신호*(`alembic_version`). 첫 구현은 순서가 반대였고 그래서 실제 사고를 못 잡았다 —
+    대상 DB의 기록 head가 `d6e7f8a9b0c1`(이 코드가 모르는 값)이라 `AHEAD`로 분류됐고,
+    AHEAD는 정상 롤백이라 통과시키는데 **컬럼은 실제로 없었다**. 버전 테이블에는 무엇이든
+    적혀 있을 수 있다(CLAUDE.md "간접 신호를 성공 판정으로 쓰기 금지").
+    """
+    from whymath_backend.db.schema_version import (
+        EXPECTED_ALEMBIC_HEAD,
+        SchemaVersionVerdict,
+        classify_applied_head,
+    )
+
+    heads = tuple(applied_heads)
+    applied_desc = ", ".join(heads) if heads else "(미적용)"
+    if len(heads) > 1:
+        verdict = (
+            SchemaVersionVerdict.MATCH
+            if EXPECTED_ALEMBIC_HEAD in heads
+            else SchemaVersionVerdict.BEHIND
+        )
+    else:
+        verdict = classify_applied_head(heads[0] if heads else None)
+
+    # ── 1차: 직접 신호. 버전 테이블이 무엇을 말하든 이쪽이 정본이다. ──
+    if not role_column_exists:
+        if verdict is SchemaVersionVerdict.AHEAD:
+            hint = (
+                f" 기록된 head `{applied_desc}`는 **이 코드의 마이그레이션 체인에 없는 값**이라"
+                " `alembic upgrade head`가 'Can't locate revision'으로 거부됩니다(실측) —"
+                " 임의로 stamp하지 말고 실제 스키마 상태를 먼저 확인하세요."
+            )
+        else:
+            hint = " 먼저 `alembic upgrade head`를 적용하세요."
+        return (
+            f"`user_profile.role` 컬럼이 DB에 없습니다 — 이 CLI의 모든 서브커맨드가 그 컬럼을 "
+            f"읽습니다. 기록된 head={applied_desc} / 코드 기대={EXPECTED_ALEMBIC_HEAD}.{hint}"
+        )
+
+    # ── 2차: 컬럼은 있지만 스키마가 뒤처진 경우(다른 신규 컬럼이 빌 수 있다). ──
+    if verdict is SchemaVersionVerdict.BEHIND:
+        return (
+            f"DB 스키마가 코드보다 뒤처졌습니다 — 적용={applied_desc} / 코드 기대="
+            f"{EXPECTED_ALEMBIC_HEAD}. 먼저 `alembic upgrade head`를 적용하세요 "
+            f"(대상 DB가 맞는지 `alembic current`로 먼저 대조할 것)."
+        )
+    # AHEAD 자체는 막지 않는다 — 필요한 컬럼의 실재를 위에서 직접 확인했고, 코드만 되돌린
+    # 정상 롤백에서 막으면 가드가 장애 원인이 된다(verify_schema_version 동일 판단 승계).
+    return None
+
+
 async def _default_preflight_fn() -> None:  # pragma: no cover — 실 DB(integration)
     """DB 스키마가 이 코드의 기대 head와 일치하는지 *실행 전에* 확인한다.
 
@@ -179,20 +237,39 @@ async def _default_preflight_fn() -> None:  # pragma: no cover — 실 DB(integr
     좌석 부여는 *어느 환경에서든* 스키마가 맞아야 한다 — 여기서 환경에 따라 판정이 갈리면
     안 된다.
 
+    **판정의 정본은 `alembic_version`이 아니라 `user_profile.role`의 실재다**(2026-08-11 2차
+    실측 교훈). 첫 구현은 버전 테이블만 봤는데, 실제 대상 DB의 head가 `d6e7f8a9b0c1` —
+    *이 코드가 모르는 리비전*이었다. 그 값은 `classify_applied_head`가 `AHEAD`로 분류하고
+    AHEAD는 정상 롤백이라 통과시키므로, **버전 테이블만 보는 프리플라이트는 바로 그 사고를
+    못 잡는다**(컬럼은 실제로 없는데 통과). 버전 테이블은 *다른 무엇이든 적혀 있을 수 있는*
+    간접 신호다 — CLAUDE.md "간접 신호를 성공 판정으로 쓰기 금지"에 정확히 해당한다.
+    그래서 **이 CLI가 실제로 필요로 하는 컬럼의 존재를 직접 확인**하고, 버전 정보는 안내
+    메시지를 풍부하게 하는 부가 재료로만 쓴다.
+
     Raises:
-        SchemaPreflightError: 스키마가 뒤처졌거나(BEHIND) 확인 자체가 실패한 경우.
-            확인 실패를 "통과"로 위장하지 않는다(측정 실패 ≠ 정상).
+        SchemaPreflightError: 필요한 컬럼이 없거나, 스키마가 뒤처졌거나(BEHIND), 확인 자체가
+            실패한 경우. 확인 실패를 "통과"로 위장하지 않는다(측정 실패 ≠ 정상).
     """
+    from sqlalchemy import text
+
     from whymath_backend.db.schema_version import (
-        EXPECTED_ALEMBIC_HEAD,
-        SchemaVersionVerdict,
-        classify_applied_head,
         read_applied_heads,
     )
 
     try:
         async with get_sessionmaker()() as session:
             applied_heads = await read_applied_heads(session)
+            # 직접 신호 — 이 CLI가 실제로 읽고 쓰는 컬럼이 있는가.
+            role_column_exists = bool(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT 1 FROM information_schema.columns "
+                            "WHERE table_name = 'user_profile' AND column_name = 'role'"
+                        )
+                    )
+                ).first()
+            )
     except Exception as exc:
         raise SchemaPreflightError(
             f"DB 스키마 버전을 확인하지 못했습니다({type(exc).__name__}) — "
@@ -207,26 +284,9 @@ async def _default_preflight_fn() -> None:  # pragma: no cover — 실 DB(integr
         # `recommendation_reach_report.py`의 `finally: await dispose_engine()` 선례와 동형.
         await dispose_engine()
 
-    applied = applied_heads[0] if len(applied_heads) == 1 else None
-    if len(applied_heads) > 1:
-        verdict = (
-            SchemaVersionVerdict.MATCH
-            if EXPECTED_ALEMBIC_HEAD in applied_heads
-            else SchemaVersionVerdict.BEHIND
-        )
-    else:
-        verdict = classify_applied_head(applied)
-
-    if verdict is SchemaVersionVerdict.BEHIND:
-        applied_desc = ", ".join(applied_heads) if applied_heads else "(미적용)"
-        raise SchemaPreflightError(
-            f"DB 스키마가 코드보다 뒤처졌습니다 — 적용={applied_desc} / 코드 기대="
-            f"{EXPECTED_ALEMBIC_HEAD}. 이 상태에서는 `user_profile.role` 등 신규 컬럼이 없어 "
-            f"모든 서브커맨드가 실패합니다. 먼저 `alembic upgrade head`를 적용하세요 "
-            f"(대상 DB가 맞는지 `alembic current`로 먼저 대조할 것)."
-        )
-    # AHEAD는 막지 않는다 — 코드만 되돌린 정상 롤백 상태이고, 앞선 스키마의 추가 컬럼을
-    # 이 코드가 쓰지 않는다(`schema_version.verify_schema_version`의 동일 판단 승계).
+    message = judge_schema_readiness(applied_heads, role_column_exists=role_column_exists)
+    if message is not None:
+        raise SchemaPreflightError(message)
 
 
 def _uuid_arg(value: str) -> uuid.UUID:
