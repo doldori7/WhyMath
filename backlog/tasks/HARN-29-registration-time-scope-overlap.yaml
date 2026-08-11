@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: HARN-27-registration-time-scope-overlap
+id: HARN-29-registration-time-scope-overlap
 title: "등재 시점 범위 중복 미검출 — overlap/add가 in_progress·review만 비교해 todo끼리의 같은 일을 구조적으로 못 본다"
 track: infra-debt
 stage: S3
@@ -22,5 +22,5 @@ paths:
   - scripts/harness/backlog.py
   - "tests/harness/**"
 session: null
-notes: "docs/architecture/nlp_module_gap_review_r2.md §8.11-⑥. 사고 경위(2026-08-11 자기 실측): NLP r2 세션이 Δ3을 갭으로 판정해 NLP-06을 등재했는데, 같은 날 협업 r3 세션이 같은 근본원인(data/*.json 계약이 ci.yml changes 필터 밖)으로 COLLAB-04를 등재해 먼저 main에 착륙했다. paths가 동일한데도 backlog.py overlap NLP-06은 '겹침 없음'을 출력했다 — cmd_overlap이 in_progress·review만 비교하고 todo를 제외하기 때문이다. '착수 전 확인' 용도로는 의도된 설계지만, 갭 리뷰 시리즈가 실제로 필요한 '등재 시점 중복 검사'는 어느 장치도 하지 않는다. 이 세션은 COLLAB-04 acceptance ⑥이 mobile 축을 명시적으로 범위 밖으로 그어 둔 덕에 NLP-06을 폐기 대신 mobile 축 전용으로 축소해 분업으로 정리했으나, 그 발견은 사람이 커밋 로그를 읽어서 된 것이지 기계가 알려준 것이 아니다. 이번 세션이 실측한 대장 사각 4종 중 4번째다: ①세션 브리핑 신규 설계문서 목록 미탐(→원인 규명·HARN-25 소유: _DOC_SERIES_SUFFIX='_review.md'라 _r2.md가 안 잡힘) ②next의 '이미 완료(미머지)' 경고는 태스크만 보고 문서를 안 봄 ③validate가 done+artifacts인데 커밋이 main 조상이 아닌 것을 green 통과(추천 r3 발견·REC-09 소유) ④overlap이 todo끼리를 안 봄(이 태스크)."
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.11-⑥. 사고 경위(2026-08-11 자기 실측): NLP r2 세션이 Δ3을 갭으로 판정해 NLP-06을 등재했는데, 같은 날 협업 r3 세션이 같은 근본원인(data/*.json 계약이 ci.yml changes 필터 밖)으로 COLLAB-04를 등재해 먼저 main에 착륙했다. paths가 동일한데도 backlog.py overlap NLP-06은 '겹침 없음'을 출력했다 — cmd_overlap이 in_progress·review만 비교하고 todo를 제외하기 때문이다. '착수 전 확인' 용도로는 의도된 설계지만, 갭 리뷰 시리즈가 실제로 필요한 '등재 시점 중복 검사'는 어느 장치도 하지 않는다. 이 세션은 COLLAB-04 acceptance ⑥이 mobile 축을 명시적으로 범위 밖으로 그어 둔 덕에 NLP-06을 폐기 대신 mobile 축 전용으로 축소해 분업으로 정리했으나, 그 발견은 사람이 커밋 로그를 읽어서 된 것이지 기계가 알려준 것이 아니다. 이번 세션이 실측한 대장 사각 4종 중 4번째다: ①세션 브리핑 신규 설계문서 목록 미탐(→원인 규명·HARN-25 소유: _DOC_SERIES_SUFFIX='_review.md'라 _r2.md가 안 잡힘) ②next의 '이미 완료(미머지)' 경고는 태스크만 보고 문서를 안 봄 ③validate가 done+artifacts인데 커밋이 main 조상이 아닌 것을 green 통과(추천 r3 발견·REC-09 소유) ④overlap이 todo끼리를 안 봄(이 태스크). 개명 경위(2026-08-11): 최초 HARN-27로 등재했으나 직후 타 세션 claude/multi-session-conflict-resolution-3tpr0u가 HARN-26·27·28을 원격 claim으로 선점해 개명했다 — CLI 가드가 등재 시점엔 HARN-25·26을 거부하고 27을 제안했는데 그 사이 상대가 가져갔다. HARN-22가 추적하는 TOCTOU(가드는 관측만 하고 번호를 예약하지 않는다)의 실사례이며, 이 세션이 하루에 겪은 다섯 번째 병렬 충돌이다. 개명 선례 = f60642f7(HARN-22→HARN-25)."
 updated: 2026-08-11
