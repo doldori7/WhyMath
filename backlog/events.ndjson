@@ -2690,3 +2690,26 @@
 {"ts": "2026-08-11T01:09:44", "actor": "claude/whymath-05-problem-bank-7en4l8", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/harness/problem_type_backfill.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/harness/problem_type_backfill.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-08-11T01:09:44", "actor": "claude/whymath-05-problem-bank-7en4l8", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "src/backend/whymath_backend/harness/problem_type_backfill.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/problem_type_backfill.py' 은 다른 세션 태스크 S4-16-residue-gate-demotion-battle(세션: claude/whymath-ai-content-design-vafylb)의 작업 범위 — 동시 편집 충돌 위험"}
 {"ts": "2026-08-11T01:09:54", "actor": "claude/whymath-05-problem-bank-7en4l8", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/backend/whymath_backend/schema/problem.py", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/backend/whymath_backend/schema/problem.py' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-08-11T01:03:15", "actor": "claude/whymath-curriculum-design-6eejrv", "action": "add", "id": "CUR-04-standard-join-axis-unification"}
+{"ts": "2026-08-11T01:03:39", "actor": "claude/whymath-curriculum-design-6eejrv", "action": "add", "id": "CUR-05-achievement-criteria-corpus-recovery"}
+{"ts": "2026-08-11T01:04:06", "actor": "claude/whymath-curriculum-design-6eejrv", "action": "add", "id": "CUR-06-cross-school-prerequisite-connectivity"}
+{"ts": "2026-08-11T01:02:49", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "KG-03-formula-reach-observability"}
+{"ts": "2026-08-11T01:03:18", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "KG-04-graph-analytics-artifact-landing"}
+{"ts": "2026-08-11T01:04:11", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "OPS-29-yaml-spec-unwired-audit-axis"}
+{"ts": "2026-08-11T01:04:40", "actor": "claude/whymath-learning-analytics-3pbkcx", "action": "add", "id": "PATH-09-learning-path-ordering-honesty-persistence"}
+{"ts": "2026-08-11T01:04:59", "actor": "claude/whymath-learning-analytics-3pbkcx", "action": "add", "id": "PATH-10-learning-path-ordering-basis-render"}
+{"ts": "2026-08-11T01:05:19", "actor": "claude/whymath-learning-analytics-3pbkcx", "action": "add", "id": "PATH-11-multi-weak-concept-orderability-axis"}
+{"ts": "2026-08-11T00:57:51", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-01-isolated-solution-path-recovery"}
+{"ts": "2026-08-11T00:58:24", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-02-step-panel-producer-wiring"}
+{"ts": "2026-08-11T00:59:01", "actor": "claude/whymath-solution-review-n8wkpy", "action": "add", "id": "SOL-03-solution-seat-reach-and-audit-axis"}
+{"ts": "2026-08-11T01:02:58", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-29-ci-enforcement-declaration-contract"}
+{"ts": "2026-08-11T01:03:25", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-30-alerting-last-hop-and-uptime-probe"}
+{"ts": "2026-08-11T01:03:49", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-31-backup-encryption-offsite-schedule"}
+{"ts": "2026-08-11T01:04:10", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "OPS-32-backend-dependency-declaration-usage-gate"}
+{"ts": "2026-08-11T01:04:37", "actor": "claude/whymath-eos-review-64f81f", "action": "add", "id": "RPT-02-defect-report-readout-cli"}
+{"ts": "2026-08-11T01:05:35", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-deploy-environment-approval", "kind": "human", "assignee": "kiki", "title": "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"}
+{"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-restore-rehearsal", "kind": "human", "assignee": "kiki", "title": "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"}
+{"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-offsite-move", "kind": "human", "assignee": "kiki", "title": "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"}
+{"ts": "2026-08-11T00:57:11", "actor": "claude/whymath-math-engine-design-ns3fc1", "action": "add", "id": "MATH-05-reverse-notation-display-surface"}
+{"ts": "2026-08-11T01:23:12", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "OPS-33-yaml-spec-unwired-audit-axis"}
+{"ts": "2026-08-11T01:25:23", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "HARN-22-id-number-suggestion-race"}
