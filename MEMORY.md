@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (점검·S3-33 이미 충족 발견): **"코치 답안 입력면 확장"(자유입력 최종답 감지 + MC 탭 즉시 제출) 태스크가 착수 전 조사에서 신규 구현 0건으로 이미 전량 충족돼 있음을 발견 — 등재 시점(2026-08-07·tlthrr 브랜치 재작성 계획) 이후 무관한 별개 계보(S3-24/S3-35 버킷 B 회수, 2026-08-09)가 우연히 같은 acceptance를 채웠다** (claude 점검, `/drive` 루프)
+
+- **① 자유입력 감지**: `api/coach.py`의 `_FINAL_ANSWER_ELIGIBLE_STAGES = {EXECUTE, REVIEW}` 게이트 + `solution_text = student_solution or student_input`가 S3-32(af2e9b39/a9f6e23a)로 이미 무조건 `verify_final_answer`를 태운다 — 별도 정규식/휴리스틱 감지 0. `test_coach_completion.py::test_completed_none_when_correct_but_before_execute`가 "UNDERSTAND 단계는 정답을 쳐도 검증 시도 자체를 안 함(잡담 오인 방지)"을 이미 동결.
+- **② MC 탭=즉시 제출**: `chat_screen.dart`의 `_ChoiceButtons`/`_ChoiceRow`/`_onChoiceSelected`가 커밋 `eb1db6d2`(S3-35, PR #743 — "섀도 S3-17 이식", 2026-08-09 이 세션이 직접 회수)로 이미 착지 — 탭하면 그 항목의 *값*(`choices[i]`)을 기존 `send()` 경로로 제출한다(번호≠값 모호성을 의도적으로 우회한 설계, 2026-07-22 Kiki 실기기 UX 결정 계보).
+- **③ 신호 공유**: `_onChoiceSelected(choice)`가 자유입력 경로(`_onSend`)와 **완전히 동일한** `chatControllerProvider.notifier.send()`를 호출 — 경로 분기 자체가 코드에 없어 "경로별 다른 완료 판정" 위반이 구조적으로 불가능.
+- **검증(메인 독립 재검증)**: `coach.py`·`chat_screen.dart` 배선 전량 직접 코드 읽기로 확인 · 백엔드 관련 테스트(`test_coach_completion.py`+`test_coach.py`) 재실행 289 passed·0 failed · Flutter 위젯 테스트(`chat_screen_test.dart:490` — 테스트명 자체가 "번호 행 탭 → send(student_input) 경로로 나간다") 코드 읽기로 확인. **정직한 한계**: 이 컨테이너엔 Flutter/Dart 툴체인이 전혀 없어(`flutter`/`dart` 바이너리 부재) `flutter test`를 직접 실행하지 못했다 — 코드·기존 테스트 존재 확인까지가 이 세션에서 가능한 검증의 상한.
+- **패턴 메모**: 이 세션에서 "todo인데 실제론 이미 충족" 유형이 세 번째 변형으로 나타났다 — PB-02/MISC-01/MISC-03(다른 브랜치에 완료본이 고립), S3-32(같은 브랜치에 코드는 있으나 backlog만 stale), S3-33(**무관한 별개 태스크가 같은 acceptance를 우연히 충족**). 세 번째 유형은 프로세스 결함이 아니라 병렬 계획 수립의 자연스러운 부작용이라 별도 재발방지대책 등재는 하지 않음 — `next`의 교차 브랜치 검사가 첫 유형을, 이번 발견이 세 번째 유형을 잡은 것으로 충분.
+- 정본: 이 로그 항목 직후 커밋(backlog done — 신규 코드 변경 0).
+
 ### 2026-08-10 (구현·PED-15): **`ProblemAttempt.started_at` 상시 NULL 근본수정 — 두 writer(`api/coach.py`·`api/me.py`) 모두 이 컬럼을 채우지 않아 R15/Brier/전이점수 3개 지표가 시간창(since/until) 지정 시 조용히 0행을 반환하던 버그. 부수적으로 `privacy/retention.py`의 PII 보존기한 파기 로직도 같은 컬럼을 써서 지금까지 `ProblemAttempt` 파기가 0건이었다는 사실을 발견 — 코드는 그대로 두고 `PED-16`(Kiki 결정 사안)으로 분리 등재** (claude 구현 — `/drive`, backend-engineer 위임 → 메인 독립 재검증)
 
 - **채택 설계(후보 a·근본수정)**: `db/models/activity.py`의 `idx_attempt_user`(`user_id`, `started_at DESC`) 인덱스가 애초에 이 컬럼이 채워질 것을 전제로 존재한다는 걸 근거로, 3개 쿼리만 `ended_at`으로 갈아타는 임시방편(후보 b) 대신 두 writer를 직접 고쳤다. `api/coach.py::_apply_completion`은 `dialogue.started_at`(PED-14가 이미 `duration_seconds` 계산에 쓴 값)을 그대로 옮기고, `api/me.py::submit_attempt`는 클라가 시작 시각을 직접 안 보내므로 `started_at = ended_at − duration_seconds`로 역산(이미 신뢰하는 클라 자기보고 값의 재표현 — 새 날조 아님)하되 `duration_seconds` 미제출이면 `None`으로 정직하게 남긴다. 과거 이미 적재된 행의 `started_at`은 백필하지 않는다(모르는 값을 지어내지 않는다는 원칙 — 새 행부터 자연 정상화).

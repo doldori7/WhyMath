@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -15,10 +15,15 @@ acceptance:
   - "코치 대화창에 학생이 자유입력으로 친 최종답도 S3-32의 verify_final_answer 경로로 판정된다(별도의 임시 정규식/휴리스틱 감지 금지 — 단일 권위 원칙)"
   - "MC(객관식) 문항은 보기 탭이 곧 답 제출이다 — 별도 '제출' 버튼 없이 탭 즉시 서버검증 경로 호출"
   - "두 입력면(대화 자유입력·MC 버튼) 모두 같은 CoachResponse completion 신호를 공유한다 — 경로별로 다른 완료 판정 로직 금지"
-artifacts: []
+artifacts:
+  - "착수 전 조사 결과 이미 전량 충족(신규 구현 0) — 등재 시점(2026-08-07) 이후 무관한 별개 계보(S3-24/S3-35 버킷 B 회수)가 같은 acceptance를 우연히 충족시켰다"
+  - "① 자유입력 감지: api/coach.py의 _FINAL_ANSWER_ELIGIBLE_STAGES({EXECUTE,REVIEW})+solution_text=student_solution or student_input가 S3-32(af2e9b39/a9f6e23a)로 이미 무조건 verify_final_answer를 태움(별도 휴리스틱 0) — tests/backend/api/test_coach_completion.py::test_completed_none_when_correct_but_before_execute 등 기존 테스트가 이미 동결"
+  - "② MC 탭=즉시 제출: src/mobile/lib/features/chat/presentation/chat_screen.dart의 _ChoiceButtons/_ChoiceRow/_onChoiceSelected가 커밋 eb1db6d2(S3-35, PR #743, 원 S3-17)로 이미 착지 — 탭 즉시 choices[i] 값을 기존 send() 경로로 제출(별도 버튼 0)"
+  - "③ 신호 공유: _onChoiceSelected가 _onSend와 동일하게 chatControllerProvider.notifier.send()를 그대로 호출 — 경로 분기 자체가 코드에 없어 이원화가 구조적으로 불가능"
+  - "메인 독립 재검증: 코드 직접 읽고 배선 확인(coach.py 전체·chat_screen.dart _ChoiceButtons~_onChoiceSelected)·백엔드 관련 테스트(test_coach_completion.py+test_coach.py) 재실행 289 passed 0 failed·Flutter 위젯 테스트(chat_screen_test.dart:490 '번호 행 탭 → send(student_input) 경로' — 정확히 이 acceptance를 이름 그대로 assert) 코드 읽기로 확인, 단 이 환경엔 Flutter/Dart 툴체인 자체가 없어 flutter test 직접 실행은 불가함을 정직 표기"
 paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/mobile/lib/features/chat/**"
 session: null
 notes: "브랜치 tlthrr의 원 S3-28(대화 입력 최종답 감지)·S3-29(MC 선택지 버튼) 재작성. S3-32의 verify_final_answer/completion 경로를 소비 — 대화창에 직접 친 답도, MC 보기 탭도 같은 서버검증 경로를 타야 한다(경로 이원화 금지)."
-updated: 2026-08-07
+updated: 2026-08-11
