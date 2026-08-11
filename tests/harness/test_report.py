@@ -202,6 +202,39 @@ class TestBrief:
         assert "장기 미머지 브랜치 조회 불가" in text
         assert "판정 보류" in text
 
+    def test_stale_branch_message_carries_remediation_command(self):
+        """test_판정_보류에_복구_명령이_함께_실린다
+
+        판정 보류가 무기한 침묵이 되지 않으려면 화면만 보고 고칠 수 있어야 한다
+        (2026-08-11 shallow 사고 — 브리핑이 잘린 히스토리 위에서 10건을 오분류하고도
+        'ok'로 보고했다).
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[],
+            stale_branch_status="shallow",
+            stale_branch_message="shallow 클론 — `git fetch --unshallow origin` 후 재실행",
+        )
+        assert "판정 보류" in text
+        assert "--unshallow" in text
+        # 음성 — 판정 불가 상태에서 미해결 목록을 흉내 내면 안 된다.
+        assert "미해결 장기 미머지 브랜치" not in text
+
+    def test_stale_branch_message_absent_keeps_legacy_wording(self):
+        """test_메시지가_없으면_종전_문구_그대로 (하위호환)"""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[],
+            stale_branch_status="offline",
+        )
+        assert "(장기 미머지 브랜치 조회 불가: offline — 판정 보류)" in text
+
     def test_unmerged_done_candidate_excluded_from_brief(self):
         """test_미머지_done_후보는_브리핑에서_제외된다"""
         # HARN-12 — S2-01-c(유일 todo)가 타 세션에서 이미 done 처리됐으나 미머지 상태.
