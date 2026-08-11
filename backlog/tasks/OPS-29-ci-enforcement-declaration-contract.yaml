@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-29-ci-enforcement-declaration-contract
+title: "CI 강제 상태 선언 계약 — '돌아감≠막음' 일반화(비차단 스텝 미분류 exit 1)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "ci.yml의 모든 비차단 스텝(continue-on-error, 그리고 게이트 판정을 '|| true'로 삼키는 스텝)이 의도를 선언하게 한다 — by-design:<사유>(shellcheck 선례 :923) 또는 pending-task:<id>(qa_pipeline :192 → ARCH-23). 선언 없는 비차단 스텝은 미분류로 exit 1. OPS-22 declared_unwired_audit의 분류 계약과 ARCH-25 GrandfatherEntry 만료 계약을 그대로 이식한다(새 발명 금지) — pending-task:<id>는 backlog/tasks/<id>.yaml이 실재하고 status != done일 때만 유효하고, done인데 항목이 남아 있으면 red(= 게이트를 다시 켜라는 신호). 착지 위치 tests/infra/(hermetic·infra-contracts 잡이 tests/infra 전량을 이미 실행하므로 CI 배선 확인은 그 사실 확인으로 충족). 배경: OPS-10이 '존재함≠돌아감'을, OPS-22가 '선언함≠배선됨'을 기계화했으나 사슬의 마지막 고리 '돌아감≠막음'은 미기계화 — 실측 tests/infra/*_wiring.py 11개 중 continue-on-error를 assert하는 것 0건."
+  - "변별력 실측 의무(양방향) — 선언 없는 continue-on-error 스텝 1건을 주입하면 red, 되돌리면 green을 둘 다 실측한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다(CLAUDE.md '변별력 없는 검증 스텝 금지')."
+  - "범위 밖 동결 — ARCH-23(qa_pipeline의 continue-on-error 실제 제거)은 이 태스크가 대신하지 않는다. 이 태스크는 '강제 상태를 선언·감시하는 계약'만 만들고, qa_pipeline 스텝은 pending-task:ARCH-23으로 등재해 유예를 명시한다."
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/**"
+session: null
+notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D8. r2 D3이 '돌아감≠막음'이라 이름은 붙였으나 qa_pipeline 1건에만 적용했고 그 1건조차 ARCH-23 미착수로 미착지 — 일반화가 이 태스크."
+updated: 2026-08-11
