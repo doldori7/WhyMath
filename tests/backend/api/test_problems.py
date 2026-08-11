@@ -242,6 +242,51 @@ class TestSteps:
         resp = _client(FakeSession()).get("/v1/problems/not-a-uuid/steps")
         assert resp.status_code == 422
 
+    def test_promoted_step_serves_additive_fields(self) -> None:
+        """S4-09(D1) reader ① 계약: 승격 어댑터가 적재한 실데이터(additive 필드 포함)가
+        기존 응답 스키마로 서빙된다 — 기존 필드 제거·의미 변경 0."""
+        problem = _sample_problem()
+        promoted = ProblemStep.from_schema(
+            ProblemStepSchema(
+                problem_id=problem.problem_id,
+                step_order=1,
+                expected_answer="2*x = 6",  # SolutionStep.content 영속 좌석
+                solution_path_id="sp-11111111-1111-1111-1111-111111111111",
+                concept_node_id=None,  # 매칭 검수 대기(사람 검수 큐)
+                sympy_verified=False,  # 첫 스텝은 전이 검증 대상 아님(정직 승계)
+            )
+        )
+        fake = FakeSession(get_map={problem.problem_id: problem}, list_rows=[promoted])
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        step = body[0]
+        # additive 필드 노출(승격 실데이터).
+        assert step["solution_path_id"] == "sp-11111111-1111-1111-1111-111111111111"
+        assert step["expected_answer"] == "2*x = 6"
+        assert step["concept_node_id"] is None
+        assert step["sympy_verified"] is False
+        assert step["reasoning_type"] is None
+        # 기존 필드 유지(제거·의미 변경 0 — 하위호환 계약).
+        assert step["step_order"] == 1
+        assert "socratic_prompt" in step and "common_mistakes" in step
+
+    def test_legacy_step_still_serves_with_none_additive_fields(self) -> None:
+        """레거시 단계(additive 미지정)도 그대로 서빙 — additive 필드는 전부 None(비파괴)."""
+        problem = _sample_problem()
+        legacy = _sample_step(problem.problem_id, 1)
+        fake = FakeSession(get_map={problem.problem_id: problem}, list_rows=[legacy])
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 200
+        step = resp.json()[0]
+        assert step["step_title"] == "단계1"
+        assert step["solution_path_id"] is None
+        assert step["concept_node_id"] is None
+        assert step["justification"] is None
+        assert step["common_errors"] is None
+        assert step["sympy_verified"] is None
+
 
 class TestRelations:
     def test_lists_relations_for_existing_problem(self) -> None:
