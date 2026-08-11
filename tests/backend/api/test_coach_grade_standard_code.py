@@ -54,6 +54,15 @@ from whymath_backend.schema.user import UserProfile as SchemaUserProfile
 _SECRET = "integration-jwt-secret-0123456789abcdef"
 _PRIMARY_CODE = "PED05-GRADE-STD-TEST"
 
+# 실 PG 픽스처 값 — 모듈 상수로 두는 이유는 아래 hermetic 폭 가드가 읽어야 하기 때문이다.
+_NORM_ID = "PED05-TEST-NORM-01"
+_OFFICIAL_CODE = "[12미적01-01]"  # 원자 축(atom_node.standard_codes)이 반환해야 할 정답.
+# negative control — 같은 concept_code를 가리키는 구 축 잔재. 실제 로더는 원자 행(source_id
+# 미설정)을 이 축에 절대 연결하지 못하지만(모듈 docstring), 이 테스트는 "설령 잔재가 있어도
+# 새 코드가 더는 이 축을 보지 않는다"를 직접 증명하기 위해 *의도적으로* 삽입한다.
+_STALE_NORM_ID = "PED05-STALE-OLD-AXIS-NORM"
+_STALE_OFFICIAL_CODE = "[STALE-OLD-AXIS-IGNORE]"
+
 
 class _FakeSession:
     """`session.get`만 필요한 hermetic 좌석 — `_grade_for` None 경로 확인용."""
@@ -92,6 +101,33 @@ async def _pg_reachable() -> bool:
         await engine.dispose()
 
 
+def test_integration_fixture_codes_fit_achievement_standard_column_widths() -> None:
+    """아래 실 PG 테스트의 픽스처 값이 컬럼 폭 안에 드는지 **PG 없이** 동결한다.
+
+    왜 필요한가(2026-08-11 실측): negative control이 34자였는데 `official_code`는 `String(32)`라
+    INSERT가 `StringDataRightTruncationError`로 죽었다. 그런데 그 테스트는 `@pytest.mark.integration`
+    이라 실 PG 잡에서만 발화한다 — bare `pytest`(로컬·hermetic)에서는 skip이라 **성공/실패 양쪽에서
+    같은 화면**이었고, 결함이 PR CI까지 무증상으로 살아남았다. 이 가드는 그 무증상 구간을 없앤다.
+
+    폭은 ORM 컬럼에서 읽는다 — 숫자를 베껴 적으면 스키마가 넓어질 때 가드가 조용히 낡는다.
+    """
+    for column_name, value in (
+        ("norm_id", _NORM_ID),
+        ("official_code", _OFFICIAL_CODE),
+        ("norm_id", _STALE_NORM_ID),
+        ("official_code", _STALE_OFFICIAL_CODE),
+    ):
+        limit = OrmAchievementStandard.__table__.columns[column_name].type.length
+        assert limit is not None, f"{column_name}에 길이 상한이 없다 — 가드가 무의미해졌다"
+        assert len(value) <= limit, (
+            f"achievement_standard.{column_name} 상한 {limit}자를 {value!r}가 초과({len(value)}자) "
+            "— 실 PG 잡에서 StringDataRightTruncationError로 죽는다"
+        )
+
+    # negative control이 정답값과 실제로 구별되어야 대조가 성립한다(같으면 검증이 아니라 위장).
+    assert _STALE_OFFICIAL_CODE != _OFFICIAL_CODE
+
+
 @pytest.mark.integration
 async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
     """CUR-04 — 원자 축(`atom_node.standard_codes`)이 값을 낸다. 구 축(`concept_standard_link`)
@@ -105,13 +141,10 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
     cid = uuid.uuid4()
     pid = uuid.uuid4()
     pid_unmapped = uuid.uuid4()
-    norm_id = "PED05-TEST-NORM-01"
-    official_code = "[12미적01-01]"  # 원자 축(atom_node.standard_codes)이 반환해야 할 정답.
-    # negative control — 같은 concept_code를 가리키는 구 축 잔재. 실제 로더는 원자 행(source_id
-    # 미설정)을 이 축에 절대 연결하지 못하지만(모듈 docstring), 이 테스트는 "설령 잔재가 있어도
-    # 새 코드가 더는 이 축을 보지 않는다"를 직접 증명하기 위해 *의도적으로* 삽입한다.
-    stale_norm_id = "PED05-STALE-OLD-AXIS-NORM"
-    stale_official_code = "[STALE-OLD-AXIS-SHOULD-BE-IGNORED]"
+    norm_id = _NORM_ID
+    official_code = _OFFICIAL_CODE
+    stale_norm_id = _STALE_NORM_ID
+    stale_official_code = _STALE_OFFICIAL_CODE
     sync_engine = create_engine(settings.sync_database_url)
 
     def _cleanup() -> None:
