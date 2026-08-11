@@ -81,11 +81,11 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 클러스터링 | HDBSCAN + UMAP | 풀이 유형 클러스터링 |
 | 도구 호출 | SymPy, Wolfram Alpha API | SymPy=동치·검증·해집합 단일 권위(실사용). **Wolfram Alpha API는 계획·코드 미구현**(2026-07 실측) |
 | 인증·결제 | 카카오/네이버 로그인, 토스페이먼츠 | |
-| 모니터링 | Langfuse + OpenTelemetry | LLM 추적 표준 |
+| 모니터링 | **Langfuse**(실배선) + ~~OpenTelemetry~~ — *현행 정밀*(2026-08-11 r3 실측): **OTel은 `pyproject.toml` 선언만·`import` 0건**(미배선) | LLM 추적 표준. 실집행은 Langfuse 단독 + 인프로세스 이중 회계(`ops/service_health`·`cost_probe`). OTel 의존 자체의 제거/배선 판정 = `OPS-32` |
 | CI/CD | GitHub Actions | |
 | 인프라 | Phaiakes9 (개발), GCP/AWS (프로덕션) | |
 
-**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28`, 벡터 DB(ChromaDB→**pgvector** Postgres 통합)는 `2026-06-10 슬98`, 스택 표 모델 표기 정합(패밀리명→실제 핀 ID 병기·AI/LLM 인벤토리 신설)은 `2026-07-24`, Graph DB 행 실측 단서 병기(Neo4j 런타임 미도입)는 `2026-08-10 통합점검` 결정 로그 참조.
+**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28`, 벡터 DB(ChromaDB→**pgvector** Postgres 통합)는 `2026-06-10 슬98`, 스택 표 모델 표기 정합(패밀리명→실제 핀 ID 병기·AI/LLM 인벤토리 신설)은 `2026-07-24`, Graph DB 행 실측 단서 병기(Neo4j 런타임 미도입)는 `2026-08-10 통합점검`, 모니터링 행 실측 단서 병기(OpenTelemetry 선언만·import 0건)는 `2026-08-11 운영(EOS) r3` 결정 로그 참조.
 
 ---
 
@@ -424,5 +424,5 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ---
 
-**버전**: 0.2.0 | **최종 수정**: 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
+**버전**: 0.2.1 | **최종 수정**: 2026-08-11 (운영(EOS) 3차 재점검 — 스택 표 모니터링 행 실측 정합: OTel 미배선 병기. `docs/architecture/operations_module_gap_review_r3.md` §정정) · 이전: 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
 **다음 검토일**: Phase 1 종료 시점 또는 다음 분기 SSM 스캔 중 먼저 오는 쪽 · **본문 규칙을 바꾸는 커밋은 이 버전·수정일 표기도 함께 갱신한다** (2026-08-10 통합점검: 표기가 실체보다 3개월 뒤처져 있던 상태 재발 방지)
