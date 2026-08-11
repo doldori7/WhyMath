@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SOL-02-step-panel-producer-wiring
+title: "step_panel 죽은 사슬 배선 — 서버 생산자 신설(solution_path 실재 시에만 방출) + 클라 실단계 deferred 점층 노출"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - SOL-01-isolated-solution-path-recovery
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정(2026-08-11): step_panel은 서버 스키마(l4/learning_scene.py:127 StepPanelElement — solution_path_id·reveal_policy='deferred')·클라 모델(src/mobile/lib/features/chat/data/scene_models.dart:113 solutionPathId)·클라 렌더러(scene_renderer.dart:91→204 _StepPanelSeed — '단계별로 살펴보기 / 차근차근 단계를 펼쳐 볼 수 있어요' 고정 문구 카드)·양쪽 테스트(test_learning_scene.py:93,97,140·test_scene_dsl_layer_governance.py:166·scene_models_test.dart:41·scene_renderer_test.dart:115)·MOB-14(#766) 서버↔클라 계약 동결까지 완비돼 있으나 **서버 생산자 0**(scene_generation.py가 StepPanelElement를 한 번도 만들지 않음 — grep 결과 정의·export만)이고 데이터 0이다. POST /v1/scenes/*(api/scene.py:144)는 학생 서빙 라이브 경로이므로 이는 미출시 기능이 아니라 **가동 중인 표면의 영구 빈칸**이며, 테스트가 초록인 채 학생 도달이 0인 상태다"
+  - "② 배선 방향(확정): 클라 stub을 제거하지 않고 **서버 생산자를 잇는다**. SOL-01 착지로 solution_path 데이터가 실재하므로 '소비처 없는 좌석 신설'이 아니라 이미 있는 두 끝을 잇는 것이다(dead code 금기 위반 아님). 신규 scene kind 0·신규 enum 0·신규 테이블 0 — 기존 kind의 데이터 착지만"
+  - "③ 생산자 배선: l4/scene_generation.py가 해당 개념·문항에 solution_path가 **실재할 때만** StepPanelElement를 방출한다(없으면 방출 0 — 빈 껍데기 금지). scene_generation.py:23의 'step_panel(SolutionPath Python 구현 후속)' 자인 문구를 삭제하는 최종 지점. 조회는 SOL-01이 만든 l3/solution_path_store 헬퍼 재사용(재구현 금지)"
+  - "④ 집행 별항(2026-08-04 헌법 — 정본화≠집행): ③의 생산자가 **실제 서빙 경로에서 방출되는지**를 별항으로 검증한다 — POST /v1/scenes/* 응답 실바디에 step_panel 요소가 (데이터 있을 때) 실제로 실리고 (데이터 없을 때) 실리지 않는다는 변별력 테스트. '생성기 함수가 만들 수 있다'는 집행 증거가 아니다"
+  - "⑤ 클라: _StepPanelSeed 고정 문구 → solutionPathId로 실제 단계 조회·렌더. **교수학 경계(협상 불가)**: reveal_policy='deferred' 불변 · 전체 풀이 일괄 노출 금지 · 학생이 스스로 펼친 단계까지만 노출 · 펼치기 전 단계 내용·정답 미렌더 · 점수/등급 노출 0(solution_module_gap_review.md §2-①). 위젯 테스트로 '펼치기 전 정답 문자열 부재'를 동결"
+  - "⑥ 도달 관측: SOL-03 리포트의 scene 요소 kind별 실방출 카운트에서 step_panel이 0에서 벗어나는 것을 착지 증거로 삼는다(선언이 아니라 실측). 검사는 CI 명령 그대로·판정은 exit code·백엔드 소스 변경이므로 전체 스위트 후 회귀 판단"
+  - "⑦ 범위 밖: 다중 풀이 비교 UI·갤러리(§4-⑥ Phase 3 유보)·힌트 콘텐츠(S4-11)·approach_type 노출(S4-10)·학생 대면 신규 scene kind"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/scene_generation.py
+  - src/backend/whymath_backend/l4/learning_scene.py
+  - src/backend/whymath_backend/api/scene.py
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "docs/architecture/solution_module_gap_review_r3.md §4 R2. '테스트 초록 + 학생 도달 0' 유형 — 검증 장치는 도는데 대상이 없는 역방향 변형."
+updated: 2026-08-11

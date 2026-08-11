@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-04-standard-join-axis-unification
+title: "성취기준 런타임 조인 축 이원화 해소 — 학생 대면 커버리지가 조인 실패를 0%로 위장"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: api/coach.py:917-921(_standard_code_for)과 l2/target_progress.py:102-107의 구 축 조인(ConceptStandardLink.concept_code == Concept.code → AchievementStandard)이 실제 데이터에서 0행임을 재현한다(주장 확인 또는 반증 — 반증되면 범위 재조정). api/gating.py:149-151이 이미 기록한 '구 437 code 공간·재연결 후 0행' 판정이 이 두 소비처에도 성립하는지가 판정 대상이다"
+  - "② 정합 설계 본체: 두 소비처를 원자 축(AtomNode.standard_codes)으로 정렬한다. gating.py::_fetch_achievement_codes(단일 IN 쿼리·N+1 0·배열 평탄화)와 harness/standard_attainment_report.py:10(Concept.code → AtomNode.code → AtomNode.standard_codes)의 조인 패턴을 재사용한다. 신규 스키마·마이그레이션 0, N+1 0 유지"
+  - "③ CI 배선 실재 확인: 신규 테스트가 기존 backend 잡에서 실제로 실행되는지 확인한다(OPS-03·OPS-10 — '저장소에 존재함'과 '돌아감'은 다르다)"
+  - "④ 변별력: /v1/me/target-progress의 standard_coverage_percent와 harness/standard_attainment_report의 도달 집계를 같은 fixture에서 대조해 수정 전 불일치·수정 후 일치를 테스트로 동결한다. 양쪽에서 같은 값이 나오는 fixture만으로 검증하면 위장이다"
+  - "⑤ 작동 신호 부착: 조인 성립 건수를 응답 또는 로그가 보고하게 한다 — 0%가 '도달 실패'인지 '조인 실패'인지 구분 가능해야 한다(CLAUDE.md '작동한 비율' 원칙·침묵 실패 금지). graceful None/0 폴백을 무계수로 두지 않는다"
+  - "⑥ 범위 밖 명시: ConceptStandardLink 테이블의 거취(드롭·보존) 결정과 2015 개정 460건의 링크 보강은 포함하지 않는다(curriculum_module_gap_review_r2.md §4-⑧·§5-⑦에 발화조건 기록)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/backend/whymath_backend/l2/**"
+  - "tests/backend/**"
+session: null
+notes: "docs/architecture/curriculum_module_gap_review_r2.md §3 D4. S2-03 원자 재연결로 성취기준 조인 축이 갈렸는데 옛 축 소비자 2곳이 남았고 둘 다 graceful 폴백이라 침묵 무신호. /v1/me/target-progress는 성취기준의 유일한 학생 대면 표면이라 0%가 조인 실패의 위장이 된다. 반복 실수 10회차(§6) — 1~9회차의 '만들고 잇지 않음'과 달리 '이었다가 끊었는데 끊긴 걸 아무도 안 봄' 형태라 정적 스캔으로 안 잡히고, ASM-05가 다른 축으로 착지한 뒤에야 대조가 가능해졌다."
+updated: 2026-08-11
