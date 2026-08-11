@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-21-account-identity-key-provider-subject
+title: "계정 식별 키 축 — provider 안정 id 미영속·이메일 변경 시 계정 연속성 0(학습 이력 영구 상실 경로)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① UserProfile에 auth_provider·provider_subject 2컬럼(nullable) + (auth_provider, provider_subject) 유니크 — 신규 테이블 0. OAuthIdentity.subject(api/auth.py:102)가 현재 받아서 버려지는 상태의 해소. 마이그레이션 1건(백필 없음)."
+  - "② resolve_user(api/auth.py:138) 조회 우선순위를 (provider, subject) → email_hash 폴백으로. 폴백으로 찾은 기존 사용자에게는 (provider, subject)를 채우고 email_hash를 현재 이메일로 갱신 → 다음 로그인부터 provider 이메일 변경이 계정을 끊지 않는다."
+  - "③ 무중단 회귀 — subject가 없는 기존 행이 폴백 경로로 그대로 로그인되고, 같은 사용자가 두 번째 로그인에서 subject를 획득함을 동결."
+  - "④ cross-provider 자연 연결 계약을 코드에 못 박는다 — '이메일을 검증하는 provider만 자연 연결에 참여한다'를 build_oauth_providers docstring + 동결 테스트로. 미검증 provider 추가 시 테스트가 먼저 깨지게 한다(계정 탈취 벡터 차단)."
+  - "⑤ PII 축 무변화 동결 — provider_subject는 provider 내 불투명 id이고 이메일이 아니다. 평문 이메일 미저장(email_hash만)을 회귀로 유지."
+  - "⑥ 범위 밖: 사용자 주도 이메일 변경 UI · 계정 병합(이미 두 계정이 생긴 경우) · 연구자 역할(r2 §2-①) · 휴면 계정 복구(v1 §2-⑧ 승계)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/auth.py
+  - src/backend/whymath_backend/db/models/user.py
+  - "src/backend/alembic/versions/*"
+  - "tests/backend/api/*"
+session: null
+notes: "docs/architecture/account_security_gap_review_r2.md G1→D8. 실측: resolve_user(api/auth.py:138)가 email_hash(:132 sha256 소문자 이메일) 단일 키로 upsert하고, OAuthIdentity.subject(:102)는 docstring이 '후속 계정 연결용'이라 쓰는데 UserProfile에 provider·subject 컬럼이 0건이다(inkang_provider는 인강 업체명으로 다른 축). _SELF_EDITABLE(api/users.py:74) 16필드에 이메일이 없어 변경 경로도 0. v1 §2-③의 '비밀번호 찾기는 구조적 무해당' 판정은 옳았으나 그 판정이 전제한 '이메일 영구 불변' 가정이 검증된 적이 없다 — 소셜 계정 이메일이 바뀌면 신규 계정이 생기고 기존 학습 이력에 접근할 수단이 0이다(우선순위 1 학생 웰빙). 부수 위험: resolve_user docstring(:141)이 '같은 이메일=provider 무관 같은 계정'을 설계 의도로 선언하는데 OAuthIdentity에 email_verified가 없어 provider의 이메일 검증 여부가 계약에 없다."
+updated: 2026-08-11
