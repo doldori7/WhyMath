@@ -729,6 +729,286 @@ class TestStaleAndReap:
         assert status != "ok", "조회 실패가 ok로 보고되면 '0건 통과' 위장이 된다"
 
 
+class TestBranchGoneCriterion:
+    """HARN-26 — 홀더 브랜치가 origin에 없는 claim 판정.
+
+    실측 동기(2026-08-11): 대장 5건 중 3건이 존재하지 않는 브랜치를 홀더로 지목해
+    새 세션의 착수를 막고 있었다. 기존 3중 기준(ttl·task_done·task_missing)에는
+    이 축이 없어 TTL 72시간이 지나기 전에는 아무도 그 상태를 판정할 수 없었다.
+    """
+
+    NOW = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
+    OLD = "2026-08-09T12:00:00Z"  # 48시간 전 — grace(24h) 초과, TTL(72h) 이내
+    FRESH = "2026-08-11T10:00:00Z"  # 2시간 전 — grace 이내
+
+    def _claims(self, ts: str, branch: str = "claude/a"):
+        return [remote_claims.RemoteClaim(TASK, "sha1", branch, ts)]
+
+    def _stale(self, claims, branches, **kw):
+        return {
+            c.task_id: reason
+            for c, reason in remote_claims.stale_claims(
+                claims, _mk_backlog(), 72, self.NOW, existing_branches=branches, **kw
+            )
+        }
+
+    def test_missing_branch_past_grace_is_branch_gone(self):
+        """홀더_브랜치_부재_유예초과는_branch_gone"""
+        assert self._stale(self._claims(self.OLD), frozenset({"main"}))[TASK] == "branch_gone"
+
+    def test_live_branch_is_never_stale(self):
+        """홀더_브랜치_생존시_stale_아님 — 무차별 판정 방어(음성 대조)
+
+        이 케이스가 없으면 "모든 claim을 branch_gone으로 친다"는 버그가 통과한다.
+        나머지 케이스는 전부 '부재'만 다루므로 그 버그에 대해 변별력이 없다.
+        """
+        assert self._stale(self._claims(self.OLD), frozenset({"main", "claude/a"})) == {}
+
+    def test_missing_branch_within_grace_is_recent(self):
+        """유예_이내_부재는_branch_gone_recent — start 직후 첫 push 전 구간 보호"""
+        assert self._stale(self._claims(self.FRESH), frozenset({"main"}))[TASK] == (
+            "branch_gone_recent"
+        )
+
+    def test_unknown_age_defers_to_recent(self):
+        """ts_없는_claim은_나이_불명이므로_유예 — '모른다'를 '오래됐다'로 반올림 금지"""
+        assert self._stale(self._claims(""), frozenset({"main"}))[TASK] == "branch_gone_recent"
+
+    def test_empty_branch_meta_is_never_branch_gone(self):
+        """홀더_미상(메타_파손)은_branch_gone_아님 — 특정 불가와 소멸은 다르다"""
+        assert TASK not in self._stale(self._claims(self.OLD, branch=""), frozenset({"main"}))
+
+    def test_none_branches_suspends_criterion_but_keeps_others(self):
+        """브랜치_집합_None이면_이_기준만_보류되고_TTL은_그대로_작동
+
+        조회 실패로 얻은 빈 집합을 '브랜치 전멸'로 읽으면 대장을 통째로 지운다.
+        동시에, 한 축의 보류가 나머지 판정까지 멈추게 해서도 안 된다.
+        """
+        very_old = [remote_claims.RemoteClaim(TASK, "sha1", "claude/a", "2026-08-01T12:00:00Z")]
+        assert self._stale(very_old, None)[TASK] == "ttl"  # 10일 전 — TTL 초과
+        assert TASK not in self._stale(self._claims(self.OLD), None)  # 48h — TTL 이내
+
+    def test_branch_gone_takes_precedence_over_ttl(self):
+        """둘_다_해당하면_branch_gone이_이긴다 — 자동 청소 대상 분류를 고정한다
+
+        순서가 뒤집히면 사유가 `ttl`이 되고, ttl은 확정 신호가 아니라 자동 집행
+        대상에서 빠진다(살아 있는 장기 세션일 수 있으므로). 즉 순서는 표시 문구가
+        아니라 집행 여부를 바꾼다.
+        """
+        ancient = [remote_claims.RemoteClaim(TASK, "sha1", "claude/a", "2026-08-01T12:00:00Z")]
+        assert self._stale(ancient, frozenset({"main"}))[TASK] == "branch_gone"
+
+    def test_task_done_takes_precedence_over_branch_gone(self):
+        """로컬이_이미_done이면_task_done이_이긴다"""
+        backlog = _mk_backlog(status="done", session=None)
+        backlog.tasks[TASK].artifacts = ["PR#1"]
+        stale = remote_claims.stale_claims(
+            self._claims(self.OLD), backlog, 72, self.NOW, existing_branches=frozenset({"main"})
+        )
+        assert [reason for _, reason in stale] == ["task_done"]
+
+
+class TestRemoteBranchListing:
+    """HARN-26 — `list_remote_branches`는 '조회 실패'와 '브랜치 없음'을 구분해야 한다."""
+
+    def test_lists_pushed_branches(self, bare_remote):
+        """푸시된_브랜치가_목록에_나온다"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        branches, status = remote_claims.list_remote_branches(a)
+        assert status == "ok"
+        assert branches is not None and {"main", "claude/session-a"} <= branches
+
+    def test_unpushed_branch_absent(self, bare_remote):
+        """체크아웃만_한_브랜치는_원격에_없다 — branch_gone 판정의 입력 전제"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        branches, status = remote_claims.list_remote_branches(a)
+        assert status == "ok"
+        assert branches is not None and "claude/session-a" not in branches
+
+    def test_query_failure_returns_none_not_empty_set(self, bare_remote, monkeypatch):
+        """조회_실패는_None — 빈_집합과_구별된다
+
+        빈 집합을 돌려주면 호출부가 "원격에 브랜치가 하나도 없다"로 읽어
+        살아 있는 claim을 전부 branch_gone으로 친다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "--heads"):
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        branches, status = remote_claims.list_remote_branches(a)
+        assert branches is None
+        assert status != "ok"
+
+    def test_empty_output_is_error_not_all_gone(self, bare_remote, monkeypatch):
+        """rc0_빈_출력은_error — 정상 저장소에서 브랜치 0개는 나올 수 없다"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "--heads"):
+                return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        branches, status = remote_claims.list_remote_branches(a)
+        assert branches is None and status == "error"
+
+
+class TestReapBranchGoneIntegration:
+    """HARN-26 집행 지점 — `reap`이 실제로 이 기준을 경유하는가(계약이 아니라 배선)."""
+
+    def test_reap_deletes_claim_whose_branch_vanished(self, bare_remote, monkeypatch):
+        """홀더_브랜치가_사라진_claim은_reap이_삭제한다"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        # 48시간 뒤 — grace(24h) 초과이나 TTL(72h)에는 못 미친다. 즉 이 삭제는
+        # 오직 branch_gone 기준으로만 성립한다(ttl이 대신 잡아준 게 아님).
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=48))
+        reaped, status, _ = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=False)
+        assert status == "ok"
+        assert len(reaped) == 1 and "branch_gone" in reaped[0]
+        claims, _ = remote_claims.list_claims(a)
+        assert claims == []
+
+    def test_reap_keeps_claim_whose_branch_is_alive(self, bare_remote, monkeypatch):
+        """홀더_브랜치가_살아있으면_reap이_보존한다 — 음성 대조
+
+        위 테스트와 유일하게 다른 조건이 '브랜치를 push했는가'다. 무차별 삭제
+        회귀가 생기면 이쪽만 RED가 된다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=48))
+        reaped, status, _ = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=False)
+        assert status == "ok" and reaped == []
+        claims, _ = remote_claims.list_claims(a)
+        assert [c.task_id for c in claims] == [TASK]
+
+    def test_branch_query_failure_preserves_claims_and_warns(self, bare_remote, monkeypatch):
+        """브랜치_조회_실패시_claim은_보존되고_그_사실이_경고로_드러난다
+
+        **이 테스트가 HARN-26의 최대 위험을 막는다.** 조회 실패를 '전부 부재'로
+        읽으면 대장이 통째로 지워진다. 동시에 판정을 건너뛴 사실이 침묵되면
+        "stale 없음"과 "판정 안 함"이 같은 화면이 된다(CLAUDE.md 침묵 실패 금지).
+
+        주의: `--heads`만 실패시킨다. `ls-remote` 전체를 죽이면 `_fetch_claims_branch`가
+        먼저 죽어 reap이 `status != ok`로 조기 반환하고, 그러면 이 테스트는
+        '브랜치 판정 보류'가 아니라 이미 다른 테스트가 덮는 'claim 조회 실패'를
+        검증하게 되어 아무것도 증명하지 못한다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=48))
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "--heads"):
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        reaped, status, warnings = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=False)
+        assert status == "ok", "claim 조회 자체는 성공했다 — 실패한 것은 브랜치 조회뿐"
+        assert reaped == [], "판정 불가 상태에서 삭제가 일어나면 안 된다"
+        assert any("홀더 브랜치 조회 불가" in w for w in warnings), "판정을 건너뛴 사실이 침묵됐다"
+        claims, _ = remote_claims.list_claims(a)
+        assert [c.task_id for c in claims] == [TASK]
+
+
+class TestReapReasonFilter:
+    """HARN-27 — 자동 청소는 확정 사유만 지운다. 걸러진 건은 버리지 않고 경고로 올린다."""
+
+    def test_auto_reap_reasons_contains_only_confirmed_signals(self):
+        """자동_청소_사유_집합_동결 — 이것이 안전 범위의 유일한 잠금장치다
+
+        `ttl`은 살아 있는 장기 세션일 수 있고(실측 max 지속 66.4h로 TTL 72h에 근접),
+        `task_missing`은 CI 러너가 main만 보기 때문에 다른 브랜치에서 등재된 태스크를
+        구조적으로 '없음'으로 본다(HARN-15 비가시 부채 맹점). 둘 다 자동 삭제 부적합.
+        """
+        assert remote_claims.AUTO_REAP_REASONS == frozenset({"task_done", "branch_gone"})
+
+    def test_filter_limits_deletion_and_preserves_others(self, bare_remote, monkeypatch):
+        """확정_사유만_삭제되고_나머지는_원격에_남는다
+
+        `task_done`(확정) 1건과 `ttl`(비확정) 1건을 동시에 두고 `--auto` 상당 호출을
+        한다. 필터가 없으면 둘 다 사라져 RED가 된다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        assert remote_claims.claim(a, "S1-09-ttl-task", "claude/session-a").status == "ok"
+
+        backlog = _mk_backlog(status="done", session=None)
+        backlog.tasks[TASK].artifacts = ["PR#1"]
+        backlog.tasks["S1-09-ttl-task"] = Task(
+            id="S1-09-ttl-task",
+            title="장기 세션",
+            track="math-completion",
+            stage="S1",
+            status="in_progress",
+            session="claude/session-a",
+        )
+        # TTL(72h) 초과 시점 — 브랜치는 살아 있으므로 branch_gone은 성립하지 않는다.
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=200))
+        reaped, status, warnings = remote_claims.reap(
+            a,
+            backlog,
+            ttl_hours=72,
+            dry_run=False,
+            reasons=remote_claims.AUTO_REAP_REASONS,
+        )
+        assert status == "ok"
+        assert len(reaped) == 1 and "task_done" in reaped[0]
+        remaining, _ = remote_claims.list_claims(a)
+        assert [c.task_id for c in remaining] == [
+            "S1-09-ttl-task"
+        ], "확정 사유가 아닌 ttl claim이 자동 청소로 사라졌다 — 살아 있는 장기 세션을 지운다"
+        assert any(
+            "자동 청소 제외" in w and "ttl" in w for w in warnings
+        ), "걸러진 건이 조용히 버려졌다 — '지우지 않았다'가 보이지 않으면 침묵 실패다"
+
+    def test_no_filter_deletes_everything_stale(self, bare_remote, monkeypatch):
+        """필터_없으면_전_사유_삭제 — 사람이 치는 --apply의 기존 동작 보존(음성 대조)"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        subprocess.run(["git", "push", "origin", "claude/session-a"], cwd=a, check=True)
+        created = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created)
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        monkeypatch.setattr(remote_claims, "_utcnow", lambda: created + timedelta(hours=200))
+        reaped, status, _ = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=False)
+        assert status == "ok"
+        assert len(reaped) == 1 and "ttl" in reaped[0]
+        assert remote_claims.list_claims(a)[0] == []
+
+
 class TestTaskMissingRecentRaceGuard:
     """HARN-21 결함③ — 신선한 missing claim은 reap에서 제외되고, 오래된 것은 여전히
     정리된다. 실제 `bare_remote`(진짜 로컬 원격)로 양방향(변별력)을 hermetic하게 검증.

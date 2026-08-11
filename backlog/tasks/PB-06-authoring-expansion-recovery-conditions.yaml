@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-06-authoring-expansion-recovery-conditions
+title: "미머지 저작 확장 11,446문 회수 조건 확정 — 고립 4회차·규모 4.3배(코퍼스 30종·생성기 35·태스크 22건 미등재)"
+track: math-completion
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 대장 고정 — origin/claude/whymath-mvp-plan-architecture-trjg5x(2026-08-09·111커밋·열린 PR 없음)가 담은 신규 코퍼스 30종 11,446문·결정론 생성기 35파일·저작 태스크 S4-30~S4-51 22건(main 백로그 미등재)을 코퍼스별 건수·성취기준 코드까지 표로 고정한다. 추론 0 — git show 재현 명령 병기. 회수·병합은 이 태스크가 하지 않는다(Kiki 소유)."
+  - "② 차단 조건 변별력 실측 — 신규 30종은 _provenance.json 사이드카가 전부 없다(브랜치 전체 사이드카 7개=기존 코퍼스분). ARCH-25가 _KNOWN_GAPS를 빈 dict로 비워 면제 0이므로 사이드카 없이 회수하면 상시 CI(ci.yml:301-302 provenance_audit)가 red다. 사이드카 부재 상태에서 실제 red / 사이드카를 붙이면 green — 양쪽 다 실측한다(성공·실패 동일값이면 위장)."
+  - "③ 사이드카 생성 경로 조사 — 기존 CLI가 있으면 지목하고, 없으면 그 부재를 별도 태스크로 분리 등재한다(여기서 만들지 않는다 — 범위 폭발 방지)."
+  - "④ 커버리지 델타 산정 — 브랜치 코퍼스에 harness/problem_bank_coverage.py를 돌려 회수 시 성취기준 커버(현 72/435)·학교급별(초등 5/121)·0커버 영역 25개의 변화를 수치로 낸다. R3 선측정으로 신규분 고유 성취기준 코드는 55개이고 main 78개와 교집합 0(합집합 133)이나 2022 개정 대장 대조는 미실시 — 그 대조가 이 항의 산출물이다. 이 수치가 Kiki 병합 결정의 유일한 정량 입력이다."
+  - "⑤ 스코프 밖 명시 — 병합·충돌 해소·문항 내용 재검수·품질 재감사. PB-02(열린 PR #739)가 커버리지 리포트 재생성 CI를 다루므로 ci.yml·리포트 재생성 축은 건드리지 않는다(파일 분리). 감지 자체는 HARN-13이 이미 작동한다 — 이 태스크는 감지 이후의 공백만 다룬다."
+artifacts: []
+paths:
+  - "docs/data/**"
+  - src/backend/whymath_backend/harness/problem_bank_coverage.py
+  - "backlog/tasks/**"
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G1·§6-ⓐ. 미병합 고립 4회차이며 규모 최대(main 코퍼스 2,647의 4.3배). R2 §3 R7이 '소비처 S4-01이 잠겨 저작 큐는 페이퍼로만'이라 판단한 그 저작이 같은 주에 이미 실행되고 있었다 — 고립이 상위 설계의 판단을 사실과 반대로 만든 첫 사례. S4-09(다중 풀이) 완료본도 claude/whymath-solution-review-40xspg에 있다는 감지 경고가 있어 회수 대장에 함께 올린다. PB-05는 폐기 브랜치 bbyp3d가 선점(ARCH-24로 흡수된 유령)이라 PB-06 발급."
+updated: 2026-08-11

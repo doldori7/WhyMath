@@ -2,9 +2,21 @@
   "pool": "whymath-original",
   "corpus_name": "problem_bank_rephrased_v0",
   "generated": "2026-07-17",
-  "generation_method": "generated_v0 기반 LLM 발문 다양화(question_text만 재작성) — l3/equivalent/rephrase.py를 harness/problem_corpus_rephrase.py가 오케스트레이션. 해설·난이도·distractor_map·수치·정답·slug·problem_id는 generated_v0에서 그대로 복사(코드 소유·불변 봉인). 2026-07-17 S2-08(scripts/reconcile_rephrased_corpus_s2_08.py)이 조사 받침·난이도 앵커·op-code 방향 결함을 수정 불변 수학키로 재조정. 2026-07-29 S3-12가 rephrase 발문 위생 게이트(rephrase_hygiene.py)를 신설·확장하며 위생 미달 레코드를 소급 제거(483→429) — 수치·정답·distractor_map 등 코드 소유 필드는 불변, 제거는 발문 텍스트 품질 미달 레코드 한정.",
+  "generation_method": "generated_v0 기반 LLM 발문 다양화(question_text만 재작성) — l3/equivalent/rephrase.py를 harness/problem_corpus_rephrase.py가 오케스트레이션. 해설·난이도·distractor_map·수치·정답·slug·problem_id는 generated_v0에서 그대로 복사(코드 소유·불변 봉인). 2026-07-17 S2-08(scripts/reconcile_rephrased_corpus_s2_08.py)이 조사 받침·난이도 앵커·op-code 방향 결함을 수정 불변 수학키로 재조정. 2026-07-29 S3-12가 rephrase 발문 위생 게이트(rephrase_hygiene.py)를 신설·확장하며 위생 미달 레코드를 소급 제거(483→429) — 수치·정답·distractor_map 등 코드 소유 필드는 불변, 제거는 발문 텍스트 품질 미달 레코드 한정. 2026-08-11 QUAL-02가 실중복 확정 8건(재서술 무변화 사본 — 자기 parent와 발문·정답·선지·해설·verify 전 필드 동일, generated_v0 스켈레톤 트윈과 교차 텍스트 중복)을 쌍별 개별 판정 후 은퇴 제거(429→421) — 판정 기록은 docs/data/problem_duplicate_disposition_2026-08.md.",
   "generation_cli": "python -m whymath_backend.harness.problem_corpus_rephrase",
-  "record_count": 429,
+  "record_count": 421,
+  "retired_slugs": {
+    "2026-08-11 QUAL-02 실중복 은퇴(무변화 사본 8건)": [
+      "wm-calc-extmc-bd21cd8484d2-rephrased",
+      "wm-calc-extv-bd21cd8484d2-rephrased",
+      "wm-calc-extmc-cf788e51e0fd-rephrased",
+      "wm-calc-extv-cf788e51e0fd-rephrased",
+      "wm-calc-extmc-5c4a86d7a72a-rephrased",
+      "wm-calc-extv-5c4a86d7a72a-rephrased",
+      "wm-calc-extmc-cd86d461d1b1-rephrased",
+      "wm-calc-extv-cd86d461d1b1-rephrased"
+    ]
+  },
   "source_citation": "출처: WhyMath 자체 저작 동등문제(WHYMATH_GENERATED) — generated_v0(자체 저작)의 발문을 LLM으로 다양화한 파생물. 평가원·EBS·검정교과서 본문 복제 0.",
   "license_notice": "본 코퍼스의 모든 문항은 WhyMath가 자체 생성한 저작물(license=WHYMATH_GENERATED, source_type=자체생성)의 발문 다양화 파생물이다. 저작권은 WhyMath에 있으며 본문 보유가 합법이다(schema/problem.py _METADATA_ONLY_SOURCES 규칙과 정합).",
   "copyright_rail": [
