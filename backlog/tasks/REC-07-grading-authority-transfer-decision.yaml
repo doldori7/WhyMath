@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-07-grading-authority-transfer-decision
+title: "채점 권위 이관 결정 — 선택형 서버 채점 채택 여부(사람 결정·REC-08 게이트 입력·옵션 C)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: kiki
+depends_on:
+  - REC-05-grading-coverage-ceiling
+  - REC-08-selective-grading-demotion-gate
+requires_gates: []
+acceptance:
+  - "① REC-08 강등전의 PASS/FAIL + 결함 검출률 Wilson 95% 하한·무결함 오검출 Wilson 95% 상한을 근거로 선택형(A 버킷) 서버 채점 권위 채택 여부를 결정한다(2026-08-09 Kiki 옵션 C 선택 — REC-05의 정적 커버리지 수치만으로 즉결하지 않는다). claude가 대신 판정하지 않는다 — 학습자 모델 전체(BKT·θ·추천)의 입력을 바꾸는 결정이다"
+  - "② 채택 시 클라 계약 변경 범위를 명시한다 — 앱은 student_answer만 전송하고 is_correct를 전송하지 않는다(현재 앱은 정답을 구조적으로 모른다: problems_api.dart:40-41이 answer 키 미선언·verify_api.dart:23 '정답을 알지 못하는 검증')"
+  - "③ 단답 수치(B 버킷 1,031건) 정규화 규칙 채택 여부를 별도로 판정한다 — REC-08이 같은 강등전에서 B버킷도 함께 측정하므로 그 결과를 근거로 쓴다. 표기 변형(분수·소수·근호)의 동치 판정 권위는 SymPy(l3)이며 새 축을 만들지 않는다. REC-05는 A/B 버킷 모집단 산정(1,616건/1,031건)의 입력으로 계속 쓰인다"
+  - "④ ARCH-12(QuizMode 클라 채점=데모 예외)와의 정합을 명시한다 — 예외가 유지되는지 흡수되는지"
+  - "⑤ 미채택도 결정이다 — 미채택 시 근거와 재검토 트리거를 남긴다(발화 조건 형식). 결정 전까지 REC-01 §5-①·②(클라 attempt 배선·개인화 기본 on)는 계속 잠금 상태임을 확인한다"
+artifacts: []
+paths: []
+session: null
+notes: "docs/architecture/ai_recommendation_module_gap_review_2.md §2 G1 후속. 1차 문서 §5-①은 '클라 attempt 배선'의 발화 조건을 'NLP-02 관측이 착지해 서버가 채점 권위를 가질 수 있음이 확인됐을 때'로 두었는데, NLP-02는 done이나 그 관측 경로의 파생 가능 문항이 0건이라(REC-05 실측) 조건이 구조적으로 충족될 수 없다. 사람 결정 태스크는 ASM-02(등급 노출 정책)·CUR-03(성취수준 반입) 선례를 따른다 — 자동 착수 후보에 오르지 않으며 Kiki가 start/done --as kiki로 직접 기입한다(HARN-06). 2026-08-09: claude가 제시한 4개 옵션(A 전면 이관·B 선택형만 우선·C 측정 게이트 후 이관·D 미채택) 중 Kiki가 C를 선택 — REC-08(결함 주입 강등전) 등재로 반영. MEMORY.md 2026-08-09 결정 로그 참조."
+updated: 2026-08-09

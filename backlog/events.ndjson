@@ -2717,5 +2717,8 @@
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-restore-rehearsal", "kind": "human", "assignee": "kiki", "title": "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"}
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-offsite-move", "kind": "human", "assignee": "kiki", "title": "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"}
 {"ts": "2026-08-11T00:57:11", "actor": "claude/whymath-math-engine-design-ns3fc1", "action": "add", "id": "MATH-05-reverse-notation-display-surface"}
+{"ts": "2026-08-11T01:57:32", "actor": "claude/whymath-ai-recommendation-review-rcign3", "action": "add", "id": "REC-09-r2-isolated-implementation-recovery"}
+{"ts": "2026-08-11T01:58:03", "actor": "claude/whymath-ai-recommendation-review-rcign3", "action": "add", "id": "REC-10-next-problem-honesty-fields-render"}
+{"ts": "2026-08-11T02:00:08", "actor": "claude/whymath-ai-recommendation-review-rcign3", "action": "add", "id": "OPS-34-offline-report-recipient-contract"}
 {"ts": "2026-08-11T01:23:12", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "OPS-33-yaml-spec-unwired-audit-axis"}
 {"ts": "2026-08-11T01:25:23", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "add", "id": "HARN-22-id-number-suggestion-race"}
