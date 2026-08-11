@@ -23,7 +23,8 @@ from typing import Any
 import pytest
 
 from whymath_backend.l3.notation_coverage import (
-    KATEX_PROVEN_MACROS,
+    # KATEX_PROVEN_MACROS는 더 이상 여기서 단언하지 않는다 — allowlist↔근거 매핑의 파생 관계는
+    # test_notation_evidence_integrity.py가 전담한다(MATH-02 ③, 커버리지 손실 0).
     KNOWN_GAPS_OUT_OF_SCOPE,
     extract_macros,
     extract_math_glyphs,
@@ -31,6 +32,7 @@ from whymath_backend.l3.notation_coverage import (
     load_baseline,
     load_support_set,
     main,
+    proven_macros,
 )
 
 # tests/backend/l3/ → parents[3] = 레포 루트(test_notation_contract.py와 동일 기준).
@@ -111,13 +113,29 @@ class TestPureExtraction:
 
 class TestSupportSet:
     def test_real_manifest_derivation(self) -> None:
-        """manifest 정본 파생 — 입력측·canonical측·accent·KaTeX 실증·글리프 클래스가 편입된다."""
+        """manifest 정본 파생 — 입력측·canonical측·accent·**실증된** allowlist·글리프가 편입된다.
+
+        [MATH-02 계약 변경] 이전에는 `KATEX_PROVEN_MACROS <= support.macros`(allowlist **전량**이
+        지원)를 단언했다. 이제는 **근거 파일이 실재하는 부분집합만** 지원으로 파생된다 —
+        유령 근거가 지원을 넓히지 못하게 하는 것이 이 태스크의 본체이므로, 옛 단언은 바뀐 계약을
+        반영해 교체한다(약화가 아니라 정밀화 — 아래 두 단언이 옛 단언보다 강하다).
+        """
         support = load_support_set(_MANIFEST)
         assert "\\doubleprime" in support.macros  # 정규화 매크로 입력측(cases[].input)
         assert "\\prime" in support.macros  # canonical 산출측(cases[].canonical)
         assert "\\overline" in support.macros  # accent_macros
-        assert "\\frac" in support.macros  # KaTeX 렌더 실증 allowlist
-        assert KATEX_PROVEN_MACROS <= support.macros
+        # `\frac`은 allowlist에도 있으나 manifest cases에도 있어 **독립 출처**로 지원된다
+        # (allowlist가 unproven이어도 빠지지 않는다는 뜻 — 출처를 혼동하지 않도록 명기).
+        assert "\\frac" in support.macros
+
+        proven, unproven = proven_macros(_PROJECT_ROOT)
+        # ① 실증된 것은 반드시 들어온다.
+        assert proven <= support.macros
+        # ② 실증 안 된 것은 allowlist 경유로 들어오지 못한다(manifest 독립 출처는 정당하므로
+        #    allowlist 기여분만 떼어 검사한다 — 이 분리가 옛 단언에는 없던 축이다).
+        manifest_only = load_support_set(_MANIFEST, repo_root=_PROJECT_ROOT / "__absent__")
+        assert not ((support.macros - manifest_only.macros) & unproven)
+
         assert "²" in support.glyphs and "′" in support.glyphs  # unicode_glyph_classes
 
     def test_unproven_symbols_not_included(self) -> None:
