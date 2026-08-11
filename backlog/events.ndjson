@@ -2697,3 +2697,7 @@
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-restore-rehearsal", "kind": "human", "assignee": "kiki", "title": "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"}
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-offsite-move", "kind": "human", "assignee": "kiki", "title": "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"}
 {"ts": "2026-08-11T00:57:11", "actor": "claude/whymath-math-engine-design-ns3fc1", "action": "add", "id": "MATH-05-reverse-notation-display-surface"}
+{"ts": "2026-08-11T01:50:29", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "add", "id": "CONT-01-concept-assessment-review-gate"}
+{"ts": "2026-08-11T01:50:58", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "add", "id": "CONT-02-concept-content-audit-axis-disposition"}
+{"ts": "2026-08-11T01:51:30", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "add", "id": "CONT-03-deferral-trigger-expiry-contract"}
+{"ts": "2026-08-11T01:54:00", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "add", "id": "CONT-04-rephrased-corpus-type-tagging-completion"}

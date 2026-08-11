@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CONT-02-concept-content-audit-axis-disposition
+title: "개념 콘텐츠 감사 축의 거취 판정 — ARCH-21 흡수 약속이 조용히 소멸한 무추적 구멍 봉합"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 확정 — qa_pipeline.py 축 등록부(build_report의 9축: corpus_audit·equivalence_canonicalize·concept_graph_reachability·misconception_crosslink_demotion·coach_prose_leak·content_provenance·defect_injection_demotion·banned_words_pii·defect_report_intake)에 개념 콘텐츠(concept_content_v1 437행) 결함 감사 축이 없고, _NOT_MEASURED_AXES(:175 — ui_golden·statistical_outlier·performance 3건)에도 없음을 확인한다. 측정도 안 되고 미측정 선언도 안 된 상태가 현행이다."
+  - "② 택1 판정(둘 다 안 하는 현 상태만 금지) — ⓐ qa_pipeline에 concept_content 축 흡수(harness/concept_content_audit.py의 결함율을 AxisResult로 승격) 또는 ⓑ _NOT_MEASURED_AXES에 사유와 함께 정직 등재. ⓑ를 택하면 사유는 '코드 미구현'이 아니다(코드는 실재한다) — 실제 사유(오프라인 리포트로 충분한 근거·게이트화 시 임계 미정 등)를 적는다. 어느 쪽이든 근거를 모듈 docstring에 명문화한다."
+  - "③ 약속 소멸 방지 — S3-26 notes 원문이 '감사 축은 ARCH-21 QA 오케스트레이터가 흡수 예정'이라고 적었고 ARCH-21은 done인데 흡수는 일어나지 않았다. 완료 태스크의 notes에 적힌 후속 약속이 그 태스크의 done과 함께 소멸하는 이 경로 자체를 어떻게 막을지 CONT-03(트리거 만료 계약)과 중복 없이 역할을 나눈다 — 이 태스크는 이 1건의 거취, CONT-03은 일반 계약."
+  - "④ ⓐ를 택할 경우 변별력 실측 — 개념 콘텐츠 1행에 결함을 주입해 축이 실제로 gate_fail/수치 변화를 내는지 확인 후 cp 백업으로 원복(git checkout 금지). ⓑ를 택할 경우 _NOT_MEASURED_AXES 항목이 리포트 JSON에 실제로 나타나는지 확인."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/qa_pipeline.py
+  - src/backend/whymath_backend/harness/concept_content_audit.py
+session: null
+notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F2·§3 D8 — 외부 EOS 틀(QA 엔진 박스) 3차 대조. declared_unwired_audit.py:1019가 harness.concept_content_audit을 _OFFLINE_REPORT('빌드타임 관측 리포트·사람이 돌린다')로 분류하고 있어 그 탐지기에는 걸리지 않는다 — 분류 자체는 정당하나 흡수 약속의 소멸은 아무것도 추적하지 않는다. OPS-22 탐지기 4축의 사각(PED-16이 발견한 '일반 테이블 dead write 미감사'와 같은 계열 — 이번은 '오케스트레이터 미흡수')."
+updated: 2026-08-11
