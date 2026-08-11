@@ -489,6 +489,24 @@ reader 0→`PED-16`(done, 이미 판정). **범위 밖 부기 1건**: `/v1/gatin
 - **운영 축 사람 게이트 0건 해소**: 기존 `gates.yaml` 7건이 전부 콘텐츠/개발 축이라 배포·백업·모니터링 항목이 **대장에 아예 없었다**. `gates add`로 3건 등재 — `G-deploy-environment-approval`(승인 규칙 미등록 시 배포 승인 게이트가 이름뿐)·`G-backup-restore-rehearsal`(RTO 미측정)·`G-backup-offsite-move`(prod와 같은 디스크).
 - **번호 가드 실동작**: 최초 `OPS-26` 등재 시도가 원격 브랜치 `claude/whymath-ai-integration-check-5qqcp4`의 인플라이트 `OPS-26`과 충돌해 CLI가 거부·`OPS-29`를 제안 → 그대로 수용. HARN-15 교차 브랜치 스캔이 병렬 세션 충돌을 실제로 막은 사례.
 - **등재 결과**: 태스크 239→**244**건, 게이트 7→**10**건, `backlog.py validate` EXIT=0.
+### 2026-08-11 (판정·재발방지·브랜치 부채): **미해결 장기 미머지 브랜치 결정 — 그런데 판정의 *입력*이 망가져 있었다. 탐지기 결함 4종 실측·수정(코드+동결 테스트 15건), 브리핑 19건→7건 정정. 회수 5건 등재·삭제 6건 요청** (claude 구현·판정, Kiki "미해결 장기 미머지 브랜치 9건 결정")
+
+- **정본**: `docs/reviews/unmerged_branch_verdict_2026-08-11.md`(결함 4종 실측 + 브랜치별 판정표 + 정직한 공백).
+- **착수 전제가 뒤집혔다** — "9건을 결정하라"는 지시였는데, 브리핑이 낸 "미해결 19건" 목록의 절반이 허구였다. GitHub 라이브(`list_branches`)와 대조해 실제 잔존을 확인한 것이 출발점이다. **로컬 `git branch -r`을 판정 근거로 쓰면 안 된다**는 것이 이 사고의 1차 교훈.
+- **결함 ① shallow clone 맹점(침묵 실패)**: 이 CCR 컨테이너 클론이 shallow였다(`--is-shallow-repository`=true·`origin/main` **50커밋**·경계 2026-08-06). `_find_ported_evidence`의 `git log --grep`이 절단면 밖 흡수 커밋을 못 봐 **이미 포팅된 브랜치를 "Kiki 결정 필요"로 승격**했다(반례 실증: `…-ai-tutor-design-953m1e`는 PR #705로 흡수 완료). `ahead`도 657~720까지 부풀었다. `StaleBranchScanResult`의 status는 그동안 `ok`였다 — "근거 없음"과 "히스토리가 없어 못 봄"이 같은 화면이었다.
+- **결함 ② `--prune` 누락**: fetch refspec에 prune이 없어 원격에서 삭제된 브랜치의 remote-tracking ref가 영구 잔존. `git fetch --prune` 1회에 **유령 23건** 소멸. 함수 docstring이 스스로 "캐시된 오래된 ref만 보면 안 된다"고 적어 놓고 반대 방향(사라진 ref)은 못 지우고 있었다.
+- **결함 ③·④ needle이 좁으면서 동시에 헐거웠다**: `-([a-z0-9]{6})$`는 6자 접미사가 없는 브랜치(`harn-14`·`admin-01`·`worktree-agent-…`)를 **시도조차 못 했고**(항구적 미해결), 동시에 평범한 6자 영단어(`…-metrics-writer`의 "writer")까지 잡았다. 게다가 grep이 본문을 훑어 ***"이 브랜치들은 미해결이다"라고 적은 판정 문서 커밋이 그 브랜치를 "해결됨"으로 뒤집었다.***
+- **⚠ 하마터면(④의 실피해)**: `claude/whymath-solution-review-40xspg`가 **"이미 포팅됨 — 결정 불요"** 로 분류돼 있었다. 근거 커밋 `807aa479`은 MEMORY·backlog·docs만 고친 판정 문서였고, 정작 이 브랜치는 **미회수 S4-09 완료분 2,153줄**을 안고 있었다. 삭제 배치에 들어갔으면 실작업이 사라졌다.
+- **대책(형태 = 코드 + 동결 테스트)**: ①shallow 감지 시 `status="shallow"`로 **판정 보류** 전환(가드는 fetch 앞 — 못 믿을 결과에 90초 예산을 쓰지 않는다) + 복구 명령(`git fetch --unshallow origin`)을 브리핑 화면에 노출 ②fetch 5곳에 `--prune` ③needle을 브랜치 basename 전체로 + 길이 하한 12자 ④**원장 전용 커밋 배제**(`MEMORY.md`/`backlog`/`docs`/`.github`/`ROADMAP.md`/`README.md`/`CLAUDE.md`만 고친 커밋 = "언급"이지 "흡수" 아님) ⑤`harness-claims` 인프라 브랜치 제외. `--unshallow` 자동 실행은 **채택하지 않았다**(SessionStart 훅이 매번 도는 경로·훅이 stderr를 버려 진행이 안 보임·컨테이너가 매번 새로 생겨 1회성 비용이 아님).
+- **원장 필터 변별력 실측**: 실제 trunk 커밋 10건 대조에서 진짜 흡수 5건(`ad06c6e5`·`10479969`·`4adc6870`·`b4b0153d`·`4620f747`)은 전건 유지, 문서 언급 5건(`807aa479`·`6f0c0513`·`fb937fba`·`948629b8`·`6b240d18`)은 전건 제거 — 완전 변별.
+- **뮤테이션 6종 전건 격추**(변별력 실측): shallow 가드 제거→2건 실패(음성 `full_clone`은 통과 유지) · `--prune` 제거→1건 · needle 6자 복원→2건 · 원장 필터 제거→1건 · claims 제외 제거→1건 · `cmd_brief`가 message 미전달→1건. ⚠ 1차 시도에서 `sed`가 **엉뚱한 함수의 `--prune`**을 지워 "테스트가 안 죽는다"는 가짜 신호가 나왔다 — 뮤테이션 대상이 맞는지 확인하는 것도 검증의 일부다. 원복은 전건 `cp` 백업→`cp` 복원 + `md5sum -c`로 바이트 동일 확인(OPS-24 규칙 준수).
+- **수치**: 브리핑 미해결 **19 → 7건**. 40xspg는 "포팅됨"→"미해결"로 정정(오탐 제거), worktree-agent·harn-14는 "미해결"→"포팅됨"으로 정정(미탐 제거). 하네스 스위트 312 passed·`tests/infra` wiring 19 passed·ruff/black exit 0(CI 동일 명령·대상).
+- **브랜치 판정 11건**: 🔴회수 5(admin-01→**ADMIN-08** · uqyg79 PED 9건→**PED-22·23·24·25** · q8tvcx OPS-19→**OPS-34** · 40xspg→**SOL-01 기등재**라 신규 불요 · admin-02→block 사유 이관 완료) / 🟢삭제 6(enfkqt=uqyg79 진부분집합 · h87afk=REC-02 중복 구현 패자 · harn-14 #714 · backlog-drive-next·973iv1 ahead=0 · worktree-agent #728). **회수 등재된 브랜치는 삭제 배치에서 의도적 제외**(e98dw4 선례 — 분류가 "포팅됨"이어도 전량 회수를 보장하지 않는다).
+- **삭제 전 head SHA 스냅샷**(복구 경로 = `commits/<sha>`·`contents?ref=<sha>`): enfkqt=469ee9ad · h87afk=b849bb04 · harn-14=215b45ff · backlog-drive-next=de446ec3 · 973iv1=8810bc8b · worktree-agent=6059043d.
+- **삭제 워크플로 허용 패턴에 `worktree-agent-*` 추가** — 이 접두가 패턴 밖이라 PR #728로 포팅 완료된 뒤에도 **삭제 경로가 아예 없어** 잔존했다. 기계 생성 접두라 사람 브랜치와 섞이지 않는다.
+- **ID 이중 배정 재확인**: uqyg79의 PED-04~12는 main의 동명 태스크와 **번호만 같고 내용이 다르다**(2026-08-04 13건 계보). 회수 태스크는 전부 `backlog.py add`가 제안한 신규 번호를 받았고(ADMIN-04→08·OPS-26→34·PED-17→22 — **번호 가드가 원격 브랜치 충돌 3건을 실제로 차단**), 원 번호 매핑을 notes에 남겼다. 재채번 실행 판정은 Kiki 전권 유보라 건드리지 않았다.
+- **정직한 공백**: ①**코드 이식은 하지 않았다** — 등재된 태스크가 실행되지 않으면 고립은 그대로다 ②각 브랜치 구현의 *정확성*은 보지 않았다(판정은 고유·완료·중복까지) ③q8tvcx의 설계 문서 1건 처분은 본문을 읽어야 해 OPS-34 acceptance ③으로 넘겼다 ④full clone 실측은 이 컨테이너를 unshallow한 뒤(770커밋)에만 했고 Kiki 로컬에서 재확인하지 않았다 ⑤**모든 세션 컨테이너가 shallow라면 이 스캐너는 다시는 목록을 내지 않는다** — 그 경우 이 수정은 침묵을 *정직한* 침묵으로 바꾼 것에 그친다(다만 매 세션 화면에 뜨는 미측정 신고 + 복구 명령이라 "만료 없는 유예"는 아니다) ⑥백엔드 소스 무접촉이라 전체 pytest 스위트는 돌리지 않았다 — CI가 최종 판정.
+
 ### 2026-08-11 (회수·재검증·수식엔진): **수식 엔진 갭 점검의 8일 고립분 회수 + 현행 main 재검증 — 낡은 주장 7건 정정·신규 갭 1건(D6 역방향 표시축) 발견·`MATH-05` 등재. 미병합 고립 4회차(설계 문서 형태)** (claude 회수·설계, Kiki 요청)
 
 **컨텍스트**: Kiki가 **같은 외부 EOS 틀 문서**(『07. 수식(Math Engine)』 기능 28~31)를 다시 주며
