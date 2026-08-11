@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-32-backend-dependency-declaration-usage-gate
+title: "백엔드 의존성 선언↔사용 게이트 비대칭 — pyproject 3종 import 0건(MOB-08 이식)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — src/backend/pyproject.toml:45-47의 opentelemetry-api·opentelemetry-sdk·structlog 3종이 src/ 전체에서 import 0건임을 재확인(grep 'import structlog|from opentelemetry|import opentelemetry' → 0). 반증되면 범위 재조정."
+  - "② 3종 각각 제거 vs 배선 판정·실행 — dead code 금지(좌석 없는 선언은 걷는다). 판정 근거를 기록한다. structlog은 현 로깅이 stdlib logging이므로 제거가 유력하고, OTel 2종은 CLAUDE.md 스택 표가 모니터링 표준으로 적고 있어 '표기 정정 후 제거' 또는 '배선' 중 택일이 필요하다(표기만 남기고 의존은 걷는 선택도 유효)."
+  - "③ 게이트 이식 — MOB-08이 Flutter pubspec.yaml에 만든 '선언↔사용 거버넌스 테스트'(미사용 의존 검출·1개 되돌리면 red)를 backend pyproject.toml로 이식한다. 재발명 금지 — MOB-08 구현을 먼저 읽고 같은 판정 규약을 쓴다. 빌드·런타임 전용 의존(직접 import되지 않는 것)은 허용목록에 사유와 함께 명시한다."
+  - "④ 변별력 실측(양방향) — 미사용 의존 1개를 되돌려 넣으면 red, 빼면 green을 둘 다 실측한다."
+  - "⑤ 착지 위치 택일 — ops/declared_unwired_audit.py의 5번째 축으로 넣을지 tests/infra 독립 테스트로 둘지는 착수 세션이 실측으로 정한다. declared_unwired_audit의 4축(라우트·EventType·타임시리즈·CLI)에 의존성 축이 없어 이 사각이 어느 감사기에도 안 잡혔다는 점이 배경이다."
+artifacts: []
+paths:
+  - src/backend/pyproject.toml
+  - "tests/infra/**"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+session: null
+notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D10. 같은 부류의 결함을 MOB-08이 모바일 축에서 이미 상환했는데 backend 축은 무감사로 남아 있던 비대칭."
+updated: 2026-08-11
