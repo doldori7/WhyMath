@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 from whymath_backend.api import study as study_module
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
+from whymath_backend.db.models.evidence_event import EvidenceEvent
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
 from whymath_backend.db.session import get_session
 from whymath_backend.l3.render.adapter import RenderedUnit, RenderSegment
@@ -60,11 +61,51 @@ async def _user() -> _User:
     return _User()
 
 
-class _FakeSession:
-    """`session.get`/`add`/`commit`만 쓰는 좁은 대역 — stmt는 무시한다(test_me.py 동형).
+class _StagedScalars:
+    """`add()`로 적재된 행 중 select 조건에 맞는 것들 — `.first()`/`.all()`만 제공."""
 
-    `_build_signals`가 부르는 `get_state()`는 이 세션으로 빈 행셋을 받아 "신규 학생"(숙달 신호
-    없음) 경로를 탄다 — 그 경로 자체가 라우터의 정상 분기라 대역으로 충분하다.
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+
+class _StagedResult:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _StagedScalars:
+        return _StagedScalars(self._rows)
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def scalar(self) -> int:
+        return len(self._rows)
+
+    def scalar_one_or_none(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+
+class _FakeSession:
+    """`session.get`/`add`/`commit` + **EvidenceEvent select만** 대역 실행(test_me.py 동형 확장).
+
+    대부분의 stmt는 여전히 무시하고 빈 행셋을 준다 — `_build_signals`가 부르는 `get_state()`가
+    "신규 학생"(숙달 신호 없음) 경로를 타는 것이 라우터의 정상 분기라 그것으로 충분하다.
+
+    **SEC-24(원 SEC-16) 이후 확장 이유**: `/outcome`의 유일 writer(`record_pedagogy_outcome`)가
+    stage 전에 ①처치 행 조회(소유권) ②중복 outcome 조회를 *실제로 실행*한다. 예전처럼 모든
+    select에 빈 결과를 주면 `/study`가 방금 남긴 처치 행을 못 찾아 정당한 소유자도 403이 된다 —
+    즉 이 대역이 실 DB의 "add한 행은 이후 select에 보인다"를 모델링하지 못하는 것이 원인이지,
+    라우터·writer의 결함이 아니다. 그래서 EvidenceEvent select에 한해 `self.added`를
+    stmt의 바인딩 파라미터(session_id·objective_id·event_type)로 걸러 돌려준다.
     """
 
     def __init__(self, get_map: dict[Any, Any] | None = None) -> None:
@@ -75,7 +116,34 @@ class _FakeSession:
     def add(self, obj: Any) -> None:
         self.added.append(obj)
 
-    async def execute(self, _stmt: Any) -> Any:
+    @staticmethod
+    def _selects_evidence_event(stmt: Any) -> bool:
+        descriptions = getattr(stmt, "column_descriptions", None) or []
+        return any(desc.get("entity") is EvidenceEvent for desc in descriptions)
+
+    def _matching_evidence_rows(self, stmt: Any) -> list[Any]:
+        """stmt의 바인딩 값으로 staged EvidenceEvent를 필터 — WHERE를 값 대조로 근사한다.
+
+        파라미터 *이름*(`session_id_1` 등)에 의존하지 않고 **값 집합 포함 여부**로 본다 —
+        SQLAlchemy가 붙이는 접미사가 바뀌어도 깨지지 않는다.
+        """
+        values = set(getattr(stmt, "compile", lambda: None)().params.values())
+        rows = []
+        for row in self.added:
+            if not isinstance(row, EvidenceEvent):
+                continue
+            if row.session_id not in values:
+                continue
+            if row.objective_id not in values:
+                continue
+            if row.event_type not in values:
+                continue
+            rows.append(row)
+        return rows
+
+    async def execute(self, stmt: Any) -> Any:
+        if self._selects_evidence_event(stmt):
+            return _StagedResult(self._matching_evidence_rows(stmt))
         return _EmptyResult()
 
     async def get(self, _model: Any, pk: Any) -> Any:
@@ -236,9 +304,18 @@ class TestOutcomeEndpointReach:
     """`POST /{objective_id}/outcome` — 처치와 같은 session_id로 결과를 잇는다."""
 
     def test_outcome_201_records(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """201 + `recorded=true` + 결과 행 stage."""
+        """201 + `recorded=true` + 결과 행 stage.
+
+        SEC-24(원 SEC-16) 계약 변경 수용: 임의 `session_id`로는 더 이상 201이 아니다(403) —
+        `/outcome`은 `/study`가 *이 학생에게* 발급한 session_id만 받는다. 그래서 이 테스트는
+        실제 클라이언트와 같은 순서로 `/study`를 먼저 호출해 정당한 session_id를 얻는다.
+        위조·타인·중복 세션의 거부 축은 `test_study_outcome_ownership.py`가 담당한다.
+        """
         client, fake, _calls = _client(monkeypatch)
-        session_id = str(uuid.uuid4())
+        study = client.post("/v1/me/objectives/obj-mob13/study", json={})
+        assert study.status_code == 201, study.text
+        session_id = study.json()["session_id"]
+
         resp = client.post(
             "/v1/me/objectives/obj-mob13/outcome",
             json={"session_id": session_id, "correct": True, "rt_ms": 4200},
@@ -252,8 +329,9 @@ class TestOutcomeEndpointReach:
     def test_study_then_outcome_share_session_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """관통 루프 — `/study`가 준 session_id를 `/outcome`이 그대로 받는다(집계 조인 축).
 
-        `session_id`가 어긋나면 결과 행은 남되 처치 미상으로 집계에서 제외된다(effectiveness
-        규약). 두 호출이 같은 축으로 묶이는지가 이 슬라이스의 실질이다.
+        SEC-24(원 SEC-16) 이후 이 축은 *집계 정합*이자 *인가 축*이다 — session_id가 어긋나면
+        예전처럼 "행은 남되 집계 제외"가 아니라 403으로 **기입 자체가 거부**된다(고아 outcome이
+        오염 벡터라 기입 거부로 승격). 두 호출이 같은 축으로 묶이는지가 이 슬라이스의 실질이다.
         """
         client, fake, _calls = _client(monkeypatch)
         study = client.post("/v1/me/objectives/obj-mob13/study", json={})
