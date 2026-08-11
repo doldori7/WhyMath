@@ -1136,13 +1136,18 @@ class AuditResourceType(str, Enum):
 
 
 class AuditEventKind(str, Enum):
-    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 3종 폐쇄 택소노미.
+    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 폐쇄 택소노미(현 4종).
 
     `docs/architecture/account_security_gap_review.md` D3의 경계 확정: `security_privacy.md:
     88-100`의 "모든 PII 접근 로그"는 **채택하지 않는다**(본인 조회 29개 엔드포인트 전수 감사는
     미성년 프로파일링 자산화·볼륨 소음 — 정정 경위는 `docs/standards/security_privacy.md` §감사
-    로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"과 "본인 아닌 주체의 접근"
-    3종뿐이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와 정확히 일치시킨다.
+    로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"·"본인 아닌 주체의 접근"·
+    **"계정 권한 자체의 변경"**이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와
+    정확히 일치시킨다(부기에 값을 추가할 때 이 enum도 함께 늘린다 — 단일 진실원천).
+
+    **4번째 값 `role_change`는 ADMIN-01(2026-08-11 회수)이 추가**했다. SEC-09 시점의 "3종"은
+    그 시점 실측이었을 뿐 상한이 아니다 — 폐쇄 택소노미의 뜻은 "임의 문자열 금지"이지
+    "영원히 3개"가 아니다.
 
     `deletion_audit`(별도 테이블·`DeletionAudit`)이 삭제 감사의 **단일 권위**를 유지하므로
     `resource_type`류의 삭제 이벤트는 여기 포함하지 않는다(이중 진실원천 금지 — D3 판단 근거).
@@ -1161,6 +1166,17 @@ class AuditEventKind(str, Enum):
     architecture.md` Phase B)이 아직 없어 이 값을 실제로 적재하는 엔드포인트가 없다. 값·모델·
     writer(`privacy.audit.record_admin_access_audit`)는 그 콘솔이 착지할 때 바로 배선할 수
     있도록 미리 세운다(가짜 이벤트 날조 금지 — 실 호출부가 생기기 전까지는 진짜로 0행이다).
+    """
+
+    role_change = "role_change"
+    """`ops/role_grant_cli.py`(ADMIN-01) grant/revoke — `user_profile.role` 변경.
+
+    **이번 CLI가 진짜 첫 호출부다**(위 `admin_access`와 달리 "호출부 0곳"이 아니다) —
+    `Role.CONTENT_ADMIN`을 실 사용자에게 부여하는 경로가 저장소 전체에 0건이던 갭(콘텐츠 CUD
+    6라우터는 게이팅되지만 그 문을 열 열쇠를 아무도 발급할 수 없던 상태)을 이 CLI가 메우면서,
+    부여/회수와 `privacy.audit.record_role_change_audit`가 *같은 트랜잭션*으로 이 값을 적재한다
+    (`ops/role_grant_cli.py` 모듈 docstring 참조). HTTP 미노출 — 순수 ops CLI, 운영자 직접 실행
+    (`retention_purge_cli` 컨벤션 미러).
     """
 
 
