@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,10 +17,13 @@ acceptance:
   - "④ 변별력: 임시로 소비 참조를 주입하면 해당 표면 값이 '미도달'에서 벗어나고 원복하면 다시 '미도달'로 돌아오는지 양방향 실측한다. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다. 원복은 반드시 cp 백업으로 한다(git checkout/restore 금지 — 미커밋 작업분 소실 사고 2026-08-10)"
   - "⑤ anchor 성질: 총 공식 수·필드 충전 수를 매 실행 재실측해 문서 stale을 리포트가 잡게 한다(knowledge_module_gap_review_r3.md §4 교훈 — 분모가 자라는데 문서가 안 따라가는 stale 방어)"
   - "⑥ 범위 밖 명시: 게이트가 아니다(도달 0이어도 exit 1 금지 — VIZ-01·KG-01 원칙). 공식 API 신설·공식 학생 노출·formula_refs 충전(Phase 5b 승계)은 포함하지 않는다 — 활성화가 아니라 가시화다"
-artifacts: []
+artifacts:
+  - 2393c135
+  - 1da9500b
+  - "PR#820"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: claude/whymath-knowledge-design-4rxrax
+session: null
 notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G1 — 외부 EOS 틀(모듈 9) 3차 대조 신규 갭. r1은 모듈 9를 '대부분 충족'으로 판정하고 D3(S4-06)로 constraints·mnemonic까지 채웠으나 도달 렌즈로 보면 write-only다: api/ 내 formula grep 0건, formula_id의 자기 모듈 밖 참조가 주석 1건(db/models/__init__.py:254)뿐, canonical_signature 0/25. 적재기 docstring이 스스로 write-only를 선언. S4-06의 사후 판정을 바꾸지 않는다 — 그 acceptance는 전건 충족했고 갭은 acceptance가 소비 축을 묻지 않았다는 것(2026-08-04 헌법 개정이 S4-06 등재 이후에 생긴 시점 사실). 번호: KG-02는 원격 브랜치가 선점(KG-02-concept-content-review-promotion) — HARN-10 가드 제안값 채택."
 updated: 2026-08-11
