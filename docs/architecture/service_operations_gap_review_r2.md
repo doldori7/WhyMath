@@ -434,6 +434,16 @@ v1 §6이 9회차까지, 운영 r3 §7이 10회차까지 확장한 표를 11회�
 | firebase 제거 확인 | `grep -n "firebase" src/mobile/pubspec.yaml` → `:50-52` 제거 사유 주석만(선언 0) |
 | 번호 충돌 가드 실동작 | `backlog.py add --id OPS-33-...` → `❌ 태스크 ID 번호 충돌: 'OPS-33' … 다음 빈 번호 제안: OPS-34` |
 | 등재 후 대장 무결성 | `python3 scripts/harness/backlog.py validate; echo "EXIT=$?"` → `태스크 258건, 게이트 10건` · `EXIT=0` |
+| 회귀 없음(전체 스위트) | `src/backend`에서 **bare** `python3.12 -m pytest`(CI와 동일 invocation) → **9412 passed · 304 skipped · `EXIT=0`**. lint는 CI 동일 명령·동일 대상 — `ruff check . ../../tests/backend`(`EXIT=0`) · `black --check --line-length 100 . ../../tests/backend`(`EXIT=0`). `tests/infra` 298 passed(`EXIT=0`) |
+
+### 검증 과정에서 겪은 실행 함정 2건 (다음 세션용 기록 — 결과가 아니라 *도구 사용*의 문제였다)
+
+| 함정 | 증상 | 원인·해법 |
+|---|---|---|
+| **명시 경로 invocation → asyncio strict 폴백** | `pytest ../../tests/backend`로 돌리자 **635 failed**. 실패 메시지는 *"async def functions are not natively supported"* | `src/backend/pyproject.toml:205` `asyncio_mode = "auto"`가 **명시 테스트 경로 인자**에서 적용되지 않는 알려진 형태(같은 파일 `:97-100`이 ARCH-22 재검증 때 이미 기록해 둔 현상). CI는 **bare `pytest`**(testpaths 사용)라 영향 없다. **해법 = 대상 경로를 인자로 주지 말 것**. 이 635건은 코드 결함이 아니라 **내 호출 방식의 결함**이었다 — CLAUDE.md "CI가 실제로 쓰는 명령을 그대로 재현한다"의 실사례 |
+| **sibling 패키지 미설치 → collection error** | bare 재실행 시 `7 errors during collection` · `ModuleNotFoundError: No module named 'data_pipeline'` | 이 컨테이너는 `src/backend`만 설치돼 있었다. CI는 backend·data-pipeline 둘 다 설치한다 → `pip install -e src/data-pipeline` 후 green. 부수 사항: 컨테이너 기본 `python3`은 **3.11**인데 프로젝트는 `>=3.12` 요구라 `python3.12`로 설치·실행해야 한다 |
+
+**두 함정의 공통점**: 둘 다 **"실패처럼 보이는 환경 아티팩트"** 였고, 둘 다 *추정하지 않고 원인을 실측해* 판별했다(전자는 실패 메시지 전문 확인, 후자는 의존 설치 후 재판정). 만약 첫 결과를 그대로 "회귀 발생"으로 보고했다면 존재하지 않는 결함을 8시간 추적했을 것이다.
 
 ---
 
