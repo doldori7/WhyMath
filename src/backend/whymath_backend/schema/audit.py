@@ -5,7 +5,7 @@ slice 57이 `deletion_audit`에 적재하는 행의 *읽기* 표현. `GET /v1/me
 ORM(`db/models/audit.py`)과 별도로 세운 검증·API 레이어이며 `to_schema`/`from_schema`가 잇는다
 (activity.py·user.py 동일 패턴).
 
-SEC-09의 `PrivacyAudit`은 개인정보 감사 3종(반출·동의변경·관리자접근)의 읽기 표현 —
+SEC-09의 `PrivacyAudit`은 개인정보 감사 4종(반출·동의변경·관리자접근·역할변경)의 읽기 표현 —
 `GET /v1/me/privacy-audit`가 본인 스코핑으로 반환한다. 동일 패턴(메타만·`to_schema`/
 `from_schema`).
 """
@@ -58,11 +58,13 @@ class DeletionAudit(BaseModel):
 
 
 class PrivacyAudit(BaseModel):
-    """SEC-09 개인정보 감사(반출·동의변경·관리자접근) 1행(읽기) — append-only 기록의 단일 표현.
+    """SEC-09 개인정보 감사 4종(반출·동의변경·관리자접근·역할변경) 1행(읽기) — append-only 표현.
 
     본문·PII 값·평문 IP는 어떤 필드에도 담지 않는다(`docs/architecture/account_security_gap_
     review.md` D3·CLAUDE.md 미성년 PII 보호). `target_user_id`는 행위자(`user_id`)와 다른
-    사용자의 데이터가 대상일 때만(관리자접근) 채워지고, 본인 행위(반출·동의변경)는 NULL이다.
+    사용자의 데이터가 대상일 때만(관리자접근) 채워지고, 본인 계정의 사건(반출·동의변경·역할변경)은
+    NULL이다 — 역할변경은 운영자가 셸에서 돌리는 CLI라 인증된 행위자 신원이 없어 `admin_access`와
+    달리 대상 계정 본인의 사건으로 적재된다(`privacy/audit.py::record_role_change_audit` 참조).
     """
 
     model_config = ConfigDict(
