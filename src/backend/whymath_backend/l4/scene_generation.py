@@ -20,15 +20,26 @@
     Concept에서 제거돼(컬럼 부재) 애초에 프로브 근거가 될 수 없다(낙인·즉답 구조적 차단).
 
 범위(S3): 골격 + spec 충전 + 게이트 통과 명세 반환. `concept_id`는 `Concept.code`(개념그래프 UC).
-개념그래프 *존재* 검증(DB)·다중 시각화·step_panel(SolutionPath Python 구현 후속)·L5 렌더러는 S4+.
+개념그래프 *존재* 검증(DB)·다중 시각화·L5 렌더러는 S4+.
+
+step_panel 결선(S4-09·D1 reader ②): SolutionPath가 실체화되어(`l3/solution_path.py`·
+`solution_paths` 테이블·WH-S 승격 어댑터) `StepPanelElement.solution_path_id` 댕글링이
+해소됐다 — `find_step_panel_solution_path_id`(아래)가 문제의 승격 경로 id를 조회한다(L4→L3
+다운콜). 단, 장면 골격에 step_panel을 **자동 삽입하지는 않는다** — 신규 학생 대면 노출 0
+(S4-09 경계·기존 표면 소생만). 장면 내 step_panel 배치는 검증 풀이 노출 정책과 함께 후속
+(`solution_module_gap_review.md` §4-⑥ "본인 풀이 후 대안 노출" 원칙).
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Literal
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
+from whymath_backend.l3.solution_path_store import find_solution_path_id
 from whymath_backend.l3.visualization import generate_visualization_spec
 from whymath_backend.l4.learning_scene import (
     LearningScene,
@@ -269,6 +280,22 @@ def _decide_layout(elements: list[SceneElement]) -> SceneLayout:
         return SceneLayout.single
     has_visual = any(isinstance(el, VisualizationElement) for el in elements)
     return SceneLayout.two_panel if has_visual else SceneLayout.vertical_stack
+
+
+async def find_step_panel_solution_path_id(
+    session: AsyncSession, problem_id: uuid.UUID
+) -> str | None:
+    """문제에 승격된 SolutionPath가 있으면 그 id — `StepPanelElement.solution_path_id` 결선.
+
+    S4-09(D1) reader ② 최소 결선(조회 헬퍼 수준): L3 store(`find_solution_path_id`)를
+    다운콜해 실재하는 경로 id를 돌려준다 — 이 id로 만든 `StepPanelElement`는 더 이상 댕글링
+    참조가 아니다. 없으면 None(step_panel을 만들 근거 없음 — 날조 금지).
+
+    경계(학생 대면 신규 노출 0): 본 헬퍼는 *조회만* 한다 — `generate_learning_scene` 골격에
+    step_panel을 자동 삽입하지 않고(코치 경로도 무변경), `StepPanelElement.reveal_policy`는
+    `"deferred"` 불변이다(답 미루기 스키마 강제). 장면 내 배치는 후속(모듈 docstring).
+    """
+    return await find_solution_path_id(session, problem_id)
 
 
 async def generate_learning_scene(
