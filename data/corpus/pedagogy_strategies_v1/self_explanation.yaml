@@ -1,0 +1,19 @@
+# 교수전략 카탈로그 — SELF_EXPLANATION(자기설명). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: SELF_EXPLANATION
+name_ko: 자기설명
+description: 풀이·예제를 학생이 자기 말로 설명하게 유도한다.
+research_basis:
+  - Chi et al. (1989) 자기설명 효과(self-explanation effect)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중, 하]
+target_k_types: [CONCEPT, PROCEDURE, PROOF]
+suitable_error_types: [과잉일반화]
+usage_notes: |
+  풀이·예제를 학생이 자기 말로 설명하게 해 이해의 구멍과 어긋난 일반화를 드러낼 때 쓴다 —
+  "항상 그런 줄 알았던" 규칙은 스스로 설명하다 적용 조건을 말해야 하는 순간 무너지므로
+  과잉일반화 교정에 유효하다.
+  기대 효과: 이해 점검(모니터링) 습관·원리 연결의 정교화 — 스스로 설명하다 막히는 지점이
+  곧 진단 신호다.
+  주의: "설명해 보라"가 평가 압박으로 느껴지지 않게 톤을 관리한다 — 맞고 틀림 판정이
+  아니라 생각을 꺼내는 도구로 쓴다.

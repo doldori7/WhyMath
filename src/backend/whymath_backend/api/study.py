@@ -47,6 +47,7 @@ from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.irt import theta_to_mastery_proxy
 from whymath_backend.l2.learner_state import get_state
@@ -56,7 +57,7 @@ from whymath_backend.l2.pedagogy_evidence import (
 )
 from whymath_backend.l4.content_supply import get_process_tally, supply
 from whymath_backend.l4.lthc import mastery_to_level
-from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
+from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals, grade_to_band
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
 
@@ -152,10 +153,16 @@ async def _build_signals(
         if bkt_mastery is not None
         else (theta_to_mastery_proxy(irt_theta) if irt_theta is not None else None)
     )
+    # `grade_band`(PED-18 — 04f §4 카탈로그 후보 필터 축)의 **생산자 배선 지점**이다. 값은
+    # `UserProfile.grade`에서 `grade_to_band` 순수 변환으로 파생한다("생산자 먼저" — 04d §2.1:
+    # 항상 None인 필드는 착시라 만들지 않는다). 프로필 미존재·grade None이면 None이 되고,
+    # 그때 필터는 조용히 건너뛴다(필수화 금지 — 신호 부재가 선택 불능을 만들지 않는다).
+    profile = await session.get(UserProfile, user_id)
     return StudentSignals(
         mastery_level=mastery_to_level(mastery) if mastery is not None else None,
         bkt_mastery=bkt_mastery,
         irt_theta=irt_theta,
+        grade_band=grade_to_band(profile.grade if profile is not None else None),
     )
 
 

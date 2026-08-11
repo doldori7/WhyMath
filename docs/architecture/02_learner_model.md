@@ -107,6 +107,7 @@ class MasteryState(BaseModel):
 
 - **`bkt_mastery`는 Phase 1부터 항상 채워진다.** `irt_*` 필드는 Phase 2 데이터 누적 후 채워지며, 그 전에는 `None`.
 - **선호 풀이 스타일**: 학생이 같은 문제를 *어떤 접근(대수적·기하적 등)으로 풀 때 정답률·체류시간이 좋은지* 누적 추적. 값은 L3 `SolutionPath.approach_type`(WhyMath 6가지 `solution_approaches` 중 하나, 03 문서 참조)을 그대로 취한다. L4 교수학 엔진이 힌트·다중 풀이 제시 순서를 정할 때 입력으로 사용 — L2가 추적한 선호 유형의 `SolutionPath`를 L4가 우선 노출한다.
+  > ⚠️ **실측 부기(2026-08-11 — 04f §정정)**: `MasteryState` 클래스도 `preferred_solution_style` 필드도 **코드에 존재하지 않는다**. 04d §2.1이 이 축을 "생산자 부재 — 항상 None인 필드는 착시라 만들지 않는다"로 이미 판정했고(`runtime_selector.py`의 `StudentSignals`가 이 원칙으로 3축을 거부), 04f §2.2·§5.3은 추정 선호 대신 **학생 명시 요청**(`requested_strategy`)을 대체 경로로 둔다. 위 서술은 *설계 스케치*이며 구현 계약이 아니다 — 소비 코드를 쓰기 전에 생산자부터 만든다.
 
 ### StudentProfile — 학생 프로필 (⚠️ L1 보유, L2는 *읽기*)
 

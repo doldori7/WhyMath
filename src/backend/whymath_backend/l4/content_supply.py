@@ -37,12 +37,14 @@ REND-01(렌더 어댑터)과 PED-02(교수법 선택·게이트)를 잇는 마�
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.config import get_settings
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l1.concept_content import get_concept_content
 from whymath_backend.l3 import pipeline
@@ -52,8 +54,13 @@ from whymath_backend.l3.render.adapter import RenderContext, RenderedUnit
 from whymath_backend.l3.render.assessment_bank import attach_assessment
 from whymath_backend.l3.render.dsl import ConceptDSL, from_concept_content
 from whymath_backend.l3.render.registry import get_adapter
+from whymath_backend.l4.pedagogy.prompt_assembler import attach_strategy_card
 from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals, decide
+from whymath_backend.l4.pedagogy.strategy_registry import get_strategy
 from whymath_backend.schema.enums import PedagogyStrategy
+from whymath_backend.schema.pedagogy_strategy import PedagogyStrategyCard
+
+logger = logging.getLogger("whymath.l4.content_supply")
 
 # 개념 주소화 캐시 네임스페이스 — 프롬프트-해시(`llm:cache:`)와 **키 축이 다르므로** 분리한다.
 DSL_CACHE_PREFIX = "dsl:concept:"
@@ -334,10 +341,31 @@ async def supply(
             tally.record(result.content_source, strategy=strategy.value, fallback_reason=reason)
         return result
 
+    # 전략 카드 계층(PED-18 — 04f §3.2): decide()가 고른(게이트 통과 후) 전략의 카탈로그 카드를
+    # system 뒤에 1블록 덧붙인다. 이 지점이 decide 산출 전략이 LLM 프롬프트와 만나는 **유일한
+    # 실측 소비 지점**이다(렌더 경로는 프롬프트가 없다). 플래그 OFF(기본)면 카탈로그 미조회·
+    # system 무변경 — 프롬프트-해시 캐시 키(`cache_key_for(prompt, system, ...)`)도 불변이라
+    # 기존 생성 경로와 비트동일(옵트인 무변경 계약).
+    system_for_generate = system
+    if get_settings().pedagogy_strategy_card_enabled:
+        card: PedagogyStrategyCard | None
+        try:
+            card = get_strategy(strategy)
+        except Exception as exc:
+            # best-effort 계층 — 카드 조회 실패(카탈로그 누락 LookupError·코퍼스 손상 등)가
+            # 생성 자체를 막으면 안 된다. 단 침묵 실패 금지 — 예외 타입명을 로그에 남긴다.
+            logger.warning(
+                "교수전략 카드 조회 실패 — 카드 없이 생성 진행 (strategy=%s, error=%s)",
+                strategy.value,
+                type(exc).__name__,
+            )
+            card = None
+        system_for_generate = attach_strategy_card(system, card)
+
     generated = await pipeline.generate(
         generate_request,
         prompt,
-        system,
+        system_for_generate,
         provider=provider,
         cache=cache,
         trace=trace,

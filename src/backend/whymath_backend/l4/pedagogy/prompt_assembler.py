@@ -32,6 +32,7 @@ from collections.abc import Sequence
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.pedagogy_strategy import PedagogyStrategyCard
 
 # 팩 발문의 자리표시자 — schema 불변식(a)가 socratic_prompt에 필수로 요구하는 토큰.
 # schema의 동명 private 상수(`_DOMAIN_EXAMPLE_PLACEHOLDER`)를 import하지 않고 로컬 재정의한다
@@ -147,8 +148,48 @@ def build_system_prompt(
     return "\n\n".join(layers)
 
 
+def render_strategy_card(card: PedagogyStrategyCard | None) -> str:
+    """전략 카드 계층(PED-18) — 선택된 교수전략의 서술 1블록. 없으면 "".
+
+    카탈로그 9필드 중 **name_ko·description·research_basis[0]만** 주입한다(04f §3.2 소비처
+    지정표 — "요약 1줄만 주입, attention 절약". usage_notes는 사람 서술 전용·기계 배선 금지라
+    여기서도 넣지 않는다). `research_basis`는 schema 불변식 (b)가 최소 1건을 보장하므로 첫
+    항목 접근이 안전하다. 학생-대면 미노출 지시를 동봉한다 — 내부 교수학 메타(전략명·연구
+    인용)가 미성년 학생 화면으로 새면 안 된다(`render_student_state` 미노출 지시 선례).
+    """
+    if card is None:
+        return ""
+    return (
+        f"[교수전략: {card.name_ko}] {card.description} "
+        f"(근거: {card.research_basis[0]}) "
+        "이 전략의 취지에 맞게 응답을 구성하라(전략명·연구 근거를 학생에게 직접 노출하지 마라)."
+    )
+
+
+def attach_strategy_card(system: str, card: PedagogyStrategyCard | None) -> str:
+    """system 프롬프트에 전략 카드 계층을 덧붙인다 — **무카드면 바이트 동일**(순수 함수).
+
+    PED-18 옵트인 무변경 계약의 단일 지점: `card is None`이면 입력 `system`을 그대로 반환한다
+    (`build_system_prompt`의 `pack is None → base_system` 선례 미러 — 테스트가 바이트 동일로
+    봉인). 카드가 있으면 `\\n\\n`로 이어 붙이고, system이 비면 카드 블록만 반환한다(선행 빈
+    구분자 잔류 방지). 플래그 판정·카탈로그 조회는 호출자(`content_supply.supply`) 몫이다.
+
+    `build_system_prompt`(팩 4계층)와 **직교**하게 합성 함수로 분리했다 — 실측된 소비 지점이
+    생성 폴백의 system(`content_supply`)이고, 팩 조립기는 코치 경로(`PolyaCoach.decide`)라
+    호출 계통이 다르기 때문이다.
+    """
+    block = render_strategy_card(card)
+    if not block:
+        return system
+    if not system:
+        return block
+    return f"{system}\n\n{block}"
+
+
 __all__ = [
+    "attach_strategy_card",
     "build_system_prompt",
     "render_misconceptions",
+    "render_strategy_card",
     "render_student_state",
 ]

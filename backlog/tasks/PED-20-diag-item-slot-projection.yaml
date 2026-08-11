@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-20-diag-item-slot-projection
+title: "형성평가 diag_item 슬롯 채움 — atom_probe 투영 (외부 기능 ⑰ 잔여)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화 — l3/pedagogy/diag_item_projector.py. 좌석은 기존 pedagogy_content_slot.slot_type='diag_item'(자유 문자열) — 테이블·스키마 신설 0"
+  - "② 집행 지점 — 원천은 atom_probe 전량(원자별 발문·통과기준·오답신호 기보유). *생성이 아니라 투영*이다(검증된 자산 재사용·문항 신규 저작 0). 다리는 learning_objective.concept_nodes ∩ atom_probe.code 직접 교집합 — concept_atom_crosswalk 경유 금지(존재하지 않는 다리를 새로 놓지 않는다)"
+  - "③ select-vs-generate — 이미 검수 결정이 난 슬롯(PRESCREENED/APPROVED/REJECTED)은 손대지 않는다. DRAFT인 자리만 실제 atom_probe 콘텐츠로 교체"
+  - "④ 보고 — 채움 건수·prescreen 통과율. 표본 0은 None(0% 위장 금지)"
+  - "범위 밖 명시 — 질문 7유형 별도 축 신설 금지(소크라테스 6카테고리+오개념 개입 축이 상위 호환·04f §8-⑧). 예측 질문(elicit_prediction)은 04a §11.3 소관이라 중복 등재 금지"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/pedagogy/diag_item_projector.py
+session: null
+notes: "04f §7.2 정본. 미머지 PR #675 회수 범위(브랜치 PED-10). grain 다리 실측 정정 포함 — concept_nodes는 H2 계약상 원자 백본 code 배열 그 자체."
+updated: 2026-08-11

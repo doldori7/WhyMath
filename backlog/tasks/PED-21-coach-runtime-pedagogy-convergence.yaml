@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-21-coach-runtime-pedagogy-convergence
+title: "coach 경로 실행용 교수법 축 수렴 — 신호 조립 공용 추출 + decide() 소비"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PED-18-pedagogy-strategy-catalog
+requires_gates: []
+acceptance:
+  - "① 정본화 — l4/pedagogy/signal_assembly.py로 study의 StudentSignals 조립을 공용 좌석으로 추출(대형 coach 파일 직수정 회피를 위해 추출 슬라이스를 선행)"
+  - "② 집행 지점 — coach 턴이 decide()를 실제로 호출하고 record_pedagogy_treatment로 처치를 기록한다. 현재 실행용 축(StudentSignals→decide→처치 기록)은 /study 경로에만 있고 coach는 설계용(팩) 축만 경유 — 그 비대칭이 이 태스크의 대상"
+  - "③ 표본 축적 — 처치 기록이 실제로 쌓여 adaptive/effectiveness.py 집계가 None을 벗어나는지 관측. 벗어나지 않으면 배선 미완으로 판정"
+  - "범위 밖 명시 — mode_guard 코치 경로 배선은 PED-16이 by-design 미배선으로 판정 완료. 이 태스크는 그 판정을 뒤집지 않는다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/pedagogy/signal_assembly.py
+session: null
+notes: "04f §9 정본. 미머지 PR #675 회수 범위(브랜치 PED-08 — 그 브랜치에서는 objective_id 해석 갭으로 blocked였다)."
+updated: 2026-08-11

@@ -1,0 +1,17 @@
+# 교수전략 카탈로그 — INTERLEAVING(교차연습). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: INTERLEAVING
+name_ko: 교차연습
+description: 겉보기에 비슷한 유형을 섞어 제시해 유형 변별력을 기른다.
+research_basis:
+  - Rohrer & Taylor (2007) 교차연습(interleaved practice) 효과
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중, 하]
+target_k_types: [PROCEDURE]
+suitable_error_types: [개념혼동]
+usage_notes: |
+  겉보기에 비슷한 유형들을 섞어 제시해 "어떤 방법을 언제 쓰는가"의 변별력을 기를 때
+  쓴다 — 비슷한 유형끼리 헷갈려 엉뚱한 방법을 고르는 혼동의 교정에 유효하다.
+  기대 효과: 유형 변별력·방법 선택의 정확도 향상(블록 연습 대비 지연 시험에서 우수).
+  주의: 한 유형의 절차 자체가 아직 서지 않았다면 먼저 그 유형을 안정화한 뒤 섞는다.
+  섞기 자체가 목적이 아니라 혼동되는 유형 쌍의 변별이 목적이다.

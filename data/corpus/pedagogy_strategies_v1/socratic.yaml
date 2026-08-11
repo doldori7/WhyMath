@@ -1,0 +1,20 @@
+# 교수전략 카탈로그 — SOCRATIC(소크라테스 문답). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: SOCRATIC
+name_ko: 소크라테스 문답
+description: 답을 주지 않고 질문을 이어가 학생이 스스로 답에 도달하게 한다.
+research_basis:
+  - Polya (1945) 발견술적 문답(How to Solve It)
+  - Collins & Stevens (1982) 탐구 교수의 문답 전략
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중, 하]
+target_k_types: [CONCEPT, PROOF, MODELING]
+suitable_error_types: [개념혼동, 과잉일반화]
+usage_notes: |
+  학생이 스스로 경계·반례를 세워 개념을 구성할 여지가 있을 때 기본값으로 쓴다 — 어긋난
+  일반화·개념 혼동은 학생이 자기 규칙을 말로 세우다 스스로 모순을 발견할 때 가장 깊게
+  교정된다.
+  기대 효과: 자기 구성한 이해의 견고성·메타인지 습관 형성.
+  주의: 학생이 심하게 막혀 좌절 신호가 클 때 질문만 반복하면 정서를 해친다 — 힌트 단계
+  상승(답 미루기 4단계)과 결합해 운용한다. 이 서술은 사람 참고용이며 기계 판정은
+  select()/gate()가 담당한다.

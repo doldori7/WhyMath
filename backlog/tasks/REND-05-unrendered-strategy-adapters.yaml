@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REND-05-unrendered-strategy-adapters
+title: "미구현 렌더 어댑터 5종 — 인지과학 전략 4종+시각화가 학생 도달 0"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화 — RETRIEVAL(인출연습)·SPACING(분산복습)·INTERLEAVING(교차연습)·SELF_EXPLANATION(자기설명)·VISUALIZATION(시각화) 어댑터의 렌더 계약 정의. 어댑터는 개념 무관 1:1(전략 1개=어댑터 1개·개념별 복제 금지)"
+  - "② 집행 지점 — l3/render/registry.py의 _ADAPTERS 표에 등록되어야 selectable_strategies()가 넓어진다. 현재 selectable_strategies()가 registered_strategies()에 묶여 있어 이 5종은 select()가 *영원히 고를 수 없다* — 등록 없이 어댑터 클래스만 만들면 도달 0 그대로"
+  - "③ 규칙표 동반 확장 — 어댑터를 등록하면 runtime_selector.select() 규칙표에 그 전략을 고르는 조건이 함께 들어가야 한다. 등록만 하고 규칙표를 안 늘리면 여전히 도달 0(거버넌스 테스트가 select() 출력 ⊆ 등록분을 동결할 뿐, 등록분 전량이 선택된다고 보장하지 않는다)"
+  - "④ 공급원 확인 선행 — 각 어댑터의 can_render가 요구하는 자산이 실재하는지 먼저 실측한다(ProblemBasedAdapter가 assessment 부재로 항상 False였던 404 체인의 재발 방지). 자산 없는 어댑터는 등록하지 않고 공백으로 남긴다"
+  - "⑤ 작동한 비율 — SupplyTally.strategy_render_rate로 신규 전략의 실제 렌더 성공 비율을 관측. 0%면 배선 미완으로 판정"
+  - "범위 밖 명시 — SPACING·INTERLEAVING은 단일 응답이 아니라 세션 간 스케줄 성질이라, 어댑터 렌더와 스케줄러는 별개 축이다. 이 태스크는 렌더 좌석까지"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/render/adapters.py
+  - src/backend/whymath_backend/l3/render/registry.py
+  - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
+session: null
+notes: "04f §10 정본. Kiki 결정(2026-08-11) — 미머지 브랜치 04e §10의 'REND-01 후속 실수요 시' 판정을 승계하지 않고 진짜 갭으로 재판정. 근거: 인지과학 근거가 가장 강한 4종(인출·분산·교차·자기설명)이 enum에만 있고 학생 도달 경로가 구조적으로 0 — 의사결정 우선순위 4번 '장기 숙달 > 단기 점수' 직결."
+updated: 2026-08-11

@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-18-pedagogy-strategy-catalog
+title: "교수전략 카탈로그 자산 + select() 후보 필터 소비 배선 (외부 4기능 ⑭⑮ 흡수)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화 — data/corpus/pedagogy_strategies_v1/ 10종 YAML + schema/pedagogy_strategy.py(PedagogyStrategyCard·폐쇄어휘 3종·extra=forbid) + l4/pedagogy/strategy_registry.py. enum PedagogyStrategy 10종 ↔ YAML 10건 1:1을 거버넌스 테스트가 동결하고, 제거 필드 3계열(추천점수·기계 금지조건·선행후속 페이딩)의 *부재*도 동결한다"
+  - "② 집행 지점 — 카탈로그를 실제로 읽는 서빙 코드 경로를 명시: runtime_selector.narrow_candidates()가 select() 앞에서 후보를 좁히고, content_supply.supply()가 그 경로를 경유한다. 레지스트리 importer가 테스트·CLI뿐이면 미충족(PED-06 선례 — 정본화를 집행으로 착각 금지)"
+  - "③ 불변식 3종 동결 — (a)필터는 좁힘만·공집합이면 규칙표 원판정 폴백+reason_code (b)카탈로그는 select() 전용이고 gate() 입력 금지(YAML 편집만으로 '효과 ≤ 허용' 우회 불가·부재를 테스트로 동결) (c)select() 출력 ⊆ registered_strategies()"
+  - "④ 작동한 비율 — 필터가 실제로 좁힌 비율·공집합 폴백 건수가 reason_code로 관측 가능. 정상 응답 200을 작동 증거로 삼지 않는다"
+  - "⑤ 설계 정본 docs/architecture/04f_pedagogy_strategy_catalog.md 착지 (미머지 PR #675의 04e 회수 + main 현행 기준 재판정)"
+  - "범위 밖 명시 — 비유·예시 생성기·형성평가 슬롯 투영·coach 실행용 축·미구현 어댑터 5종은 별도 태스크"
+artifacts: []
+paths:
+  - "data/corpus/pedagogy_strategies_v1/**"
+  - src/backend/whymath_backend/schema/pedagogy_strategy.py
+  - src/backend/whymath_backend/l4/pedagogy/strategy_registry.py
+  - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
+  - src/backend/whymath_backend/l4/pedagogy/prompt_assembler.py
+  - docs/architecture/04f_pedagogy_strategy_catalog.md
+session: null
+notes: "04f §3·§4 정본. 미머지 브랜치 claude/whymath-pedagogy-review-uqyg79(PR #675) 회수 — 3차 중복 착수 회피. mode_guard 축은 PED-16 by-design 판정 승계(브랜치 설계 불채택)."
+updated: 2026-08-11

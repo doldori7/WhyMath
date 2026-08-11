@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-19-analogy-example-generation
+title: "비유·예시 생성 파이프라인 + 결함주입 강등전 (외부 기능 ⑯)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PED-18-pedagogy-strategy-catalog
+requires_gates: []
+acceptance:
+  - "① 정본화 — l3/pedagogy/{analogy_demand,analogy_generator,example_generator,analogy_checker}.py. L4가 '이 개념·이 슬롯이 필요'를 결정하고 L3가 라우터 경유로 생성한다(직접 LLM 호출 금지·계층 방향 준수)"
+  - "② 집행 지점 — 개념 비유 산출은 반드시 concept_content.metaphor 좌석으로 착지한다. 슬롯에만 넣으면 AnalogyAdapter(metaphor→intuition 경로)가 영원히 읽지 않는다 = 배선 없는 생성. 목표별 예시는 pedagogy_content_slot(DRAFT→prescreen→review 상태기계 재사용)"
+  - "③ 검증 게이트 — harness/analogy_fidelity_eval CLI 결함주입 강등전(exit 0/1·pedagogy_pack_fidelity_eval 선례). 주입 결함 4축: (a)오개념 유발 비유 (b)정의 참칭 비유 (c)정답 유출 (d)게임형 산출. 검출률로 변별력 측정"
+  - "④ 상한 불변식 — 개념당 비유 1(+레지스터 변형 소수). 개념 846 × 레지스터 × 오개념 사전 대량 생성 금지, 공백·검수 탈락분만 발주(select-vs-generate). 오개념 교정 비유 신설 금지(반례 자산이 담당·reactive-only)"
+  - "⑤ 정직한 진단 유지 — '비유 0'이 아니라 '자산 100% 충전·검수 0·생성 경로 0'이 실측이다(K-12 437행 전건 metaphor 보유). 리포트는 표본 0을 None으로 표기(0% 위장 금지)"
+  - "범위 밖 명시 — 학년별 독립 생성기 신설 금지(정의 레지스터 파라미터로 흡수)·스토리텔링 독립 유형 신설 금지(실생활 예시의 서술 형식)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/pedagogy/**"
+  - src/backend/whymath_backend/harness/analogy_fidelity_eval.py
+session: null
+notes: "04f §6 정본. 미머지 PR #675 회수 범위(브랜치 PED-09). AnalogyAdapter의 'reflection: 비유는 정의를 대신하지 않는다' 세그먼트가 생성측 게이트와 이중 방어."
+updated: 2026-08-11

@@ -1,0 +1,17 @@
+# 교수전략 카탈로그 — SPACING(분산복습). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: SPACING
+name_ko: 분산복습
+description: 시간 간격을 두고 같은 내용을 재노출해 장기 파지를 굳힌다.
+research_basis:
+  - Cepeda et al. (2006) 분산 효과(spacing effect) 개관
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [중, 하]
+target_k_types: [CONCEPT, PROCEDURE]
+suitable_error_types: []
+usage_notes: |
+  한 번 배운 내용을 시간 간격을 두고 재노출해 장기 파지를 굳힐 때 쓴다 — 몰아서 반복하는
+  집중 연습보다 간격을 둔 재노출이 오래 남는다(분산 효과).
+  기대 효과: 벼락치기 대비 장기 기억 유지율 개선·망각 곡선 완화.
+  주의: 특정 오류 유형의 교정 수단이 아니라 파지 스케줄링 축이다 — suitable_error_types를
+  비워둔 것은 정직한 공백이다. 재노출 시점에는 인출연습과 결합하면 효과가 커진다.

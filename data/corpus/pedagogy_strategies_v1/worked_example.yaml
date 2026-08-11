@@ -1,0 +1,20 @@
+# 교수전략 카탈로그 — WORKED_EXAMPLE(완전예제). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: WORKED_EXAMPLE
+name_ko: 완전예제
+description: 풀이 과정을 처음부터 끝까지 보여준 뒤, 완성형 문제를 거쳐 점차 도움을 걷어낸다.
+research_basis:
+  - Sweller & Cooper (1985) 완전예제 효과(worked example effect)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중]
+target_k_types: [PROCEDURE]
+suitable_error_types: [절차오류]
+usage_notes: |
+  절차의 전체 흐름을 처음 익히는 국면(초기 교수)에서 인지부하를 낮추기 위해 쓴다 — 절차가
+  어디서 어긋나는지 단계 구조로 보여줘 절차오류 교정에 유효하다. 이후 완성형 문제→독립
+  풀이로 도움을 점차 걷어낸다(페이딩의 정본은 교수법 팩의 fading_schedule — 여기 서술은
+  참고용).
+  기대 효과: 절차 흐름의 저부하 습득·풀이 단계 구조의 내면화.
+  금지: 학생이 시도하기 전 제공 금지 — "막혔을 때 바로 정답 제공 금지"(절대 금기)와
+  충돌한다. 이 금지는 04d §2.2 완전예제 2축 게이트가 기계 강제하며, 여기 서술은 사람
+  참고용이다.

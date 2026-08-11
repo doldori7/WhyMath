@@ -138,6 +138,7 @@ class SolutionPath(BaseModel):
 - **`steps`**: 각 단계의 내용 + 막힌 학생용 힌트 + 흔한 오류 + SymPy/Lean 검증 표시. 힌트는 L4 교수학 엔진의 graded `Hint`로 전달되고, 흔한 오류는 L2 오개념 매핑·L1 misconceptions 카탈로그와 연결된다.
 - **`embedding`**: 풀이 임베딩 벡터. 유사 풀이 검색(벡터 DB)·풀이 군집화에 사용. 임베딩 모델은 CLAUDE.md 기술 스택 표의 OpenAI text-embedding-3-large.
 - **L2 연결**: L2 `MasteryState.preferred_solution_style`(02 문서 참조)은 이 `SolutionPath.approach_type`을 값으로 갖는다. L2가 "이 학생은 기하적 `SolutionPath`에서 정답률·체류시간이 좋다"를 추적하면, L4가 힌트·다중 풀이 제시 순서를 정할 때 그 유형의 `SolutionPath`를 우선 노출한다.
+  > ⚠️ **실측 부기(2026-08-11 — 04f §정정)**: `MasteryState`·`preferred_solution_style`은 **코드에 없다**(04d §2.1 "생산자 부재" 판정). 이 연결은 설계 스케치이며, 현행 교수법 선택의 실제 입력은 `StudentSignals`(숙달 3축·오개념 가설·시도/힌트 이력·학년 밴드)다 — 04f §4 참조.
 
 ### ReasoningStep — 추론 유형·정당화의 얇은 도입 (교육 추론 엔진 §2.2)
 

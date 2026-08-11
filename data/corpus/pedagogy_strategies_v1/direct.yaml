@@ -1,0 +1,17 @@
+# 교수전략 카탈로그 — DIRECT(직접교수). 정본: docs/architecture/04f_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: DIRECT
+name_ko: 직접교수
+description: 정의·원리를 명시적 설명으로 먼저 제시하고, 짧은 확인 질문으로 이해를 점검한다.
+research_basis:
+  - Rosenshine (2012) 직접교수 원리(Principles of Instruction)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중, 하]
+target_k_types: [CONCEPT, PROCEDURE]
+suitable_error_types: [정의·표기오류]
+usage_notes: |
+  정의·표기가 처음부터 흔들리는 학생에게 짧고 명확한 제시로 기준점을 세울 때 쓴다.
+  기대 효과: 정의·원리의 정확한 초기 형성과 표기 관행의 정착.
+  주의: 설명 일변도로 길게 끌면 학생이 수동화된다 — 작은 단계로 제시하고 확인 질문으로
+  되돌린다(Rosenshine의 제시-점검 순환). 학생이 스스로 구성할 수 있는 국면에서는 소크라테스
+  문답에 양보한다.
