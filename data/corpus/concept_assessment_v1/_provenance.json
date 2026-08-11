@@ -1,6 +1,6 @@
 {
   "pool": "whymath-original",
-  "source_citation": "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED)의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다.",
+  "source_citation": "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED·review_status=approved)의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다.",
   "license_notice": "WHYMATH_ORIGINAL — 원천 문항이 전량 자체 저작이므로 상속 재료도 자체 저작이다. 검정교과서·평가원·EBS 본문은 원천 코퍼스에 애초에 없다(저작권 위생 필터가 source_type/license를 이중 확인한다).",
   "generated_by": "whymath_backend.harness.concept_assessment_index",
   "concept_source": "data/corpus/concept_content_v1/content.json"
