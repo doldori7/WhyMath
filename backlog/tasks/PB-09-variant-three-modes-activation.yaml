@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-09-variant-three-modes-activation
+title: "변형 3종 발화 — 조건변형·난이도 계열변형·역문제(1차 §5-④ 유보의 발화 조건 D4+D8 모두 충족·6일 방치)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 발화 논증 선행 — problem_bank_gap_review.md §5-④의 발화 조건 두 개가 모두 성립함을 문서에 명시한다: D4(ARCH-18 done·재고 부족 실측 = 난이도 사다리 부재·유형 9종 0커버)와 D8(S4-14·S4-18 done·계보 실적재 1,024건·소비처 api/me.py:1807 CAT 형제 필터). 판정 잠금이던 사람 게이트 G-s4-14-variant-identity는 S4-21(2026-07-29 Kiki 결정)이 선행 해소해 철회됐다(events.ndjson:2111·gates.yaml 부재). S3-27의 유보 해제 논증 선례 동형."
+  - "② 계보 필수 — 3종 전부 problem_relation + generation_type=VARIANT_* 로 낳는다. 계보 없는 변형 확대는 금지(§5-④ 조건 그대로·G18 재생산 방지). GenerationType.VARIANT_NUMBER/VARIANT_STRUCTURE/VARIANT_CONTEXT 3종 enum 좌석은 현재 실사용 0건(코퍼스 전량 FULLY_GENERATED)이며 이를 실사용으로 전환한다 — 신규 필드 0."
+  - "③ 난이도 계열변형 우선 — R2 §0-③이 실측한 '한 단원을 인지~숙달로 관통하는 계열이 없다'를 직접 겨냥한다. 기존 스켈레톤 생성기의 파라미터 공간을 밴드 상하로 계열화하고 같은 뿌리 문항을 problem_relation(relation_type=심화/기초)으로 잇는다. 신규 생성기 신설이 아니라 기존 생성기의 계열 축 추가(anti-explosion·붕괴 연쇄 ①② 방어). 교수학 근거: Polya의 '더 쉬운 관련 문제를 먼저'가 재고로 존재해야 성립한다."
+  - "④ 조건변형은 verify 검산 계약이 유지되는 범위에서만 — SymPy 조건식이 변형 후에도 성립해야 한다. 검증 불가 변형은 만들지 않는다(검증 권위 서열 ①기계 증명). 성립하지 않는 영역은 정직하게 범위 밖으로 적는다."
+  - "⑤ 역문제는 v1에서 좁게 — '답→문제' 전면 생성이 아니라, 스켈레톤이 이미 근을 먼저 고르고 방정식을 역산하는 구조(skeleton_generator.py 원형)를 명시적 역문제 좌석으로 승격하는 데 그친다. 새 추상 도입 0 — 1차 §2-⑥(독립 Problem Template DSL 미채택)과 정합."
+  - "⑥ 작동한 비율 보고 — 3종 전부 기존 수용 게이트 5종·canonical signature dedup·임베딩 dedup을 그대로 통과해야 하며, 변형이 실제로 작동한 비율(생성 시도 대비 게이트 통과)을 리포트에 남긴다. 정상 응답 200은 알고리즘이 일했다는 증거가 아니다(CLAUDE.md '작동한 비율' 원칙)."
+  - "⑦ 스코프 밖 — 학생 UX·변형 노출 정책(형제 문항을 언제 보여줄지는 L6/CAT 축)·역문제 채점 루브릭·다중 풀이(S4-09/S4-10 승계)."
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/equivalent/**"
+  - src/backend/whymath_backend/harness/problem_corpus_batch.py
+  - "tests/backend/l3/**"
+  - "data/corpus/**"
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G5·§5-④. 현행 6종 실측: 숫자변형 부분(독립 생성이라 계보 없음)·문맥변형 충족(rephrase 429)·오답유도형 충족(misconception_mc 1,080)·조건변형/난이도계열/역문제 부재. WhyMath 방향 정렬 — 틀은 변형을 '대량 확장'으로 규정하나 제품 정체성이 '문제은행이 아니라 사고 추적기'(플레이북 Part 0)이므로 변형의 목적은 같은 사고를 다른 각도에서 보게 하는 것이고 그 각도 차이가 기록으로 남아야 한다."
+updated: 2026-08-11

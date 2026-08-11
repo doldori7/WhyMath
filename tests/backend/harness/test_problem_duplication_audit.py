@@ -836,12 +836,14 @@ def test_cli_qual03_section_present_and_graceful_without_target_corpus(
 # ──────────────────────────────────────────────────────────────────────────
 # 실제 코퍼스 스냅샷 — QUAL-01 실측 회귀 고정 (2026-08-10)
 # ──────────────────────────────────────────────────────────────────────────
-def test_real_corpus_snapshot_t1_resolved_and_t2_nine_pairs() -> None:
-    """실제 `data/corpus/` 전수 스캔 — 이번 QUAL-01 실측 결론을 코드로 동결한다.
+def test_real_corpus_snapshot_t1_resolved_and_t2_zero_pairs_after_qual02() -> None:
+    """실제 `data/corpus/` 전수 스캔 — QUAL-01 실측(9쌍) → QUAL-02 은퇴 반영 후 상태를 동결한다.
 
-    T1: 원 설계 문서(미병합 브랜치, 2026-08-03)의 392건이 이 재측정에서 0건(해소됨·원인 미조사).
-    T2: 원 문서가 지목한 1쌍(`wm-quad-eq-larger-root`/`wm-skel-92cd1ba2bbf5`, 여전히 재현)뿐
-    아니라, 단답형/객관식 스켈레톤 트윈 + 재서술 무변화가 교차 매칭된 8쌍을 새로 발견 — 총 9쌍.
+    T1: 원 설계 문서(미병합 브랜치, 2026-08-03)의 392건이 QUAL-01 재측정에서 0건(해소됨·원인 미조사).
+    T2: QUAL-01이 확정한 실중복 9쌍(원 문서 지목 1쌍 `wm-quad-eq-larger-root`/`wm-skel-92cd1ba2bbf5`
+    + 스켈레톤 트윈×재서술 무변화 교차 8쌍)을 QUAL-02(2026-08-11)가 쌍별 개별 판정해 9레코드를
+    은퇴(rephrased_v0 8건 + generated_v0 1건 제거, 2647→2638) — 반영 후 확정 실중복 0쌍·데모 풀
+    동시노출 0쌍이 이 코퍼스의 현행 상태다(판정 기록: docs/data/problem_duplicate_disposition_2026-08.md).
     코퍼스 내용이 바뀌면(의도된 콘텐츠 작업) 이 테스트가 깨진다 — 그때는 값을 재실측해 갱신한다.
     """
     loads, problems = pda._resolve_loads(pda.DEFAULT_CORPUS_ROOT, None)
@@ -851,48 +853,44 @@ def test_real_corpus_snapshot_t1_resolved_and_t2_nine_pairs() -> None:
     demo_pool = pda.demo_pool_corpora()
     report = pda.build_report(loads, demo_pool=demo_pool, demo_pool_status="파일확인됨")
 
-    assert report.total_problems == 2647
+    assert report.total_problems == 2638
     assert len(report.corpora) == 7
 
     # T1 — 해소됨.
     assert len(report.slug_collisions) == 0
     assert report.corpus_pairs_scanned == 21  # C(7,2)
 
-    # T2 — 9쌍(형식 동일 1 · 형식 상이 8).
-    assert report.duplicate_pair_count == 9
-    assert len(report.duplicate_pairs_same_format) == 1
-    assert len(report.duplicate_pairs_diff_format) == 8
+    # T2 — QUAL-02 은퇴 반영 후 확정 실중복 0쌍(데모 풀 동시노출도 0).
+    assert report.duplicate_pair_count == 0
+    assert len(report.duplicate_pairs_same_format) == 0
+    assert len(report.duplicate_pairs_diff_format) == 0
 
-    known_pairs = {(p.corpus_a, p.slug_a, p.corpus_b, p.slug_b) for p in report.duplicate_pairs}
-    assert (
-        "problem_bank_generated_v0",
-        "wm-skel-92cd1ba2bbf5",
-        "problem_bank_v1",
-        "wm-quad-eq-larger-root",
-    ) in known_pairs
-
-    # 원 문서가 확인을 요구한 데모 풀 동시노출 사실(acceptance ① 재확인).
-    same_format_pair = report.duplicate_pairs_same_format[0]
-    assert same_format_pair.slug_a == "wm-skel-92cd1ba2bbf5"
-    assert same_format_pair.demo_pool_co_exposed is True
-
-    # 형식 상이 8쌍은 전부 generated_v0 ↔ rephrased_v0 조합이고, 데모 풀에는 동시 노출되지
-    # 않는다(rephrased_v0는 scripts/demo/seed_demo.py의 _CORPORA에 없음).
-    for pair in report.duplicate_pairs_diff_format:
-        assert {pair.corpus_a, pair.corpus_b} == {
-            "problem_bank_generated_v0",
-            "problem_bank_rephrased_v0",
-        }
-        assert pair.demo_pool_co_exposed is False
+    # 은퇴한 9레코드가 실제로 코퍼스에서 사라졌는지 슬러그 단위로 재확인(재유입 가드).
+    all_slugs = {record.slug for load in loads for record in load.records}
+    retired = {
+        "wm-skel-92cd1ba2bbf5",  # 쌍9 은퇴 측(유지 측 wm-quad-eq-larger-root는 잔존해야 함)
+        "wm-calc-extmc-bd21cd8484d2-rephrased",
+        "wm-calc-extv-bd21cd8484d2-rephrased",
+        "wm-calc-extmc-cf788e51e0fd-rephrased",
+        "wm-calc-extv-cf788e51e0fd-rephrased",
+        "wm-calc-extmc-5c4a86d7a72a-rephrased",
+        "wm-calc-extv-5c4a86d7a72a-rephrased",
+        "wm-calc-extmc-cd86d461d1b1-rephrased",
+        "wm-calc-extv-cd86d461d1b1-rephrased",
+    }
+    assert all_slugs & retired == set()
+    assert "wm-quad-eq-larger-root" in all_slugs  # 쌍9 유지 판정 측(배선 4곳 실참조)은 보존
 
 
 def test_real_corpus_snapshot_rephrase_noop_direct_measurement() -> None:
-    """실제 `data/corpus/` 전수 스캔 — QUAL-03 직접 측정 실측(2026-08-10)을 회귀 고정한다.
+    """실제 `data/corpus/` 전수 스캔 — QUAL-03 직접 측정(2026-08-10) + QUAL-02 은퇴 반영을 고정한다.
 
-    rephrased_v0 429건 전량을 relations[0].parent_slug로 직접 대조한 결과: 무변화 282 ·
-    정상변화 147 · 부모미선언 0 · 고아참조 0. QUAL-01의 간접 하한(lineage_excluded_pair_count)과
-    **정확히 일치**한다 — 이 코퍼스 상태에서는 간접 하한이 타이트했다는 뜻(우연 아님, 모든
-    관계가 1:1이고 부모가 항상 다른 코퍼스(generated_v0)에 있기 때문 — render_report §7 참고).
+    QUAL-03 실측(429건): 무변화 282 · 정상변화 147 · 부모미선언 0 · 고아참조 0. QUAL-02(2026-08-11)가
+    그중 실중복 확정 무변화 사본 8건을 은퇴 제거해 현행은 421건: 무변화 274 · 정상변화 147(불변) ·
+    부모미선언 0 · 고아참조 0(은퇴 8건은 피참조 0이라 고아를 만들지 않음 — 제거 전 전수 grep 확인).
+    QUAL-01의 간접 하한(lineage_excluded_pair_count)과 **정확히 일치**하는 성질은 은퇴 후에도
+    유지된다(무변화 274 == 계보 제외 274 — 모든 관계가 1:1이고 부모가 항상 다른 코퍼스
+    (generated_v0)에 있기 때문 — render_report §7 참고).
     코퍼스 내용이 바뀌면(의도된 콘텐츠 작업) 이 테스트가 깨진다 — 그때는 값을 재실측해 갱신한다.
     """
     loads, problems = pda._resolve_loads(pda.DEFAULT_CORPUS_ROOT, None)
@@ -903,18 +901,18 @@ def test_real_corpus_snapshot_rephrase_noop_direct_measurement() -> None:
     noop = report.rephrase_noop
 
     assert noop.target_corpus == "problem_bank_rephrased_v0"
-    assert noop.total == 429
-    assert noop.unchanged_count == 282
+    assert noop.total == 421
+    assert noop.unchanged_count == 274
     assert noop.changed_count == 147
     assert noop.no_parent_declared_count == 0
     assert noop.orphan_parent_count == 0
-    assert noop.measurable_count == 429
-    assert noop.unchanged_rate == pytest.approx(282 / 429)
+    assert noop.measurable_count == 421
+    assert noop.unchanged_rate == pytest.approx(274 / 421)
 
     # QUAL-01 간접 하한과의 교차검증 — 이 코퍼스 상태에서는 정확히 일치(정직 회계 비교 대상).
-    assert report.lineage_excluded_pair_count == noop.unchanged_count == 282
+    assert report.lineage_excluded_pair_count == noop.unchanged_count == 274
 
-    # 429건 전부 부모가 problem_bank_generated_v0에 있다(실측 — 다른 코퍼스로의 rephrase는 없음).
+    # 421건 전부 부모가 problem_bank_generated_v0에 있다(실측 — 다른 코퍼스로의 rephrase는 없음).
     parent_corpora = {r.parent_corpus for r in noop.records}
     assert parent_corpora == {"problem_bank_generated_v0"}
 

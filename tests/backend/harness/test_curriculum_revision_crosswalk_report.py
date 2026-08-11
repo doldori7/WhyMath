@@ -681,7 +681,8 @@ def test_real_repo_corpus_confirms_three_vocabulary_coexistence() -> None:
     조사로 확인된 현재 사실(2026-08-03 실측):
       - standards_v1: 895건 중 "2022 개정" 435건·"2015 개정" 460건(2어휘 중 하나).
       - units_v1: 파일 1개(`quadratic_maxmin.unit.yaml`), `curriculum_rev="2022"`(연도만 표기).
-      - problem_bank*: 전량(2647건) `curriculum_version="2022_REVISION"`(enum 값 표기).
+      - problem_bank*: 전량(2638건 — 2026-08-03 실측 2647건에서 QUAL-02 실중복 은퇴 9건 반영)
+        `curriculum_version="2022_REVISION"`(enum 값 표기).
       - curriculum_entry: 대응 코퍼스 없음(관측 불가).
     """
     standards_load = ccr.load_standards_axis(ccr.DEFAULT_STANDARDS_PATH)

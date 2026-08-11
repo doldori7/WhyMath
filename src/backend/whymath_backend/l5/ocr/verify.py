@@ -18,6 +18,8 @@ import re
 import sympy
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.symbolic_equivalence import latex_to_plain
+
 __all__ = [
     "LatexParseResult",
     "demote_confidence_if_unparseable",
@@ -27,21 +29,6 @@ __all__ = [
 # 인식 신뢰도 강등 계수 — 파싱 불가 LaTeX의 신뢰도에 곱한다(0으로 죽이지 않고 *낮춘다* —
 # 파싱 불가가 곧 오인식은 아니라 보수적). 0.5는 KPI 튜닝 대상(verify_answer 상수 노출 선례).
 _UNPARSEABLE_CONFIDENCE_FACTOR = 0.5
-
-# 가벼운 LaTeX→sympify 전처리 — antlr 기반 `sympy.parsing.latex` 의존이 없을 때의 폴백.
-# 흔한 LaTeX 토큰을 sympify가 읽을 수 있는 형태로 바꾼다(완전하지 않음·보수적 근사).
-_LATEX_REPLACEMENTS: tuple[tuple[str, str], ...] = (
-    (r"\left", ""),
-    (r"\right", ""),
-    (r"\cdot", "*"),
-    (r"\times", "*"),
-    (r"\div", "/"),
-    (r"\pi", "pi"),
-    (r"{", "("),
-    (r"}", ")"),
-)
-_FRAC_RE = re.compile(r"\\frac\s*\(([^()]*)\)\s*\(([^()]*)\)")
-_SQRT_RE = re.compile(r"\\sqrt\s*\(([^()]*)\)")
 
 
 class LatexParseResult(BaseModel):
@@ -58,29 +45,13 @@ class LatexParseResult(BaseModel):
     reason: str | None = Field(default=None, description="실패 사유(한국어)·성공이면 None")
 
 
-def _latex_to_sympifiable(latex: str) -> str:
-    """가벼운 LaTeX→sympify 전처리(antlr 폴백) — 흔한 토큰 치환·\\frac·\\sqrt 환원(순수).
-
-    `\\frac{a}{b}` → `((a)/(b))`, `\\sqrt{x}` → `sqrt((x))`로 바꾸고 나머지 흔한 토큰을
-    치환한다. 등호는 `sympify`가 못 다루므로(파이썬 비교) 호출부가 `=`를 분리한다.
-    """
-    text = latex
-    # \frac{a}{b} → ((a)/(b)) — 중괄호는 아래에서 (..)로 치환되므로 먼저 분수 형태를 잡는다.
-    text = text.replace("{", "(").replace("}", ")")
-    text = _FRAC_RE.sub(r"((\1)/(\2))", latex.replace("{", "(").replace("}", ")"))
-    text = _SQRT_RE.sub(r"sqrt((\1))", text)
-    for token, repl in _LATEX_REPLACEMENTS:
-        text = text.replace(token, repl)
-    return text
-
-
 def parse_check_latex(latex: str) -> LatexParseResult:
     """인식 LaTeX의 SymPy 왕복 파싱 검증 — 파싱 가능(약한 구문 신호)이면 ok=True(결정론·LLM 0).
 
     절차:
       1. 빈 문자열 → ok=False(인식 실패·검증할 것 없음).
       2. `sympy.parsing.latex.parse_latex`가 가능하면 그걸로(antlr 의존). 실패/미설치면
-         가벼운 전처리(`_latex_to_sympifiable`) 후 `sympy.sympify(..., convert_xor=True)`.
+         가벼운 전처리(L3 `latex_to_plain`) 후 `sympy.sympify(..., convert_xor=True)`.
       3. 등호(`=`/`==`)가 있으면 양변을 각각 sympify해 둘 다 파싱되면 ok(방정식 인식).
       4. 어떤 경로로도 파싱 불가면 ok=False(보수적·verify_answer 정직성 상속·pass 위장 금지).
 
@@ -110,7 +81,8 @@ def parse_check_latex(latex: str) -> LatexParseResult:
 def _try_sympify(expr_text: str) -> bool:
     """한 식 문자열을 *어떤 경로로든* SymPy 표현식으로 파싱 가능한지(boolean·예외 흡수).
 
-    우선 antlr 기반 `parse_latex`(LaTeX 정식 파서), 실패/미설치면 가벼운 전처리 후 `sympify`.
+    우선 antlr 기반 `parse_latex`(LaTeX 정식 파서), 실패/미설치면 L3 `latex_to_plain` 후 `sympify`.
+    표기 정규화 권위는 L3다(MATH-01) — L5는 그것을 *호출*만 한다(7계층 정방향).
     둘 다 실패하면 False(보수적·예외 흡수). 상수 진리값(BooleanTrue 등)도 파싱 성공으로 본다.
     """
     text = expr_text.strip()
@@ -127,7 +99,7 @@ def _try_sympify(expr_text: str) -> bool:
         pass
     # ② 폴백: 가벼운 전처리 후 sympify(verify_answer convert_xor 패턴 재사용).
     try:
-        sympy.sympify(_latex_to_sympifiable(text), convert_xor=True)
+        sympy.sympify(latex_to_plain(text), convert_xor=True)
         return True
     except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 False(pass 위장 금지)
         return False

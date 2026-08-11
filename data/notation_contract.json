@@ -11,6 +11,25 @@
     {"id": "sqrt_square", "expr": "sqrt(x^2)", "vars": {"x": 5}, "value": 5.0, "tol": 1e-9},
     {"id": "division", "expr": "x/4+1", "vars": {"x": 8}, "value": 3.0, "tol": 1e-9}
   ],
+  "latex_cases_note": "LaTeX→평문 표기 3자 교차 골든(MATH-01). 'plain'은 백엔드 l3 latex_to_plain과 모바일 latexToPlainSolution이 **문자열 일치**로 단언하는 canonical 산출이다(두 구현이 같은 규칙집합임을 동결). 웹은 렌더 전용 경계라 문자열이 아니라 **mathjs 수치**로 검증한다 — 자신의 latexToMath(latex) 평가값이 'value'와 같은지 본다(예: sqrt는 웹이 1겹·백엔드가 2겹이지만 수치는 같다). 'vars'/'value'/'tol'이 없는 케이스는 웹이 수치 검증하지 않는다(웹 latexToMath가 아직 처리하지 못하는 토큰 — math_engine_gap_review.md 부록 A 드리프트 대장의 '렌더 경계 아닌 순수 버그' 항목). 입력→산출 쌍만 담고 조건 분기·재작성 규칙 트리는 넣지 않는다.",
+  "latex_cases": [
+    {"id": "frac_simple", "latex": "\\frac{1}{2}", "plain": "((1)/(2))", "vars": {}, "value": 0.5, "tol": 1e-9},
+    {"id": "frac_sum_numerator", "latex": "\\frac{1+3}{2}", "plain": "((1+3)/(2))", "vars": {}, "value": 2.0, "tol": 1e-9},
+    {"id": "brace_power_caret_kept", "latex": "x^{2}", "plain": "x^(2)", "vars": {"x": 3}, "value": 9.0, "tol": 1e-9},
+    {"id": "sqrt_arg", "latex": "\\sqrt{x}", "plain": "sqrt((x))", "vars": {"x": 9}, "value": 3.0, "tol": 1e-9},
+    {"id": "left_right_product", "latex": "\\left(x-2\\right)\\left(x-3\\right)", "plain": "(x-2)(x-3)", "vars": {"x": 5}, "value": 6.0, "tol": 1e-9},
+    {"id": "times_operator", "latex": "2\\times x", "plain": "2*x", "vars": {"x": 4}, "value": 8.0, "tol": 1e-9},
+    {"id": "pi_space_preserved", "latex": "\\pi r", "plain": "pi r", "vars": {"r": 2}, "value": 6.283185307179586, "tol": 1e-9},
+    {"id": "div_operator", "latex": "6\\div 2", "plain": "6/2"},
+    {"id": "leq_relation", "latex": "x \\leq 5", "plain": "x <= 5"},
+    {"id": "neq_relation", "latex": "a \\neq b", "plain": "a != b"},
+    {"id": "command_boundary_not_polluted", "latex": "a \\rightarrow b", "plain": "a \\rightarrow b"},
+    {"id": "displaystyle_stripped", "latex": "\\displaystyle x", "plain": "x"},
+    {"id": "thin_space_removed", "latex": "2x\\,+\\,3", "plain": "2x+3"},
+    {"id": "align_marker_removed", "latex": "2x+3 &= 7", "plain": "2x+3 = 7"},
+    {"id": "displaylines_wrapper_unwrapped", "latex": "\\displaylines{a+b}", "plain": "a+b"},
+    {"id": "environment_stripped", "latex": "\\begin{aligned}x=1\\end{aligned}", "plain": "x=1"}
+  ],
   "equivalence_cases": [
     {"id": "distributive", "a": "2*(x+1)", "b": "2*x+2", "equivalent": true},
     {"id": "binomial_expand", "a": "(x+1)^2", "b": "x^2+2*x+1", "equivalent": true},

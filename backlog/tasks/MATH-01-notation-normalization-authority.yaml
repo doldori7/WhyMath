@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -26,9 +26,10 @@ paths:
   - src/web/graphing-calculator/src/lib/mathExpr.js
   - tests/backend/l3/test_notation_contract.py
   - src/mobile/test/latex_to_plain_test.dart
+  - src/web/graphing-calculator/test/notation_contract.test.js
   - data/segmentation_contract.json
   - data/scene_contract.json
   - ".github/workflows/ci.yml"
-session: null
+session: claude/whymath-math-engine-design-ns3fc1
 notes: "docs/architecture/math_engine_gap_review.md §3 D1. 기능 29(양방향 변환)의 LaTeX→평문이 3벌인데 실측하면 사본이 아니라 서로 다른 3개 규칙이다(부록 A 대조표) — 웹은 암묵 곱셈을 강제 삽입하는데 백엔드는 그 해석을 의도적으로 거부한다(symbolic_equivalence.py:74-75). 그리고 학생 제출 경로에 있는 구현은 Dart라 수식 판정의 입력 권위가 사실상 클라이언트에 있다. latex_to_plain.dart:13-15의 '백엔드 미러' 자인은 부분 거짓(미러+확장 — \\leq·\\displaylines는 Dart 고유). notation_contract.json(py↔js) 선례에 Dart를 3자로 편입하는 형태. VIZ-01(적재 0행)·OPS-03(테스트 미실행)·NLP-01(배포 미포함)이 '부재'가 증상이었다면 이 건은 '권위 소재 불명'이 증상이다 — 다른 계열. [2026-08-11 재검증] ④의 CI 구멍이 좁아지는 동시에 넓어졌다 — backend·web는 그 사이 메워졌고(구멍 좁아짐) mobile 하나만 남았는데, 그 하나가 이미 착륙한 Dart 계약 골든 2개를 미집행 상태로 만들고 있음이 실측됐다(가설→라이브 결함). NLP-03은 그 사이 done이 됐으므로 depends_on을 걸지 않고 경계 서술만 유지한다."
 updated: 2026-08-11
