@@ -10,9 +10,19 @@
 // 직렬화한다. 그 원문을 그대로 보내면 (1) 학생 버블에 LaTeX가 노출되고 (2) 행 구분자 `\\`는
 // `'\n'` 분해에 걸리지 않아 단일 0-전이 스텝이 되어 verify가 아무 것도 결정하지 못한다.
 //
-// 드리프트 방지: 백엔드의 검증된 전처리(`l5/ocr/verify.py _latex_to_sympifiable` —
-// `_LATEX_REPLACEMENTS`·`_FRAC_RE`·`_SQRT_RE`)의 치환 규칙을 그대로 미러하고, 그 위에
-// `\displaylines` 행 분해를 얹는다. 타깃 표기 권위는 백엔드 `l3/symbolic_equivalence.to_sympy_source`.
+// 드리프트 방지(MATH-01, 2026-08-11): 백엔드 `l3/symbolic_equivalence.latex_to_plain`과 **같은
+// 규칙집합**이며, 그 일치를 `data/notation_contract.json`의 `latex_cases`가 골든으로 동결한다
+// (`test/latex_to_plain_test.dart` ↔ `tests/backend/l3/test_notation_contract.py`가 같은 파일을
+// 읽는다). 규칙을 한쪽만 바꾸면 계약을 고치지 않는 한 반대편이 red가 된다.
+//
+// 이 주석은 이전에 "백엔드 `_latex_to_sympifiable`를 그대로 미러"라고 적었으나 **부분 거짓**이었다 —
+// 실제로는 `\leq`·간격 매크로·`\displaylines`가 Dart 고유 확장이었고 백엔드에 없었다. MATH-01이
+// 백엔드를 이 규칙집합에 정렬하면서 그 자인을 참으로 만들었고(py의 경계 검사 부재·`\leq` 미처리
+// 결함 2건이 함께 해소), 이제는 계약이 그 사실을 기계로 지킨다.
+//
+// 타깃 표기 권위는 백엔드 `l3/symbolic_equivalence`다 — `latex_to_plain`(LaTeX 계층) +
+// `to_sympy_source`(유니코드·전각·그리스 계층)를 합친 것이 "입력 정규화 단일 권위"다.
+// 이 파일은 그 권위의 *미러*이지 권위가 아니다(수학 판정 0 — `no_math_logic_governance_test.dart`).
 //
 // caret-less 지수 금지(백엔드 실측): `x²`·`x^2`는 verify가 받지만 `x2`는 수열 표기(`a1`)와
 // 모호해 백엔드가 보수적으로 unverifiable 처리한다. 그래서 중괄호는 괄호로 바꿔 `x^{2}`→`x^(2)`
