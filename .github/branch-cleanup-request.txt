@@ -12,7 +12,7 @@
 #   backlog-drive-next=de446ec3 · 973iv1=8810bc8b · worktree-agent=6059043d
 #
 # ⚠ 회수 태스크가 등재된 브랜치는 이 배치에서 **의도적으로 제외**한다 —
-#   admin-01(ADMIN-08) · uqyg79(PED-22~25) · q8tvcx(OPS-34) · 40xspg(SOL-01) · admin-02.
+#   admin-01(ADMIN-08) · uqyg79(PED-22~25) · q8tvcx(OPS-38) · 40xspg(SOL-01) · admin-02.
 #   "하네스가 포팅됨으로 분류했다"가 "브랜치 안의 모든 내용이 회수됐다"를 뜻하지 않는다
 #   (openrouter-setup-guide-e98dw4 선례 — 분류는 포팅됨이었으나 S3-28 코퍼스 분기 미회수).
 

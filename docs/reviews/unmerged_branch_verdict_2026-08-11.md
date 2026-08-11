@@ -75,7 +75,7 @@ GitHub 라이브 실측과 대조한 결과 그 목록은 절반이 허구였다
 |---|---|---|
 | `claude/admin-01-operator-seat-grant-audit` (53a06c4f) | **ADMIN-01 done**(`8924a2e2` — role_grant_cli + role_change 감사). 라이브 main = `todo`·`artifacts: []` | **ADMIN-08** 신규 등재 |
 | `claude/whymath-pedagogy-review-uqyg79` (5dc040b3) | **PED-04·05·06·07·09·10·11·12 + OPS-15 done — main에 파일 자체가 없음.** 신규 파일 21건(카탈로그 YAML 10 + schema + registry + 생성기 5 + 04e 문서) | **PED-22·23·24·25** 신규 등재 |
-| `claude/whymath-ai-recommendation-review-q8tvcx` (e1835c0c) | **OPS-19 done**(`592c961f` CI 게이트 도달 가능성 계약) — main에 태스크 파일 부재. 설계 문서 1건도 부재 | **OPS-34** 신규 등재 |
+| `claude/whymath-ai-recommendation-review-q8tvcx` (e1835c0c) | **OPS-19 done**(`592c961f` CI 게이트 도달 가능성 계약) — main에 태스크 파일 부재. 설계 문서 1건도 부재 | **OPS-38** 신규 등재 |
 | `claude/whymath-solution-review-40xspg` (707c5665) | **S4-09 done**(`86212c43` 2,153줄). 라이브 main = `todo` | **SOL-01 기등재**(2026-08-11·priority 1) — 신규 등재 불요 |
 | `claude/admin-02-dead-tenancy-billing-columns` (d42fbd40) | 고립 done 0건이나 **태스크 전제를 반증하는 실측**을 담은 block 사유 | ADMIN-02를 `blocked`로 전이해 사유 이관 완료(CLI 경유) |
 
@@ -108,12 +108,12 @@ acceptance에 고정했다(NLP-04 선례: `app.py`·`coach.py`가 브랜치 쪽�
 ## 3. 정직한 공백
 
 - **코드 이식은 하지 않았다.** 이 세션은 판정·등재·삭제 요청까지다. 등재된 5개 태스크
-  (ADMIN-08·OPS-34·PED-22~25 + 기등재 SOL-01)가 실행되지 않으면 고립은 그대로다.
+  (ADMIN-08·OPS-38·PED-22~25 + 기등재 SOL-01)가 실행되지 않으면 고립은 그대로다.
 - **각 브랜치 구현이 *올바른지*는 보지 않았다.** 판정은 "고유한가·완료됐는가·중복인가"까지다.
   정확성은 이식 시 CI와 리뷰가 판정한다.
 - **PED 계열 4분할은 산출물 응집도 기준의 판단**이며, 실제 이식 시 경계가 달라질 수 있다.
   PED-25는 "지금도 결함인지 먼저 실측하고 아니면 제외"를 acceptance ①로 고정했다.
 - **q8tvcx의 설계 문서 1건**(`data_platform_module_gap_review_r2.md`)의 회수/폐기는 본문을
-  읽어야 판정된다 — OPS-34 acceptance ③으로 넘겼다(추측으로 정하지 않았다).
+  읽어야 판정된다 — OPS-38 acceptance ③으로 넘겼다(추측으로 정하지 않았다).
 - **스냅샷이다.** 다른 세션이 계속 푸시 중이므로(원격 claim 3건 활성) 삭제 배치 머지 직전에
   라이브 브랜치 목록을 재조회해야 한다.
