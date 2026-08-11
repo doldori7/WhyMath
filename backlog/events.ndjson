@@ -2749,6 +2749,9 @@
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-restore-rehearsal", "kind": "human", "assignee": "kiki", "title": "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"}
 {"ts": "2026-08-11T01:05:36", "actor": "claude/whymath-eos-review-64f81f", "action": "gate_add", "id": "G-backup-offsite-move", "kind": "human", "assignee": "kiki", "title": "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"}
 {"ts": "2026-08-11T00:57:11", "actor": "claude/whymath-math-engine-design-ns3fc1", "action": "add", "id": "MATH-05-reverse-notation-display-surface"}
+{"ts": "2026-08-11T01:50:27", "actor": "claude/whymath-learning-path-design-p1hubt", "action": "add", "id": "PATH-12-me-tab-review-queue-consumption"}
+{"ts": "2026-08-11T01:50:51", "actor": "claude/whymath-learning-path-design-p1hubt", "action": "add", "id": "PATH-13-target-axis-exposure-decision"}
+{"ts": "2026-08-11T01:51:41", "actor": "claude/whymath-learning-path-design-p1hubt", "action": "add", "id": "OPS-34-client-reach-axis"}
 {"ts": "2026-08-11T01:23:15", "actor": "claude/pr-without-request-1me42b", "action": "add", "id": "HARN-23-pr-by-default-and-done-pr-evidence"}
 {"ts": "2026-08-11T01:23:24", "actor": "claude/pr-without-request-1me42b", "action": "policy_warn", "id": "HARN-23-pr-by-default-and-done-pr-evidence", "rule": "path_overlap", "other": "HARN-20-cli-transition-wiring-and-block-notes", "detail": "실파일 교집합 5건 예: scripts/harness/backlog.py, tests/harness/conftest.py, tests/harness/test_backlog_add_id_collision.py · 프리픽스 포함: tests/harness/** ⊇ tests/harness/**", "mode": "warn"}
 {"ts": "2026-08-11T01:23:27", "actor": "claude/pr-without-request-1me42b", "action": "start", "id": "HARN-23-pr-by-default-and-done-pr-evidence", "session": "claude/pr-without-request-1me42b", "remote": "ok"}
@@ -3022,3 +3025,4 @@
 {"ts": "2026-08-11T12:52:04", "actor": "claude/whymath-collaboration-design-qlzq5m", "action": "add", "id": "ASM-12-export-prediction-seal-bypass"}
 {"ts": "2026-08-11T12:52:41", "actor": "claude/whymath-collaboration-design-qlzq5m", "action": "add", "id": "COLLAB-07-trigger-axis-completion-corpus-schemas"}
 {"ts": "2026-08-11T12:39:40", "actor": "claude/pr-without-request-1me42b", "action": "add", "id": "HARN-32-merge-race-ci-duration-vs-main-cadence"}
+{"ts": "2026-08-11T13:34:28", "actor": "claude/whymath-learning-path-design-p1hubt", "action": "add", "id": "OPS-42-client-reach-axis"}
