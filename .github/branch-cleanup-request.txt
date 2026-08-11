@@ -2,37 +2,35 @@
 # 형식: 1줄 1브랜치 · '#' 시작 줄은 주석 · 허용 패턴은 claude/*, tmp-*, worktree-agent-* 뿐.
 # 목록이 비어 있으면 no-op(다음 배치 준비 상태).
 #
-# 직전 배치: 2026-08-10 · 17건 전건 삭제 성공(런 #31346141938 · 잔존 0/17 ls-remote 검증).
-# 삭제 전 head SHA 스냅샷은 MEMORY 결정 로그(0f9894a4) 참조.
+# 직전 배치: 2026-08-11 1차 · 6건 전건 삭제 성공(ls-remote 잔존 0/6 실측 — 이 커밋 작성 세션 확인).
+# 삭제 전 head SHA 스냅샷은 unmerged_branch_verdict_2026-08-11.md·직전 배치 주석 참조.
 #
-# ── 2026-08-11 배치 (6건) ──────────────────────────────────────────────
-# 근거: docs/reviews/unmerged_branch_verdict_2026-08-11.md (브랜치별 판정표·실측 근거).
+# ── 2026-08-11 2차 배치 (6건) ──────────────────────────────────────────
+# 근거: docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2 🟢 (전수 감사 46건).
 # 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
-#   enfkqt=469ee9ad · h87afk=b849bb04 · harn-14=215b45ff
-#   backlog-drive-next=de446ec3 · 973iv1=8810bc8b · worktree-agent=6059043d
+#   560vwh=e93d36bc · path-05=36e3eb13 · mob-10=8af55fa5
+#   s3-17=f23feb76 · s3-24=928b2ac4 · misc-02=6d61321d
 #
 # ⚠ 회수 태스크가 등재된 브랜치는 이 배치에서 **의도적으로 제외**한다 —
-#   admin-01(ADMIN-08) · uqyg79(PED-22~25) · q8tvcx(OPS-38) · 40xspg(SOL-01) · admin-02.
-#   "하네스가 포팅됨으로 분류했다"가 "브랜치 안의 모든 내용이 회수됐다"를 뜻하지 않는다
-#   (openrouter-setup-guide-e98dw4 선례 — 분류는 포팅됨이었으나 S3-28 코퍼스 분기 미회수).
+#   k20m0w(SEC-24·MOB-18) · gdmwhk(PED-26) · 34zvse(CUR-08) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · fleet 5건(OPS-41) · 28d0yx(PR #759 교체 권고) ·
+#   trjg5x(PB-06) · 40xspg(SOL-01 회수 진행 중) · uqyg79(PED-22~25·PED-26 대조 대상).
 
-# 교수전략 계열 — uqyg79의 진부분집합(공통 조상 커밋 대조 실측: 고유 커밋 0건).
-# uqyg79는 PED-22~25로 회수 등재돼 보존되므로 이 브랜치는 잃는 내용이 없다.
-claude/whymath-teaching-strategy-enfkqt
+# trunk 대비 ahead=0 · 내용 diff 0파일 — 전량 흡수됐다.
+claude/merge-failure-reflection-issues-560vwh
 
-# REC-02 중복 구현의 패자. main의 REC-02는 done이며 다른 브랜치
-# (human-bottleneck-tasks-6dszy0 · 커밋 d554ddad)에서 회수돼 이미 착지했다.
-claude/whymath-probe-supply-h87afk
+# main PATH-05 = done(PR #728 포팅, artifacts가 이 브랜치 커밋 f9644016 직접 인용). 고립 done 0건.
+claude/path-05-me-tab-learning-path-consumption
 
-# PR #714로 포팅 완료(main 커밋 b4b0153d "HARN-14: 설계 문서 중복 착수 탐지 스캐너").
-# main의 HARN-14는 done. 고립된 done 0건.
-claude/harn-14-doc-series-duplicate-detection
+# main MOB-10-diagnosis-evidence-render = done — 상태전이(done 증적 기록) 전량 반영됨.
+claude/mob-10-done-bookkeeping
 
-# trunk 대비 ahead=0 — 전량 흡수됐다. 남길 내용이 없다.
-claude/backlog-drive-next
-claude/whymath-account-security-973iv1
+# 브랜치는 S3-17 blocked 기록이나 main은 이미 done(교차 회수 착지·events 2426) — 브랜치 기록이 낡음.
+claude/s3-17-suneung-prefilter-persona-fit-widen
 
-# PR #728로 포팅 완료(main 커밋 4adc6870). main의 PATH-05는 done이고 artifacts가
-# 이 브랜치의 커밋 f9644016을 직접 인용한다. 허용 패턴이 없어 그동안 삭제 경로가
-# 아예 없던 건 — 이번에 worktree-agent-*를 패턴에 추가했다.
-worktree-agent-a6e26595b30efb856
+# main S3-24도 동일 사유(Flutter SDK 부재+hot file 게이트)로 blocked — 반영 완료.
+claude/s3-24-shadow-recovery-bucket-b
+
+# 유일 내용이던 block 사유(acceptance 필드 오류+교수학 결정 필요)를 이 배치와 같은 PR이
+# main MISC-02에 CLI block으로 이관 — 머지 시점에 잃을 내용 없음이 보장된다.
+claude/misc-02-prerequisite-coaching-misconception-link
