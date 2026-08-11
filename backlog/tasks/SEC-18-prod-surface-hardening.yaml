@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - src/backend/whymath_backend/app.py
   - src/backend/whymath_backend/config.py
   - "tests/backend/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md L1·L4. docs 노출은 정보공개(정찰 조력)이지 접근 우회 아님(보호 라우트는 인증 유지). GCP/AWS WAF 차단 여지 있으나 리포 근거 없음."
-updated: 2026-08-08
+updated: 2026-08-11
