@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - "src/mobile/lib/core/**"
   - src/mobile/android/app/build.gradle
   - "src/mobile/test/**"
-session: null
+session: claude/whymath-issues-review-k20m0w
 notes: "정본: docs/reviews/functional_security_audit_2026-08-08.md L2·L3. 완화: 401은 문서화된 후속 슬라이스 유예(graceful 실패)·release 서명은 배포 CI 미배선(사전 릴리스). 스토어 배포 착수 시 결함B는 HIGH 승격 필수 선행."
-updated: 2026-08-08
+updated: 2026-08-11
