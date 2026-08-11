@@ -3,8 +3,10 @@
 두 축(`test_coach_pack_wiring.py`와 동형 관례):
 - **hermetic**: `problem_id`/`user_id` 미해석 경로(프로필 없음·문항 없음·개념 미매핑)는 fake
   session/DB 없이 graceful None을 확인한다.
-- **@integration(PG)**: 실제 `user_profile.grade`·`concept_standard_link → achievement_standard`
-  조인이 값을 낸다.
+- **@integration(PG)**: 실제 `user_profile.grade`·**원자 축**(`concept.code == atom_node.code` →
+  `atom_node.standard_codes`)이 값을 낸다(CUR-04 — 구 축 `concept_standard_link →
+  achievement_standard`는 더 이상 쓰지 않는다). 구 축 잔재가 있어도(negative control) 무시되고
+  원자 축 값만 반환되는지까지 함께 검증한다(변별력 — 조용히 구 축으로 폴백하는 회귀 방지).
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.achievement_standard import (
     AchievementStandard as OrmAchievementStandard,
 )
+from whymath_backend.db.models.atom_node import ATOM_REVIEW_STATUS_AI_ESTIMATED
+from whymath_backend.db.models.atom_node import AtomNode as OrmAtomNode
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.concept_standard_link import (
     ConceptStandardLink as OrmConceptStandardLink,
@@ -90,6 +94,9 @@ async def _pg_reachable() -> bool:
 
 @pytest.mark.integration
 async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
+    """CUR-04 — 원자 축(`atom_node.standard_codes`)이 값을 낸다. 구 축(`concept_standard_link`)
+    잔재가 *같은 concept_code*에 남아 있어도(negative control) 무시되고 원자 축 값만 반환되는지
+    함께 확인한다 — "조용히 구 축으로 폴백" 회귀를 잡는 변별력 검사(CLAUDE.md 변별력 원칙)."""
     if not await _pg_reachable():
         pytest.skip("실 PG 미도달 — WHYMATH_DATABASE_URL 확인(통합 잡에서 실행)")
 
@@ -99,7 +106,12 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
     pid = uuid.uuid4()
     pid_unmapped = uuid.uuid4()
     norm_id = "PED05-TEST-NORM-01"
-    official_code = "[12미적01-01]"
+    official_code = "[12미적01-01]"  # 원자 축(atom_node.standard_codes)이 반환해야 할 정답.
+    # negative control — 같은 concept_code를 가리키는 구 축 잔재. 실제 로더는 원자 행(source_id
+    # 미설정)을 이 축에 절대 연결하지 못하지만(모듈 docstring), 이 테스트는 "설령 잔재가 있어도
+    # 새 코드가 더는 이 축을 보지 않는다"를 직접 증명하기 위해 *의도적으로* 삽입한다.
+    stale_norm_id = "PED05-STALE-OLD-AXIS-NORM"
+    stale_official_code = "[STALE-OLD-AXIS-SHOULD-BE-IGNORED]"
     sync_engine = create_engine(settings.sync_database_url)
 
     def _cleanup() -> None:
@@ -117,9 +129,10 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
                 {"c": _PRIMARY_CODE},
             )
             conn.execute(
-                text("DELETE FROM achievement_standard WHERE norm_id = :n"),
-                {"n": norm_id},
+                text("DELETE FROM achievement_standard WHERE norm_id = ANY(:n)"),
+                {"n": [norm_id, stale_norm_id]},
             )
+            conn.execute(text("DELETE FROM atom_node WHERE code = :c"), {"c": _PRIMARY_CODE})
             conn.execute(text("DELETE FROM concept WHERE concept_id = :c"), {"c": cid})
             conn.execute(text("DELETE FROM user_profile WHERE user_id = :u"), {"u": uid})
 
@@ -167,6 +180,16 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
             )
             await s.commit()
         async with maker() as s:
+            # 원자 축(정답 경로) — Concept.code == AtomNode.code 조인 키.
+            s.add(
+                OrmAtomNode(
+                    code=_PRIMARY_CODE,
+                    name_ko="PED-05 테스트 원자",
+                    level="세부개념",
+                    standard_codes=[official_code],
+                    review_status=ATOM_REVIEW_STATUS_AI_ESTIMATED,
+                )
+            )
             s.add(
                 OrmAchievementStandard.from_schema(
                     SchemaAchievementStandard(
@@ -182,12 +205,28 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
                     )
                 )
             )
+            # negative control — 구 축 잔재(위 docstring 참조). 새 코드가 이 값을 반환하면 회귀.
+            s.add(
+                OrmAchievementStandard.from_schema(
+                    SchemaAchievementStandard(
+                        norm_id=stale_norm_id,
+                        official_code=stale_official_code,
+                        curriculum_revision="2022 개정",
+                        grade_band="고등학교",
+                        school_type="고등학교",
+                        subject="미적분Ⅰ",
+                        domain="변화와 관계",
+                        statement="PED-05 구 축 negative control 성취기준.",
+                        source_url="https://ncic.example/ped05-stale",
+                    )
+                )
+            )
             await s.commit()
         async with maker() as s:
             s.add(
                 OrmConceptStandardLink.from_schema(
                     SchemaConceptStandardLink(
-                        concept_code=_PRIMARY_CODE, norm_id=norm_id, link_type="직접"
+                        concept_code=_PRIMARY_CODE, norm_id=stale_norm_id, link_type="직접"
                     )
                 )
             )
@@ -195,7 +234,10 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
 
         async with async_sessionmaker(async_engine, expire_on_commit=False)() as s:
             assert await _grade_for(s, uid) == 12
-            assert await _standard_code_for(s, pid) == official_code
+            # 원자 축 값이 반환된다 — 구 축 negative control(stale_official_code)이 아니다.
+            resolved = await _standard_code_for(s, pid)
+            assert resolved == official_code
+            assert resolved != stale_official_code
             # fail-soft — 개념 미매핑 문항은 None.
             assert await _standard_code_for(s, pid_unmapped) is None
             # 문항 없음 → None.
