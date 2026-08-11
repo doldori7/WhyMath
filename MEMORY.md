@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (구현·QUAL 시리즈 마무리): **`QUAL-04` 재서술 계보 백필(`backfill_rephrase_lineage_s4_18.py`)의 무변화 오식별 수정 — QUAL-03이 측정한 무변화 282건의 실제 위험 지점을 재확정(run_corpus_rephrase가 아니라 이 백필 스크립트)하고 원천 차단** (claude 구현, Kiki `/drive`)
+
+- **재확정된 근본원인**: 오케스트레이터가 코드를 직접 추적해 QUAL-03의 애초 가설을 정정했다 — `problem_corpus_rephrase.run_corpus_rephrase`의 "fail-closed=원문유지"는 `test_failed_rephrase_keeps_original` 등 기존 테스트가 이미 의도적으로 고정한 안전 계약(검증 실패 시 드롭이 아니라 검증된 원본 유지)이라 건드리지 않았다. 실제 위험은 `scripts/backfill_rephrase_lineage_s4_18.py`에 있었다 — 이 스크립트는 무변화 레코드에도 예외 없이 slug 재채번·identity_id·`relations`(변형·similarity_score=1.0)를 부여해 왔고, **실측 확인 결과 커밋된 rephrased_v0 429건 전량이 이미 이 처리를 거쳐 identity_id를 보유**(392건 재슬러그) — 즉 무변화 282건 전부가 `populate.py` 적재 시 부모와 구분되는 **가짜 중복 DB 행**이 된다. QUAL-01의 "8쌍"보다 실질적으로 훨씬 큰 위험이었다(QUAL-01의 `is_legitimate_sibling`은 `relations` 선언 자체를 "정당한 형제"로 보므로 이 282건을 구조상 잡지 못한다 — QUAL-01 로직 결함이 아니라, "선언된 변형인데 내용이 실제로 안 바뀐" 축을 다루는 게 이 프로젝트에 여태 없었다는 뜻).
+- **결정**: backfill 루프에서 parent 판정 직후 — slug 재채번·identity 부여 전에 — `question_text`가 정규화 후 parent와 완전히 같으면 slug·problem_id·identity_id·relations를 전부 미부여하고 건너뛴다(`noop_skipped` 카운터). colliding 레코드는 원래 slug 그대로 남아 `populate.py`의 ON CONFLICT upsert가 부모와 같은 DB 행으로 자연 병합한다 — JSONL에서 줄을 지우는 "드롭"이 아니라 **DB에서 별도 행이 되는 것을 막는** 방식. (b)"rephrase_status 필드 신설로 소비측이 필터"안은 기각 — 이 저장소에 반복되는 "선언됐으나 소비자가 안 지키는 필드" 패턴(PED-06→PED-08·OPS-22 존재 이유 자체)을 또 만들 위험이라, 식별 자체를 원천 차단하는 쪽이 소비측 규율에 의존하지 않아 구조적으로 더 안전하다고 판단(근거 기록 — acceptance② 요구). 신규 마이그레이션 0(필드 추가가 아니라 오히려 미부여 쪽 결정).
+- **acceptance①**(사유 분포 진단): 이 환경엔 LLM이 없어 기존 282건의 개별 실패 사유는 복원 불가(정직한 한계, 사후 재실행은 오늘 시점 LLM 응답이라 "그때"의 진짜 재현이 아님) — `classify_invariance_failure`의 6단계 reason 분기(EMPTY→EQUATION_ALTERED→EXTRA_EQUATION→HYGIENE_REJECT→NO_CHANGE→QUESTION_HYGIENE)를 정적 분석으로 문서화. 라이브 재진단은 신규 도구를 만들지 않고 기존 `harness/problem_corpus_rephrase_diagnose.py`(Phaiakes9 전용)를 재사용 지점으로 명시.
+- **변별력**: cp 기반 뮤테이션(미커밋 트리에서 git checkout/stash 금지 원칙 준수)으로 구코드를 재현 → 신규 테스트 5건 중 3건이 실제로 red(무변화 레코드가 조용히 새 identity를 받음·`noop_skipped` 카운터 부재·근접무변화도 재슬러그됨) → 원복 후 5건 전부 green 재확인.
+- **실측**: `--check` 드라이런 결과 `already_done=429`·`noop_skipped=0`(전량 이미 1회 처리돼 `already_done` 단락에 먼저 걸림 — 예상과 일치, 새 로직은 향후 신규 배치에만 발동). 별도 읽기전용 스크립트로 `relations` 기반 직접 재계산 시 무변화 282/429(65.7%) — QUAL-03과 정확 일치 재확인. 코퍼스 실행 전후 무수정 확인.
+- **검증**: CI 3개 잡 명령 그대로(backend·infra-contracts·harness-integrity) 독립 재실행 — 전체 백엔드 스위트 9,412 passed·`tests/infra` 303 passed·`scripts`/`tests/harness` lint 0/0. 신규 테스트는 `tests/infra/`에 배치(스크립트가 `whymath_backend` 밖 독립 파일이라 `scripts/cleanup_atom_orphans.py`→`tests/infra/test_cleanup_atom_orphans.py` 선례 답습).
+- **QUAL 시리즈 정리**: QUAL-01(완료)→QUAL-02(실중복 9쌍 콘텐츠 판정, 미착수)·QUAL-03(완료)→QUAL-04(완료, 이 항목). 남은 건 QUAL-02뿐 — 콘텐츠 판정이라 데모풀 노출 1쌍이 최우선.
 ### 2026-08-11 (재점검·교육과정): **교육과정 관리 모듈 2차 재점검(`curriculum_module_gap_review_r2.md`) — v1 미채택 6건 전건 승계, 진짜 갭 3건 신설(D4~D6) + v1 스코프 누락 1건 정정. 최대 갭 = 성취기준 조인 축 이원화로 학생 대면 표면이 조인 실패를 "도달 0%"로 위장(D4·반복 실수 10회차) · `CUR-03`이 done인데 산출물 main 미착륙(D5) · 선수 그래프 학교급 경계 통과 20/2,210(D6). 태스크 3건 등재(`CUR-04`~`CUR-06`)** (claude 재점검, Kiki 요청·첨부 외부 EOS 틀 재제출)
 
 **배경**: Kiki가 외부 EOS 틀 문서 『0단계: 교육과정 관리』(5모듈)를 제출하며 빠진 부분 점검·설계를
