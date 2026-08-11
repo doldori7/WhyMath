@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-08-public-catalog-exposure-contract
+title: "공개 카탈로그가 노출 계약을 경유하지 않는다 — GET /v1/problems 무게이트(pending 158건 + 정답 노출·방어가 클라 단독)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 계약 — api/problems.py:81(단건)·:107-124(목록)의 select(Problem)에 기본 CAT과 동일 상수를 재사용해 review_status == ReviewStatus.approved + source_type.notin_(METADATA_ONLY_SOURCES)를 부착한다(api/me.py:2218-2225와 같은 상수·같은 판정). 판정 기준이 둘로 갈리지 않게 하는 것이 요건이다. 현재 이 경로로 pending 158건(killer_v0 120·probability_finite_v0 34·v1 4)이 열람되며, probability_finite_v0 34문은 S4-16 강등전 통과 전까지 노출 부적격으로 명시된 문항이다."
+  - "② 집행 지점 열거(계약과 별항) — is_review_cleared/is_exposable 계약을 부르는 서빙 경로를 전수 열거하고, 이 태스크가 닫는 경로가 무엇이고 남는 경로가 무엇인지 명시한다. PB-03이 6모드+기본 CAT을 배선했으나 경로 열거가 완전하지 않아 이 갭이 남았다(PED-06형 '정본화≠집행' 재발) — 같은 실수를 반복하지 않기 위한 항이다."
+  - "③ 무인증은 건드리지 않는다 — account_security_gap_review.md:222의 공개 카탈로그 결정과 tests/backend/api/test_problems.py:480-490 회귀 3건은 그대로 green이어야 한다(봉인 범위 과확대 방지). 이 태스크는 '누가 보는가'가 아니라 '무엇이 보이는가'만 바꾼다."
+  - "④ 정답 축 결정 — 이 CRUD-read 응답에서 answer·answer_explanation을 서버가 제외할지, 인증 축으로 분리할지, 현행 유지할지를 결정하고 그 결정을 테스트로 동결한다. 현재 방어는 클라 단독이며(src/mobile/lib/features/problems/data/problem_models.dart:11-16이 정답 필드를 아예 선언하지 않음) 그 주석 자신이 '이 CRUD-read에서 강제되지 않는다'고 자인한다 — 서버 계약이 없으면 소비자(웹·PDF·AI)가 늘 때마다 재발한다. 의사결정 우선순위 #1(학생 안전)·절대금기 '막혔을 때 바로 정답 제공 금지'에 걸리는 축이다."
+  - "⑤ 변별력 실측 — review_status=pending 문항 1건과 메타데이터 전용 출처 행 1건을 주입해 목록·단건 양쪽에서 실제로 빠지는지 확인한다."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/problems.py
+  - tests/backend/api/test_problems.py
+session: null
+notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G3·§6-ⓒ. PB-03이 신설한 노출 계약(l6/_shared.py:141 is_exposable·:165 is_review_cleared)을 L6 6모드와 기본 CAT은 전부 경유하는데 공개 카탈로그 경로만 계약 밖. 무인증 결정이 내려진 시점(SEC-07)에는 review_status가 전건 None이라 검수 축이라는 개념 자체가 런타임에 없었다 — 그 결정은 검수 축을 판단한 적이 없다. SEC-18(/docs·CORS)과 무관한 별개 축."
+updated: 2026-08-11

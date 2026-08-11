@@ -1,5 +1,23 @@
 # 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)
 gates:
+  - id: G-backup-offsite-move
+    title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 30
+    evidence: null
+    notes: ""
+  - id: G-backup-restore-rehearsal
+    title: "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 30
+    evidence: null
+    notes: ""
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human
@@ -8,6 +26,15 @@ gates:
     requested: 2026-07-08
     remind_after_days: 14
     evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08 2건·07-10 20건·07-12 42건, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프 — 스탬프는 clear 14시간 전 커밋 fbbcc53에 선존·ARCH-07 적대 검증)·validation success·기계 reject-only·프로덕션 적재 0. Kiki 본인 승인 확인: 2026-07-13 세션 결정(대장 정합까지 선택·AskUserQuestion 기록). arch_audit_2026-07-13_r6 §3 대장 비정합 지적의 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
+    notes: ""
+  - id: G-deploy-environment-approval
+    title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 14
+    evidence: null
     notes: ""
   - id: G-domain-partner
     title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"
@@ -27,6 +54,47 @@ gates:
     remind_after_days: 14
     evidence: "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk"
     notes: ""
+  - id: G-operator-seat-first-grant
+    title: "운영자 좌석 1호 발급 (prod whymath-pg) — 이걸 해야 콘텐츠 CUD 전건 403이 실제로 풀린다. ADMIN-01 회수로 CLI는 착지했으나 prod 좌석은 0건"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 7
+    evidence: null
+    notes: |
+      [과제] 운영자 좌석 1호 발급 — prod DB의 특정 사용자에게 CONTENT_ADMIN 부여
+      [목적] 현재 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가
+        전건 403이다. 봉인(SEC-07)이 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다.
+        이 게이트를 통과해야 "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
+      [선행] ① 이 브랜치(ADMIN-01 회수분)가 main에 머지돼 있을 것 ② Docker Desktop 가동
+        ③ prod DB 컨테이너 whymath-pg(호스트 포트 5433) 실행 중
+      [성공] grant 명령이 {"user_id","old_role","new_role":"content_admin"} JSON + 종료코드 0,
+        이어지는 list가 그 user_id를 1건 이상 보여준다. 실패 시 비0 종료코드 + stderr JSON 사유
+        (미존재 user_id면 "사용자를 찾을 수 없습니다").
+      [실행 환경] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+      [창 구분] 새 창 1개. 서버를 점유하지 않으므로 이후 조작 가능.
+
+      # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)
+      cd C:\Users\kiki\Desktop\__AI\WhyMath
+      git fetch origin main
+      git checkout main
+      git pull origin main
+      $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath"
+
+      # 1) 현재 좌석 확인 — 처음엔 total: 0 이 정상
+      python -m whymath_backend.ops.role_grant_cli list
+
+      # 2) 좌석 부여 — <여기에_실제_user_id_전체>를 실제 UUID로 치환
+      python -m whymath_backend.ops.role_grant_cli grant <여기에_실제_user_id_전체> content_admin
+
+      # 3) 자가검증 — 방금 부여한 user_id가 목록에 보여야 성공
+      python -m whymath_backend.ops.role_grant_cli list
+
+      [회수 방법] python -m whymath_backend.ops.role_grant_cli revoke <user_id> content_admin
+        (revoke는 역할 인자가 필요하고, 그 역할을 실제로 보유 중일 때만 STUDENT로 되돌린다)
+      [주의] pip/pytest 같은 실행기 단독 호출 금지 — 위처럼 python -m 형태를 쓴다(다중 환경 결합 사고 방지).
+      [clear 증적] 3)의 list 출력(user_id 포함 JSON)을 evidence로 남긴다.
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
     kind: human
@@ -45,6 +113,15 @@ gates:
     remind_after_days: 7
     evidence: "READY:True (check_status 6모델 전부·2026-07-09) + 라이브 rephrase 184/590 성공. '키 투입'(서버 라이브·도달·첫 파이프라인 동작) 충족. '실측 비용 검증'은 S1-12(클라우드 티어)로 이관"
     notes: "ROADMAP 병목 ② — S1 라이브 선행분 전체의 선결 조건"
+  - id: G-prod-dead-column-check
+    title: "prod DB(whymath-pg:5433) user_profile 미소비 컬럼 비영행 확인 — school_id·subscription_tier/_started_at/_renewed_at·school_region·gender 각각 NOT NULL 행이 있는지 실측(ADMIN-02 acceptance① 선결·샌드박스에서 접근 불가)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-11
+    remind_after_days: 7
+    evidence: null
+    notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
     kind: human
