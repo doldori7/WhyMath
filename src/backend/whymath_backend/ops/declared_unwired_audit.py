@@ -1029,6 +1029,10 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 않으므로 CI 상시 배선 비대상.
         "harness.distractor_signal_dormancy_report": _OFFLINE_REPORT,
         "ops.recommendation_reach_report": _OFFLINE_REPORT,
+        # REC-06(2026-08-11): 반복 추천 진도 폭·집중도 관측 — recommendation_reach_report와
+        # 동형(실 DB 조회·게이트 아님·exit 0/2). 진도 폭이 1이어도 머지를 막지 않으므로 CI
+        # 상시 배선 비대상이고, 실 PG 왕복이라 CI에서 원리적으로 돌지도 않는다.
+        "ops.repeat_recommendation_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
         "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
         "harness.agreement_gate_cli": _MANUAL_COMPARISON_TOOL,
