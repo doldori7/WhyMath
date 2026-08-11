@@ -67,11 +67,12 @@ gates:
       [목적] 현재 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가
         전건 403이다. 봉인(SEC-07)이 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다.
         이 게이트를 통과해야 "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
-      [선행] ① 이 브랜치(ADMIN-01 회수분)가 main에 머지돼 있을 것 ② Docker Desktop 가동
-        ③ prod DB 컨테이너 whymath-pg(호스트 포트 5433) 실행 중
+      [선행] ① 회수분이 main에 머지돼 있을 것 — **충족**(PR #786 d1d8f28a + PR #789 ceaf527c)
+        ② Docker Desktop 가동 ③ prod DB 컨테이너 whymath-pg(호스트 포트 5433) 실행 중
+        ④ src\backend\.venv 세팅 완료(README) — 아래 블록은 그 venv의 python을 **직접 지정**한다
       [성공] grant 명령이 {"user_id","old_role","new_role":"content_admin"} JSON + 종료코드 0,
         이어지는 list가 그 user_id를 1건 이상 보여준다. 실패 시 비0 종료코드 + stderr JSON 사유
-        (미존재 user_id면 "사용자를 찾을 수 없습니다").
+        (미존재 user_id면 "사용자를 찾을 수 없습니다", 잘못된 역할명이면 argparse가 종료코드 2).
       [실행 환경] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
       [창 구분] 새 창 1개. 서버를 점유하지 않으므로 이후 조작 가능.
 
@@ -80,20 +81,38 @@ gates:
       git fetch origin main
       git checkout main
       git pull origin main
+
+      # venv python을 직접 지정한다 — 이 PC는 conda base와 .venv가 동시 활성이라
+      # 맨 `python`은 다른 인터프리터에 결합될 수 있다(2026-07-27 ARCH-16 사고).
+      $Py = "src\backend\.venv\Scripts\python.exe"
       $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath"
 
-      # 1) 현재 좌석 확인 — 처음엔 total: 0 이 정상
-      python -m whymath_backend.ops.role_grant_cli list
+      # 0) 선행 자가검증 — 셋 다 통과해야 다음으로 간다
+      docker ps --filter name=whymath-pg --format "{{.Names}} {{.Status}}"   # whymath-pg가 Up이어야 함
+      & $Py -c "import whymath_backend.ops.role_grant_cli as m; print('CLI OK', m.__file__)"
 
-      # 2) 좌석 부여 — <여기에_실제_user_id_전체>를 실제 UUID로 치환
-      python -m whymath_backend.ops.role_grant_cli grant <여기에_실제_user_id_전체> content_admin
+      # 1) 부여 대상 user_id 조회 — prod에 어떤 계정이 있는지 먼저 본다
+      #    (role_grant_cli list는 '기본 역할이 아닌' 사용자만 보여주므로 지금은 빈 목록이 정상)
+      docker exec whymath-pg psql -U whymath -d whymath -c `
+        "SELECT user_id, nickname, role, created_at FROM user_profile ORDER BY created_at LIMIT 20;"
 
-      # 3) 자가검증 — 방금 부여한 user_id가 목록에 보여야 성공
-      python -m whymath_backend.ops.role_grant_cli list
+      # 2) 현재 좌석 확인 — 처음엔 {"users": [], "total": 0} 이 정상
+      & $Py -m whymath_backend.ops.role_grant_cli list
 
-      [회수 방법] python -m whymath_backend.ops.role_grant_cli revoke <user_id> content_admin
+      # 3) 좌석 부여 — 아래 자리표시자를 1)에서 고른 UUID 전체로 치환한다
+      #    (부분 문자열·생략표 금지 — UUID 36자를 통째로 붙여넣는다)
+      & $Py -m whymath_backend.ops.role_grant_cli grant 여기에_실제_user_id_전체 content_admin
+      echo "GRANT_EXIT=$LASTEXITCODE"   # 0이어야 성공
+
+      # 4) 자가검증 — 방금 부여한 user_id가 목록에 보여야 성공(total >= 1)
+      & $Py -m whymath_backend.ops.role_grant_cli list
+      echo "LIST_EXIT=$LASTEXITCODE"
+
+      [회수 방법] & $Py -m whymath_backend.ops.role_grant_cli revoke <user_id> content_admin
         (revoke는 역할 인자가 필요하고, 그 역할을 실제로 보유 중일 때만 STUDENT로 되돌린다)
-      [주의] pip/pytest 같은 실행기 단독 호출 금지 — 위처럼 python -m 형태를 쓴다(다중 환경 결합 사고 방지).
+      [주의] `python`·`pip` 같은 실행기 단독 호출 금지 — 위처럼 venv 경로를 $Py로 고정해 쓴다
+        (다중 환경 결합 사고 방지). 판정은 눈에 보이는 문자열이 아니라 $LASTEXITCODE로 한다.
+      [clear 증적] 4)의 list 출력(user_id 포함 JSON) + GRANT_EXIT=0 을 evidence로 남긴다.
       [clear 증적] 3)의 list 출력(user_id 포함 JSON)을 evidence로 남긴다.
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
