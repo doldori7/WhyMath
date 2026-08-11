@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: cancelled
 priority: 2
 owner: claude
 depends_on: []
@@ -23,5 +23,5 @@ paths:
   - src/backend/whymath_backend/harness/attempt_grading_shadow_report.py
   - tests/backend/harness/test_attempt_grading_shadow_report.py
 session: null
-notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D3. v1이 모듈 50·54·57을 NLP-02에 승계했고 NLP-02는 done이 됐으나, 그 shadow 채점이 현 코퍼스에서 단 1건도 채점할 수 없다(구조적 0.00%). 테스트는 _cond(formal=...) 픽스처로 formal을 직접 만들어 넣어 전부 green이라 천장이 가려져 있었다 — r2 §6 반복 실수 9-a '픽스처만 통과하는 커버리지'(새로운 축). CLAUDE.md '작동한 비율' 원칙(2026-08-03)의 직접 집행."
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D3. v1이 모듈 50·54·57을 NLP-02에 승계했고 NLP-02는 done이 됐으나, 그 shadow 채점이 현 코퍼스에서 단 1건도 채점할 수 없다(구조적 0.00%). 테스트는 _cond(formal=...) 픽스처로 formal을 직접 만들어 넣어 전부 green이라 천장이 가려져 있었다 — r2 §6 반복 실수 9-a '픽스처만 통과하는 커버리지'(새로운 축). CLAUDE.md '작동한 비율' 원칙(2026-08-03)의 직접 집행.\n\n[취소 2026-08-11] REC-05(done)+REC-08(done)+REC-07(todo·owner=kiki)과 잔여 없는 중복 — 2026-08-11 PR 직전 점검에서 발견, Kiki 결정으로 철회. 대응: 내 ①②③⑤⑥(코퍼스 파생 가능 0/2,647 실측·구조적 0 원인 구분·탈락 사유 분해·formal 1건 주입 변별력·CI 배선 확인)은 REC-05 acceptance ①②④⑤가 전부 덮고(절단면만 3버킷 A선택형/B수치단답/C conditions-formal로 다름), 내 ④(권위 이관 유예 만료 명문화)는 REC-07이 발화 조건과 함께 이미 소유하며 그 판단 입력은 REC-08 Wilson 강등전(done)이 만든다. REC-05의 원 실측은 2026-08-04로 내 실측보다 일주일 앞선다. 경위: REC-05/07/08과 ai_recommendation_module_gap_review_2.md는 내 브랜치 base(72914b58^)에 존재하지 않았고 미병합 고립 브랜치에 있다가 이 세션 진행 중 PR #782(4cfe10da)로 main에 머지됐다 — HARN-15 ID 충돌 가드는 통과했다(ASM-* 대 REC-*라 번호 미충돌). 의미 중복은 기계가 잡지 못한다. 두 세션의 독립 실측이 같은 결론(파생 가능 0건)에 도달한 것은 교차검증 기록으로 assessment_module_gap_review_r2.md §3 D3에 승계 형태로 남긴다. 이 문서의 고유 기여로 남는 것은 'v1 assessment 문서가 그 사실을 모른 채 모듈 50·54·57을 NLP-02에 승계했다'는 판정 오류 지적뿐이다."
 updated: 2026-08-11
