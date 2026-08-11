@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-34-removed-dependency-canon-sync-gate
+title: "제거된 의존이 정본에 살아 있음 — 제거↔정본 동기 게이트(MOB-08 선언↔사용의 역방향 짝)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — pubspec.yaml에서 이미 제거된 의존(flutter_tts·speech_to_text·firebase_messaging·firebase_core)이 src/backend/**/*.py 주석·docs/**/*.md 본문에 '현재 그것을 쓴다'는 단정형으로 남아 있는 곳을 전수 목록화한다. 착수 시점 기준 재측정할 것 — 이 태스크의 등재 세션(2026-08-11)이 발견분 6곳을 이미 직접 상환했으므로 남은 것은 신규 유입분이다."
+  - "② 게이트 신설 — tests/infra/test_removed_dependency_canon_sync.py. pubspec.yaml의 '제거 사유 주석 블록'에서 의존명을 파싱해 추출하고(하드코딩 목록 금지 — 주석이 단일 진실원천), 그 이름이 src/backend/**/*.py·docs/architecture/**/*.md·docs/standards/**/*.md에 허용목록 밖으로 등장하면 exit 1. 허용목록에는 '제거 이력·사고 경위를 서술하는 위치'만 사유 주석과 함께 등재한다(근거 없는 포괄 허용 금지 — MOB-08 pubspec_dependency_usage_governance_test.dart 허용목록 관용구 답습)."
+  - "③ 변별력 실측(양방향) — 정정된 문장 하나를 stale 표현으로 되돌리면 red, 되돌린 것을 다시 고치면 green을 둘 다 실측한다. 판정은 exit code로 한다(-q·tail로 잘라 눈으로 보고 통과 선언 금지)."
+  - "④ CI 배선 확인 — 이 테스트가 infra-contracts 잡(.github/workflows/ci.yml, tests/infra 상시 실행)에서 실제로 도는 것을 확인한 뒤 완료로 친다('저장소에 존재함'과 '돌아감'은 다르다)."
+  - "⑤ 범위 밖 동결 — flutter_tts·speech_to_text 재도입, SpeechSpec 클라 배선, firebase/푸시 구현 일체. 이 태스크는 '제거 사실이 정본에 반영되어 있는가'만 기계화한다."
+artifacts: []
+paths:
+  - "tests/infra/**"
+  - src/mobile/pubspec.yaml
+session: null
+notes: "정본: docs/architecture/service_operations_gap_review_r2.md §6 D6. 배경 — v1(service_operations_gap_review.md) §정정이 stale 정본 9곳의 소유자를 태스크에 위임했으나 acceptance·paths에 내려가지 않아 6곳이 8일간 미집행됐다. 정정 본문은 등재 세션이 직접 상환했고, 이 태스크는 재유입을 막는 기계만 소유한다. MOB-08(선언↔사용)의 반대 방향 짝."
+updated: 2026-08-11

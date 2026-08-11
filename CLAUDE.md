@@ -74,7 +74,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 객체 저장소 | S3 / MinIO | 영상·이미지 |
 | 캐시 | Redis 7 | 세션·핫 데이터 |
 | 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math, **Qwen3-VL**(멀티모달·그래프 개형) — *실제 핀(2026-07 코드)*: `qwen2-math:1.5b/7b`(MATH), `qwen2.5:3b/7b`(GENERAL), `qwen3.5:27b`(QUALITY·비동기), `qwen3-vl:8b`(VISION·인식기 실배선·라이브 정확도 미검증) | Phaiakes9. 정본 = `03a_l3_router_design.md`·`l3/router.py`(`LOCAL_MODEL_MATRIX`) |
-| 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 — *실제 배선(2026-07 코드)*: `claude-sonnet-4-6`(CLOUD_MID)·`claude-opus-4-7`(CLOUD_HIGH)만. **GPT-5·Gemini 2.5는 계획·라우터 미배선** | 라우터 경유. 정본 = `config.py`(`anthropic_model_mid/high`)·`l3/providers/anthropic.py` |
+| 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 — *실제 배선(2026-07 코드)*: `claude-sonnet-4-6`(CLOUD_MID)·`claude-opus-4-7`(CLOUD_HIGH)만. **GPT-5·Gemini 2.5는 계획·라우터 미배선**. *현행 정밀*(2026-08-11 r2 실측): **배선됨 ≠ 학생 트래픽 도달** — 학생 경로는 `budget_krw=0.0`·`subscription="free"`(`l3/escalation_defaults.py` 단일 좌석)라 라우터 규칙1이 선차단해 **클라우드 도달 0**이다. 실배정은 결제 도입(Phase 2 M2.3) 하류 | 라우터 경유. 정본 = `config.py`(`anthropic_model_mid/high`)·`l3/providers/anthropic.py`. 도달 계상 = `ops/cost_probe.py`("미도달" 표기·OPS-18) |
 | 임베딩 | **기본(로컬)=bge-m3**(`BAAI/bge-m3`·1024) · 클라우드 옵션=OpenAI text-embedding-3-large(3072) | 의미 검색·클러스터링. `embedding_provider` 셀렉터(local 기본·openai·fake)·로컬 우선(비용·Phaiakes9). **최종 확정 미결**(bge-m3 vs te-3-large — MEMORY 슬105·SSM 2026-Q3 스캔 ③) |
 | OCR | **PaddleOCR + Qwen3-VL 하이브리드** (로컬, PaddleOCR fallback) | 손글씨·그래프, Phaiakes9·미성년자 프라이버시. 2026-05-28 결정 (Mathpix 대체) |
 | 시각화 | Manim (서버 렌더), Desmos/GeoGebra 임베드, D3.js·three.js·Plotly | 선언적 JSON 명세 |
@@ -137,6 +137,8 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - ❌ **태스크 ID 번호를 추론으로 배정 금지** — 새 태스크 등재는 항상 `backlog.py add`를 거친다(번호 충돌을 로컬 백로그 + 원격 claim 대장 양쪽에서 검사·HARN-10). 파일 목록만 보고 "다음 번호"를 눈으로 골라 YAML을 만들면 **병렬 세션의 인플라이트 번호를 볼 수 없다**. 거부되면 CLI가 제안한 번호를 쓴다. (사고 경위: 2026-07-18/25 ARCH-13, 2026-07-29 OPS-15가 각각 두 태스크에 중복 배정 — full-ID는 슬러그 덕에 달라 validate가 통과했고, 사람·문서·커밋의 번호 참조만 결정 불가가 됐다)
 
 - ❌ **정본화를 집행으로 착각한 완료 선언 금지 (2026-08-04 등재)** — 노출·안전·억제 계약(무엇을 보여주고 무엇을 감출지 정하는 모듈)을 acceptance에 "정본화"라고만 적으면 그 모듈이 실제로 **서빙 경로에서 호출되는지 확인하지 않고도** 완료 처리된다. 계약을 만드는 태스크의 acceptance는 반드시 ①정본화(계약 자체)와 ②**집행 지점**(그 계약을 실제로 경유하는 서빙 코드 경로가 무엇인지)을 **별항으로 분리**해 적는다. 위 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 특수형이다 — 그 항목이 "테스트가 CI에서 도는가"를 묻는다면 이 항목은 "계약을 서빙 코드가 실제로 부르는가"를 묻는다. (사고 경위: `PED-06`이 `growth_evidence_exposure.py`에 3계층 노출 계약을 만들며 스스로 "이 함수가 유일한 노출 판정 경로가 되게 한다"고 선언했으나, acceptance ①이 "노출 계약 정본화"로만 적혀 있어 그대로 통과 → 실제로는 CLI 리포트와 자기 테스트만 그 함수를 부르고, 학생 토큰으로 호출되는 `GET /v1/me/harness-metrics`는 원시 11지표를 `GAMING_SUSPECT`까지 포함해 그대로 반환하는 상태로 1일간 방치됐다 — 게임화 모듈 2차 재점검(`gamification_module_gap_review_r2.md` §2 G1·§4-④·§7)에서 발견·`PED-08`로 재설계)
+
+- ❌ **문서 §정정의 소유자 위임을 집행으로 착각 금지 (2026-08-11 등재)** — 점검 문서가 stale 정본을 발견하고 "이 정정은 태스크 X가 처리한다"라고 **소유자를 지정하는 것만으로는 아무것도 집행되지 않는다**. 위임하려면 그 태스크의 **`acceptance`와 `paths` 양쪽**에 대상 파일을 명시한다 — `notes` 언급은 판정면이 아니라 산문이라 태스크가 acceptance를 문자 그대로 충족하고 정당하게 done이 된다. 대상 태스크가 이미 in-flight/done이면 위임하지 말고 **점검 세션이 직접 상환**한다(정정은 대개 문서·주석 수정이라 비용이 낮다). 위 "정본화를 집행으로 착각한 완료 선언 금지"의 **문서 평면 변형** — 그 항목이 "계약을 서빙 코드가 부르는가"를 묻는다면 이 항목은 "정정 위임이 태스크의 기계 판정면으로 내려갔는가"를 묻는다. 일반형: **미완성 항목은 반드시 ⑴ 소유 태스크의 acceptance·paths 또는 ⑵ 관측 가능한 발화 트리거 중 하나를 가진다.** (사고 경위: `service_operations_gap_review.md`(v1) §정정이 stale 정본 9곳의 소유자를 "1~5·8은 `A11Y-01`, 6·7은 `OPS-18` notes로"라고 지정했으나 그 파일들이 두 태스크의 acceptance·paths에 없어 **6곳이 8일간 미집행** — 특히 v1 스스로 "다음 세션이 이미 실패로 판명난 Gradle 경로를 재시도할 위험"이라 명명한 `flutter_tts` 서술 4곳이 그대로 살아 있었다. 서비스 운영 2차 재점검(`service_operations_gap_review_r2.md` §2 G1·§7 11회차)에서 발견·정정 본문은 그 세션이 직접 상환하고 재유입 방지는 `OPS-34`로 기계화)
 
 - ❌ **작동 신호 없는 알고리즘 부착 금지 — "작동한 비율" 원칙 (2026-08-03 결정·2026-08-10 통합점검이 본문 등재)** — 알고리즘·전략을 붙였으면 **그 알고리즘이 실제로 작동한 비율**을 응답·리포트가 말해야 한다. 정상 응답 200은 알고리즘이 일했다는 증거가 아니다. 부수 원칙: docstring 속 계획은 백로그를 대신하지 못한다 — 추적하려면 태스크로 등재한다. (사고 경위: 학습경로 설계에서 알고리즘 부착 후 무작동을 정상 응답으로 오인 — 반복 실수 8회차·MEMORY 2026-08-03. 결정 로그에 "등재"로 선언됐으나 본문 반영이 누락됐던 것을 2026-08-10 통합점검이 발견해 정정)
 
@@ -424,5 +426,5 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ---
 
-**버전**: 0.2.1 | **최종 수정**: 2026-08-11 (운영(EOS) 3차 재점검 — 스택 표 모니터링 행 실측 정합: OTel 미배선 병기. `docs/architecture/operations_module_gap_review_r3.md` §정정) · 이전: 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
+**버전**: 0.2.2 | **최종 수정**: 2026-08-11 (서비스 운영 2차 재점검 — 프로세스 금기 1건 신규 등재[문서 §정정의 소유자 위임을 집행으로 착각 금지·반복 실수 11회차] + 스택 표 클라우드 LLM 행 실측 정합["배선됨 ≠ 학생 트래픽 도달"·도달 0 병기]. `docs/architecture/service_operations_gap_review_r2.md` §2 G1·§4·§7) · 이전: 2026-08-11 v0.2.1 (운영(EOS) 3차 재점검 — 스택 표 모니터링 행 실측 정합: OTel 미배선 병기. `docs/architecture/operations_module_gap_review_r3.md` §정정) · 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
 **다음 검토일**: Phase 1 종료 시점 또는 다음 분기 SSM 스캔 중 먼저 오는 쪽 · **본문 규칙을 바꾸는 커밋은 이 버전·수정일 표기도 함께 갱신한다** (2026-08-10 통합점검: 표기가 실체보다 3개월 뒤처져 있던 상태 재발 방지)

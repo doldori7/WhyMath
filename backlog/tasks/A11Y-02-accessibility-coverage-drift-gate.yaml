@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: A11Y-02-accessibility-coverage-drift-gate
+title: "접근성 커버리지가 AA 선언 직후 고정 — 주 학습 화면 게이트 밖 + 신규 화면 무검출"
+track: infra-debt
+stage: S3
+subject: cross
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 커버리지 드리프트 가드 신설 — test/accessibility_test.dart가 실제로 순회하는 대상 목록 ↔ lib/features/*/presentation/의 화면 목록을 대조해, 게이트에 없는 화면은 '사유 주석이 붙은 허용목록'에 등재해야만 통과하게 한다. 근거 없는 포괄 허용 금지(pubspec_dependency_usage_governance_test.dart:114-122 관용구 답습). 목적은 '지금 전부 검증'이 아니라 '새 화면이 조용히 늘지 않는다'."
+  - "② 주 학습 화면 편입 — chat_screen·problem_screen을 게이트 대상에 넣는다. 이 둘은 학생이 가장 오래 머무는 화면인데 현재 게이트 밖이다. 06_design_system.md §7이 지목한 '컨트롤러 override 하네스'(활성 문제·메시지가 있는 상태를 만들어야 대비·탭타깃이 실제로 검사됨)를 쓴다 — 빈 초기 상태만 렌더하면 검증이 위장된다."
+  - "③ RPT-01 신고 다이얼로그 축 추가 — defect_report_button.dart의 카테고리 선택 다이얼로그는 v1 설계의 산출물인데 접근성 게이트 밖으로 태어났다. 기존 라이트/다크 × 배율(1.0/1.3/2.0×) 매트릭스에 편입한다."
+  - "④ 06_design_system.md §7 현황 표 갱신 — 이 태스크가 넓힌 커버리지를 표에 반영하고, 여전히 남는 후속(Semantics 라벨 전면 감사·TTS)은 발화 트리거를 병기한다. '정직 표기가 영구 미상환의 근거로 쓰이지 않게' 남은 항목은 트리거 또는 태스크 중 하나를 가져야 한다."
+  - "⑤ 변별력 실측(양방향) — 새 *_screen.dart를 추가하고 허용목록에 넣지 않으면 red, 넣으면 green. 그리고 편입된 화면에서 고정 height 위젯을 배율 대상에 두면 red(A11Y-01이 검증한 배율축 변별력을 새 화면에서도 재확인)."
+  - "⑥ 범위 밖 동결 — Semantics 라벨 전면 감사, TTS 재도입, 런타임 고대비·색약 팔레트 토글, accessibility_needs 소비 분기(writer 0), WCAG AAA. 목표 레벨은 A11Y-01이 선언한 WCAG 2.1 AA를 그대로 승계한다."
+artifacts: []
+paths:
+  - "src/mobile/test/**"
+  - docs/design/ui/06_design_system.md
+session: null
+notes: "정본: docs/architecture/service_operations_gap_review_r2.md §6 D8. 배경 — A11Y-01(done)이 AA를 목표로 선언한 뒤 커버리지는 explore/home/me + SceneRenderer·CoachSignalCard 5개로 고정됐고 화면은 16개다. 06_design_system.md §7이 후속 3종을 정직하게 적어두었으나 추적하는 열린 태스크가 0건 — 운영 r3 D9('정직 표기는 침묵 통과는 막지만 영구 미상환은 막지 못한다')의 접근성 평면 재발."
+updated: 2026-08-11
