@@ -10,9 +10,13 @@
 `None`인 경우는 "미상"이라 차단하지 않는다 — `get_consented_user`의 `is_minor` None-미상
 불차단 방침과 동형이며, DB에서 읽은 행은 두 컬럼 다 NOT NULL이라 실제로는 항상 True/False다).
 
-`get_consented_user`: 위에 더해 *알려진* 미성년자(`is_minor`)인데 `parent_consent_at`이
-없으면 **403**(CLAUDE.md 학부모 동의·14세 미만 절차). 민감 데이터 엔드포인트는 `ConsentedUser`
-를 쓴다.
+`get_consented_user`: 위에 더해 *알려진* 미성년자(`is_minor`)인데 동의가 **없거나·철회됐거나·
+만료됐으면 403**(CLAUDE.md 학부모 동의·14세 미만 절차). 민감 데이터 엔드포인트는 `ConsentedUser`
+를 쓴다. 철회·만료 판정은 SEC-20(`account_security_gap_review_r2.md` D9)에서 추가됐다 —
+그전까지 이 게이트는 `parent_consent_at`(설정됐는가) 하나만 읽어서 **한 번 받은 동의가 영구히
+유효**했고, `ParentalConsent.revoked_at`·`expires_at`은 writer가 상수 `None` 1곳뿐이고
+**reader가 0**이었다(만료 재확인용 인덱스 `idx_parental_consent_user`까지 있는데 읽는 사람이
+없었다). 이 함수가 그 두 컬럼의 **첫 reader**다.
 
 `require_role(*roles)`: `get_current_user` 위에 얹는 역할 게이트(SEC-07 D1) — 토큰이 아예
 없으면 `get_current_user`가 먼저 401을 던지고, 유효한 토큰이지만 역할이 불일치하면 **403**
@@ -30,14 +34,17 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Role
@@ -78,18 +85,51 @@ async def get_current_user(
     return user
 
 
+def _consent_required(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
 async def get_consented_user(
     user: Annotated[UserProfile, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserProfile:
-    """알려진 미성년자인데 학부모 동의(parent_consent_at)가 없으면 403.
+    """알려진 미성년자인데 학부모 동의가 없거나·철회됐거나·만료됐으면 403(SEC-20 D9).
 
-    `is_minor`가 None(미상)이면 차단하지 않는다 — *알려진* 미성년자만 게이트한다.
+    판정 순서(비용 순):
+      1. `is_minor`가 참이 아니면 즉시 통과 — **성인·미상 사용자는 추가 쿼리 0**이다
+         (`is_minor` None은 "미상"이라 차단하지 않는다: 추정으로 학습을 막지 않는 기존 방침).
+      2. `parent_consent_at`이 없으면 403(동의 미설정 — 종전과 동일).
+      3. 미성년이고 동의가 있으면 **최신 `parental_consent` 행 1건**을 읽어 `revoked_at`(철회)·
+         `expires_at`(만료)을 확인한다. 인덱스 `idx_parental_consent_user(user_id,
+         consent_signed_at DESC)`가 이미 이 접근 경로용으로 존재한다(신규 인덱스 0).
+
+    **동의 행이 없으면 차단하지 않는다**: `parent_consent_at`은 설정됐는데 원장 행을 못 찾는
+    경우는 "철회/만료를 판정할 근거가 없음"이지 "철회됨"이 아니다. `is_minor` None을 미상으로
+    보고 통과시키는 방침과 동형이며, 원장 도입 이전 데이터가 조용히 잠기는 것을 막는다.
+
+    **`expires_at`은 아직 writer가 없다**(SEC-20 범위: reader만 세운다). 재확인 *주기 숫자*는
+    법령 유래 판단이라 `MGMT-02`(변호사 회신) 선행이며, 주기가 확정되면 GRANT 경로에서
+    `expires_at`을 채우는 1줄로 발화한다 — **읽는 쪽을 먼저 세우는 것이 dead 컬럼을 만들지 않는
+    순서**다. 그때까지 만료 분기는 "값이 있으면 존중한다"는 계약으로만 존재한다.
     """
-    if user.is_minor and user.parent_consent_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="미성년자 학부모 동의가 필요합니다(parent_consent_at 미설정).",
-        )
+    if not user.is_minor:
+        return user
+    if user.parent_consent_at is None:
+        raise _consent_required("미성년자 학부모 동의가 필요합니다(parent_consent_at 미설정).")
+
+    latest = await session.scalar(
+        select(ParentalConsent)
+        .where(ParentalConsent.user_id == user.user_id)
+        .order_by(ParentalConsent.consent_signed_at.desc().nullslast())
+        .limit(1)
+    )
+    if latest is None:
+        # 판정 근거 부재 = 미상 → 통과(위 docstring 참조).
+        return user
+    if latest.revoked_at is not None:
+        raise _consent_required("미성년자 학부모 동의가 철회되었습니다(재동의가 필요합니다).")
+    if latest.expires_at is not None and latest.expires_at <= datetime.now(tz=timezone.utc):
+        raise _consent_required("미성년자 학부모 동의가 만료되었습니다(재확인이 필요합니다).")
     return user
 
 

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -24,6 +24,6 @@ paths:
   - src/backend/whymath_backend/api/users.py
   - docs/standards/security_privacy.md
   - "tests/backend/api/*"
-session: null
+session: claude/whymath-account-security-dw9lww
 notes: "docs/architecture/account_security_gap_review_r2.md G2→D9(최대 갭). 실측: get_consented_user는 user.parent_consent_at만 읽고, ParentalConsent.expires_at·revoked_at(db/models/parental_consent.py:75-76)은 writer가 api/users.py:242의 상수 None 1곳뿐·reader 0이며 철회 라우트도 0이다. 모델 docstring:31은 인덱스 용도를 '만료 재확인·감사'라고 쓴다 — 읽을 사람이 없는 reader를 위해 인덱스까지 만들어 뒀다. 코드는 자백하고 있다(api/users.py:203-205) — 문제는 자백이 백로그로 이어지지 않은 것(v1이 이 축을 D7 페이퍼에 동반시켜 추적 0). 문안은 법률 판단이고 집행은 기계 판단이다 — 철회를 표현할 수 없는 상태를 유지하는 쪽이 법적 위험이 크다. '만들고 읽지 않음'(운영플랫폼 8회차)의 미성년 보호 판이자 '만료 없는 유예'(2026-08-03)의 동의 판."
 updated: 2026-08-11

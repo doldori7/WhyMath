@@ -8,13 +8,16 @@ verifier`)을 오버라이드해 검증한다. 핵심 종단 검증: 동의 기�
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlalchemy.dialects import postgresql
 
 from whymath_backend.api._auth import get_consented_user, get_current_user
 from whymath_backend.app import create_app
@@ -56,17 +59,49 @@ class FakeSession:
     테스트가 *무엇이 적재됐는지*(해시·방식·범위) 검사할 수 있게 한다.
     """
 
-    def __init__(self, commit_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        commit_error: Exception | None = None,
+        *,
+        existing_consents: list[ParentalConsent] | None = None,
+    ) -> None:
         self._commit_error = commit_error
         self.added: list[Any] = []
         self.committed = False
         self.rolled_back = False
+        # SEC-20: 철회 경로가 읽는 *기존* 동의 원장 행(미철회분). 게이트가 읽는 "최신 1건"도
+        # 여기서 마지막 항목으로 돌려준다.
+        self.existing_consents = existing_consents or []
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
 
     async def merge(self, obj: Any) -> Any:
         return obj
+
+    async def scalar(self, stmt: Any) -> ParentalConsent | None:
+        """게이트(get_consented_user)의 최신 동의 1건 조회 — 없으면 None.
+
+        받은 statement를 실 PG 방언으로 컴파일해 게이트 select()의 유효성도 함께 검증한다
+        (hermetic 테스트엔 실 DB가 없다 — test_auth._FakeSession 동형).
+        """
+        str(stmt.compile(dialect=postgresql.dialect()))
+        pool = self.existing_consents + [o for o in self.added if isinstance(o, ParentalConsent)]
+        return pool[-1] if pool else None
+
+    async def scalars(self, stmt: Any) -> Any:
+        """철회 경로의 미철회 동의 행 조회 — `.all()`을 가진 결과 객체를 흉내낸다.
+
+        `scalar`와 동일하게 statement를 컴파일해 철회 select()의 유효성을 검증한다.
+        """
+        str(stmt.compile(dialect=postgresql.dialect()))
+        rows = [c for c in self.existing_consents if c.revoked_at is None]
+
+        class _Result:
+            def all(self) -> list[ParentalConsent]:
+                return rows
+
+        return _Result()
 
     async def commit(self) -> None:
         if self._commit_error is not None:
@@ -151,7 +186,7 @@ class TestGrantParentalConsent:
         user = _minor_user()
         # 사전 조건: 동의 전엔 게이트가 막는다(403).
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(get_consented_user(user=user))
+            asyncio.run(get_consented_user(user=user, session=FakeSession()))  # type: ignore[arg-type]
         assert exc.value.status_code == 403
 
         # 동의 기록.
@@ -160,7 +195,7 @@ class TestGrantParentalConsent:
         assert resp.status_code == 201, resp.text
 
         # 이제 같은 user 객체로 게이트가 통과(parent_consent_at 설정됨).
-        passed = asyncio.run(get_consented_user(user=user))
+        passed = asyncio.run(get_consented_user(user=user, session=fake))  # type: ignore[arg-type]
         assert passed is user
 
     def test_no_plaintext_guardian_pii_persisted(self) -> None:
@@ -316,5 +351,131 @@ def test_grant_without_token_returns_401() -> None:
 
     app.dependency_overrides[get_session] = _sess
     resp = TestClient(app).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
+    assert resp.status_code == 401
+    assert "WWW-Authenticate" in resp.headers
+
+
+class TestRevokeParentalConsent:
+    """SEC-20 D9 — `DELETE /v1/users/me/parental-consent`: 철회 후 게이트가 다시 닫힌다.
+
+    그전까지 동의는 *받을* 수만 있고 *거둘* 수 없었다(`revoked_at` writer 0·reader 0). 아래
+    테스트가 철회의 3요소를 계약으로 고정한다: 원장에 `revoked_at` 기록(append-only 유지·삭제
+    아님) · `parent_consent_at` 해제(게이트 재차단) · 감사 1행(SEC-09 writer 재사용).
+    """
+
+    @staticmethod
+    def _granted_consent(user: UserProfile) -> ParentalConsent:
+        return ParentalConsent(
+            consent_id=uuid.uuid4(),
+            user_id=user.user_id,
+            consent_scope="service_core",
+            consent_signed_at=datetime.now(tz=timezone.utc),
+            revoked_at=None,
+        )
+
+    def test_revoke_marks_ledger_and_clears_gate(self) -> None:
+        """철회 → 200 + 원장 행에 revoked_at + parent_consent_at 해제 + 감사 1행(동일 TX)."""
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        existing = self._granted_consent(user)
+        fake = FakeSession(existing_consents=[existing])
+
+        resp = _client(user, fake).delete(_GRANT_PATH)
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["revoked_count"] == 1
+        # 원장은 지우지 않고 revoked_at을 찍는다(append-only 유지).
+        assert existing.revoked_at is not None
+        # 게이트 통과 근거 해제 + 커밋.
+        assert user.parent_consent_at is None
+        assert fake.committed is True
+        # SEC-09 감사 재사용 — 신규 감사 테이블 0.
+        assert len(fake.added_privacy_audits()) == 1
+
+    def test_revoke_then_gate_blocks_end_to_end(self) -> None:
+        """**종단·변별력의 핵심**: 철회 후 같은 미성년의 ConsentedUser 게이트가 *막힌다*.
+
+        `test_consent_then_gate_passes_end_to_end`의 역방향 — 동의를 거두는 경로가 게이트를
+        *실제로* 닫는지 확인한다(엔드포인트가 200을 주는 것만으론 집행의 증거가 아니다).
+        """
+        import asyncio
+
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        existing = self._granted_consent(user)
+        fake = FakeSession(existing_consents=[existing])
+
+        # 사전 조건: 철회 전엔 게이트가 통과한다.
+        assert asyncio.run(get_consented_user(user=user, session=fake)) is user  # type: ignore[arg-type]
+
+        resp = _client(user, fake).delete(_GRANT_PATH)
+        assert resp.status_code == 200, resp.text
+
+        # 철회 후: 게이트가 403으로 막는다.
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(get_consented_user(user=user, session=fake))  # type: ignore[arg-type]
+        assert exc.value.status_code == 403
+
+    def test_revoked_ledger_alone_blocks_gate(self) -> None:
+        """**변별력**: `parent_consent_at`이 *남아 있어도* 원장이 철회면 게이트가 막는다.
+
+        이 단언이 SEC-20 이전 구현에서는 **실패한다** — 종전 게이트는 parent_consent_at 하나만
+        읽었으므로 원장의 revoked_at을 무시하고 통과시켰다. 즉 이 테스트는 '철회 판정을 끄면
+        실패하는' 쌍의 한쪽이며, 성공/실패 양쪽에서 같은 값을 내지 않는다.
+        """
+        import asyncio
+
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        revoked = self._granted_consent(user)
+        revoked.revoked_at = datetime.now(tz=timezone.utc)
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                get_consented_user(user=user, session=FakeSession(existing_consents=[revoked]))  # type: ignore[arg-type]
+            )
+        assert exc.value.status_code == 403
+
+    def test_revoke_is_idempotent(self) -> None:
+        """이미 전부 철회 상태면 revoked_count=0으로 200(반복 호출 안전)."""
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        already = self._granted_consent(user)
+        already.revoked_at = datetime.now(tz=timezone.utc)
+        fake = FakeSession(existing_consents=[already])
+
+        resp = _client(user, fake).delete(_GRANT_PATH)
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["revoked_count"] == 0
+        assert user.parent_consent_at is None
+
+    def test_revoke_does_not_delete_ledger_rows(self) -> None:
+        """철회는 원장 행을 *삭제하지 않는다* — append-only 방침(감사 가능성 유지)."""
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        existing = self._granted_consent(user)
+        fake = FakeSession(existing_consents=[existing])
+
+        _client(user, fake).delete(_GRANT_PATH)
+
+        # 원장 행은 그대로 남아 있고(참조 유효) 서명 시각도 보존된다.
+        assert existing.consent_signed_at is not None
+        assert fake.existing_consents == [existing]
+
+    def test_revoke_response_carries_no_guardian_pii(self) -> None:
+        """응답에 법정대리인 PII·해시가 실리지 않는다(GRANT 응답과 동일 방침)."""
+        user = _minor_user(parent_consent_at=datetime.now(tz=timezone.utc))
+        fake = FakeSession(existing_consents=[self._granted_consent(user)])
+
+        body = _client(user, fake).delete(_GRANT_PATH).json()
+
+        assert set(body) == {"revoked_at", "revoked_count"}
+
+
+def test_revoke_without_token_returns_401() -> None:
+    """토큰 없이 철회 → 401(GRANT와 동일하게 get_current_user 결선 확인)."""
+    app = create_app()
+
+    async def _sess() -> AsyncIterator[FakeSession]:
+        yield FakeSession()
+
+    app.dependency_overrides[get_session] = _sess
+    resp = TestClient(app).delete(_GRANT_PATH)
     assert resp.status_code == 401
     assert "WWW-Authenticate" in resp.headers
