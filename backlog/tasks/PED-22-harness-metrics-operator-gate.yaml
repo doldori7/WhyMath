@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-22-harness-metrics-operator-gate
+title: "원시 대리지표 표면의 학생 토큰 봉인 — GET /v1/me/harness-metrics 운영자 게이트 강등(노출 계약 우회로 폐쇄)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 정본화 축 — 노출 계약(growth_evidence_exposure.py)은 이미 정본이다. 이 태스크는 계약을 만들지 않는다. 계약 로직 재구현·복사 금지"
+  - "② 집행 지점 축(별항·2026-08-04 헌법 별항) — 집행 지점 = 'GET /v1/me/harness-metrics(api/me.py:3063) 호출이 학생 토큰에서 실제로 403이 되는 것'. 라우트를 이름으로 명시한다"
+  - "③ 의존성 교체 — api/me.py:3069의 ConsentedUser를 운영자 전용 의존성으로 교체. api/_auth.py:124 RequireContentAdmin은 선례이나 권한 의미가 콘텐츠가 아니라 운영 계측이므로 재사용 가부·신설 필요를 실측 판정한다(의미 다른 의존성의 임의 재사용 금지)"
+  - "④ 무변경 동결 — 라우트 경로·response_model(SurrogateMetrics)·_growth_evidence_state 도달 카운터·/health/ready 섹션은 건드리지 않는다(ops 진단 경로 보존)"
+  - "⑤ 변별력 3방향 실측 — 학생 토큰 403 · 운영자 토큰 200 · 무인증 401. 세 방향 모두 실제로 그 코드가 나오는지 확인(한 방향만 보면 위장된다)"
+  - "⑥ 기존 통합테스트 3곳(tests/backend/harness/test_wh1_evaluation_integration.py:361,428,444)의 인증 픽스처 갱신 — 커밋 메시지에 '테스트 약화가 아니라 계약 변경'임을 명시(게이트 무력화와 구분)"
+  - "⑦ 완료 판정 문구 — 착지 후 growth_evidence_exposure.py:131의 '이 함수가 유일한 노출 판정 경로가 되게 한다'가 처음으로 참이 됨을 근거와 함께 기술"
+  - "⑧ 전체 스위트 실행 후 회귀 없음 보고(부분 스위트 통과를 전체 통과 근거로 쓰지 않는다). 못 돌렸으면 '전체는 확인 못함'을 명시"
+  - "⑨ 범위 밖 동결 — 응답 모델 변경 · /growth-evidence 변경 · 클라 배선(D10 소관) · focus_score/engagement_score 좌석(S3-16 소유)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/api/_auth.py
+  - tests/backend/harness/test_wh1_evaluation_integration.py
+  - "tests/backend/api/test_me_harness_metrics*.py"
+session: null
+notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G1 · §4 D8. PED-08이 학생 안전 라우트(/growth-evidence)를 신설했으나 원시 라우트가 '문자 그대로 동일한 게이트'(둘 다 ConsentedUser · api/me.py:3069 vs :3261)로 원시 16지표+gaming_suspect 낙인 라벨+내부 전용 2종(diagnosis_agreement_rate·tokens_per_turn)을 학생 토큰에 반환한다. r2 D5가 이 표면을 동결한 근거('ops·리포트가 원시값으로 소비하는 표면')는 오탐 — 실측하면 ops 2종은 HTTP를 안 타고 compute_wh1_surrogate_metrics를 직접 호출한다(surrogate_baseline_report.py:314 · pilot_kpi_baseline.py:809). 라우트 주석 자신도 'ops/스크립트가 직접 호출'을 명시(api/me.py:3060-3061). Flutter 호출 0. 즉 HTTP 소비자 0건이고 유일한 호출자는 계약이 보호하려던 그 학생. 세 슬라이스(PED-08 acceptance ⑩ · S4-19 wh1_evaluation.py:1839 · PED-15)가 각각 인지하고 각각 회피만 했다 — 반복 실수 11회차 '인지하고 우회'. 형태=운영자 게이트 강등(Kiki 확정 2026-08-11 — 삭제는 되돌리기 비용·응답 축소는 우회로 존치)."
+updated: 2026-08-11
