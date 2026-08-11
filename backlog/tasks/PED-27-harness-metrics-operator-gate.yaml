@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: PED-22-harness-metrics-operator-gate
+id: PED-27-harness-metrics-operator-gate
 title: "원시 대리지표 표면의 학생 토큰 봉인 — GET /v1/me/harness-metrics 운영자 게이트 강등(노출 계약 우회로 폐쇄)"
 track: math-completion
 stage: S3

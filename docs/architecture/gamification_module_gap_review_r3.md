@@ -297,7 +297,7 @@ v1 §2의 의도적 미채택 11건을 **재판정하지 않되**, 각 항목의
 
 ## §4. 설계 D8~D12 (r2의 D5~D7에 번호 연속)
 
-### D8 — 원시 표면의 학생 토큰 봉인 (G1 · 최대 갭 · `PED-22`)
+### D8 — 원시 표면의 학생 토큰 봉인 (G1 · 최대 갭 · `PED-27`)
 
 **핵심 판단**: 계약을 또 만들지 않는다. **계약을 우회하는 길을 닫는 일**이다.
 
@@ -323,7 +323,7 @@ v1 §2의 의도적 미채택 11건을 **재판정하지 않되**, 각 항목의
 **범위 밖 동결**: 응답 모델 변경 · `/growth-evidence` 변경 · 클라 배선(D10 소관) ·
 `focus_score`/`engagement_score` 좌석(`S3-16` 소유).
 
-### D9 — 계약↔서빙 대조 게이트 (G3 · `PED-23`)
+### D9 — 계약↔서빙 대조 게이트 (G3 · `PED-28`)
 
 **핵심 판단**: 새 계약이 아니라 **기존 두 정본이 서로 어긋나지 않게 묶는 핀**이다.
 
@@ -363,7 +363,7 @@ v1 §2의 의도적 미채택 11건을 **재판정하지 않되**, 각 항목의
 **범위 밖 동결**: `/harness-metrics` 클라 배선(D8이 봉인) · 보호자 대시보드 · 확신도 수집 UI ·
 `problem_screen` 재설계(θ·표준오차 렌더는 별도 슬라이스).
 
-### D11 — 반게임화 효능 측정 복원 (G4 · G5 · `PED-24`)
+### D11 — 반게임화 효능 측정 복원 (G4 · G5 · `PED-29`)
 
 **핵심 판단**: 신규 테이블 0 · 마이그레이션 0 · 신규 계산 0. **순수함수의 입력만 바꾼다.**
 
@@ -511,17 +511,26 @@ v1이 8회차까지, r2가 9회차, `operations_module_gap_review_r3.md`가 10�
 
 | 설계 | 태스크 | stage | priority |
 |---|---|---|---|
-| D8 | `PED-22-harness-metrics-operator-gate` | S3 | 2 |
-| D9 | `PED-23-exposure-contract-serving-crosswalk-gate` | S3 | 3 |
+| D8 | `PED-27-harness-metrics-operator-gate` | S3 | 2 |
+| D9 | `PED-28-exposure-contract-serving-crosswalk-gate` | S3 | 3 |
 | D10 | `MOB-17-growth-evidence-render` | S3 | 2 |
-| D11 | `PED-24-antigamification-efficacy-measurement` | S3 | 3 |
+| D11 | `PED-29-antigamification-efficacy-measurement` | S3 | 3 |
 
-**번호 배정은 CLI가 했다** — 최초 시도 `PED-17`·`MOB-16`은 CLI가 **원격 브랜치 충돌로 거부**했다
-(`PED-17-study-generate-fallback-decision` @ `claude/whymath-ai-integration-check-5qqcp4` ·
-`MOB-16-coaching-time-goal-axis-reach` @ `claude/whymath-ai-tutor-design-uq92g2`). 두 브랜치 모두
-main 미병합이라 **로컬 파일 목록만 봤으면 보이지 않았을 인플라이트 번호**다. 거부를 우회하지 않고
-CLI가 제안한 번호(`PED-22`·`MOB-17`)를 그대로 썼다(HARN-10 — 2026-07-18/25 `ARCH-13`,
-2026-07-29 `OPS-15` 중복 배정 선례가 낳은 규칙이 실제로 작동한 사례).
+**번호 배정은 CLI가 했다 — 그리고 이 문서 안에서 두 번 작동했다** (HARN-10 —
+2026-07-18/25 `ARCH-13`, 2026-07-29 `OPS-15` 중복 배정 선례가 낳은 규칙의 실작동 기록):
+
+1. **등재 시(1차)** — 최초 시도 `PED-17`·`MOB-16`은 CLI가 **원격 브랜치 충돌로 거부**했다
+   (`PED-17-study-generate-fallback-decision` @ `claude/whymath-ai-integration-check-5qqcp4` ·
+   `MOB-16-coaching-time-goal-axis-reach` @ `claude/whymath-ai-tutor-design-uq92g2`). 두 브랜치
+   모두 main 미병합이라 **로컬 파일 목록만 봤으면 보이지 않았을 인플라이트 번호**다. CLI 제안
+   번호 `PED-22~24`·`MOB-17`을 그대로 썼다.
+2. **PR 시(2차·같은 날)** — 등재와 PR 사이에 main이 29커밋 전진하며 **다른**
+   `PED-22-strategy-catalog-canon-recovery`·`PED-23-…`·`PED-24-…`(uqyg79 회수분)가 착지해
+   1차 배정 번호가 그새 점유됐다. `validate`가 충돌 3건을 red로 잡았고, 처방("하나를 다음 빈
+   번호로 개명")대로 — main 쪽은 이미 머지돼 불가침 — 본 문서의 3건을 CLI 재등재로
+   **`PED-27`·`PED-28`·`PED-29`로 개명**했다. `MOB-17`은 원격 브랜치 선점이 유지돼 무충돌.
+   원격 스캔 가드(HARN-15)도 **푸시 이전의 시간창**(양쪽 다 인플라이트)은 못 본다 — 그 창은
+   validate가 병합 시점에 닫는다는 것이 이번 실측이다.
 
 ### 기존 태스크 수정 (CLI에 notes·artifacts 정정 서브커맨드가 없어 YAML 직접 편집 — **상태 변경 아님**)
 

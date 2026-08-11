@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: PED-23-exposure-contract-serving-crosswalk-gate
+id: PED-28-exposure-contract-serving-crosswalk-gate
 title: "노출 계약↔서빙 스키마 양방향 대조 게이트 — 동어반복 검증 제거 + 드리프트 2건 상환"
 track: math-completion
 stage: S3
@@ -18,7 +18,7 @@ acceptance:
   - "⑤ 상환 방향은 자동 노출이 아니다 — 미등재 3종은 _STATIC_TIER에 명시 등재하되 계층 판정(INTERNAL_ONLY 가능성 포함)은 지표 성격을 보고 정한다. 게이트를 green으로 만들려고 학생 노출로 밀지 않는다"
   - "⑥ 변별력 양방향 실측 — 계약에만 있고 스키마에 없는 필드/스키마에만 있고 계약에 없는 필드를 각각 주입했을 때 실제로 red가 나는지 확인(주입 파일은 실측 후 정리)"
   - "⑦ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
-  - "⑧ 범위 밖 동결 — 노출 계층 정책 자체의 개정 · 신규 지표 계산 · 클라 렌더 · /harness-metrics 게이트(PED-22 소관)"
+  - "⑧ 범위 밖 동결 — 노출 계층 정책 자체의 개정 · 신규 지표 계산 · 클라 렌더 · /harness-metrics 게이트(PED-27 소관)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/harness/growth_evidence_exposure.py

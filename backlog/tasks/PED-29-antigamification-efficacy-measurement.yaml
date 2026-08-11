@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: PED-24-antigamification-efficacy-measurement
+id: PED-29-antigamification-efficacy-measurement
 title: "반게임화 결정의 효능 측정 복원 — KPI2 리텐션 소스 교체(writer 0 좌석 이탈) + 3상태 표기 + KPI3 stale 해제"
 track: math-completion
 stage: S3

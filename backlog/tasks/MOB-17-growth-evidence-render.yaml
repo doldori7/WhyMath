@@ -18,7 +18,7 @@ acceptance:
   - "⑤ anti_gamification_governance_test.dart(현재 16정규식) 통과 필수"
   - "⑥ 재확인 지점 — api/_concept_orchestration.py:86이 미측정 학생에게 '초보' 폴백을 부여한다(api/me.py:1239의 null 폴백과 비대칭). 이 섹션이 학생 대면이므로 그 라벨이 화면에 도달하는지 확인하고, 도달하면 미측정을 최하위 라벨로 표시하지 않도록 정정 경로를 기술한다"
   - "⑦ 도달 관측 — 이 화면이 실제로 라우트를 부르는지 위젯 테스트로 동결(PED-15가 '도달 증명이지 학생 화면 배선이 아니다'로 남긴 잔여의 회수임을 명시)"
-  - "⑧ 범위 밖 동결 — /harness-metrics 클라 배선(PED-22가 봉인) · 보호자 대시보드 · 확신도 수집 UI 신설 · problem_screen 재설계(θ·표준오차 렌더는 별도 슬라이스) · 학습 경로 타일(PATH-10 소관)"
+  - "⑧ 범위 밖 동결 — /harness-metrics 클라 배선(PED-27가 봉인) · 보호자 대시보드 · 확신도 수집 UI 신설 · problem_screen 재설계(θ·표준오차 렌더는 별도 슬라이스) · 학습 경로 타일(PATH-10 소관)"
 artifacts: []
 paths:
   - "src/mobile/lib/features/profile/**"
