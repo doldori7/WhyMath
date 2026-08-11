@@ -62,6 +62,27 @@ OcrResult _result({
       minConfidence: regionConf,
     );
 
+/// 화면에 실제로 그려진 모든 텍스트(Text·SelectableText)의 문자열을 모은다.
+///
+/// MATH-05 누출 동결용 — "백슬래시 매크로가 *어디에도* 안 보인다"를 화면 단위로 단언하려면
+/// 특정 위젯 하나가 아니라 렌더된 텍스트 전량을 봐야 한다(이 저장소 테스트는 파일마다
+/// 자기 헬퍼를 갖는 관례라 mathlive_input_screen_test와 각자 보유한다).
+List<String> _renderedTexts(WidgetTester tester) {
+  final List<String> out = <String>[];
+  for (final Text w in tester.widgetList<Text>(find.byType(Text))) {
+    if (w.data != null) {
+      out.add(w.data!);
+    }
+  }
+  for (final SelectableText w
+      in tester.widgetList<SelectableText>(find.byType(SelectableText))) {
+    if (w.data != null) {
+      out.add(w.data!);
+    }
+  }
+  return out;
+}
+
 void main() {
   testWidgets('초기엔 안내와 촬영/갤러리 버튼이 보인다', (tester) async {
     await tester.pumpWidget(_wrap(_result(overall: 0.9, regionConf: 0.9)));
@@ -99,6 +120,44 @@ void main() {
     expect(
       find.text('이 부분이 잘 안 보여요 — 다시 확인해볼까요?'),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('인식 결과는 원문 LaTeX 매크로를 노출하지 않고 평문 표기로 그린다 (MATH-05)',
+      (tester) async {
+    // `plainLatex`는 이름과 달리 평문이 아니다 — 백엔드 assemble.py가 region latex 원문을
+    // 이어붙인 값이라 매크로가 그대로 들어온다. 전체 요약·영역 카드 둘 다 검사한다.
+    const OcrResult macroResult = OcrResult(
+      regions: [
+        OcrRegion(
+          bbox: BBox(x: 0, y: 0, width: 10, height: 10),
+          contentType: '수식',
+          latex: r'\frac{1}{2}',
+          confidence: 0.95,
+        ),
+      ],
+      plainLatex: r'\frac{1}{2} \times 4',
+      overallConfidence: 0.95,
+      minConfidence: 0.95,
+    );
+
+    await tester.pumpWidget(_wrap(macroResult));
+    await tester.tap(find.text('사진 찍기'));
+    await tester.pumpAndSettle();
+
+    // ① 존재 단언 — 변환된 평문 표기가 실제로 그려진다(빈 화면 위장 방지).
+    //    전체 요약: `\frac{1}{2} \times 4` → `((1)/(2)) *4`, 영역 카드: `((1)/(2))`.
+    //    `) *4`의 공백은 변환기가 `\times`의 *뒤* 공백만 삼키는 데서 오는 기존 표기 산물이다
+    //    (latex_to_plain.dart 주석 "값이 명시 기호라 뒤 공백 삼킴 안전") — 이 태스크가 만든
+    //    것이 아니고, 그 파일은 MATH-01이 소유 중이라 여기서 손대지 않는다. 실제 산출값을
+    //    그대로 동결한다(추정치를 적어 두면 계약이 아니라 희망이 된다).
+    expect(find.text('((1)/(2)) *4'), findsOneWidget);
+    expect(find.text('((1)/(2))'), findsOneWidget);
+    // ② 부재 단언 — 렌더된 텍스트 어디에도 백슬래시 매크로가 없다(화면 단위 계약).
+    expect(
+      _renderedTexts(tester).where((String t) => t.contains(r'\')),
+      isEmpty,
+      reason: '학생 대면 표면에 LaTeX 원문 노출 금지(MATH-05)',
     );
   });
 

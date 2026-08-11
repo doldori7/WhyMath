@@ -15,6 +15,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/spacing.dart';
+import '../domain/latex_to_plain.dart';
 import 'mathlive_input_webview.dart';
 
 /// 수식(LaTeX) 입력 화면 — MathLive WebView로 입력받아 "완료"로 반환한다.
@@ -40,6 +41,12 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
   String _latex = '';
 
   bool get _canSubmit => _latex.trim().isNotEmpty;
+
+  /// 미리보기용 평문 표기(MATH-05) — 표시 전용이며 pop 반환값에는 쓰지 않는다.
+  ///
+  /// 변환 결과가 빈 문자열이면(간격 매크로만 입력한 경우 등) 미리보기를 아예 그리지 않는다 —
+  /// 전송 가능 판정(`_canSubmit`)은 원문 기준 그대로라 여기 결과에 영향받지 않는다.
+  String get _preview => latexToPlainSolution(_latex);
 
   /// 웹(또는 테스트 fake)이 흘린 LaTeX 변경을 화면 상태로 반영한다.
   void _onLatexChanged(String latex) => setState(() => _latex = latex);
@@ -80,10 +87,22 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
                       ),
               ),
               const SizedBox(height: AppSpacing.md),
-              // 입력 미리보기(LaTeX 원문) — 렌더 위젯 전까지 plain Text(기존 관행).
-              if (_latex.trim().isNotEmpty) ...[
+              // 입력 미리보기 — 학생이 읽을 *평문 표기*로 되돌려 보여준다(MATH-05).
+              //
+              // 이전엔 `Text(_latex)`로 MathLive LaTeX 원문(`\frac{1}{2}` 등 백슬래시 매크로)을
+              // 그대로 노출했다. 채팅 버블(chat_screen.dart)은 MOB-06에서 이미 같은 변환을
+              // 거치는데 이 표면만 빠져 있던 것 — 없던 기능을 만드는 게 아니라 *이미 정본인*
+              // 표기 변환(latexToPlainSolution)이 미적용이던 표면을 닫는다. 수식 조판
+              // 엔진(flutter_math_fork)은 여전히 미도입이다(pubspec.yaml 주석 유지) — 이건
+              // 조판이 아니라 표기 매핑이고, 렌더러를 코어에 넣지 않는다(Renderer=Plugin).
+              //
+              // ⚠️ 표시만 변환하고 *데이터 흐름은 원문 그대로*다 — '완료'가 pop으로 돌려주는
+              // 값은 아래에서 `_latex.trim()`(원문 LaTeX)이며, 호출측
+              // chat_controller.sendMathliveLatex가 자기 쪽에서 latexToPlainSolution을
+              // 적용한다. 여기서 pop 값까지 변환하면 이중 변환이 된다.
+              if (_preview.isNotEmpty) ...[
                 Text(
-                  _latex,
+                  _preview,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),

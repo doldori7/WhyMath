@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../theme/spacing.dart';
+import '../../chat/domain/latex_to_plain.dart';
 import '../application/ocr_controller.dart';
 import '../application/ocr_state.dart';
 import '../data/image_source_service.dart';
@@ -196,10 +197,16 @@ class _OverallSummary extends StatelessWidget {
         children: [
           Text('인식한 풀이', style: theme.textTheme.titleSmall),
           const SizedBox(height: AppSpacing.xs6),
-          // 인식 결과 본문 — 선택 가능 텍스트(복사·다시 확인 편의). LaTeX 렌더는 후속(현 관례:
-          // scene_renderer도 본문을 Text로 표시·flutter_math_fork 렌더는 미도입).
-          if (result.plainLatex.isNotEmpty)
-            SelectableText(result.plainLatex)
+          // 인식 결과 본문 — 선택 가능 텍스트(복사·다시 확인 편의)이되, 학생이 읽을 *평문
+          // 표기*로 되돌려 보여준다(MATH-05).
+          //
+          // ⚠️ `plainLatex`는 이름과 달리 평문이 아니다 — 백엔드 `l5/ocr/assemble.py`가
+          // `" ".join(r.latex for r in regions)`로 *원문 region LaTeX를 이어붙인* 값이라
+          // 백슬래시 매크로가 그대로 들어온다. 이름이 만든 착시 때문에 이 표면이 오래
+          // 뚫려 있었다. 표시만 변환하고 데이터 경로(chat_controller가 코치로 넘기는
+          // `result.plainLatex`)는 건드리지 않는다 — 그쪽은 백엔드 verify 계약 소관.
+          if (latexToPlainSolution(result.plainLatex).isNotEmpty)
+            SelectableText(latexToPlainSolution(result.plainLatex))
           else
             Text(
               '아직 인식된 내용이 없어요.',
@@ -265,8 +272,12 @@ class _RegionCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.xs6),
-              if (region.latex.isNotEmpty)
-                SelectableText(region.latex)
+              // 영역 본문도 평문 표기로 되돌린다(MATH-05) — `_OverallSummary`와 같은 누출
+              // 지점이다. 태스크 acceptance는 `plainLatex` 한 곳만 지목했지만, 같은 화면에서
+              // 영역 카드가 `region.latex` 원문을 그대로 노출하고 있어 한쪽만 닫으면 화면
+              // 단위 계약("이 화면은 원문 LaTeX를 학생에게 보이지 않는다")이 성립하지 않는다.
+              if (latexToPlainSolution(region.latex).isNotEmpty)
+                SelectableText(latexToPlainSolution(region.latex))
               else
                 Text(
                   '(읽은 내용 없음)',
