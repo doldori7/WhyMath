@@ -28,9 +28,14 @@
   - `problem_bank_probability_finite_v0`: `unit_codes`가 확률형/개수형 2 밴드를 가른다.
   - `problem_bank_v1`(4건, 레거시 손저작): 생성기 배치 흔적이 없어 slug로 직접 판단(사람 판단·
     아래 개별 주석에 근거 명시).
-  - `problem_bank_rephrased_v0`(429건): **명시 제외** — `S4-14`(변형 계보 영속) 미착지로 원
-    생성기를 추적할 길이 없다. 이 모듈의 `classify_record`는 이 코퍼스명을 아예 다루지 않는다
-    (호출자가 `EXCLUDED_CORPORA`로 사전 필터링).
+  - `problem_bank_rephrased_v0`(421건): **계보(lineage) 분류** — 재서술은 발문(question_text)
+    표현만 바꾸고 수치·정답·풀이 절차는 부모와 동일하므로(`_provenance.json` 계약·
+    `test_corpus_quality.py` 봉인) 인지 행동도 부모와 같다. `relations`의 "변형" 계보
+    (`parent_slug` — S4-14/S4-18 영속·2026-08-11 실측 421/421 전건 성립)로 부모(원 생성기
+    산출물)를 찾아 부모의 유형을 그대로 승계한다(`classify_rephrased_record`). 단일 레코드만
+    으로는 분류할 수 없어 `classify_record`가 아니라 부모 색인을 요구하는 별도 함수다.
+    (구 "S4-14 미착지" 명시 제외는 사유 소멸로 `PB-07`이 해제 —
+    `docs/architecture/problem_bank_gap_review_r3.md` §3 G2.)
 
 경계(CLAUDE.md 7계층·`problem_bank_gap_review.md` §5-③ 판정 유지): 이 모듈은 **관측 축**이다.
 `problem_type_node` FK 연결·유형별 생성 확대·추천/출제 로직은 스코프 밖 — 여기서 만드는 것은
@@ -39,7 +44,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
 
 __all__ = [
     "ALL_PROBLEM_TYPE_IDS",
@@ -51,6 +60,8 @@ __all__ = [
     "CORPUS_REPHRASED_V0",
     "CORPUS_V1",
     "EXCLUDED_CORPORA",
+    "ExclusionEntry",
+    "LINEAGE_CORPORA",
     "PTYPE_CONDITION_SATISFACTION",
     "PTYPE_CONSTRUCT_OBJECT",
     "PTYPE_COUNT_SOLUTIONS",
@@ -70,6 +81,10 @@ __all__ = [
     "PTYPE_VERIFY_CLAIM",
     "TARGET_CORPORA",
     "classify_record",
+    "classify_rephrased_record",
+    "default_backlog_tasks_dir",
+    "find_exclusion_expiry_violations",
+    "rephrased_parent_slug",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -128,7 +143,10 @@ CORPUS_MISCONCEPTION_MC_V0 = "problem_bank_misconception_mc_v0"
 CORPUS_PROBABILITY_FINITE_V0 = "problem_bank_probability_finite_v0"
 CORPUS_REPHRASED_V0 = "problem_bank_rephrased_v0"
 
-# 백필 대상(결정론 순서) — `problem_bank_rephrased_v0`은 없다(S4-14 미착지·명시 제외).
+# 직접 분류 대상(결정론 순서) — 생성기 identity가 *레코드 자체*에 남아 `classify_record`가
+# 단일 레코드로 분류하는 6종. `problem_bank_rephrased_v0`은 여기 없다 — 제외가 아니라
+# **계보 분류**(`LINEAGE_CORPORA`·부모 유형 승계)로 태깅한다(PB-07 — 구 제외 사유였던
+# "S4-14 미착지"는 S4-14/S4-18 done·계보 421/421 실측으로 소멸).
 TARGET_CORPORA: tuple[str, ...] = (
     CORPUS_V1,
     CORPUS_GENERATED_V0,
@@ -138,7 +156,103 @@ TARGET_CORPORA: tuple[str, ...] = (
     CORPUS_PROBABILITY_FINITE_V0,
 )
 
-EXCLUDED_CORPORA: frozenset[str] = frozenset({CORPUS_REPHRASED_V0})
+# 계보 분류 대상(결정론 순서) — 자기 레코드의 생성기 흔적이 아니라 "변형" 계보의 부모
+# (원 생성기 산출물) 유형을 승계하는 코퍼스. 단일 레코드 서명(`classify_record`)으로는
+# 분류 불가라 별도 축이다(`classify_rephrased_record` + 부모 색인 경유 —
+# `problem_type_backfill._build_parent_type_index`가 조성).
+LINEAGE_CORPORA: tuple[str, ...] = (CORPUS_REPHRASED_V0,)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 제외(면제) 좌석 + 만료 계약 — PB-07 (`ops/provenance_audit` ARCH-25 계약의 동형 이식).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class ExclusionEntry:
+    """유형 태깅 제외 항목 — 추적 가능한 백로그 태스크 ID 필수(PB-07 만료 계약).
+
+    사유 문자열만 남긴 제외는 그 사유가 소멸해도(추적 태스크 done) 아무도 모른 채 방치된다 —
+    실측 2회차: "S4-14 미착지" 사유의 rephrased_v0 제외가 S4-14 done 후 6일 방치
+    (`docs/architecture/problem_bank_gap_review_r3.md` §3 G2·§6-ⓑ, CLAUDE.md 금기
+    "만료 없는 유예·제외 금지"). `task_id`를 구조 필드로 못박아 두면
+    `find_exclusion_expiry_violations`/`TestExclusionExpiryContract`가 backlog/tasks의 실제
+    상태와 대조해 방치를 기계로 드러낸다(자동 해제는 아니다 — 해제는 사람 판단).
+    `ops/provenance_audit.GrandfatherEntry`(ARCH-25)와 동형이되 의도적으로 공유하지 않는다
+    (2회차에 좌석 열거·공용 도구화는 과공학 — PB-07 acceptance ⑤).
+    """
+
+    task_id: str
+    reason: str
+
+
+# 유형 태깅에서 제외하는 코퍼스 — 코퍼스명 → ExclusionEntry(task_id + 사유). 만료 계약 좌석.
+# 2026-08-11 PB-07: rephrased_v0 제외를 해제했다(사유 소멸 — S4-14/S4-18 done·계보 421/421
+# 실측·이제 LINEAGE_CORPORA로 계보 분류). 현재 빈 딕셔너리 — 향후 제외가 다시 필요하면
+# 반드시 실존 백로그 태스크 id + 사유를 가진 ExclusionEntry로 등재한다
+# (`test_problem_type_mapping.py` TestExclusionExpiryContract가 동결).
+EXCLUDED_CORPORA: dict[str, ExclusionEntry] = {}
+
+
+def default_backlog_tasks_dir() -> Path:
+    """`backlog/tasks` 저장소 정본 경로(만료 계약 검증용) — harness 공통 `parents[4]` 관용구
+    (harness/ → whymath_backend/ → backend/ → src/ → repo 루트 —
+    `problem_type_backfill._REPO_ROOT`·`provenance_audit.default_backlog_tasks_dir`와 동일)."""
+    return Path(__file__).resolve().parents[4] / "backlog" / "tasks"
+
+
+def _load_backlog_task_statuses(tasks_dir: Path) -> dict[str, str]:
+    """`backlog/tasks/*.yaml` → `{task_id: status}` 경량 조회(`provenance_audit` 동형).
+
+    PyYAML `safe_load`만 사용(임의 객체 역직렬화 금지). 파싱 실패·비딕셔너리 문서는 조용히
+    건너뛴다 — 이 함수의 책임은 제외 항목 대조이지 백로그 스키마 검증이 아니다.
+    """
+    statuses: dict[str, str] = {}
+    if not tasks_dir.is_dir():
+        return statuses
+    for path in sorted(tasks_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        task_id = data.get("id")
+        status = data.get("status")
+        if isinstance(task_id, str) and isinstance(status, str):
+            statuses[task_id] = status
+    return statuses
+
+
+def find_exclusion_expiry_violations(tasks_dir: Path | None = None) -> list[str]:
+    """제외 만료 계약 위반 목록(빈 리스트 = 위반 없음) — PB-07(`ARCH-25` 동형).
+
+    ① `EXCLUDED_CORPORA`의 `task_id`가 `backlog/tasks/*.yaml` 어디에도 없다(오타·삭제된
+       태스크 참조 — 추적 불가능한 제외).
+    ② 참조된 태스크가 이미 `status: done`인데 항목이 여전히 남아 있다(사유 소멸 방치 —
+       rephrased_v0 6일 방치의 재발을 기계로 차단). 자동 해제가 아니라 트립와이어다 —
+       해제는 여전히 사람 판단·손 편집이다.
+
+    `EXCLUDED_CORPORA`는 모듈 전역을 읽는다(테스트는 `monkeypatch.setattr(ptm,
+    "EXCLUDED_CORPORA", ...)`로 교체) — `provenance_audit._KNOWN_GAPS`와 동일 관용구.
+    """
+    tdir = tasks_dir if tasks_dir is not None else default_backlog_tasks_dir()
+    statuses = _load_backlog_task_statuses(tdir)
+
+    violations: list[str] = []
+    for corpus_name, entry in EXCLUDED_CORPORA.items():
+        status = statuses.get(entry.task_id)
+        if status is None:
+            violations.append(
+                f"{corpus_name}: task_id={entry.task_id!r} 이(가) backlog/tasks/*.yaml에 "
+                "존재하지 않는다 — 추적 불가능한 제외."
+            )
+        elif status == "done":
+            violations.append(
+                f"{corpus_name}: task_id={entry.task_id!r} 이(가) 이미 done인데 "
+                "EXCLUDED_CORPORA 제외 항목이 방치되어 있다 — 해제 검토 필요."
+            )
+    return violations
 
 
 def _unit_codes(record: Mapping[str, object]) -> tuple[str, ...]:
@@ -363,10 +477,10 @@ _V1_SLUG_TO_TYPE: dict[str, str] = {
 def classify_record(corpus_name: str, record: Mapping[str, object]) -> list[str]:
     """(코퍼스명, 레코드) → `problem_type_codes` 값(0개 또는 1개·결정론).
 
-    미태깅(빈 리스트)은 ①`corpus_name`이 이 표에 없는 코퍼스(신규 코퍼스는 매핑표부터 갱신)
-    ②`problem_bank_rephrased_v0`(명시 제외) ③밴드 식별 실패(예: `distractor_map`이 여러
-    오개념을 태깅해 kebab을 하나로 못 좁히는 경우) 셋 중 하나다 — 조용한 오분류 대신 항상
-    빈 리스트로 정직하게 드러낸다.
+    미태깅(빈 리스트)은 ①`corpus_name`이 이 표에 없는 코퍼스(신규 코퍼스는 매핑표부터 갱신 —
+    계보 분류 코퍼스(`LINEAGE_CORPORA`)는 이 함수가 아니라 `classify_rephrased_record` 사용)
+    ②밴드 식별 실패(예: `distractor_map`이 여러 오개념을 태깅해 kebab을 하나로 못 좁히는
+    경우) 둘 중 하나다 — 조용한 오분류 대신 항상 빈 리스트로 정직하게 드러낸다.
     """
     ptype: str | None
     if corpus_name == CORPUS_GENERATED_V0:
@@ -389,3 +503,59 @@ def classify_record(corpus_name: str, record: Mapping[str, object]) -> list[str]
     else:
         ptype = None
     return [ptype] if ptype is not None else []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# `problem_bank_rephrased_v0` — 계보(lineage) 분류 (PB-07).
+# ──────────────────────────────────────────────────────────────────────────
+
+# 계보(재서술) 관계 타입 리터럴 — 정본은 `schema/enums.py` `RelationType.변형`
+# (재정의 아님·오탈자 방지용, PTYPE_* 상수와 동일 원칙 — 거버넌스 테스트가 대조).
+_REL_TYPE_VARIANT = "변형"
+
+
+def rephrased_parent_slug(record: Mapping[str, object]) -> str | None:
+    """rephrased 레코드의 `relations`에서 "변형" 계보 부모 slug 1종을 복원한다.
+
+    S4-14/S4-18이 영속한 계보 계약: 재서술 레코드는 원본을 가리키는 "변형" 관계를 갖는다
+    (2026-08-11 실측: 421/421 전건·전부 정확히 1건). 부모가 유일하게 좁혀지지 않으면
+    (0건 또는 서로 다른 부모 2개 이상) `None`(미태깅)을 반환한다 — 침묵 오분류 금지
+    (`_distractor_kebab`와 동일 원칙). "유사" 등 다른 관계 타입은 계보가 아니므로 무시한다.
+    """
+    raw = record.get("relations")
+    if not isinstance(raw, list):
+        return None
+    parents: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("relation_type") != _REL_TYPE_VARIANT:
+            continue
+        slug = entry.get("parent_slug")
+        if isinstance(slug, str):
+            parents.add(slug)
+    if len(parents) != 1:
+        return None
+    (only,) = parents
+    return only
+
+
+def classify_rephrased_record(
+    record: Mapping[str, object], parent_types: Mapping[str, Sequence[str]]
+) -> list[str]:
+    """rephrased 레코드 1건을 계보로 분류 — 부모(원 생성기)의 유형을 그대로 승계한다
+    (0개 또는 1개·결정론).
+
+    재서술(LLM 발문 다양화)은 question_text 표현만 바꾸고 수치·정답·풀이 절차·unit_codes는
+    부모와 동일하다(`problem_bank_rephrased_v0/_provenance.json` 계약·`test_corpus_quality.py`
+    봉인) — 인지 행동이 부모와 같으므로 유형도 부모의 것이다. 이 함수가 읽는 것은 계보
+    (`relations`)와 부모 색인뿐이다(문항 텍스트 파싱/추론 0·LLM 0 계약 유지).
+
+    `parent_types`는 직접 분류 코퍼스(`TARGET_CORPORA`)의 slug → 유도 유형 색인이다
+    (호출자가 구축 — `problem_type_backfill._build_parent_type_index`). 부모 slug 복원 실패·
+    색인 부재는 빈 리스트(미태깅) — 건수는 백필 리포트가 정직하게 센다(침묵 누락 금지).
+    """
+    slug = rephrased_parent_slug(record)
+    if slug is None:
+        return []
+    return list(parent_types.get(slug, ()))
