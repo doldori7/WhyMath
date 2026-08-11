@@ -446,6 +446,27 @@
   문서의 주장이 문서 자신에 의해 세 번 실증됐다.
 
 정본: `docs/architecture/nlp_module_gap_review_r2.md` §8.
+### 2026-08-11 (사고·런북 3중 결함): **좌석 발급 게이트 1차 실행 실패 — 원인 3건 중 2건이 CLAUDE.md에 문장으로 있는 규칙을 claude가 어긴 것. 대책은 산문이 아니라 코드(프리플라이트)와 런북 교체** (claude, Kiki가 게이트 실행 후 실패 출력 제보)
+
+- **사고**: `G-operator-seat-first-grant` 명령 블록을 Kiki가 실행 → 3곳에서 막힘.
+  | # | 증상 | 진짜 원인 | 성격 |
+  |---|---|---|---|
+  | ① | `column user_profile.role does not exist` (트레이스백 100여 줄) | **whymath-pg 마이그레이션 뒤처짐** | claude 잘못 — "가정 기반 런북 금지" 위반. 게이트 선행조건에 "스키마가 최신인가"를 안 적었다 |
+  | ② | `'<' 연산자는 나중에 사용하도록 예약` | `<여기에_실제_user_id_전체>` 꺾쇠 | claude 잘못 — CLAUDE.md가 *"자리표시 `<...>` 직접 타이핑 금지 — PowerShell `<` 예약어 거부"*라고 **명시**하는데 어김 |
+  | ③ | `git pull` → `00_overview.md` 충돌·머지 중단 | 로컬 main이 2커밋 diverged | claude 잘못 — CLAUDE.md가 *"diverged 가능 브랜치는 `fetch`+`checkout -B`로만 안내"*라고 **명시**하는데 `pull`을 줌 |
+- **핵심 교훈**: ②③은 **규칙을 몰라서가 아니라 명령 블록을 쓸 때 그 규칙을 조회하지 않아서** 났다. 규칙이 자동 로드되는 것과 *산출물에 적용되는 것*은 다른 사건이다. 그래서 대책을 산문 규칙 추가로 하지 않았다(4번째 문장을 더해도 같은 실패가 난다) — **코드와 런북 구조**로 옮겼다.
+- **대책 1(코드·본체) — `role_grant_cli` 스키마 프리플라이트**: 세 서브커맨드 **전부**에 선행. `db/schema_version.py`의 `read_applied_heads`+`classify_applied_head` **재사용**(신규 판정 로직 0). **`verify_schema_version()`을 쓰지 않은 이유**: 그 함수는 `is_production_like`(실 OAuth provider 구성)일 때만 raise하고 그 밖에선 경고 후 **통과**시킨다 — Kiki 셸은 provider 미구성이라 뒤처진 스키마인데도 통과했을 것이다(프리플라이트로서 변별력 0). 좌석 부여는 어느 환경이든 스키마가 맞아야 하므로 환경 의존 판정을 배제했다. **실측: 100여 줄 트레이스백 → 1줄 행동 지시**(`적용=b4c5d6e7f0a2 / 기대=090d254a5d43 … alembic upgrade head`). 아울러 `list`에 try 블록이 아예 없던 것(사고 시 raw 트레이스백의 직접 원인)과 예상 못 한 DB 예외도 타입명 포함 한 줄 JSON으로 봉합.
+- **대책 1이 잡아낸 2차 버그(실 DB 실행이 아니었으면 못 봤다)**: 프리플라이트를 붙이자 `upgrade head` 뒤의 `list`가 `attached to a different loop`로 죽었다 — `main()`이 프리플라이트와 본 명령을 **서로 다른 `asyncio.run()`**으로 돌리는데 전역 asyncpg 풀이 살아남아 다음 루프로 새는 것. `finally: await dispose_engine()`으로 봉합(`recommendation_reach_report` 선례 동형). **통합 테스트는 `WHYMATH_DB_DISABLE_POOL=1`로 이 함정을 우회하고 있어 끝까지 안 잡혔다** — hermetic·통합 다 green인데 실 실행만 깨지는 형태였다.
+- **대책 2(런북) — 게이트를 "측정 우선"으로 전면 교체**: `upgrade head`를 지금 안내하지 **않는다**. 저장소의 마지막 whymath-pg 실측 head가 `f3a4b5c6d7e8`(2026-06-30)이고 그게 그대로면 밀린 마이그레이션이 **29개**, 그중 **upgrade 단계가 파괴적인 것이 6건**(concept 컬럼 drop 4·제약 drop·타입 확대)이며 `a5b6c7d8e9f0`은 기존 행 길이 초과 시 **DELETE 선행**을 요구한다. 1단계는 **읽기 전용 측정 3줄**(컨테이너 생존·`alembic_version`·`mis_id` 길이 초과 행 수)로 끝내고, 그 값을 보고 2단계를 설계한다. **직전 답변에서 "additive라 안전"이라고 한 것은 가장 가까운 3건만 보고 일반화한 오판이었고 여기서 정정한다.**
+- **대책 3(등재)**: `OPS-39-prod-schema-drift-observability` — whymath-pg가 코드 head와 벌어져도 **감시하는 장치가 0건**이다(앱 기동 가드는 그 DB에 앱을 띄울 때만 발화하므로 CLI 위주 운영에선 구조적 침묵). 저장소에 **whymath-pg 대상 마이그레이션 절차 문서 자체가 없다**는 것도 함께 등재(`deployment_cd_runbook.md`의 명령은 전부 별개 compose 스택 대상이고 같은 문서가 "기존 whymath-pg 이관 미실시"를 자인).
+- **부수 확인**: 부여 대상 `user_id`를 찾을 수단이 저장소에 **0건**이다(`list`는 비기본 역할자만 보여줘 좌석 0일 땐 빈 목록, `email_hash`는 해시라 이메일로 특정 불가). 2단계 안내 시 토큰 `sub` 디코드 또는 `email_hash` 조회를 쓴다.
+
+- **⚠️ 정정(같은 날 2차 실측) — 첫 프리플라이트는 실제 사고를 못 잡는 물건이었다**: Kiki가 1단계 측정을 실행한 결과 `alembic_version = d6e7f8a9b0c1`이었고, 이 값은 **현재 코드의 마이그레이션 체인에 없다**(versions/ 전수 grep 0건). `classify_applied_head`는 미지 리비전을 `AHEAD`로 분류하고, AHEAD는 정상 롤백이라 통과시킨다 — 즉 **버전 테이블만 보던 내 프리플라이트는 그 상태를 그대로 통과시켰을 것**이다(컬럼은 실제로 없는데). 나는 내가 *만든* 시나리오(BEHIND)로만 검증했고 *실제* 상태로는 검증하지 않았다.
+  - **근본 오류 = 간접 신호를 판정에 썼다.** `alembic_version`은 무엇이든 적혀 있을 수 있는 테이블이고 컬럼 실재를 증명하지 않는다 — CLAUDE.md "간접 신호를 성공 판정으로 쓰기 금지"에 정확히 해당한다. **직접 신호**(`information_schema`로 `user_profile.role` 실재 확인)를 1차 판정으로 올리고 버전 정보는 안내 메시지를 풍부하게 하는 부가 재료로 강등했다.
+  - 판정부를 순수 함수 `judge_schema_readiness(applied_heads, *, role_column_exists)`로 분리해 두 신호의 **4조합을 hermetic으로 전수** 시험한다. **뮤테이션 실측**: 직접 신호 판정을 무력화하면 정확히 `test_unknown_head_with_missing_column`(=Kiki 케이스)만 red → 그 테스트가 이 수정을 실제로 지킨다.
+  - **실측 확인**: 그 상태에서 `alembic current`·`alembic upgrade head` **둘 다 exit 255**(`Can't locate revision identified by 'd6e7f8a9b0c1'`) — 즉 upgrade로는 진행 자체가 불가하다. 오류 메시지에 이 사실을 담되 "거부될 수 있습니다"(추측)가 아니라 "거부됩니다(실측)"로 적었다.
+  - **게이트 2단계 = 스키마 실태 조사**(읽기 전용). `alembic stamp`로 임의 리비전을 찍는 것은 **금지**로 명시 — 실태와 다른 값을 찍으면 이후 마이그레이션이 이미 있는 객체를 만들려다 깨지거나 없는 객체를 있다고 믿고 건너뛴다. 1단계에서 `mis_id` 길이 초과 0건이 나와 `a5b6c7d8e9f0`의 DELETE 선행 전제는 이미 충족.
+  - **교훈**: "사고를 재현했다"고 말하려면 *내가 상상한 실패 모드*가 아니라 *실제로 관측된 상태*를 재현해야 한다. 이번엔 Kiki의 실측값이 도착한 뒤에야 내 수정이 헛다리였음이 드러났다.
 ### 2026-08-11 (전수 감사·회수 등재): **미머지 브랜치 46건 전수 감사 — 선행 판정(#785, 브리핑 7건 대상)이 못 본 미추적 고립 7건 발견·태스크 8건 등재. 최대 건은 보안 하드닝 45커밋(k20m0w SEC-13~18: OCR 상한·XFF·프로덕션 /docs — main에 grep 0건 실측)→`SEC-24`(P1). 신규 발견 2건: ①교수전략 카탈로그 3차 구현(gdmwhk)이 PR 없이 떠 있고 main엔 4차 구현 태스크(PED-22~25)가 대기 — `PED-26`이 4차 중복 차단 ②고립 탐지가 "done 표기" 대조뿐이라 구현만 있는 브랜치는 항구 사각(gdmwhk가 실증)→`HARN-31`** (claude 감사·등재, Kiki "머지 안 된 떠도는 코드 검토"+"판정·등재까지, 보안 최우선" 결정)
 - **경위**: 컨테이너 shallow로 브리핑 "판정 보류" → `--unshallow`(793커밋)+`--prune` 후 재측정. 열린 PR 15건 대조로 **PR 미오픈 브랜치 31건** 분리, main 백로그·문서 grep으로 추적/미추적 판정. 정본 = `docs/reviews/unmerged_branch_audit_full_2026-08-11.md`(재현 명령 전문 포함).
 - **등재 8건**: `SEC-24`(k20m0w 보안 6건 회수·P1) · `MOB-18`(비보안 15건·MOB-17은 원격 8ap436 선점으로 CLI 재배정) · `PED-26`(gdmwhk 회수+PED-22~25 처분 판정) · `CUR-08`(34zvse OPS-29·CUR-04·CUR-05 회수·CUR-07은 원 브랜치 자신이 선점) · `OPS-40`(5t5lmv) · `ARCH-30`(iws58k E7) · `OPS-41`(08-11 문서 fleet 5건 PR 백필) · `HARN-31`(done-less 고립 사각). §4-2(PR 게이트 무소급)의 관측 좌석은 기존 `HARN-30` ③ 소유라 중복 등재 안 함. `MISC-02`는 고립 브랜치의 block 사유를 CLI로 main 이관.

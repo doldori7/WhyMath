@@ -55,7 +55,7 @@ gates:
     evidence: "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk"
     notes: ""
   - id: G-operator-seat-first-grant
-    title: "운영자 좌석 1호 발급 (prod whymath-pg) — 이걸 해야 콘텐츠 CUD 전건 403이 실제로 풀린다. ADMIN-01 회수로 CLI는 착지했으나 prod 좌석은 0건"
+    title: "운영자 좌석 1호 발급 (whymath-pg) — 1·2단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 3단계는 리비전 확정"
     kind: human
     assignee: kiki
     status: pending
@@ -63,57 +63,57 @@ gates:
     remind_after_days: 7
     evidence: null
     notes: |
-      [과제] 운영자 좌석 1호 발급 — prod DB의 특정 사용자에게 CONTENT_ADMIN 부여
-      [목적] 현재 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가
-        전건 403이다. 봉인(SEC-07)이 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다.
-        이 게이트를 통과해야 "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
-      [선행] ① 회수분이 main에 머지돼 있을 것 — **충족**(PR #786 d1d8f28a + PR #789 ceaf527c)
-        ② Docker Desktop 가동 ③ prod DB 컨테이너 whymath-pg(호스트 포트 5433) 실행 중
-        ④ src\backend\.venv 세팅 완료(README) — 아래 블록은 그 venv의 python을 **직접 지정**한다
-      [성공] grant 명령이 {"user_id","old_role","new_role":"content_admin"} JSON + 종료코드 0,
-        이어지는 list가 그 user_id를 1건 이상 보여준다. 실패 시 비0 종료코드 + stderr JSON 사유
-        (미존재 user_id면 "사용자를 찾을 수 없습니다", 잘못된 역할명이면 argparse가 종료코드 2).
-      [실행 환경] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
-      [창 구분] 새 창 1개. 서버를 점유하지 않으므로 이후 조작 가능.
+      [목적] 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가 전건 403이다.
+        봉인(SEC-07)은 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다. 이 게이트를 통과해야
+        "봉인 정상"과 "아무도 못 씀"이 비로소 다른 값이 된다.
 
+      [중요 — 왜 바로 grant를 하지 않는가] 2026-08-11 1차 실행이 실패했다:
+        `column user_profile.role does not exist`. whymath-pg의 스키마가 코드와 맞지 않는다.
+        PR #800이 정비한 실행 블록(venv $Py 고정·user_id 조회)은 그 자체로 옳지만,
+        **스키마가 이 상태인 한 grant에서 반드시 같은 오류로 실패한다.** 그래서 스키마를 먼저 세운다.
+
+      [1단계 결과 — 2026-08-11 Kiki 실측, 완료]
+        · 컨테이너 생존 = true
+        · alembic_version = d6e7f8a9b0c1  ← **현재 코드의 마이그레이션 체인에 없는 값**
+        · misconception_catalog에서 length(mis_id) > 16 인 행 = 0건
+      [2단계 결과 — 2026-08-11 Kiki 실측, 완료]
+        · public 테이블 68개
+        · privacy_audit=없음 · defect_report=없음 · concept_visual_style=있음
+        · user_profile 41컬럼 — **role 없음**(c5d6e7f0a2b3 미적용 확정)
+      [해석] 실제 스키마는 a9b8c7d6e5f4(concept_visual_style 있음)와 c5d6e7f0a2b3(role 없음)
+        사이다. 즉 밀린 것은 4~5개뿐이고 **전부 additive**다 — 기록된 버전 문자열만 실태와 무관한
+        값이다. 1단계의 mis_id 0건으로 a5b6c7d8e9f0의 DELETE 선행 전제도 이미 충족.
+      [실측된 제약] 이 상태에서 alembic은 아예 동작하지 않는다 — 컨테이너에서 동일 상태를 재현해
+        확인: `alembic current`·`alembic upgrade head` 둘 다 exit 255,
+        "Can't locate revision identified by 'd6e7f8a9b0c1'". 그래서 upgrade 전에 stamp가 필요하다.
+
+      [3단계 — 리비전 확정. 읽기 전용, 데이터 변경 0]
       # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)
       cd C:\Users\kiki\Desktop\__AI\WhyMath
-      git fetch origin main
-      git checkout main
-      git pull origin main
 
-      # venv python을 직접 지정한다 — 이 PC는 conda base와 .venv가 동시 활성이라
-      # 맨 `python`은 다른 인터프리터에 결합될 수 있다(2026-07-27 ARCH-16 사고).
-      $Py = "src\backend\.venv\Scripts\python.exe"
-      $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath"
+      # A) constraints/mnemonic이 나오면(2행) b4c5d6e7f0a2까지 적용, 안 나오면(0행) a9b8c7d6e5f4
+      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT column_name FROM information_schema.columns WHERE table_name='formula_node' AND column_name IN ('constraints','mnemonic');"
 
-      # 0) 선행 자가검증 — 셋 다 통과해야 다음으로 간다
-      docker ps --filter name=whymath-pg --format "{{.Names}} {{.Status}}"   # whymath-pg가 Up이어야 함
-      & $Py -c "import whymath_backend.ops.role_grant_cli as m; print('CLI OK', m.__file__)"
+      # B) 뒤쪽 리비전 혼입 확인 — 0행이어야 정상(뭔가 나오면 스키마가 뒤섞인 것이라 stamp 위험)
+      docker exec whymath-pg psql -U whymath -d whymath -c "SELECT table_name, column_name FROM information_schema.columns WHERE (table_name='refresh_token_session' AND column_name='platform') OR (table_name='problem' AND column_name='identity_id');"
 
-      # 1) 부여 대상 user_id 조회 — prod에 어떤 계정이 있는지 먼저 본다
-      #    (role_grant_cli list는 '기본 역할이 아닌' 사용자만 보여주므로 지금은 빈 목록이 정상)
-      docker exec whymath-pg psql -U whymath -d whymath -c `
-        "SELECT user_id, nickname, role, created_at FROM user_profile ORDER BY created_at LIMIT 20;"
+      [보고] A)와 B)의 출력을 알려주시면 4단계(백업 → stamp → upgrade → 좌석 부여)를 설계해 드린다.
+      [금지] `alembic stamp`를 임의의 값으로 먼저 실행하지 말 것. 실태와 다른 값을 찍으면 이후
+        마이그레이션이 이미 있는 객체를 만들려다 깨지거나, 없는 객체를 있다고 믿고 건너뛴다.
+        stamp는 A)·B)로 리비전이 확정된 뒤에만, 백업을 뜬 다음에 한다.
 
-      # 2) 현재 좌석 확인 — 처음엔 {"users": [], "total": 0} 이 정상
-      & $Py -m whymath_backend.ops.role_grant_cli list
-
-      # 3) 좌석 부여 — 아래 자리표시자를 1)에서 고른 UUID 전체로 치환한다
-      #    (부분 문자열·생략표 금지 — UUID 36자를 통째로 붙여넣는다)
-      & $Py -m whymath_backend.ops.role_grant_cli grant 여기에_실제_user_id_전체 content_admin
-      echo "GRANT_EXIT=$LASTEXITCODE"   # 0이어야 성공
-
-      # 4) 자가검증 — 방금 부여한 user_id가 목록에 보여야 성공(total >= 1)
-      & $Py -m whymath_backend.ops.role_grant_cli list
-      echo "LIST_EXIT=$LASTEXITCODE"
-
-      [회수 방법] & $Py -m whymath_backend.ops.role_grant_cli revoke <user_id> content_admin
-        (revoke는 역할 인자가 필요하고, 그 역할을 실제로 보유 중일 때만 STUDENT로 되돌린다)
-      [주의] `python`·`pip` 같은 실행기 단독 호출 금지 — 위처럼 venv 경로를 $Py로 고정해 쓴다
-        (다중 환경 결합 사고 방지). 판정은 눈에 보이는 문자열이 아니라 $LASTEXITCODE로 한다.
-      [clear 증적] 4)의 list 출력(user_id 포함 JSON) + GRANT_EXIT=0 을 evidence로 남긴다.
-      [clear 증적] 3)의 list 출력(user_id 포함 JSON)을 evidence로 남긴다.
+      [4단계 예고 — 실행하지 말 것. 3단계 확정 후 값이 채워진 블록을 다시 드린다]
+        · 백업: scripts\backup\backup_whymath_pg.ps1 (기본 대상이 이미 whymath-pg)
+        · stamp(확정된 리비전) → upgrade head → 좌석 부여
+        · 좌석 부여 블록은 PR #800이 정비한 형태를 승계한다 — venv 고정($Py) + user_profile
+          조회로 user_id를 고른 뒤 grant/list, 판정은 $LASTEXITCODE로.
+        · 승계 시 함께 정정할 #800 잔여 결함 2건:
+          ① `git pull origin main` → diverged 시 add/add 충돌을 낸다(2026-08-11 실측).
+             `git fetch origin main` + `git checkout -B main origin/main` 형태로 교체.
+          ② [회수 방법]의 꺾쇠 `<user_id>` → PowerShell이 `<`를 예약어로 거부한다. 꺾쇠 없는
+             자리표시자로 교체(같은 사유로 grant 쪽은 이미 정정돼 있다).
+      [clear 증적] 최종 clear는 좌석 부여 후 role_grant_cli list 출력(user_id 포함 JSON)
+        + GRANT_EXIT=0 으로 한다.
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
     kind: human
