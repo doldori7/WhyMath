@@ -34,6 +34,7 @@ from collections.abc import Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.verify_step import (
+    VerifyStepReasonCode,
     VerifyStepResult,
     VerifyStepState,
     verify_step,
@@ -54,8 +55,14 @@ class SolutionVerificationResult(BaseModel):
     항상 `n_transitions`와 같다. `unverified_ratio`는 검증 불가 비율(§3.1)이고,
     `first_incorrect_index`는 첫 incorrect 전이의 인덱스(없으면 None)다.
 
-    **노출 계약**: 검증 결과(상태·카운트·비율)뿐 — 정답/본문은 누출하지 않는다(`verify_step`이
-    정답을 알지도 못함·`reason`은 검증 사유일 뿐).
+    `unverifiable_by_reason`(MATH-03)은 unverifiable 전이의 *사유 코드별* 카운트다 — 관측된
+    코드만 담는 희소 dict이고 값 합은 항상 `n_unverifiable`과 같다(모든 unverifiable에 코드가
+    구조적으로 붙으므로 — `verify_step._unverifiable` 필수 인자). 클라이언트는 `steps` 전체를
+    파싱하지 않고 이 카운트만으로 학생 문구 3분기를 가른다(steps 전체 소비 강제 금지 — 노출
+    계약 유지).
+
+    **노출 계약**: 검증 결과(상태·카운트·비율·폐쇄 사유 코드)뿐 — 정답/본문은 누출하지 않는다
+    (`verify_step`이 정답을 알지도 못함·`reason`은 검증 사유일 뿐·코드는 폐쇄 enum 값).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -72,6 +79,13 @@ class SolutionVerificationResult(BaseModel):
     )
     n_unverifiable: int = Field(
         description="unverifiable 전이 개수(검증 불가).",
+    )
+    unverifiable_by_reason: dict[VerifyStepReasonCode, int] = Field(
+        default_factory=dict,
+        description=(
+            "unverifiable 전이의 사유 코드별 카운트(MATH-03·희소 — 관측된 코드만·값 합="
+            "n_unverifiable). 키는 폐쇄 7종 VerifyStepReasonCode(JSON 직렬화 시 문자열 값)."
+        ),
     )
     n_transitions: int = Field(
         description="총 전이 개수 = max(0, len(steps)-1). 세 카운트의 합과 같다.",
@@ -95,6 +109,7 @@ def _empty_result() -> SolutionVerificationResult:
         n_correct=0,
         n_incorrect=0,
         n_unverifiable=0,
+        unverifiable_by_reason={},
         n_transitions=0,
         unverified_ratio=0.0,
         first_incorrect_index=None,
@@ -124,6 +139,8 @@ def verify_solution(
 
     집계:
       - 상태별 카운트(`n_correct`·`n_incorrect`·`n_unverifiable`)·`n_transitions`.
+      - `unverifiable_by_reason` = unverifiable 전이의 사유 코드별 카운트(MATH-03·희소·값 합
+        == n_unverifiable — verify_step의 reason_code를 세기만 한다·재판정 0).
       - `unverified_ratio` = n_unverifiable / n_transitions(전이 0이면 0.0).
       - `first_incorrect_index` = 첫 incorrect 전이 인덱스(없으면 None)·`has_incorrect`.
 
@@ -156,6 +173,7 @@ def verify_solution(
     n_correct = 0
     n_incorrect = 0
     n_unverifiable = 0
+    unverifiable_by_reason: dict[VerifyStepReasonCode, int] = {}
     first_incorrect_index: int | None = None
 
     for i in range(n_transitions):
@@ -171,6 +189,13 @@ def verify_solution(
                 first_incorrect_index = i
         else:  # unverifiable — 판정 불가(verify_step의 보수적 출구·거짓 incorrect 회피).
             n_unverifiable += 1
+            # MATH-03 사유 코드 집계 — verify_step이 모든 unverifiable에 코드를 구조적으로
+            # 붙이므로(`_unverifiable` 필수 인자·총부착 동결 테스트) None 분기는 도달하지 않고,
+            # is None 가드는 타입 내로잉용이다(값 합==n_unverifiable 불변식 유지).
+            if result.reason_code is not None:
+                unverifiable_by_reason[result.reason_code] = (
+                    unverifiable_by_reason.get(result.reason_code, 0) + 1
+                )
 
     # unverified_ratio — 검증 불가 비율(§3.1). 전이가 있으므로 0 나눗셈 없음.
     unverified_ratio = n_unverifiable / n_transitions
@@ -180,6 +205,7 @@ def verify_solution(
         n_correct=n_correct,
         n_incorrect=n_incorrect,
         n_unverifiable=n_unverifiable,
+        unverifiable_by_reason=unverifiable_by_reason,
         n_transitions=n_transitions,
         unverified_ratio=unverified_ratio,
         first_incorrect_index=first_incorrect_index,

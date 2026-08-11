@@ -10,6 +10,8 @@
 //
 // 정직(범위): 줄 번호 정밀 하이라이트(error_span)·전이별 verdict 리스트·단계 입력 UI·
 // misconception 카드는 *후속*이다. 이번 슬라이스는 신호 *유무·종류·요약* cue까지만.
+// MATH-03: 확인 보류(unverifiable)는 사유 분포 카운트로 *3분기 문구*를 가른다 — 고칠 수 있는
+// 것/고칠 게 없는 것/단정하지 않는 것(운영 7종 코드는 내부·학생에겐 3분기만·위치 지시 없음).
 import 'package:flutter/material.dart';
 
 import '../../../theme/spacing.dart';
@@ -80,6 +82,8 @@ class CoachSignalCard extends StatelessWidget {
           ),
         );
       }
+      // ③-a 확인 보류 3분기(MATH-03) — 사유 분포가 있을 때만 세분 행을 그린다.
+      rows.addAll(_unverifiableRows(verification));
     }
 
     // ④ OCR 재확인 cue — 풀이 인식이 흐릴 때만(§3.3 게이트). 재촬영 유도.
@@ -137,12 +141,71 @@ class CoachSignalCard extends StatelessWidget {
 
   /// 단계 검증 요약 문구 — "N단계 중 M단계 확인"(전이 수/확인 수).
   /// unverifiedRatio는 내부값이라 표시하지 않되, 보류가 있으면 한 마디만 덧붙인다.
+  ///
+  /// MATH-03: 사유 분포([SolutionVerificationResult.unverifiableByReason])가 오면 접미사 대신
+  /// [_unverifiableRows]의 3분기 행이 세분을 담당한다. 분포가 *없는* 구판 서버 응답에서만
+  /// 기존 '확인 보류 일부' 접미사로 폴백한다 — 이때는 표기 문제(고칠 수 있음)와 비대수 단계
+  /// (고칠 게 없음)가 같은 한 문구로 접힌다(접힘 ②의 잔상·클라만 고쳐서는 회복 불가의 실측).
   static String _verificationSummary(SolutionVerificationResult v) {
     final base = '${v.nTransitions}단계 중 ${v.nCorrect}단계 확인';
-    if (v.nUnverifiable > 0) {
+    if (v.nUnverifiable > 0 && v.unverifiableByReason.isEmpty) {
       return '$base · 확인 보류 일부';
     }
     return base;
+  }
+
+  // ── 확인 보류 3분기(MATH-03) ─────────────────────────────────────────────
+  //
+  // 운영 7종 사유 코드(백엔드 VerifyStepReasonCode)를 학생 노출 *3분기*로만 접는다 —
+  // 비대칭은 의도다(검증기 내부를 학생에게 노출하지 않는다·MATH-03 ③). 기준은 "학생 행동이
+  // 갈리는가":
+  //   ① 고칠 수 있는 것(시스템이 입력을 못 읽음 → 표기 점검): parse_error·empty_input
+  //   ② 고칠 게 없는 것(원래 계산으로 확인 못 하는 종류 → 행동 불필요): non_algebraic_step
+  //   ③ 단정하지 않는 것(수학적 미결정 → 보류 톤): undecidable·heterogeneous_form·
+  //      subset_ambiguous·variable_mismatch — *미지의 새 코드도 여기*(보수 폴백·단정 금지)
+  // 문구 제약(교수학 톤): 부정 강화 금지·정답 미제공·낙인 어휘 금지 — 행동 cue만.
+
+  /// ①분기 코드 — 학생이 표기를 고치면 확인이 가능해지는 종류.
+  static const Set<String> _fixableReasonCodes = <String>{'parse_error', 'empty_input'};
+
+  /// ②분기 코드 — 계산 검증 대상이 아니라 학생이 고칠 것이 없는 종류.
+  static const Set<String> _nothingToFixReasonCodes = <String>{'non_algebraic_step'};
+
+  /// 사유 분포를 3분기 행으로 접는다 — 각 분기는 카운트가 1 이상일 때만 그린다.
+  static List<Widget> _unverifiableRows(SolutionVerificationResult v) {
+    var fixable = 0; // ① 고칠 수 있는 것
+    var nothingToFix = 0; // ② 고칠 게 없는 것
+    var indeterminate = 0; // ③ 단정하지 않는 것(미지 코드 포함·보수)
+    for (final MapEntry<String, int> entry in v.unverifiableByReason.entries) {
+      if (_fixableReasonCodes.contains(entry.key)) {
+        fixable += entry.value;
+      } else if (_nothingToFixReasonCodes.contains(entry.key)) {
+        nothingToFix += entry.value;
+      } else {
+        indeterminate += entry.value;
+      }
+    }
+
+    return <Widget>[
+      // ① 학생이 *할 수 있는 일*(표기 확인)만 부드럽게 — "틀렸다"가 아니라 "못 읽었다".
+      if (fixable > 0)
+        const _SignalRow(
+          icon: Icons.edit_outlined,
+          label: '읽지 못한 단계가 있어요 — 표기를 한 번 확인해볼까요?',
+        ),
+      // ② 행동 불필요를 명시 — 서술·경우 나누기 단계가 "문제 있음"으로 오독되지 않게.
+      if (nothingToFix > 0)
+        const _SignalRow(
+          icon: Icons.info_outline,
+          label: '계산으로 확인하는 종류가 아닌 단계는 건너뛰었어요',
+        ),
+      // ③ 단정하지 않는 보류 톤 — 옳다/그르다 어느 쪽도 암시하지 않는다.
+      if (indeterminate > 0)
+        const _SignalRow(
+          icon: Icons.hourglass_empty,
+          label: '확인을 보류한 단계가 있어요',
+        ),
+    ];
   }
 
   /// 행 리스트에 행 간 간격을 끼워 넣는다(첫 행 위는 비우고 사이만 6px).

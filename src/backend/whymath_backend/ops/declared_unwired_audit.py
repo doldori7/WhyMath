@@ -1024,6 +1024,10 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.concept_assessment_index": _OFFLINE_REPORT,
         "harness.concept_content_audit": _OFFLINE_REPORT,
         "harness.attempt_grading_shadow_report": _OFFLINE_REPORT,
+        # ASM-09(2026-08-11): distractor_map 오개념 신호 사장 규모 관측 — assessment_seat_
+        # reach_report와 동형(DB 실측·게이트 아님·exit 0/2). 사장 규모가 얼마든 머지를 막지
+        # 않으므로 CI 상시 배선 비대상.
+        "harness.distractor_signal_dormancy_report": _OFFLINE_REPORT,
         "ops.recommendation_reach_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
         "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
