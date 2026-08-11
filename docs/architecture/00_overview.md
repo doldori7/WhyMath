@@ -131,7 +131,7 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
 | PaddleOCR+Qwen3-VL OCR | L5 | P0 | 손글씨 핵심 — 2026-05-28 결정(Mathpix 대체)·계층은 L5 상호작용(CLAUDE.md 7계층 정본, 2026-08-10 통합점검 정정) |
 | Polya 엔진 | L4 | P0 | 교수학 코어 |
 | 소크라테스 프롬프트 | L4 | P0 | 코어 IP |
-| 오개념 카탈로그 | L4 | P1 | 30개 → 100개 |
+| 오개념 카탈로그 | L4 | P1 | **실측 64종**(`l4/misconception/catalog.py`) → 100개. 기존 표기 "30개"는 stale — `ai_tutor_module_gap_review.md:474`가 2026-07-29에 지적했으나 원본 미정정이던 것을 2026-08-11 r2가 정정 |
 | Flutter 학생앱 | L5 | P0 | 패드 중심·폰 동반·View Layer(별도 웹=교사 Phase3+) |
 | FastAPI 서버 | L5 | P0 | 오케스트레이터 |
 | 학교진도 모드 | L6 | P1 | Phase 2 |

@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-18-tutor-primary-operation-rate
+title: "AI 튜터 작동 비율 관측 — WH-1 primary 폴백 원장 결손 봉합 + 대리지표 ⑰ + 노출 계층 배정"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 폴백 원장 결손 봉합 — harness/wh1_primary.py:172-178 provider 실패·타임아웃 경로가 관측 레코드를 남긴다(현재 4경로 중 이 1경로만 logger.warning뿐·:182/:205/:243은 emit함). 기존 Wh1HarnessShadowObservation(wh1_shadow.py:59, extra=forbid)의 status 값 공간 확장으로 — 신규 모델 0. 실을 수 있는 것은 예외 타입명뿐(원문·시크릿·예외 메시지 본문 0을 테스트로 동결). status 리터럴 확장 vs nullable 사유 필드는 착수 시 wh1_shadow_harvest 구판 레코드 하위호환(n_correct: None 선례) 실측 후 택일"
+  - "② 라이브 집계 좌석 — harness/wh1_evaluation.py에 대리지표 ⑰ primary_utterance_rate(발화 채택 턴/primary 시도 턴). 시도 0건이면 0%가 아니라 MetricStatus 미계측으로 낸다(기존 NO_DATA 관례). 폴백 사유 분포는 note에 정직 표기. wh1_shadow_harvest status 분포에도 새 사유가 집계됨"
+  - "③ 집행 지점 — 좌석과 같은 슬라이스에서 growth_evidence_exposure.py:65 _STATIC_TIER에 INTERNAL_ONLY 등재(선례: tokens_per_turn — 시스템 품질·비용 지표). 좌석만 만들고 계층을 잇지 않으면 PED-06→PED-08 정본화≠집행 재발(PED-14 acceptance ④ 규칙). /harness-metrics·/growth-evidence 기존 응답 회귀 0"
+  - "④ 변별력 양방향 실증 — provider 강제 실패 시 ⑰ 하락·복구 시 회복을 실측으로 보인다(성공/실패 양쪽에서 같은 값을 내는 검사는 위장·2026-07-17 규칙). CI가 실제로 이 테스트를 실행하는지 배선 실재 확인(OPS-03·OPS-10)"
+  - "⑤ 범위 밖 동결 — 폴백 시 학생 대면 동작 변경 0(정적 템플릿 폴백은 안전 설계로 유지) · 경보·알림 배선 0 · /harness-metrics 원시 표면 구조 변경 0(PED-08 동결 경계) · 폴백률 기반 자동 회로차단 0(측정이 먼저다·r2 §5-⑪)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_primary.py
+  - src/backend/whymath_backend/harness/wh1_shadow.py
+  - src/backend/whymath_backend/harness/wh1_shadow_harvest.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - src/backend/whymath_backend/harness/growth_evidence_exposure.py
+  - "tests/backend/harness/**"
+session: null
+notes: "docs/architecture/ai_tutor_module_gap_review_r2.md §2 G3 · §3 D8. WH-1 primary는 config.py:168 기본 True로 2026-07-20 GA된 학생 대면 발화 정본 경로인데 작동 비율 좌석이 0이다 — wh1_evaluation.py 전문에 primary 문자열 0건. 전 턴이 정적 템플릿으로 폴백해도 16종 지표가 전부 정상값을 낸다(정적 템플릿도 verify 통과·세션 완주·힌트 상승을 만든다). CLAUDE.md 2026-08-03 '작동한 비율' 원칙의 정면 미상환이며 구조적으로 langfuse v2 8일 무증상 전멸(2026-07-16)과 동형. 경계: S4-22는 attempt_event 신호 소비자 결선이고 이건 하네스 관측 원장 — 겹치지 않는다. PED-14는 기존 ⑨의 시간 정규화이고 이건 신규 좌석 ⑰(기존 지표 의미 변경 0)."
+updated: 2026-08-11
