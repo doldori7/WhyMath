@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._auth import get_consented_user, require_content_admin
 from whymath_backend.api.me import GrowthEvidenceResponse
 from whymath_backend.app import create_app
 from whymath_backend.db.models.user import UserProfile
@@ -40,7 +40,7 @@ from whymath_backend.ops.service_health import (
     ComponentCheck,
     ReadinessProbes,
 )
-from whymath_backend.schema.enums import Persona
+from whymath_backend.schema.enums import Persona, Role
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
@@ -56,6 +56,12 @@ def _user() -> UserProfile:
     return UserProfile.from_schema(
         UserProfileSchema(user_id=_UID, persona_primary=Persona.A_일반고고3)
     )
+
+
+# SEC-24(원 SEC-13): `/v1/me/harness-metrics`가 `RequireContentAdmin`으로 닫혔다
+# (test_problems.py `_ADMIN_USER` 패턴 동형) — 이 파일의 `TestReachCounterIndependence`가
+# 두 라우트(growth-evidence·harness-metrics)를 함께 때리므로 admin 오버라이드도 함께 건다.
+_ADMIN_USER = UserProfile(user_id=uuid.uuid4(), role=Role.CONTENT_ADMIN)
 
 
 class _FakeAsyncSession:
@@ -125,6 +131,9 @@ def _surrogate_metrics(
 def _client_with_auth() -> TestClient:
     app = create_app(readiness_probes=_fake_probes())
     app.dependency_overrides[get_consented_user] = _user
+    # SEC-24(원 SEC-13): harness-metrics는 이제 RequireContentAdmin — 이 클라이언트로 그 라우트도
+    # 호출하는 TestReachCounterIndependence를 위해 함께 오버라이드(growth-evidence 쪽 인가는 무관향).
+    app.dependency_overrides[require_content_admin] = lambda: _ADMIN_USER
 
     async def _sess() -> AsyncIterator[_FakeAsyncSession]:
         yield _FakeAsyncSession()

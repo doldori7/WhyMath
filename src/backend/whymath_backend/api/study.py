@@ -29,6 +29,9 @@ segments를 내므로(SOCRATIC=질문 중심·DIRECT=설명 중심…) 응답은
 - 생성 폴백(LLM)은 이 좌석에서 **켜지 않는다**(`generate_request` 미주입). DSL이 없으면 렌더 실패
   사유를 담아 404로 돌려준다 — 학습 공급 첫 배선에서 LLM 비용·환각 표면을 열지 않는다(후속 결정).
 - 미성년자: 요청·응답 어디에도 학생 원문 발화가 없다. 기록되는 것은 전략명·공급 경로·개념 code뿐.
+- SEC-24(원 SEC-16): `/outcome`은 `/study`가 그 학생에게 발급한 `session_id`만 받는다 —
+  소유권 검증은 유일 outcome writer(`record_pedagogy_outcome`) 안쪽에서 일어나고,
+  이 라우터는 검증 실패를 HTTP(403·409)로 번역만 한다.
 
 7계층: L5(api)가 세션을 보유하고 L4 공급(`supply`)·L2 기록(`pedagogy_evidence`)을 *조합*한다.
 """
@@ -46,11 +49,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.irt import theta_to_mastery_proxy
 from whymath_backend.l2.learner_state import get_state
 from whymath_backend.l2.pedagogy_evidence import (
+    DuplicateOutcomeError,
+    SessionOwnershipError,
     record_pedagogy_outcome,
     record_pedagogy_treatment,
 )
@@ -64,6 +70,8 @@ logger = logging.getLogger("whymath.api.study")
 
 # 세션 의존성 — 모듈별 로컬 선언이 이 저장소 관례다(`api/scene.py`·`api/users.py` 동형).
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# 설정 의존성 — SEC-24(원 SEC-16) 세션↔사용자 바인딩(HMAC 키 = jwt_secret)에 필요(`_auth.py` 관례).
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 class StudySegment(BaseModel):
@@ -100,7 +108,12 @@ class OutcomeRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    session_id: uuid.UUID = Field(description="`/study` 응답이 준 세션 id.")
+    session_id: uuid.UUID = Field(
+        description=(
+            "`/study` 응답이 준 세션 id. 서버가 *요청 학생 본인에게* 발급한 값인지 소유권을 "
+            "검증한다(SEC-24(원 SEC-16)) — 타인·위조 세션 id는 403으로 거부된다."
+        )
+    )
     correct: bool = Field(description="시도 정답 여부.")
     rt_ms: int | None = Field(default=None, ge=0, description="소요 시간(ms·체류 지표). 선택.")
 
@@ -170,6 +183,7 @@ async def post_study_unit(
     objective_id: str,
     user: ConsentedUser,
     session: SessionDep,
+    settings: SettingsDep,
     request: Request,
 ) -> StudyUnitResponse:
     """학습목표를 학생 상태에 맞춘 교수법으로 렌더해 돌려주고, 그 처치를 기록한다.
@@ -224,11 +238,15 @@ async def post_study_unit(
         )
 
     session_id = uuid.uuid4()
+    # SEC-24(원 SEC-16): 처치 행 meta에 (session_id ↔ user) 키드 해시 바인딩이 함께 남는다 —
+    # `/outcome` 소유권 대조의 앵커(raw user_id 미저장·가명화 유지).
     await record_pedagogy_treatment(
         session,
         objective_id=objective.id,
         k_type=str(objective.k_type),
         session_id=session_id,
+        user_id=user.user_id,
+        settings=settings,
         strategy=result.strategy.value,
         content_source=result.content_source,
         concept_code=concept_code,
@@ -261,23 +279,46 @@ async def post_study_outcome(
     body: OutcomeRequest,
     user: ConsentedUser,
     session: SessionDep,
+    settings: SettingsDep,
 ) -> OutcomeResponse:
     """처치 이후의 시도 결과를 기록한다 — 효과 집계의 분자·분모가 되는 행.
 
-    `session_id`가 `/study` 응답의 값과 같아야 집계가 (전략 → 결과)로 이을 수 있다. 세션이 맞지
-    않으면 결과 행은 남지만 처치 미상으로 집계에서 *제외*된다(임의 귀속 금지·effectiveness 규약).
+    `session_id`는 `/study`가 *요청 학생 본인에게* 발급한 값이어야 한다(SEC-24(원 SEC-16) —
+    `docs/reviews/functional_security_audit_2026-08-08.md` M2). 소유권 검증(처치 행의 키드 해시
+    바인딩 대조)·중복 검사는 유일 outcome writer(`record_pedagogy_outcome`) 안쪽에서 일어나고,
+    실패하면 행을 남기지 않고 403(소유권)·409(중복)로 거부한다 — 예전의 "세션이 맞지 않으면
+    결과 행은 남지만 처치 미상으로 집계에서 제외" 규약을 "기입 거부"로 승격했다(고아 outcome
+    자체가 오염 벡터).
 
     학생 원문 풀이는 받지 않는다(요청 스키마에 슬롯 부재 — B1 구조적 차단).
     """
     objective = await _load_objective(session, objective_id)
-    await record_pedagogy_outcome(
-        session,
-        objective_id=objective.id,
-        k_type=str(objective.k_type),
-        session_id=body.session_id,
-        correct=body.correct,
-        rt_ms=body.rt_ms,
-    )
+    try:
+        await record_pedagogy_outcome(
+            session,
+            objective_id=objective.id,
+            k_type=str(objective.k_type),
+            session_id=body.session_id,
+            user_id=user.user_id,
+            settings=settings,
+            correct=body.correct,
+            rt_ms=body.rt_ms,
+        )
+    except SessionOwnershipError as exc:
+        # 미존재·타인 소유·바인딩 부재 전부 **단일 메시지**의 403 — 사유를 구분해 주면
+        # "그 session_id가 존재하는가"를 알려주는 존재 오라클이 된다(SEC-24(원 SEC-16) 오라클 차단).
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "학습 세션 소유권을 확인할 수 없습니다 — /study 응답이 발급한 session_id로만 "
+                "결과를 기록할 수 있습니다."
+            ),
+        ) from exc
+    except DuplicateOutcomeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이 학습 세션의 결과는 이미 기록되어 있습니다.",
+        ) from exc
     await session.commit()
     return OutcomeResponse(recorded=True)
 

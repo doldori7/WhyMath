@@ -252,7 +252,7 @@ async def grant_parental_consent(
         session,
         user_id=user.user_id,
         consent_scope=body.consent_scope,
-        ip=_client_ip(request),
+        ip=_client_ip(request, settings=settings),
         settings=settings,
     )
     try:

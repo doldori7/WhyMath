@@ -915,6 +915,12 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
         # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
         # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
+        # SEC-24(원 SEC-15) 이식 메모: 원 브랜치는 이 4건을 "PB-04 도달 관측 테스트가 6경로를
+        # 전부 호출하므로 stale"이라며 제거했으나, PB-04(`api/_l6_mode_reach_state.py`)는 main에
+        # 미착지라 그 전제가 성립하지 않는다. `test_gating.py`가 6경로를 다 부르긴 하지만
+        # 수신자가 `_client([...]).get(...)` 형태(호출식)라 감사기의 리터럴 정규식
+        # (`_TEST_CLIENT_CALL` — 식별자 수신자만 매칭)이 못 본다 — 실측으로 여전히 unclassified.
+        # 따라서 면제를 유지한다(제거하면 감사 exit 1).
         "GET /v1/gating/gifted": _INTERNAL_TOOL,
         "GET /v1/gating/metacognition": _INTERNAL_TOOL,
         "GET /v1/gating/suneung": _INTERNAL_TOOL,
