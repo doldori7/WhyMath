@@ -83,21 +83,28 @@
 영역 크기·라벨 — 에서 실질적으로 동등하다고 보고 이 레벨 하나로 정본 선언한다. AAA는 목표하지 않는다).
 
 이 표가 접근성 준수의 *현재 달성 현황 정본*이다(`coding_flutter.md`는 목표 레벨만 선언하고 이 표를 가리킨다 —
-"100%" 같은 완료 주장은 하지 않는다). **자동 검증 착지(MOB-13/14, 배율 축 A11Y-01)** — 구조적으로 안전한
-단순 화면부터 `meetsGuideline` 위젯 테스트(`test/accessibility_test.dart`)로 회귀를 막는다.
+"100%" 같은 완료 주장은 하지 않는다). **자동 검증 착지(MOB-13/14, 배율 축 A11Y-01, 주 학습 화면·드리프트 가드
+A11Y-02)** — `meetsGuideline` 위젯 테스트(`test/accessibility_test.dart`)로 회귀를 막는다.
+
+**커버리지 범위가 기계로 고정돼 있다(A11Y-02)**: `test/accessibility_coverage_governance_test.dart`가
+`lib/features/*/presentation/` 전수와 게이트 대상을 대조해, **새 화면은 게이트에 편입되거나 *사유가 달린*
+허용목록에 올라야 통과**한다. 즉 아래 🟡의 "미검증" 항목은 *누락*이 아니라 **근거와 함께 등재된 제외**이며,
+새 화면이 조용히 게이트 밖으로 늘어나는 경로는 닫혀 있다(이 표의 정직 표기가 영구 미상환의 근거로 쓰이지
+않게 하는 장치 — 운영 r3 D9 계열).
 
 | 항목 | 목표 | 현황 |
 |---|---|---|
-| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me + 조밀 위젯(`SceneRenderer`·`CoachSignalCard`)을 `textContrastGuideline`로 라이트/다크 검증(MOB-13/14), 배율 1.0×/1.3×/2.0×까지 확대(A11Y-01). chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue)는 미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 사업자색이라 대비 테스트 제외 |
-| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증(배율 1.0×/1.3×/2.0×, A11Y-01). chat 문제 배너 탭에 라벨·button 시맨틱(MOB-13) + 최소 48dp 보장(MOB-14·`maxHeight` clamp로 MOB-02 상한 불침범) |
-| Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. `SceneRenderer`의 시각화 placeholder(`_VisualizationSeed`)도 단일 `Semantics` 라벨 부착(A11Y-01). 전면 감사는 후속 |
+| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me + **chat·problem 전체 화면 상태**(활성 문제 배너·선택지·학생/코치 버블·신호 카드 — 컨트롤러 override 하네스로 *빈 상태가 아닌* 실제 상태를 렌더·A11Y-02) + **신고 다이얼로그**(라디오 6종·액션·A11Y-02) + 조밀 위젯(`SceneRenderer`·`CoachSignalCard`)을 `textContrastGuideline`로 라이트/다크 검증(MOB-13/14), 배율 1.0×/1.3×/2.0×까지 확대(A11Y-01). ocr *인식 후 cue* 상태는 제외(사유·트리거 = 허용목록). **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 사업자색이라 대비 테스트 제외 |
+| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me·**chat·problem·신고 다이얼로그** guideline 검증(배율 1.0×/1.3×/2.0×·A11Y-01/02). chat 문제 배너 탭에 라벨·button 시맨틱(MOB-13) + 최소 48dp 보장(MOB-14·`maxHeight` clamp로 MOB-02 상한 불침범). 변별력 실측: `problem_screen`의 액션 버튼을 24dp로 낮추면 게이트 red(A11Y-02) |
+| Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. `SceneRenderer`의 시각화 placeholder(`_VisualizationSeed`)도 단일 `Semantics` 라벨 부착(A11Y-01). chat·problem·신고 다이얼로그는 `labeledTapTargetGuideline`로 라벨 누락이 게이트된다(A11Y-02). 전면 감사는 후속(트리거 = 화면 집합 안정화) |
 | 색만으로 정보 전달 금지 | 굵기·아이콘·문구 병행 | 🟢 `CoachEmphasisText`(굵기)·신호는 아이콘+문구·정오 채색 전무 |
 | TTS | `SpeechSpec` 소비(클라 합성) | 🔴 후속 — **"곧"이 아니라 트리거 대기**. 서버 축은 완비(`POST /v1/speech/latex`)이나 클라 합성 의존이 없다(`flutter_tts` Gradle 비호환 실측으로 제거). 발화 조건 = ⓐ 실기기 Gradle 호환을 재검증한 대체 의존 확보 **또는** ⓑ 시각·청각 약자 학생의 파일럿 참여 **또는** ⓒ 교육기관 납품 결정 (`service_operations_gap_review.md` §5-④) |
 
 → **후속(각 항목은 소유 태스크 또는 발화 트리거를 가진다 — 소유 없는 "후속"은 영구 미상환이 된다)**:
-- chat·problem *전체 화면 상태*(활성 문제·메시지) 대비·배율 검증 + **커버리지 드리프트 가드**(새 화면이 게이트 밖으로 조용히 늘지 않게) → **`A11Y-02`** 소유(2026-08-11 등재).
-- ocr *인식 후 cue* 상태 검증 → `A11Y-02` 범위 밖. 트리거 = OCR 실기기 경로가 파일럿에서 실사용될 때.
-- Semantics 라벨 **전면** 감사 → 트리거 대기(현재는 아이콘 버튼·탭·배너·시각화 placeholder만 보유). 전면 감사는 화면 집합이 안정된 뒤가 옳다.
+- ~~chat·problem *전체 화면 상태* 대비·배율 검증 + 커버리지 드리프트 가드~~ → ✅ **`A11Y-02` 착지**(2026-08-11). 게이트 대상 5→8축(chat·problem·신고 다이얼로그 편입)이고, 남은 제외는 전부 *사유와 트리거가 달린* 허용목록 항목이다(`accessibility_coverage_governance_test.dart` `_exemptScreens`).
+- ocr *인식 후 cue* 상태 검증 → 허용목록 등재(사유: 카메라·OCR 응답 하네스 필요). 트리거 = OCR 실기기 경로가 파일럿에서 실사용될 때.
+- Semantics 라벨 **전면** 감사 → 트리거 대기(현재는 아이콘 버튼·탭·배너·시각화 placeholder + 편입 3축의 `labeledTapTargetGuideline`). 전면 감사는 화면 집합이 안정된 뒤가 옳다 — 안정화 신호는 허용목록 길이의 정체다.
+- 저빈도 화면군(login·onboarding·account_security·mathlive) → 허용목록 등재(각 사유·트리거 병기). login은 브랜드색 예외로 **구조적 제외**.
 - TTS(`SpeechSpec`) → 위 표 TTS 행의 ⓐⓑⓒ 트리거 참조.
 
 ---

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "src/mobile/test/**"
   - docs/design/ui/06_design_system.md
-session: null
+session: claude/whymath-service-operations-review-5t5lmv
 notes: "정본: docs/architecture/service_operations_gap_review_r2.md §6 D8. 배경 — A11Y-01(done)이 AA를 목표로 선언한 뒤 커버리지는 explore/home/me + SceneRenderer·CoachSignalCard 5개로 고정됐고 화면은 16개다. 06_design_system.md §7이 후속 3종을 정직하게 적어두었으나 추적하는 열린 태스크가 0건 — 운영 r3 D9('정직 표기는 침묵 통과는 막지만 영구 미상환은 막지 못한다')의 접근성 평면 재발."
 updated: 2026-08-11
