@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SOL-04-reasoning-type-vocabulary-collision
+title: "reasoning_type 한 이름 두 어휘 해소 — 교수법 슬롯 유형 vs SolutionStep 추론 7종"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정: l3/pedagogy/{slot_generator,review,prescreen}.py의 payload 키 reasoning_type은 슬롯 유형(example_pair·contrast_case·boundary_probe·diag_item)을 담고 truthiness만 검사된다(review.py:76·prescreen.py:53). SOL-01 이식으로 착지한 ProblemStep.reasoning_type / schema.enums.ReasoningType(폐쇄 7종·DEDUCTION 등)과 어휘 교집합 0이며 코드 접점도 0 — 런타임 파손·CI red는 없고 순수 의미 충돌이다(SOL-01 세션 실측)"
+  - "② 개명 방향 판정 — 둘 중 어느 축을 바꿀지 결정한다. 교수법 슬롯 축이 후발이고 소비처가 3파일로 좁으므로 slot_type 계열 개명이 후보이나, payload가 DB·코퍼스에 영속되는지 먼저 실측하고 결정한다(영속되면 마이그레이션 동반)"
+  - "③ 기계 동결 — 개명 후 같은 이름이 두 어휘를 다시 담지 못하도록 회귀 테스트를 붙인다. 변별력: 일부러 옛 이름을 되돌렸을 때 실제로 FAIL이 나는지 확인한다"
+  - "④ 범위 밖: ReasoningType enum 멤버 변경(폐쇄 7종은 math_dsl_evolution §2.2 금기 — 추가·제거 신중)·SolutionPath 스키마 변경"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/pedagogy/**"
+  - "tests/backend/l3/pedagogy/**"
+session: null
+notes: "OPS-33 notes가 'G3-ⓓ 이름 충돌 해소는 S4-09 소관'이라며 유보한 항목. SOL-01(S4-09 이식)이 완료되면서 그 소관이 닫히므로 무주공산을 막기 위해 별도 좌석으로 분리 등재한다. SOL-01 acceptance ⑥이 'S4-09 acceptance 수정'을 범위 밖으로 두므로 이식 세션에서 개명하지 않았다(범위 폭발 방지). 제안 ID SOL-03은 HARN-10 가드가 충돌 차단(SOL-03-solution-seat-reach-and-audit-axis 선점) — CLI 제안 번호 SOL-04 수용."
+updated: 2026-08-11

@@ -7,6 +7,7 @@
     python3 scripts/harness/backlog.py start <id> [--session <branch>]
                                                  [--no-remote | --ignore-remote-claim]
     python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋> [--artifact ...]
+                                                 [--no-pr <예외사유>]
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
     python3 scripts/harness/backlog.py review <id>                (in_progress → review)
@@ -30,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -84,6 +86,34 @@ def _append_note(original: str, reason: str, tag: str) -> str:
     if not original.strip():
         return stamp
     return f"{original}\n\n{stamp}"
+
+
+# ── PR 증적 게이트 (HARN-23) ────────────────────────────────────────────────
+# 규칙 정본은 CLAUDE.md "✅ 절대 원칙 → 완료·병합": 산출물이 있으면 요청 없이 PR을 연다.
+# 여기는 그 규칙의 *집행 지점*이다 — 정본화만 하고 집행을 빠뜨리면 규칙은 세션 기억에만
+# 의존하게 되고, 이 저장소는 그 실패를 이미 겪었다(미병합 고립 4회차·미머지 브랜치 19건).
+#
+# 판정은 "artifact 문자열에 PR 참조가 있는가" 하나뿐이다. 스쿼시 머지 커밋 메시지의
+# `(#758)` 관례를 그대로 수용하므로 머지된 커밋 해시 증적도 손댈 필요 없이 통과한다.
+#
+# 한계(의도적): PR의 *실재*는 확인하지 않는다 — `#999` 같은 유령 번호도 통과한다.
+# GitHub API 조회는 오프라인·프록시 환경에서 fail-open이 되고, 상시 실패하는 보호는
+# 보호가 아니다(CLAUDE.md 금기). 이 게이트가 막는 것은 *망각*이지 *위조*가 아니다.
+_PR_REFERENCE_RE = re.compile(r"#\d+|/pull/\d+")
+
+# PR 없이 done을 허용하는 예외 4종 (2026-08-11 Kiki 지정 — 이외의 사유로 보류 금지).
+# 자유 서술을 받지 않고 choices로 강제한다: 사유를 적을 수 있으면 무엇이든 사유가 된다.
+NO_PR_REASONS: tuple[str, ...] = (
+    "investigation",  # 조사·계획 전용 — 코드·문서 산출물이 없음
+    "incomplete",  # 미완 또는 사람 게이트 대기 — 아직 열 PR이 아님
+    "ci-red",  # CI 적색 — 먼저 고친다
+    "kiki-hold",  # Kiki의 명시적 보류 지시
+)
+
+
+def _has_pr_reference(artifacts: list[str]) -> bool:
+    """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
+    return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -574,6 +604,19 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
             f"{task.id}: 사람 소유 태스크({task.owner}) — 소유자 본인이 직접 기입하세요: "
             f"python3 scripts/harness/backlog.py done {task.id} --as {task.owner} --artifact <증적>"
         )
+    # PR 증적 게이트 (HARN-23) — 증적에 PR 참조가 없으면 거부한다.
+    # 거부는 장애물이 아니라 판정이다. 다만 예외 4종에 해당하면 `--no-pr <사유>`로
+    # 언제든 통과할 수 있으므로 이 게이트가 세션을 볼모로 잡지는 않는다.
+    no_pr_reason = getattr(args, "no_pr", None)
+    if no_pr_reason is None and not _has_pr_reference(args.artifact):
+        return _fail(
+            f"{task.id}: 증적에 PR 참조(#12 또는 .../pull/12)가 없습니다 — "
+            f"산출물이 있으면 요청 없이 PR을 여는 것이 기본값입니다(CLAUDE.md 완료·병합). "
+            f"PR을 열었다면 그 번호를 증적에 담고, 예외라면 사유를 명시하세요: "
+            f"--no-pr {{{'|'.join(NO_PR_REASONS)}}} "
+            f"(investigation=산출물 없는 조사·계획 / incomplete=미완·게이트 대기 / "
+            f"ci-red=CI 적색 / kiki-hold=Kiki 보류 지시)"
+        )
     error = _transition(task, "done")
     if error:
         return _fail(error)
@@ -581,14 +624,22 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
     task.status = "done"
     task.artifacts = list(dict.fromkeys(task.artifacts + args.artifact))
     task.session = None
+    if no_pr_reason is not None:
+        # PR 없이 종결한 사실을 태스크에 남긴다 — 나중에 "왜 이건 PR이 없지"를
+        # 브랜치 고고학으로 되짚지 않아도 되게(미병합 고립 4회차의 실제 비용).
+        task.notes = _append_note(task.notes, no_pr_reason, "PR 보류")
     task.updated = _today()
     store.save_task(root, task)
     done_extra: dict[str, object] = {"artifacts": args.artifact}
     if as_owner is not None:
         done_extra["as_owner"] = as_owner
+    if no_pr_reason is not None:
+        done_extra["no_pr_reason"] = no_pr_reason
     store.append_event(root, "done", task.id, **done_extra)
     _release_remote_claim(root, task.id, prev_session)
     print(f"✔ {task.id} 완료 — 증적: {', '.join(args.artifact)}")
+    if no_pr_reason is not None:
+        print(f"⚠ PR 없이 완료 — 사유: {no_pr_reason}")
     # 이 완료로 해금된 후속 태스크 안내 (순차 조율의 연결 고리)
     unlocked = [
         t
@@ -997,18 +1048,22 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     # 집합을 재사용한다 — 새 원격 조회 없이 "타 세션 진행중"을 판별하기 위함.
     stale_branches: list[tuple[str, float, int, str, str]] = []
     stale_branch_status = "ok"
+    stale_branch_message = ""
     if policy.remote_claims:
         try:
             scan = remote_claims.scan_stale_branches(
                 root, active_branches=frozenset(remote_claimed.values())
             )
             stale_branch_status = scan.status
+            stale_branch_message = scan.message
             if scan.status == "ok":
                 stale_branches = [
                     (s.branch, s.age_days, s.ahead, s.status, s.evidence) for s in scan.stale
                 ]
-        except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+        except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+            # 침묵 실패 금지 — 예외 타입명을 브리핑 문자열에 남긴다(훅은 stderr를 버린다).
             stale_branch_status = "error"
+            stale_branch_message = f"{type(exc).__name__}: {exc}"
     else:
         stale_branch_status = "disabled"
 
@@ -1075,6 +1130,7 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             remote_status=remote_status,
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
+            stale_branch_message=stale_branch_message,
             done_excluded=done_excluded,
             doc_series_candidates=doc_series_candidates,
             doc_series_status=doc_series_status,
@@ -1141,7 +1197,8 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
     ids = ", ".join(t.id for t in stale)
     print(
         f"[빌드하네스] 이 브랜치가 claim한 태스크({ids})의 상태가 갱신되지 않았습니다. "
-        f"완료했다면 `python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋>`, "
+        f"완료했다면 PR을 연 뒤 "
+        f"`python3 scripts/harness/backlog.py done <id> --artifact <PR 번호를 담은 증적>`, "
         f"미완이면 태스크 파일의 notes에 진행 메모를 남기거나 "
         f"`block <id> --reason ...` 처리 후 종료하세요.",
         file=sys.stderr,
@@ -1275,8 +1332,17 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
+        # `--auto`(HARN-27) = 무인 집행 모드. 삭제를 켜되 사유를 확정 신호로 좁힌다.
+        # 사람이 치는 `--apply`는 기존대로 전 사유를 지운다(판단 주체가 사람이므로).
+        auto = getattr(args, "auto", False)
+        apply_ = args.apply or auto
         reaped, scan_status, warnings = remote_claims.reap(
-            root, backlog, ttl, dry_run=not args.apply
+            root,
+            backlog,
+            ttl,
+            dry_run=not apply_,
+            branch_grace_hours=policy.claim_branch_grace_hours,
+            reasons=remote_claims.AUTO_REAP_REASONS if auto else None,
         )
         if scan_status != "ok":
             # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
@@ -1284,23 +1350,25 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
             print(f"원격 claim 조회 불가 ({scan_status}) — stale 판정 불가")
             return 0 if scan_status == "offline" else 1
         if warnings:
-            # task_missing이지만 TTL 이내라 reap에서 제외된 claim — 경합 조건 가능성이
-            # 있으므로 침묵시키지 않고 경고로 노출한다(HARN-21, CLAUDE.md 침묵 실패 금지).
+            # reap에서 제외됐지만 침묵시키면 안 되는 것들 — 유예 구간 claim
+            # (`task_missing_recent` HARN-21 · `branch_gone_recent` HARN-26)과
+            # 홀더 브랜치 조회 실패(판정 미수행). 둘 다 "지우지 않았다"인데 이유가 다르므로
+            # 사유 문자열을 그대로 노출한다(CLAUDE.md 침묵 실패 금지).
             print(
-                f"⚠ 최근 claim {len(warnings)}건 — task_missing이지만 TTL 이내라 reap 제외"
-                "(경합 조건 가능성: 다른 세션이 방금 add+claim했을 수 있다):"
+                f"⚠ reap 제외 {len(warnings)}건 — 유예 구간이거나 판정 불가"
+                "(경합 조건 가능성: 다른 세션이 방금 add+claim했거나 아직 첫 push 전일 수 있다):"
             )
             for item in warnings:
                 print(f"  · {item}")
         if not reaped:
             print("stale claim 없음")
             return 0
-        label = "삭제됨" if args.apply else "삭제 대상 (dry-run — 실제 삭제는 --apply)"
+        label = "삭제됨" if apply_ else "삭제 대상 (dry-run — 실제 삭제는 --apply)"
         print(f"stale claim {len(reaped)}건 {label}:")
         for item in reaped:
             print(f"  · {item}")
-        if args.apply:
-            store.append_event(root, "claim_reap", "-", reaped=reaped)
+        if apply_:
+            store.append_event(root, "claim_reap", "-", reaped=reaped, auto=auto)
         return 0
 
     # list (기본)
@@ -1491,7 +1559,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_start)
 
-    p = sub.add_parser("done", help="태스크 완료 (증적 필수)")
+    p = sub.add_parser("done", help="태스크 완료 (증적 필수 · PR 참조 필수)")
     p.add_argument("id")
     p.add_argument("--artifact", action="append", default=[])
     p.add_argument(
@@ -1500,6 +1568,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=[o for o in OWNERS if o != "claude"],
         help="사람-소유 태스크를 소유자 본인이 기입할 때 명시 (HARN-06)",
+    )
+    p.add_argument(
+        "--no-pr",
+        dest="no_pr",
+        default=None,
+        choices=list(NO_PR_REASONS),
+        help="PR 없이 완료하는 예외 사유 (HARN-23 — 예외 4종만 허용)",
     )
     p.set_defaults(func=cmd_done)
 
@@ -1593,6 +1668,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="reap TTL (기본: policy.claim_ttl_hours)",
     )
     p.add_argument("--apply", action="store_true", help="reap 실제 삭제 (기본 dry-run)")
+    p.add_argument(
+        "--auto",
+        action="store_true",
+        help="reap 무인 집행 — 삭제하되 확정 사유(task_done·branch_gone)로만 한정. CI 전용",
+    )
     p.set_defaults(func=cmd_claims)
 
     p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")

@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-30-pr-delivery-state-observability
+title: "PR 배송 상태 미관측 — 체크런 0건·미머지 PR이 조용히 방치되고, get_status는 이 저장소에서 항상 0을 낸다"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 무변별 신호 명문화 — mcp__github__pull_request_read method=get_status는 이 저장소에서 **모든 PR에 total_count: 0**을 반환한다(commit status API이고 이 저장소는 check runs를 쓴다). 실측 대조: 체크런 16건이 확실한 PR #773조차 get_status는 0. 세션이 'CI가 안 돌았다'고 오판하는 경로이므로 판정에 쓰지 말 것을 build_harness.md(또는 CLAUDE.md 프로세스 금기)에 등재하고, 대신 쓸 신호(get_check_runs / actions_list 브랜치 필터)를 함께 적는다 — 금지만 적고 대안을 안 적으면 다음 세션이 같은 함정에 다시 걸린다"
+  - "② 실제 미발화 사례 원인 규명 — PR을 열었는데 체크런이 0건인 상태가 실재한다(실측: PR #779가 57분간 0건이었고 origin/main 병합 푸시로 해소 · #751 whymath-webpage-plan은 1일 넘게 0건). ci.yml의 on.pull_request는 선언돼 있으므로 원인을 실측 규명한다 — 앱 토큰 유래 PR open 이벤트의 트리거 억제인지, Actions 큐 지연인지, 다른 것인지. **추론으로 등재하지 말 것**(이 태스크의 등재 근거 자체가 첫 가설이 반증된 데서 나왔다)"
+  - "③ 관측 좌석 — 세션 브리핑 또는 harness CLI가 '이 계정 열린 PR 중 체크런 0건'과 '체크런 green인데 미머지'를 구분해 노출한다. 두 상태의 처방이 다르다(전자=트리거를 깨워야 함, 후자=사람 결정 대기). 미해결 브랜치 스캐너(2026-08-11 #785가 결함 4종 수정)와 **다른 축**이다 — 그건 브랜치를, 이건 PR 배송을 본다"
+  - "④ HARN-23과의 경계 — HARN-23은 done 시점에 PR *참조*가 있는지만 보고 acceptance ⑥에서 'PR 실재 검증은 범위 밖(망각을 막지 위조를 막지 않는다)'을 명시했다. 이 태스크는 위조가 아니라 **배송 실패**(PR은 진짜인데 CI가 안 돌거나 머지가 안 됨)를 본다. HARN-23의 미채택 근거였던 'GitHub API 조회는 오프라인·프록시에서 fail-open'을 어떻게 다룰지 판정한다 — fail-open이면 상시 무력 보호가 되므로(CLAUDE.md 2026-07-27 금기) 조회 실패를 '측정 실패'로 보이게 하거나 좌석 자체를 포기하거나 둘 중 하나를 명시 선택한다"
+  - "⑤ 변별력 양방향 — 체크런 0건 PR과 체크런 green PR 양쪽에서 서로 다른 신호가 나는지 실측. 한쪽에서만 확인하고 통과 선언 금지"
+  - "⑥ 범위 밖 동결 — 남의 세션이 연 PR을 대신 밀어붙이지 않는다(관측·노출까지) · ci.yml 트리거 변경(workflow_dispatch 추가 등)은 원인 규명 전 채택 금지 · 브랜치 삭제·회수 축(#785 소유)"
+artifacts: []
+paths:
+  - scripts/harness/report.py
+  - scripts/harness/backlog.py
+  - "tests/harness/**"
+  - docs/standards/build_harness.md
+session: null
+notes: "발견 경위: AI 튜터 r2 PR #779가 auto-merge(SQUASH)를 걸었는데도 57분간 머지되지 않아 조사. 체크런 0건이었고 origin/main 병합 푸시로 CI가 발화(0→1)해 해소·머지됐다. 조사 중 처음 쓴 신호(get_status)가 이 저장소에서 무변별임을 대조로 발견 — 체크런 16건인 #773에서도 0을 낸다. 첫 가설('MCP 앱 토큰으로 연 PR은 CI가 영영 미발화')은 전수 확인에서 **반증**됐다: 미머지 브랜치 18건 중 CI 미발화는 1건뿐(ADMIN-02 #734, 현재 blocked로 파킹)이고 8건은 PR 미생성·8건은 PR 닫힘이었다. 그래서 이 태스크는 '만성 미머지의 근본 원인'이 아니라 **드물지만 무증상인 배송 실패 + 그것을 오판하게 만드는 도구 함정**으로 좁혀 등재한다. 브랜치 축 판정은 docs/reviews/unmerged_branch_verdict_2026-08-11.md(#785)가 소유."
+updated: 2026-08-11

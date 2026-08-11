@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: COLLAB-07-trigger-axis-completion-corpus-schemas
+title: "COLLAB-04 완결 — data/corpus·schemas가 backend 필터 밖이라 래칫 게이트가 자기 입력 변경에 안 깨어남 + corpus 플래그 무작동 + 가드 소비판정 강화"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정(결함 재현 선행): ⓐ ci.yml:88 backend 필터에 data/corpus/·schemas/가 없음 ⓑ 그런데 backend 잡의 상시 게이트 스텝(:319-320 표기 커버리지 notation_coverage)이 data/corpus/problem_bank_*/problems.jsonl을 읽고, tests/backend/test_failure_prevention_manifest.py:96-98이 schemas/v1.1/*.yaml 존재를 하드 단언한다 ⓒ schemas/는 web(:110)·mobile(:102)에는 있는데 backend에만 없다. 코퍼스에 신규 표기를 넣으면 게이트가 exit 1을 내는데 그 PR은 backend 잡을 skip함을 재현하는 검사를 먼저 세운다"
+  - "② corpus 플래그 무작동 해소: corpus 플래그(:46·:64)의 유일한 소비처 :209는 data_pipeline 필터로 게이트된 잡 내부에 있어 코퍼스 단독 PR에서 잡 통째 skip → 그 스텝도 미실행이며 continue-on-error까지 걸려 있다. COLLAB-04 주석이 'data/corpus/는 별도 축(corpus 플래그)이 담당'이라고 정당화했는데 그 전제가 사실이 아니다 — 플래그를 실제로 발화시키거나 backend 필터에 흡수하거나, 둘 중 근거 있는 쪽을 택하고 주석의 틀린 정당화를 정정한다"
+  - "③ 변별력: 각 축마다 수정 전 red·수정 후 green을 실측한다. data/corpus만 변경한 경우와 schemas만 변경한 경우를 합성해 backend 필터가 be=true를 내는지 확인. 갈리지 않으면 실패다. 비용 근거 병기 — 이력 전체에서 data/corpus 변경은 7커밋뿐이라 과트리거 비용이 낮음을 재실측해 기록한다"
+  - "④ 가드 소비판정 강화: tests/infra/test_ci_contract_fixture_trigger_wiring.py의 _backend_test_consumers가 파일 전체 substring 매칭이라 docstring에 이름만 언급해도 '소비'로 통과한다(실증됨). 읽기 호출 기준(AST 또는 경로 리터럴)으로 강화하고, 대상을 .json suffix에서 최상위 전 파일로 확장한다 — 현재 data/policy_contract.yaml 같은 비-json 계약은 계약으로 인식조차 못 해 가드 green·CI skip이 성립한다(실증됨)"
+  - "⑤ 가드 잡 축 확장: _ENFORCED_OUTPUTS가 backend·web 하드코딩이라 신규 잡·mobile을 검사하지 않는다. mobile 필터는 현재 나열 4종이 실측과 일치해 구멍은 없으나(src/mobile/test/ 읽기 전수 확인) 구조적 취약은 남는다 — 검사 대상 잡을 하드코딩이 아니라 ci.yml에서 파생시키거나, 최소한 mobile을 편입한다"
+  - "⑥ 범위 밖·정직 표기: git core.quotePath 발산(비ASCII 계약 파일명이면 CI grep은 인용·8진 이스케이프된 경로를 받아 SKIP인데 가드는 원문자열로 RUN — false-green)은 현재 해당 파일 0건이라 이 태스크에서 고치지 않되 가드 docstring의 전제에 명시한다. 계약 내용 정합(COLLAB-05 소관)·새 CI 잡 신설·data_pipeline 필터 확장은 범위 밖"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/**"
+session: null
+notes: "2026-08-11 COLLAB-04 착지 직후 자체 재검증에서 발견(서브에이전트 적대적 검증 + 부모 세션 재확인). COLLAB-04의 변경 자체는 옳고 방향도 맞으나, 같은 태스크가 세운 논리('계약 파일이 트리거 축에 있는가는 테스트 파일 축과 다르다')를 data/corpus 축에 적용하지 않았고 그 미적용을 정당화한 근거(corpus 플래그가 담당)가 실측상 작동하지 않는다. 규모: data/corpus를 참조하는 tests/backend 파일 63개 — COLLAB-04가 봉합한 최상위 계약 소비 테스트 10개의 6배. 반복 실수 10회차(트리거 축 부분 배선 — 연결이 조건부라 정상 상태에서는 완전히 정상으로 보인다)가 더 큰 표면에 그대로 남아 있다. 정본: docs/architecture/collaboration_module_gap_review_r3.md §3 D5 + §8 사후 정정."
+updated: 2026-08-11

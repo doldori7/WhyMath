@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-20-minor-consent-expiry-revocation-enforcement
+title: "미성년 동의 만료·철회 집행 — revoked_at/expires_at reader 0·철회 경로 0(한 번 받은 동의가 영구 유효)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① get_consented_user(api/_auth.py:81)가 학생별 최신 ParentalConsent 행을 읽어 revoked_at is not None 또는 expires_at <= now면 403 — parent_consent_at 단독 판정 폐기. 인덱스 idx_parental_consent_user가 이미 있으므로 신규 인덱스 0."
+  - "② DELETE /v1/users/me/parental-consent(철회) 신설 — revoked_at 기록 + user_profile.parent_consent_at 해제를 동일 트랜잭션. 감사는 기존 record_consent_change_audit(privacy/audit.py:100) 재사용(신규 감사 테이블 0·SEC-09 단일 권위 유지)."
+  - "③ 변별력 쌍 — 철회 후 보호 엔드포인트가 403이 되고, 철회 판정을 끄면 그 테스트가 실제로 실패한다(성공/실패 양쪽에서 같은 값을 내는 검사는 위장)."
+  - "④ expires_at은 여전히 writer 없음 유지 — reader만 먼저 세운다(주기 숫자 확정 시 writer 1줄로 발화). 읽는 쪽을 먼저 세우는 것이 dead 컬럼을 만들지 않는 순서."
+  - "⑤ 정본 security_privacy.md:11('회원가입 + 매 분기 재확인')에 편집자 부기 — 주기 숫자는 미확정(MGMT-02 선행)이고 만료·철회 집행 메커니즘은 이 태스크로 착지했음을 명기."
+  - "⑥ 접근 주체 축소 — v0는 학생 본인 토큰 경로만 연다(보호자 전용 경로는 MGMT-01 법정대리인 인증 모델 후행). 축소 사유를 docstring에 명시."
+  - "⑦ 범위 밖: 동의 scope 확장·약관 버전 스탬프(v1 D7·MGMT-02) · 실 법정대리인 본인확인(MGMT-01) · 재확인 주기 숫자 · 보호자 전용 접근 경로."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/_auth.py
+  - src/backend/whymath_backend/api/users.py
+  - docs/standards/security_privacy.md
+  - "tests/backend/api/*"
+session: null
+notes: "docs/architecture/account_security_gap_review_r2.md G2→D9(최대 갭). 실측: get_consented_user는 user.parent_consent_at만 읽고, ParentalConsent.expires_at·revoked_at(db/models/parental_consent.py:75-76)은 writer가 api/users.py:242의 상수 None 1곳뿐·reader 0이며 철회 라우트도 0이다. 모델 docstring:31은 인덱스 용도를 '만료 재확인·감사'라고 쓴다 — 읽을 사람이 없는 reader를 위해 인덱스까지 만들어 뒀다. 코드는 자백하고 있다(api/users.py:203-205) — 문제는 자백이 백로그로 이어지지 않은 것(v1이 이 축을 D7 페이퍼에 동반시켜 추적 0). 문안은 법률 판단이고 집행은 기계 판단이다 — 철회를 표현할 수 없는 상태를 유지하는 쪽이 법적 위험이 크다. '만들고 읽지 않음'(운영플랫폼 8회차)의 미성년 보호 판이자 '만료 없는 유예'(2026-08-03)의 동의 판."
+updated: 2026-08-11

@@ -81,3 +81,15 @@ def test_result_is_frozen() -> None:
     result = parse_check_latex("x = 1")
     with pytest.raises(ValidationError):
         result.ok = False  # type: ignore[misc]
+
+
+def test_math03_ok_bool_contract_frozen() -> None:
+    """MATH-03 ⑥(b) 동결 — `parse_check_latex(...).ok`는 계속 *순수 bool*이다.
+
+    `l5/ocr/assemble.py`의 OCR 신뢰도 강등 소비자가 `parse_check_latex(...).ok`를 bool로
+    소비한다 — verify_step 쪽 사유 코드(reason_code) 구조화는 이 계약을 건드리지 않는다
+    (사유 코드는 L3 verify 경로 전용·이 함수의 반환 형태 불변). ok가 enum·코드로 바뀌면
+    여기서 red — 그 변경은 별도 태스크의 결정이어야 한다.
+    """
+    assert type(parse_check_latex("x = 2").ok) is bool
+    assert type(parse_check_latex("x ++ )( ==").ok) is bool

@@ -3,7 +3,8 @@
 다단계 연쇄(전부 correct·중간 incorrect·unverifiable 섞임)·`unverified_ratio`·
 `first_incorrect_index`·`has_incorrect`·step_types 전파(전이별)·길이 규약(ValueError)·엣지
 (steps <2·빈 리스트)·카운트 합 = n_transitions·결정론·필드셋·`verify_step` 결과 그대로 집계
-(재구현 아님)를 검증한다.
+(재구현 아님)를 검증한다. MATH-03: 사유 코드별 카운트(`unverifiable_by_reason`) 집계·합 불변식·
+JSON 직렬화(enum 키 → 문자열 키) 추가.
 
 텍스트→단계 분해(L5)·coach 결선·PRM 가중치는 *후속*이라 여기 없다(본 슬라이스는 집계만).
 """
@@ -16,7 +17,11 @@ from whymath_backend.l3.verify_solution import (
     SolutionVerificationResult,
     verify_solution,
 )
-from whymath_backend.l3.verify_step import VerifyStepState, verify_step
+from whymath_backend.l3.verify_step import (
+    VerifyStepReasonCode,
+    VerifyStepState,
+    verify_step,
+)
 from whymath_backend.schema.enums import StepType
 
 
@@ -224,8 +229,57 @@ class TestDeterminismAndFields:
             "n_correct",
             "n_incorrect",
             "n_unverifiable",
+            "unverifiable_by_reason",
             "n_transitions",
             "unverified_ratio",
             "first_incorrect_index",
             "has_incorrect",
         }
+
+
+class TestUnverifiableByReason:
+    """MATH-03 ④·⑤ — 사유 코드별 카운트 집계(희소·합 불변식·서로 다른 카운터·직렬화)."""
+
+    def test_different_causes_hit_different_counters(self) -> None:
+        # 변별력(⑤): parse_error 유발 전이와 non_algebraic_step 유발 전이가 *서로 다른 카운터*
+        # 를 올린다 — 같은 키에 합산되면 red(무변별 위장·태스크 실패 조건).
+        result = verify_solution(
+            ["2+3", "5", "2 +* 3", "5"],
+            [StepType.계산, None, StepType.조건해석],
+        )
+        # 전이0 correct(2+3≡5)·전이1 parse_error(5→"2 +* 3")·전이2 비대수(조건해석).
+        assert result.n_unverifiable == 2
+        assert result.unverifiable_by_reason == {
+            VerifyStepReasonCode.parse_error: 1,
+            VerifyStepReasonCode.non_algebraic_step: 1,
+        }
+
+    def test_counts_sum_to_n_unverifiable(self) -> None:
+        # 합 불변식 — 모든 unverifiable에 코드가 총부착되므로(verify_step 시그니처 강제)
+        # 사유별 카운트 합은 항상 n_unverifiable과 같다.
+        result = verify_solution(["2 +* 3", "5", "sqrt(x^2)", "x", "", "y"])
+        assert result.n_unverifiable > 0
+        assert sum(result.unverifiable_by_reason.values()) == result.n_unverifiable
+
+    def test_sparse_dict_only_observed_codes(self) -> None:
+        # 희소 — 관측된 코드만 담는다(0 카운트 키 없음·분모는 n_transitions가 담당).
+        result = verify_solution(["2+3", "5", "2 +* 3"])
+        assert result.unverifiable_by_reason == {VerifyStepReasonCode.parse_error: 1}
+
+    def test_no_unverifiable_yields_empty_dict(self) -> None:
+        result = verify_solution(["2*(x+1)", "2*x+2"])
+        assert result.n_unverifiable == 0
+        assert result.unverifiable_by_reason == {}
+
+    def test_empty_aggregate_has_empty_dict(self) -> None:
+        # 전이 0개(빈 집계)도 빈 dict — None이 아니라 {}(검증은 실행됐고 보류가 0).
+        assert verify_solution([]).unverifiable_by_reason == {}
+        assert verify_solution(["2+3"]).unverifiable_by_reason == {}
+
+    def test_json_serialization_uses_string_keys(self) -> None:
+        # 직렬화 경유 실측 — enum 키 dict가 JSON 모드에서 *문자열 키*로 접힌다(API 응답·모바일
+        # Map<String,int> 파싱 전제). 여기 깨지면 클라 3분기 문구가 전부 무너진다.
+        result = verify_solution(["2+3", "5", "2 +* 3"])
+        dumped = result.model_dump(mode="json")
+        assert dumped["unverifiable_by_reason"] == {"parse_error": 1}
+        assert all(isinstance(k, str) for k in dumped["unverifiable_by_reason"])

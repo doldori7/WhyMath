@@ -326,9 +326,10 @@ abstract class SolutionCoaching with _$SolutionCoaching {
 
 /// 풀이 단계 연쇄 검증 결과(l3/verify_solution.py `SolutionVerificationResult`).
 ///
-/// 노출 계약: 검증 결과(상태·카운트·비율)뿐 — 정답/본문 누출 없음(reason은 검증 사유).
-/// 단계별 verify_step 결과(`steps`)는 이번 슬라이스 범위 밖이라 카운트·비율·위치만 옮긴다
-/// (백엔드 `steps`는 verdict/reason을 담은 리스트지만 L5 단계 렌더는 후속 — 카운트로 충분).
+/// 노출 계약: 검증 결과(상태·카운트·비율·폐쇄 사유 코드)뿐 — 정답/본문 누출 없음(reason은
+/// 검증 사유). 단계별 verify_step 결과(`steps`)는 이번 슬라이스에서도 파싱하지 않는다 —
+/// MATH-03이 보류 *사유 분포*를 `unverifiable_by_reason` 카운트로 따로 실어 주므로 학생 문구
+/// 3분기에 steps 전체가 필요 없다(카운트로 충분·백엔드 노출 계약 유지).
 @freezed
 abstract class SolutionVerificationResult with _$SolutionVerificationResult {
   const factory SolutionVerificationResult({
@@ -340,6 +341,13 @@ abstract class SolutionVerificationResult with _$SolutionVerificationResult {
 
     /// unverifiable 전이 개수(검증 불가).
     @JsonKey(name: 'n_unverifiable') required int nUnverifiable,
+
+    /// 확인 보류(unverifiable) 전이의 *사유 코드별* 카운트(MATH-03·값 합 = nUnverifiable).
+    /// 키는 백엔드 폐쇄 enum(VerifyStepReasonCode) 문자열 — parse_error·undecidable·
+    /// non_algebraic_step·empty_input·heterogeneous_form·subset_ambiguous·variable_mismatch.
+    /// 구판 서버(키 부재)는 빈 맵 — 카드가 기존 '확인 보류 일부' 한 문구로 폴백한다.
+    @JsonKey(name: 'unverifiable_by_reason')
+    @Default(<String, int>{}) Map<String, int> unverifiableByReason,
 
     /// 총 전이 개수 = max(0, len(steps)-1)·세 카운트의 합과 같다.
     @JsonKey(name: 'n_transitions') required int nTransitions,

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,7 +17,9 @@ acceptance:
   - "④ 검증 재수행 필수 — 원 커밋의 7,637 통과 증적을 **승계하지 않는다**(657커밋 드리프트). CI가 실제로 쓰는 명령을 대상 경로·플래그까지 그대로 재실행하고 판정은 **exit code**로 한다(-q·| tail 금지·'; echo EXIT=${PIPESTATUS[0]}' 병기 — 2026-08-09 규칙). 백엔드 소스를 건드리므로 **전체 스위트**를 돌린 뒤 회귀 없음을 말한다 — 못 돌렸으면 '전체는 확인하지 못했다'를 명시하고 CI를 최종 판정으로 넘긴다"
   - "⑤ 완료 조건: S4-09 status를 main에서 done으로 전이(artifacts에 이식 커밋 증적) + 원 브랜치 claude/whymath-solution-review-40xspg를 정리 대상으로 기록. 뮤테이션 검증을 한다면 원복은 cp 백업으로만 한다(git checkout --/restore/stash 금지 — 2026-08-10 OPS-24 규칙)"
   - "⑥ 범위 밖: S4-10~S4-12 착수·S4-09 acceptance 수정·신규 학생 대면 노출(이식분은 기존 표면 소생만·GET /v1/problems/{id}/steps 실데이터와 learning_scene 댕글링 해소). step_panel 서버 생산자 배선은 SOL-02"
-artifacts: []
+artifacts:
+  - "#801"
+  - c5e25116
 paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/whs/**"
