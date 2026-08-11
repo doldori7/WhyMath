@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/harness/concept_assessment_index.py
   - src/backend/whymath_backend/l3/render/assessment_bank.py
   - "data/corpus/concept_assessment_v1/**"
-session: null
+session: claude/whymath-ai-content-design-a3ysut
 notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F1·§3 D7 — 외부 EOS 틀(기능 58) 3차 대조. PB-03이 검수를 fail-closed 노출 게이트로 만들어 L6 7모드+기본 CAT+blueprint assembly에 배선했는데, S3-26이 만든 두 번째 노출 경로(/study 개념 평가 재료)는 그 게이트를 경유하지 않는다. 정본화≠집행(PED-06→PED-08) 계열의 재발형 — 그때는 노출 계약, PED-16은 억제 계약, 이번은 검수 계약. 정직한 경계: 파일럿 유일 소단원(quadratic_maxmin)이 10공수1-02-06-* 개념을 참조해 오늘 학생의 실도달은 0에 가깝다 — 실손실 수정이 아니라 규약 대칭·defense-in-depth이며 PB-03 자신의 '현 코퍼스 실손실 0이지만 채택' 선례와 동형. CUR-02가 목표 축을 넓히는 순간 도달한다."
 updated: 2026-08-11
