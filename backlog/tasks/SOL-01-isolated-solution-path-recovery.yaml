@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -25,6 +25,6 @@ paths:
   - src/backend/whymath_backend/api/problems.py
   - src/backend/whymath_backend/l4/scene_generation.py
   - "src/backend/alembic/**"
-session: null
+session: claude/school-subject-theory-problems-check-6ybkis
 notes: "docs/architecture/solution_module_gap_review_r3.md §4 R1. 미병합 고립 4회차(PB-02 그랜드파더 만료 계약의 사각 — 고립분 done이 고립 브랜치 YAML에만 기록돼 main 대장은 todo로 보였다)."
 updated: 2026-08-11
