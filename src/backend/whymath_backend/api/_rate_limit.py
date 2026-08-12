@@ -935,24 +935,40 @@ def _pair_headers(prefix: str, limit: int, result: RateLimitResult) -> dict[str,
 # "범위 밖 기능 금지"). 사용자 한도만 원하면 `ip_limit=0` 설정으로 Defense가 동등하게 동작.
 
 
-def _client_ip(request: Request) -> str | None:
-    """요청에서 IP 추출 — `X-Forwarded-For` 첫 항목 우선(LB 뒤 운영), 없으면 직접 연결.
+def _client_ip(request: Request, *, settings: Settings) -> str | None:
+    """요청에서 IP 추출 — 신뢰 프록시가 검증된 경우에만 `X-Forwarded-For`를 읽는다
+    (SEC-24, 원 SEC-14).
 
-    프록시 신뢰 모델: 본 함수는 *직전 신뢰 가능한 프록시*가 `X-Forwarded-For`를 설정했다는
-    *가정*에 의존한다(LB·CDN). 신뢰 없는 환경에선 클라이언트가 임의 헤더 주입 가능 — 운영
-    시 `uvicorn --proxy-headers` + 신뢰 IP 화이트리스트 필수. 헤더 미설정·`request.client`
-    None 이면 None 반환(rate limit 비활성 — 알 수 없는 IP는 차단도 통과도 안전한 fallback
-    선택, 본 함수는 None 시 호출자가 한도 미적용으로 처리).
+    `request.client`가 None이면 항상 None 반환(회귀 없음 — 호출자는 한도 미적용으로 처리).
+
+    프록시 신뢰 모델(우측-신뢰, 화이트리스트 기반): `X-Forwarded-For`는 각 홉이 *자신에게
+    연결한 피어*를 오른쪽에 append하며 전달하는 관례라, `request.client.host`(우리 서버에
+    직접 TCP 연결한 피어)는 헤더에 없고 헤더의 가장 오른쪽 값이 그 직전 홉이 본 피어다.
+
+    1. `settings.trusted_proxy_ips`가 비어 있거나 `request.client.host`가 그 집합에 없으면
+       → **X-Forwarded-For를 완전히 무시**하고 `request.client.host`를 그대로 반환(신뢰
+       프록시가 구성되지 않은 배포의 기본 자세 — 클라이언트가 임의로 보낼 수 있는 헤더를
+       신뢰하지 않으므로 위조로 rate limit·감사 IP를 속일 수 없다).
+    2. `request.client.host`가 신뢰 프록시 목록에 있으면 → X-Forwarded-For를 콤마로 분리해
+       *오른쪽부터* 순회, 신뢰 프록시 목록에 있는 값은 건너뛰고 처음 만나는 미신뢰 값을 원
+       클라이언트 IP로 반환. 전부 신뢰 프록시이거나 헤더가 비어 있으면 `request.client.host`로
+       안전 폴백(신뢰 체인은 확인됐으나 원 클라이언트를 특정할 근거가 없는 경우).
+
+    IP 문자열은 `strip()`만 하고 그 외 정규화(CIDR 매칭·IPv6 압축 등)는 하지 않는다.
     """
+    if request.client is None:
+        return None
+    direct_peer = request.client.host
+    trusted = settings.trusted_proxy_ips
+    if not trusted or direct_peer not in trusted:
+        return direct_peer
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        # 콤마 구분 — 가장 좌측이 원본 클라이언트, 우측은 프록시 체인
-        head = forwarded.split(",")[0].strip()
-        if head:
-            return head
-    if request.client is not None:
-        return request.client.host
-    return None
+        hops = [h.strip() for h in forwarded.split(",")]
+        for hop in reversed(hops):
+            if hop and hop not in trusted:
+                return hop
+    return direct_peer
 
 
 async def _enforce_by_ip(
@@ -987,7 +1003,7 @@ async def rate_limit_ip_read(
     response: Response,
 ) -> None:
     """*IP 단위 읽기* 한도 — 미인증 GET 엔드포인트용. IP 추출 실패 시 적용 안 함."""
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings=settings)
     if ip is None:
         return
     await _enforce_by_ip(
@@ -1004,7 +1020,7 @@ async def rate_limit_ip_write(
     response: Response,
 ) -> None:
     """*IP 단위 쓰기* 한도 — 미인증 POST 엔드포인트용. IP 추출 실패 시 적용 안 함."""
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings=settings)
     if ip is None:
         return
     await _enforce_by_ip(
@@ -1038,7 +1054,7 @@ async def rate_limit_ip_defect_report(
 
     `user_id`를 저장하지 않는 무인증 표면이라 IP 차원만 가능(user·device 차원 N/A).
     """
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings=settings)
     if ip is None:
         return
     await _enforce_by_ip(
@@ -1071,7 +1087,7 @@ async def rate_limit_auth_callback(
     장애 시 `_enforce_by_ip`가 호출하는 `_BACKEND.hit_by_ip`가 OPS-06 인메모리 폴백을 그대로
     상속한다(이 함수는 재구현 0 — 기존 fail-safe 거동 유지).
     """
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings=settings)
     if ip is None:
         return
     await _enforce_by_ip(
@@ -1091,7 +1107,7 @@ async def rate_limit_auth_refresh(
 
     IP 추출 실패 시 적용 안 함. Redis 장애 시 OPS-06 인메모리 폴백 그대로 상속(재구현 0).
     """
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings=settings)
     if ip is None:
         return
     await _enforce_by_ip(
@@ -1250,7 +1266,7 @@ async def rate_limit_triple_read(
     """*3차원 읽기* 한도(user+IP+device) — 인증 GET 엔드포인트의 강화 방어."""
     await _enforce_triple(
         user.user_id,
-        _client_ip(request),
+        _client_ip(request, settings=settings),
         await _client_device_id(request, settings),
         category="read",
         user_limit=settings.coach_rate_limit_read_per_minute,
@@ -1269,7 +1285,7 @@ async def rate_limit_triple_write(
     """*3차원 쓰기* 한도(user+IP+device) — 인증 POST 엔드포인트의 강화 방어."""
     await _enforce_triple(
         user.user_id,
-        _client_ip(request),
+        _client_ip(request, settings=settings),
         await _client_device_id(request, settings),
         category="write",
         user_limit=settings.coach_rate_limit_write_per_minute,
@@ -1305,7 +1321,7 @@ async def rate_limit_device_register(
     """디바이스 등록(`/v1/devices/register`) 전용 — user+IP 2차원·낮은 한도."""
     await _enforce_triple(
         user.user_id,
-        _client_ip(request),
+        _client_ip(request, settings=settings),
         None,  # device_id N/A — 등록 전엔 device가 없음(device 차원 자동 비활성)
         category="device_register",
         user_limit=settings.device_register_rate_limit_per_minute,
@@ -1328,7 +1344,7 @@ async def rate_limit_visualization(
     """시각화 생성(LLM·비용) 전용 — 3차원·coach write와 버킷 분리(slice 97)."""
     await _enforce_triple(
         user.user_id,
-        _client_ip(request),
+        _client_ip(request, settings=settings),
         await _client_device_id(request, settings),
         category="visualization",
         user_limit=settings.visualization_rate_limit_per_minute,
