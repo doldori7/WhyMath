@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PRES-04-math-aria-speechspec-reuse
+title: "수식 접근성 — SpeechSpec plain_text를 aria/semantic label로 재사용해 스크린리더 수식 낭독"
+track: math-completion
+stage: S4
+subject: cross
+layer: mobile
+status: todo
+priority: 5
+owner: claude
+depends_on:
+  - MATH-05-reverse-notation-display-surface
+requires_gates: []
+acceptance:
+  - "수학 본문 표출 표면(발문·선택지·코치 버블 수식 구간)에 Semantics label 부착 — label 원천은 서버 SpeechSpec.plain_text(이미 존재하는 한국어 낭독 명세) 재사용, 별도 파이프라인 신설 금지"
+  - 수식 포함 표면 1곳 이상에서 스크린리더가 LaTeX 원문이 아닌 낭독 문자열을 읽는 접근성 테스트 동결
+  - "범위 밖: MathLive 위젯 자체 접근성(math_engine_gap_review.md §4-① 축), 웹 MathML 병행 출력(학생용 웹 착수 시 PRES-03 범위)"
+artifacts: []
+paths:
+  - src/mobile/lib/features/chat/presentation/
+  - src/mobile/test/accessibility_test.dart
+session: null
+notes: "2026-08-12 표출 분석 P2-9. LaTeX 원문은 스크린리더에 무의미. MATH-05 ⑥(d)가 미룬 축의 착지"
+updated: 2026-08-13

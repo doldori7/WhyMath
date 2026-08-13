@@ -34,6 +34,10 @@ build/
 ios/Pods/
 android/.gradle/
 *.iml
+devtools_options.yaml
+
+# Node (루트 package.json — @openrouter/sdk)
+node_modules/
 
 # IDE
 .vscode/
@@ -70,6 +74,9 @@ logs/
 # Claude Code 임시
 .claude/cache/
 .claude/sessions/
+
+# 외부 플래닝 도구 로컬 캐시 (plans 등 — 로컬 유지, git 미추적)
+.hermes/
 
 # 병렬 세션용 git worktree (추적 안 함 — scripts/new-session-worktree.sh 생성물)
 worktrees/
@@ -121,6 +128,11 @@ data/cache/
 
 # 개념그래프 재ID 생성물 — ids.yaml이 정본 registry로 대체(미추적 빌드 산출물·P2d)
 /data/corpus/concept_graph_v1/id_map.csv
+
+# 배틀 하네스(S4-16) 감사 산출물 — 런타임 생성물, git truth source 아님
+# (루트 방치분은 data/audit/로 재배치 — 신규 실행은 이 경로에 출력할 것)
+data/audit/
+/battle_audit*.jsonl
 
 # S1 실기기 시연 런북 산출물 — run_demo.sh/.ps1이 남기는 uvicorn pid·로그(런타임·미추적)
 /.demo_uvicorn.pid

@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PRES-02-audience-display-profiles
+title: "대상층×디바이스 표출 프로파일 — (초/중/고/대/일반)×(폰/패드/웹) 서체·문장난이도·위젯·TTS 분기"
+track: math-completion
+stage: S5
+subject: cross
+layer: mobile
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - PRES-01-segment-body-blocks
+requires_gates: []
+acceptance:
+  - "SpeechSpec.grade_band(l3/speech_parse.py — 초/중/고/대 낭독 프로파일)를 선례로 표출 프로파일 계약 신설: 대상층별 서체 크기·문장 난이도·조작 위젯(manipulative) 여부·TTS 프로파일을 선언적 프로파일로 정의"
+  - "모바일 최소 2개 프로파일(예: 초등/고등) 실적용 — 발문 화면이 프로파일에 따라 서체·레이아웃을 바꾸는 위젯 테스트 동결"
+  - "범위 밖 명시: 콘텐츠 자체의 대상층별 생성(교수학 엔진 축)은 L4/L6 책임 — 이 태스크는 표출 분기만"
+artifacts: []
+paths:
+  - src/mobile/lib/theme/
+  - src/backend/whymath_backend/schema/speech.py
+session: null
+notes: "2026-08-12 표출 분석 P1-7. 사용자 정정 대상층 = 초등·중·고등·대학 수학, 학생/수험생/대학생/일반인. 문서 정본(CLAUDE.md:15)은 중·고등 — 정정 반영은 CLAUDE.md 갱신과 함께. '일반인'은 문서 0건으로 신규 항목"
+updated: 2026-08-13
