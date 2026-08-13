@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: review
 priority: 2
 owner: claude
 depends_on:
@@ -25,6 +25,6 @@ paths:
   - src/backend/whymath_backend/l4/learning_scene.py
   - src/backend/whymath_backend/api/scene.py
   - "src/mobile/lib/features/chat/**"
-session: null
+session: main
 notes: "docs/architecture/solution_module_gap_review_r3.md §4 R2. '테스트 초록 + 학생 도달 0' 유형 — 검증 장치는 도는데 대상이 없는 역방향 변형."
-updated: 2026-08-11
+updated: 2026-08-13
