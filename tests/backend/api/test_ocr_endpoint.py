@@ -197,3 +197,114 @@ def test_pages_disabled_503() -> None:
     """OCR 부품 미로드(비활성) → 503."""
     resp = _client(components_loaded=False).post(_PAGES_PATH, files=[_image_field("p1.png")])
     assert resp.status_code == 503
+
+
+# ── SEC-24(원 SEC-17): 업로드 크기·MIME 상한(인증 DoS 방어) ──────────────────────────────
+
+
+def _image_field_of_size(
+    name: str, size: int, *, content_type: str = "image/png"
+) -> tuple[str, tuple[str, bytes, str]]:
+    """지정 바이트 크기의 멀티파트 images 필드 1개(경계값·상한 테스트용)."""
+    return ("images", (name, b"a" * size, content_type))
+
+
+def test_oversized_image_413(monkeypatch: pytest.MonkeyPatch) -> None:
+    """단건 이미지가 _MAX_IMAGE_BYTES 초과 → 413(detail에 상한 MB 명시)."""
+
+    async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
+        raise AssertionError("상한 초과 이미지는 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
+    oversized = b"a" * (ocr_module._MAX_IMAGE_BYTES + 1)
+    resp = _client().post(_PATH, files={"image": ("s.png", oversized, "image/png")})
+    assert resp.status_code == 413
+    assert "10MB" in resp.json()["detail"]
+
+
+def test_image_size_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """경계값: 정확히 _MAX_IMAGE_BYTES바이트 = 통과(200)·+1바이트 = 거부(413)."""
+
+    async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
+        return _ocr_result()
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
+    at_limit = b"a" * ocr_module._MAX_IMAGE_BYTES
+    resp_ok = _client().post(_PATH, files={"image": ("s.png", at_limit, "image/png")})
+    assert resp_ok.status_code == 200
+
+    over_limit = b"a" * (ocr_module._MAX_IMAGE_BYTES + 1)
+    resp_over = _client().post(_PATH, files={"image": ("s.png", over_limit, "image/png")})
+    assert resp_over.status_code == 413
+
+
+def test_wrong_mime_type_415(monkeypatch: pytest.MonkeyPatch) -> None:
+    """비이미지 MIME(application/pdf) → 415(파이프라인 미도달)."""
+
+    async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
+        raise AssertionError("허용되지 않은 MIME은 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
+    resp = _client().post(_PATH, files={"image": ("x.pdf", b"%PDF-1.4 fake", "application/pdf")})
+    assert resp.status_code == 415
+
+
+def test_none_content_type_415(monkeypatch: pytest.MonkeyPatch) -> None:
+    """content-type 미전송(빈 문자열) → 415.
+
+    TestClient(httpx)는 files 튜플에 content_type을 생략하면 파일 확장자로 자동 추론해
+    "image/png" 등을 채워 넣으므로(우회), 명시적으로 빈 문자열("")을 3번째 요소로 넘겨
+    "Content-Type: " 빈 헤더를 강제한다 — 이때 UploadFile.content_type은 빈 문자열이 되고,
+    이는 허용목록에 없으므로(None과 동일하게) 415로 거부된다.
+    """
+
+    async def _fake_pipeline(image_bytes: bytes, *, components: object) -> OcrResult:
+        raise AssertionError("content-type 없는 업로드는 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline", _fake_pipeline)
+    resp = _client().post(_PATH, files={"image": ("s.png", b"abc", "")})
+    assert resp.status_code == 415
+
+
+def test_pages_individual_oversized_413(monkeypatch: pytest.MonkeyPatch) -> None:
+    """페이지 중 1장이 _MAX_IMAGE_BYTES 초과 → 413(어느 페이지인지는 불문)."""
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        raise AssertionError("상한 초과 페이지 포함 시 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    normal = _image_field_of_size("p1.png", 1024)
+    oversized = _image_field_of_size("p2.png", ocr_module._MAX_IMAGE_BYTES + 1)
+    resp = _client().post(_PAGES_PATH, files=[normal, oversized])
+    assert resp.status_code == 413
+
+
+def test_pages_total_exceeds_413(monkeypatch: pytest.MonkeyPatch) -> None:
+    """개별 상한 이내라도 합계가 _MAX_PAGES_TOTAL_BYTES 초과 → 413.
+
+    3MB × 18장 = 54MB > 50MB(_MAX_PAGES_TOTAL_BYTES) — 각 장(3MB)은 개별 상한(10MB) 이내라
+    단건 검증은 전부 통과하지만, 누적 합계가 50MB를 넘는 순간(17번째 장에서 17×3MB=51MB로
+    초과) 조기 중단되어 413이 되어야 한다(18번째 장은 읽히지 않음 — 파이프라인 미도달로 확인).
+    """
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        raise AssertionError("합계 초과는 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    page_size = 3 * 1024 * 1024  # 3MB — 개별 상한(10MB) 이내.
+    pages = [_image_field_of_size(f"p{i}.png", page_size) for i in range(18)]
+    resp = _client().post(_PAGES_PATH, files=pages)
+    assert resp.status_code == 413
+
+
+def test_pages_wrong_mime_type_415(monkeypatch: pytest.MonkeyPatch) -> None:
+    """여러 장 중 1장이 비이미지 MIME → 415."""
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        raise AssertionError("허용되지 않은 MIME 포함 시 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    ok_page = _image_field("p1.png")
+    bad_page = ("images", ("p2.txt", b"not an image", "text/plain"))
+    resp = _client().post(_PAGES_PATH, files=[ok_page, bad_page])
+    assert resp.status_code == 415

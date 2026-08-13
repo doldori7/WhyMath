@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: WEB-02-landing-deploy
+title: "랜딩 배포 배선 — 정적 호스팅 확정안 집행 (관리형 CDN vs 자가 호스트, Kiki 확정 후)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - WEB-01-landing-static-v1
+requires_gates: []
+acceptance:
+  - "web_strategy.md §4 비교표 기반 Kiki 확정이 MEMORY 결정 로그에 기록된 후 착수 — 확정 전 외부 프로비저닝 금지"
+  - "HTTPS·커스텀 도메인·배포 자동화(수동 승인 트리거) 실동작 확인 — TLS·프록시 미프로비저닝 전제, deploy.yml 골격과 별개 경로"
+artifacts: []
+paths:
+  - "src/web/webapp/**"
+  - ".github/workflows/**"
+session: null
+notes: "web_strategy.md §4 정본. 배포 절차 확정분은 deployment_cd_runbook.md 형식으로 후속 반영"
+updated: 2026-08-10

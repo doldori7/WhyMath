@@ -16,6 +16,20 @@
 게이팅한다 — 이전엔 인증 의존성이 0건이라 누구나 문제를 생성·수정·삭제할 수 있었다(실측
 `docs/architecture/account_security_gap_review.md` D1). GET(단건·목록·steps·relations)은
 *무인증 유지*(공개 카탈로그·현 클라·데모 경로 파괴 금지 — 봉인 범위 과확대 방지).
+
+정답류 비노출(SEC-24(원 SEC-15) — `functional_security_audit_2026-08-08.md` M1): 무인증 GET의
+response_model은 `PublicProblem`/`PublicProblemStep`(공개 투영 — 정답류 필드에 *자리가
+없다*, 키 부재가 계약)이다. SEC-07 D1의 공개 카탈로그(본문·메타)는 유지하되 정답류만
+구조적으로 뺀다 — D1은 본문 공개 결정이었지 정답 동봉 결정이 아니었다(감사 M1: 저작권
+강제-비움 목록에서 answer가 *빠진* 누락). 관리자 표면(POST/PATCH — RequireContentAdmin
+게이트)은 전체 `ProblemSchema`를 유지한다. Kiki가 D1을 정답까지 공개로 확장하기로
+결정하면 GET의 response_model을 되돌리면 된다(가역 — 안전측 재량 판단).
+
+ETag(SEC-24): 모든 ETag는 **공개 투영 기준**으로 계산한다 — 전체 스키마 해시를 무인증
+GET에 노출하면, 공개 필드를 다 아는 공격자가 정답 후보(예: 1~999)를 오프라인 대입해
+해시 일치로 정답을 복원하는 *오라클*이 된다. 공개 투영 기준이면 GET(공개)↔PATCH/DELETE
+(If-Match)가 단일 토큰 체계로 정합하고 오라클이 닫힌다. 대가: 정답류 *단독* 변경은
+ETag를 바꾸지 않아 그 축의 낙관적 동시성 감지가 약해진다(수용 — 보안 ≫ 편의).
 """
 
 from __future__ import annotations
@@ -40,7 +54,7 @@ from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Subject
 from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
-from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
+from whymath_backend.schema.problem import PublicProblem, PublicProblemStep
 
 router = APIRouter(prefix="/v1/problems", tags=["problem"])
 
@@ -60,7 +74,8 @@ async def create_problem(
 
     `external_id`/`slug`는 UNIQUE이므로 중복이면 PG가 IntegrityError → 롤백 후 **409**.
     본문 보유 금지 등 출처별 불변식은 schema.Problem이 이미 검증했다(경계 메모 참조).
-    응답에 ETag를 실어 이후 조건부 수정(If-Match)을 가능케 한다.
+    응답에 ETag(공개 투영 기준 — 모듈 docstring SEC-24 오라클 항목)를 실어 이후 조건부
+    수정(If-Match)을 가능케 한다. 응답 본문은 관리자 표면이라 전체 스키마 유지.
     """
     orm = Problem.from_schema(body)
     session.add(orm)
@@ -74,21 +89,22 @@ async def create_problem(
         ) from exc
     await session.refresh(orm)
     result = orm.to_schema()
-    response.headers["ETag"] = etag_for(result)
+    response.headers["ETag"] = etag_for(PublicProblem.from_problem(result))
     return result
 
 
-@router.get("/{problem_id}", response_model=ProblemSchema, summary="문제 단건 조회")
+@router.get("/{problem_id}", response_model=PublicProblem, summary="문제 단건 조회(공개 투영)")
 async def read_problem(
     problem_id: uuid.UUID,
     session: SessionDep,
     response: Response,
     if_none_match: Annotated[str | None, Header()] = None,
-) -> ProblemSchema | Response:
-    """UUID로 문제 단건 조회 — 없으면 404.
+) -> PublicProblem | Response:
+    """UUID로 문제 단건 조회 — 없으면 404. **무인증 공개 라우트 → 공개 투영**(SEC-24).
 
-    ETag를 싣고, `If-None-Match`가 현재 ETag와 일치하면 **304 Not Modified**(빈 본문)로
-    응답해 모바일 대역폭을 아낀다.
+    응답은 `PublicProblem` — 정답류 필드(`PUBLIC_HIDDEN_ANSWER_FIELDS`)는 키 자체가
+    없다(값 None이 아니라 부재가 계약). ETag를 싣고, `If-None-Match`가 현재 ETag와
+    일치하면 **304 Not Modified**(빈 본문)로 응답해 모바일 대역폭을 아낀다.
     """
     orm = await session.get(Problem, problem_id)
     if orm is None:
@@ -96,7 +112,7 @@ async def read_problem(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
-    result = orm.to_schema()
+    result = PublicProblem.from_problem(orm.to_schema())
     etag = etag_for(result)
     if matches_if_none_match(if_none_match, etag):
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
@@ -104,33 +120,38 @@ async def read_problem(
     return result
 
 
-@router.get("", response_model=list[ProblemSchema], summary="문제 목록")
+@router.get("", response_model=list[PublicProblem], summary="문제 목록(공개 투영)")
 async def list_problems(
     session: SessionDep,
     subject: Annotated[Subject | None, Query(description="과목 필터(선택)")] = None,
     limit: Annotated[int, Query(ge=1, le=200, description="페이지 크기")] = 50,
     offset: Annotated[int, Query(ge=0, description="건너뛸 행 수")] = 0,
-) -> list[ProblemSchema]:
+) -> list[PublicProblem]:
     """문제 목록 — 최신순(created_at desc, problem_id로 안정 정렬), limit/offset.
 
-    `subject`를 주면 해당 과목만 필터한다. 정렬 보조키로 problem_id(UNIQUE)를 둬 동일
-    created_at에서도 페이지네이션이 안정적이다.
+    **무인증 공개 라우트 → 공개 투영**(SEC-24 — 정답류 키 부재). `subject`를 주면 해당
+    과목만 필터한다. 정렬 보조키로 problem_id(UNIQUE)를 둬 동일 created_at에서도
+    페이지네이션이 안정적이다.
     """
     stmt = select(Problem)
     if subject is not None:
         stmt = stmt.where(Problem.subject == subject)
     stmt = stmt.order_by(Problem.created_at.desc(), Problem.problem_id).limit(limit).offset(offset)
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    return [PublicProblem.from_problem(row.to_schema()) for row in result.scalars().all()]
 
 
 @router.get(
     "/{problem_id}/steps",
-    response_model=list[ProblemStepSchema],
-    summary="문제 풀이 단계 목록",
+    response_model=list[PublicProblemStep],
+    summary="문제 풀이 단계 목록(공개 투영)",
 )
-async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list[ProblemStepSchema]:
+async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list[PublicProblemStep]:
     """문제의 풀이 단계(Polya·Socratic) 목록 — step_order 순. 문제 없으면 404.
+
+    **무인증 공개 라우트 → 공개 투영**(SEC-24): `expected_answer`(단계 정답·S4-09 승격
+    어댑터가 `SolutionStep.content`를 싣는 좌석)·`common_mistakes`/`common_errors`(힌트·
+    오개념류)는 키 자체가 없다 — 코치(L4)가 서버 내부에서만 쓴다.
 
     하위 리소스 read 전용(단계 생성/수정은 범위 밖). 부모 부재를 빈 목록과 구분하기 위해
     먼저 문제 존재를 확인한다.
@@ -151,7 +172,7 @@ async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list
         .order_by(ProblemStep.step_order)
     )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    return [PublicProblemStep.from_step(row.to_schema()) for row in result.scalars().all()]
 
 
 @router.get(
@@ -193,7 +214,8 @@ async def patch_problem(
     유지한다. `Role.CONTENT_ADMIN` 전용. `problem_id`(PK)는 경로 고정. 없으면 404, 병합 결과
     스키마 위반 422, `external_id`/`slug` UNIQUE 충돌 409. **낙관적 동시성**: `If-Match`(GET
     ETag)를 보내면 그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 — 비파괴). 응답에
-    새 ETag를 싣는다.
+    새 ETag를 싣는다. ETag는 공개 투영 기준(모듈 docstring SEC-24 — GET이 공개 투영
+    ETag를 주므로 여기서도 같은 기준으로 비교해야 If-Match 흐름이 정합한다).
     """
     existing = await session.get(Problem, problem_id)
     if existing is None:
@@ -201,7 +223,7 @@ async def patch_problem(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
-    ensure_if_match(if_match, etag_for(existing.to_schema()))
+    ensure_if_match(if_match, etag_for(PublicProblem.from_problem(existing.to_schema())))
     merged = existing.to_schema().model_dump()
     merged.update(body)
     merged["problem_id"] = problem_id  # PK는 경로 고정
@@ -225,7 +247,7 @@ async def patch_problem(
             detail="이미 존재하는 external_id 또는 slug입니다.",
         ) from exc
     result = updated.to_schema()
-    response.headers["ETag"] = etag_for(result)
+    response.headers["ETag"] = etag_for(PublicProblem.from_problem(result))
     return result
 
 
@@ -240,7 +262,8 @@ async def delete_problem(
     `Role.CONTENT_ADMIN` 전용.
 
     cascade를 ORM에 두지 않았으므로 참조가 있으면 삭제를 거부한다(가짜 cascade 금지).
-    `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).
+    `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제 —
+    비교 기준은 공개 투영 ETag·모듈 docstring SEC-24).
     """
     existing = await session.get(Problem, problem_id)
     if existing is None:
@@ -248,7 +271,7 @@ async def delete_problem(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
-    ensure_if_match(if_match, etag_for(existing.to_schema()))
+    ensure_if_match(if_match, etag_for(PublicProblem.from_problem(existing.to_schema())))
     await session.delete(existing)
     try:
         await session.commit()
