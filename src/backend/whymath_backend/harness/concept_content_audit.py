@@ -8,8 +8,9 @@
 `harness/corpus_audit_eval`(문항 합격 로트 샘플링 게이트)과의 차이:
   · corpus_audit_eval — *사람이 라벨링한 표본*을 받아 문항 코퍼스의 결함율 상한을 게이트한다.
   · 이 모듈 — *기계가 전수 스캔*해 개념 콘텐츠의 **구조적** 결함(필드 결측·연결 결측·렌더 투영
-    거부)과 **검수 상태**를 센다. 사람 라벨을 대체하지 않는다(구조 결함은 기계가 전수로 볼 수
-    있지만, 내용의 교수학적 타당성은 여전히 사람·상위 게이트 몫이다 — 검증 권위 서열 준수).
+    거부)과 explanation의 **내용 오염**(NCIC 크롤링 잔류), **검수 상태**를 센다. 사람 라벨을
+    대체하지 않는다(구조 결함과 잔류 표기는 기계가 전수로 볼 수 있지만, 내용의 교수학적
+    타당성은 여전히 사람·상위 게이트 몫이다 — 검증 권위 서열 준수).
 
 **축을 새로 만들지 않는다**: `review_status`는 `db/models/concept_content.py`가 이미 쓰는 축이며,
 이 감사는 그 값을 코퍼스에서 읽어 셀 뿐이다. 결함 분류도 새 enum이 아니라 *결측된 필드 이름*을
@@ -29,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -55,7 +57,8 @@ REVIEW_STATUS_AI_ESTIMATED = "ai_estimated"
 # 검수 상태 미표기 행의 집계 키 — "미표기"와 "ai_estimated"를 섞지 않는다(모르면 모른다).
 REVIEW_STATUS_MISSING = "(미표기)"
 
-# 결함 신호 — 전부 *기존 필드 이름*이다(새 분류축 신설 금지).
+# 결함 신호 — 결측 신호는 *기존 필드 이름*을 그대로 키로 쓴다(새 분류축 신설 금지). 내용 오염
+# 신호(아래 explanation_* 2종)만 `<필드>_<형태>`로 명명해 결측 키와 섞이지 않게 한다.
 DEFECT_MISSING_FIELDS: tuple[str, ...] = (
     "metaphor",
     "misconception",
@@ -67,6 +70,27 @@ DEFECT_NO_STANDARD_CODES = "standard_codes_empty"
 
 DEFECT_DSL_PROJECTION_REJECTED = "dsl_projection_rejected"
 """렌더 투영(`from_concept_content`)이 거부 — 교수법-중립 위반 등으로 학생에게 나갈 수 없다."""
+
+DEFECT_EXPLANATION_REVISION_MARK = "explanation_revision_mark"
+"""explanation에 'NNNN 개정' 꼴 개정 연도 표기 — NCIC 크롤링 잔류. 코퍼스 사이드카의
+license_notice("K-12 성취기준 본문은 NCIC 저작물이라 미수록")와 정면으로 모순되는 오염이다."""
+
+DEFECT_EXPLANATION_SECTION_TRAILER = "explanation_section_trailer"
+"""explanation에 '(N) 절제목' 꼴 페이지·절 표기 — 같은 NCIC 크롤링 잔류의 두 번째 형태."""
+
+DEFECT_EXPLANATION_PAGE_INSERT = "explanation_page_insert"
+"""explanation 문장 중간에 조사 직후 bare 페이지 숫자 삽입('방법을 70 설명할 수 있다' 꼴) —
+크롤링 잔류의 세 번째 형태. 47건 정정(QUAL-06) 후 추가 발견된 1건(H:12대수03-05)에서 확인."""
+
+# 잔류 탐지 패턴 — 오탐 방지를 위해 형태별로 분리한다. explanation은 개념 gloss라 개정 연도나
+# 페이지·절 표기가 정상 등장할 경로가 없고, 수학 표기 속 괄호(예: "(a+b)^n", "(연쇄법칙)")는
+# `\(\d+\)`가 걸러 낸다. PAGE_INSERT는 '조사(을/를)+숫자+한글'로 좁혀 "분모 10 진분수" 같은
+# 정상 서술(조사 없음)을 오탐하지 않는다. 2026-08-13 실 코퍼스 전수 실측 근거: 정정 전 오염
+# 47건을 앞 두 패턴의 합집합이 전부 탐지하고 나머지 390건에서는 오탐 0건이었다(QUAL-06).
+# 이후 재오염은 이 신호가 전수 스캔으로 잡아 낸다.
+_RESIDUE_REVISION_MARK = re.compile(r"\d{4}\s*개정")
+_RESIDUE_SECTION_TRAILER = re.compile(r"\(\d+\)\s*[가-힣]")
+_RESIDUE_PAGE_INSERT = re.compile(r"[을를]\s+\d{1,3}\s+[가-힣]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +175,15 @@ def audit_concepts(rows: list[ConceptRow]) -> AuditReport:
                 found.append(f"missing:{field_name}")
         if not row.standard_codes:
             found.append(DEFECT_NO_STANDARD_CODES)
+        if row.explanation is not None:
+            # 크롤링 잔류는 결측이 아니라 *내용 오염* — 값이 있을 때만 스캔한다(None을 정상으로
+            # 봐야 하는 이유가 아니라, 결측 결함은 위의 missing 축 소관이라 중복 집계하지 않는다).
+            if _RESIDUE_REVISION_MARK.search(row.explanation):
+                found.append(DEFECT_EXPLANATION_REVISION_MARK)
+            if _RESIDUE_SECTION_TRAILER.search(row.explanation):
+                found.append(DEFECT_EXPLANATION_SECTION_TRAILER)
+            if _RESIDUE_PAGE_INSERT.search(row.explanation):
+                found.append(DEFECT_EXPLANATION_PAGE_INSERT)
         try:
             from_concept_content(row)
         except ValueError:
@@ -280,6 +313,9 @@ if __name__ == "__main__":  # pragma: no cover — 엔트리포인트
 
 __all__ = [
     "DEFECT_DSL_PROJECTION_REJECTED",
+    "DEFECT_EXPLANATION_PAGE_INSERT",
+    "DEFECT_EXPLANATION_REVISION_MARK",
+    "DEFECT_EXPLANATION_SECTION_TRAILER",
     "DEFECT_MISSING_FIELDS",
     "DEFECT_NO_STANDARD_CODES",
     "REVIEW_STATUS_AI_ESTIMATED",

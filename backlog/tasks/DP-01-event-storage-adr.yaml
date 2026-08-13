@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: DP-01-event-storage-adr
+title: "데이터 플랫폼 저장소 ADR — PostgreSQL 우선·TimescaleDB/ClickHouse 착수 조건"
+track: infra-debt
+stage: S4
+subject: cross
+layer: docs
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "현재 운영 DB가 일반 PostgreSQL임을 compose·조건부 migration 실측으로 기록; TimescaleDB 전환에 별도 변환 migration·백업/롤백 검증이 필요함을 명시; ClickHouse 착수 조건(분석 SLO·이벤트량·보존·소비자)을 ADR로 고정"
+artifacts:
+  - cc355c54
+paths:
+  - "docs/architecture/adr/**"
+  - docs/architecture/00_overview.md
+session: null
+notes: "EOS #84/#85 수정 계획 P0-1. 구현 전 설계 정합성 태스크."
+updated: 2026-08-02

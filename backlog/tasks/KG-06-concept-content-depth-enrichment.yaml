@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-06-concept-content-depth-enrichment
+title: "이론 콘텐츠 깊이 보강 스코핑 — explanation 평균 25자 구조화 확장 + K-12 플래시카드 76% 공백 + en/ja 로케일 0건"
+track: math-completion
+stage: S5
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - KG-02-concept-content-review-promotion
+requires_gates: []
+acceptance:
+  - "① 현재 깊이 실측 고정: explanation 30자 미만 273/437(62%), 평균 25자, K-12 플래시카드 보유 24%(105/437)·8개 과목 0장, en/ja 로케일 0/437(빈 골격)"
+  - "② 확장 목표 구조 확정: 직관→정의→예시→오개념 연결(pedagogy_packs CONCEPT 팩의 required_slots와 정합) + 학교급별 문체 프로파일(l4/speech/profiles.py와 모순 금지)"
+  - "③ 생성 경로 결정: data-pipeline 재생성 vs 검수 워크플로(KG-02) 내 수기 보강 — 검수 없는 대량 재생성은 KG-02 blocked 사유와 같은 구조라 선행 해소 필요"
+  - "④ 로케일(en/ja)은 Phase 5 글로벌 전까지 의도적 공백인지 Kiki 판단 필요 — 사람 게이트 후보"
+  - "⑤ 범위 밖: 실제 대량 재생성 실행(이 태스크는 스코핑까지 — 실행은 승인된 설계로 별도 등재)"
+artifacts: []
+paths:
+  - "data/corpus/concept_content_v1/**"
+  - "data/corpus/concept_graph_v1/locales/**"
+session: null
+notes: "2026-08-13 감사 발견. '이유를 묻는 수학' 정체성 대비 이론이 한 줄 요약 수준. KG-02(검수) blocked 해소가 전제 — 물량 846건이라 생성 품질 게이트 없는 양산은 재발 경로."
+updated: 2026-08-13
