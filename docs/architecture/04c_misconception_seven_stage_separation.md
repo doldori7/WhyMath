@@ -126,10 +126,16 @@ embedding이 오염되어 AI가 *오개념 문장을 정상 개념의 일부처�
 
 - **Judge / Validation** — `l4/misconception/judge.py`·`judge_seam.py`. LLM-judge가 방향(⇒역)·부정
   (≠)·등치(=)가 어긋난 후보만 *걸러* 오도된 가르침을 줄인다(제거만·생성 안 함·shadow→canary→full).
-  현재 coach 미배선(측정 하니스만·`04b`). 동결: `test_misconception_judge.py`.
-- **Identity / Canonical** — 런타임 탐지 정본(kebab-id 30종·`CATALOG_BY_ID`)과 콘텐츠 카탈로그
-  (M-id 839종)를 의도적으로 FK 미결합·crosswalk로 연결. 개념과 별 키공간이라 정체성 오염 없음.
+  ~~현재 coach 미배선(측정 하니스만·`04b`)~~ → **정정(2026-08-11 실측)**: `api/coach.py:780`에
+  `judge_filter`가 결선돼 있다 — 게이트(`misconception_judge_enabled`)가 기본 off라 발동하지
+  않을 뿐 배선은 완료다. 동결: `test_misconception_judge.py`.
+- **Identity / Canonical** — 런타임 탐지 정본(kebab-id **64종**·`CATALOG_BY_ID`)과 콘텐츠 카탈로그
+  (M-id **843건**)를 의도적으로 FK 미결합·crosswalk로 연결. 개념과 별 키공간이라 정체성 오염 없음.
   동결: `test_misconception_crosslink.py`.
+  *(정정 2026-08-11 — 종전 표기 "30종·839종"은 stale이었다. 탐지 카탈로그는 34→40→46→52→58→64로
+  5회 트랜치 확장됐고 M-id는 Phase 4a에서 841→843이 됐다. 1차 대조
+  `misconception_module_gap_review.md` §0-②가 지적했으나 미정정으로 남아 있던 것을
+  `misconception_module_gap_review_r2.md` §5-1이 재등재해 여기서 반영한다.)*
 
 ---
 
