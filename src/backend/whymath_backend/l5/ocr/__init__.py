@@ -1,11 +1,12 @@
 """L5 OCR 서브시스템 — 손글씨 풀이 이미지 → 구조(`OcrResult`) 인식 파이프라인.
 
-5단계 파이프라인(부품은 모두 *주입*·전역 로드 없음):
-  ① 검출(`detect`)   — Detector Protocol·PaddleDetector(Phase A)·MfdDetector(Phase B 스텁).
-  ② 라우팅(`router`) — RegionRouter Protocol·HeuristicRouter(Phase A·모델 0)·MfdRouter(B 스텁).
+5단계 파이프라인(부품은 모두 *주입*·전역 로드 없음. 각 부품의 현재 상태는 해당 모듈
+docstring이 정본 — 여기 요약이 뒤처지면 그쪽이 이긴다):
+  ① 검출(`detect`)   — Detector Protocol·PaddleDetector(Phase A)·MfdDetector(Phase B·동작).
+  ② 라우팅(`router`) — RegionRouter Protocol·HeuristicRouter(Phase A·모델 0)·MfdRouter(B·동작).
                        핵심 순수 함수 `merge_text_and_math_regions`(IoU 병합·단위 테스트 가능).
-  ③ 인식(`recognize`)— _BaseMathRecognizer(ABC)·RapidLatexRecognizer(A)·TexTeller(B 스텁)·
-                       QwenVlRecognizer(C 스텁·L3 라우터 경유)·PaddleTextRecognizer(A).
+  ③ 인식(`recognize`)— _BaseMathRecognizer(ABC)·RapidLatexRecognizer(A)·TexTeller(C·동작)·
+                       QwenVlRecognizer(비동기 경로 실배선·L3 라우터 경유)·PaddleTextRecognizer(A).
   ④ 조립(`assemble`) — `assemble_regions` 순수 함수(읽기순 정렬·집계).
   ④-검증(`verify`)   — `parse_check_latex` SymPy 왕복(결정론·LLM 0).
   텍스트 단계 분해(`text_segmentation`) — `segment_solution_text`(구조 판별만·LLM 0·
