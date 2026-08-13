@@ -3072,3 +3072,6 @@
 {"ts": "2026-08-13T12:54:03", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "done", "id": "QUAL-06-ncic-crawl-residue-cleanup", "artifacts": ["1ca05440", "#823"]}
 {"ts": "2026-08-13T12:57:10", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "start", "id": "NS-05-notation-coverage-theory-corpus-scope", "session": "claude/qual-06-ncic-crawl-residue-cleanup", "remote": "ok"}
 {"ts": "2026-08-13T14:05:20", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "NS-05-notation-coverage-theory-corpus-scope", "artifacts": ["d2c059bc", "#824"]}
+{"ts": "2026-08-13T14:11:54", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "review", "id": "SOL-02-step-panel-producer-wiring"}
+{"ts": "2026-08-13T14:27:13", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "MOB-19-webview-lifecycle-hardening", "artifacts": ["PR#826"]}
+{"ts": "2026-08-13T14:27:15", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "SOL-02-step-panel-producer-wiring", "artifacts": ["PR#825", "PR#826"]}
