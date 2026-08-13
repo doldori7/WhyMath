@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/l3/notation_coverage.py
   - data/notation_missing_baseline.json
   - "tests/backend/l3/**"
-session: null
+session: claude/qual-06-ncic-crawl-residue-cleanup
 notes: "2026-08-13 감사: 이론 코퍼스에 미지원 유니코드 글리프 대량(atom_graph → 2448회·− 662·× 512, concept_content 19종, 대학 20종, misconceptions 22종)인데 CI 게이트가 측정 안 함. 베이스라인 수치 자체는 정확했으므로 측정기는 신뢰 가능 — 범위만 확장하면 됨."
 updated: 2026-08-13
