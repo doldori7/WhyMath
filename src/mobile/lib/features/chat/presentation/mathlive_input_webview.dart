@@ -7,8 +7,15 @@
 // 통신: 웹은 `WhymathMathInput` JS 채널로 LaTeX 변경을 push하고, Flutter는 `window.whymathClear()`·
 // `window.whymathSetLatex(v)`를 runJavaScript로 호출한다(단방향 상태 + 명령 훅). MathLive 로드 실패
 // 시 웹이 textarea로 폴백하므로 입력 자체는 끊기지 않는다(HTML 참조).
+//
+// 생명주기 하드닝(MOB-19): ① onPageFinished 전까지 로딩 인디케이터로 빈 화면을 가리고, ② 주 프레임
+// 로드 실패(onWebResourceError) 시 WebView를 걷어내고 "수식 입력 불가 → 평문 입력 유도" 안내로
+// 강등한다. 웹 내부 3단 폴백(textarea)은 *페이지가 떴을 때*만 유효하므로, 페이지 자체가 안 뜨는
+// 네이티브 측 실패는 여기서 막는다. 정서 안전: 실패를 빨강·경고로 표현하지 않는다.
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
+import 'webview_fallback.dart';
 
 /// 웹이 보낸 LaTeX 입력 메시지를 정규화한다(순수·Flutter/WebView 무관 — 단위 테스트 대상).
 ///
@@ -18,8 +25,9 @@ String normalizeLatexInput(String raw) => raw.trim();
 
 /// MathLive 수식 입력 WebView — 입력 변경을 [onChanged]로 콜백한다.
 ///
-/// 플랫폼 뷰라 헤드리스 flutter test에서 렌더 불가 — 위젯 테스트는 pump하지 않고 순수
-/// [normalizeLatexInput]만 검증한다(graphing_calculator_webview_test 선례). 화면 통합은 후속.
+/// 생명주기(MOB-19): 로드 완료 전까지 로딩 인디케이터를 얹고, 주 프레임 로드 실패 시 수식 입력 불가
+/// 안내 폴백으로 강등한다(빈 화면 미노출). 플랫폼 뷰라 헤드리스 flutter test에서는 WebView 본체를
+/// pump하지 않고, 강등 판정(순수 함수)·폴백 외형(공개 위젯)만 webview_fallback.dart 테스트가 문다.
 class MathliveInputWebView extends StatefulWidget {
   const MathliveInputWebView({
     required this.onChanged,
@@ -45,6 +53,12 @@ class MathliveInputWebView extends StatefulWidget {
 class MathliveInputWebViewState extends State<MathliveInputWebView> {
   late final WebViewController _controller;
 
+  /// 로딩 인디케이터 표시 여부 — onPageFinished(로드 완료) 전까지만 true(MOB-19).
+  bool _loading = true;
+
+  /// 강등 여부 — 주 프레임 로드 실패 시 수식 입력 불가 안내로 내린다(빈 화면 금지).
+  bool _fallBackToGuidance = false;
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +71,31 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
           widget.onChanged(normalizeLatexInput(message.message));
         },
       )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (_fallBackToGuidance || !mounted) return;
+            setState(() => _loading = false);
+          },
+          onWebResourceError: _onWebResourceError,
+        ),
+      )
       ..loadFlutterAsset('assets/mathlive_input/index.html');
+  }
+
+  /// 리소스 로드 실패 처리 — 주 프레임 실패만 안내 폴백으로 강등한다(판정은 공유 순수 함수).
+  void _onWebResourceError(WebResourceError error) {
+    if (!shouldDemoteWebViewOnError(isForMainFrame: error.isForMainFrame)) return;
+    // 침묵 실패 금지 — 강등 사유를 로그로 남긴다(학생 표면은 중립 톤 유지).
+    debugPrint(
+      '[whymath] MathLive WebView 주 프레임 로드 실패 → 입력 안내 폴백: '
+      'code=${error.errorCode} ${error.description}',
+    );
+    if (_fallBackToGuidance || !mounted) return;
+    setState(() {
+      _loading = false;
+      _fallBackToGuidance = true;
+    });
   }
 
   /// 입력을 비운다(전송 후 초기화) — 웹의 `whymathClear` 훅을 호출한다.
@@ -67,6 +105,15 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
 
   @override
   Widget build(BuildContext context) {
+    // 강등 — WebView 대신 평문 입력 유도 안내. 학생은 실패 경고가 아니라 "이렇게 입력하면 된다"는
+    // 안내를 본다(정서 안전). 실제 평문 입력 필드로의 대체는 별개 축(범위 밖 — MOB-19는 안내까지).
+    if (_fallBackToGuidance) {
+      return WebViewFallbackTile(
+        icon: Icons.edit_note_outlined,
+        label: '수식 입력 도구를 불러오지 못했어요. x^2 + 3x처럼 평문으로 적어도 괜찮아요',
+        height: widget.height,
+      );
+    }
     // height가 null이면 SizedBox는 높이 제약을 추가하지 않는다 — 부모(Expanded 등)가
     // 준 제약을 WebView가 그대로 채운다(가상 키보드 하단 도킹 공간 확보).
     return ClipRRect(
@@ -74,7 +121,13 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
       child: SizedBox(
         height: widget.height,
         width: double.infinity,
-        child: WebViewWidget(controller: _controller),
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            // 로드 완료 전까지 웹뷰 위를 덮는다 — 초기 흰 프레임·빈 화면을 숨기는 인디케이터.
+            if (_loading) const Positioned.fill(child: WebViewLoadingCover()),
+          ],
+        ),
       ),
     );
   }
