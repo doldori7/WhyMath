@@ -36,7 +36,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from whymath_backend.schema.enums import Persona, ReviewStatus, SourceType
+# `ReviewStatus` 자체는 더 이상 여기서 비교하지 않는다 — 값 판정을
+# `is_review_status_cleared`(L1, 단일 권위)에 위임했기 때문이다(CONT-01).
+from whymath_backend.schema.enums import Persona, SourceType, is_review_status_cleared
 from whymath_backend.schema.problem import Problem
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -174,6 +176,13 @@ def is_review_cleared(problem: Problem) -> bool:
     노출"(`ReviewStatus` enum docstring). 각인되는 값은 사람 인상이 아니라
     `harness/corpus_audit_eval.py`(`corpus_audit_eval`)의 측정 판정만이다(사람 입력 경로 0).
 
+    **판정 권위 위임(CONT-01)**: 어떤 *값*이 검수 통과인가는 `schema.enums.is_review_status_cleared`
+    한 곳에만 있고, 이 함수는 그 값 판정을 `Problem`에 적용하는 얇은 어댑터다. 빌드타임 경로
+    (`harness/concept_assessment_index.py` — 개념 평가 재료 상속 후보 필터)는 `Problem`이 아니라
+    코퍼스 JSONL dict를 다루므로 이 함수를 재사용할 수 없고, 대신 같은 값 판정 함수를 부른다.
+    그렇게 해서 "런타임 노출 게이트"와 "빌드타임 상속 필터"가 **같은 한 줄**을 공유한다 — 한쪽만
+    완화되는 기준 이원화를 구조적으로 막는다.
+
     Args:
       problem: 검수 상태를 판정할 문항(L1 `Problem`).
 
@@ -181,7 +190,7 @@ def is_review_cleared(problem: Problem) -> bool:
       `review_status == ReviewStatus.approved`이면 True, 그 외(`None`·`pending`·`rejected`)는
       False.
     """
-    return problem.review_status == ReviewStatus.approved
+    return is_review_status_cleared(problem.review_status)
 
 
 __all__ = [
