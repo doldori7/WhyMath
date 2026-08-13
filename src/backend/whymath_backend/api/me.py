@@ -62,7 +62,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.api._auth import ConsentedUser, CurrentUser
+from whymath_backend.api._auth import ConsentedUser, CurrentUser, RequireContentAdmin
 from whymath_backend.api._growth_evidence_state import (
     get_growth_evidence_counters,
     get_growth_evidence_exposure_counters,
@@ -3042,7 +3042,9 @@ async def export_my_data(
     이 엔드포인트 최초의 쓰기다.
     """
     export = await export_user_data(session, user_id=user.user_id)
-    record_export_audit(session, user_id=user.user_id, ip=_client_ip(request), settings=settings)
+    record_export_audit(
+        session, user_id=user.user_id, ip=_client_ip(request, settings=settings), settings=settings
+    )
     await session.commit()
     # ops 가시화 — RDB 밖 store는 이 export(PG)에 미포함(store명·user_id만·키 패턴 미로깅).
     pending = external_export_pending(user.user_id)
@@ -3056,29 +3058,45 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종+S3 4종+PED-04 3종 — admin 전용) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
 # 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
 # ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. PED-04(교수 결정 로그)가
 # 3종(⑫ 발문 전략 다양성·⑬ 연속 반복률·⑭ 클라 Polya 상태 불일치율)을 더 편입했다 — D1 writer가
 # 처음 만든 데이터의 첫 reader. 각 지표는 표본 0/부족이면 value=None + status(NO_DATA) + note로
 # 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다"). 코호트 전체 집계(user_id=None)는
-# ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만* 노출(타 학생 0·admin auth 범위 밖).
+# ops/스크립트가 직접 호출.
+#
+# SEC-24(원 SEC-13, 2026-08-08): 이 엔드포인트는 도입 당시부터 "내부·집계 전용 원시 계측 표면"이라고
+# docstring에 적혀 있었으나 실제 게이트는 `ConsentedUser`(학생 포함 인증 사용자 전원)였다 —
+# 선언과 집행이 어긋난 채 방치됐다(functional_security_audit_2026-08-08.md H1). 원시
+# `SurrogateMetrics`엔 INTERNAL_ONLY 지표(②진단정확도·④턴당토큰)·⑥보정점수 원 스칼라(역방향
+# 오독 위험)·⑧도움 감소 R15 결합판정의 원 verdict(게임화 의심 낙인 가능,
+# CLAUDE.md "부정 피드백 정서 강화 금지")가 그대로 실린다 — `harness/growth_evidence_exposure.py`
+# 가 이 세 벡터를 정확히 차단 대상으로 규정한다(:65-78 INTERNAL_ONLY 계층·:87-99 Brier 서술
+# 변환·:121-129 조합 제약. 참조: `test_me_growth_evidence_governance.py`가 이 파일에 그 두
+# 금지 리터럴이 등장하는 것 자체를 별도로 차단하므로 여기서도 서술만 하고 그대로 적지 않는다).
+# 그 계약의 유일한 집행 지점은 `GET /v1/me/growth-evidence`(PED-08)
+# 뿐이었고 이 원시 표면은 계약을 우회해 학생 토큰에 그대로 도달했다. 정정: `RequireContentAdmin`
+# 게이트로 닫는다(문제·개념 CUD 라우터와 동일 v0 역할 게이트 재사용 — 신규 ops 역할 신설은
+# 과공학, ADMIN-01 후속 과제). 본인 스코핑(`user.user_id`)은 유지 — 코호트 전체 조회는
+# 여전히 admin auth 범위 밖(ops/스크립트가 `compute_wh1_surrogate_metrics(user_id=None)` 직접
+# 호출).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
+    summary="[admin 전용] WH-1 0단계 대리 지표 원시값(7종 + S3 세션 4종 + PED-04 3종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
     request: Request,
-    user: ConsentedUser,
+    user: RequireContentAdmin,
     session: SessionDep,
     since: SinceParam = None,
     until: UntilParam = None,
     mode: HarnessMetricsMode = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 + PED-04 3종 + S3-16 1종 — *본인* 집계
-    커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 + PED-04 3종 + S3-16 1종 — *호출자*
+    집계 커버리지 맵(admin 전용 원시 표면).
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
@@ -3095,18 +3113,18 @@ async def get_my_harness_metrics(
     서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
-    422). user_id는 인증에서 주입(본인 집계만).
+    422). user_id는 인증에서 주입(호출자 본인 집계만 — 코호트 조회는 미지원).
 
-    **노출 계약(CLAUDE.md 미성년 PII·식별 분석 금기)**: 본인 집계 신호(완주율·턴당 토큰 등)만
-    반환 — 타 학생 데이터 0·개념 본문 0·정답 0. 코호트 전체 집계는 admin auth 범위라 이
-    엔드포인트에 미포함(ops/스크립트가 `compute_wh1_surrogate_metrics(user_id=None)` 직접 호출).
+    **인가(SEC-24, 원 SEC-13)**: `RequireContentAdmin` — `Role.CONTENT_ADMIN`이 아니면 403. 학생
+    (`Role.STUDENT`) 토큰은 원시 지표에 도달할 수 없다(INTERNAL_ONLY 2종·⑥Brier 원값·
+    ⑧게임화 의심 낙인 차단). 학생 안전 노출은 `GET /v1/me/growth-evidence`(PED-08)만 쓴다
+    — 그쪽이 `classify_metric_exposure`의 유일한 집행 지점이다.
 
     **PED-06 도달 관측**: 이 호출 자체를 `GrowthEvidenceReachCounters`가 센다(`GET /health/ready`
     `growth_evidence.requests_total`에 노출) — `gamification_module_gap_review.md` §3 D1이
     실측한 "클라가 이 엔드포인트를 호출하기로 결정한 적 자체가 없다"는 주장을 라이브로도
-    검증 가능하게 만든다. 응답 필드 자체는 이번 태스크로 변경하지 않는다(11지표 학생 노출
-    허용 여부는 `harness/growth_evidence_exposure.py` 계약을 클라이언트가 소비할 때의 몫 —
-    이 엔드포인트는 여전히 내부·집계 전용 원시 계측 표면이다).
+    검증 가능하게 만든다. 응답 필드 자체는 이번 태스크로 변경하지 않는다 — SEC-24는 *누가*
+    호출할 수 있는지만 좁힌다.
     """
     # 시간창 검증(noexpose 계층): naive·since>until 거부. 검증된 경계를 harness에 그대로 전달.
     get_growth_evidence_counters(request.app).record_request()

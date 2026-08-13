@@ -28,6 +28,14 @@ data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용
 
 저장소 패턴: `AsyncSession` 주입·**읽기 전용**(commit 0·flush 0·`select`만·원시 SQL 0). per-user
 본인 데이터라 HTTP 노출이 맞다("전역 집계는 ops CLI" 제약은 *전역*에만 — 이건 본인 1명).
+
+**ASM-12 예외(2026-08-11)**: 위 "추론치 포함" 방침에서 **성적 예측 5필드**(`STUDENT_HIDDEN_
+PREDICTION_FIELDS` — 추정 등급·점수·백분위·대상 대학·합격 확률)만은 제외한다. 이 필드들은
+ASM-02/07이 학생 대면 전 표면에서 봉인한 것이고 이 export도 학생 토큰이 받는 학생 표면이다
+(θ·오개념 가설 등 *학습 진단* 추론치와 달리, 또래 비교·서열 산출물이라 `pipa_data_matrix`
+§2.2 #8이 학생 본인조차 요약만으로 제한). 열람권과의 충돌 판정·뒤집힘 조건은
+`docs/legal/export_prediction_disclosure_verdict.md`(변호사 게이트 유보) — 제외는
+`not_included`로 고지한다(침묵 금지).
 """
 
 from __future__ import annotations
@@ -112,7 +120,36 @@ _NOT_INCLUDED: tuple[str, ...] = (
     "손글씨 이미지 *원본 파일*은 외부 저장소(별도 시스템) 보관 — 본 export엔 참조 URI만 담긴다.",
     "행동 로그·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
+    # ASM-12 — 제외를 침묵하면 부분 export를 완전 export로 위장하게 된다(정직 고지).
+    "성적 예측 추정치(추정 등급·점수·백분위·합격 예측)는 학습 보호 정책에 따라 미포함 — "
+    "법률 검토 후 재판정된다.",
 )
+
+
+# ASM-12 — 학생 대면 직렬화 대체표. 내부 정본이 학생에게 노출하지 않는 예측 필드
+# (`STUDENT_HIDDEN_PREDICTION_FIELDS`)를 가진 모델은 **허용목록 학생 대면 모델**(필드의
+# 부재 — ASM-07 방식·런타임 필터 금지)로 직렬화한다. 이 export는 학생 본인 토큰
+# (`ConsentedUser`)이 받는 두 번째 학생 표면이라 `/v1/me/assessments`와 같은 봉인 계약을
+# 따른다. 열람권(PIPA §35·GDPR Art.15)과의 긴장은 미조정 충돌이 아니라 **판정된 잠정
+# 기본값**이다 — 근거·뒤집힘 조건 = `docs/legal/export_prediction_disclosure_verdict.md`
+# (변호사 게이트 `G-export-prediction-disclosure` 해소 시 재판정. 현재 예측 필드 writer
+# 0건이라 실제로 제약되는 저장 데이터도 0건이다).
+def _assessment_student_json(row: Any) -> dict[str, Any]:
+    from whymath_backend.schema.assessment import StudentAssessment
+
+    return StudentAssessment.from_assessment(row.to_schema()).model_dump(mode="json")
+
+
+def _state_snapshot_student_json(row: Any) -> dict[str, Any]:
+    from whymath_backend.schema.user import StudentStateSnapshot
+
+    return StudentStateSnapshot.from_snapshot(row.to_schema()).model_dump(mode="json")
+
+
+_STUDENT_FACING_SERIALIZERS: dict[type[Base], Any] = {
+    Assessment: _assessment_student_json,
+    UserStateSnapshot: _state_snapshot_student_json,
+}
 
 
 class ExternalDataLocation(BaseModel):
@@ -186,7 +223,12 @@ def _row_to_json(row: Any) -> dict[str, Any]:
     """ORM 행 → JSON-safe dict(`to_schema().model_dump(mode="json")`). `_EXPORT_PLAN` 모델 전제.
 
     `to_schema()`가 Pydantic 스키마로 검증 복원하므로 enum·UUID·datetime이 JSON 안전하게 직렬화된다.
+    ASM-12: 예측 필드 보유 모델은 학생 대면 허용목록 모델로 대체 직렬화한다
+    (`_STUDENT_FACING_SERIALIZERS` — 이 export는 학생 토큰이 받는 학생 표면이다).
     """
+    serializer = _STUDENT_FACING_SERIALIZERS.get(type(row))
+    if serializer is not None:
+        return cast("dict[str, Any]", serializer(row))
     return cast("dict[str, Any]", row.to_schema().model_dump(mode="json"))
 
 
