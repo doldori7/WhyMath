@@ -18,12 +18,18 @@ judge는 그 후보들을 **검증**해, 학생 진술이 *그 오개념의 틀�
   (CLAUDE.md "확실하지 않을 때 자신 있게 말함 금지"·"검증 없이 학생에게 제공 금지").
 
 ────────────────────────────────────────────────────────────────────────────
-배선 경계 (슬108: coach 미배선·하니스 측정만)
+배선 경계 (coach 결선 완료·게이트 기본 off)
 ────────────────────────────────────────────────────────────────────────────
 judge는 *추가 필터 계층*이다 — `diagnose`·`semantic_matches`·`combine_diagnoses`는 *불변*이고
-judge는 그 위에 얹힌다. 이번 슬라이스는 judge를 *coach에 배선하지 않는다*(라이브 judge 효과는
-Kiki Phaiakes9 측정 후 후속 결정). seam은 주입(좌석) — 테스트는 `FakeJudge`/Fake seam(라이브 0),
-라이브 측정·후속 배선은 L3 백킹 seam을 넣는다. `JudgeProtocol`로 L3 import 의존성을 격리한다.
+judge는 그 위에 얹힌다. seam은 주입(좌석) — 테스트는 `FakeJudge`/Fake seam(라이브 0), 라이브
+경로는 L3 백킹 seam(`judge_seam.py` → `l3.pipeline.generate`·라우터 경유)을 넣는다.
+`JudgeProtocol`로 L3 import 의존성을 격리한다.
+
+**정정(2026-08-11)**: 종전 이 절은 "슬108: coach 미배선·하니스 측정만"이라 적고 있었으나
+**stale**이다 — `api/coach.py:780`이 `misconception_judge_enabled`가 True일 때
+`judge_filter(...)`를 실제로 호출한다. 배선은 완료돼 있고, 기본 off인 것은 *게이트*이지
+*미배선*이 아니다(라이브 judge 효과는 여전히 Kiki Phaiakes9 측정 후 승격 — `04b`).
+근거: `docs/architecture/misconception_module_gap_review_r2.md` §1 · §5-2.
 """
 
 from __future__ import annotations
