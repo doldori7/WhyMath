@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-26-wh1-llm-observability-cache-wiring
+title: "WH-1 학생 대면 LLM 관측·캐시 결선 — primary GA 트래픽의 비용 게이트② 표본 복구 (l3.pipeline 우회 회수)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① wh1_llm_policy.py·wh1_prose.py(·l3/equivalent/rephrase.py)의 provider 직접 호출을 l3.pipeline 경유(또는 동등한 TraceSink+Redis 캐시 결선)로 전환 — 학생 발화 경로에서 Langfuse l3_routing 이벤트와 캐시가 실적재되고, 결선 제거 시 red가 되는 양방향 변별 테스트 동반"
+  - "② ops/cost_report 게이트② 표본에 WH-1 primary 경로 호출이 계상됨을 실측 확인 — 현재 학생 대면 LLM 트래픽(wh1_primary_enabled=True 기본, 2026-07-20 GA)이 l3_routing 이벤트를 전혀 내지 않아 표본에서 구조적 누락"
+  - "③ 학생 원문·정답 사적 필드 격리(S1-a) 불변 — 트레이스 이벤트·캐시 키 어디에도 학생 원문 미포함 회귀 가드"
+  - "④ wh1_primary.py 경계 docstring의 '범위 밖(후속): Langfuse trace 결선' 선언 회수 + wh1_llm_policy.py 트레이스 서술과 코드 실상의 정합 완결(ai_integration_gap_review.md §정정의 문구 선정정을 코드로 마감)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_llm_policy.py
+  - src/backend/whymath_backend/harness/wh1_prose.py
+  - src/backend/whymath_backend/harness/wh1_primary.py
+  - src/backend/whymath_backend/l3/equivalent/rephrase.py
+  - "tests/backend/harness/**"
+session: null
+notes: "ai_integration_gap_review.md D1(2026-08-10). wh1_primary.py:37이 스스로 '범위 밖(후속)'으로 선언한 항목 — primary 기본 ON(GA) 전환으로 유보 발화 조건 기충족(ai_tutor_module_gap_review §5-④ 동계열). 03a §H-4 클라우드 실측 수치 보정의 선행 조건(표본 공급). 프라이버시 설계(S1-a 사적 필드)는 유지한 채 관측·캐시만 결선한다."
+updated: 2026-08-10

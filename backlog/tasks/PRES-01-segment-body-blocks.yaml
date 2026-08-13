@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PRES-01-segment-body-blocks
+title: "본문 세그먼트 블록 모델 — 발문·해설을 kind/content 블록열로 서버 분할 (대상층 확장의 표출 확장점)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - MATH-05-reverse-notation-display-surface
+requires_gates: []
+acceptance:
+  - "l3/render RenderSegment(kind 8종) 모델을 Problem.question_text·answer_explanation·Hint으로 일반화하는 계약 설계 — 서버가 [{kind: text|math|figure|choice, content}] 블록열을 내려주고 클라는 블록별 디스패치만. 본문 AST 전체화는 기존 결정(과공학 방지, CLAUDE.md:55 정밀) 유지"
+  - "MATH-05 ② 측정(코퍼스 매크로 0.00%)을 전제 확인으로 재현 — 라이브 갭이 아니라 초등 조작 블록·대학 증명 블록 같은 신규 kind 확장점 확보가 목적임을 notes에 명시. 측정 없이 갭 확대 금지"
+  - "하위호환: 기존 문자열 필드와 블록열 병존 기간의 소비 우선순위를 scene_contract.json과 같은 계약 파일로 동결 + 회귀 테스트"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/l3/render/
+session: null
+notes: "2026-08-12 표출 분석 P1-4. raw 문자열과 완전 AST 사이의 실용적 중간점. 대상층 확장(초등~대학·일반인)의 블록 kind 추가가 이 계층에서 일어나야 클라이언트 파편화를 막는다"
+updated: 2026-08-13

@@ -2588,6 +2588,29 @@ ASM-01 관측 리포트가 `concept_diagnosis`를 "오개념 목록이 담길 �
 정본 `assessment_seat_reach_report.py` 모듈 docstring), 오개념 가설도 같은 필드에 담되
 `kind`로 두 항목 형태를 구분한다(별도 컬럼 신설·마이그레이션 0)."""
 
+_CAPTURE_PATH_ORDERING_KEYS = ("ordering_basis", "ordering_edge_count", "has_cycle")
+"""`recommended_path` JSONB의 각 step dict에 동반 기록되는 *경로 수준* 정직 표기 3종(`PATH-09`).
+
+**왜 필요한가**: `ordering_basis`·`ordering_edge_count`·`has_cycle`은 `LearningPath`(부모)의
+필드이고 `recommended_path`에 담기는 것은 `LearningStep`(자식)이다. 그래서 `path.steps`만
+꺼내 저장하면 **부모의 정직 표기가 통째로 사라진다**. 실측상 기본 파라미터에서 96.4%가
+`ordering_basis="tiebreak_only"`(= 제약 엣지 0 · 순서가 tiebreak로만 정해짐)인데, 학생은
+`GET /v1/me/assessments`로 그 스냅샷을 "권장 학습 경로"로 다시 읽는다 — 근거 없이 정해진
+순서를 근거 있는 순서와 구별할 수 없는 상태였다(침묵 실패).
+
+**왜 헤더 원소가 아니라 step별 동반 기록인가**: 배열 앞에 메타 원소를 하나 끼우면
+`len(recommended_path)`가 더 이상 step 수가 아니게 된다. 그 길이를 이미 두 곳이 소비한다 —
+`harness/assessment_seat_reach_report.py`의 `jsonb_array_length(...) > 0` 관측 지표와
+`tests/backend/api/test_me.py`의 step 수 단언. 정직 표기를 넣자고 **기존 관측 지표의 의미를
+조용히 바꾸지 않는다**. step별 동반 기록은 배열 길이 의미를 정확히 보존한다(원소 = step).
+
+**빈 배열의 의미**: `recommended_path == []`는 "담을 step이 없다"이고, 그때 경로 수준 표기를
+실을 자리도 없다. `build_learning_path`는 steps가 비면 `ordering_basis="empty"`를 내므로
+빈 배열과 `empty`는 서로를 함의한다 — 정보 손실이 아니다. 별도 표기를 만들지 않는다.
+
+**날조 금지**: 세 값은 `build_learning_path`가 산출한 `LearningPath`에서 **그대로 옮기기만**
+한다. 재계산·보정·정규화(신뢰도 점수화 등)를 하지 않는다."""
+
 _CAPTURE_NOTE = (
     "measurement_sufficient 경계 자동 캡처(ASM-03) — 등급·점수·백분위·합격예측 4개 예측 "
     "필드는 게임화 금기(CLAUDE.md 절대 금기)로 이 경로에서 의도적으로 채우지 않음(항상 null)."
@@ -2633,6 +2656,8 @@ async def _assemble_measurement_assessment(
        가장 약한 개념(③의 첫 항목·이미 약점 정렬됨)을 대상으로 `recommend_prerequisite_gaps`
        + `build_learning_path`(`/weak-concepts/{id}/learning-path`와 *동일 호출*·기본
        파라미터)를 호출해 `recommended_path`를 얻는다. 약점 개념이 하나도 없으면 빈 리스트.
+       각 step에는 경로 수준 정직 표기 3종(`ordering_basis`·`ordering_edge_count`·
+       `has_cycle`)을 동반 기록한다(`PATH-09` — `_CAPTURE_PATH_ORDERING_KEYS` 참조).
 
     네 함수 전부 기존 L2 좌석 재사용(신규 진단·통계·ML 로직 0) — 이 함수가 하는 일은 *호출
     순서 결정 + 필드 매핑*뿐이다. `estimated_grade`·`estimated_score`·`estimated_percentile`·
@@ -2655,7 +2680,12 @@ async def _assemble_measurement_assessment(
         weakest_concept_id = weak[0].concept_id
         gaps = await recommend_prerequisite_gaps(session, user_id, weakest_concept_id)
         path = await build_learning_path(session, gaps)
-        recommended_path_items = [step.model_dump(mode="json") for step in path.steps]
+        # PATH-09: 경로 수준 정직 표기 3종을 step마다 동반 기록한다(재계산 0 — path에서 그대로
+        # 옮기기만). 상수 docstring에 헤더 원소 대신 step별 기록을 택한 이유가 있다.
+        ordering = {key: getattr(path, key) for key in _CAPTURE_PATH_ORDERING_KEYS}
+        recommended_path_items = [
+            {**step.model_dump(mode="json"), **ordering} for step in path.steps
+        ]
 
     return AssessmentSchema(
         user_id=user_id,

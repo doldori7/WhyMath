@@ -20,6 +20,9 @@ from whymath_backend.harness.concept_assessment_index import (
 )
 from whymath_backend.harness.concept_content_audit import (
     DEFECT_DSL_PROJECTION_REJECTED,
+    DEFECT_EXPLANATION_PAGE_INSERT,
+    DEFECT_EXPLANATION_REVISION_MARK,
+    DEFECT_EXPLANATION_SECTION_TRAILER,
     DEFECT_NO_STANDARD_CODES,
     REVIEW_STATUS_AI_ESTIMATED,
     REVIEW_STATUS_MISSING,
@@ -126,6 +129,89 @@ def test_multiple_defects_on_one_concept_count_once_in_rate() -> None:
     assert report.defect_rate == pytest.approx(1.0)
 
 
+# ── explanation 크롤링 잔류(QUAL-06) ─────────────────────────────
+#
+# content.json의 explanation 47건에 NCIC 크롤링 쓰레기(개정 연도·페이지/절 표기)가 박혀 있던
+# 사고의 회귀 방어다 — 사이드카 license_notice가 "성취기준 본문 미수록"을 선언하는 한 이 표기는
+# 정상 등장 경로가 없다. red(파손 샘플 탐지)와 green(실 코퍼스 잔류 0)을 함께 동결한다.
+
+
+@pytest.mark.parametrize(
+    ("explanation", "expected"),
+    [
+        # 문장 끝 개정 연도 잔류(원본 47건 중 다수 형태).
+        (
+            "지수법칙을 이용해 식을 간단히 나타낸다. 2022 개정",
+            DEFECT_EXPLANATION_REVISION_MARK,
+        ),
+        # 문장 중간에 끼어든 개정 연도(원본 H:12미적Ⅰ02-10 형태).
+        (
+            "미분을 속도와 가속도에 대한 2022 개정 문제에 활용한다.",
+            DEFECT_EXPLANATION_REVISION_MARK,
+        ),
+        # 페이지 번호 + (절) 절제목 잔류(원본 H:12대수01-08 형태).
+        (
+            "지수함수와 로그함수로 문제를 푼다. 68 (2) 삼각함수",
+            DEFECT_EXPLANATION_SECTION_TRAILER,
+        ),
+        # 조사 직후 bare 페이지 숫자 삽입(원본 H:12대수03-05 형태 — QUAL-06 정정 후 추가 발견).
+        (
+            "여러 가지 수열의 첫째항부터 제n항까지의 합을 구하는 방법을 70 설명할 수 있다.",
+            DEFECT_EXPLANATION_PAGE_INSERT,
+        ),
+        # 개정 연도 + 절 표기 혼합 형태(개정 연도 신호가 우선 울려야 한다 — 두 신호 동시 발화는
+        # 아래 test_explanation_with_both_residue_shapes_fires_both_signals가 단언).
+        (
+            "사인법칙으로 실생활 문제를 푼다. 2022 개정 (3) 수열",
+            DEFECT_EXPLANATION_REVISION_MARK,
+        ),
+    ],
+)
+def test_explanation_residue_is_detected(explanation: str, expected: str) -> None:
+    """파손 explanation은 해당 잔류 신호를 실제로 울린다(red 재현)."""
+    report = audit_concepts([_row(explanation=explanation)])
+    assert report.defect_counts.get(expected) == 1
+    assert report.defective_concepts == 1
+
+
+def test_explanation_with_both_residue_shapes_fires_both_signals() -> None:
+    """'2022 개정 (3) 수열' 류는 개정 연도와 절 표기 두 신호가 함께 울린다(한 개념 1회 집계)."""
+    report = audit_concepts(
+        [_row(explanation="사인법칙으로 실생활 문제를 푼다. 2022 개정 (3) 수열")]
+    )
+    assert report.defect_counts[DEFECT_EXPLANATION_REVISION_MARK] == 1
+    assert report.defect_counts[DEFECT_EXPLANATION_SECTION_TRAILER] == 1
+    assert report.defective_concepts == 1
+
+
+@pytest.mark.parametrize(
+    "explanation",
+    [
+        # 수학 표기의 괄호·숫자는 잔류가 아니다 — 오탐 방지(모듈 주석의 실측 근거를 테스트로 동결).
+        "(a+b)^n의 전개식에서 각 항의 계수가 이항계수로 주어진다는 정리다.",
+        "합성함수의 도함수는 겉함수와 속함수의 도함수의 곱으로 구한다(연쇄법칙).",
+        "n=1일 때 성립함을 확인하고, n=k일 때 성립하면 n=k+1일 때도 성립함을 보인다.",
+        "분산은 편차 제곱의 평균이고, 표준편차는 그 양의 제곱근이다.",
+        "속도를 시간에 대해 2번 정적분하면 위치로 되돌아간다.",
+        # 조사 없는 숫자 서술은 PAGE_INSERT 오탐이 아니다(실 코퍼스 F6의 정상 서술 형태).
+        "분모 10 진분수 ↔ 소수 한 자리.",
+    ],
+)
+def test_clean_explanation_produces_no_residue_signal(explanation: str) -> None:
+    """숫자·괄호를 포함하는 정상 수학 서술에서는 침묵한다 — 항상 울리는 검사는 검사가 아니다."""
+    report = audit_concepts([_row(explanation=explanation)])
+    assert DEFECT_EXPLANATION_REVISION_MARK not in report.defect_counts
+    assert DEFECT_EXPLANATION_SECTION_TRAILER not in report.defect_counts
+    assert DEFECT_EXPLANATION_PAGE_INSERT not in report.defect_counts
+
+
+def test_missing_explanation_is_not_a_residue_defect() -> None:
+    """explanation 결측은 오염 신호와 섞지 않는다(결측 축은 이 감사의 다른 필드 소관)."""
+    report = audit_concepts([_row(explanation=None)])
+    assert DEFECT_EXPLANATION_REVISION_MARK not in report.defect_counts
+    assert DEFECT_EXPLANATION_SECTION_TRAILER not in report.defect_counts
+
+
 # ── CLI 게이트 ───────────────────────────────────────────────────
 
 
@@ -183,3 +269,15 @@ def test_shipped_corpus_is_fully_ai_estimated_and_structurally_clean() -> None:
     assert report.review_status_counts == {REVIEW_STATUS_AI_ESTIMATED: 437}
     assert report.unreviewed_rate == 1.0
     assert report.defect_counts == {}, report.defect_counts
+
+
+def test_shipped_corpus_has_no_explanation_residue() -> None:
+    """QUAL-06 정정 후 실 코퍼스의 크롤링 잔류는 0건이다 — 재오염이 들어오면 여기서 빨개진다.
+
+    위의 전수 구조 결함 동결(`defect_counts == {}`)에 포함되지만, 라이선스 위생 사고의 회귀
+    방어는 게이트의 어느 줄이 무너졌는지 테스트 이름으로 바로 드러나야 하므로 명시한다.
+    """
+    report = audit_concepts(load_concepts(DEFAULT_CONCEPT_PATH))
+    assert DEFECT_EXPLANATION_REVISION_MARK not in report.defect_counts
+    assert DEFECT_EXPLANATION_SECTION_TRAILER not in report.defect_counts
+    assert DEFECT_EXPLANATION_PAGE_INSERT not in report.defect_counts

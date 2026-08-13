@@ -201,4 +201,140 @@ void main() {
     // 진단 결과 섹션은 정상 렌더돼야 한다(섹션 독립성).
     expect(find.text('함수의 극한'), findsOneWidget);
   });
+
+  // ── PATH-10: ordering_basis 렌더 착지 ─────────────────────────────────────
+  // PATH-02가 응답에 실어 보낸 정직 표기를 화면이 읽지 않던 문제(파싱만 하고 읽는 위젯 0개).
+  // 실측상 기본 파라미터에서 96.4%가 tiebreak_only인데, 그때 학생은 "근거 있는 순서"와
+  // 구별할 수 없었다. 대칭 사례인 has_cycle은 발생률 0%인데도 원래부터 렌더되고 있었다.
+
+  /// 두 basis fixture가 공유하는 **완전히 동일한** steps — 변별력 테스트의 전제.
+  const sharedSteps = <LearningStep>[
+    LearningStep(position: 0, conceptId: 'p0', conceptName: '함수의 정의', depth: 1),
+    LearningStep(position: 1, conceptId: 'p1', conceptName: '극한의 성질', depth: 1),
+  ];
+
+  testWidgets('PATH-10: tiebreak_only면 순서가 참고용임을 화면이 알린다(삼키지 않음)', (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(
+        steps: sharedSteps,
+        orderingBasis: 'tiebreak_only',
+        orderingEdgeCount: 0,
+      ),
+    );
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('참고용'), findsOneWidget);
+    // 단계 자체는 그대로 보인다(표기를 붙였다고 경로를 숨기지 않는다).
+    expect(find.text('함수의 정의'), findsOneWidget);
+    expect(find.text('극한의 성질'), findsOneWidget);
+  });
+
+  testWidgets('PATH-10 변별력: steps가 동일해도 basis가 다르면 화면 텍스트가 갈린다', (tester) async {
+    /// 같은 tester에서 화면을 갈아끼운다. 사이에 빈 트리를 한 번 pump해 이전 ProviderScope를
+    /// 확실히 폐기한다 — 그러지 않으면 Flutter가 엘리먼트 트리를 재사용해 두 번째 상태가
+    /// 반영되지 않고, 그 결과 "두 경우가 같다"는 *거짓 통과*가 난다(이 테스트 자체가 위장이 됨).
+    Future<void> renderWith(String basis, int edgeCount) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(_wrap(_FakeProblemsApi(
+        diagnoses: <ConceptDiagnosisItem>[_diag()],
+        learningPath: LearningPath(
+          steps: sharedSteps,
+          orderingBasis: basis,
+          orderingEdgeCount: edgeCount,
+        ),
+      )));
+      await tester.pumpAndSettle();
+    }
+
+    // ① topological — 제약 엣지가 실제로 순서를 정했으므로 참고용 표기가 없어야 한다.
+    await renderWith('topological', 3);
+    expect(find.textContaining('참고용'), findsNothing);
+    // 전제 확인: 단계는 정상 렌더된다(문구 부재가 렌더 실패 때문이 아님).
+    expect(find.text('함수의 정의'), findsOneWidget);
+
+    // ② tiebreak_only — steps는 ①과 완전히 동일한데 표기가 나타나야 한다.
+    await renderWith('tiebreak_only', 0);
+    expect(find.textContaining('참고용'), findsOneWidget);
+    expect(find.text('함수의 정의'), findsOneWidget);
+  });
+
+  testWidgets('PATH-10 어조·반게임화: 문구는 학생이 아니라 데이터 한계를 말하고 숫자·연출이 없다',
+      (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(
+        steps: sharedSteps,
+        orderingBasis: 'tiebreak_only',
+        orderingEdgeCount: 0,
+      ),
+    );
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+
+    // 어조: 학생의 부족·실패를 지적하는 표현이 없다(CLAUDE.md 부정 피드백 강화 금지).
+    for (final blamed in <String>['부족', '못했', '틀렸', '실패', '미달']) {
+      expect(find.textContaining(blamed), findsNothing);
+    }
+    // 반게임화(전역 UI 불변식 2): 랭킹·스트릭·카운트다운·보상 연출 0.
+    // 단일 음절('점'·'등'·'위')은 쓰지 않는다 — 섹션 부제 "강점·약점 개념 분석" 같은
+    // 평범한 한국어에 오탐한다. 실제로 게임화 UI에만 나타나는 어구로만 검사한다.
+    for (final gamified in <String>[
+      '랭킹',
+      '순위',
+      '스트릭',
+      '연속 학습',
+      '일째',
+      '포인트',
+      '배지',
+      '레벨',
+      '축하',
+      '남았어',
+    ]) {
+      expect(find.textContaining(gamified), findsNothing);
+    }
+    // 범위 밖(⑥): orderingEdgeCount 숫자는 학생에게 노출하지 않는다.
+    expect(find.textContaining('엣지'), findsNothing);
+    expect(find.textContaining('제약'), findsNothing);
+    // 진척 연출(게이지·프로그레스바)도 이 섹션에 없다.
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('PATH-10 정직 신호 전수: 네 신호가 모두 화면에 도달한다(다음 재작성 누락 방지)',
+      (tester) async {
+    // ① steps.isEmpty — "막힌 선수개념 없음"이 정상 결과로 표시된다.
+    await tester.pumpWidget(_wrap(_FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(steps: <LearningStep>[]),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('복습할 막힌 선수개념이 없어요'), findsOneWidget);
+
+    // ②hasCycle ③isCycleResidual ④orderingBasis — 한 경로에서 셋이 동시에 도달한다.
+    // 화면을 갈아끼우기 전에 빈 트리를 pump해 이전 ProviderScope를 폐기한다(트리 재사용 방지).
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(_wrap(_FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(
+        steps: <LearningStep>[
+          LearningStep(
+            position: 0,
+            conceptId: 'p0',
+            conceptName: '개념 A',
+            depth: 1,
+            isCycleResidual: true,
+          ),
+        ],
+        hasCycle: true,
+        orderingBasis: 'tiebreak_only',
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('순환 구조가 감지'), findsOneWidget); // ②
+    expect(find.text('순환 잔여 단계'), findsOneWidget); // ③
+    expect(find.textContaining('참고용이에요'), findsOneWidget); // ④
+  });
 }

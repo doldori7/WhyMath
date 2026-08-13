@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,7 +17,9 @@ acceptance:
   - "④계약 안정·날조 방지 — 정렬 근거는 build_learning_path가 산출한 값을 그대로 옮길 뿐 재계산·보정하지 않는다. LearningPath 재호출 0을 확인한다"
   - "⑤노출 정합 — GET /v1/me/assessments(StudentAssessment) 응답에서도 그 근거가 판독 가능함을 확인하고, 예측 5필드가 여전히 응답 스키마에 부재함을 회귀로 동결한다"
   - "⑥범위 밖 명시 — 과거 행 백필·신규 컬럼·모바일 렌더(D5 태스크 소관)·PATH-03 전이 엣지·전역 경로는 이 태스크 범위 밖이다"
-artifacts: []
+artifacts:
+  - 2501f6ad
+  - "https://github.com/doldori7/WhyMath/pull/818"
 paths:
   - src/backend/whymath_backend/api/me.py
   - "tests/backend/api/**"

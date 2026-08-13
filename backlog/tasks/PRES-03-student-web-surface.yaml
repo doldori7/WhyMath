@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PRES-03-student-web-surface
+title: "학생용 웹 표출 경로 착수 여부 — 문서 정본(웹=교사 전용) vs 사용자 정정(인터넷 채널) 충돌 판정"
+track: math-completion
+stage: S5
+subject: cross
+layer: backend
+status: todo
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "사람 게이트 판정: 현 정본 3곳(05_interaction.md 학생=Flutter 단일 / 06_application_modes.md:184-194 웹=교사 대시보드 Phase 3+ / 슬라이스 89 패드 중심 결정)과 2026-08-12 사용자 정정(스마트폰·인터넷·패드로 교육)의 충돌을 Kiki가 판정 — 착수 시 정본 문서 3곳 갱신이 선행 조건"
+  - "착수로 판정 시: React 학생 웹의 최소 표출 표면(문제+코칭) 스코프 문서 1건 + KaTeX/MathML 렌더 결정 + 기존 graphing-calculator 자산 재사용 범위 확정"
+artifacts: []
+paths:
+  - docs/architecture/05_interaction.md
+  - docs/architecture/06_application_modes.md
+session: null
+notes: "2026-08-12 표출 분석 P2-8. 표현≠의미 원칙상 코어는 UI-agnostic이라 기술 장벽은 없고, 결정은 제품 채널 전략 축. 슬라이스 85→86→89에서 '웹 1급'까지 갔다가 패드 중심으로 역전된 경위(MEMORY.md:180-184)를 판정 자료로 첨부"
+updated: 2026-08-13

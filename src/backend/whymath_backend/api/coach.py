@@ -9,8 +9,9 @@
 
 **경계**:
 - `/v1/coach` — *stateless* (state in/out·DB 무접근·LLM 호출 0).
-- `/v1/coach/sessions` — *DB 쓰기*(새 dialogue + 학생/AI 2턴 영속). LLM 호출은 여전히 0
-  (decision.prompt를 AI 턴 content로 저장 — 결정된 발화 보존).
+- `/v1/coach/sessions` — *DB 쓰기*(새 dialogue + 학생/AI 2턴 영속). AI 턴 발화는 WH-1
+  primary(`wh1_primary_enabled` 기본 ON·2026-07-20 GA)가 LLM으로 승격하고, 실패·타임아웃·
+  플래그 OFF면 결정론 `decision.prompt`로 폴백한다(`_wh1_primary_decision_or` 참조).
 - 인증 = `ConsentedUser`(미성년 동의 게이트 통과) — 학생 발화는 PII 가능(CLAUDE.md).
 - 응답에 `system`/`prompt` 본문이 노출되므로 *학생 발화를 그대로 에코하지 않음*(에코 시
   필터·검증 없이 표면화될 위험).
@@ -1801,7 +1802,7 @@ async def create_session(
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
 ) -> SessionCreateResponse:
-    """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
+    """새 대화 + 학생/AI 첫 2턴 영속. AI 턴은 WH-1 primary 발화(기본 ON·폴백=`decision.prompt`).
 
     트랜잭션: dialogue 먼저 commit(PK 확보) → turns commit(FK 의존). `user_id`는 인증된
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
@@ -2134,7 +2135,8 @@ async def append_turns(
     소유권 검증: `dialogue.user_id != user.user_id`거나 dialogue 부재 시 **404**
     (존재 노출 회피 — 타인 데이터 존재 여부 자체를 숨김; 403 분리는 정보 누출).
     `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
-    LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
+    AI 턴 content는 WH-1 primary 발화(기본 ON) — 실패·플래그 OFF 폴백 시 `decision.prompt`
+    (slice 7 정합).
     """
     # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
     segmentation_counters.record(body.solution_steps)
