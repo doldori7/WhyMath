@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -16,11 +16,13 @@ acceptance:
   - "③ 변별력: 이론 코퍼스에 신규 글리프를 주입한 대조군이 exit 1을 내는지 실측 (사전 cp 백업→주입→red 확인→cp 복원, git 원복 금지)"
   - "④ 회귀 테스트 갱신 + CI notation_coverage 스텝(ci.yml)이 그대로 신규 범위를 커버하는지 확인"
   - "⑤ 범위 밖: LaTeX↔caret 표기 원칙 정정(MATH-01 후속의 별도 판단 — CLAUDE.md 문서와 코퍼스 현실의 불일치), MATH-04 학년밴드 게이트"
-artifacts: []
+artifacts:
+  - d2c059bc
+  - "#824"
 paths:
   - src/backend/whymath_backend/l3/notation_coverage.py
   - data/notation_missing_baseline.json
   - "tests/backend/l3/**"
-session: claude/qual-06-ncic-crawl-residue-cleanup
+session: null
 notes: "2026-08-13 감사: 이론 코퍼스에 미지원 유니코드 글리프 대량(atom_graph → 2448회·− 662·× 512, concept_content 19종, 대학 20종, misconceptions 22종)인데 CI 게이트가 측정 안 함. 베이스라인 수치 자체는 정확했으므로 측정기는 신뢰 가능 — 범위만 확장하면 됨."
 updated: 2026-08-13
