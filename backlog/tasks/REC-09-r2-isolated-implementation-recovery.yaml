@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,13 +15,16 @@ acceptance:
   - "② 독립 재검증 — 원 커밋의 테스트 통과 주장을 신뢰하지 않고 관련 스위트를 이 세션에서 직접 재실행한다(REC-02 회수 방법론 답습). 판정은 exit code로 하고 출력을 잘라 판정하지 않는다. 전체 스위트를 못 돌렸으면 '전체는 확인하지 못했다'를 명시한다"
   - "③ CI 배선 실재 확인 — REC-08이 붙였다는 Wilson 게이트를 어떤 잡이 실제로 실행하는지 확인한다(OPS-03·OPS-10 '저장소에 존재함'과 '돌아감'은 다르다). 실행 잡이 없으면 회수는 미완이다"
   - "④ 범위 밖 동결 — REC-06(반복 추천 가시화) 구현·REC-07(사람 결정·owner=kiki)·선택형 서버 채점 구현은 이 태스크가 대신하지 않는다. 회수는 승계이지 재설계가 아니다(재도출 금지)"
-artifacts: []
+artifacts:
+  - "#803"
+  - "검증(오케스트레이터 독립 재실행·exit code): 회수 파일+tests/infra 394 passed exit 0·declared_unwired_audit exit 0(회수 직후 stale-waiver exit 1 정탐 발견→유예 삭제로 해소)·ruff 0·black 0(1126)·validate green·patch-id 동치 재현(git cherry '-')·REC-08 테스트 바이트 동일 diff EXIT=0. 서브에이전트 1차: 전체 백엔드 스위트 9,655 passed exit 0(순서 무작위화·검산 9,600+22+33 일치)·mypy 0(489)·Wilson 게이트 CI임계 exit 0/대조군 0.999 exit 1(변별력). 회수 방식: REC-05 cherry-pick -x 66bfe846(충돌 0)·REC-08 경로 한정 적용(원커밋의 backlog 2건 의도적 배제 — 통째 적용 시 r3가 회수한 done을 in_progress로 되돌림). 수치 현행화 2,647→2,638·A 1,612·B 1,026. CI 배선 기계 확인: 잡 backend 소속·continue-on-error 없음. acceptance ① 문자 그대로는 달성 불가(cherry-pick↔--is-ancestor 배타·근거 notes 등재 a713eba1), 의도는 대체 측정 3종으로 충족"
 paths:
-  - "src/backend/whymath_backend/harness/attempt_grading_shadow_report.py"
-  - "src/backend/whymath_backend/harness/selective_grading_demotion_eval.py"
-  - "tests/backend/harness/test_attempt_grading_shadow_report.py"
-  - "tests/backend/harness/test_selective_grading_demotion_eval.py"
+  - src/backend/whymath_backend/harness/attempt_grading_shadow_report.py
+  - src/backend/whymath_backend/harness/selective_grading_demotion_eval.py
+  - tests/backend/harness/test_attempt_grading_shadow_report.py
+  - tests/backend/harness/test_selective_grading_demotion_eval.py
   - ".github/workflows/ci.yml"
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
 session: null
-notes: "docs/architecture/ai_recommendation_module_gap_review_r3.md §3 D6. r2 문서(ai_recommendation_module_gap_review_2.md)와 REC-05~REC-08 YAML 4건은 r3 커밋에서 git 파일 체크아웃으로 회수했으나(math-engine b8608bfd 선례) 구현 2커밋은 소스 변경이라 갭 리뷰 시리즈 관례(문서+등재만)를 벗어나 이 태스크로 분리한다. 고립원 origin/claude/whymath-ai-recommendation-review-tv1f08(fdf46d7b·main 대비 24커밋 앞섬). 실측: REC-05·REC-08은 status=done·artifacts 보유인데 그 커밋이 main 조상이 아니며, backlog validate가 이 불일치를 green으로 통과시킨다(대장이 고립을 못 잡는다 — D6 보강 근거). SOL-01 동형. 착수 전 조율 필수: overlap 실측 결과 S4-16-residue-gate-demotion-battle(세션 claude/whymath-ai-content-design-vafylb)이 harness/**를 선언하고 있어 attempt_grading_shadow_report.py 1건이 실제로 겹친다 — 경고를 넘기지 말고 그 세션의 진행 상태를 먼저 확인한다(2026-07-27 병렬 세션 충돌 교훈)."
+notes: "docs/architecture/ai_recommendation_module_gap_review_r3.md §3 D6. r2 문서(ai_recommendation_module_gap_review_2.md)와 REC-05~REC-08 YAML 4건은 r3 커밋에서 git 파일 체크아웃으로 회수했으나(math-engine b8608bfd 선례) 구현 2커밋은 소스 변경이라 갭 리뷰 시리즈 관례(문서+등재만)를 벗어나 이 태스크로 분리한다. 고립원 origin/claude/whymath-ai-recommendation-review-tv1f08(fdf46d7b·main 대비 24커밋 앞섬). 실측: REC-05·REC-08은 status=done·artifacts 보유인데 그 커밋이 main 조상이 아니며, backlog validate가 이 불일치를 green으로 통과시킨다(대장이 고립을 못 잡는다 — D6 보강 근거). SOL-01 동형. 착수 전 조율 필수: overlap 실측 결과 S4-16-residue-gate-demotion-battle(세션 claude/whymath-ai-content-design-vafylb)이 harness/**를 선언하고 있어 attempt_grading_shadow_report.py 1건이 실제로 겹친다 — 경고를 넘기지 말고 그 세션의 진행 상태를 먼저 확인한다(2026-07-27 병렬 세션 충돌 교훈). **acceptance ① 명세 결함 실측(2026-08-11 회수 세션)**: cherry-pick은 patch-id 동치를 승계할 뿐 커밋 객체를 계보에 넣지 않으므로 --is-ancestor는 원리상 0이 될 수 없다 — 0을 만드는 유일한 길인 고립 브랜치 merge는 같은 태스크가 경계했다(r3가 이미 회수한 문서·YAML 중복 + REC-08 YAML의 done을 in_progress로 되돌림). 권장 방식과 검증 방식이 배타적이라 acceptance ①은 문자 그대로 달성 불가이며, 의도(고립 해소의 재현 가능한 증명)는 더 강한 대체 측정으로 충족했다 — git cherry(patch-id) + 경로별 바이트 대조 + ci.yml 게이트 블록 diff EXIT=0. 향후 회수 태스크의 acceptance는 --is-ancestor 대신 이 대체 측정으로 쓴다(SOL-01 동형 주의). acceptance 문구 자체는 골대 이동 방지를 위해 손대지 않았다."
 updated: 2026-08-11
