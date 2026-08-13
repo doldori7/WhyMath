@@ -304,6 +304,19 @@ jobs:
             --n-defective 120 --n-clean 120 --seed 20260708 --with-auditor \
             --min-detection-lower 0.95 --max-false-alarm-upper 0.05
 
+      # REC-08: 선택형·수치 단답 서버 채점 강등전(옵션 C — Kiki 결정 2026-08-09). 고정 시드
+      # 실측 여유값: A/B 각 75건 결함 전건 검출(150/150·검출 하한 0.982) → 0.95 게이트 통과 /
+      # 무결함 오검출 0/150 → Wilson 상한 0.018 → 0.02 규약(초인간 검증 S5) 통과.
+      # **n=150인 이유**: 오검출 0건이어도 n=100이면 상한이 0.026이라 2% 규약을 증명하지
+      # 못한다(작은 표본 거짓 통과 차단 — 표본 수가 규약에서 역산된 값이다).
+      # 게이트 PASS는 채점 권위 이관이 아니다 — REC-07(owner=kiki) 결정의 입력일 뿐이다.
+      # (변별력은 harness 테스트가 봉인 — 도달 불가 임계·소표본 상한 미증명 양쪽 exit1 대조군.)
+      - name: 게이트 — 선택형·단답 채점 강등전 (selective_grading·검출 하한 0.95·오검출 상한 0.02)
+        run: |
+          python -m whymath_backend.harness.selective_grading_demotion_eval \
+            --n-defective 150 --n-clean 150 --seed 20260810 \
+            --min-detection-lower 0.95 --max-false-alarm-upper 0.02
+
       - name: 게이트 — 코치 프로즈 유출 (coach_prose_leak·노출 상한 0.05·오차단 상한 0.2)
         run: |
           python -m whymath_backend.harness.coach_prose_leak_eval \

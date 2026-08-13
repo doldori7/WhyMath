@@ -5,10 +5,12 @@
 의존하지 않는다 — 특히 가짜 큐를 주입해 기본 CeleryJobQueue가 broker에 닿는 것을 막는다
 (hermeticity: 큐 미주입 시 QUALITY 경로가 라이브 Redis로 ~20초 블록됨).
 
-인가(SEC-07 D1): `/v1/generate`는 이제 `CurrentUser`(인증만) 게이트가 있다. 이 파일의
-대부분 테스트는 라우팅/캐시/큐 *결선*이 목적이라 `_client()`가 `get_current_user`를 고정
-인증 사용자로 오버라이드한다(test_concepts.py의 `require_content_admin` 오버라이드 패턴과
-동형) — 인증 자체(무토큰 401)는 `TestGenerateAuthGate`가 오버라이드 없이 검증한다.
+인가(SEC-07 D1 + SEC-24(원 SEC-15) M6): `/v1/generate`·`/v1/jobs/{id}` 둘 다 `CurrentUser`(인증만)
+게이트가 있다(SEC-24(원 SEC-15)가 폴링의 무인증 구멍을 봉인 — POST만 봉인되고 폴링이 열려 있었다).
+이 파일의 대부분 테스트는 라우팅/캐시/큐 *결선*이 목적이라 `_client()`가
+`get_current_user`를 고정 인증 사용자로 오버라이드한다(test_concepts.py의
+`require_content_admin` 오버라이드 패턴과 동형) — 인증 자체(무토큰 401·실토큰 200)는
+`TestGenerateAuthGate`·`TestJobsAuthGate`가 오버라이드 없이 검증한다.
 """
 
 from __future__ import annotations
@@ -18,10 +20,11 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_current_user
 from whymath_backend.app import create_app
-from whymath_backend.config import get_settings
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
@@ -29,6 +32,7 @@ from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import ModelAvailability, OllamaStatus
 from whymath_backend.l3.queue.celery_job_queue import JobStatus
+from whymath_backend.security import create_access_token
 
 _FAKE_USER = UserProfile(user_id=uuid.uuid4())
 
@@ -622,6 +626,116 @@ class TestJobsEndpoint:
         assert body["error"] is not None
 
 
+class TestJobsAuthGate:
+    """SEC-24(원 SEC-15) M6 — `GET /v1/jobs/{id}` 인가 회귀(오버라이드 없는 *실제* `get_current_user`).
+
+    SEC-07이 짝인 `POST /v1/generate`만 봉인하고 폴링을 "범위 밖"으로 남겨, 검증 전 원시
+    LLM 출력이 무인증으로 반환되고 있었다(`functional_security_audit_2026-08-08.md` M6).
+    무토큰 → 401, 유효 토큰(실 JWT mint/decode) → 기존 폴링 동작(200) 유지의 양방향을
+    동결한다. 소유권(job↔user) 검사는 job→user 저장이 생길 때 후속(핸들러 docstring).
+    """
+
+    _JWT_SETTINGS = Settings(jwt_secret_key=SecretStr("test-secret-key-0123456789abcdef"))
+
+    def _app(self, statuses: dict[str, JobStatus] | None = None) -> Any:
+        return create_app(
+            provider=StubProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(statuses=statuses or {}),
+        )
+
+    def test_unauthenticated_get_returns_401(self) -> None:
+        """무토큰 폴링 → 401 (TestGenerateAuthGate와 동일 구성 — 실 DB 진입 차단)."""
+        app = self._app()
+
+        # get_session은 get_current_user의 하위 의존성 — 가짜로 오버라이드해 실 DB 엔진
+        # 진입을 막는다(OPS-07 전역 누수 가드 회피). credentials=None이면 session을 실제로
+        # 쓰기 전에 401이므로 더미 객체만 yield하면 충분하다(TestGenerateAuthGate 선례).
+        async def _fake_session() -> Any:
+            yield object()
+
+        app.dependency_overrides[get_session] = _fake_session
+        resp = TestClient(app).get("/v1/jobs/j1")
+        assert resp.status_code == 401
+
+    def test_valid_token_keeps_polling_behavior(self) -> None:
+        """유효 토큰(실 mint/decode 왕복) → 기존 폴링 동작(200 + 상태) 유지."""
+        user = UserProfile(user_id=uuid.uuid4())
+        app = self._app(statuses={"j1": JobStatus(job_id="j1", state="pending")})
+
+        class _UserSession:
+            """get_current_user가 부르는 `get(UserProfile, pk)`만 모사(test_problems 패턴)."""
+
+            async def get(self, model: Any, pk: uuid.UUID) -> UserProfile | None:
+                return user if pk == user.user_id else None
+
+        async def _fake_session() -> Any:
+            yield _UserSession()
+
+        app.dependency_overrides[get_session] = _fake_session
+        app.dependency_overrides[get_settings] = lambda: self._JWT_SETTINGS
+        token = create_access_token(user.user_id, settings=self._JWT_SETTINGS)
+        resp = TestClient(app).get("/v1/jobs/j1", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "pending"
+
+
+class TestDocsProdSurfaceGate:
+    """SEC-24(원 SEC-18) 결함A — `/docs`·`/redoc`·`/openapi.json`은 프로덕션 추정에서만 비활성.
+
+    `create_app`이 FastAPI 생성자에 `docs_url`/`redoc_url`/`openapi_url`을 넘기지 않아
+    기본값(항상 활성)이 적용돼, 프로덕션에서도 API 스키마가 무인증 노출되고 있었다
+    (`docs/reviews/functional_security_audit_2026-08-08.md` L1). `is_production_like`
+    (실 OAuth kakao/naver 구성 여부, `config.py`)가 True일 때만 세 경로를 라우트 자체가
+    없는 404로 봉인한다 — 개발·CI(이 저장소 CI에 kakao/naver 키 없음)는 항상 dev 분기라
+    기존 200 동작이 완전 무회귀여야 한다(`test_reports.py::TestAppendOnly`가 이미
+    `/openapi.json` 200을 전제).
+    """
+
+    def test_docs_enabled_in_dev(self) -> None:
+        """kakao/naver 미설정(개발·CI 기본) → 기존 동작 무회귀: 셋 다 200."""
+        get_settings.cache_clear()  # 환경 기본값(off) 확정 — 다른 테스트 env 누수 방지.
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            client = TestClient(app)
+            assert client.get("/docs").status_code == 200
+            assert client.get("/redoc").status_code == 200
+            assert client.get("/openapi.json").status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+    def test_docs_disabled_when_production_like(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """kakao 구성(프로덕션 추정) → 셋 다 404(라우트 자체가 등록되지 않음).
+
+        env+cache_clear로 프로덕션 유사 `Settings`를 만든다 — `docs_url` 등은 FastAPI
+        생성자에 한 번만 넘겨져 앱 구성 *시점*에 확정되므로(런타임 재설정 불가),
+        `dependency_overrides`(요청 시점 Depends 대체)로는 이 결정을 되돌릴 수 없다.
+        `get_settings()`가 실제로 kakao_configured=True인 인스턴스를 돌려주게 만들어야
+        `create_app` 내부의 `production_like` 계산이 그 값을 본다.
+        """
+        monkeypatch.setenv("WHYMATH_KAKAO_CLIENT_ID", "prod-kakao-id")
+        get_settings.cache_clear()
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            client = TestClient(app)
+            assert client.get("/docs").status_code == 404
+            assert client.get("/redoc").status_code == 404
+            assert client.get("/openapi.json").status_code == 404
+        finally:
+            get_settings.cache_clear()  # 다음 테스트로 kakao 구성 누수 방지.
+
+
 class TestParseAppVersion:
     """`_parse_app_version` 순수 함수 단위테스트(OPS-17) — 외부 semver 라이브러리 없이 정수
     3튜플 비교로 버전을 가른다."""
@@ -656,17 +770,21 @@ class TestParseAppVersion:
 class TestAppVersionGate:
     """OPS-17 — X-App-Version 헤더 최소버전 게이트(app.py _service_metrics_middleware 좌석).
 
-    GET /v1/jobs/{id}를 표적 엔드포인트로 쓴다 — 인증 불요(`CurrentUser` 의존 없음)·ops
-    프로브 경로가 아니라(게이트 대상) 별도 인증 오버라이드 없이 검증할 수 있다.
+    GET /v1/jobs/{id}를 표적 엔드포인트로 쓴다 — ops 프로브 경로가 아니어서(게이트 대상)
+    미들웨어 동작을 그대로 본다. SEC-24(원 SEC-15)로 이 라우트에 `CurrentUser` 게이트가 붙었으므로
+    `_make_app`이 `get_current_user`를 고정 사용자로 오버라이드해 인증을 통과시킨다
+    (이 클래스의 관심사는 미들웨어이지 인증이 아니다 — 인증 자체는 `TestJobsAuthGate`).
     """
 
     def _make_app(self, queue: Any) -> Any:
-        return create_app(
+        app = create_app(
             provider=StubProvider(),
             cache=InMemoryCache(),
             trace=RecordingTraceSink(),
             queue=queue,
         )
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
+        return app
 
     def test_missing_header_passes_through_and_counts_unknown(self) -> None:
         """헤더 없음(배포 이전 구버전 클라) → 차단하지 않고(200) '미상' 카운터만 증가."""

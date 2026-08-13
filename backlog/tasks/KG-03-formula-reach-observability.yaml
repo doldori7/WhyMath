@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,7 +17,10 @@ acceptance:
   - "④ 변별력: 임시로 소비 참조를 주입하면 해당 표면 값이 '미도달'에서 벗어나고 원복하면 다시 '미도달'로 돌아오는지 양방향 실측한다. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다. 원복은 반드시 cp 백업으로 한다(git checkout/restore 금지 — 미커밋 작업분 소실 사고 2026-08-10)"
   - "⑤ anchor 성질: 총 공식 수·필드 충전 수를 매 실행 재실측해 문서 stale을 리포트가 잡게 한다(knowledge_module_gap_review_r3.md §4 교훈 — 분모가 자라는데 문서가 안 따라가는 stale 방어)"
   - "⑥ 범위 밖 명시: 게이트가 아니다(도달 0이어도 exit 1 금지 — VIZ-01·KG-01 원칙). 공식 API 신설·공식 학생 노출·formula_refs 충전(Phase 5b 승계)은 포함하지 않는다 — 활성화가 아니라 가시화다"
-artifacts: []
+artifacts:
+  - 2393c135
+  - 1da9500b
+  - "PR#820"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"

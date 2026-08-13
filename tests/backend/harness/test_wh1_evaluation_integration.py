@@ -44,6 +44,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EventType,
     Persona,
+    Role,
     SignaturePattern,
     SourceType,
     Subject,
@@ -126,8 +127,11 @@ async def _cleanup_problems(problem_ids: list[uuid.UUID]) -> None:
 
 
 def _user(uid: uuid.UUID) -> UserProfile:
+    # SEC-24(원 SEC-13): `/v1/me/harness-metrics`가 RequireContentAdmin으로 닫혔다 — 이 파일은 원시
+    # 지표 계산 정확성(R15 gaming 판정 포함)을 실 PG로 검증하므로 role=CONTENT_ADMIN으로
+    # 시드해 인가를 통과시킨다(role은 이 라우트 게이트 외 어디에도 영향 없음).
     return UserProfile.from_schema(
-        UserProfileSchema(user_id=uid, persona_primary=Persona.A_일반고고3)
+        UserProfileSchema(user_id=uid, persona_primary=Persona.A_일반고고3, role=Role.CONTENT_ADMIN)
     )
 
 

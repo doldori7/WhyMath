@@ -218,10 +218,15 @@ def test_problem_patch_delete_roundtrip_on_live_pg(admin_auth: dict[str, str]) -
 
             patched = client.patch(f"/v1/problems/{problem_id}", json={"answer": "42"})
             assert patched.status_code == 200, patched.text
-            assert patched.json()["answer"] == "42"
+            assert patched.json()["answer"] == "42"  # 관리자 표면(PATCH 응답)은 전체 스키마 유지
             assert patched.json()["subject"] == "미적분"  # 기존 필드 보존
 
-            assert client.get(f"/v1/problems/{problem_id}").json()["answer"] == "42"
+            # SEC-24(원 SEC-15): 공개 GET은 공개 투영 — 정답류는 값이 아니라 *키 자체가 없다*.
+            # (이전 계약은 GET에서 answer=="42"를 단언했으나, 무인증 정답 노출이 감사 M1
+            #  결함으로 판정돼 키 부재로 뒤집었다 — test_problems_public_projection.py 정본.)
+            got = client.get(f"/v1/problems/{problem_id}").json()
+            assert "answer" not in got
+            assert got["subject"] == "미적분"  # 본문·메타 카탈로그(D1)는 계속 공개
 
             assert client.delete(f"/v1/problems/{problem_id}").status_code == 204
             deleted = True

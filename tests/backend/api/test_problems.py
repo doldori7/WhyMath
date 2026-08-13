@@ -243,14 +243,22 @@ class TestSteps:
         assert resp.status_code == 422
 
     def test_promoted_step_serves_additive_fields(self) -> None:
-        """S4-09(D1) reader ① 계약: 승격 어댑터가 적재한 실데이터(additive 필드 포함)가
-        기존 응답 스키마로 서빙된다 — 기존 필드 제거·의미 변경 0."""
+        """S4-09(D1) reader ① 계약: 승격 어댑터가 적재한 실데이터(additive 구조 메타 필드)가
+        공개 응답 스키마로 서빙된다 — 기존 공개 필드 제거·의미 변경 0.
+
+        SEC-24(원 SEC-15) 교차 계약: `expected_answer`(= SolutionStep.content 영속 좌석)와
+        `common_mistakes`/`common_errors`는 **공개 투영에 자리가 없다** — 승격 데이터가
+        실려 있어도 무인증 GET에는 키째 나오지 않는다(정본은
+        test_problems_public_projection.py). S4-09의 원 계약은 이 3필드도 공개로 단언했으나,
+        무인증 정답·힌트 노출이 감사 M1/교수학 금기("막혔을 때 바로 정답 제공 금지")에
+        걸려 뒤집혔다. 내부 정본(`ProblemStepSchema`)에는 그대로 남아 코치(L4)가 쓴다.
+        """
         problem = _sample_problem()
         promoted = ProblemStep.from_schema(
             ProblemStepSchema(
                 problem_id=problem.problem_id,
                 step_order=1,
-                expected_answer="2*x = 6",  # SolutionStep.content 영속 좌석
+                expected_answer="2*x = 6",  # SolutionStep.content 영속 좌석(내부 정본에만)
                 solution_path_id="sp-11111111-1111-1111-1111-111111111111",
                 concept_node_id=None,  # 매칭 검수 대기(사람 검수 큐)
                 sympy_verified=False,  # 첫 스텝은 전이 검증 대상 아님(정직 승계)
@@ -262,15 +270,20 @@ class TestSteps:
         body = resp.json()
         assert len(body) == 1
         step = body[0]
-        # additive 필드 노출(승격 실데이터).
+        # additive 구조 메타 필드 노출(승격 실데이터 — 정답을 드러내지 않는 축).
         assert step["solution_path_id"] == "sp-11111111-1111-1111-1111-111111111111"
-        assert step["expected_answer"] == "2*x = 6"
         assert step["concept_node_id"] is None
         assert step["sympy_verified"] is False
         assert step["reasoning_type"] is None
-        # 기존 필드 유지(제거·의미 변경 0 — 하위호환 계약).
+        # SEC-24: 단계 정답·힌트류는 키 부재가 계약(값 None이 아니라 키 자체가 없다).
+        assert "expected_answer" not in step
+        assert "common_mistakes" not in step
+        assert "common_errors" not in step
+        # 내부 정본에는 살아 있다(공개 투영만 좁힌다 — 데이터 손실 아님).
+        assert promoted.to_schema().expected_answer == "2*x = 6"
+        # 기존 공개 필드 유지(제거·의미 변경 0 — 하위호환 계약).
         assert step["step_order"] == 1
-        assert "socratic_prompt" in step and "common_mistakes" in step
+        assert "socratic_prompt" in step
 
     def test_legacy_step_still_serves_with_none_additive_fields(self) -> None:
         """레거시 단계(additive 미지정)도 그대로 서빙 — additive 필드는 전부 None(비파괴)."""
@@ -284,8 +297,9 @@ class TestSteps:
         assert step["solution_path_id"] is None
         assert step["concept_node_id"] is None
         assert step["justification"] is None
-        assert step["common_errors"] is None
         assert step["sympy_verified"] is None
+        # SEC-24: 오개념 서술(common_errors)은 공개 투영에서 키 부재.
+        assert "common_errors" not in step
 
 
 class TestRelations:
