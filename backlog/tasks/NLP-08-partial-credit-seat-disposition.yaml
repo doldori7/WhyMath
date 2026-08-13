@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-08-partial-credit-seat-disposition
+title: "partial_credit 좌석 처분 결정 — 미채택 선언 축에 점수 계산기가 착지했는데 프로덕션 호출자 0"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: l6/blueprint/assembly.py:526 partial_credit이 실재하고 __init__.py:34,40,50,57로 export되지만 프로덕션 호출자가 0임을 재확인한다(api/me.py:155는 AssembledTestSet·ExamBlueprint·assemble_test_set 3심볼만 import · 모바일 0건 · 유일 호출은 tests/backend/l6/blueprint/test_assembly.py)"
+  - "② 처분 결정(둘 중 하나·별항): (a) 시험지 조립 축 소비처에 배선하고 그 노출이 학생 대면인지 교사·자기채점 대면인지 명시하거나 (b) 좌석을 제거한다. 결정 근거를 notes에 남긴다 — 미채택 선언 축의 조용한 좌석은 다음 세션에 '이미 되는 것'으로 오독된다"
+  - "③ 집행 지점(별항): (a)를 택하면 점수가 실제로 어느 응답 필드로 나가고 누가 그것을 읽는지 코드 경로를 적는다. (b)를 택하면 제거 후 남은 참조가 0인지 전수 확인한다"
+  - "④ 문서 정정: nlp_module_gap_review.md §1 기능 68 '점수 계산 로직 0'과 §2-② 미채택 근거를 갱신한다 — 불채택 대상은 '계산기의 존재'가 아니라 '학생에게 점수를 보여주는 것'이다. v1 본문은 소급 수정하지 않고 r2 §8.5가 이미 기록한 정정을 태스크 산출물이 승계한다"
+  - "⑤ 교수학 금기 재확인: 어느 선택지든 '정답을 빠르게'를 KPI로 만들지 않고, 학습 시간·정답률로 우열을 매기는 표면을 열지 않는다. partial_credit의 fail-closed 5분기(특히 unverifiable_prefix 허위확언 차단)는 보존한다"
+  - "⑥ 범위 밖 명시: 루브릭·서술형 채점기 신설(assembly.py:50이 이미 범위 밖 선언) · 학생 답안 채점 경로로의 확장(NLP-02/NLP-05 축) · 등급·백분위 노출 정책(ASM-02 owner=kiki 소유)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l6/blueprint/assembly.py
+  - src/backend/whymath_backend/l6/blueprint/__init__.py
+session: null
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.5(Δ5). v1 §1 기능 68 부분점수 계산은 'ScoringType enum·문항 메타 라벨만 실재, 점수 계산 로직 0'을 근거로 §2-② 의도적 미채택 판정을 받았는데, 그 사이 l6/blueprint/assembly.py:526에 partial_credit이 착지했다(verify_solution.first_incorrect_index 재사용·fail-closed 5분기·내림 변환 — 설계 자체는 정직 회계 관례 충실). 문제는 두 층: ①판정과 코드가 어긋났다 ②미채택 선언 축의 좌석은 오독을 부른다 — v1 §4-③이 NLP_TASK_TYPES의 classify에 대해 정확히 이 이유로 기록을 남겼고 r2 §1-①-a는 그 기록이 반대 방향으로 틀렸음을 밝혔다(같은 함정 3번째 자리). ASM-02(등급 노출 정책·owner=kiki)와 같은 결정 축이므로 정합을 맞춘다."
+updated: 2026-08-11

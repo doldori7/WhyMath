@@ -762,6 +762,110 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
         asyncio.run(_cleanup_all())
 
 
+def test_me_next_problem_repeats_and_exclusion_toggles_on_live_pg() -> None:
+    """REC-06 — ① 연속 호출 시 같은 문항 고정 ② attempt 제외 변별력(양방향) ③ 동률 정렬 결정론.
+
+    **왜 실 PG여야 하는가**: hermetic FakeSession은 `WHERE`·`ORDER BY`를 평가하지 않아
+    "`NOT IN`이 실제로 후보를 지우는가"와 "동률 구간이 `problem_id`로 고정되는가"를 볼 수 없다.
+    이 테스트만이 그 두 축을 실제 SQL 실행으로 확인한다.
+
+    **DB에 다른 문항이 있어도 흔들리지 않게** 설계했다 — 세 후보에 `irt_difficulty_b=0.0`(θ=0
+    에서 거리 0 = 최소)과 **가장 작은 UUID**(`uuid.UUID(int=1..3)`)를 준다. 2차 정렬 키가
+    `problem_id` 오름차순이므로 거리 0 동률 구간의 맨 앞을 이 셋이 차지한다.
+
+    **θ를 고정한 채 제외 축만 흔든다**: ②에서 attempt를 *정답 1 + 오답 1*(둘 다 b=0)로 넣어
+    MLE θ가 정확히 0.0으로 유지되게 했다. 반환 문항이 바뀌는 원인이 "θ가 움직여서"가 아니라
+    "제외가 걸려서"임을 응답의 `theta` 값으로 함께 확인한다(교란 요인 차단).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    # 가장 작은 UUID 3개 — 거리 0 동률 구간에서 2차 키(problem_id asc)가 이 순서를 고정한다.
+    pid_1, pid_2, pid_3 = (uuid.UUID(int=n) for n in (1, 2, 3))
+    suffix = uid.hex[:8]
+
+    def _tie_problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                review_status=ReviewStatus.approved,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+                irt_difficulty_b=0.0,  # θ=0에서 거리 0(최소) — 셋 다 정보량 동률
+            )
+        )
+
+    async def _purge_problems() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for pid in (pid_1, pid_2, pid_3):
+                    await conn.execute(
+                        text("DELETE FROM problem_attempt WHERE problem_id=:p"), {"p": str(pid)}
+                    )
+                    await conn.execute(
+                        text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)}
+                    )
+        finally:
+            await engine.dispose()
+
+    async def _set_attempts(rows: list[ProblemAttempt]) -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("DELETE FROM problem_attempt WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+        if rows:
+            await _add_all(*rows)
+
+    def _attempt(pid: uuid.UUID, *, correct: bool) -> ProblemAttempt:
+        return ProblemAttempt(
+            attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=correct
+        )
+
+    try:
+        asyncio.run(_purge_problems())  # 이전 실행 잔여 제거(고정 UUID라 선제 정리)
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(_add_all(_tie_problem(pid_1), _tie_problem(pid_2), _tie_problem(pid_3)))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+
+        with _client() as client:
+            # ① 진도 폭 — 같은 조건 5회 연속 호출이 전부 같은 문항(REC-06이 관측한 그 상태).
+            bodies = [client.get("/v1/me/next-problem", headers=auth).json() for _ in range(5)]
+            returned = {b["problem_id"] for b in bodies}
+            assert len(returned) == 1, f"연속 호출이 서로 다른 문항을 냈다: {returned}"
+            baseline = bodies[0]["problem_id"]
+            assert bodies[0]["theta"] == 0.0
+            # ③ 동률 정렬 결정론 — 거리 0 동률 구간에서 problem_id 최소가 뽑힌다(2차 키 효과).
+            assert baseline == str(pid_1)
+
+            # ② 변별력(정) — attempt 정답1·오답1 주입(θ는 0.0 유지) → pid_1이 후보에서 빠진다.
+            asyncio.run(
+                _set_attempts([_attempt(pid_1, correct=True), _attempt(pid_2, correct=False)])
+            )
+            after = client.get("/v1/me/next-problem", headers=auth).json()
+            assert after["theta"] == 0.0, "θ가 움직였다면 변화 원인을 제외 축으로 귀속할 수 없다"
+            assert after["problem_id"] != baseline
+            assert after["problem_id"] == str(pid_3)  # 1·2 제외 → 남은 동률 최소 id
+
+            # ② 변별력(역) — attempt를 되돌리면 원래 문항으로 복귀(성공/실패가 같은 값이 아님).
+            asyncio.run(_set_attempts([]))
+            restored = client.get("/v1/me/next-problem", headers=auth).json()
+            assert restored["problem_id"] == baseline
+    finally:
+        asyncio.run(_purge_problems())
+        asyncio.run(_cleanup([uid]))
+
+
 def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
     """GET /v1/me/next-problem — θ 근방·미응답 문항을 NOT IN 제외 후 정보량 최대로 추천."""
     if not asyncio.run(_pg_reachable()):

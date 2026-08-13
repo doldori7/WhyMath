@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-29-antigamification-efficacy-measurement
+title: "반게임화 결정의 효능 측정 복원 — KPI2 리텐션 소스 교체(writer 0 좌석 이탈) + 3상태 표기 + KPI3 stale 해제"
+track: math-completion
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① KPI2 리텐션 조회 소스 교체 — LearningSession → Dialogue(user_id: db/models/dialogue.py:75 · started_at: :87). compute_retention(pilot_kpi_baseline.py:166)은 순수함수이므로 재사용한다. 신규 테이블 0 · 마이그레이션 0 · 신규 계산 0"
+  - "② 의미 변화의 정직 표기 — Dialogue는 '문제 1개 풀이 중의 대화 1단위'라 '앱 세션'과 다르다. 지표명·note에 무엇을 세는지와 무엇을 세지 못하는지(대화를 열지 않은 방문은 안 잡힌다)를 함께 적는다. 없는 값을 지어내는 것이 아니라 있는 관측을 쓰는 것임을 명시"
+  - "③ 3상태 표기 이식 — 미도달/무데이터/구조적 불가. PED-06이 surrogate_baseline_report에 만든 것을 재사용. LearningSession 기반으로 남는 지표(③ 세션 완주율 등)는 '구조적 불가'로 분리 표기하고 'genuine 부재'와 섞지 않는다(v1 §3 D1-③ 규칙의 이 리포트 적용)"
+  - "④ KPI3 stale 해제 — _tone_safety_no_data(pilot_kpi_baseline.py:511)의 사유 '라이브 경로 미배선'(:514)이 만료됐음을 실측 확인한다(wh1_primary.py:235 filter_tone 라이브 호출 · api/coach.py:1619,1788 · config.py:168 wh1_primary_enabled default True·2026-07-20 GA). 관측이 실제로 값을 내는지 확인한 뒤에만 NO_DATA를 푼다(가정 기반 해제 금지)"
+  - "⑤ 학생 노출 0 — 이 축은 집계·운영 전용이다. 리텐션·복귀 수치를 학생 화면·학생 대면 응답에 두지 않는다(5원칙 #4 · 기능 79 미채택 11건 승계). 연속 일수 카운터·달력·목표 설정·Freeze·복구권을 만들지 않는다"
+  - "⑥ 변별력 양방향 실측 — 서로 다른 날짜의 Dialogue 행 2건을 주입하면 returning_user_rate가 실제로 움직이고, 되돌리면 다시 NO_DATA로 돌아오는지 확인"
+  - "⑦ LearningSession writer 신설 금지 — S3-16 acceptance ③이 영구 미신설을 결정으로 명시했다. 이 태스크는 그 결정을 되살리지 않는다(읽는 소스를 바꿀 뿐)"
+  - "⑧ 범위 밖 동결 — 학생 대면 리텐션 노출 · 코호트 분석 인프라 신설 · focus_score/engagement_score 좌석(S3-16 소유) · AffectState 분류기"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/pilot_kpi_baseline.py
+  - "tests/backend/harness/test_pilot_kpi_baseline*.py"
+session: null
+notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G4·G5 · §4 D11. v1·r2가 두 번 다 보지 않은 평면 — 게임화를 쓰지 않기로 한 결정이 실제로 작동하는지 우리는 모른다. 최우선 검증 가설 D7 retention ≥ 30%(risks.md:119 · market_analysis.md:121 '가장 먼저 검증해야 할 가설' · business_plan_master_v1.md:95 · execution_bridge_2026-07.md:64 Phase 1 종료 게이트)의 유일한 측정 경로가 KPI2인데, 입력 LearningSession의 생성자 호출이 src/ 전체 0건이고 S3-16이 영구 미신설을 결정했다. 게다가 compute_retention docstring(:183)은 그 0을 'genuine 부재'로 말한다 — v1 D1-③이 분리하라고 못 박은 '구조적 불가'가 '무데이터'로 위장된다. 대체 소스 Dialogue는 실 writer가 있다(api/coach.py:1891-1901). 근거 원칙 = CLAUDE.md '작동한 비율'(2026-08-03) — 채택한 것만이 아니라 채택하지 않기로 한 것에도 적용된다. 측정이 없으면 '반게임화가 옳았다'는 3차에 걸쳐 반복된 판정이 검증된 적 없는 신념으로 남는다."
+updated: 2026-08-11

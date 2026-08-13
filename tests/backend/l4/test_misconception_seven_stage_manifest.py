@@ -25,6 +25,7 @@ from whymath_backend.db.models.misconception_embedding import MisconceptionEmbed
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
+from whymath_backend.db.models.misconception_relation import MisconceptionRelation
 
 # 저장소 루트 — 이 파일: tests/backend/l4/…  →  parents[3] = repo root(tests·docs·src 보유).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -81,12 +82,16 @@ _LEVEL_ANCHOR_MODULES: dict[int, tuple[str, ...]] = {
     ),
 }
 
-# 오개념 4 ORM 테이블(Level 1) — 개념 테이블과 disjoint·개념에 FK 결합 안 됨을 확인할 대상.
+# 오개념 5 ORM 테이블(Level 1·2) — 개념 테이블과 disjoint·개념에 FK 결합 안 됨을 확인할 대상.
+# MisconceptionRelation(MISC-04·caused_by/variant_of)은 개념상 Level 2(오개념 간 관계)이지만,
+# "개념에 FK 결합 안 됨" 검사는 Level 1·2 공통 불변식이라 이 튜플에 함께 실어 동일 검사를
+# 무료로(신규 테스트 코드 0) 확장한다(04e_misconception_remediation_design.md §2-3).
 _MISCONCEPTION_MODELS = (
     MisconceptionCatalog,
     MisconceptionHypothesisRecord,
     MisconceptionCrosslink,
     MisconceptionEmbedding,
+    MisconceptionRelation,
 )
 
 # 개념 측 테이블명(오개념이 여기에 FK로 묶이면 loose-ref 분리가 깨진다).
@@ -107,6 +112,18 @@ _CONCEPT_TABLE_NAMES = frozenset(
 # import·mypy 취약성 회피). 상세 거버넌스는 test_edge_relation_governance.py 몫(중복 단언 안 함).
 _CONCEPT_GRAPH_SRC_DIR = "src/data-pipeline/data_pipeline/concept_graph"
 _RELATION_CROSSWALK_SRC = f"{_CONCEPT_GRAPH_SRC_DIR}/relation_crosswalk.py"
+
+# MISC-04 — concept_edge를 실제로 순회·join하는 backend 소스(재귀 CTE·집합 내부 엣지 조회). 이
+# 목록이 `misconception_relation`을 join하면(현재는 하지 않는다 — 04e §2-3 traversal 진입 차단
+# 불변식) 오개념이 개념 traversal의 사실상 노드가 되는 뒷문이 열린 것 — 회귀 트립와이어(§2-3).
+# `whymath_backend.l2.prerequisite_recommendation` — 재귀 CTE(`build_prerequisite_stmt`,
+#   `.cte(recursive=True)`)로 concept_edge를 순회하는 정본 traversal 엔진(Level 2 앵커 모듈).
+# `whymath_backend.l2.learning_path` — 막힌 선수 집합 *내부* concept_edge를 조회해 위상정렬하는
+#   보조 traversal 소비처(`fetch_internal_prerequisite_edges`).
+_CONCEPT_EDGE_TRAVERSAL_SRC_FILES: tuple[str, ...] = (
+    "src/backend/whymath_backend/l2/prerequisite_recommendation.py",
+    "src/backend/whymath_backend/l2/learning_path.py",
+)
 
 # 항목 ①③·preload·관계 동결을 담당하는 *기존* 방어 — 명세가 근거로 든 테스트들의 실재 확인
 # (repo 상대경로). 이들이 사라지면 04c 감사·갭 장부가 근거를 잃는다.
@@ -160,13 +177,14 @@ def test_every_level_anchor_module_importable() -> None:
 # Level 1·2 — 오개념 테이블 분리(개념과 disjoint·FK 비결합)
 # ──────────────────────────────────────────────────────────────────────────
 def test_misconception_tables_disjoint_from_concept_tables() -> None:
-    """오개념 4테이블명이 개념 측 테이블명과 겹치지 않는다(별도 store·Level 1)."""
+    """오개념 5테이블명이 개념 측 테이블명과 겹치지 않는다(별도 store·Level 1·2)."""
     mis_tables = {m.__tablename__ for m in _MISCONCEPTION_MODELS}
     assert mis_tables == {
         "misconception_catalog",
         "misconception_hypothesis",
         "misconception_crosslink",
         "misconception_embedding",
+        "misconception_relation",
     }
     assert mis_tables.isdisjoint(_CONCEPT_TABLE_NAMES)
 
@@ -201,6 +219,28 @@ def test_weak_relation_ban_constants_present() -> None:
     assert '"similar_to"' in src
     assert '"related_to"' in src
     assert "TRAVERSAL_EXCLUDED_BACKEND_EDGE_TYPES" in src
+
+
+def test_concept_edge_traversal_never_joins_misconception_relation() -> None:
+    """`concept_edge` 순회·CTE 함수가 `misconception_relation`을 join하지 않는다(MISC-04 acc③).
+
+    04e_misconception_remediation_design.md §2-3 "traversal 진입 차단"의 (b) 소스 스캔 절반 —
+    (a) 스키마 레벨 FK 부재는 `test_misconception_tables_have_no_foreign_key_into_concept`가
+    이미 확인한다. `misconception_relation`은 이 태스크(MISC-04)에서 저장소만 세우고 순회 코드를
+    전혀 쓰지 않으므로 이 테스트는 *지금* 자명하게 통과한다 — 값어치는 현재 증명이 아니라 향후
+    누군가 `prerequisite_recommendation`/`learning_path`의 concept_edge traversal에
+    `misconception_relation`을 얹으면(개념 traversal의 사실상 뒷문) 즉시 red가 되는 회귀
+    트립와이어라는 데 있다(hermetic — 소스 텍스트 스캔만, DB 불요).
+    """
+    for rel in _CONCEPT_EDGE_TRAVERSAL_SRC_FILES:
+        path = _REPO_ROOT / rel
+        assert path.is_file(), f"concept_edge traversal 소스 부재(스캔 대상 확인 필요): {rel}"
+        src = path.read_text(encoding="utf-8")
+        assert "misconception_relation" not in src, (
+            f"{rel}가 misconception_relation을 참조 — 오개념 관계셋이 개념 traversal에 "
+            "진입했다(04e §2-3 불변식 위반). misconception_relation은 reactive 조회 전용이며 "
+            "concept_edge 순회 엔진과 join되면 안 된다."
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────

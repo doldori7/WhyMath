@@ -25,7 +25,11 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 불문)로 게이팅한다: 콘텐츠 CUD(`Role.CONTENT_ADMIN`)와 달리 이 엔드포인트는 *인증된 어느
 사용자든* 호출할 수 있어야 하는 저수준 L3 raw 생성 표면이라(orchestrator·teacher tooling 등
 소비처가 아직 특정 역할로 좁혀지지 않음) `require_content_admin`이 아니라 인증 존재만 요구한다.
-`/v1/jobs/{id}`(폴링)는 SEC-07 범위 밖 — 이 태스크는 콘텐츠 CUD 6라우터 + `/v1/generate`만 봉인.
+`/v1/jobs/{id}`(폴링)도 같은 `CurrentUser` 게이트다(SEC-24(원 SEC-15) —
+`functional_security_audit_2026-08-08.md` M6): SEC-07 당시 "범위 밖"으로 남겨졌던 폴링이
+무인증인 채 검증 전 원시 LLM 출력을 반환하고 있었다(짝인 POST는 봉인·폴링만 열림). 소유권
+(job↔user) 검사는 현재 job 저장 구조(`JobStatus` — job_id·state·text·error뿐)에 user 매핑이
+없어 불가 — job→user 저장이 생길 때 후속(그전까지 최소 인증 게이트·job_id는 UUID4라 열거 곤란).
 """
 
 from __future__ import annotations
@@ -653,13 +657,26 @@ def create_app(
     스크러버 보호를 받아야 하기 때문이다(`api/_crypto.py`의 "게이트는 앱 구성 시점에 건다"
     선례와 동일 타이밍). Settings 게이트 없음 — 저장 축 fail-closed 게이트처럼 끄는 옵션을
     주지 않는다.
+
+    SEC-24(원 SEC-18): 프로덕션 추정(`is_production_like` — 실 OAuth kakao/naver 구성 여부)
+    에서는 스키마 표면(`/docs`·`/redoc`·`/openapi.json`)을 비활성화한다. 개발·CI(OAuth
+    미구성)는 그대로 노출 — 로컬 개발 경험을 해치지 않는다.
+    정본: `docs/reviews/functional_security_audit_2026-08-08.md` L1.
     """
     install_log_scrubber()
+    # SEC-24(원 SEC-18): docs_url 등은 FastAPI 생성자에 *한 번만* 넘길 수 있어(런타임 재설정
+    # 불가) 앱 구성 시점에 production_like를 확정해야 한다. get_settings()는 @lru_cache라
+    # 아래에서 다시 호출되는 것과 같은 캐시 인스턴스를 재사용 — 비용 0.
+    settings_for_app = get_settings()
+    _prod_like = settings_for_app.production_like
     app = FastAPI(
         title="WhyMath Backend — L3 생성 표면",
         version="0.1.0",
         summary="L3 라우터 ↔ Ollama·Celery 결선 (M1.2-live S1·S4)",
         lifespan=_lifespan,
+        docs_url=None if _prod_like else "/docs",
+        redoc_url=None if _prod_like else "/redoc",
+        openapi_url=None if _prod_like else "/openapi.json",
     )
     # 기본 provider는 CompositeProvider — cost_tier로 로컬(Ollama)↔클라우드(Anthropic)
     # 디스패치(S5). 둘 다 지연이라 구성 시 라이브 Ollama·Anthropic 키가 필요 없다.
@@ -1029,8 +1046,13 @@ def create_app(
         )
 
     @app.get("/v1/jobs/{job_id}", tags=["l3"], response_model=JobStatusBody)
-    async def get_job(job_id: str, request: Request) -> JobStatusBody:
+    async def get_job(job_id: str, request: Request, user: CurrentUser) -> JobStatusBody:
         """QUALITY 비동기 작업 폴링 — 상태 + (완료 시) 생성 텍스트 (03a §D.3).
+
+        인증 필수(`CurrentUser` — SEC-24(원 SEC-15) M6, POST /v1/generate와 동일 게이트):
+        무인증 폴링은 검증 전 원시 LLM 출력의 무인증 노출 표면이었다. **소유권(job↔user)
+        검사는 후속** — 현재 job 저장 구조(`JobStatus`)에 user 매핑이 없어 인증 게이트만
+        건다. job→user 저장이 생기면 타 사용자 job 폴링을 403/404로 거부하도록 확장한다.
 
         완료(success) 시 `text`는 *검증 전 원시 출력*이다(앱 docstring 경계 메모) —
         학생 직접 노출 금지. 진행 중(pending)·실패(failure)·판정 불가(unknown)는 모두
