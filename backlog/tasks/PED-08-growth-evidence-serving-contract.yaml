@@ -22,7 +22,7 @@ acceptance:
   - "⑨ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
   - "⑩ 범위 밖 동결 — /harness-metrics 응답 변경(원시 표면 유지)·모바일 화면 신설(D6)·보호자 대시보드·확신도 수집 UI"
 artifacts:
-  - 981d2b46
+  - "71155c98 (#726) — 실착지 커밋. [r3 정정 2026-08-11 · gamification_module_gap_review_r3.md §정정 ⑦] 기존 기입 '981d2b46'은 저장소에 존재하지 않는 해시다(git cat-file -t 실패 · --all 스캔에도 없음). 스쿼시 머지 저장소라 프리-스쿼시 해시가 그대로 기입된 것으로 판단."
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/harness/growth_evidence_exposure.py

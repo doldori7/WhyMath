@@ -3097,3 +3097,10 @@
 {"ts": "2026-08-10T03:14:29", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "ADMIN-05-bff-readonly"}
 {"ts": "2026-08-10T03:14:43", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "ADMIN-06-admin-web-shell"}
 {"ts": "2026-08-10T03:14:54", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "ADMIN-07-review-ui"}
+{"ts": "2026-08-11T01:57:10", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-22-harness-metrics-operator-gate"}
+{"ts": "2026-08-11T01:57:38", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-23-exposure-contract-serving-crosswalk-gate"}
+{"ts": "2026-08-11T01:58:29", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "MOB-17-growth-evidence-render"}
+{"ts": "2026-08-11T01:59:00", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-24-antigamification-efficacy-measurement"}
+{"ts": "2026-08-11T13:34:14", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-27-harness-metrics-operator-gate"}
+{"ts": "2026-08-11T13:34:18", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-28-exposure-contract-serving-crosswalk-gate"}
+{"ts": "2026-08-11T13:34:51", "actor": "claude/whymath-gamification-design-8ap436", "action": "add", "id": "PED-29-antigamification-efficacy-measurement"}
