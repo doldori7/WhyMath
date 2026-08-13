@@ -3091,6 +3091,22 @@
 {"ts": "2026-08-11T13:56:24", "actor": "claude/whymath-nlp-review-design-ufa2ax", "action": "cancel", "id": "NLP-06-contract-golden-ci-trigger", "reason": "COLLAB-04(done)가 mobile 축까지 덮어 해소 — 자기 acceptance ⑥이 'mobile은 범위 밖'이라 했으나 구현은 그것을 초과해 ci.yml:102 mobile 필터에 data/{notation,segmentation,scene,render}_contract.json 4종을 전부 넣었다(주석 :97이 'Dart 골든이 File(../../data/...)로 읽는다'고 사유까지 명시). 이 태스크가 mobile 축 전용으로 축소된 뒤 남은 근거가 전부 사라졌다. 잔여 축 1건은 살아 있으나 등재하지 않는다 — '백엔드 구현(l5/ocr/text_segmentation.py)만 바뀐 PR에서는 여전히 mobile 잡이 안 켜져 Dart 미러가 미검사'다(mobile 필터에 src/backend 경로가 없다). 이는 교차 골든의 백엔드→클라 방향 미강제로, NLP-03 D3 설계 목적의 절반이 여전히 비어 있다는 뜻이며 nlp_module_gap_review_r2.md §8.3·§8.11-⑥에 사실로 기록돼 있다. 별도 태스크로 만들지 않는 이유: COLLAB-04가 이 축의 소유자로 확립됐고 재발 차단 장치(tests/infra/test_ci_contract_fixture_trigger_wiring.py)도 그쪽에 있어, 여기서 신설하면 여섯 번째 중복이 된다(이 세션의 중복 5회 실적 — §8.11-⑥ 표)."}
 {"ts": "2026-08-11T15:11:35", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "done", "id": "KG-03-formula-reach-observability", "artifacts": ["2393c135", "1da9500b", "PR#820"]}
 {"ts": "2026-08-11T15:11:39", "actor": "claude/whymath-knowledge-design-4rxrax", "action": "done", "id": "PB-11-corpus-provenance-sidecar-cli", "artifacts": ["a318cdc8", "PR#820"]}
+{"ts": "2026-08-13T09:24:12", "actor": "main", "action": "add", "id": "MOB-19-webview-lifecycle-hardening"}
+{"ts": "2026-08-13T09:24:36", "actor": "main", "action": "add", "id": "PRES-01-segment-body-blocks"}
+{"ts": "2026-08-13T09:25:09", "actor": "main", "action": "add", "id": "PRES-02-audience-display-profiles"}
+{"ts": "2026-08-13T09:25:13", "actor": "main", "action": "add", "id": "PRES-03-student-web-surface"}
+{"ts": "2026-08-13T09:25:17", "actor": "main", "action": "add", "id": "PRES-04-math-aria-speechspec-reuse"}
+{"ts": "2026-08-13T09:50:49", "actor": "main", "action": "add", "id": "NS-05-notation-coverage-theory-corpus-scope"}
+{"ts": "2026-08-13T10:37:02", "actor": "main", "action": "add", "id": "QUAL-06-ncic-crawl-residue-cleanup"}
+{"ts": "2026-08-13T10:37:33", "actor": "main", "action": "add", "id": "KG-05-university-content-mechanical-pattern-fix"}
+{"ts": "2026-08-13T10:37:36", "actor": "main", "action": "add", "id": "KG-06-concept-content-depth-enrichment"}
+{"ts": "2026-08-13T10:38:02", "actor": "main", "action": "policy_warn", "id": "QUAL-06-ncic-crawl-residue-cleanup", "rule": "path_overlap", "other": "S4-16-residue-gate-demotion-battle", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/concept_content_audit.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/concept_content_audit.py", "mode": "warn"}
+{"ts": "2026-08-13T10:38:06", "actor": "main", "action": "start", "id": "QUAL-06-ncic-crawl-residue-cleanup", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T11:00:39", "actor": "main", "action": "start", "id": "MOB-19-webview-lifecycle-hardening", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T11:02:46", "actor": "main", "action": "review", "id": "MOB-19-webview-lifecycle-hardening"}
+{"ts": "2026-08-13T11:09:42", "actor": "main", "action": "policy_warn", "id": "SOL-02-step-panel-producer-wiring", "rule": "path_overlap", "other": "MOB-19-webview-lifecycle-hardening", "detail": "실파일 교집합 2건 예: src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart, src/mobile/lib/features/chat/presentation/mathlive_input_webview.dart · 프리픽스 포함: src/mobile/lib/features/chat/** ⊇ src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart", "mode": "warn"}
+{"ts": "2026-08-13T11:09:47", "actor": "main", "action": "start", "id": "SOL-02-step-panel-producer-wiring", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T12:54:03", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "done", "id": "QUAL-06-ncic-crawl-residue-cleanup", "artifacts": ["1ca05440", "#823"]}
 {"ts": "2026-08-10T03:13:55", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "WEB-01-landing-static-v1"}
 {"ts": "2026-08-10T03:14:06", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "WEB-02-landing-deploy"}
 {"ts": "2026-08-10T03:14:17", "actor": "claude/whymath-webpage-plan-8pma1f", "action": "add", "id": "ADMIN-04-module-registry"}
