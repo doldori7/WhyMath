@@ -337,6 +337,22 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-11 (회수·CUR-08): **34zvse 고립 done 3건 파일 단위 회수 — OPS-29(CI 강제 상태 선언 계약)·CUR-04(성취기준 조인 축 통일)·CUR-05(성취수준 코퍼스) + CUR-07 재등재. 미병합 고립 5회차** (claude 회수, Kiki "/drive")
+
+- **회수 대상 = 구현 커밋 3개**: `178639f2`(CUR-05) · `35c5693b`+`4520d9f0`(CUR-04) · `f862a7a2`(OPS-29). claim·done 처리 커밋 6개는 이식 대상이 아니다. 등재문의 브랜치 head `36d33e7e`는 낡았고 실제 head는 `8d83c87d`(CUR-07 claim만·구현 없음)라 **회수 범위는 불변**.
+- **통째 머지 금지 → 파일 단위 이식**: 브랜치는 fork(`4cfe10da`) 이후 main이 20+ 커밋 전진해 트리 diff가 196파일(대부분 main이 앞선 것)이다. `git checkout` 없이 `git show <sha>:<path>` 추출 + `git apply`로만 옮겼고, 옮긴 파일은 소스 커밋과 `cmp` 바이트 동일을 확인했다.
+- **충돌 실측 = 사실상 0**: `l2/target_progress.py`·테스트 4종·`licensing_safety.md`는 fork 이후 main 변경 0건. `api/coach.py`만 main이 1건 바꿨으나(`3b85de7e` MATH-03) 그 훅은 `_log_verify_event`(1059~1116)라 CUR-04의 import(65~71)·`_standard_code_for`(901~925)와 **겹침 0**. `ci.yml`은 main 3커밋이 건드렸지만 선언이 들어갈 두 블록은 fork↔main **바이트 동일**(+24 오프셋 이동만). 재작성 필요 파일 0건.
+- **OPS-29의 ci.yml 7줄은 선택이 아니라 동반 필수** — 브랜치 판정기를 현행 main ci.yml에 그대로 돌리면 **위반 2건**(qa_pipeline·Shellcheck)이 나온다. 테스트 파일만 옮기면 CI가 즉시 red다. 뒤집으면 이건 *이 계약이 위장 통과하지 않는다*는 실증이기도 하다.
+- **변별력(양방향 실측)**: ① 코퍼스 사이드카의 `pool`을 원본의 잘못된 값(`kice-achievement-criteria`)으로 되돌려 `provenance_audit`이 **SCHEMA_INVALID·exit 1**을 내는 것을 확인 → 감사가 신규 코퍼스를 *이름으로* 보고 있음이 증명됨(무증상 스킵 아님). ② `ci.yml`의 `pending-task:` 선언 4줄을 제거해 `tests/infra`가 **2 failed·EXIT=1**을 내는 것을 확인. 원복은 **둘 다 `cp` 백업**으로만 했고(미커밋 이식분이 트리에 있어 `git checkout --`/`restore`/`stash` 금지 — 2026-08-10 등재) `cmp` 바이트 동일 + `git diff --stat` 규모 일치까지 확인했다.
+- **CUR-07은 파일 복사가 아니라 `backlog.py add`로 재등재**했다("태스크 ID 번호를 추론으로 배정 금지" — 번호 충돌 검사를 CLI가 한다). 브랜치 원본은 `status: in_progress` + `session: claude/remaining-track-34zvse`였는데 **구현 커밋이 없다** — 그대로 옮기면 죽은 브랜치에 묶인 유령 claim이 되므로 `todo`·`session: null`로 정규화했다.
+- **검증 도구 자체의 함정 1건 실측**: `python -m importlinter.cli lint-imports`는 **아무 출력 없이 exit 0**을 낸다(계약을 실제로 돌리지 않음). `lint-imports` 실행기를 직접 불러야 "1 kept, 0 broken"이 나온다. 조용한 도구는 실패해도 성공과 같은 화면을 낸다는 2026-08-09 등재의 변형 — 출력이 비었는데 exit 0이면 그건 통과가 아니라 **미실행 의심**이다.
+- **정직한 공백**: OPS-29 계약은 `ci.yml`만 본다 — `deploy.yml`·`branch-cleanup.yml`·`harness-audit.yml`의 비차단 스텝은 미검사. 또 `pending-task:ARCH-23-qa-gate-enforcement`는 ARCH-23이 `done`이 되는 순간 red로 전환된다(만료 계약의 의도된 동작 — ARCH-23 완료자가 ci.yml 선언도 함께 걷어야 한다).
+- **집행 지점(acceptance ③)**: `infra-contracts` 잡은 `if:`도 `needs`도 없어 **항상 실행**되고 `pytest tests/infra -q`로 디렉터리 전체를 수집하므로 신규 파일 등록 작업이 없다. 나아가 이 잡은 `.github/branch-protection-setup.md`에 **required check로 등재**돼 있고 `docker-build`가 이 잡에 의존한다 — 즉 돌 뿐 아니라 실제로 막는다. "돌아감≠막음"을 주장하는 태스크 자신이 안 도는 자기모순은 없다.
+- **CUR-05 acceptance ①은 문자 그대로 재현하지 않았다** — 등재문이 지목한 소스 브랜치(`...7n9n72`, S3-34 claim 중)가 부정확함을 원 브랜치가 이미 실측 반증했다(`git branch -r --contains 98a34695`는 `human-bottleneck-tasks-6dszy0` 계열만 반환). 재현 대신 그 반증 사실을 증적에 남긴다.
+- **PR CI에서 실결함 1건 발견·수정 (재발방지 등재)** — 회수한 CUR-04 테스트의 negative control 값 `'[STALE-OLD-AXIS-SHOULD-BE-IGNORED]'`가 **34자**인데 `achievement_standard.official_code`는 `String(32)`라 실 PG INSERT가 `StringDataRightTruncationError`로 죽었다(`backend — 마이그레이션·통합 (실 PG)` 잡 red · 1 failed/280 passed). **원 브랜치도 이 결함을 못 봤다** — 그 세션은 전체 스위트 9413 passed를 보고했지만 이 테스트는 `@pytest.mark.integration`이라 실 PG 없는 invocation에서 *deselect/skip*된다. 즉 **성공 상태와 실패 상태가 로컬에서 같은 화면**이었다("변별력 없는 검증 스텝 금지"의 *마커 축* 변형 — 검사는 존재하는데 발화 조건이 로컬에 없어 무증상). 내 로컬 검증도 같은 이유로 못 봤다(이 샌드박스는 docker 불가라 실 PG 재현 자체가 불가).
+  - **대책(코드 착지)**: `tests/backend/api/test_coach_grade_standard_code.py`에 hermetic 가드 `test_integration_fixture_codes_fit_achievement_standard_column_widths` 신설 — 실 PG 픽스처 값을 모듈 상수로 올리고 **ORM 컬럼에서 폭을 읽어**(숫자 베끼기 금지 — 스키마가 넓어지면 가드가 조용히 낡는다) 상한 초과를 PG 없이 잡는다. 변별력 실측: 34자 값 재주입 → `assert 34 <= 32` red → `cp` 원복 → green.
+  - **일반 교훈**: `@pytest.mark.integration` 픽스처는 **로컬 무증상 구간**이다. 통합 전용 테스트가 DB 제약(길이·enum·FK)에 의존하는 값을 쓰면, 그 제약을 hermetic으로 미리 검사하는 짝을 함께 둔다.
+
 ### 2026-08-11 (회수·재검증·NLP): **NLP r2 문서의 7일 고립 회수 + §8 재검증 — 판정 뒤집기 1건(채점 shadow의 커버리지가 "좁다"가 아니라 **구조적 0**·코퍼스 2,647건 중 formal 0건)·상환 3건·신규 갭 3건. `NLP-05`~`NLP-08` 등재. 미머지 고립 5회차(설계 문서 형태 2번째)** (claude 회수·재검증, Kiki 첨부 docx 『16. 자연어 처리』 재제출 + "빠진 부분 점검·설계")
 
 **착수가 두 번 뒤집혔다.** ①"NLP 갭 점검을 새로 쓴다" → v1(`nlp_module_gap_review.md`·07-31·merged)이

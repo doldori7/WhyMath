@@ -12,11 +12,40 @@ CLAUDE.md "학습 시간·정답률만으로 우열을 매기는 게임화 금�
 `UserProfile.school_type`(고교 하위유형 8종만 존재하는 enum — 초·중학 값이 아예 없음)이
 None이 아니면 **학교유형을 세분하지 않고** '2022 개정' × '고등학교' 성취기준 전체를 단일
 스코프로 쓴다. `school_type`이 None이면(신규 학생 등) 스코프 계산 자체가 불가능하므로
-`standard_coverage_*` 세 필드를 전부 None으로 정직하게 비운다(0%로 위장하지 않음).
+`standard_coverage_*` 필드를 전부 None으로 정직하게 비운다(0%로 위장하지 않음).
+
+────────────────────────────────────────────────────────────────────────────
+CUR-04 — 관측 조인 축을 원자 축으로 전환 (구 축은 구조적으로 0행)
+────────────────────────────────────────────────────────────────────────────
+관측(`coverage_observed`) 조인은 과거 `concept_standard_link.concept_code == concept.code`
+(구 437 code 공간)를 썼으나, S2-03(문항↔개념 원자 재연결) 이후 이 학생의 관측 개념
+(`ConceptMasteryHistory.concept_id`)은 **원자 백본 행**을 가리킨다. 원자 행은 `concept.source_id`를
+설정하지 않는다(`l1/atom_graph/atom_backend_concept.py::upsert` — `code`·`name_ko`·`level`·
+`intrinsic_difficulty`만 SET). `concept_standard_link` 로더(`l1/standards/standard_loader.py::
+ConceptStandardLinkStore._load_source_id_to_code`)는 `concept.source_id IS NOT NULL`인 행만
+`{source_id: code}` 맵에 넣으므로, 원자 행의 `code`는 그 맵에 **절대** 나타날 수 없다 — 즉
+`concept_standard_link.concept_code`는 구조적으로 legacy(구 437) code만 담을 수 있다
+(`docs/handoff/atom_backbone_next_session.md:19`가 이미 이 사실을 기록: "atom concept source_id
+미설정 → concept_standard_link 해석은 orphan skip"). `concept.code`는 `UNIQUE`라 legacy code와
+원자 code는 겹칠 수 없는 별개 공간이다. 따라서 구 축 조인은 원자 축 개념에 대해 **항상 0행**을
+낸다 — CUR-04 acceptance①이 이 구조적 증거로 주장을 확인했다(라이브 DB 부재로 정적 근거 채택).
+
+새 조인은 `api/gating.py::_fetch_achievement_codes`(원자 축 단일 IN 쿼리·N+1 0·배열 평탄화)와
+`harness/standard_attainment_report.py`(`Concept.code → AtomNode.code → AtomNode.standard_codes`)의
+패턴을 재사용한다. `atom_node.standard_codes`는 NCIC 고시코드 배열(`official_code`와 동일 형식)이라
+스코프 매칭을 위해 `achievement_standard`에서 `(norm_id, official_code)`를 함께 읽어 역인덱싱한다
+(`official_code`는 개정 간 비유일이라 이 역인덱스가 없으면 스코프 밖 개정과 혼동될 수 있다).
+
+**작동 신호**(CLAUDE.md "작동한 비율" 원칙 — 침묵 실패 금지): `standard_coverage_measured_concepts`
+(측정 이력이 있어 원자 축 조인을 시도한 개념 수)와 `standard_coverage_matched_concepts`(그중 원자
+축에 실제로 매핑된 개념 수)를 함께 반환한다. `measured>0`인데 `matched==0`이면 "미도달"이 아니라
+"조인 실패"라는 뜻이다 — 두 값이 응답에 없으면 0%가 둘 중 무엇인지 학생도 운영자도 구분할 수
+없다(D4 문제의 재발 방지). 신규 쿼리 0(기존 스코프·관측 2쿼리 구조 그대로 재사용).
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, date, datetime
 
@@ -26,9 +55,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept
-from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.user import UserProfile
+
+_logger = logging.getLogger(__name__)
 
 # v0 스코프 정책 — 학교유형 세분화 없이 전체 '고등학교' 성취기준(2022 개정)을 단일 스코프로 사용.
 _SCOPE_CURRICULUM_REVISION = "2022 개정"
@@ -62,6 +93,22 @@ class TargetProgress(BaseModel):
     standard_coverage_scope: int | None = Field(
         default=None, description="스코프('2022 개정' × '고등학교') 성취기준 총수."
     )
+    standard_coverage_measured_concepts: int | None = Field(
+        default=None,
+        description=(
+            "측정 이력(개념 숙달 이력 1건 이상)이 있어 원자 축 조인을 시도한 개념 수"
+            "(작동 신호 분모 — CUR-04). 스코프 계산 불가 시 null."
+        ),
+    )
+    standard_coverage_matched_concepts: int | None = Field(
+        default=None,
+        description=(
+            "측정 이력이 있는 개념 중 원자 축(atom_node)에 실제로 매핑된 개념 수"
+            "(작동 신호 분자 — CUR-04). 이 값이 measured_concepts보다 작으면 그 차이만큼 원자 축"
+            " 조인이 실패한 개념이 있다는 뜻이다 — 0%가 '미도달'인지 '조인 실패'인지 이 두 필드로"
+            " 구분한다(CLAUDE.md '작동한 비율' 원칙). 스코프 계산 불가 시 null."
+        ),
+    )
 
 
 async def get_target_progress(
@@ -74,6 +121,10 @@ async def get_target_progress(
 
     호출 순서(테스트 가시성을 위해 고정): ① `session.get(UserProfile, user_id)` ② (school_type이
     있을 때만) 스코프 SELECT ③ (스코프가 0보다 클 때만) 관측 SELECT. ORM select만 사용(원시 SQL 0).
+
+    **CUR-04**: 관측 SELECT(③)는 원자 축(`Concept.code == AtomNode.code` → `AtomNode.
+    standard_codes`)으로 조인한다(모듈 docstring "구 축은 구조적으로 0행" 참조) — 구 축
+    (`concept_standard_link`)은 더 이상 조회하지 않는다. 쿼리 수는 그대로 최대 2회(N+1 0 유지).
     """
     resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
 
@@ -88,32 +139,73 @@ async def get_target_progress(
     coverage_percent: float | None = None
     coverage_observed: int | None = None
     coverage_scope: int | None = None
+    coverage_measured_concepts: int | None = None
+    coverage_matched_concepts: int | None = None
 
     if profile.school_type is not None:
-        scope_stmt = select(AchievementStandard.norm_id).where(
+        # (norm_id, official_code) 함께 조회 — official_code는 개정 간 비유일이라, 원자 축이 주는
+        # official_code를 스코프의 norm_id로 되돌리려면 이 역인덱스가 필요하다(모듈 docstring).
+        scope_stmt = select(AchievementStandard.norm_id, AchievementStandard.official_code).where(
             AchievementStandard.curriculum_revision == _SCOPE_CURRICULUM_REVISION,
             AchievementStandard.school_type == _SCOPE_SCHOOL_TYPE,
         )
-        scope_norm_ids = [row[0] for row in (await session.execute(scope_stmt)).all()]
-        coverage_scope = len(scope_norm_ids)
+        scope_rows = (await session.execute(scope_stmt)).all()
+        coverage_scope = len(scope_rows)
 
         if coverage_scope > 0:
+            norm_ids_by_official_code: dict[str, set[str]] = {}
+            for norm_id, official_code in scope_rows:
+                norm_ids_by_official_code.setdefault(official_code, set()).add(norm_id)
+
+            # 원자 축 조인(CUR-04) — `api/gating.py::_fetch_achievement_codes` 패턴 재사용.
+            # LEFT OUTER JOIN이라 원자 축에 매핑되지 않는 개념도 행으로 살아남는다(matched 계수용).
             observed_stmt = (
-                select(ConceptStandardLink.norm_id)
-                .distinct()
-                .join(Concept, Concept.code == ConceptStandardLink.concept_code)
+                select(Concept.concept_id, AtomNode.standard_codes)
+                .outerjoin(AtomNode, AtomNode.code == Concept.code)
                 .where(
-                    ConceptStandardLink.norm_id.in_(scope_norm_ids),
                     Concept.concept_id.in_(
                         select(ConceptMasteryHistory.concept_id).where(
                             ConceptMasteryHistory.user_id == user_id
                         )
-                    ),
+                    )
                 )
             )
             observed_rows = (await session.execute(observed_stmt)).all()
-            coverage_observed = len(observed_rows)
+
+            # 작동 신호(모듈 docstring) — measured(조인 시도 대상) vs matched(원자 축 히트).
+            coverage_measured_concepts = len(observed_rows)
+            coverage_matched_concepts = sum(
+                1 for _concept_id, standard_codes in observed_rows if standard_codes is not None
+            )
+
+            observed_norm_ids: set[str] = set()
+            for _concept_id, standard_codes in observed_rows:
+                if not standard_codes:
+                    continue
+                for code in standard_codes:
+                    observed_norm_ids.update(norm_ids_by_official_code.get(code, ()))
+            coverage_observed = len(observed_norm_ids)
             coverage_percent = coverage_observed / coverage_scope * 100.0
+
+            _logger.debug(
+                "target_progress 원자 축 조인 작동 신호: user_id=%s measured_concepts=%d "
+                "matched_concepts=%d scope=%d observed=%d",
+                user_id,
+                coverage_measured_concepts,
+                coverage_matched_concepts,
+                coverage_scope,
+                coverage_observed,
+            )
+            if coverage_measured_concepts > 0 and coverage_matched_concepts == 0:
+                # 측정 이력은 있는데 원자 축 조인이 전멸 — "미도달"이 아니라 "조인 실패" 의심
+                # 신호다(CLAUDE.md 침묵 실패 금지). 학생 응답 자체는 정직한 0%로 그대로 나간다.
+                _logger.warning(
+                    "target_progress 원자 축 조인 0건(측정 이력 %d건 전부 미매핑) — "
+                    "user_id=%s standard_coverage_percent=0%%가 '미도달'이 아니라 '조인 실패'일 "
+                    "가능성을 점검하라",
+                    coverage_measured_concepts,
+                    user_id,
+                )
         else:
             # 스코프 0건 — 0으로 나누기 회피이자 "스코프 없음"과 "0% 커버"를 구분(정직 표기).
             coverage_observed = 0
@@ -127,6 +219,8 @@ async def get_target_progress(
         standard_coverage_percent=coverage_percent,
         standard_coverage_observed=coverage_observed,
         standard_coverage_scope=coverage_scope,
+        standard_coverage_measured_concepts=coverage_measured_concepts,
+        standard_coverage_matched_concepts=coverage_matched_concepts,
     )
 
 
