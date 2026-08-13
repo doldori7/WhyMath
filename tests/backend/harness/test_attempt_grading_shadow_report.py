@@ -26,14 +26,26 @@ from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.harness.attempt_grading_shadow_report import (
     AttemptRecord,
+    build_gradability_ceiling_report,
     build_report,
+    classify_gradability,
     derive_verify_inputs,
     fetch_attempt_records,
+    gradability_report_to_json,
     grade_attempt,
+    main,
+    render_gradability_ceiling_report,
     render_report,
     report_to_json,
 )
-from whymath_backend.schema.enums import Curriculum, Persona, SourceType, Subject
+from whymath_backend.schema.enums import (
+    AnswerFormat,
+    Curriculum,
+    Persona,
+    QuestionFormat,
+    SourceType,
+    Subject,
+)
 from whymath_backend.schema.problem import Condition, Problem
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -47,6 +59,9 @@ def _problem(
     *,
     conditions: list[Condition] | None = None,
     answer: str | None = "3",
+    choices: list[str] | None = None,
+    question_format: QuestionFormat | None = None,
+    answer_format: AnswerFormat | None = None,
 ) -> Problem:
     return Problem(
         source_type=SourceType.자체생성,
@@ -56,6 +71,9 @@ def _problem(
         unit_codes=["U-TEST"],
         conditions_parsed=conditions if conditions is not None else [],
         answer=answer,
+        choices=choices,
+        question_format=question_format,
+        answer_format=answer_format,
     )
 
 
@@ -302,6 +320,227 @@ class TestBuildReportRegression:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# acceptance② — verifiable_count==0의 구조적 원인 구분(표본 없음 vs 파생 가능 문항 0)
+# ──────────────────────────────────────────────────────────────────────────
+class TestVerifiableZeroReason:
+    def test_no_sample_when_total_attempts_zero(self) -> None:
+        report = build_report([])
+        assert report.total_attempts == 0
+        assert report.verifiable_count == 0
+        assert report.verifiable_zero_reason == "no_sample"
+
+    def test_not_derivable_when_attempts_exist_but_none_verifiable(self) -> None:
+        # 조건 없는 문항(파생 불가) — attempt는 있는데 전량 not_derivable.
+        problem = _problem(conditions=[], answer="3")
+        records = [
+            AttemptRecord(
+                attempt_id=uuid.uuid4(), student_answer="3", client_is_correct=True, problem=problem
+            )
+        ]
+        report = build_report(records)
+        assert report.total_attempts == 1
+        assert report.verifiable_count == 0
+        assert report.verifiable_zero_reason == "not_derivable"
+
+    def test_none_when_verifiable_positive(self) -> None:
+        problem = _problem(conditions=[_cond("2*x - 6")], answer="3")
+        records = [
+            AttemptRecord(
+                attempt_id=uuid.uuid4(), student_answer="3", client_is_correct=True, problem=problem
+            )
+        ]
+        report = build_report(records)
+        assert report.verifiable_count == 1
+        assert report.verifiable_zero_reason is None
+
+    def test_render_report_distinguishes_two_zero_causes(self) -> None:
+        """같은 값(둘 다 '0건')이면 검증이 아니다 — 원인별로 실제로 다른 문구가 나와야 한다."""
+        no_sample_report = build_report([])
+        problem = _problem(conditions=[], answer="3")
+        not_derivable_report = build_report(
+            [
+                AttemptRecord(
+                    attempt_id=uuid.uuid4(),
+                    student_answer="3",
+                    client_is_correct=True,
+                    problem=problem,
+                )
+            ]
+        )
+        no_sample_text = render_report(no_sample_report)
+        not_derivable_text = render_report(not_derivable_report)
+        assert "표본 없음" in no_sample_text
+        assert "표본 없음" not in not_derivable_text
+        assert "파생 가능 문항 0건" in not_derivable_text
+        assert "파생 가능 문항 0건" not in no_sample_text
+
+    def test_report_to_json_includes_verifiable_zero_reason(self) -> None:
+        payload = report_to_json(build_report([]))
+        assert payload["verifiable_zero_reason"] == "no_sample"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# REC-05 acceptance① — 채점 가능성 상한(코퍼스 정적, attempt 무관) 분류
+# ──────────────────────────────────────────────────────────────────────────
+class TestClassifyGradability:
+    def test_choices_exact_match_is_selectable(self) -> None:
+        problem = _problem(choices=["1", "2", "3", "4"], answer="3")
+        assert classify_gradability(problem) == "selectable_exact_match"
+
+    def test_choices_present_but_answer_mismatch_falls_through(self) -> None:
+        """이상치(choices에 answer가 없음)는 A로 오분류되지 않고 정직하게 unclassified로 간다."""
+        problem = _problem(choices=["1", "2", "4"], answer="3")
+        assert classify_gradability(problem) == "unclassified"
+
+    @pytest.mark.parametrize(
+        "answer_format", [AnswerFormat.자연수, AnswerFormat.실수, AnswerFormat.분수]
+    )
+    def test_numeric_short_answer_is_bucket_b(self, answer_format: AnswerFormat) -> None:
+        problem = _problem(
+            answer="3", question_format=QuestionFormat.단답형, answer_format=answer_format
+        )
+        assert classify_gradability(problem) == "numeric_short_answer_candidate"
+
+    def test_expression_answer_format_excluded_from_bucket_b(self) -> None:
+        problem = _problem(
+            answer="x+1", question_format=QuestionFormat.단답형, answer_format=AnswerFormat.식
+        )
+        assert classify_gradability(problem) == "unclassified"
+
+    def test_condition_formal_derivable_is_bucket_c(self) -> None:
+        problem = _problem(conditions=[_cond("2*x - 6")], answer="3")
+        assert classify_gradability(problem) == "condition_formal_derivable"
+
+    def test_priority_a_over_c_when_both_satisfiable(self) -> None:
+        """A와 C를 동시에 만족해도 A가 우선(하드 우선순위 계약)."""
+        problem = _problem(choices=["1", "2", "3", "4"], answer="3", conditions=[_cond("2*x - 6")])
+        assert classify_gradability(problem) == "selectable_exact_match"
+
+    def test_no_match_anywhere_is_unclassified(self) -> None:
+        problem = _problem(choices=None, answer="서술 답안", conditions=[])
+        assert classify_gradability(problem) == "unclassified"
+
+
+class TestBuildGradabilityCeilingReport:
+    def test_buckets_are_mutually_exclusive_and_sum_to_total(self) -> None:
+        problems = [
+            _problem(choices=["1", "2"], answer="1"),
+            _problem(
+                answer="3", question_format=QuestionFormat.단답형, answer_format=AnswerFormat.자연수
+            ),
+            _problem(conditions=[_cond("2*x - 6")], answer="3"),
+            _problem(choices=None, answer="서술", conditions=[]),
+        ]
+        report = build_gradability_ceiling_report(problems)
+        assert report.total_problems == 4
+        assert sum(report.bucket_counts.values()) == 4
+        assert report.bucket_counts["selectable_exact_match"] == 1
+        assert report.bucket_counts["numeric_short_answer_candidate"] == 1
+        assert report.bucket_counts["condition_formal_derivable"] == 1
+        assert report.bucket_counts["unclassified"] == 1
+
+    def test_zero_total_denominator_rate_is_none(self) -> None:
+        report = build_gradability_ceiling_report([])
+        assert report.total_problems == 0
+        for bucket in (
+            "selectable_exact_match",
+            "numeric_short_answer_candidate",
+            "condition_formal_derivable",
+            "unclassified",
+        ):
+            assert report.bucket_rate(bucket) is None
+
+    def test_zero_condition_derivable_renders_not_derivable_not_bare_zero(self) -> None:
+        problems = [_problem(choices=["1", "2"], answer="1")]
+        report = build_gradability_ceiling_report(problems)
+        assert report.bucket_counts["condition_formal_derivable"] == 0
+        rendered = render_gradability_ceiling_report(report)
+        assert "파생 불가" in rendered
+        assert "formal 전건 결측" in rendered
+
+    def test_gradability_report_to_json_structure(self) -> None:
+        report = build_gradability_ceiling_report([_problem(choices=["1", "2"], answer="1")])
+        payload = gradability_report_to_json(report)
+        assert payload["total_problems"] == 1
+        assert set(payload["bucket_counts"]) == {
+            "selectable_exact_match",
+            "numeric_short_answer_candidate",
+            "condition_formal_derivable",
+            "unclassified",
+        }
+        assert set(payload["bucket_rates"]) == set(payload["bucket_counts"])
+        assert payload["bucket_rates"]["selectable_exact_match"] == pytest.approx(1.0)
+
+
+class TestGradabilityCeilingDiscriminates:
+    """REC-05 acceptance④ — formal 보유 문항 주입/제거로 C버킷이 양방향으로 실제로 움직인다."""
+
+    def test_c_bucket_toggles_bidirectionally_when_formal_problem_injected_and_removed(
+        self,
+    ) -> None:
+        baseline = [
+            _problem(choices=["1", "2"], answer="1"),
+            _problem(choices=None, answer="서술", conditions=[]),
+        ]
+        before = build_gradability_ceiling_report(baseline)
+        assert before.bucket_counts["condition_formal_derivable"] == 0
+
+        formal_problem = _problem(conditions=[_cond("2*x - 6")], answer="3")
+        after_inject = build_gradability_ceiling_report([*baseline, formal_problem])
+        assert after_inject.bucket_counts["condition_formal_derivable"] == 1
+
+        after_remove = build_gradability_ceiling_report(baseline)
+        assert after_remove.bucket_counts["condition_formal_derivable"] == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# REC-05 CLI — --mode ceiling 배선 확인(기본 shadow는 회귀 0)
+# ──────────────────────────────────────────────────────────────────────────
+class TestMainCeilingMode:
+    def test_mode_ceiling_dispatches_to_ceiling_report(self, monkeypatch, capsys) -> None:
+        from whymath_backend.harness import attempt_grading_shadow_report as mod
+
+        async def _fake_run_ceiling(args):
+            return build_gradability_ceiling_report([_problem(choices=["1", "2"], answer="1")])
+
+        called = {"shadow": False}
+
+        async def _fake_run_shadow(args):
+            called["shadow"] = True
+            return build_report([])
+
+        monkeypatch.setattr(mod, "_run_ceiling", _fake_run_ceiling)
+        monkeypatch.setattr(mod, "_run_shadow", _fake_run_shadow)
+
+        exit_code = main(["--mode", "ceiling"])
+        assert exit_code == 0
+        assert called["shadow"] is False
+        out = capsys.readouterr().out
+        assert "코퍼스 채점 가능성 상한 리포트" in out
+
+    def test_default_mode_is_shadow_unchanged(self, monkeypatch, capsys) -> None:
+        from whymath_backend.harness import attempt_grading_shadow_report as mod
+
+        called = {"ceiling": False}
+
+        async def _fake_run_ceiling(args):
+            called["ceiling"] = True
+            return build_gradability_ceiling_report([])
+
+        async def _fake_run_shadow(args):
+            return build_report([])
+
+        monkeypatch.setattr(mod, "_run_ceiling", _fake_run_ceiling)
+        monkeypatch.setattr(mod, "_run_shadow", _fake_run_shadow)
+
+        exit_code = main([])
+        assert exit_code == 0
+        assert called["ceiling"] is False
+        out = capsys.readouterr().out
+        assert "서버측 답안 채점 shadow 리포트" in out
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # acceptance③ — submit_attempt BKT 입력 불변 동결(소스 레벨 구조 테스트)
 # ──────────────────────────────────────────────────────────────────────────
 class TestSubmitAttemptUnchanged:
@@ -312,6 +551,17 @@ class TestSubmitAttemptUnchanged:
         source = inspect.getsource(api_me)
         assert "verify_answer" not in source
         assert "attempt_grading_shadow_report" not in source
+
+    def test_gradability_ceiling_symbols_not_wired_into_live_path(self) -> None:
+        """REC-05 채점가능성 분류기도 api/me.py에 배선되지 않았음(acceptance③ 승계 확인).
+
+        모듈명 검사(위 테스트)로 이미 충분하나, 신규 심볼 이름으로 스코프 계약을 리뷰어가
+        바로 확인할 수 있게 실행 가능한 증거로 남긴다.
+        """
+        source = inspect.getsource(api_me)
+        assert "classify_gradability" not in source
+        assert "GradabilityCeilingReport" not in source
+        assert "build_gradability_ceiling_report" not in source
 
     def test_mastery_propagation_still_takes_client_is_correct(self) -> None:
         """두 mastery 전파 콜사이트가 여전히 body.is_correct를 그대로 넘김(권위 이관 아님)."""

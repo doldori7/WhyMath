@@ -1041,12 +1041,23 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.objective_coverage": _OFFLINE_REPORT,
         "harness.concept_assessment_index": _OFFLINE_REPORT,
         "harness.concept_content_audit": _OFFLINE_REPORT,
-        "harness.attempt_grading_shadow_report": _OFFLINE_REPORT,
+        # REC-09 회수(2026-08-11) — `harness.attempt_grading_shadow_report`의 `_OFFLINE_REPORT`
+        # 유예를 **삭제**했다. 이 모듈은 이제 CI 루트에서 전이 도달한다: REC-08 게이트
+        # (`harness.selective_grading_demotion_eval` · backend 잡의 독립 스텝)가 이 모듈의
+        # `classify_gradability`를 in-process import해 A/B 모집단을 정의한다(재정의 0). 감사기의
+        # 도달 정의(⑶ 전이 폐포 — `reached_clis` docstring)상 도달이므로 유예를 남기면
+        # `stale-waiver` 위반이다. **CLI `main()` 자체는 여전히 CI가 안 돌린다** — 유예를 지운
+        # 것은 "관측 리포트를 게이트로 승격했다"는 뜻이 아니라 "이 모듈의 코드가 이제 CI 판정
+        # 경로 안에 있다"는 뜻이다(원 유예 사유였던 '아무도 안 부른다'가 사실이 아니게 됐다).
         # ASM-09(2026-08-11): distractor_map 오개념 신호 사장 규모 관측 — assessment_seat_
         # reach_report와 동형(DB 실측·게이트 아님·exit 0/2). 사장 규모가 얼마든 머지를 막지
         # 않으므로 CI 상시 배선 비대상.
         "harness.distractor_signal_dormancy_report": _OFFLINE_REPORT,
         "ops.recommendation_reach_report": _OFFLINE_REPORT,
+        # REC-06(2026-08-11): 반복 추천 진도 폭·집중도 관측 — recommendation_reach_report와
+        # 동형(실 DB 조회·게이트 아님·exit 0/2). 진도 폭이 1이어도 머지를 막지 않으므로 CI
+        # 상시 배선 비대상이고, 실 PG 왕복이라 CI에서 원리적으로 돌지도 않는다.
+        "ops.repeat_recommendation_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
         "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
         # PB-11(2026-08-11): 코퍼스 사이드카 생성·갱신 저작 CLI. `ops.provenance_audit`이 집행하는

@@ -200,11 +200,11 @@ Kiki의 ChatGPT 설계안([E])은 "AI Native + Knowledge Graph + DSL + Runtime E
 > 아래는 **제안**이다. 실제 태스크 등재는 `python3 scripts/harness/backlog.py`를 통해 하며, `backlog/` 대장을 손편집하지 않는다(`CLAUDE.md` 거부 우회 금지).
 
 - ~~**ADMIN-RBAC**~~ — `Role` enum + `UserProfile.role`(Alembic) + `require_role` + 콘텐츠 CRUD 인가 부착. **v0(2값) 완료** — `SEC-07`(2026-07-30). 관리 콘솔용 소비(BFF)는 미착수.
-- **ADMIN-MODULE-REGISTRY** — §2 원칙7의 `AdminModule`+`_MODULE_REGISTRY`(초기 시드=[03 §5](03_admin_console_plan.md) 22모듈) + `GET /v1/admin/menu` + 메뉴 필터·라우트 가드 `required_roles` 일치 동결 테스트. (선결·ADMIN-BFF 직전)
-- **ADMIN-BFF** — `/v1/admin/*` 라우터(모델 상태·비용·검수 큐·사용자 조회)·집계·마스킹·감사. `GET /v1/admin/menu`는 이 라우터의 첫 엔드포인트로 착지 권장.
-- **ADMIN-REVIEW-UI** — 검수 큐 UI(`needs_review_worklist` 소비)·DRAFT→PRESCREENED→APPROVED 상태 전이.
-- **ADMIN-WEB** — Next.js 15 백오피스 셸(내부망·SSO)·좌측 내비는 `GET /v1/admin/menu` 소비(하드코딩 nav 배열 금지).
+- **ADMIN-MODULE-REGISTRY** — §2 원칙7의 `AdminModule`+`_MODULE_REGISTRY`(초기 시드=[03 §5](03_admin_console_plan.md) 22모듈) + `GET /v1/admin/menu` + 메뉴 필터·라우트 가드 `required_roles` 일치 동결 테스트. (선결·ADMIN-BFF 직전) **→ `ADMIN-04-module-registry` 등재**(2026-08-10·웹 전략 정본 `docs/architecture/web_strategy.md` §6)
+- **ADMIN-BFF** — `/v1/admin/*` 라우터(모델 상태·비용·검수 큐·사용자 조회)·집계·마스킹·감사. `GET /v1/admin/menu`는 이 라우터의 첫 엔드포인트로 착지 권장. **→ `ADMIN-05-bff-readonly` 등재**(2026-08-10 — Phase A read-only 한정·쓰기 개시는 ADMIN-07 소관)
+- **ADMIN-REVIEW-UI** — 검수 큐 UI(`needs_review_worklist` 소비)·DRAFT→PRESCREENED→APPROVED 상태 전이. **→ `ADMIN-07-review-ui` 등재**(2026-08-10)
+- **ADMIN-WEB** — Next.js 15 백오피스 셸(내부망·SSO)·좌측 내비는 `GET /v1/admin/menu` 소비(하드코딩 nav 배열 금지). **→ `ADMIN-06-admin-web-shell` 등재**(2026-08-10 — 공개 랜딩(`WEB-01`)과 앱 골격 공유·CORS 배선 포함)
 
 ---
 
-**버전**: 1.2 | **작성**: 2026-07-24 | **최종 수정**: 2026-08-02(§2 원칙7 모듈 자동 등록 신설·§2 원칙3 RBAC 현행화·`SEC-07` 반영) | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · [05_source_reconciliation](05_source_reconciliation.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md`
+**버전**: 1.3 | **작성**: 2026-07-24 | **최종 수정**: 2026-08-10(§8 제안 4건 backlog 등재 ID 부기 — `ADMIN-04~07`·웹 전략 정본 `docs/architecture/web_strategy.md` 신설 연동) | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · [05_source_reconciliation](05_source_reconciliation.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md` · `../../architecture/web_strategy.md`

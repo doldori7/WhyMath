@@ -63,7 +63,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 계층 | 스택 | 비고 |
 |---|---|---|
 | 학생 클라이언트 | Flutter 3.x + Riverpod 2.x | 패드 중심 네이티브 태블릿·View Layer·패드+폰 한 코드·수학 로직 미포함(독립 코어 API). Atlas Odyssey·BeatBuddy 자산 (MEMORY 슬라이스 89) |
-| 별도 웹 | React 19 + Next.js 15 (App Router) | 교사 대시보드·SEO·검색유입·공유 (Phase 3+)·학생 경험 아님 |
+| 별도 웹 | React 19 + Next.js 15 (App Router) | 교사 대시보드·공개 랜딩·SEO·검색유입·공유 — 학생 경험 아님·Phase 3+는 교사 웹 한정. 웹 전략 정본 `docs/architecture/web_strategy.md` (2026-08-10 결정 로그) |
 | 국소 임베드(2 비상구) | MathLive·three.js (WebView) | 수식 입력·3D 시각화만 모듈 한정·전체 앱 아님 |
 | 수식 입력 | MathLive | 학생 수식 입력 표준 |
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |

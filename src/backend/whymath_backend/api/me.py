@@ -59,7 +59,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser, RequireContentAdmin
@@ -1744,6 +1744,57 @@ CANDIDATE_ZERO_NO_POOL = "no_candidate_pool"
 CANDIDATE_ZERO_ALL_GATED_INELIGIBLE = "all_candidates_gated_ineligible"
 
 
+# ── REC-06: 후보 조회의 노출 게이트·정렬을 *한 곳에서만* 정의한다 ──────────────────────────
+# 이 두 함수는 서빙 경로(`recommend_next_problem`)와 반복 추천 리포트
+# (`ops/repeat_recommendation_report.py`)가 **같이** 쓴다. 리포트가 후보 풀을 자기 방식으로
+# 다시 조립하면 "리포트가 보는 풀"과 "학생이 실제로 받는 풀"이 조용히 갈라져, 측정이 서빙을
+# 설명하지 못하게 된다(구축 플레이북 7대 붕괴 연쇄 중 "유지보수 지옥 ← truth source가 하나가
+# 아님"의 방어). 서빙 동작은 무변경이다 — 아래 `candidate_pool_order_by`의 2차 키만 신규다.
+def candidate_pool_conditions() -> list[ColumnElement[bool]]:
+    """기본 CAT 후보의 노출 게이트 3축(WHERE) — 난이도 라벨 · 저작권 축① · 검수 축②.
+
+    ① 난이도 라벨(`difficulty_overall`) 보유: 응답 `difficulty` 노출과 b 폴백에 필요.
+    ② 저작권 노출 게이트(법적·협상 불가): 본문 미보유 출처(평가원/EBS/교과서)는 SQL 레벨 배제.
+    ③ 검수 노출 게이트(운영 축 — 축②와 **절대 합치지 않는다**): `approved`만 후보.
+    """
+    return [
+        Problem.difficulty_overall.isnot(None),
+        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 수능 분기가 쓰는 것과 동일 상수를
+        # 재사용해 판정 기준 이원화를 막는다.
+        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+        # PB-03 축② — 검수 노출 게이트. `corpus_audit_eval` 측정 판정만 review_status에
+        # 각인된다(사람 입력 경로 0).
+        Problem.review_status == ReviewStatus.approved,
+    ]
+
+
+def candidate_pool_order_by(theta: float) -> tuple[ColumnElement[Any], ...]:
+    """후보 정렬 키 — ① |b−θ| 오름차순 ② `problem_id`(2차 키·동률 구간 동결).
+
+    ①은 기존 그대로다(보정 b `irt_difficulty_b` 우선·없으면 전문가 난이도→logit 폴백을
+    COALESCE로 표현). **②가 REC-06 acceptance③의 신규분**이다: ①만 있으면 |b−θ|가 같은 동률
+    구간의 행 순서가 **PG 임의**라 같은 DB 상태에서도 후보 풀 구성과 `select_weighted_item`의
+    인덱스가 흔들릴 수 있었다 — 결정론이 선택기에만 있고 그 앞 단계(후보 조회)에는 없던 상태다.
+
+    **무작위화가 아니다.** 2차 키는 동률 구간을 `problem_id` 오름차순으로 *고정*할 뿐이라,
+    ①로 순서가 이미 확정되는 비동률 구간은 전혀 건드리지 않는다. 즉 상위 점수가 유일한 풀에서는
+    선택 결과가 바이트 동일하고(회귀 0), 동률 구간에서만 "PG 임의" → "결정론"으로 바뀐다.
+    노출 통제(randomesque top-k)·다양성 가중은 이 태스크의 범위 밖(동결 — G3 참조).
+    """
+    return (
+        func.abs(
+            func.coalesce(
+                Problem.irt_difficulty_b,
+                Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
+            )
+            - theta
+        ),
+        # `.asc()`는 방향을 코드에 명시하는 동시에 mypy --strict 정합을 만든다
+        # (`InstrumentedAttribute`는 `ColumnElement`로 좁혀지지 않는다).
+        Problem.problem_id.asc(),
+    )
+
+
 def _weak_concept_weights(
     candidate_problem_ids: list[uuid.UUID],
     problem_concepts: dict[uuid.UUID, set[uuid.UUID]],
@@ -2112,16 +2163,12 @@ async def recommend_next_problem(
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
         if sibling_filter == "exclude" and sibling_ids:
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(sibling_ids))
-        # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
-        suneung_stmt = suneung_stmt.order_by(
-            func.abs(
-                func.coalesce(
-                    Problem.irt_difficulty_b,
-                    Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
-                )
-                - theta
-            )
-        ).limit(_CANDIDATE_POOL_SIZE)
+        # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE) — 정렬 키는
+        # `candidate_pool_order_by`(2차 키 problem_id 포함)를 공유한다. 이 분기의 동률 구간도
+        # 기본 CAT과 똑같이 PG 임의 순서였으므로 같은 동결을 적용한다(같은 결함·같은 처방).
+        suneung_stmt = suneung_stmt.order_by(*candidate_pool_order_by(theta)).limit(
+            _CANDIDATE_POOL_SIZE
+        )
         candidates = [
             row.to_schema() for row in (await session.execute(suneung_stmt)).scalars().all()
         ]
@@ -2216,32 +2263,18 @@ async def recommend_next_problem(
 
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
     # 난이도→logit(difficulty_overall - 중앙값) 폴백(COALESCE). 응답 difficulty 노출을 위해
-    # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
+    # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속). 노출 게이트(WHERE)·
+    # 정렬 키는 `candidate_pool_conditions`·`candidate_pool_order_by`가 단일 출처다(REC-06).
     candidate_stmt = select(
         Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
-    ).where(
-        Problem.difficulty_overall.isnot(None),
-        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 본문 미보유 출처(평가원/EBS/교과서)는
-        # 기본 CAT 후보에서도 SQL 레벨로 배제한다(수능 분기가 이미 쓰는 것과 동일 상수 재사용 —
-        # 판정 기준 이원화 회피).
-        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
-        # PB-03 축② — 검수 노출 게이트(운영 축, 축①과 독립 — 절대 합치지 않는다). approved만
-        # 후보. `corpus_audit_eval` 측정 판정만 review_status에 각인된다(사람 입력 경로 0).
-        Problem.review_status == ReviewStatus.approved,
-    )
+    ).where(*candidate_pool_conditions())
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     if sibling_filter == "exclude" and sibling_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(sibling_ids))
-    candidate_stmt = candidate_stmt.order_by(
-        func.abs(
-            func.coalesce(
-                Problem.irt_difficulty_b,
-                Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
-            )
-            - theta
-        )
-    ).limit(_CANDIDATE_POOL_SIZE)
+    candidate_stmt = candidate_stmt.order_by(*candidate_pool_order_by(theta)).limit(
+        _CANDIDATE_POOL_SIZE
+    )
     candidate_rows = (await session.execute(candidate_stmt)).all()
     # REC-01: 실제 후보 풀 크기 — 정직 표기용(θ 근방 SQL 선별 후, 미응답·난이도 라벨 보유 개수).
     candidate_pool_size = len(candidate_rows)

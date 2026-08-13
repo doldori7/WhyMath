@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api import me as me_module
@@ -24,6 +25,8 @@ from whymath_backend.api.me import (
     _add_ability_snapshot_if_attempts,
     _AttemptHistoryState,
     _weak_concept_weights,
+    candidate_pool_conditions,
+    candidate_pool_order_by,
 )
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
@@ -35,6 +38,7 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_event import EvidenceEvent
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
@@ -1783,6 +1787,118 @@ class TestNextProblem:
         client = _attempts_client(session)
         resp = client.get("/v1/me/next-problem?sibling_filter=exclude")
         assert resp.status_code == 200
+
+
+# ── REC-06: 후보 조회 결정론(정렬 2차 키) + 제외 축 변별력 ──────────────────────────────
+class _RecordingQueueSession(_QueueSession):
+    """`_QueueSession`에 **실행된 stmt 캡처**를 더한 것 — SQL 자체를 단언하기 위함.
+
+    기존 FakeSession은 stmt를 통째로 무시해서 "WHERE/ORDER BY가 실제로 붙었는가"를 볼 수 없었다.
+    반환값은 그대로 큐에서 주되(동작 무변경), 컴파일된 SQL 문자열을 남겨 정렬 키·NOT IN 유무를
+    검사할 수 있게 한다. 실 PG 왕복 검증은 `test_me_integration.py`가 별도로 맡는다.
+    """
+
+    def __init__(self, results: list[_AQResult]) -> None:
+        super().__init__(results)
+        self.statements: list[Any] = []
+
+    async def execute(self, _stmt: Any) -> _AQResult:
+        self.statements.append(_stmt)
+        return await super().execute(_stmt)
+
+
+def _order_by_tail(stmt: Any) -> str:
+    """컴파일된 SQL에서 ORDER BY 이후 조각(정렬 키 순서 검사용)."""
+    sql = str(stmt)
+    assert "ORDER BY" in sql, sql
+    return sql.split("ORDER BY", 1)[1]
+
+
+class TestCandidatePoolOrdering:
+    """REC-06 acceptance③ — 후보 조회 `ORDER BY`에 2차 키(problem_id)가 붙어 동률 구간이 동결."""
+
+    def test_helper_orders_by_distance_then_problem_id(self) -> None:
+        """정렬 키는 정확히 2개이고 순서는 ① |b−θ| ② problem_id다."""
+        keys = candidate_pool_order_by(0.0)
+        assert len(keys) == 2
+        stmt = select(Problem.problem_id).order_by(*keys)
+        tail = _order_by_tail(stmt)
+        assert "abs(" in tail
+        assert "problem.problem_id" in tail
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_default_cat_query_carries_secondary_key(self) -> None:
+        """핸들러가 실제로 실행하는 후보 stmt에 2차 키가 실린다(헬퍼만 고쳐 놓고 미사용 방지)."""
+        pid = uuid.uuid4()
+        session = _RecordingQueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        assert client.get("/v1/me/next-problem").status_code == 200
+        tail = _order_by_tail(session.statements[1])
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_suneung_query_carries_same_secondary_key(self) -> None:
+        """수능 분기의 후보 조회도 같은 동률 결함을 갖고 있었다 — 같은 동결을 적용한다."""
+        session = _RecordingQueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        assert client.get("/v1/me/next-problem?mode=suneung").status_code == 200
+        tail = _order_by_tail(session.statements[1])
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_exposure_gate_conditions_are_single_sourced(self) -> None:
+        """후보 WHERE 3축(난이도·저작권 출처·검수)이 헬퍼 한 곳에서만 정의된다."""
+        sql = str(select(Problem.problem_id).where(*candidate_pool_conditions()))
+        assert "problem.difficulty_overall IS NOT NULL" in sql
+        assert "problem.source_type NOT IN" in sql
+        assert "problem.review_status =" in sql
+
+    def test_secondary_key_does_not_change_pick_when_max_is_unique(self) -> None:
+        """**회귀 0 증명** — 2차 키가 바꾸는 것은 *동률 구간의 순서*뿐이다.
+
+        정렬 키 추가로 달라질 수 있는 것은 후보 리스트의 순서이므로, "순서가 달라져도 선택이
+        같다"를 보이면 회귀가 없다는 뜻이 된다. 정보량 최댓값이 유일한 풀을 여러 순열로 넣어
+        `select_weighted_item`이 매번 같은 문항을 고르는지 확인한다(동률이 있는 경우에만
+        순서가 결과를 가르며, 그때의 기존 동작은 'PG 임의'라 정의된 동작이 아니었다).
+        """
+        pool = [(uuid.uuid4(), d, None) for d in (5.0, 3.0, 1.0, 4.0)]
+        picks = set()
+        for rotation in range(len(pool)):
+            rotated = pool[rotation:] + pool[:rotation]
+            session = _QueueSession([_AQResult([]), _AQResult(rotated)])
+            body = _attempts_client(session).get("/v1/me/next-problem").json()
+            picks.add(body["problem_id"])
+        assert len(picks) == 1  # 순서를 어떻게 흔들어도 같은 문항(θ=0 → 난이도 3.0)
+        assert picks == {str(next(pid for pid, d, _b in pool if d == 3.0))}
+
+    def test_attempt_exclusion_toggles_returned_problem_bidirectionally(self) -> None:
+        """REC-06 acceptance④ — attempt 1건 주입 → 그 문항이 후보에서 빠지고, 되돌리면 원복.
+
+        두 축을 함께 본다: ⑴ `attempted_ids`가 실제로 **SQL의 NOT IN까지 도달**하는가(핸들러가
+        제외를 거는가) ⑵ 그 결과 반환 문항이 실제로 바뀌는가. FakeSession은 WHERE를 평가하지
+        않으므로 ⑵는 PG가 적용한 결과를 후보 큐로 흉내낸다 — PG가 `NOT IN`을 실제로 적용한다는
+        사실 자체는 `test_me_integration.py`의 실 PG 테스트가 별도로 증명한다.
+        """
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()  # 둘 다 난이도 3.0(θ=0 동률)
+
+        def _call(attempts: list[Any], pool: list[Any]) -> tuple[str | None, str]:
+            session = _RecordingQueueSession([_AQResult(attempts), _AQResult(pool)])
+            body = _attempts_client(session).get("/v1/me/next-problem").json()
+            return body["problem_id"], str(session.statements[1])
+
+        # ① attempt 0행 — NOT IN 없음·풀 첫 문항 반환
+        before_id, before_sql = _call([], [(pid_a, 3.0, None), (pid_b, 3.0, None)])
+        assert "problem_id NOT IN" not in before_sql
+        assert before_id == str(pid_a)
+
+        # ② attempt 1건 주입(pid_a 채점) — NOT IN이 SQL에 실리고, 반환 문항이 바뀐다
+        after_id, after_sql = _call([(pid_a, True, 3.0, None)], [(pid_b, 3.0, None)])
+        assert "problem_id NOT IN" in after_sql
+        assert after_id == str(pid_b)
+        assert after_id != before_id
+
+        # ③ 되돌림 — NOT IN이 사라지고 원래 문항으로 복귀
+        back_id, back_sql = _call([], [(pid_a, 3.0, None), (pid_b, 3.0, None)])
+        assert "problem_id NOT IN" not in back_sql
+        assert back_id == before_id
 
 
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──

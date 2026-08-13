@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 변별력: /v1/me/target-progress의 standard_coverage_percent와 harness/standard_attainment_report의 도달 집계를 같은 fixture에서 대조해 수정 전 불일치·수정 후 일치를 테스트로 동결한다. 양쪽에서 같은 값이 나오는 fixture만으로 검증하면 위장이다"
   - "⑤ 작동 신호 부착: 조인 성립 건수를 응답 또는 로그가 보고하게 한다 — 0%가 '도달 실패'인지 '조인 실패'인지 구분 가능해야 한다(CLAUDE.md '작동한 비율' 원칙·침묵 실패 금지). graceful None/0 폴백을 무계수로 두지 않는다"
   - "⑥ 범위 밖 명시: ConceptStandardLink 테이블의 거취(드롭·보존) 결정과 2015 개정 460건의 링크 보강은 포함하지 않는다(curriculum_module_gap_review_r2.md §4-⑧·§5-⑦에 발화조건 기록)"
-artifacts: []
+artifacts:
+  - "#810 — CUR-08 파일 단위 회수(원 구현=34zvse 35c5693b+4520d9f0 순서 적용). coach.py·target_progress.py 원자 축 정렬+작동 신호 2필드. main과 hunk 겹침 0(coach.py의 main 변경 3b85de7e는 _log_verify_event 영역). 전체 스위트 9636 passed EXIT=0(변별력: 통합 테스트가 구 축 counterfactual []↔신 축 matched≥1 대조를 내장). acceptance③ CI 배선=backend 잡이 src/backend 변경으로 발화"
 paths:
   - "src/backend/whymath_backend/api/**"
   - "src/backend/whymath_backend/l2/**"
