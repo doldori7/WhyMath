@@ -49,11 +49,15 @@ _REAL_PROBLEMS = _PROJECT_ROOT / "data" / "corpus" / "problem_bank_v1" / "proble
 # 합성 코퍼스 헬퍼 — 실제 코퍼스 1레코드를 변형(스키마·저작권 위생 검증을 그대로 통과)
 # ──────────────────────────────────────────────────────────────────────────
 def _write_theory_corpora(root: Path, *, explanation: str, id_token: str = "SYN") -> None:
-    """합성 이론 코퍼스 5종(THEORY_CORPORA 명세의 최소 유효 구조·레코드 1건씩).
+    """합성 이론 코퍼스 4종(THEORY_CORPORA 명세의 최소 유효 구조·레코드 1건씩).
 
     이론 코퍼스는 게이트 스캔 범위의 필수 입력이라(NS-05 — 부재 시 명시 실패) 합성 루트에도
-    항상 함께 쓴다. `id_token`은 code/mis_id/src_id 등 **미스캔 필드**에만 들어간다 —
+    항상 함께 쓴다. `id_token`은 code/mis_id 등 **미스캔 필드**에만 들어간다 —
     표기 토큰을 심어도 게이트가 읽지 않아야 하는 자리다.
+
+    concept_graph_v1/concepts.jsonl은 합성 루트에도 쓰지 않는다 — legacy snapshot 동결
+    거버넌스(test_legacy_snapshot_governance)로 스캔 대상에서 의도적 제외됐다
+    (notation_coverage.THEORY_CORPORA 명세 주석 참조).
     """
     content = {
         "content": [
@@ -107,16 +111,6 @@ def _write_theory_corpora(root: Path, *, explanation: str, id_token: str = "SYN"
             },
             ensure_ascii=False,
         ),
-        encoding="utf-8",
-    )
-    graph = root / "concept_graph_v1"
-    graph.mkdir(parents=True)
-    (graph / "concepts.jsonl").write_text(
-        json.dumps(
-            {"src_id": f"{id_token}-G1", "name_ko": "합성 개념", "metaphor": "합성 비유."},
-            ensure_ascii=False,
-        )
-        + "\n",
         encoding="utf-8",
     )
 

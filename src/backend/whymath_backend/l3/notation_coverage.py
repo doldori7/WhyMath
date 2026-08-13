@@ -4,8 +4,9 @@
 인상이 아니라 *측정*으로 관리한다(측정 없는 도입 없음). 지원 표기의 열거 정본은
 `data/notation_support_manifest.json`(NS-02 신설)이고, 이 모듈은 리포 커밋 코퍼스
 (`data/corpus/problem_bank_*/problems.jsonl` 표기 필드 + `formula_graph_v1/formulas.jsonl`의
-`latex` + **[NS-05] 이론 코퍼스 5종** — concept_content(K-12·대학)·atom_graph·misconceptions·
-concept_graph의 사람이 읽는 수학 서술 텍스트 필드, `THEORY_CORPORA` 명세 참조)에서 표기 토큰을
+`latex` + **[NS-05] 이론 코퍼스 4종** — concept_content(K-12·대학)·atom_graph·misconceptions
+(사람이 읽는 수학 서술 텍스트 필드, `THEORY_CORPORA` 명세 참조. 구 437 개념 그래프
+스냅샷은 legacy 동결 거버넌스상 의도적 제외 — 명세 주석 참조)에서 표기 토큰을
 전수 추출해 지원 집합과 대조한다(hermetic·LLM 0·DB 0·결정론).
 
 측정 축(2축 — 구조 표기는 과잉이라 제외):
@@ -366,7 +367,8 @@ def scan_corpora(problem_paths: Sequence[Path], formulas_path: Path) -> CorpusSc
 # 이론 코퍼스 스캔 (NS-05) — 문제은행 밖 사람이 읽는 수학 서술 텍스트 전수
 # ──────────────────────────────────────────────────────────────────────────
 # 2026-08-13 감사 실측으로 이론 코퍼스 5종에 미지원 글리프가 대량(atom_graph `→` 2448회·
-# `−` 662·`×` 512 등) 존재하는데 본 게이트가 측정하지 않던 공백을 메운다. 문항과 같은
+# `−` 662·`×` 512 등) 존재하는데 본 게이트가 측정하지 않던 공백을 메운다(개념 그래프
+# concepts.jsonl은 legacy snapshot 거버넌스로 제외 — 아래 명세 주석). 문항과 같은
 # 아키텍처를 따른다: 파일·구조 부재는 명시 실패(침묵 skip 금지), 토큰 추출·판정 로직은
 # 재사용(이중 정의 금지) — 바뀌는 것은 "어느 파일의 어느 필드를 읽나"뿐이다.
 #
@@ -379,7 +381,7 @@ class TheoryCorpusSpec:
     """이론 코퍼스 1종의 스캔 명세 — 경로·레코드 위치·텍스트 필드 열거(불변)."""
 
     rel_path: str  # corpus_root 기준 상대 경로
-    records_key: str | None  # 레코드 배열의 최상위 키 — None이면 JSONL(행=레코드)
+    records_key: str  # 레코드 배열의 최상위 키
     text_fields: tuple[str, ...]  # 스캔할 문자열 필드(null·결측은 스키마상 정상 — 건너뜀)
     # 레코드 안 리스트 필드(플래시카드) — 각 항목 dict의 문자열 값을 전수 스캔한다
     # (flashcards[].* 명세 — front·back·mnemonic 현행, 향후 텍스트 필드 추가도 자동 포착).
@@ -445,14 +447,12 @@ THEORY_CORPORA: Final[tuple[TheoryCorpusSpec, ...]] = (
             "distractor_rule",
         ),
     ),
-    # 개념 그래프(JSONL — 행=레코드). 제외: src_id·ccss_code·standard_codes(코드)·
-    # category·difficulty_tier(라벨)·definition_provenance·flashcard_count(메타)·
-    # _redacted_fields·behavior_skills(목록).
-    TheoryCorpusSpec(
-        rel_path="concept_graph_v1/concepts.jsonl",
-        records_key=None,
-        text_fields=("name_ko", "metaphor", "misconception", "accepted_expressions"),
-    ),
+    # concept_graph_v1/concepts.jsonl은 **의도적 제외**(NS-05 초판에서 포함했다가 CI의
+    # test_legacy_snapshot_governance가 거부): 구 437 개념 그래프는 legacy_snapshot으로
+    # 동결된 자산이고 화이트리스트(concept_atom_crosswalk·curriculum·problem_bank 빌드
+    # 적재 3종) 밖 모듈의 읽기가 금지다. 표기 측정 가치도 중복이다 — 같은 개념의 서술 텍스트는
+    # atom_graph_v1(노드 서술 11필드)과 concept_content_v1이 이미 커버한다. 런타임 재유입
+    # 금지와 측정 공백 해소를 함께 지키는 방향이 이 제외다.
 )
 
 
@@ -497,7 +497,7 @@ def _theory_record_texts(
 
 
 def scan_theory_corpora(corpus_root: Path, scan: CorpusScan) -> None:
-    """이론 코퍼스 5종(`THEORY_CORPORA`)의 서술 텍스트를 전수 스캔해 원장에 누적한다(NS-05).
+    """이론 코퍼스 4종(`THEORY_CORPORA`)의 서술 텍스트를 전수 스캔해 원장에 누적한다(NS-05).
 
     문항·수식 스캔과 같은 원장·같은 출처 규약(디렉토리명)을 쓴다. 파일 부재·JSON 파싱 실패·
     레코드 배열 구조 위반·선언 필드의 스키마 드리프트는 전부 예외 타입명을 병기해 명시 실패
@@ -516,26 +516,9 @@ def scan_theory_corpora(corpus_root: Path, scan: CorpusScan) -> None:
             raw = path.read_text(encoding="utf-8")
         except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"이론 코퍼스 부재: {path} ({type(exc).__name__}) — 스캔 범위는 5종 전수이며 "
+                f"이론 코퍼스 부재: {path} ({type(exc).__name__}) — 스캔 범위는 명세 전수이며 "
                 "부재를 조용히 건너뛰지 않는다(skip 은폐 금지)"
             ) from exc
-        if spec.records_key is None:  # JSONL — 행=레코드(formulas.jsonl과 동일 처리)
-            for line_num, line in enumerate(raw.splitlines(), start=1):
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                try:
-                    record = json.loads(stripped)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(f"{path}:{line_num}: {type(exc).__name__}: {exc}") from exc
-                if not isinstance(record, dict):
-                    raise ValueError(
-                        f"{path}:{line_num}: 레코드가 dict가 아님({type(record).__name__})"
-                    )
-                for text in _theory_record_texts(record, spec, where=f"{path}:{line_num}"):
-                    scan.add_text(text, source)
-                scan.theory_records_scanned += 1
-            continue
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -780,7 +763,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="코퍼스 루트(기본 repo data/corpus) — problem_bank_*/problems.jsonl + "
-        "formula_graph_v1/formulas.jsonl + 이론 코퍼스 5종(THEORY_CORPORA·NS-05)을 읽는다.",
+        "formula_graph_v1/formulas.jsonl + 이론 코퍼스 4종(THEORY_CORPORA·NS-05)을 읽는다.",
     )
     parser.add_argument(
         "--manifest",
@@ -825,7 +808,7 @@ def main(argv: list[str] | None = None) -> int:
 
     problem_paths = sorted(corpus_root.glob("problem_bank_*/problems.jsonl"))
     scan = scan_corpora(problem_paths, corpus_root / "formula_graph_v1" / "formulas.jsonl")
-    scan_theory_corpora(corpus_root, scan)  # NS-05 — 이론 코퍼스 5종을 같은 원장에 누적
+    scan_theory_corpora(corpus_root, scan)  # NS-05 — 이론 코퍼스 4종을 같은 원장에 누적
     baseline = load_baseline(baseline_path)
     report = dataclasses.replace(
         evaluate(scan, support, baseline),
