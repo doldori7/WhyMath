@@ -60,16 +60,18 @@ def build_ocr_components(
     """Settings 좌석으로 OCR 부품을 골라 `OcrComponents`로 조립(모델은 첫 사용 시 지연 로드).
 
     좌석:
-      - `ocr_detector`: paddle(rapidocr 라인 검출·Phase A) / mfd(YOLO 수식 검출·Phase B 스텁).
-      - `ocr_recognizer_backend`: rapid_latex(Phase A) / texteller(Phase B 스텁) /
-        qwen_vl(Phase C 스텁·L3 라우터 경유).
+      - `ocr_detector`: paddle(rapidocr 라인 검출·Phase A) / mfd(rapid-layout PP 계열 수식
+        검출·Phase B·동작 — YOLO/ultralytics 아님·AGPL 거부는 `detect.py` 참조).
+      - `ocr_recognizer_backend`: rapid_latex(Phase A) / texteller(Phase C·동작·`[ocr-heavy]`) /
+        qwen_vl(비동기 경로 실배선·L3 라우터 경유).
       - `ocr_language`: 텍스트 인식 언어(rapidocr·기본 한국어).
       - `ocr_min_confidence`: 재확인 게이트 임계(0=비활성). 조립이 이 미만 영역에
         needs_review를 단다(`OcrComponents.review_threshold`로 운반·비파괴 신호).
 
     미지원 값은 ValueError가 아니라 RuntimeError로 보고한다(좌석 오설정도 명확히·조용한
-    폴백 금지). Phase B/C 스텁 부품도 *구성은 허용*하되(좌석 결선 테스트), 실제 호출 시
-    NotImplementedError가 난다(파이프라인이 그 단계에 닿으면).
+    폴백 금지). 무거운 부품도 *구성은 허용*하되(좌석 결선 테스트·지연 로드), 의존 미설치
+    (texteller의 `[ocr-heavy]` 등)·미지원 진입(qwen_vl 동기 `recognize`)은 실제 호출 시 명확한
+    RuntimeError가 난다. 각 부품의 현재 상태(Phase·동작 여부)는 해당 모듈 docstring이 정본.
     """
     detector = _build_detector(settings)
     router = _build_router(settings)
