@@ -69,6 +69,26 @@ Future<List<ValueChanged<String>>> _openScreen(
 /// '완료' FilledButton을 찾는다.
 Finder get _submitButton => find.widgetWithText(FilledButton, '완료');
 
+/// 화면에 실제로 그려진 모든 텍스트(Text·SelectableText)의 문자열을 모은다.
+///
+/// MATH-05 누출 동결용 — "백슬래시 매크로가 *어디에도* 안 보인다"를 화면 단위로 단언하려면
+/// 특정 위젯 하나가 아니라 렌더된 텍스트 전량을 봐야 한다.
+List<String> _renderedTexts(WidgetTester tester) {
+  final List<String> out = <String>[];
+  for (final Text w in tester.widgetList<Text>(find.byType(Text))) {
+    if (w.data != null) {
+      out.add(w.data!);
+    }
+  }
+  for (final SelectableText w
+      in tester.widgetList<SelectableText>(find.byType(SelectableText))) {
+    if (w.data != null) {
+      out.add(w.data!);
+    }
+  }
+  return out;
+}
+
 void main() {
   group('MathliveInputScreen 화면 계약', () {
     testWidgets('타이틀·안내문이 렌더되고 완료는 초기 비활성', (WidgetTester tester) async {
@@ -108,14 +128,41 @@ void main() {
       await tester.pump();
 
       expect(tester.widget<FilledButton>(_submitButton).onPressed, isNotNull);
-      // 미리보기(LaTeX 원문)가 노출된다.
-      expect(find.text('  x^2 + 1  '), findsOneWidget);
+      // 미리보기는 *평문 표기*로 그린다(MATH-05) — 이 입력엔 매크로가 없어 trim만 된 모습.
+      expect(find.text('x^2 + 1'), findsOneWidget);
 
       await tester.tap(_submitButton);
       await tester.pumpAndSettle();
 
       expect(popped, 'x^2 + 1',
           reason: 'pop 반환 계약: trim된 LaTeX(채팅이 sendSolution으로 전송)');
+    });
+
+    testWidgets('미리보기는 원문 LaTeX 매크로를 노출하지 않고 평문 표기로 그린다 (MATH-05)',
+        (WidgetTester tester) async {
+      String? popped = 'sentinel';
+      final List<ValueChanged<String>> emit =
+          await _openScreen(tester, (String? r) => popped = r);
+
+      emit.single(r'\frac{1}{2}');
+      await tester.pump();
+
+      // ① 존재 단언 — 변환된 평문 표기가 실제로 그려진다(화면이 아무것도 안 그려서
+      //    "매크로 없음"이 통과하는 위장을 막는다).
+      expect(find.text('((1)/(2))'), findsOneWidget);
+      // ② 부재 단언 — 렌더된 텍스트 어디에도 백슬래시 매크로가 없다(화면 단위 계약).
+      expect(
+        _renderedTexts(tester).where((String t) => t.contains(r'\')),
+        isEmpty,
+        reason: '학생 대면 표면에 LaTeX 원문 노출 금지(MATH-05)',
+      );
+
+      // ③ 데이터 흐름은 원문 그대로 — pop 반환값은 변환되지 않는다(이중 변환 방지:
+      //    chat_controller.sendMathliveLatex가 자기 쪽에서 변환한다).
+      await tester.tap(_submitButton);
+      await tester.pumpAndSettle();
+      expect(popped, r'\frac{1}{2}',
+          reason: '표시만 변환하고 pop 계약(원문 LaTeX)은 불변이어야 한다');
     });
 
     testWidgets('공백뿐인 입력은 완료 비활성 유지', (WidgetTester tester) async {
