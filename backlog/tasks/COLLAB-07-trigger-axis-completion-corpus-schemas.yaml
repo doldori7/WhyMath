@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ 가드 소비판정 강화: tests/infra/test_ci_contract_fixture_trigger_wiring.py의 _backend_test_consumers가 파일 전체 substring 매칭이라 docstring에 이름만 언급해도 '소비'로 통과한다(실증됨). 읽기 호출 기준(AST 또는 경로 리터럴)으로 강화하고, 대상을 .json suffix에서 최상위 전 파일로 확장한다 — 현재 data/policy_contract.yaml 같은 비-json 계약은 계약으로 인식조차 못 해 가드 green·CI skip이 성립한다(실증됨)"
   - "⑤ 가드 잡 축 확장: _ENFORCED_OUTPUTS가 backend·web 하드코딩이라 신규 잡·mobile을 검사하지 않는다. mobile 필터는 현재 나열 4종이 실측과 일치해 구멍은 없으나(src/mobile/test/ 읽기 전수 확인) 구조적 취약은 남는다 — 검사 대상 잡을 하드코딩이 아니라 ci.yml에서 파생시키거나, 최소한 mobile을 편입한다"
   - "⑥ 범위 밖·정직 표기: git core.quotePath 발산(비ASCII 계약 파일명이면 CI grep은 인용·8진 이스케이프된 경로를 받아 SKIP인데 가드는 원문자열로 RUN — false-green)은 현재 해당 파일 0건이라 이 태스크에서 고치지 않되 가드 docstring의 전제에 명시한다. 계약 내용 정합(COLLAB-05 소관)·새 CI 잡 신설·data_pipeline 필터 확장은 범위 밖"
-artifacts: []
+artifacts:
+  - "PR #817 (https://github.com/doldori7/WhyMath/pull/817) — 커밋 9ae1f617.\n\nci.yml 기능 4줄: backend 필터에 data/[^/]+$·data/corpus/·schemas/ 편입 · web/mobile을 같은 접두\n패턴으로 통일 · data-pipeline 잡 if에 corpus OR 추가(죽은 플래그 소생).\ntests/infra/test_ci_contract_fixture_trigger_wiring.py +518/-74(가드 강화).\n\nacceptance 6항: ①현행 실측 고정 — CI와 동일 엔진(grep -qE)으로 필터 추출해 합성 diff 판정,\n코퍼스만/schemas만 = be:false 재현. 배경 대비 반증 3건(policy_contract.yaml은 합성 예시라 실재\n안 함 → 잠재 결함으로 취급 / data/corpus 참조는 63개가 아니라 59개(33파일) / 기존\ntest_qa_pipeline_wiring.py:117 docstring이 틀린 전제를 적어놨는데 검사는 output 존재만 봤음)\n②corpus 플래그를 잡 게이트 OR로 소생 — ARCH-21 설계 의도 보존(스텝 if 유지), backend 이전은\ntimeout 35분 리스크로 기각. backend 필터 흡수는 별개로 병행(qa_pipeline과 notation_coverage는\n서로 대체 불가). COLLAB-04의 틀린 정당화 주석 교체 ③변별력 — 가드 3 failed EXIT=1 → 17 passed\nEXIT=0, 필터 4표적 false→true·음성대조(docs) false 유지. 비용 지표 교체: shallow 창 발견 후\n마진 과트리거 비용 재측정 = 0(코퍼스 7·schemas 1커밋 전건이 이미 be=true였음 — 결함이 무증상\n이었던 이유이기도 함) ④소비판정 AST화(비-docstring 문자열 리터럴만) + 대상을 data/ 최상위 전\n파일로 확장, docstring/주석 언급이 구 방식에선 통과·신 방식에선 미인정 실증 ⑤_ENFORCED_OUTPUTS\n하드코딩 제거 → ci.yml changes.outputs에서 파생, mobile 자동 편입, fake_job 주입 시 EXIT=1 실증\n⑥core.quotePath 미수정(범위 밖)하되 비ASCII 계약 0건 감시 테스트 부착.\n\n신규 계약 2건: ⑦test_no_dead_changes_flag(스텝 if가 참조하는 플래그는 잡 if도 참조해야 함 —\n죽은 corpus 지목) · ⑥의 등재 사유를 문자열이 아니라 실물(게이트 스텝 실재·CLI 코퍼스 glob 실재·\ntests/backend의 schemas 코드 리터럴 실재)로 검증 — r3 §8-⑥ '사유의 진실성을 안 보는' 결함 클래스 회피.\n\n검증(부모 세션 독립 재실행): pytest tests/infra 325 passed EXIT=0 · tests/harness 343 passed\nEXIT=0 · ruff/black CI 원문 명령 EXIT=0 · backlog validate EXIT=0(320건) · 독립 뮤테이션(backend\n필터를 COLLAB-04 형태로 회귀) EXIT=1 후 cp 백업 원복·md5 바이트 동일 확인(git 계열 미사용).\n\n정직한 잔여: backend 전체 스위트 미실행(의존성 부재·CI가 최종 판정) · mobile 필터를 MATH-01(#791)의\n개별 나열에서 접두 패턴으로 바꿈(타 세션 착지분 수정·커버리지 손실 0·과트리거만 마진 2커밋) ·\n계약 ⑦은 잡 if의 불리언 의미론 미모델링(참조 유무만·역참조도 참조로 계상·현행 0건) · 코퍼스 단독\nPR에서 data-pipeline 잡 전체 약 10분 추가(잡 분할은 신규 잡 금지 범위 밖) · data/ncic/ 미편입\n(backend 미참조 실측) · 로컬 3.11 vs CI 3.12 black 마이너 차이 이론적 여지."
 paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
