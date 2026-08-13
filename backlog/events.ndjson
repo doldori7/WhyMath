@@ -3069,3 +3069,4 @@
 {"ts": "2026-08-13T11:02:46", "actor": "main", "action": "review", "id": "MOB-19-webview-lifecycle-hardening"}
 {"ts": "2026-08-13T11:09:42", "actor": "main", "action": "policy_warn", "id": "SOL-02-step-panel-producer-wiring", "rule": "path_overlap", "other": "MOB-19-webview-lifecycle-hardening", "detail": "실파일 교집합 2건 예: src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart, src/mobile/lib/features/chat/presentation/mathlive_input_webview.dart · 프리픽스 포함: src/mobile/lib/features/chat/** ⊇ src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart", "mode": "warn"}
 {"ts": "2026-08-13T11:09:47", "actor": "main", "action": "start", "id": "SOL-02-step-panel-producer-wiring", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T12:54:03", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "done", "id": "QUAL-06-ncic-crawl-residue-cleanup", "artifacts": ["1ca05440", "#823"]}
