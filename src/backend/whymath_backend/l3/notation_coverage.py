@@ -4,7 +4,10 @@
 인상이 아니라 *측정*으로 관리한다(측정 없는 도입 없음). 지원 표기의 열거 정본은
 `data/notation_support_manifest.json`(NS-02 신설)이고, 이 모듈은 리포 커밋 코퍼스
 (`data/corpus/problem_bank_*/problems.jsonl` 표기 필드 + `formula_graph_v1/formulas.jsonl`의
-`latex`)에서 표기 토큰을 전수 추출해 지원 집합과 대조한다(hermetic·LLM 0·DB 0·결정론).
+`latex` + **[NS-05] 이론 코퍼스 4종** — concept_content(K-12·대학)·atom_graph·misconceptions
+(사람이 읽는 수학 서술 텍스트 필드, `THEORY_CORPORA` 명세 참조. 구 437 개념 그래프
+스냅샷은 legacy 동결 거버넌스상 의도적 제외 — 명세 주석 참조)에서 표기 토큰을
+전수 추출해 지원 집합과 대조한다(hermetic·LLM 0·DB 0·결정론).
 
 측정 축(2축 — 구조 표기는 과잉이라 제외):
   ① **LaTeX 매크로**: `\\[a-zA-Z]+` 전수 추출. 지원 = manifest 파생(정규화 매크로 입력측 +
@@ -281,6 +284,7 @@ class CorpusScan:
 
     problems_scanned: int = 0
     formulas_scanned: int = 0
+    theory_records_scanned: int = 0  # NS-05 — 이론 코퍼스 레코드 수(문항·수식과 별도 회계)
     # token → {source_name: count}. source_name = 코퍼스 디렉토리명(problem_bank_v1 등).
     macro_occurrences: dict[str, dict[str, int]] = field(default_factory=dict)
     glyph_occurrences: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -360,6 +364,188 @@ def scan_corpora(problem_paths: Sequence[Path], formulas_path: Path) -> CorpusSc
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 이론 코퍼스 스캔 (NS-05) — 문제은행 밖 사람이 읽는 수학 서술 텍스트 전수
+# ──────────────────────────────────────────────────────────────────────────
+# 2026-08-13 감사 실측으로 이론 코퍼스 5종에 미지원 글리프가 대량(atom_graph `→` 2448회·
+# `−` 662·`×` 512 등) 존재하는데 본 게이트가 측정하지 않던 공백을 메운다(개념 그래프
+# concepts.jsonl은 legacy snapshot 거버넌스로 제외 — 아래 명세 주석). 문항과 같은
+# 아키텍처를 따른다: 파일·구조 부재는 명시 실패(침묵 skip 금지), 토큰 추출·판정 로직은
+# 재사용(이중 정의 금지) — 바뀌는 것은 "어느 파일의 어느 필드를 읽나"뿐이다.
+#
+# 필드 선정 규칙: **사람이 읽는 수학 서술 텍스트만** 스캔한다. ID·코드·수치·분류 라벨 필드
+# (code·mis_id·*_code·school_level·difficulty·mapping_* 등)는 표기 커버리지 축이 아니므로
+# 제외한다 — 선정 전 필드별 토큰 분포를 전수 실측해(2026-08-13) 라벨 필드에 표기 토큰이
+# 없거나 있어도 서술 필드가 같은 심볼을 이미 커버함을 확인했다.
+@dataclass(frozen=True, slots=True)
+class TheoryCorpusSpec:
+    """이론 코퍼스 1종의 스캔 명세 — 경로·레코드 위치·텍스트 필드 열거(불변)."""
+
+    rel_path: str  # corpus_root 기준 상대 경로
+    records_key: str  # 레코드 배열의 최상위 키
+    text_fields: tuple[str, ...]  # 스캔할 문자열 필드(null·결측은 스키마상 정상 — 건너뜀)
+    # 레코드 안 리스트 필드(플래시카드) — 각 항목 dict의 문자열 값을 전수 스캔한다
+    # (flashcards[].* 명세 — front·back·mnemonic 현행, 향후 텍스트 필드 추가도 자동 포착).
+    scan_all_string_fields_of: str | None = None
+
+
+# K-12·대학 이론 코퍼스 공통 필드 — 개념명(name: ÷·×·Σ·π 등 표기 실재) + 서술 5종.
+# 제외: code(ID)·subject·unit(교과 분류 라벨)·review_status(검수 상태)·standard_codes(코드).
+_CONTENT_TEXT_FIELDS: Final[tuple[str, ...]] = (
+    "name",
+    "explanation",
+    "metaphor",
+    "misconception",
+    "formal_definition_internal",
+    "accepted_expressions",
+)
+
+THEORY_CORPORA: Final[tuple[TheoryCorpusSpec, ...]] = (
+    TheoryCorpusSpec(
+        rel_path="concept_content_v1/content.json",
+        records_key="content",
+        text_fields=_CONTENT_TEXT_FIELDS,
+        scan_all_string_fields_of="flashcards",
+    ),
+    TheoryCorpusSpec(  # 대학 이론 — 동일 구조(review_status·standard_codes만 부재).
+        rel_path="concept_content_university_v1/content.json",
+        records_key="content",
+        text_fields=_CONTENT_TEXT_FIELDS,
+        scan_all_string_fields_of="flashcards",
+    ),
+    # 원자 그래프 노드 — 개념명·핵심 명제·오개념·소크라틱 질문·진단 3종·비고·전이 서술.
+    # 제외: code·parent_code·subunit_code·standard_codes(코드), level·grade_band·school_level·
+    # subject_area·unit·subunit·cognitive_type·misconception_type·node_type(분류 라벨),
+    # intrinsic_difficulty(수치)·atomicity(dict)·redacted_fields(목록). 엣지(from_name·
+    # to_name 등)는 노드 name의 중복이라 스캔하지 않는다.
+    TheoryCorpusSpec(
+        rel_path="atom_graph_v1/graph.json",
+        records_key="concepts",
+        text_fields=(
+            "name",
+            "name_display",
+            "core_proposition",
+            "misconception",
+            "socratic",
+            "diagnostic_item",
+            "diagnostic_answer",
+            "diagnostic_signal",
+            "notes",
+            "transfer",
+            "transfer_example",
+        ),
+    ),
+    # 오개념 — 정준 진술·학생 오류 사고·교정 지점·오답 유도 규칙(전부 학생-facing 서술).
+    # 제외: mis_id·*_code(ID)·school_level·domain·subunit(라벨)·error_type·difficulty·
+    # severity·mapping_confidence·mapping_score·provenance_note(메타)·behavior_skills(코드 목록).
+    TheoryCorpusSpec(
+        rel_path="misconceptions_v1/misconceptions.json",
+        records_key="misconceptions",
+        text_fields=(
+            "canonical_statement",
+            "student_wrong_thinking",
+            "correction_point",
+            "distractor_rule",
+        ),
+    ),
+    # concept_graph_v1/concepts.jsonl은 **의도적 제외**(NS-05 초판에서 포함했다가 CI의
+    # test_legacy_snapshot_governance가 거부): 구 437 개념 그래프는 legacy_snapshot으로
+    # 동결된 자산이고 화이트리스트(concept_atom_crosswalk·curriculum·problem_bank 빌드
+    # 적재 3종) 밖 모듈의 읽기가 금지다. 표기 측정 가치도 중복이다 — 같은 개념의 서술 텍스트는
+    # atom_graph_v1(노드 서술 11필드)과 concept_content_v1이 이미 커버한다. 런타임 재유입
+    # 금지와 측정 공백 해소를 함께 지키는 방향이 이 제외다.
+)
+
+
+def _theory_record_texts(
+    record: dict[str, Any], spec: TheoryCorpusSpec, *, where: str
+) -> list[str]:
+    """이론 레코드 1건에서 선언된 텍스트 필드의 문자열 값을 모은다(순수).
+
+    null·결측 필드는 스키마상 정상이라 건너뛰지만, 선언된 텍스트 필드에 문자열/null 아닌 값이
+    오면 스키마 드리프트다 — 조용히 건너뛰면 새 텍스트 필드가 스캔에서 새어 나가므로 명시
+    실패한다(침묵 실패 금지).
+    """
+    texts: list[str] = []
+    for field_name in spec.text_fields:
+        value = record.get(field_name)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(
+                f"{where}: 필드 {field_name!r}이 str/null이 아님({type(value).__name__}) — "
+                "스키마 드리프트: THEORY_CORPORA 명세 갱신 여부를 확인하라"
+            )
+        if value.strip():
+            texts.append(value)
+    if spec.scan_all_string_fields_of is not None:
+        field = spec.scan_all_string_fields_of
+        cards = record.get(field)
+        if cards is None:
+            cards = []
+        if not isinstance(cards, list):
+            raise ValueError(
+                f"{where}: 필드 {field!r}이 list/null이 아님({type(cards).__name__}) — "
+                "스키마 드리프트"
+            )
+        for card in cards:
+            if not isinstance(card, dict):
+                raise ValueError(
+                    f"{where}: {field} 항목이 dict가 아님({type(card).__name__}) — 스키마 드리프트"
+                )
+            texts.extend(v for v in card.values() if isinstance(v, str) and v.strip())
+    return texts
+
+
+def scan_theory_corpora(corpus_root: Path, scan: CorpusScan) -> None:
+    """이론 코퍼스 4종(`THEORY_CORPORA`)의 서술 텍스트를 전수 스캔해 원장에 누적한다(NS-05).
+
+    문항·수식 스캔과 같은 원장·같은 출처 규약(디렉토리명)을 쓴다. 파일 부재·JSON 파싱 실패·
+    레코드 배열 구조 위반·선언 필드의 스키마 드리프트는 전부 예외 타입명을 병기해 명시 실패
+    한다 — 이론 코퍼스가 통째로 빠져도 green으로 지나가는 공허 통과를 차단하기 위해서다
+    (레코드 총 0건도 명시 실패 — `scan_corpora`의 "문항 코퍼스 0건" 가드와 동일 철학).
+
+    Raises:
+        FileNotFoundError: 이론 코퍼스 파일 부재·레코드 총 0건.
+        ValueError: JSON 파싱 실패·레코드 배열 부재/구조 위반·스키마 드리프트.
+    """
+    before = scan.theory_records_scanned
+    for spec in THEORY_CORPORA:
+        path = corpus_root / spec.rel_path
+        source = path.parent.name
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"이론 코퍼스 부재: {path} ({type(exc).__name__}) — 스캔 범위는 명세 전수이며 "
+                "부재를 조용히 건너뛰지 않는다(skip 은폐 금지)"
+            ) from exc
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path}: {type(exc).__name__}: {exc}") from exc
+        records = payload.get(spec.records_key) if isinstance(payload, dict) else None
+        if not isinstance(records, list):
+            raise ValueError(
+                f"{path}: 최상위 {spec.records_key!r} 배열 부재/구조 위반 — 스캔 누락을 "
+                "조용히 통과시키지 않는다"
+            )
+        for index, record in enumerate(records):
+            if not isinstance(record, dict):
+                raise ValueError(
+                    f"{path}: {spec.records_key}[{index}]이 dict가 아님({type(record).__name__})"
+                )
+            where = f"{path}: {spec.records_key}[{index}]"
+            for text in _theory_record_texts(record, spec, where=where):
+                scan.add_text(text, source)
+            scan.theory_records_scanned += 1
+    if scan.theory_records_scanned == before:
+        raise FileNotFoundError(
+            f"이론 코퍼스 레코드 0건 ({corpus_root}) — 전수 측정이 공허하게 통과할 수 없으므로 "
+            "명시 실패한다(문항 코퍼스 0건 가드와 동일 철학)"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 베이스라인 (래칫 정본) — 로드만 한다. 갱신은 의식적 수동 편집(자동 갱신 금지).
 # ──────────────────────────────────────────────────────────────────────────
 _BASELINE_KINDS: Final[frozenset[str]] = frozenset({"macro", "glyph"})
@@ -418,6 +604,7 @@ class CoverageReport:
 
     problems_scanned: int
     formulas_scanned: int
+    theory_records_scanned: int  # NS-05 — 이론 코퍼스 레코드 수
     macro_occurrence_total: int
     macro_distinct: int
     macro_supported_distinct: int
@@ -473,6 +660,7 @@ def evaluate(
     return CoverageReport(
         problems_scanned=scan.problems_scanned,
         formulas_scanned=scan.formulas_scanned,
+        theory_records_scanned=scan.theory_records_scanned,
         macro_occurrence_total=sum(sum(per.values()) for per in scan.macro_occurrences.values()),
         macro_distinct=len(scan.macro_occurrences),
         macro_supported_distinct=sum(
@@ -498,7 +686,8 @@ def render_report(report: CoverageReport, *, control_empty_support: bool) -> str
         "=" * 64,
         "표기 커버리지 하네스 (NS-03) — 코퍼스 표기 ⊆ 지원 표기 게이트",
         "=" * 64,
-        f"코퍼스: 문항 {report.problems_scanned}건 · 수식 노드 {report.formulas_scanned}건",
+        f"코퍼스: 문항 {report.problems_scanned}건 · 수식 노드 {report.formulas_scanned}건 · "
+        f"이론 레코드 {report.theory_records_scanned}건(NS-05)",
         f"매크로: 연 {report.macro_occurrence_total}회 / 고유 {report.macro_distinct}종 "
         f"(지원 {report.macro_supported_distinct}·누락 "
         f"{report.macro_distinct - report.macro_supported_distinct})",
@@ -574,7 +763,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="코퍼스 루트(기본 repo data/corpus) — problem_bank_*/problems.jsonl + "
-        "formula_graph_v1/formulas.jsonl을 읽는다.",
+        "formula_graph_v1/formulas.jsonl + 이론 코퍼스 4종(THEORY_CORPORA·NS-05)을 읽는다.",
     )
     parser.add_argument(
         "--manifest",
@@ -619,6 +808,7 @@ def main(argv: list[str] | None = None) -> int:
 
     problem_paths = sorted(corpus_root.glob("problem_bank_*/problems.jsonl"))
     scan = scan_corpora(problem_paths, corpus_root / "formula_graph_v1" / "formulas.jsonl")
+    scan_theory_corpora(corpus_root, scan)  # NS-05 — 이론 코퍼스 4종을 같은 원장에 누적
     baseline = load_baseline(baseline_path)
     report = dataclasses.replace(
         evaluate(scan, support, baseline),

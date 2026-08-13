@@ -3191,3 +3191,24 @@
 {"ts": "2026-08-11T14:15:25", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "tests/backend/schema/test_enums.py", "mode": "warn", "detail": "'tests/backend/schema/test_enums.py' 은 다른 세션 태스크 SEC-24-issues-review-security-hardening-recovery(세션: claude/school-subject-theory-problems-check-6ybkis)의 작업 범위 — 동시 편집 충돌 위험"}
 {"ts": "2026-08-11T14:37:22", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "src/backend/whymath_backend/harness/concept_assessment_index.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/concept_assessment_index.py' 은 다른 세션 태스크 S4-16-residue-gate-demotion-battle(세션: claude/whymath-ai-content-design-vafylb)의 작업 범위 — 동시 편집 충돌 위험"}
 {"ts": "2026-08-11T15:05:33", "actor": "claude/whymath-ai-content-design-a3ysut", "action": "done", "id": "CONT-01-concept-assessment-review-gate", "artifacts": ["38a8a01a · PR #819 (https://github.com/doldori7/WhyMath/pull/819)"]}
+{"ts": "2026-08-13T09:24:12", "actor": "main", "action": "add", "id": "MOB-19-webview-lifecycle-hardening"}
+{"ts": "2026-08-13T09:24:36", "actor": "main", "action": "add", "id": "PRES-01-segment-body-blocks"}
+{"ts": "2026-08-13T09:25:09", "actor": "main", "action": "add", "id": "PRES-02-audience-display-profiles"}
+{"ts": "2026-08-13T09:25:13", "actor": "main", "action": "add", "id": "PRES-03-student-web-surface"}
+{"ts": "2026-08-13T09:25:17", "actor": "main", "action": "add", "id": "PRES-04-math-aria-speechspec-reuse"}
+{"ts": "2026-08-13T09:50:49", "actor": "main", "action": "add", "id": "NS-05-notation-coverage-theory-corpus-scope"}
+{"ts": "2026-08-13T10:37:02", "actor": "main", "action": "add", "id": "QUAL-06-ncic-crawl-residue-cleanup"}
+{"ts": "2026-08-13T10:37:33", "actor": "main", "action": "add", "id": "KG-05-university-content-mechanical-pattern-fix"}
+{"ts": "2026-08-13T10:37:36", "actor": "main", "action": "add", "id": "KG-06-concept-content-depth-enrichment"}
+{"ts": "2026-08-13T10:38:02", "actor": "main", "action": "policy_warn", "id": "QUAL-06-ncic-crawl-residue-cleanup", "rule": "path_overlap", "other": "S4-16-residue-gate-demotion-battle", "detail": "실파일 교집합 1건 예: src/backend/whymath_backend/harness/concept_content_audit.py · 프리픽스 포함: src/backend/whymath_backend/harness/** ⊇ src/backend/whymath_backend/harness/concept_content_audit.py", "mode": "warn"}
+{"ts": "2026-08-13T10:38:06", "actor": "main", "action": "start", "id": "QUAL-06-ncic-crawl-residue-cleanup", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T11:00:39", "actor": "main", "action": "start", "id": "MOB-19-webview-lifecycle-hardening", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T11:02:46", "actor": "main", "action": "review", "id": "MOB-19-webview-lifecycle-hardening"}
+{"ts": "2026-08-13T11:09:42", "actor": "main", "action": "policy_warn", "id": "SOL-02-step-panel-producer-wiring", "rule": "path_overlap", "other": "MOB-19-webview-lifecycle-hardening", "detail": "실파일 교집합 2건 예: src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart, src/mobile/lib/features/chat/presentation/mathlive_input_webview.dart · 프리픽스 포함: src/mobile/lib/features/chat/** ⊇ src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart", "mode": "warn"}
+{"ts": "2026-08-13T11:09:47", "actor": "main", "action": "start", "id": "SOL-02-step-panel-producer-wiring", "session": "main", "remote": "ok"}
+{"ts": "2026-08-13T12:54:03", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "done", "id": "QUAL-06-ncic-crawl-residue-cleanup", "artifacts": ["1ca05440", "#823"]}
+{"ts": "2026-08-13T12:57:10", "actor": "claude/qual-06-ncic-crawl-residue-cleanup", "action": "start", "id": "NS-05-notation-coverage-theory-corpus-scope", "session": "claude/qual-06-ncic-crawl-residue-cleanup", "remote": "ok"}
+{"ts": "2026-08-13T14:05:20", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "NS-05-notation-coverage-theory-corpus-scope", "artifacts": ["d2c059bc", "#824"]}
+{"ts": "2026-08-13T14:11:54", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "review", "id": "SOL-02-step-panel-producer-wiring"}
+{"ts": "2026-08-13T14:27:13", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "MOB-19-webview-lifecycle-hardening", "artifacts": ["PR#826"]}
+{"ts": "2026-08-13T14:27:15", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "SOL-02-step-panel-producer-wiring", "artifacts": ["PR#825", "PR#826"]}
