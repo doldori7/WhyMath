@@ -2,10 +2,31 @@
 //
 // canned LearningScene(런타임 객체)로 네트워크 없이 확인한다. misconception_probe에서 정답·
 // 수정·오개념 id·"틀렸다" 단정이 *렌더 텍스트에 없음*을 단언해 절대 금기를 지킨다.
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/data/scene_models.dart';
+import 'package:korean_math_app/features/chat/data/solution_path_api.dart';
+import 'package:korean_math_app/features/chat/data/solution_path_models.dart';
 import 'package:korean_math_app/features/chat/presentation/scene_renderer.dart';
+
+/// 가짜 SolutionPathApi — 고정 1단계 페이지를 돌려준다(step_panel은 실조회하므로
+/// 레지스트리 테스트에도 주입이 필요하다. 점층 동작 전체는 step_panel_test.dart가 동결).
+class _FakeSolutionPathApi extends SolutionPathApi {
+  _FakeSolutionPathApi() : super(Dio());
+
+  @override
+  Future<SolutionStepsPage> fetchSteps(
+    String solutionPathId, {
+    required int upTo,
+  }) async =>
+      const SolutionStepsPage(
+        steps: [SolutionStep(stepOrder: 1, content: '첫 단계 내용')],
+        total: 2,
+        upTo: 1,
+      );
+}
 
 /// 요소 리스트로 최소 장면을 만든다(테스트 공통).
 LearningScene _scene(List<SceneElement> elements, {String? topicLabel}) =>
@@ -112,7 +133,10 @@ void main() {
     expect(find.textContaining('a, b'), findsOneWidget);
   });
 
-  testWidgets('step_panel은 접힌 단계 패널을 렌더한다(deferred)', (tester) async {
+  testWidgets('solutionPathId 없는 step_panel은 조용히 생략한다(계약 방어)', (tester) async {
+    // 서버는 solution_path 실재 시에만 step_panel을 방출한다(SOL-02 ③) — id 부재는
+    // 계약 위반이라 빈 카드를 그리지 않는다. 실단계 점층 노출 동작 전체는
+    // step_panel_test.dart가 동결한다.
     await tester.pumpWidget(
       _wrap(
         _scene(const [
@@ -120,9 +144,9 @@ void main() {
         ]),
       ),
     );
-    expect(find.text('단계별로 살펴보기'), findsOneWidget);
-    // 접힘 — 펼침 내용은 탭 전엔 트리에 없다(답 미루기·점층 노출).
-    expect(find.text('차근차근 단계를 펼쳐 볼 수 있어요.'), findsNothing);
+    expect(find.text('단계별로 살펴보기'), findsNothing);
+    expect(find.text('다음 단계 보기'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('misconception_probe는 사고 유도 cue만·정답/낙인 없음', (tester) async {
@@ -240,33 +264,43 @@ void main() {
 
   testWidgets('8종 요소가 한 장면에서 모두 렌더된다', (tester) async {
     await tester.pumpWidget(
-      _wrap(
-        _scene(const [
-          SceneElement(
-            kind: 'visualization',
-            ref: Visualization(type: 'interactive_graph_2d', caption: '그래프'),
-          ),
-          SceneElement(kind: 'param_control', targets: ['a']),
-          SceneElement(kind: 'step_panel'),
-          SceneElement(kind: 'misconception_probe', intervention: 'concrete_case'),
-          SceneElement(kind: 'socratic_prompt', promptText: '왜 그렇게 생각했어?'),
-          SceneElement(kind: 'annotation'),
-          SceneElement(
-            kind: 'skill_focus',
-            behaviorArea: 'INTERPRET',
-            focusPrompt: '주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.',
-          ),
-          SceneElement(
-            kind: 'tutoring_prompt',
-            role: 'scaffold',
-            promptText: '어디서 막혔는지 같이 봐줄게.',
-          ),
-        ]),
+      // step_panel은 solutionPathId로 실조회하므로 가짜 API를 주입한다(chat_scene_test 패턴).
+      ProviderScope(
+        overrides: [solutionPathApiProvider.overrideWithValue(_FakeSolutionPathApi())],
+        child: _wrap(
+          _scene(const [
+            SceneElement(
+              kind: 'visualization',
+              ref: Visualization(type: 'interactive_graph_2d', caption: '그래프'),
+            ),
+            SceneElement(kind: 'param_control', targets: ['a']),
+            SceneElement(
+              kind: 'step_panel',
+              solutionPathId: 'sp-1',
+              revealPolicy: 'deferred',
+            ),
+            SceneElement(kind: 'misconception_probe', intervention: 'concrete_case'),
+            SceneElement(kind: 'socratic_prompt', promptText: '왜 그렇게 생각했어?'),
+            SceneElement(kind: 'annotation'),
+            SceneElement(
+              kind: 'skill_focus',
+              behaviorArea: 'INTERPRET',
+              focusPrompt: '주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.',
+            ),
+            SceneElement(
+              kind: 'tutoring_prompt',
+              role: 'scaffold',
+              promptText: '어디서 막혔는지 같이 봐줄게.',
+            ),
+          ]),
+        ),
       ),
     );
+    await tester.pumpAndSettle();
     expect(find.text('그래프'), findsOneWidget);
     expect(find.textContaining('파라미터 조작'), findsOneWidget);
     expect(find.text('단계별로 살펴보기'), findsOneWidget);
+    expect(find.textContaining('첫 단계 내용'), findsOneWidget); // step_panel 1단계(deferred)
     expect(find.textContaining('구체적인 예'), findsOneWidget);
     expect(find.text('왜 그렇게 생각했어?'), findsOneWidget);
     expect(find.text('강조 표시'), findsOneWidget);
