@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: in_progress
+status: review
 priority: 3
 owner: claude
 depends_on: []
