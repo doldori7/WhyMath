@@ -476,3 +476,86 @@ class UserStateSnapshot(BaseModel):
         default=None,
         description="벡터 저장소(pgvector·Postgres) 참조 ID(임베딩 벡터 저장 아님)",
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 학생 대면: StudentStateSnapshot (ASM-12 — export 봉인 집행)
+# ──────────────────────────────────────────────────────────────────────────
+class StudentStateSnapshot(BaseModel):
+    """상태 스냅샷 — **학생 대면 정본**(`StudentAssessment` 패턴·ASM-12).
+
+    `UserStateSnapshot`(내부 정본)에서 예측 3필드(`estimated_grade`·`estimated_score`·
+    `estimated_percentile` — `STUDENT_HIDDEN_PREDICTION_FIELDS`의 이 모델 부분집합)를
+    **뺀 것이 아니라**, 이쪽이 기반이고 내부 정본이 그 3필드를 *더한다*. 나중에 누가
+    내부 정본에 새 예측 필드를 붙여도 학생 대면에는 자동으로 새지 않는다(허용목록).
+
+    **왜 런타임 필터가 아닌가**: `ASM-07`(`StudentAssessment`)·`PED-08` ③ 선례 — 필터는
+    한 줄이 빠지면 조용히 무력화되지만 *필드의 부재*는 꺼지지 않는다.
+
+    **사고 경위**: 2026-08-11 실측 전까지 `GET /v1/me/export`의 `state_snapshots`가 내부
+    정본을 `to_schema().model_dump()` 그대로 실어 `estimated_percentile`(또래 비교 —
+    `pipa_data_matrix` §2.2 #8은 학생 본인조차 ◐ 요약만)이 학생 페이로드에 키째로
+    나가고 있었다. 판정 정본: `docs/legal/export_prediction_disclosure_verdict.md`.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    @classmethod
+    def from_snapshot(cls, snapshot: UserStateSnapshot) -> StudentStateSnapshot:
+        """내부 정본 → 학생 대면 정본. 예측 필드는 애초에 대상 모델에 자리가 없다."""
+        # 함수-지역 import — schema.assessment ↔ schema.user 모듈 순환 여지 차단
+        # (정본 집합은 assessment 쪽 단일 진실 원천을 그대로 쓴다 — 이름 복사 금지).
+        from whymath_backend.schema.assessment import STUDENT_HIDDEN_PREDICTION_FIELDS
+
+        return cls.model_validate(
+            snapshot.model_dump(exclude=set(STUDENT_HIDDEN_PREDICTION_FIELDS))
+        )
+
+    snapshot_id: uuid.UUID = Field(default_factory=uuid4, description="스냅샷 PK (UUID)")
+    user_id: uuid.UUID | None = Field(
+        default=None,
+        description="학생 FK (user_profile 참조)",
+    )
+    snapshot_at: datetime | None = Field(default=None, description="스냅샷 시각")
+
+    concept_mastery: dict[str, float] | None = Field(
+        default=None,
+        description='단원(개념)별 숙련도 {"CAL-INT-DEF":0.8, ...}(개념코드→숙련도 0-1)',
+    )
+    pattern_mastery: dict[str, float] | None = Field(
+        default=None,
+        description='시그니처 패턴별 숙련도 {"COMPOSITE_DIFFERENTIABILITY":0.6, ...}(0-1)',
+    )
+
+    avg_solve_time_by_difficulty: dict[str, Any] | None = Field(
+        default=None,
+        description='난이도별 평균 풀이 시간(초) {"easy":60,"medium":180,"hard":600}'
+        "(난이도 키 자유형 JSONB)",
+    )
+    time_management_score: float | None = Field(
+        default=None,
+        description="시간 관리 점수 0-1 (DDL 주석 '0-1')",
+        ge=0.0,
+        le=1.0,
+    )
+
+    consecutive_active_days: int | None = Field(
+        default=None,
+        description="연속 학습일. DDL에 범위 미명시 → 일수라 음수 불가 ge=0만 설정.",
+        ge=0,
+    )
+    avg_session_quality: float | None = Field(
+        default=None,
+        description="집중도 평균 0-1 (내부 정본과 동일 범위)",
+        ge=0.0,
+        le=1.0,
+    )
+
+    embedding_id: uuid.UUID | None = Field(
+        default=None,
+        description="벡터 저장소(pgvector·Postgres) 참조 ID(임베딩 벡터 저장 아님)",
+    )

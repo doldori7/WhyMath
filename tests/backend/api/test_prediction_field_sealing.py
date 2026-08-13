@@ -100,12 +100,22 @@ def _reachable_schemas(openapi: dict[str, Any], roots: set[str]) -> set[str]:
 
 
 def _student_assessment_response_schemas() -> tuple[set[str], dict[str, Any], int]:
-    """`/v1/me`의 assessment 라우트 응답에서 도달 가능한 스키마 집합 + 라우트 수."""
+    """`/v1/me` **전 라우트** 응답에서 도달 가능한 스키마 집합 + 라우트 수.
+
+    ASM-12 확장: 원래는 경로에 "assessment"가 든 라우트만 스캔했다 — 그 사각에서
+    `GET /v1/me/export`가 내부 정본 `Assessment`를 그대로 실어 나갔다(봉인 밖 두 번째
+    학생 표면). 이제 `/v1/me` 전체를 스캔한다.
+
+    ⚠ 알려진 맹점(이 스캔이 *구조적으로* 못 보는 것): `UserDataExport.data`는 무타입
+    `dict[str, list[dict]]`라 OpenAPI 컴포넌트 그래프에 행 스키마가 나타나지 않는다.
+    그 표면은 페이로드 검사(`tests/backend/privacy/test_export_prediction_sealing.py`)가
+    담당한다 — 스키마 스캔·페이로드 검사의 이중 가드다.
+    """
     openapi = create_app().openapi()
     roots: set[str] = set()
     route_count = 0
     for path, operations in openapi.get("paths", {}).items():
-        if not path.startswith(_STUDENT_PATH_PREFIX) or "assessment" not in path:
+        if not path.startswith(_STUDENT_PATH_PREFIX):
             continue
         for method, operation in operations.items():
             if method.lower() not in {"get", "post", "patch", "put", "delete"}:
