@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-05-university-content-mechanical-pattern-fix
+title: "대학 콘텐츠 기계적 생성 패턴 손질 — mnemonic '주의: <오개념 원문>' 409건 + 화살표 체인 explanation + review_status 스키마 드리프트"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - KG-02-concept-content-review-promotion
+requires_gates: []
+acceptance:
+  - "① flashcard mnemonic 409/409가 '주의: ' + 오개념 원문의 기계 복사임을 전수 실측 확인 후 처분 결정 — 틀린 문장을 암기카드에 반복 노출하는 설계는 교수학 위해(2026-08-13 감사). 제거·재작성·null화 중 근거 있는 처분을 택하고 판단 근거를 기록"
+  - "② explanation이 409/409 'A → B → C' 토픽 체인(설명 아닌 로드맵)임을 실측 고정하고, 재서술 방침을 결정 — 전량 재생성이면 생성 파이프라인 경로를, 보류면 KG-02 검수 워크플로에 편입을 명시"
+  - "③ 스키마 드리프트 해소: 대학 content.json에 review_status·standard_codes 필드 부재 — K-12와 동일 축을 갖추거나, 의도적 차이면 스키마·로더·문서에 자인 주석 (KG-02의 reviewed_only 소비 경로와 모순되지 않아야 함)"
+  - "④ _provenance.json 갱신 + 변경 전후 샘플 10건 수기 검산(수학 정확성은 현재 양호하므로 훼손 금지)"
+  - "⑤ 범위 밖: K-12 코퍼스(QUAL-06 소관), 카드 difficulty_tier 문자열 타입 정정(별도 관찰 필요 시 신규 등재)"
+artifacts: []
+paths:
+  - "data/corpus/concept_content_university_v1/**"
+  - "src/backend/whymath_backend/schema/**"
+session: null
+notes: "2026-08-13 감사 발견. 대학 콘텐츠 수학 정확성은 샘플 검산 통과(선형 ODE·제2동형정리·오일러 φ·블랙-숄즈 전부 정확) — 문제는 표현의 기계성뿐. KG-02(blocked) 해소 전 대량 재서술은 검수 없는 승격 위험이 있어 depends 처리."
+updated: 2026-08-13

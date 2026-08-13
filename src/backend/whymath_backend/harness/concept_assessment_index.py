@@ -151,6 +151,9 @@ class ConceptRow:
     standard_codes: tuple[str, ...]
     atom_codes: tuple[str, ...] = ()
     review_status: str | None = None
+    # 렌더 투영 입력은 아니다(`l3/render/dsl`이 의도적으로 매핑하지 않는 필드) — 코퍼스 감사
+    # (`harness/concept_content_audit`)가 크롤링 잔류 오염을 전수 스캔할 수 있게 적재만 한다.
+    explanation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +220,7 @@ def load_concepts(path: Path) -> list[ConceptRow]:
                     tuple(str(c) for c in raw_codes) if isinstance(raw_codes, (list, tuple)) else ()
                 ),
                 review_status=_opt_str(record.get("review_status")),
+                explanation=_opt_str(record.get("explanation")),
             )
         )
     rows.sort(key=lambda r: r.code)
