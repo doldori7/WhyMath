@@ -213,6 +213,10 @@ jobs:
         # 미니 DSL을 검증 대상으로 상정하지 않았을 가능성 — S3-28로 등재·Kiki 판정 대기). 이
         # 축이 해소되기 전까지 이 신규 게이트를 무음 실패시키지 않으면서도(리포트는 그대로
         # 남는다) 다른 PR의 CI를 막지 않는다. S3-28 완료 시 이 줄을 제거해 강제 게이트로 전환.
+        # OPS-29 강제 상태 선언(tests/infra/test_ci_enforcement_declaration_contract.py 계약)
+        # — 이 줄의 continue-on-error 실제 제거는 ARCH-23이 소유한다(S3-28은 ARCH-23의 선행
+        # 의존일 뿐 직접 소유자가 아니다):
+        # pending-task:ARCH-23-qa-gate-enforcement
         continue-on-error: true
         run: python -m whymath_backend.harness.qa_pipeline --json qa_report.json
 
@@ -957,6 +961,9 @@ jobs:
 
       - name: Shellcheck (warnings only, non-blocking)
         uses: ludeeus/action-shellcheck@master
+        # OPS-29 강제 상태 선언(tests/infra/test_ci_enforcement_declaration_contract.py 계약):
+        # by-design:severity=warning 전용 권고 린트다 — 스텝 이름 자체가 "non-blocking"으로 설계
+        # 의도를 명시하며, 애초에 PR을 막을 목적의 게이트가 아니라 참고용 경고 수집이다
         continue-on-error: true
         with:
           scandir: infra
