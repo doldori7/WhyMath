@@ -639,6 +639,25 @@ class Settings(BaseSettings):
             "액세스 토큰 TTL이 24시간이라 정상 리프레시는 드물게 일어나므로 30이면 여유롭다."
         ),
     )
+    # ── SEC-24(원 SEC-14): 신뢰 리버스 프록시 allowlist(X-Forwarded-For 위조 방지) ──
+    # `_client_ip`(api/_rate_limit.py)가 X-Forwarded-For를 신뢰할지 판단하는 근거. 여기 넣는
+    # IP는 *프록시 체인 중간의 아무 IP*가 아니라 "이 앱 서버에 직접 TCP 연결하는 리버스
+    # 프록시/로드밸런서의 IP" — 즉 `request.client.host`가 그 값과 일치해야 신뢰 체인이
+    # 시작된다(그래야 그 프록시가 실제로 설정한 XFF만 우측-신뢰 방식으로 읽는다). oauth_redirect_
+    # uri_allowlist(위)와 동일 패턴: 콤마 구분 원시값 필드 + 파싱 프로퍼티(`trusted_proxy_ips`).
+    trusted_proxy_ip_allowlist: str = Field(
+        default="",
+        description=(
+            "`X-Forwarded-For` 헤더를 신뢰할 리버스 프록시/로드밸런서 IP 화이트리스트(콤마 "
+            "구분). **이 앱 서버에 직접 TCP 연결하는 프록시의 IP**만 넣는다(`request.client.host` "
+            "가 이 값과 일치해야 함) — 체인 중간의 IP가 아니다. 비면 *전부 거부*(deny-by-default): "
+            "`_client_ip`가 X-Forwarded-For 헤더를 완전히 무시하고 `request.client.host`만 "
+            "쓴다(신뢰 프록시 미구성 상태의 안전한 기본 자세 — 위조된 XFF로 rate limit·감사 IP를 "
+            "속일 수 없다). 리버스 프록시 뒤에 배포할 때만 설정. 환경변수 "
+            "WHYMATH_TRUSTED_PROXY_IP_ALLOWLIST. 시크릿 아님(공개 IP). "
+            "파싱된 집합은 `trusted_proxy_ips` 프로퍼티 참조."
+        ),
+    )
     # ── RPT-01: 학생 결함 신고(무인증 표면) IP 단위 rate limit ──
     defect_report_rate_limit_ip_per_minute: int = Field(
         default=20,
@@ -1084,9 +1103,14 @@ class Settings(BaseSettings):
         default="rapid_latex",
         description=(
             "수식 인식 백엔드 좌석. `rapid_latex`(기본·Phase A)=rapid_latex_ocr(경량 ONNX). "
-            "`texteller`(Phase B 스텁)=transformers TexTeller(손글씨 강건·미배선). "
-            "`qwen_vl`(Phase C 스텁)=Qwen3-VL 멀티모달(*반드시 L3 라우터 경유*·Ollama 직접 호출 "
-            "금지·미배선). WHYMATH_OCR_RECOGNIZER_BACKEND로 조정."
+            "`texteller`(Phase C·실배선)=transformers TexTeller(손글씨 강건·extra [ocr-heavy]). "
+            "`qwen_vl`(Phase C·실배선·비동기 전용)=Qwen3-VL 멀티모달(*반드시 L3 라우터 경유*· "
+            "Ollama 직접 호출 금지 — factory가 provider/cache/trace를 주입하며 미주입이면 "
+            "RuntimeError). 셋 다 배선돼 있고 미검증인 것은 *구현*이 아니라 *라이브 정확도*다 "
+            "(2026-08-04 nlp_module_gap_review_r2.md §1-② 정정 — 이 설명이 texteller·qwen_vl을 "
+            "'스텁·미배선'이라 기술해 실제보다 못하다고 말하던 stale을 바로잡았다. 근거: "
+            "l5/ocr/factory.py `_build_recognizer` · l5/ocr/recognize.py `TexTellerRecognizer`/ "
+            "`QwenVlRecognizer`). WHYMATH_OCR_RECOGNIZER_BACKEND로 조정."
         ),
     )
     ocr_detector: Literal["paddle", "mfd"] = Field(
@@ -1280,6 +1304,16 @@ class Settings(BaseSettings):
         이 리스트에 없는 redirect_uri를 400으로 거절한다.
         """
         return [u.strip() for u in self.oauth_redirect_uri_allowlist.split(",") if u.strip()]
+
+    @property
+    def trusted_proxy_ips(self) -> frozenset[str]:
+        """`trusted_proxy_ip_allowlist`(콤마 구분 원시값)를 파싱한 집합(공백 제거·빈 항목 제외).
+
+        빈 집합이면 deny-by-default(신뢰 프록시 없음) — `_client_ip`(api/_rate_limit.py)가
+        `X-Forwarded-For`를 완전히 무시하고 `request.client.host`만 쓴다. 순서 무관이라
+        리스트가 아닌 `frozenset`(정확한 문자열 일치만 지원 — CIDR·IPv6 정규화는 후속).
+        """
+        return frozenset(u.strip() for u in self.trusted_proxy_ip_allowlist.split(",") if u.strip())
 
     @property
     def production_like(self) -> bool:

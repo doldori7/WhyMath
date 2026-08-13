@@ -44,6 +44,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     Persona,
     ReviewStatus,
+    Role,
     SignaturePattern,
     SourceType,
     Subject,
@@ -87,7 +88,11 @@ async def _pg_reachable() -> bool:
 
 
 async def _add_adult_user(uid: uuid.UUID, *, birth_year: int) -> None:
-    """성인 유저 시딩 — is_minor=False로 ConsentedUser 게이트 통과(동의 불요·미성년 회피)."""
+    """성인 유저 시딩 — is_minor=False로 ConsentedUser 게이트 통과(동의 불요·미성년 회피).
+
+    SEC-24(원 SEC-13): 이 유저가 흐름 끝에서 `/v1/me/harness-metrics`(RequireContentAdmin)도 호출하므로
+    role=CONTENT_ADMIN으로 시드한다 — role은 그 라우트 게이트 외 학습 흐름 어디에도 영향 없다.
+    """
     engine = create_async_engine(_settings().database_url)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
@@ -98,6 +103,7 @@ async def _add_adult_user(uid: uuid.UUID, *, birth_year: int) -> None:
                         persona_primary=Persona.A_일반고고3,
                         birth_year=birth_year,
                         is_minor=False,
+                        role=Role.CONTENT_ADMIN,
                     )
                 )
             )
