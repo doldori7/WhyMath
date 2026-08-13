@@ -10,7 +10,11 @@ Pydantic 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(`ncic/models.py
   - `ConfigDict(extra="forbid", use_enum_values=True, str_strip_whitespace=True)`.
   - enum은 `enums.py`의 `class X(str, Enum)`.
   - 불변식은 `@model_validator(mode="after")`.
-  - 공유 베이스 클래스 없음(각 모델 독립).
+  - 공유 베이스 클래스 없음(각 모델 독립) — 단 하나의 예외가 SEC-24(원 SEC-15) 공개
+    투영이다: `PublicProblem`(공개·학생 대면 기반) ⊂ `Problem`(내부 정본·정답류 6필드
+    추가), `PublicProblemStep` ⊂ `ProblemStep`(기대답·흔한실수·흔한오류 3필드 추가).
+    방향이 허용목록을 만든다(`schema/assessment.py` `StudentAssessment` ⊂ `Assessment`·
+    ASM-07 선례 동형).
 
 타입 매핑 판단(DDL → Pydantic):
   - `UUID PK` → `uuid.UUID = Field(default_factory=uuid4)`
@@ -63,6 +67,42 @@ _METADATA_ONLY_SOURCES: frozenset[SourceType] = frozenset(
 `source_detail`/`ebs_source`에 단원·코드·문항번호만 둔다. 학생에게 노출·저장되는
 실제 본문은 `SourceType.자체생성`(WHYMATH_GENERATED) 레코드만 가질 수 있다.
 """
+
+# ──────────────────────────────────────────────────────────────────────────
+# SEC-24(원 SEC-15) — 공개(무인증·학생 대면) 응답에서 **키 자체가 없어야 하는** 정답류 필드
+# (`functional_security_audit_2026-08-08.md` M1 · 저작권 강제-비움과는 독립 축)
+# ──────────────────────────────────────────────────────────────────────────
+#: 공개 투영(`PublicProblem`)에 자리가 없는 `Problem`의 정답류 필드 — 거버넌스 테스트
+#: (`tests/backend/api/test_problems_public_projection.py`)가 함께 읽는 단일 진실 원천.
+#: `answer`·`answer_explanation`·`distractor_map`은 감사 M1이 지목한 직접 노출이고,
+#: `multiple_answers`(복수 정답 후보 자유형)·`answer_transform`(예: {"p":3,"q":5} — 정답
+#: 성분 직접 포함)·`answer_constraint`(자유형 제약 — min==max 등으로 정답 유도 가능)는
+#: 전 필드 실사에서 추가로 판정한 *정답 유도 가능* 필드다. 공식 Flutter 클라의 안전
+#: 주석(`problem_models.dart` — answer 계열 5필드 의도적 미선언)과도 정합.
+PUBLIC_HIDDEN_ANSWER_FIELDS: frozenset[str] = frozenset(
+    {
+        "answer",
+        "answer_explanation",
+        "distractor_map",
+        "multiple_answers",
+        "answer_transform",
+        "answer_constraint",
+    }
+)
+
+#: 공개 투영(`PublicProblemStep`)에 자리가 없는 `ProblemStep`의 정답·힌트류 필드.
+#: `expected_answer`는 단계별 정답(S4-09 승격 어댑터가 `SolutionStep.content`를 여기 싣는다)
+#: 이고, `common_mistakes`는 [{"error","hint"}] 힌트류라 사전 일괄 노출이 Polya 단계별 제공
+#: 원칙·오개념 reactive retrieval(preload 금지)과 상충한다 — 코치(L4)가 서버 내부에서
+#: 반응적으로만 쓴다. `common_errors`(S4-09 additive)는 같은 축의 오개념 서술 목록이라
+#: 이식 시 함께 비공개로 판정했다(허용목록 원칙: 새 필드는 기본 비공개 쪽에 둔다).
+PUBLIC_HIDDEN_STEP_ANSWER_FIELDS: frozenset[str] = frozenset(
+    {
+        "expected_answer",
+        "common_mistakes",
+        "common_errors",
+    }
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -140,28 +180,29 @@ class DistractorEntry(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 핵심: Problem (§3.1 problem 테이블)
+# 공개 투영: PublicProblem (SEC-24(원 SEC-15) — 무인증·학생 대면 응답 정본)
 # ──────────────────────────────────────────────────────────────────────────
-class Problem(BaseModel):
-    """단일 문제 — §3.1 `problem` 테이블(50+ 메타데이터). WhyMath 최중요 단일 모델.
+class PublicProblem(BaseModel):
+    """문제의 **공개(무인증·학생 대면) 응답 정본** — 정답류 필드에 자리가 없다(SEC-24).
 
-    법적 교정 불변식(MEMORY 2026-05-28, `@model_validator(mode="after")`로 강제):
-      평가원·EBS·검정교과서는 *본문·문항 미보유*(상업 영리금지, 저작권 가이드 v2.0
-      §32 단서). 따라서 `source_type ∈ {평가원, EBS, 교과서}`이면
-      `question_text`·`answer_explanation`·`choices`가 *반드시 비어 있어야* 한다
-      (있으면 ValueError → ValidationError). 이 출처 레코드는 구조 메타데이터 참조
-      전용이며 `source_detail`/`ebs_source`에 단원·코드·문항번호만 둔다.
+    `Problem`(내부 정본)에서 정답류(`PUBLIC_HIDDEN_ANSWER_FIELDS` 6종)를 **뺀 것이
+    아니라**, 이쪽이 기반이고 `Problem`이 그 6필드를 *더한다*. 방향이 중요하다 —
+    나중에 누가 `Problem`에 새 정답류 필드를 붙여도 공개 응답에는 자동으로 새지
+    않는다(허용목록이지 차단목록이 아니다 · `schema/assessment.py` `StudentAssessment`
+    ⊂ `Assessment` ASM-07 선례 동형).
 
-      *왜*: 검정 교과서·평가원·EBS 본문의 복제·영리이용은 저작권법 §32 단서·§136·
-      §140(영리 비친고죄)로 금지된다. 학생에게 노출·저장되는 실제 문제는
-      `source_type=자체생성`(WHYMATH_GENERATED)이며 자체 `question_text`를 가진다.
+    **왜 런타임 필터가 아닌가**: `response_model_exclude` 같은 필터는 데코레이터 인자
+    한 줄이 빠지면 조용히 무력화되고 OpenAPI 광고도 계속된다. 필터는 꺼질 수 있으나
+    *필드의 부재*는 꺼지지 않는다(`PED-08` 노출 계약 ③ 선례 — 키 부재가 계약).
 
-      (license/generation_type 강제는 ContentProvenance = 슬라이스 2 소관. 이 모델은
-      Problem 본문 규칙만 강제한다.)
-
-    DDL의 `question_text`·`answer`는 `NOT NULL`이지만, 본문 미보유 출처의 *메타 전용*
-    레코드를 표현하려면 이들이 비어 있을 수 있어야 하므로 Pydantic에서는 Optional로
-    완화한다(법적 교정과 정합). 실제 본문 레코드(자체생성)는 `question_text`를 채운다.
+    **사고 경위**(`docs/reviews/functional_security_audit_2026-08-08.md` M1): SEC-07
+    D1은 문항 *본문·메타*의 공개 카탈로그 결정이었지 정답 동봉 결정이 아니었는데,
+    저작권 강제-비움(`_METADATA_ONLY_SOURCES`)이 평가원/EBS/교과서 *본문*만 다뤄
+    자체생성 문항의 `answer` 등이 무인증 GET에 그대로 나가고 있었다(의도가 아니라
+    누락). "막혔을 때 바로 정답 제공 금지"(CLAUDE.md 절대 금기·우선순위 #3 교수학 ≫
+    #5 UX)의 기계적 집행이 이 모델이다. **재량 판단 명시**: 닫는 것은 가역이다 —
+    Kiki가 D1을 정답까지 공개로 확장하기로 결정하면 라우터의 response_model을 되돌리면
+    된다(여는 것은 상시 위험이라 안전측으로 닫았다).
     """
 
     model_config = ConfigDict(
@@ -172,6 +213,15 @@ class Problem(BaseModel):
         # 문자열 양끝 공백 제거
         str_strip_whitespace=True,
     )
+
+    @classmethod
+    def from_problem(cls, problem: Problem) -> PublicProblem:
+        """내부 정본 → 공개 투영. 정답류 필드는 애초에 대상 모델에 자리가 없다.
+
+        `model_dump(exclude=...)` 후 재검증 — 값이 채워진 내부 정본을 넣어도 정답류는
+        변환에서 구조적으로 사라진다(ASM-07 `from_assessment` 동형).
+        """
+        return cls.model_validate(problem.model_dump(exclude=set(PUBLIC_HIDDEN_ANSWER_FIELDS)))
 
     # ===== 기본 식별 =====
     problem_id: uuid.UUID = Field(
@@ -278,17 +328,12 @@ class Problem(BaseModel):
         default=None,
         description="채점 유형 — 정오답/진단/부분점수/시간/루브릭",
     )
-    answer_constraint: dict[str, Any] | None = Field(
-        default=None,
-        description='정답 제약 {"min":1,"max":999,"is_natural":true} 등(자유형 JSONB)',
-    )
-    answer_transform: dict[str, Any] | None = Field(
-        default=None,
-        description='자연수 답 변환 패턴 {"type":"p_plus_q","p":3,"q":5} 등(자유형 JSONB)',
-    )
+    # (answer_constraint·answer_transform은 정답 유도 가능 필드 — Problem 서브클래스로 이동,
+    #  SEC-24(원 SEC-15) `PUBLIC_HIDDEN_ANSWER_FIELDS` 참조)
 
-    # ===== 본문·풀이·정답 =====
-    # 법적 교정: 평가원/EBS/교과서 출처면 question_text/answer_explanation/choices는 비어야 함.
+    # ===== 본문(공개 가능 축) =====
+    # 법적 교정: 평가원/EBS/교과서 출처면 question_text/answer_explanation/choices는 비어야 함
+    # (불변식은 Problem 서브클래스의 validator가 강제 — answer_explanation이 그쪽에 있으므로).
     question_text: str | None = Field(
         default=None,
         description="발문 원문(자체생성만 보유; 평가원/EBS/교과서는 비어야 함)",
@@ -305,30 +350,8 @@ class Problem(BaseModel):
         default=None,
         description="객관식 보기(자체생성만; 평가원/EBS/교과서는 비어야 함)",
     )
-    answer: str | None = Field(
-        default=None,
-        description="정답(자체생성만 본문 보유; 메타 전용 레코드는 비움)",
-    )
-    answer_explanation: str | None = Field(
-        default=None,
-        description="공식 해설(자체생성만; 평가원/EBS/교과서는 비어야 함)",
-    )
-    multiple_answers: dict[str, Any] | None = Field(
-        default=None,
-        description="복수해 가능성(출제오류 검증, 자유형 JSONB)",
-    )
-    # P3b 신규: 객관식 오답 선지 → 오개념 코드 매핑(rich list). 정답 선지는 제외하고 *오답*만
-    # 싣는다. 각 원소는 (choice_index, misconception_id, op_code?). misconception_id는 정본
-    # CATALOG_BY_ID의 id, op_code는 선택(추상 오류연산·평가원/EBS 본문 복제 아님). L1은 구조만
-    # 검증하고, 카탈로그 실재·op_code 정합의 *참조 무결성*은 L4 검증자(validate_distractor_map)
-    # 소관이다(역방향 의존 금지 — schema는 l4를 import하지 않음). NULL=미매핑(점진 채움).
-    distractor_map: list[DistractorEntry] | None = Field(
-        default=None,
-        description=(
-            "객관식 오답 선지→오개념코드 매핑(rich list). 정답 선지 제외·오답만. 각 원소 "
-            "(choice_index·misconception_id=CATALOG_BY_ID id·op_code 선택). 참조 무결성은 L4 검증."
-        ),
-    )
+    # (answer·answer_explanation·multiple_answers·distractor_map은 정답류 —
+    #  Problem 서브클래스로 이동, SEC-24(원 SEC-15) `PUBLIC_HIDDEN_ANSWER_FIELDS` 참조)
 
     # ===== 한국 시그니처 패턴 =====
     signature_patterns: list[SignaturePattern] = Field(
@@ -605,6 +628,81 @@ class Problem(BaseModel):
         le=5.0,
     )
 
+
+# ──────────────────────────────────────────────────────────────────────────
+# 핵심: Problem (§3.1 problem 테이블) — 내부 정본 = 공개 투영 + 정답류 6필드
+# ──────────────────────────────────────────────────────────────────────────
+class Problem(PublicProblem):
+    """단일 문제 — §3.1 `problem` 테이블(50+ 메타데이터). WhyMath 최중요 단일 모델.
+
+    **내부·영속 정본**이다. 무인증·학생 대면 응답에는 이 모델을 쓰지 않는다 —
+    `PublicProblem`을 쓴다(SEC-24(원 SEC-15) · 정답류 6필드는 이 서브클래스만 가진다).
+
+    법적 교정 불변식(MEMORY 2026-05-28, `@model_validator(mode="after")`로 강제):
+      평가원·EBS·검정교과서는 *본문·문항 미보유*(상업 영리금지, 저작권 가이드 v2.0
+      §32 단서). 따라서 `source_type ∈ {평가원, EBS, 교과서}`이면
+      `question_text`·`answer_explanation`·`choices`가 *반드시 비어 있어야* 한다
+      (있으면 ValueError → ValidationError). 이 출처 레코드는 구조 메타데이터 참조
+      전용이며 `source_detail`/`ebs_source`에 단원·코드·문항번호만 둔다.
+
+      *왜*: 검정 교과서·평가원·EBS 본문의 복제·영리이용은 저작권법 §32 단서·§136·
+      §140(영리 비친고죄)로 금지된다. 학생에게 노출·저장되는 실제 문제는
+      `source_type=자체생성`(WHYMATH_GENERATED)이며 자체 `question_text`를 가진다.
+
+      (license/generation_type 강제는 ContentProvenance = 슬라이스 2 소관. 이 모델은
+      Problem 본문 규칙만 강제한다. SEC-24 정답류 비노출은 이 저작권 축과 *독립* —
+      저작권 축은 "무엇을 저장하면 안 되는가", SEC-24는 "저장한 것 중 무엇을 공개
+      응답에 싣지 않는가"다.)
+
+    DDL의 `question_text`·`answer`는 `NOT NULL`이지만, 본문 미보유 출처의 *메타 전용*
+    레코드를 표현하려면 이들이 비어 있을 수 있어야 하므로 Pydantic에서는 Optional로
+    완화한다(법적 교정과 정합). 실제 본문 레코드(자체생성)는 `question_text`를 채운다.
+    """
+
+    model_config = ConfigDict(
+        # 추가 필드 금지 — Pydantic 모델이 스키마의 단일 진실
+        extra="forbid",
+        # 직렬화 시 enum 값을 그대로(한글 값 보존)
+        use_enum_values=True,
+        # 문자열 양끝 공백 제거
+        str_strip_whitespace=True,
+    )
+
+    # ===== 정답·풀이(내부 정본 전용 — SEC-24 PUBLIC_HIDDEN_ANSWER_FIELDS) =====
+    answer_constraint: dict[str, Any] | None = Field(
+        default=None,
+        description='정답 제약 {"min":1,"max":999,"is_natural":true} 등(자유형 JSONB)',
+    )
+    answer_transform: dict[str, Any] | None = Field(
+        default=None,
+        description='자연수 답 변환 패턴 {"type":"p_plus_q","p":3,"q":5} 등(자유형 JSONB)',
+    )
+    answer: str | None = Field(
+        default=None,
+        description="정답(자체생성만 본문 보유; 메타 전용 레코드는 비움)",
+    )
+    answer_explanation: str | None = Field(
+        default=None,
+        description="공식 해설(자체생성만; 평가원/EBS/교과서는 비어야 함)",
+    )
+    multiple_answers: dict[str, Any] | None = Field(
+        default=None,
+        description="복수해 가능성(출제오류 검증, 자유형 JSONB)",
+    )
+    # P3b 신규: 객관식 오답 선지 → 오개념 코드 매핑(rich list). 정답 선지는 제외하고 *오답*만
+    # 싣는다. 각 원소는 (choice_index, misconception_id, op_code?). misconception_id는 정본
+    # CATALOG_BY_ID의 id, op_code는 선택(추상 오류연산·평가원/EBS 본문 복제 아님). L1은 구조만
+    # 검증하고, 카탈로그 실재·op_code 정합의 *참조 무결성*은 L4 검증자(validate_distractor_map)
+    # 소관이다(역방향 의존 금지 — schema는 l4를 import하지 않음). NULL=미매핑(점진 채움).
+    # 오답 선지의 *여집합*이 정답 선지를 드러내므로 정답류로 분류(SEC-24 감사 M1).
+    distractor_map: list[DistractorEntry] | None = Field(
+        default=None,
+        description=(
+            "객관식 오답 선지→오개념코드 매핑(rich list). 정답 선지 제외·오답만. 각 원소 "
+            "(choice_index·misconception_id=CATALOG_BY_ID id·op_code 선택). 참조 무결성은 L4 검증."
+        ),
+    )
+
     # ── 불변식 ────────────────────────────────────────────────────
     @model_validator(mode="after")
     def _enforce_copyright_no_body_for_metadata_sources(self) -> Problem:
@@ -657,17 +755,17 @@ class Problem(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 보조: ProblemStep (§3.2 problem_step)
+# 공개 투영: PublicProblemStep (SEC-24(원 SEC-15)) + 보조: ProblemStep (§3.2 problem_step)
 # ──────────────────────────────────────────────────────────────────────────
-class ProblemStep(BaseModel):
-    """문항 풀이 단계 — §3.2 `problem_step`(Socratic 코칭 시 사용).
+class PublicProblemStep(BaseModel):
+    """풀이 단계의 **공개(무인증·학생 대면) 응답 정본** — 기대답·힌트류에 자리가 없다.
 
-    `UNIQUE(problem_id, step_order)` — 한 문제 안에서 step_order는 유일(런타임/DB
-    제약; 단일 모델 레벨에서는 표현하지 않음).
-
-    S4-09(D1) additive 필드 6종: SolutionPath 실체화(`l3/solution_path.py`)의 단계가
-    `problem_step`에 영속되면서 이 스키마로 서빙된다(`GET /v1/problems/{id}/steps`).
-    전부 기본 None(선택)이라 기존 필드 제거·의미 변경 0 — 기존 소비자 호환 유지.
+    `ProblemStep`(내부 정본)이 이 기반에 `PUBLIC_HIDDEN_STEP_ANSWER_FIELDS` 3필드
+    (`expected_answer`·`common_mistakes`·`common_errors`)를 *더한다*(`PublicProblem` ⊂
+    `Problem`과 동일 방향·SEC-24). `socratic_prompt`는 답을 제공하지 않는 교수학 발문이라
+    공개 유지. S4-09(D1) additive 중 구조 메타 축(`solution_path_id`·`concept_node_id`·
+    `reasoning_type`·`justification`·`sympy_verified`)도 정답을 드러내지 않으므로 공개
+    유지 — 단계 *내용*이 실리는 `expected_answer`만 내부 정본으로 남는다.
     """
 
     model_config = ConfigDict(
@@ -675,6 +773,11 @@ class ProblemStep(BaseModel):
         use_enum_values=True,
         str_strip_whitespace=True,
     )
+
+    @classmethod
+    def from_step(cls, step: ProblemStep) -> PublicProblemStep:
+        """내부 정본 → 공개 투영. 기대답·흔한실수/오류는 애초에 대상 모델에 자리가 없다."""
+        return cls.model_validate(step.model_dump(exclude=set(PUBLIC_HIDDEN_STEP_ANSWER_FIELDS)))
 
     step_id: uuid.UUID = Field(default_factory=uuid4, description="단계 PK (UUID)")
     problem_id: uuid.UUID = Field(..., description="소속 문제 FK")
@@ -692,16 +795,8 @@ class ProblemStep(BaseModel):
         default=None,
         description="소크라테스 발문 (예: '조건 (가)를 수식으로 표현해보세요')",
     )
-    expected_answer: str | None = Field(
-        default=None,
-        description="이 단계의 기대 답",
-    )
-    common_mistakes: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description='흔한 실수 목록 [{"error":"...","hint":"..."}](자유형 JSONB)',
-    )
 
-    # ===== S4-09(D1) additive — SolutionPath 단계 실체화(전부 선택·기본 None·비파괴) =====
+    # ===== S4-09(D1) additive 중 구조 메타 축(공개 유지 — 정답 비노출) =====
     solution_path_id: str | None = Field(
         default=None,
         description="소속 풀이 경로 ID(`solution_paths` FK). None=경로 미소속(레거시 단계).",
@@ -726,18 +821,48 @@ class ProblemStep(BaseModel):
             "dict로 통과시킨다."
         ),
     )
-    common_errors: list[str] | None = Field(
-        default=None,
-        description=(
-            "이 단계의 흔한 오류(오개념 카탈로그 코드/패턴 서술) — yaml SolutionStep."
-            "common_errors 1:1 좌석. 기존 common_mistakes(자유형 dict 리스트)와 별개 축."
-        ),
-    )
     sympy_verified: bool | None = Field(
         default=None,
         description=(
             "SymPy 자동 검증 통과 여부(WH-S 승계 시 직전 스텝→이 스텝 전이 Tier2 correct). "
             "None=미판정(레거시 단계)."
+        ),
+    )
+
+
+class ProblemStep(PublicProblemStep):
+    """문항 풀이 단계 — §3.2 `problem_step`(Socratic 코칭 시 사용). **내부 정본**.
+
+    `UNIQUE(problem_id, step_order)` — 한 문제 안에서 step_order는 유일(런타임/DB
+    제약; 단일 모델 레벨에서는 표현하지 않음). 무인증 steps 응답에는 이 모델을 쓰지
+    않는다 — `PublicProblemStep`을 쓴다(SEC-24(원 SEC-15)).
+
+    S4-09(D1) additive 필드 6종: SolutionPath 실체화(`l3/solution_path.py`)의 단계가
+    `problem_step`에 영속되면서 이 스키마로 서빙된다. 전부 기본 None(선택)이라 기존 필드
+    제거·의미 변경 0 — 기존 소비자 호환 유지. 단 그중 `common_errors`는 SEC-24 공개 투영
+    경계에서 내부 정본 쪽(비공개)에 둔다(오개념 preload 금지 축).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    # ===== 기대답·힌트류(내부 정본 전용 — SEC-24 PUBLIC_HIDDEN_STEP_ANSWER_FIELDS) =====
+    expected_answer: str | None = Field(
+        default=None,
+        description="이 단계의 기대 답",
+    )
+    common_mistakes: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description='흔한 실수 목록 [{"error":"...","hint":"..."}](자유형 JSONB)',
+    )
+    common_errors: list[str] | None = Field(
+        default=None,
+        description=(
+            "이 단계의 흔한 오류(오개념 카탈로그 코드/패턴 서술) — yaml SolutionStep."
+            "common_errors 1:1 좌석. 기존 common_mistakes(자유형 dict 리스트)와 별개 축."
         ),
     )
 

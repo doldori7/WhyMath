@@ -865,6 +865,13 @@ _MANUAL_COMPARISON_TOOL = (
     "by-design:후보 모델 결선용 수동 비교 도구 — 상시 게이트가 아니라 승격 판정 시점에 사람이 "
     "돌린다"
 )
+_CORPUS_AUTHORING_WRITER = (
+    "by-design:코퍼스 저작 도구(리포 데이터 기록기) — 사람이 새 코퍼스를 만들 때 출처·라이선스를 "
+    "입력해 사이드카를 쓴다. 입력(pool·서지 문구)이 사람의 법적 판단이라 자동화 대상이 아니고, "
+    "CI가 리포 데이터를 재작성하면 안 되므로(OPS-24 판정 선례: 백필은 변이형이 아니라 --check "
+    "드리프트 가드로 배선) 상시 실행 대상도 아니다. 이 도구의 산출물은 별도로 배선된 게이트"
+    "(`ops.provenance_audit`, ci.yml)가 상시 검사한다"
+)
 _PRIVILEGE_ESCALATION_CLI = (
     "by-design:권한 상승 경로 — HTTP 미노출이 설계 확정값이다(operations_platform_gap_review.md "
     "§3 D1: 관리자 HTTP API·콘솔 UI는 범위 밖). 즉 '미도달'이 결함이 아니라 *의도한 봉인*이다 — "
@@ -908,6 +915,12 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
         # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
         # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
+        # SEC-24(원 SEC-15) 이식 메모: 원 브랜치는 이 4건을 "PB-04 도달 관측 테스트가 6경로를
+        # 전부 호출하므로 stale"이라며 제거했으나, PB-04(`api/_l6_mode_reach_state.py`)는 main에
+        # 미착지라 그 전제가 성립하지 않는다. `test_gating.py`가 6경로를 다 부르긴 하지만
+        # 수신자가 `_client([...]).get(...)` 형태(호출식)라 감사기의 리터럴 정규식
+        # (`_TEST_CLIENT_CALL` — 식별자 수신자만 매칭)이 못 본다 — 실측으로 여전히 unclassified.
+        # 따라서 면제를 유지한다(제거하면 감사 exit 1).
         "GET /v1/gating/gifted": _INTERNAL_TOOL,
         "GET /v1/gating/metacognition": _INTERNAL_TOOL,
         "GET /v1/gating/suneung": _INTERNAL_TOOL,
@@ -1014,6 +1027,11 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.problem_duplication_audit": _OFFLINE_REPORT,
         "harness.visualization_reach_report": _OFFLINE_REPORT,
         "harness.concept_reach_report": _OFFLINE_REPORT,
+        # KG-03(2026-08-11): 공식 축 도달 관측 — concept_reach_report와 동일 성격(정적 스캔·
+        # DB 0·게이트 아님). 판정 소비처는 tests/backend/harness/test_formula_reach_report.py
+        # (backend 잡 testpaths가 수집)이며 전용 CI 잡은 의도적으로 신설하지 않았다 —
+        # concept-reach(OPS-23)와 달리 mobile-only PR 회귀 가드가 아니라 관측 리포트다.
+        "harness.formula_reach_report": _OFFLINE_REPORT,
         "harness.assessment_seat_reach_report": _OFFLINE_REPORT,
         "harness.recommendation_outcome_report": _OFFLINE_REPORT,
         "harness.learning_path_orderability_report": _OFFLINE_REPORT,
@@ -1042,6 +1060,10 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "ops.repeat_recommendation_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
         "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
+        # PB-11(2026-08-11): 코퍼스 사이드카 생성·갱신 저작 CLI. `ops.provenance_audit`이 집행하는
+        # 계약을 만족하는 파일을 만들어 주는 도구가 저장소에 0개였던 부재를 메운다 — 저자가 손으로
+        # 돌리는 쓰기 도구이므로 CI 상시 실행 대상이 아니다(사유 상수 참조).
+        "ops.corpus_provenance_sidecar": _CORPUS_AUTHORING_WRITER,
         "harness.agreement_gate_cli": _MANUAL_COMPARISON_TOOL,
         # S4-16(진행 중) 산출물 — 게이트 승격 조건 측정 도구, 승격 전까지는 CI 상시 배선 대상
         # 아님(LLM K=3 교차검증 라이브 의존)
