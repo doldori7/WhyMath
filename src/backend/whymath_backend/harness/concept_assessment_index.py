@@ -21,13 +21,38 @@
 
 "검증 통과"의 정의는 **추측하지 않고 저장소 정본을 재사용**한다 —
 `harness/corpus_reverify._reverify_one`(Tier1+근선택+Tier2+개념형 디스패치)이 'pass'를 낸 문항만
-후보다. 그 위에 두 겹을 더 얹는다:
+후보다. 그 위에 겹을 더 얹는다:
   · `answer_map` 비어 있지 않음 — `ConceptAssessment`의 불변식(빈 검증의 통과 위장 금지).
   · `verify_answer(conditions, answer_map)`가 pass — 렌더 시점에 어댑터가 *정확히 이 호출*을 하므로
     (`l3/render/adapters._assessment_signal`), 여기서 통과하지 못하는 재료를 넣으면 런타임에
     RENDER_UNVERIFIED로 미끄러진다. 근 집계(Vieta)·개념형(개수/판정) 문항이 이 겹에서 걸린다.
   · 저작권 위생 — `source_type=자체생성` + `license=WHYMATH_GENERATED`만(타 출처 본문 상속 금지).
+  · **검수 통과** — `review_status == approved`만(아래 참조).
 각 겹에서 몇 건이 탈락했는지 리포트에 남긴다(필터가 살아 있는지 관측 가능).
+
+────────────────────────────────────────────────────────────────────────────
+검수 축(CONT-01) — 판정 권위를 L6와 공유하는 방식
+────────────────────────────────────────────────────────────────────────────
+`PB-03`은 검수를 **fail-closed 노출 게이트**로 만들어 L6 6모드·`l6/blueprint/assembly.py`·기본
+CAT(`api/me.py`)에 배선했다. 그런데 `S3-26`이 만든 *두 번째* 학생 노출 경로(`/study`의 개념 평가
+재료 주입)는 이 인덱스를 경유하므로, 이 필터에 검수 축이 없으면 **같은 문항이 L6에서는 차단되고
+/study에서는 통과**하는 비대칭이 생긴다(정본화≠집행 계열의 재발형). 그래서 여기에 같은 축을 건다.
+
+**판정 권위 단일화 — 채택한 방법과 근거**: `l6/_shared.is_review_cleared`는 `Problem`(pydantic)
+인스턴스를 받는데 이쪽 입력은 빌드타임 JSONL dict라 그 함수를 직접 재사용할 수 없다. dict를
+`Problem`으로 구성해 부르는 방법도 있으나, 코퍼스 2,600여 행마다 전체 검증기를 태우는 비용과
+*이 도구가 문항 스키마 전체에 결합*되는 부작용을 산다. 따라서 **판정 헬퍼를 값 수준으로 승격**해
+공유한다 — `schema/enums.py::is_review_status_cleared`(L1)가 "어떤 값이 검수 통과인가"의 유일한
+정의이고, `is_review_cleared`는 그 위의 `Problem` 어댑터, 이 모듈은 dict 값을 그대로 넘긴다.
+문자열 리터럴 `"approved"`를 이 파일에 새로 적지 않는다(기준 이원화 금지).
+
+**합치지 않는 두 축**: 저작권 위생(법적 축, `is_exposable` 대응)과 검수(운영 축)는 PB-03이
+의도적으로 분리한 설계다. 여기서도 **각각 독립된 `if`·독립된 drop 사유**로 둔다 — 합치면 운영
+사유로 법적 게이트를 느슨하게 하는 압력이 생기고, 리포트에서 어느 축이 걸렀는지도 사라진다.
+
+7계층 메모: 이 모듈은 `schema.enums`(L1의 순수 enum 모듈 — `from enum import Enum` 외 의존 0)만
+추가로 import한다. **ORM·세션·L6를 import하지 않는다** — 런타임 소비처
+(`l3/render/assessment_bank.py`)의 "DB·ORM·LLM·네트워크 미접촉" 계약과 같은 자세를 유지한다.
 
 사용:
     python -m whymath_backend.harness.concept_assessment_index                    # 리포트만
@@ -51,6 +76,10 @@ from whymath_backend.l3.render.dsl import ConceptAssessment, ConceptDSL, from_co
 from whymath_backend.l3.render.registry import get_adapter, registered_strategies
 from whymath_backend.l3.verify_answer import verify_answer
 from whymath_backend.l4.content_supply import SupplyTally
+
+# 검수 판정의 단일 권위(CONT-01) — `l6/_shared.is_review_cleared`가 같은 함수를 쓴다.
+# 문자열 "approved"를 이 파일에 다시 적지 않기 위한 import다(기준 이원화 금지).
+from whymath_backend.schema.enums import is_review_status_cleared
 
 _EXIT_OK = 0
 _EXIT_GATE_FAIL = 1
@@ -81,6 +110,13 @@ _AXIS_PRIORITY: dict[str, int] = {AXIS_CONCEPT_SRC_ID: 0, AXIS_STANDARD_CODE: 1}
 
 # 탈락 사유 — 필터가 실제로 무엇을 걸렀는지 리포트에 드러내기 위한 집계 키.
 DROP_NOT_OWN_LICENSE = "NOT_OWN_LICENSE"
+DROP_NOT_REVIEW_CLEARED = "NOT_REVIEW_CLEARED"
+"""검수 미통과(`review_status != approved`) — 저작권 축과 **별개 키**다(CONT-01).
+
+법적 축(`NOT_OWN_LICENSE`)과 한 키로 묶지 않는 이유: 묶으면 리포트에서 "저작권 때문에 빠졌다"와
+"검수 대기라 빠졌다"가 구분되지 않아, 검수 백필로 해소될 건과 영구 차단 건이 같은 숫자에 섞인다.
+"""
+
 DROP_REVERIFY_NOT_PASS = "REVERIFY_NOT_PASS"
 DROP_EMPTY_ANSWER_MAP = "EMPTY_ANSWER_MAP"
 DROP_TIER1_NOT_PASS = "TIER1_NOT_PASS"
@@ -95,6 +131,13 @@ class ConceptRow:
 
     `from_concept_content(row)`가 `Any`를 받고 속성만 읽으므로(db-free 불변식), 이 값객체를 그대로
     넘겨 실제 렌더 경로를 재현할 수 있다 — 리포트가 "코퍼스에서 렌더까지"를 진짜로 통과시킨다.
+
+    ⚠️ **이름 충돌 주의(CONT-01)**: 아래 `review_status`는 *개념 콘텐츠 코퍼스*의 축이고 실측 값은
+    전 행 `ai_estimated`다. CONT-01이 건 검수 게이트가 보는 것은 이 축이 **아니라** *문항 코퍼스*의
+    `review_status`(`ReviewStatus` enum — pending/approved/rejected)이며, 그 판정은
+    `eligible_problem_refs`에서 문항 레코드에 대해 이뤄진다. 이름이 같고 값집합이 달라 혼동하기
+    쉬우므로, 개념 축을 문항 검수 게이트로 오용하지 않는다(값집합이 애초에 겹치지 않아 그렇게 하면
+    전 개념이 fail-closed로 사라진다).
     """
 
     code: str
@@ -208,15 +251,20 @@ def eligible_problem_refs(
 ) -> tuple[list[ProblemRef], Counter[str], int]:
     """문항 코퍼스 전수 → 상속 가능 후보 목록 + 탈락 사유 집계 + 총 스캔 건수.
 
-    필터는 4겹이며 각 겹의 탈락 수를 돌려준다 — "필터가 0건을 걸렀다"와 "필터가 없다"를 구분할 수
+    필터는 5겹이며 각 겹의 탈락 수를 돌려준다 — "필터가 0건을 걸렀다"와 "필터가 없다"를 구분할 수
     있어야 회귀를 본다. 겹 순서는 비용 순이다(문자열 비교 → 재검증 → SymPy).
+
+    앞의 두 겹(저작권·검수)은 L6 노출 경로의 `is_exposable` / `is_review_cleared` 두 게이트와
+    *같은 순서·같은 독립성*으로 놓았다(CONT-01) — 두 노출 경로가 같은 모양을 갖게 해, 한쪽에만
+    축이 빠진 비대칭이 눈으로 보이게 하려는 배치다.
     """
     refs: list[ProblemRef] = []
-    # 네 겹 전부를 0으로 미리 세운다 — "0건 걸렀다"와 "그 필터가 없다"를 리포트에서 구분하기
+    # 다섯 겹 전부를 0으로 미리 세운다 — "0건 걸렀다"와 "그 필터가 없다"를 리포트에서 구분하기
     # 위해서다(Counter는 미등장 키를 아예 출력하지 않아 필터 소실이 침묵으로 보인다).
     drops: Counter[str] = Counter(
         {
             DROP_NOT_OWN_LICENSE: 0,
+            DROP_NOT_REVIEW_CLEARED: 0,
             DROP_REVERIFY_NOT_PASS: 0,
             DROP_EMPTY_ANSWER_MAP: 0,
             DROP_TIER1_NOT_PASS: 0,
@@ -237,7 +285,16 @@ def eligible_problem_refs(
                 drops[DROP_NOT_OWN_LICENSE] += 1
                 continue
 
-            # ② 검증 통과 — 정의는 저장소 정본(`corpus_reverify`)을 그대로 재사용한다.
+            # ② 검수 통과 — 운영·정책 축(①의 법적 축과 **독립된 if**, PB-03 설계 유지).
+            #    판정은 L6 노출 게이트와 같은 함수(`is_review_status_cleared`)가 한다 — 이 파일에
+            #    "approved" 리터럴을 두지 않는다. fail-closed: 키 부재·None·pending·rejected 전부
+            #    탈락. 값을 *정규화하지 않고* 그대로 넘긴다 — L6 런타임 게이트도 정규화 없이
+            #    비교하므로, 여기서만 관대해지면(예: 공백 strip) 두 경로의 기준이 다시 갈린다.
+            if not is_review_status_cleared(record.get("review_status")):
+                drops[DROP_NOT_REVIEW_CLEARED] += 1
+                continue
+
+            # ③ 검증 통과 — 정의는 저장소 정본(`corpus_reverify`)을 그대로 재사용한다.
             state, _reason = _reverify_one(record, use_fuzz=False)
             if state != "pass":
                 drops[DROP_REVERIFY_NOT_PASS] += 1
@@ -247,12 +304,12 @@ def eligible_problem_refs(
             conditions = _normalize_conditions(verify.get("conditions"))
             answer_map = {str(k): str(v) for k, v in dict(verify.get("answer_map") or {}).items()}
 
-            # ③ ConceptAssessment 불변식 — 빈 answer_map/조건은 검증 불가한 재료다.
+            # ④ ConceptAssessment 불변식 — 빈 answer_map/조건은 검증 불가한 재료다.
             if not answer_map or not conditions:
                 drops[DROP_EMPTY_ANSWER_MAP] += 1
                 continue
 
-            # ④ 렌더 시점과 *같은* 호출로 최종 확인 — 여기서 못 통과하면 런타임에
+            # ⑤ 렌더 시점과 *같은* 호출로 최종 확인 — 여기서 못 통과하면 런타임에
             #    RENDER_UNVERIFIED로 미끄러진다(근 집계·개념형 문항이 여기서 걸린다).
             if verify_answer(list(conditions), answer_map).state != "pass":
                 drops[DROP_TIER1_NOT_PASS] += 1
@@ -608,8 +665,8 @@ def index_payload(report: IndexReport, *, concept_source: str) -> dict[str, Any]
     return {
         "source_citation": (
             "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항"
-            "(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED)의 verify 앵커를 개념"
-            " 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다."
+            "(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED·review_status=approved)"
+            "의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다."
         ),
         "license_notice": (
             "WHYMATH_ORIGINAL — 원천 문항이 전량 자체 저작이므로 상속 재료도 자체 저작이다. "
@@ -626,6 +683,10 @@ def index_payload(report: IndexReport, *, concept_source: str) -> dict[str, Any]
             "problems_scanned": report.problems_scanned,
             "problems_eligible": report.problems_eligible,
         },
+        # 자격 필터 5겹의 탈락 집계를 **산출물 자체에** 싣는다(CONT-01) — 리포트를 다시 돌리지
+        # 않고도 "검수 축이 실제로 몇 건을 걸렀는가"가 감사 가능해야 하고, 어느 겹이 통째로
+        # 사라지면(키 소실) 산출물 diff에서 바로 보인다. 값 전부 0이어도 키는 남는다.
+        "filter_drops": dict(sorted(report.drops.items())),
         "entries": [entry.to_json() for entry in report.entries],
         "uncovered_concept_codes": list(report.uncovered),
     }
@@ -731,6 +792,7 @@ __all__ = [
     "AXIS_STANDARD_CODE",
     "DROP_EMPTY_ANSWER_MAP",
     "DROP_NOT_OWN_LICENSE",
+    "DROP_NOT_REVIEW_CLEARED",
     "DROP_REVERIFY_NOT_PASS",
     "DROP_TIER1_NOT_PASS",
     "ConceptRow",
