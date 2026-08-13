@@ -4763,7 +4763,7 @@
       "misconception": "aᵐ·aⁿ을 a^(mn)으로 한다(실제 a^{m+n}). (a+b)ⁿ을 aⁿ+bⁿ으로 분배한다.",
       "formal_definition_internal": "같은 밑 거듭제곱을 곱하면 지수를 더한다(aᵐaⁿ=a^{m+n}); 곱셈과 거듭제곱 법칙을 구분한다.",
       "accepted_expressions": "지수의 곱·나눗셈·거듭제곱 법칙을 구분 적용",
-      "explanation": "지수법칙을 이해하고, 이를 이용하여 식을 간단히 나타낼 수 있다. 2022 개정",
+      "explanation": "지수가 정수일 때 성립하는 거듭제곱의 곱셈·나눗셈·거듭제곱의 연산 규칙을 다루는 개념이다. 지수식을 하나의 밑으로 정리해 간단히 나타내는 기본 도구다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12대수01-03]"
@@ -4870,7 +4870,7 @@
       "misconception": "지수적 변화를 일정량 증가(일차)로 본다. 로그 방정식에서 진수 조건을 확인하지 않는다.",
       "formal_definition_internal": "복리·인구·소리·지진 등 비율로 변하는 현상을 지수·로그함수로 나타내어 식의 값이나 미지수를 구하는 것이다.",
       "accepted_expressions": "복리·인구 증가를 지수함수로 나타냄 / 로그로 큰 수의 자릿수를 다룸",
-      "explanation": "지수함수, 로그함수를 활용하여 문제를 해결할 수 있다. 68 (2) 삼각함수",
+      "explanation": "지수함수와 로그함수의 성질을 이용해 지수·로그가 포함된 방정식과 부등식, 성장·감소 모형 같은 문제를 푸는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12대수01-08]"
@@ -4944,7 +4944,7 @@
       "misconception": "주어진 정보(두 변과 끼인각 vs 한 변과 두 각)에 맞는 법칙을 잘못 고른다.",
       "formal_definition_internal": "사인법칙은 변과 대각의 비, 코사인법칙은 두 변과 끼인각의 관계다.",
       "accepted_expressions": "주어진 조건에 맞는 법칙을 선택",
-      "explanation": "사인법칙과 코사인법칙을 이해하고, 실생활 문제를 해결할 수 있다. 2022 개정 (3) 수열",
+      "explanation": "삼각형의 변의 길이와 각의 크기 사이의 관계를 나타내는 두 정리다. 변과 각 중 일부가 주어진 삼각형에서 나머지 요소를 구하는 데 쓰인다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12대수02-03]"
@@ -5060,7 +5060,7 @@
       "misconception": "공식을 무작정 대입하고, 어떤 수열 유형(계차·분수)인지 먼저 파악하지 않는다.",
       "formal_definition_internal": "Σ의 성질과 자연수 거듭제곱의 합 공식, 부분분수 분해·계차 등을 이용해 여러 가지 수열의 합을 구하는 것이다.",
       "accepted_expressions": "Σ 공식으로 합을 구함 / 분수 수열은 부분분수로 소거해 더함",
-      "explanation": "여러 가지 수열의 첫째항부터 제n항까지의 합을 구하는 방법을 70 설명할 수 있다.",
+      "explanation": "수열의 첫째항부터 제n항까지의 합을 다루는 개념이다. 등차수열·등비수열의 합 공식과 합 기호(Σ)를 이용해 수열의 합을 구하고, 이를 여러 가지 문제에 적용한다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12대수03-05]"
@@ -5101,7 +5101,7 @@
       "misconception": "n=1만 확인하고 끝낸다(귀납 가정 단계 누락). k+1단계에서 가정(n=k 성립)을 안 쓴다.",
       "formal_definition_internal": "수학적 귀납법은 n=1 성립과 'n=k이면 n=k+1'을 보여 모든 자연수에서 성립을 증명한다.",
       "accepted_expressions": "기초 단계와 귀납 단계를 모두 보임",
-      "explanation": "수학적 귀납법의 원리를 이해하고, 이를 이용하여 명제를 증명할 수 있다. 2022 2 (1) 지수함수와 영역",
+      "explanation": "자연수 n에 대한 명제가 모든 자연수에 성립함을 보이는 증명법이다. n=1일 때 성립함을 확인하고, n=k일 때 성립하면 n=k+1일 때도 성립함을 보이는 두 단계로 이루어진다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12대수03-07]"
@@ -5174,7 +5174,7 @@
       "misconception": "사잇값정리를 불연속 함수에 적용한다. 닫힌구간이 아닌데 최대·최소 존재를 단정한다.",
       "formal_definition_internal": "닫힌구간에서 연속인 함수는 그 구간에서 최댓값과 최솟값을 가지며(최대최소정리), 두 끝값 사이의 임의의 값을 적어도 한 번 갖는다(사잇값 정리).",
       "accepted_expressions": "닫힌구간 연속이면 최대·최소가 있다고 함 / 사잇값 정리로 근의 존재를 보임",
-      "explanation": "연속 함수의 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다. 2022 개정 (2) 미분",
+      "explanation": "닫힌 구간에서 연속인 함수가 최댓값과 최솟값을 가진다는 최대·최소 정리와, 함숫값이 중간의 모든 값을 지나간다는 사잇값 정리를 다루는 개념이다. 사잇값 정리는 방정식의 실근 존재를 보이는 데 쓰인다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅰ-01-04]"
@@ -5397,7 +5397,7 @@
       "misconception": "속도의 부호(방향)를 무시하고 속력으로만 본다. 위치·속도·가속도의 미분 단계를 헷갈린다.",
       "formal_definition_internal": "수직선 위 점의 위치 x(t)를 시간으로 미분하면 속도, 속도를 미분하면 가속도이며, 속도의 부호가 운동 방향을 나타낸다.",
       "accepted_expressions": "위치를 미분하면 속도라 함 / 속도의 부호로 방향을 봄",
-      "explanation": "미분을 속도와 가속도에 대한 2022 개정 문제에 활용하고, 그 유용성을 인식할 수 있다. 138 (3) 적분",
+      "explanation": "위치를 시간의 함수로 보고 미분하면 속도, 속도를 다시 미분하면 가속도다. 운동의 순간 변화율을 도함수로 해석하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅰ-02-10]"
@@ -5504,7 +5504,7 @@
       "misconception": "x축 아래(음의 넓이) 처리를 빠뜨려 넓이가 작게 나온다. 두 곡선 사이는 (위−아래)임을 놓친다.",
       "formal_definition_internal": "정적분으로 넓이를 구할 때 x축 아래 부분은 부호를 따로 처리한다.",
       "accepted_expressions": "x축 아래는 절댓값/부호로 처리",
-      "explanation": "곡선으로 둘러싸인 도형의 넓이에 대한 문제를 해결할 수 있다. 2022 개정",
+      "explanation": "정적분을 이용해 곡선과 x축 또는 두 곡선으로 둘러싸인 도형의 넓이를 구하는 개념이다. 위쪽 곡선에서 아래쪽 곡선을 뺀 함수를 정적분해 계산한다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅰ-03-05]"
@@ -5520,7 +5520,7 @@
       "misconception": "속도가 음수인 구간을 그냥 더해 위치 변화와 이동거리를 혼동한다.",
       "formal_definition_internal": "수직선 위 운동에서 위치의 변화량은 ∫속도 dt, 실제 이동 거리는 ∫|속도| dt로 구한다.",
       "accepted_expressions": "속도를 적분해 위치 변화를 구함 / 방향이 바뀌면 |속도|로 이동거리를 구함",
-      "explanation": "적분을 속도와 거리에 대한 문제에 활용하고, 그 유용성을 인식할 수 있다. 140 2 (1) 함수의 영역",
+      "explanation": "속도를 시간에 대해 정적분하면 위치의 변화량이 되고, 속도의 절댓값을 정적분하면 실제로 움직인 거리가 된다. 미분과 적분의 역관계가 운동 해석에 쓰이는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅰ-03-06]"
@@ -5595,7 +5595,7 @@
       "misconception": "전개항의 계수와 지수를 헷갈린다. 일반항에서 r의 범위(0~n)를 놓친다.",
       "formal_definition_internal": "(a+b)ⁿ의 전개식에서 일반항은 ₙCᵣaⁿ⁻ʳbʳ이며, 그 계수 ₙCᵣ를 이항계수라 한다.",
       "accepted_expressions": "(a+b)ⁿ 전개의 계수가 조합임을 안다 / 파스칼의 삼각형으로 계수를 구함",
-      "explanation": "이항정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다. 2022 개정 (2) 확률",
+      "explanation": "(a+b)^n의 전개식에서 각 항의 계수가 이항계수로 주어진다는 정리다. 조합의 수와 전개식의 계수를 연결한다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12확통01-03]"
@@ -5736,7 +5736,7 @@
       "misconception": "종속인데 독립처럼 그냥 곱한다(조건부확률 필요). 곱셈정리와 덧셈정리를 혼동한다.",
       "formal_definition_internal": "두 사건이 잇따라 일어날 확률은 P(A∩B)=P(A)·P(B|A)이며, 두 사건이 독립이면 P(A)·P(B)다.",
       "accepted_expressions": "두 사건이 함께 일어날 확률을 곱으로 구함 / 종속이면 조건부확률을 곱함",
-      "explanation": "확률의 곱셈정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다. 208 (3) 통계",
+      "explanation": "두 사건이 동시에 일어날 확률을 조건부확률의 곱으로 나타내는 정리다. 사건의 독립·종속에 따라 곱의 형태가 달라진다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12확통02-06]"
@@ -5843,7 +5843,7 @@
       "misconception": "표본이 한쪽으로 치우쳤는데(편의표본) 전체를 대표한다고 본다.",
       "formal_definition_internal": "조사 대상 전체가 모집단, 그중 실제로 뽑은 일부가 표본이며, 치우치지 않도록 무작위로 뽑는다(임의추출).",
       "accepted_expressions": "전체가 모집단, 뽑은 일부가 표본이라 함 / 치우치지 않게 무작위로 뽑음",
-      "explanation": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 설명할 수 있다. 2022 개정",
+      "explanation": "조사 대상 전체인 모집단과 그 일부인 표본의 뜻을 다루고, 단순임의추출 같은 표본추출 방법을 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12확통03-05]"
@@ -5884,7 +5884,7 @@
       "misconception": "신뢰수준 95%를 '참값이 이 구간에 있을 확률 95%'로 오해한다(구간 쪽이 변하는 것).",
       "formal_definition_internal": "표본으로 모수를 추정할 때 신뢰구간(오차 범위)을 함께 제시한다.",
       "accepted_expressions": "점추정이 아니라 구간으로 말함",
-      "explanation": "공학 도구를 이용하여 모평균 및 모 비율을 추정하고 그 결과를 해석할 수 있다. 210 2 (1) 경우의 영역",
+      "explanation": "표본평균과 표본비율의 분포를 이용해 모평균과 모비율을 추정하는 개념이다. 신뢰도에 따른 신뢰구간을 구하고 그 결과를 해석한다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12확통03-07]"
@@ -5932,7 +5932,7 @@
       "misconception": "r=1(상수)·r=−1(진동) 같은 경곗값을 구분하지 않는다. |r|<1 조건을 놓친다.",
       "formal_definition_internal": "공비 r인 등비수열은 −1<r≤1이면 수렴하고(|r|<1이면 0, r=1이면 첫째항), 그 밖이면 발산한다.",
       "accepted_expressions": "|r|<1이면 0으로 수렴이라 함 / r=1과 |r|>1을 따로 봄",
-      "explanation": "등비수열의 수렴, 발산을 판정하고, 수렴하는 경우 그 극한값을 구할 수 있다. 2022 개정",
+      "explanation": "등비수열의 수렴·발산을 공비의 범위로 판정하고, 수렴하는 경우 극한값을 구하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅱ-01-03]"
@@ -5982,7 +5982,7 @@
       "misconception": "|공비|≥1인데 합 공식을 적용한다(수렴 조건 |r|<1을 무시).",
       "formal_definition_internal": "첫째항 a, 공비 r인 등비급수는 |r|<1일 때 수렴하며 그 합은 a/(1−r)이다.",
       "accepted_expressions": "|r|<1일 때 a/(1−r)로 합을 구함 / 0.999…=1을 등비급수로 설명함",
-      "explanation": "등비급수의 합을 구하고, 이를 활용할 수 있다. 266 (2) 미분법",
+      "explanation": "등비수열의 항을 차례로 더한 등비급수의 수렴·발산을 판정하고, 수렴할 때 그 합을 구하는 개념이다. 순환소수를 분수로 나타내는 데에도 쓰인다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅱ-01-05]"
@@ -6115,7 +6115,7 @@
       "misconception": "속함수의 미분(곱하기)을 빠뜨린다. 어디까지가 겉·속함수인지 잘못 나눈다.",
       "formal_definition_internal": "합성함수 y=f(g(x))의 도함수는 dy/dx=f′(g(x))·g′(x)이다(연쇄법칙).",
       "accepted_expressions": "겉함수를 미분하고 속함수의 미분을 곱함 / 양파 껍질 벗기듯 차례로 미분함",
-      "explanation": "합성 함수를 미분할 수 있다. 2022 개정",
+      "explanation": "합성함수의 도함수는 겉함수의 도함수와 속함수의 도함수의 곱으로 구한다(연쇄법칙). 복잡한 함수를 기본 함수의 합성으로 분해해 미분하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅱ-02-05]"
@@ -6220,7 +6220,7 @@
       "misconception": "속도의 부호(방향)를 무시하고 속력으로만 본다. 속도가 0인 순간(방향 전환)을 놓친다.",
       "formal_definition_internal": "평면·직선 운동에서 위치를 시간으로 미분하면 속도, 속도를 미분하면 가속도이며, 속도의 크기가 속력이다.",
       "accepted_expressions": "위치→속도→가속도로 미분함 / 속도의 크기를 속력이라 함",
-      "explanation": "미분을 속도와 가속도에 대한 문제에 활용하고, 그 유용성을 인식할 수 있다. 2022 개정 (3) 적분법",
+      "explanation": "위치 함수를 미분해 속도를, 다시 미분해 가속도를 구한다. 지수·로그·삼각함수로 주어진 운동에도 같은 해석을 적용하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅱ-02-11]"
@@ -6332,7 +6332,7 @@
       "misconception": "속도가 음수인 구간을 그대로 더해 위치 변화와 이동거리를 혼동한다(이동거리는 |속도| 적분).",
       "formal_definition_internal": "수직선 위 운동에서 위치의 변화량은 ∫속도 dt, 실제 이동 거리는 ∫|속도| dt이다.",
       "accepted_expressions": "속도를 적분해 위치 변화를 구함 / 방향이 바뀌면 |속도|로 거리 구함",
-      "explanation": "적분을 속도와 거리에 대한 문제에 활용하고, 그 유용성을 인식할 수 있다. 2022 2 (1) 수열의 영역",
+      "explanation": "속도를 시간에 대해 정적분해 위치의 변화량을 구하고, 속도의 절댓값을 정적분해 실제 이동 거리를 구하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12미적Ⅱ-03-07]"
@@ -6396,7 +6396,7 @@
       "misconception": "원의 접선 공식을 그대로 타원·쌍곡선에 쓴다. 판별식=0(접함) 조건을 빠뜨린다.",
       "formal_definition_internal": "포물선·타원·쌍곡선 위의 한 점에서 곡선에 접하는 직선의 방정식으로, 접점 좌표를 식에 대입하거나 판별식=0으로 구한다.",
       "accepted_expressions": "접점을 식에 대입해 접선을 구함 / 곡선과 한 점에서 만나는 직선이라 함",
-      "explanation": "이차곡선의 접선의 방정식을 구할 수 있다. 2022 개정 (2) 공간도형과 공간좌표",
+      "explanation": "포물선·타원·쌍곡선 위의 한 점을 지나는 접선, 그리고 기울기가 주어진 접선의 방정식을 구하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12기하01-04]"
@@ -6476,7 +6476,7 @@
       "misconception": "반지름 r과 r²(우변)을 혼동한다. 중심 좌표의 부호를 반대로 읽는다.",
       "formal_definition_internal": "중심 (a, b, c)에서 거리가 r인 점들의 자취로, (x−a)²+(y−b)²+(z−c)²=r²이다.",
       "accepted_expressions": "공간의 원이라 함 / 중심과 반지름으로 식을 세움",
-      "explanation": "구를 방정식으로 표현할 수 있다. 2022 개정 (3) 벡터",
+      "explanation": "공간좌표에서 중심의 좌표와 반지름의 길이가 주어진 구를 방정식으로 나타내고, 방정식으로부터 중심과 반지름을 읽어 내는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12기하02-05]"
@@ -6565,7 +6565,7 @@
       "misconception": "평면의 법선벡터와 평면 위에 놓인 벡터를 혼동한다. 구의 중심·반지름 설정을 틀린다.",
       "formal_definition_internal": "평면은 한 점과 법선벡터(평면에 수직인 벡터)로, 구는 중심의 위치벡터와 반지름으로 벡터를 이용해 방정식을 세운다.",
       "accepted_expressions": "법선벡터로 평면을 정함 / 중심·반지름으로 구를 나타냄",
-      "explanation": "좌표공간 330 에서 벡터를 이용하여 평면의 방정식과 구의 방정식을 구할 수 있다. 2022 2 (1) 이차곡선영역",
+      "explanation": "벡터의 내적을 이용해 평면과 구의 방정식을 나타내는 개념이다. 법선벡터와 수직 조건을 내적으로 옮겨 좌표 방정식을 얻는다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12기하03-05]"
@@ -6629,7 +6629,7 @@
       "misconception": "복리를 단리처럼 일정액 증가로 본다. 현재가치(할인)와 미래가치(원리합계)를 거꾸로 쓴다.",
       "formal_definition_internal": "단리는 원금에만 이자가 붙고(A=P(1+rn)), 복리는 이자에도 이자가 붙으며(A=P(1+r)ⁿ), 미래 금액을 같은 이율로 할인한 값이 현재가치다.",
       "accepted_expressions": "복리는 이자에 이자가 붙는다고 함 / 미래 금액을 할인해 현재가치를 구함",
-      "explanation": "단리와 복리를 이용하여 이자와 원리 합계를 구하고, 미래에 받 2022 개정을 금액의 현재가치를 구할 수 있다.",
+      "explanation": "단리와 복리로 이자와 원리합계를 계산하고, 미래에 받을 금액을 일정한 이율로 할인해 현재가치를 구하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수01-04]"
@@ -6645,7 +6645,7 @@
       "misconception": "미래에 받을 총액을 그대로 현재가치로 본다(시점마다 할인하는 과정을 빠뜨림).",
       "formal_definition_internal": "일정 기간 정기적으로 받거나 내는 금액 각각을 현재가치로 할인해 모두 더한 값이다.",
       "accepted_expressions": "받을 돈을 모두 현재가치로 당겨 더함 / 등비급수로 합을 구함",
-      "explanation": "연금의 뜻을 알고, 연금의 현재가치를 구할 수 있다. 394 (2) 함수와 경제",
+      "explanation": "일정한 기간 동안 정기적으로 받는 연금의 뜻을 다루고, 각 회차의 현재가치를 합산해 연금의 현재가치를 구한다. 등비수열의 합과 연결된다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수01-05]"
@@ -6725,7 +6725,7 @@
       "misconception": "곡선 위 이동과 곡선 자체의 이동을 혼동한다. 세금이 어느 곡선을 옮기는지 헷갈린다.",
       "formal_definition_internal": "세금·소득 등의 변화가 수요곡선이나 공급곡선을 이동시키고, 그에 따라 균형가격·균형거래량이 달라지는 것이다.",
       "accepted_expressions": "곡선이 이동하면 균형점도 옮겨감을 안다 / 어느 곡선이 움직이는지 봄",
-      "explanation": "세금과 소득의 변화가 균형가격에 미치는 영향을 탐구하고 이해한다. 2022 개정",
+      "explanation": "수요·공급을 함수로 나타낸 모형에서 세금이나 소득의 변화가 균형가격과 균형거래량에 미치는 영향을 분석하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수02-05]"
@@ -6741,7 +6741,7 @@
       "misconception": "경곗값(등호) 포함 여부를 놓친다. 부등식이 나타내는 영역의 위·아래를 헷갈린다.",
       "formal_definition_internal": "예산·생산 등의 제약을 부등식으로 나타냈을 때 이를 만족하는 점들의 집합(영역)으로, 좌표평면에서 가능한 선택을 나타낸다.",
       "accepted_expressions": "제약을 만족하는 영역을 그림 / 경계 포함 여부를 따짐",
-      "explanation": "부등식의 영역의 개념을 이해하고, 이를 활용하여 경제 현상의 문제를 해결할 수 있다. 396 (3) 행렬과 경제",
+      "explanation": "연립부등식이 나타내는 영역을 좌표평면에 그리고, 예산 제약 같은 경제 상황을 부등식의 영역으로 모형화해 해석하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수02-06]"
@@ -6789,7 +6789,7 @@
       "misconception": "역행렬을 곱하는 좌·우 위치를 헷갈린다(행렬 곱은 순서가 중요).",
       "formal_definition_internal": "여러 제약이 얽힌 연립방정식을 행렬로 나타내고 역행렬 등을 이용해 경제 문제를 푸는 것이다.",
       "accepted_expressions": "연립방정식을 행렬로 풂 / 역행렬을 곱해 해를 구함",
-      "explanation": "행렬의 연산과 역행렬을 활용하여 경제 현상의 문제를 해결할 수 있다. 2022 개정 (4) 미분과 경제",
+      "explanation": "행렬의 연산과 역행렬을 이용해 연립일차방정식 형태의 경제 모형을 푸는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수03-03]"
@@ -6853,7 +6853,7 @@
       "misconception": "1계조건(f′=0)만 보고 최대·최소를 단정한다(2계조건·정의역 끝점도 확인). 한계 개념을 놓친다.",
       "formal_definition_internal": "이윤 등 목적함수를 미분해 도함수가 0이 되는 점(과 2계조건·끝점)을 비교하여 최댓값·최솟값을 찾는 것이다.",
       "accepted_expressions": "도함수=0인 점에서 최적을 찾음 / 한계수입=한계비용 조건을 이용함",
-      "explanation": "미분을 활용하여 경제 현상의 최적화 문제를 해결할 수 있다. 398 2 (1) 수와 경제 영역",
+      "explanation": "도함수로 함수의 증가·감소와 극값을 판정해 이윤의 극대화나 비용의 극소화 같은 경제적 최적화 문제를 푸는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12경수04-04]"
@@ -6901,7 +6901,7 @@
       "misconception": "데이터는 많기만 하면 좋다고 본다(편향·품질이 양보다 중요할 수 있음).",
       "formal_definition_internal": "양·생성 속도·형태의 다양성이 큰 대규모 데이터로, 인공지능 학습의 재료가 된다.",
       "accepted_expressions": "양·속도·다양성이 큰 데이터라 함 / 품질·편향도 중요함을 안다",
-      "explanation": "빅데이터의 개념과 특성을 알고 인 공지능에서 빅데이터를 활용한 사례를 찾을 수 있다. 2022 개정 (2) 텍스트 데이터",
+      "explanation": "빅데이터의 뜻과 특성(규모·다양성·속도)을 다루고, 인공지능이 빅데이터를 학습 자료로 활용하는 사례를 살펴보는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12인수01-03]"
@@ -6949,7 +6949,7 @@
       "misconception": "단어 빈도만으로 의미를 단정한다(어순·맥락·동음이의를 무시).",
       "formal_definition_internal": "벡터로 표현한 문서들 사이의 유사도(예: 코사인 유사도)를 계산해 분류·검색하는 수학적 방법이다.",
       "accepted_expressions": "벡터 사이 각도로 문서 유사도를 잼 / 가까운 벡터를 비슷한 글로 봄",
-      "explanation": "인공지능이 텍스트를 특성에 따라 분석하는 수학적 방법을 설명할 수 있다. 458 (3) 이미지 데이터",
+      "explanation": "텍스트를 수치나 벡터로 표현하고 빈도·거리 같은 수학적 도구로 특성을 분석하는 방법을 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12인수02-03]"
@@ -6997,7 +6997,7 @@
       "misconception": "한 번 잘 맞은 분류기가 모든 새 이미지도 맞힌다고 본다(과적합·일반화 한계).",
       "formal_definition_internal": "이미지의 특징을 수치(벡터)로 뽑아, 그 값으로 종류를 나누는 경계(분류 기준)를 찾는 수학적 방법이다.",
       "accepted_expressions": "특징을 수로 뽑아 종류를 나눔 / 경계로 분류함",
-      "explanation": "인공지능이 이미지를 자동으로 분류하는 수학적 방법을 설명할 수 있다. 2022 개정 (4) 예측과 최적화",
+      "explanation": "이미지를 수치 데이터로 표현하고 특성을 추출해 자동으로 분류하는 인공지능의 수학적 원리를 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12인수03-03]"
@@ -7061,7 +7061,7 @@
       "misconception": "한 번에 최솟값에 도달한다고 본다(반복 필요). 학습률이 크면 발산·작으면 느림을, 지역최솟값에 갇힐 수 있음을 간과한다.",
       "formal_definition_internal": "손실함수의 기울기(경사) 반대 방향으로 매개변수를 조금씩 갱신해 손실의 최솟값으로 다가가는 반복 방법이다.",
       "accepted_expressions": "가장 가파른 내리막으로 한 걸음씩 내려감 / 반복해서 최솟값에 다가감",
-      "explanation": "경사하강법을 이해하고 최적화된 예측을 위한 인공지능의 학습 방법을 설명할 수 있다. 460 (5) 인공지능과 수학",
+      "explanation": "손실함숫값이 작아지는 방향으로 매개변수를 조금씩 옮겨 최적점에 접근하는 방법이다. 도함수의 부호와 크기를 이용하는 반복 최적화로, 인공지능 학습의 기본 알고리즘이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12인수04-04]"
@@ -7093,7 +7093,7 @@
       "misconception": "결과(작동함)만 보고 그 바탕의 수학 원리를 따지지 않는다.",
       "formal_definition_internal": "인공지능과 관련된 수학 주제를 선정해 원리를 조사·탐구하고 결과를 정리하는 것이다.",
       "accepted_expressions": "관심 주제의 수학 원리를 파고듦 / 작동 원리를 수학으로 설명함",
-      "explanation": "인공지능과 관련된 수학 주제를 선정하여 탐구할 수 있다. 2022 2 (1) 인공지능과 영역",
+      "explanation": "인공지능과 관련된 수학 주제를 스스로 정해 조사하고 정리하는 탐구 활동이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12인수05-02]"
@@ -7141,7 +7141,7 @@
       "misconception": "환산 배수를 틀린다(1t=1000kg, 1L=1000mL). 단위를 안 맞추고 그대로 계산한다.",
       "formal_definition_internal": "시간·길이·무게·들이의 표준단위를 알고, 정해진 배수 관계로 단위를 환산하는 것이다.",
       "accepted_expressions": "상황에 맞는 표준단위를 씀 / 1kg=1000g처럼 환산함",
-      "explanation": "시간, 길이, 무게, 들이의 표준단위를 알고, 단위를 환산할 수 있다. 2022 개정 (2) 변화와 관계",
+      "explanation": "시간·길이·무게·들이의 표준단위를 다루고, 단위 사이의 환산을 비례 관계로 계산하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12직수01-03]"
@@ -7221,7 +7221,7 @@
       "misconception": "부등식에서 음수를 곱할 때 방향을 안 바꾼다. 조건을 식으로 옮길 때 부호를 틀린다.",
       "formal_definition_internal": "직무 상황을 일차방정식이나 일차부등식으로 세워 미지수나 범위를 구하는 것이다.",
       "accepted_expressions": "손익분기 등을 식으로 세워 풂 / 음수 곱셈 시 부등호를 뒤집음",
-      "explanation": "일차방정식 또는 일차부등식을 활용하여 직무 상황의 문제를 해결할 수 있다. 2022 개정 (3) 도형과 측정",
+      "explanation": "직무 상황에서 주어진 조건을 일차방정식이나 일차부등식으로 세우고 풀어 해를 구하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12직수02-05]"
@@ -7301,7 +7301,7 @@
       "misconception": "겉넓이(㎡)와 부피(㎥)를 혼동한다. 단위를 섞어 쓴다.",
       "formal_definition_internal": "직무 상황의 입체의 표면 넓이(겉넓이)와 담기는 양(부피)을 구하는 것이다.",
       "accepted_expressions": "도색은 겉넓이, 용량은 부피로 구함 / 단위(㎡·㎥)를 구별함",
-      "explanation": "직무 상황에서 나타나는 입체도형의 겉넓이와 부피를 구할 수 있다. 2022 개정 (4) 자료와 가능성",
+      "explanation": "기둥·뿔·구 같은 입체도형의 겉넓이와 부피 공식을 이용해 직무 상황에서 필요한 양을 계산하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12직수03-05]"
@@ -7381,7 +7381,7 @@
       "misconception": "익숙한 그래프 한 가지만 쓴다. 축을 왜곡해 오해를 부른다.",
       "formal_definition_internal": "자료의 특성과 목적(비교·추이·비율)에 맞는 표·그래프를 선택해 나타내고 합리적으로 판단하는 것이다.",
       "accepted_expressions": "목적에 맞는 그래프를 골라 나타냄 / 왜곡 없이 표현함",
-      "explanation": "다양한 자료의 특성을 파악하여, 직무 목적에 적합한 표나 그래프로 나타내고 합리적인 의사 결정을 할 수 있다. 544 2 (1) 수와 연산 영역",
+      "explanation": "자료의 특성과 직무 목적에 맞는 표나 그래프를 골라 자료를 정리하고, 그 결과를 근거로 합리적으로 의사 결정하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12직수04-05]"
@@ -7429,7 +7429,7 @@
       "misconception": "수학과 문학은 정반대 영역이라 본다(형식·구조에 수학적 규칙이 작동함).",
       "formal_definition_internal": "시의 운율·구조나 작품 속 수 등 문학에 담긴 수학적 요소를 조사·활동하는 것이다.",
       "accepted_expressions": "운율·구조 속 패턴을 찾음 / 형식에 규칙이 있음을 안다",
-      "explanation": "문학과 관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다. 2022 개정",
+      "explanation": "문학 작품 속에 나타나는 수학적 내용을 찾아 조사하고 관련 활동을 하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수문01-03]"
@@ -7445,7 +7445,7 @@
       "misconception": "영화가 그린 수학·수학자 묘사를 사실 그대로 받아들인다.",
       "formal_definition_internal": "영화의 컴퓨터그래픽·암호·확률 등에 쓰인 수학 내용을 조사·활동하는 것이다.",
       "accepted_expressions": "CG·암호 속 수학을 찾음 / 영화 묘사를 비판적으로 봄",
-      "explanation": "영화와 관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다. 602 (2) 생활과 수학",
+      "explanation": "영화 속에 나타나는 수학적 내용을 찾아 조사하고 관련 활동을 하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수문01-04]"
@@ -7509,7 +7509,7 @@
       "misconception": "다수결이 언제나 가장 공정하다고 본다(방식에 따라 결과가 바뀔 수 있음).",
       "formal_definition_internal": "다수결·점수투표 등 여러 집계 방식과 그 역설을 조사해 합리적 의사결정 방법을 제안하는 것이다.",
       "accepted_expressions": "집계 방식에 따라 결과가 달라짐을 안다 / 다수결의 한계를 봄",
-      "explanation": "투표와 관련된 수학적 내용을 조사하고 이를 활용하여 합리적 의사 결정을 위한 방법을 제안할 수 있다. 2022 개정 (3) 사회와 수학",
+      "explanation": "투표 제도에 담긴 수학적 구조를 조사하고, 합리적 의사 결정을 위한 방법을 수학적으로 검토하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수문02-04]"
@@ -7573,7 +7573,7 @@
       "misconception": "가격 한 가지 기준만으로 결정한다. 기준마다 중요도(가중치)를 안 두고 단순 합산한다.",
       "formal_definition_internal": "여러 기준에 가중치를 두어 점수화하는 등 합리적 소비 의사결정 방법을 탐구·실천하는 것이다.",
       "accepted_expressions": "기준마다 가중치를 줘 비교함 / 한 기준만으로 정하지 않음",
-      "explanation": "가치소비를 위한 의사 결정 방법을 탐구하고 실천 방법을 제시할 수 있다. 604 (4) 환경과 수학",
+      "explanation": "가치소비를 위한 의사 결정 방법을 수학적으로 탐구하고 실천 방안을 제시하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수문03-04]"
@@ -7637,7 +7637,7 @@
       "misconception": "일부 지역 표본 결과를 전체 생태계로 단정한다(표본 편향).",
       "formal_definition_internal": "종·개체 수 등 생태 자료를 수학적으로 분석해 생태 감수성을 기르는 것이다.",
       "accepted_expressions": "종 수·개체 수를 통계로 분석함 / 표본의 한계를 안다",
-      "explanation": "생물 다양성과 생명권 관련 자료를 수학적으로 분석하고 이를 통해 생태 감수성을 함양할 수 있다. 2022 2 (1) 예술과 영역",
+      "explanation": "생물 다양성과 생명권에 관한 자료를 수학적으로 분석하고 그 결과를 통해 생태를 이해하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수문04-04]"
@@ -7685,7 +7685,7 @@
       "misconception": "주변 사람만 조사하는 편의표본으로 전체를 대표시킨다(무작위 추출이 필요).",
       "formal_definition_internal": "조사 대상 전체가 모집단, 그 일부가 표본이며, 문제에 맞는 방법으로 치우치지 않게 표본을 뽑는다.",
       "accepted_expressions": "전체는 모집단, 일부는 표본이라 함 / 무작위로 치우침 없이 뽑음",
-      "explanation": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 이해하여 문제 상황에 맞는 방법을 선택할 수 있다. 2022 개정 (2) 자료의 수집과",
+      "explanation": "모집단과 표본의 뜻을 다루고, 문제 상황에 맞는 표본추출 방법을 선택하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12실통01-03]"
@@ -7749,7 +7749,7 @@
       "misconception": "평균만 보고 분포를 단정한다(평균이 같아도 퍼짐이 다름). 극단값에 약한 평균을 과신한다.",
       "formal_definition_internal": "자료의 중심을 나타내는 대푯값(평균·중앙값·최빈값)과 흩어짐을 나타내는 산포도(범위·분산·표준편차)로 자료를 요약하는 것이다.",
       "accepted_expressions": "중심은 대푯값, 흩어짐은 산포도로 봄 / 평균만으로 단정하지 않음",
-      "explanation": "대푯값과 산포도의 종류를 알고 자료의 특성을 나타내는 값으로 요약할 수 있다. 696 (3) 자료의 분석",
+      "explanation": "평균·중앙값·최빈값 같은 대푯값과 분산·표준편차 같은 산포도로 자료의 특성을 요약하는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12실통02-04]"
@@ -7813,7 +7813,7 @@
       "misconception": "p값을 '귀무가설이 참일 확률'로 오해한다. '기각 실패'를 '참으로 증명됨'으로 본다.",
       "formal_definition_internal": "모집단에 대한 가설(귀무가설)을 세우고, 표본 자료가 그것과 충분히 어긋나는지를 유의수준에 따라 판정하는 절차다.",
       "accepted_expressions": "'차이 없다'를 세우고 증거로 판정함 / p값을 귀무가설이 참일 확률로 오해하지 않음",
-      "explanation": "가설검정을 이해하고, 실생활에서 공학 도구를 이용하여 가설을 검정할 수 있다. 2022 개정 (4) 통계적 탐구",
+      "explanation": "표본 자료를 근거로 모집단에 대한 가설의 채택 여부를 확률적으로 판단하는 절차를 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12실통03-04]"
@@ -7845,7 +7845,7 @@
       "misconception": "결과 수치만 보고 과정(표본·방법)의 타당성과 한계를 따지지 않는다.",
       "formal_definition_internal": "통계적 탐구의 과정과 결과를 표본·방법·해석의 타당성 측면에서 비판적으로 되돌아보는 것이다.",
       "accepted_expressions": "표본·방법의 한계를 되짚음 / 결과뿐 아니라 과정도 평가함",
-      "explanation": "통계적 탐 구 과정과 그 결과를 비판적으로 성찰할 수 있다. 698 2 (1) 통계와 영역",
+      "explanation": "통계적 탐구의 과정과 결과를 비판적으로 되돌아보고 평가하는 활동이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12실통04-02]"
@@ -7877,7 +7877,7 @@
       "misconception": "인터넷 자료는 출처 없이 써도 된다고 본다. 결과가 안 나오면 데이터를 손본다(조작).",
       "formal_definition_internal": "탐구 전 과정에서 출처 표시, 자료의 정직한 사용, 표절·조작 금지 등 지켜야 할 규범이다.",
       "accepted_expressions": "출처를 밝히고 정직하게 다룸 / 표절·조작을 하지 않음",
-      "explanation": "올바른 연구윤리를 이해하고, 탐 구의 전 과정에서 이를 준수한다. 2022 개정 (2) 과제 탐구의 방법과",
+      "explanation": "탐구의 전 과정에서 지켜야 할 연구윤리의 원칙을 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수과01-02]"
@@ -7941,7 +7941,7 @@
       "misconception": "만드는 데만 집중하고, 그 바탕의 수학 원리·근거를 설명하지 못한다.",
       "formal_definition_internal": "교구·자료·프로그램 등 산출물을 만들며 탐구하는 방법과 절차를 이해·설명하는 것이다.",
       "accepted_expressions": "산출물을 만들며 탐구함 / 바탕 원리를 설명함",
-      "explanation": "개발 연구를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다. 756 (3) 과제탐구의 실행",
+      "explanation": "개발 연구를 통해 탐구하는 방법과 절차를 다루는 개념이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수과02-04]"
@@ -8005,7 +8005,7 @@
       "misconception": "결과의 성패로만 평가한다(과정의 타당성·방법도 평가 대상).",
       "formal_definition_internal": "탐구의 과정과 결과를 되돌아보고 타당성·개선점을 평가하는 것이다.",
       "accepted_expressions": "과정과 결과를 되짚어 평가함 / 성패뿐 아니라 방법도 평가함",
-      "explanation": "탐구 과정과 결과를 반성하고 평가할 수 있다. 2022 2 (1) 과제 탐구의 영역",
+      "explanation": "수행한 탐구의 과정과 결과를 반성하고 평가하는 활동이다.",
       "review_status": "ai_estimated",
       "standard_codes": [
         "[12수과03-04]"

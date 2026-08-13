@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: QUAL-06-ncic-crawl-residue-cleanup
+title: "concept_content_v1 explanation 크롤링 잔류 47건 정정 — 성취기준 페이지·절번호가 문장 중간에 삽입된 파손 서술 + 탐지 게이트 동결"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 파손 패턴(문장 중간 연도·코드·절번호 삽입, 예: '미분을 속도와 가속도에 대한 2022 개정 문제에 활용하고')을 정규식으로 전수 탐지해 대상 레코드를 열거 — 2026-08-13 감사 실측 47건과 대조"
+  - "② 대상 레코드의 explanation을 성취기준 본문 인용이 아닌 자체 서술로 정정(라이선스 레일 준수 — docs/data/licensing_safety.md). 수학적 정확성은 샘플 검산으로 확인"
+  - "③ harness/concept_content_audit.py에 잔류 탐지 규칙을 추가하고 정정 후 잔류 0건을 CLI exit code로 실측"
+  - "④ 회귀 동결 테스트 추가: 파손 샘플로 red → 정정 후 green. CI가 도는 테스트 경로에 배선 확인"
+  - "⑤ _provenance.json을 PB-11 sidecar 규약에 맞게 갱신(수정 이력·재집계 counts)"
+  - "⑥ 범위 밖: 파손 없는 성취기준 문체 explanation 약 129건의 재서술 판단(KG-02 검수 소관), 대학 코퍼스(KG-05 소관)"
+artifacts: []
+paths:
+  - "data/corpus/concept_content_v1/**"
+  - src/backend/whymath_backend/harness/concept_content_audit.py
+  - "tests/backend/harness/**"
+session: main
+notes: "2026-08-13 전수 감사(서브에이전트 4방면 실측)에서 발견. K-12 explanation의 40%(176/437)가 성취기준 문체 '~할 수 있다' 복사이고 그중 47건(10.8%)은 크롤링 쓰레기 잔류로 문법 파괴. 자체 라이선스 문구('성취기준 본문 미수록')와 정면 모순이라 최우선. 반복 실수 방지: 탐지 게이트 없이 데이터만 고치면 재생성 시 재발."
+updated: 2026-08-13
