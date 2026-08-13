@@ -13,9 +13,12 @@ from typing import Any, cast
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.db.models.problem import ProblemStep
 from whymath_backend.db.models.solution_path import SolutionPath
 from whymath_backend.l3.solution_path_store import (
     find_solution_path_id,
+    get_solution_path,
+    get_solution_path_steps,
     get_solution_paths,
 )
 
@@ -59,6 +62,11 @@ def _orm_path(path_id: str) -> SolutionPath:
     )
 
 
+def _step_row(step_order: int) -> ProblemStep:
+    """가짜 단계 행 — ORM 인스턴스(속성 접근만 쓰이므로 세션 부착 불필요)."""
+    return ProblemStep(step_order=step_order, expected_answer=f"{step_order}단계 내용")
+
+
 class TestGetSolutionPaths:
     @pytest.mark.asyncio
     async def test_returns_rows_as_list(self) -> None:
@@ -87,3 +95,38 @@ class TestFindSolutionPathId:
         """승격 경로 없으면 None — 댕글링 참조를 만들 근거 없음(날조 금지)."""
         session = cast(AsyncSession, _FakeSession([]))
         assert await find_solution_path_id(session, uuid.uuid4()) is None
+
+
+class TestGetSolutionPath:
+    """경로 id 단건 조회 — 점층 공개 엔드포인트(SOL-02)의 404 판별 재료."""
+
+    @pytest.mark.asyncio
+    async def test_returns_header_when_found(self) -> None:
+        row = _orm_path("sp-1")
+        session = _FakeSession([row])
+        out = await get_solution_path(cast(AsyncSession, session), "sp-1")
+        assert out is row
+        assert session.executed == 1
+
+    @pytest.mark.asyncio
+    async def test_none_when_missing(self) -> None:
+        """없는 id → None(엔드포인트가 404로 매핑 — 빈 200 금지)."""
+        out = await get_solution_path(cast(AsyncSession, _FakeSession([])), "sp-ghost")
+        assert out is None
+
+
+class TestGetSolutionPathSteps:
+    """경로 단계 조회(problem_step additive 좌석) — step_order 순·읽기 전용."""
+
+    @pytest.mark.asyncio
+    async def test_returns_step_rows_as_list(self) -> None:
+        rows = [_step_row(1), _step_row(2)]
+        session = _FakeSession(rows)
+        out = await get_solution_path_steps(cast(AsyncSession, session), "sp-1")
+        assert out == rows
+        assert session.executed == 1
+
+    @pytest.mark.asyncio
+    async def test_empty_when_no_steps(self) -> None:
+        out = await get_solution_path_steps(cast(AsyncSession, _FakeSession([])), "sp-1")
+        assert out == []

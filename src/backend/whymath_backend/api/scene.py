@@ -37,6 +37,7 @@ from whymath_backend.l1.skill_graph.resolve import get_behavior_areas
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
+    list_recent_attempted_problem_ids,
 )
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
@@ -44,7 +45,10 @@ from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import LearningScene, SceneLearnerContext
 from whymath_backend.l4.misconception.evidence_store import net_support_by_misconception
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
-from whymath_backend.l4.scene_generation import generate_learning_scene
+from whymath_backend.l4.scene_generation import (
+    find_step_panel_solution_path_id,
+    generate_learning_scene,
+)
 
 
 async def scene_for_concept_diagnosis(
@@ -77,6 +81,13 @@ async def scene_for_concept_diagnosis(
     — `curate_hypothesis`가 턴 시점에 쓰는 net_support<0 archived 규약과 동형이되, 직전 턴 이후
     누적된 신규 증거까지 렌더 시점에 반영해 *반박된 오개념을 학생에게 들이밀지 않는다*(낙인 회피).
     증거 없는 가설(키 부재→0.0)은 유지(과도 억제 회피).
+
+    **step_panel 앵커 해소**(SOL-02): `student_id`가 주어지면 학생이 이 개념으로 *시도한* 문항
+    (`list_recent_attempted_problem_ids`·최근 순·상한 캡)을 앞에서부터 훑어 승격 풀이 경로가
+    *실재하는* 첫 문항의 경로 id(`find_step_panel_solution_path_id` — S4-09 reader 체인
+    재사용·재구현 0)를 생성기에 주입한다 — 장면에 `step_panel` 요소가 실린다. 경로가 하나도
+    없거나 시도 이력이 없으면 주입하지 않는다(방출 0 — 빈 껍데기 금지). `student_id`가 None이면
+    (익명·맥락 없음) 조회 자체를 생략한다(시도 이력이 없어 앵커를 정직하게 정할 수 없다).
 
     Args:
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
@@ -118,6 +129,18 @@ async def scene_for_concept_diagnosis(
         active_hypothesis_ids=active_hypothesis_ids,
         active_hypothesis_confidences=active_hypothesis_confidences,
     )
+    # step_panel 앵커 해소(SOL-02) — 최근 시도 문항부터 경로 실재를 확인해 첫 실재 경로 id만 주입.
+    # 후보 캡(STEP_PANEL_ANCHOR_LOOKBACK) 안에서 문항당 1회씩만 조회하므로 지연 상한이 있다.
+    step_panel_solution_path_id: str | None = None
+    if student_id is not None:
+        for anchor_problem_id in await list_recent_attempted_problem_ids(
+            session, student_id, diagnosis.concept_id
+        ):
+            step_panel_solution_path_id = await find_step_panel_solution_path_id(
+                session, anchor_problem_id
+            )
+            if step_panel_solution_path_id is not None:
+                break
     req = generate_routing_request(student_subscription)
     return await generate_learning_scene(
         ctx.concept_orm.to_schema().model_copy(
@@ -131,6 +154,7 @@ async def scene_for_concept_diagnosis(
         learner_context=learner_context,
         visualizability=ctx.visualizability,
         behavior_areas=behavior_areas,
+        step_panel_solution_path_id=step_panel_solution_path_id,
     )
 
 

@@ -21,6 +21,7 @@ from whymath_backend.l4.learning_scene import (
     MisconceptionProbeElement,
     SkillFocusElement,
     SocraticPromptElement,
+    StepPanelElement,
     TutoringPromptElement,
     VisualizationElement,
 )
@@ -77,6 +78,27 @@ class _FakeStyleRow:
         self.recommended_styles = styles
 
 
+class _RowResult:
+    """execute 결과 범용 모사 — `.all()`(행 목록)·`.scalars().all()/first()` 표면 동시 지원.
+
+    앵커 후보 조회(`list_recent_attempted_problem_ids`)는 `.all()`을, 경로 단건 조회
+    (`find_solution_path_id`)는 `.scalars().first()`를 부른다. 스칼라 select의 행은 값 그 자체로
+    넣는다(예: `["sp-1"]`).
+    """
+
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[object]:
+        return list(self._rows)
+
+    def scalars(self) -> _RowResult:
+        return self
+
+    def first(self) -> object | None:
+        return self._rows[0] if self._rows else None
+
+
 class _FakeSession:
     """가짜 AsyncSession — get()을 모델별로 디스패치.
 
@@ -85,10 +107,13 @@ class _FakeSession:
     다루지 않으므로 기존 동작(중립 폴백)을 유지한다. `ConceptVisualStyle`(권장 양식 Overlay·
     ARCH-14 ③)은 concept 스키마의 declared 양식을 미러한다 — API seam이 Overlay 값을 스키마 필드에
     재주입하므로 원 값이 복원돼 결정론 골격(시각화 요소 등)이 기존과 동일하게 생성된다.
+    `execute`는 SOL-02 앵커 후보 조회(student_id 있는 호출에서 1회)의 최소 표면 — 기본값은
+    빈 결과(시도 이력 없음). 실재 경로 시나리오는 `_StepPanelSession`(큐 모사)이 담당한다.
     """
 
     def __init__(self, orm: object) -> None:
         self._orm = orm
+        self.execute_calls = 0
         self._styles: list[VisualizationStyle] = (
             list(orm.to_schema().recommended_visual_styles)  # type: ignore[attr-defined]
             if orm is not None
@@ -102,6 +127,11 @@ class _FakeSession:
         if name in {"ConceptVisualization", "AtomNode"}:
             return None
         return self._orm
+
+    async def execute(self, _stmt: object) -> _RowResult:
+        """앵커 후보 조회의 기본 응답 — 빈 결과(후보 없음 → 경로 조회·방출 0)."""
+        self.execute_calls += 1
+        return _RowResult([])
 
 
 _VALID_JSON = (
@@ -486,3 +516,157 @@ async def test_no_behavior_mapping_no_skill_focus() -> None:
     )
     assert scene is not None
     assert not any(isinstance(el, SkillFocusElement) for el in scene.elements)
+
+
+# ── step_panel 앵커 배선(SOL-02 — 서비스 끝단) ──────────────────────────────
+async def _no_hypotheses(session: object, user_id: uuid.UUID) -> list[object]:
+    """가설 없음 스텁 — get_active_hypotheses 대체(프로브 축을 step_panel 축과 분리)."""
+    return []
+
+
+class _StepPanelSession(_FakeSession):
+    """`_FakeSession` + execute 큐 — SOL-02 step_panel 앵커·경로 조회 순서 모사.
+
+    쿼리 순서(서비스 코드 기준): ① 앵커 후보(`list_recent_attempted_problem_ids`) →
+    ②~ 경로 단건(`find_solution_path_id`, 후보마다·실재하면 중단). 가설·증거 쿼리는
+    monkeypatch로 분리돼 큐에 들어오지 않는다.
+    """
+
+    def __init__(self, orm: object, queue: list[list[object]]) -> None:
+        super().__init__(orm)
+        self._queue = list(queue)
+
+    async def execute(self, _stmt: object) -> _RowResult:
+        self.execute_calls += 1
+        return _RowResult(self._queue.pop(0))
+
+
+def _step_panels(scene: LearningScene) -> list[StepPanelElement]:
+    return [el for el in scene.elements if isinstance(el, StepPanelElement)]
+
+
+@pytest.mark.asyncio
+async def test_step_panel_emitted_when_attempted_problem_has_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """시도 문항에 승격 경로 실재 → 장면에 step_panel이 실린다(③ 서비스 끝단 배선)."""
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _no_hypotheses)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _StepPanelSession(
+        _FakeConceptOrm(_concept()),
+        queue=[[(uuid.uuid4(), uuid.uuid4())], ["sp-anchor-1"]],  # 앵커 1건 → 경로 실재
+    )
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    panels = _step_panels(scene)
+    assert len(panels) == 1
+    assert panels[0].solution_path_id == "sp-anchor-1"
+    # 답 미루기 스키마 강제 불변 — deferred 한 값만.
+    assert panels[0].reveal_policy == "deferred"
+
+
+@pytest.mark.asyncio
+async def test_step_panel_scans_until_first_real_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """첫 후보 문항에 경로가 없으면 다음 후보를 훑는다 — 실재하는 첫 경로를 단다."""
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _no_hypotheses)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _StepPanelSession(
+        _FakeConceptOrm(_concept()),
+        # 앵커 2건 → 첫 문항 경로 없음(None) → 둘째 문항 경로 실재.
+        queue=[
+            [(uuid.uuid4(), uuid.uuid4()), (uuid.uuid4(), uuid.uuid4())],
+            [],
+            ["sp-second"],
+        ],
+    )
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    panels = _step_panels(scene)
+    assert len(panels) == 1
+    assert panels[0].solution_path_id == "sp-second"
+    assert session.execute_calls == 3  # 앵커 1 + 경로 2(첫 None→둘 실재에서 중단)
+
+
+@pytest.mark.asyncio
+async def test_no_step_panel_when_no_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """시도 이력 0(앵커 후보 빈 목록) → 경로 조회 자체를 하지 않고 방출 0(빈 껍데기 금지)."""
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _no_hypotheses)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _StepPanelSession(_FakeConceptOrm(_concept()), queue=[[]])
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    assert _step_panels(scene) == []
+    assert session.execute_calls == 1  # 앵커 조회 1회뿐 — 경로 조회 0
+
+
+@pytest.mark.asyncio
+async def test_no_step_panel_when_no_path_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """시도 문항은 있으나 승격 경로가 하나도 없으면 방출 0(데이터 없음 방향)."""
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _no_hypotheses)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _StepPanelSession(
+        _FakeConceptOrm(_concept()),
+        queue=[[(uuid.uuid4(), uuid.uuid4())], []],  # 앵커 1건 → 경로 없음
+    )
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    assert _step_panels(scene) == []
+
+
+@pytest.mark.asyncio
+async def test_no_student_id_skips_anchor_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """student_id 미제공 → 앵커 해소 생략(익명은 시도 이력 없음·정직한 경계) → 방출 0.
+
+    execute 호출 카운터가 0이어야 한다 — 앵커 조회가 실행됐다면 1 이상으로 잡힌다.
+    """
+
+    async def _boom(session: object, user_id: uuid.UUID) -> list[object]:
+        raise AssertionError("student_id None이면 가설 store를 조회하면 안 된다")
+
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _boom)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    assert _step_panels(scene) == []
+    assert session.execute_calls == 0

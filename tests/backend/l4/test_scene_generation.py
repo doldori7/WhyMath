@@ -107,6 +107,7 @@ async def _generate(
     learner_context: SceneLearnerContext | None = None,
     visualizability: Visualizability | None = None,
     behavior_areas: list[BehaviorArea] | None = None,
+    step_panel_solution_path_id: str | None = None,
     max_level: int = 4,
 ) -> tuple[LearningScene, _FakeProvider]:
     provider = _FakeProvider(text)
@@ -120,6 +121,7 @@ async def _generate(
         learner_context=learner_context,
         visualizability=visualizability,
         behavior_areas=behavior_areas,
+        step_panel_solution_path_id=step_panel_solution_path_id,
         answer_deferral_max_level=max_level,
     )
     return scene, provider
@@ -772,7 +774,7 @@ class TestTutoringPromptBlock:
         assert isinstance(reparsed, LearningScene)
 
 
-# ── S4-09(D1) reader ②: StepPanelElement.solution_path_id 결선 ──────────────
+# ── step_panel 생산자 배선(S4-09 reader ② 조회 체인 → SOL-02 방출) ────────────
 class _StepPanelFakeScalars:
     def __init__(self, value: str | None) -> None:
         self._value = value
@@ -800,7 +802,7 @@ class _StepPanelFakeSession:
 
 
 class TestStepPanelWiring:
-    """S4-09(D1): 승격된 SolutionPath id 조회 헬퍼(댕글링 해소) + 학생 대면 신규 노출 0."""
+    """SOL-02: 실재 경로 id 주입 시에만 step_panel 방출 + S4-09 조회 헬퍼(댕글링 해소) 유지."""
 
     @pytest.mark.asyncio
     async def test_helper_returns_promoted_path_id(self) -> None:
@@ -814,7 +816,7 @@ class TestStepPanelWiring:
         found = await find_step_panel_solution_path_id(session, _uuid.uuid4())  # type: ignore[arg-type]
         assert found == "sp-promoted-1"
         panel = StepPanelElement(solution_path_id=found)
-        # 답 미루기 스키마 강제 불변 — reveal_policy는 "deferred" 한 값만(S4-09 경계 유지).
+        # 답 미루기 스키마 강제 불변 — reveal_policy는 "deferred" 한 값만(SOL-02 이후에도 유지).
         assert panel.reveal_policy == "deferred"
 
     @pytest.mark.asyncio
@@ -828,8 +830,38 @@ class TestStepPanelWiring:
         assert await find_step_panel_solution_path_id(session, _uuid.uuid4()) is None  # type: ignore[arg-type]
 
     @pytest.mark.asyncio
-    async def test_scene_skeleton_has_no_step_panel(self) -> None:
-        """학생 대면 신규 노출 0 — 장면 골격에 step_panel을 자동 삽입하지 않는다(S4-09 경계)."""
+    async def test_step_panel_emitted_only_when_path_id_given(self) -> None:
+        """실재 경로 id 주입 → step_panel 방출(③) + 게이트 라운드트립 통과."""
+        from whymath_backend.l4.learning_scene import StepPanelElement
+
+        scene, _ = await _generate(
+            _concept(cognitive=[CognitiveType.DEFINITION]),
+            step_panel_solution_path_id="sp-real-1",
+        )
+        panels = [el for el in scene.elements if isinstance(el, StepPanelElement)]
+        assert len(panels) == 1
+        assert panels[0].solution_path_id == "sp-real-1"
+        assert panels[0].reveal_policy == "deferred"
+        # 검증 게이트(parse_learning_scene)를 그대로 통과하는 명세여야 한다(직렬화 라운드트립).
+        reparsed = parse_learning_scene(scene.model_dump(mode="json"))
+        assert any(el.kind == "step_panel" for el in reparsed.elements)
+
+    @pytest.mark.asyncio
+    async def test_step_panel_before_probes_when_both_present(self) -> None:
+        """step_panel은 오개념 프로브(항상 본문 뒤) 앞 고정 슬롯에 놓인다."""
+        ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
+        scene, _ = await _generate(
+            _concept(cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+            step_panel_solution_path_id="sp-real-1",
+        )
+        kinds = [el.kind for el in scene.elements]
+        assert "step_panel" in kinds and "misconception_probe" in kinds
+        assert kinds.index("step_panel") < kinds.index("misconception_probe")
+
+    @pytest.mark.asyncio
+    async def test_no_step_panel_without_path_id(self) -> None:
+        """경로 id 미주입(None) → 방출 0(빈 껍데기 금지·SOL-02 ③의 없음 방향)."""
         from whymath_backend.l4.learning_scene import StepPanelElement
 
         scene, _ = await _generate(

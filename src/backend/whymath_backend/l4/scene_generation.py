@@ -22,12 +22,13 @@
 범위(S3): 골격 + spec 충전 + 게이트 통과 명세 반환. `concept_id`는 `Concept.code`(개념그래프 UC).
 개념그래프 *존재* 검증(DB)·다중 시각화·L5 렌더러는 S4+.
 
-step_panel 결선(S4-09·D1 reader ②): SolutionPath가 실체화되어(`l3/solution_path.py`·
+step_panel 배선(S4-09·D1 reader ② → SOL-02 생산자): SolutionPath가 실체화되어(`l3/solution_path.py`·
 `solution_paths` 테이블·WH-S 승격 어댑터) `StepPanelElement.solution_path_id` 댕글링이
 해소됐다 — `find_step_panel_solution_path_id`(아래)가 문제의 승격 경로 id를 조회한다(L4→L3
-다운콜). 단, 장면 골격에 step_panel을 **자동 삽입하지는 않는다** — 신규 학생 대면 노출 0
-(S4-09 경계·기존 표면 소생만). 장면 내 step_panel 배치는 검증 풀이 노출 정책과 함께 후속
-(`solution_module_gap_review.md` §4-⑥ "본인 풀이 후 대안 노출" 원칙).
+다운콜). SOL-02부터 생성기는 그 id를 *주입받으면*(`step_panel_solution_path_id` 인자 — L5가
+학생이 시도한 문항의 경로를 앵커 해소해 넘김) 골격에 `step_panel` 요소를 단다. 주입되지
+않으면(실재 경로 없음·앵커 문항 없음) 방출 0 — 빈 껍데기 금지(SOL-02 ③). `reveal_policy`는
+`"deferred"` 불변(답 미루기 스키마 강제)이고 단계 점층 노출은 클라 몫이다.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ from whymath_backend.l4.learning_scene import (
     SceneLearnerContext,
     SkillFocusElement,
     SocraticPromptElement,
+    StepPanelElement,
     TutoringPromptElement,
     VisualizationElement,
 )
@@ -287,13 +289,14 @@ async def find_step_panel_solution_path_id(
 ) -> str | None:
     """문제에 승격된 SolutionPath가 있으면 그 id — `StepPanelElement.solution_path_id` 결선.
 
-    S4-09(D1) reader ② 최소 결선(조회 헬퍼 수준): L3 store(`find_solution_path_id`)를
-    다운콜해 실재하는 경로 id를 돌려준다 — 이 id로 만든 `StepPanelElement`는 더 이상 댕글링
-    참조가 아니다. 없으면 None(step_panel을 만들 근거 없음 — 날조 금지).
+    S4-09(D1) reader ② 조회 헬퍼: L3 store(`find_solution_path_id`)를 다운콜해 실재하는 경로
+    id를 돌려준다 — 이 id로 만든 `StepPanelElement`는 더 이상 댕글링 참조가 아니다. 없으면
+    None(step_panel을 만들 근거 없음 — 날조 금지).
 
-    경계(학생 대면 신규 노출 0): 본 헬퍼는 *조회만* 한다 — `generate_learning_scene` 골격에
-    step_panel을 자동 삽입하지 않고(코치 경로도 무변경), `StepPanelElement.reveal_policy`는
-    `"deferred"` 불변이다(답 미루기 스키마 강제). 장면 내 배치는 후속(모듈 docstring).
+    SOL-02부터 L5(`api/scene.scene_for_concept_diagnosis`)가 학생 시도 문항의 앵커 해소에
+    호출하고, 반환 id는 `generate_learning_scene`의 `step_panel_solution_path_id` 인자로
+    주입돼 골격에 `step_panel` 요소로 실린다. `reveal_policy`는 `"deferred"` 불변(답 미루기
+    스키마 강제).
     """
     return await find_solution_path_id(session, problem_id)
 
@@ -309,6 +312,7 @@ async def generate_learning_scene(
     learner_context: SceneLearnerContext | None = None,
     visualizability: Visualizability | None = None,
     behavior_areas: list[BehaviorArea] | None = None,
+    step_panel_solution_path_id: str | None = None,
     answer_deferral_max_level: int = 4,
 ) -> LearningScene:
     """개념 노드 → 검증된 `LearningScene` 합성 명세(05a §5). 라우터 경유·결정론 골격.
@@ -322,7 +326,9 @@ async def generate_learning_scene(
     append 시점 계산이라 진입 순서와 무관 정합).
     ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ LTHC 튜터링 프롬프트:
     `learner_context.mastery_level`(BKT) → `adapt_lthc` 진입/비계/확장 발화(*학습자모델 축*·mastery
-    있을 때만·lead 분기 뒤·프로브 앞·05a §5·S5l). ④ 활성 가설 ∩ 카탈로그 → `misconception_probe`
+    있을 때만·lead 분기 뒤·프로브 앞·05a §5·S5l). ④ step_panel(SOL-02): *실재하는* 승격 풀이
+    경로 id가 `step_panel_solution_path_id`로 주입될 때만 `StepPanelElement`를 단다(없으면
+    방출 0 — 빈 껍데기 금지). ⑤ 활성 가설 ∩ 카탈로그 → `misconception_probe`
     (적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·param/annotation 정합)을
     통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
 
@@ -337,6 +343,9 @@ async def generate_learning_scene(
         visualizability: 시각화 가능성 4분류(L1·05b). 추상/불가면 시각화 생략(억지 그림 방지).
         behavior_areas: 개념의 행동영역 목록(L5 `get_behavior_areas`가 concept→skill 조인으로 해소).
             진입 순서·focus 블록을 결정. 미매핑(빈 목록/None)이면 중립(탐구 진입·focus 0).
+        step_panel_solution_path_id: 장면에 달 검증 풀이 경로 id(SOL-02). L5가 *학생이 시도한
+            문항*의 승격 경로를 앵커 해소(`find_step_panel_solution_path_id`)해 주입한다.
+            None이면 step_panel 방출 0(실재하지 않는 경로를 가리키는 빈 껍데기 금지).
         answer_deferral_max_level: 장면 힌트 상한(1~4·기본 4). 소크라테스 발화는 1단계라 항상 충족.
 
     Returns:
@@ -407,7 +416,12 @@ async def generate_learning_scene(
     # lead(visual/inquiry) 분기와 독립적인 유일 seam(프로브는 항상 마지막)이라 여기에 삽입한다.
     elements.extend(_lthc_prompts(concept, learner_context))
 
-    # ④ 오개념 프로브(적응·reactive) — 항상 본문 뒤
+    # ④ step_panel(SOL-02) — *실재하는* 승격 풀이 경로 id가 주입됐을 때만(L5가 학생 시도 문항의
+    # 경로를 앵커 해소해 넘김). 없으면 방출 0(빈 껍데기 금지). 프로브(항상 마지막) 앞 고정 슬롯.
+    if step_panel_solution_path_id is not None:
+        elements.append(StepPanelElement(solution_path_id=step_panel_solution_path_id))
+
+    # ⑤ 오개념 프로브(적응·reactive) — 항상 본문 뒤
     elements.extend(_misconception_probes(learner_context))
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.
