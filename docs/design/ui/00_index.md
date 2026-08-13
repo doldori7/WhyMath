@@ -25,6 +25,7 @@
 
 이 도메인은 아래 문서를 **대체하지 않고 UI/IA 관점으로 재조직·확장**한다. 계층 책임·계약의 정본은 여전히 아키텍처 문서다.
 
+- `../architecture/web_strategy.md` — **통합 웹 전략 정본**(웹 자산 4종 지도·공개 랜딩·배치 비교·백로그 WEB-01~02/ADMIN-04~07 — 2026-08-10 신설). 02의 교사 웹·03/04의 백오피스가 이 지도 위에 놓인다.
 - `../architecture/05_interaction.md` — **L5 상호작용 정본**(디바이스 전략·정서 안전 UI·자동 커리큘럼 정렬 입출력·시각화 스택). 화면 계약의 뿌리.
 - `../architecture/05a_learning_scene_dsl.md` — **학습 장면 합성 DSL 정본**(`SceneElement` 7종·답 미루기/낙인 금지 스키마 불변식).
 - `../architecture/06_application_modes.md` — **L6 응용 모드 정본**(6모드·`ModeConfig`·자동 커리큘럼 정렬 7차원·단일 앱 분기).
