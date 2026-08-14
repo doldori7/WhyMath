@@ -3216,3 +3216,7 @@
 {"ts": "2026-08-13T14:11:54", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "review", "id": "SOL-02-step-panel-producer-wiring"}
 {"ts": "2026-08-13T14:27:13", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "MOB-19-webview-lifecycle-hardening", "artifacts": ["PR#826"]}
 {"ts": "2026-08-13T14:27:15", "actor": "claude/ns-05-notation-coverage-theory-corpus-scope", "action": "done", "id": "SOL-02-step-panel-producer-wiring", "artifacts": ["PR#825", "PR#826"]}
+{"ts": "2026-08-14T13:14:30", "actor": "main", "action": "start_ignored_unmerged_done", "id": "MATH-05-reverse-notation-display-surface", "branches": "claude/remaining-track-34zvse"}
+{"ts": "2026-08-14T13:14:33", "actor": "main", "action": "start", "id": "MATH-05-reverse-notation-display-surface", "session": "main", "remote": "ok"}
+{"ts": "2026-08-14T13:14:48", "actor": "main", "action": "done", "id": "MATH-05-reverse-notation-display-surface", "artifacts": ["PR#826"]}
+{"ts": "2026-08-14T13:15:03", "actor": "main", "action": "done", "id": "MOB-19-webview-lifecycle-hardening", "artifacts": ["PR#826"]}

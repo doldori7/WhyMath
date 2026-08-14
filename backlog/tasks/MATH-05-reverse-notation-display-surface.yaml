@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -17,11 +17,12 @@ acceptance:
   - "④ 위젯 테스트 동결: 두 화면이 백슬래시 매크로를 포함한 원문 LaTeX를 학생에게 표시하지 않음을 위젯 테스트로 동결한다(mathlive_input_screen_test.dart·ocr 화면 테스트 확장)"
   - "⑤ 변별력: 변환 적용을 의도적으로 되돌리면 두 테스트가 red, 복원하면 green이 되는지 실측한다. 성공/실패 양쪽에서 같은 값을 내면 검증이 아니라 위장이다"
   - "⑥ 범위 밖 명시: (a) 수식 조판 렌더(KaTeX·flutter_math_fork) — 별개 축이며 미채택 유지. (b) 백엔드 LaTeX 생성(sympy.latex) — 렌더 권위 이원화라 영구 미채택(math_engine_gap_review.md §2-⑨). (c) 문항 본문 표면 — ②의 측정으로 제외. (d) MathLive 위젯 자체 접근성(스크린리더 낭독) — math_engine_gap_review.md §4-①"
-artifacts: []
+artifacts:
+  - "PR#826"
 paths:
   - src/mobile/lib/features/chat/presentation/mathlive_input_screen.dart
   - src/mobile/lib/features/ocr/presentation/ocr_capture_screen.dart
   - src/mobile/test/mathlive_input_screen_test.dart
 session: null
 notes: "docs/architecture/math_engine_gap_review.md §3 D6(2026-08-11 재검증에서 신규 발견). 1차 대조(2026-08-03)는 기능 29의 \"역방향 변환\"을 백엔드 sympy.latex 생성으로 읽고 §2-⑨ 의도적 미채택으로 닫았는데, 외부 틀이 그린 역방향(LaTeX→AST→자연표기)은 학생이 읽을 표기로 되돌리는 표시 축이다. 그 축은 미채택된 적이 없고 실측하면 두 표면이 뚫려 있다. MOB-06이 채팅 버블 한 곳만 닫았고 나머지 두 표면은 같은 함수를 부르지 않는다 — \"만들었는데 일부 표면에만 배선\" 계열."
-updated: 2026-08-11
+updated: 2026-08-14
