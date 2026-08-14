@@ -115,7 +115,9 @@ class AnalyticsEventEnvelope(BaseModel):
 
         event_type = EventType(self.event_type)
         if event_type not in EVENT_DATA_CONTRACT:
-            raise ValueError(f"{event_type.value}는 생산 payload allowlist가 없는 휴면 EventType입니다")
+            raise ValueError(
+                f"{event_type.value}는 생산 payload allowlist가 없는 " f"휴면 EventType입니다"
+            )
         try:
             normalized = build_event_data(event_type, **self.payload)
         except (KeyError, TypeError, ValueError) as exc:
