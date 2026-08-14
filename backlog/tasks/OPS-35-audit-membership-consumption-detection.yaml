@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-25-audit-membership-consumption-detection
+id: OPS-35-audit-membership-consumption-detection
 title: "declared_unwired_audit EVENT 축 멤버십 소비 탐지 보강 — 막힘 오탐(세 번째 사각) 해소 + 유예 정리 (§8.2)"
 track: infra-debt
 stage: S4
