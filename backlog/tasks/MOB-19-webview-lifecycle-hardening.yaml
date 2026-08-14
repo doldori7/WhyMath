@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: review
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "graphing_calculator_webview.dart·mathlive_input_webview.dart에 onWebResourceError 핸들러와 로딩 인디케이터 추가 — 현재 onPageFinished 훅만 존재(graphing_calculator_webview.dart:113-118). 에러 시 캡션 시드 폴백으로 내려 학생에게 빈 화면 미노출"
   - "저사양 안드로이드(미션 하한선) 대응: interactive_surface_3d(three.js) 실패 시 2D 그래프 또는 정적 캡션으로 강등하는 폴백 경로 + 위젯 테스트로 동결"
   - "변별력: 에러 주입 시 테스트 red, 폴백 복원 시 green 실측"
-artifacts: []
+artifacts:
+  - "PR#826"
 paths:
   - src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart
   - src/mobile/lib/features/chat/presentation/mathlive_input_webview.dart
-session: main
+session: null
 notes: "2026-08-12 표출 시스템 분석 P0-3. vendored WebView 2종이 오프라인은 보장하나 로딩/에러 핸들러 부재. 저사양 단말에서 WebView+three.js는 가장 무거운 조합"
-updated: 2026-08-13
+updated: 2026-08-14
