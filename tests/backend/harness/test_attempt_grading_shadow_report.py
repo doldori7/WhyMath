@@ -26,6 +26,8 @@ from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.harness.attempt_grading_shadow_report import (
     AttemptRecord,
+    _derive_from_corpus,
+    _load_corpus_verify_blocks,
     build_gradability_ceiling_report,
     build_report,
     classify_gradability,
@@ -62,6 +64,7 @@ def _problem(
     choices: list[str] | None = None,
     question_format: QuestionFormat | None = None,
     answer_format: AnswerFormat | None = None,
+    slug: str | None = None,
 ) -> Problem:
     return Problem(
         source_type=SourceType.자체생성,
@@ -74,6 +77,7 @@ def _problem(
         choices=choices,
         question_format=question_format,
         answer_format=answer_format,
+        slug=slug,
     )
 
 
@@ -470,6 +474,32 @@ class TestBuildGradabilityCeilingReport:
         }
         assert set(payload["bucket_rates"]) == set(payload["bucket_counts"])
         assert payload["bucket_rates"]["selectable_exact_match"] == pytest.approx(1.0)
+        assert set(payload["unclassified_reason_counts"]) == {
+            "no_verify_block",
+            "parse_error",
+            "multi_symbol",
+        }
+
+    def test_unclassified_reason_counts_sum_equals_unclassified_bucket(self) -> None:
+        """unclassified_reason_counts 합은 bucket_counts['unclassified']와 같아야 한다."""
+        problems = [
+            _problem(choices=None, answer="서술", conditions=[]),  # no_verify_block
+            _problem(conditions=[_cond("x + y - 3")], answer="1"),  # multi_symbol
+            _problem(conditions=[_cond("2*x - 6 = 0")], answer="3"),  # parse_error
+        ]
+        report = build_gradability_ceiling_report(problems)
+        assert report.bucket_counts["unclassified"] == 3
+        assert sum(report.unclassified_reason_counts.values()) == 3
+        assert report.unclassified_reason_counts["no_verify_block"] == 1
+        assert report.unclassified_reason_counts["multi_symbol"] == 1
+        assert report.unclassified_reason_counts["parse_error"] == 1
+
+    def test_render_includes_unclassified_reason_section(self) -> None:
+        problems = [_problem(choices=None, answer="서술", conditions=[])]
+        report = build_gradability_ceiling_report(problems)
+        rendered = render_gradability_ceiling_report(report)
+        assert "## 미분류 사유" in rendered
+        assert "no_verify_block: 1" in rendered
 
 
 class TestGradabilityCeilingDiscriminates:
@@ -491,6 +521,36 @@ class TestGradabilityCeilingDiscriminates:
 
         after_remove = build_gradability_ceiling_report(baseline)
         assert after_remove.bucket_counts["condition_formal_derivable"] == 0
+
+    def test_no_verify_block_reason_counts_toggle_with_injected_missing_problem(self) -> None:
+        """acceptance⑦ — verify 재료가 없는 문항 주입/제거로 no_verify_block 카운터가 양방향으로 움직인다."""
+        baseline = [
+            _problem(choices=["1", "2"], answer="1"),
+            _problem(conditions=[_cond("2*x - 6")], answer="3"),
+        ]
+        before = build_gradability_ceiling_report(baseline)
+        assert before.unclassified_reason_counts["no_verify_block"] == 0
+
+        missing = _problem(choices=None, answer="서술", conditions=[])
+        after_inject = build_gradability_ceiling_report([*baseline, missing])
+        assert after_inject.unclassified_reason_counts["no_verify_block"] == 1
+
+        after_remove = build_gradability_ceiling_report(baseline)
+        assert after_remove.unclassified_reason_counts["no_verify_block"] == 0
+
+    def test_parse_error_reason_counted(self) -> None:
+        """formal이 SymPy로 파싱 불가하면 parse_error 사유로 unclassified에 잡힌다."""
+        problem = _problem(conditions=[_cond("2*x - 6 = 0")], answer="3")
+        report = build_gradability_ceiling_report([problem])
+        assert report.bucket_counts["unclassified"] == 1
+        assert report.unclassified_reason_counts["parse_error"] == 1
+
+    def test_multi_symbol_reason_counted(self) -> None:
+        """다중 미지수는 multi_symbol 사유로 unclassified에 잡힌다."""
+        problem = _problem(conditions=[_cond("x + y - 3")], answer="1")
+        report = build_gradability_ceiling_report([problem])
+        assert report.bucket_counts["unclassified"] == 1
+        assert report.unclassified_reason_counts["multi_symbol"] == 1
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -736,3 +796,120 @@ class TestDiscriminatingMismatchCounter:
                 await engine.dispose()
         finally:
             await _cleanup(uid, pid)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# NLP-05 acceptance — 코퍼스 verify 블록 입력 공급
+# ──────────────────────────────────────────────────────────────────────────
+class TestCorpusVerifyBlockSupply:
+    """`derive_verify_inputs`가 `Problem.conditions_parsed` 외에 코퍼스 verify 블록을 공급원으로 쓴다."""
+
+    def test_loads_real_corpus_verify_blocks(self) -> None:
+        """코퍼스 로더가 2,124개의 유효한 verify 블록을 읽는다(NLP-05 실측)."""
+        blocks = _load_corpus_verify_blocks()
+        assert len(blocks) == 2124
+
+    def test_corpus_slug_derives_when_conditions_parsed_empty(self) -> None:
+        """DB conditions_parsed가 비어 있어도 코퍼스 slug 매칭 시 파생 재료가 생긴다."""
+        blocks = _load_corpus_verify_blocks()
+        slug, (expected_conditions, expected_answer_map) = next(iter(blocks.items()))
+        problem = _problem(conditions=[], answer="3", slug=slug)
+        result = derive_verify_inputs(problem)
+        assert result is not None
+        conditions, answer_map = result
+        assert conditions == expected_conditions
+        assert answer_map == expected_answer_map
+
+    def test_unknown_slug_returns_no_verify_block(self) -> None:
+        """코퍼스에 없는 slug는 verify 블록 공급 없이 비파생이다."""
+        problem = _problem(conditions=[], answer="3", slug="wm-definitely-not-in-corpus-12345")
+        assert derive_verify_inputs(problem) is None
+        assert _derive_from_corpus(problem) == "no_verify_block"
+
+    def test_corpus_single_equals_condition_is_parseable(self) -> None:
+        """코퍼스 conditions의 단일 `=`(`x**2 - 5*x = 0`)도 verify_answer 수준으로 파생 가능."""
+        problem = _problem(conditions=[], answer="5", slug="wm-skel-d782cf61cf93")
+        result = derive_verify_inputs(problem)
+        assert result is not None
+        assert result[0] == ["x**2 - 5*x = 0"]
+        assert result[1] == {"x": "5"}
+
+    def test_corpus_multi_symbol_answer_map_returns_none(self, monkeypatch) -> None:
+        """answer_map 키가 {"x"}가 아니면 비파생 — 다중 미지수는 스코프 밖."""
+        from whymath_backend.harness import attempt_grading_shadow_report as mod
+
+        fake_blocks = {"wm-multi-x-y": (["x + y - 3"], {"x": "1", "y": "2"})}
+        monkeypatch.setattr(mod, "_load_corpus_verify_blocks", lambda: fake_blocks)
+        problem = _problem(conditions=[], answer="1", slug="wm-multi-x-y")
+        assert derive_verify_inputs(problem) is None
+
+    def test_numeric_short_answer_with_corpus_becomes_bucket_c(self) -> None:
+        """단답형·수치 answer_format이라도 코퍼스 verify 블록이 있으면 C버킷( symbolic)으로 계상."""
+        problem = _problem(
+            conditions=[],
+            answer="5",
+            slug="wm-skel-d782cf61cf93",
+            question_format=QuestionFormat.단답형,
+            answer_format=AnswerFormat.자연수,
+        )
+        assert classify_gradability(problem) == "condition_formal_derivable"
+
+
+class TestCorpusCeilingReportDiscriminates:
+    """NLP-05 acceptance④ — 코퍼스 verify 블록 공급으로 C버킷이 0에서 실제로 오른다."""
+
+    def test_c_bucket_toggles_with_corpus_derived_problem(self) -> None:
+        baseline = [
+            _problem(choices=["1", "2"], answer="1"),
+            _problem(choices=None, answer="서술", conditions=[]),
+        ]
+        before = build_gradability_ceiling_report(baseline)
+        assert before.bucket_counts["condition_formal_derivable"] == 0
+
+        corpus_derived = _problem(
+            conditions=[],
+            answer="5",
+            slug="wm-skel-d782cf61cf93",
+            question_format=QuestionFormat.단답형,
+            answer_format=AnswerFormat.자연수,
+        )
+        after_inject = build_gradability_ceiling_report([*baseline, corpus_derived])
+        assert after_inject.bucket_counts["condition_formal_derivable"] == 1
+
+        after_remove = build_gradability_ceiling_report(baseline)
+        assert after_remove.bucket_counts["condition_formal_derivable"] == 0
+
+    def test_full_corpus_snapshot_has_nonzero_c_bucket(self) -> None:
+        """실제 코퍼스 7개 bank를 Problem 스키마로 읽어 ceiling 리포트를 돌리면 C > 0."""
+        import json
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus_root = repo_root / "data" / "corpus"
+        problems: list[Problem] = []
+        for path in sorted(corpus_root.glob("problem_bank_*/problems.jsonl")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                record = json.loads(line)
+                problems.append(
+                    Problem(
+                        source_type=SourceType.자체생성,
+                        curriculum_version=Curriculum.REVISION_2022,
+                        valid_from_year=2022,
+                        subject=Subject.공통,
+                        unit_codes=["U-CORPUS"],
+                        slug=record.get("slug"),
+                        answer=record.get("answer"),
+                        choices=record.get("choices"),
+                        question_format=record.get("question_format"),
+                        answer_format=record.get("answer_format"),
+                        conditions_parsed=[],
+                    )
+                )
+
+        report = build_gradability_ceiling_report(problems)
+        assert report.total_problems == 2638
+        assert report.bucket_counts["condition_formal_derivable"] > 0
+        assert report.bucket_counts["condition_formal_derivable"] == 872
