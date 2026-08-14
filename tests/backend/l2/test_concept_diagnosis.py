@@ -14,8 +14,10 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.l2.concept_diagnosis import (
+    STEP_PANEL_ANCHOR_LOOKBACK,
     compute_concept_diagnoses,
     diagnosis_agreement,
+    list_recent_attempted_problem_ids,
 )
 
 _UID = uuid.uuid4()
@@ -41,6 +43,11 @@ class _QueueSession:
 
 def _session(bkt_rows: list[Any], irt_rows: list[Any]) -> AsyncSession:
     return cast(AsyncSession, _QueueSession([bkt_rows, irt_rows]))
+
+
+def _session_single(rows: list[Any]) -> AsyncSession:
+    """execute 1회짜리 큐 세션 — `list_recent_attempted_problem_ids`(단일 쿼리)용."""
+    return cast(AsyncSession, _QueueSession([rows]))
 
 
 class TestDiagnosisAgreement:
@@ -134,3 +141,45 @@ class TestComputeConceptDiagnoses:
 
     async def test_empty(self) -> None:
         assert await compute_concept_diagnoses(_session([], []), _UID) == []
+
+
+class TestListRecentAttemptedProblemIds:
+    """SOL-02 step_panel 앵커 후보 열거 — 최근 시도 순(쿼리 정렬) 가정 하 dedupe·캡·빈 이력.
+
+    행 모양은 `(problem_id, attempt_id)` 튜플(SELECT 절 순서). WHERE/JOIN·ORDER BY 정확성은
+    실 PG 통합테스트 축이고, 여기선 행 가공(dedupe·캡·None 스킵)만 hermetic 검증한다.
+    """
+
+    async def test_dedupe_keeps_first_occurrence(self) -> None:
+        """같은 문항 재시도는 첫(가장 최근) 등장만 남기고 순서를 보존한다."""
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        rows = [(p1, uuid.uuid4()), (p2, uuid.uuid4()), (p1, uuid.uuid4())]
+        out = await list_recent_attempted_problem_ids(_session_single(rows), _UID, uuid.uuid4())
+        assert out == [p1, p2]
+
+    async def test_cap_limits_candidates(self) -> None:
+        """후보는 limit 캡으로 잘린다(앵커 탐색 지연 상한 — 문항당 경로 조회 1회씩이라)."""
+        rows = [(uuid.uuid4(), uuid.uuid4()) for _ in range(6)]
+        out = await list_recent_attempted_problem_ids(
+            _session_single(rows), _UID, uuid.uuid4(), limit=3
+        )
+        assert out == [r[0] for r in rows[:3]]
+
+    async def test_default_cap_is_lookback_constant(self) -> None:
+        """기본 캡은 STEP_PANEL_ANCHOR_LOOKBACK(5) — 7행이면 5개만."""
+        rows = [(uuid.uuid4(), uuid.uuid4()) for _ in range(7)]
+        out = await list_recent_attempted_problem_ids(_session_single(rows), _UID, uuid.uuid4())
+        assert len(out) == STEP_PANEL_ANCHOR_LOOKBACK
+
+    async def test_null_problem_id_skipped(self) -> None:
+        """problem_id NULL 행은 스킵(조인 등값 조건상 실 SQL에선 못 오지만 방어)."""
+        p1 = uuid.uuid4()
+        rows = [(None, uuid.uuid4()), (p1, uuid.uuid4())]
+        out = await list_recent_attempted_problem_ids(_session_single(rows), _UID, uuid.uuid4())
+        assert out == [p1]
+
+    async def test_empty_when_no_attempts(self) -> None:
+        """시도 이력 없음 → 빈 목록(앵커 없음 → step_panel 방출 0의 정직한 경계)."""
+        assert (
+            await list_recent_attempted_problem_ids(_session_single([]), _UID, uuid.uuid4()) == []
+        )

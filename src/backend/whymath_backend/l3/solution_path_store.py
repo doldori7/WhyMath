@@ -1,11 +1,16 @@
 """SolutionPath 조회 store — 승격된 풀이 경로의 *읽기* 표면 (S4-09·D1 reader ②의 하부).
 
-`solution_paths`(헤더·`db/models/solution_path.py`)에서 문제 단위로 경로를 조회한다. 쓰기는
-승격 어댑터(`whs/path_promotion.py`)만 한다 — 본 모듈은 읽기 전용(commit 없음·저장소 패턴).
+`solution_paths`(헤더·`db/models/solution_path.py`)에서 문제 단위·경로 단위로 경로를 조회한다.
+쓰기는 승격 어댑터(`whs/path_promotion.py`)만 한다 — 본 모듈은 읽기 전용(commit 없음·저장소 패턴).
 
-소비처(계층 방향): L4 `scene_generation.find_step_panel_solution_path_id`가 본 모듈을
-*다운콜*해 `StepPanelElement.solution_path_id` 댕글링을 해소한다(L4→L3 — import-linter 계약
-방향). SolutionPath는 L3 소유 엔티티(yaml `layer: L3`)라 조회 좌석도 L3에 둔다.
+소비처(계층 방향):
+  - L4 `scene_generation.find_step_panel_solution_path_id`가 본 모듈을 *다운콜*해
+    `StepPanelElement.solution_path_id` 댕글링을 해소한다(L4→L3 — import-linter 계약 방향).
+    SolutionPath는 L3 소유 엔티티(yaml `layer: L3`)라 조회 좌석도 L3에 둔다.
+  - L5 `api/solution_paths`(SOL-02 점층 공개 엔드포인트)가 `get_solution_path`·
+    `get_solution_path_steps`로 경로 헤더·단계를 읽는다. 단계 영속 좌석은 S4-09 결정대로
+    `problem_step` additive 컬럼(`solution_path_id` FK)이라 단계 읽기도 본 store가 담당한다
+    (경로 읽기 단일 표면 — 재구현 금지).
 
 저장소 패턴(`whs/solution_bank.py` 선례): AsyncSession 주입·순수 ORM/쿼리빌더·결정적 정렬.
 """
@@ -17,9 +22,15 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.db.models.problem import ProblemStep
 from whymath_backend.db.models.solution_path import SolutionPath
 
-__all__ = ["find_solution_path_id", "get_solution_paths"]
+__all__ = [
+    "find_solution_path_id",
+    "get_solution_path",
+    "get_solution_path_steps",
+    "get_solution_paths",
+]
 
 
 async def get_solution_paths(session: AsyncSession, problem_id: uuid.UUID) -> list[SolutionPath]:
@@ -54,3 +65,34 @@ async def find_solution_path_id(session: AsyncSession, problem_id: uuid.UUID) ->
     result = await session.execute(stmt)
     row = result.scalars().first()
     return row
+
+
+async def get_solution_path(session: AsyncSession, solution_path_id: str) -> SolutionPath | None:
+    """경로 id로 헤더 단건 조회 — 없으면 None(서빙 경로의 404 판별용)."""
+    stmt = select(SolutionPath).where(SolutionPath.solution_path_id == solution_path_id)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+
+async def get_solution_path_steps(
+    session: AsyncSession, solution_path_id: str
+) -> list[ProblemStep]:
+    """경로의 실체화 단계(`problem_step` additive 좌석)를 step_order 순으로 조회한다.
+
+    `UNIQUE(problem_id, step_order)` 제약상 한 문제에 한 경로의 단계만 실체화되므로
+    (`db/models/problem.py` ProblemStep docstring) step_order 단일 정렬이 결정적이다.
+    승격 어댑터는 단계 내용을 `expected_answer`에 싣는다(`whs/path_promotion.py` —
+    `SolutionStep.content`의 영속 좌석). 쓰기 시점에 내용 비어있음은 차단되지만
+    (`skipped_empty_steps`), 깨진 행 하나가 응답 전체를 깨지 않게 NULL 내용 행은 방어적으로
+    제외한다 — 총수 집계도 이 필터 기준(서빙 가능분)으로 자기정합이다.
+    """
+    stmt = (
+        select(ProblemStep)
+        .where(
+            ProblemStep.solution_path_id == solution_path_id,
+            ProblemStep.expected_answer.isnot(None),
+        )
+        .order_by(ProblemStep.step_order)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())

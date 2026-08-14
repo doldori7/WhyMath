@@ -19,13 +19,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.db.models.activity import ProblemAttempt
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
-from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.l2.ability_estimation import compute_concept_abilities
 from whymath_backend.l2.irt import theta_to_mastery_proxy
+from whymath_backend.schema.enums import ASSESSED_ROLES
 
 # BKT 숙달 P(L)과 IRT 능력 프록시(logistic θ)의 차가 이 임계를 넘으면 *불일치 신호*로 분기.
 _DIAGNOSIS_TOL = 0.2
+
+# step_panel 앵커(SOL-02) 룩백 상한 — 최근 시도 문항을 앞에서부터 훑다가 승격 풀이 경로가
+# 실재하는 첫 문항에 멈춘다. 상한이 없으면 후보마다 경로 조회가 나가는 무제한 루프라 지연 상한을
+# 둔다(실제로는 첫 후보에서 멈추는 것이 보통).
+STEP_PANEL_ANCHOR_LOOKBACK = 5
 
 Agreement = Literal["agree", "irt_higher", "bkt_higher", "insufficient"]
 
@@ -133,9 +140,56 @@ async def compute_concept_diagnoses(
     return out
 
 
+async def list_recent_attempted_problem_ids(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    concept_id: uuid.UUID,
+    *,
+    limit: int = STEP_PANEL_ANCHOR_LOOKBACK,
+) -> list[uuid.UUID]:
+    """학생이 이 개념으로 *시도한* 문항 id — 최근 시도 순·중복 제거·`limit` 캡.
+
+    SOL-02 step_panel 앵커 해소용: 개념 장면에 검증 풀이 단계 패널을 달 때 앵커는 *본인이
+    풀어본 문항*이어야 한다("본인 풀이 후 대안 노출" 원칙 — `solution_module_gap_review.md`
+    §4-⑥; 안 풀어본 문항의 풀이 경로를 들이밀지 않는다). `compute_concept_abilities`와 같은
+    조인(ProblemAttempt ⋈ ProblemConcept)·같은 역할 폐쇄집합(`ASSESSED_ROLES`)을 써서 *진단이
+    본 개념↔문항 귀속과 정합*을 유지한다 — 별개 role 축을 만들면 진단된 개념과 무관한 문항이
+    앵커가 될 수 있다. 정렬은 started_at 내림차순(NULL은 뒤)·attempt_id 안정 tiebreak라 같은
+    데이터에 같은 순서. 같은 문항 재시도는 첫(가장 최근) 등장만 남긴다.
+
+    본 함수는 *후보 열거*만 한다 — 경로 실재 확인은 L4/L3 reader 체인
+    (`scene_generation.find_step_panel_solution_path_id` → `solution_path_store.
+    find_solution_path_id`) 몫이다(경로 조회 재구현 금지·SOL-02 acceptance ③).
+    """
+    stmt = (
+        select(ProblemAttempt.problem_id, ProblemAttempt.attempt_id)
+        .join(ProblemConcept, ProblemConcept.problem_id == ProblemAttempt.problem_id)
+        .where(
+            ProblemAttempt.user_id == user_id,
+            ProblemConcept.concept_id == concept_id,
+            ProblemConcept.role.in_(ASSESSED_ROLES),
+        )
+        .order_by(ProblemAttempt.started_at.desc().nulls_last(), ProblemAttempt.attempt_id)
+    )
+    rows = (await session.execute(stmt)).all()
+    seen: set[uuid.UUID] = set()
+    out: list[uuid.UUID] = []
+    for problem_id, _attempt_id in rows:
+        # problem_id는 nullable — 조인 등값상 실 SQL에선 NULL이 못 오지만 타입 좁힘 겸 방어.
+        if problem_id is None or problem_id in seen:
+            continue
+        seen.add(problem_id)
+        out.append(problem_id)
+        if len(out) >= limit:
+            break
+    return out
+
+
 __all__ = [
     "Agreement",
     "ConceptDiagnosis",
+    "STEP_PANEL_ANCHOR_LOOKBACK",
     "compute_concept_diagnoses",
     "diagnosis_agreement",
+    "list_recent_attempted_problem_ids",
 ]
