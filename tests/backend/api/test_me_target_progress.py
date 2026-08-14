@@ -112,8 +112,13 @@ class TestGetMyTargetProgress:
         assert body["standard_coverage_percent"] is None
         assert body["standard_coverage_observed"] is None
         assert body["standard_coverage_scope"] is None
+        assert body["standard_coverage_measured_concepts"] is None
+        assert body["standard_coverage_matched_concepts"] is None
 
     def test_school_type_set_computes_coverage_percent(self) -> None:
+        """CUR-04 원자 축 — 스코프는 `(norm_id, official_code)`, 관측은 `(concept_id,
+        standard_codes)` 2-tuple(FakeSession은 실제 SQL을 보지 않고 큐잉된 결과만 반환하므로
+        shape만 새 조인과 맞추면 된다·`test_target_progress.py` 단위테스트와 동일 관례)."""
         profile = UserProfile.from_schema(
             UserProfileSchema(
                 user_id=_UID,
@@ -121,11 +126,12 @@ class TestGetMyTargetProgress:
                 school_type=SchoolType.일반고,
             )
         )
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
         client = _client(
             profile,
             [
-                [("N1",), ("N2",), ("N3",), ("N4",)],  # 스코프 4건
-                [("N1",), ("N2",)],  # 관측 2건
+                [("N1", "STD-1"), ("N2", "STD-2"), ("N3", "STD-3"), ("N4", "STD-4")],  # 스코프 4건
+                [(c1, ["STD-1"]), (c2, ["STD-2"])],  # 관측 2개념 — 둘 다 원자 축 매칭+스코프 내.
             ],
         )
         resp = client.get("/v1/me/target-progress")
@@ -133,6 +139,9 @@ class TestGetMyTargetProgress:
         assert body["standard_coverage_scope"] == 4
         assert body["standard_coverage_observed"] == 2
         assert body["standard_coverage_percent"] == 50.0
+        # 작동 신호(CUR-04) — 측정 이력 2개념 전부 원자 축에 매칭됐다(조인 실패 0건).
+        assert body["standard_coverage_measured_concepts"] == 2
+        assert body["standard_coverage_matched_concepts"] == 2
 
     def test_no_prediction_fields_in_response(self) -> None:
         profile = UserProfile.from_schema(

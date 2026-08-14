@@ -9,8 +9,9 @@
 
 **경계**:
 - `/v1/coach` — *stateless* (state in/out·DB 무접근·LLM 호출 0).
-- `/v1/coach/sessions` — *DB 쓰기*(새 dialogue + 학생/AI 2턴 영속). LLM 호출은 여전히 0
-  (decision.prompt를 AI 턴 content로 저장 — 결정된 발화 보존).
+- `/v1/coach/sessions` — *DB 쓰기*(새 dialogue + 학생/AI 2턴 영속). AI 턴 발화는 WH-1
+  primary(`wh1_primary_enabled` 기본 ON·2026-07-20 GA)가 LLM으로 승격하고, 실패·타임아웃·
+  플래그 OFF면 결정론 `decision.prompt`로 폴백한다(`_wh1_primary_decision_or` 참조).
 - 인증 = `ConsentedUser`(미성년 동의 게이트 통과) — 학생 발화는 PII 가능(CLAUDE.md).
 - 응답에 `system`/`prompt` 본문이 노출되므로 *학생 발화를 그대로 에코하지 않음*(에코 시
   필터·검증 없이 표면화될 위험).
@@ -65,10 +66,9 @@ from whymath_backend.api._segmentation_state import (
     get_segmentation_counters,
 )
 from whymath_backend.config import get_settings
-from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept
-from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
@@ -902,27 +902,55 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
     """문항 PRIMARY 개념의 성취기준 고시코드 1개 — 프롬프트 개인화(PED-05) 착지용(비PII).
 
     `_pack_for`와 동일한 해석 seam(`get_primary_concept_id` — PRIMARY 없으면 TESTED 폴백)으로
-    concept_id를 얻고, `concept_standard_link → achievement_standard` 조인으로 `official_code`
-    (예 '[12미적01-01]') 1개를 결정적으로(정렬) 고른다. 문항 없음·개념 미해석·성취기준 연결
-    미적재 어느 단계든 graceful None(폴백) — L6 게이팅의 동일 조인 관례와 정합.
+    concept_id를 얻고, **원자 축**(`Concept.code == AtomNode.code` → `AtomNode.standard_codes`)에서
+    성취기준 고시코드(예 '[12미적01-01]') 1개를 결정적으로(정렬) 고른다.
+
+    **CUR-04 축 전환**: 구 축(`concept_standard_link → achievement_standard`)은 더 쓰지 않는다.
+    S2-03 원자 재연결 이후 `get_primary_concept_id`가 돌려주는 concept_id는 원자 백본 행을
+    가리키는데, 원자 행은 `concept.source_id`를 설정하지 않아(`l1/atom_graph/
+    atom_backend_concept.py::upsert`) `concept_standard_link` 로더의 `{source_id: code}` 해석
+    맵에 구조적으로 닿지 못한다(`concept.code`는 UNIQUE라 legacy code와 원자 code는 겹치지 않는
+    별개 공간 — `docs/handoff/atom_backbone_next_session.md:19`가 이미 기록한 사실이자
+    `api/gating.py::_fetch_achievement_codes`가 옮겨간 이유와 동일). 그래서 구 축은 이 concept_id에
+    대해 늘 0행이었다 — 새 조인은 그 선례(`_fetch_achievement_codes`)를 그대로 재사용한다.
+
+    문항 없음·개념 미해석·원자 축 미매핑·성취기준 매핑 빈 배열 어느 단계든 graceful None(폴백).
+    각 단계를 디버그 로그로 구분한다(CLAUDE.md "작동한 비율" 원칙 — 0%가 "성취기준 미매핑"인지
+    "원자 축 조인 실패"인지 무계수로 묻히지 않게 한다·침묵 실패 금지).
     """
     if problem_id is None:
         return None
     concept_id = await get_primary_concept_id(session, problem_id)
     if concept_id is None:
-        return None
-    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
-    if code is None:
+        logger.debug(
+            "standard_code_for: 개념 미해석(문항-개념 매핑 없음) problem_id=%s", problem_id
+        )
         return None
     stmt = (
-        select(AchievementStandard.official_code)
-        .join(ConceptStandardLink, ConceptStandardLink.norm_id == AchievementStandard.norm_id)
-        .where(ConceptStandardLink.concept_code == str(code))
-        .order_by(AchievementStandard.official_code)
-        .limit(1)
+        select(AtomNode.standard_codes)
+        .join(Concept, Concept.code == AtomNode.code)
+        .where(Concept.concept_id == concept_id)
     )
-    official_code: str | None = await session.scalar(stmt)
-    return official_code
+    standard_codes: list[str] | None = await session.scalar(stmt)
+    if standard_codes is None:
+        # INNER JOIN 0행 — concept.code가 atom_node에 없다(비원자 개념이거나 원자 미적재).
+        logger.debug(
+            "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
+            "problem_id=%s concept_id=%s",
+            problem_id,
+            concept_id,
+        )
+        return None
+    if not standard_codes:
+        # 원자 노드는 매칭됐으나 이 원자에 연결된 성취기준이 없다(매핑 부재 — 조인 실패 아님).
+        logger.debug(
+            "standard_code_for: 원자 노드는 매칭됐으나 성취기준 매핑 없음 "
+            "problem_id=%s concept_id=%s",
+            problem_id,
+            concept_id,
+        )
+        return None
+    return sorted(standard_codes)[0]
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
@@ -1774,7 +1802,7 @@ async def create_session(
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
 ) -> SessionCreateResponse:
-    """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
+    """새 대화 + 학생/AI 첫 2턴 영속. AI 턴은 WH-1 primary 발화(기본 ON·폴백=`decision.prompt`).
 
     트랜잭션: dialogue 먼저 commit(PK 확보) → turns commit(FK 의존). `user_id`는 인증된
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
@@ -2107,7 +2135,8 @@ async def append_turns(
     소유권 검증: `dialogue.user_id != user.user_id`거나 dialogue 부재 시 **404**
     (존재 노출 회피 — 타인 데이터 존재 여부 자체를 숨김; 403 분리는 정보 누출).
     `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
-    LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
+    AI 턴 content는 WH-1 primary 발화(기본 ON) — 실패·플래그 OFF 폴백 시 `decision.prompt`
+    (slice 7 정합).
     """
     # NLP-03 acceptance ③ — 클라가 실어 보낸 solution_steps의 0-전이(<=1) 비율 관측.
     segmentation_counters.record(body.solution_steps)

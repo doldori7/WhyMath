@@ -93,6 +93,17 @@ class _MeScreenState extends ConsumerState<MeScreen> {
   }
 }
 
+/// 서버 `ordering_basis`의 "제약 엣지 0" 값 — 순서가 tiebreak로만 정해졌다는 뜻.
+///
+/// 서버 정본은 `l2/learning_path.py`의 `LearningPath.ordering_basis`
+/// (`'topological' | 'tiebreak_only' | 'empty'`)다. 실측상 **기본 파라미터에서 96.4%가
+/// 이 값**인데, `PATH-02`가 응답에 실어 보낸 뒤로도 화면이 이 필드를 읽지 않아 학생은
+/// "근거 있는 순서"와 "근거 없는 순서"를 구별할 수 없었다(`PATH-10`이 상환).
+///
+/// 대칭 사례인 `has_cycle`은 원래도 렌더됐는데, 그쪽은 원자 백본이 DAG 보장이라 발생률이
+/// **0%**다 — 정직 표기가 *안 쓰이는 축에만* 완비돼 있었던 셈이다.
+const String _orderingBasisTiebreakOnly = 'tiebreak_only';
+
 /// "학습 경로" 섹션 — `GET /v1/me/weak-concepts/{id}/learning-path` 소비.
 ///
 /// 대상 개념은 진단 결과 첫 항목(서버가 이미 약점 먼저 정렬)이다. `MeTabController.load`가
@@ -158,6 +169,23 @@ class _LearningPathSection extends ConsumerWidget {
             child: _MessageRow(
               icon: Icons.warning_amber_outlined,
               message: '개념 사이 순환 구조가 감지돼 일부 순서는 참고용으로만 표시돼요.',
+              dense: true,
+            ),
+          ),
+        if (path.orderingBasis == _orderingBasisTiebreakOnly)
+          // 서버 정직 신호: ordering_basis — has_cycle과 대칭인 표기다(PATH-02가 만들고
+          // PATH-10이 화면에 착지시킴). 값은 이미 응답에 실려 왔고, 여기서 판정을 새로
+          // 만들지 않는다(수학 로직 클라 미구현 — 전역 UI 불변식 1).
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
+            child: _MessageRow(
+              icon: Icons.info_outline,
+              message: '이 개념들 사이에는 정해진 선수 순서가 없어서, 아래 순서는 참고용이에요.',
               dense: true,
             ),
           ),

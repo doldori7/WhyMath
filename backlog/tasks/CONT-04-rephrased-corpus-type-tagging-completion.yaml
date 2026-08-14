@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CONT-04-rephrased-corpus-type-tagging-completion
+title: "rephrased_v0 429문 유형 태깅 완결 — S3-27이 조건부로 유예한 16.2%가 차단 조건 해소 후에도 미상환"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 전제 — problem_type_codes 채움률은 2,218/2,647(83.8%)이고 미태깅 429건은 전량 problem_bank_rephrased_v0다(전 코퍼스 순회 실측 2026-08-11). S3-27 acceptance ④가 이 429건을 '계보 미영속으로 원 생성기 추적 불가'를 사유로 명시 제외했고, 그 사유의 해소를 S4-14에 걸었다."
+  - "② 차단 조건 해소 확인 — S4-14는 rephrase측을 범위에서 분리했고(notes: 'identity 설계 결정이 선행돼야 해 분리'), 그 분리분은 S4-21-rephrase-lineage-identity-decision으로 등재돼 **done**이다(identity_id 신설 + problem_relation 변형 이력 + rephrased_v0 429 소급 처리). 즉 S3-27이 유예의 근거로 삼은 '원 생성기 추적 불가'는 더 이상 성립하지 않는다. 이 태스크는 그 전제가 실제로 무너졌는지를 먼저 실측으로 확인하고(identity_id/relations로 429건의 부모 슬러그 추적이 실제 가능한지), 가능한 범위에서만 태깅한다."
+  - "③ 태깅 실행 — 부모 문항의 problem_type_codes를 계보를 따라 상속한다(재서술은 봉인 모델상 수치·정답·선지 불변이므로 인지 행동 유형도 불변이라는 논거를 명문화). LLM 0·문항 텍스트 추론 0·재실행 바이트 결정론(S3-27·S3-10 백필 동형). 상속 불가 잔여분은 건수와 사유를 리포트에 명시 기록한다(침묵 통과 금지 — 부분 커버의 정직 고지 형식은 S3-27 선례 유지)."
+  - "④ 계측기 회복 확인 — problem_bank_coverage.zero_coverage_types()는 docstring이 스스로 '§4-① 트리거의 발화 계측기'라고 선언한 도구다. 코퍼스의 16.2%가 미태깅인 채로는 그 계측기의 0커버 판정이 과대 계상된다. 태깅 전후로 zero_coverage_types() 결과가 어떻게 바뀌는지 기록한다 — 이것이 이 태스크의 실제 가치다(태깅 자체가 아니라 계측기 신뢰성)."
+  - "⑤ 변별력 검증 — 임의 1건의 계보를 끊은 상태에서 그 건이 '상속 불가'로 정직 계상되는지 실측 후 cp 백업으로 원복(git checkout 금지)."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/problem_type_mapping.py
+  - src/backend/whymath_backend/harness/problem_bank_coverage.py
+  - "data/corpus/problem_bank_rephrased_v0/**"
+session: null
+notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F3·§3 D10 — 외부 EOS 틀(기능 59 '생성 기준: 유형') 3차 대조. CONT-03(트리거 만료 계약)이 일반 계약이라면 이 태스크는 그 계약이 없어서 생긴 구체적 미상환 1건이다. 부수 정정: S3-27 acceptance ④와 S4-14 notes가 후속을 'S4-18'로 지목하고 있으나 S4-18은 현재 S4-18-review-time-axis(복습 시간축·ai_tutor D5)로 무관한 태스크이며 실제 후속은 S4-21이다 — 참조가 stale하다(태스크 소실이 아니라 번호 재배정, HARN-10/HARN-15 번호 충돌 가드 계열)."
+updated: 2026-08-11

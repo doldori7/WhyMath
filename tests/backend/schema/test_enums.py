@@ -27,6 +27,7 @@ from whymath_backend.schema.enums import (
     Visualizability,
     VisualizationStyle,
     VisualType,
+    is_review_status_cleared,
 )
 
 _ALL_ENUMS: list[type[Enum]] = [
@@ -343,6 +344,30 @@ class TestReviewStatus:
     def test_values_match_ddl_comment(self) -> None:
         """§3.1 review_status_enum 주석(pending/approved/rejected)."""
         assert {r.value for r in ReviewStatus} == {"pending", "approved", "rejected"}
+
+
+class TestIsReviewStatusCleared:
+    """검수 통과 판정의 값 수준 단일 권위(CONT-01) — 런타임 L6와 빌드타임 하네스가 공유한다."""
+
+    def test_only_approved_passes(self) -> None:
+        """`approved`만 True — enum 멤버·문자열 양쪽 입력에서 같다."""
+        assert is_review_status_cleared(ReviewStatus.approved) is True
+        assert is_review_status_cleared("approved") is True
+
+    def test_fail_closed_for_every_other_state(self) -> None:
+        """`None`(미평가)·`pending`·`rejected` 전부 False — fail-closed(§13.3)."""
+        assert is_review_status_cleared(None) is False
+        assert is_review_status_cleared(ReviewStatus.pending) is False
+        assert is_review_status_cleared(ReviewStatus.rejected) is False
+        assert is_review_status_cleared("pending") is False
+        assert is_review_status_cleared("rejected") is False
+
+    def test_unknown_or_malformed_values_are_failed_closed(self) -> None:
+        """모르는 값·공백 섞인 값도 통과시키지 않는다(관대한 정규화 금지 — 기준 이원화 방지)."""
+        assert is_review_status_cleared("") is False
+        assert is_review_status_cleared("APPROVED") is False
+        assert is_review_status_cleared("approved ") is False
+        assert is_review_status_cleared("ai_estimated") is False  # 개념 코퍼스 축 값(다른 축)
 
 
 # ──────────────────────────────────────────────────────────────────────

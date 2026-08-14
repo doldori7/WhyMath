@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -19,7 +19,9 @@ acceptance:
   - "⑤ 클라: _StepPanelSeed 고정 문구 → solutionPathId로 실제 단계 조회·렌더. **교수학 경계(협상 불가)**: reveal_policy='deferred' 불변 · 전체 풀이 일괄 노출 금지 · 학생이 스스로 펼친 단계까지만 노출 · 펼치기 전 단계 내용·정답 미렌더 · 점수/등급 노출 0(solution_module_gap_review.md §2-①). 위젯 테스트로 '펼치기 전 정답 문자열 부재'를 동결"
   - "⑥ 도달 관측: SOL-03 리포트의 scene 요소 kind별 실방출 카운트에서 step_panel이 0에서 벗어나는 것을 착지 증거로 삼는다(선언이 아니라 실측). 검사는 CI 명령 그대로·판정은 exit code·백엔드 소스 변경이므로 전체 스위트 후 회귀 판단"
   - "⑦ 범위 밖: 다중 풀이 비교 UI·갤러리(§4-⑥ Phase 3 유보)·힌트 콘텐츠(S4-11)·approach_type 노출(S4-10)·학생 대면 신규 scene kind"
-artifacts: []
+artifacts:
+  - "PR#825"
+  - "PR#826"
 paths:
   - src/backend/whymath_backend/l4/scene_generation.py
   - src/backend/whymath_backend/l4/learning_scene.py
@@ -27,4 +29,4 @@ paths:
   - "src/mobile/lib/features/chat/**"
 session: null
 notes: "docs/architecture/solution_module_gap_review_r3.md §4 R2. '테스트 초록 + 학생 도달 0' 유형 — 검증 장치는 도는데 대상이 없는 역방향 변형."
-updated: 2026-08-11
+updated: 2026-08-13

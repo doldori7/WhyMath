@@ -503,6 +503,38 @@ class ReviewStatus(str, Enum):
     rejected = "rejected"
 
 
+def is_review_status_cleared(value: ReviewStatus | str | None) -> bool:
+    """검수 통과 여부의 **값 수준 단일 권위** — `approved`만 True(fail-closed).
+
+    왜 함수인가(CONT-01): 이 판정은 두 곳에서 필요하다.
+      · **런타임** — `l6/_shared.is_review_cleared(problem)`가 L6 6모드·blueprint 조립·기본 CAT의
+        노출 게이트로 호출한다(PB-03). 입력은 `Problem`(pydantic) 인스턴스다.
+      · **빌드타임** — `harness/concept_assessment_index.py`가 문항 코퍼스 JSONL을 dict로 읽어
+        개념 평가 재료 상속 후보를 고른다. 입력은 `Problem`이 아니라 *생 dict의 문자열 값*이다.
+    두 경로가 각자 `== "approved"`를 적으면 기준이 이원화되고, 한쪽만 완화돼도 아무도 모른다.
+    그래서 "어떤 값이 검수 통과인가"라는 **enum 자신의 의미**를 여기(enum 옆)에 한 번만 두고,
+    `is_review_cleared`는 이 함수를 감싸는 `Problem` 어댑터가 된다.
+
+    fail-closed: `None`(미평가)·`pending`(대기)·`rejected`(기준 미달)는 전부 False다.
+    §13.3 "모든 problem은 review_status=approved 후 노출"의 기계적 표현이다.
+
+    `ReviewStatus`는 `str, Enum`이라 enum 멤버와 문자열이 서로 동등 비교된다 — 따라서 이 한 줄이
+    `use_enum_values=True`로 문자열화된 `Problem.review_status`와 코퍼스 생 문자열 양쪽을 모두
+    올바르게 판정한다(정규화 분기 불필요).
+
+    ⚠️ 저작권 축(`l6/_shared.is_exposable`)과 **절대 합치지 않는다**. 검수는 운영·정책 축이고
+    노출 가능성은 법적 축이다(PB-03 설계). 합치면 나중에 운영 사유로 법적 게이트를 느슨하게
+    하는 압력이 생긴다 — 호출부에서 각각 독립된 `if`로 확인한다.
+
+    Args:
+      value: 판정 대상 `review_status`(enum 멤버·문자열·None 모두 허용).
+
+    Returns:
+      `approved`이면 True, 그 외 전부 False.
+    """
+    return value == ReviewStatus.approved
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 풀이 단계·문항 관계 (§3.2 step_type_enum·relation_type_enum)
 # ──────────────────────────────────────────────────────────────────────────

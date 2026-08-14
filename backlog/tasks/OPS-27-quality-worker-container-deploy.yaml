@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-27-quality-worker-container-deploy
+title: "QUALITY 비동기 워커 컨테이너 배포 — prod compose worker 서비스 부재로 202 작업 영구 pending (producer-only 배포 축)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① docker-compose.prod.yml에 celery worker 서비스 추가(app 이미지 재사용 — SEC-12 retention-purge 선례·동시성 1 강제=GPU 단일 점유 l3/queue 정본) — 컨테이너 배포에서 QUALITY(qwen3.5:27b) 202 작업이 실제 소비됨. app.py:678이 CeleryJobQueue를 상시 결선하므로 현재는 enqueue만 되고 소비자 0"
+  - "② tests/infra/에 compose 정적 파싱 배선 실재성 테스트(SEC-12 패턴 답습) — worker 서비스 제거 시 red가 되는 변별 확인"
+  - "③ deployment_cd_runbook.md에 워커 운영 절 추가 + infra/phaiakes9/OPERATIONS_24_7.md systemd 기술과의 이중 진실 해소(컨테이너/네이티브 어느 쪽이 정본인지 지정)"
+artifacts: []
+paths:
+  - docker-compose.prod.yml
+  - "tests/infra/**"
+  - docs/architecture/deployment_cd_runbook.md
+session: null
+notes: "ai_integration_gap_review.md D2(2026-08-10). GET /v1/jobs 폴링(app.py:1031)은 있는데 작업을 완료시킬 워커가 배포에 없다 — '완비된 소비 경로+미도달 공급원' 계열(S4-22·OPS-24 동형)의 배포 축 변형. jobs 무인증·소유권 축은 SEC-15(타 세션 in_progress) 소유 — 본 태스크는 워커 배포만."
+updated: 2026-08-10

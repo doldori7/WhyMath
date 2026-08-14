@@ -10,6 +10,9 @@
      ("변별력 없는 검증 스텝 금지"·test_coach_prose_leak_eval 선례).
   ⑤ 합성 신규 누락(tmp_path 코퍼스에 미지원 심볼 주입) → exit 1·베이스라인 등재 시 exit 0·
      해소 회계·부재/파싱 실패의 명시 실패(침묵 skip 금지).
+  ⑥ [NS-05] 이론 코퍼스 5종(concept_content K-12·대학·atom_graph·misconceptions·
+     concept_graph) 스캔 범위 — 합성 이론 레코드 주입 변별력·ID/코드 필드 미스캔·명시 실패,
+     실 코퍼스에서 이론 레코드가 실측되고 신규 누락 0(커밋 베이스라인과 일치)임을 동결.
 
 CI 상시 배선(ci.yml 게이트 스텝 추가)은 ARCH-14 소유 — 여기서는 pytest 상시 회귀로 심는다.
 """
@@ -45,8 +48,82 @@ _REAL_PROBLEMS = _PROJECT_ROOT / "data" / "corpus" / "problem_bank_v1" / "proble
 # ──────────────────────────────────────────────────────────────────────────
 # 합성 코퍼스 헬퍼 — 실제 코퍼스 1레코드를 변형(스키마·저작권 위생 검증을 그대로 통과)
 # ──────────────────────────────────────────────────────────────────────────
-def _write_synthetic_root(tmp_path: Path, question_text: str) -> Path:
-    """tmp_path에 합성 코퍼스 루트 구성 — 문항 1건(주입 question_text) + 무결 수식 1건."""
+def _write_theory_corpora(root: Path, *, explanation: str, id_token: str = "SYN") -> None:
+    """합성 이론 코퍼스 4종(THEORY_CORPORA 명세의 최소 유효 구조·레코드 1건씩).
+
+    이론 코퍼스는 게이트 스캔 범위의 필수 입력이라(NS-05 — 부재 시 명시 실패) 합성 루트에도
+    항상 함께 쓴다. `id_token`은 code/mis_id 등 **미스캔 필드**에만 들어간다 —
+    표기 토큰을 심어도 게이트가 읽지 않아야 하는 자리다.
+
+    concept_graph_v1/concepts.jsonl은 합성 루트에도 쓰지 않는다 — legacy snapshot 동결
+    거버넌스(test_legacy_snapshot_governance)로 스캔 대상에서 의도적 제외됐다
+    (notation_coverage.THEORY_CORPORA 명세 주석 참조).
+    """
+    content = {
+        "content": [
+            {
+                "code": f"{id_token}-C1",
+                "name": "합성 개념",
+                "explanation": explanation,
+                "metaphor": "합성 비유.",
+                "misconception": "합성 오개념.",
+                "formal_definition_internal": "합성 정의.",
+                "accepted_expressions": "합성 허용 표현.",
+                "flashcards": [{"front": "앞면 질문.", "back": "뒷면 답."}],
+            }
+        ]
+    }
+    for dirname in ("concept_content_v1", "concept_content_university_v1"):
+        d = root / dirname
+        d.mkdir(parents=True)
+        (d / "content.json").write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    atom = root / "atom_graph_v1"
+    atom.mkdir(parents=True)
+    (atom / "graph.json").write_text(
+        json.dumps(
+            {
+                "concepts": [
+                    {
+                        "code": f"{id_token}-A1",
+                        "name": "합성 원자",
+                        "socratic": "왜 그런지 스스로 설명해 보자.",
+                        "diagnostic_item": "합성 진단 문항.",
+                    }
+                ],
+                "edges": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    mis = root / "misconceptions_v1"
+    mis.mkdir(parents=True)
+    (mis / "misconceptions.json").write_text(
+        json.dumps(
+            {
+                "misconceptions": [
+                    {
+                        "mis_id": f"{id_token}M1",
+                        "canonical_statement": "합성 오개념 진술.",
+                        "student_wrong_thinking": "합성 오류 사고.",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_synthetic_root(
+    tmp_path: Path,
+    question_text: str,
+    *,
+    theory_explanation: str = "합성 이론 서술(표기 없음).",
+    theory_id_token: str = "SYN",
+) -> Path:
+    """tmp_path에 합성 코퍼스 루트 구성 — 문항 1건(주입 question_text) + 무결 수식 1건 +
+    이론 코퍼스 5종(NS-05 필수 입력 — 기본은 평문 서술만, 표기 토큰 0)."""
     root = tmp_path / "corpus"
     bank = root / "problem_bank_synthetic_v0"
     bank.mkdir(parents=True)
@@ -63,6 +140,7 @@ def _write_synthetic_root(tmp_path: Path, question_text: str) -> Path:
         '{"formula_id": "formula.synthetic", "latex": "(a+b)^{2} = a^{2} + 2ab + b^{2}"}\n',
         encoding="utf-8",
     )
+    _write_theory_corpora(root, explanation=theory_explanation, id_token=theory_id_token)
     return root
 
 
@@ -174,6 +252,8 @@ class TestGateRealCorpus:
         assert payload["new_missing"] == []
         assert payload["problems_scanned"] > 0
         assert payload["formulas_scanned"] > 0
+        # NS-05 동결 — 이론 코퍼스 5종이 실측되고 그 누락이 베이스라인과 일치함(신규 0).
+        assert payload["theory_records_scanned"] > 0
         # 베이스라인 내 누락은 리포트에 남는다(공백 은폐 방지) — 첫 실측에 실존 공백이 있다.
         assert len(payload["missing"]) >= 1
         # 게이트 밖 기록 — notation_contract.md §6 3건 전재(측정 축과 별개임을 명시).
@@ -188,6 +268,19 @@ class TestGateRealCorpus:
             "macro",
             "\\cos",
         ) in baseline  # 첫 실측 실존 공백(formula_graph_v1 유래)
+
+    def test_committed_baseline_contains_ns05_theory_entries(self) -> None:
+        """NS-05 래칫 동결 — 이론 코퍼스 첫 실측에서 계상된 신규 누락 70건이 베이스라인에
+        추가만 된 상태를 봉인한다(대표 표본 단언 — 전수 목록은 본판정 exit 0이 보증)."""
+        baseline = load_baseline(_BASELINE)
+        # 발생 상위·각 코퍼스 대표 — 지우거나 바꾸면 래칫이 풀려 본판정이 red가 된다.
+        for token in ("↔", "∫", "∞", "θ", "ε", "∂", "⊂", "∪", "⇔"):
+            assert (
+                "glyph",
+                token,
+            ) in baseline, (
+                f"NS-05 베이스라인 항목 {token!r} 부재 — 래칫 후퇴(삭제·수정 금지 원칙 위반)"
+            )
 
 
 class TestGateSynthetic:
@@ -269,3 +362,60 @@ class TestGateSynthetic:
         root = _write_synthetic_root(tmp_path, "평문 문항.")
         with pytest.raises(FileNotFoundError, match="베이스라인 부재"):
             main(["--corpus-root", str(root), "--baseline", str(tmp_path / "none.json")])
+
+
+class TestGateTheoryCorpus:
+    """이론 코퍼스 5종 스캔(NS-05) — 합성 주입 변별력·필드 선정·명시 실패."""
+
+    def test_injected_glyph_in_theory_corpus_fails(self, tmp_path: Path) -> None:
+        """이론 서술 필드(concept_content explanation)에 미지원 글리프 ⊕ 주입 →
+        베이스라인 밖 신규 누락 → exit 1(문항 경로와 같은 판정이 이론 경로에서도 작동)."""
+        root = _write_synthetic_root(
+            tmp_path, "평문 문항.", theory_explanation="연산 ⊕ 를 새로 정의하자."
+        )
+        baseline = _write_baseline(tmp_path, [])
+        assert main(["--corpus-root", str(root), "--baseline", str(baseline)]) == 1
+
+    def test_id_code_fields_not_scanned(self, tmp_path: Path) -> None:
+        """ID·코드 필드(code·mis_id·src_id)에만 표기 토큰이 있으면 exit 0 —
+        "사람이 읽는 수학 서술 텍스트만 스캔"하는 필드 선정 규칙의 대칭 봉인.
+        id_token의 ⊕가 스캔됐다면 신규 누락으로 exit 1이 됐을 것이다."""
+        root = _write_synthetic_root(tmp_path, "평문 문항.", theory_id_token="S⊕N")
+        baseline = _write_baseline(tmp_path, [])
+        assert main(["--corpus-root", str(root), "--baseline", str(baseline)]) == 0
+
+    def test_missing_theory_corpus_raises(self, tmp_path: Path) -> None:
+        """이론 코퍼스 1종 부재 → 명시 실패(스캔 범위는 5종 전수·skip 은폐 금지)."""
+        root = _write_synthetic_root(tmp_path, "평문 문항.")
+        (root / "misconceptions_v1" / "misconceptions.json").unlink()
+        baseline = _write_baseline(tmp_path, [])
+        with pytest.raises(FileNotFoundError, match="이론 코퍼스 부재"):
+            main(["--corpus-root", str(root), "--baseline", str(baseline)])
+
+    def test_malformed_theory_json_raises(self, tmp_path: Path) -> None:
+        """이론 코퍼스 JSON 파싱 실패 → 예외 타입명 병기 명시 실패(침묵 실패 금지)."""
+        root = _write_synthetic_root(tmp_path, "평문 문항.")
+        (root / "concept_content_v1" / "content.json").write_text("not json\n", encoding="utf-8")
+        baseline = _write_baseline(tmp_path, [])
+        with pytest.raises(ValueError, match="JSONDecodeError"):
+            main(["--corpus-root", str(root), "--baseline", str(baseline)])
+
+    def test_theory_records_key_missing_raises(self, tmp_path: Path) -> None:
+        """레코드 배열 키 부재(구조 위반) → 명시 실패(스캔 누락을 조용히 통과시키지 않는다)."""
+        root = _write_synthetic_root(tmp_path, "평문 문항.")
+        (root / "atom_graph_v1" / "graph.json").write_text('{"atoms": []}', encoding="utf-8")
+        baseline = _write_baseline(tmp_path, [])
+        with pytest.raises(ValueError, match="배열 부재/구조 위반"):
+            main(["--corpus-root", str(root), "--baseline", str(baseline)])
+
+    def test_theory_schema_drift_raises(self, tmp_path: Path) -> None:
+        """선언된 텍스트 필드에 str/null 아닌 값 → 스키마 드리프트 명시 실패 —
+        새 텍스트 필드가 스캔에서 새어 나가는 것을 막는다."""
+        root = _write_synthetic_root(tmp_path, "평문 문항.")
+        (root / "atom_graph_v1" / "graph.json").write_text(
+            json.dumps({"concepts": [{"code": "A1", "socratic": ["목록은", "드리프트"]}]}),
+            encoding="utf-8",
+        )
+        baseline = _write_baseline(tmp_path, [])
+        with pytest.raises(ValueError, match="스키마 드리프트"):
+            main(["--corpus-root", str(root), "--baseline", str(baseline)])

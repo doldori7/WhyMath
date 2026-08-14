@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CONT-03-deferral-trigger-expiry-contract
+title: "갭 점검 문서의 잔여 트리거에 만료·재확인 계약 — 발화 조건이 충족돼도 아무도 검사하지 않는 구조 해소"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 확정 — ai_content_generation_gap_review.md §4가 '태스크화하지 않는 축 6종'에 발화 조건을 명시해 뒀으나, 그 조건의 충족을 검사하는 주체가 0이다. 3차 재점검이 수기로 대조한 결과 2종이 이미 발화 상태였다: 트리거 ②(개념 콘텐츠 결함 주입 강등전 — 조건 'D2의 감사가 착지한 뒤' → S3-26 done으로 충족) · 트리거 ⑥(변형 3/6 미구현분: 조건변형·난이도계열변형·역문제 — 조건 'S4-14 착지 후' → S4-14 done 2026-08-05로 충족). 두 건 모두 미등재 상태로 방치됐다."
+  - "② 발화한 2종의 거취 판정 — 각각 태스크로 등재하거나, 등재하지 않는다면 그 사유와 새 발화 조건을 문서에 갱신한다. 조건이 충족됐는데 아무 판단도 하지 않은 상태로 남기는 것만 금지(CLAUDE.md '만료 없는 유예·제외 금지')."
+  - "③ 일반 계약 — 유예 항목이 만료·재확인 지점을 갖도록 기계화한다. ARCH-25의 GrandfatherEntry 만료 계약과 OPS-22의 pending-task:<id> 3분류(reached/by-design/pending-task) 패턴이 선례다: 참조된 태스크가 done으로 바뀌면 waiver가 expired로 뒤집혀 exit 1이 되는 형태. 새 대장 파일 신설 금지 — backlog/가 단일 진실 원천이며 트리거는 그 안에서 표현한다."
+  - "④ 범위 판정 선행 — 이 계약을 ai_content_generation 1편에만 걸지, 갭 점검 시리즈 전편(현재 20편 이상·각 편이 §4 트리거 절을 갖는다)에 걸지 먼저 정한다. 전편으로 넓히면 수집기가 문서 파싱에 의존하게 되므로, 파싱 대신 트리거를 backlog 필드로 승격하는 안과 비교해 택한다."
+  - "⑤ 변별력 실측 — 참조 태스크를 done으로 바꾼 상태에서 exit 1이 나는지, 원상태에서 exit 0이 나는지 양방향 실측. 수집기 파손 시 0건 통과 위장이 아니라 exit 2가 되게 한다(OPS-22 선례)."
+artifacts: []
+paths:
+  - "backlog/**"
+  - "scripts/harness/**"
+session: null
+notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F3·§3 D9·§4 트리거 대장 — 외부 EOS 틀 3차 대조에서 발견. CLAUDE.md 금기 '만료 없는 유예·제외 금지'(2026-08-03 결정·2026-08-10 통합점검이 본문 등재)의 갭점검 문서 평면 재발이다. 그 금기가 '1차 집행은 규칙 산문이 아니라 코드다(PB-02 그랜드파더 만료 계약 — 동일 유형 텍스트 규칙 2회 실패 후 코드 착지)'라고 적고 있는데, 갭 점검 문서의 §4 트리거 절은 아직 산문 단계에 있다. CONT-02와 역할 분리: CONT-02는 개념 감사 축 1건의 거취, 본 태스크는 트리거 일반 계약."
+updated: 2026-08-11
