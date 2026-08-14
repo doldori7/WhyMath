@@ -9,9 +9,13 @@
 // 정직(범위): 시각화는 실 WebView가 아니라 caption/type *seed*다(05a §6 — D3/Desmos/three.js
 // WebView·postMessage 연동은 후속). layout(two_panel·tabbed) 전용 렌더도 후속 — seed는 세로 스택.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../theme/spacing.dart';
+import '../application/step_panel_controller.dart';
+import '../application/step_panel_state.dart';
 import '../data/scene_models.dart';
+import '../domain/latex_to_plain.dart';
 import 'graphing_calculator_webview.dart';
 
 /// `LearningScene`을 받아 요소들을 세로로 렌더하는 레지스트리 위젯.
@@ -89,7 +93,8 @@ class SceneRenderer extends StatelessWidget {
               : '파라미터 조작: ${element.targets.join(', ')}',
         );
       case 'step_panel':
-        return const _StepPanelSeed();
+        // reveal_policy='deferred' — 학생이 스스로 펼친 단계까지만 서버에서 조회·노출한다.
+        return _StepPanel(solutionPathId: element.solutionPathId);
       case 'misconception_probe':
         // 답 미루기·낙인 금지 — 정답·수정·오개념 id 미렌더, 사고 유도 cue만.
         return _SceneRow(
@@ -200,24 +205,185 @@ class _VisualizationSeed extends StatelessWidget {
   }
 }
 
-/// 단계 패널 seed — reveal_policy="deferred" → 접힌 [ExpansionTile](점층 노출·답 미루기).
-class _StepPanelSeed extends StatelessWidget {
-  const _StepPanelSeed();
+/// 단계 패널 — step_panel 요소를 실제 단계 점층 노출 UI로 렌더한다(SOL-02 ⑤).
+///
+/// 교수학 경계(협상 불가):
+/// - reveal_policy='deferred' 불변 — 최초 1단계만 조회(up_to=1)하고, "다음 단계 보기" 탭으로
+///   한 단계씩만 늘린다. 전체 풀이를 한 번에 펼치는 경로는 없다(버튼·제스처 모두 부재).
+/// - 미펼침 단계 내용은 서버가 내려주지 않아 위젯 트리에도 없다(펼치기 전 정답·내용 미렌더).
+/// - 단계 내용은 MATH-05 정본 [latexToPlainSolution]으로 평문 표기 변환 후 보인다
+///   (원문 LaTeX 노출 금지).
+/// - 정서 안전: 로딩·실패 모두 중립 톤(error 롤·빨강 미사용). "단계 n/N" 진행 표시는
+///   위치 정보일 뿐 점수·등급이 아니다.
+class _StepPanel extends ConsumerWidget {
+  const _StepPanel({required this.solutionPathId});
+
+  /// 서버가 검증해 내려준 풀이 경로 id. null/빈 문자열이면 조용히 생략한다(SOL-02 ③:
+  /// 서버는 solution_path 실재 시에만 step_panel을 방출 — id 부재는 계약 위반이라 빈
+  /// 껍데기를 그리지 않는다. 침묵 실패 금지로 로그는 남긴다).
+  final String? solutionPathId;
 
   @override
-  Widget build(BuildContext context) {
-    return const Card(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = solutionPathId;
+    if (id == null || id.isEmpty) {
+      debugPrint('step_panel에 solution_path_id가 없어 렌더를 생략한다(서버 계약 위반).');
+      return const SizedBox.shrink();
+    }
+    final asyncState = ref.watch(stepPanelControllerProvider(id));
+    final theme = Theme.of(context);
+    return Card(
       margin: EdgeInsets.zero,
-      child: ExpansionTile(
-        title: Text('단계별로 살펴보기'),
-        childrenPadding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
+        child: asyncState.when(
+          loading: () => _neutralLine(theme, '단계를 불러오고 있어요.'),
+          error: (Object e, _) {
+            debugPrint('단계 패널 초기 조회 실패(${e.runtimeType}) — 중립 재시도로 폴백한다.');
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _neutralLine(theme, '단계를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'),
+                TextButton(
+                  onPressed: () =>
+                      ref.invalidate(stepPanelControllerProvider(id)),
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            );
+          },
+          data: (panelState) => _StepPanelBody(
+            solutionPathId: id,
+            panelState: panelState,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 중립 톤 안내 한 줄 — 실패·로딩도 채점이 아니라 안내다(정서 안전).
+  static Widget _neutralLine(ThemeData theme, String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+/// 조회 성공 상태의 단계 패널 본문 — 펼친 단계 목록 + 진행 표시 + "다음 단계 보기".
+class _StepPanelBody extends ConsumerWidget {
+  const _StepPanelBody({required this.solutionPathId, required this.panelState});
+
+  final String solutionPathId;
+  final StepPanelState panelState;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final page = panelState.page;
+    final children = <Widget>[
+      Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('차근차근 단계를 펼쳐 볼 수 있어요.'),
+          Icon(
+            Icons.format_list_numbered,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('단계별로 살펴보기', style: theme.textTheme.titleSmall),
+          const SizedBox(width: AppSpacing.sm),
+          // 위치 정보("단계 2/5") — 점수·등급이 아니다(SOL-02 ⑤ 점수 노출 0).
+          Text(
+            '단계 ${page.upTo}/${page.total}',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
+    ];
+
+    if (page.steps.isEmpty) {
+      // 계약상 solution_path 실재 시 단계도 실재 — 방어적 중립 문구(빈 껍데기 금지와 별개로
+      // 서버 데이터 이상에 앱이 죽지 않게 한다).
+      children.add(_StepPanel._neutralLine(theme, '아직 보여 줄 단계가 없어요.'));
+    } else {
+      for (final step in page.steps) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${step.stepOrder}.',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                // 학생 표면은 평문 표기 — 원문 LaTeX 노출 금지(MATH-05 정본 변환).
+                Flexible(
+                  child: Text(
+                    latexToPlainSolution(step.content),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (panelState.revealFailed) {
+      // 실패도 채점이 아니다 — 중립 안내 후 같은 버튼으로 재시도(펼친 단계는 그대로).
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          child: _StepPanel._neutralLine(
+            theme,
+            '다음 단계를 불러오지 못했어요. 다시 시도해 주세요.',
+          ),
+        ),
+      );
+    }
+
+    if (page.upTo < page.total) {
+      children.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: panelState.isRevealingNext
+                ? null
+                : () => ref
+                    .read(stepPanelControllerProvider(solutionPathId).notifier)
+                    .revealNext(),
+            child: panelState.isRevealingNext
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('다음 단계 보기'),
+          ),
+        ),
+      );
+    }
+    // 마지막 단계 도달 시 버튼은 사라진다 — 전체 일괄 노출 버튼은 어디에도 없다.
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
     );
   }
 }

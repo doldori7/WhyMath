@@ -6,6 +6,12 @@
 //
 // 주입 방식: loadFlutterAsset는 쿼리스트링(?spec=)을 못 싣는다 → 페이지 로드 완료(onPageFinished) 후
 // 웹이 노출한 전역 훅 window.whymathApplySpec(base64(JSON))을 runJavaScript로 호출해 명세를 넣는다.
+//
+// 생명주기 하드닝(MOB-19): 저사양 안드로이드(미션 하한선)에서 WebView+three.js는 가장 무거운 조합이다.
+// 그래서 ① onPageFinished 전까지 로딩 인디케이터로 흰 플래시·빈 화면을 가리고, ② 주 프레임 로드 실패
+// (onWebResourceError) 또는 웹 앱 기동 실패(applySpec 훅 부재 — 번들/three.js 초기화 사망) 시 WebView를
+// 걷어내고 캡션 시드로 강등한다. 정서 안전: 실패를 빨강·경고로 표현하지 않는다 — 학생에게는 정적
+// 캡션이 "원래 정적인 그림 설명"과 같은 중립 톤으로 보인다.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -14,6 +20,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../data/interaction_logger.dart';
 import '../data/scene_models.dart';
+import 'webview_fallback.dart';
 
 /// Graph2dSpec(Map) → 웹 계산기 `?spec=` 호환 base64(JSON) 파라미터.
 ///
@@ -58,6 +65,9 @@ Map<String, dynamic>? decodeInteractionMessage(String raw) {
 /// 시각화 명세(`interactive_graph_2d`·`interactive_surface_3d`)를 실 WebView로 렌더하는 인라인 위젯.
 ///
 /// 라우트를 추가하지 않고(인라인 임베드) `SceneRenderer` 안에서 고정 높이로 표시한다.
+///
+/// 생명주기(MOB-19): 로드 완료 전까지 로딩 인디케이터를 얹고, 주 프레임 로드 실패·웹 앱 기동 실패 시
+/// 캡션 시드 폴백으로 강등한다(빈 화면 미노출 — 저사양 단말이 미션 하한선).
 class GraphingCalculatorWebView extends ConsumerStatefulWidget {
   const GraphingCalculatorWebView({
     required this.viz,
@@ -86,6 +96,12 @@ class GraphingCalculatorWebView extends ConsumerStatefulWidget {
 class _GraphingCalculatorWebViewState extends ConsumerState<GraphingCalculatorWebView> {
   late final WebViewController _controller;
 
+  /// 로딩 인디케이터 표시 여부 — onPageFinished(로드 완료) 전까지만 true(MOB-19).
+  bool _loading = true;
+
+  /// 강등 여부 — 주 프레임 로드 실패·웹 앱 기동 실패 시 캡션 시드로 내린다(빈 화면 금지).
+  bool _fallBackToCaption = false;
+
   @override
   void initState() {
     super.initState();
@@ -111,23 +127,76 @@ class _GraphingCalculatorWebViewState extends ConsumerState<GraphingCalculatorWe
       )
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageFinished: (_) {
-            // 로드 완료 후 명세 주입(loadFlutterAsset는 ?spec= 쿼리 미지원).
-            _controller.runJavaScript("window.whymathApplySpec('$param')");
-          },
+          onPageFinished: (_) => _onPageFinished(param),
+          onWebResourceError: _onWebResourceError,
         ),
       )
       ..loadFlutterAsset('assets/graphing_calculator/index.html');
   }
 
+  /// 로드 완료 처리 — 웹 앱 기동을 확인한 뒤 인디케이터를 거두고 명세를 주입한다.
+  Future<void> _onPageFinished(String param) async {
+    // 이미 강등됐거나 dispose된 뒤 늦게 도착한 콜백은 무시한다(빈 화면으로 되돌리지 않음).
+    if (_fallBackToCaption || !mounted) return;
+    // 웹 앱 기동 확인(MOB-19): three.js·번들 초기화가 저사양 단말에서 죽으면 페이지 로드는
+    // "성공"이지만 applySpec 훅이 없는 빈 캔버스만 남는다 — 훅 부재를 감지해 캡션으로 강등한다.
+    // 반환 표기는 플랫폼마다 다르다(안드로이드는 JSON 인코딩 문자열 '"1"', iOS는 숫자 1) —
+    // 그래서 동등 비교가 아니라 포함 여부로 본다.
+    final hookAlive =
+        await _controller.runJavaScriptReturningResult('window.whymathApplySpec ? 1 : 0');
+    if (!mounted) return;
+    if (!hookAlive.toString().contains('1')) {
+      debugPrint('[whymath] 그래프 웹 앱 기동 실패(applySpec 훅 부재) → 캡션 폴백');
+      setState(() {
+        _loading = false;
+        _fallBackToCaption = true;
+      });
+      return;
+    }
+    setState(() => _loading = false);
+    // 로드 완료 후 명세 주입(loadFlutterAsset는 ?spec= 쿼리 미지원).
+    await _controller.runJavaScript("window.whymathApplySpec('$param')");
+  }
+
+  /// 리소스 로드 실패 처리 — 주 프레임 실패만 캡션으로 강등한다(판정은 공유 순수 함수).
+  void _onWebResourceError(WebResourceError error) {
+    if (!shouldDemoteWebViewOnError(isForMainFrame: error.isForMainFrame)) return;
+    // 침묵 실패 금지 — 강등 사유를 로그로 남긴다(학생 표면은 중립 톤 유지).
+    debugPrint(
+      '[whymath] 그래프 WebView 주 프레임 로드 실패 → 캡션 폴백: '
+      'code=${error.errorCode} ${error.description}',
+    );
+    if (_fallBackToCaption || !mounted) return;
+    setState(() {
+      _loading = false;
+      _fallBackToCaption = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 강등 — WebView 대신 캡션 시드. scene_renderer의 비대화형 시각화 폴백(_VisualizationSeed)과
+    // 같은 모습이라 학생은 "실패 경고"가 아니라 정적 그림 설명을 본다(정서 안전).
+    if (_fallBackToCaption) {
+      final cap = widget.viz.caption;
+      return WebViewFallbackTile(
+        icon: Icons.insights_outlined,
+        label: (cap != null && cap.isNotEmpty) ? cap : '그래프를 불러오지 못했어요',
+        height: widget.height,
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
         height: widget.height,
         width: double.infinity,
-        child: WebViewWidget(controller: _controller),
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            // 로드 완료 전까지 웹뷰 위를 덮는다 — 초기 흰 프레임·빈 화면을 숨기는 인디케이터.
+            if (_loading) const Positioned.fill(child: WebViewLoadingCover()),
+          ],
+        ),
       ),
     );
   }
