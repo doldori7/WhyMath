@@ -16,6 +16,11 @@ is_minor·email_hash·persona_*·subscription_*·created_at 등)는 사용자가
 
 SEC-09: 동의 기록 성공 시 `privacy.record_consent_change_audit`가 `privacy_audit`에 감사 1행을
 같은 트랜잭션으로 적재한다(`account_security_gap_review.md` D3 — 감사 대상 3종 중 "동의 변경").
+
+SEC-20(`account_security_gap_review_r2.md` D9): 동의 *철회*(`DELETE /me/parental-consent`)를
+신설했다 — 그전까지 동의는 받을 수만 있고 거둘 수 없어 **한 번 받은 동의가 영구히 유효**했다.
+철회는 원장을 지우지 않고(append-only) `revoked_at`을 찍고 `parent_consent_at`을 해제해 게이트를
+다시 닫으며, GRANT와 같은 감사 writer를 재사용한다(신규 감사 테이블 0).
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,9 +50,11 @@ from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.privacy import record_consent_change_audit
+from whymath_backend.schema.enums import ConsentScope
 from whymath_backend.schema.parental_consent import (
     ParentalConsentGrantRequest,
     ParentalConsentGrantResponse,
+    ParentalConsentRevokeResponse,
 )
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -270,3 +278,82 @@ async def grant_parental_consent(
         consent_signed_at=now,
         parent_consent_at=now,
     )
+
+
+@router.delete(
+    "/me/parental-consent",
+    response_model=ParentalConsentRevokeResponse,
+    summary="법정대리인 동의 철회(게이트 재차단) — PIPA §22-2·SEC-20",
+)
+async def revoke_parental_consent(
+    request: Request,
+    user: Annotated[UserProfile, Depends(get_current_user)],
+    session: SessionDep,
+    settings: SettingsDep,
+) -> ParentalConsentRevokeResponse:
+    """법정대리인 동의를 철회하고 미성년 동의 게이트를 다시 닫는다(SEC-20 D9).
+
+    **왜 이 경로가 필요한가**: 그전까지 동의는 *받을* 수만 있고 *거둘* 수 없었다 —
+    `ParentalConsent.revoked_at`은 컬럼과 인덱스가 있는데 writer가 상수 `None` 1곳뿐이고
+    reader가 0이었다. 즉 한 번 받은 동의가 영구히 유효했다. 동의 *문안*은 법률 판단이라
+    `MGMT-02`(변호사 회신)에 남지만, **"철회된 동의는 동의가 아니다"는 집행은 기계 판단**이고
+    철회를 표현할 수 없는 상태를 유지하는 쪽이 법적 위험이 더 크다.
+
+    **인증 게이트가 `get_current_user`인 이유**: GRANT와 동형이다. 이미 만료·철회된 미성년은
+    `get_consented_user`가 403으로 막으므로 동의 상태를 *바꾸는* 경로가 그 뒤에 있으면 도달할 수
+    없다(닭-달걀). 본인 스코핑은 경로(`me`)와 토큰이 함께 보장한다.
+
+    **접근 주체 축소(v0·의도적)**: 지금 여는 것은 **학생 본인 토큰** 경로뿐이다. 법정대리인이
+    자기 화면에서 철회하는 경로는 *보호자를 어떻게 인증할 것인가*(`MGMT-01` 법정대리인 인증
+    모델·blocked)가 정해져야 만들 수 있고, 그전에 만들면 가짜 법적 의사표시가 된다. 본인이 자기
+    계정의 동의를 거두는 방향은 그 판단 없이도 안전하다.
+
+    **원장은 지우지 않는다**: append-only 방침 유지 — 해당 학생의 *미철회* 동의 행 전부에
+    `revoked_at`을 찍고(과거 행이 남아 감사가 가능하다) `user_profile.parent_consent_at`을
+    해제한다. 두 쓰기 + 감사 1행이 **같은 트랜잭션**이다(부분 성공 없음).
+
+    **기능 플래그를 걸지 않는다(의도적·비대칭)**: GRANT는 `parental_consent_grant_enabled`가
+    off면 404다(stub 신원확인으로 self-consent 우회가 가능해서). 철회에는 그 플래그를 걸지
+    않는다 — *동의를 거두는* 행위를 기능 플래그로 막는 것은 방향이 반대다(안전을 늘리는 조작을
+    잠그는 셈). **귀결(정직 표기)**: 플래그가 off인 환경에서 철회하면 같은 경로로 *재동의할 수
+    없다* → 그 미성년은 `ConsentedUser` 엔드포인트에서 계속 403이다. 이것은 결함이 아니라
+    철회의 정당한 결과다(동의가 없으면 처리하지 않는다) — 재동의 창구는 실 본인확인(`MGMT-01`)이
+    붙어 플래그가 켜질 때 열린다.
+
+    멱등: 이미 전부 철회 상태면 `revoked_count=0`으로 200을 돌려준다(반복 호출 안전).
+    """
+    now = datetime.now(tz=timezone.utc)
+    # 1. 미철회 동의 행 전부 조회 — 최신 1건만 찍으면 과거 행이 "미철회"로 남아 게이트 판정
+    #    (최신 1건 읽기)과 원장이 어긋난다. 전부 찍어야 원장이 사실과 일치한다.
+    rows = list(
+        (
+            await session.scalars(
+                select(ParentalConsent).where(
+                    ParentalConsent.user_id == user.user_id,
+                    ParentalConsent.revoked_at.is_(None),
+                )
+            )
+        ).all()
+    )
+    for row in rows:
+        row.revoked_at = now
+    # 2. 같은 트랜잭션으로 게이트 재차단 — parent_consent_at 해제(GRANT의 정확한 역연산).
+    user.parent_consent_at = None
+    await session.merge(user)
+    # 3. SEC-09 감사 재사용 — 신규 감사 테이블 0(동의 *변경*이 이미 이 writer의 의미다).
+    #    철회도 동의 변경이므로 같은 event_kind를 쓰고, 범위는 기록된 동의의 scope를 승계한다
+    #    (행이 없으면 기본 service_core — 현재 ConsentScope는 1값이라 실질 분기 없음).
+    scope = ConsentScope.service_core
+    for row in rows:
+        if row.consent_scope:
+            scope = ConsentScope(row.consent_scope)
+            break
+    record_consent_change_audit(
+        session,
+        user_id=user.user_id,
+        consent_scope=scope,
+        ip=_client_ip(request, settings=settings),
+        settings=settings,
+    )
+    await session.commit()
+    return ParentalConsentRevokeResponse(revoked_at=now, revoked_count=len(rows))

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -18,7 +18,10 @@ acceptance:
   - "⑤ 정본 security_privacy.md:11('회원가입 + 매 분기 재확인')에 편집자 부기 — 주기 숫자는 미확정(MGMT-02 선행)이고 만료·철회 집행 메커니즘은 이 태스크로 착지했음을 명기."
   - "⑥ 접근 주체 축소 — v0는 학생 본인 토큰 경로만 연다(보호자 전용 경로는 MGMT-01 법정대리인 인증 모델 후행). 축소 사유를 docstring에 명시."
   - "⑦ 범위 밖: 동의 scope 확장·약관 버전 스탬프(v1 D7·MGMT-02) · 실 법정대리인 본인확인(MGMT-01) · 재확인 주기 숫자 · 보호자 전용 접근 경로."
-artifacts: []
+artifacts:
+  - 87fbc07d
+  - "PR #809 (https://github.com/doldori7/WhyMath/pull/809)"
+  - "검증(전건 exit code, CI 충실 재현): 전체 백엔드 스위트 9647 passed/309 skipped/1 xfailed/0 failed(813s·bare pytest) · ruff 0(src+tests) · black 0(line-length 100·1131파일) · mypy --strict 0(491파일) · lint-imports 0 · backlog validate 0(315건). 변별력 뮤테이션 2회: 철회 판정 비활성→2건 red(test_revoked_consent_raises_403·test_revoked_ledger_alone_blocks_gate), 만료 판정 비활성→1건 red(test_expired_consent_raises_403); cp 백업 복원 후 md5 동일(05a7c7b3…)·MUTATION 문자열 잔존 0. hermetic 공백 보강: FakeSession이 statement를 PG 방언으로 컴파일해 게이트·철회 select() 유효성 검증(실 DB 통합 테스트는 기본 skip). 정직한 잔여: 실 PG 왕복 미검증(환경에 PG 없음·통합 3건 skip) · expires_at은 writer 없어 만료 분기가 실데이터에서 미발화(계약만) · 법정대리인 전용 철회 경로 없음(MGMT-01 후행) · 철회/부여를 감사에서 구분 불가(AuditEventKind 미확장) · 모바일 화면 0."
 paths:
   - src/backend/whymath_backend/api/_auth.py
   - src/backend/whymath_backend/api/users.py

@@ -147,3 +147,23 @@ class ParentalConsentGrantResponse(BaseModel):
     parent_consent_at: datetime = Field(
         description="user_profile에 설정된 동의 시각(미성년 게이트 통과 근거)."
     )
+
+
+class ParentalConsentRevokeResponse(BaseModel):
+    """`DELETE /v1/users/me/parental-consent` 응답 — 동의 철회 결과(SEC-20 D9).
+
+    철회는 **원장을 지우지 않는다**(append-only 유지) — 최신 동의 행에 `revoked_at`을 찍고
+    `user_profile.parent_consent_at`을 해제해 게이트를 다시 닫는다. 응답에는 몇 행이 철회됐는지와
+    철회 시각만 싣는다(법정대리인 이메일 등 PII 미포함 — GRANT 응답과 동일 방침).
+    """
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    revoked_at: datetime = Field(description="철회 시각(원장에 기록된 값).")
+    revoked_count: int = Field(
+        ge=0,
+        description=(
+            "이번 호출로 revoked_at이 찍힌 동의 행 수. 이미 전부 철회 상태였으면 0"
+            "(멱등 — 반복 호출이 안전하다)."
+        ),
+    )

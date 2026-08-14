@@ -14,10 +14,12 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import SecretStr
+from sqlalchemy.dialects import postgresql
 
 from whymath_backend.api._auth import get_consented_user, get_current_user, require_role
 from whymath_backend.config import Settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
+from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.enums import Role
 from whymath_backend.security import create_access_token
@@ -30,15 +32,30 @@ def _settings() -> Settings:
 
 
 class _FakeSession:
-    """session.get(UserProfile, pk)만 모사 — pk가 보유 user와 같으면 반환, 아니면 None."""
+    """session.get(UserProfile, pk) + scalar(최신 동의 행) 모사.
 
-    def __init__(self, user: UserProfile | None = None) -> None:
+    `scalar`는 SEC-20에서 `get_consented_user`가 최신 `parental_consent` 행을 읽게 되면서
+    필요해졌다. 기본 None(= 원장 행 없음 → 판정 근거 부재로 통과)이며, 철회·만료 케이스는
+    `consent=` 로 행을 주입한다.
+    """
+
+    def __init__(
+        self, user: UserProfile | None = None, consent: ParentalConsent | None = None
+    ) -> None:
         self._user = user
+        self._consent = consent
 
     async def get(self, model: Any, pk: uuid.UUID) -> UserProfile | None:
         if self._user is not None and self._user.user_id == pk:
             return self._user
         return None
+
+    async def scalar(self, stmt: Any) -> ParentalConsent | None:
+        # 받은 statement를 실제 PG 방언으로 **컴파일**한다 — hermetic 테스트에는 실 DB가 없어서
+        # 게이트의 select()가 문법·컬럼 수준에서 유효한지 검증할 곳이 여기뿐이다(실 DB 통합
+        # 테스트는 WHYMATH_RUN_INTEGRATION 없이는 skip). 잘못된 컬럼·연산자면 여기서 터진다.
+        str(stmt.compile(dialect=postgresql.dialect()))
+        return self._consent
 
 
 def _creds(token: str) -> HTTPAuthorizationCredentials:
@@ -150,7 +167,7 @@ class TestConsentGate:
     async def test_minor_without_consent_raises_403(self) -> None:
         user = UserProfile(user_id=uuid.uuid4(), is_minor=True, parent_consent_at=None)
         with pytest.raises(HTTPException) as exc:
-            await get_consented_user(user=user)
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
         assert exc.value.status_code == 403
 
     async def test_minor_with_consent_passes(self) -> None:
@@ -159,16 +176,119 @@ class TestConsentGate:
             is_minor=True,
             parent_consent_at=datetime.now(tz=timezone.utc),
         )
-        assert await get_consented_user(user=user) is user
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
 
     async def test_non_minor_passes(self) -> None:
         user = UserProfile(user_id=uuid.uuid4(), is_minor=False)
-        assert await get_consented_user(user=user) is user
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
 
     async def test_unknown_minor_status_passes(self) -> None:
         """is_minor None(미상)이면 차단하지 않는다 — 알려진 미성년자만 게이트."""
         user = UserProfile(user_id=uuid.uuid4())
-        assert await get_consented_user(user=user) is user
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
+
+
+class TestConsentRevocationExpiryGate:
+    """SEC-20 D9 — 철회·만료된 동의는 게이트를 통과시키지 않는다.
+
+    그전까지 이 게이트는 `parent_consent_at`(설정됐는가) 하나만 읽어 **한 번 받은 동의가 영구히
+    유효**했고, `ParentalConsent.revoked_at`·`expires_at`은 reader가 0이었다. 아래 테스트가 그
+    두 컬럼의 첫 reader를 계약으로 고정한다.
+    """
+
+    @staticmethod
+    def _consented_minor() -> UserProfile:
+        """게이트를 *통과하던* 상태의 미성년(동의 있음) — 여기서 원장만 바꿔 차이를 만든다."""
+        return UserProfile(
+            user_id=uuid.uuid4(),
+            is_minor=True,
+            parent_consent_at=datetime.now(tz=timezone.utc),
+        )
+
+    async def test_revoked_consent_raises_403(self) -> None:
+        """철회(revoked_at 설정)된 최신 동의 → 403. parent_consent_at만으론 못 잡던 케이스."""
+        user = self._consented_minor()
+        revoked = ParentalConsent(
+            user_id=user.user_id,
+            consent_signed_at=datetime.now(tz=timezone.utc),
+            revoked_at=datetime.now(tz=timezone.utc),
+        )
+        with pytest.raises(HTTPException) as exc:
+            await get_consented_user(
+                user=user, session=_FakeSession(consent=revoked)  # type: ignore[arg-type]
+            )
+        assert exc.value.status_code == 403
+        assert "철회" in exc.value.detail
+
+    async def test_expired_consent_raises_403(self) -> None:
+        """만료(expires_at 과거)된 최신 동의 → 403.
+
+        `expires_at`은 아직 writer가 없다(주기 숫자는 MGMT-02 선행) — 이 테스트는 값이 *있을 때*
+        게이트가 존중한다는 계약을 미리 고정한다. writer가 붙는 날 이 계약이 즉시 발화한다.
+        """
+        user = self._consented_minor()
+        expired = ParentalConsent(
+            user_id=user.user_id,
+            consent_signed_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 6, 1, tzinfo=timezone.utc),
+        )
+        with pytest.raises(HTTPException) as exc:
+            await get_consented_user(
+                user=user, session=_FakeSession(consent=expired)  # type: ignore[arg-type]
+            )
+        assert exc.value.status_code == 403
+        assert "만료" in exc.value.detail
+
+    async def test_future_expiry_passes(self) -> None:
+        """만료 시각이 미래면 통과 — 만료 분기가 *유효한* 동의를 잠그지 않는다(과차단 방지)."""
+        user = self._consented_minor()
+        live = ParentalConsent(
+            user_id=user.user_id,
+            consent_signed_at=datetime.now(tz=timezone.utc),
+            expires_at=datetime(2999, 1, 1, tzinfo=timezone.utc),
+        )
+        assert (
+            await get_consented_user(
+                user=user, session=_FakeSession(consent=live)  # type: ignore[arg-type]
+            )
+        ) is user
+
+    async def test_missing_ledger_row_passes(self) -> None:
+        """원장 행이 없으면 차단하지 않는다 — "판정 근거 부재"는 "철회됨"이 아니다.
+
+        원장 도입 이전에 `parent_consent_at`만 설정된 데이터가 조용히 잠기는 것을 막는다
+        (`is_minor` None을 미상으로 보고 통과시키는 방침과 동형).
+        """
+        user = self._consented_minor()
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
+
+    async def test_non_minor_skips_ledger_query(self) -> None:
+        """성인·미상은 원장을 아예 조회하지 않는다 — 게이트 비용이 미성년에만 붙는다.
+
+        `scalar`가 호출되면 터지는 세션을 주입해 *쿼리 부재*를 직접 단언한다(성능 계약).
+        """
+
+        class _ExplodingSession(_FakeSession):
+            async def scalar(self, _stmt: Any) -> ParentalConsent | None:
+                raise AssertionError("성인/미상 사용자에게 동의 원장 쿼리가 발생했다")
+
+        for user in (
+            UserProfile(user_id=uuid.uuid4(), is_minor=False),
+            UserProfile(user_id=uuid.uuid4()),
+        ):
+            assert (
+                await get_consented_user(
+                    user=user, session=_ExplodingSession()  # type: ignore[arg-type]
+                )
+            ) is user
 
 
 class TestDerivedMinorGateEndToEnd:
@@ -191,7 +311,7 @@ class TestDerivedMinorGateEndToEnd:
             parent_consent_at=None,
         )
         with pytest.raises(HTTPException) as exc:
-            await get_consented_user(user=user)
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
         assert exc.value.status_code == 403
 
     async def test_derived_minor_with_consent_passes(self) -> None:
@@ -204,7 +324,9 @@ class TestDerivedMinorGateEndToEnd:
             is_minor=is_minor,
             parent_consent_at=datetime.now(tz=timezone.utc),
         )
-        assert await get_consented_user(user=user) is user
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
 
     async def test_derived_adult_passes_without_consent(self) -> None:
         """성인 birth_year → is_minor=False 파생 → 동의 불요로 통과."""
@@ -216,7 +338,9 @@ class TestDerivedMinorGateEndToEnd:
             birth_year=adult_birth_year,
             is_minor=is_minor,
         )
-        assert await get_consented_user(user=user) is user
+        assert (
+            await get_consented_user(user=user, session=_FakeSession())  # type: ignore[arg-type]
+        ) is user
 
 
 class TestRequireRole:
