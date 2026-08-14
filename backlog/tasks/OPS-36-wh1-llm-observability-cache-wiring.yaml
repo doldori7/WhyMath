@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-26-wh1-llm-observability-cache-wiring
+id: OPS-36-wh1-llm-observability-cache-wiring
 title: "WH-1 학생 대면 LLM 관측·캐시 결선 — primary GA 트래픽의 비용 게이트② 표본 복구 (l3.pipeline 우회 회수)"
 track: infra-debt
 stage: S4

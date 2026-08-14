@@ -147,11 +147,123 @@ describe("graph2dSpecToState — VIZ-03 필드 확장", () => {
     expect(st.rows[1].showTangent).toBeUndefined();
     expect(st.rows[1].showIntegral).toBeUndefined();
   });
+});
 
+// VIZ-06 — show_extrema: 렌더러에 먼저 이식된 극값 스캔(findExtrema/drawExtrema)의 상태
+// (showExtrema)에 좌석을 주는 필드. VIZ-03과 동형으로 주 함수 행에만 적용한다.
+// (VIZ-07에서 배치 결함 정리 — specToStateForType describe에 잘못 들어가 있던 아래 5건을
+// 내용 무변경으로 이 전용 describe로 이동.)
+describe("graph2dSpecToState — VIZ-06 show_extrema", () => {
+  it("show_extrema:true → 주 함수 행에 showExtrema", () => {
+    const st = graph2dSpecToState({ function: "x^3-3*x", show_extrema: true });
+    expect(st.rows[0].showExtrema).toBe(true);
+  });
 
+  it("show_extrema 없으면 showExtrema 미설정", () => {
+    const st = graph2dSpecToState({ function: "x^2" });
+    expect(st.rows[0].showExtrema).toBeUndefined();
+  });
 
+  it("show_extrema:false는 무시(참·명시적 true만 켠다)", () => {
+    const st = graph2dSpecToState({ function: "x^2", show_extrema: false });
+    expect(st.rows[0].showExtrema).toBeUndefined();
+  });
 
+  it("함수 없이 show_extrema만 있으면 무시(행이 없어 실을 곳이 없음)", () => {
+    expect(graph2dSpecToState({ show_extrema: true })).toBeNull();
+  });
 
+  it("show_extrema는 functions로 추가된 행이 아니라 주 함수(rows[0])에만 실린다", () => {
+    const st = graph2dSpecToState({
+      function: "x^2",
+      functions: ["x^3"],
+      show_extrema: true,
+    });
+    expect(st.rows[0].showExtrema).toBe(true);
+    expect(st.rows[1].showExtrema).toBeUndefined();
+  });
+});
+
+// VIZ-07 — number_line: 1D 수직선 축(정수·부등식 해·구간 표시). 렌더러(GraphingCalculator.jsx)에
+// 신설된 전용 1D 렌더 경로(drawNumberLine)가 소비할 상태(numberLine)로 정규화한다.
+// 축 범위는 신규 필드 없이 기존 domain을 재사용한다(1D 축 범위 = domain).
+describe("graph2dSpecToState — VIZ-07 number_line(1D 수직선 축)", () => {
+  it("number_line(points+intervals)+domain → state.numberLine 매핑 + view 설정", () => {
+    const st = graph2dSpecToState({
+      number_line: {
+        points: [{ value: 2, open: true, label: "경계" }, { value: -1 }],
+        intervals: [{ start: 2, end: 5, start_open: true, end_open: false }],
+      },
+      domain: [-5, 5],
+    });
+    expect(st.numberLine.points).toEqual([
+      { value: 2, open: true, label: "경계" },
+      { value: -1, open: false, label: null },
+    ]);
+    expect(st.numberLine.intervals).toEqual([
+      { start: 2, end: 5, startOpen: true, endOpen: false },
+    ]);
+    // domain→view 매핑은 기존 로직 재사용(1D 축 범위 = domain).
+    expect(st.view).toEqual({ xMin: -5, xMax: 5, yMin: -10, yMax: 10 });
+  });
+
+  it("number_line 미지정 → state.numberLine 미설정(undefined)", () => {
+    const st = graph2dSpecToState({ function: "x^2" });
+    expect(st.numberLine).toBeUndefined();
+  });
+
+  it("number_line이 배열·문자열 등 malformed거나 유효 항목 0개면 무시", () => {
+    expect(graph2dSpecToState({ number_line: [1, 2] })).toBeNull();
+    expect(graph2dSpecToState({ number_line: "2 이상" })).toBeNull();
+    // 유효 point(value 수치)·유효 interval(start/end 중 하나 이상 수치)이 0개 → 미설정.
+    expect(
+      graph2dSpecToState({
+        number_line: { points: [{ value: "x" }], intervals: [{ start: null, end: null }] },
+      })
+    ).toBeNull();
+    // 함수는 살아 있으면 number_line만 조용히 무시.
+    const st = graph2dSpecToState({ function: "x", number_line: "oops" });
+    expect(st.rows).toHaveLength(1);
+    expect(st.numberLine).toBeUndefined();
+  });
+
+  it("function 없이 number_line만 있어도 null이 아니다(1D 전용 spec)", () => {
+    const st = graph2dSpecToState({
+      number_line: { points: [{ value: 1 }] },
+      domain: [-3, 3],
+    });
+    expect(st).not.toBeNull();
+    expect(st.rows).toEqual([]);
+    expect(st.numberLine.points).toHaveLength(1);
+  });
+
+  it("function과 number_line 공존 → 둘 다 상태에 실림(렌더 우선순위는 컴포넌트 소관)", () => {
+    const st = graph2dSpecToState({
+      function: "x^2",
+      number_line: { points: [{ value: 0 }] },
+    });
+    expect(st.rows).toHaveLength(1);
+    expect(st.numberLine.points).toEqual([{ value: 0, open: false, label: null }]);
+  });
+
+  it("interval start/end null(반직선)·open 플래그·비수치 정규화", () => {
+    const st = graph2dSpecToState({
+      number_line: {
+        intervals: [
+          { start: 2 }, // end 미지정 → null(오른쪽 반직선)
+          { start: null, end: -1, end_open: true }, // start null(왼쪽 반직선)
+          { start: null, end: null }, // 둘 다 null → 그릴 수 없음 → skip
+          { start: "a", end: 3 }, // 비수치 start → null 정규화
+        ],
+      },
+      domain: [-5, 5],
+    });
+    expect(st.numberLine.intervals).toEqual([
+      { start: 2, end: null, startOpen: false, endOpen: false },
+      { start: null, end: -1, startOpen: false, endOpen: true },
+      { start: null, end: 3, startOpen: false, endOpen: false },
+    ]);
+  });
 });
 
 describe("parseSpecParam — URL 파라미터 파싱", () => {
@@ -443,34 +555,5 @@ describe("specToStateForType — type-first dispatch(레거시 shape 폴백)", (
   it("레거시 type=null: 그 외는 2D 폴백", () => {
     const st = specToStateForType(null, { function: "x" });
     expect(Array.isArray(st.rows)).toBe(true);
-  });
-
-  it("show_extrema:true → 주 함수 행에 showExtrema", () => {
-    const st = graph2dSpecToState({ function: "x^3-3*x", show_extrema: true });
-    expect(st.rows[0].showExtrema).toBe(true);
-  });
-
-  it("show_extrema 없으면 showExtrema 미설정", () => {
-    const st = graph2dSpecToState({ function: "x^2" });
-    expect(st.rows[0].showExtrema).toBeUndefined();
-  });
-
-  it("show_extrema:false는 무시(참·명시적 true만 켠다)", () => {
-    const st = graph2dSpecToState({ function: "x^2", show_extrema: false });
-    expect(st.rows[0].showExtrema).toBeUndefined();
-  });
-
-  it("함수 없이 show_extrema만 있으면 무시(행이 없어 실을 곳이 없음)", () => {
-    expect(graph2dSpecToState({ show_extrema: true })).toBeNull();
-  });
-
-  it("show_extrema는 functions로 추가된 행이 아니라 주 함수(rows[0])에만 실린다", () => {
-    const st = graph2dSpecToState({
-      function: "x^2",
-      functions: ["x^3"],
-      show_extrema: true,
-    });
-    expect(st.rows[0].showExtrema).toBe(true);
-    expect(st.rows[1].showExtrema).toBeUndefined();
   });
 });

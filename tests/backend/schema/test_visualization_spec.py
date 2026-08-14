@@ -125,6 +125,29 @@ class TestValidSpecs:
         with pytest.raises(ValidationError):
             Graph2dSpec.model_validate({"show_extrema": [1, 2]})
 
+    def test_graph2d_number_line(self) -> None:
+        # number_line(1D 수직선 축·선택·VIZ-07) — 점(open=열린 점)·구간(None 끝=반직선).
+        # 미지정 시 None(렌더러가 일반 2D 함수 모드 유지). 축 범위는 domain 재사용.
+        s = Graph2dSpec.model_validate(
+            {
+                "number_line": {
+                    "points": [{"value": 2, "open": True, "label": "경계"}],
+                    "intervals": [{"start": 2, "end": None, "start_open": False}],
+                },
+                "domain": [-5, 5],
+            }
+        )
+        assert s.number_line is not None
+        assert s.number_line.points is not None
+        assert s.number_line.points[0].value == 2.0
+        assert s.number_line.points[0].open is True
+        assert s.number_line.intervals is not None
+        assert s.number_line.intervals[0].start == 2.0
+        assert s.number_line.intervals[0].end is None
+        assert Graph2dSpec.model_validate({"function": "x"}).number_line is None
+        # 빈 {} number_line도 통과(전 필드 Optional — 골격만 생성·점층 충전 원칙 동형).
+        assert Graph2dSpec.model_validate({"number_line": {}}).number_line is not None
+
     def test_surface3d_valid(self) -> None:
         s = Surface3dSpec.model_validate({"surface": "z = x**2 + y**2", "rotatable": True})
         assert s.surface == "z = x**2 + y**2"
@@ -167,6 +190,21 @@ class TestTypeViolationsRejected:
     def test_graph2d_domain_not_list(self) -> None:
         with pytest.raises(ValidationError):
             Graph2dSpec.model_validate({"domain": "x"})
+
+    def test_graph2d_number_line_not_object(self) -> None:
+        # number_line은 중첩 객체만 — 문자열·리스트는 타입 위반(VIZ-07).
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"number_line": "2 이상"})
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"number_line": [1, 2]})
+
+    def test_graph2d_number_line_nested_type_violation(self) -> None:
+        # 중첩 항목 타입 위반 — 점 value는 수치, intervals는 목록이어야 한다(VIZ-07).
+        # (수치 문자열 "2"는 pydantic lax가 강제 변환하므로 비수치 문자열로 위반을 확인.)
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"number_line": {"points": [{"value": "이상"}]}})
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"number_line": {"intervals": "0..3"}})
 
     def test_surface3d_surface_not_str(self) -> None:
         with pytest.raises(ValidationError):
