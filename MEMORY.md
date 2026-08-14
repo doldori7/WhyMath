@@ -337,6 +337,26 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-14 (측정·S4-16): **잔여 축 교차검증 게이트 강등전 라이브 실측 — 로컬 Ollama 모델 전원 미달로 S4-16 blocked 전환. qwen3.5:27b timeout·qwen2.5:7b 100% 오검출·qwen2-math:7b 검출 58%/오검출 67%** (claude 측정, Kiki "진행")
+
+**배경**: S4-16(S4-13 게이트 승격 조건)은 실 provider로 K=3 교차검증의 결함 주입 검출률을 측정하는 태스크. 2026-08-03 등재 시 "실 LLM 호출 필요·Kiki 머신 동반" 조건이었다. 2026-08-14 Phaiakes9(GMKtec AI Max+ 395·Radeon 8060S·128GB LPDDR5X)에서 실측.
+
+**측정 결과(정직한 부정 판정)**:
+
+| 모델 | 결과 | 판정 |
+|---|---|---|
+| `qwen3.5:27b` | cross_verify 3관점 모두 180s timeout — 115s·238s·300s+ 소요 | 실행 불가(인프라) |
+| `qwen2.5:7b` | sample-n=1: 결함 4/4 검출이나 대조군 1/1 오검출(100%) | 구분력 0 |
+| `qwen2-math:7b` | sample-n=10: 검출 18/31(Wilson 95% 하한 0.4342)·오검출 6/9(Wilson 95% 상한 0.8580) | 구분력 부재 |
+
+- **강등전 통과 실패**: acceptance는 "강등전 통과"를 요구하나, 오검출 상한 0.8580은 검출 하한 0.4342보다 훨씬 높아 검출기가 결함과 무결함을 구분하지 못한다. `--max-defect-upper` 기본값 0.05를 보정할 근거는 얻었으나, 보정값(≥0.8580)이 게이트를 물리화시키므로 의미 없다.
+- **원인 분석**: `qwen3.5:27b`의 115~300s/call은 하드웨어 한계가 아니라 Windows 11 + Ollama + ROCm 소프트웨어 스택 문제로 추정(8060S에서 Qwen3 32B가 10~12 tok/s로 나오는 사례 대비 현재 0.5~1 tok/s). `qwen2.5:7b`/`qwen2-math:7b`는 빠륂나 추론 능력이 이 검증 작업에 미치지 못한다.
+- **후속 필요 인프라**: ① 로컬 LLM 스택 최적화(llama.cpp Vulkan 또는 Ollama ROCm 튜닝) ② 또는 클라우드 provider(Anthropic/OpenAI) 배선. `qwen3.5:27b`가 30~60s/call로 낮아지면 재측정 가능.
+- **코드 산출물**: `residue_gate_demotion_battle.py`에 `--local-model` 오버라이드 추가(고정 모델 provider 주입) — 운영 모델과 별도로 측정 모델을 지정할 수 있게 함. hermetic 테스트 22건 green 유지.
+- **감사 산출물**: `data/audit/s4-16-qwen2math-battle-audit.jsonl`(sample-n=10·as-found 병기) + `data/audit/s4-16-qwen2math-smoke-audit.jsonl`(sample-n=1) 보관.
+- **S4-16 blocked 사유**: "로컬 Ollama 모델로는 강등전 통과 불가 — qwen3.5:27b timeout·qwen2.5:7b/qwen2-math:7b 구분력 부재. 클라우드 provider 또는 로컬 LLM 스택 최적화 후 재개."
+- **KG-02 영향**: S4-16이 blocked이므로 KG-02도 계속 blocked 유지. KG-02의 "S4-16·LLM provider 선결 필요" 조건이 그대로 유효.
+
 ### 2026-08-11 (회수·CUR-08): **34zvse 고립 done 3건 파일 단위 회수 — OPS-29(CI 강제 상태 선언 계약)·CUR-04(성취기준 조인 축 통일)·CUR-05(성취수준 코퍼스) + CUR-07 재등재. 미병합 고립 5회차** (claude 회수, Kiki "/drive")
 
 - **회수 대상 = 구현 커밋 3개**: `178639f2`(CUR-05) · `35c5693b`+`4520d9f0`(CUR-04) · `f862a7a2`(OPS-29). claim·done 처리 커밋 6개는 이식 대상이 아니다. 등재문의 브랜치 head `36d33e7e`는 낡았고 실제 head는 `8d83c87d`(CUR-07 claim만·구현 없음)라 **회수 범위는 불변**.

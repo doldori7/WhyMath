@@ -45,7 +45,8 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -62,6 +63,13 @@ from whymath_backend.l3.finite_probability import (
     describe_model_ko,
     enumerate_model,
     parse_finite_model,
+)
+from whymath_backend.l3.models import CostTier, GenerationResult
+from whymath_backend.l3.providers.ollama import (
+    OllamaProvider,
+    _as_cost_tier,
+    _extract_text,
+    _extract_usage,
 )
 
 __all__ = [
@@ -94,6 +102,58 @@ RESIDUE_DEFECT_CLASSES: tuple[ResidueDefectClass, ...] = (
     "ambiguous_wording",
     "multiple_valid_answers",
 )
+
+
+class _FixedModelOllamaProvider(OllamaProvider):
+    """강등전 전용 — 라우터가 고른 모델 대신 고정 모델 ID로 호출하는 Ollama provider.
+
+    S4-16은 "실 provider"로 게이트를 승격하되, 운영 모델(현재 qwen3.5:27b)이 로컬
+    인프라에서 timeout으로 실측 불가일 때 더 가벼운 모델(예: qwen2.5:7b)로 측정할
+    수 있게 한다. 이는 **측정 대상 모델의 대표성을 희생하는 대신 실행 가능성을 확보**
+    하는 선택이며, 측정치는 하한 추정으로 해석한다.
+    """
+
+    def __init__(self, model_id: str, *, settings=None) -> None:
+        super().__init__(settings=settings)
+        self._model_id = model_id
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        """고정 모델 ID로 생성한다 — `resolve_model`을 생략한다(그 외는 부모와 동일)."""
+        cost = _as_cost_tier(decision.cost_tier)
+        if cost is not CostTier.LOCAL:
+            raise ValueError(
+                f"_FixedModelOllamaProvider는 로컬 결정만 처리한다(받은 cost_tier={cost.value})."
+            )
+        call_kwargs: dict[str, object] = {
+            "model": self._model_id,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+        }
+        if images is not None:
+            call_kwargs["images"] = images
+        if temperature is not None:
+            call_kwargs["options"] = {"temperature": temperature}
+        if json_schema is not None:
+            call_kwargs["format"] = dict(json_schema)
+        client = self._get_client()
+        start = time.monotonic()
+        response = await client.generate(**call_kwargs)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        return GenerationResult(
+            text=_extract_text(response),
+            usage=_extract_usage(response, latency_ms),
+        )
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 결정론 발문 변조기 — 각 (원본 텍스트) → (변조 텍스트, 변조 기록) | None(비적용).
@@ -597,12 +657,25 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="생성자 서명 override(검증자와 충돌 시 IndependenceError 회피용).",
     )
+    parser.add_argument(
+        "--local-model",
+        default=None,
+        help=(
+            "로컬 Ollama 모델 ID 오버라이드(예: qwen2.5:7b). 라우터가 고른 모델 대신 "
+            "고정 모델로 강등전을 실측한다 — 운영 모델이 로컬에서 timeout으로 실행 불가일 "
+            "때 측정 가능성을 확보하는 선택이며, 측정치는 하한 추정으로 해석한다."
+        ),
+    )
     args = parser.parse_args(argv)
 
     records = load_pilot_records(args.corpus)
     battery = build_residue_seeded_set(records)
     # 실 provider는 지연 연결(구성만으로 네트워크 0) — 실제 호출은 verify() 시점에 일어난다.
-    verifier = CrossVerifier()
+    if args.local_model is not None:
+        provider = _FixedModelOllamaProvider(args.local_model)
+        verifier = CrossVerifier(provider=provider)
+    else:
+        verifier = CrossVerifier()
     report = run_residue_demotion_battle(
         battery,
         verifier=verifier,
