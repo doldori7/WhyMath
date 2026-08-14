@@ -74,6 +74,10 @@ logs/
 # Claude Code 임시
 .claude/cache/
 .claude/sessions/
+.claude/backlog/handoff-*.md
+
+# Ollama Modelfile (로컬 모델 경로를 포함 — git 미추적)
+src/backend/Modelfile*.txt
 
 # 외부 플래닝 도구 로컬 캐시 (plans 등 — 로컬 유지, git 미추적)
 .hermes/
