@@ -352,7 +352,7 @@ async def revoke_parental_consent(
         session,
         user_id=user.user_id,
         consent_scope=scope,
-        ip=_client_ip(request),
+        ip=_client_ip(request, settings=settings),
         settings=settings,
     )
     await session.commit()
