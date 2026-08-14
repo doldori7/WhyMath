@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-28-exposure-contract-serving-crosswalk-gate
+title: "노출 계약↔서빙 스키마 양방향 대조 게이트 — 동어반복 검증 제거 + 드리프트 2건 상환"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 동어반복 제거(본체) — test_me_growth_evidence.py:52의 _DECLARED_FIELDS = set(GrowthEvidenceResponse.model_fields)는 검증 대상 모델 자기 자신에서 기대값을 파생하므로 모델이 무엇이든 통과한다. 기대값을 계약 표(_STATIC_TIER)에서 파생하도록 바꾼다(CLAUDE.md '변별력 없는 검증 스텝 금지')"
+  - "② 양방향 대조 — (가) _STATIC_TIER의 STUDENT_VISIBLE 지표가 GrowthEvidenceResponse에 전부 있는가 (나) GrowthEvidenceResponse의 지표 필드가 전부 _STATIC_TIER에 등재돼 있는가. 어느 쪽이 어긋나도 red"
+  - "③ 판정 대상 밖 지표 봉인 — SurrogateMetrics 필드 중 _STATIC_TIER 미등재 지표가 있으면 red. 현재 3종 실재(strategy_diversity·strategy_repeat_rate·client_state_mismatch_rate — wh1_evaluation.py:409,418,427). classify_metric_exposure의 루프가 _STATIC_TIER.items()만 순회하므로 이들은 노출 판정을 아예 안 받는다"
+  - "④ 게이트 선행 · 상환 후행 — gap_recovery_leadtime_days 누락이 이 게이트가 잡는 첫 red여야 한다. 게이트가 처음부터 green이면 변별력이 없다(먼저 세우고 그 다음 상환)"
+  - "⑤ 상환 방향은 자동 노출이 아니다 — 미등재 3종은 _STATIC_TIER에 명시 등재하되 계층 판정(INTERNAL_ONLY 가능성 포함)은 지표 성격을 보고 정한다. 게이트를 green으로 만들려고 학생 노출로 밀지 않는다"
+  - "⑥ 변별력 양방향 실측 — 계약에만 있고 스키마에 없는 필드/스키마에만 있고 계약에 없는 필드를 각각 주입했을 때 실제로 red가 나는지 확인(주입 파일은 실측 후 정리)"
+  - "⑦ CI 배선 실재 확인(OPS-03·OPS-10 선례 — 저장소에 존재함과 돌아감은 다르다)"
+  - "⑧ 범위 밖 동결 — 노출 계층 정책 자체의 개정 · 신규 지표 계산 · 클라 렌더 · /harness-metrics 게이트(PED-27 소관)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/growth_evidence_exposure.py
+  - src/backend/whymath_backend/api/me.py
+  - "tests/backend/api/test_me_growth_evidence*.py"
+session: null
+notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G3 · §4 D9. 계약 표(_STATIC_TIER, growth_evidence_exposure.py:65-83)와 서빙 스키마(GrowthEvidenceResponse, api/me.py:3170-3219)가 양방향으로 어긋나 있다 — (가) 계약이 STUDENT_VISIBLE로 판정한 gap_recovery_leadtime_days(⑯·PED-13, :78)가 응답 스키마에 필드 부재(api/me.py 히트 0), (나) SurrogateMetrics의 3종이 _STATIC_TIER 미등재라 판정 대상 밖인데 /harness-metrics로는 나간다. 거버넌스가 못 잡은 이유는 기대값이 검증 대상에서 파생되는 동어반복(test_me_growth_evidence.py:52) — 성공/실패 양쪽에서 같은 값을 내는 검사다."
+updated: 2026-08-11

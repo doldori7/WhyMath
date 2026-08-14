@@ -59,7 +59,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser, RequireContentAdmin
@@ -1744,6 +1744,57 @@ CANDIDATE_ZERO_NO_POOL = "no_candidate_pool"
 CANDIDATE_ZERO_ALL_GATED_INELIGIBLE = "all_candidates_gated_ineligible"
 
 
+# ── REC-06: 후보 조회의 노출 게이트·정렬을 *한 곳에서만* 정의한다 ──────────────────────────
+# 이 두 함수는 서빙 경로(`recommend_next_problem`)와 반복 추천 리포트
+# (`ops/repeat_recommendation_report.py`)가 **같이** 쓴다. 리포트가 후보 풀을 자기 방식으로
+# 다시 조립하면 "리포트가 보는 풀"과 "학생이 실제로 받는 풀"이 조용히 갈라져, 측정이 서빙을
+# 설명하지 못하게 된다(구축 플레이북 7대 붕괴 연쇄 중 "유지보수 지옥 ← truth source가 하나가
+# 아님"의 방어). 서빙 동작은 무변경이다 — 아래 `candidate_pool_order_by`의 2차 키만 신규다.
+def candidate_pool_conditions() -> list[ColumnElement[bool]]:
+    """기본 CAT 후보의 노출 게이트 3축(WHERE) — 난이도 라벨 · 저작권 축① · 검수 축②.
+
+    ① 난이도 라벨(`difficulty_overall`) 보유: 응답 `difficulty` 노출과 b 폴백에 필요.
+    ② 저작권 노출 게이트(법적·협상 불가): 본문 미보유 출처(평가원/EBS/교과서)는 SQL 레벨 배제.
+    ③ 검수 노출 게이트(운영 축 — 축②와 **절대 합치지 않는다**): `approved`만 후보.
+    """
+    return [
+        Problem.difficulty_overall.isnot(None),
+        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 수능 분기가 쓰는 것과 동일 상수를
+        # 재사용해 판정 기준 이원화를 막는다.
+        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+        # PB-03 축② — 검수 노출 게이트. `corpus_audit_eval` 측정 판정만 review_status에
+        # 각인된다(사람 입력 경로 0).
+        Problem.review_status == ReviewStatus.approved,
+    ]
+
+
+def candidate_pool_order_by(theta: float) -> tuple[ColumnElement[Any], ...]:
+    """후보 정렬 키 — ① |b−θ| 오름차순 ② `problem_id`(2차 키·동률 구간 동결).
+
+    ①은 기존 그대로다(보정 b `irt_difficulty_b` 우선·없으면 전문가 난이도→logit 폴백을
+    COALESCE로 표현). **②가 REC-06 acceptance③의 신규분**이다: ①만 있으면 |b−θ|가 같은 동률
+    구간의 행 순서가 **PG 임의**라 같은 DB 상태에서도 후보 풀 구성과 `select_weighted_item`의
+    인덱스가 흔들릴 수 있었다 — 결정론이 선택기에만 있고 그 앞 단계(후보 조회)에는 없던 상태다.
+
+    **무작위화가 아니다.** 2차 키는 동률 구간을 `problem_id` 오름차순으로 *고정*할 뿐이라,
+    ①로 순서가 이미 확정되는 비동률 구간은 전혀 건드리지 않는다. 즉 상위 점수가 유일한 풀에서는
+    선택 결과가 바이트 동일하고(회귀 0), 동률 구간에서만 "PG 임의" → "결정론"으로 바뀐다.
+    노출 통제(randomesque top-k)·다양성 가중은 이 태스크의 범위 밖(동결 — G3 참조).
+    """
+    return (
+        func.abs(
+            func.coalesce(
+                Problem.irt_difficulty_b,
+                Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
+            )
+            - theta
+        ),
+        # `.asc()`는 방향을 코드에 명시하는 동시에 mypy --strict 정합을 만든다
+        # (`InstrumentedAttribute`는 `ColumnElement`로 좁혀지지 않는다).
+        Problem.problem_id.asc(),
+    )
+
+
 def _weak_concept_weights(
     candidate_problem_ids: list[uuid.UUID],
     problem_concepts: dict[uuid.UUID, set[uuid.UUID]],
@@ -2112,16 +2163,12 @@ async def recommend_next_problem(
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
         if sibling_filter == "exclude" and sibling_ids:
             suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(sibling_ids))
-        # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
-        suneung_stmt = suneung_stmt.order_by(
-            func.abs(
-                func.coalesce(
-                    Problem.irt_difficulty_b,
-                    Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
-                )
-                - theta
-            )
-        ).limit(_CANDIDATE_POOL_SIZE)
+        # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE) — 정렬 키는
+        # `candidate_pool_order_by`(2차 키 problem_id 포함)를 공유한다. 이 분기의 동률 구간도
+        # 기본 CAT과 똑같이 PG 임의 순서였으므로 같은 동결을 적용한다(같은 결함·같은 처방).
+        suneung_stmt = suneung_stmt.order_by(*candidate_pool_order_by(theta)).limit(
+            _CANDIDATE_POOL_SIZE
+        )
         candidates = [
             row.to_schema() for row in (await session.execute(suneung_stmt)).scalars().all()
         ]
@@ -2216,32 +2263,18 @@ async def recommend_next_problem(
 
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
     # 난이도→logit(difficulty_overall - 중앙값) 폴백(COALESCE). 응답 difficulty 노출을 위해
-    # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
+    # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속). 노출 게이트(WHERE)·
+    # 정렬 키는 `candidate_pool_conditions`·`candidate_pool_order_by`가 단일 출처다(REC-06).
     candidate_stmt = select(
         Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
-    ).where(
-        Problem.difficulty_overall.isnot(None),
-        # PB-03 축① — 저작권 노출 게이트(법적, 협상 불가). 본문 미보유 출처(평가원/EBS/교과서)는
-        # 기본 CAT 후보에서도 SQL 레벨로 배제한다(수능 분기가 이미 쓰는 것과 동일 상수 재사용 —
-        # 판정 기준 이원화 회피).
-        Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
-        # PB-03 축② — 검수 노출 게이트(운영 축, 축①과 독립 — 절대 합치지 않는다). approved만
-        # 후보. `corpus_audit_eval` 측정 판정만 review_status에 각인된다(사람 입력 경로 0).
-        Problem.review_status == ReviewStatus.approved,
-    )
+    ).where(*candidate_pool_conditions())
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     if sibling_filter == "exclude" and sibling_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(sibling_ids))
-    candidate_stmt = candidate_stmt.order_by(
-        func.abs(
-            func.coalesce(
-                Problem.irt_difficulty_b,
-                Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
-            )
-            - theta
-        )
-    ).limit(_CANDIDATE_POOL_SIZE)
+    candidate_stmt = candidate_stmt.order_by(*candidate_pool_order_by(theta)).limit(
+        _CANDIDATE_POOL_SIZE
+    )
     candidate_rows = (await session.execute(candidate_stmt)).all()
     # REC-01: 실제 후보 풀 크기 — 정직 표기용(θ 근방 SQL 선별 후, 미응답·난이도 라벨 보유 개수).
     candidate_pool_size = len(candidate_rows)
@@ -2555,6 +2588,29 @@ ASM-01 관측 리포트가 `concept_diagnosis`를 "오개념 목록이 담길 �
 정본 `assessment_seat_reach_report.py` 모듈 docstring), 오개념 가설도 같은 필드에 담되
 `kind`로 두 항목 형태를 구분한다(별도 컬럼 신설·마이그레이션 0)."""
 
+_CAPTURE_PATH_ORDERING_KEYS = ("ordering_basis", "ordering_edge_count", "has_cycle")
+"""`recommended_path` JSONB의 각 step dict에 동반 기록되는 *경로 수준* 정직 표기 3종(`PATH-09`).
+
+**왜 필요한가**: `ordering_basis`·`ordering_edge_count`·`has_cycle`은 `LearningPath`(부모)의
+필드이고 `recommended_path`에 담기는 것은 `LearningStep`(자식)이다. 그래서 `path.steps`만
+꺼내 저장하면 **부모의 정직 표기가 통째로 사라진다**. 실측상 기본 파라미터에서 96.4%가
+`ordering_basis="tiebreak_only"`(= 제약 엣지 0 · 순서가 tiebreak로만 정해짐)인데, 학생은
+`GET /v1/me/assessments`로 그 스냅샷을 "권장 학습 경로"로 다시 읽는다 — 근거 없이 정해진
+순서를 근거 있는 순서와 구별할 수 없는 상태였다(침묵 실패).
+
+**왜 헤더 원소가 아니라 step별 동반 기록인가**: 배열 앞에 메타 원소를 하나 끼우면
+`len(recommended_path)`가 더 이상 step 수가 아니게 된다. 그 길이를 이미 두 곳이 소비한다 —
+`harness/assessment_seat_reach_report.py`의 `jsonb_array_length(...) > 0` 관측 지표와
+`tests/backend/api/test_me.py`의 step 수 단언. 정직 표기를 넣자고 **기존 관측 지표의 의미를
+조용히 바꾸지 않는다**. step별 동반 기록은 배열 길이 의미를 정확히 보존한다(원소 = step).
+
+**빈 배열의 의미**: `recommended_path == []`는 "담을 step이 없다"이고, 그때 경로 수준 표기를
+실을 자리도 없다. `build_learning_path`는 steps가 비면 `ordering_basis="empty"`를 내므로
+빈 배열과 `empty`는 서로를 함의한다 — 정보 손실이 아니다. 별도 표기를 만들지 않는다.
+
+**날조 금지**: 세 값은 `build_learning_path`가 산출한 `LearningPath`에서 **그대로 옮기기만**
+한다. 재계산·보정·정규화(신뢰도 점수화 등)를 하지 않는다."""
+
 _CAPTURE_NOTE = (
     "measurement_sufficient 경계 자동 캡처(ASM-03) — 등급·점수·백분위·합격예측 4개 예측 "
     "필드는 게임화 금기(CLAUDE.md 절대 금기)로 이 경로에서 의도적으로 채우지 않음(항상 null)."
@@ -2600,6 +2656,8 @@ async def _assemble_measurement_assessment(
        가장 약한 개념(③의 첫 항목·이미 약점 정렬됨)을 대상으로 `recommend_prerequisite_gaps`
        + `build_learning_path`(`/weak-concepts/{id}/learning-path`와 *동일 호출*·기본
        파라미터)를 호출해 `recommended_path`를 얻는다. 약점 개념이 하나도 없으면 빈 리스트.
+       각 step에는 경로 수준 정직 표기 3종(`ordering_basis`·`ordering_edge_count`·
+       `has_cycle`)을 동반 기록한다(`PATH-09` — `_CAPTURE_PATH_ORDERING_KEYS` 참조).
 
     네 함수 전부 기존 L2 좌석 재사용(신규 진단·통계·ML 로직 0) — 이 함수가 하는 일은 *호출
     순서 결정 + 필드 매핑*뿐이다. `estimated_grade`·`estimated_score`·`estimated_percentile`·
@@ -2622,7 +2680,12 @@ async def _assemble_measurement_assessment(
         weakest_concept_id = weak[0].concept_id
         gaps = await recommend_prerequisite_gaps(session, user_id, weakest_concept_id)
         path = await build_learning_path(session, gaps)
-        recommended_path_items = [step.model_dump(mode="json") for step in path.steps]
+        # PATH-09: 경로 수준 정직 표기 3종을 step마다 동반 기록한다(재계산 0 — path에서 그대로
+        # 옮기기만). 상수 docstring에 헤더 원소 대신 step별 기록을 택한 이유가 있다.
+        ordering = {key: getattr(path, key) for key in _CAPTURE_PATH_ORDERING_KEYS}
+        recommended_path_items = [
+            {**step.model_dump(mode="json"), **ordering} for step in path.steps
+        ]
 
     return AssessmentSchema(
         user_id=user_id,

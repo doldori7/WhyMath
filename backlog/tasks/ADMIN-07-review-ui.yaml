@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ADMIN-07-review-ui
+title: "검수 큐 UI — needs_review_worklist 소비·DRAFT→PRESCREENED→APPROVED 상태 전이 (Phase B 진입점)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: web
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - ADMIN-05-bff-readonly
+  - ADMIN-06-admin-web-shell
+requires_gates: []
+acceptance:
+  - "정본화: 검수 큐 화면 — 허용 전이만 가능한 상태 전이 계약·전이 액션은 BFF 쓰기 엔드포인트 경유(프런트 직접 DB 접근 0)·검수 판정치는 코어 산출을 표시만(표현≠의미)"
+  - "집행: 모든 전이(승인/반려)가 불변 감사 로그 1행을 남김을 테스트로 동결(04 §2 원칙4)·무권한 403(전이는 CONTENT_ADMIN만)"
+artifacts: []
+paths:
+  - "src/web/webapp/**"
+  - "src/backend/whymath_backend/**"
+  - "tests/backend/**"
+session: null
+notes: "04 §7 Phase B 진입점·§8 ADMIN-REVIEW-UI 제안의 등재. BFF 쓰기 확장(감사 동반) 포함"
+updated: 2026-08-10

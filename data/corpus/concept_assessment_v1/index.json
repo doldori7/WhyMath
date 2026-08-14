@@ -1,15 +1,22 @@
 {
-  "source_citation": "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED)의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다.",
+  "source_citation": "출처: 와이매스 자체작성 — 개념 평가 재료 *참조* 인덱스. 검증 통과 자체 저작 문항(problem_bank_*·source_type=자체생성·license=WHYMATH_GENERATED·review_status=approved)의 verify 앵커를 개념 태그로 이어 상속한 것이며, 신규 저작·LLM 생성은 0이다.",
   "license_notice": "WHYMATH_ORIGINAL — 원천 문항이 전량 자체 저작이므로 상속 재료도 자체 저작이다. 검정교과서·평가원·EBS 본문은 원천 코퍼스에 애초에 없다(저작권 위생 필터가 source_type/license를 이중 확인한다).",
   "generated_by": "whymath_backend.harness.concept_assessment_index",
   "concept_source": "data/corpus/concept_content_v1/content.json",
   "index_version": 1,
   "counts": {
     "concepts_total": 437,
-    "concepts_covered": 61,
-    "concepts_uncovered": 376,
-    "problems_scanned": 2647,
-    "problems_eligible": 2133
+    "concepts_covered": 57,
+    "concepts_uncovered": 380,
+    "problems_scanned": 2638,
+    "problems_eligible": 2120
+  },
+  "filter_drops": {
+    "EMPTY_ANSWER_MAP": 360,
+    "NOT_OWN_LICENSE": 0,
+    "NOT_REVIEW_CLEARED": 158,
+    "REVERIFY_NOT_PASS": 0,
+    "TIER1_NOT_PASS": 0
   },
   "entries": [
     {
@@ -537,8 +544,8 @@
     {
       "concept_code": "HK06",
       "concept_name": "이차방정식의 근(실근·허근)",
-      "problem_slug": "wm-quad-eq-larger-root",
-      "problem_bank": "problem_bank_v1",
+      "problem_slug": "wm-skel-0e91b357b1b6",
+      "problem_bank": "problem_bank_rephrased_v0",
       "problem_unit_codes": [
         "QUAD-EQ"
       ],
@@ -548,27 +555,9 @@
         "x**2 - 5*x + 6 = 0"
       ],
       "answer_map": {
-        "x": "3"
+        "x": "2"
       },
-      "prompt": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오."
-    },
-    {
-      "concept_code": "HK07",
-      "concept_name": "판별식",
-      "problem_slug": "wm-quad-eq-larger-root",
-      "problem_bank": "problem_bank_v1",
-      "problem_unit_codes": [
-        "QUAD-EQ"
-      ],
-      "match_axis": "standard_code",
-      "matched_key": "[10공수1-02-02]",
-      "conditions": [
-        "x**2 - 5*x + 6 = 0"
-      ],
-      "answer_map": {
-        "x": "3"
-      },
-      "prompt": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오."
+      "prompt": "이차방정식 x^2 - 5x + 6 = 0의 작은 근을 구하시오."
     },
     {
       "concept_code": "HK08",
@@ -587,60 +576,6 @@
         "x": "-11"
       },
       "prompt": "x² + 11x + 12 = 0 의 두 근의 합을 구하시오."
-    },
-    {
-      "concept_code": "HK09",
-      "concept_name": "이차방정식과 이차함수의 관계",
-      "problem_slug": "wm-quad-eq-root-count-mc",
-      "problem_bank": "problem_bank_v1",
-      "problem_unit_codes": [
-        "QUAD-EQ"
-      ],
-      "match_axis": "concept_src_id",
-      "matched_key": "HK09",
-      "conditions": [
-        "x**2 - 2*x = 0"
-      ],
-      "answer_map": {
-        "x": "2"
-      },
-      "prompt": "이차방정식 x^2 = 2x 의 서로 다른 실근의 개수는?"
-    },
-    {
-      "concept_code": "HK10",
-      "concept_name": "이차함수의 그래프와 직선",
-      "problem_slug": "wm-quad-fn-axis",
-      "problem_bank": "problem_bank_v1",
-      "problem_unit_codes": [
-        "QUAD-FN"
-      ],
-      "match_axis": "concept_src_id",
-      "matched_key": "HK10",
-      "conditions": [
-        "2*x - 4 = 0"
-      ],
-      "answer_map": {
-        "x": "2"
-      },
-      "prompt": "이차함수 y = x^2 - 4x + 3 의 그래프의 축이 직선 x = a 일 때, a 의 값을 구하시오."
-    },
-    {
-      "concept_code": "HK11",
-      "concept_name": "이차함수의 최대·최소",
-      "problem_slug": "wm-quad-fn-axis",
-      "problem_bank": "problem_bank_v1",
-      "problem_unit_codes": [
-        "QUAD-FN"
-      ],
-      "match_axis": "concept_src_id",
-      "matched_key": "HK11",
-      "conditions": [
-        "2*x - 4 = 0"
-      ],
-      "answer_map": {
-        "x": "2"
-      },
-      "prompt": "이차함수 y = x^2 - 4x + 3 의 그래프의 축이 직선 x = a 일 때, a 의 값을 구하시오."
     },
     {
       "concept_code": "HK22",
@@ -1359,6 +1294,10 @@
     "HK01",
     "HK04",
     "HK05",
+    "HK07",
+    "HK09",
+    "HK10",
+    "HK11",
     "HK12",
     "HK13",
     "HK14",

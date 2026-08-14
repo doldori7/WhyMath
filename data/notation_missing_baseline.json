@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "task": "NS-03",
-  "note": "표기 누락 베이스라인(Missing Symbol Report 정본) — 코퍼스에 등장하나 지원 표기 집합(data/notation_support_manifest.json 파생 + KaTeX 렌더 실증 allowlist) 밖인 심볼의 첫 실측(2026-07-23) 산출. l3/notation_coverage 게이트가 래칫으로 소비한다: 여기 없는 신규 누락 발견 시 exit 1, 여기 있는 누락은 리포트만. 갱신은 의식적 수동 편집만 — 자동 갱신(--rebaseline 류)은 래칫을 무력화하므로 존재하지 않는다. 항목 해소 경로: ①렌더 실증 테스트 추가 후 지원 승격(manifest/KATEX_PROVEN_MACROS 등재) → 본 파일에서 제거 ②코퍼스 표기 정리 → 제거. occurrences·sources는 첫 실측 시점 스냅샷(참고용). [2026-08-11 MATH-02 ④] 매크로 5건(\\sin·\\log·\\alpha·\\beta·\\theta)을 의식적 수동 편집으로 추가했다 — 새로 생긴 공백이 아니라 **원래 있었는데 유령 근거에 가려져 있던 공백**이다. KATEX_PROVEN_MACROS 24건이 부재 파일(NS-02 미착륙)을 근거로 지원집합을 넓히고 있었고, 근거 실재를 확인해 지원 파생에서 제외하자 그중 코퍼스에 실제 등장하는 5건이 누락으로 드러났다(나머지 19건은 코퍼스 미등장이거나 manifest cases로 독립 지원). 항목별 added_by·reason 참조.",
+  "note": "표기 누락 베이스라인(Missing Symbol Report 정본) — 코퍼스에 등장하나 지원 표기 집합(data/notation_support_manifest.json 파생 + KaTeX 렌더 실증 allowlist) 밖인 심볼의 첫 실측(2026-07-23) 산출. l3/notation_coverage 게이트가 래칫으로 소비한다: 여기 없는 신규 누락 발견 시 exit 1, 여기 있는 누락은 리포트만. 갱신은 의식적 수동 편집만 — 자동 갱신(--rebaseline 류)은 래칫을 무력화하므로 존재하지 않는다. 항목 해소 경로: ①렌더 실증 테스트 추가 후 지원 승격(manifest/KATEX_PROVEN_MACROS 등재) → 본 파일에서 제거 ②코퍼스 표기 정리 → 제거. occurrences·sources는 첫 실측 시점 스냅샷(참고용). [2026-08-11 MATH-02 ④] 매크로 5건(\\sin·\\log·\\alpha·\\beta·\\theta)을 의식적 수동 편집으로 추가했다 — 새로 생긴 공백이 아니라 **원래 있었는데 유령 근거에 가려져 있던 공백**이다. KATEX_PROVEN_MACROS 24건이 부재 파일(NS-02 미착륙)을 근거로 지원집합을 넓히고 있었고, 근거 실재를 확인해 지원 파생에서 제외하자 그중 코퍼스에 실제 등장하는 5건이 누락으로 드러났다(나머지 19건은 코퍼스 미등장이거나 manifest cases로 독립 지원). 항목별 added_by·reason 참조. [2026-08-13 NS-05] 글리프 70건을 의식적 수동 편집으로 추가했다 — 새로 생긴 공백이 아니라 **원래 있었는데 스캔 범위 밖이라 측정되지 않던 공백**이다. NS-03 게이트의 스캔 대상이 problem_bank_* + formula_graph_v1뿐이라 이론 코퍼스 5종의 표기가 무방비였고, NS-05가 스캔 범위를 확장하면서 첫 실측으로 드러났다(신규 누락 매크로 0건). 측정기의 판정 규칙(manifest+KaTeX allowlist)은 변경하지 않았다 — 범위 확장이지 지원 집합 확장이 아니다.",
   "measured_at": "2026-07-23",
   "measured_by": "python -m whymath_backend.l3.notation_coverage (첫 실측·부트스트랩)",
   "known_gaps_out_of_scope": [
@@ -290,6 +290,1007 @@
       },
       "codepoint": "U+2087",
       "unicode_name": "SUBSCRIPT SEVEN"
+    },
+    {
+      "token": "↔",
+      "kind": "glyph",
+      "occurrences": 667,
+      "sources": {
+        "atom_graph_v1": 611,
+        "concept_content_university_v1": 39,
+        "concept_content_v1": 9,
+        "concept_graph_v1": 2,
+        "misconceptions_v1": 6
+      },
+      "codepoint": "U+2194",
+      "unicode_name": "LEFT RIGHT ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "이론 코퍼스 스캔 범위 확장으로 드러난 기존 공백 — 신규 발생 아님. 게이트가 이론 코퍼스 5종(concept_content K-12·대학·atom_graph·misconceptions·concept_graph)의 서술 텍스트를 측정하지 않던 범위 공백을 NS-05가 메우면서 첫 실측으로 계상됐다. 해소 경로는 기존과 동일(렌더 실증 후 지원 승격)."
+    },
+    {
+      "token": "∫",
+      "kind": "glyph",
+      "occurrences": 342,
+      "sources": {
+        "atom_graph_v1": 195,
+        "concept_content_university_v1": 127,
+        "concept_content_v1": 13,
+        "misconceptions_v1": 7
+      },
+      "codepoint": "U+222B",
+      "unicode_name": "INTEGRAL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∞",
+      "kind": "glyph",
+      "occurrences": 178,
+      "sources": {
+        "atom_graph_v1": 74,
+        "concept_content_university_v1": 69,
+        "concept_content_v1": 10,
+        "concept_graph_v1": 10,
+        "misconceptions_v1": 15
+      },
+      "codepoint": "U+221E",
+      "unicode_name": "INFINITY",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "θ",
+      "kind": "glyph",
+      "occurrences": 163,
+      "sources": {
+        "atom_graph_v1": 83,
+        "concept_content_university_v1": 61,
+        "concept_content_v1": 12,
+        "concept_graph_v1": 3,
+        "misconceptions_v1": 4
+      },
+      "codepoint": "U+03B8",
+      "unicode_name": "GREEK SMALL LETTER THETA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ε",
+      "kind": "glyph",
+      "occurrences": 123,
+      "sources": {
+        "atom_graph_v1": 63,
+        "concept_content_university_v1": 60
+      },
+      "codepoint": "U+03B5",
+      "unicode_name": "GREEK SMALL LETTER EPSILON",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∂",
+      "kind": "glyph",
+      "occurrences": 92,
+      "sources": {
+        "atom_graph_v1": 51,
+        "concept_content_university_v1": 41
+      },
+      "codepoint": "U+2202",
+      "unicode_name": "PARTIAL DIFFERENTIAL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "φ",
+      "kind": "glyph",
+      "occurrences": 87,
+      "sources": {
+        "atom_graph_v1": 42,
+        "concept_content_university_v1": 45
+      },
+      "codepoint": "U+03C6",
+      "unicode_name": "GREEK SMALL LETTER PHI",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "λ",
+      "kind": "glyph",
+      "occurrences": 78,
+      "sources": {
+        "atom_graph_v1": 34,
+        "concept_content_university_v1": 44
+      },
+      "codepoint": "U+03BB",
+      "unicode_name": "GREEK SMALL LETTER LAMDA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊂",
+      "kind": "glyph",
+      "occurrences": 76,
+      "sources": {
+        "atom_graph_v1": 43,
+        "concept_content_university_v1": 9,
+        "concept_content_v1": 11,
+        "concept_graph_v1": 6,
+        "misconceptions_v1": 7
+      },
+      "codepoint": "U+2282",
+      "unicode_name": "SUBSET OF",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "Δ",
+      "kind": "glyph",
+      "occurrences": 68,
+      "sources": {
+        "atom_graph_v1": 27,
+        "concept_content_university_v1": 21,
+        "concept_content_v1": 8,
+        "concept_graph_v1": 5,
+        "misconceptions_v1": 7
+      },
+      "codepoint": "U+0394",
+      "unicode_name": "GREEK CAPITAL LETTER DELTA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "δ",
+      "kind": "glyph",
+      "occurrences": 66,
+      "sources": {
+        "atom_graph_v1": 36,
+        "concept_content_university_v1": 30
+      },
+      "codepoint": "U+03B4",
+      "unicode_name": "GREEK SMALL LETTER DELTA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∪",
+      "kind": "glyph",
+      "occurrences": 59,
+      "sources": {
+        "atom_graph_v1": 34,
+        "concept_content_university_v1": 11,
+        "concept_content_v1": 8,
+        "concept_graph_v1": 2,
+        "misconceptions_v1": 4
+      },
+      "codepoint": "U+222A",
+      "unicode_name": "UNION",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⇔",
+      "kind": "glyph",
+      "occurrences": 56,
+      "sources": {
+        "atom_graph_v1": 24,
+        "concept_content_university_v1": 31,
+        "concept_content_v1": 1
+      },
+      "codepoint": "U+21D4",
+      "unicode_name": "LEFT RIGHT DOUBLE ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "μ",
+      "kind": "glyph",
+      "occurrences": 48,
+      "sources": {
+        "atom_graph_v1": 24,
+        "concept_content_university_v1": 24
+      },
+      "codepoint": "U+03BC",
+      "unicode_name": "GREEK SMALL LETTER MU",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "≡",
+      "kind": "glyph",
+      "occurrences": 48,
+      "sources": {
+        "atom_graph_v1": 24,
+        "concept_content_university_v1": 24
+      },
+      "codepoint": "U+2261",
+      "unicode_name": "IDENTICAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∇",
+      "kind": "glyph",
+      "occurrences": 47,
+      "sources": {
+        "atom_graph_v1": 24,
+        "concept_content_university_v1": 23
+      },
+      "codepoint": "U+2207",
+      "unicode_name": "NABLA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "σ",
+      "kind": "glyph",
+      "occurrences": 46,
+      "sources": {
+        "atom_graph_v1": 26,
+        "concept_content_university_v1": 5,
+        "concept_content_v1": 4,
+        "concept_graph_v1": 2,
+        "misconceptions_v1": 9
+      },
+      "codepoint": "U+03C3",
+      "unicode_name": "GREEK SMALL LETTER SIGMA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∈",
+      "kind": "glyph",
+      "occurrences": 45,
+      "sources": {
+        "atom_graph_v1": 20,
+        "concept_content_university_v1": 15,
+        "concept_content_v1": 3,
+        "concept_graph_v1": 3,
+        "misconceptions_v1": 4
+      },
+      "codepoint": "U+2208",
+      "unicode_name": "ELEMENT OF",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∠",
+      "kind": "glyph",
+      "occurrences": 44,
+      "sources": {
+        "atom_graph_v1": 44
+      },
+      "codepoint": "U+2220",
+      "unicode_name": "ANGLE",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "¬",
+      "kind": "glyph",
+      "occurrences": 36,
+      "sources": {
+        "atom_graph_v1": 17,
+        "concept_content_university_v1": 19
+      },
+      "codepoint": "U+00AC",
+      "unicode_name": "NOT SIGN",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "κ",
+      "kind": "glyph",
+      "occurrences": 36,
+      "sources": {
+        "atom_graph_v1": 16,
+        "concept_content_university_v1": 20
+      },
+      "codepoint": "U+03BA",
+      "unicode_name": "GREEK SMALL LETTER KAPPA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⇒",
+      "kind": "glyph",
+      "occurrences": 33,
+      "sources": {
+        "atom_graph_v1": 8,
+        "concept_content_university_v1": 12,
+        "concept_content_v1": 8,
+        "concept_graph_v1": 3,
+        "misconceptions_v1": 2
+      },
+      "codepoint": "U+21D2",
+      "unicode_name": "RIGHTWARDS DOUBLE ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "α",
+      "kind": "glyph",
+      "occurrences": 32,
+      "sources": {
+        "atom_graph_v1": 26,
+        "concept_content_university_v1": 4,
+        "concept_content_v1": 2
+      },
+      "codepoint": "U+03B1",
+      "unicode_name": "GREEK SMALL LETTER ALPHA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∀",
+      "kind": "glyph",
+      "occurrences": 32,
+      "sources": {
+        "atom_graph_v1": 18,
+        "concept_content_university_v1": 13,
+        "misconceptions_v1": 1
+      },
+      "codepoint": "U+2200",
+      "unicode_name": "FOR ALL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∃",
+      "kind": "glyph",
+      "occurrences": 29,
+      "sources": {
+        "atom_graph_v1": 16,
+        "concept_content_university_v1": 12,
+        "misconceptions_v1": 1
+      },
+      "codepoint": "U+2203",
+      "unicode_name": "THERE EXISTS",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "≈",
+      "kind": "glyph",
+      "occurrences": 24,
+      "sources": {
+        "atom_graph_v1": 13,
+        "concept_content_university_v1": 5,
+        "concept_content_v1": 4,
+        "concept_graph_v1": 1,
+        "misconceptions_v1": 1
+      },
+      "codepoint": "U+2248",
+      "unicode_name": "ALMOST EQUAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∧",
+      "kind": "glyph",
+      "occurrences": 21,
+      "sources": {
+        "atom_graph_v1": 8,
+        "concept_content_university_v1": 13
+      },
+      "codepoint": "U+2227",
+      "unicode_name": "LOGICAL AND",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "β",
+      "kind": "glyph",
+      "occurrences": 20,
+      "sources": {
+        "atom_graph_v1": 18,
+        "concept_content_v1": 2
+      },
+      "codepoint": "U+03B2",
+      "unicode_name": "GREEK SMALL LETTER BETA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∅",
+      "kind": "glyph",
+      "occurrences": 20,
+      "sources": {
+        "atom_graph_v1": 11,
+        "concept_content_university_v1": 9
+      },
+      "codepoint": "U+2205",
+      "unicode_name": "EMPTY SET",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊥",
+      "kind": "glyph",
+      "occurrences": 20,
+      "sources": {
+        "atom_graph_v1": 20
+      },
+      "codepoint": "U+22A5",
+      "unicode_name": "UP TACK",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ρ",
+      "kind": "glyph",
+      "occurrences": 19,
+      "sources": {
+        "atom_graph_v1": 9,
+        "concept_content_university_v1": 10
+      },
+      "codepoint": "U+03C1",
+      "unicode_name": "GREEK SMALL LETTER RHO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "≅",
+      "kind": "glyph",
+      "occurrences": 18,
+      "sources": {
+        "atom_graph_v1": 8,
+        "concept_content_university_v1": 10
+      },
+      "codepoint": "U+2245",
+      "unicode_name": "APPROXIMATELY EQUAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "χ",
+      "kind": "glyph",
+      "occurrences": 12,
+      "sources": {
+        "atom_graph_v1": 7,
+        "concept_content_university_v1": 5
+      },
+      "codepoint": "U+03C7",
+      "unicode_name": "GREEK SMALL LETTER CHI",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ₐ",
+      "kind": "glyph",
+      "occurrences": 12,
+      "sources": {
+        "atom_graph_v1": 2,
+        "concept_content_university_v1": 2,
+        "concept_content_v1": 7,
+        "concept_graph_v1": 1
+      },
+      "codepoint": "U+2090",
+      "unicode_name": "LATIN SUBSCRIPT SMALL LETTER A",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∬",
+      "kind": "glyph",
+      "occurrences": 12,
+      "sources": {
+        "atom_graph_v1": 7,
+        "concept_content_university_v1": 5
+      },
+      "codepoint": "U+222C",
+      "unicode_name": "DOUBLE INTEGRAL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⟺",
+      "kind": "glyph",
+      "occurrences": 12,
+      "sources": {
+        "atom_graph_v1": 2,
+        "concept_content_v1": 7,
+        "concept_graph_v1": 3
+      },
+      "codepoint": "U+27FA",
+      "unicode_name": "LONG LEFT RIGHT DOUBLE ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ω",
+      "kind": "glyph",
+      "occurrences": 10,
+      "sources": {
+        "atom_graph_v1": 6,
+        "concept_content_university_v1": 4
+      },
+      "codepoint": "U+03C9",
+      "unicode_name": "GREEK SMALL LETTER OMEGA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "₆",
+      "kind": "glyph",
+      "occurrences": 10,
+      "sources": {
+        "atom_graph_v1": 8,
+        "concept_content_university_v1": 2
+      },
+      "codepoint": "U+2086",
+      "unicode_name": "SUBSCRIPT SIX",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∭",
+      "kind": "glyph",
+      "occurrences": 10,
+      "sources": {
+        "atom_graph_v1": 6,
+        "concept_content_university_v1": 4
+      },
+      "codepoint": "U+222D",
+      "unicode_name": "TRIPLE INTEGRAL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "Ω",
+      "kind": "glyph",
+      "occurrences": 9,
+      "sources": {
+        "atom_graph_v1": 3,
+        "concept_content_university_v1": 6
+      },
+      "codepoint": "U+03A9",
+      "unicode_name": "GREEK CAPITAL LETTER OMEGA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ν",
+      "kind": "glyph",
+      "occurrences": 8,
+      "sources": {
+        "atom_graph_v1": 3,
+        "concept_content_university_v1": 5
+      },
+      "codepoint": "U+03BD",
+      "unicode_name": "GREEK SMALL LETTER NU",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∉",
+      "kind": "glyph",
+      "occurrences": 8,
+      "sources": {
+        "atom_graph_v1": 4,
+        "concept_content_university_v1": 4
+      },
+      "codepoint": "U+2209",
+      "unicode_name": "NOT AN ELEMENT OF",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∽",
+      "kind": "glyph",
+      "occurrences": 8,
+      "sources": {
+        "atom_graph_v1": 8
+      },
+      "codepoint": "U+223D",
+      "unicode_name": "REVERSED TILDE",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "Λ",
+      "kind": "glyph",
+      "occurrences": 7,
+      "sources": {
+        "atom_graph_v1": 3,
+        "concept_content_university_v1": 4
+      },
+      "codepoint": "U+039B",
+      "unicode_name": "GREEK CAPITAL LETTER LAMDA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ζ",
+      "kind": "glyph",
+      "occurrences": 7,
+      "sources": {
+        "atom_graph_v1": 3,
+        "concept_content_university_v1": 4
+      },
+      "codepoint": "U+03B6",
+      "unicode_name": "GREEK SMALL LETTER ZETA",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "↑",
+      "kind": "glyph",
+      "occurrences": 7,
+      "sources": {
+        "atom_graph_v1": 6,
+        "misconceptions_v1": 1
+      },
+      "codepoint": "U+2191",
+      "unicode_name": "UPWARDS ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊆",
+      "kind": "glyph",
+      "occurrences": 7,
+      "sources": {
+        "atom_graph_v1": 4,
+        "concept_content_university_v1": 3
+      },
+      "codepoint": "U+2286",
+      "unicode_name": "SUBSET OF OR EQUAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "↦",
+      "kind": "glyph",
+      "occurrences": 6,
+      "sources": {
+        "atom_graph_v1": 3,
+        "concept_content_university_v1": 3
+      },
+      "codepoint": "U+21A6",
+      "unicode_name": "RIGHTWARDS ARROW FROM BAR",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∥",
+      "kind": "glyph",
+      "occurrences": 5,
+      "sources": {
+        "atom_graph_v1": 5
+      },
+      "codepoint": "U+2225",
+      "unicode_name": "PARALLEL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "≪",
+      "kind": "glyph",
+      "occurrences": 5,
+      "sources": {
+        "atom_graph_v1": 2,
+        "concept_content_university_v1": 3
+      },
+      "codepoint": "U+226A",
+      "unicode_name": "MUCH LESS-THAN",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∝",
+      "kind": "glyph",
+      "occurrences": 4,
+      "sources": {
+        "atom_graph_v1": 4
+      },
+      "codepoint": "U+221D",
+      "unicode_name": "PROPORTIONAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "τ",
+      "kind": "glyph",
+      "occurrences": 3,
+      "sources": {
+        "atom_graph_v1": 1,
+        "concept_content_university_v1": 2
+      },
+      "codepoint": "U+03C4",
+      "unicode_name": "GREEK SMALL LETTER TAU",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∏",
+      "kind": "glyph",
+      "occurrences": 3,
+      "sources": {
+        "atom_graph_v1": 1,
+        "concept_content_university_v1": 2
+      },
+      "codepoint": "U+220F",
+      "unicode_name": "N-ARY PRODUCT",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∛",
+      "kind": "glyph",
+      "occurrences": 3,
+      "sources": {
+        "atom_graph_v1": 2,
+        "concept_content_university_v1": 1
+      },
+      "codepoint": "U+221B",
+      "unicode_name": "CUBE ROOT",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∮",
+      "kind": "glyph",
+      "occurrences": 3,
+      "sources": {
+        "atom_graph_v1": 1,
+        "concept_content_university_v1": 2
+      },
+      "codepoint": "U+222E",
+      "unicode_name": "CONTOUR INTEGRAL",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "◁",
+      "kind": "glyph",
+      "occurrences": 3,
+      "sources": {
+        "atom_graph_v1": 1,
+        "concept_content_university_v1": 2
+      },
+      "codepoint": "U+25C1",
+      "unicode_name": "WHITE LEFT-POINTING TRIANGLE",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "Π",
+      "kind": "glyph",
+      "occurrences": 2,
+      "sources": {
+        "concept_content_v1": 2
+      },
+      "codepoint": "U+03A0",
+      "unicode_name": "GREEK CAPITAL LETTER PI",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "↓",
+      "kind": "glyph",
+      "occurrences": 2,
+      "sources": {
+        "atom_graph_v1": 2
+      },
+      "codepoint": "U+2193",
+      "unicode_name": "DOWNWARDS ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∓",
+      "kind": "glyph",
+      "occurrences": 2,
+      "sources": {
+        "concept_content_v1": 2
+      },
+      "codepoint": "U+2213",
+      "unicode_name": "MINUS-OR-PLUS SIGN",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊊",
+      "kind": "glyph",
+      "occurrences": 2,
+      "sources": {
+        "atom_graph_v1": 1,
+        "concept_content_university_v1": 1
+      },
+      "codepoint": "U+228A",
+      "unicode_name": "SUBSET OF WITH NOT EQUAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "₋",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "concept_content_v1": 1
+      },
+      "codepoint": "U+208B",
+      "unicode_name": "SUBSCRIPT MINUS",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "ₓ",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+2093",
+      "unicode_name": "LATIN SUBSCRIPT SMALL LETTER X",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "←",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+2190",
+      "unicode_name": "LEFTWARDS ARROW",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∑",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+2211",
+      "unicode_name": "N-ARY SUMMATION",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∖",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+2216",
+      "unicode_name": "SET MINUS",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "∨",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+2228",
+      "unicode_name": "LOGICAL OR",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊋",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+228B",
+      "unicode_name": "SUPERSET OF WITH NOT EQUAL TO",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊢",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+22A2",
+      "unicode_name": "RIGHT TACK",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊨",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+22A8",
+      "unicode_name": "TRUE",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
+    },
+    {
+      "token": "⊿",
+      "kind": "glyph",
+      "occurrences": 1,
+      "sources": {
+        "atom_graph_v1": 1
+      },
+      "codepoint": "U+22BF",
+      "unicode_name": "RIGHT TRIANGLE",
+      "added_by": "NS-05",
+      "added_at": "2026-08-13",
+      "reason": "동상 — NS-05 이론 코퍼스 범위 확장 첫 실측으로 드러난 기존 공백."
     },
     {
       "token": "\\cos",

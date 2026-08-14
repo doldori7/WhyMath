@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api import me as me_module
@@ -24,6 +25,8 @@ from whymath_backend.api.me import (
     _add_ability_snapshot_if_attempts,
     _AttemptHistoryState,
     _weak_concept_weights,
+    candidate_pool_conditions,
+    candidate_pool_order_by,
 )
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
@@ -35,6 +38,7 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.audit import DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_event import EvidenceEvent
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
@@ -56,6 +60,9 @@ from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshot
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
+from whymath_backend.schema.assessment import (
+    StudentAssessment as StudentAssessmentSchema,
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.audit import PrivacyAudit as PrivacyAuditSchema
@@ -1785,6 +1792,118 @@ class TestNextProblem:
         assert resp.status_code == 200
 
 
+# ── REC-06: 후보 조회 결정론(정렬 2차 키) + 제외 축 변별력 ──────────────────────────────
+class _RecordingQueueSession(_QueueSession):
+    """`_QueueSession`에 **실행된 stmt 캡처**를 더한 것 — SQL 자체를 단언하기 위함.
+
+    기존 FakeSession은 stmt를 통째로 무시해서 "WHERE/ORDER BY가 실제로 붙었는가"를 볼 수 없었다.
+    반환값은 그대로 큐에서 주되(동작 무변경), 컴파일된 SQL 문자열을 남겨 정렬 키·NOT IN 유무를
+    검사할 수 있게 한다. 실 PG 왕복 검증은 `test_me_integration.py`가 별도로 맡는다.
+    """
+
+    def __init__(self, results: list[_AQResult]) -> None:
+        super().__init__(results)
+        self.statements: list[Any] = []
+
+    async def execute(self, _stmt: Any) -> _AQResult:
+        self.statements.append(_stmt)
+        return await super().execute(_stmt)
+
+
+def _order_by_tail(stmt: Any) -> str:
+    """컴파일된 SQL에서 ORDER BY 이후 조각(정렬 키 순서 검사용)."""
+    sql = str(stmt)
+    assert "ORDER BY" in sql, sql
+    return sql.split("ORDER BY", 1)[1]
+
+
+class TestCandidatePoolOrdering:
+    """REC-06 acceptance③ — 후보 조회 `ORDER BY`에 2차 키(problem_id)가 붙어 동률 구간이 동결."""
+
+    def test_helper_orders_by_distance_then_problem_id(self) -> None:
+        """정렬 키는 정확히 2개이고 순서는 ① |b−θ| ② problem_id다."""
+        keys = candidate_pool_order_by(0.0)
+        assert len(keys) == 2
+        stmt = select(Problem.problem_id).order_by(*keys)
+        tail = _order_by_tail(stmt)
+        assert "abs(" in tail
+        assert "problem.problem_id" in tail
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_default_cat_query_carries_secondary_key(self) -> None:
+        """핸들러가 실제로 실행하는 후보 stmt에 2차 키가 실린다(헬퍼만 고쳐 놓고 미사용 방지)."""
+        pid = uuid.uuid4()
+        session = _RecordingQueueSession([_AQResult([]), _AQResult([(pid, 3.0, None)])])
+        client = _attempts_client(session)
+        assert client.get("/v1/me/next-problem").status_code == 200
+        tail = _order_by_tail(session.statements[1])
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_suneung_query_carries_same_secondary_key(self) -> None:
+        """수능 분기의 후보 조회도 같은 동률 결함을 갖고 있었다 — 같은 동결을 적용한다."""
+        session = _RecordingQueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        assert client.get("/v1/me/next-problem?mode=suneung").status_code == 200
+        tail = _order_by_tail(session.statements[1])
+        assert tail.index("abs(") < tail.index("problem.problem_id")
+
+    def test_exposure_gate_conditions_are_single_sourced(self) -> None:
+        """후보 WHERE 3축(난이도·저작권 출처·검수)이 헬퍼 한 곳에서만 정의된다."""
+        sql = str(select(Problem.problem_id).where(*candidate_pool_conditions()))
+        assert "problem.difficulty_overall IS NOT NULL" in sql
+        assert "problem.source_type NOT IN" in sql
+        assert "problem.review_status =" in sql
+
+    def test_secondary_key_does_not_change_pick_when_max_is_unique(self) -> None:
+        """**회귀 0 증명** — 2차 키가 바꾸는 것은 *동률 구간의 순서*뿐이다.
+
+        정렬 키 추가로 달라질 수 있는 것은 후보 리스트의 순서이므로, "순서가 달라져도 선택이
+        같다"를 보이면 회귀가 없다는 뜻이 된다. 정보량 최댓값이 유일한 풀을 여러 순열로 넣어
+        `select_weighted_item`이 매번 같은 문항을 고르는지 확인한다(동률이 있는 경우에만
+        순서가 결과를 가르며, 그때의 기존 동작은 'PG 임의'라 정의된 동작이 아니었다).
+        """
+        pool = [(uuid.uuid4(), d, None) for d in (5.0, 3.0, 1.0, 4.0)]
+        picks = set()
+        for rotation in range(len(pool)):
+            rotated = pool[rotation:] + pool[:rotation]
+            session = _QueueSession([_AQResult([]), _AQResult(rotated)])
+            body = _attempts_client(session).get("/v1/me/next-problem").json()
+            picks.add(body["problem_id"])
+        assert len(picks) == 1  # 순서를 어떻게 흔들어도 같은 문항(θ=0 → 난이도 3.0)
+        assert picks == {str(next(pid for pid, d, _b in pool if d == 3.0))}
+
+    def test_attempt_exclusion_toggles_returned_problem_bidirectionally(self) -> None:
+        """REC-06 acceptance④ — attempt 1건 주입 → 그 문항이 후보에서 빠지고, 되돌리면 원복.
+
+        두 축을 함께 본다: ⑴ `attempted_ids`가 실제로 **SQL의 NOT IN까지 도달**하는가(핸들러가
+        제외를 거는가) ⑵ 그 결과 반환 문항이 실제로 바뀌는가. FakeSession은 WHERE를 평가하지
+        않으므로 ⑵는 PG가 적용한 결과를 후보 큐로 흉내낸다 — PG가 `NOT IN`을 실제로 적용한다는
+        사실 자체는 `test_me_integration.py`의 실 PG 테스트가 별도로 증명한다.
+        """
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()  # 둘 다 난이도 3.0(θ=0 동률)
+
+        def _call(attempts: list[Any], pool: list[Any]) -> tuple[str | None, str]:
+            session = _RecordingQueueSession([_AQResult(attempts), _AQResult(pool)])
+            body = _attempts_client(session).get("/v1/me/next-problem").json()
+            return body["problem_id"], str(session.statements[1])
+
+        # ① attempt 0행 — NOT IN 없음·풀 첫 문항 반환
+        before_id, before_sql = _call([], [(pid_a, 3.0, None), (pid_b, 3.0, None)])
+        assert "problem_id NOT IN" not in before_sql
+        assert before_id == str(pid_a)
+
+        # ② attempt 1건 주입(pid_a 채점) — NOT IN이 SQL에 실리고, 반환 문항이 바뀐다
+        after_id, after_sql = _call([(pid_a, True, 3.0, None)], [(pid_b, 3.0, None)])
+        assert "problem_id NOT IN" in after_sql
+        assert after_id == str(pid_b)
+        assert after_id != before_id
+
+        # ③ 되돌림 — NOT IN이 사라지고 원래 문항으로 복귀
+        back_id, back_sql = _call([], [(pid_a, 3.0, None), (pid_b, 3.0, None)])
+        assert "problem_id NOT IN" not in back_sql
+        assert back_id == before_id
+
+
 # ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
 def _suneung_problem(**over: object) -> SchemaProblem:
     """수능 모드 후보용 최소 자체생성 schema Problem 빌더(l6 test_gating `_problem` 답습)."""
@@ -2316,6 +2435,10 @@ class TestAssembleMeasurementAssessment:
         weak: list[WeakConceptRecommendation],
         gaps_calls: list[uuid.UUID] | None = None,
         path_steps: tuple[Any, ...] = (),
+        ordering_basis: str = "empty",
+        ordering_edge_count: int = 0,
+        has_cycle: bool = False,
+        path_calls: list[int] | None = None,
     ) -> None:
         async def _fake_diag(session: Any, user_id: Any) -> list[ConceptDiagnosis]:
             return diagnoses
@@ -2334,7 +2457,14 @@ class TestAssembleMeasurementAssessment:
             return []
 
         async def _fake_path(session: Any, gaps: Any) -> LearningPath:
-            return LearningPath(steps=path_steps)
+            if path_calls is not None:
+                path_calls.append(1)
+            return LearningPath(
+                steps=path_steps,
+                ordering_basis=cast(Any, ordering_basis),
+                ordering_edge_count=ordering_edge_count,
+                has_cycle=has_cycle,
+            )
 
         monkeypatch.setattr("whymath_backend.api.me.compute_concept_diagnoses", _fake_diag)
         monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _fake_hyp)
@@ -2461,6 +2591,153 @@ class TestAssembleMeasurementAssessment:
         assert gaps_calls == [weakest]
         assert len(schema.recommended_path) == 1
         assert schema.recommended_path[0]["concept_id"] == str(weakest)
+
+
+class TestCapturedPathOrderingHonesty:
+    """`PATH-09` — 영속된 `recommended_path`에서 *정렬 근거*를 판독할 수 있는가.
+
+    결함(상환 전): `path.steps`만 저장해 부모 `LearningPath`의 정직 표기 3종
+    (`ordering_basis`·`ordering_edge_count`·`has_cycle`)이 통째로 사라졌다. 실측상 기본
+    파라미터에서 **96.4%가 `tiebreak_only`**인데, 학생이 `GET /v1/me/assessments`로 다시 읽는
+    스냅샷에는 그 사실이 없어 "근거 있는 순서"와 구별되지 않았다.
+
+    비대칭이 결함의 증거였다 — `is_cycle_residual`은 *자식*(`LearningStep`) 필드라 살아남고
+    `ordering_basis`는 *부모* 필드라 죽었다. 그런데 살아남은 축(사이클)은 원자 백본이 DAG
+    보장이라 발생률 **0%**이고, 죽은 축은 **96.4%**다.
+    """
+
+    _STEPS_FIXTURE_CONCEPT = uuid.UUID("11111111-1111-1111-1111-111111111111")
+
+    def _steps(self) -> tuple[Any, ...]:
+        """두 fixture가 공유하는 **완전히 동일한** steps — 변별력 테스트의 전제."""
+        return (
+            LearningStep(
+                position=0,
+                concept_id=self._STEPS_FIXTURE_CONCEPT,
+                depth=1,
+                is_cycle_residual=False,
+            ),
+        )
+
+    def _assemble(self, monkeypatch: pytest.MonkeyPatch, **ordering: Any) -> AssessmentSchema:
+        helper = TestAssembleMeasurementAssessment()
+        helper._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[],
+            hypotheses=[],
+            weak=[
+                WeakConceptRecommendation(
+                    concept_id=self._STEPS_FIXTURE_CONCEPT, weakness=0.1, agreement="agree"
+                )
+            ],
+            path_steps=self._steps(),
+            **ordering,
+        )
+        return asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+
+    def test_persisted_step_carries_ordering_basis(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """①결함 재현 — 영속 산출물에서 정렬 근거 3종이 판독 가능해야 한다.
+
+        상환 전 코드(`[step.model_dump() for step in path.steps]`)에서는 이 단언이 전부
+        KeyError/누락으로 실패한다.
+        """
+        schema = self._assemble(monkeypatch, ordering_basis="tiebreak_only", ordering_edge_count=0)
+        item = schema.recommended_path[0]
+        assert item["ordering_basis"] == "tiebreak_only"
+        assert item["ordering_edge_count"] == 0
+        assert item["has_cycle"] is False
+        # 자식 필드(원래도 살아남던 축)가 회귀하지 않았는지도 함께 고정.
+        assert item["is_cycle_residual"] is False
+
+    def test_identical_steps_different_basis_produce_different_snapshots(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """③변별력(핵심) — `steps`가 **완전히 동일**하고 `ordering_basis`만 다른 두 fixture의
+        영속 산출물이 실제로 갈리는가. 갈리지 않으면 정직 표기는 위장이다."""
+        topological = self._assemble(
+            monkeypatch, ordering_basis="topological", ordering_edge_count=3
+        )
+        tiebreak = self._assemble(
+            monkeypatch, ordering_basis="tiebreak_only", ordering_edge_count=0
+        )
+
+        # 전제 확인: 두 경우의 step 본체(정렬 근거 키 제외)는 바이트 단위로 같다.
+        ordering_keys = set(me_module._CAPTURE_PATH_ORDERING_KEYS)
+
+        def _body(schema: AssessmentSchema) -> list[dict[str, Any]]:
+            return [
+                {k: v for k, v in item.items() if k not in ordering_keys}
+                for item in schema.recommended_path
+            ]
+
+        assert _body(topological) == _body(tiebreak)
+        # 그럼에도 영속 산출물 전체는 달라야 한다 — 이 단언이 변별력 그 자체다.
+        assert topological.recommended_path != tiebreak.recommended_path
+        assert topological.recommended_path[0]["ordering_basis"] == "topological"
+        assert tiebreak.recommended_path[0]["ordering_basis"] == "tiebreak_only"
+
+    def test_ordering_values_copied_verbatim_with_single_path_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """④날조 방지 — 값은 `build_learning_path` 산출물을 *그대로* 옮긴 것이고,
+        `LearningPath` 재호출은 0이다(조립당 정확히 1회)."""
+        path_calls: list[int] = []
+        schema = self._assemble(
+            monkeypatch,
+            ordering_basis="topological",
+            ordering_edge_count=7,
+            has_cycle=True,
+            path_calls=path_calls,
+        )
+        assert path_calls == [1]  # 재호출 0 — 정확히 1회
+        item = schema.recommended_path[0]
+        # 정규화·보정·신뢰도 점수화 없이 원값 그대로(7이 0..1로 스케일되거나 하지 않는다).
+        assert item["ordering_edge_count"] == 7
+        assert item["has_cycle"] is True
+        assert item["ordering_basis"] == "topological"
+
+    def test_array_length_still_equals_step_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """②의 안전 조건 — 정직 표기를 넣었다고 **배열 길이 의미가 바뀌면 안 된다**.
+
+        `assessment_seat_reach_report`의 `jsonb_array_length(recommended_path) > 0` 관측
+        지표와 기존 step 수 단언이 그 길이를 소비한다. 헤더 원소를 끼우지 않은 이유가 이것이다.
+        """
+        schema = self._assemble(monkeypatch, ordering_basis="tiebreak_only", ordering_edge_count=0)
+        assert len(schema.recommended_path) == len(self._steps()) == 1
+        # 모든 원소가 여전히 step이다(메타 전용 원소가 섞이지 않았다).
+        assert all("concept_id" in item for item in schema.recommended_path)
+
+    def test_no_weak_concepts_yields_empty_array(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """빈 배열은 "담을 step이 없다"이며 별도 표기를 만들지 않는다(상수 docstring 계약)."""
+        helper = TestAssembleMeasurementAssessment()
+        helper._patch_l2_outputs(monkeypatch, diagnoses=[], hypotheses=[], weak=[])
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert schema.recommended_path == []
+
+    def test_student_facing_model_exposes_basis_without_prediction_fields(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """⑤노출 정합 — 학생 대면 정본(`StudentAssessment`)에서도 정렬 근거가 판독 가능하고,
+        예측 5필드는 여전히 **스키마에 자리가 없다**(ASM-07 구조적 배제 회귀 동결)."""
+        schema = self._assemble(monkeypatch, ordering_basis="tiebreak_only", ordering_edge_count=0)
+        student = StudentAssessmentSchema.from_assessment(schema)
+        assert student.recommended_path[0]["ordering_basis"] == "tiebreak_only"
+        for hidden in (
+            "estimated_grade",
+            "estimated_score",
+            "estimated_percentile",
+            "target_university_id",
+            "admission_probability",
+        ):
+            assert hidden not in StudentAssessmentSchema.model_fields
 
 
 class TestAssessmentCaptureEndpoint:

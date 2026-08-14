@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CONT-01-concept-assessment-review-gate
+title: "개념 평가 재료 주입에 검수 축 집행 — /study가 문항 노출 4단 중 검수 게이트만 비껴가는 비대칭 해소"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 후보 필터에 검수 축 추가 — concept_assessment_index.py의 3겹 필터(①저작권 source_type/license ②_reverify_one pass ③answer_map 불변식)에 review_status==approved를 4번째 겹으로 추가한다. 이 필드는 이미 IndexEntry에 캡처되고 있으나(:110 선언·:176 대입) 필터 조건에도 런타임에도 소비처가 0인 죽은 필드다 — 신규 필드 0, 소생만. 탈락 건수를 기존 drops 카운터와 같은 형식으로 리포트에 남긴다(필터가 살아 있는지 관측 가능)."
+  - "② 판정 권위 단일화 — l6/_shared.py:165 is_review_cleared(fail-closed·approved만 통과)와 같은 기준을 쓴다. 다만 그 함수는 ORM Problem을 받고 이쪽은 빌드타임 JSONL dict라 직접 재사용이 불가하므로, 기준 이원화를 피하는 방법(ReviewStatus enum 공유 또는 판정 헬퍼 승격)을 설계 판단으로 명시한다. PB-03이 is_exposable(법적 축)과 is_review_cleared(운영 축)를 의도적으로 분리한 설계는 유지 — 합치지 않는다."
+  - "③ 전후 실측 기록 — 현행 커밋된 index.json 61 entry 중 5건이 problem_bank_v1(review_status=pending 4/4) 유래다(HK06·HK07·HK09·HK10·HK11). 게이트 적용 후 이 5건이 실제로 빠지는지, concepts_covered가 61→몇으로 바뀌는지 산출물·리포트에 기록한다. 커버율 하락은 결함이 아니라 게이트가 일한 증거이므로 숨기지 않는다."
+  - "④ 변별력 검증 의무 — review_status=pending 레코드 1건을 후보에 주입한 상태에서 그것이 실제로 탈락하는지 실측하고, 정상 상태에서 탈락하지 않는지도 실측한다(성공·실패 양쪽에서 같은 값을 내면 위장). 뮤테이션 원복은 cp 백업으로만 한다(git checkout 금지 — CLAUDE.md 2026-08-10 등재 규칙)."
+  - "⑤ 경계 — 신규 학생 대면 축 0·LLM 0·신규 저작 0. 개념 설명 LLM 생성 폴백은 켜지 않는다. 미커버 개념 376건의 정직 기록 형식은 무변경 유지."
+artifacts:
+  - "38a8a01a · PR #819 (https://github.com/doldori7/WhyMath/pull/819)"
+paths:
+  - src/backend/whymath_backend/harness/concept_assessment_index.py
+  - src/backend/whymath_backend/l3/render/assessment_bank.py
+  - "data/corpus/concept_assessment_v1/**"
+session: null
+notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F1·§3 D7 — 외부 EOS 틀(기능 58) 3차 대조. PB-03이 검수를 fail-closed 노출 게이트로 만들어 L6 7모드+기본 CAT+blueprint assembly에 배선했는데, S3-26이 만든 두 번째 노출 경로(/study 개념 평가 재료)는 그 게이트를 경유하지 않는다. 정본화≠집행(PED-06→PED-08) 계열의 재발형 — 그때는 노출 계약, PED-16은 억제 계약, 이번은 검수 계약. 정직한 경계: 파일럿 유일 소단원(quadratic_maxmin)이 10공수1-02-06-* 개념을 참조해 오늘 학생의 실도달은 0에 가깝다 — 실손실 수정이 아니라 규약 대칭·defense-in-depth이며 PB-03 자신의 '현 코퍼스 실손실 0이지만 채택' 선례와 동형. CUR-02가 목표 축을 넓히는 순간 도달한다."
+updated: 2026-08-11

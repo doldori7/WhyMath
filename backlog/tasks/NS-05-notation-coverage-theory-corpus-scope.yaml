@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NS-05-notation-coverage-theory-corpus-scope
+title: "notation_coverage 스캔 범위에 이론 코퍼스 5종 추가 — concept_content(K-12·대학)·atom_graph·misconceptions·concepts.jsonl의 미지원 글리프 무방비 해소"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① l3/notation_coverage.py 스캔 대상(현재 problem_bank_* + formula_graph_v1 뿐 — :620-621)에 concept_content_v1·concept_content_university_v1·atom_graph_v1·misconceptions_v1·concept_graph_v1/concepts.jsonl을 추가"
+  - "② 신규 미지원 글리프는 notation_missing_baseline.json에 래칫 계상(삭제·수정 금지 — NS-03의 베이스라인 래칫 철학 답습). 첫 실측 건수를 리포트에 기록"
+  - "③ 변별력: 이론 코퍼스에 신규 글리프를 주입한 대조군이 exit 1을 내는지 실측 (사전 cp 백업→주입→red 확인→cp 복원, git 원복 금지)"
+  - "④ 회귀 테스트 갱신 + CI notation_coverage 스텝(ci.yml)이 그대로 신규 범위를 커버하는지 확인"
+  - "⑤ 범위 밖: LaTeX↔caret 표기 원칙 정정(MATH-01 후속의 별도 판단 — CLAUDE.md 문서와 코퍼스 현실의 불일치), MATH-04 학년밴드 게이트"
+artifacts:
+  - d2c059bc
+  - "#824"
+paths:
+  - src/backend/whymath_backend/l3/notation_coverage.py
+  - data/notation_missing_baseline.json
+  - "tests/backend/l3/**"
+session: null
+notes: "2026-08-13 감사: 이론 코퍼스에 미지원 유니코드 글리프 대량(atom_graph → 2448회·− 662·× 512, concept_content 19종, 대학 20종, misconceptions 22종)인데 CI 게이트가 측정 안 함. 베이스라인 수치 자체는 정확했으므로 측정기는 신뢰 가능 — 범위만 확장하면 됨."
+updated: 2026-08-13

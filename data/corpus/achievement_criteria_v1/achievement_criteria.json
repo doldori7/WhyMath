@@ -1,0 +1,3579 @@
+[
+ {
+  "school_level": "고등학교",
+  "subject": "공통수학",
+  "unit_hierarchy": [
+   "(1) 문자와 식",
+   "(가) 다항식의 연산",
+   "(나) 나머지 정리",
+   "(다) 인수분해",
+   "(라) 복소수와 이차방정식",
+   "(마) 이차방정식과 이차함수",
+   "(바) 여러 가지 방정식과 부등식",
+   "(2) 기하",
+   "(가) 평면좌표",
+   "(나) 직선의 방정식",
+   "(다) 원의 방정식",
+   "(라) 도형의 이동",
+   "(3) 수와 연산",
+   "(가) 집합",
+   "(나) 명제",
+   "(4) 함수",
+   "(가) 함수",
+   "(나) 유리함수와 무리함수",
+   "(5) 확률과 통계",
+   "(가) 경우의 수",
+   "(나) 순열과 조합"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[10수학01-01]",
+    "criteria_codes": [
+     "[10수학01-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-02]",
+    "criteria_codes": [
+     "[10수학01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-03]",
+    "criteria_codes": [
+     "[10수학01-03-00]",
+     "[10수학01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-04]",
+    "criteria_codes": [
+     "[10수학01-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[10수학01-06]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[10수학01-07]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[10수학01-08]",
+    "criteria_codes": [
+     "[10수학01-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-09]",
+    "criteria_codes": [
+     "[10수학01-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-10]",
+    "criteria_codes": [
+     "[10수학01-10-00]",
+     "[10수학01-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-11]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[10수학01-12]",
+    "criteria_codes": [
+     "[10수학01-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-13]",
+    "criteria_codes": [
+     "[10수학01-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-14]",
+    "criteria_codes": [
+     "[10수학01-14-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-15]",
+    "criteria_codes": [
+     "[10수학01-15-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학01-16]",
+    "criteria_codes": [
+     "[10수학01-16-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-01]",
+    "criteria_codes": [
+     "[10수학02-01-00]",
+     "[10수학02-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-02]",
+    "criteria_codes": [
+     "[10수학02-02-02]",
+     "[10수학02-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-03]",
+    "criteria_codes": [
+     "[10수학02-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-04]",
+    "criteria_codes": [
+     "[10수학02-04-02]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-05]",
+    "criteria_codes": [
+     "[10수학02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-06]",
+    "criteria_codes": [
+     "[10수학02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-07]",
+    "criteria_codes": [
+     "[10수학02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-08]",
+    "criteria_codes": [
+     "[10수학02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학02-09]",
+    "criteria_codes": [
+     "[10수학02-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-01]",
+    "criteria_codes": [
+     "[10수학03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-02]",
+    "criteria_codes": [
+     "[10수학03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-03]",
+    "criteria_codes": [
+     "[10수학03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-04]",
+    "criteria_codes": [
+     "[10수학03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-05]",
+    "criteria_codes": [
+     "[10수학03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-06]",
+    "criteria_codes": [
+     "[10수학03-06-01]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-07]",
+    "criteria_codes": [
+     "[10수학03-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학03-08]",
+    "criteria_codes": [
+     "[10수학03-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학04-01]",
+    "criteria_codes": [
+     "[10수학04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학04-02]",
+    "criteria_codes": [
+     "[10수학04-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학04-03]",
+    "criteria_codes": [
+     "[10수학04-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학04-04]",
+    "criteria_codes": [
+     "[10수학04-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학04-05]",
+    "criteria_codes": [
+     "[10수학04-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학05-01]",
+    "criteria_codes": [
+     "[10수학05-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학05-02]",
+    "criteria_codes": [
+     "[10수학05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[10수학05-03]",
+    "criteria_codes": [
+     "[10수학05-03-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 다항식",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 방정식과 부등식",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 도형의 방정식",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(4) 집합과 명제",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(5) 함수와 그래프",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(6) 경우의 수",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(1) 문항 개발 목록",
+    "levels": []
+   },
+   {
+    "unit": "(2) 예시 평가 문항",
+    "levels": [
+     "C"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "수학Ⅰ",
+  "unit_hierarchy": [
+   "(1) 지수함수와 로그함수",
+   "(가) 지수와 로그",
+   "(나) 지수함수와 로그함수",
+   "(2) 삼각함수",
+   "(가) 삼각함수",
+   "(3) 수열",
+   "(가) 등차수열과 등비수열",
+   "(나) 수열의 합",
+   "(다) 수학적 귀납법",
+   "(1) 지수함수와 로그함수",
+   "(2) 삼각함수",
+   "(3) 수열"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12수학Ⅰ01-01]",
+    "criteria_codes": [
+     "[12수학Ⅰ01-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-03]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-04]",
+    "criteria_codes": [
+     "[12수학Ⅰ01-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-05]",
+    "criteria_codes": [
+     "[12수학Ⅰ01-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-06]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-07]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅰ01-08]",
+    "criteria_codes": [
+     "[12수학Ⅰ01-08-00]",
+     "[12수학Ⅰ02-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ02-01]",
+    "criteria_codes": [
+     "[12수학Ⅰ02-01-02]",
+     "[12수학Ⅰ02-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ02-02]",
+    "criteria_codes": [
+     "[12수학Ⅰ02-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ02-03]",
+    "criteria_codes": [
+     "[12수학Ⅰ02-03-00]",
+     "[12수학Ⅰ03-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-01]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-02]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-02-02]",
+     "[12수학Ⅰ03-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-03]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-04]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-05]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-06]",
+    "criteria_codes": [
+     "[12수학Ⅰ03-06-01]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-07]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅰ03-08]",
+    "criteria_codes": []
+   }
+  ],
+  "achievement_levels_by_unit": []
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "수학Ⅱ",
+  "unit_hierarchy": [
+   "(1) 함수의 극한과 연속",
+   "(가) 함수의 극한",
+   "(나) 함수의 연속",
+   "(2) 미분",
+   "(가) 미분계수",
+   "(나) 도함수",
+   "(다) 도함수의 활용",
+   "(3) 적분",
+   "(가) 부정적분",
+   "(나) 정적분",
+   "(다) 정적분의 활용"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12수학Ⅱ01-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ01-02]",
+    "criteria_codes": [
+     "[12수학Ⅱ01-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ01-03]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ01-04]",
+    "criteria_codes": [
+     "[12수학Ⅱ01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-03]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-04]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-06]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-07]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-08]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-09]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-09-00]",
+     "[12수학Ⅱ02-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-10]",
+    "criteria_codes": [
+     "[12수학Ⅱ02-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ02-11]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-03]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-04]",
+    "criteria_codes": [
+     "[12수학Ⅱ03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12수학Ⅱ03-06]",
+    "criteria_codes": [
+     "[12수학Ⅱ03-06-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 함수의 극한과 연속",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 미분",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 적분",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(1) 문항 개발 목록",
+    "levels": []
+   },
+   {
+    "unit": "(2) 예시 평가 문항",
+    "levels": []
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "미적분",
+  "unit_hierarchy": [
+   "(1) 수열의 극한",
+   "(가) 수열의 극한",
+   "(나) 급수",
+   "(2) 미분법",
+   "(가) 여러 가지 함수의 미분",
+   "(나) 여러 가지 미분법",
+   "(다) 도함수의 활용",
+   "(3) 적분법",
+   "(가) 여러 가지 적분법",
+   "(나) 정적분의 활용"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12미적01-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12미적01-02]",
+    "criteria_codes": [
+     "[12미적01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적01-03]",
+    "criteria_codes": [
+     "[12미적01-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적01-04]",
+    "criteria_codes": [
+     "[12미적01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적01-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12미적01-06]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12미적02-01]",
+    "criteria_codes": [
+     "[12미적02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-02]",
+    "criteria_codes": [
+     "[12미적02-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-03]",
+    "criteria_codes": [
+     "[12미적02-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-04]",
+    "criteria_codes": [
+     "[12미적02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-05]",
+    "criteria_codes": [
+     "[12미적02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-06]",
+    "criteria_codes": [
+     "[12미적02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-07]",
+    "criteria_codes": [
+     "[12미적02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-08]",
+    "criteria_codes": [
+     "[12미적02-08-00]",
+     "[12미적02-09-01]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-09]",
+    "criteria_codes": [
+     "[12미적02-09-02]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-10]",
+    "criteria_codes": [
+     "[12미적02-10-00]",
+     "[12미적02-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-11]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12미적02-12]",
+    "criteria_codes": [
+     "[12미적02-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-13]",
+    "criteria_codes": [
+     "[12미적02-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적02-14]",
+    "criteria_codes": [
+     "[12미적02-14-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-01]",
+    "criteria_codes": [
+     "[12미적03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-02]",
+    "criteria_codes": [
+     "[12미적03-02-00]",
+     "[12미적03-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-03]",
+    "criteria_codes": [
+     "[12미적03-03-02]",
+     "[12미적03-03-03]",
+     "[12미적03-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-04]",
+    "criteria_codes": [
+     "[12미적03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12미적03-06]",
+    "criteria_codes": [
+     "[12미적03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12미적03-07]",
+    "criteria_codes": [
+     "[12미적03-07-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 수열의 극한",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 미분법",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 적분법",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(1) 문항 개발 목록",
+    "levels": []
+   },
+   {
+    "unit": "(2) 예시 평가 문항",
+    "levels": [
+     "B"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "확률과통계",
+  "unit_hierarchy": [
+   "(1) 경우의 수",
+   "(가) 순열과 조합",
+   "(나) 이항정리",
+   "(2) 확률",
+   "(가) 확률의 뜻과 활용",
+   "(나) 조건부확률",
+   "(3) 통계",
+   "(가) 확률분포",
+   "(나) 통계적 추정"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12확통01-01]",
+    "criteria_codes": [
+     "[12확통01-01-02]",
+     "[12확통01-01-03]"
+    ]
+   },
+   {
+    "standard_code": "[12확통01-02]",
+    "criteria_codes": [
+     "[12확통01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통01-03]",
+    "criteria_codes": [
+     "[12확통01-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-01]",
+    "criteria_codes": [
+     "[12확통02-01-01]",
+     "[12확통02-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12확통02-03]",
+    "criteria_codes": [
+     "[12확통02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-04]",
+    "criteria_codes": [
+     "[12확통02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-05]",
+    "criteria_codes": [
+     "[12확통02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-06]",
+    "criteria_codes": [
+     "[12확통02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통02-07]",
+    "criteria_codes": [
+     "[12확통02-07-00]",
+     "[12확통03-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12확통03-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12확통03-02]",
+    "criteria_codes": [
+     "[12확통03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통03-03]",
+    "criteria_codes": [
+     "[12확통03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통03-04]",
+    "criteria_codes": [
+     "[12확통03-04-01]",
+     "[12확통03-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[12확통03-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12확통03-06]",
+    "criteria_codes": [
+     "[12확통03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12확통03-07]",
+    "criteria_codes": [
+     "[12확통03-07-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 경우의 수",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 확률",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 통계",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(1) 문항 개발 목록",
+    "levels": []
+   },
+   {
+    "unit": "(2) 예시 평가 문항",
+    "levels": []
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "심화수학Ⅰ",
+  "unit_hierarchy": [
+   "(1) 방정식과 부등식",
+   "(가) 방정식",
+   "(나) 부등식",
+   "(2) 지수함수와 로그함수",
+   "(가) 지수함수",
+   "(나) 로그함수",
+   "(3) 삼각함수",
+   "(가) 삼각함수",
+   "(나) 삼각함수의 활용",
+   "(4) 수열과 극한",
+   "(가) 수열",
+   "(나) 수열의 극한",
+   "(5) 미분",
+   "(가) 함수의 극한과 연속",
+   "(나) 미분계수와 도함수",
+   "(다) 여러 가지 미분법",
+   "(라) 도함수의 활용"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12심수Ⅰ01-01]",
+    "criteria_codes": [
+     "[12심수Ⅰ01-01-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ01-02]",
+    "criteria_codes": [
+     "[12심수Ⅰ01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ01-03]",
+    "criteria_codes": [
+     "[12심수Ⅰ01-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ01-04]",
+    "criteria_codes": [
+     "[12심수Ⅰ01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ01-05]",
+    "criteria_codes": [
+     "[12심수Ⅰ01-05-00]",
+     "[12심수Ⅰ02-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-02]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-03]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-04]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-05]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-06]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-06-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-07]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-08]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-09]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ02-10]",
+    "criteria_codes": [
+     "[12심수Ⅰ02-10-00]",
+     "[12심수Ⅰ03-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-01]",
+    "criteria_codes": [
+     "[12심수Ⅰ03-01-02]",
+     "[12심수Ⅰ03-01-03]",
+     "[12심수Ⅰ03-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-03]",
+    "criteria_codes": [
+     "[12심수Ⅰ03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-04]",
+    "criteria_codes": [
+     "[12심수Ⅰ03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-05]",
+    "criteria_codes": [
+     "[12심수Ⅰ03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ03-06]",
+    "criteria_codes": [
+     "[12심수Ⅰ03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-01]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-01-00]",
+     "[12심수Ⅰ04-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-02]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-02-02]",
+     "[12심수Ⅰ04-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-03]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-04]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-05]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-06]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-07]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-08]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-09]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-10]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-11]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ04-12]",
+    "criteria_codes": [
+     "[12심수Ⅰ04-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-01]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-02]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-03]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-04]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-05]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-06]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-07]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-08]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-09]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-09-00]",
+     "[12심수Ⅰ05-10-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-10]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-10-02]",
+     "[12심수Ⅰ05-11-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-11]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-11-02]",
+     "[12심수Ⅰ05-12-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-12]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-13]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-14]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-14-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-15]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-15-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-16]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-16-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-17]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-17-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-18]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-18-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅰ05-19]",
+    "criteria_codes": [
+     "[12심수Ⅰ05-19-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 방정식과 부등식",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 지수함수와 로그함수",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 삼각함수",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(4) 수열과 극한",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(5) 미분",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "심화수학Ⅱ",
+  "unit_hierarchy": [
+   "(1) 적분",
+   "(가) 부정적분",
+   "(나) 정적분",
+   "(2) 이차곡선",
+   "(가) 이차곡선",
+   "(3) 공간도형과 공간좌표",
+   "(가) 공간도형",
+   "(나) 공간좌표",
+   "(4) 확률",
+   "(가) 순열과 조합",
+   "(나) 확률의 뜻과 성질",
+   "(다) 조건부확률",
+   "(5) 통계",
+   "(가) 확률분포",
+   "(나) 통계적 추정"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12심수Ⅱ01-01]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-02]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-03]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-03-00]",
+     "[12심수Ⅱ01-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-04]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-04-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-05]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-06]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-07]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ01-08]",
+    "criteria_codes": [
+     "[12심수Ⅱ01-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ02-01]",
+    "criteria_codes": [
+     "[12심수Ⅱ02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ02-02]",
+    "criteria_codes": [
+     "[12심수Ⅱ02-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ02-03]",
+    "criteria_codes": [
+     "[12심수Ⅱ02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ02-04]",
+    "criteria_codes": [
+     "[12심수Ⅱ02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-01]",
+    "criteria_codes": [
+     "[12심수Ⅱ03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-02]",
+    "criteria_codes": [
+     "[12심수Ⅱ03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-03]",
+    "criteria_codes": [
+     "[12심수Ⅱ03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-04]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-06]",
+    "criteria_codes": [
+     "[12심수Ⅱ03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ03-07]",
+    "criteria_codes": [
+     "[12심수Ⅱ03-07-00]",
+     "[12심수Ⅱ04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-02]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-02-00]",
+     "[12심수Ⅱ04-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-03]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-04]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-04-01]",
+     "[12심수Ⅱ04-04-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-05]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-06]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-06-00]",
+     "[12심수Ⅱ04-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-07]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-07-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-08]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-09]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-09-00]",
+     "[12심수Ⅱ04-10-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-10]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-10-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ04-11]",
+    "criteria_codes": [
+     "[12심수Ⅱ04-11-00]",
+     "[12심수Ⅱ05-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-01]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-01-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-02]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-03]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-03-01]",
+     "[12심수Ⅱ05-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-04]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-04-02]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-05]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-06]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-07]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-08]",
+    "criteria_codes": [
+     "[12심수Ⅱ05-08-00]",
+     "[12심수Ⅱ05-09-01]"
+    ]
+   },
+   {
+    "standard_code": "[12심수Ⅱ05-09]",
+    "criteria_codes": []
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 적분",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 이차곡선",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 공간도형과 공간좌표",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(4) 확률",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(5) 통계",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "고급수학Ⅰ",
+  "unit_hierarchy": [
+   "(1) 벡터",
+   "(가) 벡터",
+   "(나) 도형의 방정식",
+   "(2) 행렬과 선형변환",
+   "(가) 행렬의 연산과 행렬식",
+   "(나) 행렬과 연립일차방정식",
+   "(다) 행렬과 선형변환",
+   "(라) 행렬의 대각화",
+   "(3) 복소수와 극좌표",
+   "(가) 복소수와 극형식",
+   "(나) 극좌표와 극방정식",
+   "(4) 그래프",
+   "(가) 그래프와 행렬",
+   "(나) 평면그래프와 수형도",
+   "(1) 벡터",
+   "(2) 행렬과 선형변환",
+   "(3) 복소수와 극좌표",
+   "(4) 그래프",
+   "(1) 문항 개발 목록"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12고수Ⅰ01-01]",
+    "criteria_codes": [
+     "[12고수Ⅰ01-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ01-02]",
+    "criteria_codes": [
+     "[12고수Ⅰ01-02-00]",
+     "[12고수Ⅰ01-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ01-03]",
+    "criteria_codes": [
+     "[12고수Ⅰ01-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ01-04]",
+    "criteria_codes": [
+     "[12고수Ⅰ01-04-01]",
+     "[12고수Ⅰ01-04-02]",
+     "[12고수Ⅰ01-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ01-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅰ01-06]",
+    "criteria_codes": [
+     "[12고수Ⅰ01-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-01]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-02]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-03]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-03-00]",
+     "[12고수Ⅰ02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-04]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-05]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-06]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-06-00]",
+     "[12고수Ⅰ02-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-07]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-07-02]",
+     "[12고수Ⅰ02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-08]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅰ02-09]",
+    "criteria_codes": [
+     "[12고수Ⅰ02-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-01]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-02]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-03]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-04]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-05]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ03-06]",
+    "criteria_codes": [
+     "[12고수Ⅰ03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-01]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-03]",
+    "criteria_codes": [
+     "[12고수Ⅰ04-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-04]",
+    "criteria_codes": [
+     "[12고수Ⅰ04-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-05]",
+    "criteria_codes": [
+     "[12고수Ⅰ04-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅰ04-06]",
+    "criteria_codes": [
+     "[12고수Ⅰ04-06-00]",
+     "[12고수Ⅰ02-09-00]",
+     "[12고수Ⅰ03-05-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": []
+ },
+ {
+  "school_level": "고등학교",
+  "subject": "고급수학Ⅱ",
+  "unit_hierarchy": [
+   "(1) 미적분의 활용",
+   "(가) 미분의 활용",
+   "(나) 적분의 활용",
+   "(2) 급수",
+   "(가) 급수의 수렴과 발산",
+   "(나) 멱급수",
+   "(3) 수학적 모델링",
+   "(가) 수학적 모델링",
+   "(나) 그래프와 모델링",
+   "(다) 행렬과 모델링",
+   "(라) 미분방정식과 모델링"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[12고수Ⅱ01-01]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-01-00]",
+     "[12고수Ⅱ01-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-03]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-03-00]",
+     "[12고수Ⅱ01-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-04]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-04-02]",
+     "[12고수Ⅱ01-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-05]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-05-02]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-06]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-06-00]",
+     "[12고수Ⅱ01-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-07]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-07-02]",
+     "[12고수Ⅱ01-08-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-08]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-08-02]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ01-09]",
+    "criteria_codes": [
+     "[12고수Ⅱ01-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-01]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-02]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-02-01]",
+     "[12고수Ⅱ02-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-03]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-04]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-05]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-06]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-06-00]",
+     "[12고수Ⅱ02-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-07]",
+    "criteria_codes": [
+     "[12고수Ⅱ02-08-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ02-08]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-01]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-02]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-03]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-04]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-05]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-06]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-07]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-08]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-09]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-09-00]",
+     "[12고수Ⅱ03-10-01]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-10]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-10-02]"
+    ]
+   },
+   {
+    "standard_code": "[12고수Ⅱ03-11]",
+    "criteria_codes": [
+     "[12고수Ⅱ03-11-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 미적분의 활용",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 급수",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(3) 수학적 모델링",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "초중학교",
+  "subject": "초등1-2학년군",
+  "unit_hierarchy": [
+   "(1) 수와 연산",
+   "(가) 네 자리 이하의 수",
+   "(나) 두 자리 수 범위의 덧셈과 뺄셈",
+   "(다) 곱셈",
+   "(2) 도형",
+   "(가) 입체도형의 모양",
+   "(나) 평면도형과 그 구성 요소",
+   "(3) 측정",
+   "(가) 양의 비교",
+   "(나) 시각과 시간",
+   "(다) 길이",
+   "(4) 규칙성",
+   "(가) 규칙 찾기",
+   "(5) 자료와 가능성",
+   "(가) 분류하기",
+   "(나) 표 만들기",
+   "(다) 그래프 그리기",
+   "(1) 수와 연산",
+   "(2) 도형",
+   "(3) 측정",
+   "(4) 규칙성",
+   "(5) 자료와 가능성"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[2수01-01]",
+    "criteria_codes": [
+     "[2수01-01-02]",
+     "[2수01-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-02]",
+    "criteria_codes": [
+     "[2수01-02-02]",
+     "[2수01-03-01]",
+     "[2수01-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-03]",
+    "criteria_codes": [
+     "[2수01-03-03]",
+     "[2수01-03-04]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-04]",
+    "criteria_codes": [
+     "[2수01-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-05]",
+    "criteria_codes": [
+     "[2수01-05-00]",
+     "[2수01-06-01]",
+     "[2수01-06-02]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-06]",
+    "criteria_codes": [
+     "[2수01-06-03]",
+     "[2수01-06-04]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-07]",
+    "criteria_codes": [
+     "[2수01-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-08]",
+    "criteria_codes": [
+     "[2수01-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-09]",
+    "criteria_codes": [
+     "[2수01-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-10]",
+    "criteria_codes": [
+     "[2수01-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수01-11]",
+    "criteria_codes": [
+     "[2수01-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수02-01]",
+    "criteria_codes": [
+     "[2수02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수02-02]",
+    "criteria_codes": [
+     "[2수02-02-01]",
+     "[2수02-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[2수02-03]",
+    "criteria_codes": [
+     "[2수02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수02-04]",
+    "criteria_codes": [
+     "[2수02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수02-05]",
+    "criteria_codes": [
+     "[2수02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-01]",
+    "criteria_codes": [
+     "[2수03-01-00]",
+     "[2수03-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-02]",
+    "criteria_codes": [
+     "[2수03-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-03]",
+    "criteria_codes": [
+     "[2수03-03-00]",
+     "[2수03-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-04]",
+    "criteria_codes": [
+     "[2수03-04-02]",
+     "[2수03-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-05]",
+    "criteria_codes": [
+     "[2수03-05-02]",
+     "[2수03-05-03]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-06]",
+    "criteria_codes": [
+     "[2수03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-07]",
+    "criteria_codes": [
+     "[2수03-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-08]",
+    "criteria_codes": [
+     "[2수03-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수03-09]",
+    "criteria_codes": [
+     "[2수03-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수04-01]",
+    "criteria_codes": [
+     "[2수04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수04-02]",
+    "criteria_codes": [
+     "[2수04-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수05-01]",
+    "criteria_codes": [
+     "[2수05-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수05-02]",
+    "criteria_codes": [
+     "[2수05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[2수05-03]",
+    "criteria_codes": [
+     "[2수05-03-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": []
+ },
+ {
+  "school_level": "초중학교",
+  "subject": "초등3-4학년군",
+  "unit_hierarchy": [
+   "(1) 수와 연산",
+   "(가) 다섯 자리 이상의 수",
+   "(나) 세 자리 수의 덧셈과 뺄셈",
+   "(다) 곱셈",
+   "(라) 나눗셈",
+   "(마) 분수",
+   "(바) 소수",
+   "(사) 분수와 소수의 덧셈과 뺄셈",
+   "(2) 도형",
+   "(가) 도형의 기초",
+   "(나) 평면도형의 이동",
+   "(다) 원의 구성요소",
+   "(라) 여러 가지 삼각형",
+   "(마) 여러 가지 사각형",
+   "(바) 다각형",
+   "(3) 측정",
+   "(가) 시각과 시간",
+   "(나) 길이",
+   "(다) 들이",
+   "(라) 무게",
+   "(마) 각도",
+   "(4) 규칙성",
+   "(가) 규칙 찾기",
+   "(5) 자료와 가능성",
+   "(가) 자료의 정리"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[4수01-01]",
+    "criteria_codes": [
+     "[4수01-01-02]",
+     "[4수01-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-02]",
+    "criteria_codes": [
+     "[4수01-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-03]",
+    "criteria_codes": [
+     "[4수01-03-01]",
+     "[4수01-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-04]",
+    "criteria_codes": [
+     "[4수01-04-00]",
+     "[4수01-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-05]",
+    "criteria_codes": [
+     "[4수01-05-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-06]",
+    "criteria_codes": [
+     "[4수01-06-00]",
+     "[4수01-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-07]",
+    "criteria_codes": [
+     "[4수01-07-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-08]",
+    "criteria_codes": [
+     "[4수01-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-09]",
+    "criteria_codes": [
+     "[4수01-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-10]",
+    "criteria_codes": [
+     "[4수01-10-00]",
+     "[4수01-11-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-11]",
+    "criteria_codes": [
+     "[4수01-11-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-12]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[4수01-13]",
+    "criteria_codes": [
+     "[4수01-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-14]",
+    "criteria_codes": [
+     "[4수01-14-00]",
+     "[4수01-15-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-15]",
+    "criteria_codes": [
+     "[4수01-15-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-16]",
+    "criteria_codes": [
+     "[4수01-16-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수01-17]",
+    "criteria_codes": [
+     "[4수01-17-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-01]",
+    "criteria_codes": [
+     "[4수02-01-00]",
+     "[4수02-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-02]",
+    "criteria_codes": [
+     "[4수02-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-03]",
+    "criteria_codes": [
+     "[4수02-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-04]",
+    "criteria_codes": [
+     "[4수02-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-05]",
+    "criteria_codes": [
+     "[4수02-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-06]",
+    "criteria_codes": [
+     "[4수02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-07]",
+    "criteria_codes": [
+     "[4수02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-08]",
+    "criteria_codes": [
+     "[4수02-08-00]",
+     "[4수02-09-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-09]",
+    "criteria_codes": [
+     "[4수02-09-02]",
+     "[4수02-10-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-10]",
+    "criteria_codes": [
+     "[4수02-10-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-11]",
+    "criteria_codes": [
+     "[4수02-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수02-12]",
+    "criteria_codes": [
+     "[4수02-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-01]",
+    "criteria_codes": [
+     "[4수03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-02]",
+    "criteria_codes": [
+     "[4수03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-03]",
+    "criteria_codes": [
+     "[4수03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-04]",
+    "criteria_codes": [
+     "[4수03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-05]",
+    "criteria_codes": [
+     "[4수03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-06]",
+    "criteria_codes": [
+     "[4수03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-07]",
+    "criteria_codes": [
+     "[4수03-07-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-08]",
+    "criteria_codes": [
+     "[4수03-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-09]",
+    "criteria_codes": [
+     "[4수03-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-10]",
+    "criteria_codes": [
+     "[4수03-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-11]",
+    "criteria_codes": [
+     "[4수03-11-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-12]",
+    "criteria_codes": [
+     "[4수03-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-13]",
+    "criteria_codes": [
+     "[4수03-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수03-14]",
+    "criteria_codes": [
+     "[4수03-14-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수04-01]",
+    "criteria_codes": [
+     "[4수04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수04-02]",
+    "criteria_codes": [
+     "[4수04-02-00]",
+     "[4수05-01-01]"
+    ]
+   },
+   {
+    "standard_code": "[4수05-01]",
+    "criteria_codes": [
+     "[4수05-01-02]"
+    ]
+   },
+   {
+    "standard_code": "[4수05-02]",
+    "criteria_codes": [
+     "[4수05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[4수05-03]",
+    "criteria_codes": [
+     "[4수05-03-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 수와 연산",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(2) 도형",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(3) 측정",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(4) 규칙성",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(5) 자료와 가능성",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "초중학교",
+  "subject": "초등5-6학년군",
+  "unit_hierarchy": [
+   "(1) 수와 연산",
+   "(가) 자연수의 혼합 계산",
+   "(나) 약수와 배수",
+   "(다) 분수의 덧셈과 뺄셈",
+   "(라) 분수의 곱셈과 나눗셈",
+   "(마) 분수와 소수",
+   "(바) 소수의 곱셈과 나눗셈",
+   "(2) 도형",
+   "(가) 합동과 대칭",
+   "(나) 직육면체와 정육면체",
+   "(다) 각기둥과 각뿔",
+   "(라) 원기둥과 원뿔",
+   "(마) 입체도형의 공간 감각",
+   "(3) 측정",
+   "(가) 어림하기",
+   "(나) 평면도형의 둘레와 넓이",
+   "(다) 원주율과 원의 넓이",
+   "(라) 입체도형의 겉넓이와 부피",
+   "(4) 규칙성",
+   "(가) 규칙과 대응",
+   "(나) 비와 비율",
+   "(다) 비례식과 비례배분",
+   "(5) 자료와 가능성",
+   "(가) 평균",
+   "(나) 자료의 정리",
+   "(다) 가능성"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[6수01-01]",
+    "criteria_codes": [
+     "[6수01-01-00]",
+     "[6수01-02-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-02]",
+    "criteria_codes": [
+     "[6수01-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-03]",
+    "criteria_codes": [
+     "[6수01-02-01]",
+     "[6수01-02-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-04]",
+    "criteria_codes": [
+     "[6수01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-05]",
+    "criteria_codes": [
+     "[6수01-05-00]",
+     "[6수01-06-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-06]",
+    "criteria_codes": [
+     "[6수01-06-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-07]",
+    "criteria_codes": [
+     "[6수01-07-00]",
+     "[6수01-08-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-08]",
+    "criteria_codes": [
+     "[6수01-08-02]",
+     "[6수01-09-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-09]",
+    "criteria_codes": [
+     "[6수01-09-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-10]",
+    "criteria_codes": [
+     "[6수01-10-00]",
+     "[6수01-11-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-11]",
+    "criteria_codes": [
+     "[6수01-11-02]",
+     "[6수01-12-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-12]",
+    "criteria_codes": [
+     "[6수01-12-02]",
+     "[6수01-13-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-13]",
+    "criteria_codes": [
+     "[6수01-13-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-14]",
+    "criteria_codes": [
+     "[6수01-14-00]",
+     "[6수01-15-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수01-15]",
+    "criteria_codes": []
+   },
+   {
+    "standard_code": "[6수01-16]",
+    "criteria_codes": [
+     "[6수01-16-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-01]",
+    "criteria_codes": [
+     "[6수02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-02]",
+    "criteria_codes": [
+     "[6수02-02-00]",
+     "[6수02-03-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-03]",
+    "criteria_codes": [
+     "[6수02-03-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-04]",
+    "criteria_codes": [
+     "[6수02-04-00]",
+     "[6수02-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-05]",
+    "criteria_codes": [
+     "[6수02-05-02]",
+     "[6수02-06-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-06]",
+    "criteria_codes": [
+     "[6수02-06-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-07]",
+    "criteria_codes": [
+     "[6수02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-08]",
+    "criteria_codes": [
+     "[6수02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-09]",
+    "criteria_codes": [
+     "[6수02-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-10]",
+    "criteria_codes": [
+     "[6수02-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수02-11]",
+    "criteria_codes": [
+     "[6수02-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-01]",
+    "criteria_codes": [
+     "[6수03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-02]",
+    "criteria_codes": [
+     "[6수03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-03]",
+    "criteria_codes": [
+     "[6수03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-04]",
+    "criteria_codes": [
+     "[6수03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-05]",
+    "criteria_codes": [
+     "[6수03-05-00]",
+     "[6수03-06-01]",
+     "[6수03-06-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-06]",
+    "criteria_codes": [
+     "[6수03-06-03]",
+     "[6수03-06-04]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-07]",
+    "criteria_codes": [
+     "[6수03-07-00]",
+     "[6수03-08-01]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-08]",
+    "criteria_codes": [
+     "[6수03-08-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-09]",
+    "criteria_codes": [
+     "[6수03-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-10]",
+    "criteria_codes": [
+     "[6수03-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수03-11]",
+    "criteria_codes": [
+     "[6수03-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수04-01]",
+    "criteria_codes": [
+     "[6수04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수04-02]",
+    "criteria_codes": [
+     "[6수04-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수04-03]",
+    "criteria_codes": [
+     "[6수04-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수04-04]",
+    "criteria_codes": [
+     "[6수04-04-01]",
+     "[6수04-04-02]"
+    ]
+   },
+   {
+    "standard_code": "[6수04-05]",
+    "criteria_codes": [
+     "[6수04-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-01]",
+    "criteria_codes": [
+     "[6수05-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-02]",
+    "criteria_codes": [
+     "[6수05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-03]",
+    "criteria_codes": [
+     "[6수05-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-04]",
+    "criteria_codes": [
+     "[6수05-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-05]",
+    "criteria_codes": [
+     "[6수05-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-06]",
+    "criteria_codes": [
+     "[6수05-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[6수05-07]",
+    "criteria_codes": [
+     "[6수05-07-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 수와 연산",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(2) 도형",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(3) 측정",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(4) 규칙성",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   {
+    "unit": "(5) 자료와 가능성",
+    "levels": [
+     "A",
+     "B",
+     "C"
+    ]
+   }
+  ]
+ },
+ {
+  "school_level": "초중학교",
+  "subject": "중학교1-3학년군",
+  "unit_hierarchy": [
+   "(1) 수와 연산",
+   "(가) 소인수분해",
+   "(나) 정수와 유리수",
+   "(다) 유리수와 순환소수",
+   "(라) 제곱근과 실수",
+   "(2) 문자와 식",
+   "(가) 문자의 사용과 식의 계산",
+   "(나) 일차방정식",
+   "(다) 식의 계산",
+   "(라) 일차부등식과 연립일차방정식",
+   "(마) 다항식의 곱셈과 인수분해",
+   "(바) 이차방정식",
+   "(3) 함수",
+   "(가) 좌표평면과 그래프",
+   "(나) 일차함수와 그래프",
+   "(다) 일차함수와 일차방정식의 관계",
+   "(라) 이차함수와 그래프",
+   "(4) 기하",
+   "(가) 기본 도형",
+   "(나) 작도와 합동",
+   "(다) 평면도형의 성질",
+   "(라) 입체도형의 성질",
+   "(마) 삼각형과 사각형의 성질",
+   "(바) 도형의 닮음",
+   "(사) 피타고라스 정리",
+   "(아) 삼각비",
+   "(자) 원의 성질",
+   "(5) 확률과 통계",
+   "(가) 자료의 정리와 해석",
+   "(나) 확률과 그 기본 성질",
+   "(다) 대푯값과 산포도",
+   "(라) 상관관계"
+  ],
+  "standard_criteria_coverage": [
+   {
+    "standard_code": "[9수01-01]",
+    "criteria_codes": [
+     "[9수01-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-02]",
+    "criteria_codes": [
+     "[9수01-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-03]",
+    "criteria_codes": [
+     "[9수01-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-04]",
+    "criteria_codes": [
+     "[9수01-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-05]",
+    "criteria_codes": [
+     "[9수01-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-06]",
+    "criteria_codes": [
+     "[9수01-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-07]",
+    "criteria_codes": [
+     "[9수01-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-08]",
+    "criteria_codes": [
+     "[9수01-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-09]",
+    "criteria_codes": [
+     "[9수01-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수01-10]",
+    "criteria_codes": [
+     "[9수01-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-01]",
+    "criteria_codes": [
+     "[9수02-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-02]",
+    "criteria_codes": [
+     "[9수02-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-03]",
+    "criteria_codes": [
+     "[9수02-03-00]",
+     "[9수02-04-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-04]",
+    "criteria_codes": [
+     "[9수02-04-02]",
+     "[9수02-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-05]",
+    "criteria_codes": [
+     "[9수02-05-02]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-06]",
+    "criteria_codes": [
+     "[9수02-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-07]",
+    "criteria_codes": [
+     "[9수02-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-08]",
+    "criteria_codes": [
+     "[9수02-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-09]",
+    "criteria_codes": [
+     "[9수02-09-00]",
+     "[9수02-10-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-10]",
+    "criteria_codes": [
+     "[9수02-10-02]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-11]",
+    "criteria_codes": [
+     "[9수02-11-01]",
+     "[9수02-11-02]",
+     "[9수02-12-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-12]",
+    "criteria_codes": [
+     "[9수02-12-02]",
+     "[9수02-13-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수02-13]",
+    "criteria_codes": [
+     "[9수02-13-02]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-01]",
+    "criteria_codes": [
+     "[9수03-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-02]",
+    "criteria_codes": [
+     "[9수03-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-03]",
+    "criteria_codes": [
+     "[9수03-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-04]",
+    "criteria_codes": [
+     "[9수03-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-05]",
+    "criteria_codes": [
+     "[9수03-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-06]",
+    "criteria_codes": [
+     "[9수03-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-07]",
+    "criteria_codes": [
+     "[9수03-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-08]",
+    "criteria_codes": [
+     "[9수03-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-09]",
+    "criteria_codes": [
+     "[9수03-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수03-10]",
+    "criteria_codes": [
+     "[9수03-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-01]",
+    "criteria_codes": [
+     "[9수04-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-02]",
+    "criteria_codes": [
+     "[9수04-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-03]",
+    "criteria_codes": [
+     "[9수04-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-04]",
+    "criteria_codes": [
+     "[9수04-04-00]",
+     "[9수04-05-01]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-05]",
+    "criteria_codes": [
+     "[9수04-05-02]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-06]",
+    "criteria_codes": [
+     "[9수04-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-07]",
+    "criteria_codes": [
+     "[9수04-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-08]",
+    "criteria_codes": [
+     "[9수04-08-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-09]",
+    "criteria_codes": [
+     "[9수04-09-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-10]",
+    "criteria_codes": [
+     "[9수04-10-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-11]",
+    "criteria_codes": [
+     "[9수04-11-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-12]",
+    "criteria_codes": [
+     "[9수04-12-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-13]",
+    "criteria_codes": [
+     "[9수04-13-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-14]",
+    "criteria_codes": [
+     "[9수04-14-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-15]",
+    "criteria_codes": [
+     "[9수04-15-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-16]",
+    "criteria_codes": [
+     "[9수04-16-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-17]",
+    "criteria_codes": [
+     "[9수04-17-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-18]",
+    "criteria_codes": [
+     "[9수04-18-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-19]",
+    "criteria_codes": [
+     "[9수04-19-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수04-20]",
+    "criteria_codes": [
+     "[9수04-20-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-01]",
+    "criteria_codes": [
+     "[9수05-01-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-02]",
+    "criteria_codes": [
+     "[9수05-02-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-03]",
+    "criteria_codes": [
+     "[9수05-03-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-04]",
+    "criteria_codes": [
+     "[9수05-04-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-05]",
+    "criteria_codes": [
+     "[9수05-05-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-06]",
+    "criteria_codes": [
+     "[9수05-06-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-07]",
+    "criteria_codes": [
+     "[9수05-07-00]"
+    ]
+   },
+   {
+    "standard_code": "[9수05-08]",
+    "criteria_codes": [
+     "[9수05-08-00]"
+    ]
+   }
+  ],
+  "achievement_levels_by_unit": [
+   {
+    "unit": "(1) 함수",
+    "levels": []
+   },
+   {
+    "unit": "(가) 1학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(나) 2학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(다) 3학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(2) 확률과 통계",
+    "levels": []
+   },
+   {
+    "unit": "(가) 1학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(나) 2학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   },
+   {
+    "unit": "(다) 3학년",
+    "levels": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E"
+    ]
+   }
+  ]
+ }
+]

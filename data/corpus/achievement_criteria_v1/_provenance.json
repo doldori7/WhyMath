@@ -1,0 +1,46 @@
+{
+  "pool": "whymath-original",
+  "pool_classification_note": "ContentPool 3종 폐쇄 중 whymath-original 선택 근거(CUR-05, 2026-08-11): docs/data/licensing_safety.md의 본 코퍼스 행이 '사실정보/식별자'(상업✅·가공✅·표시✅)로 이미 분류돼 있음 — WHYMATH_ORIGINAL 정의('공공누리 등급1 + 사실정보 소스')와 문언 일치. 원본 PDF(license_notice 참조)는 라이선스 미확인이나, 그 미확인은 licensing_safety.md 32행(본문 서술)에 별도로 격리·보류돼 있고 본 코퍼스는 33행(구조 메타만·서술 비포함)에 해당 — NCIC 성취기준 코드·고시 본문이 저작권법 §7 보호대상 아님(licensing_safety.md:136 'NCIC 구분')과 동일 원리를 KICE 코드/등급라벨에 적용. external-sharealike·external-licensed는 해당 사실 없어 배제.",
+  "sources": [
+    {
+      "title": "2015 개정 교육과정에 따른 고등학교 수학과 평가기준 개발 연구",
+      "report_no": "연구보고 CRC 2017-5-6",
+      "publisher": "한국교육과정평가원(KICE)",
+      "published": "2017-11-28",
+      "isbn": "979-11-5788-529-9",
+      "sha256": "6811c24eadcb3d2d015843b6ffa24401657c52fcbbe5400f21ac073eb67c89f7",
+      "acquired_by": "Kiki (GitHub 웹 업로드, commit 388f7921)",
+      "acquired": "2026-08-08",
+      "covers": "고등학교: 수학(공통)·수학Ⅰ·수학Ⅱ·미적분·확률과통계·심화수학Ⅰ/Ⅱ·고급수학Ⅰ/Ⅱ (9과목)"
+    },
+    {
+      "title": "2015 개정 교육과정에 따른 초·중학교 수학과 평가기준 개발 연구",
+      "report_no": "연구보고 CRC 2016-2-6",
+      "publisher": "한국교육과정평가원(KICE)",
+      "published": "2016-11-30",
+      "isbn": "979-11-5788-347-9",
+      "sha256": "59cde4ca2b6576ffbe98f51ba1f5ecea5db39af503966326c888a46409a67d30",
+      "acquired_by": "Kiki (GitHub 웹 업로드, commit 388f7921)",
+      "acquired": "2026-08-08",
+      "covers": "초등학교 1~2/3~4/5~6학년군 + 중학교 1~3학년군 (4개 학년군)"
+    }
+  ],
+  "counts": {
+    "school_level_subject_datasets": 13,
+    "unit_hierarchy_entries": 230,
+    "standard_to_criteria_coverage_entries": 459,
+    "achievement_level_by_unit_entries": 54
+  },
+  "known_gaps": [
+    "고등학교 '기하'·'경제 수학'·'수학과제 탐구'(진로선택 3과목)는 이 2017년 보고서 자체에 없음 — 원본에 없는 데이터를 날조하지 않음, 별도 보고서 필요",
+    "고등학교 '수학Ⅰ'·'고급수학Ⅰ'은 원문에서 '나. 단원/영역별 성취수준' 절이 탐지되지 않음(achievement_levels_by_unit=[] — 다른 두 과목과 형식이 다르거나 페이지 파싱 실패, 미확인 상태로 정직 기록)",
+    "초등 1~2학년군은 '나. 영역별 성취수준' 절이 탐지되지 않음(achievement_levels_by_unit=[])"
+  ],
+  "extraction_method": "pdfplumber 텍스트 추출 + 정규식(단원 헤더 '(1)'/'(가)' 패턴, 성취기준/평가준거 코드 '[...]' 패턴, 성취수준 등급 단독 문자 A~E) — 원문 서술 문장(평가기준 설명·성취수준 일반적 특성 서술·예시 평가도구 문항)은 의도적으로 비추출·비저장. Kiki 확인(2026-08-08): 저작권 확인 전까지 구조 메타데이터만 반입, 본문 서술 반입 보류.",
+  "license_notice": "미확인 — PDF 표지에 '본 자료 내용의 무단 복제를 금함' 문구만 확인, 공공누리(KOGL) 유형 마크는 텍스트 추출로 확인 안 됨(로고 이미지일 가능성). NCIC 게시판(원출처)에 공공누리 유형이 표시돼 있는지 별도 확인 필요 — 확인 전까지 본 코퍼스는 원문 서술을 포함하지 않는 구조 메타데이터(단원 계층·성취기준/평가준거 코드·성취수준 등급 커버리지)로 범위를 제한한다.",
+  "post_extraction": [
+    "achievement_criteria.json: school_level×subject 13세트, 각 unit_hierarchy(단원/소단원 제목)·standard_criteria_coverage(성취기준→평가준거코드)·achievement_levels_by_unit(단원→등급 커버리지, 등급 라벨만) 3필드",
+    "QA 실측 재확인: 초기 추출본에서 고급수학Ⅰ 페이지 범위가 '다.예시 평가 문항' 절까지 침범해 문제 본문 조각 4건(PUA 글리프 포함)이 unit_hierarchy에 섞여 들어간 것을 grep 전수 검사로 발견 → 페이지 범위 350-378에서 350-359로 축소 후 재추출(237→230건, 4건 제거+연관 오염 정리). 커밋 전 전수 정규식 검사(문장 종결 어미·PUA 코드포인트)로 재확인 완료, 잔존 0건",
+    "원본 PDF 2개는 처리 후 작업 트리에서 git rm(원본 미보존 관례 — File A xlsx 선례 승계)"
+  ]
+}
