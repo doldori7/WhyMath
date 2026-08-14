@@ -279,6 +279,11 @@ def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_twenty_callsi
       `DELETE /v1/auth/sessions`·`DELETE /v1/auth/sessions/{jti}`. 전부 인증/세션 표면이라
       10종 *개념* 표면의 도달 판정은 그대로다(`me_learning_path`만 도달 유지). 이번엔 이
       가드가 mobile 필터 잡(OPS-23으로 신설)에서도 켜지므로 mobile-only PR 우회는 없다.
+    - 20 → 21 (2026-08-13, SOL-02). `features/chat/data/solution_path_api.dart`에서
+      `GET /v1/solution-paths/{solutionPathId}/steps`를 호출하기 시작해 `/v1/` 리터럴
+      콜사이트가 하나 늘었다. SOL-02의 백엔드 엔드포인트는 PR #825에서 먼저 병합되었고,
+      모바일 소비 표면은 PR #826에서 추가되어 이 가드가 최종적으로 발화했다. 이 콜사이트도
+      10종 개념 표면에 포함되지 않으므로 도달/미도달 판정은 변하지 않는다.
     """
     if not crr.DEFAULT_MOBILE_LIB_ROOT.is_dir() or not crr.DEFAULT_BACKEND_API_ROOT.is_dir():
         pytest.skip("실 mobile/backend 경로 미존재")
@@ -290,6 +295,6 @@ def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_twenty_callsi
     assert by_key["me_learning_path"].matched_files == ("features/problems/data/problems_api.dart",)
     assert all(s.status == "미도달" for k, s in by_key.items() if k != "me_learning_path")
     assert all(s.reach_count == 0 for k, s in by_key.items() if k != "me_learning_path")
-    assert report.total_v1_literal_callsites == 20
+    assert report.total_v1_literal_callsites == 21
     assert isinstance(crr.render_report(report), str)
     assert isinstance(crr.dump_json(report), str)
