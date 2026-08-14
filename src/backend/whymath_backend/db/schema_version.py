@@ -121,6 +121,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "090d254a5d43",
     "c6d7e8f1a2b4",  # S4-09 solution_paths 신설 + problem_step additive 6컬럼
     "374fb620de9e",  # MISC-04: misconception_relation (caused_by·variant_of·개념그래프 격리)
+    "d1e2f3c4b5a6",  # S3-32: dialogue.review_turns_remaining (Polya 돌아보기 턴 카운터)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

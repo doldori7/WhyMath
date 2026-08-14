@@ -127,6 +127,15 @@ class Dialogue(BaseModel):
         ge=0,
     )
 
+    # ===== 완료 상태머신 (S3-32) =====
+    review_turns_remaining: int | None = Field(
+        default=None,
+        description="정답 도달 후 완료 전 남은 돌아보기(메타인지) 턴 수. >0이면 돌아보기 대기"
+        "(review_pending)·0/None이면 아님. 완료 여부는 attempt_id로 판정. 상태머신은 "
+        "`l4/completion.py`. 개수라 음수 불가 ge=0.",
+        ge=0,
+    )
+
     # ===== LLM 사용량 =====
     model_used: str | None = Field(
         default=None,
