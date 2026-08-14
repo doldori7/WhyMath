@@ -49,7 +49,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from whymath_backend.harness.residue_cross_verify_eval import (
     PilotRecord,
@@ -64,13 +64,8 @@ from whymath_backend.l3.finite_probability import (
     enumerate_model,
     parse_finite_model,
 )
-from whymath_backend.l3.models import CostTier, GenerationResult
-from whymath_backend.l3.providers.ollama import (
-    OllamaProvider,
-    _as_cost_tier,
-    _extract_text,
-    _extract_usage,
-)
+from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
+from whymath_backend.l3.providers.ollama import OllamaProvider
 
 __all__ = [
     "RESIDUE_DEFECT_CLASSES",
@@ -113,7 +108,7 @@ class _FixedModelOllamaProvider(OllamaProvider):
     하는 선택이며, 측정치는 하한 추정으로 해석한다.
     """
 
-    def __init__(self, model_id: str, *, settings=None) -> None:
+    def __init__(self, model_id: str, *, settings: Any = None) -> None:
         super().__init__(settings=settings)
         self._model_id = model_id
 
@@ -121,19 +116,19 @@ class _FixedModelOllamaProvider(OllamaProvider):
         self,
         prompt: str,
         system: str,
-        decision,
+        decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
     ) -> GenerationResult:
         """고정 모델 ID로 생성한다 — `resolve_model`을 생략한다(그 외는 부모와 동일)."""
-        cost = _as_cost_tier(decision.cost_tier)
-        if cost is not CostTier.LOCAL:
+        if decision.cost_tier != CostTier.LOCAL.value:
             raise ValueError(
-                f"_FixedModelOllamaProvider는 로컬 결정만 처리한다(받은 cost_tier={cost.value})."
+                "_FixedModelOllamaProvider는 로컬 결정만 처리한다"
+                f"(받은 cost_tier={decision.cost_tier})."
             )
-        call_kwargs: dict[str, object] = {
+        call_kwargs: dict[str, Any] = {
             "model": self._model_id,
             "prompt": prompt,
             "system": system,
@@ -149,9 +144,32 @@ class _FixedModelOllamaProvider(OllamaProvider):
         start = time.monotonic()
         response = await client.generate(**call_kwargs)
         latency_ms = (time.monotonic() - start) * 1000.0
+        text = ""
+        if hasattr(response, "response"):
+            text = response.response if isinstance(response.response, str) else ""
+        elif isinstance(response, dict):
+            text = response.get("response", "") if isinstance(response.get("response"), str) else ""
+        input_tokens = None
+        output_tokens = None
+        if hasattr(response, "prompt_eval_count"):
+            val = response.prompt_eval_count
+            input_tokens = val if isinstance(val, int) and val >= 0 else None
+        elif isinstance(response, dict):
+            val = response.get("prompt_eval_count")
+            input_tokens = val if isinstance(val, int) and val >= 0 else None
+        if hasattr(response, "eval_count"):
+            val = response.eval_count
+            output_tokens = val if isinstance(val, int) and val >= 0 else None
+        elif isinstance(response, dict):
+            val = response.get("eval_count")
+            output_tokens = val if isinstance(val, int) and val >= 0 else None
         return GenerationResult(
-            text=_extract_text(response),
-            usage=_extract_usage(response, latency_ms),
+            text=text,
+            usage=Usage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            ),
         )
 
 
