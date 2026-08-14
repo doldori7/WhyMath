@@ -646,7 +646,14 @@ async def list_my_privacy_audit(
 class AttemptSubmitRequest(BaseModel):
     """본인 풀이 채점 결과 제출 — `POST /v1/me/attempts` 요청 본문.
 
-    v1: `is_correct`는 *클라이언트 보고*(서버측 답안 채점[OCR·answer-check]은 L3/L5 후속).
+    v1: `is_correct`는 *클라이언트 보고*(서버측 답안 채점[OCR·answer-check]은 L3/L5 후속). 이
+    필드·엔드포인트는 S3-32(코치 대화 흐름의 완료 통합) 도입 이후에도 **의도적으로 그대로**다 —
+    학생이 (예: OCR로 인식한 풀이를) 코치 대화 밖에서 직접 채점 결과를 보고하는 v1 경로는 계속
+    존재한다. S3-32는 이와 *별개*로, `/v1/coach/sessions[/turns]` 대화 흐름 안에서 서버가
+    `l3.verify_final_answer`로 최종답을 직접 검증하고 Polya 돌아보기(메타인지) 1턴을 거쳐
+    `ProblemAttempt`를 *서버 권위*로 적재하는 두 번째 경로를 추가한다(`api/coach.py`의
+    `_complete_problem`·`l4/completion.py`). 두 경로는 각자의 `is_correct` 출처가 다르다(여기는
+    클라 보고 그대로·코치 경로는 서버 검증 결과) — 어느 한쪽이 다른 쪽을 대체하지 않는다.
     `problem_id`는 존재하는 문제를 참조해야 한다(FK — 미존재 시 저장계층 무결성 오류).
     """
 
@@ -725,6 +732,14 @@ async def submit_attempt(
     이어서 `record_problem_attempt_skill_mastery`로 *스킬 축* 숙달도 같은 모델 B로 전파한다(Phase
     2b-2·행동 축) — 평가 개념을 `Concept.behavior_skills` 브리지로 mastery-estimable 스킬에 해소해
     갱신한다. 응답 `skill_mastery_updates`는 실제 갱신된 스킬만(매핑/해소 없으면 빈 목록).
+
+    S3-32 참고: 이 엔드포인트는 `is_correct`를 *클라이언트 보고 그대로* 신뢰하는 v1 경로다(변경
+    없음 — `AttemptSubmitRequest` docstring 참조). 코치 대화 흐름(`/v1/coach/sessions[/turns]`)
+    에서 정답에 도달하면 *같은 두 헬퍼*(`record_problem_attempt_mastery`·
+    `record_problem_attempt_skill_mastery`)를 재사용하는 별도의 서버검증 attempt 적재 경로가
+    있다 — `api/coach.py::_complete_problem`(서버가 `l3.verify_final_answer`로 직접 판정한
+    `is_correct=True`만 적재·Polya 돌아보기 1턴 경유). 두 경로 모두 `GET /me/next-problem`의
+    미시도 필터에서 동일하게 소비된다(`ProblemAttempt` 존재 여부만 본다).
     """
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
