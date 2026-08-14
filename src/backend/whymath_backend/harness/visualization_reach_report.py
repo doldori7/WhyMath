@@ -416,7 +416,7 @@ def render_report(report: ReachReport, *, max_listed: int = 40) -> str:
         f"({_pct(report.seat_pass_count, report.catalog_total)})",
         f"- 게이트는 통과했으나 권장 양식 전건이 unseated(좌석 0): "
         f"**{report.gate_pass_count - report.seat_pass_count}**",
-        "- 100% 정합은 목표가 아니다 — 미좌석 양식(예: 입체도형·수직선)은 시각화를 보류하는 것이 "
+        "- 100% 정합은 목표가 아니다 — 미좌석 양식(예: 입체도형·평면도형)은 시각화를 보류하는 것이 "
         "정답이다. 목표는 이 격차를 계속 눈에 보이게 하는 것이다.",
         "- 판정 함수는 `l4.visualization_policy.has_render_seat`를 그대로 재사용한다"
         "(신규 판정 로직 0).",

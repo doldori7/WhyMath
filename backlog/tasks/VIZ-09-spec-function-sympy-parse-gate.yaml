@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: VIZ-09-spec-function-sympy-parse-gate
+title: "시각화 명세 함수식 sympify 파싱 게이트 — 파싱 불가 식의 학생 도달 차단 (§8.4)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① parse_visualization_spec 게이트에 Graph2dSpec function·functions 파싱 검사 추가 — 파싱 실패 시 명세 거부(기존 실패 경로 = 시각화 블록 생략·소크라테스 폴백 재사용, 새 폴백 신설 0)"
+  - "② 관계식·부등식 문자열(x**2+y**2=1, y > x**2)이 오탐 거부되지 않음을 테스트로 동결 — 웹 classify 6형(function/implicit/inequality/polar/parametric/point)과 호환. 등호(=)는 sympify가 그대로 못 읽으므로 Eq 변환·분할 등 파서 측 처리 필요(단위원 seated 경로를 깨면 안 됨)"
+  - "③ 거부 시 예외 타입명 포함 로그(침묵 실패 금지) + 기존 Langfuse 추적 유지"
+  - "④ 범위 상한: 파싱 가능성만 판정 — 의미 정합(개념과 어울리는 그래프인가)은 viz_eval 라이브 평가 소관(§8.6 미등재 트리거)으로 남긴다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/visualization.py
+  - "tests/backend/l3/*"
+session: null
+notes: "visualization_module_gap_review.md §8.4 — l3/visualization.py:14-16 자기 예고(「SymPy 검증은 후속」) 중 유일하게 남은 항(타입별 typed spec은 VIZ-03~06으로 착륙). OCR 축(l5/ocr/verify.py)은 SymPy 검산 실사용·시각화 축만 0인 비대칭. CLAUDE.md 「LLM 응답을 검증 없이 학생에게 제공 금지 — PRM 또는 도구 검증 필수」 압력이 근거. SymPy는 이미 프로젝트 표준 의존성이라 신규 의존 0."
+updated: 2026-08-10

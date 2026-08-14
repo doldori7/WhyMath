@@ -53,6 +53,48 @@ class Graph2dParam(BaseModel):
     default: float | None = Field(default=None, description="초기값")
 
 
+class NumberLinePoint(BaseModel):
+    """number_line 점 마커 — 수직선 위 한 값의 위치(정수·해·확률값 등) 표시(VIZ-07).
+
+    `open=True`는 열린 점(○ — 그 값 미포함·부등식 경계), 기본(None/False)은 닫힌 점(●)이다.
+    타입만 검증하고 well-formed 여부(domain 내 등)는 렌더러가 판정한다(Graph2dParam 동형).
+    """
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    value: float | None = Field(default=None, description="점의 위치(수직선 위 값·예: 2)")
+    open: bool | None = Field(default=None, description="열린 점(○) 여부 — 기본 닫힌 점(●)")
+    label: str | None = Field(default=None, description="점 라벨(미지정 시 렌더러가 값을 표기)")
+
+
+class NumberLineInterval(BaseModel):
+    """number_line 구간·반직선 — 부등식 해집합의 범위 표시(VIZ-07).
+
+    `start`/`end`가 None이면 그쪽 축 끝까지 뻗는 반직선이다(예: x ≥ 2 → start=2·end=None).
+    `start_open`/`end_open`=True는 그 끝점이 열린(○·미포함) 경계다. 구간 방향(start<end 등)
+    well-formed 판정은 렌더러 책임(타입만 검증).
+    """
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    start: float | None = Field(default=None, description="구간 시작(None=왼쪽 축 끝 — 반직선)")
+    end: float | None = Field(default=None, description="구간 끝(None=오른쪽 축 끝 — 반직선)")
+    start_open: bool | None = Field(default=None, description="시작 끝점 열림(○) 여부")
+    end_open: bool | None = Field(default=None, description="끝 끝점 열림(○) 여부")
+
+
+class NumberLineSpec(BaseModel):
+    """number_line 1D 수직선 축 명세 — 점·구간의 조합(VIZ-07).
+
+    축 범위는 신규 필드 없이 `Graph2dSpec.domain`을 재사용한다(1D 축 범위 = domain).
+    """
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    points: list[NumberLinePoint] | None = Field(default=None, description="점 마커 목록")
+    intervals: list[NumberLineInterval] | None = Field(default=None, description="구간·반직선 목록")
+
+
 class Graph2dSpec(BaseModel):
     """interactive_graph_2d spec — 2D 함수·관계 그래프(D3/Plotly/Desmos).
 
@@ -77,6 +119,14 @@ class Graph2dSpec(BaseModel):
     ⚠️ 번호 주의: 고립 브랜치는 이 작업을 `VIZ-04`로 등재했으나 main의 `VIZ-04`는
     `VIZ-04-visual-style-render-seat-contract`(done)라 **ID 충돌**이었다. `VIZ-06`이
     재배정된 번호다(HARN-10 유형).
+
+    VIZ-07(2026-08-10) — `number_line` 추가로 1D 수직선 축 모드를 연다(VIZ-03 acceptance
+    ①-b의 승계 — `visualization_module_gap_review.md` §8.1). 근거는 스타일 코퍼스의 수직선
+    권장 25건(정수·유리수·부등식 해·구간의 위치 표상). VIZ-06과 같은 「렌더러 먼저, 좌석
+    나중」 순서를 지켰다 — 웹 계산기에 전용 1D 렌더 경로(`drawNumberLine`)를 본 태스크가
+    *먼저* 신설한 뒤 이 필드로 좌석을 준다. **정직한 이연**: 코퍼스의 점프 화살표류 4건
+    (수직선 위 이동 과정 애니메이션)·내분점 비율 분할 전용 표기는 v1 미지원 —
+    points/intervals 조합으로 근사한다.
     """
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
@@ -124,6 +174,15 @@ class Graph2dSpec(BaseModel):
             "`function`(주 함수)과 비교할 추가 함수식 목록 — 렌더러가 이미 지원하는 다중 함수 행"
             "(`rows` 배열)에 좌석을 준다. `function`을 대체하지 않고 *추가*한다(주 함수 +"
             "비교 함수들 — 함수 비교 시각화)."
+        ),
+    )
+    number_line: NumberLineSpec | None = Field(
+        default=None,
+        description=(
+            "1D 수직선 축 모드(VIZ-07) — 정수·부등식 해·구간을 수평 축 위 점·구간으로 표시한다."
+            "본 태스크가 신설한 1D 렌더 경로(웹 `drawNumberLine`)에 좌석을 준다. 축 범위는 기존"
+            "`domain`을 재사용하고(신규 범위 필드 없음), `function`과 공존 가능하되 렌더러가 1D를"
+            "우선한다. well-formed 여부(구간 방향·domain 내 등)는 렌더러가 판정(타입만 검증)."
         ),
     )
 

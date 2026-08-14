@@ -12,7 +12,8 @@
 // Graph2dSpec 형태:
 //   { function: "a*x**2+b*x+c", domain: [xMin, xMax], y_range: [yMin, yMax]?,
 //     parameters: [{name,min,max,step,default}], tangent_point?, integral_region?, functions?,
-//     show_extrema? }
+//     show_extrema?, number_line?: { points: [{value,open?,label?}],
+//     intervals: [{start,end,start_open?,end_open?}] } }
 //
 // 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
 //
@@ -26,6 +27,12 @@
 // 극값 표시. 렌더러(GraphingCalculator.jsx)에 findExtrema/drawExtrema(numDeriv 부호 변화
 // 스캔)를 먼저 이식한 뒤 그 결과 상태(showExtrema)에 좌석을 준다 — VIZ-03과 동일하게 주
 // 함수 행에만. (고립본은 이 작업을 VIZ-04로 달았으나 main이 그 번호를 이미 쓰고 있어 재배정.)
+//
+// VIZ-07(2026-08-10) — number_line: 1D 수직선 축 모드(정수·부등식 해·구간 표시). VIZ-06과
+// 같은 「렌더러 먼저, 좌석 나중」 순서로 렌더러(GraphingCalculator.jsx)에 전용 1D 렌더 경로
+// (drawNumberLine)를 먼저 신설한 뒤, 여기서 spec.number_line을 그 경로가 소비할 상태
+// (numberLine)로 정규화만 한다. 축 범위는 신규 필드 없이 기존 domain→view 매핑을 재사용한다.
+// 수학 판정 0 — 해집합 계산·정오 판정 없이 spec이 준 점·구간을 상태로 옮길 뿐이다(권위 경계).
 import * as math from "mathjs";
 import { classify, extractVars } from "./mathExpr.js";
 
@@ -41,7 +48,44 @@ const _functionToRow = (fn) => {
   return { latex, expr };
 };
 
-// Graph2dSpec → 계산기 applyState 호환 부분 상태({rows, sliders, view}). 변환할 게 없으면 null.
+// spec.number_line 원시 객체 → 계산기 numberLine 상태({points, intervals}) 정규화 (VIZ-07).
+// 유효한 항목만 남긴다 — points는 value가 유한수인 것만(open은 명시적 true만, label은 문자열만),
+// intervals는 start/end를 유한수 또는 null로 정규화하되 둘 다 null이면(그릴 수 없음) 버린다.
+// 유효 point·interval이 0개면 null(numberLine 미설정 — 1D 모드 진입 안 함).
+const _numberLineToState = (nl) => {
+  if (!nl || typeof nl !== "object" || Array.isArray(nl)) return null;
+  const points = [];
+  if (Array.isArray(nl.points)) {
+    nl.points.forEach((p) => {
+      if (!p || typeof p !== "object" || !Number.isFinite(p.value)) return;
+      points.push({
+        value: p.value,
+        open: p.open === true, // 열린 점(○)은 명시적 true만 — 기본 닫힌 점(●)
+        label: typeof p.label === "string" ? p.label : null, // 라벨 없으면 렌더러가 값 표기
+      });
+    });
+  }
+  const intervals = [];
+  if (Array.isArray(nl.intervals)) {
+    nl.intervals.forEach((iv) => {
+      if (!iv || typeof iv !== "object" || Array.isArray(iv)) return;
+      const start = Number.isFinite(iv.start) ? iv.start : null; // null = 왼쪽 축 끝까지(반직선)
+      const end = Number.isFinite(iv.end) ? iv.end : null; // null = 오른쪽 축 끝까지(반직선)
+      if (start === null && end === null) return; // 양끝 다 없으면 그릴 대상이 없음
+      intervals.push({
+        start,
+        end,
+        startOpen: iv.start_open === true, // 열린 끝점(○)은 명시적 true만
+        endOpen: iv.end_open === true,
+      });
+    });
+  }
+  if (!points.length && !intervals.length) return null;
+  return { points, intervals };
+};
+
+// Graph2dSpec → 계산기 applyState 호환 부분 상태({rows, sliders, view, numberLine?}).
+// 변환할 게 없으면 null.
 export const graph2dSpecToState = (spec) => {
   if (!spec || typeof spec !== "object") return null;
 
@@ -112,8 +156,14 @@ export const graph2dSpecToState = (spec) => {
     }
   }
 
-  if (!rows.length && !Object.keys(sliders).length && !view) return null;
-  return { rows, sliders, view };
+  // number_line → 1D 수직선 상태(VIZ-07) — 함수 행과 공존 가능(렌더 우선순위는 컴포넌트 소관).
+  const numberLine = _numberLineToState(spec.number_line);
+
+  // number_line만 있는 spec도 유효 — 말미 null 판정에 numberLine 포함(1D 전용 spec 보존).
+  if (!rows.length && !Object.keys(sliders).length && !view && !numberLine) return null;
+  const st = { rows, sliders, view };
+  if (numberLine) st.numberLine = numberLine;
+  return st;
 };
 
 // ====== 코어 Surface3dSpec 소비 어댑터 (3D 곡면) ======
@@ -250,6 +300,8 @@ export const specToStateForType = (type, spec) => {
 //   - 함수에 실제로 쓰인 슬라이더만 parameters로(정방향이 parameters에서만 슬라이더를 만들므로
 //     클린 라운드트립). default = 현재 슬라이더 value.
 //   - domain은 x 범위. y_range는 기본 ±10과 다를 때만 실음(기본값은 명세에서 생략·클린 라운드트립).
+//   - numberLine 상태의 역변환(1D → spec.number_line)은 v1 미지원(VIZ-07) — 1D 명세는 코어가
+//     생성해 내려보내는 소비 전용 경로다(내보내기는 함수 행 기준 유지).
 export const calcStateToGraph2dSpec = (state) => {
   if (!state || typeof state !== "object") return null;
   const { rows, sliders, view } = state;

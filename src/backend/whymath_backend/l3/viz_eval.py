@@ -60,13 +60,41 @@ def _is_number(value: object) -> TypeGuard[float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _number_line_has_valid_item(number_line: dict[str, Any]) -> bool:
+    """number_line(1D 수직선·VIZ-07)에 그릴 수 있는 유효 항목이 1개 이상인가.
+
+    유효 point = dict이고 value가 수치 / 유효 interval = dict이고 start·end 중 하나 이상 수치
+    (둘 다 없으면 반직선조차 못 그린다) — 웹 어댑터(graph2dSpec.js `_numberLineToState`)의
+    렌더 가능 판정과 같은 기준이다(완성도 = 렌더러에게 쓸모 있는 최소 구조).
+    """
+    points = number_line.get("points")
+    intervals = number_line.get("intervals")
+    if isinstance(points, list) and any(
+        isinstance(p, dict) and _is_number(p.get("value")) for p in points
+    ):
+        return True
+    return isinstance(intervals, list) and any(
+        isinstance(iv, dict) and (_is_number(iv.get("start")) or _is_number(iv.get("end")))
+        for iv in intervals
+    )
+
+
 def complete_graph2d(spec: dict[str, Any]) -> bool:
-    """interactive_graph_2d 완성도 — 함수식(비어있지 않음) + 정의역 2원소."""
-    function = spec.get("function")
+    """interactive_graph_2d 완성도 — 함수식(비어있지 않음)+정의역 2원소, 또는 1D 수직선.
+
+    VIZ-07 1D 분기: `number_line` 명세는 함수식 없이도 완성일 수 있다 — number_line이 dict이고
+    유효 항목(점·구간)이 1개 이상이며 domain이 2원소 수치면 완성으로 판정한다(1D 축 범위 =
+    domain 재사용 규약이라 domain은 여전히 필수). 기존 함수 경로(function+domain)는 불변.
+    """
     domain = spec.get("domain")
+    domain_ok = isinstance(domain, list) and len(domain) == 2 and all(_is_number(x) for x in domain)
+    number_line = spec.get("number_line")
+    if isinstance(number_line, dict) and _number_line_has_valid_item(number_line):
+        return domain_ok
+    function = spec.get("function")
     if not isinstance(function, str) or not function.strip():
         return False
-    return isinstance(domain, list) and len(domain) == 2 and all(_is_number(x) for x in domain)
+    return domain_ok
 
 
 def complete_surface3d(spec: dict[str, Any]) -> bool:

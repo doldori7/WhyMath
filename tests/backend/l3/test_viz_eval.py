@@ -159,6 +159,24 @@ def test_complete_graph2d_branches() -> None:
     assert not complete_graph2d({"function": "x**2", "domain": ["a", "b"]})  # 비-숫자
 
 
+def test_complete_graph2d_number_line_branches() -> None:
+    """VIZ-07 1D 수직선 분기 — function 없이도 number_line(유효 항목)+domain이면 완성."""
+    assert complete_graph2d({"number_line": {"points": [{"value": 2}]}, "domain": [-5, 5]})
+    assert complete_graph2d(
+        {"number_line": {"intervals": [{"start": 2, "end": None}]}, "domain": [-5, 5]}
+    )
+    assert not complete_graph2d({"number_line": {"points": [{"value": 2}]}})  # 1D인데 domain 없음
+    assert not complete_graph2d({"number_line": {}, "domain": [-5, 5]})  # 빈 number_line
+    assert not complete_graph2d(
+        {"number_line": {"points": [{"open": True}]}, "domain": [-5, 5]}
+    )  # 유효 항목 0(위치값 없음)
+    assert not complete_graph2d(
+        {"number_line": {"intervals": [{"start": None, "end": None}]}, "domain": [-5, 5]}
+    )  # 양끝 다 없는 구간 — 그릴 수 없음
+    # 기존 함수 경로 불변 — number_line이 무효(유효 항목 0)면 function 경로로 폴백.
+    assert complete_graph2d({"function": "x**2", "domain": [-3, 3], "number_line": {"points": []}})
+
+
 def test_complete_surface3d_branches() -> None:
     assert complete_surface3d({"surface": "z = x**2 + y**2"})
     assert not complete_surface3d({"surface": "   "})
