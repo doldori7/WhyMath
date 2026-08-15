@@ -6765,3 +6765,43 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 
 **최종 수정**: 2026-05-28  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
+
+
+---
+
+## 📋 결정 로그 — 2026-08-15
+
+### DSL 콘텐츠 생성기(Domain-Specific Language Content Generator) 도입
+
+**결정**: WhyMath L3에 DSL 콘텐츠 생성기를 도입한다. LLM이 만든 자연어 콘텐츠를 교육 DSL로 정의하고, 다중 검증·수학 검증·교육 검증을 통과한 것만 컴파일해 Runtime으로 넘긴다.
+
+**근거**:
+- LLM이 직접 콘텐츠 DB를 수정하면 정답 오류·조건 누락·난이도 불일치를 사후에 잡기 어렵다.
+- DSL은 콘텐츠의 Intermediate Representation(IR)으로서 생성·검증·컴파일·실행을 분리한다.
+- 수학 정답 FAIL은 다른 점수로 상쇄할 수 없다.
+
+**핵심 설계**:
+- Human-readable YAML/JSON은 저작·검토용, Canonical IR은 Pydantic 모델 + 렌더러-중립 LaTeX.
+- 수학 검증은 SymPy가 단일 권위(자체 CAS 금지).
+- 6단계 검증 파이프라인: 문법 → 스키마 → 의미 → 수학 → 교육 → 중복.
+- Repair Loop: 최대 3회 재시도 후 사람 검수 큐로 전달.
+- API 3종: `POST /v1/dsl/{generate, validate, compile}`.
+
+**구현**:
+- 신규 패키지: `src/backend/whymath_backend/l3/dsl/`
+- API 라우터: `src/backend/whymath_backend/api/dsl.py`
+- 테스트: `tests/backend/l3/dsl/`, `tests/backend/api/test_dsl.py`
+- 문서: `docs/architecture/03d_dsl_content_generator.md`
+
+**검증**:
+- 단위 테스트 31개 통과
+- API 통합 테스트 5개 통과
+- Ruff·Black 통과
+
+**후속 과제**:
+- `/v1/dsl/generate`의 실제 LLM 생성 연동(`l3/pipeline.py`와 통합)
+- DSL Registry 및 버전 관리
+- 콘텐츠 생명주기 DB 테이블 정규화
+- 오개념 DSL을 `l4/misconception/`과 연결
+
+---
