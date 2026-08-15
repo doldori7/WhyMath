@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -17,11 +17,12 @@ acceptance:
   - "③ 작동한 비율 보고 — 채움 건수·prescreen 통과율을 리포트가 말해야 한다. 표본 0은 None으로 보고하고 0%로 위장하지 않는다(CLAUDE.md '작동한 비율' 원칙)"
   - "④ 강등전 게이트 — analogy_fidelity_eval이 Wilson 경계 CLI exit 0/1로 판정하는지 확인한다(점추정·인상 판정 금지)"
   - "⑤ 검증 재수행 + CI 배선 실재 확인. 판정은 exit code"
-artifacts: []
+artifacts:
+  - "PR #835 — 로컬 전체 스위트 10,187 passed·신규 95건 green·eval 정상 exit 0/--control exit 1(변별력 봉인)·라우터 경유·DRAFT 상태기계 재사용 확인·ci.yml 게이트 스텝 배선·provenance exit 0"
 paths:
   - "src/backend/whymath_backend/l3/pedagogy/**"
   - src/backend/whymath_backend/harness/analogy_fidelity_eval.py
   - "tests/backend/l3/**"
 session: null
 notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 uqyg79 head=5dc040b3. 원 태스크 PED-09-analogy-example-generator(6a367c5f)·PED-10-diag-item-slot-fill(3dcb3e93)."
-updated: 2026-08-11
+updated: 2026-08-15
