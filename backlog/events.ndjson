@@ -3282,3 +3282,4 @@
 {"ts": "2026-08-14T23:05:56", "actor": "main", "action": "add", "id": "OPS-43-local-llm-stack-optimization"}
 {"ts": "2026-08-15T15:46:21", "actor": "claude/backend-ped-22-strategy-canon-27fffa", "action": "start", "id": "PED-22-strategy-catalog-canon-recovery", "session": "claude/backend-ped-22-strategy-canon-27fffa", "remote": "ok"}
 {"ts": "2026-08-15T16:44:04", "actor": "claude/backend-ped-22-strategy-canon-27fffa", "action": "done", "id": "PED-22-strategy-catalog-canon-recovery", "artifacts": ["PR #831 — CI 전 잡 green(backend lint·type·test·실 PG 마이그레이션 통합·provenance·harness-integrity 포함), commit a6394c1c, 로컬 전체 스위트 10,092 passed(seed 2435175126)"]}
+{"ts": "2026-08-15T17:26:34", "actor": "claude/backend-env-test-defects-c80ef5", "action": "add", "id": "OPS-44-local-env-test-defects"}
