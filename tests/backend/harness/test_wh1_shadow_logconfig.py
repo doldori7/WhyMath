@@ -32,6 +32,16 @@ def test_logconfig_captures_record_logger(tmp_path: Path) -> None:
     config = json.loads(_LOGCONFIG.read_text(encoding="ascii"))
     out = tmp_path / "records.log"
     config["handlers"]["wh1_record_file"]["filename"] = str(out)
+    # 오염 스냅샷 — dictConfig는 설정의 loggers 키 각각에 propagate/disabled를 쓴다.
+    # 구 버전은 finally가 핸들러만 복원해 propagate=False가 잔존했다(구 OPS-15 — pytest 8.x
+    # caplog은 root 전용 부착이라 이후 caplog 단언이 0건 관측으로 연쇄 실패하는 순서 플레이크).
+    # pytest 9+는 비전파 로거에도 직접 부착해 증상이 잠복하지만 오염 자체는 결함이다
+    # (PED-25 ③ — 2026-08-15 결정론 프로브로 잔존 실측: dictConfig 후 propagate False).
+    configured_loggers = list(config["loggers"])
+    snapshot = {
+        name: (logging.getLogger(name).propagate, logging.getLogger(name).disabled)
+        for name in configured_loggers
+    }
     logging.config.dictConfig(config)
     try:
         logging.getLogger(_RECORD_LOGGER).info('{"probe": "e2e"}')
@@ -39,10 +49,31 @@ def test_logconfig_captures_record_logger(tmp_path: Path) -> None:
             handler.flush()
         assert out.read_text(encoding="utf-8").strip() == '{"probe": "e2e"}'
     finally:
-        # 전역 로깅 상태 복원 — 다른 테스트의 로거 구성 오염 방지.
+        # 전역 로깅 상태 복원 — 핸들러뿐 아니라 propagate/disabled 스냅샷도 원복한다.
         for handler in list(logging.getLogger(_RECORD_LOGGER).handlers):
             logging.getLogger(_RECORD_LOGGER).removeHandler(handler)
             handler.close()
+        for name, (propagate, disabled) in snapshot.items():
+            logger = logging.getLogger(name)
+            logger.propagate = propagate
+            logger.disabled = disabled
+
+
+def test_logconfig_test_restores_logger_state(tmp_path: Path) -> None:
+    """원복 회귀 동결 — 위 e2e 테스트가 propagate/disabled를 사전 상태로 되돌린다.
+
+    변별력: 구 버전(핸들러만 복원)에선 이 테스트가 결정론적으로 실패한다(dictConfig가
+    record 로거에 propagate=False를 잔존시키므로). 러너 버전·실행 순서와 무관하게 오염
+    잔존을 직접 단언한다(pytest 9+의 caplog 마스킹과 무관한 축).
+    """
+    logger = logging.getLogger(_RECORD_LOGGER)
+    before = (logger.propagate, logger.disabled)
+    test_logconfig_captures_record_logger(tmp_path)
+    after = (logger.propagate, logger.disabled)
+    assert after == before, (
+        f"dictConfig 테스트가 로거 상태를 잔존시켰습니다: {before} → {after}. "
+        "finally에서 propagate/disabled 스냅샷 원복이 동작하는지 확인하세요."
+    )
 
 
 def test_logconfig_targets_real_record_logger_name() -> None:

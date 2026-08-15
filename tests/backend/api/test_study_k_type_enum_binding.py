@@ -10,6 +10,12 @@
 
 로 터진다.
 
+**같은 함정의 두 번째 좌석**(PED-25 ② 회수 · 2026-08-15): `l4/pedagogy/adaptive/effectiveness.py`가
+집계 키를 `k_type=str(outcome.k_type)`로 만들고 있었다. 이쪽은 INSERT가 아니라 인메모리 집계라
+실 PG도 예외를 내지 않는다 — 대신 맹글링된 키(`"KnowledgeType.CONCEPT"`)가 리포트·정책 평가의
+`"CONCEPT"` 셀과 영원히 조인되지 않는 **침묵 오염**이 된다. fake/평문 픽스처 경로(`k_type="CONCEPT"`)
+에서는 `str("CONCEPT") == "CONCEPT"`이라 기존 테스트가 전부 green인 것도 동형이다.
+
 **왜 이 파일이 필요한가 — 세 검출기가 전부 놓쳤다**:
   · 전체 백엔드 스위트 9,696건: green (fake 세션이 바인딩 값을 DB로 왕복시키지 않는다)
   · `mypy --strict`: green (`str(Enum)`의 타입은 `str`이라 타입 오류가 아니다)
@@ -79,3 +85,33 @@ class TestStudySourceFreeze:
         """
         text = _STUDY_SOURCE.read_text(encoding="utf-8")
         assert text.count("k_type=KnowledgeType(objective.k_type).value") == 3
+
+
+_EFFECTIVENESS_SOURCE = (
+    Path(__file__).resolve().parents[3]
+    / "src/backend/whymath_backend/l4/pedagogy/adaptive/effectiveness.py"
+)
+
+
+class TestEffectivenessSourceFreeze:
+    """`l4/pedagogy/adaptive/effectiveness.py` 집계 키 변환 표현식 동결 (PED-25 ②).
+
+    study.py와 같은 함정(`str(멤버)` 맹글링)이 집계 키 경로에도 있었다 — INSERT가 아니라
+    인메모리 키라 예외 없이 침묵 오염되는 형태. 행동 검증(enum 멤버 입력 → 라벨 셀 귀속)은
+    `tests/backend/l4/adaptive/test_effectiveness.py::TestKnowledgeTypeLabelNormalization`이
+    담당하고, 여기서는 회귀의 *정확한 소스 형태*를 못 박는다.
+    """
+
+    def test_does_not_use_str_of_enum(self) -> None:
+        """`str(outcome.k_type)` 패턴이 되살아나면 실패한다(회귀의 정확한 형태)."""
+        text = _EFFECTIVENESS_SOURCE.read_text(encoding="utf-8")
+        assert "str(outcome.k_type)" not in text, (
+            "`str(outcome.k_type)`는 'KnowledgeType.CONCEPT' 키를 만들어 집계 셀 조인을 "
+            "깨뜨린다(침묵 오염 — PG 라벨 집합 밖). "
+            "`KnowledgeType(outcome.k_type).value`를 쓸 것."
+        )
+
+    def test_key_construction_passes_value(self) -> None:
+        """집계 키는 `.value`로 정규화된 라벨이다(멱등 — 평문 라벨도 통과)."""
+        text = _EFFECTIVENESS_SOURCE.read_text(encoding="utf-8")
+        assert text.count("k_type=KnowledgeType(outcome.k_type).value") == 1

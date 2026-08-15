@@ -137,7 +137,7 @@ class SolutionPath(BaseModel):
 - **`concept_sequence`**: 풀이의 *골격*. "이 풀이는 [개념A] → [개념B] → [개념C] 순으로 개념을 통과한다"를 노드 ID 순서열로 표현. 자연어 풀이 텍스트는 `steps[].content`에 남지만, *비교·검색·분류의 기준*은 `concept_sequence`다.
 - **`steps`**: 각 단계의 내용 + 막힌 학생용 힌트 + 흔한 오류 + SymPy/Lean 검증 표시. 힌트는 L4 교수학 엔진의 graded `Hint`로 전달되고, 흔한 오류는 L2 오개념 매핑·L1 misconceptions 카탈로그와 연결된다.
 - **`embedding`**: 풀이 임베딩 벡터. 유사 풀이 검색(벡터 DB)·풀이 군집화에 사용. 임베딩 모델은 CLAUDE.md 기술 스택 표의 OpenAI text-embedding-3-large.
-- **L2 연결**: L2 `MasteryState.preferred_solution_style`(02 문서 참조)은 이 `SolutionPath.approach_type`을 값으로 갖는다. L2가 "이 학생은 기하적 `SolutionPath`에서 정답률·체류시간이 좋다"를 추적하면, L4가 힌트·다중 풀이 제시 순서를 정할 때 그 유형의 `SolutionPath`를 우선 노출한다.
+- **L2 연결**(⚠️ 미구현 — 2026-08-15 실측, PED-25): L2 `MasteryState.preferred_solution_style`(02 문서 참조)은 이 `SolutionPath.approach_type`을 값으로 갖는다. L2가 "이 학생은 기하적 `SolutionPath`에서 정답률·체류시간이 좋다"를 추적하면, L4가 힌트·다중 풀이 제시 순서를 정할 때 그 유형의 `SolutionPath`를 우선 노출한다. **단, `MasteryState` 자체가 문서 스케치이며 이 추적·우선 노출 코드는 0건이다** — 설계 의도 서술이지 현행 동작이 아니다.
 
 ### ReasoningStep — 추론 유형·정당화의 얇은 도입 (교육 추론 엔진 §2.2)
 

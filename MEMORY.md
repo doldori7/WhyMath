@@ -346,6 +346,16 @@
 **검증 재수행(acceptance ⑤ — 원 커밋의 7,621 passed 미승계)**: 카탈로그·스키마 테스트 43건 green·ruff·black·provenance_audit exit 0·전체 스위트는 이 커밋에서 재실행. enum 10종↔YAML 10건 1:1 거버넌스 테스트로 동결.
 
 **후속 의무(acceptance ⑥)**: 좌석만 있고 소비자가 없으면 계약이 허공에 뜬다(VIZ-06 교훈) — 소비 배선은 PED-23(select 후보 필터·전략 카드·mode_guard fail-closed), 생성기는 PED-24가 잇는다.
+### 2026-08-15 (회수·PED-25): **uqyg79 소액 정정 3건 회수 — k_type 맹글링 수정·유령 필드 부기 6곳·caplog 오염 근본 수정(가드는 제외)** (claude 회수, Kiki "진행")
+
+**배경**: `docs/reviews/unmerged_branch_verdict_2026-08-11.md`에서 uqyg79(5dc040b3)의 PED-11·PED-12·OPS-15 done이 main 미착지로 판정돼 PED-25로 등재. acceptance ①("지금도 결함인지 실측 선행")에 따라 3건 전건 재실측.
+
+**실측 결과 — 3건 전부 현재도 결함이었다**:
+- **② k_type 맹글링(구 PED-12)**: `l4/pedagogy/adaptive/effectiveness.py:173`의 `k_type=str(outcome.k_type)` 잔존. api/study.py와 같은 함정(2026-08-11 실 PG 사고)이 집계 키 경로에 하나 더 있었다. INSERT가 아닌 인메모리 키라 예외 없이 **침묵 오염**(맹글링 키가 "CONCEPT" 셀과 미조인). 기존 테스트가 못 잡은 이유도 동형 — 픽스처가 평문 `"CONCEPT"`만 사용. 수정: `KnowledgeType(outcome.k_type).value`(멱등) + 행동 테스트(enum 멤버 입력) + `test_study_k_type_enum_binding.py`에 소스 스캔 동결 확장.
+- **④ 유령 필드(구 PED-11)**: `preferred_solution_style` 무부기 서술 6곳 잔존 확인(02_learner_model·03_content_generation·system_deep_dive·design/ui/01·llm-architect·ml-engineer). `MasteryState` 자체가 코드 0건인데 존재처럼 읽히는 문구에 전량 "미구현" 실측 부기.
+- **③ caplog 플레이크(구 OPS-15)**: **플레이크는 재현 안 됨**(원 bad seed 442243680 포함 무작위 10시드 × 98건 전부 green — pytest 9.1.1의 caplog이 비전파 로거에 직접 부착해 마스킹·구 커밋의 예측과 일치). **그러나 오염 자체는 결정론적으로 잔존** — `test_wh1_shadow_logconfig.py`의 finally가 핸들러만 복원해 `propagate=False`가 남는 것을 프로브로 실측(dictConfig 전 True → 후 False → 핸들러 복원 후에도 False). 이에 근본 수정(스냅샷→원복 + 원복 회귀 테스트)만 이식하고, **격리 가드 2종(`_logging_state_guard.py`·conftest autouse)은 제외** — acceptance ③의 "재현 시에만 격리 장치" 조건에 따라(핀된 러너 9.1.1에서 무증상·오염원은 근본 수정으로 소멸). pytest 8.x 회귀·미래 dictConfig 신규 사용이 생기면 브랜치 uqyg79의 가드 구현을 회수하면 된다.
+
+**교훈**: "증상이 안 보인다"와 "결함이 없다"의 구분 — 러너 업그레이드(8→9)가 마스킹한 오염을 결정론 프로브로 직접 잴 것.
 
 ### 2026-08-14 (측정·S4-16): **잔여 축 교차검증 게이트 강등전 라이브 실측 — 로컬 Ollama 모델 전원 미달로 S4-16 blocked 전환. qwen3.5:27b timeout·qwen2.5:7b 100% 오검출·qwen2-math:7b 검출 58%/오검출 67%** (claude 측정, Kiki "진행")
 
