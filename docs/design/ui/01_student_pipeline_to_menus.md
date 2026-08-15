@@ -172,7 +172,7 @@ WhyMath 여정 :  오늘 목표 → 왜 배울까 → 탐색 → 개념 → 예�
 
 ### 흐름 B — 런타임(온라인, 🔴 계획): 개인화 렌더
 ```
-학생 상태(L2: BKT·오개념·preferred_solution_style)
+학생 상태(L2: BKT·오개념·preferred_solution_style — ⚠️ 미구현 필드, 코드 0건)
    →  Runtime Pedagogy Selector.select() → PedagogyStrategy 1개   [PED-02]
    →  gate()(금지 모드·Polya 단계)  →  supply(): ConceptDSL 캐시 조회   [REND-01/CACHE-01]
    →  히트=adapter[strat].render()(0원) / 미스=라우터 생성 → DSL 승격

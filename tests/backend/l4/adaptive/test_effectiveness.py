@@ -22,6 +22,7 @@ from whymath_backend.l4.pedagogy.adaptive.effectiveness import (
     EffectivenessStat,
     aggregate_effectiveness,
 )
+from whymath_backend.schema.enums import KnowledgeType
 
 _T0 = datetime(2026, 7, 26, tzinfo=UTC)
 _OBJ = "OBJ.quadratic.01"
@@ -156,3 +157,33 @@ class TestWilsonJudgement:
         json_cells = report.to_json()["cells"]
         assert isinstance(json_cells, list)
         assert {c["strategy"] for c in json_cells} == {"SOCRATIC", "DIRECT"}
+
+
+class TestKnowledgeTypeLabelNormalization:
+    """enum 멤버 입력 → 집계 키는 PG 라벨 (PED-25 ②, 구 PED-12).
+
+    사고 경위: `_K = "CONCEPT"` 평문 픽스처만 쓰는 기존 테스트는 이 결함을 못 잡는다 —
+    실 PG 왕복(native enum 컬럼)에서 SQLAlchemy가 돌려주는 것은 `KnowledgeType` **멤버**이고,
+    `str(멤버)`는 `"KnowledgeType.CONCEPT"`(라벨 집합 밖)이다(api/study.py 동형 사고
+    2026-08-11 실 PG 실측·`tests/backend/api/test_study_k_type_enum_binding.py` 참조).
+    맹글링된 키는 리포트·정책 평가의 "CONCEPT" 셀과 영원히 조인되지 않는다(침묵 오염).
+    """
+
+    def test_enum_member_input_aggregates_under_pg_label(self) -> None:
+        sid = uuid.uuid4()
+        treatment = _treatment(sid, "SOCRATIC")
+        outcome = _outcome(sid, True)
+        # 실 PG 경로 재현 — ORM이 돌려주는 enum 멤버를 그대로 넣는다.
+        treatment.k_type = KnowledgeType.CONCEPT
+        outcome.k_type = KnowledgeType.CONCEPT
+        report = aggregate_effectiveness([treatment, outcome])
+        key = EffectivenessKey(strategy="SOCRATIC", k_type="CONCEPT", objective_id=_OBJ)
+        assert report.stats[key].trials == 1
+        assert "KnowledgeType.CONCEPT" not in {k.k_type for k in report.stats}
+
+    def test_plain_string_input_still_aggregates(self) -> None:
+        """멱등성 — 평문 라벨(기존 픽스처 경로)도 같은 셀로 모인다."""
+        sid = uuid.uuid4()
+        report = aggregate_effectiveness([_treatment(sid, "SOCRATIC"), _outcome(sid, True)])
+        key = EffectivenessKey(strategy="SOCRATIC", k_type="CONCEPT", objective_id=_OBJ)
+        assert report.stats[key].trials == 1

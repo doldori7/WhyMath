@@ -37,7 +37,7 @@ PRD v1.1은 학습자 모델로 **IRT theta + 망각곡선 + 협업필터링**�
 
 > 상세 엔티티 정의는 `docs/architecture/02_learner_model.md` "PRD v1.1 엔티티 통합" 및 `schemas/v1.1/` 참조.
 
-- **`MasteryState` 보유 (L2 책임)** — PRD v1.1의 `MasteryState`를 L2의 *개념 노드별 숙달 레코드*로 흡수. 기존 `LearnerState.mastery`(성취기준별 BKT 확률)를 *확장* — 성취기준 코드뿐 아니라 L1 개념 그래프의 개념 노드에도 숙달 상태 부착. 필드: `bkt_mastery`(Phase 1부터 항상 채움)·`irt_theta`+`irt_ci_lower/upper`(Phase 2 보강, IRT theta + **신뢰구간**)·`forgetting_strength`+`decayed_mastery`(Phase 2 망각곡선 보강)·`preferred_solution_style`(L3 `SolutionPath.approach_type` 값을 취해 학생 선호 풀이 추적 → L4 힌트·다중 풀이 순서 입력)
+- **`MasteryState` 보유 (L2 책임)**(⚠️ 미구현 — `MasteryState`는 문서 스케치이며 `src/` 코드 0건, 2026-08-15 실측) — PRD v1.1의 `MasteryState`를 L2의 *개념 노드별 숙달 레코드*로 흡수. 기존 `LearnerState.mastery`(성취기준별 BKT 확률)를 *확장* — 성취기준 코드뿐 아니라 L1 개념 그래프의 개념 노드에도 숙달 상태 부착. 필드: `bkt_mastery`(Phase 1부터 항상 채움)·`irt_theta`+`irt_ci_lower/upper`(Phase 2 보강, IRT theta + **신뢰구간**)·`forgetting_strength`+`decayed_mastery`(Phase 2 망각곡선 보강)·`preferred_solution_style`(L3 `SolutionPath.approach_type` 값을 취해 학생 선호 풀이 추적 → L4 힌트·다중 풀이 순서 입력 — ⚠️ 생산자·소비자 코드 0건)
 - **`StudentProfile` 소비 (⚠️ L1 보유, L2는 *읽기만*)** — `StudentProfile`은 자동 커리큘럼 정렬의 입력이며 **L1 데이터 기반이 보유**한다. L2는 이를 *소유하지 않고* L1에서 **읽어서 학습자 상태 갱신에 활용**: ①활성 교과서·그림자 커리큘럼을 보고 *어떤 성취기준·개념 노드를 추적할지* 범위 결정 ②학년·교육과정으로 BKT 사전 분포 `P(L0)` 초기값 보정 ③목표(내신 등급 등)를 `LearnerState`에 실어 L4에 전달. **L2는 `StudentProfile`을 수정하지 않는다** — 위치·학교·교과서 변경은 L1 책임. L2가 생산하는 것은 어디까지나 *학습자의 동적 상태*(`MasteryState`·`LearnerState`)이지 *정적 프로필*이 아님 (7계층 경계)
 - **자동 정렬용 진단** — L2의 BKT/IRT 추정 결과는 자동 커리큘럼 정렬 엔진(L1+L6)이 "이 학생이 어느 개념까지 숙달했는가"를 판단하는 진단 신호로 쓰인다. L2는 진단 *결과*만 제공, 정렬 *로직*은 L6 소관
 

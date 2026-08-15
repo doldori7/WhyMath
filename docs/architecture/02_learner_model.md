@@ -79,6 +79,8 @@
 
 ### MasteryState — 개념별 숙달 상태 (L2 보유)
 
+> ⚠️ **미구현 스케치 (2026-08-15 실측 부기, PED-25)**: 이 섹션의 `MasteryState`는 문서 스케치이며 대응 코드가 없다(`src/`에 `class MasteryState` 0건). 특히 `preferred_solution_style`은 `schemas/`의 `mastery_state.schema.yaml`에만 존재하고 생산자(L2 추적)·소비자(L4 우선 노출) 코드가 모두 0건이다 — `runtime_selector.py`·`solution_path_store.py`의 docstring도 이 필드를 "후속 몫"으로 명시한다. 이 문서를 읽고 필드가 존재한다고 가정하지 말 것.
+
 PRD v1.1의 `MasteryState`를 L2의 *개념 노드별 숙달 레코드*로 흡수한다. WhyMath의 기존 `LearnerState.mastery`(성취기준별 BKT 확률)를 *확장*하는 구조 — 성취기준 코드뿐 아니라 L1 개념 그래프의 개념 노드에도 숙달 상태를 부착한다.
 
 ```python
@@ -106,7 +108,7 @@ class MasteryState(BaseModel):
 ```
 
 - **`bkt_mastery`는 Phase 1부터 항상 채워진다.** `irt_*` 필드는 Phase 2 데이터 누적 후 채워지며, 그 전에는 `None`.
-- **선호 풀이 스타일**: 학생이 같은 문제를 *어떤 접근(대수적·기하적 등)으로 풀 때 정답률·체류시간이 좋은지* 누적 추적. 값은 L3 `SolutionPath.approach_type`(WhyMath 6가지 `solution_approaches` 중 하나, 03 문서 참조)을 그대로 취한다. L4 교수학 엔진이 힌트·다중 풀이 제시 순서를 정할 때 입력으로 사용 — L2가 추적한 선호 유형의 `SolutionPath`를 L4가 우선 노출한다.
+- **선호 풀이 스타일**(⚠️ 미구현 — 위 실측 부기 참조): 학생이 같은 문제를 *어떤 접근(대수적·기하적 등)으로 풀 때 정답률·체류시간이 좋은지* 누적 추적. 값은 L3 `SolutionPath.approach_type`(WhyMath 6가지 `solution_approaches` 중 하나, 03 문서 참조)을 그대로 취한다. L4 교수학 엔진이 힌트·다중 풀이 제시 순서를 정할 때 입력으로 사용 — L2가 추적한 선호 유형의 `SolutionPath`를 L4가 우선 노출한다.
 
 ### StudentProfile — 학생 프로필 (⚠️ L1 보유, L2는 *읽기*)
 
