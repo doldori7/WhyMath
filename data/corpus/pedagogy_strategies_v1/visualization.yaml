@@ -1,0 +1,20 @@
+# 교수전략 카탈로그 — VISUALIZATION(시각화). 정본: docs/architecture/04e_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: VISUALIZATION
+name_ko: 시각화
+description: 그림·그래프 등 시각 표현을 앞세워 관계를 눈으로 파악하게 한다.
+research_basis:
+  - Mayer (2009) 멀티미디어 학습 원리(multimedia learning)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중, 하]
+target_k_types: [SPATIAL, REPRESENT, STOCHASTIC]
+suitable_error_types: [직관오류, 역방향오류]
+usage_notes: |
+  말·식만으로 공간 관계·방향 관계가 잡히지 않을 때 그림·그래프 등 시각 표현을 앞세운다 —
+  포함·대응·역방향처럼 방향이 있는 관계를 눈으로 확인시키므로 어긋난 직관·방향 뒤집힘의
+  교정에 유효하다. 확률·통계(STOCHASTIC)에서도 분포·데이터를 눈으로 보게 하는 축이 직관
+  형성의 기본 도구다.
+  기대 효과: 직관의 교정·다중 표상(식↔그래프↔도형) 연결의 강화.
+  주의: 장식적 시각 자료는 오히려 부하를 늘린다(멀티미디어 학습의 일관성 원리) — 개념
+  구조에 대응하는 표현만 쓴다. 렌더 intent는 L5 시각화 명세로 위임한다(이 카탈로그는 시각
+  자료 자체를 담지 않는 서술 자산이다).

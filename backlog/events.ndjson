@@ -3280,3 +3280,4 @@
 {"ts": "2026-08-14T22:44:57", "actor": "main", "action": "start", "id": "NLP-05-shadow-grading-input-supply", "session": "main", "remote": "ok"}
 {"ts": "2026-08-14T23:04:10", "actor": "main", "action": "block", "id": "S4-16-residue-gate-demotion-battle", "reason": "로컬 Ollama 모델로는 강등전 통과 불가 — qwen3.5:27b timeout(115~300s/call)·qwen2.5:7b 100% 오검출·qwen2-math:7b 검출 58%/오검출 67%. 클라우드 provider 또는 로컬 LLM 스택 최적화(llama.cpp Vulkan 등) 필요. 측정 증적: data/audit/s4-16-qwen2math-battle-audit.jsonl + MEMORY.md 2026-08-14 기록."}
 {"ts": "2026-08-14T23:05:56", "actor": "main", "action": "add", "id": "OPS-43-local-llm-stack-optimization"}
+{"ts": "2026-08-15T15:46:21", "actor": "claude/backend-ped-22-strategy-canon-27fffa", "action": "start", "id": "PED-22-strategy-catalog-canon-recovery", "session": "claude/backend-ped-22-strategy-canon-27fffa", "remote": "ok"}
