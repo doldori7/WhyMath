@@ -346,6 +346,13 @@
 **배선 3좌석(전부 옵트인 플래그 기본 OFF)**: ①카탈로그 후보 필터(`pedagogy_catalog_filter_enabled` — grade_band 신호 생산자 신설·공집합/소진/적재실패 3중 폴백 reason_code) ②전략 카드(`pedagogy_strategy_card_enabled` — supply() 생성 폴백의 LLM 프롬프트 직전, 무카드 바이트 동일) ③mode_guard 런타임(`mode_guard_runtime_enabled` — 발화 확정 후·톤필터 직전, 위반 발화 미서빙·소크라테스 재질문 결정론 폴백). gate()에 카탈로그 미주입은 정적+런타임 이중 동결(효과≤허용).
 
 **부수 처리**: gate3 봉인(`_WH1_PRIMARY_RUNNER_ALLOWLIST`)은 mode_guard.py의 docstring 참조(비호출) 1건을 사유 주석과 함께 개정 — 봉인 자체의 지시에 따른 정당 개정. api/study.py k_type hunk는 main에 이미 상위 형태로 존재해 이식하지 않음.
+### 2026-08-15 (회수·PED-24): **uqyg79 비유·예시 생성기 + diag_item 슬롯 투영 회수 — 구 PED-09(6a367c5f)·PED-10(3dcb3e93) 이식. 미병합 고립 6회차 상환 2번째** (claude 회수)
+
+**배경**: 같은 격리 브랜치의 구 PED-09(비유·예시 생성기 4종 + analogy_fidelity_eval 강등전)·PED-10(diag_item_projector)이 main에 전건 부재였다(PED-22 후속 회수 — 번호 매핑: 구 PED-09/10→PED-24).
+
+**이식(머지 아님)**: 신규 파일만 파일 단위 이식 — `l3/pedagogy/analogy_generator.py`·`analogy_checker.py`·`analogy_demand.py`·`example_generator.py`·`diag_item_projector.py` + `harness/analogy_fidelity_eval.py` + 테스트 7종(95건) + `l3/pedagogy/__init__.py` docstring + ci.yml backend 잡에 analogy_fidelity 게이트 스텝 추가(구 커밋의 배선이 main에 없었음). seam 드리프트 실측: 의존 파일 13종 중 unit_compiler.py만 변경(docstring 추가뿐·시그니처 동일)이라 코드 수정 없이 그대로 이식됐다. 04e §7.2 grain 다리 정정·§10 표는 PED-22가 이미 회수한 04e에 포함돼 있어 문서 추가 수정 없음.
+
+**헌법 검합**: 라우터 경유(`Router().route` + 주입 `LLMProvider.generate` — llm_generator 선례 동형·직접 SDK 호출 0)·산출 DRAFT + prescreen→review 상태기계 함수 재사용(새 상태기계·테이블 0)·강등전은 Wilson 상한 CLI exit 0/1(점추정 없음·`--control` 널 검출기 대조 exit 1 실측)·표본 0은 None(0% 위장 금지). 라이브 LLM 채움은 Phaiakes9 런북 소관(정직한 공백 — 구 커밋과 동일).
 
 ### 2026-08-15 (회수·PED-22): **uqyg79 교수전략 카탈로그 정본 회수 — 04e 설계 문서·YAML 10건·schema·registry 이식. 미병합 고립 6회차 상환** (claude 회수, Kiki "진행")
 
