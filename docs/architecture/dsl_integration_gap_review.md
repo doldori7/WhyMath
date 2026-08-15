@@ -168,6 +168,11 @@ Visualization의 중복 여부는 미검토 축", 2026-07 시각화 인벤토리
 사후축의 집행 지점 부재 + 그 부재를 가리는 선언"**이다. 처방: 과대 진술 2곳은 본 세션
 직접 정정(§3-F2), 집행 지점 배선 여부는 **PED-16 판정**(§3-D4).
 
+> **해결 부기(2026-08-15)**: PED-16의 재검토 조건("WH-1 루프가 PedagogyPack을 참조하게 되는
+> 시점")은 PED-23(회수)이 충족했다 — coach가 `decide(pack=)`에 넣은 같은 팩 객체를
+> `run_wh1_primary_turn(pack=)`으로 thread해 톤필터 직전 런타임 가드를 복원
+> (`mode_guard_runtime_enabled` 옵트인·기본 OFF). 본 절의 나머지는 감사 시점 기록으로 유지.
+
 ### ⑥ 교수법 DSL의 DB 갈래 — dead write 2테이블 (이중 정본 위험)
 
 - `pedagogy_pack` 테이블: `PedagogyPackStore.populate`(`l1/pedagogy/populate.py` CLI)가 쓰기만
