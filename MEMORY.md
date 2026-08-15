@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-15 (회수·PED-22): **uqyg79 교수전략 카탈로그 정본 회수 — 04e 설계 문서·YAML 10건·schema·registry 이식. 미병합 고립 6회차 상환** (claude 회수, Kiki "진행")
+
+**배경**: `claude/whymath-pedagogy-review-uqyg79`(head 5dc040b3)의 PED-04·05(구 번호 — main의 동명 태스크와 이중 배정)가 done인데 main에 `04e_pedagogy_strategy_catalog.md`·`data/corpus/pedagogy_strategies_v1/`·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`가 전건 부재였다(2026-08-11 판정서 §2).
+
+**이식(머지 아님·acceptance ③)**: 신규 파일만 파일 단위로 이식 — 04e 문서·카탈로그 YAML 10건+`_provenance.json`(pool 필드 포함·5dc040b3 수정분)·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`·테스트 2건(`test_strategy_registry.py`·`test_pedagogy_strategy_schema.py`). 브랜치 쪽이 낡은 기존 파일(strategy_graph_v1·backlog yaml 등)은 채택하지 않았다. 번호 매핑: 구 PED-04→PED-22, 구 PED-05→PED-22, 구 PED-06→PED-23, 구 PED-07→PED-23, 구 PED-09/10→PED-24, 구 PED-11/12·OPS-15→PED-25.
+
+**검증 재수행(acceptance ⑤ — 원 커밋의 7,621 passed 미승계)**: 카탈로그·스키마 테스트 43건 green·ruff·black·provenance_audit exit 0·전체 스위트는 이 커밋에서 재실행. enum 10종↔YAML 10건 1:1 거버넌스 테스트로 동결.
+
+**후속 의무(acceptance ⑥)**: 좌석만 있고 소비자가 없으면 계약이 허공에 뜬다(VIZ-06 교훈) — 소비 배선은 PED-23(select 후보 필터·전략 카드·mode_guard fail-closed), 생성기는 PED-24가 잇는다.
+
 ### 2026-08-14 (측정·S4-16): **잔여 축 교차검증 게이트 강등전 라이브 실측 — 로컬 Ollama 모델 전원 미달로 S4-16 blocked 전환. qwen3.5:27b timeout·qwen2.5:7b 100% 오검출·qwen2-math:7b 검출 58%/오검출 67%** (claude 측정, Kiki "진행")
 
 **배경**: S4-16(S4-13 게이트 승격 조건)은 실 provider로 K=3 교차검증의 결함 주입 검출률을 측정하는 태스크. 2026-08-03 등재 시 "실 LLM 호출 필요·Kiki 머신 동반" 조건이었다. 2026-08-14 Phaiakes9(GMKtec AI Max+ 395·Radeon 8060S·128GB LPDDR5X)에서 실측.
