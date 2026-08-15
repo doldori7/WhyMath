@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-15 (회수·PED-23): **교수전략 카탈로그 소비 배선 회수 — 후보 필터·전략 카드·mode_guard 런타임 fail-closed. PED-16 "by-design 미배선" 선언 해소** (claude 회수, Kiki "진행")
+
+**배경**: uqyg79의 구 PED-06(842ed2a5)·PED-07(2874e7b0)이 done인데 main 미착지. PED-22(카탈로그 정본)가 먼저 착지한 뒤 소비 배선을 회수했다(좌석만 두고 끝내지 않는다 — VIZ-06 교훈).
+
+**현행 정합 판정(acceptance ②)**: main의 선행 가드 2종(`gate()` 사전 축)과 원 구현(선택 입력 필터·프롬프트 카드·사후 문면 가드)은 축이 달라 기능 중복 0 — "현행 위 재구현" 채택. 유일한 상충은 PED-16(2026-08-10)의 "mode_guard by-design 미배선" 선언 — 그 근거("WH-1 루프가 PedagogyPack을 참조하지 않아 대형 작업")는 coach가 decide에 넣은 같은 팩 객체를 러너로 thread하면 해소되고, PED-16이 명시한 재검토 조건을 PED-23이 충족했으므로 선언을 **해소 부기**로 갱신(파기 아님).
+
+**배선 3좌석(전부 옵트인 플래그 기본 OFF)**: ①카탈로그 후보 필터(`pedagogy_catalog_filter_enabled` — grade_band 신호 생산자 신설·공집합/소진/적재실패 3중 폴백 reason_code) ②전략 카드(`pedagogy_strategy_card_enabled` — supply() 생성 폴백의 LLM 프롬프트 직전, 무카드 바이트 동일) ③mode_guard 런타임(`mode_guard_runtime_enabled` — 발화 확정 후·톤필터 직전, 위반 발화 미서빙·소크라테스 재질문 결정론 폴백). gate()에 카탈로그 미주입은 정적+런타임 이중 동결(효과≤허용).
+
+**부수 처리**: gate3 봉인(`_WH1_PRIMARY_RUNNER_ALLOWLIST`)은 mode_guard.py의 docstring 참조(비호출) 1건을 사유 주석과 함께 개정 — 봉인 자체의 지시에 따른 정당 개정. api/study.py k_type hunk는 main에 이미 상위 형태로 존재해 이식하지 않음.
+
 ### 2026-08-15 (회수·PED-22): **uqyg79 교수전략 카탈로그 정본 회수 — 04e 설계 문서·YAML 10건·schema·registry 이식. 미병합 고립 6회차 상환** (claude 회수, Kiki "진행")
 
 **배경**: `claude/whymath-pedagogy-review-uqyg79`(head 5dc040b3)의 PED-04·05(구 번호 — main의 동명 태스크와 이중 배정)가 done인데 main에 `04e_pedagogy_strategy_catalog.md`·`data/corpus/pedagogy_strategies_v1/`·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`가 전건 부재였다(2026-08-11 판정서 §2).

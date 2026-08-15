@@ -323,7 +323,7 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 
 | 항목 | 처리 | 태스크 |
 |---|---|---|
-| `mode_guard` 런타임 미배선 — `check_forbidden_modes` 프로덕션 호출 0(하네스·테스트만) | coach 응답 경로에 fail-closed 배선(`filter_tone` 앞·위반 시 폴백+reason_code). 플래그 옵트인·OFF 무변경. "검증 장치를 만들고 배선 확인 없이 완료 선언 금지" 반복 사고 유형의 해소 | PED-07 |
+| `mode_guard` 런타임 미배선 — `check_forbidden_modes` 프로덕션 호출 0(하네스·테스트만) | coach 응답 경로에 fail-closed 배선(`filter_tone` 앞·위반 시 폴백+reason_code). 플래그 옵트인·OFF 무변경. "검증 장치를 만들고 배선 확인 없이 완료 선언 금지" 반복 사고 유형의 해소 | PED-07 → **PED-23 회수**(main 재적용) |
 | coach·study 경로 분기 — 설계용(팩) 축은 2026-07-27 GA 기배선, **실행용 축**(StudentSignals→decide→처치 기록)은 `/study`만 | ① study의 신호 조립을 공용 좌석으로 추출(101KB coach 직수정 회피 — 최고 위험이라 추출 슬라이스 선행) ② coach 턴에서 `decide()` 소비+`record_pedagogy_treatment` | PED-08 |
 | adaptive policy 미승격(표본 미달 exit 1) | **신규 작업 없음** — 승격 게이트(`pedagogy_policy_eval`)가 정직하게 미달을 표기 중. 규칙표 v1이 정본(04d §3.3). 표본은 PED-08 착지로 자연 축적 | — |
 | `preferred_solution_style` 유령 필드(`02_learner_model.md`·`03_content_generation.md`가 여전히 서술) | 04d §2.1 패턴("항상 None인 필드는 착시")의 실측 부기를 02·03에 확산 | PED-11 |
@@ -340,11 +340,11 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 | 공급 오케스트레이션 | `l4/content_supply.py::supply()` | ✅ decide 내부 호출 — 게이트 우회 불가 |
 | 렌더 어댑터 | `l3/render/adapters.py` 5종 | ⚠️ 10종 중 5종(RETRIEVAL·SPACING·INTERLEAVING·SELF_EXPLANATION·VISUALIZATION 미구현 — `LookupError` 정직 실패). 어댑터 추가는 REND-01 후속 실수요 시 |
 | 전략 카탈로그 | `schema/pedagogy_strategy.py`·`pedagogy_strategies_v1/` 10건·`strategy_registry.py` | ✅ 착지(PED-05 — 제거 필드 3계열 부재 이중 동결·enum 1:1 거버넌스) |
-| 후보 필터·전략 카드 | `runtime_selector.narrow_candidates`·`prompt_assembler.attach_strategy_card`·`supply()` 생성 폴백 | ✅ 착지(PED-06 — 플래그 2종 기본 OFF 캔어리·공집합 3중 폴백 reason_code·gate 카탈로그 부재 동결. grade_band 생산자 배선·난이도는 kwargs 축만(생산자 부재)·R2 정밀화는 error_type 순수 경로 생산자 부재로 보류) |
+| 후보 필터·전략 카드 | `runtime_selector.narrow_candidates`·`prompt_assembler.attach_strategy_card`·`supply()` 생성 폴백 | ✅ 착지(PED-23 회수 — 원 PED-06을 main 위 재적용: 플래그 2종 기본 OFF 캔어리·공집합 3중 폴백 reason_code·gate 카탈로그 부재 동결. grade_band 생산자 배선·난이도는 kwargs 축만(생산자 부재)·R2 정밀화는 error_type 순수 경로 생산자 부재로 보류) |
 | 비유 자산 | `concept_content.metaphor` 846행 | ⚠️ 전량 검수 전 — PED-09가 채움·검수 파이프라인(§6) |
 | 비유·예시 생성기 | — | 🆕 PED-09(`l3/pedagogy/` — slot_generator 형제) |
 | 형성평가 | `l3/pedagogy/diag_item_projector.py`(계획·행 빌드·오케스트레이션) | ✅ 착지(PED-10 — atom_probe↔concept_nodes 직접 code 교집합·crosswalk 불필요(§7.2 실측 정정)·select-vs-generate·표본 0=None) |
-| mode_guard | `l4/pedagogy/mode_guard.py`(검출 1종/7모드) | ✅ 런타임 배선(PED-07 — WH-1 primary 톤필터 직전·`mode_guard_runtime_enabled` 옵트인 기본 OFF 캔어리·위반 시 소크라테스 재질문 폴백. GA flip은 측정+사인오프 후 별도) |
+| mode_guard | `l4/pedagogy/mode_guard.py`(검출 1종/7모드) | ✅ 런타임 배선(PED-23 회수 — 원 PED-07을 main 위 재적용: WH-1 primary 톤필터 직전·`mode_guard_runtime_enabled` 옵트인 기본 OFF 캔어리·위반 시 소크라테스 재질문 폴백. PED-16 by-design 미배선 선언은 이 배선으로 해소. GA flip은 측정+사인오프 후 별도) |
 | 처치·효과 측정 | `l2/pedagogy_evidence.py`·`adaptive/effectiveness.py`(지표 2/4 구현) | ✅ 좌석 가동·표본 축적 중(04d §3) |
 | 예측 질문 | `04a §11.3` 도구#10 | ⏸ 설계만 — WH-1 하네스 소관(04e 범위 밖) |
 
@@ -358,6 +358,9 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
   **PED-10**(형성평가 슬롯 채움·done — §7.2 grain 다리 실측 정정 동반)·**PED-11**(문서 부채 정정·done)·
   **PED-12**(adaptive k_type 라벨 맹글링 수정·done)·**PED-13**(coach 목표 해석 다리·신규 — §12 무관·
   §9 배선 갭의 후속).
+- 회수(격리 브랜치 → main 재적용): **PED-22**(카탈로그 정본 — 04e·YAML 10건·schema·registry)·
+  **PED-23**(소비 배선 — 원 PED-06/07 capability를 현행 main 위 재적용: 후보 필터·전략 카드·
+  mode_guard 런타임 배선. PED-16의 by-design 미배선 선언은 PED-23으로 해소됨).
 - 교차링크: `04d`(선택·학습 메커니즘 — 상위 정본)·`03c`(전략 enum·렌더·select-vs-generate)·`04a §11`(전략
   레퍼토리·예측 도구)·`04c`(오개념 reactive)·`docs/data/strategy_graph_v1.md` §4(축 구분)·
   `docs/standards/superhuman_verification_standard.md`(결함주입 강등전 규격).

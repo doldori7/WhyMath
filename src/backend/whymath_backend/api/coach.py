@@ -1898,6 +1898,7 @@ async def _wh1_primary_decision_or(
     session: AsyncSession | None = None,
     theta: float | None = None,
     user_id: uuid.UUID | None = None,
+    pack: PedagogyPack | None = None,
 ) -> PedagogyDecision:
     """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
 
@@ -1913,6 +1914,11 @@ async def _wh1_primary_decision_or(
     `session`·`theta`·`user_id`(REC-02 ②)는 `run_wh1_primary_turn`의 select_probe 후보 공급으로
     그대로 흐른다 — 호출자가 이미 조회한 `server_theta`·`user.user_id`를 재사용할 뿐 신규 쿼리는
     없다(create_session·append_turns 두 핸들러가 이미 계산해 둔 값).
+
+    `pack`(PED-23 회수 — 04e §9): `_pack_for`가 해석해 `decide(pack=)`에 넣은 *같은* 팩 객체를
+    러너로 thread한다 — 러너가 톤필터 직전 금지모드 가드(`mode_guard_runtime_enabled` 옵트인·
+    기본 OFF)에 재사용(위반 발화 미서빙·소크라테스 재질문 폴백). None(무팩·플래그 OFF 해석)이면
+    가드 무관.
     """
     try:
         utterance = await run_wh1_primary_turn(
@@ -1928,6 +1934,7 @@ async def _wh1_primary_decision_or(
             session=session,
             theta=theta,
             user_id=user_id,
+            pack=pack,
         )
     except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
         logger.warning(
@@ -2201,6 +2208,7 @@ async def create_session(
             session=session,
             theta=server_theta,
             user_id=user.user_id,
+            pack=pack,  # PED-23: decide에 넣은 같은 팩 재사용 — 러너의 금지모드 가드(옵트인).
         )
 
     now = datetime.now(timezone.utc)
@@ -2562,6 +2570,7 @@ async def append_turns(
             session=session,
             theta=server_theta,
             user_id=user.user_id,
+            pack=pack,  # PED-23: create_session과 동형 — decide와 같은 팩을 가드에 재사용.
         )
 
     current_total = dialogue.total_turns or 0

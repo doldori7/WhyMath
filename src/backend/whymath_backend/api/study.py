@@ -51,6 +51,7 @@ from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.irt import theta_to_mastery_proxy
 from whymath_backend.l2.learner_state import get_state
@@ -62,7 +63,7 @@ from whymath_backend.l2.pedagogy_evidence import (
 )
 from whymath_backend.l4.content_supply import get_process_tally, supply
 from whymath_backend.l4.lthc import mastery_to_level
-from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals
+from whymath_backend.l4.pedagogy.runtime_selector import StudentSignals, grade_to_band
 from whymath_backend.schema.enums import KnowledgeType
 
 router = APIRouter(prefix="/v1/me/objectives", tags=["study"])
@@ -157,7 +158,14 @@ async def _build_signals(
     진단이 없거나(신규 학생) 해당 개념이 진단 목록에 없으면 숙달 축은 비운 채로 둔다 — 없는 값을
     기본치로 채우면 선택기가 근거 없는 판단을 하게 된다(PED-02가 세운 "가짜 통과 금지" 규약).
     Polya 단계·턴 수·힌트는 대화 세션 축이라 여기서는 기본값이다(공급 진입 = 시도 전).
+
+    `grade_band`(PED-23 회수 — 04e §4 카탈로그 후보 필터 축)는 `UserProfile.grade`(10~14 —
+    `schema/user.py` 계약)에서 `grade_to_band` 순수 변환으로 파생한다("생산자 먼저" — 04d §2.1).
+    프로필 미존재·grade 미기입이면 None으로 두어 필터의 학년 축이 조용히 스킵된다(필수화 금지).
     """
+    profile = await session.get(UserProfile, user_id)
+    grade_band = grade_to_band(profile.grade if profile is not None else None)
+
     state = await get_state(session, user_id)
     bkt_mastery = state.mastery.get(concept_code)
     irt_theta = state.domain_abilities.get(concept_code)
@@ -170,6 +178,7 @@ async def _build_signals(
         mastery_level=mastery_to_level(mastery) if mastery is not None else None,
         bkt_mastery=bkt_mastery,
         irt_theta=irt_theta,
+        grade_band=grade_band,
     )
 
 
