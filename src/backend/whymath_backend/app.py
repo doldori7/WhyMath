@@ -116,6 +116,7 @@ from whymath_backend.api.auth import (
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
+from whymath_backend.api.dsl import router as dsl_router
 from whymath_backend.api.gating import router as gating_router
 from whymath_backend.api.interactions import router as interactions_router
 from whymath_backend.api.me import router as me_router
@@ -1112,5 +1113,6 @@ def create_app(
     app.include_router(ocr_router)
     app.include_router(speech_router)
     app.include_router(reports_router)
+    app.include_router(dsl_router)
 
     return app
