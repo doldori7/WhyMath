@@ -91,9 +91,13 @@ class TestSlotDemand:
         assert demand.filled_by_type is None
 
     def test_pilot_unit_ordered_total(self) -> None:
-        """파일럿 소단원 발주 40점(팩 required_slots × 4목표 + variation 오버라이드) 동결."""
+        """파일럿 소단원 발주 43점(팩 required_slots × 4목표 + variation 오버라이드) 동결.
+
+        2026-08-16 PED-30: MODELING 팩 보강(plan_skeleton 2 + result_interpretation 1 추가)으로
+        40 → 43. 의도된 데이터 보강이며, 이후 변경은 다시 이 리터럴을 깨 검토를 강제한다.
+        """
         demand = measure_slot_demand()
-        assert demand.ordered_total == 40
+        assert demand.ordered_total == 43
         assert demand.ordered_by_type["example_pair"] == 4
         assert demand.ordered_by_type["problem_variation"] == 3  # OBJ-04 오버라이드 반영
 

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - "data/corpus/pedagogy_packs_v1/**"
   - "tests/backend/schema/**"
-session: null
+session: claude/backend-ped-30-stub-packs-f01c1f
 notes: "교수학 데이터 검토(2026-08-15) 후속 — 7유형 중 4유형이 stub이라 고등 핵심 영역(기하·확률통계·수학과제 탐구)이 데이터적으로 미커버. _provenance.json counts 갱신도 동반."
-updated: 2026-08-15
+updated: 2026-08-16
