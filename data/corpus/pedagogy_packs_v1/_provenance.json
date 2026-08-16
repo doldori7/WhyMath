@@ -9,7 +9,7 @@
   },
   "source_citation": "출처: WhyMath 자체 저작 — 교수법 방법론 v2 설계 기반(7 지식유형 교수법 팩).",
   "license_notice": "WHYMATH_ORIGINAL — 와이매스 자체 저작물(소크라테스 발문·페이딩·금지 모드·필요 슬롯·기본 증거 규격). 검정교과서·평가원·EBS 본문 미포함(팩은 특정 주제에 묶이지 않는 유형 불변 교수법 데이터).",
-  "note": "7 지식유형 팩 = 3 full(CONCEPT·PROCEDURE·REPRESENT) + 4 stub(PROOF·MODELING·SPATIAL·STOCHASTIC).",
+  "note": "7 지식유형 팩 = 3 full(CONCEPT·PROCEDURE·REPRESENT) + 4 stub(PROOF·MODELING·SPATIAL·STOCHASTIC). 2026-08-16 PED-30: stub 4종 풍성화 — fading_schedule 충족·required_slots 보강·교수학 근거 명시(PROOF 증명 스캐폴딩·MODELING Polya 4단계·SPATIAL van Hiele 수준·STOCHASTIC 시뮬레이션 직관). is_stub 승격은 팩별 사람 검수 증적 전제로 유지(AI 자기승인 금지).",
   "post_extraction": [
     "팩당 1 YAML(k_type 하나). schema PedagogyPack이 형식·교수학 불변식 게이트({domain_example} 자리표시자 필수·주제 명사 금지·forbidden_modes 폐쇄 어휘·required_slots 비어있지 않음).",
     "backend 로더(l1/pedagogy/pack_loader)가 k_type PK 멱등 upsert로 pedagogy_pack에 적재(rename·해석 seam 0·순수 RDB sync)."

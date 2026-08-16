@@ -3,16 +3,19 @@ pack_version: 1
 api_version: "1.0"
 is_stub: true
 socratic_prompt: |
-  학생이 {domain_example}의 논증을 스스로 세우도록 이끈다.
-  ① 증명 조각을 순서대로 배열하게 한다.
-  ② 빈칸을 채워 완성하게 한다.
-  ③ 전체를 직접 작성하게 한다.
+  학생이 {domain_example}의 논증을 스스로 세우도록 이끈다(증명 스캐폴딩 — 도움을 단계적으로 거둔다).
+  ① 명제에서 가정과 결론을 먼저 분리하게 한다.
+  ② 증명 조각을 순서대로 배열하게 한다.
+  ③ 빈칸을 채워 완성하게 하고, 오류가 심어진 논증을 비평하게 한다.
+  ④ 전체를 직접 작성하게 한다.
   완성된 논증을 따라 쓰기만 하지 않는다.
-fading_schedule: null
+fading_schedule: {arrange: 2, completion: 2, critique: 1, solo: 2}
 forbidden_modes: [COPY_COMPLETED_PROOF]
 required_slots:
+  - {type: assumption_conclusion_split, count: 1}
   - {type: proof_fragment_order, count: 2}
   - {type: blank_proof, count: 2}
   - {type: error_proof_critique, count: 2}
+  - {type: solo_proof, count: 2}
   - {type: diag_item, count: 2}
-default_evidence: {kind: PROOF_COMPLETENESS, judge: claude, rubric_axes: 3}
+default_evidence: {kind: PROOF_COMPLETENESS, judge: claude, rubric_axes: 3, solo_required: true}
