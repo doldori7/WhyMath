@@ -337,6 +337,36 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-16 (규칙·LLM 포트폴리오): **모델·프로바이더 포트폴리오 개방 원칙 — "불가 목록"이 아니라 실측 기반 상시 재평가. CLAUDE.md ✅절대원칙·AGENTS.md 스택 표 반영** (Kiki 지시, claude 등재)
+
+**결정**: 신규 LLM 프로바이더(OpenRouter 등)·신규 모델(DeepSeek 계열 등)의 도입을 **전제로 배제하지 않는다**. WhyMath는 AI 발전과 비용 구조의 변화에 유연하고 현명하게 대응한다 — 모델·프로바이더 포트폴리오는 고정 집합이 아니라 **측정 기반 개방 목록**이다.
+
+**배경·사고 경위**: 2026-08-15 외부 EOS 설계안("97. 자동 콘텐츠 생성 파이프라인") 아키텍처 검토에서, 제안서의 OpenRouter/DeepSeek 언급을 "현행 스택 표에 없는 신규 프로바이더라 불가"로 판정했으나 Kiki가 "현실적이지 않다 — 우리 시스템은 AI 발전과 비용에 대해 유연하고 현명하게 상황에 맞춰 접근한다"로 정정. 이 원칙을 규칙으로 등재한다.
+
+**경계 (개방 ≠ 무절차)**:
+- 채택·교체 조건 3건: ① 라우터(`l3/router.py`) 경유 배선 — 직접 호출 금지는 불변 ② 품질·지연·비용 실측 근거(2026-05-20 태스크 인지 실측 선례 형식) ③ 본 결정 로그 기재.
+- **검증 계약은 프로바이더와 무관하게 불변**: SymPy 단일 권위·학생 제공 전 검증·Langfuse 추적·미성년자 데이터 정책·저작권 레일은 모델이 바뀌어도 유지된다.
+- 현행 배선(claude-sonnet-4-6·claude-opus-4-7 + Ollama 로컬 매트릭스)은 이 원칙의 *현재 상태*이지 *상한*이 아니다.
+
+**반영**: CLAUDE.md ✅절대원칙·LLM 사용 항목 신설 + 기술 스택 표 주석, AGENTS.md 기술 스택 표 LLM 행.
+
+### 2026-08-15 (회수·PED-23): **교수전략 카탈로그 소비 배선 회수 — 후보 필터·전략 카드·mode_guard 런타임 fail-closed. PED-16 "by-design 미배선" 선언 해소** (claude 회수, Kiki "진행")
+
+**배경**: uqyg79의 구 PED-06(842ed2a5)·PED-07(2874e7b0)이 done인데 main 미착지. PED-22(카탈로그 정본)가 먼저 착지한 뒤 소비 배선을 회수했다(좌석만 두고 끝내지 않는다 — VIZ-06 교훈).
+
+**현행 정합 판정(acceptance ②)**: main의 선행 가드 2종(`gate()` 사전 축)과 원 구현(선택 입력 필터·프롬프트 카드·사후 문면 가드)은 축이 달라 기능 중복 0 — "현행 위 재구현" 채택. 유일한 상충은 PED-16(2026-08-10)의 "mode_guard by-design 미배선" 선언 — 그 근거("WH-1 루프가 PedagogyPack을 참조하지 않아 대형 작업")는 coach가 decide에 넣은 같은 팩 객체를 러너로 thread하면 해소되고, PED-16이 명시한 재검토 조건을 PED-23이 충족했으므로 선언을 **해소 부기**로 갱신(파기 아님).
+
+**배선 3좌석(전부 옵트인 플래그 기본 OFF)**: ①카탈로그 후보 필터(`pedagogy_catalog_filter_enabled` — grade_band 신호 생산자 신설·공집합/소진/적재실패 3중 폴백 reason_code) ②전략 카드(`pedagogy_strategy_card_enabled` — supply() 생성 폴백의 LLM 프롬프트 직전, 무카드 바이트 동일) ③mode_guard 런타임(`mode_guard_runtime_enabled` — 발화 확정 후·톤필터 직전, 위반 발화 미서빙·소크라테스 재질문 결정론 폴백). gate()에 카탈로그 미주입은 정적+런타임 이중 동결(효과≤허용).
+
+**부수 처리**: gate3 봉인(`_WH1_PRIMARY_RUNNER_ALLOWLIST`)은 mode_guard.py의 docstring 참조(비호출) 1건을 사유 주석과 함께 개정 — 봉인 자체의 지시에 따른 정당 개정. api/study.py k_type hunk는 main에 이미 상위 형태로 존재해 이식하지 않음.
+### 2026-08-15 (회수·PED-24): **uqyg79 비유·예시 생성기 + diag_item 슬롯 투영 회수 — 구 PED-09(6a367c5f)·PED-10(3dcb3e93) 이식. 미병합 고립 6회차 상환 2번째** (claude 회수)
+
+**배경**: 같은 격리 브랜치의 구 PED-09(비유·예시 생성기 4종 + analogy_fidelity_eval 강등전)·PED-10(diag_item_projector)이 main에 전건 부재였다(PED-22 후속 회수 — 번호 매핑: 구 PED-09/10→PED-24).
+
+**이식(머지 아님)**: 신규 파일만 파일 단위 이식 — `l3/pedagogy/analogy_generator.py`·`analogy_checker.py`·`analogy_demand.py`·`example_generator.py`·`diag_item_projector.py` + `harness/analogy_fidelity_eval.py` + 테스트 7종(95건) + `l3/pedagogy/__init__.py` docstring + ci.yml backend 잡에 analogy_fidelity 게이트 스텝 추가(구 커밋의 배선이 main에 없었음). seam 드리프트 실측: 의존 파일 13종 중 unit_compiler.py만 변경(docstring 추가뿐·시그니처 동일)이라 코드 수정 없이 그대로 이식됐다. 04e §7.2 grain 다리 정정·§10 표는 PED-22가 이미 회수한 04e에 포함돼 있어 문서 추가 수정 없음.
+
+**헌법 검합**: 라우터 경유(`Router().route` + 주입 `LLMProvider.generate` — llm_generator 선례 동형·직접 SDK 호출 0)·산출 DRAFT + prescreen→review 상태기계 함수 재사용(새 상태기계·테이블 0)·강등전은 Wilson 상한 CLI exit 0/1(점추정 없음·`--control` 널 검출기 대조 exit 1 실측)·표본 0은 None(0% 위장 금지). 라이브 LLM 채움은 Phaiakes9 런북 소관(정직한 공백 — 구 커밋과 동일).
+
 ### 2026-08-15 (회수·PED-22): **uqyg79 교수전략 카탈로그 정본 회수 — 04e 설계 문서·YAML 10건·schema·registry 이식. 미병합 고립 6회차 상환** (claude 회수, Kiki "진행")
 
 **배경**: `claude/whymath-pedagogy-review-uqyg79`(head 5dc040b3)의 PED-04·05(구 번호 — main의 동명 태스크와 이중 배정)가 done인데 main에 `04e_pedagogy_strategy_catalog.md`·`data/corpus/pedagogy_strategies_v1/`·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`가 전건 부재였다(2026-08-11 판정서 §2).

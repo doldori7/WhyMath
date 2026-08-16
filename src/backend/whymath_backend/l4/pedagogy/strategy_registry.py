@@ -18,9 +18,10 @@ DB-free)로 `data/corpus/pedagogy_strategies_v1/*.yaml`(전략 10종·`PedagogyS
 계약이 실재하지만, 전략 카탈로그는 enum 10종과 1:1 완비가 거버넌스 테스트로 동결된 자산이라
 미등록 조회는 곧 결함(오탈자·코퍼스 누락)이며 조용히 넘어가면 안 된다.
 
-⚠️ 범위(PED-05): 이 모듈은 **카탈로그 자산의 조회까지만** 제공한다. `runtime_selector`(select
-후보 필터)·`prompt_assembler`(전략 카드) 소비 배선은 PED-06 소관이며, 카탈로그가 `gate()` 입력에
-들어가면 안 된다는 불변식(04e §4 ②)도 PED-06에서 동결한다.
+⚠️ 범위: 이 모듈은 **카탈로그 자산의 조회까지만** 제공한다. 소비 배선(`runtime_selector`의
+select 후보 필터·`prompt_assembler` 전략 카드)은 **PED-23(회수 — 원 PED-06 재적용)이 착지**
+했고, 카탈로그가 `gate()` 입력에 들어가면 안 된다는 불변식(04e §4 ②)도 같은 태스크의 테스트
+(`tests/backend/l4/test_catalog_consumption.py`)가 동결한다.
 """
 
 from __future__ import annotations

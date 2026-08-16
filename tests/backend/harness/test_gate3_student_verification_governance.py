@@ -353,6 +353,10 @@ _WH1_PRIMARY_RUNNER_ALLOWLIST: frozenset[str] = frozenset(
         # 학생 노출 표면이 아니라 측정 하네스(hermetic·FakeProvider)이며, 우회 경로가 아니라
         # 봉인 대상 경로 자체를 측정하는 소비자라 의식적으로 등재한다(2026-07-21 리뷰).
         "harness/coach_prose_leak_eval.py",
+        # PED-23(회수): 사후 가드 정본 모듈의 docstring 참조만(비호출) — mode_guard가 실제로
+        # 호출되는 좌석은 여전히 `harness/wh1_primary.py` 톤필터 직전 1곳뿐이다(가드 배선 자체는
+        # 그 안쪽 계층이라 새 학생 표면이 아님 — 봉인 ③의 취지(우회 배선 차단)와 무관).
+        "l4/pedagogy/mode_guard.py",
     }
 )
 # 검증 게이트·톤필터 경유 마커 — wh1_primary.py가 이 둘을 잃으면 발화가 게이트를 우회한 것이다.

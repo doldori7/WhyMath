@@ -26,28 +26,24 @@
 것만 검사한다.
 
 ────────────────────────────────────────────────────────────────────────────
-집행 지점 판정 — PED-16(2026-08-10): by-design 미배선으로 확정
+집행 지점 판정 — PED-16(2026-08-10) by-design 미배선 확정 → PED-23(회수) 옵트인 배선 복원
 ────────────────────────────────────────────────────────────────────────────
-이 함수는 라이브 코치 응답 경로 **어디에도 배선돼 있지 않다** — 호출자는
-`harness/pedagogy_pack_fidelity_eval.py`(오프라인 결함주입 측정·CI 상시) 하나뿐이다. 이는
-누락이 아니라 **의도적 선언**이다.
+PED-16 당시 이 함수는 라이브 코치 응답 경로 어디에도 배선돼 있지 않았다 — 호출자가
+`harness/pedagogy_pack_fidelity_eval.py`(오프라인 결함주입 측정·CI 상시) 하나뿐이었다. 근거는
+"실제 생성→서빙 경로(WH-1 루프 `harness/wh1_primary.py`)가 `PedagogyPack`을 참조하지 않아
+배선하려면 팩 주입을 WH-1 루프 전체에 새로 도입해야 한다"는 것이었고, 재검토 조건으로 "WH-1
+루프가 PedagogyPack을 참조하게 되는 시점"을 명시했다.
 
-  - **근거**: `/v1/coach`(`api/coach.py`)의 `CoachResponse`는 "무엇을 프롬프트할지"(system·prompt·
-    hint_level 등)만 반환하고 LLM이 생성한 실제 응답 텍스트 필드가 없다 — 이 가드는 *응답 문면*을
-    검사하는 함수인데 이 엔드포인트엔 검사할 문면 자체가 없다. 실제 생성→서빙 경로는 WH-1 루프
-    (`harness/wh1_primary.py`, `filter_tone`이 노출 직전 마지막 방어선으로 실배선)인데, 이 루프는
-    `PedagogyPack`을 전혀 참조하지 않는다(grep 0건) — 여기 배선하려면 PedagogyPack 주입 자체를
-    WH-1 루프 전체에 새로 도입해야 하는 별도 대형 작업이라 이 태스크 범위를 넘는다.
-  - **완화 요인**: 사전(pre-hoc) 가드는 실재한다 — `runtime_selector.py`의 `forbids_worked_first`가
-    팩이 `WORKED_EXAMPLE_FIRST`를 금지하면 전략 *선택* 시점에 이미 강등한다. 이 가드가 규칙
-    검출기를 가진 유일한 모드(`RULE_DETECTABLE_MODES`)가 바로 `WORKED_EXAMPLE_FIRST`이므로,
-    사후 문면 가드 부재의 실질 위험은 사전 축에서 이미 흡수되고 있다.
-  - **재검토 조건**: WH-1 루프(`harness/wh1_primary.py`)가 `PedagogyPack`을 참조하게 되는 시점 —
-    그때는 `check_forbidden_modes`를 노출 직전(`filter_tone` 인근)에 fail-closed로 배선하는 것을
-    재검토한다.
-  - **불변**: 오프라인 결함주입 측정(`pedagogy_pack_fidelity_eval`)은 그대로 CI 상시 유지 — 이
-    가드의 규칙 검출 정확도 자체는 계속 측정된다.
-    상세: `docs/architecture/dsl_integration_gap_review.md` §2-⑤.
+그러나 격리 브랜치의 원 구현(PED-07)은 이미 그 선결 조건을 충족해 두고 있었다 — coach가
+`decide(pack=)`에 넣은 *같은* 팩 객체를 `run_wh1_primary_turn(pack=)`으로 thread하면 러너
+전체 도입 없이 톤필터 직전 1좌석 배선으로 끝난다. **PED-23이 그 capability를 현행 main 위에
+재적용했다**: `mode_guard_runtime_enabled`(기본 False·옵트인 캔어리) ∧ 팩 주입 시 발화 확정
+후·`filter_tone` 직전에 이 가드가 돌고, 위반 발화는 서빙하지 않고 `fallback_reply_for`의
+소크라테스 재질문(결정론 템플릿·기존 EXAMPLE_QUESTION 자산)으로 대체한다(fail-closed·
+reason_code 구조화 로그). PED-16의 완화 요인(사전 가드 `runtime_selector.forbids_worked_first`)은
+불변으로 유지되며, 오프라인 결함주입 측정(`pedagogy_pack_fidelity_eval`)도 그대로 CI 상시다.
+상세: `docs/architecture/dsl_integration_gap_review.md` §2-⑤·`docs/architecture/
+04e_pedagogy_strategy_catalog.md` §9.
 """
 
 from __future__ import annotations
@@ -56,6 +52,7 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Protocol
 
+from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
 from whymath_backend.schema.pedagogy_pack import FORBIDDEN_MODE_VOCAB, PedagogyPack
 
 # 가드 컨텍스트 — 검출기에 넘길 선택적 부가 정보 백(문항 메타·k_type 등). v1 검출기는 미사용이나
@@ -148,6 +145,33 @@ RULE_DETECTABLE_MODES: frozenset[str] = frozenset(FORBIDDEN_MODE_DETECTORS)
 DEFERRED_MODES: frozenset[str] = FORBIDDEN_MODE_VOCAB - RULE_DETECTABLE_MODES
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 폴백 재질문 — 위반 발화를 대체하는 안전한 소크라테스식 결정론 템플릿 (PED-23 회수)
+# ──────────────────────────────────────────────────────────────────────────
+# 위반 모드 → 소크라테스 재질문 카테고리. WORKED_EXAMPLE_FIRST(정의·정답 단정)의 안전한 재진입은
+# 학생의 현재 이해 지점을 *묻는* 것(명료화) — 04d §2.2 "차단 시 SOCRATIC 강등(말하기 대신 묻기)"
+# 선례의 사후 가드판. 미등록 모드(deferred·v1 검출기 없음)는 방어적 기본값 CLARIFICATION —
+# 어떤 위반이든 "학생에게 되묻기"가 항상 안전한 강등이다(전량 기존 자산·신규 프로즈 0).
+_FALLBACK_CATEGORY: dict[str, SocraticCategory] = {
+    "WORKED_EXAMPLE_FIRST": SocraticCategory.CLARIFICATION,
+}
+_DEFAULT_FALLBACK_CATEGORY = SocraticCategory.CLARIFICATION
+
+
+def fallback_reply_for(mode: str) -> str:
+    """위반 모드 → 안전한 소크라테스식 재질문(결정론 템플릿) — 위반 발화의 대체재.
+
+    정본: `docs/architecture/04e_pedagogy_strategy_catalog.md` §9(런타임 배선)·04d §2.2
+    (완전예제 차단 시 SOCRATIC 강등 선례). 런타임 가드가 위반을 검출하면 호출자는 그 발화를
+    학생에게 보내지 않고(fail-closed) 이 함수의 재질문으로 *대체*한다. 반환값은
+    `l4/socratic/categories.py::EXAMPLE_QUESTION`(스펙 정본 예시 질문)의 기존 자산 그대로다 —
+    새 학생-대면 프로즈를 만들지 않는다(교수학 검수 통과 자산 재사용). 순수·전역함수
+    (미정의 모드에도 기본 카테고리로 항상 안전한 문자열 반환·예외 0).
+    """
+    category = _FALLBACK_CATEGORY.get(mode, _DEFAULT_FALLBACK_CATEGORY)
+    return EXAMPLE_QUESTION[category]
+
+
 def check_forbidden_modes(
     pack: PedagogyPack, reply: str, *, context: GuardContext | None = None
 ) -> str | None:
@@ -177,4 +201,5 @@ __all__ = [
     "GuardContext",
     "ModeDetector",
     "check_forbidden_modes",
+    "fallback_reply_for",
 ]
