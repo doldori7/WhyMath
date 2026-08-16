@@ -10,6 +10,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
 from whymath_backend.harness.problem_corpus_rephrase import main, run_corpus_rephrase
 from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
@@ -171,8 +173,16 @@ class TestRunCorpusRephrase:
 
 
 class TestCliEntry:
-    def test_main_without_live_provider_fails_closed(self, tmp_path: Path, capsys: object) -> None:
-        # provider 미주입(이 환경 LLM 0) → 전건 provider 예외 → unchanged, exit 0(fail-closed).
+    def test_main_without_live_provider_fails_closed(
+        self, tmp_path: Path, capsys: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # fail-closed 계약(전건 provider 예외 → unchanged)은 환경 무관이어야 한다.
+        # [OPS-44 사고 경위] "이 환경 LLM 0" 전제였으나 Kiki 머신은 Ollama가 상시 기동이라
+        # 실제 변형이 일어나 깨졌다 — provider 해소를 예외로 강제 차단해 전제를 코드로 봉인.
+        def _blocked(self: QuestionRephraser) -> None:
+            raise RuntimeError("테스트 강제 차단 — 라이브 provider 해소 금지")
+
+        monkeypatch.setattr(QuestionRephraser, "_resolve_provider", _blocked)
         src = _seed_corpus(tmp_path)
         out = tmp_path / "rephrased.jsonl"
         code = main(["--in", str(src), "--out", str(out)])

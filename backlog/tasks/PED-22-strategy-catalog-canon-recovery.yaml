@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -17,7 +17,8 @@ acceptance:
   - "④ provenance 게이트 통과 — 카탈로그 사이드카(_provenance.json)에 pool 필드가 빠져 원 브랜치 CI가 깨진 전력이 있다(5dc040b3이 그 수정). 이식 후 provenance_audit을 실제로 돌려 exit 0을 확인한다"
   - "⑤ 검증 재수행 — 원 커밋의 7,621 passed 증적을 승계하지 않는다. CI 동일 명령·판정은 exit code·전체 스위트 실행 후에만 '회귀 없음'을 말한다"
   - "⑥ 범위 — 소비 배선(PED-06/07)은 PED-18 소관. 이 태스크는 정본·데이터·registry 좌석까지다. 좌석만 옮기고 소비자가 없으면 계약이 허공에 뜨므로 후속을 반드시 잇는다(VIZ-06 교훈)"
-artifacts: []
+artifacts:
+  - "PR #831 — CI 전 잡 green(backend lint·type·test·실 PG 마이그레이션 통합·provenance·harness-integrity 포함), commit a6394c1c, 로컬 전체 스위트 10,092 passed(seed 2435175126)"
 paths:
   - "data/corpus/pedagogy_strategies_v1/**"
   - src/backend/whymath_backend/schema/pedagogy_strategy.py
@@ -25,4 +26,4 @@ paths:
   - "docs/architecture/*"
 session: null
 notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 claude/whymath-pedagogy-review-uqyg79 head=5dc040b3. 원 태스크 PED-04-strategy-gap-design-doc(68b04481)·PED-05-strategy-catalog-data(d8e38646). claude/whymath-teaching-strategy-enfkqt는 이 브랜치의 진부분집합(공통 조상 대조 실측)이라 별도 회수 불요."
-updated: 2026-08-11
+updated: 2026-08-15

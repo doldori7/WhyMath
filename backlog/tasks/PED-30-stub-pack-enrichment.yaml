@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-30-stub-pack-enrichment
+title: "stub 교수법 팩 4종 풍성화 (PROOF·MODELING·SPATIAL·STOCHASTIC) — is_stub 승격 전제 충족"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① DSL 스키마 동결 준수 — 필드·어휘 추가 금지(YAGNI·test_pedagogy_dsl_schema_freeze.py). 기존 9필드(socratic_prompt·fading_schedule·forbidden_modes·required_slots·default_evidence 등)만 채운다"
+  - "② 각 팩의 교수학 근거 명시 — PROOF(증명 스캐폴딩)·MODELING(Polya 4단계)·SPATIAL(van Hiele 수준)·STOCHASTIC(시뮬레이션 직관)의 fading_schedule·required_slots·default_evidence를 근거와 함께 보강"
+  - "③ is_stub=false 승격은 팩별 사람 검수 증적 전제 — AI 자기승인 금지(KG-02와 같은 축). 이 태스크 완료 조건은 데이터 보강+게이트 통과까지이며 승격은 별도 판정"
+  - "④ 형식 게이트 통과 — PedagogyPack 불변식({domain_example} 자리표시자·주제 명사 블록리스트·FORBIDDEN_MODE_VOCAB·required_slots 비어있지 않음) + provenance_audit exit 0 + 전체 스위트 green"
+artifacts:
+  - "#839"
+paths:
+  - "data/corpus/pedagogy_packs_v1/**"
+  - "tests/backend/schema/**"
+session: null
+notes: "교수학 데이터 검토(2026-08-15) 후속 — 7유형 중 4유형이 stub이라 고등 핵심 영역(기하·확률통계·수학과제 탐구)이 데이터적으로 미커버. _provenance.json counts 갱신도 동반."
+updated: 2026-08-16

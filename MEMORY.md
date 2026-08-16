@@ -337,6 +337,76 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-16 (규칙·LLM 포트폴리오): **모델·프로바이더 포트폴리오 개방 원칙 — "불가 목록"이 아니라 실측 기반 상시 재평가. CLAUDE.md ✅절대원칙·AGENTS.md 스택 표 반영** (Kiki 지시, claude 등재)
+
+**결정**: 신규 LLM 프로바이더(OpenRouter 등)·신규 모델(DeepSeek 계열 등)의 도입을 **전제로 배제하지 않는다**. WhyMath는 AI 발전과 비용 구조의 변화에 유연하고 현명하게 대응한다 — 모델·프로바이더 포트폴리오는 고정 집합이 아니라 **측정 기반 개방 목록**이다.
+
+**배경·사고 경위**: 2026-08-15 외부 EOS 설계안("97. 자동 콘텐츠 생성 파이프라인") 아키텍처 검토에서, 제안서의 OpenRouter/DeepSeek 언급을 "현행 스택 표에 없는 신규 프로바이더라 불가"로 판정했으나 Kiki가 "현실적이지 않다 — 우리 시스템은 AI 발전과 비용에 대해 유연하고 현명하게 상황에 맞춰 접근한다"로 정정. 이 원칙을 규칙으로 등재한다.
+
+**경계 (개방 ≠ 무절차)**:
+- 채택·교체 조건 3건: ① 라우터(`l3/router.py`) 경유 배선 — 직접 호출 금지는 불변 ② 품질·지연·비용 실측 근거(2026-05-20 태스크 인지 실측 선례 형식) ③ 본 결정 로그 기재.
+- **검증 계약은 프로바이더와 무관하게 불변**: SymPy 단일 권위·학생 제공 전 검증·Langfuse 추적·미성년자 데이터 정책·저작권 레일은 모델이 바뀌어도 유지된다.
+- 현행 배선(claude-sonnet-4-6·claude-opus-4-7 + Ollama 로컬 매트릭스)은 이 원칙의 *현재 상태*이지 *상한*이 아니다.
+
+**반영**: CLAUDE.md ✅절대원칙·LLM 사용 항목 신설 + 기술 스택 표 주석, AGENTS.md 기술 스택 표 LLM 행.
+
+### 2026-08-15 (회수·PED-23): **교수전략 카탈로그 소비 배선 회수 — 후보 필터·전략 카드·mode_guard 런타임 fail-closed. PED-16 "by-design 미배선" 선언 해소** (claude 회수, Kiki "진행")
+
+**배경**: uqyg79의 구 PED-06(842ed2a5)·PED-07(2874e7b0)이 done인데 main 미착지. PED-22(카탈로그 정본)가 먼저 착지한 뒤 소비 배선을 회수했다(좌석만 두고 끝내지 않는다 — VIZ-06 교훈).
+
+**현행 정합 판정(acceptance ②)**: main의 선행 가드 2종(`gate()` 사전 축)과 원 구현(선택 입력 필터·프롬프트 카드·사후 문면 가드)은 축이 달라 기능 중복 0 — "현행 위 재구현" 채택. 유일한 상충은 PED-16(2026-08-10)의 "mode_guard by-design 미배선" 선언 — 그 근거("WH-1 루프가 PedagogyPack을 참조하지 않아 대형 작업")는 coach가 decide에 넣은 같은 팩 객체를 러너로 thread하면 해소되고, PED-16이 명시한 재검토 조건을 PED-23이 충족했으므로 선언을 **해소 부기**로 갱신(파기 아님).
+
+**배선 3좌석(전부 옵트인 플래그 기본 OFF)**: ①카탈로그 후보 필터(`pedagogy_catalog_filter_enabled` — grade_band 신호 생산자 신설·공집합/소진/적재실패 3중 폴백 reason_code) ②전략 카드(`pedagogy_strategy_card_enabled` — supply() 생성 폴백의 LLM 프롬프트 직전, 무카드 바이트 동일) ③mode_guard 런타임(`mode_guard_runtime_enabled` — 발화 확정 후·톤필터 직전, 위반 발화 미서빙·소크라테스 재질문 결정론 폴백). gate()에 카탈로그 미주입은 정적+런타임 이중 동결(효과≤허용).
+
+**부수 처리**: gate3 봉인(`_WH1_PRIMARY_RUNNER_ALLOWLIST`)은 mode_guard.py의 docstring 참조(비호출) 1건을 사유 주석과 함께 개정 — 봉인 자체의 지시에 따른 정당 개정. api/study.py k_type hunk는 main에 이미 상위 형태로 존재해 이식하지 않음.
+### 2026-08-15 (회수·PED-24): **uqyg79 비유·예시 생성기 + diag_item 슬롯 투영 회수 — 구 PED-09(6a367c5f)·PED-10(3dcb3e93) 이식. 미병합 고립 6회차 상환 2번째** (claude 회수)
+
+**배경**: 같은 격리 브랜치의 구 PED-09(비유·예시 생성기 4종 + analogy_fidelity_eval 강등전)·PED-10(diag_item_projector)이 main에 전건 부재였다(PED-22 후속 회수 — 번호 매핑: 구 PED-09/10→PED-24).
+
+**이식(머지 아님)**: 신규 파일만 파일 단위 이식 — `l3/pedagogy/analogy_generator.py`·`analogy_checker.py`·`analogy_demand.py`·`example_generator.py`·`diag_item_projector.py` + `harness/analogy_fidelity_eval.py` + 테스트 7종(95건) + `l3/pedagogy/__init__.py` docstring + ci.yml backend 잡에 analogy_fidelity 게이트 스텝 추가(구 커밋의 배선이 main에 없었음). seam 드리프트 실측: 의존 파일 13종 중 unit_compiler.py만 변경(docstring 추가뿐·시그니처 동일)이라 코드 수정 없이 그대로 이식됐다. 04e §7.2 grain 다리 정정·§10 표는 PED-22가 이미 회수한 04e에 포함돼 있어 문서 추가 수정 없음.
+
+**헌법 검합**: 라우터 경유(`Router().route` + 주입 `LLMProvider.generate` — llm_generator 선례 동형·직접 SDK 호출 0)·산출 DRAFT + prescreen→review 상태기계 함수 재사용(새 상태기계·테이블 0)·강등전은 Wilson 상한 CLI exit 0/1(점추정 없음·`--control` 널 검출기 대조 exit 1 실측)·표본 0은 None(0% 위장 금지). 라이브 LLM 채움은 Phaiakes9 런북 소관(정직한 공백 — 구 커밋과 동일).
+
+### 2026-08-15 (회수·PED-22): **uqyg79 교수전략 카탈로그 정본 회수 — 04e 설계 문서·YAML 10건·schema·registry 이식. 미병합 고립 6회차 상환** (claude 회수, Kiki "진행")
+
+**배경**: `claude/whymath-pedagogy-review-uqyg79`(head 5dc040b3)의 PED-04·05(구 번호 — main의 동명 태스크와 이중 배정)가 done인데 main에 `04e_pedagogy_strategy_catalog.md`·`data/corpus/pedagogy_strategies_v1/`·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`가 전건 부재였다(2026-08-11 판정서 §2).
+
+**이식(머지 아님·acceptance ③)**: 신규 파일만 파일 단위로 이식 — 04e 문서·카탈로그 YAML 10건+`_provenance.json`(pool 필드 포함·5dc040b3 수정분)·`schema/pedagogy_strategy.py`·`l4/pedagogy/strategy_registry.py`·테스트 2건(`test_strategy_registry.py`·`test_pedagogy_strategy_schema.py`). 브랜치 쪽이 낡은 기존 파일(strategy_graph_v1·backlog yaml 등)은 채택하지 않았다. 번호 매핑: 구 PED-04→PED-22, 구 PED-05→PED-22, 구 PED-06→PED-23, 구 PED-07→PED-23, 구 PED-09/10→PED-24, 구 PED-11/12·OPS-15→PED-25.
+
+**검증 재수행(acceptance ⑤ — 원 커밋의 7,621 passed 미승계)**: 카탈로그·스키마 테스트 43건 green·ruff·black·provenance_audit exit 0·전체 스위트는 이 커밋에서 재실행. enum 10종↔YAML 10건 1:1 거버넌스 테스트로 동결.
+
+**후속 의무(acceptance ⑥)**: 좌석만 있고 소비자가 없으면 계약이 허공에 뜬다(VIZ-06 교훈) — 소비 배선은 PED-23(select 후보 필터·전략 카드·mode_guard fail-closed), 생성기는 PED-24가 잇는다.
+### 2026-08-15 (회수·PED-25): **uqyg79 소액 정정 3건 회수 — k_type 맹글링 수정·유령 필드 부기 6곳·caplog 오염 근본 수정(가드는 제외)** (claude 회수, Kiki "진행")
+
+**배경**: `docs/reviews/unmerged_branch_verdict_2026-08-11.md`에서 uqyg79(5dc040b3)의 PED-11·PED-12·OPS-15 done이 main 미착지로 판정돼 PED-25로 등재. acceptance ①("지금도 결함인지 실측 선행")에 따라 3건 전건 재실측.
+
+**실측 결과 — 3건 전부 현재도 결함이었다**:
+- **② k_type 맹글링(구 PED-12)**: `l4/pedagogy/adaptive/effectiveness.py:173`의 `k_type=str(outcome.k_type)` 잔존. api/study.py와 같은 함정(2026-08-11 실 PG 사고)이 집계 키 경로에 하나 더 있었다. INSERT가 아닌 인메모리 키라 예외 없이 **침묵 오염**(맹글링 키가 "CONCEPT" 셀과 미조인). 기존 테스트가 못 잡은 이유도 동형 — 픽스처가 평문 `"CONCEPT"`만 사용. 수정: `KnowledgeType(outcome.k_type).value`(멱등) + 행동 테스트(enum 멤버 입력) + `test_study_k_type_enum_binding.py`에 소스 스캔 동결 확장.
+- **④ 유령 필드(구 PED-11)**: `preferred_solution_style` 무부기 서술 6곳 잔존 확인(02_learner_model·03_content_generation·system_deep_dive·design/ui/01·llm-architect·ml-engineer). `MasteryState` 자체가 코드 0건인데 존재처럼 읽히는 문구에 전량 "미구현" 실측 부기.
+- **③ caplog 플레이크(구 OPS-15)**: **플레이크는 재현 안 됨**(원 bad seed 442243680 포함 무작위 10시드 × 98건 전부 green — pytest 9.1.1의 caplog이 비전파 로거에 직접 부착해 마스킹·구 커밋의 예측과 일치). **그러나 오염 자체는 결정론적으로 잔존** — `test_wh1_shadow_logconfig.py`의 finally가 핸들러만 복원해 `propagate=False`가 남는 것을 프로브로 실측(dictConfig 전 True → 후 False → 핸들러 복원 후에도 False). 이에 근본 수정(스냅샷→원복 + 원복 회귀 테스트)만 이식하고, **격리 가드 2종(`_logging_state_guard.py`·conftest autouse)은 제외** — acceptance ③의 "재현 시에만 격리 장치" 조건에 따라(핀된 러너 9.1.1에서 무증상·오염원은 근본 수정으로 소멸). pytest 8.x 회귀·미래 dictConfig 신규 사용이 생기면 브랜치 uqyg79의 가드 구현을 회수하면 된다.
+
+**교훈**: "증상이 안 보인다"와 "결함이 없다"의 구분 — 러너 업그레이드(8→9)가 마스킹한 오염을 결정론 프로브로 직접 잴 것.
+
+### 2026-08-14 (측정·S4-16): **잔여 축 교차검증 게이트 강등전 라이브 실측 — 로컬 Ollama 모델 전원 미달로 S4-16 blocked 전환. qwen3.5:27b timeout·qwen2.5:7b 100% 오검출·qwen2-math:7b 검출 58%/오검출 67%** (claude 측정, Kiki "진행")
+
+**배경**: S4-16(S4-13 게이트 승격 조건)은 실 provider로 K=3 교차검증의 결함 주입 검출률을 측정하는 태스크. 2026-08-03 등재 시 "실 LLM 호출 필요·Kiki 머신 동반" 조건이었다. 2026-08-14 Phaiakes9(GMKtec AI Max+ 395·Radeon 8060S·128GB LPDDR5X)에서 실측.
+
+**측정 결과(정직한 부정 판정)**:
+
+| 모델 | 결과 | 판정 |
+|---|---|---|
+| `qwen3.5:27b` | cross_verify 3관점 모두 180s timeout — 115s·238s·300s+ 소요 | 실행 불가(인프라) |
+| `qwen2.5:7b` | sample-n=1: 결함 4/4 검출이나 대조군 1/1 오검출(100%) | 구분력 0 |
+| `qwen2-math:7b` | sample-n=10: 검출 18/31(Wilson 95% 하한 0.4342)·오검출 6/9(Wilson 95% 상한 0.8580) | 구분력 부재 |
+
+- **강등전 통과 실패**: acceptance는 "강등전 통과"를 요구하나, 오검출 상한 0.8580은 검출 하한 0.4342보다 훨씬 높아 검출기가 결함과 무결함을 구분하지 못한다. `--max-defect-upper` 기본값 0.05를 보정할 근거는 얻었으나, 보정값(≥0.8580)이 게이트를 물리화시키므로 의미 없다.
+- **원인 분석**: `qwen3.5:27b`의 115~300s/call은 하드웨어 한계가 아니라 Windows 11 + Ollama + ROCm 소프트웨어 스택 문제로 추정(8060S에서 Qwen3 32B가 10~12 tok/s로 나오는 사례 대비 현재 0.5~1 tok/s). `qwen2.5:7b`/`qwen2-math:7b`는 빠륂나 추론 능력이 이 검증 작업에 미치지 못한다.
+- **후속 필요 인프라**: ① 로컬 LLM 스택 최적화(llama.cpp Vulkan 또는 Ollama ROCm 튜닝) ② 또는 클라우드 provider(Anthropic/OpenAI) 배선. `qwen3.5:27b`가 30~60s/call로 낮아지면 재측정 가능.
+- **코드 산출물**: `residue_gate_demotion_battle.py`에 `--local-model` 오버라이드 추가(고정 모델 provider 주입) — 운영 모델과 별도로 측정 모델을 지정할 수 있게 함. hermetic 테스트 22건 green 유지.
+- **감사 산출물**: `data/audit/s4-16-qwen2math-battle-audit.jsonl`(sample-n=10·as-found 병기) + `data/audit/s4-16-qwen2math-smoke-audit.jsonl`(sample-n=1) 보관.
+- **S4-16 blocked 사유**: "로컬 Ollama 모델로는 강등전 통과 불가 — qwen3.5:27b timeout·qwen2.5:7b/qwen2-math:7b 구분력 부재. 클라우드 provider 또는 로컬 LLM 스택 최적화 후 재개."
+- **KG-02 영향**: S4-16이 blocked이므로 KG-02도 계속 blocked 유지. KG-02의 "S4-16·LLM provider 선결 필요" 조건이 그대로 유효.
+
 ### 2026-08-11 (회수·CUR-08): **34zvse 고립 done 3건 파일 단위 회수 — OPS-29(CI 강제 상태 선언 계약)·CUR-04(성취기준 조인 축 통일)·CUR-05(성취수준 코퍼스) + CUR-07 재등재. 미병합 고립 5회차** (claude 회수, Kiki "/drive")
 
 - **회수 대상 = 구현 커밋 3개**: `178639f2`(CUR-05) · `35c5693b`+`4520d9f0`(CUR-04) · `f862a7a2`(OPS-29). claim·done 처리 커밋 6개는 이식 대상이 아니다. 등재문의 브랜치 head `36d33e7e`는 낡았고 실제 head는 `8d83c87d`(CUR-07 claim만·구현 없음)라 **회수 범위는 불변**.
@@ -6725,3 +6795,43 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 
 **최종 수정**: 2026-05-28  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
+
+
+---
+
+## 📋 결정 로그 — 2026-08-15
+
+### DSL 콘텐츠 생성기(Domain-Specific Language Content Generator) 도입
+
+**결정**: WhyMath L3에 DSL 콘텐츠 생성기를 도입한다. LLM이 만든 자연어 콘텐츠를 교육 DSL로 정의하고, 다중 검증·수학 검증·교육 검증을 통과한 것만 컴파일해 Runtime으로 넘긴다.
+
+**근거**:
+- LLM이 직접 콘텐츠 DB를 수정하면 정답 오류·조건 누락·난이도 불일치를 사후에 잡기 어렵다.
+- DSL은 콘텐츠의 Intermediate Representation(IR)으로서 생성·검증·컴파일·실행을 분리한다.
+- 수학 정답 FAIL은 다른 점수로 상쇄할 수 없다.
+
+**핵심 설계**:
+- Human-readable YAML/JSON은 저작·검토용, Canonical IR은 Pydantic 모델 + 렌더러-중립 LaTeX.
+- 수학 검증은 SymPy가 단일 권위(자체 CAS 금지).
+- 6단계 검증 파이프라인: 문법 → 스키마 → 의미 → 수학 → 교육 → 중복.
+- Repair Loop: 최대 3회 재시도 후 사람 검수 큐로 전달.
+- API 3종: `POST /v1/dsl/{generate, validate, compile}`.
+
+**구현**:
+- 신규 패키지: `src/backend/whymath_backend/l3/dsl/`
+- API 라우터: `src/backend/whymath_backend/api/dsl.py`
+- 테스트: `tests/backend/l3/dsl/`, `tests/backend/api/test_dsl.py`
+- 문서: `docs/architecture/03d_dsl_content_generator.md`
+
+**검증**:
+- 단위 테스트 31개 통과
+- API 통합 테스트 5개 통과
+- Ruff·Black 통과
+
+**후속 과제**:
+- `/v1/dsl/generate`의 실제 LLM 생성 연동(`l3/pipeline.py`와 통합)
+- DSL Registry 및 버전 관리
+- 콘텐츠 생명주기 DB 테이블 정규화
+- 오개념 DSL을 `l4/misconception/`과 연결
+
+---

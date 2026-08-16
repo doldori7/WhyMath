@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -16,7 +16,8 @@ acceptance:
   - "③ 집행 지점(정본화와 별항) — 이식한 각 계약이 실제 서빙 경로에서 경유되는지 확인한다: OCR 상한은 업로드 라우트가 실제 호출, /docs 비활성은 prod-like 설정에서 404 실측, CORS 동결·XFF·outcome 소유권·노출계약은 해당 테스트가 CI에서 실행됨을 확인(tests/infra/test_test_suite_wiring.py 축). '저장소에 존재함'≠'돌아감'"
   - "④ 전체 backend 스위트 통과 + exit code 판정(-q/tail 금지) — 부분 스위트 통과를 전체 통과 근거로 보고 금지"
   - "⑤ 범위 밖 동결 — k20m0w의 비보안분(MOB·NS·S3 표기)은 MOB-17 소유. 회수 완료 전 원 브랜치 삭제 금지"
-artifacts: []
+artifacts:
+  - "#816"
 paths:
   - "src/backend/whymath_backend/api/**"
   - src/backend/whymath_backend/app.py
@@ -26,4 +27,4 @@ paths:
   - "tests/infra/**"
 session: null
 notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A1·§3-①. 원 브랜치 head 2330a095(45커밋·133파일·고립 done 21건). 미탐 원인 = HARN-25(_DOC_SERIES_SUFFIX 사각 — 보안 감사 문서 미탐지). 계정·보안 r2 세션이 SEC-14를 최대 갭으로 재등재 직전까지 간 실피해 있음. 원번호 매핑: SEC-13-harness-metrics-exposure-contract·SEC-14-xff-trusted-proxy·SEC-15-unauth-answer-jobs-exposure·SEC-16-outcome-write-ownership·SEC-17-ocr-upload-limits·SEC-18-prod-surface-hardening"
-updated: 2026-08-11
+updated: 2026-08-14

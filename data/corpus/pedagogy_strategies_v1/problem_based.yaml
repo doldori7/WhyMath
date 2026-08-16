@@ -1,0 +1,21 @@
+# 교수전략 카탈로그 — PROBLEM_BASED(문제기반학습). 정본: docs/architecture/04e_pedagogy_strategy_catalog.md §3.
+# 내부 서술 자산(학생 대면 텍스트 아님) — 서술·매핑은 후속 사람 검토 전제.
+strategy: PROBLEM_BASED
+name_ko: 문제기반학습
+description: 문제를 먼저 제시하고 그 해결에 필요한 개념을 뒤따라 끌어온다.
+research_basis:
+  - Hmelo-Silver (2004) 문제기반학습(PBL) 개관
+  - Kirschner, Sweller & Clark (2006) 최소 안내 교수 비판(적용 한계 근거)
+target_grade_bands: [초등, 중학, 고등, 대학]
+difficulty_range: [상, 중]
+target_k_types: [MODELING, CONCEPT, STOCHASTIC]
+suitable_error_types: []
+usage_notes: |
+  개념의 필요를 먼저 느끼게 할 때 쓴다 — 문제를 앞세워 "왜 이 개념이 있어야 하는가"를
+  체감시킨 뒤 개념을 끌어온다. 확률·통계(STOCHASTIC)는 실데이터 탐구 문제가 자연스러운
+  진입로라 특히 맞는다.
+  기대 효과: 학습 동기·개념의 쓸모에 대한 감각·자기주도적 탐구 습관.
+  주의: 기초 결손이 큰 학생에게 안내 없는 탐구는 부적합하다는 반론이 있다(Kirschner,
+  Sweller & Clark 2006) — 낮은 난이도의 기본기 훈련 국면에는 권하지 않고, 막히면 힌트
+  단계·소크라테스 질문으로 안내를 보강한다. 특정 오류 유형의 교정 수단이 아니라 동기·
+  탐구 축이라 suitable_error_types는 비워둔다(정직한 공백).

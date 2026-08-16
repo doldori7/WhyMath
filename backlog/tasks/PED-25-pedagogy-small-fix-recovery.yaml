@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -16,11 +16,12 @@ acceptance:
   - "③ OPS-15 caplog 플레이크 — WH-1 harness 테스트의 로거 상태 오염(dictConfig propagate)이 현행에서 재현되는지 무작위 시드 10회로 확인한 뒤에만 격리 장치를 넣는다. 재현 안 되면 제외하고 근거를 남긴다"
   - "④ PED-11 문서 부채 — preferred_solution_style 유령 필드 서술이 02_learner_model.md·03_content_generation.md에 아직 있는지 확인 후 실측 부기"
   - "⑤ 3건 중 제외한 것이 있으면 **무엇을 왜 제외했는지** 완료 보고에 명시한다(침묵하면 전건 처리로 읽힌다)"
-artifacts: []
+artifacts:
+  - "PR #832 — CI 전 잡 green(backend 21m40s·실 PG 통합 포함), commit 09ca2617, 로컬 전체 스위트 10,054 passed(seed 961532637). 제외 명시(acceptance ⑤): OPS-15 격리 가드 2종(_logging_state_guard·conftest autouse)은 '플레이크 재현 시에만' 조건에 따라 제외 — 핀된 pytest 9.1.1에서 10시드 무재현·오염원은 근본 수정(스냅샷 원복)으로 소멸, 회수 경로는 MEMORY 2026-08-15에 기록"
 paths:
   - "src/backend/whymath_backend/l2/**"
   - "tests/backend/harness/**"
   - "docs/architecture/*"
 session: null
 notes: "docs/reviews/unmerged_branch_verdict_2026-08-11.md. 원 브랜치 uqyg79 head=5dc040b3. 원 태스크 PED-11-doc-debt-ghost-fields(8b2e5c60)·PED-12-effectiveness-ktype-label(4fd8684a)·OPS-15-wh1-caplog-order-flake(e1401c8a). 원 OPS-15 번호는 main에서 다른 태스크가 2회 이중 배정된 이력이 있다(CLAUDE.md HARN-10 사고 경위)."
-updated: 2026-08-11
+updated: 2026-08-15

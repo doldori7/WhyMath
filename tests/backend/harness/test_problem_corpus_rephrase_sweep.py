@@ -239,8 +239,16 @@ class TestRunRephraseSweep:
 
 
 class TestCliEntry:
-    def test_main_without_live_provider_fails_closed(self, tmp_path: Path, capsys: object) -> None:
-        # provider 미주입(이 환경 LLM 0) → 전건 provider 예외 → 변형 0, exit 0(fail-closed).
+    def test_main_without_live_provider_fails_closed(
+        self, tmp_path: Path, capsys: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # fail-closed 계약(전건 provider 예외 → 변형 0)은 환경 무관이어야 한다.
+        # [OPS-44 사고 경위] "이 환경 LLM 0" 전제였으나 Kiki 머신은 Ollama가 상시 기동이라
+        # 실제 변형이 일어나 깨졌다 — provider 해소를 예외로 강제 차단해 전제를 코드로 봉인.
+        def _blocked(self: QuestionRephraser) -> None:
+            raise RuntimeError("테스트 강제 차단 — 라이브 provider 해소 금지")
+
+        monkeypatch.setattr(QuestionRephraser, "_resolve_provider", _blocked)
         src = _seed_corpus(tmp_path)
         code = main(["--in", str(src), "--temperatures", "0.7,0.9", "--limit", "4", "--json"])
         assert code == 0
@@ -259,8 +267,16 @@ class TestCliEntry:
         captured = capsys.readouterr()  # type: ignore[attr-defined]
         assert "0.70" in captured.out and "0.90" in captured.out  # 기본 온도 표
 
-    def test_main_repeats_aggregates_attempts(self, tmp_path: Path, capsys: object) -> None:
-        # --repeats N → 시도 수 = limit × N(provider 부재라 변형 0·표에 반복 N 표기).
+    def test_main_repeats_aggregates_attempts(
+        self, tmp_path: Path, capsys: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # --repeats N → 시도 수 = limit × N(provider 차단이라 변형 0·표에 반복 N 표기).
+        # [OPS-44 사고 경위] 라이브 Ollama 도달 머신에선 실제 변형으로 rephrased>0이 돼 깨졌다 —
+        # provider 해소를 예외로 강제 차단해 환경 무관으로 고정(위 fails_closed와 동형).
+        def _blocked(self: QuestionRephraser) -> None:
+            raise RuntimeError("테스트 강제 차단 — 라이브 provider 해소 금지")
+
+        monkeypatch.setattr(QuestionRephraser, "_resolve_provider", _blocked)
         src = _seed_corpus(tmp_path)
         code = main(
             ["--in", str(src), "--temperatures", "0.7", "--limit", "4", "--repeats", "2", "--json"]

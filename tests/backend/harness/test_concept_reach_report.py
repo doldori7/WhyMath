@@ -292,7 +292,11 @@ def test_real_corpus_smoke_nine_surfaces_unreached_one_reached_and_twenty_callsi
     by_key = {s.key: s for s in report.surfaces}
     assert by_key["me_learning_path"].status == "도달"
     assert by_key["me_learning_path"].reach_count == 1
-    assert by_key["me_learning_path"].matched_files == ("features/problems/data/problems_api.dart",)
+    # [OPS-44 사고 경위] 원래 matched_files == ("features/problems/data/problems_api.dart",)
+    # 단언이었으나 Windows에선 스캔 산출 경로가 백슬래시로 나와 깨졌다 — POSIX 정규화 후 비교.
+    assert tuple(Path(p).as_posix() for p in by_key["me_learning_path"].matched_files) == (
+        "features/problems/data/problems_api.dart",
+    )
     assert all(s.status == "미도달" for k, s in by_key.items() if k != "me_learning_path")
     assert all(s.reach_count == 0 for k, s in by_key.items() if k != "me_learning_path")
     assert report.total_v1_literal_callsites == 21

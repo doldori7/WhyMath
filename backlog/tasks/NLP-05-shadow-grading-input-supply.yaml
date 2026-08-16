@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on:
@@ -24,6 +24,6 @@ paths:
   - src/backend/whymath_backend/harness/attempt_grading_shadow_report.py
   - "src/backend/whymath_backend/l1/problem_bank/**"
   - tests/backend/harness/test_attempt_grading_shadow_report.py
-session: null
+session: main
 notes: "docs/architecture/nlp_module_gap_review_r2.md §8.2(Δ2·판정 뒤집기). r2 본문 §2 D2 잔여 ②는 '얼마나 좁은지는 리포트를 돌려야 알 수 있다'고 적었으나 코퍼스 grep으로 즉답되고 답은 0이다 — derive_verify_inputs(:93)가 읽는 Condition.formal은 코퍼스 7뱅크 2,647건 전부에 없고 저장소 전체에 writer가 0건이라 파생이 영구히 None이다. 정작 필요한 answer_map+conditions는 코퍼스 verify 블록에 100% 있는데 l1/problem_bank/populate.py:296이 pop하고 :214가 '적재는 slug·problem·concept_tags·relations만 소비'라 자인한다. 파급: r2 §3 D6이 사전 등재한 이관 임계 '검산 가능 200건 이상'이 OPS-19(러너) 착륙 후에도 영구 미달 → v1 §5-② 채점 권위 이관 유보가 해제도 영구화도 불가(CLAUDE.md '만료 없는 유예·제외 금지'). 착수 순서: 이 태스크가 OPS-19보다 먼저다 — 돌릴 것이 없는 러너를 먼저 배선하면 '돌렸는데 0'이라는 가장 나쁜 화면이 된다. CLAUDE.md '작동 신호 없는 알고리즘 부착 금지 — 작동한 비율' 정면 해당. 겹침 경고 조사(2026-08-11): overlap이 S4-16(in_progress·claude/whymath-ai-content-design-vafylb)과 1건 경고했으나 프리픽스 artifact다 — S4-16의 paths가 harness/** 광역이고, 그 브랜치의 실제 harness 변경은 residue_gate_demotion_battle.py 1파일뿐이라 attempt_grading_shadow_report.py와 실충돌 0. 다만 claim이 8일 경과(policy claim_ttl_hours=72 초과)이므로 착수 시 재확인한다. 인접 대조(2026-08-11 병합 시점·r2 §8.11-①): REC-05(추천 r2 §2 G1)가 같은 사실에 독립 도달했다 — 고립본 attempt_grading_shadow_report.py 638줄(main 412줄+226)이 '코퍼스 2,647문항 중 0건만 통과(조건 보유 30건 전부 formal 결측)'를 그대로 적었다. 수치가 정확히 일치하므로 Δ2는 교차 검증된 사실이며, 이 문서 §8.2의 '최대 발견'은 최초 발견이 아니라 고립돼 안 보였을 뿐이다. 처방은 다르다 — REC-05는 0을 정직하게 만들고(4버킷 상한 리포트+verifiable_zero_reason) 이 태스크는 0을 0이 아니게 만든다(코퍼스 verify 블록 공급). REC-05는 verify 블록 참조가 0건(전수 grep 확인)이라 겹치지 않는다. 다만 같은 파일을 고치므로 REC-09(회수)에 depends — 회수 전 착수하면 226줄을 모르는 채 같은 파일을 고쳐 두 번째 고립을 만든다."
-updated: 2026-08-11
+updated: 2026-08-14

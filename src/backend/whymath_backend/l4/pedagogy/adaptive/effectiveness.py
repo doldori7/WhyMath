@@ -41,6 +41,7 @@ from whymath_backend.l2.pedagogy_evidence import (
     EVENT_TYPE_TREATMENT,
     META_KEY_STRATEGY,
 )
+from whymath_backend.schema.enums import KnowledgeType
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +171,11 @@ def aggregate_effectiveness(rows: list[EvidenceEvent]) -> EffectivenessReport:
             continue  # 정답 여부 미기록 — 정답률 분모에 넣지 않는다.
         key = EffectivenessKey(
             strategy=strategy,
-            k_type=str(outcome.k_type),
+            # PG native enum 경유 행은 k_type이 KnowledgeType 멤버로 온다 — str(멤버)는
+            # "KnowledgeType.CONCEPT"(라벨 집합 밖 맹글링)이므로 .value로 정규화한다
+            # (api/study.py 동일 사고 2026-08-11 실 PG 실측·test_study_k_type_enum_binding 참조).
+            # 멱등: 평문 라벨 문자열이 와도 KnowledgeType("CONCEPT").value == "CONCEPT".
+            k_type=KnowledgeType(outcome.k_type).value,
             objective_id=outcome.objective_id,
         )
         stat = stats[key]

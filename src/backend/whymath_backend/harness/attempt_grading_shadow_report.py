@@ -55,6 +55,14 @@ attempt 유무와 무관하게 코퍼스 전량을 스캔한다.
   A 1,612 / B 1,026 / C 0 / unclassified 0)으로 갱신했다. **구조적 결론은 불변**이다 —
   C버킷 0건과 그 원인(조건 보유 30건 전부 `formal` 결측)은 코퍼스가 줄기 전후로 동일하다.
 
+NLP-05 추가(2026-08-14): `derive_verify_inputs`가 `Problem.conditions_parsed`뿐 아니라
+코퍼스 `verify.{conditions,answer_map}`을 공급원으로 삼는다. 코퍼스 2,638건 중
+verify 블록(conditions+answer_map)을 보유한 것은 2,124건이며, 이 중 단일 미지수 `x`로
+파생 가능한 것도 2,124건(실측). `classify_gradability` 우선순위를 A→C→B로 조정해
+symbolic 파생 가능한 문항이 '수치 단답 후보'보다 정확한 경로로 계상되게 했다. 그 결과
+코퍼스 전체 기준 **A 1,612 / C 872 / B 154 / unclassified 0**이며, C버킷이 0에서
+올라감으로써 `verify_answer` 실제 호출의 입력 공급이 확인된다.
+
 구조적 0 원인 구분(acceptance②): `ShadowGradingReport.verifiable_zero_reason`이 "표본
 없음(attempt 0행)"과 "파생 가능 문항 0(코퍼스 formal 결측)"을 구분한다 — 이전에는 둘 다
 `mismatch_rate=None`으로 같은 값이었다(변별력 없음).
@@ -75,6 +83,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import sys
@@ -82,7 +91,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast, get_args
 
 import sympy
 from sqlalchemy import select
@@ -121,10 +130,182 @@ logger = logging.getLogger("whymath.harness.attempt_grading_shadow_report")
 # 이 슬라이스가 지원하는 유일한 미지수 이름 — 다중 미지수 문항은 스코프 밖(모듈 docstring).
 _SUPPORTED_UNKNOWN = "x"
 
+# NLP-05 — 파생 실패 원인(acceptance⑤). `derive_verify_inputs`가 None을 반환할 때의 사유.
+_NotDerivableReason = Literal[
+    "no_problem",
+    "no_student_answer",
+    "no_verify_input",
+    "parse_error",
+    "multi_symbol",
+]
+
+# NLP-05 — ceiling 리포트 unclassified 원인(acceptance⑤).
+_UnclassifiedReason = Literal[
+    "no_verify_block",
+    "parse_error",
+    "multi_symbol",
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 코퍼스 verify 블록 로더(NLP-05)
+# ──────────────────────────────────────────────────────────────────────────
+def _repo_root() -> Path:
+    """`src/backend/whymath_backend/harness/attempt_grading_shadow_report.py`에서 repo root 반환."""
+    return Path(__file__).resolve().parents[4]
+
+
+@functools.lru_cache(maxsize=1)
+def _load_corpus_verify_blocks() -> dict[str, tuple[list[str], dict[str, str]]]:
+    """`data/corpus/problem_bank_*/problems.jsonl`에서 `verify.{conditions,answer_map}`만 추출.
+
+    반환: slug에서 (conditions 리스트, answer_map)로 매핑. `verify.conditions`는 단일 문자열이므로
+    `[conditions]` 형태로 반환해 `verify_answer`의 `Sequence[str]` 인터페이스와 맞춘다.
+    slug가 없는 레코드는 건너뛴다 -- DB `Problem.slug`가 nullable이라 역조회 불가.
+    """
+    blocks: dict[str, tuple[list[str], dict[str, str]]] = {}
+    corpus_root = _repo_root() / "data" / "corpus"
+    for path in sorted(corpus_root.glob("problem_bank_*/problems.jsonl")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:  # pragma: no cover — 파일 누락 시 정직히 skip(테스트 환경 변이)
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            slug = record.get("slug")
+            if not slug:
+                continue
+            verify = record.get("verify") or {}
+            conditions = verify.get("conditions")
+            answer_map = verify.get("answer_map")
+            if (
+                not isinstance(conditions, str)
+                or not conditions.strip()
+                or not isinstance(answer_map, dict)
+                or not answer_map
+            ):
+                continue
+            blocks[str(slug)] = (
+                [conditions],
+                {str(k): str(v) for k, v in answer_map.items()},
+            )
+    return blocks
+
+
+def _can_parse_for_derivation(condition: str) -> bool:
+    """코퍼스 conditions 문자열이 verify_answer 수준에서 파싱 가능한지 사전 점검.
+
+    `verify_answer._parse_condition`은 `=`/`==`/`Eq` 등을 모두 등식 잔차로 정규화하지만,
+    `sympy.sympify` 단독으로는 `=`를 파이썬 대입문으로 보아 예외를 던진다. derivation 게이트는
+    실제 검산기와 동일한 관용도를 허용해야 하므로, 등호 정규화 후 sympify 시도로 판단한다.
+    """
+    normalized = condition.strip()
+    if not normalized:
+        return False
+    # `=` 단독을 `==`로 정규화 -- `<=`, `>=`, `!=`, `==`는 건드리지 않는다.
+    if (
+        "=" in normalized
+        and "==" not in normalized
+        and "<=" not in normalized
+        and ">=" not in normalized
+        and "!=" not in normalized
+    ):
+        normalized = normalized.replace("=", "==", 1)
+    try:
+        sympy.sympify(normalized, evaluate=False)
+    except Exception:  # noqa: BLE001
+        return False
+    return True
+
+
+def _derive_from_corpus(
+    problem: Problem,
+) -> tuple[list[str], dict[str, str]] | _UnclassifiedReason:
+    """`Problem.slug`로 코퍼스 verify 블록을 역조회해 단일 미지수(`x`) 파생 재료를 만든다.
+
+    answer_map 키가 정확히 `{"x"}`가 아니면 비파생 -- 다중 미지수는 이 슬라이스 스코프 밖.
+    실패 시 `UnclassifiedReason` 문자열을 반환해 ceiling/shadow 리포트의 사유 계수를 채운다.
+    """
+    if not problem.slug:
+        return "no_verify_block"
+    blocks = _load_corpus_verify_blocks()
+    item = blocks.get(problem.slug)
+    if item is None:
+        return "no_verify_block"
+    conditions, answer_map = item
+    if set(answer_map.keys()) != {_SUPPORTED_UNKNOWN}:
+        return "multi_symbol"
+    if not conditions or not conditions[0].strip():
+        return "no_verify_block"
+    if not _can_parse_for_derivation(conditions[0]):
+        logger.debug("derive_verify_inputs corpus 비파생(conditions 파싱 실패)")
+        return "parse_error"
+    return conditions, answer_map
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 파생 — conditions/answer_map(모듈 docstring의 핵심 위험 지점)
 # ──────────────────────────────────────────────────────────────────────────
+def _derive_from_conditions_parsed(
+    problem: Problem,
+) -> tuple[list[str], dict[str, str]] | _NotDerivableReason:
+    """DB `Problem.conditions_parsed[*].formal` 경로 — REC-05 원 로직.
+
+    실패 시 `NotDerivableReason` 문자열을 반환한다. `conditions_parsed`가 비거나
+    `answer`가 없으면 "no_verify_input" — 코퍼스 fallback을 시도할 수 있음을 의미.
+    """
+    if not problem.conditions_parsed:
+        return "no_verify_input"
+    if not problem.answer or not problem.answer.strip():
+        return "no_verify_input"
+
+    formals: list[str] = []
+    free_symbols: set[str] = set()
+    for condition in problem.conditions_parsed:
+        formal = condition.formal
+        if not formal or not formal.strip():
+            return "no_verify_input"
+        try:
+            parsed = sympy.sympify(formal, evaluate=False)
+        except Exception as exc:  # noqa: BLE001 — 파싱 불가는 보수적 비파생(pass 위장 금지)
+            logger.debug("derive_verify_inputs 비파생(formal 파싱 실패): %s", type(exc).__name__)
+            return "parse_error"
+        free_symbols |= {str(s) for s in parsed.free_symbols}
+        formals.append(formal)
+
+    if free_symbols != {_SUPPORTED_UNKNOWN}:
+        return "multi_symbol"
+    return formals, {_SUPPORTED_UNKNOWN: problem.answer}
+
+
+def _derive_verify_inputs_with_reason(
+    problem: Problem,
+) -> tuple[tuple[list[str], dict[str, str]], None] | tuple[None, _NotDerivableReason]:
+    """파생 재료 + 실패 사유를 함께 반환하는 내부 헬퍼(NLP-05 acceptance⑤).
+
+    `_derive_from_corpus`의 `no_verify_block`은 shadow 리포트 사유 체계에서
+    `no_verify_input`으로 통합한다 — 둘 다 "검산 재료가 없음"을 의미하며,
+    세분화된 `no_verify_block`은 ceiling 리포트 전용이다.
+    """
+    parsed = _derive_from_conditions_parsed(problem)
+    if isinstance(parsed, tuple):
+        return parsed, None
+    if parsed == "no_verify_input":
+        corpus = _derive_from_corpus(problem)
+        if isinstance(corpus, tuple):
+            return corpus, None
+        if corpus == "no_verify_block":
+            return None, "no_verify_input"
+        return None, cast(_NotDerivableReason, corpus)
+    return None, parsed
+
+
 def derive_verify_inputs(problem: Problem) -> tuple[list[str], dict[str, str]] | None:
     """`Problem.conditions_parsed[*].formal` + `Problem.answer` → verify_answer 입력 파생.
 
@@ -137,32 +318,32 @@ def derive_verify_inputs(problem: Problem) -> tuple[list[str], dict[str, str]] |
       - 조건들의 자유기호 합집합이 정확히 `{"x"}`가 아님(미지수가 없거나·다른 이름이거나·
         다중 변수인 경우 — 이 게이트가 "y를 x로 오인"류 오류를 막는 유일한 방어선)
 
+    NLP-05 추가: `conditions_parsed`로 파생 불가하면 `Problem.slug`로 코퍼스
+    `verify.{conditions,answer_map}`을 역조회해 재시도한다. 코퍼스 verify 블록은
+    `data/corpus/problem_bank_*/problems.jsonl`의 2,124건(전체 2,638건 중)에 존재하며,
+    전부 단일 미지수 `x`다(실측). 이 경로로 `derive_verify_inputs`가 0에서 벗어나
+    `verify_answer`가 실제 호출된다.
+
     반환은 `(conditions, answer_map)`이며 `answer_map`은 `{"x": problem.answer}` — 이 값은
     "파생 가능성이 확정됐다"는 *틀*일 뿐, 실제 shadow 채점은 `grade_attempt`가 이 틀의 키에
     학생 제출값을 대입해서 이뤄진다(모듈 docstring "채점 대상은 항상 학생 제출값이다").
     """
-    if not problem.conditions_parsed:
-        return None
-    if not problem.answer or not problem.answer.strip():
-        return None
+    result, _reason = _derive_verify_inputs_with_reason(problem)
+    return result
 
-    formals: list[str] = []
-    free_symbols: set[str] = set()
-    for condition in problem.conditions_parsed:
-        formal = condition.formal
-        if not formal or not formal.strip():
-            return None
-        try:
-            parsed = sympy.sympify(formal, evaluate=False)
-        except Exception as exc:  # noqa: BLE001 — 파싱 불가는 보수적 비파생(pass 위장 금지)
-            logger.debug("derive_verify_inputs 비파생(formal 파싱 실패): %s", type(exc).__name__)
-            return None
-        free_symbols |= {str(s) for s in parsed.free_symbols}
-        formals.append(formal)
 
-    if free_symbols != {_SUPPORTED_UNKNOWN}:
-        return None
-    return formals, {_SUPPORTED_UNKNOWN: problem.answer}
+def _grade_attempt_with_reason(
+    problem: Problem, student_answer: str | None
+) -> tuple[AnswerVerdict | None, _NotDerivableReason | None]:
+    """`grade_attempt`의 사유 반환 버전(NLP-05 acceptance⑤)."""
+    if student_answer is None or not student_answer.strip():
+        return None, "no_student_answer"
+    derived, reason = _derive_verify_inputs_with_reason(problem)
+    if derived is None:
+        return None, reason
+    conditions, canonical_answer_map = derived
+    student_map = dict.fromkeys(canonical_answer_map, student_answer)
+    return verify_answer(conditions, student_map), None
 
 
 def grade_attempt(problem: Problem, student_answer: str | None) -> AnswerVerdict | None:
@@ -175,14 +356,8 @@ def grade_attempt(problem: Problem, student_answer: str | None) -> AnswerVerdict
     실제 대입값은 항상 `student_answer`다 — `derive_verify_inputs`가 돌린 `answer_map`은
     미지수 이름(`x`)만 취하고 값은 버린다(그 값은 `Problem.answer`이지 채점 대상이 아니다).
     """
-    if student_answer is None or not student_answer.strip():
-        return None
-    derived = derive_verify_inputs(problem)
-    if derived is None:
-        return None
-    conditions, canonical_answer_map = derived
-    student_map = dict.fromkeys(canonical_answer_map, student_answer)
-    return verify_answer(conditions, student_map)
+    verdict, _reason = _grade_attempt_with_reason(problem, student_answer)
+    return verdict
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -266,6 +441,10 @@ class ShadowGradingReport:
     0 금지 — "미상"을 0%로 위장하지 않는다). `client_grade_mismatch_count`는 `verifiable_count`
     행(검산이 실제로 이뤄진 행)만을 모집단으로 하고, 그중에서도 `unverifiable` verdict는
     대조 대상에서 제외한다(acceptance② — 판정 불가를 오답 신호로 쓰지 않는다).
+
+    NLP-05 — `not_derivable_reason_counts`가 파생 불가의 세부 원인을 계수한다:
+    `no_problem`(문항 조인 실패), `no_student_answer`, `no_verify_input`,
+    `parse_error`, `multi_symbol`. 이 합은 `not_derivable_count`와 같다.
     """
 
     total_attempts: int
@@ -274,6 +453,8 @@ class ShadowGradingReport:
     # {"pass": n, "fail": n, "unverifiable": n}
     verdict_counts: dict[str, int] = field(default_factory=dict)
     client_grade_mismatch_count: int = 0
+    # NLP-05 — 파생 불가 세부 사유(acceptance⑤).
+    not_derivable_reason_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def mismatch_rate(self) -> float | None:
@@ -310,9 +491,10 @@ def build_report(records: list[AttemptRecord]) -> ShadowGradingReport:
     """attempt 레코드 목록 → `ShadowGradingReport`(순수·부작용 0).
 
     각 레코드에 대해:
-      1. `problem`이 없으면 `not_derivable`(FK 고아·문제 삭제).
-      2. `grade_attempt`가 `None`이면 `not_derivable`(파생 실패 또는 student_answer 없음).
-      3. 그 외 verdict(`pass`/`fail`/`unverifiable`)를 `verdict_counts`에 누적하고,
+      1. `problem`이 없으면 `not_derivable`(FK 고아·문제 삭제) — 사유 `no_problem`.
+      2. `student_answer`가 없으면 `not_derivable` — 사유 `no_student_answer`.
+      3. 파생 불가면 `not_derivable` — 사유 `no_verify_input`/`parse_error`/`multi_symbol`.
+      4. 그 외 verdict(`pass`/`fail`/`unverifiable`)를 `verdict_counts`에 누적하고,
          verdict가 `unverifiable`이 *아니고* `client_is_correct`가 제출돼 있으면 클라 보고
          (`is_correct`)와 서버 판정(`verdict.state == "pass"`)을 대조해 불일치를 센다.
          `client_is_correct`가 `None`(레거시 미채점 행)이면 verdict는 집계하되 대조는
@@ -322,14 +504,27 @@ def build_report(records: list[AttemptRecord]) -> ShadowGradingReport:
     not_derivable = 0
     verdict_counts: dict[str, int] = {"pass": 0, "fail": 0, "unverifiable": 0}
     mismatch = 0
+    reason_counts: dict[str, int] = {
+        "no_problem": 0,
+        "no_student_answer": 0,
+        "no_verify_input": 0,
+        "parse_error": 0,
+        "multi_symbol": 0,
+    }
 
     for record in records:
         if record.problem is None:
             not_derivable += 1
+            reason_counts["no_problem"] += 1
             continue
-        verdict = grade_attempt(record.problem, record.student_answer)
+        verdict, reason = _grade_attempt_with_reason(record.problem, record.student_answer)
         if verdict is None:
             not_derivable += 1
+            if reason is not None:
+                reason_counts[reason] += 1
+            else:
+                # `_grade_attempt_with_reason`은 None verdict에 항상 사유를 준다.
+                reason_counts["no_verify_input"] += 1
             continue
         verdict_counts[verdict.state] = verdict_counts.get(verdict.state, 0) + 1
         if verdict.state == "unverifiable":
@@ -347,6 +542,7 @@ def build_report(records: list[AttemptRecord]) -> ShadowGradingReport:
         verifiable_count=total - not_derivable,
         verdict_counts=verdict_counts,
         client_grade_mismatch_count=mismatch,
+        not_derivable_reason_counts=reason_counts,
     )
 
 
@@ -368,39 +564,68 @@ _NUMERIC_ANSWER_FORMATS: frozenset[AnswerFormat] = frozenset(
 )
 
 
-def classify_gradability(problem: Problem) -> GradabilityBucket:
-    """문항 1건 → 채점 가능성 버킷(순수·하드 우선순위 A→B→C→unclassified — 상호배타 계약).
-
-    - **A**(`selectable_exact_match`): `choices` 보유 ∧ `answer` 보유 ∧ `answer`가 `choices`
-      원소와 문자열 일치 — 서버 채점이 자명(정확일치 1회 비교).
-    - **B**(`numeric_short_answer_candidate`): `question_format`이 단답형이고 `answer_format`이
-      수치 3종(`자연수`/`실수`/`분수`) 중 하나 — 정규화 규칙(권위는 SymPy) 도입 시 채점 가능.
-    - **C**(`condition_formal_derivable`): `derive_verify_inputs`가 성공(기존 게이트 재사용 —
-      중복 판정 로직 0).
-    - 그 외 **unclassified**: 셋 다 불성립. `choices`는 있는데 `answer`가 그 안에 없는
-      데이터 이상치도 A로 오분류되지 않고 여기로 정직하게 떨어진다(조용한 은폐 금지).
-
-    우선순위는 하드 계약이다 — A와 C를 동시에 만족하는 문항도 A로 계상한다(선택형이 더
-    자명한 채점이므로).
-    """
+def _classify_gradability_with_reason(
+    problem: Problem,
+) -> tuple[GradabilityBucket, _UnclassifiedReason | None]:
+    """문항 1건 → (버킷, unclassified 사유). 내부 집계용(acceptance⑤)."""
     if problem.choices and problem.answer and problem.answer in problem.choices:
-        return "selectable_exact_match"
+        return "selectable_exact_match", None
+    derived, reason = _derive_verify_inputs_with_reason(problem)
+    if derived is not None:
+        return "condition_formal_derivable", None
+    # `derive_verify_inputs`가 None인 상황에서만 unclassified 사유를 결정한다.
+    unclassified_reason: _UnclassifiedReason
+    if reason == "no_verify_input":
+        # DB conditions_parsed도 없고 코퍼스 verify 블록도 없음.
+        unclassified_reason = "no_verify_block"
+    else:
+        # `_derive_verify_inputs_with_reason`이 반환하는 나머지 사유는
+        # `_NotDerivableReason`과 `_UnclassifiedReason`이 겹치는 영역다.
+        unclassified_reason = cast(_UnclassifiedReason, reason)
     if (
         problem.question_format == QuestionFormat.단답형
         and problem.answer_format in _NUMERIC_ANSWER_FORMATS
     ):
-        return "numeric_short_answer_candidate"
-    if derive_verify_inputs(problem) is not None:
-        return "condition_formal_derivable"
-    return "unclassified"
+        return "numeric_short_answer_candidate", None
+    return "unclassified", unclassified_reason
+
+
+def classify_gradability(problem: Problem) -> GradabilityBucket:
+    """문항 1건 → 채점 가능성 버킷(순수·하드 우선순위 A→C→B→unclassified — 상호배타 계약).
+
+    - **A**(`selectable_exact_match`): `choices` 보유 ∧ `answer` 보유 ∧ `answer`가 `choices`
+      원소와 문자열 일치 — 서버 채점이 자명(정확일치 1회 비교).
+    - **C**(`condition_formal_derivable`): `derive_verify_inputs`가 성공 —
+      `Problem.conditions_parsed[*].formal` 또는 코퍼스 `verify.{conditions,answer_map}`
+      (NLP-05)에서 파생. symbolic 검산이 가능한 문항으로, 단순 '수치 단답 후보'보다
+      정확한 채점 경로다.
+    - **B**(`numeric_short_answer_candidate`): `question_format`이 단답형이고 `answer_format`이
+      수치 3종(`자연수`/`실수`/`분수`) 중 하나 — 정규화 규칙(권위는 SymPy) 도입 시 채점 가능.
+      코퍼스 verify 블록으로 이미 symbolic 파생 가능한 문항은 C로 계상한다.
+    - 그 외 **unclassified**: 셋 다 불성립. `choices`는 있는데 `answer`가 그 안에 없는
+      데이터 이상치도 A로 오분류되지 않고 여기로 정직하게 떨어진다(조용한 은폐 금지).
+
+    우선순위는 하드 계약이다 — A와 C를 동시에 만족하는 문항도 A로 계상한다(선택형이 더
+    자명한 채점이므로). NLP-05 이후 C가 B보다 우선: symbolic 파생 가능한 문항은
+    '후보'가 아닌 실제 검산 경로가 있음.
+    """
+    bucket, _reason = _classify_gradability_with_reason(problem)
+    return bucket
 
 
 @dataclass(slots=True, frozen=True)
 class GradabilityCeilingReport:
-    """코퍼스 전량의 채점 가능성 버킷 집계(불변) — 4버킷 합은 항상 `total_problems`와 같다."""
+    """코퍼스 전량의 채점 가능성 버킷 집계(불변) — 4버킷 합은 항상 `total_problems`와 같다.
+
+    NLP-05 — `unclassified_reason_counts`가 unclassified 버킷으로 떨어진 문항의
+    세부 원인(`no_verify_block`, `parse_error`, `multi_symbol`)을 계수한다. 이 합은
+    `bucket_counts["unclassified"]`와 같다.
+    """
 
     total_problems: int
     bucket_counts: dict[GradabilityBucket, int] = field(default_factory=dict)
+    # NLP-05 — unclassified 세부 사유(acceptance⑤).
+    unclassified_reason_counts: dict[str, int] = field(default_factory=dict)
 
     def bucket_rate(self, bucket: GradabilityBucket) -> float | None:
         """버킷 비율. `total_problems == 0`이면 `None`(분모 없는 0 금지)."""
@@ -415,10 +640,21 @@ class GradabilityCeilingReport:
 def build_gradability_ceiling_report(problems: Sequence[Problem]) -> GradabilityCeilingReport:
     """문항 목록 → `GradabilityCeilingReport`(순수·부작용 0). 각 문항을 정확히 한 버킷에 계상."""
     counts: dict[GradabilityBucket, int] = dict.fromkeys(_GRADABILITY_BUCKETS, 0)
+    reason_counts: dict[str, int] = {
+        "no_verify_block": 0,
+        "parse_error": 0,
+        "multi_symbol": 0,
+    }
     for problem in problems:
-        bucket = classify_gradability(problem)
+        bucket, reason = _classify_gradability_with_reason(problem)
         counts[bucket] += 1
-    return GradabilityCeilingReport(total_problems=len(problems), bucket_counts=counts)
+        if reason is not None:
+            reason_counts[reason] += 1
+    return GradabilityCeilingReport(
+        total_problems=len(problems),
+        bucket_counts=counts,
+        unclassified_reason_counts=reason_counts,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -449,9 +685,21 @@ def render_report(report: ShadowGradingReport) -> str:
         f"- fail: {report.verdict_counts.get('fail', 0)}",
         f"- unverifiable: {report.verdict_counts.get('unverifiable', 0)}",
         "",
-        "## 클라이언트 ↔ 서버 불일치 (이중 회계)",
+        "## 파생 불가 사유 (NLP-05)",
         "",
     ]
+    for key in (
+        "no_problem",
+        "no_student_answer",
+        "no_verify_input",
+        "parse_error",
+        "multi_symbol",
+    ):
+        count = report.not_derivable_reason_counts.get(key, 0)
+        lines.append(f"- {key}: {count}")
+    lines.append("")
+    lines.append("## 클라이언트 ↔ 서버 불일치 (이중 회계)")
+    lines.append("")
     if report.verifiable_count == 0:
         lines.append("- 검산 가능 표본 0건 — 불일치율 측정 불가(데이터없음, 0%로 위장하지 않음).")
         if report.verifiable_zero_reason == "no_sample":
@@ -491,6 +739,7 @@ def report_to_json(report: ShadowGradingReport) -> dict[str, Any]:
         "mismatch_rate": report.mismatch_rate,
         "unverifiable_rate": report.unverifiable_rate,
         "verifiable_zero_reason": report.verifiable_zero_reason,
+        "not_derivable_reason_counts": dict(report.not_derivable_reason_counts),
     }
 
 
@@ -534,6 +783,12 @@ def render_gradability_ceiling_report(report: GradabilityCeilingReport) -> str:
         else:
             lines.append(f"- {label}: **{count} / {report.total_problems}** ({rate_text})")
     lines.append("")
+    lines.append("## 미분류 사유 (NLP-05)")
+    lines.append("")
+    for key in ("no_verify_block", "parse_error", "multi_symbol"):
+        count = report.unclassified_reason_counts.get(key, 0)
+        lines.append(f"- {key}: {count}")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -543,6 +798,9 @@ def gradability_report_to_json(report: GradabilityCeilingReport) -> dict[str, An
         "total_problems": report.total_problems,
         "bucket_counts": {b: report.bucket_counts.get(b, 0) for b in _GRADABILITY_BUCKETS},
         "bucket_rates": {b: report.bucket_rate(b) for b in _GRADABILITY_BUCKETS},
+        "unclassified_reason_counts": {
+            r: report.unclassified_reason_counts.get(r, 0) for r in get_args(_UnclassifiedReason)
+        },
     }
 
 

@@ -237,17 +237,68 @@ class Settings(BaseSettings):
             "비트동일(`decision.system`은 `_BASE_SYSTEM` 그대로). WH-1 라이브 측정 경로(`wh1_*`)· "
             "톤필터는 무변경. GA 전환 근거: 결함주입 측정(pedagogy_pack_fidelity_eval exit 0·CI "
             "상시) 통과 + Kiki 사인오프(2026-07-27·blast radius 파일럿 1단원 한정 간이 갈음). "
-            "주의(2026-08-10 정정 → PED-16(2026-08-10)이 by-design 미배선으로 확정): "
-            "forbidden_modes *문면* 가드(`mode_guard`)는 이 플래그와 무관하게 코치 응답 경로에 "
-            "배선돼 있지 않다 — 오프라인 결함주입 측정(`pedagogy_pack_fidelity_eval`) 전용으로 "
-            "유지하기로 확정했다(근거: 실제 생성→서빙 경로는 WH-1 루프인데 `wh1_primary.py`가 "
-            "PedagogyPack을 참조하지 않아 배선하려면 PedagogyPack 주입을 WH-1 전체에 새로 "
-            "도입해야 함 — 이 태스크 범위 밖의 별도 대형 작업. 완화 요인: `check_forbidden_modes`"
-            "가 규칙 검출기를 가진 유일한 모드 WORKED_EXAMPLE_FIRST는 이미 `runtime_selector`의 "
-            "사전 가드 `forbids_worked_first`가 선택 시점에 강등하므로 사후 가드 부재의 실질 "
-            "위험은 낮다). 재검토 조건: WH-1 루프가 PedagogyPack을 참조하게 되는 시점. 사전 "
-            "가드는 `runtime_selector` supply 경로에 별도 배선. "
+            "주의: forbidden_modes *문면* 가드(`mode_guard`)는 이 플래그와 무관하다 — "
+            'PED-16(2026-08-10)이 "WH-1 루프가 PedagogyPack을 참조하지 않는다"를 근거로 '
+            "by-design 미배선을 확정했으나, PED-23(회수)이 coach→WH-1 러너 팩 thread로 그 선결 "
+            "조건을 충족시켜 톤필터 직전 런타임 배선을 복원했다(`mode_guard_runtime_enabled` "
+            "옵트인·기본 OFF — 그 플래그의 description 참조). 오프라인 결함주입 측정"
+            "(`pedagogy_pack_fidelity_eval`)은 그대로 CI 상시다. 사전 가드(`runtime_selector`의 "
+            "`forbids_worked_first` 선택 시점 강등)도 불변으로 유지된다. "
             "WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false 킬스위치."
+        ),
+    )
+
+    mode_guard_runtime_enabled: bool = Field(
+        default=False,
+        description=(
+            "교수법 팩 forbidden_modes 런타임 가드(`mode_guard.check_forbidden_modes`)를 WH-1 "
+            "primary 학생-대면 발화 경로의 톤필터 *앞*에 걸지(PED-23 회수 — 정본 "
+            "docs/architecture/04e_pedagogy_strategy_catalog.md §9). **False(기본·옵트인)** — "
+            "OFF면 가드 블록 미실행으로 기존 서빙 경로와 비트동일(회귀 0·킬스위치). ON이면 팩이 "
+            "해석된 턴에서 발화가 팩 금지 모드를 위반할 때 그 발화를 학생에게 보내지 않고 "
+            "안전한 소크라테스식 재질문(결정론 템플릿·`fallback_reply_for`)으로 대체하며 "
+            "reason_code(위반 모드 토큰)를 구조화 WARNING 로그로 남긴다(fail-closed·04d §2.2 "
+            "SOCRATIC 강등 선례 미러). 팩 부재(None)면 가드는 통과(팩 없으면 forbidden_modes도 "
+            "없음). 결정론 폴백·검증 게이트·톤필터는 무변경 — 가드는 그 사슬 *안*(프로즈 뒤· "
+            '톤필터 앞)에 얹힌 계층이다. 경위: PED-16(2026-08-10)이 "WH-1 루프가 PedagogyPack을 '
+            '참조하지 않는다"를 근거로 by-design 미배선을 확정했으나, 격리 브랜치의 원 구현'
+            "(PED-07)이 이미 coach→러너 팩 thread로 그 선결 조건을 충족해 둔 상태였다 — PED-23이 "
+            "그 capability를 현행 위에 재적용했다(옵트인 캔어리). GA flip(기본 True)은 결함주입 "
+            "측정(pedagogy_pack_fidelity_eval exit 0 상시)+사인오프 후 별도 커밋(팩 GA 선례). "
+            "WHYMATH_MODE_GUARD_RUNTIME_ENABLED=false 킬스위치."
+        ),
+    )
+
+    pedagogy_catalog_filter_enabled: bool = Field(
+        default=False,
+        description=(
+            "교수전략 카탈로그(PED-05·PED-22 회수)의 적합성 필드(target_grade_bands·"
+            "difficulty_range·target_k_types)를 `runtime_selector.select()`의 **후보 필터**로 "
+            "소비할지(PED-23 회수 — 정본 docs/architecture/04e_pedagogy_strategy_catalog.md §4). "
+            "**False(기본·옵트인)** — OFF면 카탈로그 미조회·규칙표 v1(R1~R5) 원판정 그대로(기존 "
+            "선택 경로와 비트동일·킬스위치). ON이면 규칙표 적용 전에 후보 집합을 카탈로그 적합성"
+            "으로 **좁히기만** 한다: 좁힌 결과가 공집합이거나 규칙표가 후보를 소진하면 필터를 "
+            "무시하고 원판정으로 폴백하며 reason_code(CATALOG_FILTER_EMPTY/EXHAUSTED)를 구조화 "
+            "로그로 남긴다(조용한 실패 금지). 카탈로그는 select 전용 — `gate()`는 플래그와 "
+            "무관하게 카탈로그를 읽지 않는다(효과≤허용 우회 차단·04e §4 불변식 ②·테스트 동결). "
+            "GA flip(기본 True)은 측정+사인오프 후 별도 커밋(mode_guard 캔어리 선례). "
+            "WHYMATH_PEDAGOGY_CATALOG_FILTER_ENABLED=false 킬스위치."
+        ),
+    )
+
+    pedagogy_strategy_card_enabled: bool = Field(
+        default=False,
+        description=(
+            "`supply()` 생성 폴백의 system 프롬프트에 선택된 교수전략의 카탈로그 카드"
+            "(name_ko·description·research_basis 요약 1줄 — attention 절약)를 얹을지(PED-23 "
+            "회수 — 정본 04e §3.2 소비처 지정표). **False(기본·옵트인)** — OFF면 카탈로그 "
+            "미조회·system 무변경으로 기존 생성 경로와 비트동일(프롬프트-해시 캐시 키도 불변·"
+            "킬스위치). ON이면 `decide()`가 고른(게이트 통과 후) 전략의 카드를 조회해 "
+            "`attach_strategy_card`로 system 뒤에 1블록을 덧붙인다 — 카드 조회 실패는 예외 "
+            "타입명을 WARNING 로그로 남기고 무카드로 진행한다(best-effort 계층·생성 자체를 "
+            "막지 않음·침묵 실패 금지). 렌더 경로(dsl_render)는 프롬프트가 없어 무관. "
+            "GA flip(기본 True)은 측정+사인오프 후 별도 커밋(팩 GA 선례). "
+            "WHYMATH_PEDAGOGY_STRATEGY_CARD_ENABLED=false 킬스위치."
         ),
     )
 

@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-43-local-llm-stack-optimization
+title: "Phaiakes9 로컬 LLM 스택 최적화 — S4-16 강등전 재개 조건"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① qwen3.5:27b가 cross_verify 1회 호출을 60초 이내에 완료(현재 115~300초) — Ollama ROCm 튜닝·llama.cpp Vulkan 전환·또는 GPU offload 최적화로 달성"
+  - "② S4-16 강등전을 qwen3.5:27b로 재실행해 Wilson 게이트 PASS(검출률 하한 > 0.9·오검출 상한 < 0.05) — 통과 시 S4-16 done 전환 및 KG-02 unblock"
+  - "③ 대안: 클라우드 provider(Anthropic/OpenAI)를 Phaiakes9 backend에 배선해 S4-16 강등전 실행 — 이 경우도 ②와 동일한 게이트 PASS가 필요"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/providers/**"
+  - "infra/phaiakes9/**"
+session: null
+notes: "2026-08-14 측정에서 확인: qwen3.5:27b는 Windows+Ollama+ROCm에서 0.5~1 tok/s로 너무 느리고, qwen2.5:7b/qwen2-math:7b는 강등전 구분력이 없다. GMKtec AI Max+ 395/8060S는 32B급을 돌릴 수 있는 하드웨어이므로 소프트웨어 스택 문제로 추정. S4-16 blocked 해소의 전제 조건."
+updated: 2026-08-14
