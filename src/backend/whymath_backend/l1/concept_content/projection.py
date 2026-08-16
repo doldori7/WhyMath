@@ -11,8 +11,9 @@ Phase 3가 캡처한 콘텐츠 코퍼스(`concept_content_v1/content.json`·K-12
     (예 'CALC1-U1-S1'). 겹침 0이라 단일 PK·`scope`('K-12'|'대학')로 구분(loader 인자로 주입).
   - **콘텐츠 4종 + 암기카드 수용**: metaphor·misconception·formal_definition_internal·
     accepted_expressions·explanation·flashcards(JSONB list). 4종은 전량 자체작성(보유 허용).
-  - **review_status는 상수 'ai_estimated'**: 콘텐츠는 AI 추정·검수필요라 코퍼스에서 읽지 않고
-    코드 상수로 박는다(정직 표기·검수 게이팅용·atom_node 동형).
+  - **review_status는 코퍼스 record 값**: 콘텐츠는 AI 추정·검수필요라 코퍼스에서
+    `review_status`를 읽고, 부재 시만 'ai_estimated'로 폴백한다(정직 표기·검수 게이팅용·
+    승격 후 재적재 시 `reviewed` 보존).
 
 ────────────────────────────────────────────────────────────────────────────
 법적·노출 (CLAUDE.md 우선순위 #2)
@@ -36,6 +37,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from sqlalchemy import func
+
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.concept_content import CONTENT_REVIEW_STATUS_AI_ESTIMATED
 
@@ -56,12 +59,12 @@ def _opt_str(value: object) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class ConceptContentRecord:
-    """프로젝션 대상 한 개념(K-12)/소단원(대학)의 콘텐츠 4종 + 설명 + 암기카드.
+    """프로젝션 대상 한 개념(K-12)/소단원(대학)의 콘텐츠 4종 + 설명 + 암기카드 + 검수 상태.
 
     `content.json`의 한 content 항목에서 콘텐츠 키만 추린 값이다. **성취기준 *본문* 슬롯은 없다**
     (코퍼스에 본문 부재·standard_codes 코드만·구조적 차단). `formal_definition_internal`은 저장하되
-    학생 비노출(노출은 소비계층 게이팅). 적재기가 code 키로 upsert한다. `review_status`는 슬롯이
-    없다 — 적재기가 상수로 박는다(AI 추정).
+    학생 비노출(노출은 소비계층 게이팅). `review_status`는 코퍼스 record 값을 그대로 읽어
+    upsert한다(승격 후 재적재 시 `reviewed` 보존 — 부재 시 'ai_estimated' 기본).
     """
 
     code: str
@@ -76,6 +79,7 @@ class ConceptContentRecord:
     explanation: str | None
     standard_codes: tuple[str, ...]
     flashcards: tuple[dict[str, object], ...]
+    review_status: str
 
 
 def load_concept_content_from_json(path: Path, *, scope: str) -> list[ConceptContentRecord]:
@@ -113,6 +117,8 @@ def load_concept_content_from_json(path: Path, *, scope: str) -> list[ConceptCon
             if isinstance(raw_cards, (list, tuple))
             else ()
         )
+        # 코퍼스가 review_status를 명시하면 그 값을, 없으면 AI 추정 상수를 쓴다(정직 표기).
+        review_status = _opt_str(record.get("review_status")) or CONTENT_REVIEW_STATUS_AI_ESTIMATED
         out.append(
             ConceptContentRecord(
                 code=code,
@@ -127,6 +133,7 @@ def load_concept_content_from_json(path: Path, *, scope: str) -> list[ConceptCon
                 explanation=_opt_str(record.get("explanation")),
                 standard_codes=codes,
                 flashcards=cards,
+                review_status=review_status,
             )
         )
     return out
@@ -137,9 +144,10 @@ class ConceptContentStore:
 
     `AtomNodeStore`(원자 메타 프로젝션)의 *콘텐츠* 짝이다. `upsert`는 PK 충돌 upsert
     (`INSERT ... ON CONFLICT(code) DO UPDATE`)로 멱등 적재한다(같은 code 재적재 → 행 갱신·
-    updated_at 갱신). `review_status`는 상수 'ai_estimated'로 박는다(콘텐츠는 AI 추정·정직 표기).
-    sync 엔진은 슬3 `_build_sync_engine`을 재사용해 지연 생성·캐시한다(신규 seam 0). 벡터 컬럼이
-    없어 검색 메서드는 두지 않는다 — *적재 전용* 좌석이다(조회·조인은 후속).
+    updated_at 갱신). `review_status`는 코퍼스 record의 값을 그대로 사용한다(승격 후 재적재 시
+    `reviewed` 보존 — 부재 시 로더가 'ai_estimated' 기본). sync 엔진은 슬3 `_build_sync_engine`을
+    재사용해 지연 생성·캐시한다(신규 seam 0). 벡터 컬럼이 없어 검색 메서드는 두지 않는다 — *적재
+    전용* 좌석이다(조회·조인은 후속).
     """
 
     def __init__(
@@ -168,7 +176,7 @@ class ConceptContentStore:
         """단일 콘텐츠 레코드 upsert (멱등·code PK 충돌 갱신).
 
         `INSERT ... ON CONFLICT(code) DO UPDATE` — 콘텐츠 4종·설명·standard_codes·flashcards +
-        review_status('ai_estimated' 상수) + updated_at(now())을 갱신한다. 성취기준 *본문* 컬럼은
+        record의 `review_status` + updated_at(now())을 갱신한다. 성취기준 *본문* 컬럼은
         없다(코퍼스 부재·레코드 슬롯 부재의 이중 차단). standard_codes는 PG TEXT[]·flashcards는
         dict 리스트(PG JSONB)로 바인딩한다. **`atom_codes`는 여기서 건드리지 않는다**(INSERT·set_
         미등장 — 신규 행은 server_default '{}', 기존 행 값은 보존): 채움 좌석은 S0-2 크로스워크
@@ -193,7 +201,7 @@ class ConceptContentStore:
             explanation=record.explanation,
             standard_codes=list(record.standard_codes),
             flashcards=[dict(c) for c in record.flashcards],
-            review_status=CONTENT_REVIEW_STATUS_AI_ESTIMATED,
+            review_status=record.review_status,
         )
         # PK 충돌 시 갱신 — updated_at은 now()로 새로 찍는다(server_default는 INSERT 전용).
         stmt = stmt.on_conflict_do_update(
@@ -216,6 +224,27 @@ class ConceptContentStore:
         )
         with self._get_engine().begin() as conn:
             conn.execute(stmt)
+
+    def mark_review_status(self, codes: Sequence[str], review_status: str) -> int:
+        """code 목록의 `review_status`를 일괄 갱신하고 영향받은 행 수를 반환.
+
+        사람 검수 승격 시 `review_status='reviewed'`로 갱신하는 전용 좌석이다. `code`가
+        테이블에 없으면 해당 행은 0으로 집계되며, 전체 code가 없으면 0을 반환한다.
+        """
+        from sqlalchemy import update
+
+        from whymath_backend.db.models.concept_content import ConceptContent
+
+        if not codes:
+            return 0
+        stmt = (
+            update(ConceptContent)
+            .where(ConceptContent.code.in_(codes))
+            .values(review_status=review_status, updated_at=func.now())
+        )
+        with self._get_engine().begin() as conn:
+            result = conn.execute(stmt)
+            return int(result.rowcount)
 
 
 def populate_concept_content(

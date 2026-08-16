@@ -60,6 +60,7 @@ from whymath_backend.api._concurrency import (
 )
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
+from whymath_backend.db.models.concept_content import ConceptContent
 from whymath_backend.db.session import get_session
 from whymath_backend.l1.atom_graph.retrieval import search_atoms
 from whymath_backend.l4.misconception.semantic.provider import (
@@ -68,6 +69,7 @@ from whymath_backend.l4.misconception.semantic.provider import (
 )
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
+from whymath_backend.schema.concept_content import ConceptContentSchema
 
 router = APIRouter(prefix="/v1/concepts", tags=["concept"])
 
@@ -232,6 +234,42 @@ async def search_concepts_endpoint(
         ],
         vector_store_enabled=enabled,
     )
+
+
+@router.get(
+    "/content",
+    response_model=list[ConceptContentSchema],
+    summary="개념 콘텐츠 목록",
+)
+async def list_concept_content(
+    session: SessionDep,
+    reviewed_only: Annotated[
+        bool,
+        Query(
+            description=("검수 게이팅. false(기본)=전체 콘텐츠. true='reviewed' 상태만 반환."),
+        ),
+    ] = False,
+    scope: Annotated[str | None, Query(description="scope 필터 (K-12|대학).")] = None,
+    subject: Annotated[str | None, Query(description="subject 필터.")] = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="페이지 크기")] = 50,
+    offset: Annotated[int, Query(ge=0, description="건너뛸 행 수")] = 0,
+) -> list[ConceptContentSchema]:
+    """`concept_content` PG 프로젝션 조회 좌석 — 콘텐츠 4종·설명·암기카드·검수 상태.
+
+    **노출 계약**: 학생 직접 노출이 아니라 L2/L4·교사 도구가 소비하는 *내부 표면*이다.
+    `formal_definition_internal`은 내부·검수용이므로 학생 렌더 경로에서는 별도 게이팅으로
+    제외해야 한다. `reviewed_only=true`면 검수 완료 콘텐츠만 반환(fail-closed).
+    """
+    stmt = select(ConceptContent)
+    if reviewed_only:
+        stmt = stmt.where(ConceptContent.review_status == "reviewed")
+    if scope is not None:
+        stmt = stmt.where(ConceptContent.scope == scope)
+    if subject is not None:
+        stmt = stmt.where(ConceptContent.subject == subject)
+    stmt = stmt.order_by(ConceptContent.code).limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
 
 
 @router.post(

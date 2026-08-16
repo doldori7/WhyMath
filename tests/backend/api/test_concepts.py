@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -30,6 +31,7 @@ from whymath_backend.api._auth import require_content_admin
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
+from whymath_backend.db.models.concept_content import ConceptContent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
@@ -135,6 +137,32 @@ def _sample_edge(from_id: uuid.UUID, to_id: uuid.UUID) -> ConceptEdge:
             to_concept_id=to_id,
             edge_type=EdgeType.PREREQUISITE,
         )
+    )
+
+
+def _sample_concept_content(
+    code: str = "N1",
+    *,
+    scope: str = "K-12",
+    subject: str = "초등수학",
+    review_status: str = "ai_estimated",
+) -> ConceptContent:
+    """`ConceptContent` transient ORM — list_content endpoint 모사용."""
+    return ConceptContent(
+        code=code,
+        scope=scope,
+        name=f"name-{code}",
+        subject=subject,
+        unit="수와 연산",
+        metaphor="개수 도구",
+        misconception="0 포함 오인",
+        formal_definition_internal="정의(내부)",
+        accepted_expressions="자연수",
+        explanation="기초",
+        standard_codes=["[2수01-01]"],
+        flashcards=[{"front": "Q", "back": "A"}],
+        review_status=review_status,
+        updated_at=datetime.now(timezone.utc),
     )
 
 
@@ -400,6 +428,43 @@ class TestConditionalGet:
 
 
 _TEST_JWT_SETTINGS = Settings(jwt_secret_key=SecretStr("test-secret-key-0123456789abcdef"))
+
+
+class TestListContent:
+    """GET /v1/concepts/content — 콘텐츠 4종 조회 좌석(내부 표면)."""
+
+    def test_list_content_returns_rows(self) -> None:
+        rows = [
+            _sample_concept_content("N1", review_status="reviewed"),
+            _sample_concept_content("N2", scope="대학", subject="갈루아 이론"),
+        ]
+        fake = FakeSession(list_rows=rows)
+        resp = _client(fake).get("/v1/concepts/content")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        assert {item["code"] for item in body} == {"N1", "N2"}
+        assert body[0]["review_status"] == "reviewed"
+
+    def test_list_content_accepts_query_params(self) -> None:
+        """reviewed_only·scope·subject 쿼리 파라미터가 422 없이 수용된다(필터 로직은 SQLAlchemy
+        + 실 PG에서 검증 — 단위테스트는 FakeSession이라 필터 미적용)."""
+        fake = FakeSession(list_rows=[_sample_concept_content()])
+        client = _client(fake)
+        assert client.get("/v1/concepts/content?reviewed_only=true").status_code == 200
+        assert client.get("/v1/concepts/content?scope=K-12").status_code == 200
+        assert (
+            client.get(
+                "/v1/concepts/content?subject=%EC%B4%88%EB%93%B1%EC%88%98%ED%95%99"
+            ).status_code
+            == 200
+        )
+
+    def test_list_content_pagination_rejects_out_of_range(self) -> None:
+        client = _client(FakeSession())
+        assert client.get("/v1/concepts/content?limit=0").status_code == 422
+        assert client.get("/v1/concepts/content?limit=999").status_code == 422
+        assert client.get("/v1/concepts/content?offset=-1").status_code == 422
 
 
 class TestAuthGate:

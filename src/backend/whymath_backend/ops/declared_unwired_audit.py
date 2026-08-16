@@ -1041,6 +1041,8 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "harness.objective_coverage": _OFFLINE_REPORT,
         "harness.concept_assessment_index": _OFFLINE_REPORT,
         "harness.concept_content_audit": _OFFLINE_REPORT,
+        "harness.concept_content_review_batch": _BATCH_GENERATOR,
+        "harness.concept_content_review_apply": _BATCH_GENERATOR,
         # REC-09 회수(2026-08-11) — `harness.attempt_grading_shadow_report`의 `_OFFLINE_REPORT`
         # 유예를 **삭제**했다. 이 모듈은 이제 CI 루트에서 전이 도달한다: REC-08 게이트
         # (`harness.selective_grading_demotion_eval` · backend 잡의 독립 스텝)가 이 모듈의
