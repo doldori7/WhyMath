@@ -28,7 +28,11 @@ from whymath_backend.l3.dsl.models import (
     ValidationReport,
 )
 from whymath_backend.l3.dsl.quality_gate import QualityGate
-from whymath_backend.l3.dsl.repair import InMemoryHumanReviewQueue, RepairEngine
+from whymath_backend.l3.dsl.repair import (
+    DSLRepairLLM,
+    InMemoryHumanReviewQueue,
+    RepairEngine,
+)
 from whymath_backend.l3.dsl.validators import (
     DSLValidationPipeline,
     DuplicateValidator,
@@ -111,7 +115,7 @@ def get_repair_engine() -> RepairEngine:
     현재는 LLM 복구 호출이 구현되지 않아 placeholder로 둔다.
     """
 
-    class _NoopRepairLLM:
+    class _NoopRepairLLM(DSLRepairLLM):
         async def repair(
             self, dsl: ProblemDSL, report: ValidationReport, attempt: int
         ) -> ProblemDSL:

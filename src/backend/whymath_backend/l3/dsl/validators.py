@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -188,17 +189,13 @@ class DSLValidationPipeline:
                     }
                 )
 
-        def status(stage: str) -> str:
+        def status(stage: str) -> Literal["PASS", "FAIL"]:
             r = results.get(stage)
             if r is None:
                 return "PASS"
             return "PASS" if r.passed else "FAIL"
 
-        math_status = status("math")
-        if math_status == "FAIL":
-            math_status = "FAIL"
-        elif math_status == "PASS":
-            math_status = "PASS"
+        math_status: Literal["PASS", "FAIL", "UNVERIFIABLE"] = status("math")
 
         # 수학 정답 FAIL은 전체 FAIL
         publishable = (
@@ -214,7 +211,7 @@ class DSLValidationPipeline:
             syntax=status("syntax"),
             schema_validation=status("schema"),
             semantic=status("semantic"),
-            math=math_status,  # type: ignore[arg-type]
+            math=math_status,
             education=status("education"),
             duplicate=status("duplicate"),
             publishable=publishable,
