@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-16 (규칙·LLM 포트폴리오): **모델·프로바이더 포트폴리오 개방 원칙 — "불가 목록"이 아니라 실측 기반 상시 재평가. CLAUDE.md ✅절대원칙·AGENTS.md 스택 표 반영** (Kiki 지시, claude 등재)
+
+**결정**: 신규 LLM 프로바이더(OpenRouter 등)·신규 모델(DeepSeek 계열 등)의 도입을 **전제로 배제하지 않는다**. WhyMath는 AI 발전과 비용 구조의 변화에 유연하고 현명하게 대응한다 — 모델·프로바이더 포트폴리오는 고정 집합이 아니라 **측정 기반 개방 목록**이다.
+
+**배경·사고 경위**: 2026-08-15 외부 EOS 설계안("97. 자동 콘텐츠 생성 파이프라인") 아키텍처 검토에서, 제안서의 OpenRouter/DeepSeek 언급을 "현행 스택 표에 없는 신규 프로바이더라 불가"로 판정했으나 Kiki가 "현실적이지 않다 — 우리 시스템은 AI 발전과 비용에 대해 유연하고 현명하게 상황에 맞춰 접근한다"로 정정. 이 원칙을 규칙으로 등재한다.
+
+**경계 (개방 ≠ 무절차)**:
+- 채택·교체 조건 3건: ① 라우터(`l3/router.py`) 경유 배선 — 직접 호출 금지는 불변 ② 품질·지연·비용 실측 근거(2026-05-20 태스크 인지 실측 선례 형식) ③ 본 결정 로그 기재.
+- **검증 계약은 프로바이더와 무관하게 불변**: SymPy 단일 권위·학생 제공 전 검증·Langfuse 추적·미성년자 데이터 정책·저작권 레일은 모델이 바뀌어도 유지된다.
+- 현행 배선(claude-sonnet-4-6·claude-opus-4-7 + Ollama 로컬 매트릭스)은 이 원칙의 *현재 상태*이지 *상한*이 아니다.
+
+**반영**: CLAUDE.md ✅절대원칙·LLM 사용 항목 신설 + 기술 스택 표 주석, AGENTS.md 기술 스택 표 LLM 행.
+
 ### 2026-08-15 (회수·PED-23): **교수전략 카탈로그 소비 배선 회수 — 후보 필터·전략 카드·mode_guard 런타임 fail-closed. PED-16 "by-design 미배선" 선언 해소** (claude 회수, Kiki "진행")
 
 **배경**: uqyg79의 구 PED-06(842ed2a5)·PED-07(2874e7b0)이 done인데 main 미착지. PED-22(카탈로그 정본)가 먼저 착지한 뒤 소비 배선을 회수했다(좌석만 두고 끝내지 않는다 — VIZ-06 교훈).
@@ -6782,3 +6795,43 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 
 **최종 수정**: 2026-05-28  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
+
+
+---
+
+## 📋 결정 로그 — 2026-08-15
+
+### DSL 콘텐츠 생성기(Domain-Specific Language Content Generator) 도입
+
+**결정**: WhyMath L3에 DSL 콘텐츠 생성기를 도입한다. LLM이 만든 자연어 콘텐츠를 교육 DSL로 정의하고, 다중 검증·수학 검증·교육 검증을 통과한 것만 컴파일해 Runtime으로 넘긴다.
+
+**근거**:
+- LLM이 직접 콘텐츠 DB를 수정하면 정답 오류·조건 누락·난이도 불일치를 사후에 잡기 어렵다.
+- DSL은 콘텐츠의 Intermediate Representation(IR)으로서 생성·검증·컴파일·실행을 분리한다.
+- 수학 정답 FAIL은 다른 점수로 상쇄할 수 없다.
+
+**핵심 설계**:
+- Human-readable YAML/JSON은 저작·검토용, Canonical IR은 Pydantic 모델 + 렌더러-중립 LaTeX.
+- 수학 검증은 SymPy가 단일 권위(자체 CAS 금지).
+- 6단계 검증 파이프라인: 문법 → 스키마 → 의미 → 수학 → 교육 → 중복.
+- Repair Loop: 최대 3회 재시도 후 사람 검수 큐로 전달.
+- API 3종: `POST /v1/dsl/{generate, validate, compile}`.
+
+**구현**:
+- 신규 패키지: `src/backend/whymath_backend/l3/dsl/`
+- API 라우터: `src/backend/whymath_backend/api/dsl.py`
+- 테스트: `tests/backend/l3/dsl/`, `tests/backend/api/test_dsl.py`
+- 문서: `docs/architecture/03d_dsl_content_generator.md`
+
+**검증**:
+- 단위 테스트 31개 통과
+- API 통합 테스트 5개 통과
+- Ruff·Black 통과
+
+**후속 과제**:
+- `/v1/dsl/generate`의 실제 LLM 생성 연동(`l3/pipeline.py`와 통합)
+- DSL Registry 및 버전 관리
+- 콘텐츠 생명주기 DB 테이블 정규화
+- 오개념 DSL을 `l4/misconception/`과 연결
+
+---
