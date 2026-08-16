@@ -65,7 +65,8 @@ def _parse_expression(text: str, local_dict: dict[str, object]) -> object | None
         implicit_multiplication,
     )
     try:
-        return parse_expr(text, local_dict=local_dict, transformations=transformations)
+        result: object = parse_expr(text, local_dict=local_dict, transformations=transformations)
+        return result
     except Exception:
         return None
 
@@ -85,7 +86,8 @@ def _parse_formula(text: str, local_dict: dict[str, object]) -> object | None:
         try:
             from sympy import Eq
 
-            return Eq(left, right)
+            eq_result: object = Eq(left, right)
+            return eq_result
         except ImportError:
             return None
 

@@ -22,9 +22,13 @@ from whymath_backend.api._auth import CurrentUser
 from whymath_backend.l3.dsl.compiler import ContentCompiler
 from whymath_backend.l3.dsl.math_verifier import MathValidator
 from whymath_backend.l3.dsl.models import (
+    AnswerSpec,
     CompiledContent,
     ContentSpecification,
+    CurriculumMeta,
+    DifficultyMeta,
     ProblemDSL,
+    ProblemTemplate,
     ValidationReport,
 )
 from whymath_backend.l3.dsl.quality_gate import QualityGate
@@ -161,21 +165,21 @@ async def generate_dsl(
     dsl = ProblemDSL(
         content_id=f"{body.spec.subject[:3].upper()}-{body.spec.concept[:8].upper()}-000001",
         dsl_version="1.0",
-        curriculum={
-            "subject": body.spec.subject,
-            "grade": body.spec.grade,
-            "domain": body.spec.concept,
-            "concept": body.spec.concept,
-        },
-        difficulty={"level": body.spec.difficulty, "target_time_sec": 120},
+        curriculum=CurriculumMeta(
+            subject=body.spec.subject,
+            grade=body.spec.grade,
+            domain=body.spec.concept,
+            concept=body.spec.concept,
+        ),
+        difficulty=DifficultyMeta(level=body.spec.difficulty, target_time_sec=120),
         learning={"skill": ("equation_transformation",)},
-        problem={
-            "statement": "스캐폴드 문제 본문 — 실제 LLM 생성 연동 필요",
-            "template": None,
-            "variables": {},
-            "constraints": (),
-        },
-        answer={"type": "integer", "value": "0", "expression": None, "choices": None},
+        problem=ProblemTemplate(
+            statement="스캐폴드 문제 본문 — 실제 LLM 생성 연동 필요",
+            template=None,
+            variables={},
+            constraints=(),
+        ),
+        answer=AnswerSpec(type="integer", value="0", expression=None, choices=None),
         solution=(),
         hints=(),
     )
