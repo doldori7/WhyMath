@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ acceptance:
 artifacts: []
 paths:
   - "tests/backend/**"
-session: null
+session: claude/backend-ops-44-env-defects-b663b6
 notes: "2026-08-15 PED-22/25 검증 중 발견 — 로컬(Windows·Ollama 상시 기동)에서 전체 스위트가 상시 11건 red라 로컬 판정 신뢰가 깎인다. CI(Linux)는 green."
-updated: 2026-08-15
+updated: 2026-08-16

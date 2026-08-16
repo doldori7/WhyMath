@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from whymath_backend.l5.ocr.recognize import (
@@ -51,7 +53,13 @@ def test_korean_rec_kwargs_when_korean_and_model_dir() -> None:
     kwargs = _rapidocr_rec_kwargs("korean", "/models/korean")
     assert kwargs["rec_model_path"].endswith("korean_PP-OCRv4_rec.onnx")
     assert kwargs["rec_keys_path"].endswith("korean_dict.txt")
-    assert "/models/korean" in kwargs["rec_model_path"]
+    # [OPS-44 사고 경위] 원래 "/models/korean" in ... 단언이었으나 Windows에선 경로가
+    # 백슬래시(`\models\korean\...`)로 나와 깨졌다 — 경로 부품(parts) 비교로 플랫폼 중립화.
+    assert Path(kwargs["rec_model_path"]).parts[-3:] == (
+        "models",
+        "korean",
+        "korean_PP-OCRv4_rec.onnx",
+    )
     # 'ko' 약어도 동일하게 인식한다.
     assert _rapidocr_rec_kwargs("ko", "/m") != {}
 

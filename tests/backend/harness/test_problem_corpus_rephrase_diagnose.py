@@ -11,6 +11,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
 from whymath_backend.harness.problem_corpus_rephrase_diagnose import (
     main,
@@ -159,7 +161,16 @@ class TestRunRephraseDiagnose:
 
 
 class TestCliEntry:
-    def test_dump_writes_failures_jsonl(self, tmp_path: Path, capsys: object) -> None:
+    def test_dump_writes_failures_jsonl(
+        self, tmp_path: Path, capsys: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # provider 차단 main → 전건 PROVIDER_ERROR(환경 무관)·그 실패가 dump된다.
+        # [OPS-44 사고 경위] "라이브 부재" 전제였으나 Kiki 머신은 Ollama가 상시 기동이라 실제
+        # 변형이 일어나 깨졌다 — provider 해소를 예외로 강제 차단해 전제를 코드로 봉인.
+        def _blocked(self: QuestionRephraser) -> None:
+            raise RuntimeError("테스트 강제 차단 — 라이브 provider 해소 금지")
+
+        monkeypatch.setattr(QuestionRephraser, "_resolve_provider", _blocked)
         src = _seed_corpus(tmp_path)
         dump = tmp_path / "failures.jsonl"
         # provider 미주입 main → 전건 PROVIDER_ERROR(라이브 부재)·그 실패가 dump된다.
