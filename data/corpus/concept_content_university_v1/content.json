@@ -24,7 +24,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U1-S2",
@@ -45,7 +46,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U1-S3",
@@ -66,7 +68,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U2-S1",
@@ -87,7 +90,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U2-S2",
@@ -108,7 +112,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U3-S1",
@@ -129,7 +134,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U4-S1",
@@ -150,7 +156,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "GALOIS-U4-S2",
@@ -171,7 +178,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U1-S1",
@@ -192,7 +200,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U1-S2",
@@ -213,7 +222,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U2-S1",
@@ -234,7 +244,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U2-S2",
@@ -255,7 +266,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U3-S1",
@@ -276,7 +288,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U3-S2",
@@ -297,7 +310,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U4-S1",
@@ -318,7 +332,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FINM-U4-S2",
@@ -339,7 +354,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U1-S1",
@@ -360,7 +376,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U1-S2",
@@ -381,7 +398,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U2-S1",
@@ -402,7 +420,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U3-S1",
@@ -423,7 +442,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U3-S2",
@@ -444,7 +464,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U4-S1",
@@ -465,7 +486,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AGEO-U4-S2",
@@ -486,7 +508,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U1-S1",
@@ -507,7 +530,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U1-S2",
@@ -528,7 +552,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U2-S1",
@@ -549,7 +574,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U2-S2",
@@ -570,7 +596,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U3-S1",
@@ -591,7 +618,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U3-S2",
@@ -612,7 +640,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U4-S1",
@@ -633,7 +662,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ATOPO-U4-S2",
@@ -654,7 +684,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U1-S1",
@@ -675,7 +706,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U1-S2",
@@ -696,7 +728,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U1-S3",
@@ -717,7 +750,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U1-S4",
@@ -738,7 +772,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U2-S1",
@@ -759,7 +794,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U2-S2",
@@ -780,7 +816,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U2-S3",
@@ -801,7 +838,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U3-S1",
@@ -822,7 +860,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U3-S2",
@@ -843,7 +882,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U3-S3",
@@ -864,7 +904,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U4-S1",
@@ -885,7 +926,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U4-S2",
@@ -906,7 +948,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "DGEO-U5-S1",
@@ -927,7 +970,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U1-S1",
@@ -948,7 +992,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U1-S2",
@@ -969,7 +1014,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U1-S3",
@@ -990,7 +1036,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U2-S1",
@@ -1011,7 +1058,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U2-S2",
@@ -1032,7 +1080,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U3-S1",
@@ -1053,7 +1102,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U3-S2",
@@ -1074,7 +1124,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U4-S1",
@@ -1095,7 +1146,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U4-S2",
@@ -1116,7 +1168,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U4-S3",
@@ -1137,7 +1190,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MFLD-U5-S1",
@@ -1158,7 +1212,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U1-S1",
@@ -1179,7 +1234,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U1-S2",
@@ -1200,7 +1256,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U1-S3",
@@ -1221,7 +1278,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U1-S4",
@@ -1242,7 +1300,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U2-S1",
@@ -1263,7 +1322,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U2-S2",
@@ -1284,7 +1344,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U2-S3",
@@ -1305,7 +1366,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U3-S1",
@@ -1326,7 +1388,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U3-S2",
@@ -1347,7 +1410,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U3-S3",
@@ -1368,7 +1432,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U4-S1",
@@ -1389,7 +1454,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U4-S2",
@@ -1410,7 +1476,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U5-S1",
@@ -1431,7 +1498,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ODE-U5-S2",
@@ -1452,7 +1520,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U1-S1",
@@ -1473,7 +1542,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U1-S2",
@@ -1494,7 +1564,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U1-S3",
@@ -1515,7 +1586,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U1-S4",
@@ -1536,7 +1608,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S1",
@@ -1557,7 +1630,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S2",
@@ -1578,7 +1652,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S3",
@@ -1599,7 +1674,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S4",
@@ -1620,7 +1696,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S5",
@@ -1641,7 +1718,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S6",
@@ -1662,7 +1740,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U2-S7",
@@ -1683,7 +1762,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U3-S1",
@@ -1704,7 +1784,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U3-S2",
@@ -1725,7 +1806,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U3-S3",
@@ -1746,7 +1828,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U3-S4",
@@ -1767,7 +1850,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U3-S5",
@@ -1788,7 +1872,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U4-S1",
@@ -1809,7 +1894,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U4-S2",
@@ -1830,7 +1916,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U4-S3",
@@ -1851,7 +1938,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U4-S4",
@@ -1872,7 +1960,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U5-S1",
@@ -1893,7 +1982,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U5-S2",
@@ -1914,7 +2004,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U5-S3",
@@ -1935,7 +2026,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U5-S4",
@@ -1956,7 +2048,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U6-S1",
@@ -1977,7 +2070,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U6-S2",
@@ -1998,7 +2092,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U6-S3",
@@ -2019,7 +2114,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U6-S4",
@@ -2040,7 +2136,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U7-S1",
@@ -2061,7 +2158,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U7-S2",
@@ -2082,7 +2180,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U7-S3",
@@ -2103,7 +2202,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC1-U7-S4",
@@ -2124,7 +2224,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U1-S1",
@@ -2145,7 +2246,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U1-S2",
@@ -2166,7 +2268,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U1-S3",
@@ -2187,7 +2290,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U1-S4",
@@ -2208,7 +2312,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S1",
@@ -2229,7 +2334,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S2",
@@ -2250,7 +2356,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S3",
@@ -2271,7 +2378,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S4",
@@ -2292,7 +2400,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S5",
@@ -2313,7 +2422,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U2-S6",
@@ -2334,7 +2444,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U3-S1",
@@ -2355,7 +2466,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U3-S2",
@@ -2376,7 +2488,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U3-S3",
@@ -2397,7 +2510,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U3-S4",
@@ -2418,7 +2532,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U4-S1",
@@ -2439,7 +2554,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U4-S2",
@@ -2460,7 +2576,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U4-S3",
@@ -2481,7 +2598,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U4-S4",
@@ -2502,7 +2620,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U4-S5",
@@ -2523,7 +2642,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S1",
@@ -2544,7 +2664,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S2",
@@ -2565,7 +2686,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S3",
@@ -2586,7 +2708,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S4",
@@ -2607,7 +2730,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S5",
@@ -2628,7 +2752,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U5-S6",
@@ -2649,7 +2774,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U6-S1",
@@ -2670,7 +2796,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U6-S2",
@@ -2691,7 +2818,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U6-S3",
@@ -2712,7 +2840,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U6-S4",
@@ -2733,7 +2862,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CALC2-U6-S5",
@@ -2754,7 +2884,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U1-S1",
@@ -2775,7 +2906,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U1-S2",
@@ -2796,7 +2928,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U2-S1",
@@ -2817,7 +2950,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U2-S2",
@@ -2838,7 +2972,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U2-S3",
@@ -2859,7 +2994,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U2-S4",
@@ -2880,7 +3016,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U3-S1",
@@ -2901,7 +3038,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U3-S2",
@@ -2922,7 +3060,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U4-S1",
@@ -2943,7 +3082,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U4-S2",
@@ -2964,7 +3104,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U4-S3",
@@ -2985,7 +3126,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U4-S4",
@@ -3006,7 +3148,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U5-S1",
@@ -3027,7 +3170,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CXAN-U5-S2",
@@ -3048,7 +3192,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U1-S1",
@@ -3069,7 +3214,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U1-S2",
@@ -3090,7 +3236,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U1-S3",
@@ -3111,7 +3258,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U2-S1",
@@ -3132,7 +3280,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U2-S2",
@@ -3153,7 +3302,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U2-S3",
@@ -3174,7 +3324,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U3-S1",
@@ -3195,7 +3346,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U3-S2",
@@ -3216,7 +3368,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U3-S3",
@@ -3237,7 +3390,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U4-S1",
@@ -3258,7 +3412,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U4-S2",
@@ -3279,7 +3434,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U4-S3",
@@ -3300,7 +3456,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U4-S4",
@@ -3321,7 +3478,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U5-S1",
@@ -3342,7 +3500,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U5-S2",
@@ -3363,7 +3522,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U5-S3",
@@ -3384,7 +3544,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA1-U5-S4",
@@ -3405,7 +3566,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U1-S1",
@@ -3426,7 +3588,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U1-S2",
@@ -3447,7 +3610,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U1-S3",
@@ -3468,7 +3632,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U2-S1",
@@ -3489,7 +3654,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U2-S2",
@@ -3510,7 +3676,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U2-S3",
@@ -3531,7 +3698,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U3-S1",
@@ -3552,7 +3720,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U3-S2",
@@ -3573,7 +3742,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U3-S3",
@@ -3594,7 +3764,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U4-S1",
@@ -3615,7 +3786,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U4-S2",
@@ -3636,7 +3808,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U5-S1",
@@ -3657,7 +3830,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U5-S2",
@@ -3678,7 +3852,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "LINA2-U5-S3",
@@ -3699,7 +3874,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U1-S1",
@@ -3720,7 +3896,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U1-S2",
@@ -3741,7 +3918,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U2-S1",
@@ -3762,7 +3940,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U2-S2",
@@ -3783,7 +3962,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U2-S3",
@@ -3804,7 +3984,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U3-S1",
@@ -3825,7 +4006,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U4-S1",
@@ -3846,7 +4028,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MLOG-U4-S2",
@@ -3867,7 +4050,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U1-S1",
@@ -3888,7 +4072,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U1-S2",
@@ -3909,7 +4094,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U1-S3",
@@ -3930,7 +4116,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U2-S1",
@@ -3951,7 +4138,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U2-S2",
@@ -3972,7 +4160,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U2-S3",
@@ -3993,7 +4182,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U3-S1",
@@ -4014,7 +4204,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U4-S1",
@@ -4035,7 +4226,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "MSTAT-U4-S2",
@@ -4056,7 +4248,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U1-S1",
@@ -4077,7 +4270,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U1-S2",
@@ -4098,7 +4292,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U1-S3",
@@ -4119,7 +4314,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U2-S1",
@@ -4140,7 +4336,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U2-S2",
@@ -4161,7 +4358,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U2-S3",
@@ -4182,7 +4380,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U3-S1",
@@ -4203,7 +4402,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U3-S2",
@@ -4224,7 +4424,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U3-S3",
@@ -4245,7 +4446,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U4-S1",
@@ -4266,7 +4468,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U4-S2",
@@ -4287,7 +4490,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U5-S1",
@@ -4308,7 +4512,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U5-S2",
@@ -4329,7 +4534,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMER-U5-S3",
@@ -4350,7 +4556,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U1-S1",
@@ -4371,7 +4578,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U1-S2",
@@ -4392,7 +4600,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U1-S3",
@@ -4413,7 +4622,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U2-S1",
@@ -4434,7 +4644,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U2-S2",
@@ -4455,7 +4666,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U3-S1",
@@ -4476,7 +4688,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U3-S2",
@@ -4497,7 +4710,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U3-S3",
@@ -4518,7 +4732,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U4-S1",
@@ -4539,7 +4754,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U4-S2",
@@ -4560,7 +4776,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U4-S3",
@@ -4581,7 +4798,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U5-S1",
@@ -4602,7 +4820,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "RANAL-U5-S2",
@@ -4623,7 +4842,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U1-S1",
@@ -4644,7 +4864,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U1-S2",
@@ -4665,7 +4886,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U2-S1",
@@ -4686,7 +4908,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U2-S2",
@@ -4707,7 +4930,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U2-S3",
@@ -4728,7 +4952,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U3-S1",
@@ -4749,7 +4974,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U3-S2",
@@ -4770,7 +4996,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U3-S3",
@@ -4791,7 +5018,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U3-S4",
@@ -4812,7 +5040,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U4-S1",
@@ -4833,7 +5062,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CRYP-U4-S2",
@@ -4854,7 +5084,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U1-S1",
@@ -4875,7 +5106,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U1-S2",
@@ -4896,7 +5128,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U1-S3",
@@ -4917,7 +5150,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U2-S1",
@@ -4938,7 +5172,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U2-S2",
@@ -4959,7 +5194,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U3-S1",
@@ -4980,7 +5216,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U3-S2",
@@ -5001,7 +5238,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U3-S3",
@@ -5022,7 +5260,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U4-S1",
@@ -5043,7 +5282,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U4-S2",
@@ -5064,7 +5304,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U5-S1",
@@ -5085,7 +5326,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U5-S2",
@@ -5106,7 +5348,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO1-U5-S3",
@@ -5127,7 +5370,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U1-S1",
@@ -5148,7 +5392,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U1-S2",
@@ -5169,7 +5414,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U2-S1",
@@ -5190,7 +5436,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U2-S2",
@@ -5211,7 +5458,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U3-S1",
@@ -5232,7 +5480,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U3-S2",
@@ -5253,7 +5502,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U4-S1",
@@ -5274,7 +5524,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "TOPO2-U4-S2",
@@ -5295,7 +5546,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U1-S1",
@@ -5316,7 +5568,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U1-S2",
@@ -5337,7 +5590,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U1-S3",
@@ -5358,7 +5612,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U2-S1",
@@ -5379,7 +5634,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U2-S2",
@@ -5400,7 +5656,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U3-S1",
@@ -5421,7 +5678,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U3-S2",
@@ -5442,7 +5700,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U4-S1",
@@ -5463,7 +5722,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U4-S2",
@@ -5484,7 +5744,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT1-U4-S3",
@@ -5505,7 +5766,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U1-S1",
@@ -5526,7 +5788,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U1-S2",
@@ -5547,7 +5810,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U2-S1",
@@ -5568,7 +5832,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U2-S2",
@@ -5589,7 +5854,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U3-S1",
@@ -5610,7 +5876,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U3-S2",
@@ -5631,7 +5898,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U4-S1",
@@ -5652,7 +5920,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "NUMT2-U4-S2",
@@ -5673,7 +5942,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U1-S1",
@@ -5694,7 +5964,8 @@
           "grade": "B",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U1-S2",
@@ -5715,7 +5986,8 @@
           "grade": "B",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U1-S3",
@@ -5736,7 +6008,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U1-S4",
@@ -5757,7 +6030,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U2-S1",
@@ -5778,7 +6052,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U2-S2",
@@ -5799,7 +6074,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U2-S3",
@@ -5820,7 +6096,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U2-S4",
@@ -5841,7 +6118,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U3-S1",
@@ -5862,7 +6140,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U3-S2",
@@ -5883,7 +6162,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U3-S3",
@@ -5904,7 +6184,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U4-S1",
@@ -5925,7 +6206,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "COMB-U4-S2",
@@ -5946,7 +6228,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CAPST-U1-S1",
@@ -5967,7 +6250,8 @@
           "grade": "B",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CAPST-U1-S2",
@@ -5988,7 +6272,8 @@
           "grade": "B",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CAPST-U2-S1",
@@ -6009,7 +6294,8 @@
           "grade": "B",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "CAPST-U2-S2",
@@ -6030,7 +6316,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U1-S1",
@@ -6051,7 +6338,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U1-S2",
@@ -6072,7 +6360,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U1-S3",
@@ -6093,7 +6382,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U2-S1",
@@ -6114,7 +6404,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U2-S2",
@@ -6135,7 +6426,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U2-S3",
@@ -6156,7 +6448,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U2-S4",
@@ -6177,7 +6470,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U3-S1",
@@ -6198,7 +6492,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U3-S2",
@@ -6219,7 +6514,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U3-S3",
@@ -6240,7 +6536,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U4-S1",
@@ -6261,7 +6558,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U4-S2",
@@ -6282,7 +6580,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U4-S3",
@@ -6303,7 +6602,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U4-S4",
@@ -6324,7 +6624,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U4-S5",
@@ -6345,7 +6646,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U5-S1",
@@ -6366,7 +6668,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U5-S2",
@@ -6387,7 +6690,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SETLOG-U5-S3",
@@ -6408,7 +6712,8 @@
           "grade": "B",
           "difficulty_tier": "25"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U1-S1",
@@ -6429,7 +6734,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U1-S2",
@@ -6450,7 +6756,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U1-S3",
@@ -6471,7 +6778,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U2-S1",
@@ -6492,7 +6800,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U2-S2",
@@ -6513,7 +6822,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U3-S1",
@@ -6534,7 +6844,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U3-S2",
@@ -6555,7 +6866,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U4-S1",
@@ -6576,7 +6888,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "SET-U4-S2",
@@ -6597,7 +6910,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U1-S1",
@@ -6618,7 +6932,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U2-S1",
@@ -6639,7 +6954,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U2-S2",
@@ -6660,7 +6976,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U2-S3",
@@ -6681,7 +6998,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U3-S1",
@@ -6702,7 +7020,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U3-S2",
@@ -6723,7 +7042,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U4-S1",
@@ -6744,7 +7064,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U4-S2",
@@ -6765,7 +7086,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U5-S1",
@@ -6786,7 +7108,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U5-S2",
@@ -6807,7 +7130,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PDE-U5-S3",
@@ -6828,7 +7152,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U1-S1",
@@ -6849,7 +7174,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U1-S2",
@@ -6870,7 +7196,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U2-S1",
@@ -6891,7 +7218,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U2-S2",
@@ -6912,7 +7240,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U2-S3",
@@ -6933,7 +7262,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U3-S1",
@@ -6954,7 +7284,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U3-S2",
@@ -6975,7 +7306,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U4-S1",
@@ -6996,7 +7328,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U4-S2",
@@ -7017,7 +7350,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U4-S3",
@@ -7038,7 +7372,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U5-S1",
@@ -7059,7 +7394,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "FANAL-U5-S2",
@@ -7080,7 +7416,8 @@
           "grade": "A",
           "difficulty_tier": "28"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U1-S1",
@@ -7101,7 +7438,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U1-S2",
@@ -7122,7 +7460,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U1-S3",
@@ -7143,7 +7482,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U2-S1",
@@ -7164,7 +7504,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U2-S2",
@@ -7185,7 +7526,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U2-S3",
@@ -7206,7 +7548,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U2-S4",
@@ -7227,7 +7570,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U3-S1",
@@ -7248,7 +7592,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U3-S2",
@@ -7269,7 +7614,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U3-S3",
@@ -7290,7 +7636,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U3-S4",
@@ -7311,7 +7658,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U4-S1",
@@ -7332,7 +7680,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U4-S2",
@@ -7353,7 +7702,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U4-S3",
@@ -7374,7 +7724,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U4-S4",
@@ -7395,7 +7746,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U5-S1",
@@ -7416,7 +7768,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U5-S2",
@@ -7437,7 +7790,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U5-S3",
@@ -7458,7 +7812,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL1-U5-S4",
@@ -7479,7 +7834,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U1-S1",
@@ -7500,7 +7856,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U1-S2",
@@ -7521,7 +7878,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U1-S3",
@@ -7542,7 +7900,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U2-S1",
@@ -7563,7 +7922,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U2-S2",
@@ -7584,7 +7944,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U2-S3",
@@ -7605,7 +7966,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U3-S1",
@@ -7626,7 +7988,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U3-S2",
@@ -7647,7 +8010,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U3-S3",
@@ -7668,7 +8032,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U4-S1",
@@ -7689,7 +8054,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U4-S2",
@@ -7710,7 +8076,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U5-S1",
@@ -7731,7 +8098,8 @@
           "grade": "B",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U5-S2",
@@ -7752,7 +8120,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U5-S3",
@@ -7773,7 +8142,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "ANAL2-U5-S4",
@@ -7794,7 +8164,8 @@
           "grade": "A",
           "difficulty_tier": "26"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U1-S1",
@@ -7815,7 +8186,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U1-S2",
@@ -7836,7 +8208,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U1-S3",
@@ -7857,7 +8230,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U1-S4",
@@ -7878,7 +8252,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U2-S1",
@@ -7899,7 +8274,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U2-S2",
@@ -7920,7 +8296,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U2-S3",
@@ -7941,7 +8318,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U3-S1",
@@ -7962,7 +8340,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U3-S2",
@@ -7983,7 +8362,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U3-S3",
@@ -8004,7 +8384,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U4-S1",
@@ -8025,7 +8406,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U4-S2",
@@ -8046,7 +8428,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U5-S1",
@@ -8067,7 +8450,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG1-U5-S2",
@@ -8088,7 +8472,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U1-S1",
@@ -8109,7 +8494,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U1-S2",
@@ -8130,7 +8516,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U1-S3",
@@ -8151,7 +8538,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U1-S4",
@@ -8172,7 +8560,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U2-S1",
@@ -8193,7 +8582,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U2-S2",
@@ -8214,7 +8604,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U2-S3",
@@ -8235,7 +8626,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U3-S1",
@@ -8256,7 +8648,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U3-S2",
@@ -8277,7 +8670,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U4-S1",
@@ -8298,7 +8692,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U4-S2",
@@ -8319,7 +8714,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U4-S3",
@@ -8340,7 +8736,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "AALG2-U5-S1",
@@ -8361,7 +8758,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U1-S1",
@@ -8382,7 +8780,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U1-S2",
@@ -8403,7 +8802,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U1-S3",
@@ -8424,7 +8824,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U2-S1",
@@ -8445,7 +8846,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U3-S1",
@@ -8466,7 +8868,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U3-S2",
@@ -8487,7 +8890,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U3-S3",
@@ -8508,7 +8912,8 @@
           "grade": "B",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U4-S1",
@@ -8529,7 +8934,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U4-S2",
@@ -8550,7 +8956,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U5-S1",
@@ -8571,7 +8978,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     },
     {
       "code": "PROB-U5-S2",
@@ -8592,7 +9000,8 @@
           "grade": "A",
           "difficulty_tier": "27"
         }
-      ]
+      ],
+      "review_status": "ai_estimated"
     }
   ]
 }

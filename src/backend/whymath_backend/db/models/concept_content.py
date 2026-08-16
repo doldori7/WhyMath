@@ -42,6 +42,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.concept_content import ConceptContentSchema
 
 # 콘텐츠 검수 상태 기본값 — 안내 시트상 *AI 추정·검수필요*라 '검수 완료'가 아닌 'ai_estimated'.
 # 게이팅 필터가 이 리터럴과 비교한다(정직 표기·검수 승격 시 'reviewed'로 갱신 가능·plain text).
@@ -111,6 +112,25 @@ class ConceptContent(Base):
         sa.Index("ix_concept_content_scope", "scope"),
         sa.Index("ix_concept_content_subject", "subject"),
     )
+
+    def to_schema(self) -> ConceptContentSchema:
+        """ORM 행 → Pydantic 응답 스키마(안전·내부 표면용)."""
+        return ConceptContentSchema(
+            code=self.code,
+            scope=self.scope,
+            name=self.name,
+            subject=self.subject,
+            unit=self.unit,
+            metaphor=self.metaphor,
+            misconception=self.misconception,
+            formal_definition_internal=self.formal_definition_internal,
+            accepted_expressions=self.accepted_expressions,
+            explanation=self.explanation,
+            standard_codes=list(self.standard_codes or []),
+            flashcards=list(self.flashcards or []),
+            review_status=self.review_status,
+            updated_at=self.updated_at,
+        )
 
 
 __all__ = [

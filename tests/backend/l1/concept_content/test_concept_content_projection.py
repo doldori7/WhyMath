@@ -100,6 +100,7 @@ def _record(code: str = _K12_CODE, *, scope: str = CONTENT_SCOPE_K12) -> Concept
         explanation="수 세기의 기초",
         standard_codes=("[2수01-01]",),
         flashcards=({"front": "자연수란?", "back": "1,2,3,...", "grade": "A"},),
+        review_status=CONTENT_REVIEW_STATUS_AI_ESTIMATED,
     )
 
 
@@ -151,8 +152,36 @@ class TestLoadFromJson:
                 explanation="기초",
                 standard_codes=("[2수01-01]",),
                 flashcards=({"front": "Q", "back": "A"},),
+                review_status=CONTENT_REVIEW_STATUS_AI_ESTIMATED,
             )
         ]
+
+    def test_load_reads_review_status_from_json(self, tmp_path: Path) -> None:
+        path = _write_content(
+            tmp_path,
+            [
+                {
+                    "code": _K12_CODE,
+                    "name": "자연수",
+                    "subject": "초등수학",
+                    "review_status": "reviewed",
+                }
+            ],
+            name="content.json",
+        )
+        loaded = load_concept_content_from_json(path, scope=CONTENT_SCOPE_K12)
+        assert len(loaded) == 1
+        assert loaded[0].review_status == "reviewed"
+
+    def test_load_defaults_review_status_to_ai_estimated(self, tmp_path: Path) -> None:
+        path = _write_content(
+            tmp_path,
+            [{"code": _K12_CODE, "name": "자연수", "subject": "초등수학"}],
+            name="content.json",
+        )
+        loaded = load_concept_content_from_json(path, scope=CONTENT_SCOPE_K12)
+        assert len(loaded) == 1
+        assert loaded[0].review_status == CONTENT_REVIEW_STATUS_AI_ESTIMATED
 
     def test_scope_is_injected_by_caller(self, tmp_path: Path) -> None:
         # 대학 코퍼스는 standard_codes 키가 없다 → () 정규화. scope는 호출자 주입(대학).
@@ -166,6 +195,7 @@ class TestLoadFromJson:
         assert loaded[0].scope == CONTENT_SCOPE_UNIVERSITY
         assert loaded[0].standard_codes == ()
         assert loaded[0].flashcards == ()
+        assert loaded[0].review_status == CONTENT_REVIEW_STATUS_AI_ESTIMATED
 
     def test_standard_codes_non_list_becomes_empty(self, tmp_path: Path) -> None:
         path = _write_content(
@@ -246,6 +276,7 @@ class TestRedaction:
             "explanation",
             "standard_codes",
             "flashcards",
+            "review_status",
         }
 
     def test_load_ignores_body_fields_if_present(self, tmp_path: Path) -> None:
@@ -314,16 +345,30 @@ class TestUpsertStatement:
         ):
             assert col in compiled, f"upsert SQL에 콘텐츠 컬럼 누락: {col}"
 
-    def test_upsert_binds_review_status_ai_estimated(self) -> None:
-        assert CONTENT_REVIEW_STATUS_AI_ESTIMATED == "ai_estimated"
+    def test_upsert_binds_review_status_from_record(self) -> None:
         from sqlalchemy.dialects import postgresql
 
+        reviewed_record = ConceptContentRecord(
+            code=_K12_CODE,
+            scope=CONTENT_SCOPE_K12,
+            name="자연수",
+            subject="초등수학",
+            unit=None,
+            metaphor=None,
+            misconception=None,
+            formal_definition_internal=None,
+            accepted_expressions=None,
+            explanation=None,
+            standard_codes=(),
+            flashcards=(),
+            review_status="reviewed",
+        )
         store, engine = _fake_store()
-        store.upsert(_record())
+        store.upsert(reviewed_record)
         compiled = engine.executed[0].compile(  # type: ignore[attr-defined]
             dialect=postgresql.dialect()
         )
-        assert "ai_estimated" in compiled.params.values()
+        assert "reviewed" in compiled.params.values()
 
 
 # ──────────────────────────────────────────────────────────────────────────
