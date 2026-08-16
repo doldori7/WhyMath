@@ -192,6 +192,10 @@ def _run_subpytest(
         ],
         capture_output=True,
         text=True,
+        # [OPS-44 사고 경위] 자식 stdout의 UTF-8 한국어를 부모가 로케일(cp949)로 디코드해
+        # reader thread가 UnicodeDecodeError로 죽고 stdout=None이 됐다 — UTF-8 명시로 고정.
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
 

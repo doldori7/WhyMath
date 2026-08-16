@@ -10,6 +10,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from whymath_backend.harness import problem_corpus_accumulate
 from whymath_backend.harness.problem_corpus_accumulate import (
     load_corpus_index,
     main,
@@ -151,8 +154,23 @@ class TestRunCorpusAccumulate:
 
 
 class TestCliEntry:
-    def test_main_without_live_llm_exits_1(self, tmp_path: Path, capsys: object) -> None:
-        # 라이브 LLM 없음(이 환경) → 생성기 안전 폴백 → 전건 generation_failed → 무진전 exit 1.
+    def test_main_without_live_llm_exits_1(
+        self, tmp_path: Path, capsys: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # fail-closed 계약(전건 generation_failed → 무진전 exit 1)은 환경 무관이어야 한다.
+        # [OPS-44 사고 경위] "이 환경 LLM 0" 전제였으나 Kiki 머신은 Ollama가 상시 기동이라
+        # 실제 생성이 성공해 깨졌다 — 라이브 생성기 조립을 전건 실패 스텁으로 교체해 봉인.
+        class _AlwaysFailingGenerator:
+            """provider 장애 환경 재현 — generate가 항상 None(orchestrator가 generation_failed로 기록)."""
+
+            def generate(self, spec: EquivalenceSpec) -> None:
+                return None
+
+        monkeypatch.setattr(
+            problem_corpus_accumulate,
+            "_build_live_generator",
+            lambda topic_hint: _AlwaysFailingGenerator(),
+        )
         seed = _seed_corpus(tmp_path, short_n=3)
         out = tmp_path / "accumulated.jsonl"
         code = main(["--seed", str(seed), "--out", str(out), "--n", "2"])
