@@ -76,6 +76,8 @@ __all__ = [
     "CrossVerificationResult",
     "CrossVerifier",
     "IndependenceError",
+    "MISSING_CONDITION_PERSPECTIVES",
+    "MULTIPLE_VALID_ANSWERS_PERSPECTIVES",
     "PROBABILITY_PERSPECTIVES",
     "Perspective",
     "PerspectiveVerdict",
@@ -237,6 +239,172 @@ def _judge_labelled(
         )
 
     return judge
+
+
+def _judge_defect_class(
+    principle: str, *, expected_defect_class: str
+) -> Callable[[ResidueSubject, Mapping[str, object]], PerspectiveVerdict]:
+    """결함류별 전용 관점의 판정기 - verdict 라벨을 읽고 defect_class 기본값을 고정한다."""
+    base = _judge_labelled(principle)
+
+    def judge(subject: ResidueSubject, data: Mapping[str, object]) -> PerspectiveVerdict:
+        verdict = base(subject, data)
+        if verdict.verdict == "defect" and not verdict.defect_class:
+            return PerspectiveVerdict(principle, "defect", expected_defect_class, verdict.reason)
+        # defect_class가 있으면 그대로 둔다(다양한 하위 분류 허용).
+        return verdict
+
+    return judge
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# v4 - 결함류별 전용 관점 (missing_condition / multiple_valid_answers)
+# ──────────────────────────────────────────────────────────────────────────
+# 필요조건 결측: 문제를 푸는 solver가 아니라, 유일한 해를 위해 필요한 조건이
+# 명시되어 있는지 adversarial하게 검사한다.
+_SYSTEM_MISSING_CONDITION_CHECKLIST = prompt_text(
+    "l3.cross_verify.missing_condition_checklist_system"
+)
+
+
+_SYSTEM_MISSING_CONDITION_RECONSTRUCTION = prompt_text(
+    "l3.cross_verify.missing_condition_reconstruction_system"
+)
+
+
+_SYSTEM_MISSING_CONDITION_STUDENT_READING = prompt_text(
+    "l3.cross_verify.missing_condition_student_reading_system"
+)
+
+
+def _render_missing_condition_checklist(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.missing_condition_checklist_user"),
+        QUESTION_TEXT=subject.question_text,
+    )
+
+
+def _render_missing_condition_reconstruction(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.missing_condition_reconstruction_user"),
+        QUESTION_TEXT=subject.question_text,
+    )
+
+
+def _render_missing_condition_student_reading(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.missing_condition_student_reading_user"),
+        QUESTION_TEXT=subject.question_text,
+    )
+
+
+_MISSING_CONDITION_PERSPECTIVES: tuple[Perspective, ...] = (
+    Perspective(
+        principle="missing_condition_checklist",
+        system_prompt=_SYSTEM_MISSING_CONDITION_CHECKLIST,
+        visible_fields=frozenset({"question_text"}),
+        render=_render_missing_condition_checklist,
+        judge=_judge_defect_class(
+            "missing_condition_checklist", expected_defect_class="missing_condition"
+        ),
+    ),
+    Perspective(
+        principle="missing_condition_reconstruction",
+        system_prompt=_SYSTEM_MISSING_CONDITION_RECONSTRUCTION,
+        visible_fields=frozenset({"question_text", "answer"}),
+        render=_render_missing_condition_reconstruction,
+        judge=_judge_defect_class(
+            "missing_condition_reconstruction", expected_defect_class="missing_condition"
+        ),
+    ),
+    Perspective(
+        principle="missing_condition_student_reading",
+        system_prompt=_SYSTEM_MISSING_CONDITION_STUDENT_READING,
+        visible_fields=frozenset({"question_text", "answer_explanation"}),
+        render=_render_missing_condition_student_reading,
+        judge=_judge_defect_class(
+            "missing_condition_student_reading", expected_defect_class="missing_condition"
+        ),
+    ),
+)
+
+
+# 복수 정답: 정답 외에 다른 합리적인 해석/모델에서 답이 나오는지 반증적으로 탐색한다.
+_SYSTEM_MULTIPLE_ANSWERS_COUNTEREXAMPLE = prompt_text(
+    "l3.cross_verify.multiple_valid_answers_counterexample_system"
+)
+
+
+_SYSTEM_MULTIPLE_ANSWERS_ALTERNATIVE_MODEL = prompt_text(
+    "l3.cross_verify.multiple_valid_answers_alternative_model_system"
+)
+
+
+_SYSTEM_MULTIPLE_ANSWERS_BOUNDARY = prompt_text(
+    "l3.cross_verify.multiple_valid_answers_boundary_system"
+)
+
+
+def _render_multiple_answers_counterexample(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.multiple_valid_answers_counterexample_user"),
+        QUESTION_TEXT=subject.question_text,
+        ANSWER=subject.answer,
+    )
+
+
+def _render_multiple_answers_alternative_model(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.multiple_valid_answers_alternative_model_user"),
+        QUESTION_TEXT=subject.question_text,
+        ANSWER_EXPLANATION=subject.answer_explanation,
+    )
+
+
+def _render_multiple_answers_boundary(subject: ResidueSubject) -> str:
+    return fill(
+        prompt_text("l3.cross_verify.multiple_valid_answers_boundary_user"),
+        QUESTION_TEXT=subject.question_text,
+        ANSWER=subject.answer,
+    )
+
+
+_MULTIPLE_VALID_ANSWERS_PERSPECTIVES: tuple[Perspective, ...] = (
+    Perspective(
+        principle="multiple_valid_answers_counterexample",
+        system_prompt=_SYSTEM_MULTIPLE_ANSWERS_COUNTEREXAMPLE,
+        visible_fields=frozenset({"question_text", "answer"}),
+        render=_render_multiple_answers_counterexample,
+        judge=_judge_defect_class(
+            "multiple_valid_answers_counterexample",
+            expected_defect_class="multiple_valid_answers",
+        ),
+    ),
+    Perspective(
+        principle="multiple_valid_answers_alternative_model",
+        system_prompt=_SYSTEM_MULTIPLE_ANSWERS_ALTERNATIVE_MODEL,
+        visible_fields=frozenset({"question_text", "answer_explanation"}),
+        render=_render_multiple_answers_alternative_model,
+        judge=_judge_defect_class(
+            "multiple_valid_answers_alternative_model",
+            expected_defect_class="multiple_valid_answers",
+        ),
+    ),
+    Perspective(
+        principle="multiple_valid_answers_boundary",
+        system_prompt=_SYSTEM_MULTIPLE_ANSWERS_BOUNDARY,
+        visible_fields=frozenset({"question_text", "answer", "answer_explanation"}),
+        render=_render_multiple_answers_boundary,
+        judge=_judge_defect_class(
+            "multiple_valid_answers_boundary",
+            expected_defect_class="multiple_valid_answers",
+        ),
+    ),
+)
+
+
+MISSING_CONDITION_PERSPECTIVES: tuple[Perspective, ...] = _MISSING_CONDITION_PERSPECTIVES
+MULTIPLE_VALID_ANSWERS_PERSPECTIVES: tuple[Perspective, ...] = _MULTIPLE_VALID_ANSWERS_PERSPECTIVES
 
 
 PROBABILITY_PERSPECTIVES: tuple[Perspective, ...] = (
@@ -465,7 +633,7 @@ class CrossVerifier:
         except Exception as exc:  # noqa: BLE001 — provider 장애로 배치가 죽으면 안 됨
             # 침묵 실패 금지 — 예외 *타입명*을 사유에 남긴다(값·시크릿은 제외).
             _LOGGER.warning(
-                "교차검증 provider 호출 실패(%s·%s) — unclear 기록",
+                "교차검증 provider 호출 실패(%s-%s) - unclear 기록",
                 perspective.principle,
                 type(exc).__name__,
             )
@@ -473,7 +641,7 @@ class CrossVerifier:
                 perspective.principle,
                 "unclear",
                 "provider_error",
-                f"provider 호출 실패({type(exc).__name__}) — 측정 실패로 기록.",
+                f"provider 호출 실패({type(exc).__name__}) - 측정 실패로 기록.",
             )
         self._record_trace(decision, generated.usage)
         data = _extract_json(generated.text)

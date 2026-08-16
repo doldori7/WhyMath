@@ -29,11 +29,20 @@ from whymath_backend.harness.residue_gate_demotion_battle import (
     _mutate_unstated_equiprobability,
     build_residue_seeded_set,
     main,
+    render_repeated_report,
+    repeated_report_to_json,
     report_to_json,
+    run_repeated_residue_demotion_battle,
     run_residue_demotion_battle,
     write_audit_jsonl,
+    write_repeated_audit_jsonl,
 )
-from whymath_backend.l3.cross_verify import CrossVerificationResult, PerspectiveVerdict
+from whymath_backend.l3.cross_verify import (
+    MISSING_CONDITION_PERSPECTIVES,
+    MULTIPLE_VALID_ANSWERS_PERSPECTIVES,
+    CrossVerificationResult,
+    PerspectiveVerdict,
+)
 from whymath_backend.l3.verification_tier import VerificationTier
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -409,6 +418,139 @@ def test_main_report_only_wiring_smoke(tmp_path: Path) -> None:
     exit_code = main([str(_PILOT_CORPUS), "--sample-n", "0", "--audit-out", str(audit_out)])
     assert exit_code == 0  # 표본 0건이라 검증기 호출 0 — 게이트 미지정이므로 통과
     assert not audit_out.exists() or audit_out.read_text(encoding="utf-8") == ""
+
+
+# ── ⑥ 반복 실행 v3 프로토콜 ────────────────────────────────────────────────
+def test_run_repeated_demotion_battle_returns_n_reports(records: list[PilotRecord]) -> None:
+    battery = build_residue_seeded_set(records)
+    verifier = _ScriptedVerifier(mode="oracle", clean_texts=_clean_texts(records))
+    repeated = run_repeated_residue_demotion_battle(
+        battery,
+        verifier=verifier,
+        sample_n=3,
+        seed="t12",
+        repeat_runs=3,
+        corpus_size=len(records),
+    )
+    assert len(repeated.reports) == 3
+    assert repeated.repeat_runs == 3
+    assert all(isinstance(r, ResidueBattleReport) for r in repeated.reports)
+
+
+def test_repeated_report_render_and_json_include_stats(records: list[PilotRecord]) -> None:
+    battery = build_residue_seeded_set(records)
+    verifier = _ScriptedVerifier(mode="oracle", clean_texts=_clean_texts(records))
+    repeated = run_repeated_residue_demotion_battle(
+        battery,
+        verifier=verifier,
+        sample_n=3,
+        seed="t13",
+        repeat_runs=2,
+        corpus_size=len(records),
+    )
+    text = render_repeated_report(repeated, confidence=0.95)
+    assert "반복 실행" in text
+    assert "평균" in text
+    assert "최악" in text
+    assert "표준편차" in text
+    assert "판정불가율" in text
+    payload = repeated_report_to_json(repeated, confidence=0.95)
+    assert payload["repeat_runs"] == 2
+    assert "detection_lower_bound_mean" in payload["overall"]
+    assert "false_alarm_upper_bound_worst" in payload["clean_control"]
+
+
+def test_write_repeated_audit_jsonl_includes_run_index(
+    tmp_path: Path, records: list[PilotRecord]
+) -> None:
+    battery = build_residue_seeded_set(records)
+    verifier = _ScriptedVerifier(mode="oracle", clean_texts=_clean_texts(records))
+    repeated = run_repeated_residue_demotion_battle(
+        battery,
+        verifier=verifier,
+        sample_n=3,
+        seed="t14",
+        repeat_runs=2,
+        corpus_size=len(records),
+    )
+    out = tmp_path / "repeated_audit.jsonl"
+    n = write_repeated_audit_jsonl(out, repeated)
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert n == len(lines)
+    runs = {json.loads(line).get("run") for line in lines}
+    assert runs == {1, 2}
+
+
+# ── ⑦ v4 결함류별 전용 관점 ──────────────────────────────────────────────
+def test_v4_missing_condition_perspectives_are_independent() -> None:
+    """MISSING_CONDITION_PERSPECTIVES는 CrossVerifier 생성 시 독립성 검사를 통과한다."""
+    from whymath_backend.l3.cross_verify import CrossVerifier
+
+    verifier = CrossVerifier(perspectives=MISSING_CONDITION_PERSPECTIVES)
+    assert len(verifier._perspectives) == 3
+
+
+def test_v4_multiple_valid_answers_perspectives_are_independent() -> None:
+    """MULTIPLE_VALID_ANSWERS_PERSPECTIVES는 CrossVerifier 생성 시 독립성 검사를 통과한다."""
+    from whymath_backend.l3.cross_verify import CrossVerifier
+
+    verifier = CrossVerifier(perspectives=MULTIPLE_VALID_ANSWERS_PERSPECTIVES)
+    assert len(verifier._perspectives) == 3
+
+
+class _ClassScriptedVerifier:
+    """결함류별로 다른 동작을 하는 대역 검증기 — v4 Mapping 배선 테스트용."""
+
+    def __init__(self, *, verdict: str) -> None:
+        self.verdict = verdict
+        self.seen: list[str] = []
+
+    def verify(self, subject: object) -> CrossVerificationResult:
+        problem_id = subject.problem_id  # type: ignore[attr-defined]
+        self.seen.append(problem_id)
+        return CrossVerificationResult(
+            problem_id,
+            (PerspectiveVerdict("p", self.verdict, "", "대역"),),
+            self.verdict,  # type: ignore[arg-type]
+            "",
+            "대역",
+        )
+
+    def flush_trace(self) -> None:
+        """CrossVerifier.flush_trace 호환용 no-op."""
+
+
+def test_v4_defect_specific_verifier_mapping(records: list[PilotRecord]) -> None:
+    """결함류별 Mapping verifier가 missing_condition/defect, 나머지/ok로 분기한다."""
+    battery = build_residue_seeded_set(records)
+    verifiers = {
+        "missing_condition": _ClassScriptedVerifier(verdict="defect"),
+        "unstated_equiprobability": _ClassScriptedVerifier(verdict="ok"),
+        "ambiguous_wording": _ClassScriptedVerifier(verdict="ok"),
+        "multiple_valid_answers": _ClassScriptedVerifier(verdict="ok"),
+    }
+    report = run_residue_demotion_battle(battery, verifier=verifiers, sample_n=5, seed="v4-t1")
+
+    assert report.per_class["missing_condition"].detected > 0
+    assert report.per_class["multiple_valid_answers"].detected == 0
+    # clean 대조군은 Mapping 중 "ambiguous_wording" verifier(여기서는 ok)를 사용.
+    assert report.clean_false_alarms == 0
+
+
+def test_v4_defect_specific_mapping_uses_correct_verifier_for_clean(
+    records: list[PilotRecord],
+) -> None:
+    """clean 대조군은 Mapping에서 ambiguous_wording verifier를 사용한다."""
+    battery = build_residue_seeded_set(records)
+    verifiers = {
+        "missing_condition": _ClassScriptedVerifier(verdict="ok"),
+        "unstated_equiprobability": _ClassScriptedVerifier(verdict="ok"),
+        "ambiguous_wording": _ClassScriptedVerifier(verdict="defect"),
+        "multiple_valid_answers": _ClassScriptedVerifier(verdict="ok"),
+    }
+    report = run_residue_demotion_battle(battery, verifier=verifiers, sample_n=5, seed="v4-t2")
+    # clean 검증에 ambiguous_wording(항상 defect) verifier가 쓰이므로 오검출 > 0.
+    assert report.clean_false_alarms > 0
 
 
 # ── 로더 위생(재사용 확인) ────────────────────────────────────────────────

@@ -433,6 +433,43 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 임시: OpenRouter 클라우드 라우팅 (S4-16 강등전 전용) ──
+    # S4-16은 K=3 교차검증이 로컬 Ollama(qwen3.5:27b timeout·qwen2.5:7b 100% 오검출)로
+    # 통과하지 못해 *임시* 클라우드 후보를 OpenRouter(OpenAI-Compatible API)로 태운다.
+    # 이 설정은 harness/residue_gate_demotion_battle.py --openrouter-model에서만 사용되며
+    # 운영 라우터(CompositeProvider·Anthropic)에는 영향을 주지 않는다.
+    # API 키는 기본값 없음(빈=미설정) — 미설정 시 OpenRouter 경로는 명확한 오류를 던진다.
+    openrouter_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "OpenRouter API 키. SecretStr — repr/로그 평문 노출 안 됨. 기본값 없음(빈=미설정). "
+            "환경변수 WHYMATH_OPENROUTER_API_KEY로 주입. S4-16 harness --openrouter-model에만 사용."
+        ),
+    )
+    openrouter_model_id: str = Field(
+        default="qwen/qwen3.8-max",
+        description=(
+            "OpenRouter 모델 ID(S4-16 임시). 기본 qwen/qwen3.8-max(한국어·수학 우수·OpenRouter "
+            "intelligence 58.1). 환경변수 WHYMATH_OPENROUTER_MODEL_ID로 오버라이드."
+        ),
+    )
+    openrouter_request_timeout_s: float = Field(
+        default=60.0,
+        ge=0.0,
+        description=(
+            "OpenRouter 단일 호출 타임아웃(초). S4-16 harness 전용. "
+            "WHYMATH_OPENROUTER_REQUEST_TIMEOUT_S로 조정."
+        ),
+    )
+    openrouter_max_tokens: int = Field(
+        default=4096,
+        ge=1,
+        description=(
+            "OpenRouter chat.completions max_tokens(S4-16 임시). K=3 교차검증 JSON 출력을 "
+            "수용할 여유. WHYMATH_OPENROUTER_MAX_TOKENS로 조정."
+        ),
+    )
+
     # ── 인증(JWT 집행 계층, L5) ──
     # UserProfile엔 credential 필드가 없다 — JWT는 sub=user_id만 담는 *집행 토큰*이고, 실제
     # 로그인(카카오/네이버 OAuth, 후속)이 create_access_token을 호출해 발급한다. 시크릿은 코드

@@ -163,6 +163,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - LLM 호출은 항상 라우터 경유 — 직접 호출 금지
 - 모든 데이터베이스 접근은 ORM/쿼리 빌더 — 원시 SQL 최소화
 - 한국어 주석을 코드에 직접 작성 (Kiki 선호)
+- **사용자에게 보이는 모든 출력은 한국어로 표시한다** — 이미지·로그·리포트·CLI 메시지를 불문하고 한국어가 기본값이다. **한국어 Windows PowerShell/콘솔은 기본 인코딩이 cp949이므로, 터미널로 직접 출력하는 한국어 텍스트는 cp949에 없는 문자(예: em dash `—`, smart quote, 일부 유니코드 기호)를 쓰지 않거나, 출력 전 `errors="replace"`/`encode`로 안전하게 보낸다** — 그렇지 않으면 `UnicodeEncodeError`로 명령이 중단되고 사용자는 한국어 메시지를 못 본다(2026-08-15 S4-16 harness `print(render_report(...))` cp949 깨짐 실측). 파일 쓰기/읽기는 항상 `encoding="utf-8"`을 명시한다. (2026-08-15 등재)
 - **외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다** — 로케일 인코딩(한국어 Windows=cp949)으로 읽는 파일(uvicorn `--log-config` 등)은 **ASCII 전용** + 회귀 테스트 동결. 한국어 설명은 파일이 아니라 런북/문서에 둔다. **같은 원리로, 우리가 파싱하는 외부 서브프로세스 출력(git 등)의 디코딩도 인코딩을 명시한다** — Windows 로케일(cp949)에서 기본 인코딩 디코드는 붕괴한다(HARN-19 실측 2026-08-08 — 대책 코드 = `GitOutputDecodeError`·`tests/harness/test_subprocess_encoding.py` 동결). (2026-07-17 logconfig UnicodeDecodeError 기동 실패 실측 — `test_wh1_shadow_logconfig.py` 선례)
 
 ### LLM 사용
