@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,10 +15,11 @@ acceptance:
   - "② 각 팩의 교수학 근거 명시 — PROOF(증명 스캐폴딩)·MODELING(Polya 4단계)·SPATIAL(van Hiele 수준)·STOCHASTIC(시뮬레이션 직관)의 fading_schedule·required_slots·default_evidence를 근거와 함께 보강"
   - "③ is_stub=false 승격은 팩별 사람 검수 증적 전제 — AI 자기승인 금지(KG-02와 같은 축). 이 태스크 완료 조건은 데이터 보강+게이트 통과까지이며 승격은 별도 판정"
   - "④ 형식 게이트 통과 — PedagogyPack 불변식({domain_example} 자리표시자·주제 명사 블록리스트·FORBIDDEN_MODE_VOCAB·required_slots 비어있지 않음) + provenance_audit exit 0 + 전체 스위트 green"
-artifacts: []
+artifacts:
+  - "#839"
 paths:
   - "data/corpus/pedagogy_packs_v1/**"
   - "tests/backend/schema/**"
-session: claude/backend-ped-30-stub-packs-f01c1f
+session: null
 notes: "교수학 데이터 검토(2026-08-15) 후속 — 7유형 중 4유형이 stub이라 고등 핵심 영역(기하·확률통계·수학과제 탐구)이 데이터적으로 미커버. _provenance.json counts 갱신도 동반."
 updated: 2026-08-16
