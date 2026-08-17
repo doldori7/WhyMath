@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-36
+title: 011_1 EOS Identity/ID Domain 설계안 부분 수용 결정 및 문서·백로그 반영
+track: infra-debt
+stage: S2
+subject: cross
+layer: docs
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - docs/standards/eos_identity_layer_011_1_decision.md 작성
+  - MEMORY.md 011_1 결정 로그 반영
+  - "ARCH-31~35 후속 태스크 등재"
+  - backlog.py validate green
+  - "PR #842 머지 완료"
+artifacts:
+  - "#842"
+paths:
+  - docs/standards/eos_identity_layer_011_1_decision.md
+  - MEMORY.md
+  - backlog/tasks/ARCH-31.yaml
+  - backlog/tasks/ARCH-32.yaml
+  - backlog/tasks/ARCH-33.yaml
+  - backlog/tasks/ARCH-34.yaml
+  - backlog/tasks/ARCH-35.yaml
+session: null
+notes: "첨부 EOS Identity/Content/Subject/Learner/Event/Version/Source ID 설계안을 WhyMath 현행 설계와 대비하여 부분 수용하고, 결정 문서와 후속 태스크 5건을 등재. PR #842 참조."
+updated: 2026-08-17
