@@ -609,26 +609,15 @@ class CrossVerifier:
             _LOGGER.warning("교차검증 관측 기록 실패(%s) — 무시하고 계속", type(exc).__name__)
 
     # ── 검증 ───────────────────────────────────────────────────────────
-    def verify(self, subject: ResidueSubject) -> CrossVerificationResult:
-        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님)."""
-        if subject.authored_by == self.signature:
-            raise IndependenceError(
-                f"생성자와 검증자가 같은 주체({subject.authored_by}) — 자기승인 금지"
-            )
-        decision = Router().route(self._routing_request())
-        verdicts = [self._run_perspective(p, subject, decision) for p in self._perspectives]
-        return _aggregate(subject.problem_id, verdicts)
-
-    def _run_perspective(
+    async def _run_perspective_async(
         self, perspective: Perspective, subject: ResidueSubject, decision: RoutingDecision
     ) -> PerspectiveVerdict:
+        """관점 1개를 비동기로 실행 — provider 호출·trace 기록·판정까지 한 묶음."""
         try:
-            generated = self._ensure_loop().run_until_complete(
-                self._provider.generate(
-                    perspective.render(subject),
-                    perspective.system_prompt,
-                    decision,
-                )
+            generated = await self._provider.generate(
+                perspective.render(subject),
+                perspective.system_prompt,
+                decision,
             )
         except Exception as exc:  # noqa: BLE001 — provider 장애로 배치가 죽으면 안 됨
             # 침묵 실패 금지 — 예외 *타입명*을 사유에 남긴다(값·시크릿은 제외).
@@ -643,7 +632,9 @@ class CrossVerifier:
                 "provider_error",
                 f"provider 호출 실패({type(exc).__name__}) - 측정 실패로 기록.",
             )
-        self._record_trace(decision, generated.usage)
+        # trace 기록은 짧은 동기 작업이나, 병렬 관점이 동시에 sink를 건드릴 수 있으므로
+        # 안전하게 별도 스레드로 위임한다.
+        await asyncio.to_thread(self._record_trace, decision, generated.usage)
         data = _extract_json(generated.text)
         if data is None:
             return PerspectiveVerdict(
@@ -653,6 +644,22 @@ class CrossVerifier:
                 "응답에서 JSON을 읽을 수 없음 — 측정 실패로 기록.",
             )
         return perspective.judge(subject, data)
+
+    async def _verify_async(self, subject: ResidueSubject) -> CrossVerificationResult:
+        """검증 1건의 실제 비동기 본문 — 루프가 실행 중인 상태에서 gather를 호출해
+        코루틴들이 동일 루프에 task로 등록되도록 한다."""
+        if subject.authored_by == self.signature:
+            raise IndependenceError(
+                f"생성자와 검증자가 같은 주체({subject.authored_by}) — 자기승인 금지"
+            )
+        decision = Router().route(self._routing_request())
+        coros = [self._run_perspective_async(p, subject, decision) for p in self._perspectives]
+        verdicts = await asyncio.gather(*coros)
+        return _aggregate(subject.problem_id, verdicts)
+
+    def verify(self, subject: ResidueSubject) -> CrossVerificationResult:
+        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님)."""
+        return self._ensure_loop().run_until_complete(self._verify_async(subject))
 
     def flush_trace(self) -> None:
         """배치 종료 시 관측 전송 확정 — flush 없는 sink는 조용히 통과(계약 밖 표면)."""

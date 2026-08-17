@@ -50,7 +50,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.harness.residue_cross_verify_eval import (
@@ -64,6 +64,7 @@ from whymath_backend.l3.cross_verify import (
     MULTIPLE_VALID_ANSWERS_PERSPECTIVES,
     PROBABILITY_PERSPECTIVES,
     CrossVerifier,
+    PerspectiveVerdict,
     ResidueSubject,
 )
 from whymath_backend.l3.finite_probability import (
@@ -75,7 +76,7 @@ from whymath_backend.l3.finite_probability import (
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
 from whymath_backend.l3.providers.lemonade import LemonadeProvider
-from whymath_backend.l3.providers.ollama import OllamaProvider
+from whymath_backend.l3.providers.ollama import OllamaProvider, _OllamaClient
 
 __all__ = [
     "RESIDUE_DEFECT_CLASSES",
@@ -123,9 +124,40 @@ class _FixedModelOllamaProvider(OllamaProvider):
     하는 선택이며, 측정치는 하한 추정으로 해석한다.
     """
 
-    def __init__(self, model_id: str, *, settings: Any = None) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        timeout: float | None = None,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+        settings: Any = None,
+    ) -> None:
         super().__init__(settings=settings)
         self._model_id = model_id
+        self._timeout = timeout
+        self._num_ctx = num_ctx
+        self._num_predict = num_predict
+
+    def _get_client(self) -> _OllamaClient:
+        """클라이언트 지연 해석 — timeout 오버라이드 지원."""
+        if self._client is None:
+            settings = self._resolved_settings
+            settings_timeout = settings.ollama_request_timeout_s
+            timeout = self._timeout if self._timeout is not None else settings_timeout
+            try:
+                from ollama import AsyncClient
+            except ImportError as exc:  # pragma: no cover — ollama 미설치 환경
+                raise RuntimeError(
+                    "ollama Python 클라이언트가 설치되지 않았습니다. "
+                    "`pip install ollama` 후 다시 시도하세요."
+                ) from exc
+            client = AsyncClient(
+                host=settings.ollama_host,
+                timeout=timeout,
+            )
+            self._client = cast(_OllamaClient, client)
+        return self._client
 
     async def generate(
         self,
@@ -151,8 +183,15 @@ class _FixedModelOllamaProvider(OllamaProvider):
         }
         if images is not None:
             call_kwargs["images"] = images
+        options: dict[str, Any] = {}
         if temperature is not None:
-            call_kwargs["options"] = {"temperature": temperature}
+            options["temperature"] = temperature
+        if self._num_ctx is not None:
+            options["num_ctx"] = self._num_ctx
+        if self._num_predict is not None:
+            options["num_predict"] = self._num_predict
+        if options:
+            call_kwargs["options"] = options
         if json_schema is not None:
             call_kwargs["format"] = dict(json_schema)
         client = self._get_client()
@@ -533,13 +572,19 @@ class ClassDetection:
 
 @dataclass(frozen=True, slots=True)
 class _AuditRow:
-    """감사 JSONL 1행 — 문항·역할(seeded/clean)·결함류·변조기록·검증 결과."""
+    """감사 JSONL 1행 — 문항·역할(seeded/clean)·결함류·변조기록·검증 결과.
+
+    `aggregate_reason`은 K=3 관점의 집계 사유(보수적 판정의 근거)이고,
+    `verdicts`는 개별 관점 판정(향후 오검출/판정불가 원인 추적용)이다.
+    """
 
     problem_id: str
     role: Literal["seeded", "clean"]
     defect_class: str | None
     mutation_note: str
     aggregate: str
+    aggregate_reason: str = ""
+    verdicts: tuple[PerspectiveVerdict, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -664,6 +709,8 @@ def run_residue_demotion_battle(
                     defect_class=defect_class,
                     mutation_note=item.mutation_note,
                     aggregate=result.aggregate,
+                    aggregate_reason=result.reason,
+                    verdicts=result.verdicts,
                 )
             )
             if result.aggregate == "unclear":
@@ -703,6 +750,8 @@ def run_residue_demotion_battle(
                 defect_class=None,
                 mutation_note="",
                 aggregate=result.aggregate,
+                aggregate_reason=result.reason,
+                verdicts=result.verdicts,
             )
         )
         if result.aggregate == "unclear":
@@ -767,6 +816,15 @@ def run_repeated_residue_demotion_battle(
 
 def write_audit_jsonl(path: Path, report: ResidueBattleReport) -> int:
     """감사 JSONL — 문항별 판정 행 + as-found 병기 요약(§4.5 합격 로트 무결성 동형)."""
+
+    def _verdict_payload(v: PerspectiveVerdict) -> dict[str, object]:
+        return {
+            "principle": v.principle,
+            "verdict": v.verdict,
+            "defect_class": v.defect_class,
+            "reason": v.reason,
+        }
+
     lines = [
         json.dumps(
             {
@@ -775,6 +833,8 @@ def write_audit_jsonl(path: Path, report: ResidueBattleReport) -> int:
                 "defect_class": row.defect_class,
                 "mutation_note": row.mutation_note,
                 "aggregate": row.aggregate,
+                "aggregate_reason": row.aggregate_reason,
+                "verdicts": [_verdict_payload(v) for v in row.verdicts],
             },
             ensure_ascii=False,
         )
@@ -799,6 +859,15 @@ def write_audit_jsonl(path: Path, report: ResidueBattleReport) -> int:
 
 def write_repeated_audit_jsonl(path: Path, repeated: RepeatedResidueBattleReport) -> int:
     """반복 실행 감사 JSONL - run별 문항별 판정 행 + as-found 병기 요약."""
+
+    def _verdict_payload(v: PerspectiveVerdict) -> dict[str, object]:
+        return {
+            "principle": v.principle,
+            "verdict": v.verdict,
+            "defect_class": v.defect_class,
+            "reason": v.reason,
+        }
+
     lines: list[str] = []
     for run_index, report in enumerate(repeated.reports, start=1):
         for row in report.audit_rows:
@@ -811,6 +880,8 @@ def write_repeated_audit_jsonl(path: Path, repeated: RepeatedResidueBattleReport
                         "defect_class": row.defect_class,
                         "mutation_note": row.mutation_note,
                         "aggregate": row.aggregate,
+                        "aggregate_reason": row.aggregate_reason,
+                        "verdicts": [_verdict_payload(v) for v in row.verdicts],
                     },
                     ensure_ascii=False,
                 )
@@ -1168,6 +1239,34 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--ollama-timeout",
+        type=float,
+        default=None,
+        help=(
+            "로컬 Ollama 호출 타임아웃(초). 설정하지 않으면 Settings의 "
+            "ollama_request_timeout_s(기본 30)을 사용한다. qwen3.5:27b 등 대형 모델에서 "
+            "timeout이 발생할 때 늘려 사용."
+        ),
+    )
+    parser.add_argument(
+        "--ollama-num-ctx",
+        type=int,
+        default=None,
+        help=(
+            "Ollama generate options.num_ctx 오버라이드. 긴 prompt/context에서 KV cache "
+            "부족으로 실패할 때 늘려 사용(예: 8192)."
+        ),
+    )
+    parser.add_argument(
+        "--ollama-num-predict",
+        type=int,
+        default=None,
+        help=(
+            "Ollama generate options.num_predict 오버라이드. 모델이 응답을 너무 짧게 끊을 때 "
+            "늘려 사용(예: 2048)."
+        ),
+    )
+    parser.add_argument(
         "--openrouter-model",
         default=None,
         help=(
@@ -1236,7 +1335,12 @@ def main(argv: list[str] | None = None) -> int:
             max_tokens=args.openrouter_max_tokens,
         )
     elif args.local_model is not None:
-        provider = _FixedModelOllamaProvider(args.local_model)
+        provider = _FixedModelOllamaProvider(
+            args.local_model,
+            timeout=args.ollama_timeout,
+            num_ctx=args.ollama_num_ctx,
+            num_predict=args.ollama_num_predict,
+        )
 
     if args.v4:
         # v4: 결함류별 전용 관점. missing_condition / multiple_valid_answers 는 adversarial
