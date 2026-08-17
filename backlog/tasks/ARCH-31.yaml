@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-31
+title: "Content Version 분리: Problem.content_version_id nullable 추가 및 ContentVersion 모델 설계"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - Problem schema/ORM에 content_version_id nullable FK 추가
+  - ContentVersion Pydantic 모델 및 ORM 설계
+  - Alembic 마이그레이션 추가
+  - 기존 identity_id와의 관계 문서화
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/db/models/problem.py
+  - "src/backend/whymath_backend/alembic/versions/*"
+session: null
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Content ID ≠ Content Version ID 분리를 MVP 범위 내에서 구현."
+updated: 2026-08-17

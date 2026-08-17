@@ -6835,3 +6835,20 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - 오개념 DSL을 `l4/misconception/`과 연결
 
 ---
+
+## 2026-08-17: 011_1 EOS Identity/ID Domain 부분 수용 결정
+
+- ✅ **011_1 ID Domain 설계안 부분 수용** — 첨부된 EOS Identity/Content/Subject/Learner/Event/Version/Source ID 설계안을 WhyMath 현행 설계와 대비해 검토. **전면 수용은 거부**하고 수정 수용. 주요 결정:
+  - ✅ 7개 ID Domain 정의(011_1) 채택 — EOS Identity Layer 범위 확정.
+  - ❌ Unified `Entity` 슈퍼테이블 보류 — 7계층 독립성 해치고 마이그레이션 비용 큼.
+  - ❌ "ID는 무의미하다" 원칙 거부/수정 — WhyMath는 curriculum/language/renderer 무관하되 **의미론적 canonical ID**(`math.<area>.<slug>`) 사용(`docs/standards/part9_id_policy_review.md` 정신).
+  - ✅ Content ID ≠ Content Version ID 분리 채택 — `Problem`에 nullable `content_version_id` 추가를 별도 태스크로 분해.
+  - ⚠️ Subject ontology(`parent_subject_id`) 부분 채택 — 수학 외 확장 시 `subject_node` 신설; 현재는 `Concept` DAG 활용.
+  - ⚠️ Learner ID ≠ User ID 부분 채택 — 역할(Role) 테이블 분리로 점진 적용.
+  - ✅ Event = raw fact 채택 — 기존 `AnalyticsEventEnvelope` allowlist 정신과 일치.
+  - ⚠️ Source 객체 + Provenance 부분 채택 — `source_type`/`source_detail` → 별도 `source` 테이블로 점진 이관.
+  - ❌ External ID Registry / CASE / W3C PROV Phase 2 이관 — MVP 범위 밖.
+- **결정 문서**: `docs/standards/eos_identity_layer_011_1_decision.md`
+- **후속**: `scripts/harness/backlog.py add`로 5개 태스크 등재(content_version 분리, Source 엔티티 분리, Learner/User 역할 분리, Subject ontology 확장, External ID Registry/CASE/PROV Phase 2).
+
+---

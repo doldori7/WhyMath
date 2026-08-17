@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-34
+title: "Subject ontology 확장 설계: 수학 외 과목(물리/화학/생물/지구과학 등) subject_node"
+track: subject-expansion
+stage: E1
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "subject_node 모델 설계(subject_id, parent_subject_id, subject_type, canonical_id)"
+  - 수학 과목을 subject_node로 재모델링하는 방안
+  - Concept DAG와 subject_node 간 관계 정의
+  - docs/architecture/subject_expansion_readiness.md 갱신
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/enums.py
+  - docs/architecture/subject_expansion_readiness.md
+session: null
+notes: 011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 parent_subject_id 기반 ontology를 수학 외 과목 확장에 적용.
+updated: 2026-08-17
