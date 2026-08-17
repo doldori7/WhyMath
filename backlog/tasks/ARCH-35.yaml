@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-35
+title: "External ID Registry 및 CASE/W3C PROV 연결 (Phase 2)"
+track: subject-expansion
+stage: E2
+subject: cross
+layer: docs
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "External ID Registry 설계(entity_id, namespace, value, type, is_primary)"
+  - 1EdTech CASE 학습기준 매핑 설계
+  - W3C PROV Entity/Activity/Agent 연결 구조 설계
+  - Phase 2 로드맵에 일정 확정
+artifacts: []
+paths:
+  - docs/strategy/status_roadmap_2026-07.md
+  - docs/standards/eos_identity_layer_011_1_decision.md
+session: null
+notes: 011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 External ID Mapping/Provenance를 Phase 2로 이관.
+updated: 2026-08-17

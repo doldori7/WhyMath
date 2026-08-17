@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-33
+title: "Learner/User 역할 분리: Role 테이블 도입 및 learner_profile 분리 설계"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "Role 모델 설계(user_id, role_type, org_id 등)"
+  - "learner_profile 분리 설계(user_id 1:1 FK)"
+  - UserProfile.user_id와 learner_profile 매핑 계획
+  - 기존 API 및 마이그레이션 영향 분석
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/user.py
+  - src/backend/whymath_backend/db/models/__init__.py
+session: null
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Learner ID ≠ User ID를 점진 적용."
+updated: 2026-08-17
