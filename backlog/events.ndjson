@@ -3306,3 +3306,6 @@
 {"ts": "2026-08-17T10:39:33", "actor": "arch-011-1-eos-identity", "action": "add", "id": "ARCH-33"}
 {"ts": "2026-08-17T10:39:36", "actor": "arch-011-1-eos-identity", "action": "add", "id": "ARCH-34"}
 {"ts": "2026-08-17T10:39:38", "actor": "arch-011-1-eos-identity", "action": "add", "id": "ARCH-35"}
+{"ts": "2026-08-17T12:39:34", "actor": "main", "action": "add", "id": "ARCH-36"}
+{"ts": "2026-08-17T12:39:49", "actor": "main", "action": "start", "id": "ARCH-36", "session": "main", "remote": "ok"}
+{"ts": "2026-08-17T12:39:56", "actor": "main", "action": "done", "id": "ARCH-36", "artifacts": ["#842"]}
