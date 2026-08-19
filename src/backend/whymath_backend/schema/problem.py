@@ -130,6 +130,34 @@ class Condition(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 서브모델: SchemaVersion — EOS Content Schema 계약 버전 (011_2)
+# ──────────────────────────────────────────────────────────────────────────
+class SchemaVersion(BaseModel):
+    """콘텐츠가 따르는 EOS Content Schema 계약 버전.
+
+    콘텐츠 자체의 버전(content_version)과는 별개이며, Contract 변경 시
+    하위호환/호환성 판정에 사용. Major.Minor.Patch 형식을 권장.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    name: str = Field(
+        default="whymath-problem",
+        description="스키마 네임스페이스/이름",
+        min_length=1,
+    )
+    version: str = Field(
+        default="1.1.0",
+        description="스키마 버전 (Semantic Versioning 권장)",
+        min_length=1,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 서브모델: DistractorEntry (객관식 오답 선지 → 오개념 매핑)
 # ──────────────────────────────────────────────────────────────────────────
 class DistractorEntry(BaseModel):
@@ -222,6 +250,12 @@ class PublicProblem(BaseModel):
         변환에서 구조적으로 사라진다(ASM-07 `from_assessment` 동형).
         """
         return cls.model_validate(problem.model_dump(exclude=set(PUBLIC_HIDDEN_ANSWER_FIELDS)))
+
+    # ===== 스키마 계약 버전 (011_2) =====
+    schema_version: SchemaVersion = Field(
+        default_factory=SchemaVersion,
+        description="EOS Content Schema 계약 버전 (Content Version과 별개)",
+    )
 
     # ===== 기본 식별 =====
     problem_id: uuid.UUID = Field(

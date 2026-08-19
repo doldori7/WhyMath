@@ -41,6 +41,18 @@ phase_scope: "Phase 1 — 평가원 기출 5년치 + NuminaMath/OmniMath + 자�
 
 fields:
 
+  # --- 스키마 계약 버전 ----------------------------------------------------
+  schema_version:
+    type: SchemaVersion
+    required: true
+    description: >-
+      이 문제가 따르는 EOS Content Schema 버전. 콘텐츠 자체의 버전(content_version)
+      과는 별개이며, Contract 변경 시 하위호환/호환성 판정에 사용.
+    element_schema: SchemaVersion
+    default:
+      name: "whymath-problem"
+      version: "1.1.0"
+
   # --- 식별 ---------------------------------------------------------------
   problem_id:
     type: string
@@ -281,9 +293,31 @@ ProblemLanguageVariant:
       required: false
       description: 해당 언어의 정답 표기.
 
+# =============================================================================
+# SchemaVersion — EOS Content Schema 계약 버전
+# =============================================================================
+SchemaVersion:
+  description: >-
+    콘텐츠가 따르는 EOS Content Schema 계약 버전. 콘텐츠 자체의 버전
+    (content_version)과는 별개이며, Contract 변경 시 하위호환/호환성 판정에
+    사용. Major.Minor.Patch 형식을 권장하나, WhyMath v1.1에서는
+    "whymath-problem" 네임스페이스 아래 "1.1.0"으로 고정.
+  fields:
+    name:
+      type: string
+      required: true
+      description: 스키마 네임스페이스/이름.
+      default: "whymath-problem"
+    version:
+      type: string
+      required: true
+      description: 스키마 버전 (Semantic Versioning 권장).
+      default: "1.1.0"
+
 # -----------------------------------------------------------------------------
 # 엔티티 간 관계 요약
 # -----------------------------------------------------------------------------
+
 relationships:
   - target: "AchievementStandard (NCIC, src/data-pipeline/data_pipeline/ncic/models.py)"
     via: "standard_codes"

@@ -3309,3 +3309,4 @@
 {"ts": "2026-08-17T12:39:34", "actor": "main", "action": "add", "id": "ARCH-36"}
 {"ts": "2026-08-17T12:39:49", "actor": "main", "action": "start", "id": "ARCH-36", "session": "main", "remote": "ok"}
 {"ts": "2026-08-17T12:39:56", "actor": "main", "action": "done", "id": "ARCH-36", "artifacts": ["#842"]}
+{"ts": "2026-08-19T14:06:02", "actor": "s4-16-blocked-evidence", "action": "add", "id": "S1-16-subject-neutral-content-contract"}

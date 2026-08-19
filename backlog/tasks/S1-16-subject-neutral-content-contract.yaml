@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-16-subject-neutral-content-contract
+title: "Subject-neutral Content Contract 적용 — schema_version 고정 및 Problem math extension 분리"
+track: subject-expansion
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - schema_version 필드를 Problem/PublicProblem 및 problem.schema.yaml에 추가하고 API 응답/요청에 노출. 테스트 추가.
+  - "수학 전용 필드(answer_transform, signature_patterns, requires_graph_sketch, sketch_step_count)를 extensions.math로 이동. 하위호환/마이그레이션 및 downstream 수정."
+artifacts: []
+paths:
+  - schemas/v1.1/problem.schema.yaml
+  - src/backend/whymath_backend/schema/problem.py
+  - tests/backend/schema/test_problem.py
+  - docs/architecture/content_contract_0112_review.md
+  - MEMORY.md
+session: null
+notes: ""
+updated: 2026-08-19
