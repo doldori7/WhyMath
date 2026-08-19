@@ -34,6 +34,7 @@ from whymath_backend.schema.problem import (
     Problem,
     ProblemRelation,
     ProblemStep,
+    SchemaVersion,
 )
 from whymath_backend.schema.visualization import Visualization
 
@@ -79,6 +80,34 @@ class TestCondition:
         """text 누락 → ValidationError."""
         with pytest.raises(ValidationError):
             Condition(label="가")  # type: ignore[call-arg]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# SchemaVersion 서브모델 (011_2) — EOS Content Schema 계약 버전
+# ──────────────────────────────────────────────────────────────────────
+class TestSchemaVersion:
+    def test_default_instance(self) -> None:
+        """기본값은 whymath-problem 1.1.0."""
+        sv = SchemaVersion()
+        assert sv.name == "whymath-problem"
+        assert sv.version == "1.1.0"
+
+    def test_custom_version(self) -> None:
+        """커스텀 name/version을 받을 수 있다."""
+        sv = SchemaVersion(name="eos-content", version="2.0.0")
+        assert sv.name == "eos-content"
+        assert sv.version == "2.0.0"
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid' — 알 수 없는 필드 거부."""
+        with pytest.raises(ValidationError):
+            SchemaVersion(name="x", version="1.0.0", patch="abc")  # type: ignore[call-arg]
+
+    def test_inherited_in_problem(self) -> None:
+        """Problem 생성 시 schema_version 기본값이 상속된다."""
+        p = _minimal_self_generated()
+        assert p.schema_version.name == "whymath-problem"
+        assert p.schema_version.version == "1.1.0"
 
 
 # ──────────────────────────────────────────────────────────────────────

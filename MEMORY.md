@@ -6794,6 +6794,32 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 ---
 
 **최종 수정**: 2026-05-28  
+---
+
+## 2026-08-16: S4-16 v4 결함류별 적대적 검증기 구현
+
+- ✅ **v4 결함류별 전용 관점 구현** (Kiki 승인, A 선택) — `src/backend/whymath_backend/l3/cross_verify.py`에 `MISSING_CONDITION_PERSPECTIVES` 3개(`missing_condition_checklist`, `missing_condition_reconstruction`, `missing_condition_student_reading`)와 `MULTIPLE_VALID_ANSWERS_PERSPECTIVES` 3개(`multiple_valid_answers_counterexample`, `multiple_valid_answers_alternative_model`, `multiple_valid_answers_boundary`) 추가. **핵심 설계**: LLM을 "문제를 푸는 solver"가 아니라 "문제 서술의 빈틈·대안을 증명하는 adversarial verifier"로 쓴다.
+- ✅ **`docs/prompts/l3_cross_verify.md` v4 프롬프트 정본 추가** — 필요조건 체크리스트·독립 재구성+필요조건 추론·학생 대안 해석 시뮬레이션(missing_condition), 반례 생성·대안 모델 탐색·경계조건 테스트(multiple_valid_answers)용 프롬프트. cp949-safe로 em dash 제거.
+- ✅ **`harness/residue_gate_demotion_battle.py` 결함류별 verifier 배선** — `run_residue_demotion_battle`/`run_repeated_residue_demotion_battle`의 `verifier` 인자를 `CrossVerifier | Mapping[ResidueDefectClass, CrossVerifier]`로 확장. `--v4` CLI 옵션 추가. v4 모드에서는 missing_condition과 multiple_valid_answers에 전용 관점을, unstated_equiprobability와 ambiguous_wording에는 기존 v2 `PROBABILITY_PERSPECTIVES`를 사용.
+- ✅ **Windows cp949 한국어 출력 깨짐 방어 개선** — `sys.stdout.reconfigure(encoding="utf-8")`로 기본 터미널에서도 한국어 리포트가 깨지지 않도록 출력 전 인코딩 강제. `UnicodeEncodeError` 폴백은 제거(실제로는 cp949에서 예외가 발생하지 않고 물음표로 침묵 대체되어 폴백이 무의미했음).
+- ✅ **v4 테스트 추가** — `tests/backend/harness/test_residue_gate_demotion_battle.py`에 독립성 검사·결함류별 Mapping verifier 배선·clean verifier 선택 테스트 4건 추가. 총 29 passed.
+- ✅ **검증**: `ruff check` 통과, `black --line-length 100` 통과, `mypy --strict`는 기존 5건 외에 신규 오류 0, `pytest tests/backend/harness/test_residue_gate_demotion_battle.py` 29 passed.
+- ⚠️ **호출 비용 증가**: v4는 결함류별로 별도 관점을 두므로, v2 대비 LLM 호출 수가 4배로 늘어난다. `--sample-n 5 --repeat-runs 5` 기준 최대 375회 호출(qwen3.8-max 기준 약 $1.5~3). 스모크 측정 시 `--sample-n 2 --repeat-runs 2` 권장.
+- **후속**: ① OpenRouter `qwen/qwen3.8-max`로 v4 재측정 — `data/audit/s4-16-qwen38-v4.jsonl` ② `missing_condition` 18% → 60%+, `multiple_valid_answers` 4% → 50%+ 향상 목표 ③ v4 결과가 기대에 못 미치면 `unstated_equiprobability`/`ambiguous_wording`도 전용 관점으로 강화.
+
+---
+
+## 2026-08-19: 011_2 Subject-neutral Content Schema / API Contract 수용 결정
+
+- ✅ **011_2 외부 제안 검토 및 수용 방향 확정** — EOS 관점의 Subject-neutral Content Contract 제안을 WhyMath 설계와 대조. 핵심 결론: WhyMath는 이미 Concept 노드의 subject 분리, CurriculumEntry Overlay, 교수법-중립 DSL, AI 출력 정규화 등 011_2의 핵심 원칙을 수용 중. **태스크 등록**: `S1-16-subject-neutral-content-contract`(`backlog/tasks/S1-16-subject-neutral-content-contract.yaml`).
+- ✅ **수용 항목**: ① `schema_version` 필드를 `Problem`/`PublicProblem` 및 `problem.schema.yaml`에 명시적으로 추가(Phase A, non-breaking) ② 수학 전용 필드(`answer_transform`, `signature_patterns`, `requires_graph_sketch`, `sketch_step_count`)를 `extensions.math` 서브스키마로 분리(Phase B, breaking). ③ 결정 문서 `docs/architecture/content_contract_0112_review.md` 작성.
+- 🚧 **보류 항목**: ① 물리/화학 등 타 과목 Extension 구현(`subject_expansion_readiness.md` §8 보류 대장 유지) ② `/contents` 단일 endpoint 도입(MVP에서는 `/problems` + subject 필터로 충분) ③ Domain Extension Registry 구체화(`AREA` 레지스트리는 준비됐으나 별도 레지스트리 형태는 소비처 등록 후).
+- ✅ **실행 계획**: Phase A를 먼저 구현하여 머지하고, Phase B는 별도 PR로 분리. `tests/backend/schema/test_problem.py`에 schema_version 테스트 추가, `ruff`/`black`/`mypy --strict` 통과를 게이트로.
+- **참조**: `docs/architecture/content_contract_0112_review.md`, `schemas/v1.1/concept.schema.yaml`, `schemas/v1.1/curriculum_entry.schema.yaml`, `docs/architecture/03c_content_strategy_cache.md`, `docs/architecture/subject_expansion_readiness.md`.
+
+---
+
+**최종 수정**: 2026-08-19  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
 
 
