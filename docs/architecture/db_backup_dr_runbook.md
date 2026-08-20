@@ -175,7 +175,7 @@ docker inspect whymath-pg | Out-File -Encoding utf8 C:\Users\kiki\Desktop\__AI\W
 
 ### 취급 규칙 (의무)
 
-1. **보관 위치 고정**: 백업 디렉터리(`C:\Users\kiki\Desktop\__AI\WhyMath-backups`)는 Phaiakes9 로컬에만 둔다. **파일 단위 암호화 없이 클라우드 업로드·외부 공유·타 기기 복사 금지.** 오프사이트 사본이 필요해지면 반드시 파일 암호화(7-Zip AES-256 또는 age) + Kiki 명시 승인 후에만 — 현재 절차 미도입(§6).
+1. **보관 위치 고정**: 백업 디렉터리(`C:\Users\kiki\Desktop\__AI\WhyMath-backups`)는 Phaiakes9 로컬에만 둔다. **파일 단위 암호화 없이 클라우드 업로드·외부 공유·타 기기 복사 금지.** 오프사이트 사본이 필요하면 파일 암호화(7-Zip AES-256 또는 age) + Kiki 명시 승인 후에만 이동한다 — 구체적 절차는 §7.
 2. **외부 도구 반입 금지**: 덤프 파일(또는 그 일부)을 LLM·SaaS·분석 도구에 업로드 금지 — "학생 풀이 데이터를 명시적 동의 없이 학습에 사용 금지" 금기의 백업판.
 3. **보존 상한 = PIPA 파기 창**: 계정 삭제(잊힐 권리) 처리 후에도 그 학생의 데이터는 백업 안에 **최대 `RetentionDays`(기본 14일)** 잔존한다 → 파기 완료 시점은 "라이브 삭제 + RetentionDays 경과" 이후다(`deletion_audit` 기록과 함께 이 창을 파기 안내에 반영). `-RetentionDays`를 늘리면 이 잔존 창도 같이 늘어난다 — 연장은 이 트레이드오프를 인지하고 결정한다.
 4. **리허설 복제본도 동급**: scratch 컨테이너는 실데이터 복제본이다 — 127.0.0.1 바인딩 유지, 리허설 종료 즉시 3-4로 폐기(볼륨 없음 = 잔존물 없음). 리허설 출력 캡처·스크린샷에 학생 행 데이터가 섞이지 않게 행수 집계만 공유한다.
@@ -191,11 +191,91 @@ docker inspect whymath-pg | Out-File -Encoding utf8 C:\Users\kiki\Desktop\__AI\W
 | 복구 리허설 | 분기 1회, §3 (약 10분) |
 | RPO(허용 데이터 손실) | 마지막 백업 이후 ~ 최대 3~4일(주 2회 기준) — WAL/PITR 미도입 한계 |
 | RTO(복구 소요) | 리허설 실측 기준 기록(첫 리허설 후 이 표를 갱신) |
+| 오프사이트 사본 | §7 스크립트 + Kiki 실행 후 `G-backup-offsite-move` clear |
+
+## §7. 오프사이트(NAS) 사본 이동 — SPOF 부분 상환
+
+> 목적: 로컬 백업(`C:\Users\kiki\Desktop\__AI\WhyMath-backups`)과 prod DB가 같은 물리 머신·같은 디스크에 있어 디스크 장애 시 동시 소실되는 SPOF를 부분적으로 상환한다. NAS는 내부 신뢰 구역의 별도 저장소를 가정한다.
+> 전제: NAS 경로가 이미 마운트·접근 가능하고, **prod DB 서버/백업 디렉터리와 물리적으로 다른 장치**에 있다. NAS가 인터넷 공유·제3자 클라우드라면 §7-5 암호화를 **의무**로 적용한다.
+
+### 7-1. 수동 이동 1회
+
+스크립트: `scripts/backup/move_backup_to_nas.ps1`. ASCII 전용 — 한국어 설명은 이 런북에만 있다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+Set-ExecutionPolicy -Scope Process -Bypass -Force
+.\scripts\backup\move_backup_to_nas.ps1 -NasPath "\\YOUR_NAS\share\whymath-backups"
+
+# 자가검증 1: 종료코드 - True 여야 함
+$LASTEXITCODE -eq 0
+
+# 자가검증 2: NAS에 최신 .dump 2개 존재 + 크기 > 0
+Get-ChildItem "\\YOUR_NAS\share\whymath-backups\*.dump" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 2 Name, Length, LastWriteTime
+
+# 자가검증 3: 해시 일치 (스크립트 내부 검증 출력과 독립적으로 1건 직접 확인)
+$local = Get-ChildItem C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$nas = Get-ChildItem "\\YOUR_NAS\share\whymath-backups\$($local.Name)"
+$lh = Get-FileHash $local.FullName -Algorithm SHA256
+$nh = Get-FileHash $nas.FullName -Algorithm SHA256
+$lh.Hash -eq $nh.Hash
+```
+
+- **성공**: `[OK] offsite copy complete: copied=N skipped=M ...` 출력, 자가검증 1이 `True`, 자가검증 2의 파일 크기 `> 0`, 자가검증 3이 `True`.
+- **변별력**: 스크립트는 호스트 회수 전이 아니라 NAS 도달 **후** SHA-256으로 다시 검증한다. 복사 중 손상·네트워크 끊김은 해시 불일치로 `[FAIL]` + 종료코드 1이 된다.
+- **실패 시 대처**: `[FAIL]` 사유 확인 → NAS 접근(`Test-Path`) → 용량 → 재실행. 해시 불일치면 해당 파일만 삭제 후 재실행(스크립트가 `Copy-Item -Force`로 덮어쓴다).
+- **KeepCount**: 기본값 2. 더 많이/적게 옮기려면 `-KeepCount N`.
+
+### 7-2. 파일 단위 암호화 (NAS가 외부/클라우드이거나 추가 보호가 필요할 때)
+
+§4-1의 "파일 단위 암호화 없이 클라우드 업로드·외부 공유·타 기기 복사 금지"를 준수하기 위해, NAS가 내부가 아니거나 정책상 암호화를 요구하면 7-Zip AES-256으로 `.7z`를 만든 뒤 이동한다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+$7z = "C:\Program Files\7-Zip\7z.exe"
+$dump = Get-ChildItem C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$archive = Join-Path C:\Users\kiki\Desktop\__AI\WhyMath-backups "$($dump.BaseName).7z"
+
+# 대화형으로 강력한 암호 입력 (화면에 표시되지 않음)
+& $7z a -t7z -mhe=on -p $archive $dump.FullName
+
+# 자가검증: 목록 + 해제 테스트 (임시 폴더, 복원 직후 삭제)
+& $7z t $archive
+```
+
+- **주의**: 7-Zip 대화형 `-p`는 배치/스케줄러에서 사용 불가. 자동화하려면 키 관리(Windows DPAPI, HashiCorp Vault 등)가 선행돼야 하며, 평문 비밀번호를 스크립트에 하드코딩하면 금지다. 현재는 수동 게이트용 대화형 절차만 제공한다.
+- **이동**: 암호화된 `.7z`를 `move_backup_to_nas.ps1`의 `-BackupDir`로 지정하면 된다(스크립트는 `.dump`만 선택한다 — 필요 시 `-Filter` 확장은 별도 태스크).
+
+### 7-3. 정기 이동 스케줄 등록 (선택)
+
+§2 백업 스케줄 직후에 NAS 이동을 붙인다. 로그온 세션 의존은 §2와 동일.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+schtasks /Create /F /TN "WhyMath-PG-Backup-Offsite" /SC WEEKLY /D MON,THU /ST 09:30 /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\kiki\Desktop\__AI\WhyMath\scripts\backup\move_backup_to_nas.ps1 -NasPath \"\\YOUR_NAS\share\whymath-backups\""
+
+# 자가검증 1~3은 7-1과 동일
+schtasks /Query /TN "WhyMath-PG-Backup-Offsite"
+```
+
+### 7-4. 게이트 clear 증적
+
+`G-backup-offsite-move` clear 시 evidence 예시:
+
+```bash
+python3 scripts/harness/backlog.py gates clear G-backup-offsite-move --evidence "NAS offsite copy completed. Host: Phaiakes9, NAS path: \\YOUR_NAS\share\whymath-backups, files copied: 2, verification: SHA-256 matched for all files, latest dump: whymath_YYYYMMDD_HHMMSS.dump (N bytes)."
+```
 
 ## §6. 미해결 사항 (정직 기술)
 
-- **오프사이트 사본 부재**: 백업이 prod와 같은 머신·같은 디스크에 있다 — 디스크 동시 소실에는 무방비(SPOF 부분 상환). 파일 암호화 절차 확립 후 외장/오프사이트 이동이 다음 단계.
-- **백업 파일 자체 암호화 미도입**: §4-1의 파일 단위 암호화(7z AES/age)는 규칙만 있고 도구 절차 미구축.
+- **오프사이트 사본 절차 도입, 실행 미완료**: NAS 이동 스크립트·검증·런북 §7은 확립됐다. 실제 사본 이동 및 `G-backup-offsite-move` clear는 Kiki가 NAS 경로를 확정하고 7-1을 실행한 뒤 완료한다.
+- **백업 파일 자체 암호화 선택 절차만 도입**: §7-2에 7-Zip AES-256 대화형 절차가 있다. 키 관리·자동화는 미도입 — 외부/클라우드 NAS 사용 시 반드시 7-2를 적용하고, 키 보관은 백업 파일과 분리한다(§4-5).
 - **WAL 아카이빙/PITR 없음**: pg_dump 스냅샷 방식 — 백업 사이 데이터는 유실 범위.
 - **스케줄 로그온 의존**: §2 한계 참조(로그아웃/꺼짐 시 회차 누락).
 

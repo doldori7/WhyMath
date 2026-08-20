@@ -20,6 +20,16 @@ Lib/
 Scripts/
 share/
 
+# 예외: 루트 "scripts/"는 프로젝트 코드 디렉터리. Windows는 대소문자를 구분하지
+# 않아 "Scripts/"가 "scripts/"까지 무시한다. 루트 scripts/는 다시 추적하고, 그 아래
+# 런타임 산출물은 별도로 무시한다.
+!scripts/
+
+# S4-16 battle harness runtime scripts (truth source is the harness, not these ad-hoc runners)
+scripts/run_hybrid_battle.py
+scripts/run_single_model_battle.py
+scripts/summarize_s4_audit.py
+
 # Python 테스트·린터 캐시
 .coverage
 .coverage.*
