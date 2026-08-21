@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-45-bench-prefill-instrumentation
+title: "벤치 하네스 프리필 미계측 — prompt_eval_* 기록 없어 '프리필이 느린가/생성이 느린가' 구분 불가"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① bench_latency.py가 ollama 응답의 prompt_eval_count·prompt_eval_duration·eval_duration을 CallResult/ConcurrencyRun에 기록하고 결과 JSON에 노출 — 현재 eval_count만 읽어(:210-211) 프리필/생성 분리가 구조적으로 불가"
+  - "② 프리필 tok/s와 생성 tok/s를 각각 리포트에 출력 — OPS-43 회귀 원인 판정(가설 B 컨텍스트/KV vs 대역폭)이 이 분리에 의존"
+  - "③ 가짜 클라이언트 주입 테스트로 신규 필드 계약 동결(tests/infra) — 기존 bench 테스트 패턴 유지, CI 실행 배선 확인 후 완료 선언"
+artifacts: []
+paths:
+  - "infra/phaiakes9/benchmark/**"
+  - "tests/infra/**"
+session: null
+notes: "infra/phaiakes9/LLM_STACK_TUNING.md §5 계측 갭에서 발견. OPS-43 STEP 1 선결 — 이 계측 없이는 27b 0.5~1 tok/s 회귀의 원인을 프리필/생성으로 가를 수 없다."
+updated: 2026-08-21
