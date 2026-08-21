@@ -1,5 +1,14 @@
 # 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)
 gates:
+  - id: G-amd395-perf-baseline
+    title: "Phaiakes9(AMD 395/8060S) GPU 추론 베이스라인 측정 — docs/ops/amd395_local_llm_performance.md Phase 0~1 실행(evidence_*.txt·bench_*.csv). 라우터 LOCAL_LATENCY_MS 보정·QUALITY 티어 판단의 선결"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-21
+    remind_after_days: 7
+    evidence: null
+    notes: ""
   - id: G-backup-offsite-move
     title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
     kind: human

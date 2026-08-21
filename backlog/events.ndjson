@@ -3317,3 +3317,5 @@
 {"ts": "2026-08-21T04:42:12", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "start", "id": "OPS-45-bench-prefill-instrumentation", "session": "claude/llm-optimal-pc-setup-voyp4v", "remote": "ok"}
 {"ts": "2026-08-21T04:42:13", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "done", "id": "OPS-45-bench-prefill-instrumentation", "artifacts": ["#848"]}
 {"ts": "2026-08-21T04:42:16", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "done", "id": "OPS-46-bench-environment-capture", "artifacts": ["#848"]}
+{"ts": "2026-08-21T05:13:42", "actor": "claude/amd-395-gpu-diagnosis-jinh6i", "action": "gate_add", "id": "G-amd395-perf-baseline", "kind": "human", "assignee": "kiki", "title": "Phaiakes9(AMD 395/8060S) GPU 추론 베이스라인 측정 — docs/ops/amd395_local_llm_performance.md Phase 0~1 실행(evidence_*.txt·bench_*.csv). 라우터 LOCAL_LATENCY_MS 보정·QUALITY 티어 판단의 선결"}
+{"ts": "2026-08-21T05:17:15", "actor": "claude/amd-395-gpu-diagnosis-jinh6i", "action": "add", "id": "HARN-33-gates-yaml-blockscalar-preserve"}
