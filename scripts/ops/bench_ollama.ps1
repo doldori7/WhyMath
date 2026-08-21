@@ -239,7 +239,11 @@ foreach ($model in $Models) {
 
     for ($r = 1; $r -le $Repeat; $r++) {
         try {
-            $res = Invoke-Generate -Model $model -Text $Prompt -Predict $NumPredict
+            # 매 실행 고유 접두사로 프롬프트 캐시를 무력화한다.
+            # (2026-08-22 실측: 2회차 prompt_tps가 43,542 t/s로 찍혔다 — prefill을 안 한 캐시 히트값이다.
+            #  생성 t/s는 영향이 적지만 프롬프트 처리 속도는 통째로 허수가 된다.)
+            $nonce = "[" + $Label + "-" + $r + "-" + (Get-Random) + "] "
+            $res = Invoke-Generate -Model $model -Text ($nonce + $Prompt) -Predict $NumPredict
             $genTps = if ($res.eval_duration -gt 0) { [math]::Round($res.eval_count / ($res.eval_duration / 1e9), 2) } else { 0 }
             $ppTps  = if ($res.prompt_eval_duration -gt 0) { [math]::Round($res.prompt_eval_count / ($res.prompt_eval_duration / 1e9), 2) } else { 0 }
             $totMs  = [math]::Round(($res.total_duration / 1e6), 1)
@@ -272,8 +276,10 @@ $ok = @($Rows | Where-Object { $_.error -eq "" -and $null -ne $_.gen_tps })
 if ($ok.Count -gt 0) {
     $ok | Group-Object model | ForEach-Object {
         $g = $_.Group
-        $medGen = ($g.gen_tps | Sort-Object)[[int][math]::Floor($g.Count/2)]
-        $medPp  = ($g.prompt_tps | Sort-Object)[[int][math]::Floor($g.Count/2)]
+        # 하위 중앙값(보수적). floor(n/2)는 n=2에서 *최댓값*을 고른다 — 벤치 요약으로 부적절하다.
+        $mi = [int][math]::Floor(($g.Count - 1) / 2)
+        $medGen = @($g.gen_tps | Sort-Object)[$mi]
+        $medPp  = @($g.prompt_tps | Sort-Object)[$mi]
         "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   gpu_fraction {3}   ctx {4}" -f $_.Name, $medGen, $medPp, $g[0].gpu_fraction, $g[0].context_length
     } | ForEach-Object { Write-Host $_ }
 }
