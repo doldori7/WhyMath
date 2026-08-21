@@ -149,3 +149,7 @@ data/audit/
 /.demo_uvicorn.pid
 /.demo_uvicorn.log
 /.demo_uvicorn.err.log
+
+# Phaiakes9 GPU 성능 진단 산출물 — collect_gpu_evidence.ps1 / bench_ollama.ps1의 실측 결과
+# (머신·시점 종속 로컬 증거. 확정 수치만 docs/ops/amd395_local_llm_performance.md §5로 옮긴다)
+/.gpu_evidence/
