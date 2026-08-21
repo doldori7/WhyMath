@@ -105,9 +105,39 @@ if (Test-Path $srvLog) {
         Write-Host "[SRV ] ^ 서버가 기동 시 읽은 값이다. 방금 바꾼 환경변수가 여기 없으면 Ollama 재시작이 안 된 것이다."
     }
 }
+$commit0 = Get-CommitFreeGB
+Write-Host ("[MEM ] CommitFree_GB (시작) = " + $commit0 + "   <- 로드 실패의 실제 구속 자원")
+$orph0 = Get-OrphanLlamaServers
+if ($orph0.Count -gt 0) {
+    $sum = [math]::Round((($orph0 | Measure-Object -Property PrivateMemorySize64 -Sum).Sum)/1GB, 2)
+    Write-Host ("[MEM ] llama-server 프로세스 " + $orph0.Count + "개 상주 (합계 커밋 " + $sum + " GB)")
+    try {
+        $psNow = Invoke-RestMethod -Uri ($OllamaHost + "/api/ps") -TimeoutSec 10
+        if ($null -eq $psNow.models -or @($psNow.models).Count -eq 0) {
+            Write-Host "[WARN] /api/ps 는 상주 모델 0건인데 llama-server 가 살아 있다 = 고아 프로세스."
+            Write-Host "       실패한 로드가 남긴 잔해이며 커밋을 점유해 다음 로드를 실패시킨다."
+            Write-Host "       해소: Get-Process ollama*, llama-server | Stop-Process -Force  후 Ollama 재실행."
+        }
+    } catch { }
+}
 Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
 Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
 Write-Host ""
+
+function Get-CommitFreeGB {
+    # Windows 커밋 여유(= 이 프로세스가 추가로 커밋할 수 있는 최대치).
+    # 2026-08-22 실측: 이 값이 0.9 GB로 마르면 물리 여유 34.9 GB와 무관하게
+    # 1.0 GiB 할당조차 실패한다. 로드 실패의 실제 구속 자원이므로 매 측정에 기록한다.
+    try { return [math]::Round((Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory / 1MB, 1) }
+    catch { return -1 }
+}
+
+function Get-OrphanLlamaServers {
+    # /api/ps 가 비어 있는데 llama-server 가 살아 있으면 고아다.
+    # 실패한 로드가 남긴 고아가 커밋을 점유해 *다음* 로드를 실패시키는 자기증식 구조가 실측됐다
+    # (2026-08-22: 하루 전 08:47·09:22에 뜬 고아 2개가 커밋 19.3 GB를 잡고 있었다).
+    return @(Get-Process llama-server -ErrorAction SilentlyContinue)
+}
 
 function Get-HttpErrorBody {
     param($Rec)
@@ -188,10 +218,11 @@ foreach ($model in $Models) {
     } catch {
         $why = Get-HttpErrorBody $_
         Write-Host ("  [ERR] " + $_.Exception.GetType().Name + " :: " + $why)
+        Write-Host ("        CommitFree_GB = " + (Get-CommitFreeGB) + " (실패 직후)")
         [void]$Rows.Add([pscustomobject]@{
             label=$Label; model=$model; run=0; gen_tps=$null; prompt_tps=$null
             eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-            gpu_fraction=$null; context_length=$null
+            gpu_fraction=$null; context_length=$null; commit_free_gb=(Get-CommitFreeGB)
             error=($_.Exception.GetType().Name + ": " + $why) })
         if (-not $NoUnload) { Remove-LoadedModel -Model $model }
         continue
@@ -214,14 +245,14 @@ foreach ($model in $Models) {
                 label=$Label; model=$model; run=$r; gen_tps=$genTps; prompt_tps=$ppTps
                 eval_count=$res.eval_count; prompt_eval_count=$res.prompt_eval_count
                 load_ms=[math]::Round(($res.load_duration/1e6),1); total_ms=$totMs
-                gpu_fraction=$frac; context_length=$ctx; error="" })
+                gpu_fraction=$frac; context_length=$ctx; commit_free_gb=(Get-CommitFreeGB); error="" })
         } catch {
             $why = Get-HttpErrorBody $_
             Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().Name + " :: " + $why)
             [void]$Rows.Add([pscustomobject]@{
                 label=$Label; model=$model; run=$r; gen_tps=$null; prompt_tps=$null
                 eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-                gpu_fraction=$frac; context_length=$ctx
+                gpu_fraction=$frac; context_length=$ctx; commit_free_gb=(Get-CommitFreeGB)
                 error=($_.Exception.GetType().Name + ": " + $why) })
         }
     }
@@ -276,6 +307,17 @@ if ($failed.Count -gt 0) {
     } else {
         Write-Host ("  [ERR] System.IO.FileNotFoundException: " + $lg)
     }
+}
+
+# ── 커밋·고아 프로세스 후처리 보고 ─────────────────────────────────────────
+$commit1 = Get-CommitFreeGB
+$orph1 = Get-OrphanLlamaServers
+Write-Host ("-" * 78)
+Write-Host ("[MEM ] CommitFree_GB : 시작 " + $commit0 + " -> 종료 " + $commit1)
+if ($orph1.Count -gt 0) {
+    $sum1 = [math]::Round((($orph1 | Measure-Object -Property PrivateMemorySize64 -Sum).Sum)/1GB, 2)
+    Write-Host ("[MEM ] 종료 시점 llama-server " + $orph1.Count + "개 잔존 (합계 커밋 " + $sum1 + " GB)")
+    Write-Host "       다음 실행 전에 정리하지 않으면 커밋이 계속 깎여 실패가 누적된다."
 }
 
 # ── 자가검증 ────────────────────────────────────────────────────────────────
