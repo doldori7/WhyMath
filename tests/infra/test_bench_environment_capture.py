@@ -260,7 +260,7 @@ async def test_partial_gpu_residency_is_visible(bench: Any) -> None:
     """부분 오프로드(vram_fraction < 1.0)가 결과에 그대로 보인다.
 
     이 값은 **냉각과 독립**으로 오프로드 가설을 판정하는 신호다
-    (infra/phaiakes9/LLM_STACK_TUNING.md §4.1 신호 ①).
+    Windows 측 동일 산식 구현은 scripts/ops/bench_ollama.ps1의 gpu_fraction.
     """
     report = await _run(bench, TimingClient(), _make_probe(bench, 0.42))
     assert report.environment.vram_fraction.value == 0.42

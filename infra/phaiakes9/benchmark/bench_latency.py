@@ -1,6 +1,12 @@
-"""Phaiakes9 — Ollama LLM 응답 속도 벤치마크.
+"""Phaiakes9 — Ollama LLM 응답 속도 벤치마크 (Linux/CI 경로).
 
 M1.1 게이트: p50 < 2s 측정.
+
+**역할 경계 (2026-08-21 확정)**: 이 도구는 *CI에서 상시 도는 계측 계약* 담당이다.
+Kiki 머신(Windows)의 성능 측정·튜닝 정본은 `docs/ops/amd395_local_llm_performance.md`와
+`scripts/ops/{collect_gpu_evidence,bench_ollama}.ps1`이며, 전용 VRAM 실바이트·전원 계획·
+드라이버·서버 로그 등 Python으로 못 읽는 증거는 그쪽이 수집한다. 설정 권고가 충돌하면
+그 문서가 이긴다. 여기서는 *권고하지 않고 기록·판정만* 한다.
 
 사용:
     python bench_latency.py [--model qwen2.5-math:7b-instruct] [--concurrency 1,2,4,8]
@@ -62,8 +68,9 @@ v1 = 이 필드가 **아예 없던** 결과 = 측정 조건(냉각·CMOS·백엔
      **다른 시점 결과와 비교 불가**. `environment_comparable()`이 이를 기계로 판정한다.
 
 왜 버전을 박는가: 2026-05-16(9.22 tok/s)과 2026-08-14(0.5~1 tok/s) 두 측정이
-같은 조건에서 잰 것인지 알 방법이 없어 "9~18배 회귀"라는 판정을 회수해야 했다.
-버전 필드가 없으면 미래 세션이 v1 결과를 또 유효한 기준선으로 오인한다.
+같은 조건에서 잰 것인지 알 방법이 없어 둘 다 폐기해야 했다(경위:
+`infra/phaiakes9/LLM_STACK_TUNING.md` §1). 버전 필드가 없으면 미래 세션이
+v1 결과를 또 유효한 기준선으로 오인한다.
 """
 
 OLLAMA_ENV_KEYS: Final[tuple[str, ...]] = (
@@ -84,7 +91,8 @@ OLLAMA_ENV_KEYS: Final[tuple[str, ...]] = (
 """성능에 직접 영향을 주는 Ollama 환경변수 — 결과에 그대로 스냅샷한다.
 
 CONTEXT_LENGTH·NUM_PARALLEL은 KV 캐시 크기를 곱으로 키워 부분 오프로드를 유발할 수
-있으므로(LLM_STACK_TUNING.md 가설 B), 이 값을 모르면 tok/s를 해석할 수 없다.
+있으므로, 이 값을 모르면 tok/s를 해석할 수 없다.
+권장값의 정본은 `docs/ops/amd395_local_llm_performance.md` L6·L7 — 여기서는 *기록*만 한다.
 """
 
 _PROBE_TIMEOUT_S: Final[float] = 3.0
@@ -145,9 +153,9 @@ class CallResult:
 
     **프리필/생성 분리(OPS-45)**: `prompt_eval_*`(프리필=연산 바운드)과
     `eval_*`(생성=대역폭 바운드)는 느려지는 원인이 다르다 —
-    써멀 스로틀은 프리필을 크게 때리고, 부분 오프로드/KV 폭발은 생성을 파국적으로 때린다.
+    써멀·전원은 프리필을 크게 때리고, 부분 오프로드/KV 폭발은 생성을 파국적으로 때린다.
     둘을 합산한 wall-clock만 보면 두 원인이 구분되지 않는다.
-    (근거: infra/phaiakes9/LLM_STACK_TUNING.md §4.1 신호 ②)
+    (성능 해석의 정본: `docs/ops/amd395_local_llm_performance.md` §2·L2)
 
     ollama 응답의 duration 계열은 **나노초**다 → ms로 환산해 저장한다.
     필드가 없으면 0이 아니라 **None**이다(날조 0 금지).
@@ -308,8 +316,8 @@ class HttpEnvProbe:
 
         **vram_fraction이 이 프로브의 존재 이유다.** 적재 위치(GPU 전량이냐 CPU 분할이냐)는
         온도가 아니라 VRAM 예산이 정하므로, 이 값은 **냉각 상태와 완전히 독립**으로
-        부분 오프로드 가설을 확정/기각한다(LLM_STACK_TUNING.md §4.1 신호 ①).
-        1.0 = 100% GPU. 1.0 미만이면 그만큼 CPU로 흘렀다.
+        부분 오프로드를 확정/기각한다. 1.0 = 100% GPU, 미만이면 그만큼 CPU로 흘렀다.
+        Windows 측 정본 구현은 `scripts/ops/bench_ollama.ps1`의 `gpu_fraction`(동일 산식).
         """
         payload, why = self._get_json("/api/ps")
         if payload is None:

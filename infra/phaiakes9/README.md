@@ -86,9 +86,8 @@ bash benchmark/run_bench.sh
 
 ### 측정 조건을 반드시 함께 남길 것 (OPS-46)
 
-`tokens_per_sec`만 적힌 결과는 **다른 시점 결과와 비교할 수 없습니다.** 2026-05-16(27b 9.22 tok/s)과
-2026-08-14(27b 0.5~1 tok/s) 두 측정이 정확히 그 상태였고, 냉각·CMOS 상태를 알 수 없어
-"9~18배 회귀"라는 판정을 **회수해야 했습니다**.
+`tokens_per_sec`만 적힌 결과는 **다른 시점 결과와 비교할 수 없습니다.** 2026-05-16·2026-08-14 두 측정이
+정확히 그 상태였고, 결국 **둘 다 폐기**했습니다(경위: `LLM_STACK_TUNING.md` §1).
 
 그래서 조건 4종을 인자로 받습니다 — 미지정 시 결과 JSON에 `environment_comparable: false`가 찍히고
 콘솔에 경고가 뜹니다:
@@ -98,20 +97,19 @@ python3 benchmark/bench_latency.py --model qwen3.5:27b --host http://127.0.0.1:1
   --gpu-backend ROCm --cmos "auto" --power-profile "기본" --cooling "평균"
 ```
 
-결과 JSON에 자동으로 함께 기록되는 것:
-
 | 필드 | 의미 |
 |---|---|
-| `environment.vram_fraction` | **1.0 = 100% GPU.** 미만이면 부분 오프로드 — 이 값은 *냉각과 독립*으로 오프로드 여부를 판정한다 |
-| `environment.ollama_version` / `loaded_model` | `/api/version`·`/api/ps` 자동 조회 |
-| `environment.ollama_env` | `OLLAMA_CONTEXT_LENGTH`·`NUM_PARALLEL` 등 성능에 직결되는 환경변수 스냅샷 |
-| `concurrency_runs[].prefill_tokens_per_sec` / `decode_tokens_per_sec` | **프리필/생성 분리**(OPS-45). 써멀은 프리필을, 오프로드는 생성을 때린다 — 지문이 반대라 원인이 갈린다 |
-| `environment_comparable` | 이 결과를 다른 시점과 나란히 놓아도 되는지의 기계 판정 |
-
-온도 센서가 없는 환경(Windows)에서는 `--thermal-drift-probe`로 첫 동시도 단계를 마지막에 재실행해
-tok/s 하락률을 봅니다 — 뒤가 느리면 써멀 스로틀을 의심할 근거가 됩니다.
+| `environment.vram_fraction` | **1.0 = 100% GPU.** 미만이면 부분 오프로드 — *냉각과 독립*으로 판정된다 |
+| `environment.ollama_version` / `loaded_model` / `ollama_env` | `/api/version`·`/api/ps`·`OLLAMA_*` 자동 스냅샷 |
+| `concurrency_runs[].prefill_tokens_per_sec` / `decode_tokens_per_sec` | 프리필/생성 분리(OPS-45) |
+| `environment_comparable` | 이 결과를 다른 시점과 나란히 놓아도 되는지의 **기계 판정** |
 
 값이 없을 때는 0이 아니라 `null` + `status`/`note`가 기록됩니다(날조 0 원칙).
+
+> **⚠️ 이 도구는 CI 계약용입니다.** Kiki 머신에서 성능을 *측정·튜닝*할 때의 정본은
+> **[`docs/ops/amd395_local_llm_performance.md`](../../docs/ops/amd395_local_llm_performance.md)** +
+> `scripts/ops/collect_gpu_evidence.ps1`·`bench_ollama.ps1` 입니다 — 전용 VRAM 실바이트·전원 계획·
+> 드라이버·서버 로그처럼 Python으로 못 읽는 증거를 그쪽이 수집합니다. **설정 권고가 충돌하면 그 문서가 이깁니다.**
 
 ---
 
