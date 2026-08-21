@@ -37,6 +37,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $RepoRoot ".gpu_evidence" }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 
+$RunStart = Get-Date        # 로그 tail을 이 시각 이후로 자른다(이전 런의 로그를 이번 런의 증거로 오독 금지)
 $Stamp   = Get-Date -Format "yyyyMMdd_HHmmss"
 $OutFile = Join-Path $OutDir ("bench_" + $Label + "_" + $Stamp + ".csv")
 
@@ -64,6 +65,13 @@ try {
     Write-Host "[HINT] 트레이 Ollama가 떠 있는지, 또는 별도 창에서 'ollama serve'가 도는지 확인하세요."
     exit 1
 }
+# powershell.exe -File 로 실행하면 `-Models a,b` 가 배열이 아니라 *문자열 1개*로 도착한다.
+# (2026-08-22 실측 사고: 측정 2회가 "invalid model name" 하나로 통째 공전했다.)
+if ($Models.Count -eq 1 -and $Models[0] -match ",") {
+    $Models = @($Models[0].Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    Write-Host ("[INFO] -Models 를 콤마로 분해: " + $Models.Count + "개")
+}
+
 $installed = @($tags.models | ForEach-Object { $_.name })
 Write-Host ("[INFO] installed models : " + ($installed -join ", "))
 
@@ -76,6 +84,27 @@ if ($Models.Count -eq 0) {
     }
 }
 if ($Models.Count -eq 0) { Write-Host "[FAIL] 측정할 모델이 없습니다. 'ollama pull qwen2.5:7b' 후 다시 실행하세요."; exit 1 }
+
+# 서버에 던지기 전에 이름을 검증한다 — 오타를 500으로 알아내지 않는다.
+$unknown = @($Models | Where-Object { $installed -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    Write-Host ("[FAIL] 설치되지 않은 모델: " + ($unknown -join ", "))
+    Write-Host ("[HINT] 설치 목록에서 골라 다시 지정하세요. 콤마 구분, 공백 없이.")
+    exit 1
+}
+
+# 서버가 실제로 어떤 설정으로 떠 있는지 — 환경변수를 바꾸고 재시작을 안 하면 여기서 드러난다.
+$srvLog = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
+if (Test-Path $srvLog) {
+    $cfg = @(Select-String -Path $srvLog -Pattern 'msg="server config"') | Select-Object -Last 1
+    if ($null -ne $cfg) {
+        foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_VULKAN","OLLAMA_IGPU_ENABLE")) {
+            $m = [regex]::Match($cfg.Line, [regex]::Escape($k) + ":([^ \]]*)")
+            if ($m.Success) { Write-Host ("[SRV ] " + $k.PadRight(26) + "= " + $m.Groups[1].Value) }
+        }
+        Write-Host "[SRV ] ^ 서버가 기동 시 읽은 값이다. 방금 바꾼 환경변수가 여기 없으면 Ollama 재시작이 안 된 것이다."
+    }
+}
 Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
 Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
 Write-Host ""
@@ -223,9 +252,27 @@ if ($failed.Count -gt 0) {
     Write-Host ("실패 " + $failed.Count + "건 — Ollama 서버 로그 tail (원인은 대개 여기 있다)")
     $lg = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
     if (Test-Path $lg) {
-        Get-Content $lg -Tail 200 |
-            Select-String -Pattern "level=ERROR|level=WARN|error|memory|unable|failed|insufficient|out of|gpu|vram|ctx|context" |
-            Select-Object -Last 30 | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
+        # 이번 실행 이후의 줄만 본다. 이전 런의 로그를 이번 런의 증거로 읽는 오독을 막는다.
+        # (2026-08-22 실측 사고: 실행조차 안 된 런에 이전 런의 OOM 로그가 붙어 나왔다.)
+        $lines = @(Get-Content $lg -Tail 4000)
+        $startIdx = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $m = [regex]::Match($lines[$i], 'time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})')
+            if ($m.Success) {
+                $ts = [datetime]::MinValue
+                if ([datetime]::TryParse($m.Groups[1].Value, [ref]$ts)) {
+                    if ($ts -ge $RunStart) { $startIdx = $i; break }
+                }
+            }
+        }
+        if ($startIdx -lt 0) {
+            Write-Host "  [중요] 이번 실행 이후 기록된 서버 로그가 없다 — 서버가 모델 로드를 *시도조차 하지 않았다*."
+            Write-Host "         요청이 서버에 닿기 전에 거부됐다는 뜻이다(모델명 오류 등). 위 [ERR] 본문을 보라."
+        } else {
+            $lines[$startIdx..($lines.Count-1)] |
+                Select-String -Pattern "level=ERROR|level=WARN|error|memory|unable|failed|insufficient|out of|cudaMalloc|ROCm|vram|num_ctx|n_ctx" |
+                Select-Object -Last 30 | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
+        }
     } else {
         Write-Host ("  [ERR] System.IO.FileNotFoundException: " + $lg)
     }

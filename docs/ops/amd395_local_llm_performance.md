@@ -327,6 +327,45 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 - ⇒ **가설**: 기본 컨텍스트 262,144(L6 참조)가 이 7종에는 그대로 적용돼 KV 할당이 실패한다. 1.5b만 자기 상한 4096에 걸려 살아남았다.
 - **이 가설은 아직 검증되지 않았다.** 1차 도구가 500의 *응답 본문*을 버리고 예외 타입명만 남겨 원인 판정이 불가능했다(도구 결함, 수정 완료).
 
+### 🔴 로드 실패 근본 원인 (2026-08-22 08:01 · `bench_diag` 로그)
+
+`qwen3:30b-a3b`(qwen3moe) 로드 시퀀스가 로그에 그대로 남았다:
+
+```
+1차: alloc_tensor_range: failed to allocate ROCm_Host buffer of size 16049422336   (14.95 GiB, 호스트)
+     → "reducing automatic context and retrying once"  old_num_ctx=262144 → new_num_ctx=32768
+2차: ggml_backend_cuda_buffer_type_alloc_buffer: allocating 17524.43 MiB on device 0:
+     cudaMalloc failed: out of memory
+     alloc_tensor_range: failed to allocate ROCm0 buffer of size 18375698432        (17.11 GiB, 디바이스)
+```
+
+그런데 같은 로그에서 fitter는 **"메모리 충분"** 이라고 판단했다:
+
+```
+| ROCm0 | 102129 = 101832 + (29980 = 17524 + 12288 + 168) + -29683 |
+projected to use 29980 MiB vs 101832 MiB free → "no changes needed"
+system memory total=63.6 GiB free=36.5 GiB free_swap=2.8 GiB
+gpu memory library=ROCm available=99.1 GiB free=99.6 GiB
+```
+
+**핵심**: 보고된 free 99.6 GiB와 실제 할당 가능량이 다르다. 메모리 회계의 `unaccounted`가 **-29,683 MiB(음수)** 인 것이
+그 불일치의 지문이다. 문헌의 Windows Strix Halo 할당 이슈(ROCm #5940 — Windows에서 hipMalloc이 VRAM 대신 shared로
+새거나 실패)와 부합한다.
+
+**확정된 것**: 1.5b(0.9GB, ctx 4096)는 성공, MoE 30B(17.3GB)는 실패. **실제 천장은 그 사이 어딘가이며 아직 미측정이다.**
+
+**후보 대책 사다리** (위에서부터 싸고 되돌리기 쉬운 순서)
+
+| # | 대책 | 근거 | 되돌리기 |
+|---|---|---|---|
+| 1 | `OLLAMA_CONTEXT_LENGTH=8192` + `OLLAMA_NUM_PARALLEL=1` | 로그의 `-c 131072 -np 4`가 컨텍스트만 12,288 MiB를 먹었다. 둘은 **곱해지므로 하나의 KV 예산 레버**로 다룬다 | 환경변수 삭제 |
+| 2 | 페이지파일 확대 | `free_swap=2.8 GiB`. Windows는 대형 커밋에 페이지파일 백업을 요구한다 — 14.95 GiB 호스트 할당 실패의 유력 후보 | 시스템 설정 원복 |
+| 3 | Vulkan 백엔드(`OLLAMA_IGPU_ENABLE=1`) | 할당 경로가 ROCm과 다르다. 속도 비교가 아니라 **우회 수단**으로 먼저 쓴다 | 환경변수 삭제 |
+| 4 | VGM 하향(64GB → 32GB) | 호스트 할당이 실패하는 상황이면 Windows 가용 RAM 63.6GB가 오히려 병목이다. **반직관적이므로 1~3 실패 후에만** | Adrenalin 원복 + 재부팅 |
+
+**모델 크기 사다리로 천장을 먼저 잰다** — 대책을 고르기 전에 "어디까지 되는가"를 알아야 한다:
+`qwen2.5:3b`(1.8) → `qwen2.5:7b`(4.4) → `qwen3-vl:8b`(5.7) → `qwen2.5:14b`(8.4) → `gpt-oss:20b`(12.8) → `qwen3.5:27b`(16.2) → `qwen3:30b-a3b`(17.3)
+
 **이 시점의 결론 전환**: 최초 질문("ROCm이 왜 안 잡히나")은 **이 머신에서 성립하지 않는다** — 이미 잡혀 있다.
 실제 병목 후보는 ①과대 컨텍스트(256K) ②병렬 4 ③flash attention 꺼짐 ④전원 Balanced ⑤dense 27B의 대역폭 벽이다.
 
@@ -348,6 +387,14 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 - ❌ **`HIP_VISIBLE_DEVICES=-1`을 ROCm 경로에 남겨두기** — GPU가 통째로 꺼진다.
 - ❌ **27B dense가 느린 것을 설정 탓으로 돌리기** — §2 물리 한계다.
 - ❌ **검사 명령 출력을 `-q`/`tail`로 잘라 통과 선언** — 판정은 exit code로 한다(CLAUDE.md 2026-08-09 등재).
+- ❌ **로그 tail을 시간 필터 없이 붙여 "이번 실행의 증거"로 읽기** — 실행이 아예 안 된 런에 **이전 런의 로그**가 붙어 나오면,
+  없는 원인을 분석하게 된다. 실행 시작 시각 이후의 줄만 자르고, 해당 줄이 **0건이면 그 사실 자체를 보고**한다
+  ("서버가 로드를 시도조차 하지 않았다" = 요청이 서버에 닿기 전에 거부됐다는 결정적 단서다).
+  (사고 경위: 2026-08-22 `-Models` 파싱 버그로 실행이 안 된 두 런에 07:56 OOM 로그가 그대로 붙었다.)
+- ❌ **`powershell.exe -File` 로 배열 인자를 넘기면서 콤마 분해를 기대하기** — `-File` 모드는 인자를 **문자열 그대로** 넘긴다.
+  `-Models a,b` 는 원소 2개가 아니라 `"a,b"` 원소 1개로 도착해 서버에서 `invalid model name`이 된다.
+  스크립트가 스스로 콤마를 분해하고, **서버에 던지기 전에 설치 목록과 대조**한다.
+  (사고 경위: 2026-08-22 측정 2회가 이 한 가지 이유로 통째 공전했다.)
 - ❌ **HTTP 실패를 예외 *타입명*만으로 기록하기** — 500의 원인은 타입명이 아니라 **응답 본문**에 들어 있다.
   `System.Net.WebException`은 8개 모델이 전부 다른 이유로 죽어도 똑같이 찍힌다.
   (사고 경위: 2026-08-22 Phase 1 1차에서 7개 모델이 전건 500이었는데 본문을 버려 원인 판정이 불가능했고, 측정 1회가 통째로 공전했다.
