@@ -3311,3 +3311,4 @@
 {"ts": "2026-08-17T12:39:56", "actor": "main", "action": "done", "id": "ARCH-36", "artifacts": ["#842"]}
 {"ts": "2026-08-19T14:06:02", "actor": "s4-16-blocked-evidence", "action": "add", "id": "S1-16-subject-neutral-content-contract"}
 {"ts": "2026-08-21T03:33:26", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "add", "id": "OPS-45-bench-prefill-instrumentation"}
+{"ts": "2026-08-21T04:16:03", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "add", "id": "OPS-46-bench-environment-capture"}
