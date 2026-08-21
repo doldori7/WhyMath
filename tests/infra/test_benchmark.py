@@ -184,6 +184,7 @@ async def test_run_benchmark_gate_pass(bench: Any) -> None:
         warmup_calls=0,
         gate_p50_ms=2000,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     assert report.gate_p50_under_2s is True
     assert len(report.concurrency_runs) == 2
@@ -207,6 +208,7 @@ async def test_run_benchmark_gate_fail(bench: Any) -> None:
         warmup_calls=0,
         gate_p50_ms=2000,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     assert report.gate_p50_under_2s is False
     assert report.concurrency_runs[0].p50_ms >= 2000
@@ -223,6 +225,7 @@ async def test_run_benchmark_partial_failure(bench: Any) -> None:
         concurrencies=[1],
         warmup_calls=0,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     run = report.concurrency_runs[0]
     # 동시도 1이므로 호출 순서 결정적: idx 1, 3 실패 → 2건 실패
@@ -242,6 +245,7 @@ async def test_run_benchmark_warmup_called(bench: Any) -> None:
         concurrencies=[1],
         warmup_calls=2,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     # 워밍업 2회 + 본 측정 3회 = 5회
     assert len(client.calls) == 5
@@ -257,7 +261,13 @@ async def test_run_benchmark_empty_samples_raises(bench: Any) -> None:
     """빈 표본은 ValueError."""
     client = MockOllamaClient()
     with pytest.raises(ValueError, match="표본"):
-        await bench.run_benchmark(model="mock", samples=[], concurrencies=[1], client=client)
+        await bench.run_benchmark(
+            model="mock",
+            samples=[],
+            concurrencies=[1],
+            client=client,
+            probe=bench.NullEnvProbe(),
+        )
 
 
 @pytest.mark.asyncio
@@ -266,7 +276,13 @@ async def test_run_benchmark_empty_concurrencies_raises(bench: Any) -> None:
     client = MockOllamaClient()
     samples = _make_samples(bench, n=2)
     with pytest.raises(ValueError, match="concurrencies"):
-        await bench.run_benchmark(model="mock", samples=samples, concurrencies=[], client=client)
+        await bench.run_benchmark(
+            model="mock",
+            samples=samples,
+            concurrencies=[],
+            client=client,
+            probe=bench.NullEnvProbe(),
+        )
 
 
 # ---- report 직렬화 --------------------------------------------------------
@@ -281,6 +297,7 @@ async def test_report_to_dict_is_json_serializable(bench: Any) -> None:
         concurrencies=[1],
         warmup_calls=0,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     d = bench.report_to_dict(report)
     # JSON 왕복
@@ -303,6 +320,7 @@ async def test_report_machine_detection(bench: Any) -> None:
         concurrencies=[1],
         warmup_calls=0,
         client=client,
+        probe=bench.NullEnvProbe(),
     )
     assert "platform" in report.machine
     assert "python_version" in report.machine

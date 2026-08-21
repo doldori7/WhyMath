@@ -272,8 +272,74 @@ MEMORY 2026-05-16에 이런 줄이 있다:
 **STEP 1을 STEP 2보다 앞에 두는 이유**: 재부팅·BIOS 진입 없이 환경변수만으로 되돌릴 수 있어
 **가장 싸고 가장 빨리 반증되는 가설**이다.
 
-**지금 당장 Kiki가 할 일은 없다.** 냉각 증설이 선행 조건이고, 그전에 계측 복구(OPS-45·46)는 코드 작업이라
-이쪽에서 처리할 수 있다. STEP 0 런북은 계측 복구 후 이 문서에 추가한다.
+**계측 복구(OPS-45·46)는 완료됐다** — 아래 §7.1이 그 위에서 도는 STEP 0 런북이다.
+**냉각 증설이 선행 조건이므로 지금 실행할 필요는 없다.**
+
+---
+
+### 7.1 STEP 0 런북 — 조건 기록된 기준선
+
+#### 사전 브리핑 (6항목)
+
+1. **과제 명칭**: Phaiakes9 LLM 스택 기준선 측정 (STEP 0)
+2. **목적**: **신뢰할 수 있는 기준선을 처음으로 확보한다.** 기존 측정 2건은 조건 미기록이라 폐기됐다.
+   부수적으로 `ollama ps` 상당 값(`vram_fraction`)이 **냉각과 무관하게** 부분 오프로드 가설(A/B)을
+   확정 또는 기각한다. 이 결과가 STEP 1~4의 비교 기준이 되고, `OPS-43` acceptance ① 판정에 직접 쓰인다.
+3. **구체적 절차**: ①브랜치 체크아웃 ②의존성 확인 ③27B 벤치 1회 —
+   **정상이면 2~3분, 회귀 상태면 15~40분**. 진행 중 콘솔에 측정 환경 요약이 먼저 출력된다.
+4. **성공 기준**:
+   - **성공**: `results/step0-27b-baseline.json` 생성 + 콘솔에 **`환경 기록: ✅ 비교 가능`**.
+     ⚠️ 벤치의 exit code는 SLA 게이트(p50<2초) 판정이라 **27B는 어차피 exit 1**이다 —
+     **이 단계에서 exit 1은 실패가 아니다.** 우리가 보는 것은 `tokens_per_sec`·`decode_tokens_per_sec`·`vram_fraction`이다.
+   - **실패**: JSON 미생성 또는 `ollama` 접속 오류 → 대처: `Get-Process ollama`로 서비스 확인, 없으면 Ollama 실행 후 재시도.
+   - **`환경 기록: ⚠️ 비교 불가`가 뜨면** 조건 인자를 빠뜨린 것이다 — 경고에 어느 인자가 빠졌는지 나온다. 채워서 재실행.
+5. **실행 환경**: Phaiakes9(= 평소 쓰는 이 PC) · **Windows PowerShell** ·
+   `C:\Users\kiki\Desktop\__AI\WhyMath` · 선행: Ollama 기동 중 · `qwen3.5:27b` 로컬 보유 · **냉각 증설 완료 후**.
+6. **창 구분**: **새 PowerShell 창 1개.** 서버를 점유하지 않으므로 이후 조작 가능.
+
+#### 명령 블록
+
+```powershell
+# ── 실행 시스템: Windows PowerShell (Phaiakes9 = 이 PC 자신 · 별도 접속 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# 이 브랜치의 신규 파일을 쓰므로 체크아웃 선행 (force-push 대비 -B 형태)
+git fetch origin claude/llm-optimal-pc-setup-voyp4v
+git checkout -B claude/llm-optimal-pc-setup-voyp4v origin/claude/llm-optimal-pc-setup-voyp4v
+
+# ── 자가검증 ①: 벤치 스크립트 존재 (없으면 아래는 전부 무의미)
+Test-Path .\infra\phaiakes9\benchmark\bench_latency.py
+
+# ── 자가검증 ②: ollama 파이썬 클라이언트 (python -m 형태로 인터프리터 고정)
+python -m pip install --user ollama
+
+# ── 측정 — 조건 4종을 실제 상태로 바꿔서 넣을 것
+#    (--cooling 은 증설 후 실제 상태로. "평균"/"증설 완료" 등 자유 서술)
+python .\infra\phaiakes9\benchmark\bench_latency.py `
+  --model qwen3.5:27b `
+  --host http://127.0.0.1:11434 `
+  --concurrency 1 `
+  --num-predict 512 `
+  --gpu-backend ROCm `
+  --cmos "auto" `
+  --power-profile "기본" `
+  --cooling "증설 완료" `
+  --thermal-drift-probe `
+  --output .\infra\phaiakes9\results\step0-27b-baseline.json
+echo "EXIT=$LASTEXITCODE  (27B는 SLA 게이트상 1이 정상 — 수치를 보세요)"
+
+# ── 자가검증 ③: 결과 파일 생성 + 핵심 수치
+Test-Path .\infra\phaiakes9\results\step0-27b-baseline.json
+$r = Get-Content .\infra\phaiakes9\results\step0-27b-baseline.json | ConvertFrom-Json
+$r.concurrency_runs | Format-Table concurrent, p50_ms, tokens_per_sec, `
+  prefill_tokens_per_sec, decode_tokens_per_sec, success_count, fail_count
+"비교가능: {0} / GPU상주비율: {1}" -f $r.environment_comparable, $r.environment.vram_fraction.value
+```
+
+**보고해 주실 것**: 위 마지막 두 줄의 출력 전부.
+- `vram_fraction`이 **1 미만이면 → 가설 A/B 확정**(부분 오프로드, 열과 무관) → STEP 1로 직행
+- `1.0`인데 느리면 → A/B 기각 → 프리필/생성 중 어느 쪽이 죽었는지로 써멀 vs 백엔드 판별
+- `thermal_drift.drop_pct`가 크면 → 써멀 잔존
 
 ---
 
@@ -283,7 +349,7 @@ MEMORY 2026-05-16에 이런 줄이 있다:
 - **`qwen3.5:122b`의 dense/MoE 미확인** — §2.2 판정은 dense 가정. MoE면 뒤집힌다.
 - **회귀의 실재 여부·원인 미확정** — §4는 가설, §7이 판정 절차. 아직 아무것도 실측하지 않았다.
 - **냉각 개선 폭 미상** — "평균 수준 → 증대 예정"의 정량 목표가 없어, 개선 후 성능 예측 불가.
-- **프리필/생성 분리 불가**(`OPS-45`) · **환경 조건 미기록**(`OPS-46`) — 둘 다 미해소.
+- ~~프리필/생성 분리 불가(`OPS-45`) · 환경 조건 미기록(`OPS-46`)~~ — **해소**(2026-08-21). 다만 *코드가 준비됐을 뿐 아직 측정하지 않았다*.
 - **적대적 리뷰어 라우터 배선 미설계** — `LOCAL_MODEL_MATRIX`에 리뷰어 티어 축이 없다.
   도입 시 `03a` 설계 변경 + CLAUDE.md 채택 3조건(라우터 경유·실측 근거·MEMORY 로그) 필요.
 - **3자 quant(`mdq100/*`) 신뢰성 미검증** — 실측 후보로만 취급, 라우터 핀 승격 금지.

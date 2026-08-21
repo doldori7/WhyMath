@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,7 +15,8 @@ acceptance:
   - "② 획득 불가 항목은 가짜 0/빈문자 금지 — wh1_evaluation.py의 MetricStatus 선례대로 value=None + 사유 note로 갭을 가시화(날조 0 원칙)"
   - "③ 조건 미기록 결과와 기록 결과를 구분할 수 있게 스키마 버전 필드 부여 — 과거 results/*.json이 '비교 불가'임이 기계로 드러나야 한다"
   - "④ 가짜 클라이언트 주입 테스트로 신규 필드 계약 동결(tests/infra) + CI 실행 배선 확인 후 완료 선언"
-artifacts: []
+artifacts:
+  - "#848"
 paths:
   - "infra/phaiakes9/benchmark/**"
   - "tests/infra/**"
