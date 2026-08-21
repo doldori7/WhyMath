@@ -24,6 +24,7 @@ param(
     [int]$NumPredict = 128,
     [int]$Repeat = 2,
     [int]$PromptRepeat = 8,
+    [switch]$WithMoe,
     [string]$Prompt = "",
     [string]$OllamaHost = "http://127.0.0.1:11434",
     [string]$OutDir = ""
@@ -40,6 +41,10 @@ $OutFile = Join-Path $OutDir ("bench_" + $Label + "_" + $Stamp + ".csv")
 
 # WhyMath L3 라우터가 실제로 쓰는 로컬 모델 핀 (src/backend/whymath_backend/l3/router.py)
 $WhyMathPins = @("qwen2-math:1.5b", "qwen2.5:3b", "qwen2-math:7b", "qwen2.5:7b", "qwen3-vl:8b", "qwen3.5:27b")
+
+# dense(qwen3.5:27b) 대비 MoE 대조군 — -WithMoe 로 추가한다.
+# 이 프로젝트에서 가장 값어치 있는 단일 측정: 같은 ~17GB 적재량에서 활성 파라미터만 다른 두 구조의 t/s 차이.
+$MoeComparison = @("qwen3:30b-a3b", "qwen3-coder:30b")
 
 # ── 프롬프트 (prefill을 재려면 충분히 길어야 한다) ──────────────────────────
 if ([string]::IsNullOrWhiteSpace($Prompt)) {
@@ -62,7 +67,8 @@ $installed = @($tags.models | ForEach-Object { $_.name })
 Write-Host ("[INFO] installed models : " + ($installed -join ", "))
 
 if ($Models.Count -eq 0) {
-    $Models = @($WhyMathPins | Where-Object { $installed -contains $_ })
+    $pool = if ($WithMoe) { $WhyMathPins + $MoeComparison } else { $WhyMathPins }
+    $Models = @($pool | Where-Object { $installed -contains $_ })
     if ($Models.Count -eq 0) {
         Write-Host "[WARN] WhyMath 핀 모델이 하나도 설치돼 있지 않습니다. 설치된 모델 중 앞 3개로 대체합니다."
         $Models = @($installed | Select-Object -First 3)
@@ -87,19 +93,24 @@ function Invoke-Generate {
                              -ContentType "application/json; charset=utf-8" -TimeoutSec 900
 }
 
-function Get-GpuFraction {
+function Get-PsInfo {
     param([string]$Model)
+    # 반환: gpu_fraction(오프로드 비율) + context_length(실제 적용된 컨텍스트).
+    # 컨텍스트는 이 머신의 주요 병목 후보다(2026-08-22 실측: 기본값이 262144로 잡혀 있었다).
+    $r = [pscustomobject]@{ frac = -1; ctx = $null }
     try {
         $ps = Invoke-RestMethod -Uri ($OllamaHost + "/api/ps") -TimeoutSec 20
         foreach ($m in $ps.models) {
             if ($m.name -eq $Model -or $m.model -eq $Model) {
-                if ($m.size -gt 0) { return [math]::Round(($m.size_vram / $m.size), 4) }
+                if ($m.size -gt 0) { $r.frac = [math]::Round(($m.size_vram / $m.size), 4) }
+                if ($null -ne $m.context_length) { $r.ctx = $m.context_length }
+                return $r
             }
         }
-        return -1   # 상주 목록에 없음 (이미 언로드됨)
+        return $r   # 상주 목록에 없음 (이미 언로드됨)
     } catch {
         Write-Host ("[ERR] " + $_.Exception.GetType().FullName + ": /api/ps 조회 실패")
-        return -1
+        return $r
     }
 }
 
@@ -119,12 +130,15 @@ foreach ($model in $Models) {
         [void]$Rows.Add([pscustomobject]@{
             label=$Label; model=$model; run=0; gen_tps=$null; prompt_tps=$null
             eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-            gpu_fraction=$null; error=$_.Exception.GetType().FullName })
+            gpu_fraction=$null; context_length=$null; error=$_.Exception.GetType().FullName })
         continue
     }
 
-    $frac = Get-GpuFraction -Model $model
+    $info = Get-PsInfo -Model $model
+    $frac = $info.frac
+    $ctx  = $info.ctx
     Write-Host ("  gpu_fraction = " + $frac + "   (1.0=전량 GPU / 0.0=전량 CPU / -1=조회 실패)")
+    Write-Host ("  context      = " + $(if ($null -ne $ctx) { $ctx } else { "(미보고)" }))
 
     for ($r = 1; $r -le $Repeat; $r++) {
         try {
@@ -137,13 +151,13 @@ foreach ($model in $Models) {
                 label=$Label; model=$model; run=$r; gen_tps=$genTps; prompt_tps=$ppTps
                 eval_count=$res.eval_count; prompt_eval_count=$res.prompt_eval_count
                 load_ms=[math]::Round(($res.load_duration/1e6),1); total_ms=$totMs
-                gpu_fraction=$frac; error="" })
+                gpu_fraction=$frac; context_length=$ctx; error="" })
         } catch {
             Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().FullName + ": " + $_.Exception.Message)
             [void]$Rows.Add([pscustomobject]@{
                 label=$Label; model=$model; run=$r; gen_tps=$null; prompt_tps=$null
                 eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-                gpu_fraction=$frac; error=$_.Exception.GetType().FullName })
+                gpu_fraction=$frac; context_length=$ctx; error=$_.Exception.GetType().FullName })
         }
     }
     Write-Host ""
@@ -160,7 +174,7 @@ if ($ok.Count -gt 0) {
         $g = $_.Group
         $medGen = ($g.gen_tps | Sort-Object)[[int][math]::Floor($g.Count/2)]
         $medPp  = ($g.prompt_tps | Sort-Object)[[int][math]::Floor($g.Count/2)]
-        "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   gpu_fraction {3}" -f $_.Name, $medGen, $medPp, $g[0].gpu_fraction
+        "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   gpu_fraction {3}   ctx {4}" -f $_.Name, $medGen, $medPp, $g[0].gpu_fraction, $g[0].context_length
     } | ForEach-Object { Write-Host $_ }
 }
 

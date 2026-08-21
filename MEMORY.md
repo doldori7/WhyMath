@@ -6939,3 +6939,18 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
   ② **증거 유실** — 마지막에 한 번만 저장하는 구조라, 정지 시 화면에 5개 섹션이 찍혔는데도 **파일이 생성조차 되지 않았다**. 섹션마다 즉시 append 하도록 변경.
   - 재발방지: 위 ①②를 런북 §7 안티패턴에 등재("증거 수집 도구를 마지막에 한 번 저장 구조로 만들기 금지"). CLAUDE.md의 "변별력 없는 검증 스텝 금지"·"간접 신호 금지" 계열의 *증거 수집* 축 변형이다.
 - **다음**: Ollama 계측이 아직 0건이다(v1 정지 지점). v2로 Phase 0 재실행 → Phase 1 벤치 → Phase 3(전원 140W) → Phase 4(백엔드) 순. 게이트 `G-amd395-perf-baseline` 유지.
+
+## 2026-08-22: Phaiakes9 Phase 0 완주 — ROCm은 이미 작동 중, 진짜 병목은 컨텍스트·병렬·전원
+
+- **최초 전제가 뒤집혔다**: "8060S에서 ROCm이 안 잡힌다"는 이 머신에 해당하지 않는다. 서버 로그 실측 —
+  `library=ROCm compute=gfx1151 type=iGPU total=99.7 GiB` 로 **ROCm이 추론 장치로 선택돼 있다**(`HSA_OVERRIDE_GFX_VERSION` 불요). 반면 Vulkan 장치는 `dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1`로 자동 제외됐다. ⇒ 남은 질문은 "잡히는가"가 아니라 **"Vulkan이 더 빠른가"**(Phase 4).
+- **VGM 확정**: 레지스트리 `qwMemorySize` = 65,536 MB = **정확히 64.0 GB**. 카브아웃 추정(64.4GB)과 0.4GB 차 = 펌웨어 예약. 추정 방식의 정확도가 실측으로 검증됐다. ROCm 보고 99.7 GiB는 전용 64GB + 공유(RAM 절반 ~32GB) 합산치다.
+- 🔴 **실제 병목 후보 4건(전부 설정)**:
+  ① **기본 컨텍스트 262,144** — `vram-based default context`가 VRAM 99.7 GiB를 근거로 256K를 기본값으로 잡았다. KV 캐시는 컨텍스트에 비례하므로 27B급에서 물리적으로 불가능한 크기 → 로드마다 자동 fit이 개입해 예측 불가·CPU 흘러내림 위험. **8192~32768 명시 권장**.
+  ② `OLLAMA_NUM_PARALLEL=4` — KV가 슬롯 수만큼 곱해진다 → 1~2.
+  ③ `OLLAMA_FLASH_ATTENTION=false` → 1.
+  ④ 전원 계획 = **균형 조정(Balanced)** → 고성능 + 전면 버튼 140W 확인(Phase 3).
+  (부수: `OLLAMA_MAX_LOADED_MODELS=2`인데 라우터는 6핀을 오간다 → 4.)
+- **dense↔MoE 대조 준비 완료**: 설치 모델 15종에 `qwen3.5:27b`(16.2GB·dense)와 **`qwen3:30b-a3b`·`qwen3-coder:30b`(각 17.3GB·MoE)** 가 이미 함께 있다. **다운로드 없이 즉시 비교 가능** — 이 프로젝트에서 가장 값어치 있는 단일 측정이다(§2 계산상 약 10배 차이 예상).
+- **도구**: `bench_ollama.ps1`에 `context_length` 기록(과대 컨텍스트가 주 병목 후보이므로 CSV 열로 고정)과 `-WithMoe`(MoE 대조군 추가) 추가.
+- **다음**: Phase 1 베이스라인 벤치(현행 설정 그대로) → 설정 4건 적용 후 재측정 → Phase 3 전원 → Phase 4 Vulkan 대조.

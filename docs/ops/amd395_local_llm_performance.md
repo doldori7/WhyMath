@@ -18,7 +18,7 @@
 | **[미측정]** | Phaiakes9에서 아직 안 잰 것 | **가정 금지 — 측정 후 이 표를 갱신** |
 
 > ⚠️ **성능 수치(t/s)는 여전히 전부 [계산] 또는 [문헌]이다** — Phaiakes9 벤치 실측은 0건.
-> 다만 **환경 실측은 2026-08-22 Phase 0 1차로 착지했다**(하드웨어·드라이버·VGM 카브아웃). §5 진단표 참조.
+> 다만 **환경 실측은 2026-08-22 Phase 0으로 완주했다**(9/9 섹션). 하드웨어·드라이버·VGM·**백엔드 선택·기본 컨텍스트**까지 확인됐다. §5 진단표 참조.
 > 게이트 `G-amd395-perf-baseline`(사람 게이트 대장)이 이 측정을 추적한다.
 
 ---
@@ -99,6 +99,16 @@ LLM 토큰 생성은 매 토큰마다 활성 가중치를 통째로 읽으므로
 - **기대**: 토큰 생성(대역폭 바운드)보다 **프롬프트 처리(연산 바운드)** 에서 이득이 크다 [계산 근거: prefill은 GEMM, decode는 메모리 읽기]. WhyMath는 **긴 프롬프트 + 짧은 출력**(PRM 단계 검증·동치 판정) 비중이 커서 이 레버가 체감상 크게 작동할 수 있다 — **[미측정]**.
 
 ### L3. 백엔드: Vulkan vs ROCm/HIP [문헌]
+
+> ✅ **Phaiakes9 현재 상태 = ROCm 사용 중 (2026-08-22 실측)**. 서버 로그가 두 줄로 말해 준다:
+> ```
+> library=Vulkan  msg="dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1"  name=Vulkan0
+> library=ROCm    msg="inference compute"  compute=gfx1151  type=iGPU  total="99.7 GiB"
+> ```
+> 즉 **Vulkan 장치는 iGPU라는 이유로 버려졌고, ROCm이 gfx1151을 잡아 실제 추론 장치로 선택됐다.**
+> `HSA_OVERRIDE_GFX_VERSION` 없이도 인식된다(문헌의 우회는 이 버전에선 불요).
+> ⇒ **"ROCm이 안 잡힌다"는 최초 전제는 이 머신에 해당하지 않는다.** 남은 질문은 "잡혔는가"가 아니라
+> **"Vulkan으로 바꾸면 더 빠른가"** 이며, 그것이 Phase 4다(`OLLAMA_IGPU_ENABLE=1`로 Vulkan 장치를 살려 비교).
 - 같은 하드웨어 비교에서 **ROCm은 프롬프트 처리 +20%, Vulkan은 토큰 생성 +25%** 로 서로 반대 방향의 우위가 보고된다.
 - Ollama에서 Vulkan은 **실험적**으로 0.12.6부터 들어왔고 `OLLAMA_VULKAN=1`(끄기 `=0`)로 제어된다. iGPU는 `OLLAMA_IGPU_ENABLE=1`을 **명시해야** GPU를 쓰는 사례가 보고된다(안 하면 GPU를 *감지하고도* CPU로 돈다).
 - ROCm 경로는 `HSA_OVERRIDE_GFX_VERSION=11.5.1`로 gfx1151 인식이 풀린 보고가 있다.
@@ -112,10 +122,28 @@ LLM 토큰 생성은 매 토큰마다 활성 가중치를 통째로 읽으므로
 
 ### L5. 모델·양자화 선택 — **가장 큰 레버** [계산]
 - **MoE 우선**. §2 표대로 dense 27B(≈10 t/s) → MoE 30B-A3B(≈100 t/s)는 10배다.
+- ✅ **비교에 필요한 모델이 이미 다 깔려 있다 (2026-08-22 실측)** — `qwen3:30b-a3b`(17.3GB·MoE)와
+  `qwen3-coder:30b`(17.3GB·MoE)가 `qwen3.5:27b`(16.2GB·dense)와 나란히 있다. **다운로드 없이 즉시 대조 가능**하다.
+  이 세 모델의 t/s 비교가 이 프로젝트에서 가장 값어치 있는 단일 측정이다.
 - 양자화는 **Q4_K_M / IQ4_XS**가 크기·품질 균형점. Q8_0은 크기가 2배 → 대역폭 바운드 구간에서 **속도가 절반**이 된다.
 - **WhyMath 제안(결정 아님·측정 후 판단)**: QUALITY 티어 `qwen3.5:27b`(dense)는 이 하드웨어에서 구조적으로 느리다. 비동기 티어라 지연 허용치가 크긴 하나, 동급 MoE 대체가 성립하면 **비동기를 동기로 승격**할 수 있는 크기의 이득이다. → §6.
 
-### L6. 모델 상주 정책 — WhyMath에서 **체감 1순위** [코드+계산]
+### L6. 모델 상주 정책 · 컨텍스트 예산 — WhyMath에서 **체감 1순위** [코드+계산+실측]
+
+> 🔴 **Phaiakes9에서 즉시 손봐야 할 것이 실측으로 드러났다 (2026-08-22)**
+>
+> | 항목 | 현재값 | 문제 | 권장 |
+> |---|---|---|---|
+> | `OLLAMA_CONTEXT_LENGTH` | unset → **자동 262,144** | 로그: `vram-based default context ... default_num_ctx=262144`. ROCm이 VRAM을 99.7 GiB로 보고해 **256K 컨텍스트**가 기본값이 됐다 | **8192~32768 명시** |
+> | `OLLAMA_NUM_PARALLEL` | **4** | KV 캐시가 병렬 슬롯 수만큼 곱해진다 | **1~2** |
+> | `OLLAMA_FLASH_ATTENTION` | **false** | KV 메모리·속도 손해 | **1** |
+> | `OLLAMA_MAX_LOADED_MODELS` | **2** | 라우터는 6개 핀을 오간다 → 스왑 발생 | **4** |
+> | `OLLAMA_KEEP_ALIVE` | 10m | 무난 | 30m |
+>
+> **왜 컨텍스트가 1순위인가** [계산]: 27B급에서 KV 캐시는 대략 컨텍스트 길이에 비례한다.
+> 256K × 4병렬은 물리적으로 불가능한 크기라 Ollama의 자동 fit이 끼어들어 **로드 때마다 예측 불가능하게 줄인다** —
+> 로드 시간이 길어지고, 최악의 경우 GPU에 다 못 올려 **CPU로 흘러내린다**(= `gpu_fraction < 1`).
+> 8K로 명시하면 같은 계산에서 KV가 1/32이 된다. WhyMath 호출은 대부분 단문이므로 손해가 없다.
 - 라우터는 한 학습 흐름에서 MATH(1.5b/7b)·GENERAL(3b/7b)·VISION(8b)·QUALITY(27b)를 **오간다** [코드 `LOCAL_MODEL_MATRIX`]. Ollama 기본값은 동시 상주 모델 수가 적어, 모델이 바뀔 때마다 **언로드→로드**가 일어난다.
 - 27B를 디스크에서 다시 올리는 비용은 수 초 단위다. 이게 붙으면 **모델 스왑이 p50 지연을 지배**한다 — 토큰 속도를 아무리 올려도 안 보인다.
 - **그래서 VGM 64GB의 진짜 값어치는 "큰 모델 하나"가 아니라 "여러 모델 동시 상주"다.**
@@ -123,12 +151,13 @@ LLM 토큰 생성은 매 토큰마다 활성 가중치를 통째로 읽으므로
   ```powershell
   # [실행 시스템] Windows PowerShell (Phaiakes9)
   cd C:\Users\kiki\Desktop\__AI\WhyMath
+  [Environment]::SetEnvironmentVariable("OLLAMA_CONTEXT_LENGTH","8192","User")
+  [Environment]::SetEnvironmentVariable("OLLAMA_NUM_PARALLEL","2","User")
+  [Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION","1","User")
   [Environment]::SetEnvironmentVariable("OLLAMA_MAX_LOADED_MODELS","4","User")
   [Environment]::SetEnvironmentVariable("OLLAMA_KEEP_ALIVE","30m","User")
-  [Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION","1","User")
-  [Environment]::SetEnvironmentVariable("OLLAMA_NUM_PARALLEL","2","User")
   # 자가검증 — 값이 실제로 박혔는지 (레지스트리를 되읽는다. 현재 셸 변수가 아님)
-  "OLLAMA_MAX_LOADED_MODELS","OLLAMA_KEEP_ALIVE","OLLAMA_FLASH_ATTENTION","OLLAMA_NUM_PARALLEL" |
+  "OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_KEEP_ALIVE" |
     ForEach-Object { "{0} = {1}" -f $_, [Environment]::GetEnvironmentVariable($_,"User") }
   ```
   > 위 4줄이 **빈 값이 아니어야** 한다. 그리고 **Ollama를 재시작해야** 적용된다(트레이 아이콘 → Quit → 재실행).
@@ -241,8 +270,8 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 | 0 | 현행 그대로 | | | | | **환경 실측 완료 2026-08-22**(아래) · 벤치 [미측정] |
 | 2 | VGM 64GB | — | — | — | — | ✅ **이미 충족**(카브아웃 64.4GB 실측) — 조정 불요 |
 | 3 | +140W | | | | | [미측정] |
-| 4a | Vulkan | | | | | [미측정] |
-| 4b | ROCm | | | | | [미측정] |
+| 4a | Vulkan (`OLLAMA_IGPU_ENABLE=1`) | | | | | [미측정] |
+| 4b | ROCm (**현재 기본값**) | | | | | [미측정] |
 | 5 | 상주 정책 | | | | | [미측정] |
 | 6 | llama.cpp standalone | | | | | [미측정] |
 
@@ -263,6 +292,26 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 | 전용 VRAM 레지스트리 | `SecurityException` (권한 부족) | 무해 — §2로 대체 판정 |
 | dxdiag | 90초 내 미생성 | 무해 — 기본 비활성으로 전환 |
 | Ollama | **미수집** — v1 스크립트가 이 지점에서 정지 | 도구 결함, v2에서 수정 |
+
+### Phase 0 완주 (2026-08-22 07:38 · `evidence_20260822_073859` · 9/9 `[OK]`)
+
+| 항목 | 실측값 | 판정 |
+|---|---|---|
+| **백엔드** | `library=ROCm compute=gfx1151 type=iGPU total=99.7 GiB` | ✅ **ROCm이 이미 GPU를 잡고 있다** |
+| Vulkan 장치 | `dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1` | iGPU라 자동 제외 → Phase 4에서 살려 비교 |
+| Ollama | `0.32.15` · server UP (`0.0.0.0:11434`) | ✅ |
+| 전용 VRAM(레지스트리) | **65,536 MB = 64.0 GB** | ✅ 카브아웃 추정 64.4GB와 0.4GB 차 = 펌웨어 예약 |
+| ROCm 보고 VRAM | 99.7 GiB | 전용 64GB + 공유(RAM 절반 ~32GB) 합산치 |
+| **기본 컨텍스트** | **`default_num_ctx=262144`** (VRAM 기반 자동) | 🔴 **과대** — L6 참조 |
+| `OLLAMA_NUM_PARALLEL` | 4 | 🔴 KV × 4 |
+| `OLLAMA_FLASH_ATTENTION` | false | 🔴 꺼짐 |
+| `OLLAMA_MAX_LOADED_MODELS` | 2 | ⚠️ 라우터 6핀 대비 부족 |
+| `OLLAMA_KEEP_ALIVE` / `OLLAMA_MODELS` | 10m / `D:\ollama_models` | — |
+| 전원 계획 | `381b4222…` = **균형 조정(Balanced)** | ⚠️ 고성능 아님 → Phase 3 |
+| 설치 모델 15종 | `qwen3.5:27b`(dense) · **`qwen3:30b-a3b`·`qwen3-coder:30b`(MoE)** · `qwen2.5:{3b,7b,14b,32b}` · `qwen2-math:{1.5b,7b}` · `qwen3-vl:8b` · `deepseek-r1:32b` · `gpt-oss:20b` · `llama3.3`(39.6GB) · `bge-m3` | ✅ **dense↔MoE 대조에 필요한 모델이 이미 전부 있다** |
+
+**이 시점의 결론 전환**: 최초 질문("ROCm이 왜 안 잡히나")은 **이 머신에서 성립하지 않는다** — 이미 잡혀 있다.
+실제 병목 후보는 ①과대 컨텍스트(256K) ②병렬 4 ③flash attention 꺼짐 ④전원 Balanced ⑤dense 27B의 대역폭 벽이다.
 
 ---
 
