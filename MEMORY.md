@@ -6927,3 +6927,15 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **산출물**: `docs/ops/amd395_local_llm_performance.md`(런북·근거 등급 표기·진단표) · `scripts/ops/collect_gpu_evidence.ps1`(Phase 0 증거) · `scripts/ops/bench_ollama.ps1`(모델별 gen/prompt t/s + gpu_fraction CSV).
 - **미측정 명시**: Phaiakes9 실측치는 **아직 0건**이다. 문서의 모든 성능 수치는 [계산] 또는 [문헌]이며, 진단표 §5는 비어 있다. 사람 게이트 `G-amd395-perf-baseline`이 이 측정을 추적한다.
 - **후속(측정 후 결정)**: ①라우터 `LOCAL_LATENCY_MS` 실측 보정 ②QUALITY 티어 dense 27B 유지 여부 — 모델 교체 시 CLAUDE.md 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그) 통과 필수이며 검증 계약(SymPy 단일 권위·PRM·Langfuse)은 불변 ③로컬 vs OpenRouter 7축 비교(정확도 축은 결함 주입 강등전으로 판정).
+
+## 2026-08-22: Phaiakes9 Phase 0 1차 실측 — VGM 이미 64GB 확인 + 증거 수집기 v1 결함 수정
+
+- **환경 실측 착지**(evidence_20260822_003545): `NUCBOX_EVO-X2` · RYZEN AI MAX+ 395 16C/32T · Radeon 8060S(driver `32.0.31035.1003`) · **LPDDR5X 16GB × 8ch @ 8000 MT/s**(설치 128.0GB) · Win11 Pro 26200.
+  - ⇒ 런북 §2의 대역폭 전제(8000 MT/s × 256-bit = **256 GB/s**)가 이 머신에서 **확인**됐다. 즉 dense 27B의 이론 상한 15.5 t/s는 가정이 아니라 이 하드웨어의 실제 벽이다.
+- **VGM은 이미 64GB였다** — 물리 128.0GB − Windows 가용 63.6GB = **카브아웃 64.4GB**. 권장값과 일치하므로 **Phase 2(VGM 조정) 불요**. 레버 ①은 처음부터 충족 상태였다.
+  - 방법론 소득: 이 판정은 **관리자 권한도 dxdiag도 필요 없다**. 실제로 레지스트리(`qwMemorySize`)는 `SecurityException`, dxdiag는 90초 내 미생성으로 **둘 다 실패했는데 판정은 성립**했다 — 판정 경로 이중화의 실효 사례.
+- **도구 결함 2건 실측·수정**(`collect_gpu_evidence.ps1` v1 → v2):
+  ① **외부 프로세스 무한 대기** — §6 `ollama` CLI 호출에서 정지. 모든 외부 실행을 `Start-Process` + `WaitForExit(timeout)` + kill로 감싸고, 멈춤 자체를 `[TIMEOUT]` 증거로 남긴다. REST(`/api/version`)를 CLI보다 **먼저** 조회하도록 순서 교체.
+  ② **증거 유실** — 마지막에 한 번만 저장하는 구조라, 정지 시 화면에 5개 섹션이 찍혔는데도 **파일이 생성조차 되지 않았다**. 섹션마다 즉시 append 하도록 변경.
+  - 재발방지: 위 ①②를 런북 §7 안티패턴에 등재("증거 수집 도구를 마지막에 한 번 저장 구조로 만들기 금지"). CLAUDE.md의 "변별력 없는 검증 스텝 금지"·"간접 신호 금지" 계열의 *증거 수집* 축 변형이다.
+- **다음**: Ollama 계측이 아직 0건이다(v1 정지 지점). v2로 Phase 0 재실행 → Phase 1 벤치 → Phase 3(전원 140W) → Phase 4(백엔드) 순. 게이트 `G-amd395-perf-baseline` 유지.
