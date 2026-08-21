@@ -104,6 +104,24 @@ Add-Section "1. System (CPU / RAM / memory speed)" {
     "Manufacturer/Model     : {0} / {1}" -f $cs.Manufacturer, $cs.Model
     Get-CimInstance Win32_PhysicalMemory | Select-Object BankLabel, Capacity, Speed, ConfiguredClockSpeed | Format-Table -AutoSize
     Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List
+
+    # ── Windows 커밋 한도·페이지파일 ─────────────────────────────────────
+    # 물리 여유가 많아도 커밋 한도(= RAM + 페이지파일)가 차면 할당이 실패한다.
+    # 2026-08-22 실측: 물리 free 34.9 GiB인데 1.0 GiB CPU 버퍼 할당이 실패했고
+    # free_swap이 2.8 GiB -> 891 MiB로 줄고 있었다. 그래서 이 값을 상시 수집한다.
+    $os = Get-CimInstance Win32_OperatingSystem
+    "commit_limit_GB   : {0:N1}   (= 물리 RAM + 페이지파일)" -f ($os.TotalVirtualMemorySize / 1MB)
+    "commit_free_GB    : {0:N1}   <- 이 값이 작으면 물리 여유와 무관하게 할당이 실패한다" -f ($os.FreeVirtualMemory / 1MB)
+    "physical_free_GB  : {0:N1}" -f ($os.FreePhysicalMemory / 1MB)
+    $auto = (Get-CimInstance Win32_ComputerSystem).AutomaticManagedPagefile
+    "pagefile_auto     : {0}" -f $auto
+    $pf = @(Get-CimInstance Win32_PageFileUsage)
+    if ($pf.Count -eq 0) { "pagefile          : (없음) <- 커밋 한도가 물리 RAM으로 고정된다" }
+    else { $pf | Select-Object Name, AllocatedBaseSize, CurrentUsage, PeakUsage | Format-Table -AutoSize }
+    "--- 메모리 상위 프로세스 ---"
+    Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 8 `
+        Name, @{n="WS_GB";e={[math]::Round($_.WorkingSet64/1GB,2)}}, @{n="Commit_GB";e={[math]::Round($_.PrivateMemorySize64/1GB,2)}} |
+        Format-Table -AutoSize
 }
 
 Add-Section "2. GPU carve-out (= VGM 반영값 · 관리자 권한 불요)" {
