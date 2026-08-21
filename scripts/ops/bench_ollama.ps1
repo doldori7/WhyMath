@@ -48,81 +48,7 @@ $WhyMathPins = @("qwen2-math:1.5b", "qwen2.5:3b", "qwen2-math:7b", "qwen2.5:7b",
 # 이 프로젝트에서 가장 값어치 있는 단일 측정: 같은 ~17GB 적재량에서 활성 파라미터만 다른 두 구조의 t/s 차이.
 $MoeComparison = @("qwen3:30b-a3b", "qwen3-coder:30b")
 
-# ── 프롬프트 (prefill을 재려면 충분히 길어야 한다) ──────────────────────────
-if ([string]::IsNullOrWhiteSpace($Prompt)) {
-    $unit = "이차함수 y = x^2 - 4x + 3 의 그래프가 x축과 만나는 점의 좌표를 구하는 과정을 단계별로 설명하시오. 각 단계에서 왜 그 변형이 정당한지 근거를 밝히시오. "
-    $sb = New-Object System.Text.StringBuilder
-    for ($i = 0; $i -lt $PromptRepeat; $i++) { [void]$sb.Append($unit) }
-    [void]$sb.Append("위 내용을 요약하지 말고, 마지막 질문에만 답하시오: 이 함수의 두 근의 합은?")
-    $Prompt = $sb.ToString()
-}
-
-# ── 설치된 모델 확인 → 측정 대상 확정 ────────────────────────────────────────
-try {
-    $tags = Invoke-RestMethod -Uri ($OllamaHost + "/api/tags") -TimeoutSec 20
-} catch {
-    Write-Host ("[FAIL] " + $_.Exception.GetType().FullName + ": Ollama 서버에 닿지 못했습니다 (" + $OllamaHost + ")")
-    Write-Host "[HINT] 트레이 Ollama가 떠 있는지, 또는 별도 창에서 'ollama serve'가 도는지 확인하세요."
-    exit 1
-}
-# powershell.exe -File 로 실행하면 `-Models a,b` 가 배열이 아니라 *문자열 1개*로 도착한다.
-# (2026-08-22 실측 사고: 측정 2회가 "invalid model name" 하나로 통째 공전했다.)
-if ($Models.Count -eq 1 -and $Models[0] -match ",") {
-    $Models = @($Models[0].Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    Write-Host ("[INFO] -Models 를 콤마로 분해: " + $Models.Count + "개")
-}
-
-$installed = @($tags.models | ForEach-Object { $_.name })
-Write-Host ("[INFO] installed models : " + ($installed -join ", "))
-
-if ($Models.Count -eq 0) {
-    $pool = if ($WithMoe) { $WhyMathPins + $MoeComparison } else { $WhyMathPins }
-    $Models = @($pool | Where-Object { $installed -contains $_ })
-    if ($Models.Count -eq 0) {
-        Write-Host "[WARN] WhyMath 핀 모델이 하나도 설치돼 있지 않습니다. 설치된 모델 중 앞 3개로 대체합니다."
-        $Models = @($installed | Select-Object -First 3)
-    }
-}
-if ($Models.Count -eq 0) { Write-Host "[FAIL] 측정할 모델이 없습니다. 'ollama pull qwen2.5:7b' 후 다시 실행하세요."; exit 1 }
-
-# 서버에 던지기 전에 이름을 검증한다 — 오타를 500으로 알아내지 않는다.
-$unknown = @($Models | Where-Object { $installed -notcontains $_ })
-if ($unknown.Count -gt 0) {
-    Write-Host ("[FAIL] 설치되지 않은 모델: " + ($unknown -join ", "))
-    Write-Host ("[HINT] 설치 목록에서 골라 다시 지정하세요. 콤마 구분, 공백 없이.")
-    exit 1
-}
-
-# 서버가 실제로 어떤 설정으로 떠 있는지 — 환경변수를 바꾸고 재시작을 안 하면 여기서 드러난다.
-$srvLog = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
-if (Test-Path $srvLog) {
-    $cfg = @(Select-String -Path $srvLog -Pattern 'msg="server config"') | Select-Object -Last 1
-    if ($null -ne $cfg) {
-        foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_VULKAN","OLLAMA_IGPU_ENABLE")) {
-            $m = [regex]::Match($cfg.Line, [regex]::Escape($k) + ":([^ \]]*)")
-            if ($m.Success) { Write-Host ("[SRV ] " + $k.PadRight(26) + "= " + $m.Groups[1].Value) }
-        }
-        Write-Host "[SRV ] ^ 서버가 기동 시 읽은 값이다. 방금 바꾼 환경변수가 여기 없으면 Ollama 재시작이 안 된 것이다."
-    }
-}
-$commit0 = Get-CommitFreeGB
-Write-Host ("[MEM ] CommitFree_GB (시작) = " + $commit0 + "   <- 로드 실패의 실제 구속 자원")
-$orph0 = Get-OrphanLlamaServers
-if ($orph0.Count -gt 0) {
-    $sum = [math]::Round((($orph0 | Measure-Object -Property PrivateMemorySize64 -Sum).Sum)/1GB, 2)
-    Write-Host ("[MEM ] llama-server 프로세스 " + $orph0.Count + "개 상주 (합계 커밋 " + $sum + " GB)")
-    try {
-        $psNow = Invoke-RestMethod -Uri ($OllamaHost + "/api/ps") -TimeoutSec 10
-        if ($null -eq $psNow.models -or @($psNow.models).Count -eq 0) {
-            Write-Host "[WARN] /api/ps 는 상주 모델 0건인데 llama-server 가 살아 있다 = 고아 프로세스."
-            Write-Host "       실패한 로드가 남긴 잔해이며 커밋을 점유해 다음 로드를 실패시킨다."
-            Write-Host "       해소: Get-Process ollama*, llama-server | Stop-Process -Force  후 Ollama 재실행."
-        }
-    } catch { }
-}
-Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
-Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
-Write-Host ""
+# ── 헬퍼 함수 (호출보다 먼저 정의해야 한다 — PowerShell은 위에서 아래로 실행한다) ──
 
 function Get-CommitFreeGB {
     # Windows 커밋 여유(= 이 프로세스가 추가로 커밋할 수 있는 최대치).
@@ -203,6 +129,83 @@ function Get-PsInfo {
         return $r
     }
 }
+
+
+# ── 프롬프트 (prefill을 재려면 충분히 길어야 한다) ──────────────────────────
+if ([string]::IsNullOrWhiteSpace($Prompt)) {
+    $unit = "이차함수 y = x^2 - 4x + 3 의 그래프가 x축과 만나는 점의 좌표를 구하는 과정을 단계별로 설명하시오. 각 단계에서 왜 그 변형이 정당한지 근거를 밝히시오. "
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $PromptRepeat; $i++) { [void]$sb.Append($unit) }
+    [void]$sb.Append("위 내용을 요약하지 말고, 마지막 질문에만 답하시오: 이 함수의 두 근의 합은?")
+    $Prompt = $sb.ToString()
+}
+
+# ── 설치된 모델 확인 → 측정 대상 확정 ────────────────────────────────────────
+try {
+    $tags = Invoke-RestMethod -Uri ($OllamaHost + "/api/tags") -TimeoutSec 20
+} catch {
+    Write-Host ("[FAIL] " + $_.Exception.GetType().FullName + ": Ollama 서버에 닿지 못했습니다 (" + $OllamaHost + ")")
+    Write-Host "[HINT] 트레이 Ollama가 떠 있는지, 또는 별도 창에서 'ollama serve'가 도는지 확인하세요."
+    exit 1
+}
+# powershell.exe -File 로 실행하면 `-Models a,b` 가 배열이 아니라 *문자열 1개*로 도착한다.
+# (2026-08-22 실측 사고: 측정 2회가 "invalid model name" 하나로 통째 공전했다.)
+if ($Models.Count -eq 1 -and $Models[0] -match ",") {
+    $Models = @($Models[0].Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    Write-Host ("[INFO] -Models 를 콤마로 분해: " + $Models.Count + "개")
+}
+
+$installed = @($tags.models | ForEach-Object { $_.name })
+Write-Host ("[INFO] installed models : " + ($installed -join ", "))
+
+if ($Models.Count -eq 0) {
+    $pool = if ($WithMoe) { $WhyMathPins + $MoeComparison } else { $WhyMathPins }
+    $Models = @($pool | Where-Object { $installed -contains $_ })
+    if ($Models.Count -eq 0) {
+        Write-Host "[WARN] WhyMath 핀 모델이 하나도 설치돼 있지 않습니다. 설치된 모델 중 앞 3개로 대체합니다."
+        $Models = @($installed | Select-Object -First 3)
+    }
+}
+if ($Models.Count -eq 0) { Write-Host "[FAIL] 측정할 모델이 없습니다. 'ollama pull qwen2.5:7b' 후 다시 실행하세요."; exit 1 }
+
+# 서버에 던지기 전에 이름을 검증한다 — 오타를 500으로 알아내지 않는다.
+$unknown = @($Models | Where-Object { $installed -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    Write-Host ("[FAIL] 설치되지 않은 모델: " + ($unknown -join ", "))
+    Write-Host ("[HINT] 설치 목록에서 골라 다시 지정하세요. 콤마 구분, 공백 없이.")
+    exit 1
+}
+
+# 서버가 실제로 어떤 설정으로 떠 있는지 — 환경변수를 바꾸고 재시작을 안 하면 여기서 드러난다.
+$srvLog = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
+if (Test-Path $srvLog) {
+    $cfg = @(Select-String -Path $srvLog -Pattern 'msg="server config"') | Select-Object -Last 1
+    if ($null -ne $cfg) {
+        foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_VULKAN","OLLAMA_IGPU_ENABLE")) {
+            $m = [regex]::Match($cfg.Line, [regex]::Escape($k) + ":([^ \]]*)")
+            if ($m.Success) { Write-Host ("[SRV ] " + $k.PadRight(26) + "= " + $m.Groups[1].Value) }
+        }
+        Write-Host "[SRV ] ^ 서버가 기동 시 읽은 값이다. 방금 바꾼 환경변수가 여기 없으면 Ollama 재시작이 안 된 것이다."
+    }
+}
+$commit0 = Get-CommitFreeGB
+Write-Host ("[MEM ] CommitFree_GB (시작) = " + $commit0 + "   <- 로드 실패의 실제 구속 자원")
+$orph0 = Get-OrphanLlamaServers
+if ($orph0.Count -gt 0) {
+    $sum = [math]::Round((($orph0 | Measure-Object -Property PrivateMemorySize64 -Sum).Sum)/1GB, 2)
+    Write-Host ("[MEM ] llama-server 프로세스 " + $orph0.Count + "개 상주 (합계 커밋 " + $sum + " GB)")
+    try {
+        $psNow = Invoke-RestMethod -Uri ($OllamaHost + "/api/ps") -TimeoutSec 10
+        if ($null -eq $psNow.models -or @($psNow.models).Count -eq 0) {
+            Write-Host "[WARN] /api/ps 는 상주 모델 0건인데 llama-server 가 살아 있다 = 고아 프로세스."
+            Write-Host "       실패한 로드가 남긴 잔해이며 커밋을 점유해 다음 로드를 실패시킨다."
+            Write-Host "       해소: Get-Process ollama*, llama-server | Stop-Process -Force  후 Ollama 재실행."
+        }
+    } catch { }
+}
+Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
+Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
+Write-Host ""
 
 $Rows = New-Object System.Collections.ArrayList
 
