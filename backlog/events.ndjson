@@ -3310,5 +3310,12 @@
 {"ts": "2026-08-17T12:39:49", "actor": "main", "action": "start", "id": "ARCH-36", "session": "main", "remote": "ok"}
 {"ts": "2026-08-17T12:39:56", "actor": "main", "action": "done", "id": "ARCH-36", "artifacts": ["#842"]}
 {"ts": "2026-08-19T14:06:02", "actor": "s4-16-blocked-evidence", "action": "add", "id": "S1-16-subject-neutral-content-contract"}
+{"ts": "2026-08-21T03:33:26", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "add", "id": "OPS-45-bench-prefill-instrumentation"}
+{"ts": "2026-08-21T04:16:03", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "add", "id": "OPS-46-bench-environment-capture"}
+{"ts": "2026-08-21T04:28:44", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "start", "id": "OPS-46-bench-environment-capture", "session": "claude/llm-optimal-pc-setup-voyp4v", "remote": "ok"}
+{"ts": "2026-08-21T04:42:10", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "policy_warn", "id": "OPS-45-bench-prefill-instrumentation", "rule": "path_overlap", "other": "OPS-46-bench-environment-capture", "detail": "실파일 교집합 5건 예: infra/phaiakes9/benchmark/bench_latency.py, infra/phaiakes9/benchmark/fast_tier_eval.json, infra/phaiakes9/benchmark/quality_eval.py · 프리픽스 포함: infra/phaiakes9/benchmark/** ⊇ infra/phaiakes9/benchmark/**", "mode": "warn"}
+{"ts": "2026-08-21T04:42:12", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "start", "id": "OPS-45-bench-prefill-instrumentation", "session": "claude/llm-optimal-pc-setup-voyp4v", "remote": "ok"}
+{"ts": "2026-08-21T04:42:13", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "done", "id": "OPS-45-bench-prefill-instrumentation", "artifacts": ["#848"]}
+{"ts": "2026-08-21T04:42:16", "actor": "claude/llm-optimal-pc-setup-voyp4v", "action": "done", "id": "OPS-46-bench-environment-capture", "artifacts": ["#848"]}
 {"ts": "2026-08-21T05:13:42", "actor": "claude/amd-395-gpu-diagnosis-jinh6i", "action": "gate_add", "id": "G-amd395-perf-baseline", "kind": "human", "assignee": "kiki", "title": "Phaiakes9(AMD 395/8060S) GPU 추론 베이스라인 측정 — docs/ops/amd395_local_llm_performance.md Phase 0~1 실행(evidence_*.txt·bench_*.csv). 라우터 LOCAL_LATENCY_MS 보정·QUALITY 티어 판단의 선결"}
 {"ts": "2026-08-21T05:17:15", "actor": "claude/amd-395-gpu-diagnosis-jinh6i", "action": "add", "id": "HARN-33-gates-yaml-blockscalar-preserve"}
