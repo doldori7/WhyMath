@@ -6878,3 +6878,18 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **후속**: `scripts/harness/backlog.py add`로 5개 태스크 등재(content_version 분리, Source 엔티티 분리, Learner/User 역할 분리, Subject ontology 확장, External ID Registry/CASE/PROV Phase 2).
 
 ---
+
+## 2026-08-21: Phaiakes9(AMD Ryzen AI Max+ 395 / 8060S) 로컬 LLM 성능 극대화 — 진단 런북 + 측정 도구
+
+- **배경**: Phaiakes9(GMKtec EVO-X2 · Strix Halo · 128GB LPDDR5X-8000)에서 Ollama GPU 추론이 실제로 성립하는지, 성립한다면 어떤 조합이 최대 성능인지 불명. 무작정 재설치·드라이버 교체 대신 **증거 수집 → 레버 1개씩 측정** 절차를 정본화.
+- **핵심 발견 (계산 · 외부 실측으로 교차검증)**: 이 하드웨어의 토큰 생성 속도 상한은 **메모리 대역폭 256 GB/s**가 정한다(`8000 MT/s × 32 B`). 상한 ≈ 대역폭 ÷ 활성 가중치 바이트.
+  - `qwen3.5:27b`(QUALITY·**dense**) Q4 ≈ 16.5GB → **이론 상한 15.5 t/s**, 현실 기대 8.5~11 t/s. **설정 튜닝으로 넘을 수 없는 물리 벽**이다.
+  - 동급 **MoE**(30B-A3B류, 활성 ~3B) → 기대 74~94 t/s. 외부 실측 보고 ~100 t/s와 정합 → 추정 모델이 검증됨.
+  - ⇒ **가장 큰 레버는 백엔드 튜닝(±25%)이 아니라 모델 구조(dense→MoE ≈ 10배)**.
+  - `qwen2.5:7b`급(WhyMath 주력) 기대 30~41 t/s — 여기서 미달하면 원인은 대역폭이 아니라 **CPU 폴백**이며, 판정치는 `/api/ps`의 `size_vram/size`(gpu_fraction).
+- **레버 우선순위(문서 §3)**: ①가변 그래픽 메모리(VGM) ②전원 모드 140W ③백엔드(Vulkan=생성 우세 / ROCm=프롬프트 처리 우세) ④런타임(standalone llama.cpp) ⑤**모델·양자화** ⑥모델 상주 정책 ⑦컨텍스트 길이.
+  - **VGM 권장 64GB(96GB 아님)** — Phaiakes9는 추론 전용기가 아니라 Docker Postgres·uvicorn·Flutter 빌드가 상주하는 개발기다. WhyMath 모델 총합 상주 소요 ≈ 30~35GB.
+  - **L6(상주 정책)이 WhyMath 체감 1순위** — 라우터가 한 흐름에서 MATH/GENERAL/VISION/QUALITY 6개 핀을 오가므로(`LOCAL_MODEL_MATRIX`), 모델 스왑 언로드/로드가 p50을 지배할 수 있다. VGM의 진짜 값어치는 "큰 모델 하나"가 아니라 "여러 모델 동시 상주".
+- **산출물**: `docs/ops/amd395_local_llm_performance.md`(런북·근거 등급 표기·진단표) · `scripts/ops/collect_gpu_evidence.ps1`(Phase 0 증거) · `scripts/ops/bench_ollama.ps1`(모델별 gen/prompt t/s + gpu_fraction CSV).
+- **미측정 명시**: Phaiakes9 실측치는 **아직 0건**이다. 문서의 모든 성능 수치는 [계산] 또는 [문헌]이며, 진단표 §5는 비어 있다. 사람 게이트 `G-amd395-perf-baseline`이 이 측정을 추적한다.
+- **후속(측정 후 결정)**: ①라우터 `LOCAL_LATENCY_MS` 실측 보정 ②QUALITY 티어 dense 27B 유지 여부 — 모델 교체 시 CLAUDE.md 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그) 통과 필수이며 검증 계약(SymPy 단일 권위·PRM·Langfuse)은 불변 ③로컬 vs OpenRouter 7축 비교(정확도 축은 결함 주입 강등전으로 판정).
