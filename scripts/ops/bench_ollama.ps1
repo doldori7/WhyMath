@@ -25,6 +25,7 @@ param(
     [int]$Repeat = 2,
     [int]$PromptRepeat = 8,
     [switch]$WithMoe,
+    [switch]$NoUnload,
     [string]$Prompt = "",
     [string]$OllamaHost = "http://127.0.0.1:11434",
     [string]$OutDir = ""
@@ -79,6 +80,36 @@ Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
 Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
 Write-Host ""
 
+function Get-HttpErrorBody {
+    param($Rec)
+    # CLAUDE.md 침묵 실패 금지의 HTTP 축: 500의 *원인*은 예외 타입명이 아니라 응답 본문에 있다.
+    # (2026-08-22 실측 사고: 7개 모델이 전부 500이었는데 타입명만 찍혀 원인 판정이 불가능했다.)
+    $body = $null
+    if ($Rec.ErrorDetails -and $Rec.ErrorDetails.Message) { $body = $Rec.ErrorDetails.Message }
+    if (-not $body -and $Rec.Exception.PSObject.Properties.Name -contains "Response" -and $Rec.Exception.Response) {
+        try {
+            $sr = New-Object System.IO.StreamReader($Rec.Exception.Response.GetResponseStream())
+            $body = $sr.ReadToEnd()
+            $sr.Close()
+        } catch { }
+    }
+    if ([string]::IsNullOrWhiteSpace($body)) { return "(응답 본문 없음)" }
+    return (($body -replace "\s+", " ").Trim())
+}
+
+function Remove-LoadedModel {
+    # keep_alive=0 으로 즉시 언로드. 모델 간 메모리 간섭을 끊어 500 연쇄를 막는다.
+    param([string]$Model)
+    try {
+        $payload = @{ model = $Model; keep_alive = 0 } | ConvertTo-Json -Depth 3
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+        Invoke-RestMethod -Uri ($OllamaHost + "/api/generate") -Method Post -Body $bytes `
+                          -ContentType "application/json; charset=utf-8" -TimeoutSec 120 | Out-Null
+    } catch {
+        Write-Host ("  [WARN] 언로드 실패: " + $_.Exception.GetType().FullName)
+    }
+}
+
 function Invoke-Generate {
     param([string]$Model, [string]$Text, [int]$Predict)
     $payload = @{
@@ -126,11 +157,14 @@ foreach ($model in $Models) {
         $loadMs = [math]::Round(($w.load_duration / 1e6), 1)
         Write-Host ("  warmup ok  (load_duration = " + $loadMs + " ms)")
     } catch {
-        Write-Host ("  [ERR] " + $_.Exception.GetType().FullName + ": " + $_.Exception.Message)
+        $why = Get-HttpErrorBody $_
+        Write-Host ("  [ERR] " + $_.Exception.GetType().Name + " :: " + $why)
         [void]$Rows.Add([pscustomobject]@{
             label=$Label; model=$model; run=0; gen_tps=$null; prompt_tps=$null
             eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-            gpu_fraction=$null; context_length=$null; error=$_.Exception.GetType().FullName })
+            gpu_fraction=$null; context_length=$null
+            error=($_.Exception.GetType().Name + ": " + $why) })
+        if (-not $NoUnload) { Remove-LoadedModel -Model $model }
         continue
     }
 
@@ -153,13 +187,16 @@ foreach ($model in $Models) {
                 load_ms=[math]::Round(($res.load_duration/1e6),1); total_ms=$totMs
                 gpu_fraction=$frac; context_length=$ctx; error="" })
         } catch {
-            Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().FullName + ": " + $_.Exception.Message)
+            $why = Get-HttpErrorBody $_
+            Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().Name + " :: " + $why)
             [void]$Rows.Add([pscustomobject]@{
                 label=$Label; model=$model; run=$r; gen_tps=$null; prompt_tps=$null
                 eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
-                gpu_fraction=$frac; context_length=$ctx; error=$_.Exception.GetType().FullName })
+                gpu_fraction=$frac; context_length=$ctx
+                error=($_.Exception.GetType().Name + ": " + $why) })
         }
     }
+    if (-not $NoUnload) { Remove-LoadedModel -Model $model }
     Write-Host ""
 }
 
@@ -176,6 +213,22 @@ if ($ok.Count -gt 0) {
         $medPp  = ($g.prompt_tps | Sort-Object)[[int][math]::Floor($g.Count/2)]
         "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   gpu_fraction {3}   ctx {4}" -f $_.Name, $medGen, $medPp, $g[0].gpu_fraction, $g[0].context_length
     } | ForEach-Object { Write-Host $_ }
+}
+
+# ── 실패가 있으면 서버 로그 tail 자동 첨부 (원인 판정 재료를 같은 화면에 모은다) ──
+$failed = @($Rows | Where-Object { $_.error -ne "" })
+if ($failed.Count -gt 0) {
+    Write-Host ""
+    Write-Host ("-" * 78)
+    Write-Host ("실패 " + $failed.Count + "건 — Ollama 서버 로그 tail (원인은 대개 여기 있다)")
+    $lg = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
+    if (Test-Path $lg) {
+        Get-Content $lg -Tail 200 |
+            Select-String -Pattern "level=ERROR|level=WARN|error|memory|unable|failed|insufficient|out of|gpu|vram|ctx|context" |
+            Select-Object -Last 30 | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
+    } else {
+        Write-Host ("  [ERR] System.IO.FileNotFoundException: " + $lg)
+    }
 }
 
 # ── 자가검증 ────────────────────────────────────────────────────────────────
