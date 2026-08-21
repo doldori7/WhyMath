@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-47-backend-job-timeout-headroom
+title: "backend 잡 타임아웃 여유 16% — 2026-08-21 main에서 실제 소진(cancelled). ci.yml 주석에만 있던 최적화 계획을 태스크로 승격"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정(2026-08-21·재현 명령 동봉): main push의 backend 잡 성공 11표본은 20.9/28.2/29.4분(최소/중앙/최대)이고 상한은 timeout-minutes:35 → 최대 표본 기준 여유 5.6분(16%)뿐이다. 2026-08-21 커밋 01ff6041에서 이 여유가 실제로 소진돼 Pytest 단계에서 cancelled(=timeout) 발생. 재현: GET /actions/workflows/ci.yml/runs?branch=main&event=push → 각 run의 /jobs에서 backend 잡 started_at→completed_at"
+  - "② 상한 재상향은 답이 아님을 전제로 한다 — 이미 25→35로 한 번 올렸고(ci.yml:276-280 주석) 다시 걸렸다. 소요 자체를 줄이는 축을 고른다: ci.yml 주석이 지목한 pytest-xdist 병렬 실행 / 무거운 생성기·게이트 테스트 slow 마크 분리 중 실측으로 효과가 확인된 것만 채택. 여러 축을 동시에 넣지 않는다(어느 것이 들었는지 판정 불가가 된다)"
+  - "③ 변별력 양방향: 적용 전후 소요를 같은 방식으로 재고 분포(최대 표본)로 비교한다. 적용 후만 재고 통과 선언 금지. 목표는 '평균이 줄었다'가 아니라 '최대 표본의 여유가 상한의 30% 이상'이다"
+  - "④ 커버리지 게이트 불변: --cov-fail-under=70·계층별 floor·Wilson 게이트 9종은 그대로 돌아야 한다. 병렬화로 게이트가 조용히 빠지면 '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'에 걸린다 — 적용 후 게이트 스텝이 실제로 실행되는지 확인"
+  - "⑤ 경계 별항(중복 회피): HARN-32 ③이 '완화책 후보 = CI 분할·단축(백엔드 잡이 병목)'을 적어 두었으나 그 태스크의 대상은 *머지 경합*(base 전진·mergeable_state)이다. 이 태스크는 *잡 자체의 시간 여유*를 본다 — 착수 시 HARN-32와 소유 축이 갈리는지 재확인하고, 겹치면 한쪽으로 합친다"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - src/backend/pyproject.toml
+session: null
+notes: "발견 경위: 2026-08-21 PR #848 스쿼시 머지 후 main CI 확인 중 backend 잡이 40분에 cancelled. lint·black·mypy·import-linter는 통과했고 Pytest 단계에서 잘렸다. 이 머지의 diff는 src/backend를 한 파일도 건드리지 않았고(변경 9파일 = MEMORY.md·backlog/·infra/·tests/infra), backend 잡은 working-directory: src/backend라 diff와 무관 — 즉 이 타임아웃은 #848의 결함이 아니라 선재하는 여유 부족이 드러난 것이다. 직전 main 커밋 38278c85는 같은 스위트를 28.3분에 통과했다. 재실행으로 확인하려 했으나 rerun-failed-jobs가 403(권한 없음)이라 못 했다 — 이 판정은 소요 분포 11표본 실측에 근거한다. ci.yml:279가 '후속 최적화 과제: pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리'를 적어 두었으나 태스크로 등재돼 있지 않았다(CLAUDE.md: 주석 속 계획은 백로그를 대신하지 못한다)."
+updated: 2026-08-21
