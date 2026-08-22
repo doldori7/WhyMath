@@ -244,6 +244,11 @@ foreach ($model in $Models) {
             #  생성 t/s는 영향이 적지만 프롬프트 처리 속도는 통째로 허수가 된다.)
             $nonce = "[" + $Label + "-" + $r + "-" + (Get-Random) + "] "
             $res = Invoke-Generate -Model $model -Text ($nonce + $Prompt) -Predict $NumPredict
+            # 토큰이 0개면 측정이 아니라 실패다. 0 t/s 로 기록하면 중앙값을 오염시킨다.
+            # (2026-08-22 실측: 재방문 첫 런에서 eval_count 가 비어 "gen 0 t/s | out  tok" 이 찍혔다.)
+            if ($null -eq $res.eval_count -or [int]$res.eval_count -le 0) {
+                throw ("empty response — eval_count=" + $res.eval_count + " done_reason=" + $res.done_reason)
+            }
             $genTps = if ($res.eval_duration -gt 0) { [math]::Round($res.eval_count / ($res.eval_duration / 1e9), 2) } else { 0 }
             $ppTps  = if ($res.prompt_eval_duration -gt 0) { [math]::Round($res.prompt_eval_count / ($res.prompt_eval_duration / 1e9), 2) } else { 0 }
             $totMs  = [math]::Round(($res.total_duration / 1e6), 1)
