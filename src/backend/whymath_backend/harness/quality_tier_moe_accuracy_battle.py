@@ -525,13 +525,19 @@ def _write_audit(
     candidate_outcomes: list[ModelOutcome],
     report: BattleReport,
 ) -> None:
-    """문항별 판정 + as-found 요약 JSONL 저장."""
+    """문항별 판정 + as-found 요약 JSONL 저장.
+
+    PR #854 "측정 도구는 실패 경로부터 설계" — 상세 레코드와 as-found 요약은 다른
+    스키마이므로 ``record_type`` 태그로 명시적으로 구분한다. 파서가 tail을 시간 필터
+    없이 읽었을 때 요약 행을 오판정하지 않도록 한다.
+    """
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     with audit_path.open("w", encoding="utf-8") as fh:
         for baseline, candidate in zip(baseline_outcomes, candidate_outcomes, strict=True):
             fh.write(
                 json.dumps(
                     {
+                        "record_type": "verdict",
                         "slug": baseline.slug,
                         "ground_truth": baseline.ground_truth,
                         "baseline": {
@@ -565,6 +571,7 @@ def _write_audit(
         c = report.candidate.metrics
         conf = report.confidence
         summary = {
+            "record_type": "as_found_summary",
             "as_found_baseline_detection_rate": b.detection_rate,
             "as_found_baseline_false_alarm_rate": b.false_alarm_rate,
             "as_found_candidate_detection_rate": c.detection_rate,

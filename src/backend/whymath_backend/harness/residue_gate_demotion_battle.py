@@ -443,10 +443,16 @@ def run_residue_demotion_battle(
 
 
 def write_audit_jsonl(path: Path, report: ResidueBattleReport) -> int:
-    """감사 JSONL — 문항별 판정 행 + as-found 병기 요약(§4.5 합격 로트 무결성 동형)."""
+    """감사 JSONL — 문항별 판정 행 + as-found 병기 요약(§4.5 합격 로트 무결성 동형).
+
+    PR #854 "측정 도구는 실패 경로부터 설계" — 상세 레코드와 요약 레코드는 다른
+    스키마이므로 ``record_type`` 태그로 명시적으로 구분한다. 파서가 시간 필터 없이
+    tail만 읽었을 때 as-found 라인을 오판정하지 않도록 한다.
+    """
     lines = [
         json.dumps(
             {
+                "record_type": "verdict",
                 "problem_id": row.problem_id,
                 "role": row.role,
                 "defect_class": row.defect_class,
@@ -461,6 +467,7 @@ def write_audit_jsonl(path: Path, report: ResidueBattleReport) -> int:
         lines.append(
             json.dumps(
                 {
+                    "record_type": "as_found_summary",
                     "as_found_overall_detected": report.overall_detected,
                     "as_found_overall_resolved": report.overall_resolved,
                     "as_found_clean_false_alarms": report.clean_false_alarms,
