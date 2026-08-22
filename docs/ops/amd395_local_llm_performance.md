@@ -635,13 +635,14 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
 
    | 티어 | 현행 상수 | 실측 | 판정 |
    |---|---|---|---|
-   | FAST (`qwen2-math:1.5b`) | 1,010 ms | 906 ms | 상수가 10% 보수적 |
-   | MID (`qwen2-math:7b`급) | 3,918 ms | 3,551 ms | 상수가 9% 보수적 |
-   | QUALITY (`qwen3.5:27b`) | 13,886 ms | 12,406 ms | 상수가 11% 보수적 |
+   | FAST (`qwen2-math:1.5b`) | 1,010 ms | 906 ms | 상수가 10% 보수적 — 유지 |
+   | MID (`qwen2-math:7b`급) | 3,918 ms | 3,551 ms | 상수가 9% 보수적 — 유지 |
+   | QUALITY (`qwen3:30b-a3b`) | 2,300 ms | 2,300 ms(왕복) | MoE 채택에 따라 갱신 |
 
-   **셋 다 실측이 상수보다 빠르다** — 즉 라우터는 로컬을 실제보다 느리다고 보고 있고, 이는 클라우드 승급 쪽으로
-   기우는 *안전측* 오차다. 상수를 건드리면 승급 판정이 바뀌므로 **근거 없는 변경을 하지 않는다.** 상수는 검증됐다.
-2. **QUALITY 티어 재검토** → **`OPS-48` 정확도 축 실측 완료(2026-08-22)** [실측]. `qwen3.5:27b`(dense)와 `qwen3:30b-a3b`(MoE)를 같은 결함 주입 시험지 100문항(결함 50 · 무결함 50 · seed 20260708)으로 대조. 판정은 `docs/standards/superhuman_verification_standard.md`의 Wilson 단측 경계·CLI exit 0/1. **결과: 후보(MoE)가 기준(dense)보다 열등하지 않음.**
+   **FAST·MID는 여전히 실측보다 보수적** — 클라우드 승급 쪽으로 기우는 *안전측* 오차다.
+   QUALITY는 dense 27B → MoE로 교체되면서 왕복 지연 상수를 13,886 ms → **2,300 ms**로 갱신했다.
+   이 값은 ctx 8192 · np 1 · flash attention · ROCm 조건에서의 Phaiakes9 실측(§2, §6.2)이다.
+2. ✅ **QUALITY 티어 재검토 → MoE 교체(2026-08-22)** [코드+실측]. `qwen3.5:27b`(dense)와 `qwen3:30b-a3b`(MoE)를 같은 결함 주입 시험지 100문항(결함 50 · 무결함 50 · seed 20260708)으로 대조. 판정은 `docs/standards/superhuman_verification_standard.md`의 Wilson 단측 경계·CLI exit 0/1. **결과: 후보(MoE)가 기준(dense)보다 열등하지 않음.**
 
    | 지표 | qwen3.5:27b (기준) | qwen3:30b-a3b (후보) | 비고 |
    |---|---|---|---|
@@ -652,7 +653,12 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
 
    **판정**: `require-candidate-not-worse-than-baseline` 마진 0.05 — exit 0. 후보의 검출률 하한(0.512)이 기준 하한(0.376)보다 높고, 오경보 상한(0.140)이 기준(0.141)과 같거나 낮다.
 
-   **주의**: 후보의 **파싱 실패율이 16%**로 기준(1%)보다 높다. 미분류된 문항은 판정에서 제외되며, 이는 “속도가 빠르지만 정답 형식을 덜 잘 따른다”는 리스크를 의미한다. clean 문항 20%, broken_latex 57%에서 실패한 점은 결함 클래스별 강인성이 불균등함을 시사한다. **QUALITY 티어 교체는 기술적으로 가능하나, 운영 전에는 broken_latex 등 파싱 실패 클래스에 대한 추가 샘플링·프롬프트 엔지니어링을 권장한다.**
+   **반영 완료(OPS-49)**:
+   - `src/backend/whymath_backend/l3/router.py`: `QUALITY_MODEL_ID="qwen3:30b-a3b"`, `LOCAL_LATENCY_MS[QUALITY]=2300`
+   - `tests/backend/l3/test_router.py`: QUALITY 해석·지연 상수 테스트 갱신
+   - `AGENTS.md`: 기술 스택 표의 로컬 모델 목록에 `qwen3:30b-a3b`(QUALITY·MoE) 반영
+
+   **주의**: 후보의 **파싱 실패율이 16%**로 기준(1%)보다 높다. 미분류된 문항은 판정에서 제외되며, 이는 “속도가 빠르지만 정답 형식을 덜 잘 따른다”는 리스크를 의미한다. clean 문항 20%, broken_latex 57%에서 실패한 점은 결함 클래스별 강인성이 불균등함을 시사한다. **운영 전에는 broken_latex 등 파싱 실패 클래스에 대한 추가 샘플링·프롬프트 엔지니어링을 권장한다.**
    - 실행기: `scripts/ops/run_moe_quality_battle.ps1`
    - 감사 파일: `data/audit/ops-48-moe-accuracy-battle-20260822_232452.jsonl`
    - 하니스: `src/backend/whymath_backend/harness/quality_tier_moe_accuracy_battle.py`

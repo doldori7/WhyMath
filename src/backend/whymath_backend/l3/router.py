@@ -35,7 +35,9 @@ from whymath_backend.l3.models import (
 LOCAL_LATENCY_MS: Final[dict[LocalModelTier, int]] = {
     LocalModelTier.FAST: 1010,  # qwen2-math:1.5b — p50 1,010ms, SLA PASS
     LocalModelTier.MID: 3918,  # qwen2-math:7b — p50 3,918ms
-    LocalModelTier.QUALITY: 13886,  # qwen3.5:27b — p50 13,886ms, 비동기 전용
+    # QUALITY: qwen3:30b-a3b(MoE) 왕복 p50 ≈ 2,300ms(2026-08-22, ctx 8192/np 1/flash on/ROCm).
+    # dense 27B(qwen3.5:27b)는 12,406ms로 5.4배 느림 — OPS-48 판정으로 MoE 채택.
+    LocalModelTier.QUALITY: 2300,
 }
 """로컬 티어별 예상 지연(ms). 출처: 03a §A.1 벤치 p50.
 
@@ -46,8 +48,8 @@ LOCAL_LATENCY_MS: Final[dict[LocalModelTier, int]] = {
 
 # ──────────────────────────────────────────────────────────────────────────
 # 축3 그라운딩 — 패밀리(축3)×크기(축2) → 실제 모델 ID 매트릭스 (03a §A.0·§C.4)
-# QUALITY(27b)는 패밀리 무관 상위 티어 — 매트릭스에 (패밀리, QUALITY)는 두지 않고
-# resolve_model()이 별도 처리한다(27b가 양 패밀리 포괄, 03a §A.0).
+# QUALITY(MoE)는 패밀리 무관 상위 티어 — 매트릭스에 (패밀리, QUALITY)는 두지 않고
+# resolve_model()이 별도 처리한다(MoE가 양 패밀리 포괄, 03a §A.0).
 # ──────────────────────────────────────────────────────────────────────────
 LOCAL_MODEL_MATRIX: Final[dict[tuple[ModelFamily, LocalModelTier], str]] = {
     (ModelFamily.MATH, LocalModelTier.FAST): "qwen2-math:1.5b",
@@ -65,8 +67,13 @@ QUALITY는 패밀리 무관 → 이 매트릭스에 없고 QUALITY_MODEL_ID로 �
 llm-architect.md A.0 매트릭스와 동일해야 한다.
 """
 
-QUALITY_MODEL_ID: Final[str] = "qwen3.5:27b"
-"""QUALITY 티어 실제 모델 — 패밀리 무관(27b가 MATH/GENERAL 양쪽 포괄, 03a §A.0)."""
+QUALITY_MODEL_ID: Final[str] = "qwen3:30b-a3b"
+"""QUALITY 티어 실제 모델 — 패밀리 무관(MoE, 03a §A.0).
+
+2026-08-22 OPS-48 판정: dense 27B(qwen3.5:27b) 대비 MoE(qwen3:30b-a3b)가
+생성 6.0배·왕복 5.4배 빠르면서도 정확도(검출률/오경보)가 열등하지 않음.
+단, 파싱 실패율 16%(기준 1%)로 운영 전 추가 샘플링·프롬프트 튜닝이 권장됨.
+"""
 
 # ──────────────────────────────────────────────────────────────────────────
 # 축3 결정 입력 집합 — NLP임이 분명한 호출지점·태스크 (03a §C.0 규칙1·3)
@@ -237,7 +244,7 @@ def resolve_model(
     """(패밀리 축3 × 크기 축2) → 실제 로컬 모델 ID 해석 (03a §A.0 매트릭스 lookup).
 
     호출 직전 LLMClient가 수행하는 lookup을 로직 헬퍼로 노출한다.
-      - QUALITY → 패밀리 무관 `qwen3.5:27b`(27b가 양 패밀리 포괄, 03a §A.0).
+      - QUALITY → 패밀리 무관 `qwen3:30b-a3b`(MoE가 양 패밀리 포괄, 03a §A.0).
       - FAST/MID → (패밀리, 크기) 매트릭스 lookup. 이때 패밀리가 None이면 오류
         (불변식 4 위반 — LOCAL+FAST/MID는 패밀리가 반드시 있어야 한다).
     클라우드(local_model None)에는 적용하지 않는다 — 호출 전 cost_tier로 분기.
@@ -510,7 +517,7 @@ class Router:
         family = self._decide_family(req)
         local_model, mode = self._decide_local_tier(req)
 
-        # QUALITY(27b)는 패밀리 무관 → local_family=None (불변식 4, 03a §A.0).
+        # QUALITY(MoE)는 패밀리 무관 → local_family=None (불변식 4, 03a §A.0).
         # 단 reason에는 결정된 패밀리를 남겨 추적성을 유지한다(QUALITY로 합류 전 의도).
         family_applicable = local_model in (LocalModelTier.FAST, LocalModelTier.MID)
         decision_family = family if family_applicable else None
@@ -557,7 +564,7 @@ class Router:
         모델로 보내면 7b조차 0%였으므로 NLP 식별 규칙을 *넓게* 잡는다(§C.0 메모).
 
         QUALITY로 합류할 요청도 패밀리를 정해두지만, route()에서 QUALITY면
-        local_family는 None으로 비운다(27b가 양 패밀리 포괄, §A.0 불변식 4).
+        local_family는 None으로 비운다(MoE가 양 패밀리 포괄, §A.0 불변식 4).
         """
         call_site = _as_call_site(req.call_site)
         # 규칙 1: NLP 호출지점 ①③④ → GENERAL (②=depth는 MATH)
@@ -581,7 +588,7 @@ class Router:
         # 규칙 1: ⑤ 자기검증 → QUALITY 비동기 (패밀리 무관)
         if call_site == CallSite.SELF_VERIFY:
             return LocalModelTier.QUALITY, "async"
-        # 규칙 2: 비동기 + (verify/generate or hard/killer) → QUALITY (27b 비동기 전용)
+        # 규칙 2: 비동기 + (verify/generate or hard/killer) → QUALITY (MoE 비동기 전용)
         if (not req.sync) and (
             req.task_type in ("verify", "generate") or req.difficulty in ("hard", "killer")
         ):
