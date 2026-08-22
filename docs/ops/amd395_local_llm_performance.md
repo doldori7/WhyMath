@@ -6,6 +6,36 @@
 
 ---
 
+## ★ 확정 결론 — Phaiakes9 성능 극대화 조건 (2026-08-22 실측)
+
+레버를 하나씩 갈라 측정한 최종 권고. **왕복 지연**(prefill + 생성)이 판단축이다 — WhyMath 호출은 긴 프롬프트·짧은 출력이 주력이기 때문이다.
+
+| # | 조건 | 값 | 실측 근거 |
+|---|---|---|---|
+| 1 | **모델 구조** | dense보다 **MoE** | 27B dense 11.7 t/s vs 30B-A3B **70.1** t/s — **6.0배**. 최대 레버 |
+| 2 | **모델 상주** | `OLLAMA_MAX_LOADED_MODELS=3`+ · `OLLAMA_KEEP_ALIVE=30m` | 재방문 로드 2,340 ms → **2.6 ms** (**900배**) |
+| 3 | **flash attention** | `OLLAMA_FLASH_ATTENTION=1` | MoE 생성 **+20.3%** · prefill **+21.7%** · 왕복 **−34.8%**. 부작용 없음 |
+| 4 | **백엔드** | **ROCm 유지** (`OLLAMA_IGPU_ENABLE` 설정하지 않음) | Vulkan은 생성 +9~21%를 주지만 prefill을 **−25~75%** 깎는다 → 27B 왕복 13.1s → **21.1s (+68%)** |
+| 5 | **컨텍스트 예산** | `OLLAMA_CONTEXT_LENGTH=8192` · `OLLAMA_NUM_PARALLEL=1` | 자동 262,144는 로드 실패를 유발 |
+| 6 | **VGM** | 64 GB (이미 설정됨) | 레지스트리 실측 65,536 MB |
+| 7 | **위생** | 주기적 재시작 · 고아 `llama-server` 정리 | 커밋 여유 0.9 GB → 205 GB 회복. 방치 시 **전건 로드 실패** |
+
+**적용 명령** (`resident` 프리셋이 3·5를 포함하고, 4는 `IGPU_ENABLE`을 두지 않는 것이 곧 적용이다):
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_CONTEXT_LENGTH","8192","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_NUM_PARALLEL","1","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION","1","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_MAX_LOADED_MODELS","3","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_KEEP_ALIVE","30m","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_IGPU_ENABLE",$null,"User")   # Vulkan 후보 제외 = ROCm 유지
+# 적용하려면 Ollama 재시작 필요
+```
+
+**넘을 수 없는 벽**: 생성 속도 상한은 메모리 대역폭 256 GB/s가 정한다(§2). dense 27B의 11.7 t/s는
+이론 상한 15.5의 75%로 **이미 물리 한계 근처**다. 여기서 더 얻으려면 설정이 아니라 **모델을 바꿔야 한다**(레버 1).
+
+---
+
 ## 0. 이 문서의 근거 등급 (읽기 전에)
 
 이 저장소 규칙상 **검증 없는 실행 안내는 금지**다. 아래 표기를 각 주장에 붙였다.
@@ -560,6 +590,39 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Prese
 
 `resident`의 재방문 첫 런이 `gen 0 t/s | out  tok`으로 찍혔다(`eval_count` 없음).
 0은 측정이 아니라 실패인데 정상값으로 섞여 중앙값을 오염시킨다. **대책**: `eval_count ≤ 0`이면 실패로 분류한다.
+
+### ✅ 레버 분리 측정 — flash attention과 백엔드를 갈랐다 (2026-08-22 21:30 · 3 프리셋 각 8/8 성공)
+
+`baseline`(flash off) → `rocm`(flash **on**) → `vulkan`(flash on + `IGPU_ENABLE=1`). 인접 프리셋은 **레버 하나만** 다르다.
+
+#### flash attention 효과 (`baseline` → `rocm`, 둘 다 ROCm)
+
+| 모델 | 생성 | prefill | **왕복** |
+|---|---|---|---|
+| `qwen2.5:3b` | +7.2% | +3.7% | −18.9% |
+| `qwen2.5:7b` | +3.7% | +3.3% | −14.0% |
+| `qwen3.5:27b` | −0.5% | +3.1% | −4.3% |
+| **`qwen3:30b-a3b`** | **+20.3%** | **+21.7%** | **−34.8%** |
+
+⇒ **채택.** MoE에서 20% 규칙을 넘고, 나머지도 왕복이 일관되게 줄며 **손해가 없다.**
+
+#### 백엔드 효과 (`rocm` → `vulkan`) — **트레이드오프**
+
+| 모델 | 생성 | prefill | **왕복** |
+|---|---|---|---|
+| `qwen2.5:3b` | +14.4% | −12.4% | −7.3% |
+| `qwen2.5:7b` | +12.5% | −24.9% | −3.9% |
+| **`qwen3.5:27b`** | +9.3% | **−75.2%** | **+68.1%** (13.1s → 21.1s) |
+| **`qwen3:30b-a3b`** | **+21.2%** | **−46.7%** | +8.8% |
+
+⇒ **ROCm 유지.** Vulkan은 문헌대로 생성에서 앞서지만 **prefill을 크게 깎는다.**
+WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 주력이라 **왕복이 판단축**이고, 그 축에서 큰 모델이 크게 손해다.
+생성 t/s만 봤다면 정반대 결론을 냈을 것이다.
+
+> **[미확정] 백엔드 라벨** — `library=` 출력이 세 프리셋 모두 `ROCm`으로 찍혔다. 그러나 성능 지문(생성↑·prefill↓)은
+> 백엔드 전환과 정확히 부합한다. **원인은 도구 결함 10회차**: 그 줄에 **시간 필터가 없어 이전 기동의 로그를 읽었을 수 있다**
+> (bench 로그 tail에는 넣었던 필터를 여기엔 빠뜨렸다 — 같은 실수의 반복). 수정 완료, 다음 실행에서 확정된다.
+> **결론(ROCm 유지)은 라벨이 아니라 왕복 수치에 근거하므로 이 미확정에 영향받지 않는다.**
 
 **이 시점의 결론 전환**: 최초 질문("ROCm이 왜 안 잡히나")은 **이 머신에서 성립하지 않는다** — 이미 잡혀 있다.
 실제 병목 후보는 ①과대 컨텍스트(256K) ②병렬 4 ③flash attention 꺼짐 ④전원 Balanced ⑤dense 27B의 대역폭 벽이다.

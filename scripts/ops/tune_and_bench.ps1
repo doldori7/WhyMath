@@ -235,7 +235,22 @@ foreach ($name in $presetNames) {
     # 프리셋 이름이 "vulkan"이라고 Vulkan 이 쓰인다는 보장은 없다. 로그가 정본이다.
     $lg2 = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
     if (Test-Path $lg2) {
-        $ic = @(Select-String -Path $lg2 -Pattern 'msg="inference compute"') | Select-Object -Last 1
+        # 시간 필터 필수 — 없으면 *이전 기동*의 줄을 읽어 "3회 모두 ROCm"처럼 보인다.
+        # (2026-08-22 실측 결함 10회차: 세 프리셋이 전부 library=ROCm 으로 찍혔는데
+        #  성능 지문은 백엔드가 바뀐 모습이었다. 라벨이 stale 이었을 가능성이 크다.)
+        $since = (Get-Date).AddMinutes(-3)
+        $icLines = @(Get-Content $lg2 -Tail 2000 | Select-String -Pattern 'msg="inference compute"')
+        $ic = $null
+        foreach ($cand in $icLines) {
+            $tm = [regex]::Match($cand.Line, 'time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})')
+            if ($tm.Success) {
+                $ts = [datetime]::MinValue
+                if ([datetime]::TryParse($tm.Groups[1].Value, [ref]$ts) -and $ts -ge $since) { $ic = $cand }
+            }
+        }
+        if ($null -eq $ic) {
+            Write-Host "  [WARN] 최근 3분 내 inference compute 줄이 없다 — 백엔드 미확인(이전 기동 줄은 읽지 않는다)"
+        }
         if ($null -ne $ic) {
             $lm = [regex]::Match($ic.Line, 'library=(\S+)')
             $cm = [regex]::Match($ic.Line, 'compute=(\S+)')
