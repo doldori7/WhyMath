@@ -36,18 +36,28 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Forc
 $PresetTable = @{
     "baseline" = @{
         desc = "현행 확정 조건 (ctx 8192 · np 1) — 비교 기준선"
+        models   = $null   # $null = 전역 -Models 사용
+        noUnload = $false
         env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
                   OLLAMA_FLASH_ATTENTION = "false"; OLLAMA_MAX_LOADED_MODELS = "2"
                   OLLAMA_KEEP_ALIVE = "10m"; OLLAMA_IGPU_ENABLE = $null }
     }
     "resident" = @{
-        desc = "상주 정책 (L6) — flash attention + 3모델 상주 + keep_alive 30m"
+        desc = "상주 정책 (L6) — 같은 모델 재방문 시 load_ms 가 0에 수렴하는지"
         env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
                   OLLAMA_FLASH_ATTENTION = "1"; OLLAMA_MAX_LOADED_MODELS = "3"
                   OLLAMA_KEEP_ALIVE = "30m"; OLLAMA_IGPU_ENABLE = $null }
+        # 상주 효과는 *같은 모델을 다시 부를 때* 드러난다. 모델마다 언로드하면 측정 자체가 불가능하다.
+        # 3모델 × 2회 방문, MAX_LOADED_MODELS=3 이라 전부 상주해야 한다 → 2회차 load_ms ≈ 0 이 기대값.
+        # 모델 합계 0.9+1.8+4.4 = 7.1 GB — 커밋 여유 20 GB 안에 안전하게 들어간다
+        # (27B 16.2GB 를 여기 넣으면 3모델 합이 22 GB 로 천장을 넘어 실패가 재현된다).
+        models   = "qwen2-math:1.5b,qwen2.5:3b,qwen2.5:7b,qwen2-math:1.5b,qwen2.5:3b,qwen2.5:7b"
+        noUnload = $true
     }
     "vulkan" = @{
         desc = "Vulkan 백엔드 (L3) — iGPU 장치를 살려 ROCm과 대조"
+        models   = $null
+        noUnload = $false
         env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
                   OLLAMA_FLASH_ATTENTION = "1"; OLLAMA_MAX_LOADED_MODELS = "3"
                   OLLAMA_KEEP_ALIVE = "30m"; OLLAMA_IGPU_ENABLE = "1" }
@@ -188,7 +198,15 @@ foreach ($name in $presetNames) {
     }
 
     Write-Host "⑤ 벤치"
-    & powershell -ExecutionPolicy Bypass -File $Bench -Label $name -Models $Models -Repeat $Repeat
+    $useModels = if ($p.ContainsKey("models") -and $p.models) { $p.models } else { $Models }
+    # $args 는 PowerShell 자동 변수다 — 덮어쓰지 않는다.
+    $benchArgs = @("-ExecutionPolicy","Bypass","-File",$Bench,"-Label",$name,"-Models",$useModels,"-Repeat",[string]$Repeat)
+    if ($p.ContainsKey("noUnload") -and $p.noUnload) {
+        $benchArgs += "-NoUnload"
+        Write-Host "  (모델 상주 유지 — 재방문 load_ms 로 상주 효과를 잰다)"
+    }
+    Write-Host ("  모델: " + $useModels)
+    & powershell @benchArgs
     $benchExit = $LASTEXITCODE
 
     $csv = @(Get-ChildItem -Path $OutDir -Filter ("bench_" + $name + "_*.csv") | Sort-Object LastWriteTime -Descending | Select-Object -First 1)

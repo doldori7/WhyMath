@@ -231,11 +231,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Prese
 마지막에 프리셋 간 비교표를 출력한다. Windows 고성능 전원 계획도 함께 적용하며 되돌리는 명령을 출력한다
 (`-SkipPowerPlan`으로 생략 가능).
 
-| 프리셋 | 내용 |
-|---|---|
-| `baseline` | 현행 확정 조건(ctx 8192 · np 1) — 비교 기준선 |
-| `resident` | L6 상주 정책 — flash attention + 3모델 상주 + keep_alive 30m |
-| `vulkan` | L3 백엔드 대조 — `OLLAMA_IGPU_ENABLE=1`로 Vulkan 장치를 살린다 |
+| 프리셋 | 내용 | 측정 모델 | 소요 |
+|---|---|---|---|
+| `baseline` | 현행 확정 조건(ctx 8192 · np 1) — 비교 기준선 | 3b·7b·27b·30b-a3b | ~2분 |
+| `resident` | L6 상주 정책 — **같은 모델 재방문 시 `load_ms`가 0에 수렴하는지** | 1.5b·3b·7b **× 2회** (`-NoUnload`) | ~1분 |
+| `vulkan` | L3 백엔드 대조 — `OLLAMA_IGPU_ENABLE=1`로 Vulkan 장치를 살린다 | 3b·7b·27b·30b-a3b | ~2분 |
+
+**3개 전부 = 약 5분** (2026-08-22 clean 런 실측값 기반 추정: 로드 3.0~16.0초 + 생성 + 프리셋당 재기동 오버헤드 ~25초).
+
+> **`resident`의 모델이 다른 이유** — 상주 효과는 *같은 모델을 다시 부를 때* 드러나므로 3모델을 2회씩 방문한다.
+> 27B(16.2GB)를 넣지 않는 것은 의도적이다: 3모델 합이 22GB가 되어 **커밋 여유 20GB 천장을 넘고, 그러면
+> 상주가 아니라 실패를 재현하게 된다**. 1.5b+3b+7b = 7.1GB는 안전하다.
 
 > ⚠️ **전면 버튼(54/85/140W)은 OS에서 못 바꾼다.** 스크립트는 Windows 전원 계획만 고성능으로 돌린다 —
 > 140W는 **눈으로 확인**해야 한다.
