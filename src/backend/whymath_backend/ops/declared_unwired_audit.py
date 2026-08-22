@@ -1067,6 +1067,9 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 돌리는 쓰기 도구이므로 CI 상시 실행 대상이 아니다(사유 상수 참조).
         "ops.corpus_provenance_sidecar": _CORPUS_AUTHORING_WRITER,
         "harness.agreement_gate_cli": _MANUAL_COMPARISON_TOOL,
+        # OPS-48(완료) — QUALITY 티어 dense↔MoE 정확도 축 강등전. Phaiakes9 실측 완료,
+        # 결과는 data/audit/ops-48-moe-accuracy-battle-*.jsonl. 승격 판정 시점의 수동 도구.
+        "harness.quality_tier_moe_accuracy_battle": _MANUAL_COMPARISON_TOOL,
         # S4-16(진행 중) 산출물 — 게이트 승격 조건 측정 도구, 승격 전까지는 CI 상시 배선 대상
         # 아님(LLM K=3 교차검증 라이브 의존)
         "harness.residue_gate_demotion_battle": "pending-task:S4-16-residue-gate-demotion-battle",

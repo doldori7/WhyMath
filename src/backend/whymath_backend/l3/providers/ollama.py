@@ -138,14 +138,23 @@ def _extract_text(generate_response: Any) -> str:
     """ollama generate 응답에서 생성 텍스트를 방어적으로 추출.
 
     pydantic `GenerateResponse`(`.response`) 또는 dict(`{"response": ...}`)
-    양쪽을 흡수한다. 둘 다 아니면 빈 문자열.
+    양쪽을 흡수한다. Qwen3 계열은 json_schema format 사용 시 출력을 `thinking` 필드에
+    담고 `response`는 비어 있을 수 있어 `thinking`도 fallback으로 본다.
     """
-    if hasattr(generate_response, "response"):
-        text = generate_response.response
-        return text if isinstance(text, str) else ""
-    if isinstance(generate_response, dict):
-        text = generate_response.get("response", "")
-        return text if isinstance(text, str) else ""
+
+    def _attr(name: str) -> str | None:
+        if hasattr(generate_response, name):
+            v = getattr(generate_response, name)
+            return v if isinstance(v, str) else None
+        if isinstance(generate_response, dict):
+            v = generate_response.get(name)
+            return v if isinstance(v, str) else None
+        return None
+
+    for field in ("response", "thinking"):
+        text = _attr(field)
+        if text:
+            return text
     return ""
 
 
@@ -339,4 +348,82 @@ class OllamaProvider:
                 for mid in _REQUIRED_MODEL_IDS
             ),
             error=None,
+        )
+
+
+class FixedModelOllamaProvider(OllamaProvider):
+    """강등전·측정 전용 — 라우터가 고른 모델 대신 고정 모델 ID로 호출하는 Ollama provider.
+
+    `OllamaProvider`를 상속해 `_get_client()`·`_extract_*` 로직을 재사용하고,
+    `generate()`에서만 `resolve_model()`을 건너뛰어 `--model-id` 인자로 들어온 ID를
+    직접 Ollama에 넘긴다. 이를 통해 운영 라우터 매트릭스와 무관하게 특정 모델의
+    정확도·지연을 측정한다(CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계 금지" —
+    실패·오류 경로도 동일한 provider 인터페이스로 처리).
+
+    `timeout`·`num_ctx`·`num_predict`는 강등전에 필요한 긴 타임아웃·컨텍스트 제한·
+    출력 길이 제한을 주입하기 위한 것이다. 모두 선택 인자 — 미지정 시 Ollama 기본값.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        client: _OllamaClient | None = None,
+        settings: Settings | None = None,
+        timeout: float | None = None,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+    ) -> None:
+        if settings is not None and timeout is not None:
+            settings = settings.model_copy(update={"ollama_request_timeout_s": timeout})
+        elif timeout is not None:
+            settings = get_settings().model_copy(update={"ollama_request_timeout_s": timeout})
+        super().__init__(client=client, settings=settings)
+        self._model_id = model_id
+        self._num_ctx = num_ctx
+        self._num_predict = num_predict
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        """고정 모델 ID로 생성한다 — `resolve_model`을 생략한다(그 외는 부모와 동일)."""
+        cost = _as_cost_tier(decision.cost_tier)
+        if cost is not CostTier.LOCAL:
+            raise ValueError(
+                f"FixedModelOllamaProvider는 로컬 결정만 처리한다"
+                f"(받은 cost_tier={decision.cost_tier})."
+            )
+        call_kwargs: dict[str, Any] = {
+            "model": self._model_id,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+        }
+        if images is not None:
+            call_kwargs["images"] = images
+        options: dict[str, Any] = {}
+        if self._num_ctx is not None:
+            options["num_ctx"] = self._num_ctx
+        if self._num_predict is not None:
+            options["num_predict"] = self._num_predict
+        if temperature is not None:
+            options["temperature"] = temperature
+        if options:
+            call_kwargs["options"] = options
+        if json_schema is not None:
+            call_kwargs["format"] = dict(json_schema)
+        client = self._get_client()
+        start = time.monotonic()
+        response = await client.generate(**call_kwargs)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        return GenerationResult(
+            text=_extract_text(response),
+            usage=_extract_usage(response, latency_ms),
         )
