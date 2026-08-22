@@ -99,7 +99,7 @@ class OllamaStatus:
         return tuple(m.model_id for m in self.models if not m.present)
 
 
-# 라우팅이 실제로 요구하는 로컬 모델 ID 전체 = 매트릭스(FAST/MID) + QUALITY(27b).
+# 라우팅이 실제로 요구하는 로컬 모델 ID 전체 = 매트릭스(FAST/MID) + QUALITY(MoE).
 # 03a §A.0. /status가 이 집합의 설치 여부를 점검한다.
 _REQUIRED_MODEL_IDS: tuple[str, ...] = (
     *sorted(set(LOCAL_MODEL_MATRIX.values())),
@@ -265,7 +265,7 @@ class OllamaProvider:
 
         - CostTier.LOCAL이 아니면 즉시 거부(클라우드는 S5 범위 밖).
         - LOCAL FAST/MID/QUALITY는 resolve_model()로 실제 모델 ID를 얻어 호출한다
-          (QUALITY→qwen3.5:27b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0;
+          (QUALITY→qwen3:30b-a3b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0;
           VISION/FAST→qwen3-vl 멀티모달).
         - `images`(base64 목록)가 주어지면 ollama generate의 `images=`로 전달한다 —
           VL 모델(qwen3-vl)이 이미지를 받는다. None이면 기존 텍스트 호출과 동일.
@@ -277,7 +277,7 @@ class OllamaProvider:
           코드펜스·필드 누락을 원천 차단). None(기본)이면 format을 싣지 않아 자유 텍스트 생성
           — *기존 동작 무변경*. 문법 제약은 형식만 보장하며 수학적 진실 검증은 하류 게이트 소관.
 
-        주의: QUALITY(27b)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
+        주의: QUALITY(MoE)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
         비동기 워커가 같은 제공자로 QUALITY를 호출할 수 있어야 하기 때문.
 

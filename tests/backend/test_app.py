@@ -155,7 +155,7 @@ class TestStatus:
             reachable=True,
             models=(
                 ModelAvailability("qwen2-math:1.5b", True),
-                ModelAvailability("qwen3.5:27b", True),
+                ModelAvailability("qwen3:30b-a3b", True),
             ),
         )
         client = _client(StubProvider(status=status))
@@ -209,14 +209,14 @@ class TestStatus:
             reachable=True,
             models=(
                 ModelAvailability("qwen2-math:1.5b", True),
-                ModelAvailability("qwen3.5:27b", False),
+                ModelAvailability("qwen3:30b-a3b", False),
             ),
         )
         client = _client(StubProvider(status=status))
         body = client.get("/status").json()
         assert body["ready"] is False
         assert body["reachable"] is True
-        assert body["missing"] == ["qwen3.5:27b"]
+        assert body["missing"] == ["qwen3:30b-a3b"]
 
     def test_status_includes_cloud_when_provider_exposes_it(self) -> None:
         """CompositeProvider 표면(check_cloud_status) → /status에 cloud_* 필드가 채워진다(S5)."""

@@ -7080,3 +7080,15 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **CLAUDE.md 규칙 신설**(v0.2.2 → **v0.2.3**): "❌ 측정·수집 도구를 성공 경로만 보고 설계 금지". 반복 실수 10회차이므로 자동 로드되는 규칙 형태가 필요했다(스킬은 트리거될 때만 읽힌다). 세 질문으로 요약 — ①실패해도 증거가 남는가 ②실패 *원인*이 남는가 ③지금 보는 게 이번 실행 것인가. 부칙: 외부 프로세스 전부 타임아웃 · **정지 장치도 변별력이 필요하다**(표기 차이로 정상 상태에서 멈추면 안 된다).
 - **문서 인덱스 보강**: `docs/ops/amd395_local_llm_performance.md`를 CLAUDE.md 인덱스에 등재(2026-08-10 통합점검이 지적한 "규범 문서가 인덱스에서 안 보이는" 상태 재발 방지).
 - **결과 요약 아티팩트** 발행 — https://claude.ai/code/artifact/4ea59a08-d0a9-40c7-9327-1459c1b23291
+
+## 2026-08-22: OPS-49 — 라우터 QUALITY 티어를 `qwen3:30b-a3b`(MoE)로 교체
+
+- **전제**: PR #855(OPS-48)에서 dense 27B(`qwen3.5:27b`) 대비 MoE(`qwen3:30b-a3b`)가 정확도 축에서 열등하지 않음을 Wilson 단측 경계로 판정(exit 0)했으나, 실제 라우터 코드는 여전히 dense 모델을 가리키고 있었다.
+- **변경**:
+  - `src/backend/whymath_backend/l3/router.py`: `QUALITY_MODEL_ID="qwen3:30b-a3b"`, `LOCAL_LATENCY_MS[LocalModelTier.QUALITY]=2300` (MoE 왕복 2.3s 실측 기준). 관련 주석을 dense 27B → MoE로 일괄 동기화.
+  - `src/backend/whymath_backend/l3/providers/ollama.py`: QUALITY 모델 식별 주석을 MoE로 갱신.
+  - `tests/backend/l3/test_router.py`: QUALITY 해상·지연 상수 단언을 2300ms/`qwen3:30b-a3b`로 갱신.
+  - `AGENTS.md`: 기술 스택 표의 로컬 모델 목록에 `qwen3:30b-a3b`(QUALITY·MoE) 반영.
+  - `docs/ops/amd395_local_llm_performance.md` §6: QUALITY 티어 재검토 항목에 "✅ MoE 교체 — 라우터 반영 완료(OPS-49)" 추가, `LOCAL_LATENCY_MS` 표를 MoE 기준으로 갱신.
+- **남은 리스크**: MoE 후보의 파싱 실패율 16%(기준 1%)는 그대로다. clean 문항 20%·broken_latex 57%에서 JSON/후처리 실패하므로, 운영 전 별도 샘플링·프롬프트 튜닝이 필요하다(OPS-49 notes에 명시).
+- **검증**: 4게이트(ruff·black·mypy·pytest) 통과 및 PR # 생성. CI가 최종 판정.
