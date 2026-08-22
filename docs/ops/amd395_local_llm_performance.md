@@ -215,7 +215,32 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\collect_gpu_evidence.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\ops\bench_ollama.ps1 -Label vgm64
 ```
 
-### Phase 3. 전원 모드 140W
+### 🤖 Phase 2~5 자동 실행 — `tune_and_bench.ps1` (권장)
+
+수작업 단계(환경변수 → Ollama 재시작 → 실효 설정 확인 → 벤치)를 전부 스크립트가 한다.
+**2026-08-22 진단에서 측정 4회가 측정 자체가 아닌 이유로 공전했기 때문이다** — 재시작 누락 2회, 고아 프로세스 1회, 인자 파싱 1회.
+
+```powershell
+# [실행 시스템] Windows PowerShell (Phaiakes9 본체)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,resident,vulkan"
+```
+
+프리셋마다 ①환경변수 적용 ②Ollama·고아 전부 종료 ③재기동 ④`/api/version` 응답 대기
+⑤**`server.log`의 실효 설정이 의도와 일치하는지 대조**(불일치면 즉시 중단 — 잘못된 상태로 재지 않는다) ⑥벤치.
+마지막에 프리셋 간 비교표를 출력한다. Windows 고성능 전원 계획도 함께 적용하며 되돌리는 명령을 출력한다
+(`-SkipPowerPlan`으로 생략 가능).
+
+| 프리셋 | 내용 |
+|---|---|
+| `baseline` | 현행 확정 조건(ctx 8192 · np 1) — 비교 기준선 |
+| `resident` | L6 상주 정책 — flash attention + 3모델 상주 + keep_alive 30m |
+| `vulkan` | L3 백엔드 대조 — `OLLAMA_IGPU_ENABLE=1`로 Vulkan 장치를 살린다 |
+
+> ⚠️ **전면 버튼(54/85/140W)은 OS에서 못 바꾼다.** 스크립트는 Windows 전원 계획만 고성능으로 돌린다 —
+> 140W는 **눈으로 확인**해야 한다.
+
+### Phase 3. 전원 모드 140W (수동 참고)
 전면 버튼으로 Performance 전환 + Windows 전원 모드 최고 성능 → 재측정 (`-Label power140`).
 
 ### Phase 4. 백엔드 스위치 — **창 2개** ⚠️
@@ -455,8 +480,17 @@ CommitFree_GB : 0.9  →  20.2      (고아 2개가 잡고 있던 커밋 = 19.3 
 
 ## 6. WhyMath 적용 — 측정이 끝나면 결정할 것 3개
 
-1. **`LOCAL_LATENCY_MS` 보정** [코드] — 현재 라우터의 로컬 지연 상수는 벤치 p50 가정값이다. Phase 1~5 실측으로 갈아끼운다. 상수가 틀리면 라우터의 로컬↔클라우드 승급 판정이 통째로 틀어진다.
-2. **QUALITY 티어 재검토** — `qwen3.5:27b`(dense)는 §2대로 이 하드웨어에서 ~10 t/s가 상한이다. 동급 MoE 대체가 성립하면 10배다. **단, 모델 교체는 CLAUDE.md 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그)을 통과해야 하며, 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적)은 불변이다.**
+1. ✅ **`LOCAL_LATENCY_MS` 보정 — 불요로 판정(2026-08-22)** [코드+실측]. 실측 왕복(prefill 796자 + 128토큰)을 현행 상수와 대조:
+
+   | 티어 | 현행 상수 | 실측 | 판정 |
+   |---|---|---|---|
+   | FAST (`qwen2-math:1.5b`) | 1,010 ms | 906 ms | 상수가 10% 보수적 |
+   | MID (`qwen2-math:7b`급) | 3,918 ms | 3,551 ms | 상수가 9% 보수적 |
+   | QUALITY (`qwen3.5:27b`) | 13,886 ms | 12,406 ms | 상수가 11% 보수적 |
+
+   **셋 다 실측이 상수보다 빠르다** — 즉 라우터는 로컬을 실제보다 느리다고 보고 있고, 이는 클라우드 승급 쪽으로
+   기우는 *안전측* 오차다. 상수를 건드리면 승급 판정이 바뀌므로 **근거 없는 변경을 하지 않는다.** 상수는 검증됐다.
+2. **QUALITY 티어 재검토** → **`OPS-48` 등재 완료(2026-08-22)**. 속도 축은 실측 끝났고 **정확도 축(결함 주입 강등전)이 남았다** — `qwen3.5:27b`(dense)는 §2대로 이 하드웨어에서 ~10 t/s가 상한이다. 동급 MoE 대체가 성립하면 10배다. **단, 모델 교체는 CLAUDE.md 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그)을 통과해야 하며, 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적)은 불변이다.**
 3. **로컬 vs OpenRouter 비교축** — t/s만으로 고르지 않는다. `detection accuracy` / `false alarm` / `왕복 지연` / `t/s` / `컨텍스트` / `비용` / `반복 실행 안정성` 7축으로 비교하고, **정확도 축은 결함 주입 강등전으로 판정**한다(`docs/standards/superhuman_verification_standard.md`). 로컬이 정확도에서 지더라도 지연·비용에서 이기는 구간이 있고, 그 반대도 있다.
 
 ---

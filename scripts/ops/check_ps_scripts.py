@@ -16,6 +16,7 @@
 사용:  python3 scripts/ops/check_ps_scripts.py [경로...]
 종료:  0 통과 / 1 위반
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -37,17 +38,17 @@ def strip_noncode(src: str) -> str:
 
     while i < n:
         c = src[i]
-        if src.startswith("<#", i):                      # 블록 주석
+        if src.startswith("<#", i):  # 블록 주석
             j = src.find("#>", i)
             j = n if j < 0 else j + 2
             blank(i, j)
             i = j
-        elif c == "#":                                   # 줄 주석
+        elif c == "#":  # 줄 주석
             j = src.find("\n", i)
             j = n if j < 0 else j
             blank(i, j)
             i = j
-        elif c == "'":                                   # 작은따옴표 문자열
+        elif c == "'":  # 작은따옴표 문자열
             j = i + 1
             while j < n:
                 if src[j] == "'":
@@ -59,7 +60,7 @@ def strip_noncode(src: str) -> str:
                 j += 1
             blank(i, j)
             i = j
-        elif c == '"':                                   # 큰따옴표 문자열
+        elif c == '"':  # 큰따옴표 문자열
             j = i + 1
             while j < n:
                 if src[j] == "`":
@@ -74,7 +75,7 @@ def strip_noncode(src: str) -> str:
                 j += 1
             blank(i, j)
             i = j
-        elif c == "`":                                   # 이스케이프
+        elif c == "`":  # 이스케이프
             i += 2
         else:
             i += 1
@@ -115,7 +116,7 @@ def check_call_before_def(code: str) -> list[str]:
         for idx, ln in enumerate(lines, start=1):
             if idx >= def_line or not pat.search(ln):
                 continue
-            if re.match(r"\s*function\s", ln):           # 다른 함수 정의 줄은 제외
+            if re.match(r"\s*function\s", ln):  # 다른 함수 정의 줄은 제외
                 continue
             issues.append(
                 f"L{idx}: {name}() 를 정의(L{def_line})보다 먼저 호출한다 "
@@ -144,9 +145,7 @@ def check_file(path: pathlib.Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    targets = [pathlib.Path(a) for a in argv[1:]] or sorted(
-        pathlib.Path("scripts").rglob("*.ps1")
-    )
+    targets = [pathlib.Path(a) for a in argv[1:]] or sorted(pathlib.Path("scripts").rglob("*.ps1"))
     files = [t for t in targets if t.is_file()]
     if not files:
         print("검사할 .ps1 파일이 없다.")

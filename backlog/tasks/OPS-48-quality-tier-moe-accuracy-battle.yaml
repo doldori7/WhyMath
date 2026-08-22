@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-48-quality-tier-moe-accuracy-battle
+title: "QUALITY 티어 dense 27B → MoE 교체 판단 — 속도 6.0배 실측 완료, 정확도 축 대조가 남았다"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 속도 축(완료·재현 근거 보존): Phaiakes9 실측 2026-08-22 — qwen3.5:27b(dense) 11.9 t/s / prefill 293 vs qwen3:30b-a3b(MoE) 71.5 t/s / prefill 1,148 = 생성 6.0배·prefill 3.9배. 동일 프롬프트 128토큰 왕복 12.4초 → 2.3초. 재현 명령 = scripts/ops/bench_ollama.ps1 -WithMoe"
+  - "② 정확도 축(미측정 — 이 태스크의 본체): 두 모델을 결함 주입 강등전으로 대조한다. 판정은 인상이 아니라 Wilson 단측 경계 CLI exit 0/1 (docs/standards/superhuman_verification_standard.md). 검출률·오경보율을 각각 낸다 — 속도가 6배여도 검출률이 떨어지면 채택하지 않는다"
+  - "③ 채택 조건 3건 충족 확인(CLAUDE.md 2026-08-16): ⑴ 라우터(l3/router.py) 경유 배선 — QUALITY_MODEL_ID 교체이므로 직접 호출 경로가 생기지 않음을 확인 ⑵ 실측 근거 = ①+② ⑶ MEMORY 결정 로그 기재. 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적·미성년자 데이터 정책)은 모델과 무관하게 불변임을 별항으로 확인"
+  - "④ 채택 시 후속: QUALITY가 비동기 전용인 전제(LOCAL_LATENCY_MS[QUALITY]=13886ms)가 바뀌는지 판단한다. 2.3초면 동기 승격이 성립할 수 있으나 이는 별도 결정이며 이 태스크에서는 가능성만 기록한다"
+  - "⑤ 범위 밖: dense 27B 자체의 튜닝 · 다른 MoE 후보 탐색(qwen3-coder:30b는 코드 특화라 수학 QUALITY 대체군이 아니다) · 라우터 티어 구조 변경"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/router.py
+  - docs/ops/amd395_local_llm_performance.md
+session: null
+notes: "근거 문서 docs/ops/amd395_local_llm_performance.md §2·§5(Phase 1 확정 측정)·§3 L5. 속도 축은 이미 실측 완료 상태로 착수한다 — 남은 것은 정확도 대조뿐이다. LOCAL_LATENCY_MS 보정은 불요로 판정됐다(실측 906/3551/12406ms가 기존 상수 1010/3918/13886ms보다 빨라 상수가 보수적·안전측)."
+updated: 2026-08-22
