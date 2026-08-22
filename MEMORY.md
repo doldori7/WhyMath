@@ -7054,6 +7054,22 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **확정된 성능 극대화 조건 7항**(문서 최상단 ★ 섹션에 정본화): ①MoE 우선(6.0배) ②상주 정책(900배) ③flash attention on ④ROCm 유지 ⑤ctx 8192·np 1 ⑥VGM 64GB ⑦주기적 재시작·고아 정리. 넘을 수 없는 벽은 대역폭 256 GB/s — dense 27B의 11.7 t/s는 이론 상한의 75%로 이미 물리 한계 근처이며, 더 얻으려면 설정이 아니라 모델을 바꿔야 한다.
 - **도구 결함 10회차**: `library=` 판독에 **시간 필터를 빠뜨려** 세 프리셋 모두 `ROCm`으로 찍혔다(이전 기동 줄을 읽었을 가능성). bench 로그 tail에는 넣었던 필터를 새 코드에 빠뜨린 **같은 실수의 반복**이다. 수정 완료. 단 **결론은 라벨이 아니라 왕복 수치에 근거**하므로 영향받지 않는다.
 
+## 2026-08-22: OPS-48 QUALITY 티어 dense ↔ MoE 정확도 축 강등전 완료
+
+- **측정 설계**: 같은 결함 주입 시험지 100문항(결함 50 · 무결함 50 · seed 20260708)로 `qwen3.5:27b`(dense)와 `qwen3:30b-a3b`(MoE)를 대조. 판정은 Wilson 단측 경계·CLI exit 0/1(`docs/standards/superhuman_verification_standard.md`). 레버는 모델 구조만 다르고 ctx 8192 · np 1 · flash attention on · ROCm · MAX_LOADED_MODELS=2 · KEEP_ALIVE=30m로 동일.
+- **결과**: 후보(MoE)가 기준(dense)보다 열등하지 않음 — exit 0.
+  - 검출률: 기준 24/49=0.490(95% 하한 0.376) → 후보 28/44=0.636(95% 하한 0.512).
+  - 오경보율: 기준 3/50=0.060(95% 상한 0.141) → 후보 2/40=0.050(95% 상한 0.140).
+  - 평균 지연: 기준 7,376 ms → 후보 1,408 ms(약 5.2배 빠름).
+- **발견된 리스크**: 후보의 **파싱 실패율이 16%(기준 1%)**로 높았다. clean 문항 20%, broken_latex 57%에서 JSON 형식(또는 후처리) 실패. 미분류 문항은 판정에서 제외되므로 Wilson 판정은 유효하지만, 운영 전에는 broken_latex 등 취약 클래스에 대한 추가 샘플링·프롬프트 튜닝이 필요하다.
+- **도구 산출물**:
+  - `src/backend/whymath_backend/harness/quality_tier_moe_accuracy_battle.py` — 결함 주입 강등전 하니스(Wilson 경계 판정, CLI exit 0/1).
+  - `tests/backend/harness/test_quality_tier_moe_accuracy_battle.py` — fake OllamaClient 주입 hermetic 테스트 18개.
+  - `scripts/ops/run_moe_quality_battle.ps1` — Phaiakes9 전용 실행기(환경변수·고아 프로세스 정리·Ollama 재기동·감사 JSONL).
+  - `src/backend/whymath_backend/l3/providers/ollama.py` — `FixedModelOllamaProvider` 공개 이동, `_extract_text`가 Ollama 0.32 + Qwen3 json_schema 출력의 `thinking` 필드 fallback을 수용.
+  - 감사 파일: `data/audit/ops-48-moe-accuracy-battle-20260822_232452.jsonl`.
+- **결정**: CLAUDE.md 모델·프로바이더 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그)과 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적) 불변을 확인. **QUALITY 티어를 `qwen3.5:27b`에서 `qwen3:30b-a3b`로 교체하는 것이 정확도 축에서도 성립** — 단, 16% 파싱 실패율은 운영 전에 추가 완화 조치가 필요한 노출사항이다.
+
 ## 2026-08-22: 진단 여정의 오류·결과를 스킬·규칙으로 영속화
 
 - **`/llm-perf-doctor` 스킬 신설**(`.claude/commands/llm-perf-doctor.md`) — `demo-doctor` 구조를 따른 **실측 사례 카탈로그**다. 새로 디버깅하지 말고 증상을 표에서 매칭하게 한다.
