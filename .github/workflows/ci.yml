@@ -1013,6 +1013,15 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: PowerShell 스크립트 정적 검사 (BOM·괄호·정의 전 호출)
+        # PS 스크립트는 Kiki 머신(Windows)에서만 실행된다 — Linux 러너도 개발 세션도
+        # 실행 검증을 할 수 없다. 그 공백에서 반복 발생한 결함 3종을 기계로 고정한다.
+        # 차단 게이트다(continue-on-error 없음): 위반 시 exit 1 로 PR 을 막는다.
+        run: |
+          set -euo pipefail
+          python3 scripts/ops/check_ps_scripts.py
+          echo "EXIT=$?"
+
       - name: Shellcheck (warnings only, non-blocking)
         uses: ludeeus/action-shellcheck@master
         # OPS-29 강제 상태 선언(tests/infra/test_ci_enforcement_declaration_contract.py 계약):
