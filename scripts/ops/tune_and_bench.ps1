@@ -116,6 +116,18 @@ function Start-OllamaServer {
     return $false
 }
 
+function ConvertTo-CanonicalEnvValue {
+    # Ollama는 불리언 환경변수를 정규화해 로그에 찍는다("1" -> "true").
+    # 표기 차이를 불일치로 판정하면 정상 상태에서 멈추는 오탐이 된다
+    # (2026-08-22 실측: FLASH_ATTENTION 기대 '1' / 실제 'true'로 resident 프리셋이 중단됐다).
+    param([string]$Value)
+    switch -Regex ($Value) {
+        '^(1|true|on|yes)$'  { return "true" }
+        '^(0|false|off|no)$' { return "false" }
+        default              { return $Value }
+    }
+}
+
 function Test-EffectiveConfig {
     param([hashtable]$Expect)
     # 서버가 *기동 시 읽은* 값을 server.log에서 되읽어 의도와 대조한다.
@@ -133,7 +145,8 @@ function Test-EffectiveConfig {
         $got = if ($m.Success) { $m.Groups[1].Value } else { "" }
         # 기대가 $null(제거)이면 빈 값이어야 하고, "false"/"1" 같은 값은 문자열로 비교한다.
         $wantStr = if ($null -eq $want) { "" } else { [string]$want }
-        $match = ($got -eq $wantStr)
+        # 표기가 아니라 *의미*로 비교한다.
+        $match = ((ConvertTo-CanonicalEnvValue $got) -eq (ConvertTo-CanonicalEnvValue $wantStr))
         Write-Host ("  {0} {1,-26} 기대 '{2}' / 실제 '{3}'" -f $(if ($match) { "OK  " } else { "MISS" }), $k, $wantStr, $got)
         if (-not $match) { $ok = $false }
     }
@@ -146,11 +159,22 @@ function Set-HighPerformancePowerPlan {
     $before = (& powercfg /getactivescheme) 2>&1
     Write-Host ("  현재 전원 계획: " + ($before -join " "))
     $list = (& powercfg /list) 2>&1 | Out-String
+    $target = $hp
     if ($list -notmatch [regex]::Escape($hp)) {
-        Write-Host "  [WARN] 고성능 계획이 목록에 없다 — 건너뛴다(전면 버튼만 눈으로 확인할 것)."
-        return
+        # 최신 Windows는 고성능 계획을 기본 목록에서 숨긴다. 내장 템플릿에서 복제하면 나타난다.
+        # (2026-08-22 실측: Win11 26200에서 목록에 없어 전원 레버 측정 자체를 건너뛰었다.)
+        Write-Host "  고성능 계획이 목록에 없다 — 내장 템플릿에서 복제한다."
+        $dup = (& powercfg -duplicatescheme $hp) 2>&1 | Out-String
+        $m = [regex]::Match($dup, '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})')
+        if (-not $m.Success) {
+            Write-Host ("  [WARN] 복제 실패 — 건너뛴다. 출력: " + ($dup.Trim() -replace "\s+", " "))
+            Write-Host "  (전면 버튼 54/85/140W는 어차피 눈으로 확인해야 한다.)"
+            return
+        }
+        $target = $m.Groups[1].Value
+        Write-Host ("  복제 완료 — 새 GUID " + $target)
     }
-    & powercfg /setactive $hp
+    & powercfg /setactive $target
     $after = (& powercfg /getactivescheme) 2>&1
     Write-Host ("  변경 후: " + ($after -join " "))
     Write-Host ("  [되돌리기] powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e   # 균형 조정")
