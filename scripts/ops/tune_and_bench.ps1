@@ -54,6 +54,16 @@ $PresetTable = @{
         models   = "qwen2-math:1.5b,qwen2.5:3b,qwen2.5:7b,qwen2-math:1.5b,qwen2.5:3b,qwen2.5:7b"
         noUnload = $true
     }
+    "rocm" = @{
+        desc = "ROCm + flash attention (L3 대조군) — vulkan과 IGPU_ENABLE 하나만 다르다"
+        # baseline 대비: flash attention만 다름 -> flash 효과 분리
+        # vulkan  대비: IGPU_ENABLE만 다름     -> 백엔드 효과 분리
+        env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
+                  OLLAMA_FLASH_ATTENTION = "1"; OLLAMA_MAX_LOADED_MODELS = "3"
+                  OLLAMA_KEEP_ALIVE = "30m"; OLLAMA_IGPU_ENABLE = $null }
+        models   = $null
+        noUnload = $false
+    }
     "vulkan" = @{
         desc = "Vulkan 백엔드 (L3) — iGPU 장치를 살려 ROCm과 대조"
         models   = $null
@@ -219,6 +229,34 @@ foreach ($name in $presetNames) {
     if (-not (Test-EffectiveConfig -Expect $p.env)) {
         Write-Host "[FAIL] 서버가 읽은 값이 의도와 다르다 — 이 상태로 재면 결과가 무의미하다. 중단."
         exit 1
+    }
+
+    Write-Host "④-b 서버가 실제로 고른 추론 백엔드"
+    # 프리셋 이름이 "vulkan"이라고 Vulkan 이 쓰인다는 보장은 없다. 로그가 정본이다.
+    $lg2 = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
+    if (Test-Path $lg2) {
+        # 시간 필터 필수 — 없으면 *이전 기동*의 줄을 읽어 "3회 모두 ROCm"처럼 보인다.
+        # (2026-08-22 실측 결함 10회차: 세 프리셋이 전부 library=ROCm 으로 찍혔는데
+        #  성능 지문은 백엔드가 바뀐 모습이었다. 라벨이 stale 이었을 가능성이 크다.)
+        $since = (Get-Date).AddMinutes(-3)
+        $icLines = @(Get-Content $lg2 -Tail 2000 | Select-String -Pattern 'msg="inference compute"')
+        $ic = $null
+        foreach ($cand in $icLines) {
+            $tm = [regex]::Match($cand.Line, 'time=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})')
+            if ($tm.Success) {
+                $ts = [datetime]::MinValue
+                if ([datetime]::TryParse($tm.Groups[1].Value, [ref]$ts) -and $ts -ge $since) { $ic = $cand }
+            }
+        }
+        if ($null -eq $ic) {
+            Write-Host "  [WARN] 최근 3분 내 inference compute 줄이 없다 — 백엔드 미확인(이전 기동 줄은 읽지 않는다)"
+        }
+        if ($null -ne $ic) {
+            $lm = [regex]::Match($ic.Line, 'library=(\S+)')
+            $cm = [regex]::Match($ic.Line, 'compute=(\S+)')
+            Write-Host ("  library = " + $(if ($lm.Success) { $lm.Groups[1].Value } else { "?" }) +
+                        "  compute = " + $(if ($cm.Success) { $cm.Groups[1].Value } else { "?" }))
+        } else { Write-Host "  [WARN] inference compute 줄을 못 찾았다" }
     }
 
     Write-Host "⑤ 벤치"
