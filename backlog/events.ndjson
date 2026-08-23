@@ -3328,3 +3328,10 @@
 {"ts": "2026-08-23T09:25:51", "actor": "claude/lic-01-rights-provenance-mvp-2", "action": "add", "id": "OPS-50"}
 {"ts": "2026-08-23T09:26:20", "actor": "claude/lic-01-rights-provenance-mvp-2", "action": "add", "id": "OPS-51"}
 {"ts": "2026-08-23T09:26:23", "actor": "claude/lic-01-rights-provenance-mvp-2", "action": "add", "id": "OPS-52"}
+{"ts": "2026-08-23T11:09:49", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "start", "id": "OPS-50", "session": "claude/ops-50-51-52-moe-rocm-followup", "remote": "ok"}
+{"ts": "2026-08-23T11:09:58", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "start", "id": "OPS-51", "session": "claude/ops-50-51-52-moe-rocm-followup", "remote": "ok"}
+{"ts": "2026-08-23T11:10:29", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "done", "id": "OPS-50", "artifacts": ["PR#860"]}
+{"ts": "2026-08-23T11:10:31", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "done", "id": "OPS-51", "artifacts": ["PR#860"]}
+{"ts": "2026-08-23T11:10:49", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "start", "id": "OPS-52", "session": "claude/ops-50-51-52-moe-rocm-followup", "remote": "ok"}
+{"ts": "2026-08-23T11:10:57", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "done", "id": "OPS-52", "artifacts": ["PR#860"]}
+{"ts": "2026-08-23T14:26:47", "actor": "claude/ops-50-51-52-moe-rocm-followup", "action": "add", "id": "CUR-09-eos-unit-structure-review-adoption"}
