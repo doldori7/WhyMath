@@ -5,8 +5,8 @@ EOS 42번 모듈에 해당하는 Source Registry + Rights Registry의 영속 레
 Content-Source/Rights를 N:M으로 분리하고, License를 Permission primitive(JSONB)로
 정규화해 기계적 권리 판정을 지원한다.
 
-Revision ID: a1b2c3d4e5f6
-Revises: 374fb620de9e
+Revision ID: e07b1324d1d4
+Revises: d1e2f3c4b5a6
 Create Date: 2026-08-23 00:00:00.000000
 """
 
@@ -20,8 +20,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "a1b2c3d4e5f6"
-down_revision: str | None = "374fb620de9e"
+revision: str = "e07b1324d1d4"
+down_revision: str | None = "d1e2f3c4b5a6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
