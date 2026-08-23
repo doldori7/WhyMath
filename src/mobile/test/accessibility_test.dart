@@ -24,6 +24,8 @@ import 'package:korean_math_app/features/explore/presentation/explore_screen.dar
 import 'package:korean_math_app/features/home/presentation/home_screen.dart';
 import 'package:korean_math_app/features/problems/data/problem_models.dart';
 import 'package:korean_math_app/features/problems/data/problems_api.dart';
+import 'package:korean_math_app/features/profile/data/growth_evidence_api.dart';
+import 'package:korean_math_app/features/profile/data/growth_evidence_models.dart';
 import 'package:korean_math_app/features/profile/presentation/me_screen.dart';
 import 'package:korean_math_app/theme/app_theme.dart';
 
@@ -37,6 +39,36 @@ class _EmptyProblemsApi extends ProblemsApi {
   @override
   Future<List<ConceptDiagnosisItem>> getDiagnosisConcepts({int? limit}) async =>
       const <ConceptDiagnosisItem>[];
+}
+
+/// 성장 증거 조회를 즉시 완결하는 fake — [growthEvidenceApiProvider] override용.
+/// 실제 Dio 호출로 들어가면 `pumpAndSettle`이 영영 끝나지 않기 때문에(MOB-17),
+/// 접근성 스위트는 응답 *내용*이 아닌 렌더된 위젯의 대비·탭타깃만 검사한다.
+class _EmptyGrowthEvidenceApi extends GrowthEvidenceApi {
+  _EmptyGrowthEvidenceApi() : super(Dio());
+
+  static const _suppressed = GrowthEvidenceMetricView(
+    status: 'no_data',
+    exposableNow: false,
+    suppressedReason: '아직 충분한 학습 데이터가 모이지 않았어요.',
+  );
+
+  @override
+  Future<GrowthEvidenceResponse> getGrowthEvidence() async =>
+      const GrowthEvidenceResponse(
+        verifyPassRate: _suppressed,
+        sessionCompletionRate: _suppressed,
+        helpReductionSlope: _suppressed,
+        helpDemandSupplyRatio: _suppressed,
+        transferScore: _suppressed,
+        hintDepthReached: _suppressed,
+        masteryGainRate: _suppressed,
+        misconceptionResolutionRate: _suppressed,
+        selfSolveRate: _suppressed,
+        calibrationBrier: GrowthEvidenceBrierView(
+          narrative: '아직 예측 확신도 데이터가 없어요.',
+        ),
+      );
 }
 
 /// 기존 `MediaQueryData`(뷰포트 크기·기기 픽셀비 등)는 그대로 둔 채 `textScaler`만
@@ -73,12 +105,15 @@ Widget _wrap(Widget screen, Brightness brightness, {double textScale = 1.0}) {
   );
 }
 
-/// MeScreen 전용 wrap — 진단·학습 경로 조회(PATH-05)가 실 서버를 타지 않도록
-/// [problemsApiProvider]를 [_EmptyProblemsApi]로 갈아끼운다(그 외는 [_wrap]과 동일).
+/// MeScreen 전용 wrap — 진단·학습 경로(PATH-05)와 성장 증거(MOB-17) 조회가 실 서버를
+/// 타지 않도록 [problemsApiProvider]·[growthEvidenceApiProvider]를 fake로 갈아끼운다.
 Widget _wrapMeScreen(Brightness brightness, {double textScale = 1.0}) {
   const screen = MeScreen();
   return ProviderScope(
-    overrides: [problemsApiProvider.overrideWithValue(_EmptyProblemsApi())],
+    overrides: [
+      problemsApiProvider.overrideWithValue(_EmptyProblemsApi()),
+      growthEvidenceApiProvider.overrideWithValue(_EmptyGrowthEvidenceApi()),
+    ],
     child: MaterialApp(
       theme: brightness == Brightness.light
           ? WhyMathTheme.light
@@ -180,9 +215,9 @@ void main() {
       });
     }
 
-    // MeScreen — 기본(미인증) 상태: 학습 경로·진단 결과(빈 데이터 fake)+설정 플레이스홀더
-    // (비탭)+라벨. 라이트만. PATH-05 배선 후 진단·학습 경로 조회를 실 서버가 아니라
-    // [_EmptyProblemsApi]로 즉시 완결시켜(빈 리스트) pending timer를 남기지 않는다.
+    // MeScreen — 기본(미인증) 상태: 학습 경로·진단 결과(빈 데이터 fake)+성장 증거 fake+
+    // 설정 플레이스홀더(비탭)+라벨. 라이트만. 실 서버 호출은 [_EmptyProblemsApi]와
+    // [_EmptyGrowthEvidenceApi]로 즉시 완결시켜 pending timer를 남기지 않는다.
     testWidgets('MeScreen 접근성(라이트·배율$scaleLabel): 탭타깃·라벨·대비', (tester) async {
       await tester.pumpWidget(_wrapMeScreen(Brightness.light, textScale: textScale));
       await tester.pumpAndSettle();
