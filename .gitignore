@@ -14,11 +14,12 @@ venv/
 .env
 .env.local
 
-# Python (로컬 pip 설치 아티팩트 — ensurepip/pip가 프로젝트 루트에 설치한 경우)
-Include/
-Lib/
-Scripts/
-share/
+# Python 가상환경 아티팩트 — .venv/로 충분히 무시한다.
+# 루트의 Include/Lib/Scripts/share는 Windows Git이 core.ignorecase=true로 대소문자를
+# 구분하지 못해 실제 tracked 디렉토리인 scripts/ 등을 잘못 ignore할 위험이 있어
+# 명시 규칙에서 제외한다. 루트에 파이썬 아티팩트가 생기면 그때 수동으로 -f add.
+.venv/
+.venv*/
 
 # Python 테스트·린터 캐시
 .coverage
@@ -91,6 +92,9 @@ src/backend/Modelfile*.txt
 
 # 병렬 세션용 git worktree (추적 안 함 — scripts/new-session-worktree.sh 생성물)
 worktrees/
+
+# 로컬 작업/실험 디렉토리 (런타임 산출물, 대용량 wheel 등 — git 미추적)
+/work/
 
 
 # WhyMath 추가 보안 패턴 (자동 생성)

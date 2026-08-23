@@ -168,10 +168,13 @@ _SYSTEM_PROMPT = """당신은 중·고등학생용 수학 학습 앱의 문항 �
 - statement_mismatch: 발문의 수식/문장과 검산 조건이 서로 다름
 - broken_latex: LaTeX 수식 표기가 깨짐(중괄호 짝 불일치 등)
 
-응답 형식(반드시 JSON만):
+응답 형식(반드시 JSON만, 설명은 40자 이내 한 문장):
 {"has_defect": true/false, "defect_class": "answer_error" 또는 null, "reason": "짧은 근거"}
 
-has_defect가 false면 defect_class는 null로 하세요."""
+- JSON 외 텍스트를 쓰지 마세요.
+- reason은 40자 이내 한 문장으로만 쓰세요.
+- has_defect가 false면 defect_class는 null로 하세요.
+- "그러나" "따라서" 같은 접속어를 반복해 길게 설명하지 마세요."""
 
 
 def _format_item(item: SeededItem) -> str:
@@ -198,10 +201,11 @@ def _format_item(item: SeededItem) -> str:
 
 _JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
+    "additionalProperties": False,
     "properties": {
         "has_defect": {"type": "boolean"},
         "defect_class": {"type": ["string", "null"]},
-        "reason": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"], "maxLength": 80},
     },
     "required": ["has_defect"],
 }
