@@ -666,7 +666,7 @@ class TestActualUsageInstrumentation:
         assert len(provider.calls) == 1  # 두 번째는 provider 미호출
 
     async def test_async_enqueue_records_zero_cost(self) -> None:
-        """비동기(QUALITY) enqueue → cost_krw=0.0(로컬 27b=0원·생성 실측은 워커 몫)."""
+        """비동기(QUALITY) enqueue → cost_krw=0.0(로컬 MoE=0원·생성 실측은 워커 몫)."""
         trace = RecordingTraceSink()
 
         result = await generate(

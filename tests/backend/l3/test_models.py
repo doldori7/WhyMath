@@ -156,7 +156,7 @@ class TestRoutingDecisionValid:
             local_family=None,  # QUALITY는 패밀리 무관(03a §A.0)
             local_model=LocalModelTier.QUALITY,
             mode="async",
-            est_latency_ms=13886,
+            est_latency_ms=2300,
         )
         assert d.mode == "async"
         assert d.local_family is None
@@ -222,13 +222,13 @@ class TestRoutingDecisionInvariants:
             )
 
     def test_quality_sync_rejected(self) -> None:
-        """불변식 3 위반: QUALITY인데 mode='sync' (27b 동기 불가)."""
+        """불변식 3 위반: QUALITY인데 mode='sync' (MoE 동기 불가)."""
         with pytest.raises(ValidationError) as exc:
             RoutingDecision(
                 cost_tier=CostTier.LOCAL,
                 local_model=LocalModelTier.QUALITY,
                 mode="sync",
-                est_latency_ms=13886,
+                est_latency_ms=2300,
             )
         assert "불변식" in str(exc.value)
 
@@ -254,14 +254,14 @@ class TestRoutingDecisionInvariants:
             )
 
     def test_quality_with_family_rejected(self) -> None:
-        """불변식 4 위반: QUALITY인데 local_family 존재 (27b는 패밀리 무관)."""
+        """불변식 4 위반: QUALITY인데 local_family 존재 (MoE는 패밀리 무관)."""
         with pytest.raises(ValidationError) as exc:
             RoutingDecision(
                 cost_tier=CostTier.LOCAL,
                 local_family=ModelFamily.MATH,  # QUALITY는 패밀리 무관 → None이어야
                 local_model=LocalModelTier.QUALITY,
                 mode="async",
-                est_latency_ms=13886,
+                est_latency_ms=2300,
             )
         assert "불변식" in str(exc.value)
 

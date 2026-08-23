@@ -9,8 +9,8 @@
 end-to-end 동작하는지, (2) 실 broker로 send_task 디스패치가 되는지(워커 없이 PENDING
 관측)를 Kiki가 Phaiakes9에서 확인. 라이브러리(celery·redis)는 이미 의존성에 있다.
 
-QUALITY(27b) *실제 모델 실행*은 이 통합 테스트의 범위가 아니다(GPU·ollama 필요, p50≈
-14초). 여기서는 큐 *배관*(enqueue·result·디스패치)만 가짜 provider로 검증한다 —
+QUALITY(MoE) *실제 모델 실행*은 이 통합 테스트의 범위가 아니다(GPU·ollama 필요, p50≈
+2.3초). 여기서는 큐 *배관*(enqueue·result·디스패치)만 가짜 provider로 검증한다 —
 모델 실행 자체는 ollama 통합 테스트(test_ollama_integration.py)가 별도로 다룬다.
 
 설계 정본: docs/architecture/03a_l3_router_design.md §D.3(QUALITY 비동기 큐 경로).
@@ -85,7 +85,7 @@ def test_eager_apply_and_poll_e2e() -> None:
         local_family=None,
         local_model=LocalModelTier.QUALITY,
         mode="async",
-        est_latency_ms=13886,
+        est_latency_ms=2300,
     )
     payload = {
         PAYLOAD_PROMPT: "검증",

@@ -168,13 +168,10 @@ _SYSTEM_PROMPT = """당신은 중·고등학생용 수학 학습 앱의 문항 �
 - statement_mismatch: 발문의 수식/문장과 검산 조건이 서로 다름
 - broken_latex: LaTeX 수식 표기가 깨짐(중괄호 짝 불일치 등)
 
-응답 형식(반드시 JSON만, 설명은 40자 이내 한 문장):
+응답 형식(반드시 JSON만):
 {"has_defect": true/false, "defect_class": "answer_error" 또는 null, "reason": "짧은 근거"}
 
-- JSON 외 텍스트를 쓰지 마세요.
-- reason은 40자 이내 한 문장으로만 쓰세요.
-- has_defect가 false면 defect_class는 null로 하세요.
-- "그러나" "따라서" 같은 접속어를 반복해 길게 설명하지 마세요."""
+has_defect가 false면 defect_class는 null로 하세요."""
 
 
 def _format_item(item: SeededItem) -> str:
@@ -201,11 +198,10 @@ def _format_item(item: SeededItem) -> str:
 
 _JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "additionalProperties": False,
     "properties": {
         "has_defect": {"type": "boolean"},
         "defect_class": {"type": ["string", "null"]},
-        "reason": {"type": ["string", "null"], "maxLength": 80},
+        "reason": {"type": ["string", "null"]},
     },
     "required": ["has_defect"],
 }
@@ -529,19 +525,13 @@ def _write_audit(
     candidate_outcomes: list[ModelOutcome],
     report: BattleReport,
 ) -> None:
-    """문항별 판정 + as-found 요약 JSONL 저장.
-
-    PR #854 "측정 도구는 실패 경로부터 설계" — 상세 레코드와 as-found 요약은 다른
-    스키마이므로 ``record_type`` 태그로 명시적으로 구분한다. 파서가 tail을 시간 필터
-    없이 읽었을 때 요약 행을 오판정하지 않도록 한다.
-    """
+    """문항별 판정 + as-found 요약 JSONL 저장."""
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     with audit_path.open("w", encoding="utf-8") as fh:
         for baseline, candidate in zip(baseline_outcomes, candidate_outcomes, strict=True):
             fh.write(
                 json.dumps(
                     {
-                        "record_type": "verdict",
                         "slug": baseline.slug,
                         "ground_truth": baseline.ground_truth,
                         "baseline": {
@@ -575,7 +565,6 @@ def _write_audit(
         c = report.candidate.metrics
         conf = report.confidence
         summary = {
-            "record_type": "as_found_summary",
             "as_found_baseline_detection_rate": b.detection_rate,
             "as_found_baseline_false_alarm_rate": b.false_alarm_rate,
             "as_found_candidate_detection_rate": c.detection_rate,

@@ -146,7 +146,7 @@ class TestTelemetryFromUsage:
         log = generation_log_from_result(
             result,
             problem_id=uuid.uuid4(),
-            model_name="qwen3.5:27b",
+            model_name="qwen3:30b-a3b",
             cost_usd=0.0,  # 로컬 사전생성 = 0달러 확정
         )
         assert log.input_tokens == 120

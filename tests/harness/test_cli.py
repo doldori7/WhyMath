@@ -1159,6 +1159,108 @@ class TestStartOverlapPreflight:
         assert "paths 미선언" in capsys.readouterr().err  # 선언 권장 안내
 
 
+class TestTodoOverlapDetection:
+    """HARN-29 — todo 태스크끼리도 파일 범위 겹침을 검출해야 한다."""
+
+    PATHS = [".github/workflows/ci.yml", "tests/infra/**"]
+
+    def _add_todo(self, capsys, task_id: str, title: str) -> None:
+        assert (
+            cli.main(
+                [
+                    "add",
+                    "--id",
+                    task_id,
+                    "--title",
+                    title,
+                    "--track",
+                    "infra-debt",
+                    "--stage",
+                    "S3",
+                    "--subject",
+                    "cross",
+                    "--layer",
+                    "infra",
+                    "--path",
+                    self.PATHS[0],
+                    "--path",
+                    self.PATHS[1],
+                ]
+            )
+            == 0
+        )
+        capsys.readouterr()
+
+    def test_overlap_command_detects_todo_duplicates(self, seeded_repo: Path, capsys):
+        """overlap 명령이 todo끼리 겹침을 검출한다(기본: todo 포함)."""
+        self._add_todo(capsys, "T9-11-todo-a", "todo 겹침 A")
+        self._add_todo(capsys, "T9-12-todo-b", "todo 겹침 B")
+        capsys.readouterr()
+
+        assert cli.main(["overlap", "T9-11-todo-a"]) == 0
+        out = capsys.readouterr().out
+        assert "T9-12-todo-b" in out
+        assert "프리픽스 포함" in out  # pathscope.overlap이 실제 교집합/포함을 출력
+
+    def test_overlap_command_in_flight_only_excludes_todos(self, seeded_repo: Path, capsys):
+        """--in-flight-only 플래그가 todo를 제외하고 기존 동작을 보존한다."""
+        self._add_todo(capsys, "T9-13-todo-a", "todo 겹침 A")
+        self._add_todo(capsys, "T9-14-todo-b", "todo 겹침 B")
+        capsys.readouterr()
+
+        assert cli.main(["overlap", "T9-13-todo-a", "--in-flight-only"]) == 0
+        out = capsys.readouterr().out
+        assert "T9-14-todo-b" not in out
+        assert "in-flight" in out
+
+    def test_add_warns_when_paths_overlap_with_existing_todo(self, seeded_repo: Path, capsys):
+        """add가 기존 todo와 paths 겹치면 경고하지만 등록은 허용한다."""
+        self._add_todo(capsys, "T9-15-todo-a", "todo 겹침 A")
+        assert (
+            cli.main(
+                [
+                    "add",
+                    "--id",
+                    "T9-16-todo-b",
+                    "--title",
+                    "todo 겹침 B",
+                    "--track",
+                    "infra-debt",
+                    "--stage",
+                    "S3",
+                    "--subject",
+                    "cross",
+                    "--layer",
+                    "infra",
+                    "--path",
+                    self.PATHS[1],  # wildcard path로 프리픽스 포함 검출
+                ]
+            )
+            == 0
+        )
+        err = capsys.readouterr().err
+        assert "파일 범위 겹침" in err
+        assert "T9-15-todo-a" in err
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks["T9-16-todo-b"].status == "todo"  # 경고만, 차단 아님
+
+    def test_start_blocked_by_inflight_but_warns_about_todo(self, seeded_repo: Path, capsys):
+        """block 모드에서 in-flight와 겹치면 차단, 동시에 todo 겹침도 경고한다."""
+        import store as store_mod
+        from models import Policy
+
+        store_mod.save_policy(seeded_repo, Policy(path_overlap="block"))
+        self._add_todo(capsys, "T9-17-todo-a", "todo 겹침 A")
+        self._add_todo(capsys, "T9-18-todo-b", "todo 겹침 B")
+        assert cli.main(["start", "T9-17-todo-a", "--session", "claude/a", "--no-remote"]) == 0
+        capsys.readouterr()
+
+        assert cli.main(["start", "T9-18-todo-b", "--session", "claude/b", "--no-remote"]) == 1
+        err = capsys.readouterr().err
+        assert "착수 거부" in err
+        assert "T9-17-todo-a" in err
+
+
 class TestCheckEditPolicy:
     """check-edit 훅의 조율 정책 3분기 — scope_drift·path_overlap·adhoc_edit."""
 
