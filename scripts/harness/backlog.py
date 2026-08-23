@@ -543,6 +543,32 @@ def _inflight_tasks(
     return list(result.values())
 
 
+def _overlap_candidates(
+    backlog, remote_claimed: dict[str, str] | None, session: str | None, include_todo: bool
+) -> list[Task]:
+    """겹침 검사 대상 태스크 집합.
+
+    기본적으로 in-flight(in_progress·review) ∪ 원격 claim 을 포함한다.
+    include_todo=True면 todo 상태 태스크도 추가해 *등재 시점* 중복 검사가 가능하게 한다.
+    """
+    candidates = _inflight_tasks(backlog, remote_claimed, session)
+    if include_todo:
+        seen = {t.id for t in candidates}
+        for t in backlog.tasks.values():
+            if t.status == "todo" and t.id not in seen and t.paths:
+                candidates.append(t)
+    return candidates
+
+
+def _is_inflight_task(task: Task, remote_claimed: dict[str, str] | None) -> bool:
+    """원격 claim이 있거나 로컬 상태가 in_progress/review면 in-flight로 본다."""
+    if task.status in ("in_progress", "review"):
+        return True
+    if remote_claimed and task.id in remote_claimed:
+        return True
+    return False
+
+
 def _check_path_overlap(
     root: Path,
     backlog,
@@ -551,23 +577,30 @@ def _check_path_overlap(
     remote_claimed: dict[str, str] | None = None,
     session: str | None = None,
 ) -> str | None:
-    """start 프리플라이트 — 타 in-flight 태스크와 paths 교차 검사.
+    """start/add 프리플라이트 — 타 in-flight·todo 태스크와 paths 교차 검사.
+
+    in-flight 겹침: policy.path_overlap 에 따라 warn/block.
+    todo    겹침: 항상 warn (등재 시점 중복을 사용자에게 알리되 차단은 안 함).
 
     warn: stderr 경고 + policy_warn 이벤트 후 진행(None 반환).
     block: 오류 메시지 반환(호출측이 exit 1).
     """
     if policy.path_overlap == "off" or not task.paths:
         return None
-    inflight = [
-        t for t in _inflight_tasks(backlog, remote_claimed, session) if t.id != task.id and t.paths
+    candidates = [
+        t
+        for t in _overlap_candidates(backlog, remote_claimed, session, include_todo=True)
+        if t.id != task.id and t.paths
     ]
-    if not inflight:
+    if not candidates:
         return None
     files = pathscope.repo_files(root)
-    for other in inflight:
+    block_message: str | None = None
+    for other in candidates:
         hit = pathscope.overlap(task.id, task.paths, other.id, other.paths, files)
         if hit is None:
             continue
+        is_inflight = _is_inflight_task(other, remote_claimed)
         desc = (
             f"{task.id} ↔ {other.id}(세션: {other.session or '?'}) "
             f"파일 범위 겹침 — {hit.describe()}"
@@ -579,12 +612,15 @@ def _check_path_overlap(
             rule="path_overlap",
             other=other.id,
             detail=hit.describe(),
-            mode=policy.path_overlap,
+            mode=policy.path_overlap if is_inflight else "warn",
         )
-        if policy.path_overlap == "block":
-            return f"착수 거부 — {desc}\n  겹침 해소(paths 조정·상대 태스크 완료 대기) 후 재시도"
+        if is_inflight and policy.path_overlap == "block":
+            block_message = (
+                f"착수 거부 — {desc}\n  겹침 해소(paths 조정·상대 태스크 완료 대기) 후 재시도"
+            )
+            continue  # todo 겹침도 경고로 계속 출력
         print(f"⚠ {desc}", file=sys.stderr)
-    return None
+    return block_message
 
 
 def cmd_done(root: Path, args: argparse.Namespace) -> int:
@@ -1000,6 +1036,15 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         notes=args.notes or "",
         updated=_today(),
     )
+    # [프리플라이트] 파일 범위 겹침 — 등재 시점에도 todo·in-flight 중복을 검출
+    # (start와 동일한 함수를 재사용; todo 겹침은 경고, in-flight 겹침은 policy에 따름)
+    policy, _ = store.load_policy(root)
+    overlap_error = _check_path_overlap(
+        root, backlog, task, policy, remote_claimed=None, session=None
+    )
+    if overlap_error:
+        return _fail(overlap_error)
+
     backlog.tasks[task.id] = task
     errors = store.validate_backlog(backlog)
     # 새 태스크가 유발한 오류만 걸러 거부 (기존 백로그의 무관한 경고에 볼모 잡히지 않게)
@@ -1398,7 +1443,11 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
-    """태스크 간 파일 범위 겹침 진단 — 착수 전 수동 확인용."""
+    """태스크 간 파일 범위 겹침 진단 — 착수 전 수동 확인용.
+
+    기본적으로 todo를 포함한 전체 상태를 비교한다. 오직 in-flight만 보려면
+    --in-flight-only 를 사용한다.
+    """
     backlog, _ = _load(root)
     task = backlog.tasks.get(args.id)
     if task is None:
@@ -1411,13 +1460,17 @@ def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
         if not others:
             return _fail(f"태스크 '{args.against}' 없음")
     else:
+        include_todo = not args.in_flight_only
         others = [
             t
-            for t in backlog.tasks.values()
-            if t.id != task.id and t.status in ("in_progress", "review") and t.paths
+            for t in _overlap_candidates(
+                backlog, remote_claimed=None, session=None, include_todo=include_todo
+            )
+            if t.id != task.id and t.paths
         ]
     if not others:
-        print("비교 대상 in-flight 태스크 없음")
+        scope_msg = "전체" if not args.in_flight_only else "in-flight"
+        print(f"비교 대상 {scope_msg} 태스크 없음")
         return 0
     files = pathscope.repo_files(root)
     found = False
@@ -1427,7 +1480,8 @@ def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
             found = True
             print(f"⚠ {task.id} ↔ {other.id} (세션: {other.session or '?'}): {hit.describe()}")
     if not found:
-        print(f"✔ {task.id}: 겹침 없음 ({len(others)}건 비교)")
+        scope_msg = "전체" if not args.in_flight_only else "in-flight"
+        print(f"✔ {task.id}: {scope_msg} 범위에서 겹침 없음 ({len(others)}건 비교)")
     return 0
 
 
@@ -1677,7 +1731,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")
     p.add_argument("id")
-    p.add_argument("--against", help="특정 태스크와만 비교 (기본: 전체 in-flight)")
+    p.add_argument("--against", help="특정 태스크와만 비교 (기본: 전체)")
+    p.add_argument(
+        "--in-flight-only",
+        action="store_true",
+        help="비교 대상에서 todo 태스크 제외 (기존 동작)",
+    )
     p.set_defaults(func=cmd_overlap)
 
     p = sub.add_parser("policy", help="조율 정책 표시·warn 측정 리포트")
