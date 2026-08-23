@@ -5,7 +5,7 @@ QUALITY 생성 태스크의 *핵심 로직*(run_quality_generation_payload)을 b
 hermetic). 등록된 Celery 태스크는 이 플레인 함수 위의 얇은 래퍼이므로(register_quality_task),
 함수만 검증하면 태스크 본체가 검증된 셈이다.
 
-설계 정본: docs/architecture/03a_l3_router_design.md §D.3(QUALITY 비동기)·§A.0(27b 해석).
+설계 정본: docs/architecture/03a_l3_router_design.md §D.3(QUALITY 비동기)·§A.0(MoE 해석).
 """
 
 from __future__ import annotations
@@ -47,14 +47,14 @@ class FakeProvider:
 
 
 def _quality_decision() -> RoutingDecision:
-    """QUALITY(async) 결정 — 27b, 패밀리 무관(불변식 4)."""
+    """QUALITY(async) 결정 — qwen3:30b-a3b(MoE), 패밀리 무관(불변식 4)."""
     return RoutingDecision(
         cost_tier=CostTier.LOCAL,
         local_family=None,
         local_model=LocalModelTier.QUALITY,
         mode="async",
         reason="self_verify",
-        est_latency_ms=13886,
+        est_latency_ms=2300,
         est_cost_krw=0.0,
     )
 
@@ -94,17 +94,17 @@ class TestRunQualityGenerationPayload:
         assert decision.local_model == LocalModelTier.QUALITY.value
         assert decision.mode == "async"
 
-    def test_quality_resolves_to_27b_model_id(self) -> None:
-        """재구성된 QUALITY 결정은 resolve_model로 qwen3.5:27b가 된다(03a §A.0).
+    def test_quality_resolves_to_moe_model_id(self) -> None:
+        """재구성된 QUALITY 결정은 resolve_model로 qwen3:30b-a3b(MoE)가 된다(03a §A.0).
 
-        태스크가 provider에 넘기는 결정으로 실제 모델 ID가 27b인지 확인한다 — 워커가
+        태스크가 provider에 넘기는 결정으로 실제 모델 ID가 QUALITY MoE인지 확인한다 — 워커가
         OllamaProvider를 통해 호출할 모델이 QUALITY 전용 모델임을 보장.
         """
         provider = FakeProvider()
         run_quality_generation_payload(_quality_payload(), provider=provider)
         _, _, decision = provider.calls[0]
         model_id = resolve_model(decision.local_family, decision.local_model)
-        assert model_id == QUALITY_MODEL_ID == "qwen3.5:27b"
+        assert model_id == QUALITY_MODEL_ID == "qwen3:30b-a3b"
 
     def test_missing_payload_key_raises(self) -> None:
         """payload 스키마가 깨지면(키 누락) KeyError — 워커가 실패로 기록."""
@@ -128,7 +128,7 @@ class TestRunQualityGenerationPayload:
                 "local_model": "quality",
                 "mode": "sync",  # 위반
                 "reason": "",
-                "est_latency_ms": 13886,
+                "est_latency_ms": 2300,
                 "est_cost_krw": 0.0,
             },
         }
@@ -302,7 +302,7 @@ def test_register_quality_task_body_delegates_to_plain_function(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 워커 계측 (S1 게이트 ② — QUALITY 27b 생성 완료의 실측 usage·cost_krw 기록)
+# 워커 계측 (S1 게이트 ② — QUALITY MoE 생성 완료의 실측 usage·cost_krw 기록)
 # ──────────────────────────────────────────────────────────────────────────
 class UsageQualityProvider:
     """가짜 provider — 텍스트 + 실측 usage 반환(워커 trace 배선 검증)."""
@@ -332,7 +332,7 @@ class TestWorkerTraceInstrumentation:
         assert text == "긴 검증 출력"  # 반환 계약(str) 불변
         assert len(trace.records) == 1
         rec = trace.records[0]
-        assert rec["cost_krw"] == 0.0  # QUALITY=LOCAL 27b=0원 확정
+        assert rec["cost_krw"] == 0.0  # QUALITY=LOCAL MoE=0원 확정
         assert rec["input_tokens"] == 200
         assert rec["output_tokens"] == 800
         assert rec["latency_ms"] == 13900.0

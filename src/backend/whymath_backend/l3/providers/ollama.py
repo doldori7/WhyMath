@@ -99,7 +99,7 @@ class OllamaStatus:
         return tuple(m.model_id for m in self.models if not m.present)
 
 
-# 라우팅이 실제로 요구하는 로컬 모델 ID 전체 = 매트릭스(FAST/MID) + QUALITY(27b).
+# 라우팅이 실제로 요구하는 로컬 모델 ID 전체 = 매트릭스(FAST/MID) + QUALITY(MoE).
 # 03a §A.0. /status가 이 집합의 설치 여부를 점검한다.
 _REQUIRED_MODEL_IDS: tuple[str, ...] = (
     *sorted(set(LOCAL_MODEL_MATRIX.values())),
@@ -138,14 +138,23 @@ def _extract_text(generate_response: Any) -> str:
     """ollama generate 응답에서 생성 텍스트를 방어적으로 추출.
 
     pydantic `GenerateResponse`(`.response`) 또는 dict(`{"response": ...}`)
-    양쪽을 흡수한다. 둘 다 아니면 빈 문자열.
+    양쪽을 흡수한다. Qwen3 계열은 json_schema format 사용 시 출력을 `thinking` 필드에
+    담고 `response`는 비어 있을 수 있어 `thinking`도 fallback으로 본다.
     """
-    if hasattr(generate_response, "response"):
-        text = generate_response.response
-        return text if isinstance(text, str) else ""
-    if isinstance(generate_response, dict):
-        text = generate_response.get("response", "")
-        return text if isinstance(text, str) else ""
+
+    def _attr(name: str) -> str | None:
+        if hasattr(generate_response, name):
+            v = getattr(generate_response, name)
+            return v if isinstance(v, str) else None
+        if isinstance(generate_response, dict):
+            v = generate_response.get(name)
+            return v if isinstance(v, str) else None
+        return None
+
+    for field in ("response", "thinking"):
+        text = _attr(field)
+        if text:
+            return text
     return ""
 
 
@@ -256,7 +265,7 @@ class OllamaProvider:
 
         - CostTier.LOCAL이 아니면 즉시 거부(클라우드는 S5 범위 밖).
         - LOCAL FAST/MID/QUALITY는 resolve_model()로 실제 모델 ID를 얻어 호출한다
-          (QUALITY→qwen3.5:27b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0;
+          (QUALITY→qwen3:30b-a3b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0;
           VISION/FAST→qwen3-vl 멀티모달).
         - `images`(base64 목록)가 주어지면 ollama generate의 `images=`로 전달한다 —
           VL 모델(qwen3-vl)이 이미지를 받는다. None이면 기존 텍스트 호출과 동일.
@@ -268,7 +277,7 @@ class OllamaProvider:
           코드펜스·필드 누락을 원천 차단). None(기본)이면 format을 싣지 않아 자유 텍스트 생성
           — *기존 동작 무변경*. 문법 제약은 형식만 보장하며 수학적 진실 검증은 하류 게이트 소관.
 
-        주의: QUALITY(27b)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
+        주의: QUALITY(MoE)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
         비동기 워커가 같은 제공자로 QUALITY를 호출할 수 있어야 하기 때문.
 
@@ -339,4 +348,82 @@ class OllamaProvider:
                 for mid in _REQUIRED_MODEL_IDS
             ),
             error=None,
+        )
+
+
+class FixedModelOllamaProvider(OllamaProvider):
+    """강등전·측정 전용 — 라우터가 고른 모델 대신 고정 모델 ID로 호출하는 Ollama provider.
+
+    `OllamaProvider`를 상속해 `_get_client()`·`_extract_*` 로직을 재사용하고,
+    `generate()`에서만 `resolve_model()`을 건너뛰어 `--model-id` 인자로 들어온 ID를
+    직접 Ollama에 넘긴다. 이를 통해 운영 라우터 매트릭스와 무관하게 특정 모델의
+    정확도·지연을 측정한다(CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계 금지" —
+    실패·오류 경로도 동일한 provider 인터페이스로 처리).
+
+    `timeout`·`num_ctx`·`num_predict`는 강등전에 필요한 긴 타임아웃·컨텍스트 제한·
+    출력 길이 제한을 주입하기 위한 것이다. 모두 선택 인자 — 미지정 시 Ollama 기본값.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        client: _OllamaClient | None = None,
+        settings: Settings | None = None,
+        timeout: float | None = None,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+    ) -> None:
+        if settings is not None and timeout is not None:
+            settings = settings.model_copy(update={"ollama_request_timeout_s": timeout})
+        elif timeout is not None:
+            settings = get_settings().model_copy(update={"ollama_request_timeout_s": timeout})
+        super().__init__(client=client, settings=settings)
+        self._model_id = model_id
+        self._num_ctx = num_ctx
+        self._num_predict = num_predict
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        """고정 모델 ID로 생성한다 — `resolve_model`을 생략한다(그 외는 부모와 동일)."""
+        cost = _as_cost_tier(decision.cost_tier)
+        if cost is not CostTier.LOCAL:
+            raise ValueError(
+                f"FixedModelOllamaProvider는 로컬 결정만 처리한다"
+                f"(받은 cost_tier={decision.cost_tier})."
+            )
+        call_kwargs: dict[str, Any] = {
+            "model": self._model_id,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+        }
+        if images is not None:
+            call_kwargs["images"] = images
+        options: dict[str, Any] = {}
+        if self._num_ctx is not None:
+            options["num_ctx"] = self._num_ctx
+        if self._num_predict is not None:
+            options["num_predict"] = self._num_predict
+        if temperature is not None:
+            options["temperature"] = temperature
+        if options:
+            call_kwargs["options"] = options
+        if json_schema is not None:
+            call_kwargs["format"] = dict(json_schema)
+        client = self._get_client()
+        start = time.monotonic()
+        response = await client.generate(**call_kwargs)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        return GenerationResult(
+            text=_extract_text(response),
+            usage=_extract_usage(response, latency_ms),
         )

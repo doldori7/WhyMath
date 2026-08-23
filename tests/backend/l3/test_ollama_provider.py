@@ -131,8 +131,8 @@ class TestGenerate:
 
         assert client.generate_calls[0]["model"] == "qwen2.5:7b"
 
-    async def test_quality_resolves_27b_family_agnostic(self) -> None:
-        """QUALITY(패밀리 None) → qwen3.5:27b. 제공자는 동기 차단을 하지 않는다.
+    async def test_quality_resolves_moe_family_agnostic(self) -> None:
+        """QUALITY(패밀리 None) → qwen3:30b-a3b(MoE). 제공자는 동기 차단을 하지 않는다.
 
         QUALITY 동기 차단은 파이프라인 책임이다(03a §D.3). 제공자는 비동기 워커가
         같은 코드로 호출할 수 있도록 모델 해석·호출만 한다.

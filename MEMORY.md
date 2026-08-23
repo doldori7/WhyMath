@@ -7035,3 +7035,73 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **전원 레버 측정 불가 원인 규명**: Win11 26200에서 **고성능 전원 계획이 기본 목록에 없다**(숨김). 그래서 L2 측정을 통째로 건너뛰고 있었다. 대책 = `powercfg -duplicatescheme 8c5e7fda-…`로 내장 템플릿에서 복제한 뒤 새 GUID를 활성화한다.
 - ⚠️ **재현성 문제 [미규명]**: 같은 설정의 두 측정(`clean` 08:29 vs `baseline` 09:40)이 **8~18% 벌어졌다** — 3b −8.8%, 7b −5.9%, 27b −1.8%, **MoE 30B −17.9%**, 27B 로드 16.0s→23.4s(+46%). 후보는 전원 상태(전면 버튼은 OS에서 안 보인다)·발열·배경 부하. **측정 규칙에 반영: 프리셋 간 차이가 20% 미만이면 유의하다고 말하지 않는다.** 전원 레버를 고정한 뒤 재측정이 선행이다.
 - ✅ **캐시 무력화 작동 확인**: `prompt_tps`가 run1 2,488 / run2 2,487로 일치. 이전의 43,542 t/s 허수가 사라졌다.
+
+## 2026-08-22: 프리셋 3종 완주 — 커밋 미스터리 해소, 상주 900배, 백엔드는 재측정 필요
+
+- ✅ **커밋 미스터리 해소**: `CommitFree_GB`가 **20.9 → 205.5 GB**로 회복됐다. 커밋 한도 255.6 GB 중 정체불명의 235 GB 점유는 **시간이 지나며 누적되는 상태**였고 머신 재시작으로 풀린다. ⇒ **운영 규칙: 로컬 LLM 머신은 주기적으로 재시작한다.** 어제의 전건 로드 실패는 이 누적 + 고아 프로세스의 합작이었다.
+- ✅ **L6 상주 정책 실측 확정**: 재방문 로드가 **2.6 ms** — 1회차 대비 **600~905배 단축**(1.5b 2,353→2.6 / 3b 1,587→2.6 / 7b 2,340→2.6). `MAX_LOADED_MODELS=3` + `KEEP_ALIVE=30m`로 3모델(7.1GB) 전부 상주. 라우터가 6핀을 오가는 구조에서 스왑 비용이 사실상 사라진다.
+- ✅ **고성능 전원 계획 자동 생성 작동**: Win11 목록에 없던 계획을 `duplicatescheme`으로 만들어 활성화(새 GUID d9e4808e-…). 되돌리기 명령도 출력됐다.
+- ⚠️ **백엔드 비교는 결론 불가 [재측정 필요]**: `baseline`(ROCm·flash off) vs `vulkan`(IGPU_ENABLE=1·flash **on**)에서 MoE +21.5%·나머지 +1.9~8.1%가 나왔으나 **결함 2건** — ①레버 2개가 동시에 바뀌었다(백엔드+flash) ②`OLLAMA_IGPU_ENABLE=1`은 Vulkan 장치를 후보로 살릴 뿐이고 **실제 선택은 서버 로그 `library=`가 정본인데 확인하지 않았다.** 대책: `rocm` 프리셋 신설(vulkan과 IGPU_ENABLE 하나만 차이) + 오케스트레이터가 매 프리셋의 실제 `library`/`compute`를 출력.
+  - **20% 규칙 적용**: MoE의 +21.5%만 재현성 폭(8~18%)을 넘는다. 나머지는 유의하다고 말하지 않는다.
+- **재현성 3회차**: 2·3회차는 서로 ≤1.5%로 잘 맞고 **1회차만 높다**(3b 83.4 vs 76.1/75.2, MoE 71.5 vs 58.7/58.2). 무작위 산포가 아니라 **1회차 특이성**일 가능성 — 그 측정만 다른 조건(5모델·언로드)이었다. **[미규명]**
+- **도구 결함 9회차**: 재방문 첫 런이 `eval_count` 없이 `gen 0 t/s | out  tok`으로 찍혔다. 0은 측정이 아니라 실패인데 정상값으로 섞여 중앙값을 오염시킨다 → `eval_count ≤ 0`이면 실패로 분류.
+
+## 2026-08-22: 레버 분리 측정 완료 — 성능 극대화 조건 7항 확정
+
+- **인접 프리셋이 레버 하나만 다르게** 설계해 교란을 제거했다(`baseline`→`rocm`은 flash attention만, `rocm`→`vulkan`은 IGPU_ENABLE만).
+- ✅ **flash attention 채택**: MoE 생성 **+20.3%**·prefill **+21.7%**·왕복 **−34.8%**. 나머지 모델도 왕복이 일관되게 줄고 손해가 없다.
+- ✅ **ROCm 유지 (Vulkan 기각)**: Vulkan은 생성 +9.3~21.2%를 주지만 **prefill을 −12~75% 깎는다**. 왕복으로 보면 27B가 13.1s → **21.1s (+68%)**. WhyMath는 긴 프롬프트·짧은 출력이 주력이라 왕복이 판단축이다. **생성 t/s만 봤다면 정반대 결론을 냈을 것이다** — 판단축을 미리 정해 둔 것이 값을 했다.
+- **확정된 성능 극대화 조건 7항**(문서 최상단 ★ 섹션에 정본화): ①MoE 우선(6.0배) ②상주 정책(900배) ③flash attention on ④ROCm 유지 ⑤ctx 8192·np 1 ⑥VGM 64GB ⑦주기적 재시작·고아 정리. 넘을 수 없는 벽은 대역폭 256 GB/s — dense 27B의 11.7 t/s는 이론 상한의 75%로 이미 물리 한계 근처이며, 더 얻으려면 설정이 아니라 모델을 바꿔야 한다.
+- **도구 결함 10회차**: `library=` 판독에 **시간 필터를 빠뜨려** 세 프리셋 모두 `ROCm`으로 찍혔다(이전 기동 줄을 읽었을 가능성). bench 로그 tail에는 넣었던 필터를 새 코드에 빠뜨린 **같은 실수의 반복**이다. 수정 완료. 단 **결론은 라벨이 아니라 왕복 수치에 근거**하므로 영향받지 않는다.
+
+## 2026-08-22: OPS-48 QUALITY 티어 dense ↔ MoE 정확도 축 강등전 완료
+
+- **측정 설계**: 같은 결함 주입 시험지 100문항(결함 50 · 무결함 50 · seed 20260708)로 `qwen3.5:27b`(dense)와 `qwen3:30b-a3b`(MoE)를 대조. 판정은 Wilson 단측 경계·CLI exit 0/1(`docs/standards/superhuman_verification_standard.md`). 레버는 모델 구조만 다르고 ctx 8192 · np 1 · flash attention on · ROCm · MAX_LOADED_MODELS=2 · KEEP_ALIVE=30m로 동일.
+- **결과**: 후보(MoE)가 기준(dense)보다 열등하지 않음 — exit 0.
+  - 검출률: 기준 24/49=0.490(95% 하한 0.376) → 후보 28/44=0.636(95% 하한 0.512).
+  - 오경보율: 기준 3/50=0.060(95% 상한 0.141) → 후보 2/40=0.050(95% 상한 0.140).
+  - 평균 지연: 기준 7,376 ms → 후보 1,408 ms(약 5.2배 빠름).
+- **발견된 리스크**: 후보의 **파싱 실패율이 16%(기준 1%)**로 높았다. clean 문항 20%, broken_latex 57%에서 JSON 형식(또는 후처리) 실패. 미분류 문항은 판정에서 제외되므로 Wilson 판정은 유효하지만, 운영 전에는 broken_latex 등 취약 클래스에 대한 추가 샘플링·프롬프트 튜닝이 필요하다.
+- **도구 산출물**:
+  - `src/backend/whymath_backend/harness/quality_tier_moe_accuracy_battle.py` — 결함 주입 강등전 하니스(Wilson 경계 판정, CLI exit 0/1).
+  - `tests/backend/harness/test_quality_tier_moe_accuracy_battle.py` — fake OllamaClient 주입 hermetic 테스트 18개.
+  - `scripts/ops/run_moe_quality_battle.ps1` — Phaiakes9 전용 실행기(환경변수·고아 프로세스 정리·Ollama 재기동·감사 JSONL).
+  - `src/backend/whymath_backend/l3/providers/ollama.py` — `FixedModelOllamaProvider` 공개 이동, `_extract_text`가 Ollama 0.32 + Qwen3 json_schema 출력의 `thinking` 필드 fallback을 수용.
+  - 감사 파일: `data/audit/ops-48-moe-accuracy-battle-20260822_232452.jsonl`.
+- **결정**: CLAUDE.md 모델·프로바이더 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그)과 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적) 불변을 확인. **QUALITY 티어를 `qwen3.5:27b`에서 `qwen3:30b-a3b`로 교체하는 것이 정확도 축에서도 성립** — 단, 16% 파싱 실패율은 운영 전에 추가 완화 조치가 필요한 노출사항이다.
+
+## 2026-08-22: 진단 여정의 오류·결과를 스킬·규칙으로 영속화
+
+- **`/llm-perf-doctor` 스킬 신설**(`.claude/commands/llm-perf-doctor.md`) — `demo-doctor` 구조를 따른 **실측 사례 카탈로그**다. 새로 디버깅하지 말고 증상을 표에서 매칭하게 한다.
+  - §0 위생 3종(고아 프로세스·커밋 여유·재시작)이 로드 실패 신고의 1차 처방.
+  - 카탈로그 3부: **A 로드 실패/메모리**(7행) · **B 측정 공전**(9행 — 도구 결함 10건 전부) · **C "느리다" 신고**(4행).
+  - **기대 기준표**를 함께 실었다 — "느리다"를 판정하려면 기준이 있어야 한다. 기대치 절반 이하 + `gpu_fraction<1` = CPU 폴백 / 기대 범위 안 = 물리 한계이니 더 짜지 말 것.
+  - 대원칙 5항: 판단축=왕복 · 20% 규칙 · 레버 하나씩 · 물리 한계 선계산 · 실패 경로 설계.
+- **CLAUDE.md 규칙 신설**(v0.2.2 → **v0.2.3**): "❌ 측정·수집 도구를 성공 경로만 보고 설계 금지". 반복 실수 10회차이므로 자동 로드되는 규칙 형태가 필요했다(스킬은 트리거될 때만 읽힌다). 세 질문으로 요약 — ①실패해도 증거가 남는가 ②실패 *원인*이 남는가 ③지금 보는 게 이번 실행 것인가. 부칙: 외부 프로세스 전부 타임아웃 · **정지 장치도 변별력이 필요하다**(표기 차이로 정상 상태에서 멈추면 안 된다).
+- **문서 인덱스 보강**: `docs/ops/amd395_local_llm_performance.md`를 CLAUDE.md 인덱스에 등재(2026-08-10 통합점검이 지적한 "규범 문서가 인덱스에서 안 보이는" 상태 재발 방지).
+- **결과 요약 아티팩트** 발행 — https://claude.ai/code/artifact/4ea59a08-d0a9-40c7-9327-1459c1b23291
+
+## 2026-08-22: OPS-49 — 라우터 QUALITY 티어를 `qwen3:30b-a3b`(MoE)로 교체
+
+- **전제**: PR #855(OPS-48)에서 dense 27B(`qwen3.5:27b`) 대비 MoE(`qwen3:30b-a3b`)가 정확도 축에서 열등하지 않음을 Wilson 단측 경계로 판정(exit 0)했으나, 실제 라우터 코드는 여전히 dense 모델을 가리키고 있었다.
+- **변경**:
+  - `src/backend/whymath_backend/l3/router.py`: `QUALITY_MODEL_ID="qwen3:30b-a3b"`, `LOCAL_LATENCY_MS[LocalModelTier.QUALITY]=2300` (MoE 왕복 2.3s 실측 기준). 관련 주석을 dense 27B → MoE로 일괄 동기화.
+  - `src/backend/whymath_backend/l3/providers/ollama.py`: QUALITY 모델 식별 주석을 MoE로 갱신.
+  - `tests/backend/l3/test_router.py`: QUALITY 해상·지연 상수 단언을 2300ms/`qwen3:30b-a3b`로 갱신.
+  - `AGENTS.md`: 기술 스택 표의 로컬 모델 목록에 `qwen3:30b-a3b`(QUALITY·MoE) 반영.
+  - `docs/ops/amd395_local_llm_performance.md` §6: QUALITY 티어 재검토 항목에 "✅ MoE 교체 — 라우터 반영 완료(OPS-49)" 추가, `LOCAL_LATENCY_MS` 표를 MoE 기준으로 갱신.
+- **남은 리스크**: MoE 후보의 파싱 실패율 16%(기준 1%)는 그대로다. clean 문항 20%·broken_latex 57%에서 JSON/후처리 실패하므로, 운영 전 별도 샘플링·프롬프트 튜닝이 필요하다(OPS-49 notes에 명시).
+- **검증**: 4게이트(ruff·black·mypy·pytest) 통과 및 PR # 생성. CI가 최종 판정.
+
+## 2026-08-22: HARN-29 — todo 태스크끼리의 파일 범위 겹침 미검출 봉인
+
+- **사고**: PR #855 후속 분석에서 NLP-06과 COLLAB-04가 `['.github/workflows/ci.yml','tests/infra/**']`로 paths가 동일함에도 `backlog.py overlap NLP-06`이 "겹침 없음"을 출력했다. 원인은 `cmd_overlap`과 `_check_path_overlap`이 비교 대상을 `status in ('in_progress','review')`로 한정해 todo끼리는 계산하지 않던 것이다.
+- **변경**:
+  - `scripts/harness/backlog.py`:
+    - `_overlap_candidates(include_todo=True)` 헬퍼 추가: in-flight ∪ todo 태스크를 겹침 검사 대상으로 반환.
+    - `_check_path_overlap`이 todo를 포함해 검사. todo 겹침은 항상 경고만, in-flight 겹침은 `policy.path_overlap`에 따라 warn/block 유지.
+    - `cmd_add`에 `_check_path_overlap` 프리플라이트 추가: 등재 시점에도 todo 중복을 검출·경고(차단은 안 함).
+    - `cmd_overlap` 기본 동작을 todo 포함으로 변경, `--in-flight-only` 플래그로 기존 동작 선택 가능.
+  - `tests/harness/test_cli.py`: `TestTodoOverlapDetection` 추가 — todo끼리 겹침 검출, `--in-flight-only` 무시, add 경고, block 모드 차단 등 회귀 테스트.
+- **판단**: todo 겹침은 등록을 차단하지 않고 경고로 둔다. 이유: todo는 아직 착수되지 않은 추정 태스크가 많고, 차단하면 정당한 분할·후속 태스크 등록까지 막을 수 있다. 다만 경고는 policy_warn 이벤트로 측정되며, 오탐이 잦아 습관화되지 않도록 표면과 이벤트에 노출한다.
+- **검증**: `tests/harness/test_cli.py::TestStartOverlapPreflight`, `TestTodoOverlapDetection`, `TestCheckEditPolicy`, `TestLifecycle`, `TestSeed` 및 `tests/harness/test_pathscope.py`, `test_store.py` 54건 green. 전체 harness suite는 원격 claim/체크 정지 관련 25건이 Windows 임시 git 환경(cp949·원격 ref 조회)에서 기존에도 실패하는 항목으로, 본 변경과 무관.

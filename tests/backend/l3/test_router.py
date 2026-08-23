@@ -177,7 +177,7 @@ class TestAxis2LocalTier:
         assert d.est_latency_ms == LOCAL_LATENCY_MS[LocalModelTier.QUALITY]
 
     def test_rule2_async_generate_quality(self, router: Router) -> None:
-        """규칙2: 비동기 + generate → QUALITY/async (27b 비동기 전용)."""
+        """규칙2: 비동기 + generate → QUALITY/async (MoE 비동기 전용)."""
         d = router.route(_req(task_type="generate", sync=False))
         assert d.local_model == LocalModelTier.QUALITY
         assert d.mode == "async"
@@ -326,7 +326,7 @@ class TestAxis3ModelFamily:
         assert d.local_family == ModelFamily.MATH
 
     def test_quality_clears_family(self, router: Router) -> None:
-        """QUALITY로 합류하면 local_family=None (27b 패밀리 무관, 03a §A.0 불변식 4).
+        """QUALITY로 합류하면 local_family=None (MoE 패밀리 무관, 03a §A.0 불변식 4).
 
         ② depth(패밀리 MATH) + 비동기 hard → 크기 규칙2가 QUALITY로 올림.
         패밀리는 결정됐으나 QUALITY라 local_family는 비워진다(reason엔 남음).
@@ -368,7 +368,7 @@ class TestResolveModel:
         assert resolve_model(ModelFamily.GENERAL, LocalModelTier.MID) == "qwen2.5:7b"
 
     def test_resolve_quality_family_irrelevant(self) -> None:
-        """QUALITY는 패밀리 무관 → 항상 qwen3.5:27b (None이어도 동작)."""
+        """QUALITY는 패밀리 무관 → 항상 qwen3:30b-a3b (None이어도 동작)."""
         assert resolve_model(None, LocalModelTier.QUALITY) == QUALITY_MODEL_ID
         assert resolve_model(ModelFamily.MATH, LocalModelTier.QUALITY) == QUALITY_MODEL_ID
 
@@ -553,7 +553,7 @@ class TestEstimators:
         """로컬 지연 — 03a §A.1 벤치 p50."""
         assert local_latency(LocalModelTier.FAST) == 1010
         assert local_latency(LocalModelTier.MID) == 3918
-        assert local_latency(LocalModelTier.QUALITY) == 13886
+        assert local_latency(LocalModelTier.QUALITY) == 2300
 
     def test_cloud_latency_values(self) -> None:
         """클라우드 지연 — placeholder 상수."""

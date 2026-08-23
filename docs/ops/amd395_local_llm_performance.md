@@ -6,6 +6,36 @@
 
 ---
 
+## ★ 확정 결론 — Phaiakes9 성능 극대화 조건 (2026-08-22 실측)
+
+레버를 하나씩 갈라 측정한 최종 권고. **왕복 지연**(prefill + 생성)이 판단축이다 — WhyMath 호출은 긴 프롬프트·짧은 출력이 주력이기 때문이다.
+
+| # | 조건 | 값 | 실측 근거 |
+|---|---|---|---|
+| 1 | **모델 구조** | dense보다 **MoE** | 27B dense 11.7 t/s vs 30B-A3B **70.1** t/s — **6.0배**. 최대 레버 |
+| 2 | **모델 상주** | `OLLAMA_MAX_LOADED_MODELS=3`+ · `OLLAMA_KEEP_ALIVE=30m` | 재방문 로드 2,340 ms → **2.6 ms** (**900배**) |
+| 3 | **flash attention** | `OLLAMA_FLASH_ATTENTION=1` | MoE 생성 **+20.3%** · prefill **+21.7%** · 왕복 **−34.8%**. 부작용 없음 |
+| 4 | **백엔드** | **ROCm 유지** (`OLLAMA_IGPU_ENABLE` 설정하지 않음) | Vulkan은 생성 +9~21%를 주지만 prefill을 **−25~75%** 깎는다 → 27B 왕복 13.1s → **21.1s (+68%)** |
+| 5 | **컨텍스트 예산** | `OLLAMA_CONTEXT_LENGTH=8192` · `OLLAMA_NUM_PARALLEL=1` | 자동 262,144는 로드 실패를 유발 |
+| 6 | **VGM** | 64 GB (이미 설정됨) | 레지스트리 실측 65,536 MB |
+| 7 | **위생** | 주기적 재시작 · 고아 `llama-server` 정리 | 커밋 여유 0.9 GB → 205 GB 회복. 방치 시 **전건 로드 실패** |
+
+**적용 명령** (`resident` 프리셋이 3·5를 포함하고, 4는 `IGPU_ENABLE`을 두지 않는 것이 곧 적용이다):
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_CONTEXT_LENGTH","8192","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_NUM_PARALLEL","1","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION","1","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_MAX_LOADED_MODELS","3","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_KEEP_ALIVE","30m","User")
+[Environment]::SetEnvironmentVariable("OLLAMA_IGPU_ENABLE",$null,"User")   # Vulkan 후보 제외 = ROCm 유지
+# 적용하려면 Ollama 재시작 필요
+```
+
+**넘을 수 없는 벽**: 생성 속도 상한은 메모리 대역폭 256 GB/s가 정한다(§2). dense 27B의 11.7 t/s는
+이론 상한 15.5의 75%로 **이미 물리 한계 근처**다. 여기서 더 얻으려면 설정이 아니라 **모델을 바꿔야 한다**(레버 1).
+
+---
+
 ## 0. 이 문서의 근거 등급 (읽기 전에)
 
 이 저장소 규칙상 **검증 없는 실행 안내는 금지**다. 아래 표기를 각 주장에 붙였다.
@@ -501,6 +531,99 @@ CommitFree_GB : 0.9  →  20.2      (고아 2개가 잡고 있던 커밋 = 19.3 
 > ✅ **캐시 무력화는 작동 확인**: 이번 런의 `prompt_tps`는 run1 2,488 / run2 2,487로 일치한다.
 > 이전 런의 43,542 t/s 같은 허수가 사라졌다.
 
+### ✅ 프리셋 3종 완주 (2026-08-22 21:17~21:20 · 고성능 전원 계획 적용 · `bench_{baseline,resident,vulkan}_2026082221*`)
+
+#### ① 커밋 미스터리 해소 — 재시작이 답이었다
+
+`CommitFree_GB`가 **20.9 → 205.5 GB**로 돌아왔다. 커밋 한도 255.6 GB 중 정체불명의 235 GB를 점유하던 것은
+**시간이 지나며 누적되는 상태**였고, 머신 재시작으로 해소된다. ⇒ **운영 규칙: 로컬 LLM을 쓰는 머신은 주기적으로 재시작한다.**
+(어제의 전건 로드 실패는 이 누적 + 고아 프로세스의 합작이었다.)
+
+#### ② 상주 정책(L6) — 재방문 로드가 **2.6 ms**, 600~900배 단축
+
+| 모델 | 1회차 로드 | 재방문 로드 | 단축 |
+|---|---|---|---|
+| `qwen2-math:1.5b` | 2,353 ms | **2.6 ms** | 905배 |
+| `qwen2.5:3b` | 1,587 ms | **2.6 ms** | 610배 |
+| `qwen2.5:7b` | 2,340 ms | **2.6 ms** | 900배 |
+
+**L6 가설이 실측으로 확정됐다.** 라우터가 6개 핀을 오가는 구조에서 스왑 비용이 사실상 사라진다.
+`MAX_LOADED_MODELS=3` + `KEEP_ALIVE=30m`로 3모델(7.1 GB)이 전부 상주했다.
+
+#### ③ 백엔드·flash attention — **[교란 있음, 재측정 필요]**
+
+| 모델 | `baseline`(ROCm·flash off) | `vulkan`(IGPU_ENABLE=1·flash **on**) | 차이 |
+|---|---|---|---|
+| `qwen2.5:3b` | 75.2 | 81.4 | +8.1% |
+| `qwen2.5:7b` | 39.8 | 41.9 | +5.2% |
+| `qwen3.5:27b` | 11.7 | 11.9 | +1.9% |
+| **`qwen3:30b-a3b`** | 58.2 | **70.8** | **+21.5%** (prefill +26.8%) |
+
+⚠️ **이 비교는 그대로 결론이 될 수 없다 — 두 가지 결함이 있다.**
+1. **레버 2개가 동시에 바뀌었다**(백엔드 + flash attention). 어느 쪽 효과인지 갈리지 않는다.
+2. **`vulkan` 프리셋이 Vulkan을 썼다는 보장이 없다.** `OLLAMA_IGPU_ENABLE=1`은 Vulkan iGPU 장치를 *후보로 살릴 뿐*이고,
+   실제 선택은 서버 로그의 `msg="inference compute" library=…`가 정본이다. 그 줄을 확인하지 않았다.
+
+**대책(반영 완료)**: `rocm` 프리셋 신설 — `vulkan`과 **`OLLAMA_IGPU_ENABLE` 하나만** 다르다.
+`baseline → rocm`이 flash attention 효과, `rocm → vulkan`이 백엔드 효과로 갈린다.
+오케스트레이터는 이제 매 프리셋마다 서버가 **실제로 고른 `library`/`compute`를 출력**한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,rocm,vulkan"
+```
+
+> **20% 규칙 적용**: MoE의 +21.5%만 재현성 폭(8~18%)을 넘어선다. 나머지 3종(+1.9~8.1%)은 **유의하다고 말하지 않는다.**
+
+#### ④ 재현성 3회차 — 전원 고정 후에도 첫 회차는 여전히 높다
+
+| 모델 | clean 08:29 | baseline 09:40 | baseline 21:17 |
+|---|---|---|---|
+| `qwen2.5:3b` | 83.4 | 76.1 | 75.2 |
+| `qwen2.5:7b` | 42.3 | 39.8 | 39.8 |
+| `qwen3.5:27b` | 11.9 | 11.7 | 11.7 |
+| `qwen3:30b-a3b` | 71.5 | 58.7 | 58.2 |
+
+2·3회차는 서로 잘 맞는다(≤1.5%). **1회차만 높다.** 즉 재현성 문제는 무작위 산포가 아니라
+**1회차 특이성**일 가능성이 크다 — 그 측정만 `-NoUnload` 없이 5모델을 돌린 첫 세션이었다. **[미규명]**
+
+#### ⑤ 도구 결함 9회차 — 빈 응답을 0 t/s로 기록
+
+`resident`의 재방문 첫 런이 `gen 0 t/s | out  tok`으로 찍혔다(`eval_count` 없음).
+0은 측정이 아니라 실패인데 정상값으로 섞여 중앙값을 오염시킨다. **대책**: `eval_count ≤ 0`이면 실패로 분류한다.
+
+### ✅ 레버 분리 측정 — flash attention과 백엔드를 갈랐다 (2026-08-22 21:30 · 3 프리셋 각 8/8 성공)
+
+`baseline`(flash off) → `rocm`(flash **on**) → `vulkan`(flash on + `IGPU_ENABLE=1`). 인접 프리셋은 **레버 하나만** 다르다.
+
+#### flash attention 효과 (`baseline` → `rocm`, 둘 다 ROCm)
+
+| 모델 | 생성 | prefill | **왕복** |
+|---|---|---|---|
+| `qwen2.5:3b` | +7.2% | +3.7% | −18.9% |
+| `qwen2.5:7b` | +3.7% | +3.3% | −14.0% |
+| `qwen3.5:27b` | −0.5% | +3.1% | −4.3% |
+| **`qwen3:30b-a3b`** | **+20.3%** | **+21.7%** | **−34.8%** |
+
+⇒ **채택.** MoE에서 20% 규칙을 넘고, 나머지도 왕복이 일관되게 줄며 **손해가 없다.**
+
+#### 백엔드 효과 (`rocm` → `vulkan`) — **트레이드오프**
+
+| 모델 | 생성 | prefill | **왕복** |
+|---|---|---|---|
+| `qwen2.5:3b` | +14.4% | −12.4% | −7.3% |
+| `qwen2.5:7b` | +12.5% | −24.9% | −3.9% |
+| **`qwen3.5:27b`** | +9.3% | **−75.2%** | **+68.1%** (13.1s → 21.1s) |
+| **`qwen3:30b-a3b`** | **+21.2%** | **−46.7%** | +8.8% |
+
+⇒ **ROCm 유지.** Vulkan은 문헌대로 생성에서 앞서지만 **prefill을 크게 깎는다.**
+WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 주력이라 **왕복이 판단축**이고, 그 축에서 큰 모델이 크게 손해다.
+생성 t/s만 봤다면 정반대 결론을 냈을 것이다.
+
+> **[미확정] 백엔드 라벨** — `library=` 출력이 세 프리셋 모두 `ROCm`으로 찍혔다. 그러나 성능 지문(생성↑·prefill↓)은
+> 백엔드 전환과 정확히 부합한다. **원인은 도구 결함 10회차**: 그 줄에 **시간 필터가 없어 이전 기동의 로그를 읽었을 수 있다**
+> (bench 로그 tail에는 넣었던 필터를 여기엔 빠뜨렸다 — 같은 실수의 반복). 수정 완료, 다음 실행에서 확정된다.
+> **결론(ROCm 유지)은 라벨이 아니라 왕복 수치에 근거하므로 이 미확정에 영향받지 않는다.**
+
 **이 시점의 결론 전환**: 최초 질문("ROCm이 왜 안 잡히나")은 **이 머신에서 성립하지 않는다** — 이미 잡혀 있다.
 실제 병목 후보는 ①과대 컨텍스트(256K) ②병렬 4 ③flash attention 꺼짐 ④전원 Balanced ⑤dense 27B의 대역폭 벽이다.
 
@@ -512,13 +635,34 @@ CommitFree_GB : 0.9  →  20.2      (고아 2개가 잡고 있던 커밋 = 19.3 
 
    | 티어 | 현행 상수 | 실측 | 판정 |
    |---|---|---|---|
-   | FAST (`qwen2-math:1.5b`) | 1,010 ms | 906 ms | 상수가 10% 보수적 |
-   | MID (`qwen2-math:7b`급) | 3,918 ms | 3,551 ms | 상수가 9% 보수적 |
-   | QUALITY (`qwen3.5:27b`) | 13,886 ms | 12,406 ms | 상수가 11% 보수적 |
+   | FAST (`qwen2-math:1.5b`) | 1,010 ms | 906 ms | 상수가 10% 보수적 — 유지 |
+   | MID (`qwen2-math:7b`급) | 3,918 ms | 3,551 ms | 상수가 9% 보수적 — 유지 |
+   | QUALITY (`qwen3:30b-a3b`) | 2,300 ms | 2,300 ms(왕복) | MoE 채택에 따라 갱신 |
 
-   **셋 다 실측이 상수보다 빠르다** — 즉 라우터는 로컬을 실제보다 느리다고 보고 있고, 이는 클라우드 승급 쪽으로
-   기우는 *안전측* 오차다. 상수를 건드리면 승급 판정이 바뀌므로 **근거 없는 변경을 하지 않는다.** 상수는 검증됐다.
-2. **QUALITY 티어 재검토** → **`OPS-48` 등재 완료(2026-08-22)**. 속도 축은 실측 끝났고 **정확도 축(결함 주입 강등전)이 남았다** — `qwen3.5:27b`(dense)는 §2대로 이 하드웨어에서 ~10 t/s가 상한이다. 동급 MoE 대체가 성립하면 10배다. **단, 모델 교체는 CLAUDE.md 채택 조건 3건(라우터 경유·실측 근거·MEMORY 결정 로그)을 통과해야 하며, 검증 계약(SymPy 단일 권위·PRM·Langfuse 추적)은 불변이다.**
+   **FAST·MID는 여전히 실측보다 보수적** — 클라우드 승급 쪽으로 기우는 *안전측* 오차다.
+   QUALITY는 dense 27B → MoE로 교체되면서 왕복 지연 상수를 13,886 ms → **2,300 ms**로 갱신했다.
+   이 값은 ctx 8192 · np 1 · flash attention · ROCm 조건에서의 Phaiakes9 실측(§2, §6.2)이다.
+2. ✅ **QUALITY 티어 재검토 → MoE 교체(2026-08-22)** [코드+실측]. `qwen3.5:27b`(dense)와 `qwen3:30b-a3b`(MoE)를 같은 결함 주입 시험지 100문항(결함 50 · 무결함 50 · seed 20260708)으로 대조. 판정은 `docs/standards/superhuman_verification_standard.md`의 Wilson 단측 경계·CLI exit 0/1. **결과: 후보(MoE)가 기준(dense)보다 열등하지 않음.**
+
+   | 지표 | qwen3.5:27b (기준) | qwen3:30b-a3b (후보) | 비고 |
+   |---|---|---|---|
+   | 처리 문항 / 미분류·파싱실패 | 100 / 1 | 100 / 16 | 후보가 clean에서도 10/50, broken_latex에서 4/7 파싱 실패 |
+   | 검출률 (결함 中) | 24/49 = **0.490** | 28/44 = **0.636** | 95% Wilson 하한 0.376 → 0.512 |
+   | 오경보율 (무결함 中) | 3/50 = **0.060** | 2/40 = **0.050** | 95% Wilson 상한 0.141 → 0.140 |
+   | 평균 지연 | **7,376 ms** | **1,408 ms** | 약 **5.2배** 빠름(§2 왕복 12.4s→2.3s와 일치) |
+
+   **판정**: `require-candidate-not-worse-than-baseline` 마진 0.05 — exit 0. 후보의 검출률 하한(0.512)이 기준 하한(0.376)보다 높고, 오경보 상한(0.140)이 기준(0.141)과 같거나 낮다.
+
+   **반영 완료(OPS-49)**:
+   - `src/backend/whymath_backend/l3/router.py`: `QUALITY_MODEL_ID="qwen3:30b-a3b"`, `LOCAL_LATENCY_MS[QUALITY]=2300`
+   - `tests/backend/l3/test_router.py`: QUALITY 해석·지연 상수 테스트 갱신
+   - `AGENTS.md`: 기술 스택 표의 로컬 모델 목록에 `qwen3:30b-a3b`(QUALITY·MoE) 반영
+
+   **주의**: 후보의 **파싱 실패율이 16%**로 기준(1%)보다 높다. 미분류된 문항은 판정에서 제외되며, 이는 “속도가 빠르지만 정답 형식을 덜 잘 따른다”는 리스크를 의미한다. clean 문항 20%, broken_latex 57%에서 실패한 점은 결함 클래스별 강인성이 불균등함을 시사한다. **운영 전에는 broken_latex 등 파싱 실패 클래스에 대한 추가 샘플링·프롬프트 엔지니어링을 권장한다.**
+   - 실행기: `scripts/ops/run_moe_quality_battle.ps1`
+   - 감사 파일: `data/audit/ops-48-moe-accuracy-battle-20260822_232452.jsonl`
+   - 하니스: `src/backend/whymath_backend/harness/quality_tier_moe_accuracy_battle.py`
+
 3. **로컬 vs OpenRouter 비교축** — t/s만으로 고르지 않는다. `detection accuracy` / `false alarm` / `왕복 지연` / `t/s` / `컨텍스트` / `비용` / `반복 실행 안정성` 7축으로 비교하고, **정확도 축은 결함 주입 강등전으로 판정**한다(`docs/standards/superhuman_verification_standard.md`). 로컬이 정확도에서 지더라도 지연·비용에서 이기는 구간이 있고, 그 반대도 있다.
 
 ---
