@@ -116,6 +116,14 @@ from whymath_backend.db.models.provenance import (
     GenerationLog,
 )
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.rights import (
+    ContentRightsLink,
+    ContentSourceLink,
+    DerivationEdge,
+    RightsEntity,
+    RightsHolderEntity,
+    SourceEntity,
+)
 from whymath_backend.db.models.skill_node import (
     SKILL_REVIEW_STATUS_DEFAULT,
     SkillNode,
@@ -251,6 +259,13 @@ __all__ = [
     "SolutionPath",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
+    # LIC-01: Rights & Provenance Infrastructure
+    "SourceEntity",
+    "RightsHolderEntity",
+    "RightsEntity",
+    "ContentSourceLink",
+    "ContentRightsLink",
+    "DerivationEdge",
     # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)
     "SkillNode",
     "SKILL_REVIEW_STATUS_DEFAULT",

@@ -124,6 +124,7 @@ from whymath_backend.api.oauth_providers import build_oauth_providers
 from whymath_backend.api.ocr import router as ocr_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.reports import router as reports_router
+from whymath_backend.api.rights import router as rights_router
 from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.solution_paths import router as solution_paths_router
 from whymath_backend.api.speech import router as speech_router
@@ -1114,5 +1115,6 @@ def create_app(
     app.include_router(speech_router)
     app.include_router(reports_router)
     app.include_router(dsl_router)
+    app.include_router(rights_router)
 
     return app
