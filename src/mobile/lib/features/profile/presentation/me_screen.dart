@@ -23,6 +23,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../problems/data/problem_models.dart';
 import '../application/me_tab_controller.dart';
 import '../application/me_tab_state.dart';
+import '../data/growth_evidence_models.dart';
 
 /// 나 탭 화면 — 학습 경로·진단 결과(실 API) + 설정(준비 중) + (인증 시) 로그아웃.
 class MeScreen extends ConsumerStatefulWidget {
@@ -58,6 +59,8 @@ class _MeScreenState extends ConsumerState<MeScreen> {
             _LearningPathSection(state: meTabState),
             const Divider(height: 1),
             _DiagnosisSection(state: meTabState),
+            const Divider(height: 1),
+            _GrowthEvidenceSection(state: meTabState),
             const Divider(height: 1),
             const _PlaceholderTile(
               icon: Icons.settings_outlined,
@@ -255,17 +258,152 @@ class _DiagnosisSection extends ConsumerWidget {
             // MOB-10: 숙달 상태 라벨(서버 mastery_to_level 산출) — 원시 BKT 확률·θ는
             // 어디에도 노출하지 않는다. 순위·등급 표기가 아니라 상태 서술이므로
             // _PlaceholderTile의 '준비 중'과 동일하게 절제된 trailing 텍스트로 렌더.
-            trailing: item.masteryLevel == null
+            //
+            // MOB-17: api/_concept_orchestration.py:86이 미측정 학생에게 '초보' 폴백을
+            // 부여하는 경로가 있으나, api/me.py:1239(ConceptDiagnosisItem.mastery_level)
+            // 는 bkt_mastery null 시 null이다. 혹시라도 두 모듈 간 비대칭이 학생 화면에
+            // 도달하면 미측정을 최하위 라벨로 표시하지 않도록 클라에서 한 번 더 막는다.
+            trailing: item.safeMasteryLevel == null
                 ? null
                 : Builder(
                     builder: (context) => Text(
-                      item.masteryLevel!,
+                      item.safeMasteryLevel!,
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ),
           ),
       ],
     );
+  }
+}
+
+/// "성장의 증거" 섹션 — `GET /v1/me/growth-evidence` 소비 (MOB-17).
+///
+/// 클라는 표시만 한다. 서버가 준 status·value·exposable_now·suppressed_reason·
+/// narrative를 그대로 렌더하고, 임계값 계산·라벨 판정·서술 생성은 금지(전역 UI 불변식 #1).
+/// [GrowthEvidenceMetricView.value]는 원시 확률/비율 스칼라이므로 5원칙 #1에 따라
+/// 학생에게 노출하지 않는다 — 화면에는 [suppressedReason]·[status]·Brier [narrative]
+///만 보인다.
+class _GrowthEvidenceSection extends ConsumerWidget {
+  const _GrowthEvidenceSection({required this.state});
+
+  final MeTabState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void retry() => ref.read(meTabControllerProvider.notifier).load();
+
+    return _Section(
+      icon: Icons.trending_up_outlined,
+      title: '성장의 증거',
+      subtitle: '나의 학습 변화를 시간순으로 살펴보기',
+      child: switch (state.growthEvidenceStatus) {
+        SectionStatus.idle ||
+        SectionStatus.loading =>
+          const _LoadingRow(),
+        SectionStatus.unauthenticated => const _MessageRow(
+            icon: Icons.lock_outline,
+            message: '로그인이 필요해요.',
+          ),
+        SectionStatus.error => _MessageRow(
+            icon: Icons.error_outline,
+            message: state.growthEvidenceError ?? '성장의 증거를 불러오지 못했어요.',
+            onRetry: retry,
+          ),
+        SectionStatus.loaded => _buildLoaded(state.growthEvidence),
+      },
+    );
+  }
+
+  Widget _buildLoaded(GrowthEvidenceResponse? evidence) {
+    if (evidence == null) {
+      // 정상적으로 조회했으나 응답이 null인 경우는 없지만, 타입 안전을 위해.
+      return const _MessageRow(
+        icon: Icons.info_outline,
+        message: '아직 성장의 증거 데이터가 없어요.',
+      );
+    }
+    return Column(
+      children: [
+        for (final entry in _metricEntries(evidence))
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.circle_outlined, size: 20),
+            title: Text(entry.title),
+            subtitle: Text(entry.displayBody),
+          ),
+      ],
+    );
+  }
+
+  List<_MetricTile> _metricEntries(GrowthEvidenceResponse evidence) {
+    return <_MetricTile>[
+      _MetricTile.metric(
+        title: '풀이 검증 통과율',
+        metric: evidence.verifyPassRate,
+      ),
+      _MetricTile.metric(
+        title: '세션 완주율',
+        metric: evidence.sessionCompletionRate,
+      ),
+      _MetricTile.metric(
+        title: '도움 감소 추세',
+        metric: evidence.helpReductionSlope,
+      ),
+      _MetricTile.metric(
+        title: '도움 요청·제공 비율',
+        metric: evidence.helpDemandSupplyRatio,
+      ),
+      _MetricTile.metric(
+        title: '전이 점수',
+        metric: evidence.transferScore,
+      ),
+      _MetricTile.metric(
+        title: '답 미루기 도달 깊이',
+        metric: evidence.hintDepthReached,
+      ),
+      _MetricTile.metric(
+        title: '숙달 증가율',
+        metric: evidence.masteryGainRate,
+      ),
+      _MetricTile.metric(
+        title: '오개념 해소율',
+        metric: evidence.misconceptionResolutionRate,
+      ),
+      _MetricTile.metric(
+        title: '스스로 풀이 도달율',
+        metric: evidence.selfSolveRate,
+      ),
+      _MetricTile.narrative(
+        title: '예측 확신도 보정',
+        body: evidence.calibrationBrier.narrative,
+      ),
+    ];
+  }
+}
+
+/// 성장의 증거 섹션 지표 1타일 — 제목 + 서버가 준 서술(또는 status).
+class _MetricTile {
+  const _MetricTile.metric({required this.title, required this.metric})
+      : body = null;
+  const _MetricTile.narrative({required this.title, required this.body})
+      : metric = null;
+
+  final String title;
+
+  /// 일반 지표([_GrowthEvidenceSection._buildLoaded]에서 null이 아님).
+  final GrowthEvidenceMetricView? metric;
+
+  /// 명시적 body(예: Brier narrative).
+  final String? body;
+
+  /// 화면에 보일 본문.
+  ///
+  /// 서버가 준 [suppressedReason]을 우선. 없으면 [status]를 그대로 노출.
+  /// [value](원시 스칼라)는 5원칙 #1에 따라 보이지 않는다.
+  String get displayBody {
+    if (body != null) return body!;
+    return metric!.suppressedReason ?? metric!.status;
   }
 }
 
@@ -383,5 +521,23 @@ class _PlaceholderTile extends StatelessWidget {
         style: Theme.of(context).textTheme.labelMedium,
       ),
     );
+  }
+}
+
+extension _DiagnosisItemMastery on ConceptDiagnosisItem {
+  /// api/_concept_orchestration.py:86의 "초보" 폴백이 미측정 학생에게 도달하지 않도록,
+  /// 원시 숙달 지표가 전부 null이면 [masteryLevel] 라벨을 무시한다.
+  ///
+  /// api/me.py:1239(ConceptDiagnosisItem)은 bkt_mastery null 시 mastery_level도 null이지만,
+  /// 다른 모듈(_concept_orchestration)이 "초보" 폴백을 주는 경로가 있을 수 있어 학생 대면
+  /// 화면에서 마지막 방어선을 둔다(MOB-17 acceptance ⑥).
+  String? get safeMasteryLevel {
+    if (masteryLevel == '초보' &&
+        bktMastery == null &&
+        irtTheta == null &&
+        irtMasteryProxy == null) {
+      return null;
+    }
+    return masteryLevel;
   }
 }
