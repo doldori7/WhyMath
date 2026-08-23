@@ -7092,3 +7092,16 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
   - `docs/ops/amd395_local_llm_performance.md` §6: QUALITY 티어 재검토 항목에 "✅ MoE 교체 — 라우터 반영 완료(OPS-49)" 추가, `LOCAL_LATENCY_MS` 표를 MoE 기준으로 갱신.
 - **남은 리스크**: MoE 후보의 파싱 실패율 16%(기준 1%)는 그대로다. clean 문항 20%·broken_latex 57%에서 JSON/후처리 실패하므로, 운영 전 별도 샘플링·프롬프트 튜닝이 필요하다(OPS-49 notes에 명시).
 - **검증**: 4게이트(ruff·black·mypy·pytest) 통과 및 PR # 생성. CI가 최종 판정.
+
+## 2026-08-22: HARN-29 — todo 태스크끼리의 파일 범위 겹침 미검출 봉인
+
+- **사고**: PR #855 후속 분석에서 NLP-06과 COLLAB-04가 `['.github/workflows/ci.yml','tests/infra/**']`로 paths가 동일함에도 `backlog.py overlap NLP-06`이 "겹침 없음"을 출력했다. 원인은 `cmd_overlap`과 `_check_path_overlap`이 비교 대상을 `status in ('in_progress','review')`로 한정해 todo끼리는 계산하지 않던 것이다.
+- **변경**:
+  - `scripts/harness/backlog.py`:
+    - `_overlap_candidates(include_todo=True)` 헬퍼 추가: in-flight ∪ todo 태스크를 겹침 검사 대상으로 반환.
+    - `_check_path_overlap`이 todo를 포함해 검사. todo 겹침은 항상 경고만, in-flight 겹침은 `policy.path_overlap`에 따라 warn/block 유지.
+    - `cmd_add`에 `_check_path_overlap` 프리플라이트 추가: 등재 시점에도 todo 중복을 검출·경고(차단은 안 함).
+    - `cmd_overlap` 기본 동작을 todo 포함으로 변경, `--in-flight-only` 플래그로 기존 동작 선택 가능.
+  - `tests/harness/test_cli.py`: `TestTodoOverlapDetection` 추가 — todo끼리 겹침 검출, `--in-flight-only` 무시, add 경고, block 모드 차단 등 회귀 테스트.
+- **판단**: todo 겹침은 등록을 차단하지 않고 경고로 둔다. 이유: todo는 아직 착수되지 않은 추정 태스크가 많고, 차단하면 정당한 분할·후속 태스크 등록까지 막을 수 있다. 다만 경고는 policy_warn 이벤트로 측정되며, 오탐이 잦아 습관화되지 않도록 표면과 이벤트에 노출한다.
+- **검증**: `tests/harness/test_cli.py::TestStartOverlapPreflight`, `TestTodoOverlapDetection`, `TestCheckEditPolicy`, `TestLifecycle`, `TestSeed` 및 `tests/harness/test_pathscope.py`, `test_store.py` 54건 green. 전체 harness suite는 원격 claim/체크 정지 관련 25건이 Windows 임시 git 환경(cp949·원격 ref 조회)에서 기존에도 실패하는 항목으로, 본 변경과 무관.
