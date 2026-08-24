@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: mobile
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -19,11 +19,12 @@ acceptance:
   - "⑥ 재확인 지점 — api/_concept_orchestration.py:86이 미측정 학생에게 '초보' 폴백을 부여한다(api/me.py:1239의 null 폴백과 비대칭). 이 섹션이 학생 대면이므로 그 라벨이 화면에 도달하는지 확인하고, 도달하면 미측정을 최하위 라벨로 표시하지 않도록 정정 경로를 기술한다"
   - "⑦ 도달 관측 — 이 화면이 실제로 라우트를 부르는지 위젯 테스트로 동결(PED-15가 '도달 증명이지 학생 화면 배선이 아니다'로 남긴 잔여의 회수임을 명시)"
   - "⑧ 범위 밖 동결 — /harness-metrics 클라 배선(PED-27가 봉인) · 보호자 대시보드 · 확신도 수집 UI 신설 · problem_screen 재설계(θ·표준오차 렌더는 별도 슬라이스) · 학습 경로 타일(PATH-10 소관)"
-artifacts: []
+artifacts:
+  - "PR #863"
 paths:
   - "src/mobile/lib/features/profile/**"
   - "src/mobile/lib/features/**/data/**"
   - "src/mobile/test/**"
 session: null
 notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G2 · §4 D10. PED-06(관측)→PED-08(서빙)→PED-15(도달 증명) 3슬라이스가 진행됐는데 학생은 성장의 증거를 한 번도 본 적이 없다 — src/mobile/lib/ 전수 growth grep 0건. 클라가 부르는 /v1/me/*는 problems_api.dart의 4개뿐(:30,44,54,72). PED-15는 이 사실을 artifacts에 '정직한 잔여: 이 엔드포인트를 소비하는 모바일 클라이언트는 여전히 0건 — 도달 증명이지 학생 화면 배선이 아니다'로 적고 acceptance 빈 배열로 done 처리했으며 후속 태스크가 0건이었다(반복 실수 11회차 후반부 '자인이 추적을 대신함'). 남은 것은 위젯 한 겹이고, 5원칙 #1 '보상이 아니라 증거'의 최초 실착지점이다."
-updated: 2026-08-11
+updated: 2026-08-23
