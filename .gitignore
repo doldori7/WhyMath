@@ -15,10 +15,10 @@ venv/
 .env.local
 
 # Python (로컬 pip 설치 아티팩트 — ensurepip/pip가 프로젝트 루트에 설치한 경우)
-Include/
-Lib/
-Scripts/
-share/
+/Include/
+/Lib/
+/Scripts/
+/share/
 
 # Python 테스트·린터 캐시
 .coverage

@@ -1,8 +1,9 @@
-// MeScreen 위젯 테스트 — 학습 경로·진단 결과 실 API 렌더 + 정직 신호(has_cycle·빈 경로·401)
-// 노출 검증 (PATH-05).
+// MeScreen 위젯 테스트 — 학습 경로·진단 결과·성장의 증거 실 API 렌더 + 정직 신호
+// (has_cycle·빈 경로·401·NO_DATA·원시 스칼라 미노출) 노출 검증 (PATH-05 · MOB-17).
 //
-// problemsApiProvider를 fake로 override해 네트워크 없이 화면 동작을 확인한다
-// (problem_screen_test 답습). 설정 섹션은 여전히 "준비 중"이라 그대로 남아 있는지도 확인한다.
+// problemsApiProvider·growthEvidenceApiProvider를 fake로 override해 네트워크 없이 화면 동작을
+// 확인한다(problem_screen_test 답습). 설정 섹션은 여전히 "준비 중"이라 그대로 남아 있는지도
+// 확인한다.
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/problems/data/problem_models.dart';
 import 'package:korean_math_app/features/problems/data/problems_api.dart';
 import 'package:korean_math_app/features/profile/presentation/me_screen.dart';
+import 'package:korean_math_app/features/profile/data/growth_evidence_api.dart';
+import 'package:korean_math_app/features/profile/data/growth_evidence_models.dart';
 
 /// 미리 짠 응답(또는 지정한 상태코드로 throw)을 돌려주는 fake.
 class _FakeProblemsApi extends ProblemsApi {
@@ -55,18 +58,73 @@ class _FakeProblemsApi extends ProblemsApi {
   }
 }
 
+/// 성장의 증거 API fake.
+class _FakeGrowthEvidenceApi extends GrowthEvidenceApi {
+  _FakeGrowthEvidenceApi({
+    this.evidence,
+    this.statusCode,
+  }) : super(Dio());
+
+  final GrowthEvidenceResponse? evidence;
+  final int? statusCode;
+
+  @override
+  Future<GrowthEvidenceResponse> getGrowthEvidence() async {
+    if (statusCode != null) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/v1/me/growth-evidence'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/v1/me/growth-evidence'),
+          statusCode: statusCode,
+        ),
+      );
+    }
+    return evidence ?? _emptyGrowthEvidence();
+  }
+}
+
+GrowthEvidenceResponse _emptyGrowthEvidence() => GrowthEvidenceResponse(
+      verifyPassRate: _metric(status: 'no_data'),
+      sessionCompletionRate: _metric(status: 'no_data'),
+      helpReductionSlope: _metric(status: 'no_data'),
+      helpDemandSupplyRatio: _metric(status: 'no_data'),
+      transferScore: _metric(status: 'no_data'),
+      hintDepthReached: _metric(status: 'no_data'),
+      masteryGainRate: _metric(status: 'no_data'),
+      misconceptionResolutionRate: _metric(status: 'no_data'),
+      selfSolveRate: _metric(status: 'no_data'),
+      calibrationBrier: const GrowthEvidenceBrierView(
+        narrative: '아직 예측 확신도 데이터가 없어요.',
+      ),
+    );
+
+GrowthEvidenceMetricView _metric({
+  required String status,
+  bool exposableNow = false,
+  String? suppressedReason,
+  double? rawValue,
+}) =>
+    GrowthEvidenceMetricView(
+      status: status,
+      exposableNow: exposableNow,
+      suppressedReason: suppressedReason,
+      rawValue: rawValue,
+    );
+
 ConceptDiagnosisItem _diag({
   String conceptId = 'c1',
   String? name = '함수의 극한',
   String? masteryLevel,
   double? bktMastery,
   double? irtTheta,
+  double? irtMasteryProxy,
 }) =>
     ConceptDiagnosisItem(
       conceptId: conceptId,
       conceptName: name,
       bktMastery: bktMastery,
       irtTheta: irtTheta,
+      irtMasteryProxy: irtMasteryProxy,
       masteryLevel: masteryLevel,
       coaching: const DiagnosisCoaching(
         focus: 'foundation',
@@ -75,15 +133,23 @@ ConceptDiagnosisItem _diag({
       ),
     );
 
-Widget _wrap(ProblemsApi api) {
+Widget _wrap(
+  ProblemsApi problemsApi, {
+  GrowthEvidenceApi? growthApi,
+}) {
   return ProviderScope(
-    overrides: [problemsApiProvider.overrideWithValue(api)],
+    overrides: [
+      problemsApiProvider.overrideWithValue(problemsApi),
+      growthEvidenceApiProvider.overrideWithValue(
+        growthApi ?? _FakeGrowthEvidenceApi(),
+      ),
+    ],
     child: const MaterialApp(home: MeScreen()),
   );
 }
 
 void main() {
-  testWidgets('성공: 진단 결과·학습 경로 데이터를 그대로 렌더한다', (tester) async {
+  testWidgets('성공: 진단 결과·학습 경로·성장의 증거 데이터를 그대로 렌더한다', (tester) async {
     final api = _FakeProblemsApi(
       diagnoses: <ConceptDiagnosisItem>[
         _diag(conceptId: 'weakest', name: '함수의 극한', masteryLevel: '발전 중'),
@@ -108,11 +174,24 @@ void main() {
     // 학습 경로 섹션 — 순서대로 두 단계.
     expect(find.text('함수의 정의'), findsOneWidget);
     expect(find.text('극한의 성질'), findsOneWidget);
-    // "준비 중" placeholder는 설정 섹션에만 남아 있어야 한다(1건).
+    // 성장의 증거 섹션 — title들이 보인다.
+    expect(find.text('성장의 증거'), findsOneWidget);
+    expect(find.text('풀이 검증 통과율'), findsOneWidget);
+    expect(find.text('예측 확신도 보정'), findsOneWidget);
+    // Brier narrative.
+    expect(find.text('아직 예측 확신도 데이터가 없어요.'), findsOneWidget);
+    // "준비 중" placeholder는 설정 섹션에만 남아 있어야 한다. 성장의 증거 섹션 타일이
+    // 길어지면 viewport 밖으로 밀릴 수 있어 스크롤 후 확인한다.
+    await tester.scrollUntilVisible(
+      find.text('준비 중'),
+      100.0,
+      scrollable: find.byType(Scrollable),
+    );
     expect(find.text('준비 중'), findsOneWidget);
   });
 
-  testWidgets('MOB-10: mastery_level=null이면 라벨을 렌더하지 않는다(무데이터 정직 표기)', (tester) async {
+  testWidgets('MOB-10: mastery_level=null이면 라벨을 렌더하지 않는다(무데이터 정직 표기)',
+      (tester) async {
     final api = _FakeProblemsApi(
       diagnoses: <ConceptDiagnosisItem>[_diag(name: '이차방정식')],
     );
@@ -123,6 +202,21 @@ void main() {
     expect(find.text('초보'), findsNothing);
     expect(find.text('발전 중'), findsNothing);
     expect(find.text('숙달'), findsNothing);
+  });
+
+  testWidgets('MOB-17: _concept_orchestration.py:86의 "초보" 폴백이 미측정 데이터로 도달하면 라벨을 숨긴다',
+      (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[
+        _diag(name: '이차방정식', masteryLevel: '초보'),
+      ],
+    );
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이차방정식'), findsOneWidget);
+    // 원시 숙달 지표가 모두 null인데 mastery_level만 '초보'로 오면 폴백으로 간주해 숨긴다.
+    expect(find.text('초보'), findsNothing);
   });
 
   testWidgets('MOB-10: 원시 BKT 확률·θ 숫자는 화면 어디에도 렌더되지 않는다', (tester) async {
@@ -151,7 +245,8 @@ void main() {
     expect(find.textContaining('불러오지 못했'), findsNothing);
   });
 
-  testWidgets('진단 데이터 자체가 없으면 두 섹션 모두 "정상, 데이터 없음" 안내를 보인다', (tester) async {
+  testWidgets('진단 데이터 자체가 없으면 두 섹션 모두 "정상, 데이터 없음" 안내를 보인다',
+      (tester) async {
     final api = _FakeProblemsApi();
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
@@ -183,7 +278,8 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
 
-    expect(find.text('로그인이 필요해요.'), findsNWidgets(2)); // 학습 경로·진단 결과 둘 다.
+    // 학습 경로·진단 결과·성장의 증거 세 섹션 모두.
+    expect(find.text('로그인이 필요해요.'), findsNWidgets(3));
     expect(find.textContaining('불러오지 못했'), findsNothing);
     expect(find.textContaining('오류가 발생'), findsNothing);
   });
@@ -200,6 +296,8 @@ void main() {
     expect(find.widgetWithText(TextButton, '다시 시도'), findsOneWidget);
     // 진단 결과 섹션은 정상 렌더돼야 한다(섹션 독립성).
     expect(find.text('함수의 극한'), findsOneWidget);
+    // 성장의 증거 섹션도 정상 렌더돼야 한다(섹션 독립성).
+    expect(find.text('성장의 증거'), findsOneWidget);
   });
 
   // ── PATH-10: ordering_basis 렌더 착지 ─────────────────────────────────────
@@ -336,5 +434,115 @@ void main() {
     expect(find.textContaining('순환 구조가 감지'), findsOneWidget); // ②
     expect(find.text('순환 잔여 단계'), findsOneWidget); // ③
     expect(find.textContaining('참고용이에요'), findsOneWidget); // ④
+  });
+
+  // ── MOB-17: 성장의 증거 섹션 추가 검증 ──────────────────────────────────────
+
+  testWidgets('MOB-17: NO_DATA·suppressed_reason을 숨기지 않고 서술로 보인다', (tester) async {
+    const reason = '아직 이 지표를 계산할 데이터가 모아지지 않았어요.';
+    final growthApi = _FakeGrowthEvidenceApi(
+      evidence: GrowthEvidenceResponse(
+        verifyPassRate: _metric(
+          status: 'no_data',
+          exposableNow: false,
+          suppressedReason: reason,
+        ),
+        sessionCompletionRate: _metric(status: 'no_data'),
+        helpReductionSlope: _metric(status: 'no_data'),
+        helpDemandSupplyRatio: _metric(status: 'no_data'),
+        transferScore: _metric(status: 'no_data'),
+        hintDepthReached: _metric(status: 'no_data'),
+        masteryGainRate: _metric(status: 'no_data'),
+        misconceptionResolutionRate: _metric(status: 'no_data'),
+        selfSolveRate: _metric(status: 'no_data'),
+        calibrationBrier: const GrowthEvidenceBrierView(
+          narrative: '아직 예측 확신도 데이터가 없어요.',
+        ),
+      ),
+    );
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(steps: <LearningStep>[]),
+    );
+    await tester.pumpWidget(_wrap(api, growthApi: growthApi));
+    await tester.pumpAndSettle();
+
+    expect(find.text(reason), findsOneWidget);
+    expect(find.text('성장의 증거'), findsOneWidget);
+  });
+
+  testWidgets('MOB-17: 원시 스칼라(value)는 화면에 노출되지 않는다', (tester) async {
+    final growthApi = _FakeGrowthEvidenceApi(
+      evidence: GrowthEvidenceResponse(
+        verifyPassRate: _metric(
+          status: 'measured',
+          exposableNow: true,
+          rawValue: 0.87,
+        ),
+        sessionCompletionRate: _metric(status: 'no_data'),
+        helpReductionSlope: _metric(status: 'no_data'),
+        helpDemandSupplyRatio: _metric(status: 'no_data'),
+        transferScore: _metric(status: 'no_data'),
+        hintDepthReached: _metric(status: 'no_data'),
+        masteryGainRate: _metric(status: 'no_data'),
+        misconceptionResolutionRate: _metric(status: 'no_data'),
+        selfSolveRate: _metric(status: 'no_data'),
+        calibrationBrier: const GrowthEvidenceBrierView(
+          narrative: '아직 예측 확신도 데이터가 없어요.',
+        ),
+      ),
+    );
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(steps: <LearningStep>[]),
+    );
+    await tester.pumpWidget(_wrap(api, growthApi: growthApi));
+    await tester.pumpAndSettle();
+
+    expect(find.text('measured'), findsOneWidget); // status는 그대로 노출.
+    expect(find.textContaining('0.87'), findsNothing); // value는 노출 금지.
+    expect(find.textContaining('87'), findsNothing);
+  });
+
+  testWidgets('MOB-17: Brier는 narrative만 보이고 원 스칼라는 없다', (tester) async {
+    const narrative = '네 예측이 실제 정답과 꽤 잘 맞고 있어요.';
+    final growthApi = _FakeGrowthEvidenceApi(
+      evidence: GrowthEvidenceResponse(
+        verifyPassRate: _metric(status: 'no_data'),
+        sessionCompletionRate: _metric(status: 'no_data'),
+        helpReductionSlope: _metric(status: 'no_data'),
+        helpDemandSupplyRatio: _metric(status: 'no_data'),
+        transferScore: _metric(status: 'no_data'),
+        hintDepthReached: _metric(status: 'no_data'),
+        masteryGainRate: _metric(status: 'no_data'),
+        misconceptionResolutionRate: _metric(status: 'no_data'),
+        selfSolveRate: _metric(status: 'no_data'),
+        calibrationBrier: const GrowthEvidenceBrierView(narrative: narrative),
+      ),
+    );
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(steps: <LearningStep>[]),
+    );
+    await tester.pumpWidget(_wrap(api, growthApi: growthApi));
+    await tester.pumpAndSettle();
+
+    expect(find.text(narrative), findsOneWidget);
+  });
+
+  testWidgets('MOB-17: 성장의 증거만 일반 실패(401 외)면 재시도 버튼과 함께 error로 표시한다',
+      (tester) async {
+    final api = _FakeProblemsApi(
+      diagnoses: <ConceptDiagnosisItem>[_diag()],
+      learningPath: const LearningPath(steps: <LearningStep>[]),
+    );
+    final growthApi = _FakeGrowthEvidenceApi(statusCode: 500);
+    await tester.pumpWidget(_wrap(api, growthApi: growthApi));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('성장의 증거를 불러오지 못했어요'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '다시 시도'), findsOneWidget);
+    // 다른 섹션은 정상 렌더돼야 한다(섹션 독립성).
+    expect(find.text('함수의 극한'), findsOneWidget);
   });
 }
