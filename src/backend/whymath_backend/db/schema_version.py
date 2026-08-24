@@ -123,6 +123,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "374fb620de9e",  # MISC-04: misconception_relation (caused_by·variant_of·개념그래프 격리)
     "d1e2f3c4b5a6",  # S3-32: dialogue.review_turns_remaining (Polya 돌아보기 턴 카운터)
     "e07b1324d1d4",  # LIC-01: Rights & Provenance Infrastructure MVP
+    "b8e76fe238d0",  # EOS-3: Achievement Standard lifecycle expansion
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

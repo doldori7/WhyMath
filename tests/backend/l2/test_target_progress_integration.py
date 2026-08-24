@@ -77,6 +77,8 @@ def _standard(norm_id: str, *, curriculum_revision: str, school_type: str) -> Ac
             subject="수학",
             domain="변화와 관계",
             statement=f"{norm_id} 성취기준 본문(통합테스트 픽스처).",
+            official_statement=f"{norm_id} 성취기준 본문(통합테스트 픽스처).",
+            version_id=uuid.uuid4(),
             source_url="https://ncic.example/standards",
         )
     )
