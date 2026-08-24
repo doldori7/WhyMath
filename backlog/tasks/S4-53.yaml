@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-53
+title: "SymPy 불가 영역 verifier v2 — 단계 A 실증 도메인 구현"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-52-verifier-v2-design
+requires_gates: []
+acceptance:
+  - "단계 A 실증 도메인 1개(geometric_discrete 또는 statistical_claim) 확정"
+  - "해당 도메인 DSL 문법 및 코퍼스 밴드 30~50문 선정"
+  - "도메인 verifier 구현체 작성 및 Verifier.verify() 디스패치 연동"
+  - "도메인별 잔여 축(residual_axes) 정의"
+  - "도메인별 Cross-Verify 관점 템플릿 구현 및 K≥3 교차검증 통과"
+  - "ruff/black/mypy green, import-linter 7계층 위반 0"
+  - PR 생성 및 CI 통과
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "docs/architecture/**"
+  - "backlog/tasks/**"
+session: null
+notes: "S4-52 v2 설계서 §3.2 단계 A. 후보: geometric_discrete(평면격자·정다각형·격자점·선분 교차·도형 내 정수점) 또는 statistical_claim(유한 표본 데이터의 평균·중앙값·분산·사분위수·상관계수). 최종 선택은 코퍼스 우선순위/소비처에 따름. 구현 후 S4-56에서 Wilson 게이트 파일럿 실행."
+updated: 2026-08-25

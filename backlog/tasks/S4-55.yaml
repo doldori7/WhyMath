@@ -1,0 +1,30 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-55
+title: "SymPy 불가 영역 verifier v2 — Verification Tier 개편"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-52-verifier-v2-design
+requires_gates: []
+acceptance:
+  - "verification_tier.py enum 확장: FINITE_EXHAUSTIVE, SYMBOLIC_PROOF, DETERMINISTIC_DATA, NUMERIC_SAMPLING, STATISTICAL_ESTIMATE, RESIDUE_REVIEWED, HUMAN_REVIEWED"
+  - MACHINE_EXHAUSTIVE → FINITE_EXHAUSTIVE alias 유지
+  - MACHINE_SAMPLED → NUMERIC_SAMPLING/STATISTICAL_ESTIMATE alias 유지
+  - "read_verification_tier() alias 해석 로직 구현"
+  - "stamp_verification_tier() 신규값 기록 및 하위호환 테스트"
+  - "ruff/black/mypy green, import-linter 7계층 위반 0"
+  - PR 생성 및 CI 통과
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/verification_tier.py
+  - src/backend/whymath_backend/l3/verifier.py
+  - docs/architecture/verifier_v2_design.md
+  - "backlog/tasks/**"
+session: null
+notes: "S4-52 v2 설계서 §4. '증명된 축의 집합'으로 tier를 세분화하되, 기존 MACHINE_EXHAUSTIVE/MACHINE_SAMPLED는 legacy alias로 유지해 마이그레이션 없이 기존 코퍼스를 그대로 읽을 수 있게 한다."
+updated: 2026-08-25

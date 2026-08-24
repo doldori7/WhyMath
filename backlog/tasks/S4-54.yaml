@@ -1,0 +1,32 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-54
+title: "SymPy 불가 영역 verifier v2 — 통합 Verifier contract 구현"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-52-verifier-v2-design
+requires_gates: []
+acceptance:
+  - l3/verifier.py에 VerificationVerdict 모델 구현
+  - "Verifier.verify(problem) 단일 진입점 구현"
+  - "answer_kind → 기존 _CONCEPTUAL_VERIFIERS + 신규 _VERIFIERS_V2 디스패치"
+  - 도메인 verifier 결과를 VerificationVerdict로 래핑
+  - 잔여 축 식별 및 cross_verifier 연결 흐름 구현
+  - "ruff/black/mypy green, import-linter 7계층 위반 0"
+  - PR 생성 및 CI 통과
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/verifier.py
+  - src/backend/whymath_backend/l3/verification_tier.py
+  - src/backend/whymath_backend/l3/cross_verify.py
+  - src/backend/whymath_backend/l3/finite_probability.py
+  - docs/architecture/verifier_v2_design.md
+  - "backlog/tasks/**"
+session: null
+notes: "S4-52 v2 설계서 §2. 현재는 스켈레톤만 존재. 기존 _CONCEPTUAL_VERIFIERS(verify_answer 등)를 래핑하면서도 신규 도메인 verifier 플러그인 구조를 추가."
+updated: 2026-08-25
