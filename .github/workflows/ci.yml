@@ -1107,6 +1107,9 @@ jobs:
         run: |
           pip install pyyaml pytest pytest-randomly \
                       "ruff>=0.7.0,<0.16" "black>=24.10.0,<27"
+          # CUR-09 후속: EOS 단원 구조 관측 리포트가 whymath_backend.harness를 import하므로
+          # backend 패키지를 editable 설치한다(dev extra 불요 — CLI는 stdlib+PyYAML만 쓴다).
+          pip install -e src/backend
 
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
@@ -1137,6 +1140,14 @@ jobs:
             # **사람 판단이 필요한 잔여**(ttl·task_missing)라는 뜻이다.
             echo "::warning::stale 원격 claim 발견 — 확정 사유는 harness-audit이 자동 청소한다. 위 목록에 ttl/task_missing이 남아 있으면 사람 판단이 필요하다"
           fi
+
+      # CUR-09 후속: EOS 단원 구조 관측 리포트 — 현행 모델/스키마/코퍼스에 EOS 설계 메타데이터가
+      # 얼마나 반영됐는지 관측·고정. 게이트가 아니라 리포트(exit 0/2). JSON 산출물까지 결정론 검증.
+      - name: EOS 단원 구조 관측 리포트 (CUR-09)
+        working-directory: src/backend
+        run: |
+          python -m whymath_backend.harness.eos_unit_structure_observation_report
+          python -m whymath_backend.harness.eos_unit_structure_observation_report --json /tmp/eos_unit_structure_observation.json
 
       # OPS-12 — `tests/harness`·`scripts/harness`를 lint/format하는 잡이 **하나도 없었다**
       # (OPS-11의 harness 판박이). backend 잡은 `../../tests/backend`만, data-pipeline 잡은
