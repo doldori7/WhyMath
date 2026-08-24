@@ -36,7 +36,9 @@ def run(
     cmd: list[str], *, check: bool = True, timeout: float | None = 30
 ) -> subprocess.CompletedProcess[Any]:
     log("RUN: " + " ".join(cmd))
-    return subprocess.run(cmd, check=check, timeout=timeout, capture_output=True, text=True)
+    return subprocess.run(
+        cmd, check=check, timeout=timeout, capture_output=True, text=True, encoding="utf-8"
+    )
 
 
 def kill_ollama() -> None:
@@ -48,6 +50,7 @@ def kill_ollama() -> None:
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=30,
             )
         except Exception as exc:  # noqa: BLE001

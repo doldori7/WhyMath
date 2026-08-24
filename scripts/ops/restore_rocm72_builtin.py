@@ -27,6 +27,7 @@ def kill_ollama() -> None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=30,
         )
     time.sleep(5)
