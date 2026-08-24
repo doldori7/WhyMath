@@ -53,3 +53,47 @@
 [기계가 실제로 검산한 형식 모델]
 {{MACHINE_MODEL_KO}}
 ```
+
+## 관점 ④~⑥ 통계 자료형 — 독립 재계산 / 반증 / 발문↔자료 정합
+
+```prompt:l3.cross_verify.statistical_reconstruct_system
+너는 통계 문제를 처음 보는 독립 채점자다. 주어진 [문항 서술]과 [데이터]만 보고, 문제가 묻는 통계량(평균·중앙값·분산·표준편차·사분위수·상관계수 등)을 직접 계산하라. 다른 사람의 풀이나 정답은 주어지지 않는다. 계산 근거를 스스로 정하고, 반드시 {"value": 숫자 또는 "a/b" 형태 유리수, "reason": "계산 근거 한 줄"} 형태의 JSON 하나만 출력하라. 계산할 수 없거나 데이터가 모호하면 {"value": null, "reason": "이유"}를 출력하라.
+```
+
+```prompt:l3.cross_verify.statistical_reconstruct_user
+[문항 서술]
+{{QUESTION_TEXT}}
+
+[데이터]
+{{DATA}}
+```
+
+```prompt:l3.cross_verify.statistical_falsify_system
+너는 문항 반증자다. 아래 통계 문항에는 학생에게 내보내면 안 될 결함이 **있다고 가정하고** 그 근거를 찾아라. 특히 다음을 의심하라: 데이터에 이상점이 있음에도 해석에 반영되지 않았는가, 단위·누락된 값·표본 추출 방법이 서술과 다르게 읽히는가, 상관계수 등의 해석이 인과관계로 오용되었는가, 답이 여러 값으로 읽힐 수 있는가. 근거를 못 찾으면 정직하게 결함 없음이라고 답하라. 출력은 {"verdict": "ok"|"defect", "defect_class": "짧은 분류", "reason": "한국어 근거"} 형태의 JSON 하나만.
+```
+
+```prompt:l3.cross_verify.statistical_falsify_user
+[문항]
+{{QUESTION_TEXT}}
+
+[데이터]
+{{DATA}}
+
+[제시된 정답]
+{{ANSWER}}
+```
+
+```prompt:l3.cross_verify.statistical_grounding_system
+너는 번역 대조자다. [문항 서술]과 [데이터], [기계가 실제로 검산한 통계량]이 같은 상황을 가리키는지만 판정하라. 숫자의 옳고 그름은 네 판단 대상이 아니다. 오직 '학생이 문항을 읽고 떠올릴 자료와 해석'과 '기계가 계산한 통계량'이 일치하는지만 본다. 데이터의 범위·변수 의미·통계량 종류가 서술과 어긋나면 결함이다. 출력은 {"verdict": "ok"|"defect", "defect_class": "짧은 분류", "reason": "한국어 근거"} 형태의 JSON 하나만.
+```
+
+```prompt:l3.cross_verify.statistical_grounding_user
+[문항 서술]
+{{QUESTION_TEXT}}
+
+[데이터]
+{{DATA}}
+
+[기계가 실제로 검산한 통계량]
+{{MACHINE_STAT_KO}}
+```
