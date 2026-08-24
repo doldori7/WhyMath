@@ -12,6 +12,7 @@ cross-dataset 정합은 *파이프라인 책임*이고 모델·테스트 대상�
 from __future__ import annotations
 
 from datetime import date
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -23,7 +24,7 @@ from whymath_backend.schema.standard import AchievementStandard, ConceptStandard
 # 공용 헬퍼 — required를 채운 최소 유효 인자(테스트마다 override)
 # ──────────────────────────────────────────────────────────────────────
 def _standard_kwargs(**overrides: object) -> dict[str, object]:
-    """AchievementStandard required(식별 3 + 분류 4 + statement + source_url)를 채운 기본 인자."""
+    """AchievementStandard required(식별 3 + 분류 4 + statement + official_statement + version_id + source_url)를 채운 기본 인자."""
     base: dict[str, object] = {
         "norm_id": "2022_12미적1_01_01",
         "official_code": "[12미적1-01-01]",
@@ -33,6 +34,8 @@ def _standard_kwargs(**overrides: object) -> dict[str, object]:
         "subject": "미적분Ⅰ",
         "domain": "변화와 관계",
         "statement": "함수의 극한의 뜻을 알고 그 성질을 이해한다.",
+        "official_statement": "함수의 극한의 뜻을 알고 그 성질을 이해한다.",
+        "version_id": uuid4(),
         "source_url": "https://ncic.example/2022/12미적1",
     }
     base.update(overrides)
@@ -55,16 +58,24 @@ def _link_kwargs(**overrides: object) -> dict[str, object]:
 # ──────────────────────────────────────────────────────────────────────
 class TestAchievementStandard:
     def test_minimal_valid(self) -> None:
-        """required만으로 생성되며 선택 필드는 기본값(None·빈 리스트)을 갖는다."""
+        """required만으로 생성되며 선택 필드는 기본값(None·빈 리스트·기본 Literal)을 갖는다."""
         s = AchievementStandard(**_standard_kwargs())  # type: ignore[arg-type]
         assert s.norm_id == "2022_12미적1_01_01"
         assert s.official_code == "[12미적1-01-01]"
+        assert s.official_statement == s.statement
+        assert s.normalized_statement is None
+        assert s.learner_friendly_statement is None
         assert s.parent_codes == []  # default_factory=list
         assert s.sub_domain is None
         assert s.commentary is None
         assert s.big_idea is None
         assert s.effective_from is None
+        assert s.effective_to is None
         assert s.source_document is None
+        assert s.status == "published"
+        assert s.jurisdiction == "KR"
+        assert s.language == "ko-KR"
+        assert isinstance(s.version_id, UUID)
 
     def test_uses_official_code_field_not_code(self) -> None:
         """백엔드 계약은 `official_code` 필드를 쓴다(코퍼스의 `code` 키 아님 — 로더가 매핑)."""
@@ -83,6 +94,8 @@ class TestAchievementStandard:
             "subject",
             "domain",
             "statement",
+            "official_statement",
+            "version_id",
             "source_url",
         ],
     )
@@ -106,14 +119,43 @@ class TestAchievementStandard:
                 commentary="좌극한·우극한을 함께 다룬다.",
                 big_idea="변화의 누적과 순간",
                 effective_from=date(2025, 3, 1),
+                effective_to=date(2030, 2, 28),
                 parent_codes=["[9수01-01]"],
                 source_document="2022-33호.pdf",
+                normalized_statement="함수 y=f(x)의 극한 개념과 성질을 이해하고 활용한다.",
+                learner_friendly_statement="함수값이 어떤 값에 가까워지는 극한의 뜻을 설명할 수 있다.",
+                status="approved",
+                jurisdiction="KR",
+                language="ko-KR",
             )  # type: ignore[arg-type]
         )
         again = AchievementStandard(**s.model_dump())
         assert again == s
         assert again.effective_from == date(2025, 3, 1)
+        assert again.effective_to == date(2030, 2, 28)
         assert again.parent_codes == ["[9수01-01]"]
+        assert again.normalized_statement is not None
+        assert again.status == "approved"
+        assert again.version_id == s.version_id
+
+    def test_official_statement_separate_from_normalized_and_learner_friendly(self) -> None:
+        """공식 원문·정규화 문구·학생용 표현은 서로 독립적이다."""
+        s = AchievementStandard(
+            **_standard_kwargs(
+                statement="공식 원문",
+                official_statement="함수의 극한의 뜻을 알고 그 성질을 이해한다.",
+                normalized_statement="정규화 문구",
+                learner_friendly_statement="학생용 문구",
+            )
+        )
+        assert s.official_statement == "함수의 극한의 뜻을 알고 그 성질을 이해한다."
+        assert s.normalized_statement == "정규화 문구"
+        assert s.learner_friendly_statement == "학생용 문구"
+
+    def test_status_literal_rejects_unknown(self) -> None:
+        """status는 정해진 Literal 값만 허용한다."""
+        with pytest.raises(ValidationError):
+            AchievementStandard(**_standard_kwargs(status="invalid"))  # type: ignore[arg-type]
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
@@ -234,6 +235,8 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
                         subject="미적분Ⅰ",
                         domain="변화와 관계",
                         statement="PED-05 테스트 성취기준.",
+                        official_statement="PED-05 테스트 성취기준.",
+                        version_id=uuid4(),
                         source_url="https://ncic.example/ped05",
                     )
                 )
@@ -250,6 +253,8 @@ async def test_grade_and_standard_code_resolve_on_real_pg() -> None:
                         subject="미적분Ⅰ",
                         domain="변화와 관계",
                         statement="PED-05 구 축 negative control 성취기준.",
+                        official_statement="PED-05 구 축 negative control 성취기준.",
+                        version_id=uuid4(),
                         source_url="https://ncic.example/ped05-stale",
                     )
                 )

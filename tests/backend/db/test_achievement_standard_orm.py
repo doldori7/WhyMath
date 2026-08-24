@@ -12,6 +12,7 @@ db/models/concept_standard_link.py.
 from __future__ import annotations
 
 from datetime import date
+from uuid import UUID, uuid4
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
@@ -47,6 +48,8 @@ def _valid_standard(**overrides: object) -> SchemaAchievementStandard:
         "subject": "미적분Ⅰ",
         "domain": "변화와 관계",
         "statement": "함수의 극한의 뜻을 알고 그 성질을 이해한다.",
+        "official_statement": "함수의 극한의 뜻을 알고 그 성질을 이해한다.",
+        "version_id": uuid4(),
         "source_url": "https://ncic.example/2022/12미적1",
     }
     base.update(overrides)
@@ -106,20 +109,21 @@ def test_achievement_standard_unique_revision_official_code() -> None:
 
 
 def test_achievement_standard_date_and_text_array_and_no_fk() -> None:
-    """effective_from은 DATE, parent_codes는 TEXT[](빈 배열 기본), FK·UUID PK 없음."""
+    """effective_from/effective_to은 DATE, parent_codes는 TEXT[](빈 배열 기본), FK 없음."""
     ddl = _pg_ddl(OrmAchievementStandard.__table__)
     assert "DATE" in ddl  # effective_from (TIMESTAMPTZ 아님)
     assert "TEXT[]" in ddl  # parent_codes
     assert "'{}'::text[]" in ddl  # NOT NULL 배열 빈 기본값
-    # norm_id는 의미 문자열(UUID 아님) → gen_random_uuid() 없음.
-    assert "gen_random_uuid()" not in ddl
+    # norm_id는 의미 문자열(UUID 아님) → PK에 gen_random_uuid() 없음.
+    assert "PRIMARY KEY (norm_id)" in ddl
+    assert "norm_id" in ddl
     # 성취기준 자체는 다른 테이블을 참조하지 않는다(느슨참조 코드들도 FK 아님).
     assert len(OrmAchievementStandard.__table__.foreign_keys) == 0
     assert "REFERENCES" not in ddl
 
 
 def test_achievement_standard_indexes() -> None:
-    """official_code 단일 · (curriculum_revision, domain) 인덱스가 정의된다."""
+    """official_code · (curriculum_revision, domain) · status · version_id 인덱스가 정의된다."""
     by_name = {
         ix.name: [c.name for c in ix.columns] for ix in OrmAchievementStandard.__table__.indexes
     }
@@ -128,6 +132,42 @@ def test_achievement_standard_indexes() -> None:
         "curriculum_revision",
         "domain",
     ]
+    assert by_name["idx_achievement_standard_status"] == ["status"]
+    assert by_name["idx_achievement_standard_version_id"] == ["version_id"]
+
+
+def test_achievement_standard_lifecycle_and_version_columns_exist() -> None:
+    """status·version_id·jurisdiction·language·effective_to 컬럼이 DDL에 존재한다."""
+    ddl = _pg_ddl(OrmAchievementStandard.__table__)
+    cols = {c.name for c in OrmAchievementStandard.__table__.columns}
+    assert {"status", "version_id", "jurisdiction", "language", "effective_to"} <= cols
+    assert "status" in ddl
+    assert "version_id" in ddl
+    assert "jurisdiction" in ddl
+    assert "language" in ddl
+
+
+def _render_default(col_name: str) -> str:
+    """컬럼의 server_default를 PostgreSQL 문자열로 렌더링."""
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.sql.expression import TextClause
+
+    default = OrmAchievementStandard.__table__.c[col_name].server_default
+    assert default is not None
+    arg = default.arg
+    # DefaultClause는 내부 arg로 TextClause(또는 plain str)를 갖는다.
+    if isinstance(arg, TextClause):
+        return str(arg.compile(dialect=postgresql.dialect()))
+    return str(arg)
+
+
+def test_achievement_standard_server_defaults() -> None:
+    """status·jurisdiction·language·parent_codes·official_statement는 INSERT 시 server_default를 갖는다."""
+    assert "published" in _render_default("status")
+    assert "KR" in _render_default("jurisdiction")
+    assert "ko-KR" in _render_default("language")
+    assert "'{}'::text[]" in _render_default("parent_codes")
+    assert _render_default("official_statement") == ""
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -188,23 +228,37 @@ def test_concept_standard_link_link_type_is_string_not_enum() -> None:
 # 4) 변환 roundtrip — AchievementStandard
 # ──────────────────────────────────────────────────────────────────────────
 def test_achievement_standard_roundtrip_preserves_fields() -> None:
-    """schema.AchievementStandard → ORM → schema가 핵심 필드(식별·본문·날짜·배열·출처)를 보존."""
+    """schema.AchievementStandard → ORM → schema가 핵심 필드(식별·본문·날짜·배열·출처·lifecycle)를 보존."""
     s = _valid_standard(
         sub_domain="극한",
         commentary="좌극한·우극한을 함께 다룬다.",
         big_idea="변화의 누적과 순간",
         effective_from=date(2025, 3, 1),
+        effective_to=date(2030, 2, 28),
         parent_codes=["[9수01-01]"],
         source_document="2022-33호.pdf",
+        normalized_statement="함수의 극한을 이해하고 그 성질을 설명할 수 있다.",
+        learner_friendly_statement="함수값이 어디로 가는지 극한으로 설명할 수 있다.",
+        status="approved",
+        jurisdiction="KR",
+        language="ko-KR",
     )
     orm = OrmAchievementStandard.from_schema(s)
     assert orm.norm_id == "2022_12미적1_01_01"
     assert orm.official_code == "[12미적1-01-01]"
     assert orm.curriculum_revision == "2022 개정"
     assert orm.statement == "함수의 극한의 뜻을 알고 그 성질을 이해한다."
+    assert orm.official_statement == "함수의 극한의 뜻을 알고 그 성질을 이해한다."
+    assert orm.normalized_statement == s.normalized_statement
+    assert orm.learner_friendly_statement == s.learner_friendly_statement
     assert orm.effective_from == date(2025, 3, 1)
+    assert orm.effective_to == date(2030, 2, 28)
     assert orm.parent_codes == ["[9수01-01]"]
     assert orm.source_url == "https://ncic.example/2022/12미적1"
+    assert orm.status == "approved"
+    assert orm.jurisdiction == "KR"
+    assert orm.language == "ko-KR"
+    assert isinstance(orm.version_id, UUID)
 
     back = orm.to_schema()
     assert back.norm_id == s.norm_id
@@ -213,8 +267,14 @@ def test_achievement_standard_roundtrip_preserves_fields() -> None:
     assert back.commentary == s.commentary
     assert back.big_idea == s.big_idea
     assert back.effective_from == date(2025, 3, 1)
+    assert back.effective_to == date(2030, 2, 28)
     assert back.parent_codes == s.parent_codes
     assert back.source_document == s.source_document
+    assert back.official_statement == s.official_statement
+    assert back.normalized_statement == s.normalized_statement
+    assert back.learner_friendly_statement == s.learner_friendly_statement
+    assert back.status == "approved"
+    assert back.version_id == s.version_id
 
 
 def test_achievement_standard_roundtrip_minimal_defaults() -> None:
@@ -224,12 +284,23 @@ def test_achievement_standard_roundtrip_minimal_defaults() -> None:
     assert orm.parent_codes == []  # schema default_factory=list
     assert orm.sub_domain is None
     assert orm.effective_from is None
+    assert orm.effective_to is None
+    assert orm.normalized_statement is None
+    assert orm.learner_friendly_statement is None
+    assert orm.status == "published"  # ORM server_default
+    assert orm.jurisdiction == "KR"
+    assert orm.language == "ko-KR"
 
     back = orm.to_schema()
     assert back.parent_codes == []
     assert back.commentary is None
     assert back.big_idea is None
     assert back.source_document is None
+    assert back.normalized_statement is None
+    assert back.learner_friendly_statement is None
+    assert back.status == "published"
+    assert back.jurisdiction == "KR"
+    assert back.language == "ko-KR"
 
 
 # ──────────────────────────────────────────────────────────────────────────

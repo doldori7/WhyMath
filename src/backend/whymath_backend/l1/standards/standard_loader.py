@@ -85,6 +85,7 @@ v2.0). 검정교과서·EBS·평가원 본문 금지와 대비 — 따라서 bac
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -129,8 +130,13 @@ def _standard_from_row(row: dict[str, Any]) -> AchievementStandard:
 
     seam: 코퍼스는 고시 원문코드를 `code` 키로 두지만 backend schema는 `official_code`다(혼동
     회피·`schema/standard.py` 모듈 docstring). 여기서 `code`를 꺼내 `official_code`로 옮긴다 — 이
-    rename이 이 슬라이스의 핵심이다. 나머지 키는 동명 직결이며, schema가 형식·필수성을 재검증한다
-    (extra=forbid라 `code` 키가 그대로 남아 있으면 거부되므로 *반드시* pop으로 제거해 rename한다).
+    rename이 이 슬라이스의 핵심이다.
+
+    추가 정규화: EOS-3 설계에서 `official_statement`는 공식 원문(변경 금지),
+    `version_id`는 교육과정 개정 간 스냅숏 식별자다. 코퍼스(P1)는 이 두 필드가 없을 수
+    있으므로, `official_statement` 누락 시 `statement`를 복사하고, `version_id` 누락 시
+    새 UUID를 부여한다. status/jurisdiction/language는 schema 기본값
+    ("published"/"KR"/"ko-KR")이 채워진다.
     """
     data = dict(row)  # 원본 불변(호출자 dict 보호)
     # 코퍼스 `code` → schema `official_code` (필수 rename). schema는 extra=forbid라 `code`를
@@ -138,6 +144,11 @@ def _standard_from_row(row: dict[str, Any]) -> AchievementStandard:
     # 단계에서 ValidationError를 낸다(형식 게이트는 schema 몫).
     if "code" in data:
         data["official_code"] = data.pop("code")
+    # EOS-3 lifecycle 확장: 공식 원문과 버전 식별자가 누락되면 기본값으로 채운다.
+    if "official_statement" not in data and "statement" in data:
+        data["official_statement"] = data["statement"]
+    if "version_id" not in data:
+        data["version_id"] = uuid.uuid4()
     return AchievementStandard.model_validate(data)
 
 
