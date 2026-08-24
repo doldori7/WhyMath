@@ -31,6 +31,6 @@ paths:
   - "src/backend/whymath_backend/l3/**"
   - "docs/architecture/**"
   - "backlog/tasks/**"
-session: null
+session: claude/s4-52-verifier-v2-design
 notes: "S4-13 v1(확률 유한 전수형)의 후속. v2는 검증 권위 서열을 유지하며 verifier를 통합 contract + 플러그인 가능한 도메인 검증기 + 영역별 잔여 교차검증 구조로 확장하는 설계. 단계 A: 확률 외 1개 영역(기하 또는 통계)을 실증 도메인으로 선정, 나머지는 발화 조건만 기술. 구현은 하위 슬라이스 태스크로 분할. PR #866"
 updated: 2026-08-24
