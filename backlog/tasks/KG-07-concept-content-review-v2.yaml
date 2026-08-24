@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: KG-07-concept-content-review-v2
+title: "개념 콘텐츠 검수 승격 v2 — S4-52 verifier v2 적용 및 846건 reviewed 승격 실행"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S4-52-residue-verifier-v2
+requires_gates: []
+acceptance:
+  - "S4-52에서 설계한 verifier v2(PASS/REVIEW/FAIL + evidence policy + Qwen/Claude 앙상블)를 concept_content 검수에 적용한다. K-12 437건 + 대학 409건 = 846건 중 표본을 Wilson min-n 샘플링으로 검수 배치 실행. PASS된 표본은 data/corpus/concept_content_v1/content.json과 data/corpus/concept_content_university_v1/content.json의 review_status를 reviewed로 갱신하고 src/backend/whymath_backend/l1/concept_content/projection.py를 통해 PG에 재적재한다. /concepts/search reviewed_only=true 재측정 시 N>0임을 확인. 미통과분은 ai_estimated 유지 + 결함 목록 산출. 결함 주입 표본이 검수 배치에서 실제 FAIL/REVIEW로 나오는지 실측."
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l1/concept_content/**"
+  - "data/corpus/concept_content_v1/**"
+  - "data/corpus/concept_content_university_v1/**"
+  - src/backend/whymath_backend/harness/concept_content_audit.py
+session: null
+notes: "KG-02가 S4-16 인프라 미완으로 blocked되었고, S4-16은 OpenRouter reference run에서 prompt만으로는 gate 통과 불가로 판명되어 S4-52 verifier v2 설계로 전환. KG-07은 verifier v2 완성 후 개념 콘텐츠 검수 승격을 재개하는 후속 태스크. projection.py는 이미 review_status를 코퍼스 record 값으로 upsert하고 mark_review_status로 일괄 갱신하는 좌석이 있어 구조적 준비는 되어 있다. 코퍼스 현황: concept_content_v1 437건 ai_estimated, concept_content_university_v1 409건 ai_estimated."
+updated: 2026-08-24
