@@ -15,7 +15,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.harness.corpus_audit_eval import AuditLabel
 from whymath_backend.l3.cross_verify import CrossVerifier
 from whymath_backend.l3.finite_probability import (
     verify_finite_count,
@@ -74,9 +73,9 @@ class VerificationVerdict(BaseModel):
         default=None,
         description="fail/unverifiable 사유(학생 비노출).",
     )
-    audit_labels: list[AuditLabel] = Field(
+    audit_labels: list[str] = Field(
         default_factory=list,
-        description="잔여 교차검증 감사 라벨.",
+        description="잔여 교차검증 감사 라벨 식별자(문자열).",
     )
 
 
@@ -100,12 +99,12 @@ def _verify_finite_probability_pair(
 def _verify_finite_count_pair(
     conditions: str, answer: str
 ) -> tuple[AnswerVerdict, tuple[str, ...]]:
-    """finite_count → (AnswerVerdict, residual_axes)."""
+    """finite_count → (AnswerVerdict, residual_axes).
+
+    finite_count는 경우의 수(카드)만 세므로 등확률 가정에 의존하지 않는다.
+    """
     verdict = verify_finite_count(conditions, answer)
-    residual = (
-        "문발↔형식모델 정합",
-        "등확률 가정",
-    )
+    residual = ("문발↔형식모델 정합",)
     return verdict, residual
 
 
@@ -180,10 +179,12 @@ class Verifier:
             )
 
         # 설계 단계: cross_verifier가 주입되지 않으면 unverifiable로 보수 회피.
+        # NOTE: 기계 전수 증거는 tier=MACHINE_EXHAUSTIVE로 유지. aggregate state만
+        # unverifiable이므로 잔여 축이 해소되면 pass가 될 때 등급이 일관된다.
         if self._cross_verifier is None:
             return VerificationVerdict(
                 state="unverifiable",
-                tier=VerificationTier.MACHINE_SAMPLED,
+                tier=VerificationTier.MACHINE_EXHAUSTIVE,
                 machine_axes=("유한 전수 검증",),
                 residual_axes=residual_axes,
                 reason="잔여 축이 있으나 cross_verifier가 주입되지 않음(v2 스켈레톤)",
@@ -193,7 +194,7 @@ class Verifier:
         #   현재는 설계 단계이므로 잔여 축을 사유로 unverifiable로 회피.
         return VerificationVerdict(
             state="unverifiable",
-            tier=VerificationTier.MACHINE_SAMPLED,
+            tier=VerificationTier.MACHINE_EXHAUSTIVE,
             machine_axes=("유한 전수 검증",),
             residual_axes=residual_axes,
             reason="잔여 교차검증은 S4-52-2 구현 후 활성화",

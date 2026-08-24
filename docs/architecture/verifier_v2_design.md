@@ -90,7 +90,7 @@ class VerificationVerdict(BaseModel):
     residual_axes: tuple[str, ...]          # 기계가 닫지 못한 축
     machine_axes: tuple[str, ...]         # 기계가 닫은 축
     reason: str | None = None
-    audit_labels: list[AuditLabel] = Field(default_factory=list)
+    audit_labels: list[str] = Field(default_factory=list)
 
 class Verifier:
     def __init__(self, *, cross_verifier: CrossVerifier | None = None) -> None: ...
@@ -169,9 +169,11 @@ _VERIFIERS_V2: dict[str, DomainVerifier] = {
 
 ```python
 class VerificationTier(str, Enum):
-    # 기존 값(alias)
-    MACHINE_EXHAUSTIVE = "machine_exhaustive"   # finite_exhaustive + symbolic_proof 등의 상위 alias
-    MACHINE_SAMPLED = "machine_sampled"         # numeric_sampling + statistical_estimate alias
+    # 기존 값(legacy alias)
+    # NOTE: v1 이름이지만 의미는 "유한 전수 열거"에 한정. SymPy 증명/데이터 전수를
+    # 포함하는 상위 alias로 확대하지 않는다(Codex P2 피드백).
+    MACHINE_EXHAUSTIVE = "machine_exhaustive"   # FINITE_EXHAUSTIVE의 legacy alias
+    MACHINE_SAMPLED = "machine_sampled"           # numeric_sampling + statistical_estimate legacy alias
 
     # 신규 — 기계 증명/결정론
     FINITE_EXHAUSTIVE = "finite_exhaustive"     # 유한 집합 전수 열거(확률·기하 이산·통계 자료)
@@ -189,7 +191,7 @@ class VerificationTier(str, Enum):
 
 ### 4.2 alias 처리
 
-- `read_verification_tier()`는 `MACHINE_EXHAUSTIVE`를 들어오면 내부적으로 `FINITE_EXHAUSTIVE | SYMBOLIC_PROOF | DETERMINISTIC_DATA` 집합으로 해석.
+- `read_verification_tier()`는 `MACHINE_EXHAUSTIVE`를 들어오면 `FINITE_EXHAUSTIVE`로 해석. SymPy 증명/데이터 전수는 별도 등급을 부여받으므로 레거시 값에서 추론하지 않는다.
 - `stamp_verification_tier()`는 신규값만 기록. 기존 코퍼스는 마이그레이션 없이 alias로 그대로 읽힌다.
 - 어떤 값도 "학생 노출 자격"을 단독으로 주지 않는다 — `is_exposable`이 최종 판단.
 
