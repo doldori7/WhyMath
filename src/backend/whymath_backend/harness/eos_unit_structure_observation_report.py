@@ -197,12 +197,19 @@ class ObservationReport:
 # ──────────────────────────────────────────────────────────────────────────
 # AST 기반 모델/스키마 스캔
 # ──────────────────────────────────────────────────────────────────────────
+def _is_public_identifier(name: str) -> bool:
+    """클래스 메타데이터(``__tablename__`` 등)가 아닌 public identifier만 허용."""
+    return not (name.startswith("__") and name.endswith("__"))
+
+
 def extract_class_assignments(text: str, class_names: set[str]) -> dict[str, tuple[str, ...]]:
     """Python 소스 텍스트에서 지정한 클래스들의 최상위 할당 이름(컬럼/필드명)을 추출(순수).
 
     SQLAlchemy 2.0(`name: Mapped[...] = mapped_column(...)`)과 Pydantic
     (`name: type = Field(...)`) 모두 `AnnAssign` 형태로 처리한다. legacy
     `name = Column(...)` 할당도 `Assign` 형태로 잡는다.
+
+    ``__tablename__``·``__table_args__`` 같은 클래스 메타데이터는 컬럼/필드로 보지 않는다.
     """
     tree = ast.parse(text)
     result: dict[str, list[str]] = {name: [] for name in class_names}
@@ -211,11 +218,15 @@ def extract_class_assignments(text: str, class_names: set[str]) -> dict[str, tup
             continue
         for item in node.body:
             if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-                result[node.name].append(item.target.id)
+                name = item.target.id
+                if _is_public_identifier(name):
+                    result[node.name].append(name)
             elif isinstance(item, ast.Assign):
                 for target in item.targets:
                     if isinstance(target, ast.Name):
-                        result[node.name].append(target.id)
+                        name = target.id
+                        if _is_public_identifier(name):
+                            result[node.name].append(name)
     return {name: tuple(sorted(names)) for name, names in result.items()}
 
 
@@ -288,10 +299,13 @@ def extract_unit_yaml_fields(text: str) -> tuple[bool, bool, bool, bool]:
 
     `unit_concepts_role`은 `unit_concepts`가 리스트이고, 원소 dict 중 `role` 키를 1개 이상
     가진 경우에만 True다.
+
+    Raises:
+        ValueError: YAML 최상위가 mapping이 아닌 경우(리스트·스칼라·None 등).
     """
     payload = yaml.safe_load(text)
     if not isinstance(payload, dict):
-        return (False, False, False, False)
+        raise ValueError(f"소단원 YAML 최상위가 mapping이 아님: {type(payload).__name__}")
 
     order_index_present = UNIT_YAML_KEYS[0] in payload
     coverage_weight_present = UNIT_YAML_KEYS[1] in payload
@@ -329,9 +343,11 @@ def _scan_corpus(units_root: Path, errors: list[ParseError]) -> tuple[CorpusObse
         )
     observations: list[CorpusObservation] = []
     for path in paths:
+        file_status: FileStatus = "데이터없음"
         try:
             text = path.read_text(encoding="utf-8")
             order_index, coverage_weight, unit_concepts, role = extract_unit_yaml_fields(text)
+            file_status = "적재됨"
         except Exception as exc:  # noqa: BLE001 — 파일 단위 격리
             errors.append(
                 ParseError(
@@ -344,7 +360,7 @@ def _scan_corpus(units_root: Path, errors: list[ParseError]) -> tuple[CorpusObse
         observations.append(
             CorpusObservation(
                 file_name=path.name,
-                status="적재됨",
+                status=file_status,
                 order_index_present=order_index,
                 coverage_weight_present=coverage_weight,
                 unit_concepts_present=unit_concepts,
@@ -665,8 +681,9 @@ def _safe_print(text: str) -> None:
         encoded = text.encode("utf-8")
         sys.stdout.buffer.write(encoded)
         sys.stdout.buffer.write(b"\n")
-    except Exception:
-        # buffer 쓰기마저 실패하면 어쩔 수 없이 print 폴백(에러 메시지는 보이게).
+    except Exception as exc:  # noqa: BLE001 — 폴백이어서 예외 타입만 stderr에 보고
+        exc_name = type(exc).__name__
+        print(f"[eos_report] UTF-8 buffer 실패({exc_name}); print 폴백", file=sys.stderr)
         print(text)
 
 
@@ -689,8 +706,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--units-root",
         type=Path,
-        default=DEFAULT_UNITS_ROOT,
-        help=f"소단원 YAML 루트 디렉터리(기본 {DEFAULT_UNITS_ROOT}).",
+        default=None,
+        help="소단원 YAML 루트 디렉터리(미지정 시 repo-root/data/corpus/units_v1).",
     )
     parser.add_argument(
         "--json",
@@ -701,7 +718,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    report = build_report(args.repo_root, units_root=args.units_root)
+    units_root = args.units_root or (args.repo_root / "data" / "corpus" / "units_v1")
+    report = build_report(args.repo_root, units_root=units_root)
     _safe_print(render_report(report))
     if args.json_path is not None:
         args.json_path.parent.mkdir(parents=True, exist_ok=True)

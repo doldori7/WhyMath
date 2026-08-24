@@ -57,6 +57,12 @@ def test_extract_unit_yaml_fields_all_absent() -> None:
     assert eos.extract_unit_yaml_fields(text) == (False, False, False, False)
 
 
+def test_extract_unit_yaml_fields_non_mapping_raises() -> None:
+    text = yaml.safe_dump([{"unit_id": "u1"}], allow_unicode=True)
+    with pytest.raises(ValueError, match="mapping"):
+        eos.extract_unit_yaml_fields(text)
+
+
 def test_extract_unit_yaml_fields_all_present() -> None:
     payload = {
         "unit_id": "u1",
@@ -107,6 +113,36 @@ def test_build_report_current_repo() -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 4. 변별력 — fixture에 가상 필드를 추가하면 관측값이 변해야 한다
 # ──────────────────────────────────────────────────────────────────────────
+def test_scan_corpus_non_mapping_records_parse_error(tmp_path: Path) -> None:
+    """unit YAML 최상위가 mapping이 아니면 parse error를 기록하고 '적재됨'으로 보지 않는다."""
+    units_root = tmp_path / "units"
+    units_root.mkdir()
+    (units_root / "bad.unit.yaml").write_text("- not_a_mapping\n", encoding="utf-8")
+
+    errors: list[eos.ParseError] = []
+    observations = eos._scan_corpus(units_root, errors)
+
+    assert len(observations) == 1
+    assert observations[0].status == "데이터없음"
+    assert observations[0].order_index_present is False
+    assert len(errors) == 1
+    assert errors[0].source == "bad.unit.yaml"
+    assert errors[0].error_type == "ValueError"
+
+
+def test_extract_class_assignments_excludes_dunder_metadata() -> None:
+    """``__tablename__``·``__table_args__`` 같은 클래스 메타데이터는 컬럼으로 세지 않는다."""
+    text = """
+class ConceptEdge:
+    __tablename__ = "concept_edge"
+    __table_args__ = {"schema": "public"}
+    edge_id: Mapped[int] = mapped_column(primary_key=True)
+    edge_type: Mapped[str]
+"""
+    result = eos.extract_class_assignments(text, {"ConceptEdge"})
+    assert result["ConceptEdge"] == ("edge_id", "edge_type")
+
+
 def test_build_report_fixture_with_fields(tmp_path: Path) -> None:
     """가상 fixture에 제안 필드를 추가하면 관측값이 실제로 증가해야 한다(변별력)."""
     model_dir = tmp_path / "src/backend/whymath_backend/db/models"
