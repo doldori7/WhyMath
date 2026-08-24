@@ -484,6 +484,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── OpenRouter (S4-16 reference run·확장 클라우드 모델 실험) ──
+    openrouter_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "OpenRouter API 키. SecretStr — repr/로그에 평문 노출 안 됨. 기본값 없음(빈 = 미설정). "
+            "환경변수 WHYMATH_OPENROUTER_API_KEY로만 주입. 비면 OpenRouter 경로 불가."
+        ),
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter API base URL. WHYMATH_OPENROUTER_BASE_URL로 오버라이드.",
+    )
+    openrouter_model_id: str = Field(
+        default="openai/gpt-5.6-sol",
+        description=(
+            "OpenRouter 기본 모델 ID(예: openai/gpt-5.6-sol). "
+            "WHYMATH_OPENROUTER_MODEL_ID로 오버라이드."
+        ),
+    )
+    openrouter_max_tokens: int = Field(
+        default=16000,
+        ge=1,
+        description="OpenRouter chat.completions의 max_tokens. WHYMATH_OPENROUTER_MAX_TOKENS로 조정.",
+    )
+    openrouter_request_timeout_s: float = Field(
+        default=60.0,
+        ge=0.0,
+        description="OpenRouter 단일 호출 타임아웃(초). WHYMATH_OPENROUTER_REQUEST_TIMEOUT_S로 조정.",
+    )
+
     # ── 인증(JWT 집행 계층, L5) ──
     # UserProfile엔 credential 필드가 없다 — JWT는 sub=user_id만 담는 *집행 토큰*이고, 실제
     # 로그인(카카오/네이버 OAuth, 후속)이 create_access_token을 호출해 발급한다. 시크릿은 코드

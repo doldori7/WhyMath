@@ -365,6 +365,7 @@ class CrossVerifier:
         settings: Settings | None = None,
         trace: TraceSink | None = None,
         subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
+        budget_krw: float | None = None,
         difficulty: str = "medium",
     ) -> None:
         _assert_independent(perspectives, min_perspectives)
@@ -382,6 +383,7 @@ class CrossVerifier:
         self._trace = trace
         self._perspectives = tuple(perspectives)
         self._subscription = subscription
+        self._budget_krw = budget_krw
         self._difficulty = difficulty
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -398,7 +400,11 @@ class CrossVerifier:
             difficulty=self._difficulty,
             requires_reasoning=True,
             student_subscription=self._subscription,
-            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
+            budget_krw=(
+                self._budget_krw
+                if self._budget_krw is not None
+                else _STUDENT_ESCALATION_DEFAULTS.budget_krw
+            ),
             call_site=CallSite.SELF_VERIFY,
             sync=False,
         )

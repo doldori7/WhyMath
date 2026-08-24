@@ -63,7 +63,9 @@ from whymath_backend.l3.finite_probability import (
     enumerate_model,
     parse_finite_model,
 )
+from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.providers.ollama import FixedModelOllamaProvider
+from whymath_backend.l3.providers.openrouter import OpenRouterProvider
 
 __all__ = [
     "RESIDUE_DEFECT_CLASSES",
@@ -81,6 +83,7 @@ __all__ = [
 
 _EXIT_OK = 0
 _EXIT_GATE_FAIL = 1
+_EXIT_INPUT_ERROR = 2
 
 # 결함 4종 — D7 명세(발문 조건 결측·중의성·등확률 미명시·복수 정답)와 1:1.
 ResidueDefectClass = Literal[
@@ -615,14 +618,76 @@ def main(argv: list[str] | None = None) -> int:
             "때 측정 가능성을 확보하는 선택이며, 측정치는 하한 추정으로 해석한다."
         ),
     )
+    parser.add_argument(
+        "--cloud",
+        action="store_true",
+        help=(
+            "클라우드(Anthropic) provider로 강등전을 실측한다. budget_krw가 충분히 "
+            "높게 설정되어 라우터가 CLOUD_MID/HIGH를 선택하도록 한다. --local-model/--openrouter와 "
+            "동시 사용 불가."
+        ),
+    )
+    parser.add_argument(
+        "--openrouter",
+        action="store_true",
+        help=(
+            "OpenRouter 경유 클라우드 provider로 강등전을 실측한다. --openrouter-model-id로 "
+            "모델을 지정할 수 있다. --local-model/--cloud와 동시 사용 불가."
+        ),
+    )
+    parser.add_argument(
+        "--openrouter-model-id",
+        default=None,
+        help=(
+            "OpenRouter 모델 ID(예: openai/gpt-5.6-sol). 미지정이면 WHYMATH_OPENROUTER_MODEL_ID "
+            "환경변수/설정값을 사용한다."
+        ),
+    )
+    parser.add_argument(
+        "--budget-krw",
+        type=float,
+        default=2000.0,
+        help="클라우드 강등전용 라우팅 예산(원). --cloud/--openrouter 사용 시 기본 2000.0(기본값).",
+    )
+    parser.add_argument(
+        "--subscription",
+        type=str,
+        default="premium",
+        help="클라우드 강등전용 학생 구독 등급(기본 premium).",
+    )
     args = parser.parse_args(argv)
+
+    exclusive = [args.local_model is not None, args.cloud, args.openrouter]
+    if sum(exclusive) > 1:
+        print(
+            "오류: --local-model, --cloud, --openrouter 중 하나만 사용할 수 있습니다.",
+            file=sys.stderr,
+        )
+        return _EXIT_INPUT_ERROR
 
     records = load_pilot_records(args.corpus)
     battery = build_residue_seeded_set(records)
     # 실 provider는 지연 연결(구성만으로 네트워크 0) — 실제 호출은 verify() 시점에 일어난다.
+    provider: LLMProvider | None = None
     if args.local_model is not None:
         provider = FixedModelOllamaProvider(args.local_model)
         verifier = CrossVerifier(provider=provider)
+    elif args.cloud:
+        from whymath_backend.l3.providers.anthropic import AnthropicProvider
+
+        provider = AnthropicProvider()
+        verifier = CrossVerifier(
+            provider=provider,
+            subscription=args.subscription,
+            budget_krw=args.budget_krw,
+        )
+    elif args.openrouter:
+        provider = OpenRouterProvider(model_id=args.openrouter_model_id)
+        verifier = CrossVerifier(
+            provider=provider,
+            subscription=args.subscription,
+            budget_krw=args.budget_krw,
+        )
     else:
         verifier = CrossVerifier()
     report = run_residue_demotion_battle(
