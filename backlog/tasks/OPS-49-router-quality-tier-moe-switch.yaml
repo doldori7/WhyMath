@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-49-router-quality-tier-moe-switch
+title: "라우터 QUALITY 티어 qwen3:30b-a3b(MoE)로 교체"
+track: infra-debt
+stage: S5
+subject: cross
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - OPS-48-quality-tier-moe-accuracy-battle
+requires_gates: []
+acceptance:
+  - "1) QUALITY_MODEL_ID=qwen3:30b-a3b 2) LOCAL_LATENCY_MS[QUALITY]=MoE 왕복 실측(~2300ms) 3) resolve_model/관련 테스트 갱신 4) ruff/black/mypy/pytest 4게이트 green 5) PR 생성"
+artifacts:
+  - "#857"
+paths:
+  - src/backend/whymath_backend/l3/router.py
+  - src/backend/whymath_backend/l3/providers/ollama.py
+  - tests/backend/l3/test_router.py
+  - docs/ops/amd395_local_llm_performance.md
+session: null
+notes: "PR #855 OPS-48에서 MoE가 dense보다 정확도가 열등하지 않음을 실측·판정했으나, 라우터 코드의 QUALITY_MODEL_ID는 여전히 qwen3.5:27b(dense)이고 LOCAL_LATENCY_MS[QUALITY]도 dense 기준 13,886ms로 MoE 실측 1,408ms와 10배 차이. 운영 적용을 위해 코드 동기화 필요."
+updated: 2026-08-23
