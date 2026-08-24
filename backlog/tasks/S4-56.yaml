@@ -1,0 +1,32 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-56
+title: "SymPy 불가 영역 verifier v2 — Cross-Verify v2 CLI 및 Wilson 게이트"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-53
+  - S4-54
+requires_gates: []
+acceptance:
+  - "residue_cross_verify_eval_v2 CLI 구현(도메인별 --domain 플래그)"
+  - "도메인별 관점 템플릿(확률·기하 이산·통계 자료) 적용"
+  - "도메인별 sample_n, max-defect-upper, min-n 기본값 설정"
+  - 기계 축 전수 재검증 → 잔여 축 표본 Wilson 검수
+  - "파일럿 코퍼스 30~50문으로 게이트 승격"
+  - "audit.jsonl + as_found 병기 + exit 0/1 산출"
+  - "ruff/black/mypy green, import-linter 7계층 위반 0"
+  - PR 생성 및 CI 통과
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/cross_verify.py
+  - src/backend/whymath_backend/harness/residue_cross_verify_eval_v2.py
+  - docs/architecture/verifier_v2_design.md
+  - "backlog/tasks/**"
+session: null
+notes: "S4-52 v2 설계서 §5~§6. S4-53(도메인 verifier)와 S4-54(통합 contract) 완료 후 실행. 파일럿 코퍼스를 통해 잔여 축 교차검증 게이트를 실제 측정으로 승격한다."
+updated: 2026-08-25
