@@ -1,0 +1,36 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-52-verifier-v2-design
+title: "SymPy 불가 영역 검증기 v2 — 통합 contract·도메인 확장·등급 개편 설계"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on:
+  - S4-13-unverifiable-domain-path
+  - S4-17-verify-tier-l1-promotion
+requires_gates: []
+acceptance:
+  - "S4-52 태스크 YAML 등록 및 status=in_progress"
+  - "docs/architecture/verifier_v2_design.md 초안 작성: 통합 verifier contract, verification tier 개편, cross-verify v2, 감사 CLI 확장"
+  - "docs/architecture/verifier_v2_domains.md 초안 작성: 단계 A 실증 도메인(기하 또는 통계) 1개의 DSL·잔여·관점 설계 + 기타 도메인 발화 조건"
+  - "src/backend/whymath_backend/l3/verifier.py 스켈레톤 작성: Verifier, VerificationVerdict, verify() 시그니처. 구현체는 NO-OP/pass-through"
+  - "기존 verification_tier enum 하위호환 유지하면서 확장안을 설계서에 기술"
+  - "import-linter 7계층 위반 0, ruff/black/mypy green"
+  - "PR 생성 및 CI 통과 대기(설계 산출물 위주)"
+artifacts:
+  - "backlog/tasks/S4-52-verifier-v2-design.yaml"
+  - "docs/architecture/verifier_v2_design.md"
+  - "docs/architecture/verifier_v2_domains.md"
+  - "src/backend/whymath_backend/l3/verifier.py (stub)"
+  - "후속 구현 슬라이스 분할안(설계서 §7)"
+  - "PR #866"
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "docs/architecture/**"
+  - "backlog/tasks/**"
+session: claude/s4-52-verifier-v2-design
+notes: "S4-13 v1(확률 유한 전수형)의 후속. v2는 검증 권위 서열을 유지하며 verifier를 통합 contract + 플러그인 가능한 도메인 검증기 + 영역별 잔여 교차검증 구조로 확장하는 설계. 단계 A: 확률 외 1개 영역(기하 또는 통계)을 실증 도메인으로 선정, 나머지는 발화 조건만 기술. 구현은 하위 슬라이스 태스크로 분할. PR #866"
+updated: 2026-08-24
