@@ -31,6 +31,11 @@ from whymath_backend.l3.finite_probability import (
     verify_finite_count,
     verify_finite_probability,
 )
+from whymath_backend.l3.statistical_claim import (
+    describe_statistical_model_ko,
+    parse_statistical_model,
+    verify_statistical_claim,
+)
 from whymath_backend.l3.verification_tier import VerificationTier
 from whymath_backend.l3.verify_answer import AnswerVerdict
 
@@ -104,6 +109,7 @@ class _DomainResult:
     machine_total: int = 0
     machine_favorable: int = 0
     machine_model_ko: str = ""
+    machine_value: float | None = None
 
 
 DomainVerifier = Callable[[str, str], _DomainResult]
@@ -170,6 +176,30 @@ def _verify_finite_count_pair(conditions: str, answer: str) -> _DomainResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 통계 자료형 verifier 래퍼 — SymPy 불가 영역 v2 실증 도메인(S4-53)
+# ──────────────────────────────────────────────────────────────────────────
+def _verify_statistical_claim_pair(conditions: str, answer: str) -> _DomainResult:
+    """statistical_claim → _DomainResult + 잔여 축 + 교차검증 재료."""
+    verdict, residual_axes, result = verify_statistical_claim(conditions, answer)
+    machine_model_ko = ""
+    machine_value: float | None = None
+    if verdict.state == "pass":
+        try:
+            model = parse_statistical_model(conditions)
+            machine_model_ko = describe_statistical_model_ko(model, result)
+            machine_value = result.value
+        except Exception:  # noqa: BLE001 — 교차검증 재료가 없어도 기계 검증 결과는 유효
+            machine_model_ko = ""
+    return _DomainResult(
+        verdict=verdict,
+        machine_axes=("통계량 전수 결정론 검산",),
+        residual_axes=residual_axes,
+        machine_model_ko=machine_model_ko,
+        machine_value=machine_value,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 기존 `_CONCEPTUAL_VERIFIERS` → _DomainResult 래퍼
 # ──────────────────────────────────────────────────────────────────────────
 def _wrap_conceptual_verifier(
@@ -222,10 +252,12 @@ def _machine_axis_for(kind: str) -> str:
 def _build_verifiers_v2() -> dict[str, DomainVerifier]:
     """기존 `_CONCEPTUAL_VERIFIERS`를 `_DomainResult`로 래핑해 통합 테이블 구성.
 
-    `finite_probability`/`finite_count`는 유한 전수형이라 별도 래퍼를 쓰고,
-    나머지는 `_wrap_conceptual_verifier`로 래핑. 중복 키는 즉시 거부.
+    `finite_probability`/`finite_count`는 유한 전수형, `statistical_claim`은 통계
+    자료형이라 별도 래퍼를 쓰고, 나머지는 `_wrap_conceptual_verifier`로 래핑.
+    중복 키는 즉시 거부.
     """
     verifiers: dict[str, DomainVerifier] = {}
+    verifiers["statistical_claim"] = _verify_statistical_claim_pair
     for kind, fn in _CONCEPTUAL_VERIFIERS.items():
         if kind == "finite_probability":
             verifiers[kind] = _verify_finite_probability_pair
@@ -332,7 +364,9 @@ class Verifier:
             machine_model_ko=domain_result.machine_model_ko,
             machine_total=domain_result.machine_total,
             machine_favorable=domain_result.machine_favorable,
+            machine_value=domain_result.machine_value,
             authored_by=problem.authored_by,
+            data=problem.conditions,
         )
         cross_result = self._cross_verifier.verify(subject)
         audit_labels = [f"cross_verify:{cross_result.aggregate}"]

@@ -12,7 +12,6 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l3.statistical_claim import (
-    StatisticalClaimError,
     parse_statistical_model,
     verify_statistical_claim,
 )
@@ -41,9 +40,7 @@ def test_median_even() -> None:
 
 
 def test_variance() -> None:
-    verdict, residual, result = verify_statistical_claim(
-        "data=[1,2,3,4,5]; stat=variance", "2.5"
-    )
+    verdict, residual, result = verify_statistical_claim("data=[1,2,3,4,5]; stat=variance", "2.5")
     assert verdict.state == "pass"
     assert result.value == pytest.approx(2.5)
 
@@ -54,13 +51,9 @@ def test_std() -> None:
 
 
 def test_q1_q3() -> None:
-    verdict, residual, result = verify_statistical_claim(
-        "data=[1,2,3,4,5,6,7,8]; stat=q1", "2.75"
-    )
+    verdict, residual, result = verify_statistical_claim("data=[1,2,3,4,5,6,7,8]; stat=q1", "2.75")
     assert verdict.state == "pass"
-    verdict, residual, result = verify_statistical_claim(
-        "data=[1,2,3,4,5,6,7,8]; stat=q3", "6.25"
-    )
+    verdict, residual, result = verify_statistical_claim("data=[1,2,3,4,5,6,7,8]; stat=q3", "6.25")
     assert verdict.state == "pass"
 
 
@@ -84,16 +77,12 @@ def test_corr_2d_without_columns_is_unverifiable() -> None:
 
 
 def test_answer_with_label() -> None:
-    verdict, residual, result = verify_statistical_claim(
-        "data=[1,2,3,4,5]; stat=mean", "mean=3"
-    )
+    verdict, residual, result = verify_statistical_claim("data=[1,2,3,4,5]; stat=mean", "mean=3")
     assert verdict.state == "pass"
 
 
 def test_fraction_answer() -> None:
-    verdict, residual, result = verify_statistical_claim(
-        "data=[0,1]; stat=mean", "1/2"
-    )
+    verdict, residual, result = verify_statistical_claim("data=[0,1]; stat=mean", "1/2")
     assert verdict.state == "pass"
 
 

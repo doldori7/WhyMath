@@ -179,3 +179,49 @@ async def test_cross_verifier_receives_machine_model_ko() -> None:
     assert subject.machine_favorable == 6
     assert "주사위" in subject.machine_model_ko
     assert problem.answer in subject.answer
+
+
+@pytest.mark.asyncio
+async def test_statistical_claim_pass_without_cross_verifier_is_unverifiable() -> None:
+    """통계 자료형도 기계 검증 후 잔여 축이 있으면 cross_verifier 없이는 unverifiable."""
+    verifier = Verifier()
+    problem = _problem(
+        "statistical_claim",
+        "3",
+        "data=[1,2,3,4,5]; stat=mean",
+    )
+    verdict = await verifier.verify(problem)
+    assert verdict.state == "unverifiable"
+    assert verdict.tier == VerificationTier.MACHINE_EXHAUSTIVE
+    assert "통계량 전수 결정론 검산" in verdict.machine_axes
+    assert "자료↔발문 정합" in verdict.residual_axes
+
+
+@pytest.mark.asyncio
+async def test_statistical_claim_fail_returns_fail() -> None:
+    verifier = Verifier()
+    problem = _problem(
+        "statistical_claim",
+        "99",
+        "data=[1,2,3,4,5]; stat=mean",
+    )
+    verdict = await verifier.verify(problem)
+    assert verdict.state == "fail"
+    assert verdict.tier == VerificationTier.MACHINE_SAMPLED
+    assert "불일치" in (verdict.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_statistical_claim_cross_verifier_receives_data_and_machine_value() -> None:
+    fake = _FakeCrossVerifier("ok")
+    verifier = Verifier(cross_verifier=fake)  # type: ignore[arg-type]
+    problem = _problem(
+        "statistical_claim",
+        "3",
+        "data=[1,2,3,4,5]; stat=mean",
+    )
+    await verifier.verify(problem)
+    subject = fake.subjects[0]
+    assert subject.data == problem.conditions
+    assert subject.machine_value == pytest.approx(3.0)
+    assert "평균" in subject.machine_model_ko
