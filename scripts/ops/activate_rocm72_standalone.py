@@ -32,7 +32,9 @@ def log(msg: str) -> None:
     print(line, flush=True)
 
 
-def run(cmd: list[str], *, check: bool = True, timeout: float | None = 30) -> subprocess.CompletedProcess[Any]:
+def run(
+    cmd: list[str], *, check: bool = True, timeout: float | None = 30
+) -> subprocess.CompletedProcess[Any]:
     log("RUN: " + " ".join(cmd))
     return subprocess.run(cmd, check=check, timeout=timeout, capture_output=True, text=True)
 
@@ -142,7 +144,9 @@ def main() -> int:
     log("inspecting Ollama logs for ROCm/HIP keywords")
     log_dir = pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Ollama" / "logs"
     if log_dir.exists():
-        log_files = sorted(log_dir.glob("server*.log"), key=lambda p: p.stat().st_mtime, reverse=True)[:3]
+        log_files = sorted(
+            log_dir.glob("server*.log"), key=lambda p: p.stat().st_mtime, reverse=True
+        )[:3]
         keywords = ["ROCm", "HIP", "hipblas", "amdhip", "gfx", "GPU"]
         for lf in log_files:
             lines = lf.read_text(encoding="utf-8", errors="ignore").splitlines()

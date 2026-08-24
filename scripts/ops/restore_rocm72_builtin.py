@@ -73,7 +73,9 @@ def main() -> int:
     # standalone 시도에서 setx로 남긴 HIP_PATH 사용자 환경변수 삭제
     log("removing standalone HIP_PATH user env")
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE) as key:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE
+        ) as key:
             try:
                 winreg.DeleteValue(key, "HIP_PATH")
                 log("  deleted HIP_PATH from HKCU\\Environment")

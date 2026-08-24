@@ -839,6 +839,10 @@ _AUTHORING = (
 _PRIVACY_RIGHT = (
     "by-design:법정 권리 이행 표면(PIPA 열람·삭제·감사) — 학생 앱 UI가 아니라 요청 처리 경로다"
 )
+_CONTENT_RIGHT = (
+    "by-design:콘텐츠 접근 권한 판정 표면(DISPLAY·batch-check) — MVP에서 학생 앱 직접 호출 경로가 "
+    "아직 확정되지 않았고, L1 rights gateway는 내부/후속 화면(L5/L6)에서 소비하도록 설계됨"
+)
 _INTERNAL_TOOL = "by-design:내부 도구·하네스 소비 표면 — 학생 클라이언트 대상이 아니다"
 
 _BATCH_GENERATOR = (
@@ -951,6 +955,12 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:api/verify.py — verify-step은 verify-solution이 연쇄 적용하는 하위 도구 "
             "표면(모듈 docstring). 학생 경로는 조립된 POST /v1/verify-solution만 쓴다(reached)"
         ),
+        # 콘텐츠 접근 권한 판정 표면 — MVP에서 클라이언트 직접 호출 경로가 아직 확정되지 않았고
+        # L1 rights gateway는 내부/후속 화면(L5/L6)에서 소비할 것으로 설계되어 있어, 현재 단계에서
+        # 도달 항목이 0건인 것이 의도다. 학생 앱이 직접 부르게 되면 reached로 전환한다.
+        "GET /v1/rights/{param}/{param}": _CONTENT_RIGHT,
+        "POST /v1/rights/batch-check": _CONTENT_RIGHT,
+        "POST /v1/rights/check": _CONTENT_RIGHT,
     },
     # ── 축 2. EventType(생산자 보유·소비자 없음) ──────────────────────────
     # 실측(2026-08-07): 검산결과·힌트제공·힌트요청은 `wh1_evaluation.py`/`coach.py`가 소비한다.
