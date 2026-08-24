@@ -19,9 +19,16 @@ PK 판단(이 모듈의 핵심 결정):
   - `curriculum_revision` → `sa.String(16)`('2022 개정'·'2015 개정').
   - `grade_band`·`school_type`·`subject`·`domain`(required) → `sa.String, NOT NULL`.
   - `sub_domain`(선택) → `sa.String`(nullable).
-  - `statement`(본문, required) → `sa.Text, NOT NULL`(자유 서술 — 길이 무제한).
+  - `statement`(본문, required·deprecated) → `sa.Text, NOT NULL`.
+    새 코드는 `official_statement` 사용.
+  - `official_statement`(공식 원문, required) → `sa.Text, NOT NULL`.
+  - `normalized_statement`·`learner_friendly_statement`(선택) → `sa.Text`(nullable).
   - `commentary`·`big_idea`(선택) → `sa.Text`(nullable).
-  - `effective_from`(시행일) → `sa.Date`(TIMESTAMPTZ 아님 — 날짜만, curriculum_entry 선례).
+  - `effective_from`·`effective_to`(시행일) → `sa.Date`
+    (TIMESTAMPTZ 아님 — 날짜만, curriculum_entry 선례).
+  - `status`(lifecycle) → `sa.String(30), NOT NULL`.
+  - `version_id`(버전 식별) → `sa.Uuid, NOT NULL`.
+  - `jurisdiction`·`language` → `sa.String, NOT NULL`.
   - `parent_codes`(선수 코드 배열, NOT NULL 의미) → `ARRAY(sa.Text), server_default '{}'::text[]`
     (concept_node.standard_codes·concept_fusion.concept_ids NOT NULL 배열 선례 — schema가
     default_factory=list라 항상 list를 넘기지만 DB도 빈 배열 기본값을 둔다).
@@ -35,6 +42,7 @@ PK 판단(이 모듈의 핵심 결정):
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 import sqlalchemy as sa
@@ -76,19 +84,41 @@ class AchievementStandard(Base):
     sub_domain: Mapped[str | None] = mapped_column(sa.String)
 
     # ===== 본문·해설 (공공누리 1유형 — 본문 보유 허용) =====
+    # ⚠️ `statement`는 하위호환용 deprecated 컬럼이다. 새 코드는 `official_statement`를 사용.
+    # official_statement: 공식 원문(변경 금지), normalized_statement: EOS 정규화,
+    # learner_friendly_statement: 학생용 표현.
     statement: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    official_statement: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="")
+    normalized_statement: Mapped[str | None] = mapped_column(sa.Text)
+    learner_friendly_statement: Mapped[str | None] = mapped_column(sa.Text)
     commentary: Mapped[str | None] = mapped_column(sa.Text)
     big_idea: Mapped[str | None] = mapped_column(sa.Text)
 
     # ===== 시점·위계·출처 =====
     # DATE — 날짜만(TIMESTAMPTZ 아님, curriculum_entry.effective_from 선례).
     effective_from: Mapped[date | None] = mapped_column(sa.Date)
+    effective_to: Mapped[date | None] = mapped_column(sa.Date)
     # NOT NULL 배열 — schema default_factory=list. concept_node.standard_codes 선례대로 빈 배열.
     parent_codes: Mapped[list[str]] = mapped_column(
         ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
     )
     source_url: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_document: Mapped[str | None] = mapped_column(sa.Text)
+
+    # ===== 라이프사이클·버전·管轄 =====
+    status: Mapped[str] = mapped_column(
+        sa.String(30), nullable=False, server_default=sa.text("'published'")
+    )
+    # version_id는 교육과정 개정 시 스냅숏 식별. norm_id는 개정 간 표면 식별자.
+    version_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, nullable=False, server_default=sa.text("gen_random_uuid()")
+    )
+    jurisdiction: Mapped[str] = mapped_column(
+        sa.String(20), nullable=False, server_default=sa.text("'KR'")
+    )
+    language: Mapped[str] = mapped_column(
+        sa.String(20), nullable=False, server_default=sa.text("'ko-KR'")
+    )
 
     # ── 제약·인덱스 (복합 UNIQUE + 조회 경로 인덱스) ──
     __table_args__ = (
@@ -102,6 +132,10 @@ class AchievementStandard(Base):
         sa.Index("idx_achievement_standard_official_code", "official_code"),
         # 개정 × 영역 필터(예: '2022 개정'의 '도형과 측정' 성취기준 목록).
         sa.Index("idx_achievement_standard_revision_domain", "curriculum_revision", "domain"),
+        # 상태 필터(예: published만 노출).
+        sa.Index("idx_achievement_standard_status", "status"),
+        # 버전 식별자 조회(이벤트·스냅숏 연결).
+        sa.Index("idx_achievement_standard_version_id", "version_id"),
     )
 
     # ── 변환 헬퍼 (schema↔db seam, concept.py 패턴) ──────────────────────

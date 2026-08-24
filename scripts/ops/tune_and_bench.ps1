@@ -16,6 +16,9 @@
 # 설계 규칙(CLAUDE.md): 자가검증은 변별력 있게(실효 설정 대조·서버 응답 확인),
 #   침묵 실패 금지(예외 타입명 로깅), 되돌리는 법 명시(전원 계획 원복 명령 출력).
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 [CmdletBinding()]
 param(
     [string]$Presets = "baseline,resident",
@@ -71,6 +74,15 @@ $PresetTable = @{
         env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
                   OLLAMA_FLASH_ATTENTION = "1"; OLLAMA_MAX_LOADED_MODELS = "3"
                   OLLAMA_KEEP_ALIVE = "30m"; OLLAMA_IGPU_ENABLE = "1" }
+    }
+    "vulkan_forced" = @{
+        desc = "Vulkan 강제 (L3) — OLLAMA_LLM_LIBRARY=vulkan으로 ROCm 후보를 제외"
+        models   = $null
+        noUnload = $false
+        env  = @{ OLLAMA_CONTEXT_LENGTH = "8192"; OLLAMA_NUM_PARALLEL = "1"
+                  OLLAMA_FLASH_ATTENTION = "1"; OLLAMA_MAX_LOADED_MODELS = "3"
+                  OLLAMA_KEEP_ALIVE = "30m"; OLLAMA_IGPU_ENABLE = "1"
+                  OLLAMA_LLM_LIBRARY = "vulkan" }
     }
 }
 
@@ -148,7 +160,7 @@ function Test-EffectiveConfig {
     if ($null -eq $cfg) { Write-Host "  [WARN] server config 줄 없음 — 대조 생략"; return $true }
 
     $ok = $true
-    foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_IGPU_ENABLE")) {
+    foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_IGPU_ENABLE","OLLAMA_LLM_LIBRARY")) {
         if (-not $Expect.ContainsKey($k)) { continue }
         $want = $Expect[$k]
         $m = [regex]::Match($cfg.Line, [regex]::Escape($k) + ":([^ \]]*)")
@@ -169,13 +181,24 @@ function Set-HighPerformancePowerPlan {
     $before = (& powercfg /getactivescheme) 2>&1
     Write-Host ("  현재 전원 계획: " + ($before -join " "))
     $list = (& powercfg /list) 2>&1 | Out-String
-    $target = $hp
-    if ($list -notmatch [regex]::Escape($hp)) {
+
+    # 목록에서 "고성능" / "High performance" 이름을 가진 항목이 이미 있는지 확인한다.
+    # 내장 GUID만 체크하면 복제 후 새 GUID가 활성화돼도 다음 실행 때 또 복제하게 된다(2026-08-23 실측).
+    $existing = $null
+    foreach ($line in ($list -split "`r?`n")) {
+        if ($line -match 'High performance|고성능') {
+            $m = [regex]::Match($line, '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})')
+            if ($m.Success) { $existing = $m.Groups[1].Value; break }
+        }
+    }
+
+    $target = if ($existing) { $existing } else { $hp }
+    if (-not $existing -and $list -notmatch [regex]::Escape($hp)) {
         # 최신 Windows는 고성능 계획을 기본 목록에서 숨긴다. 내장 템플릿에서 복제하면 나타난다.
         # (2026-08-22 실측: Win11 26200에서 목록에 없어 전원 레버 측정 자체를 건너뛰었다.)
         Write-Host "  고성능 계획이 목록에 없다 — 내장 템플릿에서 복제한다."
         $dup = (& powercfg -duplicatescheme $hp) 2>&1 | Out-String
-        $m = [regex]::Match($dup, '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})')
+        $m = [regex]::Match($dup, '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})')
         if (-not $m.Success) {
             Write-Host ("  [WARN] 복제 실패 — 건너뛴다. 출력: " + ($dup.Trim() -replace "\s+", " "))
             Write-Host "  (전면 버튼 54/85/140W는 어차피 눈으로 확인해야 한다.)"
@@ -183,6 +206,8 @@ function Set-HighPerformancePowerPlan {
         }
         $target = $m.Groups[1].Value
         Write-Host ("  복제 완료 — 새 GUID " + $target)
+    } elseif ($existing) {
+        Write-Host ("  기존 고성능 계획 사용 — GUID " + $existing)
     }
     & powercfg /setactive $target
     $after = (& powercfg /getactivescheme) 2>&1

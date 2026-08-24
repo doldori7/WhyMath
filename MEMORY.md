@@ -7081,6 +7081,24 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **문서 인덱스 보강**: `docs/ops/amd395_local_llm_performance.md`를 CLAUDE.md 인덱스에 등재(2026-08-10 통합점검이 지적한 "규범 문서가 인덱스에서 안 보이는" 상태 재발 방지).
 - **결과 요약 아티팩트** 발행 — https://claude.ai/code/artifact/4ea59a08-d0a9-40c7-9327-1459c1b23291
 
+## 2026-08-23: EOS 『2_단원 구조 관리』 설계안 검토 수용
+
+- **사건**: Kiki가 EOS 지향 교육앱을 위한 『2_단원 구조 관리』 설계안(116항)을 제출하고 검토를 요청.
+- **검토 축**: WhyMath 정본(Concept 영속 원본·Curriculum Overlay·PREREQUISITE 중심)과의 정렬/충돌 판단.
+- **수용 결정 3가지 후속 가설**:
+  1. **Sequence/Prerequisite 분리** — 공식 커리큘럼 순서(order_index)와 선수학습 의존성(PREREQUISITE 엣지)을 분리. 현재 `db/models/`에 순서 컬럼이 0개인 실측.
+  2. **Unit ↔ Concept 역할 enum** — `CORE`/`SUPPORTING`/`PREREQUISITE`/`EXTENSION`/`ENRICHMENT`/`REVIEW` 역할을 `unit_concept` 매핑에 추가 검토. 현재 `LearningObjective.k_type`은 *목표/문제 생성 유형* 축과 별개.
+  3. **coverage_weight 도입** — 성취기준이 여러 단원/개념에 걸쳐 있을 때 비율(0.3+0.5+0.2) 저장 가설. `CurriculumEntry`/`ConceptStandardLink`에 비율 필드 추가 가능성 관측.
+- **의도적 미채택 5가지**:
+  1. Curriculum → Subject → Course → UnitNode 1급 트리 — WhyMath에서 Unit은 atom_node 백본의 파생 뷰.
+  2. Graph DB(Neo4j) 도입 — runtime 미도입 확정, PostgreSQL `unit_edge`로 projection.
+  3. Drag & Drop CMS / 단원 이동·병합·분리 — YAML=소스·DB=산출물 단방향 populate 체계 유지, 수작업 신호 실측 전 GUI 미도입.
+  4. 관계 타입 12종 전면 채택 — `RELATED_TO`/`OVERLAPS_WITH` traversal 금지, `equivalent`는 SymPy가 유일 권위.
+  5. 다국가 UnitAlignment 즉시 구축 — `CurriculumEntry`가 3축(KR/US/IMO) Phase 1 범위 유지.
+- **산출물**:
+  - `backlog/tasks/CUR-09-eos-unit-structure-review-adoption.yaml` 등재 (track: infra-debt, stage: S3, priority: 2, owner: claude).
+  - `docs/architecture/curriculum_module_gap_review_r2.md` §후속 추가.
+- **cross-ref**: `curriculum_module_gap_review.md`(v1) §0-②, `curriculum_module_gap_review_r2.md` §2(의도적 미채택), `schemas/v1.1/curriculum_entry.schema.yaml`.
 ## 2026-08-22: OPS-49 — 라우터 QUALITY 티어를 `qwen3:30b-a3b`(MoE)로 교체
 
 - **전제**: PR #855(OPS-48)에서 dense 27B(`qwen3.5:27b`) 대비 MoE(`qwen3:30b-a3b`)가 정확도 축에서 열등하지 않음을 Wilson 단측 경계로 판정(exit 0)했으나, 실제 라우터 코드는 여전히 dense 모델을 가리키고 있었다.

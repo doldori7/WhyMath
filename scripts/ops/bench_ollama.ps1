@@ -17,6 +17,9 @@
 #   prompt_tps = prompt_eval_count / (prompt_eval_duration / 1e9) ← 프롬프트 처리(prefill) 속도
 #   gpu_fraction = /api/ps 의 size_vram / size                    ← `ollama ps` PROCESSOR 열의 기계 판독형
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 [CmdletBinding()]
 param(
     [string]$Label = "run",
@@ -181,7 +184,7 @@ $srvLog = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
 if (Test-Path $srvLog) {
     $cfg = @(Select-String -Path $srvLog -Pattern 'msg="server config"') | Select-Object -Last 1
     if ($null -ne $cfg) {
-        foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_VULKAN","OLLAMA_IGPU_ENABLE")) {
+        foreach ($k in @("OLLAMA_CONTEXT_LENGTH","OLLAMA_NUM_PARALLEL","OLLAMA_FLASH_ATTENTION","OLLAMA_MAX_LOADED_MODELS","OLLAMA_VULKAN","OLLAMA_IGPU_ENABLE","OLLAMA_LLM_LIBRARY")) {
             $m = [regex]::Match($cfg.Line, [regex]::Escape($k) + ":([^ \]]*)")
             if ($m.Success) { Write-Host ("[SRV ] " + $k.PadRight(26) + "= " + $m.Groups[1].Value) }
         }

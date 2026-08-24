@@ -22,7 +22,12 @@
   - `sub_domain`·`commentary`·`big_idea`·`source_document` → `str | None`(선택).
   - `statement`(성취기준 본문) → required `str`. ⚠️ **NCIC 공공누리 제1유형** 자료라 본문 보유가
     *허용*되는 예외 출처다(검정교과서·EBS 본문 금지와 대비 — `licensing_safety.md` 가이드 v2.0).
-  - `effective_from`(시행 시작일) → `date | None`.
+  - `official_statement`(교육부/공식기관 고시 원문) → required `str`.
+  - `normalized_statement`·`learner_friendly_statement` → `str | None`.
+  - `effective_from`·`effective_to`(시행일) → `date | None`.
+  - `status`(lifecycle) → `Literal` with default `"published"`.
+  - `version_id`(버전 식별자) → required `UUID`.
+  - `jurisdiction`·`language` → `str` with defaults `"KR"`/`"ko-KR"`.
   - `parent_codes`(선수 성취기준 코드) → `list[str]`(default_factory=list).
   - `source_url`(원자료 URL) → required `str`. 공공누리 1유형 *출처 표시 의무*.
   - `link_type`(개념↔성취기준 연결 의미) → `Literal["직접","재매핑","준용"]`(data-pipeline
@@ -38,6 +43,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -96,7 +102,23 @@ class AchievementStandard(BaseModel):
     sub_domain: str | None = Field(default=None, description="세부 영역 (선택)")
 
     # ===== 본문·해설 (공공누리 1유형 — 본문 보유 허용, 출처 표시 의무) =====
-    statement: str = Field(..., description="성취기준 본문(공공누리 1유형 — 본문 보유 허용)")
+    # ⚠️ `statement`는 하위호환용 deprecated 필드. 새 코드는 `official_statement`를 사용.
+    statement: str = Field(
+        ...,
+        description="성취기준 본문(공공누리 1유형 — 본문 보유 허용, deprecated)",
+    )
+    official_statement: str = Field(
+        ...,
+        description="교육부/공식기관 고시 원문(변경 금지) — statement의 authoritative source",
+    )
+    normalized_statement: str | None = Field(
+        default=None,
+        description="EOS 내부 정규화 문구(official_statement 해석·확장)",
+    )
+    learner_friendly_statement: str | None = Field(
+        default=None,
+        description="학생용 쉬운 표현",
+    )
     commentary: str | None = Field(default=None, description="성취기준 해설 (선택)")
     big_idea: str | None = Field(default=None, description="해당 영역의 핵심 아이디어 (선택)")
 
@@ -104,6 +126,10 @@ class AchievementStandard(BaseModel):
     effective_from: date | None = Field(
         default=None,
         description="시행 시작일 — 학년별 단계 시행 (선택)",
+    )
+    effective_to: date | None = Field(
+        default=None,
+        description="시행 종료일/폐기 예정일 (선택)",
     )
     parent_codes: list[str] = Field(
         default_factory=list,
@@ -116,6 +142,31 @@ class AchievementStandard(BaseModel):
     source_document: str | None = Field(
         default=None,
         description="PDF/HWP 등 첨부 문서 식별자 (선택)",
+    )
+
+    # ===== 라이프사이클·버전·국가/언어 =====
+    status: Literal[
+        "draft",
+        "review",
+        "approved",
+        "published",
+        "deprecated",
+        "superseded",
+    ] = Field(
+        default="published",
+        description="성취기준 생명주기 상태",
+    )
+    version_id: UUID = Field(
+        ...,
+        description="버전 식별자 — 교육과정 개정 시 스냅숏 구분",
+    )
+    jurisdiction: str = Field(
+        default="KR",
+        description="管轄/법정 교육 체계 (예: 'KR', 'US')",
+    )
+    language: str = Field(
+        default="ko-KR",
+        description="성취기준 원문 언어 (BCP 47)",
     )
 
 

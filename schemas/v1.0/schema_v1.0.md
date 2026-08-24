@@ -1125,14 +1125,31 @@ CREATE TABLE problem_attempt_y2026m11 PARTITION OF problem_attempt
 ### 13.2 저작권 관리
 
 ```sql
--- 콘텐츠 저작권 정책
+-- 콘텐츠 저작권 정책 (LIC-01 확장 — 18종)
 CREATE TYPE license_enum AS ENUM (
-    'PUBLIC_DOMAIN',          -- 평가원 공개 자료
-    'EBS_LICENSED',           -- EBS 라이선스 (사용 협의 필요)
-    'AIHUB_OPEN',             -- AIHub 공개 데이터셋
+    'PUBLIC_DOMAIN',          -- 공개 자료(평가원 공개)
+    'KOGL_0',                 -- 공공누리 0유형
+    'KOGL_1',                 -- 공공누리 1유형
+    'KOGL_2',                 -- 공공누리 2유형
+    'KOGL_3',                 -- 공공누리 3유형
+    'KOGL_4',                 -- 공공누리 4유형
+    'CC0',                    -- CC0
+    'CC_BY',                  -- CC BY
+    'CC_BY_SA',               -- CC BY-SA
+    'CC_BY_NC',               -- CC BY-NC
+    'CC_BY_ND',               -- CC BY-ND
+    'CC_BY_NC_SA',            -- CC BY-NC-SA
+    'CC_BY_NC_ND',            -- CC BY-NC-ND
+    'INTERNAL_OWNED',         -- WhyMath 내부 직접 제작
     'WHYMATH_GENERATED',      -- 자체 생성 (저작권 WhyMath)
     'USER_GENERATED',         -- 사용자 자작 (특성 #37)
-    'THIRD_PARTY_LICENSED'    -- 사설 모의고사 협업
+    'AIHUB_OPEN',             -- AIHub 공개 데이터셋
+    'CONTRACT_LICENSED',      -- 계약 기반 라이선스
+    'DIRECT_PERMISSION',      -- 개별 이용허락
+    'THIRD_PARTY_LICENSED',   -- 사설 모의고사 협업
+    'UNKNOWN',                -- 권리 상태 미확인
+    'RESTRICTED',             -- 명시적 제한
+    'EBS_LICENSED'            -- EBS 라이선스 (사용 협의 필요)
 );
 ```
 

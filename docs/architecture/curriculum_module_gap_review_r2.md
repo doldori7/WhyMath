@@ -670,3 +670,55 @@ for w in "Ontology" "온톨로지" "용어 사전" "변경 이력" "메타데이
 done
 # → 0 0 0 0 0 0 0 0 0
 ```
+
+---
+
+## §후속 — 2026-08-23 EOS 『2_단원 구조 관리』 추가 검토 수용
+
+> **사건**: Kiki가 EOS(Education Operating System) 지향 교육앱을 위한 『2_단원 구조 관리』 설계안(116항)을 제출하고 검토를 요청. v1·r2가 이미 5모듈(교육과정DB·단원구조·성취기준·학습목표·선수학습그래프)을 대조했으나, 이번 문서는 *단원 구조*에 대한 심화·확장 설계안이므로 별도 수용 결정을 남긴다.
+>
+> **결론**: WhyMath 정본과 충돌하지 않는 범위 내에서 3가지 후속 가설만 채택하고, 제안서의 Curriculum 중심 1급 UnitNode 구조는 도입하지 않는다. 태스크 `CUR-09-eos-unit-structure-review-adoption` 등재.
+
+### ① 정렬점(수용)
+
+| 제안서 원칙 | WhyMath 정본 | 정렬 판단 |
+|---|---|---|
+| Unit Tree와 Knowledge Graph 분리 | `atom_node.parent_code`로 계층, `EdgeType.PREREQUISITE`로 선수 관계 분리 | ✅ 동일 |
+| Unit ≠ Concept | `Concept`에서 교육과정/학년/과목 제거, `CurriculumEntry`로 Overlay | ✅ 동일 |
+| Sequence ≠ Prerequisite | **현재 미구현** — `db/models/`에 sequence 컬럼 0개 | ⚠️ 후속 가설 |
+| coverage_weight(성취기준-단원 N:M 비율) | `CurriculumEntry`·`ConceptStandardLink`에 비율 컬럼 없음 | ⚠️ 후속 가설 |
+| PostgreSQL = authoritative source | pgvector 사용, Neo4j runtime 미도입 | ✅ 동일 |
+| Published Unit 삭제 금지/deprecation | `UnitSpec.status`에 `SUPERSEDED` 포함 | ✅ 동일 |
+
+### ② 의도적 미채택/범위 밖
+
+1. **Curriculum → Subject → Course → UnitNode 1급 트리** — WhyMath는 `Concept`가 영속 원본이고 Unit은 atom_node 백본의 파생 뷰이므로 UnitNode를 독립 Aggregate로 두지 않는다(`CLAUDE.md` 원칙 ⑤, v1 §0-②).
+2. **Graph DB(Neo4j) 도입** — runtime 연결은 확정적으로 미도입. Unit Graph는 PostgreSQL `unit_edge` 테이블로 projection(`AGENTS.md` 기술 스택).
+3. **Drag & Drop CMS / 단원 이동·병합·분리** — 콘텐츠 파이프라인이 "YAML=소스, DB=산출물, 단방향 populate"로 통일돼 있고, 수작업 신호가 실측되지 않아 GUI를 도입하지 않는다(r2 §2-⑥·§5-②).
+4. **관계 타입 12종 전면 채택** — `RELATED_TO`/`OVERLAPS_WITH` 등은 traversal 금지, `equivalent`는 SymPy가 유일 권위. MVP에서는 `PREREQUISITE` + `PARENT_OF`만 유지(r2 §2-②·§2-④).
+5. **다국가 UnitAlignment 즉시 구축** — `CurriculumEntry`가 다국 매트릭스 셀이나 데이터는 Phase 1에서 KR+US+IMO 3축만(`curriculum_entry.schema.yaml`, r2 §2-⑤).
+
+### ③ 수용 후속 3가지
+
+1. **Sequence/Prerequisite 분리** — 공식 커리큘럼 순서를 담는 `sequence_order`/`order_index`와 선수학습 의존성 `PREREQUISITE`를 분리. 현재 `db/models/` 전체에 순서 컬럼이 0개(r2 §4-①).
+2. **Unit ↔ Concept 역할 enum 도입 가설** — `CORE`/`SUPPORTING`/`PREREQUISITE`/`EXTENSION`/`ENRICHMENT`/`REVIEW` 역할을 `unit_concept` 매핑에 추가 검토. 현재 `LearningObjective.k_type`은 *목표/문제 생성 유형* 축이므로 개념 역할 축과는 별개.
+3. **coverage_weight 도입 가설** — 성취기준이 여러 단원/개념에 걸쳐 있을 때 비율(0.3+0.5+0.2)을 저장. `CurriculumEntry`·`ConceptStandardLink`에 비율 필드 추가 가능성을 관측 리포트로 먼저 정합.
+
+### ④ 실행물
+
+- **태스크 등재**: `backlog/tasks/CUR-09-eos-unit-structure-review-adoption.yaml`
+  - track: `infra-debt`
+  - stage: `S3`
+  - priority: `2`
+  - 범위: 현행 실측 고정 + 3가지 가설 관측 리포트 + CI 배선 확인
+  - 범위 밖: 스키마/마이그레이션 변경, Graph DB, CMS GUI, 다국가 즉시 확장
+- **MEMORY.md 결정 로그**: 2026-08-23 항목 추가(별도 커밋).
+
+### ⑤ cross-ref
+
+- `docs/architecture/curriculum_module_gap_review.md`(v1) §0-② — Concept 원본·Curriculum Overlay 원칙
+- `docs/architecture/curriculum_module_gap_review_r2.md` §2 — 의도적 미채택 6건
+- `backlog/tasks/CUR-01-curriculum-revision-vocabulary-consistency.yaml` — 교육과정 개정 표기 3어휘 분열
+- `backlog/tasks/CUR-02-objective-coverage-observability.yaml` — 학습목표 커버리지 관측
+- `backlog/tasks/CUR-04-standard-join-axis-unification.yaml` — 성취기준 조인 축 이원화 해소
+- `schemas/v1.1/curriculum_entry.schema.yaml` — 다국 매트릭스 셀 설계

@@ -153,4 +153,4 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        assert heads == {"d1e2f3c4b5a6"}  # S3-32 dialogue_review_turns_remaining 리비전이 현 head
+        assert heads == {"b8e76fe238d0"}  # EOS-3 Achievement Standard lifecycle expansion

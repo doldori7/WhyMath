@@ -446,16 +446,56 @@ class LicenseType(str, Enum):
     법적 메모: 본문을 가진 문제의 지배 license는 `WHYMATH_GENERATED`. `EBS_LICENSED`·
     (관련) `ORIGINAL`은 공식 제휴(Phase 3+) 전까지 미사용(MEMORY 2026-05-28).
     license/generation_type 강제는 ContentProvenance(슬라이스 2) 소관.
+
+    LIC-01 확장: KOGL/CC/자체/계약/미확인/제한 등급을 native로 지원해 Rights Policy Engine이
+    라이선스 문자열을 해석하지 않고 enum 값으로 판정할 수 있게 한다.
     """
 
+    # 퍼블릭 도메인 / 법령 면제
     PUBLIC_DOMAIN = "PUBLIC_DOMAIN"
     """공개 자료(평가원 공개 — 단, 본문 영리사용은 별도 금지)."""
 
-    EBS_LICENSED = "EBS_LICENSED"
-    """EBS 라이선스 — 공식 제휴 전까지 미사용."""
+    # 공공누리
+    KOGL_0 = "KOGL_0"
+    """공공누리 0유형 — 자유이용."""
 
-    AIHUB_OPEN = "AIHUB_OPEN"
-    """AIHub 공개 데이터셋."""
+    KOGL_1 = "KOGL_1"
+    """공공누리 1유형 — 출처표시."""
+
+    KOGL_2 = "KOGL_2"
+    """공공누리 2유형 — 출처표시 + 상업적 이용금지."""
+
+    KOGL_3 = "KOGL_3"
+    """공공누리 3유형 — 출처표시 + 변경금지."""
+
+    KOGL_4 = "KOGL_4"
+    """공공누리 4유형 — 출처표시 + 상업적 이용금지 + 변경금지."""
+
+    # Creative Commons
+    CC0 = "CC0"
+    """CC0 — 퍼블릭 도메인 dedication."""
+
+    CC_BY = "CC_BY"
+    """CC BY — 출처표시."""
+
+    CC_BY_SA = "CC_BY_SA"
+    """CC BY-SA — 출처표시 + 동일조건변경허락(Share-Alike 전염 주의)."""
+
+    CC_BY_NC = "CC_BY_NC"
+    """CC BY-NC — 출처표시 + 비영리."""
+
+    CC_BY_ND = "CC_BY_ND"
+    """CC BY-ND — 출처표시 + 변경금지."""
+
+    CC_BY_NC_SA = "CC_BY_NC_SA"
+    """CC BY-NC-SA — 출처표시 + 비영리 + 동일조건변경허락."""
+
+    CC_BY_NC_ND = "CC_BY_NC_ND"
+    """CC BY-NC-ND — 출처표시 + 비영리 + 변경금지."""
+
+    # WhyMath / 내부 / 계약
+    INTERNAL_OWNED = "INTERNAL_OWNED"
+    """WhyMath 내부 직접 제작 콘텐츠(고용/의뢰 계약에 따른 권리 보유)."""
 
     WHYMATH_GENERATED = "WHYMATH_GENERATED"
     """자체 생성 — 저작권 WhyMath. 본문 보유 문제의 지배 license."""
@@ -463,8 +503,27 @@ class LicenseType(str, Enum):
     USER_GENERATED = "USER_GENERATED"
     """사용자 자작."""
 
+    AIHUB_OPEN = "AIHUB_OPEN"
+    """AIHub 공개 데이터셋 — 영리 명문 허용(출처표시·국외반출·재판매금지·환수 조건)."""
+
+    CONTRACT_LICENSED = "CONTRACT_LICENSED"
+    """계약 기반 라이선스 — 제휴/구독/기간/지역 조건을 별도 contract에 따름."""
+
+    DIRECT_PERMISSION = "DIRECT_PERMISSION"
+    """권리자로부터 개별 이용허락을 받은 콘텐츠."""
+
     THIRD_PARTY_LICENSED = "THIRD_PARTY_LICENSED"
     """사설 모의고사 협업(제휴)."""
+
+    # 안전선
+    UNKNOWN = "UNKNOWN"
+    """권리 상태 미확인 — fail-closed(REVIEW_REQUIRED/DENY)."""
+
+    RESTRICTED = "RESTRICTED"
+    """명시적 제한 — 거의 모든 행위 불가."""
+
+    EBS_LICENSED = "EBS_LICENSED"
+    """EBS 라이선스 — 공식 제휴 전까지 미사용."""
 
 
 class GenerationType(str, Enum):
@@ -487,6 +546,155 @@ class GenerationType(str, Enum):
 
     FULLY_GENERATED = "FULLY_GENERATED"
     """AI 완전 생성."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# LIC-01 권리·출처 정책 enum (Rights & Provenance Infrastructure MVP)
+# ──────────────────────────────────────────────────────────────────────────
+class PermissionAction(str, Enum):
+    """EOS 정규화 권리 primitive — License를 시스템이 해석할 수 있는 최소 행위 단위."""
+
+    DISPLAY = "DISPLAY"
+    """학생/교사 UI에 표시."""
+
+    COPY = "COPY"
+    """내부 복제."""
+
+    REDISTRIBUTE = "REDISTRIBUTE"
+    """외부 재배포."""
+
+    MODIFY = "MODIFY"
+    """수정·번역·요약."""
+
+    TRANSLATE = "TRANSLATE"
+    """번역."""
+
+    COMMERCIAL_USE = "COMMERCIAL_USE"
+    """상업적 이용."""
+
+    DOWNLOAD = "DOWNLOAD"
+    """다운로드 허용."""
+
+    PRINT = "PRINT"
+    """인쇄."""
+
+    EXPORT = "EXPORT"
+    """내보내기."""
+
+    EMBED = "EMBED"
+    """임베드."""
+
+    API_ACCESS = "API_ACCESS"
+    """API 노출."""
+
+    RAG_INDEX = "RAG_INDEX"
+    """RAG 인덱싱."""
+
+    AI_CONTEXT = "AI_CONTEXT"
+    """LLM 프롬프트 컨텍스트 입력."""
+
+    AI_TRAINING = "AI_TRAINING"
+    """LLM 학습 데이터로 사용."""
+
+    AI_FINE_TUNING = "AI_FINE_TUNING"
+    """파인튜닝 데이터로 사용."""
+
+    AI_EVALUATION = "AI_EVALUATION"
+    """모델 평가 데이터로 사용."""
+
+    AI_SYNTHETIC_DERIVATION = "AI_SYNTHETIC_DERIVATION"
+    """AI 합성 파생물 생성에 사용."""
+
+
+class RightsDecision(str, Enum):
+    """Rights Policy Engine의 판정 결과."""
+
+    ALLOW = "ALLOW"
+    """허용."""
+
+    ALLOW_WITH_ATTRIBUTION = "ALLOW_WITH_ATTRIBUTION"
+    """출처 표시 조건 하에 허용."""
+
+    ALLOW_WITH_RESTRICTIONS = "ALLOW_WITH_RESTRICTIONS"
+    """특정 조건 하에 허용(계약 조건 등)."""
+
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    """검수 필요 — 자동 승인 불가."""
+
+    DENY = "DENY"
+    """거부."""
+
+
+class RightsReviewStatus(str, Enum):
+    """Rights Entity의 검수·분쟁 상태."""
+
+    UNVERIFIED = "UNVERIFIED"
+    """미검증."""
+
+    VERIFIED = "VERIFIED"
+    """검증됨."""
+
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    """검수 필요."""
+
+    APPROVED = "APPROVED"
+    """승인됨."""
+
+    RESTRICTED = "RESTRICTED"
+    """제한됨."""
+
+    DISPUTED = "DISPUTED"
+    """분쟁 중."""
+
+    EXPIRED = "EXPIRED"
+    """계약/라이선스 만료."""
+
+
+class SourceAuthority(str, Enum):
+    """출처의 신뢰도 등급."""
+
+    OFFICIAL = "OFFICIAL"
+    """공식 기관 발행."""
+
+    VERIFIED = "VERIFIED"
+    """검증된 출처."""
+
+    SECONDARY = "SECONDARY"
+    """2차 출처."""
+
+    USER_REPORTED = "USER_REPORTED"
+    """사용자 제보."""
+
+    UNKNOWN = "UNKNOWN"
+    """미확인."""
+
+
+class DerivationType(str, Enum):
+    """콘텐츠 파생 관계 엣지 유형."""
+
+    DERIVED_FROM = "DERIVED_FROM"
+    """일반 파생."""
+
+    TRANSLATED_FROM = "TRANSLATED_FROM"
+    """번역."""
+
+    ADAPTED_FROM = "ADAPTED_FROM"
+    """각색·적응."""
+
+    SUMMARIZED_FROM = "SUMMARIZED_FROM"
+    """요약."""
+
+    GENERATED_FROM = "GENERATED_FROM"
+    """AI/프로그램 생성."""
+
+    PARAMETERIZED_FROM = "PARAMETERIZED_FROM"
+    """파라미터 변형(숫자 치환 등)."""
+
+    EXCERPTED_FROM = "EXCERPTED_FROM"
+    """발췌."""
+
+    COMBINED_FROM = "COMBINED_FROM"
+    """여러 원본 결합."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

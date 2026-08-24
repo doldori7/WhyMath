@@ -313,14 +313,31 @@ class TestVisualizability:
 # ──────────────────────────────────────────────────────────────────────
 class TestLicenseType:
     def test_values_match_ddl(self) -> None:
-        """§13.2 license_enum 값 그대로(영어, 6종)."""
+        """§13.2 license_enum 값 그대로(영어, 18종) — LIC-01 확장."""
         assert {lt.value for lt in LicenseType} == {
             "PUBLIC_DOMAIN",
-            "EBS_LICENSED",
-            "AIHUB_OPEN",
+            "KOGL_0",
+            "KOGL_1",
+            "KOGL_2",
+            "KOGL_3",
+            "KOGL_4",
+            "CC0",
+            "CC_BY",
+            "CC_BY_SA",
+            "CC_BY_NC",
+            "CC_BY_ND",
+            "CC_BY_NC_SA",
+            "CC_BY_NC_ND",
+            "INTERNAL_OWNED",
             "WHYMATH_GENERATED",
             "USER_GENERATED",
+            "AIHUB_OPEN",
+            "CONTRACT_LICENSED",
+            "DIRECT_PERMISSION",
             "THIRD_PARTY_LICENSED",
+            "UNKNOWN",
+            "RESTRICTED",
+            "EBS_LICENSED",
         }
 
 

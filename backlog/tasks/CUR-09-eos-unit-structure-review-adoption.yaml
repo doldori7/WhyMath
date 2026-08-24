@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-09-eos-unit-structure-review-adoption
+title: "EOS 단원 구조 관리 설계 검토 수용 후속 — Sequence/Prerequisite/Unit-Concept 역할/coverage_weight 가설 관측"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정: db/models/ 전체에 sequence/order_index 컬럼 0개, atom_node.parent_code로만 계층 표현 중, PREREQUISITE 외 Unit 간 의미 관계 엣지 미적재, unit_concept 역할 enum/weight 미정의, unit↔standard coverage_weight 미정의를 실측 재현한다."
+  - "② 정합 설계 본체: EOS 단원 구조 검토 결론 중 WhyMath 원칙(Concept 원본·Curriculum Overlay·PREREQUISITE 중심)과 충돌하지 않는 후속 가설 — Sequence/Prerequisite 분리, Unit-Concept 역할 enum(CORE/SUPPORTING/PREREQUISITE/EXTENSION/ENRICHMENT/REVIEW), coverage_weight — 을 관측 리포트/가설 명세서로 정리한다. 신규 스키마·마이그레이션 변경은 범위 밖."
+  - "③ CI 배선 실재 확인: 관측 리포트가 기존 harness 잡에서 실제로 실행되고 exit 0/1로 판정하는지 확인한다(OPS-03·OPS-10 선례 — '저장소에 존재함'과 '돌아감'은 다르다)."
+  - "④ 변별력: 파일럿 단원 DSL 1건(quadratic_maxmin.unit.yaml)을 대상으로 제안 필드(order_index, unit_concept.role, coverage_weight)가 현재 누락되어 있음을 재현한다. 가설 필드가 추가되었을 때 리포트 수치가 변하는지 확인한다."
+  - "⑤ 범위 밖 명시: UnitNode를 1급 독립 Aggregate로 도입, Graph DB(Neo4j) 추가, Drag&Drop CMS, 다국가 UnitAlignment 즉시 구축, 교과별 확장 metadata를 Unit core schema에 주입은 포함하지 않는다."
+artifacts: []
+paths:
+  - "docs/architecture/curriculum_module_gap_review*.md"
+  - "data/corpus/units_v1/**"
+  - src/backend/whymath_backend/db/models/pedagogy_dsl.py
+  - src/backend/whymath_backend/db/models/curriculum_entry.py
+  - src/backend/whymath_backend/db/models/achievement_standard.py
+  - "src/backend/whymath_backend/schema/*.py"
+  - src/backend/whymath_backend/l1/pedagogy/unit_compiler.py
+  - "scripts/harness/**"
+session: null
+notes: "외부 EOS 설계안 『2_단원 구조 관리』(116항) 검토를 수용. WhyMath 정본은 Concept이 영속 원본이고 Curriculum/Unit은 Overlay이므로, 제안서의 Curriculum→Subject→Course→UnitNode 트리를 1급 엔티티로 그대로 도입하지 않는다. 후속으로 Sequence/Prerequisite 분리, Unit-Concept 역할 enum, coverage_weight 가설 관측만 선행한다."
+updated: 2026-08-23
