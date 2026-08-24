@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-52-residue-verifier-v2
+title: "교차검증기 v2 — PASS/REVIEW/FAIL + evidence policy + Qwen/Claude 앙상블 설계/검증"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-16-residue-gate-demotion-battle
+requires_gates: []
+acceptance:
+  - "S4-16 측정 결과(OpenRouter GPT-5.6 Sol: 검출 18/20, 오검출 3/5)를 바탕으로 verifier 구조를 binary ok/defect에서 PASS/REVIEW/FAIL 3단계로 전환. evidence policy table과 allowed implicit assumptions을 prompt에 주입해 false alarm을 억제. clean 표본 30건 이상에서 false alarm Wilson 상한 <= 0.10, defect detection Wilson 하한 >= 0.70 달성. Qwen proposer + Claude judge 2단계 앙상블 또는 단일 frontier verifier reference run으로 최종 검증."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/cross_verify.py
+  - src/backend/whymath_backend/harness/residue_gate_demotion_battle.py
+  - docs/prompts/l3_cross_verify.md
+  - docs/standards/superhuman_verification_standard.md
+session: null
+notes: "S4-16 OpenRouter reference run 결과: GPT-5.6 Sol도 clean 5건 중 3건을 false alarm(주로 '동시에 던지되 구별하여 순서쌍으로 센다' 같은 표준 관례를 모호성으로 읽음). 이는 promptv3/v4 미세조정으로는 sensitivity/specificity를 동시에 만족하기 어렵다는 증거. verifier v2 설계 방향: ① verdict를 PASS/REVIEW/FAIL 3단계로 분리 ② defect 판정에 evidence-type(counterexample/numerical contradiction/symbolic contradiction/two-valid-interpretations/policy violation) 필수 ③ WhyMath QA policy table(allowed implicit assumptions, not-defects)을 prompt에 주입 ④ clean 표본을 30~50건으로 확대 ⑤ defect class별 confusion matrix 출력 ⑥ Qwen high-recall proposer + Claude high-precision judge 2단계 앙상블 실험."
+updated: 2026-08-24
