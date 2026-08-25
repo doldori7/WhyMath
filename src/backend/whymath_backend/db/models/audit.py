@@ -35,11 +35,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.audit import AuditEvent as SchemaAuditEvent
 from whymath_backend.schema.audit import DefectReport as SchemaDefectReport
 from whymath_backend.schema.audit import DeletionAudit as SchemaDeletionAudit
 from whymath_backend.schema.audit import PrivacyAudit as SchemaPrivacyAudit
@@ -205,3 +208,109 @@ class DefectReport(Base):
         mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
         data = {key: getattr(self, key) for key in mapped_keys}
         return SchemaDefectReport.model_validate(data)
+
+
+class AuditEvent(Base):
+    """EOS 범용 감사 이벤트 1행 — ADMIN-10.
+
+    `docs/architecture/90_audit_log.md`가 정본. append-only이며 UPDATE/DELETE 라우터를 두지
+    않는다. 민감 데이터는 저장하지 않고, 버전 이력은 `before_version`/`after_version`
+    식별자만 참조한다.
+
+    설계 결정:
+      - `audit_event_id`는 UUID PK(`gen_random_uuid()`).
+      - `actor_id`/`resource_id`는 **plain 문자열** — UUID뿐 아니라 서비스 식별자도 올 수 있고,
+        참조 대상 리소스가 삭제·재편돼도 감사 행은 잔존해야 한다(compliance 로그 독립성).
+      - `action`/`resource_type`/`source_service`는 `sa.String`으로 네이티브 PG enum 미생성 —
+        코드 안전성은 Pydantic enum/contract로, DB는 단순 문자열(AuditResourceType 선례).
+      - `changed_fields`는 PG `text[]` — 필드명 배열만 저장.
+      - `metadata`는 `JSONB` — 확장 속성 전용, 단 PII 금지(스키마·런타임 검증).
+      - `occurred_at` DESC 인덱스 + `(action, occurred_at)` 등 주요 조합 인덱스.
+    """
+
+    __tablename__ = "audit_event"
+
+    audit_event_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+    )
+
+    actor_type: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    actor_role: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+
+    action: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+
+    resource_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    resource_id: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+
+    before_version: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    after_version: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    changed_fields: Mapped[list[str] | None] = mapped_column(
+        sa.ARRAY(sa.String(64)),
+        nullable=True,
+    )
+
+    authorization_decision: Mapped[str | None] = mapped_column(sa.String(32), nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    reason_text: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
+
+    request_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    workflow_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    source_service: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+
+    # `metadata`는 SQLAlchemy Declarative 예약어이므로 ORM 속성명은 `event_metadata`로 하고
+    # DB 컬럼명만 `metadata`로 유지한다. schema↔ORM seam에서 이름을 매핑한다.
+    event_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata",
+        JSONB(none_as_null=True),
+        nullable=True,
+    )
+    retention_policy_id: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+
+    integrity_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    previous_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+
+    __table_args__ = (
+        sa.Index("idx_audit_event_occurred_at", sa.desc("occurred_at")),
+        sa.Index("idx_audit_event_actor", "actor_type", "actor_id", sa.desc("occurred_at")),
+        sa.Index("idx_audit_event_action", "action", sa.desc("occurred_at")),
+        sa.Index(
+            "idx_audit_event_resource",
+            "resource_type",
+            "resource_id",
+            sa.desc("occurred_at"),
+        ),
+        sa.Index("idx_audit_event_request_id", "request_id", sa.desc("occurred_at")),
+        sa.Index("idx_audit_event_workflow_id", "workflow_id"),
+    )
+
+    # ── 변환 헬퍼 (schema↔db seam, DeletionAudit 패턴 답습) ──
+    @classmethod
+    def from_schema(cls, schema: SchemaAuditEvent) -> AuditEvent:
+        """검증된 `schema.AuditEvent` → 영속 ORM(mapper 컬럼키 필터)."""
+        data = schema.model_dump()
+        # Declarative 예약어 회피: schema 필드명 `metadata` → ORM 속성명 `event_metadata`.
+        event_metadata = data.pop("metadata", None)
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        kwargs["event_metadata"] = event_metadata
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaAuditEvent:
+        """영속 ORM → `schema.AuditEvent`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        # ORM 속성명 `event_metadata` → schema 필드명 `metadata`.
+        data["metadata"] = data.pop("event_metadata", None)
+        return SchemaAuditEvent.model_validate(data)

@@ -37,12 +37,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import RequestResponseEndpoint
 
 from whymath_backend.api._auth import CurrentUser
@@ -132,9 +135,10 @@ from whymath_backend.api.study import router as study_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
+from whymath_backend.audit.llm import emit_generate_audit
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
-from whymath_backend.db.session import dispose_engine
+from whymath_backend.db.session import dispose_engine, get_session
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.interfaces import (
@@ -981,7 +985,10 @@ def create_app(
 
     @app.post("/v1/generate", tags=["l3"])
     async def post_generate(
-        body: GenerateBody, request: Request, user: CurrentUser
+        body: GenerateBody,
+        request: Request,
+        user: CurrentUser,
+        session: Annotated[AsyncSession, Depends(get_session)],
     ) -> JSONResponse:
         """라우팅 → (동기) 캐시·생성 / (비동기 QUALITY) 큐잉. 메타데이터 + 결과 반환.
 
@@ -1023,6 +1030,28 @@ def create_app(
                     ),
                 },
             )
+
+        # AI 생성 감사 기록 — 생성 실패(예외) 시에는 기록하지 않는다. audit 실패가 본 응답을
+        # 깨뜨리지 않게 별도 try로 감싼다(CLAUDE.md "학생 응답 ≫ 관측" 우선순위).
+        try:
+            request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+            await emit_generate_audit(
+                session,
+                decision=result.decision,
+                prompt=body.prompt,
+                system=body.system,
+                result=result,
+                request_id=request_id,
+                validation_result=result.validation_signal,
+            )
+            await session.commit()
+        except Exception as audit_exc:  # noqa: BLE001
+            logger.warning(
+                "AI 생성 감사 기록 실패(%s): %s",
+                type(audit_exc).__name__,
+                audit_exc,
+            )
+            await session.rollback()
 
         if result.is_queued:
             # 비동기 QUALITY 큐잉 → 202 Accepted + job_id(폴링 안내).

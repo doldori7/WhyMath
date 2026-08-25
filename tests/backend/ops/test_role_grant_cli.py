@@ -22,12 +22,17 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
+from whymath_backend.audit.event_bus import emit_identity_event
 from whymath_backend.config import Settings
-from whymath_backend.db.models.audit import PrivacyAudit
+from whymath_backend.db.models.audit import AuditEvent, PrivacyAudit
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.ops import role_grant_cli as cli
 from whymath_backend.privacy.audit import record_role_change_audit
-from whymath_backend.schema.enums import Role
+from whymath_backend.schema.enums import (
+    AuditEventAuthorization,
+    AuditEventSeverity,
+    Role,
+)
 
 _UID = uuid.uuid4()
 
@@ -251,6 +256,49 @@ class TestRecordRoleChangeAudit:
             session, user_id=_UID, ip=None, settings=_settings()  # type: ignore[arg-type]
         )
         assert row.ip_hash is None
+
+
+# ===========================================================================
+# ADMIN-10: IAM 이벤트 AuditEvent 배선
+# ===========================================================================
+
+
+class TestEmitIdentityEvent:
+    """`emit_identity_event`가 `iam.role.assign/revoke` AuditEvent를 올바르게 생성한다."""
+
+    @pytest.mark.asyncio
+    async def test_role_assign_emits_audit_event(self) -> None:
+        user = _user(Role.STUDENT)
+        session = _FakeUserSession({_UID: user})
+        old_role = await cli.apply_role_change(
+            session,  # type: ignore[arg-type]
+            user_id=_UID,
+            new_role=Role.CONTENT_ADMIN,
+        )
+        emit_identity_event(
+            session,  # type: ignore[arg-type]
+            action="iam.role.assign",
+            actor_id=None,
+            resource_id=_UID,
+            source_service="role_grant_cli",
+            authorization_decision=AuditEventAuthorization.allow,
+            severity=AuditEventSeverity.high,
+            metadata={"old_role": old_role.value, "new_role": Role.CONTENT_ADMIN.value},
+        )
+        audit_rows = [a for a in session.added if isinstance(a, AuditEvent)]
+        assert len(audit_rows) == 1
+        audit = audit_rows[0]
+        assert audit.action == "iam.role.assign"
+        assert audit.actor_type == "user"
+        assert audit.resource_type == "UserProfile"
+        assert audit.resource_id == str(_UID)
+        assert audit.authorization_decision == "allow"
+        assert audit.severity == "HIGH"
+        assert audit.retention_policy_id == "RET_SECURITY"
+        assert audit.event_metadata == {
+            "old_role": "student",
+            "new_role": "content_admin",
+        }
 
 
 # ===========================================================================

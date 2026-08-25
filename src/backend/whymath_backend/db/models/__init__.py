@@ -57,7 +57,7 @@ from whymath_backend.db.models.atom_probe import (
     ATOM_PROBE_REVIEW_STATUS_AI_ESTIMATED,
     AtomProbe,
 )
-from whymath_backend.db.models.audit import DefectReport, DeletionAudit, PrivacyAudit
+from whymath_backend.db.models.audit import AuditEvent, DefectReport, DeletionAudit, PrivacyAudit
 from whymath_backend.db.models.concept import (
     Concept,
     ConceptEdge,
@@ -205,6 +205,8 @@ __all__ = [
     "PrivacyAudit",
     # RPT-01: DefectReport (학생 결함 신고 — user_id 컬럼 없음, append-only)
     "DefectReport",
+    # ADMIN-10: AuditEvent (EOS 범용 감사 이벤트 — content/AI/knowledge provenance)
+    "AuditEvent",
     # Phase B.2: MisconceptionCatalog (M-id 오개념 콘텐츠 카탈로그·mis_id PK·기존 kebab 체계와 별개)
     "MisconceptionCatalog",
     # 오개념 정체성 통합 골격: MisconceptionCrosslink (kebab-id ↔ M-id N:M 매핑·read-time 해석)

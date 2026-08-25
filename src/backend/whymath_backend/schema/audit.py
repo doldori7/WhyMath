@@ -19,7 +19,12 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.schema.enums import (
+    AuditEventActorType,
+    AuditEventAuthorization,
     AuditEventKind,
+    AuditEventRetentionPolicy,
+    AuditEventSeverity,
+    AuditEventStatus,
     AuditResourceType,
     ConsentScope,
     DefectCategory,
@@ -132,4 +137,101 @@ class DefectReport(BaseModel):
     reported_at: datetime | None = Field(
         default=None,
         description="신고 접수 시각(DB server_default now())",
+    )
+
+
+class AuditEvent(BaseModel):
+    """EOS 범용 감사 이벤트 1행(append-only) — ADMIN-10.
+
+    `docs/architecture/90_audit_log.md`가 정본. Actor·Action·Resource·Result·Context를
+    구조화하여 저장하며, 민감 데이터(before/after payload, prompt 원문, 개인정보)는
+    **저장하지 않는다**. 버전 이력은 `before_version`/`after_version` 식별자만 참조하고,
+    원본은 `Version Store`에서 조회한다.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    audit_event_id: uuid.UUID = Field(default_factory=uuid4, description="감사 이벤트 PK (UUID)")
+    occurred_at: datetime | None = Field(
+        default=None,
+        description="이벤트 발생 시각 (DB server_default now())",
+    )
+
+    actor_type: AuditEventActorType = Field(
+        description="행위자 유형 — user/ai_agent/service_account/cron_job/migration",
+    )
+    actor_id: str | None = Field(
+        default=None,
+        description="행위자 식별자 (UUID 또는 서비스명).",
+    )
+    actor_role: str | None = Field(
+        default=None,
+        description="행위자 역할 (content_admin 등).",
+    )
+
+    action: str = Field(
+        description="이벤트 액션 — <domain>.<resource>.<action> 표기",
+    )
+
+    resource_type: str = Field(description="대상 리소스 유형")
+    resource_id: str = Field(description="대상 리소스 식별자")
+
+    before_version: str | None = Field(
+        default=None,
+        description="변경 전 버전 식별자 (version_id 참조)",
+    )
+    after_version: str | None = Field(
+        default=None,
+        description="변경 후 버전 식별자 (version_id 참조)",
+    )
+    changed_fields: list[str] | None = Field(
+        default=None,
+        description="변경된 필드명 배열 (값은 저장하지 않음)",
+    )
+
+    authorization_decision: AuditEventAuthorization | None = Field(
+        default=None,
+        description="인가 판정 — allow/deny",
+    )
+    reason_code: str | None = Field(
+        default=None,
+        description="변경 사유 코드 — ERROR_FIX/CURRICULUM_UPDATE/AI_CORRECTION/ADMIN_OVERRIDE 등",
+    )
+    reason_text: str | None = Field(
+        default=None,
+        description="사람 입력 변경 사유 (선택, PII 금지)",
+    )
+
+    request_id: str | None = Field(default=None, description="요청 ID")
+    trace_id: str | None = Field(default=None, description="분산 추적 trace ID")
+    workflow_id: str | None = Field(default=None, description="워크플로우 ID")
+    source_service: str = Field(description="이벤트를 발생시킨 서비스/모듈")
+
+    status: AuditEventStatus = Field(description="작업 결과 — success/failure")
+    severity: AuditEventSeverity = Field(
+        default=AuditEventSeverity.notice,
+        description="이벤트 심각도 — INFO/NOTICE/WARNING/HIGH/CRITICAL",
+    )
+
+    metadata: dict[str, object] | None = Field(
+        default=None,
+        description=(
+            "확장 메타데이터 (PII 금지). " "예: AI model/prompt_version/input_hash/output_hash"
+        ),
+    )
+    retention_policy_id: AuditEventRetentionPolicy = Field(
+        description="보존 정책 식별자 — RET_PRIVACY/RET_SECURITY/RET_CONTENT/RET_AI/RET_CRITICAL",
+    )
+
+    integrity_hash: str | None = Field(
+        default=None,
+        description="이벤트 무결성 해시 (P2)",
+    )
+    previous_hash: str | None = Field(
+        default=None,
+        description="이전 이벤트 해시 (P2 hash-chain)",
     )

@@ -49,9 +49,10 @@ from whymath_backend.api._concurrency import (
     etag_for,
     matches_if_none_match,
 )
+from whymath_backend.audit.event_bus import emit_content_event
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.enums import Subject
+from whymath_backend.schema.enums import AuditEventSeverity, Subject
 from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
 from whymath_backend.schema.problem import PublicProblem, PublicProblemStep
@@ -79,6 +80,17 @@ async def create_problem(
     """
     orm = Problem.from_schema(body)
     session.add(orm)
+    emit_content_event(
+        session,
+        action="problem.create",
+        actor_id=admin.user_id,
+        actor_role=admin.role.value if admin.role else None,
+        resource_type="Problem",
+        resource_id=body.problem_id,
+        source_service="problems_api",
+        severity=AuditEventSeverity.notice,
+        reason_code="CONTENT_CREATION",
+    )
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -224,6 +236,24 @@ async def patch_problem(
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
     ensure_if_match(if_match, etag_for(PublicProblem.from_problem(existing.to_schema())))
+    changed_fields = [k for k in body.keys() if k != "problem_id"]
+    severity = (
+        AuditEventSeverity.high
+        if {"answer", "solution", "answer_explanation", "expected_answer"} & set(changed_fields)
+        else AuditEventSeverity.notice
+    )
+    emit_content_event(
+        session,
+        action="problem.update",
+        actor_id=admin.user_id,
+        actor_role=admin.role.value if admin.role else None,
+        resource_type="Problem",
+        resource_id=problem_id,
+        source_service="problems_api",
+        changed_fields=changed_fields,
+        severity=severity,
+        reason_code="CONTENT_UPDATE",
+    )
     merged = existing.to_schema().model_dump()
     merged.update(body)
     merged["problem_id"] = problem_id  # PK는 경로 고정
@@ -272,6 +302,17 @@ async def delete_problem(
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
     ensure_if_match(if_match, etag_for(PublicProblem.from_problem(existing.to_schema())))
+    emit_content_event(
+        session,
+        action="problem.delete",
+        actor_id=admin.user_id,
+        actor_role=admin.role.value if admin.role else None,
+        resource_type="Problem",
+        resource_id=problem_id,
+        source_service="problems_api",
+        severity=AuditEventSeverity.high,
+        reason_code="CONTENT_DELETION",
+    )
     await session.delete(existing)
     try:
         await session.commit()

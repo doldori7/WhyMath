@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -24,7 +25,9 @@ from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_current_user
 from whymath_backend.app import create_app
+from whymath_backend.audit.llm import _hash_text
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.audit import AuditEvent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
@@ -126,17 +129,62 @@ class NoPollQueue:
         return "job-x"
 
 
-def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
-    """provider/cache/trace/queue를 가짜로, get_current_user를 고정 인증 사용자로 오버라이드."""
+class _FakeGenerateSession:
+    """`/v1/generate` 감사 기록용 가짜 세션 — add/commit/rollback만 추적한다.
+
+    ADMIN-10: `post_generate`가 `get_session` 의존성으로 DB 세션을 받아
+    `emit_generate_audit`을 호출한다. hermetic 테스트에서는 실 DB 연결 없이
+    AuditEvent 적재 여부만 확인하면 된다.
+    """
+
+    def __init__(self) -> None:
+        self.added: list[Any] = []
+        self.committed = False
+        self.rolled_back = False
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+    async def __aenter__(self) -> "_FakeGenerateSession":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+
+async def _fake_generate_session() -> AsyncIterator[_FakeGenerateSession]:
+    yield _FakeGenerateSession()
+
+
+def _client_with_session(
+    provider: StubProvider, queue: Any | None = None
+) -> tuple[TestClient, _FakeGenerateSession]:
+    """`_client`와 동일하되 `/v1/generate` 감사용 가짜 세션도 함께 반환한다."""
+    fake_session = _FakeGenerateSession()
     app = create_app(
         provider=provider,
         cache=InMemoryCache(),
         trace=RecordingTraceSink(),
-        # 기본적으로 가짜 큐 주입 — 라이브 broker 차단(hermetic).
         queue=queue if queue is not None else StubQueue(),
     )
+
+    async def _fake_session() -> AsyncIterator[_FakeGenerateSession]:
+        yield fake_session
+
+    app.dependency_overrides[get_session] = _fake_session
     app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
-    return TestClient(app)
+    return TestClient(app), fake_session
+
+
+def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
+    """provider/cache/trace/queue를 가짜로, get_current_user를 고정 인증 사용자로 오버라이드."""
+    return _client_with_session(provider, queue)[0]
 
 
 class TestHealth:
@@ -483,6 +531,75 @@ class TestGenerateEndpoint:
         }
         resp = client.post("/v1/generate", json=payload)
         assert resp.status_code == 422
+
+
+class TestGenerateAudit:
+    """ADMIN-10 — `/v1/generate` 호출 시 AI 감사 이벤트가 기록된다."""
+
+    def _post(self, payload: dict[str, Any]) -> tuple[TestClient, _FakeGenerateSession]:
+        provider = StubProvider(text="생성결과")
+        client, session = _client_with_session(provider)
+        resp = client.post("/v1/generate", json=payload)
+        return resp, session
+
+    def test_generate_local_creates_ai_audit_event(self) -> None:
+        """LOCAL 동기 완료 → `ai.generate` AuditEvent가 기록되고 커밋된다."""
+        payload = {
+            "request": {
+                "task_type": "explain",
+                "difficulty": "easy",
+                "requires_reasoning": False,
+                "student_subscription": "free",
+                "sync": True,
+            },
+            "prompt": "이차방정식이 뭐야?",
+            "system": "너는 수학 코치다",
+        }
+        resp, session = self._post(payload)
+        assert resp.status_code == 200
+        assert len(session.added) == 1
+        assert isinstance(session.added[0], AuditEvent)
+        event = session.added[0]
+        assert event.actor_type == "ai_agent"
+        assert event.action == "ai.generate"
+        assert event.resource_type == "LLMCall"
+        assert event.source_service == "app.generate"
+        assert event.retention_policy_id == "RET_AI"
+        assert event.status == "success"
+        assert event.event_metadata["provider"] == "ollama"
+        # LOCAL + explain + easy → FAST/MATH 라우팅
+        assert event.event_metadata["model"] == "qwen2-math:1.5b"
+        assert event.event_metadata["input_hash"] == _hash_text(
+            "너는 수학 코치다\n이차방정식이 뭐야?"
+        )
+        assert event.event_metadata["output_hash"] == _hash_text("생성결과")
+        assert session.committed is True
+
+    def test_generate_quality_queued_creates_ai_audit_event(self) -> None:
+        """QUALITY 비동기 큐잉 → `ai.generate` AuditEvent가 기록된다."""
+        payload = {
+            "request": {
+                "task_type": "self_verify",
+                "difficulty": "hard",
+                "requires_reasoning": True,
+                "student_subscription": "free",
+                "sync": False,
+                "call_site": "self_verify",
+            },
+            "prompt": "검증해줘",
+            "system": "",
+        }
+        provider = StubProvider()
+        client, session = _client_with_session(provider, queue=StubQueue(job_id="job-audit-1"))
+        resp = client.post("/v1/generate", json=payload)
+        assert resp.status_code == 202
+        assert len(session.added) == 1
+        event = session.added[0]
+        assert event.action == "ai.generate"
+        assert event.status == "success"
+        assert event.severity == "INFO"
+        assert event.event_metadata["model"] == "qwen3:30b-a3b"
+        assert session.committed is True
 
 
 class TestGenerateAuthGate:

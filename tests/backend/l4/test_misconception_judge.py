@@ -413,7 +413,8 @@ class TestJudgeRoutingProfile:
         assert decision.local_model == LocalModelTier.MID
         assert resolve_model(decision.local_family, decision.local_model) == "qwen2.5:7b"
 
-    def test_default_settings_preserve_fast_math(self) -> None:
+    def test_default_settings_preserve_fast_math(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # env/오버라이드 없으면 현행(fast_math) 보존 — 회귀 0.
+        monkeypatch.delenv("WHYMATH_MISCONCEPTION_JUDGE_ROUTING", raising=False)
         decision = Router().route(_judge_routing_request(Settings()))
         assert resolve_model(decision.local_family, decision.local_model) == "qwen2-math:1.5b"
