@@ -115,6 +115,7 @@ USING (tenant_id = current_setting('app.tenant_id')::uuid);
 RLS 구현 시 유의사항:
 - SQLAlchemy async + 커넥션 풀에서는 **트랜잭션 시작 시** `SET LOCAL app.tenant_id = ...`를 호출해야 한다. 커넥션 반납 시 설정이 풀린다.
 - 애플리케이션 DB 계정은 `BYPASSRLS` 권한이 없어야 한다. 슈퍼유저로 접속하면 RLS가 무력화된다.
+- **테이블 소유자(owner)는 기본적으로 RLS를 우회**할 수 있다. 마이그레션 계정과 애플리케이션 계정을 분리하거나, 소유자에게도 RLS를 강제하는 `FORCE ROW LEVEL SECURITY`를 사용해야 한다. 인가 테스트에 이 케이스를 포함해야 한다.
 - 현재 WhyMath는 테넌시 개념이 없으므로 이는 EOS 단계 요구사항이다.
 
 ## 5. 객체 수준·필드 수준 인가
@@ -217,7 +218,7 @@ API key 생성
 
 - **Transit**: Client↔API, API↔API, API↔DB/Vector DB/Object Storage/LLM — TLS 1.3 우선, 1.2 호환 범위에 한해.
 - **At-Rest**: PostgreSQL, Redis, Object Storage, Vector DB, backups, snapshots, analytics warehouse, log storage.
-- **Application/Field-Level**: 고위험 필드(guardian_phone, email, real_name, external_identity, sensitive_profile)는 AES-256-GCM 봉투 암호화.
+- **Application/Field-Level**: 고위험 필드(guardian_phone, email, real_name, external_identity, sensitive_profile)는 AES-256-GCM 필드 수준 암호화. EOS 목표는 §7.2의 KEK/DEK 봉투 암호화를 적용하는 것이다.
 
 > ⚠️ Disk/TDE 암호화만으로는 부족. 애플리케이션 서버 자체가 탈취된 경우를 대비해 필드 수준 암호화를 병행.
 
@@ -233,12 +234,14 @@ Master Key → KEK → DEK → Data
 
 `src/backend/whymath_backend/api/_crypto.py`가 이미 다음을 구현해 두었다.
 
-- AES-256-GCM(96-bit nonce, AEAD)
+- AES-256-GCM(96-bit nonce, AEAD) 필드 수준 암호화
 - `MultiKeyCipher`: primary + fallback 다중 키 + 버전 기반 복호화
 - 자산별 키 소스 분리: device secret, dialogue content, evidence payload
-- prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed)
+- dialogue content에 한해 prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed)
 
-EOS는 이 패턴을 보안 플랫폼 전체의 기본 암호화 규약으로 승격한다.
+현재 구현은 **자산별 마스터 키를 직접 사용하는 필드 암호화**이며, §7.2에서 정의한 KEK/DEK 봉투 암호화나 KMS는 아직 도입되지 않았다. EOS는 이를 P0 암호화 기반선으로 삼고, KEK/DEK/KMS로의 이행은 P1/P2에서 `TBD-48-02`로 결정한다.
+
+> ⚠️ 알려진 갭: `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`가 없을 때 device secret은 평문 폴백(`secret_plain`)될 수 있다. 이 갭은 SEC-01 범위 밖이므로 별도로 추적해야 한다.
 
 ### 7.4 Key Lifecycle
 
@@ -807,7 +810,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 | OAuth + refresh 회전/재사용 탐지 | 카카오·네이버 OAuth, rotation, reuse detection, 전체 로그아웃 | `api/auth.py`, `refresh_token_session.py` | ✅ 충족 |
 | Role enum | STUDENT, CONTENT_ADMIN 2종뿐 | `schema/enums.py:1473` | 🟡 부분 |
 | 동의·미성년 검사 | `is_minor` 파생, 보호자 동의 부여/철회/만료 | `api/_auth.py:get_consented_user` | 🟡 부분 (expires_at writer 없음) |
-| 필드 수준 암호화 | AES-256-GCM 봉투, 3개 키 분리, 회전, prod fail-closed | `api/_crypto.py` | ✅ 충족 |
+| 필드 수준 암호화 | AES-256-GCM, 3개 자산별 키, MultiKeyCipher 회전, dialogue content만 prod fail-closed; device secret 평문 폴백 갭 있음 | `api/_crypto.py` | 🟡 부분 |
 | Log PII 스크러버 | 시크릿/이메일/전화번호/학생 발화 마스킹, 예외 타입명 보존 | `ops/log_scrubber.py` | ✅ 충족 |
 | 감사 테이블 | DeletionAudit, PrivacyAudit, DefectReport | `db/models/audit.py` | ✅ 구조 충족 |
 | 관리자 접근 감사 | `record_admin_access_audit` 호출부 0곳 | — | ⬜ 미착지 |
@@ -830,7 +833,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 |---|---|---|
 | DEC-48-01 | 요구사항 ID는 `EOS-SEC-*` 접두사 사용 | 백로그 `SEC-01~24`와 충돌 방지 |
 | DEC-48-02 | 비밀번호 인증은 현행과 같이 미채택, 비밀번호 해싱 절은 "도입 시" 조걶로 한정 | OAuth 전용 결정(SEC-07 D1) |
-| DEC-48-03 | 필드 수준 암호화는 현행 `_crypto.py`의 AES-256-GCM 봉투 + 키 분리 + MultiKeyCipher를 EOS 기본 규약으로 승격 | 이미 구현·운영 검증됨 |
+| DEC-48-03 | 필드 수준 AES-256-GCM + 자산별 키 분리 + MultiKeyCipher 회전은 EOS P0 암호화 기반선; KEK/DEK/KMS 봉투 암호화는 P1/P2(`TBD-48-02`)로 이행 | 현행 `_crypto.py`가 P0 기반선, 완전 봉투 미도입 |
 | DEC-48-04 | 액세스 토큰은 stateless JWT + 짧은 TTL + refresh 회전을 유지, 즉시 취소 한계를 문서화 | 현행 설계 유지 |
 | DEC-48-05 | 멀티테넌시·RLS·12개 역할은 EOS 단계로 분리, 현행은 2역할 유지 | "좌석 없는 역할 안 만든다" 원칙, 테넌시 부재 |
 | DEC-48-06 | 보안 이벤트는 204 교육 이벤트와 분리 | 감사/보안/교육 3종 구분 |
