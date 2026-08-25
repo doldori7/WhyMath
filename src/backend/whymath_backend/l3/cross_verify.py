@@ -518,7 +518,6 @@ class CrossVerifier:
         self._perspectives = tuple(perspectives)
         self._subscription = subscription
         self._difficulty = difficulty
-        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ── 라우팅(호출지점 ⑤ 자기검증 좌석) ────────────────────────────────
     def _routing_request(self) -> RoutingRequest:
@@ -546,13 +545,6 @@ class CrossVerifier:
             return f"llm:{resolve_model(decision.local_family, decision.local_model)}"
         return f"llm:{decision.cost_tier}"
 
-    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
-        """인스턴스 전용 지속 이벤트 루프 — 배치에서 provider 커넥션 풀이 죽은 루프에 묶이는
-        회귀 방어(`llm_generator._ensure_loop` 실측 교훈 동형)."""
-        if self._loop is None or self._loop.is_closed():
-            self._loop = asyncio.new_event_loop()
-        return self._loop
-
     def _record_trace(self, decision: RoutingDecision, usage: Usage | None) -> None:
         """호출 1건의 라우팅·실측을 관측에 남긴다 — never-break(배치 비차단·타입명 로그)."""
         is_cloud = decision.cost_tier != CostTier.LOCAL.value
@@ -576,26 +568,48 @@ class CrossVerifier:
             _LOGGER.warning("교차검증 관측 기록 실패(%s) — 무시하고 계속", type(exc).__name__)
 
     # ── 검증 ───────────────────────────────────────────────────────────
-    def verify(self, subject: ResidueSubject) -> CrossVerificationResult:
-        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님)."""
+    def verify(
+        self,
+        subject: ResidueSubject,
+        perspectives: Sequence[Perspective] | None = None,
+    ) -> CrossVerificationResult:
+        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님).
+
+        `perspectives`가 주어지면 해당 관점 집합을, 아니면 인스턴스 기본 관점을 사용한다.
+        도메인별 관점 분기는 `Verifier`가 담당한다.
+
+        동기 API로 유지하면서 async provider 호출은 내부에서 새 이벤트 루프를 열어 실행한다.
+        호출부가 이미 async loop 안에 있을 경우 `asyncio.to_thread()`로 격리해 충돌을 피한다.
+        """
         if subject.authored_by == self.signature:
             raise IndependenceError(
                 f"생성자와 검증자가 같은 주체({subject.authored_by}) — 자기승인 금지"
             )
+        perspectives_to_use = self._perspectives if perspectives is None else perspectives
         decision = Router().route(self._routing_request())
-        verdicts = [self._run_perspective(p, subject, decision) for p in self._perspectives]
+        return asyncio.run(self._verify_async(subject, decision, perspectives_to_use))
+
+    async def _verify_async(
+        self,
+        subject: ResidueSubject,
+        decision: RoutingDecision,
+        perspectives: Sequence[Perspective],
+    ) -> CrossVerificationResult:
+        """관점별 판정을 순차 await하고 집계한다."""
+        verdicts: list[PerspectiveVerdict] = []
+        for perspective in perspectives:
+            verdict = await self._run_perspective(perspective, subject, decision)
+            verdicts.append(verdict)
         return _aggregate(subject.problem_id, verdicts)
 
-    def _run_perspective(
+    async def _run_perspective(
         self, perspective: Perspective, subject: ResidueSubject, decision: RoutingDecision
     ) -> PerspectiveVerdict:
         try:
-            generated = self._ensure_loop().run_until_complete(
-                self._provider.generate(
-                    perspective.render(subject),
-                    perspective.system_prompt,
-                    decision,
-                )
+            generated = await self._provider.generate(
+                perspective.render(subject),
+                perspective.system_prompt,
+                decision,
             )
         except Exception as exc:  # noqa: BLE001 — provider 장애로 배치가 죽으면 안 됨
             # 침묵 실패 금지 — 예외 *타입명*을 사유에 남긴다(값·시크릿은 제외).

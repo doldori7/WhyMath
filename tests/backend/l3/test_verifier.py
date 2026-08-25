@@ -14,6 +14,7 @@ import pytest
 
 from whymath_backend.l3.cross_verify import (
     CrossVerificationResult,
+    Perspective,
     ResidueSubject,
     ResidueVerdictLabel,
 )
@@ -28,7 +29,12 @@ class _FakeCrossVerifier:
         self.aggregate = aggregate
         self.subjects: list[ResidueSubject] = []
 
-    def verify(self, subject: ResidueSubject) -> CrossVerificationResult:
+    def verify(
+        self,
+        subject: ResidueSubject,
+        perspectives: tuple[Perspective, ...] | None = None,
+    ) -> CrossVerificationResult:
+        del perspectives  # 대역은 관점 세트를 검증하지 않는다.
         self.subjects.append(subject)
         return CrossVerificationResult(
             problem_id=subject.problem_id,

@@ -39,6 +39,7 @@ class StatisticalClaimError(ValueError):
 
 
 StatKind = Literal["mean", "median", "variance", "std", "q1", "q3", "corr"]
+VarianceKind = Literal["sample", "population"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,7 @@ class StatisticalModel:
     table: tuple[tuple[float, ...], ...] | None
     stat: StatKind
     columns: tuple[int, ...] | None
+    variance_kind: VarianceKind | None
     source: str
 
 
@@ -105,6 +107,8 @@ def _flatten_table(parsed: object) -> tuple[tuple[float, ...], ...]:
     for row in parsed:
         if not isinstance(row, list):
             raise StatisticalClaimError(f"data 행이 배열이 아님: {row!r}")
+        if not row:
+            raise StatisticalClaimError("data 행이 비어 있음")
         if expected_len is None:
             expected_len = len(row)
         elif len(row) != expected_len:
@@ -179,6 +183,13 @@ def parse_statistical_model(conditions: str) -> StatisticalModel:
             raise StatisticalClaimError(f"columns는 배열이어야 함: {cols!r}")
         columns = tuple(int(c) for c in cols)
 
+    variance_kind: VarianceKind | None = None
+    if "variance_kind" in kwargs:
+        vk = kwargs["variance_kind"].strip().lower()
+        if vk not in ("sample", "population"):
+            raise StatisticalClaimError(f"미지 variance_kind: {vk!r}")
+        variance_kind = vk  # type: ignore[assignment]
+
     table: tuple[tuple[float, ...], ...] | None = None
     if _is_1d(raw_data):
         values = _flatten_numbers(raw_data)
@@ -208,7 +219,12 @@ def parse_statistical_model(conditions: str) -> StatisticalModel:
             values = tuple(float(row[0]) for row in table)
 
     return StatisticalModel(
-        values=values, table=table, stat=stat, columns=columns, source=conditions
+        values=values,
+        table=table,
+        stat=stat,
+        columns=columns,
+        variance_kind=variance_kind,
+        source=conditions,
     )
 
 
@@ -240,11 +256,19 @@ def _stat_value(model: StatisticalModel) -> tuple[float | None, str]:
         value = median(values)
         return value, f"중앙값(n={n}) = {value}"
     if model.stat == "variance":
-        value = stdev(values) ** 2 if n > 1 else 0.0
-        return value, f"분산(n={n}, 자유도 n-1) = {value}"
+        if model.variance_kind == "population":
+            mean_v = sum(values) / n
+            value = sum((x - mean_v) ** 2 for x in values) / n
+        else:
+            value = stdev(values) ** 2 if n > 1 else 0.0
+        return value, f"분산(n={n}, variance_kind={model.variance_kind or 'sample'}) = {value}"
     if model.stat == "std":
-        value = stdev(values) if n > 1 else 0.0
-        return value, f"표준편차(n={n}, 자유도 n-1) = {value}"
+        if model.variance_kind == "population":
+            mean_v = sum(values) / n
+            value = math.sqrt(sum((x - mean_v) ** 2 for x in values) / n)
+        else:
+            value = stdev(values) if n > 1 else 0.0
+        return value, f"표준편차(n={n}, variance_kind={model.variance_kind or 'sample'}) = {value}"
     if model.stat == "q1":
         value = _percentile(values, 0.25)
         return value, f"1사분위수(n={n}) = {value}"
@@ -278,7 +302,10 @@ def _parse_claimed(answer: str) -> tuple[float | None, str | None]:
         # 분수 'a/b' 지원
         if "/" in value_text:
             num, den = value_text.split("/", 1)
-            value = float(num) / float(den)
+            denominator = float(den)
+            if denominator == 0:
+                return None, f"주장값 {answer!r}의 분모가 0"
+            value = float(num) / denominator
         else:
             value = float(value_text)
     except ValueError:

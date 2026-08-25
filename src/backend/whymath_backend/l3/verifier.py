@@ -16,13 +16,20 @@ S4-13 v1이 확률 유한 전수형을 닫았다면, v2는 검증 진입점을 �
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l3.cross_verify import CrossVerifier, ResidueSubject
+from whymath_backend.l3.cross_verify import (
+    PROBABILITY_PERSPECTIVES,
+    STATISTICAL_PERSPECTIVES,
+    CrossVerifier,
+    Perspective,
+    ResidueSubject,
+)
 from whymath_backend.l3.equivalent.acceptance import _CONCEPTUAL_VERIFIERS
 from whymath_backend.l3.finite_probability import (
     describe_model_ko,
@@ -113,6 +120,11 @@ class _DomainResult:
 
 
 DomainVerifier = Callable[[str, str], _DomainResult]
+
+# 도메인별 교차검증 관점 — 기본값은 확률 유한 전수형 관점.
+_CROSS_VERIFY_PERSPECTIVES: dict[str, tuple[Perspective, ...]] = {
+    "statistical_claim": STATISTICAL_PERSPECTIVES,
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -347,9 +359,9 @@ class Verifier:
                 reason="잔여 축이 있으나 cross_verifier가 주입되지 않음",
             )
 
-        return self._run_cross_verify(problem, domain_result)
+        return await self._run_cross_verify(problem, domain_result)
 
-    def _run_cross_verify(
+    async def _run_cross_verify(
         self, problem: ProblemVerifyInput, domain_result: _DomainResult
     ) -> VerificationVerdict:
         """잔여 축에 대해 독립 다관점 LLM 교차검증을 실행하고 결과를 VerificationVerdict로 변환."""
@@ -368,7 +380,8 @@ class Verifier:
             authored_by=problem.authored_by,
             data=problem.conditions,
         )
-        cross_result = self._cross_verifier.verify(subject)
+        perspectives = _CROSS_VERIFY_PERSPECTIVES.get(problem.answer_kind, PROBABILITY_PERSPECTIVES)
+        cross_result = await asyncio.to_thread(self._cross_verifier.verify, subject, perspectives)
         audit_labels = [f"cross_verify:{cross_result.aggregate}"]
 
         if cross_result.aggregate == "ok":
