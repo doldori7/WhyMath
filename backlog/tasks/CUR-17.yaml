@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-17
+title: "Concept Resolver API 설계 — curriculum context aware"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① '꼭지점'과 같이 동음이의/다의어 개념을 curriculum context(학년·단원·관련 개념)로 해석하는 API 계약을 설계한다."
+  - "② POST /concepts/resolve 엔드포인트 스펙(입력: query, subject, context[], grade; 출력: concept_id, canonical_name, confidence)을 Pydantic 모델로 정의한다."
+  - "③ canonical key 우선 → alias 매칭 → embedding semantic 매칭 → graph context 매칭 순위를 명시하고, confidence 임계치를 설정한다."
+  - "④ AI Tutor 프롬프트 빌더가 이 resolver를 거쳐 target_concepts를 결정하는 흐름을 문서화한다."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/concept.py
+  - src/backend/whymath_backend/l1/concept_graph/retrieval.py
+  - src/backend/whymath_backend/l1/concept_graph/node_projection.py
+session: null
+notes: "EOS 6_개념 DB 검토 §28, §40 반영. AI Tutor가 자연어 질문을 Knowledge Graph에 연결할 때 의미 충돌을 해소하는 핵심 API."
+updated: 2026-08-25
