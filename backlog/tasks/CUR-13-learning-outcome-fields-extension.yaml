@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-13-learning-outcome-fields-extension
+title: AchievementStandard Learning Outcome/Competency 필드 확장
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - CUR-07-achievement-standard-schema-extension
+requires_gates: []
+acceptance:
+  - "① AchievementStandard에 cognitive_level·mastery_definition·observable·assessmentable·knowledge_type nullable 컬럼 추가. ② schema/Pydantic/ORM/마이그레이션 동시 갱신. ③ achievement_criteria_v1 코퍼스에서 채울 수 있는 필드가 있는지 실측 후 로더 확장 여부 판단. ④ Alembic additive 마이그레이션 왕복 green. ⑤ 범위 밖: 별도 LearningOutcome/Competency 테이블 분리는 Phase 2."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/achievement_standard.py
+  - src/backend/whymath_backend/schema/standard.py
+  - src/backend/alembic/versions/
+session: null
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 4. 별도 엔티티 분리는 NCIC 기반 MVP에 과해, AchievementStandard 확장으로 충분함."
+updated: 2026-08-25
