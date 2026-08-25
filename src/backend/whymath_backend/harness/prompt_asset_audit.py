@@ -257,6 +257,12 @@ L3_PROMPT_RAILS: dict[str, tuple[str, ...]] = {
     "l3.cross_verify.falsify_user": (RAIL_INDEPENDENCE,),
     "l3.cross_verify.grounding_system": (RAIL_INDEPENDENCE,),
     "l3.cross_verify.grounding_user": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_reconstruct_system": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_reconstruct_user": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_falsify_system": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_falsify_user": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_grounding_system": (RAIL_INDEPENDENCE,),
+    "l3.cross_verify.statistical_grounding_user": (RAIL_INDEPENDENCE,),
 }
 
 # 레일 0 자산의 사유 — "왜 이 자산엔 준거를 안 거는가"를 명시한다(침묵 누락 금지).

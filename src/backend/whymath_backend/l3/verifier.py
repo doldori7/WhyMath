@@ -16,13 +16,20 @@ S4-13 v1이 확률 유한 전수형을 닫았다면, v2는 검증 진입점을 �
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l3.cross_verify import CrossVerifier, ResidueSubject
+from whymath_backend.l3.cross_verify import (
+    PROBABILITY_PERSPECTIVES,
+    STATISTICAL_PERSPECTIVES,
+    CrossVerifier,
+    Perspective,
+    ResidueSubject,
+)
 from whymath_backend.l3.equivalent.acceptance import _CONCEPTUAL_VERIFIERS
 from whymath_backend.l3.finite_probability import (
     describe_model_ko,
@@ -30,6 +37,11 @@ from whymath_backend.l3.finite_probability import (
     parse_finite_model,
     verify_finite_count,
     verify_finite_probability,
+)
+from whymath_backend.l3.statistical_claim import (
+    describe_statistical_model_ko,
+    parse_statistical_model,
+    verify_statistical_claim,
 )
 from whymath_backend.l3.verification_tier import VerificationTier
 from whymath_backend.l3.verify_answer import AnswerVerdict
@@ -104,9 +116,15 @@ class _DomainResult:
     machine_total: int = 0
     machine_favorable: int = 0
     machine_model_ko: str = ""
+    machine_value: float | None = None
 
 
 DomainVerifier = Callable[[str, str], _DomainResult]
+
+# 도메인별 교차검증 관점 — 기본값은 확률 유한 전수형 관점.
+_CROSS_VERIFY_PERSPECTIVES: dict[str, tuple[Perspective, ...]] = {
+    "statistical_claim": STATISTICAL_PERSPECTIVES,
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -170,6 +188,30 @@ def _verify_finite_count_pair(conditions: str, answer: str) -> _DomainResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 통계 자료형 verifier 래퍼 — SymPy 불가 영역 v2 실증 도메인(S4-53)
+# ──────────────────────────────────────────────────────────────────────────
+def _verify_statistical_claim_pair(conditions: str, answer: str) -> _DomainResult:
+    """statistical_claim → _DomainResult + 잔여 축 + 교차검증 재료."""
+    verdict, residual_axes, result = verify_statistical_claim(conditions, answer)
+    machine_model_ko = ""
+    machine_value: float | None = None
+    if verdict.state == "pass":
+        try:
+            model = parse_statistical_model(conditions)
+            machine_model_ko = describe_statistical_model_ko(model, result)
+            machine_value = result.value
+        except Exception:  # noqa: BLE001 — 교차검증 재료가 없어도 기계 검증 결과는 유효
+            machine_model_ko = ""
+    return _DomainResult(
+        verdict=verdict,
+        machine_axes=("통계량 전수 결정론 검산",),
+        residual_axes=residual_axes,
+        machine_model_ko=machine_model_ko,
+        machine_value=machine_value,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 기존 `_CONCEPTUAL_VERIFIERS` → _DomainResult 래퍼
 # ──────────────────────────────────────────────────────────────────────────
 def _wrap_conceptual_verifier(
@@ -222,10 +264,12 @@ def _machine_axis_for(kind: str) -> str:
 def _build_verifiers_v2() -> dict[str, DomainVerifier]:
     """기존 `_CONCEPTUAL_VERIFIERS`를 `_DomainResult`로 래핑해 통합 테이블 구성.
 
-    `finite_probability`/`finite_count`는 유한 전수형이라 별도 래퍼를 쓰고,
-    나머지는 `_wrap_conceptual_verifier`로 래핑. 중복 키는 즉시 거부.
+    `finite_probability`/`finite_count`는 유한 전수형, `statistical_claim`은 통계
+    자료형이라 별도 래퍼를 쓰고, 나머지는 `_wrap_conceptual_verifier`로 래핑.
+    중복 키는 즉시 거부.
     """
     verifiers: dict[str, DomainVerifier] = {}
+    verifiers["statistical_claim"] = _verify_statistical_claim_pair
     for kind, fn in _CONCEPTUAL_VERIFIERS.items():
         if kind == "finite_probability":
             verifiers[kind] = _verify_finite_probability_pair
@@ -315,9 +359,9 @@ class Verifier:
                 reason="잔여 축이 있으나 cross_verifier가 주입되지 않음",
             )
 
-        return self._run_cross_verify(problem, domain_result)
+        return await self._run_cross_verify(problem, domain_result)
 
-    def _run_cross_verify(
+    async def _run_cross_verify(
         self, problem: ProblemVerifyInput, domain_result: _DomainResult
     ) -> VerificationVerdict:
         """잔여 축에 대해 독립 다관점 LLM 교차검증을 실행하고 결과를 VerificationVerdict로 변환."""
@@ -332,9 +376,12 @@ class Verifier:
             machine_model_ko=domain_result.machine_model_ko,
             machine_total=domain_result.machine_total,
             machine_favorable=domain_result.machine_favorable,
+            machine_value=domain_result.machine_value,
             authored_by=problem.authored_by,
+            data=problem.conditions,
         )
-        cross_result = self._cross_verifier.verify(subject)
+        perspectives = _CROSS_VERIFY_PERSPECTIVES.get(problem.answer_kind, PROBABILITY_PERSPECTIVES)
+        cross_result = await asyncio.to_thread(self._cross_verifier.verify, subject, perspectives)
         audit_labels = [f"cross_verify:{cross_result.aggregate}"]
 
         if cross_result.aggregate == "ok":

@@ -46,6 +46,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -77,6 +78,7 @@ __all__ = [
     "CrossVerifier",
     "IndependenceError",
     "PROBABILITY_PERSPECTIVES",
+    "STATISTICAL_PERSPECTIVES",
     "Perspective",
     "PerspectiveVerdict",
     "ResidueSubject",
@@ -92,7 +94,9 @@ ResidueVerdictLabel = Literal["ok", "defect", "unclear"]
 # 관점이 볼 수 있는 `ResidueSubject` 필드 이름 — 가시 집합의 정의역(오타로 은닉이 새는 것 방어).
 # 기계 계산값(machine_total·machine_favorable)은 *판정 재료*이지 프롬프트 노출 대상이 아니라
 # 여기 없다 — ①의 대조는 기계가 하지 LLM에게 정답 숫자를 보여주지 않는다.
-_FIELD_NAMES = frozenset({"question_text", "answer", "answer_explanation", "machine_model_ko"})
+_FIELD_NAMES = frozenset(
+    {"question_text", "answer", "answer_explanation", "machine_model_ko", "data"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +105,7 @@ class ResidueSubject:
 
     `authored_by`는 이 문항을 만든 주체의 서명이다(예 결정론 생성기 이름·LLM 모델 id).
     검증자는 자기 서명과 충돌하면 검증을 거부한다 — 생성자≠검증자의 구조적 강제.
+    `data`는 통계 자료형처럼 원본 자료 문자열이 필요한 도메인용 선택적 필드.
     """
 
     problem_id: str
@@ -111,6 +116,8 @@ class ResidueSubject:
     machine_total: int
     machine_favorable: int
     authored_by: str
+    data: str = ""
+    machine_value: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +271,134 @@ PROBABILITY_PERSPECTIVES: tuple[Perspective, ...] = (
 )
 """파일럿(확률 유한 전수형) 기본 K=3 관점 — 원리·프롬프트·가시 필드가 모두 다르다."""
 
+# ──────────────────────────────────────────────────────────────────────────
+# 관점 ④~⑥ 통계 자료형 — 독립 재계산 / 반증 / 발문↔자료↔통계량 정합
+# ──────────────────────────────────────────────────────────────────────────
+_SYSTEM_STAT_RECONSTRUCT = prompt_text("l3.cross_verify.statistical_reconstruct_system")
+_SYSTEM_STAT_FALSIFY = prompt_text("l3.cross_verify.statistical_falsify_system")
+_SYSTEM_STAT_GROUNDING = prompt_text("l3.cross_verify.statistical_grounding_system")
+
+
+def _render_stat_reconstruct(subject: ResidueSubject) -> str:
+    """가시 필드 = 발문 + 데이터. 정답·해설·기계 계산값은 은닉(앵커링 차단)."""
+    return fill(
+        prompt_text("l3.cross_verify.statistical_reconstruct_user"),
+        QUESTION_TEXT=subject.question_text,
+        DATA=subject.data,
+    )
+
+
+def _render_stat_falsify(subject: ResidueSubject) -> str:
+    """가시 필드 = 발문 + 데이터 + 제시된 정답."""
+    return fill(
+        prompt_text("l3.cross_verify.statistical_falsify_user"),
+        QUESTION_TEXT=subject.question_text,
+        DATA=subject.data,
+        ANSWER=subject.answer,
+    )
+
+
+def _render_stat_grounding(subject: ResidueSubject) -> str:
+    """가시 필드 = 발문 + 데이터 + 기계가 검산한 통계량 설명."""
+    return fill(
+        prompt_text("l3.cross_verify.statistical_grounding_user"),
+        QUESTION_TEXT=subject.question_text,
+        DATA=subject.data,
+        MACHINE_STAT_KO=subject.machine_model_ko,
+    )
+
+
+def _parse_numeric_value(raw: object) -> float | None:
+    """LLM 재계산 값 파싱 — 정수·실수·'a/b' 분수를 float로."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        text = raw.strip().replace(" ", "")
+        if "/" in text:
+            try:
+                num, den = text.split("/", 1)
+                return float(num) / float(den)
+            except ValueError:
+                return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
+def _judge_stat_reconstruct(
+    subject: ResidueSubject, data: Mapping[str, object]
+) -> PerspectiveVerdict:
+    """LLM이 독립적으로 계산한 통계량 vs 기계 계산값 — **기계가** 판정한다."""
+    raw_value = data.get("value")
+    if raw_value is None:
+        return PerspectiveVerdict(
+            principle="statistical_reconstruction",
+            verdict="unclear",
+            defect_class="reconstruction_declined",
+            reason=f"독립 재계산 실패: {data.get('reason', '사유 미제시')}",
+        )
+    llm_value = _parse_numeric_value(raw_value)
+    if llm_value is None:
+        return PerspectiveVerdict(
+            principle="statistical_reconstruction",
+            verdict="unclear",
+            defect_class="value_unparsed",
+            reason=f"재계산 값을 숫자로 읽을 수 없음(value={raw_value!r}).",
+        )
+    if subject.machine_value is None:
+        return PerspectiveVerdict(
+            principle="statistical_reconstruction",
+            verdict="unclear",
+            defect_class="machine_value_missing",
+            reason="기계 계산값이 없어 대조 불가.",
+        )
+    if math.isclose(llm_value, subject.machine_value, rel_tol=1e-9, abs_tol=1e-9):
+        return PerspectiveVerdict(
+            principle="statistical_reconstruction",
+            verdict="ok",
+            defect_class="",
+            reason=f"독립 재계산 일치({llm_value}).",
+        )
+    return PerspectiveVerdict(
+        principle="statistical_reconstruction",
+        verdict="defect",
+        defect_class="model_mismatch",
+        reason=(
+            f"독립 재계산 불일치 — 재계산 {llm_value} vs 기계 계산 "
+            f"{subject.machine_value}. 발문이 기계가 검산한 자료·통계량과 다르게 읽힐 소지."
+        ),
+    )
+
+
+STATISTICAL_PERSPECTIVES: tuple[Perspective, ...] = (
+    Perspective(
+        principle="statistical_reconstruction",
+        system_prompt=_SYSTEM_STAT_RECONSTRUCT,
+        visible_fields=frozenset({"question_text", "data"}),
+        render=_render_stat_reconstruct,
+        judge=_judge_stat_reconstruct,
+    ),
+    Perspective(
+        principle="statistical_falsification",
+        system_prompt=_SYSTEM_STAT_FALSIFY,
+        visible_fields=frozenset({"question_text", "data", "answer"}),
+        render=_render_stat_falsify,
+        judge=_judge_labelled("statistical_falsification"),
+    ),
+    Perspective(
+        principle="statistical_grounding",
+        system_prompt=_SYSTEM_STAT_GROUNDING,
+        visible_fields=frozenset({"question_text", "data", "machine_model_ko"}),
+        render=_render_stat_grounding,
+        judge=_judge_labelled("statistical_grounding"),
+    ),
+)
+"""통계 자료형 K=3 관점 — 원리·프롬프트·가시 필드가 모두 다르다."""
+
 
 @dataclass(frozen=True, slots=True)
 class CrossVerificationResult:
@@ -383,7 +518,6 @@ class CrossVerifier:
         self._perspectives = tuple(perspectives)
         self._subscription = subscription
         self._difficulty = difficulty
-        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ── 라우팅(호출지점 ⑤ 자기검증 좌석) ────────────────────────────────
     def _routing_request(self) -> RoutingRequest:
@@ -411,13 +545,6 @@ class CrossVerifier:
             return f"llm:{resolve_model(decision.local_family, decision.local_model)}"
         return f"llm:{decision.cost_tier}"
 
-    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
-        """인스턴스 전용 지속 이벤트 루프 — 배치에서 provider 커넥션 풀이 죽은 루프에 묶이는
-        회귀 방어(`llm_generator._ensure_loop` 실측 교훈 동형)."""
-        if self._loop is None or self._loop.is_closed():
-            self._loop = asyncio.new_event_loop()
-        return self._loop
-
     def _record_trace(self, decision: RoutingDecision, usage: Usage | None) -> None:
         """호출 1건의 라우팅·실측을 관측에 남긴다 — never-break(배치 비차단·타입명 로그)."""
         is_cloud = decision.cost_tier != CostTier.LOCAL.value
@@ -441,26 +568,48 @@ class CrossVerifier:
             _LOGGER.warning("교차검증 관측 기록 실패(%s) — 무시하고 계속", type(exc).__name__)
 
     # ── 검증 ───────────────────────────────────────────────────────────
-    def verify(self, subject: ResidueSubject) -> CrossVerificationResult:
-        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님)."""
+    def verify(
+        self,
+        subject: ResidueSubject,
+        perspectives: Sequence[Perspective] | None = None,
+    ) -> CrossVerificationResult:
+        """대상 1건을 K개 관점으로 교차검증. 관점 실패는 unclear(측정 실패·통과 아님).
+
+        `perspectives`가 주어지면 해당 관점 집합을, 아니면 인스턴스 기본 관점을 사용한다.
+        도메인별 관점 분기는 `Verifier`가 담당한다.
+
+        동기 API로 유지하면서 async provider 호출은 내부에서 새 이벤트 루프를 열어 실행한다.
+        호출부가 이미 async loop 안에 있을 경우 `asyncio.to_thread()`로 격리해 충돌을 피한다.
+        """
         if subject.authored_by == self.signature:
             raise IndependenceError(
                 f"생성자와 검증자가 같은 주체({subject.authored_by}) — 자기승인 금지"
             )
+        perspectives_to_use = self._perspectives if perspectives is None else perspectives
         decision = Router().route(self._routing_request())
-        verdicts = [self._run_perspective(p, subject, decision) for p in self._perspectives]
+        return asyncio.run(self._verify_async(subject, decision, perspectives_to_use))
+
+    async def _verify_async(
+        self,
+        subject: ResidueSubject,
+        decision: RoutingDecision,
+        perspectives: Sequence[Perspective],
+    ) -> CrossVerificationResult:
+        """관점별 판정을 순차 await하고 집계한다."""
+        verdicts: list[PerspectiveVerdict] = []
+        for perspective in perspectives:
+            verdict = await self._run_perspective(perspective, subject, decision)
+            verdicts.append(verdict)
         return _aggregate(subject.problem_id, verdicts)
 
-    def _run_perspective(
+    async def _run_perspective(
         self, perspective: Perspective, subject: ResidueSubject, decision: RoutingDecision
     ) -> PerspectiveVerdict:
         try:
-            generated = self._ensure_loop().run_until_complete(
-                self._provider.generate(
-                    perspective.render(subject),
-                    perspective.system_prompt,
-                    decision,
-                )
+            generated = await self._provider.generate(
+                perspective.render(subject),
+                perspective.system_prompt,
+                decision,
             )
         except Exception as exc:  # noqa: BLE001 — provider 장애로 배치가 죽으면 안 됨
             # 침묵 실패 금지 — 예외 *타입명*을 사유에 남긴다(값·시크릿은 제외).
