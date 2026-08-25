@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -19,7 +19,8 @@ acceptance:
   - "도메인별 Cross-Verify 관점 템플릿 구현 및 K≥3 교차검증 통과"
   - "ruff/black/mypy green, import-linter 7계층 위반 0"
   - PR 생성 및 CI 통과
-artifacts: []
+artifacts:
+  - "PR #874"
 paths:
   - "src/backend/whymath_backend/l3/**"
   - "docs/architecture/**"
