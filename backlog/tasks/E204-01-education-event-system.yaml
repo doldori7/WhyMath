@@ -1,0 +1,45 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E204-01-education-event-system
+title: "EOS Education Event System — Canonical Event + Taxonomy + Registry + SDK"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: cancelled
+priority: 1
+owner: claude
+depends_on:
+  - DP-02-analytics-event-envelope
+  - DP-03-attempt-event-idempotency
+  - DP-04-event-contract-governance
+  - ADMIN-10-audit-event-foundation
+  - S4-22-attempt-event-signal-consumer-wiring
+  - EOS-44-version-management-design
+requires_gates: []
+acceptance:
+  - "① docs/architecture/204_education_event_system.md 설계 문서 작성 (Canonical Education Event, Taxonomy, Registry, Audit/Telemetry/Adapter 경계)"
+  - "② Canonical Education Event Envelope 스키마 구현 (event_id/type/version, occurred/recorded_at, actor, session, object, context, payload, source, trace, privacy, schema_version)"
+  - "③ Event Taxonomy 정의 (EDUCATION_EVENT: interaction/learning/assessment/knowledge/curriculum/learner_model/misconception/pedagogy/tutoring/content/AI/collaboration/parent/teacher/agent/system + separate security/audit/operational)"
+  - "④ Event Registry 구현 (event_type, schema_version, domain, required_fields, PII_classification, retention_policy, producer, consumer, status, deprecated_at)"
+  - "⑤ 20~30개 MVP 핵심 이벤트 Contract/Schema 작성 (problem.*/hint.*/tutor.*/mastery.*/assessment.*/ai.* 등)"
+  - "⑥ Event SDK emit 함수 제공 (event_id/timestamp/trace/privacy/version 자동 처리 + schema validation)"
+  - "⑦ 소비자 Registry 연동 + Concept/Skill/Objective/Misconception ID reference contract 정의"
+  - "⑧ Observation/Inference/Decision/Intervention 분리 + causation chain 필드 (parent_event_id, causation_id, correlation_id, trace_id)"
+  - "⑨ Education Event ↔ Audit ↔ Telemetry 분리 문서화 및 기존 AttemptEvent/AnalyticsEventEnvelope 정리"
+  - "⑩ xAPI/Caliper/CloudEvents Adapter 인터페이스 설계 (내부 모델 불변)"
+artifacts: []
+paths:
+  - docs/architecture/204_education_event_system.md
+  - src/backend/whymath_backend/schema/education_event.py
+  - src/backend/whymath_backend/schema/event_taxonomy.py
+  - src/backend/whymath_backend/schema/event_registry.py
+  - src/backend/whymath_backend/events/sdk.py
+  - "src/backend/whymath_backend/events/adapters/*.py"
+  - src/backend/whymath_backend/db/models/education_event.py
+  - src/backend/whymath_backend/db/models/event_outbox.py
+  - "tests/backend/schema/test_education_event*.py"
+  - "tests/backend/events/test_*.py"
+  - "tests/backend/db/test_education_event*.py"
+session: null
+notes: "검토 권고 204_교육 이벤트 시스템 반영. EOS 외부 모듈 번호 204에 대응. MVP는 Operational DB + Education Event Stream(Outbox) 구조. 완전 Event Sourcing은 Phase 5+로 유예. ADMIN-10(audit)과 병행/연동.\n\n[취소 2026-08-25] 잘못된 depends_on 설정 — EOS-204은 DP-02~04/S4-22의 umbrella로, 이들에 의존하지 않음"
+updated: 2026-08-25
