@@ -265,13 +265,13 @@ GENERATED → ACTIVE → ROTATING → RETIRED → DESTROYED
 다음을 소스코드·이미지·커밋된 env 파일에 영구 저장하지 않는다.
 
 ```
-DB_PASSWORD
-JWT_PRIVATE_KEY
-OPENAI_API_KEY / ANTHROPIC_API_KEY
-SMTP_PASSWORD
-OAUTH_CLIENT_SECRET
-WEBHOOK_SECRET
-ENCRYPTION_KEY
+DB 자격증명
+JWT 서명 키
+클라우드 LLM/API 키
+SMTP 자격증명
+OAuth 클라이언트 시크릿
+웹훅 시크릿
+암호화 키
 ```
 
 대신 Secret Manager / Vault / Cloud secret service를 사용. 이미지 계약은 "런타임 env 주입만"이 기본.
@@ -479,7 +479,7 @@ IP, user, tenant, API key, endpoint
 
 권한이 있더라도 비정상. Authorization + Behavior Monitoring 조합.
 
-### 11.6 Risk-Based Access Control(P2)
+### 11.6 리스크 기반 Access Control(P2)
 
 ```
 risk = f(user, device, IP, geo, behavior, action, resource)
@@ -769,7 +769,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 - Policy-as-Code / Central PDP
 - Agent Identity / Service Identity
 - Advanced Zero Trust(mTLS·단기 자격증명)
-- Risk-Based Authorization
+- 리스크 기반 Authorization
 - Automated Access Review
 
 ## 19. 설계 안티패턴
@@ -843,7 +843,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 | TBD-48-01 | 정책 엔진: OPA / 자체 DSL / 중앙 Python authorize | 47, 90 | ReBAC 도입기 |
 | TBD-48-02 | KMS/HSM 선택(cloud KMS vs Vault) | infra | 키 종류 5+ 또는 B2B 테넌트 |
 | TBD-48-03 | relationship 테이블 설계(47 보호자 관계 정규화 이후) | 47 | ReBAC 도입기 |
-| TBD-48-04 | Risk-Based Access Control 모델 | — | P2 |
+| TBD-48-04 | 리스크 기반 Access Control 모델 | — | P2 |
 | TBD-48-05 | GraphQL 도입 여부(도입 시 보안 규칙 적용) | — | 별도 아키텍처 결정 |
 | TBD-48-06 | 고위험 작업 step-up: Passkey/WebAuthn vs TOTP vs 재인증 TTL | 46 | 관리자 콘솔 착지기 |
 | TBD-48-07 | 감사로그 무결성 메커니즘(해시 체인 vs WORM) | 90 | 90 문서 선행 |
@@ -872,7 +872,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 3. **47 먼저**: 동의·보호자 관계·데이터 처리 근거·보존기간.
 4. **48-P1 EOS 확장**: ReBAC/ABAC, tenant_id, RLS, 관리자 콘솔.
 5. **90 먼저/동시**: 보안 이벤트 영속·변조 방지·정책 버전 재현.
-6. **48-P2 고급**: Central PDP, Agent Identity, Risk-Based.
+6. **48-P2 고급**: Central PDP, Agent Identity, 리스크 기반.
 
 ---
 
