@@ -53,7 +53,9 @@ from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     ConceptRole,
+    DependencyLevel,
     EdgeType,
+    RequiredStrength,
     VisualizationStyle,
 )
 
@@ -268,6 +270,36 @@ class ConceptEdge(BaseModel):
         default=None,
         description="관계 세부유형 — 원자 백본 관계유형(원본/소단원내/소단원간/학년간/학교급간 등)",
     )
+
+    # ── EOS 6_개념 DB 검토 §13 prerequisite 메타 (CUR-16) ──────────
+    required_strength: RequiredStrength | None = Field(
+        default=None,
+        description="선수학습 관계의 필요 강도 — WEAK/MODERATE/STRONG/CRITICAL. "
+        "edge_type이 PREREQUISITE일 때만 의미를 가진다.",
+    )
+    dependency_level: DependencyLevel | None = Field(
+        default=None,
+        description="선수학습 관계의 의존 수준 — RECOMMENDED/EXPECTED/REQUIRED. "
+        "edge_type이 PREREQUISITE일 때만 의미를 가진다.",
+    )
+    minimum_mastery: float | None = Field(
+        default=None,
+        description="선수개념의 최소 숙련도 임계값 (0.0~1.0). "
+        "edge_type이 PREREQUISITE일 때만 의미를 가진다.",
+        ge=0.0,
+        le=1.0,
+    )
+    curriculum_context: list[str] = Field(
+        default_factory=list,
+        description="교육과정 맥락 식별자 배열(예: '2022_KR_Math_9', '2015_KR_Math_9'). "
+        "CurriculumEntry Overlay와의 느슨한 참조.",
+    )
+    evidence_source_id: str | None = Field(
+        default=None,
+        description="이 관계의 근거가 되는 증거/출처 ID(예: 'src_xxx').",
+        max_length=64,
+    )
+
     created_at: datetime | None = Field(default=None, description="생성 시각")
 
     # ── 불변식 ────────────────────────────────────────────────────
@@ -279,6 +311,18 @@ class ConceptEdge(BaseModel):
                 "개념 엣지 위반: from_concept_id와 to_concept_id가 같을 수 없다 "
                 "(자기 자신을 가리키는 엣지 금지)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _prerequisite_meta_only_for_prerequisite(self) -> ConceptEdge:
+        """선수학습 메타 필드는 PREREQUISITE 엣지에서만 사용 가능."""
+        if self.edge_type != EdgeType.PREREQUISITE:
+            if self.required_strength is not None:
+                raise ValueError("required_strength은 PREREQUISITE 엣지에서만 설정할 수 있다")
+            if self.dependency_level is not None:
+                raise ValueError("dependency_level은 PREREQUISITE 엣지에서만 설정할 수 있다")
+            if self.minimum_mastery is not None:
+                raise ValueError("minimum_mastery는 PREREQUISITE 엣지에서만 설정할 수 있다")
         return self
 
 

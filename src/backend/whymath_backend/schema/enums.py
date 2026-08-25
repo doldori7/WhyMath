@@ -908,6 +908,43 @@ class EdgeType(str, Enum):
     (`l4/misconception/distractor.py`)가 보유한다."""
 
 
+class RequiredStrength(str, Enum):
+    """선수학습 관계의 필요 강도 — §4.2 `required_strength_enum`.
+
+    EOS 6_개념 DB 검토 §13에 따른 prerequisite 메타. edge_type=PREREQUISITE일 때
+    이 관계가 얼마나 필수적인지를 나타낸다.
+    """
+
+    WEAK = "WEAK"
+    """약한 선호 — 없어도 학습이 가능하나 효율이 떨어진다."""
+
+    MODERATE = "MODERATE"
+    """중간 — 복습을 권장한다."""
+
+    STRONG = "STRONG"
+    """강함 — 거의 필수이며, 미흡 시 상위 개념 학습에 장애가 크다."""
+
+    CRITICAL = "CRITICAL"
+    """필수 — 없으면 상위 개념 진행이 불가능하다."""
+
+
+class DependencyLevel(str, Enum):
+    """선수학습 관계의 의존 수준 — §4.2 `dependency_level_enum`.
+
+    EOS 6_개념 DB 검토 §13에 따른 prerequisite 메타. edge_type=PREREQUISITE일 때
+    의존이 권장/기대/필수인지를 구분한다.
+    """
+
+    RECOMMENDED = "RECOMMENDED"
+    """권장 — 도움이 되나 강제하지 않는다."""
+
+    EXPECTED = "EXPECTED"
+    """기대됨 — 일반적으로 요구된다."""
+
+    REQUIRED = "REQUIRED"
+    """필수 — 반드시 충족해야 한다."""
+
+
 class ConceptRole(str, Enum):
     """문제 안에서 개념의 역할 — §4.2 `concept_role_enum`(L366-370, 영어 4종)."""
 
