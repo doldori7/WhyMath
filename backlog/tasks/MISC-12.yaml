@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-12
+title: Concept schema misconception_codes 제거 및 MisconceptionRelation canonical 전환
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - concept.schema.yaml의 misconception_codes 필드 삭제
+  - "MisconceptionRelation이 Concept↔Misconception 관계의 유일 진실원천임을 문서화"
+  - cross-reference 일관성 테스트 추가
+artifacts: []
+paths:
+  - schemas/v1.1/concept.schema.yaml
+  - src/backend/whymath_backend/db/models/misconception_relation.py
+session: null
+notes: "CLAUDE.md Concept Purity 준수. 검토 문서 §10·§25·§68-7 반영."
+updated: 2026-08-26
