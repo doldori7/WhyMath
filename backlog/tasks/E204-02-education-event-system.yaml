@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -21,7 +21,8 @@ acceptance:
   - "⑧ Observation/Inference/Decision/Intervention 분리 + causation chain 필드 (parent_event_id, causation_id, correlation_id, trace_id)"
   - "⑨ Education Event ↔ Audit ↔ Telemetry 분리 문서화 및 기존 AttemptEvent/AnalyticsEventEnvelope 정리"
   - "⑩ xAPI/Caliper/CloudEvents Adapter 인터페이스 설계 (내부 모델 불변)"
-artifacts: []
+artifacts:
+  - "#882"
 paths:
   - docs/architecture/204_education_event_system.md
   - src/backend/whymath_backend/schema/education_event.py
@@ -34,6 +35,6 @@ paths:
   - "tests/backend/schema/test_education_event*.py"
   - "tests/backend/events/test_*.py"
   - "tests/backend/db/test_education_event*.py"
-session: main
+session: null
 notes: "검토 권고 204_교육 이벤트 시스템 반영. EOS 외부 모듈 번호 204에 대응. MVP는 Operational DB + Education Event Stream(Outbox) 구조. 완전 Event Sourcing은 Phase 5+로 유예. ADMIN-10(audit)과 병행/연동. 관련 태스크: DP-02~04(봉투/영속/계약), S4-22(consumer wiring), EOS-44(version), ADMIN-10(audit) — 이 태스크는 umbrella로, 이들에 의존하지 않고 병행/흡수 관계다."
 updated: 2026-08-25
