@@ -138,6 +138,7 @@ async def generate(
     validator: SeedValidator | None = None,
     skip_cache_on_signal: bool = False,
     images: Sequence[str] | None = None,
+    training_allowed: bool | None = None,
 ) -> GenerationResult:
     """라우팅 → (비동기면 큐잉 / 동기면 캐시·생성) → 관측을 조립한다.
 
@@ -152,6 +153,7 @@ async def generate(
             QualityQueueUnavailableError(미구성 폴백 → API 503).
         cache_ttl_s: 캐시 TTL(초). None이면 Settings.cache_ttl_s.
         student_id_hash: Langfuse 기록용 학생 ID 해시(직접 ID 금지, 03a §F.2).
+        training_allowed: AI 모델 학습/개선에 데이터 사용 동의 여부(EOS §48). 관측용.
         validator: 런타임 shadow 검증기(L3 결정론 도구, 예: `default_seed_validator()`).
             주입 시 *캐시 미스로 새로 생성된 출력*에만 적용해 거짓 수치 관계 등 환각
             신호를 trace의 `validation_signal`로 기록한다. **비차단** — 반환 텍스트·
@@ -196,7 +198,11 @@ async def generate(
         # 실측은 워커가 자기 trace로 기록한다, queue/tasks.py). usage는 미존재라 None.
         trace.record(
             langfuse_fields(
-                decision, cache_hit=False, student_id_hash=student_id_hash, cost_krw=0.0
+                decision,
+                cache_hit=False,
+                student_id_hash=student_id_hash,
+                cost_krw=0.0,
+                training_allowed=training_allowed,
             )
         )
         return GenerationResult(
@@ -222,6 +228,7 @@ async def generate(
                 # 2층 캐시의 (2) — 프롬프트-해시 적중. 경로는 자기 cache_hit에서 유도한다
                 # (상위가 주입할 필요 없음·03c §4).
                 content_source="prompt_cache",
+                training_allowed=training_allowed,
             )
         )
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
@@ -267,6 +274,7 @@ async def generate(
             usage=usage,
             cost_krw=actual_krw,
             content_source="generate",  # 2층 캐시의 (3) — 실제 LLM 생성.
+            training_allowed=training_allowed,
         )
     )
     return GenerationResult(
