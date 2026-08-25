@@ -49,7 +49,7 @@
 | §21 계정 존재 노출 방지 | 이메일·OTP 엔드포인트에서 일반 메시지 | 현재 비밀번호 리셋/이메일 가입 경로가 없어 해당 공격면이 좁음. OAuth 가입은 provider가 응답 처리 | ✅ 이미 OAuth 설계에서 간접 충족 |
 | §22 복구 ≥ 인증 보증 | Account Recovery Assurance ≥ Auth Assurance | 계정 복구 경로 자체가 **부재**(r2 D8). 식별 키가 `email_hash` 단일, provider `subject`는 버려짐. 이메일 변경 경로 0 | ⚠️ **이 문서의 가장 중요한 신규 가치**. D8 해법의 출발점 |
 | §24 보호자·학생 계정 분리 | Relationship(`GUARDIAN_OF`) | 부모 계정/역할 부재. `parent_email_hash`만 `UserProfile`에 있음(`user.py:151`) | ✅ 신규·채택 가치, Phase 3+ |
-| §25-26 미성년 동의·생년월일 최소화 | 연령 구간/법정대리인 동의 | `get_consented_user`(`api/_auth.py:92`) 게이트 구현. `expires_at`·`revoked_at`은 reader/writer 부재(r2 D9) | ⚠️ 부분 구현. 법규 보강 필요(§3) |
+| §25-26 미성년 동의·생년월일 최소화 | 연령 구간/법정대리인 동의 | `get_consented_user`가 최신 `ParentalConsent`를 읽어 `revoked_at`·`expires_at` 판정(`_auth.py:92-133`), `DELETE /v1/users/me/parental-consent` 철회 구현(`api/users.py:283-323`). `expires_at`를 채우는 writer는 법적 재확인 주기(MGMT-02) 확정 전까지 미구현 | ⚠️ 부분 구현. §3 법규 보강 필요 |
 | §27-28 이메일 별도 모델·이메일 변경 보안 이벤트 | `email_addresses` 테이블 | `email_hash` 단일 컬럼(`user.py:83`). 이메일 변경 경로 0 | ⚠️ D8 연결. 단 문서의 평문 `normalized_email`은 현 PII 미수집 정책과 충돌 |
 | §30-31 Social Login·Account Linking | provider+subject 연결, 이메일로 자동 합병 금지 | `api/auth.py`에서 OAuth 콜백 시 `email_hash` upsert. provider `subject` 미보존 | ⚠️ 현재는 email_hash 기반 병합 — 설계안의 "자동 합병 금지"는 채택 가치 |
 | §32-33 OIDC/OAuth + JWT 최소 정보 | Authorization Code + PKCE, sub/iss/aud/scope/session_id | 현재는 카카오/네이버 OAuth 콜백. JWT payload는 `user_id`, `role`, `is_minor` 등(`security.py`). PKCE는 **미사용**(v1 §4 정직한 공백) | ⚠️ PKCE·JWT 최소화 개선 필요 |
@@ -58,7 +58,7 @@
 | §40 Invitation 모델 | token_hash 저장 | 미구현 | ✅ 장기 |
 | §41 계정 삭제 vs 데이터 삭제 분리 | Account deletion ≠ Learning data deletion | `privacy/erasure.py`에서 `UserProfile` 삭제 + 18테이블 원자 삭제. **학습 데이터 보존** 경로는 현재 삭제권만 있음 | ⚠️ 정책 보강 필요 |
 | §42-43 Auth Event 표준 발행·Audit 분리 | `identity.authentication.succeeded` 등 | `privacy/audit.py` 4종 writer(export·consent·admin·role) 구현. **인증 이벤트 전용 writer는 부재** | ⚠️ 부분 구현. §4 감사 확장 필요 |
-| §55-56 Frontend token 저장·CSRF/XSS | HttpOnly Secure SameSite Cookie, BFF | 모바일(Secure Storage/Keystore) 미언급. 웹 쪽은 현재 SPA OAuth 흐름 | ⚠️ 모바일 전략 보강 필요(§3) |
+| §55-56 Frontend token 저장·CSRF/XSS | HttpOnly Secure SameSite Cookie, BFF | 모바일은 이미 `flutter_secure_storage`로 토큰 저장, 401 interceptor로 갱신(`core/token_store.dart`, `core/auth_interceptor.dart`). 웹/BFF 전략은 보강 대상 | ⚠️ 웹/BFF 쪽 보강. 모바일은 구현됨 |
 | §57-58 Rate Limit·OTP 목적 분리 | IP/account/device 한도, purpose-bound OTP | `/callback`·`/refresh`에 IP rate limit 부착. OTP 메커니즘 부재 | ⚠️ OTP 설계 시 채택 |
 | §60-61 Admin 인증 분리·Super Admin | MFA 강제, 짧은 세션, step-up, approval | `CONTENT_ADMIN`만 존재. 별도 Admin BFF/승인 체계 미구현(v1 §4 정직한 공백) | ✅ 장기 |
 | §65-66 Observability·SLO | login_success_rate, P95/P99 | 미수집(v1 §3 D3: 학생 접속 시각 이력 = 프로파일링 자산화 거부) | ❌ 충돌 |
@@ -108,10 +108,9 @@
 
 ### ① 정보통신망법(온라인 서비스 특례)
 
-- **제29조**: 1년간 미이용 계정은 **분리보관·파기**해야 한다. 설계안 §62 상태 머신에 `DORMANT`가 없다.
-- **제31조**: 주민등록번호 수집 제한. 학교 SSO를 연결할 때 학번·주민번호 처리 방식이 필요.
+- **주민등록번호 수집 제한(제31조)**. 학교 SSO를 연결할 때 학번·주민번호 처리 방식이 필요.
 - **본인확인기관**: 만 14세 미만 보호자 동의를 받기 위한 본인확인은 **신용정보/통신사 본인확인기관** 경유가 일반적. 현재 `StubGuardianVerifier`이므로 출시 전 MGMT-01(변호사 자문)이 선행.
-- 반영: 상태 머신에 `DORMANT` 추가, 휴면 계정 전환·복구 정책 명시.
+- **휴면계정(DORMANT)**: 정보통신망법의 개인정보 유효기간제(1년 미이용 분리보관)는 2023-09-15에 폐지되어 **2026년 현재 법적 의무가 아니다**. 따라서 설계안 §62 상태 머신에 `DORMANT`를 넣는 것은 개인정보 최소화·보관 비용 절감 차원의 **제품 선택**이며, 법적 의무로 오인해 P0에 넣지 않아야 한다.
 
 ### ② 이메일리스 학생
 
@@ -121,8 +120,8 @@
 
 ### ③ Flutter 모바일 토큰 저장
 
-- 설계안 §55-56은 웹/HttpOnly 쿠키·BFF 중심. 주 클라이언트인 Flutter의 Secure Storage/Keystore·iOS Keychain 사용, 백그라운드 access token 갱신 전략이 없다.
-- 반영: "인증 상태 저장" 플랫폼별 매트릭스(웹·iOS·Android) 추가.
+- 설계안 §55-56은 웹/HttpOnly 쿠키·BFF 중심. 그러나 WhyMath 모바일은 이미 `core/token_store.dart:47-71`에서 `flutter_secure_storage`로 access·refresh 토큰을 저장하고, `core/auth_interceptor.dart`에서 401 기반 백그라운드 갱신을 수행한다.
+- 반영: "설계안이 Flutter를 누락했다"는 지적과 "WhyMath에 구현이 없다"는 판정을 구분. 외부 설계안 보완 항목으로만 기록하고, 현재 구현은 이미 존재함을 명시.
 
 ### ④ 보호자 복구 체계
 
@@ -180,7 +179,7 @@
 
 - **P0 유지**: Identity/Account 분리(식별자 정책), Session/Access/Refresh Token, Logout/Logout All, Rate Limit, Account Status(기존 3상태), Student/Teacher/Parent 역할 모델, Guardian Relationship, Consent 연결, Authorization/Audit 연결.
 - **P0 → P1/보류**: 비밀번호 로그인, 비밀번호 reset, 계정 잠금, 로그인 이력 수집.
-- **P0 추가**: 이메일리스 학교 발급 계정(Invitation), OAuth PKCE, 모바일 Secure Storage, 휴면계정(DORMANT).
+- **P0 추가**: 이메일리스 학교 발급 계정(Invitation), OAuth PKCE. 모바일 Secure Storage는 이미 구현. 휴면계정(DORMANT)은 제품 선택 사항으로 P2/보류.
 
 ### ③ 현재 최우선
 
@@ -198,7 +197,7 @@
 3. **이메일리스 학교 발급 계정 가입/로그인** — Invitation/Provisioning 설계.
 4. **OAuth PKCE + sender-constrained token(DPoP/mTLS) 도입** — RFC 9700 준수, 모바일 탈취 리스크 완화.
 5. **인증/세션 이벤트 전용 감사 writer 추가** — §42 표준 이벤트 12종.
-6. **휴면계정(DORMANT) 상태 및 파기 정책** — 정보통신망법 제29조.
+6. **휴면계정(DORMANT) 상태 및 파기 정책(제품 선택)** — 2023-09-15 법적 의무 폐지 이후 제품 정책으로 재분류.
 7. **(재결정 트리거 시) 비밀번호/Passkey 전략 재판정** — 현재 OAuth 전용 정책과의 균형.
 
 ---
@@ -211,7 +210,7 @@
 
 1. **채택**: Identity/Account/Person 분리, Relationship 기반 인가, 이메일리스 학교 계정, Passkey/SSO 장기 후보.
 2. **재결정 필요**: 비밀번호, 계정 잠금, 이메일 평문, 로그인 이력 수집.
-3. **보강**: 정보통신망법(휴면계정), 본인확인기관, Flutter Secure Storage, PKCE/DPoP, JWKS, 인증 감사 이벤트.
+3. **보강**: 본인확인기관(법정대리인 인증), 휴면계정 제품 정책, PKCE/DPoP, JWKS, 인증 감사 이벤트. Flutter Secure Storage는 이미 구현.
 4. **보류**: Risk Engine, SCIM, AI/Service Identity, Super Admin PAM — Phase 5 이후.
 
 이 문서를 그대로 P0 설계서로 삼지 말고, **WhyMath의 봉인 결정과 기존 갭(D8·D9)을 먼저 반영한 병합안**으로 재구성할 것을 권고한다.
