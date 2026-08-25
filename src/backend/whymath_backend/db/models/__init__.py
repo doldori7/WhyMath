@@ -76,6 +76,8 @@ from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.concept_visual_style import ConceptVisualStyle
 from whymath_backend.db.models.concept_visualization import ConceptVisualization
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
+from whymath_backend.db.models.curriculum_framework import CurriculumFramework
+from whymath_backend.db.models.curriculum_version import CurriculumVersion
 from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import (
@@ -194,6 +196,9 @@ __all__ = [
     "UserBehaviorMetrics",
     # v1.1 CurriculumEntry
     "CurriculumEntry",
+    # CUR-10: CurriculumFramework/CurriculumVersion (EOS Curriculum Semantic Backbone)
+    "CurriculumFramework",
+    "CurriculumVersion",
     # v1.1 TextbookMapping
     "TextbookMapping",
     "TextbookUnit",

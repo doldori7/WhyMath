@@ -149,6 +149,10 @@ def _standard_from_row(row: dict[str, Any]) -> AchievementStandard:
         data["official_statement"] = data["statement"]
     if "version_id" not in data:
         data["version_id"] = uuid.uuid4()
+    # CUR-10: KR 교육과정 행은 기본값으로 KR_NC_2022 프레임워크를 연결한다.
+    # framework_id가 명시되어 있으면 그 값을 존중하고, 누락 시에만 기본값을 부여한다.
+    if "framework_id" not in data:
+        data["framework_id"] = "KR_NC_2022" if data.get("jurisdiction") == "KR" else None
     return AchievementStandard.model_validate(data)
 
 

@@ -108,8 +108,8 @@ def test_achievement_standard_unique_revision_official_code() -> None:
     assert "uq_achievement_standard_revision_official_code" in ddl
 
 
-def test_achievement_standard_date_and_text_array_and_no_fk() -> None:
-    """effective_from/effective_to은 DATE, parent_codes는 TEXT[](빈 배열 기본), FK 없음."""
+def test_achievement_standard_date_and_text_array_and_framework_fk() -> None:
+    """effective_from/effective_to은 DATE, parent_codes는 TEXT[](빈 배열 기본), framework FK만 존재."""
     ddl = _pg_ddl(OrmAchievementStandard.__table__)
     assert "DATE" in ddl  # effective_from (TIMESTAMPTZ 아님)
     assert "TEXT[]" in ddl  # parent_codes
@@ -117,9 +117,12 @@ def test_achievement_standard_date_and_text_array_and_no_fk() -> None:
     # norm_id는 의미 문자열(UUID 아님) → PK에 gen_random_uuid() 없음.
     assert "PRIMARY KEY (norm_id)" in ddl
     assert "norm_id" in ddl
-    # 성취기준 자체는 다른 테이블을 참조하지 않는다(느슨참조 코드들도 FK 아님).
-    assert len(OrmAchievementStandard.__table__.foreign_keys) == 0
-    assert "REFERENCES" not in ddl
+    # CUR-10: 성취기준은 curriculum_framework.framework_id를 nullable FK로 참조.
+    fks = {
+        fk.parent.name: fk.column.table.name for fk in OrmAchievementStandard.__table__.foreign_keys
+    }
+    assert fks == {"framework_id": "curriculum_framework"}
+    assert "REFERENCES curriculum_framework (framework_id)" in ddl
 
 
 def test_achievement_standard_indexes() -> None:

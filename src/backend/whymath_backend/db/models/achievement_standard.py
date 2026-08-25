@@ -84,6 +84,10 @@ class AchievementStandard(Base):
     # official_code는 교육과정 간 *비유일* — UNIQUE 아님(NON-unique). 유일성은 복합 UNIQUE로.
     official_code: Mapped[str] = mapped_column(sa.String(32), nullable=False)
     curriculum_revision: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    # CUR-10: CurriculumFramework 연결(느슨 FK, nullable). curriculum_revision은 하위호환 레이블.
+    framework_id: Mapped[str | None] = mapped_column(
+        sa.String(64), sa.ForeignKey("curriculum_framework.framework_id"), nullable=True
+    )
 
     # ===== 분류 (NCIC subject/domain은 str — 닫힌 enum 강제는 파이프라인 책임) =====
     grade_band: Mapped[str] = mapped_column(sa.String, nullable=False)

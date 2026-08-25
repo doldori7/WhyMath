@@ -109,7 +109,17 @@ class AchievementStandard(BaseModel):
     )
     curriculum_revision: str = Field(
         ...,
-        description="교육과정 개정 표시 ('2022 개정' | '2015 개정')",
+        description=(
+            "교육과정 개정 표시 ('2022 개정' | '2015 개정'). "
+            "⚠️ CUR-10: framework_id 기반 연결 권장, 본 필드는 하위호환·레이블용"
+        ),
+    )
+    framework_id: str | None = Field(
+        default=None,
+        description=(
+            "소속 교육과정 프레임워크 식별자 "
+            "(CurriculumFramework.framework_id, CUR-10). null이면 미분류"
+        ),
     )
 
     # ===== 분류 (NCIC subject/domain은 str — 닫힌 enum 강제는 파이프라인 책임) =====
