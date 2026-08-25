@@ -17,9 +17,12 @@
 #
 # 관계 요약:
 #   - Concept --(prerequisite_concept_ids)--> Concept   (자기참조, Edge와 중복 저장)
-#   - Concept --(misconception_codes)--> 오개념 카탈로그 (docs/data/misconceptions, Phase 1 30개)
 #   - Concept --(standard_codes)--> AchievementStandard  (NCIC truth source — FK)
 #   - Concept --(visualization_card_keys)--> L5 시각화 자산  (L1은 참조 키만 보유)
+#
+# ⚠ 오개념 연결은 Concept 노드 내장 금지(Concept Purity):
+#   Concept ↔ Misconception 관계는 별도 misconception_relation 엔티티에서만 관리한다.
+#   검토 문서 §10·§25·§68-7 반영 — 2026-08-26 MISC-12.
 #   - concept_id 키 공간은 curriculum_entry / textbook_mapping과 *공유* (join 가능해야 함)
 #
 # 상태: 명세 단계. Phase 1 구현 대상 (고1 미적분 영역 ~100개념).
@@ -106,17 +109,6 @@ fields:
       그래프를 거치지 않는 조회 편의를 위함. 진실은 Edge, 이 필드는 캐시.
     references: concept.concept_id   # 자기참조 FK
 
-  misconception_codes:
-    type: list[string]
-    required: false
-    default: []
-    description: >-
-      이 개념에서 전형적으로 발생하는 오개념의 카탈로그 키.
-      오개념 카탈로그(docs/data/misconceptions)는 Phase 1에 30개만 존재 —
-      dangling 참조 가능. 검증은 에러가 아닌 *경고*로 처리.
-    references: "misconception catalog code (docs/data/misconceptions — Phase 1 30개)"
-    example: ["distribution-over-power", "limit-equals-substitution"]
-
   visualization_card_keys:
     type: list[string]
     required: false
@@ -160,5 +152,6 @@ validation_invariants:
   - "locales/ko.json 키 == 노드 concept_id 집합·전건 name_ko 비공백 (locale_parity — 별도 검증)"
   - "ids.yaml registry 키 == 노드 concept_id 집합·필드/이관 정합 (registry_parity — 별도 검증)"
   - "prerequisite_concept_ids의 각 ID가 실재 (cross-node 참조)"
-  - "dangling misconception_codes / visualization_card_keys → 경고 (에러 아님)"
+  - "dangling visualization_card_keys → 경고 (에러 아님)"
+  - "concept 노드에 misconception_codes 등 오개녬 필드가 내장되어 있지 않음 (concept_purity)"
   - "고립 노드(엣지 0개) → 경고"
