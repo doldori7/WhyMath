@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-57
+title: "SymPy 불가 영역 verifier v2 — 단계 B 도메인 발화 조건 설계"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-53
+requires_gates: []
+acceptance:
+  - "단계 B 도메인 vector_algebra, sequence_induction 발화 조건 확정"
+  - 각 도메인 DSL 문법·잔여 축·관점 템플릿 설계서 초안 작성
+  - 코퍼스 소비처/밴드 매핑 및 우선순위 판정
+  - 도메인 verifier 플러그인 등록 인터페이스 하위호환 검토
+  - "ruff/black/mypy green, import-linter 7계층 위반 0"
+  - PR 생성 및 CI 통과
+artifacts: []
+paths:
+  - docs/architecture/verifier_v2_domains.md
+  - src/backend/whymath_backend/l3/verifier.py
+  - "backlog/tasks/**"
+session: null
+notes: "S4-52 v2 설계서 §3.3 단계 B. S4-53(단계 A 실증) 완료 후, vector_algebra(내적/외적/스칼라·방향/단위)와 sequence_induction(귀납·추측·증명)의 발화 조건을 docs/architecture/verifier_v2_domains.md에 추가 설계."
+updated: 2026-08-25

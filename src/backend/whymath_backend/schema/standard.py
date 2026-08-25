@@ -37,6 +37,30 @@
 제1유형 자료라 *상업 이용·변경이 허용*되며 본문을 보유할 수 있다(검정교과서·EBS·평가원 본문은
 자체 동등문제로 대체해야 하는 것과 *대비*). 단 모든 사용에 출처 표시가 의무이며, 이는
 data-pipeline 수집기(`SOURCE_CITATION`)와 추후 노출 계층이 동봉한다.
+
+────────────────────────────────────────────────────────────────────────────
+CUR-07 확장 — 평가준거 코드·단원별 성취수준 등급 (achievement_criteria_v1 실측 근거)
+────────────────────────────────────────────────────────────────────────────
+`data/corpus/achievement_criteria_v1/achievement_criteria.json`(CUR-05 회수, 13 school_level×subject
+세트)을 실측 근거로 두 확장을 반영한다. 코퍼스는 성격이 다른 두 필드를 갖고, **두 필드를 같은
+조인 축으로 취급하지 않는다**(강제 매칭 금지 — CLAUDE.md "환경 사실의 추론 등재 금지"):
+
+  1. `standard_criteria_coverage`(성취기준 코드 → 평가준거 코드 다건, official_code 단위) — 실측
+     확인(`docs/data/achievement_criteria_v1.md` §4): 459건 전량이 `standards_v1`의 '2015 개정'
+     official_code 집합과 **정확히 일치**(교집합 459/459, 페이지 경계 오귀속 우려가 실제로는
+     이 코퍼스 표본에서 관측되지 않음 — 데이터 카드의 "간헐적 오귀속 가능" 경고는 유효하되 이
+     코퍼스 자체엔 미발현). 그래서 `AchievementStandard`에 `evaluation_criteria_codes` 컬럼을
+     *추가*한다(official_code 1건 : 평가준거 코드 다건 — `parent_codes`와 동일 배열 패턴). 매칭은
+     (curriculum_revision, official_code) 대조로 로더(`l1/standards/criteria_loader.py`)가 수행.
+  2. `achievement_levels_by_unit`(단원 → 등급 라벨 다건, **unit 문자열 단위**) — 실측 확인:
+     `unit`(예 '(1) 다항식')은 `AchievementStandard.domain`/`sub_domain`(NCIC 표준 분류 어휘)과
+     어휘가 **교집합 0**(고등학교 표준 26개 domain 대조)이고, 같은 코퍼스의 `unit_hierarchy` 최상위
+     번호 매김과도 불일치(예: 공통수학의 `unit_hierarchy`는 "(1) 문자와 식"이지만
+     `achievement_levels_by_unit`은 "(1) 다항식" — 같은 "(1)"이 다른 대상을 가리킴). 게다가
+     "(1) 문항 개발 목록"·"(2) 예시 평가 문항" 같은 *보고서 절 제목*까지 섞여 있어 이 축은 순수
+     "단원" 분류조차 아니다. 개별 성취기준(`norm_id`)에 안전하게 귀속시킬 근거가 없으므로, 별도
+     테이블 `AchievementLevelUnit`(school_level·subject·unit·levels)로 두고 **개별 성취기준과의
+     연결은 이 태스크 범위 밖**으로 명시한다(`docs/data/achievement_criteria_v1.md` §5 후속 항목).
 """
 
 from __future__ import annotations
@@ -144,6 +168,16 @@ class AchievementStandard(BaseModel):
         description="PDF/HWP 등 첨부 문서 식별자 (선택)",
     )
 
+    # ===== 평가준거 코드 커버리지 (CUR-07 — achievement_criteria_v1 매칭 결과, 선택) =====
+    evaluation_criteria_codes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "평가준거 코드(하위 평가기준) — achievement_criteria_v1의 standard_criteria_coverage "
+            "매칭 결과(선택). (curriculum_revision, official_code) 매칭 실패 시 빈 배열 유지"
+            "(조용한 날조 금지 — 매칭 통계는 로더 반환값이 정직 계상)"
+        ),
+    )
+
     # ===== 라이프사이클·버전·국가/언어 =====
     status: Literal[
         "draft",
@@ -206,4 +240,41 @@ class ConceptStandardLink(BaseModel):
     note: str | None = Field(default=None, description="연결 근거·비고 (선택)")
 
 
-__all__ = ["AchievementStandard", "ConceptStandardLink"]
+# ──────────────────────────────────────────────────────────────────────────
+# 보조: AchievementLevelUnit (단원 단위 성취수준 등급 커버리지 — CUR-07 신규)
+# ──────────────────────────────────────────────────────────────────────────
+class AchievementLevelUnit(BaseModel):
+    """단원 단위 성취수준 등급 커버리지 — `achievement_criteria_v1`의 `achievement_levels_by_unit`
+    원소 1건의 백엔드 계약 모델.
+
+    ⚠️ **개별 `AchievementStandard`(norm_id)와 의도적으로 연결하지 않는다**(모듈 docstring
+    "CUR-07 확장" §2 실측 근거). `unit`은 KICE 평가기준 보고서 자체의 단원 편성 문자열(예
+    '(1) 다항식')이며 `AchievementStandard.domain`/`sub_domain`(NCIC 표준 분류 어휘)과도, 같은
+    코퍼스의 `unit_hierarchy` 최상위 번호 매김과도 어휘·번호 체계가 다르다 — 억지로 이으면 "이
+    단원의 모든 성취기준이 이 등급 집합을 가진다"는 원본에 없는 주장이 된다. `school_level`도
+    `AchievementStandard.school_type`과 다른 어휘다(코퍼스 출처 KICE 보고서 구분 — '고등학교'
+    보고서 vs '초중학교' 보고서 — 개별 성취기준의 실제 학교급이 아니다). 그래서 이 모델은
+    성취기준 식별자를 필드로 갖지 않는다(연결 없음이 설계 결정 — 우연한 누락이 아니다).
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    school_level: str = Field(
+        ...,
+        description="출처 KICE 보고서 구분('고등학교' | '초중학교') — school_type과 다른 어휘",
+    )
+    subject: str = Field(
+        ..., description="과목명 또는 학년군명(코퍼스 원문 그대로, 예 '심화수학Ⅰ')"
+    )
+    unit: str = Field(..., description="단원 라벨(코퍼스 원문 그대로, 예 '(1) 다항식') — 서술 없음")
+    levels: list[str] = Field(
+        default_factory=list,
+        description="해당 단원에 정의된 성취수준 등급 라벨 목록(A~E 또는 A~C 단독 문자, 서술 없음)",
+    )
+    source_document: str | None = Field(
+        default=None,
+        description="출처 코퍼스 식별자(예 'achievement_criteria_v1') — 선택",
+    )
+
+
+__all__ = ["AchievementStandard", "AchievementLevelUnit", "ConceptStandardLink"]

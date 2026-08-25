@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-58
+title: statistical_claim tolerance/exact value DSL 개선
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S4-53
+requires_gates: []
+acceptance: []
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/statistical_claim.py
+  - docs/architecture/verifier_v2_design.md
+session: null
+notes: "Codex #4/#5: 정확값·허용오차 정책, Decimal/정확분수 도입. 현재 float 비교(rel_tol=1e-9)는 대값 왜곡과 정수 데이터 정밀도 손실 가능."
+updated: 2026-08-25
