@@ -8,6 +8,7 @@ verifier`)을 오버라이드해 검증한다. 핵심 종단 검증: 동의 기�
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
@@ -85,8 +86,22 @@ class FakeSession:
         받은 statement를 실 PG 방언으로 컴파일해 게이트 select()의 유효성도 함께 검증한다
         (hermetic 테스트엔 실 DB가 없다 — test_auth._FakeSession 동형).
         """
-        str(stmt.compile(dialect=postgresql.dialect()))
+        from sqlalchemy.dialects import postgresql as pg_dialect
+
+        compiled = str(stmt.compile(dialect=pg_dialect.dialect()))
         pool = self.existing_consents + [o for o in self.added if isinstance(o, ParentalConsent)]
+        # where 절의 scope 필터를 존중한다 — 단일 equality(`=`)와 IN 절 모두 지원.
+        eq_match = re.search(r"consent_scope = '([^']+)'", compiled)
+        if eq_match is not None:
+            expected_scopes = {eq_match.group(1)}
+        else:
+            in_match = re.search(r"consent_scope IN \(([^)]+)\)", compiled)
+            if in_match is not None:
+                expected_scopes = set(re.findall(r"'([^']+)'", in_match.group(1)))
+            else:
+                expected_scopes = set()
+        if expected_scopes:
+            pool = [c for c in pool if c.consent_scope in expected_scopes]
         return pool[-1] if pool else None
 
     async def scalars(self, stmt: Any) -> Any:
@@ -336,6 +351,49 @@ class TestGrantParentalConsent:
         resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
         assert resp.status_code == 409
         assert fake.rolled_back is True
+
+    def test_optional_scope_does_not_set_parent_consent_at(self) -> None:
+        """선택 동의(`ai_training`)는 서비스 이용 게이트 근거(parent_consent_at)를 설정하지 않는다."""
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake).post(
+            _GRANT_PATH,
+            json={"guardian_email": "parent@example.com", "consent_scope": "ai_training"},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["consent_scope"] == "ai_training"
+        assert user.parent_consent_at is None
+        assert fake.added_consents()[0].consent_scope == "ai_training"
+
+    def test_optional_scope_does_not_open_core_gate(self) -> None:
+        """선택 동의만으로는 `get_consented_user` core gate가 열리지 않는다."""
+        import asyncio
+
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake).post(
+            _GRANT_PATH,
+            json={"guardian_email": "parent@example.com", "consent_scope": "ai_training"},
+        )
+        assert resp.status_code == 201, resp.text
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(get_consented_user(user=user, session=fake))  # type: ignore[arg-type]
+        assert exc.value.status_code == 403
+
+    def test_ai_inference_opens_core_gate(self) -> None:
+        """`ai_inference`는 core scope이므로 parent_consent_at을 설정하고 gate를 연다."""
+        import asyncio
+
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake).post(
+            _GRANT_PATH,
+            json={"guardian_email": "parent@example.com", "consent_scope": "ai_inference"},
+        )
+        assert resp.status_code == 201, resp.text
+        assert user.parent_consent_at is not None
+        passed = asyncio.run(get_consented_user(user=user, session=fake))  # type: ignore[arg-type]
+        assert passed is user
 
 
 def test_grant_without_token_returns_401() -> None:

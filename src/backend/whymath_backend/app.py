@@ -39,13 +39,15 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import RequestResponseEndpoint
 
-from whymath_backend.api._auth import CurrentUser
+from whymath_backend.api._auth import CurrentUser, has_scope_consent
 from whymath_backend.api._device_store import (
     build_device_store_from_settings,
     ping_device_store_health,
@@ -122,6 +124,7 @@ from whymath_backend.api.interactions import router as interactions_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.oauth_providers import build_oauth_providers
 from whymath_backend.api.ocr import router as ocr_router
+from whymath_backend.api.privacy import router as privacy_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.reports import router as reports_router
 from whymath_backend.api.rights import router as rights_router
@@ -134,7 +137,7 @@ from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
-from whymath_backend.db.session import dispose_engine
+from whymath_backend.db.session import dispose_engine, get_session
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.interfaces import (
@@ -166,6 +169,7 @@ from whymath_backend.ops.service_health import (
     default_readiness_probes,
     evaluate_alerts,
 )
+from whymath_backend.schema.enums import ConsentScope
 
 # 앱 state 의존 키 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출(라우터 공유,
 # slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
@@ -981,7 +985,10 @@ def create_app(
 
     @app.post("/v1/generate", tags=["l3"])
     async def post_generate(
-        body: GenerateBody, request: Request, user: CurrentUser
+        body: GenerateBody,
+        request: Request,
+        user: CurrentUser,
+        session: Annotated[AsyncSession, Depends(get_session)],
     ) -> JSONResponse:
         """라우팅 → (동기) 캐시·생성 / (비동기 QUALITY) 큐잉. 메타데이터 + 결과 반환.
 
@@ -989,6 +996,11 @@ def create_app(
         (동기·완료)는 *검증 전 원시 출력*이다 — 03 문서 환각 방어 파이프라인을 통과하기
         전에는 학생에게 직접 노출 금지 (CLAUDE.md 절대 금기). 환각 방어·학생 표면화는 상위
         계층(L4/L5 오케스트레이터)의 책임이다.
+
+        AI 모델 학습/개선에 데이터 사용 가능 여부는 `ConsentScope.ai_training` 동의를
+        판정해 Langfuse trace 메타데이터로 전달한다(EOS §48·§50). 이 판정은 응답 생성을
+        막지 않으며, 단지 관측/라우팅 계약에서 학습 허용 여부를 명시하는 용도다.
+        성인은 현재 별도 성인 동의 저장소가 없어 기본 False(privacy-by-default).
 
         QUALITY(27b)로 라우팅되면 동기 호출이 불가하므로(03a §D.3) 작업 큐에 적재하고
         **HTTP 202 Accepted**로 job_id를 반환한다 — 호출자는 /v1/jobs/{job_id}로 폴링한다.
@@ -999,6 +1011,10 @@ def create_app(
         cache = _get_cache(request)
         trace = _get_trace(request)
         queue = _get_queue(request)
+        # EOS §48·§50: AI inference와 AI training 목적을 분리. inference 응답 생성은
+        # service_core 동의로 진행되며, training_allowed는 별도 ai_training 동의 판정값을
+        # Langfuse trace 메타데이터로 전달해 후속 학습 파이프라인이 참조할 수 있게 한다.
+        training_allowed = await has_scope_consent(user, session, ConsentScope.ai_training)
         try:
             result = await pipeline.generate(
                 body.request,
@@ -1010,6 +1026,7 @@ def create_app(
                 queue=queue,
                 validator=_get_validator(request),
                 skip_cache_on_signal=_get_skip_cache_on_signal(request),
+                training_allowed=training_allowed,
             )
         except QualityQueueUnavailableError as exc:
             # 큐 미구성/ broker 도달 실패 — 명확한 503 JSON(스택트레이스 금지).
@@ -1102,6 +1119,7 @@ def create_app(
     app.include_router(problems_router)
     app.include_router(users_router)
     app.include_router(me_router)
+    app.include_router(privacy_router)
     app.include_router(coach_router)
     app.include_router(verify_router)
     app.include_router(devices_router)
