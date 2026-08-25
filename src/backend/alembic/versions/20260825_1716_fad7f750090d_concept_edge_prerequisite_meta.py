@@ -6,7 +6,7 @@ EOS 6_개념 DB 검토 §13에 따른 prerequisite 엣지 메타를 추가한다
   curriculum_context, evidence_source_id 컬럼 추가
 
 Revision ID: fad7f750090d
-Revises: d5e6f7a8b9c0
+Revises: 899ae0efbb8b
 Create Date: 2026-08-25 17:16:00.000000
 """
 
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "fad7f750090d"
-down_revision: str | None = "fcfdfc277348"
+down_revision: str | None = "899ae0efbb8b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - src/backend/whymath_backend/db/models/concept_edge.py
   - src/backend/whymath_backend/schema/concept.py
   - schemas/v1.1/concept.schema.yaml
-session: null
+session: backend/cur-16-concept-edge-prerequisite-meta-v2
 notes: "EOS 6_개념 DB 검토 §13에 따른 선수학습 edge 메타 확장. WhyMath는 ConceptEdge.PREREQUISITE로 단일 테이블 운영 중이므로 추가 메타를 컬럼 확장으로 수용한다."
 updated: 2026-08-25
