@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-14-case-1-1-mapping-document
+title: 1EdTech CASE 1.1 매핑표 및 외부 교환 모델 설계 문서
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① docs/standards/case_1_1_mapping.md 작성 — CASE 1.1 Framework/Item/Association/Rric ↔ WhyMath CurriculumFramework/AchievementStandard/CurriculumEntry/Concept/ConceptEdge 대응표. ② W3C Verifiable Credentials 접점 정리. ③ EOS Curriculum Semantic Backbone ADR(docs/architecture/eos_curriculum_semantic_backbone_adr.md)와 cross-ref. ④ 범위 밖: 실제 CASE 1.1 REST/JSON 어댑터 코드는 Phase 2."
+artifacts: []
+paths:
+  - docs/standards/case_1_1_mapping.md
+  - docs/architecture/eos_curriculum_semantic_backbone_adr.md
+session: null
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 7. 코드 어댑터는 MVP 범위 밖이나, ID/provenance 안정화를 통해 향후 연결 가능함을 문서화."
+updated: 2026-08-25
