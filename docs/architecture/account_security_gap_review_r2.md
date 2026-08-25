@@ -26,6 +26,8 @@
 >    없었다** — 위 갭 2건이 v1에서 안 보였던 이유는 판정이 틀려서가 아니라 **표에 칸이 없어서**다.
 
 관련 정본: `docs/architecture/account_security_gap_review.md`(**v1 — 이 문서가 승계·정정하는 원본**) ·
+`docs/architecture/46_identity_auth_design_review.md`(2026-08-25 — 46_회원가입·로그인·인증
+80절 심화 설계안 대조, r2 승계 아닌 별도 검토) ·
 `docs/standards/security_privacy.md`(보안·개인정보 표준) · `docs/legal/pipa_data_matrix.md`(역할×항목
 2차원 정본) · `docs/architecture/operations_platform_gap_review.md` §3(ADMIN-01~03 소유) ·
 `docs/design/ui/04_admin_console_architecture.md` §2 원칙 3~4 · `CLAUDE.md` 절대 금기(보안·데이터·
