@@ -224,6 +224,7 @@ class TestConsentRevocationExpiryGate:
                 user=user, session=_FakeSession(consent=revoked)  # type: ignore[arg-type]
             )
         assert exc.value.status_code == 403
+        assert "철회" in exc.value.detail
 
     async def test_expired_consent_raises_403(self) -> None:
         """만료(expires_at 과거)된 최신 동의 → 403.
@@ -242,6 +243,7 @@ class TestConsentRevocationExpiryGate:
                 user=user, session=_FakeSession(consent=expired)  # type: ignore[arg-type]
             )
         assert exc.value.status_code == 403
+        assert "만료" in exc.value.detail
 
     async def test_future_expiry_passes(self) -> None:
         """만료 시각이 미래면 통과 — 만료 분기가 *유효한* 동의를 잠그지 않는다(과차단 방지)."""

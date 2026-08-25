@@ -380,7 +380,6 @@ def langfuse_fields(
     usage: Usage | None = None,
     cost_krw: float | None = None,
     content_source: str | None = None,
-    training_allowed: bool | None = None,
 ) -> dict[str, object]:
     """Langfuse 기록 필드 dict 생성 (03a §F.2 표).
 
@@ -393,9 +392,6 @@ def langfuse_fields(
     `validation_signal`은 런타임 shadow 검증(L3 결정론 도구) 결과다 — None=통과(또는
     미검증), 문자열=거짓 수치 관계 등 *환각 신호 사유*. 비차단 관측 전용이며 반환
     텍스트·캐시 동작에 영향을 주지 않는다(학생 노출 경계는 L4/L5 책임, CLAUDE.md).
-
-    `training_allowed`는 AI 모델 학습/개선에 사용자 데이터를 사용할 수 있는지의 동의
-    상태다(EOS §48). `None`이면 미측정. 관측용이며 provider 동작을 직접 제어하지 않는다.
     """
     cost = _as_cost_tier(decision.cost_tier)
     family = _as_model_family(decision.local_family)
@@ -428,8 +424,6 @@ def langfuse_fields(
         "student_id_hash": student_id_hash,  # 직접 ID 금지(해시만)
         "reason": decision.reason,  # 결정 근거
         "validation_signal": validation_signal,  # 런타임 shadow 검증 환각 신호(비차단)
-        # AI 학습 동의 상태(EOS §48) — 관측용, provider 제어는 별도 계약/설정.
-        "training_allowed": training_allowed,
         # 공급 경로(03c 2층 캐시) — prompt_cache/generate는 파이프라인이 cache_hit에서 유도하고,
         # dsl_render는 라우팅을 타지 않아 상위(l4 공급 경로)가 자기 이벤트로 기록한다.
         "content_source": content_source,

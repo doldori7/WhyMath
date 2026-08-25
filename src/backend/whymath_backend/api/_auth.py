@@ -47,7 +47,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.enums import ConsentScope, Role
+from whymath_backend.schema.enums import Role
 from whymath_backend.security import decode_access_token
 
 # auto_error=False — 헤더 없을 때 FastAPI 기본 403 대신 우리가 401(WWW-Authenticate)로 처리.
@@ -89,129 +89,48 @@ def _consent_required(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
-def _effective_scope(scope: ConsentScope) -> ConsentScope:
-    """동의 검사 시 `service_core`와 동일 취급할 scope를 정규화.
-
-    AI Tutor 응답 생성(`ai_inference`)은 서비스 본 기능에 속하므로 `service_core` 동의로
-    충족한다. 별도 `ai_inference` 동의 레코드는 감사/고지 목적으로 남을 수 있으나, 게이트
-    판정에서는 `service_core`와 동일하게 본다(EOS §45·§48).
-    """
-    if scope is ConsentScope.ai_inference:
-        return ConsentScope.service_core
-    return scope
-
-
-async def _latest_consent_for_scope(
-    user_id: uuid.UUID,
-    session: AsyncSession,
-    scope: ConsentScope,
-) -> ParentalConsent | None:
-    """특정 scope의 최신 `parental_consent` 행 1건을 반환(없으면 None)."""
-    effective = _effective_scope(scope)
-    latest: ParentalConsent | None = await session.scalar(
-        select(ParentalConsent)
-        .where(
-            ParentalConsent.user_id == user_id,
-            ParentalConsent.consent_scope == effective.value,
-        )
-        .order_by(ParentalConsent.consent_signed_at.desc().nullslast())
-        .limit(1)
-    )
-    return latest
-
-
-def _is_consent_active(consent: ParentalConsent | None) -> bool:
-    """동의 행이 존재하고 철회·만료되지 않았으면 True."""
-    if consent is None:
-        return False
-    if consent.revoked_at is not None:
-        return False
-    if consent.expires_at is not None and consent.expires_at <= datetime.now(tz=timezone.utc):
-        return False
-    return True
-
-
-async def has_scope_consent(
-    user: UserProfile,
-    session: AsyncSession,
-    scope: ConsentScope,
-) -> bool:
-    """사용자가 `scope`에 대해 유효한 동의를 가지고 있으면 True.
-
-    - 성인(`is_minor=False`)은 `service_core`·`ai_inference`에 대해 True(서비스 이용 자체가
-      동의 의사로 본다). 그 외 scope(ai_training·research·marketing)에 대해서는 현재
-      별도 성인 동의 저장소가 없으므로 **False**(privacy-by-default, 후속 성인 동의 UI에서
-      확장).
-    - 미성년자(`is_minor=True`)는 `parental_consent` 테이블에서 해당 scope 최신 행의
-      철회·만료 여부를 확인한다.
-    - `is_minor`가 None(미상)이면 추가 쿼리 없이 True(기존 방침 유지).
-    """
-    # service_core는 ai_inference와 동일 취급.
-    effective = _effective_scope(scope)
-
-    # 성인 또는 연령 미상: service_core/ai_inference만 허용, 나머지는 기본 거부.
-    if not user.is_minor:
-        return effective is ConsentScope.service_core
-
-    # 미성년자: service_core는 기존 parent_consent_at gate와 함께 체크.
-    if effective is ConsentScope.service_core:
-        if user.parent_consent_at is None:
-            return False
-        # 동의 원장이 없으면(legacy) parent_consent_at만으로 판정(기존 방침).
-        latest = await _latest_consent_for_scope(user.user_id, session, effective)
-        if latest is None:
-            return True
-        return _is_consent_active(latest)
-
-    # 미성년자: service_core 외 scope은 해당 scope의 동의 행을 직접 본다.
-    latest = await _latest_consent_for_scope(user.user_id, session, effective)
-    return _is_consent_active(latest)
-
-
-async def _check_scope_consent(
-    user: UserProfile,
-    session: AsyncSession,
-    scope: ConsentScope,
-) -> UserProfile:
-    """`has_scope_consent`가 False이면 403, 아니면 user를 그대로 반환."""
-    if not await has_scope_consent(user, session, scope):
-        scope_label = scope.value
-        if _effective_scope(scope) is ConsentScope.service_core:
-            detail = f"미성년자 학부모 동의가 필요합니다(scope={scope_label})."
-        else:
-            detail = f"해당 개인정보 처리에 대한 동의가 필요합니다(scope={scope_label})."
-        raise _consent_required(detail)
-    return user
-
-
 async def get_consented_user(
     user: Annotated[UserProfile, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserProfile:
     """알려진 미성년자인데 학부모 동의가 없거나·철회됐거나·만료됐으면 403(SEC-20 D9).
 
-    `service_core`(서비스 본 기능) scope에 대한 동의를 검사한다. 다른 scope별 판정은
-    `has_scope_consent` 또는 `require_consent`를 사용.
+    판정 순서(비용 순):
+      1. `is_minor`가 참이 아니면 즉시 통과 — **성인·미상 사용자는 추가 쿼리 0**이다
+         (`is_minor` None은 "미상"이라 차단하지 않는다: 추정으로 학습을 막지 않는 기존 방침).
+      2. `parent_consent_at`이 없으면 403(동의 미설정 — 종전과 동일).
+      3. 미성년이고 동의가 있으면 **최신 `parental_consent` 행 1건**을 읽어 `revoked_at`(철회)·
+         `expires_at`(만료)을 확인한다. 인덱스 `idx_parental_consent_user(user_id,
+         consent_signed_at DESC)`가 이미 이 접근 경로용으로 존재한다(신규 인덱스 0).
+
+    **동의 행이 없으면 차단하지 않는다**: `parent_consent_at`은 설정됐는데 원장 행을 못 찾는
+    경우는 "철회/만료를 판정할 근거가 없음"이지 "철회됨"이 아니다. `is_minor` None을 미상으로
+    보고 통과시키는 방침과 동형이며, 원장 도입 이전 데이터가 조용히 잠기는 것을 막는다.
+
+    **`expires_at`은 아직 writer가 없다**(SEC-20 범위: reader만 세운다). 재확인 *주기 숫자*는
+    법령 유래 판단이라 `MGMT-02`(변호사 회신) 선행이며, 주기가 확정되면 GRANT 경로에서
+    `expires_at`을 채우는 1줄로 발화한다 — **읽는 쪽을 먼저 세우는 것이 dead 컬럼을 만들지 않는
+    순서**다. 그때까지 만료 분기는 "값이 있으면 존중한다"는 계약으로만 존재한다.
     """
-    return await _check_scope_consent(user, session, ConsentScope.service_core)
+    if not user.is_minor:
+        return user
+    if user.parent_consent_at is None:
+        raise _consent_required("미성년자 학부모 동의가 필요합니다(parent_consent_at 미설정).")
 
-
-def require_consent(scope: ConsentScope) -> Callable[..., Awaitable[UserProfile]]:
-    """특정 `ConsentScope` 동의를 요구하는 FastAPI 의존성 팩토리.
-
-    사용 예:
-        RequireAiTrainingConsent = Annotated[
-            UserProfile, Depends(require_consent(ConsentScope.ai_training))
-        ]
-    """
-
-    async def _dependency(
-        user: Annotated[UserProfile, Depends(get_current_user)],
-        session: Annotated[AsyncSession, Depends(get_session)],
-    ) -> UserProfile:
-        return await _check_scope_consent(user, session, scope)
-
-    return _dependency
+    latest = await session.scalar(
+        select(ParentalConsent)
+        .where(ParentalConsent.user_id == user.user_id)
+        .order_by(ParentalConsent.consent_signed_at.desc().nullslast())
+        .limit(1)
+    )
+    if latest is None:
+        # 판정 근거 부재 = 미상 → 통과(위 docstring 참조).
+        return user
+    if latest.revoked_at is not None:
+        raise _consent_required("미성년자 학부모 동의가 철회되었습니다(재동의가 필요합니다).")
+    if latest.expires_at is not None and latest.expires_at <= datetime.now(tz=timezone.utc):
+        raise _consent_required("미성년자 학부모 동의가 만료되었습니다(재확인이 필요합니다).")
+    return user
 
 
 def require_role(*roles: Role) -> Callable[..., Awaitable[UserProfile]]:

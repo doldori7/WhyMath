@@ -167,25 +167,3 @@ class ParentalConsentRevokeResponse(BaseModel):
             "(멱등 — 반복 호출이 안전하다)."
         ),
     )
-
-
-class ConsentScopeStatus(BaseModel):
-    """특정 동의 scope의 현재 상태(내역 조회 응답의 항목)."""
-
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
-
-    scope: ConsentScope = Field(description="동의 범위.")
-    status: str = Field(description="상태: GRANTED | WITHDRAWN | EXPIRED | NEVER_GRANTED.")
-    granted_at: datetime | None = Field(default=None, description="최종 동의 시각(미동의=None).")
-    expires_at: datetime | None = Field(default=None, description="동의 만료 시각.")
-
-
-class ParentalConsentHistoryResponse(BaseModel):
-    """`GET /v1/users/me/parental-consent` 응답 — 동의 내역 조회.
-
-    법정대리인 이메일·해시 등 PII는 응답에 포함하지 않는다. scope별 최신 상태만 노출.
-    """
-
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
-
-    scopes: list[ConsentScopeStatus] = Field(description="동의 scope별 현재 상태 목록.")
