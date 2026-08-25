@@ -1486,6 +1486,16 @@ class ConsentScope(str, Enum):
     marketing = "marketing"
     """마케팅·프로모션·이벤트 알림을 위한 데이터 활용(§26). 별도 동의 필요."""
 
+    @property
+    def is_core_scope(self) -> bool:
+        """서비스 본 기능(core) 동의 범위 여부(EOS §45·§48).
+
+        `service_core`(서비스 본 기능)와 `ai_inference`(AI Tutor 응답 생성 등 서비스 제공)
+        은 서비스 이용 게이트를 여는 *core* scope다. `ai_training`·`research`·`marketing`은
+        별도 동의가 필요한 *optional* scope다.
+        """
+        return self in (ConsentScope.service_core, ConsentScope.ai_inference)
+
 
 class Role(Enum):
     """`user_profile.role` — 인가(authorization) 역할, v0 **2값 확정(축소)**(SEC-07 D1).

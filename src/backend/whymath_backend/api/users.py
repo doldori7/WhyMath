@@ -253,8 +253,12 @@ async def grant_parental_consent(
     )
     session.add(consent)
     # 3. 같은 트랜잭션으로 게이트 통과 근거(parent_consent_at) 설정 — 동의 기록과 원자적.
-    user.parent_consent_at = now
-    await session.merge(user)
+    #    단, core scope(`service_core`·`ai_inference`)에 대해서만 설정한다. 선택 동의
+    #    (`ai_training`·`research`·`marketing`)는 서비스 이용 게이트를 열어서는 안 된다
+    #    (EOS §45·§48: optional scope이 core gate를 여는 문제).
+    if body.consent_scope.is_core_scope:
+        user.parent_consent_at = now
+        await session.merge(user)
     # 4. SEC-09: 동의변경 감사 1행 — 위 두 쓰기와 *같은* 트랜잭션(session.commit() 1회)이라
     #    동의 기록·게이트 갱신·감사가 원자적(부분 성공 없음). 어떤 동의 범위가 바뀌었는지만
     #    typed 메타(consent_scope)로 남기고, 법정대리인 이메일 등 PII는 담지 않는다.

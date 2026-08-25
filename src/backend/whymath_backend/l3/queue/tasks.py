@@ -63,6 +63,7 @@ _WORKER_SHADOW_VALIDATOR = default_seed_validator()
 PAYLOAD_PROMPT = "prompt"
 PAYLOAD_SYSTEM = "system"
 PAYLOAD_DECISION = "decision"
+PAYLOAD_TRAINING_ALLOWED = "training_allowed"
 
 
 def _resolve_provider(provider: LLMProvider | None) -> LLMProvider:
@@ -138,6 +139,7 @@ def run_quality_generation_payload(
                 cache_hit=False,
                 usage=generated.usage,
                 cost_krw=cost,
+                training_allowed=payload.get(PAYLOAD_TRAINING_ALLOWED),
             )
         )
 

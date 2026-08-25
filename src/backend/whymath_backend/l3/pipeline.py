@@ -98,17 +98,27 @@ class GenerationResult:
         return self.status == "queued"
 
 
-def _build_async_payload(prompt: str, system: str, decision: RoutingDecision) -> dict[str, object]:
+def _build_async_payload(
+    prompt: str,
+    system: str,
+    decision: RoutingDecision,
+    *,
+    training_allowed: bool | None = None,
+) -> dict[str, object]:
     """비동기 큐 payload(JSON-safe dict) 구성 — 워커 태스크 스키마와 일치.
 
     RoutingDecision은 use_enum_values=True라 model_dump()가 enum을 문자열로 내놓아
     JSON 직렬화·Celery 전송에 안전하다(pickle 미사용). 워커는 이 dict에서
     RoutingDecision을 다시 검증·재구성한다(queue/tasks.py PAYLOAD_* 키와 동일).
+
+    `training_allowed`는 AI 학습/개선에 데이터 사용 동의 여부(EOS §48)로, enqueue
+    시점과 워커 생성 완료 시점 모두 Langfuse trace 메타데이터로 남긴다.
     """
     return {
         "prompt": prompt,
         "system": system,
         "decision": decision.model_dump(),
+        "training_allowed": training_allowed,
     }
 
 
@@ -183,7 +193,7 @@ async def generate(
                 "QUALITY(27b) 동기 호출 불가 — 비동기 큐가 구성되지 않았습니다(03a §D.3). "
                 f"결정: cost_tier={decision.cost_tier}, local_model={decision.local_model}."
             )
-        payload = _build_async_payload(prompt, system, decision)
+        payload = _build_async_payload(prompt, system, decision, training_allowed=training_allowed)
         try:
             job_id = await queue.enqueue(payload)
         except Exception as exc:  # noqa: BLE001 — broker 다운 등 디스패치 실패를 도메인 예외로

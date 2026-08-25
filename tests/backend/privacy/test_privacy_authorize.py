@@ -46,14 +46,23 @@ class _FakeSession:
             )
         )
         # where 절에서 조회하려는 consent_scope 값을 추출한다(실제 필터링 모사).
-        match = re.search(r"consent_scope = '([^']+)'", compiled)
-        expected_scope = match.group(1) if match else None
+        # 단일 equality(`=`)와 core scope용 IN(`IN ('service_core', 'ai_inference')`)를
+        # 모두 지원한다.
+        eq_match = re.search(r"consent_scope = '([^']+)'", compiled)
+        if eq_match is not None:
+            expected_scopes = {eq_match.group(1)}
+        else:
+            in_match = re.search(r"consent_scope IN \(([^)]+)\)", compiled)
+            if in_match is not None:
+                expected_scopes = set(re.findall(r"'([^']+)'", in_match.group(1)))
+            else:
+                expected_scopes = set()
         # 동의 원장은 주어진 user의 것이어야 하고, 요청 scope과도 일치해야 한다.
         if self._consent is None or self._user is None:
             return None
         if self._consent.user_id != self._user.user_id:
             return None
-        if expected_scope is not None and self._consent.consent_scope != expected_scope:
+        if expected_scopes and self._consent.consent_scope not in expected_scopes:
             return None
         return self._consent
 
@@ -119,6 +128,15 @@ class TestAuthorizeProcessing:
         """미성년자가 service_core 동의를 받으면 해당 scope은 허용된다."""
         user = _minor_user(consent_at=datetime.now(tz=timezone.utc))
         consent = _consent("service_core", user_id=user.user_id)
+        decision = await authorize_processing(
+            _FakeSession(user, consent), user, scope=ConsentScope.service_core
+        )
+        assert decision.allowed is True
+
+    async def test_minor_ai_inference_consent_satisfies_service_core(self) -> None:
+        """`ai_inference` 동의는 서비스 본 기능(core) 처리에 대해서도 허용된다."""
+        user = _minor_user(consent_at=datetime.now(tz=timezone.utc))
+        consent = _consent("ai_inference", user_id=user.user_id)
         decision = await authorize_processing(
             _FakeSession(user, consent), user, scope=ConsentScope.service_core
         )

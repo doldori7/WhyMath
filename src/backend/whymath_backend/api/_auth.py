@@ -120,6 +120,29 @@ async def _latest_consent_for_scope(
     return latest
 
 
+# 서비스 이용(core) 게이트를 여는 scope — `service_core`와 동일 취급되는 `ai_inference` 포함.
+_CORE_SCOPES: frozenset[ConsentScope] = frozenset(
+    {ConsentScope.service_core, ConsentScope.ai_inference}
+)
+
+
+async def _latest_core_consent(
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> ParentalConsent | None:
+    """core scope(`service_core`·`ai_inference`) 중 최신 동의 행 1건을 반환(없으면 None)."""
+    latest: ParentalConsent | None = await session.scalar(
+        select(ParentalConsent)
+        .where(
+            ParentalConsent.user_id == user_id,
+            ParentalConsent.consent_scope.in_([s.value for s in _CORE_SCOPES]),
+        )
+        .order_by(ParentalConsent.consent_signed_at.desc().nullslast())
+        .limit(1)
+    )
+    return latest
+
+
 def _is_consent_active(consent: ParentalConsent | None) -> bool:
     """동의 행이 존재하고 철회·만료되지 않았으면 True."""
     if consent is None:
@@ -153,12 +176,13 @@ async def has_scope_consent(
     if not user.is_minor:
         return effective is ConsentScope.service_core
 
-    # 미성년자: service_core는 기존 parent_consent_at gate와 함께 체크.
+    # 미성년자: core gate는 `service_core`·`ai_inference` 중 최신 동의를 본다.
+    # `ai_inference`는 서비스 본 기능(AI Tutor 응답 생성)이므로 core scope로 취급.
     if effective is ConsentScope.service_core:
         if user.parent_consent_at is None:
             return False
         # 동의 원장이 없으면(legacy) parent_consent_at만으로 판정(기존 방침).
-        latest = await _latest_consent_for_scope(user.user_id, session, effective)
+        latest = await _latest_core_consent(user.user_id, session)
         if latest is None:
             return True
         return _is_consent_active(latest)
