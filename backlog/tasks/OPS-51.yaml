@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -23,6 +23,6 @@ paths:
   - scripts/ops/tune_and_bench.ps1
   - docs/ops/amd395_local_llm_performance.md
   - ".gpu_evidence/**"
-session: null
+session: claude/infra-ops-51-bench-capture-28eab6
 notes: "docs/ops/amd395_local_llm_performance.md §5 미측정 항목 후속. OPS-46이 기본 환경 캡처를 마쳤으나, 140W 전원 모드·백엔드 라벨 확정·resident 왕복 지연은 아직 기록되지 않았다. 재현성 문제(1회차만 높음)의 원인 규명이 핵심."
-updated: 2026-08-23
+updated: 2026-08-25
