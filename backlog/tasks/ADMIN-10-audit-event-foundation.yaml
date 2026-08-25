@@ -1,0 +1,32 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ADMIN-10-audit-event-foundation
+title: "EOS Audit Event Foundation — 공통 audit_event 테이블·SDK·P0 이벤트 배선"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① docs/architecture/90_audit_log.md 설계 문서 작성 및 기존 privacy_audit/deletion_audit과의 통합 전략 확정"
+  - "② audit_event ORM/마이그레이션 + AuditEventActorType/Severity enum + audit.emit(...) SDK 구현"
+  - "③ P0 이벤트 배선: role_grant_cli(iam.role.*), problems CUD, l3/router AI 생성/승인"
+  - "④ append-only 회귀 테스트, PII 미저장 테스트, AI 해시/모델 추적 테스트 통과"
+  - "⑤ GET /v1/admin/audit-events 조회 API(역할 기반 접근 제어) 및 CMS 검색 UI 연동"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/audit.py
+  - src/backend/whymath_backend/db/models/audit.py
+  - src/backend/whymath_backend/privacy/audit.py
+  - src/backend/whymath_backend/ops/role_grant_cli.py
+  - src/backend/whymath_backend/l3/router.py
+  - src/backend/whymath_backend/l3/interfaces.py
+  - "src/backend/alembic/versions/*audit*.py"
+  - "tests/backend/db/test_audit_event_*.py"
+  - "tests/backend/ops/test_role_grant_cli*.py"
+session: null
+notes: "90_감사(Audit) 로그 설계 검토 산출물. 세 결정사항: 1) 기존 privacy_audit/deletion_audit 유지 + audit_event 병존 2) before_version/after_version은 version_id 참조만, 원본은 version store 3) AI Trace는 별도 저장소 신규 금지, Langfuse trace_id 참조 + input/output hash. 2026-08-25: main 세션과 NLP-05의 중복 claim 해소를 위해 session을 null로 변경하고 status를 todo로 되돌림."
+updated: 2026-08-25
