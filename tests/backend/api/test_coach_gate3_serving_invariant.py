@@ -127,7 +127,9 @@ def test_served_utterance_is_static_template_end_to_end() -> None:
         ), f"서빙 응답 발화가 정적 템플릿 이탈 — input={text!r}: {prompt!r}"
 
 
-def test_serving_path_llm_flag_governance() -> None:
+def test_serving_path_llm_flag_governance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """게이트 ③ 봉인 ③ — 서빙 경로 LLM 소비 플래그 기본값 거버넌스(기본값 조용한 변경 방지).
 
     게이트 ③의 "LLM 산문 미방출" 논거는 다음 전제에 기댄다: 오개념 judge(서빙 유일 LLM 콜·산문
@@ -154,6 +156,9 @@ def test_serving_path_llm_flag_governance() -> None:
     CI 상시) 통과 + Kiki 사인오프(blast radius 좁아 실기기 확인 간이 갈음). 이 봉인이 이제 True를
     동결한다 — 조용히 False로 뒤집히면 red.
     """
+    # 기본값 동결 테스트는 머신 전역 env 오버라이드에 흔들리면 안 된다.
+    monkeypatch.delenv("WHYMATH_WH1_HARNESS_SHADOW_ENABLED", raising=False)
+    get_settings.cache_clear()
     settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
     assert settings.misconception_judge_enabled is False
     assert settings.wh1_harness_shadow_enabled is False

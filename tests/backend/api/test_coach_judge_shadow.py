@@ -287,6 +287,9 @@ class TestSpawnGating:
         _patch_judge(monkeypatch, FakeJudge(default=JudgeVerdict.NOT_EXPRESSES))
         captured = _patch_spawn(monkeypatch)
         _enable_shadow(monkeypatch)  # judge_shadow는 *안* 켠다
+        # 머신 전역 env로 judge_shadow가 켜져 있을 수 있으므로 명시적으로 끈다.
+        monkeypatch.delenv("WHYMATH_MISCONCEPTION_JUDGE_SHADOW", raising=False)
+        get_settings.cache_clear()
         body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
         assert captured.calls == 0  # judge_shadow off → spawn 0
         assert "distribution-over-power" in _exposed_ids(body)  # 노출 불변
