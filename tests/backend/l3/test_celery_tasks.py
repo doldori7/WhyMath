@@ -26,6 +26,7 @@ from whymath_backend.l3.queue.tasks import (
     PAYLOAD_DECISION,
     PAYLOAD_PROMPT,
     PAYLOAD_SYSTEM,
+    PAYLOAD_TRAINING_ALLOWED,
     QUALITY_TASK_NAME,
     run_quality_generation_payload,
 )
@@ -351,6 +352,49 @@ class TestWorkerTraceInstrumentation:
         assert rec["cost_krw"] == 0.0
         assert rec["input_tokens"] is None
         assert rec["output_tokens"] is None
+
+    def test_trace_records_training_allowed_from_payload(self) -> None:
+        """payload의 `training_allowed`가 워커 trace 메타데이터로 전달된다(EOS §48)."""
+        trace = RecordingTraceSink()
+        payload = _quality_payload()
+        payload[PAYLOAD_TRAINING_ALLOWED] = True
+
+        run_quality_generation_payload(
+            payload,
+            provider=UsageQualityProvider(usage=Usage(input_tokens=1, output_tokens=1)),
+            trace=trace,
+        )
+
+        rec = trace.records[0]
+        assert rec["training_allowed"] is True
+
+    def test_trace_records_training_allowed_false_from_payload(self) -> None:
+        """payload에 `training_allowed=False`가 명시되면 워커 trace에 False가 기록된다."""
+        trace = RecordingTraceSink()
+        payload = _quality_payload()
+        payload[PAYLOAD_TRAINING_ALLOWED] = False
+
+        run_quality_generation_payload(
+            payload,
+            provider=UsageQualityProvider(usage=Usage(input_tokens=1, output_tokens=1)),
+            trace=trace,
+        )
+
+        rec = trace.records[0]
+        assert rec["training_allowed"] is False
+
+    def test_trace_training_allowed_defaults_to_none(self) -> None:
+        """payload에 `training_allowed`가 없으면 워커 trace에는 None(미측정)이 기록된다."""
+        trace = RecordingTraceSink()
+
+        run_quality_generation_payload(
+            _quality_payload(),
+            provider=UsageQualityProvider(usage=Usage(input_tokens=1, output_tokens=1)),
+            trace=trace,
+        )
+
+        rec = trace.records[0]
+        assert rec["training_allowed"] is None
 
     def test_no_trace_no_records_backward_compatible(self) -> None:
         """trace 미주입(종전 호출) → 관측 없이 종전과 동일 동작(하위호환)."""

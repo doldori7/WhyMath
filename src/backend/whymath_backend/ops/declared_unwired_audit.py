@@ -961,6 +961,9 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "GET /v1/rights/{param}/{param}": _CONTENT_RIGHT,
         "POST /v1/rights/batch-check": _CONTENT_RIGHT,
         "POST /v1/rights/check": _CONTENT_RIGHT,
+        # 개인정보·보호자 동의 법정 권리 이행 표면 — 학생 앱 UI가 아니라 요청 처리/내부 PEP 경로다.
+        "GET /v1/users/me/parental-consent": _PRIVACY_RIGHT,
+        "POST /v1/privacy/authorize": _PRIVACY_RIGHT,
     },
     # ── 축 2. EventType(생산자 보유·소비자 없음) ──────────────────────────
     # 실측(2026-08-07): 검산결과·힌트제공·힌트요청은 `wh1_evaluation.py`/`coach.py`가 소비한다.

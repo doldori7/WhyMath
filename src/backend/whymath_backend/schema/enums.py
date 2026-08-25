@@ -1458,16 +1458,43 @@ class ConsentScope(str, Enum):
     표현한다. PIPA는 동의 시 *수집 항목·이용 목적·보유 기간·제3자 제공 여부*를 명확히 고지할
     의무를 지우므로(§3.2), 동의 1건이 *무엇에 대한 동의였는지*를 감사 가능하게 기록한다.
 
-    **현재는 `service_core`(서비스 본 기능 이용을 위한 개인정보 처리·게이트 해제) 한 값만
-    둔다.** 모델 학습 활용·제3자 제공·마케팅 등 *별도 동의가 필요한 범위*는 각각 별도 동의
-    레코드(별 scope)로 받아야 하며(CLAUDE.md "동의 없이 학습 사용 금지"·§5 체크리스트), 그
-    값들은 **변호사 자문으로 범위·문구가 확정된 뒤** 추가한다(지금 추측으로 박지 않는다 —
-    가짜 동의 범위를 만들지 않는다). 닫힌 카테고리지만 ORM은 String(32)로 두어(AuditResourceType
-    선례) 범위 추가 시 마이그레이션이 enum 변경을 요구하지 않게 한다.
+    **기본값은 `service_core`(서비스 본 기능 이용을 위한 개인정보 처리·게이트 해제).**
+    AI 튜터 응답 생성·학습 이력 저장 등 서비스 본 기능은 `service_core` 동의로 처리한다.
+    모델 학습 개선·연구·마케팅 등 *별도 동의가 필요한 범위*는 각각 별도 동의 레코드(별 scope)
+    로 받으며(CLAUDE.md "동의 없이 학습 사용 금지"·§5 체크리스트), 그 값들은 **변호사 자문
+    으로 범위·문구가 확정된 뒤** 노출한다. 닫힌 카테고리지만 ORM은 String(32)로 두어
+    (AuditResourceType 선례) 범위 추가 시 마이그레이션이 enum 변경을 요구하지 않게 한다.
+
+    EOS Privacy & Consent Platform 검토(§18·§45·§48)에 따르면 AI inference(서비스 제공)
+    와 AI training(모델 개선)은 반드시 분리된 처리 목적으로 관리해야 한다. `ai_inference`는
+    `service_core`에 포함될 수 있으나, `ai_training`·`research`·`marketing`은 명시적 추가
+    동의가 필요하다.
     """
 
     service_core = "service_core"
     """서비스 본 기능 이용을 위한 개인정보 처리 동의(미성년 게이트 해제) — §3.1 가입 단계."""
+
+    ai_inference = "ai_inference"
+    """AI Tutor 응답 생성·대화 문맥 저장 등 서비스 제공을 위한 AI 추론(§45·§49)."""
+
+    ai_training = "ai_training"
+    """모델 개선·fine-tuning·평가·품질 향상을 위한 학습 데이터 활용(§48). 별도 동의 필요."""
+
+    research = "research"
+    """교육 연구·통계·논문·벤치마크를 위한 데이터 활용(§53). 별도 동의 필요."""
+
+    marketing = "marketing"
+    """마케팅·프로모션·이벤트 알림을 위한 데이터 활용(§26). 별도 동의 필요."""
+
+    @property
+    def is_core_scope(self) -> bool:
+        """서비스 본 기능(core) 동의 범위 여부(EOS §45·§48).
+
+        `service_core`(서비스 본 기능)와 `ai_inference`(AI Tutor 응답 생성 등 서비스 제공)
+        은 서비스 이용 게이트를 여는 *core* scope다. `ai_training`·`research`·`marketing`은
+        별도 동의가 필요한 *optional* scope다.
+        """
+        return self in (ConsentScope.service_core, ConsentScope.ai_inference)
 
 
 class Role(Enum):
