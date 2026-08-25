@@ -52,6 +52,20 @@ from whymath_backend.schema.dialogue import (
     Dialogue,
     DialogueTurn,
 )
+
+# EOS 204 Education Event System
+from whymath_backend.schema.education_event import (
+    Actor,
+    EducationContext,
+    EducationEvent,
+    EducationEventEnvelope,
+    Object,
+    PedagogyContext,
+    Privacy,
+    Session,
+    Source,
+    Trace,
+)
 from whymath_backend.schema.enums import (
     Accessibility,
     AnswerFormat,
@@ -93,6 +107,20 @@ from whymath_backend.schema.enums import (
     VisualizationStyle,
     VisualizationType,
     VisualType,
+)
+from whymath_backend.schema.event_registry import (
+    EventRegistry,
+    EventRegistryEntry,
+    EventRegistryLoader,
+)
+from whymath_backend.schema.event_taxonomy import (
+    EducationEventDomain,
+    EducationEventType,
+    EventActorType,
+    EventNamespace,
+    EventPrivacyClassification,
+    EventStatus,
+    event_domain,
 )
 from whymath_backend.schema.ocr import (
     BBox,
@@ -175,6 +203,27 @@ __all__ = [
     "VisualType",
     "VisualizationStyle",
     "VisualizationType",
+    # EOS 204 Education Event System
+    "Actor",
+    "EducationContext",
+    "EducationEvent",
+    "EducationEventDomain",
+    "EducationEventEnvelope",
+    "EducationEventType",
+    "EventActorType",
+    "EventNamespace",
+    "EventPrivacyClassification",
+    "EventRegistry",
+    "EventRegistryEntry",
+    "EventRegistryLoader",
+    "EventStatus",
+    "Object",
+    "PedagogyContext",
+    "Privacy",
+    "Session",
+    "Source",
+    "Trace",
+    "event_domain",
     # problem
     "Condition",
     "Problem",
