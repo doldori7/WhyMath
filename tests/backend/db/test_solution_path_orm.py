@@ -153,4 +153,4 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        assert heads == {"899ae0efbb8b"}  # CUR-10 Curriculum Framework / Version tables
+        assert heads == {"fad7f750090d"}  # CUR-16 concept_edge prerequisite 메타 확장
