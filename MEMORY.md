@@ -7141,3 +7141,14 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **확정 결정**: 비밀번호 해싱 절은 OAuth 전용 현행(SEC-07 D1)에 맞춰 "도입 시" 조걶로 한정 / 필드 암호화는 현행 `_crypto.py`(AES-256-GCM·키 3종 분리·MultiKeyCipher)를 EOS 표준으로 승격 / 멀티테넌시·RLS·12개 역할은 EOS 단계로 분리(현행 Role 2값·테넌시 0) / 보안 이벤트는 204 교육 이벤트와 분리.
 - **법령 인용 검증**: 개인정보보호위원회고시 제2026-9호(2026-07-01 시행) — law.go.kr 대조 확인(2026-08-25). 세부 수치(접속기록 보관기간 등)는 고시 별표 원문 대조 표시.
 - **산출물**: `docs/architecture/48_eos_security_access_control.md`, PR #NNN.
+
+## 2026-08-26: EOS 『28_MathLive 입력』 43절 설계안 검토 — 델타 1건(EOS-28) 등재 + 승계 3건
+
+- **사건**: Kiki가 EOS 지향 『28_MathLive 입력』 설계안(43절)을 제출하고 검토를 요청.
+- **착수 전 확인**: 같은 근원 틀의 10항 요약본을 `math_engine_gap_review.md`가 이미 전수 대조(기능 28 "갭 0" · MATH-01~05). §7.6 계열 C 방어(착수 전 기존 리뷰 조회)의 **두 번째 작동 사례** — 전수 재대조를 거르고 델타만 판정.
+- **판정**: 43절 중 37절은 기판정 재확인(✅충족·🚫의도적 미채택·⏸유보). 자체 Canonical Math AST · 클라이언트 lightweight parse · 입력 중 실시간 서버 검증 · 학생 입력 거부(allowed_symbols)는 기존 미채택 결정 그대로 유지. 문서 자체 결함 2건 기록(§30 예시가 §2.1 위반 · "observed AST 보존"이 프라이버시 현행과 충돌 — `wrong_form_match.py:17` 현행이 정답).
+- **진짜 갭 1건 등재**: `EOS-28-answer-form-contract`(S3·prio 2) — **답 형태 계약: 동치≠지시 준수 채점 변별**. 실측 근거: `verify_answer.py:272-347` 수치 잔차만 · `verify_final_answer.py:246-284` 값 해집합+동치뿐 · 형태 검사 grep 0건 · `answer_format` enum(`schema/enums.py:175-181`)은 채점기 미소비 메타 라벨. 경계: 형태 불만족은 제출 차단이 아니라 채점 변별+피드백(§2-⑤ 계열 교수학 금기, 테스트 기계화). 첫 acceptance는 코퍼스 형태 요구 문항 비율 실측 — 0건이면 유보 전환(측정 없는 도입 없음).
+- **승계 3건**: ①원문 LaTeX 보존 = `EOS-32`(acceptance의 `raw_response/latex`가 이미 수용 — 단 현재 백엔드 도달 값은 평문뿐이라 `chat_controller.dart:96-110` 모바일 페이로드 확장이 전제) ②step 수준 입력 이벤트 = `EOS-46` ③버전 고정·채점 재현성 = `EOS-47`(evaluation_context에 notation_contract·파서 버전 포함 요구 추가 기록).
+- **공백 7종은 발화 조걧만**: 입력 상태 모델(G-1) · 위젯 세션 이벤트(G-2) · 혼합 블록(G-3) · 키보드 visible 프로필(G-4) · 음성(G-5) · i18n(G-6) · paste 정규화(G-7).
+- **산출물**: `docs/architecture/28_mathlive_input.md` + backlog 1건(`validate` green 421건). 오개념 축은 `l4/misconception/wrong_form_match.py`가 문서 제안(AST signature)보다 강한 구현(SymPy Wild 정합·거짓 등식 가드)임을 확인 — ✅ 초과.
+- **cross-ref**: `math_engine_gap_review.md`(기능 28 기판정 정본) · `32_learning_history.md` · `44_eos_version_management.md`.
