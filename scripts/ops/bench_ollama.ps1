@@ -17,9 +17,6 @@
 #   prompt_tps = prompt_eval_count / (prompt_eval_duration / 1e9) ← 프롬프트 처리(prefill) 속도
 #   gpu_fraction = /api/ps 의 size_vram / size                    ← `ollama ps` PROCESSOR 열의 기계 판독형
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
 [CmdletBinding()]
 param(
     [string]$Label = "run",
@@ -31,10 +28,14 @@ param(
     [switch]$NoUnload,
     [string]$Prompt = "",
     [string]$OllamaHost = "http://127.0.0.1:11434",
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+    [switch]$PowerMode140W   # EVO-X2 전면 버튼 Performance(140W) 수기 확인 플래그
 )
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 콘솔 출력을 UTF-8로 바꿔 한글이 깨지지 않게 한다.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $RepoRoot ".gpu_evidence" }
@@ -65,7 +66,39 @@ function Get-OrphanLlamaServers {
     # /api/ps 가 비어 있는데 llama-server 가 살아 있으면 고아다.
     # 실패한 로드가 남긴 고아가 커밋을 점유해 *다음* 로드를 실패시키는 자기증식 구조가 실측됐다
     # (2026-08-22: 하루 전 08:47·09:22에 뜬 고아 2개가 커밋 19.3 GB를 잡고 있었다).
-    return @(Get-Process llama-server -ErrorAction SilentlyContinue)
+    # 정상 벤치 중에는 로드된 모델마다 llama-server 1개가 떠 있으므로,
+    # 로드된 모델 수를 빼지 않으면 정상 runner까지 고아로 오표기된다(2026-08-25 Codex 리뷰).
+    param([string]$HostUri = "")
+    $procs = @(Get-Process llama-server -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return @() }
+    if ([string]::IsNullOrWhiteSpace($HostUri)) { $HostUri = $OllamaHost }
+    $loaded = 0
+    try {
+        $ps = Invoke-RestMethod -Uri ($HostUri + "/api/ps") -TimeoutSec 10 -ErrorAction Stop
+        if ($null -ne $ps.models) { $loaded = @($ps.models).Count }
+    } catch {
+        # /api/ps 조회 실패 시에는 보수적으로 전부 고아로 간주하지 않고 0을 반환한다 —
+        # 오탐 경고가 측정을 오염시키는 것보다 조회 실패를 로그로 남기는 편이 정직하다.
+        Write-Host ("[WARN] " + $_.Exception.GetType().Name + ": /api/ps 조회 실패 — 고아 판정 불가로 0 처리")
+        return @()
+    }
+    $orphanCount = [math]::Max(0, $procs.Count - $loaded)
+    if ($orphanCount -eq 0) { return @() }
+    return @($procs | Select-Object -First $orphanCount)
+}
+
+function Get-GpuClockAndTemp {
+    # AMD iGPU는 Windows에서 표준 WMI로 클럭/온도를 획득하기 어렵다.
+    # ACPI thermal zone의 첫 항목은 GPU라는 보장이 없으므로 gpu_temp_c로 기록하지 않는다
+    # (2026-08-25 Codex 리뷰: 잘못된 GPU 온도가 스로틀링 분석을 오도한다).
+    $r = @{ clock_mhz = $null; temp_c = $null; error = "" }
+    try {
+        [void](Get-CimInstance Win32_VideoController -ErrorAction Stop)
+    } catch {
+        $r.error = $_.Exception.GetType().FullName
+    }
+    # GPU 클럭/온도는 표준 WMI 미지원 — Adrenalin/AMDSmiCLI 필요.
+    return $r
 }
 
 function Get-HttpErrorBody {
@@ -208,6 +241,9 @@ if ($orph0.Count -gt 0) {
 }
 Write-Host ("[INFO] benchmark target : " + ($Models -join ", "))
 Write-Host ("[INFO] prompt chars     : " + $Prompt.Length + " / num_predict : " + $NumPredict + " / repeat : " + $Repeat)
+Write-Host ("[INFO] power_mode_140W  : " + $PowerMode140W + "  (EVO-X2 전면 버튼 Performance 확인 플래그)")
+$gt0 = Get-GpuClockAndTemp
+Write-Host ("[INFO] gpu_temp_c       : " + $(if ($null -ne $gt0.temp_c) { $gt0.temp_c } else { "N/A" }))
 Write-Host ""
 
 $Rows = New-Object System.Collections.ArrayList
@@ -229,6 +265,8 @@ foreach ($model in $Models) {
             label=$Label; model=$model; run=0; gen_tps=$null; prompt_tps=$null
             eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
             gpu_fraction=$null; context_length=$null; commit_free_gb=(Get-CommitFreeGB)
+            power_mode_140w=$PowerMode140W; orphan_llama_servers=(Get-OrphanLlamaServers).Count
+            gpu_clock_mhz=$null; gpu_temp_c=$null
             error=($_.Exception.GetType().Name + ": " + $why) })
         if (-not $NoUnload) { Remove-LoadedModel -Model $model }
         continue
@@ -255,19 +293,27 @@ foreach ($model in $Models) {
             $genTps = if ($res.eval_duration -gt 0) { [math]::Round($res.eval_count / ($res.eval_duration / 1e9), 2) } else { 0 }
             $ppTps  = if ($res.prompt_eval_duration -gt 0) { [math]::Round($res.prompt_eval_count / ($res.prompt_eval_duration / 1e9), 2) } else { 0 }
             $totMs  = [math]::Round(($res.total_duration / 1e6), 1)
-            Write-Host ("  run " + $r + " : gen " + $genTps + " t/s | prompt " + $ppTps + " t/s | total " + $totMs + " ms | out " + $res.eval_count + " tok")
+            $gt = Get-GpuClockAndTemp
+            $orph = (Get-OrphanLlamaServers).Count
+            Write-Host ("  run " + $r + " : gen " + $genTps + " t/s | prompt " + $ppTps + " t/s | total " + $totMs + " ms | out " + $res.eval_count + " tok | CommitFree=" + (Get-CommitFreeGB) + "GB | orphan=" + $orph)
             [void]$Rows.Add([pscustomobject]@{
                 label=$Label; model=$model; run=$r; gen_tps=$genTps; prompt_tps=$ppTps
                 eval_count=$res.eval_count; prompt_eval_count=$res.prompt_eval_count
                 load_ms=[math]::Round(($res.load_duration/1e6),1); total_ms=$totMs
-                gpu_fraction=$frac; context_length=$ctx; commit_free_gb=(Get-CommitFreeGB); error="" })
+                gpu_fraction=$frac; context_length=$ctx; commit_free_gb=(Get-CommitFreeGB)
+                power_mode_140w=$PowerMode140W; orphan_llama_servers=$orph
+                gpu_clock_mhz=$gt.clock_mhz; gpu_temp_c=$gt.temp_c; error="" })
         } catch {
             $why = Get-HttpErrorBody $_
-            Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().Name + " :: " + $why)
+            $gt = Get-GpuClockAndTemp
+            $orph = (Get-OrphanLlamaServers).Count
+            Write-Host ("  [ERR] run " + $r + " : " + $_.Exception.GetType().Name + " :: " + $why + " | orphan=" + $orph)
             [void]$Rows.Add([pscustomobject]@{
                 label=$Label; model=$model; run=$r; gen_tps=$null; prompt_tps=$null
                 eval_count=$null; prompt_eval_count=$null; load_ms=$null; total_ms=$null
                 gpu_fraction=$frac; context_length=$ctx; commit_free_gb=(Get-CommitFreeGB)
+                power_mode_140w=$PowerMode140W; orphan_llama_servers=$orph
+                gpu_clock_mhz=$gt.clock_mhz; gpu_temp_c=$gt.temp_c
                 error=($_.Exception.GetType().Name + ": " + $why) })
         }
     }
@@ -279,7 +325,7 @@ $Rows | Export-Csv -Path $OutFile -NoTypeInformation -Encoding UTF8
 
 # ── 요약 (모델별 중앙값) ─────────────────────────────────────────────────────
 Write-Host ("-" * 78)
-Write-Host ("요약 — label=" + $Label)
+Write-Host ("요약 — label=" + $Label + "  power_mode_140W=" + $PowerMode140W)
 $ok = @($Rows | Where-Object { $_.error -eq "" -and $null -ne $_.gen_tps })
 if ($ok.Count -gt 0) {
     $ok | Group-Object model | ForEach-Object {
@@ -288,7 +334,10 @@ if ($ok.Count -gt 0) {
         $mi = [int][math]::Floor(($g.Count - 1) / 2)
         $medGen = @($g.gen_tps | Sort-Object)[$mi]
         $medPp  = @($g.prompt_tps | Sort-Object)[$mi]
-        "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   gpu_fraction {3}   ctx {4}" -f $_.Name, $medGen, $medPp, $g[0].gpu_fraction, $g[0].context_length
+        $medLd  = @($g.load_ms | Sort-Object)[$mi]
+        $medCf  = @($g.commit_free_gb | Sort-Object)[$mi]
+        $medOr  = @($g.orphan_llama_servers | Sort-Object)[$mi]
+        "{0,-20} gen {1,8} t/s   prompt {2,9} t/s   load {3,7} ms   CommitFree {4,5}GB   orphan {5}   gpu_fraction {6}" -f $_.Name, $medGen, $medPp, $medLd, $medCf, $medOr, $g[0].gpu_fraction
     } | ForEach-Object { Write-Host $_ }
 }
 
