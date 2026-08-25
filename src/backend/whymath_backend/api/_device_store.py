@@ -44,8 +44,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from whymath_backend.api._crypto import (
     SupportsEnvelope,
-    build_secret_cipher,
     encrypt_secret_for_storage,
+    require_device_secret_cipher,
     resolve_stored_secret,
 )
 from whymath_backend.api._degradation import DegradationCounter, DegradationSnapshot
@@ -392,11 +392,15 @@ class PgDeviceStore:
         self,
         sessionmaker: async_sessionmaker[AsyncSession],
         cipher: SupportsEnvelope | None = None,
+        *,
+        allow_plaintext_fallback: bool = False,
     ) -> None:
         self._sessionmaker = sessionmaker
         # slice 73: 봉투 암호화기(None이면 평문 저장·기존 동작). register는 암호화 저장,
         # verify는 복호화. 평문 행(기존·암호화 비활성)은 dual-read 폴백으로 그대로 동작.
+        # SEC-28: 평문 폴백은 개발/CI에서만 명시적 플래그로 허용(prod-like에서는 부팅 실패).
         self._cipher = cipher
+        self._allow_plaintext_fallback = allow_plaintext_fallback
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         # 지연 import — 순환 import 방지(models가 schema를 import, 본 모듈은 models를 import)
@@ -404,8 +408,11 @@ class PgDeviceStore:
 
         device_id = str(uuid.uuid4())
         secret_plain = secrets.token_urlsafe(32)
-        # slice 73: cipher 있으면 암호화 저장(평문 컬럼 NULL)·없으면 평문 폴백.
-        plain_col, encrypted, nonce = encrypt_secret_for_storage(self._cipher, secret_plain)
+        # slice 73: cipher 있으면 암호화 저장(평문 컬럼 NULL)·없으면 평문 폰백.
+        # SEC-28: 평문 폰백은 개발/CI에서만 명시적 플래그로 허용.
+        plain_col, encrypted, nonce = encrypt_secret_for_storage(
+            self._cipher, secret_plain, allow_plaintext_fallback=self._allow_plaintext_fallback
+        )
         async with self._sessionmaker() as session:
             session.add(
                 DeviceCredential(
@@ -1118,8 +1125,14 @@ def build_device_store_from_settings(
     sm = get_sessionmaker(settings)
     # slice 73: 봉투 암호화기 주입(키 미설정 시 None=평문 폴백). 잘못된 키 길이는 여기서
     # ValueError로 fail-fast(lifespan startup에서 표면화).
-    cipher = build_secret_cipher(settings)
-    pg_store: DeviceCredentialStore = PgDeviceStore(sm, cipher)
+    # SEC-28: prod-like 환경에서 키 미설정 시 RuntimeError로 부팅 거부.
+    cipher = require_device_secret_cipher(settings)
+    # SEC-28: 키가 없고 prod-like가 아닐 때만 평문 폰백을 명시적으로 허용(개발/CI 편의).
+    # 키가 설정되면 암호화를 사용하므로 평문 폰백이 필요 없고, prod-like에서는 키 없으면 부팅 실패.
+    allow_plaintext_fallback = cipher is None and not bool(settings.production_like)
+    pg_store: DeviceCredentialStore = PgDeviceStore(
+        sm, cipher, allow_plaintext_fallback=allow_plaintext_fallback
+    )
 
     if mode == "pg":
         return pg_store, _noop
