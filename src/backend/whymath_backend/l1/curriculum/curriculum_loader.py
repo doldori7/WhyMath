@@ -132,6 +132,8 @@ _KR_SOURCE_CODE: str = "교육부 고시 제2022-33호 [수학과 교육과정]"
 # is_present=True 셀의 근거 출처 URL(schema validator 충족). NCIC 국가교육과정정보센터 포털.
 _KR_SOURCE_URL: str = "https://www.ncic.go.kr"
 _KR_CURRICULUM_REVISION: str = "2022 개정"
+# CUR-10: KR 교육과정의 기본 프레임워크 식별자. curriculum_framework 백필과 동일 값.
+_KR_FRAMEWORK_ID: str = "KR_NC_2022"
 
 # review_status → confidence(데이터 품질 신뢰도). reviewed는 검수 완료라 높게, 그 외는 보수적으로.
 _CONFIDENCE_REVIEWED: float = 0.9
@@ -229,6 +231,7 @@ def _kr_entry_from_concept(concept: dict[str, Any], *, now: datetime) -> Curricu
         introduced_grade=introduced_grade,
         grade_band=grade_band,
         curriculum_revision=_KR_CURRICULUM_REVISION,
+        framework_id=_KR_FRAMEWORK_ID,
         # 맥락
         domain_label=_opt_str(concept.get("domain")),
         # 깊이 — grade_band 학년진행 휴리스틱(cognitive_level 원문 주석 확보 시 대체)

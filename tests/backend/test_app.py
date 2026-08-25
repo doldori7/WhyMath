@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -126,8 +127,19 @@ class NoPollQueue:
         return "job-x"
 
 
+class _FakeSession:
+    """/v1/generate의 session 의존성용 가짜 세션 — 동의 원장 조회만 모사."""
+
+    async def scalar(self, stmt: Any) -> Any:
+        return None
+
+
+async def _fake_session() -> AsyncIterator[_FakeSession]:
+    yield _FakeSession()
+
+
 def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
-    """provider/cache/trace/queue를 가짜로, get_current_user를 고정 인증 사용자로 오버라이드."""
+    """provider/cache/trace/queue를 가짜로, get_current_user/get_session을 오버라이드."""
     app = create_app(
         provider=provider,
         cache=InMemoryCache(),
@@ -136,6 +148,8 @@ def _client(provider: StubProvider, queue: Any | None = None) -> TestClient:
         queue=queue if queue is not None else StubQueue(),
     )
     app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
+    # /v1/generate가 ConsentScope.ai_training 동의 판정에 session을 쓰므로 가짜 세션 주입.
+    app.dependency_overrides[get_session] = _fake_session
     return TestClient(app)
 
 

@@ -119,12 +119,27 @@ def upgrade() -> None:
         """)
 
     # AchievementStandard.version_id별로 CurriculumVersion 행을 생성해 기존 스냅숏을 보존.
+    # 먼저 같은 curriculum_revision을 가진 KR 행의 version_id를 단일 UUID로 통일해야
+    # curriculum_version의 (framework_id, version_label) UNIQUE 제약이 위반되지 않는다.
+    op.execute("""
+        UPDATE achievement_standard s
+        SET version_id = rev.version_id
+        FROM (
+            SELECT DISTINCT ON (COALESCE(NULLIF(curriculum_revision, ''), 'initial'))
+                gen_random_uuid() AS version_id,
+                COALESCE(NULLIF(curriculum_revision, ''), 'initial') AS version_label
+            FROM achievement_standard
+            WHERE jurisdiction = 'KR'
+        ) rev
+        WHERE s.jurisdiction = 'KR'
+          AND rev.version_label = COALESCE(NULLIF(s.curriculum_revision, ''), 'initial')
+        """)
     op.execute("""
         INSERT INTO curriculum_version (
             version_id, framework_id, version_label,
             effective_from, status, created_at, updated_at
         )
-        SELECT DISTINCT
+        SELECT DISTINCT ON (COALESCE(NULLIF(s.curriculum_revision, ''), 'initial'))
             s.version_id,
             'KR_NC_2022',
             COALESCE(NULLIF(s.curriculum_revision, ''), 'initial'),
