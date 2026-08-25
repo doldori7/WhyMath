@@ -22,10 +22,14 @@ param(
     [string]$OutDir = "",
     [string]$OllamaHost = "http://127.0.0.1:11434",
     [switch]$WithDxdiag,
-    [int]$NativeTimeoutSec = 20
+    [int]$NativeTimeoutSec = 20,
+    [switch]$PowerMode140W   # EVO-X2 전면 버튼 Performance(140W) 수기 확인 플래그
 )
 
 $ErrorActionPreference = "Continue"
+# Windows PowerShell 콘솔 출력을 UTF-8로 바꿔 한글이 깨지지 않게 한다.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $RepoRoot ".gpu_evidence" }
@@ -87,6 +91,45 @@ function Invoke-Native {
     }
 }
 
+function Get-CommitFreeGB {
+    try { return [math]::Round((Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory / 1MB, 1) }
+    catch { return -1 }
+}
+
+function Get-OrphanLlamaServers {
+    return @(Get-Process llama-server -ErrorAction SilentlyContinue)
+}
+
+function Get-GpuClockAndTemp {
+    # AMD iGPU는 Windows에서 표준 WMI로 클럭/온도를 획득하기 어렵다.
+    # PowerShell에서 제공하는 표면들을 시도하고, 실패하면 예외 타입명을 남긴다(침묵 실패 금지).
+    try {
+        $vc = Get-CimInstance Win32_VideoController | Select-Object -First 1
+        if ($vc) {
+            "video_controller = {0}" -f $vc.Name
+            "adapter_ram_reported_MB = {0:N0}" -f ($vc.AdapterRAM / 1MB)
+        }
+    } catch {
+        "[ERR] {0}: {1}" -f $_.Exception.GetType().FullName, $_.Exception.Message
+    }
+    try {
+        $tz = @(Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" -ErrorAction Stop)
+        if ($tz.Count -gt 0) {
+            "thermal_zone_count = {0}" -f $tz.Count
+            $tz | Select-Object -First 3 | ForEach-Object {
+                $k = if ($_.CurrentTemperature) { $_.CurrentTemperature / 10 - 273.15 } else { $null }
+                "  instance={0} temp_c={1:N1}" -f $_.InstanceName, $k
+            }
+        } else {
+            "thermal_zone: (none)"
+        }
+    } catch {
+        "[ERR] {0}: {1}" -f $_.Exception.GetType().FullName, $_.Exception.Message
+    }
+    "gpu_clock_mhz: (표준 WMI 미지원 — Adrenalin/AMDSmiCLI가 필요)"
+    "gpu_temp_c:    (표준 WMI 미지원 — Adrenalin/AMDSmiCLI가 필요)"
+}
+
 Add-Line "WhyMath / Phaiakes9 GPU evidence"
 Add-Line ("collected_at : " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss K"))
 Add-Line ("hostname     : " + $env:COMPUTERNAME)
@@ -140,11 +183,13 @@ Add-Section "2. GPU carve-out (= VGM 반영값 · 관리자 권한 불요)" {
     else                   { "판정: 카브아웃 정상 범위. WhyMath 모델 총합 상주 소요는 약 30~35GB(문서 §3 L1)." }
 }
 
-Add-Section "3. GPU (video controllers)" {
+Add-Section "3. GPU (video controllers / clock / temp)" {
     Get-CimInstance Win32_VideoController |
         Select-Object Name, DriverVersion, DriverDate, VideoProcessor, VideoModeDescription, PNPDeviceID, Status |
         Format-List
     "(주의) Win32_VideoController.AdapterRAM 은 4GB에서 wrap 되어 신뢰 불가 — §2 카브아웃을 쓴다."
+    "--- GPU 클럭/온도 (표준 WMI로 획득 가능한 경우) ---"
+    Get-GpuClockAndTemp
 }
 
 Add-Section "4. Dedicated VRAM (registry / dxdiag) - 보조 확인" {
@@ -184,7 +229,12 @@ Add-Section "4. Dedicated VRAM (registry / dxdiag) - 보조 확인" {
 
 Add-Section "5. Power plan / power mode" {
     Invoke-Native -File "powercfg" -Arguments @("/getactivescheme") -TimeoutSec 15
-    "--- (참고) EVO-X2 전면 버튼: Quiet 54W / Balanced 85W / Performance 140W — OS에서는 안 보인다. 눈으로 확인할 것."
+    "--- EVO-X2 전면 버튼: Quiet 54W / Balanced 85W / Performance 140W ---"
+    "power_mode_140W_confirmed : {0}" -f $PowerMode140W
+    if (-not $PowerMode140W) {
+        "  -> 전면 버튼을 Performance(140W)로 맞춘 뒤 -PowerMode140W 스위치를 추가해 다시 실행하세요."
+    }
+    "CommitFree_GB : {0:N1}" -f (Get-CommitFreeGB)
 }
 
 Add-Section "6. Ollama REST (/api/version, /api/ps) - 서버가 살아 있는지 먼저" {
@@ -261,6 +311,21 @@ Add-Section "9. Ollama server log - GPU discovery lines (tail)" {
     if (-not $found) { "[ERR] System.IO.FileNotFoundException: no Ollama server.log/app.log under " + $env:LOCALAPPDATA + "\Ollama" }
 }
 
+Add-Section "10. Workload hygiene (orphan llama-server / commit free)" {
+    $orph = Get-OrphanLlamaServers
+    $cf = Get-CommitFreeGB
+    if ($orph.Count -eq 0) {
+        "llama-server_orphan_count : 0"
+        "llama-server_orphan_commit_GB : 0"
+    } else {
+        $sum = [math]::Round((($orph | Measure-Object -Property PrivateMemorySize64 -Sum).Sum)/1GB, 2)
+        "llama-server_orphan_count : {0}" -f $orph.Count
+        "llama-server_orphan_commit_GB : {0:N2}" -f $sum
+        "  -> /api/ps 는 비어 있는데 llama-server 프로세스가 남아 있다면 고아다. 다음 측정 전에 정리하세요."
+    }
+    "CommitFree_GB : {0:N1}" -f $cf
+}
+
 # ── 자가검증 (변별력 있는 검사: 존재 + 크기 + 섹션 수) ───────────────────────
 Add-Line ""
 Add-Line ("-" * 78)
@@ -268,12 +333,12 @@ $ok = $true
 if (-not (Test-Path $OutFile)) { Write-Host "[FAIL] evidence file was not created"; $ok = $false }
 else {
     $size = (Get-Item $OutFile).Length
-    $sections = @(Select-String -Path $OutFile -Pattern "^## \d\.").Count
+    $sections = @(Select-String -Path $OutFile -Pattern "^## \d+\.").Count
     Write-Host ("[INFO] file     : " + $OutFile)
     Write-Host ("[INFO] size     : " + $size + " bytes")
-    Write-Host ("[INFO] sections : " + $sections + " / 9")
-    if ($size -lt 500)   { Write-Host "[FAIL] evidence file is suspiciously small"; $ok = $false }
-    if ($sections -lt 9) { Write-Host "[FAIL] some sections did not render — 파일의 마지막 '## N.' 이 멈춘 지점이다"; $ok = $false }
+    Write-Host ("[INFO] sections : " + $sections + " / 10")
+    if ($size -lt 500)    { Write-Host "[FAIL] evidence file is suspiciously small"; $ok = $false }
+    if ($sections -lt 10) { Write-Host "[FAIL] some sections did not render — 파일의 마지막 '## N.' 이 멈춘 지점이다"; $ok = $false }
 }
 if ($ok) { Write-Host "[OK] Phase 0 evidence collected. 이 파일을 그대로 공유하세요." ; exit 0 }
 else     { Write-Host "[FAIL] Phase 0 incomplete — 위 [ERR]/[FAIL]/[TIMEOUT] 줄과 파일을 그대로 붙여넣고 멈추세요." ; exit 1 }
