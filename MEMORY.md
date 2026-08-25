@@ -7141,3 +7141,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **확정 결정**: 비밀번호 해싱 절은 OAuth 전용 현행(SEC-07 D1)에 맞춰 "도입 시" 조걶로 한정 / 필드 암호화는 현행 `_crypto.py`(AES-256-GCM·키 3종 분리·MultiKeyCipher)를 EOS 표준으로 승격 / 멀티테넌시·RLS·12개 역할은 EOS 단계로 분리(현행 Role 2값·테넌시 0) / 보안 이벤트는 204 교육 이벤트와 분리.
 - **법령 인용 검증**: 개인정보보호위원회고시 제2026-9호(2026-07-01 시행) — law.go.kr 대조 확인(2026-08-25). 세부 수치(접속기록 보관기간 등)는 고시 별표 원문 대조 표시.
 - **산출물**: `docs/architecture/48_eos_security_access_control.md`, PR #NNN.
+
+## 2026-08-25: EOS 『32_학습 이력(Learning History)』 설계안 검토 수용 — 기존 구조의 명문화 + 갭 5종 등재
+
+- **사건**: Kiki가 EOS 지향 32_학습 이력 설계안(32절)을 제출하고 검토를 요청.
+- **판정**: 방향 수용 — Raw Event/Learning History/Learner State 3계층 분리·Evidence↔Mastery 분리·Version 고정은 타당하며, **대부분 코드에 이름 없이 이미 존재**(attempt_event·mastery_history append-only·UserStateSnapshot·evidence_links). 그린필드 신설이 아니라 ADR 명문화 + 갭 보강으로 착지.
+- **정정 4건**: ① 참조 전제인 204_교육 이벤트·205_공통 메타데이터 문서는 저장소에 부재 — 실질 정본은 코드(`schema/event_data_contract.py`·`schema/analytics_event.py`)임을 명시 ② ID 예시를 프리픽스+ULID에서 011_1 확정안(UUID+의미적 canonical ID)으로 교정 ③ "Raw Event = immutable"을 "갱신 금지(append-only) + 삭제는 개인정보 절차로만 + 감사 잔존"으로 정정(미성년자 삭제권 배관 `erasure/retention`과의 충돌 해소) ④ Subject-neutral core는 설계 원칙 확정·실구현은 `subject_expansion_readiness.md` 보류 대장 원칙에 따라 착수 트리거 전 금지.
+- **갭 5종 등재**: `EOS-32-answer-submission-entity`(attempt 내 다회 제출 시퀀스 정규화) · `EOS-45-hint-usage-entity`(힌트 횟수·레벨·엔람시간) · `EOS-46-solution-step-event`(학생 풀이 step 수준 — `SolutionNode` MCTS 노드와 명칭 구분) · `EOS-47-attempt-version-pinning`(problem_version_id + evaluation_context, EOS-44 선행) · `EOS-48-event-time-active-time`(event_time/ingested_at 분리 + active/idle 구분). 하네스가 번호당 1태스크 강제(HARN-10)라 32 외 번호는 EOS-45~48 배정.
+- **사고 메모**: 최초 등재·부기는 메인 체크아웃(CUR-16 브랜치)에서 했으나, 병렬 세션의 트리 정리로 MEMORY.md 부기분과 events.ndjson 이벤트가 무증상 소실(태스크 YAML·설계 문서는 untracked라 생존). 격리 worktree에서 재구성 — 병렬 세션 규칙(1 세션 = 1 worktree)의 필요성을 재확인한 사례.
+- **산출물**: `docs/architecture/32_learning_history.md`(8대 원칙 ADR + 기존 구현 매핑 표 + privacy 3종 배선 필수화), backlog 태스크 5건.
+- **cross-ref**: `44_eos_version_management.md`(VersionContext 정본), `02_learner_model.md`, `04a_wh1_tutoring_harness.md`(evidence_links), `docs/standards/eos_identity_layer_011_1_decision.md`.

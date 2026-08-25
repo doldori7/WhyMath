@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-45-hint-usage-entity
+title: "HintUsage 정규화 — 힌트 횟수·레벨·엔람시간 1급 데이터화"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "hint_usage 스키마+ORM+alembic: attempt FK, hint_id, hint_level, requested_at, view_duration_ms"
+  - "mastery 추정 입력으로 hint_rate가 사용 가능함을 보이는 L2 테스트(used_hint 불리언 대체 아님 — 병행)"
+  - "privacy 3종 배선 갱신 + 완전성 테스트 통과"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/activity.py
+  - "src/backend/whymath_backend/l2/**"
+  - "src/backend/whymath_backend/privacy/**"
+  - "src/backend/alembic/versions/**"
+session: null
+notes: "32_학습 이력 검토 갭(docs/architecture/32_learning_history.md). 무힌트 20초 정답과 힌트 3회 4분 정답의 숙련도 해석 구분이 목적."
+updated: 2026-08-26
