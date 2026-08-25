@@ -48,11 +48,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.audit.event_bus import emit_identity_event
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import dispose_engine, get_sessionmaker
 from whymath_backend.privacy.audit import record_role_change_audit
-from whymath_backend.schema.enums import Role
+from whymath_backend.schema.enums import AuditEventAuthorization, AuditEventSeverity, Role
 
 __all__ = [
     "GrantFn",
@@ -138,6 +139,16 @@ async def _default_grant_fn(  # pragma: no cover — 실 DB(integration)
     async with get_sessionmaker()() as session:
         old_role = await apply_role_change(session, user_id=user_id, new_role=role)
         record_role_change_audit(session, user_id=user_id, ip=None, settings=settings)
+        emit_identity_event(
+            session,
+            action="iam.role.assign",
+            actor_id=None,
+            resource_id=user_id,
+            source_service="role_grant_cli",
+            authorization_decision=AuditEventAuthorization.allow,
+            severity=AuditEventSeverity.high,
+            metadata={"old_role": old_role.value, "new_role": role.value},
+        )
         await session.commit()
     return {"user_id": str(user_id), "old_role": old_role.value, "new_role": role.value}
 
@@ -152,6 +163,16 @@ async def _default_revoke_fn(  # pragma: no cover — 실 DB(integration)
             session, user_id=user_id, new_role=_BASE_ROLE, expected_current_role=role
         )
         record_role_change_audit(session, user_id=user_id, ip=None, settings=settings)
+        emit_identity_event(
+            session,
+            action="iam.role.revoke",
+            actor_id=None,
+            resource_id=user_id,
+            source_service="role_grant_cli",
+            authorization_decision=AuditEventAuthorization.allow,
+            severity=AuditEventSeverity.high,
+            metadata={"old_role": old_role.value, "new_role": _BASE_ROLE.value},
+        )
         await session.commit()
     return {"user_id": str(user_id), "old_role": old_role.value, "new_role": _BASE_ROLE.value}
 

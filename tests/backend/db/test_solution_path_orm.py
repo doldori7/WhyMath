@@ -153,4 +153,4 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        assert heads == {"fcfdfc277348"}  # CUR-07 Achievement Standard evaluation criteria codes
+        assert heads == {"79de95331710"}  # ADMIN-10 audit_event table

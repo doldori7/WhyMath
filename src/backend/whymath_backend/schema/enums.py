@@ -1420,6 +1420,94 @@ class AuditEventKind(str, Enum):
     """
 
 
+class AuditEventActorType(str, Enum):
+    """`audit_event.actor_type` — Audit Event의 행위자 유형(ADMIN-10).
+
+    사람뿐 아니라 AI·서비스·예약 작업도 1급 Actor로 기록해 EOS에서
+    "누가/무엇이 변경했는가"를 완전히 재구성할 수 있게 한다.
+    """
+
+    user = "user"
+    """인증된 사람 사용자."""
+
+    ai_agent = "ai_agent"
+    """AI 생성·수정·분류기. `metadata`에 model/prompt_version 등을 남긴다."""
+
+    service_account = "service_account"
+    """내부 서비스·Celery worker 등 기계 주체."""
+
+    cron_job = "cron_job"
+    """예약 작업(보존 파기·집계 등)."""
+
+    migration = "migration"
+    """데이터 마이그레이션 작업."""
+
+
+class AuditEventSeverity(str, Enum):
+    """`audit_event.severity` — 감사 이벤트 심각도(ADMIN-10).
+
+    SIEM/Alert 연동(P1)을 고려한 5단계. 기본값은 NOTICE.
+    """
+
+    info = "INFO"
+    """정보성 변경(예: 조회·단순 메타 수정)."""
+
+    notice = "NOTICE"
+    """일반적인 콘텐츠·지식 변경(기본값)."""
+
+    warning = "WARNING"
+    """주의가 필요한 변경(예: 광범위한 메타 변경)."""
+
+    high = "HIGH"
+    """높은 영향 변경(예: 정답 변경·대량 export·관리자 권한 부여)."""
+
+    critical = "CRITICAL"
+    """심각한 변경(예: Audit 정책 변경·MFA 비활성화·핵심 보안 통제 변경)."""
+
+
+class AuditEventStatus(str, Enum):
+    """`audit_event.status` — 감사 대상 작업의 실행 결과(ADMIN-10)."""
+
+    success = "success"
+    """작업이 의도한 대로 완료됨."""
+
+    failure = "failure"
+    """작업이 거부되거나 실패함(인가 거부·검증 실패 포함)."""
+
+
+class AuditEventAuthorization(str, Enum):
+    """`audit_event.authorization_decision` — 인가 판정(ADMIN-10)."""
+
+    allow = "allow"
+    """접근/작업 허용."""
+
+    deny = "deny"
+    """접근/작업 거부."""
+
+
+class AuditEventRetentionPolicy(str, Enum):
+    """`audit_event.retention_policy_id` — 감사 로그 보존 정책(ADMIN-10).
+
+    법률/계약 변경 시 코드를 고치지 않고 정책 테이블만 갱신할 수 있도록
+    식별자 기반으로 관리한다.
+    """
+
+    privacy = "RET_PRIVACY"
+    """개인정보 접근·반출·동의 변경 — 3년(법령 최소기한에 따라 갱신)."""
+
+    security = "RET_SECURITY"
+    """로그인·권한 변경 등 보안 감사 — 3년."""
+
+    content = "RET_CONTENT"
+    """콘텐츠·지식그래프 변경 — 3년."""
+
+    ai = "RET_AI"
+    """AI 생성/승인 감사 — 3년."""
+
+    critical = "RET_CRITICAL"
+    """정답 변경·Audit 정책 변경 등 — 7년."""
+
+
 class DefectCategory(str, Enum):
     """`defect_report.category` — 학생 결함 신고 카테고리(RPT-01, 폐쇄 6종).
 

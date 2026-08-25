@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from whymath_backend.api._auth import require_content_admin
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.audit import AuditEvent
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
@@ -149,7 +150,14 @@ class TestCreate:
         assert resp.status_code == 201, resp.text
         assert resp.json()["subject"] == "미적분"
         assert fake.committed is True
-        assert len(fake.added) == 1
+        # Problem + AuditEvent가 같은 트랜잭션으로 add된다.
+        assert len(fake.added) == 2
+        audit = next(a for a in fake.added if isinstance(a, AuditEvent))
+        assert audit.action == "problem.create"
+        assert audit.actor_type == "user"
+        assert audit.resource_type == "Problem"
+        assert audit.severity == "NOTICE"
+        assert audit.retention_policy_id == "RET_CONTENT"
 
     def test_create_duplicate_returns_409(self) -> None:
         """external_id/slug UNIQUE 충돌(IntegrityError) → 롤백 후 409."""
@@ -326,6 +334,11 @@ class TestPatch:
         assert resp.status_code == 200, resp.text
         assert resp.json()["answer"] == "42"
         assert fake.committed is True
+        audit = next(a for a in fake.added if isinstance(a, AuditEvent))
+        assert audit.action == "problem.update"
+        assert audit.changed_fields == ["answer"]
+        # 정답류 변경은 HIGH 심각도
+        assert audit.severity == "HIGH"
 
     def test_patch_404_when_missing(self) -> None:
         resp = _client(FakeSession()).patch(f"/v1/problems/{uuid.uuid4()}", json={"answer": "x"})
@@ -378,6 +391,9 @@ class TestDelete:
         assert resp.status_code == 204
         assert fake.committed is True
         assert len(fake.deleted) == 1
+        audit = next(a for a in fake.added if isinstance(a, AuditEvent))
+        assert audit.action == "problem.delete"
+        assert audit.severity == "HIGH"
 
     def test_delete_404_when_missing(self) -> None:
         resp = _client(FakeSession()).delete(f"/v1/problems/{uuid.uuid4()}")

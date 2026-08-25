@@ -125,6 +125,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "e07b1324d1d4",  # LIC-01: Rights & Provenance Infrastructure MVP
     "b8e76fe238d0",  # EOS-3: Achievement Standard lifecycle expansion
     "fcfdfc277348",  # CUR-07: Achievement Standard evaluation criteria codes + level unit
+    "79de95331710",  # ADMIN-10: audit_event table
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]
