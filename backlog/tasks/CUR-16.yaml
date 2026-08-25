@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-16
+title: ConceptEdge prerequisite 메타 확장 설계
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 ConceptEdge 스키마/ORM/마이그레이션을 실측하고 prerequisite 외 일반 relation과 어떻게 구분되어 있는지 문서화한다."
+  - "② required_strength, dependency_level, minimum_mastery, curriculum_context, evidence_source_id 필드를 추가할지/필드별 범위를 결정한다."
+  - "③ Alembic 마이그레이션(상향/하향)과 Pydantic 스키마 변경을 설계하고, existing data 호환성을 보장한다."
+  - "④ DAG 검증·self-prerequisite 금지·cycle detection이 새 메타에도 여전히 유효함을 테스트로 동결한다."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/concept_edge.py
+  - src/backend/whymath_backend/schema/concept.py
+  - schemas/v1.1/concept.schema.yaml
+session: null
+notes: "EOS 6_개념 DB 검토 §13에 따른 선수학습 edge 메타 확장. WhyMath는 ConceptEdge.PREREQUISITE로 단일 테이블 운영 중이므로 추가 메타를 컬럼 확장으로 수용한다."
+updated: 2026-08-25
