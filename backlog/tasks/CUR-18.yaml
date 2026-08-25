@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-18
+title: "Concept Search API 확장 — relations/prerequisites/misconceptions/problems/objectives/explanations/visualizations"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① GET /concepts/{concept_id}/relations, /prerequisites, /misconceptions, /problems, /objectives, /explanations, /visualizations 엔드포인트 목록을 현행 API와 대비하여 gap을 식별한다."
+  - "② 누락된 엔드포인트 중 MVP 우선순위를 선정하고 Pydantic 응답 스키마를 설계한다."
+  - "③ Concept-Objective, Concept-Problem, Concept-Visualization, Concept-Explanation 매핑 조회가 L1 서비스 레이어에서 일관되게 동작하도록 인터페이스를 설계한다."
+  - "④ 새 엔드포인트에 대한 pytest 기본 계약 테스트를 설계하고, OpenAPI 스펙 자동 생성 가능성을 확인한다."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/concept.py
+  - src/backend/whymath_backend/l1/concept_graph/
+  - src/backend/whymath_backend/db/models/concept.py
+  - src/backend/whymath_backend/db/models/achievement_standard.py
+  - src/backend/whymath_backend/db/models/visualization_card.py
+session: null
+notes: "EOS 6_개념 DB 검토 §39 반영. 기존 API에 누락된 Concept 주변 리소스 조회 엔드포인트를 설계한다."
+updated: 2026-08-25
