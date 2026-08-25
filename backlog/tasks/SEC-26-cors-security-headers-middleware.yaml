@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-26-cors-security-headers-middleware
+title: "CORS 및 보안 헤더 미들웨어 배선 — prod 환경에서 origin 제한 + HSTS/CSP/X-Content-Type-Options/X-Frame-Options"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "ADMIN-06(백오피스 웹 셸)이 먼저 CORS origin allowlist를 정의하면, 본 태스크는 그 기반선을 전역 CORS/보안 헤더로 일반화한다(선행 권장·단계 위반이 아닌 논리 순서)"
+  - "기존 CORS/보안 헤더 동결 테스트(예: tests/backend/test_cors_policy_freeze.py)가 있다면 해당 계약을 먼저 검토·갱신한다"
+  - "FastAPI CORSMiddleware + TrustedHostMiddleware + 보안 헤더(HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy)를 app.py에 추가한다"
+  - "prod-like 환경(config)에서 CORS origin allowlist를 명시하고, wildcard + credentials 조합을 금지한다"
+  - "docs, redoc, openapi.json 엔드포인트의 prod 비활성화가 여전히 유효함을 재확인하고 회귀 테스트로 동결한다"
+  - "해당 보안 설정이 CI backend 잡에서 실제로 실행되는지 확인한다(tests/infra/test_test_suite_wiring.py 축)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - "tests/backend/**"
+  - "tests/infra/**"
+session: null
+notes: "48_보안 §P0 갭. ADMIN-06(백오피스 웹 셸)이 admin-specific CORS origin allowlist를 이미 소유하고 있으므로, 본 태스크는 ADMIN-06의 allowlist 기반선이 확보된 뒤 전역 CORS/보안 헤더로 일반화·확장하는 역할이다. 스테이지 순서상 하드 의존은 불가능하므로 acceptance에서 선행 권장으로 처리한다."
+updated: 2026-08-25

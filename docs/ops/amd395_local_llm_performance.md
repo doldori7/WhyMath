@@ -253,21 +253,30 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\bench_ollama.ps1 -Label v
 ```powershell
 # [실행 시스템] Windows PowerShell (Phaiakes9 본체)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,resident,vulkan"
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,resident,rocm,vulkan"
+# 전원 레버는 별도 실행 2회 — ①전면 버튼 Balanced 상태에서 baseline만:
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline"
+# ②전면 버튼을 Performance(140W)로 전환한 뒤 power140만:
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "power140" -PowerMode140W
+# (baseline과 power140을 같은 실행에 넣으면 같은 물리 전원 상태에서 측정돼 스크립트가 중단한다 — 2026-08-25 Codex 리뷰)
 ```
 
 프리셋마다 ①환경변수 적용 ②Ollama·고아 전부 종료 ③재기동 ④`/api/version` 응답 대기
-⑤**`server.log`의 실효 설정이 의도와 일치하는지 대조**(불일치면 즉시 중단 — 잘못된 상태로 재지 않는다) ⑥벤치.
-마지막에 프리셋 간 비교표를 출력한다. Windows 고성능 전원 계획도 함께 적용하며 되돌리는 명령을 출력한다
+⑤**`server.log`의 실효 설정이 의도와 일치하는지 대조**(불일치면 즉시 중단 — 잘못된 상태로 재지 않는다) ⑥벤치
+⑦**벤치 후 `inference compute` 라벨을 서버 기동 시각 이후 줄만 읽어 확정**(2026-08-22 도구 결함 10회차 재발 방지).
+마지막에 프리셋 간 비교표(회차별 CommitFree_GB·고아 llama-server 수 포함)를 출력한다. Windows 고성능 전원 계획도 함께 적용하며 되돌리는 명령을 출력한다
 (`-SkipPowerPlan`으로 생략 가능).
 
 | 프리셋 | 내용 | 측정 모델 | 소요 |
 |---|---|---|---|
-| `baseline` | 현행 확정 조건(ctx 8192 · np 1) — 비교 기준선 | 3b·7b·27b·30b-a3b | ~2분 |
+| `baseline` | 현행 확정 조건(ctx 8192 · np 1 · flash off · `VULKAN=0`) — 비교 기준선 | 3b·7b·27b·30b-a3b | ~2분 |
+| `power140` | baseline + 전면 버튼 140W 수기 확인(`-PowerMode140W` 필수) | 3b·7b·27b·30b-a3b | ~2분 |
 | `resident` | L6 상주 정책 — **같은 모델 재방문 시 `load_ms`가 0에 수렴하는지** | 1.5b·3b·7b **× 2회** (`-NoUnload`) | ~1분 |
-| `vulkan` | L3 백엔드 대조 — `OLLAMA_IGPU_ENABLE=1`로 Vulkan 장치를 살린다 | 3b·7b·27b·30b-a3b | ~2분 |
+| `rocm` | flash on · `VULKAN=0` — `vulkan`과 백엔드 레버 하나만 다름 | 3b·7b·27b·30b-a3b | ~2분 |
+| `vulkan` | L3 백엔드 대조 — `OLLAMA_VULKAN=1`+`IGPU_ENABLE=1`로 Vulkan 장치를 살린다 | 3b·7b·27b·30b-a3b | ~2분 |
+| `vulkan_forced` | `OLLAMA_LLM_LIBRARY=vulkan`으로 ROCm 후보까지 제외(라벨 혼재 해소용) | 3b·7b·27b·30b-a3b | ~2분 |
 
-**3개 전부 = 약 5분** (2026-08-22 clean 런 실측값 기반 추정: 로드 3.0~16.0초 + 생성 + 프리셋당 재기동 오버헤드 ~25초).
+**5개 전부 = 약 12분** (2026-08-25 실측: 11:26 기동 → 11:33 완료).
 
 > **`resident`의 모델이 다른 이유** — 상주 효과는 *같은 모델을 다시 부를 때* 드러나므로 3모델을 2회씩 방문한다.
 > 27B(16.2GB)를 넣지 않는 것은 의도적이다: 3모델 합이 22GB가 되어 **커밋 여유 20GB 천장을 넘고, 그러면
@@ -277,7 +286,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Prese
 > 140W는 **눈으로 확인**해야 한다.
 
 ### Phase 3. 전원 모드 140W (수동 참고)
-전면 버튼으로 Performance 전환 + Windows 전원 모드 최고 성능 → 재측정 (`-Label power140`).
+전면 버튼으로 Performance 전환 → `tune_and_bench.ps1 -Presets "power140" -PowerMode140W`로 재측정.
+**반드시 baseline과 별도 실행이어야 한다**(같은 실행이면 물리 전원 상태가 같아 비교가 무효 — §5 OPS-51 ①).
 
 ### Phase 4. 백엔드 스위치 — **창 2개** ⚠️
 
@@ -327,18 +337,18 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 
 ---
 
-## 5. 진단표 (측정 기록 — **현재 전부 비어 있음**)
+## 5. 진단표 (측정 기록)
 
 | Phase | 설정 | `gpu_fraction` | `gen_tps` (7b) | `gen_tps` (27b) | `prompt_tps` | 판정 |
 |---|---|---|---|---|---|---|
-| 0 | 현행 그대로 | | | | | **환경 실측 완료 2026-08-22**(아래) |
+| 0 | 현행 그대로 | | | | | **환경 실측 완료 2026-08-22**(아래) · 2026-08-25 재측정 완료 |
 | 1 | ctx 8192 · np 1 · 고아 정리 | **1.0** | **42.3** | **11.9** | 293~2,331 | ✅ **10/10 성공** (MoE 30B = 71.5) |
 | 2 | VGM 64GB | — | — | — | — | ✅ **이미 충족**(카브아웃 64.4GB 실측) — 조정 불요 |
-| 3 | +140W | | | | | [미측정] |
-| 4a | Vulkan (`OLLAMA_IGPU_ENABLE=1`) | | | | | [미측정] |
-| 4b | ROCm (**현재 기본값**) | | | | | [미측정] |
-| 5 | 상주 정책 | | | | | [미측정] |
-| 6 | llama.cpp standalone | | | | | [미측정] |
+| 3 | +140W | 1.0 | 40.1 | 11.7 | 310~2,635 | ⚠️ **판정 유보** — 같은 실행의 baseline과 물리 전원 상태가 동일(2026-08-25). 전원 레버는 별도 실행 2회 필요(아래 ①) |
+| 4a | Vulkan (`OLLAMA_VULKAN=1`+`IGPU_ENABLE=1`) | 1.0 | 42.4 | 11.9 | 315~2,577 | ✅ 라벨 잡힘 — 다만 `ROCm / gfx1151`과 `Vulkan / 0.0` 혼재 → §5 2026-08-25 |
+| 4b | ROCm (`OLLAMA_VULKAN=0`) | 1.0 | 42.6 | 12.0 | 313~2,489 | ✅ 라벨 확정 `ROCm / gfx1151` — 2026-08-25 |
+| 5 | 상주 정책 | 1.0 | 42.1 (재방문 load 3.1 ms) | — | 1,467~5,490 | ✅ 재방문 로드 3~4 ms — 2026-08-25 |
+| 6 | llama.cpp standalone | | | | | [미측정] — Phase 1~5에서 기대치 도달, 건너뜀 |
 
 **기대 기준선**(§2 [계산]): 7b = 30~41 t/s · 27b = 8.5~11 t/s · 1.5b = 141~179 t/s
 
@@ -374,6 +384,17 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 | `OLLAMA_KEEP_ALIVE` / `OLLAMA_MODELS` | 10m / `D:\ollama_models` | — |
 | 전원 계획 | `381b4222…` = **균형 조정(Balanced)** | ⚠️ 고성능 아님 → Phase 3 |
 | 설치 모델 15종 | `qwen3.5:27b`(dense) · **`qwen3:30b-a3b`·`qwen3-coder:30b`(MoE)** · `qwen2.5:{3b,7b,14b,32b}` · `qwen2-math:{1.5b,7b}` · `qwen3-vl:8b` · `deepseek-r1:32b` · `gpt-oss:20b` · `llama3.3`(39.6GB) · `bge-m3` | ✅ **dense↔MoE 대조에 필요한 모델이 이미 전부 있다** |
+
+### Phase 0 재측정 (2026-08-25 10:55 · `evidence_20260825_105523` · 10/10 `[OK]`)
+
+| 항목 | 실측값 | 판정 |
+|---|---|---|
+| 카브아웃 | 64.4 GB (레지스트리 65,536 MB) | ✅ 08-22와 동일 — VGM 불변 |
+| 커밋 여유 | **219.5 GB** · 고아 llama-server **0** | ✅ 08-22의 커밋 고갈(0.9 GB)과 대조 — 재시작 후 정상 |
+| 전원 | Windows 고성능 계획 + 전면 버튼 140W 수기 확인 플래그 | ✅ Phase 3 조건 |
+| GPU 클럭/온도 | 표준 WMI 미지원 → N/A | ⚠️ Adrenalin/AMDSmiCLI 필요 — "획득 가능 시" 조건으로 기록 |
+| 서버 로그 GPU 탐지 줄 | 0건 | ⚠️ 트레이 앱 경로라 `server.log` 갱신이 없을 수 있음 — §5 OPS-51 재측정의 벤치 후 라벨로 대체 |
+| **잔해 환경변수** | `OLLAMA_VULKAN`(기본값 true)·`OLLAMA_LLM_LIBRARY=vulkan`이 남아 있으면 **CPU 폴백** 재현 | 🔴 도구 결함 11회차 — §5 OPS-51 재측정 참조 |
 
 ### Phase 1 베이스라인 1차 (2026-08-22 07:54 · `bench_baseline_20260822_075405.csv`)
 
@@ -626,6 +647,53 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
 
 **이 시점의 결론 전환**: 최초 질문("ROCm이 왜 안 잡히나")은 **이 머신에서 성립하지 않는다** — 이미 잡혀 있다.
 실제 병목 후보는 ①과대 컨텍스트(256K) ②병렬 4 ③flash attention 꺼짐 ④전원 Balanced ⑤dense 27B의 대역폭 벽이다.
+
+### ✅ OPS-51 재측정 — 5프리셋 완주 + 백엔드 라벨 확정 (2026-08-25 11:26~11:33 · `bench_{baseline,power140,resident,rocm,vulkan}_2026082511*`)
+
+**전원·도구 상태**: Windows 전원 계획 고성능 · EVO-X2 전면 버튼 Performance(140W) 수기 확인 플래그(`-PowerMode140W`) ·
+전 구간 `gpu_fraction = 1.0` · CommitFree 193~219 GB · 백엔드 라벨은 **벤치 후 서버 로그의 `inference compute` 줄**을 서버 기동 시각 이후로 필터해 확정.
+
+| 프리셋 | 설정 | 3b | 7b | 27b | 30b-a3b | 백엔드 라벨 |
+|---|---|---|---|---|---|---|
+| `baseline` | flash off | 78.2 | 40.6 | 12.1 | 58.2 | ✅ `ROCm / gfx1151` |
+| `power140` | flash off + 140W | 76.8 | 40.1 | 11.7 | 57.3 | ✅ `ROCm / gfx1151` |
+| `resident` | flash on · 상주 | 83.6 (재방문 load **3.6 ms**) | 42.1 (**3.1 ms**) | — | — | ✅ `ROCm / gfx1151` |
+| `rocm` | flash on | 83.5 | 42.6 | 12.0 | 72.6 | ✅ `ROCm / gfx1151` |
+| `vulkan` | flash on + `VULKAN=1`+`IGPU_ENABLE=1` | 84.1 | 42.4 | 11.9 | 72.5 | ⚠️ **`Vulkan / 0.0`과 `ROCm / gfx1151` 혼재** |
+
+**① Phase 3 (전원 140W) — 판정 유보 (측정 설계 결함, Codex 리뷰로 발견)**: 오늘 실행은 `baseline`과 `power140`을 **같은 실행**에서 연속 측정했고, 프리셋 환경은 동일하며 물리 전원 상태(전면 버튼)를 프리셋 사이에 바꾸는 단계가 없다. 즉 두 프리셋은 **같은 물리 전원 상태**에서 측정됐다. 나온 1~2% 차이는 재현성 데이터로는 유효하지만 **전원 레버 효과 판정에는 쓸 수 없다**.
+⇒ 스크립트를 수정해 `baseline`과 `power140`을 같은 실행에 넣으면 중단한다. 전원 비교는 ①Balanced 상태에서 `baseline`만 측정 → ②전면 버튼 Performance(140W) 전환 → ③`power140`만 측정하는 **두 번의 별도 실행**이 필요하다(후속 측정 과제).
+
+**② Phase 4a/4b (백엔드 라벨) — 도구 결함 10회차 재발 방지 검증 완료**: 라벨 추출이 이제 서버 기동 시각 이후 줄만 읽고,
+`rocm` 계열 4프리셋은 전부 `ROCm / gfx1151`, `vulkan`은 `Vulkan / 0.0` + `ROCm / gfx1151` 혼재를 정확히 잡아낸다(불일치 시 경고까지 나옴).
+단, `vulkan`의 혼재는 `OLLAMA_LLM_LIBRARY`를 비워 두면 **두 라이브러리가 같이 로드**되기 때문이다 — 실 계산 장치 구분은
+`vulkan_forced`(`OLLAMA_LLM_LIBRARY=vulkan`)로 한 번 더 재야 한다(후속).
+
+**③ `rocm` vs `vulkan` 성능 — 오늘은 동일(±2% 내)**: 2026-08-22 측정의 큰 차이(27b prefill −75%·왕복 +68%)가 재현되지 않았다.
+두 가능성: (가) 08-22 `vulkan` 측정이 도구 결함 10회차로 라벨만 바뀐 상태였거나 다른 상태 오염이 있었다, (나) 0.32.15에서 Vulkan 경로가 개선됐다.
+**백엔드 결론(ROCm 유지)은 왕복 수치 근거이므로 유지**하되, 08-22의 prefill 열화 수치는 "확정 트레이드오프"로 더 이상 인용하지 않는다.
+
+**④ Phase 5 (상주 정책) — 재방문 로드 3.1~4.3 ms 재확인**: `MAX_LOADED_MODELS=3`에서 3모델이 전부 상주.
+단 재방문 첫 런 1건이 빈 응답으로 실패했다 — 도구 결함 9회차 대책(`eval_count ≤ 0` → 실패 분류)이 정상 작동해 중앙값 오염은 없었다.
+
+**⑤ 재현성 1회차 특이성 가설 축소**: baseline MoE(30b-a3b)는 3일에 걸쳐 **58.7 → 58.2 → 58.2**로 안정.
+반면 1회차(clean 08:29) 71.5는 오늘 flash-on 측정(rocm 72.6, vulkan 72.5)과 일치한다.
+⇒ 가설이 "**1회차 측정은 flash attention이 켜진 상태였다**"로 축소된다. 단 08:29 당시 evidence(07:38)는 `FLASH_ATTENTION=false`였으므로
+확정은 아니다. 발열·전원 가설은 ①의 측정 설계 결함으로 **판정 유보**(오늘 power140 비교는 무효) — 별도 실행 2회로 다시 재야 한다.
+
+**추가 정정 (2026-08-25 Codex 리뷰 반영)**:
+- 오늘 CSV의 `orphan_llama_servers` 열은 **정상 runner까지 포함한 값**이었다(모델 로드 중 llama-server 1개가 떠 있으면 1로 기록).
+  스크립트를 수정해 `/api/ps` 로드 수를 뺀 값만 고아로 기록한다. 오늘 값(1~3)은 실제 고아 0 + 상주 모델 수로 읽어야 한다.
+- `gpu_temp_c`는 표준 WMI로 GPU 온도를 식별할 수 없어 **항상 null**로 기록한다 — ACPI thermal zone의 첫 값을 GPU로 단정하지 않는다.
+
+**도구 결함 11~13회차 (이번 세션에서 발견·수정)**
+- **11회차 — `OLLAMA_VULKAN` 기본값이 true (Ollama 0.32.15)**: 명시 없이 `IGPU_ENABLE`만 지우면 Vulkan이 기본 활성으로 남아
+  CPU 폴백(`gpu_fraction=0`, 3b 40 t/s·27b 5.8 t/s)이 재현된다. ROCm 계열 프리셋에는 `OLLAMA_VULKAN=0` 명시 필수. 프리셋표에 반영.
+- **12회차 — 실효 설정 대조가 stale server config를 읽음**: `Test-EffectiveConfig`에 시간 필터(기동 시각 이후)가 없어
+  이전 기동의 `server config` 줄을 읽고 정상 상태를 MISS로 중단시켰다. 기동 직전 시각(`ServerReadyAt`) 이후 줄만 읽게 수정.
+- **13회차 — 한글 포함 .ps1은 UTF-8 BOM이 없으면 파서가 통째로 깨진다**: 에이전트 편집 도구가 BOM을 벗겨 Windows PowerShell 5.1이
+  ANSI로 읽으며 구문 오류 발생. 세 스크립트에 BOM을 유지하고, 콘솔 인코딩 설정을 `param` 블록 **이후**로 이동했다
+  (`param` 앞의 실행문은 특정 조건에서 파싱을 막는다).
 
 ---
 

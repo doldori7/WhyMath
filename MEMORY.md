@@ -7123,3 +7123,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
   - `tests/harness/test_cli.py`: `TestTodoOverlapDetection` 추가 — todo끼리 겹침 검출, `--in-flight-only` 무시, add 경고, block 모드 차단 등 회귀 테스트.
 - **판단**: todo 겹침은 등록을 차단하지 않고 경고로 둔다. 이유: todo는 아직 착수되지 않은 추정 태스크가 많고, 차단하면 정당한 분할·후속 태스크 등록까지 막을 수 있다. 다만 경고는 policy_warn 이벤트로 측정되며, 오탐이 잦아 습관화되지 않도록 표면과 이벤트에 노출한다.
 - **검증**: `tests/harness/test_cli.py::TestStartOverlapPreflight`, `TestTodoOverlapDetection`, `TestCheckEditPolicy`, `TestLifecycle`, `TestSeed` 및 `tests/harness/test_pathscope.py`, `test_store.py` 54건 green. 전체 harness suite는 원격 claim/체크 정지 관련 25건이 Windows 임시 git 환경(cp949·원격 ref 조회)에서 기존에도 실패하는 항목으로, 본 변경과 무관.
+
+
+## 2026-08-25: EOS 『48_보안(암호화·접근 통제)』 설계안 검토 수용 — 목표 아키텍처 + 현행 매핑 3부 구조로 착지
+
+- **사건**: Kiki가 EOS 지향 48_보안 설계안(108절)을 제출하고 검토를 요청.
+- **판정**: 조걶부 수용 — 방향(46/47/48/90 분리·RBAC+ABAC+ReBAC·봉투 암호화·AI 인가)은 정확하나 그린필드 문서라 현행 자산 미참조가 결함.
+- **수정 4건 반영 착지**: ①현행 자산 매핑(제2부) ②결정표 분리(제3부) ③46/47/90 선행 의존 명시(제4부) ④요구사항 ID를 `EOS-SEC-*`로(백로그 SEC-01~24와 충돌 방지).
+- **확정 결정**: 비밀번호 해싱 절은 OAuth 전용 현행(SEC-07 D1)에 맞춰 "도입 시" 조걶로 한정 / 필드 암호화는 현행 `_crypto.py`(AES-256-GCM·키 3종 분리·MultiKeyCipher)를 EOS 표준으로 승격 / 멀티테넌시·RLS·12개 역할은 EOS 단계로 분리(현행 Role 2값·테넌시 0) / 보안 이벤트는 204 교육 이벤트와 분리.
+- **법령 인용 검증**: 개인정보보호위원회고시 제2026-9호(2026-07-01 시행) — law.go.kr 대조 확인(2026-08-25). 세부 수치(접속기록 보관기간 등)는 고시 별표 원문 대조 표시.
+- **산출물**: `docs/architecture/48_eos_security_access_control.md`, PR #NNN.

@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-29-admin-access-audit-wiring
+title: "CONTENT_ADMIN 관리자 접근 감사(record_admin_access_audit) 배선"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "record_admin_access_audit의 현재 시그니처(actor_user_id, target_user_id, ip, settings)와 PrivacyAudit 스키마를 확인하고, 호출부 0건 문제를 해결할 방향을 결정한다: (a)삭제 (b)target_user_id가 있는 관리자 계정/권한 조작에 배선 (c)스키마 확장"
+  - "결정이 (b)이면: ops/role_grant_cli.py 등 target_user_id가 명확한 관리자 조작 지점에서 record_admin_access_audit을 호출한다"
+  - "결정이 (c)이면: PrivacyAudit 모델/마이그레이션과 record_admin_access_audit 시그니처를 resource_type/resource_id/action/policy_version/reason을 포함하도록 확장한다"
+  - "인가 회귀 테스트를 추가한다: 관리자 동작 시 감사 이벤트 생성, 비관리자/미인증 시 거부"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/privacy/audit.py
+  - src/backend/whymath_backend/db/models/audit.py
+  - src/backend/whymath_backend/api/_auth.py
+  - src/backend/whymath_backend/ops/role_grant_cli.py
+  - "src/backend/alembic/versions/**"
+  - tests/backend/privacy/test_audit.py
+session: null
+notes: "48_보안 §P0 Security Audit 갭. record_admin_access_audit은 관리자 콘솔 Phase B(ADMIN-06)를 전제로 한 dead code 상태다. 현재 contract는 actor_user_id/target_user_id/ip/settings뿐이므로 CONTENT_ADMIN 엔드포인트(concepts/problems)에는 직접 적용할 수 없다. 본 태스크는 먼저 삭제/배선/확장 3개 방향 중 하나를 결정하고 그에 맞춰 실행한다."
+updated: 2026-08-25
