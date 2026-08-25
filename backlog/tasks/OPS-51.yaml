@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -16,13 +16,14 @@ acceptance:
   - "② collect_gpu_evidence.ps1 / bench_ollama.ps1 / tune_and_bench.ps1 출력에 140W 전원 상태(수기 확인 플래그)·GPU 클럭/온도(획득 가능 시)·측정 회차별 CommitFree_GB·고아 llama-server 개수를 추가"
   - "③ tune_and_bench.ps1의 inference compute 라벨 추출이 실제로 ROCm/Vulkan을 구분하는지 검증 — 2026-08-22 도구 결함 10회차(이전 기동 로그 stale 읽기) 재발 방지"
   - "④ 측정 결과를 docs/ops/amd395_local_llm_performance.md §5 진단표에 갱신하고, 재현성 8~18% 폭에 대한 가설(1회차 특이성·발열·전원)을 데이터로 축소"
-artifacts: []
+artifacts:
+  - "PR #876 (CI pass) — 5프리셋 재측정 완주 + 백엔드 라벨 확정 + docs/ops/amd395_local_llm_performance.md §5 갱신 + 도구 결함 11~13회차 기록"
 paths:
   - scripts/ops/collect_gpu_evidence.ps1
   - scripts/ops/bench_ollama.ps1
   - scripts/ops/tune_and_bench.ps1
   - docs/ops/amd395_local_llm_performance.md
   - ".gpu_evidence/**"
-session: claude/infra-ops-51-bench-capture-28eab6
+session: null
 notes: "docs/ops/amd395_local_llm_performance.md §5 미측정 항목 후속. OPS-46이 기본 환경 캡처를 마쳤으나, 140W 전원 모드·백엔드 라벨 확정·resident 왕복 지연은 아직 기록되지 않았다. 재현성 문제(1회차만 높음)의 원인 규명이 핵심."
 updated: 2026-08-25
