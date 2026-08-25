@@ -3967,3 +3967,4 @@
 {"ts": "2026-08-25T16:25:08", "actor": "main", "action": "policy_warn", "id": "CUR-10-curriculum-framework-version-tables", "rule": "path_overlap", "other": "SEC-29-admin-access-audit-wiring", "detail": "실파일 교집합 5건 예: src/backend/alembic/versions/.gitkeep, src/backend/alembic/versions/20260528_1801_4c6d083dfeef_initial_problem_domain.py, src/backend/alembic/versions/20260528_2223_1551744048aa_concept_provenance_user_curriculum_.py · 프리픽스 포함: src/backend/alembic/versions/ ⊇ src/backend/alembic/versions/**", "mode": "warn"}
 {"ts": "2026-08-25T16:25:12", "actor": "main", "action": "start", "id": "CUR-10-curriculum-framework-version-tables", "session": "main", "remote": "ok"}
 {"ts": "2026-08-25T16:57:47", "actor": "curriculum/CUR-10-framework-version-tables", "action": "review", "id": "NLP-05-shadow-grading-input-supply"}
+{"ts": "2026-08-25T19:38:22", "actor": "main", "action": "done", "id": "CUR-10-curriculum-framework-version-tables", "artifacts": ["#886"]}

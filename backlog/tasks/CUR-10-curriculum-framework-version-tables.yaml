@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -13,7 +13,8 @@ depends_on:
 requires_gates: []
 acceptance:
   - "① CurriculumFramework(framework_id PK·authority·country·title·description·effective_from·effective_to·status)와 CurriculumVersion(version_id PK·framework_id FK·version_label·effective_from·effective_to·status·source_id) Pydantic+ORM+마이그레이션 신설. ② CurriculumEntry·AchievementStandard에 nullable framework_id 컬럼 추가, 기존 curriculum_revision은 deprecated 유지. ③ 마이그레이션: 기존 KR 행은 'KR_NC_2022' framework로 백필, version_id는 기존 achievement_standard.version_id와 연결. ④ Alembic upgrade/downgrade/head check 왕복 green. ⑤ 범위 밖: source 1급 테이블·audit trail·CASE 어댑터는 포함하지 않음."
-artifacts: []
+artifacts:
+  - "#886"
 paths:
   - src/backend/whymath_backend/db/models/curriculum_framework.py
   - src/backend/whymath_backend/db/models/curriculum_version.py
@@ -22,6 +23,6 @@ paths:
   - src/backend/whymath_backend/schema/curriculum_framework.py
   - src/backend/whymath_backend/schema/curriculum_version.py
   - src/backend/alembic/versions/
-session: main
+session: null
 notes: "EOS Curriculum Semantic Backbone ADR(docs/architecture/eos_curriculum_semantic_backbone_adr.md) Phase 1 실행 항목 1. Framework/Version 분리는 검토안 P0 요구사항이며, WhyMath 정본(Concept 원본·Curriculum Overlay)과 충돌하지 않음."
 updated: 2026-08-25
