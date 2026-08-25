@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-44-version-management-design
+title: EOS Version Management design and Foundation schema
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S1-16-subject-neutral-content-contract
+requires_gates: []
+acceptance:
+  - docs/architecture/44_eos_version_management.md approved
+  - Problem Concept Solution version schema contract defined
+  - "Published=immutable lifecycle enforced"
+  - VersionContext and Release Snapshot scoped for Phase 2
+artifacts: []
+paths:
+  - docs/architecture/44_eos_version_management.md
+session: null
+notes: "References 011_1, ARCH-20, CUR-07. Per 011_1 no unified Entity super-table; domain UUID PKs with common VersionHeader contract. MVP + Phase 2 scope."
+updated: 2026-08-25
