@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -52,8 +52,10 @@ from whymath_backend.db.session import get_session
 from whymath_backend.privacy import record_consent_change_audit
 from whymath_backend.schema.enums import ConsentScope
 from whymath_backend.schema.parental_consent import (
+    ConsentScopeStatus,
     ParentalConsentGrantRequest,
     ParentalConsentGrantResponse,
+    ParentalConsentHistoryResponse,
     ParentalConsentRevokeResponse,
 )
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -280,6 +282,13 @@ async def grant_parental_consent(
     )
 
 
+def _effective_service_scope(scope: ConsentScope) -> ConsentScope:
+    """`ai_inference`는 `service_core`와 동일 취급(서비스 본 기능)."""
+    if scope is ConsentScope.ai_inference:
+        return ConsentScope.service_core
+    return scope
+
+
 @router.delete(
     "/me/parental-consent",
     response_model=ParentalConsentRevokeResponse,
@@ -290,14 +299,17 @@ async def revoke_parental_consent(
     user: Annotated[UserProfile, Depends(get_current_user)],
     session: SessionDep,
     settings: SettingsDep,
+    scope: Annotated[
+        ConsentScope | None,
+        Query(description="철회할 동의 scope. 미지정 시 전체 철회."),
+    ] = None,
 ) -> ParentalConsentRevokeResponse:
     """법정대리인 동의를 철회하고 미성년 동의 게이트를 다시 닫는다(SEC-20 D9).
 
-    **왜 이 경로가 필요한가**: 그전까지 동의는 *받을* 수만 있고 *거둘* 수 없었다 —
-    `ParentalConsent.revoked_at`은 컬럼과 인덱스가 있는데 writer가 상수 `None` 1곳뿐이고
-    reader가 0이었다. 즉 한 번 받은 동의가 영구히 유효했다. 동의 *문안*은 법률 판단이라
-    `MGMT-02`(변호사 회신)에 남지만, **"철회된 동의는 동의가 아니다"는 집행은 기계 판단**이고
-    철회를 표현할 수 없는 상태를 유지하는 쪽이 법적 위험이 더 크다.
+    **scope 파라미터**: 특정 scope(예: `ai_training`)만 철회하려면 query string으로
+    `?scope=ai_training`를 전달. 미지정 시 모든 미철회 동의를 철회(기존 동작).
+    `service_core`를 철회하면 `parent_consent_at`을 해제해 서비스 이용 게이트를 닫는다.
+    `ai_training` 등 다른 scope만 철회하면 서비스 이용은 유지되고 해당 목적 처리만 중단.
 
     **인증 게이트가 `get_current_user`인 이유**: GRANT와 동형이다. 이미 만료·철회된 미성년은
     `get_consented_user`가 403으로 막으므로 동의 상태를 *바꾸는* 경로가 그 뒤에 있으면 도달할 수
@@ -305,55 +317,124 @@ async def revoke_parental_consent(
 
     **접근 주체 축소(v0·의도적)**: 지금 여는 것은 **학생 본인 토큰** 경로뿐이다. 법정대리인이
     자기 화면에서 철회하는 경로는 *보호자를 어떻게 인증할 것인가*(`MGMT-01` 법정대리인 인증
-    모델·blocked)가 정해져야 만들 수 있고, 그전에 만들면 가짜 법적 의사표시가 된다. 본인이 자기
-    계정의 동의를 거두는 방향은 그 판단 없이도 안전하다.
+    모델·blocked)가 정해져야 만들 수 있고, 그전에 만들면 가짜 법적 의사표시가 된다.
 
-    **원장은 지우지 않는다**: append-only 방침 유지 — 해당 학생의 *미철회* 동의 행 전부에
-    `revoked_at`을 찍고(과거 행이 남아 감사가 가능하다) `user_profile.parent_consent_at`을
-    해제한다. 두 쓰기 + 감사 1행이 **같은 트랜잭션**이다(부분 성공 없음).
+    **원장은 지우지 않는다**: append-only 방침 유지 — 미철회 동의 행에 `revoked_at`을 찍는다.
+    `service_core`가 철회되면 `parent_consent_at`을 해제한다. 감사 1행이 같은 트랜잭션.
 
-    **기능 플래그를 걸지 않는다(의도적·비대칭)**: GRANT는 `parental_consent_grant_enabled`가
-    off면 404다(stub 신원확인으로 self-consent 우회가 가능해서). 철회에는 그 플래그를 걸지
-    않는다 — *동의를 거두는* 행위를 기능 플래그로 막는 것은 방향이 반대다(안전을 늘리는 조작을
-    잠그는 셈). **귀결(정직 표기)**: 플래그가 off인 환경에서 철회하면 같은 경로로 *재동의할 수
-    없다* → 그 미성년은 `ConsentedUser` 엔드포인트에서 계속 403이다. 이것은 결함이 아니라
-    철회의 정당한 결과다(동의가 없으면 처리하지 않는다) — 재동의 창구는 실 본인확인(`MGMT-01`)이
-    붙어 플래그가 켜질 때 열린다.
-
-    멱등: 이미 전부 철회 상태면 `revoked_count=0`으로 200을 돌려준다(반복 호출 안전).
+    멱등: 이미 철회 상태면 `revoked_count=0`으로 200을 돌려준다(반복 호출 안전).
     """
     now = datetime.now(tz=timezone.utc)
-    # 1. 미철회 동의 행 전부 조회 — 최신 1건만 찍으면 과거 행이 "미철회"로 남아 게이트 판정
-    #    (최신 1건 읽기)과 원장이 어긋난다. 전부 찍어야 원장이 사실과 일치한다.
-    rows = list(
-        (
-            await session.scalars(
-                select(ParentalConsent).where(
-                    ParentalConsent.user_id == user.user_id,
-                    ParentalConsent.revoked_at.is_(None),
-                )
-            )
-        ).all()
-    )
+    # 1. 미철회 동의 행 조회 — scope 미지정 시 전체, 지정 시 해당 scope만.
+    where_clause = [
+        ParentalConsent.user_id == user.user_id,
+        ParentalConsent.revoked_at.is_(None),
+    ]
+    if scope is not None:
+        where_clause.append(ParentalConsent.consent_scope == scope.value)
+    rows = list((await session.scalars(select(ParentalConsent).where(*where_clause))).all())
     for row in rows:
         row.revoked_at = now
-    # 2. 같은 트랜잭션으로 게이트 재차단 — parent_consent_at 해제(GRANT의 정확한 역연산).
-    user.parent_consent_at = None
-    await session.merge(user)
-    # 3. SEC-09 감사 재사용 — 신규 감사 테이블 0(동의 *변경*이 이미 이 writer의 의미다).
-    #    철회도 동의 변경이므로 같은 event_kind를 쓰고, 범위는 기록된 동의의 scope를 승계한다
-    #    (행이 없으면 기본 service_core — 현재 ConsentScope는 1값이라 실질 분기 없음).
-    scope = ConsentScope.service_core
-    for row in rows:
-        if row.consent_scope:
-            scope = ConsentScope(row.consent_scope)
-            break
+
+    # 2. service_core 철회 시에만 게이트 근거 해제. 다른 scope만 철회하면 서비스 이용은 유지.
+    revoked_scopes = {
+        ConsentScope(row.consent_scope) if row.consent_scope else ConsentScope.service_core
+        for row in rows
+    }
+    if scope is None or _effective_service_scope(scope) is ConsentScope.service_core:
+        # service_core가 포함된 철회면 parent_consent_at 해제.
+        user.parent_consent_at = None
+        await session.merge(user)
+
+    # 3. SEC-09 감사 — 철회된 scope 중 하나를 기록. 여러 scope가 한꺼번에 철회되면
+    #    service_core를 우선(가장 보수적), 아니면 첫 번째 scope.
+    audit_scope = ConsentScope.service_core
+    if ConsentScope.service_core not in revoked_scopes and rows:
+        first_scope = rows[0].consent_scope or ConsentScope.service_core.value
+        audit_scope = ConsentScope(first_scope)
     record_consent_change_audit(
         session,
         user_id=user.user_id,
-        consent_scope=scope,
+        consent_scope=audit_scope,
         ip=_client_ip(request, settings=settings),
         settings=settings,
     )
     await session.commit()
     return ParentalConsentRevokeResponse(revoked_at=now, revoked_count=len(rows))
+
+
+@router.get(
+    "/me/parental-consent",
+    response_model=ParentalConsentHistoryResponse,
+    summary="내 동의 내역 조회 — scope별 최신 상태",
+)
+async def read_parental_consent_history(
+    user: Annotated[UserProfile, Depends(get_current_user)],
+    session: SessionDep,
+) -> ParentalConsentHistoryResponse:
+    """현재 로그인한 사용자(또는 그 보호자)의 동의 scope별 최신 상태를 반환.
+
+    법정대리인 이메일·해시 등 PII는 응답에 포함하지 않는다.
+    """
+    # 각 scope별 최신 동의 행을 한 번에 조회.
+    all_consents = list(
+        (
+            await session.scalars(
+                select(ParentalConsent).where(ParentalConsent.user_id == user.user_id)
+            )
+        ).all()
+    )
+
+    def _latest(scope_value: str) -> ParentalConsent | None:
+        matches = [c for c in all_consents if c.consent_scope == scope_value]
+        if not matches:
+            return None
+        return max(
+            matches,
+            key=lambda c: (
+                c.consent_signed_at
+                if c.consent_signed_at is not None
+                else (c.created_at or datetime.min.replace(tzinfo=timezone.utc))
+            ),
+        )
+
+    now = datetime.now(tz=timezone.utc)
+    statuses: list[ConsentScopeStatus] = []
+    for scope in ConsentScope:
+        latest = _latest(scope.value)
+        if latest is None:
+            statuses.append(
+                ConsentScopeStatus(
+                    scope=scope, status="NEVER_GRANTED", granted_at=None, expires_at=None
+                )
+            )
+            continue
+        if latest.revoked_at is not None:
+            statuses.append(
+                ConsentScopeStatus(
+                    scope=scope,
+                    status="WITHDRAWN",
+                    granted_at=latest.consent_signed_at,
+                    expires_at=None,
+                )
+            )
+        elif latest.expires_at is not None and latest.expires_at <= now:
+            statuses.append(
+                ConsentScopeStatus(
+                    scope=scope,
+                    status="EXPIRED",
+                    granted_at=latest.consent_signed_at,
+                    expires_at=latest.expires_at,
+                )
+            )
+        else:
+            statuses.append(
+                ConsentScopeStatus(
+                    scope=scope,
+                    status="GRANTED",
+                    granted_at=latest.consent_signed_at,
+                    expires_at=latest.expires_at,
+                )
+            )
+
+    return ParentalConsentHistoryResponse(scopes=statuses)
