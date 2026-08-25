@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-29-admin-access-audit-wiring
+title: "CONTENT_ADMIN 관리자 접근 감사(record_admin_access_audit) 배선"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - privacy/audit.py의 record_admin_access_audit 함수가 현재 호출부 0건인 상태를 해소한다
+  - "require_content_admin이 적용된 모든 API 엔드포인트(concepts, problems 등)에서 관리자 접근 시 record_admin_access_audit을 호출한다"
+  - "감사 이벤트에 actor, resource_type, resource_id, action, policy_version, reason을 포함한다"
+  - "인가 회귀 테스트를 추가한다: CONTENT_ADMIN 접근 시 감사 이벤트 생성, STUDENT 접근 시 403 거부"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/privacy/audit.py
+  - src/backend/whymath_backend/api/_auth.py
+  - src/backend/whymath_backend/api/concepts.py
+  - src/backend/whymath_backend/api/problems.py
+  - tests/backend/privacy/test_audit.py
+session: null
+notes: "48_보안 §P0 Security Audit 갭. ADMIN-06(백오피스 웹 셸) 확장 시 admin HTTP API 범위로 확장한다."
+updated: 2026-08-25
