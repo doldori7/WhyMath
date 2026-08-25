@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/schema/curriculum_framework.py
   - src/backend/whymath_backend/schema/curriculum_version.py
   - src/backend/alembic/versions/
-session: null
+session: main
 notes: "EOS Curriculum Semantic Backbone ADR(docs/architecture/eos_curriculum_semantic_backbone_adr.md) Phase 1 실행 항목 1. Framework/Version 분리는 검토안 P0 요구사항이며, WhyMath 정본(Concept 원본·Curriculum Overlay)과 충돌하지 않음."
 updated: 2026-08-25

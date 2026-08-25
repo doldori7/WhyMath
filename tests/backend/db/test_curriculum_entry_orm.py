@@ -91,11 +91,16 @@ def test_curriculum_entry_ddl_enum_and_date() -> None:
     assert "gen_random_uuid()" not in ddl
 
 
-def test_curriculum_entry_loose_refs_are_not_fk() -> None:
-    """concept_id·country_code·national_standard_codes 등은 느슨참조라 FK가 없다(cross-dataset)."""
-    assert len(OrmCurriculumEntry.__table__.foreign_keys) == 0
+def test_curriculum_entry_loose_refs_and_framework_fk() -> None:
+    """concept_id·country_code·national_standard_codes 등은 느슨참조라 FK가 없고,
+    CUR-10에서 추가된 framework_id만 curriculum_framework를 참조한다."""
+    fks = {fk.parent.name: fk.column.table.name for fk in OrmCurriculumEntry.__table__.foreign_keys}
+    assert fks == {"framework_id": "curriculum_framework"}
     ddl = _pg_ddl(OrmCurriculumEntry.__table__)
-    assert "REFERENCES" not in ddl
+    assert "REFERENCES curriculum_framework (framework_id)" in ddl
+    # 느슨참조 컬럼들은 여전히 FK가 아니다.
+    assert "REFERENCES concept" not in ddl
+    assert "REFERENCES country" not in ddl
 
 
 # ──────────────────────────────────────────────────────────────────────────

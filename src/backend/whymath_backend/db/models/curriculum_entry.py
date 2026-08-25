@@ -99,6 +99,10 @@ class CurriculumEntry(Base):
     # DATE — 날짜만(TIMESTAMPTZ 아님).
     effective_from: Mapped[date | None] = mapped_column(sa.Date)
     curriculum_revision: Mapped[str | None] = mapped_column(sa.String)
+    # CUR-10: CurriculumFramework 연결(느슨 FK, nullable). curriculum_revision은 하위호환 레이블.
+    framework_id: Mapped[str | None] = mapped_column(
+        sa.String(64), sa.ForeignKey("curriculum_framework.framework_id"), nullable=True
+    )
 
     # ===== 그룹 4: 맥락 =====
     introduced_context: Mapped[str | None] = mapped_column(sa.Text)
