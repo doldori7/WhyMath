@@ -66,23 +66,38 @@ function Get-OrphanLlamaServers {
     # /api/ps 가 비어 있는데 llama-server 가 살아 있으면 고아다.
     # 실패한 로드가 남긴 고아가 커밋을 점유해 *다음* 로드를 실패시키는 자기증식 구조가 실측됐다
     # (2026-08-22: 하루 전 08:47·09:22에 뜬 고아 2개가 커밋 19.3 GB를 잡고 있었다).
-    return @(Get-Process llama-server -ErrorAction SilentlyContinue)
+    # 정상 벤치 중에는 로드된 모델마다 llama-server 1개가 떠 있으므로,
+    # 로드된 모델 수를 빼지 않으면 정상 runner까지 고아로 오표기된다(2026-08-25 Codex 리뷰).
+    param([string]$HostUri = "")
+    $procs = @(Get-Process llama-server -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return @() }
+    if ([string]::IsNullOrWhiteSpace($HostUri)) { $HostUri = $OllamaHost }
+    $loaded = 0
+    try {
+        $ps = Invoke-RestMethod -Uri ($HostUri + "/api/ps") -TimeoutSec 10 -ErrorAction Stop
+        if ($null -ne $ps.models) { $loaded = @($ps.models).Count }
+    } catch {
+        # /api/ps 조회 실패 시에는 보수적으로 전부 고아로 간주하지 않고 0을 반환한다 —
+        # 오탐 경고가 측정을 오염시키는 것보다 조회 실패를 로그로 남기는 편이 정직하다.
+        Write-Host ("[WARN] " + $_.Exception.GetType().Name + ": /api/ps 조회 실패 — 고아 판정 불가로 0 처리")
+        return @()
+    }
+    $orphanCount = [math]::Max(0, $procs.Count - $loaded)
+    if ($orphanCount -eq 0) { return @() }
+    return @($procs | Select-Object -First $orphanCount)
 }
 
 function Get-GpuClockAndTemp {
     # AMD iGPU는 Windows에서 표준 WMI로 클럭/온도를 획득하기 어렵다.
-    # 표준 인터페이스들을 시도하고, 실패하면 예외 타입명을 남긴다(침묵 실패 금지).
-    $r = @{ clock_mhz = $null; temp_c = $null }
+    # ACPI thermal zone의 첫 항목은 GPU라는 보장이 없으므로 gpu_temp_c로 기록하지 않는다
+    # (2026-08-25 Codex 리뷰: 잘못된 GPU 온도가 스로틀링 분석을 오도한다).
+    $r = @{ clock_mhz = $null; temp_c = $null; error = "" }
     try {
-        $tz = @(Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" -ErrorAction Stop)
-        if ($tz.Count -gt 0) {
-            $first = $tz | Select-Object -First 1
-            if ($first.CurrentTemperature) {
-                $r.temp_c = [math]::Round($first.CurrentTemperature / 10 - 273.15, 1)
-            }
-        }
-    } catch { }
-    # GPU 클럭은 표준 WMI 미지원 — Adrenalin/AMDSmiCLI 필요.
+        [void](Get-CimInstance Win32_VideoController -ErrorAction Stop)
+    } catch {
+        $r.error = $_.Exception.GetType().FullName
+    }
+    # GPU 클럭/온도는 표준 WMI 미지원 — Adrenalin/AMDSmiCLI 필요.
     return $r
 }
 

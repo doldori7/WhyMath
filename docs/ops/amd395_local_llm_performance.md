@@ -253,9 +253,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\bench_ollama.ps1 -Label v
 ```powershell
 # [실행 시스템] Windows PowerShell (Phaiakes9 본체)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,resident,vulkan"
-# 전원 레버까지 잴 때 (전면 버튼 Performance 전환 후):
-powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,power140,resident,rocm,vulkan" -PowerMode140W
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline,resident,rocm,vulkan"
+# 전원 레버는 별도 실행 2회 — ①전면 버튼 Balanced 상태에서 baseline만:
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "baseline"
+# ②전면 버튼을 Performance(140W)로 전환한 뒤 power140만:
+powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Presets "power140" -PowerMode140W
+# (baseline과 power140을 같은 실행에 넣으면 같은 물리 전원 상태에서 측정돼 스크립트가 중단한다 — 2026-08-25 Codex 리뷰)
 ```
 
 프리셋마다 ①환경변수 적용 ②Ollama·고아 전부 종료 ③재기동 ④`/api/version` 응답 대기
@@ -283,8 +286,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ops\tune_and_bench.ps1 -Prese
 > 140W는 **눈으로 확인**해야 한다.
 
 ### Phase 3. 전원 모드 140W (수동 참고)
-전면 버튼으로 Performance 전환 → `tune_and_bench.ps1 -Presets "baseline,power140"` + `-PowerMode140W` 플래그로 재측정.
-2026-08-25 실측에서는 baseline 대비 차이가 재현성 폭(±2%) 내였다 — §5 OPS-51 재측정 참조.
+전면 버튼으로 Performance 전환 → `tune_and_bench.ps1 -Presets "power140" -PowerMode140W`로 재측정.
+**반드시 baseline과 별도 실행이어야 한다**(같은 실행이면 물리 전원 상태가 같아 비교가 무효 — §5 OPS-51 ①).
 
 ### Phase 4. 백엔드 스위치 — **창 2개** ⚠️
 
@@ -341,7 +344,7 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 | 0 | 현행 그대로 | | | | | **환경 실측 완료 2026-08-22**(아래) · 2026-08-25 재측정 완료 |
 | 1 | ctx 8192 · np 1 · 고아 정리 | **1.0** | **42.3** | **11.9** | 293~2,331 | ✅ **10/10 성공** (MoE 30B = 71.5) |
 | 2 | VGM 64GB | — | — | — | — | ✅ **이미 충족**(카브아웃 64.4GB 실측) — 조정 불요 |
-| 3 | +140W | 1.0 | 40.1 | 11.7 | 310~2,635 | ✅ **재현성 폭 내** (baseline 대비 −1~2%) — 2026-08-25 |
+| 3 | +140W | 1.0 | 40.1 | 11.7 | 310~2,635 | ⚠️ **판정 유보** — 같은 실행의 baseline과 물리 전원 상태가 동일(2026-08-25). 전원 레버는 별도 실행 2회 필요(아래 ①) |
 | 4a | Vulkan (`OLLAMA_VULKAN=1`+`IGPU_ENABLE=1`) | 1.0 | 42.4 | 11.9 | 315~2,577 | ✅ 라벨 잡힘 — 다만 `ROCm / gfx1151`과 `Vulkan / 0.0` 혼재 → §5 2026-08-25 |
 | 4b | ROCm (`OLLAMA_VULKAN=0`) | 1.0 | 42.6 | 12.0 | 313~2,489 | ✅ 라벨 확정 `ROCm / gfx1151` — 2026-08-25 |
 | 5 | 상주 정책 | 1.0 | 42.1 (재방문 load 3.1 ms) | — | 1,467~5,490 | ✅ 재방문 로드 3~4 ms — 2026-08-25 |
@@ -658,9 +661,8 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
 | `rocm` | flash on | 83.5 | 42.6 | 12.0 | 72.6 | ✅ `ROCm / gfx1151` |
 | `vulkan` | flash on + `VULKAN=1`+`IGPU_ENABLE=1` | 84.1 | 42.4 | 11.9 | 72.5 | ⚠️ **`Vulkan / 0.0`과 `ROCm / gfx1151` 혼재** |
 
-**① Phase 3 (전원 140W) — 유의한 차이 없음**: `power140`이 `baseline`보다 전 모델에서 1~2% **낮다**. 재현성 폭(§5-④) 안이다.
-⇒ 전면 버튼 140W는 토큰 생성(대역폭 바운드)에서 효과가 없고, prefill(연산 바운드)에서도 이번 측정 범위에서는 유의한 이득이 없다.
-L2는 "손해는 없으니 켜 두되, 속도 레버로 세지 않는다"로 정리한다.
+**① Phase 3 (전원 140W) — 판정 유보 (측정 설계 결함, Codex 리뷰로 발견)**: 오늘 실행은 `baseline`과 `power140`을 **같은 실행**에서 연속 측정했고, 프리셋 환경은 동일하며 물리 전원 상태(전면 버튼)를 프리셋 사이에 바꾸는 단계가 없다. 즉 두 프리셋은 **같은 물리 전원 상태**에서 측정됐다. 나온 1~2% 차이는 재현성 데이터로는 유효하지만 **전원 레버 효과 판정에는 쓸 수 없다**.
+⇒ 스크립트를 수정해 `baseline`과 `power140`을 같은 실행에 넣으면 중단한다. 전원 비교는 ①Balanced 상태에서 `baseline`만 측정 → ②전면 버튼 Performance(140W) 전환 → ③`power140`만 측정하는 **두 번의 별도 실행**이 필요하다(후속 측정 과제).
 
 **② Phase 4a/4b (백엔드 라벨) — 도구 결함 10회차 재발 방지 검증 완료**: 라벨 추출이 이제 서버 기동 시각 이후 줄만 읽고,
 `rocm` 계열 4프리셋은 전부 `ROCm / gfx1151`, `vulkan`은 `Vulkan / 0.0` + `ROCm / gfx1151` 혼재를 정확히 잡아낸다(불일치 시 경고까지 나옴).
@@ -677,7 +679,12 @@ L2는 "손해는 없으니 켜 두되, 속도 레버로 세지 않는다"로 정
 **⑤ 재현성 1회차 특이성 가설 축소**: baseline MoE(30b-a3b)는 3일에 걸쳐 **58.7 → 58.2 → 58.2**로 안정.
 반면 1회차(clean 08:29) 71.5는 오늘 flash-on 측정(rocm 72.6, vulkan 72.5)과 일치한다.
 ⇒ 가설이 "**1회차 측정은 flash attention이 켜진 상태였다**"로 축소된다. 단 08:29 당시 evidence(07:38)는 `FLASH_ATTENTION=false`였으므로
-확정은 아니며, 발열·전원 가설은 오늘 `power140`≈`baseline`(1~2%)으로 약화된다.
+확정은 아니다. 발열·전원 가설은 ①의 측정 설계 결함으로 **판정 유보**(오늘 power140 비교는 무효) — 별도 실행 2회로 다시 재야 한다.
+
+**추가 정정 (2026-08-25 Codex 리뷰 반영)**:
+- 오늘 CSV의 `orphan_llama_servers` 열은 **정상 runner까지 포함한 값**이었다(모델 로드 중 llama-server 1개가 떠 있으면 1로 기록).
+  스크립트를 수정해 `/api/ps` 로드 수를 뺀 값만 고아로 기록한다. 오늘 값(1~3)은 실제 고아 0 + 상주 모델 수로 읽어야 한다.
+- `gpu_temp_c`는 표준 WMI로 GPU 온도를 식별할 수 없어 **항상 null**로 기록한다 — ACPI thermal zone의 첫 값을 GPU로 단정하지 않는다.
 
 **도구 결함 11~13회차 (이번 세션에서 발견·수정)**
 - **11회차 — `OLLAMA_VULKAN` 기본값이 true (Ollama 0.32.15)**: 명시 없이 `IGPU_ENABLE`만 지우면 Vulkan이 기본 활성으로 남아

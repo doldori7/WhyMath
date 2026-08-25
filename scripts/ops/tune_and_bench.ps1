@@ -292,6 +292,14 @@ if ($presetNames -contains "power140" -and -not $PowerMode140W) {
     Write-Host "    EVO-X2 전면 버튼을 Performance(140W)로 전환한 뒤 다시 실행하세요."
     Write-Host "    140W 확인 없이 측정하면 '전원' 레버를 구분할 수 없습니다."
 }
+# 전원 레버 비교는 물리 전원 상태가 다른 두 실행이 필요하다.
+# baseline과 power140을 같은 실행에서 돌리면 둘 다 같은 물리 상태에서 측정돼 비교가 무효다(2026-08-25 Codex 리뷰).
+if (($presetNames -contains "baseline") -and ($presetNames -contains "power140")) {
+    Write-Host "[FAIL] baseline 과 power140 을 같은 실행에 넣을 수 없습니다."
+    Write-Host "       전원 비교는 ①전면 버튼 Balanced 상태에서 baseline 만 측정 →"
+    Write-Host "       ②전면 버튼을 Performance(140W)로 전환 → ③power140 만 측정 순서로 두 번 실행하세요."
+    exit 1
+}
 
 if (-not $SkipPowerPlan) {
     Write-Head "전원 계획 (L2)"
@@ -351,13 +359,18 @@ foreach ($name in $presetNames) {
         foreach ($pair in $pairs) {
             Write-Host ("  backend = $pair")
         }
-        # 검증: vulkan/vulkan_forced 프리셋이면 ROCm이 나오면 경고.
+        # 검증: library 이름으로만 판정한다 — compute 식별자는 백엔드마다 다르다
+        # (Vulkan은 gfx1151이 아니라 0.0으로 보고된다. 2026-08-25 Codex 리뷰).
+        $libs = @($pairs | ForEach-Object { $_.Split('/')[0].Trim() })
         $expectVulkan = ($name -like "vulkan*")
-        if ($expectVulkan -and ($pairs -notcontains "vulkan / gfx1151") -and ($pairs -match "ROCm")) {
+        if ($expectVulkan -and ($libs -notcontains "Vulkan") -and ($libs -contains "ROCm")) {
             Write-Host "  [WARN] 프리셋 이름은 vulkan 인데 서버가 ROCm 을 선택했다 — 라벨 검증 실패"
         }
-        if (-not $expectVulkan -and ($pairs -contains "vulkan / gfx1151")) {
+        if (-not $expectVulkan -and ($libs -contains "Vulkan")) {
             Write-Host "  [WARN] 프리셋 이름은 ROCm 계열인데 서버가 Vulkan 을 선택했다 — 라벨 검증 실패"
+        }
+        if ($libs.Count -gt 1) {
+            Write-Host ("  [WARN] 백엔드 라벨 혼재 (" + ($libs -join ", ") + ") — OLLAMA_LLM_LIBRARY 미강제 시 양쪽 라이브러리가 로드된다")
         }
     }
 

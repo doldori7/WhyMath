@@ -115,13 +115,13 @@ function Get-GpuClockAndTemp {
     try {
         $tz = @(Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" -ErrorAction Stop)
         if ($tz.Count -gt 0) {
-            "thermal_zone_count = {0}" -f $tz.Count
+            "acpi_thermal_zone_count = {0}  <- 주의: GPU라는 보장 없음(CPU·메인보드일 수 있다)" -f $tz.Count
             $tz | Select-Object -First 3 | ForEach-Object {
                 $k = if ($_.CurrentTemperature) { $_.CurrentTemperature / 10 - 273.15 } else { $null }
-                "  instance={0} temp_c={1:N1}" -f $_.InstanceName, $k
+                "  instance={0} temp_c={1:N1}  (ACPI 존 — GPU로 기록 금지)" -f $_.InstanceName, $k
             }
         } else {
-            "thermal_zone: (none)"
+            "acpi_thermal_zone: (none)"
         }
     } catch {
         "[ERR] {0}: {1}" -f $_.Exception.GetType().FullName, $_.Exception.Message
