@@ -1,6 +1,6 @@
 # EOS 6_개념(Concept) DB 설계 검토 — WhyMath 수용 ADR
 
-> **상태**: 초안 (2026-08-25)  
+> **상태**: 초안 (2026-08-25) · r2 보강 검토 반영 (2026-08-25, §2.26·§3.6~3.10 추가)  
 > **범위**: EOS 지향 교육앱을 위한 『6_개념(Concept) DB』 설계 검토(64항)를 WhyMath 현행 설계·원칙과 대조하여 부분 수용  
 > **연관**: `docs/architecture/concept_node_layering_decision.md`, `docs/architecture/eos_curriculum_semantic_backbone_adr.md`, `docs/standards/eos_identity_layer_011_1_decision.md`, `docs/architecture/01_data_foundation.md`, `backlog/tasks/CUR-09-eos-unit-structure-review-adoption.yaml`
 
@@ -196,6 +196,17 @@ WhyMath 현행은 검토안의 MVP 범위를 상당 부분 이미 구현했으�
 
 12가지 계약 중 WhyMath가 이미 충족하거나 Phase 1/1.5/2로 확장할 항목으로 매핑한다. 이 계약을 `docs/standards/s1_structure_audit_2026-07.md` 및 Concept Purity 원칙 아래 두고 운영한다.
 
+### 2.26 r2 보강 검토 — 검토안 자체의 내부 결함 6종 (2026-08-25)
+
+r1 판정표(§1) 이후 검토안 문서를 대상으로 한 독립 재검토에서, r1이 명시하지 않은 검토안 자체의 결함 6종을 추가 식별했다. WhyMath 수용 시 아래 수정 없이 원문을 받으면 안 된다.
+
+1. **§4↔§9 자기모순 (canonical_key UNIQUE)** — 검토안은 `canonical_key`를 "변경 가능"이라 정의(§4)하면서 DDL에서는 `UNIQUE` 제약(§9)을 건다. 변경 가능한 키에 UNIQUE를 걸면 키 갱신 시 참조 무결성 관리가 깨진다. WhyMath의 `aliases` 배열 + `ids.yaml` registry가 이 모순의 실제 해벌이므로, 검토안 DDL은 수용하지 않는다(§3.10).
+2. **§12 관계 타입 11종 — 검토안 자신의 원칙 위반** — 검토안은 "관계를 너무 많이 만들면 KG가 관리 불가능"이라 경고하면서 정작 11개 relation을 제안한다. 특히 `related_to`는 WhyMath가 traversal 금지로 봉인한 타입이다. r1의 기존 7종 매핑(§2.10)을 유지하고, 검토안 vocabulary는 그대로 받지 않는다(§3.5와 정합).
+3. **§45 Rule 4 "가능하면 DAG" — 강제 수준 부족** — 선수관계 순환은 학습경로 엔진의 무한 루프·오진단을 만드는 치명 오류인데 검토안은 "가능하면" 수준의 권고에 그친다. WhyMath는 data-pipeline 검증기가 `prerequisite_cycle`을 **hard error**로 강제한다(`data_pipeline/graph_analytics/analytics.py:166`, `atom_graph/validate.py:9`, `skill_graph/validate.py:8`; 런타임 가정 주석 `api/me.py:1503`). 수용 시 "prerequisite는 DAG 강제(검증 게이트 hard error)"로 격상한다(§3.6).
+4. **§46 Quality Score — 게이트 사용 금지** — 가중치(15/15/15/10/…)는 근거 없는 점추정이다. `superhuman_verification_standard.md`의 "점추정·인상 판정 금지" 원칙에 따라 대시보드 지표로는 허용하되, 배포·승격 게이트(exit 0/1 판정)로 사용하려면 측정 기반 임계값(Wilson 단측 경계 등)이 선행돼야 한다(§3.7).
+5. **§51 이벤트 `concept_refs` 배열 — 비정규화 드리프트 위험** — 문항-개념 매핑이 수정되면 과거 이벤트의 배열과 불일치가 생긴다. WhyMath는 이벤트의 `concept_refs`를 **기록 시점 스냅샷**으로 명시하고, 분석·숙련 추정은 `problem_id` 조인으로 읽기 시점에 해석하는 규칙을 둔다(§3.8).
+6. **노드 순수성(negative constraint) 부재** — 검토안은 Concept에 무엇을 *넣을지*만 다루고, 무엇을 *넣으면 안 되는지*(renderer·prompt·UI·embedding 혼입 금지)는 다루지 않는다. WhyMath의 `_FORBIDDEN_NODE_FIELDS` 정적 차단이 이 결함을 이미 보완하므로, Concept Contract(§61) 수용 시 "금지 필드 목록" 조항을 추가한다(§3.9).
+
 ---
 
 ## 3. WhyMath 수정 원칙
@@ -221,6 +232,26 @@ AI가 생성한 Concept/Relation은 `DRAFT`/`REVIEW` 상태로 두고, Rule/Vali
 ### 3.5 Relation vocabulary 상한
 
 신규 relation type 추가는 7~8개 상한 내에서. 무분별한 edge type 증식은 KG 관리 불가능성을 초래.
+
+### 3.6 Prerequisite DAG 강제 (r2)
+
+선수관계 순환은 "가능하면 회피"가 아니라 **hard error**로 강제한다. data-pipeline 검증기의 `prerequisite_cycle` 규칙(concept_graph·atom_graph·skill_graph 공통)이 단일 권위이며, 런타임은 DAG 보장을 전제로 재귀 순회한다(`api/me.py:1503`). 신규 edge 유입 경로(수작업 YAML, AI 제안, API)는 모두 이 검증기를 통과해야 ACTIVE로 승격 가능하다.
+
+### 3.7 품질 점수의 게이트 사용 금지 (r2)
+
+Concept Quality Score류의 가중치 합산 점수는 대시보드·우선순위 지표로만 사용한다. 배포·승격·완료 판정의 게이트로 사용하려면 `superhuman_verification_standard.md`에 따라 측정 기반 임계값(Wilson 단측 경계, exit 0/1 판정)으로 재정의해야 하며, 점추정 점수 그대로의 게이트화는 금지한다.
+
+### 3.8 이벤트 concept_refs는 스냅샷 (r2)
+
+학습 이벤트에 기록하는 `concept_refs`는 **기록 시점 스냅샷**임을 스키마 주석으로 명시한다. 문항-개념 매핑 변경 후의 분석·숙련 추정은 이벤트 배열이 아니라 `problem_id` 조인 기준 읽기 시점 해석을 정본으로 한다.
+
+### 3.9 Concept Contract 금지 필드 조항 (r2)
+
+EOS Concept Contract(검토안 §61) 수용 시 13번 조항으로 "Concept 노드는 renderer·curriculum·prompt·misconception·UI·embedding·외부 저작권 텍스트를 내장하지 않는다(`_FORBIDDEN_NODE_FIELDS` 정적 차단)"를 추가한다.
+
+### 3.10 canonical_key 변경과 불변 참조 분리 (r2)
+
+사람이 읽는 키(`canonical_key`)는 변경 가능성을 허용하되 UNIQUE 제약으로 참조 기준을 삼지 않는다. 불변 참조는 `concept_id`(`math.<area>.<slug>`)가 담당하고, 옛 키는 `aliases` + `ids.yaml` registry가 흡수한다.
 
 ---
 
