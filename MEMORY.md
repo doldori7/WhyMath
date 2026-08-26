@@ -7151,3 +7151,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **사고 메모**: 최초 등재·부기는 메인 체크아웃(CUR-16 브랜치)에서 했으나, 병렬 세션의 트리 정리로 MEMORY.md 부기분과 events.ndjson 이벤트가 무증상 소실(태스크 YAML·설계 문서는 untracked라 생존). 격리 worktree에서 재구성 — 병렬 세션 규칙(1 세션 = 1 worktree)의 필요성을 재확인한 사례.
 - **산출물**: `docs/architecture/32_learning_history.md`(8대 원칙 ADR + 기존 구현 매핑 표 + privacy 3종 배선 필수화), backlog 태스크 5건.
 - **cross-ref**: `44_eos_version_management.md`(VersionContext 정본), `02_learner_model.md`, `04a_wh1_tutoring_harness.md`(evidence_links), `docs/standards/eos_identity_layer_011_1_decision.md`.
+## 2026-08-26: EOS 『28_MathLive 입력』 43절 설계안 검토 — 델타 1건(EOS-28) 등재 + 승계 3건
+
+- **사건**: Kiki가 EOS 지향 『28_MathLive 입력』 설계안(43절)을 제출하고 검토를 요청.
+- **착수 전 확인**: 같은 근원 틀의 10항 요약본을 `math_engine_gap_review.md`가 이미 전수 대조(기능 28 "갭 0" · MATH-01~05). §7.6 계열 C 방어(착수 전 기존 리뷰 조회)의 **두 번째 작동 사례** — 전수 재대조를 거르고 델타만 판정.
+- **판정**: 43절 중 37절은 기판정 재확인(✅충족·🚫의도적 미채택·⏸유보). 자체 Canonical Math AST · 클라이언트 lightweight parse · 입력 중 실시간 서버 검증 · 학생 입력 거부(allowed_symbols)는 기존 미채택 결정 그대로 유지. 문서 자체 결함 2건 기록(§30 예시가 §2.1 위반 · "observed AST 보존"이 프라이버시 현행과 충돌 — `wrong_form_match.py:17` 현행이 정답).
+- **진짜 갭 1건 등재**: `EOS-28-answer-form-contract`(S3·prio 2) — **답 형태 계약: 동치≠지시 준수 채점 변별**. 실측 근거: `verify_answer.py:272-347` 수치 잔차만 · `verify_final_answer.py:246-284` 값 해집합+동치뿐 · 형태 검사 grep 0건 · `answer_format` enum(`schema/enums.py:175-181`)은 채점기 미소비 메타 라벨. 경계: 형태 불만족은 제출 차단이 아니라 채점 변별+피드백(§2-⑤ 계열 교수학 금기, 테스트 기계화). 첫 acceptance는 코퍼스 형태 요구 문항 비율 실측 — 0건이면 유보 전환(측정 없는 도입 없음).
+- **승계 3건(조걶부)**: ①원문 LaTeX 보존 = `EOS-32`(acceptance의 `raw_response/latex`가 이미 수용 — 단 현재 백엔드 도달 값은 평문뿐이라 `chat_controller.dart:96-110` 모바일 페이로드 확장이 전제) ②step 수준 입력 이벤트 = `EOS-46` ③버전 고정·채점 재현성 = `EOS-47`(evaluation_context에 notation_contract·파서 버전 포함 요구 추가 기록). **단 EOS-32 시리즈는 main 미머지** — 커밋 `7b64f185`가 원격 브랜치 `claude/docs-eos-32-learning-history-2f77c4`에만 존재(2026-08-26 실측), 그 머지가 선행 조건이며 무산 시 미소유 갭으로 환원(계열 C 감시).
+- **공백 7종은 발화 조걧만**: 입력 상태 모델(G-1) · 위젯 세션 이벤트(G-2) · 혼합 블록(G-3) · 키보드 visible 프로필(G-4) · 음성(G-5) · i18n(G-6) · paste 정규화(G-7).
+- **산출물**: `docs/architecture/28_mathlive_input.md` + backlog 1건. `validate` green — **PR 트리 기준 410건**(본 체크아웃에서는 미커밋 EOS-32 시리즈 포함 421건으로 측정됐으나 정본은 PR 트리). 오개념 축은 `l4/misconception/wrong_form_match.py`가 문서 제안(AST signature)보다 강한 구현(SymPy Wild 정합·거짓 등식 가드)임을 확인 — ✅ 초과.
+- **cross-ref**: `math_engine_gap_review.md`(기능 28 기판정 정본) · `32_learning_history.md` · `44_eos_version_management.md`.

@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-31-eos-pedagogy-strategy-library-gap-design
+title: EOS pedagogical strategy library gap design 14/15/16/17 boundaries
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - Write docs/architecture/04f_pedagogy_module_boundaries.md with gap analysis vs current L4 implementation
+  - "Define WhyMath seats for explanation selection, hint strategy, remediation strategy modules"
+  - "Quantify gaps in l4/pedagogy: StrategyDecision, ExecutionPlan, Outcome, PedagogicalAction, StrategyStep"
+  - Link PED-31 in ROADMAP.md Phase 1-2 L4 pedagogy engine milestones
+  - Decompose follow-up tasks PED-32 execution plan model and PED-33 event-system wiring in notes
+artifacts: []
+paths:
+  - docs/architecture/04f_pedagogy_module_boundaries.md
+  - "src/backend/whymath_backend/l4/pedagogy/*.py"
+session: null
+notes: "Gap design task: reconcile external 14 pedagogical strategy review with WhyMath current PedagogyStrategy enum, YAML catalog, runtime_selector. Identify missing StrategyDecision/ExecutionPlan/Outcome entities, PedagogicalAction atomic layer, StrategyStep, ApplicabilityRule, Pedagogy Graph, State Machine, Fading policy, Event System integration, and conditional effectiveness model. Document 15/16/17 module boundaries."
+updated: 2026-08-26
