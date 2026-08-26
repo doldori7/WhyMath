@@ -15,10 +15,12 @@ acceptance:
   - "answer form 계약 스키마 ADR: 기존 answer_format(enum 4종·메타 라벨)/answer_constraint(자유형 JSONB·검증기 미소비)와의 관계 — 신설 vs 확장 결정 + expected_form 폐쇄 어휘 정의"
   - "형태 판정 검증기 SymPy 기반 구현(deterministic·LLM 0): mathematically_equivalent와 instruction_satisfied를 분리한 verdict — 형태 불만족이 incorrect가 아님"
   - "교수학 금기 기계화: 형태 불일치가 제출 차단이 아니라 채점 변별·피드백으로만 흐름을 테스트 동결(§2-⑤ 학생 입력 거부 금지 준수·부정 강화 금지)"
+  - "프로덕션 소비 지점 배선: api/coach.py 완료 경로(verify_final_answer 호출부)에서 instruction_satisfied가 채점 결과·응답에 실제 반영됨을 API 테스트로 동결 — 스키마·검증기 단독 구현으로 완료 선언 금지(배선 확인 없는 완료 금지)"
 artifacts: []
 paths:
   - "src/backend/whymath_backend/schema/**"
   - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/api/**"
   - "tests/backend/**"
   - "docs/architecture/**"
 session: null
