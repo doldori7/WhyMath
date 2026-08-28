@@ -1,6 +1,6 @@
 # EOS 6_개념(Concept) DB 설계 검토 — WhyMath 수용 ADR
 
-> **상태**: 초안 (2026-08-25) · r2 보강 검토 반영 (2026-08-25, §2.26·§3.6~3.10 추가)  
+> **상태**: 초안 (2026-08-25) · r2 보강 검토 반영 (2026-08-25, §2.26·§3.6~3.10 추가) · r3 PR #897 리뷰 반영 (2026-08-28, §2.26-1·§3.6·§3.8·§3.10 보정 + §4 후속 7·8 추가)  
 > **범위**: EOS 지향 교육앱을 위한 『6_개념(Concept) DB』 설계 검토(64항)를 WhyMath 현행 설계·원칙과 대조하여 부분 수용  
 > **연관**: `docs/architecture/concept_node_layering_decision.md`, `docs/architecture/eos_curriculum_semantic_backbone_adr.md`, `docs/standards/eos_identity_layer_011_1_decision.md`, `docs/architecture/01_data_foundation.md`, `backlog/tasks/CUR-09-eos-unit-structure-review-adoption.yaml`
 
@@ -200,7 +200,7 @@ WhyMath 현행은 검토안의 MVP 범위를 상당 부분 이미 구현했으�
 
 r1 판정표(§1) 이후 검토안 문서를 대상으로 한 독립 재검토에서, r1이 명시하지 않은 검토안 자체의 결함 6종을 추가 식별했다. WhyMath 수용 시 아래 수정 없이 원문을 받으면 안 된다.
 
-1. **§4↔§9 자기모순 (canonical_key UNIQUE)** — 검토안은 `canonical_key`를 "변경 가능"이라 정의(§4)하면서 DDL에서는 `UNIQUE` 제약(§9)을 건다. 변경 가능한 키에 UNIQUE를 걸면 키 갱신 시 참조 무결성 관리가 깨진다. WhyMath의 `aliases` 배열 + `ids.yaml` registry가 이 모순의 실제 해벌이므로, 검토안 DDL은 수용하지 않는다(§3.10).
+1. **§4↔§9 규칙 부재 (canonical_key UNIQUE + 변경 가능)** — 검토안은 `canonical_key`를 "변경 가능"이라 정의(§4)하면서 DDL에서는 `UNIQUE` 제약(§9)을 건다. UNIQUE 자체는 조회 모호성 방지로 유효하지만, 검토안에는 이 키를 참조(FK) 대상으로 쓰지 않는다는 규칙이 없어 키 갱신 시 참조 무결성 관리가 깨질 수 있다. WhyMath는 `concept_id` 불변 참조 + `aliases` 배열 + `ids.yaml` registry로 해결하므로, 규칙 부재 상태의 검토안 DDL은 그대로 수용하지 않는다(§3.10).
 2. **§12 관계 타입 11종 — 검토안 자신의 원칙 위반** — 검토안은 "관계를 너무 많이 만들면 KG가 관리 불가능"이라 경고하면서 정작 11개 relation을 제안한다. 특히 `related_to`는 WhyMath가 traversal 금지로 봉인한 타입이다. r1의 기존 7종 매핑(§2.10)을 유지하고, 검토안 vocabulary는 그대로 받지 않는다(§3.5와 정합).
 3. **§45 Rule 4 "가능하면 DAG" — 강제 수준 부족** — 선수관계 순환은 학습경로 엔진의 무한 루프·오진단을 만드는 치명 오류인데 검토안은 "가능하면" 수준의 권고에 그친다. WhyMath는 data-pipeline 검증기가 `prerequisite_cycle`을 **hard error**로 강제한다(`data_pipeline/graph_analytics/analytics.py:166`, `atom_graph/validate.py:9`, `skill_graph/validate.py:8`; 런타임 가정 주석 `api/me.py:1503`). 수용 시 "prerequisite는 DAG 강제(검증 게이트 hard error)"로 격상한다(§3.6).
 4. **§46 Quality Score — 게이트 사용 금지** — 가중치(15/15/15/10/…)는 근거 없는 점추정이다. `superhuman_verification_standard.md`의 "점추정·인상 판정 금지" 원칙에 따라 대시보드 지표로는 허용하되, 배포·승격 게이트(exit 0/1 판정)로 사용하려면 측정 기반 임계값(Wilson 단측 경계 등)이 선행돼야 한다(§3.7).
@@ -237,13 +237,15 @@ AI가 생성한 Concept/Relation은 `DRAFT`/`REVIEW` 상태로 두고, Rule/Vali
 
 선수관계 순환은 "가능하면 회피"가 아니라 **hard error**로 강제한다. data-pipeline 검증기의 `prerequisite_cycle` 규칙(concept_graph·atom_graph·skill_graph 공통)이 단일 권위이며, 런타임은 DAG 보장을 전제로 재귀 순회한다(`api/me.py:1503`). 신규 edge 유입 경로(수작업 YAML, AI 제안, API)는 모두 이 검증기를 통과해야 ACTIVE로 승격 가능하다.
 
+현행 보장 경계를 명시한다: 순환 검증은 data-pipeline 변환 단계(graph.json 산출 시)에서 수행되고, 런타임 적재 CLI(`l1/concept_graph/populate.py` ④단계)는 `populate_backend_edges`를 검증 호출 없이 upsert하므로 임의 `--graph` 입력에는 hard-error 보장이 미적용이다. 적재 경로에도 동일 검증기를 배선하는 것을 후속 태스크로 둔다(§4).
+
 ### 3.7 품질 점수의 게이트 사용 금지 (r2)
 
 Concept Quality Score류의 가중치 합산 점수는 대시보드·우선순위 지표로만 사용한다. 배포·승격·완료 판정의 게이트로 사용하려면 `superhuman_verification_standard.md`에 따라 측정 기반 임계값(Wilson 단측 경계, exit 0/1 판정)으로 재정의해야 하며, 점추정 점수 그대로의 게이트화는 금지한다.
 
 ### 3.8 이벤트 concept_refs는 스냅샷 (r2)
 
-학습 이벤트에 기록하는 `concept_refs`는 **기록 시점 스냅샷**임을 스키마 주석으로 명시한다. 문항-개념 매핑 변경 후의 분석·숙련 추정은 이벤트 배열이 아니라 `problem_id` 조인 기준 읽기 시점 해석을 정본으로 한다.
+학습 이벤트에 기록하는 `concept_refs`는 **기록 시점 스냅샷**임을 스키마 주석으로 명시한다. 단, 현행 `AttemptEvent`·`EvidenceEvent` 모델은 `concept_refs`를 영속하지 않으므로(activity.py:238·evidence_event.py:54 — `objective_id`·`problem_id`만 보유), 이 원칙의 적용에는 이벤트 스키마에 `concept_refs` 영속 또는 버전드 매핑(versioned problem→concept mapping) 도입이 선행돼야 한다. 그 전까지 매핑 변경 후 재생(replay)되는 숙련 추정이 현행 매핑으로 소급 재귀속되는 한계를 인정하고, 현행 매핑 기준 재해석은 명시적 교정 마이그레이션으로 한정한다.
 
 ### 3.9 Concept Contract 금지 필드 조항 (r2)
 
@@ -251,7 +253,7 @@ EOS Concept Contract(검토안 §61) 수용 시 13번 조항으로 "Concept 노�
 
 ### 3.10 canonical_key 변경과 불변 참조 분리 (r2)
 
-사람이 읽는 키(`canonical_key`)는 변경 가능성을 허용하되 UNIQUE 제약으로 참조 기준을 삼지 않는다. 불변 참조는 `concept_id`(`math.<area>.<slug>`)가 담당하고, 옛 키는 `aliases` + `ids.yaml` registry가 흡수한다.
+사람이 읽는 키(`canonical_key`)는 변경 가능성을 허용하되, 라이브 키의 UNIQUE 제약은 유지한다 — 변경 가능성과 UNIQUE는 모순이 아니며, UNIQUE는 두 개념이 동일 키로 해석되는 조회 모호성을 막는 장치다. 금지 대상은 이 키를 *참조 기준(FK 대상)*으로 삼는 것이고, 불변 참조는 `concept_id`(`math.<area>.<slug>`)가 담당한다. 개명된 옛 키는 `aliases` + `ids.yaml` registry가 흡수한다.
 
 ---
 
@@ -265,6 +267,8 @@ EOS Concept Contract(검토안 §61) 수용 시 13번 조항으로 "Concept 노�
 4. **Concept Search API 확장**: `GET /concepts/{id}/relations|prerequisites|misconceptions|problems|objectives|explanations|visualizations` 및 `POST /concepts/resolve` 추가.
 5. **Concept Lifecycle + Merge/Split 설계**: `status` 전이 룰, `merged_into`/`split_into` 관리, audit trail. Phase 2.
 6. **Cross-subject Concept Mapping 설계**: 수학 외 과목 확장 시 `subject_node` 및 cross-subject `related_to` 정책. Phase 2+.
+7. **런타임 적재 경로 DAG 검증 배선** (r2, PR #897 리뷰 반영): `l1/concept_graph/populate.py` ④단계 `populate_backend_edges`가 `prerequisite_cycle` 검증 호출 없이 upsert한다. data-pipeline 검증기와 동일 규칙을 적재 경로에도 적용해 임의 `--graph` 입력에도 hard-error가 적용되게 한다.
+8. **이벤트 concept_refs 영속화** (r2, PR #897 리뷰 반영): `AttemptEvent`·`EvidenceEvent`에 `concept_refs` 스냅샷(또는 versioned problem→concept mapping)을 영속해 §3.8 원칙을 실제 replay에 적용 가능하게 한다.
 
 ---
 
