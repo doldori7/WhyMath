@@ -30,17 +30,17 @@ from data_pipeline.strategy_graph.models import (
 )
 
 from whymath_backend.db.models.strategy_node import StrategyNode as OrmStrategyNode
-from whymath_backend.schema.enums import EdgeType, ReasoningType
+from whymath_backend.schema.enums import ApproachType, EdgeType, ReasoningType
 
 # 리포지토리 루트(tests/backend/l1/ 기준 3단 상위) → 코퍼스 경로.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _STRATEGY_GRAPH = _REPO_ROOT / "data" / "corpus" / "strategy_graph_v1" / "graph.json"
 
-# 인접 축1: 풀이 전체 접근유형 6값(schemas/v1.1/solution_path.schema.yaml `approach_type` enum).
-# 스키마와 1:1 하드코딩(빌드 의존 최소·값이 바뀌면 이 테스트가 잡는다).
-_APPROACH_TYPES = frozenset(
-    {"algebraic", "geometric", "combinatorial", "inductive", "visual", "backward"}
-)
+# 인접 축1: 풀이 전체 접근유형 6값 — S4-10 좌석 승격: 리터럴 하드코딩 → 단일 좌석
+# `schema/enums.py::ApproachType` 참조. 폐쇄성(값 집합 동결)은 아래
+# `test_approach_type_closed_set_frozen`이 리터럴 비교로 별도 유지한다(좌석이 바뀌면
+# 그 테스트가 잡는다 — 하드코딩이 지키던 동결력 보존).
+_APPROACH_TYPES = frozenset(member.value for member in ApproachType)
 
 
 def test_strategy_adds_no_edge_type() -> None:
@@ -71,11 +71,26 @@ def test_strategy_closed_set_frozen() -> None:
     )
 
 
+def test_approach_type_closed_set_frozen() -> None:
+    """`ApproachType` 6종의 값 집합 동결(조합폭발 방지·closed 택소노미 — S4-10 좌석 승격 보상).
+
+    좌석 참조 승격으로 disjoint 검사가 enum 변경을 따라 움직이게 됐으므로, 폐쇄성 자체는
+    여기서 리터럴 비교로 동결한다(`test_strategy_closed_set_frozen` 선례 동형 — yaml
+    `approach_type` enum·구 Literal 6값과 1:1).
+    """
+    assert len(ApproachType) == 6
+    assert _APPROACH_TYPES == frozenset(
+        {"algebraic", "geometric", "combinatorial", "inductive", "visual", "backward"}
+    )
+
+
 def test_strategy_axis_disjoint_from_reasoning_and_approach() -> None:
     """각 strategy slug이 approach_type 6값·ReasoningType 7값(소문자)과 교집합 ∅(축 혼동 차단).
 
     strategy(공략 발상)·approach_type(완성 풀이 접근)·ReasoningType(스텝 추론)은 직교 3축이다.
     slug이 두 축의 어느 값과도 문자열로 겹치지 않아야 노드가 서로의 의미로 오염되지 않는다.
+    (S4-10: approach 6값이 리터럴 → `ApproachType` 좌석 참조로 승격 — 값 집합이 동일하므로
+    본 검사의 결과는 불변이다.)
     """
     slugs = frozenset(STRATEGY_SLUGS)
     reasoning_lower = frozenset(r.value.lower() for r in ReasoningType)

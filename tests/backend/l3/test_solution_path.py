@@ -8,7 +8,8 @@ Pydantic 소관 invariant(이 파일):
   - steps order 1부터 연속(중복·건너뜀·역순 거부)
   - justification.prior_step_orders 각 값 < 현재 order(전방·자기참조 금지·비순환)
   - reasoning_type 폐쇄 7종 밖 거부(기존 좌석 `schema/enums.py::ReasoningType` 소비 — 신설 0)
-  - approach_type 6종 밖 거부(Literal — Enum 클래스 신설 0·S4-10에서 좌석 승격)
+  - approach_type 6종 밖 거부(S4-10 좌석 승격 — 단일 좌석 `schema/enums.py::ApproachType`
+    소비·값 집합은 구 Literal과 동일)
   - reasoning_type·justification 미지정 스텝도 유효(하위호환·strict superset)
 
 적재 시점 소관(여기서 검증 *안 함* — 경계 명시): problem_id/concept ID 실재(cross-dataset)는
@@ -169,11 +170,11 @@ class TestReasoningTypeClosedEnum:
 
 
 # ==========================================================================
-# invariant: approach_type 6종 밖 거부 (Literal — Enum 클래스 신설 0)
+# invariant: approach_type 6종 밖 거부 (S4-10 좌석 승격 — schema/enums.py 단일 좌석)
 # ==========================================================================
 class TestApproachTypeClosedSet:
     def test_all_six_values_pass(self) -> None:
-        """성공: 폐쇄 6종 전원이 수용된다(거버넌스 테스트 리터럴과 동일 집합)."""
+        """성공: 폐쇄 6종 전원이 수용된다(거버넌스 테스트와 같은 좌석·동일 집합)."""
         assert set(APPROACH_TYPES) == {
             "algebraic",
             "geometric",
@@ -190,15 +191,28 @@ class TestApproachTypeClosedSet:
         with pytest.raises(ValidationError):
             _path(approach_type="비유적")
 
-    def test_no_enum_class_created(self) -> None:
-        """approach_type용 Enum 클래스를 *신설하지 않았다* — schema/enums.py 단일 좌석 규약.
+    def test_single_enum_seat(self) -> None:
+        """S4-09가 예고한 좌석 승격 완료(S4-10) — schema/enums.py `ApproachType` 단일 좌석.
 
-        좌석 승격(ApproachType Enum)은 S4-10 몫이다. 여기서는 schema.enums에 ApproachType이
-        아직 없음을 동결한다(S4-10이 들어오면 이 테스트를 좌석 참조 검증으로 교체).
+        l3가 재수출하는 `ApproachType`이 schema 좌석 *그 자체*이고(이중 정의 0),
+        `APPROACH_TYPES` 튜플도 좌석에서 파생된다(단일 진실 원천).
         """
         import whymath_backend.schema.enums as enums
+        from whymath_backend.l3.solution_path import ApproachType as L3ApproachType
 
-        assert not hasattr(enums, "ApproachType")
+        assert L3ApproachType is enums.ApproachType
+        assert APPROACH_TYPES == tuple(member.value for member in enums.ApproachType)
+
+    def test_korean_label_parse_helper(self) -> None:
+        """한글 라벨 6종만 좌석으로 번역·그 외는 None(추측 금지 — 단일 번역 경로)."""
+        from whymath_backend.l3.solution_path import parse_approach_label
+        from whymath_backend.schema.enums import ApproachType
+
+        assert parse_approach_label("대수적") is ApproachType.algebraic
+        assert parse_approach_label(" visual ") is ApproachType.visual
+        assert parse_approach_label("비유적") is None
+        assert parse_approach_label("corpus-replay") is None
+        assert parse_approach_label(None) is None
 
 
 # ==========================================================================
