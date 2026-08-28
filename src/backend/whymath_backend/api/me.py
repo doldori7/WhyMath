@@ -3548,17 +3548,16 @@ async def get_my_learning_metrics(
     minutes_active = None if agg.minutes_active is None else int(agg.minutes_active)
     attempted = None if agg.attempted is None else int(agg.attempted)
     correct = None if agg.correct is None else int(agg.correct)
+    accuracy_rate: float | None = None
+    if attempted is not None and attempted != 0 and correct is not None:
+        accuracy_rate = round(correct / attempted, 4)
     summary = LearningMetricsSummary(
         days_counted=days_counted,
         total_minutes_active=minutes_active,
         total_problems_attempted=attempted,
         total_problems_correct=correct,
         total_socratic_turns=None if agg.socratic_turns is None else int(agg.socratic_turns),
-        accuracy_rate=(
-            round(correct / attempted, 4)
-            if attempted not in (None, 0) and correct is not None
-            else None
-        ),
+        accuracy_rate=accuracy_rate,
         avg_minutes_per_active_day=(
             round(minutes_active / days_counted, 2)
             if minutes_active is not None and days_counted > 0

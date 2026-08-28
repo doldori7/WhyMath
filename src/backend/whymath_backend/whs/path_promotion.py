@@ -23,9 +23,16 @@
     (`whs/verdict.py`·`l3/verify_solution.py` — 전이 개수는 n-1)이므로, 검증된 것은 "직전
     스텝→이 스텝" 전이다. 따라서 **order≥2 스텝만 True**, 첫 스텝은 전이 검증 대상이
     아니라 False다(과잉 주장 금지 — 원 검증 상태의 정확한 승계).
-  - `problem_step`의 `UNIQUE(problem_id, step_order)` 불변 유지 — 한 문제에 *첫 verified
-    경로 1개*만 단계 실체화하고, 추가 경로는 스킵·리포트한다(제약 재론은 S4-10 몫).
-    기존 `problem_step` 행이 선점한 문제도 스킵한다(레거시 보존·클로버 금지).
+  - **다중 경로 공존(S4-10 재론 확정)**: S4-09가 유보한 "문제당 1경로" 제약을 재론해
+    *분리*했다 — ① `solution_paths` **헤더는 문제당 N경로 허용**(yaml 관계 "N:1 — 한 문제에
+    여러 SolutionPath"의 실현·테이블에 problem_id UNIQUE가 애초에 없음·풀이 다양성 자산 §2.4)
+    ② `problem_step` **단계는 대표 1경로만** 실체화한다 — `UNIQUE(problem_id, step_order)`
+    불변 유지(steps API는 문제당 *한* 정합 시퀀스를 서빙하는 계약이라 두 경로의 단계가 같은
+    문제 아래 섞이면 서빙 표면이 붕괴한다). 대표 = *단계 좌석이 비어 있을 때 처음 승격되는
+    경로*(선호 유형·검수 우선 등 대표 *선택 정책*은 L2 preferred_solution_style이 서는 §4-⑤
+    후속 몫 — `l3/solution_path_store.py` 동일 유보). 추가 경로는 헤더만 적재하고 단계 스킵을
+    리포트한다(`steps_skipped_*`). 기존 `problem_step` 행(레거시 Socratic 단계)이 선점한
+    문제도 단계는 스킵한다(클로버 금지) — 헤더는 적재한다(경로 자산은 별개 축).
   - 멱등: `solution_path_id = "sp-{verified_solutions.id}"` 결정론 부여 — 재실행 시 기존
     적재분은 `already_promoted`로 스킵된다.
   - `content` 영속 좌석: `problem_step.expected_answer`("이 단계의 기대 답") — WH-S 스텝은
@@ -68,7 +75,7 @@ from whymath_backend.db.models.verified_solution import (
     WhsSolutionGrade,
 )
 from whymath_backend.db.session import get_sessionmaker
-from whymath_backend.l3.solution_path import APPROACH_TYPES, SolutionPath
+from whymath_backend.l3.solution_path import SolutionPath, parse_approach_label
 from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
 
 __all__ = [
@@ -88,29 +95,18 @@ __all__ = [
 # crosswalk 검수 큐 `"review_queue"` top key 선례 동형).
 _QUEUE_KIND = "solution_path_promotion_review"
 
-# strategy_tag → approach_type 결정론 매핑 — 영문 6종 정확 일치 + 한글 라벨 1:1 번역만.
-# 한글 라벨 근거: `solution_path.schema.yaml` enum 한글 설명·`verified_solution.py` §2.4
-# docstring("대수적·기하적·귀납적")·WH-S 테스트 표기. 그 외 태그는 추측하지 않는다(None →
-# 사람 검수 큐 — "corpus-replay" 등 620문 재생 태그가 여기 해당).
-_APPROACH_BY_TAG: dict[str, str] = {value: value for value in APPROACH_TYPES} | {
-    "대수적": "algebraic",
-    "기하적": "geometric",
-    "조합적": "combinatorial",
-    "귀납적": "inductive",
-    "시각적": "visual",
-    "역방향": "backward",
-}
-
 
 def map_strategy_tag_to_approach(strategy_tag: str | None) -> str | None:
-    """`strategy_tag` 자유 텍스트 → 폐쇄 6종 approach_type. 매핑 불가면 None(추측 금지).
+    """`strategy_tag` 자유 텍스트 → 폐쇄 6종 approach_type 값. 매핑 불가면 None(추측 금지).
 
-    결정론 표만 탄다(영문 정확 일치 + 한글 라벨 1:1 번역). None 반환 = "사람이 판정할 몫"
-    (검수 큐행 — AI 자기승인 금지). 자유 텍스트 전반의 enum 승격은 S4-10(D2) 몫.
+    S4-10 좌석 승격: 자체 매핑 상수를 걷어내고 단일 번역 경로
+    `l3.solution_path.parse_approach_label`(영문 enum 값 정확 일치 + 한글 라벨 1:1)에
+    위임한다(값 중복 제거 — `ApproachType` 단일 좌석·`APPROACH_LABELS_KR` 단일 번역표).
+    None 반환 = "사람이 판정할 몫"(검수 큐행 — AI 자기승인 금지·"corpus-replay" 등 620문
+    재생 태그가 여기 해당).
     """
-    if strategy_tag is None:
-        return None
-    return _APPROACH_BY_TAG.get(strategy_tag.strip())
+    parsed = parse_approach_label(strategy_tag)
+    return parsed.value if parsed is not None else None
 
 
 def extract_plain_steps(solution_path: dict[str, Any]) -> list[str] | None:
@@ -180,19 +176,26 @@ class PromotionReport:
     `failures`는 사람 가독 사유 목록(예외 타입명 포함 — 침묵 실패 금지). 큐 카운트 2종:
     `queued_approach_unmappable`(승격 *차단* — approach NOT NULL 좌석을 채울 수 없음)·
     `queued_concept_unmatched_steps`(승격은 *진행* — concept 좌석 NULL·사람이 채움).
+
+    S4-10 재론 반영: `promoted`는 *헤더* 적재 계획 수이고, 그중 단계까지 실체화한 대표
+    경로가 `promoted_with_steps`·단계 좌석 선점으로 헤더만 적재한 경로가 두 `steps_skipped_*`
+    카운트다(불변식: promoted = promoted_with_steps + steps_skipped_additional_path +
+    steps_skipped_step_conflict — 구 `skipped_additional_path`/`skipped_step_conflict`는
+    경로 전체 스킵이었으나 이제 *단계만* 스킵한다).
     """
 
     total_input: int = 0  # verified_solutions 전 행(모든 grade)
     excluded_unverified: int = 0  # unverified 제외(격리 유지·R-S2)
     eligible_verified: int = 0  # verified 행 수(승격 후보)
-    promoted: int = 0  # solution_paths+problem_step 적재 계획 성공
-    promoted_steps: int = 0  # 적재 계획된 스텝 총수
+    promoted: int = 0  # solution_paths 헤더 적재 계획 성공(N경로 허용 — S4-10 재론)
+    promoted_with_steps: int = 0  # 그중 problem_step 단계까지 실체화한 대표 경로 수
+    promoted_steps: int = 0  # 적재 계획된 스텝 행 총수(대표 경로들의 합)
     already_promoted: int = 0  # 멱등 재실행 스킵(기존 sp-id 실재)
     skipped_empty_steps: int = 0  # steps=[](실체화할 단계 없음)
     skipped_malformed: int = 0  # solution_path JSONB 형식 위반(list[str] 아님)
     skipped_problem_missing: int = 0  # 코퍼스에 problem 부재(FK 불가·날조 금지)
-    skipped_additional_path: int = 0  # 문제당 1경로 제약(UNIQUE — S4-10 재론)
-    skipped_step_conflict: int = 0  # 기존 problem_step 선점(레거시 보존·클로버 금지)
+    steps_skipped_additional_path: int = 0  # 대표 경로가 이미 단계 실체화 — 헤더만(UNIQUE 불변)
+    steps_skipped_step_conflict: int = 0  # 레거시 problem_step 선점 — 헤더만(클로버 금지)
     queued_approach_unmappable: int = 0  # approach 미확정 → 검수 큐(승격 차단)
     queued_concept_unmatched_steps: int = 0  # 개념 매칭 검수 대기 스텝 수(승격은 진행)
     pydantic_rejected: int = 0  # Pydantic invariant 위반(방어적 — 정상 데이터면 0)
@@ -207,13 +210,14 @@ class PromotionReport:
             "excluded_unverified": self.excluded_unverified,
             "eligible_verified": self.eligible_verified,
             "promoted": self.promoted,
+            "promoted_with_steps": self.promoted_with_steps,
             "promoted_steps": self.promoted_steps,
             "already_promoted": self.already_promoted,
             "skipped_empty_steps": self.skipped_empty_steps,
             "skipped_malformed": self.skipped_malformed,
             "skipped_problem_missing": self.skipped_problem_missing,
-            "skipped_additional_path": self.skipped_additional_path,
-            "skipped_step_conflict": self.skipped_step_conflict,
+            "steps_skipped_additional_path": self.steps_skipped_additional_path,
+            "steps_skipped_step_conflict": self.steps_skipped_step_conflict,
             "queued_approach_unmappable": self.queued_approach_unmappable,
             "queued_concept_unmatched_steps": self.queued_concept_unmatched_steps,
             "pydantic_rejected": self.pydantic_rejected,
@@ -239,7 +243,11 @@ class PromotionReport:
 
 @dataclass(frozen=True)
 class PlannedPath:
-    """적재 계획 1건 — 검증 통과한 경로 모델 + 단계 스키마(래퍼가 ORM으로 변환·적재)."""
+    """적재 계획 1건 — 검증 통과한 경로 모델 + 단계 스키마(래퍼가 ORM으로 변환·적재).
+
+    S4-10 재론: `step_schemas`가 빈 튜플이면 *헤더만* 적재하는 추가 경로다(대표 경로가
+    이미 단계 좌석을 차지 — UNIQUE(problem_id, step_order) 불변·클로버 금지).
+    """
 
     path: SolutionPath
     problem_id: uuid.UUID
@@ -294,20 +302,24 @@ def plan_promotion(
     *,
     existing_problem_ids: Set[uuid.UUID],
     already_promoted_path_ids: Set[str],
-    problem_ids_with_path: Set[uuid.UUID],
     problem_ids_with_steps: Set[uuid.UUID],
     now: datetime,
 ) -> PromotionPlan:
     """승격 계획 수립 — **순수 결정론**(DB·LLM 0). 판정 순서는 아래 주석 번호 그대로.
 
-    `rows`는 호출자가 결정적 순서(`problem_id, created_at, id`)로 정렬해 넘긴다 — "문제당
-    첫 verified 경로"가 이 순서의 첫 행으로 정의된다. 프리페치 집합 4종은 래퍼가 DB에서
-    모아 넘긴다(참조 실재·멱등·제약 선점의 판정 재료).
+    `rows`는 호출자가 결정적 순서(`problem_id, created_at, id`)로 정렬해 넘긴다 — "대표
+    경로"(단계 실체화)는 단계 좌석이 빈 문제에서 이 순서의 첫 행으로 정의된다. 프리페치
+    집합 3종은 래퍼가 DB에서 모아 넘긴다(참조 실재·멱등·단계 좌석 선점의 판정 재료).
+
+    S4-10 재론: 구 시그니처의 `problem_ids_with_path`(문제당 1경로 가드)는 제거됐다 —
+    헤더는 N경로 허용이라 경로 존재가 새 경로를 막지 않고, 단계 좌석만
+    `problem_ids_with_steps`(레거시 포함 problem_step 실재)로 가드한다.
     """
     plan = PromotionPlan()
     report = plan.report
-    # 이 런에서 이미 경로를 계획한 문제 — UNIQUE(problem_id, step_order) 제약의 런 내 가드.
-    planned_problems: set[uuid.UUID] = set()
+    # 이 런에서 단계 실체화를 계획한 문제 — UNIQUE(problem_id, step_order)의 런 내 가드.
+    # (헤더는 N경로 허용이라 가드 없음 — S4-10 재론.)
+    step_planned_problems: set[uuid.UUID] = set()
 
     for row in rows:
         report.total_input += 1
@@ -340,23 +352,14 @@ def plan_promotion(
         path_id = solution_path_id_for(row.id)
         if path_id in already_promoted_path_ids:
             report.already_promoted += 1
-            planned_problems.add(row.problem_id)  # 이 문제는 이미 경로 보유 — 추가 경로 가드
             continue
-        # ⑥ 문제당 1경로(UNIQUE(problem_id, step_order) 불변 유지) — 추가 경로는 S4-10 재론.
-        if row.problem_id in problem_ids_with_path or row.problem_id in planned_problems:
-            report.skipped_additional_path += 1
-            continue
-        # ⑦ 기존 problem_step 선점(레거시 Socratic 단계) — 클로버 금지.
-        if row.problem_id in problem_ids_with_steps:
-            report.skipped_step_conflict += 1
-            continue
-        # ⑧ approach 매핑 — 불가면 사람 검수 큐(NOT NULL 좌석을 추측으로 채우지 않는다).
+        # ⑥ approach 매핑 — 불가면 사람 검수 큐(NOT NULL 좌석을 추측으로 채우지 않는다).
         approach = map_strategy_tag_to_approach(row.strategy_tag)
         if approach is None:
             report.queued_approach_unmappable += 1
             plan.queue_entries.append(_queue_approach_entry(row, steps))
             continue
-        # ⑨ Pydantic 검증(invariant 전건) — 위반은 예외 타입명과 함께 기록(침묵 실패 금지).
+        # ⑦ Pydantic 검증(invariant 전건) — 위반은 예외 타입명과 함께 기록(침묵 실패 금지).
         try:
             path = build_solution_path(
                 solution_path_id=path_id,
@@ -371,28 +374,42 @@ def plan_promotion(
                 f"pydantic_rejected vs={row.id}: {type(exc).__name__}: {str(exc)[:300]}"
             )
             continue
-        # ⑩ 적재 계획 + 개념 매칭 검수 큐(승격은 진행 — concept 좌석은 NULL·사람이 채움).
-        step_schemas = tuple(
-            ProblemStepSchema(
-                problem_id=row.problem_id,
-                step_order=step.order,
-                expected_answer=step.content,  # content 영속 좌석(모듈 docstring 근거)
-                solution_path_id=path_id,
-                concept_node_id=None,  # 매칭 검수 대기
-                reasoning_type=None,  # 원 데이터에 없음(날조 금지)
-                justification=None,
-                common_errors=None,
-                sympy_verified=step.sympy_verified,
+        # ⑧ 단계 좌석 판정(S4-10 재론) — 헤더는 무조건 계획하되, 단계는 좌석이 빈 문제의
+        #    첫 경로(대표)만 실체화한다(UNIQUE 불변·레거시 클로버 금지).
+        legacy_occupied = row.problem_id in problem_ids_with_steps
+        run_occupied = row.problem_id in step_planned_problems
+        materialize_steps = not (legacy_occupied or run_occupied)
+        step_schemas: tuple[ProblemStepSchema, ...] = ()
+        if materialize_steps:
+            step_schemas = tuple(
+                ProblemStepSchema(
+                    problem_id=row.problem_id,
+                    step_order=step.order,
+                    expected_answer=step.content,  # content 영속 좌석(모듈 docstring 근거)
+                    solution_path_id=path_id,
+                    concept_node_id=None,  # 매칭 검수 대기
+                    reasoning_type=None,  # 원 데이터에 없음(날조 금지)
+                    justification=None,
+                    common_errors=None,
+                    sympy_verified=step.sympy_verified,
+                )
+                for step in path.steps
             )
-            for step in path.steps
-        )
+            step_planned_problems.add(row.problem_id)
+            report.promoted_with_steps += 1
+            report.promoted_steps += len(steps)
+            # 개념 매칭 검수 대기 스텝 수 — problem_step 행의 NULL concept 좌석 기준
+            # (헤더만 적재한 경로의 개념 검수는 concept_sequence 축·큐 레코드로만 흐른다).
+            report.queued_concept_unmatched_steps += len(steps)
+        elif legacy_occupied:
+            report.steps_skipped_step_conflict += 1
+        else:
+            report.steps_skipped_additional_path += 1
+        # ⑨ 적재 계획 + 개념 매칭 검수 큐(승격은 진행 — concept 좌석은 NULL·사람이 채움).
         plan.planned.append(
             PlannedPath(path=path, problem_id=row.problem_id, step_schemas=step_schemas)
         )
-        planned_problems.add(row.problem_id)
         report.promoted += 1
-        report.promoted_steps += len(steps)
-        report.queued_concept_unmatched_steps += len(steps)
         plan.queue_entries.append(_queue_concept_entry(row, path_id, steps))
 
     return plan
@@ -408,7 +425,7 @@ async def promote_verified_solutions(session: AsyncSession) -> PromotionPlan:
     실사용 표면은 execute/add/flush뿐 — 테스트는 Fake를 `cast(AsyncSession, ...)`로 주입한다
     (`test_solution_bank.py` FakeSession 선례).
     """
-    # 결정적 순서(문제당 "첫 경로" 정의의 기준 — get_all_verified 정렬 미러).
+    # 결정적 순서(단계 좌석이 빈 문제의 "대표(첫) 경로" 정의 기준 — get_all_verified 정렬 미러).
     rows_result = await session.execute(
         select(VerifiedSolution).order_by(
             VerifiedSolution.problem_id,
@@ -421,21 +438,19 @@ async def promote_verified_solutions(session: AsyncSession) -> PromotionPlan:
     problem_ids = {row.problem_id for row in rows}
     existing_problem_ids: set[uuid.UUID] = set()
     already_promoted_path_ids: set[str] = set()
-    problem_ids_with_path: set[uuid.UUID] = set()
     problem_ids_with_steps: set[uuid.UUID] = set()
     if problem_ids:
         problems_result = await session.execute(
             select(Problem.problem_id).where(Problem.problem_id.in_(problem_ids))
         )
         existing_problem_ids = set(problems_result.scalars().all())
+        # 기존 경로 id만 필요(멱등) — 경로 *존재*는 더 이상 새 경로를 막지 않는다(S4-10 재론).
         paths_result = await session.execute(
-            select(SolutionPathOrm.solution_path_id, SolutionPathOrm.problem_id).where(
+            select(SolutionPathOrm.solution_path_id).where(
                 SolutionPathOrm.problem_id.in_(problem_ids)
             )
         )
-        for existing_path_id, existing_problem_id in paths_result.all():
-            already_promoted_path_ids.add(existing_path_id)
-            problem_ids_with_path.add(existing_problem_id)
+        already_promoted_path_ids = set(paths_result.scalars().all())
         steps_result = await session.execute(
             select(ProblemStep.problem_id).where(ProblemStep.problem_id.in_(problem_ids)).distinct()
         )
@@ -449,7 +464,6 @@ async def promote_verified_solutions(session: AsyncSession) -> PromotionPlan:
         rows,
         existing_problem_ids=existing_problem_ids,
         already_promoted_path_ids=already_promoted_path_ids,
-        problem_ids_with_path=problem_ids_with_path,
         problem_ids_with_steps=problem_ids_with_steps,
         now=datetime.now(tz=UTC),
     )
@@ -479,7 +493,9 @@ async def promote_verified_solutions(session: AsyncSession) -> PromotionPlan:
 PromoteFn = Callable[[bool], Coroutine[Any, Any, PromotionPlan]]
 
 
-async def _default_promote(apply: bool) -> PromotionPlan:  # pragma: no cover — 실 DB(integration)
+async def _default_promote(
+    apply: bool,
+) -> PromotionPlan:  # pragma: no cover — 실 DB(integration)
     """기본 승격 실행 — 세션 1개로 계획·적재 후 apply면 commit, 아니면 rollback(dry-run)."""
     async with get_sessionmaker()() as session:
         plan = await promote_verified_solutions(session)

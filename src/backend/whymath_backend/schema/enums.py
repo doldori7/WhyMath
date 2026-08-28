@@ -814,6 +814,55 @@ class ReasoningType(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 풀이 접근 유형 (solution_path.schema.yaml `approach_type` · SolutionPath.approach_type)
+# ──────────────────────────────────────────────────────────────────────────
+class ApproachType(str, Enum):
+    """풀이 *경로 전체* 접근 유형 — 폐쇄 6종(`SolutionPath.approach_type`).
+
+    근거: `schemas/v1.1/solution_path.schema.yaml` `approach_type` enum(6종)·
+    `03_content_generation.md` solution_approaches. S4-10(D2)에서 `l3/solution_path.py`의
+    Literal 좌석을 이 단일 좌석으로 승격했다(`ReasoningType` 단일 좌석 규약 미러 —
+    `docs/architecture/solution_module_gap_review.md` §3 D2).
+
+    축 구분 주의(직교 3축 — `tests/backend/l1/test_strategy_governance.py` disjoint 동결):
+      - **ApproachType**(이 enum) — *완성된 풀이 경로 전체*의 유형("이 풀이는 기하적 풀이다").
+      - `ReasoningType` — *한 스텝*의 추론 유형(한 대수적 풀이 안에서도 스텝마다
+        치환·사례분류·귀납이 섞인다).
+      - `StrategyNode`(l1 strategy_graph) — 문제 공략 *계획 발상* heuristic(Polya 계획 단계 —
+        아직 풀이가 완성되기 전의 접근 아이디어).
+
+    ⚠️ 폐쇄집합(6종) — *제거는 어렵고 추가는 신중해야* 한다(무한 온톨로지 금지·관계 타입 폭발
+    방지). "비유적" 등 새 유형 제안은 오개념 개입·정의 레지스터 `analogy` 축과 혼동 위험이라
+    기각된 전례가 있다(§3 D2 — 프롬프트 정합에서 제거).
+
+    멤버명=값(소문자 영어) — yaml enum 키·DB TEXT 저장값·기존 Literal 값과 1:1 동일
+    (`ReviewStatus` 소문자 멤버 선례). `L2 MasteryState.preferred_solution_style`이 이 값을
+    그대로 취한다(yaml 관계 명세). use_enum_values=True 직렬화 시 소문자 값 보존
+    (예: approach_type="algebraic").
+    """
+
+    algebraic = "algebraic"
+    """대수적 — 식 변형·계산 중심."""
+
+    geometric = "geometric"
+    """기하적 — 도형·그래프 중심."""
+
+    combinatorial = "combinatorial"
+    """조합적 — 경우의 수·셈 중심."""
+
+    inductive = "inductive"
+    """귀납적 — 패턴·수학적 귀납법 중심."""
+
+    visual = "visual"
+    """시각적 — 그림·다이어그램으로 통찰."""
+
+    backward = "backward"
+    """역방향 — 결론에서 거꾸로 추론. (ReasoningType.BACKWARD와 *다른 축*이다 — 소문자
+    "backward"는 풀이 전체 축, 대문자 "BACKWARD"는 스텝 축. 거버넌스 disjoint 검사는
+    strategy slug 기준이라 이 두 축 간 표기 유사는 허용되며, 의미 구분은 타입이 지킨다.)"""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 개념 그래프 (§4.2 concept 도메인 인라인 DDL — 4종)
 # ──────────────────────────────────────────────────────────────────────────
 # §14.3에 별도 `CREATE TYPE`이 없어 §4.2 DDL의 컬럼 인라인 주석을 정본으로 채택한다
