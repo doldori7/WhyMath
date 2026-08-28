@@ -1,0 +1,188 @@
+# 32. EOS 학습 이력(Learning History) 설계
+
+> **범위**: 학생 행동 이벤트에서 학습자 상태 추정에 이르는 학습 데이터 기반의 구조 확정 — Raw Event / Learning History / Learner State 3계층 분리, Evidence와 Mastery 분리, 버전 고정, 시간 모델, 개인정보 경계.
+> **상태**: 설계 확정(2026-08-25). 외부 EOS 설계안(32_학습 이력)을 WhyMath 현행 구현과 대조 검토하여 정정 수용. 후속 구현 태스크 5종 등재(EOS-32, EOS-45~48).
+> **관련**: `docs/architecture/02_learner_model.md`, `docs/architecture/44_eos_version_management.md`, `docs/architecture/04a_wh1_tutoring_harness.md`, `docs/standards/eos_identity_layer_011_1_decision.md`, `schemas/v1.0/schema_v1.0.md` 도메인 4~7, `docs/strategy/subject_expansion_readiness.md`
+
+---
+
+## 1. 핵심 설계 원칙 8가지
+
+1. **Raw Event와 Learning History를 분리한다.**
+2. **Learning History와 Learner State를 분리한다.** 학습 이력은 사실의 시간축 기록이고, Learner State는 그것으로부터 추론한 현재 추정값이다. 같은 테이블에 섞지 않는다.
+3. **원본 이벤트는 갱신하지 않는다(append-only).** 단 "영구 불변"이 아니라, 삭제는 오직 개인정보 절차(삭제권·보존기한 파기)로만 수행하고 감사는 잔존한다(§6).
+4. **Mastery는 결과이며 Evidence가 원본이다.** `mastery = 0.76`만 저장하지 않고, 왜 그 값인지 추적 가능한 증거 시계열을 유지해 모델 교체 시 재계산할 수 있게 한다.
+5. **Problem ID뿐 아니라 Version ID를 기록한다.** 학습 기록은 당시 사용한 콘텐츠 버전에 고정된다(44번 문서 원칙 6과 동일).
+6. **Attempt / Submission / Hint / Step을 구분한다.**
+7. **Subject-neutral core + Subject extension 구조를 원칙으로 확정한다.** 단 실구현은 과목 확장 착수 트리거 전까지 보류한다(§9).
+8. **파생 learner state는 언제든 history로부터 재계산 가능해야 한다.**
+
+이 8가지는 Architecture Decision으로 확정한다.
+
+---
+
+## 2. WhyMath 맥락에서의 조율
+
+### 2.1 전제 문서의 실재성 정정
+
+외부 EOS 설계안이 참조하는 `204_교육 이벤트 시스템`, `205_공통 메타데이터` 문서는 이 저장소에 **문서로 존재하지 않는다**. 해당하는 실질 정본은 코드에 있다:
+
+- 이벤트 payload 계약 정본: `src/backend/whymath_backend/schema/event_data_contract.py`(EVENT_DATA_CONTRACT)
+- 이벤트 envelope·멱등키·PII 금지키 차단: `src/backend/whymath_backend/schema/analytics_event.py`
+- 감사 이벤트: `src/backend/whymath_backend/db/models/audit.py`(deletion_audit·privacy_audit·defect_report — append-only, UPDATE/DELETE 라우터 없음)
+
+따라서 본 문서는 "204/205 선행 문서에 기반한다"가 아니라, **위 코드 계약을 정본으로 삼아 32번 계층을 그 위에 정의**한다. 204/205를 별도 문서로 착지시킬 필요가 생기면 그때 이 코드 계약을 문서화하는 방향으로 작성한다(코드가 선, 문서가 후).
+
+### 2.2 ID 체계
+
+외부안의 `LS_01JXYZ...`, `ATT_...` 같은 프리픽스+ULID 예시는 채택하지 않는다. `docs/standards/eos_identity_layer_011_1_decision.md`에서 확정한 대로 **UUID PK(`gen_random_uuid` server_default) + 의미적 canonical ID(`math.<area>.<slug>`) 혼합**을 유지한다. "ID는 무의미하다"는 원칙은 이미 거부된 바 있다. 본 문서의 모든 예시 ID는 UUID로 읽는다.
+
+### 2.3 3계층 분리는 신규 도입이 아니라 기존 구조의 명문화
+
+외부안의 "Raw Event → Learning History → Learner State" 분리는 WhyMath 코드에 **이름 없이 이미 존재**한다. 본 문서의 역할은 이 분리를 ADR로 동결하고, 확인된 갭만 보강하는 것이다.
+
+| 계층 | 의미 | 기존 구현 |
+|---|---|---|
+| Raw Event | 원자적 행동 사실, 갱신 없음 | `attempt_event`(TimescaleDB hypertable, BIGSERIAL+event_at 복합 PK, INSERT 전용 — `db/models/activity.py:238`), `evidence_event`(payload 봉투 암호화) |
+| Learning History | 교육적 의미가 부여된 시계열·이력 | `learning_session`·`problem_attempt`(`db/models/activity.py`), `concept_mastery_history`·`skill_mastery_history`(append-only 측정 시계열 — `db/models/assessment.py`), `daily_learning_metrics` 등 롤업 3종(`db/models/timeseries.py`) |
+| Learner State | 추론된 현재 학습자 상태 | `UserStateSnapshot`(`db/models/user.py:282`), `l2/learner_state.py` 조립기, `MisconceptionHypothesisRecord` |
+
+주의: Learning History는 단일 정규화 테이블이 아니라 **목적별 다중 테이블**(이벤트 로그·측정 시계열·롤업·증거)이다. hypertable 시계열 + 삭제권 오케스트레이션이라는 이 workload에는 이 구조가 맞으며, 단일 거대 history 테이블을 새로 만들지 않는다.
+
+---
+
+## 3. 데이터 흐름
+
+```
+학생 행동
+   ↓
+Raw Event (attempt_event / evidence_event — append-only)
+   ↓ semanticization
+Learning History (learning_session / problem_attempt / mastery_history / rollups)
+   ↓ evidence
+Evidence (evidence_links / concept_mastery_history / pedagogy_evidence)
+   ↓ inference (순수 추정 커널: l2/bkt.py, irt.py)
+Learner State (UserStateSnapshot / LearnerState 조립 / MisconceptionHypothesis)
+   ↓
+AI Tutor · Learning Path · Analytics · Teacher Dashboard
+```
+
+L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "직전 측정 SELECT → 순수 BKT 계산 → `concept_mastery_history` append-only INSERT"의 얇은 DB 래퍼이고, `l2/learning_metrics_rollup.py`는 3개 원천 테이블만으로 일별 멱등 upsert를 수행한다("측정된 것만 적재, 추론 지표 날조 금지").
+
+---
+
+## 4. 엔티티 모델 — 기존과 신규의 구분
+
+| 외부안 엔티티 | 판정 | 근거 |
+|---|---|---|
+| LearningSession | ✅ 기존 유지 | `learning_session`(session_type, 카운트, focus/engagement 점수) |
+| ProblemAttempt | ✅ 기존 유지 + 보강 | `problem_attempt`(is_correct, student_answer, used_hint, stuck_at_step, step_times JSONB). 버전 고정은 EOS-47에서 보강 |
+| AnswerSubmission | 🆕 신규 (EOS-32) | 다회 제출의 정규 기록이 없음. attempt_event로의 재구성도 불가 — `답입력` 이벤트 payload(`ResponseLatencyEventData`, `schema/event_data_contract.py`)는 응답 본문·채점 결과를 담지 않는 지연 신호다. 과거분 백필 없이 신규 수집 시작 |
+| HintUsage | 🆕 신규 (EOS-45) | 현재 `used_hint` 불리언뿐. 횟수·레벨·엔람시간 필요(무힌트 정답과 힌트 3회 정답의 숙련도 해석 구분) |
+| SolutionStep(학생 풀이) | 🆕 신규 (EOS-46) | 현재 `step_times` JSONB + attempt_event 분산. 23_단계별 풀이와 정합 필요. **단 `db/models/solution_node.py`의 `SolutionNode`는 WH-S AI 솔버의 MCTS 노드(학생 데이터 아님)이므로 명칭·책임을 명시 구분한다** |
+| MasteryEvidence | ✅ 기존 유지 | `concept_mastery_history`/`skill_mastery_history` append-only 시계열 + `evidence_links`(polarity ±1) |
+| MisconceptionObservation | ✅ 기존 유지 | `MisconceptionHypothesisRecord`(활성 가설) + `evidence_links`(지지/반박 누적). suspected→likely→confirmed→remediated 상태 전이 정신과 일치 |
+| LearningHistorySummary | ✅ 기존 유지 | `daily_learning_metrics`·`user_behavior_metrics` 롤업 + `UserStateSnapshot` |
+| LearningActivity(활동 단위) | ⚠️ 부분 | 세션→attempt 직결 + attempt_event가 활동 분해를 담당. 문제풀이 외 활동(개념학습·시각화 조작 등)이 1급 엔티티로 필요해지면 그때 분리 검토. 현재는 이벤트로 충분 |
+
+### AnswerSubmission 분리의 근거
+
+학생은 문제 하나에 답을 여러 번 제출할 수 있다(오답 → 오답 → 정답). Attempt에 최종 답만 남기면 "두 번째 시도의 오답이 어떤 오개념을 시사하는가"가 손실된다. 분리된 submission 시퀀스는 오개념 시스템(`evidence_links`)의 핵심 입력이다.
+
+**과거 이력 백필은 불가하다.** `attempt_event`의 `답입력` 이벤트는 응답 본문·채점 결과를 담지 않는 지연 신호(`ResponseLatencyEventData` = `server_latency_ms`·`mode`·`persona`뿐)이므로, 과거 제출 시퀀스를 이벤트 로그에서 재구성하는 것은 대화 타이밍으로 제출 레코드를 *날조*하는 일이다. 따라서 과거분은 `problem_attempt.student_answer`의 최종값만 복구 대상이고, 시퀀스 수집은 신규 엔티티 배포 시점부터 시작한다.
+
+---
+
+## 5. 버전 고정 (44번 문서와의 연계)
+
+학습 기록은 논리적 Entity가 아니라 **당시 사용한 Version에 고정**한다(44번 원칙 6).
+
+- 설계는 `docs/architecture/44_eos_version_management.md`가 정본: Entity ID ≠ Version ID, Published immutable, Runtime VersionContext(problem_version_id·solution_version_id·pedagogy_version_id·prompt_version_id 등).
+- 현재 미구현: `Problem.content_version_id`는 011_1 후속 태스크(ARCH-31)로 등재돼 있으나 미착지. **EOS-47**이 이를 `problem_attempt`까지 착지시킨다(선행: EOS-44 설계 + ARCH-31 실구현).
+- 문제 수정 후에도 과거 기록이 원 version을 가리켜 재현 가능해야 한다(재현성 테스트가 acceptance).
+
+## 6. 불변성과 삭제권 — "immutable"의 정정
+
+외부안의 "Raw Event = immutable"은 미성년자 삭제권과 충돌하므로 WhyMath에서는 다음으로 정정한다:
+
+1. 이벤트·이력 테이블은 **갱신하지 않는다**(append-only 관행 — 코드 전반에 존재).
+2. **삭제는 오직 개인정보 절차로만** 수행한다:
+   - 삭제권: `privacy/erasure.py`의 `_ERASURE_PLAN`(user 연결 테이블 명시 삭제, 완전성은 `tests/backend/privacy/test_erasure_plan_completeness.py`가 동결)
+   - 보존 파기: `privacy/retention.py`의 `_RETENTION_PLAN`(`pii_retention_years` 초과분 파기, `retention_until` 경과 증거 purge)
+   - hypertable 느슨참조 고아 방지: attempt_event orphan DELETE 트리거(`alembic/versions/20260604_0200`)
+3. 삭제 후에도 **감사는 잔존**한다(`deletion_audit`은 user FK 없이 잔존).
+4. DB 수준 WORM 강제(UPDATE/DELETE 차단 트리거)는 두지 않는다 — 삭제권 배관과 충돌하기 때문. 불변성은 API 부재와 관행으로 지키고, 파괴 행위는 감사로 잡는다.
+5. 분석 제외는 삭제가 아니라 상태로 표현한다(excluded_from_analysis류). 테스트 계정 오염은 삭제 대상이 아니라 분석 플래그 대상.
+
+## 7. 시간 모델
+
+외부안 지적대로 두 가지가 현재 스키마의 실제 갭이며, **EOS-48**로 보강한다:
+
+- **event_time / ingested_at 분리**: 오프라인 태블릿이 하루 뒤 sync하는 시나리오에서 서버 수신 시각을 사건 시각으로 착각하면 안 된다.
+- **active / idle / elapsed 구분**: `session_end - session_start`를 학습 시간으로 쓰지 않는다(자리 비움 오염). 단 롤업의 "측정된 것만 적재" 원칙을 유지한다 — 클라이언트 heartbeat 등 **실측 신호가 있을 때만** active를 적재하고, 없으면 추정치를 날조하지 않는다.
+
+## 8. Evidence와 Learner State의 분리
+
+`mastery = 0.76`만 저장하지 않는다. 현행 구조가 이미 이 원칙을 구현한다:
+
+- Evidence(원본): `evidence_links`(학습 이벤트 → 오개념 가설의 지지/반박, polarity ±1, retention_until), `concept_mastery_history` append-only 시계열, `l2/pedagogy_evidence.py`(처치·결과 이벤트, HMAC 키드 해시 가명화)
+- 추정(순수): `l2/bkt.py`·`irt.py`·`ability_estimation.py`(DB 무관 순수 계산)
+- State(출력): `UserStateSnapshot`, `l2/learner_state.py` 조립기
+
+모델 교체 시 history로부터 재계산 가능해야 한다는 원칙 8의 근거가 이 분리다. 신규 evidence writer를 추가할 때는 **암호화 바이트만 수신하고 cipher에 접촉하지 않는** `evidence_event_store.py` 패턴을 따른다.
+
+## 9. Subject-neutral 원칙 — 설계 확정, 구현 보류
+
+과목 중립 core + 과목별 extension(response payload를 `response_type + payload`로 일반화)은 방향으로 **확정**한다. 단:
+
+- WhyMath는 현재 수학 고정이며, `docs/strategy/subject_expansion_readiness.md`의 보류 대장 원칙(**착수 트리거 전 구현 금지**)이 적용된다.
+- 따라서 본 문서에서는 "신규 학습 이력 엔티티를 설계할 때 수학 전용 필드를 핵심 스키마에 박지 않는다"는 **설계 제약**으로만 강제한다. `math_problem_id` 같은 수학 전용 컬럼을 핵심 테이블에 추가하는 것은 금지, 수학 특화 내용은 payload/확장 컬럼으로 격리.
+- 물리·역사용 response_type 실구현은 과목 확장 트리거 이후다.
+
+## 10. 저장소 분리 원칙
+
+- 운영 이력: PostgreSQL(TimescaleDB hypertable 포함)
+- 개념 관계: PG 단일 평면 개념 그래프(Neo4j 런타임 미도입 — 기존 결정)
+- 학생 이벤트를 Knowledge Graph에 넣지 않는다. 그래프에서 쓰는 것은 `mastered / learning / struggling` 같은 **요약된 learner-state edge**까지다.
+- AI Tutor 대화 전문은 Learning History에 넣지 않는다. 현행 구조 유지: `dialogue`/`dialogue_turn`(본문 AES-256-GCM 봉투 암호화)에 보존하고, 교육적으로 의미 있는 상호작용만 이벤트로 추출한다.
+
+## 11. 개인정보 경계
+
+학습 이력은 성취도·오개념·행동 패턴이 장기 누적되는 고민감 데이터다. 신규 엔티티 추가 시 다음 배선이 **acceptance의 필수 항목**이다:
+
+1. `privacy/erasure.py` `_ERASURE_PLAN` — 삭제 대상 포함(완전성 테스트가 metadata 전수 스윕으로 강제)
+2. `privacy/retention.py` `_RETENTION_PLAN` — 보존기한 파기 대상 포함
+3. `privacy/export.py` — 반출 대상 포함(성적 예측 필드의 학생 표면 제외 정책 준수)
+4. 본문류(payload·응답 원문)는 봉투 암호화 컬럼 패턴(`payload_encrypted` + nonce) 적용 검토
+5. learner 참조는 pseudonymous `user_id`만 — PII 직접 컬럼 금지(envelope의 PII 금지키 차단과 동일 정신)
+
+## 12. MVP 범위
+
+- **MVP(현재 유지)**: learning_session / problem_attempt / attempt_event / mastery_history 계열 / 롤업 / evidence_links — 이미 존재.
+- **이번 확정으로 보강(후속 태스크)**: AnswerSubmission(EOS-32) · HintUsage(EOS-45) · 학생 풀이 step(EOS-46) · 버전 고정(EOS-47) · 시간 모델(EOS-48).
+- **EOS 단계(보류)**: cross-subject history, longitudinal record, KT 계열(BKT/DKT/Transformer) 교체 가능 구조는 원칙 4·8의 evidence 분리로 이미 확보 — 전용 인프라는 착수 트리거 후.
+
+## 13. 후속 태스크
+
+아래 5종은 `scripts/harness/backlog.py add`로 등재 완료(2026-08-25):
+
+1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선).
+2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트.
+3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
+4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).
+5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지).
+
+공통 acceptance: 신규 테이블은 §11의 privacy 3종 배선 + `test_erasure_plan_completeness` 통과.
+
+---
+
+## 14. 참고 문서
+
+- `docs/architecture/02_learner_model.md` — LearnerState/MasteryState 정의(MasteryState는 미구현 명시)
+- `docs/architecture/44_eos_version_management.md` — 버전 분리·VersionContext 정본
+- `docs/architecture/04a_wh1_tutoring_harness.md` — evidence_links 설계 정본
+- `docs/standards/eos_identity_layer_011_1_decision.md` — ID 체계 확정안
+- `schemas/v1.0/schema_v1.0.md` 도메인 4~7 — 학습 활동 데이터 DDL 정본(hypertable 선언 포함)
+- `docs/strategy/subject_expansion_readiness.md` — 과목 확장 보류 대장 원칙
+- `src/backend/whymath_backend/schema/event_data_contract.py` — 이벤트 payload 계약 정본
+- `src/backend/whymath_backend/privacy/erasure.py` / `retention.py` / `export.py` — 개인정보 3종 배선

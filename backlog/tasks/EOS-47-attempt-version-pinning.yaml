@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-47-attempt-version-pinning
+title: "problem_attempt 버전 고정 — problem_version_id + evaluation_context"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - EOS-44-version-management-design
+  - ARCH-31
+requires_gates: []
+acceptance:
+  - "Content Version 분리(ARCH-31: Problem.content_version_id + ContentVersion 스키마) 착지 후 problem_attempt에 version 고정 컬럼 추가(alembic)"
+  - "evaluation_context 스냅숏(curriculum_version, concept_graph_version, grading_policy_version) 기록 계약 — 44_eos_version_management.md VersionContext와 정합"
+  - "과거 기록 재현성 테스트: 문제 수정(신규 version) 후에도 attempt가 원 version을 가리킴"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/activity.py
+  - "src/backend/alembic/versions/**"
+  - "tests/backend/**"
+session: null
+notes: "32_학습 이력 검토 갭이자 44번 문서 미구현분(content_version_id) 착지 앞당기기. 선행: EOS-44(설계) + ARCH-31(Content Version 실구현)."
+updated: 2026-08-26

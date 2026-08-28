@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-48-event-time-active-time
+title: "학습 시간 모델 — event_time/ingestion_time 분리 + active/idle 구분"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "attempt_event·problem_attempt에 event_time(클이언트 발생 시각)과 ingested_at(서버 수신 시각) 분리 — 오프라인 태블릿 sync 시나리오 테스트 포함"
+  - "learning_session/problem_attempt에 active_seconds/idle_seconds 구분 또는 산출 계약 + 롤업(learning_metrics_rollup) 반영 — '측정된 것만 적재' 원칙 유지"
+  - "privacy 3종 배선 영향 검토 + 완전성 테스트 통과"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/activity.py
+  - src/backend/whymath_backend/l2/learning_metrics_rollup.py
+  - "src/backend/alembic/versions/**"
+  - "src/backend/whymath_backend/privacy/**"
+  - "tests/backend/**"
+session: null
+notes: 32_학습 이력 검토 갭. session_end-start를 학습시간으로 쓰는 부정확 해소가 목적.
+updated: 2026-08-26
