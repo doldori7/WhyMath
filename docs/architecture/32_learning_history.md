@@ -77,7 +77,7 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 |---|---|---|
 | LearningSession | ✅ 기존 유지 | `learning_session`(session_type, 카운트, focus/engagement 점수) |
 | ProblemAttempt | ✅ 기존 유지 + 보강 | `problem_attempt`(is_correct, student_answer, used_hint, stuck_at_step, step_times JSONB). 버전 고정은 EOS-47에서 보강 |
-| AnswerSubmission | 🆕 신규 (EOS-32) | 현재 다회 제출은 attempt_event 로그 재구성뿐. 오류 분석 1급 입력을 위해 정규 엔티티로 분리 |
+| AnswerSubmission | 🆕 신규 (EOS-32) | 다회 제출의 정규 기록이 없음. attempt_event로의 재구성도 불가 — `답입력` 이벤트 payload(`ResponseLatencyEventData`, `schema/event_data_contract.py`)는 응답 본문·채점 결과를 담지 않는 지연 신호다. 과거분 백필 없이 신규 수집 시작 |
 | HintUsage | 🆕 신규 (EOS-45) | 현재 `used_hint` 불리언뿐. 횟수·레벨·엔람시간 필요(무힌트 정답과 힌트 3회 정답의 숙련도 해석 구분) |
 | SolutionStep(학생 풀이) | 🆕 신규 (EOS-46) | 현재 `step_times` JSONB + attempt_event 분산. 23_단계별 풀이와 정합 필요. **단 `db/models/solution_node.py`의 `SolutionNode`는 WH-S AI 솔버의 MCTS 노드(학생 데이터 아님)이므로 명칭·책임을 명시 구분한다** |
 | MasteryEvidence | ✅ 기존 유지 | `concept_mastery_history`/`skill_mastery_history` append-only 시계열 + `evidence_links`(polarity ±1) |
@@ -89,6 +89,8 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 
 학생은 문제 하나에 답을 여러 번 제출할 수 있다(오답 → 오답 → 정답). Attempt에 최종 답만 남기면 "두 번째 시도의 오답이 어떤 오개념을 시사하는가"가 손실된다. 분리된 submission 시퀀스는 오개념 시스템(`evidence_links`)의 핵심 입력이다.
 
+**과거 이력 백필은 불가하다.** `attempt_event`의 `답입력` 이벤트는 응답 본문·채점 결과를 담지 않는 지연 신호(`ResponseLatencyEventData` = `server_latency_ms`·`mode`·`persona`뿐)이므로, 과거 제출 시퀀스를 이벤트 로그에서 재구성하는 것은 대화 타이밍으로 제출 레코드를 *날조*하는 일이다. 따라서 과거분은 `problem_attempt.student_answer`의 최종값만 복구 대상이고, 시퀀스 수집은 신규 엔티티 배포 시점부터 시작한다.
+
 ---
 
 ## 5. 버전 고정 (44번 문서와의 연계)
@@ -96,7 +98,7 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 학습 기록은 논리적 Entity가 아니라 **당시 사용한 Version에 고정**한다(44번 원칙 6).
 
 - 설계는 `docs/architecture/44_eos_version_management.md`가 정본: Entity ID ≠ Version ID, Published immutable, Runtime VersionContext(problem_version_id·solution_version_id·pedagogy_version_id·prompt_version_id 등).
-- 현재 미구현: `Problem.content_version_id`는 011_1 후속 태스크로 등재돼 있으나 미착지. **EOS-47**이 이를 `problem_attempt`까지 착지시킨다(EOS-44 선행).
+- 현재 미구현: `Problem.content_version_id`는 011_1 후속 태스크(ARCH-31)로 등재돼 있으나 미착지. **EOS-47**이 이를 `problem_attempt`까지 착지시킨다(선행: EOS-44 설계 + ARCH-31 실구현).
 - 문제 수정 후에도 과거 기록이 원 version을 가리켜 재현 가능해야 한다(재현성 테스트가 acceptance).
 
 ## 6. 불변성과 삭제권 — "immutable"의 정정
@@ -167,7 +169,7 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선).
 2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트.
 3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
-4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 선행).
+4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).
 5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지).
 
 공통 acceptance: 신규 테이블은 §11의 privacy 3종 배선 + `test_erasure_plan_completeness` 통과.

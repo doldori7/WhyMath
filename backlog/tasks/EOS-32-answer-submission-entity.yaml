@@ -12,7 +12,7 @@ depends_on: []
 requires_gates: []
 acceptance:
   - "answer_submission 스키마(Pydantic)+ORM+alembic 마이그레이션 설계·구현: attempt FK, sequence_no, response_type, raw_response/latex, canonical_ast(JSONB), grading_result, error_analysis(suspected_misconception_ids)"
-  - "기존 problem_attempt.student_answer + attempt_event(답입력)와의 이관·병행 전략 문서화(32_learning_history.md §후속)"
+  - "이관·병행 전략 문서화(32_learning_history.md §후속) — 과거 다회 제출 시퀀스는 백필 불가: attempt_event의 응답 이벤트 payload(ResponseLatencyEventData, schema/event_data_contract.py)는 응답 본문·채점 결과를 담지 않으므로, 과거분은 problem_attempt.student_answer 최종값만 복구하고 시퀀스 수집은 신규 엔티티 배포 시점부터"
   - "privacy 3종 배선 갱신: erasure._ERASURE_PLAN·retention._RETENTION_PLAN·export 대상에 신규 테이블 포함 + test_erasure_plan_completeness 통과"
 artifacts: []
 paths:
@@ -22,5 +22,5 @@ paths:
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
 session: null
-notes: "32_학습 이력 검토에서 확인된 갭. 현재 다회 제출은 attempt_event 로그 재구성뿐이라 오류 분석 입력으로 불충분. 오개념 시스템(evidence_links)의 1급 입력이 목적."
+notes: "32_학습 이력 검토에서 확인된 갭. attempt_event는 응답 지연 이벤트라 제출 본문·채점을 담지 않아 과거 제출 시퀀스 재구성 불가 — 정규 엔티티로 신규 수집 시작. 오개념 시스템(evidence_links)의 1급 입력이 목적."
 updated: 2026-08-26

@@ -19,6 +19,8 @@ paths:
   - src/backend/whymath_backend/db/models/activity.py
   - src/backend/whymath_backend/schema/event_data_contract.py
   - "src/backend/alembic/versions/**"
+  - "src/backend/whymath_backend/privacy/**"
+  - "tests/backend/**"
   - "docs/architecture/**"
 session: null
 notes: "32_학습 이력 검토 갭. 정오답보다 '어느 단계에서 오류'를 학습하는 데이터가 목적. db/models/solution_node.py는 학생 데이터가 아니므로 혼동 금지."
