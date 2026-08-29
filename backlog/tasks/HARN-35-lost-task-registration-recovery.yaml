@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-35-lost-task-registration-recovery
+title: "고아 브랜치의 태스크 등재 유실 7건 회수 — 오개념 r2 5종 + 면제만료 + cp949 감사"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정: MISC-07~11 5건(오개념 r2 갭 — OCR 진단 합류·품질 게이트 단일 집행·ANALOGY 신호원·해소율 정직화·고립 완료분 회수)은 backup/whymath-misconception-review-r1skwr-pre-rebase(a95bb456)에만 존재, SEC-25(declared_unwired 면제 4건 만료 조건 — '만료 없는 유예 금지' 원칙 직결)는 backup/school-subject-6ybkis-pre-rebase(5d2c2b71)에만, OPS-24(cp949 CLI 출력 안전성 전수 감사)는 vafylb(b1218739)에만 존재 — 전건 main 부재 재현: git cat-file -e origin/main:backlog/tasks/<파일> → 실패"
+  - "② 재등재는 전건 backlog.py add 경유·원 번호 재사용 금지 — MISC-07~11은 MISC-12~16(PR #893 인플라이트)과, OPS-24는 CLAUDE.md 사고 경위 속 별건 OPS-24(review_status backfill)와, OPS-35는 5t5lmv(클라버전 게이트)·t608mk(메트릭 롤업) 이중 사용과 각각 충돌 이력 — CLI가 제안하는 번호 채택"
+  - "③ 본문 대조: 재등재 전 각 태스크의 갭이 현행 main에서 이미 해소됐는지 코드 grep으로 교차 확인(해소분은 재등재 대신 판정 기록) — 특히 MISC-11(고립 완료분 회수)은 이 감사의 HARN-34 ③과 중복이면 흡수 처리"
+  - "④ 집행 지점: backlog.py validate exit 0 + next 후보에 실제 노출"
+artifacts: []
+paths:
+  - "backlog/tasks/**"
+session: null
+notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md. 회수 완료 전 원 브랜치(r1skwr backup·6ybkis backup·vafylb) 삭제 금지. t608mk의 OPS-35/36/37·QUAL-05, azdnov의 HARN-22, 5t5lmv의 A11Y-02·OPS-35는 각각 OPS-41·OPS-40이 소유하므로 이 태스크 범위 밖(중복 등재 금지)"
+updated: 2026-08-29

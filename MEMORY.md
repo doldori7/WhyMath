@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-29 (감사·회수·정리): **미머지 브랜치 4차 전수 감사 — 법령 게이트 유실 발견(HARN-34 P1)·태스크 등재 유실 7건(HARN-35)·claim 경로 CRLF 오염(HARN-36) + 삭제 4차 배치 6건** (Kiki "미머지 파일 처리 검토" 요청, claude 판정·등재)
+- **판정 정본**: `docs/reviews/unmerged_branch_audit_2026-08-29.md` (PR 미오픈 40건 전수·blob 단위 대조)
+- **최중요 발견**: "재생성-머지" 패턴(#815→#822, #744→#821)이 코드만 착지시키고 부기를 유실 — 변호사 검토 게이트 `G-export-prediction-disclosure`(ph1ad7 gates.yaml에만 존재)·ASM-12/MISC-04 done 기록·SEC-28 done 경로가 전부 미착지. "회수 시 acceptance 전수 재대조 생략 금지"(08-10)의 4번째 축(약속한 **부기**가 다 왔는가) 실사례
+- **backup/*-pre-rebase가 유일 사본인 사례 2건**: r1skwr backup(MISC-07~11 오개념 r2 태스크 5종)·6ybkis backup(SEC-25 면제 만료) — "백업"이라는 이름이 원본 실재 착시를 만듦
+- **6eejrv(PB-08 redaction) 판정 확정**: #802 close(Kiki — SEC-24 projection과 상호배타) 존중, 정답 축은 main 해소 실측(problems·gating 전건 PublicProblem). 검수 축(pending 노출)은 main PB-08(todo) 소유로 잔존
+- **감사 도구 함정 신규 실측**: `git rev-parse origin/main:<부재경로>`는 인자를 에코해 부재 파일을 '상이'로 위장 — 존재 판정은 `git cat-file -e` 필수(판정 문서 §1에 방법 동결)
+- 3차 배치(admin-01) 집행 확인(잔존 0/1). 4차 배치 6건 등재, 허용 패턴 밖 2건(pr/collab-07·backend/cur-16 v1)은 Kiki 수동 삭제로 분리
+
 ### 2026-08-14 (회수·재착지·시각화 R4): **시각화 4차 재점검(R4) 재착지 — 본 편 자신이 force-push로 유실됐다가 현행 main 재실측 후 복구. `VIZ-10` 등재** (claude, Kiki "15. 시각화 분야의 빠진 부분 점검·설계"의 완결)
 
 - **① 08-11 R4 산출물이 유실됐다** — PR #812(CI 16/16 green)가 base 정합 반복(main 회전 > backend CI 27분) 중 브랜치 head가 **R3 계보로 되감겼다**: 08-11 커밋 `7ce40f4f`(R4 산출물)·`b7dd3796`(재정합)이 08-10 커밋 `5feeea95`로 대체됨 → 스쿼시 머지 `22b6116b`가 **1파일 4줄**(`S4-22` YAML)만 담음. **R3 회수분은 살아남았고**(main에 `number_line` 5회·`VIZ-07` done·`VIZ-08`/`VIZ-09`/`OPS-26`·§8·CLAUDE.md 회수 규칙 전부 실재) **R4 층만 사라졌다**(본 문서·`VIZ-10`·원본 포인터·MEMORY 로그).

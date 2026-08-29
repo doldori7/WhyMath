@@ -35,4 +35,31 @@
 #
 # 즉 브랜치에만 있고 main에 없는 내용은 **0건**이다(폐기된 옛 문구 제외).
 # 열린 PR #713은 이 브랜치가 head라 삭제 시 자동으로 닫힌다 — 그 PR의 내용은 #786이 회수했다.
-claude/admin-01-operator-seat-grant-audit
+# claude/admin-01-operator-seat-grant-audit  ← 3차 배치 집행 완료(2026-08-29 ls-remote 잔존 0/1 실측)
+
+# ── 2026-08-29 4차 배치 (6건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-08-29.md ──
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   backup/collaboration-qlzq5m-pre-rebase          = 65b90308 (고유줄 0)
+#   backup/whymath-collaboration-design-qlzq5m-pre-rebase = 65b90308 (동일 head 중복 백업)
+#   backup/webpage-plan-8pma1f-pre-rebase           = eef8aee3 (상이 0·부재 0 — web_strategy.md 착지)
+#   whymath-nlp-design-my18a1                       = a89a6c99 (08-04 계보 재확인·config 고유 2줄=#783 대체 구문)
+#   whymath-math-engine-design-4qbaru               = f0edfac1 (08-04 계보 재확인)
+#   whymath-ai-recommendation-review-tv1f08         = fdf46d7b (REC-09 done·잔여 전건 main 우세 실측)
+#
+# ⚠ 회수 태스크가 참조하는 브랜치는 의도적으로 제외(회수 완료 전 삭제 금지) —
+#   HARN-34: ph1ad7 · misc-04-recovery · s4-52-verifier-v2-design-status · eos-curriculum-semantic-backbone-adr
+#   HARN-35: backup/whymath-misconception-review-r1skwr-pre-rebase · backup/school-subject-6ybkis-pre-rebase · vafylb
+#   OPS-41:  backup/ai-content-a3ysut-pre-rebase · t608mk · azdnov (+8ap436 backup은 ③ 확인 후)
+#   기존 제외 승계: k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07 잔여) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · trjg5x(PB-06/Kiki) · 6dszy0 2건(MISC-01/03·PB-02) · 6eejrv(PB-08 참고) ·
+#   e98dw4(S3-28 잔여) · q8tvcx(OPS-38) · 7n9n72/40xspg(잔여 재열거 미완 보류)
+#
+# ⚠ 허용 패턴(claude/*) 밖이라 이 배치에 못 싣는 삭제 확정 2건 — Kiki 수동 삭제 필요:
+#   pr/collab-07 = d45bbf38 (COLLAB-07 #817 머지·고유줄 0)
+#   backend/cur-16-concept-edge-prerequisite-meta = 6d751b57 (v2=#892 착지·전건 main 우세)
+claude/backup/collaboration-qlzq5m-pre-rebase
+claude/backup/whymath-collaboration-design-qlzq5m-pre-rebase
+claude/backup/webpage-plan-8pma1f-pre-rebase
+claude/whymath-nlp-design-my18a1
+claude/whymath-math-engine-design-4qbaru
+claude/whymath-ai-recommendation-review-tv1f08

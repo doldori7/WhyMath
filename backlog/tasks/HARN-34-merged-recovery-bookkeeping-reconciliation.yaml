@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-34-merged-recovery-bookkeeping-reconciliation
+title: "회수 착지분 부기 정합 일괄 — 법령 게이트 G-export-prediction-disclosure 유실 이관 + done 기록 4건"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 게이트 이관(법령·최우선): ph1ad7(905ed311)의 backlog/gates.yaml 고유 항목 G-export-prediction-disclosure(열람권 export 예측 5필드 제외의 PIPA §35/GDPR Art.15 변호사 검토·human·kiki·30일 리마인드)를 main gates.yaml에 CLI/정본 경로로 이관한다 — ASM-12 코드는 #822로 착지했는데 판정 유보를 지탱하는 게이트만 유실된 상태(docs/legal/export_prediction_disclosure_verdict.md가 이 게이트를 지목하는데 대장에 없음)"
+  - "② done 기록 회수: ASM-12(#822)·MISC-04(#821)를 backlog.py done으로 정정(증적 PR 병기·재구현 금지 — 코드는 main에 blob 동일 실측). S4-52 artifacts에 #866 증적 병기. SEC-28은 PR #885 머지 후 done 처리(head 브랜치가 yaml 미보유라 자동 착지 불가 — eos-curriculum-semantic-backbone-adr 2f2e311e의 done 기록이 유일 사본)"
+  - "③ 고립 구현 참조 병기: main todo 태스크 yaml notes에 참조 브랜치 head를 기록해 중복 구현을 차단 — MISC-01·MISC-03·PB-02(6dszy0 67881979: 테스트 5파일 main 부재 실측)·CUR-07(34zvse 7fb78470)·S3-28(e98dw4 f8c0e3b6)·PB-08(6eejrv 2f428729 — 단 redaction 접근은 #802 close로 폐기, 검수 축 테스트만 참고)"
+  - "④ OPS-41 notes 현행화: a3ysut·8ap436 원 브랜치 소멸(backup/*-pre-rebase만 잔존·head 갱신), p1hubt 소멸+학습경로 r3 doc 착지 확인, 게임화 r3 doc 착지 확인 — 잔여 대상을 a3ysut(backup)·t608mk·azdnov 3건으로 재열거"
+  - "⑤ 집행 지점: backlog.py validate exit 0 + 게이트는 /gates 점검 화면에 실제 노출 확인(정본화≠집행 규칙)"
+artifacts: []
+paths:
+  - backlog/gates.yaml
+  - "backlog/tasks/**"
+session: null
+notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md. 회수 완료 전 참조 원 브랜치(ph1ad7·eos-curriculum-semantic-backbone-adr) 삭제 금지. '회수 시 acceptance 전수 재대조 생략 금지'(2026-08-10) 실사례 — #821/#822가 코드만 착지하고 부기·게이트를 유실"
+updated: 2026-08-29
