@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-49-concept-version-contract
+title: "ConceptVersion 계약 — concept_id 기반 버전 테이블·VersionHeader 공유 contract 배선"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 44_eos_version_management.md §6.2/6.3의 VersionHeader·ConceptVersion 계약을 Pydantic 스키마+ORM+alembic으로 실체화 — concept_id는 의미 ID(math.<area>.<slug>) 유지, version_id UUID 별도(원칙 1: Entity ID≠Version ID)"
+  - "② Published=immutable을 코드로 집행: PUBLISHED 상태 행의 payload UPDATE를 DB/ORM 계층에서 거부하고 테스트로 동결(§7 상태 머신 — PUBLISHED→DRAFT 전이 금지 포함). 뮤테이션으로 변별력 실측"
+  - "③ Concept 테이블에 current_published_version_id nullable 추가(§6.4) — 기존 데이터 비파괴, ARCH-31(ProblemVersion 축)과 마이그레이션 체인 충돌 회피(나중 착수 쪽이 rebase)"
+  - "④ 범위 밖: Release Snapshot·VersionContext(Phase 2 — §13)·Edge 버전화(원칙 5의 확장분)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/db/models/concept*.py"
+  - "src/backend/whymath_backend/schema/concept*.py"
+  - "src/backend/alembic/versions/**"
+  - "tests/backend/db/**"
+session: null
+notes: "출처: 44_eos_version_management.md §16-3 — EOS-44 종결 시 MVP 범위(§12 'Problem/Concept/Solution 버전 테이블') 좌석 부재를 발견해 등재(docstring 계획은 백로그를 대신하지 못한다). ARCH-31(Problem 축)·EOS-47(attempt 고정 축)과 3분할"
+updated: 2026-08-30
