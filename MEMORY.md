@@ -7215,3 +7215,11 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **대장 명문화**: registry.yaml·MP-0 6축·DECISIONS.md 개념은 backlog/+MEMORY.md가 대체(문서 §4) — 별도 대장 신설 금지.
 - **산출물**: `docs/reviews/eos_plan52_crosswalk_2026-09.md`(53행 전수 표·갭·이월·방법 한계) + 태스크 13건.
 - **cross-ref**: `eos_transition_declaration_2026-08-30.md` 부록 A·§1.1 · `eos_anchor_asset_audit_2026-09.md`(수치 정본) · EOS-51(실패코드·CU·KPI 동결 좌석).
+
+## 2026-08-30: EOS-54 HIT 검수 타이머 착지 + G0 조기 서명 + 사고 2건 기록
+
+- **EOS-54(★계측기)**: `review_timer_event`(append-only·started/finished/aborted 3종·NULL=미측정 무default) + writer(`harness/review_timer.py`·JSONL 즉시 flush) + 집계 CLI(`ops/hit_cu_metrics.py` — HIT 중앙값·P90·적재율 상시 보고·실패코드 F1~F8 분포·CU당 비용 인프로세스 이중 회계·exit 0/1). `GenerationFailureCode` 첫 소비 지점 3곳 신설. 뮤테이션 3종(0 날조·0건 위장·default 주입) 전부 red 실측 후 복원. privacy: 검수자 텔레메트리로 학생 소유 축 0 — erasure 3종 배선 불요 판정(스윕 green 실측·docstring 근거). 미결선 자인: 실검수 흐름 호출 0(ADMIN-07 후속) — 적재율 지표가 이를 상시 노출. 검증 = 4게이트+신규 82건+**전체 스위트 10,816 passed·92%·전층 PASS**.
+- **G0 조기 서명(9/6→8/30)**: Kiki가 kiki 머신에서 clear 실행 시도(구버전 대장·CUR-16 브랜치라 "게이트 없음" 거부) — 서명 의사가 대화 결정(앵커 6·주 25h)+실행 시도로 명확해 선례(G-crosswalk-approval)대로 세션이 완료분 반영(`ad7862ab`). W2(되돌릴 수 없는 스키마 주간) 진행 조건 충족.
+- **사고 ① EOS-49/50/51 번호 충돌(3회차 — ARCH-13·OPS-15 동형)**: kiki 머신 `backend/cur-16-...` 브랜치 커밋 3b7bab6f에 main과 이종 내용의 동번호 3건(problem-quarantine·generation-log-prompt-seed·content-lifecycle) — EOS-50은 main EOS-55와 내용 중복 의심. 대책 = `HARN-38` 등재(재번호·경위 규명·fail-open 의심 교차 기록). 부수: 이번 등재에서 HARN-37 충돌을 CLI가 실거부·38 제안 — 가드 변별력 실증.
+- **사고 ② cp949 CLI 크래시 실측**: kiki 머신 PowerShell에서 `backlog.py gates`가 `UnicodeEncodeError('⏳')`로 사망 — **기등재 OPS-53의 정확한 실사례**(신선한 증거로 부기). 임시 우회 = gates.yaml 직독(Select-String).
+- **머신 2대 관측**: 태그 push는 `C:\Users\rollrock\...`, 이번 실행은 `C:\Users\kiki\...` — CLAUDE.md 고정 경로(kiki)는 유효하나 rollrock 머신이 별도 존재. 병기 정정은 Kiki 확인 대기.
