@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,10 @@ acceptance:
   - "① Tier1 소스(licensing_safety.md 대조로 목록 확정 — 선언 기준 14곳) 약관 HTML+SHA256+수집 시각 아카이빙 스크립트 — 실패 경로 설계(소스별 즉시 flush·타임아웃·원인 기록)"
   - "② 감사로그 규약 + 재수집 멱등"
   - "③ 집행 별항: 주기 재수집(cron)은 후속(OPS-56 축과 조율) — 1차는 수동 1회 실행 증적(네트워크 필요 시 Kiki 머신 명령 블록)"
-artifacts: []
+artifacts:
+  - "#912"
+  - scripts/ops/license_snapshot_archiver.py
+  - docs/data/license_snapshot_archive.md
 paths:
   - "scripts/ops/**"
   - "data/licenses/**"

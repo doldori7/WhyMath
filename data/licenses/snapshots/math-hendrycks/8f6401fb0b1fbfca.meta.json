@@ -1,0 +1,12 @@
+{
+  "bytes": 1070,
+  "content_type": "text/plain; charset=utf-8",
+  "first_fetched_at": "2026-08-30T16:44:07Z",
+  "first_run_id": "20260830T164404Z-182a74",
+  "http_status": 200,
+  "license_label": "MIT",
+  "name_ko": "MATH (Hendrycks)",
+  "sha256": "8f6401fb0b1fbfcac17aac8d61e4e1b0d2de9aa190d8aa655fedc5fd783b2ace",
+  "source_id": "math-hendrycks",
+  "url": "https://raw.githubusercontent.com/hendrycks/math/HEAD/LICENSE"
+}
