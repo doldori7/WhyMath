@@ -45,9 +45,10 @@
 #   whymath-nlp-design-my18a1                       = a89a6c99 (08-04 계보 재확인·config 고유 2줄=#783 대체 구문)
 #   whymath-math-engine-design-4qbaru               = f0edfac1 (08-04 계보 재확인)
 #   whymath-ai-recommendation-review-tv1f08         = fdf46d7b (REC-09 done·잔여 전건 main 우세 실측)
+#   s4-52-verifier-v2-design-status                 = 2281def0 (#899 리뷰 정정 — #866 증적 main 기존재·stub은 S4-54가 대체)
 #
 # ⚠ 회수 태스크가 참조하는 브랜치는 의도적으로 제외(회수 완료 전 삭제 금지) —
-#   HARN-34: ph1ad7 · misc-04-recovery · s4-52-verifier-v2-design-status · eos-curriculum-semantic-backbone-adr
+#   HARN-34: ph1ad7 · misc-04-recovery · eos-curriculum-semantic-backbone-adr
 #   HARN-35: backup/whymath-misconception-review-r1skwr-pre-rebase · backup/school-subject-6ybkis-pre-rebase · vafylb
 #   OPS-41:  backup/ai-content-a3ysut-pre-rebase · t608mk · azdnov (+8ap436 backup은 ③ 확인 후)
 #   기존 제외 승계: k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07 잔여) · 5t5lmv(OPS-40) ·
@@ -63,3 +64,4 @@ claude/backup/webpage-plan-8pma1f-pre-rebase
 claude/whymath-nlp-design-my18a1
 claude/whymath-math-engine-design-4qbaru
 claude/whymath-ai-recommendation-review-tv1f08
+claude/s4-52-verifier-v2-design-status

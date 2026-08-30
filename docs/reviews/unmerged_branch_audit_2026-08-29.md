@@ -29,7 +29,7 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 | # | 고립 내용 | 실측 근거 | 등재 |
 |---|---|---|---|
 | A1 | **법령 게이트 유실**: `G-export-prediction-disclosure`(PIPA §35/GDPR Art.15 변호사 검토·30일 리마인드)가 `ph1ad7`(905ed311) gates.yaml에만 존재 | ASM-12 코드는 #822로 main 착지(blob 동일 실측)됐는데 게이트·done 기록은 미착지 — main `grep export-prediction gates.yaml` 0건. `export_prediction_disclosure_verdict.md`(main 실재)가 이 게이트를 지목하는데 대장에 없음 | **HARN-34** (P1) |
-| A2 | **done 부기 유실 4건**: ASM-12(#822 머지)·MISC-04(#821 머지)는 main yaml이 `todo`·artifacts 공란. S4-52는 #866 증적 누락. SEC-28 done 기록은 `eos-curriculum-semantic-backbone-adr`(2f2e311e)에만 — #885 head가 yaml 미보유라 머지돼도 착지 불가 | `git log --grep '(#821)' '(#822)' '(#866)'` 머지 확인 + yaml diff | **HARN-34** |
+| A2 | **done 부기 유실 3건**: ASM-12(#822 머지)·MISC-04(#821 머지)는 main yaml이 `todo`·artifacts 공란. SEC-28 done 기록은 `eos-curriculum-semantic-backbone-adr`(2f2e311e)에만 — #885 head가 yaml 미보유라 머지돼도 착지 불가. ~~S4-52 #866 증적 누락~~ → **정정(#899 리뷰)**: main artifacts·notes에 `PR #866` 기존재 — 브랜치 표기 `"#866"`과의 문자열 차이가 comm 고유줄 오인을 낳음. 회수 대상 아님 | `git log --grep '(#821)' '(#822)'` 머지 확인 + yaml diff | **HARN-34** |
 | A3 | **태스크 등재 유실 7건**: MISC-07~11(오개념 r2 갭 5종 — `backup/whymath-misconception-review-r1skwr-pre-rebase` a95bb456에만) · SEC-25(면제 만료 조건 — `backup/school-subject-6ybkis-pre-rebase` 5d2c2b71에만) · OPS-24 cp949 감사(`vafylb` b1218739에만) | 전건 `git cat-file -e origin/main:backlog/tasks/<f>` 실패. 슬러그 검색으로 재채번 승계 여부 교차(OPS-26→OPS-36 승계 1건 제외 전건 부재) | **HARN-35** (P2) |
 | A4 | **claim 경로 CRLF 오염**: harness-claims 트리가 `"claims\r/MISC-16.json\r"` — Windows 세션 기록분의 개행 미정규화 | `git ls-tree origin/harness-claims \| cat -A` | **HARN-36** (P2) |
 
@@ -50,9 +50,9 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 | `6eejrv` | main **PB-08**(todo) 참고 자산 — redaction 접근 자체는 #802 close로 폐기(main은 SEC-24 projection 채택·정답 축 해소, gating 6종도 `PublicProblem` 실측). **검수 축(pending 노출)은 여전히 미해소·PB-08 소유** |
 | `q8tvcx` | **OPS-38**(todo) |
 | `7n9n72` · `40xspg` | SOL-01(done) 잔여 재열거 **이번 감사 미완** — §5 정직한 공백 |
-| `ph1ad7` · `misc-04-recovery` · `s4-52-status` · `eos-semantic-backbone` · `r1skwr backup` · `6ybkis backup` | **HARN-34/35** — 회수 완료 전 삭제 금지 |
+| `ph1ad7` · `misc-04-recovery` · `eos-semantic-backbone` · `r1skwr backup` · `6ybkis backup` | **HARN-34/35** — 회수 완료 전 삭제 금지 |
 
-### 🟢 삭제 후보 — 잃을 내용 없음 실측 (4차 배치 등재 8건)
+### 🟢 삭제 후보 — 잃을 내용 없음 실측 (4차 배치 등재)
 
 | 브랜치 (head) | 근거 |
 |---|---|
@@ -64,6 +64,7 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 | `claude/whymath-nlp-design-my18a1` (a89a6c99) | 08-04 삭제 계보 재확인. config.py 고유 2줄 = #783(머지)이 대체한 옛 docstring 구문 실측 |
 | `claude/whymath-math-engine-design-4qbaru` (f0edfac1) | 08-04 삭제 계보 재확인 — 잔여 yaml/doc 고유줄 = 낡은 판(MATH-01~04·NLP-03 전건 main 실재) |
 | `claude/whymath-ai-recommendation-review-tv1f08` (fdf46d7b) | REC-09 회수 done. 잔여 정독: 수치 2,647은 main이 2,638로 현행화(QUAL-02)·ci.yml `claims reap` 구문은 main 재작성판 실재·REC-06 고유 3줄 = 옛 메타 — **전건 main 우세** |
+| `claude/s4-52-verifier-v2-design-status` (2281def0) | **#899 리뷰 정정으로 승격**: 잔여 2파일 정독 — verifier.py는 S4-54 구현이 대체한 옛 stub(main 우세), yaml은 #866 증적이 main에 `PR #866`으로 기존재(표기 차이) — 잃을 내용 0 |
 
 ### ⚪ 조건부 보류 — 다음 배치 (정독 미완 또는 회수 대기)
 
