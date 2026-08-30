@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-18-match-gate-single-enforcement
+title: "오개념 품질 게이트 단일 집행 — floor 0.65가 하네스 주경로에 미적용(호출자 1/2)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① harness/wh1_loop.py의 MatchMisconceptionAction 실행부가 apply_match_quality_gate를 호출한다 — floor 상수를 복제하지 않는다(이중 진실원천 금지). 계약 모듈 재사용만. 2026-08-30 재실측: 호출자는 여전히 api/coach.py:818 단 1곳, wh1_loop.py:424 diagnose()는 게이트 없이 도는 주경로"
+  - "② ocr_confidence는 None을 넘긴다 — 하네스 경로는 OCR 신뢰도를 갖고 있지 않다. 게이트②는 dormant, 게이트①(floor)만 적용. 없는 신호를 날조하지 않는다"
+  - "③ 관측 우선 — floor 적용으로 사라지는 약한 매치의 감소량을 먼저 로그로 남기고(작동한 비율 원칙) 예상 범위인지 확인한 뒤 굳힌다. 감소 0이면 배선 재확인"
+  - "④ 집행 지점 별항 — apply_match_quality_gate 호출자가 2경로 전부임을 소스 스캔 테스트로 동결. 신규 호출 경로가 생기면 red"
+  - "⑤ 범위 밖 동결 — intervene.py의 0.5 임계 · floor 값 자체 변경 · semantic/judge 게이트 기본값"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/wh1_loop.py
+  - "tests/backend/harness/test_wh1_*.py"
+session: null
+notes: "원 등재 MISC-08(r1skwr backup a95bb456에만 잔존) — HARN-35 재등재. 정본: misconception_module_gap_review_r2.md §2 G2 + 04e §9-D2. '한 곳에서만 부름'형 부분집행 — 반복 실수 10회차 계보"
+updated: 2026-08-30

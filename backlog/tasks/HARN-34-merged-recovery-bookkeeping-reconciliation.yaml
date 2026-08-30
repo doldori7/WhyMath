@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: review
 priority: 1
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - backlog/gates.yaml
   - "backlog/tasks/**"
-session: null
+session: claude/uncommitted-changes-qjhp6f
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md. 회수 완료 전 참조 원 브랜치(ph1ad7·eos-curriculum-semantic-backbone-adr) 삭제 금지. '회수 시 acceptance 전수 재대조 생략 금지'(2026-08-10) 실사례 — #821/#822가 코드만 착지하고 부기·게이트를 유실"
-updated: 2026-08-29
+updated: 2026-08-30

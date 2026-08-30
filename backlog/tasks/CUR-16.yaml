@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,11 +15,12 @@ acceptance:
   - "② required_strength, dependency_level, minimum_mastery, curriculum_context, evidence_source_id 필드를 추가할지/필드별 범위를 결정한다."
   - "③ Alembic 마이그레이션(상향/하향)과 Pydantic 스키마 변경을 설계하고, existing data 호환성을 보장한다."
   - "④ DAG 검증·self-prerequisite 금지·cycle detection이 새 메타에도 여전히 유효함을 테스트로 동결한다."
-artifacts: []
+artifacts:
+  - "PR #892 (https://github.com/doldori7/WhyMath/pull/892) — ConceptEdge prerequisite 메타 확장, main a92a887f. 부기 경위: v1 브랜치가 v2로 재작업·머지되며 status 갱신 미착지 → HARN-34가 정정. 이행 실측: required_strength 등 5필드(schema/concept.py 11참조)·test_concept_edge_prerequisite_meta.py 동결·설계 문서 착지"
 paths:
   - src/backend/whymath_backend/db/models/concept_edge.py
   - src/backend/whymath_backend/schema/concept.py
   - schemas/v1.1/concept.schema.yaml
-session: backend/cur-16-concept-edge-prerequisite-meta-v2
+session: null
 notes: "EOS 6_개념 DB 검토 §13에 따른 선수학습 edge 메타 확장. WhyMath는 ConceptEdge.PREREQUISITE로 단일 테이블 운영 중이므로 추가 메타를 컬럼 확장으로 수용한다."
-updated: 2026-08-25
+updated: 2026-08-30

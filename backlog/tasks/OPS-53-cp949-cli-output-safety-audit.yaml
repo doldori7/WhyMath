@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-53-cp949-cli-output-safety-audit
+title: "하네스/ops CLI 콘솔 출력 cp949 안전성 전수 감사 — 한국어 Windows 인쇄 크래시 재발 방지"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① harness/*.py·ops/*.py CLI가 stdout/stderr로 print하는 모든 문자열 리터럴을 전수 스캔해 cp949 인코딩 불가 문자(em dash 등) 존재를 검출하는 회귀 테스트 신설 — CI 동결(2026-08-30 재실측: 개별 모듈 cp949 대응은 산재하나 전수 스캐너 부재)"
+  - "② 기존 CLI 리포트 모듈(visualization_reach_report·attempt_grading_shadow_report·pedagogy_content_slot_reach_report 등)도 같은 스캔으로 재확인 — 발견 위반은 이번 태스크에서 함께 수정"
+  - "③ 변별력 — em dash 1개를 의도 주입해 스캐너 검출 실측 후 복원(cp 백업 원복). 성공/실패 동일값이면 위장"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/**"
+session: null
+notes: "원 등재 OPS-24(vafylb b1218739에만 잔존·CLAUDE.md 사고 경위 속 별건 OPS-24와 번호 재사용 충돌) — HARN-35 재등재. S4-16 강등전 CLI의 Phaiakes9 라이브 크래시 실측(em dash U+2014·cp949 부재). 2026-07-17 logconfig 사고와 같은 cp949 계열 2회차 — 등재 의무 건"
+updated: 2026-08-30

@@ -108,3 +108,31 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
   승격, 7n9n72는 최대 잔존 고립 확정(🟡 행·HARN-37 참조).
 - ⚪ 조건부 8건의 고유줄 정독은 총합 수치까지만 — 내용 판정은 다음 배치 몫.
 - 각 브랜치 구현의 정확성은 보지 않았다(고유한가·추적되는가까지).
+
+---
+
+## 6. 실행 부록 (2026-08-30 · #899 머지 직후 같은 세션이 HARN-34·35 실행)
+
+### HARN-34 — 부기·게이트 회수 (전항 이행)
+- ① `G-export-prediction-disclosure` 게이트 CLI 재등재(원 요청일 08-11을 notes에 보존·30일 리마인드 재가동)
+- ② done 정정 4건: ASM-12(#822)·MISC-04(#821)·CUR-16(#892)·S4-10(#898) — 전건 이행 실측 근거를 증적에 병기.
+  SEC-28은 main yaml notes에 "#885 머지 시 별도 done 필요·기록 사본 위치"를 심어 유실 경로를 차단(브랜치 삭제 후에도 정보 보존)
+- ③ 고립 참조 병기 7건: MISC-01·MISC-03·PB-02·CUR-07·S3-28·PB-08·SEC-28
+- ④ OPS-41 notes 현행화(잔여 대상 3건으로 축소·head 갱신)
+
+### HARN-35 — 등재 유실 회수 (재등재 매핑 · 전건 미해소 재실측 후)
+| 원 번호(브랜치) | 재등재 | 미해소 재실측 근거(2026-08-30) |
+|---|---|---|
+| MISC-07(r1skwr) | **MISC-17** | `_compute_matches` 호출 3곳 여전히 `body.student_input` 단독 |
+| MISC-08(r1skwr) | **MISC-18** | `apply_match_quality_gate` 호출자 여전히 coach.py:818 1곳 |
+| MISC-09(r1skwr) | **MISC-19** | `StudentSignals` 생산자 여전히 4필드만 — misconception_ids 0 |
+| MISC-10(r1skwr) | **MISC-20** | `misconception_resolution_rate` 여전히 STUDENT_VISIBLE(:79) |
+| SEC-25(6ybkis) | **SEC-30** | 면제 4건 주석 잔존·PB-04 테스트 main 미착지 |
+| OPS-24(vafylb) | **OPS-53** | cp949 전수 스캐너 부재(개별 대응만 산재) |
+| MISC-11(r1skwr) | **흡수** | "고립 완료분 회수" 좌석 — HARN-34 ③(참조 병기) + main todo 태스크 자신(MISC-01/03·PB-02 등)이 회수 좌석을 이미 가짐. 별도 태스크는 소유 이원화라 미등재 판정 |
+
+### 5차 삭제 배치 (회수 착지와 같은 머지에서 집행 — 잔여 정보 전건 main에 보존됨)
+`ph1ad7`(905ed311·게이트+ASM-12 회수 완료) · `misc-04-recovery`(7eaaa695·MISC-04 회수 완료) ·
+`eos-curriculum-semantic-backbone-adr`(2f2e311e·SEC-28 기록을 main note로 이관) ·
+`backup/whymath-misconception-review-r1skwr-pre-rebase`(a95bb456·MISC-17~20 재등재 완료) ·
+`backup/school-subject-6ybkis-pre-rebase`(5d2c2b71·SEC-30 재등재 완료)

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on:
@@ -13,11 +13,12 @@ depends_on:
 requires_gates: []
 acceptance:
   - "라우터 경유 생성→최종답 SymPy 동치+단계 검증 통과분만 solution_path 뱅크(검증 실패 뱅크 유입 0 테스트 동결) + ApproachType 6종 enum 단일 좌석 신설(schema/enums.py·ReasoningType 미러) + test_strategy_governance 리터럴 상수→좌석 참조 승격(3축 disjoint 동결 유지) + multi_solution_gen.md 접근 카테고리를 스키마 6종으로 정합(비유적 제거·visual 포함) + strategy_tag→approach_type 승격 + 시드 스코프 실측 리포트(생성률·검증 통과율·approach 다양성) + 주관 메타(elegance·educational_value)는 ai_estimated 게이팅 — 학생 대면 노출 없음(§4-⑥ 유보)"
-artifacts: []
+artifacts:
+  - "PR #898 (https://github.com/doldori7/WhyMath/pull/898) — 다중 풀이 파이프라인, main 3d79abd8(#899 직전 HEAD). 부기 경위: 세션 브랜치의 done 커밋 미머지 → HARN-34가 정정. 이행 실측: ApproachType 6종 단일 좌석(schema/enums.py)·multi_solution_gen.md·SolutionPath gen_meta(ai_estimated 게이팅) 전건 main 실재"
 paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/whs/**"
   - "docs/prompts/**"
-session: claude/backend-s4-10-multi-solution-9ebc1b
+session: null
 notes: "docs/architecture/solution_module_gap_review.md §3 D2 — 외부 EOS 틀(기능 24) 대조(설계만 갭·프롬프트 소비처 0). ROADMAP:67 'SolutionPath 다중 풀이' 체크박스의 백로그 실행화. 오프라인 콘텐츠 공장 축 — S3-01 비의존(S4-06 선례)"
-updated: 2026-08-26
+updated: 2026-08-30
