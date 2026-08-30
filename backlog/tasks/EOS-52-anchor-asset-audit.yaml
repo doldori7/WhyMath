@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -15,10 +15,12 @@ acceptance:
   - "② 전역 수치 정정표 — 전환 설계서의 가정(개념 545노드·오개념 400건·OP_01~08)을 저장소 실측(원자 백본·오개념 DB·crosswalk)으로 대체하고 차이를 명기. OP코드 실재 여부(코드인지 문서인지)도 판정"
   - "③ 산출물 docs/reviews/eos_anchor_asset_audit_2026-09.md + 재현 스크립트(측정·수집 도구 실패 경로 설계 규칙 준수 — 단계별 flush·원인 기록·시간 필터)"
   - "④ 대학 앵커 2종 자산 부재 시 '없음' 그대로 기록(날조 금지) — 앵커 8→6 축소 결정(G0)의 근거 데이터로 제공"
-artifacts: []
+artifacts:
+  - "#907"
+  - docs/reviews/eos_anchor_asset_audit_2026-09.md
 paths:
   - docs/reviews/eos_anchor_asset_audit_2026-09.md
   - "scripts/analysis/**"
-session: claude/mvp-eos-transition-plan-ghcajm
+session: null
 notes: "출처: 260830 전환 설계서 §8.3(자산 실사를 콘텐츠 일정 확정 전에 — 반나절) + 06_KPI측정 시트 앵커 표. 코퍼스는 저장소 data/·스키마 실측 우선, prod DB(whymath-pg:5433) 조회 필요분은 Kiki 머신 명령 블록으로."
 updated: 2026-08-30
