@@ -136,3 +136,13 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 `eos-curriculum-semantic-backbone-adr`(2f2e311e·SEC-28 기록을 main note로 이관) ·
 `backup/whymath-misconception-review-r1skwr-pre-rebase`(a95bb456·MISC-17~20 재등재 완료) ·
 `backup/school-subject-6ybkis-pre-rebase`(5d2c2b71·SEC-30 재등재 완료)
+
+## 7. 보류분 정독 완결 (2026-08-30 · #901)
+
+⚪ 조건부 5건 전건 판정 종결 — **6차 배치 4건 + 수동 1건**:
+- `28d0yx backup`(b7dd3796)·`viz-r3 backup`(4bb6cd10): 상이 = pre-R4 문서·옛 VIZ-10 yaml — main(R4 분리·VIZ-10 done)이 우세. §2 ⚪의 "R4 문구 모호"는 main 문서의 R4 헤더 공지를 comm이 역방향으로 보여준 착시였다
+- `gamification-8ap436 backup`(ce93aaad): MOB-17이 main에 done+artifacts로 실재 — OPS-41 ③ 축 해소 확인
+- `ai-integration-5qqcp4 backup`(8f997a7b): coach.py 옛 ConceptStandardLink join — `git log -S` 실측: #705가 도입, **#810(CUR-04 조인 축 통일)이 의도 교체**. 설계 폐기분
+- `curriculum/cur-15-…-adr`(9bb0b22a): 고유줄 4 = 미머지 `#887` 참조 등 낡은 부기 — main(#891·#897) 우세. 허용 패턴 밖 → 수동 삭제 목록
+
+이로써 감사 모집단 40건의 판정 미결 0건. 잔존 브랜치는 전건 열린 태스크·PR이 소유한다.
