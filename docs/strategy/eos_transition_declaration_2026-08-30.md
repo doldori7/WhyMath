@@ -78,25 +78,25 @@
 - [x] 선언 PR 오픈 (이 PR이 006 문서가 말한 "EOS 전환 공식 PR")
 
 **Kiki 몫 (금일 ~ 내일)**:
-- [ ] **선언 PR 머지** — "pr" 한 마디면 CI 대기~자동 스쿼시 머지까지 일괄
-- [ ] **베이스라인 태그** — 머지 후 §2.2 명령 블록 실행 (EOS-06 ①, 15분)
+- [x] **선언 PR 머지** — #904 스쿼시 머지 완료(`3635877d`, 2026-08-30)
+- [ ] **베이스라인 태그** — §2.2 블록 실행(대상 `0d6fb82d` 고정). 세션 대행 push는 프록시 403(브랜치 외 ref 차단)으로 불가 — Kiki 실행 필요
 - [ ] **주당 가용 시간 확정** — 15h/20h/25h 중 선언 (G0 전제·§6-2. 기준값 20h 권고)
 - [ ] (권장) **IP 분리 증빙 착수** — 개인 장비·계정·시간 증빙 + 재직사 자산 무사용 확인서 (게이트 `G-eos-ip-separation-evidence`, 2h — 12/31 산출물 전체의 귀속이 걸린 P0)
 - [ ] (권장) **19일 밀린 사람 게이트 3건 정리** — `G-deploy-environment-approval`(GitHub UI 5분: Settings→Environments→staging·prod→Required reviewers에 본인 등록), `G-prod-dead-column-check`(§2.3 블록 5분), `G-operator-seat-first-grant`(3단계 리비전 확정 — 후속 Claude 세션과 함께)
 
-### 2.2 베이스라인 태그 — 선언 PR 머지 **후** 실행
+### 2.2 베이스라인 태그 — Kiki 실행 필요 (EOS-06 ①)
+
+**태그 대상 = `0d6fb82d`(PR #903 스쿼시)** — §0이 선언한 MVP 최종 베이스라인 그 커밋이다. 선언 머지 커밋(`3635877d`)은 EOS 국면 산출물이라 베이스라인이 아니다(초판의 "머지 후 main HEAD 태깅" 절차는 이 원칙과 어긋나 정정 — PR #905 리뷰 지적 수용). 대상 커밋의 main CI는 green 완료 실측(run 33292330788 · conclusion=success)이므로 언제든 태깅 가능하다.
+
+원격 세션 대행 push는 불가 실측(2026-08-30): CCR git 프록시가 브랜치 외 ref push를 403으로 차단(`refs/claims/*` 403과 같은 부류)하고 GitHub MCP에 ref 생성 도구가 없다 — 거부의 우회 금지 절차에 따라 사람 소유 액션으로 이관.
 
 ```powershell
 # [실행 시스템: Windows PowerShell — Phaiakes9 = 이 PC, 별도 접속 불요]
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git fetch origin main
-git checkout main
-git pull origin main
-# 자가검증 ①: 최근 커밋에 EOS 전환 선언 PR 머지가 보여야 한다 (안 보이면 태그 중단)
-git log --oneline -3
-git tag -a whymath-mvp-final-2026-08-30 -m "Final WhyMath MVP baseline before EOS transition (12/31 = internal verification, not launch)"
+git tag -a whymath-mvp-final-2026-08-30 0d6fb82d8f9ad43cf62c51abfff1d1acab4e153b -m "Final WhyMath MVP baseline before EOS transition (12/31 = internal verification, not launch)"
 git push origin whymath-mvp-final-2026-08-30
-# 자가검증 ②: 아래 출력에 태그가 1줄 보이면 성공, 빈 출력이면 push 실패
+# 자가검증: 아래 출력에 태그가 1줄 보이면 성공, 빈 출력이면 push 실패
 git ls-remote --tags origin whymath-mvp-final-2026-08-30
 ```
 
