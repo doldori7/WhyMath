@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - "src/backend/whymath_backend/privacy/**"
   - "src/backend/alembic/versions/**"
   - "tests/backend/**"
-session: null
+session: claude/uncommitted-changes-qjhp6f
 notes: "32_학습 이력 검토 갭(docs/architecture/32_learning_history.md). 무힌트 20초 정답과 힌트 3회 4분 정답의 숙련도 해석 구분이 목적."
-updated: 2026-08-26
+updated: 2026-08-30
