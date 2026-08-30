@@ -70,3 +70,7 @@ ClickHouse는 다음 근거가 모두 갖춰질 때만 별도 ADR로 검토한�
 ## 재검토
 
 P1 이벤트 writer와 세션/퍼널 집계가 실제 트래픽에서 동작한 뒤, 분석 SLO·이벤트량·보존기간·소비자 근거를 포함한 운영 리포트로 재검토한다.
+
+## 추기 (2026-08-31 — EOS-48)
+
+EOS-48이 `attempt_event`에 nullable `event_time`(클라이언트 신고 발생 시각) 컬럼을 추가했다(마이그레이션 `c9bc2555282e`). 본 ADR의 hypertable 전환 조건·절차와의 충돌 여부를 재확인한 결과 **무충돌**이다: ① 파티션 키(`event_at`)·복합 PK 불변 — `create_hypertable` 전환 절차는 컬럼 목록과 무관하게 동작한다 ② 컬럼은 NULL 지배적(신고 이벤트만 값)이라 압축·chunk 부담 미미 ③ `event_at`의 실측 의미(전 writer가 서버 now — 수신 시각)를 재정의하지 않고 발생 시각을 별도 컬럼으로 분리했으므로, 전환 시 파티션 의미도 그대로다. 귀속 계약(발생 우선·시계 왜곡 시 수신 폴백)은 `l2.learning_metrics_rollup.effective_event_moment`가 정본이다.

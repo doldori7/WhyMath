@@ -5,10 +5,12 @@
 data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용자 PII인지* 열거(`_ERASURE_PLAN`)
 하므로, 그 인벤토리의 *학습/진단 subset*을 **읽기**로 재사용해 본인 데이터를 한데 모은다.
 
-범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 17종(학습 세션·시도·진단·개념 숙달 이력·능력
+범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 19종(학습 세션·시도·진단·개념 숙달 이력·능력
 스냅샷·동의·트랙/페르소나/상태 이력·오개념 가설·진단 증거·일별 학습 지표·행동 지표 시계열·대화
 세션 메타 + **세부 시도 이벤트** + **답 제출 시퀀스**(EOS-32 `answer_submission` — 본인 제출
-원문·채점·오류 분석)) + **대화 턴 본문**(`dialogue_turns`·조인) + `user_profile` 단건.
+원문·채점·오류 분석) + **힌트 사용 이력**(EOS-45 `hint_usage` — 레벨·시각·열람시간) +
+**풀이 step 이력**(EOS-46 `student_solution_step` — 단계 본문·검증·개념 태그)) +
+**대화 턴 본문**(`dialogue_turns`·조인) + `user_profile` 단건.
 **보안 항목 영구 제외**: `device_credential`·`refresh_token_session`(로그인 토큰·기기 자격 — 노출은
 보안 위험·"개인 학습 데이터" 아님). 손글씨 이미지 원본 파일(외부 저장소·URI만 포함)·외부 store
 실조회·비동기 job은 후속 — 미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다(날조 0).
@@ -60,8 +62,10 @@ from whymath_backend.db.models.assessment import (
 )
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.db.models.hint_usage import HintUsage
 from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.timeseries import DailyLearningMetrics, UserBehaviorMetrics
 from whymath_backend.db.models.user import (
     UserPersonaHistory,
@@ -117,6 +121,11 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     # EOS-32: 답 제출 시퀀스(본인 풀이 원문·채점·오류 분석 — 본인 열람권 Art.15에 그대로 안전.
     # 성적 예측 필드 0·자유텍스트는 본인 제출물 자체). user_id 직접 보유·to_schema() 보유.
     (AnswerSubmission, "user_id", "answer_submissions"),
+    # EOS-45: 힌트 사용 이력(레벨·시각·열람시간 — 식별자/수치/날짜만·자유텍스트 0·PII-safe).
+    (HintUsage, "user_id", "hint_usages"),
+    # EOS-46: 학생 풀이 step(본인 제출 단계 본문·검증·개념 태그 — 본인 열람권 Art.15에 안전.
+    # 자유텍스트는 본인 제출물 자체·성적 예측 필드 0). user_id 직접 보유·to_schema() 보유.
+    (StudentSolutionStep, "user_id", "student_solution_steps"),
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).

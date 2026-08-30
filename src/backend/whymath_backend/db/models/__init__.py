@@ -11,6 +11,8 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 도메인3 User (§5.1·§5.2): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot.
   - 도메인4 Activity (§6.1): LearningSession·ProblemAttempt·AttemptEvent.
   - EOS-32 AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — 32_learning_history §4).
+  - EOS-45 HintUsage (힌트 횟수·레벨·열람시간 1급 데이터화 — used_hint 병행·32 §4).
+  - EOS-46 StudentSolutionStep (학생 풀이 step 정규 기록 — ADR-002·WH-S SolutionNode와 무관).
   - 도메인5 Dialogue (§7.1): Dialogue·DialogueTurn.
   - 도메인6 Assessment (§8.1): Assessment·ConceptMasteryHistory.
   - 도메인7 TimeSeries (§9.1): DailyLearningMetrics·ProblemSolveTimeDistribution·
@@ -92,6 +94,7 @@ from whymath_backend.db.models.formula_node import (
     FORMULA_REVIEW_STATUS_DEFAULT,
     FormulaNode,
 )
+from whymath_backend.db.models.hint_usage import HintUsage
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.db.models.misconception_crosslink import MisconceptionCrosslink
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
@@ -143,6 +146,7 @@ from whymath_backend.db.models.strategy_node import (
     STRATEGY_REVIEW_STATUS_DEFAULT,
     StrategyNode,
 )
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.textbook_mapping import (
     TextbookMapping,
     TextbookUnit,
@@ -188,6 +192,10 @@ __all__ = [
     "AttemptEvent",
     # EOS-32: AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — evidence_links 1급 입력)
     "AnswerSubmission",
+    # EOS-45: HintUsage (힌트 횟수·레벨·열람시간 1급 데이터화 — used_hint 병행·hint_rate 원천)
+    "HintUsage",
+    # EOS-46: StudentSolutionStep (학생 풀이 step 정규 기록 — ADR-002·WH-S SolutionNode와 무관)
+    "StudentSolutionStep",
     # 도메인5 Dialogue
     "Dialogue",
     "DialogueTurn",

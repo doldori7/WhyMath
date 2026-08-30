@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "학생 풀이 step 이벤트 스키마 설계: attempt FK, sequence, expression, canonical_ast, validation, concept_ids — SolutionNode(WH-S MCTS 노드)와 명칭·책임 구분 명시"
   - "attempt_event event_type 확장 또는 별도 테이블 여부를 hypertable 정본(schemas/v1.0)과 대조해 ADR 1편"
   - "privacy 3종 배선 갱신 + 완전성 테스트 통과"
-artifacts: []
+artifacts:
+  - "PR #903 (https://github.com/doldori7/WhyMath/pull/903) — ADR-002(attempt_event 확장 기각·별도 엔티티 채택·hypertable 정본 대조)·student_solution_step(a926d39f126a·SolutionNode 구분 기계 동결·SymPy 단일 권위 validation 계약)·privacy 3종 red→green. 전체 hermetic 10,702 passed"
 paths:
   - src/backend/whymath_backend/db/models/activity.py
   - src/backend/whymath_backend/schema/event_data_contract.py
@@ -22,6 +23,10 @@ paths:
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
   - "docs/architecture/**"
+  - src/backend/whymath_backend/db/models/student_solution_step.py
+  - src/backend/whymath_backend/schema/student_solution_step.py
+  - src/backend/whymath_backend/db/models/__init__.py
+  - src/backend/whymath_backend/db/schema_version.py
 session: null
 notes: "32_학습 이력 검토 갭. 정오답보다 '어느 단계에서 오류'를 학습하는 데이터가 목적. db/models/solution_node.py는 학생 데이터가 아니므로 혼동 금지."
-updated: 2026-08-26
+updated: 2026-08-30

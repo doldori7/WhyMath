@@ -102,6 +102,36 @@ EOS-32가 `answer_submission` 테이블(ORM `db/models/answer_submission.py` · 
 5. **privacy 3종 배선(§11 acceptance 이행)** — 삭제권 `_ERASURE_PLAN`(user_id·attempt보다 먼저), 보존 파기 `_RETENTION_PLAN`(`submitted_at` NOT NULL 축), 반출 `_EXPORT_PLAN`(`answer_submissions` 카테고리) 등재 완료. 완결성은 `test_erasure_plan_completeness`가 metadata 전수 스윕으로 동결한다.
 6. **봉투 암호화(§11-4 "적용 검토"의 판정)** — `raw_response`·`latex`·`canonical_ast`는 `problem_attempt.student_answer`·`handwriting_uri`와 같은 계층의 *미성년 풀이 데이터*다. 이 테이블만 선행 암호화하면 같은 데이터가 두 테이블에서 다른 보호를 받는 비대칭이 생기므로, 봉투 암호화 컬럼은 `student_answer` 계열과 **일괄 판단**한다(SEC 계열 후속 — `dialogue_turn` 봉투 암호화 선례의 확장 축). 그때까지의 평문 저장 책임 경계는 `problem_attempt` 기존 방침과 동일(저장·동의 계층 문서화).
 
+### 이관·병행 전략 — EOS-45 HintUsage 구현 확정 (2026-08-30)
+
+EOS-45가 `hint_usage` 테이블(ORM `db/models/hint_usage.py` · schema `schema/hint_usage.py` · alembic `0e148995e6e9`)을 착지시킨다. EOS-32 전략과 동형이되 과거 이력의 사정이 다르다:
+
+1. **과거 힌트 이력은 attempt_event에 *부분* 존재하나 백필하지 않는다(의도적)** — 실측: `힌트제공` 이벤트(`HintEventData`)는 hint_level을 담고 `힌트요청` 이벤트는 레벨조차 없다. 둘 다 hint_id·view_duration_ms가 없고, 무엇보다 `힌트제공`은 AI *공급*(supply) 신호이지 학생 *열람*(usage) 기록이 아니다 — 이벤트를 usage 행으로 승격하면 절반(식별자·열람시간)을 날조하고 의미(공급≠열람)를 오염시킨다. 과거 분석은 attempt_event를 그대로 쓰면 되고(하네스 지표 ⑤·⑫), `hint_usage` 수집은 배포·writer 배선 시점부터다.
+2. **used_hint 병행(대체 아님)** — `problem_attempt.used_hint`와 기존 소비자(`l2/learning_metrics_rollup`의 `daily_hint_reliance_rate`)는 불변. `hint_usage`는 불리언이 잃는 축(횟수·최대 레벨·열람시간)의 원천이며, 파생 불리언과 기록 used_hint의 일치는 검증 가능한 병행 신호다(가용성 증명 = `tests/backend/l2/test_hint_rate_mastery_input.py` — L2 알고리즘 무변경, mastery 추정·rollup 배선 확장은 후속).
+3. **소유 정합·privacy** — EOS-32 PR #902 P1의 (attempt_id, user_id) 복합 FK 관례를 신설 시점부터 적용(참조 대상 UNIQUE는 EOS-32 것 재사용). privacy 3종(erasure `user_id`·retention `requested_at`·export `hint_usages`) 등재 완료, 완결성은 `test_erasure_plan_completeness`가 동결.
+4. **writer 배선은 범위 밖** — 힌트 서빙 경로가 이 테이블에 적재를 시작하는 것은 후속 몫이며, 그 전까지 빈 좌석이다(좌석 존재 ≠ 수집 작동).
+
+### 이관·병행 전략 — EOS-46 StudentSolutionStep 구현 확정 (2026-08-30)
+
+EOS-46이 `student_solution_step` 테이블(ORM `db/models/student_solution_step.py` · schema `schema/student_solution_step.py` · alembic `a926d39f126a`)을 착지시킨다. **저장 형태 판정(attempt_event 확장 기각·별도 정규 엔티티 채택)의 정본은 `docs/architecture/adr/ADR-002-student-solution-step-entity.md`**(hypertable 정본·실측 대조, 기각 대안·검토 결함 포함).
+
+1. **백필 없음(의도적)** — 과거 step *내용*의 원천이 존재하지 않는다: `problem_attempt.step_times` JSONB는 단계별 *시간*만 담고, `attempt_event`의 `계산`·`그래프그리기` 등은 본문 없는 telemetry다. expression·canonical_ast·validation을 과거분에 만들어 넣는 것은 재구성이 아니라 날조다. 수집은 배포·writer 배선 시점부터.
+2. **명칭·책임 구분** — `student_solution_step`(학생 제출물·미성년 PII 계열) ↔ `solution_nodes`(WH-S MCTS 탐색 노드·시스템 상태) ↔ `problem_step`(문항 저작 정본). 혼동 금지는 ADR-002 3자 대조표 + ORM docstring + 기계 동결(`test_distinct_from_whs_solution_node`).
+3. **기존 흔적과의 병행** — `problem_attempt.step_times`(시간)·attempt_event telemetry(행위 신호)는 불변 유지. `student_solution_step`은 *내용·검증·개념 태그* 축의 신규 원천이며 셋은 서로 대체하지 않는다.
+4. **소유 정합·privacy** — EOS-32 복합 FK 관례 적용(참조 대상 UNIQUE 재사용). privacy 3종(erasure `user_id`·retention `submitted_at`·export `student_solution_steps`) 등재 완료·완결성 스윕 동결.
+5. **writer 배선은 범위 밖** — step 제출 서빙 경로의 적재 시작은 후속 몫(빈 좌석·좌석 존재 ≠ 수집 작동). validation 채움도 그 writer가 SymPy 검증 경유로 수행한다(검증 계약 불변).
+
+### 이관·병행 전략 — EOS-48 시간 모델 구현 확정 (2026-08-31)
+
+EOS-48이 §7의 두 갭을 착지시킨다(신규 테이블 없음 — 기존 3테이블 nullable 컬럼 추가·alembic `c9bc2555282e`):
+
+1. **event_time/ingested_at 분리(실측 기반 비대칭 배치)** — `attempt_event.event_at`은 실측상 전 writer가 서버 now(UTC)를 넣는 **수신 시각**이라 *발생* 쪽(`event_time`)만 추가, `problem_attempt.started_at/ended_at`은 클라 신고 **발생 시각**이라 *수신* 쪽(`ingested_at`)만 추가했다(기존 컬럼 재정의 0). 귀속 계약(발생 우선·시계 왜곡=발생>수신은 수신 폴백·미신고는 수신)은 `l2.learning_metrics_rollup.effective_event_moment`가 정본·테스트 동결. **롤업 소비 배선 완료(PR #903 P2)**: `_fetch_events`가 event_time을 읽고 창 필터를 SQL 등가식(`LEAST(COALESCE(event_time, event_at), event_at)`)으로 걸며 소크라테스 귀속이 `EventFact.effective_at()`을 경유한다 — writer 부재(전행 NULL)에서는 기존 산출과 비트동일(회귀 테스트 동결)이라 배선이 no-op 안전이고, writer가 붙는 순간 지연 도착이 발생일 롤업 재실행에 잡힌다.
+2. **백필 없음(의도적)** — 기존 행의 `event_time`/`ingested_at` 백필은 수신 시각 복제 = 날조라 하지 않는다(마이그레이션도 server_default를 달지 않아 ALTER 시점 백필 날조를 구조적으로 차단 — 테스트 동결). NULL=미기록이 정직한 상태.
+3. **active/idle 실측 좌석 + 병행 지표** — `learning_session`/`problem_attempt`에 `active_seconds`/`idle_seconds`(NULL=미측정·0 날조 금지·경과 승격 백필 금지 — §7 "측정된 것만 적재"). 롤업은 기존 `daily_active_minutes`(경과 기반)를 **재정의하지 않고** `daily_measured_active_minutes`(실측 세션만 합산)·`daily_active_measured_ratio`(계측 작동 비율 상시 보고 — "작동한 비율" 원칙)를 병행 추가했다.
+4. **privacy 3종 무변경 검토(검증 가능)** — 신규 테이블 0이라 플랜 변경 0. 3테이블의 기존 플랜 커버 유지·파기 축 불변·신규 컬럼의 export payload 노출은 `tests/backend/privacy/test_event_time_active_time_privacy.py`가 기계로 동결.
+5. **ADR-001 무충돌** — attempt_event 컬럼 추가는 파티션 키·복합 PK 불변이라 hypertable 전환 절차와 무충돌(ADR-001 추기 2026-08-31).
+6. **writer 배선은 범위 밖** — event_time 신고·ingested_at 기록·heartbeat 기반 active/idle 계측의 클라·서버 배선은 후속 몫(빈 좌석·ratio 지표가 그 작동률을 상시 드러낸다).
+
 ---
 
 ## 5. 버전 고정 (44번 문서와의 연계)
@@ -178,10 +208,10 @@ EOS-32가 `answer_submission` 테이블(ORM `db/models/answer_submission.py` · 
 아래 5종은 `scripts/harness/backlog.py add`로 등재 완료(2026-08-25):
 
 1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선). **구현 착지 2026-08-30** — 이관·병행 전략은 §4 "이관·병행 전략" 확정(데이터 이관 0건·병행 기록·writer 배선은 범위 밖 후속).
-2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트.
-3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
+2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트. **구현 착지 2026-08-30** — 이관·병행 판단은 §4 "이관·병행 전략 — EOS-45"(백필 없음·used_hint 병행·writer 배선은 범위 밖 후속).
+3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR. **구현 착지 2026-08-30** — 판정 = 별도 정규 엔티티 `student_solution_step`(ADR-002·attempt_event 확장 기각), 백필 판정은 §4 "이관·병행 전략 — EOS-46".
 4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).
-5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지).
+5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지). **구현 착지 2026-08-31** — 실측 기반 비대칭 컬럼 배치·귀속 계약(`effective_event_moment`)·병행 지표 2종, 상세는 §4 "이관·병행 전략 — EOS-48".
 
 공통 acceptance: 신규 테이블은 §11의 privacy 3종 배선 + `test_erasure_plan_completeness` 통과.
 

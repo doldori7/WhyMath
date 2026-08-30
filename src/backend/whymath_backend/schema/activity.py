@@ -153,6 +153,19 @@ class LearningSession(BaseModel):
         le=1.0,
     )
 
+    # ===== 실측 활동/공백 시간 (EOS-48 — 32_learning_history §7) =====
+    active_seconds: int | None = Field(
+        default=None,
+        description="실측 활동 시간(초 — heartbeat 등 실측 신호가 있을 때만). None=미측정"
+        "(0 날조 금지·ended_at-started_at 승격 백필 금지 — duration_seconds(경과)와 별개 축)",
+        ge=0,
+    )
+    idle_seconds: int | None = Field(
+        default=None,
+        description="실측 공백(자리 비움) 시간(초). None=미측정(0 날조 금지)",
+        ge=0,
+    )
+
     # ===== 환경 =====
     device_used: Device | None = Field(
         default=None,
@@ -231,6 +244,24 @@ class ProblemAttempt(BaseModel):
         "ge=0 le=1 설정.",
         ge=0.0,
         le=1.0,
+    )
+
+    # ===== 시간 분리·실측 시간 (EOS-48 — 32_learning_history §7) =====
+    ingested_at: datetime | None = Field(
+        default=None,
+        description="서버 *수신* 시각(오프라인 sync 구분 — 발생은 started_at/ended_at 클라 "
+        "신고). None=미기록(기존 행·writer 무영향 — 백필 금지: 복제는 날조)",
+    )
+    active_seconds: int | None = Field(
+        default=None,
+        description="실측 활동 시간(초·heartbeat 등 실측 신호). None=미측정(0 날조 금지·"
+        "duration_seconds(경과)와 별개 축)",
+        ge=0,
+    )
+    idle_seconds: int | None = Field(
+        default=None,
+        description="실측 공백 시간(초). None=미측정(0 날조 금지)",
+        ge=0,
     )
 
     # ===== 풀이 방식 (특성 #96) =====
@@ -327,8 +358,15 @@ class AttemptEvent(BaseModel):
     )
     event_at: datetime = Field(
         ...,
-        description="이벤트 발생 시각 — DDL TIMESTAMPTZ NOT NULL → required(복합 PK 구성요소·"
-        "hypertable 분할 키)",
+        description="서버 기록(수신) 시각 — DDL TIMESTAMPTZ NOT NULL → required(복합 PK "
+        "구성요소·hypertable 분할 키). EOS-48 실측 명문화: 전 writer가 서버 now(UTC)를 넣어 "
+        "왔다(발생 시각은 event_time — 분리 신설)",
+    )
+    event_time: datetime | None = Field(
+        default=None,
+        description="클라이언트 신고 *발생* 시각(EOS-48 — 오프라인 sync 시 event_at(수신)과 "
+        "벌어짐). None=미신고(기존 writer·기존 행 무영향 — 백필 금지). 귀속 계약은 "
+        "l2.learning_metrics_rollup.effective_event_moment 정본",
     )
 
     # ===== FK =====

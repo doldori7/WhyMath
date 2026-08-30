@@ -67,9 +67,11 @@ from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.db.models.hint_usage import HintUsage
 from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.timeseries import DailyLearningMetrics, UserBehaviorMetrics
 from whymath_backend.db.models.user import (
     UserPersonaHistory,
@@ -95,6 +97,10 @@ _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
     # EOS-32: attempt CASCADE 자식이나 user_id 직접 보유 — 명시 삭제로 보고 일관(EvidenceLink
     # 선례). problem_attempt보다 먼저(attempt→submission CASCADE 역순 방지·자식 우선).
     (AnswerSubmission, "user_id"),
+    # EOS-45: 힌트 사용 이력 — answer_submission과 동형(attempt CASCADE 자식·자식 우선).
+    (HintUsage, "user_id"),
+    # EOS-46: 학생 풀이 step — 같은 계열(attempt CASCADE 자식·자식 우선·ADR-002).
+    (StudentSolutionStep, "user_id"),
     (ProblemAttempt, "user_id"),  # learning_session보다 먼저(session→attempt CASCADE 역순 방지)
     (LearningSession, "user_id"),
     (AttemptEvent, "user_id"),  # 느슨참조·hypertable(고아 방지)
