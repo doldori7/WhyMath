@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - docs/reviews/eos_anchor_asset_audit_2026-09.md
   - "scripts/analysis/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: 260830 전환 설계서 §8.3(자산 실사를 콘텐츠 일정 확정 전에 — 반나절) + 06_KPI측정 시트 앵커 표. 코퍼스는 저장소 data/·스키마 실측 우선, prod DB(whymath-pg:5433) 조회 필요분은 Kiki 머신 명령 블록으로."
 updated: 2026-08-30
