@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-35-hint-fading-ceiling-contract
+title: "힌트 유도-제공 균형 상한 계약 — 숙달 -1 상쇄로 인한 레벨 3+ 도달 불가 해소 + 상한 도달 보장·실측 튜닝"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 확증 갭 해소: l4/hint_deferral.py decide_hint_level 규칙 5(숙달 base-1)가 규칙 2·3(답요구·좌절 +1)을 매 턴 상쇄 — 숙달 학생은 연속 신호에도 레벨 3+ 도달이 구조적으로 불가(막힘 5턴 임계 합산도 max 2, 2026-08-30 코드 실측). 좌절·답요구 연속 N회 시 상한 레벨 도달을 '보장'하는 계약을 설계·구현 — 즉답 허용이 아니라 4단계 사다리의 종착 보장(레벨 4=마지막 수단 스펙 불변, '바로 정답 제공 금지' 금기 준수)"
+  - "② 임계 파라미터(STUCK_TURN_THRESHOLD=5·점진폭·연속 N)의 튜닝 근거를 세션 지표로 실측 — wh1_evaluation ⑤ 도움 감소 곡선·이탈률. 외부 선례 = LearnLM 2407.12687 §5.5(과잉 유도가 좌절·학습 지연 유발 → 의도적 완화)"
+  - "③ '작동한 비율' 원칙: 상한 도달률·좌절 해소율 리포트 필드 동반 — 무작동이 정상 응답으로 위장되지 않게"
+  - "④ PED-31 notes의 Fading policy 항과 관계 명문화(중복 설계 금지) — 이 태스크가 Fading의 상한 축, PED-31이 전략 라이브러리 축"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/hint_deferral.py
+  - tests/backend/l4/test_hint_deferral.py
+session: null
+notes: "출처: LearnLM 검토 차용 후보 2 — 적대 검증 생존, 갭은 검증 렌즈가 코드로 확증(세션 재확인 완료). 기존 answer_deferral_max_level(learning_scene)과의 방향 차이도 설계에서 화해할 것."
+updated: 2026-08-30

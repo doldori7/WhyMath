@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-36-learning-scenario-bank-schema
+title: "학습 시나리오 뱅크 스키마 — 테스트 4시나리오 × PRD 페르소나 5종 정형화 + 결함주입 시험지 소스 배선"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 시나리오 뱅크 스키마 정의 — LearnLM 2412.16429의 49-시나리오 구조(과목·주제·학습 목표·초기 발화·페르소나·대화 플랜) 차용, 기존 테스트 4시나리오(정상·답 강요·좌절·오개념) × PRD v1.2 페르소나 5종 교차"
+  - "② 집행 지점 별항(정본화≠집행): coach_prose_leak_eval 결함주입 그리드가 뱅크를 시험지 소스로 소비 — 현재 하드코딩 단일 문제(2x+3=7)에서 뱅크 소비로 전환, 커버리지 증가를 판정치로"
+  - "③ 범위 밖 명문: arena식 인간 쌍대비교는 미채택(검증 권위 서열 — 기계 게이트 우선·인상 판정 금지) — 시나리오 '구조'만 발췌"
+artifacts: []
+paths:
+  - docs/standards/prompt_engineering.md
+  - src/backend/whymath_backend/harness/coach_prose_leak_eval.py
+  - tests/backend/harness/test_coach_prose_leak_eval.py
+session: null
+notes: "출처: LearnLM 검토 차용 후보 4 — 적대 검증 2렌즈 생존. SSM #12 루브릭(채점기) 축과 직교하는 시험지(입력) 축."
+updated: 2026-08-30
