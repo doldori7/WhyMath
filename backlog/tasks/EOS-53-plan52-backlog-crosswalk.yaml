@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-53-plan52-backlog-crosswalk
+title: "EOS 전환계획 52항목 ↔ 백로그·코드 전수 대조 — 이미 있음/부분/신규 3분류, 갭만 등재 (이중 진실원천 방지)"
+track: infra-debt
+stage: S3
+subject: math
+layer: docs
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 별첨 xlsx 02_개발항목 52건(A1~I3) 각각을 저장소 실측으로 판정: 이미 구현(증거 경로 명기)/부분(갭 명시)/신규 — trunk 부재를 미구현으로 단정 금지 절차 준수(git log --all·원격 claim 대장 확인)"
+  - "② 신규·갭만 backlog.py add로 등재(기존 태스크 ID 매핑 우선·중복 등재 금지). T3·T4(POSTPONE 대응)는 등재하지 않고 이월 목록으로 문서화"
+  - "③ 전환 계획서의 registry.yaml·MP-0 대장 개념은 backlog/가 대체함을 명문화 — 별도 대장 파일 신설 금지(단일 진실 원천)"
+  - "④ 산출물 docs/reviews/eos_plan52_crosswalk_2026-09.md — 52행 전수 표(그룹·Tier·판정·근거·대응 태스크 ID)"
+artifacts: []
+paths:
+  - docs/reviews/eos_plan52_crosswalk_2026-09.md
+  - "backlog/tasks/**"
+session: null
+notes: "출처: 260830_WhyMath_EOS_개발기준_추적표.xlsx 02_개발항목 + 전환 설계서 §1.2. 계획서는 코드베이스 미열람 자인(§8.3) — 대조 없이 재구현하면 A5 라우터·D1 SymPy 3-tier·H1 import-linter·E4 mastery_history처럼 이미 있는 것을 다시 만든다."
+updated: 2026-08-30

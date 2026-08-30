@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-52-anchor-asset-audit
+title: "앵커 자산 실사 — 앵커 후보 8단원의 원자·성취기준·오개념·detection_rule·문항 코퍼스 실측 커버리지 (콘텐츠 일정 확정의 선결)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 앵커 후보 8단원(초3 분수·초6 비와 비율·중2 경우의 수와 확률·중3 이차방정식·고1 이차함수 최대최소·고2 도함수의 활용·대학 ε-δ 극한·선형대수 일차독립과 기저) 각각의 원자 노드 수·성취기준 코드(2022 개정) 수·오개념 항목 수·기계판정형 detection_rule 수·기존 문항 코퍼스 문항 수를 실측 집계"
+  - "② 전역 수치 정정표 — 전환 설계서의 가정(개념 545노드·오개념 400건·OP_01~08)을 저장소 실측(원자 백본·오개념 DB·crosswalk)으로 대체하고 차이를 명기. OP코드 실재 여부(코드인지 문서인지)도 판정"
+  - "③ 산출물 docs/reviews/eos_anchor_asset_audit_2026-09.md + 재현 스크립트(측정·수집 도구 실패 경로 설계 규칙 준수 — 단계별 flush·원인 기록·시간 필터)"
+  - "④ 대학 앵커 2종 자산 부재 시 '없음' 그대로 기록(날조 금지) — 앵커 8→6 축소 결정(G0)의 근거 데이터로 제공"
+artifacts: []
+paths:
+  - docs/reviews/eos_anchor_asset_audit_2026-09.md
+  - "scripts/analysis/**"
+session: null
+notes: "출처: 260830 전환 설계서 §8.3(자산 실사를 콘텐츠 일정 확정 전에 — 반나절) + 06_KPI측정 시트 앵커 표. 코퍼스는 저장소 data/·스키마 실측 우선, prod DB(whymath-pg:5433) 조회 필요분은 Kiki 머신 명령 블록으로."
+updated: 2026-08-30
