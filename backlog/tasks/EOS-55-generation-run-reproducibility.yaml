@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,10 @@ acceptance:
   - "① GenerationLog(또는 확장)에 prompt_version·model·seed·입력 스냅샷(해시+참조) 기록 — alembic 마이그레이션 포함"
   - "② 재현 계약 테스트 — 동일 Run 레코드로 재실행 시 동일 입력이 복원됨을 동결"
   - "③ 집행 별항(정본화≠집행): problem_corpus_accumulate·pregenerate 두 생성 경로가 실제로 이 로그를 적재함을 통합 테스트로 확인 — 스키마 실재≠적재 배선이 이 태스크의 존재 이유"
-artifacts: []
+artifacts:
+  - "#912"
+  - src/backend/whymath_backend/l3/pregenerate/provenance_bridge.py
+  - tests/backend/schema/test_generation_reproducibility.py
 paths:
   - src/backend/whymath_backend/db/models/provenance.py
   - "src/backend/whymath_backend/harness/problem_corpus_*.py"

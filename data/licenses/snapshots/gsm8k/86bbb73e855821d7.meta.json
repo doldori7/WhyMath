@@ -1,0 +1,12 @@
+{
+  "bytes": 1062,
+  "content_type": "text/plain; charset=utf-8",
+  "first_fetched_at": "2026-08-30T16:42:49Z",
+  "first_run_id": "20260830T164229Z-c98e84",
+  "http_status": 200,
+  "license_label": "MIT",
+  "name_ko": "GSM8K",
+  "sha256": "86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b",
+  "source_id": "gsm8k",
+  "url": "https://raw.githubusercontent.com/openai/grade-school-math/HEAD/LICENSE"
+}

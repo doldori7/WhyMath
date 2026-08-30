@@ -23,10 +23,16 @@ L3 코드에는 L4 import 0(계층 규칙). harness는 import-linter 계약 밖(
 산출물은 v0(사람 검수 전) — 게이트 통과 ≠ 학생 노출(§03 정본). exit 코드: 신규 수용 ≥1이면 0,
 아니면 1(코퍼스 무진전 신호 — 사유는 리포트의 outcome 집계로 관측·조용한 실패 금지).
 
+생성 로그(EOS-55 집행 별항): 이 경로는 **기본으로** LLM 호출별 `GenerationLog`(모델·재현
+좌석·입력 스냅샷 해시+참조)를 `<out>.genlog.jsonl`에 즉시 flush로 적재한다 —
+`--generation-log`로 경로만 바꿀 수 있다(끄는 옵션 없음 — 적재가 기본이어야 "경로가
+적재한다"가 참·정본화≠집행). `ops/hit_cu_metrics --generation-log`가 이 JSONL을 소비한다.
+
 사용법(Phaiakes9·라이브):
     python -m whymath_backend.harness.problem_corpus_accumulate \\
         --seed <기존.jsonl> [--seed <추가.jsonl> ...] --out <축적.jsonl> --n 20 \\
-        [--topic-hint "..."] [--standard-code "[10공수1-02-02]"] [--difficulty 2.5]
+        [--topic-hint "..."] [--standard-code "[10공수1-02-02]"] [--difficulty 2.5] \\
+        [--generation-log <경로.jsonl>]
 """
 
 from __future__ import annotations
@@ -34,7 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,9 +51,12 @@ from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import EquivalentProblemGenerator
 from whymath_backend.l3.equivalent.orchestrator import run_batch
+from whymath_backend.l3.pregenerate.provenance_bridge import append_generation_log_jsonl
+from whymath_backend.schema.provenance import GenerationLog
 
 __all__ = [
     "AccumulateReport",
+    "default_generation_log_path",
     "load_corpus_index",
     "main",
     "run_corpus_accumulate",
@@ -176,10 +185,21 @@ def run_corpus_accumulate(
     )
 
 
-def _build_live_generator(topic_hint: str) -> EquivalentProblemGenerator:
+def default_generation_log_path(out_path: Path) -> Path:
+    """생성 로그 기본 경로 — 축적 산출물 곁 사이드카 `<out>.genlog.jsonl`(항상 적재)."""
+    return out_path.with_suffix(".genlog.jsonl")
+
+
+def _build_live_generator(
+    topic_hint: str,
+    *,
+    generation_log_sink: Callable[[GenerationLog], None] | None = None,
+) -> EquivalentProblemGenerator:
     """라이브 LLM 생성기 조립(조성 루트) — L4 카탈로그 라벨 주입·표준 CompositeProvider.
 
     이 함수만 LLM 경로를 안다 — 여기 격리해 run_corpus_accumulate는 좌석 무관을 유지한다.
+    `generation_log_sink`(EOS-55): 호출별 GenerationLog(재현 좌석·입력 스냅샷)를 흘릴 싱크
+    — main()이 JSONL appender를 배선한다(적재가 기본·정본화≠집행).
     """
     from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
     from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
@@ -191,6 +211,7 @@ def _build_live_generator(topic_hint: str) -> EquivalentProblemGenerator:
         topic_hint=topic_hint,
         subject=Subject.공통,
         slug_prefix="wm-gen-quad",
+        generation_log_sink=generation_log_sink,
     )
 
 
@@ -215,6 +236,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--difficulty", type=float, default=_DEFAULT_DIFFICULTY, help="스펙 난이도(1~5)."
     )
+    parser.add_argument(
+        "--generation-log",
+        type=Path,
+        default=None,
+        help=(
+            "GenerationLog JSONL 경로(EOS-55). 미지정 시 <out>.genlog.jsonl 사이드카에 "
+            "항상 적재한다(끄기 없음 — 적재가 기본·정본화≠집행)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     spec = EquivalenceSpec(
@@ -223,7 +253,18 @@ def main(argv: list[str] | None = None) -> int:
         difficulty_overall=args.difficulty,
         answer_format=None,
     )
-    generator = _build_live_generator(args.topic_hint)
+    # 생성 Run 재현 로그(EOS-55) — 호출별 즉시 flush 사이드카(2026-08-22 규칙 ①: 배치가
+    # 도중에 죽어도 그때까지의 호출 이력·비용은 파일에 남는다).
+    genlog_path: Path = (
+        args.generation_log
+        if args.generation_log is not None
+        else default_generation_log_path(args.out)
+    )
+
+    def _genlog_sink(log: GenerationLog) -> None:
+        append_generation_log_jsonl(genlog_path, log)
+
+    generator = _build_live_generator(args.topic_hint, generation_log_sink=_genlog_sink)
     report = run_corpus_accumulate(
         out_path=args.out,
         seed_paths=list(args.seeds),

@@ -1,0 +1,12 @@
+{
+  "bytes": 7238,
+  "content_type": "text/plain; charset=utf-8",
+  "first_fetched_at": "2026-08-30T16:44:04Z",
+  "first_run_id": "20260830T164404Z-182a74",
+  "http_status": 200,
+  "license_label": "CC0",
+  "name_ko": "Metamath set.mm",
+  "sha256": "8a5f6a2b110cdecd3543c2b18c4d17fa2f08d16ca61c1fe0a1e41b1343464b5c",
+  "source_id": "metamath-set-mm",
+  "url": "https://raw.githubusercontent.com/metamath/set.mm/HEAD/LICENSE"
+}
