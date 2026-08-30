@@ -128,6 +128,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "899ae0efbb8b",  # CUR-10: Curriculum Framework / Version tables
     "fad7f750090d",  # CUR-16: concept_edge prerequisite 메타 확장
     "d7e8f1a2b4c6",  # S4-10 solution_paths.gen_meta — 다중 풀이 생성 주관 메타(ai_estimated)
+    "8f0b8e906362",  # EOS-32: answer_submission — attempt 내 다회 제출 시퀀스 정규화
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

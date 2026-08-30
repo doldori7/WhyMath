@@ -91,6 +91,17 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 
 **과거 이력 백필은 불가하다.** `attempt_event`의 `답입력` 이벤트는 응답 본문·채점 결과를 담지 않는 지연 신호(`ResponseLatencyEventData` = `server_latency_ms`·`mode`·`persona`뿐)이므로, 과거 제출 시퀀스를 이벤트 로그에서 재구성하는 것은 대화 타이밍으로 제출 레코드를 *날조*하는 일이다. 따라서 과거분은 `problem_attempt.student_answer`의 최종값만 복구 대상이고, 시퀀스 수집은 신규 엔티티 배포 시점부터 시작한다.
 
+### 이관·병행 전략 — EOS-32 구현 확정 (2026-08-30)
+
+EOS-32가 `answer_submission` 테이블(ORM `db/models/answer_submission.py` · schema `schema/answer_submission.py` · alembic `8f0b8e906362`)을 착지시키며, 위 백필 불가 판정을 다음 운영 전략으로 명문화한다:
+
+1. **데이터 이관 0건(의도적)** — 마이그레이션 `8f0b8e906362`는 빈 테이블만 만든다. 과거 attempt의 `student_answer` 최종값을 `answer_submission`으로 *복제 적재하지 않는다*: 최종값 1건을 `sequence_no=1`로 넣으면 "제출이 1회뿐이었다"는 시퀀스를 날조하게 된다(실제 제출 횟수는 소실됐고 복원 불가). 과거분의 정본은 계속 `problem_attempt.student_answer`다.
+2. **신규 수집 시작점** — 시퀀스 수집은 이 마이그레이션이 적용되고 제출 writer가 배선된 시점부터다. **writer 배선은 EOS-32 범위 밖**(EOS-32 = L1 영속 좌석 + privacy 3종 배선까지·정본화와 집행의 별항 구분): 제출 처리 서빙 경로가 이 테이블에 적재를 시작하는 것은 후속 태스크 몫이며, 그 전까지 이 테이블은 빈 좌석이다 — 좌석 존재를 수집 작동으로 오인하지 않는다("작동 신호 없는 알고리즘 부착 금지"의 데이터 축).
+3. **병행 기록(이중 기록·정본 구분)** — writer 배선 후에도 `problem_attempt.student_answer`는 *최종값 캐시*로 계속 기록한다(기존 소비자·롤업·export 호환 — 제거·개명 0). 시퀀스의 정본은 `answer_submission`이고, 정합 계약은 "attempt의 `student_answer` == 그 attempt의 `max(sequence_no)` 제출의 응답"이다. 두 기록이 어긋나면 writer 결함이다(조용히 넘기지 않고 로그).
+4. **시퀀스 부재의 해석(정직)** — `answer_submission` 0건인 attempt는 「배포·배선 이전 과거분」 또는 「writer 미경유 경로」다. *"제출이 없었다"로 해석 금지* — 시퀀스 유무로 과거/신규를 가를 뿐, 부재를 행동 신호로 쓰지 않는다.
+5. **privacy 3종 배선(§11 acceptance 이행)** — 삭제권 `_ERASURE_PLAN`(user_id·attempt보다 먼저), 보존 파기 `_RETENTION_PLAN`(`submitted_at` NOT NULL 축), 반출 `_EXPORT_PLAN`(`answer_submissions` 카테고리) 등재 완료. 완결성은 `test_erasure_plan_completeness`가 metadata 전수 스윕으로 동결한다.
+6. **봉투 암호화(§11-4 "적용 검토"의 판정)** — `raw_response`·`latex`·`canonical_ast`는 `problem_attempt.student_answer`·`handwriting_uri`와 같은 계층의 *미성년 풀이 데이터*다. 이 테이블만 선행 암호화하면 같은 데이터가 두 테이블에서 다른 보호를 받는 비대칭이 생기므로, 봉투 암호화 컬럼은 `student_answer` 계열과 **일괄 판단**한다(SEC 계열 후속 — `dialogue_turn` 봉투 암호화 선례의 확장 축). 그때까지의 평문 저장 책임 경계는 `problem_attempt` 기존 방침과 동일(저장·동의 계층 문서화).
+
 ---
 
 ## 5. 버전 고정 (44번 문서와의 연계)
@@ -166,7 +177,7 @@ L2 구현은 이미 이 파이프라인 형태다: `l2/mastery_tracking.py`는 "
 
 아래 5종은 `scripts/harness/backlog.py add`로 등재 완료(2026-08-25):
 
-1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선).
+1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선). **구현 착지 2026-08-30** — 이관·병행 전략은 §4 "이관·병행 전략" 확정(데이터 이관 0건·병행 기록·writer 배선은 범위 밖 후속).
 2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트.
 3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
 4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).

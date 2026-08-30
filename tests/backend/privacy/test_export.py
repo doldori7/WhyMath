@@ -50,6 +50,7 @@ _CATEGORIES = {
     "user_behavior_metrics",
     "dialogues",
     "attempt_events",
+    "answer_submissions",
     "dialogue_turns",
 }
 
@@ -147,13 +148,13 @@ def _run(session: _FakeSession, user_id: uuid.UUID) -> UserDataExport:
 
 class TestExportUserData:
     def test_assembles_categories_and_profile(self) -> None:
-        """17종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
+        """18종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
         uid = uuid.uuid4()
-        # _EXPORT_PLAN(16) + dialogue_turns 조인(1) + profile(1) = 18 execute. learning_sessions
+        # _EXPORT_PLAN(17) + dialogue_turns 조인(1) + profile(1) = 19 execute. learning_sessions
         # (0)·skill_mastery_history(4·Phase 2b-2 신규)·ability_snapshots(5)·parental_consents(6)·
         # misconception_hypotheses(10)·misconception_evidence(11)·daily_learning_metrics(12)·
-        # user_behavior_metrics(13)·dialogues(14)·attempt_events(15)·dialogue_turns(16)에 구분 행,
-        # 나머지 빈, 마지막 profile.
+        # user_behavior_metrics(13)·dialogues(14)·attempt_events(15)·answer_submissions(16·EOS-32)·
+        # dialogue_turns(17)에 구분 행, 나머지 빈, 마지막 profile.
         fake = _FakeSession(
             [
                 [_StubRow({"cat": "ls"})],
@@ -172,6 +173,7 @@ class TestExportUserData:
                 [_StubRow({"cat": "ubm"})],
                 [_StubRow({"cat": "dlg"})],
                 [_StubRow({"cat": "aev"})],
+                [_StubRow({"cat": "asb"})],  # answer_submissions(EOS-32·답 제출 시퀀스)
                 [
                     _StubRow(
                         {"cat": "dlt", "content": "평문 본문", "image_uri": "s3://x/h.png"},
@@ -195,6 +197,7 @@ class TestExportUserData:
         assert out.data["user_behavior_metrics"] == [{"cat": "ubm"}]  # 증분 4 신규
         assert out.data["dialogues"] == [{"cat": "dlg"}]  # 증분 5 신규(대화 세션 메타)
         assert out.data["attempt_events"] == [{"cat": "aev"}]  # 증분 7 신규(세부 시도 이벤트)
+        assert out.data["answer_submissions"] == [{"cat": "asb"}]  # EOS-32(답 제출 시퀀스)
         # 증분 6(대화 턴 본문·조인) + 감사상환 #2: 키 미설정이라 평문 passthrough 복호.
         # SEC-01: image_uri·image_analysis도 복호 표면에 올라 export에 실린다(이미지 없으면 None).
         assert out.data["dialogue_turns"] == [
@@ -208,11 +211,11 @@ class TestExportUserData:
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)
-        assert len(fake.executed) == 18
+        assert len(fake.executed) == 19
 
     def test_no_profile_yields_none(self) -> None:
         """프로필 행이 없으면 user_profile=None·각 카테고리 빈 리스트."""
-        fake = _FakeSession([[] for _ in range(18)])
+        fake = _FakeSession([[] for _ in range(19)])
         out = _run(fake, uuid.uuid4())
         assert out.user_profile is None
         assert all(rows == [] for rows in out.data.values())
@@ -220,7 +223,7 @@ class TestExportUserData:
 
     def test_multiple_rows_preserved(self) -> None:
         """카테고리당 다행 직렬화 보존(리스트 순서)."""
-        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 17)])
+        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 18)])
         out = _run(fake, uuid.uuid4())
         assert out.data["learning_sessions"] == [{"n": 1}, {"n": 2}]
 

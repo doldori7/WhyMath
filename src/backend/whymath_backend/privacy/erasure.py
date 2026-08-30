@@ -56,6 +56,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.activity import AttemptEvent, LearningSession, ProblemAttempt
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
@@ -91,6 +92,9 @@ __all__ = [
 #   · 나머지는 user_profile만 참조(상호 의존 0)라 순서 무관.
 _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
     (Dialogue, "user_id"),  # → dialogue_turn DB CASCADE
+    # EOS-32: attempt CASCADE 자식이나 user_id 직접 보유 — 명시 삭제로 보고 일관(EvidenceLink
+    # 선례). problem_attempt보다 먼저(attempt→submission CASCADE 역순 방지·자식 우선).
+    (AnswerSubmission, "user_id"),
     (ProblemAttempt, "user_id"),  # learning_session보다 먼저(session→attempt CASCADE 역순 방지)
     (LearningSession, "user_id"),
     (AttemptEvent, "user_id"),  # 느슨참조·hypertable(고아 방지)
