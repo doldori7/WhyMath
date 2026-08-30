@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: in_progress
+status: review
 priority: 3
 owner: claude
 depends_on: []
@@ -22,8 +22,6 @@ paths:
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
   - "docs/architecture/**"
-  # 범위 확장(EOS-32/45 선례): ADR 판정이 별도 정규 엔티티라 전용 모델·스키마 파일로 착지,
-  # 마이그레이션 추가는 KNOWN_REVISIONS 동결 상수 갱신을 강제(SEC-03).
   - src/backend/whymath_backend/db/models/student_solution_step.py
   - src/backend/whymath_backend/schema/student_solution_step.py
   - src/backend/whymath_backend/db/models/__init__.py

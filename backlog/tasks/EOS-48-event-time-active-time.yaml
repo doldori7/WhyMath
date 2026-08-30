@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - "src/backend/alembic/versions/**"
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
-session: null
+session: claude/uncommitted-changes-qjhp6f
 notes: 32_학습 이력 검토 갭. session_end-start를 학습시간으로 쓰는 부정확 해소가 목적.
-updated: 2026-08-26
+updated: 2026-08-30
