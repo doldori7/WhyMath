@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: docs
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - docs/reviews/eos_plan52_crosswalk_2026-09.md
   - "backlog/tasks/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: 260830_WhyMath_EOS_개발기준_추적표.xlsx 02_개발항목 + 전환 설계서 §1.2. 계획서는 코드베이스 미열람 자인(§8.3) — 대조 없이 재구현하면 A5 라우터·D1 SymPy 3-tier·H1 import-linter·E4 mastery_history처럼 이미 있는 것을 다시 만든다."
 updated: 2026-08-30
