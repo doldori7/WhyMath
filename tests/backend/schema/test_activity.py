@@ -58,7 +58,8 @@ class TestActivityEnumValues:
         }
 
     def test_event_type_values_korean(self) -> None:
-        """EventType — §6.1 한글 8종(L667-668) + WH-1 검산결과·힌트제공 + L5 시각화조작(11종)."""
+        """EventType — §6.1 한글 8종(L667-668) + WH-1 검산결과·힌트제공 + L5 시각화조작
+        + EOS-57 문제시도(12종)."""
         assert EventType.문제읽기.value == "문제읽기"
         assert EventType.답입력.value == "답입력"
         assert EventType.검산결과.value == "검산결과"  # WH-1 verify 결과 이벤트(binary 검산·지표 ①)
@@ -78,6 +79,7 @@ class TestActivityEnumValues:
             "검산결과",
             "힌트제공",
             "시각화조작",
+            "문제시도",  # EOS-57: 채점 확정 이벤트(skill_ids[] 좌석의 event_type)
         }
 
     def test_str_enum_equality(self) -> None:

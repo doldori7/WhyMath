@@ -45,7 +45,7 @@ from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
@@ -297,6 +297,19 @@ class AttemptEvent(Base):
     # ===== 이벤트 내용 =====
     event_type: Mapped[EventType | None] = mapped_column(_pg_enum(EventType, "event_type_enum"))
     event_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+
+    # ===== 해소된 스킬 배열 (EOS-57 — W2 되돌릴 수 없는 스키마 ①) =====
+    # 채점 확정 시 `l2.skill_mastery_tracking`이 concept→skill로 해소한 스킬 id 배열
+    # (`skill_node` PK = Text `skill.<slug>`·assessment.SkillMasteryHistory.skill_id 동형).
+    # REFERENCES 없음 → FK 아님(hypertable 느슨참조 — 이 테이블의 기존 3 참조 컬럼과 동형).
+    #
+    # **nullable + server_default 없음**이 이 좌석의 핵심 계약이다(EOS-48 비파괴 규약 동형):
+    #   - NULL  = 미기록 — 구판 이벤트, 또는 이 축을 쓰지 않는 다른 event_type(검산결과 등).
+    #   - `{}`  = 해소를 *실행했으나* 매핑 0건(concept→skill 브리지 미보유 문항).
+    # 둘을 구분하지 않으면 "writer가 안 돌았다"와 "돌았는데 0건이다"가 같은 글자로 보인다
+    # (S3-07 None≠0 규약 · CLAUDE.md "작동한 비율" 원칙의 데이터 전제). `'{}'::text[]`
+    # server_default를 달면 기존 행 전체가 "해소 0건"으로 백필되는 날조라 달지 않는다.
+    skill_ids: Mapped[list[str] | None] = mapped_column(ARRAY(sa.Text), nullable=True)
 
     @classmethod
     def from_schema(cls, schema: SchemaAttemptEvent) -> AttemptEvent:

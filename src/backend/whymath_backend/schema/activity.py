@@ -394,3 +394,10 @@ class AttemptEvent(BaseModel):
         description="이벤트 부가 데이터(JSONB). 생산 3종(검산결과·힌트제공·시각화조작)은 "
         "event_data_contract 계약으로 모양 고정(invariant ⑫)·휴면 8종은 자유형.",
     )
+    skill_ids: list[str] | None = Field(
+        default=None,
+        description="EOS-57: 채점 확정 시 concept→skill로 *해소된* 스킬 id 배열"
+        "(`skill.<slug>`·skill_node PK). `문제시도` 이벤트에서만 채워진다. "
+        "None=미기록(구판 이벤트·writer 미도달·다른 event_type)·[]=해소 실행했으나 매핑 0건 — "
+        "둘을 구분한다(S3-07 None≠0 규약·'작동한 비율' 측정의 데이터 전제).",
+    )
