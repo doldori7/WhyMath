@@ -20,6 +20,7 @@ import pytest
 from whymath_backend.harness.learning_metrics_rollup_cli import resolve_window
 from whymath_backend.l2.learning_metrics_rollup import (
     BEHAVIOR_METRIC_ACCURACY_RATE,
+    BEHAVIOR_METRIC_ACTIVE_MEASURED_RATIO,
     BEHAVIOR_METRIC_ACTIVE_MINUTES,
     BEHAVIOR_METRIC_HINT_RELIANCE,
     BEHAVIOR_METRIC_SESSION_COUNT,
@@ -260,6 +261,10 @@ class TestAggregateUserBehaviorMetrics:
             BEHAVIOR_METRIC_ACCURACY_RATE: 0.5,
             BEHAVIOR_METRIC_HINT_RELIANCE: 0.5,
             BEHAVIOR_METRIC_SOLUTION_VIEW: 0.0,
+            # EOS-48 병행: 계측 작동 비율(이 세션은 active_seconds 미측정 → 0.0 — 셈이라 사실.
+            # measured_active_minutes 행은 *없음*(측정 0건 — 0 날조 금지)이 위 dict 동등성으로
+            # 함께 검증된다). 기존 5개 지표의 값·의미는 불변.
+            BEHAVIOR_METRIC_ACTIVE_MEASURED_RATIO: 0.0,
         }
 
     def test_no_inferred_metrics_produced(self) -> None:
@@ -451,6 +456,8 @@ def _fake_session_with_activity() -> _FakeSession:
                     duration_seconds=3600,
                     focus_score=0.9,
                     target_concept_id=None,
+                    active_seconds=None,  # EOS-48: 미측정(레거시 세션 — 0 날조 금지)
+                    idle_seconds=None,
                 )
             ],
             [  # _fetch_attempts
@@ -510,7 +517,8 @@ class TestRunDailyRollupWiring:
             "attempt_event": 1,
         }
         assert payload["upserted"]["daily_learning_metrics"] == 1
-        assert payload["upserted"]["user_behavior_metrics"] == 5
+        # EOS-48: 기존 5행 + daily_active_measured_ratio 1행(병행 — 계측 작동 비율 상시 보고).
+        assert payload["upserted"]["user_behavior_metrics"] == 6
         assert payload["upserted"]["problem_solve_time_distribution"] == 1
 
     def test_report_carries_no_pii(self) -> None:

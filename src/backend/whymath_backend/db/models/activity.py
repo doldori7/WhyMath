@@ -107,6 +107,14 @@ class LearningSession(Base):
     focus_score: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     engagement_score: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
+    # ===== 실측 활동/공백 시간 (EOS-48 — 32_learning_history §7) =====
+    # `duration_seconds`(경과 elapsed)와 *별개 축*: 자리 비움이 섞인 경과를 학습 시간으로 쓰지
+    # 않기 위한 실측 좌석. 클라 heartbeat 등 실측 신호가 있을 때만 적재하고 NULL=미측정
+    # (0 날조 금지·ended_at-started_at 승격 백필 금지). 롤업은 기존 daily_active_minutes
+    # (경과 기반)를 *재정의하지 않고* 병행 지표(measured)로만 소비한다.
+    active_seconds: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    idle_seconds: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+
     # ===== 환경 (device_used는 배치1 device_enum 공유) =====
     device_used: Mapped[Device | None] = mapped_column(_pg_enum(Device, "device_enum"))
     # VARCHAR(20) — enum 아닌 자유 문자열(schema network_type 선례).
@@ -166,9 +174,21 @@ class ProblemAttempt(Base):
     )
 
     # ===== 시간 =====
+    # 실측(EOS-48): started_at/ended_at은 *클라이언트 신고* 발생 시각(schema Optional — 클라가
+    # 채우는 운영 메타), created_at은 server_default지만 from_schema 경유 덮어쓰기가 가능해
+    # 수신 시각을 *보장*하지 않는다 — 그래서 아래 ingested_at(서버 전용 좌석)을 분리한다.
     started_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     duration_seconds: Mapped[int | None] = mapped_column(sa.Integer)
+    # EOS-48: 서버 *수신* 시각 — 오프라인 sync에서 발생(started_at)과 수신이 벌어지는 것을
+    # 구분한다. NULL=미기록(기존 행·기존 writer 무영향 — server_default를 달지 않는 이유:
+    # ALTER 시 기존 행에 마이그레이션 시각이 백필되는 날조를 막는다. 신규 writer가 채운다).
+    ingested_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    # EOS-48: 실측 활동/공백 시간(초) — 클라 heartbeat 등 *실측 신호가 있을 때만* 적재
+    # (32_learning_history §7 "측정된 것만 적재"). NULL=미측정(0 날조 금지 — ended_at-started_at
+    # 을 active로 승격하는 백필 금지·EOS-45 view_duration_ms 판정과 동형).
+    active_seconds: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    idle_seconds: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
 
     # ===== 결과 (기본값 없는 BOOLEAN → 미채점=NULL) =====
     is_correct: Mapped[bool | None] = mapped_column(sa.Boolean)
@@ -258,7 +278,16 @@ class AttemptEvent(Base):
     # ===== 복합 PK (event_id, event_at) =====
     # BIGSERIAL → BigInteger autoincrement PK(DB-assigned, gen_random_uuid 없음).
     event_id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    # EOS-48 실측 명문화: 전 writer(api/coach.py·interactions.py)가 `datetime.now(UTC)` 서버
+    # 시각을 넣는다 — 즉 event_at의 실측 의미는 **서버 수신(기록) 시각**(ingested)이다.
+    # 소비자(롤업 `_fetch_events` 귀속·`_RETENTION_PLAN` 파기·하네스 지표 스캔)도 이 의미로
+    # 읽어 왔다. 재정의하지 않는다(hypertable 파티션 키 — ADR-001 추기).
     event_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), primary_key=True)
+    # EOS-48: 클라이언트 신고 *발생* 시각 — 오프라인 태블릿이 하루 뒤 sync하면 event_at(수신)과
+    # 벌어진다. NULL=미신고(기존 writer·기존 행 무영향 — 백필 금지: 수신 시각 복제는 날조).
+    # 귀속 계약(발생 우선·미래 신고=시계 왜곡은 수신 폴백)은 l2.learning_metrics_rollup.
+    # effective_event_moment가 정본.
+    event_time: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
 
     # ===== FK 아님 (REFERENCES 없음 — hypertable 느슨참조) =====
     attempt_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)

@@ -21,6 +21,13 @@ paths:
   - "src/backend/alembic/versions/**"
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
+  # 범위 확장(EOS-32/45/46 선례): ORM 컬럼 추가는 Pydantic schema 대응 필드를 강제하고
+  # (to_schema extra='forbid'), 마이그레이션 추가는 KNOWN_REVISIONS 동결 갱신(SEC-03),
+  # 착지 표기·ADR-001 추기는 acceptance·조율 지시 사항이다.
+  - src/backend/whymath_backend/schema/activity.py
+  - src/backend/whymath_backend/db/schema_version.py
+  - docs/architecture/32_learning_history.md
+  - docs/architecture/adr/ADR-001-event-storage-postgresql-first.md
 session: claude/uncommitted-changes-qjhp6f
 notes: 32_학습 이력 검토 갭. session_end-start를 학습시간으로 쓰는 부정확 해소가 목적.
 updated: 2026-08-30

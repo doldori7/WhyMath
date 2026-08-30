@@ -110,6 +110,7 @@ __all__ = [
     "aggregate_daily_metrics",
     "aggregate_solve_time_distribution",
     "aggregate_user_behavior_metrics",
+    "effective_event_moment",
     "metric_date_of",
     "run_daily_rollup",
 ]
@@ -135,6 +136,12 @@ BEHAVIOR_METRIC_ACCURACY_RATE = "daily_accuracy_rate"
 BEHAVIOR_METRIC_HINT_RELIANCE = "daily_hint_reliance_rate"
 BEHAVIOR_METRIC_SOLUTION_VIEW = "daily_solution_view_rate"
 BEHAVIOR_METRIC_SESSION_COUNT = "daily_session_count"
+# EOS-48 병행 지표(기존 지표 재정의 금지 — daily_active_minutes는 *경과(elapsed)* 기반 의미
+# 불변). measured_*는 `learning_session.active_seconds`(실측 신호)가 있는 세션만 집계하고,
+# ratio는 그 계측이 *실제 작동한 비율*(측정 세션/전체 세션)을 리포트가 말할 수 있게 한다
+# ("작동한 비율" 원칙 — 좌석 존재를 계측 작동으로 위장하지 않는다).
+BEHAVIOR_METRIC_MEASURED_ACTIVE_MINUTES = "daily_measured_active_minutes"
+BEHAVIOR_METRIC_ACTIVE_MEASURED_RATIO = "daily_active_measured_ratio"
 
 # upsert 배치 크기 — 한 INSERT에 묶는 최대 행 수(파라미터 한도·메모리 보호).
 _UPSERT_CHUNK = 500
@@ -153,6 +160,10 @@ class SessionFact:
     duration_seconds: int | None = None
     focus_score: float | None = None
     target_concept_id: uuid.UUID | None = None
+    # EOS-48: 실측 활동/공백 시간(초) — None=미측정(0 날조 금지·경과와 별개 축). 끝에 기본값
+    # 부가(additive) — 기존 생성자·소비자 무영향.
+    active_seconds: int | None = None
+    idle_seconds: int | None = None
 
     def effective_seconds(self) -> int | None:
         """활동 시간(초) — `duration_seconds` 우선, 없으면 `ended_at−started_at` 폴백.
@@ -188,6 +199,30 @@ class EventFact:
     user_id: uuid.UUID
     event_at: datetime
     event_type: EventType | None = None
+
+
+def effective_event_moment(event_time: datetime | None, ingested_at: datetime) -> datetime:
+    """지표 귀속에 쓸 이벤트 시각 — event_time(발생)/ingested_at(수신) 분리 계약(EOS-48 정본).
+
+    오프라인 태블릿 sync 시나리오(32_learning_history §7): 어제 발생한 이벤트가 오늘 수신되면
+    귀속은 *발생일*이어야 한다(수신 시각을 사건 시각으로 착각 금지). 단 클라 시계는 신뢰
+    불가라 왜곡을 가드한다:
+
+      1. `event_time is None` → `ingested_at`(기존 동작 — 미신고 이벤트는 수신 시각 귀속.
+         attempt_event는 event_at이 실측상 수신 시각이므로 그대로 넘긴다).
+      2. `event_time > ingested_at` → **시계 왜곡**(발생이 수신보다 미래일 수 없다) →
+         `ingested_at`(서버 시각 폴백 — 미래 신고를 그대로 귀속하면 지표가 미래로 샌다).
+      3. 그 외(지연 도착 포함·event_time ≤ ingested_at) → `event_time`(발생 기준 귀속).
+
+    순수 함수(DB 무관) — 소비 배선(롤업 `_fetch_events`가 event_time 컬럼을 읽어 이 함수를
+    경유하는 것)은 범위 밖 후속이다(기존 지표 의미 불변 원칙 — 배선 시점에 별도 태스크로
+    귀속 변화량을 실측한 뒤 전환한다). 이 함수·테스트가 그 전환의 *계약 동결*이다.
+    """
+    if event_time is None:
+        return ingested_at
+    if event_time > ingested_at:
+        return ingested_at
+    return event_time
 
 
 def metric_date_of(moment: datetime, *, tz: ZoneInfo = KST) -> date:
@@ -363,6 +398,14 @@ def aggregate_user_behavior_metrics(
             seconds = [s for s in (f.effective_seconds() for f in day_sessions) if s is not None]
             if seconds:
                 pairs.append((BEHAVIOR_METRIC_ACTIVE_MINUTES, float(sum(seconds) // 60)))
+            # EOS-48 병행 지표 — 기존 daily_active_minutes(경과 기반)는 의미 불변. 실측
+            # active_seconds가 있는 세션만 measured로 합산하고("측정된 것만 적재" — 미측정
+            # 세션을 0으로 섞지 않는다), ratio는 계측이 실제 작동한 비율을 항상 보고한다
+            # (측정 0건인 날도 0.0 — 셈이라 사실·좌석≠작동을 드러내는 신호).
+            measured = [f.active_seconds for f in day_sessions if f.active_seconds is not None]
+            if measured:
+                pairs.append((BEHAVIOR_METRIC_MEASURED_ACTIVE_MINUTES, float(sum(measured) // 60)))
+            pairs.append((BEHAVIOR_METRIC_ACTIVE_MEASURED_RATIO, len(measured) / len(day_sessions)))
         if day_attempts:
             total = len(day_attempts)
             correct = sum(1 for a in day_attempts if a.is_correct is True)
@@ -492,6 +535,8 @@ async def _fetch_sessions(
         LearningSession.duration_seconds,
         LearningSession.focus_score,
         LearningSession.target_concept_id,
+        LearningSession.active_seconds,  # EOS-48: 실측 활동(측정된 것만 — 병행 지표 입력)
+        LearningSession.idle_seconds,
     ).where(
         LearningSession.user_id.is_not(None),
         LearningSession.started_at.is_not(None),
@@ -507,6 +552,8 @@ async def _fetch_sessions(
             duration_seconds=row.duration_seconds,
             focus_score=None if row.focus_score is None else float(row.focus_score),
             target_concept_id=row.target_concept_id,
+            active_seconds=row.active_seconds,  # EOS-48: NULL=미측정 그대로(0 날조 금지)
+            idle_seconds=row.idle_seconds,
         )
         for row in result
     ]
