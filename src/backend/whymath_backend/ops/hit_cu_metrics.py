@@ -160,10 +160,34 @@ class SessionSummary:
     """반려 실패코드들(F1~F8 값)."""
 
 
-def classify_sessions(events: Sequence[ReviewTimerEvent]) -> tuple[list[SessionSummary], int]:
-    """이벤트 → 세션 요약 + anomaly 수(한 세션 복수 slug/복수 종결 — 버리지 않고 센다).
+def dedupe_events(
+    events: Sequence[ReviewTimerEvent],
+) -> tuple[list[ReviewTimerEvent], int]:
+    """event_id 중복 제거(첫 관측 유지·입력 순서 보존) + 제거 수.
 
-    anomaly여도 데이터는 집계에 남긴다(관측을 버리면 침묵 실패) — 수만 리포트로 올린다.
+    같은 event_id 재출현은 새 관측이 아니라 같은 관측의 재기록이다(append 재시도 경로) —
+    그대로 두면 종결 이벤트가 두 번 합산돼 1분 검수가 2분이 된다(중앙값·P90 게이트 오염).
+    제거 수는 리포트로 올린다(조용히 버리면 침묵 실패).
+    """
+    seen: set[uuid.UUID] = set()
+    unique: list[ReviewTimerEvent] = []
+    duplicates = 0
+    for event in events:
+        if event.event_id in seen:
+            duplicates += 1
+            continue
+        seen.add(event.event_id)
+        unique.append(event)
+    return unique, duplicates
+
+
+def classify_sessions(events: Sequence[ReviewTimerEvent]) -> tuple[list[SessionSummary], int]:
+    """이벤트 → 세션 요약 + anomaly 수(한 세션 복수 slug/복수 종결).
+
+    anomaly 세션은 **계측 성립(measured)으로 치지 않는다** — 복수 종결의 경과 합산·복수
+    slug의 임의 slug 귀속은 구조적으로 신뢰할 수 없는 측정이라, 표본에 넣으면 중앙값·P90
+    게이트가 오염된다. 대신 버리지도 않는다: unmeasured로 강등해 CU 미계측 카운트와
+    anomaly 수 양쪽으로 가시화한다(관측을 버리면 침묵 실패).
     """
     by_session: dict[uuid.UUID, list[ReviewTimerEvent]] = {}
     for event in events:
@@ -180,12 +204,16 @@ def classify_sessions(events: Sequence[ReviewTimerEvent]) -> tuple[list[SessionS
             in (ReviewTimerEventType.FINISHED.value, ReviewTimerEventType.ABORTED.value)
         ]
         finishes = [e for e in terminal if e.event_type == ReviewTimerEventType.FINISHED.value]
-        if len(slugs) > 1 or len(terminal) > 1:
+        anomalous = len(slugs) > 1 or len(terminal) > 1
+        if anomalous:
             anomaly_count += 1
         # 결정론: slug는 started 이벤트 우선, 없으면 정렬 최솟값(안정).
         started = [e for e in group if e.event_type == ReviewTimerEventType.STARTED.value]
         slug = started[0].cu_slug if started else min(slugs)
-        measured = bool(terminal) and all(e.elapsed_ms is not None for e in terminal)
+        # anomaly는 measured 불성립 — 오염 표본을 KPI에 넣지 않는다(수는 위에서 셌다).
+        measured = (
+            bool(terminal) and not anomalous and all(e.elapsed_ms is not None for e in terminal)
+        )
         elapsed_total = sum(e.elapsed_ms for e in terminal if e.elapsed_ms is not None)
         summaries.append(
             SessionSummary(
@@ -273,6 +301,8 @@ class HitCuReport:
     window_excluded_count: int
     time_unknown_excluded_count: int
     session_anomaly_count: int
+    duplicate_event_count: int
+    """같은 event_id 재출현으로 제거된 행 수(append 재시도 등) — 중복 합산 오염 방지."""
 
     # ── 세션·CU 3분류(미측정≠0) ──
     session_count: int
@@ -306,8 +336,12 @@ class HitCuReport:
     # ── CU당 비용(GenerationLog 인프로세스 기록 — SaaS 비의존) ──
     cost_rows_matched: int = 0
     cost_rows_unmatched: int = 0
+    cost_rows_unmetered: int = 0
+    """조인은 됐으나 cost_usd(또는 토큰 전건)가 null인 행 — 0으로 날조하지 않고 분리."""
     cost_parse_errors: tuple[str, ...] = field(default=())
     cu_with_cost: int = 0
+    cu_cost_incomplete: int = 0
+    """비용 미기록 행이 섞인 CU — 부분합은 과소집계라 백분위 표본에서 제외."""
     cu_without_cost: int = 0
     cost_usd_per_cu_p50: float | None = None
     cost_usd_per_cu_p90: float | None = None
@@ -325,6 +359,9 @@ def aggregate(
     genlog_rows: Sequence[dict[str, Any]] | None = None,
 ) -> HitCuReport:
     """순수 집계 — 이벤트(+판정·비용 행) → HitCuReport. I/O 0."""
+    raw_count = len(events)
+    deduped, duplicate_count = dedupe_events(events)
+    events = deduped
     sessions, anomaly_count = classify_sessions(events)
     cus = classify_cus(sessions)
 
@@ -376,8 +413,10 @@ def aggregate(
     cu_slugs = {c.cu_slug for c in cus}
     cost_by_cu: dict[str, float] = {}
     tokens_by_cu: dict[str, int] = {}
+    cost_incomplete_cus: set[str] = set()
     matched = 0
     unmatched = 0
+    unmetered = 0
     cost_errors: list[str] = []
     for idx, row in enumerate(genlog_rows or (), start=1):
         slug_value = row.get("slug") or row.get("cu_slug")
@@ -387,24 +426,43 @@ def aggregate(
         if slug is None or slug not in cu_slugs:
             unmatched += 1
             continue
+        # null=미기록 — 0으로 변환하면 미계측 생성이 "$0 계측됨"으로 위장된다(스키마상
+        # cost_usd·토큰은 nullable). 미기록은 미기록으로 남기고 수를 센다.
+        cost_raw = row.get("cost_usd")
+        in_raw = row.get("input_tokens")
+        out_raw = row.get("output_tokens")
         try:
-            cost = float(row.get("cost_usd") or 0.0)
-            tokens = int(row.get("input_tokens") or 0) + int(row.get("output_tokens") or 0)
+            cost = float(cost_raw) if cost_raw is not None else None
+            tokens_in = int(in_raw) if in_raw is not None else None
+            tokens_out = int(out_raw) if out_raw is not None else None
         except (TypeError, ValueError) as exc:
             cost_errors.append(f"row {idx}: {type(exc).__name__}")
             continue
         matched += 1
-        cost_by_cu[slug] = cost_by_cu.get(slug, 0.0) + cost
-        tokens_by_cu[slug] = tokens_by_cu.get(slug, 0) + tokens
-    per_cu_costs = sorted(cost_by_cu.values())
+        if cost is None or (tokens_in is None and tokens_out is None):
+            unmetered += 1
+        if cost is None:
+            # 비용 미기록 행이 섞인 CU는 부분합(과소집계) — 백분위 표본에서 제외한다.
+            cost_incomplete_cus.add(slug)
+        else:
+            cost_by_cu[slug] = cost_by_cu.get(slug, 0.0) + cost
+        recorded_tokens = (tokens_in or 0) + (tokens_out or 0)
+        if tokens_in is not None or tokens_out is not None:
+            tokens_by_cu[slug] = tokens_by_cu.get(slug, 0) + recorded_tokens
+    # 완전 계측 CU만 백분위 표본 — 부분 기록 CU의 합은 진짜 비용의 하한일 뿐이다.
+    complete_cost_by_cu = {
+        slug: value for slug, value in cost_by_cu.items() if slug not in cost_incomplete_cus
+    }
+    per_cu_costs = sorted(complete_cost_by_cu.values())
     has_cost_input = genlog_rows is not None
 
     return HitCuReport(
-        event_count=len(events),
+        event_count=raw_count,
         parse_error_count=parse_error_count,
         window_excluded_count=window_excluded_count,
         time_unknown_excluded_count=time_unknown_excluded_count,
         session_anomaly_count=anomaly_count,
+        duplicate_event_count=duplicate_count,
         session_count=len(sessions),
         dangling_session_count=sum(1 for s in sessions if not s.has_terminal),
         cu_total=len(cus),
@@ -428,12 +486,19 @@ def aggregate(
         unknown_failure_code_count=unknown_code_count,
         cost_rows_matched=matched,
         cost_rows_unmatched=unmatched,
+        cost_rows_unmetered=unmetered,
         cost_parse_errors=tuple(cost_errors),
-        cu_with_cost=len(cost_by_cu),
-        cu_without_cost=(len(cu_slugs) - len(cost_by_cu)) if has_cost_input else len(cu_slugs),
+        cu_with_cost=len(complete_cost_by_cu),
+        cu_cost_incomplete=len(cost_incomplete_cus),
+        cu_without_cost=(
+            len(cu_slugs) - len(complete_cost_by_cu) - len(cost_incomplete_cus)
+            if has_cost_input
+            else len(cu_slugs)
+        ),
         cost_usd_per_cu_p50=_percentile(per_cu_costs, 0.50),
         cost_usd_per_cu_p90=_percentile(per_cu_costs, 0.90),
-        cost_usd_total=sum(per_cu_costs) if has_cost_input else None,
+        # 총액은 "기록된 비용의 합"(부분 기록 CU 포함) — 백분위와 달리 하한임을 렌더가 명기.
+        cost_usd_total=sum(cost_by_cu.values()) if has_cost_input else None,
         tokens_total=sum(tokens_by_cu.values()) if has_cost_input else None,
     )
 
@@ -455,10 +520,11 @@ def render_report(report: HitCuReport) -> str:
         "# HIT·CU 생산 계측 리포트 (EOS-54)",
         "",
         f"- 이벤트: 유효 {report.event_count} · 파싱 실패 {report.parse_error_count} · "
-        f"창 밖 제외 {report.window_excluded_count} · 시각 미상 제외 "
-        f"{report.time_unknown_excluded_count}",
+        f"중복 제거 {report.duplicate_event_count} · 창 밖 제외 "
+        f"{report.window_excluded_count} · 시각 미상 제외 {report.time_unknown_excluded_count}",
         f"- 세션: {report.session_count} (dangling {report.dangling_session_count} · "
-        f"anomaly {report.session_anomaly_count})",
+        f"anomaly {report.session_anomaly_count} — anomaly는 계측 불성립으로 강등, "
+        "HIT 표본 제외)",
         f"- CU 3분류: 계측 {report.cu_measured} / 미계측 {report.cu_unmeasured} / "
         f"미종결 {report.cu_unfinished} (합 {report.cu_total}) — 미계측·미종결은 HIT 표본에서 "
         "제외·분리 카운트(0초 산입 금지)",
@@ -523,11 +589,15 @@ def render_report(report: HitCuReport) -> str:
             else "미산출(조인 0)"
         )
         lines += [
-            f"- CU당 비용 p50 {p50} · p90 {p90} · 총 ${report.cost_usd_total:.4f} · "
-            f"총 토큰 {report.tokens_total}",
-            f"- 비용 조인: CU {report.cu_with_cost}개 계측 / {report.cu_without_cost}개 "
-            f"미계측(0원 산입 금지) · 행 매칭 {report.cost_rows_matched} · 미매칭 "
-            f"{report.cost_rows_unmatched} · 파싱 실패 {len(report.cost_parse_errors)}",
+            f"- CU당 비용 p50 {p50} · p90 {p90} (완전 계측 CU 표본만) · 기록 비용 합 "
+            f"${report.cost_usd_total:.4f}(부분 기록 CU 포함 — 하한) · 기록 토큰 합 "
+            f"{report.tokens_total}",
+            f"- 비용 조인: CU {report.cu_with_cost}개 완전 계측 / "
+            f"{report.cu_cost_incomplete}개 부분 기록(백분위 제외) / "
+            f"{report.cu_without_cost}개 미계측(0원 산입 금지) · 행 매칭 "
+            f"{report.cost_rows_matched} · 미매칭 {report.cost_rows_unmatched} · "
+            f"메트릭 미기록 {report.cost_rows_unmetered} · 파싱 실패 "
+            f"{len(report.cost_parse_errors)}",
         ]
     lines += [
         "",
@@ -545,8 +615,12 @@ def render_report(report: HitCuReport) -> str:
 
 
 def _say(message: str) -> None:
-    """단계별 진행 출력 — 즉시 flush(중간에 죽어도 어디까지 갔는지 남는다)."""
-    print(message, flush=True)
+    """단계별 진행·판정 출력 — stderr·즉시 flush(중간에 죽어도 어디까지 갔는지 남는다).
+
+    stdout은 데이터 전용이다 — --json 소비자(`jq`·`json.load`)가 진행 메시지에 깨지지
+    않도록 진행·판정 문구는 전부 stderr로 보낸다.
+    """
+    print(message, file=sys.stderr, flush=True)
 
 
 def _load_jsonl_dicts(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
@@ -657,6 +731,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── ③ 판정 소스(선택 — 명시 입력의 부재는 오독이 아니라 실패) ──
     verdict_rows: list[dict[str, Any]] | None = None
+    verdict_load_errors: list[str] = []
     if args.verdicts:
         verdicts_path = Path(args.verdicts)
         try:
@@ -679,6 +754,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── ④ GenerationLog 소스(선택) — 인프로세스 이중 회계(SaaS 비의존) ──
     genlog_rows: list[dict[str, Any]] | None = None
+    genlog_load_errors: list[str] = []
     if args.generation_log:
         genlog_path = Path(args.generation_log)
         try:
@@ -702,12 +778,29 @@ def main(argv: list[str] | None = None) -> int:
         verdict_rows=verdict_rows,
         genlog_rows=genlog_rows,
     )
+    # 데이터는 stdout(단일 JSON 문서 또는 리포트 본문), 진행·판정은 stderr(_say) — 분리.
     if args.json:
-        _say(json.dumps(dataclasses.asdict(report), ensure_ascii=False, indent=2))
+        print(json.dumps(dataclasses.asdict(report), ensure_ascii=False, indent=2), flush=True)
     else:
-        _say(render_report(report))
+        print(render_report(report), flush=True)
 
     # ── ⑥ 판정 — 표본 0은 성공 0이 아니라 측정 실패(acceptance ④) ──
+    # 파싱 실패 행이 하나라도 있으면 통과 금지 — 깨진 행이 하필 '느린 finished'였다면
+    # HIT 표본에서 사라진 채 게이트가 성공한다(부분 입력으로 판정 금지). 리포트는 이미
+    # 출력했으므로 증거는 남는다.
+    parse_failure_total = (
+        len(load_errors)
+        + len(verdict_load_errors)
+        + len(genlog_load_errors)
+        + len(report.verdict_parse_errors)
+        + len(report.cost_parse_errors)
+    )
+    if parse_failure_total > 0:
+        _say(
+            f"[측정 실패] 파싱 실패 {parse_failure_total}건 — 유실된 행이 표본을 바꿨을 수 "
+            "있어 부분 입력으로는 판정하지 않는다(입력을 고치고 재실행)"
+        )
+        return _EXIT_MEASUREMENT_FAIL
     if report.cu_measured == 0:
         _say(
             "[측정 실패] 계측 CU 0건 — 판정은 있어도 경과가 전건 미계측이면 HIT는 '0분'이 "
