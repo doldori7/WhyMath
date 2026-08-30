@@ -104,10 +104,12 @@ class TestMigrationFile:
         assert "op.drop_constraint(" not in source
 
     def test_chain_is_linear_on_the_single_head(self) -> None:
-        """체인 조율(acceptance ①) — EOS-48(c9bc2555282e) 위에 선형으로 쌓인다.
+        """체인 조율(acceptance ①) — EOS-54(84c782415837) 위에 선형으로 쌓인다.
 
-        저장소는 단일 head 관례다. 형제 태스크 EOS-47(problem_attempt 버전 고정)이 브랜치
-        head를 만들지 않고 이 리비전 위에 쌓이도록, 여기서 down_revision을 이름으로 동결한다.
+        저장소는 단일 head 관례다. 작성 시점 부모는 EOS-48(c9bc2555282e)이었으나 main에 EOS-54가
+        먼저 착지해 브랜치 head 2개가 됐고, 재부모화로 선형화했다(두 리비전은 건드리는 객체가
+        겹치지 않아 순서 의존 0 — 마이그레이션 docstring). 형제 EOS-47이 브랜치 head를 만들지
+        않도록 down_revision을 이름으로 동결한다.
         """
         source = next(_VERSIONS_DIR.glob(_MIGRATION_GLOB)).read_text(encoding="utf-8")
-        assert 'down_revision: str | None = "c9bc2555282e"' in source
+        assert 'down_revision: str | None = "84c782415837"' in source

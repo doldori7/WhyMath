@@ -21,14 +21,20 @@ skill_mastery_tracking.py`)에만 존재하고 버려졌다 — 문항↔개념�
 안전하다(직전 선례 `c0d1e2f3a4b5` 시각화조작·`b1c2d3e4f5a6` 힌트제공 docstring 동일 근거).
 `IF NOT EXISTS`로 재실행 멱등.
 
-**마이그레이션 체인 조율(EOS-57 acceptance ① 명시 요구)**: 착지 시점 단일 head는
-`c9bc2555282e`(EOS-48 event_time/active_time)이고 이 리비전이 그 위에 쌓인다. 같은 활동 도메인
-(`activity.py` 3테이블)을 건드리는 **미착수 형제 태스크 EOS-47**(problem_attempt 버전 고정 —
-`problem_version_id`·`evaluation_context`)과는 **테이블도 컬럼도 겹치지 않는다**: 본 리비전은
-`attempt_event` 1테이블에만 `skill_ids`를 더하고, EOS-47은 `problem_attempt`에 버전 컬럼을
-더한다. 따라서 EOS-47은 본 리비전 위에 선형으로 쌓으면 되고(브랜치 head 금지 — 저장소는 단일
-head 관례), 두 마이그레이션 사이에 순서 의존이 없다(어느 쪽이 먼저 착지해도 무방하며, 나중
-착지분이 그때의 head를 down_revision으로 잡는다).
+**마이그레이션 체인 조율(EOS-57 acceptance ① 명시 요구)**: 본 리비전은 `84c782415837`
+(EOS-54 review_timer_event) 위에 쌓인다. 작성 시점의 head는 `c9bc2555282e`(EOS-48)였으나
+main에 EOS-54가 먼저 착지해 두 리비전이 같은 부모를 갖는 **브랜치 head 2개** 상태가 됐고,
+이를 EOS-57 쪽 재부모화로 선형화했다(저장소는 단일 head 관례 — `test_solution_path_orm.py::
+test_single_head_chain`이 동결). **순서 의존은 없다**: EOS-54는 `review_timer_event` 테이블을
+새로 만들고 본 리비전은 `attempt_event`에 컬럼 1개 + enum 값 1개를 더한다 — 건드리는 객체가
+겹치지 않아 어느 순서로 적용해도 결과가 같다. 재부모화가 안전한 이유가 이것이다(merge 리비전을
+만들지 않은 이유이기도 하다).
+
+같은 활동 도메인(`activity.py` 3테이블)을 건드리는 **미착수 형제 태스크 EOS-47**(problem_attempt
+버전 고정 — `problem_version_id`·`evaluation_context`)과도 **테이블도 컬럼도 겹치지 않는다**:
+본 리비전은 `attempt_event` 1테이블에만 `skill_ids`를 더하고, EOS-47은 `problem_attempt`에 버전
+컬럼을 더한다. 따라서 EOS-47은 그 시점 head 위에 선형으로 쌓으면 되고 두 마이그레이션 사이에
+순서 의존이 없다.
 
 **ADR-001 재확인(hypertable 전환 무충돌)**: nullable 배열 컬럼 추가는 파티션 키(`event_at`)·
 복합 PK를 건드리지 않는다 — `create_hypertable` 전환 절차는 컬럼 목록과 무관하게 동작하고,
@@ -38,7 +44,7 @@ upgrade: enum 값 1개 add(멱등) + 컬럼 1개 add(nullable·default 없음).
 downgrade: 컬럼 drop(대칭). enum 값은 PG가 제거를 지원하지 않아 관례대로 남긴다(no-op·무손상).
 
 Revision ID: d4a71c0f9b32
-Revises: c9bc2555282e
+Revises: 84c782415837
 Create Date: 2026-09-01 01:00:00.000000
 """
 
@@ -53,7 +59,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d4a71c0f9b32"
-down_revision: str | None = "c9bc2555282e"
+down_revision: str | None = "84c782415837"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
