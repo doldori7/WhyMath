@@ -5,9 +5,10 @@
 data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용자 PII인지* 열거(`_ERASURE_PLAN`)
 하므로, 그 인벤토리의 *학습/진단 subset*을 **읽기**로 재사용해 본인 데이터를 한데 모은다.
 
-범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 15종(학습 세션·시도·진단·개념 숙달 이력·능력
+범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 17종(학습 세션·시도·진단·개념 숙달 이력·능력
 스냅샷·동의·트랙/페르소나/상태 이력·오개념 가설·진단 증거·일별 학습 지표·행동 지표 시계열·대화
-세션 메타 + **세부 시도 이벤트**) + **대화 턴 본문**(`dialogue_turns`·조인) + `user_profile` 단건.
+세션 메타 + **세부 시도 이벤트** + **답 제출 시퀀스**(EOS-32 `answer_submission` — 본인 제출
+원문·채점·오류 분석)) + **대화 턴 본문**(`dialogue_turns`·조인) + `user_profile` 단건.
 **보안 항목 영구 제외**: `device_credential`·`refresh_token_session`(로그인 토큰·기기 자격 — 노출은
 보안 위험·"개인 학습 데이터" 아님). 손글씨 이미지 원본 파일(외부 저장소·URI만 포함)·외부 store
 실조회·비동기 job은 후속 — 미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다(날조 0).
@@ -50,6 +51,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.activity import AttemptEvent, LearningSession, ProblemAttempt
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
@@ -112,6 +114,9 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (UserBehaviorMetrics, "user_id", "user_behavior_metrics"),  # 증분 4: 학습 행동 시계열
     (Dialogue, "user_id", "dialogues"),  # 증분 5: 대화 세션 메타(본문은 DialogueTurn·아래 조인)
     (AttemptEvent, "user_id", "attempt_events"),  # 증분 7: 세부 시도 이벤트(동기·Phase1)
+    # EOS-32: 답 제출 시퀀스(본인 풀이 원문·채점·오류 분석 — 본인 열람권 Art.15에 그대로 안전.
+    # 성적 예측 필드 0·자유텍스트는 본인 제출물 자체). user_id 직접 보유·to_schema() 보유.
+    (AnswerSubmission, "user_id", "answer_submissions"),
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).

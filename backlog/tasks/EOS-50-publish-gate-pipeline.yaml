@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-50-publish-gate-pipeline
+title: "Publish Gate — Draft→Publish 검증 파이프라인(§9 QA 연계) 배선"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 44_eos_version_management.md §9의 Publish Gate를 코드로: publish 전이 시 검증 파이프라인(스키마 유효성·content_hash 산출·governance 필드 완결) 경유를 강제 — 검증 미통과 publish는 exit/예외로 거부(기계 게이트·점추정 인상 판정 금지)"
+  - "② 기존 검수 축과 이원화 금지: review_status(ReviewStatus)·PB-03 노출 계약과의 관계를 먼저 판정해 문서화 — 같은 축이면 재사용, 다른 축이면 경계 명문화(판정 이원화 회피)"
+  - "③ 집행 지점 별항: publish API/CLI가 실제로 이 게이트를 경유함을 소스 스캔 또는 통합 테스트로 동결(정본화≠집행)"
+  - "④ 범위 밖: Impact Analysis·Dependency lock(Phase 2 — §13)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/api/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: 44_eos_version_management.md §16-6 — EOS-44 종결 시 MVP 범위(§12 'Publish with validation') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화"
+updated: 2026-08-30

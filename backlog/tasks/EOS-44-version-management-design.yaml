@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -15,9 +15,10 @@ acceptance:
   - Problem Concept Solution version schema contract defined
   - "Published=immutable lifecycle enforced"
   - VersionContext and Release Snapshot scoped for Phase 2
-artifacts: []
+artifacts:
+  - "PR #877 (https://github.com/doldori7/WhyMath/pull/877) — 설계 문서 착지(main 56579260·423줄·설계 확정 2026-08-25). acceptance 대조: ①문서 approved(#877 머지) ②§6.2 VersionHeader+§6.3 Problem/Concept/Solution 버전 테이블 계약 정의 ③§7 상태 머신(PUBLISHED→DRAFT 금지 명문)+§12 'Published=immutable 원칙' — 설계 계약 확정, 코드 집행은 ARCH-31·EOS-49(신규)·EOS-50(신규) 소유 ④§10/§13이 VersionContext·Release Snapshot을 2단계로 명시 유보. 부기 경위: cur-15 세션이 claim 후 #877로 산출물만 착지·done 미기록 — /drive가 종결하며 §16 후속 중 MVP 좌석 부재 2건(ConceptVersion·Publish Gate)을 EOS-49/50으로 등재"
 paths:
   - docs/architecture/44_eos_version_management.md
 session: null
 notes: "References 011_1, ARCH-20, CUR-07, S1-16. Per 011_1 no unified Entity super-table; domain UUID PKs with common VersionHeader contract. MVP + Phase 2 scope."
-updated: 2026-08-25
+updated: 2026-08-30

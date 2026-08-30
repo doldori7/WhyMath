@@ -10,6 +10,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 도메인8 Provenance (§10.1): ContentProvenance·GenerationLog.
   - 도메인3 User (§5.1·§5.2): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot.
   - 도메인4 Activity (§6.1): LearningSession·ProblemAttempt·AttemptEvent.
+  - EOS-32 AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — 32_learning_history §4).
   - 도메인5 Dialogue (§7.1): Dialogue·DialogueTurn.
   - 도메인6 Assessment (§8.1): Assessment·ConceptMasteryHistory.
   - 도메인7 TimeSeries (§9.1): DailyLearningMetrics·ProblemSolveTimeDistribution·
@@ -44,6 +45,7 @@ from whymath_backend.db.models.activity import (
     LearningSession,
     ProblemAttempt,
 )
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
@@ -184,6 +186,8 @@ __all__ = [
     "LearningSession",
     "ProblemAttempt",
     "AttemptEvent",
+    # EOS-32: AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — evidence_links 1급 입력)
+    "AnswerSubmission",
     # 도메인5 Dialogue
     "Dialogue",
     "DialogueTurn",

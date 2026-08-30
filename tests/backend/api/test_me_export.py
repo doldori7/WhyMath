@@ -119,9 +119,10 @@ def _client() -> TestClient:
     app.dependency_overrides[get_consented_user] = _user
 
     async def _sess() -> AsyncIterator[_FakeSession]:
-        # 15종 카테고리 + 대화 턴 조인(15) + profile(16) = 17 execute. learning_sessions(0)·
-        # parental_consents(5)·misconception_evidence(10)·user_behavior_metrics(12)·dialogues(13)·
-        # attempt_events(14)·dialogue_turns(15)에 1행씩, 나머지 빈, profile 1행.
+        # _EXPORT_PLAN 17종 카테고리 + 대화 턴 조인(17) + profile(18) = 19 execute.
+        # learning_sessions(0)·parental_consents(6)·misconception_evidence(11)·
+        # user_behavior_metrics(13)·dialogues(14)·attempt_events(15)·answer_submissions(16·EOS-32·
+        # 빈)·dialogue_turns(17)에 행, 나머지 빈, profile 1행.
         yield _FakeSession(
             [
                 [_StubRow({"sid": "s1"})],
@@ -140,6 +141,7 @@ def _client() -> TestClient:
                 [_StubRow({"metric": "churn_risk"})],
                 [_StubRow({"resolution": "자기풀이"})],
                 [_StubRow({"event": "step_submit"})],
+                [],  # answer_submissions(EOS-32·빈 구간)
                 [_StubRow({"content": "x=2?"}, content="x=2?")],
                 [_StubRow({"uid": str(_UID)})],
             ]
@@ -177,6 +179,7 @@ class TestExportMyData:
         assert body["data"]["user_behavior_metrics"] == [{"metric": "churn_risk"}]  # 증분 4 신규
         assert body["data"]["dialogues"] == [{"resolution": "자기풀이"}]  # 증분 5 신규(세션 메타)
         assert body["data"]["attempt_events"] == [{"event": "step_submit"}]  # 증분 7 신규
+        assert body["data"]["answer_submissions"] == []  # EOS-32 신규(답 제출 시퀀스·빈)
         # 증분 6 신규(턴 본문) + SEC-01: 이미지 두 축도 복호 표면에 올라 응답에 실린다.
         assert body["data"]["dialogue_turns"] == [
             {"content": "x=2?", "image_uri": None, "image_analysis": None}
@@ -218,6 +221,7 @@ class TestExportMyData:
                 [_StubRow({"metric": "churn_risk"})],
                 [_StubRow({"resolution": "자기풀이"})],
                 [_StubRow({"event": "step_submit"})],
+                [],  # answer_submissions(EOS-32·빈 구간)
                 [_StubRow({"content": "x=2?"}, content="x=2?")],
                 [_StubRow({"uid": str(_UID)})],
             ]

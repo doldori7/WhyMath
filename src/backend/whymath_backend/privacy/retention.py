@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.config import get_settings
 from whymath_backend.db.base import Base
 from whymath_backend.db.models.activity import AttemptEvent, LearningSession, ProblemAttempt
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
@@ -65,6 +66,10 @@ __all__ = ["purge_expired_records", "retention_cutoff"]
 # 동반 제거(자식 타임스탬프 무관). attempt_event·시계열 지표는 느슨참조(FK 차단 없음).
 _RETENTION_PLAN: tuple[tuple[type[Base], str], ...] = (
     (Dialogue, "started_at"),  # → dialogue_turn DB CASCADE
+    # EOS-32: 제출 시퀀스(미성년 풀이 데이터) — problem_attempt보다 먼저(자식 우선·attempt 파기
+    # 시 CASCADE 동반 제거와 별개로, attempt가 창 안에 남아도 만료 제출은 파기). NOT NULL
+    # submitted_at이라 NULL-미파기 잔존 없음.
+    (AnswerSubmission, "submitted_at"),
     (ProblemAttempt, "started_at"),  # learning_session보다 먼저(session→attempt CASCADE 역순 방지)
     (LearningSession, "started_at"),
     (AttemptEvent, "event_at"),  # 느슨참조·hypertable(고아 방지)
