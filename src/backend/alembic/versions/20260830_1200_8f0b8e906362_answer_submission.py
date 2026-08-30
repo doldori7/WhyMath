@@ -11,16 +11,21 @@ data migration 0건. 이관·병행 전략 = 32_learning_history §4).
 
 구조(ORM 정본 `db/models/answer_submission.py`와 1:1):
   - PK `submission_id` UUID `gen_random_uuid()`.
-  - `attempt_id` NOT NULL FK → problem_attempt **ON DELETE CASCADE**(attempt 삭제 시 자식 제출
-    동반 제거 — slice 56 dialogue_turn 선례).
-  - `user_id` NOT NULL FK → user_profile(NO ACTION — 삭제권은 앱레벨 `_ERASURE_PLAN`이 자식
-    우선 명시 삭제·`problem_attempt.user_id` 동형).
+  - `(attempt_id, user_id)` NOT NULL **복합 FK** → problem_attempt(attempt_id, user_id)
+    **ON DELETE CASCADE**(PR #902 P1 정정 — 미배포 리비전 직접 수정): 단독 attempt FK로는
+    "A의 attempt + B의 user_id" 조합이 통과해 user_id 선별 export/erasure에 타인 데이터가
+    섞인다. 참조 대상 UNIQUE `uq_problem_attempt_attempt_user`를 problem_attempt에 먼저
+    추가한다(attempt_id PK라 논리 중복이나 복합 FK 참조 대상으로 필요 — PG 표준 패턴·기존 행
+    무영향). CASCADE(attempt 삭제 시 자식 제출 동반 제거)는 복합 FK가 담당.
+  - `user_id` NOT NULL FK → user_profile(복합 FK와 별도 — 계정 실재 강제. NO ACTION — 삭제권은
+    앱레벨 `_ERASURE_PLAN`이 자식 우선 명시 삭제·`problem_attempt.user_id` 동형).
   - `UNIQUE(attempt_id, sequence_no)` — attempt 내 제출 순번 유일(dialogue_turn 선례).
   - JSONB 3종(canonical_ast·grading_result·error_analysis) — ORM은 `none_as_null=True`(SEC-06).
   - `submitted_at` TIMESTAMPTZ NOT NULL DEFAULT now() — 보존 파기(`_RETENTION_PLAN`) 축.
   - 인덱스 `(user_id, submitted_at DESC)` — 학생 단위 최근순 조회·privacy 경로.
 
-upgrade: 테이블·PK·FK·UNIQUE·인덱스 생성(additive). downgrade: 테이블 drop(제약·인덱스 동반).
+upgrade: problem_attempt 참조 대상 UNIQUE → 테이블·PK·복합 FK·UNIQUE·인덱스 생성(additive).
+downgrade: 테이블 drop(제약·인덱스 동반) → problem_attempt UNIQUE drop(대칭 원복).
 
 Revision ID: 8f0b8e906362
 Revises: d7e8f1a2b4c6
@@ -44,6 +49,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # PR #902 P1: 복합 FK 참조 대상 — (attempt_id, user_id) 유일성 보장(attempt_id PK라 논리
+    # 중복이지만 PG가 복합 FK 대상에 요구·기존 행 무영향). 테이블 생성보다 먼저.
+    op.create_unique_constraint(
+        "uq_problem_attempt_attempt_user",
+        "problem_attempt",
+        ["attempt_id", "user_id"],
+    )
     op.create_table(
         "answer_submission",
         sa.Column(
@@ -67,9 +79,11 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
+        # PR #902 P1: 소유 일치 복합 FK — "A의 attempt + B의 user_id" 조합을 DB가 거부.
         sa.ForeignKeyConstraint(
-            ["attempt_id"],
-            ["problem_attempt.attempt_id"],
+            ["attempt_id", "user_id"],
+            ["problem_attempt.attempt_id", "problem_attempt.user_id"],
+            name="fk_answer_submission_attempt_owner",
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
@@ -89,3 +103,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("idx_answer_submission_user", table_name="answer_submission")
     op.drop_table("answer_submission")
+    # 복합 FK 참조 대상 UNIQUE도 대칭 원복(테이블 drop 후라 참조자 0 — 안전).
+    op.drop_constraint("uq_problem_attempt_attempt_user", "problem_attempt", type_="unique")

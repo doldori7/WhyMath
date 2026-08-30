@@ -78,8 +78,11 @@ class TestAnswerSubmissionTable:
         ddl = str(CreateTable(AnswerSubmission.__table__).compile(dialect=postgresql.dialect()))
         assert "answer_submission" in ddl
         assert "PRIMARY KEY (submission_id)" in ddl
-        # attempt 삭제(GDPR) 시 자식 제출 동반 제거(slice 56 dialogue_turn 선례).
-        assert "REFERENCES problem_attempt (attempt_id) ON DELETE CASCADE" in ddl
+        # PR #902 P1: 소유 일치 복합 FK + attempt 삭제(GDPR) 시 자식 제출 동반 제거(CASCADE).
+        assert (
+            "FOREIGN KEY(attempt_id, user_id) "
+            "REFERENCES problem_attempt (attempt_id, user_id) ON DELETE CASCADE" in ddl
+        )
         # pseudonymous user_id 직접 보유(privacy 3종 배선의 균일 경로) — NO ACTION.
         assert "REFERENCES user_profile (user_id)" in ddl
         assert "CONSTRAINT uq_answer_submission_attempt_seq UNIQUE (attempt_id, sequence_no)" in ddl
@@ -93,6 +96,39 @@ class TestAnswerSubmissionTable:
             assert (
                 columns[name].nullable is False
             ), f"answer_submission.{name}은 NOT NULL이어야 한다"
+
+    def test_composite_attempt_user_fk_declared(self) -> None:
+        """PR #902 P1 — (attempt_id, user_id) 복합 FK가 problem_attempt를 가리킨다(CASCADE).
+
+        attempt FK와 user FK가 독립이면 "A의 attempt + B의 user_id" 조합 INSERT가 통과해,
+        user_id만으로 선별하는 export/erasure에 타인 데이터가 섞인다(소유 불일치). 복합 FK가
+        그 조합을 DB에서 거부한다(실제 강제는 아래 실 PG 통합테스트).
+        """
+        composite = [
+            constraint
+            for constraint in AnswerSubmission.__table__.constraints
+            if constraint.__class__.__name__ == "ForeignKeyConstraint"
+            and tuple(constraint.columns.keys()) == ("attempt_id", "user_id")
+        ]
+        assert len(composite) == 1, "(attempt_id, user_id) 복합 FK가 정확히 1개여야 한다"
+        targets = {fk.target_fullname for fk in composite[0].elements}
+        assert targets == {"problem_attempt.attempt_id", "problem_attempt.user_id"}
+        assert composite[0].ondelete == "CASCADE"
+
+    def test_problem_attempt_has_composite_unique_for_fk_target(self) -> None:
+        """PR #902 P1 — 복합 FK 참조 대상 UNIQUE(attempt_id, user_id)가 problem_attempt에 선언.
+
+        attempt_id가 PK라 논리적으로 중복이지만, PG는 복합 FK의 참조 대상 컬럼 조합에 유일성
+        보장을 요구한다(표준 패턴).
+        """
+        from whymath_backend.db.models.activity import ProblemAttempt
+
+        unique_sets = [
+            tuple(constraint.columns.keys())
+            for constraint in ProblemAttempt.__table__.constraints
+            if constraint.__class__.__name__ == "UniqueConstraint"
+        ]
+        assert ("attempt_id", "user_id") in unique_sets
 
     def test_sequence_unique_constraint_declared(self) -> None:
         """UNIQUE(attempt_id, sequence_no) — attempt 내 제출 순번 유일(정규 시퀀스 계약)."""
@@ -163,7 +199,13 @@ class TestMigrationFile:
         assert 'op.create_table(\n        "answer_submission"' in source
         assert 'op.drop_table("answer_submission")' in source
         assert 'name="uq_answer_submission_attempt_seq"' in source
-        assert 'ondelete="CASCADE"' in source  # attempt FK
+        assert 'ondelete="CASCADE"' in source  # attempt 복합 FK
+        # PR #902 P1: 소유 일치 복합 FK + 참조 대상 UNIQUE(problem_attempt) — up/down 대칭.
+        assert '["attempt_id", "user_id"]' in source
+        assert 'name="fk_answer_submission_attempt_owner"' in source
+        assert '"uq_problem_attempt_attempt_user"' in source
+        assert "op.create_unique_constraint(" in source
+        assert "op.drop_constraint(" in source
         assert '"idx_answer_submission_user"' in source
         assert 'op.drop_index("idx_answer_submission_user"' in source
         # 체인: S4-10 gen_meta(d7e8f1a2b4c6) 위에 쌓인다(단일 head 불변의 짝 —
@@ -172,13 +214,14 @@ class TestMigrationFile:
 
 
 # ===========================================================================
-# 통합 (실 PG·기본 SKIP) — UNIQUE(attempt_id, sequence_no) 실제 강제 왕복
+# 통합 (실 PG·기본 SKIP) — UNIQUE(attempt_id, sequence_no) + 복합 FK 소유 일치 실제 강제 왕복
 # ===========================================================================
 
 
 @pytest.mark.integration
-def test_sequence_no_unique_enforced_on_live_pg() -> None:
-    """같은 attempt에 같은 sequence_no 2건 INSERT → IntegrityError(중복 시퀀스 거부)."""
+def test_sequence_unique_and_owner_fk_enforced_on_live_pg() -> None:
+    """실 PG 제약 강제 2건 — ①같은 attempt·같은 sequence_no 중복 거부(UNIQUE) ②타인 attempt에
+    제출을 다는 소유 불일치 조합("A의 attempt + B의 user_id") 거부(복합 FK·PR #902 P1)."""
     from pydantic import SecretStr
     from sqlalchemy import text
     from sqlalchemy.exc import IntegrityError
@@ -207,10 +250,22 @@ def test_sequence_no_unique_enforced_on_live_pg() -> None:
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
-    uid = uuid.uuid4()
-    aid = uuid.uuid4()
+    uid_a = uuid.uuid4()  # attempt 소유자 A
+    uid_b = uuid.uuid4()  # 타인 B(소유 불일치 조합 시도용)
+    aid = uuid.uuid4()  # A 소유 attempt
 
-    def _submission(seq: int) -> AnswerSubmission:
+    def _user(uid: uuid.UUID, nickname: str) -> UserProfile:
+        return UserProfile.from_schema(
+            UserProfileSchema(
+                user_id=uid,
+                persona_primary=Persona.A_일반고고3,
+                nickname=nickname,
+                email_hash=f"HASH-{uid.hex[:8]}",
+                is_minor=True,
+            )
+        )
+
+    def _submission(uid: uuid.UUID, seq: int) -> AnswerSubmission:
         return AnswerSubmission.from_schema(
             SchemaAnswerSubmission(
                 attempt_id=aid, user_id=uid, sequence_no=seq, response_type="text"
@@ -221,31 +276,33 @@ def test_sequence_no_unique_enforced_on_live_pg() -> None:
         engine = create_async_engine(settings.database_url)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
+            # 시드는 commit — 위반 2건을 각각 독립 세션에서 시도해도 남아 있게(정리는 _cleanup).
             async with sm() as session:
-                session.add(
-                    UserProfile.from_schema(
-                        UserProfileSchema(
-                            user_id=uid,
-                            persona_primary=Persona.A_일반고고3,
-                            nickname="제출학생",
-                            email_hash=f"HASH-{uid.hex[:8]}",
-                            is_minor=True,
-                        )
-                    )
-                )
+                session.add(_user(uid_a, "제출학생A"))
+                session.add(_user(uid_b, "타인B"))
                 await session.flush()
                 session.add(
-                    ProblemAttempt.from_schema(ProblemAttemptSchema(attempt_id=aid, user_id=uid))
+                    ProblemAttempt.from_schema(ProblemAttemptSchema(attempt_id=aid, user_id=uid_a))
                 )
+                await session.commit()
+
+            # ① 같은 (attempt_id, sequence_no) — UNIQUE가 거부해야 한다.
+            async with sm() as session:
+                session.add(_submission(uid_a, 1))
                 await session.flush()
-                session.add(_submission(1))
-                await session.flush()
-                # 같은 (attempt_id, sequence_no) — UNIQUE가 거부해야 한다.
-                session.add(_submission(1))
+                session.add(_submission(uid_a, 1))
                 with pytest.raises(IntegrityError) as excinfo:
                     await session.flush()
                 assert "uq_answer_submission_attempt_seq" in str(excinfo.value)
-                await session.rollback()  # 실패 트랜잭션 정리(시드 포함 전부 롤백)
+                await session.rollback()
+
+            # ② A의 attempt + B의 user_id — 복합 FK가 거부해야 한다(PR #902 P1 소유 일치).
+            async with sm() as session:
+                session.add(_submission(uid_b, 1))
+                with pytest.raises(IntegrityError) as excinfo:
+                    await session.flush()
+                assert "fk_answer_submission_attempt_owner" in str(excinfo.value)
+                await session.rollback()
         finally:
             await engine.dispose()
 
@@ -258,7 +315,10 @@ def test_sequence_no_unique_enforced_on_live_pg() -> None:
                     ("problem_attempt", "user_id"),
                     ("user_profile", "user_id"),
                 ):
-                    await conn.execute(text(f"DELETE FROM {tbl} WHERE {col} = :k"), {"k": str(uid)})
+                    for uid in (uid_a, uid_b):
+                        await conn.execute(
+                            text(f"DELETE FROM {tbl} WHERE {col} = :k"), {"k": str(uid)}
+                        )
         finally:
             await engine.dispose()
 

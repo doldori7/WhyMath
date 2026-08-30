@@ -76,6 +76,18 @@ class TestAnswerSubmissionContract:
         with pytest.raises(ValidationError):
             _minimal(unknown_field="x")
 
+    def test_raw_response_and_latex_preserve_whitespace_verbatim(self) -> None:
+        """PR #902 P2 — 제출 원문은 *바이트 동일* 보존(strip 정규화 금지).
+
+        raw_response의 계약은 "제출된 그대로"다 — 앞뒤 공백도 오류 분석 증거(입력 습관·OCR
+        전사 특성)라서 조용한 정규화는 증거 유실이다. latex도 동일(수식 표현 원문 축).
+        """
+        raw = "  x = 2  "
+        tex = "\tx = 2 \n"
+        sub = _minimal(response_type="latex", raw_response=raw, latex=tex)
+        assert sub.raw_response == raw  # 바이트 동일 — strip 없음
+        assert sub.latex == tex
+
 
 class TestGradingResultContract:
     def test_method_must_be_nonempty(self) -> None:

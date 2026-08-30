@@ -12,14 +12,21 @@
 
 영속 매핑 결정(근거 병기):
   - `submission_id` UUID PK `gen_random_uuid()` — 배치1 UUID PK 선례.
-  - `attempt_id` UUID **NOT NULL FK problem_attempt.attempt_id ON DELETE CASCADE** — attempt 없는
-    제출은 없다(신규 수집이라 항상 attempt 컨텍스트 존재). attempt 삭제(GDPR) 시 자식 제출 동반
-    제거(slice 56 `dialogue_turn`→`dialogue` CASCADE 선례와 동형).
-  - `user_id` UUID **NOT NULL FK user_profile.user_id** — pseudonymous user_id만(PII 직접 컬럼
-    금지·§11.5). 비정규화 직접 보유가 privacy 3종 배선(삭제권 user 단위 delete·반출 user 단위
-    select)의 균일 경로를 만든다(`attempt_event.user_id` 동거 선례). CASCADE 없음 —
-    `problem_attempt.user_id`와 동형(NO ACTION — 삭제권은 앱레벨 `_ERASURE_PLAN`이 자식 우선
-    명시 삭제).
+  - `(attempt_id, user_id)` **NOT NULL 복합 FK → problem_attempt(attempt_id, user_id)
+    ON DELETE CASCADE** (PR #902 P1 정정) — attempt FK와 user FK를 독립으로 두면 "A의 attempt +
+    B의 user_id" 조합 INSERT가 통과해, `user_id`만으로 선별하는 export/erasure에 타인 풀이·채점
+    데이터가 섞인다(소유 불일치). 복합 FK가 그 조합을 DB 수준에서 거부한다 — 참조 대상 UNIQUE
+    `(attempt_id, user_id)`는 `problem_attempt`에 추가(attempt_id PK라 논리 중복이나 복합 FK
+    참조 대상으로 필요 — PG 표준 패턴). attempt 삭제(GDPR) 시 자식 제출 동반 제거는 유지
+    (slice 56 `dialogue_turn`→`dialogue` CASCADE 선례와 동형). 부수 강제(정직 명시):
+    `problem_attempt.user_id`가 NULL인 attempt는 (attempt_id, user_id) 쌍이 실재하지 않아
+    제출을 못 단다 — 소유자 미상 attempt에 제출을 다는 것 자체가 소유 불일치이므로 의도된
+    강제다(신규 수집 경로는 항상 인증 학생 컨텍스트).
+  - `user_id` UUID **NOT NULL FK user_profile.user_id**(복합 FK와 별도 유지) — pseudonymous
+    user_id만(PII 직접 컬럼 금지·§11.5). 직접 보유가 privacy 3종 배선(삭제권 user 단위 delete·
+    반출 user 단위 select)의 균일 경로를 만든다(`attempt_event.user_id` 동거 선례). CASCADE
+    없음 — `problem_attempt.user_id`와 동형(NO ACTION — 삭제권은 앱레벨 `_ERASURE_PLAN`이
+    자식 우선 명시 삭제).
   - `sequence_no` INTEGER NOT NULL + **UNIQUE(attempt_id, sequence_no)** — attempt 내 제출 순번
     유일(1부터). `dialogue_turn` `UNIQUE(dialogue_id, turn_order)` 선례와 동형(명명 제약은
     `misconception_hypothesis` `uq_*` 선례).
@@ -81,13 +88,11 @@ class AnswerSubmission(Base):
         primary_key=True,
         server_default=sa.text("gen_random_uuid()"),
     )
-    # attempt 삭제(GDPR) 시 자식 제출 동반 제거 — ON DELETE CASCADE(slice 56 dialogue_turn 선례).
-    attempt_id: Mapped[uuid.UUID] = mapped_column(
-        sa.Uuid,
-        sa.ForeignKey("problem_attempt.attempt_id", ondelete="CASCADE"),
-        nullable=False,
-    )
+    # attempt 참조는 단독 FK가 아니라 (attempt_id, user_id) *복합 FK*(__table_args__ — PR #902
+    # P1: 타인 attempt에 제출을 다는 소유 불일치 조합을 DB가 거부).
+    attempt_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False)
     # pseudonymous user_id 직접 보유 — privacy 3종 배선의 균일 경로(모듈 docstring 근거).
+    # user_profile FK는 복합 FK와 별도 유지(계정 실재 강제).
     user_id: Mapped[uuid.UUID] = mapped_column(
         sa.Uuid, sa.ForeignKey("user_profile.user_id"), nullable=False
     )
@@ -114,6 +119,15 @@ class AnswerSubmission(Base):
 
     # ── 제약·인덱스 ──
     __table_args__ = (
+        # PR #902 P1: attempt·user 소유 일치의 DB 강제 — (attempt_id, user_id) 쌍이 실재하는
+        # problem_attempt 행과 일치해야 INSERT된다("A의 attempt + B의 user_id" 조합 거부).
+        # attempt 삭제(GDPR) 시 자식 제출 동반 제거(CASCADE)는 이 복합 FK가 담당.
+        sa.ForeignKeyConstraint(
+            ["attempt_id", "user_id"],
+            ["problem_attempt.attempt_id", "problem_attempt.user_id"],
+            name="fk_answer_submission_attempt_owner",
+            ondelete="CASCADE",
+        ),
         sa.UniqueConstraint("attempt_id", "sequence_no", name="uq_answer_submission_attempt_seq"),
         sa.Index("idx_answer_submission_user", "user_id", sa.desc("submitted_at")),
     )

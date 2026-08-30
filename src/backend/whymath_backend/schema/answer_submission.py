@@ -95,11 +95,16 @@ class AnswerSubmission(BaseModel):
 
     개인정보 메모(모듈 docstring 참조): `raw_response`·`latex`·`canonical_ast`는 *미성년 풀이
     데이터*다 — 저장·동의 계층 책임(문서화만·가짜 validator 없음).
+
+    **str_strip_whitespace 미적용(PR #902 P2)**: 이 모델의 str 필드는 `raw_response`·`latex`
+    둘뿐이고, 둘 다 계약이 "제출된 그대로"다 — 앞뒤 공백도 오류 분석 증거(입력 습관·OCR 전사
+    특성)라 조용한 strip 정규화는 증거 유실이다. 바이트 동일 보존을 테스트가 동결한다
+    (`test_raw_response_and_latex_preserve_whitespace_verbatim`). 식별자 성격 필드의 strip은
+    서브모델(GradingResult.method 등)이 각자 유지한다.
     """
 
     model_config = ConfigDict(
         extra="forbid",
-        str_strip_whitespace=True,
     )
 
     # ===== 기본 식별 =====

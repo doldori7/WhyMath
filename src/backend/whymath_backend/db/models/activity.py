@@ -215,6 +215,11 @@ class ProblemAttempt(Base):
             "stuck_at_concept_id",
             postgresql_where=sa.text("stuck_at_concept_id IS NOT NULL"),
         ),
+        # EOS-32(PR #902 P1): answer_submission의 복합 FK (attempt_id, user_id) 참조 대상.
+        # attempt_id가 PK라 이 UNIQUE는 논리적으로 중복이지만, PG는 복합 FK가 가리키는 컬럼
+        # 조합에 유일성 보장(UNIQUE/PK)을 요구한다 — 참조 대상 좌석용 표준 패턴(값 제약 추가
+        # 효과는 0·기존 행 무영향).
+        sa.UniqueConstraint("attempt_id", "user_id", name="uq_problem_attempt_attempt_user"),
     )
 
     @classmethod
