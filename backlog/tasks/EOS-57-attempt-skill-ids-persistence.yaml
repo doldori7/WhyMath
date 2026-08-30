@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/db/models/activity.py
   - "src/backend/whymath_backend/alembic/**"
   - "tests/backend/**"
-session: null
+session: claude/next-task-progress-2p549h
 notes: "출처: EOS-53 crosswalk 갭 #4(E3 잔여). 선언 정본 §5 '미확정' 항의 실측 확정(영속 좌석 0 — 런타임 브리지 l2/skill_mastery_tracking.py:182만 존재). 12월 데이터에 남길 소급 불가 축."
 updated: 2026-08-30

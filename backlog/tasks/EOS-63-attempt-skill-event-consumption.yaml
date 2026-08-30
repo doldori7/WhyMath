@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-63-attempt-skill-event-consumption
+title: "skill_mastery_tracking 소비 전환 — 런타임 해소 대신 attempt_event.skill_ids 기록을 읽는다 (EOS-57 승계)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - EOS-57-attempt-skill-ids-persistence
+requires_gates: []
+acceptance:
+  - "① 소비 전환: 스킬 축 분석·롤업이 concept→skill 런타임 재해소 대신 attempt_event.skill_ids(기록된 사실)를 읽는다 — 매핑이 사후에 바뀌어도 과거 시도의 귀속이 흔들리지 않는 것이 전환의 목적"
+  - "② 전환 선결 조건 명시: EOS-57 기록률 리포트(harness/attempt_skill_event_reach_report)의 writer 도달률이 관측 창에서 충분히 쌓인 뒤에만 전환한다 — 기록 0건 상태에서 소비를 바꾸면 스킬 숙달 전파가 죽는다(착수 시 실측 수치를 notes에 남긴다)"
+  - "③ 폴백 계약: skill_ids가 NULL(미기록 구판 행)인 과거 시도는 '기록 없음'으로 말하고 런타임 재해소로 조용히 메우지 않는다 — 미기록과 해소 0건의 구분(EOS-57 None≠[] 규약)을 소비측이 무너뜨리지 않음을 테스트로 동결"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/skill_mastery_tracking.py
+  - src/backend/whymath_backend/l2/attempt_skill_event.py
+  - "tests/backend/l2/**"
+session: null
+notes: "출처: EOS-57 acceptance ③('집행 별항: 소비 지점 전환은 후속 태스크로 분리'). EOS-57은 영속 좌석+writer까지만 소유한다."
+updated: 2026-08-30
