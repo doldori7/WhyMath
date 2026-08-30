@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -22,6 +22,6 @@ paths:
   - "src/backend/whymath_backend/privacy/**"
   - "tests/backend/**"
   - "docs/architecture/**"
-session: null
+session: claude/uncommitted-changes-qjhp6f
 notes: "32_학습 이력 검토 갭. 정오답보다 '어느 단계에서 오류'를 학습하는 데이터가 목적. db/models/solution_node.py는 학생 데이터가 아니므로 혼동 금지."
-updated: 2026-08-26
+updated: 2026-08-30
