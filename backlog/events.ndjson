@@ -6458,3 +6458,4 @@
 {"ts": "2026-08-30T12:08:17", "actor": "claude/mvp-eos-transition-plan-ghcajm", "action": "policy_warn", "id": "OPS-56-weekly-metrics-cron", "rule": "path_overlap", "other": "WEB-01-landing-static-v1", "detail": "프리픽스 포함: .github/workflows/** ⊇ .github/workflows/**", "mode": "warn"}
 {"ts": "2026-08-30T12:08:17", "actor": "claude/mvp-eos-transition-plan-ghcajm", "action": "policy_warn", "id": "OPS-56-weekly-metrics-cron", "rule": "path_overlap", "other": "WEB-02-landing-deploy", "detail": "프리픽스 포함: .github/workflows/** ⊇ .github/workflows/**", "mode": "warn"}
 {"ts": "2026-08-30T12:08:17", "actor": "claude/mvp-eos-transition-plan-ghcajm", "action": "add", "id": "OPS-56-weekly-metrics-cron"}
+{"ts": "2026-08-30T12:09:43", "actor": "claude/mvp-eos-transition-plan-ghcajm", "action": "done", "id": "EOS-53-plan52-backlog-crosswalk", "artifacts": ["#908", "docs/reviews/eos_plan52_crosswalk_2026-09.md"]}
