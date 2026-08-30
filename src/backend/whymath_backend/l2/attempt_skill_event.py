@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -38,6 +39,8 @@ from whymath_backend.schema.enums import EventType
 from whymath_backend.schema.event_data_contract import build_event_data
 
 __all__ = ["AttemptSource", "record_attempt_skill_event"]
+
+_logger = logging.getLogger("whymath.l2.attempt_skill_event")
 
 
 class AttemptSource(str, Enum):
@@ -64,23 +67,39 @@ async def record_attempt_skill_event(
     skill_ids: Iterable[str],
     source: AttemptSource,
     event_at: datetime | None = None,
-) -> AttemptEvent:
+) -> AttemptEvent | None:
     """해소된 스킬 배열을 `문제시도` 이벤트 1건으로 적재하고 **commit까지 수행**한다.
 
     `skill_ids`는 *해소 결과 그대로*를 순서 보존·중복 제거해 싣는다(빈 반복자면 `[]` — None으로
     승격하지 않는다: "해소했는데 0건"은 실측이고 NULL은 미기록이라 의미가 다르다).
 
-    commit을 여기서 하는 이유: 두 호출부 모두 이 시점에 이미 attempt를 commit해 트랜잭션 경계가
-    닫혀 있고(숙달 전파 헬퍼도 자체 commit한다), 기록 유실 시 "채점은 됐는데 스킬 귀속만 사라진"
-    상태가 조용히 생기는 것을 막아야 한다. 예외는 삼키지 않는다 — 실패하면 호출부로 전파해
-    핸들러의 트랜잭션 정책이 판정한다(침묵 실패 금지: best-effort로 삼키면 소급 불가 축이
-    무증상으로 비는데, 그것이 이 태스크가 존재하는 이유 자체다).
+    **실패 시 예외를 전파하지 않고 None을 반환한다** — 초안은 전파(500)였으나 PR #913 리뷰
+    지적으로 재판정했다. 결정적 근거는 "전파해도 기록이 남지 않는다"는 것이다:
 
-    전파 설계가 배포에서 안전한 근거(실측·가정 아님): `문제시도` enum 값이 DB에 없으면 이
-    INSERT가 실패해 채점 응답이 500이 된다 — 즉 "코드가 마이그레이션보다 먼저 뜨는" 순서에
-    민감하다. `deploy.yml`은 `alembic upgrade head`를 컨테이너 기동(`up -d`)보다 **먼저**
-    실행하므로(deploy.yml:184-190) 신규 코드가 트래픽을 받을 때는 값이 이미 존재한다.
-    `skip_migration=true`는 운영자의 명시적 롤백 선택이며 런북 §6이 판단 기준을 소유한다.
+      - 전파(500) 시 — attempt·숙달은 *이미 commit*됐고 이벤트만 실패한다. 클라가 재시도하면
+        `submit_attempt`에 멱등키가 없으므로 **새 attempt**(새 UUID)가 생기고 숙달이 한 번 더
+        적용된다. 원래 attempt의 이벤트는 그래도 영원히 없다.
+      - 흡수(201) 시 — 이벤트만 없다. 중복 attempt도, 이중 계상된 숙달도 없다.
+
+    즉 두 경우 모두 그 이벤트를 잃는다. 전파는 데이터를 구하지 못하면서 **학습자 모델까지
+    오염**시킨다(BKT sample_size 이중 계상 = 학생 숙달 추정 왜곡). CLAUDE.md 의사결정
+    우선순위상 학생 상태의 정합이 분석 축 한 칸보다 앞선다.
+
+    **침묵 실패가 아니다**(CLAUDE.md 금기 준수) — 두 가지가 실패를 말한다:
+      ① 로그에 **예외 타입명**을 남긴다(무타입 경고 금지 — langfuse v2 무증상 전멸 교훈).
+      ② `harness/attempt_skill_event_reach_report`의 **"writer 미도달"** 칸이 그 attempt를
+         센다 — 유실이 *비율로* 보인다. 이 리포트가 존재하는 이유가 정확히 이것이다.
+    삼켜도 되는 이유가 "덜 중요해서"가 아니라 **유실이 계측되기 때문**이라는 점이 핵심이다.
+
+    남은 한계(정직한 공백): 진짜 원자성(attempt·숙달·이벤트 단일 트랜잭션)은 공유 L2 헬퍼 2개
+    (`record_problem_attempt_mastery`·`record_problem_attempt_skill_mastery`)의 commit 소유권을
+    호출부로 옮겨야 해서 이 PR 범위를 넘는다 — 재시도 멱등성(멱등키)까지 함께 봐야 하는 별도
+    설계 사안이다.
+
+    배포 순서 안전성(실측·가정 아님): `문제시도` enum 값이 DB에 없으면 이 INSERT가 실패한다.
+    `deploy.yml`은 `alembic upgrade head`를 컨테이너 기동(`up -d`)보다 **먼저** 실행한다
+    (deploy.yml:184-190). 흡수 설계로 바뀐 지금은 그 순서가 어긋나도 채점이 죽지 않고 기록률만
+    떨어진다(리포트가 즉시 드러낸다).
 
     `event_at`은 서버 기록(수신) 시각이다 — 이 테이블의 기존 writer 전부와 같은 의미로 서버
     `now(UTC)`를 넣는다(EOS-48 실측 명문화). 클라 신고 발생 시각(`event_time`)은 채점 경로에
@@ -102,5 +121,20 @@ async def record_attempt_skill_event(
         skill_ids=deduped,  # [] 유지(None 승격 금지 — 미기록과 해소 0건은 다른 사실).
     )
     session.add(event)
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001 — 타입명을 남기고 흡수(위 docstring의 재판정 근거)
+        # 세션을 되살린다 — commit 실패 후 rollback 없이는 이후 사용이 전부 실패한다.
+        await session.rollback()
+        _logger.error(
+            "문제시도 이벤트 적재 실패 — attempt_id=%s source=%s skill_ids=%d건 (%s): %s. "
+            "채점·숙달은 이미 durable하므로 요청은 성공으로 끝내고, 이 유실은 "
+            "attempt_skill_event_reach_report의 'writer 미도달' 비율로 계측된다.",
+            attempt_id,
+            source.value,
+            len(deduped),
+            type(exc).__name__,
+            exc,
+        )
+        return None
     return event

@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.l2.attempt_skill_event import AttemptSource, record_attempt_skill_event
@@ -26,17 +28,27 @@ _PID = uuid.uuid4()
 
 
 class _FakeSession:
-    """add/commit만 시뮬 — writer는 조회를 하지 않는다(해소는 호출부가 이미 끝냈다)."""
+    """add/commit만 시뮬 — writer는 조회를 하지 않는다(해소는 호출부가 이미 끝냈다).
 
-    def __init__(self) -> None:
+    `commit_error`를 주면 commit이 그 예외를 던진다(적재 실패 경로 재현).
+    """
+
+    def __init__(self, commit_error: Exception | None = None) -> None:
         self.added: list[Any] = []
         self.commits = 0
+        self.rollbacks = 0
+        self._commit_error = commit_error
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
 
     async def commit(self) -> None:
+        if self._commit_error is not None:
+            raise self._commit_error
         self.commits += 1
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
 
 
 async def _record(**kwargs: Any) -> tuple[_FakeSession, Any]:
@@ -112,3 +124,74 @@ async def test_event_at_is_server_time_and_event_time_stays_null() -> None:
 async def test_source_labels_are_closed_two() -> None:
     """경로 라벨은 폐쇄 2종 — 기록률 리포트의 경로별 분모가 이 집합에 의존한다."""
     assert {s.value for s in AttemptSource} == {"attempt_submit", "coach_completion"}
+
+
+class TestCommitFailureIsAbsorbedButNotSilent:
+    """적재 실패 정책(PR #913 리뷰 재판정) — 흡수하되 계측 가능하게 남긴다.
+
+    전파(500)를 택하지 않은 이유는 "덜 중요해서"가 아니라 **전파해도 기록이 남지 않기
+    때문**이다: `submit_attempt`에 멱등키가 없어 재시도는 *새* attempt를 만들고 숙달을 한 번 더
+    적용한다 — 원래 attempt의 이벤트는 어차피 없고, 학습자 모델만 추가로 오염된다.
+    """
+
+    async def test_commit_failure_returns_none_instead_of_raising(self) -> None:
+        session = _FakeSession(commit_error=RuntimeError("연결 끊김"))
+        result = await record_attempt_skill_event(
+            cast(AsyncSession, session),
+            user_id=_UID,
+            attempt_id=_AID,
+            problem_id=_PID,
+            is_correct=True,
+            skill_ids=["skill.a"],
+            source=AttemptSource.attempt_submit,
+        )
+        assert result is None  # 전파하지 않는다 — 채점 응답은 성공으로 끝난다
+        assert session.rollbacks == 1  # 세션을 되살린다(rollback 없으면 이후 사용이 전부 실패)
+
+    async def test_failure_log_carries_the_exception_type_name(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """무타입 경고 금지 — 8개의 서로 다른 실패가 같은 글자로 보이면 안 된다.
+
+        변별력: 예외 타입명(`OperationalError`)이 로그에 실제로 들어가는지를 본다. 이 단언이
+        없으면 "실패를 삼키되 원인을 남긴다"는 계약이 코드에서 조용히 증발할 수 있다.
+        """
+
+        class OperationalError(RuntimeError):
+            """PG 계열 오류 시뮬 — 타입명이 로그에 남는지가 관심사다."""
+
+        session = _FakeSession(commit_error=OperationalError("서버가 연결을 닫음"))
+        with caplog.at_level(logging.ERROR, logger="whymath.l2.attempt_skill_event"):
+            await record_attempt_skill_event(
+                cast(AsyncSession, session),
+                user_id=_UID,
+                attempt_id=_AID,
+                problem_id=_PID,
+                is_correct=False,
+                skill_ids=[],
+                source=AttemptSource.coach_completion,
+            )
+        rendered = caplog.text
+        assert "OperationalError" in rendered  # 예외 *타입명*
+        assert "coach_completion" in rendered  # 어느 채점 경로였는지
+        assert str(_AID) in rendered  # 어느 attempt가 이벤트를 잃었는지
+        assert "writer 미도달" in rendered  # 계측 경로를 로그가 스스로 가리킨다
+
+    async def test_success_path_does_not_log_an_error(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """변별력 — 정상 적재에서는 error 로그가 없다(성공/실패가 같은 화면이면 위장이다)."""
+        session = _FakeSession()
+        with caplog.at_level(logging.ERROR, logger="whymath.l2.attempt_skill_event"):
+            result = await record_attempt_skill_event(
+                cast(AsyncSession, session),
+                user_id=_UID,
+                attempt_id=_AID,
+                problem_id=_PID,
+                is_correct=True,
+                skill_ids=["skill.a"],
+                source=AttemptSource.attempt_submit,
+            )
+        assert result is not None
+        assert session.rollbacks == 0
+        assert caplog.text == ""
