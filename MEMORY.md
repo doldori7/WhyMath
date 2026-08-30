@@ -7223,3 +7223,11 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **기계 집행 신설**: `tests/backend/schema/test_failure_definition_freeze.py` — ①§5 전문 정규화 sha256 동결(`a9ad9f6a…`) ②판정 임계 토큰 6건(12분·2%·60%·6중3·Conditional 2·10%) 개별 단언 ③**서명 기록 자체 동결**(게이트를 pending으로 되돌리는 우회도 CI red) + 뮤테이션 변별력 3건. 서명 전 red(8p/1f)→clear 후 green(9p) 실측 — "1차 집행은 규칙 산문이 아니라 코드다"(PB-02 선례). §6 KPI *목표값*은 해시 범위 밖(§5만 동결)이라 G2(10/25) 재조정 경로는 보존된다.
 - **잔여(게이트 요건 아님·선언 §4 "종료 시 산출")**: W2(9/7~) 태스크 확정·여유 82h 배분 — 후속 /drive에서. `EOS-56`(앵커 1급 등록)은 requires G-eos-g0 해소로 착수 가능 전환.
 - **cross-ref**: `eos_verification_design_v1.md` §5·§8 · `backlog/gates.yaml` G-eos-g0 evidence(서명 전문) · PR #908(대상 문서 착지).
+
+## 2026-08-30: 동결 장치 자체의 결함 2건 — "배선 확인 없이 완료 선언" 재발 (PR #910 리뷰 수용)
+
+- **경위**: G0 서명의 기계 집행으로 만든 `test_failure_definition_freeze.py`가 **두 축에서 무력**이었고, 자동 리뷰(Codex)가 둘 다 지목했다. 세션은 PR 본문 체크박스에 "CI 잡이 이 변경을 실제로 실행한다"를 스스로 체크한 상태였다 — *이 PR에서는* 참이지만 *방어 대상 벡터에서는* 거짓이었다.
+- **P1(배선·중대)**: `ci.yml` backend 필터에 동결 입력 2건(`docs/standards/eos_verification_design_v1.md`·`backlog/gates.yaml`)이 없어, **그 파일만 고치는 PR은 backend 잡이 SKIP**되고 skip은 required check에서 충족으로 계상된다 → 실패정의·서명을 조용히 고치고 머지할 수 있었다. `data/corpus`·`schemas` 편입(COLLAB-07 ①②)과 **완전히 같은 형태의 사각**이며, 이 저장소에서 이 유형은 4회차다(OPS-03 tests/infra 미실행·OPS-08 required check 미강제·OPS-11 infra lint 부재·COLLAB-04/07). 상환: 필터 편입 + `test_ci_contract_fixture_trigger_wiring.py` **계약 ⑧** — 동결 테스트의 `FROZEN_INPUT_PATHS`를 **AST로 파싱**해 강제(경로 하드코딩 두 벌 금지 = 계약 ②의 파생 원칙 답습·새 동결 입력이 늘면 가드가 자동 추종). 변별력 실측: 편입 이전 필터로 되돌리면 계약 ⑧ RED(EXIT=1), 복원 시 green.
+- **P2(단언 무력)**: 서명 기록 검증이 `cleared`+`evidence 비어있지 않음`+`블록에 2026-08-30 포함` 3단언이었는데, **게이트 블록에는 `requested: 2026-08-30`이 항상 있어** 날짜 단언이 무변별이었다. 즉 evidence를 "서명 철회"로 갈아끼워도 전건 통과 — 뮤테이션으로 재현 확인(3단언 all pass). 상환: 정규식 블록 절단 → `yaml.safe_load` 파싱으로 바꾸고 **evidence 전문 sha256 동결**(`7ee70ad6…`) + 날짜는 evidence *값*에서 확인. 뮤테이션 후 3건 RED로 검출 실측.
+- **교훈(일반화)**: "변별력 없는 검증 스텝 금지"는 *검사 대상*뿐 아니라 **검사가 읽는 범위**에도 적용된다 — 넓은 블록에서 substring을 찾으면 그 블록의 *다른 필드*가 단언을 대신 만족시킨다(P2). 그리고 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 확인 대상은 "이 PR에서 도는가"가 아니라 **"방어 대상 변경에서 도는가"**다(P1). 후자를 PR 체크박스가 묻는 문장으로 오독한 것이 이번 누락의 직접 원인이다.
+- **cross-ref**: PR #910 리뷰 코멘트 2건 · `tests/infra/test_ci_contract_fixture_trigger_wiring.py` 계약 ⑧ · `.github/workflows/ci.yml` backend 필터 주석(2026-08-30 편입 사유).
