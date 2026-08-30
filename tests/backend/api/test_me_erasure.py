@@ -89,8 +89,8 @@ class TestEraseMyAccount:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["user_id"] == str(_UID)
-        # 20개 테이블(+answer_submission·EOS-32 +hint_usage·EOS-45) + user_profile, 각 2행 = 42.
-        assert body["total_rows_deleted"] == 42
+        # 21개 테이블(+EOS-32/45/46 신규 3종) + user_profile, 각 2행 = 44.
+        assert body["total_rows_deleted"] == 44
         assert fake.commits == 1  # 엔드포인트가 commit(원자적)
         # DeletionAudit 1행 적재(GDPR 증빙·삭제 전).
         from whymath_backend.db.models.audit import DeletionAudit

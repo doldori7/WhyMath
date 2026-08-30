@@ -54,6 +54,7 @@ from whymath_backend.db.models.assessment import (
 )
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.hint_usage import HintUsage
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.timeseries import (
     DailyLearningMetrics,
     ProblemSolveTimeDistribution,
@@ -74,6 +75,8 @@ _RETENTION_PLAN: tuple[tuple[type[Base], str], ...] = (
     # EOS-45: 힌트 사용 이력 — answer_submission과 동형(자식 우선·NOT NULL requested_at이라
     # NULL-미파기 잔존 없음).
     (HintUsage, "requested_at"),
+    # EOS-46: 학생 풀이 step — 같은 계열(자식 우선·NOT NULL submitted_at·NULL-미파기 없음).
+    (StudentSolutionStep, "submitted_at"),
     (ProblemAttempt, "started_at"),  # learning_session보다 먼저(session→attempt CASCADE 역순 방지)
     (LearningSession, "started_at"),
     (AttemptEvent, "event_at"),  # 느슨참조·hypertable(고아 방지)

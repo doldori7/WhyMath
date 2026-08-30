@@ -111,6 +111,16 @@ EOS-45가 `hint_usage` 테이블(ORM `db/models/hint_usage.py` · schema `schema
 3. **소유 정합·privacy** — EOS-32 PR #902 P1의 (attempt_id, user_id) 복합 FK 관례를 신설 시점부터 적용(참조 대상 UNIQUE는 EOS-32 것 재사용). privacy 3종(erasure `user_id`·retention `requested_at`·export `hint_usages`) 등재 완료, 완결성은 `test_erasure_plan_completeness`가 동결.
 4. **writer 배선은 범위 밖** — 힌트 서빙 경로가 이 테이블에 적재를 시작하는 것은 후속 몫이며, 그 전까지 빈 좌석이다(좌석 존재 ≠ 수집 작동).
 
+### 이관·병행 전략 — EOS-46 StudentSolutionStep 구현 확정 (2026-08-30)
+
+EOS-46이 `student_solution_step` 테이블(ORM `db/models/student_solution_step.py` · schema `schema/student_solution_step.py` · alembic `a926d39f126a`)을 착지시킨다. **저장 형태 판정(attempt_event 확장 기각·별도 정규 엔티티 채택)의 정본은 `docs/architecture/adr/ADR-002-student-solution-step-entity.md`**(hypertable 정본·실측 대조, 기각 대안·검토 결함 포함).
+
+1. **백필 없음(의도적)** — 과거 step *내용*의 원천이 존재하지 않는다: `problem_attempt.step_times` JSONB는 단계별 *시간*만 담고, `attempt_event`의 `계산`·`그래프그리기` 등은 본문 없는 telemetry다. expression·canonical_ast·validation을 과거분에 만들어 넣는 것은 재구성이 아니라 날조다. 수집은 배포·writer 배선 시점부터.
+2. **명칭·책임 구분** — `student_solution_step`(학생 제출물·미성년 PII 계열) ↔ `solution_nodes`(WH-S MCTS 탐색 노드·시스템 상태) ↔ `problem_step`(문항 저작 정본). 혼동 금지는 ADR-002 3자 대조표 + ORM docstring + 기계 동결(`test_distinct_from_whs_solution_node`).
+3. **기존 흔적과의 병행** — `problem_attempt.step_times`(시간)·attempt_event telemetry(행위 신호)는 불변 유지. `student_solution_step`은 *내용·검증·개념 태그* 축의 신규 원천이며 셋은 서로 대체하지 않는다.
+4. **소유 정합·privacy** — EOS-32 복합 FK 관례 적용(참조 대상 UNIQUE 재사용). privacy 3종(erasure `user_id`·retention `submitted_at`·export `student_solution_steps`) 등재 완료·완결성 스윕 동결.
+5. **writer 배선은 범위 밖** — step 제출 서빙 경로의 적재 시작은 후속 몫(빈 좌석·좌석 존재 ≠ 수집 작동). validation 채움도 그 writer가 SymPy 검증 경유로 수행한다(검증 계약 불변).
+
 ---
 
 ## 5. 버전 고정 (44번 문서와의 연계)
@@ -188,7 +198,7 @@ EOS-45가 `hint_usage` 테이블(ORM `db/models/hint_usage.py` · schema `schema
 
 1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선). **구현 착지 2026-08-30** — 이관·병행 전략은 §4 "이관·병행 전략" 확정(데이터 이관 0건·병행 기록·writer 배선은 범위 밖 후속).
 2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트. **구현 착지 2026-08-30** — 이관·병행 판단은 §4 "이관·병행 전략 — EOS-45"(백필 없음·used_hint 병행·writer 배선은 범위 밖 후속).
-3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
+3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR. **구현 착지 2026-08-30** — 판정 = 별도 정규 엔티티 `student_solution_step`(ADR-002·attempt_event 확장 기각), 백필 판정은 §4 "이관·병행 전략 — EOS-46".
 4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).
 5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지).
 
