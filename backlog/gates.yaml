@@ -61,7 +61,7 @@ gates:
     status: cleared
     requested: 2026-08-30
     remind_after_days: 7
-    evidence: "검증설계서 v1(docs/standards/eos_verification_design_v1.md·#908 머지 3b007e23) 검토·승인 — 앵커 6개·주 25h·실패정의 F-Ⅰ~Ⅴ 동결 서명. 서명 주체=Kiki: 2026-08-30 본인 확정(AskUserQuestion 앵커·시간 결정) + 본인 clear 실행 시도(kiki 머신 PowerShell 로그 — 구버전 대장이라 '게이트 없음' 거부·세션이 선례대로 완료분 반영, 새 서명 아님). G0 차단 3조건 전부 충족: ①앵커 세트+코드셋 ②CU·실패코드 문서+코드 동결 ③실패정의 동결·서명"
+    evidence: "2026-08-30 Kiki 서명 — 검증설계서 v1(docs/standards/eos_verification_design_v1.md·#908 머지 3b007e23) 검토·승인: 앵커 6개·주 25h·실패정의 F-Ⅰ~Ⅴ 문안 그대로 동결(조기 서명 — 예정일 9/6). 서명 주체=Kiki: 2026-08-30 본인 확정(AskUserQuestion — 앵커·시간 결정 + '서명 확정 — 동결' 응답 실측) + 본인 clear 실행 시도(kiki 머신 PowerShell 로그 — 구버전 대장이라 '게이트 없음' 거부·세션이 선례대로 완료분 반영, 새 서명 아님). 차단 3조건 전부 충족: ①앵커 세트 6개+성취기준 코드셋(문서 §1-1·§2) ②CU 스키마·실패코드 F1~F8 문서+코드 동결(#908 GenerationFailureCode+계약 테스트) ③실패정의 동결·서명(본 clear — 문서 명문 '그 clear가 곧 서명'). 대상 §5 정규화 sha256=a9ad9f6ab7d4b065bf0c89d67e57e1d7cf827b6a4f4db4866a49c605d3553e3a. 기계 집행: tests/backend/schema/test_failure_definition_freeze.py — §5 해시·임계 토큰·서명 기록(게이트 되돌림·evidence 교체 차단) 3축 CI 동결 + 트리거 배선 강제(infra 계약 ⑧). W2 태스크 확정·여유 82h 배분은 차단 조건 아님(선언 §4 '종료 시 산출') — 후속 진행. 본 문안은 병렬 두 세션(#909·#910)의 서명 기록을 병합한 것이며 새 서명이 아니다."
     notes: ""
   - id: G-eos-ip-separation-evidence
     title: "겸직 IP 귀속 분리 증빙 — ①개인 장비·개인 계정·개인 시간 작업 사실 증빙(커밋 타임스탬프 등) ②재직사 자산·데이터 무사용 확인서 자체 작성·보관 ③신설 법인 설립 시 IP 양도 계약 예정 기록. 12/31 산출물 전체의 귀속 리스크·투자 실사 항목(전환 설계서 §1.1-b, 2h 소요)"
