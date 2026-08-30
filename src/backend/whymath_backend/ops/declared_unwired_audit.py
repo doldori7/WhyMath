@@ -1027,6 +1027,16 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "ops.wh1_shadow_probe": _LIVE_DEPENDENT,
         "harness.wh1_shadow_harvest": _LIVE_DEPENDENT,
         "harness.residue_cross_verify_eval": _LIVE_DEPENDENT,
+        # EOS-54(2026-08-30): HIT·CU 생산 계측 판독기 — 검수 타이머 *실이벤트*(JSONL) 의존.
+        # 계측 표본이 쌓이기 전에는 입력 0 = 측정 실패(exit 1)가 설계값(미측정≠0 승격)이라 CI
+        # 상시 배선 비대상 — G2(10/25) 기준선·G5 판정 시점에 운영자가 돌린다(answer_distribution_
+        # battle "사람이 판단 시점에 돌린다"와 동형). 판정 소비처는 tests/backend/ops/
+        # test_hit_cu_metrics.py(backend 잡 수집 — exit 0/1 양쪽 실측). 검수 UI 결선 별항은
+        # ADMIN-07 후속(정본화≠집행 — 모듈 docstring).
+        "ops.hit_cu_metrics": (
+            "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
+            "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
+        ),
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,

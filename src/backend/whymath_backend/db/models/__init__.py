@@ -125,6 +125,7 @@ from whymath_backend.db.models.provenance import (
     GenerationLog,
 )
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.review_timer_event import ReviewTimerEvent
 from whymath_backend.db.models.rights import (
     ContentRightsLink,
     ContentSourceLink,
@@ -196,6 +197,8 @@ __all__ = [
     "HintUsage",
     # EOS-46: StudentSolutionStep (학생 풀이 step 정규 기록 — ADR-002·WH-S SolutionNode와 무관)
     "StudentSolutionStep",
+    # EOS-54: ReviewTimerEvent (HIT 검수 타이머 이벤트 — 검수자 텔레메트리·학생 축 없음)
+    "ReviewTimerEvent",
     # 도메인5 Dialogue
     "Dialogue",
     "DialogueTurn",
