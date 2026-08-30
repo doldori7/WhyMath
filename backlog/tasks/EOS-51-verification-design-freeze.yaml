@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on:
@@ -22,6 +22,6 @@ paths:
   - "schemas/v1.1/**"
   - "src/backend/whymath_backend/schema/**"
   - "tests/backend/schema/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: 260830 전환 설계서 §3(검증 설계)·§2.4(실패 정의)·xlsx 06_KPI측정. G0(9/6) 차단 조건 ①②③의 산출물. 실패정의를 12월에 만들면 검증이 아니라 확증편향이 된다."
 updated: 2026-08-30
