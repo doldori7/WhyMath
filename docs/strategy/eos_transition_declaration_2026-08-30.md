@@ -1,0 +1,332 @@
+# WhyMath MVP 종료 · EOS 전환 선언 — D0(8/30)·W1(8/31~9/6) 실행계획
+
+> **작성일**: 2026-08-30 (일) | **성격**: 전환 선언 정본 + 금일·1주 실행계획 + 체크리스트
+>
+> **근거 문서 3종** (Kiki 제공, 저장소 외부 — 핵심 표는 본 문서 부록에 전사):
+> ① `006_MVP 개발 종료·EOS 전환 코딩·절차 체크리스트` (2026-08-27 기준)
+> ② `260830_WhyMath_EOS 전환 설계서` (2026-08-30 — ①을 대체·정밀화한 최신본)
+> ③ `260830_WhyMath_EOS_개발기준_추적표.xlsx` (8시트: 대시보드·개발항목 52·주간계획 18주·게이트 6·개발기준 41·KPI측정·저작권·이전절차 MP-0~7)
+>
+> **집행 체계**: 작업일정 정본은 계속 `backlog/`(빌드 하네스)다. 본 문서는 선언과 주간 리듬의 정본이며,
+> "다음 할 일"은 여전히 `python3 scripts/harness/backlog.py next`가 계산한다.
+
+---
+
+## §0. 전환 선언 (정본)
+
+**2026년 8월 30일, WhyMath MVP(기능 단위 개발 국면)를 종료하고 EOS(Education OS) 전환을 선언한다.**
+
+1. **전환일**: 2026-08-30. 이 시점의 main(`0d6fb82d`, PR #903, hermetic 10,724 passed)이 MVP 최종 베이스라인이며 `whymath-mvp-final-2026-08-30` 태그로 동결한다(EOS-06).
+2. **12/31의 재정의**: 2026-12-31은 **외부 출시일이 아니라 내부 검증 판정일**이다. 앱스토어·결제·마케팅·CS·베타 사용자 확보는 전부 2027년 범위다.
+3. **목표 2축**: ① EOS 아키텍처 검증 ② **AI 콘텐츠 생산 가능성의 기술적·내용적 확인**(최우선). 주 기준은 폐쇄루프 완결이 아니라 **"출시 등급 CU 1건 생산의 인간 개입 시간(HIT)이 전 학교급에서 손익분기(중앙값 4분) 아래인가"**다. 폐쇄루프는 목적이 아니라 콘텐츠 품질을 재는 계측기로 강등한다(깊이앵커 1개에서만 완결).
+4. **판정**: 12/27 데이터 동결 → 12/31 **Go / Conditional Go / No-Go**. 판정 질문은 "2027년 1학기 출시를 위한 콘텐츠 대량 생산에 자원을 투입해도 되는가, 투입한다면 어느 범위에". 실패 정의 F-Ⅰ~Ⅴ는 **G0(9/6)에 동결하고 12월에 수정하지 않는다**. No-Go는 프로젝트 중단이 아니라 AI-first 콘텐츠 전략의 폐기(AI 보조 저작 도구로 전환 등)다.
+5. **신규 기능 게이트**: 오늘 이후 신규 개발 항목은 "12월 검증(G0~G5)에 필요한가"를 통과해야 등재한다. 기존 백로그는 폐기가 아니라 crosswalk(EOS-53)로 흡수·이월 판정한다.
+6. **불변**: 검증 계약(SymPy 단일 권위·학생 제공 전 검증·Langfuse 추적·미성년자 데이터 정책·저작권 레일)과 CLAUDE.md 금기는 전환과 무관하게 유지된다.
+
+이 선언은 2026-07-24 채택된 북극성 서사(`education_os_positioning_v1.md`)의 **실행 국면 진입**이며, 2026-08-23부터 진행된 EOS 설계안 검토 연쇄(단원구조·32 학습이력·44 버전관리·48 보안·28 MathLive → EOS-* 태스크)의 상위 계획을 공식화한 것이다.
+
+---
+
+## §1. 저장소 실상 대조 — 계획서가 보지 못한 것
+
+전환 설계서는 스스로 "실제 코드베이스를 보지 않았다"(§8.3)고 자인한다. 실측 대조 결과, **52개 개발항목의 상당수가 이미 존재**한다. 대조 없이 계획서 순서대로 구현하면 이미 있는 것을 다시 만든다.
+
+### 1.1 이미 있는 것 (대표 8건 — 전수 대조는 EOS-53)
+
+| 계획서 항목 | 저장소 실측 | 남는 갭 |
+|---|---|---|
+| A5 AI Model Gateway | `l3/router.py` + providers, 라우터 경유 원칙(CLAUDE.md) | 데이터 등급 기반 라우팅 정책(AI Hub→로컬 강제) 명시 배선 |
+| D1 Deterministic Gate | 3-tier 검증(수치→SymPy→Lean4 보류) 구현 | 생성 파이프라인 연쇄 강제 여부 확인(정본화≠집행) |
+| H1 계층 린트 CI | import-linter 7계층 단방향 상시(ci.yml:323) + 4게이트 | EOS Core/Subject 축은 별개 — §1.3-③ 참조 |
+| E4 mastery_history | append-only 이력 이미 존재(2026-08-25 실측) | — |
+| E3 이벤트 적재 | attempt_event + EOS-45/46/48 금일(#903) 머지 | writer 배선(빈 좌석 3건 — PR #903 자인) |
+| A4·G6 저작권 원장·스냅샷 | **LIC-01 진행 중**(42_ 설계 적용) | 완결 + provenance NOT NULL 강제 확인 |
+| A2 Subject-neutral Contract | **S1-16**(todo·S1 잔여 마지막 실행 가능 태스크) + CUR-11 | W1에 S1-16 실행 |
+| F4 검수 워크벤치 | ADMIN-07-review-ui 등재됨(todo) | HIT 타이머·반려코드 강제(신규 축) |
+| MP-0 registry.yaml | **`backlog/` 429태스크가 대체** — 신설 금지 | crosswalk에서 매핑만 |
+
+### 1.2 수치 정정 (계획서 가정 → 저장소 실측)
+
+| 항목 | 계획서 | 실측 (확정은 EOS-52) |
+|---|---|---|
+| 개념 노드 | 545 | 원자 백본 **2,683노드·2,210엣지**(CLAUDE.md 2026-07-21) · 구 개념그래프 437 |
+| 오개념 | 400 | **839**(2026-07-03 실측) + crosswalk 64행 검수 완료 |
+| 성취기준 | (언급만) | **895** 적재 |
+| 문항 코퍼스 | 0 가정 | **2,647** 문항(NLP-05 실측 언급) |
+| 테스트 | (미언급) | hermetic **10,724 passed**(2026-08-30 #903) |
+
+→ 계획서의 최소 출시 물량 산식(545노드×4문항≈2,180 CU)과 HIT 손익분기 4분은 **실측 수치로 재검산이 필요**하다. EOS-52가 선결인 이유다.
+
+### 1.3 적응 원칙 3 (계획서 지시를 저장소 체계로 번역)
+
+1. **registry.yaml·DECISIONS.md·docs/eos/ 7파일 트리를 신설하지 않는다.** MP-0 대장 = `backlog/`, ADR = MEMORY.md 결정 로그 + `docs/architecture/`, 이월 목록 = backlog POSTPONE/cancel. 이중 진실원천은 이 저장소가 명문으로 금지한 붕괴 경로다.
+2. **게이트 G0~G5는 하네스 사람 게이트 대장으로 집행한다.** G0은 `G-eos-g0-verification-design-freeze`로 등재 완료. G1~G5는 직전 주에 순차 등재한다(대장 청결 유지).
+3. **Subject-neutral core "실구현"은 보류 대장 원칙 유지.** 2026-08-25 결정(EOS-32 검토)대로 실구현은 착수 트리거 전 금지 — W1은 **계약(contract) 수준**(S1-16·CUR-11)만 진행한다. 계획서의 `src/eos/`+`subjects/math/` 물리 대이동은 12월 검증에 불필요하며 "한 번에 재작성 금지"(006 §43)와도 정합.
+
+---
+
+## §2. 금일(D0 — 2026-08-30 일) 작업계획
+
+### 2.1 체크리스트
+
+**본 세션 완료분** (선언 PR에 포함):
+- [x] 계획서 3종 검토 + 저장소 실측 대조 (§1)
+- [x] 전환 선언 정본화 (§0, 본 문서)
+- [x] 하네스 등재 — 태스크 4건: `EOS-06`(베이스라인 태그·ROADMAP)·`EOS-51`(검증설계서·G0 산출물)·`EOS-52`(앵커 자산 실사)·`EOS-53`(52항목 crosswalk)
+- [x] 사람 게이트 2건 등재 — `G-eos-g0-verification-design-freeze`(9/6·remind 7d)·`G-eos-ip-separation-evidence`(겸직 IP 분리 증빙·remind 14d)
+- [x] MEMORY.md 결정 로그 기록
+- [x] 선언 PR 오픈 (이 PR이 006 문서가 말한 "EOS 전환 공식 PR")
+
+**Kiki 몫 (금일 ~ 내일)**:
+- [ ] **선언 PR 머지** — "pr" 한 마디면 CI 대기~자동 스쿼시 머지까지 일괄
+- [ ] **베이스라인 태그** — 머지 후 §2.2 명령 블록 실행 (EOS-06 ①, 15분)
+- [ ] **주당 가용 시간 확정** — 15h/20h/25h 중 선언 (G0 전제·§6-2. 기준값 20h 권고)
+- [ ] (권장) **IP 분리 증빙 착수** — 개인 장비·계정·시간 증빙 + 재직사 자산 무사용 확인서 (게이트 `G-eos-ip-separation-evidence`, 2h — 12/31 산출물 전체의 귀속이 걸린 P0)
+- [ ] (권장) **19일 밀린 사람 게이트 3건 정리** — `G-deploy-environment-approval`(GitHub UI 5분: Settings→Environments→staging·prod→Required reviewers에 본인 등록), `G-prod-dead-column-check`(§2.3 블록 5분), `G-operator-seat-first-grant`(3단계 리비전 확정 — 후속 Claude 세션과 함께)
+
+### 2.2 베이스라인 태그 — 선언 PR 머지 **후** 실행
+
+```powershell
+# [실행 시스템: Windows PowerShell — Phaiakes9 = 이 PC, 별도 접속 불요]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git fetch origin main
+git checkout main
+git pull origin main
+# 자가검증 ①: 최근 커밋에 EOS 전환 선언 PR 머지가 보여야 한다 (안 보이면 태그 중단)
+git log --oneline -3
+git tag -a whymath-mvp-final-2026-08-30 -m "Final WhyMath MVP baseline before EOS transition (12/31 = internal verification, not launch)"
+git push origin whymath-mvp-final-2026-08-30
+# 자가검증 ②: 아래 출력에 태그가 1줄 보이면 성공, 빈 출력이면 push 실패
+git ls-remote --tags origin whymath-mvp-final-2026-08-30
+```
+
+### 2.3 G-prod-dead-column-check 실측 (선택·5분)
+
+```powershell
+# [실행 시스템: Windows PowerShell — Phaiakes9. 선행: Docker Desktop 가동, whymath-pg 컨테이너 Up]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+docker exec whymath-pg psql -U whymath -d whymath -c "SELECT count(*) FILTER (WHERE school_id IS NOT NULL) AS school_id, count(*) FILTER (WHERE subscription_tier IS NOT NULL) AS sub_tier, count(*) FILTER (WHERE subscription_started_at IS NOT NULL) AS sub_started, count(*) FILTER (WHERE subscription_renewed_at IS NOT NULL) AS sub_renewed, count(*) FILTER (WHERE school_region IS NOT NULL) AS school_region, count(*) FILTER (WHERE gender IS NOT NULL) AS gender, count(*) AS total FROM user_profile;"
+# 자가검증: 테이블명이 다르다는 오류가 나면 → docker exec whymath-pg psql -U whymath -d whymath -c "\dt" 로 실제 테이블명 확인 후 재실행
+# 출력 숫자 행을 그대로 다음 Claude 세션에 붙여넣으면 게이트 clear + ADMIN-02 unblock 판정에 사용된다
+```
+
+---
+
+## §3. 1주간(W1 — 8/31 월 ~ 9/6 일) 작업계획
+
+**이 주의 단일 목표(전환 설계서 W1): "헌법 고정 — 무엇을 성공으로 볼지 확정."** 게이트 G0.
+예산: 총 20h(개발 16 · 콘텐츠 4) 기준 — 평일 저녁 2h×4 + 주말 6h×2. Claude 세션 위임으로 실작업은 배수가 되지만, **Kiki의 검수·판정 시간이 병목**이므로 하루 착수 태스크는 WIP≤3(하네스 policy와 동일)을 지킨다.
+
+### 3.1 일자별 계획
+
+| 일자 | Kiki 시간 | 착수/완료 목표 | 실행 방식 |
+|---|---|---|---|
+| 월 8/31 | 2h | **EOS-53** 52항목 crosswalk 착수 · /stray-code 스냅샷 확인(15분) | Claude 세션 위임(`/implement EOS-53`), Kiki는 판정 리뷰 |
+| 화 9/1 | 2h | **EOS-52** 앵커 자산 실사 착수 | Claude 세션 + Kiki 머신 DB 조회(세션이 명령 블록 생성) |
+| 수 9/2 | 2h | **S1-16** Subject-neutral Content Contract 구현 (§3.2-③) | Claude 세션 위임 — S1 잔여 실행 가능분 종결 |
+| 목 9/3 | 2h | EOS-53·52 산출물 리뷰, 갭 태스크 등재 확정 · **EOS-51** 초안 착수 · 여유 시 SEC-28(prio 1·소형) | 리뷰 중심 |
+| 금 9/4 | 2h | **EOS-51** 검증설계서 v1 초안 — 실패정의 F-Ⅰ~Ⅴ·KPI·앵커 표 | Claude 세션 + Kiki 목표값 검토 |
+| 토 9/5 | 6h | EOS-51 완성 — CU·실패코드 F1~F8 **코드 동결** + 앵커 성취기준 코드(2022 개정) 매핑 확정 · LIC-01 진행 점검 | Claude 세션 + Kiki 콘텐츠 검토(4h 배분의 대부분) |
+| 일 9/6 | 6h | **G0 판정** — §4 체크리스트 전수 → 앵커 8 vs 6 결정 → 실패정의 서명 → `gates clear` → W2 계획 확정 | Kiki 판정일 |
+
+### 3.2 태스크별 구체 코딩 계획
+
+**① EOS-53 — 52항목 crosswalk** (월~목, 산출물 `docs/reviews/eos_plan52_crosswalk_2026-09.md`)
+- 입력: 부록 A의 52행 표(본 문서에 전사됨 — 원본 xlsx는 저장소 외부).
+- 각 행을 `이미 구현(증거 경로)/부분(갭)/신규`로 3분류. **trunk 부재≠미구현** 절차 준수: `git log --all --grep=<키워드>` + 원격 claim 대장 확인.
+- 신규·갭만 `backlog.py add`(기존 태스크 ID 매핑 우선·중복 등재 금지). T3·T4는 등재하지 않고 이월 목록 절에 기록.
+- 검증: `python3 scripts/harness/backlog.py validate` EXIT=0.
+
+**② EOS-52 — 앵커 자산 실사** (화~목, 산출물 `docs/reviews/eos_anchor_asset_audit_2026-09.md`)
+- 대상: 부록 B 앵커 8단원 × {원자 노드, 성취기준 코드, 오개념, 기계판정 detection_rule, 코퍼스 문항 수}.
+- 방법: 저장소 자산(`data/corpus/**`·`schemas/`·L1 모델) 우선, prod DB(whymath-pg:5433) 조회분은 Kiki 머신 명령 블록으로. 재현 스크립트는 `scripts/analysis/`에 — **실패 경로 설계 규칙**(단계별 flush·원인 기록·시간 필터·타임아웃) 준수.
+- 대학 앵커 2종(ε-δ·선형대수)은 자산 부재 가능성이 높다 — 부재 시 '없음' 그대로 기록(날조 금지). 이 숫자가 G0의 앵커 8→6 결정 근거다.
+
+**③ S1-16 — Subject-neutral Content Contract** (수, 기존 acceptance 그대로)
+- `schemas/v1.1/problem.schema.yaml` + `src/backend/whymath_backend/schema/problem.py`: `schema_version` 필드 추가, API 응답/요청 노출.
+- 수학 전용 4필드(`answer_transform`·`signature_patterns`·`requires_graph_sketch`·`sketch_step_count`) → `extensions.math`로 이동 + 하위호환·downstream 수정.
+- 테스트: `tests/backend/schema/test_problem.py` 확장. 검증: ruff·black·mypy --strict·pytest 전체 + `; echo "EXIT=$?"` — CI 동일 명령·경로.
+- 완료 시 S1은 16/17(잔여 ARCH-11은 트리거 대기 blocked) — **MVP 스테이지 실행 가능분 종결**로 선언과 정합.
+
+**④ EOS-51 — 검증설계서 v1 + 계약 코드 동결** (금~토, 산출물 `docs/standards/eos_verification_design_v1.md`)
+- 문서: CU 정의(부록 C)·앵커 세트(8 vs 6 — Kiki 결정 기입란)·기술 KPI 6종·내용 KPI 6종·실패코드 F1~F8·실패정의 F-Ⅰ~Ⅴ(부록 D) 전부 "위반 판정 가능 문장"으로. KPI 목표값이 실측 벤치마크가 아니라 산술 손익분기 도출값이며 G2(10/25)에서 재조정됨을 명기.
+- 코드 동결: `schema/enums.py`에 실패코드 enum + 테스트. CU 계약은 **기존 스키마 조합**(problem+solution_path+hint+매핑)으로 표현 가능하면 신설하지 않고 부족분만 추가(과공학 방지). 소비 지점(생성 파이프라인·검수 이벤트)은 후속 태스크 ID로 별항(정본화≠집행).
+- 판정 형식: KPI 판정도 기존 검증 권위 서열대로 CLI exit 0/1(Wilson 경계) — `superhuman_verification_standard.md`와 정합.
+
+**⑤ 병행 유지**: LIC-01(진행 중 — A4·G6 축)은 W1 내 완결 목표. NLP-05(진행 중)는 EOS 계획과 독립 — 세션 여유 시만.
+
+---
+
+## §4. G0 판정 체크리스트 (9/6 일 — `G-eos-g0-verification-design-freeze`)
+
+**차단 조건** (미충족 시 W2 진행 금지):
+- [ ] ① 앵커 세트 확정 — 8개 vs 6개 결정 완료(EOS-52 실사 근거 인용) + 전 앵커 성취기준 코드(2022 개정) 매핑
+- [ ] ② CU 스키마 + 실패코드 F1~F8 확정 — 문서 + 코드(enum·스키마) 양쪽, 테스트 green
+- [ ] ③ 실패정의 F-Ⅰ~F-Ⅴ 문서 동결 — "12월 수정 금지" 명문 + Kiki 서명 → `python3 scripts/harness/backlog.py gates clear G-eos-g0-verification-design-freeze --evidence "..."`
+
+**추적 조건** (미충족이어도 진행·기록):
+- [ ] EOS-53 crosswalk 완료율(52행 중 판정 완료 행 수) · 갭 태스크 등재 수
+- [ ] EOS-52 실사 완료 — 계획서 산식(2,180 CU·HIT 4분) 재검산 결과
+- [ ] S1-16 머지(S1 실행 가능분 종결) · LIC-01 완결 여부
+- [ ] EOS-06 태그·ROADMAP 갱신 완료
+- [ ] IP 분리 증빙 착수(G-eos-ip-separation-evidence)
+- [ ] 주당 가용 시간 확정(15/20/25h) + 부족분 해소 옵션 채택(부록 E — 20h이면 ②+④ 권고)
+
+**G0 종료 시 산출**: W2(9/7~9/13 "되돌릴 수 없는 스키마 확정" 주간) 태스크 확정 — §5 실측표 기반.
+
+---
+
+## §5. W2 예고 — "되돌릴 수 없는 스키마 4건"의 저장소 실측 현황
+
+계획서 §5.2의 4건은 저장소에서 이미 절반이 끝나 있다. W2는 나머지 절반 + crosswalk 갭이다.
+
+| 계획서 항목 | 실측 | W2 조치 |
+|---|---|---|
+| mastery_history append-only | **이미 존재** | 없음(확인만) |
+| problem/evaluator/prompt_version 스냅샷 | **EOS-47** 등재됨(todo) + EOS-44 설계 완료 | EOS-47 착수 |
+| skill_ids[] 복수 (problem_attempted) | 미확정 — EOS-53에서 실측 판정 | 갭이면 태스크 등재·착수 |
+| recommendation candidates[] + policy_version | 미확정 — EOS-53에서 실측 판정 | 갭이면 태스크 등재 |
+| 라이선스 스냅샷 아카이버(G6·소급 불가) | LIC-01 범위 확인 | 미포함이면 분리 등재 |
+| Event Envelope 버전 규율 | EOS-49(concept-version-contract)·EOS-50(publish gate) 등재됨 | 순차 착수 |
+
+---
+
+## §6. 리스크 · 미결정 · 전제
+
+1. **앵커 8 vs 6** — G0에서 결정. 주 20h 확정 시 대시보드 권고 조합(②앵커 8→6 + ④검수 235→160 CU = −40h → 314h ≤ 318h 성립) 채택 권고. 대학 앵커 포기 = "자동검증 한계선 확인"을 2027-01로 이월.
+2. **주당 가용 시간 미확정** — 계획 전체가 20h(기준)~22h(필요) 전제. Kiki 확정 전에는 W2 이후 일정 확약 불가.
+3. **변호사 1차 의견서 권고 vs 2026-07-27 Kiki 지시 충돌** — 설계서는 12/31 전 1차 의견서(8항목)를 권고하나, 기존 지시는 "외부 작업이 미완성 제품의 병목이 되는 것 반대"(MGMT-01/02 보류). **재판정은 Kiki 몫**. 단 최대 쟁점(AI Hub 국외 반출)은 자문 전까지 로컬 라우팅 강제로 무해화 — 로컬 우선은 이미 이 저장소의 기존 원칙이라 실비용이 낮다. IP 귀속(2순위)만은 자문과 무관하게 증빙 확보가 가능하므로 게이트로 등재했다.
+4. **시간 추정 미보정** — 52항목 소요(h)는 AI 압축 계수 가정값. W6~W8 첫 실측(120 CU)에서 보정이 이 계획의 첫 자기 수정 지점(설계서 §8.3).
+5. **기존 백로그와의 우선순위 충돌** — S3 잔여 61건·S4 잔여 90건 중 12월 검증 비관여분은 강등이 아니라 "검증 비관여" 표시로 이월 판정(EOS-53 → G0). 폐기 아님.
+6. **계측 공백이 곧 검증 실패** — HIT 타이머(D5)·Run 재현성 로그(F5)가 없으면 12월에 잴 것이 없다. W2~W6 최우선 신규 축이며, "작동한 비율" 원칙(응답 200≠계측 작동)을 설계 단계부터 적용한다.
+
+---
+
+## 부록 A. 개발항목 52건 (추적표 02 시트 전사 — EOS-53의 입력)
+
+형식: `코드 | 기능명 | Phase | Tier | h | 완료(DoD) 판정 조건`
+
+**A. EOS 계약 골격**
+- A1 | Canonical ID 체계 + Entity Registry | P1 | T1 | 12 | ID 정규식 CI 검사 통과, DB PK와 분리된 canonical_id 존재
+- A2 | Subject-neutral Content Schema/API Contract | P1 | T1 | 14 | 계약 파일만으로 타입체크 통과(구현 0줄)
+- A3 | 공통 메타데이터(학교급·출처·버전) | P1 | T1 | 6 | 모든 콘텐츠 엔티티가 school_level·source_type·version 보유
+- A4 | 저작권 원장 3종(source_asset/content_item/generation_provenance) | P1 | T1 | 10 | DDL+NOT NULL, provenance 없는 AI 생성물 INSERT 거부
+- A5 | AI Model Gateway(로컬/클라우드 라우팅) | P1 | T1 | 10 | 전 LLM 호출 게이트웨이 경유, 데이터 등급 라우팅
+
+**B. 수학 콘텐츠 스키마**
+- B1 | 교육과정 재귀 트리(CurriculumNode) | P1 | T1 | 10 | 고정 6계층 폐기, node_type 사전으로 4개 학교급 등록
+- B2 | 단원 구조 관리 | P1 | T2 | 4 | 앵커 8개가 트리 실 노드로 존재
+- B3 | 선수학습 관계 그래프 | P1 | T2 | 8 | prerequisite 엣지, 노드당 평균 차수 ≥1.0
+- B4 | 개념 DB(원4·8·9 흡수) | P1 | T2 | 8 | supersedes 필드, 앵커 커버분 매핑
+- B5 | 정의 관리 | P2 | T4 | 4 | (예비 — B4 흡수 가능)
+- B6 | 오개념 DB + detection_rule 기계판정형 | P1 | T1 | 10 | 앵커 커버분이 정규식/SymPy 술어로 자동 판정
+- B7 | 문제 DB + 난이도·유형(원18·19·20 병합) | P1 | T1 | 10 | authored/empirical 난이도 분리, CU 전 필드 수용
+
+**C. AI 콘텐츠 생산(최우선)**
+- C1 | 자동 콘텐츠 생성 파이프라인 | P1 | T1 | 24 | 앵커 1개 생성→검증→검수큐 E2E, Run 로그 적재
+- C2 | DSL 콘텐츠 생성기 | P1 | T1 | 16 | DSL 1건으로 CU 10건+ 자동 생성
+- C3 | 자동 문제 생성 | P1 | T1 | 14 | 성취기준 코드만으로 문항 생성, 저작권 seed 0건
+- C4 | 변형문제 생성 | P2 | T2 | 10 | 동일 skill 변형 5종, 중복도 임계 미만
+- C5 | 단계별 풀이 생성 | P2 | T1 | 12 | 인접 단계 동치성 연쇄 검사 통과율 측정 가능
+- C6 | 다양한 풀이법 생성 | P2 | T4 | 8 | (예비)
+- C7 | 힌트 3단계 + 누설 차단 | P2 | T1 | 10 | L1·L2 힌트 정답 누설 자동검사 0건
+- C8 | 비유/예시·질문 생성 | P2 | T4 | 10 | (예비)
+- C9 | 연령별 설명 생성(학교급 폭) | P2 | T2 | 12 | 동일 개념 4개 언어 수준, F7 실패율 측정
+- C10 | Prompt Registry/Versioning | P1 | T1 | 8 | 인라인 프롬프트 0건, 생성물에 prompt_version
+
+**D. 생산물 품질 자동판정**
+- D1 | Deterministic Gate(SymPy) | P1 | T1 | 16 | 생성→파서→검증→저장 순서 코드 강제
+- D2 | QA 엔진 — 생산물 합격 판정 | P2 | T1 | 14 | CU 단위 pass/fail + F1~F8 자동 부여
+- D3 | 품질 점수 + 난이도 검증 | P3 | T3 | 12 | (확장 — 주 25h 시나리오만)
+- D4 | 중복 콘텐츠 탐지 | P3 | T4 | 10 | (예비)
+- D5 | Cost/Latency 추적 + **HIT 검수 타이머** | P1 | T1 | 10 | CU당 HIT·토큰·금액 자동 기록 ★없으면 검증 불가
+
+**E. 깊이앵커 폐쇄루프**
+- E1 | MathLive 입력 + LaTeX(원28·29 병합) | P2 | T2 | 12 | 앵커 A4 문항 입력·표시 정상
+- E2 | 채점(결정론 우선, LLM은 설명만) | P2 | T2 | 12 | LLM 정오 판정 코드 경로 0
+- E3 | 학습 이력 + Event 적재(skill_ids 복수) | P2 | T1 | 10 | skill_ids[]·problem_version·evaluator_version 존재
+- E4 | Mastery 갱신 + mastery_history | P2 | T1 | 12 | before/after/근거/engine_version append-only
+- E5 | 진단평가 생성 + 답안 분석 | P3 | T3 | 14 | (확장)
+- E6 | 오개념 진단+약점+추천(candidates 기록) | P3 | T2 | 16 | 추천 로그에 candidates[]·policy_version·followed
+- E7 | 대화형 튜터 + 실시간 피드백 | P3 | T4 | 18 | (예비 — 힌트 템플릿 대체)
+
+**F. 검증 전용 신규**
+- F1 | 앵커 단원 세트 정의·등록 | P1 | T1 | 6 | 8개 앵커가 성취기준 코드와 함께 DB 인스턴스로
+- F2 | 학교급 간 개념 수직 연결(분수→유리수→실수) | P2 | T2 | 12 | 3개 학교급 관통 prerequisite 체인 1개+
+- F3 | 앵커 간 생산성 비교 계측 | P2 | T1 | 10 | 앵커별 HIT·비용·수율·실패분포 동일 축 집계
+- F4 | 휴먼 검수 워크벤치 | P2 | T1 | 14 | 표본 검수 시 타이머·반려코드 입력 강제
+- F5 | 생성 Run 재현성 로그 | P1 | T1 | 8 | prompt_version·model·seed·입력 스냅샷 재현
+- F6 | 검증 결론 리포트 자동 집계 | P4 | T1 | 10 | Go/Conditional/No-Go 지표표 자동 생성 ★최종 산출물
+
+**G. 저작권 컴플라이언스**
+- G1 | provenance 미기입 INSERT 차단 | P1 | T1 | 2 | origin='ai_*'에 provenance 없으면 INSERT 실패
+- G2 | 금칙 소스 스캔 CI | P1 | T1 | 2 | EBS·평가원·교과서 등 검출 시 CI 적색
+- G3 | publish 허용 매트릭스(tier×등급) | P1 | T1 | 3 | tier0·등급 C~E는 public 승격 차단
+- G4 | seed 오염 전파 검사(재귀 CTE) | P2 | T2 | 6 | 조상 최악 등급 effective_grade 상속
+- G5 | 유사도 게이트(MinHash+임베딩·원문 미보관) | P2 | T3 | 12 | (확장 — 8-gram 0.7/코사인 0.85)
+- G6 | 라이선스 스냅샷 아카이버 + 감사로그 | P1 | T1 | 6 | Tier1 소스 14곳 약관 HTML+SHA256 ★소급 불가
+
+**H. 기반·계측**
+- H1 | 계층 의존 린트 + 금칙 CI | P0 | T1 | 4 | core→adapters import 0
+- H2 | 데이터 무결성 게이트(v_integrity_violations) | P1 | T1 | 5 | orphan·dangling·duplicate 6종 0건
+- H3 | 폐쇄루프 E2E 골든 3종 | P2 | T2 | 10 | 정상/선수결손/오개념 nightly 통과
+- H4 | 주간 지표 자동 집계 cron(7지표) | P1 | T1 | 4 | 월 07:00 metrics/weekly.json append + 경보
+
+**I. 콘텐츠 생산 운영**
+- I1 | 앵커 8×CU 생산 운영(폭 7×60 + 깊이 150) | P2~4 | T1 | 20 | 570 CU + 전수 자동계측
+- I2 | 인간 표본 검수 235 CU | P3~4 | T1 | 30 | 실패코드·루브릭 라벨링 + LLM 심판 κ
+- I3 | 깊이앵커 학생 표본 20~30명 반응 수집 | P4 | T2 | 10 | Spearman ρ 산출 가능 데이터
+
+**소계**: 전체 560h · T1 352h · T1+T2 472h · 실행계획(03 시트) 354h
+
+## 부록 B. 앵커 단원 8개 (06 시트)
+
+| 코드 | 학교급 | 단원 | 역할 | 생산/검수 CU |
+|---|---|---|---|---|
+| A1 | 초등 | 초3 분수의 이해와 크기 비교 | 폭(언어 수준·그림 모델) | 60/25 |
+| A2 | 초등 | 초6 비와 비율 | 폭(실생활 맥락·단위) | 60/25 |
+| A3 | 중등 | 중2 경우의 수와 확률 | 폭·기준선(비대수 — SymPy 불통 검증 대안) | 60/25 |
+| A4 | 중등 | **중3 이차방정식** | **깊이 ★ 폐쇄루프** | 150/60 |
+| A5 | 고등 | 고1 이차함수의 최대·최소 | 폭(그래프·조건 누락) | 60/25 |
+| A6 | 고등 | 고2 도함수의 활용 | 폭(정답 유일성·다단계) | 60/25 |
+| A7 | 대학 | 미적분 ε-δ 극한·연속 | 폭(증명형 — 자동검증 한계선) | 60/25 |
+| A8 | 대학 | 선형대수 일차독립과 기저 | 폭(추상 구조·반례) | 60/25 |
+
+성취기준 코드는 전부 2022 개정 기준 매핑(2027년 재작업 방지). 학교급당 2개인 이유: n=1이면 "학교급이 어려운 것"과 "단원이 어려운 것"을 구분할 수 없다.
+
+## 부록 C. CU(콘텐츠 단위) 정의와 KPI (06 시트 요약)
+
+**CU** = 문제 + 정답 + 단계별 풀이 + 3단계 힌트 + concept/skill 매핑 + 난이도 + 예상 오답 3개(OP코드) + 성취기준 코드. 문항 수만 세면 안 된다.
+
+**기술 KPI**: HIT 중앙값 ≤4분/P90 ≤8분 · 자동검증 1차 통과율 ≥85% · 재작업률 ≤15%(2회+ ≤3%) · 처리량 ≥30 CU/h · 단위 비용 ≤250원/CU(상한 400) · 실패분포 F1+F2 ≥60%(가장 중요한 예측 지표).
+
+**내용 KPI**: 수학적 오류율 ≤0.5% · 교육과정 정합률 ≥92%(블라인드 역매핑) · 난이도 타당도 ρ≥0.5(깊이)/0.6(폭·전문가) · 오개념 연결(OP 라벨 정확도 ≥85%·실오답 매칭 ≥40%) · 풀이 비약 지적률 ≤10%(LLM 심판 κ≥0.5 시만 전수 확장) · 힌트 누설 0%(무관용).
+
+**실패코드**: F1 수식·파싱 / F2 정답 불일치 / F3 풀이 논리 비약 / F4 성취기준 이탈 / F5 난이도 미스 / F6 오개념 오연결 / F7 언어 수준 부적합 / F8 힌트 누설.
+
+## 부록 D. 실패의 사전 정의 F-Ⅰ~Ⅴ (G0 동결 대상 — 12월 수정 금지)
+
+- **F-Ⅰ**: 중등 기준선 앵커(A3·A4)에서조차 HIT 중앙값 > 12분/CU
+- **F-Ⅱ**: 인간 검수 통과 CU의 수학적 오류율 > 2%
+- **F-Ⅲ**: 실패 분포에서 F3+F6+F7(판단형) 합 > 60%
+- **F-Ⅳ**: 앵커 8개 중 4개+ 기준 미달(2~3개면 Conditional Go)
+- **F-Ⅴ**: 힌트의 의미적 정답 누설(자동 검사 밖)이 표본 검수에서 ≥10%
+
+하나라도 해당하면 AI-first 콘텐츠 전략 실패 판정. No-Go = 전략 변경(AI 보조 저작 도구 전환 또는 외부 라이선싱+오케스트레이션), 프로젝트 중단이 아님.
+
+## 부록 E. 게이트 일정과 시간 예산 (01·04 시트 요약)
+
+| 게이트 | 일자 | 차단 조건 요지 |
+|---|---|---|
+| G0 검증설계 동결 | 09-06(일) | 앵커·CU 스키마·실패정의 동결(§4) |
+| G1 계측 가능한 파이프라인 | 09-27(일) | 앵커 1개 E2E + HIT·실패코드 이벤트 적재 + Core→Math 정적 의존 0 |
+| G2 기준선 확보 | 10-25(일) | 중등 2앵커 각 60 CU + HIT 중앙값 ≤8분 + 자동검증 ≥70% |
+| G3 폭 확장·붕괴지점 | 11-22(일) | 앵커 전부 60 CU+ + 4급 중 3급 HIT ≤6분 + 누설 0 + 메타 누락 0 |
+| G4 계측기 완성 | 12-13(일) | 깊이앵커 수동 개입 0 루프 3연속 + 학생 표본 ≥20명 + P0 결함 0 |
+| G5 동결→판정 | 12-27→12-31 | (판정 게이트) Go/Conditional/No-Go + 2027 범위 결정 |
+
+시간 예산: 잔여 17.6주, 기준 가용 318h(주 20h−휴일 34h) vs 실행계획 354h → **−36h**. 해소 권고 = ②앵커 8→6(−30h) + ④검수 235→160 CU(−10h) → 314h 성립. 12/21~31은 신규 작업 0 버퍼(잠식 금지). 전제: AI Hub 데이터는 국외 반출 확인 전 로컬 Ollama 전용 / 겸직 IP 정리 전 외부 공개·투자 자료 제출 금지.
+
+---
+
+**다음 검토일**: G0(9/6) 판정 시 — W2 계획 확정과 함께 본 문서 §3~§5 갱신.

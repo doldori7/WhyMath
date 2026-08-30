@@ -7175,3 +7175,15 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **공백 7종은 발화 조걧만**: 입력 상태 모델(G-1) · 위젯 세션 이벤트(G-2) · 혼합 블록(G-3) · 키보드 visible 프로필(G-4) · 음성(G-5) · i18n(G-6) · paste 정규화(G-7).
 - **산출물**: `docs/architecture/28_mathlive_input.md` + backlog 1건. `validate` green — **PR 트리 기준 410건**(본 체크아웃에서는 미커밋 EOS-32 시리즈 포함 421건으로 측정됐으나 정본은 PR 트리). 오개념 축은 `l4/misconception/wrong_form_match.py`가 문서 제안(AST signature)보다 강한 구현(SymPy Wild 정합·거짓 등식 가드)임을 확인 — ✅ 초과.
 - **cross-ref**: `math_engine_gap_review.md`(기능 28 기판정 정본) · `32_learning_history.md` · `44_eos_version_management.md`.
+
+## 2026-08-30: MVP 개발 종료 · EOS 전환 선언 — D0·W1 실행계획 정본화
+
+- **사건**: Kiki가 계획서 3종(006 전환 체크리스트 · 260830 전환 설계서 · 개발기준 추적표 xlsx 8시트)을 제출하고 "지금을 MVP 개발 종료 시점이자 EOS 전환점으로 선언 + 금일·1주 작업계획(구체 코딩 계획·체크리스트 포함)"을 요청.
+- **선언 채택**: 2026-08-30을 전환일로 확정. main `0d6fb82d`(PR #903, hermetic 10,724 passed)가 MVP 최종 베이스라인 — `whymath-mvp-final-2026-08-30` 태그 대상(EOS-06). **12/31 재정의**: 외부 출시일이 아니라 내부 검증 판정일(Go/Conditional Go/No-Go). 주 기준 = 폐쇄루프 완결이 아니라 **CU당 인간 개입 시간(HIT)** — 폐쇄루프는 콘텐츠 품질을 재는 계측기로 강등(깊이앵커 A4에서만 완결).
+- **저장소 실상 대조 핵심**: 계획서는 코드베이스 미열람 자인(§8.3). 52항목 중 상당수 기존재 — A5 라우터·D1 SymPy 3-tier·H1 import-linter CI·E4 mastery_history·A4/G6 LIC-01(진행 중)·A2 S1-16/CUR-11·F4 ADMIN-07. 수치 정정: 개념 545→원자 2,683·오개념 400→839·성취기준 895·코퍼스 2,647(확정은 EOS-52 실사).
+- **적응 원칙 3** (계획서 지시의 저장소 번역): ①registry.yaml·DECISIONS.md·docs/eos 트리 신설 금지 — MP-0 대장=backlog/, ADR=MEMORY+docs/architecture(이중 진실원천 방지) ②게이트 G0~G5는 하네스 사람 게이트 대장으로 집행 ③subject-neutral core 실구현은 보류 대장 원칙 유지(2026-08-25 결정) — W1은 계약 수준(S1-16)만.
+- **등재**: 태스크 4건 — `EOS-06-mvp-close-baseline-tag`(태그+ROADMAP 갱신) · `EOS-51-verification-design-freeze`(검증설계서 v1·G0 산출물, depends EOS-52) · `EOS-52-anchor-asset-audit`(앵커 8단원 자산 실사 — 콘텐츠 일정 확정의 선결) · `EOS-53-plan52-backlog-crosswalk`(52항목 전수 대조·갭만 등재). 게이트 2건 — `G-eos-g0-verification-design-freeze`(9/6 검증설계 동결·kiki·remind 7d) · `G-eos-ip-separation-evidence`(겸직 IP 분리 증빙·kiki·remind 14d).
+- **W1(8/31~9/6) 단일 목표**: "헌법 고정" — 월 EOS-53 / 화 EOS-52 / 수 S1-16(S1 실행 가능분 종결) / 목~토 EOS-51(실패정의 F-Ⅰ~Ⅴ·실패코드 F1~F8 코드 동결) / 일 G0 판정(앵커 8 vs 6 결정 포함).
+- **미결정(Kiki)**: ①주당 가용 시간 15/20/25h ②앵커 8 vs 6(G0에서·EOS-52 근거) ③변호사 1차 의견서 권고 vs 2026-07-27 "외부 작업 비병목" 지시의 재판정 — 단 AI Hub 국외 반출 쟁점은 자문 전 로컬 라우팅 강제로 무해화(기존 로컬 우선 원칙과 정합).
+- **산출물**: `docs/strategy/eos_transition_declaration_2026-08-30.md`(선언 정본 + D0/W1 체크리스트 + 계획서 핵심 표 부록 전사 — 원본 xlsx는 저장소 외부라 미래 세션 접근 불가 문제 해소), backlog 태스크 4건·게이트 2건, 본 결정 로그.
+- **cross-ref**: `education_os_positioning_v1.md`(북극성 서사·2026-07-24) · EOS 설계검토 연쇄(2026-08-23~26: 단원구조·32·44·48·28) · `s1_exit_gate_judgement_2026-07.md`.

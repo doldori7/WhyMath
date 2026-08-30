@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-51-verification-design-freeze
+title: "EOS 검증설계서 v1 — 앵커 세트·CU 스키마·실패코드 F1~F8·실패정의 F-Ⅰ~Ⅴ 동결 (G0 산출물)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - EOS-52-anchor-asset-audit
+requires_gates: []
+acceptance:
+  - "① docs/standards/eos_verification_design_v1.md — 측정 단위 CU 정의(문제+정답+단계풀이+3힌트+매핑+난이도+예상오답+성취기준코드)·앵커 세트(8 vs 6은 Kiki 결정 기입·EOS-52 실사 수치 인용)·기술 KPI 6종(HIT 중앙값≤4분 등)·내용 KPI 6종·실패코드 F1~F8을 전부 위반 판정 가능 문장으로 확정"
+  - "② 실패정의 F-Ⅰ~F-Ⅴ 동결 — '12월 수정 금지' 명문 + Kiki 서명은 게이트 G-eos-g0-verification-design-freeze clear evidence로 기록"
+  - "③ 실패코드·CU 필수 필드는 산문 외에 코드로도 동결 — schema/enums.py 또는 schemas/v1.1 계약 추가 + 테스트. 정본화≠집행 별항: 실제 소비 지점(생성 파이프라인·검수 이벤트)은 후속 태스크 ID로 명시"
+  - "④ KPI 목표값의 한계 명기 — 실측 벤치마크가 아니라 산술 손익분기 도출값이며 G2(10/25) 기준선에서 재조정함을 문서에 못박음"
+artifacts: []
+paths:
+  - docs/standards/eos_verification_design_v1.md
+  - "schemas/v1.1/**"
+  - "src/backend/whymath_backend/schema/**"
+  - "tests/backend/schema/**"
+session: null
+notes: "출처: 260830 전환 설계서 §3(검증 설계)·§2.4(실패 정의)·xlsx 06_KPI측정. G0(9/6) 차단 조건 ①②③의 산출물. 실패정의를 12월에 만들면 검증이 아니라 확증편향이 된다."
+updated: 2026-08-30
