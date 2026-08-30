@@ -79,7 +79,7 @@
 
 **Kiki 몫 (금일 ~ 내일)**:
 - [x] **선언 PR 머지** — #904 스쿼시 머지 완료(`3635877d`, 2026-08-30)
-- [ ] **베이스라인 태그** — §2.2 블록 실행(대상 `0d6fb82d` 고정). 세션 대행 push는 프록시 403(브랜치 외 ref 차단)으로 불가 — Kiki 실행 필요
+- [x] **베이스라인 태그** — Kiki가 §2.2 블록 실행·push 완료(2026-08-30). `ls-remote` 역참조 실측: `whymath-mvp-final-2026-08-30^{}` → `0d6fb82d` — EOS-06 done(증적 #904·#905·태그)
 - [ ] **주당 가용 시간 확정** — 15h/20h/25h 중 선언 (G0 전제·§6-2. 기준값 20h 권고)
 - [ ] (권장) **IP 분리 증빙 착수** — 개인 장비·계정·시간 증빙 + 재직사 자산 무사용 확인서 (게이트 `G-eos-ip-separation-evidence`, 2h — 12/31 산출물 전체의 귀속이 걸린 P0)
 - [ ] (권장) **19일 밀린 사람 게이트 3건 정리** — `G-deploy-environment-approval`(GitHub UI 5분: Settings→Environments→staging·prod→Required reviewers에 본인 등록), `G-prod-dead-column-check`(§2.3 블록 5분), `G-operator-seat-first-grant`(3단계 리비전 확정 — 후속 Claude 세션과 함께)
