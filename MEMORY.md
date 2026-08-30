@@ -7198,3 +7198,10 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **총평**: LearnLM 5원칙 중 WhyMath 공백은 인지부하(학생 대면 응답) 축 하나. 능동 학습·answer-leakage는 WhyMath가 서빙 경로 차단+Wilson 게이트로 상위 구현(수출급).
 - **산출물**: `docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md`(정본·인용 레일·대조표 15행) · `docs/standards/prompt_engineering.md` 참고 소스 절 신설 · backlog 3건.
 - **cross-ref**: `ssm_scan_2026-Q3.md` #12 · `ssm_activation_handoff.md` 트랙 C · PED-31 · `superhuman_verification_standard.md`.
+
+## 2026-08-30: EOS-52 앵커 자산 실사 완료 — G0 결정 근거 확보·전역 수치 정정
+
+- **실측(파일=정본)**: 원자 2,683(구조 860+리프 1,823 — CU 산식엔 리프가 적절)·오개념 843(+4)·성취기준 895행은 **2015(460)/2022(435) 혼재**(2022 단독 435+대학 자체 409)·코퍼스 **2,638**(−9). **OP_01~08은 문서 개념**(저장소 리터럴 0건) — 기능 대응물은 L4 `DistractorOpCode` kebab 10종. detection_rule 필드도 코드 0건 — 선언서 B6는 전면 신규.
+- **앵커 커버리지 핵심**: 8앵커 전부 성취기준·원자 있음(A7·A8 대학도 자체 성취기준 2+2·원자 8+5 — "대학 자산 부재" 우려는 이 두 축엔 해당 없음). 그러나 **문항은 A4(378)·A6(261, 그마저 1코드 집중) 둘뿐** — 기존 코퍼스는 앵커 관점에선 두 단원 자산. A1·A2·A3·A5도 문항 0이라 폭 앵커 생산 부담은 대학 앵커와 동급. A4 깊이 앵커의 원자 해상도 3개는 얕음. 기계판정 채널 신규 구축량은 8이든 6이든 동일.
+- **산출물**: `docs/reviews/eos_anchor_asset_audit_2026-09.md` + `scripts/analysis/eos_anchor_asset_audit.py`(stdlib 전용·AST 파싱으로 역방향 의존 회피·단계별 flush·뮤테이션 변별력 실측 EXIT=1). 재현: 메인 세션 재실행 EXIT=0·9/9 동일 수치. prod DB 대조는 부록 A psql 명령(Kiki 머신).
+- **cross-ref**: `eos_transition_declaration_2026-08-30.md` §3.2-② · EOS-51(해금) · G-eos-g0.
