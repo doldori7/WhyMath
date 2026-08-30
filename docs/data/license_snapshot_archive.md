@@ -129,6 +129,22 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
   기본 동작으로 존중(샌드박스·Kiki 머신 공통).
 - 의존성: **표준 라이브러리만** (backend 패키지 import 금지 — Kiki 머신 단독 실행 가능).
 
+## 4-A. 1차 집행 실측 현황 (2026-08-30 · 샌드박스 실행분)
+
+**카탈로그 20곳 중 6곳 확보 · 14곳 미확보.** 태스크 `LIC-02`는 *정본화*(스크립트·문서·계약
+테스트) 기준으로 done이며, **소급 불가 자산인 스냅샷 자체는 30%만 확보된 상태**다. 남은 14곳은
+게이트 `G-license-snapshot-blocked-sources`가 추적한다(무추적 상태로 두면 "정본화를 집행으로
+착각한 완료 선언"이 된다 — CLAUDE.md 금기).
+
+| 상태 | 곳 | source_id |
+|---|---|---|
+| ✅ 확보 | 6 | gsm8k · math-hendrycks · mathlib4 · metamath-set-mm · minif2f · prm800k |
+| ⛔ 미확보(egress 403) | 14 | ncic · kogl-license-types · aihub · schoolinfo · openstax · siyavula · illustrative-mathematics · numinamath-cot · numinamath-tir · phet · omnimath · olymmath · openmathinstruct-1 · dlmf |
+
+확보된 6곳이 전부 GitHub/HuggingFace **raw** 경로인 것은 우연이 아니다 — 원격 세션 프록시가
+그 호스트만 허용한다. 즉 **미확보 14곳은 재시도로 해소되지 않으며**, 네트워크가 열린
+Kiki 머신 1회 실행이 유일한 경로다(§5).
+
 ## 5. 집행 별항 (정본화 ≠ 집행)
 
 - **이 문서·스크립트 = 정본화**. 주기 재수집(cron·분기 라이선스 점검 연동)은 **OPS-56 축과
@@ -139,22 +155,52 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
 
 ### Kiki 머신 수동 실행 (Windows PowerShell)
 
-> **과제**: 프록시로 막힌 소스의 약관 스냅샷 재수집 · **목적**: 확인 시점 약관 보관(소급 불가) ·
-> **환경**: Windows PowerShell(=Phaiakes9), 새 창, 선행 조건 없음 · **성공 기준**: 아래 자가검증
-> 스텝에서 `exit=0`과 감사로그 라인 증가가 보이면 성공, `exit=1`이면 0곳 수집(네트워크 점검).
+> **1. 과제**: 샌드박스 egress 정책에 막힌 **14곳**의 약관 스냅샷 수집 (게이트
+> `G-license-snapshot-blocked-sources`).
+> **2. 목적**: *확인 시점의* 약관 원문 보관 — **소급 불가**다. 나중에 약관이 바뀌면 "우리가 쓸
+> 당시 조건이 이랬다"를 증명할 방법이 영구히 사라진다(저작권 K4 계약).
+> **3. 절차**: main 최신화 → 아카이버 1회 실행(20곳 순회·이미 받은 6곳은 `unchanged`로 건너뜀
+> ·소스당 타임아웃 있음, 총 1~3분) → 자가검증 2스텝 → 커밋·푸시.
+> **4. 성공 기준**: 자가검증 ①에서 `exit=0`(20곳 전부) 또는 `exit=3`(부분 — 일부 사이트가
+> 봇 차단/JS 요구 시 정상적 결과)이면 성공. **`exit=1`이면 0곳 수집 = 네트워크 자체 문제**이니
+> VPN·방화벽을 보고 재시도. 자가검증 ②에서 스냅샷 디렉터리가 **6개→최대 20개로 늘어야** 한다 —
+> 늘지 않았으면 성공이 아니다.
+> **5. 실행 환경**: Windows PowerShell(=Phaiakes9 본체), 작업 디렉터리
+> `C:\Users\kiki\Desktop\__AI\WhyMath`. 선행 조건 없음(표준 라이브러리만 사용·서버·DB 불요).
+> **6. 창 구분**: **새 창** 1개. 장기 점유 프로세스가 없으므로 실행 후 같은 창에서 계속 작업 가능.
 
 ```powershell
-# [실행 시스템: Windows PowerShell — 새 창]
+# [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-git fetch
-git checkout -B claude/mvp-eos-transition-plan-ghcajm origin/claude/mvp-eos-transition-plan-ghcajm
-python scripts\ops\license_snapshot_archiver.py
-echo "exit=$LASTEXITCODE"   # 자가검증 1 — 0=전곳 성공 / 3=부분 실패 / 1=0곳(측정 실패)
+git fetch origin main
+git checkout main
+git pull origin main
 
-# 자가검증 2 — 이번 실행 증거가 실재하는지 (감사로그 마지막 라인 + manifest)
+python scripts\ops\license_snapshot_archiver.py
+echo "exit=$LASTEXITCODE"   # 자가검증 ① — 0=20곳 전부 / 3=부분 성공 / 1=0곳(네트워크 문제) / 2=사용법 오류
+
+# 자가검증 ② — 스냅샷이 실제로 늘었는지 (6개에서 늘지 않으면 실패다)
+(Get-ChildItem data\licenses\snapshots -Directory).Count
 Get-Content data\licenses\audit_log.jsonl -Tail 3
-Get-ChildItem data\licenses\runs | Sort-Object Name | Select-Object -Last 1
 ```
+
+수집분 커밋(위 자가검증에서 개수가 늘었을 때만):
+
+```powershell
+# [실행 시스템: Windows PowerShell — 같은 창]
+git add data\licenses
+git commit -m "LIC-02 집행: 차단됐던 라이선스 약관 스냅샷 수집 (게이트 G-license-snapshot-blocked-sources)"
+git push origin main
+```
+
+> 실행 결과(자가검증 ①의 exit 값 + ②의 디렉터리 개수)를 다음 Claude 세션에 붙여넣으면 게이트
+> `G-license-snapshot-blocked-sources`를 clear 처리한다.
+
+**왜 샌드박스에서 못 받았나 (실측·2026-08-30)**: 원격 세션의 egress 프록시가 14곳을
+`Tunnel connection failed: 403 Forbidden`으로 거부했다 — 조직 egress 정책이며 프록시 README가
+**"우회하지 말고 보고하라"**고 명시한다(CLAUDE.md "거부(deny)의 우회 금지"와 동일 취지).
+코드 결함이 아니므로 아카이버 수정으로는 해소되지 않는다. 남은 실패는 감사로그에
+`error_type`/`error_detail`로 전건 기록돼 있다.
 
 ---
 
