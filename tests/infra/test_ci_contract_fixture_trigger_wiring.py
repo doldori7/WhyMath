@@ -66,6 +66,10 @@ r"""공유 계약 fixture(`data/` 최상위) · backend 잡 입력 경로 ↔ CI
 ⑦ **죽은 플래그 금지** — 스텝 `if`가 참조하는 `changes` 플래그는 그 스텝이 속한 잡의 `if`도
    참조해야 한다. 아니면 그 플래그만 참인 PR에서 잡이 통째 skip돼 스텝이 영영 실행되지 않는다
    (죽은 `corpus` 플래그가 정확히 이 형태였다).
+⑧ **동결 테스트 입력** — G0 실패정의·서명 동결 테스트가 읽는 파일(실패정의 문서·`gates.yaml`)이
+   backend 필터 안에 있다. 경로 목록은 하드코딩이 아니라 그 테스트의 `FROZEN_INPUT_PATHS`를
+   **AST로 파싱**해 얻는다(계약 ②와 같은 파생 원칙 — 두 벌이면 한쪽만 고쳐진 채 "위반 0"이
+   나온다). 2026-08-30 PR #910 리뷰(P1)가 지목한 사각이며, ⑥과 같은 구조의 다른 입력 축이다.
 
 의도적으로 검증하지 않는 것 (정직한 공백)
 --------------------------------------
@@ -103,6 +107,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CI_YAML = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _DATA_DIR = _REPO_ROOT / "data"
 _BACKEND_TESTS_DIR = _REPO_ROOT / "tests" / "backend"
+
+# 계약 ⑧ — G0 동결 테스트(실패정의 F-Ⅰ~Ⅴ·서명 기록)와 그 입력 경로 선언 상수.
+# 경로 목록 자체는 여기 두지 않는다: 단일 진실 원천은 동결 테스트의 상수이고, 이 파일은
+# AST로 그것을 읽는다(하드코딩 두 벌 금지 — 계약 ②와 같은 이유).
+_FREEZE_TEST = _BACKEND_TESTS_DIR / "schema" / "test_failure_definition_freeze.py"
+_FROZEN_PATHS_CONST = "FROZEN_INPUT_PATHS"
 
 # 계약 fixture로 보지 *않을* 최상위 data/ 파일 — 반드시 사유를 적는다(무사유 예외 금지).
 # 형식: {"파일명": "왜 계약이 아닌가 + 누가 대신 검사하는가"}
@@ -518,6 +528,105 @@ def _sample_repo_path_under(root: str) -> str:
         if path.is_file():
             return path.relative_to(_REPO_ROOT).as_posix()
     raise AssertionError(f"{base}: 파일이 0건이다 — 빈 표본으로 '위반 0'을 만들지 않는다.")
+
+
+# ── 계약 ⑧ : 동결 테스트의 입력 경로가 backend 필터 안에 있는가 ────────────────
+
+
+def _frozen_input_paths() -> list[str]:
+    """동결 테스트가 선언한 `FROZEN_INPUT_PATHS` 튜플을 **AST로** 읽는다(import 불가 —
+    이 잡에는 backend 패키지가 설치되지 않는다).
+
+    경로 목록을 여기에 하드코딩하지 않는 이유는 계약 ②와 같다: 두 벌이 되면 새 동결 입력이
+    늘 때 한쪽만 고쳐지고, 그 순간 가드는 "위반 0"을 조용히 낸다. 단일 진실 원천은 동결
+    테스트 쪽이고 이 파서는 그것을 따라간다.
+    """
+    if not _FREEZE_TEST.is_file():
+        raise AssertionError(
+            f"{_FREEZE_TEST}: 동결 테스트가 없다 — G0 서명 동결이 사라졌거나 파일이 옮겨졌다. "
+            "옮겼다면 이 상수를 함께 고쳐라(조용한 통과 금지)."
+        )
+    try:
+        tree = ast.parse(_FREEZE_TEST.read_text(encoding="utf-8"))
+    except SyntaxError as exc:  # 예외 타입명 동반 — 침묵 실패 금지
+        raise AssertionError(f"{_FREEZE_TEST}: AST 파싱 실패({type(exc).__name__}: {exc})") from exc
+
+    for node in tree.body:
+        targets = (
+            node.targets
+            if isinstance(node, ast.Assign)
+            else [node.target] if isinstance(node, ast.AnnAssign) else []
+        )
+        if not any(isinstance(t, ast.Name) and t.id == _FROZEN_PATHS_CONST for t in targets):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Tuple) or not value.elts:
+            raise AssertionError(
+                f"{_FREEZE_TEST}: {_FROZEN_PATHS_CONST}가 비어있지 않은 리터럴 튜플이 아니다 "
+                "— 파서가 읽을 수 없는 형태(f-string·연산 등)로 바뀌면 강제가 무력해진다."
+            )
+        paths = [
+            e.value for e in value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
+        ]
+        if len(paths) != len(value.elts):
+            raise AssertionError(
+                f"{_FREEZE_TEST}: {_FROZEN_PATHS_CONST}에 문자열 상수가 아닌 원소가 있다 — "
+                "AST로 확정할 수 없는 경로는 강제 대상에서 조용히 빠진다."
+            )
+        return paths
+    raise AssertionError(
+        f"{_FREEZE_TEST}: {_FROZEN_PATHS_CONST} 상수를 찾지 못했다 — 상수를 지우거나 이름을 "
+        "바꾸면 이 가드가 아무것도 강제하지 않게 된다(빈 목록으로 '위반 0'을 만들지 않는다)."
+    )
+
+
+def test_backend_filter_covers_frozen_freeze_test_inputs() -> None:
+    """계약 ⑧ — G0 동결 테스트가 읽는 입력 파일이 backend 필터 안에 있다.
+
+    `test_failure_definition_freeze.py`는 실패정의 문서 §5와 서명 기록(gates.yaml)을 해시로
+    동결한다. 그런데 그 두 파일이 backend 필터 밖이면 **그 파일만 고치는 PR에서 backend 잡이
+    SKIP**되고, skip은 required check에서 *충족*으로 계상된다 — 동결 테스트가 막으라고 만들어진
+    바로 그 벡터(문서·서명의 조용한 수정)에서 테스트가 실행되지 않는 상태다. data/corpus·
+    schemas가 겪은 사각(COLLAB-07 ①②)과 같은 형태이며, 2026-08-30 PR #910 리뷰(P1)가 지목했다.
+
+    실측 표본은 **실재 파일 경로**를 쓴다(가상 경로로 통과/실패를 만들지 않는다).
+    """
+    jobs = _load_ci_jobs()
+    pattern = re.compile(_backend_filter(jobs))
+
+    violations: list[str] = []
+    for rel in _frozen_input_paths():
+        if not (_REPO_ROOT / rel).is_file():
+            raise AssertionError(
+                f"{rel}: 동결 테스트가 선언한 입력이 저장소에 없다 — 표본을 뽑을 수 없다."
+            )
+        if not pattern.search(rel):
+            violations.append(f"  · {rel}")
+    assert not violations, (
+        "G0 동결 테스트의 입력이 backend 필터 밖이다 — 그 파일만 바꾸는 PR에서 backend 잡이 "
+        "SKIP돼 실패정의·서명 동결이 집행되지 않는다(PR #910 리뷰 P1).\n"
+        + "\n".join(violations)
+        + f"\n현재 backend 필터: {_backend_filter(jobs)!r}"
+    )
+
+
+def test_frozen_input_parser_is_discriminating() -> None:
+    """계약 ⑧ 보조 — 파서·판정의 변별력(양성·음성 대조 양쪽).
+
+    "못 찾았으니 위반 없음"이 아니라 **예외**임을 실측한다(빈 목록 위장 금지).
+    """
+    # ⓐ 실제 상수는 읽힌다(양성 대조 — 무차별 실패가 아님).
+    paths = _frozen_input_paths()
+    assert paths and all(isinstance(p, str) for p in paths)
+
+    # ⓑ 현행 필터가 그 경로를 실제로 매치한다 + 편입 이전 필터였다면 검출된다(음성 대조).
+    jobs = _load_ci_jobs()
+    assert all(re.search(_backend_filter(jobs), p) for p in paths)
+    legacy = re.compile(r"^(src/backend/|tests/backend/|data/[^/]+$|data/corpus/|schemas/)")
+    assert any(not legacy.search(p) for p in paths), (
+        "편입 이전 필터로도 전건이 매치된다면 이 가드는 아무것도 막지 못한다 — "
+        "동결 입력이 이미 다른 경로로 커버되는지 재확인하라."
+    )
 
 
 # ── 계약 ⑦ : 죽은 플래그 금지 ─────────────────────────────────────────────────

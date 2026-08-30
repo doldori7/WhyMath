@@ -106,7 +106,19 @@ jobs:
           #       통과할 수 있었다.
           # 비용 실측(shallow 이력 80커밋·2026-08-07~): data/corpus 변경 7커밋·schemas 변경
           # 1커밋이며 **전건이 이미 다른 경로로 backend를 깨우고 있었다**(마진 과트리거 0건).
-          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|\.github/workflows/ci\.yml$)'; then
+          #
+          # **G0 동결 입력 2건 편입**(2026-08-30 · PR #910 Codex 리뷰 P1 지적 수용) —
+          # `docs/standards/eos_verification_design_v1.md`(실패정의 F-Ⅰ~Ⅴ 정본)·
+          # `backlog/gates.yaml`(서명 기록)은 tests/backend/schema/test_failure_definition_freeze.py
+          # 가 해시로 동결하는 **입력**이다. 필터 밖이면 그 두 파일만 고치는 PR에서 backend 잡이
+          # SKIP되고 skip은 required check에서 충족으로 계상된다 — 즉 **동결 테스트가 방어해야 할
+          # 바로 그 벡터(문서·서명 조용한 수정)에서 실행되지 않는다**. data/corpus·schemas 편입과
+          # 같은 형태의 사각(COLLAB-07 ①②)이며, 등재 완전성은 위 fixture 가드와 같은 파일
+          # (test_ci_contract_fixture_trigger_wiring.py)이 동결 테스트의 FROZEN_INPUT_PATHS를
+          # **AST로 파싱해** 강제한다(경로 목록의 하드코딩 두 벌 금지 — 새 동결 입력이 늘면
+          # 가드가 자동으로 따라온다). 과트리거는 파일 2건 한정이라 비용이 사실상 0이다
+          # (backlog/ 전체가 아니라 gates.yaml 하나 — 태스크 상태 변경 PR은 깨우지 않는다).
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|docs/standards/eos_verification_design_v1\.md$|backlog/gates\.yaml$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
