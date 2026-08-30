@@ -49,7 +49,7 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 | `6dszy0` · `merge/6dszy0` | main **MISC-01·MISC-03·PB-02**(전건 todo)가 소유 — #739는 의도 close(S3-32→#738, REC-02→#735, MISC-04→#821로 각각 착지). 미착지 잔여 = 위 3건 구현+테스트 5파일(main 부재 실측) |
 | `6eejrv` | main **PB-08**(todo) 참고 자산 — redaction 접근 자체는 #802 close로 폐기(main은 SEC-24 projection 채택·정답 축 해소, gating 6종도 `PublicProblem` 실측). **검수 축(pending 노출)은 여전히 미해소·PB-08 소유** |
 | `q8tvcx` | **OPS-38**(todo) |
-| `7n9n72` · `40xspg` | SOL-01(done) 잔여 재열거 **이번 감사 미완** — §5 정직한 공백 |
+| `7n9n72` (621b11f9) | **잔여 재열거 완료(후속 정독)** — main 부재 **15파일**(distractor/prerequisite_link·coach 테스트 4종·wh1_evaluation 시간정규화·slip_report·PED-15/16·alembic 2건) + 고유줄 수백. **최대 잔존 고립**. 소유: main MISC-05·MISC-06(todo) + HARN-35(MISC-11 재등재) + HARN-37. ⚠ 브리핑 '이미 포팅됨(#770)'은 문서 커밋 오분류 — 삭제 절대 금지 |
 | `ph1ad7` · `misc-04-recovery` · `eos-semantic-backbone` · `r1skwr backup` · `6ybkis backup` | **HARN-34/35** — 회수 완료 전 삭제 금지 |
 
 ### 🟢 삭제 후보 — 잃을 내용 없음 실측 (4차 배치 등재)
@@ -65,10 +65,14 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 | `claude/whymath-math-engine-design-4qbaru` (f0edfac1) | 08-04 삭제 계보 재확인 — 잔여 yaml/doc 고유줄 = 낡은 판(MATH-01~04·NLP-03 전건 main 실재) |
 | `claude/whymath-ai-recommendation-review-tv1f08` (fdf46d7b) | REC-09 회수 done. 잔여 정독: 수치 2,647은 main이 2,638로 현행화(QUAL-02)·ci.yml `claims reap` 구문은 main 재작성판 실재·REC-06 고유 3줄 = 옛 메타 — **전건 main 우세** |
 | `claude/s4-52-verifier-v2-design-status` (2281def0) | **#899 리뷰 정정으로 승격**: 잔여 2파일 정독 — verifier.py는 S4-54 구현이 대체한 옛 stub(main 우세), yaml은 #866 증적이 main에 `PR #866`으로 기존재(표기 차이) — 잃을 내용 0 |
+| `claude/whymath-solution-review-40xspg` (707c5665) | **후속 정독으로 승격**: SOL-01(#801) 실코드 포팅 완료. 잔여 16파일 고유줄 = 전건 옛 판(problems.py는 SEC-24 이전 docstring·scene_generation 옛 구문·yaml 07-29 메타) — main 우세 |
+| `claude/backup/learning-analytics-3pbkcx-pre-rebase` (33d9ebf1) | **후속 정독으로 승격**: PATH-09·10 done·r3 doc 착지. me.py 고유줄은 main 실재 irt_difficulty_b 로직의 옛 포매팅 |
+| `claude/backup/whymath-account-security-dw9lww-pre-rebase` (0fca22eb) | **후속 정독으로 승격**: SEC-20(#809) 착지 — main _auth/users에 ParentalConsent 배선 15·22건 실재. 잔여 = pre-rebase 옛 판·r2 doc 고유줄 0 |
+| `claude/backup/whymath-curriculum-design-6eejrv-pre-rebase` (2f428729) | 라이브 `6eejrv`와 **동일 head** — 라이브가 잔존(PB-08 참고)하므로 중복 사본·손실 0 |
 
 ### ⚪ 조건부 보류 — 다음 배치 (정독 미완 또는 회수 대기)
 
-- `backup/whymath-account-security-dw9lww-pre-rebase` (고유줄 71) · `backup/learning-analytics-3pbkcx-pre-rebase` (53 — PATH-09·10은 done) · `backup/visualization-review-28d0yx-pre-rebase` (30) · `backup/whymath-visualization-review-r3-pre-rebase` (9 — #759는 머지·VIZ-07 done) · `backup/gamification-8ap436-pre-rebase` (3 — OPS-41 ③ MOB-17 축 확인 후) · `backup/ai-integration-5qqcp4-pre-rebase` (16 — OPS-26은 OPS-36으로 재채번 승계 확인) · `backup/whymath-curriculum-design-6eejrv-pre-rebase` (라이브 6eejrv와 동일 head — 라이브 처분 확정 후) · `curriculum/cur-15-eos-concept-db-review-adr` (고유줄 4 — EOS-44 claim은 해제 상태)
+- `backup/visualization-review-28d0yx-pre-rebase` (30 — 고유줄이 R4 문구를 담아 doc 계보 모호·정독 필요) · `backup/whymath-visualization-review-r3-pre-rebase` (9 — #759는 머지·VIZ-07 done) · `backup/gamification-8ap436-pre-rebase` (3 — OPS-41 ③ MOB-17 축 확인 후) · `backup/ai-integration-5qqcp4-pre-rebase` (16 — OPS-26은 OPS-36으로 재채번 승계 확인) · `curriculum/cur-15-eos-concept-db-review-adr` (고유줄 4 — 브랜치 CUR-15 artifacts `#887` vs main `#891` 표기 이설, HARN-34 실행 시 확인)
 - HARN-34/35 참조 브랜치 6건 (🟡 마지막 행) — 회수 착지 후 삭제 배치
 
 ### ⚪ 판정 대상 아님
@@ -100,7 +104,7 @@ git fetch --unshallow origin && git fetch --prune origin '+refs/heads/*:refs/rem
 ## 5. 정직한 공백
 
 - **코드 이식 0줄** — 이식은 등재된 태스크(/drive)가 실행한다.
-- `7n9n72`(83파일)·`40xspg`(27파일)의 SOL-01-이후 잔여 재열거는 하지 못했다 — 삭제 후보로
-  내리지 않고 보류가 그 공백의 처리다.
+- ~~`7n9n72`·`40xspg` 잔여 재열거 미완~~ → **후속 정독으로 해소**(#899 세션): 40xspg는 삭제
+  승격, 7n9n72는 최대 잔존 고립 확정(🟡 행·HARN-37 참조).
 - ⚪ 조건부 8건의 고유줄 정독은 총합 수치까지만 — 내용 판정은 다음 배치 몫.
 - 각 브랜치 구현의 정확성은 보지 않았다(고유한가·추적되는가까지).

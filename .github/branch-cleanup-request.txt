@@ -46,6 +46,10 @@
 #   whymath-math-engine-design-4qbaru               = f0edfac1 (08-04 계보 재확인)
 #   whymath-ai-recommendation-review-tv1f08         = fdf46d7b (REC-09 done·잔여 전건 main 우세 실측)
 #   s4-52-verifier-v2-design-status                 = 2281def0 (#899 리뷰 정정 — #866 증적 main 기존재·stub은 S4-54가 대체)
+#   whymath-solution-review-40xspg                  = 707c5665 (SOL-01=#801 실코드 포팅·잔여 전건 옛 판 실측)
+#   backup/learning-analytics-3pbkcx-pre-rebase     = 33d9ebf1 (PATH-09/10 done·me.py 고유줄=main 실재 로직 옛 포매팅)
+#   backup/whymath-account-security-dw9lww-pre-rebase = 0fca22eb (SEC-20=#809 착지·ParentalConsent 배선 main 실재)
+#   backup/whymath-curriculum-design-6eejrv-pre-rebase = 2f428729 (라이브 6eejrv와 동일 head — 중복 사본·손실 0)
 #
 # ⚠ 회수 태스크가 참조하는 브랜치는 의도적으로 제외(회수 완료 전 삭제 금지) —
 #   HARN-34: ph1ad7 · misc-04-recovery · eos-curriculum-semantic-backbone-adr
@@ -53,7 +57,7 @@
 #   OPS-41:  backup/ai-content-a3ysut-pre-rebase · t608mk · azdnov (+8ap436 backup은 ③ 확인 후)
 #   기존 제외 승계: k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07 잔여) · 5t5lmv(OPS-40) ·
 #   iws58k(ARCH-30) · trjg5x(PB-06/Kiki) · 6dszy0 2건(MISC-01/03·PB-02) · 6eejrv(PB-08 참고) ·
-#   e98dw4(S3-28 잔여) · q8tvcx(OPS-38) · 7n9n72/40xspg(잔여 재열거 미완 보류)
+#   e98dw4(S3-28 잔여) · q8tvcx(OPS-38) · 7n9n72(최대 잔존 고립 — MISC-05/06·HARN-35/37, 삭제 절대 금지)
 #
 # ⚠ 허용 패턴(claude/*) 밖이라 이 배치에 못 싣는 삭제 확정 2건 — Kiki 수동 삭제 필요:
 #   pr/collab-07 = d45bbf38 (COLLAB-07 #817 머지·고유줄 0)
@@ -65,3 +69,7 @@ claude/whymath-nlp-design-my18a1
 claude/whymath-math-engine-design-4qbaru
 claude/whymath-ai-recommendation-review-tv1f08
 claude/s4-52-verifier-v2-design-status
+claude/whymath-solution-review-40xspg
+claude/backup/learning-analytics-3pbkcx-pre-rebase
+claude/backup/whymath-account-security-dw9lww-pre-rebase
+claude/backup/whymath-curriculum-design-6eejrv-pre-rebase
