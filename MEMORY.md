@@ -7215,3 +7215,11 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **대장 명문화**: registry.yaml·MP-0 6축·DECISIONS.md 개념은 backlog/+MEMORY.md가 대체(문서 §4) — 별도 대장 신설 금지.
 - **산출물**: `docs/reviews/eos_plan52_crosswalk_2026-09.md`(53행 전수 표·갭·이월·방법 한계) + 태스크 13건.
 - **cross-ref**: `eos_transition_declaration_2026-08-30.md` 부록 A·§1.1 · `eos_anchor_asset_audit_2026-09.md`(수치 정본) · EOS-51(실패코드·CU·KPI 동결 좌석).
+
+## 2026-08-30: EOS G0 검증설계 동결 완결 — 실패정의 F-Ⅰ~Ⅴ Kiki 서명 (9/6 예정 → 조기)
+
+- **서명**: 2026-08-30 Kiki가 실패정의 F-Ⅰ~Ⅴ를 문안 그대로 동결 승인(서명 세션 AskUserQuestion "서명 확정 — 동결" 응답 실측) → `gates clear G-eos-g0-verification-design-freeze` 기록. 설계서 명문 절차("그 clear가 곧 서명") 그대로 집행. 선결인 **PR #908 스쿼시 머지(`3b007e23`)도 같은 응답으로 승인**받아 CI 16체크 green 확인 후 집행(EOS-53·EOS-51 산출물 main 착지).
+- **G0 차단 3조건 조기 충족**: ①앵커 세트 6개+성취기준 코드(설계서 §1-1·§2 — Kiki 결정 2026-08-30) ②CU 스키마·실패코드 F1~F8 문서+코드 동결(#908) ③실패정의 동결·서명(본 건). 예정일 9/6의 G0가 D0(8/30)에 완결 — W1 산출물(EOS-52 실사→EOS-53 crosswalk→EOS-51 설계서)이 하루에 전부 착지한 결과다. 조기 서명은 동결 취지(측정 전 실패정의 확정 = 확증편향 차단)에 순방향.
+- **기계 집행 신설**: `tests/backend/schema/test_failure_definition_freeze.py` — ①§5 전문 정규화 sha256 동결(`a9ad9f6a…`) ②판정 임계 토큰 6건(12분·2%·60%·6중3·Conditional 2·10%) 개별 단언 ③**서명 기록 자체 동결**(게이트를 pending으로 되돌리는 우회도 CI red) + 뮤테이션 변별력 3건. 서명 전 red(8p/1f)→clear 후 green(9p) 실측 — "1차 집행은 규칙 산문이 아니라 코드다"(PB-02 선례). §6 KPI *목표값*은 해시 범위 밖(§5만 동결)이라 G2(10/25) 재조정 경로는 보존된다.
+- **잔여(게이트 요건 아님·선언 §4 "종료 시 산출")**: W2(9/7~) 태스크 확정·여유 82h 배분 — 후속 /drive에서. `EOS-56`(앵커 1급 등록)은 requires G-eos-g0 해소로 착수 가능 전환.
+- **cross-ref**: `eos_verification_design_v1.md` §5·§8 · `backlog/gates.yaml` G-eos-g0 evidence(서명 전문) · PR #908(대상 문서 착지).
