@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "① 재현 고정: origin/harness-claims 트리에 디렉터리·파일명 말미 CR(\\r)이 포함된 경로가 실재함을 실측 고정(git ls-tree origin/harness-claims | cat -A → 'claims\\r/MISC-16.json\\r'·2026-08-25/26 Windows 세션 기록분) — task-id 또는 경로 문자열이 개행 정규화 없이 트리에 기록된 경위를 remote_claims.py 쓰기 경로에서 규명"
   - "② 쓰기측 차단: claim 경로·task-id에 strip()/CR 제거를 강제하고 회귀 테스트로 동결(HARN-19 GitOutputDecodeError·cp949 계열 — 인코딩·개행 정규화 축의 연장). 읽기측도 CR 포함 경로를 정규화 매칭해 기존 오염 레코드를 계속 인식"
   - "③ 변별력: CR 포함 task-id를 주입하면 정규화 전 red·후 green을 테스트로 실측(성공/실패 양쪽에서 다른 신호)"
-artifacts: []
+artifacts:
+  - "PR #901 (https://github.com/doldori7/WhyMath/pull/901) — ①재현 고정(오염 트리 바이트 제작·ls-tree 원시 경로 \\r 실측) ②쓰기측 바이트 stdin+진입점 새니타이즈, 읽기측 pathspec 제거+CR 정규화(레거시 오염 인식·자연 치유) ③뮤테이션 2건 변별력 실측(각 가드만 red·cp 원복·md5 동일). tests/harness 350 passed·ruff/black CI 동일 호출 exit 0"
 paths:
   - scripts/harness/remote_claims.py
   - "tests/harness/**"
-session: claude/uncommitted-changes-qjhp6f
+session: null
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md 구조적 발견. 오염 상태에서는 Linux 세션의 claim 대조(활성 claim 브랜치 보호)가 경로 불일치로 무력화될 수 있다 — 이번 감사도 트리 직접 조회로 우회 확인함"
 updated: 2026-08-30
