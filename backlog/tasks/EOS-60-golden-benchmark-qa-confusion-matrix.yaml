@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-60-golden-benchmark-qa-confusion-matrix
+title: "골든 벤치마크 데이터셋 + QA 엔진 혼동행렬 — 자동 판정의 FN율 측정 (★내용 KPI 4종의 계산 근거 부재)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 골든 셋 구축 규약 — 별도 라벨링 캠페인 금지: EOS-54 검수 이벤트(verdict·failure_code)에서 앵커별 표본을 골든으로 승격하는 선정·동결 규약. 앵커 6개 × 30~35건 ≈ 200건 목표(검수 185 CU 예산 안에서 부산물로 확보)"
+  - "② QA 엔진 혼동행렬 CLI(exit 0/1) — 골든 대비 Precision·Recall·**False Negative율**(틀린 콘텐츠를 정상 판정) 산출. FN은 교육 콘텐츠에서 무관용 축이므로 별도 보고. Wilson 단측 경계 판정(점추정 금지)"
+  - "③ 과적합 방지 — S2-11(done) 표본 회전 규약을 골든에 적용: QA 엔진 교정 후 같은 골든 재채점 금지·신규 독립 표본 재추출. 골든 셋 자체에 버전·동결 시점 기록"
+  - "④ '작동한 비율' 원칙 — 골든 적재율·평가 실행 여부를 리포트가 상시 보고. 골든 0건은 '통과'가 아니라 측정 실패로 exit 1 승격"
+  - "⑤ 집행 별항(정본화≠집행): EOS-51 §6 내용 KPI 4종(수학적 오류율 심판 전수·교육과정 정합률 역매핑·op-code 라벨 정확도·풀이 비약 LLM 심판 κ≥0.5)이 이 골든을 실제로 소비하는 지점을 명시. subject_id를 처음부터 스키마에 둔다(Validation의 Math 비종속)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/ops/**"
+  - "data/corpus/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: 260830 외부 검토 N8 + 본 검토 docs/reviews/eos_validation_n1_n10_gap_review_2026-08-30.md §3.7·§6-2. 저장소 전수 grep 0건(golden 히트는 notation_contract·NotMeasuredAxis('ui_golden')뿐). G2(10/25) '자동검증 ≥70%'는 자동검증이 맞는지 모르면 무의미한 숫자 — 외부 문서는 N8을 P1로 봤으나 우리 게이트 일정에서는 P0. 골든은 검수 데이터가 쌓이는 동안에만 싸게 만들 수 있다(N5·N7·N9의 '나중에 만들면 복원 불가' 논지가 N8에도 적용)."
+updated: 2026-08-30
