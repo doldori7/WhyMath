@@ -136,6 +136,12 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
 게이트 `G-license-snapshot-blocked-sources`가 추적한다(무추적 상태로 두면 "정본화를 집행으로
 착각한 완료 선언"이 된다 — CLAUDE.md 금기).
 
+**게이트 clear 기준은 기계 판정이다**: `python scripts/ops/license_snapshot_coverage.py`가
+**exit 0**(전곳 확보)을 낼 때만 clear한다. 아카이버의 exit 3(부분 성공)이나 스냅샷 개수 증가를
+성공으로 읽으면 *1곳만 받아도* 통과해 나머지가 영구 미확보로 남는다(PR #915 리뷰 P1 —
+변별력 없는 검증 스텝 금지). 판정기의 변별력은 `tests/infra/test_license_snapshot_coverage.py`
+8건이 동결한다(전곳→0 · 1곳 누락→1 · 로그만 있고 파일 없음→미확보 · 판정 불가→2).
+
 | 상태 | 곳 | source_id |
 |---|---|---|
 | ✅ 확보 | 6 | gsm8k · math-hendrycks · mathlib4 · metamath-set-mm · minif2f · prm800k |
@@ -159,42 +165,48 @@ Kiki 머신 1회 실행이 유일한 경로다(§5).
 > `G-license-snapshot-blocked-sources`).
 > **2. 목적**: *확인 시점의* 약관 원문 보관 — **소급 불가**다. 나중에 약관이 바뀌면 "우리가 쓸
 > 당시 조건이 이랬다"를 증명할 방법이 영구히 사라진다(저작권 K4 계약).
-> **3. 절차**: main 최신화 → 아카이버 1회 실행(20곳 순회·이미 받은 6곳은 `unchanged`로 건너뜀
-> ·소스당 타임아웃 있음, 총 1~3분) → 자가검증 2스텝 → 커밋·푸시.
-> **4. 성공 기준**: 자가검증 ①에서 `exit=0`(20곳 전부) 또는 `exit=3`(부분 — 일부 사이트가
-> 봇 차단/JS 요구 시 정상적 결과)이면 성공. **`exit=1`이면 0곳 수집 = 네트워크 자체 문제**이니
-> VPN·방화벽을 보고 재시도. 자가검증 ②에서 스냅샷 디렉터리가 **6개→최대 20개로 늘어야** 한다 —
-> 늘지 않았으면 성공이 아니다.
+> **3. 절차**: origin/main에서 **작업 브랜치 생성**(로컬 main은 건드리지 않는다) → 아카이버
+> 1회 실행(20곳 순회·이미 받은 6곳은 `unchanged`로 건너뜀·소스당 타임아웃, 총 1~3분) →
+> **커버리지 판정**(exit code) → 커밋·브랜치 push → PR.
+> **4. 성공 기준**: **`coverage=0`이 유일한 성공이다.** 아카이버 자신의 exit(0/3)이나 스냅샷
+> 개수 증가는 **성공 기준이 아니다** — 20곳 중 1곳만 받아도 exit 3이고 개수는 늘기 때문에,
+> 그것으로 판정하면 13곳이 영구 미확보인 채 게이트가 닫힌다. `coverage=1`이면 아직 미확보가
+> 있는 것이고(출력에 미확보 id가 전건 나온다) 게이트는 열린 채로 둔다. `coverage=2`는 판정
+> 불가(감사로그 파손 등)이니 출력을 그대로 알려 달라.
 > **5. 실행 환경**: Windows PowerShell(=Phaiakes9 본체), 작업 디렉터리
-> `C:\Users\kiki\Desktop\__AI\WhyMath`. 선행 조건 없음(표준 라이브러리만 사용·서버·DB 불요).
-> **6. 창 구분**: **새 창** 1개. 장기 점유 프로세스가 없으므로 실행 후 같은 창에서 계속 작업 가능.
+> `C:\Users\kiki\Desktop\__AI\WhyMath`. 선행 조건 없음(표준 라이브러리만·서버·DB 불요).
+> **6. 창 구분**: **새 창** 1개. 장기 점유 프로세스가 없어 같은 창에서 계속 작업 가능.
 
 ```powershell
 # [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
 cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# origin/main 기준으로 작업 브랜치 생성 — 로컬 main을 병합·이동시키지 않는다
+# (pull은 로컬 main이 갈라져 있으면 머지 커밋·충돌을 낸다 — HARN-06 실측 선례)
 git fetch origin main
-git checkout main
-git pull origin main
+git checkout -B claude/lic-02-snapshot-capture origin/main
 
 python scripts\ops\license_snapshot_archiver.py
-echo "exit=$LASTEXITCODE"   # 자가검증 ① — 0=20곳 전부 / 3=부분 성공 / 1=0곳(네트워크 문제) / 2=사용법 오류
+echo "archiver=$LASTEXITCODE"    # 참고값 — 0=전곳 / 3=부분 / 1=0곳(네트워크 문제) / 2=사용법
 
-# 자가검증 ② — 스냅샷이 실제로 늘었는지 (6개에서 늘지 않으면 실패다)
-(Get-ChildItem data\licenses\snapshots -Directory).Count
-Get-Content data\licenses\audit_log.jsonl -Tail 3
+# ★ 성공 판정은 이것 하나 — 0이라야 전곳 확보다
+python scripts\ops\license_snapshot_coverage.py
+echo "coverage=$LASTEXITCODE"    # 0=전곳 확보(게이트 clear 가능) / 1=미확보 있음 / 2=판정 불가
 ```
 
-수집분 커밋(위 자가검증에서 개수가 늘었을 때만):
+수집분 제출 (위 `coverage` 값과 무관하게, 받은 만큼은 반드시 커밋한다 —
+부분 확보라도 그 스냅샷은 소급 불가 자산이다):
 
 ```powershell
 # [실행 시스템: Windows PowerShell — 같은 창]
 git add data\licenses
-git commit -m "LIC-02 집행: 차단됐던 라이선스 약관 스냅샷 수집 (게이트 G-license-snapshot-blocked-sources)"
-git push origin main
+git commit -m "LIC-02 집행: 차단됐던 라이선스 약관 스냅샷 수집 (G-license-snapshot-blocked-sources)"
+git push -u origin claude/lic-02-snapshot-capture
 ```
 
-> 실행 결과(자가검증 ①의 exit 값 + ②의 디렉터리 개수)를 다음 Claude 세션에 붙여넣으면 게이트
-> `G-license-snapshot-blocked-sources`를 clear 처리한다.
+> **main에 직접 push하지 않는다** — 이 저장소는 PR·CI 경유가 기본값이고 main은 브랜치 보호
+> 대상이다. push 후 알려주시면 다음 Claude 세션이 PR을 열고, `coverage=0`일 때만 게이트를
+> clear한다(부분 확보면 게이트는 남은 id 목록과 함께 유지된다).
 
 **왜 샌드박스에서 못 받았나 (실측·2026-08-30)**: 원격 세션의 egress 프록시가 14곳을
 `Tunnel connection failed: 403 Forbidden`으로 거부했다 — 조직 egress 정책이며 프록시 README가
