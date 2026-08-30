@@ -102,6 +102,15 @@ EOS-32가 `answer_submission` 테이블(ORM `db/models/answer_submission.py` · 
 5. **privacy 3종 배선(§11 acceptance 이행)** — 삭제권 `_ERASURE_PLAN`(user_id·attempt보다 먼저), 보존 파기 `_RETENTION_PLAN`(`submitted_at` NOT NULL 축), 반출 `_EXPORT_PLAN`(`answer_submissions` 카테고리) 등재 완료. 완결성은 `test_erasure_plan_completeness`가 metadata 전수 스윕으로 동결한다.
 6. **봉투 암호화(§11-4 "적용 검토"의 판정)** — `raw_response`·`latex`·`canonical_ast`는 `problem_attempt.student_answer`·`handwriting_uri`와 같은 계층의 *미성년 풀이 데이터*다. 이 테이블만 선행 암호화하면 같은 데이터가 두 테이블에서 다른 보호를 받는 비대칭이 생기므로, 봉투 암호화 컬럼은 `student_answer` 계열과 **일괄 판단**한다(SEC 계열 후속 — `dialogue_turn` 봉투 암호화 선례의 확장 축). 그때까지의 평문 저장 책임 경계는 `problem_attempt` 기존 방침과 동일(저장·동의 계층 문서화).
 
+### 이관·병행 전략 — EOS-45 HintUsage 구현 확정 (2026-08-30)
+
+EOS-45가 `hint_usage` 테이블(ORM `db/models/hint_usage.py` · schema `schema/hint_usage.py` · alembic `0e148995e6e9`)을 착지시킨다. EOS-32 전략과 동형이되 과거 이력의 사정이 다르다:
+
+1. **과거 힌트 이력은 attempt_event에 *부분* 존재하나 백필하지 않는다(의도적)** — 실측: `힌트제공` 이벤트(`HintEventData`)는 hint_level을 담고 `힌트요청` 이벤트는 레벨조차 없다. 둘 다 hint_id·view_duration_ms가 없고, 무엇보다 `힌트제공`은 AI *공급*(supply) 신호이지 학생 *열람*(usage) 기록이 아니다 — 이벤트를 usage 행으로 승격하면 절반(식별자·열람시간)을 날조하고 의미(공급≠열람)를 오염시킨다. 과거 분석은 attempt_event를 그대로 쓰면 되고(하네스 지표 ⑤·⑫), `hint_usage` 수집은 배포·writer 배선 시점부터다.
+2. **used_hint 병행(대체 아님)** — `problem_attempt.used_hint`와 기존 소비자(`l2/learning_metrics_rollup`의 `daily_hint_reliance_rate`)는 불변. `hint_usage`는 불리언이 잃는 축(횟수·최대 레벨·열람시간)의 원천이며, 파생 불리언과 기록 used_hint의 일치는 검증 가능한 병행 신호다(가용성 증명 = `tests/backend/l2/test_hint_rate_mastery_input.py` — L2 알고리즘 무변경, mastery 추정·rollup 배선 확장은 후속).
+3. **소유 정합·privacy** — EOS-32 PR #902 P1의 (attempt_id, user_id) 복합 FK 관례를 신설 시점부터 적용(참조 대상 UNIQUE는 EOS-32 것 재사용). privacy 3종(erasure `user_id`·retention `requested_at`·export `hint_usages`) 등재 완료, 완결성은 `test_erasure_plan_completeness`가 동결.
+4. **writer 배선은 범위 밖** — 힌트 서빙 경로가 이 테이블에 적재를 시작하는 것은 후속 몫이며, 그 전까지 빈 좌석이다(좌석 존재 ≠ 수집 작동).
+
 ---
 
 ## 5. 버전 고정 (44번 문서와의 연계)
@@ -178,7 +187,7 @@ EOS-32가 `answer_submission` 테이블(ORM `db/models/answer_submission.py` · 
 아래 5종은 `scripts/harness/backlog.py add`로 등재 완료(2026-08-25):
 
 1. **EOS-32-answer-submission-entity** — AnswerSubmission 분리: attempt 내 다회 제출 시퀀스 정규화(스키마+ORM+alembic + 이관 전략 + privacy 3종 배선). **구현 착지 2026-08-30** — 이관·병행 전략은 §4 "이관·병행 전략" 확정(데이터 이관 0건·병행 기록·writer 배선은 범위 밖 후속).
-2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트.
+2. **EOS-45-hint-usage-entity** — HintUsage 정규화: 힌트 횟수·레벨·엔람시간 1급 데이터화 + mastery 입력 테스트. **구현 착지 2026-08-30** — 이관·병행 판단은 §4 "이관·병행 전략 — EOS-45"(백필 없음·used_hint 병행·writer 배선은 범위 밖 후속).
 3. **EOS-46-solution-step-event** — 학생 풀이 step 수준 이벤트: 23_단계별 풀이와 정합, SolutionNode와 명칭 구분, 테이블 분리 여부 ADR.
 4. **EOS-47-attempt-version-pinning** — problem_attempt 버전 고정: problem_version_id + evaluation_context(EOS-44 설계 + ARCH-31 Content Version 실구현 선행).
 5. **EOS-48-event-time-active-time** — 시간 모델: event_time/ingested_at 분리 + active/idle 구분(롤업 "측정된 것만 적재" 원칙 유지).

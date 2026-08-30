@@ -166,7 +166,7 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        assert heads == {"8f0b8e906362"}  # EOS-32 answer_submission이 현 head(S4-10 위에 체인)
+        assert heads == {"0e148995e6e9"}  # EOS-45 hint_usage가 현 head(EOS-32 위에 체인)
 
     def test_gen_meta_migration_file_exists_with_symmetric_updown(self) -> None:
         """S4-10 `gen_meta` 마이그레이션 파일이 존재하고 up/down이 대칭(컬럼 add/drop)이다."""
