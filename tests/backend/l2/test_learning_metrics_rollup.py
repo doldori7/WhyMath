@@ -487,6 +487,7 @@ def _fake_session_with_activity() -> _FakeSession:
                     user_id=_USER,
                     event_at=_kst(2026, 8, 10, 9, 6),
                     event_type=EventType.힌트요청,
+                    event_time=None,  # EOS-48(P2): 레거시 미신고 — 기존 귀속과 비트동일 경로
                 )
             ],
         ]

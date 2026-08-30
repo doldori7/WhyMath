@@ -74,7 +74,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -199,6 +199,12 @@ class EventFact:
     user_id: uuid.UUID
     event_at: datetime
     event_type: EventType | None = None
+    # EOS-48(PR #903 P2): 클라 신고 발생 시각 — None=미신고(레거시·기존 동작과 비트동일).
+    event_time: datetime | None = None
+
+    def effective_at(self) -> datetime:
+        """지표 귀속 시각 — `effective_event_moment` 경유(발생 우선·시계 왜곡은 수신 폴백)."""
+        return effective_event_moment(self.event_time, self.event_at)
 
 
 def effective_event_moment(event_time: datetime | None, ingested_at: datetime) -> datetime:
@@ -214,15 +220,33 @@ def effective_event_moment(event_time: datetime | None, ingested_at: datetime) -
          `ingested_at`(서버 시각 폴백 — 미래 신고를 그대로 귀속하면 지표가 미래로 샌다).
       3. 그 외(지연 도착 포함·event_time ≤ ingested_at) → `event_time`(발생 기준 귀속).
 
-    순수 함수(DB 무관) — 소비 배선(롤업 `_fetch_events`가 event_time 컬럼을 읽어 이 함수를
-    경유하는 것)은 범위 밖 후속이다(기존 지표 의미 불변 원칙 — 배선 시점에 별도 태스크로
-    귀속 변화량을 실측한 뒤 전환한다). 이 함수·테스트가 그 전환의 *계약 동결*이다.
+    소비 배선(PR #903 P2로 현행화): `_fetch_events`가 event_time을 SELECT하고 기간 필터를
+    `LEAST(COALESCE(event_time, event_at), event_at)`(이 함수의 SQL 등가식 —
+    `_effective_event_at_expr`)로 걸며, `aggregate_daily_metrics`의 소크라테스 귀속이
+    `EventFact.effective_at()`으로 이 함수를 경유한다. writer 부재로 event_time이 전행
+    NULL인 현재 데이터에서는 기존 동작과 **비트동일**(분기 1 — 회귀 테스트 동결)이고,
+    writer가 배선되는 순간 지연 도착 이벤트가 발생일 롤업 재실행에 잡히기 시작한다.
     """
     if event_time is None:
         return ingested_at
     if event_time > ingested_at:
         return ingested_at
     return event_time
+
+
+def _effective_event_at_expr() -> Any:
+    """`effective_event_moment`의 SQL 등가식 — `_fetch_events` 기간 필터용(단일 진실 원천 짝).
+
+    `LEAST(COALESCE(event_time, event_at), event_at)`:
+      - event_time NULL → COALESCE가 event_at → LEAST(event_at, event_at)=event_at (분기 1).
+      - event_time > event_at(시계 왜곡) → LEAST가 event_at (분기 2).
+      - event_time ≤ event_at → LEAST가 event_time (분기 3).
+    Python 함수와 분기가 1:1이다 — 창 필터(SQL)와 날짜 귀속(Python)이 어긋나면 지연 도착
+    이벤트가 창 밖으로 새거나 이중 계상되므로, 둘의 동치를 테스트가 동결한다.
+    """
+    return func.least(
+        func.coalesce(AttemptEvent.event_time, AttemptEvent.event_at), AttemptEvent.event_at
+    )
 
 
 def metric_date_of(moment: datetime, *, tz: ZoneInfo = KST) -> date:
@@ -313,7 +337,9 @@ def aggregate_daily_metrics(
     for event in events:
         if event.event_type not in _SOCRATIC_EVENT_TYPES:
             continue
-        key = (event.user_id, metric_date_of(event.event_at, tz=tz))
+        # EOS-48(PR #903 P2): 귀속은 effective_at()(발생 우선·시계 왜곡은 수신 폴백) —
+        # event_time 미신고(레거시 전행 NULL)에서는 event_at과 동일해 기존 동작 비트동일.
+        key = (event.user_id, metric_date_of(event.effective_at(), tz=tz))
         socratic_by_key[key] += 1
         keys.add(key)
 
@@ -602,16 +628,33 @@ async def _fetch_attempts(
 
 
 async def _fetch_events(session: AsyncSession, start: datetime, end: datetime) -> list[EventFact]:
-    """창 내 `attempt_event` 중 소크라테스 3종만(전량 적재 회피)."""
-    stmt = select(AttemptEvent.user_id, AttemptEvent.event_at, AttemptEvent.event_type).where(
+    """창 내 `attempt_event` 중 소크라테스 3종만(전량 적재 회피).
+
+    EOS-48(PR #903 P2): 기간 필터는 `_effective_event_at_expr`(발생 우선 SQL 등가식) 기준 —
+    어제 발생/오늘 수신 이벤트가 *어제* 창의 롤업 재실행에 잡힌다(event_at 필터면 창 밖으로
+    새서 effective 귀속이 도달 불가). event_time 전행 NULL(레거시·writer 부재)에서는 식이
+    event_at으로 축약돼 기존 필터와 비트동일이다.
+    """
+    effective_at = _effective_event_at_expr()
+    stmt = select(
+        AttemptEvent.user_id,
+        AttemptEvent.event_at,
+        AttemptEvent.event_type,
+        AttemptEvent.event_time,  # EOS-48: 발생 시각(귀속은 EventFact.effective_at 경유)
+    ).where(
         AttemptEvent.user_id.is_not(None),
-        AttemptEvent.event_at >= start,
-        AttemptEvent.event_at < end,
+        effective_at >= start,
+        effective_at < end,
         AttemptEvent.event_type.in_(sorted(t.value for t in _SOCRATIC_EVENT_TYPES)),
     )
     result = await session.execute(stmt)
     return [
-        EventFact(user_id=row.user_id, event_at=row.event_at, event_type=row.event_type)
+        EventFact(
+            user_id=row.user_id,
+            event_at=row.event_at,
+            event_type=row.event_type,
+            event_time=row.event_time,
+        )
         for row in result
     ]
 

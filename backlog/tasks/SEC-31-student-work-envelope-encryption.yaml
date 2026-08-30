@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-31-student-work-envelope-encryption
+title: "학생 답안·풀이 본문 일괄 봉투 암호화 — 답안 계열 3테이블 평문 유보 해소"
+track: math-completion
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 대상 전수(2026-08-30 실측 인벤토리): problem_attempt(student_answer·handwriting_uri·ocr_result)·answer_submission(raw_response·latex·canonical_ast)·student_solution_step(expression·canonical_ast) — 미성년 풀이 본문/전사 계열. hint_usage는 본문 없음(대상 외)·attempt_event.event_data는 경량 telemetry라 1차 대상 외(단 시각화조작 payload 전사 가능성 재검토)"
+  - "② 구현은 dialogue_turn 선례 그대로: *_encrypted+*_nonce(LargeBinary) 컬럼쌍·AESGCM(api/_crypto.py SecretCipher/MultiKeyCipher)·dual-read 폴백·JSONB는 결정론 직렬화(sort_keys) 후 암호화·_NON_SCHEMA_COLUMNS로 schema/export 밖 유지·백필 CLI(dialogue_content_backfill.py 선례·SEC-04 none_as_null 함정 주의)"
+  - "③ 키 정책: 데이터 주체·요청 동일성 기준으로 dialogue 키 공유 vs 신규 키를 판정해 근거 기록(Kiki 결정 선례 참조) — 임의 신규 키 발급 금지"
+  - "④ export 복호 표면 확장: /v1/me/export가 복호 평문을 반환하되 복호 실패는 침묵 아닌 타입명 로그(침묵 실패 금지) — privacy 3종 플랜은 테이블 단위라 무변경 확인"
+  - "⑤ 집행 지점: 3테이블 전건 동시 배선(부분 배선 = 보호 비대칭 재생산 금지 — EOS-32 §4-6 유보 판정의 해소가 이 태스크의 존재 이유)·평문 컬럼 잔존 여부를 스캔 테스트로 동결"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/db/models/**"
+  - src/backend/whymath_backend/api/_crypto.py
+  - "src/backend/whymath_backend/privacy/**"
+  - "src/backend/alembic/versions/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: PR #903 Codex P1 지적 → 실측 판정 (a). 봉투 암호화 장치는 실재(dialogue 계열 SEC-01 집행 중)하나 답안 계열은 EOS-32 §4-6이 '일괄 후속'으로 유보한 채 좌석이 없었다 — docstring 계획은 백로그를 대신하지 못한다. 단일 테이블 선행 암호화는 보호 비대칭이라 EOS-46(student_solution_step)에서도 미적용 유지, 이 태스크가 3테이블을 일괄 해소한다. CLAUDE.md '학생 데이터=민감 정보 암호화 저장' 원칙 축"
+updated: 2026-08-30
