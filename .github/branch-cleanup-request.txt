@@ -87,3 +87,16 @@ claude/unresolved-long-term-branches-ph1ad7
 claude/misc-04-misconception-relation-recovery
 claude/backup/whymath-misconception-review-r1skwr-pre-rebase
 claude/backup/school-subject-6ybkis-pre-rebase
+
+# ── 2026-08-30 6차 배치 (4건) — 보류분 정독 완결(#901) ──
+# head SHA 스냅샷:
+#   backup/visualization-review-28d0yx-pre-rebase   = b7dd3796 (상이 4건 전건 main 우세 — pre-R4 문서·옛 VIZ-10 yaml. #759 머지·VIZ-10 done)
+#   backup/whymath-visualization-review-r3-pre-rebase = 4bb6cd10 (상이 1건 = pre-R4 문서 — main이 R4 분리 후속판)
+#   backup/gamification-8ap436-pre-rebase           = ce93aaad (상이 1건 = MOB-17 yaml — main은 done+artifacts로 우세. OPS-41 ③ 축 해소 확인)
+#   backup/ai-integration-5qqcp4-pre-rebase         = 8f997a7b (상이 1건 = coach.py 옛 ConceptStandardLink join — CUR-04/#810 조인 축 통일이 의도 교체 실측)
+# ⚠ 허용 패턴 밖 수동 삭제 대상 추가(누적 3건):
+#   curriculum/cur-15-eos-concept-db-review-adr = 9bb0b22a (고유줄 4 = 미머지 '#887' 참조·낡은 CUR-16 status·adr '초안' 상태줄 — main 우세)
+claude/backup/visualization-review-28d0yx-pre-rebase
+claude/backup/whymath-visualization-review-r3-pre-rebase
+claude/backup/gamification-8ap436-pre-rebase
+claude/backup/ai-integration-5qqcp4-pre-rebase
