@@ -185,11 +185,13 @@ def _now_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _flush(result: dict[str, Any], out_path: Path) -> None:
+def _flush(result: dict[str, Any], out_path: Path) -> bool:
     """결과를 원자적으로 저장(tmp→replace) — 단계별 즉시 flush의 실체.
 
-    실패해도 증거가 남게, 매 단계 호출된다. 쓰기 자체가 실패하면 stderr로 예외 타입명을
-    낸다(침묵 실패 금지) — 단, 측정 루프는 계속한다(마지막 flush가 성공할 수 있다).
+    실패해도 증거가 남게, 매 단계 호출된다. 쓰기 실패는 stderr 예외 타입명 + result
+    warnings에 기록하고 False를 반환한다 — 측정 루프는 계속하되(마지막 flush가 성공할 수
+    있다), **최종 flush 실패·증거 파일 부재는 main()이 exit 1로 승격**한다(성공 위장 금지
+    — PR #907 리뷰 수용: 영속 실패한 측정을 자동화가 성공으로 받아들이면 안 된다).
     """
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -199,8 +201,11 @@ def _flush(result: dict[str, Any], out_path: Path) -> None:
             encoding="utf-8",
         )
         os.replace(tmp, out_path)
+        return True
     except OSError as exc:
         print(f"[flush 실패] {type(exc).__name__}: {exc}", file=sys.stderr)
+        result["warnings"].append(f"flush 실패: {type(exc).__name__}: {str(exc)[:200]}")
+        return False
 
 
 def _load_json(rel: str) -> Any:
@@ -330,8 +335,12 @@ def step_problems(ctx: dict[str, Any], result: dict[str, Any]) -> None:
     for bank in banks:
         path = corpus_dir / bank / "problems.jsonl"
         if not path.exists():
-            result["warnings"].append(f"{bank}: problems.jsonl 없음")
-            continue
+            # 은행 디렉터리는 있는데 데이터 파일이 없다 = 부분 체크아웃·삭제 의심.
+            # 이 총계는 G0 결정 근거이므로 조용한 누락은 0건 위장이다 — 측정 실패로 승격
+            # (PR #907 리뷰 수용)
+            raise FileNotFoundError(
+                f"{bank}: problems.jsonl 없음(은행 디렉터리만 잔존) — 부분 입력으로 총계 산출 금지"
+            )
         n = 0
         with path.open(encoding="utf-8") as fh:
             for line in fh:
@@ -485,6 +494,10 @@ def step_literal_scan(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         Path(result["out_path"]).resolve(),
         # 실사 문서 자신도 제외 — 판정 결과를 서술하며 패턴 문자열을 담으므로 재실행 시 오염원
         (REPO_ROOT / "docs/reviews/eos_anchor_asset_audit_2026-09.md").resolve(),
+        # 실사 결정 로그(MEMORY.md 2026-08-30 항목)도 동일 사유로 제외 — MEMORY는 코드가
+        # 아니라 결정 로그이므로 '코드 실재' 판정에 기여하지 않으며, 포함 시 재현이
+        # 비멱등이 된다(PR #907 리뷰 수용)
+        (REPO_ROOT / "MEMORY.md").resolve(),
     }
     hits: dict[str, list[dict[str, Any]]] = {"OP_01~08": [], "detection_rule": []}
     skipped_large: list[str] = []
@@ -606,7 +619,7 @@ def main() -> int:
         "global": {},
         "anchors": {a["id"]: {} for a in ANCHOR_DEFS},
     }
-    _flush(result, out_path)  # 시작 상태부터 저장 — 첫 단계 전 실패도 증거가 남는다
+    persist_ok = _flush(result, out_path)  # 시작 상태부터 저장 — 첫 단계 전 실패도 증거가 남는다
 
     ctx: dict[str, Any] = {}
     for name, fn in STEPS:
@@ -617,7 +630,7 @@ def main() -> int:
             result["errors"].append(
                 {"step": name, "error_type": type(exc).__name__, "error": str(exc)[:500]}
             )
-        _flush(result, out_path)
+        persist_ok = _flush(result, out_path)
 
     print(f"측정 시각(UTC): {result['measured_at_utc']}")
     print(f"결과 JSON: {out_path}")
@@ -633,6 +646,14 @@ def main() -> int:
         print(f"\n측정 실패 단계 {len(result['errors'])}건:", file=sys.stderr)
         for e in result["errors"]:
             print(f"  - {e['step']}: {e['error_type']}: {e['error']}", file=sys.stderr)
+        return 1
+    # 영속 검증 — 최종 flush가 실패했거나 증거 파일이 없으면 측정 성공을 선언할 수 없다
+    # (성공 위장 금지: 증거 없는 EXIT=0은 자동화가 빈 측정을 수용하게 만든다)
+    if not persist_ok or not out_path.exists():
+        print(
+            "\n[측정 실패] 결과 JSON 영속 실패 — 최종 flush 실패 또는 증거 파일 부재",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
