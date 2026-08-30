@@ -112,11 +112,13 @@ class CachePrewarmer:
         """항목 결과 → GenerationLog 조립·싱크 적재 (EOS-55 집행 별항 — never-break).
 
         기록 원칙(날조 금지):
-          - `problem_id=None` — 사전적재 시드는 problem 레코드가 없다(캐시 키 단위 자산).
+          - `problem_id=None`·`cu_slug=None` — 사전적재 시드는 problem 레코드도 코퍼스 CU
+            정체성도 없다(캐시 키 단위 자산·#912 P1-2 "가진 정체성만 기록"의 이 경로 값).
           - `prompt_version=None`/`seed=None` — 이 경로는 템플릿 체계·seed 스레딩이 없다
             (2026-08-30 실측). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
           - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
-          - 스냅샷: `input_snapshot_for_prewarm` — request 원문 + 프롬프트/시스템 sha256 핀.
+          - 스냅샷: `input_snapshot_for_prewarm` — 프롬프트/시스템 **전문**+sha256 핀 +
+            request 원문(#912 P1-1 자기완결).
         싱크 예외는 흡수하되 **타입명을 로그에 남긴다**(침묵 실패 금지 — 관측 적재 실패가
         배치를 깨면 안 됨·`llm_generator._record_trace` 동형).
         """

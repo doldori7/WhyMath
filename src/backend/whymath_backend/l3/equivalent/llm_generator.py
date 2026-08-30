@@ -419,7 +419,15 @@ class LLMEquivalentProblemGenerator:
             )
             return None
         self._emit_generation_log(
-            spec, prompt, decision, usage=generated.usage, success=True, error_detail=None
+            spec,
+            prompt,
+            decision,
+            usage=generated.usage,
+            success=True,
+            error_detail=None,
+            # 조립된 후보의 안정 slug = 코퍼스 키(멱등 upsert·검수 타이머 cu_slug와 동일 축)
+            # — hit_cu_metrics CU당 토큰·비용 조인 정체성(#912 P1-2).
+            cu_slug=candidate.problem.slug,
         )
         return candidate
 
@@ -509,19 +517,23 @@ class LLMEquivalentProblemGenerator:
 
     # ── 생성 Run 재현 로그 (EOS-55 집행 별항 — Langfuse와 별개의 인프로세스 이중 회계) ──
     def _input_snapshot(self, spec: EquivalenceSpec, prompt: str) -> dict[str, object]:
-        """호출 1건의 입력 스냅샷(해시+참조) — 재현 계약의 accumulate측 조립(EOS-55).
+        """호출 1건의 입력 스냅샷(전문+해시 — 자기완결) — 재현 계약의 accumulate측 조립.
 
         담는 것(전부 JSON 원시형 — canonical 직렬화·JSONB 왕복 안정):
-          - `prompt_sha256`/`system_sha256`: 실제 전송 텍스트의 sha256 핀 — *전문 미보관*
-            (저작권·용량). 프롬프트 문면 자체는 `prompt_version`(정본 자산 해시)이 식별한다.
+          - `prompt`/`system`: 실제 전송 텍스트 **전문(verbatim)** — 스냅샷 자기완결의 핵심
+            (#912 P1-1: 해시만 남기면 정본 자산·스펙이 바뀐 뒤 모델 입력을 재구성할 수 없다.
+            자체 정본 템플릿+자체 스펙 조합이라 저작권 무관·행당 수 KB 허용).
+          - `prompt_sha256`/`system_sha256`: 전문의 sha256 병기 — 무결성 대조 축.
           - `spec`: 이 경로가 실제로 가진 구조 입력 — 성취기준·오개념·난이도·답형태.
-            레코드만으로 그대로 복원된다(동일 spec + 동일 정본 = 동일 프롬프트 재조립 가능).
+            (전문과 중복되는 재료지만 명료성 우선 — 구조 신호로도, 문면으로도 복원 가능.)
           - `topic_hint`/`temperature`: 프롬프트·샘플링에 실제 반영된 생성 신호.
         라우터 결정은 담지 않는다 — spec에서 결정론 유도되는 파생물이고, 실행 모델은
         `model_name` 컬럼이 별도 기록한다(pregenerate측 `input_snapshot_for_prewarm` 동형).
         """
         return {
             "kind": "l3.equivalent.llm_generate",
+            "prompt": prompt,
+            "system": _system_prompt(),
             "prompt_sha256": text_sha256(prompt),
             "system_sha256": text_sha256(_system_prompt()),
             "spec": {
@@ -543,12 +555,17 @@ class LLMEquivalentProblemGenerator:
         usage: Usage | None,
         success: bool,
         error_detail: str | None,
+        cu_slug: str | None = None,
     ) -> None:
         """호출 1건의 GenerationLog 조립·싱크 적재 — never-break(배치 비차단).
 
         기록 원칙(날조 금지):
           - `problem_id=None` — 배치 저작 후보는 DB problem 레코드가 아직 없다(JSONL 코퍼스
             v0 단계·slug 기반). DB 적재 시점의 연결은 적재 파이프라인 소관.
+          - `cu_slug`(#912 P1-2): 후보 조립까지 도달한 성공 종단만 코퍼스 키와 동일 산식의
+            안정 slug(`_stable_slug` 산출물·`candidate.problem.slug`)를 전달한다 —
+            `ops/hit_cu_metrics --generation-log` CU 조인 정체성. 정체성이 생기기 전에
+            실패한 종단(provider 예외·파싱 실패·조립 실패)은 None=미기록(정직).
           - `seed=None` — 이 경로는 seed 스레딩이 없다(2026-08-30 실측: 라우터·프로바이더
             seed 전달 0). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
           - `prompt_version`: 정본 자산 내용 해시(`_prompt_version` — 실제 아는 값).
@@ -574,6 +591,7 @@ class LLMEquivalentProblemGenerator:
                 success=success,
                 error_detail=error_detail,
                 input_snapshot=self._input_snapshot(spec, prompt),
+                cu_slug=cu_slug,
             )
             self._generation_log_sink(log)
         except Exception as exc:  # noqa: BLE001 — 관측 적재 장애는 저작 배치 비차단(타입명 로그)

@@ -90,26 +90,32 @@ def actual_cost_usd_or_none(decision: RoutingDecision, usage: Usage | None) -> f
 
 
 def input_snapshot_for_prewarm(item: PregenItem) -> dict[str, Any]:
-    """사전적재 항목 → 입력 스냅샷(해시+참조) — 재현 계약의 pregenerate측 조립(EOS-55).
+    """사전적재 항목 → 입력 스냅샷(전문+해시) — 재현 계약의 pregenerate측 조립(EOS-55).
 
     담는 것(전부 JSON 원시형 — canonical 직렬화·JSONB 왕복 안정):
       - `kind`: 스냅샷 판별자(경로별 형태가 달라 소비측이 분기할 수 있게).
-      - `prompt_sha256`/`system_sha256`: 실제 전송 텍스트의 sha256 핀 — *전문 미보관*
-        (저작권·용량). 원문 후보를 들고 있으면 `text_sha256` 재계산으로 동일성 대조 가능.
+      - `prompt`/`system`: 실제 전송 텍스트 **전문(verbatim)** — 스냅샷 자기완결의 핵심
+        (#912 P1-1: 해시만 남기면 원본 specs 파일이 바뀌거나 사라진 뒤 모델 입력을 재구성할
+        수 없다. 자체 저작 스펙이라 저작권 무관·행당 수 KB 허용).
+      - `prompt_sha256`/`system_sha256`: 전문의 sha256 병기 — 무결성 대조 축(바이트 동일 핀).
       - `request`: 라우팅 신호 원문(`RoutingRequest` JSON 덤프) — 레코드만으로 *그대로
         복원*되는 구조 입력. 런타임 키 정합의 재료 전부가 여기 있다(03a §F.1).
-      - `precomputed_response_sha256`: 인제스트 모드일 때만 — 외부 시드 응답도 이 항목의
-        *입력*이므로 핀한다(생성 모드는 키 자체가 없음 — 모드가 스냅샷 형태로 드러난다).
+      - `precomputed_response`(+`_sha256`): 인제스트 모드일 때만 — 외부 시드 응답도 이
+        항목의 *입력*이므로 같은 원칙(전문+핀)으로 담는다(생성 모드는 키 자체가 없음 —
+        모드가 스냅샷 형태로 드러난다).
     라우터 결정(decision)은 담지 않는다 — request에서 결정론 유도되는 파생물이고, 실제
     실행 모델은 `model_name` 컬럼이 별도로 기록한다.
     """
     snapshot: dict[str, Any] = {
         "kind": "l3.pregenerate.prewarm",
+        "prompt": item.prompt,
+        "system": item.system,
         "prompt_sha256": text_sha256(item.prompt),
         "system_sha256": text_sha256(item.system),
         "request": item.request.model_dump(mode="json"),
     }
     if item.precomputed_response is not None:
+        snapshot["precomputed_response"] = item.precomputed_response
         snapshot["precomputed_response_sha256"] = text_sha256(item.precomputed_response)
     return snapshot
 
@@ -125,6 +131,7 @@ def generation_log_from_result(
     prompt_version: str | None = None,
     seed: int | None = None,
     input_snapshot: Mapping[str, Any] | None = None,
+    cu_slug: str | None = None,
 ) -> GenerationLog:
     """사전적재 항목 결과(`PrewarmItemResult`)를 `GenerationLog`로 변환한다(순수 함수).
 
@@ -143,8 +150,11 @@ def generation_log_from_result(
         사전생성=0.0, 미상=None). 이 어댑터는 단가를 모른다(순수 변환).
       - `prompt_version`/`seed`: 재현 좌석(EOS-55) — *실제 쓰인 값만* 인자로 받는다.
         사전적재 경로는 템플릿 체계·seed 스레딩이 없어 기본 None=미기록(날조 금지).
-      - `input_snapshot`: 입력 스냅샷(참조) — 주어지면 `input_sha256`은 schema validator가
-        canonical 해시로 자동 보충·봉인한다(해시 계산 정본은 schema 하나).
+      - `input_snapshot`: 입력 스냅샷(전문+해시 — 자기완결) — 주어지면 `input_sha256`은
+        schema validator가 canonical 해시로 자동 보충·봉인한다(해시 계산 정본은 schema 하나).
+      - `cu_slug`: 생산 CU 조인 정체성(#912 P1-2) — 경로가 *실제 가진* 정체성만 기록한다.
+        사전적재 캐시 시드는 CU 정체성이 없어 기본 None=미기록(코퍼스 slug를 아는 호출자는
+        전달 — hit_cu_metrics CU 조인 축).
     """
     usage = result.usage
     latency_ms: int | None = None
@@ -165,6 +175,7 @@ def generation_log_from_result(
         prompt_version=prompt_version,
         seed=seed,
         input_snapshot=dict(input_snapshot) if input_snapshot is not None else None,
+        cu_slug=cu_slug,
     )
 
 

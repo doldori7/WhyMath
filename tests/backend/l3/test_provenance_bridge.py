@@ -213,7 +213,7 @@ def _item(**overrides: object) -> PregenItem:
 
 class TestReproducibilitySeatsPassthrough:
     def test_prompt_version_seed_snapshot_passed(self) -> None:
-        """재현 좌석 3인자(prompt_version·seed·input_snapshot)가 그대로 실리고 해시가 봉인된다."""
+        """재현 좌석 4인자(prompt_version·seed·input_snapshot·cu_slug)가 실리고 해시가 봉인된다."""
         snapshot = input_snapshot_for_prewarm(_item())
         log = generation_log_from_result(
             _result("written"),
@@ -222,10 +222,12 @@ class TestReproducibilitySeatsPassthrough:
             prompt_version="v-test",
             seed=1234,
             input_snapshot=snapshot,
+            cu_slug="wm-gen-quad-abc123def456",
         )
         assert log.problem_id is None  # 사전적재 시드=problem 레코드 없음(정직 NULL)
         assert log.prompt_version == "v-test"
         assert log.seed == 1234
+        assert log.cu_slug == "wm-gen-quad-abc123def456"  # CU 조인 정체성(#912 P1-2)
         assert log.input_sha256 == input_snapshot_sha256(snapshot)
         assert restore_input_snapshot(log) == snapshot
 
@@ -238,26 +240,36 @@ class TestReproducibilitySeatsPassthrough:
         assert log.seed is None
         assert log.input_sha256 is None
         assert log.input_snapshot is None
+        assert log.cu_slug is None
 
 
 class TestInputSnapshotForPrewarm:
-    def test_snapshot_pins_text_and_restores_request(self) -> None:
-        """스냅샷 = 텍스트 sha256 핀(전문 미보관) + request 원문(레코드만으로 복원)."""
+    def test_snapshot_is_self_contained_verbatim_plus_pins(self) -> None:
+        """스냅샷 자기완결(#912 P1-1) — prompt/system **전문** + sha256 병기 + request 원문.
+
+        해시만으로는 모델 입력을 재구성할 수 없다 — specs 파일이 사라져도 스냅샷의 전문이
+        provider에 재투입할 정확한 바이트다(재현 계약 본체).
+        """
         item = _item()
         snapshot = input_snapshot_for_prewarm(item)
         assert snapshot["kind"] == "l3.pregenerate.prewarm"
-        assert snapshot["prompt_sha256"] == text_sha256(item.prompt)
-        assert snapshot["system_sha256"] == text_sha256(item.system)
-        assert "prompt" not in snapshot  # 전문 미보관(저작권·용량) — 해시 핀만
+        # 전문(verbatim) — provider에 다시 넣을 텍스트 그 자체.
+        assert snapshot["prompt"] == item.prompt
+        assert snapshot["system"] == item.system
+        # 무결성 핀 — 담긴 전문과 해시가 자기모순 없이 정합.
+        assert snapshot["prompt_sha256"] == text_sha256(snapshot["prompt"])
+        assert snapshot["system_sha256"] == text_sha256(snapshot["system"])
         # request는 원문 복원 가능 — 재검증하면 원 라우팅 신호와 동치.
         revived = RoutingRequest.model_validate(snapshot["request"])
         assert revived == item.request
 
-    def test_ingest_mode_pins_precomputed_response(self) -> None:
-        """인제스트 모드는 외부 시드 응답도 입력 — sha256 핀 키가 생긴다(생성 모드엔 없음)."""
+    def test_ingest_mode_stores_precomputed_response_verbatim(self) -> None:
+        """인제스트 모드는 외부 시드 응답도 입력 — 전문+sha256 핀(생성 모드엔 키 없음)."""
         generated = input_snapshot_for_prewarm(_item())
+        assert "precomputed_response" not in generated
         assert "precomputed_response_sha256" not in generated
         ingest = input_snapshot_for_prewarm(_item(precomputed_response="답은 3."))
+        assert ingest["precomputed_response"] == "답은 3."
         assert ingest["precomputed_response_sha256"] == text_sha256("답은 3.")
 
     def test_snapshot_is_jsonb_safe(self) -> None:

@@ -138,8 +138,8 @@ class GenerationLog(Base):
 
     __tablename__ = "generation_log"
 
-    # EOS-55 메모: 재현 좌석 4컬럼(prompt_version·seed·input_sha256·input_snapshot)이
-    # 추가되면서 schema.GenerationLog에 스냅샷↔해시 정합 validator가 생겼다 —
+    # EOS-55 메모: 재현 좌석 5컬럼(prompt_version·seed·input_sha256·input_snapshot·
+    # cu_slug)이 추가되면서 schema.GenerationLog에 스냅샷↔해시 정합 validator가 생겼다 —
     # to_schema()가 model_validate를 거치므로 DB 읽기도 그 무결성 봉인을 지난다.
 
     log_id: Mapped[uuid.UUID] = mapped_column(
@@ -174,6 +174,9 @@ class GenerationLog(Base):
     seed: Mapped[int | None] = mapped_column(sa.BigInteger)
     input_sha256: Mapped[str | None] = mapped_column(sa.String(64))
     input_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # 생산 CU 조인 정체성(#912 P1-2) — 코퍼스 키·review_timer cu_slug와 동일 산식(폭 128
+    # schema 강제 동형). 정체성 없는 종단(파싱 실패·pregenerate 시드)은 NULL=미기록.
+    cu_slug: Mapped[str | None] = mapped_column(sa.String(128))
 
     # ── 인덱스 (§10.1 CREATE INDEX) ──
     __table_args__ = (sa.Index("idx_generation_problem", "problem_id"),)

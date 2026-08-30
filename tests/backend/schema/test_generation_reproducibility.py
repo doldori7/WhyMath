@@ -30,7 +30,11 @@ from whymath_backend.schema.provenance import (
 
 
 def _snapshot(**overrides: Any) -> dict[str, Any]:
-    """대표 스냅샷 — 중첩 dict·list·불리언·수치·유니코드 전형 포함(왕복 안정성 재료)."""
+    """대표 스냅샷 — 중첩 dict·list·불리언·수치·유니코드 전형 포함(왕복 안정성 재료).
+
+    골든 해시 동결(test_golden_digest_frozen)의 입력이므로 내용 변경 금지 — 실경로 스냅샷
+    형태(전문 병존)는 조립부 테스트(bridge·wiring)와 아래 verbatim 계약 테스트가 본다.
+    """
     base: dict[str, Any] = {
         "kind": "l3.pregenerate.prewarm",
         "prompt_sha256": text_sha256("이차방정식 x^2-5x+6=0"),
@@ -149,6 +153,28 @@ class TestRestoreContract:
         # 레코드 원본은 불변 — 재복원하면 원 입력 그대로.
         assert restore_input_snapshot(log) == _snapshot()
 
+    def test_restore_yields_verbatim_model_inputs(self) -> None:
+        """강화 계약(#912 P1-1): 복원 스냅샷에서 provider에 **다시 넣을 전문**이 나온다.
+
+        해시 일치만으로는 계약 미성립 — 원본 specs가 사라져도 레코드의 전문이 정확한
+        바이트여야 한다. 전문↔핀 자기정합(text_sha256 재계산 일치)까지 함께 동결한다.
+        """
+        prompt = "이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오."
+        system = "당신은 동등문제 저작자입니다."
+        snap = _snapshot(
+            prompt=prompt,
+            system=system,
+            prompt_sha256=text_sha256(prompt),
+            system_sha256=text_sha256(system),
+        )
+        restored = restore_input_snapshot(GenerationLog(input_snapshot=snap))
+        # 전문 그 자체가 복원된다 — 이것이 재실행 시 모델에 투입할 입력이다.
+        assert restored["prompt"] == prompt
+        assert restored["system"] == system
+        # 전문과 병기된 핀이 자기정합 — 복원물만으로 무결성 재검증 가능.
+        assert text_sha256(restored["prompt"]) == restored["prompt_sha256"]
+        assert text_sha256(restored["system"]) == restored["system_sha256"]
+
     def test_unrecorded_snapshot_raises(self) -> None:
         """스냅샷 미기록 레코드는 빈 dict 위장 없이 ValueError(복원 불가를 정직하게)."""
         with pytest.raises(ValueError, match="미기록"):
@@ -173,14 +199,21 @@ class TestRestoreContract:
 # ──────────────────────────────────────────────────────────────────────
 class TestReproducibilitySeats:
     def test_seats_default_none(self) -> None:
-        """prompt_version·seed 기본 None=미기록 — 0/빈문자 날조 없음."""
+        """prompt_version·seed·cu_slug 기본 None=미기록 — 0/빈문자 날조 없음."""
         log = GenerationLog()
         assert log.prompt_version is None
         assert log.seed is None
+        assert log.cu_slug is None
 
     def test_seed_recorded_when_given(self) -> None:
         """seed는 *실제 쓰인 값*이 주어지면 그대로 기록된다(좌석 실재 계약)."""
         assert GenerationLog(seed=42).seed == 42
+
+    def test_cu_slug_recorded_when_given(self) -> None:
+        """cu_slug 좌석(#912 P1-2) — 코퍼스 키와 같은 문자열이 그대로 보존된다."""
+        assert GenerationLog(cu_slug="wm-gen-quad-abc123def456").cu_slug == (
+            "wm-gen-quad-abc123def456"
+        )
 
     def test_input_sha256_format_enforced(self) -> None:
         """input_sha256은 64자 소문자 hex만 — 형식 밖 주장은 적재 거부."""

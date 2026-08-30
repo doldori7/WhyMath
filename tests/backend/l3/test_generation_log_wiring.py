@@ -40,6 +40,7 @@ from whymath_backend.l3.pregenerate.__main__ import main as pregen_main
 from whymath_backend.l3.pregenerate.models import PregenItem
 from whymath_backend.l3.pregenerate.prewarmer import CachePrewarmer
 from whymath_backend.l3.pregenerate.provenance_bridge import (
+    append_generation_log_jsonl,
     load_generation_logs_jsonl,
     model_name_for_decision,
 )
@@ -155,9 +156,12 @@ class TestPrewarmerEmitsGenerationLog:
         assert log.input_tokens == 50 and log.output_tokens == 120  # provider 실측 전달
         assert log.problem_id is None  # 사전적재 시드=problem 레코드 없음(정직 NULL)
         assert log.prompt_version is None and log.seed is None  # 이 경로 미사용=미기록
-        # 재현 계약: 적재 레코드만으로 입력 복원 + 프롬프트 핀 일치.
+        assert log.cu_slug is None  # CU 정체성 없는 경로 — 미기록(#912 P1-2 정직 NULL)
+        # 강화 재현 계약(#912 P1-1): 레코드만으로 provider에 **다시 넣을 전문**이 나온다.
         restored = restore_input_snapshot(log)
-        assert restored["prompt_sha256"] == text_sha256(item.prompt)
+        assert restored["prompt"] == item.prompt  # 전문(verbatim) — 재투입 가능 바이트
+        assert restored["system"] == item.system
+        assert restored["prompt_sha256"] == text_sha256(restored["prompt"])  # 핀 자기정합
         assert RoutingRequest.model_validate(restored["request"]) == item.request
 
     def test_failed_validation_logged_false_with_reason(self) -> None:
@@ -343,7 +347,7 @@ def _generator(
 
 class TestAccumulateGeneratorEmitsGenerationLog:
     def test_successful_call_logged_with_prompt_version_and_snapshot(self) -> None:
-        """성공 호출 → success=True + prompt_version(정본 해시)·모델명·스냅샷 복원."""
+        """성공 호출 → success=True + prompt_version(정본 해시)·모델명·**전문 복원**·cu_slug."""
         provider = FakeProvider([_HAPPY])
         logs: list[GenerationLog] = []
         candidate = _generator(provider, logs).generate(_spec())
@@ -356,11 +360,16 @@ class TestAccumulateGeneratorEmitsGenerationLog:
         assert log.model_name == model_name_for_decision(provider.decisions[0])
         assert log.cost_usd == 0.0  # free 구독 → LOCAL 0원 확정
         assert log.seed is None  # seed 스레딩 없음(실측) — 미기록
-        # 재현 계약: 실제 전송 프롬프트·시스템의 sha256 핀이 스냅샷과 일치.
+        # CU 조인 정체성(#912 P1-2) — 조립된 후보의 코퍼스 키(안정 slug)와 동일.
+        assert log.cu_slug == candidate.problem.slug
+        # 강화 재현 계약(#912 P1-1): 레코드만으로 provider에 **다시 넣은 전문 그대로**가
+        # 나온다 — 해시 일치만으로는 계약 미성립(specs·정본이 바뀌면 재구성 불가).
         restored = restore_input_snapshot(log)
         assert restored["kind"] == "l3.equivalent.llm_generate"
-        assert restored["prompt_sha256"] == text_sha256(provider.prompts[0])
-        assert restored["system_sha256"] == text_sha256(provider.systems[0])
+        assert restored["prompt"] == provider.prompts[0]  # 전문(verbatim) = 실제 전송 바이트
+        assert restored["system"] == provider.systems[0]
+        assert restored["prompt_sha256"] == text_sha256(restored["prompt"])  # 핀 자기정합
+        assert restored["system_sha256"] == text_sha256(restored["system"])
         assert restored["spec"]["achievement_standard_codes"] == [_STANDARD]
         assert restored["topic_hint"] == "이차방정식 — 두 근 중 큰 근"
 
@@ -373,6 +382,7 @@ class TestAccumulateGeneratorEmitsGenerationLog:
         assert logs[0].success is False
         assert logs[0].error_detail is not None and "RuntimeError" in logs[0].error_detail
         assert logs[0].input_tokens is None  # 실측 없음 — 날조 금지
+        assert logs[0].cu_slug is None  # 후보 조립 전 실패 — CU 정체성 미기록(정직)
 
     def test_parse_failure_logged_false_with_usage(self) -> None:
         """JSON 파싱 실패 → success=False, 단 실측 usage(비용 발생분)는 기록된다."""
@@ -383,6 +393,7 @@ class TestAccumulateGeneratorEmitsGenerationLog:
         assert logs[0].success is False
         assert logs[0].error_detail == "응답 JSON 파싱 실패"
         assert logs[0].input_tokens == 50  # 호출은 성사 — 실측 보존
+        assert logs[0].cu_slug is None  # 후보 조립 전 실패 — CU 정체성 미기록(정직)
 
     def test_run_corpus_accumulate_glue_produces_logs(self, tmp_path: Path) -> None:
         """main()이 잇는 조립 그대로(생성기+싱크 → run_corpus_accumulate) 호출별 적재."""
@@ -400,6 +411,64 @@ class TestAccumulateGeneratorEmitsGenerationLog:
         assert all(
             restore_input_snapshot(log)["kind"] == "l3.equivalent.llm_generate" for log in logs
         )
+
+
+class TestSidecarJoinsHitCuMetrics:
+    """#912 P1-2 본체 — accumulate 사이드카가 문서화된 소비자(hit_cu_metrics)와 실제 조인.
+
+    cu_slug가 없으면 aggregate의 CU당 비용 조인이 전건 unmatched로 떨어져 CU당 토큰·비용
+    측정이 0이 된다(codex 지적 그대로). 실경로 사이드카 산출물을 genlog_rows로 넣어 조인
+    성립을 동결한다 — 소비자 접속이 이 태스크의 집행 별항(acceptance ③)이다.
+    """
+
+    def test_accumulate_sidecar_rows_join_cu_costs(self, tmp_path: Path) -> None:
+        """사이드카 행 → aggregate 조인: matched 전건·cu_with_cost ≥ 1·$0 실기록≠미기록."""
+        from whymath_backend.harness.review_timer import finish_review, start_review
+        from whymath_backend.ops.hit_cu_metrics import aggregate
+
+        # ① 실경로 그대로 사이드카 생산 — 생성기+JSONL appender 싱크+run_corpus_accumulate.
+        provider = FakeProvider([_HAPPY])
+        sidecar = tmp_path / "acc.genlog.jsonl"
+        generator = LLMEquivalentProblemGenerator(
+            provider,  # type: ignore[arg-type]
+            misconception_catalog={},
+            topic_hint="이차방정식 — 두 근 중 큰 근",
+            generation_log_sink=lambda log: append_generation_log_jsonl(sidecar, log),
+        )
+        run_corpus_accumulate(
+            out_path=tmp_path / "acc.jsonl",
+            seed_paths=[],
+            generator=generator,
+            spec=_spec(),
+            n=2,
+        )
+        # ② 문서화된 소비자가 읽는 형태 그대로 — JSONL 행 dict(model dump라 cu_slug가
+        #    top-level에 실려 aggregate의 조인 키 `row.get("cu_slug")`에 바로 잡힌다).
+        rows = [
+            json.loads(line)
+            for line in sidecar.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert len(rows) == 2
+        slug = rows[0]["cu_slug"]
+        assert isinstance(slug, str) and slug  # 성공 종단 전건에 CU 정체성 실림
+        # ③ 같은 CU의 검수 타이머 페어와 함께 집계 — CU당 비용 조인 성립.
+        started = start_review(cu_slug=slug, reviewer_id="rev-1")
+        finished = finish_review(
+            review_session_id=started.review_session_id,
+            cu_slug=slug,
+            reviewer_id="rev-1",
+            verdict="approved",
+            elapsed_ms=60_000,
+        )
+        report = aggregate([started, finished], genlog_rows=rows)
+        assert report.cost_rows_matched == 2  # 전건 조인 — unmatched 전락(P1 증상) 해소
+        assert report.cost_rows_unmatched == 0
+        # 로컬 경로 cost_usd=0.0은 **실기록**이다 — 미기록(null)으로 오독되면 CU가
+        # 불완전 계측으로 강등돼 cu_with_cost=0이 된다(0.0≠null 구분의 변별 단언).
+        assert report.cu_with_cost == 1
+        assert report.cost_usd_total == 0.0  # $0 확정(미산출 None과 구분)
+        assert report.tokens_total == 2 * (50 + 120)  # provider 실측 토큰 합
 
 
 class TestAccumulateMainWiring:

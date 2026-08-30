@@ -305,17 +305,21 @@ class ContentProvenance(BaseModel):
 # 생성 Run 재현 계약 — 입력 스냅샷 canonical 직렬화·해시 (EOS-55)
 #
 # "동일 Run 레코드로 재실행 시 동일 입력이 복원된다"를 성립시키는 순수 함수 3종.
-# 스냅샷은 *전문 복제가 아니다*(저작권·용량 — 자유 텍스트는 sha256으로만 핀하고,
-# 구조 신호(라우팅 request·스펙 필드)만 복원 가능한 형태로 담는다). 이 모듈은 l3를
-# import하지 않는다(7계층 역방향 금지) — 스냅샷 *조립*은 각 생성 경로(L3측
-# `l3/pregenerate/provenance_bridge.py`·`l3/equivalent/llm_generator.py`)가 하고,
-# 여기는 직렬화·해시·복원 검증의 단일 정본만 둔다.
+# 스냅샷은 **자기완결**이어야 한다(#912 codex P1-1): 자유 텍스트(프롬프트·시스템)는
+# **전문(verbatim)을 담고** sha256 핀을 무결성용으로 병기한다 — 해시만 남기면 원본
+# specs 파일이 바뀌거나 사라진 뒤 모델 입력을 재구성할 수 없다(해시 복원≠입력 복원).
+# 두 생성 경로의 문면은 자체 정본 템플릿+자체 스펙 조합이라 저작권 무관이고, 행당 수
+# KB는 로그 테이블에 허용 용량이다. 이 모듈은 l3를 import하지 않는다(7계층 역방향
+# 금지) — 스냅샷 *조립*은 각 생성 경로(L3측 `l3/pregenerate/provenance_bridge.py`·
+# `l3/equivalent/llm_generator.py`)가 하고, 여기는 직렬화·해시·복원 검증의 단일
+# 정본만 둔다.
 # ──────────────────────────────────────────────────────────────────────────
 def text_sha256(text: str) -> str:
-    """자유 텍스트(프롬프트·시스템·응답)의 sha256 hex — 전문 미보관 핀(저작권·용량).
+    """자유 텍스트(프롬프트·시스템·응답)의 sha256 hex — 바이트 동일성 핀(utf-8 기준).
 
-    스냅샷에 본문 대신 이 해시를 담아, 나중에 후보 텍스트가 원래 입력과 동일한지
-    대조할 수 있게 한다(해시 일치 = 바이트 동일·utf-8 기준).
+    스냅샷에 전문과 *병기*해 무결성 대조 축으로 쓴다(해시 일치 = 바이트 동일). 전문
+    없이 이 해시만 남기는 용법은 재현 계약 미성립이다(#912 P1-1 — 해시로는 입력을
+    재구성할 수 없다) — 스냅샷 조립부는 전문을 함께 담는다.
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -465,10 +469,21 @@ class GenerationLog(BaseModel):
     input_snapshot: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "입력 스냅샷(복원 가능한 참조) — 라우팅 request·스펙 필드 등 구조 신호는 원문, "
-            "자유 텍스트(프롬프트·시스템)는 sha256 핀만(전문 복제 아님 — 저작권·용량). "
+            "입력 스냅샷(자기완결 복원 재료) — 프롬프트·시스템 **전문(verbatim)** + sha256 "
+            "무결성 핀 + 라우팅 request·스펙 필드 원문. 해시만으로는 입력을 재구성할 수 "
+            "없으므로 전문을 담는다(#912 P1-1 — 자체 문면이라 저작권 무관·행당 수 KB 허용). "
             "복원은 `restore_input_snapshot`(해시 대조 통과분만 반환)."
         ),
+    )
+    cu_slug: str | None = Field(
+        default=None,
+        description=(
+            "생산된 CU(콘텐츠 단위)의 안정 slug — 코퍼스 키·검수 타이머 `cu_slug`와 동일 "
+            "산식(#912 P1-2: `ops/hit_cu_metrics --generation-log` CU 조인 정체성). 호출이 "
+            "후보 조립까지 도달하지 못했거나(파싱 실패 등) 경로에 CU 정체성이 없으면"
+            "(pregenerate 캐시 시드) None=미기록 — 날조 금지."
+        ),
+        max_length=128,
     )
 
     @model_validator(mode="after")
