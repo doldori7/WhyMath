@@ -14,17 +14,31 @@ prompt, system, decision)`을 그대로 재사용 → 사전적재한 키는 런
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import logging
+from collections.abc import Callable, Iterable
 
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider
-from whymath_backend.l3.models import Usage
+from whymath_backend.l3.models import RoutingDecision, Usage
 from whymath_backend.l3.pregenerate.models import (
     PregenItem,
     PrewarmItemResult,
     PrewarmReport,
 )
+from whymath_backend.l3.pregenerate.provenance_bridge import (
+    actual_cost_usd_or_none,
+    generation_log_from_result,
+    input_snapshot_for_prewarm,
+    model_name_for_decision,
+)
 from whymath_backend.l3.pregenerate.validator import SeedValidator
 from whymath_backend.l3.router import Router, cache_key_for
+from whymath_backend.schema.provenance import GenerationLog
+
+logger = logging.getLogger("whymath.l3.pregenerate.prewarmer")
+
+# 생성 로그 싱크 계약 — GenerationLog 1건을 받아 적재한다(JSONL appender·DB 세션 등).
+# 예외는 prewarmer가 흡수한다(관측 적재 실패가 사전적재 배치를 깨면 안 됨 — 타입명 로그).
+GenerationLogSink = Callable[[GenerationLog], None]
 
 
 class CachePrewarmer:
@@ -37,6 +51,11 @@ class CachePrewarmer:
 
     `ttl_seconds` 기본 `0` = 무만료(S2 RedisCache는 ttl<=0이면 SET without EX) — 사전
     생성물은 만료되면 의미가 없으므로 기본 무만료. 명시적 회전 정책은 후속.
+
+    `generation_log_sink`(EOS-55 집행 별항): 항목 1건 처리마다 `GenerationLog`(모델·
+    prompt_version·seed 좌석·입력 스냅샷 해시+참조)를 조립해 싱크로 흘린다 — 스킵·실패
+    항목도 기록한다(성공 경로만 보는 계측 금지·2026-08-22 규칙). None(기본)이면 종전
+    동작 그대로(관측 0·기존 호출부 무영향).
     """
 
     def __init__(
@@ -46,11 +65,13 @@ class CachePrewarmer:
         cache: CacheBackend,
         validator: SeedValidator,
         router: Router | None = None,
+        generation_log_sink: GenerationLogSink | None = None,
     ) -> None:
         self._provider = provider
         self._cache = cache
         self._validator = validator
         self._router = router if router is not None else Router()
+        self._generation_log_sink = generation_log_sink
 
     async def prewarm(
         self,
@@ -74,7 +95,54 @@ class CachePrewarmer:
         ttl_seconds: int,
         overwrite: bool,
     ) -> PrewarmItemResult:
+        """항목 1건: 라우팅 → 본처리 → 생성 로그 적재(EOS-55) — 결과는 그대로 반환."""
         decision = self._router.route(item.request)
+        result = await self._prewarm_with_decision(
+            item, decision, ttl_seconds=ttl_seconds, overwrite=overwrite
+        )
+        self._emit_generation_log(item, decision, result)
+        return result
+
+    def _emit_generation_log(
+        self,
+        item: PregenItem,
+        decision: RoutingDecision,
+        result: PrewarmItemResult,
+    ) -> None:
+        """항목 결과 → GenerationLog 조립·싱크 적재 (EOS-55 집행 별항 — never-break).
+
+        기록 원칙(날조 금지):
+          - `problem_id=None` — 사전적재 시드는 problem 레코드가 없다(캐시 키 단위 자산).
+          - `prompt_version=None`/`seed=None` — 이 경로는 템플릿 체계·seed 스레딩이 없다
+            (2026-08-30 실측). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
+          - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
+          - 스냅샷: `input_snapshot_for_prewarm` — request 원문 + 프롬프트/시스템 sha256 핀.
+        싱크 예외는 흡수하되 **타입명을 로그에 남긴다**(침묵 실패 금지 — 관측 적재 실패가
+        배치를 깨면 안 됨·`llm_generator._record_trace` 동형).
+        """
+        if self._generation_log_sink is None:
+            return
+        try:
+            log = generation_log_from_result(
+                result,
+                problem_id=None,
+                model_name=model_name_for_decision(decision),
+                cost_usd=actual_cost_usd_or_none(decision, result.usage),
+                input_snapshot=input_snapshot_for_prewarm(item),
+            )
+            self._generation_log_sink(log)
+        except Exception as exc:  # noqa: BLE001 — 관측 적재 장애는 배치 비차단(타입명 로그)
+            logger.warning("사전적재 생성 로그 적재 실패(%s) — 무시하고 계속", type(exc).__name__)
+
+    async def _prewarm_with_decision(
+        self,
+        item: PregenItem,
+        decision: RoutingDecision,
+        *,
+        ttl_seconds: int,
+        overwrite: bool,
+    ) -> PrewarmItemResult:
+        """라우팅 결정이 주어진 항목 1건의 본처리 — 종전 `_prewarm_one` 본문 그대로."""
 
         # QUALITY(async)는 런타임 파이프라인이 async 분기에서 캐시를 *치지 않는다*
         # (pipeline.py:128-149 — async는 enqueue만 하고 cache.get/set 없음). 따라서

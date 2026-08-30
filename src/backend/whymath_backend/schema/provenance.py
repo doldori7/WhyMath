@@ -28,7 +28,11 @@ Pydantic 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(슬라이스 1 
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -298,6 +302,74 @@ class ContentProvenance(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 생성 Run 재현 계약 — 입력 스냅샷 canonical 직렬화·해시 (EOS-55)
+#
+# "동일 Run 레코드로 재실행 시 동일 입력이 복원된다"를 성립시키는 순수 함수 3종.
+# 스냅샷은 *전문 복제가 아니다*(저작권·용량 — 자유 텍스트는 sha256으로만 핀하고,
+# 구조 신호(라우팅 request·스펙 필드)만 복원 가능한 형태로 담는다). 이 모듈은 l3를
+# import하지 않는다(7계층 역방향 금지) — 스냅샷 *조립*은 각 생성 경로(L3측
+# `l3/pregenerate/provenance_bridge.py`·`l3/equivalent/llm_generator.py`)가 하고,
+# 여기는 직렬화·해시·복원 검증의 단일 정본만 둔다.
+# ──────────────────────────────────────────────────────────────────────────
+def text_sha256(text: str) -> str:
+    """자유 텍스트(프롬프트·시스템·응답)의 sha256 hex — 전문 미보관 핀(저작권·용량).
+
+    스냅샷에 본문 대신 이 해시를 담아, 나중에 후보 텍스트가 원래 입력과 동일한지
+    대조할 수 있게 한다(해시 일치 = 바이트 동일·utf-8 기준).
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def canonical_input_json(snapshot: Mapping[str, Any]) -> str:
+    """입력 스냅샷의 canonical JSON 직렬화 — 키 정렬·compact·유니코드 원문(결정론).
+
+    같은 내용이면 키 순서·공백과 무관하게 항상 같은 문자열이 나온다(해시 안정성의 전제).
+    `allow_nan=False` — NaN/Infinity는 JSON 표준 밖이라 PostgreSQL JSONB 왕복이 불가하므로,
+    저장 불가 값은 여기서 시끄럽게 실패시킨다(조용한 이식 불가 스냅샷 금지).
+    JSON 비직렬화 값(enum·set 등)도 TypeError로 실패한다 — 조립부가 원시형으로 정규화한
+    뒤 넘겨야 한다(복원 계약: DB JSONB 왕복 후에도 같은 canonical 문자열이어야 함).
+    """
+    return json.dumps(
+        snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def input_snapshot_sha256(snapshot: Mapping[str, Any]) -> str:
+    """입력 스냅샷 → sha256 hex — canonical 직렬화(utf-8) 위에서만 계산한다(단일 정본)."""
+    return hashlib.sha256(canonical_input_json(snapshot).encode("utf-8")).hexdigest()
+
+
+def restore_input_snapshot(log: GenerationLog) -> dict[str, Any]:
+    """Run 레코드만으로 입력 스냅샷을 복원한다 — 해시 재계산·대조 통과분만 반환(재현 계약).
+
+    계약(EOS-55 acceptance ②): ① `input_snapshot` 미기록이면 복원 불가를 *정직하게*
+    ValueError로 알린다(빈 dict 위장 금지) ② 재계산 해시가 `input_sha256`과 다르면
+    스냅샷이 변조/파손된 것 — 조용히 돌려주지 않고 ValueError(무결성 실패). 반환은
+    깊은 복사본이라 호출자가 수정해도 레코드가 오염되지 않는다.
+    """
+    if log.input_snapshot is None:
+        raise ValueError(
+            "입력 스냅샷 미기록 — 이 GenerationLog 레코드로는 입력을 복원할 수 없다"
+            "(구 레코드 또는 스냅샷 미배선 경로·NULL=미기록)."
+        )
+    if log.input_sha256 is None:
+        # 모델 validator가 스냅샷 존재 시 해시를 자동 보충하므로 정상 경로에선 불가능하나,
+        # 방어적으로 명시 실패(해시 없는 스냅샷은 무결성 검증 불가 = 재현 계약 미성립).
+        raise ValueError("input_sha256 미기록 — 스냅샷 무결성을 검증할 수 없다(재현 계약 미성립).")
+    recomputed = input_snapshot_sha256(log.input_snapshot)
+    if recomputed != log.input_sha256:
+        raise ValueError(
+            "입력 스냅샷 해시 불일치 — 기록 이후 스냅샷이 변조/파손됐다"
+            f"(기록 {log.input_sha256[:12]}… ≠ 재계산 {recomputed[:12]}…)."
+        )
+    return copy.deepcopy(dict(log.input_snapshot))
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 보조: GenerationLog (§10.1 generation_log 테이블)
 # ──────────────────────────────────────────────────────────────────────────
 class GenerationLog(BaseModel):
@@ -362,3 +434,63 @@ class GenerationLog(BaseModel):
     success: bool | None = Field(default=None, description="성공 여부")
     error_detail: str | None = Field(default=None, description="실패 사유(있으면)")
     generated_at: datetime | None = Field(default=None, description="생성 시각")
+
+    # ── 생성 Run 재현 좌석 (EOS-55) — 전부 Optional·NULL=미기록(0/빈값 날조 금지) ──
+    prompt_version: str | None = Field(
+        default=None,
+        description=(
+            "실제 사용한 프롬프트 정본의 식별자 — 별도 버전 체계가 없으므로(2026-08-30 실측: "
+            "prompt_template_id 적재 0·Langfuse 프롬프트 버전 미사용) 정본 자산 내용 해시로 "
+            "식별한다(예 'l3.equivalent@sha256:abc123def456'). 템플릿 체계가 없는 경로"
+            "(pregenerate 인제스트 등)는 None=미기록."
+        ),
+        max_length=128,
+    )
+    seed: int | None = Field(
+        default=None,
+        description=(
+            "생성 호출에 *실제로 쓰인* 샘플링 시드. 현행 두 생성 경로는 seed 스레딩이 없어"
+            "(2026-08-30 실측: 라우터·프로바이더 seed 전달 0) 항상 None=미사용 — 좌석만 두고 "
+            "실사용 시점에 실제 값을 기록한다(날조 금지)."
+        ),
+    )
+    input_sha256: str | None = Field(
+        default=None,
+        description=(
+            "입력 스냅샷의 sha256 hex(canonical 직렬화 기준) — 무결성 축. 스냅샷이 있으면 "
+            "validator가 자동 보충·대조하므로 호출자가 직접 계산할 필요 없다."
+        ),
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    input_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "입력 스냅샷(복원 가능한 참조) — 라우팅 request·스펙 필드 등 구조 신호는 원문, "
+            "자유 텍스트(프롬프트·시스템)는 sha256 핀만(전문 복제 아님 — 저작권·용량). "
+            "복원은 `restore_input_snapshot`(해시 대조 통과분만 반환)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _enforce_input_snapshot_integrity(self) -> GenerationLog:
+        """스냅샷↔해시 정합 강제 — 재현 계약의 쓰기측 봉인.
+
+        ① 스냅샷이 있는데 해시가 없으면 canonical 해시를 *자동 보충*한다(호출자 계산
+           드리프트 원천 제거 — 해시 계산 정본은 `input_snapshot_sha256` 하나).
+        ② 둘 다 있는데 불일치면 ValueError — 변조/파손된 재현 주장을 적재 단계에서 거부한다
+           (DB `to_schema`·JSONL 로드가 model_validate를 거치므로 읽기측도 같은 봉인을 지난다).
+        해시만 있고 스냅샷이 없는 레코드는 허용한다(참조가 외부에 있는 경로의 정직한 부분
+        기록 — 복원 시도는 `restore_input_snapshot`이 ValueError로 정직 실패).
+        """
+        if self.input_snapshot is not None:
+            recomputed = input_snapshot_sha256(self.input_snapshot)
+            if self.input_sha256 is None:
+                # validator 안 대입 — mode="after"라 재검증 루프 없음(pydantic v2 규약).
+                self.input_sha256 = recomputed
+            elif self.input_sha256 != recomputed:
+                raise ValueError(
+                    "input_sha256이 input_snapshot의 canonical 해시와 불일치 — "
+                    f"기록 {self.input_sha256[:12]}… ≠ 재계산 {recomputed[:12]}… "
+                    "(변조/파손된 재현 주장은 적재 거부)."
+                )
+        return self

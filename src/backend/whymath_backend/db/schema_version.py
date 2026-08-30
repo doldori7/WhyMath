@@ -133,6 +133,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "a926d39f126a",  # EOS-46: student_solution_step — 학생 풀이 step 정규 기록(ADR-002)
     "c9bc2555282e",  # EOS-48: event_time/ingested_at 분리 + active/idle 실측 좌석(3테이블 ALTER)
     "84c782415837",  # EOS-54: review_timer_event — HIT 검수 타이머 이벤트 계측기
+    "f4b2d8c1a3e5",  # EOS-55: generation_log 재현 좌석 4컬럼(prompt_version·seed·입력 스냅샷)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

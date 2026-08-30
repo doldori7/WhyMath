@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - "src/backend/whymath_backend/harness/problem_corpus_*.py"
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: EOS-53 crosswalk 갭 #2(F5+C10 잔여). G1 차단 조건(Run 로그 적재)·F-Ⅲ 실패분포 분석 전제. prompt_template_id 컬럼은 실재(provenance.py:154) — 값 배선이 갭."
 updated: 2026-08-30

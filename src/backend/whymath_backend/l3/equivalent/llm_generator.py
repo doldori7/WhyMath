@@ -99,7 +99,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
 
 import sympy
@@ -121,6 +121,10 @@ from whymath_backend.l3.models import (
     RoutingRequest,
     Usage,
 )
+from whymath_backend.l3.pregenerate.provenance_bridge import (
+    actual_cost_usd_or_none,
+    model_name_for_decision,
+)
 from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.l3.router import Router, _as_cost_tier, actual_cost_krw, langfuse_fields
 from whymath_backend.l3.verify_answer import derive_selected_root
@@ -134,7 +138,7 @@ from whymath_backend.schema.enums import (
     Subject,
 )
 from whymath_backend.schema.problem import DistractorEntry, Problem
-from whymath_backend.schema.provenance import ContentProvenance
+from whymath_backend.schema.provenance import ContentProvenance, GenerationLog, text_sha256
 
 __all__ = ["LLMEquivalentProblemGenerator"]
 
@@ -219,6 +223,34 @@ def _system_prompt() -> str:
     return prompt_text("l3.equivalent.system")
 
 
+# 이 생성기가 인용하는 정본 프롬프트 자산 전량(고정 순서) — prompt_version 식별의 재료.
+_EQUIVALENT_PROMPT_ASSET_IDS: tuple[str, ...] = (
+    "l3.equivalent.system",
+    "l3.equivalent.user",
+    "l3.equivalent.user_topic",
+)
+
+
+@lru_cache(maxsize=1)
+def _prompt_version() -> str:
+    """이 경로의 프롬프트 정본 식별자 — 자산 내용 해시(EOS-55 `prompt_version` 좌석).
+
+    별도 버전 번호 체계가 없으므로(2026-08-30 실측: `prompt_template_id` 적재 0·Langfuse
+    프롬프트 버전 미사용·정본 md에 버전 헤더 없음) 번호를 *발명하지 않고*, 실제 호출부가
+    아는 값 — 인용하는 정본 자산 3종의 내용 — 으로 결정론 식별한다. 정본(doc-first)이
+    바뀌면 식별자도 바뀐다(같은 식별자 = 같은 문면 보증). 형식:
+    `l3.equivalent@sha256:<12hex>`. 프로세스당 1회 계산(`_system_prompt` 캐시 동형).
+    """
+    digest = hashlib.sha256()
+    for asset_id in _EQUIVALENT_PROMPT_ASSET_IDS:
+        # 자산 경계를 \x00으로 구분 — 이어붙임 모호성(id/본문 경계 이동) 방지.
+        digest.update(asset_id.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(prompt_text(asset_id).encode("utf-8"))
+        digest.update(b"\x00")
+    return f"l3.equivalent@sha256:{digest.hexdigest()[:12]}"
+
+
 # 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
 _STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
@@ -251,6 +283,7 @@ class LLMEquivalentProblemGenerator:
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
         valid_from_year: int = 2022,
         fallback_unit_codes: Sequence[str] = (),
+        generation_log_sink: Callable[[GenerationLog], None] | None = None,
     ) -> None:
         """생성기 구성.
 
@@ -289,6 +322,13 @@ class LLMEquivalentProblemGenerator:
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
             subject·curriculum_version·valid_from_year: Problem 필수 메타 기본값(스펙 밖·저작 배선).
             fallback_unit_codes: LLM이 unit_codes를 안 주면 쓰는 폴백(비면 결측 시 생성 실패).
+            generation_log_sink: **생성 Run 재현 로그 싱크**(EOS-55 집행 별항). LLM 호출
+                1건마다 `GenerationLog`(모델·prompt_version·seed 좌석·입력 스냅샷 해시+참조)를
+                조립해 흘린다 — provider 예외·파싱/조립 실패도 success=False로 기록한다
+                (성공 경로만 보는 계측 금지·2026-08-22 규칙). Langfuse trace(SaaS)와 별개의
+                인프로세스 이중 회계 축이다. None(기본)이면 종전 동작 그대로(기존 호출부
+                무영향) — 배치 CLI(`harness/problem_corpus_accumulate`)가 JSONL appender를
+                배선한다.
         """
         if provider is None:
             # 표준 구성 재사용(LLMTutorPolicy·app.py 동형) — 지연 연결이라 구성만으로 네트워크 0.
@@ -314,6 +354,7 @@ class LLMEquivalentProblemGenerator:
         # 배치용 지속 이벤트 루프(지연 생성) — asyncio.run의 루프 생성·종료 반복이 provider의
         # 캐시 커넥션 풀을 죽여 배치가 격회 실패하던 실측 회귀 방어(_invoke·_ensure_loop 참조).
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._generation_log_sink = generation_log_sink
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -334,6 +375,15 @@ class LLMEquivalentProblemGenerator:
             generated = self._invoke(prompt, decision)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
             _LOGGER.warning("동등문제 생성 provider 호출 실패 — None 폴백: %s", exc)
+            # 실패한 호출 *시도*도 Run 이력이다(EOS-55) — usage 미상(None)·정직 실패 기록.
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=None,
+                success=False,
+                error_detail=f"provider.generate failed: {type(exc).__name__}: {exc}",
+            )
             return None
         # LLM 호출 성공 = 비용 발생 — 하류 JSON 파싱·조립 성패와 무관하게 관측을 먼저 남긴다
         # ("모든 LLM 호출 → Langfuse 추적" — 추적 0이던 공백 보정·2026-07-21 정합성 검토).
@@ -343,6 +393,14 @@ class LLMEquivalentProblemGenerator:
         data = self._extract_json(raw)
         if data is None:
             _LOGGER.warning("동등문제 생성 응답 JSON 파싱 실패 — None 폴백.")
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=generated.usage,
+                success=False,
+                error_detail="응답 JSON 파싱 실패",
+            )
             return None
 
         try:
@@ -351,7 +409,18 @@ class LLMEquivalentProblemGenerator:
             # Problem/Provenance 불변식 위반(저작권 게이트가 생성 거부)·필수 결측·타입 오류.
             # 조용히 통과시키지 않고 로그 + None(게이트에 도달하기 전 정직한 생성 실패).
             _LOGGER.warning("동등문제 후보 조립 실패 — None 폴백: %s", exc)
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=generated.usage,
+                success=False,
+                error_detail=f"후보 조립 실패: {type(exc).__name__}",
+            )
             return None
+        self._emit_generation_log(
+            spec, prompt, decision, usage=generated.usage, success=True, error_detail=None
+        )
         return candidate
 
     # ── 동기 경계(async provider.generate를 배치 sync 문맥에서 호출) ─────
@@ -437,6 +506,78 @@ class LLMEquivalentProblemGenerator:
             flush()
         except Exception as exc:  # noqa: BLE001 — 전송 확정 실패가 배치 결과를 깨면 안 됨
             _LOGGER.warning("동등문제 생성 관측 flush 실패(%s) — 무시하고 계속", type(exc).__name__)
+
+    # ── 생성 Run 재현 로그 (EOS-55 집행 별항 — Langfuse와 별개의 인프로세스 이중 회계) ──
+    def _input_snapshot(self, spec: EquivalenceSpec, prompt: str) -> dict[str, object]:
+        """호출 1건의 입력 스냅샷(해시+참조) — 재현 계약의 accumulate측 조립(EOS-55).
+
+        담는 것(전부 JSON 원시형 — canonical 직렬화·JSONB 왕복 안정):
+          - `prompt_sha256`/`system_sha256`: 실제 전송 텍스트의 sha256 핀 — *전문 미보관*
+            (저작권·용량). 프롬프트 문면 자체는 `prompt_version`(정본 자산 해시)이 식별한다.
+          - `spec`: 이 경로가 실제로 가진 구조 입력 — 성취기준·오개념·난이도·답형태.
+            레코드만으로 그대로 복원된다(동일 spec + 동일 정본 = 동일 프롬프트 재조립 가능).
+          - `topic_hint`/`temperature`: 프롬프트·샘플링에 실제 반영된 생성 신호.
+        라우터 결정은 담지 않는다 — spec에서 결정론 유도되는 파생물이고, 실행 모델은
+        `model_name` 컬럼이 별도 기록한다(pregenerate측 `input_snapshot_for_prewarm` 동형).
+        """
+        return {
+            "kind": "l3.equivalent.llm_generate",
+            "prompt_sha256": text_sha256(prompt),
+            "system_sha256": text_sha256(_system_prompt()),
+            "spec": {
+                "achievement_standard_codes": sorted(spec.achievement_standard_codes),
+                "target_misconception_ids": sorted(spec.target_misconception_ids),
+                "difficulty_overall": spec.difficulty_overall,
+                "answer_format": self._enum_value(spec.answer_format),
+            },
+            "topic_hint": self._topic_hint,
+            "temperature": self._temperature,
+        }
+
+    def _emit_generation_log(
+        self,
+        spec: EquivalenceSpec,
+        prompt: str,
+        decision: RoutingDecision,
+        *,
+        usage: Usage | None,
+        success: bool,
+        error_detail: str | None,
+    ) -> None:
+        """호출 1건의 GenerationLog 조립·싱크 적재 — never-break(배치 비차단).
+
+        기록 원칙(날조 금지):
+          - `problem_id=None` — 배치 저작 후보는 DB problem 레코드가 아직 없다(JSONL 코퍼스
+            v0 단계·slug 기반). DB 적재 시점의 연결은 적재 파이프라인 소관.
+          - `seed=None` — 이 경로는 seed 스레딩이 없다(2026-08-30 실측: 라우터·프로바이더
+            seed 전달 0). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
+          - `prompt_version`: 정본 자산 내용 해시(`_prompt_version` — 실제 아는 값).
+          - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
+        싱크·조립 예외는 흡수하되 **타입명을 로그에 남긴다**(침묵 실패 금지 —
+        `_record_trace` 동형).
+        """
+        if self._generation_log_sink is None:
+            return
+        try:
+            latency_ms: int | None = None
+            if usage is not None and usage.latency_ms is not None:
+                # 실측 float(ms) → 스키마 계약 int(ms) 반올림(provenance_bridge 동형).
+                latency_ms = int(round(usage.latency_ms))
+            log = GenerationLog(
+                model_name=model_name_for_decision(decision, settings=self._settings),
+                prompt_version=_prompt_version(),
+                seed=None,  # seed 미사용(실측) — NULL=미기록(날조 금지)
+                input_tokens=usage.input_tokens if usage is not None else None,
+                output_tokens=usage.output_tokens if usage is not None else None,
+                cost_usd=actual_cost_usd_or_none(decision, usage),
+                latency_ms=latency_ms,
+                success=success,
+                error_detail=error_detail,
+                input_snapshot=self._input_snapshot(spec, prompt),
+            )
+            self._generation_log_sink(log)
+        except Exception as exc:  # noqa: BLE001 — 관측 적재 장애는 저작 배치 비차단(타입명 로그)
+            _LOGGER.warning("동등문제 생성 로그 적재 실패(%s) — 무시하고 계속", type(exc).__name__)
 
     # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
     def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:
