@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -16,7 +16,9 @@ acceptance:
   - "② 실패정의 F-Ⅰ~F-Ⅴ 동결 — '12월 수정 금지' 명문 + Kiki 서명은 게이트 G-eos-g0-verification-design-freeze clear evidence로 기록"
   - "③ 실패코드·CU 필수 필드는 산문 외에 코드로도 동결 — schema/enums.py 또는 schemas/v1.1 계약 추가 + 테스트. 정본화≠집행 별항: 실제 소비 지점(생성 파이프라인·검수 이벤트)은 후속 태스크 ID로 명시"
   - "④ KPI 목표값의 한계 명기 — 실측 벤치마크가 아니라 산술 손익분기 도출값이며 G2(10/25) 기준선에서 재조정함을 문서에 못박음"
-artifacts: []
+artifacts:
+  - "#908"
+  - docs/standards/eos_verification_design_v1.md
 paths:
   - docs/standards/eos_verification_design_v1.md
   - "schemas/v1.1/**"

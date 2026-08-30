@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: LIC-02-license-snapshot-archiver
+title: "라이선스 스냅샷 아카이버 — Tier1 소스 약관 HTML+SHA256 보관 (★소급 불가 — 지금 캡처 못 하면 영구 재구성 불가)"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① Tier1 소스(licensing_safety.md 대조로 목록 확정 — 선언 기준 14곳) 약관 HTML+SHA256+수집 시각 아카이빙 스크립트 — 실패 경로 설계(소스별 즉시 flush·타임아웃·원인 기록)"
+  - "② 감사로그 규약 + 재수집 멱등"
+  - "③ 집행 별항: 주기 재수집(cron)은 후속(OPS-56 축과 조율) — 1차는 수동 1회 실행 증적(네트워크 필요 시 Kiki 머신 명령 블록)"
+artifacts: []
+paths:
+  - "scripts/ops/**"
+  - "data/licenses/**"
+  - "docs/data/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #6(G6). LIC-01 범위 밖 실측 확인. 저작권 K4 계약(확인 시점 약관 보관·소급 불가)."
+updated: 2026-08-30

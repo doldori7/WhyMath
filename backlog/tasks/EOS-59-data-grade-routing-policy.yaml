@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-59-data-grade-routing-policy
+title: "데이터 등급 기반 라우팅 정책 배선 — AI Hub 유래 컨텍스트는 로컬 전용(국외 반출 확인 전 강제)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① RoutingRequest에 데이터 등급 신호 추가 + AI Hub 유래 콘텐츠 포함 요청의 클라우드 티어 차단(로컬 강제) — 라우터 순수 결정 로직 배선(직접 호출 금지 불변)"
+  - "② 차단 발동률 리포트('작동한 비율')"
+  - "③ 집행 별항: 호출부가 등급 신호를 실제로 채우는지 소스 스캔 게이트 — 미지정=최고 등급 보수 기본값"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/router.py
+  - "src/backend/whymath_backend/l3/**"
+  - "tests/backend/l3/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #11(A5 잔여). 라우터·config에 aihub/data_grade 축 0건 실측. 선언 부록 E 전제·L7 계약(국내 공공데이터 원문은 로컬 모델만)의 기계화."
+updated: 2026-08-30
