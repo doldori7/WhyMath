@@ -1,0 +1,12 @@
+{
+  "bytes": 1062,
+  "content_type": "text/plain; charset=utf-8",
+  "first_fetched_at": "2026-08-30T16:42:40Z",
+  "first_run_id": "20260830T164229Z-c98e84",
+  "http_status": 200,
+  "license_label": "MIT",
+  "name_ko": "PRM800K",
+  "sha256": "22d61a2226e035da51c56149c3358c36d1f61716435866bc6e6fe0e54c7270db",
+  "source_id": "prm800k",
+  "url": "https://raw.githubusercontent.com/openai/prm800k/HEAD/LICENSE"
+}

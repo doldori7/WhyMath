@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "scripts/ops/**"
   - "data/licenses/**"
   - "docs/data/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: EOS-53 crosswalk 갭 #6(G6). LIC-01 범위 밖 실측 확인. 저작권 K4 계약(확인 시점 약관 보관·소급 불가)."
 updated: 2026-08-30
