@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-34-cognitive-load-prompt-principle
+title: "프롬프트 원칙 6 신설 — 학생 대면 응답의 인지부하 관리(턴당 질문 1개·길이 상한·청크·무관정보 금지) — LearnLM 루브릭 차용"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① docs/standards/prompt_engineering.md에 '원칙 6: 인지부하 관리' 신설 — 턴당 질문 1개·응답 길이 상한·관리 가능한 청크 분할·무관 정보/반복 금지·정보 제시 순서(선 유도→후 보강)를 위반 판정 가능 문장으로. 출처 귀속 병기(LearnLM 25항목 루브릭 중 인지부하 9항목 — arXiv:2412.16429·CC BY 4.0, 정본 docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md §4)"
+  - "② 집행 지점 별항(정본화≠집행): l4/polya/prompts.py 정적 템플릿에 지시문 착지 + 실소비 경로(/v1/coach·PedagogyDecision) 경유를 테스트로 동결"
+  - "③ 측정 계약(측정 없는 도입 없음): 도입 전후를 SSM #12 pedagogical_rubric 자체평가 또는 prompt_engineering.md LLM-as-judge 문항 확장으로 비교 — 판정치는 CLI exit/기계 게이트 형식"
+  - "④ 범위 밖: 루브릭(채점기) 확장은 SSM #12 파일럿 소관 — 이 태스크는 저작(프롬프트) 축만"
+artifacts: []
+paths:
+  - docs/standards/prompt_engineering.md
+  - src/backend/whymath_backend/l4/polya/prompts.py
+  - tests/backend/l4/test_polya_prompts.py
+session: null
+notes: "출처: LearnLM 검토(docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md) 차용 후보 1 — 적대 검증 2렌즈 생존. 현 원칙 5개에 학생 대면 응답 부하 축이 0건(실측·grep 0건)인 순수 공백. 2407.12687이 '표층 규칙은 프롬프팅으로 잘 된다'고 명시한 이식 가능 영역."
+updated: 2026-08-30
