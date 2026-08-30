@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-19-analogy-signal-wiring-or-removal
+title: "ANALOGY 규칙 신호원 배선 또는 규칙 삭제 — runtime_selector R2가 라이브에서 발화 불가"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 착수 시 판정 먼저 — 배선(A) vs 삭제(B) 택1을 근거와 함께 명시. 죽은 규칙 방치는 선택지가 아니다. 2026-08-30 재실측: api/study.py StudentSignals(:177)는 여전히 mastery_level·bkt_mastery·irt_theta·grade_band만 채움 — misconception_ids 생산자 0"
+  - "② A면 — api/study.py:_build_signals()가 l2/learner_state.py active_misconceptions(PED-05 done)를 읽어 StudentSignals.misconception_ids를 채운다. 신규 조회 경로 0(LearnerState 좌석에서 읽기만)"
+  - "③ A여도 규칙 순서를 곧바로 굳히지 않는다 — R2가 R3·R4보다 앞서 ANALOGY 고정 위험. 먼저 'R2가 발화했다면 몇 %였는가'를 shadow로 센다(04b 롤아웃 패턴 재사용)"
+  - "④ B면 — 규칙 R2와 StudentSignals.misconception_ids 슬롯을 함께 제거하고 거버넌스 테스트(select() 출력 ⊆ 등록 전략) 동결 확인"
+  - "⑤ 범위 밖 동결 — R1/R3/R4 조건·순서 · adaptive/policy.py Thompson sampling · pedagogy pack 프롬프트 계층"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/study.py
+  - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
+  - "tests/backend/l4/pedagogy/**"
+session: null
+notes: "원 등재 MISC-09(r1skwr backup a95bb456에만 잔존) — HARN-35 재등재. 정본: misconception_module_gap_review_r2.md §2 G3 + 04e §9-D3. 슬롯도 규칙도 있고 신호원만 없는 상태"
+updated: 2026-08-30

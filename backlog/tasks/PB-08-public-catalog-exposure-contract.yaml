@@ -21,5 +21,5 @@ paths:
   - src/backend/whymath_backend/api/problems.py
   - tests/backend/api/test_problems.py
 session: null
-notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G3·§6-ⓒ. PB-03이 신설한 노출 계약(l6/_shared.py:141 is_exposable·:165 is_review_cleared)을 L6 6모드와 기본 CAT은 전부 경유하는데 공개 카탈로그 경로만 계약 밖. 무인증 결정이 내려진 시점(SEC-07)에는 review_status가 전건 None이라 검수 축이라는 개념 자체가 런타임에 없었다 — 그 결정은 검수 축을 판단한 적이 없다. SEC-18(/docs·CORS)과 무관한 별개 축."
+notes: "정본: docs/architecture/problem_bank_gap_review_r3.md §3 G3·§6-ⓒ. PB-03이 신설한 노출 계약(l6/_shared.py:141 is_exposable·:165 is_review_cleared)을 L6 6모드와 기본 CAT은 전부 경유하는데 공개 카탈로그 경로만 계약 밖. 무인증 결정이 내려진 시점(SEC-07)에는 review_status가 전건 None이라 검수 축이라는 개념 자체가 런타임에 없었다 — 그 결정은 검수 축을 판단한 적이 없다. SEC-18(/docs·CORS)과 무관한 별개 축. [2026-08-30 HARN-34 고립 참조] redaction 접근 구현이 claude/whymath-curriculum-design-6eejrv(2f428729·PR #802)에 있으나 #802는 close — main은 SEC-24 PublicProblem projection 채택(정답 축 해소·gating 6종 포함 실측). 이 태스크의 잔여 = 검수 축(review_status pending 노출)만이며, 6eejrv의 검수 축 테스트(TestPublicCatalogExposure)는 참고 자산으로 유효. redaction 재도입 금지"
 updated: 2026-08-11

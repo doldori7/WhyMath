@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,9 +15,10 @@ acceptance:
   - "② 재등재는 전건 backlog.py add 경유·원 번호 재사용 금지 — MISC-07~11은 MISC-12~16(PR #893 인플라이트)과, OPS-24는 CLAUDE.md 사고 경위 속 별건 OPS-24(review_status backfill)와, OPS-35는 5t5lmv(클라버전 게이트)·t608mk(메트릭 롤업) 이중 사용과 각각 충돌 이력 — CLI가 제안하는 번호 채택"
   - "③ 본문 대조: 재등재 전 각 태스크의 갭이 현행 main에서 이미 해소됐는지 코드 grep으로 교차 확인(해소분은 재등재 대신 판정 기록) — 특히 MISC-11(고립 완료분 회수)은 이 감사의 HARN-34 ③과 중복이면 흡수 처리"
   - "④ 집행 지점: backlog.py validate exit 0 + next 후보에 실제 노출"
-artifacts: []
+artifacts:
+  - "PR #900 (https://github.com/doldori7/WhyMath/pull/900) — 미해소 재실측 후 재등재 6건: MISC-07→17·08→18·09→19·10→20, SEC-25→SEC-30, OPS-24→OPS-53 (전건 add CLI·원 번호 재사용 0). MISC-11은 흡수 판정(HARN-34 ③+main todo 태스크 자신이 좌석 — 소유 이원화 회피). 판정 기록 = 감사 문서 §6"
 paths:
   - "backlog/tasks/**"
 session: null
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md. 회수 완료 전 원 브랜치(r1skwr backup·6ybkis backup·vafylb) 삭제 금지. t608mk의 OPS-35/36/37·QUAL-05, azdnov의 HARN-22, 5t5lmv의 A11Y-02·OPS-35는 각각 OPS-41·OPS-40이 소유하므로 이 태스크 범위 밖(중복 등재 금지)"
-updated: 2026-08-29
+updated: 2026-08-30

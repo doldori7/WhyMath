@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MISC-17-ocr-solution-into-diagnosis
+title: "손글씨(OCR) 풀이를 오개념 진단 입력에 합류 — 사진 제출 턴 가설·증거 적재 0 해소"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① _compute_matches 첫 인자를 body.student_solution or body.student_input로 변경 — 새 관용구 발명 0(같은 파일 coach.py가 WH-1 primary 호출에서 이미 쓰는 형태 이식 — 2026-08-30 재실측: main coach.py:1925·2117이 그 형태, 반면 _compute_matches 호출 3곳(:2020·:2075·:2458)은 여전히 body.student_input 단독). 세 핸들러 전부 동일 적용"
+  - "② 회귀 0 실증 — student_solution=None인 기존 텍스트 턴은 or 폴백으로 비트동일. 기존 coach 테스트 무수정 통과가 그 증거이며, 수정이 필요하면 회귀이므로 중단하고 원인 규명"
+  - "③ 변별력 확인 후 동결 — OCR 제출 형상(student_input='' + student_solution 채움) 턴에서 (a) 후보 산출 (b) misconception_hypothesis 행 적재 (c) evidence_links 적재 3건을 API 테스트로 고정. 테스트를 먼저 수정 전 코드에 돌려 red임을 확인한 뒤 구현한다"
+  - "④ 신규 안전장치 0 — OCR 품질 강등은 이미 ocr_confidence → apply_match_quality_gate 게이트②가 담당. 새 임계·새 게이트를 만들지 않는다"
+  - "⑤ 범위 밖 동결 — 두 필드 이어붙이기 · intervene 임계 변경 · warmstart/preload 규약 변경 · 모바일 클라 변경(서버측만으로 해소)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - "tests/backend/api/test_coach*.py"
+session: null
+notes: "원 등재 MISC-07(r1skwr 세션 2026-08-11·backup a95bb456에만 잔존) — HARN-35가 재등재(원 번호 재사용 금지). 정본: docs/architecture/misconception_module_gap_review_r2.md §2 G1 + 04e §9-D1. R2 최대 갭·미해소 2026-08-30 재실측. 발화를 만드는 WH-1 primary만 LaTeX를 봐서 '발화는 풀이를 알고 학생 상태는 모르는' split-brain"
+updated: 2026-08-30

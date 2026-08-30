@@ -17,5 +17,5 @@ paths:
   - "data/corpus/problem_bank_*/problems.jsonl"
   - src/backend/whymath_backend/l3/equivalent/canonicalize.py
 session: null
-notes: "ARCH-21 qa_pipeline.py 첫 실행에서 실측 발견. corpus 경로 변경 시 트리거되는 CI 옵션 스텝이 이 축을 continue-on-error로 임시 완화해뒀다(이 태스크 완료 후 강제 게이트로 전환 검토) — MEMORY.md 2026-08-02 결정 로그 참조. 2026-08-03 priority 3→2 상향(operations_module_gap_review_r2.md §3 D3): 이 태스크가 ARCH-23(QA 게이트 강제 전환)의 유일한 블로커이고, 그동안 qa_pipeline 게이트 전체가 상시 fail-open으로 남는다 — 우선순위 3에 묻히면 '판정 대기'가 무기한이 된다."
+notes: "ARCH-21 qa_pipeline.py 첫 실행에서 실측 발견. corpus 경로 변경 시 트리거되는 CI 옵션 스텝이 이 축을 continue-on-error로 임시 완화해뒀다(이 태스크 완료 후 강제 게이트로 전환 검토) — MEMORY.md 2026-08-02 결정 로그 참조. 2026-08-03 priority 3→2 상향(operations_module_gap_review_r2.md §3 D3): 이 태스크가 ARCH-23(QA 게이트 강제 전환)의 유일한 블로커이고, 그동안 qa_pipeline 게이트 전체가 상시 fail-open으로 남는다 — 우선순위 3에 묻히면 '판정 대기'가 무기한이 된다. [2026-08-30 HARN-34 고립 참조] 구현이 claude/openrouter-setup-guide-e98dw4(f8c0e3b6)에 고립(done 표기·NLP-04 회수가 이 항목은 미이식). 착수 시 파일 단위 회수 우선"
 updated: 2026-08-03

@@ -73,3 +73,17 @@ claude/whymath-solution-review-40xspg
 claude/backup/learning-analytics-3pbkcx-pre-rebase
 claude/backup/whymath-account-security-dw9lww-pre-rebase
 claude/backup/whymath-curriculum-design-6eejrv-pre-rebase
+
+# ── 2026-08-30 5차 배치 (5건) — 회수 착지(HARN-34·35)와 같은 머지에서 집행 ──
+# 판정 정본: docs/reviews/unmerged_branch_audit_2026-08-29.md §6. head SHA 스냅샷:
+#   unresolved-long-term-branches-ph1ad7            = 905ed311 (게이트+ASM-12 done 회수 완료)
+#   misc-04-misconception-relation-recovery         = 7eaaa695 (MISC-04 done 회수 완료)
+#   backup/whymath-misconception-review-r1skwr-pre-rebase = a95bb456 (MISC-17~20 재등재 완료·MISC-11은 흡수 판정)
+#   backup/school-subject-6ybkis-pre-rebase         = 5d2c2b71 (SEC-30 재등재 완료)
+# ⚠ eos-curriculum-semantic-backbone-adr(2f2e311e)는 허용 패턴(claude/*) 밖 — SEC-28 기록은
+#   main SEC-28 yaml notes로 이관 완료. Kiki 수동 삭제 대상에 추가:
+#   git push origin --delete curriculum/eos-curriculum-semantic-backbone-adr
+claude/unresolved-long-term-branches-ph1ad7
+claude/misc-04-misconception-relation-recovery
+claude/backup/whymath-misconception-review-r1skwr-pre-rebase
+claude/backup/school-subject-6ybkis-pre-rebase

@@ -18,5 +18,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/l4/misconception/visualize.py
 session: null
-notes: "docs/architecture/misconception_module_gap_review.md §3 + 04e_misconception_remediation_design.md §1-1. visualize_misconception() 코드 완비·테스트 존재·production 호출자 0건."
+notes: "docs/architecture/misconception_module_gap_review.md §3 + 04e_misconception_remediation_design.md §1-1. visualize_misconception() 코드 완비·테스트 존재·production 호출자 0건. [2026-08-30 HARN-34 고립 참조] 구현+테스트가 claude/human-bottleneck-tasks-6dszy0(67881979)에 고립(done 표기) — tests/backend/l4/test_misconception_visualization_shadow.py 등 main 부재 실측(감사 2026-08-29). 착수 시 재구현 말고 파일 단위 회수 우선. 7n9n72(621b11f9)에 이중구현 존재(MISC-11 실측) — 최신본 대조 필수"
 updated: 2026-08-03

@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-30-declared-unwired-waiver-staleness
+title: "declared_unwired_audit 면제 4건의 만료 조건 배선 — PB-04 착지 시 stale-waiver 해소"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정: gifted·metacognition·suneung·thinking 4건 면제가 여전히 주석 사유만으로 유지(2026-08-30 재실측: declared_unwired_audit.py에 잔존·PB-04 _l6_mode_reach 테스트 main 미착지). 근본 원인 후보 = 감사기 정규식 _TEST_CLIENT_CALL이 _client([...]).get(...) 형태 미인식"
+  - "② 만료 조건을 코드로 — PB-04 착지를 감지해 면제를 자동 무효화하거나 최소한 만료 확인 지점을 기계가 강제('만료 없는 유예·제외 금지' 집행·ARCH-25 그랜드파더 만료 계약 선례)"
+  - "③ 대안 축 — 감사기 정규식을 넓혀 _client(...).get(...) 인식 시 면제 자체 불요 가능. 면제 유지 vs 탐지 개선을 실측으로 판정"
+  - "④ 변별력 — 면제 제거 시 실제 exit 1, PB-04 착지 후 제거 시 exit 0 양방향 확인"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - "tests/backend/ops/**"
+session: null
+notes: "원 등재 SEC-25(6ybkis backup 5d2c2b71에만 잔존) — HARN-35 재등재. SEC-24 회수 세션의 정직한 공백 ①에서 분리된 좌석. 선행 조건 PB-04는 여전히 k20m0w 고립(MOB-18 소유)"
+updated: 2026-08-30

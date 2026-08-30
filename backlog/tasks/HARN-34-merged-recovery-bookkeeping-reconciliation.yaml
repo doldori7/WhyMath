@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -16,10 +16,11 @@ acceptance:
   - "③ 고립 구현 참조 병기: main todo 태스크 yaml notes에 참조 브랜치 head를 기록해 중복 구현을 차단 — MISC-01·MISC-03·PB-02(6dszy0 67881979: 테스트 5파일 main 부재 실측)·CUR-07(34zvse 7fb78470)·S3-28(e98dw4 f8c0e3b6)·PB-08(6eejrv 2f428729 — 단 redaction 접근은 #802 close로 폐기, 검수 축 테스트만 참고)"
   - "④ OPS-41 notes 현행화: a3ysut·8ap436 원 브랜치 소멸(backup/*-pre-rebase만 잔존·head 갱신), p1hubt 소멸+학습경로 r3 doc 착지 확인, 게임화 r3 doc 착지 확인 — 잔여 대상을 a3ysut(backup)·t608mk·azdnov 3건으로 재열거"
   - "⑤ 집행 지점: backlog.py validate exit 0 + 게이트는 /gates 점검 화면에 실제 노출 확인(정본화≠집행 규칙)"
-artifacts: []
+artifacts:
+  - "PR #900 (https://github.com/doldori7/WhyMath/pull/900) — ①G-export-prediction-disclosure 게이트 재등재(원 요청일 08-11 보존) ②ASM-12/#822·MISC-04/#821·CUR-16/#892·S4-10/#898 done 정정(이행 실측 병기)·SEC-28 유실 차단 note ③고립 참조 7건 병기 ④OPS-41 현행화 ⑤validate green·게이트 대장 노출 확인"
 paths:
   - backlog/gates.yaml
   - "backlog/tasks/**"
 session: null
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md. 회수 완료 전 참조 원 브랜치(ph1ad7·eos-curriculum-semantic-backbone-adr) 삭제 금지. '회수 시 acceptance 전수 재대조 생략 금지'(2026-08-10) 실사례 — #821/#822가 코드만 착지하고 부기·게이트를 유실"
-updated: 2026-08-29
+updated: 2026-08-30
