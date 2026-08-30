@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: LIC-03-provenance-enforcement-layer-decision
+title: "provenance 강제 집행 지점 결정·배선 — DB CHECK 의도적 미생성 방침 vs DoD 'INSERT 거부' 충돌 해소"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 방침 재판정 문서화 — DB NOT NULL/CHECK vs 서비스 계층 단일 진입 강제 중 택1(현행 방침 유지 시 근거와 우회 불가능성 증명)"
+  - "② 택한 계층에서 origin='ai_*' 무-provenance 기록이 실제 거부됨을 뮤테이션 테스트로 동결 — 원복은 cp 백업 규칙 준수(git 계열 원복 금지)"
+  - "③ 선행 조건 문언(형식 depends 불가 — LIC-01이 E2 스테이지라 로드맵 가드에 걸림·실측): LIC-01 완결(현재 in_progress·미머지 브랜치 2본) 착지 후 잔여만 이 태스크 소유 — 착수 세션은 LIC-01 상태를 먼저 실측"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/provenance.py
+  - "src/backend/whymath_backend/l1/rights/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #10(G1+A4 잔여). 충돌 실측: provenance.py:48-50이 DB CHECK 미생성 자기선언(schema 계층 강제 방침)인데 계획서 DoD는 INSERT 거부 요구. 부수 발견: LIC-01 stage=E2는 실질(12월 저작권 레일)과 어긋나 보임 — 스테이지 재조정은 Kiki/후속 판단."
+updated: 2026-08-30

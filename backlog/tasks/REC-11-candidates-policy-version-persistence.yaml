@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: REC-11-candidates-policy-version-persistence
+title: "recommendation candidates[]·policy_version 영속 — 추천 오프라인 평가의 소급 불가 축(W2 스키마 ②)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 추천 처치 기록(REC-03 evidence_event 좌석)에 candidates[](후보 problem_id·점수)·policy_version 추가 — 비민감 meta 계약 유지"
+  - "② followed 결과 결합은 파일럿 이후임을 명문(범위 밖 별항 — REC-03 docstring 동결과 정합)"
+  - "③ 기록률 리포트('작동한 비율') 동반"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/recommendation_evidence.py
+  - "src/backend/whymath_backend/db/models/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #5(E6 잔여). policy_version 전수 grep 0 실측 — 선언 정본 §5 '미확정' 항의 실측 확정."
+updated: 2026-08-30

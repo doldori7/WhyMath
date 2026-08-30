@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-54-hit-review-timer-cu-metrics
+title: "HIT 검수 타이머 + CU 단위 생산 계측 — 주 기준 지표(HIT 중앙값≤4분)의 계측기 신설 (★없으면 12월 검증 불가)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 검수 세션 타이머 이벤트 스키마+writer — CU 단위 HIT 초·시작/종료·중단 구분. '작동한 비율' 원칙: 타이머 이벤트 적재율을 리포트가 상시 보고(응답 200≠계측)"
+  - "② CU당 토큰·금액 결합 집계 CLI(exit 0/1) — ops/cost_probe 인프로세스 이중 회계 준수(SaaS 단독 의존 금지)"
+  - "③ 집행 별항(정본화≠집행): 검수 UI(ADMIN-07)가 타이머·반려코드 없이 판정 제출 불가하게 하는 결선은 후속 태스크로 명시 — ADMIN-07 acceptance 확장 방식은 amend CLI 부재(HARN-24 todo)를 감안해 등재 세션이 판정"
+  - "④ 측정 실패가 '0분'으로 위장되지 않는 실패 경로 설계(2026-08-22 규칙 — 미측정≠0 구분)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/db/models/**"
+  - "src/backend/whymath_backend/ops/**"
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #1(D5+F4 잔여). G1(9/27) 차단 조건 — HIT·실패코드 이벤트 적재. 선언 정본 §6-6."
+updated: 2026-08-30

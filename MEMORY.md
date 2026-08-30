@@ -7205,3 +7205,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **앵커 커버리지 핵심**: 8앵커 전부 성취기준·원자 있음(A7·A8 대학도 자체 성취기준 2+2·원자 8+5 — "대학 자산 부재" 우려는 이 두 축엔 해당 없음). 그러나 **문항은 A4(378)·A6(261, 그마저 1코드 집중) 둘뿐** — 기존 코퍼스는 앵커 관점에선 두 단원 자산. A1·A2·A3·A5도 문항 0이라 폭 앵커 생산 부담은 대학 앵커와 동급. A4 깊이 앵커의 원자 해상도 3개는 얕음. 기계판정 채널 신규 구축량은 8이든 6이든 동일.
 - **산출물**: `docs/reviews/eos_anchor_asset_audit_2026-09.md` + `scripts/analysis/eos_anchor_asset_audit.py`(stdlib 전용·AST 파싱으로 역방향 의존 회피·단계별 flush·뮤테이션 변별력 실측 EXIT=1). 재현: 메인 세션 재실행 EXIT=0·9/9 동일 수치. prod DB 대조는 부록 A psql 명령(Kiki 머신).
 - **cross-ref**: `eos_transition_declaration_2026-08-30.md` §3.2-② · EOS-51(해금) · G-eos-g0.
+
+## 2026-08-30: EOS-53 — 전환계획 53항목 전수 crosswalk 완료·갭 13건 등재
+
+- **행 수 정정**: 계획서 부록 A는 "52건" 표기이나 실측 **53행**(h 소계 검산이 53행 전부로만 성립) — 표기 오차로 판정, 53행 전수 대조.
+- **판정 분포**: 이미 구현 11 · 부분 27(그중 11행은 기존 태스크로 커버) · 신규 7 · 이월(T3·T4) 8. 저장소는 계획서 가정보다 훨씬 진척 — 재구현 회피가 crosswalk의 실익.
+- **주목 발견**: ①이월 지정 4건이 기실재(C6 다중풀이 S4-10 done·D4 dedup 기본 ON·C8 비유 PED-24 done·E7 WH-1 코치 실재 — "힌트 템플릿 대체" 가정은 실상과 다름) ②A4 저작권 원장 rights ORM 6종+RightsGateway #861 기착지, 단 "INSERT 거부" DoD가 DB CHECK 의도적 미생성 방침(provenance.py:48-50)과 충돌 → LIC-03 판정 태스크 ③선언 §5 '미확정' 2건 실측 확정: skill_ids[]·candidates[]+policy_version 모두 영속 좌석 0 ④A2 schema_version 기실재(schema/problem.py:255) — S1-16 잔여는 extensions.math 이동 ⑤LIC-01 stage=E2 실측 — S3 depends 형식 의존이 로드맵 가드에 거부, 스테이지 실질 정합은 재조정 사안.
+- **갭 13건 등재**(validate green·449건): EOS-54(HIT 타이머★)·EOS-55(Run 재현성)·EOS-56(앵커 등록·G-eos-g0 게이트)·EOS-57(skill_ids[])·EOS-58(앵커 E2E 실증)·EOS-59(데이터 등급 라우팅)·REC-11(candidates/policy_version)·LIC-02(라이선스 스냅샷★소급불가)·LIC-03(provenance 집행 판정)·MISC-07(앵커 기계판정 채널)·OPS-54(policy-guard EBS·평가원 패턴)·OPS-55(무결성 게이트)·OPS-56(주간 지표 cron). 유보 6건(#14~19)은 문서 §2.2에 등재 시점 트리거 명기(만료 없는 유예 금지).
+- **대장 명문화**: registry.yaml·MP-0 6축·DECISIONS.md 개념은 backlog/+MEMORY.md가 대체(문서 §4) — 별도 대장 신설 금지.
+- **산출물**: `docs/reviews/eos_plan52_crosswalk_2026-09.md`(53행 전수 표·갭·이월·방법 한계) + 태스크 13건.
+- **cross-ref**: `eos_transition_declaration_2026-08-30.md` 부록 A·§1.1 · `eos_anchor_asset_audit_2026-09.md`(수치 정본) · EOS-51(실패코드·CU·KPI 동결 좌석).

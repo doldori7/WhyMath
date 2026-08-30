@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-56-anchor-set-registration
+title: "앵커 세트 1급 등록 — G0 확정 세트(8 또는 6)를 성취기준 코드와 함께 코퍼스/DB 인스턴스로 (F1+B2 잔여)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates:
+  - G-eos-g0-verification-design-freeze
+acceptance:
+  - "① G0 확정 앵커 세트를 성취기준 코드(EOS-52 동결 코드셋 승계)와 함께 1급 인스턴스로 등록 — YAML=소스·DB=산출물 단방향 관례"
+  - "② 등록 무결성 게이트 — 앵커 코드가 성취기준 데이터에 실재함을 CI 검사(코드 소멸 시 적색)"
+  - "③ 집행 별항: EOS-52 실사 스크립트·생산 배치가 하드코딩 상수 대신 이 등록을 읽도록 전환하는 후속 지점 명시"
+artifacts: []
+paths:
+  - "data/corpus/**"
+  - "scripts/analysis/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #3. 현재 앵커 정의는 scripts/analysis/eos_anchor_asset_audit.py ANCHOR_DEFS 상수뿐. F3·I1 계측의 조인 축. requires_gates=G-eos-g0(앵커 수 결정 선행)."
+updated: 2026-08-30

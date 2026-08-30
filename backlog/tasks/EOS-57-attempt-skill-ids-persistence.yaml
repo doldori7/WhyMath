@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-57-attempt-skill-ids-persistence
+title: "problem_attempted skill_ids[] 복수 영속 — 소급 불가 스키마(W2 되돌릴 수 없는 결정 ①)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① attempt_event에 skill_ids[](채점 시 해소된 스킬 배열) 영속 — alembic+writer 배선. EOS-47(version 고정)과 같은 테이블이므로 마이그레이션 체인 조율 명시"
+  - "② 기록률 리포트('작동한 비율') — 신규 attempt 중 skill_ids 비어있지 않은 비율 상시 보고"
+  - "③ 집행 별항: 소비 지점(skill_mastery_tracking이 이벤트 기록을 읽는 전환)은 후속 태스크로 분리 — 이 태스크는 영속 좌석+writer까지"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/activity.py
+  - "src/backend/whymath_backend/alembic/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #4(E3 잔여). 선언 정본 §5 '미확정' 항의 실측 확정(영속 좌석 0 — 런타임 브리지 l2/skill_mastery_tracking.py:182만 존재). 12월 데이터에 남길 소급 불가 축."
+updated: 2026-08-30

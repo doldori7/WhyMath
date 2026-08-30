@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-54-policy-guard-source-patterns
+title: "policy-guard 금칙 소스 패턴 확장 — EBS·평가원(수능·모평) 본문 인용 의심 패턴 추가 (소형)"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① ci.yml policy-guard 잡에 EBS·평가원 본문 인용 의심 패턴 추가 — 기존 잡 확장(신규 잡 금지)"
+  - "② 오탐 우회 규약(#codeowner-ack류) 유지"
+  - "③ 변별력 실측 — 위반 픽스처 주입 시 실제 적색 1회 실증(변별력 없는 검증 스텝 금지)"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/**"
+session: null
+notes: "출처: EOS-53 crosswalk 갭 #7(G2 잔여). 현행 policy-guard는 검정교과서 5사 패턴뿐(실측) — 저작권 절대 금기(EBS·평가원)의 CI 커버리지 구멍."
+updated: 2026-08-30
