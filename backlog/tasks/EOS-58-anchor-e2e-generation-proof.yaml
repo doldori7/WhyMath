@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/**"
   - "docs/reviews/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: EOS-53 crosswalk 갭 #8(C1 잔여). G1(9/27) 차단 조건 그 자체. pedagogy 축 E2E 선례 = tests/backend/api/test_e2e_pedagogy_pilot_integration.py. 로컬 LLM 필요 시 Kiki 머신 실행 명령 블록 동봉."
 updated: 2026-08-30

@@ -28,11 +28,19 @@ L3 코드에는 L4 import 0(계층 규칙). harness는 import-linter 계약 밖(
 `--generation-log`로 경로만 바꿀 수 있다(끄는 옵션 없음 — 적재가 기본이어야 "경로가
 적재한다"가 참·정본화≠집행). `ops/hit_cu_metrics --generation-log`가 이 JSONL을 소비한다.
 
+검수 워크리스트(EOS-58 앵커 관통): 비수용 outcome(needs_review·rejected_*·generation_failed)
+은 종전엔 사유 문자열 샘플만 남고 휘발했다 — 사람 검수 큐(§03 "needs_review는 사람 검수로")의
+입력이 라이브 LLM 경로에서 끊겨 있던 공백이다. 이제 **기본으로** `<out>.worklist.md` 사이드카에
+기존 좌석(`needs_review_worklist.build_worklist`·`render_worklist_markdown` — batch CLI
+`--worklist-out` 동일물)으로 워크리스트를 기록한다. `--worklist-out`으로 경로만 바꿀 수 있다
+(genlog와 같은 규약 — 기본 적재라야 검수 큐 공급이 참·비수용 0건이어도 기록해 "관측했고
+0건"과 "미기록"을 구분한다). 무진전(exit 1) 회차에도 기록한다(실패 증거 보존·2026-08-22 규칙).
+
 사용법(Phaiakes9·라이브):
     python -m whymath_backend.harness.problem_corpus_accumulate \\
         --seed <기존.jsonl> [--seed <추가.jsonl> ...] --out <축적.jsonl> --n 20 \\
         [--topic-hint "..."] [--standard-code "[10공수1-02-02]"] [--difficulty 2.5] \\
-        [--generation-log <경로.jsonl>]
+        [--generation-log <경로.jsonl>] [--worklist-out <경로.md>]
 """
 
 from __future__ import annotations
@@ -45,18 +53,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.harness.needs_review_worklist import (
+    build_worklist,
+    render_worklist_markdown,
+)
 from whymath_backend.harness.problem_corpus_batch import JsonlCorpusSink, _record_to_json
 from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import EquivalentProblemGenerator
-from whymath_backend.l3.equivalent.orchestrator import run_batch
+from whymath_backend.l3.equivalent.orchestrator import GenerationOutcome, run_batch
 from whymath_backend.l3.pregenerate.provenance_bridge import append_generation_log_jsonl
 from whymath_backend.schema.provenance import GenerationLog
 
 __all__ = [
     "AccumulateReport",
     "default_generation_log_path",
+    "default_worklist_path",
     "load_corpus_index",
     "main",
     "run_corpus_accumulate",
@@ -70,7 +83,13 @@ _DEFAULT_DIFFICULTY = 2.5
 
 @dataclass(frozen=True, slots=True)
 class AccumulateReport:
-    """축적 배치 리포트 — 시도/수용/중복/검수/실패 + 파일 상태(조용한 실패 금지)."""
+    """축적 배치 리포트 — 시도/수용/중복/검수/실패 + 파일 상태(조용한 실패 금지).
+
+    `review_outcomes`(EOS-58)는 비수용 GenerationOutcome 원본(후보+게이트 판정+사유)의 누적
+    — 사람 검수 워크리스트 렌더 입력(batch `CorpusBatchReport.review_outcomes` 미러). 종전엔
+    사유 문자열 샘플(`reason_sample`)만 남고 후보·근거가 휘발해 needs_review 검수 큐가 라이브
+    경로에서 끊겨 있었다. `to_json`엔 카운트만 싣는다(outcome 객체는 워크리스트 렌더 전용).
+    """
 
     attempted: int
     accepted: int
@@ -81,6 +100,7 @@ class AccumulateReport:
     existing_out_records: int
     out_path: str
     reason_sample: list[str] = field(default_factory=list)
+    review_outcomes: list[GenerationOutcome] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -93,6 +113,7 @@ class AccumulateReport:
             "existing_out_records": self.existing_out_records,
             "out_path": self.out_path,
             "reason_sample": self.reason_sample,
+            "review_outcomes_count": len(self.review_outcomes),
         }
 
 
@@ -155,8 +176,13 @@ def run_corpus_accumulate(
 
     counts: dict[str, int] = {}
     reasons: list[str] = []
+    # 비수용 outcome 원본 보존(EOS-58) — needs_review 후보·게이트 사유가 휘발하지 않고
+    # 워크리스트(사람 검수 큐 입력)로 흐른다(batch의 review_outcomes 포착 필터와 동일).
+    review_outcomes: list[GenerationOutcome] = []
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
+        if outcome.status not in ("accepted_stored", "accepted"):
+            review_outcomes.append(outcome)
         if outcome.status != "accepted_stored" and outcome.reasons and len(reasons) < 10:
             reasons.append(outcome.reasons[0][:80])
 
@@ -182,12 +208,22 @@ def run_corpus_accumulate(
         existing_out_records=out_total,
         out_path=str(out_path),
         reason_sample=reasons,
+        review_outcomes=review_outcomes,
     )
 
 
 def default_generation_log_path(out_path: Path) -> Path:
     """생성 로그 기본 경로 — 축적 산출물 곁 사이드카 `<out>.genlog.jsonl`(항상 적재)."""
     return out_path.with_suffix(".genlog.jsonl")
+
+
+def default_worklist_path(out_path: Path) -> Path:
+    """검수 워크리스트 기본 경로 — 축적 산출물 곁 사이드카 `<out>.worklist.md`(항상 기록).
+
+    genlog 사이드카와 같은 규약(EOS-58) — 기본 기록이라야 라이브 회차의 needs_review 후보가
+    사람 검수 큐로 반드시 흐른다(플래그를 잊으면 큐가 조용히 유실되는 설계 금지).
+    """
+    return out_path.with_suffix(".worklist.md")
 
 
 def _build_live_generator(
@@ -245,6 +281,15 @@ def main(argv: list[str] | None = None) -> int:
             "항상 적재한다(끄기 없음 — 적재가 기본·정본화≠집행)."
         ),
     )
+    parser.add_argument(
+        "--worklist-out",
+        type=Path,
+        default=None,
+        help=(
+            "비수용 후보(검수필요·거부·실패) 워크리스트 마크다운 경로(EOS-58). 미지정 시 "
+            "<out>.worklist.md 사이드카에 항상 기록한다(끄기 없음 — 사람 검수 큐 공급이 기본)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     spec = EquivalenceSpec(
@@ -278,6 +323,17 @@ def main(argv: list[str] | None = None) -> int:
     flush_trace = getattr(generator, "flush_trace", None)
     if callable(flush_trace):
         flush_trace()
+    # 검수 워크리스트 사이드카(EOS-58) — 비수용 후보를 사람 검수 큐 입력으로 항상 기록한다.
+    # 무진전 회차(exit 1)에도 기록한다(실패 증거 보존·2026-08-22 규칙 ①) — needs_review가
+    # 0건이어도 파일 헤더가 "관측했고 0건"을 말한다(미기록과 구분·미측정≠0).
+    worklist_path: Path = (
+        args.worklist_out if args.worklist_out is not None else default_worklist_path(args.out)
+    )
+    worklist_md = render_worklist_markdown(
+        build_worklist(report.review_outcomes), total_outcomes=report.attempted
+    )
+    worklist_path.parent.mkdir(parents=True, exist_ok=True)
+    worklist_path.write_text(worklist_md, encoding="utf-8")
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0 if report.appended > 0 else 1
