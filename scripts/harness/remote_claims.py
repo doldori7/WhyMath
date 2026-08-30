@@ -160,29 +160,32 @@ def _git(
     import os
 
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env_extra or {})}
-    result = subprocess.run(
+    # HARN-36: stdin은 **바이트로** 넘긴다. text 모드 stdin은 TextIOWrapper의 개행 변환을
+    # 타서 Windows에서 '\n'이 '\r\n'으로 바뀌고, mktree가 그 '\r'를 파일명에 포함시켰다
+    # (실측: harness-claims 트리의 "claims\r/MISC-16.json\r" — 2026-08-25 Windows 세션 기록).
+    # 바이트 stdin은 변환 계층 자체가 없어 구조적으로 차단된다.
+    raw = subprocess.run(
         ["git", *argv],
         cwd=root,
         capture_output=True,
-        # HARN-19: encoding을 명시하지 않으면 파이썬이 locale.getpreferredencoding()으로
-        # 디코드한다 — 한국어 Windows는 cp949라 git이 내보내는 UTF-8(태스크 YAML의 한글
-        # 본문 등)에서 UnicodeDecodeError가 난다. git 출력은 UTF-8이 정본이므로 고정한다.
-        # errors='replace' 근거: strict면 바이트 하나 때문에 호출 *전체*가 실패하고,
-        # 이 함수의 소비자들은 fail-open이라 보호가 통째로 죽는다(HARN-11 미머지 done
-        # 탐지가 그렇게 상시 무력이었다). 한 항목만 깨진 문자로 남기는 편이 낫다.
-        encoding="utf-8",
-        errors="replace",
         timeout=timeout,
-        input=input_text,
+        input=None if input_text is None else input_text.encode("utf-8"),
         env=env,
     )
-    # HARN-19 ②(마스킹 제거): reader 스레드에서 디코드가 터지면 subprocess는 예외를
-    # 전파하지 못하고 stdout을 None으로 남긴다 → 소비자가 None을 만져 AttributeError가
-    # 되고, 경고에는 'error:AttributeError'만 찍혀 진짜 원인(인코딩)이 가려진다.
-    # 정상 동작에서는 도달 불가능한 상태이므로, 원인을 이름에 담아 크게 실패시킨다.
-    if result.stdout is None and result.returncode == 0:
-        raise GitOutputDecodeError(f"git {argv[0]}: stdout 디코드 실패 (stdout=None)")
-    return result
+    # HARN-19: 출력 디코드는 utf-8 고정 — locale 기본(한국어 Windows=cp949)은 git의
+    # UTF-8 출력(태스크 YAML 한글 등)에서 붕괴한다. errors='replace' 근거: strict면
+    # 바이트 하나 때문에 호출 *전체*가 실패하고, 소비자들은 fail-open이라 보호가 통째로
+    # 죽는다(HARN-11 상시 무력 선례). 한 항목만 깨진 문자로 남기는 편이 낫다.
+    # HARN-19 ②(마스킹 제거)의 stdout=None 축은 수동 디코드로 구조가 바뀌었지만 계약은
+    # 유지한다 — capture_output 바이너리 모드에서 stdout이 None이면 원인 불명의 큰 실패다.
+    if raw.stdout is None and raw.returncode == 0:
+        raise GitOutputDecodeError(f"git {argv[0]}: stdout 캡처 실패 (stdout=None)")
+    return subprocess.CompletedProcess(
+        args=raw.args,
+        returncode=raw.returncode,
+        stdout=None if raw.stdout is None else raw.stdout.decode("utf-8", errors="replace"),
+        stderr=None if raw.stderr is None else raw.stderr.decode("utf-8", errors="replace"),
+    )
 
 
 # claim 커밋의 고정 신원 — 전역 git 설정 부재 환경에서도 commit-tree가 성립하게 한다.
@@ -326,6 +329,16 @@ def load_cache(root: Path) -> dict[str, str]:
         return {}
 
 
+def _sanitize_ident(value: str) -> str:
+    """task_id·branch에서 CR/LF·양끝 공백 제거 — 트리 경로·메타에 개행이 스미는 것을 차단.
+
+    HARN-36: Windows에서 `git branch --show-current` 류 출력이 CR을 달고 오거나 호출측
+    문자열에 개행이 섞이면, 그 값이 그대로 claim 파일명·메타가 되어 Linux 세션의 경로
+    대조(`claims/<id>.json`)가 조용히 어긋난다. 이름은 식별자다 — 개행은 내용일 수 없다.
+    """
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def _claim_path(task_id: str) -> str:
     return f"{CLAIMS_DIR}/{task_id}.json"
 
@@ -363,7 +376,11 @@ def _read_claims(root: Path, base_sha: str) -> list[RemoteClaim]:
     """base 커밋의 트리에서 claim 전건을 읽는다 — 왕복 없이 로컬 객체만 본다."""
     if not base_sha:
         return []
-    ls = _git(root, "ls-tree", "-r", "-z", base_sha, "--", f"{CLAIMS_DIR}/", timeout=15)
+    # HARN-36: pathspec을 걸지 않는다 — 구버전 Windows 세션이 남긴 오염 디렉터리
+    # ("claims\r/")는 pathspec "claims/"에 매칭되지 않아 git 단계에서 통째로 사라진다.
+    # claim 브랜치 트리는 _write_claims가 claims 디렉터리만 담게 만들므로 전체 나열이 싸고,
+    # 대조는 아래 코드측 필터(CR 정규화 경유)가 단일 지점으로 수행한다.
+    ls = _git(root, "ls-tree", "-r", "-z", base_sha, timeout=15)
     if ls.returncode != 0:
         return []
     claims: list[RemoteClaim] = []
@@ -375,6 +392,11 @@ def _read_claims(root: Path, base_sha: str) -> list[RemoteClaim]:
         if len(fields) < 3 or fields[1] != "blob":
             continue
         blob_sha = fields[2]
+        # HARN-36: 경로의 CR을 정규화하고 나서 대조한다 — 구버전 Windows 세션이 남긴
+        # 오염 레코드("claims\r/MISC-16.json\r")도 활성 claim으로 계속 인식돼야
+        # 브랜치 보호(중복 구현 차단)가 끊기지 않는다. 다음 뮤테이션이 전체 트리를
+        # 다시 쓰므로 오염은 그 시점에 자연 치유된다.
+        path = path.replace("\r", "")
         if not path.startswith(f"{CLAIMS_DIR}/") or not path.endswith(".json"):
             continue
         task_id = path[len(CLAIMS_DIR) + 1 : -len(".json")]
@@ -488,6 +510,7 @@ def _mutate_claims(
 
 def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
     """태스크를 원자적으로 원격 claim. 이미 다른 세션이 잡고 있으면 conflict."""
+    task_id, branch = _sanitize_ident(task_id), _sanitize_ident(branch)  # HARN-36
     if not has_remote(root):
         return ClaimResult("offline", message="origin 원격 없음 — 로컬 claim만 사용")
     meta = {
@@ -534,6 +557,7 @@ def release(root: Path, task_id: str, branch: str, force: bool = False) -> Claim
     ref 삭제 push를 쓰지 않는다 — 이 환경의 프록시가 삭제를 거부하기 때문이며,
     그 제약이 단일 브랜치 설계를 고른 이유다(모듈 docstring 참조).
     """
+    task_id, branch = _sanitize_ident(task_id), _sanitize_ident(branch)  # HARN-36
     if not has_remote(root):
         return ClaimResult("offline", message="origin 원격 없음")
 

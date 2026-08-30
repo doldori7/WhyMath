@@ -1725,3 +1725,77 @@ def _os_environ() -> dict[str, str]:
     import os
 
     return dict(os.environ)
+
+
+class TestCrlfSanitization:
+    """HARN-36 — claim 경로 CRLF 오염 차단·레거시 오염 인식.
+
+    사고 경위: Windows 세션의 text 모드 stdin 개행 변환(\\n→\\r\\n)이 mktree 파일명에
+    \\r를 넣어 harness-claims 트리에 "claims\\r/MISC-16.json\\r"가 실재했고, Linux
+    세션의 경로 대조가 조용히 어긋나 활성 claim 보호가 무력해질 수 있었다.
+    """
+
+    def test_claim_with_cr_in_identifiers_writes_clean_path(self, bare_remote):
+        """CR_주입_task_id·branch가_트리에서_깨끗한_경로로_기록된다 (변별력: 새니타이즈 제거 시 red)"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        result = remote_claims.claim(a, TASK + "\r", "claude/session-a\r\n")
+        assert result.status == "ok"
+        # 트리 실측 — 파싱(정규화 경유)이 아니라 원시 경로 바이트로 판정한다
+        sha, status = remote_claims._fetch_claims_branch(a)
+        assert status == "ok"
+        ls = remote_claims._git(a, "ls-tree", "-r", "-z", sha)
+        raw_paths = [e.partition("\t")[2] for e in ls.stdout.split("\0") if e.strip()]
+        assert raw_paths == [f"claims/{TASK}.json"]
+        assert all("\r" not in p and "\n" not in p for p in raw_paths)
+        # 메타의 branch에도 개행이 없다
+        claims, _ = remote_claims.list_claims(a, with_meta=True)
+        assert claims[0].branch == "claude/session-a"
+
+    def test_read_claims_recognizes_legacy_cr_polluted_tree(self, bare_remote):
+        """구버전_오염_트리(claims\\r/X.json\\r)도_활성_claim으로_인식된다"""
+        _, clone = bare_remote
+        a = clone("session-a")
+        # 오염 트리를 직접 제작 — mktree에 바이트로 \r 포함 파일명을 밀어 넣는다
+        payload = '{"branch": "claude/other", "task": "%s", "ts": "2026-08-25T00:00:00Z"}' % TASK
+        blob = remote_claims._git(a, "hash-object", "-w", "--stdin", input_text=payload)
+        assert blob.returncode == 0
+        sub = remote_claims._git(
+            a, "mktree", input_text=f"100644 blob {blob.stdout.strip()}\t{TASK}.json\r\n"
+        )
+        assert sub.returncode == 0
+        root_tree = remote_claims._git(
+            a, "mktree", input_text=f"040000 tree {sub.stdout.strip()}\tclaims\r\n"
+        )
+        assert root_tree.returncode == 0
+        commit = remote_claims._git(
+            a,
+            "commit-tree",
+            root_tree.stdout.strip(),
+            "-m",
+            "polluted",
+            env_extra=remote_claims._COMMIT_IDENTITY,
+        )
+        assert commit.returncode == 0
+        # 오염 상태 확인(전제): 원시 경로에 \r가 실재한다
+        ls = remote_claims._git(a, "ls-tree", "-r", "-z", commit.stdout.strip())
+        assert "\r" in ls.stdout
+        # 정규화 읽기 — task_id가 깨끗하게 인식된다 (이 줄이 수정 전 코드에서 red)
+        claims = remote_claims._read_claims(a, commit.stdout.strip())
+        assert [c.task_id for c in claims] == [TASK]
+        assert claims[0].branch == "claude/other"
+
+    def test_git_stdin_is_bytes_never_text(self, monkeypatch, tmp_path):
+        """_git의_stdin은_바이트다 — text 모드 개행 변환이 구조적으로 불가능함을 동결"""
+        captured: dict = {}
+        real_run = subprocess.run
+
+        def spy(argv, **kwargs):
+            captured.update(kwargs)
+            return real_run(argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims.subprocess, "run", spy)
+        result = remote_claims._git(tmp_path, "version", input_text="a\nb\n")
+        assert result.returncode == 0
+        assert isinstance(captured.get("input"), bytes)  # str이면 Windows에서 \n→\r\n
+        assert "encoding" not in captured  # encoding 지정 = text 모드 stdin의 입구

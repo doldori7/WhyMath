@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - scripts/harness/remote_claims.py
   - "tests/harness/**"
-session: null
+session: claude/uncommitted-changes-qjhp6f
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-29.md 구조적 발견. 오염 상태에서는 Linux 세션의 claim 대조(활성 claim 브랜치 보호)가 경로 불일치로 무력화될 수 있다 — 이번 감사도 트리 직접 조회로 우회 확인함"
-updated: 2026-08-29
+updated: 2026-08-30
