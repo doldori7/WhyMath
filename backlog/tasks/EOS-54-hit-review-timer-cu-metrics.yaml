@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/**"
-session: null
+session: claude/mvp-eos-transition-plan-ghcajm
 notes: "출처: EOS-53 crosswalk 갭 #1(D5+F4 잔여). G1(9/27) 차단 조건 — HIT·실패코드 이벤트 적재. 선언 정본 §6-6."
 updated: 2026-08-30
