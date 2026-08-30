@@ -74,7 +74,7 @@ _SIGNED_SECTION5_SHA256 = "a9ad9f6ab7d4b065bf0c89d67e57e1d7cf827b6a4f4db4866a49c
 # 비어있지 않음만 보는 검사는 서명을 지키지 못한다: evidence를 "서명 철회"로 바꿔도
 # `cleared`·비어있지 않음·(블록에 늘 있는 `requested: 2026-08-30`) 세 단언이 전부 통과한다
 # (2026-08-30 실측 — PR #910 Codex 리뷰 P2 지적, 뮤테이션으로 재현 후 이 해시로 상환).
-_SIGNED_EVIDENCE_SHA256 = "7ee70ad6a23e0d6617999c8cb90690f162f3ab04b0416d06759950b1ea0fbb58"
+_SIGNED_EVIDENCE_SHA256 = "33e9f16c14da91d910378f3b53f5f61ae98b013fe89f5ddb489336a8073b051d"
 
 # 판정 임계 토큰 — 해시와 독립인 의미 축 이중 동결(실패 메시지가 "무엇이 변했나"를 말하게).
 _FROZEN_TOKENS = (

@@ -132,6 +132,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "0e148995e6e9",  # EOS-45: hint_usage — 힌트 횟수·레벨·열람시간 1급 데이터화
     "a926d39f126a",  # EOS-46: student_solution_step — 학생 풀이 step 정규 기록(ADR-002)
     "c9bc2555282e",  # EOS-48: event_time/ingested_at 분리 + active/idle 실측 좌석(3테이블 ALTER)
+    "84c782415837",  # EOS-54: review_timer_event — HIT 검수 타이머 이벤트 계측기
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]
