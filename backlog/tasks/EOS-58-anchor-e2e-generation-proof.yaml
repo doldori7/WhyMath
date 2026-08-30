@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,11 +14,14 @@ acceptance:
   - "① 깊이앵커(A4) 성취기준 코드로 생성 배치→SymPy 게이트→저장→needs_review 워크리스트 생성까지 1회 관통 — 실측 로그 첨부"
   - "② 관통 중 GenerationLog·(EOS-54/55 착지 시) HIT/Run 로그의 실적재를 행 수로 확인 — 간접 신호(정상 응답 200) 금지"
   - "③ 집행 별항: 상시화(nightly 골든 승격)는 후속 태스크로 명시"
-artifacts: []
+artifacts:
+  - "#914"
+  - docs/reviews/eos_anchor_e2e_a4_2026-08-30.md
+  - tests/backend/harness/test_eos_anchor_e2e_a4.py
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/**"
   - "docs/reviews/**"
-session: claude/mvp-eos-transition-plan-ghcajm
+session: null
 notes: "출처: EOS-53 crosswalk 갭 #8(C1 잔여). G1(9/27) 차단 조건 그 자체. pedagogy 축 E2E 선례 = tests/backend/api/test_e2e_pedagogy_pilot_integration.py. 로컬 LLM 필요 시 Kiki 머신 실행 명령 블록 동봉."
 updated: 2026-08-30
