@@ -229,8 +229,17 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
 권한 없이 읽힌다. 판정을 외부 관측 인프라에 의존시키지 않는다는 이중 회계 원칙과 같은
 방향이다. tip sha는 이미 도는 `for-each-ref`에 얹어 받으므로 브랜치당 추가 git 호출은 0.
 
+**`active` 판정에는 원격 claim 맵이 필요하다.** 두 진입점(`cmd_brief`·`cmd_branches`)이
+모두 `active_branches=frozenset(remote_claimed.values())`를 넘겨야 이 분류가 실제로 난다.
+CI 진입점이 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "🔴 회수 또는 삭제 필요"로
+경고된다** — 삭제를 유도하는 오경보이자, 이 표가 4분류라고 말하면서 CI 경로는 3분류만
+낼 수 있는 상태다. 두 진입점의 배선을 각각 테스트가 붙든다
+(`test_cli.py::TestStaleBranchClassificationWiring`). claim 조회 자체가 실패하면 그 사실을
+출력에 남긴다 — `active`가 조용히 `isolated`로 오분류되는 것을 막기 위함이다.
+
 **조회 실패는 "PR 없음"이 아니다.** 실패하면 그 브랜치는 `unresolved`(고립 여부 미판정)로
-남고 `pr_lookup_ok=False`가 선다. 실패를 고립으로 읽으면 인프라가 죽은 순간 열린 PR 전부가
+남고 `pr_lookup_ok=False`가 서며, `pr_lookup_error`에 **예외 타입명을 포함한 사유**가
+실린다(무타입 경고는 타임아웃·git 미설치·권한 오류를 같은 글자로 보이게 만든다). 실패를 고립으로 읽으면 인프라가 죽은 순간 열린 PR 전부가
 "삭제 필요"로 승격된다 — 삭제를 유도하는 오경보다.
 
 **열림/닫힘은 판정하지 않는다.** `refs/pull/<N>/merge`가 열린 PR에만 생긴다는 통설을

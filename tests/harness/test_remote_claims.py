@@ -1565,6 +1565,54 @@ class TestScanStaleBranches:
         branches = {s.branch: s for s in result.stale}
         assert branches[branch].status == "unresolved"
         assert branches[branch].status != "isolated"
+        # 실패 사유가 남아야 한다 — 무타입 경고는 타임아웃·git 미설치·권한 오류를
+        # 운영자에게 같은 글자로 보이게 만든다(Codex 리뷰 P1, 2026-08-31).
+        assert result.pr_lookup_error, "PR 조회 실패 사유가 비었다 — 침묵 실패"
+        assert "비0 종료" in result.pr_lookup_error
+
+    def test_pr_lookup_exception_carries_type_name(self, bare_remote, monkeypatch):
+        """PR_조회_예외는_타입명을_남긴다
+
+        `TimeoutExpired`·`FileNotFoundError`·`OSError`가 전부 "PR 대조 실패"라는 같은
+        글자로 뭉개지면 운영자는 무엇을 고쳐야 할지 알 수 없다. CLAUDE.md 침묵 실패
+        금지는 예외 **타입명**을 로그에 남길 것을 요구한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_stale_branch(a, "claude/whymath-exception-example", "w.txt")
+
+        real_git = remote_claims._git
+
+        def boom_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "origin") and any("refs/pull/" in x for x in argv):
+                raise FileNotFoundError("git 실행 파일 없음")
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", boom_git)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.status == "ok"
+        assert result.pr_lookup_ok is False
+        assert "FileNotFoundError" in result.pr_lookup_error
+
+    def test_pr_lookup_timeout_carries_type_name(self, bare_remote, monkeypatch):
+        """PR_조회_타임아웃도_타입명을_남긴다"""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_stale_branch(a, "claude/whymath-timeout-example", "w.txt")
+
+        real_git = remote_claims._git
+
+        def slow_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "origin") and any("refs/pull/" in x for x in argv):
+                raise subprocess.TimeoutExpired(cmd="git ls-remote", timeout=20)
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", slow_git)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.pr_lookup_ok is False
+        assert "TimeoutExpired" in result.pr_lookup_error
 
     def test_pr_lookup_uses_no_extra_git_call_per_branch(self, bare_remote):
         """PR_대조는_브랜치마다_원격_왕복을_추가하지_않는다

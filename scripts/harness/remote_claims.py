@@ -1322,8 +1322,12 @@ _EVIDENCE_RECORD_SEP = "\x1e"
 _PR_REF_TIMEOUT = 20
 
 
-def _fetch_pr_head_shas(root: Path) -> dict[str, int] | None:
-    """원격의 `refs/pull/<N>/head`를 sha → PR 번호로 읽는다. 실패하면 None.
+def _fetch_pr_head_shas(root: Path) -> tuple[dict[str, int] | None, str]:
+    """원격의 `refs/pull/<N>/head`를 sha → PR 번호로 읽는다.
+
+    반환: `(매핑, 실패사유)`. 성공이면 `(dict, "")`, 실패면 `(None, "<예외타입>: <상세>")`.
+    실패 사유에 **예외 타입명을 반드시 담는다** — 무타입 경고는 타임아웃·git 미설치·
+    권한 오류를 운영자에게 같은 글자로 보이게 만든다(CLAUDE.md 침묵 실패 금지).
 
     **왜 API가 아니라 git인가**: 이 스캔은 Kiki의 Windows 머신 SessionStart 훅과 CI
     양쪽에서 돈다. GitHub 토큰·`gh` CLI·네트워크 API 권한을 전제하면 그 중 하나만
@@ -1346,11 +1350,13 @@ def _fetch_pr_head_shas(root: Path) -> dict[str, int] | None:
     try:
         result = _git(root, "ls-remote", "origin", "refs/pull/*/head", timeout=_PR_REF_TIMEOUT)
     except subprocess.TimeoutExpired:
-        return None
-    except Exception:  # noqa: BLE001 - 환경 의존. 아래에서 타입명을 남길 수 없는 경로라 None 폴백
-        return None
+        return None, f"TimeoutExpired: PR ref 조회 {_PR_REF_TIMEOUT}초 초과"
+    except Exception as exc:  # noqa: BLE001 - 환경 의존(FileNotFoundError·OSError 등)
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다(CLAUDE.md AI·신뢰). 타입명이 없으면
+        # 타임아웃·git 미설치·파일시스템 오류가 운영자에게 전부 같은 글자로 보인다.
+        return None, f"{type(exc).__name__}: {exc}"
     if result.returncode != 0:
-        return None
+        return None, f"git ls-remote 비0 종료({result.returncode}): {result.stderr.strip()}"
     mapping: dict[str, int] = {}
     for line in result.stdout.splitlines():
         sha, _, ref = line.partition("\t")
@@ -1364,7 +1370,7 @@ def _fetch_pr_head_shas(root: Path) -> dict[str, int] | None:
         prev = mapping.get(sha)
         if prev is None or int(number) > prev:
             mapping[sha] = int(number)
-    return mapping
+    return mapping, ""
 
 
 def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
@@ -1453,6 +1459,8 @@ class StaleBranchScanResult:
     # 이 값이 False일 때 "고립 0건"이라고 말해서는 안 된다 — 측정 실패와 통과는
     # 같은 색이면 안 된다(CLAUDE.md 이중 회계).
     pr_lookup_ok: bool = False
+    # PR 조회 실패 사유 — **예외 타입명을 포함**한다. 빈 문자열이면 실패가 없었다는 뜻.
+    pr_lookup_error: str = ""
     trunk_ref: str = ""
     trunk_branch: str = ""
     trunk_source: str = ""
@@ -1542,7 +1550,7 @@ def scan_stale_branches(
 
         # PR ref는 스캔당 **1회**만 읽는다 — 브랜치마다 ls-remote를 돌리면 원격
         # 왕복이 N배가 되어 SessionStart 예산을 넘긴다.
-        pr_heads = _fetch_pr_head_shas(root)
+        pr_heads, pr_lookup_error = _fetch_pr_head_shas(root)
 
         trunk_ref, trunk_source = _resolve_trunk_ref(root)
         trunk_branch = (
@@ -1613,6 +1621,7 @@ def scan_stale_branches(
             scanned_refs=len(entries),
             truncated=truncated,
             pr_lookup_ok=pr_heads is not None,
+            pr_lookup_error=pr_lookup_error,
             trunk_ref=trunk_ref,
             trunk_branch=trunk_branch,
             trunk_source=trunk_source,
