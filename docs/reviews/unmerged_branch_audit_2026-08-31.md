@@ -176,12 +176,43 @@ git show e8717347 --name-only --format='' | grep -c 'residue_gate_demotion_battl
 ## 7. 검증 (전건 exit code)
 
 ```bash
-python3 scripts/harness/backlog.py validate      # EXIT=0 — 태스크 458건·게이트 18건
-python3 scripts/harness/backlog.py overlap       # S4-59 겹침 경고 0건(paths 실 touch set으로 축소 후)
-python3 scripts/harness/backlog.py next --n 3    # S4-59 후보 노출 확인(배선 확인)
+python3 scripts/harness/backlog.py validate
+# EXIT=0 — 태스크 462건·게이트 18건·트랙 3건 (감사 시점 458건 → main 머지분 반영 후 462건)
+
+python3 scripts/harness/backlog.py overlap S4-59-demotion-battle-first-round-record-recovery
+# EXIT=0 · 경고 11건 — 전건 `세션: ?`(비활성). 상대측 태스크의 넓은 paths(`backlog/**`·`docs/**`)가
+# 내 4파일을 포함해서 뜨는 것이며, 내 paths를 더 좁혀서 없앨 수 있는 종류가 아니다.
+
+python3 scripts/harness/backlog.py overlap S4-59-demotion-battle-first-round-record-recovery --in-flight-only
+# EXIT=0 · "in-flight 범위에서 겹침 없음 (2건 비교)" — 실제 병렬 충돌 0이라는 판정은 이쪽이다.
+
+python3 scripts/harness/backlog.py next --n 60
+# S4-59가 30위로 노출(배선 확인). `--n 3`으로는 보이지 않는다.
 ```
+
+### ⚠ 이 절의 1차 기재는 틀렸다 — PR #927 Codex 리뷰(P2)가 잡아 정정
+
+최초 기재는 `overlap`을 **인자 없이** 적고 "겹침 경고 0건", `next --n 3`에 "S4-59 노출 확인"이라고
+적었다. 실측하면 둘 다 성립하지 않는다:
+
+- `overlap`은 위치 인자 `id`가 **필수**라 인자 없이는 `EXIT=2`(usage 오류)로 죽는다. 당시 판정에
+  쓴 것은 `overlap 2>&1 | grep -c 'S4-59'` → `0`이었는데, 이 `0`은 "겹침 없음"이 아니라
+  **"명령이 실패해 아무것도 출력하지 않음"**이었다. 정상 상태와 실패 상태가 같은 값을 내므로
+  **변별력이 없는 검증**이다 — CLAUDE.md "변별력 없는 검증 스텝 금지"·"검사 명령의 출력을
+  억제하거나 잘라서 판정 금지(판정은 exit code로)"에 정면으로 걸린다. 이 감사 문서가 §4에서
+  바로 그 원칙("성공/실패가 다른 값을 내는 검사")을 내세우면서 자기 검증에서 그것을 어겼다.
+- `next --n 3`의 실제 출력은 EOS-60·HARN-38·CUR-12이고 **S4-59는 30위**다.
+
+정정 후 사실관계: **겹침 경고는 11건이며 0건이 아니다.** 다만 전건 비활성 세션이고
+`--in-flight-only`가 겹침 0을 내므로 **병렬 충돌은 없다**는 결론 자체는 유지된다 —
+바뀐 것은 근거이지 판정이 아니다. `paths` 축소(19→11)의 효과도 실재하나 0이 되지는 않는다.
+
+부기(별건 관찰, 이번 범위 밖): 경고 중 `OPS-19 ↔ docker-compose*.yml ⊇ docs/standards/…md`는
+glob 포함 판정의 오탐으로 보인다(`docker-compose*.yml`이 `docs/…`를 포함할 수 없다).
+`overlap`의 프리픽스 매칭이 `*`를 경로 구분자까지 삼키는 것으로 추정되며, 확인·수정은
+이 감사의 범위가 아니라 별도 판단이 필요하다.
 
 `S4-59`는 최초 `--id S4-53` 시도를 CLI가 **번호 충돌로 거부**(로컬 백로그 S4-53 선점)해
 제안 번호 `S4-59`를 그대로 채택했다 — 우회하지 않았다(거부는 판정이지 장애물이 아니다).
 최초 `paths`가 `docs/standards/**`·`backlog/tasks/**`로 넓어 겹침 경고 19건이 떴고,
-REC-09 선례대로 **실제 touch set 4파일로 좁혀** 경고를 0으로 만들었다.
+REC-09 선례대로 **실제 touch set 4파일로 좁혀** 11건으로 줄였다.
