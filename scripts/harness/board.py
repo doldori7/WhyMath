@@ -34,7 +34,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import Backlog, Task
+from models import Backlog, Gate, Task
 
 # 열 정의 — (열 키, 표시명, 설명). 렌더 순서가 곧 화면 순서다.
 COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -193,6 +193,68 @@ def apply_remote_done(cards: list[BoardTask], remote_done: dict[str, list[str]])
         card.detail = ", ".join(branches)
 
 
+def gate_dependents(
+    backlog: Backlog, gate_id: str
+) -> tuple[list[dict[str, str]], list[dict[str, object]]]:
+    """이 게이트를 전제로 건 것 — (태스크 목록, 트랙 목록).
+
+    두 경로가 있다: ①태스크가 `requires_gates`로 직접 건 경우 ②트랙 `entry_gate`인 경우
+    (E축 하드락처럼 트랙 전체가 잠긴다 — 태스크 쪽에는 아무 표시도 남지 않으므로 이쪽을
+    세지 않으면 "아무것도 안 막는 게이트"로 잘못 보인다).
+
+    ⚠ 이 목록은 **의존 관계**이지 "현재 차단"이 아니다. 해소(cleared/waived)된 게이트를
+    아직 `requires_gates`에 달고 있는 태스크가 실재하며(실측: G-eos-g0-verification-
+    design-freeze ↔ EOS-56), `selector.unmet_gates`는 그 태스크를 착수 가능으로 본다.
+    지금 막고 있는지 여부는 `blocks_now`(=게이트가 pending인가)가 말한다 — 이 구분이
+    없으면 화면이 "이미 풀린 게이트가 아직 막고 있다"고 거짓말한다.
+    """
+    tasks = [
+        {"id": t.id, "title": t.title, "status": t.status}
+        for t in sorted(backlog.tasks.values(), key=lambda t: t.id)
+        if gate_id in t.requires_gates and t.status not in ("done", "cancelled")
+    ]
+    tracks = [
+        {
+            "track": key,
+            "title": track.title,
+            "pending": sum(
+                1
+                for t in backlog.tasks.values()
+                if t.track == key and t.status not in ("done", "cancelled")
+            ),
+        }
+        for key, track in sorted(backlog.tracks.items())
+        if track.entry_gate == gate_id
+    ]
+    return tasks, tracks
+
+
+def gate_detail(backlog: Backlog, gate: Gate, today: date) -> dict[str, object]:
+    """게이트 1건의 카드 + 펼침 상세 — 화면에서 "무엇을 하면 풀리는가"까지 읽히게 한다."""
+    days = report._days_pending(gate.requested, today)
+    tasks, tracks = gate_dependents(backlog, gate.id)
+    return {
+        "id": gate.id,
+        "title": gate.title,
+        "kind": gate.kind,
+        "assignee": gate.assignee,
+        "status": gate.status,
+        "requested": gate.requested,
+        "days": days,
+        "remind_after_days": gate.remind_after_days,
+        "overdue": bool(
+            gate.status == "pending"
+            and gate.remind_after_days is not None
+            and (days or 0) >= gate.remind_after_days
+        ),
+        "evidence": gate.evidence or "",
+        "notes": gate.notes,
+        "blocks_now": gate.status == "pending",
+        "dependent_tasks": tasks,
+        "dependent_tracks": tracks,
+    }
+
+
 def build_board(
     backlog: Backlog,
     errors: list[str],
@@ -241,23 +303,10 @@ def build_board(
         if card.column == "done":
             bucket["done"] += 1
 
-    gates = [
-        {
-            "id": gate.id,
-            "title": gate.title,
-            "kind": gate.kind,
-            "assignee": gate.assignee,
-            "requested": gate.requested,
-            "days": report._days_pending(gate.requested, today),
-            "overdue": bool(
-                gate.remind_after_days is not None
-                and (report._days_pending(gate.requested, today) or 0) >= gate.remind_after_days
-            ),
-        }
-        for gate in backlog.gates.values()
-        if gate.status == "pending"
-    ]
-    gates.sort(key=lambda g: (not g["overdue"], -(g["days"] or 0), g["id"]))
+    gates = [gate_detail(backlog, gate, today) for gate in backlog.gates.values()]
+    gates.sort(
+        key=lambda g: (g["status"] != "pending", not g["overdue"], -(g["days"] or 0), g["id"])
+    )
 
     counts = {key: len(by_column[key]) for key in by_column}
     return {
@@ -375,12 +424,36 @@ input[type=search]{min-width:240px;flex:1}
   background:transparent;color:var(--muted);font:inherit;font-size:12px;
   cursor:pointer;width:calc(100% - 18px)}
 .more:hover{border-color:var(--accent);color:var(--accent)}
-.gates{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:9px}
+.gates{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:9px;
+  align-items:start}
 .gate{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--wait);
-  border-radius:9px;padding:9px 11px}
+  border-radius:9px}
 .gate.overdue{border-left-color:var(--block)}
+.gate.cleared{border-left-color:var(--done)}
+.gate > summary{padding:9px 11px;cursor:pointer;list-style:none;display:block}
+.gate > summary::-webkit-details-marker{display:none}
+.gate > summary::after{content:"펼치기 ▾";float:right;font-size:10.5px;color:var(--muted);
+  margin-left:8px}
+.gate[open] > summary::after{content:"접기 ▴"}
+.gate > summary:hover{background:var(--chip);border-radius:6px}
 .gate .g{font-size:10.8px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.gate .gt{margin-top:4px;font-size:12.5px;overflow-wrap:anywhere}
 .gate .d{float:right;font-size:11.5px;color:var(--block);font-variant-numeric:tabular-nums}
+.gate .body{padding:2px 11px 11px;border-top:1px solid var(--line);margin-top:2px}
+.gate .body h4{margin:11px 0 5px;font-size:10.5px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.08em;font-weight:660}
+.gate .body .meta{display:flex;flex-wrap:wrap;gap:4px}
+.gate .body ul{margin:0;padding-left:16px;font-size:12px}
+.gate .body li{margin:2px 0}
+.gate .note{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;margin:0;
+  background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 9px;
+  font:11.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.gate .cmd{display:block;background:var(--bg);border:1px solid var(--line);border-radius:7px;
+  padding:7px 9px;font-size:11px;overflow-x:auto;white-space:pre;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.gate .none{font-size:11.5px;color:var(--muted)}
+.resolved{margin-top:12px}
+.resolved > summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:6px 0}
 .notice{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);
   border-left:3px solid var(--run);border-radius:9px;padding:9px 12px;font-size:12.5px}
 .notice.stale{border-left-color:var(--block)}
@@ -416,8 +489,9 @@ _CONTENT = """<div class="wrap">
 
   <div class="board" id="board"></div>
 
-  <div class="section">사람 게이트 — Kiki 행동 대기</div>
+  <div class="section" id="gates-title">사람 게이트 — 행동 대기</div>
   <div class="gates" id="gates"></div>
+  <div id="gates-resolved"></div>
 
   <div id="errbox"></div>
 
@@ -471,12 +545,7 @@ function head() {
       <span class="pct">${s.done}/${s.total}</span>
       <div class="bar"><i class="d" style="width:${pct}%"></i></div></div>`;
   }).join('');
-  document.getElementById('gates').innerHTML = DATA.gates.map(g =>
-    `<div class="gate${g.overdue ? ' overdue' : ''}">
-       <span class="g">${esc(g.id)}</span>
-       ${g.days != null ? `<span class="d">${g.days}일 경과</span>` : ''}
-       <div style="margin-top:4px;font-size:12.5px">${esc(g.title)}</div>
-     </div>`).join('') || '<div class="sub">대기 중인 게이트 없음</div>';
+  renderGates();
   const st = DATA.remote_done_status;
   const notice = document.getElementById('notice');
   if (st !== 'ok') {
@@ -493,6 +562,76 @@ function head() {
       `<div class="section">정합성 경고</div>`
       + `<div class="err">${DATA.errors.map(esc).join('<br>')}</div>`;
   }
+}
+
+function gateBody(g) {
+  const meta = [
+    `<span class="chip">${esc(g.kind)}</span>`,
+    `<span class="chip">담당 ${esc(g.assignee)}</span>`,
+    g.requested ? `<span class="chip">요청 ${esc(g.requested)}</span>` : '',
+    g.remind_after_days != null
+      ? `<span class="chip">리마인드 ${g.remind_after_days}일 경과 시</span>` : '',
+    `<span class="chip">${esc(g.status)}</span>`,
+  ].join('');
+
+  const deps = [];
+  g.dependent_tracks.forEach(t => deps.push(g.blocks_now
+    ? `트랙 <b>${esc(t.title)}</b> 전체 잠금 — 이 게이트 전까지 착수 불가한 미완 ${t.pending}건`
+    : `트랙 <b>${esc(t.title)}</b> — 이 게이트를 진입 조건으로 걸었다 (미완 ${t.pending}건)`));
+  g.dependent_tasks.forEach(t => deps.push(`<code>${esc(t.id)}</code> ${esc(t.title)}`));
+  const depTitle = g.blocks_now
+    ? '이 게이트가 막고 있는 것'
+    : '이 게이트를 전제로 걸었던 것 (해소됨 — 지금은 차단하지 않는다)';
+  const depHtml = deps.length
+    ? `<ul>${deps.map(b => `<li>${b}</li>`).join('')}</ul>`
+    : `<div class="none">이 게이트를 <code>requires_gates</code>로 건 태스크도, `
+      + `진입 게이트로 쓰는 트랙도 없다 — 스케줄러를 막지는 않는 운영·법무 축 항목이다.</div>`;
+
+  const noteHtml = g.notes
+    ? `<pre class="note">${esc(g.notes)}</pre>`
+    : `<div class="none">노트 없음 — 위 제목이 내용 전부다.</div>`;
+
+  const evidenceHtml = g.status === 'pending' ? '' :
+    `<h4>근거 (evidence)</h4><div class="none">${esc(g.evidence || '기록 없음')}</div>`;
+
+  const cmd = g.status === 'pending'
+    ? `python3 scripts/harness/backlog.py gates clear ${g.id} --evidence "&lt;근거&gt;"`
+    : `python3 scripts/harness/backlog.py gates list`;
+
+  return `<div class="body">
+    <h4>메타</h4><div class="meta">${meta}</div>
+    <h4>${depTitle}</h4>${depHtml}
+    <h4>상세 노트</h4>${noteHtml}
+    ${evidenceHtml}
+    <h4>해소</h4><code class="cmd">${cmd}</code></div>`;
+}
+
+function gateCard(g) {
+  const cls = g.status === 'pending' ? (g.overdue ? ' overdue' : '') : ' cleared';
+  const badge = g.status === 'pending'
+    ? (g.days != null ? `<span class="d">${g.days}일 경과</span>` : '')
+    : `<span class="d" style="color:var(--done)">${esc(g.status)}</span>`;
+  return `<details class="gate${cls}">
+    <summary><span class="g">${esc(g.id)}</span>${badge}
+      <div class="gt">${esc(g.title)}</div></summary>
+    ${gateBody(g)}
+  </details>`;
+}
+
+function renderGates() {
+  const pending = DATA.gates.filter(g => g.status === 'pending');
+  const resolved = DATA.gates.filter(g => g.status !== 'pending');
+  const overdue = pending.filter(g => g.overdue).length;
+  document.getElementById('gates-title').textContent = `사람 게이트 — 행동 대기 ${pending.length}건`
+    + (overdue ? ` (리마인드 초과 ${overdue}건)` : '');
+  document.getElementById('gates').innerHTML =
+    pending.map(gateCard).join('') || '<div class="sub">대기 중인 게이트 없음</div>';
+  document.getElementById('gates-resolved').innerHTML = resolved.length
+    ? `<details class="resolved"><summary>해소된 게이트 ${resolved.length}건 보기 `
+      + `(cleared·waived — 근거 포함)</summary>`
+      + `<div class="gates" style="margin-top:8px">${resolved.map(gateCard).join('')}</div>`
+      + `</details>`
+    : '';
 }
 
 function fillFilters() {
