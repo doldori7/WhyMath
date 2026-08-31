@@ -96,7 +96,14 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
   건드릴 수 없다(구조적 차단).
 - **conflict만 차단**(신호가 확정적) — offline/권한 오류는 경고 + 이벤트 로그 후
   로컬 claim으로 진행한다(fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다).
-- `done`/`block`이 claim을 해제한다. 세션이 죽어 claim이 남으면 `claims reap`이
+- `done`/`block`이 claim을 해제한다. **예외: `block --gate-wait`는 claim을 유지한다**
+  (HARN-45) — 사람 게이트 해소를 기다리는 세션이 자기 자리를 잃지 않게 하기 위한
+  *자리 보전*이다. `--gate-wait`는 태스크의 `requires_gates`에 **미해소 게이트가 실제로
+  있을 때만** 통과한다(근거 없는 무기한 점유 차단). 자리를 넘기려면 `unblock <id>` 후
+  `claims release <id>`. 읽기측 `classify_todo`는 claim 보유자가 *그 세션 자신*이면
+  제외하지 않으므로(=`remote_claims.claim()`의 같은-브랜치 멱등 계약과 동형), 게이트
+  해소 후 원 세션의 재착수는 막히지 않는다 — 보전이 자물쇠가 되지 않게 하는 반대편
+  동결이다. 세션이 죽어 claim이 남으면 `claims reap`이
   **4중 기준**(TTL 초과 · 태스크 이미 done/cancelled · 태스크 미존재 ·
   **홀더 브랜치가 origin에 부재**)으로 청소한다 (기본 dry-run, 실삭제는 `--apply`).
   `reap`은 **(목록, 조회상태, 경고목록)** 을 돌려준다 — 조회 실패를 "stale 없음"으로
@@ -305,7 +312,7 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
 | 진행 중 | 세션이 claim해 작업 중 (`in_progress`·`review`) | `status` + `session` |
 | 다음 착수 | 의존성·게이트 전부 해소 — 바로 시작 가능 | `selector.classify_todo` = None |
 | 대기 | 등재됐으나 선행 조건 미해소 (사유 라벨 표시) | `selector.Exclusion.reason` |
-| 차단 | `blocked` — 노트의 최신 `[차단 …]` 문단을 카드에 발췌 | `status` + `notes` |
+| 차단 | `blocked` — 노트의 최신 `[차단 …]`/`[게이트대기 …]` 문단을 카드에 발췌 | `status` + `notes` |
 | 완료 | 증적 확인된 종결 — 최근 갱신 우선 | `status == done` |
 
 여기에 스테이지 진행률·사람 게이트·`validate` 경고가 같은 화면에 얹히고, 검색어·스테이지·
@@ -375,6 +382,7 @@ python3 scripts/harness/backlog.py done <id> --artifact "<PR 번호를 담은 �
 python3 scripts/harness/backlog.py done <id> --artifact "<커밋>" --no-pr ci-red   # 예외 4종만(HARN-23)
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
+python3 scripts/harness/backlog.py block <id> --reason "..." --gate-wait  # 사람 게이트 대기 — claim 유지(자리 보전·HARN-45)
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증

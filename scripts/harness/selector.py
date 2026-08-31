@@ -59,6 +59,7 @@ def classify_todo(
     remote_claimed: dict[str, str] | None = None,
     overlap_block: dict[str, list[str]] | None = None,
     allow_human_owner: bool = False,
+    resuming_session: str | None = None,
 ) -> Exclusion | None:
     """todo 태스크의 제외 사유 (None = 착수 가능 후보).
 
@@ -68,6 +69,11 @@ def classify_todo(
         <owner>`로 기입하는 start 경로 전용**(HARN-06). candidates()는 기본값(False)만
         쓰므로 next/status/brief의 자동 착수 후보에서 사람 태스크는 계속 제외된다.
         deps·게이트·claim 등 나머지 검사는 사람 기입에도 동일 적용(우회 아님).
+    resuming_session: 착수를 시도하는 *본인* 세션(브랜치). claim 보유자가 그 세션 자신이면
+        claimed/claimed_remote 제외를 건너뛴다 — **자기 자리로의 복귀**이지 중복 착수가
+        아니기 때문이다. `remote_claims.claim()`이 같은 브랜치에 멱등인 것과 같은 계약을
+        읽기측에도 맞춘 것(HARN-45). 기본값 None이면 종전대로 전부 제외되므로
+        candidates()/next/status의 후보 계산은 불변이다.
     """
     if not allow_human_owner and task.owner != "claude":
         return Exclusion(task.id, "owner", [task.owner])
@@ -80,9 +86,9 @@ def classify_todo(
     gates = unmet_gates(backlog, task)
     if gates:
         return Exclusion(task.id, "gates", gates)
-    if task.session:
+    if task.session and task.session != resuming_session:
         return Exclusion(task.id, "claimed", [task.session])
-    if remote_claimed and task.id in remote_claimed:
+    if remote_claimed and task.id in remote_claimed and remote_claimed[task.id] != resuming_session:
         return Exclusion(task.id, "claimed_remote", [remote_claimed[task.id]])
     if overlap_block and task.id in overlap_block:
         return Exclusion(task.id, "path_overlap", overlap_block[task.id])

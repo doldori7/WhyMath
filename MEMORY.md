@@ -7471,3 +7471,15 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **변별력 실측(뮤테이션 3종·각자의 축만 red)**: ①`pushed is False`→`is not None`(무조건 고지) → 과탐 축 2건 red ②`if False`(전면 침묵) → 미push 축 red ③`None`→`False`(판정 불가를 확정으로 접기) → undecidable 축 red. 전부 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수)·md5 바이트 동일 확인·원복 후 12건 green 재확인.
 - **검증**: 신규 12건 포함 `tests/harness` **410 passed** · `tests/infra` 417 passed · ruff/black EXIT=0 · validate 480태스크·21게이트 green. 라이브 스모크: 이 세션의 미push 브랜치에서 고지 실발화 확인(신선도 축은 미발화 — 두 축 독립 동작 실증).
 - **cross-ref**: `HARN-38` 조사 보고서 §2-2·§7 · 태스크 notes의 사례 5건 누적 · `scripts/harness/remote_claims.py` §등재 가시성 고지 · `tests/harness/test_backlog_add_id_collision.py::TestAddVisibilityNotice`
+
+## 2026-08-31: HARN-45 — '게이트 대기'와 '차단'의 분리 (`block --gate-wait`가 claim을 유지)
+
+- **사고(실측)**: HARN-38이 입력을 못 구해 사람 게이트 `G-cur16-branch-push`를 신설하고 `block`으로 전이 → `cmd_block`이 원격 claim을 반납 → **55초 뒤** 타 세션 `claude/failure-definition-signature-scmzdu`가 같은 태스크를 claim(그 세션 요약도 "Pushing HARN-38 branch") → 게이트 해소 후 원 세션의 재claim이 CAS 충돌로 거부. `--force` 우회는 하지 않았다(확정 신호는 우회 대상이 아님).
+- **구조 원인**: '게이트 대기'와 '차단'은 **요구가 정반대**인데(전자는 자리를 지켜야 하고 후자는 인계 가능해야 한다) 같은 전이 하나로 표현돼 있었다. 게다가 `requires_gates`가 걸린 태스크는 `start`가 거부하므로 `todo`로 두는 우회도 성립하지 않는다 — **'게이트 대기 중 자리 보전'을 표현할 수단 자체가 없었다**.
+- **결정 — 상태값 신설이 아니라 `block --gate-wait` 플래그**: 실제 결함은 *claim 소유권 하나*인데 새 status는 `STATUS_TRANSITIONS`·selector·board·문서·테스트로 파급되고, **무엇을 기다리는지는 `requires_gates`가 이미 기록**한다. 최소 표면으로 정확히 그 축만 바꿨다.
+- **자기 잠금 방지(반대편 동결)**: claim을 쥔 채로는 원 세션 자신도 재착수가 막혔다 — `selector.classify_todo`가 `task.session`만 보고 "claimed"로 제외했기 때문. `resuming_session` 인자를 받아 **보유자가 그 세션 자신이면 제외하지 않는다**(=`remote_claims.claim()`의 같은-브랜치 멱등 계약을 읽기측에 맞춘 것). 기본값 `None`이라 `next`/`status`/`brief`의 후보 계산은 불변. **이 결함은 내가 아니라 테스트가 잡았다** — 보전만 검증했다면 '아무도, 심지어 주인도 못 집어간다'는 반대 결함이 그대로 남았을 것이다(acceptance ②가 양방향을 요구한 이유).
+- **근거 없는 점유 차단**: `--gate-wait`는 `requires_gates`에 **미해소 게이트가 실제로 있을 때만** 통과한다(없으면 exit 1). 게이트 없는 '게이트 대기'는 대장으로 검증 불가능한 주장이며, 그 보전은 점유일 뿐이다.
+- **부수 결함 선제 차단**: 새 노트 태그 `[게이트대기 ...]`를 `board._excerpt`가 몰랐다 — 인식 못 하면 보드가 *에러 없이* 첫 문단(발견 경위)을 대기 사유로 표시하는 **조용한 오표시**가 된다. 태그 목록에 편입 + 회귀 테스트 동결.
+- **변별력 실측(뮤테이션 4종·각자의 축만 red)**: ①gate-wait가 claim을 반납(=수정 전 동작) → 사고 재현 2건 red(**acceptance ③**) ②모든 block이 claim 유지 → 인계 축 1건 red ③`resuming_session` 예외 제거 → 주인 복귀 축 1건 red ④board 태그 목록에서 `[게이트대기` 제거 → 발췌 축 1건 red. 전부 `cp` 백업 원복·md5 바이트 동일 확인.
+- **검증**: 신규 7건 포함 `tests/harness` **425 passed** · `tests/infra` 420 passed · ruff/black EXIT=0 · validate 481태스크·21게이트 green.
+- **cross-ref**: `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-A · `docs/standards/build_harness.md` §원격 claim·§CLI 요약 · `tests/harness/test_block_gate_wait_claim_hold.py`

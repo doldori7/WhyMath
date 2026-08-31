@@ -249,7 +249,13 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     if as_owner is not None and as_owner != task.owner:
         return _fail(f"{task.id}: --as {as_owner} 불일치 — 이 태스크의 owner는 '{task.owner}'")
     human = as_owner is not None and as_owner == task.owner
-    exclusion = selector.classify_todo(backlog, task, allow_human_owner=human)
+    session = args.session or store.current_branch(root)
+    # 자기 자리로의 복귀는 중복 착수가 아니다 — `--gate-wait`로 claim을 쥔 채 대기한
+    # 세션이 게이트 해소 후 재착수할 때, 자기 claim에 자기가 막히면 자리 보전이
+    # 자물쇠가 된다(HARN-45). CAS claim의 같은-브랜치 멱등 계약과 동일한 기준.
+    exclusion = selector.classify_todo(
+        backlog, task, allow_human_owner=human, resuming_session=session
+    )
     if exclusion is not None:
         message = f"{task.id} 착수 거부 — {exclusion.reason}: {exclusion.detail}"
         if exclusion.reason == "owner":
@@ -259,7 +265,6 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
                 f"python3 scripts/harness/backlog.py start {task.id} --as {task.owner}"
             )
         return _fail(message)
-    session = args.session or store.current_branch(root)
     policy, _ = store.load_policy(root)
 
     # 원격 claim 스냅샷 — 다른 세션의 in-flight는 로컬 backlog 사본에 안 보이므로
@@ -694,6 +699,27 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_block(root: Path, args: argparse.Namespace) -> int:
+    """태스크 차단 — 기본은 **인계 가능**(claim 반납), `--gate-wait`는 **자리 보전**.
+
+    두 상태가 왜 갈라져야 하는가(HARN-45 · 2026-08-31 실사례): '사람 게이트 대기'와
+    '차단'은 의미가 반대다. 전자는 *같은 세션이 게이트 해소 후 이어받아야* 하고,
+    후자는 *다른 세션이 맡을 수 있어야* 한다. 그런데 구 구현은 둘 다 `blocked`로
+    표현하며 **무조건 claim을 반납**했다.
+
+    그 결과가 실제 사고다 — HARN-38이 입력 부재로 사람 게이트를 신설하고 block하자
+    claim이 풀렸고, **55초 뒤** 다른 세션이 같은 태스크를 claim해 같은 일을 병렬
+    수행했다(2026-08-31T05:00:05Z 실측). 게이트 해소 후 원 세션의 재claim은 CAS
+    충돌로 거부됐다.
+
+    **왜 로컬 status로는 못 막는가**: 다른 세션은 *자기 클론의* 백로그 사본을 본다.
+    이쪽 브랜치의 `blocked`는 머지 전까지 그쪽에 보이지 않으므로, 그쪽 눈에 태스크는
+    여전히 `todo`다. 교차 세션에서 실효를 갖는 신호는 **원격 claim 대장 하나뿐**이며,
+    그래서 이 수정의 본질은 상태값이 아니라 *claim을 놓느냐 쥐느냐*다.
+
+    상태값(`gate_waiting` 등)을 새로 만들지 않은 이유: 문제는 claim 소유권 하나인데
+    상태값 신설은 전이표·selector·보드·문서·테스트로 파급이 번지고, `requires_gates`가
+    이미 "무엇을 기다리는가"를 기록한다. 최소 수술로 실제 결함만 고친다.
+    """
     backlog, _ = _load(root)
     task = backlog.tasks.get(args.id)
     if task is None:
@@ -701,15 +727,43 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "blocked")
     if error:
         return _fail(error)
+
+    gate_wait = bool(getattr(args, "gate_wait", False))
+    if gate_wait:
+        pending = selector.unmet_gates(backlog, task)
+        if not pending:
+            # 게이트 없는 '게이트 대기'는 검증 불가능한 주장이다 — 자리를 무기한
+            # 쥐고 있을 근거가 대장에 없으면 그 보전은 점유일 뿐이다.
+            return _fail(
+                f"{task.id}: --gate-wait 인데 미해소 게이트가 없다 "
+                f"(requires_gates={task.requires_gates or '없음'}). "
+                "먼저 게이트를 등재·연결하라: `backlog.py gates add <G-id> --title ...` "
+                "후 태스크의 requires_gates에 추가. 게이트 없이 자리만 잡아야 하면 "
+                "`--gate-wait` 없이 block하고 사유를 남긴다(인계 가능 상태)."
+            )
+
     prev_session = task.session
     task.status = "blocked"
-    task.session = None
-    task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
+    if not gate_wait:
+        task.session = None
+    task.notes = _append_note(
+        task.notes, args.reason, "게이트대기" if gate_wait else "차단"
+    )  # 덮어쓰지 않고 append (HARN-20)
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "block", task.id, reason=args.reason)
+    store.append_event(root, "block", task.id, reason=args.reason, gate_wait=gate_wait)
+
+    if gate_wait:
+        # claim을 **의도적으로 유지**한다 — 이것이 이 플래그의 전부다.
+        print(
+            f"⏸ {task.id} 게이트 대기 — {args.reason}\n"
+            f"  · 원격 claim 유지(세션: {task.session or '?'}) — 다른 세션의 착수가 거부된다\n"
+            f"  · 미해소 게이트: {', '.join(selector.unmet_gates(backlog, task))}\n"
+            f"  · 인계하려면: `unblock {task.id}` 후 `claims release {task.id}`"
+        )
+        return 0
     _release_remote_claim(root, task.id, prev_session)
-    print(f"✖ {task.id} 차단 — {args.reason}")
+    print(f"✖ {task.id} 차단 — {args.reason} (claim 반납 — 다른 세션이 인계 가능)")
     return 0
 
 
@@ -1774,9 +1828,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_done)
 
-    p = sub.add_parser("block", help="태스크 차단")
+    p = sub.add_parser("block", help="태스크 차단 (기본: claim 반납 — 인계 가능)")
     p.add_argument("id")
     p.add_argument("--reason", required=True)
+    p.add_argument(
+        "--gate-wait",
+        action="store_true",
+        help="사람 게이트 대기 — 원격 claim을 유지해 자리를 보전한다"
+        "(미해소 게이트가 requires_gates에 있어야 함 · HARN-45)",
+    )
     p.set_defaults(func=cmd_block)
 
     p = sub.add_parser("unblock", help="차단 해제")

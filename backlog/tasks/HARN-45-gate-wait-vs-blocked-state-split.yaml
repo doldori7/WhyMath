@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - scripts/harness/backlog.py
   - scripts/harness/store.py
   - tests/harness/test_review_cancel_and_block_notes.py
-session: null
+session: claude/harn-38-tyyh3i
 notes: "사고 경위(실측): 2026-08-31 HARN-38이 acceptance ①의 입력(미push 브랜치 YAML)을 못 구해 사람 게이트 G-cur16-branch-push를 신설하고 block으로 전이 → cmd_block이 원격 claim을 반납 → 05:00:05Z에 타 세션 claude/failure-definition-signature-scmzdu가 HARN-38을 claim(그 세션 task_summary도 'Pushing HARN-38 branch'로 같은 작업 착수 확인) → 게이트 해소 후 원 세션이 재claim하려 했으나 CAS 충돌로 거부. --force 우회는 하지 않았다(확정 신호). 크로스세션 메시지는 도달 불가(ListAgents 0건)라 사람 보고로 에스컬레이션. 구조적 원인: '게이트 대기'와 '차단'은 의미가 다른데(전자는 자리를 지켜야 하고 후자는 인계 가능해야 한다) 같은 전이를 쓴다. 부수: requires_gates가 걸린 태스크는 start가 거부되므로 todo로 두어도 재claim이 안 된다 — 즉 현재 설계에는 '게이트 대기 중 자리 보전'을 표현할 수단 자체가 없다."
 updated: 2026-08-31

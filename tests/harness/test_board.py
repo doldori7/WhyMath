@@ -129,6 +129,16 @@ class TestClassify:
         assert "최신 사유 문단" in detail
         assert "부기 문단" not in detail
 
+    def test_excerpt_picks_gate_wait_paragraph(self):
+        """test_게이트대기_문단도_차단과_같은_계열로_발췌된다 (HARN-45)
+
+        `block --gate-wait`는 `[게이트대기 ...]` 태그를 붙인다. 이 태그를 인식하지
+        않으면 보드는 *에러 없이* 첫 문단(발견 경위)을 대기 사유로 보여준다 —
+        조용한 오표시라 눈으로는 안 잡힌다.
+        """
+        note = "원 발견 경위\n\n[게이트대기 2026-08-31] G-x 해소 대기"
+        assert board._excerpt(note) == "[게이트대기 2026-08-31] G-x 해소 대기"
+
     def test_excerpt_without_block_paragraph_falls_back_to_first(self):
         """test_차단_문단이_없으면_첫_문단으로_되돌린다"""
         assert board._excerpt("원 사유\n\n[복구 불가] 부기") == "원 사유"

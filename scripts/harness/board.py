@@ -109,11 +109,15 @@ def _excerpt(text: str, limit: int = _NOTE_MAX) -> str:
     노트는 시간순으로 뒤에 쌓이므로 최신 차단 사유가 마지막에 온다. 다만 차단 문단이
     하나도 없는 태스크에서 마지막 문단을 집으면 사유가 아닌 부기(복구 불가 기록 등)가
     잡히므로, 그 경우엔 원 사유가 있는 첫 문단으로 되돌린다.
+
+    `[게이트대기 ...]`(HARN-45)도 같은 계열이다 — `block --gate-wait`가 붙이는 태그라
+    여기서 인식하지 않으면 보드가 *조용히* 첫 문단(발견 경위)을 대기 사유로 보여준다.
+    태그를 늘리는 쪽은 이 목록도 함께 늘려야 한다.
     """
     blocks = [para.strip() for para in text.split("\n\n") if para.strip()]
     chosen = ""
     for para in blocks:
-        if para.startswith("[차단") or para.startswith("[블록"):
+        if para.startswith(("[차단", "[블록", "[게이트대기")):
             chosen = para
     if not chosen:
         chosen = blocks[0] if blocks else ""
