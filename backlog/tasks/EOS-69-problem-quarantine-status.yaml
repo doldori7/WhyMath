@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-69-problem-quarantine-status
+title: "Problem quarantined 상태 도입 — 오답·결함 문항의 비파괴 격리 (검토_18 §24)"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - EOS-44-version-management-design
+requires_gates: []
+acceptance:
+  - "review_status(또는 EOS-44 lifecycle)에 quarantined 상태값 추가 — 삭제가 아닌 격리, 기존 problem_attempt 학습 기록 보존을 명세"
+  - "격리 사유(quarantine_reason)·격리 시각 기록 컬럼 + alembic 마이그레이션 (과거 은퇴 처분 docs/data/problem_duplicate_disposition_2026-08.md 사례의 구조화)"
+  - "서빙 게이트 fail-closed: is_review_status_cleared·CAT 후보 풀(api/me.py)·L6 게이팅(gating.py)이 quarantined를 제외"
+  - "회귀 테스트: quarantined 문항이 next-problem·L6 모드·서빙 API에서 제외되고, 해당 문항의 기존 attempt 기록 조회는 유지됨"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/enums.py
+  - src/backend/whymath_backend/db/models/problem.py
+  - "src/backend/alembic/versions/**"
+  - src/backend/whymath_backend/api/gating.py
+session: null
+notes: "검토_18(문제 DB 검토) §24 채택. 현재 상태값은 pending/approved/rejected뿐이라 운영 중 정답 오류·복수 정답·모호 문장 판정 문항의 격리 경로가 없음. EOS-44가 lifecycle 설계를 선행하므로 상태값 착지 지점은 그 설계와 정합시킬 것. [재번호 2026-08-31·HARN-38] 원 ID = EOS-49-problem-quarantine-status(kiki 머신 브랜치 backend/cur-16-...-v2에서 2026-08-26T08:39:47 KST 등재). main의 EOS-49-concept-version-contract가 4일 뒤(2026-08-30T01:11:47 UTC) 같은 번호로 등재되며 충돌 — 미push 브랜치라 어느 가드도 볼 수 없었다. 본문 무변경 이관(제목·acceptance 4항·paths·원 notes 그대로)."
+updated: 2026-08-31

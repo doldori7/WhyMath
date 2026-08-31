@@ -14,8 +14,9 @@
 | 충돌의 실체 | kiki 머신의 **push되지 않은 로컬 브랜치**에 main과 이종 내용의 동번호 3건이 존재 |
 | 번호 충돌 가드(HARN-10+HARN-15)가 못 잡은 이유 | **fail-open(403)이 아니다.** 가드의 관측 표면 3종 중 **어느 것도 미push 브랜치를 원리적으로 볼 수 없다** — 구조적 사각 |
 | HARN-07(fail-open 폴백 미착륙)과의 관계 | **이번 건은 재현 사례가 아니다.** 이번 세션 실측에서 원격 claim 조회는 `status=ok`로 정상 작동 |
+| 선후 판정 | **경우 A 확정**(2026-08-31 브랜치 회수 후 실측) — kiki 측이 **4일 먼저**였고, 충돌을 만든 것은 main 측 add다 |
 | 새로 드러난 부수 결함 | `backlog/events.ndjson`의 `ts`가 **머신 로컬시각·오프셋 무표기** — 교차 머신 사건 순서 재구성이 원리적으로 불가 |
-| ‘G-eos-g0 clear’ 커밋(3b7bab6f) | **실제 clear가 아니다** — GitHub에 존재하지 않는 커밋. 대장을 실제로 바꾼 것은 `ad7862ab`(§4) |
+| ‘G-eos-g0 clear’ 커밋(3b7bab6f) | **실제 clear가 아니다** — 그 커밋의 diff에 `gates.yaml`이 **아예 없다**(§4). 대장을 실제로 바꾼 것은 `ad7862ab` |
 
 ---
 
@@ -31,9 +32,14 @@ $ mcp__github__get_commit(sha=3b7bab6f)
 error: No commit found for SHA: 3b7bab6f
 ```
 
-`backend/cur-16-concept-edge-prerequisite-meta-v2`는 GitHub에 **한 번도 push된 적이 없다**.
-커밋 `3b7bab6f`도 GitHub 객체 그래프에 부재한다. 따라서 이 브랜치의 내용은
-**kiki 머신의 로컬 디스크에만** 존재한다.
+`backend/cur-16-concept-edge-prerequisite-meta-v2`는 GitHub에 **한 번도 push된 적이 없었다**.
+커밋 `3b7bab6f`도 GitHub 객체 그래프에 부재했다. 따라서 사고 발생 시점부터 조사 시점까지
+이 브랜치의 내용은 **kiki 머신의 로컬 디스크에만** 존재했다.
+
+> **[2026-08-31 갱신]** Kiki가 게이트 `G-cur16-branch-push`를 실행해 브랜치를 push했다
+> (`git ls-remote` 출력 1줄 · head = `3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0` — 태스크가
+> 지목한 커밋과 일치). 위 측정은 **push 이전 상태의 기록**이며, 그 시점 사고의 원인 판정이다.
+> 회수 후 확정된 사실은 §3-2·§4·§6에 반영했다.
 
 ### 2-2. 번호 충돌 가드의 관측 표면 3종 — 전수 측정
 
@@ -117,33 +123,41 @@ HARN-36(2026-08-30 00:50 release)이 고친 바로 그 결함의 실사례가 �
 사고 재구성에서 "어느 쪽 add가 먼저였나"는 책임 소재가 아니라 **어느 가드를 고쳐야 하는지**를
 가르는 질문인데, 대장만으로는 그 질문에 답할 수 없다. 후속 태스크로 등재했다(§7).
 
-### 3-2. 두 가지 가능한 순서 — 어느 쪽이든 사각은 실재한다
+### 3-2. 선후 판정 — **경우 A 확정** (2026-08-31 브랜치 회수 후)
 
-kiki 측 add 시각을 모르므로 두 경우를 모두 판정한다.
+조사 시점에는 kiki 측 add 시각을 알 수 없어 두 경우를 모두 판정했다. 브랜치가 push된 뒤
+그 브랜치의 `events.ndjson`을 직접 읽어 **선후가 결정됐다**:
 
-**경우 A — kiki 측 add가 main보다 먼저 (2026-08-30T01:11 UTC 이전).**
-그 시점 EOS-49/50/51 번호는 main 어디에도 없었으므로 kiki 측 add는 정당했다.
-충돌을 *만든* 것은 main 측 add이고, 그 가드가 못 본 이유가 §2-2다 — **미push 브랜치 사각**.
-CUR-16 브랜치가 08-25부터 in-flight였던 점(claim 대장)으로 보아 이쪽이 유력하다.
+| 측 | add 시각 (원문) | 척도 | UTC 환산 |
+|---|---|---|---|
+| **kiki** `EOS-49-problem-quarantine-status` | 2026-08-26T08:39:47 | KST(+0900) | 2026-08-25T23:39:47Z |
+| **kiki** `EOS-50-generation-log-prompt-seed` | 2026-08-26T08:39:52 | KST | 2026-08-25T23:39:52Z |
+| **kiki** `EOS-51-content-lifecycle-state-wiring` | 2026-08-26T08:39:56 | KST | 2026-08-25T23:39:56Z |
+| main `EOS-49-concept-version-contract` | 2026-08-30T01:11:47 | UTC | 2026-08-30T01:11:47Z |
+| main `EOS-50-publish-gate-pipeline` | 2026-08-30T01:11:49 | UTC | 2026-08-30T01:11:49Z |
+| main `EOS-51-verification-design-freeze` | 2026-08-30T06:37:55 | UTC | 2026-08-30T06:37:55Z |
 
-**경우 B — kiki 측 add가 main보다 나중.**
-그러면 kiki 측 가드의 출처 ③이 main의 새 번호를 봤어야 한다. 못 본 이유는 별개의 사각인
-**`fetch=False` 기본값**이다 — `scan_remote_task_files`는 이미 캐시된 remote-tracking ref만
-읽고 네트워크를 타지 않는다(`remote_claims.py:1193` 명문). MEMORY 2026-08-30 기록의
-"구버전 트리·pull 중단"이 사실이면 그 머신의 `origin/main` 캐시는 08-25 언저리에 멈춰 있어
-08-30 01:11의 add를 원리적으로 볼 수 없다.
+**kiki 측이 4일 이상 먼저다.** 척도 불명(§3-1)이 판정을 흐릴 여지도 없다 — 9시간 오차를
+어느 방향으로 적용해도 4일 간격은 뒤집히지 않는다. kiki 측 브랜치의 척도는 claim 커밋
+`fc943cd8(+0900)`와의 3초 차로 KST임이 독립 확인된다.
 
-이 두 번째 사각은 **이미 기계로 동결된 계약**이다 —
-`tests/harness/test_backlog_add_id_collision.py::test_branch_tracking_ref_removed_then_add_passes`
-("remote-tracking ref가 없으면 add가 통과한다")와
-`::test_default_call_never_invokes_git_fetch`가 그 동작을 의도로 못 박고 있다.
-즉 경우 B는 버그가 아니라 **의도된 네트워크 비용 트레이드오프의 대가**이며, 대가를
-치를 때 사람에게 알리지 않는 것(경고 부재)이 결함이다.
+따라서:
 
-**어느 경우든 "가드가 fail-open으로 무력화됐다"는 가설은 기각된다** — 이번 세션 실측에서
-출처 ②·③ 모두 `status=ok`였고, 403·예외·축소 경고는 한 건도 관측되지 않았다.
+- **확정 = 경우 A(미push 브랜치 사각).** kiki 측 add는 그 시점 번호가 실제로 비어 있었으므로
+  **정당했다**. 충돌을 *만든* 것은 4일 뒤의 **main 측 add**이고, 그 가드가 못 본 이유가
+  §2-2다 — 미push 브랜치는 세 출처 어디에도 나타나지 않는다.
+- **경우 B(`fetch=False` 낡은 캐시)는 이번 사고에서 발생하지 않았다.** kiki 측 add 시점에는
+  main에 그 번호가 아예 없었으므로 캐시가 아무리 신선했어도 볼 것이 없었다.
+  다만 이 사각 자체는 실재하며 `test_branch_tracking_ref_removed_then_add_passes`가
+  계약으로 동결하고 있다 — 이번 사고의 원인은 아니지만 **다음 사고의 후보**다.
 
----
+> **대책 우선순위에 미치는 영향**: `HARN-43`의 acceptance ①(미push 고지)이 **실증된 원인**에
+> 대한 대책이고, ②(ref 신선도 고지)는 **예방적 추가**다. 둘을 같은 무게로 적지 않는다 —
+> 실증된 것과 가정된 것을 구분하지 않으면 대책의 조준이 흐려진다.
+
+부수 관측: 그 브랜치의 add 이벤트 앞에는 `policy_warn`(파일 범위 겹침)이 EOS-49에 33건,
+EOS-50에 31건, EOS-51에 14건 붙어 있다. 즉 **가드는 그날 정상 작동했고 경고도 냈다** —
+번호 충돌만 관측 범위 밖이었다.
 
 ## 4. acceptance ② — ‘G-eos-g0 clear’ 커밋의 실체
 
@@ -152,10 +166,16 @@ kiki 머신 브랜치 커밋 `3b7bab6f`의 메시지는 `G-eos-g0 clear`지만,
 
 | | kiki 머신 `3b7bab6f` | main `ad7862ab` |
 |---|---|---|
-| GitHub 존재 | ❌ `No commit found for SHA` | ✅ `ad7862ab9f1d8c91b7fe8bf49f89c39253917571` |
-| 시각 | 불명(미push) | 2026-08-30T15:08:41Z |
-| 변경 파일 | 불명 | `backlog/gates.yaml`(+2/−2) · `backlog/events.ndjson`(+21) — 대장 2건뿐 |
-| 대장 반영 | 없음 | 있음 |
+| GitHub 존재(조사 시점) | ❌ `No commit found for SHA` | ✅ `ad7862ab9f1d8c91b7fe8bf49f89c39253917571` |
+| 시각 | 미push(회수 후 확인 가능) | 2026-08-30T15:08:41Z |
+| **`gates.yaml` 변경** | **❌ 없음** | ✅ `+2/−2` |
+| 그 밖의 변경 | `events.ndjson`(+82) · `CUR-16.yaml` · 신규 태스크 3건 | `events.ndjson`(+21) |
+| 대장 반영 | **없음** | 있음 |
+
+**결정적 증거(2026-08-31 회수 후 실측)**: `git show --stat 3b7bab6f`의 변경 파일 5건에
+**`backlog/gates.yaml`이 없다.** 게이트를 clear했다면 반드시 그 파일이 바뀐다. 즉 이 커밋은
+자기 메시지를 자기 diff로 반증한다 — clear가 "게이트 없음"으로 거부됐으니 기록될 변경이
+애초에 없었던 것이다.
 
 **clear의 실체는 `ad7862ab`다.** MEMORY 2026-08-30 기록대로, kiki 머신에서의 clear 실행은
 구버전 대장 때문에 "게이트 없음"으로 **거부**됐고, 세션이 선례(G-crosswalk-approval)에 따라
@@ -187,49 +207,84 @@ HARN-38 acceptance ③은 "fail-open(403)이면 HARN-07 재현 사례로 교차 
 
 ---
 
-## 6. acceptance ① — 재번호는 왜 이 세션에서 실행할 수 없는가
+## 6. acceptance ① — 재번호 실행 결과 (2026-08-31 완료)
 
-재번호의 입력은 kiki 측 3건의 **YAML 본문**(title·acceptance·paths·notes)이다.
-§2-1 실측대로 그 파일들은 GitHub에 없고 이 샌드박스에서 도달 경로가 **0**이다.
-내용을 모른 채 `backlog.py add`를 돌리면 **태스크를 날조**하게 되므로 실행하지 않는다
-(CLAUDE.md "환경 사실의 추론 등재 금지").
+조사 시점에는 입력(3건의 YAML 본문)에 도달할 수 없어 실행하지 않았다 — 내용을 모른 채
+`add`를 돌리면 태스크를 날조하게 되기 때문이다(CLAUDE.md "환경 사실의 추론 등재 금지").
+게이트 `G-cur16-branch-push`가 해소되어 본문을 확보한 뒤 실행했다.
 
-해소 경로 = 사람 게이트 `G-cur16-branch-push`(§8 브리핑) — Kiki가 그 브랜치를 push하면
-이 세션(또는 후속)이 즉시 ①을 완결한다.
+### 6-1. 재번호 결과
 
-### 6-1. 미리 확정해 둔 판정 — EOS-50 중복 의심 대조
+| 원 ID (kiki 브랜치) | 처분 | 새 ID |
+|---|---|---|
+| `EOS-49-problem-quarantine-status` | 재등재(본문 무변경) | **`EOS-69-problem-quarantine-status`** |
+| `EOS-50-generation-log-prompt-seed` | **중복 — 재등재 안 함**(§6-2) · 잔여만 승계 | **`EOS-71-generation-seed-threading`** |
+| `EOS-51-content-lifecycle-state-wiring` | 재등재(본문 무변경) | **`EOS-70-content-lifecycle-state-wiring`** |
 
-acceptance ①은 `EOS-50-generation-log-prompt-seed`가 main의
-`EOS-55-generation-run-reproducibility`와 중복인지 판정하라고 요구한다. 본문 없이 확정할 수
-없지만, **대조 기준선은 지금 전부 확정해 둔다** — 브랜치가 도착하면 판정이 기계적이 되도록.
+번호는 전부 `backlog.py add`가 배정했다(HARN-10 준수). 첫 시도 `EOS-67`은 CLI가 실거부했고
+(`EOS-67-core-adapter-import-contract`가 원격 브랜치 `claude/review-status-differences-jw5m4a`에
+선점), 제안 번호를 채택했다 — **이번 세션에서만 가드 실거부 2회차**(§7 부수 실측의 `HARN-42`에 이어).
 
-EOS-55(**status: done** · PR #912 · 2026-08-30 착지)의 실측 착지 범위:
+재등재는 제목·acceptance 전항·paths·원 notes를 **바이트 수준에서 그대로 옮겼고**, 각 태스크
+notes에 원 ID·원 등재 시각·충돌 경위를 병기했다. 번호만 바뀌고 내용은 바뀌지 않았음을
+추적할 수 있게 하기 위함이다.
 
-| EOS-55가 실제로 착지시킨 것 | 실측 근거 |
-|---|---|
-| `generation_log` 재현 좌석 5컬럼: `prompt_version`·`seed`·`input_sha256`·`input_snapshot`·`cu_slug` | `db/models/provenance.py:141,173-174` · alembic `f4b2d8c1a3e5` |
-| 두 생성 경로(pregenerate·accumulate) 실적재 배선 | `l3/pregenerate/provenance_bridge.py` |
-| 재현 계약 테스트(전문 복원 단언) | `tests/backend/schema/test_generation_reproducibility.py` |
+### 6-2. EOS-50 중복 판정 — acceptance 3항 전수 대조
 
-**판정 규칙(브랜치 도착 시 그대로 적용)**:
+원 `EOS-50-generation-log-prompt-seed`의 acceptance 3항을 main `EOS-55`(done · PR #912) 착지분과
+**항목별로** 대조했다. "중복 같다"는 인상이 아니라 항목 단위 판정이어야 실제 잔여를 놓치지 않는다.
 
-- kiki 측 EOS-50의 acceptance가 **좌석·적재·재현 계약 범위 안**이면 → **중복**. 재등재하지 않고
-  `EOS-55`에 흡수됐음을 notes에 기록한 뒤 구 YAML 삭제.
-- **좌석 밖의 잔여**를 요구하면 → 그 잔여만 새 번호로 재등재. 현재 확인된 잔여 후보는 하나다:
+| 원 EOS-50 acceptance | 판정 | 실측 근거 |
+|---|---|---|
+| ① GenerationLog에 **prompt 본문**(또는 해시+저장소 참조)·**seed 컬럼** 추가(alembic) | ✅ **흡수 — 오히려 더 강하게** | `input_snapshot_for_prewarm`이 `prompt`·`system` **전문(verbatim)** + 각 sha256을 담는다(`provenance_bridge.py:90-119`). EOS-50이 허용한 "해시+참조"보다 강한 전문 저장. `seed` 컬럼도 착지(`provenance.py:174` BigInteger · alembic `f4b2d8c1a3e5`) |
+| ①의 목적절 — 모델·`generator_version` 단위 **영향 생성분 전수 조회** 성립 | ✅ **실질 성립** | `model_name` 실적재 · **`prompt_version` 실값 적재**(`llm_generator.py:585` → `_prompt_version()` = 정본 프롬프트 자산 내용 해시). `generator_version`이라는 *이름*의 컬럼은 저장소 전체 grep 0건이나, 그 축의 역할을 `prompt_version`이 수행한다 |
+| ② pregenerate·**DSL 생성 경로**가 실제 prompt·seed를 적재 | ⚠️ **부분 미이행** | **prompt 축 = 이행**(pregenerate·accumulate 두 경로 실적재 — #912 집행 별항). **seed 축 = 미이행**(두 경로 전부 `seed=None` — `provenance_bridge.py:151-152`·`prewarmer.py:117`·`provenance.py:173` 자인 3중). **DSL 경로 = 전제 무효**(아래) |
+| ③ 기존 행 백필 정책 명시 — 복원 불가분은 null 자인, 침묵 미기입 금지 | ✅ **흡수** | 재현 좌석 5컬럼 전부 nullable·`server_default` 없음 = "구 행 NULL=미기록"(`provenance.py:170` 주석). `seed=NULL 정직`도 MEMORY 2026-08-30에 명문 |
 
-  > **seed 값의 실제 스레딩.** 컬럼은 있으나 두 경로 모두 `seed=None`을 쓴다 —
-  > `provenance_bridge.py:151-152` 주석 자인: *"사전적재 경로는 템플릿 체계·seed 스레딩이 없어
-  > 기본 None=미기록(날조 금지)"*. MEMORY 2026-08-30도 *"seed=NULL 정직(라우터 스레딩 전무 실측
-  > — 결정론 재생성은 별도 태스크)"*로 명시적 후속 이월을 기록했다.
-  > 백로그 전수 검색 결과 **이 잔여를 소유한 태스크는 현재 없다.**
+**"DSL 생성 경로" 전제 무효 판정**: `l3/dsl/`에는 라우터·프로바이더 import가 **0건**이다
+(`compiler.py`·`variable_engine.py`·`validators.py`·`math_verifier.py`·`quality_gate.py`·`repair.py`).
+이 계층은 **결정론 컴파일러**이고 LLM 호출 자체가 없으므로 `GenerationLog` 적재 대상이 아니다.
+`variable_engine.generate(seed=…)`의 `seed`는 **변수 바인딩 난수 시드**로 LLM 시드와 다른 축이다
+(`compiler.py:28`이 `seed=0` 하드코딩) — 이름이 같아서 같은 것으로 읽히기 쉬운 지점이라 명시한다.
 
-  즉 kiki 측 EOS-50이 "seed를 실제로 넣어 결정론 재생성을 가능하게 하라"는 요구를 담고 있다면
-  그것은 **살아 있는 갭**이며 재등재 대상이다.
-- `EOS-49-problem-quarantine-status`·`EOS-51-content-lifecycle-state-wiring`은 main 동번호와
-  주제가 무관하므로(버전 계약·발행 게이트·검증설계 동결) 중복 판정 대상이 아니다 —
-  **본문 확인 후 그대로 새 번호로 재등재**한다.
+**결론**: `EOS-50`은 **중복이므로 재등재하지 않는다.** 미이행 잔여는 **seed 축 하나**이며
+`EOS-71-generation-seed-threading`으로 승계 등재했다(백로그 전수 검색 결과 이 잔여를 소유한
+태스크가 없었음 — MEMORY 2026-08-30의 "결정론 재생성은 별도 태스크" 이월이 좌석 없이 떠 있던 상태).
 
----
+### 6-3. 구 YAML 처분 — 미완(사람 행동 필요)
+
+원 YAML 3건은 여전히 `backend/cur-16-...-v2` 브랜치에 있다. 이 세션은 **자신의 지정 브랜치
+외에는 push할 수 없어** 그 브랜치에서 삭제 커밋을 올리지 못했다.
+
+처분 판단의 재료(실측):
+
+- 그 브랜치의 **코드 내용은 이미 main에 전부 있다** — `required_strength` 등 CUR-16 기능이
+  main `schema/concept.py:275,320`에 실재하고, `CUR-16`은 `status: done`·PR #892(`a92a887f`) 머지.
+- 브랜치 고유분은 **태스크 YAML 3건 + 위 false-clear 커밋**뿐이었고, 3건은 §6-1에서 회수 완료.
+- 즉 이 브랜치는 **머지 가치가 0**이며, 남겨 두면 "언젠가 머지되어 동번호 YAML이 main에 재진입"
+  하는 경로만 남는다(그때도 슬러그가 달라 `validate`는 통과한다 — 이 사고의 원형 그대로).
+
+**권고 = 브랜치 삭제**(YAML 삭제를 포함하는 상위 처분). 되돌리려면 SHA
+`3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0`로 재생성하면 되므로 **가역**이다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 · 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# ① 원격 브랜치 삭제 (복구 SHA = 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0)
+git push origin --delete backend/cur-16-concept-edge-prerequisite-meta-v2
+
+# ② 로컬 브랜치 삭제 — 현재 이 브랜치에 있으면 먼저 다른 브랜치로 이동해야 한다
+git branch -D backend/cur-16-concept-edge-prerequisite-meta-v2
+
+# ③ 자가검증 — 이 출력이 판정이다. **무출력이면 성공**, 1줄 보이면 삭제 실패
+git ls-remote --heads origin backend/cur-16-concept-edge-prerequisite-meta-v2
+```
+
+> ③의 성공/실패 방향이 §8의 push 검증과 **반대**임에 주의한다(그때는 1줄=성공, 여기서는
+> 무출력=성공). 같은 명령이라도 무엇을 확인하는지에 따라 판정이 뒤집히므로 명시한다.
+
+게이트 `G-cur16-branch-disposal`로 등재했다.
 
 ## 7. 재발방지대책 (CLAUDE.md 실수 관리 — 3회차 반복이라 등재 의무)
 
@@ -240,8 +295,12 @@ EOS-55(**status: done** · PR #912 · 2026-08-30 착지)의 실측 착지 범위
 등재한 후속 2건(번호는 `backlog.py add`가 배정 — HARN-10 준수):
 
 1. **`HARN-43-add-unpushed-branch-visibility-warning`** — `backlog.py add` 성공 직후,
-   그 번호가 **아직 다른 세션에 보이지 않는다**는 사실을 경고로 알린다. 판정 축 2개:
-   현재 브랜치의 원격 ref 부재(경우 A 사각) · remote-tracking ref의 신선도(경우 B 사각).
+   그 번호가 **아직 다른 세션에 보이지 않는다**는 사실을 경고로 알린다. 판정 축 2개이나
+   **무게가 다르다**(§3-2 확정 반영):
+   - acceptance ① 현재 브랜치의 원격 ref 부재(**경우 A** 사각) — **이번 사고의 실증된 원인**
+   - acceptance ② remote-tracking ref 신선도(**경우 B** 사각) — 이번엔 발생하지 않은 **예방적 추가**
+
+   실증된 것과 가정된 것을 같은 무게로 적으면 대책의 조준이 흐려지므로 구분해 둔다.
    "측정 실패와 통과가 같은 색이면 안 된다"의 등재 경로 적용 — 지금은 **둘 다 조용히 통과**한다.
 2. **`HARN-44-event-ledger-timezone-offset`** — `store.append_event`의 `ts`에 오프셋을 넣어
    교차 머신 순서 재구성을 가능하게 한다(§3-1). 기존 행은 소급 정정 불가이므로
@@ -257,9 +316,12 @@ EOS-55(**status: done** · PR #912 · 2026-08-30 착지)의 실측 착지 범위
 EXIT=1
 ```
 
-상대는 **push된 미머지 브랜치**였고 출처 ③이 정확히 잡았다. HARN-38 등재 당시
-HARN-37 충돌을 거부했던 것(태스크 notes 기록)에 이은 두 번째 변별력 실증이다.
+상대는 **push된 미머지 브랜치**였고 출처 ③이 정확히 잡았다. §6-1의 재번호에서도
+`EOS-67` 요청이 같은 방식으로 실거부됐다(`EOS-67-core-adapter-import-contract` 선점).
+HARN-38 등재 당시 HARN-37 충돌 거부까지 합치면 **변별력 실증 3회차**다.
 이 대비가 §2-2의 결론을 강화한다 — 문제는 가드의 판정력이 아니라 **관측 범위**다.
+그리고 §3-2 부수 관측대로, kiki 측 add 그날에도 가드는 `policy_warn`을 78건 냈다 —
+**작동은 했고, 번호 충돌만 관측 범위 밖이었다.**
 
 **대책의 성격 구분(정직한 한계)**: ①은 *탐지*가 아니라 *고지*다. 미push 브랜치를 실제로
 관측하는 방법은 없으므로, 가드가 할 수 있는 최선은 **자기 관측 범위의 구멍을 사람에게

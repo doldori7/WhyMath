@@ -11,6 +11,7 @@ owner: claude
 depends_on: []
 requires_gates:
   - G-cur16-branch-push
+  - G-cur16-branch-disposal
 acceptance:
   - "① kiki 머신 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 커밋 3b7bab6f의 EOS-49-problem-quarantine-status·EOS-50-generation-log-prompt-seed·EOS-51-content-lifecycle-state-wiring 3건을 최신 main 기준 backlog.py add로 재등재(새 번호는 CLI 배정 — HARN-10)·구 YAML 삭제. 특히 EOS-50-generation-log-prompt-seed는 main의 EOS-55-generation-run-reproducibility와 내용 중복 의심 — 재등재 전 대조·병합 판정"
   - "② 그 브랜치 커밋 메시지 'G-eos-g0 clear'가 실제 clear가 아님을 세션 기록에 남김(clear 실체는 main 반영분 — 2026-08-30 ad7862ab)"
@@ -21,5 +22,5 @@ paths:
   - "backlog/tasks/**"
   - "docs/reviews/**"
 session: null
-notes: "사고 경위: 2026-08-30 Kiki가 kiki 머신(CUR-16 브랜치·구버전 트리)에서 G0 서명 블록 실행 → pull 중단·게이트 없음 거부·커밋이 CUR-16 브랜치에 적재되며 동번호 이종 EOS-49/50/51 존재가 노출. full-ID 슬러그가 달라 validate는 통과하는 부류(ARCH-13·OPS-15 선례와 동형·3회차). 이번 등재 자체도 HARN-37 충돌을 CLI가 거부·HARN-38 제안 — 가드 변별력 실증. 착수 전제: 해당 브랜치 push 또는 kiki 머신 세션.\n\n[차단 2026-08-31] acceptance ②③ 완결(docs/reviews/eos_number_collision_root_cause_2026-08-31.md — 경위 실측 규명·fail-open 가설 기각·'G-eos-g0 clear' 커밋 실체 기록). ①(재번호)만 잔여이며 입력인 YAML 3건이 미push 브랜치에만 존재해 실행 불가 — 게이트 G-cur16-branch-push 대기. 대책 2건 등재: HARN-43·HARN-44."
+notes: "사고 경위: 2026-08-30 Kiki가 kiki 머신(CUR-16 브랜치·구버전 트리)에서 G0 서명 블록 실행 → pull 중단·게이트 없음 거부·커밋이 CUR-16 브랜치에 적재되며 동번호 이종 EOS-49/50/51 존재가 노출. full-ID 슬러그가 달라 validate는 통과하는 부류(ARCH-13·OPS-15 선례와 동형·3회차). 이번 등재 자체도 HARN-37 충돌을 CLI가 거부·HARN-38 제안 — 가드 변별력 실증. 착수 전제: 해당 브랜치 push 또는 kiki 머신 세션.\n\n[차단 2026-08-31] acceptance ②③ 완결(docs/reviews/eos_number_collision_root_cause_2026-08-31.md — 경위 실측 규명·fail-open 가설 기각·'G-eos-g0 clear' 커밋 실체 기록). ①(재번호)만 잔여이며 입력인 YAML 3건이 미push 브랜치에만 존재해 실행 불가 — 게이트 G-cur16-branch-push 대기. 대책 2건 등재: HARN-43·HARN-44.\n\n[차단 2026-08-31] [2026-08-31 진행] ①의 재등재분 완료 — G-cur16-branch-push 해소로 본문 확보 후 EOS-49→EOS-69·EOS-51→EOS-70 무변경 재등재, EOS-50은 EOS-55 대조 결과 중복 판정(재등재 안 함)하고 미이행 잔여 seed 스레딩만 EOS-71로 승계. ②③은 8/30 완결. 잔여 = ①의 '구 YAML 삭제' 한 항목뿐이며, 그 브랜치는 세션의 지정 브랜치가 아니라 push 불가 — 게이트 G-cur16-branch-disposal(브랜치 삭제 권고·가역·복구 SHA 3b7bab6f) 대기."
 updated: 2026-08-31

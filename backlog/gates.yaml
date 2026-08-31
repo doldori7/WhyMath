@@ -36,14 +36,23 @@ gates:
     remind_after_days: 14
     evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08 2건·07-10 20건·07-12 42건, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프 — 스탬프는 clear 14시간 전 커밋 fbbcc53에 선존·ARCH-07 적대 검증)·validation success·기계 reject-only·프로덕션 적재 0. Kiki 본인 승인 확인: 2026-07-13 세션 결정(대장 정합까지 선택·AskUserQuestion 기록). arch_audit_2026-07-13_r6 §3 대장 비정합 지적의 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
     notes: ""
-  - id: G-cur16-branch-push
-    title: "kiki 머신 로컬 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 push — 그 브랜치에만 존재하는 EOS-49/50/51 동번호 이종 태스크 YAML 3건의 본문 확보(HARN-38 ① 선결). 실측: GitHub에 브랜치·커밋 3b7bab6f 모두 부재 = 미push, kiki 머신 초기화 시 영구 소실. 실행 명령·6항목 브리핑 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §8 (main 머지 아님·업로드만)"
+  - id: G-cur16-branch-disposal
+    title: "backend/cur-16-concept-edge-prerequisite-meta-v2 브랜치 처분(삭제 권고) — 고유분 회수 완료(태스크 3건 EOS-69/70/71로 재등재)·코드는 이미 main(PR #892 a92a887f)이라 머지 가치 0. 남겨 두면 동번호 YAML이 main에 재진입하는 경로만 남는다(그때도 슬러그가 달라 validate 통과 — 이 사고의 원형). 가역(복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0). 명령·자가검증 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §6-3. ※세션은 지정 브랜치 외 push 불가라 대행 못 함 — Kiki 허가 시 세션이 삭제 커밋 대행 가능"
     kind: human
     assignee: kiki
     status: pending
     requested: 2026-08-31
-    remind_after_days: 3
+    remind_after_days: 7
     evidence: null
+    notes: ""
+  - id: G-cur16-branch-push
+    title: "kiki 머신 로컬 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 push — 그 브랜치에만 존재하는 EOS-49/50/51 동번호 이종 태스크 YAML 3건의 본문 확보(HARN-38 ① 선결). 실측: GitHub에 브랜치·커밋 3b7bab6f 모두 부재 = 미push, kiki 머신 초기화 시 영구 소실. 실행 명령·6항목 브리핑 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §8 (main 머지 아님·업로드만)"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-08-31
+    remind_after_days: 3
+    evidence: "2026-08-31 Kiki 실행 — ④ 자가검증 출력 실측: 'refs/heads/backend/cur-16-concept-edge-prerequisite-meta-v2' 1줄, head=3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0 (태스크가 지목한 커밋과 일치). ②브랜치 존재 확인·③push 전부 성공. 세션이 fetch해 EOS-49/50/51 3건 YAML 본문·add 이벤트 시각 확보 — HARN-38 ① 실행 가능."
     notes: ""
   - id: G-deploy-environment-approval
     title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
