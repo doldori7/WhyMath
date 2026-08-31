@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -16,7 +16,11 @@ acceptance:
   - "② 변별력 확인: 일부러 Core에서 Adapter를 import하는 뮤테이션을 넣어 lint-imports가 exit 1을 내는지 실측하고 복원. 원복은 cp 백업으로만(git checkout 금지 — 2026-08-10 규칙). 복원 후 git diff --stat으로 규모 대조"
   - "③ 배선 실재 동결(정본화≠집행): 이 계약이 CI에서 실제로 실행됨을 tests/infra 계약 테스트로 대조(OPS-10 선례). 'pyproject에 존재함'과 '잡이 돌아감'은 다르다 — ci.yml lint 스텝이 lint-imports를 부르는지까지 기계 대조"
   - "④ 현행 위반이 0이 아니면: 위반 전건을 열거하고 baseline 허용(ignore_imports)으로 동결하되 만료·재확인 지점을 함께 적는다 — 만료 없는 유예 금지. 위반 0이면 그 사실을 실측 출력으로 기록"
-artifacts: []
+artifacts:
+  - "#924"
+  - "src/backend/pyproject.toml (forbidden 계약 2건)"
+  - "tests/infra/test_eos_boundary_contract_wiring.py (9건)"
+  - "lint-imports: 3 kept 0 broken · baseline 9간선(EOS-69 소유)·구조적 제외 11"
 paths:
   - src/backend/pyproject.toml
   - tests/infra/test_import_contract_wiring.py
