@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on:
@@ -19,5 +19,5 @@ paths:
   - src/backend/whymath_backend/api/alignments.py
   - src/backend/whymath_backend/app.py
 session: null
-notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨."
-updated: 2026-08-25
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨.\n\n[차단 2026-08-31] G-eos-verification-relevance-triage 대기 — 12월 검증 관여도 판정 미필(선언 §0-5 신규 기능 게이트·§6-5 이월 판정). 착수 시 /v1/curricula/* 라우터 5종+app 배선이 들어가는데, 선언 §1.3-③이 이 태스크를 'W1 계약 수준' 축으로 분류한 것과 실제 acceptance(라우터 신설)가 어긋난다. requires_gates 부착 CLI 경로가 없어(HARN-24 ③·ADMIN-02 선례) block으로 집행 — 게이트 clear 후 unblock."
+updated: 2026-08-31

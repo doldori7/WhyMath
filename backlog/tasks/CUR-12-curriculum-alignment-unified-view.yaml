@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on:
@@ -20,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l2/target_progress.py
   - src/backend/whymath_backend/l3/dsl/models.py
 session: null
-notes: EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 6. Alignment는 검토안 P0이자 WhyMath의 기술 부채 축.
-updated: 2026-08-25
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 6. Alignment는 검토안 P0이자 WhyMath의 기술 부채 축.\n\n[차단 2026-08-31] G-eos-verification-relevance-triage 대기 — 12월 검증 관여도 판정 미필(선언 §0-5·§6-5). acceptance ②가 api/coach.py·l2/target_progress.py·l3 DSL 생성기를 get_alignments 경유로 리팩토링하는 소비처 정렬이라, 관여도 판정 없이 착수하면 12월 검증 비관여 작업이 서빙 경로를 건드린다. requires_gates 부착 CLI 경로 부재(HARN-24 ③)로 block 집행 — 게이트 clear 후 unblock."
+updated: 2026-08-31
