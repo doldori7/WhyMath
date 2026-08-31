@@ -16,6 +16,7 @@
 | HARN-07(fail-open 폴백 미착륙)과의 관계 | **이번 건은 재현 사례가 아니다.** 이번 세션 실측에서 원격 claim 조회는 `status=ok`로 정상 작동 |
 | 선후 판정 | **경우 A 확정**(2026-08-31 브랜치 회수 후 실측) — kiki 측이 **4일 먼저**였고, 충돌을 만든 것은 main 측 add다 |
 | 새로 드러난 부수 결함 | `backlog/events.ndjson`의 `ts`가 **머신 로컬시각·오프셋 무표기** — 교차 머신 사건 순서 재구성이 원리적으로 불가 |
+| **조사 중 동종 재발** | 병렬 세션이 같은 원본을 다른 번호로 **이중 등재**(§6-1a) — 원인은 `block`의 claim 반납(§7-A·`HARN-45`). 상대 번호로 통일해 해소 |
 | ‘G-eos-g0 clear’ 커밋(3b7bab6f) | **실제 clear가 아니다** — 그 커밋의 diff에 `gates.yaml`이 **아예 없다**(§4). 대장을 실제로 바꾼 것은 `ad7862ab` |
 
 ---
@@ -217,17 +218,46 @@ HARN-38 acceptance ③은 "fail-open(403)이면 HARN-07 재현 사례로 교차 
 
 | 원 ID (kiki 브랜치) | 처분 | 새 ID |
 |---|---|---|
-| `EOS-49-problem-quarantine-status` | 재등재(본문 무변경) | **`EOS-69-problem-quarantine-status`** |
-| `EOS-50-generation-log-prompt-seed` | **중복 — 재등재 안 함**(§6-2) · 잔여만 승계 | **`EOS-71-generation-seed-threading`** |
-| `EOS-51-content-lifecycle-state-wiring` | 재등재(본문 무변경) | **`EOS-70-content-lifecycle-state-wiring`** |
+| `EOS-49-problem-quarantine-status` | 재등재(본문 무변경) | **`EOS-71-problem-quarantine-status`** |
+| `EOS-50-generation-log-prompt-seed` | **중복 — 재등재 안 함**(§6-2) · 잔여만 승계 | **`EOS-73-generation-seed-threading`** |
+| `EOS-51-content-lifecycle-state-wiring` | 재등재(본문 무변경) | **`EOS-72-content-lifecycle-state-wiring`** |
 
-번호는 전부 `backlog.py add`가 배정했다(HARN-10 준수). 첫 시도 `EOS-67`은 CLI가 실거부했고
-(`EOS-67-core-adapter-import-contract`가 원격 브랜치 `claude/review-status-differences-jw5m4a`에
-선점), 제안 번호를 채택했다 — **이번 세션에서만 가드 실거부 2회차**(§7 부수 실측의 `HARN-42`에 이어).
+번호는 전부 `backlog.py add`가 배정했다(HARN-10 준수). 최종 번호에 이르기까지 CLI가
+**연속 4회 실거부**했다 — `EOS-67`(`…core-adapter-import-contract` 선점) ·
+`EOS-71`·`EOS-72`(아래 §6-1a의 병렬 세션 선점) — 매번 제안 번호를 채택했다.
 
 재등재는 제목·acceptance 전항·paths·원 notes를 **바이트 수준에서 그대로 옮겼고**, 각 태스크
 notes에 원 ID·원 등재 시각·충돌 경위를 병기했다. 번호만 바뀌고 내용은 바뀌지 않았음을
 추적할 수 있게 하기 위함이다.
+
+### 6-1a. 같은 사고가 이 조사 중에 **재발했다** — 병렬 이중 등재
+
+재번호를 실행하는 동안 다른 세션(`claude/failure-definition-signature-scmzdu`)이 **같은
+HARN-38을 병렬 수행**해, 같은 원본 3건을 **다른 번호로 이중 등재**했다:
+
+| 원 ID | 본 세션 최초 배정 | 병렬 세션 배정 | 최종 |
+|---|---|---|---|
+| `EOS-49-problem-quarantine-status` | `EOS-69` | **`EOS-71`**(05:11:47Z claim) | **`EOS-71`** |
+| `EOS-51-content-lifecycle-state-wiring` | `EOS-70` | **`EOS-72`** | **`EOS-72`** |
+| (EOS-50 잔여) | `EOS-71` | *(미등재 — 본 세션 고유분)* | **`EOS-73`** |
+
+즉 **"같은 일을 두 번호로 등재"** — HARN-38이 고치려던 바로 그 질병이 그 조사 도중에
+한 번 더 발생했다. 원인은 §7-A(`HARN-45`)의 claim 반납 사각이다.
+
+**해소 방식 — 본 세션이 양보하고 상대 번호로 통일**했다(`EOS-69`·`EOS-70` 철회):
+
+- 상대가 **원격 claim 대장에 먼저 등재**했다(`EOS-71` 05:11:47Z). 대장은 교차 세션의 유일한
+  공유 신호이므로, 거기에 먼저 오른 쪽이 기준이 되는 것이 일관된 규칙이다.
+- 결정적으로 — **같은 full ID면 두 브랜치가 다 머지돼도 번호 충돌이 아니다.**
+  `cmd_add`의 "같은 full ID 재등재는 충돌이 아니다" 규칙(`backlog.py:1001-1003`)이 그 상태를
+  정상으로 정의한다. 반대로 `EOS-69`/`EOS-71`을 각자 유지하면 **양쪽이 머지되는 순간
+  내용이 같은 태스크가 4개**가 되고, 슬러그가 달라 `validate`는 통과한다 — **이 사고의 원형
+  그대로**다. 즉 양보는 예의가 아니라 **재발 차단 조치**다.
+- 두 세션의 이관본은 title·acceptance 전항·paths가 **동일**했다(둘 다 같은 원본을 충실히
+  옮겼다) — 양보로 잃는 내용이 없음을 대조로 확인했다.
+
+**본 세션 고유분**(상대 브랜치에 없음): `EOS-73`(EOS-50 잔여) · `HARN-43`·`HARN-44`·`HARN-45` ·
+이 보고서 · 게이트 2건 · CLAUDE.md 규칙 개정.
 
 ### 6-2. EOS-50 중복 판정 — acceptance 3항 전수 대조
 
@@ -251,7 +281,7 @@ notes에 원 ID·원 등재 시각·충돌 경위를 병기했다. 번호만 바
 `EOS-71-generation-seed-threading`으로 승계 등재했다(백로그 전수 검색 결과 이 잔여를 소유한
 태스크가 없었음 — MEMORY 2026-08-30의 "결정론 재생성은 별도 태스크" 이월이 좌석 없이 떠 있던 상태).
 
-### 6-3. 구 YAML 처분 — 미완(사람 행동 필요)
+### 6-3. 구 YAML 처분 — **완료** (2026-08-31 Kiki 실행)
 
 원 YAML 3건은 여전히 `backend/cur-16-...-v2` 브랜치에 있다. 이 세션은 **자신의 지정 브랜치
 외에는 push할 수 없어** 그 브랜치에서 삭제 커밋을 올리지 못했다.
@@ -284,7 +314,13 @@ git ls-remote --heads origin backend/cur-16-concept-edge-prerequisite-meta-v2
 > ③의 성공/실패 방향이 §8의 push 검증과 **반대**임에 주의한다(그때는 1줄=성공, 여기서는
 > 무출력=성공). 같은 명령이라도 무엇을 확인하는지에 따라 판정이 뒤집히므로 명시한다.
 
-게이트 `G-cur16-branch-disposal`로 등재했다.
+**[실행 결과 — 게이트 `G-cur16-branch-disposal` cleared]** Kiki가 2026-08-31 실행:
+`git push origin --delete` → `[deleted] backend/cur-16-concept-edge-prerequisite-meta-v2` ·
+`git branch -D` → `Deleted branch … (was 3b7bab6f)` · **③ 자가검증 `git ls-remote` 무출력**(=성공 방향).
+구 YAML 3건이 원격·로컬 양쪽에서 소멸해 **동번호 재진입 경로가 차단**됐다. 복구 SHA는
+`3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0`으로 이 문서·MEMORY·게이트 evidence 3곳에 보존된다.
+
+⇒ **acceptance ① 전항 완료** (재등재 + 구 YAML 삭제).
 
 ## 7. 재발방지대책 (CLAUDE.md 실수 관리 — 3회차 반복이라 등재 의무)
 
@@ -357,6 +393,10 @@ HARN-38 등재 당시 HARN-37 충돌 거부까지 합치면 **변별력 실증 3
 `HARN-45-gate-wait-vs-blocked-state-split`로 등재했다. 이 사고는 §7의 세 사각과 성격이
 다르다 — 앞의 것들은 *관측*의 사각이고, 이것은 *상태 표현*의 사각이다.
 
+**그리고 이 사각은 곧바로 실해를 냈다** — 그 세션이 같은 재번호를 병렬로 수행해 §6-1a의
+**이중 등재**가 발생했다. 즉 `HARN-45`는 가설적 위험이 아니라 **같은 세션 안에서 원인→결과가
+모두 관측된** 결함이다. 우선순위 1로 등재한 근거다.
+
 ## 8. Kiki 실행 과제 브리핑 — CUR-16 브랜치 push (게이트 `G-cur16-branch-push` · **2026-08-31 해소 완료**)
 
 > CLAUDE.md "Kiki 직접 수행 과제의 사전 브리핑 템플릿 의무" 6항목.
@@ -404,15 +444,38 @@ git push -u origin backend/cur-16-concept-edge-prerequisite-meta-v2
 git ls-remote --heads origin backend/cur-16-concept-edge-prerequisite-meta-v2
 ```
 
-push가 확인되면 게이트를 clear한다:
+**게이트 clear는 Kiki가 하지 않는다 — ④의 출력만 전달하면 세션이 처리한다.**
 
-```powershell
-# [실행 시스템] Windows PowerShell — 같은 창에서 이어서 실행 가능
-python scripts\harness\backlog.py gates clear G-cur16-branch-push --evidence "④ git ls-remote 출력 1줄 확인 — 브랜치 원격 착지"
-```
-
-> ⚠ 이 CLI가 `UnicodeEncodeError`로 죽으면 **기등재 OPS-53의 알려진 cp949 결함**이다
-> (MEMORY 2026-08-30 사고 ②). 그 경우 clear는 생략하고 ④의 출력만 전달하면 세션이 처리한다.
+> ### ⚠️ 초안의 결함과 정정 (Codex P2 · 2026-08-31 · PR #930 리뷰 수용)
+>
+> 이 블록의 **초안에는 `backlog.py gates clear G-cur16-branch-push` 명령이 들어 있었다.**
+> 그 명령은 **반드시 실패한다** — 실측:
+>
+> ```
+> $ git show origin/main:backlog/gates.yaml | grep -c "G-cur16-branch-push"                 → 0
+> $ git show origin/backend/cur-16-…-v2:backlog/gates.yaml | grep -c "G-cur16-branch-push"  → 0
+> ```
+>
+> 이 게이트는 **미머지 브랜치 `claude/harn-38-tyyh3i`에만** 있다. CLI는 *현재 체크아웃의*
+> `backlog/gates.yaml`을 읽으므로 kiki 머신 어느 브랜치에서 실행해도 `게이트 없음`으로 거부된다
+> — **이 사고를 촉발한 2026-08-30 실패(구버전 대장에서 G0 clear 시도 → "게이트 없음" 거부)와
+> 글자 그대로 같은 실패**를, 그 사고를 조사하는 문서가 재생산할 뻔했다.
+>
+> **어긴 규칙**: CLAUDE.md "Kiki 머신 행동 요청 시 실행 명령 동봉 필수" —
+> *"미머지 브랜치의 신규 파일을 쓰는 명령이면 해당 브랜치 fetch/checkout을 반드시 선행 포함"*.
+> 규칙은 이미 있었고 지키지 않았다. 원인 추정: "신규 **파일**"이라는 문언을 읽고
+> **대장의 신규 *항목*(gates.yaml의 게이트 1줄)** 을 그 범주로 매핑하지 못했다 —
+> 파일은 이미 존재하고 그 안의 항목만 새것이라 "신규 파일 없음"으로 통과시킨 것이다.
+> 상환 = CLAUDE.md 규칙 문언에 **대장 항목**을 명시적으로 편입(2026-08-31 개정).
+>
+> **실제 피해 0** — Kiki는 ②③④만 실행했고 clear는 세션이 자기 체크아웃에서 수행했다.
+> 다만 이는 **설계가 아니라 운이었다**. 정정된 형태가 위 문장이다: 게이트가 미머지 상태인
+> 동안 clear는 **그 브랜치를 가진 쪽**(= 세션)이 한다.
+>
+> **일반화한 판정 규칙**: Kiki에게 `backlog.py`(또는 임의의 대장 조작 CLI) 명령을 안내하기
+> 전에, **그 명령이 읽을 대장 항목이 kiki 머신의 체크아웃에 실재하는지** 확인한다.
+> 없으면 ①브랜치 fetch/checkout을 선행 포함하거나 ②그 단계를 세션이 가져간다.
+> 셋 중 어느 것도 하지 않은 안내는 "가정 기반 런북"이다.
 
 ---
 

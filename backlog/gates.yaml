@@ -40,10 +40,10 @@ gates:
     title: "backend/cur-16-concept-edge-prerequisite-meta-v2 브랜치 처분(삭제 권고) — 고유분 회수 완료(태스크 3건 EOS-69/70/71로 재등재)·코드는 이미 main(PR #892 a92a887f)이라 머지 가치 0. 남겨 두면 동번호 YAML이 main에 재진입하는 경로만 남는다(그때도 슬러그가 달라 validate 통과 — 이 사고의 원형). 가역(복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0). 명령·자가검증 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §6-3. ※세션은 지정 브랜치 외 push 불가라 대행 못 함 — Kiki 허가 시 세션이 삭제 커밋 대행 가능"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-31
     remind_after_days: 7
-    evidence: null
+    evidence: "2026-08-31 Kiki 실행 — ① git push origin --delete 출력 '[deleted] backend/cur-16-concept-edge-prerequisite-meta-v2' ② git branch -D 출력 'Deleted branch ... (was 3b7bab6f)' ③ 자가검증 git ls-remote 무출력(=성공 방향) 실측. 구 YAML 3건(EOS-49/50/51 이종)이 원격·로컬 양쪽에서 소멸 — 동번호 재진입 경로 차단. 고유분은 EOS-69/70/71로 회수 완료, 브랜치 코드는 이미 main(CUR-16 done·PR #892 a92a887f). 복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0(가역)."
     notes: ""
   - id: G-cur16-branch-push
     title: "kiki 머신 로컬 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 push — 그 브랜치에만 존재하는 EOS-49/50/51 동번호 이종 태스크 YAML 3건의 본문 확보(HARN-38 ① 선결). 실측: GitHub에 브랜치·커밋 3b7bab6f 모두 부재 = 미push, kiki 머신 초기화 시 영구 소실. 실행 명령·6항목 브리핑 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §8 (main 머지 아님·업로드만)"

@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: EOS-69-problem-quarantine-status
+id: EOS-71-problem-quarantine-status
 title: "Problem quarantined 상태 도입 — 오답·결함 문항의 비파괴 격리 (검토_18 §24)"
 track: math-completion
 stage: S2
@@ -23,5 +23,5 @@ paths:
   - "src/backend/alembic/versions/**"
   - src/backend/whymath_backend/api/gating.py
 session: null
-notes: "검토_18(문제 DB 검토) §24 채택. 현재 상태값은 pending/approved/rejected뿐이라 운영 중 정답 오류·복수 정답·모호 문장 판정 문항의 격리 경로가 없음. EOS-44가 lifecycle 설계를 선행하므로 상태값 착지 지점은 그 설계와 정합시킬 것. [재번호 2026-08-31·HARN-38] 원 ID = EOS-49-problem-quarantine-status(kiki 머신 브랜치 backend/cur-16-...-v2에서 2026-08-26T08:39:47 KST 등재). main의 EOS-49-concept-version-contract가 4일 뒤(2026-08-30T01:11:47 UTC) 같은 번호로 등재되며 충돌 — 미push 브랜치라 어느 가드도 볼 수 없었다. 본문 무변경 이관(제목·acceptance 4항·paths·원 notes 그대로)."
+notes: "검토_18(문제 DB 검토) §24 채택. 현재 상태값은 pending/approved/rejected뿐이라 운영 중 정답 오류·복수 정답·모호 문장 판정 문항의 격리 경로가 없음. EOS-44가 lifecycle 설계를 선행하므로 상태값 착지 지점은 그 설계와 정합시킬 것. [재번호 2026-08-31·HARN-38] 원 ID = EOS-49-problem-quarantine-status(kiki 머신 브랜치 backend/cur-16-...-v2에서 2026-08-26T08:39:47 KST 등재). main의 EOS-49-concept-version-contract가 4일 뒤(2026-08-30T01:11:47 UTC) 같은 번호로 등재되며 충돌 — 미push 브랜치라 어느 가드도 볼 수 없었다. 본문 무변경 이관. 번호 채택 경위: 두 세션이 HARN-38을 병렬 수행해 각각 EOS-69(본 세션)·EOS-71(claude/failure-definition-signature-scmzdu)로 이중 등재 → 원격 claim 대장에 먼저 등재된 EOS-71로 통일하고 본 세션이 EOS-69를 철회했다(같은 full ID면 양 브랜치가 머지돼도 번호 충돌이 아니다 — HARN-10 '같은 full ID 재등재는 충돌 아님' 규칙 활용). 구 YAML은 2026-08-31 Kiki가 브랜치를 삭제해 소멸(복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0)."
 updated: 2026-08-31
