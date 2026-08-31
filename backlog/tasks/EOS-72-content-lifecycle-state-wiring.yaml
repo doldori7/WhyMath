@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -15,10 +15,15 @@ acceptance:
   - "l3/dsl/models.py ContentLifecycleState(idea→…→deprecated 11단계, 현재 사용처 0건)를 EOS-44 lifecycle 설계와 정합시켜 ①실 서빙 게이트(review_status·is_published)로의 배선 ②폐기·삭제 둘 중 하나를 결정"
   - "배선 선택 시: DSL 생성→검증→검수→출판 경로가 상태 전이를 실제로 거치고, 게이트 우회가 구조적으로 불가함을 테스트로 동결"
   - "폐기 선택 시: 선언 삭제 + review_status 단일 진실원천임을 명시하는 회귀 테스트 — 이중 상태머신 재발 방지"
-artifacts: []
+artifacts:
+  - "PR #935 (https://github.com/doldori7/WhyMath/pull/935) — ContentLifecycleState 삭제(l3/dsl/models.py·__init__.py) + tests/backend/l3/dsl/test_lifecycle_single_source.py 12건 + 03d §9.2 부기"
+  - "판정: 폐기(acceptance ① 둘 중). 근거 — 소비처 0건(참조 4건 전부 자기참조) · EOS-44(#877)가 DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED 6단계를 정본으로 확정(배선 시 이중 상태머신) · 노출 판정 정본 ReviewStatus + is_review_status_cleared는 이미 l6/_shared.is_review_cleared로 배선됨 · 11단계는 축 혼재(parsed/validated/verified=컴파일러 단계, used/analyzed/improved=학습 이벤트)"
+  - "acceptance ③ 동결: 옛 심볼 부재만이 아니라 l3/dsl 전체(rglob)에서 출판 거버넌스 어휘를 가진 Enum을 금지 — 개명 재도입·서브패키지 이동 양쪽을 잡는다. 결함 주입 4종 전부 red 후 복원: 옛 이름 되살림 / PublishState 개명 / 중첩 서브패키지 PublicationState / 정본 문서의 PUBLISHED→DRAFT 금지 삭제"
+  - "리뷰 P2 2건 반영(b8fe4f22): ①글로브 비재귀 → rglob(지적 시점 실제로 가드 무력) ②is_published가 ReviewStatus를 소비한다는 서술 오류 정정(실측: 참조 3건 전부 선언·읽는 코드 0건). 파생 발견은 ADMIN-12로 분리 등재"
+  - "검증: ruff exit 0 · black --check exit 0 · mypy --strict l3/dsl exit 0 · pytest tests/backend/l3/dsl tests/infra 460 passed · backlog validate green"
 paths:
   - src/backend/whymath_backend/l3/dsl/models.py
   - "src/backend/whymath_backend/l3/dsl/**"
-session: claude/git-unshallow-repo-crr6x5
+session: null
 notes: "[판정 2026-08-31 · 폐기] acceptance ①의 둘 중 폐기를 택했다. 근거 4건: ①소비처 0건 — 저장소 전체 참조 4건이 전부 자기참조(정의·models.__all__·__init__ import·__all__). ②정본 충돌 — EOS-44(#877 머지·설계 확정)가 DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED 6단계를 정본으로 확정했고 PUBLISHED→DRAFT 금지를 명문화했다. 11단계를 배선하면 같은 대상에 상태 머신이 둘 생긴다 — 단계 수도 이름도 전이도 다르다. acceptance ③이 막으려는 이중 상태머신 그 자체다. ③노출 판정의 정본은 이미 배선돼 있다 — ReviewStatus(pending/approved/rejected) + is_review_status_cleared(approved만 True·fail-closed·CONT-01 값 수준 단일 권위)를 l6/_shared.is_review_cleared와 problem.is_published가 소비한다. ④축 혼재 — 11단계 중 parsed/validated/verified는 결정론 컴파일러의 처리 단계(함수 호출 순서가 이미 표현)이고 used/analyzed/improved는 학습 이벤트·개선 루프이지 노출 판정이 아니다. [동결] tests/backend/l3/dsl/test_lifecycle_single_source.py 12건 — 옛 심볼 부재만이 아니라 l3/dsl에서 *출판 거버넌스 어휘를 가진 Enum*을 금지해 이름을 바꾼 재도입도 잡는다. 결함 주입 3종 전부 red(옛 이름 되살림 / PublishState로 개명 되살림 / 정본 문서의 전이 규칙 삭제), 복원 바이트 동일. [문서] 03d §9.2 원 도식은 파이프라인 서사로 유효해 남기고 부기로 정본 표를 병기했다. 검토_18 §23 채택. 문서의 generated→schema_validated→…→published 상태머신 제안과 정확히 겹치는 미완 조각 — enum은 export만 되고 소비처 0건(2026-08-25 실측). EOS-44 설계 문서에서 lifecycle 정본이 정해진 뒤 착수. [재번호 2026-08-31·HARN-38] 원 ID = EOS-51-content-lifecycle-state-wiring(kiki 머신 브랜치에서 2026-08-26T08:39:56 KST 등재). main의 EOS-51-verification-design-freeze가 4일 뒤(2026-08-30T06:37:55 UTC) 같은 번호로 등재되며 충돌. 본문 무변경 이관. 번호 채택 경위: 병렬 이중 등재(본 세션 EOS-70 / claude/failure-definition-signature-scmzdu EOS-72)를 원격 대장 선등재분 EOS-72로 통일하고 EOS-70을 철회. 재대조 실측(2026-08-31): l3/dsl에 라우터·프로바이더 import 0건 — 이 계층은 결정론 컴파일러라 LLM 호출이 없다는 사실이 ①의 배선/폐기 판단 재료. 구 YAML은 2026-08-31 브랜치 삭제로 소멸."
 updated: 2026-08-31

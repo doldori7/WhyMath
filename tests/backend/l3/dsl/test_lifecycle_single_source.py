@@ -19,7 +19,8 @@
   ① 그 심볼이 되살아나지 않는다(정의·재export 둘 다).
   ② **일반화 가드** — `l3/dsl` 어디에도 *출판 거버넌스 어휘*를 멤버로 갖는 Enum이 없다.
      ①만으로는 이름만 바꿔 되살리면 통과한다. 재발은 대개 같은 이름으로 오지 않는다.
-  ③ 정본이 실제로 그 자리에 있다 — `ReviewStatus` 3값 + fail-closed 판정.
+  ③ 정본이 실제로 그 자리에 있다 — `ReviewStatus` 기본 3값 보존 + **approved만 게이트를 연다**
+     (값 집합을 상등으로 고정하지 않는다: EOS-71의 `quarantined` 추가가 그 과다 명세를 실증했다).
   ④ 폐기 판단의 전제(EOS-44 §7 상태 머신)가 문서에 살아 있다. 그 전제가 바뀌면 이 결정도
      재검토 대상이므로, 전제가 사라지는 것을 침묵으로 넘기지 않는다.
 
@@ -133,8 +134,26 @@ def test_no_publication_governance_enum_in_dsl_package() -> None:
 # ===========================================================================
 
 
-def test_review_status_is_the_single_source() -> None:
-    assert {s.value for s in ReviewStatus} == {"pending", "approved", "rejected"}
+def test_review_status_keeps_its_baseline_values() -> None:
+    """세 기본값은 사라지지 않는다 — 게이트가 그 위에 서 있다.
+
+    **집합 상등으로 고정하지 않는다.** 초판은 `== {pending, approved, rejected}`였는데, EOS-71이
+    결함 문항 비파괴 격리를 위해 `quarantined`를 정당하게 추가하자 곧바로 red가 됐다(#931 머지에서
+    실측). 값의 *개수*는 이 테스트가 지킬 대상이 아니다 — 지켜야 할 것은 아래 게이트 계약이다.
+    과다 명세는 정당한 확장을 막고, 결국 테스트를 약화시키라는 압력이 된다.
+    """
+    assert {"pending", "approved", "rejected"} <= {s.value for s in ReviewStatus}
+
+
+def test_only_approved_opens_the_gate_for_every_status() -> None:
+    """★ 진짜 계약 — `approved` 하나만 노출을 연다. *현재와 미래의 모든 값*에 대해.
+
+    새 상태가 추가될 때 그것이 게이트를 여는지는 이 테스트가 자동으로 판정한다. 값을 열거해
+    고정하는 대신 enum 전체를 순회하므로, `quarantined` 같은 후속 추가가 실수로 노출을 여는
+    경우를 사람이 기억하지 않아도 잡는다(fail-closed 유지).
+    """
+    opened = {s.value for s in ReviewStatus if is_review_status_cleared(s)}
+    assert opened == {"approved"}, f"approved 외의 상태가 노출을 엽니다: {sorted(opened)}"
 
 
 @pytest.mark.parametrize(
