@@ -252,7 +252,7 @@ features:
     db_model_modules: 0
     internal_imports: 4
     test_files: 2
-    test_functions: 203
+    test_functions: 206
     matrix:
       A_subject: 0
       B_db: 0
