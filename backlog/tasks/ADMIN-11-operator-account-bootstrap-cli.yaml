@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ADMIN-11-operator-account-bootstrap-cli
+title: "운영자 계정 부트스트랩 ops CLI — user_profile 0행이라 좌석을 줄 대상이 없다"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: in_progress
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — whymath-pg(5433) user_profile 0행이고 UserProfile 생성 경로가 api/auth.py resolve_user(OAuth 콜백) 단 하나임을 재확인한다. 2026-08-31 G-operator-seat-first-grant 4단계 E에서 발견 — role_grant_cli list가 exit 0에 {\"users\":[],\"total\":0}을 냈다(CLI 정상·대상 부재)."
+  - "② ops CLI 신설 — 이메일로 UserProfile 1행을 멱등 생성한다. email_hash는 api/auth.py의 email_hash를 그대로 재사용해야 한다(순수 sha256·비밀값 없음). 그래야 나중에 같은 이메일로 실제 OAuth 로그인할 때 resolve_user가 같은 행을 찾아 좌석이 유지된다 — 이 재사용이 이 태스크의 핵심 계약이다. 값을 복제하면 안 된다."
+  - "③ 권한은 만들지 않는다 — 생성되는 계정의 role은 기본값(student)이다. 권한 부여는 기존 role_grant_cli grant가 단독 담당하고 그쪽이 privacy_audit.role_change를 남긴다. 이 CLI가 role을 직접 쓰면 감사 경로가 둘로 갈라진다."
+  - "④ 멱등 — 같은 이메일로 두 번 돌려도 계정이 2개가 되지 않고 기존 user_id를 그대로 돌려준다(created=false). 재실행 안전은 운영 도구의 최소 요건이다."
+  - "⑤ 스키마 프리플라이트 — 실행 전에 필요한 컬럼(user_profile.email_hash·persona_primary) 실재를 직접 확인하고, 없으면 트레이스백이 아니라 한 줄 행동 지시로 거부한다(role_grant_cli 2026-08-11 소음 실패 선례 승계). 판정은 버전 테이블이 아니라 컬럼 실물로 한다."
+  - "⑥ 배선 실재성 — declared_unwired_audit의 _MANIFEST에 이 모듈을 등재한다(ops/*.py 중 module-level main을 자동 수집하므로 미등재 시 AUDIT exit 1). 등재 전 exit 1 → 등재 후 exit 0 양방향 실측."
+  - "⑦ 테스트 — 합성 함수 주입으로 CLI 배선(인자 파싱·거부 경로·JSON stdout·종료 코드·멱등)을 hermetic 검증한다(role_grant_cli 컨벤션). 실 DB 왕복은 integration 마크."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/ops/account_bootstrap_cli.py
+  - src/backend/whymath_backend/ops/declared_unwired_audit.py
+  - tests/backend/ops/test_account_bootstrap_cli.py
+session: claude/git-unshallow-repo-crr6x5
+notes: "G-operator-seat-first-grant 4단계 E 차단 해소용. Kiki 결정(2026-08-31): 좌석은 Kiki 실계정 이메일에 붙이고, 계정 생성은 원시 SQL이 아니라 ops CLI로 한다. 데모 인증 경로(고정 신원 demo-student@whymath.example)는 '데모 인증이 켜진 서버에 닿는 누구나'가 좌석 주인이 되므로 배제."
+updated: 2026-08-31

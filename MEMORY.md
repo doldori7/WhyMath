@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (운영·게이트): **whymath-pg 스키마 드리프트 해소 + 좌석 발급 경로 완성 — `G-operator-seat-first-grant` 3·4단계 실행 + `ADMIN-11` 신설** (claude 설계·예행, Kiki 실행)
+
+- **왜**: 게이트가 20일 정지해 있었다. whymath-pg의 `alembic_version`이 이 저장소 체인에 **없는** `d6e7f8a9b0c1`이라 `alembic current`·`upgrade head`가 둘 다 exit 255로 죽었고(2026-08-11 실측), 그래서 `user_profile.role`이 없어 콘텐츠 CUD 6라우터가 전건 403인 상태가 고착됐다. "봉인 정상"과 "아무도 못 씀"이 같은 값이었다.
+- **측정 도구 신설** — `scripts/ops/probe_prod_schema_revision.sql`(읽기 전용). 판정을 **버전 테이블(간접 신호)이 아니라 스키마 실물(직접 신호)**에서 낸다: 리비전별 판별자 26행 + 판정 3치(`stamp_target`·`pending_count`·`present_after_gap`). 기존 3단계 설계(질의 2개)는 08-11 이후 체인이 20건 늘어 **이미 변별력을 잃은 상태**였다. `tests/infra/test_prod_schema_probe.py` 16건이 프로브를 체인에 동결한다 — 마이그레이션이 늘었는데 프로브를 갱신하지 않으면 CI red(갱신 없이 두면 `pending 0`이라는 *틀린 통과*를 낸다).
+- **실측(Kiki, 2026-08-31)**: `stamp_target = a9b8c7d6e5f4` / `pending 22` / `present_after_gap 0`. 이후 A 백업 → B `stamp --purge` → C `upgrade head`(22건) → D 프로브 재실행 전부 exit 0, **head `d4a71c0f9b32` 도달 · pending 0**. `OPS-39`가 관측하려던 드리프트가 실제로 닫혔다(관측 장치 자체는 여전히 `OPS-39` 범위).
+- **★ 런북 결함 2건을 *예행연습*이 잡았다 — 코드 리뷰도 테스트도 아니었다**:
+  1. **`alembic stamp <rev>`는 이 DB에서 반드시 실패한다.** stamp도 `current`와 같은 이유로 *현재값을 먼저 해석*하려 들어 `Can't locate revision 'd6e7f8a9b0c1'`으로 exit 255가 난다. 로컬 PG16에 같은 상태를 만들어 실측했고 `--purge`(버전 테이블을 비우고 찍기)만 exit 0이었다. **기존 4단계 예고대로 갔으면 08-11 1차 실행과 똑같은 실패를 반복했을 것이다.**
+  2. **`user_profile`이 0행이었다.** 게이트 노트의 "user_profile 조회로 user_id를 고른다"는 *계정이 존재한다*는 미확인 전제였고 틀렸다. 저장소에서 `UserProfile`을 만드는 경로는 `api/auth.py`의 `resolve_user` 하나뿐이고 OAuth 콜백에서만 불린다 — provider를 붙이기 전에는 계정이 존재할 수 없다. `role_grant_cli`는 정상이었다(`list`가 exit 0 + `total: 0`).
+- **Kiki 결정**: ① 좌석은 **실계정 이메일**에 붙인다(데모 인증의 고정 신원 `demo-student@whymath.example`은 *데모 인증이 켜진 서버에 닿는 누구나*가 좌석 주인이 되므로 배제) ② 계정 생성은 원시 SQL이 아니라 **전용 ops CLI**로 한다.
+- **`ADMIN-11` — `ops/account_bootstrap_cli.py`**: 이메일로 `UserProfile` 1행을 멱등 생성. **핵심 계약 = `api/auth.py`의 `email_hash` 재사용**(비밀값 없는 순수 sha256이라 결정론적) — 그래야 장차 같은 이메일로 실제 로그인할 때 `resolve_user`가 같은 행을 찾아 좌석이 유지된다. 값을 복제하면 두 경로가 조용히 갈라진다. **권한은 만들지 않는다**(role 기본값 `student`) — `content_admin` 부여는 `role_grant_cli grant`가 단독 담당하고 그쪽이 `privacy_audit.role_change`를 남긴다. 이 CLI가 role을 쓰면 감사 경로가 둘로 갈라진다. `declared_unwired_audit` 등재 양방향 실측(미등재 exit 1 → 등재 exit 0).
+- **예행연습이 잡은 세 번째 결함(자기 코드)**: 1회차 출력만 `"role": null`이었다 — `role`은 이 코드가 아니라 DB `server_default`가 채우는데, 커밋 전 ORM 객체는 그 값을 모른다(2회차는 조회 경로라 `student`). **같은 상태를 회차에 따라 다른 값으로 보고하는 출력**이라 커밋 후 `refresh`를 명시했다.
+- **일반 교훈(등재)**: **런북은 예행연습을 통과하기 전까지 가설이다.** 이 세션에서 실행 전에 잡힌 결함이 3건이고, 그중 2건은 *실행하면 반드시* 실패하는 것이었다. 기존 규칙 "검증 없는 실행 안내 금지"가 "그 명령이 산출물을 내는 코드 경로인지 저장소에서 확인"을 요구한다면, 이번 사례는 그 위 단계 — **가능하면 같은 상태를 재현해 명령 자체를 돌려 본다**(로컬 PG16 재현은 30분이 안 걸렸고, Kiki 머신 실패 1회의 왕복보다 짧다).
+
 ### 2026-08-31 (도구·가시화): **작업 보드 도입 — backlog 457건 전수 칸반 + 게이트 상세 열람 (`HARN-40` #921 · `HARN-41` #923)** (Kiki "한 눈에 일목요연하게 보는 보드" 요청, claude 구현)
 
 - **왜**: `status`·`brief`는 "next 3건 + 게이트 요약"이라 **전수 조망이 구조적으로 불가능**했다. "무엇을 했고·무엇이 돌아가는 중이고·무엇이 예정인가"는 요약이 아니라 전수 투영이라야 답이 된다. 산출 = `scripts/harness/board.py` → 자기완결 HTML 1파일(외부 CDN·폰트·서버 요청 0 — 오프라인에서 열린다). 정본 문서 = `docs/standards/build_harness.md` §4b.
