@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - scripts/harness/backlog.py
   - tests/harness/test_track_amend.py
-session: null
+session: claude/review-status-differences-jw5m4a
 notes: "출처: 2026-08-31 Kiki 'S1-16' 착수 요청이 track_gate로 거부되며 발견. 거부의 우회 금지 절차 ③(CLI 경로 자체가 없는 설계 공백 → 태스크 등재·HARN-06 선례)에 따른 등재이며 대장 손편집은 하지 않았다. HARN-24와 같은 실수 계열(정정이 대장에 도달하지 못함)의 track 축 — 다만 피해가 더 크다: acceptance 오류는 잘못 집행되지만 track 오류는 아예 착수가 불가능하다. S1-16의 구현 자체는 미머지 PR #846(브랜치 s1-17-phase-b-math-extension)에 실재한다 — 1커밋·3파일 +359/-1, 분기 이후 main 측 변경은 problem.py 1건(#931 격리 상태)뿐이라 3-way 병합 충돌 1건. 회수는 저비용이나 이 게이트가 풀려야 착수 가능. 번호: HARN-47 요청이 원격 선점(next-task-progress-2p549h)으로 실거부돼 CLI 제안 49 사용."
 updated: 2026-08-31
