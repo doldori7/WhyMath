@@ -339,7 +339,7 @@
 
 ### 2026-08-31 (구현·EOS-60): **골든 벤치마크 셋 + QA 엔진 혼동행렬 — 판정기의 FN율을 처음으로 잰다(N8 갭 해소)** (claude 구현)
 - **문제**: `qa_pipeline`이 9축을 조립해 PASS/FAIL을 내지만 **자기 FN율을 모른다**. EOS-51 §6 내용 KPI 6종 중 4종이 골든 라벨에 의존하는데 저장소 전수 grep 0건이었다(N8 — `eos_validation_n1_n10_gap_review_2026-08-30.md` §3.7). G2(10/25)의 "자동검증 ≥70%"는 자동검증이 맞는지 모르면 무의미한 숫자다
-- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 65건
+- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 73건
 - **별도 라벨링 캠페인 0**: 골든은 EOS-54 검수 이벤트의 `verdict`·`failure_code`에서 승격한다(검수 185 CU 예산의 부산물 — 추가 인간 시간 ≈ 0). 앵커 6 × 30~35 ≈ 200건 목표
 - **as-found fail-closed(#911 codex P1 반영)**: `rejected`는 그대로 승격, `approved`는 ⓐ 검수 전 스냅샷 또는 ⓑ EOS-62 edit-aware verdict(+`--edit-aware-since` 경계) 없이는 **제외 + 건수 명시**. 손질 후 승인을 clean으로 승격하면 FN율이 과소평가되어 골든이 자기 목적을 훼손한다. ⓑ 착지 여부는 상수가 아니라 `ReviewVerdict` 어휘 **실측**(`edit_aware_verdict_available`) — EOS-62 착지 시 자동 해금, 착지 전에는 손대지 않아도 fail-closed 유지
 - **과적합 방지(S2-11 골든 적용)**: 골든에 `golden_version`·`rotation`·`frozen_at`·`digest`(판정 축만의 sha256 — 라벨 손편집은 로드 시 터짐) 동결 + 평가 원장으로 "같은 골든 × 다른 엔진 리비전" 재채점을 exit 1 차단(같은 리비전 재실행은 재현성 확인이므로 허용). 회전 해시는 `reviewer_sample_package.rotation_key`를 공개 승격해 **재사용**(재구현 0)
