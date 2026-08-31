@@ -909,14 +909,17 @@ class TestPublicProjectionCombinesBothExclusionAxes:
 
 
 class TestMathExtensionSyncIsFieldLevel:
-    """legacy ↔ `extensions.math` 동기화가 **필드 단위**인지 (S1-16 회귀 봉인).
+    """legacy ↔ `extensions.math` 동기화 계약 동결 (S1-16 회귀 봉인).
 
-    처음 이식본은 `extensions.math`가 있으면 legacy 5필드를 통째로 덮어썼다.
-    그러면 legacy 축에만 값을 쓰는 기존 생산자의 값이 *조용히* 사라진다 —
+    두 번의 침묵 손실을 막는다. ①처음 이식본은 `extensions.math`가 있으면 legacy
+    5필드를 통째로 덮어써, legacy 축에만 쓰는 생산자의 값이 사라졌다 —
     `l1.problem_bank.signature_tagger.apply_signatures`가 정확히 그렇다
-    (`model_copy(update=...)`로 legacy만 갱신·재검증 없음). JSONL 왕복에서
-    다시 검증될 때 빈 `extensions.math.signature_patterns`가 태깅 결과를
-    `[]`로 덮어 밴드 테스트가 깨졌다. 그 침묵 손실을 여기서 동결한다.
+    (`model_copy(update=...)`로 legacy만 갱신·재검증 없음). ②그것을 값 비교
+    ("기본값이 아닌 쪽이 이김")로 고치자 **명시적 비우기를 표현할 수 없게** 됐다 —
+    재태깅으로 `[]`가 되면 낡은 extension 값이 되살아난다(PR #941 Codex P2).
+
+    그래서 계약은 값이 아니라 **입력이 무엇을 말했나**(`model_fields_set`)로
+    판정한다: 명시된 legacy가 이기고, extension은 언급되지 않은 필드만 채운다.
     """
 
     def _base(self, **kwargs: object) -> Problem:
@@ -944,16 +947,35 @@ class TestMathExtensionSyncIsFieldLevel:
         problem = self._base(extensions={"math": {"requires_graph_sketch": True}})
         assert problem.requires_graph_sketch is True
 
-    def test_extension_wins_when_both_sides_have_values(self) -> None:
-        """둘 다 채웠으면 `extensions.math`가 정본 — 규칙이 결정적이어야 한다."""
+    def test_explicit_legacy_wins_over_extension(self) -> None:
+        """둘 다 명시했으면 legacy가 정본 — 영속 축이 legacy 컬럼이라서다."""
         problem = self._base(
-            requires_graph_sketch=False,
             sketch_step_count=3,
             extensions={"math": {"sketch_step_count": 6}},
         )
-        assert problem.sketch_step_count == 6
+        assert problem.sketch_step_count == 3
         assert problem.extensions.math is not None
-        assert problem.extensions.math.sketch_step_count == 6
+        assert problem.extensions.math.sketch_step_count == 3
+
+    def test_explicit_clear_is_not_resurrected(self) -> None:
+        """명시적 비우기가 낡은 extension 값으로 되살아나면 안 된다 (Codex P2).
+
+        재태깅이 `[]`를 유도하거나 개형 플래그를 내리는 경우가 실제 경로다 —
+        값 비교 규칙은 그것을 "안 채운 것"으로 읽어 옛 값을 복원했다.
+        """
+        stale = self._base(
+            signature_patterns=["CONDITION_LIST"],
+            requires_graph_sketch=True,
+        )
+        cleared = stale.model_copy(
+            update={"signature_patterns": [], "requires_graph_sketch": False}
+        )
+        revalidated = Problem.model_validate(cleared.model_dump(mode="json"))
+        assert revalidated.signature_patterns == []
+        assert revalidated.requires_graph_sketch is False
+        assert revalidated.extensions.math is not None
+        assert revalidated.extensions.math.signature_patterns == []
+        assert revalidated.extensions.math.requires_graph_sketch is False
 
     def test_round_trip_preserves_legacy_only_write(self) -> None:
         """직렬화 왕복에서도 살아남아야 한다 — 실제 회귀가 난 경로다."""

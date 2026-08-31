@@ -217,16 +217,16 @@ class MathExtension(BaseModel):
     )
 
 
-#: `MathExtension` 각 필드의 기본값 — legacy top-level 필드와의 양방향 동기화에서
-#: "어느 쪽이 실제로 값을 채웠는가"를 판정하는 유일 기준(`Problem._sync_math_extensions`).
-#: 두 축이 같은 표를 보게 묶어 두려고 상수로 뽑았다 — 필드 추가 시 여기만 고치면 된다.
-MATH_EXTENSION_DEFAULTS: dict[str, Any] = {
-    "answer_transform": None,
-    "answer_constraint": None,
-    "signature_patterns": [],
-    "requires_graph_sketch": False,
-    "sketch_step_count": None,
-}
+#: legacy top-level과 `extensions.math`가 공유하는 필드 이름 — 두 축의 동기화
+#: (`Problem._sync_math_extensions`)가 도는 유일한 목록. 두 축이 같은 표를 보게 하려고
+#: 상수로 뽑았다 — 필드를 늘리면 여기만 고치면 된다.
+MATH_EXTENSION_FIELDS: tuple[str, ...] = (
+    "answer_transform",
+    "answer_constraint",
+    "signature_patterns",
+    "requires_graph_sketch",
+    "sketch_step_count",
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1004,40 +1004,45 @@ class Problem(PublicProblem):
         `db/models/problem.py`의 `from_schema`/`to_schema`는 여전히 legacy
         컬럼만 사용하며, 이 validator가 `extensions.math`를 채우고 비운다.
 
-        동기화 규칙(필드 단위):
-          - `extensions`가 None이거나 `extensions.math`가 None이면: legacy 필드로
-            `extensions.math`를 생성.
-          - 둘 다 있으면 **필드마다** 기본값이 아닌 쪽이 이긴다. 양쪽 다 값을
-            채웠으면 `extensions.math`가 정본이다.
+        동기화 규칙 — **legacy top-level이 정본, `extensions.math`는 그 투영**:
+          - 입력에 *명시된* legacy 필드가 언제나 이긴다.
+          - `extensions.math`는 **입력이 언급하지 않은** legacy 필드만 끌어올린다
+            (새 축만 채우는 호출자를 위한 하위호환 방향).
+          - 그 결과로 `extensions.math`를 항상 재생성한다 — 두 축이 다른 값을
+            들고 있는 상태 자체가 생기지 않는다.
 
-        *왜 무조건 `extensions.math` 우선이 아닌가*: 그러면 legacy 축에만 값을
-        쓰는 기존 생산자의 값이 조용히 사라진다. 실제로 `l1.problem_bank`의
-        시그니처 태거는 `model_copy(update={"signature_patterns": ...})`로 legacy
-        축만 갱신하고(재검증 없음) JSONL 왕복에서 다시 검증되는데, 그때
-        `extensions.math.signature_patterns`는 빈 배열이라 태깅 결과가 통째로
-        `[]`로 덮였다. 침묵 손실이므로 필드 단위 판정으로 바꾼다.
+        *왜 값 비교(기본값이 아닌 쪽이 이김)가 아닌가*: 값만 보면 **명시적 비우기를
+        표현할 수 없다**. 재태깅으로 `signature_patterns`가 `[]`가 되거나
+        `requires_graph_sketch`를 `False`로 되돌리면, 값 비교는 그것을 "안 채운 것"으로
+        읽고 낡은 extension 값을 되살린다. 어느 방향이든 결과는 침묵 손실이다 —
+        실제로 반대 방향(legacy에만 쓰는 `l1.problem_bank`의 시그니처 태거가
+        `model_copy(update=...)`로 갱신 → JSONL 왕복 재검증에서 빈 extension이 태깅을
+        `[]`로 덮음)이 먼저 터졌고, 값 비교로 고치자 이 방향이 남았다. 그래서
+        "무엇이 채워졌나"(값)가 아니라 **"입력이 무엇을 말했나"**(`model_fields_set`)로
+        판정한다. 전체 덤프의 왕복에서는 두 축이 모두 명시되므로 정본인 legacy가
+        이기고, 그 시점의 legacy는 직렬화 직전 이 validator가 맞춰 둔 값이다.
+
+        DB 왕복에서도 정합한다 — `db/models/problem.py`는 legacy 컬럼만 쓰므로
+        `to_schema`는 legacy만 주고 `extensions.math`는 여기서 재생성된다.
         """
-        legacy: dict[str, Any] = {name: getattr(self, name) for name in MATH_EXTENSION_DEFAULTS}
+        provided = self.model_fields_set
+        legacy: dict[str, Any] = {name: getattr(self, name) for name in MATH_EXTENSION_FIELDS}
 
-        if self.extensions is None or self.extensions.math is None:
-            self.extensions = ProblemExtensions(math=MathExtension(**legacy))
-            return self
+        ext = self.extensions.math if self.extensions is not None else None
+        if ext is not None:
+            for name in MATH_EXTENSION_FIELDS:
+                if name not in provided:
+                    legacy[name] = getattr(ext, name)
 
-        ext = self.extensions.math
-        merged: dict[str, Any] = {}
-        for name, default in MATH_EXTENSION_DEFAULTS.items():
-            ext_value = getattr(ext, name)
-            legacy_value = legacy[name]
-            # extension이 기본값이고 legacy가 값을 채웠으면 legacy가 이긴다.
-            # 그 외(둘 다 기본·extension만 채움·둘 다 채움)는 extension이 정본.
-            if ext_value == default and legacy_value != default:
-                merged[name] = legacy_value
-            else:
-                merged[name] = ext_value
-
-        self.extensions = self.extensions.model_copy(update={"math": MathExtension(**merged)})
-        for name, value in merged.items():
+        for name, value in legacy.items():
             setattr(self, name, value)
+
+        math = MathExtension(**legacy)
+        self.extensions = (
+            ProblemExtensions(math=math)
+            if self.extensions is None
+            else self.extensions.model_copy(update={"math": math})
+        )
         return self
 
 
