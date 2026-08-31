@@ -350,3 +350,70 @@ class TestUnmergedDone:
         root = store.find_repo_root()
         backlog, _ = store.load_backlog(root)
         assert board.scan_unmerged_done(root, backlog, skip=True) == ({}, "skipped")
+
+
+class TestGateDetail:
+    """게이트 상세 — "무엇을 하면 풀리는가"까지 화면이 답해야 한다."""
+
+    def _gate(self, payload: dict, gate_id: str) -> dict:
+        return next(g for g in payload["gates"] if g["id"] == gate_id)
+
+    def test_detail_carries_the_full_note_and_meta(self):
+        """test_상세는_노트_원문과_메타를_그대로_싣는다"""
+        backlog = _backlog()
+        backlog.gates["G-key"].notes = "여러 줄\n런북 본문\n\n두 번째 문단"
+        payload = board.build_board(backlog, [], TODAY)
+        gate = self._gate(payload, "G-key")
+        assert gate["notes"] == "여러 줄\n런북 본문\n\n두 번째 문단"  # 발췌·요약하지 않는다
+        assert gate["kind"] == "human"
+        assert gate["assignee"] == "kiki"
+        assert gate["remind_after_days"] == 7
+        assert gate["days"] == 20 and gate["overdue"] is True
+
+    def test_blocking_tasks_are_listed(self):
+        """test_이_게이트를_건_태스크가_상세에_나온다"""
+        payload = board.build_board(_backlog(), [], TODAY)
+        gate = self._gate(payload, "G-key")
+        assert [t["id"] for t in gate["blocking_tasks"]] == ["S2-03-gate"]
+
+    def test_finished_tasks_are_not_counted_as_blocked(self):
+        """test_종결된_태스크는_막힌_것으로_세지_않는다"""
+        backlog = _backlog()
+        backlog.tasks["S2-03-gate"].status = "cancelled"
+        payload = board.build_board(backlog, [], TODAY)
+        assert self._gate(payload, "G-key")["blocking_tasks"] == []
+
+    def test_track_entry_gate_locks_are_visible(self):
+        """test_트랙_진입_게이트_잠금이_보인다 (태스크 쪽엔 표시가 남지 않는 축)"""
+        payload = board.build_board(_backlog(), [], TODAY)
+        gate = self._gate(payload, "G-e-axis")
+        assert gate["blocking_tasks"] == []  # 어떤 태스크도 requires_gates로 걸지 않았다
+        assert gate["blocking_tracks"] == [{"track": "e-axis", "title": "확장", "pending": 1}]
+
+    def test_resolved_gates_are_available_with_evidence(self):
+        """test_해소된_게이트도_근거와_함께_열람_가능하다"""
+        backlog = _backlog()
+        backlog.gates["G-key"].status = "cleared"
+        backlog.gates["G-key"].evidence = "PR #921"
+        payload = board.build_board(backlog, [], TODAY)
+        gate = self._gate(payload, "G-key")
+        assert gate["status"] == "cleared"
+        assert gate["evidence"] == "PR #921"
+        assert gate["overdue"] is False  # 해소된 게이트는 경과일로 붉게 칠하지 않는다
+
+    def test_pending_gates_sort_before_resolved(self):
+        """test_대기_게이트가_해소된_것보다_앞선다"""
+        backlog = _backlog()
+        backlog.gates["G-key"].status = "waived"
+        payload = board.build_board(backlog, [], TODAY)
+        statuses = [g["status"] for g in payload["gates"]]
+        assert statuses == sorted(statuses, key=lambda s: s != "pending")
+
+    def test_gate_section_is_rendered_from_payload(self):
+        """test_게이트_섹션이_페이로드에서_렌더된다"""
+        backlog = _backlog()
+        backlog.gates["G-key"].notes = "런북 본문"
+        html = board.render_html(board.build_board(backlog, [], TODAY))
+        assert 'id="gates-resolved"' in html  # 해소 그룹 자리
+        assert "function gateBody(" in html  # 펼침 본문 렌더러
+        assert "런북 본문" in html  # 노트가 실제로 페이지에 실린다
