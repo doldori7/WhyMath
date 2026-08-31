@@ -30,6 +30,11 @@ def _run_git(repo: Path, *argv: str) -> str:
     ).stdout.strip()
 
 
+def _all_events_text(repo: Path) -> str:
+    """이벤트 대장 전문 — 레거시 + 세션 샤드 합집합(HARN-46 샤딩 이후의 정본 읽기)."""
+    return "".join(path.read_text(encoding="utf-8") for path in store.event_paths(repo))
+
+
 class TestSeed:
     def test_seed_result_is_validate_green(self, seeded_repo: Path):
         """시딩_결과는_validate_green"""
@@ -178,7 +183,7 @@ class TestGatesAdd:
         assert gate.remind_after_days == 7
         assert gate.requested  # requested 자동 스탬프(YYYY-MM-DD)
         # events.ndjson 감사 로그에 gate_add 이벤트가 남는다 (누가·언제·무엇)
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         assert any(
             json.loads(line).get("action") == "gate_add"
             and json.loads(line).get("id") == "G-new-human-approval"
@@ -705,7 +710,7 @@ class TestReadSideFallback:
         return calls
 
     def _events(self, repo: Path) -> list[dict]:
-        raw = (repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        raw = _all_events_text(repo)
         return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
     def test_cas_success_skips_readside_scan(self, bare_remote, monkeypatch, capsys):
@@ -901,7 +906,7 @@ class TestReadSideStaleHandling:
         )
 
     def _events(self, repo: Path) -> list[dict]:
-        raw = (repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        raw = _all_events_text(repo)
         return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
     def _setup(
@@ -1130,7 +1135,7 @@ class TestStartOverlapPreflight:
         err = capsys.readouterr().err
         assert "파일 범위 겹침" in err
         # policy_warn 이벤트가 측정용으로 적재된다
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         assert '"action": "policy_warn"' in events
         assert '"rule": "path_overlap"' in events
 
@@ -1553,7 +1558,7 @@ class TestHumanOwnerLifecycle:
         assert backlog.tasks[task_id].status == "done"
         assert "판정 문서 (#77)" in backlog.tasks[task_id].artifacts
         # 이벤트 대장에 as_owner가 남아 claude 기입과 구분된다
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         records = [json.loads(line) for line in events.splitlines() if line.strip()]
         human_events = [
             r for r in records if r.get("id") == task_id and r.get("as_owner") == "kiki"

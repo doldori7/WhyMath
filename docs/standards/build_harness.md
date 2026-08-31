@@ -22,17 +22,28 @@
 ## 2. 단일 진실 원천 — `backlog/`
 
 ```
-backlog/tracks.yaml      트랙 3종 + stage_order (S0~S5 → E1~E6)
-backlog/gates.yaml       사람 게이트 대장 (Kiki 수동 대기 추적)
-backlog/tasks/<id>.yaml  태스크당 1파일 — 병렬 세션 충돌 원천 차단
-backlog/events.ndjson    append-only 감사 로그 (merge=union)
-backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (off|warn|block)
+backlog/tracks.yaml           트랙 3종 + stage_order (S0~S5 → E1~E6)
+backlog/gates.yaml            사람 게이트 대장 (Kiki 수동 대기 추적)
+backlog/tasks/<id>.yaml       태스크당 1파일 — 병렬 세션 충돌 원천 차단
+backlog/events/<actor>.ndjson append-only 감사 로그 — **세션(=브랜치)당 1샤드** (HARN-46)
+backlog/events.ndjson         레거시 단일 대장 — 읽기 전용 역사 (신규 기록 없음)
+backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수준 (off|warn|block)
 ```
+
+> **이벤트 샤딩 경위(HARN-46 · 2026-08-31)**: 원래 단일 `events.ndjson`에 모든 세션이
+> append하고 `merge=union`이 충돌을 흡수한다고 믿었다. 그러나 union은 **로컬 git에서만**
+> 작동하고 **GitHub의 mergeability 판정은 저장소 merge driver를 적용하지 않는다** — 그래서
+> main에 어떤 PR이 착지하든 이 파일을 만진 열린 PR은 전부 충돌(dirty)이 됐다(PR #931이
+> CI green 4회를 확보하고도 머지가 반복 지연된 실측 사고 —
+> `docs/reviews/pr931_merge_block_root_cause_2026-08-31.md`). 대책은 tasks/의
+> 태스크당-1파일과 동형: **세션당 1샤드**로 나눠 두 브랜치가 같은 파일을 동시에 append하는
+> 상황 자체를 없앤다. 소비자는 반드시 `store.event_paths()`(레거시+샤드 합집합)로 읽는다 —
+> 한쪽만 읽으면 무손실이 아니다. 계약 동결 = `tests/harness/test_event_ledger_sharding.py`.
 
 - **태스크 상태는 CLI로만 변경한다**: `python3 scripts/harness/backlog.py <cmd>`.
   직접 편집하면 PostToolUse 훅이 무결성을 검증한다 (깨지면 차단).
 - ROADMAP.md·MEMORY.md는 **서사(왜)** 담당으로 존속 — 수치·순서·다음 작업의 정본은 backlog다.
-- 병렬 세션: 태스크당 1파일 + `session` claim 필드 + events union-merge로
+- 병렬 세션: 태스크당 1파일 + `session` claim 필드 + **이벤트 세션 샤드**로
   "1 세션 = 1 도메인 = 1 브랜치 = 1 태스크"가 파일 수준에서 강제된다
   (`docs/standards/parallel_sessions.md` 연계).
 - **태스크 `paths` 필드 (v1.1)**: 태스크가 만질 파일 범위를 glob으로 선언한다

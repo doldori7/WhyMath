@@ -87,3 +87,30 @@ before: `qual02_audit_before.json`(사전 실측)·재확인 실행으로 동일
 - **신규 코퍼스 생성·재서술 파이프라인 수정** — QUAL-03 소관(`run_corpus_rephrase`의 fail-closed 편입 설계 등).
 - **generated_v0 내부 형식 트윈 4그룹**(extmc/extv 동일 발문) — 동일 코퍼스 내부 사안으로 T2(교차 코퍼스) 확정 목록 밖. 의도된 생성기 밴드 설계(객관식/단답형)인지 발문 차별화가 필요한지는 별도 콘텐츠 판단 대상.
 - **`wm-quad-eq-larger-root`의 review_status=pending·성취기준 태그(`[10공수1-02-02]`) 적정성** — v1 수제 코퍼스 검수 절차 소관.
+
+## 7. 후속 (2026-08-31) — 이제 비파괴 격리 경로가 있다
+
+**이 절은 위 §1~6의 판정 기록을 고치지 않는다**(이력 문서 개작 금지). 당시 판정은 당시 가용한 수단
+안에서 내려진 것이고, 그 수단의 공백이 이후 태스크 `EOS-71-problem-quarantine-status`로 메워졌음을
+상호참조로만 남긴다.
+
+§3이 "레코드 제거"를 택한 1순위 근거는 **비파괴 대안이 작동하지 않는다**는 것이었다 — *"감사 도구는
+`review_status`를 필터하지 않는다 → 마킹만으로는 목록에서 사라지지 않는다."* 여기에는 그보다 더 넓은
+공백이 깔려 있었다: 애초에 `review_status`에 "결함 판정으로 회수됨"을 뜻하는 값 자체가 없었고
+(`pending`/`approved`/`rejected` 3종뿐), 서빙 쪽에서도 `api/problems.py`의 무인증 GET 4종은
+`review_status`를 전혀 보지 않았다.
+
+EOS-71이 그 공백을 닫았다:
+
+- `ReviewStatus.quarantined` 신설 — `rejected`(애초에 승인 못 받음)와 구분되는 **사후 회수** 상태.
+- `problem.quarantine_reason`·`quarantined_at` 컬럼 — 격리 사유·시각 기록 좌석.
+- 공개 카탈로그 GET 4종(단건·목록·steps·relations)의 격리 배제 — 마킹이 실제로 노출을 끊는다.
+- 비파괴 보장: 레코드도, 딸린 `problem_attempt` 학습 기록도 보존하며 학생 이력 조회
+  (`GET /v1/me/ability/history`)는 계속 그 attempt를 보여준다.
+
+계약 정본: **`docs/standards/problem_quarantine_contract.md`**.
+
+향후 같은 유형의 처분(실중복·정답 오류·복수 정답·모호 문장)은 **격리가 기본 수단**이다. 물리 제거를
+택하려면 왜 격리로 불충분한지를 판정 기록에 남긴다. 다만 §3의 근거였던 **감사 도구
+(`harness/problem_duplication_audit.py`)의 `review_status` 미필터**는 EOS-71 범위 밖이라 그대로다 —
+격리 상태값이 생겼으므로 이제 그 필터 추가가 의미를 갖는다(격리 계약 문서 §7 "범위 밖" 참조).

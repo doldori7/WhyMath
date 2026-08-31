@@ -7325,6 +7325,18 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
 - **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
 
+## 2026-08-31: /drive 3루프 — HARN-38(번호 충돌 규명)·EOS-71(결함 문항 비파괴 격리) (#931)
+
+- **HARN-38**: kiki 머신 브랜치 `backend/cur-16-...` 커밋 `3b7bab6f`가 등재한 EOS-49/50/51이 main 동번호와 충돌(동일 유형 **3회차** — ARCH-13·OPS-15 선행). 판정: 2건은 CLI 배정 새 번호(`EOS-71`·`EOS-72`)로 이관, **EOS-50은 main `EOS-55`와 내용 중복이라 재등재하지 않음**(요구 3항 대 `GenerationLog` 실측 대조 — 이중 추적 방지). 부수 실측: 브랜치 커밋 제목이 "G-eos-g0 clear"인데 그 커밋은 `gates.yaml`을 **0건 변경**했다 — 커밋 제목을 근거로 서명 소재를 읽으면 안 된다(서명 정본은 main `ad7862ab`→`d52d9a62`).
+- **사고 대책의 자기 결함 1건(codex P1 수용)**: 3회차 실패를 규명해 놓고 가드 개선을 "개선 후보"로만 남겨 **추적자를 붙이지 않았다**. CLAUDE.md "반복 실수는 재발방지대책 등재 의무 · '다음엔 조심한다'는 대책이 아니다"의 위반. 해소 = 병렬 세션이 이미 등재한 **`HARN-43`**(미push 브랜치·ref 신선도 고지)을 조사 문서 §6이 가리키게 정정 — 새 태스크 추가 등재는 이중 추적이라 하지 않았다.
+- **원인 판정 정정(병렬 조사가 더 강한 증거)**: 내 §5-3은 "낡은 remote-tracking ref"를 *가능한 설명*으로 뒀으나, `claude/harn-38-tyyh3i` 세션이 가드 3종을 실행해 **36브랜치·11,975파일을 훑고도 cur-16을 0건 관측(status 둘 다 ok — fail-open 아님)**을 측정했다. 1차 원인은 **미push 브랜치**(어떤 원격 스캔의 관측 대상도 아님)이고 ref 신선도는 부가 사각이다. 앞선 두 대책(HARN-10·HARN-15)은 *push된 표면*만 넓혔다.
+- **EOS-71**: `ReviewStatus.quarantined` + `problem.quarantine_reason`·`quarantined_at`(alembic `e7c3b9a15f24`). **`rejected`와 합치지 않는다** — "들여보내지 않았다" vs "들여보냈다가 되돌렸다"를 합치면 학생이 이미 풀어 본 결함 문항과 한 번도 나간 적 없는 탈락 문항이 같은 글자가 돼 딸린 attempt의 재해석 여부를 사후에 못 가린다. 착수 실측: L6 6모드·blueprint·기본 CAT은 전부 `approved` **허용목록**이라 새 값을 이미 fail-closed로 배제 — **코드를 더할 곳은 `api/problems.py` 무인증 GET 4종뿐**이었다(격리 문항이 풀이 단계까지 새 나가던 유일한 구멍). 자동 배제는 *공짜로 얻은 것이라 아무도 지키고 있지 않아서* 7경로 전건+양성 대조로 동결했다.
+- **함정 2건(주석·테스트 동결)**: ①SQL 3값 논리 — `!= 'quarantined'`는 `review_status` NULL 행을 통째로 사라지게 한다(실코퍼스에 NULL 실재) → `IS DISTINCT FROM` ②404를 ETag/304 분기보다 **앞에** — 뒤에 두면 `If-None-Match` 클라가 304를 받아 캐시된 결함 문항을 계속 쓴다.
+- **비파괴 원칙**: 레코드·`problem_attempt` 보존, `GET /v1/me/ability/history`는 `review_status`를 **의도적으로 필터하지 않는다** — 이 *미집행*도 집행 지점 표에 명시하고 테스트로 동결(필터를 추가하면 red). 계약 정본 = `docs/standards/problem_quarantine_contract.md`(정본화 §1~3과 집행 지점 §4를 별항 분리).
+- **전체 스위트가 잡은 진짜 누락 1건**: wheel에 `alembic/versions/`가 없어 런타임 가드가 `db/schema_version.py::KNOWN_REVISIONS` 상수를 믿는다 — 마이그레이션만 추가하고 상수를 안 고치면 새 head가 **프로덕션에서 `AHEAD`로 오분류**된다.
+- **CI red 1건(정당한 지적)**: 병합해 들어온 #929의 prod schema 프로브 계약이 신규 리비전을 잡았다("마이그레이션이 늘면 이 테스트가 프로브 갱신을 강제한다 — 갱신 없이 두면 프로브는 'pending 0'이라는 *틀린 통과*를 낸다"). 갱신하지 않았으면 `G-operator-seat-first-grant`의 stamp 판정 재료가 조용히 거짓이 될 경로였다.
+- **머지 경합 관측(운영 교훈)**: `backlog/events.ndjson`은 모든 세션이 append하는 공용 대장이라 **main 착지마다 이 PR이 dirty**가 됐다(라운드 4회). 저장소는 `.gitattributes merge=union`을 걸어 뒀고 로컬 병합은 매번 충돌 0인데, **GitHub의 mergeability 판정은 그 드라이버를 적용하지 않는다**. 이 PR의 CI(~30분)와 main 착지 간격이 비슷해 경합이 반복됐다. 또한 **`blocked`의 실제 원인은 CI도 충돌도 아닌 저장소 룰**("A conversation must be resolved before this pull request can be merged")이었고 — 미해결 codex 스레드 1건 — 이는 `mergeable_state`만 보고는 알 수 없고 **머지 시도의 405 응답 본문에서만** 드러났다.
+- **cross-ref**: PR #931 · `HARN-43`(가드 사각 고지·병렬 세션) · `EOS-72`(ContentLifecycleState 배선/폐기 결정 — 다음 후보) · `docs/standards/problem_quarantine_contract.md` · 감사 도구 `problem_duplication_audit.py`의 `review_status` 미필터는 **여전히 미해소**(2026-08 물리 제거의 직접 근거였던 공백 — 격리 상태값이 생겼으므로 이제 필터 추가가 의미를 갖는다).
 ## 2026-08-31: HARN-38 — EOS-49/50/51 번호 충돌 경위 규명(②③ 완결·① 게이트 대기)
 
 - **결론(가설 기각)**: 번호 가드가 **fail-open으로 무력화된 것이 아니다.** 이번 세션 실측에서 `list_claims`·`scan_remote_task_files` 모두 `status=ok`, `start`도 `원격 claim: ok` — 403·축소 경고 0건. 따라서 acceptance ③이 조건부로 요구한 **HARN-07(fail-open 폴백 미착륙) 교차 기록은 하지 않는다**(허위 교차 기록은 대책의 조준을 흐린다).
@@ -7384,3 +7396,18 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **주목할 점 — 두 세션이 같은 부류 결함을 각자 겪고 각자 규칙화**: #924가 올린 v0.2.5 규칙은 *"다단계 명령 블록에서 자리표시자 대신 셸 변수로 잇는다"*(전체 붙여넣기 실행에서 치환이 안 일어나 자리표시자가 그대로 실행됨)로, 본 세션의 v0.2.7(실행용↔증거 블록 분리)과 **같은 계열**(Kiki 명령 블록 위생)이다. 상호 보완적이라 둘 다 살렸다. **같은 병목을 두 세션이 독립적으로 관측했다는 것 자체가 그 병목이 실재한다는 강한 증거**다.
 - **누적**: 태스크 ID → 게이트 ID → 문서 버전 번호 ×2 = **동종 4회**. 전부 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것. 문서 버전은 가드가 없어 git 충돌이 유일한 방어선이었고, 두 번 다 같은 줄이라 잡혔다 — 운이 두 번 따른 것이지 설계가 아니다(`HARN-43` 범위 근거 보강).
 - **cross-ref**: PR #930·#924·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.7 · HARN-43
+
+## 2026-08-31: HARN-46 — 이벤트 대장 세션 샤딩 (PR #931 · blocked 5라운드 사고 대책)
+
+- **사고**: PR #931이 CI 16잡 green 4회를 확보하고도 머지 5라운드 지연. 라운드별 원인이 전부 달랐다 — ①웹훅 유실(GitHub측) ②③`events.ndjson` 경합 ④정당한 게이트 red(#929 프로브 계약) ⑤저장소 룰 "conversation must be resolved"(미해결 codex 스레드 — **상태 조회로는 안 보이고 머지 시도의 405 본문에만 사유가 있다**). 원인 분해 정본 = `docs/reviews/pr931_merge_block_root_cause_2026-08-31.md`.
+- **구조 원인(②③)**: 모든 세션이 append하는 단일 공용 파일 + **GitHub mergeability는 `.gitattributes merge=union`을 적용하지 않는다** — union이 지켜 준 것은 "로컬에서 해소 가능"까지고 "GitHub이 충돌로 안 본다"는 애초에 보장된 적 없다. main 착지 간격(30~90분)과 PR CI(~30분)가 겹치는 한 경합은 확률이 아니라 구조.
+- **대책(HARN-46)**: `store.append_event` → 세션(=브랜치)당 1샤드 `backlog/events/<actor>.ndjson`(tasks/ 태스크당-1파일 선례 동형 — 충돌을 '발생 불가능'으로). 레거시 파일은 읽기 전용 역사. 소비자는 `store.event_paths()` 합집합 필수. 테스트 13건 + 뮤테이션 3종 red 실측. **잔여 위험(명시)**: `MEMORY.md`가 같은 충돌 계급 — 사람이 읽는 서사 정본이라 개편은 Kiki 결정 대기.
+- **병렬 수렴 관측**: #930(병렬 HARN-38)이 원격 claim 대장에서 본 세션의 선등재 EOS-71/72를 발견, 자기 번호(EOS-69/70)를 철회하고 동일 full ID로 통일 — **선푸시 + 가드가 4회차 번호 충돌을 실제로 막은 사례**. EOS-50=EOS-55 중복 판정도 독립적으로 일치.
+- **cross-ref**: PR #930·#931 · HARN-43/44/45(#930 등재 대책 3건) · `test_event_ledger_sharding.py`
+## 2026-08-31: 동종 5회차 — 같은 충돌 해소를 두 세션이 동시 수행 (git이 5분 차로 차단)
+
+- **경위**: PR #930 머지 후 #931이 대장 3건 충돌 상태가 되어, Kiki 승인을 받아 본 세션이 그 브랜치의 충돌을 해소하고 push했다 → **non-fast-forward 거부**. 확인해 보니 그 브랜치 소유 세션(`claude/failure-definition-signature-scmzdu`)이 그사이 **같은 병합을 스스로 완료**(`b939fbd4`)한 상태였다. force-push하지 않고 철회, 임시 브랜치 삭제, 그쪽 해소를 채택했다.
+- **그쪽 해소 검증(철회 전 실측)**: `EOS-71` done(그쪽 구현 반영) · `EOS-72`/`HARN-38` main과 일치 · #930 산출물 5종(보고서·EOS-73·HARN-43/44/45) 전부 보존 · `CLAUDE.md` v0.2.7 유지 · main과 merge-tree 충돌 0. 온전해서 덮어쓸 이유가 없었다.
+- **누적 5회의 대비가 핵심**: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72). 가드가 **없는** 축(게이트 ID·문서 버전 ×2·중복 작업)에서는 **git 충돌·사람·운이 유일한 방어선**이었다 — 버전 충돌 2회는 두 브랜치가 *같은 줄*을 고쳐서, 이번 건은 *5분 차이*로 잡혔다. 어느 것도 설계된 방어가 아니다.
+- **HARN-43 범위 정정**: acceptance ①의 고지 대상은 '번호'가 아니라 **"내가 지금 하는 일이 다른 세션에 보이지 않는다"는 사실 자체**다. 사례 5건을 태스크 notes에 누적 기록했다.
+- **cross-ref**: PR #930(머지 1387662a)·#931·#924·#928 · HARN-43 notes · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§7-C

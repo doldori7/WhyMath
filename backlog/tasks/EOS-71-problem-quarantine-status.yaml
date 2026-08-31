@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -16,7 +16,8 @@ acceptance:
   - "격리 사유(quarantine_reason)·격리 시각 기록 컬럼 + alembic 마이그레이션 (과거 은퇴 처분 docs/data/problem_duplicate_disposition_2026-08.md 사례의 구조화)"
   - "서빙 게이트 fail-closed: is_review_status_cleared·CAT 후보 풀(api/me.py)·L6 게이팅(gating.py)이 quarantined를 제외"
   - "회귀 테스트: quarantined 문항이 next-problem·L6 모드·서빙 API에서 제외되고, 해당 문항의 기존 attempt 기록 조회는 유지됨"
-artifacts: []
+artifacts:
+  - "PR #931 (커밋 a97956e1) — ReviewStatus.quarantined + is_review_status_quarantined + problem.quarantine_reason/quarantined_at + alembic e7c3b9a15f24 + api/problems.py 공개 GET 4종 격리 배제(IS DISTINCT FROM·404) + 계약 정본 docs/standards/problem_quarantine_contract.md + 신규 테스트 48건. 전체 스위트 11055 passed·0 failed, 커버리지 91.66%, 계층 바닥선 전건 PASS"
 paths:
   - src/backend/whymath_backend/schema/enums.py
   - src/backend/whymath_backend/db/models/problem.py
