@@ -289,8 +289,14 @@ class TestEventLedger:
             )
             == 0
         )
-        lines = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8").splitlines()
-        events = [json.loads(line) for line in lines if line.strip()]
+        # 이벤트 대장은 세션 샤딩됐다(HARN-46) — 레거시 단일 파일만 읽으면 샤딩 이후
+        # 기록이 통째로 안 보인다. store.event_paths()가 레거시+샤드를 모두 준다.
+        events = [
+            json.loads(line)
+            for path in store.event_paths(seeded_repo)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         amends = [e for e in events if e.get("action") == "amend"]
         assert len(amends) == 1
         assert amends[0]["id"] == "T1-14-amend-event"

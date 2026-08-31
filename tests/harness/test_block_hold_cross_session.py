@@ -31,6 +31,7 @@ import json
 from pathlib import Path
 
 import remote_claims
+import store
 
 import backlog as cli
 
@@ -179,8 +180,13 @@ class TestFailureIsLoud:
         err = capsys.readouterr().err
         assert "로컬에만" in err, "게시 실패를 알리지 않으면 없는 보호를 있다고 믿게 된다"
         # 그리고 그 사실이 이벤트 대장에도 남는다
-        lines = (git_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8").splitlines()
-        evs = [json.loads(x) for x in lines if x.strip()]
+        # 이벤트 대장 샤딩(HARN-46) — 레거시+샤드를 함께 읽는다
+        evs = [
+            json.loads(x)
+            for path in store.event_paths(git_repo)
+            for x in path.read_text(encoding="utf-8").splitlines()
+            if x.strip()
+        ]
         assert any(e.get("action") == "block_hold_failed" and e.get("id") == TASK for e in evs)
 
 
