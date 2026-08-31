@@ -14,7 +14,8 @@
 > 이 문서와 스캔 스크립트는 *계측기*다. 배정을 기계가 강제하는 지점은 **`EOS-67`**
 > (import-linter forbidden 계약 + CI 배선 동결)이며, 그것이 착지하기 전까지:
 >
-> - 새 코드가 경계를 넘어도 **CI는 통과한다**.
+> - ~~새 코드가 경계를 넘어도 **CI는 통과한다**.~~ → **2026-08-31 `EOS-67` 착지로 해소** —
+>   import-linter 계약 2건이 CI lint 스텝에서 판정한다(§5). 아래 두 줄은 여전히 유효하다.
 > - 아래 "위반 15건"은 *막고 있는 상태에서 남은 15건*이 아니라 **아무도 막지 않은 상태의 15건**이다.
 > - 따라서 이 문서의 존재를 근거로 "경계가 있다"고 말하면 안 된다. 지금 있는 것은 **경계의 정의**뿐이다.
 >
@@ -159,15 +160,44 @@ Physics를 붙일 때 **이 두 계층은 손대지 않아도 된다** — 계�
 
 ---
 
-## §5. EOS-67로 넘기는 것 (집행 별항)
+## §5. 집행 — `EOS-67` 착지 (2026-08-31)
 
-| 넘길 것 | 내용 |
-|---|---|
-| 계약 형태 | import-linter `forbidden` 계약 — `BOUNDARY_MAP`의 CORE 키 → ADAPTER 키 |
-| baseline | **필요함**(위반 15 > 0). `ignore_imports`로 동결하되 **만료·재확인 지점 필수**(만료 없는 유예 금지) |
-| 권고 순서 | ① B분류 3건은 baseline 없이 즉시 해소 가능(`josa.py` 이동) ② C분류 1건은 EOS-66 Protocol로 흡수 ③ A분류 11건만 baseline에 넣고 **`EOS-69`**(경유 배선) 진행에 따라 순차 해제 — EOS-66은 계약만 만들었고 경유 배선은 EOS-69다 |
-| 배선 확인 | 계약이 CI에서 실제로 도는지 `tests/infra` 계약 테스트로 대조 — "pyproject에 있음 ≠ 잡이 돎" |
-| 재측정 | `python3 scripts/analysis/eos_core_adapter_boundary_scan.py` — 위반 수 변화가 진척 지표 |
+**정적 강제가 착지했다.** 이 문서 머리의 "⚠️ 정본화 ≠ 집행" 경고는 §5 범위에서는 **해소됐다** —
+`src/backend/pyproject.toml`에 import-linter `forbidden` 계약 2건이 서고, CI lint 스텝
+(`run: lint-imports`)이 매 PR에서 이를 판정한다. 남은 미집행은 §4 A분류의 *경유 배선*(EOS-69)이다.
+
+| 계약 | source | 유예 | 상태 |
+|---|---|---|---|
+| **baseline 0 — 이미 깨끗한 구역** | `l1` · `l2` · `schema` | **없음** | KEPT. 이 구역이 수학을 새로 끌어오면 즉시 적색 |
+| **baseline 있음 — EOS-69가 해소** | `api` · `l4` · `l6` · `l3` CORE 키 20 | 20 | KEPT (20 ignored) |
+
+**유예 20건의 성격은 둘로 갈린다** (pyproject 주석에 그룹 ①②로 분리 표기):
+
+- **그룹 ① 구조적 제외 11건 — 빚이 아니다.** 출발점이 ADAPTER(3) 또는 MIXED(8)인 간선이다.
+  계약은 "CORE로 지정한 모듈"만 구속하므로 애초에 위반이 아니고, 부모 패키지를 source로 잡은
+  탓에 걸릴 뿐이다. MIXED를 지금 강제하면 §1이 유보한 판정을 조기에 강요하게 된다.
+- **그룹 ② baseline 9건 — 이것이 빚이다.** §4 A·B·C분류의 심볼 15건을 모듈 단위로 축약한 수다
+  (`api.coach` 3심볼→2간선 · `l6.blueprint.assembly` 3→2 · `l3.render.adapters` 6→3 ·
+  `l3.pedagogy.slot_generator` 2→1 · `api._ocr_state` 1→1). 소유자는 **`EOS-69`**.
+
+**만료는 날짜가 아니라 기계다.** `unmatched_ignore_imports_alerting`이 기본 `ERROR`이므로,
+EOS-69가 어떤 간선을 없애면 대응하는 유예 줄이 매치되지 않아 `lint-imports`가 실패한다 —
+CI가 "이 줄을 지워라"라고 말한다. 실측 확인(뮤테이션 C): `l6.blueprint.assembly`의
+`verify_step` import를 제거하니 `No matches for ignored import ...`로 exit 1. 유예가 조용히
+눌러앉을 수 없다("만료 없는 유예 금지"의 코드 집행). 사람이 읽을 재확인 지점은 **G1(9/27)** —
+그때까지 9줄이 그대로면 EOS-69 진척이 0이라는 뜻이다.
+
+**드리프트 방지**: `tests/infra/test_eos_boundary_contract_wiring.py`가 pyproject의 forbidden
+목록을 `BOUNDARY_MAP`(정본)과 대조하고, CI가 `lint-imports`를 실제로 부르는지, 만료 정책이
+꺼지지 않았는지를 함께 동결한다. pyproject만 고치고 정본을 안 고치면 CI가 적색이 된다.
+
+**측정 축의 한계(명시)**: 계약은 `allow_indirect_imports = true`로 **직접 import만** 판정한다.
+경계 스캔이 AST 직접 import를 세므로 축을 맞춘 것이다 — 간접까지 세면 계약과 이 문서가 서로
+다른 숫자를 말하게 된다. 따라서 `api.coach → l4 → l4.solution_coaching → wrong_form_match`
+같은 *경유* 의존은 이 계약이 잡지 않는다. 그 축은 MIXED 모듈 해소와 함께 다룰 별개 문제다.
+
+**재측정**: `python3 scripts/analysis/eos_core_adapter_boundary_scan.py` — 위반 수 변화가 진척
+지표이고, `lint-imports`가 그 진척을 강제한다.
 
 ---
 
