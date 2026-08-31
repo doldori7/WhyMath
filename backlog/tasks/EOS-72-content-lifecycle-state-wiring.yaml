@@ -20,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l3/dsl/models.py
   - "src/backend/whymath_backend/l3/dsl/**"
 session: null
-notes: "검토_18 §23 채택. 문서의 generated→schema_validated→…→published 상태머신 제안과 정확히 겹치는 미완 조각 — enum은 export만 되고 소비처 0건(2026-08-25 실측). EOS-44 설계 문서에서 lifecycle 정본이 정해진 뒤 착수. [HARN-38 재등재: kiki 머신 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 커밋 3b7bab6f에서 EOS-51로 등재됐으나 main의 EOS-51-verification-design-freeze(done)와 번호 충돌 — 원본 내용 그대로 새 번호로 이관. 구 YAML은 그 브랜치에만 존재하며 main 미착지이므로 삭제 대상 아님(그 브랜치가 머지되면 충돌 재발하므로 브랜치 소유 세션이 정리해야 한다).]"
+notes: "검토_18 §23 채택. 문서의 generated→schema_validated→…→published 상태머신 제안과 정확히 겹치는 미완 조각 — enum은 export만 되고 소비처 0건(2026-08-25 실측). EOS-44 설계 문서에서 lifecycle 정본이 정해진 뒤 착수. [재번호 2026-08-31·HARN-38] 원 ID = EOS-51-content-lifecycle-state-wiring(kiki 머신 브랜치에서 2026-08-26T08:39:56 KST 등재). main의 EOS-51-verification-design-freeze가 4일 뒤(2026-08-30T06:37:55 UTC) 같은 번호로 등재되며 충돌. 본문 무변경 이관. 번호 채택 경위: 병렬 이중 등재(본 세션 EOS-70 / claude/failure-definition-signature-scmzdu EOS-72)를 원격 대장 선등재분 EOS-72로 통일하고 EOS-70을 철회. 재대조 실측(2026-08-31): l3/dsl에 라우터·프로바이더 import 0건 — 이 계층은 결정론 컴파일러라 LLM 호출이 없다는 사실이 ①의 배선/폐기 판단 재료. 구 YAML은 2026-08-31 브랜치 삭제로 소멸."
 updated: 2026-08-31
