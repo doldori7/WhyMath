@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-74-declaration-canon-drift-freeze
+title: "선언 정본 stale 해소 + 검증설계서와의 일치 기계 동결 (감사 A7)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 선언 정본을 G0 확정치로 갱신 — 앵커 8→6·주당 20h→25h·F-Ⅳ '8개 중 4개'→'6개 중 3개'·시간 예산 재검산. 결정 경위(누가 언제 무엇을)를 함께 적어 '왜 바뀌었나'가 남게 한다"
+  - "② 일치 기계 동결 — 선언 정본과 검증설계서가 같은 값을 말하는지 테스트로 대조. 선언을 참조하는 기계 장치가 **0건**이라 표류를 아무도 못 잡던 것이 A7의 구조적 원인이다(검증설계서만 해시 동결돼 있었다)"
+  - "③ 변별력 양방향 — 어느 한쪽만 바꿔도 RED가 되는지 뮤테이션으로 확인. 한쪽만 검증하면 '둘 다 틀린 값으로 일치'해도 통과한다"
+  - "④ 동결 대상은 **G0 확정치**이지 F-Ⅰ~Ⅴ 문안 자체가 아니다 — 문안 해시 동결은 test_failure_definition_freeze.py(검증설계서 §5) 소유이며 그 경계를 침범하지 않는다"
+artifacts:
+  - "PR #916 (https://github.com/doldori7/WhyMath/pull/916) — 선언 정본 G0 확정치 갱신 + 두 문서 일치 기계 동결"
+  - tests/backend/schema/test_declaration_canon_consistency.py
+paths:
+  - docs/strategy/eos_transition_declaration_2026-08-30.md
+  - "tests/backend/schema/*"
+session: null
+notes: "감사 A7(docs/reviews/eos_transition_plan_compliance_audit_2026-08-31.md). 선언은 앵커 8·20h·F-Ⅳ 8중4를, 검증설계서는 앵커 6·25h·F-Ⅳ 6중3을 말한다. 검증설계서가 선언을 '정본'으로 인용하므로 두 문서를 다 읽지 않는 세션은 틀린 쪽을 정본으로 쓴다. 선언 스스로 '다음 검토일: G0 판정 시 §3~§5 갱신'이라 적었고 G0은 2026-08-30에 서명됐다."
+updated: 2026-08-31
