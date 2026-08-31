@@ -25,7 +25,7 @@
 | B1 | WIP≤3의 근거 부재 + 초과(8/30 start 19건·병렬 4세션) | §3 | 중 |
 | B2 | fail-open 정책 경고 2,610건 하루 누적 — 보호가 상시 무력 | CLAUDE.md | 중 |
 | B3 | W1(6일)+W2 일부를 D0 하루에 압축 — Kiki 검수 병목 전제 무효화 | §3 | 낮음 |
-| C1 | §1.3-③ 실구현 보류가 하네스에 미배선 — CUR-11이 `next` 상위 추천 중 | §1.3-③ | **높음(잠재)** |
+| C1 | 관여도 미판정 태스크가 `next` 상위 점유 (초판의 "§1.3-③ 위반"은 **오판·정정**) | §0-5·§6-5 | 중 (**조치 완료**) |
 | C2 | LIC-01 in_progress 7일 — claim TTL 72h 초과 | §3.2-⑤·policy | 낮음 |
 
 ---
@@ -136,13 +136,22 @@ CLAUDE.md: "같은 실패 경고가 환경에서 **반복 관측되면(2회+)** 
 
 ## §3. 미착화 잠재 위반 (C)
 
-### C1. §1.3-③(Subject-neutral 실구현 보류)이 하네스에 배선되지 않았다 — **다음 세션이 그대로 밟는다**
+### C1. 관여도 미판정 태스크가 `next` 상위를 점유한다 — **2026-08-31 조치 완료**
 
-계획 §1.3-③: "Subject-neutral core **실구현은 착수 트리거 전 금지** — W1은 **계약(contract) 수준**(S1-16·CUR-11)만 진행한다."
+> **정정(2026-08-31)**: 본 항의 초판은 이를 "§1.3-③(Subject-neutral 실구현 보류) 위반"으로 적었다. **오판이다.** 선언 §1.3-③은 CUR-11을 S1-16과 나란히 "W1은 **계약(contract) 수준**(S1-16·CUR-11)만 진행한다"로 **명시 허용**하고, §1.1 표 A2행도 CUR-11을 계약 축에 배치한다. 계획이 허용한 태스크를 계획 위반으로 적은 것이므로 아래와 같이 판정을 교체한다.
 
-그런데 `CUR-11-subject-neutral-curriculum-api`의 제목은 "**/v1/curricula/\* 라우터 신설**"로 계약이 아니라 실구현이고, `requires_gates: []`·`depends_on` 해소·`priority: 2`다. `CUR-12`도 동형. 그 결과 **현재 SessionStart 브리핑의 next 후보 2·3위가 이 둘**이며, `/drive`가 다음에 집는 것을 막는 장치가 없다.
+**실제 결함 2건**:
 
-계획의 금지가 문서에만 있고 대장에 없는 상태 — CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"의 계획 버전이다. 착수 전에 처리해야 한다.
+1. **선언의 분류가 실물과 어긋난다** — 선언은 CUR-11을 "계약 수준"으로 부르지만, `CUR-11` acceptance ①은 `GET /v1/curricula`·`/{framework_id}`·`/{framework_id}/nodes`·`/v1/learning-outcomes/{norm_id}`·`/v1/alignments` **라우터 5종 신설 + app.py 배선**이다. S1-16(스키마 필드 추가·`extensions.math` 이동)이 진짜 계약 작업인 것과 성격이 다르다. `CUR-12`는 한술 더 떠 `api/coach.py`·`l2/target_progress.py`·`l3 DSL 생성기`를 `get_alignments` 경유로 바꾸는 **서빙 소비처 리팩토링**이다.
+2. **그럼에도 관여도 판정을 받은 적이 없다** — 둘 다 2026-08-25 등재(선언 이전)이고 A1(§0-5 게이트 미집행)·A2(§6-5 분류 미실시)의 사각지대에 그대로 놓여 있었다. `requires_gates: []`·priority 2라 브리핑 next 후보 **2·3위**였다.
+
+**조치**(2026-08-31, Kiki 지시):
+- `gates add G-eos-verification-relevance-triage`(kind=decision·assignee=kiki·remind 7d) — clear 조건 ①잔여 todo 151건 관여/비관여 분류 ②비관여분 이월 표시 ③CUR-11·CUR-12 착수 판정.
+- `block CUR-11` / `block CUR-12` — 사유에 게이트 ID·근거 조항 명기.
+- **변별력 확인**: 차단 후 `next --n 5`에서 두 태스크가 사라짐(차단 전 2·3위) · `validate` green(태스크 451·게이트 17).
+- **집행 수단 주석**: `requires_gates`를 *기존* 태스크에 부착하는 CLI 경로가 없다(`add` 시점 전용). 이 공백은 `HARN-24` acceptance ③이 이미 등재했고, ADMIN-02에 `G-prod-dead-column-check`를 붙이지 못한 선례가 있다. 대장 손편집 대신 CLI 지원 verb인 `block`으로 집행했으므로 **게이트 clear 후 `unblock`이 별도로 필요**하다(자동 해소되지 않는다).
+
+**남은 노출 — 이 조치는 근본 해결이 아니다**: 차단 직후 같은 계열의 `CUR-17`(Concept Resolver API 설계)·`CUR-18`(Concept Search API 확장 — 주변 리소스 엔드포인트)이 next 2·3위로 승격했다. 둘 다 같은 EOS 개념 DB 검토 계보이고 역시 관여도 미판정이다. **태스크 단위 차단은 151건 대기열 앞에서 두더지잡기**이며, 실효 해결은 A2의 일괄 트리아지(게이트의 clear 조건 ①)와 A1의 등재 시점 게이트 코드화뿐이다.
 
 ### C2. LIC-01 claim TTL 초과
 
@@ -169,7 +178,8 @@ CLAUDE.md: "같은 실패 경고가 환경에서 **반복 관측되면(2회+)** 
 |---|---|---|
 | ① `backlog.py add`에 12월 검증 관여 판정 필드 강제(미기입 시 exit 1) | A1 | 코드(하네스) |
 | ② 기존 잔여 150건 검증 관여도 일괄 트리아지 + `next` 우선순위 반영 | A2·C1 | 태스크(EOS-53 승계) |
-| ③ CUR-11·CUR-12에 `requires_gates` 또는 blocked 부여(§1.3-③ 배선) — **②보다 먼저, 다음 /drive 전에** | C1 | 대장 수정 |
+| ③ ~~CUR-11·CUR-12 차단~~ → **2026-08-31 완료**(`G-eos-verification-relevance-triage` 등재 + block 2건). 게이트 clear 시 `unblock` 필요 | C1 | 완료 |
+| ③-b | CUR-17·CUR-18(차단 후 next 2·3위로 승격·동일 계보·관여도 미판정) 처리 판정 — ②로 흡수할지 개별 차단할지 | C1 | Kiki 판정 |
 | ④ ADMIN-07 acceptance에 HIT 타이머·반려코드 강제 추가(또는 신규 태스크) | A5 | 태스크 |
 | ⑤ 선언 정본 §2.1·§3·§6·부록 B·D를 G0 확정치로 갱신 | A7 | 문서 |
 | ⑥ W2 태스크 확정 + 여유 82h 배분 — 기한 부여 | A4 | 문서·대장 |
