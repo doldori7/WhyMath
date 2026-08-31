@@ -5,7 +5,7 @@ track: math-completion
 stage: S1
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -13,13 +13,14 @@ requires_gates: []
 acceptance:
   - schema_version 필드를 Problem/PublicProblem 및 problem.schema.yaml에 추가하고 API 응답/요청에 노출. 테스트 추가.
   - "수학 전용 필드(answer_transform, signature_patterns, requires_graph_sketch, sketch_step_count)를 extensions.math로 이동. 하위호환/마이그레이션 및 downstream 수정."
-artifacts: []
+artifacts:
+  - "https://github.com/doldori7/WhyMath/pull/941"
 paths:
   - schemas/v1.1/problem.schema.yaml
   - src/backend/whymath_backend/schema/problem.py
   - tests/backend/schema/test_problem.py
   - docs/architecture/content_contract_0112_review.md
   - MEMORY.md
-session: claude/review-status-differences-jw5m4a
+session: null
 notes: "[정정 2026-08-31] track subject-expansion → math-completion: 등재 오분류 정정 — 2026-08-19 MEMORY 결정(등재 커밋 01e75fd0·PR #845)이 '수용 항목'(schema_version·extensions.math 분리 = 본 태스크)과 '보류 항목'(물리/화학 등 타 과목 Extension)을 갈랐는데 track이 보류 쪽에 붙었다. stage S1·subject math이며 전환 선언이 'S1 잔여 마지막 실행 가능 태스크'로 W1(9/2)에 배정한 건이다. 같은 트랙 나머지 13건은 전부 E1~E6. Kiki 판정 2026-08-31(옵션 1 트랙 정정 선택).\n\n[차단 2026-08-31] 변별력 검증용 일시 되돌림\n\n[정정 2026-08-31] track math-completion → subject-expansion: 변별력 검증 — 되돌리면 다시 거부되는지 확인\n\n[정정 2026-08-31] track subject-expansion → math-completion: 정정 확정 — Kiki 판정 2026-08-31(옵션 1). 앞선 되돌림 2회는 HARN-49 acceptance ④ 변별력 검증용이며 이 줄이 최종 상태다."
 updated: 2026-08-31
