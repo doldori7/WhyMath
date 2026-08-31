@@ -1347,6 +1347,39 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
         return 0
 
     mine = [t for t in backlog.tasks.values() if t.status == "in_progress" and t.session == branch]
+
+    # [무결성 게이트] 이 세션이 유발한 대장 위반이 있으면 정지를 막는다 (HARN-49).
+    #
+    # 왜 Stop 훅인가: 2026-08-31 실측 사고 — `validate` 가 "1세션이 2개 태스크 동시
+    # claim" 위반을 정확히 냈는데, 명령을 `;` 로 이어 붙여 exit code 를 판정에 쓰지
+    # 않은 채 push 했다. 2선 방어인 CI harness-integrity 잡은 그 push 에 **트리거가
+    # 걸리지 않아**(HARN-30) 무증상이었다. 규칙(CLAUDE.md 2026-08-09 "출력 억제·판정
+    # 건너뛰기 금지")은 이미 있었고 재발했다 — 그래서 코드로 옮긴다.
+    #
+    # **남의 위반에 볼모 잡히지 않는다**: 저장소 전역 위반이 아니라 이 브랜치·이 세션이
+    # 잡은 태스크를 지목하는 오류만 본다(cmd_add 의 own_errors 와 같은 방식). main 에
+    # 이미 있던 위반 때문에 모든 세션의 정지가 막히면 그 훅은 곧 무력화된다.
+    own_ids = {t.id for t in backlog.tasks.values() if t.session == branch}
+    violations = [
+        e
+        for e in store.validate_backlog(backlog)
+        if branch in e or any(tid in e for tid in own_ids)
+    ]
+    if violations:
+        print(
+            "❌ 대장 무결성 위반 — 이 세션이 유발한 것이므로 정지를 막습니다:",
+            file=sys.stderr,
+        )
+        for v in violations:
+            print(f"  · {v}", file=sys.stderr)
+        print(
+            "  해소 후 다시 종료하세요 (예: 완료분은 `done <id> --artifact ...`,\n"
+            "  보류분은 `block <id> --reason ...`). 진단: "
+            "`python3 scripts/harness/backlog.py validate; echo EXIT=$?`",
+            file=sys.stderr,
+        )
+        return 2
+
     if not mine:
         return 0
 
