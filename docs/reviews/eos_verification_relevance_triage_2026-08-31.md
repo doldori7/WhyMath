@@ -104,7 +104,7 @@
 | `S4-57` | todo | S4 | **R** | A3 | 단계 B 도메인 발화 조건 — 동 |
 | `S4-58` | todo | S4 | **R** | A3 | statistical_claim DSL — A3 확률·통계 앵커 |
 | `SEC-19-generate-rate-limit` | todo | S4 | **R** | 비용KPI | /v1/generate 레이트리밋 — 유일한 무제한 LLM 비용 표면 |
-| `CUR-11-subject-neutral-curriculum-api` | blocked | S3 | **?** | 게이트대상 | 본 게이트의 판정 대상 4건 중 하나(실구현·라우터 5종) |
+| `CUR-11-subject-neutral-curriculum-api` | ~~blocked~~ **done** | S3 | ~~**?**~~ **판정 불요** | — | **2026-08-31 실측 정정**: 차단 발효 전 타 세션이 구현·머지(main done·PR #920). 판정 대상은 CUR-12·17·18 3건으로 축소 |
 | `CUR-12-curriculum-alignment-unified-view` | blocked | S3 | **?** | 게이트대상 | 본 게이트의 판정 대상(서빙 소비처 리팩토링) |
 | `CUR-17` | blocked | S3 | **?** | 게이트대상 | 본 게이트의 판정 대상(설계 — concept resolve는 관여 여지 큼) |
 | `CUR-18` | blocked | S3 | **?** | 게이트대상 | 본 게이트의 판정 대상(설계) |
