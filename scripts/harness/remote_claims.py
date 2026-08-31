@@ -83,6 +83,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -1248,6 +1249,119 @@ def scan_remote_task_files(
     except Exception as exc:  # pragma: no cover - 환경 의존
         # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
         return [], f"error:{type(exc).__name__}"
+
+
+# ── 등재 가시성 고지 (HARN-43) ─────────────────────────────────────────────
+#
+# **이것은 탐지가 아니라 고지다.** 미push 브랜치를 실제로 관측하는 수단은 없다 —
+# 그 브랜치는 이 클론의 remote-tracking ref에도, `harness-claims` 대장에도, 원격
+# 브랜치 파일명 스캔에도 나타나지 않는다. 즉 `cmd_add`의 번호 가드가 통과했다는 것은
+# "충돌이 없다"가 아니라 "가드가 볼 수 있는 범위 안에는 없다"는 뜻이다.
+#
+# 근거(HARN-38 실측 2026-08-31): 가드의 관측 표면 3종을 전수 호출해 36브랜치·11,975
+# 파일을 훑었으나 충돌 상대 브랜치는 0건 관측됐다 — 그 브랜치가 push된 적이 없었기
+# 때문이다(GitHub API도 해당 커밋을 `No commit found`로 응답). 3출처 모두 `status=ok`
+# 였으므로 조회 실패가 아니라 **관측 범위 밖**이었다.
+#
+# 같은 병목이 그날 5회 관측됐고(태스크 ID·게이트 ID·문서 버전 ×2·중복 작업), 가드가
+# 있는 축에서는 CLI가 5번 다 실거부했지만 가드가 없는 축에서는 git 충돌·사람·운이
+# 유일한 방어선이었다. 그래서 이 고지의 대상은 '번호'가 아니라 **"내가 지금 하는 일이
+# 다른 세션에 보이지 않는다"는 사실 자체**다.
+#
+# 두 함수 모두 **네트워크를 타지 않는다**(로컬 ref·파일 mtime만 읽는다).
+# `scan_remote_task_files`의 `fetch=False` 계약과 같은 원칙이다.
+
+
+def branch_has_remote_ref(root: Path, branch: str) -> tuple[bool | None, str]:
+    """`branch`의 remote-tracking ref가 **이 클론에** 있는가. 반환 `(판정, 상태)`.
+
+    판정 `None` = **판정 불가**(상태가 이유) — 빈 결과를 '없음'으로 읽으면 안 된다.
+
+    **정직한 한계 2가지**(고지 문안이 '추정'이라고 말하는 근거):
+      · 이것은 *이 클론의 로컬 관점*이다. 다른 클론에서 push된 브랜치는 여기서 fetch
+        하기 전까지 ref가 없어 '미push'로 보인다(거짓 경고). 고지일 뿐 차단이 아니므로
+        허용되는 방향의 오차다.
+      · 반대 방향은 오차가 없다 — `git push`가 remote-tracking ref를 갱신하므로,
+        이 세션이 직접 push했다면 ref는 반드시 있다. 즉 **"보인다"는 신뢰할 수 있고
+        "안 보인다"만 추정**이다.
+    """
+    if not branch or branch == "unknown":
+        return None, "unknown-branch"
+    if not has_remote(root):
+        return None, "offline"
+    try:
+        probe = _git(
+            root, "rev-parse", "--verify", "--quiet", f"{REMOTE_REF_PREFIX}{branch}", timeout=10
+        )
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
+        return None, f"error:{type(exc).__name__}"
+    # rev-parse --verify --quiet: 존재하면 0, 없으면 1(무출력). 그 외는 판정 불가.
+    if probe.returncode == 0:
+        return True, "ok"
+    if probe.returncode == 1:
+        return False, "ok"
+    return None, _classify_failure(probe.stderr or "")
+
+
+def remote_refs_age_seconds(root: Path) -> tuple[float | None, str]:
+    """원격 ref 스냅샷의 나이(초) — 네트워크 0. 반환 `(초, 상태)`.
+
+    `None` = 판정 불가 → 호출부는 **침묵한다**(추측 출력 금지).
+
+    **왜 `FETCH_HEAD` 하나로는 안 되는가**(2026-08-31 테스트가 잡은 결함): 갓 클론한
+    저장소에는 `FETCH_HEAD`가 없다. 그것을 '오래됨'으로 읽으면 *가장 신선한* 상태인
+    클론 직후에 고지가 항상 뜨고, 그러면 이 기능은 보호가 아니라 소음이 된다.
+    그래서 **원격 ref가 마지막으로 갱신된 흔적 중 가장 최근 것**을 본다:
+      · `FETCH_HEAD`         — 마지막 `git fetch`/`git pull` (**worktree별**)
+      · `packed-refs`        — 클론 시점(및 gc·pack 갱신) (**공용**)
+      · `refs/remotes/origin`— 개별 ref 파일이 풀려 있는 경우의 갱신 (**공용**)
+    셋 다 없으면 판정 불가다 — 없는 것을 '오래됐다'로 접지 않는다.
+
+    **linked worktree에서 두 디렉터리를 나눠 보는 이유**(Codex P2 · PR #940 실측): 이
+    저장소는 병렬 세션에 worktree를 의무화한다(`docs/standards/parallel_sessions.md`
+    "1 세션 = 1 브랜치 = 1 worktree" · `scripts/new-session-worktree.sh`). 그런데
+    linked worktree에서 `--git-dir`는 `.git/worktrees/<name>`을 가리키고 **공용 ref는
+    거기 없다** — 실측: 갓 만든 worktree의 `--git-dir`에는 흔적 3종이 *전부* 부재해
+    이 함수가 `no-ref-stamp`로 침묵했다. 즉 **보호가 필요한 바로 그 환경에서 무력**
+    했다. 공용 흔적은 `--git-common-dir`에서, worktree 고유 `FETCH_HEAD`는 `--git-dir`
+    에서 읽어 합친다(둘은 일반 클론에서 같은 경로로 수렴하므로 분기 없이 동작한다).
+
+    왜 이 값을 고지하는가: 번호 가드의 세 번째 출처(`scan_remote_task_files`)는
+    **이미 있는 remote-tracking ref만** 읽고 네트워크를 타지 않는다(의도된 비용
+    트레이드오프). 그래서 그 ref가 낡았으면 가드는 *그 시점 이후 원격에 등재된 번호를
+    구조적으로 보지 못한다*. 대가를 치를 때 사람에게 말하지 않는 것이 결함이므로
+    경과 시간을 함께 띄운다 — `fetch=False` 기본값 자체는 바꾸지 않는다.
+    """
+
+    def _resolve(flag: str) -> Path | None:
+        out = _git(root, "rev-parse", flag, timeout=10)
+        if out.returncode != 0:
+            return None
+        raw = (out.stdout or "").strip()
+        if not raw:
+            return None
+        path = Path(raw)
+        return path if path.is_absolute() else root / path
+
+    try:
+        git_dir = _resolve("--git-dir")
+        if git_dir is None:
+            return None, "error:git-dir"
+        # linked worktree면 공용 디렉터리가 다르다. 일반 클론에서는 같은 경로로 수렴.
+        common_dir = _resolve("--git-common-dir") or git_dir
+        candidates = (
+            git_dir / "FETCH_HEAD",  # worktree별 fetch 기록
+            common_dir / "FETCH_HEAD",  # 주 체크아웃에서의 fetch 기록
+            common_dir / "packed-refs",  # 공용 — 클론 시점
+            common_dir / "refs" / "remotes" / "origin",  # 공용 — 풀린 ref 갱신
+        )
+        stamps = [c.stat().st_mtime for c in candidates if c.exists()]
+        if not stamps:
+            return None, "no-ref-stamp"
+        return max(0.0, time.time() - max(stamps)), "ok"
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        return None, f"error:{type(exc).__name__}"
 
 
 # ── 장기 미머지 브랜치 감지 (HARN-13) ──────────────────────────────────────
