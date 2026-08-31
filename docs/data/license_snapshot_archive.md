@@ -168,37 +168,78 @@ egress 차단으로 막혔던 14곳 중 **13곳이 해소**됐다. 이로써 "�
 - 계약 동결: `tests/infra/test_license_snapshot_archiver.py` (성공/HTTP 실패/타임아웃/예외/
   변경 감지/멱등/즉시 flush/exit 코드 — 경로별 상이 신호, hermetic·네트워크 0).
 
-### 5-A. 잔여 1곳(siyavula) URL 확정 — 다음 실행 과제
+### 5-A. 잔여 1곳(siyavula) — URL 확정 완료, 재수집만 남음
 
-> **1. 과제**: `siyavula` 약관 페이지의 **실제 URL 확인** (게이트의 마지막 잔여분).
-> **2. 목적**: 카탈로그의 404 URL을 고쳐야 20/20이 되고 게이트가 닫힌다. 재실행만으로는
-> 절대 해소되지 않는다(원인이 네트워크가 아니라 URL이라서).
-> **3. 절차**: 아래 후보 프로브를 돌려 200을 내는 URL을 찾는다(10초). 없으면
-> 브라우저로 siyavula.com에서 약관·라이선스 페이지를 찾아 주소를 알려 달라.
-> **4. 성공 기준**: `200 <URL>` 줄이 하나라도 출력되면 성공. 전부 404/오류면 실패이며,
-> 그때는 브라우저 확인이 필요하다.
-> **5. 실행 환경**: Windows PowerShell(=Phaiakes9), 작업 디렉터리 무관.
-> **6. 창 구분**: 새 창이든 기존 창이든 무방(단발 명령).
+**2026-08-31 확정**: 홈페이지 href 스캔으로 실제 약관 경로를 발견했다 —
+`https://www.siyavula.com/info/terms-and-conditions` (구 URL `/terms`는 404였다).
+카탈로그(`TIER1_SOURCES`)는 이 값으로 정정됐고 `url_origin`도 `_ORIGIN_DISCOVERED`로 갱신됐다.
+
+> **채택하지 않은 후보**: 같은 스캔에서 `/info/privacy-policy`도 키워드에 걸렸지만
+> 개인정보처리방침은 **라이선스 조항이 아니다**. 키워드 매칭은 *후보 발견*이지 *근거 확인*이
+> 아니며, 매칭됐다는 이유로 채택하면 CC BY 근거가 없는 페이지를 라이선스 증거로 보관하게
+> 된다(PR #918 리뷰 P2). 그래서 아래 절차에 **내용 검증 스텝**을 넣는다.
+
+> **1. 과제**: siyavula 약관 재수집 + 확보 내용이 실제로 라이선스 조항인지 확인 → 20/20 달성.
+> **2. 목적**: 게이트 `G-license-snapshot-blocked-sources` 종결. 확인 시점 약관 원문 보관은
+> 소급 불가하므로 이 1건이 마지막 미확보분이다.
+> **3. 절차**: main 최신화(정정된 카탈로그 포함) → siyavula만 수집 → 커버리지 판정 →
+> **수집된 본문에 라이선스 문구가 실제로 있는지 확인** → 커밋·브랜치 push.
+> **4. 성공 기준**: `coverage=0`(20/20) **그리고** `LICENSE_EVIDENCE` 줄에 매칭 문구가
+> 하나 이상 출력될 것. **둘 다여야 성공**이다 — coverage만 0이면 "무언가를 받긴 했다"는
+> 뜻이지 "라이선스 근거를 확보했다"는 뜻이 아니다. 매칭이 0줄이면 그 URL은 약관 페이지가
+> 아니므로 알려 달라(게이트는 열어 둔다).
+> **5. 실행 환경**: Windows PowerShell(=Phaiakes9), `C:\Users\kiki\Desktop\__AI\WhyMath`.
+> **6. 창 구분**: 새 창 1개. 장기 점유 프로세스 없음.
 
 ```powershell
-# [실행 시스템: Windows PowerShell — 창 무관. siyavula 약관 URL 후보 프로브]
-$c = @(
-  "https://www.siyavula.com/terms-and-conditions",
-  "https://www.siyavula.com/terms-of-use",
-  "https://www.siyavula.com/legal/terms",
-  "https://www.siyavula.com/about/terms",
-  "https://www.siyavula.com/privacy-and-terms",
-  "https://www.siyavula.com/"
-)
-foreach ($u in $c) {
-  try   { $r = Invoke-WebRequest -Uri $u -MaximumRedirection 5 -TimeoutSec 15
-          "$($r.StatusCode) $u" }
-  catch { "ERR $($_.Exception.Response.StatusCode.value__) $u" }
+# [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git fetch origin main
+git checkout -B claude/lic-02-siyavula-capture origin/main
+
+python scripts\ops\license_snapshot_archiver.py --sources siyavula
+echo "archiver=$LASTEXITCODE"
+
+python scripts\ops\license_snapshot_coverage.py
+echo "coverage=$LASTEXITCODE"    # ★ 0이라야 20/20
+
+# 내용 검증 — 받은 것이 정말 라이선스/약관 문서인가 (키워드 매칭≠근거 확인)
+$snap = Get-ChildItem data\licenses\snapshots\siyavula -Filter *.html -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime | Select-Object -Last 1
+if ($null -eq $snap) { "LICENSE_EVIDENCE 없음 — 스냅샷 파일 자체가 없다" }
+else {
+  $txt = Get-Content $snap.FullName -Raw
+  $pat = '(?i)(creative commons|CC[ -]?BY|licen[cs]e|copyright|terms (of|and)|이용약관|저작권)'
+  $m = [regex]::Matches($txt, $pat) | ForEach-Object { $_.Value } | Sort-Object -Unique
+  "SNAPSHOT $($snap.Name) bytes=$($snap.Length)"
+  if ($m) { $m | ForEach-Object { "  LICENSE_EVIDENCE $_" } }
+  else    { "  LICENSE_EVIDENCE 0건 — 이 URL은 약관 페이지가 아니다(채택 보류)" }
 }
 ```
 
-출력에서 200을 낸 URL(또는 브라우저로 찾은 주소)을 알려주시면 다음 세션이
-`TIER1_SOURCES`의 `siyavula` 항목을 고치고 재수집해 게이트를 닫는다.
+수집분 제출 (coverage 값과 무관하게 받은 만큼 커밋 — 소급 불가):
+
+```powershell
+# [실행 시스템: Windows PowerShell — 같은 창]
+git add data\licenses
+git commit -m "LIC-02 집행: siyavula 약관 스냅샷 수집 (URL 정정 후 재수집)"
+git push -u origin claude/lic-02-siyavula-capture
+```
+
+> `coverage` 값과 `LICENSE_EVIDENCE` 줄을 알려주시면 PR을 열고, **둘 다 성공일 때만**
+> 게이트를 clear한다.
+
+> **프로브 실패 기록 3건(2026-08-31 · 전부 원격 세션이 작성한 블록의 결함)**
+> ① `-UseBasicParsing` 누락 → PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차 정지.
+> ② catch의 진단 문자열이 **파이프라인 출력**이 되어 `return $null`에도 불구하고 반환값을
+> 오염 → 호출부가 실패를 성공으로 오인(수정: `Write-Host`).
+> ③ `$home`에 대입 → PowerShell **자동 변수**(읽기 전용)라 대입 거부, 그런데 후속
+> `if ($home)`이 홈 경로 문자열로 **참**이 되어 가짜 성공 신호. 성공/실패가 같은 화면을 냈다.
+>
+> 공통 원인: **원격 세션은 PowerShell을 실행 검증할 수 없다**(Windows 부재 + 대상 호스트
+> egress 403). 그런데 저장소 가드 `scripts/ops/check_ps_scripts.py`는 `scripts/**/*.ps1`만
+> 훑어 **런북 마크다운 코드펜스는 검사 범위 밖**이다 — Kiki에게 건네는 PowerShell 대부분이
+> 사는 곳이 정확히 그 사각이다. 가드 확장 = `OPS-57`.
 
 ### Kiki 머신 수동 실행 (Windows PowerShell)
 
