@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: docs
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,10 @@ acceptance:
   - "① 경계 정본 1장 — 계획서 100 §3.7의 Core 14항목/Adapter 10항목 표를 현행 패키지(whymath_backend.l1~l6·schema·db·ops·privacy)에 매핑. 각 모듈에 Core/Adapter/Infra 중 하나를 배정하고, 판정 불가(혼재) 모듈은 '혼재'로 그대로 적는다 — 날조 금지"
   - "② 혼재 모듈의 실측 규모: Core 지정 패키지가 Adapter 지정 패키지를 import하는 현행 위반 건수를 실측해 표에 기재(EOS-67 계약이 baseline 허용을 필요로 하는지 판정하는 근거)"
   - "③ 집행 별항(정본화≠집행): 이 표를 기계가 읽는 지점은 EOS-67(import-linter 계약)이며, 표만으로는 아무것도 강제되지 않음을 문서 머리에 명기"
-artifacts: []
+artifacts:
+  - "#924"
+  - docs/architecture/eos_core_adapter_boundary.md
+  - scripts/analysis/eos_core_adapter_boundary_scan.py
 paths:
   - "docs/architecture/**"
 session: null
