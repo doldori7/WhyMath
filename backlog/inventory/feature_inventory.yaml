@@ -1,0 +1,591 @@
+# EOS 기능 인벤토리 + Migration Difficulty Matrix — 기계 생성 장부 (EOS-68)
+# 재생성: python3 scripts/analysis/eos_feature_inventory.py --write
+# 손편집 금지 — 점수 임계·메타는 생성기(정본)에 있다. 여기 고치면 다음 생성이 덮는다.
+# release_relevance는 *제안*이다 — 확정은 Kiki(#916 트리아지 프로토콜과 통합 판정).
+schema_version: 1
+dashboard:
+  population: 23
+  classification_rate: 23/23
+  release_relevant_proposed: 17
+  deferred_proposed: 6
+  migration_actions:
+    KEEP: 4
+    REFACTOR: 17
+    HEAVY_REFACTOR: 1
+    REPLACE_CANDIDATE: 1
+features:
+  - feature_id: WM-API-APP-CORE
+    location: src/backend/whymath_backend/app.py
+    user: Platform
+    domain: AI Orchestration
+    status: Production
+    endpoints: 6
+    write_endpoints: 1
+    eos_ownership: Core+Adapter
+    adapter_deps: [l5.ocr.factory]
+    mixed_deps: [api.ocr, api.speech, api.verify, l3.pregenerate.validator, schema.enums]
+    db_model_modules: 0
+    internal_imports: 48
+    test_files: 1
+    test_functions: 43
+    matrix:
+      A_subject: 3
+      B_db: 0
+      C_coupling: 3
+      D_tests: 0
+      E_state: 1
+      F_data: 0
+    matrix_total: 7
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "C1·A5 — /v1/generate 생성 표면·게이트웨이"
+  - feature_id: WM-API-AUTH
+    location: src/backend/whymath_backend/api/auth.py
+    user: Student
+    domain: Identity
+    status: Production
+    endpoints: 7
+    write_endpoints: 5
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 2
+    internal_imports: 10
+    test_files: 2
+    test_functions: 33
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 2
+      D_tests: 0
+      E_state: 2
+      F_data: 2
+    matrix_total: 8
+    migration_action: REFACTOR
+    release_relevance: platform-invariant
+    seat: "계획서 100 P0 목록 'User/Auth' — 폐쇄루프 진입점"
+  - feature_id: WM-API-CONCEPTS
+    location: src/backend/whymath_backend/api/concepts.py
+    user: Student
+    domain: Knowledge Graph
+    status: Production
+    endpoints: 8
+    write_endpoints: 3
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 2
+    internal_imports: 10
+    test_files: 4
+    test_functions: 59
+    matrix:
+      A_subject: 0
+      B_db: 1
+      C_coupling: 2
+      D_tests: 0
+      E_state: 2
+      F_data: 2
+    matrix_total: 7
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "B4 개념 DB 조회 표면"
+  - feature_id: WM-API-PROBLEMS
+    location: src/backend/whymath_backend/api/problems.py
+    user: Student
+    domain: Content
+    status: Production
+    endpoints: 7
+    write_endpoints: 3
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums, schema.problem]
+    db_model_modules: 1
+    internal_imports: 6
+    test_files: 3
+    test_functions: 64
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 1
+      D_tests: 0
+      E_state: 2
+      F_data: 1
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "B7 문제 DB — 앵커 CU의 서빙 표면"
+  - feature_id: WM-API-USERS
+    location: src/backend/whymath_backend/api/users.py
+    user: Student
+    domain: Identity
+    status: Production
+    endpoints: 5
+    write_endpoints: 3
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 2
+    internal_imports: 14
+    test_files: 2
+    test_functions: 15
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 2
+      D_tests: 0
+      E_state: 2
+      F_data: 2
+    matrix_total: 8
+    migration_action: REFACTOR
+    release_relevance: platform-invariant
+    seat: "법정대리인 동의 — CLAUDE.md 법령 유래 절차(기계 대체 금지)"
+  - feature_id: WM-API-ME
+    location: src/backend/whymath_backend/api/me.py
+    user: Student
+    domain: Learning Model
+    status: Production
+    endpoints: 36
+    write_endpoints: 11
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums, schema.problem]
+    db_model_modules: 7
+    internal_imports: 44
+    test_files: 11
+    test_functions: 269
+    matrix:
+      A_subject: 1
+      B_db: 3
+      C_coupling: 3
+      D_tests: 0
+      E_state: 3
+      F_data: 3
+    matrix_total: 13
+    migration_action: HEAVY_REFACTOR
+    release_relevance: verification-loop
+    seat: "E3·E4 — 학습 이력·mastery 조회"
+  - feature_id: WM-API-PRIVACY
+    location: src/backend/whymath_backend/api/privacy.py
+    user: Student
+    domain: Security
+    status: Production
+    endpoints: 1
+    write_endpoints: 1
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 1
+    internal_imports: 5
+    test_files: 2
+    test_functions: 10
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 1
+      D_tests: 0
+      E_state: 1
+      F_data: 1
+    matrix_total: 5
+    migration_action: REFACTOR
+    release_relevance: platform-invariant
+    seat: "미성년 PII PEP — 불변 계약(전환 선언 §0-6)"
+  - feature_id: WM-API-COACH
+    location: src/backend/whymath_backend/api/coach.py
+    user: Student
+    domain: Pedagogy
+    status: Production
+    endpoints: 4
+    write_endpoints: 3
+    eos_ownership: Core+Adapter
+    adapter_deps: [l3.verify_final_answer, l3.verify_solution]
+    mixed_deps: [l3.pregenerate.validator, schema.enums]
+    db_model_modules: 6
+    internal_imports: 52
+    test_files: 12
+    test_functions: 381
+    matrix:
+      A_subject: 3
+      B_db: 3
+      C_coupling: 3
+      D_tests: 0
+      E_state: 2
+      F_data: 3
+    matrix_total: 14
+    migration_action: REPLACE_CANDIDATE
+    release_relevance: verification-loop
+    seat: "E2·C7 — 채점 연동 코칭·힌트"
+  - feature_id: WM-API-VERIFY
+    location: src/backend/whymath_backend/api/verify.py
+    user: Student
+    domain: Assessment
+    status: Production
+    endpoints: 3
+    write_endpoints: 3
+    eos_ownership: Core+Adapter
+    adapter_deps: [l3.verify_answer, l3.verify_solution, l3.verify_step]
+    mixed_deps: [api.verify, schema.enums]
+    db_model_modules: 0
+    internal_imports: 5
+    test_files: 1
+    test_functions: 38
+    matrix:
+      A_subject: 3
+      B_db: 0
+      C_coupling: 1
+      D_tests: 0
+      E_state: 2
+      F_data: 0
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "D1·E2 — 결정론 채점 표면"
+  - feature_id: WM-API-DEVICES
+    location: src/backend/whymath_backend/api/devices.py
+    user: Student
+    domain: Security
+    status: Production
+    endpoints: 3
+    write_endpoints: 2
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 0
+    internal_imports: 4
+    test_files: 2
+    test_functions: 203
+    matrix:
+      A_subject: 0
+      B_db: 0
+      C_coupling: 1
+      D_tests: 0
+      E_state: 1
+      F_data: 0
+    matrix_total: 2
+    migration_action: KEEP
+    release_relevance: platform-invariant
+    seat: "디바이스 인증 — SEC 축"
+  - feature_id: WM-API-GATING
+    location: src/backend/whymath_backend/api/gating.py
+    user: Student
+    domain: Application Mode
+    status: Production
+    endpoints: 6
+    write_endpoints: 0
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums, schema.problem]
+    db_model_modules: 3
+    internal_imports: 8
+    test_files: 2
+    test_functions: 56
+    matrix:
+      A_subject: 1
+      B_db: 2
+      C_coupling: 1
+      D_tests: 0
+      E_state: 0
+      F_data: 2
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: deferred-candidate
+    seat: "대응 개발항목 없음 — L6 모드는 12월 검증 밖"
+  - feature_id: WM-API-VISUALIZATION
+    location: src/backend/whymath_backend/api/visualization.py
+    user: Student
+    domain: Interaction
+    status: Production
+    endpoints: 3
+    write_endpoints: 2
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 0
+    internal_imports: 12
+    test_files: 4
+    test_functions: 20
+    matrix:
+      A_subject: 1
+      B_db: 0
+      C_coupling: 2
+      D_tests: 0
+      E_state: 1
+      F_data: 0
+    matrix_total: 4
+    migration_action: KEEP
+    release_relevance: deferred-candidate
+    seat: "대응 없음"
+  - feature_id: WM-API-INTERACTIONS
+    location: src/backend/whymath_backend/api/interactions.py
+    user: Student
+    domain: Event
+    status: Production
+    endpoints: 1
+    write_endpoints: 1
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 1
+    internal_imports: 5
+    test_files: 1
+    test_functions: 6
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 1
+      D_tests: 1
+      E_state: 1
+      F_data: 1
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "E3 — AttemptEvent 수집"
+  - feature_id: WM-API-SCENE
+    location: src/backend/whymath_backend/api/scene.py
+    user: Student
+    domain: Interaction
+    status: Production
+    endpoints: 1
+    write_endpoints: 1
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 0
+    internal_imports: 14
+    test_files: 2
+    test_functions: 28
+    matrix:
+      A_subject: 0
+      B_db: 0
+      C_coupling: 2
+      D_tests: 0
+      E_state: 1
+      F_data: 0
+    matrix_total: 3
+    migration_action: KEEP
+    release_relevance: deferred-candidate
+    seat: "대응 없음"
+  - feature_id: WM-API-SOLUTION-PATHS
+    location: src/backend/whymath_backend/api/solution_paths.py
+    user: Student
+    domain: Content
+    status: Production
+    endpoints: 1
+    write_endpoints: 0
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 0
+    internal_imports: 3
+    test_files: 1
+    test_functions: 6
+    matrix:
+      A_subject: 0
+      B_db: 0
+      C_coupling: 0
+      D_tests: 1
+      E_state: 0
+      F_data: 0
+    matrix_total: 1
+    migration_action: KEEP
+    release_relevance: verification-loop
+    seat: "C5 — 단계별 풀이 점층 공개"
+  - feature_id: WM-API-STUDY
+    location: src/backend/whymath_backend/api/study.py
+    user: Student
+    domain: Pedagogy
+    status: Production
+    endpoints: 2
+    write_endpoints: 2
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 2
+    internal_imports: 14
+    test_files: 6
+    test_functions: 35
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 2
+      D_tests: 0
+      E_state: 1
+      F_data: 2
+    matrix_total: 7
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "E1 — 학습 공급·교수법 처치"
+  - feature_id: WM-API-OCR
+    location: src/backend/whymath_backend/api/ocr.py
+    user: Student
+    domain: Interaction
+    status: Production
+    endpoints: 2
+    write_endpoints: 2
+    eos_ownership: Core+Adapter
+    adapter_deps: [l5.ocr.factory, l5.ocr.pipeline]
+    mixed_deps: [api.ocr, schema.ocr]
+    db_model_modules: 0
+    internal_imports: 5
+    test_files: 5
+    test_functions: 44
+    matrix:
+      A_subject: 3
+      B_db: 0
+      C_coupling: 1
+      D_tests: 0
+      E_state: 1
+      F_data: 0
+    matrix_total: 5
+    migration_action: REFACTOR
+    release_relevance: deferred-candidate
+    seat: "대응 없음 — E1은 MathLive 입력이지 OCR이 아님(검증설계서 §2)"
+  - feature_id: WM-API-SPEECH
+    location: src/backend/whymath_backend/api/speech.py
+    user: Student
+    domain: Interaction
+    status: Production
+    endpoints: 1
+    write_endpoints: 1
+    eos_ownership: Core+Adapter
+    adapter_deps: [l3.speech]
+    mixed_deps: [api.speech, l4.speech, schema.speech]
+    db_model_modules: 0
+    internal_imports: 4
+    test_files: 1
+    test_functions: 5
+    matrix:
+      A_subject: 3
+      B_db: 0
+      C_coupling: 1
+      D_tests: 1
+      E_state: 1
+      F_data: 0
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: deferred-candidate
+    seat: "대응 없음 — 접근성 축"
+  - feature_id: WM-API-REPORTS
+    location: src/backend/whymath_backend/api/reports.py
+    user: Student
+    domain: QA
+    status: Production
+    endpoints: 1
+    write_endpoints: 1
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 1
+    internal_imports: 5
+    test_files: 2
+    test_functions: 16
+    matrix:
+      A_subject: 1
+      B_db: 1
+      C_coupling: 1
+      D_tests: 0
+      E_state: 1
+      F_data: 1
+    matrix_total: 5
+    migration_action: REFACTOR
+    release_relevance: deferred-candidate
+    seat: "대응 없음 — 학생 결함 신고(RPT-01)"
+  - feature_id: WM-API-DSL
+    location: src/backend/whymath_backend/api/dsl.py
+    user: Admin
+    domain: Content
+    status: Production
+    endpoints: 3
+    write_endpoints: 3
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [l3.dsl.compiler, l3.dsl.math_verifier, l3.dsl.models, l3.dsl.quality_gate, l3.dsl.repair, l3.dsl.validators, l3.dsl.variable_engine]
+    db_model_modules: 0
+    internal_imports: 8
+    test_files: 1
+    test_functions: 5
+    matrix:
+      A_subject: 1
+      B_db: 0
+      C_coupling: 1
+      D_tests: 1
+      E_state: 2
+      F_data: 0
+    matrix_total: 5
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "C2 — DSL 생성기 표면"
+  - feature_id: WM-API-RIGHTS
+    location: src/backend/whymath_backend/api/rights.py
+    user: Platform
+    domain: Content
+    status: Production
+    endpoints: 3
+    write_endpoints: 2
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 0
+    internal_imports: 5
+    test_files: 0
+    test_functions: 0
+    matrix:
+      A_subject: 1
+      B_db: 0
+      C_coupling: 1
+      D_tests: 3
+      E_state: 1
+      F_data: 0
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "A4·G1~G6 저작권 원장·게이트 — 콘텐츠 생산 레일(LIC-01)"
+  - feature_id: WM-API-CURRICULA
+    location: src/backend/whymath_backend/api/curricula.py
+    user: Admin
+    domain: Curriculum
+    status: Production
+    endpoints: 4
+    write_endpoints: 0
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: [schema.enums]
+    db_model_modules: 4
+    internal_imports: 9
+    test_files: 2
+    test_functions: 22
+    matrix:
+      A_subject: 1
+      B_db: 2
+      C_coupling: 2
+      D_tests: 0
+      E_state: 0
+      F_data: 3
+    matrix_total: 8
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "B1 — 교육과정 Framework/Version 조회"
+  - feature_id: WM-API-ALIGNMENTS
+    location: src/backend/whymath_backend/api/alignments.py
+    user: Admin
+    domain: Curriculum
+    status: Production
+    endpoints: 1
+    write_endpoints: 0
+    eos_ownership: Core
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 3
+    internal_imports: 4
+    test_files: 1
+    test_functions: 9
+    matrix:
+      A_subject: 0
+      B_db: 2
+      C_coupling: 1
+      D_tests: 1
+      E_state: 0
+      F_data: 2
+    matrix_total: 6
+    migration_action: REFACTOR
+    release_relevance: verification-loop
+    seat: "B2·F1 — 개념↔성취기준 정렬 조회(앵커 매핑)"

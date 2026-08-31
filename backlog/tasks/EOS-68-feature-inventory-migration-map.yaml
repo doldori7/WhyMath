@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: docs
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - docs/reviews/eos_feature_inventory_migration_map.md
   - "backlog/inventory/**"
-session: null
+session: claude/review-status-differences-jw5m4a
 notes: "출처: 대조 §4 A3(#924). 계획서 100 P0-02·P0-09·Gate 0-D. 실측: grep -rl 'REFACTOR' backlog/ docs/ = 0건(대조 문서 자신 제외). Gate 0-D 4문항 전부와 대시보드 5숫자 중 2개가 이 산출물에 의존한다. 100 §5는 이 기간 코딩 비중이 20~30%를 넘지 않아도 정상이라 명시 — 분류 작업이 본 태스크의 산출물이다. 주의: 100의 '기존 120개'는 저장소 외부 xlsx가 정본이라 개수 정합은 판정 대상이 아니다(대조 §6-1)."
 updated: 2026-08-31
