@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-70-subject-adapter-explain-capability
+title: "SubjectAdapter explain 능력 추가 판정 — 설명 생성 축 착지 후 계약 확장 여부 결정"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - EOS-66-subject-adapter-contract
+requires_gates: []
+acceptance:
+  - "① 선결 확인: 위임 가능한 공개 설명 생성 진입점이 실재하는지 재실측(EOS-66 시점 0건 — l1~l6 공개 explain* 함수 전무, EOS-53 crosswalk C9 '신규' 판정). 여전히 0이면 이 태스크는 blocked로 되돌리고 C9 착지를 기다린다"
+  - "② 계약 적합성 판정: explain이 '과목마다 반드시 존재하는 능력'인가를 Physics·History 기준으로 검토(계획서 100 §3.9). 통과하면 Protocol에 추가, 아니면 어댑터 내부 공개 API로 두고 그 판정을 문서에 기록"
+  - "③ 추가 시 시그니처가 LLM 인프라(provider·cache·trace)를 계약으로 끌어들이지 않을 것 — 끌어들이면 Physics 어댑터가 같은 장비 없이는 계약을 구현할 수 없다. 불가하면 ②의 '내부 API' 결론으로"
+  - "④ tests/backend/schema/test_subject_adapter.py의 계약 표면 동결 테스트(test_contract_exposes_only_the_three_agreed_capabilities) 갱신 — 3메서드 단언을 바꾸는 커밋에 판정 근거를 남긴다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/subject_adapter.py
+  - src/backend/whymath_backend/l4/subject_adapter_math.py
+session: null
+notes: "출처: EOS-66이 계약 v1을 3메서드로 확정하며 분리한 축. 계획서 100 §3.9는 explain을 후보로 들었으나 저장소에 위임 대상이 없어 v1에서 제외했다(없는 것을 계약에 넣으면 NotImplementedError 좌석이 생겨 '선언≠배선'이 하나 는다). 우선도 3 — 12월 검증 관여도는 간접(설명 품질 KPI F7과 연결되나 계약 형태와는 독립)."
+updated: 2026-08-31

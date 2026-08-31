@@ -104,6 +104,22 @@ PUBLIC_HIDDEN_STEP_ANSWER_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+#: 공개 투영(`PublicProblem`)에 자리가 없는 `Problem`의 **운영 메타** 필드 — 격리 축(EOS-71).
+#: 정답류(`PUBLIC_HIDDEN_ANSWER_FIELDS`)와 **다른 축이라 집합을 합치지 않는다**: 전자는 "교수학·
+#: 보안상 학생에게 주면 안 되는 것"(정답 노출 금지·SEC-24)이고 이쪽은 "운영자만 알면 되는 것"
+#: (격리 사유·시각)이다. 합치면 한 축의 완화 압력이 다른 축까지 조용히 열고, "왜 안 나가는가"를
+#: 구분할 수 없다(`is_exposable`(저작권)/`is_review_cleared`(검수) 두 축 분리와 같은 논거).
+#: 격리 사유를 공개 투영에 두지 않는 이유: `api/problems.py` GET 4종은 **무인증**이라 여기 자리를
+#: 만드는 순간 운영 판단 메모(실중복 판정·출제 오류 서술 등)가 그대로 공개된다 — 애초에 샐 표면을
+#: 만들지 않는다(허용목록 원칙: 새 필드는 기본 비공개 쪽). 계약 정본은
+#: `docs/standards/problem_quarantine_contract.md` §3·§4.
+PUBLIC_HIDDEN_OPS_FIELDS: frozenset[str] = frozenset(
+    {
+        "quarantine_reason",
+        "quarantined_at",
+    }
+)
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 서브모델: 발문 조건 (§3.1 conditions_parsed JSONB)
@@ -248,8 +264,14 @@ class PublicProblem(BaseModel):
 
         `model_dump(exclude=...)` 후 재검증 — 값이 채워진 내부 정본을 넣어도 정답류는
         변환에서 구조적으로 사라진다(ASM-07 `from_assessment` 동형).
+
+        제외 집합은 **두 축의 합집합**이다(EOS-71): 정답류(`PUBLIC_HIDDEN_ANSWER_FIELDS`) +
+        운영 메타(`PUBLIC_HIDDEN_OPS_FIELDS` — 격리 사유·시각). 두 집합을 하나로 합쳐 두지 않는
+        이유는 각 상수의 주석에 있다(축이 다르면 완화 압력도 따로 와야 한다). 여기서 합집합을
+        쓰는 것은 *투영 연산*이지 축의 병합이 아니다.
         """
-        return cls.model_validate(problem.model_dump(exclude=set(PUBLIC_HIDDEN_ANSWER_FIELDS)))
+        hidden = set(PUBLIC_HIDDEN_ANSWER_FIELDS | PUBLIC_HIDDEN_OPS_FIELDS)
+        return cls.model_validate(problem.model_dump(exclude=hidden))
 
     # ===== 스키마 계약 버전 (011_2) =====
     schema_version: SchemaVersion = Field(
@@ -653,7 +675,10 @@ class PublicProblem(BaseModel):
     )
     review_status: ReviewStatus | None = Field(
         default=None,
-        description="검수 상태 — pending/approved/rejected",
+        description=(
+            "검수 상태 — pending/approved/rejected/quarantined "
+            "(quarantined=사후 결함 판정으로 회수·EOS-71. rejected와 다르다: 삭제가 아닌 격리)"
+        ),
     )
     review_score: float | None = Field(
         default=None,
@@ -734,6 +759,26 @@ class Problem(PublicProblem):
         description=(
             "객관식 오답 선지→오개념코드 매핑(rich list). 정답 선지 제외·오답만. 각 원소 "
             "(choice_index·misconception_id=CATALOG_BY_ID id·op_code 선택). 참조 무결성은 L4 검증."
+        ),
+    )
+
+    # ===== 운영 격리(EOS-71 — 내부 정본 전용·PUBLIC_HIDDEN_OPS_FIELDS) =====
+    # `review_status == quarantined`의 **근거 기록**. 상태값만 있고 사유가 없으면 "왜 회수됐는가"가
+    # 사람 기억에만 남아 해제(재승인) 판단도 재발 방지도 불가능해진다(격리 계약 §3 기록 의무).
+    # 두 필드를 `PublicProblem`(기반)이 아니라 이 서브클래스에 두는 이유: 공개 GET 4종은 무인증이라
+    # 기반에 자리를 만드는 순간 운영 판단 메모가 그대로 공개된다(`PUBLIC_HIDDEN_OPS_FIELDS` 주석).
+    quarantine_reason: str | None = Field(
+        default=None,
+        description=(
+            "격리 사유(운영 메타·공개 투영 제외) — 정답 오류/복수 정답/모호 문장/실중복 등 "
+            "사후 결함 판정의 근거 서술. NULL=미격리"
+        ),
+    )
+    quarantined_at: datetime | None = Field(
+        default=None,
+        description=(
+            "격리 시각(운영 메타·공개 투영 제외) — 이 시각 *이전* attempt는 결함 문항 응답일 수 "
+            "있다. NULL=미격리(기본값 없음 — 백필 날조 방지)"
         ),
     )
 

@@ -199,7 +199,149 @@ layers = [
 ]
 
 # ──────────────────────────────────────────────────────────────────────
-# 테스트
+# EOS Core ↔ Math Adapter 경계 강제 (EOS-67) — 7계층 축과 **별개의 축**이다.
+#
+# 배정 정본: `scripts/analysis/eos_core_adapter_boundary_scan.py`의 `BOUNDARY_MAP`
+# 해설:     `docs/architecture/eos_core_adapter_boundary.md`
+# 정합 동결: `tests/infra/test_eos_boundary_contract_wiring.py`가 아래 목록이 정본과
+#            어긋나면 실패시킨다(이 파일을 손으로 고치고 정본을 안 고치면 CI 적색).
+#
+# 왜 7계층 계약으로 부족한가: 경계선이 계층 *사이*가 아니라 `l3` 한가운데를 지난다
+# (CORE 39모듈 : ADAPTER 39모듈 동거 — 경계 문서 §3). layers 계약은 이 축을 볼 수 없다.
+#
+# G1(2026-09-27) 차단 조건 "Core→Math 정적 의존 0"을 재는 도구가 이 두 계약이다.
+# ──────────────────────────────────────────────────────────────────────
+
+[[tool.importlinter.contracts]]
+name = "EOS Core → Math Adapter 금지 (baseline 0 — 이미 깨끗한 구역)"
+type = "forbidden"
+# 이 셋은 2026-08-31 실측에서 Adapter 참조가 **0건**이다. 유예 없이 그 상태를 동결한다 —
+# 새로 수학을 끌어오면 즉시 적색. `l2`·`l6`는 sympy·수학 어휘도 0건인 구역이다(경계 문서 §3).
+source_modules = [
+    "whymath_backend.l1",
+    "whymath_backend.l2",
+    "whymath_backend.schema",
+]
+# 직접 import만 판정한다(간접 체인 제외) — 경계 스캔(`eos_core_adapter_boundary_scan.py`)이
+# AST 직접 import를 세므로, 여기서 간접까지 세면 계약과 문서가 서로 다른 숫자를 말하게 된다.
+# 한계(명시): `api.coach -> l4 -> l4.solution_coaching -> wrong_form_match` 같은 *경유* 의존은
+# 이 계약이 잡지 않는다. 그 축은 MIXED 모듈 해소(S1-16 등)와 함께 다뤄야 하는 별개 문제다.
+allow_indirect_imports = true
+forbidden_modules = [
+    "whymath_backend.l3.equivalent",
+    "whymath_backend.l3.finite_probability",
+    "whymath_backend.l3.multi_solution",
+    "whymath_backend.l3.notation_coverage",
+    "whymath_backend.l3.solution_set",
+    "whymath_backend.l3.speech",
+    "whymath_backend.l3.speech_parse",
+    "whymath_backend.l3.statistical_claim",
+    "whymath_backend.l3.symbolic_equivalence",
+    "whymath_backend.l3.verifier",
+    "whymath_backend.l3.verify_answer",
+    "whymath_backend.l3.verify_final_answer",
+    "whymath_backend.l3.verify_solution",
+    "whymath_backend.l3.verify_step",
+    "whymath_backend.l4.misconception.wrong_form_match",
+    "whymath_backend.l4.misconception.wrong_form_shadow_harvest",
+    "whymath_backend.l4.subject_adapter_math",
+    "whymath_backend.l5.ocr",
+]
+
+[[tool.importlinter.contracts]]
+name = "EOS Core → Math Adapter 금지 (baseline 있음 — EOS-69가 해소)"
+type = "forbidden"
+# `l3`는 통째로 넣을 수 없다(ADAPTER 모듈이 같은 계층에 산다) — CORE 배정 키만 열거한다.
+source_modules = [
+    "whymath_backend.api",
+    "whymath_backend.l4",
+    "whymath_backend.l6",
+    "whymath_backend.l3.cache",
+    "whymath_backend.l3.cross_verify",
+    "whymath_backend.l3.dsl",
+    "whymath_backend.l3.escalation_defaults",
+    "whymath_backend.l3.interfaces",
+    "whymath_backend.l3.models",
+    "whymath_backend.l3.pedagogy",
+    "whymath_backend.l3.pipeline",
+    "whymath_backend.l3.pregenerate",
+    "whymath_backend.l3.prompt_assets",
+    "whymath_backend.l3.providers",
+    "whymath_backend.l3.queue",
+    "whymath_backend.l3.render",
+    "whymath_backend.l3.router",
+    "whymath_backend.l3.solution_path",
+    "whymath_backend.l3.solution_path_store",
+    "whymath_backend.l3.trace",
+    "whymath_backend.l3.verification_tier",
+    "whymath_backend.l3.visualization",
+    "whymath_backend.l3.viz_eval",
+]
+# 직접 import만 판정한다(간접 체인 제외) — 경계 스캔(`eos_core_adapter_boundary_scan.py`)이
+# AST 직접 import를 세므로, 여기서 간접까지 세면 계약과 문서가 서로 다른 숫자를 말하게 된다.
+# 한계(명시): `api.coach -> l4 -> l4.solution_coaching -> wrong_form_match` 같은 *경유* 의존은
+# 이 계약이 잡지 않는다. 그 축은 MIXED 모듈 해소(S1-16 등)와 함께 다뤄야 하는 별개 문제다.
+allow_indirect_imports = true
+forbidden_modules = [
+    "whymath_backend.l3.equivalent",
+    "whymath_backend.l3.finite_probability",
+    "whymath_backend.l3.multi_solution",
+    "whymath_backend.l3.notation_coverage",
+    "whymath_backend.l3.solution_set",
+    "whymath_backend.l3.speech",
+    "whymath_backend.l3.speech_parse",
+    "whymath_backend.l3.statistical_claim",
+    "whymath_backend.l3.symbolic_equivalence",
+    "whymath_backend.l3.verifier",
+    "whymath_backend.l3.verify_answer",
+    "whymath_backend.l3.verify_final_answer",
+    "whymath_backend.l3.verify_solution",
+    "whymath_backend.l3.verify_step",
+    "whymath_backend.l4.misconception.wrong_form_match",
+    "whymath_backend.l4.misconception.wrong_form_shadow_harvest",
+    "whymath_backend.l4.subject_adapter_math",
+    "whymath_backend.l5.ocr",
+]
+ignore_imports = [
+    # ── 그룹 ①: 구조적 제외 — 계약 *대상이 아닌* 모듈이 출발점인 간선 (빚 아님) ──
+    # EOS-65 배정에서 ADAPTER 또는 MIXED인 모듈이다. 계약은 "CORE로 지정한 모듈"만 구속하므로
+    # (acceptance ①) 이들은 애초에 위반이 아니다. 부모 패키지를 source로 잡은 탓에 걸릴 뿐이다.
+    # ADAPTER→ADAPTER는 정상이고, MIXED는 "아직 안 갈랐다"는 선언이라 지금 강제하면
+    # 판정을 조기에 강요하게 된다(경계 문서 §1 "MIXED를 반올림하지 않는 이유").
+    #   ADAPTER 출발:
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verifier",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_answer",
+    "whymath_backend.l4.misconception.wrong_form_match -> whymath_backend.l3.symbolic_equivalence",
+    #   MIXED 출발 (해소 경로 = 모듈 분할. api.verify/speech/ocr는 표면이 중립·페이로드가 수식):
+    "whymath_backend.api.verify -> whymath_backend.l3.verify_answer",
+    "whymath_backend.api.verify -> whymath_backend.l3.verify_solution",
+    "whymath_backend.api.verify -> whymath_backend.l3.verify_step",
+    "whymath_backend.api.speech -> whymath_backend.l3.speech",
+    "whymath_backend.api.ocr -> whymath_backend.l5.ocr.factory",
+    "whymath_backend.api.ocr -> whymath_backend.l5.ocr.pipeline",
+    "whymath_backend.l4.solution_coaching -> whymath_backend.l3.verify_solution",
+    "whymath_backend.l4.speech -> whymath_backend.l3.speech",
+
+    # ── 그룹 ②: baseline — CORE 진성 위반 9간선 (= 심볼 15건의 모듈 단위 축약) ──
+    # 이것이 실제 빚이다. 해소 소유자는 `EOS-69`(SubjectAdapter 경유 배선).
+    #
+    # **만료는 날짜가 아니라 기계다**: `unmatched_ignore_imports_alerting`이 기본 ERROR라,
+    # EOS-69가 어떤 간선을 없애면 그에 대응하는 아래 줄이 *매치되지 않아* lint-imports가
+    # 실패한다. 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다 — 유예가 조용히 눌러앉을 수
+    # 없다("만료 없는 유예 금지"의 코드 집행).
+    #
+    # 재확인 지점: G1(2026-09-27). 그때까지 9줄이 그대로면 EOS-69가 진척 0이라는 뜻이다.
+    "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",
+    "whymath_backend.api.coach -> whymath_backend.l3.verify_final_answer",
+    "whymath_backend.api.coach -> whymath_backend.l3.verify_solution",
+    "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.l3.symbolic_equivalence",
+    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.josa",
+    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.rephrase",
+    "whymath_backend.l3.render.adapters -> whymath_backend.l3.verify_answer",
+    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_solution",
+    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_step",
+]
+
 # ──────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

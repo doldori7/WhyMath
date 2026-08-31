@@ -22,17 +22,28 @@
 ## 2. 단일 진실 원천 — `backlog/`
 
 ```
-backlog/tracks.yaml      트랙 3종 + stage_order (S0~S5 → E1~E6)
-backlog/gates.yaml       사람 게이트 대장 (Kiki 수동 대기 추적)
-backlog/tasks/<id>.yaml  태스크당 1파일 — 병렬 세션 충돌 원천 차단
-backlog/events.ndjson    append-only 감사 로그 (merge=union)
-backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (off|warn|block)
+backlog/tracks.yaml           트랙 3종 + stage_order (S0~S5 → E1~E6)
+backlog/gates.yaml            사람 게이트 대장 (Kiki 수동 대기 추적)
+backlog/tasks/<id>.yaml       태스크당 1파일 — 병렬 세션 충돌 원천 차단
+backlog/events/<actor>.ndjson append-only 감사 로그 — **세션(=브랜치)당 1샤드** (HARN-46)
+backlog/events.ndjson         레거시 단일 대장 — 읽기 전용 역사 (신규 기록 없음)
+backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수준 (off|warn|block)
 ```
+
+> **이벤트 샤딩 경위(HARN-46 · 2026-08-31)**: 원래 단일 `events.ndjson`에 모든 세션이
+> append하고 `merge=union`이 충돌을 흡수한다고 믿었다. 그러나 union은 **로컬 git에서만**
+> 작동하고 **GitHub의 mergeability 판정은 저장소 merge driver를 적용하지 않는다** — 그래서
+> main에 어떤 PR이 착지하든 이 파일을 만진 열린 PR은 전부 충돌(dirty)이 됐다(PR #931이
+> CI green 4회를 확보하고도 머지가 반복 지연된 실측 사고 —
+> `docs/reviews/pr931_merge_block_root_cause_2026-08-31.md`). 대책은 tasks/의
+> 태스크당-1파일과 동형: **세션당 1샤드**로 나눠 두 브랜치가 같은 파일을 동시에 append하는
+> 상황 자체를 없앤다. 소비자는 반드시 `store.event_paths()`(레거시+샤드 합집합)로 읽는다 —
+> 한쪽만 읽으면 무손실이 아니다. 계약 동결 = `tests/harness/test_event_ledger_sharding.py`.
 
 - **태스크 상태는 CLI로만 변경한다**: `python3 scripts/harness/backlog.py <cmd>`.
   직접 편집하면 PostToolUse 훅이 무결성을 검증한다 (깨지면 차단).
 - ROADMAP.md·MEMORY.md는 **서사(왜)** 담당으로 존속 — 수치·순서·다음 작업의 정본은 backlog다.
-- 병렬 세션: 태스크당 1파일 + `session` claim 필드 + events union-merge로
+- 병렬 세션: 태스크당 1파일 + `session` claim 필드 + **이벤트 세션 샤드**로
   "1 세션 = 1 도메인 = 1 브랜치 = 1 태스크"가 파일 수준에서 강제된다
   (`docs/standards/parallel_sessions.md` 연계).
 - **태스크 `paths` 필드 (v1.1)**: 태스크가 만질 파일 범위를 glob으로 선언한다
@@ -227,6 +238,67 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 세션 종료   → (자동) Stop 훅: claim 태스크 미갱신이면 차단
 ```
 
+## 4b. 작업 보드 — 한 화면 가시화 (`board.py`)
+
+`status`·`brief`가 *터미널 요약*(next 3건 + 게이트)이라면, 보드는 **전수 가시화**다.
+"무엇을 했고 · 무엇을 하는 중이며 · 무엇이 예정인가"를 한 화면에서 본다.
+
+```bash
+python3 scripts/harness/board.py            # work/board.html 생성 (+ 터미널 요약 동시 출력)
+python3 scripts/harness/board.py --text     # HTML 없이 터미널 요약만
+python3 scripts/harness/board.py --json     # 페이로드 JSON (다른 도구가 소비)
+python3 scripts/harness/board.py --no-remote   # 미머지 완료 스캔 생략 (배너로 판정 불가 표기)
+python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # 스냅샷 보관용
+```
+
+산출물은 **자기완결 HTML 1파일**이다 — 외부 CDN·폰트·서버 요청이 없어 오프라인에서도
+열리고, 그대로 첨부·공유할 수 있다. 5열 칸반:
+
+| 열 | 무엇인가 | 판정 근거 |
+|---|---|---|
+| 진행 중 | 세션이 claim해 작업 중 (`in_progress`·`review`) | `status` + `session` |
+| 다음 착수 | 의존성·게이트 전부 해소 — 바로 시작 가능 | `selector.classify_todo` = None |
+| 대기 | 등재됐으나 선행 조건 미해소 (사유 라벨 표시) | `selector.Exclusion.reason` |
+| 차단 | `blocked` — 노트의 최신 `[차단 …]` 문단을 카드에 발췌 | `status` + `notes` |
+| 완료 | 증적 확인된 종결 — 최근 갱신 우선 | `status == done` |
+
+여기에 스테이지 진행률·사람 게이트·`validate` 경고가 같은 화면에 얹히고, 검색어·스테이지·
+레이어·트랙·과목으로 즉시 필터된다.
+
+**게이트 카드는 클릭하면 펼쳐진다**(네이티브 `details/summary` — 키보드 접근 가능). 접힌
+상태는 id·제목·경과일(리마인드 초과면 붉은 테두리)만, 펼치면 넷을 더 보여준다:
+- **메타** — 종류·담당·요청일·리마인드 임계·상태
+- **이 게이트가 막고 있는 것** — `requires_gates`로 건 태스크 목록에 더해, **트랙
+  `entry_gate`로 잠긴 경우 그 트랙의 미완 건수**를 함께 센다. 트랙 잠금은 태스크 쪽에
+  아무 표시도 남기지 않으므로, 이걸 세지 않으면 E축 하드락이 "아무것도 안 막는 게이트"로
+  보인다(실측: `G-s5-subject-expansion`이 미완 15건을 잠근다). 단 이 목록은 **의존 관계**
+  이지 "현재 차단"이 아니다 — 해소된 게이트를 아직 `requires_gates`에 달고 있는 태스크가
+  실재하고(`G-eos-g0-verification-design-freeze` ↔ `EOS-56`) `selector.unmet_gates`는 그
+  태스크를 착수 가능으로 본다. 화면 문구는 `blocks_now`(게이트가 pending인가)로 갈린다:
+  대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)".
+- **상세 노트** — 발췌가 아니라 **원문 그대로**(줄바꿈 보존·스크롤). 게이트 노트에는 실행
+  런북이 들어 있다(`G-operator-seat-first-grant` 2,736자) — 요약하면 그게 사라진다
+- **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능
+
+해소된 게이트(cleared·waived)는 기본 접힌 별도 그룹에서 근거(evidence)와 함께 열람한다 —
+기본 화면은 행동이 필요한 대기 게이트만 보여 준다.
+
+**계약 3건** (`tests/harness/test_board.py`가 동결):
+1. **판정 무복제** — 열 배치는 `selector.classify_todo`, 진행률은 `report.stage_progress`를
+   그대로 호출한다. 보드가 자기만의 "착수 가능" 판정을 갖는 순간 이중 진실원천이 된다.
+2. **무손실** — 열에 배치된 건수 + 취소 건수 = 전체 건수. 어떤 태스크도 조용히 사라지지
+   않는다(보드는 요약이 아니라 전수 투영이다).
+3. **미머지 완료분 재조정** — `remote_claims.scan_remote_done`(fetch 없음·네트워크 0)으로
+   *다른 브랜치에서 이미 done인* 태스크를 "다음 착수"에서 빼 대기 열로 옮기고 사유를
+   붙인다. `next`가 같은 이유로 후보에서 제외하는 축이며(HARN-11), 이것이 없으면 **끝난
+   작업이 예정으로 보여 중복 구현을 부른다**(도입 시 실측 15건). 스캔이 실패하거나
+   `--no-remote`로 건너뛰면 **빈 결과를 "완료분 없음"으로 위장하지 않고** 보드 상단에
+   "판정 불가(<사유>)" 배너를 띄운다 — 측정 실패는 통과와 같은 색이면 안 된다.
+
+보드는 **읽기 전용**이다 — `backlog/`를 일절 쓰지 않으며, 상태 변경 창구는 `backlog.py`
+CLI 단독이라는 규약이 그대로 유지된다. 기본 출력 경로 `work/`는 gitignore 대상이라
+생성물이 저장소를 오염시키지 않는다(스냅샷을 남기려면 `--out`으로 명시 경로를 준다).
+
 ## 5. 다과목 확장과의 관계 (비침투 원칙)
 
 백로그의 `subject` 필드는 **빌드 관리 메타데이터**다. 런타임 `Subject` enum·
@@ -266,6 +338,7 @@ python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 
 python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
+python3 scripts/harness/board.py                   # 작업 보드 HTML (work/board.html)
 ```
 
 테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (2026-08-10 실측 251건 —

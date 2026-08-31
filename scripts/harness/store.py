@@ -1,10 +1,20 @@
 """backlog/ 저장소 — 로드·저장·이벤트 로그·무결성 검증.
 
 파일 배치 (전부 git 커밋 대상):
-    backlog/tracks.yaml      트랙 정의 + stage_order
-    backlog/gates.yaml       사람 게이트 대장
-    backlog/tasks/<id>.yaml  태스크당 1파일 (병렬 세션 충돌 원천 차단)
-    backlog/events.ndjson    append-only 상태변경 로그 (merge=union)
+    backlog/tracks.yaml           트랙 정의 + stage_order
+    backlog/gates.yaml            사람 게이트 대장
+    backlog/tasks/<id>.yaml       태스크당 1파일 (병렬 세션 충돌 원천 차단)
+    backlog/events/<actor>.ndjson append-only 상태변경 로그 — **세션(=브랜치)당 1샤드**
+    backlog/events.ndjson         레거시 단일 대장 (읽기 전용 역사 — 신규 기록 없음)
+
+이벤트 샤딩(HARN-46, 2026-08-31): 원래는 events.ndjson 한 파일에 모든 세션이
+append했고 `.gitattributes merge=union`이 병렬 충돌을 흡수한다고 믿었다. 그러나
+**GitHub의 mergeability 판정은 저장소 merge driver를 적용하지 않아서**, main에
+어떤 PR이 착지하든 이 파일을 함께 만진 열린 PR은 전부 dirty(충돌)가 됐다 —
+PR #931이 CI green을 4회 확보하고도 머지가 반복 지연된 실측 사고. 로컬 병합은
+매번 충돌 0이었으므로 문제는 데이터가 아니라 **배치**다. 대책은 tasks/의
+태스크당-1파일 선례와 동형: 세션당 1샤드로 나눠 두 브랜치가 같은 파일을 동시에
+append하는 상황 자체를 없앤다(충돌을 '해소 가능'이 아니라 '발생 불가능'으로).
 
 읽기는 PyYAML(사람 손 편집 허용을 위해), 쓰기는 자체 직렬화기
 (키 순서·인용 규칙 고정 → diff 안정·결정적 출력).
@@ -292,13 +302,50 @@ def current_branch(root: Path) -> str:
         return "unknown"
 
 
+def _event_shard_name(actor: str) -> str:
+    """actor(브랜치명) → 샤드 파일명 — 결정적·경로 탈출 불가.
+
+    파일명 안전 문자([A-Za-z0-9._-]) 외 전부 '_' 치환: 브랜치명의 '/'가 하위
+    디렉터리로 해석되거나 '..'이 events/ 밖을 가리키는 것을 원천 차단한다.
+    치환 후 선두 '.'도 벗긴다('..'·숨김 파일 방지). 서로 다른 브랜치가 같은
+    이름으로 붕괴하는 경우(예: 'a/b'와 'a_b')는 이론상 가능하지만, 그 한 쌍만
+    종전(단일 파일) 상태로 퇴화할 뿐이고 union이 여전히 로컬 병합을 흡수한다.
+    상한 120자: 파일시스템 255 한계에 여유를 둔다.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", actor).lstrip(".") or "unknown"
+    return safe[:120] + ".ndjson"
+
+
+def event_paths(root: Path) -> list[Path]:
+    """이벤트 대장 파일 전부 — 레거시 단일 대장 + 세션 샤드(이름 정렬).
+
+    소비자(policy 리포트 등)는 반드시 이 목록을 순회해야 한다. 레거시 파일만
+    읽으면 샤딩 이후 기록이 통째로 안 보이고, 샤드만 읽으면 과거 역사가 사라진다
+    — 어느 쪽도 무손실이 아니다.
+    """
+    paths: list[Path] = []
+    legacy = backlog_dir(root) / "events.ndjson"
+    if legacy.exists():
+        paths.append(legacy)
+    shard_dir = backlog_dir(root) / "events"
+    if shard_dir.is_dir():
+        paths.extend(sorted(shard_dir.glob("*.ndjson")))
+    return paths
+
+
 def append_event(root: Path, action: str, subject_id: str, **extra: object) -> None:
-    """append-only 이벤트 로그 (merge=union — 병렬 세션 충돌 흡수)."""
-    path = backlog_dir(root) / "events.ndjson"
+    """append-only 이벤트 로그 — **세션(=actor 브랜치)당 1샤드**에 기록 (HARN-46).
+
+    레거시 `events.ndjson`에는 더 이상 쓰지 않는다(역사 보존·읽기 전용). 이유는
+    모듈 docstring 참조 — GitHub mergeability가 merge=union을 적용하지 않아
+    공용 단일 파일이 main 착지마다 열린 PR을 dirty로 만들었다(PR #931 실측).
+    """
+    actor = current_branch(root)
+    path = backlog_dir(root) / "events" / _event_shard_name(actor)
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "actor": current_branch(root),
+        "actor": actor,
         "action": action,
         "id": subject_id,
         **extra,

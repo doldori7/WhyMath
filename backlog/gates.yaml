@@ -9,6 +9,15 @@ gates:
     remind_after_days: 7
     evidence: "Phase 0~1 완주 (2026-08-22, Kiki 실행). 산출물: evidence_20260822_073859.txt(9/9 섹션 OK) · bench_{clean,baseline,rocm,vulkan,resident}_2026-08-22*.csv(전건 성공, 전 모델 gpu_fraction=1.0). 확정 결과: ①대역폭 상한 모델 전 구간 검증(dense 4종 유효 대역폭 167~199 GB/s = 피크 256의 65~78%, 예측 범위 전건 적중) ②dense 27B 11.7 vs MoE 30B-A3B 70.1 t/s = 6.0배 ③상주 재방문 로드 2,340ms→2.6ms(900배) ④flash attention 채택(MoE 왕복 -34.8%) ⑤Vulkan 기각(prefill -75% → 27B 왕복 +68%) ⑥VGM 64.0GB 확정 ⑦커밋 위생 규칙(고아 정리·주기적 재시작). LOCAL_LATENCY_MS는 보정 불요 판정(실측 906/3551/12406ms가 상수 1010/3918/13886ms보다 빨라 상수가 보수적·안전측). 정본 = docs/ops/amd395_local_llm_performance.md ★확정 결론 7항 + §5. 머지 PR #849·#851·#852."
     notes: ""
+  - id: G-authoring-expansion-merge-decision
+    title: "미머지 저작 확장 11,446문 회수·병합 결정 (trjg5x) — PB-06이 조건 확정 후 Kiki 소유로 남긴 결정"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-08-31
+    remind_after_days: 7
+    evidence: null
+    notes: "결정 대상: origin/claude/whymath-mvp-plan-architecture-trjg5x(c8abbc17)의 신규 코퍼스 30종 11,446문·결정론 생성기 30파일·저작 태스크 S4-19~51 32건(main 백로그 미등재)을 회수할 것인가. 정량 입력은 PB-06(done·PR #795)이 이미 산출: 성취기준 커버 78→130/435(+52·+12.0%p)·초등 9→22·0커버 영역 24→19. 차단 조건 3건도 PB-06이 확정(사이드카 30/30 부재→CI provenance_audit red·S4-19/S4-22 ID 충돌·shallow merge-base 부재), 사이드카 생성 CLI는 PB-11(done)이 상환. 게이트 신설 사유: PB-06 acceptance ①이 '회수·병합은 이 태스크가 하지 않는다(Kiki 소유)'로 명시했으나 그 소유가 게이트·태스크 어디에도 등재되지 않아 done 이후 20일간 추적자 0인 상태였다(2026-08-31 stray-code 감사 발견 — '만료 없는 유예·제외 금지' 위반). 결정 전까지 브랜치 삭제 금지."
   - id: G-backup-offsite-move
     title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
     kind: human
@@ -35,6 +44,24 @@ gates:
     requested: 2026-07-08
     remind_after_days: 14
     evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08 2건·07-10 20건·07-12 42건, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프 — 스탬프는 clear 14시간 전 커밋 fbbcc53에 선존·ARCH-07 적대 검증)·validation success·기계 reject-only·프로덕션 적재 0. Kiki 본인 승인 확인: 2026-07-13 세션 결정(대장 정합까지 선택·AskUserQuestion 기록). arch_audit_2026-07-13_r6 §3 대장 비정합 지적의 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
+    notes: ""
+  - id: G-cur16-branch-disposal
+    title: "backend/cur-16-concept-edge-prerequisite-meta-v2 브랜치 처분(삭제 권고) — 고유분 회수 완료(태스크 3건 EOS-69/70/71로 재등재)·코드는 이미 main(PR #892 a92a887f)이라 머지 가치 0. 남겨 두면 동번호 YAML이 main에 재진입하는 경로만 남는다(그때도 슬러그가 달라 validate 통과 — 이 사고의 원형). 가역(복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0). 명령·자가검증 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §6-3. ※세션은 지정 브랜치 외 push 불가라 대행 못 함 — Kiki 허가 시 세션이 삭제 커밋 대행 가능"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-08-31
+    remind_after_days: 7
+    evidence: "2026-08-31 Kiki 실행 — ① git push origin --delete 출력 '[deleted] backend/cur-16-concept-edge-prerequisite-meta-v2' ② git branch -D 출력 'Deleted branch ... (was 3b7bab6f)' ③ 자가검증 git ls-remote 무출력(=성공 방향) 실측. 구 YAML 3건(EOS-49/50/51 이종)이 원격·로컬 양쪽에서 소멸 — 동번호 재진입 경로 차단. 고유분은 EOS-69/70/71로 회수 완료, 브랜치 코드는 이미 main(CUR-16 done·PR #892 a92a887f). 복구 SHA 3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0(가역)."
+    notes: ""
+  - id: G-cur16-branch-push
+    title: "kiki 머신 로컬 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 push — 그 브랜치에만 존재하는 EOS-49/50/51 동번호 이종 태스크 YAML 3건의 본문 확보(HARN-38 ① 선결). 실측: GitHub에 브랜치·커밋 3b7bab6f 모두 부재 = 미push, kiki 머신 초기화 시 영구 소실. 실행 명령·6항목 브리핑 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §8 (main 머지 아님·업로드만)"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-08-31
+    remind_after_days: 3
+    evidence: "2026-08-31 Kiki 실행 — ④ 자가검증 출력 실측: 'refs/heads/backend/cur-16-concept-edge-prerequisite-meta-v2' 1줄, head=3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0 (태스크가 지목한 커밋과 일치). ②브랜치 존재 확인·③push 전부 성공. 세션이 fetch해 EOS-49/50/51 3건 YAML 본문·add 이벤트 시각 확보 — HARN-38 ① 실행 가능."
     notes: ""
   - id: G-deploy-environment-approval
     title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
@@ -94,19 +121,19 @@ gates:
     title: "라이선스 약관 스냅샷 미수집 14곳 캡처 (★소급 불가) — LIC-02 아카이버는 main 착지·실행 완료했으나 샌드박스 egress 정책이 14곳을 403으로 거부(조직 정책·우회 금지). 카탈로그 20곳 중 6곳만 확보(gsm8k·math-hendrycks·mathlib4·metamath-set-mm·minif2f·prm800k). 미확보: ncic·kogl-license-types·aihub·schoolinfo·openstax·siyavula·illustrative-mathematics·numinamath-cot/tir·phet·omnimath·olymmath·openmathinstruct-1·dlmf. Kiki 머신(Phaiakes9)에서 1회 실행하면 해소 — 명령 블록 = docs/data/license_snapshot_archive.md §5"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-30
     remind_after_days: 3
-    evidence: null
+    evidence: "2026-08-31 전곳 확보 — license_snapshot_coverage.py 20/20 · exit 0(기계 판정). 경위: 1차(08-30 원격 세션) 6/20(egress 403 14곳) → 2차(08-31 Kiki 머신) 19/20(신규 13곳) → 3차 siyavula URL 정정 후 재수집 1/1 성공(run_id=20260831T013601Z-8daf15·sha256=45723a589bd0a69d). 잔여 1곳이던 siyavula는 egress가 아니라 URL 결함이었고(구 /terms 404), 홈페이지 href 스캔으로 https://www.siyavula.com/info/terms-and-conditions 를 발견해 카탈로그 정정(#918). 내용 검증(PR #918 리뷰 P2 기준 — 키워드 매칭≠라이선스 근거): 스냅샷 158,035바이트에서 creative commons×6·license류×24·copyright×9·terms and conditions×26 확인, 원문에 'licensed under a Creative Commons Attribution Only License'(=CC BY) 부여 조항 실재. 단서: 해당 페이지는 'Some material'·'Only material that is clearly marked'로 CC BY 적용 범위를 명시 표기 자료로 한정한다 — 사이트 전체가 CC BY가 아님(LIC-05로 licensing_safety.md 반영 등재 — LIC-04는 타 세션이 선점해 CLI가 번호를 재배정했다). 성공 기준 2중(coverage=0 AND LICENSE_EVIDENCE≥1) 모두 충족."
     notes: ""
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1~3단계 완료(2026-08-31 원본 볼륨 복귀·stamp 확정 a9b8c7d6e5f4·백업 확보). 4단계 실행 대기: stamp→upgrade head→운영자 부트스트랩→content_admin grant — 복붙 블록은 notes에 전문 수록"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 7
-    evidence: null
+    evidence: "2026-08-31 Kiki 실행 완료. ① 스키마 정렬: stamp --purge a9b8c7d6e5f4 → upgrade head 22건 → head d4a71c0f9b32 도달, 프로브 재실행 pending_count 0 · present_after_gap 0(백업 whymath_20260831_141321.dump 선행). ② 계정 부트스트랩(ADMIN-11): account_bootstrap_cli create → {\"user_id\": \"5612757b-93c2-4d60-8318-3c85d3d6ff2c\", \"created\": true, \"role\": \"student\"}. ③ 좌석 부여: role_grant_cli grant 5612757b-93c2-4d60-8318-3c85d3d6ff2c content_admin → GRANT_EXIT=0, {\"old_role\": \"student\", \"new_role\": \"content_admin\"}. ④ list → {\"users\": [{\"user_id\": \"5612757b-93c2-4d60-8318-3c85d3d6ff2c\", \"role\": \"content_admin\"}], \"total\": 1}. 좌석 0건 상태 해소 — \"봉인 정상\"과 \"아무도 못 씀\"이 이제 다른 값이다."
     notes: "[목적] 콘텐츠 CUD 6라우터(/v1/concepts·/v1/problems의 POST/PATCH/DELETE)가 전건 403이다.\n  봉인(SEC-07)은 정상 작동 중이지만 좌석이 0건이라 아무도 통과 못 한다. 이 게이트를 통과해야\n  \"봉인 정상\"과 \"아무도 못 씀\"이 비로소 다른 값이 된다.\n\n[중요 — 왜 바로 grant를 하지 않는가] 2026-08-11 1차 실행이 실패했다:\n  `column user_profile.role does not exist`. whymath-pg의 스키마가 코드와 맞지 않는다.\n  PR #800이 정비한 실행 블록(venv $Py 고정·user_id 조회)은 그 자체로 옳지만,\n  **스키마가 이 상태인 한 grant에서 반드시 같은 오류로 실패한다.** 그래서 스키마를 먼저 세운다.\n\n[1단계 결과 — 2026-08-11 Kiki 실측, 완료]\n  · 컨테이너 생존 = true\n  · alembic_version = d6e7f8a9b0c1  ← **현재 코드의 마이그레이션 체인에 없는 값**\n  · misconception_catalog에서 length(mis_id) > 16 인 행 = 0건\n[2단계 결과 — 2026-08-11 Kiki 실측, 완료]\n  · public 테이블 68개\n  · privacy_audit=없음 · defect_report=없음 · concept_visual_style=있음\n  · user_profile 41컬럼 — **role 없음**(c5d6e7f0a2b3 미적용 확정)\n[해석] 실제 스키마는 a9b8c7d6e5f4(concept_visual_style 있음)와 c5d6e7f0a2b3(role 없음)\n  사이다. 즉 밀린 것은 4~5개뿐이고 **전부 additive**다 — 기록된 버전 문자열만 실태와 무관한\n  값이다. 1단계의 mis_id 0건으로 a5b6c7d8e9f0의 DELETE 선행 전제도 이미 충족.\n[실측된 제약] 이 상태에서 alembic은 아예 동작하지 않는다 — 컨테이너에서 동일 상태를 재현해\n  확인: `alembic current`·`alembic upgrade head` 둘 다 exit 255,\n  \"Can't locate revision identified by 'd6e7f8a9b0c1'\". 그래서 upgrade 전에 stamp가 필요하다.\n\n[3단계 결과 — 2026-08-31 Kiki 실측, 완료]\n  · 사전 사고: 8/25 10:08Z 누군가 whymath-pg를 빈 클러스터로 재생성(POSTGRES_USER=postgres·포트 56432·\n    스키마만 899ae0efbb8b·데이터 0). 원본은 dangling 볼륨 ef75415d에 무손실 생존 확인.\n  · 복구 완료(2026-08-31): 원본 볼륨으로 whymath-pg 재생성(5433·whymath 롤·restart unless-stopped)\n    — 재고 재현 concepts 2683 / edges 2210 / misconceptions 841 / standards 895.\n    빈 컨테이너는 whymath-pg-empty-20260825로 개명 보존(삭제 아님). 백업\n    whymath_20260831_120150.dump 확보(-Fc·카탈로그 자가검증·BACKUP_EXIT=0).\n  · A) formula_node constraints/mnemonic = 0행 → stamp 확정 = a9b8c7d6e5f4\n  · B) 뒤쪽 리비전 혼입 = 0행 → stamp 안전\n  · 후보→head 22개 마이그레이션 전수 스캔(세션 실측): upgrade측 파괴 연산 0\n    (a9b8 자체 drop은 stamp 지점이라 재실행 없음 · b8e76fe238d0 UPDATE 2건은 무손실 백필)\n\n[4단계 — 실행 대기. 아래가 복붙 실행 블록 전문(단계별 exit 판정 동봉) — Windows PowerShell·창 1개]\n# 0) 리포 최신화 + venv·DB URL 고정\ncd C:\\Users\\kiki\\Desktop\\__AI\\WhyMath\ngit fetch origin main\ngit checkout -B main origin/main\n$Py = \"C:\\Users\\kiki\\Desktop\\__AI\\WhyMath\\.venv\\Scripts\\python.exe\"\n$env:WHYMATH_DATABASE_URL = \"postgresql+asyncpg://whymath@127.0.0.1:5433/whymath\"\ncd src\\backend\n\n# 1) stamp — 3단계 A=0행으로 확정된 실태 리비전\n& $Py -m alembic stamp a9b8c7d6e5f4\necho \"STAMP_EXIT=$LASTEXITCODE\"\n& $Py -m alembic current\n\n# 2) 밀린 마이그레이션 전체 적용 (사전 전수 스캔: 파괴 연산 0·백업 확보됨)\n& $Py -m alembic upgrade head\necho \"UPGRADE_EXIT=$LASTEXITCODE\"\n& $Py -m alembic current\n\n# 3) 직접 신호 검증 — role 컬럼 실재(버전 문자열 아님) + 데이터 무손상(2683/2210/841/895)\ndocker exec whymath-pg psql -U whymath -d whymath -c \"SELECT column_name FROM information_schema.columns WHERE table_name='user_profile' AND column_name='role';\"\ndocker exec whymath-pg psql -U whymath -d whymath -c \"SELECT (SELECT count(*) FROM concept) AS concepts, (SELECT count(*) FROM concept_edge) AS edges, (SELECT count(*) FROM misconception_catalog) AS misconceptions, (SELECT count(*) FROM achievement_standard) AS standards;\"\n\n# 4) 운영자 계정 부트스트랩 — 앱 로그인과 동일 해시(sha256 소문자)·rollrock.ki@gmail.com\n#    (OAuth 미가동·user_profile 0행 실측 근거의 1회성. 페르소나는 enum 1번값 — 한글 인코딩 회피)\ndocker exec whymath-pg psql -U whymath -d whymath -c \"INSERT INTO user_profile (user_id, email_hash, persona_primary) VALUES (gen_random_uuid(), '26727c7b2e4acb35dbb468ab84a47fff1242b5248e5c67e7c9458f7a7557bb46', (enum_range(NULL::persona_enum))[1]);\"\n$uid = (docker exec whymath-pg psql -U whymath -d whymath -t -A -c \"SELECT user_id FROM user_profile WHERE email_hash='26727c7b2e4acb35dbb468ab84a47fff1242b5248e5c67e7c9458f7a7557bb46';\").Trim()\necho \"UID=$uid\"\n\n# 5) 좌석 1호 grant + list 검증 (list JSON = clear 증적)\n& $Py -m whymath_backend.ops.role_grant_cli grant $uid content_admin\necho \"GRANT_EXIT=$LASTEXITCODE\"\n& $Py -m whymath_backend.ops.role_grant_cli list\necho \"LIST_EXIT=$LASTEXITCODE\"\n\n[성공 기준] STAMP_EXIT=0 → current=a9b8c7d6e5f4 → UPGRADE_EXIT=0 → current=head(단일) →\n  role 컬럼 1행 + 재고 4종 불변 → UID 채워짐 → GRANT_EXIT=0 + list에 content_admin 1건 JSON.\n  실패 시 그 지점에서 중단·출력 전문 보고(백업 whymath_20260831_120150.dump로 복구 가능).\n[clear 증적] 최종 clear는 좌석 부여 후 role_grant_cli list 출력(user_id 포함 JSON)\n  + GRANT_EXIT=0 으로 한다.\n"
   - id: G-orphan-prod-run
     title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
@@ -135,6 +162,15 @@ gates:
     remind_after_days: 7
     evidence: "2026-08-31 Kiki 실측(원본 복귀 후 whymath-pg:5433·ef7541 볼륨): SELECT count(school_id..gender), count(*) FROM user_profile → 6컬럼 전부 0 · total_rows 0. 미소비 컬럼 전건 비영행 아님(빈 테이블) — ADMIN-02 acceptance① 선결 충족. 부수: 8/25 컨테이너 재생성 사고로 빈 클러스터가 whymath-pg 이름을 점유하던 것을 진단·원본 볼륨 복귀(재고 2683/2210/841/895 재현·백업 whymath_20260831_120150.dump 확보) 후 실측."
     notes: ""
+  - id: G-prod-dropped-column-residue-check
+    title: "prod DB(whymath-pg) concept.embedding_id 잔존 확인 — stamp가 삭제 리비전(seq 65)을 건너뛰었을 가능성 (PR #929 리뷰 지적)"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-08-31
+    remind_after_days: 3
+    evidence: "2026-08-31 Kiki 실측(whymath-pg, 읽기 전용): SELECT column_name FROM information_schema.columns WHERE table_name=concept AND column_name=embedding_id → 0행. 즉 seq 65(f1a2b3c4d5e7)의 concept.embedding_id 삭제는 stamp --purge a9b8c7d6e5f4 시점에 이미 적용돼 있었고, stamp가 건너뛴 삭제는 없다. 잔존 컬럼 0건이라 제거 작업 불요. PR #929가 착지시킨 음(negative) 극성 프로브를 다시 돌려도 같은 판정이 나온다(존재했다면 stamp_target이 seq 64로 내려가고 present_after_gap이 올라갔을 것)."
+    notes: "[경위] PR #929 리뷰(codex 봇 P1)가 짚은 구멍이다. 초판 프로브가 seq 65\n  (f1a2b3c4d5e7 = concept.embedding_id 삭제)를 판별자 없이 건너뛰었고, 2026-08-31 4단계에서\n  stamp --purge a9b8c7d6e5f4(seq 67)를 그 위에 찍었다. 그 시점에 컬럼이 남아 있었다면\n  alembic은 삭제를 `완료`로 믿게 되고 upgrade head는 그 리비전을 영영 실행하지 않는다 —\n  컬럼이 조용히 남는다. 삭제 자체는 죽은 참조 컬럼 정리라 데이터 위험은 낮지만,\n  `스키마가 코드와 일치한다`는 판정이 거짓이 되는 것이 문제다.\n\n[확인 — 읽기 전용, 1줄]\n# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)\ncd C:\\Users\\kiki\\Desktop\\__AI\\WhyMath\ndocker exec whymath-pg psql -U whymath -d whymath -c \"SELECT column_name FROM information_schema.columns WHERE table_name='concept' AND column_name='embedding_id';\"\n\n[판정] 0행 = 정상(삭제가 이미 적용돼 있었다) → 이 게이트 clear.\n  1행 = 삭제가 건너뛰어졌다 → 세션에 알려주면 제거 절차(백업 선행 → ALTER TABLE concept\n  DROP COLUMN embedding_id)를 값이 채워진 블록으로 드린다.\n\n[대책(코드 착지 완료)] 프로브에 음(negative) 극성 축 신설 — 컬럼의 *존재*가 stamp 대상을\n  그 앞(seq 64)에서 막고 present_after_gap을 올린다. 실측: 정상 DB는\n  stamp_target a9b8c7d6e5f4 / after_gap 0, 컬럼을 되살린 DB는 e6f1a2b3c4d5 / after_gap 2.\n  tests/infra/test_prod_schema_probe.py가 삭제 전용 리비전의 극성을 양방향으로 동결한다."
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
     kind: human

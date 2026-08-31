@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-73-generation-seed-threading
+title: "생성 seed 실제 스레딩 — GenerationLog.seed가 전 경로 NULL인 좌석 무작동 해소 (결정론 재생성)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 라우터→provider 호출 경로에 seed를 실제로 스레딩한다(Ollama options.seed 등) — 좌석(GenerationLog.seed BigInteger·EOS-55 착지)은 이미 있고 값이 전무한 상태의 해소. 스레딩이 구조적으로 불가한 provider가 있으면 그 사실을 경로별로 명시하고 NULL을 유지한다(날조 금지·EOS-55 정직 원칙 승계)"
+  - "② '작동한 비율' 보고: seed 적재율을 경로별(pregenerate·accumulate)로 산출해 리포트가 말하게 한다 — 좌석 실재≠적재를 200 응답으로 오인하지 않기 위함. 분모 0은 0%가 아니라 '측정 불가(분모 0)'로 렌더(EOS-57 reach_report 선례)"
+  - "③ 결정론 재생성 계약 테스트: 같은 seed·같은 input_snapshot 재투입이 같은 출력을 내는지 동결. 모델이 비결정적이라 성립하지 않으면 그 사실 자체를 측정으로 남기고 계약을 '재현 불가 자인'으로 축소한다(성립하지 않는 계약을 통과로 위장 금지)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/router.py
+  - "src/backend/whymath_backend/l3/providers/**"
+  - "src/backend/whymath_backend/l3/pregenerate/**"
+  - src/backend/whymath_backend/l3/equivalent/llm_generator.py
+session: null
+notes: "출처: HARN-38 ① EOS-50 중복 대조의 *잔여분*(docs/reviews/eos_number_collision_root_cause_2026-08-31.md §6-2). 원 EOS-50-generation-log-prompt-seed(kiki 머신 브랜치 2026-08-26 등재)의 acceptance 3항을 main EOS-55(done·#912) 착지분과 전수 대조한 결과 ①③은 완전 흡수(EOS-55가 오히려 더 강하게 — 해시가 아니라 prompt/system 전문 저장), ②만 부분 미이행이라 그 잔여만 승계 등재한다. 실측 근거: provenance_bridge.py:151-152·prewarmer.py:117이 'seed 스레딩이 없어 기본 None' 자인 · db/models/provenance.py:173 주석 '현행 두 경로는 seed 미사용=NULL' · 백로그 전수 검색 결과 이 잔여를 소유한 태스크 부재. 원 EOS-50 ②가 함께 요구한 'DSL 생성 경로 적재'는 전제 무효 판정 — l3/dsl은 라우터·프로바이더 import 0건의 결정론 컴파일러라 LLM 호출 자체가 없어 GenerationLog 대상이 아니다(variable_engine.generate(seed=)는 변수 바인딩 난수 seed로 별개 축). prompt 축은 이미 실적재된다(llm_generator.py:585 _prompt_version() 자산 내용 해시) — 미이행은 seed 축 하나. 병렬 세션은 이 잔여를 등재하지 않았다(그쪽 브랜치 EOS-71/72 2건뿐) — 이 태스크는 본 세션 고유분이다. [재번호 2회] EOS-71→EOS-72→EOS-73: 병렬 세션의 EOS-71·EOS-72 선점을 CLI가 연속 실거부해 제안 번호를 채택했다."
+updated: 2026-08-31

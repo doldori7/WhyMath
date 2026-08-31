@@ -20,6 +20,7 @@ from whymath_backend.api._crypto import (
     build_secret_cipher,
     encrypt_dialogue_content,
     encrypt_secret_for_storage,
+    require_device_secret_cipher,
     resolve_dialogue_content,
     resolve_stored_secret,
 )
@@ -190,9 +191,18 @@ class TestStorageHelpers:
         # 복호하면 원본
         assert cipher.decrypt(enc, nonce) == "tok"
 
-    def test_encrypt_for_storage_without_cipher(self) -> None:
+    def test_encrypt_for_storage_without_cipher_explicit_fallback(self) -> None:
         """cipher None이면 (secret_plain, None, None) — 평문 폴백."""
-        assert encrypt_secret_for_storage(None, "tok") == ("tok", None, None)
+        assert encrypt_secret_for_storage(None, "tok", allow_plaintext_fallback=True) == (
+            "tok",
+            None,
+            None,
+        )
+
+    def test_encrypt_for_storage_without_cipher_fail_closed(self) -> None:
+        """cipher None이면서 평문 폴백 미허용 시 RuntimeError(SEC-28 fail-closed)."""
+        with pytest.raises(RuntimeError, match="device secret"):
+            encrypt_secret_for_storage(None, "tok")
 
     def test_resolve_encrypted_round_trip(self) -> None:
         """암호화 저장 → resolve가 복호해 원본 secret 복원(register→verify 경로)."""
@@ -216,6 +226,28 @@ class TestStorageHelpers:
         """평문·암호화 둘 다 없으면 데이터 무결성 오류(RuntimeError)."""
         with pytest.raises(RuntimeError, match="무결성"):
             resolve_stored_secret(SecretCipher(_KEY), None, None, None)
+
+
+class TestRequireDeviceSecretCipher:
+    """SEC-28: device secret cipher — prod-like 환경에서 키 미설정 시 부팅 거부."""
+
+    def test_dev_without_key_returns_none(self) -> None:
+        """개발/CI 환경(kakao/naver 미구성)에서 키 없으면 None(평문 폴백 허용)."""
+        assert require_device_secret_cipher(_settings("")) is None
+
+    def test_prod_without_key_raises(self) -> None:
+        """prod-like(kakao/naver 중 하나 구성) 환경에서 키 없으면 RuntimeError."""
+        dev_settings = _settings("")
+        # Settings 인스턴스에 직접 OAuth provider 속성을 주입해 is_production_like를 True로.
+        dev_settings.kakao_client_id = "real-kakao-id"
+        with pytest.raises(RuntimeError, match="device secret"):
+            require_device_secret_cipher(dev_settings)
+
+    def test_with_key_returns_cipher(self) -> None:
+        """키가 설정되면 cipher 반환 — prod/dev 구분 없음."""
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        cipher = require_device_secret_cipher(_settings(key_b64))
+        assert cipher is not None
 
 
 class TestBuildDialogueContentCipher:
