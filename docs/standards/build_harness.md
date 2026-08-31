@@ -236,6 +236,7 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 python3 scripts/harness/board.py            # work/board.html 생성 (+ 터미널 요약 동시 출력)
 python3 scripts/harness/board.py --text     # HTML 없이 터미널 요약만
 python3 scripts/harness/board.py --json     # 페이로드 JSON (다른 도구가 소비)
+python3 scripts/harness/board.py --no-remote   # 미머지 완료 스캔 생략 (배너로 판정 불가 표기)
 python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # 스냅샷 보관용
 ```
 
@@ -253,11 +254,17 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
 여기에 스테이지 진행률·사람 게이트(경과일·리마인드 초과 강조)·`validate` 경고가 같은
 화면에 얹히고, 검색어·스테이지·레이어·트랙·과목으로 즉시 필터된다.
 
-**계약 2건** (`tests/harness/test_board.py`가 동결):
+**계약 3건** (`tests/harness/test_board.py`가 동결):
 1. **판정 무복제** — 열 배치는 `selector.classify_todo`, 진행률은 `report.stage_progress`를
    그대로 호출한다. 보드가 자기만의 "착수 가능" 판정을 갖는 순간 이중 진실원천이 된다.
 2. **무손실** — 열에 배치된 건수 + 취소 건수 = 전체 건수. 어떤 태스크도 조용히 사라지지
    않는다(보드는 요약이 아니라 전수 투영이다).
+3. **미머지 완료분 재조정** — `remote_claims.scan_remote_done`(fetch 없음·네트워크 0)으로
+   *다른 브랜치에서 이미 done인* 태스크를 "다음 착수"에서 빼 대기 열로 옮기고 사유를
+   붙인다. `next`가 같은 이유로 후보에서 제외하는 축이며(HARN-11), 이것이 없으면 **끝난
+   작업이 예정으로 보여 중복 구현을 부른다**(도입 시 실측 15건). 스캔이 실패하거나
+   `--no-remote`로 건너뛰면 **빈 결과를 "완료분 없음"으로 위장하지 않고** 보드 상단에
+   "판정 불가(<사유>)" 배너를 띄운다 — 측정 실패는 통과와 같은 색이면 안 된다.
 
 보드는 **읽기 전용**이다 — `backlog/`를 일절 쓰지 않으며, 상태 변경 창구는 `backlog.py`
 CLI 단독이라는 규약이 그대로 유지된다. 기본 출력 경로 `work/`는 gitignore 대상이라

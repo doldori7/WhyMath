@@ -30,6 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import remote_claims
 import report
 import selector
 import store
@@ -53,6 +54,8 @@ WAIT_LABEL: dict[str, str] = {
     "claimed": "다른 세션 claim",
     "claimed_remote": "원격 claim",
     "path_overlap": "경로 충돌",
+    # selector가 내지 않는 축 — 원격 브랜치 사본이 done인 태스크(HARN-11 미머지 done 필터)
+    "done_elsewhere": "미머지 완료(다른 브랜치)",
 }
 
 _NOTE_MAX = 220  # 카드에 싣는 사유 발췌 상한 (전문은 yaml에 있다)
@@ -174,9 +177,39 @@ def _order_key(backlog: Backlog, card: BoardTask) -> tuple[int, int, int, str]:
     )
 
 
-def build_board(backlog: Backlog, errors: list[str], today: date) -> dict[str, object]:
-    """보드 페이로드 — HTML 렌더와 --json이 공유하는 단일 자료구조."""
+def apply_remote_done(cards: list[BoardTask], remote_done: dict[str, list[str]]) -> None:
+    """원격 브랜치에서 이미 done인 태스크를 "다음 착수"에서 빼 대기로 옮긴다 (HARN-11 동형).
+
+    트렁크 사본이 아직 todo인 미머지 완료분을 "예정"으로 보여 주면 중복 구현을 부른다 —
+    `backlog.py next`가 같은 이유로 `scan_remote_done` 결과를 후보에서 제외한다. 보드도
+    같은 판정을 쓰되, 지우지 않고 **사유를 붙여** 남긴다(무손실 계약).
+    """
+    for card in cards:
+        branches = remote_done.get(card.id)
+        if not branches or card.column not in ("ready", "waiting"):
+            continue
+        card.column = "waiting"
+        card.reason = WAIT_LABEL["done_elsewhere"]
+        card.detail = ", ".join(branches)
+
+
+def build_board(
+    backlog: Backlog,
+    errors: list[str],
+    today: date,
+    *,
+    remote_done: dict[str, list[str]] | None = None,
+    remote_done_status: str = "skipped",
+) -> dict[str, object]:
+    """보드 페이로드 — HTML 렌더와 --json이 공유하는 단일 자료구조.
+
+    remote_done: task_id → 그 태스크를 done으로 들고 있는 미머지 브랜치들.
+    remote_done_status: 그 스캔의 판정 상태(`ok`/`offline`/`error:*`/`skipped`). `ok`가
+        아니면 **판정 불가**이며, 보드가 그 사실을 배너로 드러낸다 — 빈 결과를 "완료분
+        없음"으로 읽히게 두면 측정 실패가 통과로 위장된다.
+    """
     cards = build_tasks(backlog)
+    apply_remote_done(cards, remote_done or {})
     by_column: dict[str, list[BoardTask]] = {key: [] for key, _, _ in COLUMNS}
     by_column["cancelled"] = []
     for card in cards:
@@ -240,6 +273,8 @@ def build_board(backlog: Backlog, errors: list[str], today: date) -> dict[str, o
         "tracks": tracks,
         "layers": layers,
         "gates": gates,
+        "remote_done_status": remote_done_status,
+        "remote_done_count": len(remote_done or {}),
         "errors": errors,
         "tasks": [card.as_dict() for card in cards],
     }
@@ -346,6 +381,10 @@ input[type=search]{min-width:240px;flex:1}
 .gate.overdue{border-left-color:var(--block)}
 .gate .g{font-size:10.8px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
 .gate .d{float:right;font-size:11.5px;color:var(--block);font-variant-numeric:tabular-nums}
+.notice{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--run);border-radius:9px;padding:9px 12px;font-size:12.5px}
+.notice.stale{border-left-color:var(--block)}
+.notice b{font-weight:660}
 .err{background:var(--panel);border:1px solid var(--block);border-radius:9px;padding:10px 12px;
   color:var(--block);font-size:12.5px}
 footer{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.75}
@@ -360,6 +399,7 @@ _CONTENT = """<div class="wrap">
     <h1>WhyMath 작업 보드</h1>
     <span class="sub" id="hdr"></span>
   </header>
+  <div id="notice"></div>
   <div class="tiles" id="tiles"></div>
 
   <div class="section">스테이지 진행률</div>
@@ -437,6 +477,17 @@ function head() {
        ${g.days != null ? `<span class="d">${g.days}일 경과</span>` : ''}
        <div style="margin-top:4px;font-size:12.5px">${esc(g.title)}</div>
      </div>`).join('') || '<div class="sub">대기 중인 게이트 없음</div>';
+  const st = DATA.remote_done_status;
+  const notice = document.getElementById('notice');
+  if (st !== 'ok') {
+    notice.innerHTML = `<div class="notice stale"><b>미머지 완료 판정 불가 (${esc(st)})</b> — `
+      + `"다음 착수"에 다른 브랜치에서 이미 끝난 작업이 섞여 있을 수 있다. `
+      + `착수 전 <code>backlog.py start &lt;id&gt;</code>로 재확인할 것.</div>`;
+  } else if (DATA.remote_done_count) {
+    notice.innerHTML = `<div class="notice"><b>미머지 완료 ${DATA.remote_done_count}건</b> — `
+      + `다른 브랜치에서 끝났으나 아직 머지되지 않은 태스크를 "다음 착수"에서 빼 `
+      + `대기 열에 사유와 함께 표기했다.</div>`;
+  }
   if (DATA.errors.length) {
     document.getElementById('errbox').innerHTML =
       `<div class="section">정합성 경고</div>`
@@ -555,6 +606,13 @@ def render_text(payload: dict[str, object]) -> str:
         f"  완료 {counts['done']} · 진행 중 {counts['in_progress']} · 다음 착수 {counts['ready']} "
         f"· 대기 {counts['waiting']} · 차단 {counts['blocked']} · 취소 {counts['cancelled']}",
     ]
+    status = payload["remote_done_status"]
+    if status == "ok" and payload["remote_done_count"]:
+        lines.append(
+            f"  ⚠ 미머지 완료 {payload['remote_done_count']}건 — 다음 착수에서 빼 대기로 표기"
+        )
+    elif status != "ok":
+        lines.append(f"  ⚠ 미머지 완료 판정 불가({status}) — 다음 착수에 완료분이 섞였을 수 있음")
     tasks = {t["id"]: t for t in payload["tasks"]}
     for column in payload["columns"]:
         if column["key"] == "done":
@@ -573,6 +631,27 @@ def render_text(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def scan_unmerged_done(
+    root: Path, backlog: Backlog, *, skip: bool = False
+) -> tuple[dict[str, list[str]], str]:
+    """미머지 완료분 조회 — {task_id: [브랜치…]} 와 판정 상태.
+
+    `fetch=False`라 **이미 있는 remote-tracking ref만** 본다(네트워크 0 — 보드는 오프라인
+    에서도 돌아야 한다). 그만큼 마지막 fetch 시점 기준으로 stale할 수 있고, 조회가 실패하면
+    빈 결과가 아니라 상태 문자열로 그 사실이 남는다.
+    """
+    todo_ids = [t.id for t in backlog.tasks.values() if t.status == "todo"]
+    if skip:
+        return {}, "skipped"
+    if not todo_ids:
+        return {}, "ok"
+    policy, _ = store.load_policy(root)
+    if not policy.remote_claims:
+        return {}, "disabled"
+    done_map, status = remote_claims.scan_remote_done(root, todo_ids)
+    return {tid: [f.branch for f in finishers] for tid, finishers in done_map.items()}, status
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="backlog/ 작업 보드 생성 (읽기 전용)")
     parser.add_argument(
@@ -585,12 +664,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="문서 껍데기(<html>/<head>/<body>) 없이 title+style+본문만 출력",
     )
+    parser.add_argument(
+        "--no-remote",
+        action="store_true",
+        help="원격 미머지 done 스캔 생략 (판정 불가로 표기된다 — 숨기지 않는다)",
+    )
     args = parser.parse_args(argv)
 
     root = store.find_repo_root()
     backlog, schema_errors = store.load_backlog(root)
     errors = store.validate_backlog(backlog, schema_errors)
-    payload = build_board(backlog, errors, date.today())
+    remote_done, remote_done_status = scan_unmerged_done(root, backlog, skip=args.no_remote)
+    payload = build_board(
+        backlog,
+        errors,
+        date.today(),
+        remote_done=remote_done,
+        remote_done_status=remote_done_status,
+    )
 
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

@@ -279,3 +279,74 @@ class TestFragment:
         fragment = board.render_html(payload, fragment=True)
         assert document.lower().startswith("<!doctype html>")
         assert fragment.split("</style>", 1)[1].strip() in document
+
+
+class TestUnmergedDone:
+    """미머지 완료분 재조정 — 끝난 작업이 "예정"으로 보이면 중복 구현을 부른다 (HARN-11 동형)."""
+
+    def test_ready_task_done_elsewhere_moves_to_waiting(self):
+        """test_다른_브랜치에서_완료된_태스크는_다음착수에서_빠진다"""
+        payload = board.build_board(
+            _backlog(),
+            [],
+            TODAY,
+            remote_done={"S2-01-ready": ["claude/other-session"]},
+            remote_done_status="ok",
+        )
+        assert _column_of(payload, "S2-01-ready") == "waiting"
+        card = next(t for t in payload["tasks"] if t["id"] == "S2-01-ready")
+        assert card["reason"] == "미머지 완료(다른 브랜치)"
+        assert card["detail"] == "claude/other-session"
+
+    def test_reconciliation_is_lossless(self):
+        """test_재조정도_무손실이다"""
+        payload = board.build_board(
+            _backlog(),
+            [],
+            TODAY,
+            remote_done={"S2-01-ready": ["claude/other-session"]},
+            remote_done_status="ok",
+        )
+        placed = sum(len(col["ids"]) for col in payload["columns"])
+        assert placed + payload["counts"]["cancelled"] == payload["total"]
+
+    def test_terminal_states_are_untouched(self):
+        """test_완료·진행·차단_카드는_재조정_대상이_아니다"""
+        remote_done = {"S1-01-done": ["b1"], "S1-03-run": ["b2"], "S1-05-blocked": ["b3"]}
+        payload = board.build_board(
+            _backlog(), [], TODAY, remote_done=remote_done, remote_done_status="ok"
+        )
+        assert _column_of(payload, "S1-01-done") == "done"
+        assert _column_of(payload, "S1-03-run") == "in_progress"
+        assert _column_of(payload, "S1-05-blocked") == "blocked"
+
+    def test_indeterminate_scan_is_surfaced_not_swallowed(self):
+        """test_판정_불가는_빈_결과로_위장되지_않는다"""
+        payload = board.build_board(
+            _backlog(), [], TODAY, remote_done={}, remote_done_status="offline"
+        )
+        assert payload["remote_done_status"] == "offline"
+        assert "판정 불가(offline)" in board.render_text(payload)
+
+    def test_clean_scan_reports_the_exclusion_count(self):
+        """test_정상_스캔은_제외_건수를_보고한다"""
+        payload = board.build_board(
+            _backlog(), [], TODAY, remote_done={"S2-01-ready": ["b1"]}, remote_done_status="ok"
+        )
+        text = board.render_text(payload)
+        assert "미머지 완료 1건" in text
+        assert "판정 불가" not in text
+
+    def test_default_status_is_skipped_not_ok(self):
+        """test_스캔을_안_했으면_ok가_아니라_skipped다"""
+        payload = board.build_board(_backlog(), [], TODAY)
+        assert payload["remote_done_status"] == "skipped"
+        assert "판정 불가(skipped)" in board.render_text(payload)
+
+    def test_no_remote_flag_skips_the_scan(self, tmp_path):
+        """test_no_remote는_스캔을_건너뛰고_그_사실을_남긴다"""
+        import store
+
+        root = store.find_repo_root()
+        backlog, _ = store.load_backlog(root)
+        assert board.scan_unmerged_done(root, backlog, skip=True) == ({}, "skipped")
