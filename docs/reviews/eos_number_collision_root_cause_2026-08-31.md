@@ -330,9 +330,39 @@ HARN-38 등재 당시 HARN-37 충돌 거부까지 합치면 **변별력 실증 3
 
 ---
 
-## 8. Kiki 실행 과제 브리핑 — CUR-16 브랜치 push (게이트 `G-cur16-branch-push`)
+## 7-A. 조사 중 발생한 사고 — 게이트 대기가 claim을 반납한다 (`HARN-45`)
+
+이 조사 자체가 네 번째 사각을 노출했다. 기록해 둔다 — 조사가 만든 사고를 조사 보고서가
+빠뜨리면 그 사고는 다음 세션에 다시 난다.
+
+**경위**: acceptance ①이 입력 부재로 막혀 게이트 `G-cur16-branch-push`를 신설하고 HARN-38을
+`block`으로 전이했다. `cmd_block`은 `_release_remote_claim`으로 **원격 claim을 반납**한다
+(`backlog.py:711`). 그 창에 다른 세션이 태스크를 집어갔다:
+
+```
+2026-08-31T05:00:05Z  claim HARN-38-eos-number-collision-renumber
+                      (claude/failure-definition-signature-scmzdu)
+```
+
+게이트 해소 후 원 세션이 재claim을 시도하자 CAS 충돌로 거부됐다. **`--force`로 우회하지
+않았다** — CAS claim conflict는 확정 신호이지 장애물이 아니다(CLAUDE.md "거부의 우회 금지").
+크로스세션 메시지도 도달하지 않아(`ListAgents` 0건) 사람 보고로 에스컬레이션했다.
+
+**구조적 원인**: **‘게이트 대기’와 ‘차단’은 의미가 다른데 같은 전이를 쓴다.**
+게이트 대기는 *자리를 지켜야* 하고(같은 세션이 해소 후 이어받는다), 차단은 *인계 가능해야*
+한다(다른 세션이 맡을 수 있다). 게다가 `requires_gates`가 걸린 태스크는 `start`가 거부되므로
+`todo`로 남겨도 재claim이 안 된다 — 즉 **현행 설계에 "게이트 대기 중 자리 보전"을 표현할
+수단 자체가 없다.**
+
+`HARN-45-gate-wait-vs-blocked-state-split`로 등재했다. 이 사고는 §7의 세 사각과 성격이
+다르다 — 앞의 것들은 *관측*의 사각이고, 이것은 *상태 표현*의 사각이다.
+
+## 8. Kiki 실행 과제 브리핑 — CUR-16 브랜치 push (게이트 `G-cur16-branch-push` · **2026-08-31 해소 완료**)
 
 > CLAUDE.md "Kiki 직접 수행 과제의 사전 브리핑 템플릿 의무" 6항목.
+> **[해소 기록]** Kiki가 2026-08-31 실행 완료 — ④ 자가검증에서 `refs/heads/backend/cur-16-…-v2`
+> 1줄·head `3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0` 확인. 아래 브리핑은 **집행 기록**으로
+> 보존한다(다음 유사 과제의 서식 선례). 남은 사람 행동은 §6-3의 브랜치 처분이다.
 
 1. **과제 명칭** — kiki 머신 로컬 브랜치 `backend/cur-16-concept-edge-prerequisite-meta-v2`를
    GitHub에 push (내용 변경 없음 · 순수 업로드)
@@ -394,5 +424,6 @@ python scripts\harness\backlog.py gates clear G-cur16-branch-push --evidence "�
 - `scripts/harness/remote_claims.py:1179-1245` (`scan_remote_task_files` — fetch=False 명문)
 - `scripts/harness/store.py:295-307` (`append_event` — 오프셋 없는 로컬 시각)
 - `tests/harness/test_backlog_add_id_collision.py` (경우 B 사각의 기계 동결)
+- `HARN-45`(조사 중 발생한 사고 — §7-A) · 병렬 claim 충돌 상대 세션 `claude/failure-definition-signature-scmzdu`
 - 선례: ARCH-13(2026-07-18/25) · OPS-15(2026-07-29) · HARN-10 · HARN-15 · HARN-36 · HARN-07
 - PR #902(main EOS-49/50 등재) · #908/#910(G0 서명) · #912(EOS-55) · 커밋 `ad7862ab`
