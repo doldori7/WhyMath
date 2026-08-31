@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-72-content-lifecycle-state-wiring
+title: "ContentLifecycleState 11단계 배선 또는 폐기 결정 — 선언만 존재하는 상태머신 해소 (검토_18 §23)"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - EOS-44-version-management-design
+requires_gates: []
+acceptance:
+  - "l3/dsl/models.py ContentLifecycleState(idea→…→deprecated 11단계, 현재 사용처 0건)를 EOS-44 lifecycle 설계와 정합시켜 ①실 서빙 게이트(review_status·is_published)로의 배선 ②폐기·삭제 둘 중 하나를 결정"
+  - "배선 선택 시: DSL 생성→검증→검수→출판 경로가 상태 전이를 실제로 거치고, 게이트 우회가 구조적으로 불가함을 테스트로 동결"
+  - "폐기 선택 시: 선언 삭제 + review_status 단일 진실원천임을 명시하는 회귀 테스트 — 이중 상태머신 재발 방지"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/dsl/models.py
+  - "src/backend/whymath_backend/l3/dsl/**"
+session: null
+notes: "검토_18 §23 채택. 문서의 generated→schema_validated→…→published 상태머신 제안과 정확히 겹치는 미완 조각 — enum은 export만 되고 소비처 0건(2026-08-25 실측). EOS-44 설계 문서에서 lifecycle 정본이 정해진 뒤 착수. [HARN-38 재등재: kiki 머신 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 커밋 3b7bab6f에서 EOS-51로 등재됐으나 main의 EOS-51-verification-design-freeze(done)와 번호 충돌 — 원본 내용 그대로 새 번호로 이관. 구 YAML은 그 브랜치에만 존재하며 main 미착지이므로 삭제 대상 아님(그 브랜치가 머지되면 충돌 재발하므로 브랜치 소유 세션이 정리해야 한다).]"
+updated: 2026-08-31

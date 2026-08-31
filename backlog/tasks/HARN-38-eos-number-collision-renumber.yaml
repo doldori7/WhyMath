@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - "backlog/tasks/**"
   - "docs/reviews/**"
-session: null
+session: claude/failure-definition-signature-scmzdu
 notes: "사고 경위: 2026-08-30 Kiki가 kiki 머신(CUR-16 브랜치·구버전 트리)에서 G0 서명 블록 실행 → pull 중단·게이트 없음 거부·커밋이 CUR-16 브랜치에 적재되며 동번호 이종 EOS-49/50/51 존재가 노출. full-ID 슬러그가 달라 validate는 통과하는 부류(ARCH-13·OPS-15 선례와 동형·3회차). 이번 등재 자체도 HARN-37 충돌을 CLI가 거부·HARN-38 제안 — 가드 변별력 실증. 착수 전제: 해당 브랜치 push 또는 kiki 머신 세션."
-updated: 2026-08-30
+updated: 2026-08-31
