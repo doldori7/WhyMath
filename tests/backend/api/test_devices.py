@@ -1937,6 +1937,9 @@ def _lifespan_settings(
     max_retries: int = 1,
     backoff_seconds: float = 0.001,
     jitter: bool = False,
+    device_secret_encryption_key: str = "",
+    kakao_client_id: str = "",
+    naver_client_id: str = "",
 ) -> Settings:
     """slice 35: 테스트 기본은 `max_retries=1`(재시도 비활성·기존 timeout 테스트 ~0s) +
     `backoff=0.001s`(재시도 테스트의 sleep 거의 0). slice 36: jitter 기본 False(결정론적·
@@ -1948,6 +1951,9 @@ def _lifespan_settings(
         device_store_health_check_max_retries=max_retries,
         device_store_health_check_retry_backoff_seconds=backoff_seconds,
         device_store_health_check_retry_jitter=jitter,
+        device_secret_encryption_key=SecretStr(device_secret_encryption_key),
+        kakao_client_id=kakao_client_id,
+        naver_client_id=naver_client_id,
     )
 
 
@@ -1984,9 +1990,48 @@ class TestBuildDeviceStoreFromSettings:
         try:
             store, cleanup = build_device_store_from_settings(_lifespan_settings("pg"))
             assert isinstance(store, PgDeviceStore)
+            # SEC-28: 키 미설정 + 개발 환경이면 평문 폴백 명시적 허용
+            assert store._allow_plaintext_fallback is True
             await cleanup()  # noop
         finally:
             await dispose_engine()  # 모듈 전역(_engine·_sessionmaker) 정리
+
+    async def test_pg_mode_with_key_uses_cipher_and_disallows_fallback(self) -> None:
+        """SEC-28: 키 설정 시 cipher가 생기고 평문 폴백은 명시적으로 차단된다."""
+        import base64
+        import os
+
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        try:
+            store, cleanup = build_device_store_from_settings(
+                _lifespan_settings("pg", device_secret_encryption_key=key_b64)
+            )
+            assert isinstance(store, PgDeviceStore)
+            assert store._cipher is not None
+            assert store._allow_plaintext_fallback is False
+            await cleanup()  # noop
+        finally:
+            await dispose_engine()
+
+    async def test_pg_mode_prod_without_key_raises(self) -> None:
+        """SEC-28: prod-like(kakao/naver 구성) 환경에서 device secret 키 미설정 시 부팅 거부."""
+        try:
+            with pytest.raises(RuntimeError, match="device secret"):
+                build_device_store_from_settings(
+                    _lifespan_settings("pg", kakao_client_id="real-kakao-id")
+                )
+        finally:
+            await dispose_engine()
+
+    async def test_pg_cached_mode_prod_without_key_raises(self) -> None:
+        """SEC-28: pg_cached 모드도 prod-like 환경에서 키 미설정 시 부팅 거부."""
+        try:
+            with pytest.raises(RuntimeError, match="device secret"):
+                build_device_store_from_settings(
+                    _lifespan_settings("pg_cached", naver_client_id="real-naver-id")
+                )
+        finally:
+            await dispose_engine()
 
     async def test_pg_cached_mode_returns_cached_store_and_closes_redis(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2792,10 +2837,23 @@ def _fake_sessionmaker_for(store: dict[str, Any]) -> Any:
     return factory
 
 
+def _pg_store(
+    store: dict[str, Any],
+    cipher: SecretCipher | MultiKeyCipher | None = None,
+    allow_plaintext_fallback: bool = True,
+) -> PgDeviceStore:
+    """hermetic PgDeviceStore — 단위 테스트에서는 평문 폴백을 명시적으로 허용."""
+    return PgDeviceStore(
+        _fake_sessionmaker_for(store),
+        cipher=cipher,
+        allow_plaintext_fallback=allow_plaintext_fallback,
+    )
+
+
 class TestPgDeviceStoreRegister:
     async def test_register_inserts_row_and_returns_credentials(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         # 적재 확인
         assert device_id in store_dict
@@ -2809,7 +2867,7 @@ class TestPgDeviceStoreRegister:
 
     async def test_register_yields_distinct_credentials(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, s1 = await store.register(_UID)
         d2, s2 = await store.register(_UID)
         assert d1 != d2
@@ -2820,19 +2878,19 @@ class TestPgDeviceStoreRegister:
 class TestPgDeviceStoreVerify:
     async def test_verify_accepts_valid_signature(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         sig = _compute_signature(secret_plain, device_id)
         assert await store.verify(device_id, sig) is True
 
     async def test_verify_unknown_device_id_returns_false(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         assert await store.verify("never-registered", "0" * 64) is False
 
     async def test_verify_wrong_signature_returns_false(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _secret = await store.register(_UID)
         bad_sig = _compute_signature("wrong-secret", device_id)
         assert await store.verify(device_id, bad_sig) is False
@@ -2840,7 +2898,7 @@ class TestPgDeviceStoreVerify:
     async def test_verify_accepts_uppercase_signature(self) -> None:
         # .lower() 정규화 정합
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         sig_upper = _compute_signature(secret_plain, device_id).upper()
         assert await store.verify(device_id, sig_upper) is True
@@ -2849,7 +2907,7 @@ class TestPgDeviceStoreVerify:
 class TestPgDeviceStoreRevoke:
     async def test_revoke_existing_owner_returns_true_and_marks_row(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _secret = await store.register(_UID)
         assert await store.revoke(device_id, _UID) is True
         # 행이 폐기됐고 revoked_at이 채워졌는지
@@ -2859,14 +2917,14 @@ class TestPgDeviceStoreRevoke:
 
     async def test_revoke_unknown_returns_false(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         # update WHERE device_id = ... AND user_id = ... 가 0행 매치 → rowcount 0 → False
         assert await store.revoke("never-registered", _UID) is False
 
     async def test_verify_after_revoke_returns_false(self) -> None:
         """revoke 후 같은 secret/서명이라도 verify는 False(slice 22 invariant 그대로)."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         sig = _compute_signature(secret_plain, device_id)
         assert await store.verify(device_id, sig) is True
@@ -2876,7 +2934,7 @@ class TestPgDeviceStoreRevoke:
     async def test_revoke_other_owner_returns_false(self) -> None:
         """slice 24: 타인 owner_id로 폐기 시도 → WHERE 매치 0 → False(rowcount 0)."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _secret = await store.register(_UID)
         other_uid = uuid.uuid4()
         assert await store.revoke(device_id, other_uid) is False
@@ -2892,12 +2950,12 @@ class TestPgDeviceStoreListForUser:
 
     async def test_empty_returns_empty_list(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         assert await store.list_for_user(_UID) == []
 
     async def test_scoped_to_owner_and_excludes_revoked(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, _ = await store.register(_UID)
         d2, _ = await store.register(_UID)
         # 다른 사용자의 device
@@ -2916,7 +2974,7 @@ class TestPgDeviceStoreListForUser:
     async def test_verify_success_updates_last_used_at(self) -> None:
         """slice 32: PgDeviceStore.verify가 last_used_at 컬럼 UPDATE."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         assert store_dict[device_id].last_used_at is None
         # verify 성공 → last_used_at 갱신
@@ -2929,7 +2987,7 @@ class TestPgDeviceStoreListForUser:
 
     async def test_verify_failure_does_not_update_last_used_at(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _ = await store.register(_UID)
         # 잘못된 sig → False → last_used_at 갱신 0
         assert await store.verify(device_id, "0" * 64) is False
@@ -2938,7 +2996,7 @@ class TestPgDeviceStoreListForUser:
     async def test_include_revoked_returns_revoked_rows(self) -> None:
         """slice 37: include_revoked=True → WHERE revoked=False 절 제거·폐기 행 포함."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, _ = await store.register(_UID)
         d2, _ = await store.register(_UID)
         await store.revoke(d1, _UID)
@@ -2957,7 +3015,7 @@ class TestPgDeviceStoreListForUser:
     async def test_pagination_via_sql_limit_offset(self) -> None:
         """slice 38: PgDeviceStore.list_for_user가 SQL LIMIT/OFFSET 발급(`_FakePgSession` 처리)."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         ids = [(await store.register(_UID))[0] for _ in range(4)]
         # limit=2 offset=0 → 첫 2개(DESC 정렬·최근 등록 우선)
         page1 = await store.list_for_user(_UID, limit=2, offset=0)
@@ -2971,7 +3029,7 @@ class TestPgDeviceStoreListForUser:
     async def test_count_for_user_via_sql_count(self) -> None:
         """slice 39: PgDeviceStore.count_for_user → SELECT COUNT(*) WHERE ... 발급."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         for _ in range(3):
             await store.register(_UID)
         d_revoke, _ = await store.register(_UID)
@@ -2989,7 +3047,7 @@ class TestPgDeviceStoreListForUser:
         `_FakePgSession._row_matches`가 ge/le 연산자도 처리하므로 hermetic 검증 가능.
         """
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, _ = await store.register(_UID)
         d2, _ = await store.register(_UID)
         now = datetime.now(UTC)
@@ -3008,7 +3066,7 @@ class TestPgDeviceStoreListForUser:
     async def test_revoked_since_until_via_sql_range(self) -> None:
         """slice 43: PgDeviceStore가 revoked_at >= revoked_since / <= revoked_until WHERE 발급."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, _ = await store.register(_UID)
         d2, _ = await store.register(_UID)
         await store.revoke(d1, _UID)
@@ -3051,7 +3109,7 @@ class TestPgDeviceStoreListForUser:
     async def test_used_since_until_via_sql_range(self) -> None:
         """slice 44: PgDeviceStore가 last_used_at >= used_since / <= used_until WHERE 발급."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d_never, _ = await store.register(_UID)
         d_old, secret_old = await store.register(_UID)
         d_recent, secret_recent = await store.register(_UID)
@@ -3078,7 +3136,7 @@ class TestPgDeviceStoreListForUser:
     async def test_order_by_dynamic_column_and_direction(self) -> None:
         """slice 46: PgDeviceStore의 ORDER BY가 동적 컬럼·방향으로 변경됨."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         ids = [(await store.register(_UID))[0] for _ in range(3)]
         # last_used_at 조정 — DESC면 d3, ASC면 d1 순(verify로 채움)
         now = datetime.now(UTC)
@@ -3098,7 +3156,7 @@ class TestPgDeviceStoreListForUser:
     async def test_nulls_first_via_sql_ordering(self) -> None:
         """slice 47: PgDeviceStore가 NULLS FIRST/LAST SQL 발급 → `_FakePgSession` 재귀 unwrap."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         d1, secret1 = await store.register(_UID)
         d_never, _ = await store.register(_UID)
         await store.verify(d1, _compute_signature(secret1, d1))
@@ -3117,12 +3175,12 @@ class TestPgDeviceStoreCleanupStale:
 
     async def test_empty_returns_empty_list(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         assert await store.cleanup_stale(max_age_days=30) == []
 
     async def test_fresh_devices_not_revoked(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _ = await store.register(_UID)
         assert await store.cleanup_stale(max_age_days=30) == []
         assert store_dict[device_id].revoked is False
@@ -3130,7 +3188,7 @@ class TestPgDeviceStoreCleanupStale:
     async def test_stale_by_created_at_revoked(self) -> None:
         """한 번도 verify 안 된 device·created_at > 임계 → 폐기."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _ = await store.register(_UID)
         # created_at을 강제로 31일 전
         store_dict[device_id].created_at = datetime.now(UTC) - timedelta(days=31)
@@ -3141,7 +3199,7 @@ class TestPgDeviceStoreCleanupStale:
 
     async def test_stale_by_last_used_at_revoked(self) -> None:
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, secret_plain = await store.register(_UID)
         # verify 성공 → last_used_at 채워짐
         sig = _compute_signature(secret_plain, device_id)
@@ -3154,7 +3212,7 @@ class TestPgDeviceStoreCleanupStale:
     async def test_already_revoked_skipped_in_select(self) -> None:
         """이미 폐기된 device는 SELECT WHERE revoked=False에서 제외."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _ = await store.register(_UID)
         await store.revoke(device_id, _UID)  # 미리 폐기
         # created_at을 과거로 강제해도 SELECT에서 제외돼 다시 안 폐기
@@ -3164,7 +3222,7 @@ class TestPgDeviceStoreCleanupStale:
     async def test_dry_run_returns_list_without_revoking(self) -> None:
         """slice 34: dry_run=True → SELECT만·UPDATE 0·preview 패턴."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         device_id, _ = await store.register(_UID)
         store_dict[device_id].created_at = datetime.now(UTC) - timedelta(days=31)
         preview = await store.cleanup_stale(max_age_days=30, dry_run=True)
@@ -3258,7 +3316,7 @@ class TestPgDeviceStoreReencrypt:
     async def test_no_cipher_is_noop(self) -> None:
         """cipher 미설정 store는 0(no-op) — 평문 행 그대로."""
         store_dict: dict[str, Any] = {}
-        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        store = _pg_store(store_dict)
         await store.register(_UID)
         assert await store.reencrypt_plaintext_secrets() == 0
         # 평문 그대로
@@ -3269,12 +3327,12 @@ class TestPgDeviceStoreReencrypt:
     async def test_backfills_plaintext_rows(self) -> None:
         """평문 등록 → cipher store 백필 → 행이 암호화(secret_plain NULL)·verify 유지."""
         store_dict: dict[str, Any] = {}
-        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        plain_store = _pg_store(store_dict)
         d1, s1 = await plain_store.register(_UID)
         d2, s2 = await plain_store.register(_UID)
 
         cipher = SecretCipher(os.urandom(32))
-        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        enc_store = _pg_store(store_dict, cipher)
         assert await enc_store.reencrypt_plaintext_secrets() == 2
         # 두 행 모두 암호화 표현으로 전환
         for d, s in ((d1, s1), (d2, s2)):
@@ -3288,10 +3346,10 @@ class TestPgDeviceStoreReencrypt:
     async def test_idempotent_second_run_zero(self) -> None:
         """백필 후 재실행은 0(이미 암호화된 행 제외)."""
         store_dict: dict[str, Any] = {}
-        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        plain_store = _pg_store(store_dict)
         await plain_store.register(_UID)
         cipher = SecretCipher(os.urandom(32))
-        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        enc_store = _pg_store(store_dict, cipher)
         assert await enc_store.reencrypt_plaintext_secrets() == 1
         assert await enc_store.reencrypt_plaintext_secrets() == 0
 
@@ -3299,18 +3357,18 @@ class TestPgDeviceStoreReencrypt:
         """cipher store가 등록한 행(이미 암호화)은 백필 대상 아님 — 0."""
         store_dict: dict[str, Any] = {}
         cipher = SecretCipher(os.urandom(32))
-        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        enc_store = _pg_store(store_dict, cipher)
         await enc_store.register(_UID)  # 암호화 등록
         assert await enc_store.reencrypt_plaintext_secrets() == 0
 
     async def test_batch_size_limits_per_call(self) -> None:
         """batch_size로 호출당 처리량 제한 — 반복 호출로 전체 백필."""
         store_dict: dict[str, Any] = {}
-        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        plain_store = _pg_store(store_dict)
         for _ in range(3):
             await plain_store.register(_UID)
         cipher = SecretCipher(os.urandom(32))
-        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        enc_store = _pg_store(store_dict, cipher)
         assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 2
         assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 1
         assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 0
@@ -3318,11 +3376,11 @@ class TestPgDeviceStoreReencrypt:
     async def test_both_null_row_skipped(self) -> None:
         """이상 행(secret_plain·secret_encrypted 둘 다 NULL)은 건드리지 않음(방어·count 0)."""
         store_dict: dict[str, Any] = {}
-        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        plain_store = _pg_store(store_dict)
         d, _ = await plain_store.register(_UID)
         store_dict[d].secret_plain = None  # 둘 다 NULL인 이상 상태 강제
         cipher = SecretCipher(os.urandom(32))
-        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        enc_store = _pg_store(store_dict, cipher)
         assert await enc_store.reencrypt_plaintext_secrets() == 0
         # 그대로 둠(암호화 안 함)
         assert store_dict[d].secret_encrypted is None
@@ -3336,12 +3394,10 @@ class TestPgDeviceStoreKeyRotation:
         old_key = SecretCipher(os.urandom(32))
         new_key = SecretCipher(os.urandom(32))
         # 회전 전: 구 키 store로 등록(구 키로 암호화 저장)
-        old_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), old_key)
+        old_store = _pg_store(store_dict, old_key)
         device_id, secret = await old_store.register(_UID)
         # 회전 후: 새 키 primary·구 키 fallback → lockout 없이 verify
-        rotated_store = PgDeviceStore(
-            _fake_sessionmaker_for(store_dict), MultiKeyCipher(new_key, [old_key])
-        )
+        rotated_store = _pg_store(store_dict, MultiKeyCipher(new_key, [old_key]))
         assert await rotated_store.verify(device_id, _compute_signature(secret, device_id)) is True
         # 회전 후 신규 등록은 새 키로 암호화 — 구 키 단독 store는 복호 불가(verify 시 raise)
         new_id, new_secret = await rotated_store.register(_UID)

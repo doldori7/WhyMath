@@ -113,7 +113,7 @@ def test_pg_device_store_roundtrip_on_live_pg() -> None:
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
-                store = PgDeviceStore(sm)
+                store = PgDeviceStore(sm, allow_plaintext_fallback=True)
                 # register
                 device_id, secret_plain = await store.register(uid)
                 uuid.UUID(device_id)  # UUID4 형식
@@ -156,7 +156,7 @@ def test_devices_router_with_pg_store_on_live_pg() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
-            store = PgDeviceStore(sm)
+            store = PgDeviceStore(sm, allow_plaintext_fallback=True)
             set_device_store(store)
             try:
                 app = create_app()
@@ -216,8 +216,10 @@ def test_pg_store_persists_across_instances_on_live_pg() -> None:
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
-                store_a = PgDeviceStore(sm)  # "워커 A"
-                store_b = PgDeviceStore(sm)  # "워커 B" — 별 인스턴스, 같은 PG
+                store_a = PgDeviceStore(sm, allow_plaintext_fallback=True)  # "워커 A"
+                store_b = PgDeviceStore(
+                    sm, allow_plaintext_fallback=True
+                )  # "워커 B" — 별 인스턴스, 같은 PG
 
                 device_id, secret_plain = await store_a.register(uid)
                 sig = _sign(secret_plain, device_id)
@@ -257,7 +259,7 @@ def test_cross_user_revoke_isolation_on_live_pg() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
-            store = PgDeviceStore(sm)
+            store = PgDeviceStore(sm, allow_plaintext_fallback=True)
             set_device_store(store)
             try:
                 app = create_app()
@@ -322,7 +324,7 @@ def test_list_devices_endpoint_on_live_pg() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
-            store = PgDeviceStore(sm)
+            store = PgDeviceStore(sm, allow_plaintext_fallback=True)
             set_device_store(store)
             try:
                 app = create_app()
@@ -418,7 +420,7 @@ def test_cleanup_stale_devices_on_live_pg() -> None:
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
-                store = PgDeviceStore(sm)
+                store = PgDeviceStore(sm, allow_plaintext_fallback=True)
 
                 # 1 fresh + 1 stale 등록
                 d_fresh, _ = await store.register(uid)
@@ -493,7 +495,7 @@ def test_cached_device_store_on_live_pg_and_redis() -> None:
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
-                inner = PgDeviceStore(sm)
+                inner = PgDeviceStore(sm, allow_plaintext_fallback=True)
                 store = CachedDeviceStore(inner, redis_client, ttl_seconds=60)
 
                 device_id, secret_plain = await store.register(uid)
@@ -548,7 +550,7 @@ def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
             engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
-                store = PgDeviceStore(sm)
+                store = PgDeviceStore(sm, allow_plaintext_fallback=True)
                 # 등록 순서대로 seq 증가(d1<d2<d3). register는 created_at=now()라 서로 다름.
                 d1, _ = await store.register(uid)
                 d2, _ = await store.register(uid)
@@ -618,7 +620,7 @@ def test_pg_device_store_envelope_encryption_round_trip_on_live_pg() -> None:
                     assert row.secret_nonce is not None
                     assert secret_plain.encode("utf-8") not in row.secret_encrypted
                 # ③ 하위 호환: 평문 등록(cipher 없는 store) → cipher 활성 store가 verify
-                plain_store = PgDeviceStore(sm)
+                plain_store = PgDeviceStore(sm, allow_plaintext_fallback=True)
                 pid, psecret = await plain_store.register(uid)
                 assert await enc_store.verify(pid, _sign(psecret, pid)) is True
             finally:
@@ -685,7 +687,7 @@ def test_pg_device_store_reencrypt_backfill_on_live_pg() -> None:
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 # 평문 등록(cipher 없는 store)
-                plain_store = PgDeviceStore(sm)
+                plain_store = PgDeviceStore(sm, allow_plaintext_fallback=True)
                 d1, s1 = await plain_store.register(uid)
                 d2, s2 = await plain_store.register(uid)
                 # 백필(cipher store)
