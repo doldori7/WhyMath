@@ -541,6 +541,22 @@ DEPRECATED
 
 **폐쇄 루프**: 사용 데이터가 다시 DSL 개선으로 돌아온다.
 
+> **[2026-08-31 부기 · EOS-72] 위 11단계는 코드로 구현하지 않는다 — 정본이 아니다.**
+> `l3/dsl/models.py`에 `ContentLifecycleState`로 선언돼 있었으나 소비처 0건 상태로 남아 있다가
+> 삭제됐다. 이 도식을 배선하면 같은 대상에 상태 머신이 **둘** 생기기 때문이다:
+>
+> | 축 | 정본 | 위치 |
+> |---|---|---|
+> | 노출 판정(이 문항을 학생에게 보여도 되는가) | `ReviewStatus` pending/approved/rejected + `is_review_status_cleared`(approved만 True·fail-closed) | `schema/enums.py` |
+> | 버전 생명주기(이 버전이 어느 단계인가) | DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED, PUBLISHED→DRAFT 금지 | `44_eos_version_management.md` §7 (EOS-44 확정) |
+>
+> 위 11단계는 축이 섞여 있다 — `parsed`·`validated`·`verified`는 이 결정론 컴파일러의 *처리 단계*
+> (함수 호출 순서가 이미 표현한다)이고, `used`·`analyzed`·`improved`는 학습 이벤트·개선 루프이지
+> 노출 판정이 아니다. 도식 자체는 **파이프라인 서사**로는 여전히 유효하므로 남겨 둔다.
+>
+> 재발 방지는 이 부기가 아니라 코드가 한다 — `tests/backend/l3/dsl/test_lifecycle_single_source.py`가
+> `l3/dsl`에서 *출판 거버넌스 어휘를 가진 Enum*을 금지한다(이름을 바꿔 되살려도 CI red).
+
 ---
 
 ## 10. WhyMath 기존 자산과의 통합
