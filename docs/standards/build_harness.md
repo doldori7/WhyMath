@@ -227,6 +227,42 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 세션 종료   → (자동) Stop 훅: claim 태스크 미갱신이면 차단
 ```
 
+## 4b. 작업 보드 — 한 화면 가시화 (`board.py`)
+
+`status`·`brief`가 *터미널 요약*(next 3건 + 게이트)이라면, 보드는 **전수 가시화**다.
+"무엇을 했고 · 무엇을 하는 중이며 · 무엇이 예정인가"를 한 화면에서 본다.
+
+```bash
+python3 scripts/harness/board.py            # work/board.html 생성 (+ 터미널 요약 동시 출력)
+python3 scripts/harness/board.py --text     # HTML 없이 터미널 요약만
+python3 scripts/harness/board.py --json     # 페이로드 JSON (다른 도구가 소비)
+python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # 스냅샷 보관용
+```
+
+산출물은 **자기완결 HTML 1파일**이다 — 외부 CDN·폰트·서버 요청이 없어 오프라인에서도
+열리고, 그대로 첨부·공유할 수 있다. 5열 칸반:
+
+| 열 | 무엇인가 | 판정 근거 |
+|---|---|---|
+| 진행 중 | 세션이 claim해 작업 중 (`in_progress`·`review`) | `status` + `session` |
+| 다음 착수 | 의존성·게이트 전부 해소 — 바로 시작 가능 | `selector.classify_todo` = None |
+| 대기 | 등재됐으나 선행 조건 미해소 (사유 라벨 표시) | `selector.Exclusion.reason` |
+| 차단 | `blocked` — 노트의 최신 `[차단 …]` 문단을 카드에 발췌 | `status` + `notes` |
+| 완료 | 증적 확인된 종결 — 최근 갱신 우선 | `status == done` |
+
+여기에 스테이지 진행률·사람 게이트(경과일·리마인드 초과 강조)·`validate` 경고가 같은
+화면에 얹히고, 검색어·스테이지·레이어·트랙·과목으로 즉시 필터된다.
+
+**계약 2건** (`tests/harness/test_board.py`가 동결):
+1. **판정 무복제** — 열 배치는 `selector.classify_todo`, 진행률은 `report.stage_progress`를
+   그대로 호출한다. 보드가 자기만의 "착수 가능" 판정을 갖는 순간 이중 진실원천이 된다.
+2. **무손실** — 열에 배치된 건수 + 취소 건수 = 전체 건수. 어떤 태스크도 조용히 사라지지
+   않는다(보드는 요약이 아니라 전수 투영이다).
+
+보드는 **읽기 전용**이다 — `backlog/`를 일절 쓰지 않으며, 상태 변경 창구는 `backlog.py`
+CLI 단독이라는 규약이 그대로 유지된다. 기본 출력 경로 `work/`는 gitignore 대상이라
+생성물이 저장소를 오염시키지 않는다(스냅샷을 남기려면 `--out`으로 명시 경로를 준다).
+
 ## 5. 다과목 확장과의 관계 (비침투 원칙)
 
 백로그의 `subject` 필드는 **빌드 관리 메타데이터**다. 런타임 `Subject` enum·
@@ -266,6 +302,7 @@ python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 
 python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
+python3 scripts/harness/board.py                   # 작업 보드 HTML (work/board.html)
 ```
 
 테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (2026-08-10 실측 251건 —

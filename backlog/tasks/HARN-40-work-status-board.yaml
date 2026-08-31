@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-40-work-status-board
+title: "작업 보드 — 완료·진행·예정 한 화면 가시화 (backlog/ 읽기 전용 투영)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "backlog/ 전 태스크를 5열(진행 중·다음 착수·대기·차단·완료)로 배치하는 자기완결 HTML 보드 생성기 scripts/harness/board.py 신설 — 외부 CDN·폰트·서버 요청 0"
+  - "판정 무복제 — 열 배치는 selector.classify_todo, 진행률은 report.stage_progress를 그대로 호출(보드 자체 판정 금지·이중 진실원천 방지)"
+  - "무손실 계약 — 열 배치 건수 + 취소 건수 = 전체 건수를 테스트가 동결(요약이 아니라 전수 투영)"
+  - "읽기 전용 계약 — 보드 생성이 backlog/ 파일 mtime을 바꾸지 않음을 테스트가 동결(상태 변경 창구는 backlog.py CLI 단독)"
+  - "docs/standards/build_harness.md §4b에 정본화 + §7 CLI 요약 등재"
+artifacts: []
+paths:
+  - scripts/harness/board.py
+  - tests/harness/test_board.py
+  - docs/standards/build_harness.md
+session: claude/work-status-dashboard-79426g
+notes: "Kiki 요청(2026-08-31): '어느 작업을 했고 무엇이 진행 중이고 무엇이 예정인지 한 눈에'. status/brief는 next 3건 요약이라 455건 전수 조망이 불가능했다."
+updated: 2026-08-31
