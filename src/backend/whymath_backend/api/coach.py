@@ -68,7 +68,6 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
-from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
@@ -78,6 +77,11 @@ from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l1.embedding_provider import build_provider
+from whymath_backend.l1.standards.alignment_query import (
+    AlignmentAxis,
+    get_alignments,
+    log_join_stats,
+)
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -1166,7 +1170,11 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
     맵에 구조적으로 닿지 못한다(`concept.code`는 UNIQUE라 legacy code와 원자 code는 겹치지 않는
     별개 공간 — `docs/handoff/atom_backbone_next_session.md:19`가 이미 기록한 사실이자
     `api/gating.py::_fetch_achievement_codes`가 옮겨간 이유와 동일). 그래서 구 축은 이 concept_id에
-    대해 늘 0행이었다 — 새 조인은 그 선례(`_fetch_achievement_codes`)를 그대로 재사용한다.
+    대해 늘 0행이었다.
+
+    **CUR-12 통합 경유**: 원자 축 조인을 여기서 다시 쓰지 않고
+    `l1/standards/alignment_query.get_alignments`(단일 진실 원천)를 축 1개(ATOM_NODE)로 호출한다
+    — 쿼리 수는 그대로 1회다. 조인 회계(probed/matched)는 `log_join_stats`가 낸다.
 
     문항 없음·개념 미해석·원자 축 미매핑·성취기준 매핑 빈 배열 어느 단계든 graceful None(폴백).
     각 단계를 디버그 로그로 구분한다(CLAUDE.md "작동한 비율" 원칙 — 0%가 "성취기준 미매핑"인지
@@ -1180,31 +1188,34 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
             "standard_code_for: 개념 미해석(문항-개념 매핑 없음) problem_id=%s", problem_id
         )
         return None
-    stmt = (
-        select(AtomNode.standard_codes)
-        .join(Concept, Concept.code == AtomNode.code)
-        .where(Concept.concept_id == concept_id)
+    result = await get_alignments(
+        session,
+        concept_ids=[concept_id],
+        axes={AlignmentAxis.ATOM_NODE},
     )
-    standard_codes: list[str] | None = await session.scalar(stmt)
-    if standard_codes is None:
-        # INNER JOIN 0행 — concept.code가 atom_node에 없다(비원자 개념이거나 원자 미적재).
-        logger.debug(
-            "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
-            "problem_id=%s concept_id=%s",
-            problem_id,
-            concept_id,
-        )
+    log_join_stats(result.stats, logger=logger, context=f"coach.standard_code_for/{problem_id}")
+    if result.stats.matched == 0:
+        # 두 사태를 계속 구분해 로그로 남긴다(CUR-04가 세운 3단계 구분 유지 — 0%의 원인이
+        # 묻히지 않게). 기준은 **joined**다: OUTER JOIN이라 개념이 있으면 probed는 늘 1이고,
+        # 원자 행이 실제로 붙었는지는 joined만 안다(#933 리뷰 P2 — probed로 갈랐더니 조인
+        # 미스가 "매핑 없음"으로 잘못 찍혔다).
+        if result.stats.joined == 0:
+            logger.debug(
+                "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
+                "problem_id=%s concept_id=%s",
+                problem_id,
+                concept_id,
+            )
+        else:
+            logger.debug(
+                "standard_code_for: 원자 노드는 매칭됐으나 성취기준 매핑 없음 "
+                "problem_id=%s concept_id=%s",
+                problem_id,
+                concept_id,
+            )
         return None
-    if not standard_codes:
-        # 원자 노드는 매칭됐으나 이 원자에 연결된 성취기준이 없다(매핑 부재 — 조인 실패 아님).
-        logger.debug(
-            "standard_code_for: 원자 노드는 매칭됐으나 성취기준 매핑 없음 "
-            "problem_id=%s concept_id=%s",
-            problem_id,
-            concept_id,
-        )
-        return None
-    return sorted(standard_codes)[0]
+    # 결정론 — refs는 정렬·중복 제거되어 나온다(첫 코드 선택이 안정).
+    return result.standard_refs(kind="official_code")[0]
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
