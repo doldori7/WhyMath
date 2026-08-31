@@ -31,9 +31,13 @@ from whymath_backend.schema.enums import (
 from whymath_backend.schema.problem import (
     Condition,
     DistractorEntry,
+    MathExtension,
+    MathExtensionPublic,
     Problem,
+    ProblemExtensions,
     ProblemRelation,
     ProblemStep,
+    PublicProblem,
     SchemaVersion,
 )
 from whymath_backend.schema.visualization import Visualization
@@ -636,6 +640,117 @@ class TestCopyrightInvariant:
         assert p.question_text is None  # 본문은 여전히 비어야(불변식 충족)
         assert p.distractor_map is not None
         assert p.distractor_map[0].choice_index == 1
+
+
+# ──────────────────────────────────────────────────────────────────────
+# MathExtension / ProblemExtensions (011_2) — 과목별 확장 분리
+# ──────────────────────────────────────────────────────────────────────
+class TestMathExtension:
+    def test_math_extension_all_fields(self) -> None:
+        """MathExtension은 5개 수학 특화 필드를 담는다."""
+        ext = MathExtension(
+            answer_transform={"type": "p_plus_q", "p": 3, "q": 5},
+            answer_constraint={"min": 1, "max": 999, "is_natural": True},
+            signature_patterns=[SignaturePattern.COMPOSITE_DIFFERENTIABILITY],
+            requires_graph_sketch=True,
+            sketch_step_count=6,
+        )
+        assert ext.answer_transform is not None
+        assert ext.answer_transform["p"] == 3
+        assert ext.signature_patterns == [SignaturePattern.COMPOSITE_DIFFERENTIABILITY]
+
+    def test_math_extension_public_excludes_answer_fields(self) -> None:
+        """공개 투영 MathExtensionPublic은 정답 유도 필드를 제외한다."""
+        MathExtensionPublic(
+            signature_patterns=[SignaturePattern.COMPOSITE_DIFFERENTIABILITY],
+            requires_graph_sketch=True,
+            sketch_step_count=6,
+        )
+        assert "answer_transform" not in MathExtensionPublic.model_fields
+        assert "answer_constraint" not in MathExtensionPublic.model_fields
+
+    def test_extensions_extra_forbidden(self) -> None:
+        """ProblemExtensions에 정의되지 않은 과목 키는 거부."""
+        with pytest.raises(ValidationError):
+            ProblemExtensions(physics={})  # type: ignore[call-arg]
+
+    def test_problem_creates_extensions_from_legacy(self) -> None:
+        """legacy 필드만 제공하면 extensions.math가 자동 생성."""
+        p = _minimal_self_generated(
+            answer_transform={"type": "p_plus_q", "p": 3, "q": 5},
+            answer_constraint={"min": 1, "max": 999},
+            signature_patterns=[SignaturePattern.COMPOSITE_DIFFERENTIABILITY],
+            requires_graph_sketch=True,
+            sketch_step_count=6,
+        )
+        assert p.extensions is not None
+        assert p.extensions.math is not None
+        assert p.extensions.math.answer_transform is not None
+        assert p.extensions.math.answer_transform["p"] == 3
+        assert p.extensions.math.signature_patterns == [
+            SignaturePattern.COMPOSITE_DIFFERENTIABILITY
+        ]
+        assert p.extensions.math.requires_graph_sketch is True
+        assert p.extensions.math.sketch_step_count == 6
+
+    def test_problem_syncs_legacy_from_extensions(self) -> None:
+        """extensions.math만 제공하면 legacy top-level 필드가 동기화."""
+        p = _minimal_self_generated(
+            extensions=ProblemExtensions(
+                math=MathExtension(
+                    answer_transform={"type": "p_plus_q", "p": 7, "q": 11},
+                    signature_patterns=[SignaturePattern.GRAPH_SHAPE_INFERENCE],
+                    requires_graph_sketch=True,
+                    sketch_step_count=5,
+                )
+            ),
+        )
+        assert p.answer_transform == {"type": "p_plus_q", "p": 7, "q": 11}
+        assert p.signature_patterns == [SignaturePattern.GRAPH_SHAPE_INFERENCE]
+        assert p.requires_graph_sketch is True
+        assert p.sketch_step_count == 5
+
+    def test_public_problem_strips_answer_fields_from_extensions(self) -> None:
+        """PublicProblem.from_problem은 extensions.math에서 정답 유도 필드를 제외."""
+        p = _minimal_self_generated(
+            answer_transform={"type": "p_plus_q", "p": 3, "q": 5},
+            answer_constraint={"min": 1, "max": 999},
+            signature_patterns=[SignaturePattern.COMPOSITE_DIFFERENTIABILITY],
+            requires_graph_sketch=True,
+            sketch_step_count=6,
+        )
+        public = PublicProblem.from_problem(p)
+        assert public.extensions is not None
+        assert public.extensions.math is not None
+        assert "answer_transform" not in MathExtensionPublic.model_fields
+        assert "answer_constraint" not in MathExtensionPublic.model_fields
+        assert public.extensions.math.signature_patterns == [
+            SignaturePattern.COMPOSITE_DIFFERENTIABILITY
+        ]
+        assert public.extensions.math.requires_graph_sketch is True
+        assert public.extensions.math.sketch_step_count == 6
+
+    def test_extensions_roundtrip_via_db_mapping(self) -> None:
+        """from_schema/to_schema는 extensions를 DB 컬럼(legacy)을 통해 복원."""
+        from whymath_backend.db.models.problem import Problem as DbProblem
+
+        p = _minimal_self_generated(
+            answer_transform={"type": "p_plus_q", "p": 3, "q": 5},
+            signature_patterns=[SignaturePattern.COMPOSITE_DIFFERENTIABILITY],
+            requires_graph_sketch=True,
+            sketch_step_count=6,
+        )
+        orm = DbProblem.from_schema(p)
+        restored = orm.to_schema()
+        assert restored.extensions is not None
+        assert restored.extensions.math is not None
+        assert restored.extensions.math.answer_transform is not None
+        assert restored.extensions.math.answer_transform["p"] == 3
+        assert restored.extensions.math.signature_patterns == [
+            SignaturePattern.COMPOSITE_DIFFERENTIABILITY
+        ]
+        assert restored.extensions.math.requires_graph_sketch is True
+        assert restored.extensions.math.sketch_step_count == 6
 
 
 # ──────────────────────────────────────────────────────────────────────
