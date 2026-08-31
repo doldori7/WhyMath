@@ -338,6 +338,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (구현·EOS-60): **골든 벤치마크 셋 + QA 엔진 혼동행렬 — 판정기의 FN율을 처음으로 잰다(N8 갭 해소)** (claude 구현)
+- **문제**: `qa_pipeline`이 9축을 조립해 PASS/FAIL을 내지만 **자기 FN율을 모른다**. EOS-51 §6 내용 KPI 6종 중 4종이 골든 라벨에 의존하는데 저장소 전수 grep 0건이었다(N8 — `eos_validation_n1_n10_gap_review_2026-08-30.md` §3.7). G2(10/25)의 "자동검증 ≥70%"는 자동검증이 맞는지 모르면 무의미한 숫자다
+- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 73건
+- **별도 라벨링 캠페인 0**: 골든은 EOS-54 검수 이벤트의 `verdict`·`failure_code`에서 승격한다(검수 185 CU 예산의 부산물 — 추가 인간 시간 ≈ 0). 앵커 6 × 30~35 ≈ 200건 목표
+- **as-found fail-closed(#911 codex P1 반영)**: `rejected`는 그대로 승격, `approved`는 ⓐ 검수 전 스냅샷 또는 ⓑ EOS-62 edit-aware verdict(+`--edit-aware-since` 경계) 없이는 **제외 + 건수 명시**. 손질 후 승인을 clean으로 승격하면 FN율이 과소평가되어 골든이 자기 목적을 훼손한다. ⓑ 착지 여부는 상수가 아니라 `ReviewVerdict` 어휘 **실측**(`edit_aware_verdict_available`) — EOS-62 착지 시 자동 해금, 착지 전에는 손대지 않아도 fail-closed 유지
+- **과적합 방지(S2-11 골든 적용)**: 골든에 `golden_version`·`rotation`·`frozen_at`·`digest`(판정 축만의 sha256 — 라벨 손편집은 로드 시 터짐) 동결 + 평가 원장으로 "같은 골든 × 다른 엔진 리비전" 재채점을 exit 1 차단(같은 리비전 재실행은 재현성 확인이므로 허용). 회전 해시는 `reviewer_sample_package.rotation_key`를 공개 승격해 **재사용**(재구현 0)
+- **FN 위장 차단**: 예측 없는 골든 항목을 pass로 세지 않는다(미평가 분리 카운트) — 이 계약이 깨지면 FN율이 구조적으로 낮아진다. 파싱 실패 1건이라도 있으면 판정하지 않는다(hit_cu_metrics 동일 규약)
+- **집행 별항(⑤)**: 내용 KPI 4종의 골든 소비 결선표를 `CONTENT_KPI_CONSUMERS`로 동결하고 리포트가 **라벨 축별 정답지 건수**와 함께 상시 출력 — 착지는 `ops/qa_confusion_matrix` 1종뿐이고 교육과정 정합률·op-code 정확도·풀이 비약 κ는 **미착지**(좌석 `EOS-61`·`MISC-07`)임을 그대로 적는다. 표와 실체의 정합(착지=import 가능·미착지=좌석 태스크 실재)은 테스트가 기계 동결. `subject_id`는 처음부터 스키마에(Math 비종속)
+- **CI 배선 판정**: 둘 다 검수 실이벤트 의존이라 `declared_unwired_audit`에 `by-design` 등재(hit_cu_metrics 동형) — 판정 로직 자체는 backend 잡이 수집하는 테스트가 상시 검증한다
 ### 2026-08-31 (감사·stray-code): **미머지 브랜치 5차 전수 감사 — 삭제 0건·회수 1건(S4-59)·추적자 0인 사람 결정 1건 게이트화(G-authoring-expansion-merge-decision)** (Kiki "/stray-code", claude 감사)
 
 - **전제 복구**: 세션 클론이 shallow였고 SessionStart 브리핑도 "장기 미머지 브랜치 조회 불가 — 판정 보류"를 자인했다. `git fetch --unshallow` 후 트렁크 904커밋 복원하고서야 판정에 착수(shallow 상태의 ahead 수치·포팅 근거는 전부 오염된다는 08-11 선례 준수)
@@ -7335,16 +7344,23 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 > 같은 날 두 항목의 **종결분**. 이 태스크는 "번호 충돌을 고치는 태스크"였는데, **그 조사 도중 같은 유형이 두 번 더 발생**했다. 둘 다 기록한다 — 조사가 만든 사고를 조사가 빠뜨리면 다음 세션에 다시 난다.
 
 - **acceptance ① 전항 완료**: 재등재 + 구 YAML 삭제. Kiki가 브랜치 삭제 실행(`[deleted] backend/cur-16-…-v2` · `Deleted branch (was 3b7bab6f)` · **자가검증 `git ls-remote` 무출력**=성공 방향) → 게이트 `G-cur16-branch-disposal` cleared. 최종 번호 = **`EOS-71`**(quarantine)·**`EOS-72`**(lifecycle)·**`EOS-73`**(EOS-50 잔여 seed 스레딩).
-- **재발 ① — 런북이 사고를 재생산할 뻔했다(Codex P2 · PR #930)**: 내 §8 브리핑이 kiki 머신용으로 `backlog.py gates clear G-cur16-branch-push`를 안내했는데, 그 게이트는 **미머지 브랜치에만** 있다(실측: `git show origin/main:backlog/gates.yaml | grep -c` → **0**, CUR-16 브랜치도 **0**). 실행됐다면 `게이트 없음`으로 거부돼 **이 사고를 촉발한 2026-08-30 실패와 글자 그대로 같은 실패**가 났다. **어긴 규칙은 이미 있었다** — "미머지 브랜치의 신규 파일을 쓰는 명령이면 브랜치 fetch/checkout을 선행 포함". 원인: "신규 **파일**"이라는 문언을 읽고 **대장의 신규 *항목*(gates.yaml의 게이트 1줄)** 을 그 범주로 매핑하지 못했다 — 파일은 이미 있고 항목만 새것이라 "신규 파일 없음"으로 통과시켰다. **상환 = CLAUDE.md 규칙에 대장 항목 명시 편입(v0.2.4)** + 안내 전 실재 확인 의무(`git show origin/main:backlog/gates.yaml | grep -c <ID>`). 실피해 0 — Kiki가 그 단계를 건너뛰었다(**설계가 아니라 운**).
+- **재발 ① — 런북이 사고를 재생산할 뻔했다(Codex P2 · PR #930)**: 내 §8 브리핑이 kiki 머신용으로 `backlog.py gates clear G-cur16-branch-push`를 안내했는데, 그 게이트는 **미머지 브랜치에만** 있다(실측: `git show origin/main:backlog/gates.yaml | grep -c` → **0**, CUR-16 브랜치도 **0**). 실행됐다면 `게이트 없음`으로 거부돼 **이 사고를 촉발한 2026-08-30 실패와 글자 그대로 같은 실패**가 났다. **어긴 규칙은 이미 있었다** — "미머지 브랜치의 신규 파일을 쓰는 명령이면 브랜치 fetch/checkout을 선행 포함". 원인: "신규 **파일**"이라는 문언을 읽고 **대장의 신규 *항목*(gates.yaml의 게이트 1줄)** 을 그 범주로 매핑하지 못했다 — 파일은 이미 있고 항목만 새것이라 "신규 파일 없음"으로 통과시켰다. **상환 = CLAUDE.md 규칙에 대장 항목 명시 편입(v0.2.5)** + 안내 전 실재 확인 의무(`git show origin/main:backlog/gates.yaml | grep -c <ID>`). 실피해 0 — Kiki가 그 단계를 건너뛰었다(**설계가 아니라 운**).
 - **재발 ② — 병렬 이중 등재(§6-1a)**: 다른 세션 `claude/failure-definition-signature-scmzdu`가 같은 HARN-38을 병렬 수행해 같은 원본 3건을 **다른 번호로** 등재했다(본 세션 EOS-69/70 vs 그쪽 EOS-71/72). **"같은 일을 두 번호로 등재" = HARN-38이 고치려던 바로 그 질병의 재발.** 원인은 `HARN-45`(block이 claim 반납 → 게이트 대기 중 자리 상실). **해소 = 본 세션이 양보**하고 원격 대장 선등재분(EOS-71/72)으로 통일·EOS-69/70 철회. 근거는 예의가 아니라 **재발 차단**이다 — 같은 full ID면 두 브랜치가 다 머지돼도 충돌이 아니지만(`backlog.py:1001-1003`), 각자 번호를 유지하면 **머지 순간 내용 동일 태스크가 4개**가 되고 슬러그가 달라 validate는 통과한다(원형 그대로). 두 이관본의 title·acceptance·paths가 동일함을 대조해 양보로 잃는 내용이 0임을 확인했다.
 - **`HARN-45`의 격상 근거**: 가설적 위험이 아니라 **같은 세션 안에서 원인(claim 반납)→결과(이중 등재)가 모두 관측된** 결함이라 priority 1로 등재했다.
 - **가드 실거부 누적 5회**(변별력 실증): HARN-37(등재) · HARN-42(대책) · EOS-67 · EOS-71 · EOS-72(재번호). 전부 **push된** 브랜치 상대라 출처 ③이 잡았다 — 문제는 판정력이 아니라 관측 범위임을 재확인.
-- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§8 정정 · CLAUDE.md v0.2.4 · EOS-71·EOS-72·EOS-73 · HARN-43·HARN-44·HARN-45 · 게이트 G-cur16-branch-push·G-cur16-branch-disposal(둘 다 cleared)
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§8 정정 · CLAUDE.md v0.2.5 · EOS-71·EOS-72·EOS-73 · HARN-43·HARN-44·HARN-45 · 게이트 G-cur16-branch-push·G-cur16-branch-disposal(둘 다 cleared)
 
-## 2026-08-31: 런북 형식 결함 2회차 — 증거 인용이 복사-실행됨 (CLAUDE.md v0.2.5)
+## 2026-08-31: 런북 형식 결함 2회차 — 증거 인용이 복사-실행됨 (CLAUDE.md v0.2.6)
 
 - **경위**: HARN-38 세션이 claim 대장 실측을 Kiki에게 보고하며 `$ git ls-tree -r --name-only origin/harness-claims`(프롬프트 접두 `$` 포함)와 그 **출력 줄**(`claims/EOS-71-….json   ← 여기`)을 한 코드 펜스에 담았다 → Kiki가 그대로 붙여넣어 PowerShell이 둘 다 명령으로 해석·`CommandNotFoundException` 2건. **피해 0**(조회였고 실행조차 안 됨) — 다만 파괴적 명령의 출력을 같은 방식으로 인용했다면 결과가 달랐다.
 - **원인**: 코드 펜스는 Kiki에게 **복사-실행 대상으로 읽힌다.** 세션의 "증거 인용" 의도가 **형식에 나타나지 않았다.** 시크릿 규칙("생략 문자를 복사-실행되는 위치에 두지 않는다")이 같은 원리를 이미 담고 있었으나 *증거 인용* 축으로 일반화돼 있지 않았다.
-- **상환**: `CLAUDE.md` v0.2.5 — ①실행용 블록에는 **순수 명령만**(프롬프트 접두·출력 줄·`← 여기` 같은 설명 화살표 금지) ②증거·출력 인용은 실행용과 눈으로 구별되게 표시하고, 실행이 필요하면 **동작하는 형태의 블록을 따로** 준다.
-- **같은 세션 2회차라는 점이 핵심**: 첫 번째는 미머지 게이트 clear 안내(Codex P2·v0.2.4 상환). **두 결함 다 *내용*은 옳았고 *형식*이 틀렸다** — 하나는 맞는 명령을 틀린 체크아웃에서 돌리게 했고, 하나는 명령이 아닌 것을 명령 자리에 놓았다. 공통 자문: **"이걸 그대로 붙여넣으면 무슨 일이 일어나는가."**
-- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-B·§8 · CLAUDE.md v0.2.5
+- **상환**: `CLAUDE.md` v0.2.6 — ①실행용 블록에는 **순수 명령만**(프롬프트 접두·출력 줄·`← 여기` 같은 설명 화살표 금지) ②증거·출력 인용은 실행용과 눈으로 구별되게 표시하고, 실행이 필요하면 **동작하는 형태의 블록을 따로** 준다.
+- **같은 세션 2회차라는 점이 핵심**: 첫 번째는 미머지 게이트 clear 안내(Codex P2·v0.2.5 상환). **두 결함 다 *내용*은 옳았고 *형식*이 틀렸다** — 하나는 맞는 명령을 틀린 체크아웃에서 돌리게 했고, 하나는 명령이 아닌 것을 명령 자리에 놓았다. 공통 자문: **"이걸 그대로 붙여넣으면 무슨 일이 일어나는가."**
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-B·§8 · CLAUDE.md v0.2.6
+
+## 2026-08-31: 동종 3회차 — 병렬 세션이 CLAUDE.md 버전 번호를 각자 v0.2.4로 배정
+
+- **경위**: PR #930의 base 최신화 중, main의 **#928(EOS-60)** 이 `CLAUDE.md`를 v0.2.4(골든 벤치마크 계약 인덱스 등재)로 올린 것이 발견됐다 — 본 세션도 같은 번호를 썼다(대장 신규 항목 편입). **git이 content 충돌로 잡아** 자동 병합을 막았다(add/add가 아니라 같은 줄 수정이라 잡혔다).
+- **해소**: 본 세션이 양보 — main의 v0.2.4를 이력에 보존하고 본 세션 분을 **v0.2.5**(대장 신규 항목)·**v0.2.6**(실행용↔증거 블록 분리)으로 재배정. 태스크 번호 양보(§6-1a)와 **같은 원칙**(원격에 먼저 착지한 쪽이 기준).
+- **의의 — 세 번째 동종 사례**: 태스크 ID → 게이트 ID → **문서 버전 번호**. 셋 다 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것이다. `HARN-43`이 겨냥하는 병목이 **`backlog.py` 번호 가드보다 넓다**는 증거 — 가드가 있는 축에서는 CLI가 5번 실거부했지만, 가드가 **없는** 축(게이트 ID·문서 버전)에서는 사람 또는 git 충돌이 최후 방어선이었다. 이번엔 git이 잡아 피해 0이나, 버전 줄이 두 브랜치에서 *같은 자리*가 아니었다면 조용히 둘 다 v0.2.4로 남았을 것이다.
+- **cross-ref**: PR #930·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.6 · HARN-43
