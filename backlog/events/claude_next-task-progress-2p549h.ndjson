@@ -1,0 +1,3 @@
+{"ts": "2026-08-31T11:20:04", "actor": "claude/next-task-progress-2p549h", "action": "add", "id": "HARN-47-stale-branch-isolation-vs-pr-pending"}
+{"ts": "2026-08-31T11:20:15", "actor": "claude/next-task-progress-2p549h", "action": "start", "id": "HARN-47-stale-branch-isolation-vs-pr-pending", "session": "claude/next-task-progress-2p549h", "remote": "ok"}
+{"ts": "2026-08-31T11:47:31", "actor": "claude/next-task-progress-2p549h", "action": "done", "id": "HARN-47-stale-branch-isolation-vs-pr-pending", "artifacts": ["PR #936 (https://github.com/doldori7/WhyMath/pull/936) — 커밋 ccfd82c5(구현·테스트·CI 배선) + 67d38151(문서·MEMORY). 실측: 미머지 18건 → 고립 7 + PR제출 11. 뮤테이션 5종 전건 red·cp 복원 md5 일치. harness 407 passed·harness+infra 663 passed(제외 4파일은 origin/main 워크트리에서 동일 47 failed로 기준선 확인)."]}
