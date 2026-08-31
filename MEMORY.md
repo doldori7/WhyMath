@@ -7260,3 +7260,11 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **LIC-02**: `scripts/ops/license_snapshot_archiver.py`(표준 라이브러리 단독·exit 0/1/2/3·실패 경로 5축) + content-addressed 멱등 + append-only 감사로그(`docs/data/license_snapshot_archive.md` 규약 정본). **Tier1 목록 = 매트릭스 실측 20곳**(선언 "14곳"과 차이 — 도출 규칙·사유 문서 §1). 라이브 3런: 성공 6곳 스냅샷 커밋·멱등 unchanged 6/6 실증·**프록시 차단 14곳**(Kiki 머신 실행 몫 — 문서 §5 명령 블록). 부산물: miniF2F "MIT" 표기 불완전 실측 → `LIC-04` 등재.
 - **병렬 머지 충돌 1건**: #910(kiki 세션 — G0 Kiki 직접 서명+F-Ⅰ~Ⅴ 기계 동결)이 선머지 → `events.ndjson` add/add. base 머지로 해소(로컬 자동 병합·validate green·#910 신규 테스트 13+19 본 브랜치 위 passing 확인). G0 서명은 #910의 Kiki 본인 서명이 정본(내 대리 clear ad7862ab를 상위 대체 — 방향 일치).
 - **cross-ref**: PR #909(EOS-54)·#912 · `eos_verification_design_v1.md` §6(HIT·CU당 비용 지표의 계측기+재료 완비) · HARN-38(EOS-50 중복 의심 대조 시 EOS-55 착지 반영할 것).
+
+## 2026-08-31: /drive 2루프 3건 착지 — EOS-58 E2E 관통·CUR-09 가설 동결·CUR-11 API (#914·#920)
+
+- **EOS-58(#914)**: A4 앵커 E2E 1회 관통(G1 차단 해소) — 실 CLI·SymPy 실물·행 수 실측. codex 3건이 검수 큐 설계 결함을 짚어 **내구 큐 계층**(`<out>.review.jsonl` 즉시 flush + 워크리스트=누적 렌더 뷰 + payload 전문) 착지 — needs_review 후보가 라이브 경로에서 휘발하던 실공백 2단 해소. 후속 = EOS-64(nightly 골든 승격·HARN-10 제안 번호).
+- **CUR-09(#914)**: 단원 구조 3가설(순서 Overlay·역할 enum·coverage_weight) — 현행 5측정 등식 동결(성취기준 510/844 복수 원자 = 균등 가중 강제 실측)·채택 트리거 명세·UnitNode 1급 비채택 기계 동결. 외부 설계안 116항 원문 미확보(재제공 요청 명기).
+- **CUR-11(#920)**: `/v1/curricula`+`/v1/learning-outcomes`+`/v1/alignments` 5종 — CUR-10 첫 HTTP 표면(착수 실측: api 소비처 0). subject-neutral 라우팅 기계 동결·통합 3건은 임시 PG16 클러스터 자가 구성으로 실 SQL 검증. CUR-12 경계 별항(통합 함수 미선점).
+- **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
+- **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
