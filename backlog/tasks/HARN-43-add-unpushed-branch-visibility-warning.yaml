@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -15,11 +15,14 @@ acceptance:
   - "② scan_remote_task_files가 읽은 remote-tracking ref의 신선도(마지막 fetch 이후 경과)를 함께 고지한다 — fetch=False 기본값은 유지(네트워크 비용 가드·test_default_call_never_invokes_git_fetch 계약 불변)"
   - "③ 변별력 실측: 원격 ref 있는 브랜치에서는 경고가 나오지 않고 없는 브랜치에서만 나오는 것을 hermetic bare_remote 픽스처로 양방향 동결. 무조건 출력하는 경고는 소음이라 검증이 아니다"
   - "④ 정직한 한계 명문화: 이것은 탐지가 아니라 고지다 — 미push 브랜치를 실제로 관측하는 수단은 없다. docstring에 그 한계를 적고 '가드 통과 ≠ 충돌 없음'을 경고 문안에 담는다"
-artifacts: []
+artifacts:
+  - "PR(예정) — cmd_add 가시성 고지: remote_claims.branch_has_remote_ref/remote_refs_age_seconds(네트워크 0) + backlog._print_visibility_notice. ①미push ref 부재 ②원격 스냅샷 나이 임계(1800s) 두 축, 둘 다 해당 없으면 완전 침묵"
+  - "tests/harness/test_backlog_add_id_collision.py::TestAddVisibilityNotice(4건)·TestVisibilityHelpersAreNetworkFree(2건) — 양방향 변별력 + fetch 미호출 계약 + undecidable 축"
+  - "뮤테이션 3종 실측: 무조건 고지/전면 침묵/None→False 각각 해당 축만 red · cp 백업 원복·md5 동일"
 paths:
   - scripts/harness/backlog.py
   - scripts/harness/remote_claims.py
   - tests/harness/test_backlog_add_id_collision.py
 session: null
-notes: "출처: HARN-38 경위 규명(docs/reviews/eos_number_collision_root_cause_2026-08-31.md §2-2·§3-2·§7). 동번호 이종 태스크 3회차(ARCH-13·OPS-15·EOS-49/50/51) — 앞 두 대책(HARN-10 번호 가드·HARN-15 원격 파일명 스캔)은 push된 표면만 넓혔고 이번 사고는 그 밖에서 났다. 실측: 가드 출처 3종이 36브랜치·11,975 파일을 훑고도 cur-16 브랜치를 0건 관측(status는 둘 다 ok — fail-open 아님). [사례 누적 — 2026-08-31 하루 5회 실측] 이 병목은 태스크 ID 축에만 있지 않다. ①태스크 ID(EOS-49/50/51 원 사고) ②게이트 ID(미머지 게이트의 clear 안내 — CLAUDE.md v0.2.6 상환) ③④문서 버전 번호 2회(CLAUDE.md v0.2.4를 PR #928과, v0.2.5를 PR #924와 각각 동시 배정 — 매번 main을 이력에 보존하고 밀어냄) ⑤같은 작업의 중복 수행(PR #930 머지 후 #931의 대장 충돌을 본 세션과 그 브랜치 소유 세션이 *동시에* 해소 — 본 세션 push가 non-fast-forward로 거부돼 발각, force-push 없이 철회하고 그쪽 해소를 채택). 판정에 중요한 대비: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단됐지만(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72), 가드가 **없는** 축(게이트 ID·문서 버전·중복 작업)에서는 git 충돌·사람·운이 유일한 방어선이었다. ③④는 두 브랜치가 *같은 줄*을 고쳐 git이 잡았고, ⑤는 5분 차이로 잡혔다 — 어느 것도 설계된 방어가 아니다. 즉 acceptance ①의 고지 대상은 '번호'가 아니라 **'내가 지금 하는 일이 다른 세션에 보이지 않는다'는 사실 자체**이며, 이 사례 누적이 그 범위 판단의 근거다."
+notes: "출처: HARN-38 경위 규명(docs/reviews/eos_number_collision_root_cause_2026-08-31.md §2-2·§3-2·§7). 동번호 이종 태스크 3회차(ARCH-13·OPS-15·EOS-49/50/51) — 앞 두 대책(HARN-10 번호 가드·HARN-15 원격 파일명 스캔)은 push된 표면만 넓혔고 이번 사고는 그 밖에서 났다. 실측: 가드 출처 3종이 36브랜치·11,975 파일을 훑고도 cur-16 브랜치를 0건 관측(status는 둘 다 ok — fail-open 아님). [사례 누적 — 2026-08-31 하루 5회 실측] 이 병목은 태스크 ID 축에만 있지 않다. ①태스크 ID(EOS-49/50/51 원 사고) ②게이트 ID(미머지 게이트의 clear 안내 — CLAUDE.md v0.2.6 상환) ③④문서 버전 번호 2회(CLAUDE.md v0.2.4를 PR #928과, v0.2.5를 PR #924와 각각 동시 배정 — 매번 main을 이력에 보존하고 밀어냄) ⑤같은 작업의 중복 수행(PR #930 머지 후 #931의 대장 충돌을 본 세션과 그 브랜치 소유 세션이 *동시에* 해소 — 본 세션 push가 non-fast-forward로 거부돼 발각, force-push 없이 철회하고 그쪽 해소를 채택). 판정에 중요한 대비: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단됐지만(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72), 가드가 **없는** 축(게이트 ID·문서 버전·중복 작업)에서는 git 충돌·사람·운이 유일한 방어선이었다. ③④는 두 브랜치가 *같은 줄*을 고쳐 git이 잡았고, ⑤는 5분 차이로 잡혔다 — 어느 것도 설계된 방어가 아니다. 즉 acceptance ①의 고지 대상은 '번호'가 아니라 **'내가 지금 하는 일이 다른 세션에 보이지 않는다'는 사실 자체**이며, 이 사례 누적이 그 범위 판단의 근거다.\n\n[PR 보류 2026-08-31] incomplete"
 updated: 2026-08-31
