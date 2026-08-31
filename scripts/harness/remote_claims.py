@@ -126,6 +126,19 @@ class RemoteClaim:
     ts: str = ""  # UTC ISO8601
     meta: dict | None = None
 
+    @property
+    def kind(self) -> str:
+        """`claim`(착수 점유) 또는 `block`(차단 홀드 — HARN-42).
+
+        `kind` 없는 레코드는 전부 claim이다(구버전 호환) — 차단 홀드는 이 필드를
+        명시적으로 넣은 것만 인정한다. 반대로 하면 메타 파손이 차단으로 읽힌다.
+        """
+        return str((self.meta or {}).get("kind") or "claim")
+
+    @property
+    def reason(self) -> str:
+        return str((self.meta or {}).get("reason") or "")
+
 
 @dataclass
 class ClaimResult:
@@ -543,6 +556,63 @@ def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
 
     try:
         result = _mutate_claims(root, task_id, f"claim {task_id} ({branch})", apply)
+        if result.status == "ok" and result.claim is None:
+            result.claim = mine
+        return result
+    except subprocess.TimeoutExpired:
+        return ClaimResult("offline", message="git 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        return ClaimResult("error", message=f"{type(exc).__name__}: {exc}")
+
+
+def hold(root: Path, task_id: str, branch: str, reason: str) -> ClaimResult:
+    """차단(block)을 원격 대장에 게시한다 — 병렬 세션의 `start`가 즉시 보게 (HARN-42).
+
+    **왜 필요한가** (2026-08-31 실측 사고): `cmd_block`은 태스크 YAML에 `blocked`를
+    쓰고 원격 claim을 *해제*했다. 그런데 YAML은 **main에 머지돼야** 병렬 세션에
+    보이고, 이 저장소의 머지 지연은 CI(~30분)+base 전진 경합(HARN-32)으로 시간
+    단위다. 즉 차단은 **보호를 거는 순간 오히려 원격 신호를 지웠고**, 그 창에서
+    다른 세션이 아무 마찰 없이 착수했다.
+
+    실사고: `CUR-11` block 00:28:07 → 13분 뒤 타 세션 claim 00:41:24 → 그 세션이
+    구현·머지 완료(PR #920). 차단은 대장에 실재했고 `next`에서도 사라졌지만
+    미머지 브랜치에 있었기에 아무것도 막지 못했다.
+
+    `harness-claims` 브랜치는 **머지 없이 즉시 push**되는 유일한 교차 세션 채널이다.
+    차단을 그 채널에 실으면 보호가 조치 시점에 발효한다.
+
+    점유 규칙은 claim과 동일하다 — 다른 브랜치가 이미 잡고 있으면 conflict를 낸다.
+    남의 착수를 차단으로 덮어쓰지 않는다(적대적 탈취 방지).
+    """
+    task_id, branch = _sanitize_ident(task_id), _sanitize_ident(branch)  # HARN-36
+    if not has_remote(root):
+        return ClaimResult("offline", message="origin 원격 없음 — 로컬 차단만 적용")
+    meta = {
+        "task": task_id,
+        "branch": branch,
+        "ts": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "harness": "2.0",
+        "kind": "block",
+        "reason": reason[:500],
+    }
+    mine = RemoteClaim(task_id, "", branch, str(meta["ts"]), meta)
+
+    def apply(
+        existing: RemoteClaim | None, current: list[RemoteClaim]
+    ) -> tuple[list[RemoteClaim], ClaimResult | None]:
+        if existing is not None and existing.branch != branch and existing.kind == "claim":
+            holder = existing.branch or "홀더 불명(메타 파손)"
+            return [], ClaimResult(
+                "conflict",
+                claim=existing,
+                message=f"'{holder}'가 착수 claim 중이라 차단 홀드를 게시하지 않았다 "
+                f"(ts={existing.ts or '?'}) — 그 세션과 조율이 먼저다",
+            )
+        others = [c for c in current if c.task_id != task_id]
+        return [*others, mine], None
+
+    try:
+        result = _mutate_claims(root, task_id, f"block hold {task_id} ({branch})", apply)
         if result.status == "ok" and result.claim is None:
             result.claim = mine
         return result

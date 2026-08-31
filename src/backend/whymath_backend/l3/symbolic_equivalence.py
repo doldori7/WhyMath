@@ -20,7 +20,6 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from enum import Enum
 
 import sympy
 from sympy.parsing.sympy_parser import (
@@ -29,6 +28,8 @@ from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
 )
+
+from whymath_backend.schema.verification_capabilities import EquivalenceOutcome
 
 # 유니코드 위첨자 → SymPy 거듭제곱(소스 정규화). caret(^)은 convert_xor가 처리하고,
 # 위첨자는 파서가 못 읽으므로(→ SympifyError) 파싱 전에 치환해야 한다. 학생 손글씨·MathLive
@@ -271,13 +272,10 @@ def to_sympy_source(raw: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
-class IdentityVerdict(str, Enum):
-    """두 식의 항등성 4상태 — identity/not_identity는 *확정*, undecidable/parse_error는 보수."""
-
-    identity = "identity"  # lhs ≡ rhs 확정(전개 0 환원 또는 simplify가 0 판정).
-    not_identity = "not_identity"  # lhs ≢ rhs 확정(0-아님 확정·또는 같은 변수 다항 비항등).
-    undecidable = "undecidable"  # 비다항·정의역 의존 등 SymPy 미결정(증명도 반증도 못 함).
-    parse_error = "parse_error"  # 파싱 실패·빈 입력(검증 안전 회피).
+# EOS-69: 항등 4상태를 schema 중립 enum과 공유(별칭 — 매핑 금지).
+IdentityVerdict = EquivalenceOutcome
+"""두 식의 항등성 4상태 — `EquivalenceOutcome`의 별칭. identity/not_identity는 *확정*,
+undecidable/parse_error는 보수(둘을 합치지 않는다)."""
 
 
 @dataclass(frozen=True, slots=True)

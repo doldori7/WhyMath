@@ -24,10 +24,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+# EOS-69: Core는 **좁은 능력 계약**(schema.verification_capabilities)만 안다.
+# 수학 구현은 합성 루트(`composition`, INFRA)가 주입한다 — Core가 어댑터를 이름으로 알면
+# 계약을 도입한 의미가 사라진다. `SubjectAdapter` 필수 3종에 넣지 않은 이유는 계약 모듈
+# docstring 참조(항등 판정은 역사·국어엔 없다 — 필수로 만들면 빈 구현을 강요한다).
+from whymath_backend.composition import default_expression_equivalence
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import PedagogyContentSlot
 from whymath_backend.l1.embedding_primitives import build_sync_engine
-from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
+from whymath_backend.schema.verification_capabilities import (
+    EquivalenceOutcome,
+    ExpressionEquivalence,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -54,22 +62,30 @@ NUMERIC_SLOT_TYPES: frozenset[str] = frozenset(
 # ──────────────────────────────────────────────────────────────────────────
 # payload 검증 — 숫자형 슬롯의 답을 SymPy로 실제 대조
 # ──────────────────────────────────────────────────────────────────────────
-def verify_slot_payload(payload: dict[str, Any]) -> bool | None:
-    """payload에 `verification`(claim_lhs≡claim_rhs 주장)이 있으면 SymPy로 판정, 없으면 None.
+def verify_slot_payload(
+    payload: dict[str, Any], *, equivalence: ExpressionEquivalence | None = None
+) -> bool | None:
+    """payload에 `verification`(claim_lhs≡claim_rhs 주장)이 있으면 판정, 없으면 None.
 
     반환:
       - True: `identity_status(claim_lhs, claim_rhs) == identity`(답이 실제로 맞음).
-      - False: not_identity/undecidable/parse_error(답이 틀렸거나 검증 불가 — fail-closed).
+      - False: not_identity/undecidable/parse_error(답이 틀렸거나 검증 불가 — **fail-closed**).
       - None: `verification` 키 없음(개념형 슬롯 — 수치 검증 대상 아님).
 
-    검증 없는 True 표기 금지 — 이 함수가 실제 SymPy 판정을 거쳐야만 sympy_verified가 True가 된다.
+    검증 없는 True 표기 금지 — 실제 판정을 거쳐야만 sympy_verified가 True가 된다.
+
+    `equivalence`는 과목의 항등 판정 능력(EOS-69). 생략하면 수학 구현이 주입되므로 기존
+    호출부는 그대로 동작한다 — **이 리팩터는 호출 경로 변경이지 동작 변경이 아니다**.
+    4상태 중 `identity`만 True이고 나머지 3종은 전부 False다(기존과 동일 — `undecidable`을
+    True로 올리지 않는다).
     """
     verification = payload.get("verification")
     if not verification:
         return None
     lhs = str(verification.get("claim_lhs", ""))
     rhs = str(verification.get("claim_rhs", ""))
-    return identity_status(lhs, rhs) is IdentityVerdict.identity
+    verifier = equivalence if equivalence is not None else default_expression_equivalence()
+    return verifier.identity_status(lhs, rhs) is EquivalenceOutcome.identity
 
 
 def _is_tts_safe(payload: dict[str, Any]) -> bool:

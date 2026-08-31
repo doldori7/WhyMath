@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -211,3 +212,14 @@ def verify_solution(
         first_incorrect_index=first_incorrect_index,
         has_incorrect=first_incorrect_index is not None,
     )
+
+
+if TYPE_CHECKING:
+    # ── EOS-69 구조적 적합성 증명 ──────────────────────────────────────────
+    # `SolutionVerificationResult`가 Core의 중립 계약을 *변환 없이* 만족함을 mypy가 검사한다.
+    # 이 줄이 있어야 "계약을 만들었다"가 "계약이 실제로 성립한다"가 된다 — 필드 이름을 바꾸거나
+    # 카운트를 지우면 여기서 적색이 난다(설계 규칙 1: 중간 변환 객체 금지).
+    from whymath_backend.schema.verification_capabilities import ChainVerificationCounts
+
+    def _counts_conformance(result: SolutionVerificationResult) -> ChainVerificationCounts:
+        return result
