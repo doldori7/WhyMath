@@ -7367,6 +7367,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
 - **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
 
+## 2026-08-31: 사람 게이트 3건 집행 세션 — prod DB 컨테이너 사고 발견·무손실 복구 + 게이트 ③ clear·② 3단계 완결
+
+- **사고 발견·복구(핵심)**: 게이트 쿼리 실행 중 `role "whymath" does not exist`로 발견 — **8/25 10:08Z 누군가 whymath-pg를 빈 클러스터로 재생성**(경위 미상 — Kiki 질문 미답·후속 규명 대상. POSTGRES_USER=postgres·포트 56432·스키마만 899ae0efbb8b·데이터 0. 같은 형상의 빈 클러스터 볼륨이 2개 = 두 번 재생성됨). **원본은 dangling 볼륨 ef75415d에 무손실 생존** — 프로브 실측으로 특정(68테이블·alembic=d6e7f8a9b0c1 = 8/11 실측과 일치·concepts 2683/edges 2210/misconceptions 841/standards 895·user 0행). 복구 = 빈 컨테이너 개명 보존(whymath-pg-empty-20260825) → 원본 볼륨으로 whymath-pg 재생성(5433·restart unless-stopped) → 재고 재현 확인 → 즉시 백업(whymath_20260831_120150.dump·-Fc·자가검증 EXIT=0). **데이터 손실 0**(실사용자도 원래 0행).
+- **진단 교훈**: ①이 사고는 **OPS-39(prod 스키마 드리프트 감시 0건)의 실사례 2호** — 6일간 무감지, 우선순위 재고 권고 ②내 진단 결함 2건 자인: 볼륨 필터 `whymath|pg`가 **익명 hex 볼륨을 구조적으로 배제**(후보를 못 봄 — 필터 없는 전수+생성시각으로 정정), 재고 프로브가 atom_node를 세어 0 오판(정본은 concept — 정정 재프로브로 회복) ③판정은 직접 신호(생성 시각·롤 구성·information_schema)로 — `alembic_version` 간접 신호 금지 원칙 재확인.
+- **게이트 진행**: **③ G-prod-dead-column-check cleared**(user_profile 6컬럼 전부 0·total 0행 — ADMIN-02 선결 충족). **② G-operator-seat 3단계 완결**(A=0행 → stamp 확정 `a9b8c7d6e5f4` · B=0행 혼입 없음 · 후보→head 22개 전수 스캔 파괴 연산 0) — 4단계(stamp→upgrade→부트스트랩 INSERT→content_admin grant) 확정값 블록은 게이트 노트+세션 채팅에 보존, **Kiki 실행 대기**. ① deploy environment(브라우저)도 절차 안내됨·실행 대기.
+- **반복 실수 자인(3회차·같은 세션 내)**: 검사 명령 뒤 `| tail`을 붙이고 `$?`로 판정 — tail의 exit가 실패를 가림(기존 규칙 "출력 억제·절단 판정 금지"의 자기 위반. gates.yaml 파손을 validate green으로 오인할 뻔). 패턴 고정: 파이프 쓰면 판정은 반드시 `${PIPESTATUS[0]}`, 파손 의심 시 파이프 없이 재실행. 부수: gates.yaml notes는 이중따옴표 단일행 인코딩 — **손편집 금지·수정은 `store.load_backlog`+`dump_gates` 왕복으로만**(2회 파손 후 확립·파일 단위 복원으로 회복).
+- **cross-ref**: OPS-39 · backlog/gates.yaml G-operator-seat-first-grant notes(4단계 확정값) · scripts/backup/backup_whymath_pg.ps1.
 ## 2026-08-31: /drive 3루프 — HARN-38(번호 충돌 규명)·EOS-71(결함 문항 비파괴 격리) (#931)
 
 - **HARN-38**: kiki 머신 브랜치 `backend/cur-16-...` 커밋 `3b7bab6f`가 등재한 EOS-49/50/51이 main 동번호와 충돌(동일 유형 **3회차** — ARCH-13·OPS-15 선행). 판정: 2건은 CLI 배정 새 번호(`EOS-71`·`EOS-72`)로 이관, **EOS-50은 main `EOS-55`와 내용 중복이라 재등재하지 않음**(요구 3항 대 `GenerationLog` 실측 대조 — 이중 추적 방지). 부수 실측: 브랜치 커밋 제목이 "G-eos-g0 clear"인데 그 커밋은 `gates.yaml`을 **0건 변경**했다 — 커밋 제목을 근거로 서명 소재를 읽으면 안 된다(서명 정본은 main `ad7862ab`→`d52d9a62`).
@@ -7453,3 +7460,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **누적 5회의 대비가 핵심**: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72). 가드가 **없는** 축(게이트 ID·문서 버전 ×2·중복 작업)에서는 **git 충돌·사람·운이 유일한 방어선**이었다 — 버전 충돌 2회는 두 브랜치가 *같은 줄*을 고쳐서, 이번 건은 *5분 차이*로 잡혔다. 어느 것도 설계된 방어가 아니다.
 - **HARN-43 범위 정정**: acceptance ①의 고지 대상은 '번호'가 아니라 **"내가 지금 하는 일이 다른 세션에 보이지 않는다"는 사실 자체**다. 사례 5건을 태스크 notes에 누적 기록했다.
 - **cross-ref**: PR #930(머지 1387662a)·#931·#924·#928 · HARN-43 notes · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§7-C
+
+## 2026-08-31: HARN-43 — `add` 가시성 고지 착지 (탐지 아닌 고지·조용할 때 조용함이 핵심)
+
+- **무엇**: `backlog.py add` 성공 직후, 번호 가드가 **못 본 범위**를 사람에게 고지한다. 두 축 — ①현재 브랜치의 remote-tracking ref 부재(미push 추정) ②원격 ref 스냅샷 나이가 임계(30분·main 전진 주기 실측) 초과. 헬퍼 2종은 `remote_claims`에 두고 **네트워크 0**(로컬 ref·파일 mtime만) — `scan_remote_task_files`의 `fetch=False` 계약 불변.
+- **설계 핵심은 '조용할 때 조용함'**: push됐고 ref도 신선하면 **아무것도 출력하지 않는다**. 무조건 뜨는 고지는 습관화돼 정작 필요한 순간에 안 보인다(CLAUDE.md "상시 실패하는 fail-open 보호" 동형). 판정 불가(`None`)도 침묵한다 — 추측 출력은 측정 실패를 경고 유무로 위장한다.
+- **테스트가 설계 결함을 잡았다(기록 가치 있음)**: 초안은 신선도를 `FETCH_HEAD` mtime 하나로 판정했는데, **갓 클론한 저장소에는 그 파일이 없다**. 그것을 '오래됨'으로 읽어 *가장 신선한* 상태인 클론 직후에 고지가 항상 떴다 — `test_pushed_branch_gets_no_notice`가 red로 잡았다. 상환: 원격 ref 갱신 흔적 **3종**(`FETCH_HEAD`·`packed-refs`·`refs/remotes/origin`)의 **최댓값**으로 바꾸고, 셋 다 없으면 판정 불가로 침묵. 테스트도 흔적을 *전부* 늙히도록 고쳤다(하나만 늙히면 다른 흔적이 신선해 공허하게 통과).
+- **정직한 한계(코드 docstring 명문)**: "보인다"는 신뢰할 수 있고 **"안 보인다"만 추정**이다 — `git push`가 tracking ref를 만들므로 본인이 push했다면 ref는 반드시 있지만, *다른 클론에서* push된 브랜치는 fetch 전까지 여기서 안 보인다(거짓 고지 방향). 차단이 아니라 고지이므로 허용되는 방향의 오차다. **미push 브랜치를 실제로 관측하는 수단은 없다** — 고지 문안에 `가드 통과 ≠ 충돌 없음`을 담은 이유다.
+- **변별력 실측(뮤테이션 3종·각자의 축만 red)**: ①`pushed is False`→`is not None`(무조건 고지) → 과탐 축 2건 red ②`if False`(전면 침묵) → 미push 축 red ③`None`→`False`(판정 불가를 확정으로 접기) → undecidable 축 red. 전부 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수)·md5 바이트 동일 확인·원복 후 12건 green 재확인.
+- **검증**: 신규 12건 포함 `tests/harness` **410 passed** · `tests/infra` 417 passed · ruff/black EXIT=0 · validate 480태스크·21게이트 green. 라이브 스모크: 이 세션의 미push 브랜치에서 고지 실발화 확인(신선도 축은 미발화 — 두 축 독립 동작 실증).
+- **cross-ref**: `HARN-38` 조사 보고서 §2-2·§7 · 태스크 notes의 사례 5건 누적 · `scripts/harness/remote_claims.py` §등재 가시성 고지 · `tests/harness/test_backlog_add_id_collision.py::TestAddVisibilityNotice`

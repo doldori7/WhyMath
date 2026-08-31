@@ -1037,6 +1037,65 @@ def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str 
     return f"{prefix}-{index:02d}"
 
 
+# 원격 ref 신선도 고지 임계 — 이 저장소는 main이 대략 30분 간격으로 전진한다(2026-08-31
+# 실측: #922·#924·#927·#928·#930·#932·#933가 한나절에 착지). 그보다 오래된 스냅샷으로
+# 판정했다면 "그 사이 등재된 번호는 못 봤다"가 실질적 가능성이 된다.
+_STALE_REFS_SECONDS = 1800
+
+
+def _format_age(seconds: float) -> str:
+    """경과 초 → 사람이 읽는 표기(분 단위 이하는 뭉갠다 — 정밀도를 날조하지 않는다)."""
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "1분 미만"
+    if minutes < 60:
+        return f"{minutes}분"
+    hours, rem = divmod(minutes, 60)
+    return f"{hours}시간 {rem}분" if rem else f"{hours}시간"
+
+
+def _print_visibility_notice(root: Path, task_id: str, policy: object) -> None:
+    """등재 직후 **가드의 관측 사각**을 사람에게 고지한다 (HARN-43).
+
+    **탐지가 아니라 고지다.** 미push 브랜치를 실제로 관측하는 수단은 없으므로(그
+    브랜치는 세 출처 어디에도 나타나지 않는다 — `remote_claims` §등재 가시성 고지),
+    가드가 할 수 있는 최선은 자기 관측 범위의 구멍을 말하는 것뿐이다. 이 함수는
+    무엇도 차단하지 않으며, 어떤 판정도 뒤집지 않는다.
+
+    **조용할 때는 조용하다** — push된 브랜치에서 ref도 신선하면 아무것도 출력하지
+    않는다. 무조건 뜨는 고지는 소음이 되어 습관적으로 무시되고, 그러면 정작 필요한
+    순간에 보이지 않는다(CLAUDE.md "상시 실패하는 fail-open 보호" 선례와 동형).
+
+    판정 불가(`None`)는 침묵한다 — 여기서 추측을 출력하면 "측정 실패"가 "경고 없음"
+    또는 "경고 있음"으로 위장된다. 조회 실패 자체의 고지는 이미 `cmd_add`의 fail-open
+    경고가 담당한다.
+    """
+    if not getattr(policy, "remote_claims", False):
+        return
+    lines: list[str] = []
+
+    branch = store.current_branch(root)
+    pushed, _pushed_status = remote_claims.branch_has_remote_ref(root, branch)
+    if pushed is False:
+        lines.append(
+            f"이 번호는 **push 전까지 다른 세션에 보이지 않는다** — 현재 브랜치 "
+            f"'{branch}'의 원격 ref가 이 클론에 없다(미push 추정)."
+        )
+
+    age, _age_status = remote_claims.remote_refs_age_seconds(root)
+    if age is not None and age >= _STALE_REFS_SECONDS:
+        lines.append(
+            f"번호 가드가 읽은 원격 스냅샷이 {_format_age(age)} 지났다 — 그 이후 원격에 "
+            "등재된 번호는 구조적으로 보지 못했다(`scan_remote_task_files`는 네트워크를 "
+            "타지 않는다). 최신 판정이 필요하면 `git fetch origin` 후 재확인."
+        )
+    if not lines:
+        return
+    print(f"  ⓘ {task_id} 가시성 고지 — **가드 통과 ≠ 충돌 없음**", file=sys.stderr)
+    for line in lines:
+        print(f"     · {line}", file=sys.stderr)
+
+
 def cmd_add(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.id in backlog.tasks:
@@ -1116,6 +1175,8 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     path = store.save_task(root, task)
     store.append_event(root, "add", task.id)
     print(f"＋ {task.id} 추가 → {path.relative_to(root)}")
+    # HARN-43 — 등재는 끝났고, 이제 가드가 *못 본* 범위를 말한다(차단 아님).
+    _print_visibility_notice(root, task.id, policy)
     return 0
 
 
