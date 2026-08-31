@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-68-feature-inventory-migration-map
+title: "기존 기능 인벤토리 + Migration Difficulty Matrix — Gate 0-D 판정 재료 (KEEP/REFACTOR/REPLACE/POSTPONE 4분류)"
+track: math-completion
+stage: S3
+subject: cross
+layer: docs
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 기능 인벤토리: 현행 기능을 계획서 100 §3.3의 필드로 장부화(기능명·현재 위치·사용자·Domain·EOS Ownership·상태·결합도·테스트·Migration Action·출시 우선도·Migration Risk). 모집단은 backlog 456태스크가 아니라 *서빙 중인 기능* 단위 — 모집단 정의를 먼저 적고 그 정의로 세운다"
+  - "② Migration Difficulty Matrix: 100 §3.14의 6축(과목결합도·DB결합도·모듈결합도·테스트부족·상태변경복잡도·데이터이전난이도) 각 0~3점 18점 만점 → 0~4 KEEP / 5~9 REFACTOR / 10~13 Heavy / 14~18 REPLACE 자동 판정"
+  - "③ 판정 결과는 산문이 아니라 기계가 읽는 표(YAML 또는 CSV)로 — 대시보드 5숫자 중 '기존 기능 분류율'·'Release P0 수'가 이 표에서 계산되게 한다"
+  - "④ 중복 회피 별항: PR #916의 eos_verification_relevance_triage(잔여 182건 관여도 트리아지)와 축이 다름을 명시하고(그쪽은 '12월 검증 관여 여부', 이쪽은 'Core/Adapter 귀속 + 이전 난이도'), 겹치는 행은 그 문서를 인용해 재판정하지 않는다"
+artifacts: []
+paths:
+  - docs/reviews/eos_feature_inventory_migration_map.md
+  - "backlog/inventory/**"
+session: null
+notes: "출처: 대조 §4 A3(#924). 계획서 100 P0-02·P0-09·Gate 0-D. 실측: grep -rl 'REFACTOR' backlog/ docs/ = 0건(대조 문서 자신 제외). Gate 0-D 4문항 전부와 대시보드 5숫자 중 2개가 이 산출물에 의존한다. 100 §5는 이 기간 코딩 비중이 20~30%를 넘지 않아도 정상이라 명시 — 분류 작업이 본 태스크의 산출물이다. 주의: 100의 '기존 120개'는 저장소 외부 xlsx가 정본이라 개수 정합은 판정 대상이 아니다(대조 §6-1)."
+updated: 2026-08-31

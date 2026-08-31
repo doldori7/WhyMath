@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-42-open-pr-eos-reclassification
+title: "열린 PR 전건 EOS 4분류(MERGE/REWORK/POSTPONE/CLOSE) + 분류 라벨 생성 — 006 §24 단독 경고 축"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 열린 PR 전건(대조 시점 16건) 1건씩 판정 — 판정 질문은 006 §24의 단일 질문('EOS 1과목 검증 blocker인가') + 판정 근거 1줄. 판정 결과는 PR 라벨과 판정표 양쪽에 남긴다"
+  - "② GitHub 라벨 생성·부착: eos-merge / eos-rework / eos-postpone / eos-close (현재 저장소 라벨 전무 — release-blocker 조회 404 실측)"
+  - "③ 중복·사장 PR 처리: 실측된 중복 축을 판정에 반영 — #885(SEC-28)는 #922 회수 이식과 같은 축, #856·#858은 LIC-01 계열 브랜치 2개 동시 오픈. CLOSE 판정 PR은 닫는 이유를 그 PR에 1건 코멘트로 남긴다(침묵 종료 금지)"
+  - "④ 사람 소유 별항: PR을 실제로 닫거나 머지하는 행위는 되돌리기 어려우므로 Kiki 판정 사항 — 본 태스크의 산출물은 판정표와 라벨까지이며, CLOSE·MERGE 집행은 Kiki 승인 후. 거부의 우회 금지 절차 준수"
+artifacts: []
+paths:
+  - docs/reviews/open_pr_eos_triage.md
+session: null
+notes: "출처: 대조 §4 A4(#924). 계획서 006 §24('현재 PR을 그대로 계속 merge하면 EOS 전환 선언이 무의미하다' — 단독 경고) · §49-B. 실측 2026-08-31: 열린 PR 16건 전건 라벨 0 · 최고 연령 #844(8/17 · 14일). 원격 브랜치 36건은 별개 축(unmerged_branch_audit_2026-08-29가 소유) — 이 태스크는 *열린 PR*만 다룬다."
+updated: 2026-08-31
