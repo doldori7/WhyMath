@@ -55,9 +55,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
-from whymath_backend.db.models.atom_node import AtomNode
-from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.user import UserProfile
+from whymath_backend.l1.standards.alignment_query import (
+    AlignmentAxis,
+    get_alignments,
+    log_join_stats,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -157,33 +160,25 @@ async def get_target_progress(
             for norm_id, official_code in scope_rows:
                 norm_ids_by_official_code.setdefault(official_code, set()).add(norm_id)
 
-            # 원자 축 조인(CUR-04) — `api/gating.py::_fetch_achievement_codes` 패턴 재사용.
-            # LEFT OUTER JOIN이라 원자 축에 매핑되지 않는 개념도 행으로 살아남는다(matched 계수용).
-            observed_stmt = (
-                select(Concept.concept_id, AtomNode.standard_codes)
-                .outerjoin(AtomNode, AtomNode.code == Concept.code)
-                .where(
-                    Concept.concept_id.in_(
-                        select(ConceptMasteryHistory.concept_id).where(
-                            ConceptMasteryHistory.user_id == user_id
-                        )
-                    )
-                )
+            # 원자 축 조인(CUR-04) — **CUR-12 통합 경유**: 조인을 여기서 다시 쓰지 않고
+            # `l1/standards/alignment_query.get_alignments`를 축 1개(ATOM_NODE)로 부른다.
+            # concept_ids에 **서브쿼리를 그대로** 넘겨 쿼리 수 불변(최대 2회·N+1 0)을 지킨다.
+            # 그 축은 LEFT OUTER JOIN이라 원자 축 미매핑 개념도 probed로 남는다(matched 계수용).
+            alignment = await get_alignments(
+                session,
+                concept_ids=select(ConceptMasteryHistory.concept_id).where(
+                    ConceptMasteryHistory.user_id == user_id
+                ),
+                axes={AlignmentAxis.ATOM_NODE},
             )
-            observed_rows = (await session.execute(observed_stmt)).all()
 
             # 작동 신호(모듈 docstring) — measured(조인 시도 대상) vs matched(원자 축 히트).
-            coverage_measured_concepts = len(observed_rows)
-            coverage_matched_concepts = sum(
-                1 for _concept_id, standard_codes in observed_rows if standard_codes is not None
-            )
+            coverage_measured_concepts = alignment.stats.probed
+            coverage_matched_concepts = alignment.stats.matched
 
             observed_norm_ids: set[str] = set()
-            for _concept_id, standard_codes in observed_rows:
-                if not standard_codes:
-                    continue
-                for code in standard_codes:
-                    observed_norm_ids.update(norm_ids_by_official_code.get(code, ()))
+            for code in alignment.standard_refs():
+                observed_norm_ids.update(norm_ids_by_official_code.get(code, ()))
             coverage_observed = len(observed_norm_ids)
             coverage_percent = coverage_observed / coverage_scope * 100.0
 
@@ -196,16 +191,13 @@ async def get_target_progress(
                 coverage_scope,
                 coverage_observed,
             )
-            if coverage_measured_concepts > 0 and coverage_matched_concepts == 0:
-                # 측정 이력은 있는데 원자 축 조인이 전멸 — "미도달"이 아니라 "조인 실패" 의심
-                # 신호다(CLAUDE.md 침묵 실패 금지). 학생 응답 자체는 정직한 0%로 그대로 나간다.
-                _logger.warning(
-                    "target_progress 원자 축 조인 0건(측정 이력 %d건 전부 미매핑) — "
-                    "user_id=%s standard_coverage_percent=0%%가 '미도달'이 아니라 '조인 실패'일 "
-                    "가능성을 점검하라",
-                    coverage_measured_concepts,
-                    user_id,
-                )
+            # 전건 미매칭 경고는 통합 함수가 낸다(`log_join_stats` — probed>0·matched==0이면
+            # warning 승격). 여기서 다시 쓰지 않는다: 같은 판정을 두 곳에 두면 갈라진다.
+            log_join_stats(
+                alignment.stats,
+                logger=_logger,
+                context=f"target_progress/user={user_id}",
+            )
         else:
             # 스코프 0건 — 0으로 나누기 회피이자 "스코프 없음"과 "0% 커버"를 구분(정직 표기).
             coverage_observed = 0

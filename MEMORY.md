@@ -338,6 +338,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (구현·CUR-12): **Curriculum Alignment 통합 조회 — 3축 단일 함수 + 소비처 4곳 정렬** (claude 구현)
+- **문제**: 개념↔성취기준 정렬이 3축(ConceptStandardLink·CurriculumEntry.national_standard_codes·AtomNode.standard_codes)으로 흩어져 있고, 같은 **원자 축 조인이 소비처마다 복제**돼 있었다(`api/coach._standard_code_for`·`l2/target_progress`·`api/gating._fetch_achievement_codes`) — `api/alignments.py`(CUR-11)도 핸들러 안에서 3축을 직접 SELECT했다. CUR-11이 자기 docstring에 "CUR-12가 통합 함수를 세우면 이 핸들러는 그 함수를 경유하도록 갈아끼우는 것이 의도된 진화"라고 좌석을 미리 지목해 둔 상태였다
+- **착지**: `l1/standards/alignment_query.py`(`get_alignments` 단일 비동기 함수) + 소비처 4곳 정렬(coach·target_progress·alignments·dsl) + 테스트 27건. 배선 실재성은 `TestConsumerWiringIsReal`이 **import 구조로** 동결한다(축 ORM import 재출현 = 조인을 손으로 다시 쓴 것 — 뮤테이션으로 변별력 실측)
+- **어휘는 통일하지 않는다**: 축마다 개념 측·성취기준 측 어휘가 다르고(1축=norm_id, 2·3축=official_code), 그 차이를 없애지 않고 `standard_ref_kind`로 **표시**한다(CUR-11 정책 계승·가짜 통일 금지). 물리 `curriculum_alignment` 테이블·어휘 번역은 Phase 2(acceptance ⑤)
+- **UUID로 물어도 추가 쿼리 0**: 각 축이 자체 조인으로 개념 키를 푼다(별도 해석 쿼리 없음). `concept_ids`가 **서브쿼리(Select)** 도 받아 `l2/target_progress`의 "쿼리 수 최대 2회·N+1 0" 계약이 그대로 유지된다
+- **조인 회계(acceptance ②)**: `probed`(조회된 행)와 `matched`(성취기준이 실린 행)를 축별로 분리해 **"매핑 없음"과 "조인 실패"를 구분**한다. `log_join_stats`가 probed>0·matched==0이면 warning으로 승격(target_progress가 쓰던 경고의 일반화). 조회 자체를 안 한 축은 `queried_axes`에서 빠져 0이 "없음"이 아니라 "안 봄"임이 남는다(미측정 ≠ 0)
+- **alignment_type은 로깅 전용(acceptance ③)**: 6값 폐쇄 어휘를 정의하되 판정·필터에 쓰지 않고, **현재 어느 축도 채우지 못한다** — 세 축 중 교수학적 의도를 기록하는 축이 없기 때문이다(1축의 `link_type` '직접/재매핑/준용'은 매핑 출처이지 역할이 아니다). 임의로 TEACHES를 찍는 것은 날조이므로 전건 None으로 두고, 회계가 `type_counts={'(미상)': N}`으로 그 공백을 드러낸다
+- **구현 중 실측한 함정**: 축 합성 순서를 enum 값 **사전순**으로 정렬하면 `atom_node`가 앞으로 와 `api/alignments.py` 페이지네이션의 "축-우선 prefix 보존" 계약이 조용히 깨진다 → `AXIS_ORDER`(선언 순서) 상수로 고정하고 테스트가 동결. 기존 CUR-11 테스트가 이 회귀를 즉시 잡았다
+- **상충하는 두 요구를 플래그로 분리**: `api/alignments.py`는 배열 축의 빈 행을 SQL에서 제외해야(prefix 보존) 하고, `l2/target_progress`는 **빈 행도 probed로 세야**(조인 실패 판별) 한다 → `require_nonempty` 플래그로 갈라 두고 각 소비처가 *명시*한다(조용한 기본값 의존 금지)
+- **l3 DSL 축**: `CurriculumMeta.standard_codes` 슬롯 신설 + `api/dsl.py`가 `get_alignments`를 경유해 채운다. IR은 순수 Pydantic이라 스스로 조회하지 않는다(세션을 쥔 표면이 채운다). 응답 `contents[].curriculum`으로 노출해 **배선을 관측 가능하게** 했다 — 아무도 못 보는 슬롯은 배선 확인이 불가능하다
+- **잔여 축 분리 등재**: `api/gating._fetch_achievement_codes`는 진입 키가 problem이라 concept 키 시그니처로 덮이지 않는다 → 억지 통합 대신 `CUR-19`로 등재(만료 없는 유예 금지)
+
 ### 2026-08-31 (운영·게이트): **whymath-pg 스키마 드리프트 해소 + 좌석 발급 경로 완성 — `G-operator-seat-first-grant` 3·4단계 실행 + `ADMIN-11` 신설** (claude 설계·예행, Kiki 실행)
 
 - **왜**: 게이트가 20일 정지해 있었다. whymath-pg의 `alembic_version`이 이 저장소 체인에 **없는** `d6e7f8a9b0c1`이라 `alembic current`·`upgrade head`가 둘 다 exit 255로 죽었고(2026-08-11 실측), 그래서 `user_profile.role`이 없어 콘텐츠 CUD 6라우터가 전건 403인 상태가 고착됐다. "봉인 정상"과 "아무도 못 씀"이 같은 값이었다.

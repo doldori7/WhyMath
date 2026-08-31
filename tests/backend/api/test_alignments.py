@@ -45,6 +45,10 @@ class _FakeResult:
     def scalars(self) -> _FakeScalars:
         return _FakeScalars(self._rows)
 
+    def all(self) -> list[Any]:
+        """다중 컬럼 행 — CUR-12 통합 함수(`get_alignments`)의 읽기 방식."""
+        return list(self._rows)
+
 
 class FakeSession:
     """execute 큐 기반 AsyncSession 모사(test_me_target_progress.py 관례).
@@ -119,14 +123,32 @@ def _atom(code: str = "atom-001", codes: list[str] | None = None) -> AtomNode:
     )
 
 
+# ── 행 빌더 (CUR-12 통합 함수의 축별 SELECT 열 순서) ──────────────────────
+# 통합 함수는 엔티티가 아니라 *열*을 고른다(개념 UUID를 함께 실어야 소비처가 되돌릴 수 있다).
+#   1축 = (ConceptStandardLink, concept_id) · 2축 = (CurriculumEntry, concept_id)
+#   3축 = (atom_code, standard_codes, concept_id)
+# FakeSession은 실제 SQL을 보지 않으므로, 이 모양이 곧 계약이다.
+def _link_row(*args: Any, **kwargs: Any) -> tuple[Any, Any]:
+    return (_link(*args, **kwargs), None)
+
+
+def _entry_row(*args: Any, **kwargs: Any) -> tuple[Any, Any]:
+    return (_entry(*args, **kwargs), None)
+
+
+def _atom_row(code: str = "atom-001", codes: list[str] | None = None) -> tuple[Any, Any, Any]:
+    atom = _atom(code, codes)
+    return (atom.code, atom.standard_codes, None)
+
+
 class TestListAlignments:
     def test_axis_major_order_and_ref_kind(self) -> None:
         """3축이 고정 순서(1→2→3)로 합성되고, 축별 어휘 표시(standard_ref_kind)가 붙는다."""
         fake = FakeSession(
             execute_queue=[
-                [_link()],
-                [_entry("ce-0001", codes=["[10공수1-01-01]"])],
-                [_atom("atom-001")],
+                [_link_row()],
+                [_entry_row("ce-0001", codes=["[10공수1-01-01]"])],
+                [_atom_row("atom-001")],
             ]
         )
         resp = _client(fake).get("/v1/alignments")
@@ -152,7 +174,7 @@ class TestListAlignments:
         fake = FakeSession(
             execute_queue=[
                 [],
-                [_entry("ce-0001", codes=["[10공수1-01-01]", "[10공수1-01-02]"])],
+                [_entry_row("ce-0001", codes=["[10공수1-01-01]", "[10공수1-01-02]"])],
                 [],
             ]
         )
@@ -166,7 +188,7 @@ class TestListAlignments:
         fake = FakeSession(
             execute_queue=[
                 [],
-                [_entry("ce-0001", codes=["[10공수1-01-01]", "[10공수1-01-02]"])],
+                [_entry_row("ce-0001", codes=["[10공수1-01-01]", "[10공수1-01-02]"])],
                 [],
             ]
         )
@@ -177,7 +199,7 @@ class TestListAlignments:
 
     def test_axis_filter_queries_single_axis(self) -> None:
         """axis 필터를 주면 그 축만 조회한다(execute 1회·타 축 항목 0)."""
-        fake = FakeSession(execute_queue=[[_entry("ce-0001")]])
+        fake = FakeSession(execute_queue=[[_entry_row("ce-0001")]])
         resp = _client(fake).get("/v1/alignments", params={"axis": "curriculum_entry"})
         assert resp.status_code == 200
         assert fake.execute_calls == 1
@@ -185,7 +207,7 @@ class TestListAlignments:
 
     def test_early_exit_skips_later_axes(self) -> None:
         """앞 축에서 offset+limit 항목이 차면 뒤 축은 조회하지 않는다(결정적 순서라 안전)."""
-        fake = FakeSession(execute_queue=[[_link()], [_entry()], [_atom()]])
+        fake = FakeSession(execute_queue=[[_link_row()], [_entry_row()], [_atom_row()]])
         resp = _client(fake).get("/v1/alignments", params={"limit": 1})
         assert resp.status_code == 200
         assert fake.execute_calls == 1
@@ -194,7 +216,7 @@ class TestListAlignments:
 
     def test_offset_slices_composed_order(self) -> None:
         """offset은 합성 순서에 적용된다 — 1축 1건을 건너뛰면 2축 항목부터 나온다."""
-        fake = FakeSession(execute_queue=[[_link()], [_entry("ce-0001")], [_atom()]])
+        fake = FakeSession(execute_queue=[[_link_row()], [_entry_row("ce-0001")], [_atom_row()]])
         resp = _client(fake).get("/v1/alignments", params={"offset": 1, "limit": 1})
         assert resp.status_code == 200
         (item,) = resp.json()
@@ -202,7 +224,7 @@ class TestListAlignments:
 
     def test_offset_beyond_items_returns_empty(self) -> None:
         """항목 수를 넘는 offset → 200 + [] (정직한 빈 페이지)."""
-        fake = FakeSession(execute_queue=[[_link()]])
+        fake = FakeSession(execute_queue=[[_link_row()]])
         resp = _client(fake).get("/v1/alignments", params={"offset": 500})
         assert resp.status_code == 200
         assert resp.json() == []

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/l2/target_progress.py
   - src/backend/whymath_backend/l3/dsl/models.py
-session: null
+session: claude/eos-60-3uoj70
 notes: EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 6. Alignment는 검토안 P0이자 WhyMath의 기술 부채 축.
-updated: 2026-08-25
+updated: 2026-08-31
