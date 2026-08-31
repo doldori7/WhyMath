@@ -7338,3 +7338,63 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **CUR-11(#920)**: `/v1/curricula`+`/v1/learning-outcomes`+`/v1/alignments` 5종 — CUR-10 첫 HTTP 표면(착수 실측: api 소비처 0). subject-neutral 라우팅 기계 동결·통합 3건은 임시 PG16 클러스터 자가 구성으로 실 SQL 검증. CUR-12 경계 별항(통합 함수 미선점).
 - **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
 - **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
+
+## 2026-08-31: HARN-38 — EOS-49/50/51 번호 충돌 경위 규명(②③ 완결·① 게이트 대기)
+
+- **결론(가설 기각)**: 번호 가드가 **fail-open으로 무력화된 것이 아니다.** 이번 세션 실측에서 `list_claims`·`scan_remote_task_files` 모두 `status=ok`, `start`도 `원격 claim: ok` — 403·축소 경고 0건. 따라서 acceptance ③이 조건부로 요구한 **HARN-07(fail-open 폴백 미착륙) 교차 기록은 하지 않는다**(허위 교차 기록은 대책의 조준을 흐린다).
+- **실체 = 관측 범위 밖의 사실**: 충돌 상대인 `backend/cur-16-concept-edge-prerequisite-meta-v2`는 **GitHub에 없다** — `git ls-remote` 0건 · GitHub API가 커밋 `3b7bab6f`를 `No commit found`로 응답. 가드의 관측 표면 3종(로컬 백로그 / claim 대장 / 원격 브랜치 `backlog/tasks/` 파일명)을 전수 호출한 결과 **36 브랜치·11,975 파일**을 훑고도 그 브랜치는 0건 관측. claim 대장(722커밋 전수 grep)에도 kiki 측 EOS-49/50/51은 없다 — **`add`는 claim을 쓰지 않기** 때문이며, 이 맹점을 메우려고 만든 것이 바로 HARN-15의 출처 ③인데 그것 역시 *push된* 브랜치만 본다.
+- **두 사각 모두 실재**: 정확한 선후는 판정 불가(아래)이나 어느 순서든 사각이 있다. **경우 A**(kiki 측 add가 먼저) = 미push 브랜치 사각 → main 측 가드가 못 봄. **경우 B**(나중) = `scan_remote_task_files`의 `fetch=False` 기본값 → 낡은 `origin/main` 캐시라 못 봄. 경우 B는 버그가 아니라 **의도된 네트워크 비용 트레이드오프**이며 `test_branch_tracking_ref_removed_then_add_passes`가 이미 계약으로 동결하고 있다 — 결함은 **대가를 치를 때 사람에게 말하지 않는 것**이다.
+- **부수 결함 발견 — 이벤트 대장이 교차 머신 순서를 못 준다**: `store.append_event`가 `datetime.now()`(오프셋 없는 머신 로컬 시각)를 쓴다. 교차검증 실측: `done HARN-36 @2026-08-30T00:50:38`은 claim 커밋 `1ca71b02(+0000)`와 1초 차 = **UTC 세션** / `start CUR-16 @2026-08-25T23:56:15`는 `fc943cd8(+0900)`와 3초 차 = **KST 세션**. 같은 파일의 두 줄이 9시간 어긋난 척도인데 알려주는 필드가 없다 → "어느 add가 먼저였나"(= 어느 가드를 고칠 것인가)에 대장만으로 답할 수 없었다.
+- **acceptance ②(‘G-eos-g0 clear’ 커밋의 실체)**: 미push 커밋 `3b7bab6f`의 메시지가 `G-eos-g0 clear`지만 **그것은 clear가 아니다**. 대장을 실제로 바꾼 것은 `ad7862ab`(2026-08-30T15:08:41Z · `gates.yaml`+2/−2 · `events.ndjson`+21 — 대장 2파일만 변경)이고, 이후 #910의 Kiki 본인 서명분이 정본으로 상위 대체했다. **기록 의의**: 훗날 그 브랜치를 회수하는 세션이 커밋 메시지를 clear의 근거로 오독하는 것을 차단한다 — 게이트의 진실 원천은 `backlog/gates.yaml`이지 커밋 메시지가 아니다.
+- **재발방지대책(3회차라 등재 의무)**: ARCH-13·OPS-15에 이은 3회차인데, 앞 두 대책(HARN-10·HARN-15)은 모두 *push된* 표면을 넓히는 방향이었고 이번 사고는 그 밖에서 났다. **`HARN-43`**(add 직후 "이 번호는 push 전까지 다른 세션에 안 보인다" 고지 + remote-tracking ref 신선도 고지 — `fetch=False` 계약은 불변) · **`HARN-44`**(이벤트 ts 오프셋 표기·과거분 소급 정정 금지). **정직한 한계 명시**: HARN-43은 *탐지*가 아니라 *고지*다 — 미push 브랜치를 실제로 관측하는 수단은 없으며, 가드가 할 수 있는 최선은 "가드 통과 ≠ 충돌 없음"을 화면에 띄우는 것뿐이다.
+- **가드 변별력 실증(부수)**: 위 대책을 `HARN-42`로 등재하려 하자 CLI가 **실거부**했다 — 상대는 push된 미머지 브랜치 `claude/review-status-differences-jw5m4a`의 `HARN-42-open-pr-eos-reclassification`, 제안 번호 `HARN-43` 채택. HARN-38 등재 때 HARN-37 충돌을 거부한 데 이은 2회차. 이 대비가 결론을 강화한다 — **문제는 판정력이 아니라 관측 범위**다.
+- **① 잔여·게이트**: 재번호의 입력은 kiki 측 3건의 YAML *본문*인데 도달 경로가 0이라, 내용을 모른 채 등재하면 태스크 날조가 된다(환경 사실의 추론 등재 금지) → 실행하지 않고 **게이트 `G-cur16-branch-push`** 신설(6항목 브리핑·PowerShell 명령·자가검증 스텝은 리뷰 문서 §8). HARN-38은 `blocked`로 전이(claim 반납 — 게이트 해소 후 어느 세션이든 인계 가능). **EOS-50 중복 판정은 기준선을 미리 확정해 뒀다**(§6-1): EOS-55(done·#912)가 좌석 5컬럼+양 경로 적재+재현 계약을 이미 덮으므로 원칙적으로 중복이나, **seed 값의 실제 스레딩**은 잔여다(`provenance_bridge.py:151-152`가 "seed 스레딩이 없어 기본 None" 자인 · 백로그 전수 검색 결과 이 잔여를 소유한 태스크 없음) — kiki 측 EOS-50이 그것을 요구하면 재등재 대상.
+- **cross-ref**: `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` · `backlog/gates.yaml` G-cur16-branch-push · HARN-43·HARN-44 · 커밋 `ad7862ab` · PR #902·#908·#910·#912 · 선례 ARCH-13·OPS-15·HARN-10·HARN-15·HARN-36·HARN-07
+
+## 2026-08-31: HARN-38 후속 — 브랜치 회수로 ① 실행·선후 확정(경우 A)·EOS-50 중복 판정
+
+> 같은 날 앞 항목("EOS-49/50/51 번호 충돌 경위 규명")의 **후속 확정**이다. 그 항목이 "판정 불가"로 남긴 2건이 여기서 결정됐다 — 앞 항목의 서술을 지우지 않고 확정분을 덧대 남긴다(조사 시점에 무엇을 알 수 있었는지가 대책 설계의 근거이므로).
+
+- **게이트 해소**: Kiki가 `G-cur16-branch-push` 실행 → 브랜치 착지(head `3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0` = 태스크가 지목한 커밋). 자가검증 스텝(`git ls-remote` 1줄)이 판정으로 작동.
+- **선후 확정 — 경우 A**: 브랜치 `events.ndjson` 실측으로 kiki 측 add는 **2026-08-26T08:39:47/52/56(KST)** = 08-25T23:39Z, main 측은 **08-30T01:11:47Z**(EOS-49/50)·**06:37:55Z**(EOS-51). **kiki 측이 4일 이상 먼저**이며 척도 불명(9시간)을 어느 방향으로 적용해도 뒤집히지 않는다. ⇒ kiki 측 add는 그 시점 번호가 실제로 비어 있었으므로 **정당**했고, 충돌을 *만든* 것은 main 측 add다. **경우 B(`fetch=False` 낡은 캐시)는 이번 사고에서 발생하지 않았다** — kiki 측 add 시점에 main에 그 번호가 아예 없었으므로 캐시가 신선했어도 볼 것이 없었다. 사각 자체는 실재하므로 `HARN-43` acceptance에서 ①(실증된 원인)과 ②(예방적 추가)의 **무게를 구분해** 적었다 — 실증된 것과 가정된 것을 같은 무게로 적으면 대책의 조준이 흐려진다.
+- **가드는 그날 작동했다**: 그 브랜치의 add 앞에 `policy_warn`(파일 범위 겹침)이 **78건**(EOS-49 33·EOS-50 31·EOS-51 14) 찍혔다. 번호 충돌만 관측 범위 밖이었다는 §2-2 결론의 직접 증거.
+- **acceptance ② 증거 강화**: `git show --stat 3b7bab6f`의 변경 파일 5건에 **`backlog/gates.yaml`이 없다**. 게이트를 clear했다면 반드시 그 파일이 바뀐다 — **이 커밋은 자기 메시지를 자기 diff로 반증한다**. 조사 시점의 "GitHub에 없다"보다 강한 증거다.
+- **acceptance ① 재번호 실행**(번호는 전부 `backlog.py add` 배정 — HARN-10): `EOS-49-problem-quarantine-status`→**`EOS-69`**, `EOS-51-content-lifecycle-state-wiring`→**`EOS-70`**(둘 다 제목·acceptance 전항·paths·원 notes 무변경 이관, 각 notes에 원 ID·원 등재 시각·경위 병기). 첫 요청 `EOS-67`은 CLI가 실거부(원격 브랜치 `claude/review-status-differences-jw5m4a`의 `EOS-67-core-adapter-import-contract` 선점) — **이번 세션 가드 실거부 3회차**(HARN-37·HARN-42·EOS-67).
+- **EOS-50 중복 판정 — acceptance 3항 전수 대조**(인상이 아니라 항목 단위여야 잔여를 안 놓친다): ①(prompt 본문·seed 컬럼) **흡수, 오히려 더 강하게** — EOS-55의 `input_snapshot`이 prompt·system **전문+각 sha256**을 담아 EOS-50이 허용한 "해시+참조"를 상회. ①의 목적절(모델·`generator_version` 단위 전수 조회) **실질 성립** — 그 이름의 컬럼은 grep 0건이나 `prompt_version`이 실값 적재(`llm_generator.py:585` 자산 내용 해시). ②(pregenerate·DSL 경로 적재) **부분 미이행** — prompt 축은 이행, **seed 축은 두 경로 전부 None**(`provenance_bridge.py:151-152`·`prewarmer.py:117`·`provenance.py:173` 자인 3중). ③(백필 정책·null 자인) **흡수**. ⇒ **중복이므로 재등재하지 않고** 미이행 seed 축만 **`EOS-71-generation-seed-threading`**으로 승계(MEMORY 2026-08-30의 "결정론 재생성은 별도 태스크" 이월이 좌석 없이 떠 있던 상태를 해소).
+- **"DSL 생성 경로" 전제 무효 판정**: `l3/dsl/`에 라우터·프로바이더 import **0건** — 이 계층은 **결정론 컴파일러**라 LLM 호출 자체가 없어 `GenerationLog` 적재 대상이 아니다. `variable_engine.generate(seed=…)`의 seed는 **변수 바인딩 난수**로 LLM seed와 다른 축(`compiler.py:28` `seed=0` 하드코딩) — 이름이 같아 같은 것으로 읽히기 쉬운 지점이라 명시한다.
+- **잔여 1건 — 구 YAML 삭제**: 원 YAML 3건은 여전히 그 브랜치에 있고, 이 세션은 **지정 브랜치 외 push 권한이 없어** 삭제 커밋을 올리지 못했다. 처분 재료 실측: 브랜치 코드는 이미 main에 있고(`required_strength`가 `schema/concept.py:275,320` 실재·CUR-16 done·PR #892 `a92a887f`), 고유분은 회수된 3건뿐이라 **머지 가치 0**. 남겨 두면 "언젠가 머지되어 동번호 YAML이 main에 재진입"하는 경로만 남는다(그때도 슬러그가 달라 `validate`는 통과 — 이 사고의 원형 그대로). 권고 = **브랜치 삭제**(가역 · 복구 SHA `3b7bab6f…`) → 게이트 **`G-cur16-branch-disposal`**.
+- **병렬 claim 충돌(기록)**: `block` 시 원격 claim 해제가 거부됐다 — **2026-08-31T05:00:05Z에 다른 세션 `claude/failure-definition-signature-scmzdu`가 HARN-38을 claim**(내가 block으로 반납한 직후 창). CAS 충돌은 확정 신호라 `--force`로 우회하지 않았고, 크로스세션 메시지는 도달 불가(`ListAgents` 0건)라 Kiki 보고로 에스컬레이션했다. **교훈**: `block`이 claim을 반납하므로, *게이트 대기*를 `block`으로 표현하면 그 창에 다른 세션이 태스크를 집어간다 — 게이트 대기와 차단은 다른 상태인데 같은 전이를 쓰고 있다(후속 후보).
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §3-2·§4·§6 · EOS-69·EOS-70·EOS-71 · HARN-43·HARN-44 · 게이트 G-cur16-branch-push(cleared)·G-cur16-branch-disposal(pending)
+
+## 2026-08-31: HARN-38 종결 — 동종 사고가 조사 중 2건 재발(런북 결함·병렬 이중 등재)
+
+> 같은 날 두 항목의 **종결분**. 이 태스크는 "번호 충돌을 고치는 태스크"였는데, **그 조사 도중 같은 유형이 두 번 더 발생**했다. 둘 다 기록한다 — 조사가 만든 사고를 조사가 빠뜨리면 다음 세션에 다시 난다.
+
+- **acceptance ① 전항 완료**: 재등재 + 구 YAML 삭제. Kiki가 브랜치 삭제 실행(`[deleted] backend/cur-16-…-v2` · `Deleted branch (was 3b7bab6f)` · **자가검증 `git ls-remote` 무출력**=성공 방향) → 게이트 `G-cur16-branch-disposal` cleared. 최종 번호 = **`EOS-71`**(quarantine)·**`EOS-72`**(lifecycle)·**`EOS-73`**(EOS-50 잔여 seed 스레딩).
+- **재발 ① — 런북이 사고를 재생산할 뻔했다(Codex P2 · PR #930)**: 내 §8 브리핑이 kiki 머신용으로 `backlog.py gates clear G-cur16-branch-push`를 안내했는데, 그 게이트는 **미머지 브랜치에만** 있다(실측: `git show origin/main:backlog/gates.yaml | grep -c` → **0**, CUR-16 브랜치도 **0**). 실행됐다면 `게이트 없음`으로 거부돼 **이 사고를 촉발한 2026-08-30 실패와 글자 그대로 같은 실패**가 났다. **어긴 규칙은 이미 있었다** — "미머지 브랜치의 신규 파일을 쓰는 명령이면 브랜치 fetch/checkout을 선행 포함". 원인: "신규 **파일**"이라는 문언을 읽고 **대장의 신규 *항목*(gates.yaml의 게이트 1줄)** 을 그 범주로 매핑하지 못했다 — 파일은 이미 있고 항목만 새것이라 "신규 파일 없음"으로 통과시켰다. **상환 = CLAUDE.md 규칙에 대장 항목 명시 편입(v0.2.6)** + 안내 전 실재 확인 의무(`git show origin/main:backlog/gates.yaml | grep -c <ID>`). 실피해 0 — Kiki가 그 단계를 건너뛰었다(**설계가 아니라 운**).
+- **재발 ② — 병렬 이중 등재(§6-1a)**: 다른 세션 `claude/failure-definition-signature-scmzdu`가 같은 HARN-38을 병렬 수행해 같은 원본 3건을 **다른 번호로** 등재했다(본 세션 EOS-69/70 vs 그쪽 EOS-71/72). **"같은 일을 두 번호로 등재" = HARN-38이 고치려던 바로 그 질병의 재발.** 원인은 `HARN-45`(block이 claim 반납 → 게이트 대기 중 자리 상실). **해소 = 본 세션이 양보**하고 원격 대장 선등재분(EOS-71/72)으로 통일·EOS-69/70 철회. 근거는 예의가 아니라 **재발 차단**이다 — 같은 full ID면 두 브랜치가 다 머지돼도 충돌이 아니지만(`backlog.py:1001-1003`), 각자 번호를 유지하면 **머지 순간 내용 동일 태스크가 4개**가 되고 슬러그가 달라 validate는 통과한다(원형 그대로). 두 이관본의 title·acceptance·paths가 동일함을 대조해 양보로 잃는 내용이 0임을 확인했다.
+- **`HARN-45`의 격상 근거**: 가설적 위험이 아니라 **같은 세션 안에서 원인(claim 반납)→결과(이중 등재)가 모두 관측된** 결함이라 priority 1로 등재했다.
+- **가드 실거부 누적 5회**(변별력 실증): HARN-37(등재) · HARN-42(대책) · EOS-67 · EOS-71 · EOS-72(재번호). 전부 **push된** 브랜치 상대라 출처 ③이 잡았다 — 문제는 판정력이 아니라 관측 범위임을 재확인.
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§8 정정 · CLAUDE.md v0.2.6 · EOS-71·EOS-72·EOS-73 · HARN-43·HARN-44·HARN-45 · 게이트 G-cur16-branch-push·G-cur16-branch-disposal(둘 다 cleared)
+
+## 2026-08-31: 런북 형식 결함 2회차 — 증거 인용이 복사-실행됨 (CLAUDE.md v0.2.7)
+
+- **경위**: HARN-38 세션이 claim 대장 실측을 Kiki에게 보고하며 `$ git ls-tree -r --name-only origin/harness-claims`(프롬프트 접두 `$` 포함)와 그 **출력 줄**(`claims/EOS-71-….json   ← 여기`)을 한 코드 펜스에 담았다 → Kiki가 그대로 붙여넣어 PowerShell이 둘 다 명령으로 해석·`CommandNotFoundException` 2건. **피해 0**(조회였고 실행조차 안 됨) — 다만 파괴적 명령의 출력을 같은 방식으로 인용했다면 결과가 달랐다.
+- **원인**: 코드 펜스는 Kiki에게 **복사-실행 대상으로 읽힌다.** 세션의 "증거 인용" 의도가 **형식에 나타나지 않았다.** 시크릿 규칙("생략 문자를 복사-실행되는 위치에 두지 않는다")이 같은 원리를 이미 담고 있었으나 *증거 인용* 축으로 일반화돼 있지 않았다.
+- **상환**: `CLAUDE.md` v0.2.7 — ①실행용 블록에는 **순수 명령만**(프롬프트 접두·출력 줄·`← 여기` 같은 설명 화살표 금지) ②증거·출력 인용은 실행용과 눈으로 구별되게 표시하고, 실행이 필요하면 **동작하는 형태의 블록을 따로** 준다.
+- **같은 세션 2회차라는 점이 핵심**: 첫 번째는 미머지 게이트 clear 안내(Codex P2·v0.2.6 상환). **두 결함 다 *내용*은 옳았고 *형식*이 틀렸다** — 하나는 맞는 명령을 틀린 체크아웃에서 돌리게 했고, 하나는 명령이 아닌 것을 명령 자리에 놓았다. 공통 자문: **"이걸 그대로 붙여넣으면 무슨 일이 일어나는가."**
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-B·§8 · CLAUDE.md v0.2.7
+
+## 2026-08-31: 동종 3회차 — 병렬 세션이 CLAUDE.md 버전 번호를 각자 v0.2.4로 배정
+
+- **경위**: PR #930의 base 최신화 중, main의 **#928(EOS-60)** 이 `CLAUDE.md`를 v0.2.4(골든 벤치마크 계약 인덱스 등재)로 올린 것이 발견됐다 — 본 세션도 같은 번호를 썼다(대장 신규 항목 편입). **git이 content 충돌로 잡아** 자동 병합을 막았다(add/add가 아니라 같은 줄 수정이라 잡혔다).
+- **해소**: 본 세션이 양보 — main의 v0.2.4를 이력에 보존하고 본 세션 분을 **v0.2.5**(대장 신규 항목)·**v0.2.6**(실행용↔증거 블록 분리)으로 재배정. 태스크 번호 양보(§6-1a)와 **같은 원칙**(원격에 먼저 착지한 쪽이 기준).
+- **의의 — 세 번째 동종 사례**: 태스크 ID → 게이트 ID → **문서 버전 번호**. 셋 다 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것이다. `HARN-43`이 겨냥하는 병목이 **`backlog.py` 번호 가드보다 넓다**는 증거 — 가드가 있는 축에서는 CLI가 5번 실거부했지만, 가드가 **없는** 축(게이트 ID·문서 버전)에서는 사람 또는 git 충돌이 최후 방어선이었다. 이번엔 git이 잡아 피해 0이나, 버전 줄이 두 브랜치에서 *같은 자리*가 아니었다면 조용히 둘 다 v0.2.4로 남았을 것이다.
+- **cross-ref**: PR #930·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.7 · HARN-43
+
+## 2026-08-31: 동종 4회차 — CLAUDE.md 버전 번호 충돌이 한 시간 안에 두 번
+
+- **경위**: §7-C의 v0.2.4 충돌(#928)을 해소해 본 세션 분을 v0.2.5·v0.2.6으로 밀어낸 직후, base를 다시 최신화하자 **#924**가 `CLAUDE.md`를 **v0.2.5**로 올린 것이 나왔다 — 방금 밀어낸 바로 그 번호. 같은 해소를 반복해 최종 **v0.2.6**(대장 신규 항목)·**v0.2.7**(실행용↔증거 블록 분리)로 재배정하고, main의 v0.2.4·v0.2.5를 이력에 보존했다.
+- **주목할 점 — 두 세션이 같은 부류 결함을 각자 겪고 각자 규칙화**: #924가 올린 v0.2.5 규칙은 *"다단계 명령 블록에서 자리표시자 대신 셸 변수로 잇는다"*(전체 붙여넣기 실행에서 치환이 안 일어나 자리표시자가 그대로 실행됨)로, 본 세션의 v0.2.7(실행용↔증거 블록 분리)과 **같은 계열**(Kiki 명령 블록 위생)이다. 상호 보완적이라 둘 다 살렸다. **같은 병목을 두 세션이 독립적으로 관측했다는 것 자체가 그 병목이 실재한다는 강한 증거**다.
+- **누적**: 태스크 ID → 게이트 ID → 문서 버전 번호 ×2 = **동종 4회**. 전부 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것. 문서 버전은 가드가 없어 git 충돌이 유일한 방어선이었고, 두 번 다 같은 줄이라 잡혔다 — 운이 두 번 따른 것이지 설계가 아니다(`HARN-43` 범위 근거 보강).
+- **cross-ref**: PR #930·#924·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.7 · HARN-43
