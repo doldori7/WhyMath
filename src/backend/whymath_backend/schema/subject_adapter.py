@@ -18,18 +18,40 @@ Core가 "이 문자열은 이차방정식"임을 알게 되는 순간 경계가 
 `if problem.type == "quadratic"` 금지). 반대로 문자열 자체는 과목 중립이다 — Physics 어댑터는
 같은 필드에 물리 관계식을 담고 자기 방식으로 해석한다.
 
-## ⚠️ 정본화 ≠ 집행 — 이 계약을 경유하는 서빙 코드 경로는 **현재 0개**다
+## 🔑 계약은 **2층**이다 — 이 파일은 그중 **필수층**이다
 
-이 파일이 있다고 해서 경계가 집행되는 것이 아니다. 2026-08-31 기준 실측:
+> **이 절을 읽지 않고 아래 Protocol에 메서드를 추가하지 말 것.** 여기에 추가하는 것은
+> "모든 과목이 반드시 제공해야 한다"는 선언이며, 되돌리기 어렵다.
 
-- `api.coach`·`l6.blueprint.assembly`·`l3.render.adapters`·`l3.pedagogy.slot_generator`는
-  여전히 `l3.verify_*`·`l3.symbolic_equivalence`를 **직접 import**한다(11건 —
-  `docs/architecture/eos_core_adapter_boundary.md` §4 A분류).
-- 그 11건을 이 Protocol 호출로 바꾸는 **경유 배선은 후속 태스크**이며, 이 태스크의 범위가 아니다.
-- 정적 강제(Core→Adapter import 금지)는 `EOS-67`이 import-linter로 세운다.
+**필수층** — 이 파일의 `SubjectAdapter`.
+  의미: 과목이면 **반드시** 제공한다. 없으면 그 과목은 이 시스템에 들어올 수 없다.
+  추가 게이트: "Physics·Chemistry·History에도 **반드시** 존재하는가?"에 **예**일 때만.
 
-따라서 이 계약의 존재를 근거로 "Core가 수학을 모른다"고 말하면 안 된다. 지금 성립한 것은
-**"수학을 모르고도 말할 수 있는 문장이 무엇인지"의 정의**까지다.
+**선택층** — `schema/verification_capabilities.py`.
+  의미: 있는 과목만 제공한다. Core는 그 능력이 없을 때의 경로를 **반드시** 갖는다.
+  추가 게이트: 위 질문에 **아니오**면 전부 이쪽으로 간다.
+
+**필요한 능력이 생겼을 때의 기본 행선지는 선택층이다.** 필수층 확장은 예외이고 근거가 필요하다.
+단계 연쇄 검증·기호 항등 판정·수식 봉인이 선택층에 있는 이유가 정확히 이것이다 — 역사·국어에
+'전이 동치'나 '항등'이 없으므로, 필수로 만들면 그 과목들이 **빈 구현을 강요당하고** 빈 구현은
+곧 "판정했다"는 거짓 신호가 된다(검증 없는 신뢰 금지).
+
+이 2층 구조는 **기계가 지킨다**: `tests/backend/schema/test_subject_adapter_two_tier_contract.py`
+가 이 Protocol의 필수 메서드 집합을 동결한다. 여기에 메서드를 늘리면 CI가 적색이 되고, 그때
+"선택층으로 갈 수 없는 이유"를 적어야 통과한다(조용한 확장 불가).
+
+## 집행 상태 (2026-08-31 `EOS-69` 완료 — 이 절은 실측으로 갱신됨)
+
+이 파일이 있다고 해서 경계가 집행되는 것은 아니다. 그러나 2026-08-31 현재:
+
+- **경유 배선 완료.** 착수 시점 A분류 11건(`api.coach`·`l6.blueprint.assembly`·
+  `l3.render.adapters`·`l3.pedagogy.slot_generator`)은 전부 계약 경유로 바뀌었다. 기본 구현
+  선택은 합성 루트 `whymath_backend.composition`(INFRA) 한 곳에 산다.
+- **경계 스캔 위반 0건** (`scripts/analysis/eos_core_adapter_boundary_scan.py`).
+- **정적 강제 가동.** `EOS-67`의 import-linter 계약 3건이 CI lint 스텝에서 매 PR을 판정한다.
+
+한계(명시): 스캔·계약 모두 **정적 import**만 본다. 동적 import·문자열 경유 참조는 사각이며,
+`MIXED` 34모듈은 위반 계산에서 빠지므로 0은 *CORE 배정 모듈 기준의* 0이다.
 
 ## v1이 3메서드인 이유 (`explain` 미포함)
 
