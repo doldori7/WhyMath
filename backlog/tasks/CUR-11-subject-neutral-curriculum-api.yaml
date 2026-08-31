@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -13,7 +13,10 @@ depends_on:
 requires_gates: []
 acceptance:
   - "① GET /v1/curricula(목록·페이지네이션), GET /v1/curricula/{framework_id}, GET /v1/curricula/{framework_id}/nodes(CurriculumEntry 기반 개념 노드 뷰), GET /v1/learning-outcomes/{norm_id}, GET /v1/alignments(통합 조회) 라우터 추가. ② subject-neutral — /math/grade/10/unit/3 같은 과목 특화 경로 금지. ③ 테스트: hermetic(FakeSession)·통합(PG16) 2층. ④ 범위 밖: /v1/me/target-progress 변경, 학생 대면 노출 정책 변경은 포함하지 않음."
-artifacts: []
+artifacts:
+  - "#920"
+  - src/backend/whymath_backend/api/curricula.py
+  - src/backend/whymath_backend/api/alignments.py
 paths:
   - src/backend/whymath_backend/api/curricula.py
   - src/backend/whymath_backend/api/alignments.py
@@ -21,6 +24,6 @@ paths:
   - tests/backend/api/test_curricula.py
   - tests/backend/api/test_alignments.py
   - tests/backend/api/test_curricula_integration.py
-session: claude/mvp-eos-transition-plan-ghcajm
+session: null
 notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨."
 updated: 2026-08-31
