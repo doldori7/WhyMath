@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -18,11 +18,15 @@ acceptance:
   - "⑤ 스키마 프리플라이트 — 실행 전에 필요한 컬럼(user_profile.email_hash·persona_primary) 실재를 직접 확인하고, 없으면 트레이스백이 아니라 한 줄 행동 지시로 거부한다(role_grant_cli 2026-08-11 소음 실패 선례 승계). 판정은 버전 테이블이 아니라 컬럼 실물로 한다."
   - "⑥ 배선 실재성 — declared_unwired_audit의 _MANIFEST에 이 모듈을 등재한다(ops/*.py 중 module-level main을 자동 수집하므로 미등재 시 AUDIT exit 1). 등재 전 exit 1 → 등재 후 exit 0 양방향 실측."
   - "⑦ 테스트 — 합성 함수 주입으로 CLI 배선(인자 파싱·거부 경로·JSON stdout·종료 코드·멱등)을 hermetic 검증한다(role_grant_cli 컨벤션). 실 DB 왕복은 integration 마크."
-artifacts: []
+artifacts:
+  - "PR #929 (https://github.com/doldori7/WhyMath/pull/929) · 커밋 63fd3da3 · src/backend/whymath_backend/ops/account_bootstrap_cli.py 신설 + declared_unwired_audit _MANIFEST 등재 + tests/backend/ops/test_account_bootstrap_cli.py(22건)·test_account_bootstrap_cli_integration.py(3건)"
+  - "실측: 실 PostgreSQL 16(head 스키마) 예행 — create 신규/멱등/대소문자 정규화 → role_grant_cli grant → list → privacy_audit.role_change 1행. 결함 주입(email_hash 재사용 절단) 시 통합 3건 red, 복원 후 green(cp 백업·바이트 동일 확인). declared_unwired_audit 미등재 exit 1 → 등재 exit 0."
+  - "prod 적용 결과(Kiki, 2026-08-31): account_bootstrap_cli create rollrock.ki@gmail.com → user_id 5612757b-93c2-4d60-8318-3c85d3d6ff2c(created true, role student) → grant content_admin GRANT_EXIT=0 → list total 1. G-operator-seat-first-grant cleared."
+  - "CI green(커밋 16a112a1 · run 33363589778): backend — lint·type·test success · backend — 마이그레이션·통합(실 PG) success(신규 통합 3건 실행) · infra-contracts · declared-unwired-audit · harness-integrity · policy-guard · docker-build 전부 success"
 paths:
   - src/backend/whymath_backend/ops/account_bootstrap_cli.py
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - tests/backend/ops/test_account_bootstrap_cli.py
-session: claude/git-unshallow-repo-crr6x5
+session: null
 notes: "G-operator-seat-first-grant 4단계 E 차단 해소용. Kiki 결정(2026-08-31): 좌석은 Kiki 실계정 이메일에 붙이고, 계정 생성은 원시 SQL이 아니라 ops CLI로 한다. 데모 인증 경로(고정 신원 demo-student@whymath.example)는 '데모 인증이 켜진 서버에 닿는 누구나'가 좌석 주인이 되므로 배제."
 updated: 2026-08-31
