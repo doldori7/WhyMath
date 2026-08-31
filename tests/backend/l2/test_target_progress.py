@@ -112,7 +112,9 @@ class TestCoverageScopeUnavailable:
 class TestCoverageComputed:
     """`school_type`이 있으면 스코프→관측 순으로 조회해 비율을 계산(CUR-04 원자 축).
 
-    스코프 행은 `(norm_id, official_code)` 2-tuple, 관측 행은 `(concept_id, standard_codes)`
+    스코프 행은 `(norm_id, official_code)` 2-tuple, 관측 행은 `(atom_code, standard_codes,
+    concept_id)` 3-tuple(**CUR-12** 통합 함수 `get_alignments`의 원자 축 SELECT 열 순서 —
+    LEFT OUTER JOIN 미스는 atom_code=None으로 온다)
     2-tuple이다 — `get_target_progress` 모듈 docstring의 원자 축 조인 shape과 정합.
     """
 
@@ -127,9 +129,9 @@ class TestCoverageComputed:
             [
                 [("N1", "STD-1"), ("N2", "STD-2"), ("N3", "STD-3"), ("N4", "STD-4")],  # 스코프
                 [
-                    (c1, ["STD-1"]),  # 원자 매칭 + 스코프 내 코드 관측 → N1 커버.
-                    (c2, ["STD-OUT-OF-SCOPE"]),  # 원자 매칭됐으나 스코프 밖 코드.
-                    (c3, None),  # 원자 축 조인 미스(concept.code가 atom_node에 없음).
+                    ("A1", ["STD-1"], c1),  # 원자 매칭 + 스코프 내 코드 관측 → N1 커버.
+                    ("A2", ["STD-OUT-OF-SCOPE"], c2),  # 원자 매칭됐으나 스코프 밖 코드.
+                    (None, None, c3),  # 원자 축 조인 미스(concept.code가 atom_node에 없음).
                 ],
             ],
         )
@@ -166,7 +168,8 @@ class TestCoverageComputed:
             profile,
             [
                 [("N1", "STD-1")],  # 스코프 1건
-                [(c1, None), (c2, None)],  # 측정 이력 2개념 — 전부 원자 축 미매칭.
+                # 측정 이력 2개념 — 전부 원자 축 미매칭(OUTER JOIN 미스 = atom_code None).
+                [(None, None, c1), (None, None, c2)],
             ],
         )
         result = await get_target_progress(session, _UID, as_of=_AS_OF)  # type: ignore[arg-type]

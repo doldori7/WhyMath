@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: CUR-19-gating-alignment-unified-view
+title: "게이팅 성취기준 조회의 정렬 통합 경유 — 문항 키 진입점 (CUR-12 잔여 축)"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - CUR-12-curriculum-alignment-unified-view
+requires_gates: []
+acceptance:
+  - "① api/gating.py::_fetch_achievement_codes(문항 id → 성취기준 코드)를 l1/standards/alignment_query.get_alignments 경유로 전환 — 현재 원자 축 조인의 마지막 잔여 복제본이다. ② 진입 키가 concept이 아니라 problem이라 CUR-12의 concept 키 시그니처로 바로 덮이지 않는다: problem→concept 해석을 별도 단계로 두되 쿼리 수 증가(1→2)가 게이팅 지연에 미치는 영향을 실측하고, 허용 불가면 통합 함수에 problem 키 진입점을 추가하는 안과 비교 판정. ③ 조인 성립 건수 로깅(log_join_stats) 동반 — 침묵 실패 금지. ④ 테스트: 전환 전후 동일 입력의 산출 dict 동등성 + 쿼리 수 실측."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/gating.py
+  - src/backend/whymath_backend/l1/standards/alignment_query.py
+  - tests/backend/api/test_gating.py
+session: null
+notes: "CUR-12 구현 중 실측 발견. CUR-12는 concept 키 소비처 4곳(coach·target_progress·alignments·dsl)을 통합했으나 gating은 problem 키 진입점이라 시그니처가 달라 분리했다(억지 통합은 함수 표면을 흐린다). 남겨 두면 원자 축 조인의 마지막 복제본으로 남아 통합의 의미가 반감되므로 태스크로 추적한다 — 만료 없는 유예 금지."
+updated: 2026-08-31
