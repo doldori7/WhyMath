@@ -330,12 +330,17 @@ ignore_imports = [
     # 실패한다. 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다 — 유예가 조용히 눌러앉을 수
     # 없다("만료 없는 유예 금지"의 코드 집행).
     #
-    # 재확인 지점: G1(2026-09-27). 그때까지 9줄이 그대로면 EOS-69가 진척 0이라는 뜻이다.
+    # 재확인 지점: G1(2026-09-27). 그때까지 이 목록이 그대로면 EOS-69가 진척 0이라는 뜻이다.
+    #
+    # [EOS-69 1차 상환 2026-08-31] 9줄 → **8줄**. `l3.render.adapters -> l3.equivalent.josa`
+    # 를 지웠다 — 경계 문서 §4 **B분류**(오배치 유틸)로, 조사 판별은 과목과 무관하므로
+    # `whymath_backend.lang.josa`로 물리 이동해 위반 자체를 소멸시켰다(스캔 15 → 12건).
+    # 분류표만 고치지 않고 파일을 옮긴 이유: import-linter는 **모듈 경로**로 판정하므로
+    # `l3.equivalent.*` 접두가 남는 한 계약은 그대로 걸린다.
     "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",
     "whymath_backend.api.coach -> whymath_backend.l3.verify_final_answer",
     "whymath_backend.api.coach -> whymath_backend.l3.verify_solution",
     "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.l3.symbolic_equivalence",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.josa",
     "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.rephrase",
     "whymath_backend.l3.render.adapters -> whymath_backend.l3.verify_answer",
     "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_solution",

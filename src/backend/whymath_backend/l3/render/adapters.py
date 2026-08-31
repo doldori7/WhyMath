@@ -15,12 +15,12 @@
 ③ **검증 후 노출**: 평가 재료를 렌더하면 `verify_answer`로 정답을 확인하고, 수치·수식은
    `rephrase.classify_invariance_failure`의 봉인으로 원본 보존을 확인한다. 실패는 예외가 아니라
    `validation_signal`로 표면화한다(조용한 실패 금지).
-④ **한국어 조사 일치**: 이름·값 뒤 조사는 `l3/equivalent/josa.py`가 판정한다(재발명 금지).
+④ **한국어 조사 일치**: 이름·값 뒤 조사는 `lang/josa.py`가 판정한다(재발명 금지 · EOS-69로 수학 패키지 밖 이동).
 """
 
 from __future__ import annotations
 
-from whymath_backend.l3.equivalent.josa import eul_reul, eun_neun, i_ga
+from whymath_backend.lang.josa import eul_reul, eun_neun, i_ga
 from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, extract_equation
 from whymath_backend.l3.pregenerate.models import ValidationSignal
 from whymath_backend.l3.render.adapter import RenderContext, RenderedUnit, RenderSegment

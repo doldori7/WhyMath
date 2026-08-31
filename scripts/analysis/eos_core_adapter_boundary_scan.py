@@ -101,6 +101,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l3.notation_coverage": ("ADAPTER", "수학 표기 커버리지 게이트"),
     "l3.speech": ("ADAPTER", "수식 AST → 한국어 낭독 — doc-100 'mathematical expression parsing'"),
     "l3.speech_parse": ("ADAPTER", "낭독 역파싱"),
+    # ── 과목 중립 언어 유틸 (EOS-69) ──
+    "lang": (
+        "CORE",
+        "한국어 조사·표기 유틸 — 어떤 과목이든 한국어로 가르치면 필요하다. "
+        "표준 라이브러리만 import(모듈 자인). 경계 문서 §4 B분류 3건의 해소처",
+    ),
     # ── L4 교수학 엔진 — Polya·소크라테스·오개념 *기계*는 중립, 수학 검출기만 Adapter ──
     "l4": ("CORE", "Polya 4단계·소크라테스·LTHC·힌트 지연은 교수학 구조이지 수학이 아님"),
     "l4.misconception": (
