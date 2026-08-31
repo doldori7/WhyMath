@@ -313,6 +313,16 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
         if result.status == "conflict":
             other = result.claim
             detail = f" (세션: {other.branch or '?'}, {other.ts or '시각 불명'})" if other else ""
+            if other is not None and other.kind == "block":
+                # 차단 홀드는 착수 점유가 아니다 — 해소 경로가 다르므로 그렇게 안내한다.
+                # 이 분기가 없으면 "남이 작업 중"으로 읽혀 --force 탈취를 유도한다(HARN-42).
+                message = (
+                    f"{task.id} 착수 거부 — 다른 세션이 **차단**해 둔 태스크{detail}\n"
+                    f"  사유: {other.reason or '(기록 없음)'}\n"
+                    f"  해소는 차단 사유를 없앤 뒤 `unblock {task.id}` — "
+                    f"claims release --force는 차단 우회이므로 쓰지 않는다"
+                )
+                return _fail(message)
             message = (
                 f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
                 f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도"
@@ -710,9 +720,36 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "block", task.id, reason=args.reason)
-    _release_remote_claim(root, task.id, prev_session)
+    _publish_block_hold(root, task.id, prev_session, args.reason)
     print(f"✖ {task.id} 차단 — {args.reason}")
     return 0
+
+
+def _publish_block_hold(root: Path, task_id: str, prev_session: str | None, reason: str) -> None:
+    """차단을 원격 대장에 게시 — 머지 없이 병렬 세션에 즉시 보이게 (HARN-42).
+
+    구현은 원격 claim을 *해제*했다. 그 결과 차단은 보호를 거는 순간 유일한 교차
+    세션 신호를 지웠고, 태스크 YAML이 main에 머지되기까지(CI ~30분 + base 경합)
+    다른 세션은 아무 마찰 없이 착수할 수 있었다 — CUR-11 실사고(2026-08-31).
+
+    실패는 침묵하지 않는다(예외 타입·상태를 로그와 이벤트에 남긴다). 게시 실패 시
+    차단은 로컬에만 남으므로 **보호가 없는 상태임을 명시**한다 — fail-open을
+    "보호 있음"으로 위장하지 않는다(CLAUDE.md 금기).
+    """
+    policy, _ = store.load_policy(root)
+    if not policy.remote_claims:
+        return
+    branch = prev_session or store.current_branch(root)
+    result = remote_claims.hold(root, task_id, branch, reason)
+    if result.status == "ok":
+        return
+    print(
+        f"⚠ 원격 차단 홀드 게시 실패({result.status}): {result.message}\n"
+        f"  → 이 차단은 **로컬에만** 있습니다. 이 PR이 머지되기 전까지 병렬 세션은 "
+        f"{task_id}을(를) 착수할 수 있습니다",
+        file=sys.stderr,
+    )
+    store.append_event(root, "block_hold_failed", task_id, status=result.status)
 
 
 def cmd_review(root: Path, args: argparse.Namespace) -> int:
@@ -788,10 +825,13 @@ def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "todo")
     if error:
         return _fail(error)
+    prev_session = task.session
     task.status = "todo"
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "unblock", task.id)
+    # 차단 홀드도 함께 걷는다 — 안 걷으면 해제된 태스크가 영구 차단으로 보인다(HARN-42)
+    _release_remote_claim(root, task.id, prev_session)
     print(f"· {task.id} 차단 해제 → todo")
     return 0
 

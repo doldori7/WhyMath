@@ -566,8 +566,22 @@ class TestRemoteClaimCli:
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
 
-    def test_block_releases_remote_claim(self, bare_remote, monkeypatch, capsys):
-        """block이_원격_claim을_해제한다"""
+    def test_block_converts_claim_to_block_hold(self, bare_remote, monkeypatch, capsys):
+        """block이_착수_claim을_차단_홀드로_전환한다 (HARN-42로 계약 변경)
+
+        **구 계약**: block은 원격 claim을 *해제*했다(`claims == []`).
+        **신 계약**: 해제 대신 `kind="block"` 홀드로 **전환**한다.
+
+        왜 바꿨나 — 구 계약은 차단이 보호를 거는 순간 유일한 교차 세션 신호를
+        지웠다. 태스크 YAML의 `blocked`는 main에 머지돼야 남에게 보이는데 이
+        저장소의 머지 지연은 시간 단위라(CI ~30분 + HARN-32 경합), 그 창에서 타
+        세션이 마찰 없이 착수했다(CUR-11 실사고 2026-08-31 — block 00:28 → 타 세션
+        claim 00:41 → 구현·머지 완료, 차단은 끝내 발효 못 함).
+
+        구 계약의 *원 의도*("차단된 태스크가 진행 중 점유로 남지 않는다")는
+        유지된다 — 아래에서 kind가 더 이상 `claim`이 아님을 함께 확인한다.
+        교차 세션 차단 동작 자체는 test_block_hold_cross_session.py가 동결한다.
+        """
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -575,8 +589,11 @@ class TestRemoteClaimCli:
         assert cli.main(["block", task_id, "--reason", "테스트"]) == 0
         import remote_claims
 
-        claims, _ = remote_claims.list_claims(repo)
-        assert claims == []
+        claims, _ = remote_claims.list_claims(repo, with_meta=True)
+        held = [c for c in claims if c.task_id == task_id]
+        assert len(held) == 1, "차단 홀드가 원격에 남아야 병렬 세션이 본다"
+        assert held[0].kind == "block"
+        assert held[0].kind != "claim", "구 의도 유지 — 진행 중 점유로 남지 않는다"
 
     def test_no_remote_flag_skips_remote(self, bare_remote, monkeypatch, capsys):
         """no_remote_플래그는_원격을_생략한다"""
