@@ -112,6 +112,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
         "수학 오답 형태 SymPy 매칭 — doc-100 'math misconception detectors'",
     ),
     "l4.misconception.wrong_form_shadow_harvest": ("ADAPTER", "위 검출기의 shadow 수확"),
+    "l4.subject_adapter_math": (
+        "ADAPTER",
+        "MathSubjectAdapter(EOS-66) — SubjectAdapter 계약의 수학 구현. CORE인 l4에 살지만 "
+        "배정은 파일 단위(선례: wrong_form_match). CORE가 이것을 import하면 위반이 맞다 — "
+        "Core는 schema.subject_adapter Protocol만 알아야 하고 구현체는 DI로만 주입된다",
+    ),
     "l4.solution_coaching": ("MIXED", "코칭 대화 구조는 중립이나 풀이 단계 참조가 수식 전제"),
     "l4.speech": ("MIXED", "낭독 교수 정책 — 정책은 중립, 대상이 수식"),
     # ── L5 상호작용 — OCR은 수식 인식 그 자체 ──
@@ -125,6 +131,10 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "api.speech": ("MIXED", "낭독 엔드포인트 — 동상"),
     "api.ocr": ("MIXED", "OCR 엔드포인트 — 동상"),
     "schema": ("CORE", "순수 타입 — 대부분 과목 중립(학습자·활동·권리·이벤트)"),
+    "schema.subject_adapter": (
+        "CORE",
+        "SubjectAdapter 계약(EOS-66) — 과목 중립 Protocol·순수 타입",
+    ),
     "schema.problem": (
         "MIXED",
         "수학 전용 4필드(answer_transform 등)를 S1-16이 extensions.math로 분리할 때까지 혼재",

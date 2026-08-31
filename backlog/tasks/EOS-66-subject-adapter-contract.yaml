@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on:
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/schema/subject_adapter.py
   - src/backend/whymath_backend/l4/subject_adapter_math.py
   - tests/backend/schema/test_subject_adapter.py
-session: null
+session: claude/review-status-differences-jw5m4a
 notes: "출처: 대조 §4 A1(#924). 계획서 100 P0-05·P0-06 · 006 §6. 실측: grep -rn 'SubjectAdapter' src/ = 0건. 인접 착지 구분 — CUR-11(done·#920)은 curriculum API 표면이고 S1-16(todo)은 스키마 축이라 행위 계약은 무주인이었다. 선언 §1.3-③은 물리 대이동만 보류하고 계약 수준은 W1 몫으로 명시했다. 파일 경로는 EOS-65 경계 표 확정 후 조정 가능(현 경로는 잠정)."
 updated: 2026-08-31
