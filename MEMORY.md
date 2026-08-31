@@ -7449,3 +7449,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **누적 5회의 대비가 핵심**: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72). 가드가 **없는** 축(게이트 ID·문서 버전 ×2·중복 작업)에서는 **git 충돌·사람·운이 유일한 방어선**이었다 — 버전 충돌 2회는 두 브랜치가 *같은 줄*을 고쳐서, 이번 건은 *5분 차이*로 잡혔다. 어느 것도 설계된 방어가 아니다.
 - **HARN-43 범위 정정**: acceptance ①의 고지 대상은 '번호'가 아니라 **"내가 지금 하는 일이 다른 세션에 보이지 않는다"는 사실 자체**다. 사례 5건을 태스크 notes에 누적 기록했다.
 - **cross-ref**: PR #930(머지 1387662a)·#931·#924·#928 · HARN-43 notes · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§7-C
+
+## 2026-08-31: HARN-43 — `add` 가시성 고지 착지 (탐지 아닌 고지·조용할 때 조용함이 핵심)
+
+- **무엇**: `backlog.py add` 성공 직후, 번호 가드가 **못 본 범위**를 사람에게 고지한다. 두 축 — ①현재 브랜치의 remote-tracking ref 부재(미push 추정) ②원격 ref 스냅샷 나이가 임계(30분·main 전진 주기 실측) 초과. 헬퍼 2종은 `remote_claims`에 두고 **네트워크 0**(로컬 ref·파일 mtime만) — `scan_remote_task_files`의 `fetch=False` 계약 불변.
+- **설계 핵심은 '조용할 때 조용함'**: push됐고 ref도 신선하면 **아무것도 출력하지 않는다**. 무조건 뜨는 고지는 습관화돼 정작 필요한 순간에 안 보인다(CLAUDE.md "상시 실패하는 fail-open 보호" 동형). 판정 불가(`None`)도 침묵한다 — 추측 출력은 측정 실패를 경고 유무로 위장한다.
+- **테스트가 설계 결함을 잡았다(기록 가치 있음)**: 초안은 신선도를 `FETCH_HEAD` mtime 하나로 판정했는데, **갓 클론한 저장소에는 그 파일이 없다**. 그것을 '오래됨'으로 읽어 *가장 신선한* 상태인 클론 직후에 고지가 항상 떴다 — `test_pushed_branch_gets_no_notice`가 red로 잡았다. 상환: 원격 ref 갱신 흔적 **3종**(`FETCH_HEAD`·`packed-refs`·`refs/remotes/origin`)의 **최댓값**으로 바꾸고, 셋 다 없으면 판정 불가로 침묵. 테스트도 흔적을 *전부* 늙히도록 고쳤다(하나만 늙히면 다른 흔적이 신선해 공허하게 통과).
+- **정직한 한계(코드 docstring 명문)**: "보인다"는 신뢰할 수 있고 **"안 보인다"만 추정**이다 — `git push`가 tracking ref를 만들므로 본인이 push했다면 ref는 반드시 있지만, *다른 클론에서* push된 브랜치는 fetch 전까지 여기서 안 보인다(거짓 고지 방향). 차단이 아니라 고지이므로 허용되는 방향의 오차다. **미push 브랜치를 실제로 관측하는 수단은 없다** — 고지 문안에 `가드 통과 ≠ 충돌 없음`을 담은 이유다.
+- **변별력 실측(뮤테이션 3종·각자의 축만 red)**: ①`pushed is False`→`is not None`(무조건 고지) → 과탐 축 2건 red ②`if False`(전면 침묵) → 미push 축 red ③`None`→`False`(판정 불가를 확정으로 접기) → undecidable 축 red. 전부 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수)·md5 바이트 동일 확인·원복 후 12건 green 재확인.
+- **검증**: 신규 12건 포함 `tests/harness` **410 passed** · `tests/infra` 417 passed · ruff/black EXIT=0 · validate 480태스크·21게이트 green. 라이브 스모크: 이 세션의 미push 브랜치에서 고지 실발화 확인(신선도 축은 미발화 — 두 축 독립 동작 실증).
+- **cross-ref**: `HARN-38` 조사 보고서 §2-2·§7 · 태스크 notes의 사례 5건 누적 · `scripts/harness/remote_claims.py` §등재 가시성 고지 · `tests/harness/test_backlog_add_id_collision.py::TestAddVisibilityNotice`
