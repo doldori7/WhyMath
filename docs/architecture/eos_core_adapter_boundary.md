@@ -74,7 +74,7 @@
 | 계획서 Adapter 항목 | 현행 좌석 | 배정 |
 |---|---|---|
 | Math AST | `l3.speech`(AST→낭독) · `l3.equivalent`(정규화) | ADAPTER ✓ |
-| LaTeX | `l3.render` 경유 · `schema.problem` 필드 · `l1.formula_graph` | 분산 — MIXED 다수 |
+| LaTeX | `l3.render` 경유 · `schema.problem` 필드 · `l1.formula_graph` | 분산 — MIXED 다수. **S1-16(2026-08-31) 착지로 수학 전용 4필드가 `extensions.math`로 구조화**됐으나, 하위호환용 legacy top-level 필드가 남아 양방향 동기화되므로 `schema.problem`은 여전히 MIXED다(CORE 승격은 legacy 제거가 선결 — breaking이라 미채택) |
 | Equation equivalence | `l3.equivalent`(26모듈·12,119loc) | ADAPTER ✓ |
 | Symbolic manipulation | `l3.symbolic_equivalence` | ADAPTER ✓ |
 | Graph rendering | `l3.visualization`(명세만) + 클라 렌더 | CORE — 명세는 구조라 중립 |

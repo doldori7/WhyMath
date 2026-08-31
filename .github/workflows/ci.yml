@@ -1102,8 +1102,14 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # fetch-depth: 0 — HARN-47 브랜치 스캔은 trunk 히스토리와 ahead count를 읽는다.
+      # 기본값(depth=1)이면 `is_shallow_repo` 가드에 걸려 **매 실행 "판정 보류"**가
+      # 된다. 그건 보호가 아니라 상시 무력 상태다(CLAUDE.md: 상시 실패하는 fail-open
+      # 보호를 "보호 있음"으로 신뢰 금지). 이 잡은 초 단위라 full depth 비용을 감당한다.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -1151,6 +1157,28 @@ jobs:
             # branch_gone)는 harness-audit.yml이 자동 청소하므로, 여기 남는 목록은
             # **사람 판단이 필요한 잔여**(ttl·task_missing)라는 뜻이다.
             echo "::warning::stale 원격 claim 발견 — 확정 사유는 harness-audit이 자동 청소한다. 위 목록에 ttl/task_missing이 남아 있으면 사람 판단이 필요하다"
+          fi
+
+      # HARN-47 — 이 스캔은 SessionStart 훅에서만 돌고 있었다. 즉 사람이 대화형 세션을
+      # 열 때만 존재했고 CI에서는 한 번도 실행되지 않았다. "저장소에 존재함"과 "돌아감"은
+      # 다르다(tests/infra 199건 미실행·브랜치 보호 미강제와 같은 형태의 반복 실패).
+      #
+      # 게이트가 아니라 **관측**이다 — 남의 방치 브랜치 때문에 무관한 PR을 red로 만들지
+      # 않는다. 다만 침묵하지도 않는다: 고립 N건은 warning으로, *측정 실패*는 그와
+      # 구분되는 별도 warning으로 낸다(0건 통과로 위장 금지).
+      - name: 고립 브랜치 관측 — PR로 노출된 적 없는 미머지 브랜치 (HARN-47)
+        run: |
+          set -o pipefail
+          out=$(python3 scripts/harness/backlog.py branches) && rc=0 || rc=$?
+          echo "$out"
+          echo "EXIT=$rc"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::고립 브랜치 판정 불가 — 이 실행에서 측정되지 않았다(고립 0건이라는 뜻이 아니다)"
+            exit 0
+          fi
+          n=$(echo "$out" | grep -c '^  \[고립\]' || true)
+          if [ "$n" -gt 0 ]; then
+            echo "::warning::PR로 노출된 적 없는 미머지 브랜치 ${n}건 — 회수(PR 생성) 또는 삭제가 필요하다. 이 목록이 유일한 존재 증거다"
           fi
 
       # CUR-09 후속: EOS 단원 구조 관측 리포트 — 현행 모델/스키마/코퍼스에 EOS 설계 메타데이터가
