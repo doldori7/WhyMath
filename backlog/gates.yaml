@@ -130,10 +130,10 @@ gates:
     title: "prod DB(whymath-pg:5433) user_profile 미소비 컬럼 비영행 확인 — school_id·subscription_tier/_started_at/_renewed_at·school_region·gender 각각 NOT NULL 행이 있는지 실측(ADMIN-02 acceptance① 선결·샌드박스에서 접근 불가)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 7
-    evidence: null
+    evidence: "2026-08-31 Kiki 실측(원본 복귀 후 whymath-pg:5433·ef7541 볼륨): SELECT count(school_id..gender), count(*) FROM user_profile → 6컬럼 전부 0 · total_rows 0. 미소비 컬럼 전건 비영행 아님(빈 테이블) — ADMIN-02 acceptance① 선결 충족. 부수: 8/25 컨테이너 재생성 사고로 빈 클러스터가 whymath-pg 이름을 점유하던 것을 진단·원본 볼륨 복귀(재고 2683/2210/841/895 재현·백업 whymath_20260831_120150.dump 확보) 후 실측."
     notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
