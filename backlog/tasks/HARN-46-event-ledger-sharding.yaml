@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,13 +16,14 @@ acceptance:
   - "경로 안전·결정론: actor 새니타이즈가 events/ 디렉터리 밖으로 탈출 불가(선두 점·구분자 치환)하고 같은 actor는 항상 같은 샤드에 떨어진다"
   - "회귀 테스트: ①샤드 경로 기록 ②레거시 파일 미기록 ③서로 다른 actor→서로 다른 파일(충돌 불가 속성) ④리포트가 레거시+샤드 합산 ⑤경로 탈출 차단 — 전부 hermetic"
   - ".gitattributes에 샤드 패턴 union 병기(동일 actor 재생성 브랜치 방어) + build_harness.md 대장 배치 갱신 + 사고 경위 문서(blocked 5라운드 원인 분해 — 코드로 고칠 수 있는 축과 GitHub측·거버넌스 축의 구분 명시)"
-artifacts: []
+artifacts:
+  - "PR #931 (커밋 c9ec7836) — store.append_event 세션 샤딩(backlog/events/<actor>.ndjson) + event_paths 합집합 리더 + policy 리포트 이관 + .gitattributes 샤드 union + build_harness.md 갱신 + 사고 문서 docs/reviews/pr931_merge_block_root_cause_2026-08-31.md(blocked 5라운드 원인 분해). 신규 테스트 13건(test_event_ledger_sharding.py)·기존 직접 읽기 7곳 이관. tests/harness 404 passed·tests/infra 417 passed·뮤테이션 3종 red 실측"
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
   - docs/standards/build_harness.md
   - ".gitattributes"
   - "docs/reviews/**"
-session: claude/failure-definition-signature-scmzdu
+session: null
 notes: "사고 경위: PR #931이 CI green을 4회 확보하고도 머지가 5라운드 지연 — 라운드 2·3·4의 원인이 backlog/events.ndjson 경합(모든 세션이 append하는 단일 공용 파일 + GitHub mergeability는 저장소 merge driver 미적용 → main 착지마다 dirty). 로컬 병합은 매번 충돌 0(union)이었으므로 문제는 데이터가 아니라 배치다. 대책 원리 = 충돌을 '해소 가능'하게 두지 않고 '발생 불가능'하게 만든다(1세션=1샤드 파일 — backlog/tasks/ 태스크당-1파일 선례와 동형). 잔여 위험: MEMORY.md도 같은 union 방식의 공용 append 파일 — 사람이 읽는 문서라 개편은 Kiki 결정 대기(사고 문서에 명시). Kiki 지시(2026-08-31): 'blocked 발생원인과 근본적인 해결방법과 테스트 해결책적용까지'."
 updated: 2026-08-31
