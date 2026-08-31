@@ -18,6 +18,9 @@ paths:
   - src/backend/whymath_backend/api/curricula.py
   - src/backend/whymath_backend/api/alignments.py
   - src/backend/whymath_backend/app.py
+  - tests/backend/api/test_curricula.py
+  - tests/backend/api/test_alignments.py
+  - tests/backend/api/test_curricula_integration.py
 session: claude/mvp-eos-transition-plan-ghcajm
 notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨."
 updated: 2026-08-31
