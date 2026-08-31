@@ -190,6 +190,59 @@ class TestFailureIsLoud:
         assert any(e.get("action") == "block_hold_failed" and e.get("id") == TASK for e in evs)
 
 
+class TestHandoverIsStillPossible:
+    """양방향 변별력 (HARN-45 acceptance ②) — 자리 보전과 인계가 **둘 다** 가능해야 한다.
+
+    HARN-48의 수정은 "차단이 자리를 지킨다"만 만들었다. 그것만 검증하면 **반대 결함**을
+    못 잡는다 — *아무도 이어받을 수 없는* 영구 점유다. HARN-45가 독립 사고(HARN-38,
+    05:00:05Z)에서 같은 뿌리를 발견하며 정확히 이 축을 요구했다.
+
+    구분: **게이트 대기**는 자리를 지켜야 하고(기본), **인계 차단**은 남이 이어받을 수
+    있어야 한다(`--handover`). 두 방향을 함께 동결한다.
+    """
+
+    def test_handover_block_releases_seat(self, bare_remote, monkeypatch):
+        """--handover 차단은 자리를 비운다 — 타 세션이 이어받을 수 있어야 한다."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        _seed_session(a, monkeypatch)
+        assert _add() == 0
+        assert cli.main(["block", TASK, "--reason", "설계 재검토 필요 — 인계", "--handover"]) == 0
+        assert [c for c in remote_claims.list_claims(a)[0] if c.task_id == TASK] == []
+
+        _seed_session(b, monkeypatch)
+        assert _add() == 0
+        assert cli.main(["start", TASK]) == 0, "인계 차단인데 타 세션이 이어받지 못했다"
+
+    def test_default_block_keeps_seat(self, bare_remote, monkeypatch):
+        """변별력 대조 — 기본 차단은 여전히 자리를 지킨다(같은 픽스처·플래그만 차이)."""
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        _seed_session(a, monkeypatch)
+        assert _add() == 0
+        assert cli.main(["block", TASK, "--reason", "게이트 대기"]) == 0
+
+        _seed_session(b, monkeypatch)
+        assert _add() == 0
+        assert cli.main(["start", TASK]) == 1, "기본 차단이 자리를 못 지켰다"
+
+    def test_handover_recorded_in_event(self, bare_remote, monkeypatch):
+        """어느 쪽 의도였는지 대장에 남는다 — 나중에 판정 가능해야 한다."""
+        _, clone = bare_remote
+        a = clone("session-a")
+        _seed_session(a, monkeypatch)
+        assert _add() == 0
+        assert cli.main(["block", TASK, "--reason", "인계", "--handover"]) == 0
+        evs = [
+            json.loads(x)
+            for path in store.event_paths(a)
+            for x in path.read_text(encoding="utf-8").splitlines()
+            if x.strip()
+        ]
+        blocks = [e for e in evs if e.get("action") == "block" and e.get("id") == TASK]
+        assert blocks and blocks[-1]["handover"] is True
+
+
 class TestBackwardCompatibility:
     """구버전 레코드(kind 없음)는 claim으로 읽는다 — 메타 파손이 차단으로 둔갑하면 안 된다."""
 

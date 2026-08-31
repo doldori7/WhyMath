@@ -1,0 +1,2 @@
+{"ts": "2026-08-31T12:57:53", "actor": "claude/eos-migration-compliance-check-xu50yl", "action": "amend", "id": "HARN-48-block-remote-hold-publication", "reason": "HARN-45(타 세션 독립 등재)와 중복 확인 — 양방향 요구를 이 태스크로 흡수", "changed": ["acceptance +1 (⑦ [정정 2026-08-31] HARN-45와 동일 뿌리(cmd_blo…)"]}
+{"ts": "2026-08-31T12:57:54", "actor": "claude/eos-migration-compliance-check-xu50yl", "action": "amend", "id": "HARN-45-gate-wait-vs-blocked-state-split", "reason": "HARN-48과 중복 — 구현 완료분 명시 + 잔여 축 분리 제안(4회차 중복 구현 방지)", "changed": ["acceptance +1 (④ [정정 2026-08-31·HARN-48 세션] **본 태스크는 HA…)"]}

@@ -719,7 +719,14 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "block", task.id, reason=args.reason)
+    handover = bool(getattr(args, "handover", False))
+    store.append_event(root, "block", task.id, reason=args.reason, handover=handover)
+    if handover:
+        # 인계 의도 — 자리를 비운다. 게이트 대기와 달리 "남이 이어받아야" 하는 차단이다.
+        _release_remote_claim(root, task.id, prev_session)
+        print(f"✖ {task.id} 차단(인계) — {args.reason}")
+        print("  · 원격 홀드를 두지 않았다 — 다른 세션이 이 태스크를 착수할 수 있다")
+        return 0
     _publish_block_hold(root, task.id, prev_session, args.reason)
     print(f"✖ {task.id} 차단 — {args.reason}")
     return 0
@@ -1774,6 +1781,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("block", help="태스크 차단")
     p.add_argument("id")
     p.add_argument("--reason", required=True)
+    p.add_argument(
+        "--handover",
+        action="store_true",
+        help="인계 차단 — 원격 홀드를 두지 않아 다른 세션이 이어받을 수 있다"
+        " (기본은 홀드 게시: 자리를 지킨다 — HARN-45/48)",
+    )
     p.set_defaults(func=cmd_block)
 
     p = sub.add_parser("unblock", help="차단 해제")
