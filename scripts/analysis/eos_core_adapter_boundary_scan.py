@@ -137,7 +137,9 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     ),
     "schema.problem": (
         "MIXED",
-        "수학 전용 4필드(answer_transform 등)를 S1-16이 extensions.math로 분리할 때까지 혼재",
+        "S1-16 착지(2026-08-31) 후에도 MIXED다 — 수학 전용 4필드가 `extensions.math`로 "
+        "*구조화*됐으나 legacy top-level 필드가 하위호환을 위해 남아 양방향 동기화된다. "
+        "CORE 승격은 legacy 축 제거(breaking)가 선결이며 S1-16이 의도적으로 하지 않았다",
     ),
     "schema.enums": ("MIXED", "과목 중립 enum과 수학 전용 enum이 한 파일에 동거"),
     "schema.answer_submission": ("MIXED", "답안 제출 계약 — 봉투는 중립, 답 표현이 수식"),

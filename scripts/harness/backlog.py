@@ -45,7 +45,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Gate, Task
+from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Backlog, Gate, Task
 from seed_data import build_seed
 
 
@@ -763,6 +763,66 @@ def cmd_cancel(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_amend(root: Path, args: argparse.Namespace) -> int:
+    """등재 후 필드 정정 — 현재는 `track` 축만 연다 (HARN-49).
+
+    **왜 필요한가**: 등재 시 잘못 붙은 `track`은 그 트랙의 `entry_gate`를 상속시켜 태스크를
+    **영구 착수 불가**로 만든다. `start`에 track_gate 우회 플래그는 없고(설계상 옳다),
+    대장 손편집은 금지(거부의 우회 금지)이므로 정정 경로 자체가 없었다 — S1-16이 그렇게
+    12일 막혔다(stage S1인데 track의 진입 게이트가 S5).
+
+    **범위를 track으로 좁힌 이유**: `HARN-24`가 acceptance append·requires_gates 부착을
+    따로 연다. 여기서 그것까지 구현하면 두 태스크가 같은 코드를 두 번 만든다. 이 함수는
+    HARN-24가 `--acceptance`·`--gate`를 **덧붙일 수 있는 형태**로 두고, 축이 늘어날 때
+    `_AMENDABLE`만 확장하면 되게 한다.
+
+    **여전히 열지 않는 것**(HARN-24 ⑦ 승계): 태스크 삭제·ID 변경·acceptance 항목 개별
+    제거. 그것들은 대장 손편집의 우회 표면이 되거나 ID 계보를 끊는다.
+
+    정정은 **덮어쓰기가 아니라 기록을 남긴다** — notes에 이전 값을 append하고(HARN-20의
+    notes append 교훈 승계) 이벤트에 `amend` 액션·필드·이전/이후 값·사유를 남긴다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+
+    if args.track is None:
+        return _fail("정정할 필드를 지정하라 — 현재 지원: --track (HARN-24가 acceptance 축을 연다)")
+
+    if args.track not in backlog.tracks:
+        known = ", ".join(sorted(backlog.tracks))
+        return _fail(f"track '{args.track}' 은 tracks.yaml에 없다. 등록된 트랙: {known}")
+
+    before = task.track
+    if before == args.track:
+        return _fail(f"{task.id}: track이 이미 '{args.track}' — 바꿀 것이 없다")
+
+    task.track = args.track
+    task.notes = _append_note(task.notes, f"track {before} → {args.track}: {args.reason}", "정정")
+    task.updated = _today()
+    store.save_task(root, task)
+    store.append_event(
+        root,
+        "amend",
+        task.id,
+        field="track",
+        before=before,
+        after=args.track,
+        reason=args.reason,
+    )
+    print(f"✎ {task.id} track 정정 — {before} → {args.track}")
+
+    # 정정이 실제로 착수 가능성을 바꿨는지 그 자리에서 보여준다(정본화≠집행 — 사람이 확인할 것)
+    old_gate = backlog.tracks[before].entry_gate if before in backlog.tracks else None
+    new_gate = backlog.tracks[args.track].entry_gate
+    if old_gate and not new_gate:
+        print(f"  진입 게이트 해소: '{old_gate}' → 없음 (이제 start 가능 — 직접 확인하라)")
+    elif new_gate:
+        print(f"  ⚠ 새 트랙에도 진입 게이트가 있다: '{new_gate}'")
+    return 0
+
+
 def _release_remote_claim(root: Path, task_id: str, prev_session: str | None) -> None:
     """done/block 후 원격 claim 해제 — best-effort (실패해도 진행, reap이 나중에 청소)."""
     policy, _ = store.load_policy(root)
@@ -1120,19 +1180,65 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _stage_outliers_on_gated_tracks(backlog: Backlog) -> list[str]:
+    """진입 게이트가 있는 트랙에서 stage가 다른 모든 소속 태스크보다 앞서는 태스크 (HARN-49 ⑤).
+
+    **잡으려는 결함**: 트랙을 잘못 붙이면 그 트랙의 `entry_gate`를 상속해 태스크가 영구
+    착수 불가가 된다. 자기 stage가 게이트가 지키는 시기보다 *앞선다면* 그 태스크는 그
+    트랙 소속일 수 없다 — S1-16이 stage S1인데 E축(S5 게이트) 트랙에 있었다.
+
+    **게이트 id를 파싱하지 않는다**(`G-s5-...`의 's5'를 읽는 방식은 명명 관례에 의존해
+    깨지기 쉽다). 대신 `stage_order`와 *같은 트랙 다른 태스크들*의 stage만 쓴다 — 어떤
+    태스크의 stage가 동료 전원보다 엄격히 앞서면 그 태스크가 이질적이라는 뜻이다.
+
+    **경고이지 오류가 아니다**: 의도적으로 이른 stage를 붙이는 경우를 막지 않는다. 또한
+    `add` 거부로 만들지 않은 이유는 — 이 결함은 *이미 등재된* 태스크에서 발견되므로
+    등재 시점 거부로는 S1-16 같은 기존 건을 하나도 잡지 못한다.
+
+    실측(2026-08-31·480태스크): 적중 1건(S1-16), 오탐 0건.
+    """
+    rank = {stage: i for i, stage in enumerate(backlog.stage_order)}
+    out: list[str] = []
+    for name, track in backlog.tracks.items():
+        if not getattr(track, "entry_gate", None):
+            continue
+        members = [t for t in backlog.tasks.values() if t.track == name]
+        if len(members) < 2:
+            continue  # 비교 대상이 없으면 이질성을 말할 수 없다
+        for task in members:
+            mine = rank.get(task.stage)
+            peers = [rank.get(o.stage) for o in members if o.id != task.id]
+            if mine is None or any(p is None for p in peers):
+                continue  # stage_order 밖 값은 스키마 검증이 따로 잡는다
+            if all(mine < p for p in peers):  # type: ignore[operator]
+                out.append(
+                    f"{task.id}: stage={task.stage} 인데 트랙 '{name}'(진입 게이트 "
+                    f"{track.entry_gate})의 다른 태스크 전원보다 앞선다 — 트랙 오분류 의심. "
+                    f"정정: backlog.py amend {task.id} --track <올바른 트랙> --reason ..."
+                )
+    return out
+
+
 def cmd_validate(root: Path, args: argparse.Namespace) -> int:
     backlog, schema_errors = _load(root)
     errors = store.validate_backlog(backlog, schema_errors)
+    warnings = _stage_outliers_on_gated_tracks(backlog)
     if not errors:
         if not args.quiet:
             print(
                 f"✔ 백로그 무결성 green — 태스크 {len(backlog.tasks)}건, "
                 f"게이트 {len(backlog.gates)}건, 트랙 {len(backlog.tracks)}건"
             )
+        for warning in warnings:
+            # 무결성 위반이 아니라 구조 의심 — exit 0을 바꾸지 않는다(경고를 오류로 승격하면
+            # 의도적 배치까지 막고, 그러면 사람이 경고 자체를 끄게 된다)
+            print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
         return 0
     print(f"❌ 무결성 위반 {len(errors)}건:", file=sys.stderr)
     for error in errors:
         print(f"  · {error}", file=sys.stderr)
+    for warning in warnings:
+        print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
     return 1
 
 
@@ -1791,6 +1897,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--reason", required=True)
     p.set_defaults(func=cmd_cancel)
+
+    p = sub.add_parser("amend", help="등재 후 필드 정정 — 현재 track 축만 (HARN-49)")
+    p.add_argument("id")
+    p.add_argument("--track", default=None, help="정정할 track (tracks.yaml에 등록된 것만)")
+    p.add_argument("--reason", required=True, help="정정 사유 — notes·이벤트에 기록된다")
+    p.set_defaults(func=cmd_amend)
 
     p = sub.add_parser("gates", help="사람 게이트 대장")
     p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive"])

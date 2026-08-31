@@ -174,6 +174,136 @@ class SchemaVersion(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 서브모델: MathExtension — 수학 과목 확장 (011_2)
+# ──────────────────────────────────────────────────────────────────────────
+class MathExtension(BaseModel):
+    """수학 문항에 특화된 확장 필드 — Core Problem Schema가 아닌 math extension으로 분리.
+
+    011_2 Subject-neutral Content Contract: 과목 특화 필드는 Core가 아니라
+    Domain Extension으로 분리해 다른 과목(물리·역사 등)이 다른 extension을
+    사용할 수 있도록 한다.
+
+    **SEC-24 경계**: `answer_transform`·`answer_constraint`는 정답 유도 가능 필드로
+    `PublicProblem`에는 노출되지 않는다 — `PublicProblem.from_problem`이 이들을
+    제거하고 `MathExtensionPublic`으로 검증.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    answer_transform: dict[str, Any] | None = Field(
+        default=None,
+        description='자연수 답 변환 패턴 {"type":"p_plus_q","p":3,"q":5} 등(자유형 JSONB)',
+    )
+    answer_constraint: dict[str, Any] | None = Field(
+        default=None,
+        description='정답 제약 {"min":1,"max":999,"is_natural":true} 등(자유형 JSONB)',
+    )
+    signature_patterns: list[SignaturePattern] = Field(
+        default_factory=list,
+        description="한국 수능 시그니처 패턴 배열(10종 중)",
+    )
+    requires_graph_sketch: bool = Field(
+        default=False,
+        description="그래프를 그려야 풀리는가",
+    )
+    sketch_step_count: int | None = Field(
+        default=None,
+        description="개형 추론 단계 수(보통 5-6)",
+        ge=0,
+    )
+
+
+#: legacy top-level과 `extensions.math`가 공유하는 필드 이름 — 두 축의 동기화
+#: (`Problem._sync_math_extensions`)가 도는 유일한 목록. 두 축이 같은 표를 보게 하려고
+#: 상수로 뽑았다 — 필드를 늘리면 여기만 고치면 된다.
+MATH_EXTENSION_FIELDS: tuple[str, ...] = (
+    "answer_transform",
+    "answer_constraint",
+    "signature_patterns",
+    "requires_graph_sketch",
+    "sketch_step_count",
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 서브모델: MathExtensionPublic — 공개 투영용 수학 확장 (SEC-24)
+# ──────────────────────────────────────────────────────────────────────────
+class MathExtensionPublic(BaseModel):
+    """공개 투영(`PublicProblem`)용 수학 확장 — 정답 유도 가능 필드 제외.
+
+    `PublicProblem.from_problem`이 `Problem.extensions.math`에서
+    `answer_transform`·`answer_constraint`를 제거한 뒤 이 모델로 검증한다.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    signature_patterns: list[SignaturePattern] = Field(
+        default_factory=list,
+        description="한국 수능 시그니처 패턴 배열(10종 중)",
+    )
+    requires_graph_sketch: bool = Field(
+        default=False,
+        description="그래프를 그려야 풀리는가",
+    )
+    sketch_step_count: int | None = Field(
+        default=None,
+        description="개형 추론 단계 수(보통 5-6)",
+        ge=0,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 서브모델: ProblemExtensions — 과목별 확장 묶음 (011_2)
+# ──────────────────────────────────────────────────────────────────────────
+class ProblemExtensions(BaseModel):
+    """Subject-neutral Core를 확장하는 과목별 payload 묶음.
+
+    과목 추가 시 math/physics/history 등의 서브 필드를 추가하지만,
+    Core API는 그대로 유지. 현재는 math extension만 정의.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    math: MathExtension | None = Field(
+        default=None,
+        description="수학 과목 확장",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 서브모델: ProblemExtensionsPublic — 공개 투영용 과목별 확장 묶음
+# ──────────────────────────────────────────────────────────────────────────
+class ProblemExtensionsPublic(BaseModel):
+    """공개 투영(`PublicProblem`)용 과목별 확장 묶음.
+
+    정답 유도 가능 필드를 제외한 `MathExtensionPublic`만 포함.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    math: MathExtensionPublic | None = Field(
+        default=None,
+        description="수학 과목 확장(공개 투영)",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 서브모델: DistractorEntry (객관식 오답 선지 → 오개념 매핑)
 # ──────────────────────────────────────────────────────────────────────────
 class DistractorEntry(BaseModel):
@@ -269,14 +399,34 @@ class PublicProblem(BaseModel):
         운영 메타(`PUBLIC_HIDDEN_OPS_FIELDS` — 격리 사유·시각). 두 집합을 하나로 합쳐 두지 않는
         이유는 각 상수의 주석에 있다(축이 다르면 완화 압력도 따로 와야 한다). 여기서 합집합을
         쓰는 것은 *투영 연산*이지 축의 병합이 아니다.
+
+        **중첩 축(011_2·S1-16)**: top-level 제외만으로는 부족하다 — 같은 정답 유도 필드가
+        `extensions.math` 안에도 산다. 그쪽도 제거한 뒤 `MathExtensionPublic`으로 검증해야
+        SEC-24 "키 부재" 계약이 중첩 필드에서 뚫리지 않는다. 두 축(평면 제외·중첩 제거)은
+        서로를 대체하지 않으므로 **둘 다** 적용한다.
         """
         hidden = set(PUBLIC_HIDDEN_ANSWER_FIELDS | PUBLIC_HIDDEN_OPS_FIELDS)
-        return cls.model_validate(problem.model_dump(exclude=hidden))
+        data = problem.model_dump(exclude=hidden)
+        math_ext = (
+            data.get("extensions", {}).get("math")
+            if isinstance(data.get("extensions"), dict)
+            else None
+        )
+        if isinstance(math_ext, dict):
+            math_ext.pop("answer_transform", None)
+            math_ext.pop("answer_constraint", None)
+        return cls.model_validate(data)
 
     # ===== 스키마 계약 버전 (011_2) =====
     schema_version: SchemaVersion = Field(
         default_factory=SchemaVersion,
         description="EOS Content Schema 계약 버전 (Content Version과 별개)",
+    )
+
+    # ===== 과목별 확장 (011_2) =====
+    extensions: ProblemExtensionsPublic = Field(
+        default_factory=ProblemExtensionsPublic,
+        description="과목별 확장 payload — Core Schema에 과목 특화 필드를 직접 넣지 않음",
     )
 
     # ===== 기본 식별 =====
@@ -782,6 +932,15 @@ class Problem(PublicProblem):
         ),
     )
 
+    # ===== 과목별 확장 (011_2·S1-16) — 내부 정본용 =====
+    # `PublicProblem.extensions`(`ProblemExtensionsPublic`)을 오버라이드. `MathExtension`
+    # 에는 정답 유도 가능 필드 2종을 포함하며, `PublicProblem.from_problem`이 이들을
+    # 제거한 뒤 `MathExtensionPublic`으로 검증(SEC-24).
+    extensions: ProblemExtensions = Field(  # type: ignore[assignment]
+        default_factory=ProblemExtensions,
+        description="과목별 확장 payload — math extension에 수학 특화 필드(정답 유도 2종 포함)",
+    )
+
     # ── 불변식 ────────────────────────────────────────────────────
     @model_validator(mode="after")
     def _enforce_copyright_no_body_for_metadata_sources(self) -> Problem:
@@ -830,6 +989,60 @@ class Problem(PublicProblem):
                 f"source_type='자체생성'(WHYMATH_GENERATED) 레코드만 가질 수 있다 "
                 f"(MEMORY 2026-05-28)."
             )
+        return self
+
+    # ── 011_2: legacy 수학 특화 필드 ↔ extensions.math 양방향 동기화 ──
+    @model_validator(mode="after")
+    def _sync_math_extensions(self) -> Problem:
+        """legacy top-level 필드와 `extensions.math`를 양방향 동기화.
+
+        하위호환: 기존 top-level 필드를 채우는 호출자에게는 자동으로
+        `extensions.math`가 채워지고, 새로 `extensions.math`를 채우는
+        호출자에게는 top-level legacy 필드가 동기화된다.
+
+        DB 마이그레이션 없이 Pydantic/ORM 매핑 레벨에서 처리 —
+        `db/models/problem.py`의 `from_schema`/`to_schema`는 여전히 legacy
+        컬럼만 사용하며, 이 validator가 `extensions.math`를 채우고 비운다.
+
+        동기화 규칙 — **legacy top-level이 정본, `extensions.math`는 그 투영**:
+          - 입력에 *명시된* legacy 필드가 언제나 이긴다.
+          - `extensions.math`는 **입력이 언급하지 않은** legacy 필드만 끌어올린다
+            (새 축만 채우는 호출자를 위한 하위호환 방향).
+          - 그 결과로 `extensions.math`를 항상 재생성한다 — 두 축이 다른 값을
+            들고 있는 상태 자체가 생기지 않는다.
+
+        *왜 값 비교(기본값이 아닌 쪽이 이김)가 아닌가*: 값만 보면 **명시적 비우기를
+        표현할 수 없다**. 재태깅으로 `signature_patterns`가 `[]`가 되거나
+        `requires_graph_sketch`를 `False`로 되돌리면, 값 비교는 그것을 "안 채운 것"으로
+        읽고 낡은 extension 값을 되살린다. 어느 방향이든 결과는 침묵 손실이다 —
+        실제로 반대 방향(legacy에만 쓰는 `l1.problem_bank`의 시그니처 태거가
+        `model_copy(update=...)`로 갱신 → JSONL 왕복 재검증에서 빈 extension이 태깅을
+        `[]`로 덮음)이 먼저 터졌고, 값 비교로 고치자 이 방향이 남았다. 그래서
+        "무엇이 채워졌나"(값)가 아니라 **"입력이 무엇을 말했나"**(`model_fields_set`)로
+        판정한다. 전체 덤프의 왕복에서는 두 축이 모두 명시되므로 정본인 legacy가
+        이기고, 그 시점의 legacy는 직렬화 직전 이 validator가 맞춰 둔 값이다.
+
+        DB 왕복에서도 정합한다 — `db/models/problem.py`는 legacy 컬럼만 쓰므로
+        `to_schema`는 legacy만 주고 `extensions.math`는 여기서 재생성된다.
+        """
+        provided = self.model_fields_set
+        legacy: dict[str, Any] = {name: getattr(self, name) for name in MATH_EXTENSION_FIELDS}
+
+        ext = self.extensions.math if self.extensions is not None else None
+        if ext is not None:
+            for name in MATH_EXTENSION_FIELDS:
+                if name not in provided:
+                    legacy[name] = getattr(ext, name)
+
+        for name, value in legacy.items():
+            setattr(self, name, value)
+
+        math = MathExtension(**legacy)
+        self.extensions = (
+            ProblemExtensions(math=math)
+            if self.extensions is None
+            else self.extensions.model_copy(update={"math": math})
+        )
         return self
 
 
