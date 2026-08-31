@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - scripts/harness/backlog.py
   - "tests/harness/*"
   - docs/standards/build_harness.md
-session: null
+session: claude/eos-migration-compliance-check-xu50yl
 notes: "docs/architecture/operations_platform_gap_review_r2.md §4 D8. operations_platform_gap_review.md §독립검증 ③이 이 공백을 정확히 예견하고 '실사례 1건(그것도 우회 성립)뿐이라 설계 근거가 얇다'며 등재를 미뤘는데, 2번째 사례가 발생했고 이번엔 우회가 실패했다. 일반형: '문서가 소유자'라는 우회는 착수 세션이 그 문서를 읽을 때만 성립한다 — 태스크 YAML은 반드시 읽히지만 참조 문서는 선택이다. 반복 실수 11회차(정정이 대장에 도달하지 못해 정정 전 지시가 그대로 집행됨)의 코드 축 대책."
-updated: 2026-08-11
+updated: 2026-08-31

@@ -258,6 +258,8 @@ python3 scripts/harness/backlog.py done <id> --artifact "<커밋>" --no-pr ci-re
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
+python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>]
+                                                   # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
@@ -277,6 +279,7 @@ exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 
 ## 8. 금기
 
 - ❌ backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략
+- ❌ **태스크 정정을 문서에만 착지시키고 acceptance에 반영하지 않기 (HARN-24)** — "문서가 소유자"라는 우회는 착수 세션이 그 문서를 읽을 때만 성립한다. 태스크 YAML은 *반드시* 읽히지만 참조 문서는 선택이다. 정정은 `amend`로 acceptance에 도달시킨다. (사고 경위: ADMIN-02의 범위 축소 정정이 `operations_platform_gap_review.md`에만 있고 acceptance에 없어, 그 정정을 조상으로 가진 세션이 stale acceptance ②를 그대로 집행해 `subscription_*` 3컬럼까지 드롭 — 커밋 b3a58b02)
 - ❌ 증적(artifact) 없는 done
 - ❌ **PR 참조 없는 done** — 산출물이 있으면 요청 없이 PR을 여는 것이 기본값이다(CLAUDE.md "완료·병합"). 증적에 `#12`·`.../pull/12`가 없으면 CLI가 exit 1로 거부하며, 예외는 `--no-pr {investigation|incomplete|ci-red|kiki-hold}`로만 통과한다(HARN-23). 스쿼시 머지 커밋의 `(#758)` 관례는 그대로 통과 — 기존 증적 표기를 바꿀 필요 없다
 - ❌ evidence 없는 게이트 clear

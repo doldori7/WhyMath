@@ -18,7 +18,9 @@
                                                  [--assignee <담당자>] [--remind-after-days N]
     python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
-    python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
+    python3 scripts/harness/backlog.py amend <id> --reason <사유>
+      [--acceptance ...] [--gate <G-id>] [--track ...]
+  python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
     python3 scripts/harness/backlog.py validate [--quiet]
     python3 scripts/harness/backlog.py brief [--format hook]
     python3 scripts/harness/backlog.py check-stop        (Stop 훅 전용 — stdin JSON)
@@ -1059,6 +1061,97 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_amend(root: Path, args: argparse.Namespace) -> int:
+    """기존 태스크의 acceptance·requires_gates·track 정정 (HARN-24).
+
+    **왜 필요한가**: 이 CLI의 서브커맨드 18개 중 *등재된 태스크의* acceptance를 고치는
+    것이 0건이었다. 그래서 정정이 문서에만 착지하고 태스크 YAML에 도달하지 못했고,
+    그 정정을 조상으로 가진 세션이 stale acceptance를 그대로 집행했다(ADMIN-02 →
+    subscription_* 3컬럼 드롭, 커밋 b3a58b02). 일반형: "문서가 소유자"라는 우회는
+    착수 세션이 그 문서를 읽을 때만 성립한다 — 태스크 YAML은 **반드시** 읽히지만
+    참조 문서는 선택이다.
+
+    **설계 원칙 3**:
+    1. **append만, 덮어쓰기 금지** — acceptance는 정정 항을 *추가*한다. HARN-20이
+       notes에서 배운 교훈(덮어쓰기가 blocked 4건 전건의 원 notes를 소실시킴)을
+       acceptance 축에 승계한다. 기존 항의 개별 제거는 열지 않는다(acceptance ⑦).
+    2. **다른 필드 불변** — status·session·artifacts·id·title은 건드리지 않는다.
+       상태 전이는 start/done/block/review/cancel의 몫이고, 이 verb가 그 경로를
+       우회하는 표면이 되면 안 된다.
+    3. **사유 필수 + 이벤트 기록** — 왜 고쳤는지가 대장에 남지 않으면 정정 자체가
+       추적 불가가 된다.
+
+    `--gate`는 `add` 시점 외에 `requires_gates`를 붙일 유일한 경로다(그 부재 때문에
+    ADMIN-02에 G-prod-dead-column-check를 붙이지 못했고, CUR-11·12·17·18을
+    requires_gates 대신 block으로 처리해야 했다). `--track`은 트랙 이관용이다
+    (entry_gate 하드락으로 태스크군을 일괄 강등하는 경로 — selector.py의 track_gate).
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+
+    # 변경 요청이 하나도 없으면 거부 — 사유만 남기고 아무것도 안 바꾸는 호출은
+    # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
+    if not (args.acceptance or args.gates or args.track):
+        return _fail(
+            f"{task.id}: 변경 항목이 없다 — "
+            "--acceptance / --gate / --track 중 하나 이상을 지정하라"
+        )
+
+    changed: list[str] = []
+
+    # ① acceptance: append만 (덮어쓰기 금지 — HARN-20 승계)
+    for item in args.acceptance or []:
+        text = item.strip()
+        if not text:
+            return _fail(f"{task.id}: 빈 acceptance 항은 추가할 수 없다")
+        if text in task.acceptance:
+            return _fail(f"{task.id}: 동일한 acceptance 항이 이미 있다 — {text[:60]}")
+        task.acceptance.append(text)
+        changed.append(f"acceptance +1 ({text[:40]}…)")
+
+    # ② requires_gates: 중복 없이 추가 (제거는 열지 않는다 — 게이트 해제는 gates clear의 몫)
+    for gid in args.gates or []:
+        if gid in task.requires_gates:
+            return _fail(f"{task.id}: 게이트 '{gid}' 가 이미 붙어 있다")
+        if gid not in backlog.gates:
+            return _fail(
+                f"{task.id}: 게이트 '{gid}' 가 gates.yaml에 없다 — "
+                "먼저 `gates add` 로 등재하라(존재하지 않는 게이트는 영구 차단이 된다)"
+            )
+        task.requires_gates.append(gid)
+        changed.append(f"requires_gates +{gid}")
+
+    # ③ track 이관
+    if args.track:
+        if args.track == task.track:
+            return _fail(f"{task.id}: 이미 track '{args.track}' 이다")
+        if args.track not in backlog.tracks:
+            return _fail(
+                f"{task.id}: track '{args.track}' 가 tracks.yaml에 없다 — " "먼저 트랙을 정의하라"
+            )
+        changed.append(f"track {task.track} → {args.track}")
+        task.track = args.track
+
+    task.notes = _append_note(task.notes, args.reason, "정정")
+    task.updated = _today()
+
+    errors = store.validate_backlog(backlog)
+    own_errors = [e for e in errors if args.id in e]
+    if own_errors:
+        for e in own_errors:
+            print(f"  · {e}", file=sys.stderr)
+        return _fail(f"{args.id}: 스키마/무결성 위반으로 정정 거부")
+
+    store.save_task(root, task)
+    store.append_event(root, "amend", task.id, reason=args.reason, changed=changed)
+    print(f"✎ {task.id} 정정 — {args.reason}")
+    for c in changed:
+        print(f"  · {c}")
+    return 0
+
+
 def cmd_validate(root: Path, args: argparse.Namespace) -> int:
     backlog, schema_errors = _load(root)
     errors = store.validate_backlog(backlog, schema_errors)
@@ -1694,6 +1787,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--notes")
     p.set_defaults(func=cmd_add)
+
+    p = sub.add_parser("amend", help="등재된 태스크의 acceptance·게이트·트랙 정정 (HARN-24)")
+    p.add_argument("id")
+    p.add_argument(
+        "--acceptance",
+        action="append",
+        default=[],
+        help="acceptance 정정 항 추가 (append만 — 기존 항은 지우지 않는다)",
+    )
+    p.add_argument(
+        "--gate",
+        action="append",
+        default=[],
+        dest="gates",
+        help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
+    )
+    p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
+    p.set_defaults(func=cmd_amend)
 
     p = sub.add_parser("validate", help="백로그 무결성 전수 검증")
     p.add_argument("--quiet", action="store_true")
