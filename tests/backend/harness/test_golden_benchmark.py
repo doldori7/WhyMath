@@ -52,6 +52,7 @@ from whymath_backend.harness.review_timer import (
     finish_review,
     start_review,
 )
+from whymath_backend.harness.reviewer_sample_package import rotation_key
 from whymath_backend.schema.enums import GenerationFailureCode
 from whymath_backend.schema.review_timer import ReviewTimerEvent
 
@@ -244,18 +245,50 @@ class TestRotationAndFreeze:
 
     def test_same_rotation_is_byte_reproducible(self) -> None:
         items = [_item(f"cu-{i:03d}") for i in range(20)]
-        first = select_by_anchor(items, quota=5, rotation=3)
-        second = select_by_anchor(items, quota=5, rotation=3)
+        prior = {"cu-000"}
+        first = select_by_anchor(items, quota=5, rotation=3, exclude=prior)
+        second = select_by_anchor(items, quota=5, rotation=3, exclude=prior)
 
         assert [i.cu_slug for i in first] == [i.cu_slug for i in second]
 
-    def test_different_rotation_reorders_selection(self) -> None:
-        """변별력 양방향 — 회전이 실제로 다른 표본을 뽑아야 재추출 규약이 의미를 가진다."""
-        items = [_item(f"cu-{i:03d}") for i in range(40)]
-        rot0 = {i.cu_slug for i in select_by_anchor(items, quota=5, rotation=0)}
-        rot1 = {i.cu_slug for i in select_by_anchor(items, quota=5, rotation=1)}
+    def test_rotation_without_exclusion_is_refused(self) -> None:
+        """#928 리뷰 P1 — 회전만으로는 신규 표본이 보장되지 않는다(fail-closed).
 
-        assert rot0 != rot1
+        후보가 쿼터 이하면(우리 목표 규모 30~35 = 기본 쿼터 35의 바로 그 구간) 회전은 순서만
+        바꾸고 전건이 선택돼 **같은 셋·같은 digest**가 나온다. 그러면 교정 후 재판정이 원장에
+        영구 차단된다 — 규약이 스스로를 막는 상태. 그래서 제외 집합을 요구한다.
+        """
+        with pytest.raises(ValueError, match="제외 집합"):
+            select_by_anchor([_item("cu-a")], quota=35, rotation=1)
+
+    def test_rotation_alone_would_have_produced_the_same_set(self) -> None:
+        """결함의 실재 증거 — 제외가 없으면 회전이 무력하다는 사실 자체를 동결한다."""
+        items = [_item(f"cu-{i:03d}") for i in range(33)]  # 30~35 목표 구간
+        rot0 = select_by_anchor(items, quota=35, rotation=0)
+        # 같은 후보를 회전만 바꿔 뽑으면(제외를 우회해 직접 정렬) 전건이 그대로 선택된다.
+        reordered = sorted(items, key=lambda i: rotation_key(i.cu_slug, 1))[:35]
+        assert {i.cu_slug for i in reordered} == {i.cu_slug for i in rot0}
+        assert compute_digest(rot0) == compute_digest(tuple(reordered))
+
+    def test_exclusion_produces_a_disjoint_sample(self) -> None:
+        """변별력 양방향 — 제외를 주면 실제로 겹치지 않는 신규 표본이 나온다."""
+        first_pool = [_item(f"cu-{i:03d}") for i in range(35)]
+        rot0 = select_by_anchor(first_pool, quota=35, rotation=0)
+        grown = first_pool + [_item(f"cu-{i:03d}") for i in range(35, 80)]
+
+        rot1 = select_by_anchor(grown, quota=35, rotation=1, exclude={i.cu_slug for i in rot0})
+
+        assert {i.cu_slug for i in rot1} & {i.cu_slug for i in rot0} == set()
+        assert compute_digest(rot0) != compute_digest(rot1)
+
+    def test_exhausted_pool_yields_empty_selection_not_reuse(self) -> None:
+        """후보가 소진되면 이전 표본을 재사용하지 않고 **비운다** — 부족은 리포트가 드러낸다."""
+        items = [_item(f"cu-{i:03d}") for i in range(33)]
+        rot0 = select_by_anchor(items, quota=35, rotation=0)
+
+        rot1 = select_by_anchor(items, quota=35, rotation=1, exclude={i.cu_slug for i in rot0})
+
+        assert rot1 == ()
 
     def test_quota_applies_per_anchor(self) -> None:
         items = [_item(f"a4-{i}", "A4") for i in range(10)] + [
@@ -734,3 +767,135 @@ def test_quota_must_be_positive() -> None:
     """쿼터 0은 "아무것도 안 뽑음"을 조용히 정상 처리하게 만든다 — 계약으로 막는다."""
     with pytest.raises(ValueError, match="quota"):
         select_by_anchor([_item("cu-a")], quota=0)
+
+
+class TestCliExclusionWiring:
+    """`--exclude-golden` 배선 — 규약이 코어에만 있고 CLI에서 못 쓰면 집행이 아니다(#928 P1)."""
+
+    def _fixture(self, tmp_path: Path, slugs: list[str]) -> tuple[Path, Path]:
+        events_path = tmp_path / "events.jsonl"
+        anchors_path = tmp_path / "anchors.jsonl"
+        _write_events(
+            events_path,
+            [_finish(s, "rejected", failure_code=GenerationFailureCode.F2) for s in slugs],
+        )
+        _write_anchor_map(anchors_path, [(s, "A4") for s in slugs])
+        return events_path, anchors_path
+
+    def test_rotation_without_exclude_golden_is_measurement_failure(self, tmp_path: Path) -> None:
+        events_path, anchors_path = self._fixture(tmp_path, ["cu-a", "cu-b"])
+
+        code = main(
+            [
+                "--events",
+                str(events_path),
+                "--anchor-map",
+                str(anchors_path),
+                "--rotation",
+                "1",
+            ]
+        )
+        assert code == 1
+
+    def test_exclusion_yields_new_digest_on_grown_pool(self, tmp_path: Path) -> None:
+        """교정 후 재판정의 정본 경로 — 후보가 늘어난 뒤 이전 셋을 제외하면 새 골든이 나온다."""
+        first_events, first_anchors = self._fixture(tmp_path, ["cu-a", "cu-b"])
+        v1 = tmp_path / "golden_v1.json"
+        assert (
+            main(
+                [
+                    "--events",
+                    str(first_events),
+                    "--anchor-map",
+                    str(first_anchors),
+                    "--out",
+                    str(v1),
+                ]
+            )
+            == 0
+        )
+
+        grown_events, grown_anchors = self._fixture(
+            tmp_path / "round2", ["cu-a", "cu-b", "cu-c", "cu-d"]
+        )
+        v2 = tmp_path / "golden_v2.json"
+        code = main(
+            [
+                "--events",
+                str(grown_events),
+                "--anchor-map",
+                str(grown_anchors),
+                "--rotation",
+                "1",
+                "--exclude-golden",
+                str(v1),
+                "--golden-version",
+                "v2",
+                "--out",
+                str(v2),
+            ]
+        )
+
+        assert code == 0
+        first = load_golden_set(v1)
+        second = load_golden_set(v2)
+        assert {i.cu_slug for i in second.items} == {"cu-c", "cu-d"}  # 이전 표본 재사용 0
+        assert first.digest != second.digest  # → 원장이 재채점으로 막지 않는다
+
+    def test_exhausted_pool_reports_measurement_failure(self, tmp_path: Path) -> None:
+        """후보가 전부 이전 골든이면 승격 0건 = 측정 실패 — 재사용으로 채우지 않는다."""
+        events_path, anchors_path = self._fixture(tmp_path, ["cu-a", "cu-b"])
+        v1 = tmp_path / "golden_v1.json"
+        assert (
+            main(
+                [
+                    "--events",
+                    str(events_path),
+                    "--anchor-map",
+                    str(anchors_path),
+                    "--out",
+                    str(v1),
+                ]
+            )
+            == 0
+        )
+
+        code = main(
+            [
+                "--events",
+                str(events_path),
+                "--anchor-map",
+                str(anchors_path),
+                "--rotation",
+                "1",
+                "--exclude-golden",
+                str(v1),
+            ]
+        )
+        assert code == 1
+
+    def test_missing_exclude_file_is_measurement_failure(self, tmp_path: Path) -> None:
+        events_path, anchors_path = self._fixture(tmp_path, ["cu-a"])
+
+        code = main(
+            [
+                "--events",
+                str(events_path),
+                "--anchor-map",
+                str(anchors_path),
+                "--rotation",
+                "1",
+                "--exclude-golden",
+                str(tmp_path / "absent.json"),
+            ]
+        )
+        assert code == 1
+
+    def test_report_states_exclusion_accounting(self, tmp_path: Path, capsys) -> None:
+        """제외 집합이 없으면 '초판만 가능'하다는 사실을 리포트가 자인한다."""
+        events_path, anchors_path = self._fixture(tmp_path, ["cu-a"])
+
+        assert main(["--events", str(events_path), "--anchor-map", str(anchors_path)]) == 0
+        out = capsys.readouterr().out
+        assert "회전·재추출" in out
+        assert "제외 집합 없음" in out

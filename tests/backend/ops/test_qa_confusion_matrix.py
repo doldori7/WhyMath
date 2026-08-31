@@ -502,6 +502,66 @@ class TestRescoreLedgerEnforcement:
         )
         assert code == 0
 
+    def test_corrupt_ledger_is_measurement_failure_not_a_free_pass(
+        self, workspace: tuple[Path, Path, Path]
+    ) -> None:
+        """#928 리뷰 P1 — 원장이 깨진 순간이 곧 재채점 금지가 무력해지는 순간이다.
+
+        손상된 줄이 하필 이전 평가 기록(rev-a)이면 `find_rescore_violation`은 빈 이력을 보고
+        rev-b를 통과시킨다 — 금지 규율이 그 *증거가 손상된 바로 그 순간에* 사라진다.
+        손상 = 판정 불가지 통과가 아니다.
+        """
+        golden_path, predictions_path, ledger_path = workspace
+        digest = json.loads(golden_path.read_text(encoding="utf-8"))["digest"]
+        # engine_revision 키가 빠진 손상 줄 — 원래 rev-a 평가 기록이었다고 가정
+        ledger_path.write_text(json.dumps({"digest": digest}) + "\n", encoding="utf-8")
+
+        code = main(
+            [
+                "--golden",
+                str(golden_path),
+                "--predictions",
+                str(predictions_path),
+                "--ledger",
+                str(ledger_path),
+                "--engine-revision",
+                "rev-b",
+            ]
+        )
+        assert code == 1
+
+    def test_intact_ledger_with_same_content_passes(
+        self, workspace: tuple[Path, Path, Path]
+    ) -> None:
+        """변별력 대조군 — 같은 시나리오에서 원장이 온전하면 통과한다(위 케이스가 위장이 아님)."""
+        golden_path, predictions_path, ledger_path = workspace
+        digest = json.loads(golden_path.read_text(encoding="utf-8"))["digest"]
+        ledger_path.write_text(
+            json.dumps(
+                {
+                    "digest": digest,
+                    "engine_revision": "rev-b",
+                    "evaluated_at": _T0.isoformat(),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        code = main(
+            [
+                "--golden",
+                str(golden_path),
+                "--predictions",
+                str(predictions_path),
+                "--ledger",
+                str(ledger_path),
+                "--engine-revision",
+                "rev-b",
+            ]
+        )
+        assert code == 0
+
     def test_ledger_without_engine_revision_is_measurement_failure(
         self, workspace: tuple[Path, Path, Path]
     ) -> None:

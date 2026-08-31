@@ -43,6 +43,9 @@ append하고, **같은 골든을 다른 엔진 리비전으로 다시 재는 것
 초인간 검증 §4.5 "결함 교정 후 같은 표본 재채점 금지"). 교정 후 재판정은 rotation을 올린
 신규 표본으로 한다. 같은 리비전 재실행은 재현성(S4) 확인이므로 허용된다.
 원장을 주지 않으면 이 규율은 **미집행**이며, 리포트가 그 사실을 상시 명기한다(정본화≠집행).
+원장이 **깨져 있으면 통과가 아니라 측정 실패(exit 1)** 다 — 손상된 줄이 하필 이전 평가
+기록이면 빈 이력을 보고 재채점을 허용하게 되어, 금지 규율이 그 증거가 손상된 바로 그
+순간에 무력화된다.
 
 집행 별항 — 내용 KPI 4종의 소비 지점 (acceptance ⑤)
 ----------------------------------------------------
@@ -654,6 +657,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         records, ledger_errors = load_evaluation_ledger(ledger_path)
         for reason in ledger_errors:
             _say(f"  · {reason}")
+        # 원장이 깨졌으면 **판정하지 않는다**(#928 리뷰 P1). 깨진 줄이 하필 이전 평가 기록이면
+        # `find_rescore_violation`이 빈/부분 이력을 보고 재채점을 통과시킨다 — 금지 규율이
+        # 그 증거가 손상된 바로 그 순간에 무력화된다. 손상 = 판정 불가지 통과가 아니다.
+        if ledger_errors:
+            _say(
+                f"[측정 실패] 원장 파싱 실패 {len(ledger_errors)}건 — 재채점 이력이 손상된 "
+                "상태에서는 재채점 금지를 판정할 수 없다(원장을 고치고 재실행)"
+            )
+            return _EXIT_MEASUREMENT_FAIL
         violation = find_rescore_violation(
             records, digest=golden.digest, engine_revision=args.engine_revision
         )

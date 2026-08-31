@@ -50,8 +50,12 @@ S2-11(done)이 명문화한 "결함 교정 후 같은 표본 재채점 금지·�
      하면 그것이 곧 "교정 후 같은 표본 재채점"이므로 `ops/qa_confusion_matrix`가 exit 1로
      막는다. 같은 리비전 재실행은 재현성(S4) 확인이므로 허용한다.
 
-재추출 메커니즘은 새로 만들지 않는다 — `reviewer_sample_package.rotation_key`(S2-11 회전 해시)를
-그대로 재사용한다(단일 진실 원천). rotation을 올리면 선택 순서가 결정론적으로 재배열된다.
+재추출의 독립성 원천은 **이전 골든의 명시적 제외**(`--exclude-golden`)다 — `rotation`만으로는
+신규 표본이 보장되지 않는다(#928 리뷰 P1 실측: 앵커 후보가 쿼터 이하면 회전은 순서만 바꾸고
+전건이 선택돼 같은 digest가 나온다. 그 구간이 하필 우리 목표 규모 30~35다). 회전은 제외 위에서
+순서를 재배열하는 보조 축이고, 해시 자체는 새로 만들지 않는다 —
+`reviewer_sample_package.rotation_key`(S2-11)를 그대로 재사용한다(단일 진실 원천).
+`rotation > 0`인데 제외 집합이 없으면 **거부**한다(fail-closed).
 
 subject 비종속 (acceptance ⑤ 후단)
 ----------------------------------
@@ -78,7 +82,7 @@ import argparse
 import hashlib
 import json
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -300,6 +304,10 @@ class PromotionReport:
     edit_aware_since: datetime | None
     as_found_rows: int
     parse_errors: tuple[str, ...] = field(default=())
+    prior_golden_slugs: int = 0
+    """제외 집합(이전 골든)의 크기 — 재추출 독립성의 근거가 얼마나 있는지."""
+    excluded_prior_golden: int = 0
+    """이전 골든에 이미 쓰여 이번 선택에서 빠진 승격 후보 수(0이면 겹침이 없었다는 뜻)."""
 
     @property
     def promoted_count(self) -> int:
@@ -450,18 +458,40 @@ def _resolve_label(
 
 
 def select_by_anchor(
-    items: Sequence[GoldenItem], *, quota: int = ANCHOR_QUOTA_MAX, rotation: int = 0
+    items: Sequence[GoldenItem],
+    *,
+    quota: int = ANCHOR_QUOTA_MAX,
+    rotation: int = 0,
+    exclude: Collection[str] = (),
 ) -> tuple[GoldenItem, ...]:
-    """앵커별 쿼터 선택 — S2-11 회전 해시로 결정론 재배열(재추출 메커니즘 재구현 금지).
+    """앵커별 쿼터 선택 — 이전 골든 제외 + S2-11 회전 해시 재배열(재추출 메커니즘 재구현 금지).
 
-    같은 rotation이면 바이트 재현, rotation을 올리면 선택 순서가 재배열된다(`rotation_key`가
-    단일 진실 원천 — `reviewer_sample_package`). quota를 못 채우는 앵커는 있는 만큼만 담고,
-    부족분은 리포트가 드러낸다(0 채움·묵인 금지).
+    **rotation만으로는 신규 표본이 보장되지 않는다**(#928 리뷰 P1 실측): 앵커 후보가 쿼터
+    이하면(우리 목표 구간 30~35 = 기본 쿼터 35의 바로 그 구간이다) 회전은 *순서만* 바꾸고
+    전건이 선택되므로 같은 셋·같은 digest가 나온다 — 그러면 교정 후 재판정이 원장에
+    "재채점"으로 영구 차단된다. 후보가 많아도 겹침은 크게 남는다.
+
+    그래서 독립성의 원천은 **이전 골든의 명시적 제외**(`exclude` = 이전 셋의 cu_slug)이고,
+    회전은 그 위에서 순서를 재배열하는 보조 축이다. `rotation > 0`인데 제외 집합이 비어
+    있으면 **거부**한다(fail-closed — 독립을 확인할 근거가 없는 재추출은 재추출이 아니다).
+
+    같은 (rotation, exclude)면 바이트 재현(`rotation_key`가 단일 진실 원천 —
+    `reviewer_sample_package`). quota를 못 채우는 앵커는 있는 만큼만 담고, 부족분·후보
+    소진은 리포트가 드러낸다(0 채움·묵인 금지).
     """
     if quota <= 0:
         raise ValueError(f"quota는 1 이상이어야 한다: {quota}")
+    excluded = frozenset(exclude)
+    if rotation > 0 and not excluded:
+        raise ValueError(
+            "rotation>0에는 이전 골든의 slug 제외 집합이 필요하다 — 회전만으로는 신규 표본이 "
+            "보장되지 않는다(후보 ≤ 쿼터면 순서만 바뀌고 같은 셋·같은 digest가 나온다). "
+            "이전 동결 셋을 --exclude-golden으로 넘겨라"
+        )
     buckets: dict[str, list[GoldenItem]] = {}
     for item in items:
+        if item.cu_slug in excluded:
+            continue  # 이전 골든에 쓰인 표본 — 재채점 금지의 실질(같은 표본 재사용 차단)
         buckets.setdefault(item.anchor_id, []).append(item)
     selected: list[GoldenItem] = []
     for anchor_id in sorted(buckets):
@@ -686,6 +716,15 @@ def render_promotion_report(report: PromotionReport, *, quota: int = ANCHOR_QUOT
     lines.append(f"- 어휘 밖 verdict: {report.excluded_unknown_verdict}건")
     lines.append(f"- 같은 CU 중복 판정(최신 1건만 승격): {report.excluded_duplicate_cu}건")
     lines.append("")
+    lines.append("## 회전·재추출 (acceptance ③ — 재채점 금지의 실질)")
+    lines.append(f"- 이전 골든 제외 집합: {report.prior_golden_slugs}건")
+    lines.append(f"- 그중 이번 후보와 겹쳐 제외된 건수: {report.excluded_prior_golden}건")
+    if report.prior_golden_slugs == 0:
+        lines.append(
+            "  - 제외 집합 없음 → rotation 0(초판)만 가능하다. 교정 후 재판정은 이전 동결 셋을 "
+            "`--exclude-golden`으로 넘겨야 **독립 표본**이 된다(회전만으로는 같은 셋이 나온다)."
+        )
+    lines.append("")
     lines.append("## as-found 라벨 무결성 경로 (acceptance ⑥)")
     lines.append(
         f"- ⓑ edit-aware verdict 어휘(EOS-62): "
@@ -733,6 +772,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--golden-version", default="v1", help="골든 내용 버전 라벨(기본 v1)")
     parser.add_argument(
         "--rotation", type=int, default=0, help="S2-11 표본 회전 인덱스(재판정은 다음 rotation)"
+    )
+    parser.add_argument(
+        "--exclude-golden",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="이전 동결 골든 셋 JSON(반복 가능) — 그 slug를 이번 선택에서 제외한다. "
+        "rotation>0의 필수 입력(회전만으로는 신규 표본이 보장되지 않음)",
     )
     parser.add_argument(
         "--quota", type=int, default=ANCHOR_QUOTA_MAX, help=f"앵커당 쿼터(기본 {ANCHOR_QUOTA_MAX})"
@@ -796,13 +843,41 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"'{_EDIT_AWARE_VALUE}'가 없다(EOS-62 미착지) — 경로 ⓑ는 적용되지 않는다."
             )
 
+    exclude_slugs: set[str] = set()
+    for raw_path in args.exclude_golden or []:
+        prior_path = Path(raw_path)
+        if not prior_path.exists():
+            _say(f"[측정 실패] FileNotFoundError: 제외용 이전 골든 없음 — {prior_path}")
+            return _EXIT_MEASUREMENT_FAIL
+        try:
+            prior = load_golden_set(prior_path)
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            _say(f"[측정 실패] {type(exc).__name__}: 이전 골든 로드 불가 — {prior_path}")
+            return _EXIT_MEASUREMENT_FAIL
+        exclude_slugs.update(item.cu_slug for item in prior.items)
+        _say(
+            f"[④ 제외] 이전 골든 {len(prior.items)}건 (version={prior.golden_version} "
+            f"rotation={prior.rotation}) — {prior_path}"
+        )
+
     report = promote_from_events(
         events,
         anchor_rows=anchor_rows,
         as_found_rows=as_found_rows,
         edit_aware_since=edit_aware_since,
     )
-    selected = select_by_anchor(report.promoted, quota=args.quota, rotation=args.rotation)
+    try:
+        selected = select_by_anchor(
+            report.promoted,
+            quota=args.quota,
+            rotation=args.rotation,
+            exclude=exclude_slugs,
+        )
+    except ValueError as exc:
+        # rotation>0인데 제외 집합 없음 — 독립 표본을 확인할 근거가 없다(fail-closed).
+        _say(f"[측정 실패] {type(exc).__name__}: {exc}")
+        return _EXIT_MEASUREMENT_FAIL
+    overlapped = sum(1 for item in report.promoted if item.cu_slug in exclude_slugs)
     selected_report = PromotionReport(
         promoted=selected,
         total_events=report.total_events,
@@ -820,6 +895,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             *anchor_parse_errors,
             *as_found_errors,
         ),
+        prior_golden_slugs=len(exclude_slugs),
+        excluded_prior_golden=overlapped,
     )
 
     rendered = render_promotion_report(selected_report, quota=args.quota)
