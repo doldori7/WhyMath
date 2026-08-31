@@ -7368,6 +7368,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
 - **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
 
+## 2026-08-31: 사람 게이트 3건 집행 세션 — prod DB 컨테이너 사고 발견·무손실 복구 + 게이트 ③ clear·② 3단계 완결
+
+- **사고 발견·복구(핵심)**: 게이트 쿼리 실행 중 `role "whymath" does not exist`로 발견 — **8/25 10:08Z 누군가 whymath-pg를 빈 클러스터로 재생성**(경위 미상 — Kiki 질문 미답·후속 규명 대상. POSTGRES_USER=postgres·포트 56432·스키마만 899ae0efbb8b·데이터 0. 같은 형상의 빈 클러스터 볼륨이 2개 = 두 번 재생성됨). **원본은 dangling 볼륨 ef75415d에 무손실 생존** — 프로브 실측으로 특정(68테이블·alembic=d6e7f8a9b0c1 = 8/11 실측과 일치·concepts 2683/edges 2210/misconceptions 841/standards 895·user 0행). 복구 = 빈 컨테이너 개명 보존(whymath-pg-empty-20260825) → 원본 볼륨으로 whymath-pg 재생성(5433·restart unless-stopped) → 재고 재현 확인 → 즉시 백업(whymath_20260831_120150.dump·-Fc·자가검증 EXIT=0). **데이터 손실 0**(실사용자도 원래 0행).
+- **진단 교훈**: ①이 사고는 **OPS-39(prod 스키마 드리프트 감시 0건)의 실사례 2호** — 6일간 무감지, 우선순위 재고 권고 ②내 진단 결함 2건 자인: 볼륨 필터 `whymath|pg`가 **익명 hex 볼륨을 구조적으로 배제**(후보를 못 봄 — 필터 없는 전수+생성시각으로 정정), 재고 프로브가 atom_node를 세어 0 오판(정본은 concept — 정정 재프로브로 회복) ③판정은 직접 신호(생성 시각·롤 구성·information_schema)로 — `alembic_version` 간접 신호 금지 원칙 재확인.
+- **게이트 진행**: **③ G-prod-dead-column-check cleared**(user_profile 6컬럼 전부 0·total 0행 — ADMIN-02 선결 충족). **② G-operator-seat 3단계 완결**(A=0행 → stamp 확정 `a9b8c7d6e5f4` · B=0행 혼입 없음 · 후보→head 22개 전수 스캔 파괴 연산 0) — 4단계(stamp→upgrade→부트스트랩 INSERT→content_admin grant) 확정값 블록은 게이트 노트+세션 채팅에 보존, **Kiki 실행 대기**. ① deploy environment(브라우저)도 절차 안내됨·실행 대기.
+- **반복 실수 자인(3회차·같은 세션 내)**: 검사 명령 뒤 `| tail`을 붙이고 `$?`로 판정 — tail의 exit가 실패를 가림(기존 규칙 "출력 억제·절단 판정 금지"의 자기 위반. gates.yaml 파손을 validate green으로 오인할 뻔). 패턴 고정: 파이프 쓰면 판정은 반드시 `${PIPESTATUS[0]}`, 파손 의심 시 파이프 없이 재실행. 부수: gates.yaml notes는 이중따옴표 단일행 인코딩 — **손편집 금지·수정은 `store.load_backlog`+`dump_gates` 왕복으로만**(2회 파손 후 확립·파일 단위 복원으로 회복).
+- **cross-ref**: OPS-39 · backlog/gates.yaml G-operator-seat-first-grant notes(4단계 확정값) · scripts/backup/backup_whymath_pg.ps1.
 ## 2026-08-31: /drive 3루프 — HARN-38(번호 충돌 규명)·EOS-71(결함 문항 비파괴 격리) (#931)
 
 - **HARN-38**: kiki 머신 브랜치 `backend/cur-16-...` 커밋 `3b7bab6f`가 등재한 EOS-49/50/51이 main 동번호와 충돌(동일 유형 **3회차** — ARCH-13·OPS-15 선행). 판정: 2건은 CLI 배정 새 번호(`EOS-71`·`EOS-72`)로 이관, **EOS-50은 main `EOS-55`와 내용 중복이라 재등재하지 않음**(요구 3항 대 `GenerationLog` 실측 대조 — 이중 추적 방지). 부수 실측: 브랜치 커밋 제목이 "G-eos-g0 clear"인데 그 커밋은 `gates.yaml`을 **0건 변경**했다 — 커밋 제목을 근거로 서명 소재를 읽으면 안 된다(서명 정본은 main `ad7862ab`→`d52d9a62`).
