@@ -349,6 +349,8 @@
 - **상충하는 두 요구를 플래그로 분리**: `api/alignments.py`는 배열 축의 빈 행을 SQL에서 제외해야(prefix 보존) 하고, `l2/target_progress`는 **빈 행도 probed로 세야**(조인 실패 판별) 한다 → `require_nonempty` 플래그로 갈라 두고 각 소비처가 *명시*한다(조용한 기본값 의존 금지)
 - **l3 DSL 축**: `CurriculumMeta.standard_codes` 슬롯 신설 + `api/dsl.py`가 `get_alignments`를 경유해 채운다. IR은 순수 Pydantic이라 스스로 조회하지 않는다(세션을 쥔 표면이 채운다). 응답 `contents[].curriculum`으로 노출해 **배선을 관측 가능하게** 했다 — 아무도 못 보는 슬롯은 배선 확인이 불가능하다
 - **잔여 축 분리 등재**: `api/gating._fetch_achievement_codes`는 진입 키가 problem이라 concept 키 시그니처로 덮이지 않는다 → 억지 통합 대신 `CUR-19`로 등재(만료 없는 유예 금지)
+- **#933 리뷰 P2 2건 상환(둘 다 실재 결함)**: ① **회계 2분류의 뭉갬** — probed/matched만으로는 "조인 미스"와 "매핑 없음"이 똑같이 `(1,0)`으로 보였고, 그 결과 coach가 조인 미스에 "매핑 없음" 라벨을 찍고 `target_progress.matched_concepts`의 의미가 구 구현(`standard_codes is not None`)에서 바뀌었다. **joined를 추가한 3분류**로 고치고 blackout 경고 기준도 matched→joined로 옮겼다(매핑만 빈 것은 정상 상태일 수 있어 경고 대상이 아니다). ② **결과물에서의 가짜 통일** — 다축 조회 후 `standard_refs()`를 필터 없이 쓰면 norm_id와 official_code가 한 리스트에 섞였다(축을 나눠 표시해 놓고 결과에서 도로 뭉갬). `standard_refs(kind=...)` 추가 + 소비처 3곳 명시 + dsl은 official_code 축만 조회
+- **자기 테스트가 결함을 동결하고 있었다(교훈)**: ①은 내가 쓴 두 테스트(`outer_join_miss`·`matched_row_without_codes`)가 **같은 기대값**을 단언해 아무것도 구분하지 못했고, ②는 혼합 어휘 리스트를 그대로 정답으로 박아 두었다. 재발 방지로 파라미터 테이블 + `test_state_accounting_is_pairwise_distinct`(세 기대값이 서로 달라야 한다는 **계약의 자기검사**)를 넣었다 — "변별력 없는 검증 스텝 금지"가 테스트 *묶음* 수준에서도 적용된다는 사례
 
 ### 2026-08-31 (운영·게이트): **whymath-pg 스키마 드리프트 해소 + 좌석 발급 경로 완성 — `G-operator-seat-first-grant` 3·4단계 실행 + `ADMIN-11` 신설** (claude 설계·예행, Kiki 실행)
 

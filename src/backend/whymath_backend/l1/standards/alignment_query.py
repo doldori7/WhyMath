@@ -26,6 +26,11 @@
 `standard_ref_kind`를 함께 실어 소비처가 어휘를 오인 조인하지 않게 한다. 어휘 번역·물리
 `curriculum_alignment` 테이블은 **Phase 2**다(acceptance ⑤ 범위 밖).
 
+**결과물에서도 섞이면 안 된다**(#933 리뷰 P2): 여러 축을 함께 조회한 소비처가
+`standard_refs()`를 필터 없이 쓰면 `2022_...`(norm_id)와 `[...]`(official_code)가 한 리스트에
+섞여 어느 쪽 조회도 성립하지 않는다 — 축을 나눠 표시해 놓고 결과에서 도로 뭉개는 셈이다.
+그래서 `standard_refs(kind=...)`로 어휘를 고를 수 있고, 다축 소비처는 반드시 지정한다.
+
 UUID로 물어도 되고 코드로 물어도 된다 (추가 쿼리 0)
 ---------------------------------------------------
 `concept_ids`(DB `Concept.concept_id` UUID)를 주면 각 축이 **자체 조인으로** 개념 키를 푼다 —
@@ -37,10 +42,17 @@ UUID로 물어도 되고 코드로 물어도 된다 (추가 쿼리 0)
 "작동한 비율" 원칙 — 조인 성립 건수 (acceptance ② · CLAUDE.md 절대 금기)
 ------------------------------------------------------------------------
 정상 응답은 조인이 성립했다는 증거가 아니다. `AlignmentResult.stats`가 축별로
-**probed(조회된 행)·matched(성취기준이 실린 행)·items(산출 항목)** 를 항상 들고 나오고,
-`log_join_stats()`가 그것을 로그로 낸다 — probed>0인데 matched==0이면 **warning**으로
+**probed(훑은 행)·joined(축 엔티티가 붙은 행)·matched(성취기준이 실린 행)·items(산출 항목)**
+를 항상 들고 나온다. 3분류인 이유는 2분류로는 **"조인이 안 됐다"와 "매핑이 없다"가 같은 0**
+으로 뭉개지기 때문이다(#933 리뷰 P2 실측):
+
+    조인 미스  probed=1 joined=0 matched=0   ← 배선·적재 이상 의심
+    매핑 없음  probed=1 joined=1 matched=0   ← 정상 상태일 수 있다
+    정상       probed=1 joined=1 matched=1
+
+`log_join_stats()`가 이것을 로그로 내고, probed>0인데 **joined==0**이면 **warning**으로
 승격한다(`l2/target_progress`가 이미 쓰던 "0%가 '미도달'이 아니라 '조인 실패'일 가능성"
-경고의 일반화). 소비처는 이 신호를 지우지 않는다.
+경고의 일반화 — 그 경고가 가리키던 사태가 바로 joined다). 소비처는 이 신호를 지우지 않는다.
 
 `alignment_type`은 **로깅 전용**이다 (acceptance ③)
 ---------------------------------------------------
@@ -173,9 +185,17 @@ class Alignment:
 class AlignmentJoinStats:
     """조인 성립 회계 — "작동한 비율" 원칙의 자료(침묵 실패 금지·acceptance ②).
 
-    `probed`는 축이 실제로 훑은 행 수, `matched`는 그중 성취기준이 실려 항목을 낳은 행 수다.
-    둘의 분리가 **"매핑이 없다"와 "조인이 안 됐다"를 구분**한다 — 합쳐 놓으면 0%가 어느 쪽인지
-    영원히 알 수 없다.
+    **3분류**여야 한다(#933 리뷰 P2 실측 — 2분류로는 두 사태가 같은 숫자로 뭉갠다):
+
+    | | probed | joined | matched | 뜻 |
+    |---|---|---|---|---|
+    | 조인 미스 | 1 | 0 | 0 | 개념은 조회했으나 그 축에 행이 **없다**(배선/적재 문제 의심) |
+    | 매핑 없음 | 1 | 1 | 0 | 축 행은 있는데 성취기준이 **비어 있다**(정상 상태일 수 있다) |
+    | 정상 | 1 | 1 | 1 | 성취기준이 실렸다 |
+
+    `probed`(훑은 행) · `joined`(그 축 엔티티가 실제로 붙은 행) · `matched`(성취기준이 실려
+    항목을 낳은 행). joined를 빼면 "조인이 안 됐다"와 "매핑이 없다"가 같은 0으로 보이고, 그러면
+    0%의 원인을 영원히 알 수 없다 — 이 모듈의 존재 이유 중 하나가 그 구분이다.
     """
 
     axes: tuple[AlignmentAxis, ...]
@@ -186,6 +206,9 @@ class AlignmentJoinStats:
     건너뛴 축의 0은 "조회했는데 없음"이 아니라 **"조회 안 함"** 이다(미측정 ≠ 0)."""
 
     probed_by_axis: Mapping[str, int]
+    joined_by_axis: Mapping[str, int]
+    """그 축 엔티티가 실제로 붙은 행 수 — probed와 다르면 조인 미스가 있다는 뜻."""
+
     matched_by_axis: Mapping[str, int]
     items_by_axis: Mapping[str, int]
     type_counts: Mapping[str, int]
@@ -194,6 +217,10 @@ class AlignmentJoinStats:
     @property
     def probed(self) -> int:
         return sum(self.probed_by_axis.values())
+
+    @property
+    def joined(self) -> int:
+        return sum(self.joined_by_axis.values())
 
     @property
     def matched(self) -> int:
@@ -205,12 +232,17 @@ class AlignmentJoinStats:
 
     @property
     def join_blackout(self) -> bool:
-        """조회는 했는데 전건 미매칭 — "미도달"이 아니라 "조인 실패"를 의심할 상태.
+        """조회는 했는데 **조인이 전건 실패** — "미도달"이 아니라 "조인 실패"를 의심할 상태.
+
+        기준은 `matched`가 아니라 `joined`다(#933 리뷰 P2): 축 행은 다 붙었는데 성취기준 매핑만
+        비어 있는 것은 정상 상태일 수 있어 경고 대상이 아니고, 축 행 자체가 하나도 안 붙는 것이
+        배선·적재 이상이다. `l2/target_progress`의 원래 경고(`standard_codes is not None`을
+        matched로 세던)가 가리키던 사태가 바로 이 joined다.
 
         조회 자체를 안 한 경우(probed==0)는 blackout이 아니다 — 그건 "안 봄"이지 "안 맞음"이
         아니다(미측정 ≠ 0). 그래서 경고가 남발되지 않는다.
         """
-        return self.probed > 0 and self.matched == 0
+        return self.probed > 0 and self.joined == 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,9 +252,20 @@ class AlignmentResult:
     alignments: tuple[Alignment, ...]
     stats: AlignmentJoinStats
 
-    def standard_refs(self) -> tuple[str, ...]:
-        """성취기준 참조 중복 제거 + 정렬 — 결정론(소비처가 '첫 코드'를 골라도 안정)."""
-        return tuple(sorted({a.standard_ref for a in self.alignments}))
+    def standard_refs(self, *, kind: StandardRefKind | None = None) -> tuple[str, ...]:
+        """성취기준 참조 중복 제거 + 정렬 — 결정론(소비처가 '첫 코드'를 골라도 안정).
+
+        `kind`를 주면 그 어휘의 참조만 남긴다. **어휘를 섞어 담는 소비처는 반드시 지정해야
+        한다**(#933 리뷰 P2): 축마다 어휘가 달라(1축=norm_id, 2·3축=official_code) 필터 없이
+        평탄화하면 `2022_...`와 `[...]`가 한 리스트에 섞이고, 그 리스트로는 어느 쪽 조회도
+        성립하지 않는다 — 이 모듈이 금지하는 "조용한 가짜 통일"이 결과물에서 일어난다.
+        단일 축만 조회하는 소비처는 어휘가 하나뿐이라 생략해도 안전하지만, 축 집합이 나중에
+        늘어날 수 있으므로 **명시를 권장**한다.
+        """
+        refs = {
+            a.standard_ref for a in self.alignments if kind is None or a.standard_ref_kind == kind
+        }
+        return tuple(sorted(refs))
 
     def refs_by_concept_id(self) -> dict[uuid.UUID, tuple[str, ...]]:
         """concept_id → 성취기준 참조(정렬). UUID로 묻지 않은 항목은 빠진다."""
@@ -299,12 +342,14 @@ async def get_alignments(
 
     alignments: list[Alignment] = []
     probed: dict[str, int] = {}
+    joined: dict[str, int] = {}
     matched: dict[str, int] = {}
     items: dict[str, int] = {}
 
     queried: list[AlignmentAxis] = []
     for axis in requested:
         probed[axis.value] = 0
+        joined[axis.value] = 0
         matched[axis.value] = 0
         items[axis.value] = 0
         if empty_target:
@@ -342,6 +387,7 @@ async def get_alignments(
                 require_nonempty=require_nonempty,
             )
         probed[axis.value] = found.probed
+        joined[axis.value] = found.joined
         matched[axis.value] = found.matched
         items[axis.value] = len(found.alignments)
         alignments.extend(found.alignments)
@@ -357,6 +403,7 @@ async def get_alignments(
             axes=requested,
             queried_axes=tuple(queried),
             probed_by_axis=probed,
+            joined_by_axis=joined,
             matched_by_axis=matched,
             items_by_axis=items,
             type_counts=type_counts,
@@ -366,10 +413,11 @@ async def get_alignments(
 
 @dataclass(frozen=True, slots=True)
 class _AxisRows:
-    """축 1개의 조회 산출 — 항목 + 그 축의 probed/matched 회계."""
+    """축 1개의 조회 산출 — 항목 + 그 축의 probed/joined/matched 회계."""
 
     alignments: tuple[Alignment, ...]
     probed: int
+    joined: int
     matched: int
 
 
@@ -434,8 +482,8 @@ async def _query_link_axis(
         )
         for link, concept_id in rows
     )
-    # 링크 행은 정의상 성취기준을 실고 있다 — probed == matched(빈 매핑이 있을 수 없는 축).
-    return _AxisRows(alignments=found, probed=len(rows), matched=len(rows))
+    # 링크 행은 정의상 성취기준(norm_id)을 실고 있다 — 이 축엔 "붙었는데 빈 매핑"이 없다.
+    return _AxisRows(alignments=found, probed=len(rows), joined=len(rows), matched=len(rows))
 
 
 async def _query_entry_axis(
@@ -498,7 +546,8 @@ async def _query_entry_axis(
             )
             for code in codes
         )
-    return _AxisRows(alignments=tuple(found), probed=len(rows), matched=matched)
+    # CurriculumEntry가 기준 테이블이라 나온 행은 전부 "붙은" 행이다(probed == joined).
+    return _AxisRows(alignments=tuple(found), probed=len(rows), joined=len(rows), matched=matched)
 
 
 async def _query_atom_axis(
@@ -542,10 +591,14 @@ async def _query_atom_axis(
 
     rows = (await session.execute(stmt)).all()
     found: list[Alignment] = []
+    joined = 0
     matched = 0
     for atom_code, standard_codes, concept_id in rows:
         if atom_code is None:
-            continue  # OUTER JOIN 미스 — 조회는 했으나(probed) 원자 축에 없다(matched 아님)
+            # OUTER JOIN 미스 — 조회는 했으나(probed) 원자 행이 없다(joined 아님).
+            # 이 분리가 "조인 실패"와 "매핑 없음"을 가른다(#933 리뷰 P2).
+            continue
+        joined += 1
         codes = [
             code for code in (standard_codes or []) if outcome_id is None or code == outcome_id
         ]
@@ -561,7 +614,7 @@ async def _query_atom_axis(
             )
             for code in codes
         )
-    return _AxisRows(alignments=tuple(found), probed=len(rows), matched=matched)
+    return _AxisRows(alignments=tuple(found), probed=len(rows), joined=joined, matched=matched)
 
 
 def log_join_stats(
@@ -578,23 +631,26 @@ def log_join_stats(
     """
     target = logger if logger is not None else _logger
     target.debug(
-        "alignment 조인 회계 [%s]: axes=%s queried=%s probed=%d matched=%d items=%d "
-        "probed_by_axis=%s matched_by_axis=%s items_by_axis=%s type_counts=%s",
+        "alignment 조인 회계 [%s]: axes=%s queried=%s probed=%d joined=%d matched=%d "
+        "items=%d probed_by_axis=%s joined_by_axis=%s matched_by_axis=%s items_by_axis=%s "
+        "type_counts=%s",
         context,
         [a.value for a in stats.axes],
         [a.value for a in stats.queried_axes],
         stats.probed,
+        stats.joined,
         stats.matched,
         stats.items,
         dict(stats.probed_by_axis),
+        dict(stats.joined_by_axis),
         dict(stats.matched_by_axis),
         dict(stats.items_by_axis),
         dict(stats.type_counts),
     )
     if stats.join_blackout:
         target.warning(
-            "alignment 조인 0건 [%s]: 조회 %d행 전부 미매칭 — 결과 0건이 '매핑 없음'이 아니라 "
-            "'조인 실패'일 가능성을 점검하라(axes=%s)",
+            "alignment 조인 0건 [%s]: 조회 %d행 전부 조인 실패(축 행 0건) — 결과 0건이 "
+            "'매핑 없음'이 아니라 '조인 실패'다. 배선·적재를 점검하라(axes=%s)",
             context,
             stats.probed,
             [a.value for a in stats.axes],

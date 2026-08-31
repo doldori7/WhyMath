@@ -181,10 +181,14 @@ async def generate_dsl(
     성립했는지 아닌지는 `log_join_stats`가 회계로 남긴다(0건이 "매핑 없음"인지 "조인 실패"인지
     묻히지 않게 한다·CLAUDE.md 침묵 실패 금지).
     """
+    # 축은 **official_code 어휘를 내는 것만** 고른다(#933 리뷰 P2): `concept_standard_link`는
+    # norm_id를 내므로 함께 담으면 `2022_...`와 `[...]`가 한 리스트에 섞여 어느 쪽 조회도
+    # 성립하지 않는다 — 이 모듈이 금지하는 "가짜 통일"이 결과물에서 일어난다. 축 선택과
+    # `kind` 필터를 **둘 다** 건다(축 집합이 나중에 바뀌어도 어휘가 새지 않게).
     alignment = await get_alignments(
         session,
         concept_codes=[body.spec.concept],
-        axes={AlignmentAxis.ATOM_NODE, AlignmentAxis.CONCEPT_STANDARD_LINK},
+        axes={AlignmentAxis.ATOM_NODE, AlignmentAxis.CURRICULUM_ENTRY},
     )
     log_join_stats(
         alignment.stats,
@@ -201,7 +205,7 @@ async def generate_dsl(
             grade=body.spec.grade,
             domain=body.spec.concept,
             concept=body.spec.concept,
-            standard_codes=alignment.standard_refs(),
+            standard_codes=alignment.standard_refs(kind="official_code"),
         ),
         difficulty=DifficultyMeta(level=body.spec.difficulty, target_time_sec=120),
         learning={"skill": ("equation_transformation",)},

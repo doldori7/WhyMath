@@ -160,40 +160,57 @@ class TestAxisComposition:
 
 
 class TestJoinAccounting:
-    """acceptance ② — "매핑 없음"과 "조인 실패"를 계수로 구분한다."""
+    """acceptance ② — "매핑 없음"과 "조인 실패"를 계수로 구분한다.
 
-    async def test_outer_join_miss_counts_probed_but_not_matched(self) -> None:
+    #933 리뷰 P2 상환: 초판은 probed/matched **2분류**라 아래 세 사태 중 앞의 둘이 똑같이
+    `(1, 0)`으로 뭉갰다 — 그 상태로는 0%의 원인을 영원히 알 수 없다. 3분류로 고치고, 세
+    사태가 **서로 다른 회계**를 낸다는 것 자체를 아래 파라미터 테이블이 동결한다.
+    """
+
+    _STATES = (
+        # (라벨, 행, 기대 (probed, joined, matched), blackout)
+        ("조인 미스", (None, None), (1, 0, 0), True),
+        ("매핑 없음", ("atom-001", []), (1, 1, 0), False),
+        ("정상", ("atom-001", ["[2수01-01]"]), (1, 1, 1), False),
+    )
+
+    @pytest.mark.parametrize(("label", "row", "expected", "blackout"), _STATES)
+    async def test_three_states_have_distinct_accounting(
+        self,
+        label: str,
+        row: tuple[str | None, list[str] | None],
+        expected: tuple[int, int, int],
+        blackout: bool,
+    ) -> None:
         cid = uuid.uuid4()
-        session = _FakeSession([[_atom_row(None, None, cid)]])  # OUTER JOIN 미스
+        session = _FakeSession([[_atom_row(row[0], row[1], cid)]])
         result = await get_alignments(  # type: ignore[arg-type]
             session, concept_ids=[cid], axes={AlignmentAxis.ATOM_NODE}
         )
 
-        assert result.stats.probed == 1
-        assert result.stats.matched == 0
-        assert result.alignments == ()
-        assert result.stats.join_blackout is True
+        actual = (result.stats.probed, result.stats.joined, result.stats.matched)
+        assert actual == expected, label
+        assert result.stats.join_blackout is blackout, label
 
-    async def test_matched_row_without_codes_is_probed_but_not_matched(self) -> None:
-        """원자 행은 있는데 성취기준 배열이 빈 경우 — 조인은 됐고 매핑이 없다."""
+    def test_state_accounting_is_pairwise_distinct(self) -> None:
+        """세 기대값이 서로 달라야 이 테이블이 변별력을 갖는다 — 계약의 자기검사.
+
+        초판이 무너진 지점이 정확히 여기다: 두 사태의 기대값이 같으면 위 파라미터 테스트는
+        전부 통과하면서도 아무것도 구분하지 못한다.
+        """
+        assert len({expected for _, _, expected, _ in self._STATES}) == len(self._STATES)
+
+    async def test_blackout_tracks_join_failure_not_empty_mapping(self) -> None:
+        """경고 기준은 matched가 아니라 joined — 매핑만 빈 것은 정상 상태일 수 있다."""
         cid = uuid.uuid4()
         session = _FakeSession([[_atom_row("atom-001", [], cid)]])
         result = await get_alignments(  # type: ignore[arg-type]
             session, concept_ids=[cid], axes={AlignmentAxis.ATOM_NODE}
         )
 
-        assert result.stats.probed == 1 and result.stats.matched == 0
-
-    async def test_hit_clears_blackout(self) -> None:
-        """변별력 대조군 — 매칭이 하나라도 있으면 blackout이 서지 않는다."""
-        cid = uuid.uuid4()
-        session = _FakeSession([[_atom_row("atom-001", ["[2수01-01]"], cid)]])
-        result = await get_alignments(  # type: ignore[arg-type]
-            session, concept_ids=[cid], axes={AlignmentAxis.ATOM_NODE}
-        )
-
-        assert result.stats.matched == 1
-        assert result.stats.join_blackout is False
+        assert result.stats.matched == 0  # 성취기준은 없지만
+        assert result.stats.joined == 1  # 조인은 성립했다 →
+        assert result.stats.join_blackout is False  # 경고 대상이 아니다
 
     async def test_no_probe_is_not_a_blackout(self) -> None:
         """조회 자체를 안 했으면 blackout이 아니다 — "안 봄"과 "안 맞음"은 다르다(미측정 ≠ 0)."""
@@ -217,7 +234,7 @@ class TestJoinAccounting:
             log_join_stats(result.stats, logger=logger, context="unit")
         assert any(r.levelno == logging.WARNING for r in caplog.records)
 
-    async def test_hit_logs_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_join_success_logs_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """변별력 양방향 — 경고가 *항상* 뜨는 검사였다면 신호가 아니다."""
         cid = uuid.uuid4()
         session = _FakeSession([[_atom_row("atom-001", ["[2수01-01]"], cid)]])
@@ -350,3 +367,30 @@ class TestConsumerWiringIsReal:
         from whymath_backend.api.alignments import AlignmentAxis as WireAxis
 
         assert set(get_args(WireAxis)) == {a.value for a in AlignmentAxis}
+
+
+class TestRefKindFilter:
+    """#933 리뷰 P2 — 축 어휘가 섞인 결과를 그대로 평탄화하면 '가짜 통일'이 결과물에서 난다."""
+
+    async def test_unfiltered_refs_can_mix_vocabularies(self) -> None:
+        """결함의 실재를 동결 — 필터 없이 뽑으면 norm_id와 official_code가 한 리스트에 섞인다.
+
+        이 사실 자체가 `kind` 인자가 필요한 이유다(소비처가 섞인 리스트로는 어느 쪽 조회도
+        하지 못한다). 함수의 기본 동작을 비난하는 것이 아니라, **섞일 수 있음**을 못박는다.
+        """
+        session = _FakeSession([[_link_row()], [], [_atom_row()]])
+        result = await get_alignments(session)  # type: ignore[arg-type]
+
+        kinds = {a.standard_ref_kind for a in result.alignments}
+        assert kinds == {"norm_id", "official_code"}
+        assert len(result.standard_refs()) == 2  # 섞인 채로 나온다
+
+    async def test_kind_filter_keeps_one_vocabulary(self) -> None:
+        session = _FakeSession([[_link_row()], [], [_atom_row()]])
+        result = await get_alignments(session)  # type: ignore[arg-type]
+
+        official = result.standard_refs(kind="official_code")
+        norm = result.standard_refs(kind="norm_id")
+        assert official == ("[10공수1-01-01]",)
+        assert norm == ("2022_10공수1_01_01",)
+        assert set(official) & set(norm) == set()

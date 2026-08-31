@@ -173,11 +173,14 @@ async def get_target_progress(
             )
 
             # 작동 신호(모듈 docstring) — measured(조인 시도 대상) vs matched(원자 축 히트).
+            # matched의 정본 의미는 **원자 행이 붙었는가**(구 구현의 `standard_codes is not
+            # None`)이지 "성취기준이 실렸는가"가 아니다 → `stats.joined`를 쓴다(#933 리뷰 P2:
+            # `stats.matched`를 쓰면 매핑만 빈 개념이 조인 실패로 오분류돼 지표 의미가 바뀐다).
             coverage_measured_concepts = alignment.stats.probed
-            coverage_matched_concepts = alignment.stats.matched
+            coverage_matched_concepts = alignment.stats.joined
 
             observed_norm_ids: set[str] = set()
-            for code in alignment.standard_refs():
+            for code in alignment.standard_refs(kind="official_code"):
                 observed_norm_ids.update(norm_ids_by_official_code.get(code, ()))
             coverage_observed = len(observed_norm_ids)
             coverage_percent = coverage_observed / coverage_scope * 100.0

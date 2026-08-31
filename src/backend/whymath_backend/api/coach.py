@@ -1195,9 +1195,11 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
     )
     log_join_stats(result.stats, logger=logger, context=f"coach.standard_code_for/{problem_id}")
     if result.stats.matched == 0:
-        # probed>0·matched==0 = 원자 축에 개념이 없거나 성취기준 매핑이 비었다. 두 사태를
-        # 계속 구분해 로그로 남긴다(CUR-04가 세운 3단계 구분 유지 — 0%의 원인이 묻히지 않게).
-        if result.stats.probed == 0:
+        # 두 사태를 계속 구분해 로그로 남긴다(CUR-04가 세운 3단계 구분 유지 — 0%의 원인이
+        # 묻히지 않게). 기준은 **joined**다: OUTER JOIN이라 개념이 있으면 probed는 늘 1이고,
+        # 원자 행이 실제로 붙었는지는 joined만 안다(#933 리뷰 P2 — probed로 갈랐더니 조인
+        # 미스가 "매핑 없음"으로 잘못 찍혔다).
+        if result.stats.joined == 0:
             logger.debug(
                 "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
                 "problem_id=%s concept_id=%s",
@@ -1213,7 +1215,7 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
             )
         return None
     # 결정론 — refs는 정렬·중복 제거되어 나온다(첫 코드 선택이 안정).
-    return result.standard_refs()[0]
+    return result.standard_refs(kind="official_code")[0]
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
