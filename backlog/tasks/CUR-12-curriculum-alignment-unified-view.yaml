@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -13,7 +13,11 @@ depends_on:
 requires_gates: []
 acceptance:
   - "① 기존 3축(ConceptStandardLink·CurriculumEntry.national_standard_codes·AtomNode.standard_codes)을 하나의 get_alignments(concept_id, framework_id, outcome_id) 비동기 함수로 통합. ② api/coach.py·l2/target_progress.py·l3 DSL 생성기가 get_alignments를 경유하도록 리팩토링(침묵 실패 금지 — 조인 성립 건수 로깅). ③ alignment_type(TEACHES/PRACTICES/ASSESSES/REMEDIATES/EXTENDS/REVIEWS) enum 정의 및 로깅용으로만 사용. ④ 테스트: 변별력 있는 fixture로 구 축 0행·신 축 매칭 대조. ⑤ 범위 밖: 물리 curriculum_alignment 테이블은 Phase 2."
-artifacts: []
+artifacts:
+  - "#933"
+  - e43a189d
+  - src/backend/whymath_backend/l1/standards/alignment_query.py
+  - tests/backend/l1/standards/test_alignment_query.py
 paths:
   - src/backend/whymath_backend/l1/standards/alignment_query.py
   - src/backend/whymath_backend/api/coach.py
@@ -21,4 +25,4 @@ paths:
   - src/backend/whymath_backend/l3/dsl/models.py
 session: null
 notes: EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 6. Alignment는 검토안 P0이자 WhyMath의 기술 부채 축.
-updated: 2026-08-25
+updated: 2026-08-31

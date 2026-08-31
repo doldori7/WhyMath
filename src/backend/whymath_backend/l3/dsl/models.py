@@ -42,7 +42,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CurriculumMeta(BaseModel):
-    """교육과정 메타 — DSL의 curriculum 영역."""
+    """교육과정 메타 — DSL의 curriculum 영역.
+
+    `standard_codes`(CUR-12)는 **정렬 조회 결과를 담는 슬롯**이다. IR은 순수 Pydantic이라
+    스스로 DB를 조회하지 않는다 — 채우는 쪽은 세션을 쥔 표면(`api/dsl.py`)이고, 그쪽이
+    `l1/standards/alignment_query.get_alignments`를 경유한다(통합 함수 단일 진실 원천).
+    비어 있음은 "정렬 없음"이 아니라 "이 DSL에 정렬이 실리지 않음"이다 — 조인이 성립했는지는
+    채우는 쪽의 조인 회계 로그가 말한다(`log_join_stats` — 침묵 실패 금지).
+    """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -50,6 +57,11 @@ class CurriculumMeta(BaseModel):
     grade: str = Field(..., min_length=1, description="학년(예: middle_2)")
     domain: str | None = Field(default=None, description="영역(예: algebra)")
     concept: str = Field(..., min_length=1, description="개념(예: simultaneous_equations)")
+    standard_codes: tuple[str, ...] = Field(
+        default=(),
+        description="정렬된 성취기준 참조(CUR-12 `get_alignments` 산출·정렬·중복 제거). "
+        "빈 튜플 = 이 DSL에 정렬이 실리지 않음(조인 성립 여부는 생성 측 회계 로그가 말한다)",
+    )
 
 
 class DifficultyMeta(BaseModel):
