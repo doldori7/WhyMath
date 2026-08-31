@@ -90,6 +90,7 @@ __all__ = [
     "aggregate",
     "classify_cus",
     "classify_sessions",
+    "effective_moment",
     "main",
     "render_report",
 ]

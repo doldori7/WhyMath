@@ -366,6 +366,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `docs/standards/security_privacy.md` — 미성년 PII·암호화·보존 파기 정본
 - `docs/standards/incident_response_slo.md` — 인시던트 런북·최소 SLO 정본(`test_slo_contract.py` 기계 대조)
 - `docs/standards/crosswalk_gate_contract.md` — 오개념 kebab↔M-id 승인·적재 게이트 계약 정본(코드 동결)
+- `docs/standards/golden_benchmark_contract.md` — 골든 벤치마크 승격·동결·QA 엔진 혼동행렬 계약 정본(as-found fail-closed·재채점 금지·내용 KPI 4종 결선표 — EOS-60)
 - `docs/standards/coding_python.md`·`coding_flutter.md` — 언어별 코딩 표준
 - `docs/standards/data_pipeline.md` — 데이터 6단계 흐름·도구 표준
 - `docs/standards/parallel_sessions.md` — 병렬 세션 규약(1 세션 = 1 도메인 = 1 브랜치 = 1 worktree)
@@ -441,5 +442,5 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ---
 
-**버전**: 0.2.4 | **최종 수정**: 2026-08-31 (다단계 명령 블록 자리표시자 금지 규칙 신설 — 전체 붙여넣기 실행에서 치환이 일어나지 않아 자리표시자 2건이 그대로 실행됨. 대책 = 앞 단계 출력을 셸 변수로 잇기) · 이전: 2026-08-22 (측정·수집 도구 실패 경로 설계 규칙 신설 — Phaiakes9 진단 도구 결함 10건·측정 4회 공전. 대책 = `check_ps_scripts.py` CI 차단 + `/llm-perf-doctor` 카탈로그) · 이전: 2026-08-11 (PR 기본값 전환 — 완료·병합 원칙 신설 + `backlog.py done` PR 증적 게이트, `HARN-23`) · 이전: 2026-08-11 (운영(EOS) 3차 재점검 — 스택 표 모니터링 행 실측 정합: OTel 미배선 병기. `docs/architecture/operations_module_gap_review_r3.md` §정정) · 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
+**버전**: 0.2.5 | **최종 수정**: 2026-08-31 (다단계 명령 블록 자리표시자 금지 규칙 신설 — 전체 붙여넣기 실행에서 치환이 일어나지 않아 자리표시자 2건이 그대로 실행됨. 대책 = 앞 단계 출력을 셸 변수로 잇기) · 이전: 2026-08-31 (골든 벤치마크 계약 인덱스 등재 — QA 엔진 FN율 측정 정본 `golden_benchmark_contract.md` 신설·EOS-60) · 이전: 2026-08-22 (측정·수집 도구 실패 경로 설계 규칙 신설 — Phaiakes9 진단 도구 결함 10건·측정 4회 공전. 대책 = `check_ps_scripts.py` CI 차단 + `/llm-perf-doctor` 카탈로그) · 이전: 2026-08-11 (PR 기본값 전환 — 완료·병합 원칙 신설 + `backlog.py done` PR 증적 게이트, `HARN-23`) · 이전: 2026-08-11 (운영(EOS) 3차 재점검 — 스택 표 모니터링 행 실측 정합: OTel 미배선 병기. `docs/architecture/operations_module_gap_review_r3.md` §정정) · 2026-08-10 (통합점검 — `docs/reviews/harness_constitution_rules_integrated_audit_2026-08-10.md`)  
 **다음 검토일**: Phase 1 종료 시점 또는 다음 분기 SSM 스캔 중 먼저 오는 쪽 · **본문 규칙을 바꾸는 커밋은 이 버전·수정일 표기도 함께 갱신한다** (2026-08-10 통합점검: 표기가 실체보다 3개월 뒤처져 있던 상태 재발 방지)

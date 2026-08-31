@@ -1037,6 +1037,22 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
             "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
         ),
+        # EOS-60(2026-08-31): 골든 승격기 + QA 엔진 혼동행렬 — 둘 다 EOS-54 검수 *실이벤트*가
+        # 입력이다(별도 라벨링 캠페인 금지 규약의 귀결). 검수 판정이 쌓이기 전에는 승격 0건 =
+        # 측정 실패(exit 1)가 설계값이라 hit_cu_metrics와 같은 이유로 CI 상시 배선 비대상 —
+        # G2(10/25) 기준선·G5 판정 시점에 운영자가 돌린다. 판정 로직 자체(as-found fail-closed·
+        # 회전·digest·혼동행렬·게이트 변별력 양방향·재채점 금지)는 backend 잡이 수집하는
+        # tests/backend/harness/test_golden_benchmark.py·tests/backend/ops/
+        # test_qa_confusion_matrix.py가 상시 검증한다 — "안 도는 코드"가 아니라 "실표본이 있을
+        # 때 사람이 돌리는 판독기"다. 계약 정본 = docs/standards/golden_benchmark_contract.md.
+        "harness.golden_benchmark": (
+            "by-design:검수 실이벤트 의존 골든 승격기(EOS-60) — 검수 판정 축적 전에는 승격 0건이 "
+            "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. 검수와 함께 운영자가 돌린다"
+        ),
+        "ops.qa_confusion_matrix": (
+            "by-design:골든 실표본 의존 혼동행렬 판독기(EOS-60) — 골든 0건·평가쌍 0건이 측정 "
+            "실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
+        ),
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,

@@ -351,6 +351,15 @@
 - **예행연습이 잡은 세 번째 결함(자기 코드)**: 1회차 출력만 `"role": null`이었다 — `role`은 이 코드가 아니라 DB `server_default`가 채우는데, 커밋 전 ORM 객체는 그 값을 모른다(2회차는 조회 경로라 `student`). **같은 상태를 회차에 따라 다른 값으로 보고하는 출력**이라 커밋 후 `refresh`를 명시했다.
 - **일반 교훈(등재)**: **런북은 예행연습을 통과하기 전까지 가설이다.** 이 세션에서 실행 전에 잡힌 결함이 3건이고, 그중 2건은 *실행하면 반드시* 실패하는 것이었다. 기존 규칙 "검증 없는 실행 안내 금지"가 "그 명령이 산출물을 내는 코드 경로인지 저장소에서 확인"을 요구한다면, 이번 사례는 그 위 단계 — **가능하면 같은 상태를 재현해 명령 자체를 돌려 본다**(로컬 PG16 재현은 30분이 안 걸렸고, Kiki 머신 실패 1회의 왕복보다 짧다).
 
+### 2026-08-31 (구현·EOS-60): **골든 벤치마크 셋 + QA 엔진 혼동행렬 — 판정기의 FN율을 처음으로 잰다(N8 갭 해소)** (claude 구현)
+- **문제**: `qa_pipeline`이 9축을 조립해 PASS/FAIL을 내지만 **자기 FN율을 모른다**. EOS-51 §6 내용 KPI 6종 중 4종이 골든 라벨에 의존하는데 저장소 전수 grep 0건이었다(N8 — `eos_validation_n1_n10_gap_review_2026-08-30.md` §3.7). G2(10/25)의 "자동검증 ≥70%"는 자동검증이 맞는지 모르면 무의미한 숫자다
+- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 73건
+- **별도 라벨링 캠페인 0**: 골든은 EOS-54 검수 이벤트의 `verdict`·`failure_code`에서 승격한다(검수 185 CU 예산의 부산물 — 추가 인간 시간 ≈ 0). 앵커 6 × 30~35 ≈ 200건 목표
+- **as-found fail-closed(#911 codex P1 반영)**: `rejected`는 그대로 승격, `approved`는 ⓐ 검수 전 스냅샷 또는 ⓑ EOS-62 edit-aware verdict(+`--edit-aware-since` 경계) 없이는 **제외 + 건수 명시**. 손질 후 승인을 clean으로 승격하면 FN율이 과소평가되어 골든이 자기 목적을 훼손한다. ⓑ 착지 여부는 상수가 아니라 `ReviewVerdict` 어휘 **실측**(`edit_aware_verdict_available`) — EOS-62 착지 시 자동 해금, 착지 전에는 손대지 않아도 fail-closed 유지
+- **과적합 방지(S2-11 골든 적용)**: 골든에 `golden_version`·`rotation`·`frozen_at`·`digest`(판정 축만의 sha256 — 라벨 손편집은 로드 시 터짐) 동결 + 평가 원장으로 "같은 골든 × 다른 엔진 리비전" 재채점을 exit 1 차단(같은 리비전 재실행은 재현성 확인이므로 허용). 회전 해시는 `reviewer_sample_package.rotation_key`를 공개 승격해 **재사용**(재구현 0)
+- **FN 위장 차단**: 예측 없는 골든 항목을 pass로 세지 않는다(미평가 분리 카운트) — 이 계약이 깨지면 FN율이 구조적으로 낮아진다. 파싱 실패 1건이라도 있으면 판정하지 않는다(hit_cu_metrics 동일 규약)
+- **집행 별항(⑤)**: 내용 KPI 4종의 골든 소비 결선표를 `CONTENT_KPI_CONSUMERS`로 동결하고 리포트가 **라벨 축별 정답지 건수**와 함께 상시 출력 — 착지는 `ops/qa_confusion_matrix` 1종뿐이고 교육과정 정합률·op-code 정확도·풀이 비약 κ는 **미착지**(좌석 `EOS-61`·`MISC-07`)임을 그대로 적는다. 표와 실체의 정합(착지=import 가능·미착지=좌석 태스크 실재)은 테스트가 기계 동결. `subject_id`는 처음부터 스키마에(Math 비종속)
+- **CI 배선 판정**: 둘 다 검수 실이벤트 의존이라 `declared_unwired_audit`에 `by-design` 등재(hit_cu_metrics 동형) — 판정 로직 자체는 backend 잡이 수집하는 테스트가 상시 검증한다
 ### 2026-08-31 (감사·stray-code): **미머지 브랜치 5차 전수 감사 — 삭제 0건·회수 1건(S4-59)·추적자 0인 사람 결정 1건 게이트화(G-authoring-expansion-merge-decision)** (Kiki "/stray-code", claude 감사)
 
 - **전제 복구**: 세션 클론이 shallow였고 SessionStart 브리핑도 "장기 미머지 브랜치 조회 불가 — 판정 보류"를 자인했다. `git fetch --unshallow` 후 트렁크 904커밋 복원하고서야 판정에 착수(shallow 상태의 ahead 수치·포팅 근거는 전부 오염된다는 08-11 선례 준수)
