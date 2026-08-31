@@ -36,6 +36,15 @@ gates:
     remind_after_days: 14
     evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08 2건·07-10 20건·07-12 42건, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프 — 스탬프는 clear 14시간 전 커밋 fbbcc53에 선존·ARCH-07 적대 검증)·validation success·기계 reject-only·프로덕션 적재 0. Kiki 본인 승인 확인: 2026-07-13 세션 결정(대장 정합까지 선택·AskUserQuestion 기록). arch_audit_2026-07-13_r6 §3 대장 비정합 지적의 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
     notes: ""
+  - id: G-cur16-branch-push
+    title: "kiki 머신 로컬 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 push — 그 브랜치에만 존재하는 EOS-49/50/51 동번호 이종 태스크 YAML 3건의 본문 확보(HARN-38 ① 선결). 실측: GitHub에 브랜치·커밋 3b7bab6f 모두 부재 = 미push, kiki 머신 초기화 시 영구 소실. 실행 명령·6항목 브리핑 = docs/reviews/eos_number_collision_root_cause_2026-08-31.md §8 (main 머지 아님·업로드만)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-31
+    remind_after_days: 3
+    evidence: null
+    notes: ""
   - id: G-deploy-environment-approval
     title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
     kind: human
