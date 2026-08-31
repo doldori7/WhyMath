@@ -217,6 +217,18 @@ class MathExtension(BaseModel):
     )
 
 
+#: `MathExtension` 각 필드의 기본값 — legacy top-level 필드와의 양방향 동기화에서
+#: "어느 쪽이 실제로 값을 채웠는가"를 판정하는 유일 기준(`Problem._sync_math_extensions`).
+#: 두 축이 같은 표를 보게 묶어 두려고 상수로 뽑았다 — 필드 추가 시 여기만 고치면 된다.
+MATH_EXTENSION_DEFAULTS: dict[str, Any] = {
+    "answer_transform": None,
+    "answer_constraint": None,
+    "signature_patterns": [],
+    "requires_graph_sketch": False,
+    "sketch_step_count": None,
+}
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 서브모델: MathExtensionPublic — 공개 투영용 수학 확장 (SEC-24)
 # ──────────────────────────────────────────────────────────────────────────
@@ -992,30 +1004,40 @@ class Problem(PublicProblem):
         `db/models/problem.py`의 `from_schema`/`to_schema`는 여전히 legacy
         컬럼만 사용하며, 이 validator가 `extensions.math`를 채우고 비운다.
 
-        동기화 규칙:
+        동기화 규칙(필드 단위):
           - `extensions`가 None이거나 `extensions.math`가 None이면: legacy 필드로
             `extensions.math`를 생성.
-          - `extensions.math`가 주어지면: legacy 필드를 `extensions.math` 값으로
-            덮어쓴다(extensions.math를 canonical source로 본다).
+          - 둘 다 있으면 **필드마다** 기본값이 아닌 쪽이 이긴다. 양쪽 다 값을
+            채웠으면 `extensions.math`가 정본이다.
+
+        *왜 무조건 `extensions.math` 우선이 아닌가*: 그러면 legacy 축에만 값을
+        쓰는 기존 생산자의 값이 조용히 사라진다. 실제로 `l1.problem_bank`의
+        시그니처 태거는 `model_copy(update={"signature_patterns": ...})`로 legacy
+        축만 갱신하고(재검증 없음) JSONL 왕복에서 다시 검증되는데, 그때
+        `extensions.math.signature_patterns`는 빈 배열이라 태깅 결과가 통째로
+        `[]`로 덮였다. 침묵 손실이므로 필드 단위 판정으로 바꾼다.
         """
-        legacy: dict[str, Any] = {
-            "answer_transform": self.answer_transform,
-            "answer_constraint": self.answer_constraint,
-            "signature_patterns": self.signature_patterns,
-            "requires_graph_sketch": self.requires_graph_sketch,
-            "sketch_step_count": self.sketch_step_count,
-        }
+        legacy: dict[str, Any] = {name: getattr(self, name) for name in MATH_EXTENSION_DEFAULTS}
 
         if self.extensions is None or self.extensions.math is None:
             self.extensions = ProblemExtensions(math=MathExtension(**legacy))
             return self
 
         ext = self.extensions.math
-        self.answer_transform = ext.answer_transform
-        self.answer_constraint = ext.answer_constraint
-        self.signature_patterns = ext.signature_patterns
-        self.requires_graph_sketch = ext.requires_graph_sketch
-        self.sketch_step_count = ext.sketch_step_count
+        merged: dict[str, Any] = {}
+        for name, default in MATH_EXTENSION_DEFAULTS.items():
+            ext_value = getattr(ext, name)
+            legacy_value = legacy[name]
+            # extension이 기본값이고 legacy가 값을 채웠으면 legacy가 이긴다.
+            # 그 외(둘 다 기본·extension만 채움·둘 다 채움)는 extension이 정본.
+            if ext_value == default and legacy_value != default:
+                merged[name] = legacy_value
+            else:
+                merged[name] = ext_value
+
+        self.extensions = self.extensions.model_copy(update={"math": MathExtension(**merged)})
+        for name, value in merged.items():
+            setattr(self, name, value)
         return self
 
 

@@ -857,3 +857,112 @@ class TestProblemRelation:
             relation_type=RelationType.선수,
         )
         assert r.model_dump()["relation_type"] == "선수"
+
+
+class TestPublicProjectionCombinesBothExclusionAxes:
+    """공개 투영이 **세 축을 동시에** 막는지 (S1-16 이식 시 병합 지점).
+
+    이 클래스가 지키는 것은 병합의 산물이다. `EOS-71`(운영 격리 메타 제외)과
+    `S1-16`(중첩 `extensions.math`의 정답 유도 필드 제거)이 같은 `from_problem`을
+    각각 고쳤고, 이식하며 합쳤다. 한쪽만 남으면 다른 쪽이 조용히 뚫린다 —
+    그 조용함을 막는 것이 이 테스트다.
+    """
+
+    def _problem(self) -> Problem:
+        return Problem(
+            source_type="자체생성",
+            curriculum_version="2022_REVISION",
+            valid_from_year=2025,
+            subject="공통",
+            unit_codes=["중변관-U1-S13"],
+            answer_transform={"x": "3"},
+            quarantine_reason="정답 오류",
+        )
+
+    def test_legacy_field_syncs_into_math_extension(self) -> None:
+        """하위호환 — legacy top-level을 쓰면 `extensions.math`에도 실려야 한다."""
+        math = self._problem().extensions.math
+        assert math is not None
+        assert math.answer_transform == {"x": "3"}
+
+    def test_public_projection_drops_answer_field_at_top_level(self) -> None:
+        assert "answer_transform" not in PublicProblem.from_problem(self._problem()).model_dump()
+
+    def test_public_projection_drops_ops_metadata(self) -> None:
+        """EOS-71 축 — 격리 사유는 무인증 공개 GET에 나가면 안 된다."""
+        assert "quarantine_reason" not in PublicProblem.from_problem(self._problem()).model_dump()
+
+    def test_public_projection_drops_answer_field_inside_math_extension(self) -> None:
+        """S1-16 축 — 같은 필드가 중첩에도 산다. top-level 제외만으로는 뚫린다."""
+        data = PublicProblem.from_problem(self._problem()).model_dump()
+        math = (data.get("extensions") or {}).get("math")
+        assert isinstance(math, dict)
+        assert "answer_transform" not in math
+        assert "answer_constraint" not in math
+
+    def test_public_projection_keeps_safe_extension_fields(self) -> None:
+        """제거가 과하면 안 된다 — 안전한 확장 필드는 남아야 공개 표면이 쓸모 있다."""
+        data = PublicProblem.from_problem(self._problem()).model_dump()
+        math = (data.get("extensions") or {}).get("math")
+        assert isinstance(math, dict)
+        assert "requires_graph_sketch" in math
+
+
+class TestMathExtensionSyncIsFieldLevel:
+    """legacy ↔ `extensions.math` 동기화가 **필드 단위**인지 (S1-16 회귀 봉인).
+
+    처음 이식본은 `extensions.math`가 있으면 legacy 5필드를 통째로 덮어썼다.
+    그러면 legacy 축에만 값을 쓰는 기존 생산자의 값이 *조용히* 사라진다 —
+    `l1.problem_bank.signature_tagger.apply_signatures`가 정확히 그렇다
+    (`model_copy(update=...)`로 legacy만 갱신·재검증 없음). JSONL 왕복에서
+    다시 검증될 때 빈 `extensions.math.signature_patterns`가 태깅 결과를
+    `[]`로 덮어 밴드 테스트가 깨졌다. 그 침묵 손실을 여기서 동결한다.
+    """
+
+    def _base(self, **kwargs: object) -> Problem:
+        return Problem(
+            source_type="자체생성",
+            curriculum_version="2022_REVISION",
+            valid_from_year=2025,
+            subject="공통",
+            unit_codes=["중변관-U1-S13"],
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+    def test_legacy_wins_when_extension_field_is_default(self) -> None:
+        """extension이 기본값이고 legacy가 값을 채웠으면 legacy가 살아남는다."""
+        problem = self._base(
+            signature_patterns=["CONDITION_LIST"],
+            extensions={"math": {"requires_graph_sketch": True}},
+        )
+        assert problem.signature_patterns == ["CONDITION_LIST"]
+        assert problem.extensions.math is not None
+        assert problem.extensions.math.signature_patterns == ["CONDITION_LIST"]
+
+    def test_extension_wins_when_legacy_field_is_default(self) -> None:
+        """반대 방향 — 새 축만 채운 호출자에게는 legacy가 동기화된다."""
+        problem = self._base(extensions={"math": {"requires_graph_sketch": True}})
+        assert problem.requires_graph_sketch is True
+
+    def test_extension_wins_when_both_sides_have_values(self) -> None:
+        """둘 다 채웠으면 `extensions.math`가 정본 — 규칙이 결정적이어야 한다."""
+        problem = self._base(
+            requires_graph_sketch=False,
+            sketch_step_count=3,
+            extensions={"math": {"sketch_step_count": 6}},
+        )
+        assert problem.sketch_step_count == 6
+        assert problem.extensions.math is not None
+        assert problem.extensions.math.sketch_step_count == 6
+
+    def test_round_trip_preserves_legacy_only_write(self) -> None:
+        """직렬화 왕복에서도 살아남아야 한다 — 실제 회귀가 난 경로다."""
+        seeded = self._base(extensions={"math": {}})
+        tagged = seeded.model_copy(
+            update={"signature_patterns": ["CONDITION_LIST", "INDUCTIVE_SEQUENCE"]}
+        )
+        revalidated = Problem.model_validate(tagged.model_dump(mode="json"))
+        assert revalidated.signature_patterns == [
+            "CONDITION_LIST",
+            "INDUCTIVE_SEQUENCE",
+        ]
