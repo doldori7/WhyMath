@@ -7253,3 +7253,10 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **사고 ① EOS-49/50/51 번호 충돌(3회차 — ARCH-13·OPS-15 동형)**: kiki 머신 `backend/cur-16-...` 브랜치 커밋 3b7bab6f에 main과 이종 내용의 동번호 3건(problem-quarantine·generation-log-prompt-seed·content-lifecycle) — EOS-50은 main EOS-55와 내용 중복 의심. 대책 = `HARN-38` 등재(재번호·경위 규명·fail-open 의심 교차 기록). 부수: 이번 등재에서 HARN-37 충돌을 CLI가 실거부·38 제안 — 가드 변별력 실증.
 - **사고 ② cp949 CLI 크래시 실측**: kiki 머신 PowerShell에서 `backlog.py gates`가 `UnicodeEncodeError('⏳')`로 사망 — **기등재 OPS-53의 정확한 실사례**(신선한 증거로 부기). 임시 우회 = gates.yaml 직독(Select-String).
 - **머신 2대 관측**: 태그 push는 `C:\Users\rollrock\...`, 이번 실행은 `C:\Users\kiki\...` — CLAUDE.md 고정 경로(kiki)는 유효하나 rollrock 머신이 별도 존재. 병기 정정은 Kiki 확인 대기.
+
+## 2026-08-30: EOS-55(Run 재현성)+LIC-02(약관 스냅샷) 착지 — 소급 불가 2종 (#912 스쿼시 586dfc57)
+
+- **EOS-55**: GenerationLog 재현 좌석 5종(prompt_version·seed·input_sha256·input_snapshot JSONB·cu_slug — alembic `f4b2d8c1a3e5`) + 두 생성 경로(pregenerate 전 종단·accumulate 4종단) 실적재 배선 + 사이드카 `<out>.genlog.jsonl` 기본 ON. 착수 실측: 두 경로 모두 적재 0·bridge 프로덕션 호출 0(스키마 실재≠배선 그대로). **원칙 확립(codex P1 2건 계기)**: ①스냅샷은 "전문(verbatim)+sha256 핀" — *해시 복원≠입력 복원*, 복원 계약은 provider 재투입 전문 반환으로 단언 ②사이드카 행은 조인 정체성(cu_slug=코퍼스 slug) 동반 — 소비자(hit_cu_metrics) 접속이 집행 별항의 본질. seed=NULL 정직(라우터 스레딩 전무 실측 — 날조 금지·결정론 재생성은 별도 태스크). 검증 = 전체 스위트 10,880·전층 PASS·뮤테이션 7종 red.
+- **LIC-02**: `scripts/ops/license_snapshot_archiver.py`(표준 라이브러리 단독·exit 0/1/2/3·실패 경로 5축) + content-addressed 멱등 + append-only 감사로그(`docs/data/license_snapshot_archive.md` 규약 정본). **Tier1 목록 = 매트릭스 실측 20곳**(선언 "14곳"과 차이 — 도출 규칙·사유 문서 §1). 라이브 3런: 성공 6곳 스냅샷 커밋·멱등 unchanged 6/6 실증·**프록시 차단 14곳**(Kiki 머신 실행 몫 — 문서 §5 명령 블록). 부산물: miniF2F "MIT" 표기 불완전 실측 → `LIC-04` 등재.
+- **병렬 머지 충돌 1건**: #910(kiki 세션 — G0 Kiki 직접 서명+F-Ⅰ~Ⅴ 기계 동결)이 선머지 → `events.ndjson` add/add. base 머지로 해소(로컬 자동 병합·validate green·#910 신규 테스트 13+19 본 브랜치 위 passing 확인). G0 서명은 #910의 Kiki 본인 서명이 정본(내 대리 clear ad7862ab를 상위 대체 — 방향 일치).
+- **cross-ref**: PR #909(EOS-54)·#912 · `eos_verification_design_v1.md` §6(HIT·CU당 비용 지표의 계측기+재료 완비) · HARN-38(EOS-50 중복 의심 대조 시 EOS-55 착지 반영할 것).
