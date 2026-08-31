@@ -21,7 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 #
 #   · 노출 판정의 정본 = `schema/enums.py`의 `ReviewStatus`(pending/approved/rejected)와
 #     값 수준 단일 권위 `is_review_status_cleared`(approved만 True·fail-closed, CONT-01).
-#     실제 서빙 게이트(`l6/_shared.is_review_cleared`·`problem.is_published`)가 그것을 본다.
+#     실제 서빙 게이트 `l6/_shared.is_review_cleared`(L6 6모드 gating)가 그것을 본다.
+#     — `problem.is_published`는 *별개의 게시 축*이며 현재 읽는 코드가 없다(ADMIN-12).
 #   · 버전 생명주기의 정본 = `docs/architecture/44_eos_version_management.md` §7
 #     (DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED · PUBLISHED→DRAFT 금지).
 #

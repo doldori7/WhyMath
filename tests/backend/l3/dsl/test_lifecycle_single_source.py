@@ -6,6 +6,10 @@
 
   · 노출 판정의 정본 = `schema/enums.py`의 `ReviewStatus`(pending/approved/rejected)와
     값 수준 단일 권위 `is_review_status_cleared`(approved만 True·fail-closed, CONT-01).
+    실제 소비처는 `l6/_shared.is_review_cleared` → L6 6모드 gating이다.
+    (`problem.is_published`/`publish_at`은 *별개의 게시 축*이고 현재 소비처 0건 — 선언만 있다.
+     이 PR 초판이 그것을 검수 축의 소비처로 잘못 적었고, 리뷰 P2 지적으로 정정했다.
+     그 dead 선언 자체의 처분은 `ADMIN-12`로 분리 등재했다 — 이 태스크의 범위가 아니다.)
   · 버전 생명주기의 정본 = `docs/architecture/44_eos_version_management.md` §7
     (DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED · PUBLISHED→DRAFT 금지, EOS-44 확정).
 
@@ -47,7 +51,9 @@ _GOVERNANCE_VOCAB = frozenset({"published", "deprecated", "retired", "approved",
 
 
 def _dsl_sources() -> list[Path]:
-    files = sorted(p for p in _DSL_DIR.glob("*.py"))
+    """패키지 *전체*를 재귀로 훑는다 — `glob("*.py")`는 최상위만 봐서 `l3/dsl/publishing/models.py`
+    같은 평범한 서브패키지 분리만으로 가드가 조용히 우회된다(PR #935 리뷰 P2 지적)."""
+    files = sorted(p for p in _DSL_DIR.rglob("*.py") if "__pycache__" not in p.parts)
     assert files, f"l3/dsl 소스를 찾지 못했습니다: {_DSL_DIR}"
     return files
 

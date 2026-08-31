@@ -547,12 +547,15 @@ DEPRECATED
 >
 > | 축 | 정본 | 위치 |
 > |---|---|---|
-> | 노출 판정(이 문항을 학생에게 보여도 되는가) | `ReviewStatus` pending/approved/rejected + `is_review_status_cleared`(approved만 True·fail-closed) | `schema/enums.py` |
+> | 노출 판정(이 문항을 학생에게 보여도 되는가) | `ReviewStatus` pending/approved/rejected + `is_review_status_cleared`(approved만 True·fail-closed). 소비처 = `l6/_shared.is_review_cleared` → L6 6모드 gating | `schema/enums.py` |
 > | 버전 생명주기(이 버전이 어느 단계인가) | DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED, PUBLISHED→DRAFT 금지 | `44_eos_version_management.md` §7 (EOS-44 확정) |
 >
 > 위 11단계는 축이 섞여 있다 — `parsed`·`validated`·`verified`는 이 결정론 컴파일러의 *처리 단계*
 > (함수 호출 순서가 이미 표현한다)이고, `used`·`analyzed`·`improved`는 학습 이벤트·개선 루프이지
 > 노출 판정이 아니다. 도식 자체는 **파이프라인 서사**로는 여전히 유효하므로 남겨 둔다.
+>
+> `problem.is_published`·`publish_at`은 위 두 축과 **또 다른 게시 축**인데 현재 읽는 코드가 0건이다
+> (선언만 존재 — 처분은 `ADMIN-12`). 노출 판정을 그 필드로 하고 있다고 오해하지 말 것.
 >
 > 재발 방지는 이 부기가 아니라 코드가 한다 — `tests/backend/l3/dsl/test_lifecycle_single_source.py`가
 > `l3/dsl`에서 *출판 거버넌스 어휘를 가진 Enum*을 금지한다(이름을 바꿔 되살려도 CI red).
