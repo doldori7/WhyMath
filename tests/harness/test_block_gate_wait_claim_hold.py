@@ -237,3 +237,91 @@ class TestGateWaitRequiresRealGate:
         assert cli.main(["gates", "clear", "G-test-human-action", "--evidence", "이미 처리"]) == 0
 
         assert cli.main(["block", "S9-15-cleared-gate", "--reason", "대기", "--gate-wait"]) != 0
+
+
+class TestGateWaitRequiresHeldSeat:
+    """지키지 않은 자리는 보전할 수 없다 (Codex P1 · PR #942).
+
+    `todo → blocked` 전이가 허용되므로, **착수한 적 없는** 태스크에도 `--gate-wait`가
+    걸린다. 그 경우 `task.session`은 `None`이고 원격 claim은 애초에 없다 — 그런데
+    출력은 "claim 유지 — 다른 세션의 착수가 거부된다"고 말한다. 다른 클론에서는 그
+    태스크가 여전히 자유롭게 claim되므로, **이 옵션이 막으려던 중복 착수가 그대로
+    재발**한다. 거짓 안전 신호는 안전 신호가 없는 것보다 나쁘다.
+
+    여기서 claim을 *대신 획득*하지 않는 이유: 착수하지 않은 태스크의 자리를 잡는 것은
+    이 설계가 명시적으로 거부한 '근거 없는 점유'다(게이트 유무 검사와 같은 취지).
+    """
+
+    def test_gate_wait_on_unstarted_task_is_refused(self, bare_remote, monkeypatch, capsys):
+        """착수하지_않은_태스크의_gate_wait은_거부된다"""
+        _, clone = bare_remote
+        owner = clone("owner")
+        monkeypatch.chdir(owner)
+        assert cli.main(["seed"]) == 0
+        _register_gate("G-test-human-action")
+        assert _add_task("S9-16-unstarted", gates=["G-test-human-action"]) == 0
+
+        capsys.readouterr()
+        assert cli.main(["block", "S9-16-unstarted", "--reason", "대기", "--gate-wait"]) != 0
+        assert "착수" in capsys.readouterr().err
+
+        backlog, _ = store.load_backlog(owner)
+        assert backlog.tasks["S9-16-unstarted"].status == "todo", "거부가 상태를 바꾸면 안 된다"
+
+    def test_unstarted_task_can_still_be_blocked_plainly(self, bare_remote, monkeypatch):
+        """착수_전_태스크도_일반_block은_된다 — 거부가 block 자체로 번지면 과잉이다"""
+        _, clone = bare_remote
+        owner = clone("owner")
+        monkeypatch.chdir(owner)
+        assert cli.main(["seed"]) == 0
+        assert _add_task("S9-17-unstarted-plain") == 0
+        assert cli.main(["block", "S9-17-unstarted-plain", "--reason", "선행 조사 필요"]) == 0
+
+        backlog, _ = store.load_backlog(owner)
+        assert backlog.tasks["S9-17-unstarted-plain"].status == "blocked"
+
+
+class TestHandoffFromGateWaitActuallyWorks:
+    """안내한 인계 절차가 *실제로* 인계를 성립시키는가 (Codex P2 · PR #942).
+
+    `--gate-wait` 출력은 "인계하려면 `unblock` 후 `claims release`"라고 안내한다.
+    그런데 `claims release`가 원격 claim만 지우고 보전된 로컬 `task.session`을 그대로
+    두면, 그 사본을 받은 다른 세션은 `classify_todo`의 로컬 `claimed` 판정에 계속
+    막힌다 — 그리고 그것을 푸는 CLI가 없어 **금지된 YAML 손편집**밖에 남지 않는다.
+
+    안내한 절차가 안내한 결과를 내지 못하는 것은 문서 결함이 아니라 계약 결함이다.
+    """
+
+    def test_documented_handoff_frees_the_task_for_another_session(self, bare_remote, monkeypatch):
+        """안내된_인계_절차가_실제로_다른_세션의_착수를_허용한다"""
+        _, clone = bare_remote
+        owner = clone("owner")
+        monkeypatch.chdir(owner)
+        assert cli.main(["seed"]) == 0
+        assert _add_task("S9-18-handoff-from-wait") == 0
+        assert cli.main(["start", "S9-18-handoff-from-wait"]) == 0
+        _register_gate("G-test-human-action")
+        _attach_gate_midflight(owner, "S9-18-handoff-from-wait", "G-test-human-action")
+        assert (
+            cli.main(["block", "S9-18-handoff-from-wait", "--reason", "대기", "--gate-wait"]) == 0
+        )
+
+        # 출력이 안내하는 그대로: unblock → claims release
+        assert cli.main(["gates", "clear", "G-test-human-action", "--evidence", "완료"]) == 0
+        assert cli.main(["unblock", "S9-18-handoff-from-wait"]) == 0
+        assert cli.main(["claims", "release", "S9-18-handoff-from-wait"]) == 0
+
+        backlog, _ = store.load_backlog(owner)
+        assert (
+            backlog.tasks["S9-18-handoff-from-wait"].session is None
+        ), "원격만 비우고 로컬 자리를 남기면 인계는 서류상으로만 성립한다"
+
+        _publish(owner, "claude/owner", "인계 준비 완료")
+
+        other = clone("other")
+        monkeypatch.chdir(other)
+        assert cli.main(["seed"]) == 0
+        assert _add_task("S9-18-handoff-from-wait") == 0
+        assert (
+            cli.main(["start", "S9-18-handoff-from-wait"]) == 0
+        ), "안내한 절차를 그대로 밟았는데 인계가 안 되면 그 안내는 거짓이다"

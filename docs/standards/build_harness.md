@@ -98,9 +98,14 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
   로컬 claim으로 진행한다(fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다).
 - `done`/`block`이 claim을 해제한다. **예외: `block --gate-wait`는 claim을 유지한다**
   (HARN-45) — 사람 게이트 해소를 기다리는 세션이 자기 자리를 잃지 않게 하기 위한
-  *자리 보전*이다. `--gate-wait`는 태스크의 `requires_gates`에 **미해소 게이트가 실제로
-  있을 때만** 통과한다(근거 없는 무기한 점유 차단). 자리를 넘기려면 `unblock <id>` 후
-  `claims release <id>`. 읽기측 `classify_todo`는 claim 보유자가 *그 세션 자신*이면
+  *자리 보전*이다. `--gate-wait`는 **두 조건을 모두** 만족할 때만 통과한다(근거 없는
+  점유 차단): ①이 세션이 이미 자리를 쥐고 있을 것(`session` 존재 — 착수 전 태스크는
+  보전할 claim 자체가 없어 "claim 유지"가 거짓 신호가 된다) ②`requires_gates`에
+  **미해소** 게이트가 실제로 있을 것. 자리를 넘기려면 `unblock <id>` 후
+  `claims release <id>` — **`claims release`는 원격 claim과 로컬 `session`을 함께
+  비운다**(원격만 지우면 다른 세션이 로컬 `claimed` 판정에 계속 막혀 인계가 서류상으로만
+  성립한다). 태스크가 아직 `in_progress`/`review`면 `session`은 무결성 때문에 남기고
+  그 사실과 해소 경로를 출력한다. 읽기측 `classify_todo`는 claim 보유자가 *그 세션 자신*이면
   제외하지 않으므로(=`remote_claims.claim()`의 같은-브랜치 멱등 계약과 동형), 게이트
   해소 후 원 세션의 재착수는 막히지 않는다 — 보전이 자물쇠가 되지 않게 하는 반대편
   동결이다. 세션이 죽어 claim이 남으면 `claims reap`이

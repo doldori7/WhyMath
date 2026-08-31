@@ -730,6 +730,20 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
 
     gate_wait = bool(getattr(args, "gate_wait", False))
     if gate_wait:
+        if not task.session:
+            # 지키지 않은 자리는 보전할 수 없다. `todo → blocked` 전이가 허용되므로
+            # 착수한 적 없는 태스크에도 이 플래그가 걸리는데, 그러면 session은 None이고
+            # 원격 claim도 없는 채 "claim 유지 — 다른 세션의 착수가 거부된다"고 출력한다.
+            # 다른 클론에서는 그 태스크가 여전히 자유롭게 claim되므로 이 옵션이 막으려던
+            # 중복 착수가 그대로 재발한다 — **거짓 안전 신호는 무신호보다 나쁘다**.
+            # 여기서 claim을 대신 획득하지 않는 이유는 아래 게이트 검사와 같다:
+            # 착수하지 않은 태스크의 자리를 잡는 것은 근거 없는 점유다.
+            return _fail(
+                f"{task.id}: --gate-wait 인데 이 세션이 쥔 자리가 없다(session 없음 — "
+                "착수한 적 없거나 이미 반납됨). 보전할 claim이 없으므로 이 플래그는 "
+                "거짓 안전 신호만 낸다. 착수 후 막힌 것이면 `start` 뒤에 다시, "
+                "착수 전 보류면 `--gate-wait` 없이 block하라(인계 가능 상태)."
+            )
         pending = selector.unmet_gates(backlog, task)
         if not pending:
             # 게이트 없는 '게이트 대기'는 검증 불가능한 주장이다 — 자리를 무기한
@@ -1488,6 +1502,26 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
             return _fail(f"해제 실패({result.status}): {result.message}")
         store.append_event(root, "claim_release", args.claims_id, forced=args.force)
         print(f"✔ {args.claims_id} 원격 claim 해제")
+        # 로컬 자리(session)도 함께 비운다 — 원격만 지우면 인계는 **서류상으로만**
+        # 성립한다(HARN-45): `block --gate-wait`가 보전한 session이 남아 있으면 그
+        # 사본을 받은 다른 세션이 `classify_todo`의 로컬 `claimed` 판정에 계속 막히고,
+        # 그것을 푸는 CLI가 없어 금지된 YAML 손편집만 남는다.
+        task = backlog.tasks.get(args.claims_id)
+        if task is not None and task.session:
+            if task.status in ("in_progress", "review"):
+                # in_progress는 session 없으면 validate가 깬다(models.Task.validate).
+                # 조용히 건너뛰지 않고 남은 이유와 해소 경로를 말한다.
+                print(
+                    f"  ⓘ 로컬 session({task.session})은 남긴다 — {args.claims_id}이(가) "
+                    f"아직 {task.status}라 비우면 무결성이 깨진다. 인계하려면 먼저 "
+                    f"`block {args.claims_id} --reason ...`(자리 반납)."
+                )
+            else:
+                released_from = task.session
+                task.session = None
+                task.updated = _today()
+                store.save_task(root, task)
+                print(f"  · 로컬 session({released_from})도 해제 — 다른 세션이 인계 가능")
         return 0
 
     if args.claims_action == "reap":
@@ -1835,7 +1869,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--gate-wait",
         action="store_true",
         help="사람 게이트 대기 — 원격 claim을 유지해 자리를 보전한다"
-        "(미해소 게이트가 requires_gates에 있어야 함 · HARN-45)",
+        "(이미 착수해 자리를 쥐고 있고, 미해소 게이트가 requires_gates에 "
+        "있어야 함 · HARN-45)",
     )
     p.set_defaults(func=cmd_block)
 
