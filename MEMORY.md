@@ -7215,3 +7215,56 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **대장 명문화**: registry.yaml·MP-0 6축·DECISIONS.md 개념은 backlog/+MEMORY.md가 대체(문서 §4) — 별도 대장 신설 금지.
 - **산출물**: `docs/reviews/eos_plan52_crosswalk_2026-09.md`(53행 전수 표·갭·이월·방법 한계) + 태스크 13건.
 - **cross-ref**: `eos_transition_declaration_2026-08-30.md` 부록 A·§1.1 · `eos_anchor_asset_audit_2026-09.md`(수치 정본) · EOS-51(실패코드·CU·KPI 동결 좌석).
+
+---
+
+## 2026-08-30: EOS-57 — `attempt_event.skill_ids[]` 영속 좌석 착지 (W2 되돌릴 수 없는 스키마 ①)
+
+- **문제**: 채점 순간 `l2/skill_mastery_tracking`이 concept→skill로 *해소한* 스킬 목록이 런타임에만 존재하고 버려졌다(EOS-53 갭 #4 실측: 영속 좌석 0). 숙달 시계열은 "스킬 s의 값이 언제 변했는가"만 남기고 **"시도 a가 스킬 {s1,s2}를 건드렸다"** 는 결합을 남기지 않는다 — 문항↔개념↔스킬 매핑이 이후 바뀌면 그 결합은 **영원히 재구성 불가**다. 12월 데이터에 남길 소급 불가 축이라 지금 착지했다.
+- **좌석 결정**: `attempt_event`에 **1급 컬럼 `skill_ids ARRAY(text)`**(JSONB `event_data` 아님 — 조인·집계 축을 자유형에 묻지 않는다). `event_data`는 봉투 2키(`is_correct`·`source`)만 계약하고, 계약이 `extra="forbid"`로 `skill_ids` 병기를 produce 좌석에서 거부한다(두 진실원 방지).
+- **신규 EventType `문제시도`**(계획서 표기 `problem_attempted`) — 11종→12종. `답입력`(코치 대화 지연 텔레메트리)과 의미가 달라 기존 값 재사용 대신 신규 추가(`ALTER TYPE ... ADD VALUE` 선례 `c0d1e2f3a4b5`·`b1c2d3e4f5a6` 동형). 계약 편입으로 생산 6종→7종.
+- **None ≠ [] 를 스키마 층에서 확정**: nullable + `server_default` 없음. NULL=미기록(writer 미도달·구판·타 event_type) / `[]`=해소 실행했으나 매핑 0건. `DEFAULT '{}'::text[]`를 달면 기존 행 전체가 "해소 0건"으로 백필돼 두 사실이 같은 값이 된다(EOS-48 시각 컬럼 날조 방지 규약의 배열판). 이 구분이 "작동한 비율" 측정의 데이터 전제다.
+- **writer 단일 seam**: `l2/attempt_skill_event.py::record_attempt_skill_event` — 두 채점 경로(`api/me.py::submit_attempt` 자가보고 v1 · `api/coach.py::_complete_problem` 서버 검증)가 같은 writer를 경유하고 `event_data.source`(폐쇄 2종)가 둘을 가른다. 중복 구현 0.
+- **기록률 리포트(acceptance ②·"작동한 비율")**: `harness/attempt_skill_event_reach_report.py` — **3분류를 뭉개지 않는다**(미도달=배선 축 / 해소 0건=데이터 축 / 해소≥1=의도 상태 / 이벤트는 있는데 NULL=병리). 분모 0은 0%가 아니라 `측정 불가(분모 0)`로 렌더한다. 경로별 표는 폐쇄 2종을 **전부 보강**한다 — group by 결과만 렌더하면 한 경로 writer가 죽었을 때 그 행이 *사라져* 전멸이 화면에서 안 보인다. 게이트 아님(exit 0/2·DB 오류는 예외 타입명 동반). **"상시"의 집행 지점 분리**: 판정 로직은 CI가 상시 검증(테스트가 backend testpaths에 수집)하고, *수치*는 실 채점 이력이 분모라 CI 빈 DB에서는 전 지표가 '측정 불가'만 난다 — `declared_unwired_audit`에 `_NEEDS_LIVE_SAMPLE`로 의도 선언(무선언 미도달은 그 감사가 exit 1로 막았고, 실제로 이 커밋에서 한 번 막혔다). 주기 실행 배선은 OPS-56(주간 지표 cron) 소유.
+- **마이그레이션 체인 조율**(acceptance ① 명시 요구): `d4a71c0f9b32` on `c9bc2555282e`(EOS-48) — 단일 head 유지. 형제 미착수 태스크 **EOS-47**(problem_attempt 버전 고정)과 **테이블도 컬럼도 겹치지 않아**(이쪽은 attempt_event, 저쪽은 problem_attempt) 순서 의존 0 — 나중 착지분이 그때의 head 위에 선형으로 쌓으면 된다. 테스트가 down_revision을 이름으로 동결.
+- **범위 경계**(acceptance ③): 영속 좌석 + writer까지. 소비 지점 전환(`skill_mastery_tracking`이 런타임 해소 대신 이 기록을 읽는 것)은 후속 **EOS-63**으로 분리 등재(번호는 `backlog.py add`가 배정 — EOS-60 요청이 원격 브랜치 선점으로 거부돼 CLI 제안 번호 채택·HARN-10 작동 실측). 기록이 0건인 상태에서 소비를 바꾸면 숙달 전파가 죽으므로, 전환 선결 조건은 기록률 리포트의 실측 수치다.
+- **부수 정정(조용히 넘기지 않음)**: `harness/assessment_seat_reach_report._KNOWN_WRITER_CITATION`의 행 인용 5건이 08-10 이후 me.py 성장으로 전부 드리프트해 있었다(738→759·743→764·1030→1064·2714→2768·2927→2970 · l2 134→202·136→148). 재실측해 갱신·동결 테스트도 갱신 — 인용은 사람이 코드를 찾아가는 앵커라 틀린 번호는 조용한 거짓 주장이다(모듈 docstring이 예고한 '다음 드리프트' 회차).
+- **적재 실패 정책 재판정(PR #913 Codex 리뷰 P1 — 2026-08-30)**: 초안은 "예외를 삼키지 않는다"(전파→500)였으나 **전파가 데이터를 구하지 못한다**는 것이 결정적이었다. `submit_attempt`에 멱등키가 없어 재시도는 *새* attempt(새 UUID)를 만들고 숙달을 한 번 더 적용한다 — 원래 attempt의 이벤트는 전파해도 어차피 없고, BKT sample_size만 이중 계상돼 **학습자 모델이 오염**된다. 두 경우 모두 이벤트를 잃으므로, 학생 상태 정합이 앞서는 쪽(흡수)을 택했다. **침묵 실패가 아닌 근거 2축**: ①로그에 예외 타입명(무타입 경고 금지) ②기록률 리포트의 "writer 미도달" 칸이 유실을 *비율로* 센다 — 삼켜도 되는 이유가 "덜 중요해서"가 아니라 **유실이 계측되기 때문**이다. 진짜 원자성(attempt·숙달·이벤트 단일 트랜잭션)은 공유 L2 헬퍼 2개의 commit 소유권 이전 + 멱등키가 필요해 이 PR 범위 밖으로 남겼다(정직한 공백으로 명시).
+- **뮤테이션 실측(변별력 확인)**: ①`skill_ids=(deduped or None)`(None≠[] 파괴) ②경로 보강 제거(죽은 경로 은닉) → 각각 테스트 red 확인 후 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수·`git diff --stat`로 원복 규모 대조).
+## 2026-08-30: EOS G0 검증설계 동결 완결 — 실패정의 F-Ⅰ~Ⅴ Kiki 서명 (9/6 예정 → 조기)
+
+- **서명**: 2026-08-30 Kiki가 실패정의 F-Ⅰ~Ⅴ를 문안 그대로 동결 승인(서명 세션 AskUserQuestion "서명 확정 — 동결" 응답 실측) → `gates clear G-eos-g0-verification-design-freeze` 기록. 설계서 명문 절차("그 clear가 곧 서명") 그대로 집행. 선결인 **PR #908 스쿼시 머지(`3b007e23`)도 같은 응답으로 승인**받아 CI 16체크 green 확인 후 집행(EOS-53·EOS-51 산출물 main 착지).
+- **G0 차단 3조건 조기 충족**: ①앵커 세트 6개+성취기준 코드(설계서 §1-1·§2 — Kiki 결정 2026-08-30) ②CU 스키마·실패코드 F1~F8 문서+코드 동결(#908) ③실패정의 동결·서명(본 건). 예정일 9/6의 G0가 D0(8/30)에 완결 — W1 산출물(EOS-52 실사→EOS-53 crosswalk→EOS-51 설계서)이 하루에 전부 착지한 결과다. 조기 서명은 동결 취지(측정 전 실패정의 확정 = 확증편향 차단)에 순방향.
+- **기계 집행 신설**: `tests/backend/schema/test_failure_definition_freeze.py` — ①§5 전문 정규화 sha256 동결(`a9ad9f6a…`) ②판정 임계 토큰 6건(12분·2%·60%·6중3·Conditional 2·10%) 개별 단언 ③**서명 기록 자체 동결**(게이트를 pending으로 되돌리는 우회도 CI red) + 뮤테이션 변별력 3건. 서명 전 red(8p/1f)→clear 후 green(9p) 실측 — "1차 집행은 규칙 산문이 아니라 코드다"(PB-02 선례). §6 KPI *목표값*은 해시 범위 밖(§5만 동결)이라 G2(10/25) 재조정 경로는 보존된다.
+- **잔여(게이트 요건 아님·선언 §4 "종료 시 산출")**: W2(9/7~) 태스크 확정·여유 82h 배분 — 후속 /drive에서. `EOS-56`(앵커 1급 등록)은 requires G-eos-g0 해소로 착수 가능 전환.
+- **cross-ref**: `eos_verification_design_v1.md` §5·§8 · `backlog/gates.yaml` G-eos-g0 evidence(서명 전문) · PR #908(대상 문서 착지).
+
+## 2026-08-30: 동결 장치 자체의 결함 2건 — "배선 확인 없이 완료 선언" 재발 (PR #910 리뷰 수용)
+
+- **경위**: G0 서명의 기계 집행으로 만든 `test_failure_definition_freeze.py`가 **두 축에서 무력**이었고, 자동 리뷰(Codex)가 둘 다 지목했다. 세션은 PR 본문 체크박스에 "CI 잡이 이 변경을 실제로 실행한다"를 스스로 체크한 상태였다 — *이 PR에서는* 참이지만 *방어 대상 벡터에서는* 거짓이었다.
+- **P1(배선·중대)**: `ci.yml` backend 필터에 동결 입력 2건(`docs/standards/eos_verification_design_v1.md`·`backlog/gates.yaml`)이 없어, **그 파일만 고치는 PR은 backend 잡이 SKIP**되고 skip은 required check에서 충족으로 계상된다 → 실패정의·서명을 조용히 고치고 머지할 수 있었다. `data/corpus`·`schemas` 편입(COLLAB-07 ①②)과 **완전히 같은 형태의 사각**이며, 이 저장소에서 이 유형은 4회차다(OPS-03 tests/infra 미실행·OPS-08 required check 미강제·OPS-11 infra lint 부재·COLLAB-04/07). 상환: 필터 편입 + `test_ci_contract_fixture_trigger_wiring.py` **계약 ⑧** — 동결 테스트의 `FROZEN_INPUT_PATHS`를 **AST로 파싱**해 강제(경로 하드코딩 두 벌 금지 = 계약 ②의 파생 원칙 답습·새 동결 입력이 늘면 가드가 자동 추종). 변별력 실측: 편입 이전 필터로 되돌리면 계약 ⑧ RED(EXIT=1), 복원 시 green.
+- **P2(단언 무력)**: 서명 기록 검증이 `cleared`+`evidence 비어있지 않음`+`블록에 2026-08-30 포함` 3단언이었는데, **게이트 블록에는 `requested: 2026-08-30`이 항상 있어** 날짜 단언이 무변별이었다. 즉 evidence를 "서명 철회"로 갈아끼워도 전건 통과 — 뮤테이션으로 재현 확인(3단언 all pass). 상환: 정규식 블록 절단 → `yaml.safe_load` 파싱으로 바꾸고 **evidence 전문 sha256 동결**(`7ee70ad6…`) + 날짜는 evidence *값*에서 확인. 뮤테이션 후 3건 RED로 검출 실측.
+- **교훈(일반화)**: "변별력 없는 검증 스텝 금지"는 *검사 대상*뿐 아니라 **검사가 읽는 범위**에도 적용된다 — 넓은 블록에서 substring을 찾으면 그 블록의 *다른 필드*가 단언을 대신 만족시킨다(P2). 그리고 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 확인 대상은 "이 PR에서 도는가"가 아니라 **"방어 대상 변경에서 도는가"**다(P1). 후자를 PR 체크박스가 묻는 문장으로 오독한 것이 이번 누락의 직접 원인이다.
+- **cross-ref**: PR #910 리뷰 코멘트 2건 · `tests/infra/test_ci_contract_fixture_trigger_wiring.py` 계약 ⑧ · `.github/workflows/ci.yml` backend 필터 주석(2026-08-30 편입 사유).
+## 2026-08-30: EOS-54 HIT 검수 타이머 착지 + G0 조기 서명 + 사고 2건 기록
+
+- **EOS-54(★계측기)**: `review_timer_event`(append-only·started/finished/aborted 3종·NULL=미측정 무default) + writer(`harness/review_timer.py`·JSONL 즉시 flush) + 집계 CLI(`ops/hit_cu_metrics.py` — HIT 중앙값·P90·적재율 상시 보고·실패코드 F1~F8 분포·CU당 비용 인프로세스 이중 회계·exit 0/1). `GenerationFailureCode` 첫 소비 지점 3곳 신설. 뮤테이션 3종(0 날조·0건 위장·default 주입) 전부 red 실측 후 복원. privacy: 검수자 텔레메트리로 학생 소유 축 0 — erasure 3종 배선 불요 판정(스윕 green 실측·docstring 근거). 미결선 자인: 실검수 흐름 호출 0(ADMIN-07 후속) — 적재율 지표가 이를 상시 노출. 검증 = 4게이트+신규 82건+**전체 스위트 10,816 passed·92%·전층 PASS**.
+- **G0 조기 서명(9/6→8/30)**: Kiki가 kiki 머신에서 clear 실행 시도(구버전 대장·CUR-16 브랜치라 "게이트 없음" 거부) — 서명 의사가 대화 결정(앵커 6·주 25h)+실행 시도로 명확해 선례(G-crosswalk-approval)대로 세션이 완료분 반영(`ad7862ab`). W2(되돌릴 수 없는 스키마 주간) 진행 조건 충족.
+- **사고 ① EOS-49/50/51 번호 충돌(3회차 — ARCH-13·OPS-15 동형)**: kiki 머신 `backend/cur-16-...` 브랜치 커밋 3b7bab6f에 main과 이종 내용의 동번호 3건(problem-quarantine·generation-log-prompt-seed·content-lifecycle) — EOS-50은 main EOS-55와 내용 중복 의심. 대책 = `HARN-38` 등재(재번호·경위 규명·fail-open 의심 교차 기록). 부수: 이번 등재에서 HARN-37 충돌을 CLI가 실거부·38 제안 — 가드 변별력 실증.
+- **사고 ② cp949 CLI 크래시 실측**: kiki 머신 PowerShell에서 `backlog.py gates`가 `UnicodeEncodeError('⏳')`로 사망 — **기등재 OPS-53의 정확한 실사례**(신선한 증거로 부기). 임시 우회 = gates.yaml 직독(Select-String).
+- **머신 2대 관측**: 태그 push는 `C:\Users\rollrock\...`, 이번 실행은 `C:\Users\kiki\...` — CLAUDE.md 고정 경로(kiki)는 유효하나 rollrock 머신이 별도 존재. 병기 정정은 Kiki 확인 대기.
+
+## 2026-08-30: EOS-55(Run 재현성)+LIC-02(약관 스냅샷) 착지 — 소급 불가 2종 (#912 스쿼시 586dfc57)
+
+- **EOS-55**: GenerationLog 재현 좌석 5종(prompt_version·seed·input_sha256·input_snapshot JSONB·cu_slug — alembic `f4b2d8c1a3e5`) + 두 생성 경로(pregenerate 전 종단·accumulate 4종단) 실적재 배선 + 사이드카 `<out>.genlog.jsonl` 기본 ON. 착수 실측: 두 경로 모두 적재 0·bridge 프로덕션 호출 0(스키마 실재≠배선 그대로). **원칙 확립(codex P1 2건 계기)**: ①스냅샷은 "전문(verbatim)+sha256 핀" — *해시 복원≠입력 복원*, 복원 계약은 provider 재투입 전문 반환으로 단언 ②사이드카 행은 조인 정체성(cu_slug=코퍼스 slug) 동반 — 소비자(hit_cu_metrics) 접속이 집행 별항의 본질. seed=NULL 정직(라우터 스레딩 전무 실측 — 날조 금지·결정론 재생성은 별도 태스크). 검증 = 전체 스위트 10,880·전층 PASS·뮤테이션 7종 red.
+- **LIC-02**: `scripts/ops/license_snapshot_archiver.py`(표준 라이브러리 단독·exit 0/1/2/3·실패 경로 5축) + content-addressed 멱등 + append-only 감사로그(`docs/data/license_snapshot_archive.md` 규약 정본). **Tier1 목록 = 매트릭스 실측 20곳**(선언 "14곳"과 차이 — 도출 규칙·사유 문서 §1). 라이브 3런: 성공 6곳 스냅샷 커밋·멱등 unchanged 6/6 실증·**프록시 차단 14곳**(Kiki 머신 실행 몫 — 문서 §5 명령 블록). 부산물: miniF2F "MIT" 표기 불완전 실측 → `LIC-04` 등재.
+- **병렬 머지 충돌 1건**: #910(kiki 세션 — G0 Kiki 직접 서명+F-Ⅰ~Ⅴ 기계 동결)이 선머지 → `events.ndjson` add/add. base 머지로 해소(로컬 자동 병합·validate green·#910 신규 테스트 13+19 본 브랜치 위 passing 확인). G0 서명은 #910의 Kiki 본인 서명이 정본(내 대리 clear ad7862ab를 상위 대체 — 방향 일치).
+- **cross-ref**: PR #909(EOS-54)·#912 · `eos_verification_design_v1.md` §6(HIT·CU당 비용 지표의 계측기+재료 완비) · HARN-38(EOS-50 중복 의심 대조 시 EOS-55 착지 반영할 것).
+
+## 2026-08-31: /drive 2루프 3건 착지 — EOS-58 E2E 관통·CUR-09 가설 동결·CUR-11 API (#914·#920)
+
+- **EOS-58(#914)**: A4 앵커 E2E 1회 관통(G1 차단 해소) — 실 CLI·SymPy 실물·행 수 실측. codex 3건이 검수 큐 설계 결함을 짚어 **내구 큐 계층**(`<out>.review.jsonl` 즉시 flush + 워크리스트=누적 렌더 뷰 + payload 전문) 착지 — needs_review 후보가 라이브 경로에서 휘발하던 실공백 2단 해소. 후속 = EOS-64(nightly 골든 승격·HARN-10 제안 번호).
+- **CUR-09(#914)**: 단원 구조 3가설(순서 Overlay·역할 enum·coverage_weight) — 현행 5측정 등식 동결(성취기준 510/844 복수 원자 = 균등 가중 강제 실측)·채택 트리거 명세·UnitNode 1급 비채택 기계 동결. 외부 설계안 116항 원문 미확보(재제공 요청 명기).
+- **CUR-11(#920)**: `/v1/curricula`+`/v1/learning-outcomes`+`/v1/alignments` 5종 — CUR-10 첫 HTTP 표면(착수 실측: api 소비처 0). subject-neutral 라우팅 기계 동결·통합 3건은 임시 PG16 클러스터 자가 구성으로 실 SQL 검증. CUR-12 경계 별항(통합 함수 미선점).
+- **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
+- **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).

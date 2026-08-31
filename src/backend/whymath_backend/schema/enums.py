@@ -1226,6 +1226,25 @@ class EventType(str, Enum):
     concept_id/scene_id(event_data)로 싣고 attempt_id/problem_id는 NULL로 둔다(거짓 연결 금지).
     """
 
+    문제시도 = "문제시도"
+    """채점 확정 시점의 *문제 시도* 이벤트(EOS-57, 계획서 표기 `problem_attempted`).
+
+    **이 값의 존재 이유는 `attempt_event.skill_ids`(해소된 스킬 배열)의 영속 좌석**이다 — 채점이
+    확정된 순간 `l2.skill_mastery_tracking`이 concept→skill로 *해소한* 스킬 목록을 런타임에서
+    버리지 않고 이벤트에 남긴다(W2 "되돌릴 수 없는 스키마" ① — 12월 데이터에 남길 소급 불가 축.
+    지금 적재하지 않으면 과거 시도의 스킬 귀속은 영원히 재구성 불가다).
+
+    `답입력`(코치 대화의 서버 응답 지연 신호)과 혼동 금지 — 저 이벤트는 *대화 턴* 텔레메트리이고
+    이 이벤트는 *채점 확정 1건*에 대응한다. 두 채점 경로(`api/me.py::submit_attempt`의 클라
+    자가보고 v1 경로·`api/coach.py::_complete_problem`의 서버 검증 경로)가 같은 writer
+    (`l2.attempt_skill_event.record_attempt_skill_event`)를 경유해 적재하며 `event_data.source`가
+    둘을 구분한다.
+
+    스킬 배열은 `event_data`가 아니라 **1급 컬럼 `attempt_event.skill_ids`** 에 싣는다(조인·집계
+    축이라 JSONB에 묻지 않는다). NULL=미기록(구판 이벤트·writer 미도달)·`{}`=해소를 실행했으나
+    매핑 0건 — 둘을 구분한다(S3-07 None≠0 규약).
+    """
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Socratic 대화 (§7.1 dialogue·dialogue_turn 인라인 DDL — 5종)

@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -15,12 +15,15 @@ acceptance:
   - "② CU당 토큰·금액 결합 집계 CLI(exit 0/1) — ops/cost_probe 인프로세스 이중 회계 준수(SaaS 단독 의존 금지)"
   - "③ 집행 별항(정본화≠집행): 검수 UI(ADMIN-07)가 타이머·반려코드 없이 판정 제출 불가하게 하는 결선은 후속 태스크로 명시 — ADMIN-07 acceptance 확장 방식은 amend CLI 부재(HARN-24 todo)를 감안해 등재 세션이 판정"
   - "④ 측정 실패가 '0분'으로 위장되지 않는 실패 경로 설계(2026-08-22 규칙 — 미측정≠0 구분)"
-artifacts: []
+artifacts:
+  - "#909"
+  - src/backend/whymath_backend/ops/hit_cu_metrics.py
+  - "docs/standards/eos_verification_design_v1.md §8"
 paths:
   - "src/backend/whymath_backend/db/models/**"
   - "src/backend/whymath_backend/ops/**"
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/**"
-session: claude/mvp-eos-transition-plan-ghcajm
+session: null
 notes: "출처: EOS-53 crosswalk 갭 #1(D5+F4 잔여). G1(9/27) 차단 조건 — HIT·실패코드 이벤트 적재. 선언 정본 §6-6."
 updated: 2026-08-30

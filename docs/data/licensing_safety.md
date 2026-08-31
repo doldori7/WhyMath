@@ -190,6 +190,14 @@ sources:
 
 회색 영역은 *Phase 3+* 시점, 사용자·매출 검증 후 진행.
 
+## 약관 스냅샷 아카이브 (LIC-02)
+
+이 매트릭스가 의존하는 외부 소스 약관은 **확인 시점 원문**을 보관한다(변경 후 소급 재구성 불가 — 저작권 K4).
+
+- 규약·Tier1 목록(매트릭스 실측 **20곳** — 가이드 "14곳" 선언 대조 보고 포함): `docs/data/license_snapshot_archive.md`
+- 스크립트: `scripts/ops/license_snapshot_archiver.py` · 보관소: `data/licenses/` (append-only 감사로그 + content-addressed 스냅샷)
+- 주기 재수집(cron)은 OPS-56 축 후속 — 현재는 수동 실행(아래 분기 점검 시 함께)
+
 ## Review 주기
 
 - 매 분기 1회 라이선스 점검
@@ -198,4 +206,4 @@ sources:
 
 ---
 
-**최종 갱신**: 2026-05-28 (저작권 가이드 v2.0 *원문*·MathScope v4 카탈로그 반영 — EBS·평가원 영리금지·법적 안전조합·SA 함정·AIHub 4조건·동등문제 전략). 원문: `docs/legal/copyright_guide_v2.md` · `docs/data/dataset_catalog_v4.md`. 상세 MEMORY.md 2026-05-28.
+**최종 갱신**: 2026-08-30 (LIC-02 약관 스냅샷 아카이브 절 추가 — 매트릭스 본문 무변경) · 이전: 2026-05-28 (저작권 가이드 v2.0 *원문*·MathScope v4 카탈로그 반영 — EBS·평가원 영리금지·법적 안전조합·SA 함정·AIHub 4조건·동등문제 전략). 원문: `docs/legal/copyright_guide_v2.md` · `docs/data/dataset_catalog_v4.md`. 상세 MEMORY.md 2026-05-28.

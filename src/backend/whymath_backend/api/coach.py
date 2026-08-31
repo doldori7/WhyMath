@@ -86,6 +86,7 @@ from whymath_backend.l2 import (
     get_primary_concept_id,
     theta_to_mastery_proxy,
 )
+from whymath_backend.l2.attempt_skill_event import AttemptSource, record_attempt_skill_event
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
 from whymath_backend.l2.skill_mastery_tracking import record_problem_attempt_skill_mastery
@@ -965,7 +966,18 @@ async def _complete_problem(
     await session.commit()  # attempt 우선 durable(submit_attempt 패턴).
     # 숙달 전파(개념·스킬 축) — 서버 판정 is_correct=True. 매핑 없으면 빈 리스트(graceful).
     await record_problem_attempt_mastery(session, user_id, problem_id, True)
-    await record_problem_attempt_skill_mastery(session, user_id, problem_id, True)
+    skill_records = await record_problem_attempt_skill_mastery(session, user_id, problem_id, True)
+    # EOS-57: 해소된 스킬 배열을 `문제시도` 이벤트로 영속 — submit_attempt와 *같은 writer*
+    # (중복 구현 0). `source`가 두 채점 경로를 가르므로 기록률 리포트가 경로별 분모로 본다.
+    await record_attempt_skill_event(
+        session,
+        user_id=user_id,
+        attempt_id=attempt.attempt_id,
+        problem_id=problem_id,
+        is_correct=True,  # 서버 권위 판정(turn A correct) — attempt 적재값과 동일.
+        skill_ids=[r.skill_id for r in skill_records],
+        source=AttemptSource.coach_completion,
+    )
     return attempt.attempt_id
 
 

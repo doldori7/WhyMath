@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "① attempt_event에 skill_ids[](채점 시 해소된 스킬 배열) 영속 — alembic+writer 배선. EOS-47(version 고정)과 같은 테이블이므로 마이그레이션 체인 조율 명시"
   - "② 기록률 리포트('작동한 비율') — 신규 attempt 중 skill_ids 비어있지 않은 비율 상시 보고"
   - "③ 집행 별항: 소비 지점(skill_mastery_tracking이 이벤트 기록을 읽는 전환)은 후속 태스크로 분리 — 이 태스크는 영속 좌석+writer까지"
-artifacts: []
+artifacts:
+  - "PR https://github.com/doldori7/WhyMath/pull/913 (#913) · 커밋 6e78aa7b(좌석+writer+리포트)·ac74487d(전체 스위트 회귀 7건 수정) · 전체 backend 스위트 10768 passed exit 0(seed 2612948879)·tests/infra+harness 713 passed·ruff/black/mypy --strict/lint-imports 전부 exit 0 · alembic 단일 head d4a71c0f9b32·생성 DDL에 DEFAULT 없음 실측 · 뮤테이션 2건 변별력 확인 후 cp 백업 원복 · acceptance③ 소비 전환은 EOS-63으로 분리 등재 · 실 PG 통합테스트는 샌드박스 DB 부재로 미실행(CI 판정)"
 paths:
   - src/backend/whymath_backend/db/models/activity.py
   - "src/backend/whymath_backend/alembic/**"

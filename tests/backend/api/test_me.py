@@ -72,6 +72,7 @@ from whymath_backend.schema.enums import (
     AuditEventKind,
     AuditResourceType,
     Curriculum,
+    EventType,
     ExamType,
     Persona,
     Resolution,
@@ -904,8 +905,18 @@ class TestSubmitAttempt:
         assert upd["mastery"] == 0.69  # 첫 관측·정답
         assert upd["sample_size"] == 1
         assert body["skill_mastery_updates"] == []  # 스킬 해소 0(미매핑)
-        # ProblemAttempt + 개념 숙달행 add·attempt commit 발생(스킬행 0)
-        assert len(session.added) == 2
+        # ProblemAttempt + 개념 숙달행 + EOS-57 `문제시도` 이벤트(스킬행 0).
+        # 카운트만 세면 신규 축이 숫자에 묻히므로 *종류*로 고정한다.
+        assert [type(o).__name__ for o in session.added] == [
+            "ProblemAttempt",
+            "ConceptMasteryHistory",
+            "AttemptEvent",
+        ]
+        event = session.added[-1]
+        assert event.event_type is EventType.문제시도
+        # 해소 0건은 `[]`로 적재된다 — None(미기록)으로 접히지 않는다(EOS-57 핵심 계약).
+        assert event.skill_ids == []
+        assert event.event_data == {"is_correct": True, "source": "attempt_submit"}
 
     def test_submit_no_mapped_concepts(self) -> None:
         """문제↔개념 매핑 없으면 attempt만 적재·mastery/skill 갱신 빈 리스트."""
@@ -919,7 +930,9 @@ class TestSubmitAttempt:
         assert resp.status_code == 201, resp.text
         assert resp.json()["mastery_updates"] == []
         assert resp.json()["skill_mastery_updates"] == []
-        assert len(session.added) == 1  # attempt만
+        # attempt + EOS-57 `문제시도` 이벤트(숙달행 0 — 개념 매핑 없음).
+        assert [type(o).__name__ for o in session.added] == ["ProblemAttempt", "AttemptEvent"]
+        assert session.added[-1].skill_ids == []  # 해소 0건도 기록된다(미기록 None과 구분)
 
     def test_submit_overconfident_returns_coaching(self) -> None:
         """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
@@ -939,8 +952,8 @@ class TestSubmitAttempt:
         assert coaching is not None
         assert coaching["focus"] == "calibration_overconfident"
         assert coaching["socratic_category"] == "assumption"
-        # 적재 로직 불변 — attempt 1건만 add(개념 매핑 없음).
-        assert len(session.added) == 1
+        # 적재 로직 불변 — attempt + EOS-57 `문제시도` 이벤트(개념 매핑 없어 숙달행 0).
+        assert [type(o).__name__ for o in session.added] == ["ProblemAttempt", "AttemptEvent"]
 
     def test_submit_well_calibrated_no_coaching(self) -> None:
         """잘 보정됨(맞음 + 확신 높음) → calibration_coaching==null."""

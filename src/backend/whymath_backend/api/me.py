@@ -118,6 +118,7 @@ from whymath_backend.l2.ability_estimation import (
     estimate_global_ability,
     resolve_item_difficulty_b,
 )
+from whymath_backend.l2.attempt_skill_event import AttemptSource, record_attempt_skill_event
 from whymath_backend.l2.concept_diagnosis import Agreement, compute_concept_diagnoses
 from whymath_backend.l2.irt import (
     IrtItem,
@@ -762,6 +763,19 @@ async def submit_attempt(
     # 개념 전파와 독립 트랜잭션(자체 단일 commit)·concept→skill 매핑/해소 없으면 빈 리스트.
     skill_records = await record_problem_attempt_skill_mastery(
         session, user.user_id, body.problem_id, body.is_correct
+    )
+    # EOS-57: 해소된 스킬 배열을 `문제시도` 이벤트로 영속(소급 불가 축 — W2 스키마 ①).
+    # 숙달 전파는 "스킬 값이 언제 변했는가"만 남기고 "이 시도가 어떤 스킬을 건드렸는가"는 남기지
+    # 않는다 — 매핑이 이후 바뀌면 재구성 불가라 채점 순간에 기록한다. 빈 해소도 `[]`로 적재
+    # (미기록 NULL과 구분 — l2.attempt_skill_event 모듈 docstring).
+    await record_attempt_skill_event(
+        session,
+        user_id=user.user_id,
+        attempt_id=attempt.attempt_id,
+        problem_id=body.problem_id,
+        is_correct=body.is_correct,
+        skill_ids=[r.skill_id for r in skill_records],
+        source=AttemptSource.attempt_submit,
     )
     # WH-1 §11.4 보정 루프: 이미 받은 자기보고 확신도↔정오답에서 과신/과소신 코칭 결정.
     # 순수 L4 결정(DB 무접근·적재 로직 불변)·확신 미제출(None)이면 None(자연).

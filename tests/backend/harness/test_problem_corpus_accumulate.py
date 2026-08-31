@@ -166,10 +166,11 @@ class TestCliEntry:
             def generate(self, spec: EquivalenceSpec) -> None:
                 return None
 
+        # EOS-55: _build_live_generator가 generation_log_sink 키워드를 받으므로 **kwargs 흡수.
         monkeypatch.setattr(
             problem_corpus_accumulate,
             "_build_live_generator",
-            lambda topic_hint: _AlwaysFailingGenerator(),
+            lambda topic_hint, **kwargs: _AlwaysFailingGenerator(),
         )
         seed = _seed_corpus(tmp_path, short_n=3)
         out = tmp_path / "accumulated.jsonl"
