@@ -152,14 +152,29 @@ def build_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
 
 
 def encrypt_secret_for_storage(
-    cipher: SupportsEnvelope | None, secret_plain: str
+    cipher: SupportsEnvelope | None,
+    secret_plain: str,
+    *,
+    allow_plaintext_fallback: bool = False,
 ) -> tuple[str | None, bytes | None, bytes | None]:
     """slice 73: register용 — `(secret_plain, secret_encrypted, nonce)` 저장 3-튜플 결정.
 
-    cipher 있으면 `(None, ciphertext, nonce)`(평문 컬럼 비우고 암호화 저장), 없으면
-    `(secret_plain, None, None)`(평문 폴백·기존 동작). 셋 중 *정확히 한 표현*만 채워진다.
+    cipher 있으면 `(None, ciphertext, nonce)`(평문 컬럼 비우고 암호화 저장).
+
+    cipher 없으면:
+      - `allow_plaintext_fallback=True` → `(secret_plain, None, None)`(평문 폴백·개발/CI 전용).
+      - `allow_plaintext_fallback=False` → `RuntimeError`(prod-like 추정 환경에서 조용한
+        평문 저장 금지 — SEC-28 fail-closed).
+
+    셋 중 *정확히 한 표현*만 채워진다.
     """
     if cipher is None:
+        if not allow_plaintext_fallback:
+            raise RuntimeError(
+                "device secret 암호화기가 미설정입니다 — "
+                "`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`를 설정하거나 개발 모드에서만 "
+                "평문 폴백을 명시적으로 허용하세요."
+            )
         return secret_plain, None, None
     ciphertext, nonce = cipher.encrypt(secret_plain)
     return None, ciphertext, nonce
@@ -204,7 +219,9 @@ def encrypt_dialogue_content(
     """
     if content is None:
         return None, None, None
-    return encrypt_secret_for_storage(cipher, content)
+    # 대화 본문은 개발·CI에서 cipher 미설정 시에도 평문 폴백을 허용(SEC-01·SEC-28).
+    # prod-like 환경은 `require_dialogue_content_cipher`가 부팅 시 미리 차단한다.
+    return encrypt_secret_for_storage(cipher, content, allow_plaintext_fallback=True)
 
 
 def resolve_dialogue_content(
@@ -279,6 +296,33 @@ def resolve_evidence_payload(
                 "`WHYMATH_EVIDENCE_PAYLOAD_ENCRYPTION_KEY`를 확인하세요(키 유실 시 복호 불가)."
             )
         return cipher.decrypt(payload_encrypted, payload_nonce)
+    return None
+
+
+def require_device_secret_cipher(settings: Any) -> MultiKeyCipher | None:
+    """SEC-28: device secret cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다.
+
+    `build_secret_cipher`는 키가 없으면 조용히 `None`(평문 폴백)을 돌려준다. 이 폴백은
+    개발·CI에서는 편의지만 프로덕션에서는 **CLAUDE.md 절대 금기("디바이스 secret 평문 저장")를
+    조용히 위반**한다 — 그리고 조용하기 때문에 아무도 모른다. 이 게이트는 잊어도 작동한다.
+
+    **프로덕션 판별**: `config.is_production_like`(단일 좌석)에 위임한다.
+
+    Raises:
+        RuntimeError: prod 추정 환경인데 `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` 미설정.
+    """
+    from whymath_backend.config import is_production_like
+
+    cipher = build_secret_cipher(settings)
+    if cipher is not None:
+        return cipher
+    if is_production_like(settings):
+        raise RuntimeError(
+            "프로덕션 추정 환경(실 OAuth provider 구성)인데 device secret 암호화 키가 "
+            "미설정입니다 — "
+            "`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`를 설정하세요. 디바이스 secret을 "
+            "평문으로 저장하는 것은 절대 금기라 평문 폴백을 허용하지 않습니다."
+        )
     return None
 
 
@@ -389,6 +433,7 @@ __all__ = [
     "encrypt_dialogue_image_uri",
     "encrypt_evidence_payload",
     "encrypt_secret_for_storage",
+    "require_device_secret_cipher",
     "require_dialogue_content_cipher",
     "resolve_dialogue_content",
     "resolve_dialogue_image_analysis",
