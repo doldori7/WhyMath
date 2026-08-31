@@ -19,5 +19,5 @@ paths:
   - scripts/ops/check_ps_scripts.py
   - "tests/infra/**"
 session: null
-notes: "출처: 2026-08-31 LIC-02 siyavula URL 프로브. 원격 세션은 PowerShell 실행 검증이 구조적으로 불가(Windows 부재)하므로 정적 가드가 유일한 방어선인데, 그 가드가 런북 코드펜스를 안 본다. CLAUDE.md '측정·수집 도구를 성공 경로만 보고 설계 금지'·'변별력 없는 검증 스텝 금지'의 도구화."
+notes: "출처: 2026-08-31 LIC-02 siyavula URL 프로브. 원격 세션은 PowerShell 실행 검증이 구조적으로 불가(Windows 부재)하므로 정적 가드가 유일한 방어선인데, 그 가드가 런북 코드펜스를 안 본다. CLAUDE.md '측정·수집 도구를 성공 경로만 보고 설계 금지'·'변별력 없는 검증 스텝 금지'의 도구화. 2026-08-31 추가 관측(4번째 결함): 대화형 붙여넣기에서 `if {...}` / `else {...}`가 여러 입력으로 나뉘면 PS가 if를 완결 문으로 파싱해 else가 고아가 되고(CommandNotFoundException) 검증 스텝이 통째로 미실행된다 — 규칙 (d)로 추가 검토: 런북 코드펜스의 if/else 다중행 구조 경고. acceptance 수정 CLI(HARN-24)가 다른 세션 진행 중이라 notes로 남긴다."
 updated: 2026-08-31

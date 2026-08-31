@@ -103,10 +103,10 @@ gates:
     title: "라이선스 약관 스냅샷 미수집 14곳 캡처 (★소급 불가) — LIC-02 아카이버는 main 착지·실행 완료했으나 샌드박스 egress 정책이 14곳을 403으로 거부(조직 정책·우회 금지). 카탈로그 20곳 중 6곳만 확보(gsm8k·math-hendrycks·mathlib4·metamath-set-mm·minif2f·prm800k). 미확보: ncic·kogl-license-types·aihub·schoolinfo·openstax·siyavula·illustrative-mathematics·numinamath-cot/tir·phet·omnimath·olymmath·openmathinstruct-1·dlmf. Kiki 머신(Phaiakes9)에서 1회 실행하면 해소 — 명령 블록 = docs/data/license_snapshot_archive.md §5"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-30
     remind_after_days: 3
-    evidence: null
+    evidence: "2026-08-31 전곳 확보 — license_snapshot_coverage.py 20/20 · exit 0(기계 판정). 경위: 1차(08-30 원격 세션) 6/20(egress 403 14곳) → 2차(08-31 Kiki 머신) 19/20(신규 13곳) → 3차 siyavula URL 정정 후 재수집 1/1 성공(run_id=20260831T013601Z-8daf15·sha256=45723a589bd0a69d). 잔여 1곳이던 siyavula는 egress가 아니라 URL 결함이었고(구 /terms 404), 홈페이지 href 스캔으로 https://www.siyavula.com/info/terms-and-conditions 를 발견해 카탈로그 정정(#918). 내용 검증(PR #918 리뷰 P2 기준 — 키워드 매칭≠라이선스 근거): 스냅샷 158,035바이트에서 creative commons×6·license류×24·copyright×9·terms and conditions×26 확인, 원문에 'licensed under a Creative Commons Attribution Only License'(=CC BY) 부여 조항 실재. 단서: 해당 페이지는 'Some material'·'Only material that is clearly marked'로 CC BY 적용 범위를 명시 표기 자료로 한정한다 — 사이트 전체가 CC BY가 아님(LIC-05로 licensing_safety.md 반영 등재 — LIC-04는 타 세션이 선점해 CLI가 번호를 재배정했다). 성공 기준 2중(coverage=0 AND LICENSE_EVIDENCE≥1) 모두 충족."
     notes: ""
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1·2단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 3단계는 리비전 확정"

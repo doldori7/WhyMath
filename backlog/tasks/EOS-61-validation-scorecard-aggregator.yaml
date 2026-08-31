@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-61-validation-scorecard-aggregator
+title: "검증 결론 리포트 자동 집계 — Hard Gate F-Ⅰ~Ⅴ 기계 판정 + KPI 12종 스코어카드 CLI (G5 판정의 실행기)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① Hard Gate 우선 판정 — EOS-51 §5 F-Ⅰ~F-Ⅴ 중 1건이라도 해당하면 즉시 NO_GO(종합점수 산출 이전에 차단). 단일 EOS Score 금지(치명 오류가 평균에 묻히는 구조 방지)"
+  - "② KPI 12종(기술 6·내용 6) 스코어카드 산출 — 지표별 목표/실측/판정. 앵커 단위 분해 필수(평균 은폐 방지: F-Ⅳ는 앵커 6개 중 미달 개수로 판정) + 중앙값·P90·최소·분산 병기"
+  - "③ 판정 형식 불변 — CLI exit 0/1(Wilson 단측 경계). 점추정·인상 판정 금지(superhuman_verification_standard). 3단계 산출: GO / CONDITIONAL_GO / NO_GO"
+  - "④ 미측정과 0의 구분 — 입력 지표가 비어 있으면 'PASS'가 아니라 '측정 실패'로 exit 1. 각 KPI에 측정 가능 여부·표본수·EOS-51 §7 한계(검출력·미검증 항목)를 리포트에 동반 출력"
+  - "⑤ 집행 별항(정본화≠집행): 입력원은 EOS-54 hit_cu_metrics·EOS-55 Run 로그·EOS-60 골든 혼동행렬 — 어느 지표가 어느 소스에서 오는지 결선표를 명시하고, 미착지 소스는 '미측정'으로 정직 표기(추정 금지)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/ops/**"
+  - "docs/reviews/**"
+session: null
+notes: "출처: 260830 외부 검토 N6 + 본 검토 §3.6·§6. 판정 *기준*은 EOS-51 §5·§6에 이미 동결됨(외부 문서보다 앞섬 — Hard Gate·3단계 판정·단일점수 금지 모두 채택 완료) — 없는 것은 기준을 읽어 판정을 뱉는 실행기다. BI 대시보드가 아니라 CLI. 주간 7지표 집계는 OPS-56이 별도 좌석(주기 vs 최종 판정)."
+updated: 2026-08-30
