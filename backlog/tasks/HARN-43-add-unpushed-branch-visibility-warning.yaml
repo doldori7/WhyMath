@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-43-add-unpushed-branch-visibility-warning
+title: "backlog.py add — 번호 가드의 관측 사각을 사람에게 고지 (미push 브랜치·낡은 remote-tracking ref)"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① add 성공 직후, 현재 브랜치의 원격 ref가 없으면 '이 번호는 push 전까지 다른 세션에 보이지 않는다'를 경고한다(경우 A 사각 — EOS-49/50/51 사고의 직접 원인)"
+  - "② scan_remote_task_files가 읽은 remote-tracking ref의 신선도(마지막 fetch 이후 경과)를 함께 고지한다 — fetch=False 기본값은 유지(네트워크 비용 가드·test_default_call_never_invokes_git_fetch 계약 불변)"
+  - "③ 변별력 실측: 원격 ref 있는 브랜치에서는 경고가 나오지 않고 없는 브랜치에서만 나오는 것을 hermetic bare_remote 픽스처로 양방향 동결. 무조건 출력하는 경고는 소음이라 검증이 아니다"
+  - "④ 정직한 한계 명문화: 이것은 탐지가 아니라 고지다 — 미push 브랜치를 실제로 관측하는 수단은 없다. docstring에 그 한계를 적고 '가드 통과 ≠ 충돌 없음'을 경고 문안에 담는다"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/remote_claims.py
+  - tests/harness/test_backlog_add_id_collision.py
+session: null
+notes: "출처: HARN-38 경위 규명(docs/reviews/eos_number_collision_root_cause_2026-08-31.md §2-2·§3-2·§7). 동번호 이종 태스크 3회차(ARCH-13·OPS-15·EOS-49/50/51) — 앞 두 대책(HARN-10 번호 가드·HARN-15 원격 파일명 스캔)은 push된 표면만 넓혔고 이번 사고는 그 밖에서 났다. 실측: 가드 출처 3종이 36브랜치·11,975 파일을 훑고도 cur-16 브랜치를 0건 관측(status는 둘 다 ok — fail-open 아님)."
+updated: 2026-08-31
