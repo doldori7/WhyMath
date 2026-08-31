@@ -129,6 +129,37 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
   기본 동작으로 존중(샌드박스·Kiki 머신 공통).
 - 의존성: **표준 라이브러리만** (backend 패키지 import 금지 — Kiki 머신 단독 실행 가능).
 
+## 4-A. 집행 실측 현황 (2026-08-31 · Kiki 머신 실행 반영)
+
+**카탈로그 20곳 중 19곳 확보 · 1곳 미확보(siyavula).**
+
+| 회차 | 환경 | 결과 |
+|---|---|---|
+| 1차 (08-30) | 원격 세션(샌드박스) | 6/20 — 14곳이 egress 프록시 403(조직 정책) |
+| 2차 (08-31) | Kiki 머신(Phaiakes9·망 제약 없음) | **19/20** — 신규 13곳 확보(`run_id=20260831T005458Z-b0b14e`) |
+
+egress 차단으로 막혔던 14곳 중 **13곳이 해소**됐다. 이로써 "미확보 = 네트워크 제약"이라는
+1차 판정은 소진됐고, **남은 1곳의 원인은 다른 종류**다.
+
+### 잔여 1곳 — `siyavula` (원인이 바뀌었다)
+
+- **증상**: `https://www.siyavula.com/terms` → **HTTP 404** (망 제약 없는 Kiki 머신에서도 동일).
+  즉 egress 차단이 아니라 **URL 자체가 틀렸다** — 재실행·재시도로는 영원히 해소되지 않는다.
+- **근본 원인**: 이 URL은 문서에서 인용한 것이 아니라 구성된 값이다 — 카탈로그의
+  `url_origin`이 `_ORIGIN_OFFICIAL`("공식 사이트 · licensing_safety.md에 URL 부재 —
+  LIC-02에서 확정")로, **출처 문서 없이 확정된 유일한 부류**임을 스스로 표기하고 있다.
+  같은 표기를 가진 다른 소스(`ncic`·`schoolinfo`·`openstax`)는 2차에서 200으로 확보됐으므로,
+  구성 URL 전체가 아니라 이 한 건이 틀린 것이다.
+- **해소 경로**: 실제 약관 페이지 URL을 확인해 카탈로그를 고친 뒤 재실행한다(§5-A).
+  URL 확인은 망 접근이 필요해 원격 세션에서 불가하다(프록시가 siyavula.com을 403으로 거부 —
+  "우회 금지" 규정에 따라 재시도하지 않는다).
+
+**게이트 clear 기준은 불변**: `python scripts/ops/license_snapshot_coverage.py`가 **exit 0**을
+낼 때만 clear한다. 현재 `19/20 · exit 1`이므로 게이트
+`G-license-snapshot-blocked-sources`는 **열린 채 유지**된다 — 95%는 완료가 아니다.
+(게이트 제목의 "미수집 14곳"은 등재 시점 표기다. 하네스 CLI에 게이트 제목·notes 수정 경로가
+없어 그대로 두며, 현재 정본 수치는 이 절과 커버리지 판정기 출력이다 — `HARN-39`.)
+
 ## 5. 집행 별항 (정본화 ≠ 집행)
 
 - **이 문서·스크립트 = 정본화**. 주기 재수집(cron·분기 라이선스 점검 연동)은 **OPS-56 축과
@@ -137,24 +168,133 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
 - 계약 동결: `tests/infra/test_license_snapshot_archiver.py` (성공/HTTP 실패/타임아웃/예외/
   변경 감지/멱등/즉시 flush/exit 코드 — 경로별 상이 신호, hermetic·네트워크 0).
 
-### Kiki 머신 수동 실행 (Windows PowerShell)
+### 5-A. 잔여 1곳(siyavula) — URL 확정 완료, 재수집만 남음
 
-> **과제**: 프록시로 막힌 소스의 약관 스냅샷 재수집 · **목적**: 확인 시점 약관 보관(소급 불가) ·
-> **환경**: Windows PowerShell(=Phaiakes9), 새 창, 선행 조건 없음 · **성공 기준**: 아래 자가검증
-> 스텝에서 `exit=0`과 감사로그 라인 증가가 보이면 성공, `exit=1`이면 0곳 수집(네트워크 점검).
+**2026-08-31 확정**: 홈페이지 href 스캔으로 실제 약관 경로를 발견했다 —
+`https://www.siyavula.com/info/terms-and-conditions` (구 URL `/terms`는 404였다).
+카탈로그(`TIER1_SOURCES`)는 이 값으로 정정됐고 `url_origin`도 `_ORIGIN_DISCOVERED`로 갱신됐다.
+
+> **채택하지 않은 후보**: 같은 스캔에서 `/info/privacy-policy`도 키워드에 걸렸지만
+> 개인정보처리방침은 **라이선스 조항이 아니다**. 키워드 매칭은 *후보 발견*이지 *근거 확인*이
+> 아니며, 매칭됐다는 이유로 채택하면 CC BY 근거가 없는 페이지를 라이선스 증거로 보관하게
+> 된다(PR #918 리뷰 P2). 그래서 아래 절차에 **내용 검증 스텝**을 넣는다.
+
+> **1. 과제**: siyavula 약관 재수집 + 확보 내용이 실제로 라이선스 조항인지 확인 → 20/20 달성.
+> **2. 목적**: 게이트 `G-license-snapshot-blocked-sources` 종결. 확인 시점 약관 원문 보관은
+> 소급 불가하므로 이 1건이 마지막 미확보분이다.
+> **3. 절차**: main 최신화(정정된 카탈로그 포함) → siyavula만 수집 → 커버리지 판정 →
+> **수집된 본문에 라이선스 문구가 실제로 있는지 확인** → 커밋·브랜치 push.
+> **4. 성공 기준**: `coverage=0`(20/20) **그리고** `LICENSE_EVIDENCE` 줄에 매칭 문구가
+> 하나 이상 출력될 것. **둘 다여야 성공**이다 — coverage만 0이면 "무언가를 받긴 했다"는
+> 뜻이지 "라이선스 근거를 확보했다"는 뜻이 아니다. 매칭이 0줄이면 그 URL은 약관 페이지가
+> 아니므로 알려 달라(게이트는 열어 둔다).
+> **5. 실행 환경**: Windows PowerShell(=Phaiakes9), `C:\Users\kiki\Desktop\__AI\WhyMath`.
+> **6. 창 구분**: 새 창 1개. 장기 점유 프로세스 없음.
 
 ```powershell
-# [실행 시스템: Windows PowerShell — 새 창]
+# [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-git fetch
-git checkout -B claude/mvp-eos-transition-plan-ghcajm origin/claude/mvp-eos-transition-plan-ghcajm
-python scripts\ops\license_snapshot_archiver.py
-echo "exit=$LASTEXITCODE"   # 자가검증 1 — 0=전곳 성공 / 3=부분 실패 / 1=0곳(측정 실패)
+git fetch origin main
+git checkout -B claude/lic-02-siyavula-capture origin/main
 
-# 자가검증 2 — 이번 실행 증거가 실재하는지 (감사로그 마지막 라인 + manifest)
-Get-Content data\licenses\audit_log.jsonl -Tail 3
-Get-ChildItem data\licenses\runs | Sort-Object Name | Select-Object -Last 1
+python scripts\ops\license_snapshot_archiver.py --sources siyavula
+echo "archiver=$LASTEXITCODE"
+
+python scripts\ops\license_snapshot_coverage.py
+echo "coverage=$LASTEXITCODE"    # ★ 0이라야 20/20
+
+# 내용 검증 — 받은 것이 정말 라이선스/약관 문서인가 (키워드 매칭≠근거 확인)
+$snap = Get-ChildItem data\licenses\snapshots\siyavula -Filter *.html -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime | Select-Object -Last 1
+if ($null -eq $snap) { "LICENSE_EVIDENCE 없음 — 스냅샷 파일 자체가 없다" }
+else {
+  $txt = Get-Content $snap.FullName -Raw
+  $pat = '(?i)(creative commons|CC[ -]?BY|licen[cs]e|copyright|terms (of|and)|이용약관|저작권)'
+  $m = [regex]::Matches($txt, $pat) | ForEach-Object { $_.Value } | Sort-Object -Unique
+  "SNAPSHOT $($snap.Name) bytes=$($snap.Length)"
+  if ($m) { $m | ForEach-Object { "  LICENSE_EVIDENCE $_" } }
+  else    { "  LICENSE_EVIDENCE 0건 — 이 URL은 약관 페이지가 아니다(채택 보류)" }
+}
 ```
+
+수집분 제출 (coverage 값과 무관하게 받은 만큼 커밋 — 소급 불가):
+
+```powershell
+# [실행 시스템: Windows PowerShell — 같은 창]
+git add data\licenses
+git commit -m "LIC-02 집행: siyavula 약관 스냅샷 수집 (URL 정정 후 재수집)"
+git push -u origin claude/lic-02-siyavula-capture
+```
+
+> `coverage` 값과 `LICENSE_EVIDENCE` 줄을 알려주시면 PR을 열고, **둘 다 성공일 때만**
+> 게이트를 clear한다.
+
+> **프로브 실패 기록 3건(2026-08-31 · 전부 원격 세션이 작성한 블록의 결함)**
+> ① `-UseBasicParsing` 누락 → PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차 정지.
+> ② catch의 진단 문자열이 **파이프라인 출력**이 되어 `return $null`에도 불구하고 반환값을
+> 오염 → 호출부가 실패를 성공으로 오인(수정: `Write-Host`).
+> ③ `$home`에 대입 → PowerShell **자동 변수**(읽기 전용)라 대입 거부, 그런데 후속
+> `if ($home)`이 홈 경로 문자열로 **참**이 되어 가짜 성공 신호. 성공/실패가 같은 화면을 냈다.
+>
+> 공통 원인: **원격 세션은 PowerShell을 실행 검증할 수 없다**(Windows 부재 + 대상 호스트
+> egress 403). 그런데 저장소 가드 `scripts/ops/check_ps_scripts.py`는 `scripts/**/*.ps1`만
+> 훑어 **런북 마크다운 코드펜스는 검사 범위 밖**이다 — Kiki에게 건네는 PowerShell 대부분이
+> 사는 곳이 정확히 그 사각이다. 가드 확장 = `OPS-57`.
+
+### Kiki 머신 수동 실행 (Windows PowerShell)
+
+> **1. 과제**: 샌드박스 egress 정책에 막힌 **14곳**의 약관 스냅샷 수집 (게이트
+> `G-license-snapshot-blocked-sources`).
+> **2. 목적**: *확인 시점의* 약관 원문 보관 — **소급 불가**다. 나중에 약관이 바뀌면 "우리가 쓸
+> 당시 조건이 이랬다"를 증명할 방법이 영구히 사라진다(저작권 K4 계약).
+> **3. 절차**: origin/main에서 **작업 브랜치 생성**(로컬 main은 건드리지 않는다) → 아카이버
+> 1회 실행(20곳 순회·이미 받은 6곳은 `unchanged`로 건너뜀·소스당 타임아웃, 총 1~3분) →
+> **커버리지 판정**(exit code) → 커밋·브랜치 push → PR.
+> **4. 성공 기준**: **`coverage=0`이 유일한 성공이다.** 아카이버 자신의 exit(0/3)이나 스냅샷
+> 개수 증가는 **성공 기준이 아니다** — 20곳 중 1곳만 받아도 exit 3이고 개수는 늘기 때문에,
+> 그것으로 판정하면 13곳이 영구 미확보인 채 게이트가 닫힌다. `coverage=1`이면 아직 미확보가
+> 있는 것이고(출력에 미확보 id가 전건 나온다) 게이트는 열린 채로 둔다. `coverage=2`는 판정
+> 불가(감사로그 파손 등)이니 출력을 그대로 알려 달라.
+> **5. 실행 환경**: Windows PowerShell(=Phaiakes9 본체), 작업 디렉터리
+> `C:\Users\kiki\Desktop\__AI\WhyMath`. 선행 조건 없음(표준 라이브러리만·서버·DB 불요).
+> **6. 창 구분**: **새 창** 1개. 장기 점유 프로세스가 없어 같은 창에서 계속 작업 가능.
+
+```powershell
+# [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# origin/main 기준으로 작업 브랜치 생성 — 로컬 main을 병합·이동시키지 않는다
+# (pull은 로컬 main이 갈라져 있으면 머지 커밋·충돌을 낸다 — HARN-06 실측 선례)
+git fetch origin main
+git checkout -B claude/lic-02-snapshot-capture origin/main
+
+python scripts\ops\license_snapshot_archiver.py
+echo "archiver=$LASTEXITCODE"    # 참고값 — 0=전곳 / 3=부분 / 1=0곳(네트워크 문제) / 2=사용법
+
+# ★ 성공 판정은 이것 하나 — 0이라야 전곳 확보다
+python scripts\ops\license_snapshot_coverage.py
+echo "coverage=$LASTEXITCODE"    # 0=전곳 확보(게이트 clear 가능) / 1=미확보 있음 / 2=판정 불가
+```
+
+수집분 제출 (위 `coverage` 값과 무관하게, 받은 만큼은 반드시 커밋한다 —
+부분 확보라도 그 스냅샷은 소급 불가 자산이다):
+
+```powershell
+# [실행 시스템: Windows PowerShell — 같은 창]
+git add data\licenses
+git commit -m "LIC-02 집행: 차단됐던 라이선스 약관 스냅샷 수집 (G-license-snapshot-blocked-sources)"
+git push -u origin claude/lic-02-snapshot-capture
+```
+
+> **main에 직접 push하지 않는다** — 이 저장소는 PR·CI 경유가 기본값이고 main은 브랜치 보호
+> 대상이다. push 후 알려주시면 다음 Claude 세션이 PR을 열고, `coverage=0`일 때만 게이트를
+> clear한다(부분 확보면 게이트는 남은 id 목록과 함께 유지된다).
+
+**왜 샌드박스에서 못 받았나 (실측·2026-08-30)**: 원격 세션의 egress 프록시가 14곳을
+`Tunnel connection failed: 403 Forbidden`으로 거부했다 — 조직 egress 정책이며 프록시 README가
+**"우회하지 말고 보고하라"**고 명시한다(CLAUDE.md "거부(deny)의 우회 금지"와 동일 취지).
+코드 결함이 아니므로 아카이버 수정으로는 해소되지 않는다. 남은 실패는 감사로그에
+`error_type`/`error_detail`로 전건 기록돼 있다.
 
 ---
 

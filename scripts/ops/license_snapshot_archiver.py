@@ -64,6 +64,7 @@ OK_EVENTS = frozenset({"new", "unchanged", "changed"})
 _ORIGIN_GUIDE = "copyright_guide_v2.md §10.1 MONITORED_URLS"
 _ORIGIN_OFFICIAL = "공식 사이트 (licensing_safety.md에 URL 부재 — LIC-02에서 확정)"
 _ORIGIN_REPO = "공식 저장소 LICENSE (raw / HEAD=기본 브랜치 해석 — LIC-02에서 확정)"
+_ORIGIN_DISCOVERED = "공식 사이트 홈페이지 링크에서 발견 (구 URL 404 — LIC-02 2026-08-31 정정)"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -132,8 +133,12 @@ TIER1_SOURCES: tuple[Tier1Source, ...] = (
         source_id="siyavula",
         name_ko="Siyavula",
         license_label="CC BY",
-        url="https://www.siyavula.com/terms",
-        url_origin=_ORIGIN_OFFICIAL,
+        # 2026-08-31 정정: 구 URL `/terms`는 HTTP 404였다(망 제약 없는 Kiki 머신에서도 동일 —
+        # egress 문제가 아니라 URL 결함). 홈페이지 href 스캔으로 실제 경로를 *발견*해 확정.
+        # 같은 스캔에서 `/info/privacy-policy`도 매칭됐으나 개인정보처리방침은 라이선스 조항이
+        # 아니므로 채택하지 않았다(PR #918 리뷰 P2 — 키워드 매칭≠라이선스 근거).
+        url="https://www.siyavula.com/info/terms-and-conditions",
+        url_origin=_ORIGIN_DISCOVERED,
     ),
     Tier1Source(
         source_id="illustrative-mathematics",

@@ -90,6 +90,15 @@ gates:
     remind_after_days: 14
     evidence: "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk"
     notes: ""
+  - id: G-license-snapshot-blocked-sources
+    title: "라이선스 약관 스냅샷 미수집 14곳 캡처 (★소급 불가) — LIC-02 아카이버는 main 착지·실행 완료했으나 샌드박스 egress 정책이 14곳을 403으로 거부(조직 정책·우회 금지). 카탈로그 20곳 중 6곳만 확보(gsm8k·math-hendrycks·mathlib4·metamath-set-mm·minif2f·prm800k). 미확보: ncic·kogl-license-types·aihub·schoolinfo·openstax·siyavula·illustrative-mathematics·numinamath-cot/tir·phet·omnimath·olymmath·openmathinstruct-1·dlmf. Kiki 머신(Phaiakes9)에서 1회 실행하면 해소 — 명령 블록 = docs/data/license_snapshot_archive.md §5"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-08-30
+    remind_after_days: 3
+    evidence: null
+    notes: ""
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1·2단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 3단계는 리비전 확정"
     kind: human

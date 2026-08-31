@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-39-gates-title-notes-edit-cli
+title: "하네스 게이트 대장 제목·notes 수정 CLI 경로 신설 — gates edit"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① backlog.py gates edit <G-id> [--title ...] [--notes ...] 신설 — add와 동일 검사 골격(존재 확인·스키마 검증·events append)"
+  - "② 대장 손편집 금지 규약의 마지막 구멍 폐색 — 현재 clear/waive만 있어 '상태는 맞는데 제목이 낡은' 게이트를 CLI로 고칠 방법이 없다(G-license-snapshot-blocked-sources 실측: 제목 '미수집 14곳'이 실제 1곳과 불일치)"
+  - "③ 테스트: tests/harness에 제목 변경·존재하지 않는 게이트 거부·이벤트 적재 동결"
+artifacts: []
+paths: []
+session: null
+notes: "출처: 2026-08-31 LIC-02 집행 중 발견. HARN-06(CLI 경로 부재 → 태스크 등재) 선례와 동형."
+updated: 2026-08-31

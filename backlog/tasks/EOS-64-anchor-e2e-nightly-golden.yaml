@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-64-anchor-e2e-nightly-golden
+title: "앵커 E2E 관통 상시화(nightly) + 골든 승격 경로 결선 — EOS-58 1회 관통의 상시 계측 승격"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - EOS-58-anchor-e2e-generation-proof
+requires_gates: []
+acceptance:
+  - "① nightly 배선 + 배선 실재 기계 동결(OPS-10 선례 — 정본화≠집행 별항: 워크플로가 실제로 이 관통을 실행함을 테스트가 대조)"
+  - "② 라이브 회차 리포트에 '작동한 비율' 필드(수용/검수필요/게이트거부/중복/생성실패 분포) — 정상 응답이 아니라 분포가 작동 증거"
+  - "③ 골든 승격 = 워크리스트 검수→review_status 백필→Wilson 게이트 CLI 경유만 허용 — 경로 밖 승격은 exit 1, 법정·검수 절차의 기계 대체 금지 명기"
+  - "④ 연속 무진전(N회차 수용 0) 알람 — fail-open 상시 실패를 보호 있음으로 신뢰 금지"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - ".github/workflows/**"
+  - "tests/backend/**"
+session: null
+notes: "출처: EOS-58 acceptance ③ 집행 별항(2026-08-30). 1회 관통 실증(docs/reviews/eos_anchor_e2e_a4_2026-08-30.md)의 상시화. 라이브는 Phaiakes9 Ollama 필요 — nightly 실행 주체(CI 러너 vs Kiki 머신 스케줄) 결정 포함. 번호: EOS-60~63 원격 선점으로 CLI 제안 64 사용(HARN-10)."
+updated: 2026-08-30
