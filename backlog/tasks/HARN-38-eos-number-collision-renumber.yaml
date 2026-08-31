@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "① kiki 머신 브랜치 backend/cur-16-concept-edge-prerequisite-meta-v2 커밋 3b7bab6f의 EOS-49-problem-quarantine-status·EOS-50-generation-log-prompt-seed·EOS-51-content-lifecycle-state-wiring 3건을 최신 main 기준 backlog.py add로 재등재(새 번호는 CLI 배정 — HARN-10)·구 YAML 삭제. 특히 EOS-50-generation-log-prompt-seed는 main의 EOS-55-generation-run-reproducibility와 내용 중복 의심 — 재등재 전 대조·병합 판정"
   - "② 그 브랜치 커밋 메시지 'G-eos-g0 clear'가 실제 clear가 아님을 세션 기록에 남김(clear 실체는 main 반영분 — 2026-08-30 ad7862ab)"
   - "③ 충돌 경위 규명: 그 세션의 add가 어느 시점 tree에서 실행됐고 원격 claim 검사(HARN-36 이후)가 왜 충돌을 못 잡았는지 실측 — fail-open(403)이면 기존 HARN-07 폴백 미착륙의 재현 사례로 교차 기록"
-artifacts: []
+artifacts:
+  - "PR #931 (커밋 fd7ccdd1) — EOS-71·EOS-72 재등재 + EOS-50 중복 판정(EOS-55) + docs/reviews/harn38_eos_number_collision_2026-08-31.md"
 paths:
   - "backlog/tasks/**"
   - "docs/reviews/**"
-session: claude/failure-definition-signature-scmzdu
+session: null
 notes: "사고 경위: 2026-08-30 Kiki가 kiki 머신(CUR-16 브랜치·구버전 트리)에서 G0 서명 블록 실행 → pull 중단·게이트 없음 거부·커밋이 CUR-16 브랜치에 적재되며 동번호 이종 EOS-49/50/51 존재가 노출. full-ID 슬러그가 달라 validate는 통과하는 부류(ARCH-13·OPS-15 선례와 동형·3회차). 이번 등재 자체도 HARN-37 충돌을 CLI가 거부·HARN-38 제안 — 가드 변별력 실증. 착수 전제: 해당 브랜치 push 또는 kiki 머신 세션."
 updated: 2026-08-31
