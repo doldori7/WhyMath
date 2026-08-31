@@ -147,11 +147,24 @@ CLAUDE.md: "같은 실패 경고가 환경에서 **반복 관측되면(2회+)** 
 
 **조치**(2026-08-31, Kiki 지시):
 - `gates add G-eos-verification-relevance-triage`(kind=decision·assignee=kiki·remind 7d) — clear 조건 ①잔여 todo 151건 관여/비관여 분류 ②비관여분 이월 표시 ③CUR-11·CUR-12 착수 판정.
-- `block CUR-11` / `block CUR-12` — 사유에 게이트 ID·근거 조항 명기.
+- `block CUR-11` / `block CUR-12` — 사유에 게이트 ID·근거 조항 명기. **2차로 `CUR-17`·`CUR-18` 추가 차단**(아래 표).
 - **변별력 확인**: 차단 후 `next --n 5`에서 두 태스크가 사라짐(차단 전 2·3위) · `validate` green(태스크 451·게이트 17).
 - **집행 수단 주석**: `requires_gates`를 *기존* 태스크에 부착하는 CLI 경로가 없다(`add` 시점 전용). 이 공백은 `HARN-24` acceptance ③이 이미 등재했고, ADMIN-02에 `G-prod-dead-column-check`를 붙이지 못한 선례가 있다. 대장 손편집 대신 CLI 지원 verb인 `block`으로 집행했으므로 **게이트 clear 후 `unblock`이 별도로 필요**하다(자동 해소되지 않는다).
 
-**남은 노출 — 이 조치는 근본 해결이 아니다**: 차단 직후 같은 계열의 `CUR-17`(Concept Resolver API 설계)·`CUR-18`(Concept Search API 확장 — 주변 리소스 엔드포인트)이 next 2·3위로 승격했다. 둘 다 같은 EOS 개념 DB 검토 계보이고 역시 관여도 미판정이다. **태스크 단위 차단은 151건 대기열 앞에서 두더지잡기**이며, 실효 해결은 A2의 일괄 트리아지(게이트의 clear 조건 ①)와 A1의 등재 시점 게이트 코드화뿐이다.
+**2차 조치 — 대기열 재충전분까지 흡수**(2026-08-31, Kiki 지시): CUR-11·CUR-12 차단 직후 같은 EOS 개념 DB 검토 계보의 `CUR-17`(Concept Resolver API 설계)·`CUR-18`(Concept Search API 확장)이 next 2·3위로 승격했다 — 역시 관여도 미판정. 같은 게이트로 묶어 차단했다.
+
+| 태스크 | 성격(실측) | 차단 사유에 병기한 판정 힌트 |
+|---|---|---|
+| CUR-11 | **실구현** — 라우터 5종 + `app.py` 배선 | 선언의 "계약 수준" 분류가 실물과 불일치 |
+| CUR-12 | **실구현** — `coach.py`·`target_progress.py`·l3 DSL 소비처 리팩토링 | 관여도 판정 없이 서빙 경로를 건드림 |
+| CUR-17 | **설계** — acceptance 4항 전부 "설계·정의·문서화" | concept resolve는 CU의 concept/skill 매핑·op-code 축과 맞닿아 **관여 판정이 나올 여지가 크다** — 차단은 거부가 아니라 판정 대기 |
+| CUR-18 | **설계** — gap 식별·스키마/인터페이스 설계 | paths가 `api/concept.py`·`l1/concept_graph/`·`db/models` 3종이라 착수 시 서빙 표면에 닿음. acceptance ②의 MVP 우선순위 선정을 관여도 판정과 합치면 중복 판정 회피 |
+
+**2차 조치 후 next 상위 6**: HARN-38 · EOS-28 · EOS-56 · EOS-59 · EOS-63 · HARN-37 — CUR 계열이 대기열 상단에서 완전히 빠지고 12월 검증 직결분과 하네스 부채만 남았다(`validate` green · 태스크 451·게이트 17).
+
+**그럼에도 근본 해결은 아니다**: 4건은 관여도 미판정 **151건 중 4건**일 뿐이고, 태스크 단위 차단은 대기열 앞에서 두더지잡기다. 실효 해결은 A2의 일괄 트리아지(게이트 clear 조건 ①)와 A1의 등재 시점 게이트 코드화뿐이다.
+
+**게이트 제목 stale 주석**: 게이트 제목은 clear 조건 ③을 "CUR-11·CUR-12 착수 판정"으로 적은 채 등재됐고, 2차 조치로 대상이 4건이 됐다. `gates` 서브커맨드에 제목 amend verb가 없어(`add`·`clear`·`waive`뿐 — `HARN-24` ③과 같은 계열의 공백) 대장 손편집 대신 이 문서와 각 태스크의 block 사유로 4건 범위를 고정한다. clear 조건 ①("잔여 todo 151건 분류")이 4건을 이미 포괄하므로 판정 누락은 발생하지 않는다.
 
 ### C2. LIC-01 claim TTL 초과
 
@@ -179,7 +192,7 @@ CLAUDE.md: "같은 실패 경고가 환경에서 **반복 관측되면(2회+)** 
 | ① `backlog.py add`에 12월 검증 관여 판정 필드 강제(미기입 시 exit 1) | A1 | 코드(하네스) |
 | ② 기존 잔여 150건 검증 관여도 일괄 트리아지 + `next` 우선순위 반영 | A2·C1 | 태스크(EOS-53 승계) |
 | ③ ~~CUR-11·CUR-12 차단~~ → **2026-08-31 완료**(`G-eos-verification-relevance-triage` 등재 + block 2건). 게이트 clear 시 `unblock` 필요 | C1 | 완료 |
-| ③-b | CUR-17·CUR-18(차단 후 next 2·3위로 승격·동일 계보·관여도 미판정) 처리 판정 — ②로 흡수할지 개별 차단할지 | C1 | Kiki 판정 |
+| ③-b | ~~CUR-17·CUR-18 처리 판정~~ → **2026-08-31 완료**(Kiki 지시 "같은 게이트로" — 동일 게이트로 차단). 차단 대상 총 4건 | C1 | 완료 |
 | ④ ADMIN-07 acceptance에 HIT 타이머·반려코드 강제 추가(또는 신규 태스크) | A5 | 태스크 |
 | ⑤ 선언 정본 §2.1·§3·§6·부록 B·D를 G0 확정치로 갱신 | A7 | 문서 |
 | ⑥ W2 태스크 확정 + 여유 82h 배분 — 기한 부여 | A4 | 문서·대장 |
