@@ -251,8 +251,26 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
 | 차단 | `blocked` — 노트의 최신 `[차단 …]` 문단을 카드에 발췌 | `status` + `notes` |
 | 완료 | 증적 확인된 종결 — 최근 갱신 우선 | `status == done` |
 
-여기에 스테이지 진행률·사람 게이트(경과일·리마인드 초과 강조)·`validate` 경고가 같은
-화면에 얹히고, 검색어·스테이지·레이어·트랙·과목으로 즉시 필터된다.
+여기에 스테이지 진행률·사람 게이트·`validate` 경고가 같은 화면에 얹히고, 검색어·스테이지·
+레이어·트랙·과목으로 즉시 필터된다.
+
+**게이트 카드는 클릭하면 펼쳐진다**(네이티브 `details/summary` — 키보드 접근 가능). 접힌
+상태는 id·제목·경과일(리마인드 초과면 붉은 테두리)만, 펼치면 넷을 더 보여준다:
+- **메타** — 종류·담당·요청일·리마인드 임계·상태
+- **이 게이트가 막고 있는 것** — `requires_gates`로 건 태스크 목록에 더해, **트랙
+  `entry_gate`로 잠긴 경우 그 트랙의 미완 건수**를 함께 센다. 트랙 잠금은 태스크 쪽에
+  아무 표시도 남기지 않으므로, 이걸 세지 않으면 E축 하드락이 "아무것도 안 막는 게이트"로
+  보인다(실측: `G-s5-subject-expansion`이 미완 15건을 잠근다). 단 이 목록은 **의존 관계**
+  이지 "현재 차단"이 아니다 — 해소된 게이트를 아직 `requires_gates`에 달고 있는 태스크가
+  실재하고(`G-eos-g0-verification-design-freeze` ↔ `EOS-56`) `selector.unmet_gates`는 그
+  태스크를 착수 가능으로 본다. 화면 문구는 `blocks_now`(게이트가 pending인가)로 갈린다:
+  대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)".
+- **상세 노트** — 발췌가 아니라 **원문 그대로**(줄바꿈 보존·스크롤). 게이트 노트에는 실행
+  런북이 들어 있다(`G-operator-seat-first-grant` 2,736자) — 요약하면 그게 사라진다
+- **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능
+
+해소된 게이트(cleared·waived)는 기본 접힌 별도 그룹에서 근거(evidence)와 함께 열람한다 —
+기본 화면은 행동이 필요한 대기 게이트만 보여 준다.
 
 **계약 3건** (`tests/harness/test_board.py`가 동결):
 1. **판정 무복제** — 열 배치는 `selector.classify_todo`, 진행률은 `report.stage_progress`를
