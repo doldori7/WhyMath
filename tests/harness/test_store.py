@@ -184,10 +184,16 @@ class TestValidateBacklog:
 
 class TestEvents:
     def test_event_appended_as_ndjson(self, tmp_path: Path, git_repo: Path):
-        """test_이벤트는_ndjson으로_append"""
+        """test_이벤트는_ndjson으로_append — HARN-46: 세션(브랜치) 샤드에 기록된다.
+
+        git_repo 픽스처의 브랜치는 main이므로 샤드는 backlog/events/main.ndjson이다.
+        레거시 events.ndjson 미기록·샤딩 상세 계약은 test_event_ledger_sharding.py가
+        전담 동결한다 — 여기서는 기본 append 형식만 본다.
+        """
         store.append_event(git_repo, "start", "S1-01-alpha", session="b1")
         store.append_event(git_repo, "done", "S1-01-alpha", artifacts=["PR#1"])
-        lines = (git_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8").splitlines()
+        shard = git_repo / "backlog" / "events" / "main.ndjson"
+        lines = shard.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 2
         first = json.loads(lines[0])
         assert first["action"] == "start"

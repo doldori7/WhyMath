@@ -698,17 +698,44 @@ class DerivationType(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 검수 상태 (§3.1 review_status_enum 주석: pending/approved/rejected)
+# 검수 상태 (§3.1 review_status_enum 주석 3종 + quarantined — EOS-71)
 # ──────────────────────────────────────────────────────────────────────────
 class ReviewStatus(str, Enum):
-    """검수 상태 — §3.1 `review_status_enum` 주석(pending/approved/rejected).
+    """검수 상태 — §3.1 `review_status_enum` 주석 3종(pending/approved/rejected) + `quarantined`.
 
     §13.3: 모든 `problem`은 `review_status = approved` 후 노출.
+
+    `quarantined`는 v1.0 DDL 주석 *이후*에 더한 **운영 확장**(EOS-71)이다 — `EventType`이 §6.1
+    주석 8종에 검산결과·힌트제공·시각화조작·문제시도를 더한 것과 같은 방식으로, 스펙 스냅샷
+    (`schemas/v1.0/schema_v1.0.md`)은 원안 그대로 두고 확장은 이 docstring이 정본으로 이고 간다.
+
+    **격리는 삭제가 아니다(비파괴 원칙 — EOS-71 핵심)**: `quarantined`로 표시된 문항은 `problem`
+    레코드도, 그 문항에 딸린 `problem_attempt` 학습 기록도 **그대로 보존**한다. 끊는 것은 *노출*
+    뿐이다. 이 상태값이 없던 시기에 실중복 9건이 코퍼스 JSONL에서 **물리 제거**된 선례가 있고
+    (`docs/data/problem_duplicate_disposition_2026-08.md` §3 — "감사 도구는 review_status를
+    필터하지 않는다"가 제거의 직접 근거였다), 이 값은 그 파괴적 처분의 구조화된 대안이다.
+
+    계약 정본: `docs/standards/problem_quarantine_contract.md`.
     """
 
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+
+    quarantined = "quarantined"
+    """운영 중 **사후 결함 판정으로 회수**된 문항 — 레코드·학습 기록 보존, 노출만 차단(EOS-71).
+
+    `rejected`와 **절대 합치지 않는다**:
+      · `rejected` = *애초에 승인받지 못한* 문항. 검수 기준 미달로 판정됐고 학생에게 서빙된 적이
+        없다 — "들여보내지 않았다".
+      · `quarantined` = *한때 `approved`로 서빙되던* 문항의 사후 결함 판정(정답 오류·복수 정답·
+        모호 문장·실중복 등)에 따른 회수 — "들여보냈다가 되돌렸다".
+    합치면 "학생이 이미 풀어 본 결함 문항"과 "한 번도 나간 적 없는 탈락 문항"이 같은 글자가 되어,
+    딸린 `problem_attempt`를 재채점·θ 재계산 대상으로 볼지 사후에 구분할 수 없게 된다.
+
+    격리 사유·시각은 `problem.quarantine_reason`·`quarantined_at`에 **함께** 기록한다(계약 §3 —
+    상태값만 있고 사유가 없으면 "왜 회수됐는가"가 사람 기억에만 남아 해제 판단도 불가능해진다).
+    """
 
 
 def is_review_status_cleared(value: ReviewStatus | str | None) -> bool:
@@ -741,6 +768,40 @@ def is_review_status_cleared(value: ReviewStatus | str | None) -> bool:
       `approved`이면 True, 그 외 전부 False.
     """
     return value == ReviewStatus.approved
+
+
+def is_review_status_quarantined(value: ReviewStatus | str | None) -> bool:
+    """격리 여부의 **값 수준 단일 권위**(EOS-71) — `quarantined`만 True.
+
+    **왜 `is_review_status_cleared`와 합치지 않는가**(두 술어를 나란히 두는 이유):
+    `is_review_status_cleared`는 "`approved`만 통과"라 *검수 통과를 요구하는* 표면에만 쓸 수 있다.
+    그런데 `api/problems.py`의 공개 카탈로그 GET 4종(단건·목록·steps·relations)은 **검수 통과를
+    요구하지 않는 표면**이다 — 지금도 `pending`·`None` 문항이 그대로 나간다(SEC-07 D1의 공개
+    카탈로그 결정). 거기에 `is_review_status_cleared`를 걸면 노출 정책이 "카탈로그 전체 공개"에서
+    "승인분만 공개"로 바뀌는 **정책 변경**이 되고 현 클라·데모 경로를 광범위하게 깨뜨린다(EOS-71
+    범위 밖 — 격리 계약 §7). 그래서 그 표면에서는 *격리만 확실히 차단*하는 이 술어를 쓴다.
+
+    두 술어는 **방향이 다르다**:
+      · `is_review_status_cleared` — **허용 목록**(approved만 True). 새 상태값이 생기면 자동 배제.
+      · `is_review_status_quarantined` — **단일 값 지목**(quarantined만 True). 새 상태값이 생겨도
+        이 술어는 그 값을 격리로 보지 않는다.
+    따라서 이 술어는 `is_review_status_cleared`를 **대체하지 않는다**. 검수 통과를 요구하는 표면
+    (L6 6모드·blueprint 조립·기본 CAT 후보 풀·빌드타임 상속 필터)은 계속 `is_review_status_cleared`
+    를 쓰고, 거기서는 `quarantined`가 "approved가 아니다"라는 이유로 *이미* 차단된다 — fail-closed
+    허용목록이 새 값을 공짜로 처리한다. 이 술어가 필요한 곳은 승인을 요구하지 않는 공개 표면뿐이다.
+
+    `ReviewStatus`가 `str, Enum`이라 이 한 줄이 enum 멤버와 문자열 양쪽을 올바르게 판정한다
+    (`is_review_status_cleared`와 동일). **관대한 정규화는 하지 않는다** — `"QUARANTINED"`·
+    `"quarantined "`는 False다. 관대하게 받으면 Python 술어는 격리로 보는데 SQL 술어
+    (`api/problems.py::quarantine_exclusion_condition`)는 아닌 값이 생겨 기준이 이원화된다.
+
+    Args:
+      value: 판정 대상 `review_status`(enum 멤버·문자열·None 모두 허용).
+
+    Returns:
+      `quarantined`이면 True, 그 외(`None`·`pending`·`approved`·`rejected`) 전부 False.
+    """
+    return value == ReviewStatus.quarantined
 
 
 # ──────────────────────────────────────────────────────────────────────────

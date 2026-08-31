@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-69-subject-adapter-serving-wiring
+title: "SubjectAdapter 경유 배선 — Core 11건의 수학 검증 직접 호출을 Protocol 호출로 대체 (EOS-66 집행 지점)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - EOS-66-subject-adapter-contract
+requires_gates: []
+acceptance:
+  - "① 경계 문서 §4 A분류 11건을 SubjectAdapter Protocol 경유로 대체 — api.coach(3)·l6.blueprint.assembly(3)·l3.render.adapters(3)·l3.pedagogy.slot_generator(2). 구현체는 DI로 주입하고 호출측은 Protocol 타입만 안다"
+  - "② 대체 후 재측정: python3 scripts/analysis/eos_core_adapter_boundary_scan.py 위반 수가 15에서 얼마로 내려갔는지 실측 기재. 0이 아니면 남은 건의 사유를 건별로"
+  - "③ 회귀 없음: 대체는 동작 변경이 아니라 호출 경로 변경이다 — 각 지점의 기존 테스트가 그대로 통과해야 하고, 상태 재해석(특히 unverifiable을 fail로 접기)이 없음을 확인"
+  - "④ B분류 3건 선처리 권고: l3.equivalent.josa(한국어 조사 판별·과목 무관)를 수학 패키지 밖으로 이동하면 baseline 없이 3건이 소멸한다 — 이 태스크에서 하거나 분리하거나 판정해 기록"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/l6/blueprint/assembly.py
+  - src/backend/whymath_backend/l3/render/adapters.py
+  - src/backend/whymath_backend/l3/pedagogy/slot_generator.py
+session: null
+notes: "출처: EOS-66 acceptance ③ 집행 별항(정본화≠집행). EOS-66이 계약을 만들었으나 경유하는 서빙 경로가 0개다 — 이 태스크가 그 0을 없앤다. 위반 목록 정본 = docs/architecture/eos_core_adapter_boundary.md §4. EOS-67(정적 강제)과의 순서: 이 태스크가 먼저 끝날수록 EOS-67 baseline에 넣을 항목이 줄어든다."
+updated: 2026-08-31

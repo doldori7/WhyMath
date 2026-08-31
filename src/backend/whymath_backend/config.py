@@ -895,9 +895,11 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         description=(
             "slice 72: 디바이스 secret at-rest 봉투 암호화 마스터 키(base64 인코딩 32바이트="
-            "AES-256). 빈 값=암호화 비활성(평문 저장·기존 동작 폴백). DB 밖(env/Settings)에 "
-            "두어 DB dump만으로는 secret 복호 불가하게 한다. `WHYMATH_DEVICE_SECRET_"
-            "ENCRYPTION_KEY` env로만 주입(SecretStr — repr/로그 평문 차단·하드코딩 금지). "
+            "AES-256). DB 밖(env/Settings)에 두어 DB dump만으로는 secret 복호 불가하게 한다. "
+            "**SEC-28**: 빈 값은 개발/CI에서만 평문 폴백을 허용하고, prod-like 환경(실 OAuth "
+            "provider 구성)에서는 `require_device_secret_cipher`가 RuntimeError로 부팅을 "
+            "거부한다. `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` env로만 주입(SecretStr — repr/"
+            "로그 평문 차단·하드코딩 금지). "
             '키 생성: `python -c "import base64,os; '
             'print(base64.b64encode(os.urandom(32)).decode())"`. 진짜 KMS(HSM)는 후속.'
         ),

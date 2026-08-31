@@ -1630,14 +1630,15 @@ def cmd_policy(root: Path, args: argparse.Namespace) -> int:
         print(store.dump_policy(policy), end="")
         return 0
 
-    # report — events.ndjson의 policy_warn을 rule별 집계 (승격 판단 근거)
+    # report — 이벤트 대장(레거시 + 세션 샤드 전부)의 policy_warn을 rule별 집계.
+    # HARN-46: 샤딩 이후 기록은 backlog/events/*.ndjson에 흩어져 있으므로
+    # store.event_paths()가 주는 전 파일을 읽어야 무손실이다. 파일 간 순서는
+    # 무의미해졌으므로(샤드별 append) ts로 정렬해 rule별 tail 표시를 시간순으로 만든다.
     from datetime import datetime, timedelta
 
     cutoff = datetime.now() - timedelta(days=args.days)
-    path = store.backlog_dir(root) / "events.ndjson"
-    by_rule: dict[str, list[dict]] = {}
-    total = 0
-    if path.exists():
+    collected: list[tuple[datetime, dict]] = []
+    for path in store.event_paths(root):
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
                 event = json.loads(line)
@@ -1651,8 +1652,13 @@ def cmd_policy(root: Path, args: argparse.Namespace) -> int:
                 continue
             if ts < cutoff:
                 continue
-            total += 1
-            by_rule.setdefault(str(event.get("rule", "?")), []).append(event)
+            collected.append((ts, event))
+    collected.sort(key=lambda pair: pair[0])
+    by_rule: dict[str, list[dict]] = {}
+    total = 0
+    for _ts, event in collected:
+        total += 1
+        by_rule.setdefault(str(event.get("rule", "?")), []).append(event)
     print(f"조율 정책 warn 리포트 — 최근 {args.days}일, 총 {total}건")
     if not by_rule:
         print("  (경고 없음 — 오탐 0. 승격 기준 충족 여부는 정탐 사례와 함께 판단)")

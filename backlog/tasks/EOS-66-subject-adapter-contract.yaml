@@ -1,0 +1,32 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-66-subject-adapter-contract
+title: "SubjectAdapter 행위 계약 정의 + Math 구현 1건 — Subject Contract v1 (Gate 0-B·'Physics를 붙일 때 Core를 뜯지 않는가'의 증명 수단)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - EOS-65-core-adapter-boundary-map
+requires_gates: []
+acceptance:
+  - "① 계약 정본: SubjectAdapter Protocol 정의(evaluate_answer·detect_misconception·explain·validate_problem 4메서드 — 과목마다 반드시 존재하는 능력만. renderEquation류 수학 전용 메서드 금지). mypy --strict 통과"
+  - "② Math 구현 1건: MathSubjectAdapter가 기존 L3/L4 함수에 위임(로직 재작성 0줄 — 계획서 006 §43 '전면 재작성 금지'). 위임 대상 함수 경로를 docstring이 아니라 태스크 artifacts에 기록"
+  - "③ 집행 별항(정본화≠집행): 이 계약을 실제로 경유하는 서빙 코드 경로가 현재 0개임을 명시하고, 경유 배선(어느 API 핸들러가 Protocol을 통해 호출하게 할지)은 후속 태스크로 분리 등재 — 계약 파일 존재만으로 done 처리 금지"
+  - "④ 반례 검증: Protocol에 수학 전용 개념(LaTeX·AST·SymPy 타입)이 시그니처에 새지 않았는지 대조. 샜으면 그 메서드는 계약에서 내린다"
+artifacts:
+  - "#924"
+  - src/backend/whymath_backend/schema/subject_adapter.py
+  - src/backend/whymath_backend/l4/subject_adapter_math.py
+  - tests/backend/schema/test_subject_adapter.py
+  - "위임: l3/verify_answer.py:272 · l4/misconception/diagnose.py:136 · l3/verifier.py:300"
+  - "후속 분리 등재: EOS-69(경유 배선)·EOS-70(explain 능력)"
+paths:
+  - src/backend/whymath_backend/schema/subject_adapter.py
+  - src/backend/whymath_backend/l4/subject_adapter_math.py
+  - tests/backend/schema/test_subject_adapter.py
+session: null
+notes: "출처: 대조 §4 A1(#924). 계획서 100 P0-05·P0-06 · 006 §6. 실측: grep -rn 'SubjectAdapter' src/ = 0건. 인접 착지 구분 — CUR-11(done·#920)은 curriculum API 표면이고 S1-16(todo)은 스키마 축이라 행위 계약은 무주인이었다. 선언 §1.3-③은 물리 대이동만 보류하고 계약 수준은 W1 몫으로 명시했다. 파일 경로는 EOS-65 경계 표 확정 후 조정 가능(현 경로는 잠정)."
+updated: 2026-08-31

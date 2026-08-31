@@ -237,11 +237,22 @@ Master Key → KEK → DEK → Data
 - AES-256-GCM(96-bit nonce, AEAD) 필드 수준 암호화
 - `MultiKeyCipher`: primary + fallback 다중 키 + 버전 기반 복호화
 - 자산별 키 소스 분리: device secret, dialogue content, evidence payload
-- dialogue content에 한해 prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed)
+- device secret·dialogue content 모두 prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed) — 판정은 `config.is_production_like` 단일 좌석
 
 현재 구현은 **자산별 마스터 키를 직접 사용하는 필드 암호화**이며, §7.2에서 정의한 KEK/DEK 봉투 암호화나 KMS는 아직 도입되지 않았다. EOS는 이를 P0 암호화 기반선으로 삼고, KEK/DEK/KMS로의 이행은 P1/P2에서 `TBD-48-02`로 결정한다.
 
-> ⚠️ 알려진 갭: `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`가 없을 때 device secret은 평문 폴백(`secret_plain`)될 수 있다. 이 갭은 SEC-01 범위 밖이므로 별도로 추적해야 한다.
+> **[SEC-28 해소·2026-08-30]** 위 갭(`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` 미설정 시 device
+> secret 평문 폴백)은 닫혔다. `require_device_secret_cipher`가 prod 추정 환경에서 키가 없으면
+> `RuntimeError`로 **부팅을 거부**하고(집행 지점 = `_device_store.build_device_store_from_settings`),
+> `encrypt_secret_for_storage`는 `allow_plaintext_fallback=True`를 명시받지 않으면 평문 저장을
+> 거부한다. 개발/CI에서만 그 플래그가 켜지며, 그 값은 `cipher is None and not
+> settings.production_like`로 계산된다 — 즉 **prod-like에서는 켤 수 없다**.
+>
+> 하위 호환: 기존 평문 행의 읽기(`resolve_stored_secret` dual-read)는 그대로다 — 이 변경은
+> *새 secret의 저장*만 막는다. 기존 평문 행의 재암호화 배치는 여전히 후속이다(슬라이스 73 한계 ①).
+>
+> 변별력 실측: prod-like 거부 가드와 부팅 배선을 각각 무력화하는 뮤테이션에서 테스트 4건이 red로
+> 전환됨을 확인했다(`TestRequireDeviceSecretCipher`·`TestBuildDeviceStoreFromSettings`).
 
 ### 7.4 Key Lifecycle
 

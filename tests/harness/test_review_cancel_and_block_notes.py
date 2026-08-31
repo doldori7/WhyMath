@@ -34,6 +34,11 @@ def seeded_repo(git_repo: Path, monkeypatch) -> Path:
     return git_repo
 
 
+def _all_events_text(repo: Path) -> str:
+    """이벤트 대장 전문 — 레거시 + 세션 샤드 합집합(HARN-46 샤딩 이후의 정본 읽기)."""
+    return "".join(path.read_text(encoding="utf-8") for path in store.event_paths(repo))
+
+
 def _add_task(task_id: str, notes: str = "", stage: str = "S1") -> int:
     argv = [
         "add",
@@ -108,7 +113,7 @@ class TestReviewTransitionWiring:
         assert _add_task("T1-06-review-event") == 0
         assert cli.main(["start", "T1-06-review-event", "--no-remote"]) == 0
         assert cli.main(["review", "T1-06-review-event"]) == 0
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         assert any(
             json.loads(line).get("action") == "review"
             and json.loads(line).get("id") == "T1-06-review-event"
@@ -252,7 +257,7 @@ class TestCancelTransitionWiring:
     def test_cancel_appends_event(self, seeded_repo: Path):
         assert _add_task("T3-07-cancel-event") == 0
         assert cli.main(["cancel", "T3-07-cancel-event", "--reason", "이벤트 확인"]) == 0
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         assert any(
             json.loads(line).get("action") == "cancel"
             and json.loads(line).get("id") == "T3-07-cancel-event"
