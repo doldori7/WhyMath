@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (구현·EOS-60): **골든 벤치마크 셋 + QA 엔진 혼동행렬 — 판정기의 FN율을 처음으로 잰다(N8 갭 해소)** (claude 구현)
+- **문제**: `qa_pipeline`이 9축을 조립해 PASS/FAIL을 내지만 **자기 FN율을 모른다**. EOS-51 §6 내용 KPI 6종 중 4종이 골든 라벨에 의존하는데 저장소 전수 grep 0건이었다(N8 — `eos_validation_n1_n10_gap_review_2026-08-30.md` §3.7). G2(10/25)의 "자동검증 ≥70%"는 자동검증이 맞는지 모르면 무의미한 숫자다
+- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 65건
+- **별도 라벨링 캠페인 0**: 골든은 EOS-54 검수 이벤트의 `verdict`·`failure_code`에서 승격한다(검수 185 CU 예산의 부산물 — 추가 인간 시간 ≈ 0). 앵커 6 × 30~35 ≈ 200건 목표
+- **as-found fail-closed(#911 codex P1 반영)**: `rejected`는 그대로 승격, `approved`는 ⓐ 검수 전 스냅샷 또는 ⓑ EOS-62 edit-aware verdict(+`--edit-aware-since` 경계) 없이는 **제외 + 건수 명시**. 손질 후 승인을 clean으로 승격하면 FN율이 과소평가되어 골든이 자기 목적을 훼손한다. ⓑ 착지 여부는 상수가 아니라 `ReviewVerdict` 어휘 **실측**(`edit_aware_verdict_available`) — EOS-62 착지 시 자동 해금, 착지 전에는 손대지 않아도 fail-closed 유지
+- **과적합 방지(S2-11 골든 적용)**: 골든에 `golden_version`·`rotation`·`frozen_at`·`digest`(판정 축만의 sha256 — 라벨 손편집은 로드 시 터짐) 동결 + 평가 원장으로 "같은 골든 × 다른 엔진 리비전" 재채점을 exit 1 차단(같은 리비전 재실행은 재현성 확인이므로 허용). 회전 해시는 `reviewer_sample_package.rotation_key`를 공개 승격해 **재사용**(재구현 0)
+- **FN 위장 차단**: 예측 없는 골든 항목을 pass로 세지 않는다(미평가 분리 카운트) — 이 계약이 깨지면 FN율이 구조적으로 낮아진다. 파싱 실패 1건이라도 있으면 판정하지 않는다(hit_cu_metrics 동일 규약)
+- **집행 별항(⑤)**: 내용 KPI 4종의 골든 소비 결선표를 `CONTENT_KPI_CONSUMERS`로 동결하고 리포트가 **라벨 축별 정답지 건수**와 함께 상시 출력 — 착지는 `ops/qa_confusion_matrix` 1종뿐이고 교육과정 정합률·op-code 정확도·풀이 비약 κ는 **미착지**(좌석 `EOS-61`·`MISC-07`)임을 그대로 적는다. 표와 실체의 정합(착지=import 가능·미착지=좌석 태스크 실재)은 테스트가 기계 동결. `subject_id`는 처음부터 스키마에(Math 비종속)
+- **CI 배선 판정**: 둘 다 검수 실이벤트 의존이라 `declared_unwired_audit`에 `by-design` 등재(hit_cu_metrics 동형) — 판정 로직 자체는 backend 잡이 수집하는 테스트가 상시 검증한다
+
 ### 2026-08-30 (회수 실행): **HARN-34·35 즉시 실행 — 법령 게이트 재등재 + done 정정 4건 + 유실 태스크 6건 재등재(MISC-17~20·SEC-30·OPS-53) + 5차 삭제 배치** (Kiki "모두 알아서 정리해줘", claude 실행)
 - #899(4차 감사) 머지 직후 같은 세션이 회수를 실행: `G-export-prediction-disclosure` 게이트 CLI 재등재(원 요청일 08-11 보존), ASM-12(#822)·MISC-04(#821)·CUR-16(#892)·S4-10(#898) done 정정, 고립 참조 notes 7건 병기, OPS-41 현행화
 - 재등재 매핑: MISC-07→17·08→18·09→19·10→20, SEC-25→SEC-30, OPS-24→OPS-53 (전건 2026-08-30 미해소 재실측 후·원 번호 재사용 금지). MISC-11은 흡수 판정(HARN-34 ③ + main todo 태스크 자신이 회수 좌석)

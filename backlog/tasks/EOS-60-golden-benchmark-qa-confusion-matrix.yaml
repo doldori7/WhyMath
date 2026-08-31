@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - "data/corpus/**"
   - "tests/backend/**"
-session: null
+session: claude/eos-60-3uoj70
 notes: "출처: 260830 외부 검토 N8 + 본 검토 docs/reviews/eos_validation_n1_n10_gap_review_2026-08-30.md §3.7·§6-2. 저장소 전수 grep 0건(golden 히트는 notation_contract·NotMeasuredAxis('ui_golden')뿐). G2(10/25) '자동검증 ≥70%'는 자동검증이 맞는지 모르면 무의미한 숫자 — 외부 문서는 N8을 P1로 봤으나 우리 게이트 일정에서는 P0. acceptance ⑥은 #911 codex 리뷰 P1 반영(손질 후 승인의 FN 과소평가). 골든은 검수 데이터가 쌓이는 동안에만 싸게 만들 수 있다(N5·N7·N9의 '나중에 만들면 복원 불가' 논지가 N8에도 적용)."
-updated: 2026-08-30
+updated: 2026-08-31
