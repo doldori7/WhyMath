@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-44-event-ledger-timezone-offset
+title: "backlog/events.ndjson 시각에 오프셋 표기 — 교차 머신 사건 순서 재구성 가능하게"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① store.append_event의 ts를 오프셋 포함 표기로 전환(datetime.now()는 오프셋 없는 머신 로컬 시각 — store.py:300). 같은 파일의 KST 행과 UTC 행이 구분자 없이 섞여 있는 현 상태를 해소"
+  - "② 과거 행 소급 정정 금지(날조 방지) — 전환 시점을 문서·코드 주석에 명시하고 그 이전 구간은 '머신 로컬·척도 불명'으로 남긴다. 소비자(brief·status·리포트)가 무오프셋 레거시 행을 파싱 실패 없이 읽는지 확인"
+  - "③ 변별력 실측: 서로 다른 TZ에서 쓴 두 이벤트의 순서가 실제로 올바르게 정렬되는지 테스트로 동결(단순 문자열 포함 검사 금지 — 정렬 결과를 단언)"
+artifacts: []
+paths:
+  - scripts/harness/store.py
+  - "tests/harness/**"
+session: null
+notes: "출처: HARN-38 경위 규명 §3-1(docs/reviews/eos_number_collision_root_cause_2026-08-31.md). 실측 교차검증: 'done HARN-36 @2026-08-30T00:50:38'은 claim 커밋 1ca71b02(+0000)와 1초 차 = UTC 세션 / 'start CUR-16 @2026-08-25T23:56:15'는 claim 커밋 fc943cd8(+0900)와 3초 차 = KST 세션. 같은 대장의 두 줄이 9시간 어긋난 척도인데 알려주는 필드가 없어, 사고 재구성에서 '어느 add가 먼저였나'(=어느 가드를 고칠 것인가)에 답할 수 없었다."
+updated: 2026-08-31
