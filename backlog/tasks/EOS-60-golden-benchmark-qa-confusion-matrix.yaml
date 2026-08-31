@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,7 +17,12 @@ acceptance:
   - "④ '작동한 비율' 원칙 — 골든 적재율·평가 실행 여부를 리포트가 상시 보고. 골든 0건은 '통과'가 아니라 측정 실패로 exit 1 승격"
   - "⑥ **as-found 라벨 무결성(fail-closed)** — 골든 라벨은 QA 엔진이 실제로 본 입력, 즉 *검수 전(as-found)* 상태여야 한다. `rejected`는 failure_code가 as-found 결함을 명시하므로 그대로 승격 가능하나, `approved`는 무손질 승인과 손질 후 승인이 현재 구분 불가다(verdict 2값 — EOS-62가 그 좌석). 손질 후 승인을 정상으로 승격하면 **원래 결함이던 입력이 clean으로 라벨링되어 FN율이 과소평가**된다 — 골든이 자기 목적을 훼손한다. 따라서 ⓐ 검수 전 불변 스냅샷 + as-found 결함 라벨을 확보하거나 ⓑ EOS-62의 edit-aware verdict 착지 중 하나가 성립해야 approved를 승격한다. 둘 다 없으면 **모호 승인분은 승격에서 제외하고 그 건수를 리포트에 명시**한다(조용한 포함 금지 — 미측정≠정상). 소급 재분류는 금지(EOS-62 ④)이므로 과거 approved 행은 영구 모호로 남는다 — 골든 표본은 계약 착지 이후 검수분에서 뽑는 것이 정본 경로다"
   - "⑤ 집행 별항(정본화≠집행): EOS-51 §6 내용 KPI 4종(수학적 오류율 심판 전수·교육과정 정합률 역매핑·op-code 라벨 정확도·풀이 비약 LLM 심판 κ≥0.5)이 이 골든을 실제로 소비하는 지점을 명시. subject_id를 처음부터 스키마에 둔다(Validation의 Math 비종속)"
-artifacts: []
+artifacts:
+  - "#928"
+  - 4efda374
+  - src/backend/whymath_backend/harness/golden_benchmark.py
+  - src/backend/whymath_backend/ops/qa_confusion_matrix.py
+  - docs/standards/golden_benchmark_contract.md
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/ops/**"
@@ -25,4 +30,4 @@ paths:
   - "tests/backend/**"
 session: null
 notes: "출처: 260830 외부 검토 N8 + 본 검토 docs/reviews/eos_validation_n1_n10_gap_review_2026-08-30.md §3.7·§6-2. 저장소 전수 grep 0건(golden 히트는 notation_contract·NotMeasuredAxis('ui_golden')뿐). G2(10/25) '자동검증 ≥70%'는 자동검증이 맞는지 모르면 무의미한 숫자 — 외부 문서는 N8을 P1로 봤으나 우리 게이트 일정에서는 P0. acceptance ⑥은 #911 codex 리뷰 P1 반영(손질 후 승인의 FN 과소평가). 골든은 검수 데이터가 쌓이는 동안에만 싸게 만들 수 있다(N5·N7·N9의 '나중에 만들면 복원 불가' 논지가 N8에도 적용)."
-updated: 2026-08-30
+updated: 2026-08-31
