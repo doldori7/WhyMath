@@ -260,7 +260,11 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
 - **이 게이트가 막고 있는 것** — `requires_gates`로 건 태스크 목록에 더해, **트랙
   `entry_gate`로 잠긴 경우 그 트랙의 미완 건수**를 함께 센다. 트랙 잠금은 태스크 쪽에
   아무 표시도 남기지 않으므로, 이걸 세지 않으면 E축 하드락이 "아무것도 안 막는 게이트"로
-  보인다(실측: `G-s5-subject-expansion`이 미완 15건을 잠근다)
+  보인다(실측: `G-s5-subject-expansion`이 미완 15건을 잠근다). 단 이 목록은 **의존 관계**
+  이지 "현재 차단"이 아니다 — 해소된 게이트를 아직 `requires_gates`에 달고 있는 태스크가
+  실재하고(`G-eos-g0-verification-design-freeze` ↔ `EOS-56`) `selector.unmet_gates`는 그
+  태스크를 착수 가능으로 본다. 화면 문구는 `blocks_now`(게이트가 pending인가)로 갈린다:
+  대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)".
 - **상세 노트** — 발췌가 아니라 **원문 그대로**(줄바꿈 보존·스크롤). 게이트 노트에는 실행
   런북이 들어 있다(`G-operator-seat-first-grant` 2,736자) — 요약하면 그게 사라진다
 - **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능

@@ -370,25 +370,25 @@ class TestGateDetail:
         assert gate["remind_after_days"] == 7
         assert gate["days"] == 20 and gate["overdue"] is True
 
-    def test_blocking_tasks_are_listed(self):
+    def test_dependent_tasks_are_listed(self):
         """test_이_게이트를_건_태스크가_상세에_나온다"""
         payload = board.build_board(_backlog(), [], TODAY)
         gate = self._gate(payload, "G-key")
-        assert [t["id"] for t in gate["blocking_tasks"]] == ["S2-03-gate"]
+        assert [t["id"] for t in gate["dependent_tasks"]] == ["S2-03-gate"]
 
     def test_finished_tasks_are_not_counted_as_blocked(self):
         """test_종결된_태스크는_막힌_것으로_세지_않는다"""
         backlog = _backlog()
         backlog.tasks["S2-03-gate"].status = "cancelled"
         payload = board.build_board(backlog, [], TODAY)
-        assert self._gate(payload, "G-key")["blocking_tasks"] == []
+        assert self._gate(payload, "G-key")["dependent_tasks"] == []
 
     def test_track_entry_gate_locks_are_visible(self):
         """test_트랙_진입_게이트_잠금이_보인다 (태스크 쪽엔 표시가 남지 않는 축)"""
         payload = board.build_board(_backlog(), [], TODAY)
         gate = self._gate(payload, "G-e-axis")
-        assert gate["blocking_tasks"] == []  # 어떤 태스크도 requires_gates로 걸지 않았다
-        assert gate["blocking_tracks"] == [{"track": "e-axis", "title": "확장", "pending": 1}]
+        assert gate["dependent_tasks"] == []  # 어떤 태스크도 requires_gates로 걸지 않았다
+        assert gate["dependent_tracks"] == [{"track": "e-axis", "title": "확장", "pending": 1}]
 
     def test_resolved_gates_are_available_with_evidence(self):
         """test_해소된_게이트도_근거와_함께_열람_가능하다"""
@@ -417,3 +417,38 @@ class TestGateDetail:
         assert 'id="gates-resolved"' in html  # 해소 그룹 자리
         assert "function gateBody(" in html  # 펼침 본문 렌더러
         assert "런북 본문" in html  # 노트가 실제로 페이지에 실린다
+
+
+class TestResolvedGateIsNotABlocker:
+    """해소된 게이트가 "지금 막고 있다"고 말하면 안 된다 (codex 리뷰 #923).
+
+    실측 근거: cleared G-eos-g0-verification-design-freeze를 아직 requires_gates에 달고
+    있는 EOS-56이 실재하고, selector.unmet_gates는 그 태스크를 착수 가능으로 본다.
+    """
+
+    def test_pending_gate_blocks_now(self):
+        """test_대기_게이트는_지금_막는다"""
+        payload = board.build_board(_backlog(), [], TODAY)
+        gate = next(g for g in payload["gates"] if g["id"] == "G-key")
+        assert gate["blocks_now"] is True
+        assert [t["id"] for t in gate["dependent_tasks"]] == ["S2-03-gate"]
+
+    def test_cleared_gate_keeps_dependents_but_does_not_block(self):
+        """test_해소된_게이트는_의존만_남기고_차단하지_않는다"""
+        backlog = _backlog()
+        backlog.gates["G-key"].status = "cleared"
+        backlog.gates["G-key"].evidence = "PR #921"
+        payload = board.build_board(backlog, [], TODAY)
+        gate = next(g for g in payload["gates"] if g["id"] == "G-key")
+        assert gate["blocks_now"] is False
+        # 이력은 남긴다 — 지운다면 "누가 이 게이트를 걸었나"를 잃는다
+        assert [t["id"] for t in gate["dependent_tasks"]] == ["S2-03-gate"]
+        # 그리고 그 태스크는 실제로 착수 가능해야 한다(판정의 단일 원천과 일치)
+        assert _column_of(payload, "S2-03-gate") == "ready"
+
+    def test_render_switches_the_heading_by_state(self):
+        """test_렌더가_상태에_따라_문구를_바꾼다"""
+        html = board.render_html(board.build_board(_backlog(), [], TODAY))
+        assert "이 게이트가 막고 있는 것" in html
+        assert "해소됨 — 지금은 차단하지 않는다" in html
+        assert "g.blocks_now" in html  # 문구 선택이 상태에 묶여 있다

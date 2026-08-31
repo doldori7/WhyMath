@@ -193,14 +193,20 @@ def apply_remote_done(cards: list[BoardTask], remote_done: dict[str, list[str]])
         card.detail = ", ".join(branches)
 
 
-def gate_blockees(
+def gate_dependents(
     backlog: Backlog, gate_id: str
 ) -> tuple[list[dict[str, str]], list[dict[str, object]]]:
-    """이 게이트가 실제로 막고 있는 것 — (태스크 목록, 트랙 목록).
+    """이 게이트를 전제로 건 것 — (태스크 목록, 트랙 목록).
 
     두 경로가 있다: ①태스크가 `requires_gates`로 직접 건 경우 ②트랙 `entry_gate`인 경우
     (E축 하드락처럼 트랙 전체가 잠긴다 — 태스크 쪽에는 아무 표시도 남지 않으므로 이쪽을
     세지 않으면 "아무것도 안 막는 게이트"로 잘못 보인다).
+
+    ⚠ 이 목록은 **의존 관계**이지 "현재 차단"이 아니다. 해소(cleared/waived)된 게이트를
+    아직 `requires_gates`에 달고 있는 태스크가 실재하며(실측: G-eos-g0-verification-
+    design-freeze ↔ EOS-56), `selector.unmet_gates`는 그 태스크를 착수 가능으로 본다.
+    지금 막고 있는지 여부는 `blocks_now`(=게이트가 pending인가)가 말한다 — 이 구분이
+    없으면 화면이 "이미 풀린 게이트가 아직 막고 있다"고 거짓말한다.
     """
     tasks = [
         {"id": t.id, "title": t.title, "status": t.status}
@@ -226,7 +232,7 @@ def gate_blockees(
 def gate_detail(backlog: Backlog, gate: Gate, today: date) -> dict[str, object]:
     """게이트 1건의 카드 + 펼침 상세 — 화면에서 "무엇을 하면 풀리는가"까지 읽히게 한다."""
     days = report._days_pending(gate.requested, today)
-    tasks, tracks = gate_blockees(backlog, gate.id)
+    tasks, tracks = gate_dependents(backlog, gate.id)
     return {
         "id": gate.id,
         "title": gate.title,
@@ -243,8 +249,9 @@ def gate_detail(backlog: Backlog, gate: Gate, today: date) -> dict[str, object]:
         ),
         "evidence": gate.evidence or "",
         "notes": gate.notes,
-        "blocking_tasks": tasks,
-        "blocking_tracks": tracks,
+        "blocks_now": gate.status == "pending",
+        "dependent_tasks": tasks,
+        "dependent_tracks": tracks,
     }
 
 
@@ -567,13 +574,16 @@ function gateBody(g) {
     `<span class="chip">${esc(g.status)}</span>`,
   ].join('');
 
-  const blocking = [];
-  g.blocking_tracks.forEach(t => blocking.push(
-    `트랙 <b>${esc(t.title)}</b> 전체 잠금 — 이 게이트 전까지 착수 불가한 미완 ${t.pending}건`));
-  g.blocking_tasks.forEach(t => blocking.push(
-    `<code>${esc(t.id)}</code> ${esc(t.title)}`));
-  const blockHtml = blocking.length
-    ? `<ul>${blocking.map(b => `<li>${b}</li>`).join('')}</ul>`
+  const deps = [];
+  g.dependent_tracks.forEach(t => deps.push(g.blocks_now
+    ? `트랙 <b>${esc(t.title)}</b> 전체 잠금 — 이 게이트 전까지 착수 불가한 미완 ${t.pending}건`
+    : `트랙 <b>${esc(t.title)}</b> — 이 게이트를 진입 조건으로 걸었다 (미완 ${t.pending}건)`));
+  g.dependent_tasks.forEach(t => deps.push(`<code>${esc(t.id)}</code> ${esc(t.title)}`));
+  const depTitle = g.blocks_now
+    ? '이 게이트가 막고 있는 것'
+    : '이 게이트를 전제로 걸었던 것 (해소됨 — 지금은 차단하지 않는다)';
+  const depHtml = deps.length
+    ? `<ul>${deps.map(b => `<li>${b}</li>`).join('')}</ul>`
     : `<div class="none">이 게이트를 <code>requires_gates</code>로 건 태스크도, `
       + `진입 게이트로 쓰는 트랙도 없다 — 스케줄러를 막지는 않는 운영·법무 축 항목이다.</div>`;
 
@@ -590,7 +600,7 @@ function gateBody(g) {
 
   return `<div class="body">
     <h4>메타</h4><div class="meta">${meta}</div>
-    <h4>이 게이트가 막고 있는 것</h4>${blockHtml}
+    <h4>${depTitle}</h4>${depHtml}
     <h4>상세 노트</h4>${noteHtml}
     ${evidenceHtml}
     <h4>해소</h4><code class="cmd">${cmd}</code></div>`;
