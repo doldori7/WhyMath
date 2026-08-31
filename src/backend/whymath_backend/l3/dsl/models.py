@@ -9,30 +9,31 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # =============================================================================
-# 콘텐츠 생명주기 상태
+# 콘텐츠 생명주기 상태 — 이 모듈에 두지 않는다 (EOS-72 폐기 결정, 2026-08-31)
 # =============================================================================
-
-
-class ContentLifecycleState(str, Enum):
-    """콘텐츠 생명주기 — `docs/architecture/03d_dsl_content_generator.md` §9.2."""
-
-    IDEA = "idea"
-    GENERATED = "generated"
-    PARSED = "parsed"
-    VALIDATED = "validated"
-    VERIFIED = "verified"
-    REVIEWED = "reviewed"
-    PUBLISHED = "published"
-    USED = "used"
-    ANALYZED = "analyzed"
-    IMPROVED = "improved"
-    DEPRECATED = "deprecated"
+# `ContentLifecycleState`(idea→…→deprecated 11단계)가 여기 선언돼 있었으나 소비처가 0건인 채로
+# 남아 있었다. 삭제한 이유는 "안 쓰여서"가 아니라 **정본이 다른 곳에 이미 있어서**다:
+#
+#   · 노출 판정의 정본 = `schema/enums.py`의 `ReviewStatus`(pending/approved/rejected)와
+#     값 수준 단일 권위 `is_review_status_cleared`(approved만 True·fail-closed, CONT-01).
+#     실제 서빙 게이트 `l6/_shared.is_review_cleared`(L6 6모드 gating)가 그것을 본다.
+#     — `problem.is_published`는 *별개의 게시 축*이며 현재 읽는 코드가 없다(ADMIN-12).
+#   · 버전 생명주기의 정본 = `docs/architecture/44_eos_version_management.md` §7
+#     (DRAFT→IN_REVIEW→APPROVED→PUBLISHED→DEPRECATED→RETIRED · PUBLISHED→DRAFT 금지).
+#
+# 11단계를 배선했다면 **같은 대상에 상태 머신이 둘** 생긴다 — 단계 수도 이름도 전이도 다르다.
+# 게다가 그 11단계 중 parsed/validated/verified는 이 결정론 컴파일러의 *처리 단계*이지 콘텐츠
+# 거버넌스 상태가 아니고(함수 호출 순서가 이미 그것을 표현한다), used/analyzed/improved는 학습
+# 이벤트·개선 루프이지 노출 판정이 아니다. 축이 섞인 열거였다.
+#
+# 재발 방지는 이 주석이 아니라 `tests/backend/l3/dsl/test_lifecycle_single_source.py`가 한다 —
+# 이름을 바꿔 되살려도 잡히도록 *출판 거버넌스 어휘를 가진 Enum*을 이 패키지에서 금지한다.
+# 원 제안(11단계)은 `docs/architecture/03d_dsl_content_generator.md` §9.2에 부기와 함께 남아 있다.
 
 
 # =============================================================================
@@ -329,7 +330,6 @@ __all__ = [
     "AnswerSpec",
     "CompiledContent",
     "ConstraintSpec",
-    "ContentLifecycleState",
     "ContentSpecification",
     "CurriculumMeta",
     "DifficultyMeta",
