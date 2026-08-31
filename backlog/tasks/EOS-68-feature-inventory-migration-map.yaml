@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: docs
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,10 +15,14 @@ acceptance:
   - "② Migration Difficulty Matrix: 100 §3.14의 6축(과목결합도·DB결합도·모듈결합도·테스트부족·상태변경복잡도·데이터이전난이도) 각 0~3점 18점 만점 → 0~4 KEEP / 5~9 REFACTOR / 10~13 Heavy / 14~18 REPLACE 자동 판정"
   - "③ 판정 결과는 산문이 아니라 기계가 읽는 표(YAML 또는 CSV)로 — 대시보드 5숫자 중 '기존 기능 분류율'·'Release P0 수'가 이 표에서 계산되게 한다"
   - "④ 중복 회피 별항: PR #916의 eos_verification_relevance_triage(잔여 182건 관여도 트리아지)와 축이 다름을 명시하고(그쪽은 '12월 검증 관여 여부', 이쪽은 'Core/Adapter 귀속 + 이전 난이도'), 겹치는 행은 그 문서를 인용해 재판정하지 않는다"
-artifacts: []
+artifacts:
+  - "#924"
+  - "backlog/inventory/feature_inventory.yaml (기계 장부 23기능·대시보드 2숫자)"
+  - "scripts/analysis/eos_feature_inventory.py (생성기 정본)"
+  - "docs/reviews/eos_feature_inventory_migration_map.md (Gate 0-D 판정)"
 paths:
   - docs/reviews/eos_feature_inventory_migration_map.md
   - "backlog/inventory/**"
-session: claude/review-status-differences-jw5m4a
+session: null
 notes: "출처: 대조 §4 A3(#924). 계획서 100 P0-02·P0-09·Gate 0-D. 실측: grep -rl 'REFACTOR' backlog/ docs/ = 0건(대조 문서 자신 제외). Gate 0-D 4문항 전부와 대시보드 5숫자 중 2개가 이 산출물에 의존한다. 100 §5는 이 기간 코딩 비중이 20~30%를 넘지 않아도 정상이라 명시 — 분류 작업이 본 태스크의 산출물이다. 주의: 100의 '기존 120개'는 저장소 외부 xlsx가 정본이라 개수 정합은 판정 대상이 아니다(대조 §6-1)."
 updated: 2026-08-31
