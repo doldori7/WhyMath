@@ -208,12 +208,16 @@ class TestRender:
     def test_payload_cannot_close_the_script_tag(self):
         """test_제목의_script_종료_태그가_주입되지_않는다"""
         backlog = _backlog()
-        backlog.tasks["S1-03-run"].title = "</script><script>alert(1)</script>"
+        injected = "</script><script>alert(1)</script>"
+        backlog.tasks["S1-03-run"].title = injected
         html = board.render_html(board.build_board(backlog, [], TODAY))
-        # 페이로드 영역 안에서 '<'는 전부 <로 이스케이프되므로 조기 종료가 불가능하다.
-        blob = re.search(r'<script id="payload" type="application/json">(.*?)</script>', html, re.S)
-        assert blob is not None
-        assert "<" not in blob.group(1)
+        marker = '<script id="payload" type="application/json">'
+        start = html.index(marker) + len(marker)
+        # 브라우저는 **첫** </script>에서 스크립트를 닫는다 — 거기까지가 실제 페이로드다.
+        # 이스케이프가 빠지면 이 조각이 JSON 중간에서 잘려 파싱이 실패한다(변별력 있는 검사).
+        blob = html[start : html.index("</script>", start)]
+        assert injected in [task["title"] for task in json.loads(blob)["tasks"]]
+        assert "<" not in blob
 
     def test_text_summary_reports_every_column(self):
         """test_터미널_요약은_열별_건수를_보고한다"""
