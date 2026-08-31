@@ -21,8 +21,23 @@
 --   echo "EXIT=$LASTEXITCODE"
 --
 -- Discriminators are derived from src/backend/alembic/versions/*.py upgrade()
--- bodies (create_table / add_column). obj_column = '' means "check the table".
--- seq = position in the linear chain (chain length 90, head = d4a71c0f9b32).
+-- bodies (create_table / add_column / drop_column). obj_column = '' means
+-- "check the table". seq = position in the linear chain (length 90,
+-- head = d4a71c0f9b32).
+--
+-- POLARITY. Most rows are '+': the object EXISTS once the revision is applied.
+-- A revision that only DROPS something needs '-': the object's ABSENCE is what
+-- the revision leaves behind. The two directions carry different weight:
+--   '+' present  => applied (proof).      '+' absent  => not applied (proof).
+--   '-' present  => NOT applied (proof).  '-' absent  => inconclusive, since a
+--       database that never had the column looks identical to one that dropped
+--       it. So '-' is a one-way BRAKE: it can stop the stamp target from moving
+--       past the drop, but it can never push it forward on its own.
+-- Skipping a drop-only revision entirely (the first version of this probe did)
+-- is unsafe: with the column still present, the probe would name a stamp target
+-- AFTER the drop and report present_after_gap = 0, and stamping there tells
+-- alembic the drop is done -- `upgrade head` then never runs it, leaving the
+-- column forever. Reported on PR #929 review.
 -- ===========================================================================
 
 \echo '== recorded alembic_version (indirect signal - NOT the verdict) =='
@@ -32,53 +47,60 @@ SELECT version_num FROM alembic_version;
 \echo '== per-revision presence (the verdict) =='
 
 CREATE TEMP VIEW probe AS
-WITH expected(seq, revision, obj_table, obj_column) AS (
+WITH expected(seq, revision, obj_table, obj_column, polarity) AS (
     VALUES
-        (63, 'd5e6f0a1b2c3', 'unit_spec',             ''),
-        (64, 'e6f1a2b3c4d5', 'evidence_event',        ''),
-        (66, 'a2b3c4d5e6f1', 'dialogue_turn',         'image_uri_encrypted'),
-        (67, 'a9b8c7d6e5f4', 'concept_visual_style',  ''),
-        (68, 'b4c5d6e7f0a2', 'formula_node',          'constraints'),
-        (69, 'c5d6e7f0a2b3', 'user_profile',          'role'),
-        (70, '3702d8671074', 'privacy_audit',         ''),
-        (71, 'd6e7f0a2b3c4', 'refresh_token_session', 'platform'),
-        (72, 'db8ae6d2d91c', 'defect_report',         ''),
-        (73, '090d254a5d43', 'problem',               'identity_id'),
-        (74, 'c6d7e8f1a2b4', 'solution_paths',        ''),
-        (75, '374fb620de9e', 'misconception_relation', ''),
-        (76, 'd1e2f3c4b5a6', 'dialogue',              'review_turns_remaining'),
-        (77, 'e07b1324d1d4', 'content_rights',        ''),
-        (78, 'b8e76fe238d0', 'achievement_standard',  'official_statement'),
-        (79, 'fcfdfc277348', 'achievement_standard',  'evaluation_criteria_codes'),
-        (80, '899ae0efbb8b', 'curriculum_framework',  ''),
-        (81, 'fad7f750090d', 'concept_edge',          'required_strength'),
-        (82, 'd7e8f1a2b4c6', 'solution_paths',        'gen_meta'),
-        (83, '8f0b8e906362', 'answer_submission',     ''),
-        (84, '0e148995e6e9', 'hint_usage',            ''),
-        (85, 'a926d39f126a', 'student_solution_step', ''),
-        (86, 'c9bc2555282e', 'attempt_event',         'event_time'),
-        (87, '84c782415837', 'review_timer_event',    ''),
-        (88, 'f4b2d8c1a3e5', 'generation_log',        'prompt_version'),
-        (89, 'd4a71c0f9b32', 'attempt_event',         'skill_ids')
+        (63, 'd5e6f0a1b2c3', 'unit_spec',              '',                          '+'),
+        (64, 'e6f1a2b3c4d5', 'evidence_event',         '',                          '+'),
+        -- drop-only revision: the column's PRESENCE proves this is not applied.
+        (65, 'f1a2b3c4d5e7', 'concept',                'embedding_id',              '-'),
+        (66, 'a2b3c4d5e6f1', 'dialogue_turn',          'image_uri_encrypted',       '+'),
+        (67, 'a9b8c7d6e5f4', 'concept_visual_style',   '',                          '+'),
+        (68, 'b4c5d6e7f0a2', 'formula_node',           'constraints',               '+'),
+        (69, 'c5d6e7f0a2b3', 'user_profile',           'role',                      '+'),
+        (70, '3702d8671074', 'privacy_audit',          '',                          '+'),
+        (71, 'd6e7f0a2b3c4', 'refresh_token_session',  'platform',                  '+'),
+        (72, 'db8ae6d2d91c', 'defect_report',          '',                          '+'),
+        (73, '090d254a5d43', 'problem',                'identity_id',               '+'),
+        (74, 'c6d7e8f1a2b4', 'solution_paths',         '',                          '+'),
+        (75, '374fb620de9e', 'misconception_relation', '',                          '+'),
+        (76, 'd1e2f3c4b5a6', 'dialogue',               'review_turns_remaining',    '+'),
+        (77, 'e07b1324d1d4', 'content_rights',         '',                          '+'),
+        (78, 'b8e76fe238d0', 'achievement_standard',   'official_statement',        '+'),
+        (79, 'fcfdfc277348', 'achievement_standard',   'evaluation_criteria_codes', '+'),
+        (80, '899ae0efbb8b', 'curriculum_framework',   '',                          '+'),
+        (81, 'fad7f750090d', 'concept_edge',           'required_strength',         '+'),
+        (82, 'd7e8f1a2b4c6', 'solution_paths',         'gen_meta',                  '+'),
+        (83, '8f0b8e906362', 'answer_submission',      '',                          '+'),
+        (84, '0e148995e6e9', 'hint_usage',             '',                          '+'),
+        (85, 'a926d39f126a', 'student_solution_step',  '',                          '+'),
+        (86, 'c9bc2555282e', 'attempt_event',          'event_time',                '+'),
+        (87, '84c782415837', 'review_timer_event',     '',                          '+'),
+        (88, 'f4b2d8c1a3e5', 'generation_log',         'prompt_version',            '+'),
+        (89, 'd4a71c0f9b32', 'attempt_event',          'skill_ids',                 '+')
 )
 SELECT
     e.seq,
     e.revision,
     e.obj_table AS checked_table,
     CASE WHEN e.obj_column = '' THEN '(table)' ELSE e.obj_column END AS checked_object,
-    CASE
-        WHEN e.obj_column = '' THEN EXISTS (
-            SELECT 1 FROM information_schema.tables t
-            WHERE t.table_schema = 'public' AND t.table_name = e.obj_table)
-        ELSE EXISTS (
-            SELECT 1 FROM information_schema.columns c
-            WHERE c.table_schema = 'public'
-              AND c.table_name = e.obj_table
-              AND c.column_name = e.obj_column)
-    END AS present
+    e.polarity,
+    -- "applied" for this row: '+' rows want the object to exist, '-' rows want
+    -- it gone. The XOR-style flip keeps one contiguity rule for both kinds.
+    (
+        CASE
+            WHEN e.obj_column = '' THEN EXISTS (
+                SELECT 1 FROM information_schema.tables t
+                WHERE t.table_schema = 'public' AND t.table_name = e.obj_table)
+            ELSE EXISTS (
+                SELECT 1 FROM information_schema.columns c
+                WHERE c.table_schema = 'public'
+                  AND c.table_name = e.obj_table
+                  AND c.column_name = e.obj_column)
+        END
+    ) = (e.polarity = '+') AS present
 FROM expected e;
 
-SELECT seq, revision, checked_table, checked_object, present
+SELECT seq, revision, checked_table, checked_object, polarity, present
 FROM probe ORDER BY seq;
 
 \echo ''
