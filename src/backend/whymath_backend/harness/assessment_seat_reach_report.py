@@ -81,21 +81,25 @@ _REASON_UNCALLED_WRITER = "writer 존재하나 미호출 관측"
 # 기준·기존 ability_snapshot 인용 :965도 드리프트해 :1030으로 재실측 정정). '오류 발견 시
 # 조용히 넘어가지 않기' 집행이며, 빈 테이블의 사유가 '생성 경로 부재'→'writer 존재하나 미호출
 # 관측'으로 바뀌는 것은 의도된 진실 갱신이다(동결 테스트도 새 진실로 재작성).
+# [EOS-57 실측 재정정·2026-09-01] 위 5개 행 번호가 08-10 이후 me.py 성장으로 전부 드리프트해
+# 있었다(738→759·743→764·1030→1064·2714→2768·2927→2970 · l2 134→202·136→148). EOS-57이
+# me.py 채점 경로를 건드리며 재실측해 갱신한다 — 이 인용은 사람이 코드를 찾아가는 앵커이므로
+# 틀린 번호는 조용한 거짓 주장이다(모듈 docstring이 예고한 '다음 드리프트' 회차).
 _KNOWN_WRITER_CITATION: dict[str, str | None] = {
     "assessment": (
-        "POST /v1/me/assessments/capture — capture_measurement_assessment (api/me.py:2714)"
-        " · POST /v1/me/assessments/assemble — assemble_blueprint_assessment (api/me.py:2927)"
+        "POST /v1/me/assessments/capture — capture_measurement_assessment (api/me.py:2768)"
+        " · POST /v1/me/assessments/assemble — assemble_blueprint_assessment (api/me.py:2970)"
     ),
     "concept_mastery_history": (
         "POST /v1/me/attempts — submit_attempt → record_problem_attempt_mastery"
-        " (api/me.py:738 → l2/mastery_tracking.py:134)"
+        " (api/me.py:759 → l2/mastery_tracking.py:202)"
     ),
     "skill_mastery_history": (
         "POST /v1/me/attempts — submit_attempt → record_problem_attempt_skill_mastery"
-        " (api/me.py:743 → l2/skill_mastery_tracking.py:136)"
+        " (api/me.py:764 → l2/skill_mastery_tracking.py:148)"
     ),
     "ability_snapshot": (
-        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:1030)"
+        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:1064)"
     ),
 }
 
