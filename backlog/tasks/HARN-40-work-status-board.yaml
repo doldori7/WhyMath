@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,11 +16,13 @@ acceptance:
   - "무손실 계약 — 열 배치 건수 + 취소 건수 = 전체 건수를 테스트가 동결(요약이 아니라 전수 투영)"
   - "읽기 전용 계약 — 보드 생성이 backlog/ 파일 mtime을 바꾸지 않음을 테스트가 동결(상태 변경 창구는 backlog.py CLI 단독)"
   - "docs/standards/build_harness.md §4b에 정본화 + §7 CLI 요약 등재"
-artifacts: []
+artifacts:
+  - "https://github.com/doldori7/WhyMath/pull/921"
+  - adba9d32
 paths:
   - scripts/harness/board.py
   - tests/harness/test_board.py
   - docs/standards/build_harness.md
-session: claude/work-status-dashboard-79426g
+session: null
 notes: "Kiki 요청(2026-08-31): '어느 작업을 했고 무엇이 진행 중이고 무엇이 예정인지 한 눈에'. status/brief는 next 3건 요약이라 455건 전수 조망이 불가능했다."
 updated: 2026-08-31
