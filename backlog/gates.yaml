@@ -13,10 +13,10 @@ gates:
     title: "미머지 저작 확장 11,446문 회수·병합 결정 (trjg5x) — PB-06이 조건 확정 후 Kiki 소유로 남긴 결정"
     kind: decision
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-31
     remind_after_days: 7
-    evidence: null
+    evidence: "2026-08-31 Kiki 결정: **회수**(세션 대화 — '회수'). 결정 시점 실측 재확인(추론 0): 브랜치 origin/claude/whymath-mvp-plan-architecture-trjg5x(c8abbc17)는 main 대비 ahead 81·behind 207, 고유 파일 233건. 코퍼스 30종 problems.jsonl 행수 합계 = **11,446문 정확 일치**(PB-06 수치 검증됨). 생성기 = l3/equivalent/*_skeleton_generator.py 30 + harness/*_batch.py 60. 사이드카는 대상 30종 전부 부재(브랜치 보유 26개는 기존 코퍼스분) — 생성 CLI는 PB-11이 main에 착지시킴(ops/corpus_provenance_sidecar.py 실재 확인). 이식은 파일 단위 고정(브랜치가 207커밋 낡아 통째 머지 시 역행) — 수정 12파일(api/me.py·config.py·db/models/user.py·l4/polya/*·privacy/retention.py·schema/user.py 등)과 alembic 마이그레이션 1건(ADMIN-02 소관·G-prod-dead-column-check 대기)은 **이식 범위에서 명시 제외**. 집행 태스크로 분리 등재."
     notes: "결정 대상: origin/claude/whymath-mvp-plan-architecture-trjg5x(c8abbc17)의 신규 코퍼스 30종 11,446문·결정론 생성기 30파일·저작 태스크 S4-19~51 32건(main 백로그 미등재)을 회수할 것인가. 정량 입력은 PB-06(done·PR #795)이 이미 산출: 성취기준 커버 78→130/435(+52·+12.0%p)·초등 9→22·0커버 영역 24→19. 차단 조건 3건도 PB-06이 확정(사이드카 30/30 부재→CI provenance_audit red·S4-19/S4-22 ID 충돌·shallow merge-base 부재), 사이드카 생성 CLI는 PB-11(done)이 상환. 게이트 신설 사유: PB-06 acceptance ①이 '회수·병합은 이 태스크가 하지 않는다(Kiki 소유)'로 명시했으나 그 소유가 게이트·태스크 어디에도 등재되지 않아 done 이후 20일간 추적자 0인 상태였다(2026-08-31 stray-code 감사 발견 — '만료 없는 유예·제외 금지' 위반). 결정 전까지 브랜치 삭제 금지."
   - id: G-backup-offsite-move
     title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"

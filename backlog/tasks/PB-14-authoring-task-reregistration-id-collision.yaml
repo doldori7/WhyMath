@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-14-authoring-task-reregistration-id-collision
+title: "저작 확장 회수 ② 저작 태스크 32건 재등재 + S4-19·S4-22 ID 충돌 해소 — 코퍼스 10종이 태스크 없이 고아"
+track: math-completion
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — 브랜치 trjg5x(c8abbc17)의 backlog/tasks 고유 39파일 중 저작 태스크 S4-19~S4-51 32건이 main 백로그에 부재. 재현: 각 파일에 git cat-file -e origin/main:<path> → 실패. PB-06 정정 기록이 '저작 태스크 22→32건(S4-19~51)'으로 바로잡으며 '누락 10건이 만든 코퍼스 10종이 태스크 없이 고아가 된다'고 경고한 그 10건을 포함한다"
+  - "② 재등재는 전건 backlog.py add 경유·**원 번호 재사용 금지** — S4-19·S4-22는 main·타 브랜치와 이종 충돌 확정(PB-06 차단 조건 ⑵가 'git도 validate도 못 잡음'으로 신규 발견). 실측된 충돌: S4-22가 trjg5x=elementary-addsub-pilot-corpus vs k20m0w=attempt-event-signal-consumer-wiring. CLI가 거부하면 제안 번호를 그대로 채택한다(우회 금지). 구번호→신번호 매핑표를 문서에 전수 기재해 추적 가능하게 남긴다"
+  - "③ 본문 대조 후 재등재 — 재등재 전 각 태스크의 산출물이 PB-13 이식으로 이미 충족됐는지 대조한다. 이식으로 done 상태가 된 것은 재등재 대신 **done + artifacts(이식 PR)**로 기록하고, 미충족분만 todo로 등재한다. 코퍼스가 이미 들어왔는데 태스크를 todo로 열면 허위 잔여가 된다"
+  - "④ 집행 지점(정본화와 별항) — backlog.py validate EXIT=0 + 재등재분이 next 후보에 실제 노출되는지 확인(순위까지 기록 — '노출 확인'만 적고 실제로 안 뜨는 사례가 08-31 감사에서 실측됨). overlap은 태스크 id를 인자로 주어 실행하고 exit code로 판정한다(인자 없이 실행하면 EXIT=2로 죽어 grep이 0을 내는 무변별 검증이 된다 — 같은 감사에서 실측된 함정)"
+artifacts: []
+paths:
+  - "backlog/tasks/**"
+session: null
+notes: "출처: G-authoring-expansion-merge-decision(2026-08-31 Kiki '회수' 결정) + PB-06 정정 기록. PB-13(코퍼스 이식) 선행 권장 — ③의 본문 대조가 이식 결과에 의존한다. 회수 완료 전 원 브랜치 삭제 금지."
+updated: 2026-08-31

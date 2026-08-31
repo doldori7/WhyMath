@@ -338,6 +338,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (Kiki 결정·회수 착수): **저작 확장 11,446문 — 회수 결정. 게이트 clear + 집행 태스크 2건 등재(PB-13 코퍼스 이식·PB-14 태스크 재등재)** (Kiki "회수", claude 등재)
+
+- **결정**: 당일 오전 stray-code 감사가 신설한 `G-authoring-expansion-merge-decision`에 Kiki가 **회수**로 답해 게이트 `cleared`. 20일간 추적자 0이던 최대 고립분의 처분이 확정됐다
+- **결정 시점 실측 재확인(추론 0)**: 브랜치 `trjg5x`(c8abbc17) ahead 81·behind **207**·고유 233파일. 코퍼스 30종 `problems.jsonl` 행수 합계 = **11,446 정확 일치**(PB-06 수치 독립 검증). 생성기 실체 = `l3/equivalent/*_skeleton_generator.py` **30** + `harness/*_batch.py` **60**(PB-06의 "생성기 30"은 스켈레톤 생성기 기준). 대상 30종 사이드카 **0/30**(브랜치 보유 26개는 기존 코퍼스분이라 재사용 불가)
+- **차단 3건 현황**: 사이드카 → `PB-11`(done)이 `ops/corpus_provenance_sidecar.py`를 main에 착지시켜 상환 · shallow merge-base → 08-31 감사의 `--unshallow`로 해소 · **ID 충돌만 미해소**(`PB-14`가 담당)
+- **범위 경계를 실측으로 그었다** — 이식 대상은 신규 추가(A)만이고, **수정(M) 12파일은 명시 제외**(`api/me.py`·`config.py`·`db/models/user.py`·`l4/polya/*`·`privacy/retention.py`·`schema/user.py` 등). 브랜치가 207커밋 낡아 이들을 실으면 main이 역행한다. **alembic 마이그레이션 1건도 제외** — `ADMIN-02` 소관이며 `G-prod-dead-column-check`가 아직 pending이라 이 회수에 편승시키면 게이트를 우회하는 셈이 된다
+- **별건 발견**: `l2/learning_metrics_writer.py`도 main 부재 고립이나 코퍼스와 무관 — `PB-13` notes에 범위 밖으로 기록(중복 등재 금지). `review_queue`·`target_progress`는 main 실재라 비대상
+- **등재**: `PB-13`(코퍼스 30종+생성기 90+사이드카 30·priority 1) · `PB-14`(저작 태스크 32건 재등재+ID 충돌·priority 2). 번호는 `PB-12` 시도를 CLI가 원격 선점(6eejrv의 `PB-12-gating-answer-redaction`)으로 거부해 제안 번호 채택 — 우회 0
+- **acceptance에 08-31 감사의 자기 실패를 예방 규칙으로 이식**: `PB-14` ④가 "overlap은 id를 인자로 주고 exit code로 판정한다(인자 없이 실행하면 EXIT=2로 죽어 grep이 0을 내는 무변별 검증이 된다)"를 명시 — 같은 날 내가 실제로 빠진 함정이다
+- 검증: `validate` EXIT=0(태스크 482·게이트 21). **회수 완료 전 원 브랜치 삭제 금지**를 양 태스크 notes에 명기
+
 ### 2026-08-31 (설계·EOS-65~68·HARN-42): **첨부 계획문서 2종 대조 → A급 갭 5건 해소 — Core/Adapter 경계를 처음으로 기계가 강제한다** (Kiki 문서 2종 첨부·"A급 5건 등재"·"추천 진행"·"pr", claude 대조·구현) — PR #924
 
 - **문제**: 저장소엔 이미 006을 흡수한 선언 정본과 그 준수 감사(#916)가 있으나 **둘 다 *선언*을 기준으로 삼는다**. 선언이 원문을 번역하며 떨어뜨린 축은 구조적으로 안 보인다 — 실제로 갭 대부분이 ①②에만 있고 선언에 없는 축(②의 P0-02 인벤토리·Migration Matrix·Gate 0 A~E, ①의 §12·§20·§23)에서 나왔다. 대조 결과 충족 27·부분 13·의도적 미채택 5·갭 5(①) · 산출물 10건 중 충족 0·부분 6·갭 4(②)

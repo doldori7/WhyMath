@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PB-13-authoring-expansion-corpus-recovery
+title: "저작 확장 회수 ① 코퍼스 30종 11,446문 + 생성기 90파일 파일단위 이식 + 사이드카 30 생성 — 커버리지 78→130/435"
+track: math-completion
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정(재현 명령 병기) — origin/claude/whymath-mvp-plan-architecture-trjg5x(c8abbc17)·ahead 81/behind 207·고유 233파일. 대상: data/corpus 30종(problems.jsonl 행수 합계 11,446 실측 일치)·l3/equivalent/*_skeleton_generator.py 30·harness/*_batch.py 60·대응 tests 82. 재현: git diff --name-status origin/main...<브랜치>"
+  - "② 이식 방식 = 파일 단위(통째 머지 절대 금지 — 브랜치가 main보다 207커밋 낡아 역행한다). 신규 추가(A) 파일만 가져오고, 수정(M) 12파일은 명시 제외: api/me.py·config.py·db/models/user.py·db/schema_version.py·harness/problem_bank_coverage.py·l1/curriculum/curriculum_loader.py·l2/learning_path.py·l4/polya/{__init__,engine,prompts}.py·privacy/retention.py·schema/user.py. alembic 마이그레이션 20260808_2242_d8559726a87a도 제외(ADMIN-02 소관·G-prod-dead-column-check 대기 중). 제외분을 실수로 싣지 않았는지 이식 후 git diff로 전수 확인"
+  - "③ 사이드카 30/30 생성 — PB-11이 착지시킨 ops/corpus_provenance_sidecar.py로 대상 30종에 _provenance.json 생성. 브랜치 보유 사이드카 26개는 기존 코퍼스분이라 재사용 불가. 생성 전 provenance_audit이 EXIT=1(SIDECAR_MISSING 30건)·생성 후 EXIT=0을 양측 실측한다(성공/실패가 같은 값이면 위장 — PB-06 ②가 이미 변별력을 확인해 뒀으므로 재현만 하면 된다)"
+  - "④ 커버리지 델타 실측 대조 — harness/problem_bank_coverage.py로 이식 후 성취기준 커버가 PB-06 예측치(78→130/435·초등 9→22·0커버 24→19)와 일치하는지 확인. 불일치면 원인을 규명하고 문서에 기록(예측치를 사후 정당화하지 않는다). --standards를 main 파일로 명시 고정해 분모 고정"
+  - "⑤ 집행 지점(정본화와 별항) — 이식된 코퍼스가 실제로 게이트 경로를 경유하는지 확인: 상시 CI의 provenance_audit이 신규 30종을 실제로 스캔하는가. PB-06 정직한 공백이 'data/corpus가 backend 경로 필터에 없어 코퍼스만 바꾸는 PR은 provenance_audit이 한 번도 안 돈다'는 결함을 발견해 PB-02 notes에 남겼다 — 이식 PR에서 그 경로 필터가 실제로 발화하는지 실측하고, 안 돌면 그 사실을 명시 보고한다. 전체 스위트 EXIT=0"
+artifacts: []
+paths:
+  - "data/corpus/**"
+  - "src/backend/whymath_backend/l3/equivalent/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "출처: G-authoring-expansion-merge-decision(2026-08-31 Kiki '회수' 결정으로 cleared) + docs/reviews/unmerged_branch_audit_2026-08-31.md §5. 선행 조건은 PB-06(done·#795)이 전부 확정해 뒀다 — 차단 3건 중 사이드카는 PB-11(done)이 CLI 상환, shallow는 08-31 감사가 unshallow로 해소, ID 충돌만 후속 태스크가 담당. 회수 완료 전 원 브랜치 삭제 금지. 저작 태스크 32건 재등재와 S4-19/S4-22 ID 충돌 해소는 후속 태스크 소관이라 이 태스크 범위 밖(중복 등재 금지). 별건 관찰: l2/learning_metrics_writer.py도 main 부재 고립이나 코퍼스와 무관해 이 범위 밖 — 별도 판단 필요."
+updated: 2026-08-31
