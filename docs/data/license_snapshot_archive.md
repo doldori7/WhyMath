@@ -184,42 +184,60 @@ egress 차단으로 막혔던 14곳 중 **13곳이 해소**됐다. 이로써 "�
 
 ```powershell
 # [실행 시스템: Windows PowerShell — 창 무관. siyavula 약관 URL 발견]
-# 추측한 경로를 두드리는 대신 홈페이지의 링크에서 약관 URL을 *발견*한다.
+# 추측한 경로를 두드리는 대신 홈페이지 HTML의 href에서 약관 URL을 *발견*한다.
 $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 
 function Probe($u) {
   try {
     # -UseBasicParsing 필수 — 없으면 Windows PowerShell 5.1이 IE 엔진을 쓰려다
     # "보안 경고: 스크립트 실행 위험" 대화상자를 띄우고 절차가 멈춘다(2026-08-31 실측).
-    $r = Invoke-WebRequest -Uri $u -UseBasicParsing -UserAgent $ua -TimeoutSec 20 -MaximumRedirection 5
-    return $r
+    return Invoke-WebRequest -Uri $u -UseBasicParsing -UserAgent $ua -TimeoutSec 20 -MaximumRedirection 5
   } catch {
-    # 실패 원인을 남긴다 — 상태코드가 없는 전송 계층 오류도 구분되게(빈 ERR 금지)
+    # 실패 원인을 남긴다 — Response가 없는 전송 계층 오류도 구분되게(빈 ERR 금지)
     $code = ""
     if ($_.Exception.PSObject.Properties.Name -contains "Response" -and $_.Exception.Response) {
       try { $code = [int]$_.Exception.Response.StatusCode } catch { $code = "?" }
     }
-    "ERR status=$code type=$($_.Exception.GetType().Name) msg=$($_.Exception.Message)"
+    Write-Host "ERR status=$code type=$($_.Exception.GetType().Name) msg=$($_.Exception.Message)"
     return $null
   }
 }
 
-$home = Probe "https://www.siyavula.com/"
-if ($home) {
-  "HOME $($home.StatusCode)"
-  $home.Links |
-    Where-Object { "$($_.href) $($_.outerHTML)" -match '(?i)term|legal|privacy|licen|copyright|policy' } |
-    ForEach-Object { $_.href } |
-    Sort-Object -Unique |
-    ForEach-Object { "  LINK $_" }
+# ⚠️ 변수명에 $home/$host/$input/$error/$args/$pwd 등 PowerShell 자동 변수를 쓰지 말 것.
+#    $home은 읽기 전용이라 대입이 거부되고, 그 뒤 if($home)이 홈 경로 문자열로 *참*이 되어
+#    가짜 성공 신호를 낸다(2026-08-31 실측 — 실패가 성공처럼 보이는 최악의 형태).
+$resp = Probe "https://www.siyavula.com/"
+
+if ($null -eq $resp -or $null -eq $resp.StatusCode) {
+  "FAIL: 홈페이지 응답 없음 — 위 ERR 줄이 원인이다"
+} else {
+  "HOME status=$($resp.StatusCode) bytes=$($resp.RawContentLength)"
+  $hrefs = [regex]::Matches($resp.Content, 'href\s*=\s*["'']([^"'']+)["'']') |
+           ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+  "HREF_TOTAL $($hrefs.Count)"
+  $hits = $hrefs | Where-Object { $_ -match '(?i)term|legal|privacy|licen|copyright|policy' }
+  if ($hits) {
+    $hits | ForEach-Object { "  LINK $_" }
+  } else {
+    "  (키워드 매칭 0건 — 전체 href 상위 40개를 출력한다. 여기에도 약관이 없으면 JS 렌더다)"
+    $hrefs | Select-Object -First 40 | ForEach-Object { "  ALL $_" }
+  }
 }
 ```
 
-> **1차 프로브 실패 기록(2026-08-31)**: 추측 경로 6개를 `Invoke-WebRequest`로 두드렸으나
-> ①`-UseBasicParsing` 누락으로 Windows PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차가
-> 멈췄고 ②catch가 `$_.Exception.Response`를 무조건 참조해 전송 계층 오류에서 상태코드가 빈칸인
-> `ERR ` 줄만 남았다 — **실패했는데 원인이 안 남는** 전형(CLAUDE.md "측정·수집 도구를 성공
-> 경로만 보고 설계 금지"). 위 블록은 두 결함을 고치고, 추측 대신 발견으로 접근을 바꿨다.
+> **프로브 실패 기록 3건(2026-08-31 · 전부 원격 세션이 작성한 블록의 결함)**
+> ① `-UseBasicParsing` 누락 → Windows PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차 정지.
+> ② catch가 `$_.Exception.Response`를 무조건 참조 → 전송 계층 오류에서 상태코드가 빈칸인
+> `ERR ` 줄만 남아 **실패했는데 원인이 안 남았다**.
+> ③ `$home`에 대입 → PowerShell **자동 변수**(읽기 전용)라 대입 거부, 그런데 이어지는
+> `if ($home)`이 홈 경로 문자열로 **참**이 되어 `HOME`만 출력 — **실패가 성공처럼 보이는**
+> 최악의 형태(성공/실패가 같은 화면을 낸다).
+>
+> 세 결함의 공통 원인: **원격 세션은 PowerShell을 실행 검증할 수 없다**(Windows 부재 +
+> 대상 호스트 egress 403). 그런데 저장소의 PowerShell 가드
+> `scripts/ops/check_ps_scripts.py`는 `scripts/**/*.ps1`만 훑어 **런북 마크다운의 코드펜스는
+> 검사 범위 밖**이다 — Kiki에게 건네는 PowerShell 대부분이 사는 곳이 정확히 그 사각이다.
+> 가드 확장 = `OPS-57`.
 
 출력의 `LINK` 줄(또는 브라우저로 찾은 주소)을 알려주시면 다음 세션이
 `TIER1_SOURCES`의 `siyavula` 항목을 고치고 재수집해 게이트를 닫는다.
