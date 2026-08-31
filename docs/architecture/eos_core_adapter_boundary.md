@@ -129,7 +129,11 @@ Physics를 붙일 때 **이 두 계층은 손대지 않아도 된다** — 계�
 
 ---
 
-## §4. CORE → ADAPTER import 위반 — 실측 15건
+## §4. CORE → ADAPTER import 위반 — 착수 시점 15건 → **현재 0건**
+
+> **갱신 2026-08-31 (EOS-69 완료)**: 아래 15건은 *EOS-65 실측 시점*의 값이다. 상환 결과는
+> §4.1에 별도로 적는다 — 원 측정을 덮어쓰지 않는 이유는 "무엇이 있었는지"가 "지금 몇
+> 건인지"만큼 중요하기 때문이다(같은 형태의 위반이 다시 생기면 여기가 대조 기준이 된다).
 
 `EOS-67`의 baseline 허용 필요 여부를 판정하는 근거다(EOS-65 acceptance ②).
 
@@ -154,6 +158,30 @@ Physics를 붙일 때 **이 두 계층은 손대지 않아도 된다** — 계�
 이것이 **EOS-66이 필요한 이유의 실측 증거**다. `SubjectAdapter.evaluate_answer()`가 있었다면
 이 11건은 Protocol 호출 1개로 대체됐을 자리다. 반대로 EOS-66 없이 EOS-67 계약만 걸면 이 11건은
 고칠 방법이 없어 baseline에 영구 동결된다 — **순서가 EOS-66 → EOS-67이어야 하는 근거**다.
+
+### §4.1 상환 결과 — 15 → **0건** (EOS-69 완료 2026-08-31)
+
+세 축으로 갚았다. **축을 나누어 적는 이유는 셋의 신뢰도가 다르기 때문이다** — ①②는 코드가
+바뀌었고 ③은 판정이 바뀌었다.
+
+| 축 | 건수 | 무엇을 했나 | 무엇이 증거인가 |
+|---|---:|---|---|
+| **① 타입** | 6 | Core가 어댑터를 부른 이유가 *상태 enum 하나*뿐이던 간선. `VerifyStepState`·`FinalAnswerState`·`IdentityVerdict`를 과목 중립 계약(`schema/verification_capabilities.py`)의 `VerificationOutcome`·`EquivalenceOutcome`으로 올리고 어댑터는 **별칭**으로 공유 | `VerifyStepState is VerificationOutcome`(동일 객체·값 보존). 변환 객체를 만들지 않았으므로 상태 재해석 지점 자체가 없다 |
+| **② 배선** | 8 | Core가 기본 구현을 스스로 골라 오던 간선(`slot_generator`·`coach`·`render.adapters`). 능력별 좁은 Protocol을 **주입**받게 하고, 기본 구현 선택은 합성 루트 `whymath_backend.composition`(INFRA) 한 곳으로 | `mypy --strict` 565파일 통과 + 어댑터 쪽 `_*_CONFORMANCE` 대입 4건이 시그니처까지 검사 |
+| **③ 분류** | 1 | `api._ocr_state → l5.ocr.factory`. `OcrComponents`를 **타입 주석으로만** 쓰고 필드를 한 번도 읽지 않는 app.state 배관(`_l3_state`와 동형)이라 INFRA로 재배정 | **코드 변경 0** — 이 1건은 위반이 사라진 게 아니라 위반이 아니었다고 판정한 것이다 |
+
+**왜 함수 안 지연 import로 숨기지 않았나.** `slot_generator`의 1차 시도가 정확히 그것이었고,
+경계 스캔·import-linter는 **지연 import도 그대로 본다**. 숨기면 위반이 사라지는 게 아니라
+보이지 않게 될 뿐이다. 합성 루트는 그 반대다 — 어댑터를 아는 지점을 *한 곳으로 모으고* 그
+사실을 계약에 명시적으로 적는다(7계층 계약의 좁은 예외 2줄).
+
+**합성 루트가 세탁 통로가 되지 않게 하는 장치.** `-> whymath_backend.composition` 전체를
+열지 않고 **간선 단위로** 예외했다(현재 2줄: `slot_generator`·`render.adapters`). 새 Core→
+composition 간선이 생기면 그 즉시 `lint-imports`가 적색이 되어 *그때마다 판단*을 강요한다.
+
+**남은 정직한 잔여.** 능력을 주입받는 세 호출부는 아직 **기본 구현 선택 편의**를 쓴다
+(`equivalence=None`이면 합성 루트에 묻는다). 호출부가 능력을 상류에서 받아 내리면 그 2줄도
+사라진다. 위반이 없어진 게 아니라 **작아졌고**, 남은 크기를 계약에 적어 두었다.
 
 ### 이 숫자의 한계 (정직한 공백)
 
@@ -181,16 +209,23 @@ Physics를 붙일 때 **이 두 계층은 손대지 않아도 된다** — 계�
 - **그룹 ① 구조적 제외 11건 — 빚이 아니다.** 출발점이 ADAPTER(3) 또는 MIXED(8)인 간선이다.
   계약은 "CORE로 지정한 모듈"만 구속하므로 애초에 위반이 아니고, 부모 패키지를 source로 잡은
   탓에 걸릴 뿐이다. MIXED를 지금 강제하면 §1이 유보한 판정을 조기에 강요하게 된다.
-- **그룹 ② baseline 9건 — 이것이 빚이다.** §4 A·B·C분류의 심볼 15건을 모듈 단위로 축약한 수다
-  (`api.coach` 3심볼→2간선 · `l6.blueprint.assembly` 3→2 · `l3.render.adapters` 6→3 ·
-  `l3.pedagogy.slot_generator` 2→1 · `api._ocr_state` 1→1). 소유자는 **`EOS-69`**.
+- **그룹 ② baseline 9건 — 이것이 빚이었다.** §4 A·B·C분류의 심볼 15건을 모듈 단위로 축약한
+  수였다(`api.coach` 3심볼→2간선 · `l6.blueprint.assembly` 3→2 · `l3.render.adapters` 6→3 ·
+  `l3.pedagogy.slot_generator` 2→1 · `api._ocr_state` 1→1). 소유자는 **`EOS-69`**였다.
+
+  **2026-08-31 현재 이 그룹은 0줄이다**(§4.1). 구역 자체는 비운 채 남겼다 — 다음 빚이 생겼을
+  때 "여기가 적는 자리"임을 알리는 표지가 필요하기 때문이다. 대신 7계층 계약 쪽에 합성 루트
+  경유 예외 **2줄**이 새로 생겼다: 빚의 총량이 9 → 2로 줄었고, 성격도 "Core가 어댑터를 직접
+  부른다"에서 "Core가 배선 지점을 부른다"로 바뀌었다. 후자가 왜 더 나은지는 §4.1 마지막 문단.
 
 **만료는 날짜가 아니라 기계다.** `unmatched_ignore_imports_alerting`이 기본 `ERROR`이므로,
 EOS-69가 어떤 간선을 없애면 대응하는 유예 줄이 매치되지 않아 `lint-imports`가 실패한다 —
 CI가 "이 줄을 지워라"라고 말한다. 실측 확인(뮤테이션 C): `l6.blueprint.assembly`의
 `verify_step` import를 제거하니 `No matches for ignored import ...`로 exit 1. 유예가 조용히
-눌러앉을 수 없다("만료 없는 유예 금지"의 코드 집행). 사람이 읽을 재확인 지점은 **G1(9/27)** —
-그때까지 9줄이 그대로면 EOS-69 진척이 0이라는 뜻이다.
+눌러앉을 수 없다("만료 없는 유예 금지"의 코드 집행). **이 장치는 실제로 작동했다** — EOS-69의
+두 차례 상환에서 매번 `No matches for ignored import ...`가 먼저 CI를 적색으로 만들었고,
+그 다음에 목록이 줄었다(총 3라운드: 9→8→4→0). 사람이 읽을 재확인 지점은 **G1(9/27)** —
+그때 이 목록이 여전히 0줄인지 확인한다(0도 재확인 대상이다).
 
 **드리프트 방지**: `tests/infra/test_eos_boundary_contract_wiring.py`가 pyproject의 forbidden
 목록을 `BOUNDARY_MAP`(정본)과 대조하고, CI가 `lint-imports`를 실제로 부르는지, 만료 정책이

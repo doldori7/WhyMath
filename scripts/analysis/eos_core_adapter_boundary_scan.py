@@ -136,6 +136,14 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "api.verify": ("MIXED", "검증 엔드포인트 — 표면은 중립이나 요청·응답이 수식 계약"),
     "api.speech": ("MIXED", "낭독 엔드포인트 — 동상"),
     "api.ocr": ("MIXED", "OCR 엔드포인트 — 동상"),
+    "api._ocr_state": (
+        "INFRA",
+        "OCR 부품의 app.state 보관·조회 배관(`_l3_state`와 동형) — `OcrComponents`가 **타입 "
+        "주석으로만** 등장하고 필드를 한 번도 읽지 않는다(실측: 저장·조회·503 사유·도달 카운터). "
+        "과목이 바뀌어도 고칠 것이 없어 CORE 기준을 만족하나, 배관은 경계 계약의 대상이 아니라 "
+        "INFRA로 적는다. **이것은 배선 수정이 아니라 분류 정정이다** — 위반이 사라진 이유가 "
+        "코드 변경이 아님을 여기 남겨 둔다 (EOS-69)",
+    ),
     "schema": ("CORE", "순수 타입 — 대부분 과목 중립(학습자·활동·권리·이벤트)"),
     "schema.subject_adapter": (
         "CORE",
@@ -153,6 +161,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "db": ("INFRA", "영속 계층 — 모델 컬럼에 수학 타입이 있으나 경계 계약 대상이 아님"),
     "ops": ("INFRA", "운영·계측·감사"),
     "privacy": ("INFRA", "미성년 PII 횡단 인프라"),
+    "composition": (
+        "INFRA",
+        "합성 루트 — 능력 계약(schema)과 과목 구현(l4 어댑터)을 잇는 유일한 배선 지점. "
+        "판정 로직 0·팩토리만 노출. 과목 추가 시 *고쳐야 하는* 파일이라 CORE가 아니며, "
+        "경계의 목적은 변경 지점 제거가 아니라 한 곳으로의 집중이다 (EOS-69)",
+    ),
     "config": ("INFRA", "설정"),
     "security": ("INFRA", "인증·인가"),
     "consent": ("INFRA", "동의 절차"),
