@@ -371,3 +371,46 @@ class TestVisibilityHelpersAreNetworkFree:
         newcomer = clone("newcomer")
         assert remote_claims.branch_has_remote_ref(newcomer, "unknown")[0] is None
         assert remote_claims.branch_has_remote_ref(newcomer, "")[0] is None
+
+    def test_linked_worktree_reads_shared_ref_stamps(self, bare_remote, tmp_path):
+        """linked_worktree에서도_원격_ref_나이를_판정한다 (Codex P2 · PR #940)
+
+        이 저장소는 병렬 세션에 worktree를 의무화한다(`parallel_sessions.md` "1 세션 =
+        1 브랜치 = 1 worktree" · `scripts/new-session-worktree.sh`). 그런데 linked
+        worktree의 `--git-dir`는 `.git/worktrees/<name>`이고 **공용 ref는 거기 없다** —
+        초안은 그 디렉터리만 봐서 흔적 3종이 전부 부재, `no-ref-stamp`로 침묵했다.
+        즉 **보호가 필요한 바로 그 환경에서 무력**했다.
+
+        변별력: worktree의 `--git-dir`에 흔적이 하나도 없음을 *먼저 단언*한다. 그
+        전제가 깨지면(git이 언젠가 FETCH_HEAD를 거기 만들면) 이 테스트는 공용 디렉터리를
+        읽는지 여부와 무관하게 통과해 버린다 — 공허한 통과 방지.
+        """
+        _, clone = bare_remote
+        newcomer = clone("newcomer")
+        worktree = tmp_path / "linked-wt"
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "--detach", str(worktree), "HEAD"],
+            cwd=newcomer,
+            check=True,
+            capture_output=True,
+        )
+
+        wt_git_dir = Path(
+            subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=worktree,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        if not wt_git_dir.is_absolute():
+            wt_git_dir = worktree / wt_git_dir
+        assert not any(
+            (wt_git_dir / name).exists()
+            for name in ("FETCH_HEAD", "packed-refs", "refs/remotes/origin")
+        ), "worktree 전용 git-dir에 흔적이 있으면 이 테스트는 공용 조회를 검증하지 못한다"
+
+        age, status = remote_claims.remote_refs_age_seconds(worktree)
+        assert status == "ok", f"worktree에서 판정 불가가 나오면 안 된다 — status={status}"
+        assert age is not None and age >= 0

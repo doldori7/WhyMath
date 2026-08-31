@@ -1313,10 +1313,19 @@ def remote_refs_age_seconds(root: Path) -> tuple[float | None, str]:
     저장소에는 `FETCH_HEAD`가 없다. 그것을 '오래됨'으로 읽으면 *가장 신선한* 상태인
     클론 직후에 고지가 항상 뜨고, 그러면 이 기능은 보호가 아니라 소음이 된다.
     그래서 **원격 ref가 마지막으로 갱신된 흔적 중 가장 최근 것**을 본다:
-      · `FETCH_HEAD`         — 마지막 `git fetch`/`git pull`
-      · `packed-refs`        — 클론 시점(및 gc·pack 갱신)
-      · `refs/remotes/origin`— 개별 ref 파일이 풀려 있는 경우의 갱신
+      · `FETCH_HEAD`         — 마지막 `git fetch`/`git pull` (**worktree별**)
+      · `packed-refs`        — 클론 시점(및 gc·pack 갱신) (**공용**)
+      · `refs/remotes/origin`— 개별 ref 파일이 풀려 있는 경우의 갱신 (**공용**)
     셋 다 없으면 판정 불가다 — 없는 것을 '오래됐다'로 접지 않는다.
+
+    **linked worktree에서 두 디렉터리를 나눠 보는 이유**(Codex P2 · PR #940 실측): 이
+    저장소는 병렬 세션에 worktree를 의무화한다(`docs/standards/parallel_sessions.md`
+    "1 세션 = 1 브랜치 = 1 worktree" · `scripts/new-session-worktree.sh`). 그런데
+    linked worktree에서 `--git-dir`는 `.git/worktrees/<name>`을 가리키고 **공용 ref는
+    거기 없다** — 실측: 갓 만든 worktree의 `--git-dir`에는 흔적 3종이 *전부* 부재해
+    이 함수가 `no-ref-stamp`로 침묵했다. 즉 **보호가 필요한 바로 그 환경에서 무력**
+    했다. 공용 흔적은 `--git-common-dir`에서, worktree 고유 `FETCH_HEAD`는 `--git-dir`
+    에서 읽어 합친다(둘은 일반 클론에서 같은 경로로 수렴하므로 분기 없이 동작한다).
 
     왜 이 값을 고지하는가: 번호 가드의 세 번째 출처(`scan_remote_task_files`)는
     **이미 있는 remote-tracking ref만** 읽고 네트워크를 타지 않는다(의도된 비용
@@ -1324,22 +1333,30 @@ def remote_refs_age_seconds(root: Path) -> tuple[float | None, str]:
     구조적으로 보지 못한다*. 대가를 치를 때 사람에게 말하지 않는 것이 결함이므로
     경과 시간을 함께 띄운다 — `fetch=False` 기본값 자체는 바꾸지 않는다.
     """
-    try:
-        out = _git(root, "rev-parse", "--git-dir", timeout=10)
+
+    def _resolve(flag: str) -> Path | None:
+        out = _git(root, "rev-parse", flag, timeout=10)
         if out.returncode != 0:
-            return None, _classify_failure(out.stderr or "")
-        git_dir = Path((out.stdout or "").strip())
-        if not git_dir.is_absolute():
-            git_dir = root / git_dir
-        stamps = [
-            candidate.stat().st_mtime
-            for candidate in (
-                git_dir / "FETCH_HEAD",
-                git_dir / "packed-refs",
-                git_dir / "refs" / "remotes" / "origin",
-            )
-            if candidate.exists()
-        ]
+            return None
+        raw = (out.stdout or "").strip()
+        if not raw:
+            return None
+        path = Path(raw)
+        return path if path.is_absolute() else root / path
+
+    try:
+        git_dir = _resolve("--git-dir")
+        if git_dir is None:
+            return None, "error:git-dir"
+        # linked worktree면 공용 디렉터리가 다르다. 일반 클론에서는 같은 경로로 수렴.
+        common_dir = _resolve("--git-common-dir") or git_dir
+        candidates = (
+            git_dir / "FETCH_HEAD",  # worktree별 fetch 기록
+            common_dir / "FETCH_HEAD",  # 주 체크아웃에서의 fetch 기록
+            common_dir / "packed-refs",  # 공용 — 클론 시점
+            common_dir / "refs" / "remotes" / "origin",  # 공용 — 풀린 ref 갱신
+        )
+        stamps = [c.stat().st_mtime for c in candidates if c.exists()]
         if not stamps:
             return None, "no-ref-stamp"
         return max(0.0, time.time() - max(stamps)), "ok"
