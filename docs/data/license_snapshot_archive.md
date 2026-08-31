@@ -129,27 +129,36 @@ python scripts/ops/license_snapshot_archiver.py [--out data/licenses] [--sources
   기본 동작으로 존중(샌드박스·Kiki 머신 공통).
 - 의존성: **표준 라이브러리만** (backend 패키지 import 금지 — Kiki 머신 단독 실행 가능).
 
-## 4-A. 1차 집행 실측 현황 (2026-08-30 · 샌드박스 실행분)
+## 4-A. 집행 실측 현황 (2026-08-31 · Kiki 머신 실행 반영)
 
-**카탈로그 20곳 중 6곳 확보 · 14곳 미확보.** 태스크 `LIC-02`는 *정본화*(스크립트·문서·계약
-테스트) 기준으로 done이며, **소급 불가 자산인 스냅샷 자체는 30%만 확보된 상태**다. 남은 14곳은
-게이트 `G-license-snapshot-blocked-sources`가 추적한다(무추적 상태로 두면 "정본화를 집행으로
-착각한 완료 선언"이 된다 — CLAUDE.md 금기).
+**카탈로그 20곳 중 19곳 확보 · 1곳 미확보(siyavula).**
 
-**게이트 clear 기준은 기계 판정이다**: `python scripts/ops/license_snapshot_coverage.py`가
-**exit 0**(전곳 확보)을 낼 때만 clear한다. 아카이버의 exit 3(부분 성공)이나 스냅샷 개수 증가를
-성공으로 읽으면 *1곳만 받아도* 통과해 나머지가 영구 미확보로 남는다(PR #915 리뷰 P1 —
-변별력 없는 검증 스텝 금지). 판정기의 변별력은 `tests/infra/test_license_snapshot_coverage.py`
-8건이 동결한다(전곳→0 · 1곳 누락→1 · 로그만 있고 파일 없음→미확보 · 판정 불가→2).
-
-| 상태 | 곳 | source_id |
+| 회차 | 환경 | 결과 |
 |---|---|---|
-| ✅ 확보 | 6 | gsm8k · math-hendrycks · mathlib4 · metamath-set-mm · minif2f · prm800k |
-| ⛔ 미확보(egress 403) | 14 | ncic · kogl-license-types · aihub · schoolinfo · openstax · siyavula · illustrative-mathematics · numinamath-cot · numinamath-tir · phet · omnimath · olymmath · openmathinstruct-1 · dlmf |
+| 1차 (08-30) | 원격 세션(샌드박스) | 6/20 — 14곳이 egress 프록시 403(조직 정책) |
+| 2차 (08-31) | Kiki 머신(Phaiakes9·망 제약 없음) | **19/20** — 신규 13곳 확보(`run_id=20260831T005458Z-b0b14e`) |
 
-확보된 6곳이 전부 GitHub/HuggingFace **raw** 경로인 것은 우연이 아니다 — 원격 세션 프록시가
-그 호스트만 허용한다. 즉 **미확보 14곳은 재시도로 해소되지 않으며**, 네트워크가 열린
-Kiki 머신 1회 실행이 유일한 경로다(§5).
+egress 차단으로 막혔던 14곳 중 **13곳이 해소**됐다. 이로써 "미확보 = 네트워크 제약"이라는
+1차 판정은 소진됐고, **남은 1곳의 원인은 다른 종류**다.
+
+### 잔여 1곳 — `siyavula` (원인이 바뀌었다)
+
+- **증상**: `https://www.siyavula.com/terms` → **HTTP 404** (망 제약 없는 Kiki 머신에서도 동일).
+  즉 egress 차단이 아니라 **URL 자체가 틀렸다** — 재실행·재시도로는 영원히 해소되지 않는다.
+- **근본 원인**: 이 URL은 문서에서 인용한 것이 아니라 구성된 값이다 — 카탈로그의
+  `url_origin`이 `_ORIGIN_OFFICIAL`("공식 사이트 · licensing_safety.md에 URL 부재 —
+  LIC-02에서 확정")로, **출처 문서 없이 확정된 유일한 부류**임을 스스로 표기하고 있다.
+  같은 표기를 가진 다른 소스(`ncic`·`schoolinfo`·`openstax`)는 2차에서 200으로 확보됐으므로,
+  구성 URL 전체가 아니라 이 한 건이 틀린 것이다.
+- **해소 경로**: 실제 약관 페이지 URL을 확인해 카탈로그를 고친 뒤 재실행한다(§5-A).
+  URL 확인은 망 접근이 필요해 원격 세션에서 불가하다(프록시가 siyavula.com을 403으로 거부 —
+  "우회 금지" 규정에 따라 재시도하지 않는다).
+
+**게이트 clear 기준은 불변**: `python scripts/ops/license_snapshot_coverage.py`가 **exit 0**을
+낼 때만 clear한다. 현재 `19/20 · exit 1`이므로 게이트
+`G-license-snapshot-blocked-sources`는 **열린 채 유지**된다 — 95%는 완료가 아니다.
+(게이트 제목의 "미수집 14곳"은 등재 시점 표기다. 하네스 CLI에 게이트 제목·notes 수정 경로가
+없어 그대로 두며, 현재 정본 수치는 이 절과 커버리지 판정기 출력이다 — `HARN-39`.)
 
 ## 5. 집행 별항 (정본화 ≠ 집행)
 
@@ -158,6 +167,79 @@ Kiki 머신 1회 실행이 유일한 경로다(§5).
   `data/licenses/`에 커밋됨)이다.
 - 계약 동결: `tests/infra/test_license_snapshot_archiver.py` (성공/HTTP 실패/타임아웃/예외/
   변경 감지/멱등/즉시 flush/exit 코드 — 경로별 상이 신호, hermetic·네트워크 0).
+
+### 5-A. 잔여 1곳(siyavula) — URL 확정 완료, 재수집만 남음
+
+**2026-08-31 확정**: 홈페이지 href 스캔으로 실제 약관 경로를 발견했다 —
+`https://www.siyavula.com/info/terms-and-conditions` (구 URL `/terms`는 404였다).
+카탈로그(`TIER1_SOURCES`)는 이 값으로 정정됐고 `url_origin`도 `_ORIGIN_DISCOVERED`로 갱신됐다.
+
+> **채택하지 않은 후보**: 같은 스캔에서 `/info/privacy-policy`도 키워드에 걸렸지만
+> 개인정보처리방침은 **라이선스 조항이 아니다**. 키워드 매칭은 *후보 발견*이지 *근거 확인*이
+> 아니며, 매칭됐다는 이유로 채택하면 CC BY 근거가 없는 페이지를 라이선스 증거로 보관하게
+> 된다(PR #918 리뷰 P2). 그래서 아래 절차에 **내용 검증 스텝**을 넣는다.
+
+> **1. 과제**: siyavula 약관 재수집 + 확보 내용이 실제로 라이선스 조항인지 확인 → 20/20 달성.
+> **2. 목적**: 게이트 `G-license-snapshot-blocked-sources` 종결. 확인 시점 약관 원문 보관은
+> 소급 불가하므로 이 1건이 마지막 미확보분이다.
+> **3. 절차**: main 최신화(정정된 카탈로그 포함) → siyavula만 수집 → 커버리지 판정 →
+> **수집된 본문에 라이선스 문구가 실제로 있는지 확인** → 커밋·브랜치 push.
+> **4. 성공 기준**: `coverage=0`(20/20) **그리고** `LICENSE_EVIDENCE` 줄에 매칭 문구가
+> 하나 이상 출력될 것. **둘 다여야 성공**이다 — coverage만 0이면 "무언가를 받긴 했다"는
+> 뜻이지 "라이선스 근거를 확보했다"는 뜻이 아니다. 매칭이 0줄이면 그 URL은 약관 페이지가
+> 아니므로 알려 달라(게이트는 열어 둔다).
+> **5. 실행 환경**: Windows PowerShell(=Phaiakes9), `C:\Users\kiki\Desktop\__AI\WhyMath`.
+> **6. 창 구분**: 새 창 1개. 장기 점유 프로세스 없음.
+
+```powershell
+# [실행 시스템: Windows PowerShell — 새 창. Phaiakes9 본체이므로 SSH·WSL 진입 불요]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git fetch origin main
+git checkout -B claude/lic-02-siyavula-capture origin/main
+
+python scripts\ops\license_snapshot_archiver.py --sources siyavula
+echo "archiver=$LASTEXITCODE"
+
+python scripts\ops\license_snapshot_coverage.py
+echo "coverage=$LASTEXITCODE"    # ★ 0이라야 20/20
+
+# 내용 검증 — 받은 것이 정말 라이선스/약관 문서인가 (키워드 매칭≠근거 확인)
+$snap = Get-ChildItem data\licenses\snapshots\siyavula -Filter *.html -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime | Select-Object -Last 1
+if ($null -eq $snap) { "LICENSE_EVIDENCE 없음 — 스냅샷 파일 자체가 없다" }
+else {
+  $txt = Get-Content $snap.FullName -Raw
+  $pat = '(?i)(creative commons|CC[ -]?BY|licen[cs]e|copyright|terms (of|and)|이용약관|저작권)'
+  $m = [regex]::Matches($txt, $pat) | ForEach-Object { $_.Value } | Sort-Object -Unique
+  "SNAPSHOT $($snap.Name) bytes=$($snap.Length)"
+  if ($m) { $m | ForEach-Object { "  LICENSE_EVIDENCE $_" } }
+  else    { "  LICENSE_EVIDENCE 0건 — 이 URL은 약관 페이지가 아니다(채택 보류)" }
+}
+```
+
+수집분 제출 (coverage 값과 무관하게 받은 만큼 커밋 — 소급 불가):
+
+```powershell
+# [실행 시스템: Windows PowerShell — 같은 창]
+git add data\licenses
+git commit -m "LIC-02 집행: siyavula 약관 스냅샷 수집 (URL 정정 후 재수집)"
+git push -u origin claude/lic-02-siyavula-capture
+```
+
+> `coverage` 값과 `LICENSE_EVIDENCE` 줄을 알려주시면 PR을 열고, **둘 다 성공일 때만**
+> 게이트를 clear한다.
+
+> **프로브 실패 기록 3건(2026-08-31 · 전부 원격 세션이 작성한 블록의 결함)**
+> ① `-UseBasicParsing` 누락 → PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차 정지.
+> ② catch의 진단 문자열이 **파이프라인 출력**이 되어 `return $null`에도 불구하고 반환값을
+> 오염 → 호출부가 실패를 성공으로 오인(수정: `Write-Host`).
+> ③ `$home`에 대입 → PowerShell **자동 변수**(읽기 전용)라 대입 거부, 그런데 후속
+> `if ($home)`이 홈 경로 문자열로 **참**이 되어 가짜 성공 신호. 성공/실패가 같은 화면을 냈다.
+>
+> 공통 원인: **원격 세션은 PowerShell을 실행 검증할 수 없다**(Windows 부재 + 대상 호스트
+> egress 403). 그런데 저장소 가드 `scripts/ops/check_ps_scripts.py`는 `scripts/**/*.ps1`만
+> 훑어 **런북 마크다운 코드펜스는 검사 범위 밖**이다 — Kiki에게 건네는 PowerShell 대부분이
+> 사는 곳이 정확히 그 사각이다. 가드 확장 = `OPS-57`.
 
 ### Kiki 머신 수동 실행 (Windows PowerShell)
 
