@@ -1110,8 +1110,11 @@ class TestScanStaleBranches:
         assert "claude/old-orphan" in branches
         assert branches["claude/old-orphan"].ahead >= 1
         assert branches["claude/old-orphan"].age_days >= 9
-        # 포팅 근거도 active claim도 없으면 기본값 unresolved (2026-08-05 3분류 확장)
-        assert branches["claude/old-orphan"].status == "unresolved"
+        # 포팅 근거도 active claim도 PR 이력도 없으면 isolated (HARN-47 4분류).
+        # bare 로컬 원격에는 refs/pull/*가 없으므로 조회는 *성공하고 0건*이다 — 즉
+        # "PR로 노출된 적 없음"이 실제로 확인된 상태이지 미측정이 아니다.
+        assert result.pr_lookup_ok is True
+        assert branches["claude/old-orphan"].status == "isolated"
         assert branches["claude/old-orphan"].evidence == ""
 
     def test_recently_committed_branch_not_detected(self, bare_remote):
@@ -1229,24 +1232,31 @@ class TestScanStaleBranches:
         assert branches[branch].status == "active"
         assert branches[branch].evidence == ""
 
-    def test_three_classifications_distinguished_in_one_scan(self, bare_remote):
-        """세_분류가_한_스캔에서_동시에_구분된다
+    def test_four_classifications_distinguished_in_one_scan(self, bare_remote):
+        """네_분류가_한_스캔에서_동시에_구분된다
 
-        unresolved·ported·active가 서로 다른 값으로 동시에 나오는지 변별력 실측.
+        isolated·pr_filed·ported·active가 서로 다른 값으로 동시에 나오는지 변별력 실측.
 
         각 분류가 개별 테스트에서만 통과하고 한 스캔에서는 서로를 오염시키면(예: 전부
-        unresolved로 뭉개짐) 실전에서 무의미하다 — 성공/실패에 같은 값을 내면 검증이
+        isolated로 뭉개짐) 실전에서 무의미하다 — 성공/실패에 같은 값을 내면 검증이
         아니라 위장(CLAUDE.md 변별력 없는 검증 스텝 금지).
+
+        HARN-47이 추가한 pr_filed 축이 핵심이다. 이 축이 무력해지면(PR 대조 실패)
+        11건이 통째로 isolated로 승격돼 "고립 7건"이라는 판정이 "고립 18건"이 된다 —
+        경고 습관화가 정확히 그렇게 시작됐다.
         """
         _, clone = bare_remote
+        remote_path, _ = bare_remote
         a, b = clone("session-a"), clone("session-b")
 
-        unresolved_branch = "claude/whymath-unresolved-example-zzzzzz"
+        isolated_branch = "claude/whymath-isolated-example-zzzzzz"
+        pr_filed_branch = "claude/whymath-prfiled-example-yyyyyy"
         ported_branch = "claude/whymath-ported-example-953m1e"
         active_branch = "claude/whymath-active-example-bbbbbb"
 
         for branch, fname in [
-            (unresolved_branch, "u.txt"),
+            (isolated_branch, "u.txt"),
+            (pr_filed_branch, "pr.txt"),
             (ported_branch, "p.txt"),
             (active_branch, "ac.txt"),
         ]:
@@ -1271,14 +1281,35 @@ class TestScanStaleBranches:
         )
         subprocess.run(["git", "push", "origin", "main"], cwd=a, check=True, capture_output=True)
 
+        # GitHub이 PR을 노출하는 방식 그대로 — 원격 bare 저장소에 refs/pull/<N>/head를
+        # 만든다. 이 테스트가 실물 GitHub이 아니라 git 규약을 태우는 지점이다.
+        pr_tip = subprocess.run(
+            ["git", "rev-parse", f"refs/heads/{pr_filed_branch}"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "update-ref", "refs/pull/77/head", pr_tip],
+            cwd=remote_path,
+            check=True,
+            capture_output=True,
+        )
+
         result = remote_claims.scan_stale_branches(
             b, days_threshold=3, active_branches=frozenset({active_branch})
         )
         assert result.status == "ok"
-        branches = {s.branch: s.status for s in result.stale}
-        assert branches[unresolved_branch] == "unresolved"
-        assert branches[ported_branch] == "ported"
-        assert branches[active_branch] == "active"
+        assert result.pr_lookup_ok is True
+        branches = {s.branch: s for s in result.stale}
+        assert branches[isolated_branch].status == "isolated"
+        assert branches[pr_filed_branch].status == "pr_filed"
+        assert branches[ported_branch].status == "ported"
+        assert branches[active_branch].status == "active"
+        # PR 번호가 실제로 실려야 브리핑이 사람에게 건넬 것이 생긴다 — 분류만 맞고
+        # 번호가 비면 "PR 어딘가에 있음"이라는 쓸모없는 경고가 된다.
+        assert branches[pr_filed_branch].evidence == "PR #77"
 
     def test_no_remote_is_offline_determination(self, git_repo: Path):
         """원격_없음은_offline_판정
@@ -1470,7 +1501,10 @@ class TestScanStaleBranches:
         result = remote_claims.scan_stale_branches(b, days_threshold=3)
 
         branches = {s.branch: s for s in result.stale}
-        assert branches[branch].status == "unresolved"
+        # 요지는 "포팅됨으로 강등되지 않았다"이다. HARN-47 4분류에서 근거 없는 브랜치는
+        # PR 이력까지 없으면 isolated다(bare 로컬 원격에는 refs/pull/*가 없다).
+        assert branches[branch].status != "ported"
+        assert branches[branch].status == "isolated"
         assert branches[branch].evidence == ""
 
     def test_common_word_suffix_does_not_match(self, bare_remote):
@@ -1497,7 +1531,76 @@ class TestScanStaleBranches:
         result = remote_claims.scan_stale_branches(b, days_threshold=3)
 
         branches = {s.branch: s for s in result.stale}
+        # 요지는 "포팅됨으로 강등되지 않았다"이다. HARN-47 4분류에서 근거 없는 브랜치는
+        # PR 이력까지 없으면 isolated다(bare 로컬 원격에는 refs/pull/*가 없다).
+        assert branches[branch].status != "ported"
+        assert branches[branch].status == "isolated"
+
+    def test_pr_lookup_failure_does_not_become_isolation_claim(self, bare_remote, monkeypatch):
+        """PR_조회_실패는_고립_주장으로_바뀌지_않는다
+
+        HARN-47에서 가장 위험한 오류는 미탐이 아니라 **오탐**이다. PR 대조가 실패했을
+        때 그것을 "PR 이력 없음"으로 읽으면, 인프라가 죽은 순간 PR이 멀쩡히 열려 있는
+        브랜치 전부가 "🔴 고립 — 회수 또는 삭제 필요"로 승격된다. 삭제를 유도하는 경보다.
+
+        CLAUDE.md: 측정 실패와 통과는 같은 색이면 안 된다(이중 회계).
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-lookup-failure-example"
+        self._push_stale_branch(a, branch, "work.txt")
+
+        real_git = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv[:2] == ("ls-remote", "origin") and any("refs/pull/" in x for x in argv):
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr="fatal: boom")
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        assert result.status == "ok"  # 스캔 자체는 성공 — PR 축만 미측정이다
+        assert result.pr_lookup_ok is False
+        branches = {s.branch: s for s in result.stale}
         assert branches[branch].status == "unresolved"
+        assert branches[branch].status != "isolated"
+
+    def test_pr_lookup_uses_no_extra_git_call_per_branch(self, bare_remote):
+        """PR_대조는_브랜치마다_원격_왕복을_추가하지_않는다
+
+        SessionStart 훅은 매 세션 도는 경로다. 브랜치마다 ls-remote를 돌리면 원격
+        왕복이 N배가 되어 예산을 넘긴다 — tip sha는 이미 도는 for-each-ref 열거에
+        얹어 받는다. 이 계약이 깨지면(브랜치별 rev-parse/ls-remote 부활) 조용히
+        느려지기만 하므로 기계로 붙든다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        for i in range(3):
+            subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
+            self._push_stale_branch(a, f"claude/whymath-budget-example-{i}", f"w{i}.txt")
+
+        real_git = remote_claims._git
+        ls_remote_calls: list[tuple[str, ...]] = []
+
+        def counting_git(root, *argv, **kwargs):
+            if argv and argv[0] in ("ls-remote", "rev-parse"):
+                ls_remote_calls.append(argv)
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch_target = counting_git
+        original = remote_claims._git
+        remote_claims._git = monkeypatch_target  # type: ignore[assignment]
+        try:
+            result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        finally:
+            remote_claims._git = original  # type: ignore[assignment]
+
+        assert result.status == "ok"
+        assert len([c for c in result.stale if c.status == "isolated"]) >= 3
+        pr_ref_calls = [c for c in ls_remote_calls if any("refs/pull/" in x for x in c)]
+        # 브랜치가 3건이어도 PR ref 조회는 스캔당 1회여야 한다.
+        assert len(pr_ref_calls) == 1, f"PR ref 조회가 {len(pr_ref_calls)}회 — 스캔당 1회여야 한다"
 
     def test_short_branch_name_skips_evidence_lookup(self, bare_remote):
         """너무_짧은_브랜치명은_근거_조회를_건너뛴다

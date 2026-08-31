@@ -1442,6 +1442,55 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_branches(root: Path, args: argparse.Namespace) -> int:
+    """장기 미머지 브랜치를 고립/PR제출로 갈라 보고한다 (HARN-47).
+
+    **왜 별도 verb인가 — 집행 지점**: HARN-13이 만든 이 스캔은 SessionStart 훅에서만
+    돌았다. 즉 사람이 대화형 세션을 열 때만 존재했고, CI에서는 한 번도 실행되지 않았다.
+    이 저장소는 같은 형태의 실패를 반복했다(`tests/infra` 199건이 어떤 잡도 실행하지
+    않던 상태·브랜치 보호 required check가 통째 미강제였던 상태). "저장소에 존재함"과
+    "돌아감"은 다르다 — 그래서 CI가 부를 수 있는 표면을 별도로 낸다.
+
+    종료 코드:
+      0 — 스캔 성공(고립 0건이든 N건이든). 이 명령은 **게이트가 아니라 관측**이다.
+          다른 사람의 방치 브랜치 때문에 무관한 PR의 CI를 red로 만들지 않는다.
+      2 — 스캔 자체가 불가(offline·shallow·error). 호출부는 이것을 "고립 0건"으로
+          읽어서는 안 된다. 측정 실패와 통과는 같은 색이면 안 된다.
+    """
+    scan = remote_claims.scan_stale_branches(
+        root,
+        days_threshold=args.days,
+        fetch=not args.no_fetch,
+    )
+    if scan.status != "ok":
+        print(f"측정 불가: status={scan.status} — {scan.message or '사유 미상'}")
+        return 2
+
+    buckets: dict[str, list[remote_claims.StaleBranch]] = {}
+    for item in scan.stale:
+        buckets.setdefault(item.status, []).append(item)
+
+    isolated = buckets.get("isolated", [])
+    pr_filed = buckets.get("pr_filed", [])
+    undetermined = buckets.get("unresolved", [])
+
+    # PR 대조를 못 했으면 "고립 N건"이라는 문장 자체를 만들지 않는다 — 조회 실패
+    # 상태에서 고립 건수를 말하면 그 수는 측정이 아니라 추측이다.
+    if not scan.pr_lookup_ok:
+        print(
+            f"PR 대조 실패 — 고립/PR제출 분리 미수행. 미머지 {len(scan.stale)}건 중 "
+            f"고립 여부 미판정 {len(undetermined)}건"
+        )
+        return 2
+
+    print(f"고립(PR 이력 0건): {len(isolated)}건 · PR 제출됨: {len(pr_filed)}건")
+    for item in isolated:
+        print(f"  [고립] {item.branch} — {item.age_days:.0f}일 전 · trunk 대비 {item.ahead}커밋")
+    for item in pr_filed:
+        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
+    return 0
+
+
 def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
     """태스크 간 파일 범위 겹침 진단 — 착수 전 수동 확인용.
 
@@ -1734,6 +1783,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="reap 무인 집행 — 삭제하되 확정 사유(task_done·branch_gone)로만 한정. CI 전용",
     )
     p.set_defaults(func=cmd_claims)
+
+    p = sub.add_parser("branches", help="장기 미머지 브랜치 — 고립/PR제출 분리 (HARN-47)")
+    p.add_argument("--days", type=int, default=remote_claims.STALE_BRANCH_DEFAULT_DAYS)
+    p.add_argument("--no-fetch", action="store_true", help="원격 fetch 생략(캐시된 ref만)")
+    p.set_defaults(func=cmd_branches)
 
     p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")
     p.add_argument("id")
