@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,8 +15,9 @@ acceptance:
   - "브리핑이 두 축을 다른 행동요구로 렌더한다: isolated=즉시 조치, pr_filed=PR 번호 제시. 조회 실패는 0건과 구분해 표기한다"
   - "집행 지점(정본화와 별항) — SessionStart 훅 외에 CI(harness-integrity 잡)에서도 상시 실행되며 그 스텝이 실제로 돌아간 증적을 남긴다"
   - "뮤테이션 검증 — PR 대조를 무력화하면 red가 나는 테스트를 동결한다"
-artifacts: []
+artifacts:
+  - "PR #936 (https://github.com/doldori7/WhyMath/pull/936) — 커밋 ccfd82c5(구현·테스트·CI 배선) + 67d38151(문서·MEMORY). 실측: 미머지 18건 → 고립 7 + PR제출 11. 뮤테이션 5종 전건 red·cp 복원 md5 일치. harness 407 passed·harness+infra 663 passed(제외 4파일은 origin/main 워크트리에서 동일 47 failed로 기준선 확인)."
 paths: []
-session: claude/next-task-progress-2p549h
+session: null
 notes: ""
 updated: 2026-08-31
