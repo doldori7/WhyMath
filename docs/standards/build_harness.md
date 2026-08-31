@@ -207,6 +207,52 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
   삭제 5종 돌연변이가 각각 5·5·3·2·1건의 테스트 FAIL로 검출됨
   (`tests/harness/test_remote_claims.py`·`test_cli.py`).
 
+### 3b-3. 미머지 브랜치 4분류 — 고립과 지연의 분리 (HARN-47)
+
+브리핑의 미머지 브랜치 목록은 **행동이 다른 네 부류**를 구분한다. 한 덩어리로 부르면
+경고가 습관화되고, 습관화된 경고는 보호가 아니다(CLAUDE.md 「상시 실패하는 fail-open
+보호를 '보호 있음'으로 신뢰 금지」).
+
+| 분류 | 판정 근거 | 필요한 행동 |
+|---|---|---|
+| `isolated` | ahead>0 · 포팅 근거 없음 · **`refs/pull/*/head`에 tip 없음** | 회수(PR 생성) 또는 삭제. **브리핑 줄이 유일한 존재 증거다** |
+| `pr_filed` | tip이 `refs/pull/<N>/head`와 일치 | 없음 — 처분은 그 PR에서. 브리핑은 번호만 건넨다 |
+| `ported` | trunk 커밋이 브랜치를 인용하며 코드를 옮김 | 원본 정리만 |
+| `active` | 원격 claim 맵에 존재 | 없음 — 진행 중인 정상 작업 |
+
+**왜 이 분리가 생겼나** (2026-08-31 실측): 브리핑이 18건을 전부 "Kiki 결정 필요"로
+부르고 있었는데, 그중 11건은 **이미 PR이 열려 있고 처분 라벨까지 붙어 있었다**. 경고의
+61%가 이미 결정된 것을 다시 결정하라고 요구했고, 진짜 고립 7건이 그 소음에 24일간
+묻혀 있었다.
+
+**PR 판정은 오프라인 git만 쓴다** — `git ls-remote origin "refs/pull/*/head"`는 토큰·API
+권한 없이 읽힌다. 판정을 외부 관측 인프라에 의존시키지 않는다는 이중 회계 원칙과 같은
+방향이다. tip sha는 이미 도는 `for-each-ref`에 얹어 받으므로 브랜치당 추가 git 호출은 0.
+
+**`active` 판정에는 원격 claim 맵이 필요하다.** 두 진입점(`cmd_brief`·`cmd_branches`)이
+모두 `active_branches=frozenset(remote_claimed.values())`를 넘겨야 이 분류가 실제로 난다.
+CI 진입점이 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "🔴 회수 또는 삭제 필요"로
+경고된다** — 삭제를 유도하는 오경보이자, 이 표가 4분류라고 말하면서 CI 경로는 3분류만
+낼 수 있는 상태다. 두 진입점의 배선을 각각 테스트가 붙든다
+(`test_cli.py::TestStaleBranchClassificationWiring`). claim 조회 자체가 실패하면 그 사실을
+출력에 남긴다 — `active`가 조용히 `isolated`로 오분류되는 것을 막기 위함이다.
+
+**조회 실패는 "PR 없음"이 아니다.** 실패하면 그 브랜치는 `unresolved`(고립 여부 미판정)로
+남고 `pr_lookup_ok=False`가 서며, `pr_lookup_error`에 **예외 타입명을 포함한 사유**가
+실린다(무타입 경고는 타임아웃·git 미설치·권한 오류를 같은 글자로 보이게 만든다). 실패를 고립으로 읽으면 인프라가 죽은 순간 열린 PR 전부가
+"삭제 필요"로 승격된다 — 삭제를 유도하는 오경보다.
+
+**열림/닫힘은 판정하지 않는다.** `refs/pull/<N>/merge`가 열린 PR에만 생긴다는 통설을
+실측에서 폐기했다(열린 PR 14건 중 merge ref 보유 8건, 이미 머지된 PR도 head만 잔존).
+성공/실패에 같은 값을 내는 검사는 검증이 아니라 위장이므로, 답할 수 있는 질문("PR로
+노출된 적이 있는가")만 답하고 나머지는 PR 번호로 사람에게 넘긴다.
+
+**집행 지점**(정본화와 별항): SessionStart 훅 + **CI `harness-integrity` 잡**
+(`backlog.py branches`). 이 스캔은 HARN-13 이후 줄곧 SessionStart 전용이었다 — 대화형
+세션 밖에서는 실행 0회였다. CI 배선에는 `fetch-depth: 0`이 필수다(기본 shallow면 가드에
+걸려 매 실행 "판정 보류"가 되어 초록인 채 상시 무력이 된다). 배선 실재성은
+`tests/infra/test_stale_branch_scan_ci_wiring.py`가 기계로 동결한다.
+
 ## 3c. 조율 정책 — 단계적 강제 (warn → block)
 
 `backlog/policy.yaml`의 rule 3종 (전부 warn으로 시작 — "측정 없는 도입 없음"):
@@ -336,6 +382,7 @@ python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황
 python3 scripts/harness/backlog.py claims release <id> [--force]  # claim 해제 (남의 것은 --force)
 python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 (기본 dry-run)
 python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
+python3 scripts/harness/backlog.py branches         # 미머지 브랜치 — 고립/PR제출 분리 (HARN-47)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 python3 scripts/harness/board.py                   # 작업 보드 HTML (work/board.html)
