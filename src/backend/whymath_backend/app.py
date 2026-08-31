@@ -106,6 +106,7 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.api._segmentation_state import (
     get_segmentation_snapshot as _get_segmentation_snapshot,
 )
+from whymath_backend.api.alignments import router as alignments_router
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
 )
@@ -117,6 +118,7 @@ from whymath_backend.api.auth import (
 )
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.curricula import router as curricula_router
 from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.dsl import router as dsl_router
 from whymath_backend.api.gating import router as gating_router
@@ -1134,5 +1136,8 @@ def create_app(
     app.include_router(reports_router)
     app.include_router(dsl_router)
     app.include_router(rights_router)
+    # CUR-11: subject-neutral 교육과정 조회 표면(curricula·learning-outcomes·alignments).
+    app.include_router(curricula_router)
+    app.include_router(alignments_router)
 
     return app

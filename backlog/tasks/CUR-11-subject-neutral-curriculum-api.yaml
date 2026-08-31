@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: backend
-status: blocked
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -13,11 +13,17 @@ depends_on:
 requires_gates: []
 acceptance:
   - "① GET /v1/curricula(목록·페이지네이션), GET /v1/curricula/{framework_id}, GET /v1/curricula/{framework_id}/nodes(CurriculumEntry 기반 개념 노드 뷰), GET /v1/learning-outcomes/{norm_id}, GET /v1/alignments(통합 조회) 라우터 추가. ② subject-neutral — /math/grade/10/unit/3 같은 과목 특화 경로 금지. ③ 테스트: hermetic(FakeSession)·통합(PG16) 2층. ④ 범위 밖: /v1/me/target-progress 변경, 학생 대면 노출 정책 변경은 포함하지 않음."
-artifacts: []
+artifacts:
+  - "#920"
+  - src/backend/whymath_backend/api/curricula.py
+  - src/backend/whymath_backend/api/alignments.py
 paths:
   - src/backend/whymath_backend/api/curricula.py
   - src/backend/whymath_backend/api/alignments.py
   - src/backend/whymath_backend/app.py
+  - tests/backend/api/test_curricula.py
+  - tests/backend/api/test_alignments.py
+  - tests/backend/api/test_curricula_integration.py
 session: null
-notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨.\n\n[차단 2026-08-31] G-eos-verification-relevance-triage 대기 — 12월 검증 관여도 판정 미필(선언 §0-5 신규 기능 게이트·§6-5 이월 판정). 착수 시 /v1/curricula/* 라우터 5종+app 배선이 들어가는데, 선언 §1.3-③이 이 태스크를 'W1 계약 수준' 축으로 분류한 것과 실제 acceptance(라우터 신설)가 어긋난다. requires_gates 부착 CLI 경로가 없어(HARN-24 ③·ADMIN-02 선례) block으로 집행 — 게이트 clear 후 unblock."
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 5. Subject-neutral API는 검토안 P0 요구사항이며, 수학 외 과목 확장의 토대가 됨."
 updated: 2026-08-31
