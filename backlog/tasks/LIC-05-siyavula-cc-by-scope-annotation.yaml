@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: LIC-05-siyavula-cc-by-scope-annotation
+title: "Siyavula CC BY 적용 범위 단서를 licensing_safety.md에 반영 — '명시 표기 자료 한정'"
+track: infra-debt
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① licensing_safety.md 매트릭스의 Siyavula 행에 적용 범위 단서 명기 — 약관 원문(2026-08-31 스냅샷 sha256=45723a589bd0a69d) 실측: 'Some material on the site is licensed under a Creative Commons Attribution Only License' / 'Only material that is clearly marked with a Creative Commons license can be re-used without permission'. 즉 사이트 전체가 CC BY가 아니라 명시 표기된 자료에 한정된다"
+  - "② 귀속 문구 요건 기록 — 원문이 저자명 + 'From www.everythingmaths.co.za' 또는 'From siyavula.com' 표기를 요구한다. 실제 활용 시 이 문구가 필요하므로 데이터 카드에도 반영"
+  - "③ 동일 유형 재점검 — 스냅샷 20곳 중 '전체가 아니라 일부만' 형태의 범위 한정을 두는 소스가 더 있는지 원문 대조(확보된 원문이 있으므로 이제 기계 대조 가능). 발견분은 같은 형식으로 매트릭스에 반영"
+artifacts: []
+paths:
+  - docs/data/licensing_safety.md
+  - "docs/data/**"
+session: null
+notes: "출처: 2026-08-31 LIC-02 20/20 달성 시 내용 검증에서 발견. PR #918 리뷰 P2('키워드 매칭≠라이선스 근거')가 요구한 내용 검증 스텝이 URL 정합성뿐 아니라 라이선스 범위 단서까지 드러낸 사례 — 스냅샷 확보의 실익이 '보관'을 넘어 '대조 가능'에 있음을 보여준다."
+updated: 2026-08-31
