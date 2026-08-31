@@ -39,7 +39,13 @@ def _get(path: str) -> object:
     """GitHub API GET — 실패 시 원인을 본문째 남긴다(예외 타입만으로는 구별 불가)."""
     cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), "--cacert", CA, f"{API}{path}"]
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT + 10)
+        out = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",  # HARN-19 — 로케일(cp949) 디코드 금지
+            timeout=TIMEOUT + 10,
+        )
     except subprocess.TimeoutExpired as exc:
         raise SystemExit(f"❌ 타임아웃({TIMEOUT}s): {path}") from exc
     if out.returncode != 0:
