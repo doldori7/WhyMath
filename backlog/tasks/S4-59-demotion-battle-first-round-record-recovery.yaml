@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-59-demotion-battle-first-round-record-recovery
+title: "강등전 1차 실측 기록 회수 — S4-16 게이트 패배(검출 2/12)·결함류별 실명 관찰 104줄이 main·인플라이트 전부 부재"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정 — docs/standards/residue_gate_demotion_battle_2026-08-10.md(104줄)는 origin/claude/whymath-ai-content-design-vafylb(b1218739)에만 존재. 재현: git show origin/claude/whymath-ai-content-design-vafylb:docs/standards/residue_gate_demotion_battle_2026-08-10.md. 부재 교차확인 실측(2026-08-31): git grep -l '0.0568'·'승격 기각'·'11h 36m' origin/main origin/s4-16-blocked-evidence → 전건 0. main MEMORY.md 446-464는 후행 08-14 라운드만 기록하며 1차 라운드의 결함류별 내역을 담지 않는다"
+  - "② 이식 방식 = 파일 단위(브랜치는 main보다 161커밋 낡음 — 통째 머지 금지). 회수 대상은 문서 1건뿐이며, 같은 브랜치의 cp949 코드 수정분은 OPS-53(todo) 소유이므로 이 태스크 범위 밖(중복 등재 금지). 원 번호(구 OPS-24) 재사용 금지 — 이미 OPS-53으로 재등재됨"
+  - "③ 고유 가치 판정 후 이식 — 1차 라운드가 후행 08-14 라운드에 없는 것: 결함류별 검출 내역(missing_condition 0/3·unstated_equiprobability 0/3 = '조건 결측 계열 실명' 관찰)과 qwen3.5:27b num_ctx 8192 기준 콜당 약 15.5분·45콜 11h36m 비용 실측. 이식 전 이 두 축이 여전히 main 부재인지 재확인하고, 해소분은 이식 대신 판정 기록으로 남긴다"
+  - "④ 집행 지점(정본화와 별항) — 이식된 기록이 S4-16 재개 시 실제로 참조되도록 S4-16 태스크 notes 또는 docs/standards/superhuman_verification_standard.md에서 이 문서를 지목하는 링크를 건다. 문서만 옮기고 아무도 부르지 않으면 회수가 아니다. backlog.py validate exit 0 확인"
+artifacts: []
+paths:
+  - docs/standards/residue_gate_demotion_battle_2026-08-10.md
+  - docs/standards/superhuman_verification_standard.md
+  - backlog/tasks/S4-16-residue-gate-demotion-battle.yaml
+  - backlog/tasks/S4-59-demotion-battle-first-round-record-recovery.yaml
+session: null
+notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-31.md. 회수 완료 전 원 브랜치 claude/whymath-ai-content-design-vafylb 삭제 금지. 소유 공백 경위: HARN-35(done·PR #900)가 이 브랜치의 OPS-24만 회수하고 종료해 나머지 잔여의 소유자가 사라졌다 — '소유 태스크가 done이어도 잔여 diff가 남는다'(stray-code 4절)의 실사례. CLAUDE.md 검증 권위 서열 직결(측정이 증명하지 못한 게이트는 승격되지 않는다)이라 기록 유실은 미래 세션의 게이트 승격 오판 위험."
+updated: 2026-08-31

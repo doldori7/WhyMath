@@ -9,6 +9,15 @@ gates:
     remind_after_days: 7
     evidence: "Phase 0~1 완주 (2026-08-22, Kiki 실행). 산출물: evidence_20260822_073859.txt(9/9 섹션 OK) · bench_{clean,baseline,rocm,vulkan,resident}_2026-08-22*.csv(전건 성공, 전 모델 gpu_fraction=1.0). 확정 결과: ①대역폭 상한 모델 전 구간 검증(dense 4종 유효 대역폭 167~199 GB/s = 피크 256의 65~78%, 예측 범위 전건 적중) ②dense 27B 11.7 vs MoE 30B-A3B 70.1 t/s = 6.0배 ③상주 재방문 로드 2,340ms→2.6ms(900배) ④flash attention 채택(MoE 왕복 -34.8%) ⑤Vulkan 기각(prefill -75% → 27B 왕복 +68%) ⑥VGM 64.0GB 확정 ⑦커밋 위생 규칙(고아 정리·주기적 재시작). LOCAL_LATENCY_MS는 보정 불요 판정(실측 906/3551/12406ms가 상수 1010/3918/13886ms보다 빨라 상수가 보수적·안전측). 정본 = docs/ops/amd395_local_llm_performance.md ★확정 결론 7항 + §5. 머지 PR #849·#851·#852."
     notes: ""
+  - id: G-authoring-expansion-merge-decision
+    title: "미머지 저작 확장 11,446문 회수·병합 결정 (trjg5x) — PB-06이 조건 확정 후 Kiki 소유로 남긴 결정"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-08-31
+    remind_after_days: 7
+    evidence: null
+    notes: "결정 대상: origin/claude/whymath-mvp-plan-architecture-trjg5x(c8abbc17)의 신규 코퍼스 30종 11,446문·결정론 생성기 30파일·저작 태스크 S4-19~51 32건(main 백로그 미등재)을 회수할 것인가. 정량 입력은 PB-06(done·PR #795)이 이미 산출: 성취기준 커버 78→130/435(+52·+12.0%p)·초등 9→22·0커버 영역 24→19. 차단 조건 3건도 PB-06이 확정(사이드카 30/30 부재→CI provenance_audit red·S4-19/S4-22 ID 충돌·shallow merge-base 부재), 사이드카 생성 CLI는 PB-11(done)이 상환. 게이트 신설 사유: PB-06 acceptance ①이 '회수·병합은 이 태스크가 하지 않는다(Kiki 소유)'로 명시했으나 그 소유가 게이트·태스크 어디에도 등재되지 않아 done 이후 20일간 추적자 0인 상태였다(2026-08-31 stray-code 감사 발견 — '만료 없는 유예·제외 금지' 위반). 결정 전까지 브랜치 삭제 금지."
   - id: G-backup-offsite-move
     title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
     kind: human
@@ -94,10 +103,10 @@ gates:
     title: "라이선스 약관 스냅샷 미수집 14곳 캡처 (★소급 불가) — LIC-02 아카이버는 main 착지·실행 완료했으나 샌드박스 egress 정책이 14곳을 403으로 거부(조직 정책·우회 금지). 카탈로그 20곳 중 6곳만 확보(gsm8k·math-hendrycks·mathlib4·metamath-set-mm·minif2f·prm800k). 미확보: ncic·kogl-license-types·aihub·schoolinfo·openstax·siyavula·illustrative-mathematics·numinamath-cot/tir·phet·omnimath·olymmath·openmathinstruct-1·dlmf. Kiki 머신(Phaiakes9)에서 1회 실행하면 해소 — 명령 블록 = docs/data/license_snapshot_archive.md §5"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-30
     remind_after_days: 3
-    evidence: null
+    evidence: "2026-08-31 전곳 확보 — license_snapshot_coverage.py 20/20 · exit 0(기계 판정). 경위: 1차(08-30 원격 세션) 6/20(egress 403 14곳) → 2차(08-31 Kiki 머신) 19/20(신규 13곳) → 3차 siyavula URL 정정 후 재수집 1/1 성공(run_id=20260831T013601Z-8daf15·sha256=45723a589bd0a69d). 잔여 1곳이던 siyavula는 egress가 아니라 URL 결함이었고(구 /terms 404), 홈페이지 href 스캔으로 https://www.siyavula.com/info/terms-and-conditions 를 발견해 카탈로그 정정(#918). 내용 검증(PR #918 리뷰 P2 기준 — 키워드 매칭≠라이선스 근거): 스냅샷 158,035바이트에서 creative commons×6·license류×24·copyright×9·terms and conditions×26 확인, 원문에 'licensed under a Creative Commons Attribution Only License'(=CC BY) 부여 조항 실재. 단서: 해당 페이지는 'Some material'·'Only material that is clearly marked'로 CC BY 적용 범위를 명시 표기 자료로 한정한다 — 사이트 전체가 CC BY가 아님(LIC-05로 licensing_safety.md 반영 등재 — LIC-04는 타 세션이 선점해 CLI가 번호를 재배정했다). 성공 기준 2중(coverage=0 AND LICENSE_EVIDENCE≥1) 모두 충족."
     notes: ""
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1·2단계 측정 완료(2026-08-11). 기록 head가 코드 체인에 없는 d6e7f8a9b0c1이라 alembic이 거부되는 상태 — 3단계는 리비전 확정"
