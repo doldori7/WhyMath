@@ -173,31 +173,55 @@ egress 차단으로 막혔던 14곳 중 **13곳이 해소**됐다. 이로써 "�
 > **1. 과제**: `siyavula` 약관 페이지의 **실제 URL 확인** (게이트의 마지막 잔여분).
 > **2. 목적**: 카탈로그의 404 URL을 고쳐야 20/20이 되고 게이트가 닫힌다. 재실행만으로는
 > 절대 해소되지 않는다(원인이 네트워크가 아니라 URL이라서).
-> **3. 절차**: 아래 후보 프로브를 돌려 200을 내는 URL을 찾는다(10초). 없으면
-> 브라우저로 siyavula.com에서 약관·라이선스 페이지를 찾아 주소를 알려 달라.
-> **4. 성공 기준**: `200 <URL>` 줄이 하나라도 출력되면 성공. 전부 404/오류면 실패이며,
-> 그때는 브라우저 확인이 필요하다.
+> **3. 절차**: 아래 블록이 siyavula 홈페이지를 받아 그 안의 링크 중 term·legal·privacy·
+> licen·copyright·policy가 걸리는 것을 뽑아 준다(10초). **경로를 추측해 두드리지 않는다** —
+> 1차 시도(추측 6개)는 전건 실패했고, 실패 원인조차 안 남았다(2026-08-31 실측).
+> **4. 성공 기준**: `LINK ...` 줄이 하나라도 나오면 성공. `HOME`만 나오고 LINK가 0줄이면
+> 링크가 JS로 렌더되는 경우이니 브라우저로 siyavula.com 하단 푸터의 약관 링크를 확인해 달라.
+> `ERR ...` 줄이 나오면 그 줄을 그대로 알려 달라(status·type·msg가 원인을 가른다).
 > **5. 실행 환경**: Windows PowerShell(=Phaiakes9), 작업 디렉터리 무관.
 > **6. 창 구분**: 새 창이든 기존 창이든 무방(단발 명령).
 
 ```powershell
-# [실행 시스템: Windows PowerShell — 창 무관. siyavula 약관 URL 후보 프로브]
-$c = @(
-  "https://www.siyavula.com/terms-and-conditions",
-  "https://www.siyavula.com/terms-of-use",
-  "https://www.siyavula.com/legal/terms",
-  "https://www.siyavula.com/about/terms",
-  "https://www.siyavula.com/privacy-and-terms",
-  "https://www.siyavula.com/"
-)
-foreach ($u in $c) {
-  try   { $r = Invoke-WebRequest -Uri $u -MaximumRedirection 5 -TimeoutSec 15
-          "$($r.StatusCode) $u" }
-  catch { "ERR $($_.Exception.Response.StatusCode.value__) $u" }
+# [실행 시스템: Windows PowerShell — 창 무관. siyavula 약관 URL 발견]
+# 추측한 경로를 두드리는 대신 홈페이지의 링크에서 약관 URL을 *발견*한다.
+$ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
+
+function Probe($u) {
+  try {
+    # -UseBasicParsing 필수 — 없으면 Windows PowerShell 5.1이 IE 엔진을 쓰려다
+    # "보안 경고: 스크립트 실행 위험" 대화상자를 띄우고 절차가 멈춘다(2026-08-31 실측).
+    $r = Invoke-WebRequest -Uri $u -UseBasicParsing -UserAgent $ua -TimeoutSec 20 -MaximumRedirection 5
+    return $r
+  } catch {
+    # 실패 원인을 남긴다 — 상태코드가 없는 전송 계층 오류도 구분되게(빈 ERR 금지)
+    $code = ""
+    if ($_.Exception.PSObject.Properties.Name -contains "Response" -and $_.Exception.Response) {
+      try { $code = [int]$_.Exception.Response.StatusCode } catch { $code = "?" }
+    }
+    "ERR status=$code type=$($_.Exception.GetType().Name) msg=$($_.Exception.Message)"
+    return $null
+  }
+}
+
+$home = Probe "https://www.siyavula.com/"
+if ($home) {
+  "HOME $($home.StatusCode)"
+  $home.Links |
+    Where-Object { "$($_.href) $($_.outerHTML)" -match '(?i)term|legal|privacy|licen|copyright|policy' } |
+    ForEach-Object { $_.href } |
+    Sort-Object -Unique |
+    ForEach-Object { "  LINK $_" }
 }
 ```
 
-출력에서 200을 낸 URL(또는 브라우저로 찾은 주소)을 알려주시면 다음 세션이
+> **1차 프로브 실패 기록(2026-08-31)**: 추측 경로 6개를 `Invoke-WebRequest`로 두드렸으나
+> ①`-UseBasicParsing` 누락으로 Windows PowerShell 5.1이 IE 파싱 경고 대화상자를 띄워 절차가
+> 멈췄고 ②catch가 `$_.Exception.Response`를 무조건 참조해 전송 계층 오류에서 상태코드가 빈칸인
+> `ERR ` 줄만 남았다 — **실패했는데 원인이 안 남는** 전형(CLAUDE.md "측정·수집 도구를 성공
+> 경로만 보고 설계 금지"). 위 블록은 두 결함을 고치고, 추측 대신 발견으로 접근을 바꿨다.
+
+출력의 `LINK` 줄(또는 브라우저로 찾은 주소)을 알려주시면 다음 세션이
 `TIER1_SOURCES`의 `siyavula` 항목을 고치고 재수집해 게이트를 닫는다.
 
 ### Kiki 머신 수동 실행 (Windows PowerShell)
