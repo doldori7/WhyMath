@@ -7,6 +7,7 @@ subject: math
 layer: docs
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -16,5 +17,5 @@ artifacts: []
 paths:
   - "docs/data/**"
 session: null
-notes: "출처: LIC-02 라이브 수집 중 실측(2026-08-30). 스냅샷 증적 = data/licenses/snapshots/minif2f/. 정본 매트릭스 수정이라 별도 태스크로 분리(LIC-02 범위 밖 판단)."
-updated: 2026-08-30
+notes: "출처: LIC-02 라이브 수집 중 실측(2026-08-30). 스냅샷 증적 = data/licenses/snapshots/minif2f/. 정본 매트릭스 수정이라 별도 태스크로 분리(LIC-02 범위 밖 판단).\n\n[정정 2026-09-01] eos_priority null → P1: 저작권 레일 — 라이선스 표기 정정. EOS-80 일괄 백필"
+updated: 2026-09-01

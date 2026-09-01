@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - MATH-05-reverse-notation-display-surface
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/schema/problem.py
   - src/backend/whymath_backend/l3/render/
 session: null
-notes: "2026-08-12 표출 분석 P1-4. raw 문자열과 완전 AST 사이의 실용적 중간점. 대상층 확장(초등~대학·일반인)의 블록 kind 추가가 이 계층에서 일어나야 클라이언트 파편화를 막는다"
-updated: 2026-08-13
+notes: "2026-08-12 표출 분석 P1-4. raw 문자열과 완전 AST 사이의 실용적 중간점. 대상층 확장(초등~대학·일반인)의 블록 kind 추가가 이 계층에서 일어나야 클라이언트 파편화를 막는다\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

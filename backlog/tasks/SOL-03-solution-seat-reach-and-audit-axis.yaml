@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -24,5 +25,5 @@ paths:
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - "tests/infra/**"
 session: null
-notes: "docs/architecture/solution_module_gap_review_r3.md §4 R3. SOL-01/SOL-02와 비의존 — 병렬 착수 가능(리포트는 writer 0 상태를 0으로 정직 렌더하는 것이 초기 가치)."
-updated: 2026-08-11
+notes: "docs/architecture/solution_module_gap_review_r3.md §4 R3. SOL-01/SOL-02와 비의존 — 병렬 착수 가능(리포트는 writer 0 상태를 0으로 정직 렌더하는 것이 초기 가치).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

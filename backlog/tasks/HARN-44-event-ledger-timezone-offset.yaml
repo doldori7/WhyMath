@@ -7,7 +7,7 @@ subject: math
 layer: infra
 status: done
 priority: 2
-eos_priority: null
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +21,5 @@ paths:
   - scripts/harness/store.py
   - "tests/harness/**"
 session: null
-notes: "출처: HARN-38 경위 규명 §3-1(docs/reviews/eos_number_collision_root_cause_2026-08-31.md). 실측 교차검증: 'done HARN-36 @2026-08-30T00:50:38'은 claim 커밋 1ca71b02(+0000)와 1초 차 = UTC 세션 / 'start CUR-16 @2026-08-25T23:56:15'는 claim 커밋 fc943cd8(+0900)와 3초 차 = KST 세션. 같은 대장의 두 줄이 9시간 어긋난 척도인데 알려주는 필드가 없어, 사고 재구성에서 '어느 add가 먼저였나'(=어느 가드를 고칠 것인가)에 답할 수 없었다.\n\n[PR 보류 2026-09-01] incomplete"
+notes: "출처: HARN-38 경위 규명 §3-1(docs/reviews/eos_number_collision_root_cause_2026-08-31.md). 실측 교차검증: 'done HARN-36 @2026-08-30T00:50:38'은 claim 커밋 1ca71b02(+0000)와 1초 차 = UTC 세션 / 'start CUR-16 @2026-08-25T23:56:15'는 claim 커밋 fc943cd8(+0900)와 3초 차 = KST 세션. 같은 대장의 두 줄이 9시간 어긋난 척도인데 알려주는 필드가 없어, 사고 재구성에서 '어느 add가 먼저였나'(=어느 가드를 고칠 것인가)에 답할 수 없었다.\n\n[PR 보류 2026-09-01] incomplete\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — 교차 머신 사건 순서. EOS-80 일괄 백필"
 updated: 2026-09-01

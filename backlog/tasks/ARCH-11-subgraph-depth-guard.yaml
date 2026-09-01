@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: blocked
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on:
   - S1-11-coach-harness-converge
@@ -18,5 +19,5 @@ paths:
   - "src/backend/**"
   - "tests/backend/**"
 session: null
-notes: "트리거 미발동(2026-07-20 실측): S1-11 머지는 WH-1 발화 flip만 착륙·그래프 traversal 미도입 — query_curriculum/read_student_state는 wh1_loop._exec에서 기록만 하는 stub, wh1_llm_policy._build_prompt는 flat(TurnState 요약), 유일 엣지순회 prerequisite_recommendation은 LLM 미주입(제외 축). 지금 l2/reasoning_subgraph.py 생성=소비처 0 추상(CLAUDE.md 금기)·test_llm_subgraph_budget_invariant가 graph→LLM 빌더 없음 동결. 실제 트리거=query_curriculum이 L1+L2 실제 순회·프롬프트 주입하는 슬라이스 착륙. depends_on(S1-11)은 프록시라 조기 발동 — 해당 슬라이스 착륙 시 unblock.\n\n[복구 불가 — 2026-08-10 확인] 이 태스크는 main 트렁크 히스토리상 최초 커밋(squash 병합)부터 이미 status: blocked·notes=차단사유 상태로 존재한다 — 즉 'add로 등재'와 '동일 세션 내 block 호출로 notes 덮어쓰기'가 같은 squash 커밋 안에서 함께 일어나, 원 설계 근거(발견 경위 등)가 main에 한 번도 커밋되지 않았다. git log --all(원격 브랜치 포함)로 조회했으나 main 조상 경로상 더 이른 버전이 없어 복구 불가 — 대체된 원문은 유실됨(날조하지 않음)."
-updated: 2026-07-20
+notes: "트리거 미발동(2026-07-20 실측): S1-11 머지는 WH-1 발화 flip만 착륙·그래프 traversal 미도입 — query_curriculum/read_student_state는 wh1_loop._exec에서 기록만 하는 stub, wh1_llm_policy._build_prompt는 flat(TurnState 요약), 유일 엣지순회 prerequisite_recommendation은 LLM 미주입(제외 축). 지금 l2/reasoning_subgraph.py 생성=소비처 0 추상(CLAUDE.md 금기)·test_llm_subgraph_budget_invariant가 graph→LLM 빌더 없음 동결. 실제 트리거=query_curriculum이 L1+L2 실제 순회·프롬프트 주입하는 슬라이스 착륙. depends_on(S1-11)은 프록시라 조기 발동 — 해당 슬라이스 착륙 시 unblock.\n\n[복구 불가 — 2026-08-10 확인] 이 태스크는 main 트렁크 히스토리상 최초 커밋(squash 병합)부터 이미 status: blocked·notes=차단사유 상태로 존재한다 — 즉 'add로 등재'와 '동일 세션 내 block 호출로 notes 덮어쓰기'가 같은 squash 커밋 안에서 함께 일어나, 원 설계 근거(발견 경위 등)가 main에 한 번도 커밋되지 않았다. git log --all(원격 브랜치 포함)로 조회했으나 main 조상 경로상 더 이른 버전이 없어 복구 불가 — 대체된 원문은 유실됨(날조하지 않음).\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/플레이북 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

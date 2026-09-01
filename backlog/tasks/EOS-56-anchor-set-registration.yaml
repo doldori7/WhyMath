@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P0
 owner: claude
 depends_on: []
 requires_gates:
@@ -21,5 +22,5 @@ paths:
   - "scripts/analysis/**"
   - "tests/backend/**"
 session: null
-notes: "출처: EOS-53 crosswalk 갭 #3. 현재 앵커 정의는 scripts/analysis/eos_anchor_asset_audit.py ANCHOR_DEFS 상수뿐. F3·I1 계측의 조인 축. requires_gates=G-eos-g0(앵커 수 결정 선행)."
-updated: 2026-08-30
+notes: "출처: EOS-53 crosswalk 갭 #3. 현재 앵커 정의는 scripts/analysis/eos_anchor_asset_audit.py ANCHOR_DEFS 상수뿐. F3·I1 계측의 조인 축. requires_gates=G-eos-g0(앵커 수 결정 선행).\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/F1★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01

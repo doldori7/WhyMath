@@ -1192,8 +1192,9 @@ class TestScanStaleBranches:
             ["git", "push", "-u", "origin", branch], cwd=a, check=True, capture_output=True
         )
         subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
-        (a / "ported.txt").write_text("ported content\n", encoding="utf-8")
-        subprocess.run(["git", "add", "ported.txt"], cwd=a, check=True, capture_output=True)
+        # HARN-37: 흡수 커밋은 브랜치의 고유 파일(orphan2.txt)을 실제로 옮겨야 한다.
+        (a / "orphan2.txt").write_text("orphan2 content\n", encoding="utf-8")
+        subprocess.run(["git", "add", "orphan2.txt"], cwd=a, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", f"merge: {branch} 유용분 흡수"],
             cwd=a,
@@ -1270,8 +1271,9 @@ class TestScanStaleBranches:
             )
 
         subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
-        (a / "port_commit.txt").write_text("ported\n", encoding="utf-8")
-        subprocess.run(["git", "add", "port_commit.txt"], cwd=a, check=True, capture_output=True)
+        # HARN-37: 흡수 커밋은 ported_branch의 고유 파일(p.txt)을 실제로 착지시킨다.
+        (a / "p.txt").write_text("ported\n", encoding="utf-8")
+        subprocess.run(["git", "add", "p.txt"], cwd=a, check=True, capture_output=True)
         subprocess.run(
             # needle은 브랜치 basename 전체다(2026-08-11) — 6자 접미사 인용으로는 안 잡힌다.
             ["git", "commit", "-m", f"merge: {ported_branch} 흡수"],
@@ -1332,6 +1334,154 @@ class TestScanStaleBranches:
         subprocess.run(
             ["git", "push", "-u", "origin", branch], cwd=repo, check=True, capture_output=True
         )
+
+    def _push_multifile_branch(self, repo: Path, branch: str, filenames: list[str]) -> None:
+        """고유 코드 파일 여러 개를 가진 9일 방치 브랜치 — 부분 착지 판정의 재료."""
+        subprocess.run(["git", "checkout", "main"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "checkout", "-b", branch], cwd=repo, check=True, capture_output=True)
+        for name in filenames:
+            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+            self._commit_backdated(repo, days_ago=9, filename=name, message=f"{branch} {name}")
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=repo, check=True, capture_output=True
+        )
+
+    @staticmethod
+    def _commit_on_main(repo: Path, files: dict[str, str], message: str) -> None:
+        subprocess.run(["git", "checkout", "main"], cwd=repo, check=True, capture_output=True)
+        for name, body in files.items():
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+            subprocess.run(["git", "add", name], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", message], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "push", "origin", "main"], cwd=repo, check=True, capture_output=True)
+
+    def test_documenting_commit_is_not_porting_evidence(self, bare_remote):
+        """문서화_커밋은_포팅_근거가_아니다 (HARN-37 ① 재현 고정)
+
+        2026-08-30 브리핑이 `7n9n72`를 "이미 포팅됨(#770 근거)·결정 불요"로 분류했는데,
+        실측은 main 부재 15파일 + 고유줄 수백이었다. **#770은 그 고립을 *실측·문서화*한
+        커밋이지 포팅 커밋이 아니다** — 브랜치명을 인용하면서 (원장 밖) 자기 문서 파일을
+        건드렸을 뿐인데 옛 판정은 그것을 흡수로 받았다.
+
+        08-11 감사의 40xspg 오분류(문서 커밋을 근거로 2,153줄 삭제 직전)와 **동일 유형
+        2회차**다. 여기서 위험한 오류는 미탐이 아니라 오탐이다 — "결정 불요" 라벨이
+        실작업이 든 브랜치를 삭제 대상으로 만든다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/subject-problems-theory-check-7n9n72"
+        self._push_multifile_branch(a, branch, ["src/mis.py", "tests/test_mis.py"])
+        # 브랜치를 인용하며 **자기 조사 산출물만** 착지시킨 커밋(= #770 형태).
+        # `reviews/`는 원장 최상위(docs)가 아니라 코드 취급이라 옛 필터를 그대로 통과했다.
+        self._commit_on_main(
+            a,
+            {"reviews/stray_branch_audit.md": "이 브랜치들은 미해결이다\n"},
+            f"조사: {branch} 고립 실측·문서화",
+        )
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status != "ported", "문서화 커밋이 '결정 불요'를 만들면 고립이 숨는다"
+        assert entry.evidence == ""
+        assert entry.partial_port == ""  # 브랜치 파일을 하나도 옮기지 않았다
+
+    def test_real_code_porting_stays_ported(self, bare_remote):
+        """실코드를_옮긴_커밋은_계속_포팅됨이다 (HARN-37 ③ 대칭 축)
+
+        위 강화가 *전건 미탐*으로 도망가면 브리핑이 다시 소음이 된다 — 40xspg(#801)처럼
+        실제로 코드를 옮긴 커밋은 그대로 ported여야 한다. 한 방향만 검사하면 "아무것도
+        ported로 부르지 않는" 구현도 통과한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-solution-review-40xspg"
+        self._push_multifile_branch(a, branch, ["src/sol.py", "tests/test_sol.py"])
+        self._commit_on_main(
+            a,
+            {"src/sol.py": "sol\n", "tests/test_sol.py": "test\n"},
+            f"S4-09: {branch} 실코드 회수",
+        )
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status == "ported"
+        assert "S4-09" in entry.evidence
+
+    def test_partial_landing_is_not_ported_but_keeps_the_trace(self, bare_remote):
+        """일부만_옮긴_커밋은_ported가_아니되_단서는_남는다
+
+        전건 착지와 0건 착지 사이가 실제로 가장 흔한 상태다. 흡수 흔적을 **버리면** 사람이
+        같은 조사를 다시 하고, **흡수로 단정하면** 잔여 고유 코드가 '결정 불요' 뒤에 숨는다.
+        그래서 status는 ported가 아니고, 단서(N/M 파일)는 별도 필드로 싣는다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-partial-landing-abc123"
+        self._push_multifile_branch(a, branch, ["src/one.py", "src/two.py", "src/three.py"])
+        self._commit_on_main(a, {"src/one.py": "one\n"}, f"부분 회수: {branch} 중 일부")
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status != "ported"
+        assert entry.partial_port.startswith("1/3 파일")
+        assert "부분 회수" in entry.partial_port
+
+    def test_multi_commit_recovery_unions_to_full_port(self, bare_remote):
+        """여러_커밋에_나눠_회수해도_전건_착지로_본다 (#962 codex P2)
+
+        회수는 종종 소형 PR 여럿으로 나뉜다 — 커밋 하나가 파일 A를, 다른 하나가 B를 옮긴다.
+        각 커밋을 **따로** 재면 둘 다 부분 착지로 보여, 실제로는 전건 회수된 브랜치가 계속
+        고립으로 남는다(과보고 → 경고 습관화). 근거 커밋들의 착지 파일을 합집합으로 본다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-split-recovery-def456"
+        self._push_multifile_branch(a, branch, ["src/alpha.py", "src/beta.py"])
+        self._commit_on_main(a, {"src/alpha.py": "alpha\n"}, f"1차 회수: {branch} 중 alpha")
+        self._commit_on_main(a, {"src/beta.py": "beta\n"}, f"2차 회수: {branch} 중 beta")
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status == "ported", "합집합을 안 보면 전건 회수가 고립으로 남는다"
+        assert "외 1건" in entry.evidence  # 기여 커밋이 복수임을 근거가 자인한다
+        assert entry.partial_port == ""
+
+    def test_failed_file_scan_is_indeterminate_not_full_port(self, bare_remote, monkeypatch):
+        """분모_산출_실패는_전건_착지가_아니라_판정_불가다 (#962 codex P1)
+
+        초판은 `git diff` 실패와 "코드 파일 없는 브랜치"를 같은 빈 집합으로 돌려줬다. 그러면
+        호출부가 실패를 `0/0` 전건 착지로 읽어 **미검증 브랜치를 ported(= 삭제해도 안전)로
+        표시**한다 — git이 잠깐 실패하는 것만으로 이 태스크가 막으려던 구멍이 그대로 다시
+        열린다. 미측정을 0으로 바꾸지 않는다는 규칙이 정확히 이 자리다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-scan-failure-ghi789"
+        self._push_multifile_branch(a, branch, ["src/gamma.py"])
+        # 브랜치를 인용하며 **다른** 코드 파일을 건드린 커밋 — 옛 동작이라면 0/0 ported.
+        self._commit_on_main(a, {"src/unrelated.py": "x\n"}, f"언급: {branch} 조사")
+
+        real_git = remote_claims._git
+
+        def flaky_diff(root, *argv, **kwargs):
+            if argv[:2] == ("diff", "--name-only"):
+                raise TimeoutError("git diff 타임아웃(합성)")
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", flaky_diff)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status != "ported", "판정 불가가 '결정 불요'가 되면 안 된다"
+        assert entry.evidence == ""
+        # 침묵 실패 금지 — 예외 타입명이 사유에 남는다.
+        assert "TimeoutError" in entry.port_scan_error
 
     def test_shallow_clone_is_pending_not_ok(self, bare_remote, shallow_clone):
         """shallow_클론은_ok가_아니라_판정_보류다
@@ -1453,8 +1603,10 @@ class TestScanStaleBranches:
         branch = "claude/harn-99-no-session-suffix-here"
         self._push_stale_branch(a, branch, "suffixless.txt")
         subprocess.run(["git", "checkout", "main"], cwd=a, check=True, capture_output=True)
-        (a / "src_change.py").write_text("x = 1\n", encoding="utf-8")
-        subprocess.run(["git", "add", "src_change.py"], cwd=a, check=True, capture_output=True)
+        # HARN-37: 포팅 커밋은 **그 브랜치의 파일**을 착지시켜야 근거가 된다 —
+        # 다른 파일을 건드린 커밋은 흡수가 아니라 언급이다.
+        (a / "suffixless.txt").write_text("suffixless\n", encoding="utf-8")
+        subprocess.run(["git", "add", "suffixless.txt"], cwd=a, check=True, capture_output=True)
         subprocess.run(
             # 제목이 아니라 **본문**에 브랜치명을 인용한다(#728의 실제 패턴).
             ["git", "commit", "-m", "HARN-99: 고아 브랜치 회수", "-m", f"원본 = {branch}"],
@@ -1655,7 +1807,9 @@ class TestScanStaleBranches:
 
         짧은 needle은 우연 매칭 생성기다 — 길이 하한(12자) 아래면 grep 자체를 하지 않는다.
         """
-        assert remote_claims._find_ported_evidence(Path("."), "origin/main", "claude/ab") == ""
+        assert (
+            remote_claims._find_ported_evidence(Path("."), "origin/main", "claude/ab").header == ""
+        )
 
     def test_query_failure_not_disguised_as_empty_list(self, bare_remote, monkeypatch):
         """조회_실패는_빈_목록으로_위장되지_않는다

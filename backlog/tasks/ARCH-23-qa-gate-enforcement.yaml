@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 2
+eos_priority: P0
 owner: claude
 depends_on:
   - S3-28-canonicalize-answer-kind-scope-audit
@@ -19,5 +20,5 @@ paths:
   - ".github/workflows/ci.yml"
   - tests/infra/test_qa_pipeline_wiring.py
 session: null
-notes: "docs/architecture/operations_module_gap_review_r2.md §3 D3 — 외부 EOS 틀 모듈 45(QA 엔진) 재점검. ARCH-21이 만든 게이트가 CI에 배선은 됐으나 continue-on-error로 상시 fail-open이고 해제 조건이 ci.yml 주석·MEMORY 한 줄(=사람 기억)에만 존재. CLAUDE.md '상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지'·'대책은 규칙·코드·태스크 형태여야 한다' 정면 해당. ARCH-20/21이 학습한 '존재함≠돌아감'의 다음 단계 = '돌아감≠막음'. S3-28의 130/2647 판정 자체는 교수학 판정이라 이 태스크 범위 밖(임의 수정 금지). [2026-08-11 r3 §3 D7] 9일째 미착수 — 같은 fail-open이 2회 연속 관측됐다(r2 1회차·r3 2회차). r3가 두 번째 블로커(축 9 상시 error)를 실측 발견해 acceptance 2항을 추가했다. 라인번호도 :186→:192로 정정(그 사이 ci.yml 주석 증가). 일반 계약('돌아감≠막음'의 기계화)은 OPS-29가 별도로 담당하며, 이 태스크는 qa_pipeline 스텝의 실제 해제를 맡는다."
-updated: 2026-08-11
+notes: "docs/architecture/operations_module_gap_review_r2.md §3 D3 — 외부 EOS 틀 모듈 45(QA 엔진) 재점검. ARCH-21이 만든 게이트가 CI에 배선은 됐으나 continue-on-error로 상시 fail-open이고 해제 조건이 ci.yml 주석·MEMORY 한 줄(=사람 기억)에만 존재. CLAUDE.md '상시 실패하는 fail-open 보호를 보호 있음으로 신뢰 금지'·'대책은 규칙·코드·태스크 형태여야 한다' 정면 해당. ARCH-20/21이 학습한 '존재함≠돌아감'의 다음 단계 = '돌아감≠막음'. S3-28의 130/2647 판정 자체는 교수학 판정이라 이 태스크 범위 밖(임의 수정 금지). [2026-08-11 r3 §3 D7] 9일째 미착수 — 같은 fail-open이 2회 연속 관측됐다(r2 1회차·r3 2회차). r3가 두 번째 블로커(축 9 상시 error)를 실측 발견해 acceptance 2항을 추가했다. 라인번호도 :186→:192로 정정(그 사이 ci.yml 주석 증가). 일반 계약('돌아감≠막음'의 기계화)은 OPS-29가 별도로 담당하며, 이 태스크는 qa_pipeline 스텝의 실제 해제를 맡는다.\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/D2★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01
