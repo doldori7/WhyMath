@@ -358,6 +358,7 @@ $key = Get-Content C:\경로\배포용_개인키 -Raw
 
 GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·`prod`를 만들고, **prod에는 `Required reviewers`로 Kiki를 등록**한다.
 
+- **현재 상태(2026-09-01)**: **등록 완료** — `staging`·`prod` 생성, prod에 `Required reviewers` 등록, 아래 성공 판정 실측 확인(게이트 `G-deploy-environment-approval` cleared). 아래 절차는 environment를 새로 만들거나 재구성할 때를 위해 남겨 둔다.
 - **성공 판정**: `Deploy (수동 승인)` 워크플로를 prod로 실행했을 때 `deploy` 잡이 *Waiting for review* 상태로 멈추면 성공.
 - **미등록 시 위험(정직 기술)**: environment를 만들지 않으면 GitHub이 자동 생성하며 **승인 없이 통과**한다 — 워크플로에 `environment:`가 적혀 있다는 사실만으로는 승인이 강제되지 않는다.
 
@@ -384,6 +385,8 @@ GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·
 
 ### 미프로비저닝·미도입 목록
 
+> **2026-09-01 해소 1건**: `environment 승인 규칙`이 이 표에서 빠졌다 — Kiki가 `staging`·`prod` environment를 생성하고 prod에 `Required reviewers`를 등록했으며, §7-3의 성공 판정(`deploy` 잡이 *Waiting for review*로 정지)을 실측 확인했다. 게이트 `G-deploy-environment-approval`이 그 근거로 cleared다. **다만 §7-3 자체는 남겨 둔다** — 새 environment를 만들거나 재구성할 때 다시 필요한 절차이고, "미등록 시 위험" 문단은 그 위험이 사라진 것이 아니라 *지금은 해당하지 않는다*는 뜻이기 때문이다.
+
 | 항목 | 상태 | 영향 |
 |---|---|---|
 | GCP/AWS 프로덕션 호스트 | **없음** | 자동 배포 워크플로는 preflight에서 명시 실패한다 |
@@ -391,7 +394,6 @@ GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·
 | TLS 종단·리버스 프록시 | 없음 | 기본 바인딩이 127.0.0.1인 이유. `APP_BIND_ADDR=0.0.0.0`은 평문 HTTP를 LAN에 여는 것이며 학생 데이터 경로에는 부적합(시연 한정) |
 | 무중단 배포(블루/그린·롤링) | 없음 | `up -d` 교체 시 수 초 다운타임 |
 | staging 전용 호스트 | 없음 | staging/prod가 같은 호스트에 공존한다(이름·볼륨·포트로만 격리) — 진짜 격리는 호스트 분리 후 |
-| environment 승인 규칙 | 미등록 | §7-3 등록 전까지 승인 게이트는 이름뿐이다 |
 | 기존 `whymath-pg`(5433) 이관 | 미실시 | 현 데이터는 compose 밖 컨테이너에 있다. 이 스택으로 옮기려면 OPS-02 백업 → 새 볼륨 복원 절차가 필요하다(별도 과제) |
 | 로그 수집·알림 | 부분 | 컨테이너 로그 로테이션(10MB×3)만 설정. 중앙 수집·알림은 OPS-04 |
 
