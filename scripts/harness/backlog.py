@@ -2232,8 +2232,11 @@ def cmd_policy(root: Path, args: argparse.Namespace) -> int:
     # 무의미해졌으므로(샤드별 append) ts로 정렬해 rule별 tail 표시를 시간순으로 만든다.
     from datetime import datetime, timedelta
 
-    cutoff = datetime.now() - timedelta(days=args.days)
-    collected: list[tuple[datetime, dict]] = []
+    # HARN-44: cutoff도 **aware**여야 한다 — 대장의 ts가 오프셋을 갖게 됐으므로 naive와
+    # 비교하면 TypeError다. store.parse_event_ts가 레거시 줄에도 오프셋을 붙여 주므로
+    # 양쪽 표기가 같은 축에서 비교된다.
+    cutoff = datetime.now().astimezone() - timedelta(days=args.days)
+    collected: list[tuple[datetime, dict, bool]] = []
     for path in store.event_paths(root):
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
@@ -2242,20 +2245,32 @@ def cmd_policy(root: Path, args: argparse.Namespace) -> int:
                 continue
             if event.get("action") != "policy_warn":
                 continue
-            try:
-                ts = datetime.strptime(event.get("ts", ""), "%Y-%m-%dT%H:%M:%S")
-            except ValueError:
+            # HARN-44: 엄격 strptime("%Y-%m-%dT%H:%M:%S") + except ValueError: continue 조합은
+            # 오프셋이 붙은 신규 줄을 **에러 없이 통째로 누락**시킨다(침묵 실패). 두 표기를
+            # 모두 읽는 공용 파서를 경유한다 — 레거시 줄의 오프셋은 가정값이라 정렬 위치가
+            # 부정확할 수 있고, 그 사실은 아래 렌더에서 별도로 말한다.
+            moment = store.parse_event_ts(event.get("ts"))
+            if moment is None:
                 continue
-            if ts < cutoff:
+            if moment.moment < cutoff:
                 continue
-            collected.append((ts, event))
+            collected.append((moment.moment, event, moment.offset_known))
     collected.sort(key=lambda pair: pair[0])
     by_rule: dict[str, list[dict]] = {}
     total = 0
-    for _ts, event in collected:
+    unknown_offset = 0
+    for _ts, event, offset_known in collected:
         total += 1
+        if not offset_known:
+            unknown_offset += 1
         by_rule.setdefault(str(event.get("rule", "?")), []).append(event)
     print(f"조율 정책 warn 리포트 — 최근 {args.days}일, 총 {total}건")
+    if unknown_offset:
+        # 추정 정렬을 실측 정렬인 척하지 않는다(HARN-44 ② — 레거시는 척도 불명).
+        print(
+            f"  ⚠ 그중 {unknown_offset}건은 오프셋 없는 레거시 줄이라 읽는 머신의 로컬 "
+            "오프셋을 가정해 정렬했다 — 다른 TZ 세션이 쓴 줄이면 순서가 어긋날 수 있다."
+        )
     if not by_rule:
         print("  (경고 없음 — 오탐 0. 승격 기준 충족 여부는 정탐 사례와 함께 판단)")
         return 0
