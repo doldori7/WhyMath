@@ -65,7 +65,7 @@ WIP_BRANCHES = 12  # FLOW-01: PR 없는 in-flight 브랜치 수 상한
 
 GIT_TIMEOUT = 60  # 모든 git 호출 공통 타임아웃 (④)
 _API = "https://api.github.com"
-_CA = "/root/.ccr/ca-bundle.crt"  # 에이전트 프록시 CA — 없으면 시스템 신뢰저장소
+_CA_PATH = "/root/.ccr/ca-bundle.crt"  # 에이전트 프록시 CA (있을 때만 사용)
 
 # 감사 대상이 아닌 ref — 하네스 소유이거나 트렁크 자신.
 EXCLUDED = frozenset({"main", "HEAD", "harness-claims"})
@@ -83,6 +83,26 @@ PRESCRIPTION = {
 # 측정 불가를 표현하는 센티널. `0`(충돌 없음)과 **절대로 같은 값이면 안 된다** —
 # 측정 실패와 통과가 같은 색이면 안 된다(①).
 UNMEASURED = -1
+
+
+def _ca_args() -> list[str]:
+    """프록시 CA를 쓸 수 있으면 `["--cacert", <경로>]`, 아니면 `[]`.
+
+    **왜 존재 검사를 예외로 감싸는가** (2026-09-01 main red 실측): 초판은
+    `Path(_CA).exists()`로 가드했는데, `Path.exists()`는 실패를 False로 돌려주지
+    **않는다** — `pathlib._IGNORED_ERRNOS`는 `(ENOENT, ENOTDIR, EBADF, ELOOP)`뿐이라
+    **EACCES는 전파된다**. GitHub 러너의 `runner` 유저는 `/root`(mode 700)를 통과할
+    수 없으므로 가드 자체가 `PermissionError`로 죽어 잡이 통째로 실패했다.
+    "없으면 건너뛴다"는 의도였는데 "없으면 터진다"가 된 것이다.
+
+    이 경로는 에이전트 프록시가 있는 실행 환경에만 존재하므로, 없으면 시스템
+    신뢰저장소를 쓰는 것이 정상 동작이다.
+    """
+    try:
+        with open(_CA_PATH, "rb"):  # 존재 + 읽기 권한을 한 번에 확인한다
+            return ["--cacert", _CA_PATH]
+    except OSError:
+        return []
 
 
 @dataclass
@@ -334,9 +354,7 @@ def _open_pr_numbers(root: Path) -> tuple[set[int] | None, str]:
 
     numbers: set[int] = set()
     for page in range(1, 6):  # 상한 500건 — 무한 페이징 금지
-        cmd = ["curl", "-sS", "--max-time", "30"]
-        if Path(_CA).exists():  # 프록시 CA (원격 실행 환경)
-            cmd += ["--cacert", _CA]
+        cmd = ["curl", "-sS", "--max-time", "30", *_ca_args()]
         # 토큰이 있으면 쓴다. CI 러너의 미인증 API는 IP 공유 60req/h라 사실상 항상
         # rate limit에 걸린다 — 그러면 이 도구는 PR-03·FLOW-01을 영구 미측정으로
         # 낸다("상시 실패하는 fail-open 보호"가 되는 경로다). 토큰이 없으면 조회는
