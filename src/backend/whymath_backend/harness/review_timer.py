@@ -7,11 +7,12 @@ writer다 — **서빙 라우트 신설 없음**(태스크 지침). 현행 검�
 JSONL — needs_review_worklist·#841 승격 인프라)이 파일 기반이므로 1차 매체는 JSONL이고, DB
 적재는 같은 schema 이벤트를 `from_schema`로 넘기면 된다(별도 코드 불요).
 
-집행 별항(정본화≠집행 — acceptance ③): 검수 UI(**ADMIN-07**)가 타이머·반려코드 없이 판정
-제출 자체를 불가하게 하는 **UI 결선은 후속 태스크**다 — ADMIN-07 acceptance 확장은 amend CLI
-부재(HARN-24 todo)로 등재 세션이 방식을 판정한다. 이 모듈이 지금 집행하는 것은 함수 레벨
-계약까지다: `finish_review(verdict="rejected")`는 `failure_code` 없이 **생성 자체가 불가**
-(schema validator — §4 강제 분류의 코드 착지).
+집행 별항(정본화≠집행 — acceptance ③): 이 모듈이 집행하는 것은 함수 레벨 계약이다 —
+`finish_review(verdict="rejected")`는 `failure_code` 없이 **생성 자체가 불가**(schema
+validator — §4 강제 분류의 코드 착지). **사람 입력 경로까지의 배선은 `EOS-78`이 맡았다**:
+`harness/review_session` CLI가 이 writer의 첫 생산 호출자다(그 전까지 `src/` 생산 호출자는
+0건이었고 테스트만 이 모듈을 불렀다). 전 경로 강제(어떤 경로로도 타이머 없는 판정 제출
+불가)는 여전히 검수 UI(**ADMIN-07**) 몫이다.
 
 측정 도구 실패 경로 설계(2026-08-22 규칙):
   - **단계별 즉시 flush** — `append_event_jsonl`은 호출마다 append-open→1줄 기록→flush→close

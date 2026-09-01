@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/review-2hi01y
 notes: "출처: 계획서 200 검토 docs/reviews/eos_phase1_plan_200_gap_review_2026-09-01.md §8 + Kiki (가) 결정(2026-09-01 — 12/31 판정 기준은 선언·스코어카드 12지표 유지). 근거: harness/review_timer.py 모듈 docstring이 '검수 UI(ADMIN-07) 결선은 후속 태스크'라고 스스로 집행 공백을 자인하고, 실측상 생산 호출자가 0이다. (가) 하에서 HIT는 스코어카드 KPI 1순위이고 EOS-61 acceptance ④가 미측정을 'PASS'가 아니라 exit 1로 처리하므로, 생산자 부재는 '0건 통과'가 아니라 12/31 판정 불가로 직결된다. 정본화≠집행 재발(EOS-54가 writer를 만들고 배선 확인 없이 done)."
 updated: 2026-09-01

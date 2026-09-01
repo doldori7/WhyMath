@@ -44,10 +44,11 @@ G1(9/27) 차단 조건, `eos_plan52_crosswalk_2026-09.md` §2 후보 #1).
 `test_defect_report_no_user_id.py`(RPT-01) 선례대로 동결한다. 따라서 erasure/retention/export
 3종 배선은 **필요 없음**(배선하면 오히려 "검수자 텔레메트리를 학생 삭제권으로 지우는" 오배선).
 
-집행 별항(정본화≠집행 — acceptance ③): 검수 UI(ADMIN-07)가 타이머·반려코드 없이 판정 제출
-자체를 불가하게 하는 **UI 결선은 후속 태스크**다 — ADMIN-07 acceptance 확장은 amend CLI 부재
-(HARN-24 todo)로 등재 세션 판정 사안. 이 모듈은 함수 레벨 계약(rejected→failure_code 필수)
-까지만 집행하고, UI 강제는 `ops/hit_cu_metrics` 리포트가 상시 명기한다.
+집행 별항(정본화≠집행 — acceptance ③): 이 모듈은 함수 레벨 계약(rejected→failure_code
+필수)을 집행한다. 사람 입력 경로 배선은 `EOS-78`(`harness/review_session` CLI)이 맡았고,
+그 CLI가 반려 시 F1~F8 선택을 받을 때까지 진행하지 않음으로써 이 계약을 입력단까지 잇는다.
+다만 강제는 **그 경로에 한정**된다 — 전 경로 강제는 검수 UI(ADMIN-07) 몫이며, 남은 간극은
+`ops/hit_cu_metrics` 리포트가 적재율로 상시 드러낸다.
 """
 
 from __future__ import annotations

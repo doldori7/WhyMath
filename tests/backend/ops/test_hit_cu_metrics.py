@@ -367,11 +367,21 @@ class TestCostJoin:
 
 class TestReportRender:
     def test_enforcement_footnote_always_present(self) -> None:
-        """acceptance ③ — ADMIN-07 후속 결선 별항을 리포트가 상시 명기."""
+        """acceptance ③ — 집행 상태(생산자 배선 + 남은 간극)를 리포트가 상시 명기.
+
+        [EOS-78 갱신] 초판은 "결선은 후속 태스크(HARN-24 amend CLI 부재)"를 단언했으나 그
+        서술은 생산자가 0이던 시절의 것이다. `harness/review_session` CLI가 착지해 생산자가
+        생겼으므로, footer가 말해야 하는 사실이 바뀌었다 — ①생산자는 배선됐다 ②그러나 강제는
+        그 CLI 경로에 한정되고 전 경로 강제는 ADMIN-07 몫이다. 둘 다 명기되는지 동결한다
+        (완료를 과장하지도, 이미 된 일을 미결로 남기지도 않는다).
+        """
         text = render_report(aggregate(_reviewed_cu("cu-a", 60_000)))
-        assert "ADMIN-07" in text
         assert "정본화≠집행" in text
-        assert "HARN-24" in text
+        # ① 생산자 배선 사실
+        assert "review_session" in text
+        assert "EOS-78" in text
+        # ② 남은 간극 — 전 경로 강제는 아직 아니다
+        assert "ADMIN-07" in text
 
     def test_unmeasured_counts_rendered(self) -> None:
         text = render_report(aggregate(_reviewed_cu("cu-a", 60_000) + _reviewed_cu("cu-b", None)))
