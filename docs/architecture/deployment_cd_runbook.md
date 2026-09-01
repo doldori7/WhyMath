@@ -358,8 +358,46 @@ $key = Get-Content C:\경로\배포용_개인키 -Raw
 
 GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·`prod`를 만들고, **prod에는 `Required reviewers`로 Kiki를 등록**한다.
 
-- **성공 판정**: `Deploy (수동 승인)` 워크플로를 prod로 실행했을 때 `deploy` 잡이 *Waiting for review* 상태로 멈추면 성공.
+**성공 판정 — `gh api`로 설정 실물을 읽는다** (아래 "왜 워크플로 실행으로 판정하지 않는가" 참조):
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh auth status
+gh api repos/doldori7/WhyMath/environments --jq '.environments[] | {name, rules: [.protection_rules[]?.type]}'
+```
+
+- **성공**: `staging`·`prod` 두 줄이 나오고, **`prod`의 `rules`에 `required_reviewers`가 포함**된다.
+- **실패**: `prod`가 없거나 `rules`가 `[]` — 등록이 안 됐다. 웹 UI에서 재등록 후 재실행한다.
+- **변별력 근거**: 이 명령은 GitHub이 실제로 보관 중인 보호 규칙을 그대로 읽는다. 미등록 상태에서는 `[]`, 등록 상태에서는 `["required_reviewers"]`로 **서로 다른 값**이 나온다.
+
+> **왜 워크플로 실행으로 판정하지 않는가 (2026-09-01 정정)**: 종전 이 자리의 성공 판정은 "`Deploy (수동 승인)`를 prod로 실행했을 때 `deploy` 잡이 *Waiting for review*로 멈추면 성공"이었다. **현 상태에서는 관측 불가능하다** — `deploy` 잡은 `needs: preflight`(deploy.yml:122)이고, preflight는 배포 시크릿 5종(§7-1)이 전부 미설정이라 반드시 실패한다(§8 표 1행). 따라서 `deploy`는 등록 여부와 **무관하게 항상 skipped**로 남는다. 성공/실패 양쪽에서 같은 화면을 내므로 검증이 아니라 위장이다 — CLAUDE.md「변별력 없는 검증 스텝 금지」. 시크릿 5종이 실제로 등록된 뒤에는 그 실행 판정도 유효해진다(그때는 두 판정이 서로를 보강한다).
+
 - **미등록 시 위험(정직 기술)**: environment를 만들지 않으면 GitHub이 자동 생성하며 **승인 없이 통과**한다 — 워크플로에 `environment:`가 적혀 있다는 사실만으로는 승인이 강제되지 않는다.
+
+### 7-4. 등록 후 잔여 한계 — 조일 수 있는 것과 없는 것 (2026-09-01 실측)
+
+등록 직후 GitHub이 준 기본값 2건은 승인 게이트의 강도를 낮춘다. 정직하게 적는다.
+
+| 설정 | 기본값 | 의미 | 처분 |
+|---|---|---|---|
+| `can_admins_bypass` | ~~`true`~~ → **`false`**(2026-09-01 조임 완료) | 관리자도 승인 절차를 거친다 | 완료 — 실측 `{"can_admins_bypass":false,"rules":["required_reviewers"]}` |
+| `prevent_self_review` | `false` | 배포를 **트리거한 본인이 스스로 승인**할 수 있다 | **유지** — 현재 1인 팀이라 `true`로 두면 prod 배포가 영구 불가능해진다. 두 번째 승인자가 생기는 시점에 재검토 |
+
+`can_admins_bypass`는 **2026-09-01에 껐다**. 관리자도 승인 절차를 거치되 자기 승인은 여전히 가능하므로 배포는 막히지 않는다 — "우회"가 아니라 "멈춰서 확인"이 됐다. 아래는 재적용·검증용 명령이다(멱등).
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+'{"can_admins_bypass":false,"reviewers":[{"type":"User","id":178589964}]}' | gh api -X PUT repos/doldori7/WhyMath/environments/prod --input -
+
+# 자가검증: false 여야 함
+gh api repos/doldori7/WhyMath/environments/prod --jq '{can_admins_bypass, rules: [.protection_rules[]?.type]}'
+```
+
+- **성공**: `{"can_admins_bypass":false,"rules":["required_reviewers"]}`.
+- **변별력 근거**: 현재 값이 `true`이므로 명령이 무효면 `true`가 그대로 나온다 — 성공/실패가 다른 값을 낸다.
+- **주의**: `reviewers`를 함께 보내지 않으면 기존 승인자 규칙이 지워진다(PUT은 전체 치환) — 위 블록은 그래서 두 필드를 같이 보낸다.
 
 ## §8. 정직한 공백 — 이 CI가 검증하는 것과 검증하지 않는 것
 
@@ -391,7 +429,7 @@ GitHub 웹 UI: `Settings → Environments → New environment`에서 `staging`·
 | TLS 종단·리버스 프록시 | 없음 | 기본 바인딩이 127.0.0.1인 이유. `APP_BIND_ADDR=0.0.0.0`은 평문 HTTP를 LAN에 여는 것이며 학생 데이터 경로에는 부적합(시연 한정) |
 | 무중단 배포(블루/그린·롤링) | 없음 | `up -d` 교체 시 수 초 다운타임 |
 | staging 전용 호스트 | 없음 | staging/prod가 같은 호스트에 공존한다(이름·볼륨·포트로만 격리) — 진짜 격리는 호스트 분리 후 |
-| environment 승인 규칙 | 미등록 | §7-3 등록 전까지 승인 게이트는 이름뿐이다 |
+| environment 승인 규칙 | **등록·강화됨**(2026-09-01) | `staging`(규칙 없음)·`prod`(`required_reviewers`=doldori7, `can_admins_bypass=false`) — `gh api .../environments` 실측 `total:2`. **잔여 한계**: `prevent_self_review=false`(트리거한 본인이 승인) — 1인 팀이라 불가피, 두 번째 승인자가 생기면 재검토(§7-4) |
 | 기존 `whymath-pg`(5433) 이관 | 미실시 | 현 데이터는 compose 밖 컨테이너에 있다. 이 스택으로 옮기려면 OPS-02 백업 → 새 볼륨 복원 절차가 필요하다(별도 과제) |
 | 로그 수집·알림 | 부분 | 컨테이너 로그 로테이션(10MB×3)만 설정. 중앙 수집·알림은 OPS-04 |
 
