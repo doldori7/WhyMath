@@ -32,9 +32,16 @@ W2~W17 주간 배분과 함께 확정**한다 — 지금 확정하지 않는다(
 
 ## §2. 앵커 세트 정의 (6개 — 성취기준 코드 동결)
 
-성취기준 코드셋의 동결 정본 = `scripts/analysis/eos_anchor_asset_audit.py`의 `ANCHOR_DEFS`
-(포함/제외 사유 포함 — 예: A4에서 인수분해 [9수02-19]·이차함수 [9수02-21/22] 제외).
-1급 등록(코퍼스/DB 인스턴스화)은 `EOS-56`이 수행한다(requires G-eos-g0).
+성취기준 코드셋의 동결 정본 = **`data/corpus/eos_anchor_set_v1/anchors.yaml`**(포함/제외
+사유 포함 — 예: A4에서 인수분해 [9수02-19]·이차함수 [9수02-21/22] 제외). `EOS-56`이 1급 등록을
+수행하면서 `scripts/analysis/eos_anchor_asset_audit.py`의 `ANCHOR_DEFS` 상수를 **무손실 이관**했다
+(코드셋 추가·삭제·수정 0 — 실사 스크립트 재실행이 §2 표의 자산 수치를 그대로 재현한다). 그 스크립트는
+이제 이 파일을 읽는다.
+
+**무결성 게이트**: 앵커 코드 전건이 성취기준 코퍼스에 실재하는지 CI가 매 PR 검사한다 —
+`tests/backend/l1/test_eos_anchor_registry.py`(코드 소멸·중복 귀속·CU 물량 드리프트 시 적색).
+읽기 API = `whymath_backend.l1.standards.anchor_registry`, 판정 CLI =
+`python -m whymath_backend.l1.standards.anchor_registry`(exit 0/1).
 
 | 앵커 | 단원 | 역할 | 생산 CU | 인간 검수 CU | 현재 자산(EOS-52 실측) |
 |---|---|---|---|---|---|

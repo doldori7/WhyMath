@@ -8,7 +8,7 @@
   - **회전(③)** — 같은 rotation 바이트 재현·다른 rotation 선택 재배열(변별력 양방향).
   - **동결(③)** — digest는 내용의 함수이며 손편집 변조는 로드 시 터진다.
   - **재채점 금지 원장** — 같은 digest·다른 리비전만 위반(같은 리비전 재실행은 허용).
-  - **앵커 id 정합** — `scripts/analysis/eos_anchor_asset_audit.ANCHOR_DEFS`와 기계 대조.
+  - **앵커 id 정합** — 1급 등록(`data/corpus/eos_anchor_set_v1/anchors.yaml`·EOS-56)과 기계 대조.
   - **CLI exit** — 승격 0건·입력 부재·파싱 실패 혼입은 전부 exit 1(통과 아님).
 
 hermetic — tmp_path·픽스처만(파일 I/O 외 부작용 0·LLM/DB/네트워크 0).
@@ -16,7 +16,6 @@ hermetic — tmp_path·픽스처만(파일 I/O 외 부작용 0·LLM/DB/네트워
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -54,6 +53,11 @@ from whymath_backend.harness.review_timer import (
     start_review,
 )
 from whymath_backend.harness.reviewer_sample_package import rotation_key
+from whymath_backend.l1.standards.anchor_registry import (
+    SCOPE_DECEMBER_2026,
+    SCOPE_DEFERRED_2027_01,
+    load_anchor_registry,
+)
 from whymath_backend.schema.enums import GenerationFailureCode
 from whymath_backend.schema.review_timer import ReviewTimerEvent
 
@@ -440,29 +444,24 @@ class TestSchemaContracts:
                 as_found_basis=AsFoundBasis.PRE_REVIEW_SNAPSHOT,
             )
 
-    def test_anchor_ids_match_frozen_audit_definition(self) -> None:
-        """앵커 id 정본은 `ANCHOR_DEFS`(EOS-52 실사 스크립트) — 두 목록의 드리프트를 동결한다.
+    def test_anchor_ids_match_frozen_registry(self) -> None:
+        """앵커 id 정본은 **1급 등록**(`data/corpus/eos_anchor_set_v1/anchors.yaml`·EOS-56).
 
-        `ANCHOR_DEFS`는 8앵커 원안(대학 A7·A8 포함)을 그대로 들고 있고, G0 확정(검증설계서
-        §1-1)은 **대학 2종을 2027-01로 이월**해 6앵커로 좁혔다. 그래서 "같다"가 아니라
-        "이월분을 뺀 나머지와 같다"가 계약이다 — K-12 앵커가 늘거나 줄면 이 테스트가 깨져
-        골든 쿼터 축을 함께 고치게 한다.
+        등록은 8앵커 원안(대학 A7·A8 포함)을 그대로 들고 있고, G0 확정(검증설계서 §1-1)은
+        **대학 2종을 2027-01로 이월**해 6앵커로 좁혔다. 그래서 "같다"가 아니라 "이월분을 뺀
+        나머지와 같다"가 계약이다 — K-12 앵커가 늘거나 줄면 이 테스트가 깨져 골든 쿼터 축을
+        함께 고치게 한다.
+
+        이월 판정은 **등록의 `scope` 필드**로 한다(하드코딩 {A7, A8} 아님) — 이월이 데이터가
+        아니면 2027-01에 A7·A8을 되살릴 때 이 테스트가 조용히 거짓말을 한다.
         """
-        path = (
-            Path(__file__).resolve().parents[3]
-            / "scripts"
-            / "analysis"
-            / "eos_anchor_asset_audit.py"
-        )
-        spec = importlib.util.spec_from_file_location("eos_anchor_asset_audit", path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        registry = load_anchor_registry()
+        december = {a.id for a in registry.in_scope(SCOPE_DECEMBER_2026)}
+        deferred = {a.id for a in registry.in_scope(SCOPE_DEFERRED_2027_01)}
 
-        defs = {a["id"]: a for a in module.ANCHOR_DEFS}
-        deferred = {"A7", "A8"}  # 대학 앵커 — §1-1 확정 결정 1(2027-01 이월)
-        assert set(defs) - deferred == set(ANCHOR_IDS)
-        assert all("대학" in defs[a]["title"] for a in deferred)
+        assert december == set(ANCHOR_IDS)
+        assert deferred, "이월 앵커가 0건 — scope 축이 죽었는지 확인하라(상시 통과 위장 방지)"
+        assert all("대학" in registry.by_id(a).title for a in deferred)
 
     def test_anchor_row_parser_rejects_vocabulary_outsiders(self) -> None:
         rows, errors = parse_anchor_rows(
