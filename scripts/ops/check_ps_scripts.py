@@ -13,7 +13,26 @@
      (사고 경위: 2026-08-22 bench_ollama.ps1이 Get-CommitFreeGB를 정의 79줄 위에서 호출해
       CommandNotFoundException으로 측정 1회가 공전했다.)
 
+런북 검사 (OPS-57) — `docs/**/*.md`의 ```powershell 코드펜스도 같은 대상이다.
+Kiki에게 건네는 PowerShell의 대부분은 .ps1이 아니라 **런북 코드펜스**인데 그쪽이
+통째로 미검사였다. 붙여넣어 실행되는 순간 .ps1과 위험이 같다.
+
+런북 전용 규칙 3종 (2026-09-01 관여도 트리아지 게이트 clear 사고에서 유래):
+  ④ 보호 브랜치 직접 push — `git push origin main`은 `GH013: Changes must be made
+     through a pull request`로 거부된다. 절차의 마지막 단계가 항상 실패한다.
+  ⑤ `git reset --hard` 앞의 청결 확인 부재 — `git status --porcelain`으로 작업 트리가
+     빈 것을 먼저 보지 않으면 미커밋 작업분을 무증상으로 지운다(2026-08-10 유형).
+  ⑥ python 출력의 파이프·리다이렉트 — 한국어 Windows에서 stdout이 콘솔이 아니면
+     로케일(cp949)로 인코딩돼 `UnicodeEncodeError`로 죽는다. 문서 앞부분에 UTF-8
+     강제(PYTHONUTF8·PYTHONIOENCODING·Console::OutputEncoding)가 있어야 한다.
+
+**판정 범위 (과신 금지)**: ④~⑥은 "런북이 주의를 지시하는가"를 **문서 순서**로 본다 —
+위험 명령보다 앞에 선행 스텝이 있는지만 확인한다. 특정 붙여넣기가 실제로 안전한지,
+사람이 그 스텝을 실제로 실행했는지는 판정하지 않는다. 그리고 **의미적 결함**
+(예: 변별력 없는 검증 스텝을 차단 지점으로 오인)은 정적 검사로 잡히지 않는다.
+
 사용:  python3 scripts/ops/check_ps_scripts.py [경로...]
+       인자 없으면 scripts/**/*.ps1 + docs/**/*.md 코드펜스 전부
 종료:  0 통과 / 1 위반
 """
 
@@ -126,6 +145,114 @@ def check_call_before_def(code: str) -> list[str]:
     return issues
 
 
+# ── 런북(마크다운 코드펜스) 전용 규칙 ─────────────────────────────────────────
+#
+# .ps1과 규칙을 나눈 이유: .ps1은 파일 하나가 완결 절차지만, 런북은 **여러 블록이
+# 순서대로 사람에게 건네지는 절차**다. 그래서 선행 스텝의 존재를 *문서 순서*로 본다.
+
+_FENCE_RE = re.compile(r"^[ \t]*```[ \t]*(powershell|pwsh|ps1)[ \t]*$", re.I | re.M)
+_FENCE_END_RE = re.compile(r"^[ \t]*```[ \t]*$", re.M)
+
+# 보호 브랜치 직접 push — origin/upstream 어느 리모트든 main·master 지목이면 거부된다.
+_PUSH_PROTECTED_RE = re.compile(r"\bgit\s+push\b[^\n|;]*?\b(main|master)\b")
+# 선행 확인 스텝
+_CLEAN_CHECK_RE = re.compile(r"\bgit\s+status\b[^\n]*--porcelain")
+_RESET_HARD_RE = re.compile(r"\bgit\s+reset\b[^\n]*--hard")
+# UTF-8 강제 — 셋 중 하나라도 있으면 지시된 것으로 본다.
+_UTF8_SETUP_RE = re.compile(
+    r"PYTHONUTF8|PYTHONIOENCODING|\[Console\]::OutputEncoding|chcp\s+65001", re.I
+)
+# python 출력이 콘솔을 벗어나는 형태 (파이프 / 리다이렉트).
+#
+# 리다이렉트는 `\s>` 로만 잡는다 — 앞이 공백이 아닌 `>`는 대개 `<플레이스홀더>`의 닫는
+# 꺾쇠다(실측 오탐: `--until <파일럿종료YYYY-MM-DD> --shadow-ledger ...`가 리다이렉트로
+# 잡혔다). 오탐이 있는 가드는 사람이 끄게 만들므로 좁히는 쪽을 택한다 — 놓치는 형태
+# (`>`를 공백 없이 붙여 쓴 리다이렉트)는 이 저장소 런북 관례에 없다.
+_PY_PIPED_RE = re.compile(r"\bpython[0-9.]*\b[^\n]*?(\||\s>+\s*\S)")
+
+
+def iter_powershell_blocks(text: str) -> list[tuple[int, str]]:
+    """마크다운에서 powershell 코드펜스를 (시작 줄번호, 본문)로 뽑는다."""
+    blocks: list[tuple[int, str]] = []
+    for m in _FENCE_RE.finditer(text):
+        body_start = m.end() + 1
+        end = _FENCE_END_RE.search(text, body_start)
+        if end is None:  # 닫히지 않은 펜스 — 본문 끝까지
+            body, stop = text[body_start:], len(text)
+        else:
+            body, stop = text[body_start : end.start()], end.start()
+        line_no = text.count("\n", 0, m.start()) + 1
+        blocks.append((line_no, body))
+        del stop
+    return blocks
+
+
+def check_runbook_markdown(path: pathlib.Path) -> list[str]:
+    """런북 마크다운 1건 — 코드펜스를 **문서 순서**로 훑는다.
+
+    선행 스텝(UTF-8 강제·청결 확인)은 위험 명령보다 *앞선 줄*에 있어야 인정한다.
+    블록 경계가 아니라 줄 위치로 보는 이유: 같은 블록 안에서 설정하고 바로 쓰는 것도
+    정상이고(붙여넣기 한 번), 반대로 지운 뒤에 확인하는 것은 순서가 뒤바뀐 것이라
+    보호가 아니기 때문이다.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    blocks = iter_powershell_blocks(text)
+    if not blocks:
+        return []
+
+    # (전역 줄번호, 원문 줄, 코드 줄) — 코드 줄은 주석·문자열이 지워진 판
+    rows: list[tuple[int, str, str]] = []
+    for line_no, body in blocks:
+        code_lines = strip_noncode(body).split("\n")
+        for off, raw_line in enumerate(body.split("\n")):
+            code_line = code_lines[off] if off < len(code_lines) else ""
+            rows.append((line_no + 1 + off, raw_line, code_line))
+
+    # 선행 스텝이 처음 등장하는 위치 (없으면 무한대)
+    def first(pred) -> float:
+        for idx, (_ln, raw, code) in enumerate(rows):
+            if pred(raw, code):
+                return idx
+        return float("inf")
+
+    utf8_at = first(lambda raw, code: bool(_UTF8_SETUP_RE.search(raw)))
+    clean_at = first(lambda raw, code: bool(_CLEAN_CHECK_RE.search(code)))
+
+    issues: list[str] = []
+
+    # 구조 검사 — 붙여넣어 실행되므로 블록마다 괄호 짝이 맞아야 한다.
+    for line_no, body in blocks:
+        issues += [f"L{line_no}+ {m}" for m in check_balance(strip_noncode(body))]
+
+    for idx, (ln, _raw, code) in enumerate(rows):
+        # ④ 보호 브랜치 직접 push
+        m = _PUSH_PROTECTED_RE.search(code)
+        if m:
+            issues.append(
+                f"L{ln}: 보호 브랜치 직접 push: {m.group(0).strip()!r} "
+                "— 저장소 규칙이 'Changes must be made through a pull request'를 강제해 "
+                "GH013으로 거부된다(2026-09-01 실측). 브랜치 push + PR로 바꾼다"
+            )
+
+        # ⑤ reset --hard 앞의 청결 확인
+        if _RESET_HARD_RE.search(code) and clean_at > idx:
+            issues.append(
+                f"L{ln}: `git reset --hard` 앞에 `git status --porcelain` 확인이 없다 "
+                "— 미커밋 작업분을 무증상으로 지운다(2026-08-10 유형). "
+                "빈 출력을 눈으로 확인하는 스텝을 앞에 둔다"
+            )
+
+        # ⑥ python 출력의 파이프·리다이렉트 ↔ UTF-8 강제
+        if _PY_PIPED_RE.search(code) and utf8_at > idx:
+            issues.append(
+                f"L{ln}: python 출력을 파이프·리다이렉트하는데 앞서 UTF-8 강제가 없다 "
+                "— 한국어 Windows에서 stdout이 로케일(cp949)로 인코딩돼 UnicodeEncodeError로 "
+                ' 죽는다(2026-09-01 실측 2건). $env:PYTHONUTF8="1" 등을 앞에 둔다'
+            )
+
+    return issues
+
+
 def check_file(path: pathlib.Path) -> list[str]:
     raw = path.read_bytes()
     issues: list[str] = []
@@ -145,15 +272,27 @@ def check_file(path: pathlib.Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    targets = [pathlib.Path(a) for a in argv[1:]] or sorted(pathlib.Path("scripts").rglob("*.ps1"))
+    if argv[1:]:
+        targets = [pathlib.Path(a) for a in argv[1:]]
+    else:
+        targets = sorted(pathlib.Path("scripts").rglob("*.ps1"))
+        # OPS-57 — Kiki에게 건네는 PowerShell의 대부분은 런북 코드펜스다.
+        targets += sorted(pathlib.Path("docs").rglob("*.md"))
     files = [t for t in targets if t.is_file()]
     if not files:
-        print("검사할 .ps1 파일이 없다.")
+        print("검사할 파일이 없다.")
         return 0
 
     failed = 0
     for f in files:
-        issues = check_file(f)
+        if f.suffix.lower() == ".md":
+            issues = check_runbook_markdown(f)
+            if not issues and not iter_powershell_blocks(
+                f.read_text(encoding="utf-8", errors="replace")
+            ):
+                continue  # powershell 펜스가 없는 문서는 조용히 넘긴다
+        else:
+            issues = check_file(f)
         if issues:
             failed += 1
             print(f"[FAIL] {f}")
