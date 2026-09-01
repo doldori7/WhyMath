@@ -1,0 +1,1 @@
+{"ts": "2026-09-01T23:00:10+09:00", "actor": "gates/deploy-environment-approval", "action": "gate_clear", "id": "G-deploy-environment-approval", "evidence": "2026-09-01 Kiki 실행 — Settings/Environments에 staging·prod 생성, prod에 Required reviewers=doldori7 등록. 판정: Deploy 워크플로 prod 실행 시 deploy 잡이 Waiting for review 상태로 정지함을 확인(deployment_cd_runbook.md 7-3 성공 판정).", "reason": null}
