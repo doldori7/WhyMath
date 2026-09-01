@@ -252,20 +252,52 @@ git push origin main
 
 `gates`에 **un-clear verb가 없다**. 대장 손편집도 금지다. 따라서:
 
-**푸시 전이면**:
+### 7-1. 아직 **커밋 전**이면 (§6-4에서 red가 난 경우가 여기다)
+
+§6-3의 clear는 작업 트리만 바꾼다 — 커밋은 §6-5다. 따라서 이 시점의 되돌리기는
+**`backlog/gates.yaml` 한 파일만** 원복하는 것이다.
 
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-git reset --hard HEAD~1
+git checkout -- backlog/gates.yaml
+git status --short
 ```
 
-**푸시 후면** — revert 커밋을 만든다(히스토리 재작성 금지):
+기대: `git status --short`가 **아무것도 출력하지 않는다**(대장이 HEAD와 동일).
+
+> ⚠️ **`git reset --hard HEAD~1`을 쓰지 말 것.** 이 시점의 clear는 커밋되지 않았으므로
+> `HEAD~1`은 clear가 아니라 **직전 커밋 — 대개 이 절차가 의존하는 백필 머지분**을 지운다.
+> 미커밋 변경과 커밋된 변경을 구분하지 않는 원복이 정확히 2026-08-10 사고의 형태다
+> (`git checkout --`가 미커밋 구현분 +59/-6을 무증상으로 소실시켰다).
+>
+> 여기서 `git checkout -- backlog/gates.yaml`이 안전한 이유는 **되돌릴 대상이 그 파일
+> 하나뿐이고 그 파일에 지킬 미커밋 변경이 없기 때문**이다. 다른 파일에 작업분이 있다면
+> 경로를 넓히지 말고 그 파일만 지정한다.
+
+### 7-2. 이미 **커밋했으나 푸시 전**이면
 
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
+git log --oneline -1
+git reset --soft HEAD~1
+git checkout -- backlog/gates.yaml
+git status --short
+```
+
+`git log --oneline -1`이 **clear 커밋인지 먼저 눈으로 확인**한다 — 아니면 멈추고 세션에
+출력을 전달한다. `--soft`를 쓰는 이유는 `--hard`가 그 커밋 외의 미커밋 작업분까지
+같이 지우기 때문이다.
+
+### 7-3. 이미 **푸시했으면** — revert 커밋을 만든다(히스토리 재작성 금지):
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git log --oneline -1
 git revert --no-edit HEAD
 git push origin main
 ```
+
+여기서도 `git log --oneline -1`로 **되돌릴 커밋이 clear 커밋인지 먼저 확인**한다.
 
 revert 후 `validate`가 green으로 돌아오는지 반드시 확인한다 — 돌아오지 않으면 clear 외의
 원인이 있다는 뜻이고, 그때는 세션에 출력을 그대로 전달한다.

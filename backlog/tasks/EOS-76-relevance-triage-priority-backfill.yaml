@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: cancelled
 priority: 1
 eos_priority: P1
 owner: claude
@@ -23,5 +23,5 @@ artifacts: []
 paths:
   - "backlog/tasks/**"
 session: null
-notes: "런북: docs/ops/eos_relevance_triage_gate_runbook.md(§3 단계 2). 실측 2026-09-01 main 47804941: 미분류 비종결 190건(S3 81·S4 88·E축 15·S1 1·S5 5) = 판정표 커버 171 + 신규 등재 19. 입력 = docs/reviews/eos_verification_relevance_triage_2026-08-31.md(제안본·확정 아님). 순서 주의: 이 태스크가 끝나기 전에 게이트가 clear되면 HARN-55 그랜드파더 만료로 validate가 190건 위반을 내고 harness-integrity 잡이 red가 된다(시뮬 실측). gates에 un-clear verb가 없어 복구는 revert뿐이다. requires_gates로 이 게이트를 붙인 이유: 결정 없이 착수 후보로 뜨는 것을 막기 위함 — 게이트가 clear되면 오히려 이 태스크는 이미 끝나 있어야 한다(선후가 역전된 게이트이므로 착수 시 런북 §3 표를 먼저 읽을 것)."
+notes: "런북: docs/ops/eos_relevance_triage_gate_runbook.md(§3 단계 2). 실측 2026-09-01 main 47804941: 미분류 비종결 190건(S3 81·S4 88·E축 15·S1 1·S5 5) = 판정표 커버 171 + 신규 등재 19. 입력 = docs/reviews/eos_verification_relevance_triage_2026-08-31.md(제안본·확정 아님). 순서 주의: 이 태스크가 끝나기 전에 게이트가 clear되면 HARN-55 그랜드파더 만료로 validate가 190건 위반을 내고 harness-integrity 잡이 red가 된다(시뮬 실측). gates에 un-clear verb가 없어 복구는 revert뿐이다. requires_gates로 이 게이트를 붙인 이유: 결정 없이 착수 후보로 뜨는 것을 막기 위함 — 게이트가 clear되면 오히려 이 태스크는 이미 끝나 있어야 한다(선후가 역전된 게이트이므로 착수 시 런북 §3 표를 먼저 읽을 것).\n\n[취소 2026-09-01] 순환 게이트 등재 오류 — requires_gates에 G-eos-verification-relevance-triage를 붙였으나 그 게이트의 clear 선결 조건이 바로 이 태스크다(런북 §3). start가 무조건 거부되어 착수 불가(실측 exit 1). amend에 게이트 *제거* 경로가 없어(추가만 가능) 정정 경로가 없으므로 cancel 후 EOS-77로 재등재한다. 지적: PR #961 codex P1."
 updated: 2026-09-01
