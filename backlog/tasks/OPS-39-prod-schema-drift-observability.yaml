@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - docs/architecture/db_backup_dr_runbook.md
   - "src/backend/whymath_backend/ops/**"
 session: null
-notes: "[환경 명칭 불일치 — 함께 정리할 것] 같은 DB를 두 문서가 다르게 규정한다: MEMORY/CLAUDE.md는 whymath-pg를 'prod DB(적재 데이터가 사는 곳)'로, dialogue_encryption_deployment_checklist.md의 2026-07-27 실측은 '실 프로덕션이 아니라 암호화 도입 전 개발 DB'로 적는다. 어느 쪽이냐에 따라 파괴적 마이그레이션 허용치와 백업 요구 수준이 달라지므로, 절차 문서를 쓸 때 이 명칭을 먼저 확정한다. 2026-08-11 G-operator-seat-first-grant 1차 실행 실패에서 드러남 — role_grant_cli가 column user_profile.role does not exist로 죽었다. 직접 원인은 CLI의 프리플라이트 부재였고(같은 세션에서 상환), 남은 것은 '드리프트 자체가 관측되지 않는다'는 환경 축이다. 이 전제는 G-prod-dead-column-check·G-retired-atom-prod-cleanup 등 다른 prod 게이트도 똑같이 깔고 있다."
-updated: 2026-08-11
+notes: "[환경 명칭 불일치 — 함께 정리할 것] 같은 DB를 두 문서가 다르게 규정한다: MEMORY/CLAUDE.md는 whymath-pg를 'prod DB(적재 데이터가 사는 곳)'로, dialogue_encryption_deployment_checklist.md의 2026-07-27 실측은 '실 프로덕션이 아니라 암호화 도입 전 개발 DB'로 적는다. 어느 쪽이냐에 따라 파괴적 마이그레이션 허용치와 백업 요구 수준이 달라지므로, 절차 문서를 쓸 때 이 명칭을 먼저 확정한다. 2026-08-11 G-operator-seat-first-grant 1차 실행 실패에서 드러남 — role_grant_cli가 column user_profile.role does not exist로 죽었다. 직접 원인은 CLI의 프리플라이트 부재였고(같은 세션에서 상환), 남은 것은 '드리프트 자체가 관측되지 않는다'는 환경 축이다. 이 전제는 G-prod-dead-column-check·G-retired-atom-prod-cleanup 등 다른 prod 게이트도 똑같이 깔고 있다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

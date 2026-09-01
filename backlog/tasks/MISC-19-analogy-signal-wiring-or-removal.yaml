@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -22,5 +23,5 @@ paths:
   - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
   - "tests/backend/l4/pedagogy/**"
 session: null
-notes: "원 등재 MISC-09(r1skwr backup a95bb456에만 잔존) — HARN-35 재등재. 정본: misconception_module_gap_review_r2.md §2 G3 + 04e §9-D3. 슬롯도 규칙도 있고 신호원만 없는 상태"
-updated: 2026-08-30
+notes: "원 등재 MISC-09(r1skwr backup a95bb456에만 잔존) — HARN-35 재등재. 정본: misconception_module_gap_review_r2.md §2 G3 + 04e §9-D3. 슬롯도 규칙도 있고 신호원만 없는 상태\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

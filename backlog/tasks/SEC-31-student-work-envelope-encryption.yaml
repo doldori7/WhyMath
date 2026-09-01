@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -24,5 +25,5 @@ paths:
   - "src/backend/alembic/versions/**"
   - "tests/backend/**"
 session: null
-notes: "출처: PR #903 Codex P1 지적 → 실측 판정 (a). 봉투 암호화 장치는 실재(dialogue 계열 SEC-01 집행 중)하나 답안 계열은 EOS-32 §4-6이 '일괄 후속'으로 유보한 채 좌석이 없었다 — docstring 계획은 백로그를 대신하지 못한다. 단일 테이블 선행 암호화는 보호 비대칭이라 EOS-46(student_solution_step)에서도 미적용 유지, 이 태스크가 3테이블을 일괄 해소한다. CLAUDE.md '학생 데이터=민감 정보 암호화 저장' 원칙 축"
-updated: 2026-08-30
+notes: "출처: PR #903 Codex P1 지적 → 실측 판정 (a). 봉투 암호화 장치는 실재(dialogue 계열 SEC-01 집행 중)하나 답안 계열은 EOS-32 §4-6이 '일괄 후속'으로 유보한 채 좌석이 없었다 — docstring 계획은 백로그를 대신하지 못한다. 단일 테이블 선행 암호화는 보호 비대칭이라 EOS-46(student_solution_step)에서도 미적용 유지, 이 태스크가 3테이블을 일괄 해소한다. CLAUDE.md '학생 데이터=민감 정보 암호화 저장' 원칙 축\n\n[정정 2026-09-01] eos_priority null → P1: 미성년 PII 불변 계약 — 답안 본문 평문 유보 해소. EOS-80 일괄 백필"
+updated: 2026-09-01

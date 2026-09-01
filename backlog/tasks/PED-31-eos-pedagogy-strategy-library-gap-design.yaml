@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: kiki
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - docs/architecture/04f_pedagogy_module_boundaries.md
   - "src/backend/whymath_backend/l4/pedagogy/*.py"
 session: null
-notes: "Gap design task: reconcile external 14 pedagogical strategy review with WhyMath current PedagogyStrategy enum, YAML catalog, runtime_selector. Identify missing StrategyDecision/ExecutionPlan/Outcome entities, PedagogicalAction atomic layer, StrategyStep, ApplicabilityRule, Pedagogy Graph, State Machine, Fading policy, Event System integration, and conditional effectiveness model. Document 15/16/17 module boundaries."
-updated: 2026-08-26
+notes: "Gap design task: reconcile external 14 pedagogical strategy review with WhyMath current PedagogyStrategy enum, YAML catalog, runtime_selector. Identify missing StrategyDecision/ExecutionPlan/Outcome entities, PedagogicalAction atomic layer, StrategyStep, ApplicabilityRule, Pedagogy Graph, State Machine, Fading policy, Event System integration, and conditional effectiveness model. Document 15/16/17 module boundaries.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01
