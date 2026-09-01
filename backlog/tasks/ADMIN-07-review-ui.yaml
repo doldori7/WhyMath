@@ -7,6 +7,7 @@ subject: cross
 layer: web
 status: todo
 priority: 3
+eos_priority: P0
 owner: claude
 depends_on:
   - ADMIN-05-bff-readonly
@@ -22,5 +23,5 @@ paths:
   - "src/backend/whymath_backend/**"
   - "tests/backend/**"
 session: null
-notes: "04 §7 Phase B 진입점·§8 ADMIN-REVIEW-UI 제안의 등재. BFF 쓰기 확장(감사 동반) 포함\n\n[정정 2026-09-01] 계획서 200 검토 §8 관리자 축 우선도 재검토 — Kiki 지시(2026-09-01). 재검토 결과 승격 0건이며, 실제 임계경로는 EOS-78로 분리 등재. 판정 근거를 대장에 남겨 재질문을 막는다."
+notes: "04 §7 Phase B 진입점·§8 ADMIN-REVIEW-UI 제안의 등재. BFF 쓰기 확장(감사 동반) 포함\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/F4★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필\n\n[정정 2026-09-01] 계획서 200 검토 §8 관리자 축 우선도 재검토 — Kiki 지시(2026-09-01). 재검토 결과 승격 0건이며, 실제 임계경로는 EOS-78로 분리 등재. 판정 근거를 대장에 남겨 재질문을 막는다."
 updated: 2026-09-01

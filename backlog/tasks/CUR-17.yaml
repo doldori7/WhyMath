@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: blocked
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/l1/concept_graph/retrieval.py
   - src/backend/whymath_backend/l1/concept_graph/node_projection.py
 session: null
-notes: "EOS 6_개념 DB 검토 §28, §40 반영. AI Tutor가 자연어 질문을 Knowledge Graph에 연결할 때 의미 충돌을 해소하는 핵심 API.\n\n[차단 2026-08-31] G-eos-verification-relevance-triage 대기 — 12월 검증 관여도 판정 미필(선언 §0-5·§6-5). CUR-11·CUR-12와 동일 계보(EOS 개념 DB 검토)·동일 사각지대. 판정 시 유의: acceptance 4항이 전부 '설계·정의·문서화'라 CUR-11(라우터 신설)보다 계약 성격에 가깝고, concept resolve는 CU의 concept/skill 매핑·op-code 라벨 축과 맞닿아 있어 **관여 판정이 나올 여지가 크다** — 이 차단은 거부가 아니라 판정 대기다. 게이트 clear 후 unblock."
-updated: 2026-08-31
+notes: "EOS 6_개념 DB 검토 §28, §40 반영. AI Tutor가 자연어 질문을 Knowledge Graph에 연결할 때 의미 충돌을 해소하는 핵심 API.\n\n[차단 2026-08-31] G-eos-verification-relevance-triage 대기 — 12월 검증 관여도 판정 미필(선언 §0-5·§6-5). CUR-11·CUR-12와 동일 계보(EOS 개념 DB 검토)·동일 사각지대. 판정 시 유의: acceptance 4항이 전부 '설계·정의·문서화'라 CUR-11(라우터 신설)보다 계약 성격에 가깝고, concept resolve는 CU의 concept/skill 매핑·op-code 라벨 축과 맞닿아 있어 **관여 판정이 나올 여지가 크다** — 이 차단은 거부가 아니라 판정 대기다. 게이트 clear 후 unblock.\n\n[정정 2026-09-01] eos_priority null → P2: Concept Resolver API 설계 — 12월 내부 검증에 불요. EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -7,6 +7,7 @@ subject: earth-science
 layer: docs
 status: todo
 priority: 3
+eos_priority: P3
 owner: kiki
 depends_on: []
 requires_gates: []
@@ -16,5 +17,5 @@ artifacts: []
 paths:
   - "docs/**"
 session: null
-notes: "통합과학 완전 커버는 물리·화학·생물 3부작 기준 — 지구과학 위치는 Kiki 결정"
-updated: 2026-07-08
+notes: "통합과학 완전 커버는 물리·화학·생물 3부작 기준 — 지구과학 위치는 Kiki 결정\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -146,6 +146,7 @@ L3 라우팅에는 **서로 다른 세 축**이 있다. (1·2축은 본래 분�
 | `student_subscription` | 세션 | 'free','basic','premium','gifted' — CLOUD 승급 가드 |
 | `budget_krw`(개명) | 쿼터 매니저 | 이 호출 잔여 예산(원). 0이면 CLOUD 차단 → LOCAL 강등 |
 | `call_site`(신규) | 호출자 | 5개 핵심 호출지점 식별자 ①~⑤ (없으면 일반 호출) — **축3 패밀리 결정의 강신호**(①③④=NLP→GENERAL, ②=수학→MATH, §C.0) |
+| `data_licenses`(신규·EOS-59) | 호출자 | 이 호출의 프롬프트에 실리는 **자료의 라이선스 목록**. 축1의 *법적* 게이트 입력 — 반출 불가/미확인 자료가 있으면 CLOUD 차단(§D.5). 미지정 기본값 `UNKNOWN` = fail-closed |
 
 > 명명: 기존 `RoutingRequest.budget_cents`는 *원(KRW)* 단위 일일 한도(03 문서·llm-architect.md)와 불일치했다. 본 설계는 `budget_krw`로 통일한다(E장).
 
@@ -202,6 +203,8 @@ L3 라우팅에는 **서로 다른 세 축**이 있다. (1·2축은 본래 분�
 | 4 | `requires_reasoning` and `subscription in {premium,gifted}` | **CLOUD_MID** | 어려운 진단(기존 규칙3) |
 | 5 | (에스컬레이션 트리거 — D장) 로컬 결과 신뢰 미달 | **CLOUD_MID**→**CLOUD_HIGH** | 폴백 체인(D장) |
 | 6 | 그 외 | **LOCAL** | 기본(기존 규칙4). 목표 분포 80% |
+
+> **결정표 뒤에 법적 게이트가 한 번 더 걸린다 (EOS-59)** — 위 6규칙은 *비즈니스 축*(구독·예산)이며 그 결과는 **희망 티어**다. 최종 축1은 `guard_data_export(희망, data_licenses)`를 통과한 값이다(§D.5). 두 축을 한 함수에 합치지 않는 이유도 그곳에 적었다.
 
 ### C.2 축2 결정표 (LOCAL일 때만 — FAST / MID / QUALITY)
 
@@ -361,6 +364,44 @@ def guard_cloud(req, desired: CostTier) -> CostTier:
     return desired
 ```
 
+### D.5 데이터 등급 가드 (`guard_data_export`) — 법적 축, EOS-59
+
+`guard_cloud`(§D.4)와 **합치지 않는다**. §D.4는 구독·예산 = *비즈니스 규칙*(프로모션·요금제
+개편으로 언제든 완화 가능)이고, 여기는 데이터 제공자 이용조건 = *법적 규칙*(완화하려면
+권리자와의 **별도합의**가 필요)이다. 한 함수에 합치면 "무료 사용자에게도 클라우드를 열자"는
+비즈니스 결정이 법적 게이트까지 조용히 여는 경로가 생긴다. 저장소 선례: `l6/_shared.py`의
+`is_exposable`(저작권 축)과 `is_review_cleared`(검수 축)도 같은 이유로 분리돼 있다.
+
+**무엇이 국외 반출인가**: `CLOUD_MID`/`CLOUD_HIGH`가 가리키는 프로바이더(Anthropic 등)는
+**국외 법인**이므로, 클라우드 티어로 프롬프트를 보내는 것은 그 프롬프트에 실린 자료의
+*국외 이전*이다. `docs/data/licensing_safety.md` §133 AIHub 4조건 ②(국외반출·국외법인
+별도합의)에 따라 AIHub 유래 자료를 별도합의 없이 클라우드로 보내면 라이선스 위반이며,
+이는 CLAUDE.md 의사결정 우선순위 **#2(법적)** 사안으로 **#6(비용·효율)을 이긴다**.
+
+**권리 판정의 정본은 라우터가 아니다**: "AIHub는 반출 불가"는 이미
+`l1/rights/permission_map.py`의 `_AIHUB_OPEN`에 `export=False`로 선언돼 있다. 라우터는 그
+선언을 *읽기만* 한다 — 등급 어휘를 새로 만들면 권리 기준이 두 벌이 되기 때문에
+`LicenseType` × `PermissionAction.EXPORT`를 그대로 쓴다.
+
+```python
+def guard_data_export(desired: CostTier, licenses) -> CostTier:
+    # 법적 가드. **강등만** 한다 — 어떤 입력으로도 티어가 올라가지 않는다(단방향성).
+    if desired not in {CostTier.CLOUD_MID, CostTier.CLOUD_HIGH}:
+        return desired                  # 국내(로컬) — 판정할 반출이 없다
+    if export_judgment(licenses).blocks_offshore:   # export=False 또는 None(미확인)
+        return CostTier.LOCAL           # 반출 불가/미확인 → 국내 강등
+    return desired
+```
+
+병합은 보수적이다(§policy_engine 동형): 하나라도 `export=False`면 금지, 그 외에 `None`이
+있으면 미확인 → **fail-closed로 차단**. 미지정(`UNKNOWN`)이 곧 차단이므로, 그 보수 기본값이
+*일상 동작*이 되지 않도록 **소스 스캔 게이트**(`scripts/ops/check_routing_data_grade.py`,
+CI `backend` 잡)가 프로덕션 호출부의 등급 명시를 강제한다. 호출부가 쓰는 등급 프로파일의
+단일 좌석은 `l3/data_grade_defaults.py`다(코퍼스 구성이 바뀌면 그 한 곳만 고친다).
+
+**불변식 5**(`RoutingDecision`): `data_export_blocked=True ⟹ cost_tier == LOCAL`.
+막힌 결정이 클라우드로 나가 있으면 모순이므로 스키마가 구성 자체를 거부한다.
+
 ---
 
 ## E. 비용·예산·SLA 연동
@@ -427,6 +468,8 @@ def _cache_key(prompt, system, cost_tier, local_family, local_model):
 | `cache_hit` | bool | 캐싱 적중률 KPI |
 | `escalated_from` | 직전 티어(폴백 시) | 에스컬레이션 빈도 분석 |
 | `student_id_hash` | 해시 | 직접 ID 금지(기존 규칙 유지) |
+| `data_export_blocked`(신규·EOS-59) | bool | 데이터 등급 게이트가 *실제로* 클라우드를 막은 건수 — "작동한 비율"의 분자 |
+| `data_export_reason`(신규·EOS-59) | EXPORT_ALLOWED/PROHIBITED/UNVERIFIED 또는 null | 등급 판정 분포·발동률 분모. null=미판정(라우터 미경유)이며 '허용'이 아니다 |
 
 ---
 

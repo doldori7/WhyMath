@@ -7,6 +7,7 @@ subject: physics
 layer: backend
 status: todo
 priority: 1
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -17,5 +18,5 @@ paths:
   - "src/backend/**"
   - "tests/backend/**"
 session: null
-notes: "docs/architecture/subject_content_coverage_gap_review.md §2-① 승계 — Problem.subject는 코퍼스 2,638문 전량 \"공통\"으로 카디널리티 1이라 과목 축으로 무효이며, 유일 소비처인 api/problems.py의 where(Problem.subject == subject) 필터도 무변별(전부 또는 0건)이다. 어휘 자체가 2015 수능 선택과목 축이라 2022 개정 19과목을 표현할 수 없다. 과목 관측은 성취기준 대장 subject 투영(ARCH-28)이 담당하므로 지금 enum 확장+백필은 스키마 변경 비용만 낳는다 — 착수 트리거는 물리 문항 첫 적재(subject_expansion_readiness.md §7)."
-updated: 2026-07-08
+notes: "docs/architecture/subject_content_coverage_gap_review.md §2-① 승계 — Problem.subject는 코퍼스 2,638문 전량 \"공통\"으로 카디널리티 1이라 과목 축으로 무효이며, 유일 소비처인 api/problems.py의 where(Problem.subject == subject) 필터도 무변별(전부 또는 0건)이다. 어휘 자체가 2015 수능 선택과목 축이라 2022 개정 19과목을 표현할 수 없다. 과목 관측은 성취기준 대장 subject 투영(ARCH-28)이 담당하므로 지금 enum 확장+백필은 스키마 변경 비용만 낳는다 — 착수 트리거는 물리 문항 첫 적재(subject_expansion_readiness.md §7).\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

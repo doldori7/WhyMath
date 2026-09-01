@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - "tests/backend/api/**"
   - "tests/backend/l4/**"
 session: null
-notes: "ai_integration_gap_review.md D4(2026-08-10). study.py:29-30이 유보를 정직하게 선언했으나 추적 태스크가 없었다 — SEC-15 등재 선례('docstring 자백·추적 부재→태스크化')와 동형. MOB-13 paths(api/study.py) 의도적 겹침 — 겹침 경고는 대기 신호, MOB-13 착지 후 착수 권장(기능 의존 아님)."
-updated: 2026-08-10
+notes: "ai_integration_gap_review.md D4(2026-08-10). study.py:29-30이 유보를 정직하게 선언했으나 추적 태스크가 없었다 — SEC-15 등재 선례('docstring 자백·추적 부재→태스크化')와 동형. MOB-13 paths(api/study.py) 의도적 겹침 — 겹침 경고는 대기 신호, MOB-13 착지 후 착수 권장(기능 의존 아님).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - S3-32-learning-loop-closure-recovery
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/mobile/lib/features/chat/**"
 session: null
-notes: "브랜치 tlthrr의 원 S3-30(문제별 dialogue 리셋 — 완료 오기록으로 인한 대화 반복/고갈 버그 수정)·S3-31(오답 최종답 피드백) 재작성. S3-32 완료 신호에 의존."
-updated: 2026-08-07
+notes: "브랜치 tlthrr의 원 S3-30(문제별 dialogue 리셋 — 완료 오기록으로 인한 대화 반복/고갈 버그 수정)·S3-31(오답 최종답 피드백) 재작성. S3-32 완료 신호에 의존.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

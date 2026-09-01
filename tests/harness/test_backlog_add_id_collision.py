@@ -37,6 +37,8 @@ class TestCrossBranchTaskFileNumberCollision:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",
@@ -215,6 +217,8 @@ class TestAddVisibilityNotice:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",

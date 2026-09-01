@@ -52,6 +52,8 @@ def _add(repo: Path, task_id: str, track: str, stage: str) -> None:
         cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",
