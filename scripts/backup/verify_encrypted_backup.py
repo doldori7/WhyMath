@@ -153,7 +153,10 @@ def verify_encrypted_backup(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="암호화 백업 양방향 검증 — 잠김(①) + 복원 가능(②). exit 0 통과 / 1 미달 / 2 판정 불가."
+        description=(
+            "암호화 백업 양방향 검증 — 잠김(①) + 복원 가능(②). "
+            "exit 0 통과 / 1 미달 / 2 판정 불가."
+        )
     )
     parser.add_argument("encrypted", help="검증할 .dump.age 경로")
     parser.add_argument("--identity", required=True, help="age 개인키 파일(키 분리 — 4-5)")
