@@ -1550,6 +1550,19 @@ class StaleBranch:
     ahead: int
     status: str = "unresolved"
     evidence: str = ""
+    port_scan_error: str = ""
+    """포팅 판정 **불가** 사유(예외 타입명 포함) — 분모(브랜치 코드 파일) 산출이 실패했다.
+
+    이 값이 있으면 ported로 분류되지 않는다. 판정을 못 한 것과 근거가 없는 것은 다르므로
+    브리핑이 그 사실을 따로 말한다 — 조용히 넘기면 "검사했는데 근거 없음"으로 읽힌다.
+    """
+    partial_port: str = ""
+    """부분 착지 단서 — 근거 커밋이 이 브랜치의 코드 파일을 *일부만* 옮겼을 때 채워진다.
+
+    "N/M 파일" 형태. 이 값이 있으면 status는 **ported가 아니다**(잔여 고유 코드가 있으므로
+    '결정 불요'로 부를 수 없다) — 대신 브리핑이 이 단서를 함께 보여 사람이 나머지를 볼 수
+    있게 한다. 흡수 흔적을 버리지도, 흡수됐다고 단정하지도 않는 중간 상태다.
+    """
 
 
 # 근거 needle 길이 하한 — 짧은 문자열은 우연 매칭 생성기다.
@@ -1619,7 +1632,65 @@ def _fetch_pr_head_shas(root: Path) -> tuple[dict[str, int] | None, str]:
     return mapping, ""
 
 
-def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
+@dataclass(frozen=True)
+class PortEvidence:
+    """포팅 근거 판정 — 근거 커밋과 **그 커밋이 이 브랜치의 코드를 얼마나 옮겼는가**.
+
+    `landed`/`total`이 이 클래스의 존재 이유다. 이전 구현은 "브랜치명을 인용하면서 원장 밖
+    파일을 하나라도 건드린 커밋"을 흡수 근거로 받았는데, 그러면 **다른 파일을 건드린 커밋**이
+    포팅 근거가 된다 — 실제로 `#770`은 7n9n72의 고립을 *실측·문서화*한 커밋인데 그 브랜치를
+    "이미 포팅됨·결정 불요"로 만들었고, main 부재 15파일이 그 라벨 뒤에 숨었다(HARN-37 ①).
+    """
+
+    header: str
+    landed: int
+    total: int
+    scan_error: str = ""
+    """분모(브랜치 코드 파일) 산출 실패 사유 — 있으면 **포팅 여부를 판정하지 못했다**."""
+
+    @property
+    def is_full_port(self) -> bool:
+        """브랜치 고유 코드가 전부 트렁크에 착지했는가 — 이때만 '결정 불요'다.
+
+        분모 산출에 실패했으면(`scan_error`) 언제나 False다 — 판정 불가는 통과가 아니다.
+        """
+        if self.scan_error:
+            return False
+        return bool(self.header) and (self.total == 0 or self.landed == self.total)
+
+    @property
+    def is_partial(self) -> bool:
+        return bool(self.header) and 0 < self.landed < self.total
+
+
+def _branch_code_files(root: Path, trunk_ref: str, ref: str) -> tuple[frozenset[str] | None, str]:
+    """브랜치가 트렁크 대비 건드린 **코드** 파일 집합(원장·문서 최상위 제외) + 실패 사유.
+
+    포팅 판정의 **분모**다 — "이 브랜치가 트렁크에 남겨야 할 것"이 무엇인지.
+
+    반환 `None`은 **판정 불가**이고 빈 집합과 다르다(#962 codex P1). 초판은 둘을 같은
+    `frozenset()`으로 돌려줬는데, 그러면 호출부가 diff 실패를 "남길 코드가 없는 브랜치"로
+    읽어 `0/0` 전건 착지 = ported로 판정한다 — 즉 **git이 잠깐 실패하면 이 PR이 막으려던
+    구멍이 그대로 다시 열린다**(미검증 브랜치가 '삭제해도 안전'으로 표시). 미측정을 0으로
+    바꾸지 않는다는 이 저장소의 규칙이 정확히 이 자리에 적용된다.
+
+    실패 사유에는 **예외 타입명**을 담는다(무타입 경고 금지 — CLAUDE.md 침묵 실패 금지).
+    """
+    try:
+        res = _git(root, "diff", "--name-only", f"{trunk_ref}...{ref}", timeout=30)
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        return None, f"{type(exc).__name__}: {exc}"
+    if res.returncode != 0:
+        detail = (res.stderr or "").strip().splitlines()
+        reason = detail[0] if detail else "no stderr"
+        return None, f"git diff exit {res.returncode}: {reason[:120]}"
+    files = {line.strip() for line in res.stdout.splitlines() if line.strip()}
+    return frozenset(f for f in files if f.split("/", 1)[0] not in _LEDGER_ONLY_TOPS), ""
+
+
+def _find_ported_evidence(
+    root: Path, trunk_ref: str, branch: str, ref: str | None = None
+) -> PortEvidence:
     """브랜치명을 trunk 커밋 로그에서 찾는다 — 코드를 실제로 옮긴 커밋만 "포팅됨" 근거.
 
     브랜치의 유용한 부분을 trunk에 흡수할 때 커밋 메시지가 브랜치명을 인용하는 패턴이
@@ -1653,9 +1724,10 @@ def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
     예외·비0 종료는 `""`로 안전 폴백한다(이 브랜치만 unresolved로 남고 전체 스캔은
     실패하지 않는다).
     """
+    empty = PortEvidence("", 0, 0)
     needle = branch.split("/", 1)[-1]
     if len(needle) < _MIN_EVIDENCE_NEEDLE:
-        return ""
+        return empty
     try:
         found = _git(
             root,
@@ -1670,19 +1742,48 @@ def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
             timeout=30,
         )
     except Exception:  # pragma: no cover - 환경 의존
-        return ""
+        return empty
     if found.returncode != 0 or not found.stdout:
-        return ""
+        return empty
+    branch_files: frozenset[str] | None = frozenset()
+    scan_error = ""
+    if ref:
+        branch_files, scan_error = _branch_code_files(root, trunk_ref, ref)
+    if branch_files is None:
+        # 분모를 못 구했다 = 포팅 여부 **판정 불가**. 근거 있음으로 넘기면 미검증 브랜치가
+        # '결정 불요'가 되고, 그것이 이 태스크가 막는 바로 그 사고다(codex P1).
+        return PortEvidence("", 0, 0, scan_error=scan_error)
+
+    # 브랜치명을 인용한 커밋들을 **모아서** 본다 — 회수는 종종 여러 소형 PR로 나뉘고,
+    # 커밋 하나가 파일 A를, 다른 하나가 파일 B를 옮긴다. 각각을 따로 재면 둘 다 부분
+    # 착지로 보여 전건 회수된 브랜치가 계속 고립으로 남는다(codex P2).
+    contributions: list[tuple[str, frozenset[str]]] = []
     for record in found.stdout.split(_EVIDENCE_RECORD_SEP):
         header, _, files_blob = record.strip("\n").partition("\n")
         header = header.strip()
         if not header:
             continue
-        tops = {line.split("/", 1)[0] for line in files_blob.splitlines() if line.strip()}
+        commit_files = {line.strip() for line in files_blob.splitlines() if line.strip()}
+        tops = {f.split("/", 1)[0] for f in commit_files}
         if not tops - _LEDGER_ONLY_TOPS:
             continue  # 원장·문서만 고친 커밋 = 언급이지 흡수가 아니다
-        return header.replace("\t", " ")
-    return ""
+        title = header.replace("\t", " ")
+        if not branch_files:
+            # 브랜치에 고유 코드가 없다(순수 문서 브랜치) — 남길 코드가 없으면 고립될
+            # 코드도 없으므로 교집합을 요구할 대상이 자체가 없다.
+            return PortEvidence(title, 0, 0)
+        contributions.append((title, branch_files & frozenset(commit_files)))
+
+    landed_union: set[str] = set()
+    for _title, overlap in contributions:
+        landed_union |= overlap
+    if not landed_union:
+        return empty
+    contributing = [title for title, overlap in contributions if overlap]
+    header = contributing[0]
+    if len(contributing) > 1:
+        header = f"{header} (외 {len(contributing) - 1}건)"
+    return PortEvidence(header, len(landed_union), len(branch_files))
 
 
 @dataclass
@@ -1831,10 +1932,19 @@ def scan_stale_branches(
                 continue
             if ahead <= 0:
                 continue  # 트렁크에 이미 흡수됨(또는 커밋 0) — 방치 아님
+            partial_port = ""
+            port_scan_error = ""
             if branch in active_branches:
                 status, evidence = "active", ""
             else:
-                evidence = _find_ported_evidence(root, trunk_ref, branch)
+                port = _find_ported_evidence(root, trunk_ref, branch, ref)
+                evidence = port.header if port.is_full_port else ""
+                port_scan_error = port.scan_error
+                if port.is_partial:
+                    # 흡수 흔적은 있으나 **잔여 고유 코드가 남았다** — '결정 불요'가 아니다.
+                    # 흔적을 버리지도(사람이 다시 찾게 됨) 흡수로 단정하지도(고립이 숨음)
+                    # 않고, 아래 정상 분류를 그대로 태우되 단서를 함께 싣는다(HARN-37 ②).
+                    partial_port = f"{port.landed}/{port.total} 파일 · {port.header}"
                 if evidence:
                     status = "ported"
                 elif pr_heads is None:
@@ -1858,6 +1968,8 @@ def scan_stale_branches(
                     ahead=ahead,
                     status=status,
                     evidence=evidence,
+                    partial_port=partial_port,
+                    port_scan_error=port_scan_error,
                 )
             )
 

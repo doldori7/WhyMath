@@ -132,6 +132,45 @@ class TestBrief:
         assert "abc1234 merge: 953m1e 흡수" in text
         assert "미해결 장기 미머지 브랜치" not in text, "결정 대기 0건인데 강조 섹션이 뜨면 안 된다"
 
+    def test_partial_landing_hint_is_shown_under_isolated(self):
+        """test_부분_착지_단서는_고립_줄_아래에_표기 (HARN-37 ②)
+
+        흡수 흔적이 있는데 전건은 아닌 브랜치를 ported로 부르면 잔여 코드가 '결정 불요'
+        뒤에 숨고(오탐), 흔적을 통째로 버리면 사람이 같은 조사를 다시 한다. 그래서 status는
+        고립으로 두되 단서를 함께 보여 준다.
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                (
+                    "claude/whymath-partial-abc123",
+                    9.0,
+                    12,
+                    "isolated",
+                    "",
+                    "1/3 파일 · abc1234 부분 회수",
+                )
+            ],
+        )
+        assert "부분 착지: 1/3 파일 · abc1234 부분 회수" in text
+        assert "잔여분 확인 필요" in text
+        assert "이미 포팅됨" not in text, "부분 착지를 '결정 불요'로 부르면 고립이 숨는다"
+
+    def test_five_tuple_callers_still_render(self):
+        """test_구_5튜플_호출부도_그대로_렌더 — 필드 추가가 기존 소비자를 깨지 않는다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[("claude/whymath-legacy-tuple", 9.0, 3, "isolated", "")],
+        )
+        assert "claude/whymath-legacy-tuple" in text
+        assert "부분 착지" not in text
+
     def test_active_classification_shown_as_informational(self):
         """test_진행중_분류는_참고_섹션에_정보성으로_표기"""
         text = report.render_brief(
