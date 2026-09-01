@@ -26,6 +26,25 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from whymath_backend.schema.enums import LicenseType
+
+# ──────────────────────────────────────────────────────────────────────────
+# 데이터 등급 축의 보수 기본값 (EOS-59)
+#
+# 등급 어휘를 새로 만들지 않고 `LicenseType`을 그대로 쓴다 — "AIHub는 국외반출 금지"라는
+# 사실은 이미 `l1/rights/permission_map.py`(`_AIHUB_OPEN.export=False`)에 선언돼 있고,
+# 라우터가 그것을 자기 방식으로 다시 정의하면 그 순간 권리 기준이 두 벌이 된다.
+#
+# 기본값이 `UNKNOWN`인 이유(fail-closed): `permission_map`에서 UNKNOWN의 `export`는
+# `None`(미확인)이고, 데이터 등급 게이트는 `None`을 허용으로 보지 않는다 → 등급을 명시하지
+# 않은 요청은 클라우드로 나가지 못한다. 이 보수 기본값이 *일상 동작*이 되지 않도록,
+# 프로덕션 호출부가 등급을 실제로 채우는지는 소스 스캔 게이트
+# (`scripts/ops/check_routing_data_grade.py`·CI `backend` 잡)가 강제한다 —
+# 기본값은 그 명시를 잊었을 때만 작동하는 *사고 방지용 backstop*이다.
+# ──────────────────────────────────────────────────────────────────────────
+DEFAULT_DATA_LICENSES: tuple[LicenseType, ...] = (LicenseType.UNKNOWN,)
+"""등급 미지정 요청의 기본 등급 — 가장 보수적(미확인 → 국외 반출 차단)."""
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 축1: 비용·위치 (기존 LLMTier.MID/HIGH → CLOUD_ 접두사로 개명, 03a §0.1)
@@ -173,6 +192,33 @@ class RoutingRequest(BaseModel):
             "직행한다(수학/일반 텍스트 라우팅 규칙 무시). L5 OCR Qwen3-VL 인식기용(03a 확장)."
         ),
     )
+    # ── 데이터 등급 축 (EOS-59 — 법적 신호. 비용·품질 신호와 성격이 다르다) ──
+    data_licenses: tuple[LicenseType, ...] = Field(
+        default=DEFAULT_DATA_LICENSES,
+        min_length=1,
+        description=(
+            "이 호출의 프롬프트에 실리는 *자료*의 라이선스 목록(등급 축). 클라우드 티어는 "
+            "국외 법인 프로바이더이므로, 반출이 허용되지 않는 자료(AIHub 등)가 하나라도 "
+            "있으면 `l3.data_export_policy.guard_data_export`가 LOCAL로 강등한다. "
+            "미지정이면 UNKNOWN(=미확인)이라 fail-closed로 차단된다 — 프로덕션 호출부는 "
+            "소스 스캔 게이트가 명시를 강제한다(EOS-59 ③)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_data_licenses_non_empty(self) -> RoutingRequest:
+        """등급 목록은 비어 있을 수 없다 — "자료 없음"과 "미확인"을 구분하지 못하게 만든다.
+
+        `min_length=1`이 스키마 차원에서 이미 막지만, `model_construct`(검증 우회) 경로가
+        생기더라도 빈 목록이 조용히 통과하지 않도록 한 겹 더 둔다. 게이트 쪽
+        (`export_judgment(())`)도 빈 목록을 UNVERIFIED로 떨어뜨려 3중으로 fail-closed다.
+        """
+        if not self.data_licenses:
+            raise ValueError(
+                "data_licenses는 비어 있을 수 없다 — 자료 등급 미상은 "
+                "LicenseType.UNKNOWN으로 *명시*한다(빈 목록은 '자료 없음'과 구분 불가)"
+            )
+        return self
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -221,6 +267,24 @@ class RoutingDecision(BaseModel):
         default=0.0,
         description="예상 비용(원) — 로컬=0, 클라우드 추정 (03a §E)",
         ge=0.0,
+    )
+    # ── 데이터 등급 게이트의 *작동 신호* (EOS-59 ② — "작동한 비율") ──
+    data_export_blocked: bool = Field(
+        default=False,
+        description=(
+            "데이터 등급(법적) 게이트가 이 결정에서 *실제로* 클라우드를 막았는가. "
+            "True면 비즈니스 규칙은 클라우드를 원했으나 반출 불가/미확인 자료 때문에 "
+            "LOCAL로 강등됐다는 뜻이다. 이미 LOCAL이던 요청은 막을 것이 없었으므로 False "
+            "(정상 응답을 '게이트가 일했다'로 오인하지 않기 위한 구분)."
+        ),
+    )
+    data_export_reason: str | None = Field(
+        default=None,
+        description=(
+            "반출 판정 사유 — EXPORT_ALLOWED/EXPORT_PROHIBITED/EXPORT_UNVERIFIED "
+            "(`l3.data_export_policy`). None은 '판정 안 함'(라우터를 거치지 않고 직접 조립된 "
+            "결정)이며 '허용'이 아니다 — 미상과 통과를 구분한다."
+        ),
     )
 
     @model_validator(mode="after")
@@ -280,6 +344,17 @@ class RoutingDecision(BaseModel):
             raise ValueError(
                 f"불변식 위반: QUALITY 또는 CLOUD_*에서는 local_family가 None이어야 한다 "
                 f"(현재 {family_value!r}; QUALITY는 패밀리 무관, 03a §A.0·§G 불변식 4)"
+            )
+
+        # 불변식 5: 데이터 등급 게이트는 *강등만* 한다 (EOS-59 단방향성)
+        #   — "게이트가 막았다"고 표시된 결정이 클라우드로 나가 있으면 그 자체가 모순이다.
+        #     게이트가 우회됐거나(치명적) 플래그가 잘못 붙은(관측 오염) 두 경우뿐이고,
+        #     둘 다 조용히 넘어가면 안 된다. 이 불변식이 단방향성을 *구조로* 봉인한다.
+        if self.data_export_blocked and not is_local:
+            raise ValueError(
+                f"불변식 위반: data_export_blocked=True인데 cost_tier={cost_value}(국외 티어)다 "
+                "— 데이터 등급 게이트는 강등만 하며, 막힌 요청은 반드시 LOCAL이어야 한다 "
+                "(EOS-59 단방향성)"
             )
 
         # 모드 값 자체 검증

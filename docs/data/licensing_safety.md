@@ -132,6 +132,8 @@
 
 ### AIHub 4조건 / NCIC 구분
 - **AIHub**(71718·71716·71859·479·71518): 영리 명문 허용 — ① 출처표시 "한국지능정보사회진흥원 사업결과"(2차 저작물도) ② 국외반출·국외법인 별도합의 ③ **데이터셋 재판매·양도·대여 금지**(AI 모델 형태 서비스는 가능) ④ 위법 시 환수.
+  - **② 국외반출의 기계적 집행 지점(EOS-59)**: 우리 클라우드 LLM 프로바이더(Anthropic 등)는 **국외 법인**이므로, AIHub 유래 자료를 클라우드 티어로 보내는 것은 별도합의 없는 *국외 이전*이다. 이 조건은 산문 규칙이 아니라 라우터가 시행한다 — `l3/data_export_policy.guard_data_export`가 `RoutingRequest.data_licenses`를 읽어 반출 불가·미확인 자료의 클라우드 승급을 **LOCAL로 강등**한다(권리 판정 정본은 `l1/rights/permission_map._AIHUB_OPEN.export=False`, 설계는 `03a_l3_router_design.md` §D.5). 호출부가 등급을 실제로 채우는지는 CI `backend` 잡의 `scripts/ops/check_routing_data_grade.py`가 강제한다.
+  - **2026-09-01 실측**: `data/corpus/*/_provenance.json` 전 27개 코퍼스의 `pool`이 `whymath-original` — 현재 적재된 AIHub 유래 자료 **0건**. AIHub 자료가 저작 파이프라인 입력이 되는 시점에 `l3/data_grade_defaults.SELF_AUTHORED_CORPUS`에 `AIHUB_OPEN`을 더하면 저작 경로 전체가 자동으로 국내 전용이 된다(호출부 수정 0).
 - **공공누리 AI유형**(2026-01-28): AI유형 마크 자료는 *데이터 재판매만 금지*, **학습된 모델의 상업 이용은 허용**.
 - **NCIC 구분**: 성취기준 *코드·고시 본문* = §7 보호대상 아님(무제한) ↔ NCIC *해설서·연구보고서* = 공공누리 2유형(영리 차단, C등급). 혼동 금지.
 
