@@ -1033,6 +1033,18 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # battle "사람이 판단 시점에 돌린다"와 동형). 판정 소비처는 tests/backend/ops/
         # test_hit_cu_metrics.py(backend 잡 수집 — exit 0/1 양쪽 실측). 검수 UI 결선 별항은
         # ADMIN-07 후속(정본화≠집행 — 모듈 docstring).
+        # EOS-61(2026-09-01): 12월 검증 결론 판정기 — 입력이 EOS-54 HIT·EOS-55 Run 로그·
+        # EOS-60 골든 혼동행렬의 *산출물*이라 위 셋과 같은 이유로 CI 상시 배선 비대상이다.
+        # 오히려 이 도구는 **입력이 없을 때 GO를 내지 않는 것이 기능**이다: 빈 입력에서
+        # 미측정 12종·판정 불가 게이트 5건을 세고 exit 1을 낸다(측정 실패 ≠ 기준 미달).
+        # 판정 로직(Hard Gate 우선·F-Ⅳ 3/2 경계·미측정 비통과·단일 점수 금지)은 backend 잡이
+        # 수집하는 tests/backend/ops/test_validation_scorecard.py가 상시 검증한다 —
+        # "안 도는 코드"가 아니라 "실측이 있을 때 사람이 G5에서 돌리는 판정기"다.
+        "ops.validation_scorecard": (
+            "by-design:12월 검증 결론 판정기(EOS-61) — 입력이 EOS-54/55/60 산출물이라 실측 축적 "
+            "전에는 전 지표 미측정(exit 1)이 설계값. G5(12/31) 판정 시점에 운영자가 "
+            "`--hit-cu-json`·`--qa-matrix-json`으로 생산자 산출을 직접 먹여 돌린다"
+        ),
         "ops.hit_cu_metrics": (
             "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
             "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"

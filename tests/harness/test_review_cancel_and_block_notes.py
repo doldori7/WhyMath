@@ -42,6 +42,8 @@ def _all_events_text(repo: Path) -> str:
 def _add_task(task_id: str, notes: str = "", stage: str = "S1") -> int:
     argv = [
         "add",
+        "--eos-priority",
+        "P2",
         "--id",
         task_id,
         "--title",
@@ -134,6 +136,8 @@ class TestReviewInFlightWiring:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T2-01-overlap-a",
                     "--title",
@@ -152,6 +156,8 @@ class TestReviewInFlightWiring:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T2-02-overlap-b",
                     "--title",

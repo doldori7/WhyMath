@@ -63,6 +63,21 @@ SUBJECTS: tuple[str, ...] = (
     "cross",  # 과목 횡단 (인프라·아키텍처 등)
 )
 
+# EOS 12월 검증 등급 — 계획서 100 §3.5의 P0~P3.
+#   P0 = 없으면 12월 검증이 성립하지 않음 · P1 = 품질을 크게 높이나 우회 가능
+#   P2 = 판정 이후(2027 Q1~Q2) · P3 = 장기 연구·플랫폼
+# 등급은 *태스크의 필드*다 — 별도 대장을 만들지 않는다(이중 진실 원천 금지).
+EOS_PRIORITIES: tuple[str, ...] = ("P0", "P1", "P2", "P3")
+
+# 종결 상태 — 등급 예산·그랜드파더 계산에서 제외한다. 끝난 일은 12월 범위를 점유하지
+# 않고, 끝난 일에 등급을 소급해 붙이는 것은 분류가 아니라 장부 청소다.
+TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled")
+
+# 그랜드파더 만료의 **재확인 지점**(만료 없는 유예 금지의 코드 집행).
+# 기존 태스크의 eos_priority=null 은 이 게이트가 cleared/waived 가 되는 순간 위반이 된다.
+# 날짜가 아니라 기계다 — 관여도 트리아지가 끝나면 분류를 미룰 근거가 사라지기 때문이다.
+EOS_PRIORITY_BACKFILL_GATE = "G-eos-verification-relevance-triage"
+
 STATUSES: tuple[str, ...] = (
     "todo",
     "in_progress",
@@ -109,6 +124,8 @@ class Task:
     layer: str = "backend"
     status: str = "todo"
     priority: int = 3  # 1(최고)~5
+    # EOS 12월 검증 등급 (P0~P3). None = 그랜드파더 — 위 GATE clear 시 위반이 된다.
+    eos_priority: str | None = None
     owner: str = "claude"
     depends_on: list[str] = field(default_factory=list)
     requires_gates: list[str] = field(default_factory=list)
@@ -138,6 +155,11 @@ class Task:
             errors.append(f"{self.id}: status '{self.status}' 미등록")
         if not isinstance(self.priority, int) or not 1 <= self.priority <= 5:
             errors.append(f"{self.id}: priority는 1~5 정수여야 함 (현재 {self.priority!r})")
+        if self.eos_priority is not None and self.eos_priority not in EOS_PRIORITIES:
+            errors.append(
+                f"{self.id}: eos_priority '{self.eos_priority}' 미등록 "
+                f"(허용: {list(EOS_PRIORITIES)} 또는 null)"
+            )
         if self.owner not in OWNERS:
             errors.append(f"{self.id}: owner '{self.owner}' 미등록")
         if self.status == "done" and not self.artifacts:
@@ -251,6 +273,11 @@ class Policy:
     # 24h 근거(실측 199건): 24h 초과 4건(2.0%)·72h 초과 0건. TTL(72h) 재사용은 변별력 0.
     claim_branch_grace_hours: int = 24
     remote_claims: bool = True  # 원격 claim(refs/claims/*) 사용 여부
+    # EOS P0 예산 — 계획서 100 §3.6("P0 약 35~50개")·§7 대시보드("Release P0: ≤ 50").
+    # 예산에 닿으면 P0 신규 등재는 **교환**(One In → One Out · Rule 4)을 요구한다.
+    # 예산 자체가 규칙의 본체다: 교환제만 있고 예산이 없으면 첫 P0부터 교환 대상이 없어
+    # 규칙이 성립하지 않고, 예산만 있고 교환이 없으면 예산에 닿는 순간 등재가 영구 봉쇄된다.
+    eos_p0_budget: int = 50
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -269,6 +296,8 @@ class Policy:
             )
         if not isinstance(self.remote_claims, bool):
             errors.append(f"policy.remote_claims: bool이어야 함 (현재 {self.remote_claims!r})")
+        if not isinstance(self.eos_p0_budget, int) or self.eos_p0_budget < 1:
+            errors.append(f"policy.eos_p0_budget: 1 이상 정수여야 함 (현재 {self.eos_p0_budget!r})")
         return errors
 
 
