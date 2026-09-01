@@ -5,8 +5,9 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 1
+eos_priority: null
 owner: claude
 depends_on: []
 requires_gates: []
@@ -16,10 +17,11 @@ acceptance:
   - "③ 병렬화 적용 — pytest-xdist를 dev 의존성에 추가하고 CI pytest 스텝에 배선한다. 분배 모드는 이 저장소의 순서 의존 오염 이력(OPS-06/07/09 — db.session._engine 전역)을 고려해 선택하고 그 근거를 남긴다."
   - "④ 효과 실측 — 적용 후 실제 CI 잡 소요를 적용 전(29분 41초)과 대조한다. 예측이 아니라 실측 대조다. 예상보다 이득이 작으면 되돌릴지 판단한다."
   - "⑤ 구조적 잔여분 명시 — 이 태스크는 경합 *창*을 줄일 뿐 경합 자체를 없애지 못한다. 근본 해법(merge queue 또는 up-to-date 요구 해제)은 저장소 관리자 설정이라 게이트로 분리한다."
-artifacts: []
+artifacts:
+  - "PR #944 — https://github.com/doldori7/WhyMath/pull/944 · 실 CI A/B: pytest 스텝 1585.46s(직렬 main 1e2e341d) → 855.75s(병렬, 1.85배), 잡 28:53 → 16:48. 계층 커버리지 covered/total 5계층 전부 일치(api 3972/4122 · l1 3777/4334 · l2 1348/1376 · l3 9100/9747 · l4 3984/4170), 게이트 판정 동일. 테스트 결과 양쪽 11268 passed·323 skipped·1 xfailed. 재동기화 후 재실행 16:59 재현. 순서 의존 추가 표본 2회(seed 4183938863·3296005421) 신규 플래키 0."
 paths:
   - ".github/workflows/ci.yml"
   - src/backend/pyproject.toml
-session: claude/git-unshallow-repo-crr6x5
+session: null
 notes: "2026-08-31 세션에서 PR #935 하나를 머지하는 데 재동기화 4회가 필요했던 문제의 원인 규명에서 파생. 원인 2겹: ⓐ브랜치 보호의 Require branches to be up to date(.github/branch-protection-setup.md:52) ⓑ그 게이트가 30분이라 main 전진(15~30분 간격)과 구조적으로 경합한다. 실측 벤치(로컬 4코어 = ubuntu-latest와 동일, 461테스트, 분기 커버리지 켬): 직렬 100.1s → -n 4 62.7s(1.60배), 커버리지 총계 lines 4699/48017·branches 104/11642 완전 일치. 참고 — COVERAGE_CORE=sysmon 가속은 이 샌드박스가 Python 3.11이라 측정 자체가 불가했다(sysmon은 3.12+). 무효가 아니라 미측정이며, CI는 3.12이므로 후속 측정 여지가 있다."
 updated: 2026-09-01
