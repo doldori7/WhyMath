@@ -154,7 +154,7 @@ class TestVerdictPromptIsForgiving:
         assert (outcome.approved, outcome.aborted) == (1, 0)
         assert [e["event_type"] for e in events] == ["started", "finished"]
         # 무효 입력 2회(오타 'x' + 빈 Enter)를 실제로 되물었다.
-        assert rendered.count("a/r/s/q 중 하나여야 합니다") == 2
+        assert rendered.count("a/e/r/s/q 중 하나여야 합니다") == 2
 
     def test_eof_at_the_verdict_prompt_still_aborts_and_stops(self, tmp_path: Path) -> None:
         """되묻기가 EOF까지 삼키면 무한 루프가 된다 — 그 반대임을 동결한다."""
@@ -189,6 +189,45 @@ class TestRejectionRequiresFailureCode:
         assert [e["event_type"] for e in events] == ["started", "aborted"]
         # 판정이 없으므로 판정 파일에도 쓰지 않는다(분모 오염 방지).
         assert not (tmp_path / "verdicts.jsonl").exists()
+
+
+class TestThreeWayVerdict:
+    """EOS-62 3종 판정 — 손질 승인이 무손질 승인으로 뭉개지지 않는다."""
+
+    def test_edit_approval_is_recorded_as_its_own_verdict(self, tmp_path: Path) -> None:
+        outcome, _ = _run(tmp_path, [ReviewItem(slug="cu-a")], "e\nF5\n난이도 조정\n")
+        events = _read_jsonl(tmp_path / "events.jsonl")
+
+        assert (outcome.approved, outcome.approved_with_edit) == (0, 1)
+        assert events[1]["verdict"] == "approved_with_edit"
+        assert events[1]["failure_code"] == "F5"
+
+    def test_edit_approval_failure_code_is_optional(self, tmp_path: Path) -> None:
+        """반려는 코드 필수·수정승인은 선택 — 계약이 갈라 둔 대로."""
+        outcome, _ = _run(tmp_path, [ReviewItem(slug="cu-a")], "e\n\n\n")
+        events = _read_jsonl(tmp_path / "events.jsonl")
+
+        assert outcome.approved_with_edit == 1
+        assert events[1]["verdict"] == "approved_with_edit"
+        assert events[1]["failure_code"] is None
+
+    def test_edit_approval_still_counts_as_a_verdict_for_coverage(self, tmp_path: Path) -> None:
+        """**이 스위트의 핵심 회귀 가드.**
+
+        `verdict`를 `review_status`에 그대로 복사하면 `approved_with_edit` 행이
+        `hit_cu_metrics`의 판정 집합(approved/rejected)에 안 들어가 **적재율 분모에서
+        조용히 빠진다**(review_status_for_verdict docstring이 예고한 바로 그 버그).
+        변환 다리를 거치는지 판독기의 파서로 직접 대조한다.
+        """
+        _run(tmp_path, [ReviewItem(slug="cu-a")], "e\nF5\n\n")
+        rows = _read_jsonl(tmp_path / "verdicts.jsonl")
+
+        assert rows[0]["review_status"] == "approved"  # 노출 축 — 통과다
+        assert rows[0]["verdict"] == "approved_with_edit"  # 계측 축 — 손질 사실 보존
+        verdicts, non_verdict, errors = hit_cu_metrics._parse_verdict_rows(rows)
+        assert verdicts == [("cu-a", "approved")]
+        assert non_verdict == 0  # 분모에서 빠지지 않는다
+        assert errors == []
 
 
 class TestAbortAndResume:

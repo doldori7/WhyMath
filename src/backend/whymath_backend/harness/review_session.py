@@ -115,7 +115,11 @@ from whymath_backend.harness.review_timer import (
     start_review,
 )
 from whymath_backend.schema.enums import GenerationFailureCode
-from whymath_backend.schema.review_timer import ReviewTimerEventType
+from whymath_backend.schema.review_timer import (
+    VERDICT_APPROVED_WITH_EDIT,
+    ReviewTimerEventType,
+    review_status_for_verdict,
+)
 
 __all__ = [
     "ReviewItem",
@@ -128,16 +132,28 @@ __all__ = [
 ]
 
 # 판정 입력 키 — 폐쇄 집합. `q`는 세션 종료(현재 항목은 중단으로 기록된다).
+# 판정 키 — `EOS-62`가 종결 판정을 3종으로 넓혔으므로 입력 경로도 3종을 제공한다. `e`를
+# 빼면 손질 승인이 무손질 승인으로 기록되어 **승인율이 AI-first 실패를 가리는** 바로 그
+# 사각(EOS-62가 없앤 것)이 이 CLI에서 되살아난다.
 _VERDICT_KEYS: dict[str, str] = {
     "a": "approved",
+    "e": VERDICT_APPROVED_WITH_EDIT,
     "r": "rejected",
     "s": "skip",
     "q": "quit",
 }
 
-_PROMPT_VERDICT = "  판정 [a]승인 [r]반려 [s]보류 [q]종료 > "
+_PROMPT_VERDICT = "  판정 [a]승인 [e]수정승인 [r]반려 [s]보류 [q]종료 > "
 _PROMPT_FAILURE = "  반려 사유 F1~F8 (필수·번호만) > "
+_PROMPT_FAILURE_OPTIONAL = "  손질한 축 F1~F8 (선택·Enter로 생략) > "
 _PROMPT_NOTE = "  메모(선택·Enter로 생략) > "
+
+
+class _Skipped:
+    """선택 입력을 사람이 건너뛴 사실 — EOF(`None`)와 구분하기 위한 센티널."""
+
+
+_SKIPPED = _Skipped()
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +176,7 @@ class SessionOutcome:
     """세션 요약 — 무엇이 몇 건 일어났는지. 리포트가 아니라 실행 결과 회계다."""
 
     approved: int
+    approved_with_edit: int
     rejected: int
     aborted: int
     skipped_completed: int
@@ -234,7 +251,7 @@ def append_verdict_jsonl(
     path: Path,
     *,
     slug: str,
-    review_status: str,
+    verdict: str,
     reviewer_id: str,
     review_session_id: uuid.UUID,
     failure_code: GenerationFailureCode | None,
@@ -243,12 +260,21 @@ def append_verdict_jsonl(
     """판정 1건을 JSONL에 **즉시** append한다(호출마다 open→기록→flush→close).
 
     형식은 `ops/hit_cu_metrics`가 이미 먹는 코퍼스 양식(`slug` + `review_status`)이다 —
-    신규 형식을 만들지 않는다. 나머지 키(`reviewer_id`·`review_session_id`·실패코드)는
-    추적용 부가 정보이며 판독기는 무시한다(관용 파서 실측 확인).
+    신규 형식을 만들지 않는다. 나머지 키(`verdict`·`reviewer_id`·`review_session_id`·
+    실패코드)는 추적용 부가 정보이며 판독기는 무시한다(관용 파서 실측 확인).
+
+    **`verdict`를 `review_status`에 그대로 복사하지 않는다** — 둘은 다른 어휘다(EOS-62).
+    `approved_with_edit`을 복사하면 `hit_cu_metrics._parse_verdict_rows`가 approved/rejected
+    만 판정으로 세므로 그 행이 **비판정으로 빠져 적재율 분모가 조용히 줄어든다**. 변환은
+    `schema/review_timer.review_status_for_verdict`가 단일 정본이며, 그 docstring이 예고한
+    "각 호출부가 verdict를 그대로 복사할 것"이 바로 이 자리다. 손질 여부는 별도 `verdict`
+    키로 보존한다(노출 상태를 깎지 않고 계측 축에 남긴다).
     """
+    status = review_status_for_verdict(verdict)
     row: dict[str, Any] = {
         "slug": slug,
-        "review_status": review_status,
+        "review_status": status.value if status is not None else None,
+        "verdict": verdict,
         "reviewer_id": reviewer_id,
         "review_session_id": str(review_session_id),
         "failure_code": failure_code.value if failure_code is not None else None,
@@ -294,20 +320,29 @@ def _prompt_verdict(stream: TextIO, out: TextIO) -> str | None:
         action = _VERDICT_KEYS.get(raw.lower())
         if action is not None:
             return action
-        out.write("  ! a/r/s/q 중 하나여야 합니다.\n")
+        out.write("  ! a/e/r/s/q 중 하나여야 합니다.\n")
 
 
-def _prompt_failure_code(stream: TextIO, out: TextIO) -> GenerationFailureCode | None:
-    """반려 사유 F1~F8을 받을 때까지 되묻는다 — EOF면 None(호출자가 중단으로 처리).
+def _prompt_failure_code(
+    stream: TextIO, out: TextIO, *, required: bool
+) -> GenerationFailureCode | None | _Skipped:
+    """실패코드 F1~F8을 받는다 — 반려는 필수, 수정승인은 선택(계약 §4·EOS-62 ②).
+
+    반환 3종을 구분한다: 코드 / `None`(EOF — 호출자가 중단으로 처리) / `_SKIPPED`(선택
+    모드에서 사람이 빈 줄로 건너뜀). EOF와 "안 적음"을 같은 값으로 접으면 **파이프가 끊긴
+    사고가 정상 입력으로 위장된다**.
 
     자유 텍스트 단독 금지(설계서 §4)의 입력 경로 집행이다. 잘못된 입력은 거부하고 다시 묻되,
     무엇이 유효한지 매번 보여준다(사람을 막다른 골목에 두지 않는다).
     """
     valid = {code.value for code in GenerationFailureCode}
+    prompt = _PROMPT_FAILURE if required else _PROMPT_FAILURE_OPTIONAL
     while True:
-        raw = _read_line(stream, out, _PROMPT_FAILURE)
+        raw = _read_line(stream, out, prompt)
         if raw is None:
             return None
+        if raw == "" and not required:
+            return _SKIPPED
         token = raw.upper()
         if token in valid:
             return GenerationFailureCode(token)
@@ -339,7 +374,7 @@ def run_review_session(
     if skipped:
         stream_out.write(f"재개: 이미 종결된 {skipped}건을 건너뜁니다(이중 계측 방지).\n")
 
-    approved = rejected = aborted = events_written = 0
+    approved = approved_with_edit = rejected = aborted = events_written = 0
     stopped_early = False
     total = len(pending)
 
@@ -360,17 +395,19 @@ def run_review_session(
 
         failure_code: GenerationFailureCode | None = None
         note: str | None = None
-        if action == "rejected":
-            failure_code = _prompt_failure_code(stream_in, stream_out)
-            if failure_code is None:
-                action = None  # EOF — 반려를 완성하지 못했다. 중단으로 남긴다(억지 판정 금지)
+        if action in ("rejected", VERDICT_APPROVED_WITH_EDIT):
+            # 반려는 코드 필수, 수정승인은 선택(권장) — 계약이 그렇게 갈라 둔다.
+            picked = _prompt_failure_code(stream_in, stream_out, required=(action == "rejected"))
+            if picked is None:
+                action = None  # EOF — 판정을 완성하지 못했다. 중단으로 남긴다(억지 판정 금지)
             else:
+                failure_code = None if isinstance(picked, _Skipped) else picked
                 note_raw = _read_line(stream_in, stream_out, _PROMPT_NOTE)
                 note = note_raw or None
 
         elapsed_ms = (monotonic_ns() - t0) // 1_000_000
 
-        if action in ("approved", "rejected"):
+        if action in ("approved", VERDICT_APPROVED_WITH_EDIT, "rejected"):
             verdict: Any = action
             append_event_jsonl(
                 events_path,
@@ -389,7 +426,7 @@ def run_review_session(
             append_verdict_jsonl(
                 verdicts_path,
                 slug=item.slug,
-                review_status=action,
+                verdict=action,
                 reviewer_id=reviewer_id,
                 review_session_id=started.review_session_id,
                 failure_code=failure_code,
@@ -397,6 +434,8 @@ def run_review_session(
             )
             if action == "approved":
                 approved += 1
+            elif action == VERDICT_APPROVED_WITH_EDIT:
+                approved_with_edit += 1
             else:
                 rejected += 1
             continue
@@ -422,6 +461,7 @@ def run_review_session(
 
     return SessionOutcome(
         approved=approved,
+        approved_with_edit=approved_with_edit,
         rejected=rejected,
         aborted=aborted,
         skipped_completed=skipped,
@@ -439,7 +479,10 @@ def _render_summary(
     (2026-08-31 규칙: 앞 단계가 만들어 낸 값에는 자리표시자를 쓰지 않는다).
     """
     out.write("\n=== 검수 세션 요약 ===\n")
-    out.write(f"  승인 {outcome.approved} · 반려 {outcome.rejected} · 중단 {outcome.aborted}\n")
+    out.write(
+        f"  승인 {outcome.approved} · 수정승인 {outcome.approved_with_edit} · "
+        f"반려 {outcome.rejected} · 중단 {outcome.aborted}\n"
+    )
     if outcome.skipped_completed:
         out.write(f"  재개로 건너뜀 {outcome.skipped_completed}\n")
     out.write(f"  이벤트 {outcome.events_written}건 기록 → {events_path}\n")
