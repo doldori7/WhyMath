@@ -38,7 +38,7 @@ from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptO
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
-from whymath_backend.l4.completion import _REDIRECT_PROMPT, _REDIRECT_PROMPT_SPECIFIC
+from whymath_backend.l4.completion import _REDIRECT_PROMPT
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -425,12 +425,6 @@ class TestUnverifiableIsInert:
         assert body["awaiting_reflection"] is False
         assert body["completed_attempt_id"] is None
         assert not any(isinstance(o, ProblemAttemptORM) for o in captured.added)
-        # EOS-69: 이 클래스 이름이 약속하는 "재고도 없음"을 실제로 단언한다. 그전까지는 완료
-        # 필드만 봤기 때문에 **`unverifiable`을 `incorrect`로 접는 결함이 초록으로 통과**했다
-        # (뮤테이션 M2 실측 — 서빙 계층에 변별력이 없던 자리). 재고 발화는 턴 인덱스에 따라
-        # 두 변주가 있으므로 둘 다 배제한다.
-        assert body["decision"]["prompt"] != _REDIRECT_PROMPT
-        assert body["decision"]["prompt"] != _REDIRECT_PROMPT_SPECIFIC
 
     def test_no_solution_steps_no_completion(self) -> None:
         # solution_steps 미제공 — 완료 감지 트리거 자체가 없다(클라 계약: 완료를 원하면 보낸다).

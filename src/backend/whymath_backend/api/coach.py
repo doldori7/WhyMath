@@ -99,6 +99,8 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.verify_final_answer import FinalAnswerState, verify_final_answer
+from whymath_backend.l3.verify_solution import SolutionVerificationResult
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -163,11 +165,6 @@ from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
-from whymath_backend.schema.subject_adapter import (
-    SolutionVerificationView,
-    VerificationState,
-)
-from whymath_backend.subject_registry import get_subject_adapter
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -530,11 +527,8 @@ class _StepVerificationCarry(NamedTuple):
     (CoachResponse)에는 싣지 않는다 — 노출은 기존 solution_coaching 게이트 그대로다.
     """
 
-    verification: SolutionVerificationView | None
-    """단계 검증 원 결과의 **중립 뷰**(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다.
-
-    EOS-69: 구체 타입(`l3.verify_solution.SolutionVerificationResult`) 대신 계약이 정의한 뷰를
-    쓴다. 실제로 담기는 객체는 그대로이며(구조적 타이핑) 읽는 필드도 같다."""
+    verification: SolutionVerificationResult | None
+    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다."""
 
     ocr_gated: bool | None
     """SolutionCoaching.verification_ocr_gated(verification 객체가 아닌 형제 필드) 운반."""
@@ -908,21 +902,15 @@ def _last_solution_step(body: CoachRequest) -> str | None:
 
 async def _final_answer_state(
     session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
-) -> VerificationState | None:
-    """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — 서버 권위 3상태(비노출).
+) -> FinalAnswerState | None:
+    """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — L3 서버 권위 3상태(비노출).
 
     완료 상태머신의 *정답/오답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·
     problem_id 없음·마지막 단계 없음이면 조회조차 하지 않고 None(호출자는 미검증으로 취급). 있으면
     문항을 *무게이트*로 로드해(`_expected_answer_for`의 shadow 게이트와 무관 — 완료는 프로덕션
-    기본 기능) 마지막 단계를 **과목 어댑터**(`evaluate_final_answer`)로 3상태 판정한다.
-
-    **EOS-69: 수학 검증기 직접 호출 → 계약 경유.** 예전에는 `l3.verify_final_answer`를 직접
-    import했다(CORE→ADAPTER 위반). 지금은 조립 지점이 심은 과목 어댑터의 Protocol 메서드만
-    부른다 — 이 파일은 어느 과목이 답하는지 모른다. 판정 자체는 같은 함수가 하므로 동작 불변.
-
-    **기대정답 비노출(불변)**: `Problem.answer`는 이 함수 밖으로 결코 흘러나가지 않는다. 문항
-    객체는 어댑터에 *넘기기만* 하고, 돌려받는 것은 3상태 + 사유뿐이며 그중 상태만 반환한다
-    (사유도 버린다 — 호출자가 쓰지 않는 값을 흘리지 않는다).
+    기본 기능) 마지막 단계를 `verify_final_answer`로 3상태 판정한다. 기대정답(`Problem.answer`)은
+    이 함수 밖으로 결코 흘러나가지 않는다(verify_final_answer가 상태·사유만 반환·사유엔 학생
+    원문만 반향).
     """
     if not get_settings().l4_solution_completion_enabled or problem_id is None:
         return None
@@ -932,8 +920,8 @@ async def _final_answer_state(
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
         return None  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
-    evaluation = get_subject_adapter().evaluate_final_answer(problem, last_step)
-    return evaluation.state
+    result = verify_final_answer(last_step, problem)
+    return result.state
 
 
 async def _complete_problem(
@@ -1058,10 +1046,8 @@ async def _resolve_completion(
     final_incorrect = False
     if prior == 0 and not already_completed:
         state = await _final_answer_state(session, problem_id, body)
-        # 계약 3상태(pass/fail/unverifiable) — `unverifiable`은 둘 다 False다(사변에 false
-        # redirect 금지). 3상태를 2상태로 접지 않는 지점이 여기라 명시 비교로 남긴다.
-        final_correct = state == "pass"
-        final_incorrect = state == "fail"
+        final_correct = state is FinalAnswerState.correct
+        final_incorrect = state is FinalAnswerState.incorrect
 
     cd = decide_completion(
         prior_review_remaining=prior,
@@ -1316,7 +1302,7 @@ async def _log_verify_event(
     student_solution: str | None,
     mode: str | None = None,
     persona: str | None = None,
-    verification: SolutionVerificationView | None = None,
+    verification: SolutionVerificationResult | None = None,
     verification_ocr_gated: bool | None = None,
 ) -> bool | None:
     """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
@@ -1374,10 +1360,10 @@ async def _log_verify_event(
 
     # MATH-03: 보류 사유 분포(폐쇄 enum 코드 → 건수)를 문자열 키로 접는다 — 값 운반만(재계산 0)·
     # 비식별(코드·정수뿐). None=검증 미실행(구판 NULL 회계)·{}=검증 실행·보류 0.
-    # EOS-69: 코드 enum을 Core가 풀지 않는다(`code.value`는 어댑터 타입을 아는 것) —
-    # 검증기가 이미 문자열 키로 낸 표면(`unverifiable_reason_counts`)을 그대로 받는다.
     unverifiable_by_reason = (
-        dict(verification.unverifiable_reason_counts) if verification is not None else None
+        {code.value: count for code, count in verification.unverifiable_by_reason.items()}
+        if verification is not None
+        else None
     )
     # MATH-03 ④ 분포 리포트 — 분모 없는 0 금지: "전이 N건 중 보류 M건" 형식(보류 0건도 분모와
     # 함께 남긴다). parse_error 비중이 곧 MATH-01(표기 권위)·자연표기 확장(gap review §5-③)의

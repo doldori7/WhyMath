@@ -72,30 +72,19 @@ def test_contract_signatures_have_no_math_tokens() -> None:
     assert leaks == [], f"계약 시그니처에 수학 전용 개념 누출: {leaks}"
 
 
-def test_contract_exposes_only_the_agreed_capabilities() -> None:
-    """계약 표면을 동결한다 — 늘어나면 이 테스트가 먼저 막는다.
+def test_contract_exposes_only_the_three_agreed_capabilities() -> None:
+    """계약 표면은 3메서드로 동결한다 — 늘어나면 이 테스트가 먼저 막는다.
 
-    v1(EOS-66) 3메서드 → v2(EOS-69) 6메서드. 늘린 3건은 계약 docstring의 추가 기준
-    (a) 과목 보편성 (b) 실재 위임 대상 (c) 실재 Core 호출부를 **전부** 통과했고, 그 판정
-    근거가 거기 적혀 있다. 여기 단언을 고치는 것이 곧 그 판정을 남기는 행위다.
-
-    `explain`이 여전히 없는 것은 누락이 아니라 판정이다 — 위임할 공개 진입점이 0건이라
-    기준 (b)를 통과하지 못한다(넣으면 `NotImplementedError` 좌석만 는다).
+    `explain`이 없는 것은 누락이 아니라 판정이다(위임할 공개 진입점 0건 — 모듈 docstring).
+    추가하려면 "이 능력이 Physics·History에도 반드시 있는가"를 통과해야 하고, 그 판정을
+    이 단언 수정과 함께 남기게 한다.
     """
     methods = {
         name
         for name, _ in inspect.getmembers(SubjectAdapter, inspect.isfunction)
         if not name.startswith("_")
     }
-    assert methods == {
-        "evaluate_answer",
-        "evaluate_final_answer",
-        "check_equivalence_claim",
-        "check_content_seal",
-        "detect_misconception",
-        "validate_problem",
-    }
-    assert "explain" not in methods, "위임 대상 없는 메서드를 계약에 넣지 않는다(기준 b)"
+    assert methods == {"evaluate_answer", "detect_misconception", "validate_problem"}
 
 
 def test_math_adapter_satisfies_protocol_at_runtime() -> None:
@@ -164,121 +153,3 @@ async def test_validate_problem_unknown_kind_is_unverifiable_not_fail() -> None:
     assert isinstance(result, ProblemValidation)
     assert result.state == "unverifiable"
     assert result.reason is not None
-
-
-# ──────────────────────────────────────────────────────────────────────
-# EOS-69 v2 — 새 3메서드의 위임·3상태 보존·정답 비노출
-# ──────────────────────────────────────────────────────────────────────
-
-
-class _ProblemStub:
-    """`ProblemAnswerKeyView`를 구조적으로 만족하는 최소 스텁(ORM 없이 판정 경로를 탄다)."""
-
-    def __init__(
-        self,
-        *,
-        answer: str | None,
-        choices: list[str] | None = None,
-        multiple_answers: dict[str, object] | None = None,
-    ) -> None:
-        self.answer = answer
-        self.choices = choices
-        self.question_format = None
-        self.answer_format = None
-        self.multiple_answers = multiple_answers
-
-
-def test_final_answer_correct_maps_to_pass_and_records_its_axis() -> None:
-    result = MathSubjectAdapter().evaluate_final_answer(_ProblemStub(answer="3"), "3")
-    assert result.state == "pass"
-    # 조건 대입 축과 *다른* 축이어야 한다 — 같은 이름을 쓰면 근거가 뭉개진다.
-    assert result.checked_axes == ("answer_key_equivalence",)
-
-
-def test_final_answer_wrong_maps_to_fail_and_claims_no_axis() -> None:
-    result = MathSubjectAdapter().evaluate_final_answer(_ProblemStub(answer="3"), "5")
-    assert result.state == "fail"
-    assert result.checked_axes == ()
-
-
-def test_final_answer_without_answer_key_is_unverifiable_not_fail() -> None:
-    """채점 근거가 없는 것은 '학생이 틀림'이 아니다 — 3상태의 세 번째 칸이 지키는 것."""
-    result = MathSubjectAdapter().evaluate_final_answer(_ProblemStub(answer=None), "3")
-    assert result.state == "unverifiable"
-    assert result.state != "fail"
-
-
-def test_final_answer_never_echoes_the_expected_answer() -> None:
-    """**정답 비노출 동결** — 판정 봉투 어디에도 기대정답이 실리지 않는다.
-
-    이 봉투는 Core를 거쳐 로그·이벤트·응답으로 흐를 수 있다. 어댑터가 사유에 기대정답을
-    반향하는 순간 무인증 표면으로 정답이 새는 경로가 생긴다. 오답·검증불가 양쪽을 본다
-    (correct는 애초에 reason이 None이라 새어도 안 새는 것처럼 보이기 때문).
-    """
-    secret = "4242sentinel"
-    for student in ("5", "", "판정불가한한국어문장"):
-        result = MathSubjectAdapter().evaluate_final_answer(
-            _ProblemStub(answer=secret, multiple_answers={"alt": "9999sentinel"}), student
-        )
-        dumped = repr(result.model_dump())
-        assert secret not in dumped, f"기대정답이 판정 봉투로 새어 나왔다: {dumped}"
-        assert "9999sentinel" not in dumped, f"복수 정답 후보가 새어 나왔다: {dumped}"
-
-
-def test_final_answer_multiple_choice_path_survives_the_contract() -> None:
-    """선택지·복수정답을 *뷰로* 넘기므로 객관식 경로가 살아 있다(값 복사였다면 죽는 자리).
-
-    `ProblemStatement`(값 봉투)로 옮겨 담았다면 `choices`가 빠져 객관식이 일반 경로로
-    떨어졌을 것이다 — 뷰를 택한 이유가 이것이라 그 사실을 동결한다.
-    """
-    problem = _ProblemStub(answer="2", choices=["1", "2", "3"])
-    assert MathSubjectAdapter().evaluate_final_answer(problem, "3").state == "fail"
-    assert MathSubjectAdapter().evaluate_final_answer(problem, "2개").state == "pass"
-
-
-def test_equivalence_claim_true_false_and_undecided_are_three_distinct_states() -> None:
-    """4상태 → 3상태 매핑에서 접히는 것은 *두 종류의 모름*뿐임을 동결한다."""
-    adapter = MathSubjectAdapter()
-    assert adapter.check_equivalence_claim("(2)**2 - 4*(2) + 3", "-1").state == "pass"
-    assert adapter.check_equivalence_claim("1", "2").state == "fail"
-    # 파싱 불가 — 반증이 아니라 판정 불가. fail로 접으면 "읽지 못함"이 "틀림"이 된다.
-    assert adapter.check_equivalence_claim("", "1").state == "unverifiable"
-    assert adapter.check_equivalence_claim("$$$", "1").state == "unverifiable"
-    # 미결정(undecidable) — *읽기는 했는데* 증명도 반증도 못 한 경우. parse_error와 사유가
-    # 다르므로 별도 사례가 필요하다: 앞의 두 줄만으로는 undecidable→fail 결함을 못 잡는다
-    # (뮤테이션 M1 실측 — 앵커를 parse_error로만 잡아 두면 검사에 변별력이 없다).
-    assert adapter.check_equivalence_claim("sqrt(x**2)", "x").state == "unverifiable"
-    assert adapter.check_equivalence_claim("a", "b + 1").state == "unverifiable"
-
-
-def test_equivalence_claim_pass_records_axis_and_hides_no_verdict_name() -> None:
-    adapter = MathSubjectAdapter()
-    passed = adapter.check_equivalence_claim("2*x", "x + x")
-    assert passed.state == "pass"
-    assert passed.checked_axes == ("symbolic_identity",)
-    assert passed.reason is None
-    failed = adapter.check_equivalence_claim("1", "2")
-    assert failed.reason == "not_identity", "사유는 판정 taxonomy를 그대로 옮긴다(새 문장 금지)"
-
-
-def test_content_seal_passes_when_there_is_nothing_to_seal() -> None:
-    """봉인 대상이 없는 원문은 검사 대상이 아니다 — 위반으로 만들지 않는다."""
-    assert MathSubjectAdapter().check_content_seal("수식이 없는 설명 문장", ["아무 텍스트"]) is None
-
-
-def test_content_seal_detects_alteration_and_points_at_the_offending_text() -> None:
-    source = "이차방정식 3x^2 - 7x + 4 = 0 을 풀어라."
-    intact = "3x^2 - 7x + 4 = 0 을 생각해 봅시다."
-    altered = "3x^2 - 7x + 5 = 0 을 생각해 봅시다."
-    breach = MathSubjectAdapter().check_content_seal(source, [intact, altered])
-    assert breach is not None
-    assert breach.reason == "EQUATION_ALTERED"
-    # 인덱스는 호출자가 넘긴 순서 그대로여야 한다(호출자가 자기 어휘로 되짚는 유일한 실마리).
-    assert breach.derived_index == 1
-
-
-def test_content_seal_ignores_texts_that_do_not_carry_the_notation() -> None:
-    """표기를 싣지 않은 조각은 검사 대상 밖 — 있지도 않은 훼손을 만들지 않는다."""
-    source = "이차방정식 3x^2 - 7x + 4 = 0 을 풀어라."
-    breach = MathSubjectAdapter().check_content_seal(source, ["제목", "3x^2 - 7x + 4 = 0"])
-    assert breach is None

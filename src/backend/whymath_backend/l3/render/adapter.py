@@ -29,7 +29,6 @@ from typing import Literal, Protocol, runtime_checkable
 from whymath_backend.l3.pregenerate.models import ValidationSignal
 from whymath_backend.l3.render.dsl import ConceptDSL
 from whymath_backend.schema.enums import PedagogyStrategy
-from whymath_backend.schema.subject_adapter import SubjectAdapter
 
 # 렌더 세그먼트 종류 — 화면 문자열이 아니라 *구조 태그*다(CLAUDE.md "표현≠의미").
 # 클라(Flutter·웹·PDF)가 각자 이 종류를 보고 자기 방식으로 렌더한다.
@@ -58,21 +57,14 @@ class RenderSegment:
 
 @dataclass(frozen=True, slots=True)
 class RenderContext:
-    """렌더 1회의 부수 입력 — 치환 바인딩·로케일·과목 어댑터(선택).
+    """렌더 1회의 부수 입력 — 치환 바인딩·로케일.
 
     `bindings`는 light render의 치환 자리(이름·숫자·상황)다. 비어 있어도 유효하다(대부분의 개념은
     DSL 본문만으로 렌더된다). 학생 식별자는 담지 않는다 — 렌더는 개인정보를 모른다.
-
-    `subject`는 렌더 산출 검증(평가 재료 정답·표기 봉인)을 수행할 **과목 어댑터**다(EOS-69).
-    렌더 자체는 과목을 모르지만 *검증*은 과목만 할 수 있으므로, 그 능력을 컨텍스트로 주입받는다.
-    `None`이면 조립 지점(`whymath_backend.subject_registry`)이 심어 둔 어댑터를 쓴다 — 명시
-    주입은 테스트·다과목 배포의 결정론 좌석이고, 기본값은 기존 호출부의 시그니처를 지키기 위한
-    것이다(검증을 조용히 끄는 경로는 만들지 않는다 — None이어도 검증은 반드시 수행된다).
     """
 
     bindings: dict[str, str] = field(default_factory=dict)
     locale: str = "ko-KR"
-    subject: SubjectAdapter | None = None
 
 
 @dataclass(frozen=True, slots=True)

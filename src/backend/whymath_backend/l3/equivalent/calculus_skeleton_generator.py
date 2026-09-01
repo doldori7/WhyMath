@@ -37,7 +37,6 @@ from typing import Literal
 
 import sympy
 
-from whymath_backend.korean.josa import eul_reul
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
@@ -46,6 +45,7 @@ from whymath_backend.l3.equivalent.difficulty import (
     estimate_difficulty_extremum_irrational,
 )
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,

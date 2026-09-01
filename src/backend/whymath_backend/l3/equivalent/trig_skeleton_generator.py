@@ -33,11 +33,11 @@ from dataclasses import dataclass
 
 import sympy
 
-from whymath_backend.korean.josa import i_ga
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import i_ga
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,

@@ -57,8 +57,7 @@ S3-09 AI 검수(720문)가 rephrased 코퍼스에서 확정한 **발문 텍스�
 `rephrase.classify_invariance_failure`의 ⑤축(REASON_QUESTION_HYGIENE). ⑦(무변화·QUAL-03)은 같은
 함수 안에서 별도 게이트 축(REASON_NO_CHANGE 재사용)으로 분리 매핑된다 — 상세는 그 함수 docstring.
 
-7계층: L3 지역(어문 유틸 `korean.josa`만 import — EOS-69로 `l3/equivalent/`에서 최하위
-패키지로 이사·표준 라이브러리 외 의존 0·순수 함수).
+7계층: L3 지역(동일 패키지 josa만 import·표준 라이브러리 외 의존 0·순수 함수).
 """
 
 from __future__ import annotations
@@ -66,7 +65,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from whymath_backend.korean.josa import TailReading, tail_reading
+from whymath_backend.l3.equivalent.josa import TailReading, tail_reading
 
 __all__ = [
     "REASON_DANGLING_EXPONENT_PHRASE",

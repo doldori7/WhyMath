@@ -1,4 +1,4 @@
-"""SubjectAdapter — EOS Core가 과목에 요구하는 최소 행위 계약 (EOS-66 v1 · EOS-69 v2).
+"""SubjectAdapter — EOS Core가 과목에 요구하는 최소 행위 계약 (EOS-66 · Subject Contract v1).
 
 계획서 100 §3.9의 원칙: **과목마다 반드시 존재하는 능력만 계약에 넣는다.** `evaluateAnswer()`는
 공통성이 높지만 `renderEquation()`은 Math 전용이므로 계약이 아니다. 이 모듈은 그 선을 코드로
@@ -18,82 +18,32 @@ Core가 "이 문자열은 이차방정식"임을 알게 되는 순간 경계가 
 `if problem.type == "quadratic"` 금지). 반대로 문자열 자체는 과목 중립이다 — Physics 어댑터는
 같은 필드에 물리 관계식을 담고 자기 방식으로 해석한다.
 
-## 집행 — 이 계약을 경유하는 서빙 코드 경로 (EOS-69로 배선됨)
+## ⚠️ 정본화 ≠ 집행 — 이 계약을 경유하는 서빙 코드 경로는 **현재 0개**다
 
-EOS-66이 이 파일을 만들었을 때 계약을 경유하는 서빙 경로는 **0개**였다(그 사실을 이 자리에
-경고로 적어 두었다). `EOS-69`가 그 0을 없앴다 — 아래가 현재 이 계약을 실제로 부르는 Core
-코드다(2026-09-01 실측·`docs/architecture/eos_core_adapter_boundary.md` §4 A분류의 해소):
+이 파일이 있다고 해서 경계가 집행되는 것이 아니다. 2026-08-31 기준 실측:
 
-| Core 호출부 | 계약 메서드 | 이전(직접 import) |
-|---|---|---|
-| `api.coach._final_answer_state` | `evaluate_final_answer` | `l3.verify_final_answer` |
-| `l3.render.adapters._assessment_signal` | `evaluate_answer` | `l3.verify_answer.verify_answer` |
-| `l3.render.adapters._seal_signal` | `check_content_seal` | `l3.equivalent.rephrase.*` |
-| `l3.pedagogy.slot_generator` | `check_equivalence_claim` | `l3.symbolic_equivalence` |
+- `api.coach`·`l6.blueprint.assembly`·`l3.render.adapters`·`l3.pedagogy.slot_generator`는
+  여전히 `l3.verify_*`·`l3.symbolic_equivalence`를 **직접 import**한다(11건 —
+  `docs/architecture/eos_core_adapter_boundary.md` §4 A분류).
+- 그 11건을 이 Protocol 호출로 바꾸는 **경유 배선은 후속 태스크**이며, 이 태스크의 범위가 아니다.
+- 정적 강제(Core→Adapter import 금지)는 `EOS-67`이 import-linter로 세운다.
 
-구현체는 **조립 지점**(`whymath_backend.subject_registry`)에서만 주입된다 — 호출부는 이
-Protocol 타입만 알고 `l4.subject_adapter_math`를 import하지 않는다(그것이 곧 EOS-67 계약이
-잡는 위반이다). 정적 강제는 `lint-imports`, 실측은 경계 스캔 스크립트가 판정한다.
+따라서 이 계약의 존재를 근거로 "Core가 수학을 모른다"고 말하면 안 된다. 지금 성립한 것은
+**"수학을 모르고도 말할 수 있는 문장이 무엇인지"의 정의**까지다.
 
-**여전히 성립하지 않는 것**: "Core가 수학을 전혀 모른다"는 아직 아니다. MIXED 34모듈·`api.ocr`
-계열은 여전히 수학 페이로드를 안다(경계 문서 §4 한계). 성립한 것은 **A분류 진성 위반 경로가
-계약을 경유한다**는 것까지다.
+## v1이 3메서드인 이유 (`explain` 미포함)
 
-## 계약 표면의 성장 기록 — v1 3메서드 → v2 6메서드 (`explain`은 여전히 미포함)
-
-**메서드를 늘리는 것은 비용이다.** 계약이 커질수록 새 과목 어댑터가 채워야 할
-`NotImplementedError` 좌석이 늘고, "선언은 있는데 배선은 없다"가 하나씩 는다. 그래서 추가
-기준을 셋으로 못 박는다 — 셋을 **전부** 통과해야 계약에 들어온다:
-
-  (a) **과목 보편성** — Physics·Chemistry·History에도 *반드시* 존재하는 능력인가?
-      (계획서 100 §3.9. `render_equation()`처럼 Math 전용이면 어댑터 내부 공개 API로 둔다.)
-  (b) **실재 위임 대상** — 오늘 이 저장소에 위임할 공개 함수가 있는가? (없으면 좌석만 는다.)
-  (c) **실재 Core 호출부** — 오늘 이 계약을 부를 Core 코드가 있는가? (없으면 소비처 0 추상.)
-
-v1(EOS-66) 3메서드 — `evaluate_answer`·`detect_misconception`·`validate_problem`.
-v2(EOS-69)가 더한 3메서드와 그 근거:
-
-- **`evaluate_final_answer`** — "학생이 낸 *최종 답*이 이 문항의 정답과 같은가."
-  (a) 채점이 있는 모든 과목의 가장 기본 능력이다(물리 `3.2 m/s`, 화학 균형반응식, 역사 연도).
-  (b) `l3.verify_final_answer.verify_final_answer`. (c) `api.coach._final_answer_state`.
-  **`evaluate_answer`와 다른 질문이다** — 저쪽은 "답이 문항의 *조건*을 만족하는가"(제약 충족),
-  이쪽은 "답이 *정답 키*와 같은가"(정답 대조). 조건이 없는 문항(객관식·단답)에는 저쪽을 쓸 수
-  없고, 정답 키가 없는 생성 문항에는 이쪽을 쓸 수 없다. 하나로 합치면 둘 중 하나가 거짓말이 된다.
-
-- **`check_equivalence_claim`** — "콘텐츠가 스스로 주장하는 등가 관계가 참인가."
-  (a) 자체 저작 콘텐츠를 검수하는 파이프라인은 과목을 가리지 않고 이 질문을 한다(물리 단위
-  환산 주장, 화학 몰 계산 주장, 역사 "임진왜란 = 1592년"). 주장의 *표현*은 과목 것이고, 참/거짓
-  판정도 과목 것이다 — Core는 묻기만 한다. (b) `l3.symbolic_equivalence.identity_status`.
-  (c) `l3.pedagogy.slot_generator.verify_slot_payload`(생성 슬롯의 `sympy_verified` 표기).
-
-- **`check_content_seal`** — "원문에서 파생된 텍스트가 과목 표기 봉인을 지켰는가."
-  (a) 모든 과목에는 *변형되면 의미가 바뀌는 정형 표기*가 있다(수식·단위·화학식·연도). 렌더·
-  재서술이 그것을 훼손했는지 판정할 수 있는 것은 자기 표기를 아는 과목뿐이다. (b)
-  `l3.equivalent.rephrase.extract_equation` + `classify_invariance_failure`.
-  (c) `l3.render.adapters._seal_signal`.
-
-**여전히 넣지 않은 것 — `explain`**: EOS-66이 판정한 사유가 그대로 유효하다. 위임할 공개
-진입점이 0건이다(`l1`~`l6` 전수 grep — 공개 `explain*` 함수 없음. 설명 생성기는 전부 스켈레톤
-생성기 내부의 비공개 `_explanation()`이고, 연령별 설명 생성은 EOS-53 crosswalk가 C9 '신규'로
-판정). 기준 (b)를 통과하지 못하므로 넣지 않는다 — 생성 축이 착지한 뒤 별도 태스크가 다룬다.
-
-## 결과 *타입* 의존을 위한 중립 뷰 (EOS-69)
-
-계약이 흡수해야 할 Core→Adapter 의존이 전부 "메서드 호출"인 것은 아니다. `l6.blueprint.
-assembly.partial_credit`은 수학 함수를 *부르지 않고* `SolutionVerificationResult`를 **결과
-타입으로 소비**한다(단계별 3상태를 읽어 부분점수를 매긴다). 이런 의존은 Protocol 메서드로
-흡수되지 않는다 — 필요한 것은 *중립 결과 타입*이다.
-
-그래서 이 파일은 `StepVerificationView`·`SolutionVerificationView`(구조적 Protocol)를 둔다.
-**변환기가 아니라 뷰인 이유**: 변환(어댑터 타입 → 중립 모델 복사)을 넣으면 그 변환 함수가
-3상태를 접을 수 있는 자리가 하나 새로 생긴다. 뷰는 같은 객체를 *덜 보는* 것뿐이라 접을 자리
-자체가 없다. 선례는 이 저장소 안에 있다 — `l3.verify_final_answer.ProblemAnswerView`가 db
-계층을 import하지 않으려고 쓰는 것과 같은 기법이다(구조적 타이핑).
+계획서 100 §3.9는 `explain`을 후보로 들지만, 저장소 실측 결과 **위임할 공개 진입점이 0건**이다
+(`l1`~`l6` 전수 grep — 공개 `explain*` 함수 없음. 설명 생성기는 전부 스켈레톤 생성기 내부의
+비공개 `_explanation()`이고, 연령별 설명 생성은 EOS-53 crosswalk가 C9 **'신규'**로 판정했다).
+없는 것을 계약에 넣으면 `NotImplementedError` 좌석이 생겨 "선언≠배선"이 하나 늘 뿐이다.
+v1은 **위임 대상이 실재하는 3메서드로 시작**하고, `explain`은 생성 축이 착지한 뒤 별도 태스크로
+계약에 추가한다.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Literal, Mapping, Protocol, Sequence, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -180,146 +130,12 @@ class MisconceptionSignal(BaseModel):
     )
 
 
-class ContentSealBreach(BaseModel):
-    """`check_content_seal` 결과 — 봉인 위반 1건. 과목 중립.
-
-    `reason`은 **과목이 정의하는 폐쇄 사유 코드**다(Core는 값을 해석하지 않고 로그·신호에
-    실어 나르기만 한다). `derived_index`는 위반이 발견된 파생 텍스트의 인덱스로, Core가
-    "어느 조각이 깨졌는지"를 자기 어휘(세그먼트 종류 등)로 되짚을 수 있게 한다 — 인덱스는
-    과목 지식이 아니라 Core가 넘긴 리스트의 위치다.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    reason: str = Field(description="봉인 위반 사유 코드 — 과목이 정의하는 어휘(Core에 불투명).")
-    derived_index: int = Field(
-        ge=0,
-        description="위반이 난 파생 텍스트의 인덱스(호출 시 넘긴 순서 그대로).",
-    )
-
-
-STEP_STATE_CORRECT = "correct"
-STEP_STATE_INCORRECT = "incorrect"
-STEP_STATE_UNVERIFIABLE = "unverifiable"
-"""단계 검증 3상태 어휘 — `StepVerificationView.state`가 갖는 폐쇄 값.
-
-`VerificationState`(pass/fail/unverifiable)와 **어휘가 다른 이유**: 단계 검증이 묻는 것은
-"이 변형이 동치인가"이지 "답이 맞았는가"가 아니라, 저장소가 처음부터 correct/incorrect를
-써 왔다. 여기서 pass/fail로 번역하면 번역기가 하나 생기고, 번역기는 3상태를 접을 수 있는
-자리다. 어휘를 그대로 두고 Core가 비교에 쓸 상수만 중립 좌석에 둔다(문자열 리터럴이 Core
-코드에 흩어지는 것도 막는다).
-"""
-
-
-@runtime_checkable
-class StepVerificationView(Protocol):
-    """단계(전이) 검증 결과 1건에 대한 **중립 뷰** — Core가 볼 수 있는 최소 표면.
-
-    Core가 알아야 하는 것은 "이 전이가 correct/incorrect/unverifiable 중 무엇인가"뿐이다.
-    사유 문장·증거 가중치·단계 종류처럼 과목·검증기 내부 개념은 이 뷰에 없다 — 없으면 Core가
-    그것으로 분기할 수 없다.
-
-    `state`를 `str`로 선언한 이유: 어댑터 쪽 구현이 `str` 혼합 Enum이라(값이 곧 문자열)
-    구조적으로 그대로 만족한다. 읽기 전용 property라 공변이므로 Enum 멤버가 그대로 들어온다.
-    비교는 반드시 위 `STEP_STATE_*` 상수와 한다(리터럴 산포 금지).
-    """
-
-    @property
-    def state(self) -> str:
-        """3상태 — `STEP_STATE_CORRECT`/`_INCORRECT`/`_UNVERIFIABLE` 중 하나."""
-        ...
-
-
-@runtime_checkable
-class SolutionVerificationView(Protocol):
-    """여러 단계 연쇄 검증 집계에 대한 **중립 뷰**.
-
-    `l6.blueprint.assembly.partial_credit`(부분점수)·`api.coach`(검산 이벤트 적재)가 소비한다.
-    둘 다 수학 함수를 부르지 않고 *결과를 읽기만* 하므로, 계약이 줘야 하는 것은 메서드가 아니라
-    타입이다.
-
-    **3상태를 접지 않는 형태로 설계했다**: `n_unverifiable`과 `n_incorrect`가 별개 필드이고
-    `steps[i].state`가 전이별 3상태를 그대로 들고 있다. 어느 소비자도 "검증 불가"를 "오답"으로
-    합산할 수 없다 — 합치려면 두 필드를 일부러 더해야 하고, 그건 코드에 드러난다.
-    """
-
-    @property
-    def steps(self) -> Sequence[StepVerificationView]:
-        """전이별 결과(순서 보존·길이 == `n_transitions`)."""
-        ...
-
-    @property
-    def n_correct(self) -> int:
-        """correct 전이 수."""
-        ...
-
-    @property
-    def n_incorrect(self) -> int:
-        """incorrect 전이 수 — **검증 불가와 합치지 않는다**."""
-        ...
-
-    @property
-    def n_unverifiable(self) -> int:
-        """검증 불가 전이 수 — "기계가 판정 못 함"이지 "학생이 틀림"이 아니다."""
-        ...
-
-    @property
-    def n_transitions(self) -> int:
-        """총 전이 수. 세 카운트의 합과 같다(전이 0이면 '검증할 것이 없음'이지 실패가 아니다)."""
-        ...
-
-    @property
-    def unverified_ratio(self) -> float:
-        """검증 불가 비율. 전이 0이면 0.0."""
-        ...
-
-    @property
-    def first_incorrect_index(self) -> int | None:
-        """첫 incorrect 전이의 인덱스(없으면 None)."""
-        ...
-
-    @property
-    def unverifiable_reason_counts(self) -> Mapping[str, int]:
-        """검증 불가 사유 코드 → 건수(값 합 == `n_unverifiable`).
-
-        키는 **과목이 정의하는 폐쇄 코드 문자열**이고 Core는 해석하지 않는다(집계·적재만).
-        어댑터가 이미 문자열로 내주므로 Core가 Enum을 풀 일이 없다 — Core가 `code.value`를
-        부르는 순간 그것은 어댑터 타입을 아는 것이다.
-        """
-        ...
-
-
-@runtime_checkable
-class ProblemAnswerKeyView(Protocol):
-    """**정답 키를 보유한 문항**에 대한 중립 뷰 — `evaluate_final_answer` 입력.
-
-    왜 `ProblemStatement`(값 봉투)가 아니라 뷰인가: 최종답 대조는 정답 본문뿐 아니라 선택지·
-    문항 형식·복수 정답까지 봐야 정확하다. 이것들을 값 봉투로 복사하면 (ⓐ) 복사 누락이 곧
-    판정 저하가 되고 (ⓑ) **정답이 새 봉투에 한 번 더 실린다** — 봉투는 응답·로그로 흘러갈 수
-    있는 물건이라 정답 사본을 늘리는 것 자체가 노출 위험이다. 뷰는 Core가 이미 손에 쥔 객체를
-    *덜 보는* 것뿐이라 사본이 생기지 않는다.
-
-    필드는 전부 과목 중립 개념이다(정답·선택지·문항 형식·답 형식·복수 정답). 값은 과목이
-    정의하고 Core는 해석하지 않는다 — 형식 enum을 `Any`로 둔 이유도 그것이다.
-
-    ⚠️ **정답 비노출 계약**: 이 뷰를 받은 어댑터는 판정 상태와 사유만 돌려주며, 사유에
-    기대정답 원문을 싣지 않는다. Core는 정답을 *넘기기만* 하고 *돌려받지 않는다*.
-    """
-
-    answer: str | None
-    choices: list[str] | None
-    question_format: Any
-    answer_format: Any
-    multiple_answers: dict[str, Any] | None
-
-
 @runtime_checkable
 class SubjectAdapter(Protocol):
-    """모든 과목이 EOS Core에 제공해야 하는 최소 능력 6종 (v1 3종 + EOS-69 3종).
+    """모든 과목이 EOS Core에 제공해야 하는 최소 능력 3종.
 
-    **여기에 메서드를 추가하기 전의 질문**(계획서 100 §3.9 + 모듈 docstring의 추가 기준
-    (a)(b)(c)): 이 능력이 Physics·Chemistry·History에도 *반드시* 존재하는가? 위임할 실재
-    함수가 오늘 있는가? 부를 Core 코드가 오늘 있는가? 하나라도 아니면 계약이 아니라 어댑터
+    **여기에 메서드를 추가하기 전의 질문**(계획서 100 §3.9): 이 능력이 Physics·Chemistry·
+    History에도 *반드시* 존재하는가? 아니면 Math 전용인가? 후자면 계약이 아니라 어댑터
     내부 공개 API로 둔다.
 
     금지 예: `render_equation()`·`parse_latex()`·`simplify_expression()` — 전부 Math 전용이다.
@@ -335,50 +151,6 @@ class SubjectAdapter(Protocol):
 
         `answer`는 변수명 → 값 문자열 치환맵이다(단일 답은 항목 1개). 값의 *의미*는 과목이
         정한다 — Core는 매핑 구조만 안다.
-        """
-        ...
-
-    def evaluate_final_answer(
-        self, problem: ProblemAnswerKeyView, student_answer: str | None
-    ) -> AnswerEvaluation:
-        """학생의 *최종 답*이 문항의 정답 키와 같은지 3상태로 판정한다 (EOS-69).
-
-        `evaluate_answer`가 "조건을 만족하는가"라면 이쪽은 "정답과 같은가"다(모듈 docstring의
-        추가 근거 참조). 문항은 값 봉투가 아니라 **뷰**로 받는다 — 정답 사본을 새 객체에
-        옮겨 담지 않기 위해서다.
-
-        **정답 비노출**: 반환값에 기대정답 원문을 싣지 않는다. `reason`은 판정 사유(진단용)일
-        뿐이며 정답을 반향해서는 안 된다 — 이 봉투는 Core를 거쳐 로그·이벤트로 흐를 수 있다.
-
-        판정 불가(정답 미보유·파싱 불가·빈 입력)는 `unverifiable`이다. **`fail`로 접지
-        않는다** — 서버가 채점 근거를 못 찾은 것을 "학생이 틀렸다"로 만들면 안 된다.
-        """
-        ...
-
-    def check_equivalence_claim(self, left: str, right: str) -> AnswerEvaluation:
-        """콘텐츠가 주장하는 "left와 right는 같다"가 참인지 3상태로 판정한다 (EOS-69).
-
-        자체 저작 콘텐츠 검수 파이프라인이 발행 전에 던지는 질문이다 — 생성기가 payload에
-        남긴 자기검증 주장을 과목이 실제로 대조한다. 두 문자열은 **과목이 정의하는 불투명
-        표현**이며 Core는 내용을 해석하지 않는다.
-
-        판정: 같음이 확정되면 `pass`, 다름이 *증명*되면 `fail`, 증명도 반증도 못 하면
-        `unverifiable`. 마지막 칸이 있어야 "판정 못 했다"가 "틀렸다"로 위장되지 않는다.
-        """
-        ...
-
-    def check_content_seal(
-        self, source_text: str, derived_texts: Sequence[str]
-    ) -> ContentSealBreach | None:
-        """파생 텍스트가 원문의 과목 표기 봉인을 지켰는지 판정한다 — 통과면 None (EOS-69).
-
-        `source_text`는 정본(원문), `derived_texts`는 그것에서 만들어진 화면·발문 조각들이다.
-        원문에 봉인 대상 표기가 없으면 검사 대상이 아니므로 None(통과)이다 — "검사할 것이
-        없음"과 "위반 없음"을 굳이 가르지 않는 이유는 둘 다 *차단하지 않음*이고, 어느 조각이
-        왜 깨졌는지는 위반이 났을 때만 필요하기 때문이다.
-
-        위반이면 `ContentSealBreach`(사유 코드 + 파생 텍스트 인덱스)를 돌려준다. 사유 코드
-        어휘는 과목이 정의하며 Core는 그대로 실어 나르기만 한다.
         """
         ...
 

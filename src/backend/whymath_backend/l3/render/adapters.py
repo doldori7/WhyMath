@@ -12,24 +12,21 @@
 ① **개념 무관**: 어떤 어댑터도 특정 개념명(일차방정식·미분·확률…)을 알지 못한다. DSL 필드를
    일반 조작할 뿐이다 → 어댑터 수는 전략 수에 비례하고 개념 수와 무관하다(조합폭발 방지).
 ② **결정론·LLM=0**: 같은 (dsl, ctx) → 같은 RenderedUnit. 네트워크·난수·시계 0.
-③ **검증 후 노출**: 평가 재료를 렌더하면 과목 어댑터(`evaluate_answer`)로 정답을 확인하고,
-   수치·수식은 `check_content_seal`로 원본 보존을 확인한다. 실패는 예외가 아니라
-   `validation_signal`로 표면화한다(조용한 실패 금지). **EOS-69: 검증 함수를 직접 import하던
-   것을 과목 계약 경유로 바꿨다** — 이 파일은 이제 "정답을 어떻게 확인하는지"를 모르고 "누가
-   확인해야 하는지"만 안다(CORE→ADAPTER 위반 2간선 해소).
-④ **한국어 조사 일치**: 이름·값 뒤 조사는 `korean/josa.py`가 판정한다(재발명 금지). 조사는
-   과목이 아니라 *한국어 어문* 사실이라 어댑터(수학) 밖 최하위 패키지에 산다(EOS-69).
+③ **검증 후 노출**: 평가 재료를 렌더하면 `verify_answer`로 정답을 확인하고, 수치·수식은
+   `rephrase.classify_invariance_failure`의 봉인으로 원본 보존을 확인한다. 실패는 예외가 아니라
+   `validation_signal`로 표면화한다(조용한 실패 금지).
+④ **한국어 조사 일치**: 이름·값 뒤 조사는 `l3/equivalent/josa.py`가 판정한다(재발명 금지).
 """
 
 from __future__ import annotations
 
-from whymath_backend.korean.josa import eul_reul, eun_neun, i_ga
+from whymath_backend.l3.equivalent.josa import eul_reul, eun_neun, i_ga
+from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, extract_equation
 from whymath_backend.l3.pregenerate.models import ValidationSignal
 from whymath_backend.l3.render.adapter import RenderContext, RenderedUnit, RenderSegment
 from whymath_backend.l3.render.dsl import ConceptDSL
+from whymath_backend.l3.verify_answer import verify_answer
 from whymath_backend.schema.enums import PedagogyStrategy
-from whymath_backend.schema.subject_adapter import ProblemStatement, SubjectAdapter
-from whymath_backend.subject_registry import get_subject_adapter
 
 # DSL *본문*(정의·직관·예시)이 흘러들 수 있는 세그먼트 종류 — 수식 봉인 검사의 범위.
 # 나머지 종류(`prompt`·`solution_step`·`heading`·`reflection`)는 어댑터가 평가 재료나 고정 문구로
@@ -49,110 +46,67 @@ def _substitute(text: str, bindings: dict[str, str]) -> str:
     return rendered
 
 
-def _seal_signal(
-    dsl: ConceptDSL, segments: tuple[RenderSegment, ...], subject: SubjectAdapter
-) -> ValidationSignal | None:
-    """표기 봉인 검사 — DSL 본문의 과목 표기가 렌더 후에도 바이트 동일하게 남았는지.
+def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> ValidationSignal | None:
+    """수식 봉인 검사 — DSL 본문의 수식이 렌더 후에도 바이트 동일하게 남았는지.
 
-    판정은 과목 어댑터(`check_content_seal`)가 한다 — "무엇이 봉인 대상인지"(수식·화학식·연도)와
-    "훼손됐는지"는 자기 표기를 아는 과목만 답할 수 있다. 이 함수가 하는 일은 *무엇을 검사
-    대상으로 넘길지* 고르는 것과, 위반이 났을 때 그것을 렌더 어휘(세그먼트 종류)로 되짚는
-    것뿐이다. 봉인할 표기가 원문에 없으면 어댑터가 None을 돌려준다(검사 대상 아님=통과).
+    DSL 자유 서술에서 방정식을 추출해(`extract_equation`), 그 수식을 실은 세그먼트가 봉인을
+    지켰는지 `classify_invariance_failure`로 판정한다(단일 진실 원천 재사용). 추출할 수식이
+    없으면 검사 대상이 아니다(None=통과).
 
     **검사 대상은 DSL *본문*을 실을 수 있는 세그먼트뿐이다**(`_BODY_SEGMENT_KINDS`). `prompt`·
     `solution_step`은 어느 어댑터에서도 평가 재료(`assessment.conditions`/`answer_map`)에서만
     조립되므로 DSL 본문 수식을 실을 리가 없다. 그런데 그 세그먼트들은 조건식 때문에 `=`를
-    포함해 어댑터의 캐리어 조건에 걸리고, 그러면 *다른 출처*의 수식이 없다는 이유로 봉인
-    위반이 뜬다 — 잡으려던 위반(본문 수식 변형)이 아니라 오탐이다. kind로 범위를 좁히는 것이
-    봉인을 *약화*시키지 않는 이유가 이것이다(본문이 흘러드는 kind는 그대로 검사한다).
-
-    **kind 필터가 Core에 남는 이유**: "어느 세그먼트에 DSL 본문이 흘러드는가"는 렌더 구조
-    지식이지 과목 지식이 아니다. 반대로 "이 조각이 그 표기를 실었는가"(등호 포함 여부 등)는
-    과목 지식이라 어댑터 안에 있다. 경계가 그 사이를 지난다.
+    포함해 캐리어 조건(`"=" in seg.content`)에 걸리고, 그러면 *다른 출처*의 수식이 없다는
+    이유로 EQUATION_ALTERED가 뜬다 — 봉인이 잡으려던 위반(본문 수식 변형)이 아니라 오탐이다.
+    kind로 범위를 좁히는 것이 봉인을 *약화*시키지 않는 이유가 이것이다(본문이 흘러드는 kind는
+    그대로 검사한다).
     """
-    body_segments = [seg for seg in segments if seg.kind in _BODY_SEGMENT_KINDS]
-    candidates = [seg.content for seg in body_segments]
     sources = [text for text in (dsl.definition, dsl.intuition) if text] + list(dsl.examples)
     for source in sources:
-        breach = subject.check_content_seal(source, candidates)
-        if breach is not None:
-            kind = body_segments[breach.derived_index].kind
-            return ValidationSignal(
-                kind="other",
-                reason=f"render seal violation ({breach.reason}) in segment kind={kind}",
-            )
+        equation = extract_equation(source)
+        if equation is None:
+            continue
+        carriers = [
+            seg
+            for seg in segments
+            if seg.kind in _BODY_SEGMENT_KINDS and (equation in seg.content or "=" in seg.content)
+        ]
+        for seg in carriers:
+            reason = classify_invariance_failure(seg.content, equation=equation)
+            if reason is not None:
+                return ValidationSignal(
+                    kind="other",
+                    reason=f"render seal violation ({reason}) in segment kind={seg.kind}",
+                )
     return None
 
 
-def _assessment_signal(dsl: ConceptDSL, subject: SubjectAdapter) -> ValidationSignal | None:
-    """평가 재료 정답 검증 — 렌더에 실린 답이 조건을 만족하는지(과목 어댑터 판정).
+def _assessment_signal(dsl: ConceptDSL) -> ValidationSignal | None:
+    """평가 재료 정답 검증 — 렌더에 실린 답이 조건을 만족하는지(Tier1 SymPy).
 
-    `evaluate_answer`는 pass/fail/unverifiable 3-state다. **fail만 차단**한다 — unverifiable
-    (판정 불가)은 거짓 신호를 만들지 않기 위해 통과시키되, 상위 검증(Tier2·PRM)이 남는다.
-    3상태를 2상태로 접지 않는 지점이라 `!= "pass"`가 아니라 `== "fail"`로 쓴다.
-
-    조건이 여러 개면 **AND**다(전부 만족해야 한다). 하나라도 fail이면 즉시 차단하고 나머지는
-    묻지 않는다 — 예전에 검증기에 조건 리스트를 통째로 넘겨 얻던 결합과 판정이 같다(첫 위반
-    조건에서 fail). 결합 규칙 자체는 과목 지식이 아니라 논리라 Core에 있어도 경계를 넘지 않는다.
+    `verify_answer`는 pass/fail/unverifiable 3-state다. **fail만 차단**한다 — unverifiable(기호적
+    판정 불가)은 거짓 신호를 만들지 않기 위해 통과시키되, 상위 검증(Tier2·PRM)이 남는다.
     """
-    assessment = dsl.assessment
-    if assessment is None:
+    if dsl.assessment is None:
         return None
-    prompt = assessment.prompt or ""
-    for index, condition in enumerate(assessment.conditions):
-        evaluation = subject.evaluate_answer(
-            _condition_statement(dsl.code, prompt, condition), assessment.answer_map
+    verdict = verify_answer(list(dsl.assessment.conditions), dsl.assessment.answer_map)
+    if verdict.state == "fail":
+        return ValidationSignal(
+            kind="solution",
+            reason=f"assessment answer failed verification: {verdict.reason}",
         )
-        if evaluation.state == "fail":
-            return ValidationSignal(
-                kind="solution",
-                reason=(
-                    "assessment answer failed verification: "
-                    f"조건 {index}번 위반 — {evaluation.reason}"
-                ),
-            )
     return None
 
 
-def _condition_statement(code: str, prompt: str, condition: str) -> ProblemStatement:
-    """조건 1개를 과목 계약 봉투로 감싼다 — `evaluate_answer` 입력.
-
-    `answer`·`answer_kind`가 빈 문자열인 이유: 평가 재료에는 *정답 문자열*이 없다(정답은
-    `answer_map` 치환값이고, 그건 별도 인자로 넘어간다). 없는 값을 지어내는 대신 비워 둔다 —
-    `evaluate_answer`는 조건과 치환맵만 보므로 판정에 영향이 없고, 빈 값이 "미보유"를 정직하게
-    말한다. 봉투를 조건마다 새로 만드는 것은 조건이 곧 봉투의 유일한 내용이기 때문이다.
-    """
-    return ProblemStatement(
-        problem_ref=code,
-        question_text=prompt,
-        answer="",
-        answer_kind="",
-        conditions=condition,
-    )
-
-
-def _validate(
-    dsl: ConceptDSL, segments: tuple[RenderSegment, ...], subject: SubjectAdapter
-) -> ValidationSignal | None:
+def _validate(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> ValidationSignal | None:
     """렌더 산출 검증 파이프 — 봉인 → 평가 정답. 먼저 걸린 신호를 돌려준다(통과=None)."""
-    return _seal_signal(dsl, segments, subject) or _assessment_signal(dsl, subject)
-
-
-def _resolve_subject(ctx: RenderContext) -> SubjectAdapter:
-    """검증에 쓸 과목 어댑터 — 컨텍스트 명시 주입 우선, 없으면 조립 지점 기본값.
-
-    **검증을 끄는 분기는 없다.** `ctx.subject`가 None이어도 조립 지점이 어댑터를 주므로 검증은
-    항상 수행된다 — "주입 안 하면 검사 생략"은 조용한 실패이고, 이 파일의 불변식 ③(검증 후
-    노출)을 무력화한다.
-    """
-    return ctx.subject if ctx.subject is not None else get_subject_adapter()
+    return _seal_signal(dsl, segments) or _assessment_signal(dsl)
 
 
 def _finish(
     strategy: PedagogyStrategy,
     dsl: ConceptDSL,
     segments: list[RenderSegment],
-    subject: SubjectAdapter,
 ) -> RenderedUnit:
     """세그먼트 열을 검증해 RenderedUnit으로 봉한다(모든 어댑터 공통 종결부)."""
     frozen = tuple(segments)
@@ -160,7 +114,7 @@ def _finish(
         strategy=strategy,
         dsl_code=dsl.code,
         segments=frozen,
-        validation_signal=_validate(dsl, frozen, subject),
+        validation_signal=_validate(dsl, frozen),
     )
 
 
@@ -189,7 +143,7 @@ class DirectAdapter:
             segments.append(
                 RenderSegment(kind="example", content=_substitute(example, ctx.bindings))
             )
-        return _finish(self.strategy, dsl, segments, _resolve_subject(ctx))
+        return _finish(self.strategy, dsl, segments)
 
 
 class SocraticAdapter:
@@ -231,7 +185,7 @@ class SocraticAdapter:
                 content=f"어떤 점{i_ga('점')} 가장 헷갈리나요? 헷갈리는 지점을 말해 주세요.",
             )
         )
-        return _finish(self.strategy, dsl, segments, _resolve_subject(ctx))
+        return _finish(self.strategy, dsl, segments)
 
 
 class WorkedExampleAdapter:
@@ -272,7 +226,7 @@ class WorkedExampleAdapter:
             segments.append(
                 RenderSegment(kind="example", content=_substitute(example, ctx.bindings))
             )
-        return _finish(self.strategy, dsl, segments, _resolve_subject(ctx))
+        return _finish(self.strategy, dsl, segments)
 
 
 class ProblemBasedAdapter:
@@ -301,7 +255,7 @@ class ProblemBasedAdapter:
                 content=f"이 문제를 풀려면 어떤 개념{i_ga('개념')} 필요할까요?",
             )
         )
-        return _finish(self.strategy, dsl, segments, _resolve_subject(ctx))
+        return _finish(self.strategy, dsl, segments)
 
 
 class AnalogyAdapter:
@@ -337,7 +291,7 @@ class AnalogyAdapter:
                 content="비유는 이해를 돕는 도구일 뿐, 정확한 정의를 대신하지 않습니다.",
             )
         )
-        return _finish(self.strategy, dsl, segments, _resolve_subject(ctx))
+        return _finish(self.strategy, dsl, segments)
 
 
 __all__ = [

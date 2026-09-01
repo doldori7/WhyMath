@@ -160,7 +160,6 @@ from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
-from whymath_backend.l4.subject_adapter_math import MathSubjectAdapter
 from whymath_backend.l5.ocr.factory import build_ocr_components
 from whymath_backend.ops.log_scrubber import install_log_scrubber
 from whymath_backend.ops.service_health import (
@@ -173,7 +172,6 @@ from whymath_backend.ops.service_health import (
     evaluate_alerts,
 )
 from whymath_backend.schema.enums import ConsentScope
-from whymath_backend.subject_registry import set_subject_adapter
 
 # 앱 state 의존 키 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출(라우터 공유,
 # slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
@@ -673,16 +671,8 @@ def create_app(
     에서는 스키마 표면(`/docs`·`/redoc`·`/openapi.json`)을 비활성화한다. 개발·CI(OAuth
     미구성)는 그대로 노출 — 로컬 개발 경험을 해치지 않는다.
     정본: `docs/reviews/functional_security_audit_2026-08-08.md` L1.
-
-    EOS-69: **과목 어댑터 조립**(`set_subject_adapter`)도 여기서 한다. Core 코드는
-    `schema.subject_adapter.SubjectAdapter`(Protocol)만 알고 구현체를 import하지 않으므로
-    (EOS-67 경계 계약), 구현체를 심는 자리가 어딘가에는 있어야 한다 — 그게 이 팩토리다.
-    과목을 바꾸려면 이 한 줄만 바꾼다. `install_log_scrubber`와 같은 이유로 lifespan이
-    아니라 앱 구성 시점이다(순수 in-process·I/O 0이고, lifespan을 발화하지 않는
-    `TestClient(app)` 경로도 같은 조립을 받아야 한다).
     """
     install_log_scrubber()
-    set_subject_adapter(MathSubjectAdapter())
     # SEC-24(원 SEC-18): docs_url 등은 FastAPI 생성자에 *한 번만* 넘길 수 있어(런타임 재설정
     # 불가) 앱 구성 시점에 production_like를 확정해야 한다. get_settings()는 @lru_cache라
     # 아래에서 다시 호출되는 것과 같은 캐시 인스턴스를 재사용 — 비용 0.
