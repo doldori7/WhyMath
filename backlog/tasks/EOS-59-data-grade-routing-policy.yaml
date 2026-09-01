@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - src/backend/whymath_backend/l3/router.py
   - "src/backend/whymath_backend/l3/**"
   - "tests/backend/l3/**"
-session: null
+session: claude/failure-definition-signature-scmzdu
 notes: "출처: EOS-53 crosswalk 갭 #11(A5 잔여). 라우터·config에 aihub/data_grade 축 0건 실측. 선언 부록 E 전제·L7 계약(국내 공공데이터 원문은 로컬 모델만)의 기계화."
-updated: 2026-08-30
+updated: 2026-09-01
