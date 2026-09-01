@@ -73,8 +73,14 @@ function Write-BackupStatus {
         encrypted               = $Encrypted
         recipients_fingerprint  = $fp
     }
+    # BOM-free UTF-8. PowerShell 5.1's `Set-Content -Encoding UTF8` emits a BOM,
+    # which makes json.loads(..., encoding="utf-8") fail on the reader side with
+    # "Unexpected UTF-8 BOM" - every successful backup would then look like a
+    # failed freshness check. The reader also tolerates a BOM (utf-8-sig), but a
+    # writer that does not create the problem is the better half of the fix.
     $tmp = "$StatusPath.tmp"
-    $record | ConvertTo-Json | Set-Content -Path $tmp -Encoding UTF8
+    $json = $record | ConvertTo-Json
+    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding $false))
     Move-Item -Path $tmp -Destination $StatusPath -Force
 }
 

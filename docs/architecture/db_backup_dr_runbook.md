@@ -109,14 +109,16 @@ Set-Content -Path "C:\Users\kiki\Desktop\__AI\WhyMath-backups\recipients.txt" -V
 ## §2. 정기 스케줄 등록 — 로그온 비의존 (OPS-31 개정)
 
 > **이전 방식(`schtasks /Create`)은 로그온 세션에서만 돌았다.** PC가 꺼져 있거나 로그아웃이면 그 회차는 조용히 건너뛰어졌고, **건너뛴 상태는 정상 상태와 화면이 같았다**. 등록 스크립트가 그 두 가지를 각각 고친다: `-LogonType S4U`(로그온 없이 실행·암호 저장 없음) + `-StartWhenAvailable`(꺼져 있던 회차를 복귀 후 실행). 관리자 권한 창이 필요하다.
+>
+> **태스크는 2개가 등록된다** — `WhyMath-DB-Backup`(백업)과 `WhyMath-DB-Backup-Check`(신선도 검사). 둘째가 없으면 상태 대장을 **아무도 읽지 않고**, 읽지 않는 대장은 아무것도 탐지하지 못한다. 스케줄은 누락을 *줄이고*, 검사 태스크가 누락을 *보이게* 한다 — 이 분업이 §2의 요점이다. (초판은 검사 명령을 런북에 인쇄만 해서 사람이 기억하게 뒀는데, 그건 이 절이 없애려던 조용한 누락과 같은 실패 양식이다 — 2026-09-01 PR #968 리뷰 지적 수용.)
 
 ```powershell
 # [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 등록에 필요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -RequireEncryption
+.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption
 ```
 
-- **성공**: `[OK] task 'WhyMath-DB-Backup' registered: daily 04:00, LogonType S4U, StartWhenAvailable`.
+- **성공**: `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' registered: daily 09:00, threshold 48 h, LogonType S4U` **두 줄이 모두** 나와야 한다. 한 줄만 나오면 실패다.
 - **변별력**: 스크립트는 등록 후 작업을 **되읽어** `LogonType`이 실제로 `S4U`인지 확인한다. 권한이 모자라 Password 등록으로 강등되면 `[FAIL]`로 멈춘다 — "등록 성공"을 "설정이 옳다"의 근거로 쓰지 않는다.
 - **실패 시 대처**: `LogonType 'Password', not S4U`가 나오면 창이 관리자 권한이 아니다. PowerShell을 "관리자 권한으로 실행"으로 다시 열어 재실행한다.
 
@@ -146,16 +148,31 @@ Write-Host "EXIT=$LASTEXITCODE"
 
 ### 2-2. 누락 감시 — 조용한 실패를 소리나게
 
-스케줄은 누락을 **줄이지만**, 누락을 **보이게 하지는 않는다**. 그 일은 상태 대장이 한다:
+**이 감시는 §2에서 등록한 `WhyMath-DB-Backup-Check` 태스크가 자동으로 수행한다.** 사람이 기억해서 돌리는 것이 아니다.
+
+검사 태스크가 하는 일:
+
+| 판정 | 산출물 | 태스크 결과 코드 |
+|---|---|---|
+| 신선함 | `backup_alert.txt`가 **있으면 삭제**(회복 표시) | 0 |
+| 오래됨·기록 없음·평문 | 백업 디렉터리에 **`backup_alert.txt` 생성**(시각·사유·JSON 판정) | 1 |
+| 검사 불가(파이썬·모듈 부재) | 같은 알림 파일에 그 사실 기록 | 2 |
+
+- **알림이 회복 시 사라지는 것이 중요하다** — 안 사라지는 알림은 가구가 되고, 그러면 진짜 알림도 안 보인다.
+- **정직한 한계**: 디렉터리 안의 파일은 *누가 볼 때만* 보이는 약한 신호다. 태스크의 `LastTaskResult`도 0이 아니게 되지만 그것 역시 들여다봐야 보인다. 푸시·메일·중앙 로그 같은 진짜 알림은 `OPS-04` 범위이며 이 스크립트가 대신하지 않는다.
+
+수동으로 즉시 확인하려면(등록 검증·사고 조사 시):
 
 ```powershell
-# [실행 시스템] Windows PowerShell — 아무 때나 (주 1회 권장)
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-python scripts\backup\backup_status.py check --backup-dir "C:\Users\kiki\Desktop\__AI\WhyMath-backups" --max-age-hours 48 --require-encrypted --json
+.\scripts\backup\check_backup_freshness.ps1 -MaxAgeHours 48 -RequireEncrypted
 Write-Host "EXIT=$LASTEXITCODE"
 ```
 
-`EXIT=1`이면 마지막 성공 백업이 48시간을 넘었다는 뜻이다 — 스케줄이 죽었거나 최근 회차가 실패했다. `reason` 필드가 어느 쪽인지 말해 준다.
+- **성공**: `[OK] backup freshness check passed`, `EXIT=0`.
+- **실패**: `[ALERT] ...`와 함께 알림 파일 경로가 출력되고 `EXIT=1`. `reason` 필드가 `never_recorded`(한 번도 안 돎)·`stale`(오래됨)·`plaintext_artifact`(평문이라 반출 불가) 중 어느 사태인지 말해 준다 — 셋은 대처가 다르므로 뭉개지 않는다.
+- **`EXIT=2`**: 검사 자체를 못 했다(파이썬 경로 문제 등). **0으로 접지 않는다** — "검사 못 함"은 "문제 없음"이 아니다. `-PythonExe`로 인터프리터를 명시해 재실행한다(Kiki 머신은 conda base와 `.venv`가 동시 활성이라 `python`이 다른 인터프리터에 결합될 수 있다).
 
 ## §3. 복구 리허설 (분기 1회 권장) — scratch 컨테이너 복원 + 무결성 검증
 
@@ -297,7 +314,7 @@ Write-Host "EXIT=$LASTEXITCODE"
 | 백업 주기 | 매일 04:00 (작업 스케줄러 · S4U 로그온 비의존) + 필요 시 §1 수동 |
 | 산출물 암호화 | age 공개키 암호화(`.dump.age`) — 수신자 파일이 백업 디렉터리에 있으면 자동. 평문은 암호화 성공 후 삭제 |
 | 키 보관 | 공개키 = 백업 디렉터리 `recipients.txt` / 개인키 = `%USERPROFILE%` + 별도 매체 사본(§1b) |
-| 누락 감시 | `backup_status.py check` — `never_recorded`/`stale`/평문을 각각 다른 사유로 exit 1 |
+| 누락 감시 | `WhyMath-DB-Backup-Check` 태스크(매일 09:00) — `never_recorded`/`stale`/`plaintext_artifact`를 각각 다른 사유로 exit 1 + 알림 파일 |
 | 보존 | 14일(`-RetentionDays`), 최신 1개는 무조건 보존 |
 | 백업 소요 | 수 분 내(현 데이터 규모), 온라인 백업(pg_dump — prod 중단 불요) |
 | 복구 리허설 | 분기 1회, §3 (약 10분) |
@@ -312,9 +329,10 @@ Write-Host "EXIT=$LASTEXITCODE"
 - **WAL 아카이빙/PITR 없음**: pg_dump 스냅샷 방식 — 백업 사이 데이터는 유실 범위. OPS-31 범위 밖으로 명시 동결(acceptance ⑤).
 - **RTO 미측정**: §5 참조 — 리허설 게이트가 열리기 전까지 복구 소요는 수치가 없다. 추정으로 채우지 않는다.
 - **암호화가 만든 새 단일 실패점**: 개인키를 잃으면 모든 `.dump.age`가 영구 복구 불가다. 대책은 키 사본뿐이며(§1b), 기계가 강제할 수 없는 구간이다 — 키 사본 존재 여부를 이 런북은 검증하지 못한다.
+- **알림 도달성**: 검사 태스크가 만드는 것은 백업 디렉터리의 파일 하나다 — 누가 그 디렉터리를 볼 때만 보인다. 푸시·메일·중앙 로그는 `OPS-04`(로그 수집·알림) 범위이며 이 PR이 대신하지 않는다.
 - **PS1 실행 검증 부재(구조적)**: `.ps1`은 Kiki 머신에서만 돌아 CI가 실행할 수 없다. 계약 테스트는 **텍스트 동결**이며 "그 문장이 있다"까지만 증명한다 — "의도대로 동작한다"는 §2-1·§4-1a의 자가검증 스텝이 담당한다.
 
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
-*개정: 2026-09-01 (OPS-31) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*
+*개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*

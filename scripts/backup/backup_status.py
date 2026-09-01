@@ -135,11 +135,23 @@ def record_success(
 
 
 def load_status(status_path: Path) -> BackupStatus | None:
-    """상태 파일 적재. 파일 부재는 `None`(= 기록된 적 없음), 손상은 예외."""
+    """상태 파일 적재. 파일 부재는 `None`(= 기록된 적 없음), 손상은 예외.
+
+    **`utf-8-sig`로 읽는 이유(BOM)**: 생산자가 둘이다 — 이 모듈의 `record_success`(BOM 없음)와
+    Windows의 `backup_whymath_pg.ps1`. PowerShell 5.1은 `Set-Content -Encoding UTF8`에
+    **BOM을 붙인다**. 순수 `utf-8`로 읽으면 실제 스케줄 백업이 만든 상태 파일이 전부
+    `JSONDecodeError: Unexpected UTF-8 BOM`으로 죽고, 그러면 **성공한 백업마다 신선도 검사가
+    실패**한다 — 누락 탐지기가 정상 상태를 사고로 신고하는, 방향이 반대인 무증상 실패다.
+    쓰기 쪽도 BOM 없이 쓰도록 고쳤지만(PS1 `UTF8Encoding $false`), 읽기 쪽이 BOM을 견디는 것이
+    본질적 방어다 — 구버전 스크립트가 만든 파일도 읽어야 하고, 읽기 관용성은 잃을 것이 없다.
+    `utf-8-sig`는 BOM이 없는 파일도 그대로 읽는다.
+    (2026-09-01 PR #968 Codex P1 지적 수용 — 텍스트 동결이 잡지 못하는 축이었다: 계약 테스트가
+     *필드명*은 대조했으나 PS1이 쓴 바이트를 파이썬이 읽는 경로는 실행된 적이 없다.)
+    """
     if not status_path.exists():
         return None
     try:
-        raw = json.loads(status_path.read_text(encoding="utf-8"))
+        raw = json.loads(status_path.read_text(encoding="utf-8-sig"))
         moment = datetime.fromisoformat(str(raw["last_success_utc"]))
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         raise BackupStatusError(
@@ -174,6 +186,32 @@ def evaluate_staleness(
     if age_hours > max_age_hours:
         return StalenessVerdict(False, "stale", age_hours)
     return StalenessVerdict(True, "fresh", age_hours)
+
+
+def evaluate_backup_health(
+    status: BackupStatus | None,
+    *,
+    max_age_hours: float = DEFAULT_MAX_AGE_HOURS,
+    require_encrypted: bool = False,
+    now: datetime | None = None,
+) -> StalenessVerdict:
+    """신선도 + 암호화 요구를 합친 **단일 판정**.
+
+    왜 합쳤나: 이전 판은 신선도만 판정해 `ok`/`reason`을 만들고, 암호화 위반은 종료코드에서만
+    따로 걸렀다. 그러면 `--json --require-encrypted`로 평문 백업을 검사할 때 JSON이
+    `{"ok": true, "reason": "fresh"}`인데 exit는 1이 된다 — **같은 실행이 두 개의 다른 답을
+    내고**, JSON을 읽는 기계는 반출 금지 산출물을 정상으로 판정한다. 판정을 한 곳에서 만들어
+    두 소비자가 같은 것을 보게 한다.
+    (2026-09-01 PR #968 Codex P2 지적 수용)
+
+    신선도가 먼저다 — 기록이 없거나 오래됐으면 암호화 여부는 물을 대상이 없다.
+    """
+    verdict = evaluate_staleness(status, max_age_hours=max_age_hours, now=now)
+    if not verdict.ok:
+        return verdict
+    if require_encrypted and status is not None and not status.encrypted:
+        return StalenessVerdict(False, "plaintext_artifact", verdict.age_hours)
+    return verdict
 
 
 # --------------------------------------------------------------------------
@@ -232,7 +270,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return _EXIT_FAIL
 
-    verdict = evaluate_staleness(status, max_age_hours=args.max_age_hours)
+    verdict = evaluate_backup_health(
+        status,
+        max_age_hours=args.max_age_hours,
+        require_encrypted=args.require_encrypted,
+    )
     payload = {
         "status_path": str(status_path),
         "ok": verdict.ok,
@@ -250,6 +292,12 @@ def main(argv: list[str] | None = None) -> int:
                 "상태 경로가 다르다. '0회'와 '오래됨'은 다른 사태다.",
                 file=sys.stderr,
             )
+        elif verdict.reason == "plaintext_artifact":
+            print(
+                "[FAIL] 마지막 산출물이 평문이다 — 오프사이트 반출 금지(런북 4-1). "
+                "recipients.txt를 만든 뒤(런북 1b) 백업을 재실행하라.",
+                file=sys.stderr,
+            )
         elif verdict.reason == "stale":
             assert verdict.age_hours is not None
             print(
@@ -265,16 +313,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"[OK] 마지막 성공 백업 {verdict.age_hours:.1f}시간 전 · 산출물 {enc} · "
                 f"{status.artifact}"
             )
-    if not verdict.ok:
-        return _EXIT_FAIL
-    if args.require_encrypted and status is not None and not status.encrypted:
-        print(
-            "[FAIL] 마지막 산출물이 평문이다 — 오프사이트 반출 금지(런북 4-1). "
-            "-RecipientsFile로 백업을 재실행하라.",
-            file=sys.stderr,
-        )
-        return _EXIT_FAIL
-    return _EXIT_OK
+    return _EXIT_FAIL if not verdict.ok else _EXIT_OK
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

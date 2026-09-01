@@ -19,6 +19,15 @@
 # written by backup_whymath_pg.ps1 and read by backup_status.py does. Scheduling
 # reduces misses; the status check is what refuses to call silence success.
 #
+# So this script registers TWO tasks, and the second one is not optional:
+#   <TaskName>        runs the backup
+#   <TaskName>-Check  runs check_backup_freshness.ps1 a few hours later
+# Registering only the backup would leave the ledger unread - and an unread
+# ledger detects nothing. That was the state this file shipped in first
+# (2026-09-01 PR #968 Codex P1 caught it): the runbook printed the check command
+# for a human to remember, which is the same silent-miss failure mode wearing a
+# different hat.
+#
 # ASCII ONLY - PowerShell 5.1 reads .ps1 in the OS locale encoding (cp949 on
 # Korean Windows). Korean documentation lives in the runbook.
 #
@@ -40,6 +49,15 @@ param(
     # Refuse to produce a plaintext backup (see runbook 4-1). Recommended once
     # the key pair exists.
     [switch]$RequireEncryption,
+    # Daily run time for the freshness check, "HH:mm". Defaults to a few hours
+    # after -At so a slow or retried backup is not reported as missing.
+    [string]$CheckAt = "09:00",
+    # Freshness threshold in hours. 48 tolerates one skipped daily run; a third
+    # missed day is a real outage.
+    [double]$CheckMaxAgeHours = 48,
+    # Interpreter used by the check task. Kiki's machine has conda base and a
+    # .venv active at once, so an explicit path may be required.
+    [string]$PythonExe = "python",
     # Remove the task instead of creating it.
     [switch]$Unregister
 )
@@ -55,17 +73,24 @@ function Fail([string]$Reason) {
 # Step 0: unregister path
 # ---------------------------------------------------------------------------
 if ($Unregister) {
-    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if (-not $existing) {
-        Write-Host "[OK] task '$TaskName' does not exist - nothing to remove"
-        exit 0
+    # Both tasks - removing only the backup would leave a checker that alerts
+    # forever about a backup nobody asked for any more.
+    $removed = 0
+    foreach ($name in @($TaskName, "$TaskName-Check")) {
+        $existing = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+        if (-not $existing) {
+            Write-Host "[OK] task '$name' does not exist - nothing to remove"
+            continue
+        }
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        $still = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+        if ($still) {
+            Fail "Unregister-ScheduledTask returned but '$name' is still registered."
+        }
+        Write-Host "[OK] task '$name' removed"
+        $removed = $removed + 1
     }
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    $still = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($still) {
-        Fail "Unregister-ScheduledTask returned but '$TaskName' is still registered."
-    }
-    Write-Host "[OK] task '$TaskName' removed"
+    Write-Host "[OK] removed $removed task(s)"
     exit 0
 }
 
@@ -77,6 +102,10 @@ if ($Unregister) {
 $scriptPath = Join-Path $PSScriptRoot "backup_whymath_pg.ps1"
 if (-not (Test-Path $scriptPath)) {
     Fail "backup script not found next to this file: $scriptPath"
+}
+$checkScriptPath = Join-Path $PSScriptRoot "check_backup_freshness.ps1"
+if (-not (Test-Path $checkScriptPath)) {
+    Fail "freshness check script not found next to this file: $checkScriptPath"
 }
 
 # ---------------------------------------------------------------------------
@@ -123,6 +152,42 @@ if (-not $check.Settings.StartWhenAvailable) {
 
 Write-Host "[OK] task '$TaskName' registered: daily $At, LogonType S4U, StartWhenAvailable"
 Write-Host "[OK] action: powershell.exe $argList"
-Write-Host "[NEXT] verify freshness later with:"
-Write-Host "       python scripts\backup\backup_status.py check --backup-dir `"$BackupDir`" --max-age-hours 48"
+
+# ---------------------------------------------------------------------------
+# Step 6: register the CHECK task. This is the half that makes a missed backup
+# observable - see the header. It reads the status ledger the backup writes and
+# raises an alert file when the last success is too old (or plaintext).
+# ---------------------------------------------------------------------------
+$checkTaskName = "$TaskName-Check"
+$checkArgList = "-NoProfile -ExecutionPolicy Bypass -File `"$checkScriptPath`" -BackupDir `"$BackupDir`" -MaxAgeHours $CheckMaxAgeHours -PythonExe `"$PythonExe`""
+if ($RequireEncryption) {
+    $checkArgList = "$checkArgList -RequireEncrypted"
+}
+$checkAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $checkArgList
+$checkTrigger = New-ScheduledTaskTrigger -Daily -At $CheckAt
+$checkSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+
+Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $checkTrigger -Principal $principal -Settings $checkSettings -Force | Out-Null
+
+# ---------------------------------------------------------------------------
+# Step 7: self-verification for the check task, same standard as step 5.
+# A checker registered with the wrong logon type stops firing exactly when the
+# machine is unattended - which is when a missed backup is most likely.
+# ---------------------------------------------------------------------------
+$checkBack = Get-ScheduledTask -TaskName $checkTaskName -ErrorAction SilentlyContinue
+if (-not $checkBack) {
+    Fail "Register-ScheduledTask reported success but '$checkTaskName' cannot be read back. The backup task exists but NOTHING READS ITS LEDGER - a missed backup would be silent."
+}
+$checkLogon = $checkBack.Principal.LogonType
+if ("$checkLogon" -ne "S4U") {
+    Fail "task '$checkTaskName' registered with LogonType '$checkLogon', not S4U - the freshness check would stop firing while the machine is unattended."
+}
+if (-not $checkBack.Settings.StartWhenAvailable) {
+    Fail "task '$checkTaskName' registered without StartWhenAvailable."
+}
+
+Write-Host "[OK] task '$checkTaskName' registered: daily $CheckAt, threshold $CheckMaxAgeHours h, LogonType S4U"
+Write-Host "[OK] alert on failure: $BackupDir\backup_alert.txt (deleted automatically once a fresh backup is recorded)"
+Write-Host "[NEXT] prove both halves now - runbook section 2-1:"
+Write-Host "       Start-ScheduledTask -TaskName `"$TaskName`"; Start-ScheduledTask -TaskName `"$checkTaskName`""
 exit 0

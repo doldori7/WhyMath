@@ -30,6 +30,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 _BACKUP_DIR = _ROOT / "scripts" / "backup"
 _DUMP_SCRIPT = _BACKUP_DIR / "backup_whymath_pg.ps1"
 _SCHEDULE_SCRIPT = _BACKUP_DIR / "register_backup_schedule.ps1"
+_CHECK_SCRIPT = _BACKUP_DIR / "check_backup_freshness.ps1"
 _STATUS_MODULE = _BACKUP_DIR / "backup_status.py"
 _VERIFY_MODULE = _BACKUP_DIR / "verify_encrypted_backup.py"
 
@@ -45,7 +46,12 @@ def _strip_ps_comments(src: str) -> str:
     `scripts/ops/check_ps_scripts.strip_noncode`는 괄호 균형 검사용이라 문자열까지
     지운다 — 여기서는 `"*.dump.age"` 같은 리터럴 자체가 계약이므로 쓸 수 없다.
     한편 원문 전체를 검사하면 헤더 주석이 코드 결함을 통과시킨다(뮤테이션 ①②⑫ 미검출
-    실측). 그 사이가 이 헬퍼다: 줄 주석·블록 주석만 걷어낸다.
+    실측). 그 사이가 이 헬퍼다.
+
+    **줄 끝 주석까지 지운다**: 초판은 줄 전체 주석만 걷어냈는데, 그러면 호출을
+    `Write-Host "skip" # Register-ScheduledTask ...`처럼 *주석 처리해* 무력화해도
+    문자열이 코드에 남아 계약 단언이 통과한다(뮤테이션 ③ 미검출 실측 — 가드 자신이
+    위장이었던 사례). `#`이 따옴표 안이면 주석이 아니므로 인용 상태를 추적한다.
     """
     out: list[str] = []
     in_block = False
@@ -61,7 +67,19 @@ def _strip_ps_comments(src: str) -> str:
             continue
         if stripped.startswith("#"):
             continue
-        out.append(line)
+        # 줄 끝 주석 제거 — 따옴표 밖의 첫 `#`부터 잘라 낸다.
+        quote = ""
+        cut = None
+        for idx, ch in enumerate(line):
+            if quote:
+                if ch == quote:
+                    quote = ""
+            elif ch in ("'", '"'):
+                quote = ch
+            elif ch == "#":
+                cut = idx
+                break
+        out.append(line if cut is None else line[:cut])
     return "\n".join(out)
 
 
@@ -81,6 +99,14 @@ def _schedule_code() -> str:
     return _strip_ps_comments(_schedule_text())
 
 
+def _check_text() -> str:
+    return _CHECK_SCRIPT.read_text(encoding="ascii")
+
+
+def _check_code() -> str:
+    return _strip_ps_comments(_check_text())
+
+
 # ===========================================================================
 # A. PS1 텍스트 동결 — 암호화 스텝
 # ===========================================================================
@@ -88,8 +114,9 @@ class TestEncryptionContract:
     def test_scripts_exist(self) -> None:
         assert _DUMP_SCRIPT.is_file(), f"백업 스크립트 부재: {_DUMP_SCRIPT}"
         assert _SCHEDULE_SCRIPT.is_file(), f"스케줄 스크립트 부재: {_SCHEDULE_SCRIPT}"
+        assert _CHECK_SCRIPT.is_file(), f"신선도 검사 스크립트 부재: {_CHECK_SCRIPT}"
 
-    @pytest.mark.parametrize("script", [_DUMP_SCRIPT, _SCHEDULE_SCRIPT])
+    @pytest.mark.parametrize("script", [_DUMP_SCRIPT, _SCHEDULE_SCRIPT, _CHECK_SCRIPT])
     def test_ascii_only(self, script: Path) -> None:
         """cp949(한국어 Windows 로케일)로도 깨지지 않는다 — 2026-07-17 logconfig 선례."""
         data = script.read_bytes()
@@ -252,10 +279,24 @@ class TestScheduleContract:
         )
 
     def test_missed_occurrence_is_not_dropped(self) -> None:
+        """★ 두 태스크 *각각*을 본다.
+
+        초판은 파일 어딘가에 `-StartWhenAvailable`이 있으면 통과했다. 검사 태스크가
+        생기면서 그 문자열이 두 번 나오게 되자 **백업 태스크에서 지워도 검사 태스크의
+        것이 통과시켰다**(뮤테이션 재실행에서 미검출로 드러남 — 계약이 늘 때 기존
+        단언의 변별력이 조용히 사라지는 형태다). 설정 변수별로 특정한다.
+        """
         text = _schedule_code()
-        assert (
-            "-StartWhenAvailable" in text
-        ), "StartWhenAvailable 소실 — 머신이 꺼져 있던 회차가 그냥 버려진다"
+        for var, what in (("$settings", "백업"), ("$checkSettings", "신선도 검사")):
+            line = next(
+                (ln for ln in text.splitlines() if ln.strip().startswith(f"{var} = New-Scheduled")),
+                None,
+            )
+            assert line is not None, f"{what} 태스크의 설정 정의를 찾지 못함 ({var})"
+            assert "-StartWhenAvailable" in line, (
+                f"{what} 태스크에서 StartWhenAvailable 소실 — "
+                "머신이 꺼져 있던 회차가 그냥 버려진다"
+            )
 
     def test_registration_is_verified_by_reading_back(self) -> None:
         """★ 등록 성공은 설정이 옳다는 증거가 아니다 — 되읽어 LogonType을 확인한다.
@@ -529,3 +570,202 @@ class TestEncryptedVerification:
         vb.verify_encrypted_backup(enc, identity_file=identity)
         after = {p.name for p in tmp_path.iterdir()}
         assert after == before, f"검증이 파일을 남겼다: {after - before}"
+
+
+# ===========================================================================
+# D. PR #968 리뷰 회귀 — 텍스트 동결이 잡지 못한 3건
+# ===========================================================================
+class TestReviewRegressions:
+    """Codex 리뷰(2026-09-01) 지적 3건의 회귀 봉인.
+
+    세 건 모두 **계약 테스트가 green인 채로 통과했다**. 이유가 각각 다르다:
+      ① BOM — 필드명은 대조했지만 *PS1이 쓴 바이트를 파이썬이 읽는 경로*는 실행된 적이 없다
+              (샌드박스·CI에 PowerShell이 없다). 텍스트 동결의 구조적 사각이다.
+      ② 미배선 — "상태 대장이 누락을 관측한다"고 선언만 하고 그 대장을 *읽는 주체*를
+              배선하지 않았다. "정본화를 집행으로 착각한 완료 선언"의 이 PR 판본.
+      ③ 이중 답 — 같은 실행이 JSON과 종료코드로 서로 다른 판정을 냈다.
+    """
+
+    # ── ① BOM ──
+    def test_reader_accepts_a_bom_written_by_powershell(self, tmp_path: Path) -> None:
+        """★ PS 5.1이 붙이는 UTF-8 BOM을 실제 바이트로 재현해 판독을 검사한다.
+
+        `Set-Content -Encoding UTF8`은 BOM을 붙인다. 순수 utf-8로 읽으면
+        `JSONDecodeError: Unexpected UTF-8 BOM`이 나고, 그러면 **성공한 백업마다
+        신선도 검사가 실패**한다 — 탐지기가 정상을 사고로 신고하는 역방향 무증상 실패.
+        """
+        path = tmp_path / bs.STATUS_FILENAME
+        payload = {
+            "last_success_utc": "2026-09-01T03:00:00+00:00",
+            "artifact": "whymath_20260901_030000.dump.age",
+            "size_bytes": 4096,
+            "encrypted": True,
+            "recipients_fingerprint": "qmm59p6",
+        }
+        # utf-8-sig로 쓰면 BOM이 붙는다 — PS 5.1 산출물의 바이트 수준 재현.
+        path.write_text(json.dumps(payload), encoding="utf-8-sig")
+        assert path.read_bytes().startswith(b"\xef\xbb\xbf"), "픽스처가 BOM을 안 만들었다"
+
+        status = bs.load_status(path)
+        assert status is not None
+        assert status.artifact.endswith(".dump.age")
+        assert status.encrypted is True
+
+    def test_reader_still_accepts_bom_free_files(self, tmp_path: Path) -> None:
+        """utf-8-sig가 BOM 없는 파일도 그대로 읽는다 — 관용이 한쪽을 깨뜨리지 않았다."""
+        path = tmp_path / bs.STATUS_FILENAME
+        bs.record_success(path, artifact="a.dump.age", size_bytes=1, encrypted=True)
+        assert not path.read_bytes().startswith(b"\xef\xbb\xbf")
+        assert bs.load_status(path) is not None
+
+    def test_writer_does_not_emit_a_bom(self) -> None:
+        """PS1이 BOM 없이 쓴다 — 읽기 관용성에만 기대지 않는다(양쪽 다 고친다)."""
+        code = _dump_code()
+        assert (
+            "New-Object System.Text.UTF8Encoding $false" in code
+        ), "상태 파일 쓰기가 BOM-free UTF-8이 아니다"
+        assert (
+            "Set-Content -Path $tmp -Encoding UTF8" not in code
+        ), "BOM을 붙이는 Set-Content -Encoding UTF8이 되살아났다 (PS 5.1)"
+
+    # ── ② 신선도 검사 배선 ──
+    def test_check_task_is_registered_not_just_documented(self) -> None:
+        """★ 대장을 *읽는 주체*가 스케줄로 배선돼 있다.
+
+        사람이 기억해서 돌리는 검사는 검사가 아니다 — 그것이 바로 이 PR이 없애려던
+        조용한 누락과 같은 실패 양식이다.
+        """
+        code = _schedule_code()
+        assert '$checkTaskName = "$TaskName-Check"' in code, "검사 태스크 등록이 없다"
+        assert "Register-ScheduledTask -TaskName $checkTaskName" in code
+        assert "check_backup_freshness.ps1" in code, "검사 스크립트를 부르지 않는다"
+
+    def test_check_task_registration_is_verified_by_reading_back(self) -> None:
+        """검사 태스크도 되읽어 LogonType을 판정한다 — 백업 태스크와 같은 기준."""
+        code = _schedule_code()
+        reg = code.index("Register-ScheduledTask -TaskName $checkTaskName")
+        after = code[reg:]
+        assert "Get-ScheduledTask -TaskName $checkTaskName" in after
+        assert (
+            '"$checkLogon" -ne "S4U"' in after
+        ), "검사 태스크의 LogonType을 판정하지 않는다 — 무인 상태에서 조용히 멈춘다"
+
+    def test_unregister_removes_both_tasks(self) -> None:
+        """백업만 지우면 없어진 백업을 영원히 알리는 검사기가 남는다."""
+        code = _schedule_code()
+        assert 'foreach ($name in @($TaskName, "$TaskName-Check"))' in code
+
+    def test_alert_clears_on_recovery(self) -> None:
+        """★ 알림이 회복 시 사라진다 — 안 사라지는 알림은 가구가 되고, 그러면
+        진짜 알림도 안 보인다."""
+        code = _check_code()
+        assert "function Clear-Alert" in code
+        assert "Remove-Item $alertPath -Force" in code
+        assert (
+            "Clear-Alert" in code.split("if ($code -eq 0)")[1][:200]
+        ), "정상 판정 경로에서 알림 파일을 지우지 않는다"
+
+    def test_checker_undecidable_is_exit_two(self) -> None:
+        """도구·모듈 부재는 2 — '검사 못 함'이 '문제 없음'(0)으로 접히지 않는다."""
+        code = _check_code()
+        assert code.count("exit 2") >= 3, "판정 불가 경로가 2로 끝나지 않는다"
+        assert "exit 2" in code.split("checker missing")[1][:200]
+
+    def test_checker_records_why_it_could_not_run(self) -> None:
+        """실행기 부재도 증거를 남긴다 — 예외를 삼키지 않고 타입명을 적는다."""
+        code = _check_code()
+        assert "} catch {" in code, "실행기 부재는 예외로 난다(ErrorActionPreference=Stop)"
+        assert (
+            "$_.Exception.GetType().Name" in code
+        ), "예외 타입명이 알림에 남지 않는다 — 무타입 경고 금지"
+
+    def test_checker_does_not_shadow_the_automatic_args_variable(self) -> None:
+        """`$args`는 PowerShell 자동 변수다 — 가리면 @args 스플래팅이 어긋난다."""
+        code = _check_code()
+        assert "$args = @(" not in code
+        assert "$checkArgs = @(" in code
+
+    # ── ③ JSON과 종료코드의 단일 판정 ──
+    def test_json_verdict_reflects_the_encryption_requirement(self, tmp_path: Path) -> None:
+        """★ 평문 산출물을 --json --require-encrypted로 검사하면 JSON도 실패를 말한다.
+
+        이전 판은 JSON이 `{"ok": true, "reason": "fresh"}`인데 exit는 1이었다 —
+        같은 실행이 두 개의 다른 답을 내고, JSON 소비자는 반출 금지 산출물을 정상으로 읽는다.
+        """
+        bs.main(
+            [
+                "record",
+                "--backup-dir",
+                str(tmp_path),
+                "--artifact",
+                "a.dump",
+                "--size-bytes",
+                "10",
+                "--encrypted",
+                "false",
+            ]
+        )
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = bs.main(
+                [
+                    "check",
+                    "--backup-dir",
+                    str(tmp_path),
+                    "--require-encrypted",
+                    "--json",
+                ]
+            )
+        payload = json.loads(buf.getvalue())
+        assert code == 1
+        assert payload["ok"] is False, "JSON이 평문 산출물을 정상으로 보고한다"
+        assert payload["reason"] == "plaintext_artifact"
+
+    def test_json_and_exit_code_never_disagree(self, tmp_path: Path) -> None:
+        """네 가지 상태 전부에서 payload['ok']와 종료코드가 일치한다."""
+        import io
+        from contextlib import redirect_stdout
+
+        def run(*argv: str) -> tuple[int, dict]:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = bs.main(["check", "--backup-dir", str(tmp_path), "--json", *argv])
+            return rc, json.loads(buf.getvalue())
+
+        # ⓐ 기록 없음
+        rc, pl = run()
+        assert (rc == 1) is (pl["ok"] is False)
+        # ⓑ 신선 + 암호화
+        bs.record_success(
+            tmp_path / bs.STATUS_FILENAME, artifact="a.age", size_bytes=1, encrypted=True
+        )
+        rc, pl = run("--require-encrypted")
+        assert rc == 0 and pl["ok"] is True and pl["reason"] == "fresh"
+        # ⓒ 신선 + 평문 + 요구 없음 → 통과
+        bs.record_success(
+            tmp_path / bs.STATUS_FILENAME, artifact="a.dump", size_bytes=1, encrypted=False
+        )
+        rc, pl = run()
+        assert rc == 0 and pl["ok"] is True
+        # ⓓ 신선 + 평문 + 요구 있음 → 실패, 양쪽 일치
+        rc, pl = run("--require-encrypted")
+        assert rc == 1 and pl["ok"] is False and pl["reason"] == "plaintext_artifact"
+
+    def test_staleness_beats_encryption_in_the_reason(self, tmp_path: Path) -> None:
+        """오래됐으면 사유는 stale — 암호화 여부는 물을 대상이 없다(우선순위 고정)."""
+        now = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+        path = tmp_path / bs.STATUS_FILENAME
+        bs.record_success(
+            path,
+            artifact="a.dump",
+            size_bytes=1,
+            encrypted=False,
+            moment=now - timedelta(hours=100),
+        )
+        verdict = bs.evaluate_backup_health(
+            bs.load_status(path), max_age_hours=48, require_encrypted=True, now=now
+        )
+        assert verdict.reason == "stale"
