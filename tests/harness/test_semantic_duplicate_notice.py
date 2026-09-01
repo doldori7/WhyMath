@@ -405,6 +405,57 @@ class TestRemoteReadContract:
         assert "RuntimeError" in err, "예외 타입명 없는 경고는 금지(무증상 전멸의 원인)"
         assert "판정 불가" in err, "조회 실패를 '중복 없음'과 같은 색으로 두면 안 된다"
 
+    def test_korean_bodies_are_read_intact_from_real_git(self, tmp_path):
+        """한국어_본문_여러_건이_온전히_읽힌다 — 바이트/문자 오프셋 함정 회귀
+
+        `git cat-file --batch`의 `<size>`는 **바이트 수**인데 디코드된 문자열에서 그
+        숫자만큼 전진하면 한국어(3바이트/자)에서 위치가 밀린다. 초안이 파싱을 직접
+        구현하다 정확히 이 함정에 빠졌다 — **3건 요청에 1건만, 그것도 다음 blob의 sha가
+        섞인 채** 돌아오면서 status는 `ok`였다(조용한 손상). PR #947 리뷰가 잡았다.
+
+        모의 git으로는 이 결함을 볼 수 없다(stdout을 우리가 만들면 함정이 재현되지
+        않는다). 그래서 **실제 git 저장소**를 만들어 실제 `cat-file --batch` 출력을 태운다.
+        개수만 세면 안 된다 — 손상은 개수가 아니라 **내용**에서 드러난다.
+        """
+        import subprocess
+
+        import remote_claims
+
+        repo = tmp_path / "repo"
+        (repo / "backlog" / "tasks").mkdir(parents=True)
+        bodies = {
+            "T-001": "title: 게이트 대기와 차단의 분리 문제\nnotes: cmd_block이 claim을 반납한다\n",
+            "T-002": "title: 두 번째 태스크\nnotes: 완전히 다른 내용 손글씨 OCR 인식률\n",
+            "T-003": "title: 세 번째 태스크\nnotes: 또 다른 한국어 본문 라이선스 검토\n",
+        }
+        for tid, body in bodies.items():
+            (repo / "backlog" / "tasks" / f"{tid}.yaml").write_text(body, encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "seed",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        files = [remote_claims.RemoteTaskFile(tid, "HEAD", f"b{i}") for i, tid in enumerate(bodies)]
+
+        texts, branches, status = remote_claims.read_remote_task_texts(repo, files)
+
+        assert status == "ok"
+        assert texts == bodies, "본문이 손상됐다 — 개수만 보면 안 보이는 결함이다"
+        assert branches == {tid: f"b{i}" for i, tid in enumerate(bodies)}
+
     def test_truncation_is_reported_not_hidden(self, monkeypatch):
         """상한_초과는_truncated로_보고된다 — 부분 결과를 '전부 봤다'로 위장하지 않는다"""
         from pathlib import Path

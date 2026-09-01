@@ -1296,25 +1296,16 @@ def read_remote_task_texts(
 
     texts: dict[str, str] = {}
     branches: dict[str, str] = {}
-    # cat-file --batch 출력: "<sha> <type> <size>\n<size 바이트>\n" 또는 "<spec> missing\n"
-    body = out.stdout or ""
-    pos = 0
-    for tid, item in wanted.items():
-        nl = body.find("\n", pos)
-        if nl < 0:
-            break
-        header = body[pos:nl]
-        pos = nl + 1
-        parts = header.split()
-        if len(parts) < 3 or parts[1] != "blob":
+    # 파싱은 `_iter_batch_blobs`에 맡긴다 — `<size>`가 **문자 수가 아니라 바이트 수**라는
+    # 함정을 이미 다루고 있다(2026-07-29 실측으로 밝혀진 것). 여기서 다시 구현했다가
+    # 정확히 같은 함정에 빠졌었다: 한국어 본문에서 오프셋이 밀려 3건 요청에 1건만,
+    # 그것도 다음 blob의 sha가 섞인 채 돌아오면서 status는 ok였다(PR #947 리뷰가 포착).
+    blobs = _iter_batch_blobs(out.stdout or "")
+    for (tid, item), blob in zip(wanted.items(), blobs, strict=False):
+        if blob is None:
             continue  # missing — 그 브랜치에 그 파일이 없다(경합 중 삭제 등)
-        try:
-            size = int(parts[2])
-        except ValueError:
-            break
-        texts[tid] = body[pos : pos + size]
+        texts[tid] = blob
         branches[tid] = item.branch
-        pos += size + 1  # 본문 뒤 개행
     return texts, branches, "truncated" if truncated else "ok"
 
 
