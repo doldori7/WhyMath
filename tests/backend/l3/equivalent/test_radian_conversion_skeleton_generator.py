@@ -11,6 +11,8 @@ question_text·answer_explanation 양쪽 모두 유니코드 π 등 미검증 �
 
 from __future__ import annotations
 
+import pytest
+
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
@@ -23,6 +25,10 @@ from whymath_backend.l3.equivalent.radian_conversion_skeleton_generator import (
     _reduced_radian,
 )
 from whymath_backend.schema.enums import AnswerFormat, QuestionFormat
+
+# PB-13: backend 잡 35분 상한 초과 해소 — PR 상시 경로에서 분리하고 전용 잡
+# corpus-authoring(야간 + 생성기·배치 변경 PR)이 돌린다. 비활성화가 아니다.
+pytestmark = pytest.mark.corpus_authoring
 
 _BAD_GLYPHS = ("Σ", "α", "β", "²", "³", "∩", "∪", "π")
 _CONCEPT_SRC_ID = "H:12대수02-01"

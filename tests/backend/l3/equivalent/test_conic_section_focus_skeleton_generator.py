@@ -10,6 +10,8 @@ c=√(a²−b²)·쌍곡선 c=√(a²+b²))과 일치 ③ 풀 유일·소진 시
 
 from __future__ import annotations
 
+import pytest
+
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
@@ -24,6 +26,10 @@ from whymath_backend.l3.equivalent.conic_section_focus_skeleton_generator import
 )
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.schema.enums import QuestionFormat
+
+# PB-13: backend 잡 35분 상한 초과 해소 — PR 상시 경로에서 분리하고 전용 잡
+# corpus-authoring(야간 + 생성기·배치 변경 PR)이 돌린다. 비활성화가 아니다.
+pytestmark = pytest.mark.corpus_authoring
 
 
 def _spec(kind: str, difficulty: float = 3.2) -> EquivalenceSpec:

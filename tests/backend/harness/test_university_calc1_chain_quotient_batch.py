@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from whymath_backend.harness.university_calc1_chain_quotient_batch import (
     run_university_calc1_chain_quotient_batch,
 )
@@ -26,6 +28,10 @@ from whymath_backend.l3.equivalent.calculus_chain_quotient_rule_skeleton_generat
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.equivalent.orchestrator import run_equivalent_generation
 from whymath_backend.l3.verification_tier import VerificationTier
+
+# PB-13: backend 잡 35분 상한 초과 해소 — PR 상시 경로에서 분리하고 전용 잡
+# corpus-authoring(야간 + 생성기·배치 변경 PR)이 돌린다. 비활성화가 아니다.
+pytestmark = pytest.mark.corpus_authoring
 
 _QUOTIENT_SPEC = EquivalenceSpec(
     achievement_standard_codes=frozenset({"[CALC1-02-03]"}),

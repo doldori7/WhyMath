@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from whymath_backend.harness.vector_operations_batch import run_vector_operations_batch
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.generator import CandidateProblem
@@ -24,6 +26,10 @@ from whymath_backend.l3.equivalent.vector_operations_skeleton_generator import (
     VectorLinearCombinationSkeletonGenerator,
 )
 from whymath_backend.l3.verification_tier import VerificationTier
+
+# PB-13: backend 잡 35분 상한 초과 해소 — PR 상시 경로에서 분리하고 전용 잡
+# corpus-authoring(야간 + 생성기·배치 변경 PR)이 돌린다. 비활성화가 아니다.
+pytestmark = pytest.mark.corpus_authoring
 
 _LINEAR_COMBO_SPEC = EquivalenceSpec(
     achievement_standard_codes=frozenset({"[12기하03-01]"}),

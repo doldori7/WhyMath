@@ -413,6 +413,7 @@ addopts = [
 ]
 markers = [
     "integration: 통합 테스트 (실 네트워크·라이브 서비스 호출 가능 — 기본 skip)",
+    "corpus_authoring: 결정론 저작 도구 회귀 (l3/equivalent 스켈레톤 생성기 · harness 적재 배치). PB-13 회수로 60파일 9분12초가 되어 backend 잡의 35분 상한을 넘겼다(28.5분 + 9.2분 = 37.5분). PR 상시 경로에서 분리하되 **비활성화가 아니다** — 전용 잡 corpus-authoring이 ⑴야간 schedule ⑵생성기·배치·그 테스트를 건드리는 PR 양쪽에서 돌린다(ci.yml authoring 플래그). 즉 이 테스트가 지키는 코드를 바꾸면 그 PR에서 반드시 실행된다.",
 ]
 
 [tool.coverage.run]

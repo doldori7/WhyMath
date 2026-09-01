@@ -11,6 +11,8 @@ conic_section_focus 사고 재발 방지 — 두 필드 모두 확인해야 함�
 
 from __future__ import annotations
 
+import pytest
+
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
@@ -21,6 +23,10 @@ from whymath_backend.l3.equivalent.highschool_quotient_rule_skeleton_generator i
     _build_pool,
 )
 from whymath_backend.schema.enums import QuestionFormat
+
+# PB-13: backend 잡 35분 상한 초과 해소 — PR 상시 경로에서 분리하고 전용 잡
+# corpus-authoring(야간 + 생성기·배치 변경 PR)이 돌린다. 비활성화가 아니다.
+pytestmark = pytest.mark.corpus_authoring
 
 _STANDARD = "[12미적Ⅱ-02-04]"
 
