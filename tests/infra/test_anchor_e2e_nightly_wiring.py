@@ -19,6 +19,11 @@ EOS-58은 앵커 관통(생성→SymPy 게이트→dedup→코퍼스 저장→�
    안 돌면 이 배선은 push/PR 경로의 중복일 뿐 야간 안전망이 아니다.
 ④ 그 스텝이 **fail-open이 아니다** — `continue-on-error: true`가 붙어 있으면 관통이 깨져도
    잡은 초록이다. 상시 실패하는 fail-open 보호를 "보호 있음"으로 신뢰하지 않는다(CLAUDE.md).
+④-b 그 스텝이 **실행기를 단독 호출하지 않는다** — bare `pytest`가 아니라 `python -m pytest`다
+   (CLAUDE.md "실행기 단독 호출 금지"). 다중 환경에서 `pytest` 런처는 `python`과 다른
+   인터프리터에 결합될 수 있고, 그러면 이 잡이 설치한 것과 다른 환경에서 관통이 돌거나
+   collection이 조용히 어긋난다. 배선의 *실재*만큼 배선의 *결합 대상*도 계약이다
+   (2026-09-01 codex P1 ④ — nightly 스텝이 bare `pytest`였다).
 ⑤ 파서가 **위장하지 않는다** — ci.yml을 못 읽거나 jobs가 비면 "통과"가 아니라 실패한다.
 ⑥ 판정 함수의 **변별력을 상시 봉인**한다 — 합성 워크플로에 결함을 주입(스텝 제거·schedule
    아님·continue-on-error 부착·다른 테스트 파일로 교체)해 각각이 실제로 검출됨을 매번
@@ -69,6 +74,20 @@ def _runs_anchor_pytest(script: str, *, test_path: str) -> bool:
         return False
     for token in normalized.split():
         if token.lstrip("./").endswith(test_path) or token.endswith(test_path):
+            return True
+    return False
+
+
+def _invokes_pytest_via_python_module(script: str) -> bool:
+    """`python -m pytest` 형태인가 — bare `pytest` 런처 단독 호출을 배제한다(④-b).
+
+    `python`/`python3`/`python3.12` 어느 표기든 받되, 그 뒤가 `-m pytest`여야 한다. 토큰
+    순서로 판정하므로 주석에 우연히 섞인 "python -m pytest" 문자열은 잡지 않는다.
+    """
+    tokens = script.replace("\\\n", " ").split()
+    for i, token in enumerate(tokens[:-2]):
+        name = Path(token).name
+        if name.startswith("python") and tokens[i + 1] == "-m" and tokens[i + 2] == "pytest":
             return True
     return False
 
@@ -127,6 +146,13 @@ def anchor_wiring_violations(
                 f"`{job_key}` 잡의 앵커 관통 스텝에 continue-on-error: true가 붙어 있다 — "
                 "관통이 깨져도 잡이 초록이라 보호가 아니다(fail-open 상시 실패 금지)."
             )
+        # ④-b 실행기 단독 호출 금지 — 어느 인터프리터에 결합되는지가 결정 불가가 된다.
+        if not _invokes_pytest_via_python_module(str(step["run"])):
+            violations.append(
+                f"`{job_key}` 잡의 앵커 관통 스텝이 실행기(`pytest`)를 단독 호출한다 — "
+                "`python -m pytest`로 호출해 잡이 설치한 인터프리터에 못 박아야 한다"
+                "(CLAUDE.md 실행기 단독 호출 금지)."
+            )
     return violations
 
 
@@ -159,7 +185,7 @@ def test_parser_refuses_to_pass_on_broken_workflow() -> None:
 # ══════════════════════════════════════════════════════════════════════════
 def _synthetic_workflow(
     *,
-    run: str = f"pytest ../../{ANCHOR_TEST_PATH}",
+    run: str = f"python -m pytest ../../{ANCHOR_TEST_PATH}",
     job_if: str = "github.event_name == 'schedule'",
     continue_on_error: bool = False,
     with_schedule: bool = True,
@@ -192,6 +218,23 @@ def test_detects_non_pytest_step() -> None:
     """결함 주입 ⓑ — 경로만 언급하고 pytest로 돌지 않으면 배선이 아니다."""
     broken = _synthetic_workflow(run=f"echo ../../{ANCHOR_TEST_PATH}")
     assert anchor_wiring_violations(broken) != []
+
+
+def test_detects_bare_pytest_launcher() -> None:
+    """결함 주입 ⓕ — bare `pytest`는 배선이되 **잘못된 배선**이다(④-b·2026-09-01 P1 ④).
+
+    스텝이 존재하고 schedule에 얹혀 있고 fail-closed여도, 실행기를 단독 호출하면 어느
+    인터프리터가 도는지가 결정 불가다 — 그 상태를 '배선 정상'으로 읽지 않는다.
+    """
+    broken = _synthetic_workflow(run=f"pytest ../../{ANCHOR_TEST_PATH}")
+    assert anchor_wiring_violations(broken) != []
+
+
+def test_python_module_invocation_forms_are_accepted() -> None:
+    """양성 대조(④-b) — `python3`·절대경로 python 표기도 규약 준수로 받는다(과잉 차단 금지)."""
+    for runner in ("python", "python3", "python3.12", "/usr/bin/python3"):
+        ok = _synthetic_workflow(run=f"{runner} -m pytest ../../{ANCHOR_TEST_PATH}")
+        assert anchor_wiring_violations(ok) == [], runner
 
 
 def test_detects_non_schedule_job() -> None:

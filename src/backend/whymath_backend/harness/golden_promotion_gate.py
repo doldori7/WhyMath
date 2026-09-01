@@ -10,12 +10,38 @@
 이 게이트는 승격 제안(promotion proposal)을 받아 정본 경로 4단을 전부 통과했는지 확인하고,
 하나라도 빠지면 **exit 1**을 낸다. 정본 경로:
 
-    ① 워크리스트 검수 큐 등재  →  ② 사람 검수 판정(HIT 이벤트)  →
-    ③ review_status 백필 각인  →  ④ Wilson 결함율 상한 게이트(배치 단위)
+    ① 코퍼스 실재(축적 CLI가 수용·저장한 후보)  →  ② 사람 검수 판정(HIT 이벤트)  →
+    ③ review_status 백필 각인(감사로그 값 = 코퍼스 값 = approved)  →
+    ④ Wilson 결함율 상한 게이트(배치 단위)
 
 경로 밖 승격의 구체형 6종을 각각 다른 사유로 거부한다(뭉뚱그린 "거부" 금지 — 조치가 다르다):
-`not_in_review_queue` · `no_human_verdict` · `human_verdict_rejected` · `not_in_corpus` ·
-`review_status_not_backfilled`(백필 감사로그에 없음 = 손각인 의심) · `review_status_not_approved`.
+`not_in_corpus` · `no_human_verdict` · `human_verdict_rejected` ·
+`review_status_not_backfilled`(백필 감사로그에 각인 기록 없음 = 손각인 의심) ·
+`review_status_audit_mismatch`(감사로그 각인값 ≠ 코퍼스 현재값 = 각인 후 손편집 의심) ·
+`review_status_not_approved`(백필·코퍼스가 일치하되 값이 approved가 아님).
+
+왜 ①단이 "검수 큐 등재"가 아니라 "코퍼스 실재"인가 (2026-09-01 codex P1 실측)
+--------------------------------------------------------------------------
+초판은 ①단을 **검수 큐 멤버십**(`<out>.review.jsonl`)으로 걸었다. 그 게이트는 실제 파이프라인
+산출물을 **한 건도** 통과시킬 수 없다 — 구조적으로 0건이다:
+
+  · `problem_corpus_accumulate.run_corpus_accumulate`는 `outcome.status not in ("accepted_stored",
+    "accepted")`인 것**만** `review_sink`(검수 큐)로 흘리고, 코퍼스 JSONL에는 **수용된 것만**
+    append한다. 즉 두 산출물의 slug 집합은 **정의상 서로소**다.
+  · 그 서로소는 우연이 아니라 동결된 불변이다 — `tests/backend/harness/
+    test_needs_review_worklist.py`가 "수용(accepted_stored·accepted)은 워크리스트/큐에서 제외"를
+    핵심 계약으로 붙든다.
+
+따라서 "코퍼스에 있다 AND 큐에 있다"는 **동시에 참일 수 없는** 조건이었고, 게이트는 아무것도
+막지 못하는 대신 아무것도 통과시키지 못하는 상태(항상 exit 1)였다. 개념이 뒤집혀 있었다:
+**검수 큐는 "고쳐야 할 것" 목록이지 "승인 대기" 목록이 아니다.** 승격 후보의 전제는 큐 등재가
+아니라 **코퍼스 실재**이며, 워크리스트 검수를 대표하는 것은 큐 멤버십이 아니라 **사람 판정
+기록의 실재**(`ReviewTimerEvent` — ②단)다. 그 단은 그대로 유지한다(오히려 그것만이 사람 검수를
+대표한다).
+
+큐 멤버십은 **버리지 않고 정보로 유지**한다(`SlugVerdict.in_review_queue` · 리포트 표시).
+승격 후보가 *한때 반려 큐에 있었다*는 사실은 검수자에게 의미가 있다(재제출 이력) — 다만 그것은
+차단 조건이 아니라 참고 정보다.
 
 법정·검수 절차의 기계 대체 금지 (명기)
 -------------------------------------
@@ -51,11 +77,19 @@ CLAUDE.md 절대 금기 "*측정 없는* 기계 게이트를 인간 검수 대�
 측정 실패는 통과가 아니다
 ------------------------
 사람 검수를 받은 제안 slug가 0건이면 결함율의 **분모가 없다** — 이때는 "결함 0%"가 아니라
-측정 실패이므로 exit 1이다. 입력 파일 부재·전 줄 파싱 실패처럼 판정 재료 자체가 없으면 판정이
-아니라 **입력 오류(exit 2)** 로 구분한다(`ops/declared_unwired_audit`의 수집기 파손 exit 2 선례).
+측정 실패이므로 exit 1이다. 입력 파일 부재·**행 파싱 실패 1건 이상**처럼 판정 재료가 손상되면
+판정이 아니라 **입력 오류(exit 2)** 로 구분한다(`ops/declared_unwired_audit`의 수집기 파손
+exit 2 선례).
+
+손상된 입력에 exit 0을 주지 않는 이유 (2026-09-01 codex P1 실측): 초판은 `load_errors`를 모아
+리포트에 **렌더만** 하고 반환값에는 반영하지 않았다. 그러면 이런 형태가 조용히 통과한다 —
+검수 이벤트 JSONL의 **뒤쪽 반려 행이 잘려** 파싱 실패로 스킵되면, 같은 CU의 *이전 승인*이
+여전히 최신 판정으로 남아 승격된다(`_human_verdicts`가 파일 순서상 마지막 종결을 채택하므로).
+즉 손상은 "정보가 조금 빠진 상태"가 아니라 **판정을 뒤집을 수 있는 상태**다. 게이트에서
+"읽다가 실패했지만 통과"는 존재할 수 없다.
 
 exit 코드: 0=전건 경로 내 + Wilson 통과 · 1=경로 밖 1건 이상 또는 Wilson 미달/측정 불가 ·
-2=입력 오류(판정 불가).
+2=입력 오류(파일 부재·제안 0건·**입력 행 파싱 실패 1건 이상** — 판정 불가).
 
 사용법(운영자):
     python -m whymath_backend.harness.golden_promotion_gate \\
@@ -99,10 +133,12 @@ HUMAN_REVIEW_NOTICE = (
 )
 
 # 정본 경로 4단 — 리포트 헤더에 그대로 렌더한다(경로가 무엇인지 산출물이 자백하게).
+# ①단이 "검수 큐 등재"가 아닌 이유는 모듈 docstring 참조(큐와 코퍼스는 정의상 서로소라
+# 큐 멤버십을 전제로 걸면 게이트가 구조적으로 아무것도 통과시키지 못한다 — 2026-09-01 P1).
 PROMOTION_PATH_STAGES = (
-    "① 워크리스트 검수 큐 등재(<out>.review.jsonl)",
+    "① 코퍼스 실재(축적 CLI가 수용·저장한 후보 — 검수 큐 등재가 아니다)",
     "② 사람 검수 판정(ReviewTimerEvent finished + verdict)",
-    "③ review_status 백필 각인(problem_corpus_review_status_backfill 감사로그)",
+    "③ review_status 백필 각인(감사로그 각인값 = 코퍼스 값 = approved)",
     "④ Wilson 결함율 상한 게이트(배치 단위)",
 )
 
@@ -123,19 +159,36 @@ class SlugVerdict:
     """승격 제안된 후보 slug."""
 
     in_review_queue: bool
-    """①단 — 검수 큐 JSONL에 이 slug 행이 있는가."""
+    """**정보** — 검수 큐 JSONL에 이 slug 행이 있는가. 차단 조건이 **아니다**.
+
+    수용 문항은 정의상 큐에 없으므로(모듈 docstring) 정상 승격 후보는 여기서 False가 기본이다.
+    True는 "이 후보가 한때 반려/검수필요로 큐에 올랐다"는 이력 신호라 검수자에게 의미가 있어
+    버리지 않고 싣는다 — 판정이 아니라 참고 정보다.
+    """
 
     human_verdict: str | None
     """②단 — 사람 검수 종결 판정(approved|rejected). 없으면 None(= 검수 기록 없음)."""
 
     backfill_stamped: bool
-    """③단 전반 — 백필 감사로그가 이 slug를 각인했다고 기록하는가(손각인 배제)."""
+    """③단 전반 — 백필 감사로그가 이 slug를 **approved로** 각인했다고 기록하는가.
+
+    "각인 기록의 존재"가 아니라 "각인값이 approved"까지를 뜻한다 — 감사로그에 pending으로
+    적힌 기록을 '각인됨'으로 세면, 그 뒤 코퍼스만 손으로 approved가 돼도 통과한다(P1 ②).
+    """
+
+    backfill_review_status: str | None
+    """③단 — 백필 감사로그가 기록한 각인값 그 자체(각인 기록이 없으면 None).
+
+    slug 집합으로 축약하지 않고 값을 보존하는 이유: 이 모듈의 존재 이유가 "백필 각인 vs
+    손각인"의 구분인데, 감사=pending·코퍼스=approved 같은 **불일치**는 값을 버리는 순간
+    보이지 않는다(2026-09-01 codex P1 ②).
+    """
 
     corpus_review_status: str | None
     """③단 후반 — 코퍼스 레코드의 현재 `review_status`(레코드 부재면 None)."""
 
     in_corpus: bool
-    """코퍼스 JSONL에 이 slug 레코드가 실재하는가."""
+    """①단 — 코퍼스 JSONL에 이 slug 레코드가 실재하는가(승격 후보의 전제)."""
 
     blocked_reason: str | None
     """차단 사유(경로 밖 6종 중 하나). None이면 경로 내."""
@@ -151,6 +204,7 @@ class SlugVerdict:
             "in_review_queue": self.in_review_queue,
             "human_verdict": self.human_verdict,
             "backfill_stamped": self.backfill_stamped,
+            "backfill_review_status": self.backfill_review_status,
             "in_corpus": self.in_corpus,
             "corpus_review_status": self.corpus_review_status,
             "on_path": self.on_path,
@@ -172,7 +226,25 @@ class PromotionGateReport:
     """Wilson 단측 신뢰수준."""
 
     load_errors: list[str] = field(default_factory=list)
-    """입력 JSONL 로드 실패 사유(타입명+줄 번호) — 판정 근거의 불완전성을 자백한다."""
+    """입력 JSONL 로드 실패 사유(파일명+줄 번호+예외 타입명) — 판정 재료의 손상 목록.
+
+    비어 있지 않으면 이 리포트는 **판정이 아니라 입력 오류**다(`input_damaged`) — 손상된
+    입력으로는 승격 허용도 거부도 권위가 없다.
+    """
+
+    @property
+    def input_damaged(self) -> bool:
+        """입력 재료가 손상됐는가 — 참이면 판정 자체가 성립하지 않는다(CLI exit 2).
+
+        게이트의 통과/거부보다 **앞서는** 상태다: 잘려 스킵된 반려 행 하나가 이전 승인을
+        최신 판정으로 만들 수 있으므로, 손상 위에서 계산된 `approved`는 신뢰할 수 없다.
+        """
+        return bool(self.load_errors)
+
+    @property
+    def previously_queued(self) -> list[SlugVerdict]:
+        """**정보** — 한때 검수 큐(반려·검수필요)에 올랐던 제안. 차단하지 않고 표시만 한다."""
+        return [v for v in self.verdicts if v.in_review_queue]
 
     @property
     def off_path(self) -> list[SlugVerdict]:
@@ -204,8 +276,8 @@ class PromotionGateReport:
 
     @property
     def approved(self) -> bool:
-        """게이트 최종 — 경로 밖 0건 **그리고** Wilson 통과일 때만 승격 허용."""
-        return not self.off_path and self.wilson_passed
+        """게이트 최종 — 입력 무손상 **그리고** 경로 밖 0건 **그리고** Wilson 통과."""
+        return not self.input_damaged and not self.off_path and self.wilson_passed
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -214,6 +286,8 @@ class PromotionGateReport:
             "proposed": len(self.verdicts),
             "on_path": len(self.verdicts) - len(self.off_path),
             "off_path": len(self.off_path),
+            "previously_queued": len(self.previously_queued),
+            "input_damaged": self.input_damaged,
             "reviewed": self.reviewed,
             "defects": self.defects,
             "defect_rate_upper": self.defect_rate_upper,
@@ -231,7 +305,7 @@ def evaluate_promotion(
     *,
     queue_slugs: set[str],
     human_verdicts: dict[str, str],
-    backfilled_slugs: set[str],
+    backfilled_status: dict[str, str],
     corpus_review_status: dict[str, str | None],
     max_defect_rate: float = _DEFAULT_MAX_DEFECT_RATE,
     confidence: float = _DEFAULT_CONFIDENCE,
@@ -242,32 +316,49 @@ def evaluate_promotion(
     입력은 전부 *이미 로드된* 사실 집합이라 이 함수는 파일을 열지 않는다 — 로딩(그리고 그
     실패 사유 수집)은 `main`이 하고, 판정 로직은 여기서 hermetic하게 테스트된다.
 
+    `queue_slugs`는 **판정에 쓰지 않는다** — `SlugVerdict.in_review_queue`로 실려 리포트에만
+    나타난다(왜: 모듈 docstring "왜 ①단이 검수 큐 등재가 아닌가"). 인자를 없애지 않는 이유는
+    그 이력 정보를 계속 싣기 위해서다.
+
+    `backfilled_status`는 slug 집합이 아니라 **{slug: 감사로그 각인값}** 맵이다 — 값을 버리면
+    "감사=pending인데 코퍼스=approved"(각인 후 손편집)를 볼 수 없다.
+
     차단 사유는 **첫 번째로 막힌 단**을 낸다(뭉뚱그리지 않는다 — 조치가 단마다 다르다):
-    큐에 없다 → 사람 판정이 없다 → 사람이 반려했다 → 코퍼스에 없다 → 백필을 안 거쳤다 →
-    각인값이 approved가 아니다.
+    코퍼스에 없다 → 사람 판정이 없다 → 사람이 반려했다 → 백필을 안 거쳤다 →
+    감사값과 코퍼스값이 어긋난다 → 각인값이 approved가 아니다.
     """
     verdicts: list[SlugVerdict] = []
     for slug in proposed_slugs:
-        in_queue = slug in queue_slugs
+        in_queue = slug in queue_slugs  # 정보 전용(차단 조건 아님)
         verdict = human_verdicts.get(slug)
-        stamped = slug in backfilled_slugs
+        audit_status = backfilled_status.get(slug)
+        # "각인됨"의 정의 = 감사로그에 기록이 있고 **그 값이 approved**. 기록 존재만으로
+        # 인정하면 pending 각인 뒤의 손편집 approved가 그대로 통과한다(P1 ②).
+        stamped = audit_status is not None and is_review_status_cleared(audit_status)
         in_corpus = slug in corpus_review_status
         status = corpus_review_status.get(slug)
 
         reason: str | None
-        if not in_queue:
-            reason = "not_in_review_queue"
+        if not in_corpus:
+            # ①단 — 승격 후보의 전제는 코퍼스 실재다(축적 CLI가 수용·저장한 것).
+            reason = "not_in_corpus"
         elif verdict is None:
             reason = "no_human_verdict"
         elif verdict == "rejected":
             reason = "human_verdict_rejected"
-        elif not in_corpus:
-            reason = "not_in_corpus"
-        elif not stamped:
-            # 코퍼스 값은 approved인데 백필 감사로그에 없다 = 백필 CLI를 안 거친 각인(손편집
-            # 의심). 값만 보고 통과시키면 "경로 밖 승격"의 가장 쉬운 형태가 그대로 열린다.
+        elif audit_status is None:
+            # 코퍼스 값은 approved인데 백필 감사로그에 각인 기록이 없다 = 백필 CLI를 안 거친
+            # 각인(손편집 의심). 값만 보고 통과시키면 "경로 밖 승격"의 가장 쉬운 형태가 열린다.
+            # 조치: 백필 CLI를 돌려 각인을 정본 경로로 다시 만든다.
             reason = "review_status_not_backfilled"
-        elif not is_review_status_cleared(status):
+        elif audit_status != status:
+            # 각인은 거쳤는데 **지금 코퍼스 값이 그때 각인값과 다르다** = 각인 이후 누군가
+            # 코퍼스를 고쳤다. "각인 안 됨"과 조치가 다르다(이쪽은 백필 재실행이 아니라 변경
+            # 이력 조사 대상) — 그래서 사유를 분리한다(2026-09-01 codex P1 ②).
+            reason = "review_status_audit_mismatch"
+        elif not stamped:
+            # 감사값 = 코퍼스값인데 그 값이 approved가 아니다(pending/rejected).
+            # 판정 권위는 `is_review_status_cleared` 단일. 조치: 검수 판정 자체를 다시 받는다.
             reason = "review_status_not_approved"
         else:
             reason = None
@@ -278,6 +369,7 @@ def evaluate_promotion(
                 in_review_queue=in_queue,
                 human_verdict=verdict,
                 backfill_stamped=stamped,
+                backfill_review_status=audit_status,
                 corpus_review_status=status,
                 in_corpus=in_corpus,
                 blocked_reason=reason,
@@ -310,13 +402,22 @@ def render_gate_report(report: PromotionGateReport) -> str:
             f"- 사람 검수 판정 {report.reviewed}건 · 반려 {report.defects}건 · "
             f"결함율 Wilson 상한(신뢰 {report.confidence}) {upper_text} "
             f"(임계 {report.max_defect_rate})",
+            # 큐 이력은 **정보**로만 싣는다(차단 조건 아님) — 승격 후보가 한때 반려·검수필요
+            # 큐에 올랐다는 사실은 검수자에게 의미가 있어 버리지 않는다.
+            f"- 참고(차단 아님): 한때 검수 큐에 오른 제안 {len(report.previously_queued)}건",
             f"- 판정: {'승격 허용' if report.approved else '승격 거부'}",
             "",
         ]
     )
-    for error in report.load_errors:
-        lines.append(f"- ⚠ 입력 로드 실패 행: {error}")
     if report.load_errors:
+        # 손상은 "정보 누락"이 아니라 판정 무효 사유다 — 어느 파일 몇 번째 줄이 왜 실패했는지
+        # 전건을 남긴다(침묵 실패 금지). CLI는 이 상태에서 exit 2를 낸다.
+        lines.append("## 입력 오류 — 판정 재료 손상(판정 무효·exit 2)")
+        lines.extend(f"- ⚠ 입력 로드 실패 행: {error}" for error in report.load_errors)
+        lines.append("")
+    if report.previously_queued:
+        lines.append("## 참고 — 검수 큐 이력이 있는 제안(차단 아님)")
+        lines.extend(f"- `{verdict.slug}`" for verdict in report.previously_queued)
         lines.append("")
     if report.off_path:
         lines.append("## 경로 밖 제안(차단)")
@@ -339,13 +440,21 @@ def _read_proposal(path: Path) -> list[str]:
     return slugs
 
 
-def _load_jsonl_slug_field(path: Path, field_name: str) -> tuple[set[str], list[str]]:
-    """JSONL에서 `field_name` 값을 모은다 — (값 집합, 실패 사유[타입명+줄 번호]).
+def _load_backfill_audit(path: Path) -> tuple[dict[str, str], list[str]]:
+    """백필 감사로그 JSONL → {slug: 각인된 review_status}. (맵, 실패 사유[타입명+줄 번호]).
 
-    백필 감사로그처럼 전용 로더가 없는 단순 JSONL용이다. 파싱 실패 줄은 삼키지 않고 타입명만
-    남긴다(필드 *값*은 남기지 않는다 — 침묵 실패 금지 규약의 로그 위생).
+    **slug 집합으로 축약하지 않는 이유**(2026-09-01 codex P1 ②): 감사 레코드는
+    `problem_corpus_review_status_backfill._backfill_line`이 쓴 `{problem_id, slug,
+    review_status}`라 각인 *값*을 이미 갖고 있다. 그 값을 버리고 slug만 남기면 "이전 백필이
+    pending을 각인했는데 나중에 코퍼스를 손으로 approved로 고친" 경우가 그대로 통과한다 —
+    이 모듈의 존재 이유(백필 각인 vs 손각인 구분)가 정확히 그 지점에서 무너진다.
+
+    같은 slug가 여러 줄/여러 파일에 나오면 **마지막 기록이 이긴다**(백필 재실행이 이전 각인을
+    갱신한다 — `_human_verdicts`의 "마지막 종결이 현재 판정"과 같은 규칙). 파싱 실패 줄은
+    삼키지 않고 파일명·줄 번호·예외 타입명을 남긴다(필드 *값*은 남기지 않는다 — 침묵 실패
+    금지 규약의 로그 위생).
     """
-    values: set[str] = set()
+    statuses: dict[str, str] = {}
     errors: list[str] = []
     with path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
@@ -357,11 +466,19 @@ def _load_jsonl_slug_field(path: Path, field_name: str) -> tuple[set[str], list[
             except Exception as exc:  # noqa: BLE001 — 사유 수집(타입명 보존)이 목적
                 errors.append(f"{path.name} line {line_no}: {type(exc).__name__}")
                 continue
-            if isinstance(parsed, dict):
-                value = parsed.get(field_name)
-                if isinstance(value, str) and value:
-                    values.add(value)
-    return values, errors
+            if not isinstance(parsed, dict):
+                continue
+            slug = parsed.get("slug")
+            if not (isinstance(slug, str) and slug):
+                continue
+            raw = parsed.get("review_status")
+            if not (isinstance(raw, str) and raw):
+                # slug는 있는데 각인값이 없는 감사 행 = 재료 손상이다. 조용히 "각인 기록 있음"
+                # 으로 세면 값 없는 행이 approved 각인처럼 행세한다 — 손상으로 신고한다.
+                errors.append(f"{path.name} line {line_no}: MissingReviewStatusField")
+                continue
+            statuses[slug] = raw
+    return statuses, errors
 
 
 def _load_corpus_review_status(path: Path) -> tuple[dict[str, str | None], list[str]]:
@@ -418,7 +535,7 @@ def _say(message: str) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검증 분기가 본체다
-    """CLI 엔트리 — 경로 밖 승격이면 exit 1, 입력 자체가 없으면 exit 2."""
+    """CLI 엔트리 — 경로 밖 승격이면 exit 1, 입력이 없거나 **손상됐으면** exit 2."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.golden_promotion_gate",
         description=(
@@ -429,7 +546,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검
     )
     parser.add_argument("--proposal", type=Path, required=True, help="승격 제안 slug 목록(텍스트).")
     parser.add_argument(
-        "--review-queue", type=Path, required=True, help="검수 큐 JSONL(<out>.review.jsonl)."
+        "--review-queue",
+        type=Path,
+        required=True,
+        help=(
+            "검수 큐 JSONL(<out>.review.jsonl) — **정보용**(차단 조건 아님). 수용 문항은 "
+            "정의상 큐에 없으므로 큐 멤버십을 전제로 걸면 아무것도 통과하지 못한다."
+        ),
     )
     parser.add_argument(
         "--review-events",
@@ -448,7 +571,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검
         required=True,
         help=(
             "review_status 백필 감사로그 JSONL(복수 지정 가능) — ③단 각인이 백필 CLI를 거쳤음의 "
-            "근거. 필수인 이유: 코퍼스의 값만 보면 손편집 각인을 구분할 수 없다."
+            "근거. 필수인 이유: 코퍼스의 값만 보면 손편집 각인을 구분할 수 없다. 각인 *값*까지 "
+            "읽어 코퍼스 현재값과 대조한다(불일치는 review_status_audit_mismatch)."
         ),
     )
     parser.add_argument(
@@ -487,10 +611,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검
     verdict_map, verdict_errors = _human_verdicts(args.review_events)
     load_errors.extend(verdict_errors)
 
-    backfilled: set[str] = set()
+    backfilled: dict[str, str] = {}
     for audit_path in args.backfill_audits:
-        slugs, audit_errors = _load_jsonl_slug_field(audit_path, "slug")
-        backfilled |= slugs
+        audit_status, audit_errors = _load_backfill_audit(audit_path)
+        backfilled.update(audit_status)  # 마지막 감사 파일의 각인이 이긴다(재실행 갱신)
         load_errors.extend(audit_errors)
 
     corpus_status, corpus_errors = _load_corpus_review_status(args.corpus)
@@ -500,7 +624,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검
         proposed,
         queue_slugs=queue_slugs,
         human_verdicts=verdict_map,
-        backfilled_slugs=backfilled,
+        backfilled_status=backfilled,
         corpus_review_status=corpus_status,
         max_defect_rate=args.max_defect_rate,
         confidence=args.confidence,
@@ -513,6 +637,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901 — 입력 검
             json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
+    # ── 입력 손상(exit 2) — 판정보다 **앞선다** ──────────────────────────────
+    # 리포트·JSON은 이미 위에서 냈다(증거는 남기고 판정만 무효화한다). 손상된 입력 위의
+    # 통과/거부는 둘 다 권위가 없으므로 게이트 판정(0/1)이 아니라 입력 오류로 종료한다
+    # (2026-09-01 codex P1 ③ — 초판은 load_errors를 렌더만 하고 exit 0을 낼 수 있었다).
+    if report.input_damaged:
+        _say(
+            f"[입력 오류] 판정 재료 손상 {len(report.load_errors)}행 — "
+            f"{'; '.join(report.load_errors[:5])}"
+            f"{' …' if len(report.load_errors) > 5 else ''} (판정 무효·exit 2)."
+        )
+        return 2
     if report.off_path:
         reasons = ", ".join(sorted({v.blocked_reason or "?" for v in report.off_path}))
         _say(f"[승격 거부] 경로 밖 제안 {len(report.off_path)}건 — 사유: {reasons} (exit 1).")

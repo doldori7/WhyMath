@@ -1339,18 +1339,18 @@ jobs:
       - name: Install dependencies (editable + dev extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e ".[dev]"
           # 교차계층 거버넌스 테스트가 data_pipeline(L1)을 import → 백엔드 잡에도 설치.
-          pip install -e ../data-pipeline
+          python -m pip install -e ../data-pipeline
 
       - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
-        run: alembic upgrade head
+        run: python -m alembic upgrade head
 
       - name: Pytest (E2E 관통 슬라이스만 — 실 PG·mock LLM)
         env:
           WHYMATH_RUN_INTEGRATION: "1"
           WHYMATH_DB_DISABLE_POOL: "1"
-        run: pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
+        run: python -m pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
 
       # 초인간 검증 S6(상시성) — 전 코퍼스 verify 재료로 정답을 매일 밤 전수 재검산.
       # 정본 변경·데이터 오염을 야간에 즉시 잡는다(fail 1건이라도 있으면 exit 1). 순수 계산·
@@ -1377,5 +1377,8 @@ jobs:
       # 신규 잡 증설 0을 유지한다(위 코퍼스 재검증 스텝과 같은 판단).
       # 배선 실재성은 `tests/infra/test_anchor_e2e_nightly_wiring.py`가 동결한다(OPS-10 선례 —
       # "워크플로에 썼다"와 "그 잡이 이 관통을 돈다"는 다르다).
+      # 실행기(`pytest`)를 단독 호출하지 않는다 — CLAUDE.md "실행기 단독 호출 금지": 다중
+      # 환경에서 `pytest` 런처가 `python`과 다른 인터프리터에 결합될 수 있다. 이 잡의 설치·
+      # 마이그레이션·테스트 스텝을 전부 `python -m` 형태로 통일해 한 인터프리터로 못 박는다.
       - name: 앵커 A4 생성 E2E 관통 (EOS-64 상시화 — hermetic)
-        run: pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
+        run: python -m pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
