@@ -33,10 +33,30 @@ from dataclasses import dataclass, field
 
 API = "https://api.github.com"
 TIMEOUT = 30
-CA = "/root/.ccr/ca-bundle.crt"
+_CA_PATH = "/root/.ccr/ca-bundle.crt"  # 에이전트 프록시 CA (있을 때만 사용)
 
 # 필수 체크를 만족시키는 결론 — skipped도 만족이다(GitHub 규칙).
 SATISFYING = frozenset({"success", "skipped", "neutral"})
+
+
+def _ca_args() -> list[str]:
+    """프록시 CA를 쓸 수 있으면 `["--cacert", <경로>]`, 아니면 `[]`.
+
+    **왜 존재 검사를 예외로 감싸는가** (2026-09-01 main red 실측): `Path.exists()`는
+    실패를 False로 돌려주지 **않는다** — `pathlib._IGNORED_ERRNOS`는
+    `(ENOENT, ENOTDIR, EBADF, ELOOP)`뿐이라 **EACCES는 전파된다**. GitHub 러너의
+    `runner` 유저는 `/root`(mode 700)를 통과할 수 없으므로 검사 자체가
+    `PermissionError`로 죽는다.
+
+    그리고 CA를 **무조건** `--cacert`로 넘기면 러너에서 `curl (77) error setting
+    certificate file`이 난다. 이 경로는 에이전트 프록시가 있는 실행 환경에만
+    존재하므로, 없으면 시스템 신뢰저장소를 쓰는 것이 정상 동작이다.
+    """
+    try:
+        with open(_CA_PATH, "rb"):  # 존재 + 읽기 권한을 한 번에 확인한다
+            return ["--cacert", _CA_PATH]
+    except OSError:
+        return []
 
 
 @dataclass
@@ -108,7 +128,7 @@ def decide(
 
 
 def _get(path: str) -> object:
-    cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), "--cacert", CA, f"{API}{path}"]
+    cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), *_ca_args(), f"{API}{path}"]
     try:
         out = subprocess.run(
             cmd,
