@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 1
 eos_priority: P1
 owner: claude
@@ -18,9 +18,12 @@ acceptance:
   - "④ 자가검증 EXIT=0 — 런북 §5 스크립트로 미분류 0건 확인. 이것이 게이트 clear의 유일한 선결 판정이며 출력을 Kiki에게 그대로 전달한다"
   - "⑤ P0 예산 대비 수치 보고 — amend는 의도적으로 예산을 강제하지 않는다(막으면 등급을 낮춰 적어 예산을 맞추게 된다). 제안 기준 P0 13건/예산 50건이나 실측치를 그대로 보고한다"
   - "⑥ 게이트 clear는 본 태스크 범위 밖 — Kiki 본인이 실행한다(에이전트의 사람 게이트 clear = 준수 감사 A3 심각도 높음). 본 태스크는 clear 가능 상태를 만드는 데서 끝난다"
-artifacts: []
+artifacts:
+  - "#961"
+  - "backlog/tasks/**.yaml (190건 eos_priority 부여 · 미분류 0건)"
+  - "docs/ops/eos_relevance_triage_gate_runbook.md (절차 정본)"
 paths:
   - "backlog/tasks/**"
-session: claude/review-dydkkx-runbook
+session: null
 notes: "런북: docs/ops/eos_relevance_triage_gate_runbook.md(§3 단계 2). EOS-76 재등재 — 그쪽은 requires_gates에 대상 게이트를 붙여 순환 데드락이 됐다(start 무조건 거부·실측 exit 1·PR #961 codex P1 지적). 이 태스크는 게이트를 붙이지 않는다: 선결 관계가 '게이트→태스크'가 아니라 '태스크→게이트'이고 그 방향은 requires_gates로 표현할 수 없다(런북 §3 표가 순서의 정본). 실측 2026-09-01: 미분류 비종결 190건 = 판정표 커버 171 + 신규 19. 순서 주의: 이 태스크 완료 전에 게이트가 clear되면 HARN-55 그랜드파더 만료로 validate가 190건 위반을 내고 harness-integrity가 red가 된다. EOS-77~79는 타 세션 인플라이트라 CLI가 EOS-80을 제안했다."
 updated: 2026-09-01
