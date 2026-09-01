@@ -7655,6 +7655,19 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **그 결함을 내 테스트가 못 잡은 이유(설계 교훈)**: 모의 git이 `stdout`을 빈 문자열로 돌려주게 해 두어 **파싱 경로를 한 번도 밟지 않았다**. 모의는 내가 만든 출력을 파싱하므로 함정이 재현되지 않는다. 상환 = **실제 git 저장소를 만들어 실제 `cat-file --batch` 출력을 태우는** 회귀 테스트(M8로 변별력 확인 — 문자 오프셋으로 되돌리면 red).
 - **cross-ref**: `scripts/harness/similar.py` · `remote_claims.read_remote_task_texts` · `_iter_batch_blobs`(선례 함정) · `tests/harness/test_semantic_duplicate_notice.py` · `docs/standards/build_harness.md` §3b-1 · PR #947·#943(등재)·#942(사고)
 
+## 2026-09-01: EOS-56 — 앵커 세트 1급 등록 (분석 스크립트 상수 → 코퍼스 정본 + CI 무결성 게이트)
+
+- **무엇**: 12월 내부 검증의 **측정 조인 축**인 앵커 세트를 `data/corpus/eos_anchor_set_v1/anchors.yaml`로 1급화했다. G0 서명(2026-08-30) 이전까지 앵커 정의는 `scripts/analysis/eos_anchor_asset_audit.py`의 `ANCHOR_DEFS` **파이썬 상수 하나**뿐이었다 — 분석 스크립트 안의 상수는 ①런타임·생산 배치가 읽을 수 없고 ②성취기준 코퍼스가 코드를 잃어도 아무도 소리내지 않는다.
+- **이관은 무손실이다(기계 확인)**: 코드셋 추가·삭제·수정 0건. 검증은 인상이 아니라 재현으로 했다 — 전환 후 실사 스크립트를 재실행하니 검증설계서 §2 표의 자산 수치(A1 성취기준 3·원자 9·오개념 4 … A4 문항 378·A6 문항 261)가 **그대로 재현**됐고, 생산/검수 CU 합계도 450/185로 일치한다.
+- **이월을 데이터로 남긴 판단**: G0 확정 12월 대상은 6개(A1~A6)지만 레지스트리는 **8건 전부**를 `scope` 필드와 함께 싣는다. 목록에서 지우면 ①"왜 대학 앵커가 빠졌는가"의 근거(전환 설계서 옵션 ② 명시 손실)가 코드·문서 어디에도 남지 않고 ②EOS-52 실사 문서(8앵커 기준 발행)의 재현이 깨진다. 이월은 삭제가 아니라 상태다.
+- **집행 별항(정본화 ≠ 집행)**: acceptance ③을 "명시"에서 멈추지 않고 실사 스크립트 전환까지 착지시켰다. 상수가 되살아나는 경로는 테스트가 막는다(`TestAuditScriptReadsTheRegistry` — 리터럴 부재 + 스크립트가 읽은 코드셋이 레지스트리와 동일한지 대조). 남은 후속 지점 2건(golden_benchmark의 `ANCHOR_IDS` 런타임 파생 · 아직 없는 생산 배치)은 레지스트리 헤더 "소비 지점" 블록에 좌석과 함께 열거했다.
+- **파생 효과 — 이월 판정이 하드코딩이던 곳을 데이터로 되돌렸다**: `test_golden_benchmark.py`의 앵커 정합 동결이 `deferred = {"A7","A8"}`를 하드코딩하고 있었다. 이제 등록의 `scope`로 판정한다 — 2027-01에 대학 앵커를 되살릴 때 그 테스트가 조용히 거짓말하지 않는다.
+- **게이트가 자기 입력 변경에 깨어나는가(배선 실측)**: 무결성 검사는 `tests/backend/l1/test_eos_anchor_registry.py`에 두고, `.github/workflows/ci.yml`의 backend 경로 필터가 `data/corpus/`를 포함한다는 사실을 **주석이 아니라 파일에서 읽어** 단언한다(`TestCiTriggerWiring`). 필터 밖이면 성취기준 코퍼스 단독 수정 PR에서 잡이 SKIP되고 skip은 required check에서 충족으로 계상된다 — 방어 대상 벡터에서 정확히 실행되지 않는 형태다(COLLAB-07·G0 동결 입력 편입과 같은 사각).
+- **상시 green 위장 차단 2건**: ①성취기준 색인 0건은 "위반 없음"이 아니라 **읽기 실패**로 던진다 — 통과시키면 게이트가 코퍼스 경로 오타 하나로 영구 green이 된다. ②학교급 895행은 2022·2015 개정 혼재이므로 `curriculum_revision` 필터를 건다 — 필터 없이 세면 폐지된 2015 코드가 앵커를 살려 주어 드리프트가 은폐된다. 두 축 모두 뮤테이션으로 실측했다.
+- **변별력(뮤테이션 9종 전건 검출)**: 없는 코드 추가 → 위반 검출·CLI exit 1 · 코드 중복 귀속 → 거부 · scope 오타 → 거부 · 포함/제외 동시 등재 → 거부 · 필수 필드 결손 → 거부 · 파일 부재 → 예외 타입명 포함 실패 · 성취기준 0건 → 명시 실패 · 2015 개정 행만 → 명시 실패.
+- **사이드카에서 자기 해시를 뺀 이유**: 초안은 관례를 따라 `source_sha256`에 **자기 자신의 sha256**을 넣었다. 상류 원본이 없는 자체작성 소스에서 그 값은 아무것도 증명하지 못하면서 편집마다 조용히 낡는다. 대신 무결성은 CI 게이트가 판정한다는 사실을 `integrity_gate` 필드로 명시했다.
+- **검증**: 신규 27건 `tests/backend/l1/test_eos_anchor_registry.py` 통과 · `test_golden_benchmark.py` 50건 통과 · backend 전체 스위트 · ruff/black/mypy --strict EXIT=0(CI와 동일 명령·대상).
+- **cross-ref**: `data/corpus/eos_anchor_set_v1/anchors.yaml`(정본) · `whymath_backend.l1.standards.anchor_registry`(읽기 API·판정 CLI exit 0/1) · `docs/standards/eos_verification_design_v1.md` §2(정본 위치 갱신) · `docs/reviews/eos_anchor_asset_audit_2026-09.md` §2 · `G-eos-g0-verification-design-freeze` · EOS-52·EOS-53 갭 #3
 ## 2026-09-01: EOS-69 중복 구현 사고 — 낡은 로컬 대장이 이미 done인 태스크를 후보로 내놨다 (HARN-54 등재)
 
 - **사건**: `EOS-69`를 병렬 세션과 동시 수행했고 **PR #916이 먼저 착지**(08-31T21:27 UTC). 내 브랜치 base는 08-31T11:14의 `d980402d`라 로컬 대장에는 여전히 `todo`였고, **2시간 50분 뒤** `next`가 EOS-69를 후보 1위로 내놓고 `start`가 통과시켰다. 전체 구현 1건(계약 3→6 확장·DI 좌석·중립 뷰·테스트 신설·뮤테이션 10종·전체 스위트 40분 2회)이 **중복 생산 후 폐기**됐다.
@@ -7666,6 +7679,18 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **부수 교훈**: "변별력 없는 검증 스텝 금지"는 도구 호출 방식뿐 아니라 **테스트 앵커 선택**에도 적용된다 — 내 M1은 앵커를 `parse_error`로만 잡아 `undecidable` 경로가 초록 통과했고, M2는 테스트 이름("unverifiable is inert")과 실제 단언(완료 필드만 확인)이 불일치해 서빙 계층 접힘을 놓쳤다.
 - **cross-ref**: PR #916(main 정본) · `HARN-54` · 폐기 커밋 `a7faeb74`
 
+## 2026-09-01: EOS-62 — 검수 판정 3종화 (승인율이 AI-first 실패를 가리던 구조 해소)
+
+- **무엇**: `ReviewVerdict`에 `approved_with_edit`를 더해 "그대로 통과한 CU"와 "사람이 고쳐서 통과시킨 CU"를 갈랐다. 2값이던 시절엔 **HIT 중앙값 4분 + 승인율 93%가 "성공"으로 읽히는데 승인분의 상당수가 사람 손질일 수 있었다** — 그 손질분이 정확히 AI-first 전략의 실패 신호이므로, 성공 지표가 실패를 가리는 구조였다(N4 갭 ③).
+- **문서 §17의 5종 중 1종만 채택**: `REGENERATE`는 Run 재생성 카운트(EOS-55)가, `ESCALATE`는 운영 절차가 담당한다 — 스키마 확장은 최소로 둔다. 미채택 2종이 어휘에 들어오지 않음을 테스트가 동결한다.
+- **두 축이 갈라진 지점을 코드가 지킨다**: 2값 시절 `ReviewVerdict`는 `ReviewStatus`의 부분집합이라 "같은 문자열"이었는데, 이제 아니다. `approved_with_edit`를 `problem.review_status`에 그대로 복사하면 `is_review_status_cleared`(approved만 True·fail-closed)가 False를 내 **손질 승인된 CU가 에러 없이 목록에서 사라진다**. 그래서 `review_status_for_verdict()`를 유일한 다리로 두고(둘 다 `approved`로 매핑 — 손질 여부는 생산성 축이지 노출 축이 아니다), 그 침묵 실패 경로를 테스트가 양방향으로 실측한다(`is_review_status_cleared(변환)` True / `is_review_status_cleared(원값)` False).
+- **부기 규약 — 왜 손질 코드는 필수가 아닌가**: 반려는 "왜 못 쓰는가"가 판정의 본체라 코드 없는 반려는 측정 불가다. 손질 승인은 "통과했다"가 본체고 코드는 부기다 — 필수로 걸면 애매한 손질(문장 다듬기)에서 검수자가 아무 코드나 찍고 그 오염이 실패분포로 들어간다. 권장하되 강제하지 않고 **미기재분을 분리 카운트**한다(0 위장 금지).
+- **F-Ⅲ 분모를 지켰다(가장 중요한 판단)**: acceptance ②가 "손질 코드가 F-Ⅲ 실패분포의 입력"이라 적었지만, F-Ⅲ("실패 분포에서 판단형 > 60%")의 '실패 분포'는 EOS-51 §5에서 **12월까지 수정 금지로 동결**된 의미다. 손질 코드를 반려 분포에 합치면 12월 판정 임계가 조용히 다른 것을 재게 된다. 그래서 `edit_failure_code_counts`를 **별도 축**으로 내고, 합칠지는 최종 스코어카드(EOS-61)의 판단으로 남겼다. 테스트가 그 분리를 실측 고정한다 — 합쳤다면 예시 데이터에서 판단형 비중이 0%→50%로 바뀐다.
+- **하류가 한 줄도 안 바뀐 채 열렸다(설계가 실제로 작동한 사례)**: EOS-60 골든 승격은 `edit_aware_verdict_available()`이 **상수가 아니라 상류 `ReviewVerdict` 어휘를 `get_args`로 실측**하도록 만들어져 있었다. 이 커밋이 어휘를 넓히자 `golden_benchmark.py`의 판정 로직을 건드리지 않고 승격 경로 ⓑ가 자동 활성됐다(`approved_with_edit` → as-found `defective`). "선언과 실체 불일치"를 하류가 상류를 직접 보게 해서 막은 선례이며, 프로브가 상수였다면 어휘 확장이 무증상으로 무시됐을 것이다.
+- **영구 skip이 될 뻔한 테스트 2건을 살렸다**: 그 두 테스트는 `if edit_aware_verdict_available(): pytest.skip(...)` 형태라 착지 후 **항상 skip**된다 — 어휘 부재 시 fail-closed가 유지되는지를 검사하지 않으면서 통과처럼 보인다. 프로브를 False로 눌러 그 상태를 *만들어* 검사하도록 바꿨다(어휘 롤백·하류 배포 지연에서 여전히 필요한 안전 속성). 같은 이유로 `model_construct`(검증 우회) 픽스처도 실 writer로 교체했다 — 우회한 채 두면 "스키마가 이 값을 실제로 받는가"를 영원히 검사하지 않는다. 어휘 밖 값(`escalate`) 케이스만 우회를 유지한다(정의상 schema가 거부하는 값).
+- **마이그레이션 불요를 주장이 아니라 실측으로**: `verdict`는 TEXT 컬럼(폐쇄 강제는 schema 몫)이라 값 추가에 DDL 변경이 없다. 그 전제를 `isinstance(column.type, sa.Text)` + 왕복 테스트로 고정했다 — DB enum이었다면 마이그레이션이 필요한데 안 만든 상태가 조용히 통과했을 것이다.
+- **검증**: 신규 34건 포함 backend 전체 스위트 · `tests/infra`+`tests/harness` 971 passed · ruff/black/mypy --strict(567 files)/lint-imports(3 kept, 0 broken) EXIT=0.
+- **cross-ref**: `schema/review_timer.py`(어휘·변환 정본) · `ops/hit_cu_metrics.py` §5 승인 해상도 · `harness/golden_benchmark.py` 승격 경로 ⓑ · `docs/reviews/eos_validation_n1_n10_gap_review_2026-08-30.md` §3.4 · EOS-51 §4·§5(동결 불변) · EOS-60·EOS-61
 ## 2026-09-01: HARN-37 — "이미 포팅됨" 오분류 차단 (문서화 커밋이 포팅 근거가 되던 구멍)
 
 - **무엇**: 장기 미머지 브랜치 판정에서 `ported`(="원본 정리만 필요·결정 불요") 라벨의 근거 요건을 **파일 교집합**으로 강화했다. 근거 커밋이 그 브랜치의 고유 코드 파일을 **전건 착지**시켰을 때만 ported다.

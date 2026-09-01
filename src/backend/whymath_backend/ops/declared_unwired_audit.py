@@ -845,6 +845,11 @@ _CONTENT_RIGHT = (
 )
 _INTERNAL_TOOL = "by-design:내부 도구·하네스 소비 표면 — 학생 클라이언트 대상이 아니다"
 
+_HUMAN_REVIEW_TOOL = (
+    "by-design:사람이 대면 실행하는 검수 도구 — CI가 부를 수 있는 종류가 아니다. 자동 실행은 "
+    "사람 판정 없는 검수 이벤트를 만들어 HIT를 오염시킨다(측정하려는 대상이 인간 개입 시간 "
+    "자체이므로, 무인 실행은 0에 가까운 가짜 표본이 된다)"
+)
 _BATCH_GENERATOR = (
     "by-design:코퍼스 생성·가공 배치 — 운영자가 입력·비용·판단을 쥐고 손으로 돌리는 것이 "
     "정상이다. CI 상시 실행은 LLM 비용을 매 PR마다 태우는 설계가 된다"
@@ -1047,6 +1052,9 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
         "harness.root_aggregate_batch": _BATCH_GENERATOR,
         "harness.reviewer_sample_package": _BATCH_GENERATOR,
+        # 검수 세션(EOS-78) — 판정을 받으며 HIT 타이머를 생산한다. `reviewer_sample_package`
+        # (표본 *제시*)와 달리 사람의 판정을 되받는 대면 도구라 배치 사유를 빌려 쓰지 않는다.
+        "harness.review_session": _HUMAN_REVIEW_TOOL,
         # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
         "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다

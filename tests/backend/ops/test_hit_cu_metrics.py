@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -367,11 +367,21 @@ class TestCostJoin:
 
 class TestReportRender:
     def test_enforcement_footnote_always_present(self) -> None:
-        """acceptance ③ — ADMIN-07 후속 결선 별항을 리포트가 상시 명기."""
+        """acceptance ③ — 집행 상태(생산자 배선 + 남은 간극)를 리포트가 상시 명기.
+
+        [EOS-78 갱신] 초판은 "결선은 후속 태스크(HARN-24 amend CLI 부재)"를 단언했으나 그
+        서술은 생산자가 0이던 시절의 것이다. `harness/review_session` CLI가 착지해 생산자가
+        생겼으므로, footer가 말해야 하는 사실이 바뀌었다 — ①생산자는 배선됐다 ②그러나 강제는
+        그 CLI 경로에 한정되고 전 경로 강제는 ADMIN-07 몫이다. 둘 다 명기되는지 동결한다
+        (완료를 과장하지도, 이미 된 일을 미결로 남기지도 않는다).
+        """
         text = render_report(aggregate(_reviewed_cu("cu-a", 60_000)))
-        assert "ADMIN-07" in text
         assert "정본화≠집행" in text
-        assert "HARN-24" in text
+        # ① 생산자 배선 사실
+        assert "review_session" in text
+        assert "EOS-78" in text
+        # ② 남은 간극 — 전 경로 강제는 아직 아니다
+        assert "ADMIN-07" in text
 
     def test_unmeasured_counts_rendered(self) -> None:
         text = render_report(aggregate(_reviewed_cu("cu-a", 60_000) + _reviewed_cu("cu-b", None)))
@@ -531,3 +541,285 @@ class TestCliTimeWindow:
         _write_events(path, _reviewed_cu("cu-a", 60_000))
         assert main(["--events", str(path), "--since", "not-a-date"]) == 1
         assert "ValueError" in capsys.readouterr().err
+
+
+class TestApprovalResolutionSplit:
+    """EOS-62 ③ — 승인율을 무손질/손질 포함으로 분리 보고한다.
+
+    하나로 뭉친 승인율은 사람이 고쳐서 만든 성공을 AI의 성공으로 계상한다. 두 값을 나란히
+    내야 "HIT 4분 달성"이 품질 실태를 오독시키지 않는다.
+    """
+
+    #: EOS-62 착지 경계 — 픽스처 이벤트(_T0)보다 하루 전이라 전건이 '경계 이후'다.
+    BOUNDARY = _T0 - timedelta(days=1)
+
+    @staticmethod
+    def _mixed() -> list[ReviewTimerEvent]:
+        """무손질 2 · 손질 1 · 반려 1 — 승인율 두 값이 서로 달라지는 최소 구성."""
+        return [
+            *_reviewed_cu("cu-clean-1", 60_000),
+            *_reviewed_cu("cu-clean-2", 60_000),
+            *_reviewed_cu(
+                "cu-edited",
+                180_000,
+                verdict="approved_with_edit",
+                failure_code=GenerationFailureCode.F7,
+            ),
+            *_reviewed_cu(
+                "cu-rejected", 60_000, verdict="rejected", failure_code=GenerationFailureCode.F2
+            ),
+        ]
+
+    def test_two_approval_rates_are_reported_and_differ(self) -> None:
+        report = aggregate(self._mixed(), edit_aware_since=self.BOUNDARY)
+        assert report.decided_count == 4
+        assert report.approved_clean_count == 2
+        assert report.approved_with_edit_count == 1
+        assert report.rejected_count == 1
+        assert report.approval_rate_clean == pytest.approx(2 / 4)
+        assert report.approval_rate_including_edit == pytest.approx(3 / 4)
+        # 두 값이 같으면 이 지표는 아무것도 구분하지 못한다 — 격차 자체가 산출물이다.
+        assert report.approval_rate_clean != report.approval_rate_including_edit
+
+    def test_clean_approval_rate_carries_wilson_lower_bound(self) -> None:
+        """점추정 금지(초인간 검증 표준) — 단측 하한 병기."""
+        report = aggregate(self._mixed(), edit_aware_since=self.BOUNDARY)
+        assert report.approval_clean_wilson_lower == pytest.approx(wilson_lower_bound(2, 4))
+        assert report.approval_clean_wilson_lower < report.approval_rate_clean
+
+    def test_edit_codes_are_kept_separate_from_rejection_distribution(self) -> None:
+        """★ F-Ⅲ 분모 보호 — 손질 코드가 반려 분포에 섞이면 12월 판정 임계가 조용히 흔들린다.
+
+        F-Ⅲ("실패 분포에서 판단형 > 60%")의 '실패 분포'는 EOS-51 §5에서 동결된 의미다.
+        여기서 F7(판단형) 손질 1건을 반려 분포에 넣으면 판단형 비중이 0%→50%로 바뀐다.
+        """
+        report = aggregate(self._mixed(), edit_aware_since=self.BOUNDARY)
+        assert report.failure_code_counts["F2"] == 1  # 반려 축
+        assert report.failure_code_counts["F7"] == 0  # 손질분은 여기 없다
+        assert report.edit_failure_code_counts["F7"] == 1  # 별도 축
+        # 반려 1건이 전부 기계형(F2)이므로 판단형 비중은 0 — 손질분 혼입 시 0.5가 된다.
+        assert report.judgment_share == pytest.approx(0.0)
+        assert report.machine_share == pytest.approx(1.0)
+
+    def test_edit_without_code_is_counted_not_hidden(self) -> None:
+        """부기는 선택 — 미기재를 0으로 위장하지 않고 센다."""
+        report = aggregate(
+            [
+                *_reviewed_cu("cu-edited-1", 90_000, verdict="approved_with_edit"),
+                *_reviewed_cu(
+                    "cu-edited-2",
+                    90_000,
+                    verdict="approved_with_edit",
+                    failure_code=GenerationFailureCode.F3,
+                ),
+            ],
+            edit_aware_since=self.BOUNDARY,
+        )
+        assert report.approved_with_edit_count == 2
+        assert report.edit_without_code_count == 1
+        assert report.edit_failure_code_counts["F3"] == 1
+
+    def test_no_decisions_reports_none_not_zero(self) -> None:
+        """미측정 ≠ 0 — 판정 종결이 없으면 승인율은 0%가 아니라 미산출."""
+        report = aggregate([start_review(cu_slug="cu-a", reviewer_id="kiki")])
+        assert report.decided_count == 0
+        assert report.approval_rate_clean is None
+        assert report.approval_rate_including_edit is None
+        assert report.approval_clean_wilson_lower is None
+
+    def test_render_shows_both_rates(self) -> None:
+        body = render_report(aggregate(self._mixed(), edit_aware_since=self.BOUNDARY))
+        assert "무손질 승인율 50.0%" in body
+        assert "손질 포함 승인율 **75.0%**" in body
+        assert "손질 승인 1" in body
+
+    def test_render_states_unmeasured_when_no_decision(self) -> None:
+        body = render_report(aggregate([start_review(cu_slug="cu-a", reviewer_id="kiki")]))
+        assert "미산출(판정 종결 0건)" in body
+
+    def test_edit_verdict_rows_count_as_decisions_in_coverage(self) -> None:
+        """★ 손질 승인이 적재율 분모에서 조용히 빠지지 않는다.
+
+        파서가 `approved_with_edit`를 모르면 그 행은 '비판정'으로 분류돼 분모에서 사라진다 —
+        측정에서 사라지는 것이 이 태스크가 없애려는 바로 그 현상이다.
+        """
+        report = aggregate(
+            _reviewed_cu("cu-edited", 90_000, verdict="approved_with_edit"),
+            verdict_rows=[
+                {"slug": "cu-edited", "verdict": "approved_with_edit"},
+                {"slug": "cu-pending", "review_status": "pending"},
+            ],
+            edit_aware_since=self.BOUNDARY,
+        )
+        assert report.verdict_total == 1  # 손질 승인이 판정으로 계상됐다
+        assert report.verdict_non_verdict_rows == 1  # pending만 비판정
+        assert report.verdict_with_timer == 1
+
+    def test_json_output_carries_the_split(self, tmp_path: Path, capsys) -> None:
+        """--json 소비자(EOS-61 스코어카드)가 두 값을 기계로 읽을 수 있어야 한다."""
+        events_path = tmp_path / "events.jsonl"
+        _write_events(events_path, self._mixed())
+        assert (
+            main(
+                [
+                    "--events",
+                    str(events_path),
+                    "--edit-aware-since",
+                    self.BOUNDARY.isoformat(),
+                    "--json",
+                ]
+            )
+            == 0
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["approved_clean_count"] == 2
+        assert payload["approved_with_edit_count"] == 1
+        assert payload["approval_rate_clean"] == pytest.approx(0.5)
+        assert payload["approval_rate_including_edit"] == pytest.approx(0.75)
+        assert payload["edit_failure_code_counts"]["F7"] == 1
+
+
+class TestPreRolloutApprovalAmbiguity:
+    """Codex P1-a — 착지 이전 `approved`를 무손질로 계상하면 소급 재분류다.
+
+    EOS-62 이전에는 손질을 표현할 값 자체가 없었다. 그래서 그 시절의 `approved`는 "무손질"이
+    아니라 **손질 여부 미상**이다. 경계 없이 clean 버킷에 넣으면 무손질 승인율이 조용히
+    과대추정되고, 그것이 정확히 acceptance ④가 금지한 소급 재분류다. `golden_benchmark`는
+    같은 문제를 `--edit-aware-since`로 풀었고 이 집계기도 같은 기조를 따른다.
+    """
+
+    _BOUNDARY = _T0
+
+    def test_without_boundary_every_approval_is_ambiguous(self) -> None:
+        """★ fail-closed — 경계를 안 주면 무손질 승인율은 점값으로 나오지 않는다."""
+        report = aggregate(_reviewed_cu("cu-a", 60_000, verdict="approved"))
+        assert report.approved_clean_count == 0
+        assert report.approved_ambiguous_count == 1
+        assert report.approval_rate_clean is None
+        assert report.approval_clean_wilson_lower is None
+        assert report.edit_aware_boundary is None
+
+    def test_pre_boundary_approval_is_ambiguous(self) -> None:
+        report = aggregate(
+            _reviewed_cu(
+                "cu-old", 60_000, verdict="approved", occurred_at=self._BOUNDARY - timedelta(days=1)
+            ),
+            edit_aware_since=self._BOUNDARY,
+        )
+        assert report.approved_ambiguous_count == 1
+        assert report.approved_clean_count == 0
+
+    def test_post_boundary_approval_is_clean(self) -> None:
+        report = aggregate(
+            _reviewed_cu(
+                "cu-new", 60_000, verdict="approved", occurred_at=self._BOUNDARY + timedelta(days=1)
+            ),
+            edit_aware_since=self._BOUNDARY,
+        )
+        assert report.approved_clean_count == 1
+        assert report.approved_ambiguous_count == 0
+        assert report.approval_rate_clean == pytest.approx(1.0)
+
+    def test_ambiguity_becomes_an_interval_not_a_point(self) -> None:
+        """무지는 구간으로 보고한다 — 하나의 수로 찍으면 없는 정밀도가 생긴다."""
+        report = aggregate(
+            [
+                *_reviewed_cu(
+                    "cu-old",
+                    60_000,
+                    verdict="approved",
+                    occurred_at=self._BOUNDARY - timedelta(days=1),
+                ),
+                *_reviewed_cu(
+                    "cu-new",
+                    60_000,
+                    verdict="approved",
+                    occurred_at=self._BOUNDARY + timedelta(days=1),
+                ),
+                *_reviewed_cu(
+                    "cu-rej",
+                    60_000,
+                    verdict="rejected",
+                    failure_code=GenerationFailureCode.F1,
+                    occurred_at=self._BOUNDARY + timedelta(days=1),
+                ),
+            ],
+            edit_aware_since=self._BOUNDARY,
+        )
+        assert report.approval_rate_clean is None  # 점값 없음
+        assert report.approval_rate_clean_lower == pytest.approx(1 / 3)  # 판별불가=전부 손질
+        assert report.approval_rate_clean_upper == pytest.approx(2 / 3)  # 판별불가=전부 무손질
+
+    def test_including_edit_rate_stays_exact_under_ambiguity(self) -> None:
+        """판별불가는 '손질했는가'의 불확실이지 '승인인가'의 불확실이 아니다."""
+        report = aggregate(
+            [
+                *_reviewed_cu("cu-a", 60_000, verdict="approved"),
+                *_reviewed_cu(
+                    "cu-rej", 60_000, verdict="rejected", failure_code=GenerationFailureCode.F1
+                ),
+            ]
+        )
+        assert report.approved_ambiguous_count == 1
+        assert report.approval_rate_including_edit == pytest.approx(0.5)
+
+    def test_render_states_the_interval_and_how_to_resolve_it(self) -> None:
+        body = render_report(aggregate(_reviewed_cu("cu-a", 60_000, verdict="approved")))
+        assert "점값 미산출" in body
+        assert "--edit-aware-since" in body
+        assert "소급" in body
+
+    def test_cli_rejects_unparsable_boundary_as_measurement_failure(self, tmp_path: Path) -> None:
+        """경계 인자 오류를 조용히 무시하면 사용자는 경계가 먹은 줄 안다."""
+        events_path = tmp_path / "events.jsonl"
+        _write_events(events_path, _reviewed_cu("cu-a", 60_000))
+        assert main(["--events", str(events_path), "--edit-aware-since", "어제"]) == 1
+
+
+class TestApprovalSampleRepresentativeness:
+    """Codex P1-b — 승인율은 *계측된* 세션의 비율이지 전체 판정의 비율이 아니다.
+
+    검수 UI 미결선 구간에서는 타이머 커버리지가 100% 미만인 것이 정상이다(그 사실 자체를
+    적재율이 보고한다). 그때 승인 해상도를 계측 표본에서만 세면, 미계측 판정이 다른 분포를
+    가질 경우 승인율이 편향된다 — 편향된 수를 전체의 비율로 읽지 못하게 리포트가 자인해야 한다.
+    """
+
+    def test_incomplete_coverage_is_flagged(self) -> None:
+        """계측 2건 · 판정 10건 → 표본 불완전 표시."""
+        report = aggregate(
+            _reviewed_cu("cu-a", 60_000, verdict="approved"),
+            verdict_rows=[{"slug": f"cu-{i}", "verdict": "approved"} for i in range(10)],
+        )
+        assert report.verdict_total == 10
+        assert report.decided_count == 1
+        assert report.approval_sample_is_complete is False
+
+    def test_complete_coverage_is_flagged_complete(self) -> None:
+        report = aggregate(
+            _reviewed_cu("cu-a", 60_000, verdict="approved"),
+            verdict_rows=[{"slug": "cu-a", "verdict": "approved"}],
+        )
+        assert report.approval_sample_is_complete is True
+
+    def test_unknown_without_verdict_source(self) -> None:
+        """판정 소스가 없으면 대표성은 '통과'가 아니라 '판별 불가'다."""
+        report = aggregate(_reviewed_cu("cu-a", 60_000, verdict="approved"))
+        assert report.approval_sample_is_complete is None
+
+    def test_render_warns_on_biased_sample(self) -> None:
+        body = render_report(
+            aggregate(
+                _reviewed_cu("cu-a", 60_000, verdict="approved"),
+                verdict_rows=[{"slug": f"cu-{i}", "verdict": "approved"} for i in range(10)],
+            )
+        )
+        assert "계측 부분표본 경고" in body
+        assert "전체 판정의 비율로 읽지 말 것" in body
+
+    def test_render_states_unknown_representativeness(self) -> None:
+        body = render_report(_no_verdict_source_report())
+        assert "표본 대표성 미판별" in body
+
+
+def _no_verdict_source_report():
+    return aggregate(_reviewed_cu("cu-a", 60_000, verdict="approved"))
