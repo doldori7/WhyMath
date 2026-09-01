@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -22,13 +22,14 @@ acceptance:
   - "⑨ [④ 교수학 금기 기계화] 6종 동결(tests/backend/l3/test_answer_form_contract.py 25건): 같은 값을 형태만 달리 제출 시 완료·발화·적재 **비트 동일** · FormVerdict에 correct/incorrect 부재 · verify_answer_form이 **정답을 인자로 받지 않음**(시그니처 동결·구조적 보장) · 형태 모듈이 값 판정 심볼을 AST 기준 미참조 · 형태 위반도 정상 응답(입력 거부 없음) · 판정 불가를 위반으로 접지 않음."
   - "⑩ [⑤ 배선] api/coach.py 완료 경로: _final_answer_state가 (값,형태) 2축 반환 → _CompletionResult 운반 → SessionCreateResponse·TurnAppendResponse의 answer_form 필드. decide_completion은 형태를 인자로 받지 않는다(완료를 막는 경로가 코드에 없음). stateless /v1/coach 미탑재(DB 없이는 항상 not_required인 가짜 계기판). 코퍼스 백필 26건(answer_constraint.expected_form). **배선 실재성 뮤테이션 확인**: 배선을 상수로 바꾸자 API 테스트 5건 적색."
   - "⑪ [검증] tests/backend/api/test_coach_completion.py 19 passed(기존 13+신규 6) · l3+schema 3,587 passed · ruff·black·mypy --strict 567파일·lint-imports 3계약 KEPT 전부 0. 뮤테이션 3종 전건 검출(배선 제거·unverifiable을 violated로 접기·측정 근거 없는 어휘 추가) 후 cp 백업 원복. **전체 스위트는 로컬 미완주** — CI 최종 판정."
-artifacts: []
+artifacts:
+  - "PR #945 · 코퍼스 실측 2,638문항→형태 어휘 1종 26건(0.99%) · ADR docs/architecture/adr_answer_form_contract.md · l3/verify_answer_form.py + schema/answer_form.py 신설 · api/coach.py 완료 경로 배선(answer_form 응답 필드) · 코퍼스 백필 26건 · tests api 1,960 + l3/schema 3,587 passed · 뮤테이션 3종 전건 검출"
 paths:
   - "src/backend/whymath_backend/schema/**"
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/api/**"
   - "tests/backend/**"
   - "docs/architecture/**"
-session: claude/eos-migration-compliance-check-xu50yl
+session: null
 notes: "28_MathLive 입력 43절 델타 검토(docs/architecture/28_mathlive_input.md §2 D-1)에서 확인된 유일한 진짜 갭. 실측: verify_answer·verify_final_answer·verify_step 전부 값/동치만 판정, 형태 검사 grep 0건. 학생 대면 표현은 MATH-03 reason_code 패턴 준용. 승계 관계: EOS-32(원본 보존)·EOS-46(step 이벤트)·EOS-47(버전 고정)와 병행.\n\n[정정 2026-09-01] acceptance ①~⑤ 이행 결과·측정치·설계 판정을 확정 기재. ①의 유보 조건(0건)은 발동하지 않았고(26건) 대신 어휘를 실증 1종으로 제한했다."
 updated: 2026-09-01
