@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,11 +16,12 @@ acceptance:
   - "③ 판정 형식 불변 — CLI exit 0/1(Wilson 단측 경계). 점추정·인상 판정 금지(superhuman_verification_standard). 3단계 산출: GO / CONDITIONAL_GO / NO_GO"
   - "④ 미측정과 0의 구분 — 입력 지표가 비어 있으면 'PASS'가 아니라 '측정 실패'로 exit 1. 각 KPI에 측정 가능 여부·표본수·EOS-51 §7 한계(검출력·미검증 항목)를 리포트에 동반 출력"
   - "⑤ 집행 별항(정본화≠집행): 입력원은 EOS-54 hit_cu_metrics·EOS-55 Run 로그·EOS-60 골든 혼동행렬 — 어느 지표가 어느 소스에서 오는지 결선표를 명시하고, 미착지 소스는 '미측정'으로 정직 표기(추정 금지)"
-artifacts: []
+artifacts:
+  - "PR #953 · ops/validation_scorecard.py 신설(Hard Gate F-Ⅰ~Ⅴ 우선 판정 + KPI 12종 스코어카드 + 3단계 GO/CONDITIONAL_GO/NO_GO · Wilson 경계) · 결선표 KPI_SOURCES 6종 + CONTENT_KPI_CONSUMERS 재사용 + NON_GOLDEN_CONTENT_KPIS 2종 · tests 19건 · 뮤테이션 3종 전건 검출 · declared-unwired 의도 등재"
 paths:
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/ops/**"
   - "docs/reviews/**"
-session: claude/eos-61-validation-scorecard
+session: null
 notes: "출처: 260830 외부 검토 N6 + 본 검토 §3.6·§6. 판정 *기준*은 EOS-51 §5·§6에 이미 동결됨(외부 문서보다 앞섬 — Hard Gate·3단계 판정·단일점수 금지 모두 채택 완료) — 없는 것은 기준을 읽어 판정을 뱉는 실행기다. BI 대시보드가 아니라 CLI. 주간 7지표 집계는 OPS-56이 별도 좌석(주기 vs 최종 판정)."
 updated: 2026-09-01
