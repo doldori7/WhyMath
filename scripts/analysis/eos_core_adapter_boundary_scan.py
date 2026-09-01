@@ -87,6 +87,7 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l3.models": ("CORE", "L3 공용 데이터 모델"),
     "l3.prompt_assets": ("CORE", "프롬프트 자산 레지스트리"),
     "l3.escalation_defaults": ("CORE", "에스컬레이션 기본값 정책"),
+    "l3.generation_seed": ("CORE", "생성 재현 seed 정책 — 경로별 지원·값 추출(과목 무관)"),
     "l3.equivalent": ("ADAPTER", "수식 동치 판정·정규화 — doc-100 Adapter 'equation equivalence'"),
     "l3.symbolic_equivalence": ("ADAPTER", "기호 조작 — doc-100 'symbolic manipulation'"),
     "l3.verifier": ("ADAPTER", "모듈 스스로 '통합 *수학* 검증기 v2'로 자인"),

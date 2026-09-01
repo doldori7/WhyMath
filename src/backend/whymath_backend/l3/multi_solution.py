@@ -1108,6 +1108,9 @@ class DeterministicFakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        # EOS-73: seed 좌석은 받되 무시한다 — 이 가짜는 이미 결정론이라 시드가 바꿀 것이 없다
+        # (LLMProvider 계약 정합용 인자·값은 캡처하지 않는다).
+        seed: int | None = None,
     ) -> GenerationResult:
         """프롬프트에 포함된 발문으로 시드를 식별해 canned 응답 반환(미지 프롬프트는 명확 오류)."""
         for question, response in self._canned.items():
