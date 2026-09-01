@@ -47,6 +47,7 @@ import pathscope
 import remote_claims
 import report
 import selector
+import similar
 import store
 from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Backlog, Gate, Task
 from seed_data import build_seed
@@ -1100,6 +1101,86 @@ def _print_visibility_notice(root: Path, task_id: str, policy: object) -> None:
         print(f"     · {line}", file=sys.stderr)
 
 
+def _print_similar_notice(root: Path, backlog, task: Task, policy: object) -> None:
+    """의미 중복 후보 고지 (HARN-51) — **탐지가 아니라 고지이며, 차단하지 않는다.**
+
+    번호 가드가 막는 것은 *같은 이름*이다. 이 고지가 겨누는 것은 **다른 이름·같은 문제**로,
+    2026-08-31 `HARN-45`↔`HARN-48` 이중 구현이 어떤 가드에도 걸리지 않은 축이다.
+
+    대조군은 **로컬 in-flight + 원격 브랜치 사본**이다(acceptance ③). 로컬만 보면 그
+    실사고를 재현조차 못 한다 — `HARN-48`은 별도 브랜치에서 진행 중이었고 트렁크에는
+    없었다. 원격 읽기는 `fetch=False` 계약을 승계하므로 **네트워크 0**이다.
+
+    원격 조회가 실패하면 침묵하지 않고 '판정 불가'라고 말한다 — 조회 실패를 '중복 없음'과
+    같은 색으로 두면 측정 실패가 통과로 위장된다(CLAUDE.md 침묵 실패 금지).
+    """
+    corpus = {
+        tid: similar.task_text(other.title, other.notes, other.acceptance)
+        for tid, other in backlog.tasks.items()
+    }
+    pool = {
+        tid: text
+        for tid, text in corpus.items()
+        if tid != task.id
+        and backlog.tasks[tid].status in ("todo", "in_progress", "blocked", "review")
+    }
+    origins: dict[str, str] = {}
+    remote_status = "disabled"
+    if getattr(policy, "remote_claims", False):
+        # 고지는 관측 기능이다 — 원격 조회가 어떤 식으로 죽든 `add` 자체를 막지 않는다.
+        # 다만 **예외 타입명을 남긴다**(CLAUDE.md 침묵 실패 금지): 무타입 경고는
+        # langfuse v2 쓰기가 8일간 무증상 전멸한 원인이었다.
+        try:
+            files, remote_status = remote_claims.scan_remote_task_files(root)
+        except Exception as exc:
+            files, remote_status = [], f"error:{type(exc).__name__}"
+        if remote_status == "ok":
+            # 로컬에 이미 있는 ID는 읽기 *앞*에서 제외한다 — 같은 태스크의 원격 사본은
+            # 의미 중복 후보가 아니라 같은 것의 다른 사본이다(번호 축은 번호 가드의 몫).
+            try:
+                texts, branch_of, read_status = remote_claims.read_remote_task_texts(
+                    root, files, skip=set(corpus) | {task.id}
+                )
+            except Exception as exc:
+                texts, branch_of, read_status = {}, {}, f"error:{type(exc).__name__}"
+            for tid, raw in texts.items():
+                pool[tid] = raw
+                corpus[tid] = raw
+                origins[tid] = f"origin/{branch_of.get(tid, '?')}"
+            if read_status != "ok":
+                remote_status = read_status
+
+    index = similar.SimilarityIndex(corpus)
+    found = index.candidates(
+        similar.task_text(task.title, task.notes, task.acceptance), pool, origins=origins
+    )
+    if not found and remote_status in ("ok", "disabled"):
+        return  # 조용할 때는 조용하다
+    if found:
+        print(
+            f"  ⓘ {task.id} 의미 중복 후보 — **번호가 달라도 같은 문제일 수 있다**",
+            file=sys.stderr,
+        )
+        for item in found:
+            terms = ", ".join(item.shared_terms)
+            print(
+                f"     · {item.task_id} [{item.origin}] 유사도 {item.score:.2f}"
+                f"{chr(10)}       공유 희소어: {terms}",
+                file=sys.stderr,
+            )
+        print(
+            "     차단이 아니라 고지다 — 무관하면 그냥 진행하고, 겹치면 그쪽 세션과 "
+            "조율하거나 한쪽을 cancel한다(HARN-45 선례).",
+            file=sys.stderr,
+        )
+    if remote_status not in ("ok", "disabled"):
+        print(
+            f"  ⚠ 의미 중복 대조가 원격을 다 보지 못했다({remote_status}) — "
+            f"미머지 브랜치의 중복은 **판정 불가**다",
+            file=sys.stderr,
+        )
+
+
 def cmd_add(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.id in backlog.tasks:
@@ -1181,6 +1262,8 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     print(f"＋ {task.id} 추가 → {path.relative_to(root)}")
     # HARN-43 — 등재는 끝났고, 이제 가드가 *못 본* 범위를 말한다(차단 아님).
     _print_visibility_notice(root, task.id, policy)
+    # HARN-51 — 번호가 아니라 *의미*가 겹치는 태스크를 고지한다(차단 아님).
+    _print_similar_notice(root, backlog, task, policy)
     return 0
 
 

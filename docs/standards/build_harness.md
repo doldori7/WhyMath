@@ -253,6 +253,27 @@ CI 진입점이 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "
 걸려 매 실행 "판정 보류"가 되어 초록인 채 상시 무력이 된다). 배선 실재성은
 `tests/infra/test_stale_branch_scan_ci_wiring.py`가 기계로 동결한다.
 
+## 3b-1. 중복 방어의 두 축 — 같은 *이름* vs 같은 *문제* (HARN-51)
+
+번호 충돌 가드(HARN-10/15)가 막는 것은 **같은 식별자**를 두 세션이 배정하는 것이다.
+2026-08-31~09-01 동종 6건 중 **5건이 이 축**이었고 CLI가 전건 실거부했다.
+
+나머지 1건은 달랐다. `HARN-45`와 `HARN-48`이 같은 뿌리(차단이 교차 세션 보호를 지운다)를
+**서로 다른 이름으로** 각자 구현했고, ID가 다르므로 번호 가드·claim 대장·원격 파일 스캔
+**어디에도 걸리지 않았다**. 발견 경로는 기계가 아니라 상대 세션이 자기 YAML에 중복을
+스스로 적어 둔 것이었다 — 그것이 없었으면 한쪽 구현이 통째로 폐기됐을 것이다(실제로 폐기됐다).
+
+- **신호** = 공유어를 문서빈도의 역수(IDF)로 가중한 점수. 결정적이었던 것은 `차단`·`block`
+  같은 일반어가 아니라 `cmd_block`·`_release_remote_claim`처럼 **저장소 안에서 드문 식별자**다.
+  **IDF는 백로그 자신에서 산출**하므로 임베딩·외부 모델·네트워크가 없다.
+- **대조 범위** = 로컬 in-flight **+ 원격 브랜치 사본**. 로컬만 보면 이 사고를 재현조차 못 한다
+  (`HARN-48`은 별도 브랜치에 있었다). 원격 읽기는 `fetch=False` 계약을 승계해 **네트워크 0**이고,
+  로컬에 이미 있는 ID는 읽기 *앞*에서 걸러 `git cat-file --batch` 1회로 끝낸다.
+- **차단하지 않는다** — 유사도에 정답은 없다. 후보가 없으면 아무것도 출력하지 않고, 원격
+  조회가 실패하면 침묵 대신 **판정 불가**라고 말한다(실패를 '중복 없음'과 같은 색으로 두지 않는다).
+- **실측(2026-09-01 · 485건)**: 표적 검출 1위(0.1365 vs 잡음 0.0733) · 평균 후보 0.86건 ·
+  최대 3건 · 완전 침묵 53%. 한계까지 포함한 정본은 `scripts/harness/similar.py` 모듈 docstring.
+
 ## 3c. 조율 정책 — 단계적 강제 (warn → block)
 
 `backlog/policy.yaml`의 rule 3종 (전부 warn으로 시작 — "측정 없는 도입 없음"):
@@ -381,6 +402,7 @@ python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이�
 python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>]
                                                    # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
+#   ↑ add는 등재 후 두 가지를 **고지**한다(차단 아님): 가시성(HARN-43)·의미 중복 후보(HARN-51)
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
 python3 scripts/harness/backlog.py claims release <id> [--force]  # claim 해제 (남의 것은 --force)
