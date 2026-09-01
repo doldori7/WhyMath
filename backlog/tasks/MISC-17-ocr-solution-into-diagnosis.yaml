@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - "tests/backend/api/test_coach*.py"
 session: null
-notes: "원 등재 MISC-07(r1skwr 세션 2026-08-11·backup a95bb456에만 잔존) — HARN-35가 재등재(원 번호 재사용 금지). 정본: docs/architecture/misconception_module_gap_review_r2.md §2 G1 + 04e §9-D1. R2 최대 갭·미해소 2026-08-30 재실측. 발화를 만드는 WH-1 primary만 LaTeX를 봐서 '발화는 풀이를 알고 학생 상태는 모르는' split-brain"
-updated: 2026-08-30
+notes: "원 등재 MISC-07(r1skwr 세션 2026-08-11·backup a95bb456에만 잔존) — HARN-35가 재등재(원 번호 재사용 금지). 정본: docs/architecture/misconception_module_gap_review_r2.md §2 G1 + 04e §9-D1. R2 최대 갭·미해소 2026-08-30 재실측. 발화를 만드는 WH-1 primary만 LaTeX를 봐서 '발화는 풀이를 알고 학생 상태는 모르는' split-brain\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

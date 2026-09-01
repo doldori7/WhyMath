@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - S3-32-learning-loop-closure-recovery
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - "src/mobile/lib/features/chat/**"
 session: null
-notes: "브랜치 tlthrr의 원 S3-28(대화 입력 최종답 감지)·S3-29(MC 선택지 버튼) 재작성. S3-32의 verify_final_answer/completion 경로를 소비 — 대화창에 직접 친 답도, MC 보기 탭도 같은 서버검증 경로를 타야 한다(경로 이원화 금지)."
-updated: 2026-08-07
+notes: "브랜치 tlthrr의 원 S3-28(대화 입력 최종답 감지)·S3-29(MC 선택지 버튼) 재작성. S3-32의 verify_final_answer/completion 경로를 소비 — 대화창에 직접 친 답도, MC 보기 탭도 같은 서버검증 경로를 타야 한다(경로 이원화 금지).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

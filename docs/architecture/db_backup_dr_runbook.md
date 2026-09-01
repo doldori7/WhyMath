@@ -17,22 +17,30 @@
 
 ---
 
-## §0. 사전 준비 — 브랜치 체크아웃 (미머지 브랜치 신규 파일)
+## §0. 사전 준비 — 스크립트 실재 확인 (main 체크아웃이면 그대로 진행)
 
-백업 스크립트는 미머지 브랜치에 있다. 재시작(force-push) 가능성이 있으므로 `fetch` + `checkout -B` 형식만 사용한다(pull 금지 — diverged 시 add/add 충돌).
+백업 스크립트는 **main에 착지했다**(2026-09-01 실측: `git ls-tree origin/main scripts/backup/` → `backup_whymath_pg.ps1` 존재). 별도 브랜치 체크아웃은 **불요**하다.
 
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git fetch origin
-git checkout -B claude/whymath-service-review-9r21im origin/claude/whymath-service-review-9r21im
-
-# 자가검증: 스크립트 실재 확인 - True 여야 함
-Test-Path .\scripts\backup\backup_whymath_pg.ps1
+git checkout main
+$co = $LASTEXITCODE
+$cur = (git branch --show-current)
+if ($co -ne 0 -or $cur -ne 'main') {
+  Write-Host "[FAIL] main 체크아웃 실패 (exit=$co, 현재 브랜치=$cur) — 여기서 멈춘다. pull 하지 않는다."
+} else {
+  git pull origin main
+  Write-Host ("[CHECK] branch=" + (git branch --show-current) + " script=" + (Test-Path .\scripts\backup\backup_whymath_pg.ps1))
+}
 ```
 
-- **성공**: `Test-Path`가 `True`. (변별력: 이 파일은 이 브랜치에만 있어 체크아웃 실패 시 실제로 `False`가 나온다.)
-- **실패 시 대처**: `git branch --show-current`로 현재 브랜치 확인 후 위 `git fetch`+`checkout -B` 두 줄 재실행.
+- **성공**: `[CHECK] branch=main script=True` 한 줄.
+- **실패**: `[FAIL] main 체크아웃 실패 ...` — **pull이 실행되지 않은 상태다.** 사유(다른 worktree가 main을 점유·미커밋 변경으로 전환 거부 등)를 해소한 뒤 블록을 다시 실행한다. `[CHECK]`가 나왔는데 `script=False`면 최신 main이 아닌 것이므로 `git pull origin main` 재실행.
+- **변별력 근거(중요)**: `Test-Path` 단독은 이 자리에서 **변별력이 없다**. `git checkout main`이 실패해도 PowerShell은 네이티브 명령 실패로 멈추지 않고 계속 진행하며, 이어지는 `git pull origin main`은 *현재 체크아웃된 브랜치*(= 피처 브랜치)로 origin/main을 병합한다 — 그 결과 스크립트 파일은 존재하게 되어 `Test-Path`가 `True`를 내고, **잘못된 브랜치 위에서 준비 완료로 오판**된다. 그래서 종료코드와 현재 브랜치 이름을 먼저 확인하고, 통과했을 때만 pull한다. (2026-09-01 PR #952 Codex 리뷰 지적 수용)
+
+> **정정 이력 (2026-09-01)**: 종전 §0은 `git checkout -B claude/whymath-service-review-9r21im origin/claude/...`를 지시했으나, 그 브랜치는 **원격에서 이미 삭제**돼(`git ls-remote --heads origin` 0건) 명령이 `fatal: invalid reference`로 즉시 실패한다. 게이트 `G-backup-offsite-move`·`G-backup-restore-rehearsal`가 21일 대기한 원인 후보다. CLAUDE.md「검증 없는 실행 안내 금지」의 *만료된 안내* 축 — 런북의 브랜치 참조는 그 브랜치가 머지·삭제되는 순간 조용히 무효가 된다.
 
 ## §1. 수동 백업 1회 실행
 

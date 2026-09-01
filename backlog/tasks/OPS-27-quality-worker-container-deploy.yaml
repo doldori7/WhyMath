@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - "tests/infra/**"
   - docs/architecture/deployment_cd_runbook.md
 session: null
-notes: "ai_integration_gap_review.md D2(2026-08-10). GET /v1/jobs 폴링(app.py:1031)은 있는데 작업을 완료시킬 워커가 배포에 없다 — '완비된 소비 경로+미도달 공급원' 계열(S4-22·OPS-24 동형)의 배포 축 변형. jobs 무인증·소유권 축은 SEC-15(타 세션 in_progress) 소유 — 본 태스크는 워커 배포만."
-updated: 2026-08-10
+notes: "ai_integration_gap_review.md D2(2026-08-10). GET /v1/jobs 폴링(app.py:1031)은 있는데 작업을 완료시킬 워커가 배포에 없다 — '완비된 소비 경로+미도달 공급원' 계열(S4-22·OPS-24 동형)의 배포 축 변형. jobs 무인증·소유권 축은 SEC-15(타 세션 in_progress) 소유 — 본 태스크는 워커 배포만.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/C1 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

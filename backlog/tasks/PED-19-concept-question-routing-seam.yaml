@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - PED-18-tutor-primary-operation-rate
@@ -26,5 +27,5 @@ paths:
   - src/backend/whymath_backend/api/coach.py
   - "tests/backend/api/test_coach*.py"
 session: null
-notes: "docs/architecture/ai_tutor_module_gap_review_r2.md §2 G1·G2 · §3 D7. 외부 틀 문서 §37의 대표 대화('왜 음수끼리 곱하면 양수가 되나요?')에 현행 코치는 문항·개념 무관 정적 스캐폴드(l4/polya/prompts.py:43-85 '이 문제, 잠깐 같이 읽어볼까?')를 반환한다. v1이 '자연어 QA·개념설명'을 한 행으로 압축해 ✅를 준 것이 오판정이었다(표면 존재를 능력으로 읽음). G2는 선언≠집행이 아니라 v1 D1이 writer만 약속하고 student_intent 소비를 처음부터 범위에 두지 않은 설계 절반 — PED-04는 약속한 것을 전부 지켰다. 경계: S4-05-concept-definition-registers가 정의 레지스터 내용 + L4 눈높이 선택 소비를 소유하고 이 태스크는 라우팅·식별 seam만 — D7 착지 시 S4-05가 채울 소비처가 처음 생긴다. S4-11(힌트 본문)·S3-32(최종답 검증 루프)와도 축이 다르다."
-updated: 2026-08-11
+notes: "docs/architecture/ai_tutor_module_gap_review_r2.md §2 G1·G2 · §3 D7. 외부 틀 문서 §37의 대표 대화('왜 음수끼리 곱하면 양수가 되나요?')에 현행 코치는 문항·개념 무관 정적 스캐폴드(l4/polya/prompts.py:43-85 '이 문제, 잠깐 같이 읽어볼까?')를 반환한다. v1이 '자연어 QA·개념설명'을 한 행으로 압축해 ✅를 준 것이 오판정이었다(표면 존재를 능력으로 읽음). G2는 선언≠집행이 아니라 v1 D1이 writer만 약속하고 student_intent 소비를 처음부터 범위에 두지 않은 설계 절반 — PED-04는 약속한 것을 전부 지켰다. 경계: S4-05-concept-definition-registers가 정의 레지스터 내용 + L4 눈높이 선택 소비를 소유하고 이 태스크는 라우팅·식별 seam만 — D7 착지 시 S4-05가 채울 소비처가 처음 생긴다. S4-11(힌트 본문)·S3-32(최종답 검증 루프)와도 축이 다르다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

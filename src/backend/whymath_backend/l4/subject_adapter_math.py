@@ -46,8 +46,10 @@ from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, 
 from whymath_backend.l3.symbolic_equivalence import identity_status
 from whymath_backend.l3.verifier import ProblemVerifyInput, Verifier
 from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
+from whymath_backend.l3.verify_answer_form import form_verdict_for
 from whymath_backend.l3.verify_final_answer import FinalAnswerResult, verify_final_answer
 from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.schema.answer_form import FormVerdict
 from whymath_backend.schema.subject_adapter import (
     AnswerEvaluation,
     MisconceptionSignal,
@@ -56,6 +58,7 @@ from whymath_backend.schema.subject_adapter import (
     SubjectAdapter,
 )
 from whymath_backend.schema.verification_capabilities import (
+    AnswerFormVerifier,
     AssessmentAnswerVerifier,
     EquivalenceOutcome,
     ExpressionEquivalence,
@@ -234,9 +237,26 @@ def math_expression_seal() -> MathExpressionSeal:
     return MathExpressionSeal()
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 선택적 능력 — 답 표기 형태 판정 (EOS-28)
+# ──────────────────────────────────────────────────────────────────────────
+class MathAnswerFormVerifier:
+    """`AnswerFormVerifier` 수학 구현 — 형태 어휘(기약분수 등)가 수학 소유임을 여기서만 안다."""
+
+    def verify_answer_form(self, student_answer: str | None, answer_constraint: Any) -> FormVerdict:
+        """4상태 판정 그대로 — 값 판정에 영향을 주지 않는다."""
+        return form_verdict_for(student_answer, answer_constraint)
+
+
+def math_answer_form_verifier() -> MathAnswerFormVerifier:
+    """기본 주입용 팩토리."""
+    return MathAnswerFormVerifier()
+
+
 if TYPE_CHECKING:
     # 구조적 적합성 증명 — SubjectAdapter와 동일 패턴(mypy --strict가 검사).
     _EQUIVALENCE_CONFORMANCE: ExpressionEquivalence = MathExpressionEquivalence()
     _FINAL_ANSWER_CONFORMANCE: FinalAnswerVerifier = MathFinalAnswerVerifier()
     _ASSESSMENT_CONFORMANCE: AssessmentAnswerVerifier = MathAssessmentAnswerVerifier()
     _SEAL_CONFORMANCE: ExpressionSeal = MathExpressionSeal()
+    _ANSWER_FORM_CONFORMANCE: AnswerFormVerifier = MathAnswerFormVerifier()

@@ -150,7 +150,9 @@ def _session_client(
     return TestClient(app), captured
 
 
-def _problem(answer: str | None = "3") -> SimpleNamespace:
+def _problem(
+    answer: str | None = "3", answer_constraint: dict[str, Any] | None = None
+) -> SimpleNamespace:
     """`verify_final_answer`가 읽는 최소 필드만 담은 문항 스텁(구조적 타이핑).
 
     `domain`/`subunit`은 `verify_final_answer`와 무관하지만, WH-1 웜스타트 힌트 조립
@@ -160,6 +162,7 @@ def _problem(answer: str | None = "3") -> SimpleNamespace:
     """
     return SimpleNamespace(
         answer=answer,
+        answer_constraint=answer_constraint,
         choices=None,
         question_format=None,
         answer_format=None,
@@ -506,3 +509,85 @@ class TestGateOffIsFullyInert:
             assert dialogues[0].review_turns_remaining == 0
         finally:
             get_settings.cache_clear()
+
+
+class TestAnswerFormWiring:
+    """EOS-28 — 형태 지시 준수가 **응답에 실제로 흐르는가**, 그리고 **채점을 오염시키지 않는가**.
+
+    `verify_answer_form`의 판정 로직은 `tests/backend/l3/test_answer_form_contract.py`가 전수
+    검증한다. 여기서 보는 것은 오직 *결선*이다 — 계약과 검증기를 만들어 놓고 서빙 경로가
+    부르지 않으면 아무 일도 일어나지 않는다("정본화 ≠ 집행").
+    """
+
+    _REDUCED = {"expected_form": "reduced_fraction"}
+
+    def _post(self, *, answer: str, constraint: dict[str, Any] | None, submitted: str):
+        pid = uuid.uuid4()
+        client, captured = _session_client(
+            preload={(ProblemORM, pid): _problem(answer=answer, answer_constraint=constraint)}
+        )
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "이렇게 풀었어요",
+                "problem_id": str(pid),
+                "solution_steps": ["확률을 세면", submitted],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json(), captured
+
+    def test_form_violation_is_surfaced_in_the_response(self) -> None:
+        """`2/72`는 값이 맞다. 그런데 지시는 기약분수였다 — 그 사실이 응답에 나타나야 한다."""
+        body, _ = self._post(answer="1/36", constraint=self._REDUCED, submitted="2/72")
+        assert body["answer_form"] == "violated"
+
+    def test_form_compliance_is_surfaced(self) -> None:
+        body, _ = self._post(answer="1/36", constraint=self._REDUCED, submitted="1/36")
+        assert body["answer_form"] == "satisfied"
+
+    def test_problem_without_form_requirement_reads_not_required(self) -> None:
+        """형태 요구가 없는 99% 문항 — `satisfied`가 아니라 `not_required`여야 한다."""
+        body, _ = self._post(answer="3", constraint=None, submitted="x=3")
+        assert body["answer_form"] == "not_required"
+
+    def test_form_violation_does_not_change_grading(self) -> None:
+        """**핵심 금기**: 형태 위반이 정답 판정·완료 흐름을 바꾸지 않는다.
+
+        같은 값(`1/36` ≡ `2/72`)을 형태만 다르게 제출했을 때, 완료 상태머신의 출력이
+        **비트 동일**해야 한다. 하나라도 달라지면 형태가 채점에 스며든 것이다.
+        """
+        graded_keys = (
+            "problem_complete",
+            "awaiting_reflection",
+            "completed_attempt_id",
+        )
+        ok, ok_cap = self._post(answer="1/36", constraint=self._REDUCED, submitted="1/36")
+        bad, bad_cap = self._post(answer="1/36", constraint=self._REDUCED, submitted="2/72")
+
+        assert ok["answer_form"] != bad["answer_form"], "변별력 확인 — 두 제출이 실제로 갈렸다"
+        for key in graded_keys:
+            assert ok[key] == bad[key], f"형태 위반이 '{key}'를 바꿨다 — 채점 오염"
+        # 발화까지 동일해야 한다 — 형태 때문에 다른 말을 하면 그것이 곧 부정 강화 경로다.
+        assert ok["decision"]["prompt"] == bad["decision"]["prompt"]
+        assert ok["decision"]["socratic_category"] == bad["decision"]["socratic_category"]
+        # 적재도 동일 — 형태 위반이 attempt 적재 여부를 바꾸지 않는다.
+        assert [type(o).__name__ for o in ok_cap.added] == [type(o).__name__ for o in bad_cap.added]
+
+    def test_form_violation_is_not_rejected_input(self) -> None:
+        """형태가 틀려도 **요청은 정상 처리**된다 — 학생 입력 거부 금지.
+
+        4xx로 되돌리거나 빈 응답을 주면 학생은 자기 답을 제출조차 못 한다. 형태 판정은
+        사후 관찰이지 입력 게이트가 아니다.
+        """
+        body, _ = self._post(answer="1/36", constraint=self._REDUCED, submitted="2/72")
+        assert body["decision"]["prompt"], "발화가 비었다 — 형태 위반이 응답을 삼켰다"
+        assert body["answer_form"] == "violated"
+
+    def test_unknown_form_vocabulary_does_not_break_grading(self) -> None:
+        """저작 오타가 채점을 500으로 만들지 않는다 — 판정 불가로 흐르고 채점은 계속된다."""
+        body, _ = self._post(
+            answer="1/36", constraint={"expected_form": "오타난값"}, submitted="1/36"
+        )
+        assert body["answer_form"] == "unverifiable"
+        assert body["awaiting_reflection"] is True, "형태 판정 불가가 정답 흐름을 막았다"

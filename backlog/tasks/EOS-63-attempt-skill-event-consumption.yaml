@@ -5,12 +5,14 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on:
   - EOS-57-attempt-skill-ids-persistence
-requires_gates: []
+requires_gates:
+  - G-eos63-skill-event-reach-sample
 acceptance:
   - "① 소비 전환: 스킬 축 분석·롤업이 concept→skill 런타임 재해소 대신 attempt_event.skill_ids(기록된 사실)를 읽는다 — 매핑이 사후에 바뀌어도 과거 시도의 귀속이 흔들리지 않는 것이 전환의 목적"
   - "② 전환 선결 조건 명시: EOS-57 기록률 리포트(harness/attempt_skill_event_reach_report)의 writer 도달률이 관측 창에서 충분히 쌓인 뒤에만 전환한다 — 기록 0건 상태에서 소비를 바꾸면 스킬 숙달 전파가 죽는다(착수 시 실측 수치를 notes에 남긴다)"
@@ -21,5 +23,5 @@ paths:
   - src/backend/whymath_backend/l2/attempt_skill_event.py
   - "tests/backend/l2/**"
 session: null
-notes: "출처: EOS-57 acceptance ③('집행 별항: 소비 지점 전환은 후속 태스크로 분리'). EOS-57은 영속 좌석+writer까지만 소유한다."
-updated: 2026-08-30
+notes: "출처: EOS-57 acceptance ③('집행 별항: 소비 지점 전환은 후속 태스크로 분리'). EOS-57은 영속 좌석+writer까지만 소유한다.\n\n[차단 2026-09-01] 선행 실측 불가 — acceptance ②('writer 도달률이 관측 창에서 충분히 쌓인 뒤에만 전환')의 수치를 낼 수 없다. 실측: 컨테이너에 DATABASE_URL 미설정·5432/5433 리스너 0·docker 소켓 부재 → attempt_skill_event_reach_report는 스스로 '수치는 실 PG 채점 이력이 분모'라고 적으므로 빈 DB에서는 전 지표 측정 불가. writer(EOS-57)는 채점 경로 2곳(api/coach.py:1028·api/me.py:771)에 배선 실재하나 착지가 2026-08-30이라 관측 창이 2일이다. 기록 0건 상태에서 소비를 바꾸면 스킬 숙달 전파가 죽는다(EOS-57 writer docstring 명시 경고).\n\n[게이트 집행 2026-09-01] 두 세션이 독립으로 같은 차단 결론에 도달했고, claude/eos-migration-compliance-check-xu50yl(589a4143)이 게이트 G-eos63-skill-event-reach-sample[kiki]를 신설·requires_gates에 부착했다. 산문 조건은 셀렉터가 읽지 않으므로(selector는 depends_on·requires_gates만 본다) 게이트가 없으면 실측 없이 재착수될 수 있다 — EOS-62 notes의 '정본화≠집행 백로그 축' 선례 동형이며 HARN-52가 그 축을 일반화했다. unblock 트리거 = 게이트 clear.\n\n[스코프 정정 — 독립 실측] 소비 전환의 대상인 '스킬 축 분석·롤업' 소비처는 trunk에 아직 없다. 역할 기반 검색으로 concept→skill 런타임 재해소는 _assessed_skill_ids 1곳뿐이고 그 유일 호출자는 채점시점 record_problem_attempt_skill_mastery(=기록되는 사실의 생산자)다. 즉 전환 대상은 '기존 소비처 교체'가 아니라 '기록을 읽는 신규 롤업 신설'이며, 착수 세션은 스코프를 그렇게 잡아야 한다.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/E3 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -71,6 +71,7 @@ from typing import Protocol
 
 from whymath_backend.config import Settings
 from whymath_backend.l3 import pipeline
+from whymath_backend.l3.data_grade_defaults import SYNTHETIC_PROBE
 from whymath_backend.l3.interfaces import CacheBackend, InMemoryCache, LLMProvider
 from whymath_backend.l3.models import (
     CostTier,
@@ -345,6 +346,9 @@ def _cloud_mid_smoke_request() -> RoutingRequest:
         budget_krw=1000.0,  # cloud_min_cost(CLOUD_MID)=28원 여유(guard 통과)
         sync=True,
         max_latency_ms=30000,
+        # 등급: 스모크 프롬프트는 이 모듈이 만든 합성 문자열 — 반출 가능. 데이터 등급
+        # 게이트(EOS-59)도 통과해야 CLOUD_MID에 실제로 도달한다(두 가드 모두 통과 조건).
+        data_licenses=SYNTHETIC_PROBE,
     )
 
 
@@ -362,6 +366,8 @@ def _local_smoke_request() -> RoutingRequest:
         student_subscription="free",
         budget_krw=0.0,
         sync=True,
+        # 등급: 합성 스모크 문자열 — 반출 가능(이 요청은 free·예산 0이라 어차피 LOCAL).
+        data_licenses=SYNTHETIC_PROBE,
     )
 
 

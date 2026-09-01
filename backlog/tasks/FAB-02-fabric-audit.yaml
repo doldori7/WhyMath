@@ -7,6 +7,7 @@ subject: math
 layer: docs
 status: todo
 priority: 2
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -18,5 +19,5 @@ artifacts: []
 paths:
   - "docs/**"
 session: null
-notes: "반복 태스크 — ARCH 감사 패턴 이식. subject-expansion 트랙 = G-s5-subject-expansion 하드락 뒤 (수학 완성 전 미노출이 의도된 동작)"
-updated: 2026-07-16
+notes: "반복 태스크 — ARCH 감사 패턴 이식. subject-expansion 트랙 = G-s5-subject-expansion 하드락 뒤 (수학 완성 전 미노출이 의도된 동작)\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

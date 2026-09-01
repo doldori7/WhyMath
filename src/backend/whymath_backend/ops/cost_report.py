@@ -16,6 +16,9 @@ Langfuse 이벤트 이름 `l3_routing`의 메타데이터에서 아래를 읽는
   (캐시 히트·비동기 enqueue·미계측 이벤트는 실측이 None이라 표본에서 제외 — 지어내지 않음)
 - `cost_tier`(local/cloud_mid/cloud_high) → **로컬:클라우드 비율**(목표 80% 로컬 대비).
 - `cache_hit`(bool) → **캐시 적중률**.
+- `data_export_blocked`(bool)/`data_export_reason` → **데이터 등급 게이트 발동률**(EOS-59 ②).
+  판정이 안 실린 이벤트는 분모에서 빼고 notes로 경고한다 — "0% 발동"과 "게이트 밖 생성"을
+  같은 숫자로 뭉개지 않는다(판정치 자체는 `ops/cost_probe`의 in-process 회계).
 
 튜닝 산출물 (S1 게이트 ② 판정으로 연결)
 --------------------------------------
@@ -141,6 +144,25 @@ class CostReport:
     """cost_tier별 실측 분포(S1-12 결과표 행 단위·티어 미상 '(unknown)' 포함) — 로컬/클라우드
     행을 각각 채우려면 전역 분포로는 부족하다(런북 결과표가 티어별 p50/p90을 요구)."""
 
+    data_export_blocked_count: int = 0
+    """데이터 등급 게이트가 *실제로* 클라우드를 막은 이벤트 수 (EOS-59 ②).
+
+    `router.langfuse_fields`의 `data_export_blocked`(bool)에서 센다. 이 값이 "작동한 비율"의
+    분자다 — 정상 응답 200이 아니라 **게이트가 강등을 일으킨 횟수**만 센다."""
+
+    data_export_evaluated: int = 0
+    """데이터 등급 판정이 실린 이벤트 수(= `data_export_reason` 키가 있는 이벤트).
+
+    "작동한 비율"의 분모이자, *게이트를 거치지 않은 이벤트*(구 이벤트·라우터를 안 탄 직접
+    조립 결정)를 분모에서 빼기 위한 축이다. 이 값이 `event_count`보다 작으면 그만큼
+    게이트 밖에서 생성이 일어났다는 뜻이므로 notes로 경고한다."""
+
+    data_export_reason_counts: dict[str, int] = field(default_factory=dict)
+    """반출 판정 사유별 카운트(EXPORT_ALLOWED/PROHIBITED/UNVERIFIED). 키 없는 이벤트는 미집계.
+
+    ⚠️ *관측 보조* 축이다 — 판정치는 `ops.cost_probe.ProbeReport`가 in-process로 낸다
+    (Langfuse 단독 회계 금지 — 인프라가 죽으면 "0건 발동"으로 위장된다)."""
+
     content_source_counts: dict[str, int] = field(default_factory=dict)
     """공급 경로 값별 카운트(dsl_render/prompt_cache/generate·03c §4). 키 없는 구 이벤트는 미집계.
 
@@ -153,6 +175,17 @@ class CostReport:
 
     notes: list[str] = field(default_factory=list)
     """집계 한계·주의(표본 부족·미분류 tier 등)를 사람이 읽도록 남긴다."""
+
+    @property
+    def data_export_block_rate(self) -> float | None:
+        """데이터 등급 게이트 발동률 = 차단/판정 이벤트 (EOS-59 ② "작동한 비율").
+
+        분모가 0이면 None — "0% 발동"이 아니라 **"게이트가 실린 이벤트가 없다"**(측정 실패
+        또는 미배선)다. 두 상태를 같은 숫자로 뭉개면 배선이 끊긴 것을 정상으로 읽게 된다.
+        """
+        if self.data_export_evaluated <= 0:
+            return None
+        return self.data_export_blocked_count / self.data_export_evaluated
 
 
 def _percentile(sorted_vals: list[float], q: float) -> float | None:
@@ -225,6 +258,9 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
     content_source_counts: dict[str, int] = {}
     cache_hits = 0
     cache_total = 0
+    export_blocked = 0
+    export_evaluated = 0
+    export_reason_counts: dict[str, int] = {}
 
     per_tier_vals: dict[str, dict[str, list[float]]] = {}
 
@@ -268,6 +304,16 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
             if cache_raw:
                 cache_hits += 1
 
+        # 데이터 등급 게이트(EOS-59 ②) — 판정이 실린 이벤트만 분모에 넣는다. 라우터를 안 탄
+        # 직접 조립 결정·구 이벤트는 사유가 None이라 여기서 빠진다("미판정"과 "허용"을 구분).
+        reason_raw = ev.get("data_export_reason")
+        if isinstance(reason_raw, str):
+            export_evaluated += 1
+            export_reason_counts[reason_raw] = export_reason_counts.get(reason_raw, 0) + 1
+        blocked_raw = ev.get("data_export_blocked")
+        if blocked_raw is True:
+            export_blocked += 1
+
         # content_source — 공급 경로 분포(03c §4). 키가 있는 이벤트만 센다(구 이벤트엔 없다).
         # ⚠️ 이 집계는 *관측 보조*다. 판정치는 `l4.content_supply.SupplyTally`가 in-process로 낸다
         # (Langfuse 단독 회계 금지 — 인프라가 죽으면 "0건 통과"로 위장된다).
@@ -284,6 +330,19 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
         notes.append(f"cost_tier 미상 이벤트 {unknown}건 — 비율·분포에서 제외됨.")
 
     cache_hit_rate = cache_hits / cache_total if cache_total > 0 else None
+
+    # 게이트 밖에서 생성이 일어났는가 — 판정이 안 실린 이벤트는 데이터 등급을 통과한 적이
+    # 없다. 조용히 분모에서만 빼면 "발동률 0%"가 되어 배선 공백이 정상으로 보인다.
+    if events and export_evaluated == 0:
+        notes.append(
+            "데이터 등급 판정(data_export_reason)이 실린 이벤트 0건 — 발동률은 '0%'가 아니라 "
+            "**측정 불가**다(라우터 미경유이거나 EOS-59 이전 이벤트)."
+        )
+    elif export_evaluated < len(events):
+        notes.append(
+            f"데이터 등급 판정이 없는 이벤트 {len(events) - export_evaluated}건 — "
+            "그만큼 라우터 게이트를 거치지 않은 생성이 있었다는 뜻이다(발동률 분모에서 제외)."
+        )
 
     input_dist = _distribution(input_vals)
     output_dist = _distribution(output_vals)
@@ -325,6 +384,9 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
         cache_hits=cache_hits,
         cache_total=cache_total,
         cache_hit_rate=cache_hit_rate,
+        data_export_blocked_count=export_blocked,
+        data_export_evaluated=export_evaluated,
+        data_export_reason_counts=export_reason_counts,
         content_source_counts=content_source_counts,
         suggested_est_input_tokens=sug_in,
         suggested_est_output_tokens=sug_out,
@@ -524,6 +586,23 @@ def _render_stdout(report: CostReport) -> str:
         f"  적중 {report.cache_hits} / {report.cache_total} "
         f"→ 적중률 {_fmt_ratio(report.cache_hit_rate)}"
     )
+    # 데이터 등급 게이트(EOS-59 ②) — 관측 보조. 판정치는 `ops.cost_probe`가 in-process로 낸다.
+    lines.append("[데이터 등급 게이트 — 국외 반출 차단(EOS-59)] — 관측 보조(판정치는 cost_probe)")
+    block_rate = report.data_export_block_rate
+    if block_rate is None:
+        lines.append(
+            "  발동률: 측정 불가 (data_export_reason이 실린 이벤트 0건 — '0% 발동'이 아니다)"
+        )
+    else:
+        lines.append(
+            f"  차단 발동: {report.data_export_blocked_count}건 / "
+            f"판정 이벤트 {report.data_export_evaluated}건  ·  발동률 {block_rate * 100:.1f}%"
+        )
+    if report.data_export_reason_counts:
+        reason_str = ", ".join(
+            f"{k}={v}" for k, v in sorted(report.data_export_reason_counts.items())
+        )
+        lines.append(f"  등급 판정 분포: {reason_str}")
     lines.append("[공급 경로] — 관측 보조(판정치는 SupplyTally in-process)")
     if report.content_source_counts:
         src_str = ", ".join(f"{k}={v}" for k, v in sorted(report.content_source_counts.items()))
