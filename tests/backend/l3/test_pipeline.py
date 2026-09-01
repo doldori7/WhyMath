@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 
 # provider 반환형은 pipeline.GenerationResult(오케스트레이션 결과)와 이름이 겹쳐 별칭으로 구분.
@@ -493,6 +494,9 @@ class TestCloudRejectedThroughProvider:
             student_subscription="gifted",
             budget_krw=10000.0,
             sync=True,
+            # 반출 가능 등급 명시 — 이 테스트가 재는 것은 provider 거부 경로이지 데이터 등급
+            # 게이트(EOS-59)가 아니다. 미지정이면 fail-closed로 LOCAL이 되어 축이 바뀐다.
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
         with pytest.raises(ValueError, match="로컬 결정만"):
             await generate(
@@ -534,6 +538,9 @@ def _cloud_request() -> RoutingRequest:
         student_subscription="gifted",
         budget_krw=10000.0,
         sync=True,
+        # 반출 가능 등급 명시 — 이 헬퍼는 *클라우드 실측 계측*을 재는 좌석이라 데이터 등급
+        # 게이트(EOS-59)를 중립화해야 원래 축을 잰다(등급 축은 test_data_export_policy).
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
 
 

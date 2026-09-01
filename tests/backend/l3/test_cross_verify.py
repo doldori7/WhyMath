@@ -69,6 +69,7 @@ class ScriptedProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         self.calls.append((prompt, system))
         self.decisions.append(decision)
@@ -91,6 +92,7 @@ class RaisingProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         raise RuntimeError("provider 다운(테스트)")
 

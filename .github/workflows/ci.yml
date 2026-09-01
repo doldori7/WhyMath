@@ -423,6 +423,15 @@ jobs:
       - name: 게이트 — 콘텐츠 출처·라이선스 집행 (provenance_audit·pool 필드 + 사이드카 계약)
         run: python -m whymath_backend.ops.provenance_audit
 
+      # EOS-59 ③: 데이터 등급 라우팅 신호 소스 스캔 — 프로덕션 `RoutingRequest(` 생성이
+      # `data_licenses=`를 명시하는지 AST로 검사한다. 미명시는 fail-closed 기본값(UNKNOWN)
+      # 때문에 *조용히 LOCAL 강등*으로 끝나므로, 이 게이트가 없으면 보수 기본값이 일상
+      # 동작이 되어 "게이트가 일해서 로컬"인지 "아무도 등급을 안 적어서 로컬"인지 구분할 수
+      # 없다. 위반 시 exit 1. hermetic(LLM 0·DB 0)·cwd 무관(스크립트가 루트 자가 탐지).
+      # 변별력은 tests/infra/test_routing_data_grade_scan_wiring.py의 결함 주입이 봉인.
+      - name: 게이트 — 데이터 등급 라우팅 신호 (check_routing_data_grade·미명시 0건)
+        run: python ../../scripts/ops/check_routing_data_grade.py
+
       # OPS-16: L3 생성 프롬프트 정본(docs/prompts/l3_*.md)의 3레일 감사 —
       # ⓐ 저작권(평가원·EBS·교과서 본문 복제 금지 지시문) ⓑ 봉인(rephrase 수치·정답 불변)
       # ⓒ 독립성(cross_verify에 생성자 문맥 미주입). 위반 시 exit 1. hermetic(LLM 0·DB 0).
@@ -1117,8 +1126,14 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # fetch-depth: 0 — HARN-47 브랜치 스캔은 trunk 히스토리와 ahead count를 읽는다.
+      # 기본값(depth=1)이면 `is_shallow_repo` 가드에 걸려 **매 실행 "판정 보류"**가
+      # 된다. 그건 보호가 아니라 상시 무력 상태다(CLAUDE.md: 상시 실패하는 fail-open
+      # 보호를 "보호 있음"으로 신뢰 금지). 이 잡은 초 단위라 full depth 비용을 감당한다.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -1140,6 +1155,17 @@ jobs:
 
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
+
+      # HARN-52 — 의존 *선언*과 *집행*의 불일치를 막는다. notes에 "선행: X 착지 후"라고
+      # 적어도 selector.py는 notes를 읽지 않으므로(depends_on만 본다) 그 태스크는 사람이
+      # "막아 뒀다"고 믿는 동안 다른 세션에 착수 가능 후보로 노출된다(#911 리뷰 P2가
+      # EOS-62에서 지적 · 저장소 전수 스캔에서 동일 패턴 6건 실재).
+      #
+      # 판정은 exit code로 한다 — 출력 문자열로 통과를 선언하지 않는다(CLAUDE.md 2026-08-09).
+      # 레거시 6건은 dep_declaration.LEGACY_EXEMPT가 그랜드파더하되 HARN-53을 만료 지점으로
+      # 못박았다(만료 없는 유예 금지 — 그 태스크가 done인데 면제가 남으면 이 스텝이 red).
+      - name: 의존 선언↔집행 대조 (HARN-52)
+        run: python3 scripts/harness/backlog.py audit-deps
 
       # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
       # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
@@ -1166,6 +1192,28 @@ jobs:
             # branch_gone)는 harness-audit.yml이 자동 청소하므로, 여기 남는 목록은
             # **사람 판단이 필요한 잔여**(ttl·task_missing)라는 뜻이다.
             echo "::warning::stale 원격 claim 발견 — 확정 사유는 harness-audit이 자동 청소한다. 위 목록에 ttl/task_missing이 남아 있으면 사람 판단이 필요하다"
+          fi
+
+      # HARN-47 — 이 스캔은 SessionStart 훅에서만 돌고 있었다. 즉 사람이 대화형 세션을
+      # 열 때만 존재했고 CI에서는 한 번도 실행되지 않았다. "저장소에 존재함"과 "돌아감"은
+      # 다르다(tests/infra 199건 미실행·브랜치 보호 미강제와 같은 형태의 반복 실패).
+      #
+      # 게이트가 아니라 **관측**이다 — 남의 방치 브랜치 때문에 무관한 PR을 red로 만들지
+      # 않는다. 다만 침묵하지도 않는다: 고립 N건은 warning으로, *측정 실패*는 그와
+      # 구분되는 별도 warning으로 낸다(0건 통과로 위장 금지).
+      - name: 고립 브랜치 관측 — PR로 노출된 적 없는 미머지 브랜치 (HARN-47)
+        run: |
+          set -o pipefail
+          out=$(python3 scripts/harness/backlog.py branches) && rc=0 || rc=$?
+          echo "$out"
+          echo "EXIT=$rc"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::고립 브랜치 판정 불가 — 이 실행에서 측정되지 않았다(고립 0건이라는 뜻이 아니다)"
+            exit 0
+          fi
+          n=$(echo "$out" | grep -c '^  \[고립\]' || true)
+          if [ "$n" -gt 0 ]; then
+            echo "::warning::PR로 노출된 적 없는 미머지 브랜치 ${n}건 — 회수(PR 생성) 또는 삭제가 필요하다. 이 목록이 유일한 존재 증거다"
           fi
 
       # CUR-09 후속: EOS 단원 구조 관측 리포트 — 현행 모델/스키마/코퍼스에 EOS 설계 메타데이터가
@@ -1315,18 +1363,18 @@ jobs:
       - name: Install dependencies (editable + dev extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e ".[dev]"
           # 교차계층 거버넌스 테스트가 data_pipeline(L1)을 import → 백엔드 잡에도 설치.
-          pip install -e ../data-pipeline
+          python -m pip install -e ../data-pipeline
 
       - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
-        run: alembic upgrade head
+        run: python -m alembic upgrade head
 
       - name: Pytest (E2E 관통 슬라이스만 — 실 PG·mock LLM)
         env:
           WHYMATH_RUN_INTEGRATION: "1"
           WHYMATH_DB_DISABLE_POOL: "1"
-        run: pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
+        run: python -m pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
 
       # 초인간 검증 S6(상시성) — 전 코퍼스 verify 재료로 정답을 매일 밤 전수 재검산.
       # 정본 변경·데이터 오염을 야간에 즉시 잡는다(fail 1건이라도 있으면 exit 1). 순수 계산·
@@ -1337,3 +1385,24 @@ jobs:
             ../../data/corpus/problem_bank_generated_v0/problems.jsonl \
             ../../data/corpus/problem_bank_rephrased_v0/problems.jsonl \
             ../../data/corpus/problem_bank_killer_v0/problems.jsonl
+
+      # ── EOS-64 ① — 앵커 A4 생성 E2E 관통의 **상시화**(1회 실증 → 야간 계측) ─────────
+      # EOS-58(`docs/reviews/eos_anchor_e2e_a4_2026-08-30.md`)은 생성→SymPy 게이트→dedup→
+      # 코퍼스 저장→검수 큐 관통을 **1회** 실증했다. 1회 실증은 "그때 됐다"이지 "지금도 된다"가
+      # 아니다 — 이 스텝이 그 관통을 매일 밤 다시 돌려 드리프트를 잡는다.
+      #
+      # 실행 주체 판정(태스크 notes의 미결 사항): **CI 러너**다. 이 관통은 hermetic이라
+      # (가짜는 LLM provider 하나뿐 — 생성기·SymPy 게이트·dedup·저장·검수 큐·GenerationLog는
+      # 전부 실코드) Ollama·API 키 없이 돈다. 라이브(Phaiakes9 Ollama) 회차는 별개 축이고,
+      # 그쪽의 상시 계측은 `<out>.rounds.jsonl` 회차 대장 + 연속 무진전 알람(EOS-64 ④)이
+      # 담당한다 — CI에 자격증명·GPU를 들이지 않고도 관통 자체는 매일 검증된다.
+      #
+      # 실 PG는 이 관통에 불요하지만(hermetic) 이 잡에 얹는다 — 야간 안전망을 한 잡에 모아
+      # 신규 잡 증설 0을 유지한다(위 코퍼스 재검증 스텝과 같은 판단).
+      # 배선 실재성은 `tests/infra/test_anchor_e2e_nightly_wiring.py`가 동결한다(OPS-10 선례 —
+      # "워크플로에 썼다"와 "그 잡이 이 관통을 돈다"는 다르다).
+      # 실행기(`pytest`)를 단독 호출하지 않는다 — CLAUDE.md "실행기 단독 호출 금지": 다중
+      # 환경에서 `pytest` 런처가 `python`과 다른 인터프리터에 결합될 수 있다. 이 잡의 설치·
+      # 마이그레이션·테스트 스텝을 전부 `python -m` 형태로 통일해 한 인터프리터로 못 박는다.
+      - name: 앵커 A4 생성 E2E 관통 (EOS-64 상시화 — hermetic)
+        run: python -m pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py

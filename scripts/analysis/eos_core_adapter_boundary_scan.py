@@ -87,9 +87,16 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l3.models": ("CORE", "L3 공용 데이터 모델"),
     "l3.prompt_assets": ("CORE", "프롬프트 자산 레지스트리"),
     "l3.escalation_defaults": ("CORE", "에스컬레이션 기본값 정책"),
+    "l3.generation_seed": ("CORE", "생성 재현 seed 정책 — 경로별 지원·값 추출(과목 무관)"),
     "l3.equivalent": ("ADAPTER", "수식 동치 판정·정규화 — doc-100 Adapter 'equation equivalence'"),
     "l3.symbolic_equivalence": ("ADAPTER", "기호 조작 — doc-100 'symbolic manipulation'"),
     "l3.verifier": ("ADAPTER", "모듈 스스로 '통합 *수학* 검증기 v2'로 자인"),
+    "l3.verify_answer_form": (
+        "ADAPTER",
+        "답 표기 형태 판정 — 기약분수·인수분해형 같은 **형태 어휘가 수학 소유**이고 SymPy로 "
+        "표면을 파싱한다. 신설 시 l3 기본값(CORE)을 물려받아 sympy를 import하는 CORE 모듈이 "
+        "됐던 것을 정정한다 — EOS-69가 청소한 유형을 같은 세션에서 재생산했다 (EOS-28)",
+    ),
     "l3.verify_answer": ("ADAPTER", "수학 정답 판정 — doc-100 'math problem validators'"),
     "l3.verify_step": ("ADAPTER", "인접 단계 수식 동치 연쇄 검사"),
     "l3.verify_final_answer": ("ADAPTER", "최종 답 수식 판정"),
@@ -101,6 +108,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l3.notation_coverage": ("ADAPTER", "수학 표기 커버리지 게이트"),
     "l3.speech": ("ADAPTER", "수식 AST → 한국어 낭독 — doc-100 'mathematical expression parsing'"),
     "l3.speech_parse": ("ADAPTER", "낭독 역파싱"),
+    # ── 과목 중립 언어 유틸 (EOS-69) ──
+    "lang": (
+        "CORE",
+        "한국어 조사·표기 유틸 — 어떤 과목이든 한국어로 가르치면 필요하다. "
+        "표준 라이브러리만 import(모듈 자인). 경계 문서 §4 B분류 3건의 해소처",
+    ),
     # ── L4 교수학 엔진 — Polya·소크라테스·오개념 *기계*는 중립, 수학 검출기만 Adapter ──
     "l4": ("CORE", "Polya 4단계·소크라테스·LTHC·힌트 지연은 교수학 구조이지 수학이 아님"),
     "l4.misconception": (
@@ -130,6 +143,14 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "api.verify": ("MIXED", "검증 엔드포인트 — 표면은 중립이나 요청·응답이 수식 계약"),
     "api.speech": ("MIXED", "낭독 엔드포인트 — 동상"),
     "api.ocr": ("MIXED", "OCR 엔드포인트 — 동상"),
+    "api._ocr_state": (
+        "INFRA",
+        "OCR 부품의 app.state 보관·조회 배관(`_l3_state`와 동형) — `OcrComponents`가 **타입 "
+        "주석으로만** 등장하고 필드를 한 번도 읽지 않는다(실측: 저장·조회·503 사유·도달 카운터). "
+        "과목이 바뀌어도 고칠 것이 없어 CORE 기준을 만족하나, 배관은 경계 계약의 대상이 아니라 "
+        "INFRA로 적는다. **이것은 배선 수정이 아니라 분류 정정이다** — 위반이 사라진 이유가 "
+        "코드 변경이 아님을 여기 남겨 둔다 (EOS-69)",
+    ),
     "schema": ("CORE", "순수 타입 — 대부분 과목 중립(학습자·활동·권리·이벤트)"),
     "schema.subject_adapter": (
         "CORE",
@@ -137,7 +158,9 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     ),
     "schema.problem": (
         "MIXED",
-        "수학 전용 4필드(answer_transform 등)를 S1-16이 extensions.math로 분리할 때까지 혼재",
+        "S1-16 착지(2026-08-31) 후에도 MIXED다 — 수학 전용 4필드가 `extensions.math`로 "
+        "*구조화*됐으나 legacy top-level 필드가 하위호환을 위해 남아 양방향 동기화된다. "
+        "CORE 승격은 legacy 축 제거(breaking)가 선결이며 S1-16이 의도적으로 하지 않았다",
     ),
     "schema.enums": ("MIXED", "과목 중립 enum과 수학 전용 enum이 한 파일에 동거"),
     "schema.answer_submission": ("MIXED", "답안 제출 계약 — 봉투는 중립, 답 표현이 수식"),
@@ -147,6 +170,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "db": ("INFRA", "영속 계층 — 모델 컬럼에 수학 타입이 있으나 경계 계약 대상이 아님"),
     "ops": ("INFRA", "운영·계측·감사"),
     "privacy": ("INFRA", "미성년 PII 횡단 인프라"),
+    "composition": (
+        "INFRA",
+        "합성 루트 — 능력 계약(schema)과 과목 구현(l4 어댑터)을 잇는 유일한 배선 지점. "
+        "판정 로직 0·팩토리만 노출. 과목 추가 시 *고쳐야 하는* 파일이라 CORE가 아니며, "
+        "경계의 목적은 변경 지점 제거가 아니라 한 곳으로의 집중이다 (EOS-69)",
+    ),
     "config": ("INFRA", "설정"),
     "security": ("INFRA", "인증·인가"),
     "consent": ("INFRA", "동의 절차"),

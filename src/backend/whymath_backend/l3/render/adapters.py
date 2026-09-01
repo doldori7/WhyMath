@@ -15,18 +15,25 @@
 ③ **검증 후 노출**: 평가 재료를 렌더하면 `verify_answer`로 정답을 확인하고, 수치·수식은
    `rephrase.classify_invariance_failure`의 봉인으로 원본 보존을 확인한다. 실패는 예외가 아니라
    `validation_signal`로 표면화한다(조용한 실패 금지).
-④ **한국어 조사 일치**: 이름·값 뒤 조사는 `l3/equivalent/josa.py`가 판정한다(재발명 금지).
+④ **한국어 조사 일치**: 이름·값 뒤 조사는 `lang/josa.py`가 판정한다(재발명 금지 ·
+   EOS-69로 수학 패키지 밖 이동 — 조사 판별은 과목과 무관하므로 Core가 알아도 된다).
 """
 
 from __future__ import annotations
 
-from whymath_backend.l3.equivalent.josa import eul_reul, eun_neun, i_ga
-from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, extract_equation
+from whymath_backend.composition import (
+    default_assessment_answer_verifier,
+    default_expression_seal,
+)
 from whymath_backend.l3.pregenerate.models import ValidationSignal
 from whymath_backend.l3.render.adapter import RenderContext, RenderedUnit, RenderSegment
 from whymath_backend.l3.render.dsl import ConceptDSL
-from whymath_backend.l3.verify_answer import verify_answer
+from whymath_backend.lang.josa import eul_reul, eun_neun, i_ga
 from whymath_backend.schema.enums import PedagogyStrategy
+from whymath_backend.schema.verification_capabilities import (
+    AssessmentAnswerVerifier,
+    ExpressionSeal,
+)
 
 # DSL *본문*(정의·직관·예시)이 흘러들 수 있는 세그먼트 종류 — 수식 봉인 검사의 범위.
 # 나머지 종류(`prompt`·`solution_step`·`heading`·`reflection`)는 어댑터가 평가 재료나 고정 문구로
@@ -46,7 +53,12 @@ def _substitute(text: str, bindings: dict[str, str]) -> str:
     return rendered
 
 
-def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> ValidationSignal | None:
+def _seal_signal(
+    dsl: ConceptDSL,
+    segments: tuple[RenderSegment, ...],
+    *,
+    seal: ExpressionSeal | None = None,
+) -> ValidationSignal | None:
     """수식 봉인 검사 — DSL 본문의 수식이 렌더 후에도 바이트 동일하게 남았는지.
 
     DSL 자유 서술에서 방정식을 추출해(`extract_equation`), 그 수식을 실은 세그먼트가 봉인을
@@ -61,9 +73,11 @@ def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> Valida
     kind로 범위를 좁히는 것이 봉인을 *약화*시키지 않는 이유가 이것이다(본문이 흘러드는 kind는
     그대로 검사한다).
     """
+    # EOS-69: 봉인 대상이 "방정식"이라는 사실은 과목 구현만 안다 — Core는 뽑기/판정 두 동작만.
+    inspector = seal if seal is not None else default_expression_seal()
     sources = [text for text in (dsl.definition, dsl.intuition) if text] + list(dsl.examples)
     for source in sources:
-        equation = extract_equation(source)
+        equation = inspector.extract_sealed(source)
         if equation is None:
             continue
         carriers = [
@@ -72,7 +86,7 @@ def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> Valida
             if seg.kind in _BODY_SEGMENT_KINDS and (equation in seg.content or "=" in seg.content)
         ]
         for seg in carriers:
-            reason = classify_invariance_failure(seg.content, equation=equation)
+            reason = inspector.classify_invariance_failure(seg.content, sealed=equation)
             if reason is not None:
                 return ValidationSignal(
                     kind="other",
@@ -81,7 +95,9 @@ def _seal_signal(dsl: ConceptDSL, segments: tuple[RenderSegment, ...]) -> Valida
     return None
 
 
-def _assessment_signal(dsl: ConceptDSL) -> ValidationSignal | None:
+def _assessment_signal(
+    dsl: ConceptDSL, *, verifier: AssessmentAnswerVerifier | None = None
+) -> ValidationSignal | None:
     """평가 재료 정답 검증 — 렌더에 실린 답이 조건을 만족하는지(Tier1 SymPy).
 
     `verify_answer`는 pass/fail/unverifiable 3-state다. **fail만 차단**한다 — unverifiable(기호적
@@ -89,7 +105,8 @@ def _assessment_signal(dsl: ConceptDSL) -> ValidationSignal | None:
     """
     if dsl.assessment is None:
         return None
-    verdict = verify_answer(list(dsl.assessment.conditions), dsl.assessment.answer_map)
+    checker = verifier if verifier is not None else default_assessment_answer_verifier()
+    verdict = checker.verify_answer(list(dsl.assessment.conditions), dsl.assessment.answer_map)
     if verdict.state == "fail":
         return ValidationSignal(
             kind="solution",

@@ -31,6 +31,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 from models import (
+    EOS_PRIORITY_BACKFILL_GATE,
+    TERMINAL_STATUSES,
     Backlog,
     Gate,
     Policy,
@@ -423,8 +425,43 @@ def validate_backlog(backlog: Backlog, schema_errors: list[str] | None = None) -
         errors.append(f"depends_on 순환 참조 검출: {cycle}")
 
     errors.extend(_id_number_collisions(backlog.tasks.keys()))
+    errors.extend(_eos_priority_grandfather_errors(backlog))
 
     return errors
+
+
+# ── EOS 등급 그랜드파더 만료 (HARN-55) ───────────────────────────────────────
+#
+# 등급 필드(`eos_priority`)를 도입한 시점에 기존 태스크는 전부 null이다. 그것을 즉시
+# 위반으로 만들면 대장 전체가 red가 되고, 영원히 허용하면 "만료 없는 유예"가 된다.
+# 그래서 만료를 **날짜가 아니라 기계**에 건다 — 관여도 트리아지 게이트가 clear되는
+# 순간(= 151건을 무엇으로 분류할지 사람이 정한 순간) 미지정이 위반이 된다.
+# 선례: import-linter의 `unmatched_ignore_imports_alerting`(빚을 갚으면 CI가 줄을 지우라고
+# 말한다)·EOS-67 baseline. 유예가 조용히 눌러앉을 수 없는 형태여야 한다.
+#
+# 종결(done·cancelled) 태스크는 세지 않는다 — 끝난 일에 등급을 소급하는 것은 분류가
+# 아니라 장부 청소이고, 그 청소를 강제하면 만료가 실제 목적(12월 범위 확정)을 잃는다.
+def _eos_priority_grandfather_errors(backlog: Backlog) -> list[str]:
+    gate = backlog.gates.get(EOS_PRIORITY_BACKFILL_GATE)
+    if gate is None or gate.status not in ("cleared", "waived"):
+        return []  # 유예 유효 구간 — 아직 분류 근거(트리아지)가 없다
+    missing = sorted(
+        t.id
+        for t in backlog.tasks.values()
+        if t.eos_priority is None and t.status not in TERMINAL_STATUSES
+    )
+    if not missing:
+        return []
+    # 태스크 수만큼 오류를 쏟으면 판정이 아니라 소음이 된다 — 1건으로 묶고 처방을 붙인다.
+    head = ", ".join(missing[:5])
+    more = f" 외 {len(missing) - 5}건" if len(missing) > 5 else ""
+    return [
+        f"eos_priority 미지정 {len(missing)}건 — 그랜드파더가 만료됐다: 게이트 "
+        f"'{EOS_PRIORITY_BACKFILL_GATE}'가 {gate.status}이므로 분류를 미룰 근거가 없다. "
+        f"대상 예: {head}{more}. "
+        "처방: python3 scripts/harness/backlog.py amend <id> --eos-priority P0|P1|P2|P3 "
+        "--reason '<분류 근거>' (대장 손편집 금지)"
+    ]
 
 
 # ── 태스크 ID 번호 충돌 (HARN-10) ────────────────────────────────────────────

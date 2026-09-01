@@ -80,6 +80,40 @@ class TestSeed:
         assert cli.main(["seed"]) == 1
 
 
+class TestNextTruncationDisclosure:
+    """`next` 사람용 출력이 **절단 규모**를 드러내는지 (HARN-52 후속).
+
+    사고 경위(2026-09-01): 어떤 태스크가 착수 후보인지 판정하려고 `next`(상위 3건)를
+    썼는데, 대상이 priority 2라 **정상 상태와 뮤테이션 상태 양쪽 모두 "후보에 없음"**
+    이 나왔다 — 검증 스텝의 변별력이 0이었다. 출력이 "상위 3건"이라고 정직하게 적어도,
+    *얼마나* 잘렸는지와 전건 조회 방법이 없으면 그 출력은 부재 판정에 쓰이고 만다.
+
+    CLAUDE.md "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 *도구가 자르는* 축.
+    """
+
+    def test_shows_total_and_recovery_when_truncated(self, seeded_repo: Path, capsys):
+        """잘렸으면 분모와 전건 조회 방법을 함께 낸다."""
+        assert cli.main(["next", "--n", "50", "--json"]) == 0
+        total = len(json.loads(capsys.readouterr().out))
+        assert total > 1, "시드에 후보가 2건 이상 있어야 이 검사가 성립한다"
+
+        assert cli.main(["next", "--n", "1"]) == 0
+        out = capsys.readouterr().out
+        assert f"전체 {total}건 중 상위 1건" in out, "분모가 없으면 절단 규모를 알 수 없다"
+        assert "--json" in out and f"--n {total}" in out, "전건 조회 방법을 안내해야 한다"
+
+    def test_no_truncation_notice_when_complete(self, seeded_repo: Path, capsys):
+        """안 잘렸으면 '중 상위' 표기를 내지 않는다 — 대조군(항상 같은 말을 하면 위장)."""
+        assert cli.main(["next", "--n", "50", "--json"]) == 0
+        total = len(json.loads(capsys.readouterr().out))
+
+        assert cli.main(["next", "--n", str(total + 10)]) == 0
+        out = capsys.readouterr().out
+        assert f"전체 {total}건" in out
+        assert "중 상위" not in out, "잘리지 않았는데 절단 표기가 났다"
+        assert "표시되지 않았다" not in out
+
+
 class TestLifecycle:
     def test_start_done_roundtrip(self, seeded_repo: Path, capsys):
         """start_done_왕복"""
@@ -212,6 +246,8 @@ class TestGatesAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-93-gated-task",
                     "--title",
@@ -260,6 +296,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-90-new-task",
                     "--title",
@@ -284,6 +322,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-91-bad-task",
                     "--title",
@@ -313,6 +353,8 @@ class TestIdNumberCollision:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",
@@ -571,8 +613,22 @@ class TestRemoteClaimCli:
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
 
-    def test_block_releases_remote_claim(self, bare_remote, monkeypatch, capsys):
-        """block이_원격_claim을_해제한다"""
+    def test_block_converts_claim_to_block_hold(self, bare_remote, monkeypatch, capsys):
+        """block이_착수_claim을_차단_홀드로_전환한다 (HARN-42로 계약 변경)
+
+        **구 계약**: block은 원격 claim을 *해제*했다(`claims == []`).
+        **신 계약**: 해제 대신 `kind="block"` 홀드로 **전환**한다.
+
+        왜 바꿨나 — 구 계약은 차단이 보호를 거는 순간 유일한 교차 세션 신호를
+        지웠다. 태스크 YAML의 `blocked`는 main에 머지돼야 남에게 보이는데 이
+        저장소의 머지 지연은 시간 단위라(CI ~30분 + HARN-32 경합), 그 창에서 타
+        세션이 마찰 없이 착수했다(CUR-11 실사고 2026-08-31 — block 00:28 → 타 세션
+        claim 00:41 → 구현·머지 완료, 차단은 끝내 발효 못 함).
+
+        구 계약의 *원 의도*("차단된 태스크가 진행 중 점유로 남지 않는다")는
+        유지된다 — 아래에서 kind가 더 이상 `claim`이 아님을 함께 확인한다.
+        교차 세션 차단 동작 자체는 test_block_hold_cross_session.py가 동결한다.
+        """
         _, clone = bare_remote
         repo = self._seeded_clone(clone, monkeypatch, "session-a")
         [task_id] = self._next_ids(capsys)
@@ -580,8 +636,11 @@ class TestRemoteClaimCli:
         assert cli.main(["block", task_id, "--reason", "테스트"]) == 0
         import remote_claims
 
-        claims, _ = remote_claims.list_claims(repo)
-        assert claims == []
+        claims, _ = remote_claims.list_claims(repo, with_meta=True)
+        held = [c for c in claims if c.task_id == task_id]
+        assert len(held) == 1, "차단 홀드가 원격에 남아야 병렬 세션이 본다"
+        assert held[0].kind == "block"
+        assert held[0].kind != "claim", "구 의도 유지 — 진행 중 점유로 남지 않는다"
 
     def test_no_remote_flag_skips_remote(self, bare_remote, monkeypatch, capsys):
         """no_remote_플래그는_원격을_생략한다"""
@@ -660,6 +719,8 @@ class TestReadSideFallback:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -842,6 +903,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -1012,6 +1075,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1037,6 +1102,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1091,6 +1158,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-01-overlap-a",
                     "--title",
@@ -1109,6 +1178,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-02-overlap-b",
                     "--title",
@@ -1174,6 +1245,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1225,6 +1298,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-16-todo-b",
                     "--title",
@@ -1303,6 +1378,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-03-scoped-task",
                     "--title",
@@ -1335,6 +1412,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-04-other-task",
                     "--title",
@@ -1418,6 +1497,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-05-cross-a",
                     "--title",
@@ -1436,6 +1517,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-06-cross-b",
                     "--title",
@@ -1507,6 +1590,8 @@ class TestHumanOwnerLifecycle:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1603,6 +1688,8 @@ class TestUnmergedDoneDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -1755,6 +1842,69 @@ class TestStaleBranchClassificationWiring:
         assert cli.main(["brief"]) == 0
         assert "active_branches" in captured_kwargs, "cmd_brief가 active_branches를 안 넘기면 회귀"
         assert "claude/claimer" in captured_kwargs["active_branches"]
+
+    def test_branches_cmd_passes_remote_claim_branches_as_active_branches(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """branches_CLI도_원격_claim_브랜치를_active_branches로_전달한다
+
+        `cmd_brief`만 넘기고 CI 진입점(`cmd_branches`)이 안 넘기면, **지금 누가 작업
+        중인 브랜치가 "🔴 회수 또는 삭제 필요"로 경고된다** — 삭제를 유도하는 오경보다.
+        문서(build_harness.md §3b-3)는 4분류라고 말하는데 CI 경로는 3분류만 낼 수 있는
+        상태이기도 하다. Codex 리뷰 P1 지적(2026-08-31)으로 발견해 봉인한다.
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        other = clone("claimer")
+        assert remote_claims.claim(other, "S1-01-claimed", "claude/claimer").status == "ok"
+
+        mine = clone("newcomer-branches")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        captured_kwargs: dict = {}
+        original = remote_claims.scan_stale_branches
+
+        def spy(root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original(root, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "scan_stale_branches", spy)
+        capsys.readouterr()
+        cli.main(["branches"])
+        assert (
+            "active_branches" in captured_kwargs
+        ), "cmd_branches가 active_branches를 안 넘기면 회귀"
+        assert "claude/claimer" in captured_kwargs["active_branches"]
+
+    def test_branches_cmd_reports_pr_lookup_failure_reason(self, bare_remote, monkeypatch, capsys):
+        """branches_CLI가_PR_조회_실패_사유를_화면에_남긴다
+
+        "PR 대조 실패"만 뜨고 사유가 없으면 타임아웃·git 미설치·권한 오류가 운영자에게
+        같은 글자로 보인다(CLAUDE.md 침묵 실패 금지 — 예외 타입명 필수).
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-reason")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[],
+                pr_lookup_ok=False,
+                pr_lookup_error="TimeoutExpired: PR ref 조회 20초 초과",
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 2  # 측정 실패는 0(통과)이 아니다
+        out = capsys.readouterr().out
+        assert "TimeoutExpired" in out, f"실패 사유의 예외 타입명이 화면에 없다: {out!r}"
 
     def test_brief_forwards_scan_message_to_render(self, bare_remote, monkeypatch, capsys):
         """brief가_스캔_실패_사유를_렌더까지_전달한다

@@ -61,6 +61,8 @@ class FakeProvider:
         self.prompts: list[str] = []
         self.systems: list[str] = []
         self.decisions: list[RoutingDecision] = []
+        # EOS-73 — provider에 실제로 실려 온 시드(호출 순서대로). None이면 안 실림.
+        self.seeds: list[int | None] = []
 
     async def generate(
         self,
@@ -71,10 +73,12 @@ class FakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         self.prompts.append(prompt)
         self.systems.append(system)
         self.decisions.append(decision)
+        self.seeds.append(seed)
         if self._raises is not None:
             raise self._raises
         out = self._responses[self._index % len(self._responses)]
@@ -145,9 +149,11 @@ class TestPrewarmerEmitsGenerationLog:
         return sink_logs, report
 
     def test_written_item_logged_with_reproducibility_seats(self) -> None:
-        """written 항목 → success=True + 모델명·비용 0원 확정·스냅샷 복원(재현 계약 성립)."""
+        """written 항목 → success=True + 모델명·비용 0원 확정·시드·스냅샷 복원(재현 계약 성립)."""
         item = _item()
-        logs, _ = self._prewarm([item])
+        provider = FakeProvider(["시드 응답"])
+        logs, _ = self._prewarm([item], provider=provider)
+        provider_seeds = provider.seeds
         assert len(logs) == 1
         log = logs[0]
         assert log.success is True
@@ -155,7 +161,11 @@ class TestPrewarmerEmitsGenerationLog:
         assert log.cost_usd == 0.0  # LOCAL 0원 확정
         assert log.input_tokens == 50 and log.output_tokens == 120  # provider 실측 전달
         assert log.problem_id is None  # 사전적재 시드=problem 레코드 없음(정직 NULL)
-        assert log.prompt_version is None and log.seed is None  # 이 경로 미사용=미기록
+        assert log.prompt_version is None  # 템플릿 체계 없는 경로 — 미기록(번호 발명 금지)
+        # EOS-73: seed 좌석이 더 이상 비어 있지 않다 — provider에 실려 나간 값과 **같은 값**이
+        # 기록된다(기록≠전달이면 재현 계약이 성립하지 않는다).
+        assert log.seed is not None
+        assert log.seed == provider_seeds[0]
         assert log.cu_slug is None  # CU 정체성 없는 경로 — 미기록(#912 P1-2 정직 NULL)
         # 강화 재현 계약(#912 P1-1): 레코드만으로 provider에 **다시 넣을 전문**이 나온다.
         restored = restore_input_snapshot(log)
@@ -359,7 +369,9 @@ class TestAccumulateGeneratorEmitsGenerationLog:
         assert log.prompt_version.startswith("l3.equivalent@sha256:")
         assert log.model_name == model_name_for_decision(provider.decisions[0])
         assert log.cost_usd == 0.0  # free 구독 → LOCAL 0원 확정
-        assert log.seed is None  # seed 스레딩 없음(실측) — 미기록
+        # EOS-73: 실려 나간 시드와 기록된 시드가 같아야 재투입 좌표가 의미를 갖는다.
+        assert log.seed is not None
+        assert log.seed == provider.seeds[0]
         # CU 조인 정체성(#912 P1-2) — 조립된 후보의 코퍼스 키(안정 slug)와 동일.
         assert log.cu_slug == candidate.problem.slug
         # 강화 재현 계약(#912 P1-1): 레코드만으로 provider에 **다시 넣은 전문 그대로**가

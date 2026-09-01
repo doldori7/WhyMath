@@ -1033,6 +1033,18 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # battle "사람이 판단 시점에 돌린다"와 동형). 판정 소비처는 tests/backend/ops/
         # test_hit_cu_metrics.py(backend 잡 수집 — exit 0/1 양쪽 실측). 검수 UI 결선 별항은
         # ADMIN-07 후속(정본화≠집행 — 모듈 docstring).
+        # EOS-61(2026-09-01): 12월 검증 결론 판정기 — 입력이 EOS-54 HIT·EOS-55 Run 로그·
+        # EOS-60 골든 혼동행렬의 *산출물*이라 위 셋과 같은 이유로 CI 상시 배선 비대상이다.
+        # 오히려 이 도구는 **입력이 없을 때 GO를 내지 않는 것이 기능**이다: 빈 입력에서
+        # 미측정 12종·판정 불가 게이트 5건을 세고 exit 1을 낸다(측정 실패 ≠ 기준 미달).
+        # 판정 로직(Hard Gate 우선·F-Ⅳ 3/2 경계·미측정 비통과·단일 점수 금지)은 backend 잡이
+        # 수집하는 tests/backend/ops/test_validation_scorecard.py가 상시 검증한다 —
+        # "안 도는 코드"가 아니라 "실측이 있을 때 사람이 G5에서 돌리는 판정기"다.
+        "ops.validation_scorecard": (
+            "by-design:12월 검증 결론 판정기(EOS-61) — 입력이 EOS-54/55/60 산출물이라 실측 축적 "
+            "전에는 전 지표 미측정(exit 1)이 설계값. G5(12/31) 판정 시점에 운영자가 "
+            "`--hit-cu-json`·`--qa-matrix-json`으로 생산자 산출을 직접 먹여 돌린다"
+        ),
         "ops.hit_cu_metrics": (
             "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
             "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
@@ -1053,6 +1065,16 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:골든 실표본 의존 혼동행렬 판독기(EOS-60) — 골든 0건·평가쌍 0건이 측정 "
             "실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
         ),
+        # EOS-64(2026-09-01): 골든 승격 경로 게이트 — 입력이 *승격 제안*(사람이 "이것들을
+        # 올리겠다"고 내미는 목록)이라 제안이 없는 시점에는 돌릴 대상 자체가 없다. CI가 매
+        # 커밋마다 돌릴 성질이 아니고(제안 파일이 레포에 상주하지 않는다), 승격 판정 시점에
+        # 운영자가 돌리는 문지기다. 판정 로직(경로 밖 6종 차단·Wilson 상한 방향·측정 불가
+        # 비통과·사람 판정 우회 불가)은 backend 잡이 수집하는
+        # tests/backend/harness/test_golden_promotion_gate.py가 상시 검증한다.
+        "harness.golden_promotion_gate": (
+            "by-design:승격 제안 의존 경로 문지기(EOS-64 ③) — 제안 목록이 입력이라 상주 입력이 "
+            "없고, 승격 판정 시점에 운영자가 돌린다. 사람 검수를 대체하지 않는 확인 도구다"
+        ),
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,
@@ -1066,6 +1088,19 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # tests/backend/harness/test_attempt_skill_event_reach_report.py가 CI에서 상시 검증한다
         # — 즉 "안 도는 코드"가 아니라 "라이브 입력이 있을 때 사람이 돌리는 관측기"다.
         "harness.attempt_skill_event_reach_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
+        # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
+        # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서
+        # 확인할 값이 아니다. 판정 로직(3분류 변별력·분모 0 처리·죽은 경로 보강·판별자 정합·
+        # CLI exit 0/2)은 tests/backend/harness/test_generation_seed_adoption_report.py가 CI에서
+        # 상시 검증한다 — "안 도는 코드"가 아니라 "생성 배치가 있을 때 사람이 돌리는 관측기"다.
+        "harness.generation_seed_adoption_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-73(2026-09-01): 결정론 재생성 프로브 — 기록된 seed·입력 전문을 **라이브 Ollama**에
+        # 되먹여 회차 간 출력 동일성을 잰다. GPU·데몬 없이는 원리적으로 못 돈다. 판정 로직(3값
+        # 분류 변별력·좌표 복원 거부 사유·미측정 자인 렌더)은 tests/backend/harness/
+        # test_generation_seed_replay_probe.py가 상시 검증하며, 이 배포의 "같은 seed → 같은 출력"
+        # 성립 여부는 그 CLI를 돌리기 전까지 **미측정**이다(성립으로 승격 금지).
+        "harness.generation_seed_replay_probe": _LIVE_DEPENDENT,
         # 빌드타임 관측 리포트(게이트 아님) — 사람이 필요할 때 돌린다
         "harness.problem_bank_coverage": _OFFLINE_REPORT,
         # QUAL-01(2026-08-10): 코퍼스 JSONL만 읽는 빌드타임 관측 리포트(DB 0) — problem_bank_
