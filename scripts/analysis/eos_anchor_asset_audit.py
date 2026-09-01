@@ -38,109 +38,74 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ---------------------------------------------------------------------------
-# 앵커 정의 (매핑 기준 동결)
+# 앵커 정의 — **1급 등록(코퍼스)에서 읽는다** (EOS-56)
 #
-# 매핑 축 = **성취기준 코드(2022 개정) 단일 축**. 근거:
+# 이전에는 이 자리에 `ANCHOR_DEFS` 파이썬 상수 리터럴이 있었다. 그 형태는 ① 런타임·생산
+# 배치가 읽을 수 없고 ② 성취기준 코퍼스가 코드를 잃어도 아무도 소리내지 않는 정의였다.
+# 이제 정본은 `data/corpus/eos_anchor_set_v1/anchors.yaml`(G0 동결본)이고 이 스크립트는
+# 그것을 읽기만 한다 — 코드셋은 무손실 이관됐고 추가·삭제·수정은 없다.
+#
+# 매핑 축 = **성취기준 코드 단일 축**. 근거(레지스트리 헤더와 동일):
 #  - 원자(atom_graph)·오개념(misconceptions)·문항(problem_bank)이 모두 성취기준 코드 필드를
 #    가져 세 자산을 같은 축으로 재현 가능하게 귀속시킬 수 있다.
 #  - 대안이던 subunit(소단원명) 축은 구조 헤더 노드(level=소단원, standard_codes=[])와
-#    교과서 단원 granularity 차이(예: '비와 비율' subunit이 비례식·비례배분 원자까지 포함)로
-#    앵커 경계가 흐려진다. 성취기준 코드 축에서는 리프(세부개념)만 걸린다.
+#    교과서 단원 granularity 차이로 앵커 경계가 흐려진다. 코드 축에서는 리프만 걸린다.
 #  - 대학 앵커도 자체작성 성취기준([CALC1-*]·[LINA1-*])이 동일 메커니즘으로 존재한다.
-# 포함/제외 경계는 각 앵커의 excluded에 사유와 함께 명시(재현 가능성).
+# 포함/제외 경계는 각 앵커의 excluded에 사유와 함께 등재돼 있다(재현 가능성).
+#
+# 계층 경계: 여전히 src/backend를 import하지 않는다(모듈 docstring 참조) — 같은 *파일*을
+# 읽을 뿐이며, 백엔드 쪽 소비자는 `whymath_backend.l1.standards.anchor_registry`를 쓴다.
+# 파일이 하나이므로 리더가 둘이어도 진실 원천은 하나다.
+#
+# 8건을 그대로 감사하는 이유: G0 확정 12월 대상은 6건(A1~A6)이나, EOS-52 실사 문서는 8앵커
+# 기준으로 발행됐다. 전건을 읽어 그 문서의 재현성을 유지하고, 이월 여부는 산출 JSON의
+# `scope` 필드로 기계가 구분한다(집계에서 지우지 않는다).
 # ---------------------------------------------------------------------------
-ANCHOR_DEFS: tuple[dict[str, Any], ...] = (
-    {
-        "id": "A1",
-        "title": "초3 분수의 이해와 크기 비교",
-        "codes": ["[4수01-09]", "[4수01-10]", "[4수01-11]"],
-        "excluded": {
-            "[4수01-12]": "소수 한 자리 수 — 별도 소단원(소수)",
-            "[4수01-15]": "분모 같은 분수 덧뺄셈 — 별도 소단원(연산)",
-        },
-        "note": "2022 개정은 3~4학년군 단위(초3 구분 없음) — 도입·종류·크기비교 3코드",
-    },
-    {
-        "id": "A2",
-        "title": "초6 비와 비율",
-        "codes": ["[6수02-02]", "[6수02-03]"],
-        "excluded": {
-            "[6수02-01]": "대응 관계 — 별도 단원",
-            "[6수02-04]": "비례식 — 초6 별도 단원(비례식과 비례배분)",
-            "[6수02-05]": "비례배분 — 초6 별도 단원(비례식과 비례배분)",
-        },
-        "note": "비([6수02-02])+비율과 백분율([6수02-03])만 — 앵커명 '비와 비율' 문언 준수",
-    },
-    {
-        "id": "A3",
-        "title": "중2 경우의 수와 확률",
-        "codes": ["[9수04-05]", "[9수04-06]"],
-        "excluded": {},
-        "note": "2022 개정 '자료와 가능성' 코드 — 2015 개정 [9수05-04/05]는 미사용",
-    },
-    {
-        "id": "A4",
-        "title": "중3 이차방정식 (깊이 앵커)",
-        "codes": ["[9수02-20]"],
-        "excluded": {
-            "[9수02-19]": "다항식의 곱셈과 인수분해 — 선수 소단원(별도 코드)",
-            "[9수02-21]": "이차함수의 개념 — 이차함수 단원",
-            "[9수02-22]": "이차함수의 그래프 — 이차함수 단원",
-        },
-        "note": "2022 개정 중3 이차방정식은 단일 코드",
-    },
-    {
-        "id": "A5",
-        "title": "고1 이차함수의 최대·최소",
-        "codes": ["[10공수1-02-06]", "[10기수1-02-05]"],
-        "excluded": {
-            "[10공수1-02-04]": "이차방정식과 이차함수의 관계 — 인접 소단원",
-            "[10공수1-02-05]": "이차함수의 그래프와 직선 — 인접 소단원",
-            "[10공수1-02-11]": "이차부등식 — 별도 소단원",
-        },
-        "note": "공통수학1+기본수학1(병행과목) — sub_domain '이차함수의 최대, 최소' 전수",
-    },
-    {
-        "id": "A6",
-        "title": "고2 도함수의 활용",
-        "codes": [
-            "[12미적Ⅰ-02-05]",
-            "[12미적Ⅰ-02-06]",
-            "[12미적Ⅰ-02-07]",
-            "[12미적Ⅰ-02-08]",
-            "[12미적Ⅰ-02-09]",
-            "[12미적Ⅰ-02-10]",
-        ],
-        "excluded": {
-            "[12미적Ⅰ-02-01~04]": "미분계수·미분가능성·도함수 — '미분계수와 도함수' 소단원",
-            "[12심수Ⅰ05-19]": "심화수학Ⅰ 도함수의 활용 — 진로선택 과목(앵커는 미적분Ⅰ)",
-        },
-        "note": "미적분Ⅰ '도함수의 활용' 6코드(접선·평균값·증감극값·개형·방부등식·속도)",
-    },
-    {
-        "id": "A7",
-        "title": "대학 미적분 ε-δ 극한·연속",
-        "codes": ["[CALC1-01-02]", "[CALC1-01-03]"],
-        "excluded": {
-            "[CALC1-01-04]": "무한대 극한 — 앵커 문언(ε-δ 극한·연속) 밖",
-            "해석학 I": "ε-δ 연속을 다루나 별도 과목 — 앵커는 미적분학",
-        },
-        "note": "standards_university_v1(와이매스 자체작성) 미적분학 I — ε-δ 극한 정의+연속 2코드",
-    },
-    {
-        "id": "A8",
-        "title": "대학 선형대수 일차독립과 기저",
-        "codes": ["[LINA1-04-02]", "[LINA1-04-03]"],
-        "excluded": {
-            "[LINA1-04-01]": "부분공간 — 인접 소단원",
-            "[LINA1-04-04]": "차원(dimension) — 인접 소단원(앵커 문언은 일차독립·기저)",
-        },
-        "note": "standards_university_v1 선형대수학 I — 일차독립+기저 2코드",
-    },
-)
+ANCHOR_REGISTRY_PATH = "data/corpus/eos_anchor_set_v1/anchors.yaml"
+
+
+def _load_anchor_defs() -> tuple[dict[str, Any], ...]:
+    """1급 등록에서 앵커 정의를 읽는다 — 실패는 즉시 종료(조용한 0건 감사 금지).
+
+    감사 도구가 앵커 0건으로 "성공"하면 그 결과는 "자산 없음"으로 읽힌다. 레지스트리를 못
+    읽는 것은 측정 실패이지 측정 결과가 아니므로, 예외 타입명과 함께 즉시 실패시킨다.
+    """
+    path = REPO_ROOT / ANCHOR_REGISTRY_PATH
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise SystemExit(
+            f"[앵커 레지스트리 적재 실패] {path}: {type(exc).__name__}: {exc}"
+        ) from exc
+    anchors = doc.get("anchors") if isinstance(doc, dict) else None
+    if not isinstance(anchors, list) or not anchors:
+        raise SystemExit(f"[앵커 레지스트리 적재 실패] {path}: anchors 배열이 비어 있다")
+    try:
+        return tuple(
+            {
+                "id": a["id"],
+                "title": a["title"],
+                "codes": list(a["codes"]),
+                "excluded": dict(a.get("excluded") or {}),
+                "note": a["note"],
+                "scope": a["scope"],
+            }
+            for a in anchors
+        )
+    except (KeyError, TypeError) as exc:
+        # 필수 필드 결손을 무증상 부분 집계로 흘려보내지 않는다(스키마 정본 검증은
+        # whymath_backend.l1.standards.anchor_registry + CI 게이트가 담당).
+        raise SystemExit(
+            f"[앵커 레지스트리 구조 오류] {path}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+ANCHOR_DEFS: tuple[dict[str, Any], ...] = _load_anchor_defs()
 
 # 문항 은행 디렉터리(전수) — data/corpus/problem_bank_*/problems.jsonl
 PROBLEM_BANK_GLOB = "problem_bank_*"
@@ -602,7 +567,10 @@ def main() -> int:
         "script": "scripts/analysis/eos_anchor_asset_audit.py",
         "repo_root": str(REPO_ROOT),
         "out_path": str(out_path),
-        "mapping_axis": "성취기준 코드(2022 개정·대학 자체작성) 단일 축 — ANCHOR_DEFS 동결 코드셋",
+        "mapping_axis": (
+            "성취기준 코드(2022 개정·대학 자체작성) 단일 축 — "
+            f"1급 등록 {ANCHOR_REGISTRY_PATH} 동결 코드셋"
+        ),
         "anchor_defs": [
             {
                 "id": a["id"],
@@ -610,6 +578,7 @@ def main() -> int:
                 "codes": a["codes"],
                 "excluded": a["excluded"],
                 "note": a["note"],
+                "scope": a["scope"],
             }
             for a in ANCHOR_DEFS
         ],
