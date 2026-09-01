@@ -114,15 +114,32 @@ def test_exemption_suppresses_and_can_be_bypassed(monkeypatch) -> None:
         FakeTask(id="EOS-54-hit-timer"),
         FakeTask(id="T-1-triage"),
     )
-    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {"A-1-x": "T-1-triage"})
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "EOS-54"): "T-1-triage"})
     assert dd.find_undeclared_dependencies(tasks) == []
     assert len(dd.find_undeclared_dependencies(tasks, apply_exemptions=False)) == 1
+
+
+def test_exemption_is_pair_scoped_not_task_scoped(monkeypatch) -> None:
+    """면제된 태스크라도 *다른* 미선언 선행이 추가되면 잡힌다 (#946 리뷰 P2).
+
+    태스크 단위로 면제하면 그 태스크의 notes에 새 선행이 붙어도 계속 green이 나고,
+    회귀가 해소 태스크 완료까지 숨는다 — 면제는 (태스크, 참조) 쌍이어야 한다.
+    """
+    tasks = _tasks(
+        FakeTask(id="A-1-x", notes="선행: EOS-54-hit-timer 착지 후 · 선행: NEW-02-thing 도 필요"),
+        FakeTask(id="EOS-54-hit-timer"),
+        FakeTask(id="NEW-02-thing"),
+        FakeTask(id="T-1-triage"),
+    )
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "EOS-54"): "T-1-triage"})
+    findings = dd.find_undeclared_dependencies(tasks)
+    assert [f.referenced for f in findings] == ["NEW-02"], "면제되지 않은 새 선행이 숨었다"
 
 
 def test_expiry_fires_when_triage_task_is_done(monkeypatch) -> None:
     """해소 태스크가 done인데 면제가 남으면 만료 위반 — 만료 없는 유예 금지의 집행."""
     tasks = _tasks(FakeTask(id="A-1-x"), FakeTask(id="T-1-triage", status="done"))
-    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {"A-1-x": "T-1-triage"})
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "REF-1"): "T-1-triage"})
     violations = dd.find_expiry_violations(tasks)
     assert len(violations) == 1
     assert "만료" in violations[0]
@@ -131,14 +148,42 @@ def test_expiry_fires_when_triage_task_is_done(monkeypatch) -> None:
 def test_expiry_silent_while_triage_open(monkeypatch) -> None:
     """해소 태스크가 살아 있으면 만료가 아니다 — 위 테스트의 대조군."""
     tasks = _tasks(FakeTask(id="A-1-x"), FakeTask(id="T-1-triage", status="todo"))
-    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {"A-1-x": "T-1-triage"})
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "REF-1"): "T-1-triage"})
     assert dd.find_expiry_violations(tasks) == []
 
 
 def test_expiry_catches_dangling_exemption(monkeypatch) -> None:
     """추적 불가능한 면제(대상·해소 태스크가 백로그에 없음)도 위반이다."""
-    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {"GONE-1-x": "ALSO-GONE-1-y"})
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("GONE-1-x", "REF-1"): "ALSO-GONE-1-y"})
     assert len(dd.find_expiry_violations({})) == 2
+
+
+def test_cancelled_reference_is_still_a_violation() -> None:
+    """취소된 선행은 해소가 아니다 (#946 리뷰 P2) — selector 의미와 일치시킨다.
+
+    `selector.unmet_dependencies`는 done이 아니면 미해소로 본다. cancelled를 해소로 치면
+    그 태스크는 선언 없이 착수 가능 상태로 남는데 선행은 영원히 done이 되지 않는다.
+    """
+    tasks = _tasks(
+        FakeTask(id="A-1-x", notes="선행: EOS-54-hit-timer 착지 후"),
+        FakeTask(id="EOS-54-hit-timer", status="cancelled"),
+    )
+    findings = dd.find_undeclared_dependencies(tasks)
+    assert len(findings) == 1, "취소된 선행이 조용히 통과했다"
+    assert findings[0].referenced == "EOS-54"
+
+
+def test_expiry_fires_when_triage_task_is_cancelled(monkeypatch) -> None:
+    """해소 태스크가 cancelled여도 만료 (#946 리뷰 P2).
+
+    done만 보면 해소 태스크가 취소되는 순간 면제가 영구화되고 CI는 계속 green을 낸다 —
+    취소는 done으로 갈 수 없는 종료 상태이므로 만료로 쳐야 한다.
+    """
+    tasks = _tasks(FakeTask(id="A-1-x"), FakeTask(id="T-1-triage", status="cancelled"))
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "REF-1"): "T-1-triage"})
+    violations = dd.find_expiry_violations(tasks)
+    assert len(violations) == 1
+    assert "cancelled" in violations[0] and "만료" in violations[0]
 
 
 # ── ④ 실제 저장소 대장이 green인가 (게이트가 오늘부터 유효한지) ────────────────

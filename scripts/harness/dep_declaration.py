@@ -65,23 +65,36 @@ _WINDOW = 60
 # 태스크 ID의 *번호 부분까지* (전체 슬러그는 문서에서 자주 생략된다: "EOS-54 착지 후").
 _REF_RE = re.compile(r"\b([A-Z][A-Z0-9]{1,7}-\d{1,3})\b")
 
-_RESOLVED_STATUSES = frozenset({"done", "cancelled"})
+# 스캔 *대상*에서 빼는 상태 — 이미 끝났거나 취소된 태스크는 착수되지 않으므로 순서 강제가
+# 무의미하다.
+_SCAN_SKIP_STATUSES = frozenset({"done", "cancelled"})
+
+# 참조가 *해소됐다*고 보는 상태 — **`done`만**이다. `selector.unmet_dependencies`가
+# "done이 아니면 미해소"로 판정하므로(selector.py:39-44), 여기서 cancelled를 해소로 치면
+# 게이트와 스케줄러의 의미가 어긋난다: 취소된 선행을 지목한 태스크는 선언 없이 착수 가능
+# 상태로 남는데 그 선행은 영원히 done이 되지 않는다 — 이 게이트가 막으려던 바로 그
+# 불일치다(#946 리뷰 P2). 취소된 선행은 재계획 대상이므로 드러나는 편이 옳다
+# (`--depends`로 붙이면 영구 차단이 되니 이 경우의 정답은 notes 표현 정정이며,
+# CLI 거부 메시지가 두 경로를 모두 안내한다).
+_RESOLVED_STATUSES = frozenset({"done"})
 
 # ── 레거시 그랜드파더 (ARCH-25 패턴) ──────────────────────────────────────
-# key = 위반 태스크의 full id · value = 이 면제를 해소할 백로그 태스크 id.
+# key = (위반 태스크 full id, 참조 접두) **쌍** · value = 이 면제를 해소할 백로그 태스크 id.
+# 태스크 단위가 아니라 쌍 단위인 이유: 태스크 전체를 면제하면 그 notes에 *새로운* 미선언
+# 선행이 추가돼도 계속 green이 나고 회귀가 HARN-53 완료까지 숨는다(#946 리뷰 P2).
 # 그 태스크가 done이 되면 면제는 만료된다(find_expiry_violations가 red를 낸다).
 # 신규 위반은 여기에 추가하지 않는다 — 게이트의 존재 이유가 사라진다.
 _TRIAGE = "HARN-53-legacy-dependency-declaration-triage"
-LEGACY_EXEMPT: dict[str, str] = {
+LEGACY_EXEMPT: dict[tuple[str, str], str] = {
     # 2026-09-01 HARN-52 착지 실측 — 미완료 태스크 6건(notes 한정 스캔). 전건 즉시 수정하지
     # 않은 이유 ② 일부는 하드 의존이 아닐 수 있다(예: 스테이지 순서상 불가능하다고 자인한
     # 건) — 소프트 권고와 하드 의존의 구분은 사람 판단이다. 이 6건은 HARN-53이 분류한다.
-    "ADMIN-04-module-registry": _TRIAGE,
-    "ADMIN-09-profile-collection-inventory-contract": _TRIAGE,
-    "EOS-50-publish-gate-pipeline": _TRIAGE,
-    "LIC-03-provenance-enforcement-layer-decision": _TRIAGE,
-    "OPS-35-audit-membership-consumption-detection": _TRIAGE,
-    "SEC-30-declared-unwired-waiver-staleness": _TRIAGE,
+    ("ADMIN-04-module-registry", "ADMIN-05"): _TRIAGE,
+    ("ADMIN-09-profile-collection-inventory-contract", "ADMIN-02"): _TRIAGE,
+    ("EOS-50-publish-gate-pipeline", "ARCH-31"): _TRIAGE,
+    ("LIC-03-provenance-enforcement-layer-decision", "LIC-01"): _TRIAGE,
+    ("OPS-35-audit-membership-consumption-detection", "S4-22"): _TRIAGE,
+    ("SEC-30-declared-unwired-waiver-staleness", "MOB-18"): _TRIAGE,
 }
 
 
@@ -126,9 +139,7 @@ def find_undeclared_dependencies(
 
     findings: list[Finding] = []
     for tid, task in sorted(tasks.items()):
-        if statuses.get(tid, "") in _RESOLVED_STATUSES:
-            continue
-        if apply_exemptions and tid in LEGACY_EXEMPT:
+        if statuses.get(tid, "") in _SCAN_SKIP_STATUSES:
             continue
         self_prefix = _ref_prefix(tid)
         declared = {_ref_prefix(d) for d in (getattr(task, "depends_on", None) or [])}
@@ -150,6 +161,8 @@ def find_undeclared_dependencies(
                     if all(statuses.get(t, "") in _RESOLVED_STATUSES for t in targets):
                         continue
                     seen.add(prefix)
+                    if apply_exemptions and (tid, prefix) in LEGACY_EXEMPT:
+                        continue
                     findings.append(
                         Finding(
                             task_id=tid,
@@ -166,18 +179,24 @@ def find_expiry_violations(tasks: dict[str, object]) -> list[str]:
 
     ① 면제 대상 태스크가 백로그에 없다(삭제·오타 — 추적 불가능한 면제)
     ② 면제를 해소할 태스크가 백로그에 없다
-    ③ 해소 태스크가 done인데 면제가 남아 있다 (만료 — 면제를 지우고 실제로 고쳐야 한다)
+    ③ 해소 태스크가 종료 상태(done·cancelled)인데 면제가 남아 있다
+       (만료 — 면제를 지우고 실제로 고쳐야 한다)
     """
     violations: list[str] = []
-    for exempt_id, owner_id in sorted(LEGACY_EXEMPT.items()):
+    for (exempt_id, ref), owner_id in sorted(LEGACY_EXEMPT.items()):
+        label = f"{exempt_id} → {ref}"
         if exempt_id not in tasks:
             violations.append(f"면제 대상 '{exempt_id}' 가 백로그에 없다 — 면제를 제거하라")
         if owner_id not in tasks:
-            violations.append(f"면제 '{exempt_id}' 의 해소 태스크 '{owner_id}' 가 백로그에 없다")
+            violations.append(f"면제 '{label}' 의 해소 태스크 '{owner_id}' 가 백로그에 없다")
             continue
-        if getattr(tasks[owner_id], "status", "") == "done":
+        # done뿐 아니라 **cancelled도 만료**다 — 취소된 태스크는 영원히 done이 되지 않으므로
+        # done만 보면 해소 태스크가 취소되는 순간 면제가 영구화되고 CI는 계속 green을 낸다
+        # (#946 리뷰 P2). 종료 상태 전부를 만료로 친다.
+        owner_status = getattr(tasks[owner_id], "status", "")
+        if owner_status in _SCAN_SKIP_STATUSES:
             violations.append(
-                f"면제 '{exempt_id}' 의 해소 태스크 '{owner_id}' 가 done인데 면제가 남아 있다 "
-                "— 만료된 유예(면제를 제거하고 depends_on을 채워라)"
+                f"면제 '{label}' 의 해소 태스크 '{owner_id}' 가 {owner_status} 인데 면제가 "
+                "남아 있다 — 만료된 유예(면제를 제거하고 depends_on을 채우거나 notes를 고쳐라)"
             )
     return violations
