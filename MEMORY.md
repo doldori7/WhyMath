@@ -7655,6 +7655,19 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **그 결함을 내 테스트가 못 잡은 이유(설계 교훈)**: 모의 git이 `stdout`을 빈 문자열로 돌려주게 해 두어 **파싱 경로를 한 번도 밟지 않았다**. 모의는 내가 만든 출력을 파싱하므로 함정이 재현되지 않는다. 상환 = **실제 git 저장소를 만들어 실제 `cat-file --batch` 출력을 태우는** 회귀 테스트(M8로 변별력 확인 — 문자 오프셋으로 되돌리면 red).
 - **cross-ref**: `scripts/harness/similar.py` · `remote_claims.read_remote_task_texts` · `_iter_batch_blobs`(선례 함정) · `tests/harness/test_semantic_duplicate_notice.py` · `docs/standards/build_harness.md` §3b-1 · PR #947·#943(등재)·#942(사고)
 
+## 2026-09-01: EOS-56 — 앵커 세트 1급 등록 (분석 스크립트 상수 → 코퍼스 정본 + CI 무결성 게이트)
+
+- **무엇**: 12월 내부 검증의 **측정 조인 축**인 앵커 세트를 `data/corpus/eos_anchor_set_v1/anchors.yaml`로 1급화했다. G0 서명(2026-08-30) 이전까지 앵커 정의는 `scripts/analysis/eos_anchor_asset_audit.py`의 `ANCHOR_DEFS` **파이썬 상수 하나**뿐이었다 — 분석 스크립트 안의 상수는 ①런타임·생산 배치가 읽을 수 없고 ②성취기준 코퍼스가 코드를 잃어도 아무도 소리내지 않는다.
+- **이관은 무손실이다(기계 확인)**: 코드셋 추가·삭제·수정 0건. 검증은 인상이 아니라 재현으로 했다 — 전환 후 실사 스크립트를 재실행하니 검증설계서 §2 표의 자산 수치(A1 성취기준 3·원자 9·오개념 4 … A4 문항 378·A6 문항 261)가 **그대로 재현**됐고, 생산/검수 CU 합계도 450/185로 일치한다.
+- **이월을 데이터로 남긴 판단**: G0 확정 12월 대상은 6개(A1~A6)지만 레지스트리는 **8건 전부**를 `scope` 필드와 함께 싣는다. 목록에서 지우면 ①"왜 대학 앵커가 빠졌는가"의 근거(전환 설계서 옵션 ② 명시 손실)가 코드·문서 어디에도 남지 않고 ②EOS-52 실사 문서(8앵커 기준 발행)의 재현이 깨진다. 이월은 삭제가 아니라 상태다.
+- **집행 별항(정본화 ≠ 집행)**: acceptance ③을 "명시"에서 멈추지 않고 실사 스크립트 전환까지 착지시켰다. 상수가 되살아나는 경로는 테스트가 막는다(`TestAuditScriptReadsTheRegistry` — 리터럴 부재 + 스크립트가 읽은 코드셋이 레지스트리와 동일한지 대조). 남은 후속 지점 2건(golden_benchmark의 `ANCHOR_IDS` 런타임 파생 · 아직 없는 생산 배치)은 레지스트리 헤더 "소비 지점" 블록에 좌석과 함께 열거했다.
+- **파생 효과 — 이월 판정이 하드코딩이던 곳을 데이터로 되돌렸다**: `test_golden_benchmark.py`의 앵커 정합 동결이 `deferred = {"A7","A8"}`를 하드코딩하고 있었다. 이제 등록의 `scope`로 판정한다 — 2027-01에 대학 앵커를 되살릴 때 그 테스트가 조용히 거짓말하지 않는다.
+- **게이트가 자기 입력 변경에 깨어나는가(배선 실측)**: 무결성 검사는 `tests/backend/l1/test_eos_anchor_registry.py`에 두고, `.github/workflows/ci.yml`의 backend 경로 필터가 `data/corpus/`를 포함한다는 사실을 **주석이 아니라 파일에서 읽어** 단언한다(`TestCiTriggerWiring`). 필터 밖이면 성취기준 코퍼스 단독 수정 PR에서 잡이 SKIP되고 skip은 required check에서 충족으로 계상된다 — 방어 대상 벡터에서 정확히 실행되지 않는 형태다(COLLAB-07·G0 동결 입력 편입과 같은 사각).
+- **상시 green 위장 차단 2건**: ①성취기준 색인 0건은 "위반 없음"이 아니라 **읽기 실패**로 던진다 — 통과시키면 게이트가 코퍼스 경로 오타 하나로 영구 green이 된다. ②학교급 895행은 2022·2015 개정 혼재이므로 `curriculum_revision` 필터를 건다 — 필터 없이 세면 폐지된 2015 코드가 앵커를 살려 주어 드리프트가 은폐된다. 두 축 모두 뮤테이션으로 실측했다.
+- **변별력(뮤테이션 9종 전건 검출)**: 없는 코드 추가 → 위반 검출·CLI exit 1 · 코드 중복 귀속 → 거부 · scope 오타 → 거부 · 포함/제외 동시 등재 → 거부 · 필수 필드 결손 → 거부 · 파일 부재 → 예외 타입명 포함 실패 · 성취기준 0건 → 명시 실패 · 2015 개정 행만 → 명시 실패.
+- **사이드카에서 자기 해시를 뺀 이유**: 초안은 관례를 따라 `source_sha256`에 **자기 자신의 sha256**을 넣었다. 상류 원본이 없는 자체작성 소스에서 그 값은 아무것도 증명하지 못하면서 편집마다 조용히 낡는다. 대신 무결성은 CI 게이트가 판정한다는 사실을 `integrity_gate` 필드로 명시했다.
+- **검증**: 신규 27건 `tests/backend/l1/test_eos_anchor_registry.py` 통과 · `test_golden_benchmark.py` 50건 통과 · backend 전체 스위트 · ruff/black/mypy --strict EXIT=0(CI와 동일 명령·대상).
+- **cross-ref**: `data/corpus/eos_anchor_set_v1/anchors.yaml`(정본) · `whymath_backend.l1.standards.anchor_registry`(읽기 API·판정 CLI exit 0/1) · `docs/standards/eos_verification_design_v1.md` §2(정본 위치 갱신) · `docs/reviews/eos_anchor_asset_audit_2026-09.md` §2 · `G-eos-g0-verification-design-freeze` · EOS-52·EOS-53 갭 #3
 ## 2026-09-01: EOS-69 중복 구현 사고 — 낡은 로컬 대장이 이미 done인 태스크를 후보로 내놨다 (HARN-54 등재)
 
 - **사건**: `EOS-69`를 병렬 세션과 동시 수행했고 **PR #916이 먼저 착지**(08-31T21:27 UTC). 내 브랜치 base는 08-31T11:14의 `d980402d`라 로컬 대장에는 여전히 `todo`였고, **2시간 50분 뒤** `next`가 EOS-69를 후보 1위로 내놓고 `start`가 통과시켰다. 전체 구현 1건(계약 3→6 확장·DI 좌석·중립 뷰·테스트 신설·뮤테이션 10종·전체 스위트 40분 2회)이 **중복 생산 후 폐기**됐다.
