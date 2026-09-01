@@ -31,6 +31,7 @@ class LLMProvider(Protocol):
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """라우터 결정(decision)에 따라 응답을 생성한다(미구현).
 
@@ -56,6 +57,14 @@ class LLMProvider(Protocol):
         명확한 오류를 던진다 — 호출부가 백엔드에 맞게 지정 여부를 결정하는 것이 계약이다(예
         동등문제 저작은 LOCAL 결정일 때만 스키마를 싣고, 클라우드 경로는 프롬프트+관대 파서로
         동작). 문법 제약은 *형식*만 보장하며 내용의 수학적 진실은 여전히 하류 게이트가 검증한다.
+
+        `seed`(샘플링 시드)는 *생성 재현*용 **선택적** 입력이다(EOS-73). None(기본)이면 제공자가
+        시드를 싣지 않는다 — 즉 **기존 동작 무변경**. 값을 주면 제공자가 그 시드로 호출하고,
+        호출부는 *같은 값을* `GenerationLog.seed`에 기록해 재투입 좌표를 남긴다. seed를 물리적으로
+        받을 수 없는 백엔드(Anthropic Messages API에는 seed 파라미터가 **없다**)는 이를 *조용히
+        무시하지 않고* 명확한 오류를 던진다 — 조용히 무시하면 "기록된 seed로 재현된다"고 거짓말하는
+        행이 남기 때문이다. 지원 판정의 단일 좌석은 `l3/generation_seed.seed_supported`이고, 호출부는
+        그 판정이 True일 때만 seed를 싣는다(json_schema와 동일한 계약 형태).
         """
         ...
 

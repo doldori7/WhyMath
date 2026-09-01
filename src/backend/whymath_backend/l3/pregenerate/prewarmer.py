@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable
 
+from whymath_backend.l3.generation_seed import SeedSource, seed_for_decision
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider
 from whymath_backend.l3.models import RoutingDecision, Usage
 from whymath_backend.l3.pregenerate.models import (
@@ -56,6 +57,13 @@ class CachePrewarmer:
     prompt_version·seed 좌석·입력 스냅샷 해시+참조)를 조립해 싱크로 흘린다 — 스킵·실패
     항목도 기록한다(성공 경로만 보는 계측 금지·2026-08-22 규칙). None(기본)이면 종전
     동작 그대로(관측 0·기존 호출부 무영향).
+
+    `seed_source`(EOS-73): provider 호출마다 실어 보낼 샘플링 시드의 공급자. None(기본)이면
+    `generation_seed.default_seed_source()`(호출마다 새 난수)를 쓴다 — **끄는 옵션을 두지
+    않는다**: 좌석만 있고 값이 없는 상태(전 경로 NULL)가 이 태스크가 해소하는 무작동이므로
+    "적재가 기본"이어야 한다(genlog 싱크 경로 자체는 CLI가 항상 배선하는 것과 동형). 시드가
+    실제로 실리는 경로는 LOCAL뿐이고(클라우드는 구조적 불가) 그 판정은 `seed_for_decision`
+    단일 좌석이 한다. 재현 프로브·테스트는 고정 시드 공급자를 주입해 같은 좌표를 되먹인다.
     """
 
     def __init__(
@@ -66,12 +74,14 @@ class CachePrewarmer:
         validator: SeedValidator,
         router: Router | None = None,
         generation_log_sink: GenerationLogSink | None = None,
+        seed_source: SeedSource | None = None,
     ) -> None:
         self._provider = provider
         self._cache = cache
         self._validator = validator
         self._router = router if router is not None else Router()
         self._generation_log_sink = generation_log_sink
+        self._seed_source = seed_source
 
     async def prewarm(
         self,
@@ -114,8 +124,12 @@ class CachePrewarmer:
         기록 원칙(날조 금지):
           - `problem_id=None`·`cu_slug=None` — 사전적재 시드는 problem 레코드도 코퍼스 CU
             정체성도 없다(캐시 키 단위 자산·#912 P1-2 "가진 정체성만 기록"의 이 경로 값).
-          - `prompt_version=None`/`seed=None` — 이 경로는 템플릿 체계·seed 스레딩이 없다
-            (2026-08-30 실측). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
+          - `prompt_version=None` — 이 경로는 프롬프트 템플릿 체계가 없다(2026-08-30 실측).
+            좌석만 두고 실사용 시점에 실제 값을 기록한다(번호를 발명하지 않는다).
+          - `seed`: **provider에 실제로 실려 나간 시드**(EOS-73 — `result.seed`). 호출이
+            없었던 항목(인제스트·스킵)과 시드를 실을 수 없는 경로(클라우드 = Anthropic
+            Messages API에 seed 파라미터 부재)는 None=미기록이다. 여기서 새로 뽑지 않는
+            이유: 뽑은 값과 보낸 값이 갈라지는 순간 기록이 재현을 보장하지 못한다.
           - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
           - 스냅샷: `input_snapshot_for_prewarm` — 프롬프트/시스템 **전문**+sha256 핀 +
             request 원문(#912 P1-1 자기완결).
@@ -130,6 +144,7 @@ class CachePrewarmer:
                 problem_id=None,
                 model_name=model_name_for_decision(decision),
                 cost_usd=actual_cost_usd_or_none(decision, result.usage),
+                seed=result.seed,
                 input_snapshot=input_snapshot_for_prewarm(item),
             )
             self._generation_log_sink(log)
@@ -144,7 +159,7 @@ class CachePrewarmer:
         ttl_seconds: int,
         overwrite: bool,
     ) -> PrewarmItemResult:
-        """라우팅 결정이 주어진 항목 1건의 본처리 — 종전 `_prewarm_one` 본문 그대로."""
+        """라우팅 결정이 주어진 항목 1건의 본처리 (provider 호출 경로에서 시드를 실어 보낸다)."""
 
         # QUALITY(async)는 런타임 파이프라인이 async 분기에서 캐시를 *치지 않는다*
         # (pipeline.py:128-149 — async는 enqueue만 하고 cache.get/set 없음). 따라서
@@ -177,16 +192,31 @@ class CachePrewarmer:
         # 응답 획득 — 인제스트 모드(precomputed) 우선, 없으면 provider 호출.
         # usage(실측 토큰·지연)는 provider 생성 경로에서만 존재한다(인제스트는 None).
         usage: Usage | None = None
+        # 실제로 provider에 실려 나간 시드만 담는다 — 인제스트·스킵 경로는 None(호출 자체가
+        # 없으므로 "미기록"이 정직·PrewarmItemResult.seed docstring).
+        seed: int | None = None
         if item.precomputed_response is not None:
             response = item.precomputed_response
         else:
+            # 시드는 *호출 직전*에 뽑는다 — 스킵·인제스트로 끝난 항목에 쓰이지 않은 시드가
+            # 붙는 것을 구조적으로 막는다. 클라우드 결정이면 seed_for_decision이 None을
+            # 돌려주고(구조적 불가), 그 경우 아래 호출 kwargs에도 실리지 않는다.
+            # 공급자 자체가 잘못 주입된 경우(범위 밖 값)는 흡수하지 않는다 — 배치 전체가
+            # 잘못된 좌표를 기록하게 되므로 첫 항목에서 크게 실패하는 편이 낫다(라우팅 호출과
+            # 같은 취급·`_prewarm_one`의 route()도 감싸지 않는다).
+            seed = seed_for_decision(decision, source=self._seed_source)
+            call_kwargs: dict[str, int] = {} if seed is None else {"seed": seed}
             try:
-                generated = await self._provider.generate(item.prompt, item.system, decision)
+                generated = await self._provider.generate(
+                    item.prompt, item.system, decision, **call_kwargs
+                )
             except Exception as exc:  # noqa: BLE001 — provider 오류는 항목 단위로 흡수
                 return PrewarmItemResult(
                     cache_key=key,
                     status="error",
                     error=f"provider.generate failed: {type(exc).__name__}: {exc}",
+                    # 호출을 *시도한* 좌표는 남긴다 — 실패 재현(같은 시드로 재시도)의 재료다.
+                    seed=seed,
                 )
             response = generated.text
             usage = generated.usage
@@ -200,6 +230,7 @@ class CachePrewarmer:
                 # 신호의 사유 문자열만 담는다(error: str | None 계약 유지·slice 59).
                 error=failure_reason.reason,
                 usage=usage,
+                seed=seed,
             )
 
         try:
@@ -210,6 +241,7 @@ class CachePrewarmer:
                 status="error",
                 error=f"cache.set failed: {type(exc).__name__}: {exc}",
                 usage=usage,
+                seed=seed,
             )
 
-        return PrewarmItemResult(cache_key=key, status="written", usage=usage)
+        return PrewarmItemResult(cache_key=key, status="written", usage=usage, seed=seed)

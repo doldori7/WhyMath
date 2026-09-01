@@ -111,6 +111,7 @@ from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
+from whymath_backend.l3.generation_seed import SeedSource, seed_for_decision
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -284,6 +285,7 @@ class LLMEquivalentProblemGenerator:
         valid_from_year: int = 2022,
         fallback_unit_codes: Sequence[str] = (),
         generation_log_sink: Callable[[GenerationLog], None] | None = None,
+        seed_source: SeedSource | None = None,
     ) -> None:
         """생성기 구성.
 
@@ -329,6 +331,14 @@ class LLMEquivalentProblemGenerator:
                 인프로세스 이중 회계 축이다. None(기본)이면 종전 동작 그대로(기존 호출부
                 무영향) — 배치 CLI(`harness/problem_corpus_accumulate`)가 JSONL appender를
                 배선한다.
+            seed_source: **샘플링 시드 공급자**(EOS-73). LLM 호출마다 여기서 시드를 뽑아
+                provider로 실어 보내고 *같은 값을* GenerationLog.seed에 기록한다 — 좌석만 있고
+                값이 전무하던 상태(전 경로 NULL)의 해소. None(기본)이면
+                `generation_seed.default_seed_source()`(호출마다 새 난수)다. **난수인 이유**:
+                입력에서 결정론 유도하면 같은 스펙 n건 배치가 같은 문항 n개가 되어 temperature
+                0.9로 방어하던 mode collapse가 되돌아온다(모듈 `generation_seed` docstring ②).
+                재현은 *기록된 시드를 되먹이는 쪽*이 담당하며, 고정 공급자를 주입하면 그 좌표로
+                재투입된다(`harness/generation_seed_replay_probe`).
         """
         if provider is None:
             # 표준 구성 재사용(LLMTutorPolicy·app.py 동형) — 지연 연결이라 구성만으로 네트워크 0.
@@ -355,6 +365,7 @@ class LLMEquivalentProblemGenerator:
         # 캐시 커넥션 풀을 죽여 배치가 격회 실패하던 실측 회귀 방어(_invoke·_ensure_loop 참조).
         self._loop: asyncio.AbstractEventLoop | None = None
         self._generation_log_sink = generation_log_sink
+        self._seed_source = seed_source
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -365,14 +376,19 @@ class LLMEquivalentProblemGenerator:
     def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
         """스펙에 맞는 동등문제 후보 1건을 생성(실패 시 None·크래시 금지).
 
-        흐름: 프롬프트 조립 → 라우터 결정 → provider.generate(동기 경계) → JSON 관대 파싱 →
-        CandidateProblem 조립(저작권 메타 구조적 강제). 어느 단계든 실패하면 로그 + None을
-        돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
+        흐름: 프롬프트 조립 → 라우터 결정 → 시드 추출 → provider.generate(동기 경계) → JSON
+        관대 파싱 → CandidateProblem 조립(저작권 메타 구조적 강제). 어느 단계든 실패하면 로그 +
+        None을 돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
+
+        시드(EOS-73)는 결정 직후 *한 번만* 뽑아 provider 호출과 GenerationLog 기록이 **같은 값**을
+        보게 한다 — 종단마다 다시 뽑으면 기록된 좌표로 재투입해도 재현되지 않는다.
         """
         prompt = self._build_user_prompt(spec)
         decision = self._decide_routing(spec)
+        # LOCAL이면 시드 1개, 클라우드면 None(Messages API에 seed 파라미터 부재 — 구조적 불가).
+        seed = seed_for_decision(decision, source=self._seed_source)
         try:
-            generated = self._invoke(prompt, decision)
+            generated = self._invoke(prompt, decision, seed=seed)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
             _LOGGER.warning("동등문제 생성 provider 호출 실패 — None 폴백: %s", exc)
             # 실패한 호출 *시도*도 Run 이력이다(EOS-55) — usage 미상(None)·정직 실패 기록.
@@ -383,6 +399,8 @@ class LLMEquivalentProblemGenerator:
                 usage=None,
                 success=False,
                 error_detail=f"provider.generate failed: {type(exc).__name__}: {exc}",
+                # 호출을 *시도한* 좌표는 남긴다 — 같은 시드로 재시도해 실패를 재현할 수 있다.
+                seed=seed,
             )
             return None
         # LLM 호출 성공 = 비용 발생 — 하류 JSON 파싱·조립 성패와 무관하게 관측을 먼저 남긴다
@@ -400,6 +418,7 @@ class LLMEquivalentProblemGenerator:
                 usage=generated.usage,
                 success=False,
                 error_detail="응답 JSON 파싱 실패",
+                seed=seed,
             )
             return None
 
@@ -416,6 +435,7 @@ class LLMEquivalentProblemGenerator:
                 usage=generated.usage,
                 success=False,
                 error_detail=f"후보 조립 실패: {type(exc).__name__}",
+                seed=seed,
             )
             return None
         self._emit_generation_log(
@@ -425,6 +445,7 @@ class LLMEquivalentProblemGenerator:
             usage=generated.usage,
             success=True,
             error_detail=None,
+            seed=seed,
             # 조립된 후보의 안정 slug = 코퍼스 키(멱등 upsert·검수 타이머 cu_slug와 동일 축)
             # — hit_cu_metrics CU당 토큰·비용 조인 정체성(#912 P1-2).
             cu_slug=candidate.problem.slug,
