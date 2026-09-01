@@ -290,6 +290,7 @@ class AnthropicProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
@@ -307,6 +308,13 @@ class AnthropicProvider:
           messages.create에는 문법 제약 디코딩이 없어 스키마를 보장할 수 없다(조용한 무시 금지).
           호출부 계약: 클라우드 결정 경로에서는 json_schema를 지정하지 말고 프롬프트+관대 파서로
           동작해야 한다(동등문제 저작은 LOCAL 결정일 때만 스키마를 싣는다 — llm_generator._invoke).
+        - `seed`(EOS-73 생성 재현)가 주어지면 *명확한 오류*를 던진다 — Anthropic Messages API에는
+          **seed 파라미터 자체가 없다**(`messages.create(model, max_tokens, system, messages)` +
+          temperature/thinking 등). 즉 이 경로의 seed는 정책 선택이 아니라 **구조적 불가**이며,
+          조용히 무시하면 `GenerationLog.seed`에 "모델에 전달된 적 없는 숫자"가 남아 *재현
+          가능하다고 거짓말하는 행*이 된다(날조 금지·EOS-55 정직 원칙 승계). 따라서 클라우드
+          경로의 seed는 **NULL(미기록)로 유지**되고, 호출부는 `l3/generation_seed.seed_supported`
+          가 True(=LOCAL)일 때만 seed를 싣는다(json_schema와 동일한 계약 형태).
 
         반환은 `GenerationResult(text, usage)` — text는 *검증 전 원시 출력*(모듈 docstring
         경계 메모), usage는 응답 usage(input/output_tokens) + monotonic 실측 지연(S1 게이트 ②).
@@ -315,6 +323,13 @@ class AnthropicProvider:
             raise RuntimeError(
                 "AnthropicProvider는 멀티모달(images) 입력을 지원하지 않습니다 — 비전 인식은 "
                 "로컬 Qwen3-VL(VISION 패밀리) 경유입니다(클라우드 비전 미배선·미성년자 프라이버시)."
+            )
+        if seed is not None:
+            raise RuntimeError(
+                "AnthropicProvider는 seed(생성 재현 시드)를 지원하지 않습니다 — Anthropic Messages "
+                "API에 seed 파라미터가 없어 구조적으로 전달 불가입니다. 클라우드 경로의 "
+                "GenerationLog.seed는 NULL(미기록)이 정직한 값입니다(EOS-73·날조 금지). "
+                "호출부는 generation_seed.seed_supported(decision)가 True일 때만 seed를 싣습니다."
             )
         if json_schema is not None:
             raise RuntimeError(

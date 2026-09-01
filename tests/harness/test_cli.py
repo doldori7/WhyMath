@@ -80,6 +80,40 @@ class TestSeed:
         assert cli.main(["seed"]) == 1
 
 
+class TestNextTruncationDisclosure:
+    """`next` 사람용 출력이 **절단 규모**를 드러내는지 (HARN-52 후속).
+
+    사고 경위(2026-09-01): 어떤 태스크가 착수 후보인지 판정하려고 `next`(상위 3건)를
+    썼는데, 대상이 priority 2라 **정상 상태와 뮤테이션 상태 양쪽 모두 "후보에 없음"**
+    이 나왔다 — 검증 스텝의 변별력이 0이었다. 출력이 "상위 3건"이라고 정직하게 적어도,
+    *얼마나* 잘렸는지와 전건 조회 방법이 없으면 그 출력은 부재 판정에 쓰이고 만다.
+
+    CLAUDE.md "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 *도구가 자르는* 축.
+    """
+
+    def test_shows_total_and_recovery_when_truncated(self, seeded_repo: Path, capsys):
+        """잘렸으면 분모와 전건 조회 방법을 함께 낸다."""
+        assert cli.main(["next", "--n", "50", "--json"]) == 0
+        total = len(json.loads(capsys.readouterr().out))
+        assert total > 1, "시드에 후보가 2건 이상 있어야 이 검사가 성립한다"
+
+        assert cli.main(["next", "--n", "1"]) == 0
+        out = capsys.readouterr().out
+        assert f"전체 {total}건 중 상위 1건" in out, "분모가 없으면 절단 규모를 알 수 없다"
+        assert "--json" in out and f"--n {total}" in out, "전건 조회 방법을 안내해야 한다"
+
+    def test_no_truncation_notice_when_complete(self, seeded_repo: Path, capsys):
+        """안 잘렸으면 '중 상위' 표기를 내지 않는다 — 대조군(항상 같은 말을 하면 위장)."""
+        assert cli.main(["next", "--n", "50", "--json"]) == 0
+        total = len(json.loads(capsys.readouterr().out))
+
+        assert cli.main(["next", "--n", str(total + 10)]) == 0
+        out = capsys.readouterr().out
+        assert f"전체 {total}건" in out
+        assert "중 상위" not in out, "잘리지 않았는데 절단 표기가 났다"
+        assert "표시되지 않았다" not in out
+
+
 class TestLifecycle:
     def test_start_done_roundtrip(self, seeded_repo: Path, capsys):
         """start_done_왕복"""
@@ -212,6 +246,8 @@ class TestGatesAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-93-gated-task",
                     "--title",
@@ -260,6 +296,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-90-new-task",
                     "--title",
@@ -284,6 +322,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-91-bad-task",
                     "--title",
@@ -313,6 +353,8 @@ class TestIdNumberCollision:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",
@@ -677,6 +719,8 @@ class TestReadSideFallback:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -859,6 +903,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -1029,6 +1075,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1054,6 +1102,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1108,6 +1158,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-01-overlap-a",
                     "--title",
@@ -1126,6 +1178,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-02-overlap-b",
                     "--title",
@@ -1191,6 +1245,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1242,6 +1298,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-16-todo-b",
                     "--title",
@@ -1320,6 +1378,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-03-scoped-task",
                     "--title",
@@ -1352,6 +1412,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-04-other-task",
                     "--title",
@@ -1435,6 +1497,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-05-cross-a",
                     "--title",
@@ -1453,6 +1517,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-06-cross-b",
                     "--title",
@@ -1524,6 +1590,8 @@ class TestHumanOwnerLifecycle:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1620,6 +1688,8 @@ class TestUnmergedDoneDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",

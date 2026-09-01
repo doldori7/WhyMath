@@ -69,6 +69,8 @@ class TestCmdAddSurfacesExhaustionAsExplicitError:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",

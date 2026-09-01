@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -16,7 +16,14 @@ acceptance:
   - "형태 판정 검증기 SymPy 기반 구현(deterministic·LLM 0): mathematically_equivalent와 instruction_satisfied를 분리한 verdict — 형태 불만족이 incorrect가 아님"
   - "교수학 금기 기계화: 형태 불일치가 제출 차단이 아니라 채점 변별·피드백으로만 흐름을 테스트 동결(§2-⑤ 학생 입력 거부 금지 준수·부정 강화 금지)"
   - "프로덕션 소비 지점 배선: api/coach.py 완료 경로(verify_final_answer 호출부)에서 instruction_satisfied가 채점 결과·응답에 실제 반영됨을 API 테스트로 동결 — 스키마·검증기 단독 구현으로 완료 선언 금지(배선 확인 없는 완료 금지)"
-artifacts: []
+  - "⑥ [① 측정 결과 2026-09-01] 코퍼스 2,638문항·7뱅크 전수(scripts/analysis/answer_form_requirement_scan.py). 실증 형태 어휘 **1종**: reduced_fraction 26건(0.99%·probability_finite 뱅크). 나머지 6종(인수분해·전개·유리화·간단히·소수자릿수·지정꼴) 전부 0건. **0건이 아니므로 도입**하되 어휘를 1종으로 제한. 측정 방법 2축: 축A 지시문 꼬리 전수 추출(데이터가 어휘를 말하게 — 49종 중 형태 요구는 1종)·축B 오탐 차단 패턴 쌍. 1차 시도의 '꼴로' 패턴 24건은 전부 '사다리꼴' 오탐이었고 축A가 그것을 드러냈다."
+  - "⑦ [② ADR] docs/architecture/adr_answer_form_contract.md — **answer_constraint 확장 채택**(신설·answer_format 확장 기각). 근거: answer_format은 타입 라벨이라 요구와 섞으면 enum 폭발 · answer_constraint는 문항별 제약 슬롯으로 이미 존재하고 실측 소비 0건 · 마이그레이션 0 · SEC-24 비노출 경계 상속. 자유형 JSONB 위험은 닫힌 키(expected_form)+닫힌 어휘(ExpectedForm)+fail-closed 리더로 차단 — 모르는 값은 not_required가 아니라 unverifiable."
+  - "⑧ [③ 검증기] l3/verify_answer_form.py — SymPy 결정론·LLM 0. 값이 아니라 **표면**을 본다(sympify evaluate=False가 2/72를 보존함을 실측 확인) — 형태는 값이 같은 것들 사이를 가르는 축이라 값으로는 판정 불가. 판정 어휘는 값 3상태와 **별도 enum**(FormVerdict 4상태: satisfied/violated/not_required/unverifiable) — 재사용하면 '형태가 incorrect'가 되어 오답으로 읽힌다. not_required 독립: 문항 99%가 요구 없음이라 satisfied와 합치면 준수율이 99%로 부풀어 오른다."
+  - "⑨ [④ 교수학 금기 기계화] 6종 동결(tests/backend/l3/test_answer_form_contract.py 25건): 같은 값을 형태만 달리 제출 시 완료·발화·적재 **비트 동일** · FormVerdict에 correct/incorrect 부재 · verify_answer_form이 **정답을 인자로 받지 않음**(시그니처 동결·구조적 보장) · 형태 모듈이 값 판정 심볼을 AST 기준 미참조 · 형태 위반도 정상 응답(입력 거부 없음) · 판정 불가를 위반으로 접지 않음."
+  - "⑩ [⑤ 배선] api/coach.py 완료 경로: _final_answer_state가 (값,형태) 2축 반환 → _CompletionResult 운반 → SessionCreateResponse·TurnAppendResponse의 answer_form 필드. decide_completion은 형태를 인자로 받지 않는다(완료를 막는 경로가 코드에 없음). stateless /v1/coach 미탑재(DB 없이는 항상 not_required인 가짜 계기판). 코퍼스 백필 26건(answer_constraint.expected_form). **배선 실재성 뮤테이션 확인**: 배선을 상수로 바꾸자 API 테스트 5건 적색."
+  - "⑪ [검증] tests/backend/api/test_coach_completion.py 19 passed(기존 13+신규 6) · l3+schema 3,587 passed · ruff·black·mypy --strict 567파일·lint-imports 3계약 KEPT 전부 0. 뮤테이션 3종 전건 검출(배선 제거·unverifiable을 violated로 접기·측정 근거 없는 어휘 추가) 후 cp 백업 원복. **전체 스위트는 로컬 미완주** — CI 최종 판정."
+artifacts:
+  - "PR #945 · 코퍼스 실측 2,638문항→형태 어휘 1종 26건(0.99%) · ADR docs/architecture/adr_answer_form_contract.md · l3/verify_answer_form.py + schema/answer_form.py 신설 · api/coach.py 완료 경로 배선(answer_form 응답 필드) · 코퍼스 백필 26건 · tests api 1,960 + l3/schema 3,587 passed · 뮤테이션 3종 전건 검출"
 paths:
   - "src/backend/whymath_backend/schema/**"
   - "src/backend/whymath_backend/l3/**"
@@ -24,5 +31,5 @@ paths:
   - "tests/backend/**"
   - "docs/architecture/**"
 session: null
-notes: "28_MathLive 입력 43절 델타 검토(docs/architecture/28_mathlive_input.md §2 D-1)에서 확인된 유일한 진짜 갭. 실측: verify_answer·verify_final_answer·verify_step 전부 값/동치만 판정, 형태 검사 grep 0건. 학생 대면 표현은 MATH-03 reason_code 패턴 준용. 승계 관계: EOS-32(원본 보존)·EOS-46(step 이벤트)·EOS-47(버전 고정)와 병행."
-updated: 2026-08-26
+notes: "28_MathLive 입력 43절 델타 검토(docs/architecture/28_mathlive_input.md §2 D-1)에서 확인된 유일한 진짜 갭. 실측: verify_answer·verify_final_answer·verify_step 전부 값/동치만 판정, 형태 검사 grep 0건. 학생 대면 표현은 MATH-03 reason_code 패턴 준용. 승계 관계: EOS-32(원본 보존)·EOS-46(step 이벤트)·EOS-47(버전 고정)와 병행.\n\n[정정 2026-09-01] acceptance ①~⑤ 이행 결과·측정치·설계 판정을 확정 기재. ①의 유보 조건(0건)은 발동하지 않았고(26건) 대신 어휘를 실증 1종으로 제한했다."
+updated: 2026-09-01
