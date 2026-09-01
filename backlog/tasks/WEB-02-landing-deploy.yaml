@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - WEB-01-landing-static-v1
@@ -19,5 +20,5 @@ paths:
   - "src/web/webapp/**"
   - ".github/workflows/**"
 session: null
-notes: "web_strategy.md §4 정본. 배포 절차 확정분은 deployment_cd_runbook.md 형식으로 후속 반영"
-updated: 2026-08-10
+notes: "web_strategy.md §4 정본. 배포 절차 확정분은 deployment_cd_runbook.md 형식으로 후속 반영\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

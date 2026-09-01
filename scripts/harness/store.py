@@ -26,6 +26,7 @@ import json
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from datetime import date, datetime
 from pathlib import Path
@@ -335,6 +336,54 @@ def event_paths(root: Path) -> list[Path]:
     return paths
 
 
+# HARN-44 전환 시점: 이 표기 전환 **이후**에 쓰인 줄만 오프셋을 갖는다. 그 이전 줄은
+# 오프셋 없는 머신 로컬 시각이며 **척도 불명**이다(어느 TZ의 세션이 썼는지 줄 자체로는
+# 알 수 없다). 과거 줄을 소급 정정하지 않는다 — 실제 오프셋을 모르는 채 값을 바꾸면
+# 그건 복원이 아니라 날조다(CLAUDE.md 「날조 금지」·EOS-48 event_time 백필 금지 선례).
+_LEGACY_TS_SCALE_UNKNOWN = "오프셋 없는 머신 로컬 시각(척도 불명 — HARN-44 전환 이전)"
+
+
+@dataclass(frozen=True, slots=True)
+class EventMoment:
+    """이벤트 1건의 시각 — 정렬 가능한 aware datetime + **그 값을 믿어도 되는가**.
+
+    두 필드를 함께 두는 이유: 레거시 줄도 정렬은 돼야 하지만(안 그러면 리포트에서 통째로
+    사라진다), 그 정렬이 *정확하다고* 말해서는 안 된다. 하나로 합치면 둘 중 하나를 잃는다
+    — `datetime`만 주면 추정값이 실측값 행세를 하고, 레거시를 버리면 과거가 사라진다.
+    """
+
+    moment: datetime
+    """항상 tz-aware(비교·정렬이 TypeError 없이 성립). 레거시는 아래 가정이 붙은 값이다."""
+
+    offset_known: bool
+    """True=줄에 오프셋이 실려 있었다. False=읽는 쪽 로컬 오프셋을 *가정*해 붙였다."""
+
+
+def parse_event_ts(raw: object) -> EventMoment | None:
+    """이벤트 `ts` → `EventMoment`. 파싱 불가면 None(호출자가 건너뛴다).
+
+    두 표기를 **모두** 읽는다 — 이것이 이 함수의 존재 이유다:
+      - `2026-09-01T13:17:22+00:00` (HARN-44 이후) → 그대로 aware, `offset_known=True`.
+      - `2026-08-30T00:50:38`       (레거시)      → 읽는 머신의 로컬 오프셋을 붙이고
+        `offset_known=False`. 이 값은 *가정*이지 실측이 아니다(`_LEGACY_TS_SCALE_UNKNOWN`).
+
+    레거시를 읽지 못하면 과거가 사라지고, 신규를 읽지 못하면 **오늘 쓴 줄이 조용히
+    사라진다** — 후자가 실제 위험이었다: 소비자(policy_warn 리포트)가 엄격 `strptime` +
+    `except ValueError: continue` 조합이라, 오프셋을 붙이는 순간 신규 줄 전량이 *에러 없이*
+    누락될 뻔했다(침묵 실패 금지).
+    """
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return EventMoment(moment=parsed, offset_known=True)
+    # 레거시: 로컬 오프셋을 가정해 붙인다(값 자체는 그대로 — 시각을 옮기지 않는다).
+    return EventMoment(moment=parsed.astimezone(), offset_known=False)
+
+
 def append_event(root: Path, action: str, subject_id: str, **extra: object) -> None:
     """append-only 이벤트 로그 — **세션(=actor 브랜치)당 1샤드**에 기록 (HARN-46).
 
@@ -346,7 +395,13 @@ def append_event(root: Path, action: str, subject_id: str, **extra: object) -> N
     path = backlog_dir(root) / "events" / _event_shard_name(actor)
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
-        "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        # HARN-44: **오프셋 포함** 표기(`...+09:00`/`...+00:00`). 종전 표기
+        # `datetime.now().strftime(...)`는 오프셋 없는 *머신 로컬* 시각이라, KST 세션이 쓴
+        # 줄과 UTC 세션이 쓴 줄이 같은 대장에 구분자 없이 섞였다 — 9시간 어긋난 두 척도를
+        # 알려주는 필드가 없어 "어느 add가 먼저였나"에 답할 수 없었다(HARN-38 경위 규명
+        # §3-1 실측: 'done HARN-36 @00:50:38'은 UTC 세션·'start CUR-16 @23:56:15'는 KST
+        # 세션이었고, 그 판정은 claim 커밋의 커밋 시각과 대조해서야 겨우 났다).
+        "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
         "actor": actor,
         "action": action,
         "id": subject_id,

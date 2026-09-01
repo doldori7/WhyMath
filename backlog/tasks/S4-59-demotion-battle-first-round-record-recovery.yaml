@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -22,5 +23,5 @@ paths:
   - backlog/tasks/S4-16-residue-gate-demotion-battle.yaml
   - backlog/tasks/S4-59-demotion-battle-first-round-record-recovery.yaml
 session: null
-notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-31.md. 회수 완료 전 원 브랜치 claude/whymath-ai-content-design-vafylb 삭제 금지. 소유 공백 경위: HARN-35(done·PR #900)가 이 브랜치의 OPS-24만 회수하고 종료해 나머지 잔여의 소유자가 사라졌다 — '소유 태스크가 done이어도 잔여 diff가 남는다'(stray-code 4절)의 실사례. CLAUDE.md 검증 권위 서열 직결(측정이 증명하지 못한 게이트는 승격되지 않는다)이라 기록 유실은 미래 세션의 게이트 승격 오판 위험."
-updated: 2026-08-31
+notes: "출처: docs/reviews/unmerged_branch_audit_2026-08-31.md. 회수 완료 전 원 브랜치 claude/whymath-ai-content-design-vafylb 삭제 금지. 소유 공백 경위: HARN-35(done·PR #900)가 이 브랜치의 OPS-24만 회수하고 종료해 나머지 잔여의 소유자가 사라졌다 — '소유 태스크가 done이어도 잔여 diff가 남는다'(stray-code 4절)의 실사례. CLAUDE.md 검증 권위 서열 직결(측정이 증명하지 못한 게이트는 승격되지 않는다)이라 기록 유실은 미래 세션의 게이트 승격 오판 위험.\n\n[정정 2026-09-01] eos_priority null → P1: 회수 축 — 강등전 1차 실측 기록. EOS-80 일괄 백필"
+updated: 2026-09-01

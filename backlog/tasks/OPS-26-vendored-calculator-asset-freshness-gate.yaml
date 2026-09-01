@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - "tests/infra/*"
   - src/mobile/tool/sync_graphing_calculator.sh
 session: null
-notes: "사고 경위(2026-08-10 VIZ-07 착수 중 실측): vendored 번들이 생성 커밋(c3376c42 #698)에서부터 그 커밋 자신의 소스보다 낡은 빌드로 동기화됐고(번들 문자열 프로브: interactive_graph_2d·tangent_point·unwrapSpecEnvelope 전부 0 — 앞 둘은 리터럴/프로퍼티명이라 미니파이 생존 대상), 이후 VIZ-03(#732)·VIZ-06(#740) 웹 소스 변경에도 무동기. WebView 임베드 Dart 파일·봉투 인코더(encodeVisualizationParam)가 같은 커밋 착륙이므로 실기기 WebView spec 렌더는 기능 착륙 시점부터 한 번도 성립하지 않았을 가능성이 높다(구번들이 봉투 {type,spec}을 언랩 못 함 → 어댑터 null → 빈 계산기 — 코드 경로 추론이며 실기기 실측 아님). 즉시 해소(재동기화 + 번들 프로브)는 VIZ-07 커밋이 수행 — 본 태스크는 재발 방지 게이트만. sync 스크립트 헤더가 「표류하지 않게 한다」고 선언하나 강제 장치 0인 선언≠집행 유형. visualization_module_gap_review.md §8.1 각주·MEMORY 2026-08-10 참조."
-updated: 2026-08-10
+notes: "사고 경위(2026-08-10 VIZ-07 착수 중 실측): vendored 번들이 생성 커밋(c3376c42 #698)에서부터 그 커밋 자신의 소스보다 낡은 빌드로 동기화됐고(번들 문자열 프로브: interactive_graph_2d·tangent_point·unwrapSpecEnvelope 전부 0 — 앞 둘은 리터럴/프로퍼티명이라 미니파이 생존 대상), 이후 VIZ-03(#732)·VIZ-06(#740) 웹 소스 변경에도 무동기. WebView 임베드 Dart 파일·봉투 인코더(encodeVisualizationParam)가 같은 커밋 착륙이므로 실기기 WebView spec 렌더는 기능 착륙 시점부터 한 번도 성립하지 않았을 가능성이 높다(구번들이 봉투 {type,spec}을 언랩 못 함 → 어댑터 null → 빈 계산기 — 코드 경로 추론이며 실기기 실측 아님). 즉시 해소(재동기화 + 번들 프로브)는 VIZ-07 커밋이 수행 — 본 태스크는 재발 방지 게이트만. sync 스크립트 헤더가 「표류하지 않게 한다」고 선언하나 강제 장치 0인 선언≠집행 유형. visualization_module_gap_review.md §8.1 각주·MEMORY 2026-08-10 참조.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

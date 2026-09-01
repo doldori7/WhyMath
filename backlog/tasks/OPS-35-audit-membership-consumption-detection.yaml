@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - "tests/backend/ops/*"
 session: null
-notes: "visualization_module_gap_review.md §8.2 — OPS-22가 고친 오탐 2종(별칭 import·bulk upsert)과 동일 클래스의 세 번째 사각. COLLAB-03(#752)이 막힘을 frozenset+.in_()으로 실소비(l2/learning_metrics_rollup.py:124-126,563 — 소크라테스 상호작용 집계)하는데 탐지기가 ast.Compare만 봐서 대장(:794)에 producer-only 유예 잔존·stale-waiver 미발화(성공/실패가 같은 화면). S4-22 범위 정정(3종→2종)은 2026-08-10 R3 점검 커밋에서 선행 완료 — 본 태스크는 탐지기·대장 축만."
-updated: 2026-08-10
+notes: "visualization_module_gap_review.md §8.2 — OPS-22가 고친 오탐 2종(별칭 import·bulk upsert)과 동일 클래스의 세 번째 사각. COLLAB-03(#752)이 막힘을 frozenset+.in_()으로 실소비(l2/learning_metrics_rollup.py:124-126,563 — 소크라테스 상호작용 집계)하는데 탐지기가 ast.Compare만 봐서 대장(:794)에 producer-only 유예 잔존·stale-waiver 미발화(성공/실패가 같은 화면). S4-22 범위 정정(3종→2종)은 2026-08-10 R3 점검 커밋에서 선행 완료 — 본 태스크는 탐지기·대장 축만.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

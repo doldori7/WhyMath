@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - REC-02-misconception-probe-supply
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l1/misconception/
   - src/backend/whymath_backend/api/coach.py
 session: null
-notes: "04e_misconception_remediation_design.md §1-3. REC-02와 조회 좌석 공유(진단용 vs 교정용 소비 목적만 다름). [2026-08-30 HARN-34 고립 참조] 구현+테스트가 claude/human-bottleneck-tasks-6dszy0(67881979)에 고립(done 표기) — tests/backend/api/test_coach_similar_problem.py main 부재 실측. 착수 시 파일 단위 회수 우선. 7n9n72(621b11f9) 이중구현 대조 필수"
-updated: 2026-08-03
+notes: "04e_misconception_remediation_design.md §1-3. REC-02와 조회 좌석 공유(진단용 vs 교정용 소비 목적만 다름). [2026-08-30 HARN-34 고립 참조] 구현+테스트가 claude/human-bottleneck-tasks-6dszy0(67881979)에 고립(done 표기) — tests/backend/api/test_coach_similar_problem.py main 부재 실측. 착수 시 파일 단위 회수 우선. 7n9n72(621b11f9) 이중구현 대조 필수\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

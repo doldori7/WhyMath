@@ -7,6 +7,7 @@ subject: math
 layer: mobile
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - ASM-10-test-set-attribution-observability
@@ -24,5 +25,5 @@ paths:
   - "src/mobile/lib/features/profile/**"
   - "docs/design/ui/**"
 session: null
-notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D6. v1 D1이 진단한 구조('실동작 진단이 좌석을 거치지 않고 즉석 계산해서, 진단이 작동한다는 체감과 좌석이 비어 있다는 사실이 서로 가려 왔다')가 ASM-03·ASM-04의 writer 착지 이후에도 방향만 뒤집힌 채 그대로다 — 이번엔 좌석은 채워지는데 아무도 보지 않는다. learning_path_module_gap_review_r2.md D5와 동형이고, 시리즈 '완비된 소비 경로 + 미도달 공급원' 패턴의 거울상(r2 §6 9-b)."
-updated: 2026-08-11
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D6. v1 D1이 진단한 구조('실동작 진단이 좌석을 거치지 않고 즉석 계산해서, 진단이 작동한다는 체감과 좌석이 비어 있다는 사실이 서로 가려 왔다')가 ASM-03·ASM-04의 writer 착지 이후에도 방향만 뒤집힌 채 그대로다 — 이번엔 좌석은 채워지는데 아무도 보지 않는다. learning_path_module_gap_review_r2.md D5와 동형이고, 시리즈 '완비된 소비 경로 + 미도달 공급원' 패턴의 거울상(r2 §6 9-b).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - EOS-66-subject-adapter-contract
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/schema/subject_adapter.py
   - src/backend/whymath_backend/l4/subject_adapter_math.py
 session: null
-notes: "출처: EOS-66이 계약 v1을 3메서드로 확정하며 분리한 축. 계획서 100 §3.9는 explain을 후보로 들었으나 저장소에 위임 대상이 없어 v1에서 제외했다(없는 것을 계약에 넣으면 NotImplementedError 좌석이 생겨 '선언≠배선'이 하나 는다). 우선도 3 — 12월 검증 관여도는 간접(설명 품질 KPI F7과 연결되나 계약 형태와는 독립)."
-updated: 2026-08-31
+notes: "출처: EOS-66이 계약 v1을 3메서드로 확정하며 분리한 축. 계획서 100 §3.9는 explain을 후보로 들었으나 저장소에 위임 대상이 없어 v1에서 제외했다(없는 것을 계약에 넣으면 NotImplementedError 좌석이 생겨 '선언≠배선'이 하나 는다). 우선도 3 — 12월 검증 관여도는 간접(설명 품질 KPI F7과 연결되나 계약 형태와는 독립).\n\n[정정 2026-09-01] eos_priority null → P2: 계약 확장 판정 — 12월 검증 불요. EOS-80 일괄 백필"
+updated: 2026-09-01

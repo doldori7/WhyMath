@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/api/speech.py
   - src/backend/whymath_backend/schema/speech.py
 session: null
-notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A5. 회수 완료 전 원 브랜치 삭제 금지"
-updated: 2026-08-11
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A5. 회수 완료 전 원 브랜치 삭제 금지\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/회수 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

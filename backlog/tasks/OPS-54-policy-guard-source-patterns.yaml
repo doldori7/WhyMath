@@ -7,6 +7,7 @@ subject: math
 layer: infra
 status: todo
 priority: 2
+eos_priority: P0
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - ".github/workflows/ci.yml"
   - "tests/infra/**"
 session: null
-notes: "출처: EOS-53 crosswalk 갭 #7(G2 잔여). 현행 policy-guard는 검정교과서 5사 패턴뿐(실측) — 저작권 절대 금기(EBS·평가원)의 CI 커버리지 구멍."
-updated: 2026-08-30
+notes: "출처: EOS-53 crosswalk 갭 #7(G2 잔여). 현행 policy-guard는 검정교과서 5사 패턴뿐(실측) — 저작권 절대 금기(EBS·평가원)의 CI 커버리지 구멍.\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/G2★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01
