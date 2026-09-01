@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-51-semantic-duplicate-task-detection
+title: "의미 중복 태스크 탐지 공백 — 같은 문제에 다른 ID를 붙인 병렬 구현은 어떤 가드에도 걸리지 않는다"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 기반 설계 — 2026-08-31~09-01의 동종 6건을 축별로 분류해 '같은 식별자'(5건·가드가 전건 차단)와 '다른 식별자·같은 의미'(1건·가드 부재)를 분리하고, 후자를 볼 수 있는 신호가 무엇인지 근거와 함께 정한다. 임베딩·외부 모델 의존은 기본 배제(하네스 CLI의 네트워크 0 계약 · 과공학 방지) — 채택하려면 그 계약을 어떻게 지키는지 명시"
+  - "② 차단이 아니라 고지 — 의미 유사는 정답이 없으므로 exit 1로 막지 않는다(HARN-43 선례). 유사 후보가 없으면 아무것도 출력하지 않는다; 무조건 뜨는 고지는 습관화돼 정작 필요할 때 안 보인다. 판정 불가(원격 조회 실패 등)도 침묵하지 말고 '판정 불가'로 말한다"
+  - "③ 대조 범위에 미머지분 포함 — 로컬 백로그만 보면 이번 사고를 재현조차 못 한다(HARN-48은 별도 브랜치에서 진행 중이었다). 원격 claim 대장 + 원격 브랜치의 backlog/tasks 를 대조 대상에 넣되, fetch 비용 계약(scan_remote_task_files의 fetch=False 기본)을 깨지 않는다"
+  - "④ 변별력 실측 — 이번 실사례(HARN-45 제목·notes vs HARN-48)를 hermetic 픽스처로 재현해 고지가 뜨는지, 그리고 무관한 태스크 쌍에서는 뜨지 않는지 양방향 동결. 한 방향만 보면 '전부 유사'로 판정하는 반대 결함을 못 잡는다. 뮤테이션으로 각 축이 독립적으로 red가 되는지 확인"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/remote_claims.py
+  - "tests/harness/**"
+session: null
+notes: "사고 경위(실측): 2026-08-31~09-01 HARN-45와 HARN-48이 같은 뿌리(차단이 교차 세션 보호를 지운다)를 반대 극성으로 각자 구현 → HARN-48이 main 착지(#916·50df469d), HARN-45는 PR #942 close·태스크 cancel로 폐기. 같은 기간 동종 6회 중 앞선 5회(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72)는 전부 '같은 식별자를 두 세션이 배정'한 형태라 번호 가드(HARN-10/15)가 전건 실거부했으나, 이 건은 ID가 서로 달라 번호 가드·claim 대장·scan_remote_task_files 어디에도 걸리지 않았다. 실제 발견 경로는 기계가 아니라 상대 세션이 자기 태스크 YAML acceptance 4항에 중복을 스스로 적어 둔 것이었고, 그것이 없었다면 충돌 해소 과정에서 main의 _publish_block_hold 보호를 조용히 되돌렸을 것이다. HARN-43의 add 가시성 고지는 '번호'를 겨눈 것이라 이 축을 덮지 못한다. 등재 근거: CLAUDE.md 실수 관리(반복 실수는 규칙·코드·태스크 중 하나로 대책 등재 의무) · PR #943 Codex P1 지적 수용."
+updated: 2026-09-01
