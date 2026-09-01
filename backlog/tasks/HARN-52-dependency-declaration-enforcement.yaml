@@ -5,8 +5,9 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 1
+eos_priority: null
 owner: claude
 depends_on: []
 requires_gates: []
@@ -16,7 +17,8 @@ acceptance:
   - "③ CI 배선 실재 동결 — audit-deps가 harness-integrity 잡에서 실제로 실행됨을 tests/infra 배선 테스트가 대조(존재≠실행)"
   - "④ 변별력 실측 — 위반을 주입하면 exit 1, 제거하면 exit 0임을 테스트가 동결. 성공/실패 양쪽에서 같은 값을 내는 검사 금지"
   - "⑤ 레거시 그랜드파더에 만료 — ARCH-25 provenance_audit._KNOWN_GAPS 패턴 답습: 면제마다 해소 태스크 ID를 못박고 그 태스크가 done인데 면제가 남으면 위반 승격(만료 없는 유예 금지)"
-artifacts: []
+artifacts:
+  - "PR https://github.com/doldori7/WhyMath/pull/946 (#946) · 커밋 b1cd138f — 구현·등재가 같은 PR로 main에 이미 착지했으나 done 처리만 누락된 상태의 대장 정합(재구현 아님·HARN-54가 지목한 낡은 대장 유형). acceptance 5항 전수 재대조 결과 전부 충족 실측: ①scripts/harness/dep_declaration.py 실재 ②backlog.py amend --depends 존재 ③ci.yml:1144가 audit-deps 실행 + tests/infra/test_dep_declaration_wiring.py 동결 ④변별력 테스트 쌍(위반 주입/제거·만료 fires/silent) ⑤_TRIAGE=HARN-53 그랜드파더 만료(cancelled도 만료 처리). 검증: tests/harness/test_dep_declaration.py + tests/infra/test_dep_declaration_wiring.py 18 passed EXIT=0 · backlog.py audit-deps green(위반 0건·레거시 그랜드파더 6건은 HARN-53 소유) · 배선 동결 변별력 실측(ci.yml:1144의 audit-deps를 validate로 뮤테이션 → test_audit_deps_step_exists FAIL EXIT=1, cp 백업 원복 후 3 passed EXIT=0·MUTATION 흔적 0)"
 paths:
   - scripts/harness/dep_declaration.py
   - scripts/harness/backlog.py
