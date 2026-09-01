@@ -381,10 +381,10 @@ gh api repos/doldori7/WhyMath/environments --jq '.environments[] | {name, rules:
 
 | 설정 | 기본값 | 의미 | 처분 |
 |---|---|---|---|
-| `can_admins_bypass` | `true` | 리포 관리자는 승인 대기를 **건너뛸 수 있다** | 조일 것 — 아래 명령 |
+| `can_admins_bypass` | ~~`true`~~ → **`false`**(2026-09-01 조임 완료) | 관리자도 승인 절차를 거친다 | 완료 — 실측 `{"can_admins_bypass":false,"rules":["required_reviewers"]}` |
 | `prevent_self_review` | `false` | 배포를 **트리거한 본인이 스스로 승인**할 수 있다 | **유지** — 현재 1인 팀이라 `true`로 두면 prod 배포가 영구 불가능해진다. 두 번째 승인자가 생기는 시점에 재검토 |
 
-`can_admins_bypass`를 끄면 관리자도 승인 절차를 거친다(자기 승인은 여전히 가능하므로 배포는 막히지 않는다 — "우회"가 아니라 "멈춰서 확인"이 된다).
+`can_admins_bypass`는 **2026-09-01에 껐다**. 관리자도 승인 절차를 거치되 자기 승인은 여전히 가능하므로 배포는 막히지 않는다 — "우회"가 아니라 "멈춰서 확인"이 됐다. 아래는 재적용·검증용 명령이다(멱등).
 
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
@@ -429,7 +429,7 @@ gh api repos/doldori7/WhyMath/environments/prod --jq '{can_admins_bypass, rules:
 | TLS 종단·리버스 프록시 | 없음 | 기본 바인딩이 127.0.0.1인 이유. `APP_BIND_ADDR=0.0.0.0`은 평문 HTTP를 LAN에 여는 것이며 학생 데이터 경로에는 부적합(시연 한정) |
 | 무중단 배포(블루/그린·롤링) | 없음 | `up -d` 교체 시 수 초 다운타임 |
 | staging 전용 호스트 | 없음 | staging/prod가 같은 호스트에 공존한다(이름·볼륨·포트로만 격리) — 진짜 격리는 호스트 분리 후 |
-| environment 승인 규칙 | **등록됨**(2026-09-01) | `staging`(규칙 없음)·`prod`(`required_reviewers`=doldori7) 등록 완료 — `gh api .../environments` 실측 `total:2`. **잔여 한계**: `can_admins_bypass=true`(관리자 우회 가능)·`prevent_self_review=false`(트리거한 본인이 승인 가능) — 1인 팀이라 후자는 불가피하나 전자는 조일 수 있다(§7-4) |
+| environment 승인 규칙 | **등록·강화됨**(2026-09-01) | `staging`(규칙 없음)·`prod`(`required_reviewers`=doldori7, `can_admins_bypass=false`) — `gh api .../environments` 실측 `total:2`. **잔여 한계**: `prevent_self_review=false`(트리거한 본인이 승인) — 1인 팀이라 불가피, 두 번째 승인자가 생기면 재검토(§7-4) |
 | 기존 `whymath-pg`(5433) 이관 | 미실시 | 현 데이터는 compose 밖 컨테이너에 있다. 이 스택으로 옮기려면 OPS-02 백업 → 새 볼륨 복원 절차가 필요하다(별도 과제) |
 | 로그 수집·알림 | 부분 | 컨테이너 로그 로테이션(10MB×3)만 설정. 중앙 수집·알림은 OPS-04 |
 
