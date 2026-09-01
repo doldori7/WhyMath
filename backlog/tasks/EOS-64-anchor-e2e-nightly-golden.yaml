@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -21,6 +21,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - ".github/workflows/**"
   - "tests/backend/**"
-session: null
+session: claude/eos-migration-compliance-check-xu50yl
 notes: "출처: EOS-58 acceptance ③ 집행 별항(2026-08-30). 1회 관통 실증(docs/reviews/eos_anchor_e2e_a4_2026-08-30.md)의 상시화. 라이브는 Phaiakes9 Ollama 필요 — nightly 실행 주체(CI 러너 vs Kiki 머신 스케줄) 결정 포함. 번호: EOS-60~63 원격 선점으로 CLI 제안 64 사용(HARN-10)."
-updated: 2026-08-30
+updated: 2026-09-01
