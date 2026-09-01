@@ -35,7 +35,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
+from whymath_backend.schema.answer_form import FormVerdict
+
 __all__ = [
+    "AnswerFormVerifier",
     "VerificationOutcome",
     "EquivalenceOutcome",
     "StepOutcome",
@@ -249,6 +252,22 @@ class ExpressionSeal(Protocol):
 
     def classify_invariance_failure(self, rendered: str, *, sealed: str) -> str | None:
         """봉인이 깨졌으면 사유 코드, 지켜졌으면 None."""
+        ...
+
+
+class AnswerFormVerifier(Protocol):
+    """제출답이 문항의 **표기 지시**를 따랐는지 판정하는 능력 — **선택적** (EOS-28).
+
+    형태 어휘는 과목 소유다 — 수학의 `기약분수`는 역사에 없고, 역사라면 "연도를 서기로"
+    같은 것이 있을 것이다. 그래서 `answer_constraint`를 `Any`로 받는다: 무엇이 형태 요구로
+    적히는지는 과목이 정하고, Core는 **4상태 판정만** 읽는다.
+
+    `FormVerdict`는 값 3상태(`VerificationOutcome`)와 별도 어휘다 — 같은 축을 쪼갠 것이
+    아니라 **다른 축**이기 때문이다(형태 위반은 오답이 아니다).
+    """
+
+    def verify_answer_form(self, student_answer: str | None, answer_constraint: Any) -> FormVerdict:
+        """형태 4상태 판정. 정답을 인자로 받지 않는다 — 받지 않으면 이 경로로 샐 수 없다."""
         ...
 
 
