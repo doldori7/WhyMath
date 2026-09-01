@@ -7,6 +7,7 @@ subject: math
 layer: data-pipeline
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -23,5 +24,5 @@ paths:
   - "docs/data/**"
   - "tests/data_pipeline/graph_analytics/**"
 session: null
-notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G2(+G3 부수 흡수) — 외부 EOS 틀(모듈 10 그래프 기능) 3차 대조 신규 갭. ARCH-17(done)이 CLI·테스트는 남겼으나 docs/data/ 산출 아티팩트 0·ci.yml 내 graph_analytics grep 0건·참조처는 자기 테스트 2건+MEMORY뿐. 같은 날 같은 문서에서 나온 D4(ARCH-16)는 아티팩트 3건을 남겨 사람 검수 경로가 실재한다 — 두 설계의 착지 품질 차이가 판정 근거다. 관계 실적재 분포는 별도 태스크로 만들지 않고 이 리포트에 흡수(r3 §2 G2 부수)."
-updated: 2026-08-11
+notes: "docs/architecture/knowledge_module_gap_review_r3.md §2 G2(+G3 부수 흡수) — 외부 EOS 틀(모듈 10 그래프 기능) 3차 대조 신규 갭. ARCH-17(done)이 CLI·테스트는 남겼으나 docs/data/ 산출 아티팩트 0·ci.yml 내 graph_analytics grep 0건·참조처는 자기 테스트 2건+MEMORY뿐. 같은 날 같은 문서에서 나온 D4(ARCH-16)는 아티팩트 3건을 남겨 사람 검수 경로가 실재한다 — 두 설계의 착지 품질 차이가 판정 근거다. 관계 실적재 분포는 별도 태스크로 만들지 않고 이 리포트에 흡수(r3 §2 G2 부수).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

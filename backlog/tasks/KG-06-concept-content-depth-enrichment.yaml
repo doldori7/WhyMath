@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - KG-02-concept-content-review-promotion
@@ -22,5 +23,5 @@ paths:
   - "data/corpus/concept_content_v1/**"
   - "data/corpus/concept_graph_v1/locales/**"
 session: null
-notes: "2026-08-13 감사 발견. '이유를 묻는 수학' 정체성 대비 이론이 한 줄 요약 수준. KG-02(검수) blocked 해소가 전제 — 물량 846건이라 생성 품질 게이트 없는 양산은 재발 경로."
-updated: 2026-08-13
+notes: "2026-08-13 감사 발견. '이유를 묻는 수학' 정체성 대비 이론이 한 줄 요약 수준. KG-02(검수) blocked 해소가 전제 — 물량 846건이라 생성 품질 게이트 없는 양산은 재발 경로.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

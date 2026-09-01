@@ -7,6 +7,7 @@ subject: cross
 layer: mobile
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - PRES-01-segment-body-blocks
@@ -20,5 +21,5 @@ paths:
   - src/mobile/lib/theme/
   - src/backend/whymath_backend/schema/speech.py
 session: null
-notes: "2026-08-12 표출 분석 P1-7. 사용자 정정 대상층 = 초등·중·고등·대학 수학, 학생/수험생/대학생/일반인. 문서 정본(CLAUDE.md:15)은 중·고등 — 정정 반영은 CLAUDE.md 갱신과 함께. '일반인'은 문서 0건으로 신규 항목"
-updated: 2026-08-13
+notes: "2026-08-12 표출 분석 P1-7. 사용자 정정 대상층 = 초등·중·고등·대학 수학, 학생/수험생/대학생/일반인. 문서 정본(CLAUDE.md:15)은 중·고등 — 정정 반영은 CLAUDE.md 갱신과 함께. '일반인'은 문서 0건으로 신규 항목\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

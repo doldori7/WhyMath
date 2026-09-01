@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - scripts/harness/remote_claims.py
   - "tests/harness/**"
 session: null
-notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §4-1. 인접 좌석과 경계: HARN-25(문서명 접미사 사각)·HARN-28(shallow 보류)·HARN-30(PR 배송 관측 — §4-2는 그 ③이 소유, 중복 등재 안 함)"
-updated: 2026-08-11
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §4-1. 인접 좌석과 경계: HARN-25(문서명 접미사 사각)·HARN-28(shallow 보류)·HARN-30(PR 배송 관측 — §4-2는 그 ③이 소유, 중복 등재 안 함)\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/하네스 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

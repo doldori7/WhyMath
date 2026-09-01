@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - scripts/harness/backlog.py
   - "tests/harness/**"
 session: null
-notes: "발견 경위: 2026-08-21 G-amd395-perf-baseline 등재 시 G-operator-seat-first-grant 의 60줄 런북형 notes 가 통째로 단일 문자열로 변환됐다. 해당 커밋에서는 원본 블록을 복원해 순수 추가분만 남겼다(diff 삭제 줄 0 확인). 사람이 매번 되돌릴 수는 없고 대장 손편집은 금지 원칙이므로 도구를 고친다."
-updated: 2026-08-21
+notes: "발견 경위: 2026-08-21 G-amd395-perf-baseline 등재 시 G-operator-seat-first-grant 의 60줄 런북형 notes 가 통째로 단일 문자열로 변환됐다. 해당 커밋에서는 원본 블록을 복원해 순수 추가분만 남겼다(diff 삭제 줄 0 확인). 사람이 매번 되돌릴 수는 없고 대장 손편집은 금지 원칙이므로 도구를 고친다.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/하네스 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01
