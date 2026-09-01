@@ -68,7 +68,10 @@ from whymath_backend.api._segmentation_state import (
 
 # EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
 # `verify_final_answer` 함수 자체의 Protocol 경유(DI)는 후속 — 타입 축을 먼저 끊는다.
-from whymath_backend.composition import default_final_answer_verifier
+from whymath_backend.composition import (
+    default_answer_form_verifier,
+    default_final_answer_verifier,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
@@ -166,6 +169,7 @@ from whymath_backend.l4.turn_meta import (
     resolve_socratic_strategy,
     stage_to_targeted_step,
 )
+from whymath_backend.schema.answer_form import FormVerdict
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
@@ -411,6 +415,18 @@ _CLIENT_STATE_MISMATCH_DESC = (
     "의존하므로, 어긋남을 조용히 덮지 않고 표면화한다(침묵 실패 금지)."
 )
 
+_ANSWER_FORM_DESC = (
+    "이 턴 제출답이 문항의 **표기 지시**(예: '기약분수로 나타내시오')를 따랐는지 — EOS-28. "
+    "값 정오와 **완전히 별개 축**이다: `violated`여도 답은 맞을 수 있고, 완료(problem_complete)를 "
+    "막지 않는다. 4상태 — `satisfied`(지켰다)·`violated`(안 지켰다·오답 아님)·"
+    "`not_required`(이 문항엔 형태 요구가 없음)·`unverifiable`(요구는 있으나 판정 못 함). "
+    "`not_required`를 `satisfied`와 구분하는 이유: 문항의 99%는 형태 요구가 없어서, 합치면 "
+    "형태 준수율이 99%로 부풀어 오른다(요구 없음 ≠ 지켰음). **클라 사용 규약**: `violated`는 "
+    "오답 표시나 제출 차단에 쓰지 않는다 — '값은 맞았고, 기약분수로 바꾸면 어떻게 될까?' 같은 "
+    "*추가 안내*로만 쓴다(부정 강화 금지·학생 입력 거부 금지). stateless `/v1/coach`에는 싣지 "
+    "않는다 — DB 없이는 문항 제약을 읽을 수 없어 항상 `not_required`인 가짜 계기판이 된다."
+)
+
 _ACTIVE_HYPOTHESES_DESC = (
     "이 학생의 *누적·감쇠된* 활성 오개념 가설 세트(confidence 내림차순). 매 턴 매칭(증거)으로 "
     "갱신·영속되며, 증거가 끊긴 가설은 감쇠하고 임계 미만이면 가지치기된다. 각 항목은 *확정 "
@@ -467,6 +483,9 @@ class SessionCreateResponse(CoachResponse):
     completed_attempt_id: uuid.UUID | None = Field(
         default=None, description=_COMPLETED_ATTEMPT_ID_DESC
     )
+    answer_form: FormVerdict = Field(
+        default=FormVerdict.not_required, description=_ANSWER_FORM_DESC
+    )
 
 
 class TurnAppendResponse(CoachResponse):
@@ -498,6 +517,9 @@ class TurnAppendResponse(CoachResponse):
     awaiting_reflection: bool = Field(default=False, description=_AWAITING_REFLECTION_DESC)
     completed_attempt_id: uuid.UUID | None = Field(
         default=None, description=_COMPLETED_ATTEMPT_ID_DESC
+    )
+    answer_form: FormVerdict = Field(
+        default=FormVerdict.not_required, description=_ANSWER_FORM_DESC
     )
 
 
@@ -921,7 +943,7 @@ async def _final_answer_state(
     body: CoachRequest,
     *,
     final_answer_verifier: FinalAnswerVerifier | None = None,
-) -> VerificationOutcome | None:
+) -> tuple[VerificationOutcome | None, FormVerdict]:
     """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — L3 서버 권위 3상태(비노출).
 
     완료 상태머신의 *정답/오답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·
@@ -930,15 +952,19 @@ async def _final_answer_state(
     기본 기능) 마지막 단계를 `verify_final_answer`로 3상태 판정한다. 기대정답(`Problem.answer`)은
     이 함수 밖으로 결코 흘러나가지 않는다(verify_final_answer가 상태·사유만 반환·사유엔 학생
     원문만 반향).
+
+    반환은 `(값 판정, 형태 판정)` 두 축이다(EOS-28). 조회조차 하지 않는 경로에서는
+    `(None, not_required)` — 판정하지 않은 것을 '요구 없음'으로 정직하게 적는다.
     """
     if not get_settings().l4_solution_completion_enabled or problem_id is None:
-        return None
+        return None, FormVerdict.not_required
     last_step = _last_solution_step(body)
     if last_step is None:
-        return None
+        return None, FormVerdict.not_required
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
-        return None  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
+        # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
+        return None, FormVerdict.not_required
     # EOS-69: 구현을 이름으로 알지 않는다 — 합성 루트가 과목 구현을 준다.
     verifier = (
         final_answer_verifier
@@ -946,7 +972,12 @@ async def _final_answer_state(
         else default_final_answer_verifier()
     )
     result = verifier.verify_final_answer(last_step, problem)
-    return result.state
+    # EOS-28: 형태 지시 준수는 **값 판정과 나란히·독립으로** 계산한다. 여기서 두 판정이 서로를
+    # 참조하지 않는 것이 교수학 계약의 1차 방어다 — 참조하는 순간 형태가 정오에 스며든다.
+    form = default_answer_form_verifier().verify_answer_form(
+        last_step, getattr(problem, "answer_constraint", None)
+    )
+    return result.state, form
 
 
 async def _complete_problem(
@@ -1024,6 +1055,12 @@ class _CompletionResult(NamedTuple):
     review_turns_remaining_after: int
     attempt_id: uuid.UUID | None
     handled: bool
+    answer_form: FormVerdict = FormVerdict.not_required
+    """이 턴 제출답의 형태 지시 준수 판정(EOS-28) — 응답 노출 전용.
+
+    기본값이 `not_required`인 이유: 완료 감지를 건너뛴 턴(돌아보기 중·이미 완료·게이트 off)은
+    형태를 *판정하지 않은* 것이고, 그때 `satisfied`를 내면 판정한 척이 된다. `not_required`는
+    '이 턴에 형태 판정 대상이 없었다'는 정직한 표기다."""
 
 
 async def _resolve_completion(
@@ -1069,10 +1106,14 @@ async def _resolve_completion(
     # skip한다.
     final_correct = False
     final_incorrect = False
+    answer_form = FormVerdict.not_required
     if prior == 0 and not already_completed:
-        state = await _final_answer_state(session, problem_id, body)
+        state, answer_form = await _final_answer_state(session, problem_id, body)
         final_correct = state is VerificationOutcome.correct
         final_incorrect = state is VerificationOutcome.incorrect
+        # EOS-28 교수학 계약: `answer_form`은 아래 어느 판정에도 **들어가지 않는다**.
+        # final_correct/final_incorrect는 값 판정만으로 정해지고, decide_completion도 형태를
+        # 인자로 받지 않는다 — 형태 위반이 완료를 막거나 오답을 만드는 경로가 코드에 없다.
 
     cd = decide_completion(
         prior_review_remaining=prior,
@@ -1090,6 +1131,7 @@ async def _resolve_completion(
             review_turns_remaining_after=cd.review_turns_remaining_after,
             attempt_id=None,
             handled=False,
+            answer_form=answer_form,
         )
 
     # 결정론 발화로 override — 돌아보기/인정/재고 발화(prompt)·메타인지 카테고리(socratic_category).
@@ -1120,6 +1162,7 @@ async def _resolve_completion(
         review_turns_remaining_after=cd.review_turns_remaining_after,
         attempt_id=attempt_id,
         handled=True,
+        answer_form=answer_form,
     )
 
 
@@ -2431,6 +2474,7 @@ async def create_session(
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
         problem_complete=completion.problem_complete,
+        answer_form=completion.answer_form,
         awaiting_reflection=completion.awaiting_reflection,
         completed_attempt_id=completion.attempt_id,
     )
@@ -2790,6 +2834,7 @@ async def append_turns(
         wh1_exploration_turn=wh1_exploration,
         client_state_mismatch=bool(mismatch_fields),
         problem_complete=completion.problem_complete,
+        answer_form=completion.answer_form,
         awaiting_reflection=completion.awaiting_reflection,
         completed_attempt_id=completion.attempt_id,
     )

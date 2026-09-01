@@ -259,6 +259,7 @@ forbidden_modules = [
     "whymath_backend.l3.symbolic_equivalence",
     "whymath_backend.l3.verifier",
     "whymath_backend.l3.verify_answer",
+    "whymath_backend.l3.verify_answer_form",
     "whymath_backend.l3.verify_final_answer",
     "whymath_backend.l3.verify_solution",
     "whymath_backend.l3.verify_step",
@@ -316,6 +317,7 @@ forbidden_modules = [
     "whymath_backend.l3.symbolic_equivalence",
     "whymath_backend.l3.verifier",
     "whymath_backend.l3.verify_answer",
+    "whymath_backend.l3.verify_answer_form",
     "whymath_backend.l3.verify_final_answer",
     "whymath_backend.l3.verify_solution",
     "whymath_backend.l3.verify_step",
@@ -338,6 +340,8 @@ ignore_imports = [
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.symbolic_equivalence",
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_final_answer",
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.equivalent.rephrase",
+    # EOS-28: 형태 판정 능력(AnswerFormVerifier)의 수학 구현이 form_verdict_for에 위임한다.
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_answer_form",
     "whymath_backend.l4.misconception.wrong_form_match -> whymath_backend.l3.symbolic_equivalence",
     #   MIXED 출발 (해소 경로 = 모듈 분할. api.verify/speech/ocr는 표면이 중립·페이로드가 수식):
     "whymath_backend.api.verify -> whymath_backend.l3.verify_answer",
