@@ -225,6 +225,8 @@ class TestNoticeIsANoticeNotAGate:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S9-20-prior",
                     "--title",
@@ -245,6 +247,8 @@ class TestNoticeIsANoticeNotAGate:
         exit_code = cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 "S9-21-duplicate",
                 "--title",
@@ -274,6 +278,8 @@ class TestNoticeIsANoticeNotAGate:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S9-22-prior",
                     "--title",
@@ -294,6 +300,8 @@ class TestNoticeIsANoticeNotAGate:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S9-23-unrelated",
                     "--title",
@@ -387,6 +395,8 @@ class TestRemoteReadContract:
         exit_code = cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 "S9-24-remote-dead",
                 "--title",
