@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-59-amend-paths-correction-path
+title: "amend에 paths 정정 경로 신설 — 범위 확장이 acceptance에만 남고 겹침 검사·scope drift에 반영되지 않는다"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① amend --path 신설 — 기존 --acceptance/--gate/--depends와 같은 append 규약(제거는 열지 않는다). paths는 겹침 검사(_check_path_overlap)·scope drift(check-edit)·가시성 고지의 입력이므로 acceptance 문구로는 대체되지 않는다"
+  - "② 변별력 양방향 — 확장 전에는 그 경로 편집이 scope drift로 잡히고, 확장 후에는 잡히지 않는지 실측한다. 한쪽만 보면 '항상 통과'가 그대로 통과한다"
+  - "③ 배선 확인 — 신규 테스트가 CI(tests/harness 잡)에서 실제로 실행되는지 tests/infra 계약으로 대조. 저장소에 존재함 ≠ 돌아감"
+  - "④ 소급 정정 — OPS-53의 paths에 scripts/harness/**·tests/harness/**를 부착한다(본 결함의 발견 계기). 다른 태스크의 소급 정정은 범위 밖"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - tests/harness/test_amend_paths.py
+session: null
+notes: "발견 경위: PR #970 codex P2. OPS-53에 acceptance ④로 'scripts/harness 편입'을 적었으나 paths는 src/backend/.../harness·ops와 tests/backend/**뿐이라, 그 태스크를 claim한 세션이 scripts/harness를 편집하면 scope drift 경고가 나고 겹침 검사도 그 파일을 예약하지 못한다. amend가 acceptance·gate·track·depends·priority·eos-priority는 고칠 수 있는데 paths만 경로가 없다 — HARN-24(acceptance)·HARN-49(track)·HARN-52(depends/priority)가 각각 같은 이유로 열렸던 것의 마지막 구멍이다. 일반형: 정정 경로가 없는 필드는 등재 시점의 오류가 영구화된다."
+updated: 2026-09-01

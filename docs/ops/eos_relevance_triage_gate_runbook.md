@@ -252,6 +252,39 @@ python scripts/harness/backlog.py amend --help | Select-String "eos-priority"
 python scripts/harness/backlog.py validate
 ```
 
+> ⚠️ **세 번째 `validate`는 미분류를 보지 못한다 — 그것만으로 clear하지 말 것.**
+> `_eos_priority_grandfather_errors()`는 게이트가 `cleared|waived`일 때만 위반을 낸다
+> (`scripts/harness/store.py`). 즉 **clear 전에는 미분류가 몇 건이든 `validate`가 green**이다
+> (실측 2026-09-01: 미분류 1건을 만들고 게이트 pending 상태에서 `validate` → `green EXIT=0`).
+> 성공/실패 양쪽에서 같은 값을 내는 검사는 검증이 아니라 위장이다.
+>
+> **그래서 clear 직전 차단 지점은 §5의 미분류 카운트 스크립트다.** 아래 6-2b를 반드시 돌린다.
+
+**6-2b. 미분류 0건 확인 — 이것이 clear의 유일한 차단 지점**
+
+§5의 스크립트를 그대로 돌린다(PowerShell 히어독):
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+@'
+import sys, pathlib
+sys.path.insert(0, "scripts/harness")
+import store
+b, _ = store.load_backlog(pathlib.Path("."))
+TERM = {"done", "cancelled"}
+miss = sorted(t.id for t in b.tasks.values()
+              if t.status not in TERM and t.eos_priority is None)
+print("미분류 비종결:", len(miss), "건")
+for t in miss[:10]:
+    print("  +", t)
+sys.exit(1 if miss else 0)
+'@ | python -
+Write-Host "EXIT=$LASTEXITCODE"
+```
+
+**`EXIT=0` 이어야만 6-3으로 간다.** 0이 아니면 멈추고 출력을 세션에 전달한다 — 도착한
+태스크에 `amend --eos-priority`를 붙이면 해소된다.
+
 기대: ① 게이트 행이 **보인다**(안 보이면 체크아웃이 낡은 것 — 6-1 재실행)
 ② `--eos-priority` 도움말이 **보인다**(안 보이면 HARN-55 미반영)
 ③ `validate`가 **green**(red면 clear 금지 — 세션에 알린다).
@@ -295,11 +328,23 @@ git push -u origin gates/relevance-triage-clear
 > ```powershell
 > cd C:\Users\kiki\Desktop\__AI\WhyMath
 > git checkout main
+> git status --porcelain
+> ```
+>
+> **`git status --porcelain`이 아무것도 출력하지 않을 때만** 다음 줄을 실행한다:
+>
+> ```powershell
 > git reset --hard origin/main
 > ```
 >
-> 여기서 `reset --hard`가 안전한 이유는 **되돌릴 커밋이 이미 새 브랜치에 보존돼 있고**
-> 작업 트리에 지킬 미커밋 변경이 없기 때문이다 — §7-1의 금지와는 조건이 다르다.
+> 무언가 출력되면 **멈추고 그 목록을 세션에 전달한다.** `reset --hard`는 그 변경을
+> 무증상으로 지운다 — `checkout -B main origin/main`은 충돌하지 않는 로컬 편집을 그대로
+> 끌고 오고, 직전 커밋은 `backlog/`만 스테이징했으므로 **다른 파일의 작업분이 남아 있을 수
+> 있다.**
+>
+> `reset --hard`가 이 자리에서 허용되는 조건은 두 가지가 **모두** 성립할 때뿐이다:
+> ①되돌릴 커밋이 이미 새 브랜치에 보존됐다 ②작업 트리가 비어 있음을 방금 눈으로 확인했다.
+> ②를 가정하면 §7-1이 금지한 바로 그 형태(2026-08-10 미커밋 소실)가 된다.
 
 ---
 
@@ -349,8 +394,12 @@ git status --short
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git log --oneline -1
 git revert --no-edit HEAD
-git push origin main
+git checkout -b gates/relevance-triage-clear-revert
+git push -u origin gates/relevance-triage-clear-revert
 ```
+
+그 다음 **PR을 열어 머지한다**. `git push origin main`은 여기서도 `GH013`으로 거부된다 —
+§6-5와 같은 규칙이며, 되돌리기라고 예외가 되지 않는다.
 
 여기서도 `git log --oneline -1`로 **되돌릴 커밋이 clear 커밋인지 먼저 확인**한다.
 

@@ -19,11 +19,12 @@ acceptance:
   - "⑤ 해법 우선순위 재판정 — ①의 '문자 금지 스캐너'보다 **진입점에서 stdout/stderr을 UTF-8로 재구성**하는 편이 우선 검토 대상이다. 근거: windows_utf8_setup.md §1이 'CP949를 애플리케이션 내부에서 지원하려 하지 말 것'이라 못박았고, 문자 금지는 한국어 출력의 가독성을 영구히 깎는다. 재구성이 성립하면 ①의 스캐너는 불요해질 수 있으므로 어느 쪽을 채택했는지 명시한다"
   - "⑥ 변별력(파이프 축) — 콘솔이 아니라 **파이프·리다이렉트**에서 검증한다. 파이프를 걸면 stdout이 로케일 인코딩을 쓰기 때문에 콘솔에서만 테스트하면 이 결함이 보이지 않는다. 로케일 cp949 강제 서브프로세스에서 수정 전 실패·수정 후 성공 양방향 실측"
   - "⑦ 런북 회귀 방지 — 착지 후 docs/ops/eos_relevance_triage_gate_runbook.md §6-1b의 UTF-8 강제 블록이 여전히 필요한지 재판정한다. 불요해지면 제거하거나 '보험'으로 명시(만료 없는 유예 금지)"
+  - "⑧ paths 부착 대기 — ④가 넓힌 범위(scripts/harness/**·tests/harness/**)는 이 태스크의 paths에 반영되지 않았다. amend에 paths 정정 경로가 없기 때문이며(HARN-59가 소유), 그때까지 이 태스크를 claim한 세션은 scripts/harness 편집 시 scope drift 경고를 받는다. HARN-59 착지 후 paths를 부착하고 이 항을 해소한다"
 artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/**"
 session: null
-notes: "원 등재 OPS-24(vafylb b1218739에만 잔존·CLAUDE.md 사고 경위 속 별건 OPS-24와 번호 재사용 충돌) — HARN-35 재등재. S4-16 강등전 CLI의 Phaiakes9 라이브 크래시 실측(em dash U+2014·cp949 부재). 2026-07-17 logconfig 사고와 같은 cp949 계열 2회차 — 등재 의무 건\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/계측 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필\n\n[정정 2026-09-01] 2026-09-01 실측 사고 편입 + HARN-58 통합. 같은 유형 3회차 — 2026-07-17 logconfig(외부 도구의 읽기 인코딩), HARN-19(우리가 파싱하는 출력), 이번은 **우리가 내는 출력**. 앞 둘은 규칙·코드로 막았으나 출력측 축이 비어 있었다. 우회 수단(PYTHONUTF8 환경변수)은 사람이 매 창에서 기억해야 하므로 항구 대책이 아니다"
+notes: "원 등재 OPS-24(vafylb b1218739에만 잔존·CLAUDE.md 사고 경위 속 별건 OPS-24와 번호 재사용 충돌) — HARN-35 재등재. S4-16 강등전 CLI의 Phaiakes9 라이브 크래시 실측(em dash U+2014·cp949 부재). 2026-07-17 logconfig 사고와 같은 cp949 계열 2회차 — 등재 의무 건\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/계측 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필\n\n[정정 2026-09-01] 2026-09-01 실측 사고 편입 + HARN-58 통합. 같은 유형 3회차 — 2026-07-17 logconfig(외부 도구의 읽기 인코딩), HARN-19(우리가 파싱하는 출력), 이번은 **우리가 내는 출력**. 앞 둘은 규칙·코드로 막았으나 출력측 축이 비어 있었다. 우회 수단(PYTHONUTF8 환경변수)은 사람이 매 창에서 기억해야 하므로 항구 대책이 아니다\n\n[정정 2026-09-01] PR #970 codex P2 수용 — acceptance만 넓히고 paths를 못 넓힌 공백을 명시. 정정 경로 부재가 원인이라 HARN-59로 분리 등재했고, 그때까지의 상태를 여기 적어 둔다(침묵 금지)"
 updated: 2026-09-01
