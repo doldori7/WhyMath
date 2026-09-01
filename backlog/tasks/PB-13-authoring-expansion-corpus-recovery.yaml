@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -23,6 +23,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/l3/equivalent/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/stray-code-qkv4xt
 notes: "출처: G-authoring-expansion-merge-decision(2026-08-31 Kiki '회수' 결정으로 cleared) + docs/reviews/unmerged_branch_audit_2026-08-31.md §5. 선행 조건은 PB-06(done·#795)이 전부 확정해 뒀다 — 차단 3건 중 사이드카는 PB-11(done)이 CLI 상환, shallow는 08-31 감사가 unshallow로 해소, ID 충돌만 후속 태스크가 담당. 회수 완료 전 원 브랜치 삭제 금지. 저작 태스크 32건 재등재와 S4-19/S4-22 ID 충돌 해소는 후속 태스크 소관이라 이 태스크 범위 밖(중복 등재 금지). 별건 관찰: l2/learning_metrics_writer.py도 main 부재 고립이나 코퍼스와 무관해 이 범위 밖 — 별도 판단 필요."
-updated: 2026-08-31
+updated: 2026-09-01
