@@ -16,9 +16,15 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from typing import Final
 
-from whymath_backend.l3.data_export_policy import export_judgment_for, guard_data_export
+from whymath_backend.l3.data_export_policy import (
+    OFFSHORE_TIERS,
+    export_judgment,
+    export_judgment_for,
+    guard_data_export,
+)
 from whymath_backend.l3.models import (
     CallSite,
     CostTier,
@@ -497,6 +503,8 @@ CLOUD로 넘어간다. CLOUD 승급은 항상 guard_cloud를 통과해야 한다
 def next_tier(
     cost_tier: CostTier,
     local_model: LocalModelTier | None,
+    *,
+    data_licenses: Iterable[object],
 ) -> tuple[CostTier, LocalModelTier | None] | None:
     """현재 (축1, 축2)에서 한 단계 승급한 (축1, 축2) 반환 (03a §D.1·§D.2).
 
@@ -504,6 +512,23 @@ def next_tier(
     "다음 티어 1단계"를 결정하는 로직 수준 헬퍼. 천장(CLOUD_HIGH)이면 None.
     실제 트리거 감지(PRM confidence·다수결 등)는 생성 파이프라인의 책임이며
     M1.2 범위 밖이다 — 본 함수는 *사슬 계산*만 한다.
+
+    ## `data_licenses`가 **필수 인자**인 이유 (EOS-59 · codex P1 수용)
+
+    `route()`가 데이터 등급 게이트로 클라우드를 막아 LOCAL로 강등시켜도, 이후 신뢰도
+    재시도가 이 함수를 부르면 사슬이 `LOCAL/QUALITY → CLOUD_MID`로 올라간다. 그 순간
+    **막으려던 국외반출이 재시도 경로로 되살아난다**(AIHub 4조건 ② 위반). 사슬 계산이
+    요청을 안 보는 순수 함수라는 사실이 곧 그 구멍이었다.
+
+    선택 인자 + 관대한 기본값으로 두지 않는다 — 그러면 부르는 쪽이 빠뜨릴 때 조용히
+    fail-open이 되고, 그건 이 게이트가 없애려던 상태 그 자체다. **필수 키워드**로 둬서
+    빠뜨리면 `TypeError`가 나게 한다(침묵 대신 즉시 실패). 지금이 필수화의 최적기다 —
+    프로덕션 호출부가 아직 0건이라(`ops/cost_probe`가 "이 프로브는 next_tier를 부르지
+    않는다"고 자인) 파이프라인이 배선되기 *전에* 계약을 굳힐 수 있다.
+
+    반출이 막힌 자료면 승급은 **국내(LOCAL) 사슬 안에서만** 일어나고, 로컬 천장
+    (`QUALITY`)에 닿으면 `None`(더 올릴 곳 없음)을 돌려준다 — 클라우드로 넘어가지 않는다.
+    이것이 `guard_data_export`의 단방향성을 *재시도 축*까지 연장한 형태다.
     """
     cost = _as_cost_tier(cost_tier)
     local = _as_local_tier(local_model)
@@ -514,7 +539,12 @@ def next_tier(
         return None
     if idx + 1 >= len(ESCALATION_CHAIN):
         return None  # 천장
-    return ESCALATION_CHAIN[idx + 1]
+    candidate = ESCALATION_CHAIN[idx + 1]
+    # 법적 축 재확인 — 사슬의 다음 칸이 국외 티어면 등급을 다시 본다. 비즈니스 가드
+    # (guard_cloud)와 합치지 않는 이유는 `data_export_policy` 모듈 docstring 참조.
+    if candidate[0] in OFFSHORE_TIERS and export_judgment(data_licenses).blocks_offshore:
+        return None  # 국내 천장 — 재시도가 게이트를 우회하지 못한다
+    return candidate
 
 
 # ──────────────────────────────────────────────────────────────────────────

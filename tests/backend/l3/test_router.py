@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 import pytest
 
 from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
@@ -45,6 +47,7 @@ from whymath_backend.l3.router import (
     next_tier,
     resolve_model,
 )
+from whymath_backend.schema.enums import LicenseType
 
 
 def _req(**overrides: object) -> RoutingRequest:
@@ -675,6 +678,12 @@ class TestLangfuseFields:
 # ══════════════════════════════════════════════════════════════════════
 # 에스컬레이션 사슬 (03a §D.1·§D.2) — next_tier 로직
 # ══════════════════════════════════════════════════════════════════════
+#: 반출 가능 등급 — 기존 사슬 테스트가 재는 것은 *사슬 계산*이지 법적 게이트가 아니다.
+#: 등급을 명시하지 않으면 fail-closed 기본값 때문에 전부 로컬 천장에서 멈춰 원래 재려던
+#: 것을 못 재게 된다. 게이트 축의 변별력은 아래 `TestEscalationRespectsExportGate`가 본다.
+_EXPORTABLE: Final = (LicenseType.WHYMATH_GENERATED,)
+
+
 class TestEscalationChain:
     def test_chain_order(self) -> None:
         """사슬 순서 — FAST→MID→QUALITY→CLOUD_MID→CLOUD_HIGH."""
@@ -683,38 +692,91 @@ class TestEscalationChain:
         assert len(ESCALATION_CHAIN) == 5
 
     def test_fast_to_mid(self) -> None:
-        assert next_tier(CostTier.LOCAL, LocalModelTier.FAST) == (
+        assert next_tier(CostTier.LOCAL, LocalModelTier.FAST, data_licenses=_EXPORTABLE) == (
             CostTier.LOCAL,
             LocalModelTier.MID,
         )
 
     def test_mid_to_quality(self) -> None:
-        assert next_tier(CostTier.LOCAL, LocalModelTier.MID) == (
+        assert next_tier(CostTier.LOCAL, LocalModelTier.MID, data_licenses=_EXPORTABLE) == (
             CostTier.LOCAL,
             LocalModelTier.QUALITY,
         )
 
     def test_quality_to_cloud_mid(self) -> None:
         """로컬 천장(QUALITY)에서 CLOUD로 넘어감."""
-        assert next_tier(CostTier.LOCAL, LocalModelTier.QUALITY) == (
+        assert next_tier(CostTier.LOCAL, LocalModelTier.QUALITY, data_licenses=_EXPORTABLE) == (
             CostTier.CLOUD_MID,
             None,
         )
 
     def test_cloud_mid_to_cloud_high(self) -> None:
-        assert next_tier(CostTier.CLOUD_MID, None) == (CostTier.CLOUD_HIGH, None)
+        assert next_tier(CostTier.CLOUD_MID, None, data_licenses=_EXPORTABLE) == (
+            CostTier.CLOUD_HIGH,
+            None,
+        )
 
     def test_cloud_high_is_ceiling(self) -> None:
         """천장(CLOUD_HIGH)에서는 더 승급 불가 → None."""
-        assert next_tier(CostTier.CLOUD_HIGH, None) is None
+        assert next_tier(CostTier.CLOUD_HIGH, None, data_licenses=_EXPORTABLE) is None
 
     def test_unknown_pair_returns_none(self) -> None:
         """사슬에 없는 조합(예: CLOUD_MID+FAST)은 None."""
-        assert next_tier(CostTier.CLOUD_MID, LocalModelTier.FAST) is None
+        assert next_tier(CostTier.CLOUD_MID, LocalModelTier.FAST, data_licenses=_EXPORTABLE) is None
 
     def test_accepts_string_values(self) -> None:
         """문자열 입력도 정규화하여 동작."""
-        assert next_tier("local", "fast") == (CostTier.LOCAL, LocalModelTier.MID)  # type: ignore[arg-type]
+        assert next_tier("local", "fast", data_licenses=_EXPORTABLE) == (CostTier.LOCAL, LocalModelTier.MID)  # type: ignore[arg-type]
+
+
+class TestEscalationRespectsExportGate:
+    """EOS-59 · codex P1 — 재시도 경로가 법적 게이트를 우회하지 못한다.
+
+    `route()`가 등급 게이트로 클라우드를 막아도, 신뢰도 재시도가 `next_tier()`로 사슬을
+    올리면 `LOCAL/QUALITY → CLOUD_MID`가 되어 **막으려던 국외반출이 되살아난다**. 사슬
+    계산이 요청을 안 보는 순수 함수라는 사실이 곧 그 구멍이었다(AIHub 4조건 ② 위반 경로).
+
+    양방향으로 본다 — 한쪽만 보면 "전부 로컬 천장"이라는 반대 결함(게이트 과확대로 클라우드
+    승급을 통째로 죽임)을 못 잡는다.
+    """
+
+    def test_blocked_licenses_climb_only_the_local_chain(self) -> None:
+        """반출 금지 자료는 로컬 사슬 안에서만 승급한다."""
+        assert next_tier(
+            CostTier.LOCAL, LocalModelTier.FAST, data_licenses=(LicenseType.AIHUB_OPEN,)
+        ) == (CostTier.LOCAL, LocalModelTier.MID)
+        assert next_tier(
+            CostTier.LOCAL, LocalModelTier.MID, data_licenses=(LicenseType.AIHUB_OPEN,)
+        ) == (CostTier.LOCAL, LocalModelTier.QUALITY)
+
+    def test_blocked_licenses_stop_at_the_domestic_ceiling(self) -> None:
+        """로컬 천장에서 CLOUD로 넘어가지 않는다 — 이것이 우회 차단의 핵심 단언."""
+        assert (
+            next_tier(
+                CostTier.LOCAL, LocalModelTier.QUALITY, data_licenses=(LicenseType.AIHUB_OPEN,)
+            )
+            is None
+        )
+
+    def test_exportable_licenses_still_reach_cloud(self) -> None:
+        """양성 대조 — 반출 가능 자료는 클라우드까지 정상 승급(게이트가 과확대되지 않는다)."""
+        assert next_tier(CostTier.LOCAL, LocalModelTier.QUALITY, data_licenses=_EXPORTABLE) == (
+            CostTier.CLOUD_MID,
+            None,
+        )
+        assert next_tier(CostTier.CLOUD_MID, None, data_licenses=_EXPORTABLE) == (
+            CostTier.CLOUD_HIGH,
+            None,
+        )
+
+    def test_unverified_licenses_are_fail_closed(self) -> None:
+        """미지정(빈 목록)은 '자료 없음'이 아니라 '모른다' — 차단이 정답이다."""
+        assert next_tier(CostTier.LOCAL, LocalModelTier.QUALITY, data_licenses=()) is None
+
+    def test_licenses_argument_is_required_not_optional(self) -> None:
+        """인자를 빠뜨리면 **즉시 실패**한다 — 선택 인자였다면 조용한 fail-open이 됐다."""
+        with pytest.raises(TypeError):
+            next_tier(CostTier.LOCAL, LocalModelTier.QUALITY)  # type: ignore[call-arg]
 
 
 # ══════════════════════════════════════════════════════════════════════
