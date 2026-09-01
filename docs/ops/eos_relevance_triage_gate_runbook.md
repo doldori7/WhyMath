@@ -272,14 +272,34 @@ python scripts/harness/backlog.py validate
 
 기대: **green**. red가 나오면 그랜드파더 만료가 발효됐는데 백필이 덜 된 것이다 → §7.
 
-**6-5. 커밋·푸시**
+**6-5. 커밋 → 브랜치 push (main 직접 push는 거부된다)**
 
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git add backlog/
 git commit -m "gates: G-eos-verification-relevance-triage clear - 관여도 트리아지 확정"
-git push origin main
+git checkout -b gates/relevance-triage-clear
+git push -u origin gates/relevance-triage-clear
 ```
+
+그 다음 **PR을 연다**(세션에 알리면 세션이 연다). CI green 후 머지한다.
+
+> ⚠️ **`git push origin main`은 거부된다** — 저장소 규칙이 `Changes must be made through
+> a pull request`를 강제한다. 실측(2026-09-01):
+> `GH013: Repository rule violations found for refs/heads/main`. 게이트 대장도 예외가 아니다.
+>
+> **이미 main에 커밋한 뒤 거부당했다면**: 위 블록의 `git checkout -b`가 그 커밋을 그대로
+> 새 브랜치로 옮긴다(커밋이 브랜치에 붙어 있는 것이 아니라 브랜치가 커밋을 가리킨다).
+> 브랜치를 만들고 push한 뒤 **로컬 main만** 되돌린다:
+>
+> ```powershell
+> cd C:\Users\kiki\Desktop\__AI\WhyMath
+> git checkout main
+> git reset --hard origin/main
+> ```
+>
+> 여기서 `reset --hard`가 안전한 이유는 **되돌릴 커밋이 이미 새 브랜치에 보존돼 있고**
+> 작업 트리에 지킬 미커밋 변경이 없기 때문이다 — §7-1의 금지와는 조건이 다르다.
 
 ---
 
