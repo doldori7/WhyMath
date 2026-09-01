@@ -197,6 +197,26 @@ layers = [
     "whymath_backend.l1",
     "whymath_backend.schema",
 ]
+# 합성 루트(`whymath_backend.composition`) 경유 체인 — **간선 1건만** 좁게 예외한다.
+#
+# 왜 예외가 필요한가: 합성 루트는 계층 스택 *밖*의 횡단 배선 지점이라(능력 계약과 과목
+# 구현을 잇는 유일한 곳) 정의상 상위 계층을 안다. layers 계약은 간접 체인을 따라가므로
+# `l3.pedagogy.slot_generator -> composition -> l4.subject_adapter_math`를 역방향으로 본다.
+#
+# 왜 `-> whymath_backend.composition` 전체를 열지 않는가: 그러면 합성 루트가 **세탁 통로**가
+# 된다 — 어느 Core 모듈이든 이 경유로 어댑터에 닿아도 계약이 침묵한다. 간선 단위로 적어 두면
+# 새 Core→composition 간선이 생기는 즉시 lint-imports가 적색이 되어 *그때마다 판단*을
+# 강요한다. 반대로 이 간선이 사라지면 `unmatched_ignore_imports_alerting`(기본 ERROR)이
+# "이 줄을 지워라"라고 말한다 — 만료가 날짜가 아니라 기계다.
+#
+# 정직한 잔여(EOS-69): `verify_slot_payload`는 이제 능력(`ExpressionEquivalence`)을 **주입받는다**
+# — 타 과목·테스트는 L3를 건드리지 않고 자기 구현을 넣을 수 있다. 남은 것은 *기본 구현 선택*
+# 편의뿐이며, 호출부 4곳(review·example_generator·diag_item_projector·slot_generator 자신)이
+# 능력을 상류에서 받아 내리면 이 줄도 사라진다. 위반이 없어진 게 아니라 **작아졌다**.
+ignore_imports = [
+    "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.composition",
+    "whymath_backend.l3.render.adapters -> whymath_backend.composition",
+]
 
 # ──────────────────────────────────────────────────────────────────────
 # EOS Core ↔ Math Adapter 경계 강제 (EOS-67) — 7계층 축과 **별개의 축**이다.
@@ -311,6 +331,11 @@ ignore_imports = [
     #   ADAPTER 출발:
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verifier",
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_answer",
+    # EOS-69: 선택적 능력 4종의 수학 구현이 각각 기존 L3 판정 함수에 **얇게 위임**한다
+    # (항등 판정·최종답 검증·평가 재료 답 검증·수식 봉인). ADAPTER→ADAPTER라 위반이 아니다.
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.symbolic_equivalence",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_final_answer",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.equivalent.rephrase",
     "whymath_backend.l4.misconception.wrong_form_match -> whymath_backend.l3.symbolic_equivalence",
     #   MIXED 출발 (해소 경로 = 모듈 분할. api.verify/speech/ocr는 표면이 중립·페이로드가 수식):
     "whymath_backend.api.verify -> whymath_backend.l3.verify_answer",
@@ -321,25 +346,49 @@ ignore_imports = [
     "whymath_backend.api.ocr -> whymath_backend.l5.ocr.pipeline",
     "whymath_backend.l4.solution_coaching -> whymath_backend.l3.verify_solution",
     "whymath_backend.l4.speech -> whymath_backend.l3.speech",
+    #   INFRA 출발 (EOS-69 2차 상환에서 재배정 — 아래 그룹② 주석 참조):
+    "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",
 
-    # ── 그룹 ②: baseline — CORE 진성 위반 9간선 (= 심볼 15건의 모듈 단위 축약) ──
-    # 이것이 실제 빚이다. 해소 소유자는 `EOS-69`(SubjectAdapter 경유 배선).
+    # ── 그룹 ②: baseline — CORE 진성 위반 ──
+    #
+    # **현재 0줄이다.** 이 구역은 비어 있는 채로 남겨 둔다(지우지 않는다) — 다음에 진성 위반이
+    # 생겼을 때 "여기가 빚을 적는 자리"임을 알리는 표지가 필요하기 때문이다.
     #
     # **만료는 날짜가 아니라 기계다**: `unmatched_ignore_imports_alerting`이 기본 ERROR라,
-    # EOS-69가 어떤 간선을 없애면 그에 대응하는 아래 줄이 *매치되지 않아* lint-imports가
-    # 실패한다. 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다 — 유예가 조용히 눌러앉을 수
-    # 없다("만료 없는 유예 금지"의 코드 집행).
+    # 어떤 간선이 사라지면 그에 대응하는 줄이 *매치되지 않아* lint-imports가 실패한다.
+    # 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다 — 유예가 조용히 눌러앉을 수 없다
+    # ("만료 없는 유예 금지"의 코드 집행). 이 장치가 아래 상환 기록을 실제로 강제했다:
+    # 3회 모두 "줄을 지워라"는 CI 실패가 먼저 왔고 그 다음에 목록이 줄었다.
     #
-    # 재확인 지점: G1(2026-09-27). 그때까지 9줄이 그대로면 EOS-69가 진척 0이라는 뜻이다.
-    "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",
-    "whymath_backend.api.coach -> whymath_backend.l3.verify_final_answer",
-    "whymath_backend.api.coach -> whymath_backend.l3.verify_solution",
-    "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.l3.symbolic_equivalence",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.josa",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.rephrase",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.verify_answer",
-    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_solution",
-    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_step",
+    # [EOS-69 1차 상환 2026-08-31] 9줄 → **8줄**. `l3.render.adapters -> l3.equivalent.josa`
+    # 를 지웠다 — 경계 문서 §4 **B분류**(오배치 유틸)로, 조사 판별은 과목과 무관하므로
+    # `whymath_backend.lang.josa`로 물리 이동해 위반 자체를 소멸시켰다(스캔 15 → 12건).
+    # 분류표만 고치지 않고 파일을 옮긴 이유: import-linter는 **모듈 경로**로 판정하므로
+    # `l3.equivalent.*` 접두가 남는 한 계약은 그대로 걸린다.
+    #
+    # [EOS-69 2차 상환 2026-08-31] 8줄 → **0줄**(스캔 12 → 0건). 세 축으로 갚았다:
+    #   ① **타입 축** — Core가 어댑터를 import한 이유가 *상태 enum 하나* 뿐이던 간선들.
+    #      `VerifyStepState`·`FinalAnswerState`·`IdentityVerdict`를 과목 중립 계약
+    #      (`schema/verification_capabilities.py`)의 `VerificationOutcome`·
+    #      `EquivalenceOutcome`으로 올리고 어댑터 쪽은 별칭으로 남겼다(값 보존·동작 무변경).
+    #   ② **배선 축** — Core가 기본 구현을 스스로 골라 오던 간선(slot_generator·coach·
+    #      render.adapters). 능력별 좁은 Protocol을 주입받게 하고, 기본 구현 선택은 합성 루트
+    #      `whymath_backend.composition`(INFRA) 한 곳으로 옮겼다. 함수 안 지연 import로
+    #      숨기지 **않은** 이유: 경계 스캔·import-linter는 지연 import도 그대로 보므로,
+    #      숨기면 위반이 사라진 게 아니라 안 보이게 될 뿐이다.
+    #   ③ **분류 축(코드 변경 0)** — `api._ocr_state -> l5.ocr.factory` 1건.
+    #      이 모듈은 `OcrComponents`를 **타입 주석으로만** 쓰고 필드를 한 번도 읽지 않는
+    #      app.state 배관이다(`_l3_state`와 동형). 배관은 경계 계약 대상이 아니므로 INFRA로
+    #      재배정했고, 그래서 위 그룹①(구조적 제외)로 옮겼다. **이 1건만은 코드가 아니라
+    #      판정이 바뀐 것**이며, 그 사실을 숨기지 않기 위해 여기 별항으로 적는다.
+    #
+    # 재확인 지점: **G1(2026-09-27)** — 그때 이 목록이 0줄인지 다시 확인한다. 0이 유지되는
+    # 것이 EOS-67 차단 조건("Core→Math 정적 의존 0")의 성립 근거이고, 줄이 늘어 있으면
+    # 그 사이에 새 빚이 생겼다는 뜻이다(만료 없는 유예 금지 — 0도 재확인 대상이다).
+    #
+    # ⚠️ **0은 "아무도 막지 않는 0"이 아니다** — 위 세 계약이 지금 이 목록을 강제한다.
+    #    다만 스캔(`eos_core_adapter_boundary_scan.py`)의 0과 이 계약의 0은 *다른 측정*이다:
+    #    스캔은 AST 직접 import를, 계약은 체인을 본다. 둘이 어긋나면 스캔이 정본이다.
 ]
 
 # ──────────────────────────────────────────────────────────────────────

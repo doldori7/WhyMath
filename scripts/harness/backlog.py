@@ -18,7 +18,9 @@
                                                  [--assignee <담당자>] [--remind-after-days N]
     python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
-    python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
+    python3 scripts/harness/backlog.py amend <id> --reason <사유>
+      [--acceptance ...] [--gate <G-id>] [--track ...]
+  python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
     python3 scripts/harness/backlog.py validate [--quiet]
     python3 scripts/harness/backlog.py brief [--format hook]
     python3 scripts/harness/backlog.py check-stop        (Stop 훅 전용 — stdin JSON)
@@ -45,7 +47,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Gate, Task
+from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Backlog, Gate, Task
 from seed_data import build_seed
 
 
@@ -311,6 +313,16 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
         if result.status == "conflict":
             other = result.claim
             detail = f" (세션: {other.branch or '?'}, {other.ts or '시각 불명'})" if other else ""
+            if other is not None and other.kind == "block":
+                # 차단 홀드는 착수 점유가 아니다 — 해소 경로가 다르므로 그렇게 안내한다.
+                # 이 분기가 없으면 "남이 작업 중"으로 읽혀 --force 탈취를 유도한다(HARN-42).
+                message = (
+                    f"{task.id} 착수 거부 — 다른 세션이 **차단**해 둔 태스크{detail}\n"
+                    f"  사유: {other.reason or '(기록 없음)'}\n"
+                    f"  해소는 차단 사유를 없앤 뒤 `unblock {task.id}` — "
+                    f"claims release --force는 차단 우회이므로 쓰지 않는다"
+                )
+                return _fail(message)
             message = (
                 f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
                 f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도"
@@ -707,10 +719,44 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "block", task.id, reason=args.reason)
-    _release_remote_claim(root, task.id, prev_session)
+    handover = bool(getattr(args, "handover", False))
+    store.append_event(root, "block", task.id, reason=args.reason, handover=handover)
+    if handover:
+        # 인계 의도 — 자리를 비운다. 게이트 대기와 달리 "남이 이어받아야" 하는 차단이다.
+        _release_remote_claim(root, task.id, prev_session)
+        print(f"✖ {task.id} 차단(인계) — {args.reason}")
+        print("  · 원격 홀드를 두지 않았다 — 다른 세션이 이 태스크를 착수할 수 있다")
+        return 0
+    _publish_block_hold(root, task.id, prev_session, args.reason)
     print(f"✖ {task.id} 차단 — {args.reason}")
     return 0
+
+
+def _publish_block_hold(root: Path, task_id: str, prev_session: str | None, reason: str) -> None:
+    """차단을 원격 대장에 게시 — 머지 없이 병렬 세션에 즉시 보이게 (HARN-42).
+
+    구현은 원격 claim을 *해제*했다. 그 결과 차단은 보호를 거는 순간 유일한 교차
+    세션 신호를 지웠고, 태스크 YAML이 main에 머지되기까지(CI ~30분 + base 경합)
+    다른 세션은 아무 마찰 없이 착수할 수 있었다 — CUR-11 실사고(2026-08-31).
+
+    실패는 침묵하지 않는다(예외 타입·상태를 로그와 이벤트에 남긴다). 게시 실패 시
+    차단은 로컬에만 남으므로 **보호가 없는 상태임을 명시**한다 — fail-open을
+    "보호 있음"으로 위장하지 않는다(CLAUDE.md 금기).
+    """
+    policy, _ = store.load_policy(root)
+    if not policy.remote_claims:
+        return
+    branch = prev_session or store.current_branch(root)
+    result = remote_claims.hold(root, task_id, branch, reason)
+    if result.status == "ok":
+        return
+    print(
+        f"⚠ 원격 차단 홀드 게시 실패({result.status}): {result.message}\n"
+        f"  → 이 차단은 **로컬에만** 있습니다. 이 PR이 머지되기 전까지 병렬 세션은 "
+        f"{task_id}을(를) 착수할 수 있습니다",
+        file=sys.stderr,
+    )
+    store.append_event(root, "block_hold_failed", task_id, status=result.status)
 
 
 def cmd_review(root: Path, args: argparse.Namespace) -> int:
@@ -786,10 +832,13 @@ def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "todo")
     if error:
         return _fail(error)
+    prev_session = task.session
     task.status = "todo"
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "unblock", task.id)
+    # 차단 홀드도 함께 걷는다 — 안 걷으면 해제된 태스크가 영구 차단으로 보인다(HARN-42)
+    _release_remote_claim(root, task.id, prev_session)
     print(f"· {task.id} 차단 해제 → todo")
     return 0
 
@@ -1120,19 +1169,181 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_amend(root: Path, args: argparse.Namespace) -> int:
+    """등재된 태스크의 acceptance·requires_gates·track 정정 (HARN-24 + HARN-49 통합).
+
+    **왜 필요한가 (두 뿌리)**:
+    - *acceptance 축(HARN-24)*: 이 CLI에 등재된 태스크의 acceptance를 고치는 서브커맨드가
+      0건이었다. 그래서 정정이 문서에만 착지하고 태스크 YAML에 도달하지 못했고, 그 정정을
+      조상으로 가진 세션이 stale acceptance를 그대로 집행했다(ADMIN-02 → subscription_*
+      3컬럼 드롭, 커밋 b3a58b02). 일반형: "문서가 소유자"라는 우회는 착수 세션이 그 문서를
+      읽을 때만 성립한다 — 태스크 YAML은 **반드시** 읽히지만 참조 문서는 선택이다.
+    - *track 축(HARN-49)*: 등재 시 잘못 붙은 `track`은 그 트랙의 `entry_gate`를 상속시켜
+      태스크를 **영구 착수 불가**로 만든다. `start`에 우회 플래그는 없고(설계상 옳다) 대장
+      손편집은 금지이므로 정정 경로 자체가 없었다 — S1-16이 그렇게 12일 막혔다.
+
+    **통합 경위(2026-08-31)**: 두 태스크가 같은 verb를 독립 구현해 머지에서 충돌했다.
+    HARN-49가 이 저장소에 먼저 착지했고 그 docstring이 "HARN-24가 --acceptance·--gate를
+    덧붙일 수 있는 형태로 둔다"고 명시했으므로, **양쪽 동작을 모두 보존해** 하나로 합쳤다.
+    어느 한쪽을 버리지 않은 이유: track 축은 이전 값을 notes에 남기고 진입 게이트 변화를
+    즉석에서 보고하는데(HARN-49), acceptance 축은 append 전용 규약과 정정 후 무결성 재검사를
+    갖는다(HARN-24) — 둘 다 각자의 사고에서 배운 것이라 버리면 그 교훈이 사라진다.
+
+    **설계 원칙 3**:
+    1. **append만, 덮어쓰기 금지** — acceptance는 정정 항을 *추가*한다. HARN-20이 notes에서
+       배운 교훈(덮어쓰기가 blocked 4건 전건의 원 notes를 소실시킴)을 승계한다. 기존 항의
+       개별 제거는 열지 않는다.
+    2. **다른 필드 불변** — status·session·artifacts·id·title은 건드리지 않는다. 상태 전이는
+       start/done/block/review/cancel의 몫이고, 이 verb가 그 경로를 우회하면 안 된다.
+    3. **사유 필수 + 이벤트 기록** — 왜 고쳤는지가 대장에 남지 않으면 정정 자체가 추적 불가다.
+
+    **여전히 열지 않는 것**: 태스크 삭제·ID 변경·acceptance 항목 개별 제거. 대장 손편집의
+    우회 표면이 되거나 ID 계보를 끊는다.
+    """
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+
+    # 변경 요청이 하나도 없으면 거부 — 사유만 남기고 아무것도 안 바꾸는 호출은
+    # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
+    if not (args.acceptance or args.gates or args.track):
+        return _fail(
+            f"{task.id}: 변경 항목이 없다 — "
+            "--acceptance / --gate / --track 중 하나 이상을 지정하라"
+        )
+
+    changed: list[str] = []
+    note_lines: list[str] = []
+    track_before: str | None = None
+
+    # ① acceptance: append만 (덮어쓰기 금지 — HARN-20 승계)
+    for item in args.acceptance or []:
+        text = item.strip()
+        if not text:
+            return _fail(f"{task.id}: 빈 acceptance 항은 추가할 수 없다")
+        if text in task.acceptance:
+            return _fail(f"{task.id}: 동일한 acceptance 항이 이미 있다 — {text[:60]}")
+        task.acceptance.append(text)
+        changed.append(f"acceptance +1 ({text[:40]}…)")
+
+    # ② requires_gates: 중복 없이 추가 (제거는 열지 않는다 — 게이트 해제는 gates clear의 몫)
+    for gid in args.gates or []:
+        if gid in task.requires_gates:
+            return _fail(f"{task.id}: 게이트 '{gid}' 가 이미 붙어 있다")
+        if gid not in backlog.gates:
+            return _fail(
+                f"{task.id}: 게이트 '{gid}' 가 gates.yaml에 없다 — "
+                "먼저 `gates add` 로 등재하라(존재하지 않는 게이트는 영구 차단이 된다)"
+            )
+        task.requires_gates.append(gid)
+        changed.append(f"requires_gates +{gid}")
+
+    # ③ track 이관 — 이전 값을 notes에 남긴다(HARN-49: 흔적 없이 덮어쓰면 왜 옮겼는지 사라진다)
+    if args.track:
+        if args.track == task.track:
+            return _fail(f"{task.id}: track이 이미 '{args.track}' — 바꿀 것이 없다")
+        if args.track not in backlog.tracks:
+            known = ", ".join(sorted(backlog.tracks))
+            return _fail(f"track '{args.track}' 은 tracks.yaml에 없다. 등록된 트랙: {known}")
+        track_before = task.track
+        changed.append(f"track {track_before} → {args.track}")
+        note_lines.append(f"track {track_before} → {args.track}: {args.reason}")
+        task.track = args.track
+
+    task.notes = _append_note(task.notes, note_lines[0] if note_lines else args.reason, "정정")
+    task.updated = _today()
+
+    errors = store.validate_backlog(backlog)
+    own_errors = [e for e in errors if args.id in e]
+    if own_errors:
+        for e in own_errors:
+            print(f"  · {e}", file=sys.stderr)
+        return _fail(f"{args.id}: 스키마/무결성 위반으로 정정 거부")
+
+    store.save_task(root, task)
+    event_extra: dict[str, object] = {"reason": args.reason, "changed": changed}
+    if track_before is not None:
+        # track 축은 field/before/after도 함께 남긴다 — HARN-49가 쓰던 형태를 깨지 않는다.
+        event_extra.update(field="track", before=track_before, after=args.track)
+    store.append_event(root, "amend", task.id, **event_extra)
+    print(f"✎ {task.id} 정정 — {args.reason}")
+    for c in changed:
+        print(f"  · {c}")
+
+    # 정정이 실제로 착수 가능성을 바꿨는지 그 자리에서 보여준다
+    # (정본화 ≠ 집행 — 사람이 확인해야 한다).
+    if track_before is not None:
+        old_gate = (
+            backlog.tracks[track_before].entry_gate if track_before in backlog.tracks else None
+        )
+        new_gate = backlog.tracks[args.track].entry_gate
+        if old_gate and not new_gate:
+            print(f"  진입 게이트 해소: '{old_gate}' → 없음 (이제 start 가능 — 직접 확인하라)")
+        elif new_gate:
+            print(f"  ⚠ 새 트랙에도 진입 게이트가 있다: '{new_gate}'")
+    return 0
+
+
+def _stage_outliers_on_gated_tracks(backlog: Backlog) -> list[str]:
+    """진입 게이트가 있는 트랙에서 stage가 다른 모든 소속 태스크보다 앞서는 태스크 (HARN-49 ⑤).
+
+    **잡으려는 결함**: 트랙을 잘못 붙이면 그 트랙의 `entry_gate`를 상속해 태스크가 영구
+    착수 불가가 된다. 자기 stage가 게이트가 지키는 시기보다 *앞선다면* 그 태스크는 그
+    트랙 소속일 수 없다 — S1-16이 stage S1인데 E축(S5 게이트) 트랙에 있었다.
+
+    **게이트 id를 파싱하지 않는다**(`G-s5-...`의 's5'를 읽는 방식은 명명 관례에 의존해
+    깨지기 쉽다). 대신 `stage_order`와 *같은 트랙 다른 태스크들*의 stage만 쓴다 — 어떤
+    태스크의 stage가 동료 전원보다 엄격히 앞서면 그 태스크가 이질적이라는 뜻이다.
+
+    **경고이지 오류가 아니다**: 의도적으로 이른 stage를 붙이는 경우를 막지 않는다. 또한
+    `add` 거부로 만들지 않은 이유는 — 이 결함은 *이미 등재된* 태스크에서 발견되므로
+    등재 시점 거부로는 S1-16 같은 기존 건을 하나도 잡지 못한다.
+
+    실측(2026-08-31·480태스크): 적중 1건(S1-16), 오탐 0건.
+    """
+    rank = {stage: i for i, stage in enumerate(backlog.stage_order)}
+    out: list[str] = []
+    for name, track in backlog.tracks.items():
+        if not getattr(track, "entry_gate", None):
+            continue
+        members = [t for t in backlog.tasks.values() if t.track == name]
+        if len(members) < 2:
+            continue  # 비교 대상이 없으면 이질성을 말할 수 없다
+        for task in members:
+            mine = rank.get(task.stage)
+            peers = [rank.get(o.stage) for o in members if o.id != task.id]
+            if mine is None or any(p is None for p in peers):
+                continue  # stage_order 밖 값은 스키마 검증이 따로 잡는다
+            if all(mine < p for p in peers):  # type: ignore[operator]
+                out.append(
+                    f"{task.id}: stage={task.stage} 인데 트랙 '{name}'(진입 게이트 "
+                    f"{track.entry_gate})의 다른 태스크 전원보다 앞선다 — 트랙 오분류 의심. "
+                    f"정정: backlog.py amend {task.id} --track <올바른 트랙> --reason ..."
+                )
+    return out
+
+
 def cmd_validate(root: Path, args: argparse.Namespace) -> int:
     backlog, schema_errors = _load(root)
     errors = store.validate_backlog(backlog, schema_errors)
+    warnings = _stage_outliers_on_gated_tracks(backlog)
     if not errors:
         if not args.quiet:
             print(
                 f"✔ 백로그 무결성 green — 태스크 {len(backlog.tasks)}건, "
                 f"게이트 {len(backlog.gates)}건, 트랙 {len(backlog.tracks)}건"
             )
+        for warning in warnings:
+            # 무결성 위반이 아니라 구조 의심 — exit 0을 바꾸지 않는다(경고를 오류로 승격하면
+            # 의도적 배치까지 막고, 그러면 사람이 경고 자체를 끄게 된다)
+            print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
         return 0
     print(f"❌ 무결성 위반 {len(errors)}건:", file=sys.stderr)
     for error in errors:
         print(f"  · {error}", file=sys.stderr)
+    for warning in warnings:
+        print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
     return 1
 
 
@@ -1268,6 +1479,39 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
         return 0
 
     mine = [t for t in backlog.tasks.values() if t.status == "in_progress" and t.session == branch]
+
+    # [무결성 게이트] 이 세션이 유발한 대장 위반이 있으면 정지를 막는다 (HARN-49).
+    #
+    # 왜 Stop 훅인가: 2026-08-31 실측 사고 — `validate` 가 "1세션이 2개 태스크 동시
+    # claim" 위반을 정확히 냈는데, 명령을 `;` 로 이어 붙여 exit code 를 판정에 쓰지
+    # 않은 채 push 했다. 2선 방어인 CI harness-integrity 잡은 그 push 에 **트리거가
+    # 걸리지 않아**(HARN-30) 무증상이었다. 규칙(CLAUDE.md 2026-08-09 "출력 억제·판정
+    # 건너뛰기 금지")은 이미 있었고 재발했다 — 그래서 코드로 옮긴다.
+    #
+    # **남의 위반에 볼모 잡히지 않는다**: 저장소 전역 위반이 아니라 이 브랜치·이 세션이
+    # 잡은 태스크를 지목하는 오류만 본다(cmd_add 의 own_errors 와 같은 방식). main 에
+    # 이미 있던 위반 때문에 모든 세션의 정지가 막히면 그 훅은 곧 무력화된다.
+    own_ids = {t.id for t in backlog.tasks.values() if t.session == branch}
+    violations = [
+        e
+        for e in store.validate_backlog(backlog)
+        if branch in e or any(tid in e for tid in own_ids)
+    ]
+    if violations:
+        print(
+            "❌ 대장 무결성 위반 — 이 세션이 유발한 것이므로 정지를 막습니다:",
+            file=sys.stderr,
+        )
+        for v in violations:
+            print(f"  · {v}", file=sys.stderr)
+        print(
+            "  해소 후 다시 종료하세요 (예: 완료분은 `done <id> --artifact ...`,\n"
+            "  보류분은 `block <id> --reason ...`). 진단: "
+            "`python3 scripts/harness/backlog.py validate; echo EXIT=$?`",
+            file=sys.stderr,
+        )
+        return 2
+
     if not mine:
         return 0
 
@@ -1503,6 +1747,81 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_branches(root: Path, args: argparse.Namespace) -> int:
+    """장기 미머지 브랜치를 고립/PR제출로 갈라 보고한다 (HARN-47).
+
+    **왜 별도 verb인가 — 집행 지점**: HARN-13이 만든 이 스캔은 SessionStart 훅에서만
+    돌았다. 즉 사람이 대화형 세션을 열 때만 존재했고, CI에서는 한 번도 실행되지 않았다.
+    이 저장소는 같은 형태의 실패를 반복했다(`tests/infra` 199건이 어떤 잡도 실행하지
+    않던 상태·브랜치 보호 required check가 통째 미강제였던 상태). "저장소에 존재함"과
+    "돌아감"은 다르다 — 그래서 CI가 부를 수 있는 표면을 별도로 낸다.
+
+    종료 코드:
+      0 — 스캔 성공(고립 0건이든 N건이든). 이 명령은 **게이트가 아니라 관측**이다.
+          다른 사람의 방치 브랜치 때문에 무관한 PR의 CI를 red로 만들지 않는다.
+      2 — 스캔 자체가 불가(offline·shallow·error). 호출부는 이것을 "고립 0건"으로
+          읽어서는 안 된다. 측정 실패와 통과는 같은 색이면 안 된다.
+    """
+    # 원격 claim 맵을 먼저 읽어 `active`(타 세션 진행중)를 CI에서도 판별한다.
+    # 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "🔴 회수 또는 삭제 필요"로 경고된다** —
+    # 삭제를 유도하는 오경보이자, 문서가 4분류라고 말하면서 이 경로는 3분류만 낼 수 있는
+    # 상태다(Codex 리뷰 P1 지적, 2026-08-31). `cmd_brief`와 동일한 재료를 쓴다.
+    policy, _ = store.load_policy(root)
+    active_branches: frozenset[str] = frozenset()
+    claim_warning = ""
+    if policy.remote_claims:
+        try:
+            remote_claimed, _ = _remote_claim_map(root, policy)
+            active_branches = frozenset(remote_claimed.values())
+        except Exception as exc:  # noqa: BLE001 - 환경 의존
+            # 침묵 실패 금지 — 타입명을 남긴다. claim을 못 읽었으면 `active`가 `isolated`로
+            # 오분류될 수 있으므로 그 사실 자체를 출력에 남겨야 한다.
+            claim_warning = f"원격 claim 조회 실패({type(exc).__name__}: {exc})"
+
+    scan = remote_claims.scan_stale_branches(
+        root,
+        days_threshold=args.days,
+        fetch=not args.no_fetch,
+        active_branches=active_branches,
+    )
+    if scan.status != "ok":
+        print(f"측정 불가: status={scan.status} — {scan.message or '사유 미상'}")
+        return 2
+    if claim_warning:
+        # 진행 중 브랜치가 고립으로 오분류될 수 있는 상태 — 조용히 넘기지 않는다.
+        print(f"⚠ {claim_warning} — 'active'(타 세션 진행중)가 고립으로 오분류될 수 있다")
+
+    buckets: dict[str, list[remote_claims.StaleBranch]] = {}
+    for item in scan.stale:
+        buckets.setdefault(item.status, []).append(item)
+
+    isolated = buckets.get("isolated", [])
+    pr_filed = buckets.get("pr_filed", [])
+    undetermined = buckets.get("unresolved", [])
+
+    # PR 대조를 못 했으면 "고립 N건"이라는 문장 자체를 만들지 않는다 — 조회 실패
+    # 상태에서 고립 건수를 말하면 그 수는 측정이 아니라 추측이다.
+    if not scan.pr_lookup_ok:
+        reason = scan.pr_lookup_error or "사유 미상"
+        print(
+            f"PR 대조 실패({reason}) — 고립/PR제출 분리 미수행. 미머지 {len(scan.stale)}건 중 "
+            f"고립 여부 미판정 {len(undetermined)}건"
+        )
+        return 2
+
+    active = buckets.get("active", [])
+    ported = buckets.get("ported", [])
+    print(
+        f"고립(PR 이력 0건): {len(isolated)}건 · PR 제출됨: {len(pr_filed)}건 · "
+        f"타 세션 진행중: {len(active)}건 · 포팅됨: {len(ported)}건"
+    )
+    for item in isolated:
+        print(f"  [고립] {item.branch} — {item.age_days:.0f}일 전 · trunk 대비 {item.ahead}커밋")
+    for item in pr_filed:
+        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
+    return 0
+
+
 def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
     """태스크 간 파일 범위 겹침 진단 — 착수 전 수동 확인용.
 
@@ -1702,6 +2021,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("block", help="태스크 차단")
     p.add_argument("id")
     p.add_argument("--reason", required=True)
+    p.add_argument(
+        "--handover",
+        action="store_true",
+        help="인계 차단 — 원격 홀드를 두지 않아 다른 세션이 이어받을 수 있다"
+        " (기본은 홀드 게시: 자리를 지킨다 — HARN-45/48)",
+    )
     p.set_defaults(func=cmd_block)
 
     p = sub.add_parser("unblock", help="차단 해제")
@@ -1762,6 +2087,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--notes")
     p.set_defaults(func=cmd_add)
 
+    p = sub.add_parser(
+        "amend", help="등재된 태스크의 acceptance·게이트·트랙 정정 (HARN-24+HARN-49)"
+    )
+    p.add_argument("id")
+    p.add_argument(
+        "--acceptance",
+        action="append",
+        default=[],
+        help="acceptance 정정 항 추가 (append만 — 기존 항은 지우지 않는다)",
+    )
+    p.add_argument(
+        "--gate",
+        action="append",
+        default=[],
+        dest="gates",
+        help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
+    )
+    p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
+    p.set_defaults(func=cmd_amend)
+
     p = sub.add_parser("validate", help="백로그 무결성 전수 검증")
     p.add_argument("--quiet", action="store_true")
     p.set_defaults(func=cmd_validate)
@@ -1795,6 +2141,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="reap 무인 집행 — 삭제하되 확정 사유(task_done·branch_gone)로만 한정. CI 전용",
     )
     p.set_defaults(func=cmd_claims)
+
+    p = sub.add_parser("branches", help="장기 미머지 브랜치 — 고립/PR제출 분리 (HARN-47)")
+    p.add_argument("--days", type=int, default=remote_claims.STALE_BRANCH_DEFAULT_DAYS)
+    p.add_argument("--no-fetch", action="store_true", help="원격 fetch 생략(캐시된 ref만)")
+    p.set_defaults(func=cmd_branches)
 
     p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")
     p.add_argument("id")

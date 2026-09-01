@@ -58,11 +58,18 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l3.verify_solution import SolutionVerificationResult
-from whymath_backend.l3.verify_step import VerifyStepResult, VerifyStepState
 from whymath_backend.l6 import _shared
 from whymath_backend.schema.enums import QuestionFormat
 from whymath_backend.schema.problem import Problem
+
+# EOS-69: 수학 어댑터 대신 schema의 **좁은 중립 계약**을 읽는다.
+# 이 모듈이 실제로 쓰는 것은 `.steps`·`.first_incorrect_index`·`step.state` 3개뿐이라
+# 리치 타입(reason_code·step_type·evidence_weight)을 알 필요가 없다 — 알면 다시 과목에 묶인다.
+from whymath_backend.schema.verification_capabilities import (
+    ChainVerification,
+    StepOutcome,
+    VerificationOutcome,
+)
 
 __all__ = [
     "BLUEPRINT_USE_CASE",
@@ -523,10 +530,10 @@ class PartialCredit(BaseModel):
     )
 
 
-def partial_credit(points: int | None, verification: SolutionVerificationResult) -> PartialCredit:
+def partial_credit(points: int | None, verification: ChainVerification) -> PartialCredit:
     """기존 `verify_solution` 결과로 부분점수를 계산한다 — **신규 채점기 0**(D4-3).
 
-    새 채점 로직을 만들지 않고, `SolutionVerificationResult.first_incorrect_index`("어느
+    새 채점 로직을 만들지 않고, `ChainVerification.first_incorrect_index`("어느
     단계까지 맞았는가")를 부분 인정 근거로 그대로 재사용한다. 루브릭·서술형 채점은 범위 밖이다.
 
     판정 순서(전부 fail-closed — 확언할 수 없으면 점수를 만들지 않는다):
@@ -557,8 +564,8 @@ def partial_credit(points: int | None, verification: SolutionVerificationResult)
     credited_steps = verification.n_transitions if first_incorrect is None else first_incorrect
     # 인정 구간 = 첫 오류 직전까지의 전이들(오류가 없으면 전체). 이 구간에 unverifiable이
     # 섞여 있으면 "여기까지 맞았다"고 확언할 수 없다(허위 확언 금지 — CLAUDE.md AI·신뢰).
-    prefix: Sequence[VerifyStepResult] = verification.steps[:credited_steps]
-    if any(step.state == VerifyStepState.unverifiable for step in prefix):
+    prefix: Sequence[StepOutcome] = verification.steps[:credited_steps]
+    if any(step.state == VerificationOutcome.unverifiable for step in prefix):
         return PartialCredit(awarded_points=None, credited_ratio=None, reason="unverifiable_prefix")
 
     ratio = credited_steps / verification.n_transitions

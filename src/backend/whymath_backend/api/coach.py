@@ -65,6 +65,10 @@ from whymath_backend.api._segmentation_state import (
     SolutionSegmentationCounters,
     get_segmentation_counters,
 )
+
+# EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
+# `verify_final_answer` 함수 자체의 Protocol 경유(DI)는 후속 — 타입 축을 먼저 끊는다.
+from whymath_backend.composition import default_final_answer_verifier
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
@@ -103,8 +107,6 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_final_answer import FinalAnswerState, verify_final_answer
-from whymath_backend.l3.verify_solution import SolutionVerificationResult
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -169,6 +171,11 @@ from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.verification_capabilities import (
+    ChainVerificationCounts,
+    FinalAnswerVerifier,
+    VerificationOutcome,
+)
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -531,8 +538,12 @@ class _StepVerificationCarry(NamedTuple):
     (CoachResponse)에는 싣지 않는다 — 노출은 기존 solution_coaching 게이트 그대로다.
     """
 
-    verification: SolutionVerificationResult | None
-    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다."""
+    verification: ChainVerificationCounts | None
+    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다.
+
+    `ChainVerification`이 아니라 카운트 확장인 이유: 이 운반값의 유일한 소비처가
+    `_log_verify_event`(계측 적재 좌석)이고 거기서 상태별 카운트·보류 사유 분포를 읽는다.
+    채점(`partial_credit`)은 좁은 쪽만 요구한다 — 계약을 필요만큼만 쓰는 것이 분리의 요점이다."""
 
     ocr_gated: bool | None
     """SolutionCoaching.verification_ocr_gated(verification 객체가 아닌 형제 필드) 운반."""
@@ -905,8 +916,12 @@ def _last_solution_step(body: CoachRequest) -> str | None:
 
 
 async def _final_answer_state(
-    session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
-) -> FinalAnswerState | None:
+    session: AsyncSession,
+    problem_id: uuid.UUID | None,
+    body: CoachRequest,
+    *,
+    final_answer_verifier: FinalAnswerVerifier | None = None,
+) -> VerificationOutcome | None:
     """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — L3 서버 권위 3상태(비노출).
 
     완료 상태머신의 *정답/오답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·
@@ -924,7 +939,13 @@ async def _final_answer_state(
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
         return None  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
-    result = verify_final_answer(last_step, problem)
+    # EOS-69: 구현을 이름으로 알지 않는다 — 합성 루트가 과목 구현을 준다.
+    verifier = (
+        final_answer_verifier
+        if final_answer_verifier is not None
+        else default_final_answer_verifier()
+    )
+    result = verifier.verify_final_answer(last_step, problem)
     return result.state
 
 
@@ -1050,8 +1071,8 @@ async def _resolve_completion(
     final_incorrect = False
     if prior == 0 and not already_completed:
         state = await _final_answer_state(session, problem_id, body)
-        final_correct = state is FinalAnswerState.correct
-        final_incorrect = state is FinalAnswerState.incorrect
+        final_correct = state is VerificationOutcome.correct
+        final_incorrect = state is VerificationOutcome.incorrect
 
     cd = decide_completion(
         prior_review_remaining=prior,
@@ -1313,7 +1334,7 @@ async def _log_verify_event(
     student_solution: str | None,
     mode: str | None = None,
     persona: str | None = None,
-    verification: SolutionVerificationResult | None = None,
+    verification: ChainVerificationCounts | None = None,
     verification_ocr_gated: bool | None = None,
 ) -> bool | None:
     """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
@@ -1388,7 +1409,7 @@ async def _log_verify_event(
         )
 
     # S4-19: verification이 있을 때만 6필드를 값으로 채운다(없으면 전부 None — 정직 NULL 회계).
-    # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(SolutionVerificationResult)으로
+    # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(ChainVerificationCounts 규약)으로
     # 재구성 가능하다. ocr_gated도 verification 없으면 None(False로 위장하지 않음).
     # MATH-03: unverifiable_by_reason(사유 코드 분포)도 같은 additive 규약으로 병기한다.
     event = AttemptEventORM(

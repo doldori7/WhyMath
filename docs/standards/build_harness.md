@@ -207,6 +207,52 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
   삭제 5종 돌연변이가 각각 5·5·3·2·1건의 테스트 FAIL로 검출됨
   (`tests/harness/test_remote_claims.py`·`test_cli.py`).
 
+### 3b-3. 미머지 브랜치 4분류 — 고립과 지연의 분리 (HARN-47)
+
+브리핑의 미머지 브랜치 목록은 **행동이 다른 네 부류**를 구분한다. 한 덩어리로 부르면
+경고가 습관화되고, 습관화된 경고는 보호가 아니다(CLAUDE.md 「상시 실패하는 fail-open
+보호를 '보호 있음'으로 신뢰 금지」).
+
+| 분류 | 판정 근거 | 필요한 행동 |
+|---|---|---|
+| `isolated` | ahead>0 · 포팅 근거 없음 · **`refs/pull/*/head`에 tip 없음** | 회수(PR 생성) 또는 삭제. **브리핑 줄이 유일한 존재 증거다** |
+| `pr_filed` | tip이 `refs/pull/<N>/head`와 일치 | 없음 — 처분은 그 PR에서. 브리핑은 번호만 건넨다 |
+| `ported` | trunk 커밋이 브랜치를 인용하며 코드를 옮김 | 원본 정리만 |
+| `active` | 원격 claim 맵에 존재 | 없음 — 진행 중인 정상 작업 |
+
+**왜 이 분리가 생겼나** (2026-08-31 실측): 브리핑이 18건을 전부 "Kiki 결정 필요"로
+부르고 있었는데, 그중 11건은 **이미 PR이 열려 있고 처분 라벨까지 붙어 있었다**. 경고의
+61%가 이미 결정된 것을 다시 결정하라고 요구했고, 진짜 고립 7건이 그 소음에 24일간
+묻혀 있었다.
+
+**PR 판정은 오프라인 git만 쓴다** — `git ls-remote origin "refs/pull/*/head"`는 토큰·API
+권한 없이 읽힌다. 판정을 외부 관측 인프라에 의존시키지 않는다는 이중 회계 원칙과 같은
+방향이다. tip sha는 이미 도는 `for-each-ref`에 얹어 받으므로 브랜치당 추가 git 호출은 0.
+
+**`active` 판정에는 원격 claim 맵이 필요하다.** 두 진입점(`cmd_brief`·`cmd_branches`)이
+모두 `active_branches=frozenset(remote_claimed.values())`를 넘겨야 이 분류가 실제로 난다.
+CI 진입점이 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "🔴 회수 또는 삭제 필요"로
+경고된다** — 삭제를 유도하는 오경보이자, 이 표가 4분류라고 말하면서 CI 경로는 3분류만
+낼 수 있는 상태다. 두 진입점의 배선을 각각 테스트가 붙든다
+(`test_cli.py::TestStaleBranchClassificationWiring`). claim 조회 자체가 실패하면 그 사실을
+출력에 남긴다 — `active`가 조용히 `isolated`로 오분류되는 것을 막기 위함이다.
+
+**조회 실패는 "PR 없음"이 아니다.** 실패하면 그 브랜치는 `unresolved`(고립 여부 미판정)로
+남고 `pr_lookup_ok=False`가 서며, `pr_lookup_error`에 **예외 타입명을 포함한 사유**가
+실린다(무타입 경고는 타임아웃·git 미설치·권한 오류를 같은 글자로 보이게 만든다). 실패를 고립으로 읽으면 인프라가 죽은 순간 열린 PR 전부가
+"삭제 필요"로 승격된다 — 삭제를 유도하는 오경보다.
+
+**열림/닫힘은 판정하지 않는다.** `refs/pull/<N>/merge`가 열린 PR에만 생긴다는 통설을
+실측에서 폐기했다(열린 PR 14건 중 merge ref 보유 8건, 이미 머지된 PR도 head만 잔존).
+성공/실패에 같은 값을 내는 검사는 검증이 아니라 위장이므로, 답할 수 있는 질문("PR로
+노출된 적이 있는가")만 답하고 나머지는 PR 번호로 사람에게 넘긴다.
+
+**집행 지점**(정본화와 별항): SessionStart 훅 + **CI `harness-integrity` 잡**
+(`backlog.py branches`). 이 스캔은 HARN-13 이후 줄곧 SessionStart 전용이었다 — 대화형
+세션 밖에서는 실행 0회였다. CI 배선에는 `fetch-depth: 0`이 필수다(기본 shallow면 가드에
+걸려 매 실행 "판정 보류"가 되어 초록인 채 상시 무력이 된다). 배선 실재성은
+`tests/infra/test_stale_branch_scan_ci_wiring.py`가 기계로 동결한다.
+
 ## 3c. 조율 정책 — 단계적 강제 (warn → block)
 
 `backlog/policy.yaml`의 rule 3종 (전부 warn으로 시작 — "측정 없는 도입 없음"):
@@ -329,13 +375,18 @@ python3 scripts/harness/backlog.py done <id> --artifact "<PR 번호를 담은 �
 python3 scripts/harness/backlog.py done <id> --artifact "<커밋>" --no-pr ci-red   # 예외 4종만(HARN-23)
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
+                    # block은 원격 대장에 kind=block 홀드를 **게시**한다(HARN-42/48) —
+                    # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
+python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>]
+                                                   # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
 python3 scripts/harness/backlog.py claims release <id> [--force]  # claim 해제 (남의 것은 --force)
 python3 scripts/harness/backlog.py claims reap [--apply]   # stale claim 청소 (기본 dry-run)
 python3 scripts/harness/backlog.py claims reap --auto      # 무인 집행 — 확정 사유만 (CI 전용)
+python3 scripts/harness/backlog.py branches         # 미머지 브랜치 — 고립/PR제출 분리 (HARN-47)
 python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 python3 scripts/harness/board.py                   # 작업 보드 HTML (work/board.html)
@@ -350,6 +401,11 @@ exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 
 ## 8. 금기
 
 - ❌ backlog 상태를 마크다운 산문에만 기록하고 CLI 갱신 생략
+- ❌ **`get_status`로 CI 상태를 판정하기 (HARN-30)** — MCP `pull_request_read method=get_status`(= commit status API)는 이 저장소에서 **항상 `total_count: 0`**을 낸다. 이 저장소는 commit status가 아니라 **check runs**를 쓰기 때문이며, 체크런 16건이 확실한 PR에서도 0이 나온다(2026-08-11·2026-08-31 두 차례 실측). 이걸 판정에 쓰면 "CI가 안 돌았다"는 오판을 낳는다. **대신 쓸 신호**: `GET /repos/{repo}/commits/{sha}/check-runs` · `GET /actions/runs?head_sha=<sha>` · MCP `pull_request_read method=get_check_runs`. 열린 PR 전수 점검은 `python3 scripts/ops/pr_delivery_audit.py <owner/repo>`(체크런 0건 ↔ green 미머지를 처방과 함께 구분·exit 1=주의 필요).
+- ❌ **"미머지 PR"을 한 덩어리로 보기 (HARN-30)** — **트리거 미발화**(체크런 0건 → *깨워야* 한다)와 **조건 충족 미머지**(→ *사람 결정* 대기)는 처방이 정반대다. 전자는 **무증상**이라 아무도 보지 않으면 조용히 방치된다(실측: `pr_delivery_audit` 첫 실행에서 열린 PR 13건 중 미발화 5건·조건충족 미머지 7건). 깨우는 방법은 **`origin/main` 재병합 push**이며, 빈 커밋·PR 재개폐는 이 저장소가 금지한 경로다.
+- ❌ **머지 전에 *전체* CI를 기다리기 (HARN-32)** — 머지를 막는 것은 전체 CI가 아니라 브랜치 보호가 지정한 **필수 체크 6종**뿐이다. 이 저장소의 최장 잡 `backend — lint·type·test`(~30분)는 **필수 목록에 없다**(2026-08-31 API 실측 — `GET /repos/{repo}/rules/branches/main`). 실측 중앙값: 필수 완주 **6.5분** vs 전체 완주 **28.6분**. main은 **40.7분**마다 전진하고 규칙이 `strict_required_status_checks_policy: true`(머지 시점 up-to-date 요구)이므로 **대기 시간이 곧 패배 확률**이다 — 필수만 대기 ≈16%, 전체 대기 ≈70%. 판정은 `python3 scripts/ops/pr_merge_readiness.py <owner/repo> <pr>`(exit 0=지금 머지), 재측정은 `scripts/analysis/measure_merge_gate_latency.py`. (사고 경위: 2026-08-31 PR #916이 전체 CI를 6회 기다려 머지 시도 3회가 전부 base 전진으로 실패했다. 그 지연 창에서 차단 2건이 무력화됐다 — HARN-48 참조)
+- ❌ **차단·게이트 같은 보호 조치를 "대장에 썼으니 발효했다"고 보기 (HARN-48)** — 태스크 YAML은 **main에 머지돼야** 병렬 세션에 보인다. 이 저장소의 머지 지연은 CI(~30분)와 base 전진 경합(HARN-32)으로 시간 단위이며, 그 창 전체가 보호 공백이다. **대장 조치의 실효 시점은 조치 시점이 아니라 머지 시점**이다. 머지 없이 즉시 전파되는 채널은 `harness-claims` 브랜치뿐이므로 차단은 그 채널에 게시한다(`block`이 자동 수행). 게시가 실패하면 CLI가 "이 차단은 로컬에만 있다"를 경고한다 — 그 경고를 봤으면 보호가 없는 것이다. (사고 경위: 2026-08-31 `CUR-11` — block 00:28:07 → 13분 뒤 타 세션 claim 00:41:24 → 그 세션이 구현·머지 완료(#920). 차단은 대장에 실재했고 `next`에서도 사라졌으나 아무것도 막지 못했다)
+- ❌ **태스크 정정을 문서에만 착지시키고 acceptance에 반영하지 않기 (HARN-24)** — "문서가 소유자"라는 우회는 착수 세션이 그 문서를 읽을 때만 성립한다. 태스크 YAML은 *반드시* 읽히지만 참조 문서는 선택이다. 정정은 `amend`로 acceptance에 도달시킨다. (사고 경위: ADMIN-02의 범위 축소 정정이 `operations_platform_gap_review.md`에만 있고 acceptance에 없어, 그 정정을 조상으로 가진 세션이 stale acceptance ②를 그대로 집행해 `subscription_*` 3컬럼까지 드롭 — 커밋 b3a58b02)
 - ❌ 증적(artifact) 없는 done
 - ❌ **PR 참조 없는 done** — 산출물이 있으면 요청 없이 PR을 여는 것이 기본값이다(CLAUDE.md "완료·병합"). 증적에 `#12`·`.../pull/12`가 없으면 CLI가 exit 1로 거부하며, 예외는 `--no-pr {investigation|incomplete|ci-red|kiki-hold}`로만 통과한다(HARN-23). 스쿼시 머지 커밋의 `(#758)` 관례는 그대로 통과 — 기존 증적 표기를 바꿀 필요 없다
 - ❌ evidence 없는 게이트 clear

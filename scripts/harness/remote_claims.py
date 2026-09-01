@@ -126,6 +126,19 @@ class RemoteClaim:
     ts: str = ""  # UTC ISO8601
     meta: dict | None = None
 
+    @property
+    def kind(self) -> str:
+        """`claim`(착수 점유) 또는 `block`(차단 홀드 — HARN-42).
+
+        `kind` 없는 레코드는 전부 claim이다(구버전 호환) — 차단 홀드는 이 필드를
+        명시적으로 넣은 것만 인정한다. 반대로 하면 메타 파손이 차단으로 읽힌다.
+        """
+        return str((self.meta or {}).get("kind") or "claim")
+
+    @property
+    def reason(self) -> str:
+        return str((self.meta or {}).get("reason") or "")
+
 
 @dataclass
 class ClaimResult:
@@ -543,6 +556,63 @@ def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
 
     try:
         result = _mutate_claims(root, task_id, f"claim {task_id} ({branch})", apply)
+        if result.status == "ok" and result.claim is None:
+            result.claim = mine
+        return result
+    except subprocess.TimeoutExpired:
+        return ClaimResult("offline", message="git 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        return ClaimResult("error", message=f"{type(exc).__name__}: {exc}")
+
+
+def hold(root: Path, task_id: str, branch: str, reason: str) -> ClaimResult:
+    """차단(block)을 원격 대장에 게시한다 — 병렬 세션의 `start`가 즉시 보게 (HARN-42).
+
+    **왜 필요한가** (2026-08-31 실측 사고): `cmd_block`은 태스크 YAML에 `blocked`를
+    쓰고 원격 claim을 *해제*했다. 그런데 YAML은 **main에 머지돼야** 병렬 세션에
+    보이고, 이 저장소의 머지 지연은 CI(~30분)+base 전진 경합(HARN-32)으로 시간
+    단위다. 즉 차단은 **보호를 거는 순간 오히려 원격 신호를 지웠고**, 그 창에서
+    다른 세션이 아무 마찰 없이 착수했다.
+
+    실사고: `CUR-11` block 00:28:07 → 13분 뒤 타 세션 claim 00:41:24 → 그 세션이
+    구현·머지 완료(PR #920). 차단은 대장에 실재했고 `next`에서도 사라졌지만
+    미머지 브랜치에 있었기에 아무것도 막지 못했다.
+
+    `harness-claims` 브랜치는 **머지 없이 즉시 push**되는 유일한 교차 세션 채널이다.
+    차단을 그 채널에 실으면 보호가 조치 시점에 발효한다.
+
+    점유 규칙은 claim과 동일하다 — 다른 브랜치가 이미 잡고 있으면 conflict를 낸다.
+    남의 착수를 차단으로 덮어쓰지 않는다(적대적 탈취 방지).
+    """
+    task_id, branch = _sanitize_ident(task_id), _sanitize_ident(branch)  # HARN-36
+    if not has_remote(root):
+        return ClaimResult("offline", message="origin 원격 없음 — 로컬 차단만 적용")
+    meta = {
+        "task": task_id,
+        "branch": branch,
+        "ts": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "harness": "2.0",
+        "kind": "block",
+        "reason": reason[:500],
+    }
+    mine = RemoteClaim(task_id, "", branch, str(meta["ts"]), meta)
+
+    def apply(
+        existing: RemoteClaim | None, current: list[RemoteClaim]
+    ) -> tuple[list[RemoteClaim], ClaimResult | None]:
+        if existing is not None and existing.branch != branch and existing.kind == "claim":
+            holder = existing.branch or "홀더 불명(메타 파손)"
+            return [], ClaimResult(
+                "conflict",
+                claim=existing,
+                message=f"'{holder}'가 착수 claim 중이라 차단 홀드를 게시하지 않았다 "
+                f"(ts={existing.ts or '?'}) — 그 세션과 조율이 먼저다",
+            )
+        others = [c for c in current if c.task_id != task_id]
+        return [*others, mine], None
+
+    try:
+        result = _mutate_claims(root, task_id, f"block hold {task_id} ({branch})", apply)
         if result.status == "ok" and result.claim is None:
             result.claim = mine
         return result
@@ -1387,14 +1457,28 @@ STALE_BRANCH_DEFAULT_DAYS = 3
 class StaleBranch:
     """N일 이상 트렁크에 흡수되지 않은 원격 브랜치 1건.
 
-    status(HARN-13 잔여 — 2026-08-05 3분류 확장):
-      · "unresolved" — 진짜 Kiki 결정 대기. 기본값.
+    status(HARN-13 잔여 — 2026-08-05 3분류 확장 · HARN-47 2026-08-31 4분류):
+      · "isolated"   — **PR로 노출된 적이 한 번도 없다**. 이 브랜치의 작업은 GitHub
+                        어디에서도 보이지 않으므로 이 브리핑 줄이 유일한 존재 증거다.
+                        진짜 고립이며 즉시 조치 대상. 기본값.
+      · "pr_filed"   — 이 tip으로 PR이 열린 이력이 있다(`refs/pull/<N>/head` 일치).
+                        작업은 GitHub에 보이고 처분은 그 PR에서 이뤄진다 — 브리핑이
+                        Kiki에게 "결정하라"고 다시 물을 일이 아니라 PR 번호를 건네줄
+                        일이다. evidence에 "PR #<N>".
       · "ported"     — 이 브랜치의 유용한 부분이 이미 별도 소형 PR로 trunk에
                         흡수된 흔적(커밋 메시지에 브랜치 세션 접미사 언급)이 있다.
                         원본은 정리 대상일 뿐 결정 대기가 아니다.
       · "active"     — 다른 세션이 지금 이 브랜치에서 태스크를 claim 중(원격
                         claim 맵에 존재). 방치가 아니라 진행 중인 정상 작업.
-    evidence: ported일 때 근거 커밋(짧은 sha + 제목), 그 외 "".
+
+    isolated/pr_filed 분리 근거(HARN-47 실측 2026-08-31): 브리핑이 18건을 전부
+    "Kiki 결정 필요"로 부르고 있었는데 실측하니 11건은 **이미 PR이 열려 있고 처분
+    라벨(eos-rework/postpone/close/merge)까지 붙어 있었다**. 즉 경고의 61%가 이미
+    결정된 것을 다시 결정하라고 요구하고 있었다 — CLAUDE.md가 금지하는 "상시 실패하는
+    fail-open 보호"의 경고 습관화 형태다. 진짜 고립은 7건뿐이었고 그 7건이 11건의
+    소음 속에 숨어 24일간 방치됐다.
+
+    evidence: ported면 근거 커밋(짧은 sha + 제목), pr_filed면 "PR #<N>", 그 외 "".
     """
 
     branch: str
@@ -1416,6 +1500,61 @@ _LEDGER_ONLY_TOPS = frozenset(
 
 # git log 레코드 구분자(RS) — 커밋 제목에 개행이 없다는 가정에 의존하지 않기 위함.
 _EVIDENCE_RECORD_SEP = "\x1e"
+
+
+# PR ref 조회 타임아웃 — ls-remote 1회. 스캔 전체가 이것 하나로 멈추면 안 된다.
+_PR_REF_TIMEOUT = 20
+
+
+def _fetch_pr_head_shas(root: Path) -> tuple[dict[str, int] | None, str]:
+    """원격의 `refs/pull/<N>/head`를 sha → PR 번호로 읽는다.
+
+    반환: `(매핑, 실패사유)`. 성공이면 `(dict, "")`, 실패면 `(None, "<예외타입>: <상세>")`.
+    실패 사유에 **예외 타입명을 반드시 담는다** — 무타입 경고는 타임아웃·git 미설치·
+    권한 오류를 운영자에게 같은 글자로 보이게 만든다(CLAUDE.md 침묵 실패 금지).
+
+    **왜 API가 아니라 git인가**: 이 스캔은 Kiki의 Windows 머신 SessionStart 훅과 CI
+    양쪽에서 돈다. GitHub 토큰·`gh` CLI·네트워크 API 권한을 전제하면 그 중 하나만
+    없어도 판정이 통째로 사라진다. `refs/pull/*/head`는 **인증 없는 평범한 git
+    ls-remote로 읽힌다**(2026-08-31 실측: 토큰 0으로 935건 열람). 판정을 외부 관측
+    인프라에 의존시키지 않는다는 CLAUDE.md 이중 회계 원칙과 같은 방향이다.
+
+    **실패는 0건이 아니다**: 조회가 실패하면 `None`을 돌려준다 — 호출부는 이것을
+    "PR 이력 없음"(= 고립)으로 읽으면 **안 된다**. 인프라가 죽었을 때 11건이 통째로
+    "고립"으로 승격되면 그건 측정 실패가 경보로 위장된 것이다.
+
+    ⚠ 정직한 한계 — **열림/닫힘은 구분하지 못한다.** `refs/pull/<N>/head`는 닫힌
+    PR에도 남는다. `refs/pull/<N>/merge`가 열린 PR에만 생긴다는 통설로 이를 가르려다
+    실측에서 폐기했다(2026-08-31: 열린 PR 14건 중 merge ref 보유는 8건뿐이고, 이미
+    머지된 #922도 head만 남아 있었다 — 성공/실패 양쪽에서 같은 값을 내는 검사는
+    검증이 아니라 위장이다. CLAUDE.md "변별력 없는 검증 스텝 금지"). 그래서 이 함수는
+    "PR로 노출된 적이 있는가"라는 **답할 수 있는 질문만** 답하고, 열림/닫힘은 브리핑이
+    건네는 PR 번호로 사람이 1클릭에 확인한다.
+    """
+    try:
+        result = _git(root, "ls-remote", "origin", "refs/pull/*/head", timeout=_PR_REF_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return None, f"TimeoutExpired: PR ref 조회 {_PR_REF_TIMEOUT}초 초과"
+    except Exception as exc:  # noqa: BLE001 - 환경 의존(FileNotFoundError·OSError 등)
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다(CLAUDE.md AI·신뢰). 타입명이 없으면
+        # 타임아웃·git 미설치·파일시스템 오류가 운영자에게 전부 같은 글자로 보인다.
+        return None, f"{type(exc).__name__}: {exc}"
+    if result.returncode != 0:
+        return None, f"git ls-remote 비0 종료({result.returncode}): {result.stderr.strip()}"
+    mapping: dict[str, int] = {}
+    for line in result.stdout.splitlines():
+        sha, _, ref = line.partition("\t")
+        sha, ref = sha.strip(), ref.strip()
+        if not sha or not ref.startswith("refs/pull/") or not ref.endswith("/head"):
+            continue
+        number = ref[len("refs/pull/") : -len("/head")]
+        if not number.isdigit():
+            continue
+        # 같은 sha로 PR이 여러 번 열렸으면 가장 최신(큰 번호)을 남긴다.
+        prev = mapping.get(sha)
+        if prev is None or int(number) > prev:
+            mapping[sha] = int(number)
+    return mapping, ""
 
 
 def _find_ported_evidence(root: Path, trunk_ref: str, branch: str) -> str:
@@ -1489,6 +1628,8 @@ class StaleBranchScanResult:
     """장기 미머지 브랜치 스캔 결과.
 
     status: ok | offline | error | shallow (판정 불가는 stale 무시 금지).
+    pr_lookup_ok: PR ref 조회 성공 여부(HARN-47) — status가 ok여도 이것이 False면
+    고립/PR대기 분리는 수행되지 않았다.
     `shallow`는 트렁크 히스토리가 잘려 판정 자체가 불가능한 상태다 — `is_shallow_repo`.
     """
 
@@ -1497,6 +1638,13 @@ class StaleBranchScanResult:
     scanned_refs: int = 0
     truncated: bool = False
     message: str = ""
+    # PR ref 조회가 성공했는가(HARN-47). False면 isolated/pr_filed 분리가 수행되지
+    # **않았다**는 뜻이며, 그 경우 브랜치는 보수적으로 unresolved로 남는다. 소비처는
+    # 이 값이 False일 때 "고립 0건"이라고 말해서는 안 된다 — 측정 실패와 통과는
+    # 같은 색이면 안 된다(CLAUDE.md 이중 회계).
+    pr_lookup_ok: bool = False
+    # PR 조회 실패 사유 — **예외 타입명을 포함**한다. 빈 문자열이면 실패가 없었다는 뜻.
+    pr_lookup_error: str = ""
     trunk_ref: str = ""
     trunk_branch: str = ""
     trunk_source: str = ""
@@ -1561,7 +1709,9 @@ def scan_stale_branches(
             root,
             "for-each-ref",
             "--sort=-committerdate",
-            "--format=%(refname)%09%(committerdate:iso-strict)",
+            # objectname을 함께 받는다 — PR ref 대조에 tip sha가 필요한데, 브랜치마다
+            # rev-parse를 돌면 git 호출이 N회 늘어난다(HARN-47). 이미 도는 열거에 얹는다.
+            "--format=%(refname)%09%(committerdate:iso-strict)%09%(objectname)",
             "refs/remotes/origin",
         )
         if listing.returncode != 0:
@@ -1570,15 +1720,21 @@ def scan_stale_branches(
                 message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
             )
 
-        entries: list[tuple[str, str]] = []
+        entries: list[tuple[str, str, str]] = []
         for line in listing.stdout.splitlines():
-            ref, _, date_str = line.partition("\t")
-            ref, date_str = ref.strip(), date_str.strip()
+            parts = line.split("\t")
+            if len(parts) < 3:
+                continue
+            ref, date_str, tip_sha = parts[0].strip(), parts[1].strip(), parts[2].strip()
             if not ref or ref.endswith("/HEAD"):
                 continue
-            entries.append((ref, date_str))
+            entries.append((ref, date_str, tip_sha))
         truncated = len(entries) > max_refs
         entries = entries[:max_refs]
+
+        # PR ref는 스캔당 **1회**만 읽는다 — 브랜치마다 ls-remote를 돌리면 원격
+        # 왕복이 N배가 되어 SessionStart 예산을 넘긴다.
+        pr_heads, pr_lookup_error = _fetch_pr_head_shas(root)
 
         trunk_ref, trunk_source = _resolve_trunk_ref(root)
         trunk_branch = (
@@ -1588,7 +1744,7 @@ def scan_stale_branches(
         )
 
         stale: list[StaleBranch] = []
-        for ref, date_str in entries:
+        for ref, date_str, tip_sha in entries:
             if ref == trunk_ref:
                 continue
             branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
@@ -1617,7 +1773,20 @@ def scan_stale_branches(
                 status, evidence = "active", ""
             else:
                 evidence = _find_ported_evidence(root, trunk_ref, branch)
-                status = "ported" if evidence else "unresolved"
+                if evidence:
+                    status = "ported"
+                elif pr_heads is None:
+                    # PR 조회 실패 — "PR 이력 없음"으로 단정하지 않는다. 고립으로
+                    # 승격하면 측정 실패가 경보로 위장된다. 기존 3분류 시절의
+                    # 보수적 라벨(unresolved)로 남기고, 브리핑이 조회 실패 사실을
+                    # 별도로 말한다.
+                    status = "unresolved"
+                else:
+                    pr_number = pr_heads.get(tip_sha) if tip_sha else None
+                    if pr_number is not None:
+                        status, evidence = "pr_filed", f"PR #{pr_number}"
+                    else:
+                        status = "isolated"
             stale.append(
                 StaleBranch(
                     branch=branch,
@@ -1635,6 +1804,8 @@ def scan_stale_branches(
             stale=stale,
             scanned_refs=len(entries),
             truncated=truncated,
+            pr_lookup_ok=pr_heads is not None,
+            pr_lookup_error=pr_lookup_error,
             trunk_ref=trunk_ref,
             trunk_branch=trunk_branch,
             trunk_source=trunk_source,

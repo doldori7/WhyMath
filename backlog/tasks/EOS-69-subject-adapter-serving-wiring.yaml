@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -16,12 +16,19 @@ acceptance:
   - "② 대체 후 재측정: python3 scripts/analysis/eos_core_adapter_boundary_scan.py 위반 수가 15에서 얼마로 내려갔는지 실측 기재. 0이 아니면 남은 건의 사유를 건별로"
   - "③ 회귀 없음: 대체는 동작 변경이 아니라 호출 경로 변경이다 — 각 지점의 기존 테스트가 그대로 통과해야 하고, 상태 재해석(특히 unverifiable을 fail로 접기)이 없음을 확인"
   - "④ B분류 3건 선처리 권고: l3.equivalent.josa(한국어 조사 판별·과목 무관)를 수학 패키지 밖으로 이동하면 baseline 없이 3건이 소멸한다 — 이 태스크에서 하거나 분리하거나 판정해 기록"
-artifacts: []
+  - "⑤ [1차 상환 2026-08-31] ④ B분류 완료 — josa를 whymath_backend/lang/(신설 중립 패키지)로 **물리 이동**했다. 스캔 위반 15→**12건**, import-linter ignored 20→**19**, 계약 3건 KEPT. 분류표만 고치지 않고 파일을 옮긴 이유: import-linter는 모듈 경로로 판정하므로 l3.equivalent.* 접두가 남는 한 계약은 그대로 걸린다. 회귀: tests/backend/lang+l3/equivalent 1,040 passed · l3/render 54 passed."
+  - "⑥ [정지 사유 — ① 착수 불가·설계 판단 필요] A분류 12건은 **Protocol 확장 결정 없이는 acceptance ③을 위반한다**. SubjectAdapter는 evaluate_answer·detect_misconception·validate_problem 3종뿐인데, 남은 호출부가 쓰는 것은 verify_solution(전이별 결과)·verify_step(VerifyStepResult/State)·symbolic_equivalence(IdentityVerdict)로 **단계 수준·기호 동치 축**이다. 이를 evaluate_answer 하나로 접으면 ③이 명시 금지한 '상태 재해석(unverifiable을 fail로 접기)'이 정확히 발생한다. Protocol 자신의 docstring이 메서드 추가를 '이 능력이 Physics·Chemistry·History에도 반드시 존재하는가?'로 게이팅하므로, **단계 검증·기호 동치를 계약에 넣을지는 설계 결정**이며 기계적 리팩터가 아니다. 그 결정 전에 착수하면 되돌리기 어려운 계약을 잘못 넓힌다."
+  - "⑦ [2차 상환·완료 2026-08-31] Kiki 설계 결정(계약에 넣는다 YES / SubjectAdapter 하나에 다 넣는다 NO)에 따라 **능력별 좁은 Protocol**로 분리 구현. 신설 계약 = schema/verification_capabilities.py(VerificationOutcome·EquivalenceOutcome + Protocol 8종). 수학 구현 4종(항등·최종답·평가재료답·수식봉인)은 l4/subject_adapter_math.py에 얇은 위임으로 추가하고, 기본 구현 선택은 합성 루트 whymath_backend/composition.py(INFRA·신설)로 모았다."
+  - "⑧ [② 실측 답] 경계 스캔 위반 **15 → 0건**. 축별: ①타입 6건(상태 enum을 중립 계약으로 올리고 어댑터는 별칭 — VerifyStepState is VerificationOutcome) ②배선 8건(좁은 Protocol 주입 + 합성 루트) ③분류 1건(api._ocr_state는 OcrComponents를 타입 주석으로만 쓰는 app.state 배관이라 INFRA 재배정 — **코드 변경 0·판정이 바뀐 것**). import-linter baseline 그룹② 9줄 → 0줄, 대신 7계층 계약에 합성 루트 경유 예외 2줄 신설(간선 단위 — 세탁 통로 방지)."
+  - "⑨ [③ 회귀·상태 재해석 없음] 변환 객체를 한 개도 만들지 않았다(별칭 공유) — 상태 재해석 지점 자체가 존재하지 않는다. 검증: mypy --strict 565파일 0오류(어댑터 _*_CONFORMANCE 대입 4건이 시그니처까지 검사) · ruff/black clean · lint-imports 3계약 KEPT · tests l3 2,625 + l3.render/pedagogy/l6/l4/schema/lang 2,927 passed. **전체 스위트는 로컬에서 완주하지 못했다**(환경 사유·1% 진행에서 중단) — 최종 판정은 CI."
+  - "⑩ [정직한 잔여] 세 호출부는 아직 '기본 구현 선택 편의'를 쓴다(주입 생략 시 합성 루트에 묻는다). 능력을 상류에서 받아 내리면 7계층 예외 2줄도 사라진다. 위반이 없어진 게 아니라 9 → 2로 **작아졌고**, 남은 크기를 계약 주석·경계 문서 §4.1에 적었다. 재확인 지점 G1(2026-09-27)."
+artifacts:
+  - "PR #916 · commit e0a73364 · 경계 스캔 위반 15→0 · mypy --strict 565파일 0오류 · lint-imports 3계약 KEPT · tests l3 2,625 + api 1,517 + l3.render/pedagogy/l6/l4/schema/lang 2,927 passed · 신설 wiring 테스트 11건(뮤테이션 2건으로 변별력 확인)"
 paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/l6/blueprint/assembly.py
   - src/backend/whymath_backend/l3/render/adapters.py
   - src/backend/whymath_backend/l3/pedagogy/slot_generator.py
 session: null
-notes: "출처: EOS-66 acceptance ③ 집행 별항(정본화≠집행). EOS-66이 계약을 만들었으나 경유하는 서빙 경로가 0개다 — 이 태스크가 그 0을 없앤다. 위반 목록 정본 = docs/architecture/eos_core_adapter_boundary.md §4. EOS-67(정적 강제)과의 순서: 이 태스크가 먼저 끝날수록 EOS-67 baseline에 넣을 항목이 줄어든다."
+notes: "출처: EOS-66 acceptance ③ 집행 별항(정본화≠집행). EOS-66이 계약을 만들었으나 경유하는 서빙 경로가 0개다 — 이 태스크가 그 0을 없앤다. 위반 목록 정본 = docs/architecture/eos_core_adapter_boundary.md §4. EOS-67(정적 강제)과의 순서: 이 태스크가 먼저 끝날수록 EOS-67 baseline에 넣을 항목이 줄어든다.\n\n[정정 2026-08-31] B분류 상환 완료(15→12) + A분류는 Protocol 확장 설계 결정 대기로 정지\n\n[차단 2026-08-31] A분류 12건은 SubjectAdapter Protocol에 단계 검증(verify_step)·기호 동치(symbolic_equivalence) 능력을 추가할지의 **설계 결정**이 선결이다. 현행 3종 메서드로 접으면 acceptance ③이 금지한 상태 붕괴(unverifiable→fail)가 발생한다. Protocol docstring이 '타 과목에도 반드시 존재하는가'로 추가를 게이팅하므로 Kiki 또는 EOS-66 소유 세션의 판정이 필요하다. B분류 3건은 이 세션에서 상환 완료(15→12).\n\n[정정 2026-08-31] Kiki 설계 결정(ISP) 반영 후 A분류 전건 상환 — 스캔 15→0. 결정 전 정지 사유(⑥)가 해소됐으므로 결과·측정치·잔여를 acceptance에 확정 기재한다."
 updated: 2026-08-31
