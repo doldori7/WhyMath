@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -15,11 +15,12 @@ acceptance:
   - "① G0 확정 앵커 세트를 성취기준 코드(EOS-52 동결 코드셋 승계)와 함께 1급 인스턴스로 등록 — YAML=소스·DB=산출물 단방향 관례"
   - "② 등록 무결성 게이트 — 앵커 코드가 성취기준 데이터에 실재함을 CI 검사(코드 소멸 시 적색)"
   - "③ 집행 별항: EOS-52 실사 스크립트·생산 배치가 하드코딩 상수 대신 이 등록을 읽도록 전환하는 후속 지점 명시"
-artifacts: []
+artifacts:
+  - "PR #950 (https://github.com/doldori7/WhyMath/pull/950) · 커밋 24c628ef"
 paths:
   - "data/corpus/**"
   - "scripts/analysis/**"
   - "tests/backend/**"
-session: claude/drive-o3pt47
+session: null
 notes: "출처: EOS-53 crosswalk 갭 #3. 현재 앵커 정의는 scripts/analysis/eos_anchor_asset_audit.py ANCHOR_DEFS 상수뿐. F3·I1 계측의 조인 축. requires_gates=G-eos-g0(앵커 수 결정 선행)."
 updated: 2026-09-01
