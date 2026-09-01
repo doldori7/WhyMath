@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "① 재현 고정: 2026-08-30 브리핑이 7n9n72를 '이미 포팅됨(#770 근거)·결정 불요'로 분류했으나 실측은 main 부재 15파일 + 고유줄 수백(오개념 distractor/prerequisite_link·coach 테스트 4종·wh1_evaluation 시간정규화·PED-15/16·alembic 2건) — #770은 그 고립을 '실측·문서화'한 커밋이지 포팅 커밋이 아니다. 08-11 감사의 40xspg 오분류(문서 커밋 근거로 2,153줄 삭제 직전)와 동일 유형 2회차"
   - "② 판정 강화: 포팅 판정 근거 커밋이 브랜치 고유 src/tests 파일 중 실제로 몇을 착지시켰는지(파일 교집합 비율)를 산출해, 문서·백로그 전용 커밋은 근거에서 배제하거나 '문서만 착지' 라벨로 강등한다"
   - "③ 변별력: 7n9n72(문서만 착지)가 '이미 포팅됨'에서 빠지고, 40xspg(#801 실코드 포팅)는 유지되는 것을 테스트로 동결"
-artifacts: []
+artifacts:
+  - "PR #962 (https://github.com/doldori7/WhyMath/pull/962) · 커밋 c2970b69"
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
-session: claude/backend-eos-64-anchor-nightly-o3pt47
+session: null
 notes: "[3·4회차 실측 2026-08-31 — docs/reviews/unmerged_branch_audit_2026-08-31.md §5.1] 브리핑이 vafylb를 e8717347(#736) 근거로, trjg5x를 e16b694f(#776) 근거로 각각 '이미 포팅됨·결정 불요'로 분류했으나 두 커밋 모두 문서·백로그 전용이다 — e16b694f는 data/corpus 변경 0건인데 코퍼스 11,446문의 포팅 근거로 쓰였고, 그 커밋 제목 자체가 '고립 4회차 실측'이다(고립을 기록한 커밋이 해소 근거로 재활용). trjg5x 건이 현재까지 최대 규모이며, 아래 notes가 예고한 '삭제로 유도' 위험의 실사례다. | 출처: docs/reviews/unmerged_branch_audit_2026-08-29.md 후속(#899 세션 실측). 반복 실수 2회차 — CLAUDE.md 실수 관리 규칙에 따른 의무 등재. 오분류 방치 시 브리핑의 '원본 정리만 필요' 문구가 미회수 고립 브랜치를 삭제로 유도한다"
 updated: 2026-09-01
