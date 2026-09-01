@@ -231,10 +231,24 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
         for item in detail:
             print(f"  · {item}")
         return 0
-    print(f"착수 가능 후보 (상위 {min(args.n, len(ready))}건):")
+    shown = min(args.n, len(ready))
+    # 분모를 함께 낸다 — "상위 N건"만 적으면 *얼마나* 잘렸는지 안 보이고, 그 출력을
+    # 부재 판정("후보에 없다 = 차단됐다")에 쓰는 순간 무효가 된다. 실제로 그렇게 오독해
+    # 정상·뮤테이션 양쪽에서 같은 값을 얻은 사고가 있었다(2026-09-01 · CLAUDE.md
+    # "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 확장 축). 잘렸을 때는 전건 조회
+    # 방법까지 같이 알려 준다 — 규칙을 아는 것과 그 순간 떠올리는 것은 다르다.
+    if shown < len(ready):
+        print(f"착수 가능 후보 (전체 {len(ready)}건 중 상위 {shown}건):")
+    else:
+        print(f"착수 가능 후보 (전체 {len(ready)}건):")
     for i, task in enumerate(ready[: args.n], start=1):
         print(f"{i}. {task.id} [{task.layer}/{task.subject}] {task.title}")
         print(f"   사유: {selector.selection_rationale(backlog, task)}")
+    if shown < len(ready):
+        print(
+            f"\n※ {len(ready) - shown}건이 표시되지 않았다 — 특정 태스크가 후보인지"
+            f" 판정하려면 전건 조회: backlog.py next --n {len(ready)} --json",
+        )
     return 0
 
 
@@ -1171,7 +1185,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
-    """등재된 태스크의 acceptance·requires_gates·track·depends_on 정정 (HARN-24+HARN-49+HARN-52).
+    """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
 
     **왜 필요한가 (두 뿌리)**:
     - *acceptance 축(HARN-24)*: 이 CLI에 등재된 태스크의 acceptance를 고치는 서브커맨드가
@@ -1208,10 +1222,14 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
 
     # 변경 요청이 하나도 없으면 거부 — 사유만 남기고 아무것도 안 바꾸는 호출은
     # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
-    if not (args.acceptance or args.gates or args.track or args.depends):
+    # priority는 `is not None` — 0은 falsy라 `or args.priority`로 쓰면 `--priority 0`이
+    # "인자 없음"으로 처리돼 범위 오류가 아니라 엉뚱한 메시지가 난다(테스트가 실측).
+    if not (
+        args.acceptance or args.gates or args.track or args.depends or args.priority is not None
+    ):
         return _fail(
             f"{task.id}: 변경 항목이 없다 — "
-            "--acceptance / --gate / --track / --depends 중 하나 이상을 지정하라"
+            "--acceptance / --gate / --track / --depends / --priority 중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
@@ -1239,6 +1257,24 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             )
         task.requires_gates.append(gid)
         changed.append(f"requires_gates +{gid}")
+
+    # ④ priority 재배정 — 등재 후 우선순위를 고칠 유일한 CLI 경로(HARN-52 후속).
+    #
+    # 왜 필요한가: `depends_on`과 같은 부류의 공백이었다. 등재 시점에 정한 priority가
+    # 나중에 틀린 것으로 드러나도(선행 태스크가 급해졌다·차단 해소 지점이 됐다) 고칠
+    # 경로가 없어 대장 손편집 외에 방법이 없었다(CLAUDE.md 금기). track(HARN-49)·
+    # acceptance/gate(HARN-24)·depends(HARN-52)에 이은 마지막 필드다.
+    #
+    # 이전 값을 notes에 남긴다(HARN-49 관례) — 흔적 없이 덮어쓰면 왜 올렸는지 사라진다.
+    if args.priority is not None:
+        if not 1 <= args.priority <= 5:
+            return _fail(f"{task.id}: priority는 1(최고)~5 범위 — 받은 값 {args.priority}")
+        if args.priority == task.priority:
+            return _fail(f"{task.id}: priority가 이미 {args.priority} — 바꿀 것이 없다")
+        priority_before = task.priority
+        changed.append(f"priority {priority_before} → {args.priority}")
+        note_lines.append(f"priority {priority_before} → {args.priority}: {args.reason}")
+        task.priority = args.priority
 
     # ③ depends_on 부착 — 등재 후 의존을 붙일 유일한 CLI 경로(HARN-52).
     #
@@ -2196,6 +2232,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="depends_on에 선행 태스크 부착 (add 시점 외 유일 경로 — HARN-52). "
         "full id로 지정. 자기 의존·순환·미존재 대상은 거부",
+    )
+    p.add_argument(
+        "--priority",
+        type=int,
+        help="priority 재배정 1(최고)~5 (add 시점 외 유일 경로 — HARN-52 후속)",
     )
     p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
     p.set_defaults(func=cmd_amend)
