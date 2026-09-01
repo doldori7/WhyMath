@@ -135,7 +135,9 @@ class TestCurrentRealityFrozen:
                     with_choices += has_c
                     with_dmap += has_d
                     both += has_c and has_d
-        assert total == 14084  # 2,638 + PB-13 회수 11,446 (r2의 2,647 대비 -9 = QUAL-02(#777) 은퇴 9건)
+        assert (
+            total == 14084
+        )  # 2,638 + PB-13 회수 11,446 (r2의 2,647 대비 -9 = QUAL-02(#777) 은퇴 9건)
         assert with_choices == 1612  # r2의 1,616 대비 -4 = 은퇴 9건 중 객관식 4건
         assert with_dmap == 1612
         assert both == 1612  # choices↔distractor_map 동일 집합(불일치 0건)
