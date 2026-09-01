@@ -85,6 +85,24 @@ PRESCRIPTION = {
 UNMEASURED = -1
 
 
+def _auth_args() -> list[str]:
+    """토큰이 있으면 `["-H", "Authorization: Bearer <token>"]`, 없으면 `[]`.
+
+    **왜 필수인가** (2026-09-01 main red 2회차 실측): GitHub API의 **미인증** 한도는
+    IP당 60req/h인데 러너는 IP를 공유하므로 실질 상시 소진이다
+    (`API rate limit exceeded for 52.157.2.240`). 토큰이 없으면 이 도구는
+    PR-03·FLOW-01을 영구 미측정으로 내며, 그것은 "상시 실패하는 fail-open 보호"가
+    되는 경로다. 토큰이 없어도 조회는 시도하고, 실패는 미측정으로 **정직하게**
+    보고된다(빈 Bearer를 보내지는 않는다).
+
+    같은 형태를 `pr_delivery_audit.py`·`pr_merge_readiness.py`·
+    `measure_merge_gate_latency.py`도 쓴다 — `tests/infra/test_github_api_auth.py`가
+    네 파일 전부에서 이 헬퍼가 **실제 curl 인자에 실리는지** 동결한다.
+    """
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    return ["-H", f"Authorization: Bearer {token}"] if token else []
+
+
 def _ca_args() -> list[str]:
     """프록시 CA를 쓸 수 있으면 `["--cacert", <경로>]`, 아니면 `[]`.
 
@@ -354,15 +372,17 @@ def _open_pr_numbers(root: Path) -> tuple[set[int] | None, str]:
 
     numbers: set[int] = set()
     for page in range(1, 6):  # 상한 500건 — 무한 페이징 금지
-        cmd = ["curl", "-sS", "--max-time", "30", *_ca_args()]
-        # 토큰이 있으면 쓴다. CI 러너의 미인증 API는 IP 공유 60req/h라 사실상 항상
-        # rate limit에 걸린다 — 그러면 이 도구는 PR-03·FLOW-01을 영구 미측정으로
-        # 낸다("상시 실패하는 fail-open 보호"가 되는 경로다). 토큰이 없으면 조회는
-        # 여전히 시도하고, 실패는 미측정으로 **정직하게** 보고된다.
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if token:
-            cmd += ["-H", f"Authorization: Bearer {token}"]
-        cmd += ["-H", "Accept: application/vnd.github+json", f"{url}&page={page}"]
+        cmd = [
+            "curl",
+            "-sS",
+            "--max-time",
+            "30",
+            *_ca_args(),
+            *_auth_args(),
+            "-H",
+            "Accept: application/vnd.github+json",
+            f"{url}&page={page}",
+        ]
         try:
             proc = subprocess.run(
                 cmd,
