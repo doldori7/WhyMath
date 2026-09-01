@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - KG-02-concept-content-review-promotion
@@ -22,5 +23,5 @@ paths:
   - "data/corpus/concept_content_university_v1/**"
   - "src/backend/whymath_backend/schema/**"
 session: null
-notes: "2026-08-13 감사 발견. 대학 콘텐츠 수학 정확성은 샘플 검산 통과(선형 ODE·제2동형정리·오일러 φ·블랙-숄즈 전부 정확) — 문제는 표현의 기계성뿐. KG-02(blocked) 해소 전 대량 재서술은 검수 없는 승격 위험이 있어 depends 처리."
-updated: 2026-08-13
+notes: "2026-08-13 감사 발견. 대학 콘텐츠 수학 정확성은 샘플 검산 통과(선형 ODE·제2동형정리·오일러 φ·블랙-숄즈 전부 정확) — 문제는 표현의 기계성뿐. KG-02(blocked) 해소 전 대량 재서술은 검수 없는 승격 위험이 있어 depends 처리.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

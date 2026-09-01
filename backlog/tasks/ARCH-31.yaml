@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/db/models/problem.py
   - "src/backend/whymath_backend/alembic/versions/*"
 session: null
-notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Content ID ≠ Content Version ID 분리를 MVP 범위 내에서 구현."
-updated: 2026-08-17
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Content ID ≠ Content Version ID 분리를 MVP 범위 내에서 구현.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/F5 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

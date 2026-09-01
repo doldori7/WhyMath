@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - CUR-12-curriculum-alignment-unified-view
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l1/standards/alignment_query.py
   - tests/backend/api/test_gating.py
 session: null
-notes: "CUR-12 구현 중 실측 발견. CUR-12는 concept 키 소비처 4곳(coach·target_progress·alignments·dsl)을 통합했으나 gating은 problem 키 진입점이라 시그니처가 달라 분리했다(억지 통합은 함수 표면을 흐린다). 남겨 두면 원자 축 조인의 마지막 복제본으로 남아 통합의 의미가 반감되므로 태스크로 추적한다 — 만료 없는 유예 금지."
-updated: 2026-08-31
+notes: "CUR-12 구현 중 실측 발견. CUR-12는 concept 키 소비처 4곳(coach·target_progress·alignments·dsl)을 통합했으나 gating은 problem 키 진입점이라 시그니처가 달라 분리했다(억지 통합은 함수 표면을 흐린다). 남겨 두면 원자 축 조인의 마지막 복제본으로 남아 통합의 의미가 반감되므로 태스크로 추적한다 — 만료 없는 유예 금지.\n\n[정정 2026-09-01] eos_priority null → P2: CUR-12 잔여 축 — 12월 검증 불요. EOS-80 일괄 백필"
+updated: 2026-09-01

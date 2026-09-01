@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P0
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - "tests/backend/**"
   - ".github/workflows/ci.yml"
 session: null
-notes: "출처: EOS-53 crosswalk 갭 #12(H2). G3 차단 조건('메타 누락 0')·CU 메타 완결성 판정 도구. 주간 지표 #4의 산출원."
-updated: 2026-08-30
+notes: "출처: EOS-53 crosswalk 갭 #12(H2). G3 차단 조건('메타 누락 0')·CU 메타 완결성 판정 도구. 주간 지표 #4의 산출원.\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/H2★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01

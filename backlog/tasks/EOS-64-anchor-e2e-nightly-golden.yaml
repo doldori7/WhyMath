@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P0
 owner: claude
 depends_on:
   - EOS-58-anchor-e2e-generation-proof
@@ -22,5 +23,5 @@ paths:
   - ".github/workflows/**"
   - "tests/backend/**"
 session: null
-notes: "출처: EOS-58 acceptance ③ 집행 별항(2026-08-30). 1회 관통 실증(docs/reviews/eos_anchor_e2e_a4_2026-08-30.md)의 상시화. 라이브는 Phaiakes9 Ollama 필요 — nightly 실행 주체(CI 러너 vs Kiki 머신 스케줄) 결정 포함. 번호: EOS-60~63 원격 선점으로 CLI 제안 64 사용(HARN-10)."
-updated: 2026-08-30
+notes: "출처: EOS-58 acceptance ③ 집행 별항(2026-08-30). 1회 관통 실증(docs/reviews/eos_anchor_e2e_a4_2026-08-30.md)의 상시화. 라이브는 Phaiakes9 Ollama 필요 — nightly 실행 주체(CI 러너 vs Kiki 머신 스케줄) 결정 포함. 번호: EOS-60~63 원격 선점으로 CLI 제안 64 사용(HARN-10).\n\n[정정 2026-09-01] eos_priority null → P0: G1 차단 조건(앵커 E2E)의 상시 계측 승격. EOS-80 일괄 백필"
+updated: 2026-09-01

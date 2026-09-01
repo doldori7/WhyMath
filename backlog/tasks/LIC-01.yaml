@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: in_progress
 priority: 1
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -18,5 +19,5 @@ paths:
   - "tests/backend/**"
   - "schemas/v1.1/**"
 session: claude/lic-01-rights-provenance-mvp
-notes: "EOS 42번 모듈에 해당. 제공된 83개 항목 저작권·출처 관리 검토 문서의 MVP 10가지(§76)를 우선 구현. WhyMath 확정 원칙과 정합: L1~L4 독립 수학 코어, 표현≠의미, LLM 안전, 공공누리 AI유형, EBS/평가원/검정교과서 금지."
-updated: 2026-08-23
+notes: "EOS 42번 모듈에 해당. 제공된 83개 항목 저작권·출처 관리 검토 문서의 MVP 10가지(§76)를 우선 구현. WhyMath 확정 원칙과 정합: L1~L4 독립 수학 코어, 표현≠의미, LLM 안전, 공공누리 AI유형, EBS/평가원/검정교과서 금지.\n\n[정정 2026-09-01] eos_priority null → P1: 저작권 레일 불변 계약 — Rights & Provenance MVP. EOS-80 일괄 백필"
+updated: 2026-09-01

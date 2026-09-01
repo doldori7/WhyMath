@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/api/coach.py
 session: null
-notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — S3-16이 3종의 생산자만 소생시키고(관측 신호로 적재) 소비자는 범위 밖으로 남겼다(S3-16 acceptance ②는 힌트요청/힌트제공만 지표 ⑫로 소비). 반복 실수(생산 좌석 완비 + 소비 미배선) 패턴의 축소판 인스턴스 — 즉시 해소보다 추적이 우선이라 유예(pending-task) 대상으로 등재. [2026-08-10 R3 범위 정정] 막힘은 이 태스크 등재(08-07)와 같은 시기 착륙한 COLLAB-03(#752)이 l2/learning_metrics_rollup.py:124-126,563에서 frozenset+.in_() 멤버십 필터로 이미 소비(소크라테스 상호작용 집계) — OPS-22 탐지기가 ast.Compare만 봐서(declared_unwired_audit.py:358-376) 대장에 producer-only로 남아 있었을 뿐이다. 본 태스크는 답입력·시각화조작 2종만 배선한다(중복 배선 방지·S3-25 범위 축소 선례). 탐지기 보강·막힘 유예 정리는 OPS-25 소관. 근거: visualization_module_gap_review.md §8.2."
-updated: 2026-08-10
+notes: "OPS-22(선언≠배선 일반 탐지기) 구현 중 실측 발견 — S3-16이 3종의 생산자만 소생시키고(관측 신호로 적재) 소비자는 범위 밖으로 남겼다(S3-16 acceptance ②는 힌트요청/힌트제공만 지표 ⑫로 소비). 반복 실수(생산 좌석 완비 + 소비 미배선) 패턴의 축소판 인스턴스 — 즉시 해소보다 추적이 우선이라 유예(pending-task) 대상으로 등재. [2026-08-10 R3 범위 정정] 막힘은 이 태스크 등재(08-07)와 같은 시기 착륙한 COLLAB-03(#752)이 l2/learning_metrics_rollup.py:124-126,563에서 frozenset+.in_() 멤버십 필터로 이미 소비(소크라테스 상호작용 집계) — OPS-22 탐지기가 ast.Compare만 봐서(declared_unwired_audit.py:358-376) 대장에 producer-only로 남아 있었을 뿐이다. 본 태스크는 답입력·시각화조작 2종만 배선한다(중복 배선 방지·S3-25 범위 축소 선례). 탐지기 보강·막힘 유예 정리는 OPS-25 소관. 근거: visualization_module_gap_review.md §8.2.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

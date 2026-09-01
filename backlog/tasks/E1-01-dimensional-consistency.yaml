@@ -7,6 +7,7 @@ subject: physics
 layer: backend
 status: todo
 priority: 1
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -17,5 +18,5 @@ paths:
   - "src/backend/**"
   - "tests/backend/**"
 session: null
-notes: "subject_expansion_readiness.md §8 보류 대장 항목"
-updated: 2026-07-08
+notes: "subject_expansion_readiness.md §8 보류 대장 항목\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

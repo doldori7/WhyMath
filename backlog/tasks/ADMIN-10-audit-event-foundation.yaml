@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 1
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -28,5 +29,5 @@ paths:
   - "tests/backend/db/test_audit_event_*.py"
   - "tests/backend/ops/test_role_grant_cli*.py"
 session: null
-notes: "90_감사(Audit) 로그 설계 검토 산출물. 세 결정사항: 1) 기존 privacy_audit/deletion_audit 유지 + audit_event 병존 2) before_version/after_version은 version_id 참조만, 원본은 version store 3) AI Trace는 별도 저장소 신규 금지, Langfuse trace_id 참조 + input/output hash. 2026-08-25: main 세션과 NLP-05의 중복 claim 해소를 위해 session을 null로 변경하고 status를 todo로 되돌림."
-updated: 2026-08-25
+notes: "90_감사(Audit) 로그 설계 검토 산출물. 세 결정사항: 1) 기존 privacy_audit/deletion_audit 유지 + audit_event 병존 2) before_version/after_version은 version_id 참조만, 원본은 version store 3) AI Trace는 별도 저장소 신규 금지, Langfuse trace_id 참조 + input/output hash. 2026-08-25: main 세션과 NLP-05의 중복 claim 해소를 위해 session을 null로 변경하고 status를 todo로 되돌림.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

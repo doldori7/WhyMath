@@ -7,6 +7,7 @@ subject: math
 layer: infra
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on:
   - PB-13-authoring-expansion-corpus-recovery
@@ -20,5 +21,5 @@ artifacts: []
 paths:
   - "backlog/tasks/**"
 session: null
-notes: "출처: G-authoring-expansion-merge-decision(2026-08-31 Kiki '회수' 결정) + PB-06 정정 기록. PB-13(코퍼스 이식)을 depends_on으로 선언했다 — ③의 본문 대조가 이식 결과에 의존하므로 권고가 아니라 의존이다(2026-08-31 PR #939 Codex P2 수용: notes의 권고만으로는 스케줄러가 PB-14를 먼저 노출·착수시켜 완료된 코퍼스 태스크를 허위 잔여로 재등재할 수 있다). 회수 완료 전 원 브랜치 삭제 금지."
-updated: 2026-08-31
+notes: "출처: G-authoring-expansion-merge-decision(2026-08-31 Kiki '회수' 결정) + PB-06 정정 기록. PB-13(코퍼스 이식)을 depends_on으로 선언했다 — ③의 본문 대조가 이식 결과에 의존하므로 권고가 아니라 의존이다(2026-08-31 PR #939 Codex P2 수용: notes의 권고만으로는 스케줄러가 PB-14를 먼저 노출·착수시켜 완료된 코퍼스 태스크를 허위 잔여로 재등재할 수 있다). 회수 완료 전 원 브랜치 삭제 금지.\n\n[정정 2026-09-01] eos_priority null → P1: 회수 축 — 저작 태스크 32건 재등재. EOS-80 일괄 백필"
+updated: 2026-09-01

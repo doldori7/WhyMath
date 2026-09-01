@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - docs/data/licensing_safety.md
   - "docs/data/**"
 session: null
-notes: "출처: 2026-08-31 LIC-02 20/20 달성 시 내용 검증에서 발견. PR #918 리뷰 P2('키워드 매칭≠라이선스 근거')가 요구한 내용 검증 스텝이 URL 정합성뿐 아니라 라이선스 범위 단서까지 드러낸 사례 — 스냅샷 확보의 실익이 '보관'을 넘어 '대조 가능'에 있음을 보여준다."
-updated: 2026-08-31
+notes: "출처: 2026-08-31 LIC-02 20/20 달성 시 내용 검증에서 발견. PR #918 리뷰 P2('키워드 매칭≠라이선스 근거')가 요구한 내용 검증 스텝이 URL 정합성뿐 아니라 라이선스 범위 단서까지 드러낸 사례 — 스냅샷 확보의 실익이 '보관'을 넘어 '대조 가능'에 있음을 보여준다.\n\n[정정 2026-09-01] eos_priority null → P1: 저작권 레일 — CC BY 적용 범위 단서. EOS-80 일괄 백필"
+updated: 2026-09-01

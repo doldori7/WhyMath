@@ -7,6 +7,7 @@ subject: math
 layer: infra
 status: todo
 priority: 1
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -23,5 +24,5 @@ paths:
   - tests/harness/test_dep_declaration.py
   - tests/infra/test_dep_declaration_wiring.py
 session: null
-notes: "출처: #911 codex 리뷰 P2 + 저장소 전수 실측(미완료 태스크에서 실착 위반 9태스크 10건). EOS-62가 29번째가 아니라 10번째 사례였다 — 1회성 실수가 아니라 selector가 notes를 읽지 않는다는 구조적 공백. CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지'가 acceptance축·서빙축에만 있고 백로그 대장 축에 집행 장치가 없었다."
+notes: "출처: #911 codex 리뷰 P2 + 저장소 전수 실측(미완료 태스크에서 실착 위반 9태스크 10건). EOS-62가 29번째가 아니라 10번째 사례였다 — 1회성 실수가 아니라 selector가 notes를 읽지 않는다는 구조적 공백. CLAUDE.md '정본화를 집행으로 착각한 완료 선언 금지'가 acceptance축·서빙축에만 있고 백로그 대장 축에 집행 장치가 없었다.\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — 의존 선언↔집행. EOS-80 일괄 백필"
 updated: 2026-09-01
