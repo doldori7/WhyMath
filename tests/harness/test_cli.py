@@ -246,6 +246,8 @@ class TestGatesAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-93-gated-task",
                     "--title",
@@ -294,6 +296,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-90-new-task",
                     "--title",
@@ -318,6 +322,8 @@ class TestAdd:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "S2-91-bad-task",
                     "--title",
@@ -347,6 +353,8 @@ class TestIdNumberCollision:
         return cli.main(
             [
                 "add",
+                "--eos-priority",
+                "P2",
                 "--id",
                 task_id,
                 "--title",
@@ -711,6 +719,8 @@ class TestReadSideFallback:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -893,6 +903,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",
@@ -1063,6 +1075,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1088,6 +1102,8 @@ class TestReadSideStaleHandling:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     other,
                     "--title",
@@ -1142,6 +1158,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-01-overlap-a",
                     "--title",
@@ -1160,6 +1178,8 @@ class TestStartOverlapPreflight:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-02-overlap-b",
                     "--title",
@@ -1225,6 +1245,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1276,6 +1298,8 @@ class TestTodoOverlapDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-16-todo-b",
                     "--title",
@@ -1354,6 +1378,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-03-scoped-task",
                     "--title",
@@ -1386,6 +1412,8 @@ class TestCheckEditPolicy:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T9-04-other-task",
                     "--title",
@@ -1469,6 +1497,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-05-cross-a",
                     "--title",
@@ -1487,6 +1517,8 @@ class TestCrossSessionOverlap:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     "T8-06-cross-b",
                     "--title",
@@ -1558,6 +1590,8 @@ class TestHumanOwnerLifecycle:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     task_id,
                     "--title",
@@ -1654,6 +1688,8 @@ class TestUnmergedDoneDetection:
             cli.main(
                 [
                     "add",
+                    "--eos-priority",
+                    "P2",
                     "--id",
                     self.TASK_ID,
                     "--title",

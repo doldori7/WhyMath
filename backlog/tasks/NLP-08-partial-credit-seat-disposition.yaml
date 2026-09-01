@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -22,5 +23,5 @@ paths:
   - src/backend/whymath_backend/l6/blueprint/assembly.py
   - src/backend/whymath_backend/l6/blueprint/__init__.py
 session: null
-notes: "docs/architecture/nlp_module_gap_review_r2.md §8.5(Δ5). v1 §1 기능 68 부분점수 계산은 'ScoringType enum·문항 메타 라벨만 실재, 점수 계산 로직 0'을 근거로 §2-② 의도적 미채택 판정을 받았는데, 그 사이 l6/blueprint/assembly.py:526에 partial_credit이 착지했다(verify_solution.first_incorrect_index 재사용·fail-closed 5분기·내림 변환 — 설계 자체는 정직 회계 관례 충실). 문제는 두 층: ①판정과 코드가 어긋났다 ②미채택 선언 축의 좌석은 오독을 부른다 — v1 §4-③이 NLP_TASK_TYPES의 classify에 대해 정확히 이 이유로 기록을 남겼고 r2 §1-①-a는 그 기록이 반대 방향으로 틀렸음을 밝혔다(같은 함정 3번째 자리). ASM-02(등급 노출 정책·owner=kiki)와 같은 결정 축이므로 정합을 맞춘다."
-updated: 2026-08-11
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.5(Δ5). v1 §1 기능 68 부분점수 계산은 'ScoringType enum·문항 메타 라벨만 실재, 점수 계산 로직 0'을 근거로 §2-② 의도적 미채택 판정을 받았는데, 그 사이 l6/blueprint/assembly.py:526에 partial_credit이 착지했다(verify_solution.first_incorrect_index 재사용·fail-closed 5분기·내림 변환 — 설계 자체는 정직 회계 관례 충실). 문제는 두 층: ①판정과 코드가 어긋났다 ②미채택 선언 축의 좌석은 오독을 부른다 — v1 §4-③이 NLP_TASK_TYPES의 classify에 대해 정확히 이 이유로 기록을 남겼고 r2 §1-①-a는 그 기록이 반대 방향으로 틀렸음을 밝혔다(같은 함정 3번째 자리). ASM-02(등급 노출 정책·owner=kiki)와 같은 결정 축이므로 정합을 맞춘다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

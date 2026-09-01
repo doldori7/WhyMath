@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - REC-02-misconception-probe-supply
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l4/misconception/hypothesis_store.py
   - src/backend/whymath_backend/harness/wh1_primary.py
 session: null
-notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지)."
-updated: 2026-08-03
+notes: "04e_misconception_remediation_design.md §4. REC-02 인프라 재사용(중복 구현 방지).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

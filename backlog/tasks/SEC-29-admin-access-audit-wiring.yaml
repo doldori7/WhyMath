@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -24,5 +25,5 @@ paths:
   - "src/backend/alembic/versions/**"
   - tests/backend/privacy/test_audit.py
 session: null
-notes: "48_보안 §P0 Security Audit 갭. record_admin_access_audit은 관리자 콘솔 Phase B(ADMIN-06)를 전제로 한 dead code 상태다. 현재 contract는 actor_user_id/target_user_id/ip/settings뿐이므로 CONTENT_ADMIN 엔드포인트(concepts/problems)에는 직접 적용할 수 없다. 본 태스크는 먼저 삭제/배선/확장 3개 방향 중 하나를 결정하고 그에 맞춰 실행한다."
-updated: 2026-08-25
+notes: "48_보안 §P0 Security Audit 갭. record_admin_access_audit은 관리자 콘솔 Phase B(ADMIN-06)를 전제로 한 dead code 상태다. 현재 contract는 actor_user_id/target_user_id/ip/settings뿐이므로 CONTENT_ADMIN 엔드포인트(concepts/problems)에는 직접 적용할 수 없다. 본 태스크는 먼저 삭제/배선/확장 3개 방향 중 하나를 결정하고 그에 맞춰 실행한다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -18,5 +19,5 @@ paths:
   - src/backend/whymath_backend/harness/
   - src/backend/whymath_backend/l4/misconception/hypothesis.py
 session: null
-notes: "04c_misconception_seven_stage_separation.md §6-4(최대 미구현 갭). 04e_misconception_remediation_design.md §3. 새 분류축 도입은 04c 자신의 유예 판단을 존중해 하지 않음."
-updated: 2026-08-03
+notes: "04c_misconception_seven_stage_separation.md §6-4(최대 미구현 갭). 04e_misconception_remediation_design.md §3. 새 분류축 도입은 04c 자신의 유예 판단을 존중해 하지 않음.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

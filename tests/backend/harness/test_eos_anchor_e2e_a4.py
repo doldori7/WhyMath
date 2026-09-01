@@ -25,6 +25,16 @@ G1 차단 조건("부품은 전부 실재하는데 앵커 축으로 관통한 �
   ① 신규 수용(accepted_stored) ② 다근·선택 미명시 → 검수필요(needs_review)
   ③ 오답 → SymPy Tier1 fail(rejected_gate) ④ 시드 A4 문항과 같은 구조(rejected_duplicate)
   ⑤ 비JSON → 파싱 실패(generation_failed)
+
+2026-09-01 확장(`TestGoldenPromotionGateOnPipelineOutput`): 이 관통의 산출물을 그대로
+**골든 승격 게이트**(`harness/golden_promotion_gate`)에 먹여 "게이트가 실 파이프라인 산출물을
+통과시킬 수 있는가"에 기계가 답하게 한다 — 게이트 자기 테스트는 입력을 스스로 만들기 때문에
+그 질문에 답할 수 없었고, 그 공백으로 "구조적으로 0건 통과" 결함이 숨었다(codex P1).
+
+EOS-64 확장(회차 계측 — `TestNightlyRoundInstrumentation`): 이 관통은 nightly로 상시화됐고
+(`tests/infra/test_anchor_e2e_nightly_wiring.py`가 배선을 동결), 회차마다 **작동한 비율**
+(outcome 분포 + 방향별 Wilson 경계)과 **연속 무진전 알람**(회차 대장 기반 exit 2)을 낸다 —
+1회 실증을 상시 계측으로 승격한 축이라 같은 파일에 둔다.
 """
 
 from __future__ import annotations
@@ -35,11 +45,19 @@ from pathlib import Path
 
 import pytest
 
-from whymath_backend.harness import problem_corpus_accumulate
+from whymath_backend.harness import golden_promotion_gate, problem_corpus_accumulate
+from whymath_backend.harness import (
+    problem_corpus_review_status_backfill as review_status_backfill,
+)
+from whymath_backend.harness.anchor_round_ledger import (
+    OUTCOME_STATUSES,
+    load_round_ledger,
+)
 from whymath_backend.harness.needs_review_worklist import load_review_queue_jsonl
 from whymath_backend.harness.problem_corpus_accumulate import (
     default_generation_log_path,
     default_review_queue_path,
+    default_round_ledger_path,
     default_worklist_path,
     main,
 )
@@ -79,6 +97,26 @@ _R_ACCEPT = _response(
         ),
         "conditions": "x**2 - 40*x + 391 = 0",
         "answer_map": {"x": "23"},
+        "answer_selection": "largest",
+        "difficulty_overall": 2.5,
+        "unit_codes": ["QUAD-EQ"],
+        "answer_format": "자연수",
+        "achievement_standard_codes": [_A4_STANDARD],
+    }
+)
+
+# 두 번째 수용 대본(근 23·37) — 승격 게이트 관통(`TestGoldenPromotionGateOnPipelineOutput`)에
+# 수용 2건이 필요해서 둔다. 시드 코퍼스에 같은 구조가 없음은 그 테스트가 실측으로 재확인한다
+# (있으면 rejected_duplicate가 되어 수용 수가 줄고 단언이 빨개진다 — 조용히 넘어가지 않는다).
+_R_ACCEPT_2 = _response(
+    {
+        "question_text": "이차방정식 x^2 - 60x + 851 = 0 의 두 근 중 더 큰 근을 구하시오.",
+        "answer": "37",
+        "answer_explanation": (
+            "인수분해하면 (x-23)(x-37)=0 이므로 두 근은 23과 37이고, 더 큰 근은 37이다."
+        ),
+        "conditions": "x**2 - 60*x + 851 = 0",
+        "answer_map": {"x": "37"},
         "answer_selection": "largest",
         "difficulty_overall": 2.5,
         "unit_codes": ["QUAD-EQ"],
@@ -177,6 +215,7 @@ class ScriptedProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         out = self._responses[self._index]  # 소진 시 IndexError — 대본 밖 호출을 숨기지 않는다
         self._index += 1
@@ -560,8 +599,13 @@ class TestGenerationLogAnchorHonesty:
         HIT 이벤트(EOS-54)는 검수자 착석(started/finished/aborted·reviewer_id 필수) 계약이다.
         워크리스트 *생성*은 기계 산출이지 사람 착석이 아니므로, 이 관통이 타이머 JSONL을
         만들면 그것이 날조다 — 전건 수용 회차의 산출 디렉터리에 사이드카(코퍼스·genlog·
-        worklist) 외의 파일이 생기지 않음을 동결한다(검수 큐 review.jsonl은 비수용 발생
-        시에만 생긴다 — 이 회차는 비수용 0이라 부재가 정직).
+        worklist·회차 대장) 외의 파일이 생기지 않음을 동결한다(검수 큐 review.jsonl은 비수용
+        발생 시에만 생긴다 — 이 회차는 비수용 0이라 부재가 정직).
+
+        허용 사이드카 목록은 **의도적으로 화이트리스트**다 — 새 사이드카가 생기면 이 테스트가
+        빨개져 "무엇을 왜 더 쓰는가"를 한 번 설명하게 만든다. `acc.rounds.jsonl`은 EOS-64 ④의
+        회차 대장(기계 산출·검수자 착석 아님)으로 여기 편입했다: 연속 무진전 판정의 재료이며
+        `reviewer_id`·`verdict` 같은 사람 판정 필드를 담지 않는다(날조 축과 무관).
         """
         _patch_live_generator(monkeypatch, [_R_ACCEPT])
         out = tmp_path / "acc.jsonl"
@@ -571,4 +615,355 @@ class TestGenerationLogAnchorHonesty:
         assert code == 0
         capsys.readouterr()
         produced = sorted(p.name for p in tmp_path.iterdir())
-        assert produced == ["acc.genlog.jsonl", "acc.jsonl", "acc.worklist.md"]
+        assert produced == [
+            "acc.genlog.jsonl",
+            "acc.jsonl",
+            "acc.rounds.jsonl",
+            "acc.worklist.md",
+        ]
+        # 대장은 회차 요약만 담는다 — 검수자 착석 필드가 섞이면 그것이 날조다(축 분리 동결).
+        ledger_raw = (tmp_path / "acc.rounds.jsonl").read_text(encoding="utf-8")
+        assert "reviewer_id" not in ledger_raw
+        assert "verdict" not in ledger_raw
+
+
+class TestNightlyRoundInstrumentation:
+    """[EOS-64 ②④] 회차 계측 — 관통 1회 실증을 *상시 계측*으로 승격한 부분의 집행 지점.
+
+    EOS-58이 "한 번 관통했다"를 증명했다면 여기서 붙드는 것은 "회차마다 무엇이 관측되는가"다:
+      ② 리포트가 **작동한 비율**(outcome 분포 + 방향별 Wilson 경계)을 싣는가 — exit 코드는
+        "붙었나"만 말하고 *어느 단계가 일했는지*는 말하지 않는다.
+      ④ 연속 무진전이 **알람으로 승격**되는가 — 같은 exit 1이 매 회차 반복되는 상태를
+        "정상"으로 흘려보내면 그것이 fail-open 상시 실패다.
+    """
+
+    def test_report_carries_operating_rates_distribution(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """② 5시도 회차 리포트에 6종 어휘 전건 분포가 실리고, 경계 방향이 지표 성격과 맞는다."""
+        seed_records = load_problem_bank_records(a4_seed)
+        seed0 = _first_selectable_seed(seed_records)
+        _patch_live_generator(
+            monkeypatch,
+            [_R_ACCEPT, _R_NEEDS_REVIEW, _R_GATE_REJECT, _dup_of_seed(seed0), _R_NON_JSON],
+        )
+        out = tmp_path / "acc.jsonl"
+        assert main(["--seed", str(a4_seed), *_a4_args(out, n=5)]) == 0
+        report = json.loads(capsys.readouterr().out)
+
+        rates = report["operating_rates"]
+        assert rates["measured"] is True
+        assert rates["attempted"] == 5
+        # 어휘 전건이 실린다(관측 0인 `accepted`도 count 0으로 명시 — 키 없음과 0건은 다르다).
+        assert set(rates["statuses"]) == set(OUTCOME_STATUSES)
+        assert {s: v["count"] for s, v in rates["statuses"].items()} == {
+            "accepted_stored": 1,
+            "accepted": 0,
+            "needs_review": 1,
+            "rejected_gate": 1,
+            "rejected_duplicate": 1,
+            "generation_failed": 1,
+        }
+        # 방향 — 수용은 하한(과신 방지), 실패는 상한(관측 0을 확정 0으로 읽지 않음).
+        accepted = rates["statuses"]["accepted_stored"]
+        assert accepted["bound_direction"] == "lower" and accepted["bound"] < accepted["rate"]
+        failed = rates["statuses"]["generation_failed"]
+        assert failed["bound_direction"] == "upper" and failed["bound"] > failed["rate"]
+
+    def test_zero_attempt_report_is_unmeasured_not_zero_percent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """② 시도 0회 회차는 '전건 0%'가 아니라 **측정 불가**로 보고된다(미측정≠0)."""
+        _patch_live_generator(monkeypatch, [])
+        out = tmp_path / "acc.jsonl"
+        assert main(_a4_args(out, n=0)) == 1
+        rates = json.loads(capsys.readouterr().out)["operating_rates"]
+        assert rates["measured"] is False
+        assert rates["unmeasured_reason"] is not None
+        assert rates["statuses"]["accepted_stored"]["rate"] is None
+
+    def test_round_ledger_accumulates_one_row_per_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 회차 대장이 회차마다 1행씩 누적된다 — 이 대장이 없으면 알람은 영원히 측정 불가다."""
+        out = tmp_path / "acc.jsonl"
+        run_ids: list[str] = []
+        for script in (_R_NEEDS_REVIEW, _R_ACCEPT):
+            _patch_live_generator(monkeypatch, [script])
+            main(_a4_args(out))
+            run_ids.append(json.loads(capsys.readouterr().out)["run_id"])
+
+        records, errors = load_round_ledger(default_round_ledger_path(out))
+        assert errors == []
+        assert [r.run_id for r in records] == run_ids  # 리포트 run_id와 조인된다
+        assert [r.appended for r in records] == [0, 1]
+
+    def test_consecutive_no_progress_escalates_to_alarm_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 무진전 3회차 연속에서 exit 1 → **exit 2 알람**으로 승격된다(경계 변별력).
+
+        1·2회차가 exit 1로 남고 3회차에서만 2가 되는 것이 이 테스트의 핵심이다 — 임계와
+        무관하게 항상 알람이면 그건 판정이 아니라 소음이고, 영원히 1이면 보호가 없는 것이다.
+        """
+        out = tmp_path / "acc.jsonl"
+        codes: list[int] = []
+        for script in (_R_NEEDS_REVIEW, _R_NEEDS_REVIEW_2, _R_GATE_REJECT):
+            _patch_live_generator(monkeypatch, [script])
+            codes.append(main(_a4_args(out)))
+            captured = capsys.readouterr()
+        assert codes == [1, 1, 2]
+
+        # 알람은 stdout JSON 필드와 stderr 양쪽에 난다(한쪽만이면 습관화로 안 읽힌다).
+        report = json.loads(captured.out)
+        assert report["stagnation"]["alarm"] is True
+        assert report["stagnation"]["consecutive_zero"] == 3
+        assert report["stagnation"]["measured"] is True
+        assert report["stagnation"]["ledger_append_error"] is None
+        assert "연속 무진전 알람" in captured.err
+
+    def test_progress_round_resets_the_alarm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 진전 회차가 끼면 연속이 끊긴다 — 과거 무진전이 영구 알람으로 굳지 않는다."""
+        out = tmp_path / "acc.jsonl"
+        codes: list[int] = []
+        for script in (_R_NEEDS_REVIEW, _R_NEEDS_REVIEW_2, _R_ACCEPT, _R_GATE_REJECT):
+            _patch_live_generator(monkeypatch, [script])
+            codes.append(main(_a4_args(out)))
+            captured = capsys.readouterr()
+        assert codes == [1, 1, 0, 1]  # 3회차 진전 → 4회차 무진전이지만 연속은 1회
+        assert json.loads(captured.out)["stagnation"]["consecutive_zero"] == 1
+
+    def test_custom_window_changes_the_threshold(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 임계는 인자로 조정된다 — 창 1이면 첫 무진전 회차부터 알람(판정이 창에 실제 반응)."""
+        out = tmp_path / "acc.jsonl"
+        _patch_live_generator(monkeypatch, [_R_NEEDS_REVIEW])
+        assert main([*_a4_args(out), "--stagnation-window", "1"]) == 2
+        capsys.readouterr()
+
+    def test_non_positive_window_is_refused_by_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """④ 창 0은 알람을 상시 참으로 만든다 — argparse가 exit 2로 거부한다(변별력 보존)."""
+        out = tmp_path / "acc.jsonl"
+        _patch_live_generator(monkeypatch, [_R_ACCEPT])
+        with pytest.raises(SystemExit) as excinfo:
+            main([*_a4_args(out), "--stagnation-window", "0"])
+        assert excinfo.value.code == 2
+
+
+class TestGoldenPromotionGateOnPipelineOutput:
+    """[EOS-64 ③ · 2026-09-01 codex P1] 승격 게이트가 **실 파이프라인 산출물**을 통과시키는가.
+
+    아무도 이 질문을 하지 않고 있었다
+    -------------------------------
+    `test_golden_promotion_gate.py`는 게이트 입력을 **자기가 만든다**. 그래서 그 입력이 실제로
+    만들어질 수 있는 상태인지는 검증하지 않았고, 초판 픽스처가 검수 큐와 코퍼스에 같은 slug를
+    인위적으로 써 넣은 탓에 "게이트가 실 산출물을 한 건도 통과시키지 못한다"는 결함이 초록
+    아래 숨었다(큐=비수용·코퍼스=수용이라 두 집합은 **정의상 서로소**).
+
+    그래서 이 관통은 게이트 입력을 **실 CLI 3종의 산출물**로 만든다(가짜는 여전히 LLM
+    provider 하나뿐):
+      ① `problem_corpus_accumulate.main` — 코퍼스 JSONL + 검수 큐 JSONL(①단 재료)
+      ② `problem_corpus_review_status_backfill.main` — review_status 각인 + 감사로그(③단 재료)
+      ③ `golden_promotion_gate.main` — 판정
+
+    ②단(사람 검수 판정)만 이 테스트가 쓴다 — 그것이 정직하다. `ReviewTimerEvent`는 사람의
+    착석 기록이고 **어떤 CLI도 만들지 않는다**(`TestGenerationLogAnchorHonesty`가 파이프라인이
+    그것을 날조하지 않음을 동결한다). 게이트가 확인하는 것은 그 기록의 *실재*뿐이다.
+    """
+
+    def _pipeline_outputs(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> tuple[Path, list[str], set[str]]:
+        """축적 CLI 실 관통 1회 — (코퍼스 경로, 코퍼스 slug 목록, 검수 큐 slug 집합)."""
+        _patch_live_generator(monkeypatch, [_R_ACCEPT, _R_ACCEPT_2, _R_NEEDS_REVIEW])
+        out = tmp_path / "acc.jsonl"
+        assert main([*_a4_args(out, n=3), "--seed", str(a4_seed)]) == 0
+        capsys.readouterr()
+
+        corpus_slugs = [
+            json.loads(line)["slug"]
+            for line in out.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        queue_entries, queue_errors = load_review_queue_jsonl(default_review_queue_path(out))
+        assert queue_errors == []
+        queue_slugs = {entry.slug for entry in queue_entries if entry.slug is not None}
+        return out, corpus_slugs, queue_slugs
+
+    def _human_review_events(self, tmp_path: Path, slugs: Sequence[str]) -> Path:
+        """사람 검수 종결 이벤트 JSONL — 이 테스트가 쓰는 **유일한** 비-CLI 입력(②단)."""
+        path = tmp_path / "review_timer.jsonl"
+        path.write_text(
+            "".join(
+                json.dumps(
+                    {
+                        "review_session_id": f"00000000-0000-4000-8000-{i:012d}",
+                        "cu_slug": slug,
+                        "reviewer_id": "kiki",
+                        "event_type": "finished",
+                        "verdict": "approved",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+                for i, slug in enumerate(slugs)
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def _backfill(
+        self,
+        tmp_path: Path,
+        corpus: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> Path:
+        """백필 CLI 실 관통 — 코퍼스에 review_status를 각인하고 감사로그를 낸다(③단 재료).
+
+        `--corpus generated_v0`의 판정 근거(`docs/data/corpus_audit_240.jsonl`)는 레포 루트
+        상대경로 규약이라 cwd를 레포 루트로 옮긴다. 산출물(`--out`·`--audit-out`)은 전부
+        tmp_path이므로 레포에는 아무것도 쓰지 않는다.
+
+        **전제 자가검증**: 그 판정이 approved가 아니면 이 관통은 ③단에서 막히는데, 그것은
+        게이트 결함이 아니라 *전제*가 깨진 것이다. 두 실패가 같은 색으로 보이지 않게 여기서
+        먼저 잡고 사유를 말한다(간접 신호로 원인 오독 금지).
+        """
+        monkeypatch.chdir(_REPO_ROOT)  # 판정 근거 조회부터 레포 루트 상대경로 규약을 따른다
+        verdict = review_status_backfill.compute_corpus_verdict("generated_v0")
+        assert verdict.review_status.value == "approved", (
+            "이 관통의 전제(코퍼스 감사 판정 = approved)가 깨졌다 — 현재 "
+            f"{verdict.review_status.value}({verdict.reason}). 승격 게이트 결함이 아니라 "
+            "docs/data/corpus_audit_240.jsonl 판정이 바뀐 것이다."
+        )
+        audit = tmp_path / "backfill_audit.jsonl"
+        code = review_status_backfill.main(
+            [
+                "--in",
+                str(corpus),
+                "--corpus",
+                "generated_v0",
+                "--out",
+                str(corpus),
+                "--audit-out",
+                str(audit),
+            ]
+        )
+        assert code == 0
+        capsys.readouterr()  # 백필 리포트 JSON을 비운다 — 뒤 단언이 게이트 출력만 보게
+        return audit
+
+    def test_corpus_and_review_queue_slugs_are_disjoint(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """P1의 **원인**을 실측으로 못 박는다 — 코퍼스와 검수 큐는 겹치지 않는다.
+
+        이 단언이 참인 한, 승격 게이트가 "코퍼스에 있고 **동시에** 큐에도 있을 것"을 요구하면
+        통과 가능 집합은 공집합이다. 게이트 쪽 계약(큐 멤버십은 정보)이 이 사실 위에 선다.
+        """
+        _out, corpus_slugs, queue_slugs = self._pipeline_outputs(
+            tmp_path, a4_seed, monkeypatch, capsys
+        )
+        assert len(corpus_slugs) == 2  # 수용 2건
+        assert len(queue_slugs) == 1  # 비수용 1건(needs_review)
+        assert set(corpus_slugs).isdisjoint(queue_slugs)
+
+    def test_gate_passes_real_pipeline_output(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """실 산출물이 경로 3단을 통과한다 — 기계가 "통과 가능한가"에 답한다.
+
+        임계(`--max-defect-rate`)는 완화한다: 수용 2건짜리 회차의 Wilson 상한은 구조적으로
+        크고(작은 표본으로 결함 부재를 주장할 수 없다 — 그것이 ④단의 설계다), 여기서 재는
+        것은 ④단이 아니라 **①~③단이 실 산출물을 통과시키는가**다. 사람 판정을 끄는 인자는
+        존재하지 않으므로 이 완화로 ②단이 우회되지는 않는다.
+        """
+        out, corpus_slugs, _queue = self._pipeline_outputs(tmp_path, a4_seed, monkeypatch, capsys)
+        events = self._human_review_events(tmp_path, corpus_slugs)
+        audit = self._backfill(tmp_path, out, monkeypatch, capsys)
+        proposal = tmp_path / "proposal.txt"
+        proposal.write_text("\n".join(corpus_slugs) + "\n", encoding="utf-8")
+
+        report_path = tmp_path / "gate.json"
+        code = golden_promotion_gate.main(
+            [
+                "--proposal",
+                str(proposal),
+                "--review-queue",
+                str(default_review_queue_path(out)),
+                "--review-events",
+                str(events),
+                "--corpus",
+                str(out),
+                "--backfill-audit",
+                str(audit),
+                "--max-defect-rate",
+                "0.9",
+                "--json",
+                str(report_path),
+            ]
+        )
+        capsys.readouterr()
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        assert payload["off_path"] == 0, payload["verdicts"]  # 경로 밖 0건 — P1이 살아 있으면 2건
+        assert payload["input_damaged"] is False
+        assert payload["approved"] is True
+        assert code == 0
+
+    def test_default_threshold_blocks_only_on_wilson_not_on_path(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """기본 임계에서의 exit 1은 **④단 사유**여야 한다 — 경로 사유로 막히면 그것이 P1이다.
+
+        "exit 1"만 보면 두 실패가 같은 색이다: 표본이 작아 못 통과한 것과 게이트가 구조적으로
+        아무것도 통과시키지 못하는 것. 그래서 사유까지 단언한다(변별력 있는 검증).
+        """
+        out, corpus_slugs, _queue = self._pipeline_outputs(tmp_path, a4_seed, monkeypatch, capsys)
+        events = self._human_review_events(tmp_path, corpus_slugs)
+        audit = self._backfill(tmp_path, out, monkeypatch, capsys)
+        proposal = tmp_path / "proposal.txt"
+        proposal.write_text("\n".join(corpus_slugs) + "\n", encoding="utf-8")
+
+        code = golden_promotion_gate.main(
+            [
+                "--proposal",
+                str(proposal),
+                "--review-queue",
+                str(default_review_queue_path(out)),
+                "--review-events",
+                str(events),
+                "--corpus",
+                str(out),
+                "--backfill-audit",
+                str(audit),
+            ]
+        )
+        stdout = capsys.readouterr().out
+        assert code == 1
+        assert "결함율 Wilson 상한" in stdout  # ④단에서 막혔다
+        assert "경로 밖 제안" not in stdout  # ①~③단은 통과했다

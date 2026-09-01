@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P0
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - "src/backend/whymath_backend/api/**"
   - "tests/backend/**"
 session: null
-notes: "출처: 44_eos_version_management.md §16-6 — EOS-44 종결 시 MVP 범위(§12 'Publish with validation') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화"
-updated: 2026-08-30
+notes: "출처: 44_eos_version_management.md §16-6 — EOS-44 종결 시 MVP 범위(§12 'Publish with validation') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/D1★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01

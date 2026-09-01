@@ -7,6 +7,7 @@ subject: math
 layer: infra
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -17,5 +18,5 @@ acceptance:
 artifacts: []
 paths: []
 session: null
-notes: "출처: 2026-08-31 LIC-02 집행 중 발견. HARN-06(CLI 경로 부재 → 태스크 등재) 선례와 동형."
-updated: 2026-08-31
+notes: "출처: 2026-08-31 LIC-02 집행 중 발견. HARN-06(CLI 경로 부재 → 태스크 등재) 선례와 동형.\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — 게이트 대장 정정 경로. EOS-80 일괄 백필"
+updated: 2026-09-01

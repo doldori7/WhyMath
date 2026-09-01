@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-76-relevance-triage-priority-backfill
+title: "관여도 트리아지 등급 일괄 백필 — 비종결 190건 eos_priority 부여 (게이트 clear 선결)"
+track: math-completion
+stage: S3
+subject: cross
+layer: infra
+status: cancelled
+priority: 1
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates:
+  - G-eos-verification-relevance-triage
+acceptance:
+  - "① Kiki 결정 4건 수령 후 착수 — 판정표 R/N/? 확정 · R·N→P0~P3 매핑 규칙 · 신규 19건 판정 · ? 12건 개별 판정(런북 §2). 결정 없이 착수하면 빈 칸을 임의로 메우는 것이 된다"
+  - "② 비종결 190건 전건에 amend --eos-priority 적용 — 대장 손편집 금지. 각 건의 --reason에 판정 근거(판정표 행 또는 Kiki 결정)를 남겨 사후 재구성이 가능해야 한다"
+  - "③ 커버리지 기계 대조 — 판정표 181행 추출 시 분포가 R 66·N 103·? 12로 나오는지 먼저 확인한다(N은 평문이라 볼드 요구 정규식이 103건을 조용히 누락한다 — 런북 §1 실측 함정)"
+  - "④ 자가검증 EXIT=0 — 런북 §5 스크립트로 미분류 0건 확인. 이것이 게이트 clear의 유일한 선결 판정이며, 출력을 Kiki에게 그대로 전달한다"
+  - "⑤ P0 예산 초과 시 수치를 그대로 보고 — amend는 의도적으로 예산을 강제하지 않는다(막으면 등급을 낮춰 적어 예산을 맞추게 된다). 초과분 처리는 별도 결정"
+  - "⑥ 게이트 clear는 본 태스크 범위 밖 — Kiki 본인이 실행한다(에이전트의 사람 게이트 clear = 준수 감사 A3 심각도 높음). 본 태스크는 clear 가능 상태를 만드는 데서 끝난다"
+artifacts: []
+paths:
+  - "backlog/tasks/**"
+session: null
+notes: "런북: docs/ops/eos_relevance_triage_gate_runbook.md(§3 단계 2). 실측 2026-09-01 main 47804941: 미분류 비종결 190건(S3 81·S4 88·E축 15·S1 1·S5 5) = 판정표 커버 171 + 신규 등재 19. 입력 = docs/reviews/eos_verification_relevance_triage_2026-08-31.md(제안본·확정 아님). 순서 주의: 이 태스크가 끝나기 전에 게이트가 clear되면 HARN-55 그랜드파더 만료로 validate가 190건 위반을 내고 harness-integrity 잡이 red가 된다(시뮬 실측). gates에 un-clear verb가 없어 복구는 revert뿐이다. requires_gates로 이 게이트를 붙인 이유: 결정 없이 착수 후보로 뜨는 것을 막기 위함 — 게이트가 clear되면 오히려 이 태스크는 이미 끝나 있어야 한다(선후가 역전된 게이트이므로 착수 시 런북 §3 표를 먼저 읽을 것).\n\n[취소 2026-09-01] 순환 게이트 등재 오류 — requires_gates에 G-eos-verification-relevance-triage를 붙였으나 그 게이트의 clear 선결 조건이 바로 이 태스크다(런북 §3). start가 무조건 거부되어 착수 불가(실측 exit 1). amend에 게이트 *제거* 경로가 없어(추가만 가능) 정정 경로가 없으므로 cancel 후 EOS-77로 재등재한다. 지적: PR #961 codex P1."
+updated: 2026-09-01
