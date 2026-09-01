@@ -58,6 +58,7 @@ __all__ = [
     "ReplayOutcome",
     "ReplayVerdict",
     "classify_outputs",
+    "exit_code_for_outcomes",
     "fixed_local_decision",
     "main",
     "render_report",
@@ -351,6 +352,31 @@ async def _run(  # pragma: no cover — 라이브 Ollama 왕복
     return outcomes, [*skipped, *parse_errors]
 
 
+def exit_code_for_outcomes(outcomes: Sequence[ReplayOutcome]) -> int:
+    """측정 성사 여부 → CLI exit(**순수 함수** — main의 판정을 테스트 가능하게 분리).
+
+    `probe_one`은 provider 예외를 삼키지 않고 `UNMEASURED` + `error`(타입명 보존)로 *결과화*
+    한다 — 한 항목의 실패가 배치 전체를 죽이지 않게 하려는 설계다. 그 대가로 **Ollama가 아예
+    안 뜬 경우**(전건이 호출 오류로 미측정)에도 `_run`이 정상 반환해 exit 0이 나간다. 그러면
+    "측정을 마쳤고 재현 판정이 없었다"와 "측정 자체가 한 번도 성사되지 않았다"가 호출자에게
+    같은 글자가 된다 — 이 모듈이 3값 판정으로 막겠다고 적어 둔 위장이 exit 축에서 되살아난다.
+
+    판정 규칙: **측정에 성사한 항목이 하나도 없고**, 미측정의 원인이 *호출 오류*(`error` 있음)
+    라면 `_EXIT_INPUT_ERROR`. 두 조건을 함께 거는 이유:
+      - `REPRODUCED`/`NOT_REPRODUCED`가 1건이라도 있으면 프로브는 실제로 돌았다 — 나머지가
+        실패해도 그건 *부분 결과*이고 리포트가 건별로 말한다(exit 0).
+      - `error`가 없는 미측정(비교 대상 부족 등)은 호출 실패가 아니라 **측정 결과**다. 이것을
+        exit 2로 올리면 "재현 불가"와 "환경 오류"를 뭉개는 반대 방향의 위장이 된다.
+    항목이 0건인 경우(프로브 대상 없음)도 `_EXIT_INPUT_ERROR`가 아니다 — 입력에 재현 가능한
+    기록이 없다는 *사실*이며 리포트의 skipped 축이 사유를 말한다.
+    """
+    if not outcomes:
+        return _EXIT_OK
+    if any(o.verdict is not ReplayVerdict.UNMEASURED for o in outcomes):
+        return _EXIT_OK
+    return _EXIT_INPUT_ERROR if any(o.error for o in outcomes) else _EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI 엔트리 — **0=측정 완료(재현 여부 무관) / 2=측정 불가(입력·파일 오류)**."""
     parser = argparse.ArgumentParser(
@@ -398,7 +424,17 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         print(f"JSON 산출물: {args.json_path}")
-    return _EXIT_OK
+    # probe_one이 호출 오류를 UNMEASURED로 결과화하므로 _run은 예외를 올리지 않는다 — 전건이
+    # 호출 오류로 미측정인 상태(Ollama 부재 등)를 여기서 exit로 갈라야 "측정 완료"로 위장되지
+    # 않는다. 리포트는 이미 출력됐고 exit만 인증을 거부한다.
+    exit_code = exit_code_for_outcomes(outcomes)
+    if exit_code != _EXIT_OK:
+        print(
+            "측정 불가 — 프로브 전건이 호출 오류로 미측정이다(라이브 Ollama 도달 실패 등). "
+            "재현 판정을 내리지 못했으므로 '측정 완료'로 읽지 말 것.",
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover — 엔트리포인트

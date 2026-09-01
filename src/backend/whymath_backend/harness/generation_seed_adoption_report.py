@@ -62,6 +62,7 @@ __all__ = [
     "SeedAdoptionReport",
     "build_report",
     "dump_json",
+    "exit_code_for_parse_errors",
     "main",
     "path_of",
     "render_report",
@@ -324,6 +325,24 @@ def dump_json(report: SeedAdoptionReport) -> str:
 # ──────────────────────────────────────────────────────────────────────────
 # CLI (얇은 껍데기 — 파일 입출력만, 집계는 위 순수 코어)
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def exit_code_for_parse_errors(parse_errors: Sequence[str]) -> int:
+    """파싱 실패 유무 → CLI exit(**순수 함수** — main의 판정을 테스트 가능하게 분리).
+
+    파싱 실패가 **1건이라도** 있으면 `_EXIT_INPUT_ERROR`다. 근거는 분모다 — 읽지 못한 줄은
+    집계에서 통째로 빠지므로 그 순간 적재율은 *증명 가능하게 불완전한* 분모 위의 수치가 된다.
+    exit 0으로 끝내면 자동화는 "측정 완료 + 이 비율"로 받아들이고, 전 줄이 깨진 최악의 경우도
+    "0% 미달"과 같은 글자가 된다 — 이 모듈이 막겠다고 적어 둔 바로 그 위장이다(모듈 docstring
+    "측정 실패는 exit 2 + 예외 타입명으로 구분된다"·CLAUDE.md 「측정·게이트 도구가 판정치를
+    위장하지 않는다」). 리포트 본문은 그대로 출력한다 — 사람은 전부 보고, exit만 인증을 거부한다.
+
+    부분 실패(1000줄 중 3줄)도 같은 판정이다. "대체로 맞다"는 측정에는 없는 개념이며, 부분
+    실패를 통과시키면 조용히 잘린 분모 위의 그럴듯한 수치가 오히려 전멸보다 오래 살아남는다.
+    """
+    return _EXIT_INPUT_ERROR if parse_errors else _EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI 엔트리 — 적재율 리포트를 stdout에 출력. **0=성공(0%여도) / 2=입력·파싱 오류**."""
     parser = argparse.ArgumentParser(
@@ -359,7 +378,16 @@ def main(argv: list[str] | None = None) -> int:
         args.json_path.parent.mkdir(parents=True, exist_ok=True)
         args.json_path.write_text(dump_json(report), encoding="utf-8")
         print(f"JSON 산출물: {args.json_path}")
-    return _EXIT_OK
+    # 파싱 실패는 예외가 아니라 errors로 돌아온다(load_logs 계약) — 위 except에 걸리지 않으므로
+    # 여기서 명시적으로 exit를 갈라야 한다. 리포트는 이미 출력됐고 exit만 인증을 거부한다.
+    exit_code = exit_code_for_parse_errors(errors)
+    if exit_code != _EXIT_OK:
+        print(
+            f"측정 불완전 — 파싱 실패 {len(errors)}건이 분모에서 빠졌다(§4 참조). "
+            "적재율을 완료된 측정으로 쓰지 말 것.",
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover — 엔트리포인트

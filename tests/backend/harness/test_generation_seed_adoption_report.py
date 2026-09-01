@@ -21,6 +21,7 @@ from whymath_backend.harness.generation_seed_adoption_report import (
     PREGENERATE_PATH,
     UNKNOWN_PATH,
     build_report,
+    exit_code_for_parse_errors,
     main,
     path_of,
     render_report,
@@ -200,10 +201,49 @@ class TestCliExitCodes:
         """파싱 실패는 '적재 실패'가 아니라 '측정 실패'다 — 다른 축으로 보고한다."""
         path = tmp_path / "broken.jsonl"
         path.write_text("{잘못된 JSON}\n", encoding="utf-8")
-        assert main([str(path)]) == 0
         report = build_report([], parse_errors=["line 1: JSONDecodeError"])
         assert len(report.parse_errors) == 1
         assert "JSONDecodeError" in render_report(report)  # 타입명 보존(침묵 실패 금지)
+
+    def test_parse_errors_are_exit_2_not_a_completed_measurement(self, tmp_path: Path) -> None:
+        """파싱 실패는 exit 2다 — 읽지 못한 줄만큼 분모가 빠져 '완료된 측정'이 아니다.
+
+        [PR #959 Codex P2 수용] 초판은 이 경우 exit 0이었고 *테스트가 그 값을 계약으로
+        동결*하고 있었다. 전 줄이 깨져도 자동화에는 "측정 완료 + 0%"로 보이는데, 그건 이
+        모듈이 막겠다고 docstring에 적어 둔 위장 그 자체다(CLAUDE.md 「측정 실패가 '0건
+        통과/미달'로 위장되면 안 된다」). 기대값을 코드가 아니라 *선언된 계약*에 맞춘다.
+        """
+        path = tmp_path / "broken.jsonl"
+        path.write_text("{잘못된 JSON}\n", encoding="utf-8")
+        assert main([str(path)]) == 2
+
+    def test_partial_parse_failure_is_also_exit_2(self, tmp_path: Path) -> None:
+        """부분 실패도 exit 2 — 조용히 잘린 분모 위의 '그럴듯한' 수치가 전멸보다 오래 산다."""
+        decision = RoutingDecision(
+            cost_tier=CostTier.LOCAL,
+            local_family=ModelFamily.GENERAL,
+            local_model=LocalModelTier.MID,
+            mode="sync",
+            reason="테스트",
+            est_latency_ms=900,
+        )
+        log = generation_log_from_result(
+            PrewarmItemResult(cache_key="k", status="written", seed=777),
+            problem_id=None,
+            provenance_id=None,
+            model_name=model_name_for_decision(decision),
+            seed=777,
+        )
+        path = tmp_path / "mixed.jsonl"
+        append_generation_log_jsonl(path, log)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("{깨진 줄}\n")
+        assert main([str(path)]) == 2
+
+    def test_exit_code_helper_is_pure_and_discriminating(self) -> None:
+        """판정 함수 자체의 변별력 — 실패 유무로 값이 갈리지 않으면 검증이 아니라 위장이다."""
+        assert exit_code_for_parse_errors([]) == 0
+        assert exit_code_for_parse_errors(["line 1: JSONDecodeError"]) == 2
 
     def test_json_output_carries_none_for_unmeasurable(self, tmp_path: Path) -> None:
         payload = report_to_json(build_report([]))

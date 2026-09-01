@@ -25,8 +25,10 @@ from whymath_backend.harness.generation_seed_replay_probe import (
     DETERMINISM_CLAIM_UNMEASURED,
     ReplayInput,
     ReplayInputError,
+    ReplayOutcome,
     ReplayVerdict,
     classify_outputs,
+    exit_code_for_outcomes,
     probe_one,
     render_report,
     replay_input_from_log,
@@ -261,3 +263,43 @@ class TestReplayInputRestoration:
         assert "전문 없음" in reasons[1]
         rendered = render_report([], skipped=reasons)
         assert all(reason in rendered for reason in reasons)  # 사유를 렌더가 삼키지 않는다
+
+
+class TestCliExitDistinguishesTotalCallFailure:
+    """전건 호출 실패(Ollama 부재)를 '측정 완료'와 같은 exit로 내보내지 않는다.
+
+    [PR #959 Codex P2 수용] probe_one이 provider 예외를 UNMEASURED+error로 *결과화*하므로
+    _run은 예외를 올리지 않는다 — 그 설계의 대가로 전건 실패가 exit 0으로 나가고 있었다.
+    3값 판정으로 막은 위장이 exit 축에서 되살아난 형태다.
+    """
+
+    def _outcome(self, verdict: ReplayVerdict, error: str | None) -> ReplayOutcome:
+        return ReplayOutcome(
+            replay_input=None,  # type: ignore[arg-type]  # 판정은 verdict·error만 본다
+            digests=(),
+            verdict=verdict,
+            error=error,
+        )
+
+    def test_all_unmeasured_by_call_error_is_exit_2(self) -> None:
+        outcomes = [
+            self._outcome(ReplayVerdict.UNMEASURED, "provider.generate failed: ConnectionError: x"),
+            self._outcome(ReplayVerdict.UNMEASURED, "provider.generate failed: ConnectionError: y"),
+        ]
+        assert exit_code_for_outcomes(outcomes) == 2
+
+    def test_one_real_measurement_keeps_exit_0(self) -> None:
+        """부분 결과는 측정이다 — 나머지가 실패해도 리포트가 건별로 말한다."""
+        outcomes = [
+            self._outcome(ReplayVerdict.NOT_REPRODUCED, None),
+            self._outcome(ReplayVerdict.UNMEASURED, "provider.generate failed: ConnectionError: x"),
+        ]
+        assert exit_code_for_outcomes(outcomes) == 0
+
+    def test_unmeasured_without_call_error_stays_exit_0(self) -> None:
+        """호출 오류가 아닌 미측정은 *측정 결과*다 — exit 2로 올리면 반대 방향 위장이 된다."""
+        assert exit_code_for_outcomes([self._outcome(ReplayVerdict.UNMEASURED, None)]) == 0
+
+    def test_no_outcomes_is_not_an_error(self) -> None:
+        """프로브 대상 0건은 입력 사실이지 환경 오류가 아니다(skipped 축이 사유를 말한다)."""
+        assert exit_code_for_outcomes([]) == 0
