@@ -20,6 +20,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -146,10 +147,20 @@ class TestAsFoundIntegrity:
         assert all(i.as_found_basis == AsFoundBasis.PRE_REVIEW_SNAPSHOT for i in report.promoted)
         assert report.excluded_ambiguous_approved == 0
 
-    def test_edit_aware_since_alone_does_not_unlock_when_vocabulary_absent(self) -> None:
-        """ⓑ는 어휘 실측에 걸린다 — EOS-62 미착지 상태에서 시각만 주면 여전히 제외."""
-        if edit_aware_verdict_available():  # pragma: no cover - EOS-62 착지 후 경로
-            pytest.skip("EOS-62 착지 — 이 케이스는 어휘 부재 상태의 계약이다")
+    def test_edit_aware_since_alone_does_not_unlock_when_vocabulary_absent(
+        self, monkeypatch
+    ) -> None:
+        """ⓑ는 어휘 실측에 걸린다 — 어휘가 없으면 시각만 줘도 여전히 제외.
+
+        EOS-62 착지로 실 어휘는 3값이 됐다. 그래도 이 계약을 **지우거나 skip으로 두지 않는다**
+        — 프로브가 False를 낼 때(어휘 롤백·하류 배포 지연) fail-closed가 유지되는지가 이
+        규약의 안전 속성이고, skip은 그것을 검사하지 않으면서 통과처럼 보인다. 그래서 프로브를
+        눌러 그 상태를 *만들어* 검사한다.
+        """
+        monkeypatch.setattr(
+            "whymath_backend.harness.golden_benchmark.edit_aware_verdict_available",
+            lambda: False,
+        )
         events = [_finish("cu-b", "approved")]
         report = promote_from_events(
             events,
@@ -586,12 +597,34 @@ class TestCli:
         assert "as-found 라벨 무결성" in body
 
 
-class TestForwardCompatEditAwareVerdict:
-    """EOS-62 착지 후 상태의 선계약 — 어휘가 늘어도 이 규약이 그대로 성립하는지 미리 굳힌다.
+class TestEditAwareProbe:
+    """어휘 실측 프로브 자체 — 상류 schema와 이 규약의 결선이 살아 있는가."""
 
-    `ReviewVerdict`가 아직 2값이라 실 writer로는 `approved_with_edit` 이벤트를 만들 수 없다.
-    그래서 `model_construct`(검증 우회)로 *착지 후 상태*를 모사한다 — 우회하는 것은 상류
-    schema의 어휘 제약뿐이고, 판정 로직은 실물 그대로 돌린다.
+    def test_probe_reports_landed_vocabulary(self) -> None:
+        """EOS-62 착지를 프로브가 *실측*으로 본다 — 이 파일을 고치지 않고도 경로 ⓑ가 열렸다.
+
+        프로브가 상류 `ReviewVerdict`를 직접 읽지 않고 상수였다면, 어휘가 늘어도 하류는 계속
+        fail-closed였을 것이다(선언과 실체 불일치). 그 결선이 실제로 작동했음을 고정한다.
+        """
+        assert edit_aware_verdict_available() is True
+
+    def test_probe_tracks_the_upstream_literal_not_a_local_copy(self, monkeypatch) -> None:
+        """변별력 — 상류 어휘가 좁아지면 프로브도 False로 따라 내려간다."""
+        monkeypatch.setattr(
+            "whymath_backend.harness.golden_benchmark.ReviewVerdict",
+            Literal["approved", "rejected"],
+        )
+        assert edit_aware_verdict_available() is False
+
+
+class TestEditAwareVerdictPromotion:
+    """EOS-62 어휘로 실제 승격되는가 — **실 writer**로 만든 이벤트를 태운다.
+
+    이 클래스는 EOS-62 착지 *전*에 `model_construct`(검증 우회)로 선계약을 굳혔던 자리다.
+    어휘가 착지한 지금은 우회할 이유가 없으므로 `finish_review`(실 writer)로 바꿨다 — 검증을
+    우회한 채 남겨 두면 "스키마가 이 값을 실제로 받는가"를 영원히 검사하지 않으면서 통과하고,
+    그것이 이 저장소가 반복해 겪은 '선언과 실체 불일치'다. 어휘 밖 값 케이스만 `model_construct`
+    를 유지한다(정의상 schema가 거부하는 값이라 실 writer로 만들 수 없다).
     """
 
     def test_approved_with_edit_promotes_as_defective(self, monkeypatch) -> None:
@@ -599,19 +632,14 @@ class TestForwardCompatEditAwareVerdict:
             "whymath_backend.harness.golden_benchmark.edit_aware_verdict_available",
             lambda: True,
         )
-        event = ReviewTimerEvent.model_construct(
-            event_id=uuid.uuid4(),
+        event = finish_review(
             review_session_id=uuid.uuid4(),
             cu_slug="cu-edited",
-            problem_id=None,
             reviewer_id="kiki",
-            event_type="finished",
             verdict="approved_with_edit",
             failure_code=GenerationFailureCode.F7,
-            failure_note=None,
             elapsed_ms=90_000,
             occurred_at=_T0,
-            recorded_at=None,
         )
         report = promote_from_events(
             [event],
@@ -626,7 +654,11 @@ class TestForwardCompatEditAwareVerdict:
         assert item.as_found_basis == AsFoundBasis.EDIT_AWARE_VERDICT
 
     def test_vocabulary_outsider_is_counted_separately(self, monkeypatch) -> None:
-        """상류가 이 규약이 모르는 값을 추가하면 모호 승인이 아니라 '어휘 밖'으로 센다."""
+        """상류가 이 규약이 모르는 값을 추가하면 모호 승인이 아니라 '어휘 밖'으로 센다.
+
+        `escalate`는 schema가 거부하는 값이라(폐쇄 3종) 실 writer로는 만들 수 없다 — 상류가
+        *이 규약보다 먼저* 어휘를 넓힌 미래를 모사하려면 여기서만 검증을 우회한다.
+        """
         monkeypatch.setattr(
             "whymath_backend.harness.golden_benchmark.edit_aware_verdict_available",
             lambda: True,
@@ -736,10 +768,18 @@ class TestCliUnlockPaths:
         )
         assert code == 1
 
-    def test_edit_aware_since_warns_when_vocabulary_absent(self, tmp_path: Path, capsys) -> None:
-        """어휘 미착지인데 경계만 준 상태를 조용히 넘기지 않는다(경로 ⓑ 미적용 자인)."""
-        if edit_aware_verdict_available():  # pragma: no cover - EOS-62 착지 후 경로
-            pytest.skip("EOS-62 착지 — 이 케이스는 어휘 부재 상태의 계약이다")
+    def test_edit_aware_since_warns_when_vocabulary_absent(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        """어휘가 없는데 경계만 준 상태를 조용히 넘기지 않는다(경로 ⓑ 미적용 자인).
+
+        위 계약과 같은 이유로 skip이 아니라 프로브를 눌러 검사한다 — 이 자인 문구가 사라지면
+        사용자는 `--edit-aware-since`가 먹은 줄 안다.
+        """
+        monkeypatch.setattr(
+            "whymath_backend.harness.golden_benchmark.edit_aware_verdict_available",
+            lambda: False,
+        )
         events_path = tmp_path / "events.jsonl"
         anchors_path = tmp_path / "anchors.jsonl"
         _write_events(

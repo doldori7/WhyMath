@@ -100,6 +100,13 @@ def finish_review(
     자문하게 한다. 계측 실패면 None을 *명시*로 넘긴다(0 날조 금지 — 그 판정은 집계에서
     "미계측"으로 분리된다·acceptance ④). `verdict="rejected"`인데 failure_code가 없으면
     schema validator가 ValidationError를 던진다(§4 강제 분류 — 함수 레벨 집행).
+
+    판정 3종(EOS-62): `approved`(무손질 통과) · `approved_with_edit`(사람이 손질해 통과) ·
+    `rejected`(반려). **손질했으면 `approved`가 아니라 `approved_with_edit`을 넘긴다** — 둘을
+    같은 값으로 적는 순간 승인율이 AI-first 전략의 실패를 가린다(해상도 갭). 손질 승인에는
+    `failure_code`가 **선택**이지만(무엇을 고쳤는가) 권장이며, 미기재분은 집계가 분리
+    카운트한다. 무손질 승인에 failure_code를 붙이면 거부된다 — 고친 것이 있다면 판정값이
+    틀린 것이다.
     """
     return ReviewTimerEvent(
         review_session_id=review_session_id,

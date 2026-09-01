@@ -9,13 +9,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from pydantic import ValidationError
 
-from whymath_backend.schema.enums import GenerationFailureCode
-from whymath_backend.schema.review_timer import ReviewTimerEvent, ReviewTimerEventType
+from whymath_backend.schema.enums import (
+    GenerationFailureCode,
+    ReviewStatus,
+    is_review_status_cleared,
+)
+from whymath_backend.schema.review_timer import (
+    VERDICT_APPROVED_WITH_EDIT,
+    ReviewTimerEvent,
+    ReviewTimerEventType,
+    ReviewVerdict,
+    review_status_for_verdict,
+)
 
 
 def _base(**overrides: Any) -> dict[str, Any]:
@@ -196,3 +206,136 @@ class TestIdentityFields:
         """학생 소유 축 필드 부재 — 검수자 텔레메트리(모듈 docstring 개인정보 판정)."""
         fields = set(ReviewTimerEvent.model_fields)
         assert fields & {"user_id", "student_id", "target_user_id"} == set()
+
+
+class TestEditAwareVerdictVocabulary:
+    """EOS-62 — 판정 3종화. '손질해서 통과시킨 CU'가 무손질 통과와 구분되는가.
+
+    이 해상도가 없으면 "HIT 중앙값 4분 + 승인율 93%"가 성공으로 읽히는데 승인분의 상당수가
+    사람 손질일 수 있고, 그 손질분이 정확히 AI-first 전략의 실패 신호다 — 성공 지표가 실패를
+    가리는 구조다(N4 갭 ③).
+    """
+
+    def test_verdict_vocabulary_is_exactly_three(self) -> None:
+        """폐쇄 3종 동결 — 문서 §17의 5종 중 REGENERATE·ESCALATE는 의도적 미채택."""
+        assert set(get_args(ReviewVerdict)) == {"approved", "approved_with_edit", "rejected"}
+
+    def test_edit_approval_accepts_optional_failure_code(self) -> None:
+        """부기 규약 — 권장하되 강제하지 않는다(코드 없이도 유효)."""
+        with_code = ReviewTimerEvent.model_validate(
+            _base(
+                event_type="finished",
+                verdict="approved_with_edit",
+                failure_code=GenerationFailureCode.F7,
+                elapsed_ms=90_000,
+            )
+        )
+        assert with_code.failure_code == GenerationFailureCode.F7
+
+        without_code = ReviewTimerEvent.model_validate(
+            _base(event_type="finished", verdict="approved_with_edit", elapsed_ms=90_000)
+        )
+        assert without_code.failure_code is None
+
+    def test_edit_approval_allows_note_with_code(self) -> None:
+        event = ReviewTimerEvent.model_validate(
+            _base(
+                event_type="finished",
+                verdict="approved_with_edit",
+                failure_code=GenerationFailureCode.F3,
+                failure_note="3단계 근거 문장을 보강",
+            )
+        )
+        assert event.failure_note is not None
+
+    def test_edit_approval_note_still_requires_a_code(self) -> None:
+        """§4 자유 텍스트 단독 금지 — 손질 승인에서도 유지."""
+        with pytest.raises(ValidationError):
+            ReviewTimerEvent.model_validate(
+                _base(event_type="finished", verdict="approved_with_edit", failure_note="고침")
+            )
+
+    def test_plain_approval_still_forbids_failure_code(self) -> None:
+        """무손질 승인에 결함코드를 붙이는 경로를 막는다 — 고쳤다면 값이 틀린 것이다.
+
+        이걸 허용하면 `approved` + code가 사실상 '손질 승인'이 되어 해상도 갭이 되살아난다.
+        """
+        with pytest.raises(ValidationError, match="무손질 승인"):
+            ReviewTimerEvent.model_validate(
+                _base(
+                    event_type="finished",
+                    verdict="approved",
+                    failure_code=GenerationFailureCode.F1,
+                )
+            )
+
+    def test_rejection_still_requires_a_code(self) -> None:
+        """반려의 강제 분류(§4)는 불변 — 어휘 확장이 기존 계약을 느슨하게 만들지 않았다."""
+        with pytest.raises(ValidationError):
+            ReviewTimerEvent.model_validate(_base(event_type="finished", verdict="rejected"))
+
+    def test_aborted_still_forbids_the_new_verdict(self) -> None:
+        with pytest.raises(ValidationError):
+            ReviewTimerEvent.model_validate(
+                _base(event_type="aborted", verdict="approved_with_edit")
+            )
+
+    def test_unknown_verdict_rejected(self) -> None:
+        """문서 §17의 미채택 2종은 어휘에 들어오지 않는다(폐쇄 유지)."""
+        for outsider in ("escalate", "regenerate", "pending"):
+            with pytest.raises(ValidationError):
+                ReviewTimerEvent.model_validate(_base(event_type="finished", verdict=outsider))
+
+
+class TestBackwardCompatibility:
+    """acceptance ④ — 기존 `approved` 행의 의미를 바꾸지 않는다(값 추가만·소급 재분류 금지)."""
+
+    def test_existing_approved_rows_still_validate_unchanged(self) -> None:
+        """EOS-62 이전에 기록된 무손질 승인 행이 그대로 통과한다."""
+        event = ReviewTimerEvent.model_validate(
+            _base(event_type="finished", verdict="approved", elapsed_ms=120_000)
+        )
+        assert event.verdict == "approved"
+        assert event.failure_code is None
+
+    def test_approved_is_not_silently_reinterpreted(self) -> None:
+        """`approved`는 여전히 '무손질 승인'이지 '손질 여부 미상'으로 바뀌지 않는다.
+
+        어휘가 늘었다고 과거 값의 의미를 재정의하면 12월 판정이 소급 재분류 위에 서게 된다 —
+        골든 승격의 `edit_aware_since` 경계도 같은 원칙의 시각 축 표현이다.
+        """
+        assert review_status_for_verdict("approved") is ReviewStatus.approved
+
+
+class TestVerdictToReviewStatusBridge:
+    """두 축(판정 ↔ 노출 상태)이 갈라진 뒤의 유일한 정본 변환."""
+
+    def test_both_approvals_map_to_approved_status(self) -> None:
+        """손질 여부는 생산성 축이지 노출 축이 아니다 — 둘 다 노출 통과."""
+        assert review_status_for_verdict("approved") is ReviewStatus.approved
+        assert review_status_for_verdict(VERDICT_APPROVED_WITH_EDIT) is ReviewStatus.approved
+
+    def test_mapped_status_passes_the_exposure_predicate(self) -> None:
+        """★ 이 변환이 없으면 손질 승인 CU가 **무증상으로 노출에서 빠진다**.
+
+        `is_review_status_cleared`는 `approved`만 True인 fail-closed 술어다. verdict를 그대로
+        review_status에 복사하면 `approved_with_edit`가 False로 떨어져 에러 없이 목록에서
+        사라진다 — 그 경로가 실제로 침묵 실패임을 여기서 실측 고정한다.
+        """
+        assert is_review_status_cleared(review_status_for_verdict(VERDICT_APPROVED_WITH_EDIT))
+        assert not is_review_status_cleared(VERDICT_APPROVED_WITH_EDIT)  # 직접 복사 = 조용한 탈락
+
+    def test_rejected_maps_to_rejected(self) -> None:
+        assert review_status_for_verdict("rejected") is ReviewStatus.rejected
+
+    def test_none_is_undecided_not_a_status(self) -> None:
+        assert review_status_for_verdict(None) is None
+
+    def test_unknown_verdict_raises_instead_of_guessing(self) -> None:
+        """상류가 확장됐는데 변환이 따라가지 않은 상태를 조용히 통과시키지 않는다."""
+        with pytest.raises(ValueError, match="어휘 밖"):
+            review_status_for_verdict("escalate")
+
+    def test_review_status_vocabulary_did_not_absorb_the_verdict(self) -> None:
+        """`approved_with_edit`는 ReviewStatus에 넣지 않는다 — §13.3 노출 정책 보호."""
+        assert VERDICT_APPROVED_WITH_EDIT not in {m.value for m in ReviewStatus}
