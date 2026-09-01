@@ -1042,7 +1042,8 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # "안 도는 코드"가 아니라 "실측이 있을 때 사람이 G5에서 돌리는 판정기"다.
         "ops.validation_scorecard": (
             "by-design:12월 검증 결론 판정기(EOS-61) — 입력이 EOS-54/55/60 산출물이라 실측 축적 "
-            "전에는 전 지표 미측정(exit 1)이 설계값. G5(12/31) 판정 시점에 운영자가 돌린다"
+            "전에는 전 지표 미측정(exit 1)이 설계값. G5(12/31) 판정 시점에 운영자가 "
+            "`--hit-cu-json`·`--qa-matrix-json`으로 생산자 산출을 직접 먹여 돌린다"
         ),
         "ops.hit_cu_metrics": (
             "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
