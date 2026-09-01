@@ -32,12 +32,25 @@ from datetime import datetime
 
 API = "https://api.github.com"
 TIMEOUT = 30
-CA = "/root/.ccr/ca-bundle.crt"
+_CA_PATH = "/root/.ccr/ca-bundle.crt"  # 에이전트 프록시 CA (있을 때만 사용)
+
+
+def _ca_args() -> list[str]:
+    """프록시 CA를 쓸 수 있으면 `["--cacert", <경로>]`, 아니면 `[]`.
+
+    존재 검사를 예외로 감싼다 — `Path.exists()`는 EACCES를 전파하고(2026-09-01
+    main red 실측), CA를 무조건 넘기면 그 파일이 없는 환경에서 `curl (77)`이 난다.
+    """
+    try:
+        with open(_CA_PATH, "rb"):
+            return ["--cacert", _CA_PATH]
+    except OSError:
+        return []
 
 
 def _get(path: str) -> object:
     """GitHub API GET — 실패 시 원인을 본문째 남긴다(예외 타입만으로는 구별 불가)."""
-    cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), "--cacert", CA, f"{API}{path}"]
+    cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), *_ca_args(), f"{API}{path}"]
     try:
         out = subprocess.run(
             cmd,
