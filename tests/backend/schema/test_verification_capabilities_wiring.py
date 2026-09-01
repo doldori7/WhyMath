@@ -157,3 +157,49 @@ def test_solution_verification_result_satisfies_the_chain_contracts() -> None:
     for step in result.steps:
         assert isinstance(step, StepOutcome)
         assert isinstance(step.state, VerificationOutcome)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑤ EOS-28 — 형태 어휘는 **측정이 허가한 것만** 담는다
+# ──────────────────────────────────────────────────────────────────────────
+def test_expected_form_vocabulary_is_measurement_gated() -> None:
+    """`ExpectedForm`의 각 값이 스캐너 패턴에 실재하고, 코퍼스 적중이 0이 아니어야 한다.
+
+    이 저장소가 반복해서 다친 지점이 "소비처 0 추상"이다 — 쓰이지 않을 어휘를 미리 넣으면
+    그것을 지탱하는 분기·테스트·문서가 함께 생기고 아무도 지우지 않는다. 그래서 어휘 추가의
+    조건을 **기계가 묻게** 한다: 스캐너가 코퍼스에서 그 형태를 실제로 잡는가?
+
+    이 테스트가 실패하는 두 방향 모두 의미가 있다:
+      · 어휘를 추가했는데 적중 0 → 근거 없는 추상. 코퍼스가 먼저 생겨야 한다.
+      · 코퍼스에서 형태가 사라짐 → 그 어휘가 죽었다. 지울지 판단해야 한다.
+    """
+    import importlib.util
+    import pathlib
+
+    from whymath_backend.schema.answer_form import ExpectedForm
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    scanner_path = repo_root / "scripts/analysis/answer_form_requirement_scan.py"
+    corpus = repo_root / "data/corpus"
+    if not scanner_path.exists() or not corpus.exists():
+        import pytest
+
+        pytest.skip("스캐너·코퍼스가 없는 체크아웃 — 측정 불가(통과로 위장하지 않는다)")
+
+    spec = importlib.util.spec_from_file_location("_form_scan", scanner_path)
+    assert spec and spec.loader
+    scanner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(scanner)
+
+    for form in ExpectedForm:
+        assert form.value in scanner.FORM_PATTERNS, (
+            f"어휘 '{form.value}'가 스캐너 패턴에 없다 — 측정 경로 없이 추가됐다"
+        )
+
+    result = scanner.scan(corpus)
+    for form in ExpectedForm:
+        hits = result["form_hits"].get(form.value, [])
+        assert hits, (
+            f"어휘 '{form.value}'의 코퍼스 적중이 0건이다 — 소비처 0 추상. "
+            f"코퍼스에 그 형태가 먼저 있어야 한다(측정 없는 도입 없음)."
+        )
