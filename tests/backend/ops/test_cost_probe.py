@@ -58,6 +58,7 @@ class _FakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         self.calls.append(decision)
         if self._raise_on is not None and decision.cost_tier == self._raise_on:

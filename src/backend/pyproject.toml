@@ -283,6 +283,7 @@ source_modules = [
     "whymath_backend.l3.data_grade_defaults",
     "whymath_backend.l3.dsl",
     "whymath_backend.l3.escalation_defaults",
+    "whymath_backend.l3.generation_seed",
     "whymath_backend.l3.interfaces",
     "whymath_backend.l3.models",
     "whymath_backend.l3.pedagogy",

@@ -170,7 +170,9 @@ class GenerationLog(Base):
     # 값 의미·불변식(스냅샷↔해시 정합)은 schema.GenerationLog가 강제한다(본 파일 방침:
     # ORM은 컬럼만 — from_schema/to_schema seam이 검증을 경유).
     prompt_version: Mapped[str | None] = mapped_column(sa.String(128))
-    # Ollama options.seed는 int64 범위 — BigInteger 좌석(현행 두 경로는 seed 미사용=NULL).
+    # BigInteger 좌석 — 실제 추출 범위는 [0, 2**31-1](llama.cpp 샘플러 시드가 uint32라
+    # 좌석보다 좁게 뽑는다·`l3/generation_seed`). EOS-73부터 LOCAL 경로는 값이 실리고,
+    # 클라우드(seed 파라미터 부재)·호출 없는 항목은 NULL=미기록이다(날조 금지).
     seed: Mapped[int | None] = mapped_column(sa.BigInteger)
     input_sha256: Mapped[str | None] = mapped_column(sa.String(64))
     input_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))

@@ -453,9 +453,11 @@ class GenerationLog(BaseModel):
     seed: int | None = Field(
         default=None,
         description=(
-            "생성 호출에 *실제로 쓰인* 샘플링 시드. 현행 두 생성 경로는 seed 스레딩이 없어"
-            "(2026-08-30 실측: 라우터·프로바이더 seed 전달 0) 항상 None=미사용 — 좌석만 두고 "
-            "실사용 시점에 실제 값을 기록한다(날조 금지)."
+            "생성 호출에 *실제로 쓰인* 샘플링 시드(EOS-73 스레딩 착지 — LOCAL/Ollama "
+            "options.seed). 값이 있으면 '이 시드로 모델에 보냈다'는 뜻이고, None은 미기록이다 "
+            "— 시드를 물리적으로 실을 수 없는 경로(클라우드 Anthropic Messages API에 seed "
+            "파라미터 부재)와 호출 자체가 없었던 항목(인제스트·스킵)이 None이다. 보내지 않은 "
+            "숫자를 적으면 그 행은 재현 가능하다고 거짓말하게 된다(날조 금지)."
         ),
     )
     input_sha256: str | None = Field(
