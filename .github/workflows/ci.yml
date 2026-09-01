@@ -1141,6 +1141,17 @@ jobs:
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
 
+      # HARN-52 — 의존 *선언*과 *집행*의 불일치를 막는다. notes에 "선행: X 착지 후"라고
+      # 적어도 selector.py는 notes를 읽지 않으므로(depends_on만 본다) 그 태스크는 사람이
+      # "막아 뒀다"고 믿는 동안 다른 세션에 착수 가능 후보로 노출된다(#911 리뷰 P2가
+      # EOS-62에서 지적 · 저장소 전수 스캔에서 동일 패턴 6건 실재).
+      #
+      # 판정은 exit code로 한다 — 출력 문자열로 통과를 선언하지 않는다(CLAUDE.md 2026-08-09).
+      # 레거시 6건은 dep_declaration.LEGACY_EXEMPT가 그랜드파더하되 HARN-53을 만료 지점으로
+      # 못박았다(만료 없는 유예 금지 — 그 태스크가 done인데 면제가 남으면 이 스텝이 red).
+      - name: 의존 선언↔집행 대조 (HARN-52)
+        run: python3 scripts/harness/backlog.py audit-deps
+
       # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
       # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
       # reap이 늘 "stale claim 없음"을 보고했다. 즉 "통과"가 "검사했다"를 뜻하지 않았다.
