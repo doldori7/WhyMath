@@ -338,6 +338,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-08-31 (Kiki 결정·회수 착수): **저작 확장 11,446문 — 회수 결정. 게이트 clear + 집행 태스크 2건 등재(PB-13 코퍼스 이식·PB-14 태스크 재등재)** (Kiki "회수", claude 등재)
+
+- **결정**: 당일 오전 stray-code 감사가 신설한 `G-authoring-expansion-merge-decision`에 Kiki가 **회수**로 답해 게이트 `cleared`. 20일간 추적자 0이던 최대 고립분의 처분이 확정됐다
+- **결정 시점 실측 재확인(추론 0)**: 브랜치 `trjg5x`(c8abbc17) ahead 81·behind **207**·고유 233파일. 코퍼스 30종 `problems.jsonl` 행수 합계 = **11,446 정확 일치**(PB-06 수치 독립 검증). 생성기 실체 = `l3/equivalent/*_skeleton_generator.py` **30** + `harness/*_batch.py` **60**(PB-06의 "생성기 30"은 스켈레톤 생성기 기준). 대상 30종 사이드카 **0/30**(브랜치 보유 26개는 기존 코퍼스분이라 재사용 불가)
+- **차단 3건 현황**: 사이드카 → `PB-11`(done)이 `ops/corpus_provenance_sidecar.py`를 main에 착지시켜 상환 · shallow merge-base → 08-31 감사의 `--unshallow`로 해소 · **ID 충돌만 미해소**(`PB-14`가 담당)
+- **범위 경계를 실측으로 그었다** — 이식 대상은 신규 추가(A)만이고, **수정(M) 12파일은 명시 제외**(`api/me.py`·`config.py`·`db/models/user.py`·`l4/polya/*`·`privacy/retention.py`·`schema/user.py` 등). 브랜치가 207커밋 낡아 이들을 실으면 main이 역행한다. **alembic 마이그레이션 1건도 제외** — `ADMIN-02` 소관이며 `G-prod-dead-column-check`가 아직 pending이라 이 회수에 편승시키면 게이트를 우회하는 셈이 된다
+- **별건 발견**: `l2/learning_metrics_writer.py`도 main 부재 고립이나 코퍼스와 무관 — `PB-13` notes에 범위 밖으로 기록(중복 등재 금지). `review_queue`·`target_progress`는 main 실재라 비대상
+- **등재**: `PB-13`(코퍼스 30종+생성기 90+사이드카 30·priority 1) · `PB-14`(저작 태스크 32건 재등재+ID 충돌·priority 2). 번호는 `PB-12` 시도를 CLI가 원격 선점(6eejrv의 `PB-12-gating-answer-redaction`)으로 거부해 제안 번호 채택 — 우회 0
+- **acceptance에 08-31 감사의 자기 실패를 예방 규칙으로 이식**: `PB-14` ④가 "overlap은 id를 인자로 주고 exit code로 판정한다(인자 없이 실행하면 EXIT=2로 죽어 grep이 0을 내는 무변별 검증이 된다)"를 명시 — 같은 날 내가 실제로 빠진 함정이다
+- 검증: `validate` EXIT=0(태스크 482·게이트 21). **회수 완료 전 원 브랜치 삭제 금지**를 양 태스크 notes에 명기
+
 ### 2026-08-31 (구현·HARN-49·S1-16): **track 오분류로 12일 착수 불가였던 태스크 해소 — 정정 verb 신설 + `extensions.math` 착지** (Kiki "S1-16"·"1"(트랙 정정), claude 구현)
 
 - **거부는 우회하지 않았다**: `backlog.py start S1-16`이 `track_gate`로 거부됐다. 규칙상 처리 순서는 ①거부 사유 확인 ②사람 소유면 넘김 ③CLI 경로 자체가 없으면 태스크 등재다. 조사해 보니 **거부가 옳고 데이터가 틀렸다** — S1-16의 track이 `subject-expansion`(entry_gate 미충족·E1~E6 확장 트랙)인데 실제로는 `stage=S1`·`subject=math`이고 2026-08-19 등재 결정이 '수용 항목'과 '보류 항목'을 갈랐을 때 **수용 쪽인 이 태스크가 보류 트랙에 붙었다**. 같은 트랙 나머지 13건은 전부 E1~E6이다. 근거 3축(등재 결정문·stage/subject·트랙 동거 태스크)이 모두 정정을 가리켰다
@@ -7534,3 +7545,13 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **사이드카에서 자기 해시를 뺀 이유**: 초안은 관례를 따라 `source_sha256`에 **자기 자신의 sha256**을 넣었다. 상류 원본이 없는 자체작성 소스에서 그 값은 아무것도 증명하지 못하면서 편집마다 조용히 낡는다. 대신 무결성은 CI 게이트가 판정한다는 사실을 `integrity_gate` 필드로 명시했다.
 - **검증**: 신규 27건 `tests/backend/l1/test_eos_anchor_registry.py` 통과 · `test_golden_benchmark.py` 50건 통과 · backend 전체 스위트 · ruff/black/mypy --strict EXIT=0(CI와 동일 명령·대상).
 - **cross-ref**: `data/corpus/eos_anchor_set_v1/anchors.yaml`(정본) · `whymath_backend.l1.standards.anchor_registry`(읽기 API·판정 CLI exit 0/1) · `docs/standards/eos_verification_design_v1.md` §2(정본 위치 갱신) · `docs/reviews/eos_anchor_asset_audit_2026-09.md` §2 · `G-eos-g0-verification-design-freeze` · EOS-52·EOS-53 갭 #3
+## 2026-09-01: EOS-69 중복 구현 사고 — 낡은 로컬 대장이 이미 done인 태스크를 후보로 내놨다 (HARN-54 등재)
+
+- **사건**: `EOS-69`를 병렬 세션과 동시 수행했고 **PR #916이 먼저 착지**(08-31T21:27 UTC). 내 브랜치 base는 08-31T11:14의 `d980402d`라 로컬 대장에는 여전히 `todo`였고, **2시간 50분 뒤** `next`가 EOS-69를 후보 1위로 내놓고 `start`가 통과시켰다. 전체 구현 1건(계약 3→6 확장·DI 좌석·중립 뷰·테스트 신설·뮤테이션 10종·전체 스위트 40분 2회)이 **중복 생산 후 폐기**됐다.
+- **원인**: `backlog.py next`·`start`는 **로컬 트리의 대장**만 읽는다. 브랜치가 main보다 뒤처지면 main이 이미 `done`으로 만든 태스크가 로컬에선 `todo`로 보인다. HARN-38 근본 원인(낡은 로컬 트리)의 새 형태 — 기존 가드는 *미머지 브랜치*의 작업만 보고 *이미 머지된 main*은 보지 않는다.
+- **기존 가드가 왜 전부 비껴갔나**(등재 전 대조): `HARN-51`(의미 중복)은 "다른 ID·같은 의미"용이라 **같은 ID**인 이 건을 못 잡는다 — 그 태스크 자신이 "같은 식별자 5건은 가드가 전건 차단"이라 적었으나 이 건은 차단되지 않았다. `HARN-43`의 remote-ref 신선도 고지는 **`cmd_add` 한 곳(`backlog.py:1249`)에만 배선**돼 next·start 경로에 없다. `HARN-47`은 브랜치 재고 축이다. → **`HARN-54`** 등재.
+- **폐기 판단 근거(main이 낫다)**: 경계 위반 main **15→0** vs 내 15→1 · main은 `SubjectAdapter`를 부풀리는 대신 **좁은 능력 계약**(`verification_capabilities`) 신설 · DI 좌석도 `composition`(팩토리만 노출·재export 금지 규칙)이 내 전역 `subject_registry`보다 낫다. 되돌림은 force-push(분류기 거부·우회 안 함)가 아니라 **revert 커밋**(비파괴)으로 했고 폐기분은 패치+커밋 `a7faeb74`로 보존.
+- **★ 독립 수렴 관측**: 두 세션이 같은 아키텍처 판단에 독립 도달했다 — ①합성 루트가 구현체를 아는 것은 정의상 불가피 → 7계층 계약에 **간선 1건만** 좁게 유예 ②**지연 import로 숨기지 않는다**(grimp도 경계 스캔도 그 간선을 그대로 본다·문자열 `importlib`는 도구 판정 우회라 금기). main 쪽이 한 걸음 더: `-> composition` **전체**를 열면 합성 루트가 *세탁 통로*가 되므로 간선 단위로만 연다.
+- **등재 전 실측으로 기각한 가설 1건(기록 가치)**: 내 뮤테이션 M1·M2가 처음에 살아남아 "3상태 접힘 축이 main에도 열려 있지 않은가"를 의심했으나, **뮤테이션으로 재보니 닫혀 있었다** — 서빙 계층 `unverifiable→incorrect` 접힘 주입 시 **56건 red**, 어댑터는 pass-through라 재매핑 지점 자체가 없음, 콘텐츠 검수는 4상태 유지 + 의도된 fail-closed 허용목록(문서 명시). **M1·M2는 내 테스트의 결함이었지 main 코드의 구멍이 아니었다.** 없는 결함을 태스크로 올리는 것이 곧 "환경 사실의 추론 등재"이므로, 측정 후 기각하고 대신 진짜 원인(HARN-54)을 등재했다.
+- **부수 교훈**: "변별력 없는 검증 스텝 금지"는 도구 호출 방식뿐 아니라 **테스트 앵커 선택**에도 적용된다 — 내 M1은 앵커를 `parse_error`로만 잡아 `undecidable` 경로가 초록 통과했고, M2는 테스트 이름("unverifiable is inert")과 실제 단언(완료 필드만 확인)이 불일치해 서빙 계층 접힘을 놓쳤다.
+- **cross-ref**: PR #916(main 정본) · `HARN-54` · 폐기 커밋 `a7faeb74`
