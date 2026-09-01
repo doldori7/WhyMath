@@ -92,13 +92,11 @@ def test_ci_step_is_blocking_not_advisory() -> None:
     """비차단(continue-on-error·|| true)으로 붙으면 게이트가 아니라 경고 수집기가 된다."""
     workflow = yaml.safe_load(_CI_WORKFLOW.read_text(encoding="utf-8"))
     backend_steps = workflow["jobs"]["backend"]["steps"]
-    step = next(
-        s for s in backend_steps if "check_routing_data_grade.py" in str(s.get("run", ""))
-    )
+    step = next(s for s in backend_steps if "check_routing_data_grade.py" in str(s.get("run", "")))
     assert not step.get("continue-on-error"), "게이트 스텝이 continue-on-error로 붙어 있다"
-    assert not re.search(r"\|\|\s*true|;\s*true", str(step["run"])), (
-        "게이트 호출의 exit code를 `|| true`가 삼키고 있다"
-    )
+    assert not re.search(
+        r"\|\|\s*true|;\s*true", str(step["run"])
+    ), "게이트 호출의 exit code를 `|| true`가 삼키고 있다"
 
 
 # ──────────────────────────────────────────────────────────────────────
