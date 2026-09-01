@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 1
 eos_priority: P1
 owner: claude
@@ -19,7 +19,10 @@ acceptance:
   - "⑤ 집행 배선 확인 (정본화≠집행) — 위 ②③이 CI에서 실제로 판정되는지 tests/infra로 대조한다. 저장소에 존재함 ≠ 돌아감"
   - "⑥ 변별력 — ②③의 거부가 정상 상태에서 통과하고 위반 상태에서만 실패함을 뮤테이션으로 실측한다. 원복은 cp 백업으로만(git checkout 금지 — 2026-08-10 사고)"
   - "⑦ 신규 프레임워크 금지 — 기존 스키마 검증(validate)·policy.yaml·models.py 위에 얹는다. 별도 등급 체계·별도 대장 신설 금지(2026-08-31 Feature Flag 중복 프레임워크 오판 유형)"
-artifacts: []
+artifacts:
+  - "#955"
+  - "tests/harness/test_eos_priority_enforcement.py (16건 계약 동결)"
+  - "scripts/harness/{models,store,backlog}.py (필드·만료·CLI 집행)"
 paths:
   - scripts/harness/backlog.py
   - scripts/harness/models.py
@@ -27,6 +30,6 @@ paths:
   - backlog/policy.yaml
   - "tests/harness/test_eos_priority_*.py"
   - "tests/infra/test_eos_priority_*.py"
-session: claude/review-dydkkx
+session: null
 notes: "출처: 첨부 계획서 100 재검토 §7.2·§7.4-1 (docs/reviews/eos_source_docs_gap_review_2026-08-31.md §7). 8/31 대조의 B급 후보 1이며 PR #916 감사 A1과 같은 축이라 통합 판정 대상이었다. 실측(2026-09-01): grep -rl eos_priority backlog/tasks/ = 0건(489태스크) · Rule 4 역할 기반 재검색(one.in|교환제|swap|budget in backlog.py·policy.yaml·build_harness.md) = 0건. 갭 5건 중 4건(등급·교환제·신규기능 게이트·대시보드 3숫자)이 이 필드 하나에 걸려 있다 — 9/6 Gate 0까지 단일 최대 레버리지. 선결 주의: 값의 일괄 채움은 G-eos-verification-relevance-triage(kiki·pending)가 151건을 분류해야 빈 칸이 안 된다. 본 태스크는 기구(mechanism)만 착지시키고 값 채움은 분리한다.\n\n[정정 2026-09-01] eos_priority null → P1: 본 태스크의 자기 분류. P0가 아닌 이유: 이 기구가 없어도 12월 검증(앵커 생산·HIT 측정)의 폐쇄루프 자체는 성립한다 — 깨지는 것은 *범위 관리*다. 계획서 100이 '애매하면 P0가 아니다'라고 못박은 선을 지킨다(P0 인플레 방지). Phase 0 Gate A(Scope)의 3항 미충족을 해소하므로 P1 중에서도 최우선"
 updated: 2026-09-01
