@@ -17,22 +17,25 @@
 
 ---
 
-## §0. 사전 준비 — 브랜치 체크아웃 (미머지 브랜치 신규 파일)
+## §0. 사전 준비 — 스크립트 실재 확인 (main 체크아웃이면 그대로 진행)
 
-백업 스크립트는 미머지 브랜치에 있다. 재시작(force-push) 가능성이 있으므로 `fetch` + `checkout -B` 형식만 사용한다(pull 금지 — diverged 시 add/add 충돌).
+백업 스크립트는 **main에 착지했다**(2026-09-01 실측: `git ls-tree origin/main scripts/backup/` → `backup_whymath_pg.ps1` 존재). 별도 브랜치 체크아웃은 **불요**하다.
 
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git fetch origin
-git checkout -B claude/whymath-service-review-9r21im origin/claude/whymath-service-review-9r21im
+git checkout main
+git pull origin main
 
 # 자가검증: 스크립트 실재 확인 - True 여야 함
 Test-Path .\scripts\backup\backup_whymath_pg.ps1
 ```
 
-- **성공**: `Test-Path`가 `True`. (변별력: 이 파일은 이 브랜치에만 있어 체크아웃 실패 시 실제로 `False`가 나온다.)
-- **실패 시 대처**: `git branch --show-current`로 현재 브랜치 확인 후 위 `git fetch`+`checkout -B` 두 줄 재실행.
+- **성공**: `Test-Path`가 `True`.
+- **실패 시 대처**: `False`면 `git log --oneline -1` 으로 최신 main인지 확인 후 `git pull origin main` 재실행.
+
+> **정정 이력 (2026-09-01)**: 종전 §0은 `git checkout -B claude/whymath-service-review-9r21im origin/claude/...`를 지시했으나, 그 브랜치는 **원격에서 이미 삭제**돼(`git ls-remote --heads origin` 0건) 명령이 `fatal: invalid reference`로 즉시 실패한다. 게이트 `G-backup-offsite-move`·`G-backup-restore-rehearsal`가 21일 대기한 원인 후보다. CLAUDE.md「검증 없는 실행 안내 금지」의 *만료된 안내* 축 — 런북의 브랜치 참조는 그 브랜치가 머지·삭제되는 순간 조용히 무효가 된다.
 
 ## §1. 수동 백업 1회 실행
 
