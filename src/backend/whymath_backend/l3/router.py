@@ -16,8 +16,15 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from typing import Final
 
+from whymath_backend.l3.data_export_policy import (
+    OFFSHORE_TIERS,
+    export_judgment,
+    export_judgment_for,
+    guard_data_export,
+)
 from whymath_backend.l3.models import (
     CallSite,
     CostTier,
@@ -316,6 +323,40 @@ def guard_cloud(req: RoutingRequest, desired: CostTier) -> CostTier:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 축1 비즈니스 규칙 (03a §C.1 6규칙) — 데이터 등급(법적) 게이트 적용 *전*의 희망 티어.
+#
+# 왜 게이트 전 단계를 이름 붙여 노출하는가: "게이트가 실제로 막았는가"(EOS-59 ② 작동 신호)는
+# *희망 티어와 최종 티어의 차이*로만 정의된다. 그 차이를 재려면 게이트 전 값이 필요하고,
+# 그 값을 관측 도구가 각자 재구현하면 라우터 규칙이 바뀔 때마다 사본이 갈라진다
+# (`ops.cost_probe.classify_local_reason`이 겪던 수동 미러 문제). 그래서 한 자리에 둔다.
+# ──────────────────────────────────────────────────────────────────────────
+def business_cost_tier(req: RoutingRequest) -> CostTier:
+    """축1 결정 중 **비즈니스 축(구독·예산)** 만 — LOCAL / CLOUD_MID / CLOUD_HIGH (03a §C.1).
+
+    평가 순서 = 위에서 아래, 첫 매치 확정. 규칙 5(에스컬레이션 트리거)는 *생성 결과 신뢰
+    미달* 시점에 발동하므로 단발 route() 입력만으로는 평가하지 않는다(트리거 감지는 파이프라인
+    책임, §D.2). next_tier()로 분리.
+
+    ⚠️ 이 함수의 결과는 **희망 티어**다. 데이터 등급(법적) 게이트를 아직 통과하지 않았으므로
+    실제 라우팅 티어로 쓰면 안 된다 — 최종 티어는 `Router._decide_cost_tier`가 낸다.
+    """
+    # 규칙 1: 쿼터 소진 → 비용 0원 강제 (03a §E.2 budget_krw<=0 = "오늘은 로컬만")
+    if req.budget_krw <= 0:
+        return CostTier.LOCAL
+    # 규칙 2: 무료 사용자 항상 로컬
+    if req.student_subscription == "free":
+        return CostTier.LOCAL
+    # 규칙 3: 킬러·증명 → CLOUD_HIGH (단 구독·예산 가드 통과 시)
+    if req.difficulty == "killer" or req.task_type == "prove":
+        return guard_cloud(req, CostTier.CLOUD_HIGH)
+    # 규칙 4: 어려운 진단(premium↑) → CLOUD_MID
+    if req.requires_reasoning and req.student_subscription in ("premium", "gifted"):
+        return guard_cloud(req, CostTier.CLOUD_MID)
+    # 규칙 6: 그 외 기본 LOCAL (목표 분포 80%)
+    return CostTier.LOCAL
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 캐시 키 (03a §F.1 — 세 축 {cost_tier}:{local_family}:{local_model} 포함)
 # ──────────────────────────────────────────────────────────────────────────
 def cache_key(
@@ -430,6 +471,12 @@ def langfuse_fields(
         "validation_signal": validation_signal,  # 런타임 shadow 검증 환각 신호(비차단)
         # AI 학습 동의 상태(EOS §48) — 관측용, provider 제어는 별도 계약/설정.
         "training_allowed": training_allowed,
+        # ── 데이터 등급 게이트(EOS-59 ②) — "작동한 비율"의 원자료 ──
+        # 호출부 인자가 아니라 *결정에서 직접* 읽는다: 새 인자를 만들면 17개 호출부가 각자
+        # 채워야 하고 하나만 빠뜨려도 집계가 조용히 새기 때문이다. 결정이 이미 사실을
+        # 들고 있으므로 기존 좌석(langfuse_fields)에 그대로 얹는다.
+        "data_export_blocked": decision.data_export_blocked,  # 게이트가 실제로 막은 건수
+        "data_export_reason": decision.data_export_reason,  # 등급 판정 분포(분모·미판정 None)
         # 공급 경로(03c 2층 캐시) — prompt_cache/generate는 파이프라인이 cache_hit에서 유도하고,
         # dsl_render는 라우팅을 타지 않아 상위(l4 공급 경로)가 자기 이벤트로 기록한다.
         "content_source": content_source,
@@ -456,6 +503,8 @@ CLOUD로 넘어간다. CLOUD 승급은 항상 guard_cloud를 통과해야 한다
 def next_tier(
     cost_tier: CostTier,
     local_model: LocalModelTier | None,
+    *,
+    data_licenses: Iterable[object],
 ) -> tuple[CostTier, LocalModelTier | None] | None:
     """현재 (축1, 축2)에서 한 단계 승급한 (축1, 축2) 반환 (03a §D.1·§D.2).
 
@@ -463,6 +512,23 @@ def next_tier(
     "다음 티어 1단계"를 결정하는 로직 수준 헬퍼. 천장(CLOUD_HIGH)이면 None.
     실제 트리거 감지(PRM confidence·다수결 등)는 생성 파이프라인의 책임이며
     M1.2 범위 밖이다 — 본 함수는 *사슬 계산*만 한다.
+
+    ## `data_licenses`가 **필수 인자**인 이유 (EOS-59 · codex P1 수용)
+
+    `route()`가 데이터 등급 게이트로 클라우드를 막아 LOCAL로 강등시켜도, 이후 신뢰도
+    재시도가 이 함수를 부르면 사슬이 `LOCAL/QUALITY → CLOUD_MID`로 올라간다. 그 순간
+    **막으려던 국외반출이 재시도 경로로 되살아난다**(AIHub 4조건 ② 위반). 사슬 계산이
+    요청을 안 보는 순수 함수라는 사실이 곧 그 구멍이었다.
+
+    선택 인자 + 관대한 기본값으로 두지 않는다 — 그러면 부르는 쪽이 빠뜨릴 때 조용히
+    fail-open이 되고, 그건 이 게이트가 없애려던 상태 그 자체다. **필수 키워드**로 둬서
+    빠뜨리면 `TypeError`가 나게 한다(침묵 대신 즉시 실패). 지금이 필수화의 최적기다 —
+    프로덕션 호출부가 아직 0건이라(`ops/cost_probe`가 "이 프로브는 next_tier를 부르지
+    않는다"고 자인) 파이프라인이 배선되기 *전에* 계약을 굳힐 수 있다.
+
+    반출이 막힌 자료면 승급은 **국내(LOCAL) 사슬 안에서만** 일어나고, 로컬 천장
+    (`QUALITY`)에 닿으면 `None`(더 올릴 곳 없음)을 돌려준다 — 클라우드로 넘어가지 않는다.
+    이것이 `guard_data_export`의 단방향성을 *재시도 축*까지 연장한 형태다.
     """
     cost = _as_cost_tier(cost_tier)
     local = _as_local_tier(local_model)
@@ -473,7 +539,12 @@ def next_tier(
         return None
     if idx + 1 >= len(ESCALATION_CHAIN):
         return None  # 천장
-    return ESCALATION_CHAIN[idx + 1]
+    candidate = ESCALATION_CHAIN[idx + 1]
+    # 법적 축 재확인 — 사슬의 다음 칸이 국외 티어면 등급을 다시 본다. 비즈니스 가드
+    # (guard_cloud)와 합치지 않는 이유는 `data_export_policy` 모듈 docstring 참조.
+    if candidate[0] in OFFSHORE_TIERS and export_judgment(data_licenses).blocks_offshore:
+        return None  # 국내 천장 — 재시도가 게이트를 우회하지 못한다
+    return candidate
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -495,6 +566,7 @@ class Router:
         # 멀티모달(VL) 단축 경로 — 이미지 인식은 항상 LOCAL Qwen3-VL(VISION 패밀리)·FAST·동기.
         # 수학/일반 텍스트 패밀리·크기 규칙을 건너뛴다(이미지 인식은 직교 축, 03a 확장).
         # 미성년자 프라이버시·로컬-우선(CLAUDE.md 2026-05-28)이라 클라우드 비전 승급은 없다.
+        judgment = export_judgment_for(req)  # 등급 판정은 경로와 무관하게 항상 남긴다
         if req.requires_vision:
             return RoutingDecision(
                 cost_tier=CostTier.LOCAL,
@@ -504,8 +576,17 @@ class Router:
                 reason="local/vision/fast (multimodal)",
                 est_latency_ms=local_latency(LocalModelTier.FAST),
                 est_cost_krw=0.0,
+                # 비전은 애초에 LOCAL 직행이라 게이트가 막을 것이 없다 → blocked=False.
+                # 사유는 그대로 남긴다(등급 분포 관측 — "게이트가 안 걸렸다"와 "자료가
+                # 반출 가능했다"는 다른 사실이다).
+                data_export_blocked=False,
+                data_export_reason=judgment.reason,
             )
-        cost_tier = self._decide_cost_tier(req)
+        desired = business_cost_tier(req)  # 게이트 전 희망 티어(작동 신호의 분모)
+        cost_tier = guard_data_export(desired, req.data_licenses)  # 법적 축 — 독립 적용
+        # "게이트가 *실제로* 막았는가" = 희망과 최종이 갈렸는가. 정상 응답 200은 게이트가
+        # 일했다는 증거가 아니다(CLAUDE.md "작동 신호 없는 알고리즘 부착 금지").
+        export_blocked = cost_tier != desired
 
         # CLOUD 경로면 축3·축2 없음 — 불변식 2·4(03a §G)
         if cost_tier != CostTier.LOCAL:
@@ -517,6 +598,8 @@ class Router:
                 reason="cloud escalation",
                 est_latency_ms=cloud_latency(cost_tier),
                 est_cost_krw=cloud_cost(req, cost_tier),
+                data_export_blocked=False,  # 여기 도달했다는 것 자체가 게이트 통과다
+                data_export_reason=judgment.reason,
             )
 
         # LOCAL 경로 → 축3(패밀리) 먼저, 그다음 축2(크기)
@@ -527,38 +610,39 @@ class Router:
         # 단 reason에는 결정된 패밀리를 남겨 추적성을 유지한다(QUALITY로 합류 전 의도).
         family_applicable = local_model in (LocalModelTier.FAST, LocalModelTier.MID)
         decision_family = family if family_applicable else None
+        # 법적 게이트가 강등시킨 결정은 근거 문자열에도 남긴다 — Langfuse `reason`만 보는
+        # 대시보드에서도 "왜 로컬인가"가 비용 판단으로 오독되지 않게 한다(구조 신호는
+        # data_export_blocked, 사람이 읽는 신호는 reason — 둘 다 둔다).
+        base_reason = f"local/{family.value}/{local_model.value}"
+        reason = (
+            f"{base_reason} (data-export gate: {judgment.reason})"
+            if export_blocked
+            else base_reason
+        )
         return RoutingDecision(
             cost_tier=CostTier.LOCAL,
             local_family=decision_family,
             local_model=local_model,
             mode=mode,
-            reason=f"local/{family.value}/{local_model.value}",
+            reason=reason,
             est_latency_ms=local_latency(local_model),
             est_cost_krw=0.0,  # 로컬은 0원
+            data_export_blocked=export_blocked,
+            data_export_reason=judgment.reason,
         )
 
-    # ── 축1: 비용·위치 (03a §C.1 결정표 6규칙) ──
+    # ── 축1: 비용·위치 (03a §C.1 결정표 6규칙) + 데이터 등급 게이트(EOS-59) ──
     def _decide_cost_tier(self, req: RoutingRequest) -> CostTier:
-        """축1 결정 — LOCAL / CLOUD_MID / CLOUD_HIGH (03a §C.1).
+        """축1 최종 결정 — 비즈니스 축(§C.1 6규칙) 통과 후 **법적 축**을 독립 적용한다.
 
-        평가 순서 = 위에서 아래, 첫 매치 확정. 규칙 5(에스컬레이션 트리거)는
-        *생성 결과 신뢰 미달* 시점에 발동하므로 단발 route() 입력만으로는
-        평가하지 않는다(트리거 감지는 파이프라인 책임, §D.2). next_tier()로 분리.
+        두 축을 한 함수에 합치지 않는 이유는 `l3.data_export_policy` 모듈 docstring에 있다
+        (요약: 구독·예산은 우리가 언제든 완화할 수 있는 비즈니스 규칙이고, 데이터 등급은
+        권리자와의 별도합의 없이는 못 푸는 법적 규칙이다 — 합치면 요금제 변경이 법적
+        게이트까지 조용히 여는 경로가 된다. `l6/_shared`의 `is_exposable`↔`is_review_cleared`
+        분리와 같은 규율).
         """
-        # 규칙 1: 쿼터 소진 → 비용 0원 강제 (03a §E.2 budget_krw<=0 = "오늘은 로컬만")
-        if req.budget_krw <= 0:
-            return CostTier.LOCAL
-        # 규칙 2: 무료 사용자 항상 로컬
-        if req.student_subscription == "free":
-            return CostTier.LOCAL
-        # 규칙 3: 킬러·증명 → CLOUD_HIGH (단 구독·예산 가드 통과 시)
-        if req.difficulty == "killer" or req.task_type == "prove":
-            return guard_cloud(req, CostTier.CLOUD_HIGH)
-        # 규칙 4: 어려운 진단(premium↑) → CLOUD_MID
-        if req.requires_reasoning and req.student_subscription in ("premium", "gifted"):
-            return guard_cloud(req, CostTier.CLOUD_MID)
-        # 규칙 6: 그 외 기본 LOCAL (목표 분포 80%)
-        return CostTier.LOCAL
+        desired = business_cost_tier(req)  # ① 비즈니스 축(구독·예산)
+        return guard_data_export(desired, req.data_licenses)  # ② 법적 축 — 독립 호출·강등 전용
 
     # ── 축3: 로컬 모델 패밀리 (03a §C.0 결정표 — 크기보다 먼저) ──
     def _decide_family(self, req: RoutingRequest) -> ModelFamily:
