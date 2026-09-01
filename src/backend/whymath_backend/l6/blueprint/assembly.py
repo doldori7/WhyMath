@@ -37,10 +37,15 @@ CAT vs blueprint — 역할 분담 동결(D4-2·이 모듈의 존재 조건)
 ────────────────────────────────────────────────────────────────────────────
 레이어 규칙(CLAUDE.md 7계층)
 ────────────────────────────────────────────────────────────────────────────
-L6 → L1(`schema.problem`·`schema.enums`)·L6 공용(`l6._shared`)·L3(`l3.verify_solution`·
-`l3.verify_step`)만 의존한다. L3 의존은 **부분점수 재사용** 때문이다 — 신규 채점기를 만들지
-않고 기존 `verify_solution`의 `first_incorrect_index`(어느 단계까지 맞았는가)를 부분 인정
-근거로 그대로 쓴다(D4-3). L6은 아무도 import하지 않는 최상위 소비자다(역방향 의존 부재).
+L6 → `schema`(문항·enum·과목 계약)·L6 공용(`l6._shared`)만 의존한다. L6은 아무도 import하지
+않는 최상위 소비자다(역방향 의존 부재).
+
+**EOS-69: L3 직접 의존 제거.** 이 모듈은 원래 `l3.verify_solution`·`l3.verify_step`를 직접
+import해 그 결과 타입을 소비했다(CORE→ADAPTER 위반 2간선·경계 문서 §4 A분류). 부분점수는
+수학 함수를 *부르지* 않고 **결과를 읽기만** 하므로, 필요한 것은 Protocol 메서드가 아니라
+*중립 결과 타입*이었다 — `schema.subject_adapter.SolutionVerificationView`(구조적 뷰)로
+바꿨다. 읽는 필드도, 판정도, 반환도 그대로다(호출부는 여전히 `verify_solution` 결과를 그냥
+넘긴다 — 그 객체가 뷰를 구조적으로 만족한다). 재사용 원칙(**신규 채점기 0**·D4-3)은 불변이다.
 
 부수효과 0·결정론(deterministic)·I/O 0·LLM 0. DB 조회·성취기준 코드 주입은 전부 호출자(L5
 api) 몫이다.
@@ -58,11 +63,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l3.verify_solution import SolutionVerificationResult
-from whymath_backend.l3.verify_step import VerifyStepResult, VerifyStepState
 from whymath_backend.l6 import _shared
 from whymath_backend.schema.enums import QuestionFormat
 from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.subject_adapter import (
+    STEP_STATE_UNVERIFIABLE,
+    SolutionVerificationView,
+    StepVerificationView,
+)
 
 __all__ = [
     "BLUEPRINT_USE_CASE",
@@ -523,17 +531,21 @@ class PartialCredit(BaseModel):
     )
 
 
-def partial_credit(points: int | None, verification: SolutionVerificationResult) -> PartialCredit:
-    """기존 `verify_solution` 결과로 부분점수를 계산한다 — **신규 채점기 0**(D4-3).
+def partial_credit(points: int | None, verification: SolutionVerificationView) -> PartialCredit:
+    """단계 검증 결과로 부분점수를 계산한다 — **신규 채점기 0**(D4-3).
 
-    새 채점 로직을 만들지 않고, `SolutionVerificationResult.first_incorrect_index`("어느
-    단계까지 맞았는가")를 부분 인정 근거로 그대로 재사용한다. 루브릭·서술형 채점은 범위 밖이다.
+    새 채점 로직을 만들지 않고, `first_incorrect_index`("어느 단계까지 맞았는가")를 부분 인정
+    근거로 그대로 재사용한다. 루브릭·서술형 채점은 범위 밖이다.
+
+    인자는 **중립 뷰**(`SolutionVerificationView`)다 — 과목 검증기의 구체 타입을 이 모듈이
+    알지 않기 위해서다(EOS-69). 실제로 넘어오는 객체는 그대로 수학 검증 결과이며, 구조적
+    타이핑이라 호출부는 변환 없이 넘긴다.
 
     판정 순서(전부 fail-closed — 확언할 수 없으면 점수를 만들지 않는다):
       ① `points is None` → `no_points_declared`. 배점이 없으면 부분점수도 없다. 0점으로
          접으면 "배점 미부여"가 "0점 획득"으로 위장된다(정직 회계 ①의 문항 단위 판).
       ② `n_transitions == 0` → `no_transitions`. 단계가 1개 이하라 검증할 전이가 없다
-         (`verify_solution`의 빈 집계 계약 — 에러가 아니라 "검증할 것이 없음").
+         (검증기의 빈 집계 계약 — 에러가 아니라 "검증할 것이 없음").
       ③ 인정 구간(첫 오류 직전까지의 전이들)에 `unverifiable`이 하나라도 있으면
          `unverifiable_prefix`. 검증되지 않은 전이를 "맞았다"고 세면 허위 확언이다.
       ④ 오류 없음 → `credited_full`(전액). ⑤ 그 밖 → `credited_partial`(비율 × 배점).
@@ -543,7 +555,8 @@ def partial_credit(points: int | None, verification: SolutionVerificationResult)
 
     Args:
       points: 문항 배점(`Problem.points`). None이면 미부여.
-      verification: `l3.verify_solution.verify_solution`의 결과.
+      verification: 과목 검증기의 연쇄 단계 검증 결과(중립 뷰). 오늘의 산출처는
+        `l3.verify_solution.verify_solution`이다.
 
     Returns:
       `PartialCredit` — 점수·비율·사유.
@@ -557,8 +570,8 @@ def partial_credit(points: int | None, verification: SolutionVerificationResult)
     credited_steps = verification.n_transitions if first_incorrect is None else first_incorrect
     # 인정 구간 = 첫 오류 직전까지의 전이들(오류가 없으면 전체). 이 구간에 unverifiable이
     # 섞여 있으면 "여기까지 맞았다"고 확언할 수 없다(허위 확언 금지 — CLAUDE.md AI·신뢰).
-    prefix: Sequence[VerifyStepResult] = verification.steps[:credited_steps]
-    if any(step.state == VerifyStepState.unverifiable for step in prefix):
+    prefix: Sequence[StepVerificationView] = verification.steps[:credited_steps]
+    if any(step.state == STEP_STATE_UNVERIFIABLE for step in prefix):
         return PartialCredit(awarded_points=None, credited_ratio=None, reason="unverifiable_prefix")
 
     ratio = credited_steps / verification.n_transitions

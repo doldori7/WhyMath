@@ -101,6 +101,19 @@ class SolutionVerificationResult(BaseModel):
         description="incorrect 전이가 하나라도 있으면 True(= first_incorrect_index is not None).",
     )
 
+    @property
+    def unverifiable_reason_counts(self) -> dict[str, int]:
+        """`unverifiable_by_reason`을 **문자열 키**로 낸 사본 — 중립 뷰가 요구하는 표면 (EOS-69).
+
+        `schema.subject_adapter.SolutionVerificationView`가 이 이름으로 사유 분포를 읽는다.
+        원본(`unverifiable_by_reason`)의 키는 `VerifyStepReasonCode`(L3 Adapter enum)이고,
+        Core가 그 enum을 풀려면(`code.value`) **Core가 어댑터 타입을 아는 것**이 된다 —
+        EOS-69가 없애려는 바로 그 의존이다. 그래서 푸는 쪽을 여기(어댑터)로 옮겼다.
+
+        값은 원본과 같다(키만 `.value`). 재판정 0·집계 0 — 표기 변환뿐이다.
+        """
+        return {code.value: count for code, count in self.unverifiable_by_reason.items()}
+
 
 def _empty_result() -> SolutionVerificationResult:
     """전이 0개(steps 길이 < 2·빈 리스트)의 정직한 빈 집계 — 에러가 아니다."""

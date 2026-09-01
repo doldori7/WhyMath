@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.l3.equivalent.josa import (
+from whymath_backend.korean.josa import (
     TailReading,
     eul_reul,
     eun_neun,

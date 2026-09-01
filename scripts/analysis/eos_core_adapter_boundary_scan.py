@@ -125,6 +125,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l5.ocr": ("ADAPTER", "손글씨 수식 인식 — doc-100 'mathematical expression parsing'"),
     # ── L6 응용 모드 — 수학 신호 0(전 9모듈 실측) ──
     "l6": ("CORE", "모드 오케스트레이션(학교진도·수능·사고력·메타인지·영재). sympy·latex 0건"),
+    # ── 어문 유틸 — 7계층 아래(EOS-69) ──
+    "korean": (
+        "CORE",
+        "한국어 조사 받침 판별 등 어문 사실 — 과목 무관(Physics를 붙여도 조사 규칙은 그대로). "
+        "EOS-69가 `l3.equivalent.josa`(ADAPTER 패키지 안의 오배치 유틸)에서 옮겨 왔다",
+    ),
     # ── API·스키마·DB·횡단 ──
     "api": ("CORE", "HTTP 표면 — 과목 중립 라우팅"),
     "api.verify": ("MIXED", "검증 엔드포인트 — 표면은 중립이나 요청·응답이 수식 계약"),
@@ -152,6 +158,11 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "consent": ("INFRA", "동의 절차"),
     "consent_grant": ("INFRA", "동의 부여"),
     "app": ("INFRA", "ASGI 조립"),
+    "subject_registry": (
+        "INFRA",
+        "과목 어댑터 조립 지점(DI seat·EOS-69) — 구현체를 아는 유일한 모듈. 횡단 인프라라 "
+        "경계 계약의 source가 아니다(Core가 이 모듈을 부르는 것은 Protocol 경유와 같다)",
+    ),
     "harness": (
         "INFRA",
         "측정·배치 하네스 — 상위 계층 호출이 정상이라 계층 계약 밖(pyproject 주석과 동일 처리)",

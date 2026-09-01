@@ -187,6 +187,11 @@ root_package = "whymath_backend"
 [[tool.importlinter.contracts]]
 name = "7계층 단방향 (L_n → L_{n-1}, 역방향 금지)"
 type = "layers"
+# `whymath_backend.korean`(EOS-69)은 7계층 *아래*의 어문 유틸이다 — 한국어 조사 받침 판별처럼
+# 과목·계층과 무관한 순수 언어 사실만 담는다. schema보다 아래에 두는 이유: 이 패키지가
+# `whymath_backend`의 **어느 것도 import하지 않는다**는 사실을 계약이 지키게 하려는 것이다
+# (실제로 표준 라이브러리 외 의존 0). 계층 수가 아니라 *방향*이 이 계약의 본질이므로 이름은
+# 그대로 둔다.
 layers = [
     "whymath_backend.api",
     "whymath_backend.l6",
@@ -196,6 +201,26 @@ layers = [
     "whymath_backend.l2",
     "whymath_backend.l1",
     "whymath_backend.schema",
+    "whymath_backend.korean",
+]
+# ── 조립 지점(composition root) 1건 예외 — 의존성 역전의 정적 그림자 (EOS-69) ──
+# `whymath_backend.subject_registry`는 과목 어댑터 DI 좌석이다(계약 밖 INFRA). Core(`l3` 등)는
+# 이 좌석의 `get_subject_adapter()`만 부르고 구현체 이름을 모른다 — *논리적* 의존 방향은
+# Core ← 구현체(주입)로 이미 역전돼 있다. 그런데 좌석이 기본 구현체를 만들어 줘야 하므로
+# (HTTP 앱 밖 진입점까지 조립 코드를 복사시키지 않기 위해) 좌석 → `l4.subject_adapter_math`
+# 라는 **정적 간선 하나**가 남고, `layers` 계약은 간접 체인까지 보므로 이것이 `l3 → l4`로
+# 비친다. 그 한 간선만 예외로 둔다.
+#
+# **동적 import로 숨기지 않은 이유**: `importlib.import_module("...")`로 바꾸면 grimp도 경계
+# 스캔도 이 간선을 못 본다 — 도구의 거부를 우회해 의존을 *보이지 않게* 만드는 것이라
+# CLAUDE.md "거부의 우회 금지"에 걸린다. 보이게 두고 사람이 판정을 남기는 쪽을 택한다.
+#
+# 만료: `unmatched_ignore_imports_alerting` 기본 ERROR — 좌석이 구현체를 그만 알게 되면
+# (예: 기본값 제거·플러그인 발견 도입) 이 줄이 매치되지 않아 CI가 삭제를 요구한다.
+# 범위 동결: `tests/infra/test_eos_boundary_contract_wiring.py`가 이 예외가 **정확히 1건**이고
+# 출발점이 조립 지점인지 검사한다(예외가 조용히 자라지 못한다).
+ignore_imports = [
+    "whymath_backend.subject_registry -> whymath_backend.l4.subject_adapter_math",
 ]
 
 # ──────────────────────────────────────────────────────────────────────
@@ -215,9 +240,12 @@ layers = [
 [[tool.importlinter.contracts]]
 name = "EOS Core → Math Adapter 금지 (baseline 0 — 이미 깨끗한 구역)"
 type = "forbidden"
-# 이 셋은 2026-08-31 실측에서 Adapter 참조가 **0건**이다. 유예 없이 그 상태를 동결한다 —
+# 이 넷은 실측에서 Adapter 참조가 **0건**이다. 유예 없이 그 상태를 동결한다 —
 # 새로 수학을 끌어오면 즉시 적색. `l2`·`l6`는 sympy·수학 어휘도 0건인 구역이다(경계 문서 §3).
+# `korean`(EOS-69로 신설된 어문 유틸)은 태생적으로 표준 라이브러리 외 의존이 0이라 여기 둔다 —
+# 조사 판별기가 수학을 끌어오는 일은 없어야 하고, 그 "없어야 함"을 기계가 지킨다.
 source_modules = [
+    "whymath_backend.korean",
     "whymath_backend.l1",
     "whymath_backend.l2",
     "whymath_backend.schema",
@@ -311,6 +339,9 @@ ignore_imports = [
     #   ADAPTER 출발:
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verifier",
     "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_answer",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.verify_final_answer",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.symbolic_equivalence",
+    "whymath_backend.l4.subject_adapter_math -> whymath_backend.l3.equivalent.rephrase",
     "whymath_backend.l4.misconception.wrong_form_match -> whymath_backend.l3.symbolic_equivalence",
     #   MIXED 출발 (해소 경로 = 모듈 분할. api.verify/speech/ocr는 표면이 중립·페이로드가 수식):
     "whymath_backend.api.verify -> whymath_backend.l3.verify_answer",
@@ -322,24 +353,22 @@ ignore_imports = [
     "whymath_backend.l4.solution_coaching -> whymath_backend.l3.verify_solution",
     "whymath_backend.l4.speech -> whymath_backend.l3.speech",
 
-    # ── 그룹 ②: baseline — CORE 진성 위반 9간선 (= 심볼 15건의 모듈 단위 축약) ──
-    # 이것이 실제 빚이다. 해소 소유자는 `EOS-69`(SubjectAdapter 경유 배선).
+    # ── 그룹 ②: baseline — CORE 진성 위반 **1간선** (2026-09-01 EOS-69가 9→1로 상환) ──
+    # 이것이 실제 빚이다. 시작은 9간선(= 심볼 15건의 모듈 단위 축약)이었고, `EOS-69`가 그중
+    # 8간선(심볼 14건)을 상환했다 — A분류는 `SubjectAdapter` 계약 경유(호출) 또는 중립 결과
+    # 뷰(타입)로, B분류는 `korean.josa` 이사로. 상환 경과는 경계 문서 §4에 전사돼 있다.
+    #
+    # **남은 1건은 C분류(DI 배선)이고 EOS-69 범위 밖이다**: `api._ocr_state`가 `OcrComponents`
+    # 를 *타입 주석*으로만 참조한다(호출 0). 과목 능력이 아니라 앱 수명 자원 묶음이라
+    # `SubjectAdapter`가 흡수할 대상이 아니고, 해소하려면 app.state 보유자를 중립 부품 계약으로
+    # 일반화해야 한다 — 별개 설계 축이라 별도 태스크로 남긴다. 소유자 미지정.
     #
     # **만료는 날짜가 아니라 기계다**: `unmatched_ignore_imports_alerting`이 기본 ERROR라,
-    # EOS-69가 어떤 간선을 없애면 그에 대응하는 아래 줄이 *매치되지 않아* lint-imports가
-    # 실패한다. 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다 — 유예가 조용히 눌러앉을 수
-    # 없다("만료 없는 유예 금지"의 코드 집행).
+    # 어떤 간선을 없애면 그에 대응하는 아래 줄이 *매치되지 않아* lint-imports가 실패한다.
+    # 즉 빚을 갚으면 CI가 "이 줄을 지워라"라고 말한다("만료 없는 유예 금지"의 코드 집행).
     #
-    # 재확인 지점: G1(2026-09-27). 그때까지 9줄이 그대로면 EOS-69가 진척 0이라는 뜻이다.
+    # 재확인 지점: G1(2026-09-27) — 그때 남은 줄이 여전히 1이면 OCR 축이 미착수라는 뜻이다.
     "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",
-    "whymath_backend.api.coach -> whymath_backend.l3.verify_final_answer",
-    "whymath_backend.api.coach -> whymath_backend.l3.verify_solution",
-    "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.l3.symbolic_equivalence",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.josa",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.equivalent.rephrase",
-    "whymath_backend.l3.render.adapters -> whymath_backend.l3.verify_answer",
-    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_solution",
-    "whymath_backend.l6.blueprint.assembly -> whymath_backend.l3.verify_step",
 ]
 
 # ──────────────────────────────────────────────────────────────────────

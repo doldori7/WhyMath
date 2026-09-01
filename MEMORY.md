@@ -338,6 +338,23 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-01 (구현·EOS-69): **SubjectAdapter 경유 배선 — Core→Math 위반 15건 → 1건, 계약 3→6메서드** (claude 구현)
+
+- **문제**: `EOS-66`이 `SubjectAdapter` 계약과 수학 구현을 만들었지만 **그 계약을 경유하는 서빙 코드 경로가 0개**였다(두 파일 docstring이 "정본화 ≠ 집행"이라고 스스로 자인). `EOS-67`이 정적 강제를 세웠고 baseline에 9간선(심볼 15건)이 빚으로 동결돼 있었다. 이 태스크가 그 빚을 갚는다.
+- **결과(실측)**: 경계 스캔 위반 **15 → 1**(심볼)·**9 → 1**(간선). `lint-imports` 3계약 전부 KEPT. 남은 1건은 C분류 `api._ocr_state → l5.ocr.factory`(타입 주석 1건)이며 범위 밖 판정.
+- **★ A분류 11건은 한 부류가 아니었다 — 수단을 갈랐다**:
+  - **호출 의존 7건**(`api.coach`→`verify_final_answer` · `l3.render.adapters`→`verify_answer`·`rephrase` · `l3.pedagogy.slot_generator`→`identity_status`) → Protocol 경유 + DI 주입.
+  - **타입 의존 4건**(`l6.blueprint.assembly`→`verify_solution`·`verify_step` · `api.coach`→`verify_solution`) → 수학 함수를 *부르지 않고* 결과 타입을 소비한다. Protocol 메서드로 흡수되지 **않는다** — 필요한 건 중립 결과 타입이다. `schema.subject_adapter`에 구조적 뷰(`SolutionVerificationView`/`StepVerificationView`)를 두고 호출부는 같은 객체를 *덜 보게* 했다.
+  - **변환기가 아니라 뷰인 이유**: 변환 함수를 두면 그 함수가 3상태를 접을 수 있는 새 지점이 된다. 뷰는 복사가 없어 접을 자리 자체가 없고, 기존 테스트가 실물 객체를 그대로 넘겨도 통과한다(회귀 0). 선례는 저장소 안에 있었다 — `verify_final_answer.ProblemAnswerView`.
+- **계약 표면 3 → 6**: 추가 기준을 셋으로 못 박고(**(a) 과목 보편성 (b) 실재 위임 대상 (c) 실재 Core 호출부** 전부 통과) `evaluate_final_answer`·`check_equivalence_claim`·`check_content_seal`을 넣었다. `explain`은 여전히 미포함 — 위임할 공개 진입점 0건이라 (b) 미통과(넣으면 `NotImplementedError` 좌석만 는다). 표면 동결 테스트가 6종을 못 박아 다음 추가도 판정을 남기게 한다.
+- **B분류 3건은 코드가 아니라 위치 문제였다**: `l3/equivalent/josa.py`(한국어 조사 받침 판별·수학 무관)를 **`whymath_backend/korean/`** 신설 패키지로 이사. 코드 무변경. 7계층 계약의 **최하위 레이어**로 등재해 "아무것도 import하지 않는다"를 기계가 지키게 하고, EOS baseline 0 구역(`l1`·`l2`·`schema`)에도 편입했다.
+- **DI 좌석 `whymath_backend/subject_registry.py`(INFRA)**: Core는 Protocol만 알고 구현체는 `app.create_app`이 심는다. 조립되지 않은 진입점(하네스 CLI·단위 테스트)을 위해 지연 기본값을 두되, 기본값이 math인 것은 *배포 설정*이며 그 결정이 이 파일 안에서만 일어난다. 되돌림을 강제하는 `use_subject_adapter()` 컨텍스트 매니저 동봉(무작위 순서 실행에서 전역 누수 차단).
+- **★ 7계층 계약에 유예 1건을 *일부러 보이게* 남겼다**: 좌석이 기본 구현체를 만들어야 해서 `subject_registry → l4.subject_adapter_math` 정적 간선이 남고, `layers` 계약은 간접 체인까지 보므로 이것이 `l3 → l4`로 비친다. **`importlib.import_module` 문자열로 바꾸면 grimp도 경계 스캔도 이 간선을 못 보게 되지만 그건 도구의 판정을 우회하는 것**이라(CLAUDE.md "거부의 우회 금지") 택하지 않았다. 명시 유예 + 만료 기계(`unmatched_ignore_imports_alerting=ERROR`) + 범위 동결 테스트(유예 1건·출발점이 계층 밖인지)로 처리했다.
+- **뮤테이션 10건 전건 검출**(3상태 접힘 3 · 정답 비노출 1 · 중립 상수 드리프트 1 · 유예 증식 1 · 배선 제거 4). **그중 2건은 처음에 살아남았고, 그것이 이 세션의 실질 소득이다**:
+  - `undecidable → fail` 접힘이 **초록으로 통과**했다 — 내 테스트가 판정 불가 앵커를 `parse_error`로만 잡아 뒀기 때문이다. 두 사유는 코드 경로가 달라 한쪽만으로는 변별력이 없다(`sqrt(x**2)` vs `x` 케이스 추가로 해소).
+  - 서빙 계층에서 `unverifiable → fail` 접힘도 통과했다 — `TestUnverifiableIsInert::test_unparseable_last_step_no_completion_no_redirect`가 **이름은 "재고 없음"인데 완료 필드만 단언**하고 있었다(재고 발화 2변주 배제 단언 추가로 해소). 기존 테스트의 이름-단언 불일치를 뮤테이션이 잡은 사례.
+- **일반 교훈(기존 규칙 강화)**: "변별력 없는 검증 스텝 금지"는 *도구 호출 방식*뿐 아니라 **테스트 앵커 선택**에도 적용된다 — 같은 결과 상태로 접히는 여러 원인 중 하나만 앵커로 잡으면, 나머지 경로의 결함은 초록으로 통과한다.
+
 ### 2026-08-31 (운영·게이트): **whymath-pg 스키마 드리프트 해소 + 좌석 발급 경로 완성 — `G-operator-seat-first-grant` 3·4단계 실행 + `ADMIN-11` 신설** (claude 설계·예행, Kiki 실행)
 
 - **왜**: 게이트가 20일 정지해 있었다. whymath-pg의 `alembic_version`이 이 저장소 체인에 **없는** `d6e7f8a9b0c1`이라 `alembic current`·`upgrade head`가 둘 다 exit 255로 죽었고(2026-08-11 실측), 그래서 `user_profile.role`이 없어 콘텐츠 CUD 6라우터가 전건 403인 상태가 고착됐다. "봉인 정상"과 "아무도 못 씀"이 같은 값이었다.

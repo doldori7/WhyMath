@@ -180,3 +180,61 @@ def test_boundary_map_loader_actually_returns_the_real_assignment() -> None:
     assert boundary["l2"][0] == "CORE"
     assert boundary["l3.equivalent"][0] == "ADAPTER"
     assert boundary["l5.ocr"][0] == "ADAPTER"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ④ 조립 지점 예외 — 7계층 계약의 유일한 유예가 자라지 않는가 (EOS-69)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _layers_contract() -> dict[str, Any]:
+    data = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
+    contracts: list[dict[str, Any]] = data["tool"]["importlinter"]["contracts"]
+    layered = [c for c in contracts if c.get("type") == "layers"]
+    assert len(layered) == 1, f"layers 계약이 정확히 1건이어야 한다. 실측 {len(layered)}건"
+    return layered[0]
+
+
+def test_layers_contract_has_exactly_one_composition_root_exception() -> None:
+    """7계층 계약의 유예는 **조립 지점 1건**뿐이어야 한다 — 예외가 조용히 자라지 못하게.
+
+    EOS-69가 과목 어댑터 DI 좌석(`subject_registry`)을 세우면서, 좌석이 기본 구현체를
+    만들어야 하는 탓에 `subject_registry -> l4.subject_adapter_math`라는 정적 간선 하나가
+    남았다(논리적 방향은 이미 역전돼 있고, 남은 것은 그 그림자다). `layers` 계약은 간접
+    체인까지 보므로 이것이 `l3 → l4`로 비친다.
+
+    유예가 정당한 이유는 *하나*(의존성 역전의 조립 지점)뿐이므로, 유예도 하나여야 한다.
+    두 번째 줄이 붙는 순간 그건 다른 사유이고, 다른 사유는 별도 판정을 받아야 한다.
+    """
+    ignores = _layers_contract().get("ignore_imports", [])
+    assert ignores == [
+        "whymath_backend.subject_registry -> whymath_backend.l4.subject_adapter_math"
+    ], f"7계층 계약의 유예는 조립 지점 1건이어야 한다 — 실측 {ignores}"
+
+
+def test_layers_exception_starts_at_the_composition_root_not_at_a_layer() -> None:
+    """유예의 *출발점*이 계층이 아니라 조립 지점인지 — 계층에서 출발하면 그냥 역방향 의존이다.
+
+    `l3.foo -> l4.bar` 같은 줄이 여기 들어오면 그것은 7계층 위반을 유예하는 것이지 의존성
+    역전을 표기하는 것이 아니다. 출발점이 `layers` 목록 밖의 모듈이어야만 "조립 지점"이다.
+    """
+    contract = _layers_contract()
+    layer_prefixes = tuple(str(layer) for layer in contract["layers"])
+    for line in contract.get("ignore_imports", []):
+        source = str(line).split("->", 1)[0].strip()
+        assert not any(
+            source == prefix or source.startswith(prefix + ".") for prefix in layer_prefixes
+        ), f"유예의 출발점이 계층 안에 있다(= 그냥 역방향 의존): {line}"
+
+
+def test_layers_exception_expiry_is_machine_enforced() -> None:
+    """유예 만료가 기계로 걸려 있는지 — 기본 ERROR 정책을 끄지 않았는지 확인한다.
+
+    EOS 계약과 같은 장치다(위 `test_baseline_ignores_do_not_silently_outlive_the_debt`).
+    좌석이 구현체를 그만 알게 되면 이 줄이 매치되지 않아 CI가 삭제를 요구해야 한다.
+    """
+    level = _layers_contract().get("unmatched_ignore_imports_alerting", "error")
+    assert str(level).lower() == "error", (
+        f"layers 계약 unmatched_ignore_imports_alerting={level!r} — "
+        "ERROR가 아니면 갚은 유예가 조용히 남는다"
+    )

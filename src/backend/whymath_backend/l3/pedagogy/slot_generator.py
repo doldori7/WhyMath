@@ -9,14 +9,20 @@ PED-01 파일럿 E2E의 첫 중간 단계다. 컴파일러가 낸 슬롯 주문(
 이 단계의 목적은 "스키마가 5단계를 지탱함을 1회 증명"하는 walking-skeleton이다. LLM 생성은
 CI에서 self-skip(라이브 provider·Langfuse 필요)이라 E2E가 생성 단계를 실제로 못 밟는다. 그래서
 파일럿은 결정론적 픽스처를 쓴다:
-  - 숫자형 슬롯(문제·답이 있는 유형)은 SymPy(`identity_status`)로 답을 *실제로* 검증해
-    `sympy_verified`를 정직하게 True/False로 채운다 — 검증 없는 신뢰 금지(CLAUDE.md).
+  - 숫자형 슬롯(문제·답이 있는 유형)은 **과목 어댑터**(`check_equivalence_claim`)로 답을
+    *실제로* 검증해 `sympy_verified`를 정직하게 True/False로 채운다 — 검증 없는 신뢰 금지
+    (CLAUDE.md).
   - 개념형 슬롯(수치 답이 없는 유형)은 `sympy_verified=None`(컬럼이 nullable인 이유)으로 둔다.
 자체 저작이라 `provenance_id=None`(ORM docstring이 사람 저작에 허용). LLM 생성 경로는 실제
 콘텐츠 파이프라인이 소비처가 될 때 도입한다(소비처 0 추상 금기 회피) — deferred.
 
-7계층: L3 콘텐츠 생성. 컴파일러(L1) 산출물 소비·SymPy 동치(L3 `symbolic_equivalence`)·sync 엔진
-빌더(L1 `build_sync_engine`)를 재사용한다(신규 seam 최소·`UnitSpecStore` 미러).
+7계층: L3 콘텐츠 생성. 컴파일러(L1) 산출물 소비·sync 엔진 빌더(L1 `build_sync_engine`)를
+재사용한다(신규 seam 최소·`UnitSpecStore` 미러).
+
+**EOS-69: SymPy 직접 호출 → 과목 계약 경유.** 이 모듈은 원래 `l3.symbolic_equivalence`를 직접
+import했다(CORE→ADAPTER 위반). 파이프라인이 던지는 질문은 "이 슬롯이 주장하는 등가가 참인가"로
+과목 무관이고, 그 답은 과목만 할 수 있으므로 `SubjectAdapter.check_equivalence_claim`이 정확한
+좌석이다. 판정 함수는 그대로(`identity_status`) — 호출 경로만 바뀌었다.
 """
 
 from __future__ import annotations
@@ -27,7 +33,8 @@ from typing import TYPE_CHECKING, Any
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import PedagogyContentSlot
 from whymath_backend.l1.embedding_primitives import build_sync_engine
-from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
+from whymath_backend.schema.subject_adapter import SubjectAdapter
+from whymath_backend.subject_registry import get_subject_adapter
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -52,24 +59,35 @@ NUMERIC_SLOT_TYPES: frozenset[str] = frozenset(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# payload 검증 — 숫자형 슬롯의 답을 SymPy로 실제 대조
+# payload 검증 — 숫자형 슬롯의 답을 과목 어댑터로 실제 대조(엔진 이름은 Core가 모른다)
 # ──────────────────────────────────────────────────────────────────────────
-def verify_slot_payload(payload: dict[str, Any]) -> bool | None:
-    """payload에 `verification`(claim_lhs≡claim_rhs 주장)이 있으면 SymPy로 판정, 없으면 None.
+def verify_slot_payload(
+    payload: dict[str, Any], *, subject: SubjectAdapter | None = None
+) -> bool | None:
+    """payload에 `verification`(claim_lhs≡claim_rhs 주장)이 있으면 과목이 판정, 없으면 None.
 
     반환:
-      - True: `identity_status(claim_lhs, claim_rhs) == identity`(답이 실제로 맞음).
-      - False: not_identity/undecidable/parse_error(답이 틀렸거나 검증 불가 — fail-closed).
+      - True: 주장이 참으로 *확정*됐다(계약 3상태의 `pass`).
+      - False: 답이 틀렸거나(`fail`) 검증 불가(`unverifiable`) — **fail-closed**.
       - None: `verification` 키 없음(개념형 슬롯 — 수치 검증 대상 아님).
 
-    검증 없는 True 표기 금지 — 이 함수가 실제 SymPy 판정을 거쳐야만 sympy_verified가 True가 된다.
+    검증 없는 True 표기 금지 — 이 함수가 실제 판정을 거쳐야만 sympy_verified가 True가 된다.
+
+    **3상태가 여기서 boolean으로 접히는 것에 대하여**: `sympy_verified` 컬럼이 `bool | None`
+    이고 None은 이미 "검증 대상 아님"에 쓰였으므로, `unverifiable`을 담을 칸이 없다. 그래서
+    보수적으로 False에 접는다(미검증을 검증됨으로 위장하지 않는 방향). 이 접힘은 EOS-69 이전
+    부터 있던 계약이고 그대로다 — 다만 접히기 *전*의 3상태는 어댑터 반환값에 남아 있으므로,
+    나중에 컬럼이 3상태를 담게 되면 이 함수만 고치면 된다(정보를 버리는 지점이 한 곳이다).
+
+    `subject`를 넘기지 않으면 조립 지점(`whymath_backend.subject_registry`)의 어댑터를 쓴다.
     """
     verification = payload.get("verification")
     if not verification:
         return None
     lhs = str(verification.get("claim_lhs", ""))
     rhs = str(verification.get("claim_rhs", ""))
-    return identity_status(lhs, rhs) is IdentityVerdict.identity
+    adapter = subject if subject is not None else get_subject_adapter()
+    return adapter.check_equivalence_claim(lhs, rhs).state == "pass"
 
 
 def _is_tts_safe(payload: dict[str, Any]) -> bool:
@@ -92,7 +110,7 @@ def _build_numeric_payload(slot_type: str, objective_id: str, index: int) -> dic
 
     f(x) = x^2 - 4x + c (c = 3 + index) → 꼭짓점 x=2 · 최솟값 = c - 4 = index - 1.
     `verification`이 담은 주장 `(2)**2 - 4*(2) + c ≡ (index-1)`을 `verify_slot_payload`가 실제
-    SymPy로 대조한다(답을 일부러 틀리게 넣으면 not_identity로 잡힌다).
+    판정에 넘긴다(답을 일부러 틀리게 넣으면 fail로 잡힌다).
     """
     c = 3 + index
     answer = index - 1
@@ -101,7 +119,7 @@ def _build_numeric_payload(slot_type: str, objective_id: str, index: int) -> dic
         "answer": str(answer),
         "reasoning_type": slot_type,
         "structure_tags": ["quadratic", "extremum"],
-        # SymPy 검증 재료 — 렌더 대상 아님(검산용 구조·표현≠의미).
+        # 자기검증 주장 — 렌더 대상 아님(검산용 구조·표현≠의미).
         "verification": {
             "claim_lhs": f"(2)**2 - 4*(2) + {c}",
             "claim_rhs": str(answer),
@@ -128,12 +146,15 @@ def _build_conceptual_payload(slot_type: str, objective_id: str, index: int) -> 
 def build_slot_rows(
     objective_id: str,
     slot_manifest: Sequence[dict[str, Any]],
+    *,
+    subject: SubjectAdapter | None = None,
 ) -> list[dict[str, Any]]:
     """목표 1개의 slot_manifest(list[{type,count}]) → `pedagogy_content_slot` 행 dict 리스트.
 
     각 슬롯 유형마다 `count`개의 payload를 결정론적으로 만든다
     (id = `{objective_id}:{slot_type}:{i}`).
-    숫자형 유형은 SymPy로 답을 검증해 `sympy_verified`를 채우고, 개념형은 None으로 둔다. 모든 행은
+    숫자형 유형은 과목 어댑터로 답을 검증해 `sympy_verified`를 채우고, 개념형은 None으로 둔다.
+    모든 행은
     fail-closed로 `status='DRAFT'`·`provenance_id=None`(자체 저작)으로 낸다.
     """
     rows: list[dict[str, Any]] = []
@@ -153,8 +174,8 @@ def build_slot_rows(
                     "objective_id": objective_id,
                     "slot_type": slot_type,
                     "payload": payload,
-                    # 실제 SymPy 판정을 거친 값만 True가 된다(개념형은 None).
-                    "sympy_verified": verify_slot_payload(payload),
+                    # 실제 과목 판정을 거친 값만 True가 된다(개념형은 None).
+                    "sympy_verified": verify_slot_payload(payload, subject=subject),
                     "tts_safe": _is_tts_safe(payload),
                     "provenance_id": None,
                     "status": "DRAFT",
