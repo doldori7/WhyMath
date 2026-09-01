@@ -42,13 +42,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import dep_declaration
 import pathscope
 import remote_claims
 import report
 import selector
 import similar
 import store
-from models import GATE_KINDS, OWNERS, STATUS_TRANSITIONS, Backlog, Gate, Task
+from models import (
+    EOS_PRIORITIES,
+    GATE_KINDS,
+    OWNERS,
+    STATUS_TRANSITIONS,
+    TERMINAL_STATUSES,
+    Backlog,
+    Gate,
+    Task,
+)
 from seed_data import build_seed
 
 
@@ -231,10 +241,24 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
         for item in detail:
             print(f"  · {item}")
         return 0
-    print(f"착수 가능 후보 (상위 {min(args.n, len(ready))}건):")
+    shown = min(args.n, len(ready))
+    # 분모를 함께 낸다 — "상위 N건"만 적으면 *얼마나* 잘렸는지 안 보이고, 그 출력을
+    # 부재 판정("후보에 없다 = 차단됐다")에 쓰는 순간 무효가 된다. 실제로 그렇게 오독해
+    # 정상·뮤테이션 양쪽에서 같은 값을 얻은 사고가 있었다(2026-09-01 · CLAUDE.md
+    # "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 확장 축). 잘렸을 때는 전건 조회
+    # 방법까지 같이 알려 준다 — 규칙을 아는 것과 그 순간 떠올리는 것은 다르다.
+    if shown < len(ready):
+        print(f"착수 가능 후보 (전체 {len(ready)}건 중 상위 {shown}건):")
+    else:
+        print(f"착수 가능 후보 (전체 {len(ready)}건):")
     for i, task in enumerate(ready[: args.n], start=1):
         print(f"{i}. {task.id} [{task.layer}/{task.subject}] {task.title}")
         print(f"   사유: {selector.selection_rationale(backlog, task)}")
+    if shown < len(ready):
+        print(
+            f"\n※ {len(ready) - shown}건이 표시되지 않았다 — 특정 태스크가 후보인지"
+            f" 판정하려면 전건 조회: backlog.py next --n {len(ready)} --json",
+        )
     return 0
 
 
@@ -1166,10 +1190,60 @@ def _print_similar_notice(root: Path, backlog, task: Task, policy: object) -> No
         )
 
 
+# ── EOS 등급 집행 (HARN-55 — 계획서 100 Rule 1·3·4) ──────────────────────────
+#
+# 계획서 100은 세 규칙을 **산문으로** 요구했고(Rule 1 신규 기능 금지·Rule 3 전 기능 등급·
+# Rule 4 One In → One Out), 저장소는 그것을 선언 §0-5에 옮겨 적었을 뿐 집행 지점이 0이었다
+# (전환계획 준수 감사 A1 "높음"). 산문 규칙은 그것을 읽은 세션에만 작동한다 — 대장을 만지는
+# 경로가 CLI 하나뿐이므로, 집행 지점도 CLI여야 한다.
+#
+# 여기서 "집행"은 **등재를 거부하는 것**이다. 경고는 집행이 아니다: 이 저장소는 상시 실패하는
+# fail-open 경고가 습관화돼 보호가 통째로 무력해진 사고를 이미 겪었다(refs/claims 403).
+
+_EOS_PRIORITY_HELP = (
+    "P0 = 없으면 12월 검증(G0~G5)이 성립하지 않는다 | "
+    "P1 = 품질을 크게 높이지만 우회 가능 | "
+    "P2 = 판정 이후(2027 Q1~Q2) | "
+    "P3 = 장기 연구·플랫폼"
+)
+
+_EOS_PRIORITY_QUESTION = (
+    "판정 질문(계획서 100 §3.5): "
+    '"이 기능이 없으면 12월 31일 EOS 검증의 폐쇄루프가 깨지는가?" '
+    "YES = P0 후보. 애매하면 P0가 아니다 — 애매한 것을 P0에 넣는 것이 270개를 그대로 "
+    "12월 범위로 삼는 실패의 시작이다."
+)
+
+
+def _active_p0(backlog: Backlog) -> list[str]:
+    """예산을 점유 중인 P0 = 종결되지 않은 P0. 끝난 P0는 12월 범위를 먹지 않는다."""
+    return sorted(
+        t.id
+        for t in backlog.tasks.values()
+        if t.eos_priority == "P0" and t.status not in TERMINAL_STATUSES
+    )
+
+
 def cmd_add(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.id in backlog.tasks:
         return _fail(f"태스크 ID 중복: {args.id}")
+
+    # [Rule 1·3 집행] 등급 없는 등재를 거부한다. 이것이 "신규 기능 게이트"의 집행 지점이다
+    # — 등급을 고르려면 12월 검증 관여 여부를 판정할 수밖에 없기 때문이다.
+    if args.eos_priority is None:
+        return _fail(
+            f"{args.id}: --eos-priority 미지정 — EOS 등급 없는 신규 등재는 거부한다.\n"
+            f"    {_EOS_PRIORITY_HELP}\n"
+            f"    {_EOS_PRIORITY_QUESTION}\n"
+            "    (계획서 100 Rule 1·3 / 전환 선언 §0-5의 집행 지점. "
+            "산문 규칙만 있고 집행이 0이던 것이 준수 감사 A1이다)"
+        )
+    if args.eos_priority not in EOS_PRIORITIES:
+        return _fail(
+            f"{args.id}: --eos-priority '{args.eos_priority}' 미등록 "
+            f"(허용: {list(EOS_PRIORITIES)})"
+        )
 
     # ID 번호 충돌 차단 (HARN-10 — ARCH-13·OPS-15 2회 실측 후 등재)
     number = store.id_number_of(args.id)
@@ -1217,6 +1291,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         subject=args.subject,
         layer=args.layer,
         priority=args.priority,
+        eos_priority=args.eos_priority,
         owner=args.owner,
         depends_on=args.depends or [],
         requires_gates=args.gates or [],
@@ -1234,6 +1309,52 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     if overlap_error:
         return _fail(overlap_error)
 
+    # [Rule 4 집행] One In → One Out. 예산에 닿은 뒤의 P0 신규 등재는 교환을 요구한다.
+    # 교환 대상은 *비종결* P0여야 한다 — 이미 끝난 P0를 내주는 것은 아무것도 내주지 않는 것이다.
+    swapped: str | None = None
+    if task.eos_priority == "P0":
+        active = _active_p0(backlog)
+        budget = policy.eos_p0_budget
+        if len(active) >= budget:
+            if not args.swap_out:
+                return _fail(
+                    f"{args.id}: P0 예산 소진 — 현재 비종결 P0 {len(active)}건 / 예산 "
+                    f"{budget}건. P0 신규 등재는 기존 P0 하나와 **교환**해야 한다"
+                    " (One In → One Out · 계획서 100 Rule 4).\n"
+                    "    --swap-out <기존 P0 태스크 id> 로 내보낼 태스크를 지정하라"
+                    " (그 태스크는 P1로 강등된다).\n"
+                    f"    현재 P0: {', '.join(active[:10])}"
+                    f"{' 외 ' + str(len(active) - 10) + '건' if len(active) > 10 else ''}"
+                )
+            out = backlog.tasks.get(args.swap_out)
+            if out is None:
+                return _fail(f"--swap-out '{args.swap_out}': 그런 태스크가 없다")
+            if out.eos_priority != "P0":
+                return _fail(
+                    f"--swap-out '{args.swap_out}': P0가 아니다"
+                    f"(현재 {out.eos_priority!r}) — 교환은 P0 자리를 내주는 것이다"
+                )
+            if out.status in TERMINAL_STATUSES:
+                return _fail(
+                    f"--swap-out '{args.swap_out}': 이미 {out.status} — 종결 태스크는 예산을 "
+                    "점유하지 않으므로 내줄 자리가 없다(교환이 아니라 무상 추가가 된다)"
+                )
+            out.eos_priority = "P1"
+            out.notes = _append_note(
+                out.notes,
+                f"P0 → P1 강등 — {args.id} 등재와 교환(One In → One Out · Rule 4)",
+                "등급",
+            )
+            out.updated = _today()
+            swapped = out.id
+        elif args.swap_out:
+            return _fail(
+                f"--swap-out 불필요: 현재 비종결 P0 {len(active)}건 < 예산 {budget}건이라 "
+                "교환 없이 등재된다. 예산 여유가 있는데 교환하면 P0가 줄어든다"
+            )
+    elif args.swap_out:
+        return _fail("--swap-out 은 --eos-priority P0 일 때만 쓴다")
+
     backlog.tasks[task.id] = task
     errors = store.validate_backlog(backlog)
     # 새 태스크가 유발한 오류만 걸러 거부 (기존 백로그의 무관한 경고에 볼모 잡히지 않게)
@@ -1243,8 +1364,22 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
             print(f"  · {e}", file=sys.stderr)
         return _fail(f"{args.id}: 스키마/무결성 위반으로 추가 거부")
     path = store.save_task(root, task)
-    store.append_event(root, "add", task.id)
-    print(f"＋ {task.id} 추가 → {path.relative_to(root)}")
+    store.append_event(root, "add", task.id, eos_priority=task.eos_priority)
+    print(f"＋ {task.id} 추가 → {path.relative_to(root)} [EOS {task.eos_priority}]")
+    if swapped:
+        # 교환은 두 태스크를 바꾸므로 **양쪽 다** 디스크·대장에 남겨야 한다.
+        # 한쪽만 남기면 예산 회계가 조용히 어긋난다.
+        store.save_task(root, backlog.tasks[swapped])
+        store.append_event(
+            root,
+            "amend",
+            swapped,
+            reason=f"P0 → P1 교환 (One In → One Out, {task.id} 등재)",
+            field="eos_priority",
+            before="P0",
+            after="P1",
+        )
+        print(f"  ⇄ One In → One Out: {swapped} P0 → P1 강등")
     # HARN-43 — 등재는 끝났고, 이제 가드가 *못 본* 범위를 말한다(차단 아님).
     _print_visibility_notice(root, task.id, policy)
     # HARN-51 — 번호가 아니라 *의미*가 겹치는 태스크를 고지한다(차단 아님).
@@ -1253,7 +1388,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
-    """등재된 태스크의 acceptance·requires_gates·track 정정 (HARN-24 + HARN-49 통합).
+    """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
 
     **왜 필요한가 (두 뿌리)**:
     - *acceptance 축(HARN-24)*: 이 CLI에 등재된 태스크의 acceptance를 고치는 서브커맨드가
@@ -1290,10 +1425,19 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
 
     # 변경 요청이 하나도 없으면 거부 — 사유만 남기고 아무것도 안 바꾸는 호출은
     # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
-    if not (args.acceptance or args.gates or args.track):
+    # priority는 `is not None` — 0은 falsy라 `or args.priority`로 쓰면 `--priority 0`이
+    # "인자 없음"으로 처리돼 범위 오류가 아니라 엉뚱한 메시지가 난다(테스트가 실측).
+    if not (
+        args.acceptance
+        or args.gates
+        or args.track
+        or args.depends
+        or args.priority is not None
+        or args.eos_priority
+    ):
         return _fail(
-            f"{task.id}: 변경 항목이 없다 — "
-            "--acceptance / --gate / --track 중 하나 이상을 지정하라"
+            f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --track / --depends / "
+            "--priority / --eos-priority 중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
@@ -1322,7 +1466,61 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         task.requires_gates.append(gid)
         changed.append(f"requires_gates +{gid}")
 
-    # ③ track 이관 — 이전 값을 notes에 남긴다(HARN-49: 흔적 없이 덮어쓰면 왜 옮겼는지 사라진다)
+    # ③ priority 재배정 — 등재 후 우선순위를 고칠 유일한 CLI 경로(HARN-52 후속).
+    #
+    # 왜 필요한가: `depends_on`과 같은 부류의 공백이었다. 등재 시점에 정한 priority가
+    # 나중에 틀린 것으로 드러나도(선행 태스크가 급해졌다·차단 해소 지점이 됐다) 고칠
+    # 경로가 없어 대장 손편집 외에 방법이 없었다(CLAUDE.md 금기). track(HARN-49)·
+    # acceptance/gate(HARN-24)·depends(HARN-52)에 이은 마지막 필드다.
+    #
+    # 이전 값을 notes에 남긴다(HARN-49 관례) — 흔적 없이 덮어쓰면 왜 올렸는지 사라진다.
+    if args.priority is not None:
+        if not 1 <= args.priority <= 5:
+            return _fail(f"{task.id}: priority는 1(최고)~5 범위 — 받은 값 {args.priority}")
+        if args.priority == task.priority:
+            return _fail(f"{task.id}: priority가 이미 {args.priority} — 바꿀 것이 없다")
+        priority_before = task.priority
+        changed.append(f"priority {priority_before} → {args.priority}")
+        note_lines.append(f"priority {priority_before} → {args.priority}: {args.reason}")
+        task.priority = args.priority
+
+    # ④ depends_on 부착 — 등재 후 의존을 붙일 유일한 CLI 경로(HARN-52).
+    #
+    # 왜 필요한가: notes에 "선행: X 착지 후"라고 적어도 `selector.py`는 notes를 읽지 않는다
+    # — `depends_on`만 본다. 그런데 add 시점 외에 depends_on을 고칠 경로가 0건이라, 등재 후
+    # 발견한 선행 관계는 **대장 손편집 외에 방법이 없었다**(CLAUDE.md 금기). `dep_declaration`
+    # 게이트가 그 불일치를 red로 만드는 이상, 고칠 경로가 반드시 함께 있어야 한다 — 고칠 수
+    # 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다.
+    #
+    # 제거는 열지 않는다(추가만) — acceptance·requires_gates와 같은 append 규약. 의존 해제는
+    # 선행 태스크를 done으로 만드는 것이 정상 경로다.
+    for dep in args.depends or []:
+        if dep == task.id:
+            return _fail(f"{task.id}: 자기 자신을 의존으로 걸 수 없다")
+        if dep in task.depends_on:
+            return _fail(f"{task.id}: 의존 '{dep}' 가 이미 있다")
+        if dep not in backlog.tasks:
+            return _fail(
+                f"{task.id}: 의존 대상 '{dep}' 가 백로그에 없다 — "
+                "존재하지 않는 의존은 영구 차단이 된다(full id로 지정하라)"
+            )
+        # 순환 검사: dep에서 출발해 task.id에 도달하면 사이클이다. 사이클은 양쪽 태스크를
+        # 영구 착수 불가로 만들고, validate가 잡더라도 그때는 이미 대장이 오염된 뒤다.
+        stack, seen = [dep], set()
+        while stack:
+            cur = stack.pop()
+            if cur == task.id:
+                return _fail(f"{task.id}: 의존 '{dep}' 는 순환을 만든다 ({dep} → … → {task.id})")
+            if cur in seen:
+                continue
+            seen.add(cur)
+            nxt = backlog.tasks.get(cur)
+            if nxt is not None:
+                stack.extend(nxt.depends_on)
+        task.depends_on.append(dep)
+        changed.append(f"depends_on +{dep}")
+
+    # ⑤ track 이관 — 이전 값을 notes에 남긴다(HARN-49: 흔적 없이 덮어쓰면 왜 옮겼는지 사라진다)
     if args.track:
         if args.track == task.track:
             return _fail(f"{task.id}: track이 이미 '{args.track}' — 바꿀 것이 없다")
@@ -1333,6 +1531,26 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         changed.append(f"track {track_before} → {args.track}")
         note_lines.append(f"track {track_before} → {args.track}: {args.reason}")
         task.track = args.track
+
+    # ⑥ eos_priority — 등급 지정·정정. 기존 489건 백필의 **유일한 합법 경로**다
+    #    (대장 손편집 금지 · 그랜드파더 만료 시 validate가 미지정을 위반으로 만든다).
+    #    P0 예산은 여기서 강제하지 않는다: add의 교환제와 달리 amend는 *분류*이고,
+    #    분류 결과 P0가 예산을 넘는다면 그것은 우회가 아니라 **보고해야 할 사실**이다
+    #    (여기서 막으면 사람이 등급을 낮춰 적어 예산을 맞추게 된다 — 측정의 자기기만).
+    if args.eos_priority:
+        if args.eos_priority not in EOS_PRIORITIES:
+            return _fail(
+                f"{task.id}: --eos-priority '{args.eos_priority}' 미등록 "
+                f"(허용: {list(EOS_PRIORITIES)})"
+            )
+        if args.eos_priority == task.eos_priority:
+            return _fail(f"{task.id}: eos_priority가 이미 '{args.eos_priority}' — 바꿀 것이 없다")
+        eos_before = task.eos_priority
+        task.eos_priority = args.eos_priority
+        changed.append(f"eos_priority {eos_before or 'null'} → {args.eos_priority}")
+        note_lines.append(
+            f"eos_priority {eos_before or 'null'} → {args.eos_priority}: {args.reason}"
+        )
 
     task.notes = _append_note(task.notes, note_lines[0] if note_lines else args.reason, "정정")
     task.updated = _today()
@@ -1405,6 +1623,54 @@ def _stage_outliers_on_gated_tracks(backlog: Backlog) -> list[str]:
                     f"정정: backlog.py amend {task.id} --track <올바른 트랙> --reason ..."
                 )
     return out
+
+
+def cmd_audit_deps(root: Path, args: argparse.Namespace) -> int:
+    """의존 선언↔집행 대조 (HARN-52) — exit 0/1.
+
+    notes가 순서를 단언하는 어구로 타 태스크를 선행으로 지목하는데 `depends_on`이 비어 있으면
+    위반이다. `selector.py`는 notes를 읽지 않으므로, 그런 태스크는 사람이 "막아 뒀다"고 믿는
+    동안 다른 세션에 착수 가능 후보로 노출된다(#911 리뷰 P2 · EOS-62 실사례).
+
+    판정은 exit code로 한다(CLAUDE.md: 출력 문자열로 통과 선언 금지). `--all`은 그랜드파더를
+    무시하고 전건을 보여 준다 — 레거시 분류(HARN-53) 작업용이며 판정에는 쓰지 않는다.
+    """
+    backlog, _ = _load(root)
+    expiry = dep_declaration.find_expiry_violations(backlog.tasks)
+    findings = dep_declaration.find_undeclared_dependencies(
+        backlog.tasks, apply_exemptions=not args.all
+    )
+    exempt = len(dep_declaration.LEGACY_EXEMPT)
+
+    if args.all:
+        # 감사 모드 — 그랜드파더분까지 전부 보여 주되 판정은 하지 않는다(항상 exit 0).
+        print(f"[감사] 전건 스캔 — 위반 {len(findings)}건 (그랜드파더 {exempt}건 포함)")
+        for f in findings:
+            print(f"  · {f.render()}")
+        return 0
+
+    if not findings and not expiry:
+        print(
+            f"✔ 의존 선언↔집행 green — 위반 0건 "
+            f"(레거시 그랜드파더 {exempt}건은 HARN-53이 분류·만료)"
+        )
+        return 0
+
+    if expiry:
+        print(f"❌ 그랜드파더 만료 계약 위반 {len(expiry)}건:", file=sys.stderr)
+        for v in expiry:
+            print(f"  · {v}", file=sys.stderr)
+    if findings:
+        print(f"❌ 선언되었으나 집행되지 않은 의존 {len(findings)}건:", file=sys.stderr)
+        for f in findings:
+            print(f"  · {f.render()}", file=sys.stderr)
+        print(
+            "\n정정: python3 scripts/harness/backlog.py amend <id> "
+            "--depends <선행-태스크-full-id> --reason '...'\n"
+            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거).",
+            file=sys.stderr,
+        )
+    return 1
 
 
 def cmd_validate(root: Path, args: argparse.Namespace) -> int:
@@ -2156,6 +2422,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--subject", default="math")
     p.add_argument("--layer", default="backend")
     p.add_argument("--priority", type=int, default=3)
+    p.add_argument(
+        "--eos-priority",
+        dest="eos_priority",
+        default=None,
+        help=(
+            "EOS 12월 검증 등급 (P0|P1|P2|P3) — **필수**. "
+            "미지정은 exit 1 (계획서 100 Rule 1·3 집행 지점). " + _EOS_PRIORITY_HELP
+        ),
+    )
+    p.add_argument(
+        "--swap-out",
+        dest="swap_out",
+        default=None,
+        help=(
+            "P0 예산 소진 시 내보낼 기존 P0 태스크 id — 그 태스크는 P1로 강등된다 "
+            "(One In → One Out · 계획서 100 Rule 4)"
+        ),
+    )
     p.add_argument("--owner", default="claude")
     p.add_argument("--depends", action="append", default=[])
     p.add_argument("--gates", action="append", default=[])
@@ -2188,8 +2472,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
     )
     p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument(
+        "--depends",
+        action="append",
+        default=[],
+        help="depends_on에 선행 태스크 부착 (add 시점 외 유일 경로 — HARN-52). "
+        "full id로 지정. 자기 의존·순환·미존재 대상은 거부",
+    )
+    p.add_argument(
+        "--priority",
+        type=int,
+        help="priority 재배정 1(최고)~5 (add 시점 외 유일 경로 — HARN-52 후속)",
+    )
+    p.add_argument(
+        "--eos-priority",
+        dest="eos_priority",
+        default=None,
+        help=(
+            "EOS 등급 지정·변경 (P0|P1|P2|P3) — 기존 태스크 백필의 **유일한 합법 경로**"
+            "(대장 손편집 금지). " + _EOS_PRIORITY_HELP
+        ),
+    )
     p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
     p.set_defaults(func=cmd_amend)
+
+    p = sub.add_parser(
+        "audit-deps", help="의존 선언↔집행 대조 — notes의 '선행'이 depends_on에 있는가 (HARN-52)"
+    )
+    p.add_argument(
+        "--all",
+        action="store_true",
+        help="그랜드파더 무시하고 전건 표시 (감사 모드 — 항상 exit 0)",
+    )
+    p.set_defaults(func=cmd_audit_deps)
 
     p = sub.add_parser("validate", help="백로그 무결성 전수 검증")
     p.add_argument("--quiet", action="store_true")

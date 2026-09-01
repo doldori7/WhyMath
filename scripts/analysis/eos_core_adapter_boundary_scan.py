@@ -87,9 +87,16 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
     "l3.models": ("CORE", "L3 공용 데이터 모델"),
     "l3.prompt_assets": ("CORE", "프롬프트 자산 레지스트리"),
     "l3.escalation_defaults": ("CORE", "에스컬레이션 기본값 정책"),
+    "l3.generation_seed": ("CORE", "생성 재현 seed 정책 — 경로별 지원·값 추출(과목 무관)"),
     "l3.equivalent": ("ADAPTER", "수식 동치 판정·정규화 — doc-100 Adapter 'equation equivalence'"),
     "l3.symbolic_equivalence": ("ADAPTER", "기호 조작 — doc-100 'symbolic manipulation'"),
     "l3.verifier": ("ADAPTER", "모듈 스스로 '통합 *수학* 검증기 v2'로 자인"),
+    "l3.verify_answer_form": (
+        "ADAPTER",
+        "답 표기 형태 판정 — 기약분수·인수분해형 같은 **형태 어휘가 수학 소유**이고 SymPy로 "
+        "표면을 파싱한다. 신설 시 l3 기본값(CORE)을 물려받아 sympy를 import하는 CORE 모듈이 "
+        "됐던 것을 정정한다 — EOS-69가 청소한 유형을 같은 세션에서 재생산했다 (EOS-28)",
+    ),
     "l3.verify_answer": ("ADAPTER", "수학 정답 판정 — doc-100 'math problem validators'"),
     "l3.verify_step": ("ADAPTER", "인접 단계 수식 동치 연쇄 검사"),
     "l3.verify_final_answer": ("ADAPTER", "최종 답 수식 판정"),
