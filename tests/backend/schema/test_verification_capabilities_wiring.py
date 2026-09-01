@@ -192,9 +192,9 @@ def test_expected_form_vocabulary_is_measurement_gated() -> None:
     spec.loader.exec_module(scanner)
 
     for form in ExpectedForm:
-        assert form.value in scanner.FORM_PATTERNS, (
-            f"어휘 '{form.value}'가 스캐너 패턴에 없다 — 측정 경로 없이 추가됐다"
-        )
+        assert (
+            form.value in scanner.FORM_PATTERNS
+        ), f"어휘 '{form.value}'가 스캐너 패턴에 없다 — 측정 경로 없이 추가됐다"
 
     result = scanner.scan(corpus)
     for form in ExpectedForm:
