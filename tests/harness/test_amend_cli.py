@@ -38,6 +38,8 @@ def _add(task_id: str, *extra: str, acceptance: str = "원래 조건 ①") -> in
     return cli.main(
         [
             "add",
+            "--eos-priority",
+            "P2",
             "--id",
             task_id,
             "--title",

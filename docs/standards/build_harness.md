@@ -51,6 +51,25 @@ backlog/policy.yaml           조율 정책 — 겹침·ad-hoc 감지 강제 수
   **교집합 작업**을 사전 감지한다. 디렉토리는 `src/backend/` 또는
   `src/backend/**` 형태로 — 와일드카드 없는 리터럴은 단일 파일로 해석된다.
   기존 태스크의 paths 부재는 위반이 아니나, 신규 태스크는 `add --path` 선언을 관례화한다.
+- **태스크 `eos_priority` 필드 (v1.2 · HARN-55)**: EOS 12월 검증 등급 `P0|P1|P2|P3`.
+  계획서 100의 Rule 1·3·4를 **CLI 거부**로 집행하는 축이며, 산문 규칙이 집행 지점 0으로
+  떠 있던 상태(전환계획 준수 감사 A1 "높음")를 해소한다.
+  - **Rule 1·3 (등급 필수)** — `add --eos-priority` 미지정은 **exit 1**. 거부 메시지가
+    판정 질문("이 기능이 없으면 12월 31일 EOS 검증의 폐쇄루프가 깨지는가?")을 출력한다.
+    등급을 고르려면 12월 검증 관여 여부를 판정할 수밖에 없다 — 그것이 이 게이트의 목적이다.
+  - **Rule 4 (One In → One Out)** — 비종결 P0가 `policy.eos_p0_budget`(기본 50 ·
+    계획서 §7 "Release P0 ≤ 50")에 닿으면 P0 신규 등재는 `--swap-out <기존 P0 id>`를
+    요구하고, 그 태스크를 **P1로 강등**한다. 예산 여유 구간의 `--swap-out`은 거부한다
+    (P0를 오히려 줄이므로).
+  - **백필 경로** — 기존 태스크는 `amend <id> --eos-priority <등급> --reason "..."`.
+    대장 손편집은 금지다. amend는 예산을 강제하지 **않는다**: amend는 *분류*이고, 분류
+    결과가 예산을 넘는다면 그것은 우회가 아니라 보고해야 할 사실이다(여기서 막으면
+    사람이 등급을 낮춰 적어 예산을 맞추게 된다 — 측정의 자기기만).
+  - **그랜드파더와 그 만료** — 도입 시점의 기존 태스크는 `null`이 허용된다. 만료는 날짜가
+    아니라 **기계**다: 게이트 `G-eos-verification-relevance-triage`가 cleared/waived가 되는
+    순간(= 관여도 분류의 근거가 생긴 순간) 비종결 미지정이 `validate` 위반이 된다.
+    종결(done·cancelled) 태스크는 면제 — 끝난 일에 등급을 소급하는 것은 분류가 아니라
+    장부 청소다. 계약 동결 = `tests/harness/test_eos_priority_enforcement.py`(16건).
 
 ## 3. 순차 조율 규칙 (selector)
 
@@ -399,9 +418,12 @@ python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
                     # block은 원격 대장에 kind=block 홀드를 **게시**한다(HARN-42/48) —
                     # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
-python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>]
+python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>] [--eos-priority P0|P1|P2|P3]
                                                    # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
-python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물
+                                                   # --eos-priority = 기존 태스크 등급 백필의 유일한 합법 경로(HARN-55)
+python3 scripts/harness/backlog.py add --id ... --title ... --eos-priority P0|P1|P2|P3 --path "src/backend/**"  # /plan 산출물
+#   ↑ --eos-priority는 **필수**다 — 미지정은 exit 1 (계획서 100 Rule 1·3 집행 지점 · HARN-55).
+#     P0가 예산(policy.eos_p0_budget)에 닿았으면 --swap-out <기존 P0 id>로 교환한다(Rule 4)
 #   ↑ add는 등재 후 두 가지를 **고지**한다(차단 아님): 가시성(HARN-43)·의미 중복 후보(HARN-51)
 python3 scripts/harness/backlog.py validate        # 무결성 전수 검증
 python3 scripts/harness/backlog.py claims list --verbose   # 원격 claim 현황 (누가 무엇을)
