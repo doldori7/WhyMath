@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -22,5 +23,5 @@ paths:
   - tests/infra/test_backup_script.py
   - docs/architecture/db_backup_dr_runbook.md
 session: null
-notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D9-2. OPS-02는 done이나 런북 §6 자인 공백 4종의 백로그 추적이 0건이었다."
-updated: 2026-08-11
+notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D9-2. OPS-02는 done이나 런북 §6 자인 공백 4종의 백로그 추적이 0건이었다.\n\n[정정 2026-09-01] eos_priority null → P1: 미성년 PII 불변 계약 — 표본 수집 시 발화. EOS-80 일괄 백필"
+updated: 2026-09-01

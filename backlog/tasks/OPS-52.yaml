@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on:
   - OPS-51
@@ -23,5 +24,5 @@ paths:
   - src/backend/whymath_backend/l3/providers/ollama.py
   - src/backend/whymath_backend/l3/router.py
 session: null
-notes: "docs/ops/amd395_local_llm_performance.md §3 L4·§6 Phase 6 후속. 현재 Ollama 번들 ROCm 사용 중. ROCm 7.2 문서가 §8에 인용돼 있으나 실제 시도는 안 됐다. WSL2의 .wslconfig 메모리 제약은 이미 문서에 언급됨. +20% 규칙은 §3 L4에서 정의됨."
-updated: 2026-08-23
+notes: "docs/ops/amd395_local_llm_performance.md §3 L4·§6 Phase 6 후속. 현재 Ollama 번들 ROCm 사용 중. ROCm 7.2 문서가 §8에 인용돼 있으나 실제 시도는 안 됐다. WSL2의 .wslconfig 메모리 제약은 이미 문서에 언급됨. +20% 규칙은 §3 L4에서 정의됨.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

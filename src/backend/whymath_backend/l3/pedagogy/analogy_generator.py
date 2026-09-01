@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any, Final
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept_content import CONTENT_REVIEW_STATUS_AI_ESTIMATED
 from whymath_backend.l1.embedding_primitives import build_sync_engine
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -288,6 +289,9 @@ class AnalogyGenerator:
                 requires_reasoning=True,
                 student_subscription=self._subscription,
                 sync=True,
+                # 등급: 비유 생성 프롬프트에는 자체 개념 그래프의 대상 개념만 실린다 —
+                # 학생 자료·제3자 저작물 없음(EOS-59).
+                data_licenses=SELF_AUTHORED_CORPUS,
             )
         )
         if self._authoring_family is None:
@@ -307,6 +311,11 @@ class AnalogyGenerator:
             reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
             est_latency_ms=decision.est_latency_ms,
             est_cost_krw=decision.est_cost_krw,
+            # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 여기서는 패밀리 축만
+            # 갈아탈 뿐 법적 판정을 다시 하지 않는다. 안 실어 보내면 원본 결정이 게이트에
+            # 막혔다는 사실이 관측에서 조용히 사라진다(발동률 과소집계·EOS-59 ②).
+            data_export_blocked=decision.data_export_blocked,
+            data_export_reason=decision.data_export_reason,
         )
 
     def _invoke(

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/harness/coach_prose_leak_eval.py
   - tests/backend/harness/test_coach_prose_leak_eval.py
 session: null
-notes: "출처: LearnLM 검토 차용 후보 4 — 적대 검증 2렌즈 생존. SSM #12 루브릭(채점기) 축과 직교하는 시험지(입력) 축."
-updated: 2026-08-30
+notes: "출처: LearnLM 검토 차용 후보 4 — 적대 검증 2렌즈 생존. SSM #12 루브릭(채점기) 축과 직교하는 시험지(입력) 축.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

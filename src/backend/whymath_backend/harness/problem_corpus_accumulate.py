@@ -42,14 +42,30 @@ L3 코드에는 L4 import 0(계층 규칙). harness는 import-linter 계약 밖(
      횟수를 표기한다. `--worklist-out`으로 뷰 경로만 바꿀 수 있다(끄기 없음 — 기본 기록이라야
      검수 큐 공급이 참·비수용 0건이어도 "관측했고 0건"을 기록). 무진전(exit 1) 회차에도
      기록한다(실패 증거 보존·2026-08-22 규칙).
-범위 밖 별항(정본화≠집행): 해결(체크 완료) 추적·review_status 각인·승격 집행은 OPS-24 백필·
-승격 후속 태스크 소관 — 이 CLI의 계약은 "큐가 소실되지 않고 본문이 실린다"까지다.
+범위 밖 별항(정본화≠집행): 해결(체크 완료) 추적·review_status 각인은 OPS-24 백필 소관이고,
+**골든 승격 집행**은 `harness/golden_promotion_gate`(EOS-64 ③)가 경로를 강제한다 — 이 CLI의
+계약은 "큐가 소실되지 않고 본문이 실린다"까지다.
+
+회차 계측(EOS-64 ②④ — `harness/anchor_round_ledger`가 정본):
+  - **작동한 비율** — 리포트 JSON에 `operating_rates`(outcome 6종 분포 + 방향별 Wilson 단측
+    경계)를 싣는다. exit 0/1은 "이번에 붙었나"만 말하고 *어느 단계가 일했는지*는 말하지 않는다
+    — 전건 generation_failed 회차와 "생성은 됐는데 게이트가 다 잡은" 회차는 exit 1로 같은 색인데
+    조치가 정반대다. 분포가 그 둘을 가른다(CLAUDE.md "작동 신호 없는 알고리즘 부착 금지").
+  - **회차 대장** — 회차 1건을 `<out>.rounds.jsonl` 사이드카에 즉시 append한다(genlog·검수 큐와
+    같은 규약·끄기 없음). 이 대장이 없으면 연속 무진전이 영원히 "측정 불가"가 된다.
+  - **연속 무진전 알람** — 최신 회차부터 연속으로 신규 행 0인 회차가 `--stagnation-window`
+    (기본 3) 이상이면 알람이다. exit 2 + stderr 경고 + 리포트 `stagnation` 필드 3중으로 낸다 —
+    stderr 한 줄만이면 습관화돼 소음이 되고(fail-open 상시 실패를 "보호 있음"으로 신뢰 금지),
+    exit 코드라야 스케줄러·런북이 기계로 잡는다.
+
+exit 코드 3종: 0=신규 수용 ≥1 · 1=이번 회차 무진전 · **2=연속 무진전 알람**(1보다 강한 신호 —
+이번 회차만의 운이 아니라 구조적으로 막혀 있다).
 
 사용법(Phaiakes9·라이브):
     python -m whymath_backend.harness.problem_corpus_accumulate \\
         --seed <기존.jsonl> [--seed <추가.jsonl> ...] --out <축적.jsonl> --n 20 \\
         [--topic-hint "..."] [--standard-code "[10공수1-02-02]"] [--difficulty 2.5] \\
-        [--generation-log <경로.jsonl>] [--worklist-out <경로.md>]
+        [--generation-log <경로.jsonl>] [--worklist-out <경로.md>] [--stagnation-window 3]
 """
 
 from __future__ import annotations
@@ -64,6 +80,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.harness.anchor_round_ledger import (
+    DEFAULT_STAGNATION_WINDOW,
+    RoundRecord,
+    append_round_ledger,
+    default_round_ledger_path,
+    judge_stagnation,
+    load_round_ledger,
+    operating_rates,
+)
 from whymath_backend.harness.needs_review_worklist import (
     ReviewQueueEntry,
     append_review_queue_jsonl,
@@ -89,6 +114,7 @@ from whymath_backend.schema.provenance import GenerationLog
 __all__ = [
     "AccumulateReport",
     "default_generation_log_path",
+    "default_round_ledger_path",
     "default_review_queue_path",
     "default_worklist_path",
     "load_corpus_index",
@@ -113,6 +139,11 @@ class AccumulateReport:
     아니라 `review_sink`(발생 즉시 append)가 소유한다 — 리포트는 회차 요약일 뿐이다.
     `run_id`는 이 회차 식별자 — 검수 큐 행(`ReviewQueueEntry.run_id`)과 조인하는 키.
     `to_json`엔 outcome 카운트만 싣는다(객체는 직렬화하지 않음).
+
+    `to_json`의 `operating_rates`(EOS-64 ②)는 **작동한 비율** — outcome 6종 분포와 방향별
+    Wilson 단측 경계다. 정상 응답·exit 0은 파이프라인이 일했다는 증거가 아니므로(CLAUDE.md
+    "작동 신호 없는 알고리즘 부착 금지") 분포를 회차 리포트의 기본 필드로 싣는다. 계산은
+    `anchor_round_ledger.operating_rates` 단일 원천(비율 산술을 여기서 재구현하지 않는다).
     """
 
     attempted: int
@@ -140,6 +171,7 @@ class AccumulateReport:
             "run_id": self.run_id,
             "reason_sample": self.reason_sample,
             "review_outcomes_count": len(self.review_outcomes),
+            "operating_rates": operating_rates(self.outcome_counts, attempted=self.attempted),
         }
 
 
@@ -364,7 +396,21 @@ def main(argv: list[str] | None = None) -> int:
             "검수 큐 공급이 기본·뷰 경로를 바꿔도 큐 저장소는 <out>.review.jsonl 고정)."
         ),
     )
+    parser.add_argument(
+        "--stagnation-window",
+        type=int,
+        default=DEFAULT_STAGNATION_WINDOW,
+        help=(
+            "연속 무진전 알람 임계 회차 수(EOS-64 ④·기본 "
+            f"{DEFAULT_STAGNATION_WINDOW}). 최신 회차부터 코퍼스 신규 행 0인 회차가 이 수 "
+            "이상 연속되면 exit 2 + stderr 알람. 회차 이력은 <out>.rounds.jsonl 대장에 "
+            "항상 적재한다(끄기 없음 — 대장이 없으면 알람이 영원히 '측정 불가'다)."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.stagnation_window <= 0:
+        # 창 0·음수는 알람을 상시 참으로 만들어 판정을 무의미하게 만든다(변별력 없는 게이트).
+        parser.error(f"--stagnation-window는 1 이상이어야 한다(받은 값 {args.stagnation_window}).")
 
     spec = EquivalenceSpec(
         achievement_standard_codes=frozenset({args.standard_code}),
@@ -424,8 +470,53 @@ def main(argv: list[str] | None = None) -> int:
     )
     worklist_path.parent.mkdir(parents=True, exist_ok=True)
     worklist_path.write_text(worklist_md, encoding="utf-8")
-    json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
+
+    # ── 회차 대장 + 연속 무진전 알람(EOS-64 ④) ───────────────────────────────
+    # 대장 append는 워크리스트 기록 *뒤*에 둔다 — 앞선 산출물이 다 남은 뒤에 회차를 "끝났다"고
+    # 기록해야 대장 행과 디스크 상태가 어긋나지 않는다(중간에 죽으면 그 회차는 대장에 없고,
+    # 그건 정직하다 — 완료되지 않은 회차다).
+    payload = report.to_json()
+    ledger_path: Path = default_round_ledger_path(args.out)
+    ledger_error: str | None = None
+    try:
+        append_round_ledger(
+            ledger_path,
+            RoundRecord(
+                run_id=report.run_id,
+                out_path=report.out_path,
+                attempted=report.attempted,
+                accepted=report.accepted,
+                appended=report.appended,
+                outcome_counts=dict(report.outcome_counts),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 — 대장 적재 장애는 회차를 깨지 않되 타입명을 남긴다
+        ledger_error = type(exc).__name__
+        _LOGGER.warning("회차 대장 적재 실패(%s) — 무진전 판정은 이 회차를 못 본다", ledger_error)
+
+    ledger_records: list[RoundRecord] = []
+    ledger_load_errors: list[str] = []
+    if ledger_path.exists():
+        ledger_records, ledger_load_errors = load_round_ledger(ledger_path)
+    stagnation = judge_stagnation(
+        ledger_records, window=args.stagnation_window, load_errors=ledger_load_errors
+    )
+    payload["stagnation"] = {
+        **stagnation.to_json(),
+        "ledger_path": str(ledger_path),
+        # 적재가 실패했으면 이번 회차가 대장에 없다 — 판정이 그 사실 위에서 내려졌음을 명기한다
+        # (조용한 실패 금지: 알람이 안 뜬 이유가 "진전"인지 "기록 누락"인지 구분 가능해야 한다).
+        "ledger_append_error": ledger_error,
+        "ledger_load_errors": ledger_load_errors,
+    }
+    json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+
+    if stagnation.alarm:
+        # stderr + exit 2 — stdout JSON 한 필드만이면 습관화돼 안 읽힌다(fail-open 상시 실패를
+        # "보호 있음"으로 신뢰 금지). exit 2는 "이번 회차 무진전"(1)보다 강한 구조 신호다.
+        sys.stderr.write(f"[연속 무진전 알람] {stagnation.message}\n")
+        return 2
     return 0 if report.appended > 0 else 1
 
 

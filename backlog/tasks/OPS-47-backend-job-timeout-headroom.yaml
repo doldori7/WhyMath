@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - ".github/workflows/ci.yml"
   - src/backend/pyproject.toml
 session: null
-notes: "발견 경위: 2026-08-21 PR #848 스쿼시 머지 후 main CI 확인 중 backend 잡이 40분에 cancelled. lint·black·mypy·import-linter는 통과했고 Pytest 단계에서 잘렸다. 이 머지의 diff는 src/backend를 한 파일도 건드리지 않았고(변경 9파일 = MEMORY.md·backlog/·infra/·tests/infra), backend 잡은 working-directory: src/backend라 diff와 무관 — 즉 이 타임아웃은 #848의 결함이 아니라 선재하는 여유 부족이 드러난 것이다. 직전 main 커밋 38278c85는 같은 스위트를 28.3분에 통과했다. 재실행으로 확인하려 했으나 rerun-failed-jobs가 403(권한 없음)이라 못 했다 — 이 판정은 소요 분포 11표본 실측에 근거한다. ci.yml:279가 '후속 최적화 과제: pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리'를 적어 두었으나 태스크로 등재돼 있지 않았다(CLAUDE.md: 주석 속 계획은 백로그를 대신하지 못한다)."
-updated: 2026-08-21
+notes: "발견 경위: 2026-08-21 PR #848 스쿼시 머지 후 main CI 확인 중 backend 잡이 40분에 cancelled. lint·black·mypy·import-linter는 통과했고 Pytest 단계에서 잘렸다. 이 머지의 diff는 src/backend를 한 파일도 건드리지 않았고(변경 9파일 = MEMORY.md·backlog/·infra/·tests/infra), backend 잡은 working-directory: src/backend라 diff와 무관 — 즉 이 타임아웃은 #848의 결함이 아니라 선재하는 여유 부족이 드러난 것이다. 직전 main 커밋 38278c85는 같은 스위트를 28.3분에 통과했다. 재실행으로 확인하려 했으나 rerun-failed-jobs가 403(권한 없음)이라 못 했다 — 이 판정은 소요 분포 11표본 실측에 근거한다. ci.yml:279가 '후속 최적화 과제: pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리'를 적어 두었으나 태스크로 등재돼 있지 않았다(CLAUDE.md: 주석 속 계획은 백로그를 대신하지 못한다).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

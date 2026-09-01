@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -24,5 +25,5 @@ paths:
   - src/backend/whymath_backend/harness/pilot_kpi_baseline.py
   - "tests/backend/harness/test_pilot_kpi_baseline*.py"
 session: null
-notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G4·G5 · §4 D11. v1·r2가 두 번 다 보지 않은 평면 — 게임화를 쓰지 않기로 한 결정이 실제로 작동하는지 우리는 모른다. 최우선 검증 가설 D7 retention ≥ 30%(risks.md:119 · market_analysis.md:121 '가장 먼저 검증해야 할 가설' · business_plan_master_v1.md:95 · execution_bridge_2026-07.md:64 Phase 1 종료 게이트)의 유일한 측정 경로가 KPI2인데, 입력 LearningSession의 생성자 호출이 src/ 전체 0건이고 S3-16이 영구 미신설을 결정했다. 게다가 compute_retention docstring(:183)은 그 0을 'genuine 부재'로 말한다 — v1 D1-③이 분리하라고 못 박은 '구조적 불가'가 '무데이터'로 위장된다. 대체 소스 Dialogue는 실 writer가 있다(api/coach.py:1891-1901). 근거 원칙 = CLAUDE.md '작동한 비율'(2026-08-03) — 채택한 것만이 아니라 채택하지 않기로 한 것에도 적용된다. 측정이 없으면 '반게임화가 옳았다'는 3차에 걸쳐 반복된 판정이 검증된 적 없는 신념으로 남는다."
-updated: 2026-08-11
+notes: "docs/architecture/gamification_module_gap_review_r3.md §2 G4·G5 · §4 D11. v1·r2가 두 번 다 보지 않은 평면 — 게임화를 쓰지 않기로 한 결정이 실제로 작동하는지 우리는 모른다. 최우선 검증 가설 D7 retention ≥ 30%(risks.md:119 · market_analysis.md:121 '가장 먼저 검증해야 할 가설' · business_plan_master_v1.md:95 · execution_bridge_2026-07.md:64 Phase 1 종료 게이트)의 유일한 측정 경로가 KPI2인데, 입력 LearningSession의 생성자 호출이 src/ 전체 0건이고 S3-16이 영구 미신설을 결정했다. 게다가 compute_retention docstring(:183)은 그 0을 'genuine 부재'로 말한다 — v1 D1-③이 분리하라고 못 박은 '구조적 불가'가 '무데이터'로 위장된다. 대체 소스 Dialogue는 실 writer가 있다(api/coach.py:1891-1901). 근거 원칙 = CLAUDE.md '작동한 비율'(2026-08-03) — 채택한 것만이 아니라 채택하지 않기로 한 것에도 적용된다. 측정이 없으면 '반게임화가 옳았다'는 3차에 걸쳐 반복된 판정이 검증된 적 없는 신념으로 남는다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

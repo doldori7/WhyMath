@@ -65,11 +65,19 @@ class FakePregenProvider:
         self._text = text
         self._raises = raises
         self.calls: list[tuple[str, str, RoutingDecision]] = []
+        # EOS-73 — 사전적재기가 실어 보낸 시드(LOCAL 결정이면 값, 클라우드면 미전달).
+        self.seeds: list[int | None] = []
 
     async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        seed: int | None = None,
     ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
+        self.seeds.append(seed)
         if self._raises is not None:
             raise self._raises
         return GenerationResult(self._text)
@@ -1472,7 +1480,12 @@ class UsagePregenProvider:
         self._usage = usage
 
     async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        seed: int | None = None,  # EOS-73 — 계약 정합(이 대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         return GenerationResult(self._text, usage=self._usage)
 

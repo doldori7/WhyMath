@@ -47,6 +47,8 @@ def _add(task_id: str = TASK) -> int:
     return cli.main(
         [
             "add",
+            "--eos-priority",
+            "P2",
             "--id",
             task_id,
             "--title",

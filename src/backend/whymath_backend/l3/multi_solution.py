@@ -103,6 +103,7 @@ from whymath_backend.db.models.verified_solution import (
     WhsSolutionGrade,
 )
 from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -759,6 +760,9 @@ def generation_routing_request(subscription: str = "free") -> RoutingRequest:
         requires_reasoning=True,
         student_subscription=subscription,
         sync=True,
+        # 등급: 다중 풀이 생성의 입력 시드는 자체 저작 코퍼스의 문항이다(오프라인 공장 —
+        # 학생 자료 없음). 코퍼스에 AIHub 유래가 들어오면 단일 좌석에서 함께 잠긴다.
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
 
 
@@ -1108,6 +1112,9 @@ class DeterministicFakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        # EOS-73: seed 좌석은 받되 무시한다 — 이 가짜는 이미 결정론이라 시드가 바꿀 것이 없다
+        # (LLMProvider 계약 정합용 인자·값은 캡처하지 않는다).
+        seed: int | None = None,
     ) -> GenerationResult:
         """프롬프트에 포함된 발문으로 시드를 식별해 canned 응답 반환(미지 프롬프트는 명확 오류)."""
         for question, response in self._canned.items():

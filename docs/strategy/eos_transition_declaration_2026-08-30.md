@@ -61,6 +61,19 @@
 
 1. **registry.yaml·DECISIONS.md·docs/eos/ 7파일 트리를 신설하지 않는다.** MP-0 대장 = `backlog/`, ADR = MEMORY.md 결정 로그 + `docs/architecture/`, 이월 목록 = backlog POSTPONE/cancel. 이중 진실원천은 이 저장소가 명문으로 금지한 붕괴 경로다.
 2. **게이트 G0~G5는 하네스 사람 게이트 대장으로 집행한다.** G0은 `G-eos-g0-verification-design-freeze`로 등재 완료. G1~G5는 직전 주에 순차 등재한다(대장 청결 유지).
+
+   > ⚠️ **"G0"는 이 저장소에서 한 가지 뜻만 갖는다 — 검증설계 동결 게이트**
+   > (`G-eos-g0-verification-design-freeze` · 2026-08-30 조기 서명·clear).
+   >
+   > 첨부 계획서 100(`Phase 0 — Architecture Reset & Scope Freeze`)에도 **`Gate 0`**
+   > 가 있으나 **다른 판정**이다: 9/6 · A(Scope)·B(Architecture)·C(Data)·D(Migration)·
+   > E(Release) 5축. 두 이름이 겹치면 "G0 통과했다"가 *참이면서 동시에 거짓*이 된다
+   > — 검증설계 G0은 clear됐고 계획서 Gate A~E는 미완이기 때문이다.
+   >
+   > **표기 규약**: 이 저장소의 게이트는 `G0`~`G5`, 계획서 100의 것은 **`Phase 0 Gate A~E`**
+   > 로 적는다. 계획서 100의 Gate 0을 `G0`로 줄여 쓰지 않는다. 현행 A~E 판정은
+   > `docs/reviews/eos_source_docs_gap_review_2026-08-31.md` §2·§7이 정본이다.
+   > (출처: 같은 문서 §7.3-① — 이름 충돌을 9/6 판정 문장 이전에 고정하기 위한 규약)
 3. **Subject-neutral core "실구현"은 보류 대장 원칙 유지.** 2026-08-25 결정(EOS-32 검토)대로 실구현은 착수 트리거 전 금지 — W1은 **계약(contract) 수준**(S1-16·CUR-11)만 진행한다. 계획서의 `src/eos/`+`subjects/math/` 물리 대이동은 12월 검증에 불필요하며 "한 번에 재작성 금지"(006 §43)와도 정합.
 
 ---

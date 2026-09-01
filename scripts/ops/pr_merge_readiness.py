@@ -27,6 +27,7 @@ exit code (게이트 CLI 관례)
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -37,6 +38,22 @@ _CA_PATH = "/root/.ccr/ca-bundle.crt"  # 에이전트 프록시 CA (있을 때�
 
 # 필수 체크를 만족시키는 결론 — skipped도 만족이다(GitHub 규칙).
 SATISFYING = frozenset({"success", "skipped", "neutral"})
+
+
+def _auth_args() -> list[str]:
+    """토큰이 있으면 `["-H", "Authorization: Bearer <token>"]`, 없으면 `[]`.
+
+    **왜 필수인가** (2026-09-01 main red 실측): GitHub API의 **미인증** 한도는
+    IP당 60req/h인데, GitHub 러너는 IP를 공유하므로 실질적으로 상시 소진 상태다.
+    실제 실패: `API rate limit exceeded for 52.157.2.240`.
+
+    더 나쁜 것은 이 실패가 **간헐적**이라는 점이다 — 같은 코드가 앞선 실행에서는
+    통과했다(그때는 한도가 남아 있었다). 그래서 "한 번 초록이었다"가 안전의 증거가
+    되지 못한다. 워크플로가 `GITHUB_TOKEN` 환경변수를 넘겨도 **스크립트가 읽지
+    않으면 아무 효과가 없다** — 환경변수 설정과 실제 소비는 다른 일이다.
+    """
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    return ["-H", f"Authorization: Bearer {token}"] if token else []
 
 
 def _ca_args() -> list[str]:
@@ -128,7 +145,17 @@ def decide(
 
 
 def _get(path: str) -> object:
-    cmd = ["curl", "-sS", "--max-time", str(TIMEOUT), *_ca_args(), f"{API}{path}"]
+    cmd = [
+        "curl",
+        "-sS",
+        "--max-time",
+        str(TIMEOUT),
+        *_ca_args(),
+        *_auth_args(),
+        "-H",
+        "Accept: application/vnd.github+json",
+        f"{API}{path}",
+    ]
     try:
         out = subprocess.run(
             cmd,

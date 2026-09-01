@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -23,5 +24,5 @@ paths:
   - src/backend/whymath_backend/schema/ocr.py
   - src/mobile/lib/features/ocr/data/ocr_models.dart
 session: null
-notes: "docs/architecture/nlp_module_gap_review_r2.md §8.4(Δ4). v1 §1 기능 69는 'OCR 오류 자동 보정'을 ✅(더 엄격)로 판정하며 '저신뢰는 low_quality 플래그로 보류'를 근거로 들었는데, 실측하면 그 엄격함을 떠받치는 것은 코치 0.8 게이트 하나이고 이름이 붙은 축(needs_review→needs_reconfirmation)은 죽어 있다: config.py:1130 기본 0.0 → assemble.py:60 가드가 상시 False → :91 페이지 OR도 상시 False, 그리고 schema/ocr.py:181·:249·:282까지 완비됐는데 클라 소비자가 0(ocr_models.dart:69-71이 자체 임계로 재구현). 이 축의 목적은 오인식을 학생 오류로 거짓 지적하지 않는 것이라 의사결정 우선순위 1위(학생 안전·웰빙)다. 기본값이 축을 끄는 좌석은 opt-in이 아니라 상시 미작동으로 회계한다(§8.7 원칙)."
-updated: 2026-08-11
+notes: "docs/architecture/nlp_module_gap_review_r2.md §8.4(Δ4). v1 §1 기능 69는 'OCR 오류 자동 보정'을 ✅(더 엄격)로 판정하며 '저신뢰는 low_quality 플래그로 보류'를 근거로 들었는데, 실측하면 그 엄격함을 떠받치는 것은 코치 0.8 게이트 하나이고 이름이 붙은 축(needs_review→needs_reconfirmation)은 죽어 있다: config.py:1130 기본 0.0 → assemble.py:60 가드가 상시 False → :91 페이지 OR도 상시 False, 그리고 schema/ocr.py:181·:249·:282까지 완비됐는데 클라 소비자가 0(ocr_models.dart:69-71이 자체 임계로 재구현). 이 축의 목적은 오인식을 학생 오류로 거짓 지적하지 않는 것이라 의사결정 우선순위 1위(학생 안전·웰빙)다. 기본값이 축을 끄는 좌석은 opt-in이 아니라 상시 미작동으로 회계한다(§8.7 원칙).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

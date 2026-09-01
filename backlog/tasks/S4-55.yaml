@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on:
   - S4-52-verifier-v2-design
@@ -26,5 +27,5 @@ paths:
   - docs/architecture/verifier_v2_design.md
   - "backlog/tasks/**"
 session: null
-notes: "S4-52 v2 설계서 §4. '증명된 축의 집합'으로 tier를 세분화하되, 기존 MACHINE_EXHAUSTIVE/MACHINE_SAMPLED는 legacy alias로 유지해 마이그레이션 없이 기존 코퍼스를 그대로 읽을 수 있게 한다."
-updated: 2026-08-25
+notes: "S4-52 v2 설계서 §4. '증명된 축의 집합'으로 tier를 세분화하되, 기존 MACHINE_EXHAUSTIVE/MACHINE_SAMPLED는 legacy alias로 유지해 마이그레이션 없이 기존 코퍼스를 그대로 읽을 수 있게 한다.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/A3 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

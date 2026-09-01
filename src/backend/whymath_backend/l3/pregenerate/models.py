@@ -66,12 +66,19 @@ class PrewarmItemResult:
     `usage`는 provider 생성 호출의 *실측* 토큰·지연이다(S1 게이트 ② — GenerationLog
     텔레메트리 적재 근거, provenance_bridge). 인제스트 모드(precomputed)·스킵·오류
     경로는 provider 호출이 없어 None(지어내지 않음).
+
+    `seed`는 그 호출에 **실제로 실려 나간** 샘플링 시드다(EOS-73 — GenerationLog.seed 적재
+    근거). `usage`와 정확히 같은 규칙을 따른다: provider를 부른 경로에서만 값이 있고,
+    인제스트(precomputed)·스킵(skipped_exists)·호출 전 오류·클라우드 결정(seed 구조적 불가)은
+    None이다. **모델에 전달되지 않은 시드를 기록하면 그 행은 재현 가능하다고 거짓말하게 되므로**
+    "뽑았지만 안 보낸" 값은 여기 담지 않는다(날조 금지).
     """
 
     cache_key: str
     status: PrewarmStatus
     error: str | None = None
     usage: Usage | None = None
+    seed: int | None = None
 
 
 @dataclass(slots=True, frozen=True)

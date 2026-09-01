@@ -149,7 +149,10 @@ def generation_log_from_result(
       - `cost_usd`: 인자에서 그대로(호출자가 `actual_cost_usd_or_none`으로 산정 — 로컬
         사전생성=0.0, 미상=None). 이 어댑터는 단가를 모른다(순수 변환).
       - `prompt_version`/`seed`: 재현 좌석(EOS-55) — *실제 쓰인 값만* 인자로 받는다.
-        사전적재 경로는 템플릿 체계·seed 스레딩이 없어 기본 None=미기록(날조 금지).
+        사전적재 경로는 프롬프트 템플릿 체계가 없어 `prompt_version`은 기본 None=미기록이다
+        (번호를 발명하지 않는다). `seed`는 EOS-73부터 호출부가 `result.seed`(= provider에
+        실제로 실려 나간 시드)를 넘긴다 — 이 어댑터는 여전히 *뽑지 않는다*(순수 변환). 호출이
+        없었던 항목(인제스트·스킵)과 시드를 실을 수 없는 클라우드 결정은 None=미기록(날조 금지).
       - `input_snapshot`: 입력 스냅샷(전문+해시 — 자기완결) — 주어지면 `input_sha256`은
         schema validator가 canonical 해시로 자동 보충·봉인한다(해시 계산 정본은 schema 하나).
       - `cu_slug`: 생산 CU 조인 정체성(#912 P1-2) — 경로가 *실제 가진* 정체성만 기록한다.
