@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from whymath_backend.schema.verification_capabilities import (
+        AnswerFormVerifier,
         AssessmentAnswerVerifier,
         ExpressionEquivalence,
         ExpressionSeal,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "default_answer_form_verifier",
     "default_assessment_answer_verifier",
     "default_expression_equivalence",
     "default_expression_seal",
@@ -84,3 +86,10 @@ def default_expression_seal() -> ExpressionSeal:
     from whymath_backend.l4.subject_adapter_math import math_expression_seal
 
     return math_expression_seal()
+
+
+def default_answer_form_verifier() -> AnswerFormVerifier:
+    """`AnswerFormVerifier`(제출답의 표기 지시 준수 판정)의 기본 구현을 준다."""
+    from whymath_backend.l4.subject_adapter_math import math_answer_form_verifier
+
+    return math_answer_form_verifier()
