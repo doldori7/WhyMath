@@ -453,7 +453,9 @@ class LLMEquivalentProblemGenerator:
         return candidate
 
     # ── 동기 경계(async provider.generate를 배치 sync 문맥에서 호출) ─────
-    def _invoke(self, prompt: str, decision: RoutingDecision) -> GenerationResult:
+    def _invoke(
+        self, prompt: str, decision: RoutingDecision, *, seed: int | None
+    ) -> GenerationResult:
         """provider.generate(async)를 sync 경계에서 실행 — 오프라인 배치 문맥 전용.
 
         오케스트레이터(`run_batch`)는 sync라 여기서 코루틴을 완주시킨다. **인스턴스 전용 지속
@@ -471,18 +473,36 @@ class LLMEquivalentProblemGenerator:
         format= 제약 디코딩으로 출력을 스키마에 맞는 JSON으로 문법 강제하고, 클라우드
         (Anthropic)는 문법 제약이 없어 스키마를 주면 명확히 거부하므로(조용한 무시 금지)
         클라우드 경로는 종전처럼 프롬프트+관대 파서(_extract_json)로 동작한다(이중 방어).
+
+        `seed`(EOS-73 생성 재현)는 **값이 있을 때만** 싣는다. 호출부가 `seed_for_decision`으로
+        뽑으므로 LOCAL이면 값이, 클라우드면 None이 온다 — 클라우드에 실으면 AnthropicProvider가
+        명확히 거부한다(seed 파라미터 부재·조용한 무시 금지). 기본값을 두지 않고 **키워드 필수**로
+        받는 이유: 호출부가 "이 호출의 재현 좌표를 기록했는가"를 매번 자문하게 하기 위함이다.
         """
         is_local = decision.cost_tier == CostTier.LOCAL.value
         schema = _OUTPUT_JSON_SCHEMA if is_local else None
         # provider 반환은 GenerationResult(text, usage) — 텍스트는 조립이, usage는 관측
         # (_record_trace: 실측 토큰·지연·비용)이 소비한다.
-        return self._ensure_loop().run_until_complete(
+        loop = self._ensure_loop()
+        if seed is None:
+            # 시드 미지원 경로(클라우드) — 실으면 provider가 명확히 거부한다(조용한 무시 금지).
+            return loop.run_until_complete(
+                self._provider.generate(
+                    prompt,
+                    _system_prompt(),
+                    decision,
+                    temperature=self._temperature,
+                    json_schema=schema,
+                )
+            )
+        return loop.run_until_complete(
             self._provider.generate(
                 prompt,
                 _system_prompt(),
                 decision,
                 temperature=self._temperature,
                 json_schema=schema,
+                seed=seed,
             )
         )
 
@@ -550,6 +570,8 @@ class LLMEquivalentProblemGenerator:
           - `topic_hint`/`temperature`: 프롬프트·샘플링에 실제 반영된 생성 신호.
         라우터 결정은 담지 않는다 — spec에서 결정론 유도되는 파생물이고, 실행 모델은
         `model_name` 컬럼이 별도 기록한다(pregenerate측 `input_snapshot_for_prewarm` 동형).
+        시드도 담지 않는다 — `GenerationLog.seed` 전용 컬럼이 정본이고, 스냅샷에 사본을 두면
+        둘이 갈라졌을 때 어느 쪽이 실제로 보낸 값인지 알 수 없게 된다(단일 진실 원천).
         """
         return {
             "kind": "l3.equivalent.llm_generate",
@@ -576,6 +598,7 @@ class LLMEquivalentProblemGenerator:
         usage: Usage | None,
         success: bool,
         error_detail: str | None,
+        seed: int | None,
         cu_slug: str | None = None,
     ) -> None:
         """호출 1건의 GenerationLog 조립·싱크 적재 — never-break(배치 비차단).
@@ -587,8 +610,11 @@ class LLMEquivalentProblemGenerator:
             안정 slug(`_stable_slug` 산출물·`candidate.problem.slug`)를 전달한다 —
             `ops/hit_cu_metrics --generation-log` CU 조인 정체성. 정체성이 생기기 전에
             실패한 종단(provider 예외·파싱 실패·조립 실패)은 None=미기록(정직).
-          - `seed=None` — 이 경로는 seed 스레딩이 없다(2026-08-30 실측: 라우터·프로바이더
-            seed 전달 0). 좌석만 두고 실사용 시점에 실제 값을 기록한다.
+          - `seed`(EOS-73): **이 호출에 실제로 실려 나간 시드**를 그대로 받는다(호출부가
+            `generate()`에서 한 번 뽑아 provider와 이 기록에 같은 값을 넘긴다). 여기서 다시
+            뽑지 않는 이유는 뽑은 값과 보낸 값이 갈라지는 순간 기록이 재현을 보장하지 못하기
+            때문이다. 클라우드 결정은 None=미기록이 정직하다(Anthropic Messages API에 seed
+            파라미터 부재 — 구조적 불가·날조 금지). 기본값 없는 키워드 필수 인자다.
           - `prompt_version`: 정본 자산 내용 해시(`_prompt_version` — 실제 아는 값).
           - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
         싱크·조립 예외는 흡수하되 **타입명을 로그에 남긴다**(침묵 실패 금지 —
@@ -604,7 +630,7 @@ class LLMEquivalentProblemGenerator:
             log = GenerationLog(
                 model_name=model_name_for_decision(decision, settings=self._settings),
                 prompt_version=_prompt_version(),
-                seed=None,  # seed 미사용(실측) — NULL=미기록(날조 금지)
+                seed=seed,  # 실려 나간 값만(클라우드=None 미기록·날조 금지)
                 input_tokens=usage.input_tokens if usage is not None else None,
                 output_tokens=usage.output_tokens if usage is not None else None,
                 cost_usd=actual_cost_usd_or_none(decision, usage),

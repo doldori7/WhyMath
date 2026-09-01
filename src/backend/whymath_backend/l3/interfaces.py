@@ -63,8 +63,8 @@ class LLMProvider(Protocol):
         호출부는 *같은 값을* `GenerationLog.seed`에 기록해 재투입 좌표를 남긴다. seed를 물리적으로
         받을 수 없는 백엔드(Anthropic Messages API에는 seed 파라미터가 **없다**)는 이를 *조용히
         무시하지 않고* 명확한 오류를 던진다 — 조용히 무시하면 "기록된 seed로 재현된다"고 거짓말하는
-        행이 남기 때문이다. 지원 판정의 단일 좌석은 `l3/generation_seed.seed_supported`이고, 호출부는
-        그 판정이 True일 때만 seed를 싣는다(json_schema와 동일한 계약 형태).
+        행이 남기 때문이다. 지원 판정의 단일 좌석은 `l3/generation_seed.seed_supported`이며,
+        호출부는 그 판정이 True일 때만 seed를 싣는다(json_schema와 동일한 계약 형태).
         """
         ...
 

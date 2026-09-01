@@ -1066,6 +1066,19 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # tests/backend/harness/test_attempt_skill_event_reach_report.py가 CI에서 상시 검증한다
         # — 즉 "안 도는 코드"가 아니라 "라이브 입력이 있을 때 사람이 돌리는 관측기"다.
         "harness.attempt_skill_event_reach_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
+        # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
+        # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서
+        # 확인할 값이 아니다. 판정 로직(3분류 변별력·분모 0 처리·죽은 경로 보강·판별자 정합·
+        # CLI exit 0/2)은 tests/backend/harness/test_generation_seed_adoption_report.py가 CI에서
+        # 상시 검증한다 — "안 도는 코드"가 아니라 "생성 배치가 있을 때 사람이 돌리는 관측기"다.
+        "harness.generation_seed_adoption_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-73(2026-09-01): 결정론 재생성 프로브 — 기록된 seed·입력 전문을 **라이브 Ollama**에
+        # 되먹여 회차 간 출력 동일성을 잰다. GPU·데몬 없이는 원리적으로 못 돈다. 판정 로직(3값
+        # 분류 변별력·좌표 복원 거부 사유·미측정 자인 렌더)은 tests/backend/harness/
+        # test_generation_seed_replay_probe.py가 상시 검증하며, 이 배포의 "같은 seed → 같은 출력"
+        # 성립 여부는 그 CLI를 돌리기 전까지 **미측정**이다(성립으로 승격 금지).
+        "harness.generation_seed_replay_probe": _LIVE_DEPENDENT,
         # 빌드타임 관측 리포트(게이트 아님) — 사람이 필요할 때 돌린다
         "harness.problem_bank_coverage": _OFFLINE_REPORT,
         # QUAL-01(2026-08-10): 코퍼스 JSONL만 읽는 빌드타임 관측 리포트(DB 0) — problem_bank_

@@ -205,11 +205,15 @@ class CachePrewarmer:
             # 잘못된 좌표를 기록하게 되므로 첫 항목에서 크게 실패하는 편이 낫다(라우팅 호출과
             # 같은 취급·`_prewarm_one`의 route()도 감싸지 않는다).
             seed = seed_for_decision(decision, source=self._seed_source)
-            call_kwargs: dict[str, int] = {} if seed is None else {"seed": seed}
             try:
-                generated = await self._provider.generate(
-                    item.prompt, item.system, decision, **call_kwargs
-                )
+                # seed는 *값이 있을 때만* 싣는다 — 미지원 경로(클라우드)에 실으면 provider가
+                # 명확히 거부하고, seed 인자를 모르는 구형 대역과의 하위호환도 유지된다.
+                if seed is None:
+                    generated = await self._provider.generate(item.prompt, item.system, decision)
+                else:
+                    generated = await self._provider.generate(
+                        item.prompt, item.system, decision, seed=seed
+                    )
             except Exception as exc:  # noqa: BLE001 — provider 오류는 항목 단위로 흡수
                 return PrewarmItemResult(
                     cache_key=key,

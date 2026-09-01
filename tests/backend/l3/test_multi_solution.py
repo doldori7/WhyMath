@@ -337,6 +337,7 @@ class _CannedProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         self.calls += 1
         return GenerationResult(text=self._text, usage=None)
@@ -354,6 +355,7 @@ class _ExplodingProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         raise ConnectionError("Ollama 도달 불가")
 

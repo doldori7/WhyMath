@@ -11,10 +11,11 @@ generation_log`·`pregenerate/provenance_bridge.generation_log_from_result` docs
 ──────────────────────────────────────────────────────────────────────────
 **① 경로별 지원 — 구조적 사실이지 정책 선택이 아니다(날조 금지)**
 
-  | cost_tier        | provider          | seed        | 근거 |
-  |------------------|-------------------|-------------|------|
-  | LOCAL            | `OllamaProvider`  | **지원**    | ollama generate `options.seed`(llama.cpp 샘플러 시드) |
-  | CLOUD_MID/HIGH   | `AnthropicProvider` | **구조적 불가** | Messages API에 seed 파라미터 자체가 없다(`messages.create(model,max_tokens,system,messages)`+temperature) |
+  - `LOCAL` → `OllamaProvider` → **지원**.
+    ollama generate의 `options.seed`(llama.cpp 샘플러 시드)로 실려 나간다.
+  - `CLOUD_MID`/`CLOUD_HIGH` → `AnthropicProvider` → **구조적 불가**.
+    호출 표면이 `messages.create(model, max_tokens, system, messages)` + temperature·thinking
+    등이고 그 어디에도 시드 좌석이 없다(`l3/providers/anthropic.py` 실측).
 
 클라우드 경로는 값을 **지어내지 않고 NULL(미기록)을 유지**한다. "우리가 뽑아 둔 숫자"를
 seed 컬럼에 적으면 그 행은 *재현 가능하다고 거짓말하는 행*이 된다 — 모델에 전달된 적이
