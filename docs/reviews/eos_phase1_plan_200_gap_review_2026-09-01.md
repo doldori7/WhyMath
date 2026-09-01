@@ -267,3 +267,64 @@ Kiki가 12/31 목표로 채택한 "EOS 1과목 완성"은 200 §1이 **3축으�
 ID 재설계 · `related_to` · 영어 이벤트 12종 · 디렉터리 물리 이동 · ADR 트리 · Epic 13개 재편 · **Gate 1 10조건** · **일정표(§38)와 주차 번호**. 이들은 "지향"이 아니라 저장소가 이미 다르게 판정한 **구현 지시**이며, 오래된 사실 인식(120기능·850PR·경계 미분리) 위에 서 있다.
 
 **§3-B(게이트 병합)는 유효하다** — 200의 Gate 1을 버려도 저장소 G1 3조건은 그대로 남으며, §7 권고 2(미충족 2건을 비차단 관측 항목으로 얹기)는 그대로 적용 가능하다.
+
+### 8.5 Kiki 결정 반영 결과 (2026-09-01)
+
+**결정**: §8.3의 **(가)** — 12/31 판정 기준은 선언(스코어카드 12지표) 유지, "1과목 완성"은 그 위의 목표 서사. 대장 조정 3건 지시.
+
+#### ① 관리자 축 7건 우선도 재검토 → **승격 0건** (재검토 자체는 수행)
+
+(가)를 채택한 이상 관리자 축은 **판정 대상이 아니라 지표 생산의 수단**이다. 그 기준으로 7건을 개별 판정한 결과, **HIT 측정을 실제로 가로막는 것은 검수 화면의 부재가 아니었다.**
+
+실측(2026-09-01):
+
+```
+start_review        src/ 생산 호출자 0
+finish_review       src/ 생산 호출자 0
+abort_review        src/ 생산 호출자 0
+append_event_jsonl  src/ 생산 호출자 0        (테스트 4파일만 호출)
+```
+
+`EOS-54`(done)가 만든 HIT writer는 **자기 테스트만 부르는 계약**이다. 그리고 실제 검수 판정을 기입하는 CLI 3종(`concept_content_review_apply`·`concept_content_review_batch`·`reviewer_sample_package`)의 `review_timer` 참조는 **각각 0건**이다. `harness/review_timer.py` 모듈 docstring이 이를 스스로 자인한다 — *"검수 UI(**ADMIN-07**)가 타이머·반려코드 없이 판정 제출 자체를 불가하게 하는 **UI 결선은 후속 태스크**"*.
+
+(가) 하에서 이것은 사소하지 않다. HIT는 스코어카드 KPI 1순위이고, `EOS-61` acceptance ④가 미측정을 "PASS"가 아니라 **exit 1(측정 실패)**로 처리하므로 — 설계는 옳다 — 생산자 부재는 조용한 오통과가 아니라 **12/31 판정 불가**로 직결된다.
+
+그런데 `ADMIN-07`은 이 공백의 올바른 해소 수단이 **아니다**: stage S4·layer web이며 `ADMIN-04 → ADMIN-05/06(+WEB-01) → ADMIN-07` **4단 체인**이라 9월 안에 서지 않는다. 반면 오늘의 검수 매체는 이미 JSONL/CLI다. 그래서:
+
+| 항목 | 재검토 판정 |
+|---|---|
+| `ADMIN-07` 검수 큐 UI | **p3 유지** — 판정 대상 아님. 판정 근거를 태스크 acceptance에 교차 기록(재질문 차단) |
+| `ADMIN-04`·`05`·`06` | **p3 유지** — 웹 백오피스는 (가) 하에서 판정과 무관 |
+| `ADMIN-12`·`EOS-50`·`EOS-49` | **p3 유지** — 완성 서사 축이지 판정 축이 아님 |
+| `EOS-62` 검수 판정 해상도 | **p2 유지** — HIT 회계 해상도에 직결하므로 이미 적정 |
+| **신규** | **`EOS-78-hit-timer-producer-wiring` (p1)** — 웹 UI 없이 현행 CLI/JSONL에서 HIT를 측정 가능하게. 신규 서빙 라우트 0·웹 화면 0 |
+
+즉 **"관리자 축 7건을 승격한다"가 아니라 "7건 중 0건을 승격하고, 아무도 안 갖고 있던 1건을 새로 세운다"**가 재검토의 결론이다. 일괄 승격했다면 방금 채택한 (가)를 대장이 배신했을 것이다.
+
+#### ② D3 신규 등재 → `EOS-79-evidence-layer-boundary-canon` (p2)
+
+Attempt·Evaluation·Assessment·Mastery 4층 경계 정본. 4층이 코드로는 전부 실재하나(모델 7종) 경계를 규정한 문서가 없어 **새 코드의 귀속 판정 근거가 사람 머릿속에만 있다.** 검색 범위 명시: `docs/architecture/0*.md` 21건 + `docs/standards/` 역할 기반 검색에서 0건.
+
+#### ③ D5 신규 등재 → **등재하지 않음 (중복)** · 앞선 판정 정정
+
+**§5 G-3과 §8.1 D5의 "부분" 판정은 틀렸다.** `l6/blueprint/assembly.py` 한 곳만 보고 내린 판정이었다. 실측하면 `REC-01`(**done**)이 추천 응답의 정직 표기를 이미 착지시켰다:
+
+```
+candidate_zero_reason        backend 6건   (api/me.py:2061 정의)
+weight_axes_applied          backend 10건
+candidate_pool_size          backend 18건
+weak_concept_signal_count    backend 10건
+```
+
+계획서 200 §25가 요구한 `reason_code`+`evidence`+`score` 세트는 **서버에서 이미 성립한다**. 남은 절반은 렌더 축이며 그것도 이미 좌석이 있다 — `REC-10-next-problem-honesty-fields-render`(todo·p3, 위 4필드의 **mobile 파싱 0건**이 그 태스크의 전제). 새 태스크를 세웠다면 `REC-10`과 중복이었다.
+
+`REC-10`의 우선도는 **건드리지 않았다** — (가) 하에서 학생 대면 렌더는 판정 재료가 아니므로 p3가 맞다. 승격이 필요하다고 보면 별도 지시가 필요하다.
+
+#### 집행 확인
+
+```
+python3 scripts/harness/backlog.py validate     → ✔ green (태스크 493·게이트 22)   EXIT=0
+python3 scripts/harness/backlog.py audit-deps   → ✔ green (위반 0건)              EXIT=0
+```
+
+번호 배정은 전부 `backlog.py add` 경유다(추론 배정 금지). 실제로 첫 시도 `EOS-76`은 **원격 브랜치의 인플라이트 태스크와 충돌**해 CLI가 거부하고 `EOS-78`을 제안했다 — HARN-10 장치가 작동한 사례로 기록해 둔다.

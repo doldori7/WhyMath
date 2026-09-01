@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-78-hit-timer-producer-wiring
+title: "HIT 타이머 생산자 배선 — 현행 검수 진입점이 review_timer를 실제로 호출하게 (EOS-54 집행 지점·src/ 생산 호출자 0건)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 검수 경로 실측 고정: 12월 판정에 쓰이는 CU 검수 경로를 **1개로 특정**하고(후보: reviewer_sample_package → 사람 검수 → concept_content_review_apply / problem_corpus_* 라벨 JSONL), start/finish의 자연스러운 좌석이 어느 지점인지 판정해 기록한다. 경로가 복수면 판정에 쓰이는 것 하나로 좁힌다 — 가정 기반 설계 금지"
+  - "② 생산자 배선: 그 진입점이 review_timer.start_review·finish_review를 실제로 호출한다. **2026-09-01 실측 기준선 = src/ 전체 생산 호출자 0건**(start_review·finish_review·abort_review·append_event_jsonl 전부 0 · 테스트 4파일만 호출). 이 0을 0이 아니게 만드는 것이 이 태스크의 정의다"
+  - "③ 반려 시 failure_code 강제가 CLI 경로에서도 성립: finish_review(verdict='rejected')가 failure_code 없이 생성 불가라는 schema validator 계약이 CLI 입력 검증까지 이어지는지 확인하고, 끊겨 있으면 그 지점을 만든다"
+  - "④ 변별력(양방향): 타이머 없이 검수 1건을 제출하면 hit_cu_metrics가 '측정 실패'를 내고, 타이머를 붙이면 HIT 중앙값이 산출되는지 둘 다 실측한다. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다"
+  - "⑤ 집행 별항(정본화≠집행): ADMIN-07(웹 검수 UI)은 이 태스크의 대체물이 아니다 — ADMIN-04→ADMIN-05/06(+WEB-01)→ADMIN-07 4단 체인이라 9월 안에 서지 않는다. 이 태스크는 **웹 UI 없이 현행 CLI/JSONL 매체에서** HIT를 측정 가능하게 만든다: 신규 서빙 라우트 0·웹 화면 0"
+  - "⑥ 범위 밖 동결: 검수 판정 해상도 확장(APPROVED_WITH_EDIT = EOS-62)·DB 적재 경로 전환·ADMIN 축 승격은 하지 않는다"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/harness/**"
+session: null
+notes: "출처: 계획서 200 검토 docs/reviews/eos_phase1_plan_200_gap_review_2026-09-01.md §8 + Kiki (가) 결정(2026-09-01 — 12/31 판정 기준은 선언·스코어카드 12지표 유지). 근거: harness/review_timer.py 모듈 docstring이 '검수 UI(ADMIN-07) 결선은 후속 태스크'라고 스스로 집행 공백을 자인하고, 실측상 생산 호출자가 0이다. (가) 하에서 HIT는 스코어카드 KPI 1순위이고 EOS-61 acceptance ④가 미측정을 'PASS'가 아니라 exit 1로 처리하므로, 생산자 부재는 '0건 통과'가 아니라 12/31 판정 불가로 직결된다. 정본화≠집행 재발(EOS-54가 writer를 만들고 배선 확인 없이 done)."
+updated: 2026-09-01
