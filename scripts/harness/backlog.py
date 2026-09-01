@@ -1724,7 +1724,16 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             stale_branch_message = scan.message
             if scan.status == "ok":
                 stale_branches = [
-                    (s.branch, s.age_days, s.ahead, s.status, s.evidence) for s in scan.stale
+                    (
+                        s.branch,
+                        s.age_days,
+                        s.ahead,
+                        s.status,
+                        s.evidence,
+                        s.partial_port,
+                        s.port_scan_error,
+                    )
+                    for s in scan.stale
                 ]
         except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
             # 침묵 실패 금지 — 예외 타입명을 브리핑 문자열에 남긴다(훅은 stderr를 버린다).
