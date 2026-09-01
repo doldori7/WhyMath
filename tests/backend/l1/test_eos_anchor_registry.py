@@ -164,6 +164,56 @@ class TestAuditScriptReadsTheRegistry:
         source = self._SCRIPT.read_text(encoding="utf-8")
         assert "eos_anchor_set_v1/anchors.yaml" in source
 
+    def test_registry_load_is_a_measurement_step_not_import_time(self) -> None:
+        """★ 적재 실패에도 증거 JSON이 남는가 (#950 codex P2 상환).
+
+        초판은 모듈 **import 시점**에 적재하고 실패를 `SystemExit`으로 던졌다. 그러면
+        `main()` 진입 전에 죽어 `--out`도 파싱되지 않고 첫 `_flush()`도 실행되지 않는다 —
+        측정 실패 원인을 담은 증거가 한 줄도 남지 않는다. 이 스크립트가 스스로 선언한 실패
+        경로 설계("단계별 즉시 flush — 실패해도 증거가 남는다")가 이 실패에서만 깨져 있었다.
+
+        여기서는 *구조*를 동결한다: 적재가 STEPS의 첫 단계이고, import는 파일 I/O를 하지
+        않는다. 실패 시 증거가 실제로 남는지는 아래 `test_broken_registry_still_writes_evidence`
+        가 스크립트를 실행해 실측한다.
+        """
+        source = self._SCRIPT.read_text(encoding="utf-8")
+        assert '("anchor_registry", step_anchor_registry)' in source
+        assert "ANCHOR_DEFS: tuple[dict[str, Any], ...] = _load_anchor_defs()" not in source
+        assert (
+            "raise SystemExit" not in source
+        ), "SystemExit은 단계 러너가 잡지 못해 증거 flush를 건너뛴다"
+
+    def test_broken_registry_still_writes_evidence(self, tmp_path: Path) -> None:
+        """깨진 레지스트리로 실행해도 실패 원인이 담긴 증거 JSON이 남는다(실측).
+
+        구조 단언만으로는 부족하다 — 실제로 스크립트를 돌려 ①exit 1 ②증거 파일 실재
+        ③실패 사유에 예외 타입명 포함을 확인한다.
+        """
+        import subprocess
+        import sys as _sys
+
+        registry = _REPO_ROOT / "data/corpus/eos_anchor_set_v1/anchors.yaml"
+        original = registry.read_bytes()
+        out_path = tmp_path / "audit.json"
+        try:
+            registry.write_text("anchors: []\n", encoding="utf-8")
+            proc = subprocess.run(
+                [_sys.executable, str(self._SCRIPT), "--out", str(out_path)],
+                capture_output=True,
+                timeout=120,
+                cwd=str(_REPO_ROOT),
+            )
+        finally:
+            # git 계열 원복 금지(미커밋 작업분 소실) — 바이트를 그대로 되돌린다.
+            registry.write_bytes(original)
+
+        assert proc.returncode == 1, "적재 실패가 exit 0으로 위장되면 안 된다"
+        assert out_path.exists(), "★ 증거 없는 실패 — 이 지적의 핵심"
+        payload = json.loads(out_path.read_text(encoding="utf-8"))
+        assert payload["steps_completed"] == []
+        types = {e["error_type"] for e in payload["errors"]}
+        assert "AnchorRegistryLoadError" in types  # 무타입 경고 금지
+
     def test_script_anchor_defs_match_the_registry(self, registry) -> None:
         """스크립트가 읽은 결과와 레지스트리가 같은 코드셋인가(이관 무손실)."""
         import importlib.util
@@ -172,7 +222,7 @@ class TestAuditScriptReadsTheRegistry:
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        loaded = {a["id"]: tuple(a["codes"]) for a in module.ANCHOR_DEFS}
+        loaded = {a["id"]: tuple(a["codes"]) for a in module.load_anchor_defs()}
         assert loaded == {a.id: a.codes for a in registry.anchors}
 
 

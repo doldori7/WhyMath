@@ -69,22 +69,36 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ANCHOR_REGISTRY_PATH = "data/corpus/eos_anchor_set_v1/anchors.yaml"
 
 
-def _load_anchor_defs() -> tuple[dict[str, Any], ...]:
-    """1급 등록에서 앵커 정의를 읽는다 — 실패는 즉시 종료(조용한 0건 감사 금지).
+class AnchorRegistryLoadError(RuntimeError):
+    """앵커 레지스트리 적재·구조 실패 — **일반 예외**다(SystemExit 아님).
+
+    왜 SystemExit이 아닌가(#950 codex P2 상환): 초판은 이 적재를 *모듈 import 시점*에 하고
+    실패를 `SystemExit`으로 던졌다. 그러면 `main()`에 진입하기 전에 죽어 `--out`도 파싱되지
+    않고 첫 `_flush()`도 실행되지 않는다 — **측정 실패 원인을 담은 JSON 증거가 한 줄도 남지
+    않는다**. 이 스크립트가 모듈 docstring에 스스로 선언한 실패 경로 설계("①단계별 즉시
+    flush — 실패해도 증거가 남는다")가 정확히 이 실패에서만 깨져 있었다.
+
+    이제 적재는 **하나의 측정 단계**이고, 단계 실패는 러너가 예외 타입명과 함께 `errors`에
+    기록한 뒤 flush한다 — 다른 모든 단계와 같은 규율을 받는다.
+    """
+
+
+def load_anchor_defs() -> tuple[dict[str, Any], ...]:
+    """1급 등록에서 앵커 정의를 읽는다 — 실패는 `AnchorRegistryLoadError`.
 
     감사 도구가 앵커 0건으로 "성공"하면 그 결과는 "자산 없음"으로 읽힌다. 레지스트리를 못
-    읽는 것은 측정 실패이지 측정 결과가 아니므로, 예외 타입명과 함께 즉시 실패시킨다.
+    읽는 것은 측정 실패이지 측정 결과가 아니므로 조용한 빈 튜플을 돌려주지 않는다.
     """
     path = REPO_ROOT / ANCHOR_REGISTRY_PATH
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
-        raise SystemExit(
-            f"[앵커 레지스트리 적재 실패] {path}: {type(exc).__name__}: {exc}"
+        raise AnchorRegistryLoadError(
+            f"앵커 레지스트리 적재 실패 {path}: {type(exc).__name__}: {exc}"
         ) from exc
     anchors = doc.get("anchors") if isinstance(doc, dict) else None
     if not isinstance(anchors, list) or not anchors:
-        raise SystemExit(f"[앵커 레지스트리 적재 실패] {path}: anchors 배열이 비어 있다")
+        raise AnchorRegistryLoadError(f"앵커 레지스트리 {path}: anchors 배열이 비어 있다")
     try:
         return tuple(
             {
@@ -100,12 +114,10 @@ def _load_anchor_defs() -> tuple[dict[str, Any], ...]:
     except (KeyError, TypeError) as exc:
         # 필수 필드 결손을 무증상 부분 집계로 흘려보내지 않는다(스키마 정본 검증은
         # whymath_backend.l1.standards.anchor_registry + CI 게이트가 담당).
-        raise SystemExit(
-            f"[앵커 레지스트리 구조 오류] {path}: {type(exc).__name__}: {exc}"
+        raise AnchorRegistryLoadError(
+            f"앵커 레지스트리 구조 오류 {path}: {type(exc).__name__}: {exc}"
         ) from exc
 
-
-ANCHOR_DEFS: tuple[dict[str, Any], ...] = _load_anchor_defs()
 
 # 문항 은행 디렉터리(전수) — data/corpus/problem_bank_*/problems.jsonl
 PROBLEM_BANK_GLOB = "problem_bank_*"
@@ -183,6 +195,28 @@ def _load_json(rel: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def step_anchor_registry(ctx: dict[str, Any], result: dict[str, Any]) -> None:
+    """앵커 1급 등록 적재 — **첫 단계**. 실패는 러너가 errors에 기록하고 flush한다.
+
+    이 단계가 실패하면 뒤 단계는 조인 축 자체가 없으므로 main()이 측정을 중단한다
+    (같은 원인으로 8개 단계가 각자 죽는 소음 대신 중단 사유 1건).
+    """
+    defs = load_anchor_defs()
+    ctx["anchor_defs"] = defs
+    result["anchor_defs"] = [
+        {
+            "id": a["id"],
+            "title": a["title"],
+            "codes": a["codes"],
+            "excluded": a["excluded"],
+            "note": a["note"],
+            "scope": a["scope"],
+        }
+        for a in defs
+    ]
+    result["anchors"] = {a["id"]: {} for a in defs}
+
+
 def step_standards(ctx: dict[str, Any], result: dict[str, Any]) -> None:
     """성취기준 로드 — 학교급(2022/2015 혼재 분리) + 대학(자체작성). 앵커 코드 실재 검증."""
     school = _load_json("data/corpus/standards_v1/standards.json")["standards"]
@@ -204,7 +238,7 @@ def step_standards(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "note": "학교급 895행은 2022·2015 개정 혼재 — 앵커 집계는 2022 개정 행만 사용",
     }
     # 앵커 코드 실재 검증(동결 코드셋 vs 데이터 드리프트 감지 — 변별력 있는 검사)
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         rows: list[dict[str, Any]] = []
         for code in a["codes"]:
             hits = ctx["std2022_by_code"].get(code, []) + ctx["stdu_by_code"].get(code, [])
@@ -242,7 +276,7 @@ def step_atoms(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "school_level_split": dict(sorted(schools.items())),
         "note": "노드 총계는 구조 노드(단원·소단원) 포함 — 앵커 집계는 코드 보유 리프만",
     }
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = [x for x in atoms if codes & set(x.get("standard_codes") or [])]
         lv_split: dict[str, int] = {}
@@ -278,7 +312,7 @@ def step_misconceptions(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "collected_at": doc.get("collected_at"),
     }
     ctx["mis_by_id"] = {x["mis_id"]: x for x in mis}
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = [x for x in mis if (x.get("standard_code") or "") in codes]
         result["anchors"][a["id"]]["misconceptions"] = {
@@ -320,7 +354,7 @@ def step_problems(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "rows_total": sum(per_bank.values()),
         "per_bank": per_bank,
     }
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         bank_split: dict[str, int] = {}
         for bank, pcodes in problems:
@@ -388,7 +422,7 @@ def step_l4_catalog(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         ],
     }
     mis_by_id = ctx.get("mis_by_id", {})
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = []
         for e in entries:
@@ -424,7 +458,7 @@ def step_distractor_op_codes(ctx: dict[str, Any], result: dict[str, Any]) -> Non
     xl = _load_json("data/corpus/misconception_crosslinks_v1/crosslinks.json")["crosslinks"]
     kebab2mid = {r["kebab_id"]: r["mis_id"] for r in xl}
     mis_by_id = ctx.get("mis_by_id", {})
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = []
         for o in ops:
@@ -521,7 +555,7 @@ def step_summary_table(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "L4 탐지항목(기계) | op-code | 문항 |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         r = result["anchors"][a["id"]]
         std = r.get("standards", {}).get("count", "측정실패")
         atom = r.get("atoms", {}).get("count", "측정실패")
@@ -539,6 +573,8 @@ def step_summary_table(ctx: dict[str, Any], result: dict[str, Any]) -> None:
 
 
 STEPS: tuple[tuple[str, Any], ...] = (
+    # 앵커 등록 적재가 **첫 단계**다 — import 시점이 아니라 여기서 실패해야 증거가 남는다.
+    ("anchor_registry", step_anchor_registry),
     ("standards", step_standards),
     ("atoms", step_atoms),
     ("misconceptions", step_misconceptions),
@@ -571,22 +607,14 @@ def main() -> int:
             "성취기준 코드(2022 개정·대학 자체작성) 단일 축 — "
             f"1급 등록 {ANCHOR_REGISTRY_PATH} 동결 코드셋"
         ),
-        "anchor_defs": [
-            {
-                "id": a["id"],
-                "title": a["title"],
-                "codes": a["codes"],
-                "excluded": a["excluded"],
-                "note": a["note"],
-                "scope": a["scope"],
-            }
-            for a in ANCHOR_DEFS
-        ],
+        # 아래 두 키는 첫 단계(step_anchor_registry)가 채운다 — 적재 실패 시에도 빈 값으로
+        # 증거 JSON이 남아야 하므로 여기서 미리 선언한다(키 부재 ≠ 앵커 0건).
+        "anchor_defs": [],
         "steps_completed": [],
         "errors": [],
         "warnings": [],
         "global": {},
-        "anchors": {a["id"]: {} for a in ANCHOR_DEFS},
+        "anchors": {},
     }
     persist_ok = _flush(result, out_path)  # 시작 상태부터 저장 — 첫 단계 전 실패도 증거가 남는다
 
@@ -600,6 +628,18 @@ def main() -> int:
                 {"step": name, "error_type": type(exc).__name__, "error": str(exc)[:500]}
             )
         persist_ok = _flush(result, out_path)
+        if "anchor_defs" not in ctx:
+            # 조인 축(앵커 정의) 없이 뒤 단계를 돌리면 같은 원인으로 8건이 각자 죽는다 —
+            # 중단 사유를 1건으로 남기고 멈춘다. 여기까지의 증거는 위 flush로 이미 디스크에.
+            result["errors"].append(
+                {
+                    "step": "(중단)",
+                    "error_type": "AnchorRegistryLoadError",
+                    "error": "앵커 정의 미적재 — 조인 축이 없어 이후 단계를 진행하지 않는다",
+                }
+            )
+            persist_ok = _flush(result, out_path)
+            break
 
     print(f"측정 시각(UTC): {result['measured_at_utc']}")
     print(f"결과 JSON: {out_path}")
