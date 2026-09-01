@@ -130,6 +130,21 @@ HARN-53   HARN-54 LIC-01  LIC-04  LIC-05  NLP-05  OPS-57   PB-13    PB-14   S4-5
 
 **4를 건너뛰고 5로 가지 않는다.** 4가 이 런북 전체의 유일한 차단 지점이다.
 
+> ⚠️ **단계 4의 "미분류 0건"은 시점 의존적이다 — 4와 5 사이를 벌리지 말 것.**
+>
+> 병렬 세션이 언제든 새 태스크를 main에 착지시킨다. 특히 **`HARN-55` 머지 이전에 분기한
+> 브랜치**는 구버전 CLI를 들고 있어 `--eos-priority` 요구를 받지 않으며, 그 세션이 만든
+> 태스크 파일에는 **`eos_priority` 필드 자체가 없다**. `add` 게이트의 구멍이 아니라
+> **브랜치 시차**이고, 인플라이트 브랜치가 전부 리베이스될 때까지 계속 발생한다.
+>
+> 실측(2026-09-01): 단계 4에서 0건을 확인한 뒤 clear 직전에 재확인했더니 `EOS-79`가
+> 미분류로 들어와 있었다(PR #958). 그대로 clear했다면 `validate`가 red가 되고
+> `harness-integrity`가 main과 열린 PR 전부를 막았을 것이다.
+>
+> **그래서 5단계 직전에 4를 다시 돌린다** — §6-2의 `validate`가 그 역할이고, 그것이
+> green일 때만 §6-3으로 간다. 만약 clear 후에 red가 나면 당황할 일이 아니다:
+> 도착한 태스크에 `amend --eos-priority`를 붙이면 즉시 복구된다(revert 불요).
+
 ---
 
 ## §4. 게이트 제목의 조건 ③은 이미 소멸했다
@@ -207,6 +222,26 @@ git fetch origin main
 git checkout -B main origin/main
 ```
 
+**6-1b. UTF-8 강제 (필수 — 건너뛰면 다음 단계가 터진다)**
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+$env:PYTHONUTF8="1"
+$env:PYTHONIOENCODING="utf-8"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+```
+
+> **실측 사고 (2026-09-01)**: 이 블록 없이 `backlog.py gates list | Select-String ...`을 돌리면
+> `UnicodeEncodeError: 'cp949' codec can't encode character '\u23f3'`로 죽는다. 파이프를 걸면
+> stdout이 콘솔이 아니라 파이프가 되고, Python이 **로케일 인코딩(한국어 Windows = cp949)** 으로
+> 인코딩하는데 CLI 출력의 `⏳`·`—`가 cp949에 없기 때문이다. `--help`도 같은 이유로 죽는다.
+>
+> 이 저장소는 같은 유형을 이미 두 번 겪었다(2026-07-17 logconfig 기동 실패 · HARN-19 git 출력
+> 디코딩). 정본은 `docs/ops/windows_utf8_setup.md` §2·§3이며, 위 3줄은 그 §3.1의 "현재 세션
+> 즉시 적용"판이다. 영구 적용은 `setx PYTHONUTF8 1` + `setx PYTHONIOENCODING utf-8`(새 창부터).
+>
+> 이 환경변수는 **창 단위**다 — 창을 새로 열면 다시 설정해야 한다.
+
 **6-2. 자가검증 — 선행 조건 3종** (실패 상태에서 실제로 실패함을 확인한 검사다)
 
 ```powershell
@@ -216,6 +251,39 @@ python scripts/harness/backlog.py gates list | Select-String "eos-verification-r
 python scripts/harness/backlog.py amend --help | Select-String "eos-priority"
 python scripts/harness/backlog.py validate
 ```
+
+> ⚠️ **세 번째 `validate`는 미분류를 보지 못한다 — 그것만으로 clear하지 말 것.**
+> `_eos_priority_grandfather_errors()`는 게이트가 `cleared|waived`일 때만 위반을 낸다
+> (`scripts/harness/store.py`). 즉 **clear 전에는 미분류가 몇 건이든 `validate`가 green**이다
+> (실측 2026-09-01: 미분류 1건을 만들고 게이트 pending 상태에서 `validate` → `green EXIT=0`).
+> 성공/실패 양쪽에서 같은 값을 내는 검사는 검증이 아니라 위장이다.
+>
+> **그래서 clear 직전 차단 지점은 §5의 미분류 카운트 스크립트다.** 아래 6-2b를 반드시 돌린다.
+
+**6-2b. 미분류 0건 확인 — 이것이 clear의 유일한 차단 지점**
+
+§5의 스크립트를 그대로 돌린다(PowerShell 히어독):
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+@'
+import sys, pathlib
+sys.path.insert(0, "scripts/harness")
+import store
+b, _ = store.load_backlog(pathlib.Path("."))
+TERM = {"done", "cancelled"}
+miss = sorted(t.id for t in b.tasks.values()
+              if t.status not in TERM and t.eos_priority is None)
+print("미분류 비종결:", len(miss), "건")
+for t in miss[:10]:
+    print("  +", t)
+sys.exit(1 if miss else 0)
+'@ | python -
+Write-Host "EXIT=$LASTEXITCODE"
+```
+
+**`EXIT=0` 이어야만 6-3으로 간다.** 0이 아니면 멈추고 출력을 세션에 전달한다 — 도착한
+태스크에 `amend --eos-priority`를 붙이면 해소된다.
 
 기대: ① 게이트 행이 **보인다**(안 보이면 체크아웃이 낡은 것 — 6-1 재실행)
 ② `--eos-priority` 도움말이 **보인다**(안 보이면 HARN-55 미반영)
@@ -237,14 +305,46 @@ python scripts/harness/backlog.py validate
 
 기대: **green**. red가 나오면 그랜드파더 만료가 발효됐는데 백필이 덜 된 것이다 → §7.
 
-**6-5. 커밋·푸시**
+**6-5. 커밋 → 브랜치 push (main 직접 push는 거부된다)**
 
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git add backlog/
 git commit -m "gates: G-eos-verification-relevance-triage clear - 관여도 트리아지 확정"
-git push origin main
+git checkout -b gates/relevance-triage-clear
+git push -u origin gates/relevance-triage-clear
 ```
+
+그 다음 **PR을 연다**(세션에 알리면 세션이 연다). CI green 후 머지한다.
+
+> ⚠️ **`git push origin main`은 거부된다** — 저장소 규칙이 `Changes must be made through
+> a pull request`를 강제한다. 실측(2026-09-01):
+> `GH013: Repository rule violations found for refs/heads/main`. 게이트 대장도 예외가 아니다.
+>
+> **이미 main에 커밋한 뒤 거부당했다면**: 위 블록의 `git checkout -b`가 그 커밋을 그대로
+> 새 브랜치로 옮긴다(커밋이 브랜치에 붙어 있는 것이 아니라 브랜치가 커밋을 가리킨다).
+> 브랜치를 만들고 push한 뒤 **로컬 main만** 되돌린다:
+>
+> ```powershell
+> cd C:\Users\kiki\Desktop\__AI\WhyMath
+> git checkout main
+> git status --porcelain
+> ```
+>
+> **`git status --porcelain`이 아무것도 출력하지 않을 때만** 다음 줄을 실행한다:
+>
+> ```powershell
+> git reset --hard origin/main
+> ```
+>
+> 무언가 출력되면 **멈추고 그 목록을 세션에 전달한다.** `reset --hard`는 그 변경을
+> 무증상으로 지운다 — `checkout -B main origin/main`은 충돌하지 않는 로컬 편집을 그대로
+> 끌고 오고, 직전 커밋은 `backlog/`만 스테이징했으므로 **다른 파일의 작업분이 남아 있을 수
+> 있다.**
+>
+> `reset --hard`가 이 자리에서 허용되는 조건은 두 가지가 **모두** 성립할 때뿐이다:
+> ①되돌릴 커밋이 이미 새 브랜치에 보존됐다 ②작업 트리가 비어 있음을 방금 눈으로 확인했다.
+> ②를 가정하면 §7-1이 금지한 바로 그 형태(2026-08-10 미커밋 소실)가 된다.
 
 ---
 
@@ -294,8 +394,12 @@ git status --short
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git log --oneline -1
 git revert --no-edit HEAD
-git push origin main
+git checkout -b gates/relevance-triage-clear-revert
+git push -u origin gates/relevance-triage-clear-revert
 ```
+
+그 다음 **PR을 열어 머지한다**. `git push origin main`은 여기서도 `GH013`으로 거부된다 —
+§6-5와 같은 규칙이며, 되돌리기라고 예외가 되지 않는다.
 
 여기서도 `git log --oneline -1`로 **되돌릴 커밋이 clear 커밋인지 먼저 확인**한다.
 

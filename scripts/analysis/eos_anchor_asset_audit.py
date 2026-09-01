@@ -38,109 +38,86 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ---------------------------------------------------------------------------
-# 앵커 정의 (매핑 기준 동결)
+# 앵커 정의 — **1급 등록(코퍼스)에서 읽는다** (EOS-56)
 #
-# 매핑 축 = **성취기준 코드(2022 개정) 단일 축**. 근거:
+# 이전에는 이 자리에 `ANCHOR_DEFS` 파이썬 상수 리터럴이 있었다. 그 형태는 ① 런타임·생산
+# 배치가 읽을 수 없고 ② 성취기준 코퍼스가 코드를 잃어도 아무도 소리내지 않는 정의였다.
+# 이제 정본은 `data/corpus/eos_anchor_set_v1/anchors.yaml`(G0 동결본)이고 이 스크립트는
+# 그것을 읽기만 한다 — 코드셋은 무손실 이관됐고 추가·삭제·수정은 없다.
+#
+# 매핑 축 = **성취기준 코드 단일 축**. 근거(레지스트리 헤더와 동일):
 #  - 원자(atom_graph)·오개념(misconceptions)·문항(problem_bank)이 모두 성취기준 코드 필드를
 #    가져 세 자산을 같은 축으로 재현 가능하게 귀속시킬 수 있다.
 #  - 대안이던 subunit(소단원명) 축은 구조 헤더 노드(level=소단원, standard_codes=[])와
-#    교과서 단원 granularity 차이(예: '비와 비율' subunit이 비례식·비례배분 원자까지 포함)로
-#    앵커 경계가 흐려진다. 성취기준 코드 축에서는 리프(세부개념)만 걸린다.
+#    교과서 단원 granularity 차이로 앵커 경계가 흐려진다. 코드 축에서는 리프만 걸린다.
 #  - 대학 앵커도 자체작성 성취기준([CALC1-*]·[LINA1-*])이 동일 메커니즘으로 존재한다.
-# 포함/제외 경계는 각 앵커의 excluded에 사유와 함께 명시(재현 가능성).
+# 포함/제외 경계는 각 앵커의 excluded에 사유와 함께 등재돼 있다(재현 가능성).
+#
+# 계층 경계: 여전히 src/backend를 import하지 않는다(모듈 docstring 참조) — 같은 *파일*을
+# 읽을 뿐이며, 백엔드 쪽 소비자는 `whymath_backend.l1.standards.anchor_registry`를 쓴다.
+# 파일이 하나이므로 리더가 둘이어도 진실 원천은 하나다.
+#
+# 8건을 그대로 감사하는 이유: G0 확정 12월 대상은 6건(A1~A6)이나, EOS-52 실사 문서는 8앵커
+# 기준으로 발행됐다. 전건을 읽어 그 문서의 재현성을 유지하고, 이월 여부는 산출 JSON의
+# `scope` 필드로 기계가 구분한다(집계에서 지우지 않는다).
 # ---------------------------------------------------------------------------
-ANCHOR_DEFS: tuple[dict[str, Any], ...] = (
-    {
-        "id": "A1",
-        "title": "초3 분수의 이해와 크기 비교",
-        "codes": ["[4수01-09]", "[4수01-10]", "[4수01-11]"],
-        "excluded": {
-            "[4수01-12]": "소수 한 자리 수 — 별도 소단원(소수)",
-            "[4수01-15]": "분모 같은 분수 덧뺄셈 — 별도 소단원(연산)",
-        },
-        "note": "2022 개정은 3~4학년군 단위(초3 구분 없음) — 도입·종류·크기비교 3코드",
-    },
-    {
-        "id": "A2",
-        "title": "초6 비와 비율",
-        "codes": ["[6수02-02]", "[6수02-03]"],
-        "excluded": {
-            "[6수02-01]": "대응 관계 — 별도 단원",
-            "[6수02-04]": "비례식 — 초6 별도 단원(비례식과 비례배분)",
-            "[6수02-05]": "비례배분 — 초6 별도 단원(비례식과 비례배분)",
-        },
-        "note": "비([6수02-02])+비율과 백분율([6수02-03])만 — 앵커명 '비와 비율' 문언 준수",
-    },
-    {
-        "id": "A3",
-        "title": "중2 경우의 수와 확률",
-        "codes": ["[9수04-05]", "[9수04-06]"],
-        "excluded": {},
-        "note": "2022 개정 '자료와 가능성' 코드 — 2015 개정 [9수05-04/05]는 미사용",
-    },
-    {
-        "id": "A4",
-        "title": "중3 이차방정식 (깊이 앵커)",
-        "codes": ["[9수02-20]"],
-        "excluded": {
-            "[9수02-19]": "다항식의 곱셈과 인수분해 — 선수 소단원(별도 코드)",
-            "[9수02-21]": "이차함수의 개념 — 이차함수 단원",
-            "[9수02-22]": "이차함수의 그래프 — 이차함수 단원",
-        },
-        "note": "2022 개정 중3 이차방정식은 단일 코드",
-    },
-    {
-        "id": "A5",
-        "title": "고1 이차함수의 최대·최소",
-        "codes": ["[10공수1-02-06]", "[10기수1-02-05]"],
-        "excluded": {
-            "[10공수1-02-04]": "이차방정식과 이차함수의 관계 — 인접 소단원",
-            "[10공수1-02-05]": "이차함수의 그래프와 직선 — 인접 소단원",
-            "[10공수1-02-11]": "이차부등식 — 별도 소단원",
-        },
-        "note": "공통수학1+기본수학1(병행과목) — sub_domain '이차함수의 최대, 최소' 전수",
-    },
-    {
-        "id": "A6",
-        "title": "고2 도함수의 활용",
-        "codes": [
-            "[12미적Ⅰ-02-05]",
-            "[12미적Ⅰ-02-06]",
-            "[12미적Ⅰ-02-07]",
-            "[12미적Ⅰ-02-08]",
-            "[12미적Ⅰ-02-09]",
-            "[12미적Ⅰ-02-10]",
-        ],
-        "excluded": {
-            "[12미적Ⅰ-02-01~04]": "미분계수·미분가능성·도함수 — '미분계수와 도함수' 소단원",
-            "[12심수Ⅰ05-19]": "심화수학Ⅰ 도함수의 활용 — 진로선택 과목(앵커는 미적분Ⅰ)",
-        },
-        "note": "미적분Ⅰ '도함수의 활용' 6코드(접선·평균값·증감극값·개형·방부등식·속도)",
-    },
-    {
-        "id": "A7",
-        "title": "대학 미적분 ε-δ 극한·연속",
-        "codes": ["[CALC1-01-02]", "[CALC1-01-03]"],
-        "excluded": {
-            "[CALC1-01-04]": "무한대 극한 — 앵커 문언(ε-δ 극한·연속) 밖",
-            "해석학 I": "ε-δ 연속을 다루나 별도 과목 — 앵커는 미적분학",
-        },
-        "note": "standards_university_v1(와이매스 자체작성) 미적분학 I — ε-δ 극한 정의+연속 2코드",
-    },
-    {
-        "id": "A8",
-        "title": "대학 선형대수 일차독립과 기저",
-        "codes": ["[LINA1-04-02]", "[LINA1-04-03]"],
-        "excluded": {
-            "[LINA1-04-01]": "부분공간 — 인접 소단원",
-            "[LINA1-04-04]": "차원(dimension) — 인접 소단원(앵커 문언은 일차독립·기저)",
-        },
-        "note": "standards_university_v1 선형대수학 I — 일차독립+기저 2코드",
-    },
-)
+ANCHOR_REGISTRY_PATH = "data/corpus/eos_anchor_set_v1/anchors.yaml"
+
+
+class AnchorRegistryLoadError(RuntimeError):
+    """앵커 레지스트리 적재·구조 실패 — **일반 예외**다(SystemExit 아님).
+
+    왜 SystemExit이 아닌가(#950 codex P2 상환): 초판은 이 적재를 *모듈 import 시점*에 하고
+    실패를 `SystemExit`으로 던졌다. 그러면 `main()`에 진입하기 전에 죽어 `--out`도 파싱되지
+    않고 첫 `_flush()`도 실행되지 않는다 — **측정 실패 원인을 담은 JSON 증거가 한 줄도 남지
+    않는다**. 이 스크립트가 모듈 docstring에 스스로 선언한 실패 경로 설계("①단계별 즉시
+    flush — 실패해도 증거가 남는다")가 정확히 이 실패에서만 깨져 있었다.
+
+    이제 적재는 **하나의 측정 단계**이고, 단계 실패는 러너가 예외 타입명과 함께 `errors`에
+    기록한 뒤 flush한다 — 다른 모든 단계와 같은 규율을 받는다.
+    """
+
+
+def load_anchor_defs() -> tuple[dict[str, Any], ...]:
+    """1급 등록에서 앵커 정의를 읽는다 — 실패는 `AnchorRegistryLoadError`.
+
+    감사 도구가 앵커 0건으로 "성공"하면 그 결과는 "자산 없음"으로 읽힌다. 레지스트리를 못
+    읽는 것은 측정 실패이지 측정 결과가 아니므로 조용한 빈 튜플을 돌려주지 않는다.
+    """
+    path = REPO_ROOT / ANCHOR_REGISTRY_PATH
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise AnchorRegistryLoadError(
+            f"앵커 레지스트리 적재 실패 {path}: {type(exc).__name__}: {exc}"
+        ) from exc
+    anchors = doc.get("anchors") if isinstance(doc, dict) else None
+    if not isinstance(anchors, list) or not anchors:
+        raise AnchorRegistryLoadError(f"앵커 레지스트리 {path}: anchors 배열이 비어 있다")
+    try:
+        return tuple(
+            {
+                "id": a["id"],
+                "title": a["title"],
+                "codes": list(a["codes"]),
+                "excluded": dict(a.get("excluded") or {}),
+                "note": a["note"],
+                "scope": a["scope"],
+            }
+            for a in anchors
+        )
+    except (KeyError, TypeError) as exc:
+        # 필수 필드 결손을 무증상 부분 집계로 흘려보내지 않는다(스키마 정본 검증은
+        # whymath_backend.l1.standards.anchor_registry + CI 게이트가 담당).
+        raise AnchorRegistryLoadError(
+            f"앵커 레지스트리 구조 오류 {path}: {type(exc).__name__}: {exc}"
+        ) from exc
+
 
 # 문항 은행 디렉터리(전수) — data/corpus/problem_bank_*/problems.jsonl
 PROBLEM_BANK_GLOB = "problem_bank_*"
@@ -218,6 +195,28 @@ def _load_json(rel: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def step_anchor_registry(ctx: dict[str, Any], result: dict[str, Any]) -> None:
+    """앵커 1급 등록 적재 — **첫 단계**. 실패는 러너가 errors에 기록하고 flush한다.
+
+    이 단계가 실패하면 뒤 단계는 조인 축 자체가 없으므로 main()이 측정을 중단한다
+    (같은 원인으로 8개 단계가 각자 죽는 소음 대신 중단 사유 1건).
+    """
+    defs = load_anchor_defs()
+    ctx["anchor_defs"] = defs
+    result["anchor_defs"] = [
+        {
+            "id": a["id"],
+            "title": a["title"],
+            "codes": a["codes"],
+            "excluded": a["excluded"],
+            "note": a["note"],
+            "scope": a["scope"],
+        }
+        for a in defs
+    ]
+    result["anchors"] = {a["id"]: {} for a in defs}
+
+
 def step_standards(ctx: dict[str, Any], result: dict[str, Any]) -> None:
     """성취기준 로드 — 학교급(2022/2015 혼재 분리) + 대학(자체작성). 앵커 코드 실재 검증."""
     school = _load_json("data/corpus/standards_v1/standards.json")["standards"]
@@ -239,7 +238,7 @@ def step_standards(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "note": "학교급 895행은 2022·2015 개정 혼재 — 앵커 집계는 2022 개정 행만 사용",
     }
     # 앵커 코드 실재 검증(동결 코드셋 vs 데이터 드리프트 감지 — 변별력 있는 검사)
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         rows: list[dict[str, Any]] = []
         for code in a["codes"]:
             hits = ctx["std2022_by_code"].get(code, []) + ctx["stdu_by_code"].get(code, [])
@@ -277,7 +276,7 @@ def step_atoms(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "school_level_split": dict(sorted(schools.items())),
         "note": "노드 총계는 구조 노드(단원·소단원) 포함 — 앵커 집계는 코드 보유 리프만",
     }
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = [x for x in atoms if codes & set(x.get("standard_codes") or [])]
         lv_split: dict[str, int] = {}
@@ -313,7 +312,7 @@ def step_misconceptions(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "collected_at": doc.get("collected_at"),
     }
     ctx["mis_by_id"] = {x["mis_id"]: x for x in mis}
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = [x for x in mis if (x.get("standard_code") or "") in codes]
         result["anchors"][a["id"]]["misconceptions"] = {
@@ -355,7 +354,7 @@ def step_problems(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "rows_total": sum(per_bank.values()),
         "per_bank": per_bank,
     }
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         bank_split: dict[str, int] = {}
         for bank, pcodes in problems:
@@ -423,7 +422,7 @@ def step_l4_catalog(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         ],
     }
     mis_by_id = ctx.get("mis_by_id", {})
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = []
         for e in entries:
@@ -459,7 +458,7 @@ def step_distractor_op_codes(ctx: dict[str, Any], result: dict[str, Any]) -> Non
     xl = _load_json("data/corpus/misconception_crosslinks_v1/crosslinks.json")["crosslinks"]
     kebab2mid = {r["kebab_id"]: r["mis_id"] for r in xl}
     mis_by_id = ctx.get("mis_by_id", {})
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         codes = set(a["codes"])
         hit = []
         for o in ops:
@@ -556,7 +555,7 @@ def step_summary_table(ctx: dict[str, Any], result: dict[str, Any]) -> None:
         "L4 탐지항목(기계) | op-code | 문항 |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
-    for a in ANCHOR_DEFS:
+    for a in ctx["anchor_defs"]:
         r = result["anchors"][a["id"]]
         std = r.get("standards", {}).get("count", "측정실패")
         atom = r.get("atoms", {}).get("count", "측정실패")
@@ -574,6 +573,8 @@ def step_summary_table(ctx: dict[str, Any], result: dict[str, Any]) -> None:
 
 
 STEPS: tuple[tuple[str, Any], ...] = (
+    # 앵커 등록 적재가 **첫 단계**다 — import 시점이 아니라 여기서 실패해야 증거가 남는다.
+    ("anchor_registry", step_anchor_registry),
     ("standards", step_standards),
     ("atoms", step_atoms),
     ("misconceptions", step_misconceptions),
@@ -602,22 +603,18 @@ def main() -> int:
         "script": "scripts/analysis/eos_anchor_asset_audit.py",
         "repo_root": str(REPO_ROOT),
         "out_path": str(out_path),
-        "mapping_axis": "성취기준 코드(2022 개정·대학 자체작성) 단일 축 — ANCHOR_DEFS 동결 코드셋",
-        "anchor_defs": [
-            {
-                "id": a["id"],
-                "title": a["title"],
-                "codes": a["codes"],
-                "excluded": a["excluded"],
-                "note": a["note"],
-            }
-            for a in ANCHOR_DEFS
-        ],
+        "mapping_axis": (
+            "성취기준 코드(2022 개정·대학 자체작성) 단일 축 — "
+            f"1급 등록 {ANCHOR_REGISTRY_PATH} 동결 코드셋"
+        ),
+        # 아래 두 키는 첫 단계(step_anchor_registry)가 채운다 — 적재 실패 시에도 빈 값으로
+        # 증거 JSON이 남아야 하므로 여기서 미리 선언한다(키 부재 ≠ 앵커 0건).
+        "anchor_defs": [],
         "steps_completed": [],
         "errors": [],
         "warnings": [],
         "global": {},
-        "anchors": {a["id"]: {} for a in ANCHOR_DEFS},
+        "anchors": {},
     }
     persist_ok = _flush(result, out_path)  # 시작 상태부터 저장 — 첫 단계 전 실패도 증거가 남는다
 
@@ -631,6 +628,18 @@ def main() -> int:
                 {"step": name, "error_type": type(exc).__name__, "error": str(exc)[:500]}
             )
         persist_ok = _flush(result, out_path)
+        if "anchor_defs" not in ctx:
+            # 조인 축(앵커 정의) 없이 뒤 단계를 돌리면 같은 원인으로 8건이 각자 죽는다 —
+            # 중단 사유를 1건으로 남기고 멈춘다. 여기까지의 증거는 위 flush로 이미 디스크에.
+            result["errors"].append(
+                {
+                    "step": "(중단)",
+                    "error_type": "AnchorRegistryLoadError",
+                    "error": "앵커 정의 미적재 — 조인 축이 없어 이후 단계를 진행하지 않는다",
+                }
+            )
+            persist_ok = _flush(result, out_path)
+            break
 
     print(f"측정 시각(UTC): {result['measured_at_utc']}")
     print(f"결과 JSON: {out_path}")
