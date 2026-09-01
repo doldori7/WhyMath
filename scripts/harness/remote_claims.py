@@ -1247,6 +1247,77 @@ class RemoteTaskFile:
     branch: str  # <branch>
 
 
+def read_remote_task_texts(
+    root: Path,
+    files: "list[RemoteTaskFile]",
+    *,
+    skip: "set[str] | None" = None,
+    limit: int = 300,
+) -> tuple[dict[str, str], dict[str, str], str]:
+    """원격 브랜치 사본의 태스크 YAML **본문**을 읽는다 (HARN-51).
+
+    반환은 `({task_id: 원문}, {task_id: branch}, status)`.
+
+    `scan_remote_task_files`는 *파일명*만 준다 — 번호 충돌 판정에는 그것으로 충분하지만
+    **의미 중복** 판정에는 제목·acceptance·notes 본문이 있어야 한다.
+
+    **`skip`을 읽기 *앞*에서 적용한다** — 로컬 백로그에 이미 있는 ID의 원격 사본은
+    같은 태스크의 다른 사본이지 의미 중복 후보가 아니므로 읽을 이유가 없다. 이 필터가
+    없으면 실측상 원격 고유 ID 595건을 전부 읽어 상한(300)에 걸리고, 정상 상태에서
+    매번 '판정 불가'가 떠 경고가 소음이 된다 — 필터를 넣으면 실제 읽기는 110건이다.
+
+    읽기는 `git cat-file --batch` **1회 프로세스**로 끝낸다(브랜치당·파일당 `git show`를
+    돌리면 수백 개 프로세스가 뜬다). `scan_remote_done`이 이미 쓰는 패턴과 동형이다.
+
+    **네트워크 0** — 이미 있는 remote-tracking ref만 읽는다(`scan_remote_task_files`의
+    `fetch=False` 계약 승계). 같은 task_id가 여러 브랜치에 있으면 처음 것만 남긴다.
+
+    status가 `ok`가 아니면 **판정 불가**다 — 빈 결과를 '중복 없음'으로 읽으면 안 된다.
+    """
+    skip = skip or set()
+    wanted: dict[str, RemoteTaskFile] = {}
+    for item in files:
+        if item.task_id in skip or item.task_id in wanted:
+            continue
+        wanted[item.task_id] = item
+        if len(wanted) >= limit:
+            break
+    truncated = len({f.task_id for f in files} - skip) > len(wanted)
+    if not wanted:
+        return {}, {}, "truncated" if truncated else "ok"
+
+    specs = [f"{item.ref}:backlog/tasks/{tid}.yaml" for tid, item in wanted.items()]
+    try:
+        out = _git(root, "cat-file", "--batch", input_text="\n".join(specs) + "\n", timeout=60)
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        return {}, {}, f"error:{type(exc).__name__}"
+    if out.returncode != 0:
+        return {}, {}, _classify_failure(out.stderr or "")
+
+    texts: dict[str, str] = {}
+    branches: dict[str, str] = {}
+    # cat-file --batch 출력: "<sha> <type> <size>\n<size 바이트>\n" 또는 "<spec> missing\n"
+    body = out.stdout or ""
+    pos = 0
+    for tid, item in wanted.items():
+        nl = body.find("\n", pos)
+        if nl < 0:
+            break
+        header = body[pos:nl]
+        pos = nl + 1
+        parts = header.split()
+        if len(parts) < 3 or parts[1] != "blob":
+            continue  # missing — 그 브랜치에 그 파일이 없다(경합 중 삭제 등)
+        try:
+            size = int(parts[2])
+        except ValueError:
+            break
+        texts[tid] = body[pos : pos + size]
+        branches[tid] = item.branch
+        pos += size + 1  # 본문 뒤 개행
+    return texts, branches, "truncated" if truncated else "ok"
+
+
 def scan_remote_task_files(
     root: Path, *, fetch: bool = False, max_refs: int = SCAN_MAX_REFS
 ) -> tuple[list[RemoteTaskFile], str]:

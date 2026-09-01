@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - scripts/harness/backlog.py
   - scripts/harness/remote_claims.py
   - "tests/harness/**"
-session: null
+session: claude/harn-38-tyyh3i
 notes: "사고 경위(실측): 2026-08-31~09-01 HARN-45와 HARN-48이 같은 뿌리(차단이 교차 세션 보호를 지운다)를 반대 극성으로 각자 구현 → HARN-48이 main 착지(#916·50df469d), HARN-45는 PR #942 close·태스크 cancel로 폐기. 같은 기간 동종 6회 중 앞선 5회(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72)는 전부 '같은 식별자를 두 세션이 배정'한 형태라 번호 가드(HARN-10/15)가 전건 실거부했으나, 이 건은 ID가 서로 달라 번호 가드·claim 대장·scan_remote_task_files 어디에도 걸리지 않았다. 실제 발견 경로는 기계가 아니라 상대 세션이 자기 태스크 YAML acceptance 4항에 중복을 스스로 적어 둔 것이었고, 그것이 없었다면 충돌 해소 과정에서 main의 _publish_block_hold 보호를 조용히 되돌렸을 것이다. HARN-43의 add 가시성 고지는 '번호'를 겨눈 것이라 이 축을 덮지 못한다. 등재 근거: CLAUDE.md 실수 관리(반복 실수는 규칙·코드·태스크 중 하나로 대책 등재 의무) · PR #943 Codex P1 지적 수용."
 updated: 2026-09-01
