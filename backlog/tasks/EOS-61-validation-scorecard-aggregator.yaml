@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/ops/**"
   - "docs/reviews/**"
-session: null
+session: claude/eos-61-validation-scorecard
 notes: "출처: 260830 외부 검토 N6 + 본 검토 §3.6·§6. 판정 *기준*은 EOS-51 §5·§6에 이미 동결됨(외부 문서보다 앞섬 — Hard Gate·3단계 판정·단일점수 금지 모두 채택 완료) — 없는 것은 기준을 읽어 판정을 뱉는 실행기다. BI 대시보드가 아니라 CLI. 주간 7지표 집계는 OPS-56이 별도 좌석(주기 vs 최종 판정)."
-updated: 2026-08-30
+updated: 2026-09-01
