@@ -24,8 +24,8 @@ GitHub 러너에는 없고, 게다가 `runner` 유저는 `/root`(mode 700)를 **
 
 from __future__ import annotations
 
+import ast
 import importlib.util
-import re
 import sys
 from pathlib import Path
 
@@ -51,23 +51,73 @@ def _load(path: Path):
     return mod
 
 
+def _ca_args_span(tree: ast.AST) -> tuple[int, int] | None:
+    """`_ca_args` 함수의 줄 범위. 없으면 None."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_ca_args":
+            return node.lineno, (node.end_lineno or node.lineno)
+    return None
+
+
+def _curl_lists(tree: ast.AST) -> list[ast.List]:
+    """`"curl"`로 시작하는 리스트 리터럴 = curl 인자 목록."""
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.List) and node.elts:
+            first = node.elts[0]
+            if isinstance(first, ast.Constant) and first.value == "curl":
+                out.append(node)
+    return out
+
+
 class TestNoUnconditionalCacert:
+    """① `--cacert`는 **가드 헬퍼 안에서만** 등장해야 한다.
+
+    왜 정규식이 아니라 AST인가 (Codex P2 #3900419624, 2026-09-01): 초판 가드는
+    부정 전방탐색 `(?!_PATH)`를 쓴 정규식이었는데, 그것이 **막으려던
+    회귀를 그대로 면제했다** — `cmd = [..., "--cacert", _CA_PATH, ...]`가 통과한다.
+    헬퍼 검사도 `"_ca_args" in src` 문자열 존재만 봐서, 헬퍼를 정의해 놓고 **쓰지
+    않아도** 통과했다. 즉 러너가 다시 접근 불가 경로를 받아 curl 77로 죽는데
+    이 저장소 전역 가드는 초록인 상태가 성립했다.
+
+    그래서 문자열이 아니라 **구성된 curl 인자**를 본다.
+    """
+
     def test_scripts_using_the_ca_were_found(self):
         """스캔이 0건이면 아래 검사들이 공허하게 통과한다 — 위장 방지."""
         assert _SCRIPTS, "CA 상수를 쓰는 스크립트를 하나도 못 찾았다 — 스캔이 깨졌다"
 
     @pytest.mark.parametrize("path", _SCRIPTS, ids=lambda p: p.name)
-    def test_cacert_is_never_passed_unconditionally(self, path: Path):
-        src = path.read_text(encoding="utf-8")
-        # `"--cacert", CA` 형태로 curl 인자 목록에 직접 박는 패턴을 금지한다.
-        bad = re.search(r'"--cacert",\s*_?CA\b(?!_PATH)', src)
-        assert (
-            not bad
-        ), f"{path.name}이 --cacert를 무조건 넘긴다 — CA 없는 환경에서 curl (77)이 난다"
+    def test_cacert_appears_only_inside_the_guard_helper(self, path: Path):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        span = _ca_args_span(tree)
+        assert span, f"{path.name}에 _ca_args 헬퍼가 정의돼 있지 않다"
+        lo, hi = span
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and node.value == "--cacert":
+                assert lo <= node.lineno <= hi, (
+                    f"{path.name}:{node.lineno} — '--cacert'가 가드 헬퍼 밖에 있다. "
+                    "리터럴이든 _CA_PATH든 직접 넘기면 CA 없는 환경에서 curl 77이 난다"
+                )
 
     @pytest.mark.parametrize("path", _SCRIPTS, ids=lambda p: p.name)
-    def test_guard_helper_exists(self, path: Path):
-        assert "_ca_args" in path.read_text(encoding="utf-8"), f"{path.name}에 가드 헬퍼가 없다"
+    def test_every_curl_invocation_splices_the_guard(self, path: Path):
+        """헬퍼를 정의만 하고 **쓰지 않는** 상태를 막는다."""
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        lists = _curl_lists(tree)
+        assert lists, f"{path.name}에서 curl 인자 목록을 찾지 못했다 — 스캔이 깨졌다"
+        for lst in lists:
+            spliced = any(
+                isinstance(e, ast.Starred)
+                and isinstance(e.value, ast.Call)
+                and isinstance(e.value.func, ast.Name)
+                and e.value.func.id == "_ca_args"
+                for e in lst.elts
+            )
+            assert spliced, (
+                f"{path.name}:{lst.lineno} — curl 인자에 *_ca_args()가 없다. "
+                "헬퍼가 있어도 쓰지 않으면 보호가 아니다"
+            )
 
 
 class TestGuardSurvivesPermissionError:
