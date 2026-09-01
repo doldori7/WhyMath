@@ -78,3 +78,100 @@ jobs:
       # 파이썬 상수에 있으므로, 여기를 고쳐서 `ttl`까지 지우게 만들 수 없다.
       - name: 원격 claim 자동 청소 (--auto)
         run: python3 scripts/harness/backlog.py claims reap --auto
+
+  flow-health:
+    name: 통합 흐름 진단 (표류·충돌·과대PR·겹침·WIP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # 읽기만 한다. 이 잡은 관측이며 대장·브랜치를 고치지 않는다 —
+      # claim-reap의 contents: write가 이 잡으로 새지 않도록 별도 선언한다.
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout (전체 히스토리 필수)
+        uses: actions/checkout@v4
+        with:
+          # **fetch-depth: 0이 아니면 이 잡은 무의미하다.** shallow 클론에서는
+          # `rev-list --count trunk...ref`가 잘린 히스토리 기준의 **틀린 수**를 낸다.
+          # flow_health는 그 상태를 감지해 exit 2(측정 불가)를 내므로 잡이 조용히
+          # "이상 없음"으로 위장하지는 않지만, 애초에 측정이 되지 않는다.
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      # 원격 브랜치 전수를 봐야 한다 — checkout은 기본 브랜치 ref만 가져온다.
+      - name: 원격 브랜치·PR ref 동기화
+        run: git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
+
+      # `--warn-only`인 이유(협상 가능하나 의도적): 이 잡은 **관측**이다. 남의 방치
+      # 브랜치 때문에 무관한 PR·push를 red로 만들지 않는다 — `backlog.py branches`가
+      # exit 0을 고른 것과 같은 근거다. 대신 측정 **실패**(exit 2)는 숨기지 않는다:
+      # `--warn-only`는 신호(1)만 0으로 낮추고, collect가 실패하면 그 전에 반환된다.
+      #
+      # 판정은 exit code로 한다 — `-q`·`| tail`로 출력을 죽이거나 잘라 판정하지 않는다.
+      # `|| true`·`continue-on-error`를 쓰지 않는다(실패를 은닉하면 상시 무력화돼도
+      # 초록으로 보인다 — claim-reap 잡과 같은 규칙).
+      - name: 통합 흐름 진단
+        env:
+          # 미인증 API는 러너 IP 공유로 60req/h — 사실상 항상 rate limit이다.
+          # 토큰이 없으면 PR-03·FLOW-01이 영구 미측정이 된다.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ops/flow_health.py --warn-only --verbose \
+            --jsonl "$RUNNER_TEMP/flow_health.jsonl"
+
+      # 아래 두 도구는 저장소에 **존재했지만 그것을 부르는 자동 경로가 없었다**
+      # (2026-09-01 실측: 호출처 0건). `claims reap --apply`가 겪은 것과 같은
+      # 상태이며 이 워크플로가 만들어진 이유 그 자체다(CLAUDE.md "검증 장치를
+      # 만들고 배선 확인 없이 완료 선언 금지"). 여기서 배선한다.
+      #
+      # `if: always()`인 이유: 앞 스텝이 측정 실패(exit 2)로 죽어도 PR 배송 상태는
+      # 독립적으로 볼 가치가 있다. 단 실패를 삼키지는 않는다 — 각자 자기 exit code로
+      # 스텝 성패를 낸다.
+      - name: PR 배송 상태 관측 (NO_CHECKS vs READY_UNMERGED)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # `pr_delivery_audit`의 계약은 **exit 1이 두 가지를 뜻한다** — '주의 필요'와
+        # '측정 실패'. 초판은 둘을 뭉개고 무조건 exit 0을 했다(Codex P2 지적):
+        # curl·API·브랜치 규칙 조회가 통째로 실패해 **아무것도 측정하지 못했는데도**
+        # 잡이 초록이었다. 이 PR이 세운 "측정 실패 ≠ 통과" 원칙을 이 스텝 자신이
+        # 위반한 상태였다.
+        #
+        # 그래서 stdout으로 둘을 가른다: 도구는 측정 실패 시 '측정 실패'를 출력하고
+        # 주의 상태는 NO_CHECKS/READY_UNMERGED를 출력한다. 측정 실패면 **스텝을
+        # 실패시킨다** — 관측 잡이라도 "재지 못했다"는 초록이면 안 된다.
+        # 주의 발견은 warning으로만 남기고 통과시킨다(남의 PR 상태로 야간 잡을
+        # red로 만들지 않는다). 판정은 exit code + 출력 내용 양쪽으로 한다.
+        run: |
+          set +e
+          out=$(python3 scripts/ops/pr_delivery_audit.py doldori7/WhyMath 2>&1)
+          rc=$?
+          echo "$out"
+          echo "EXIT=$rc"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          if echo "$out" | grep -q "측정 실패"; then
+            echo "::error::PR 배송 감사가 아무것도 측정하지 못했다 — 초록으로 넘기지 않는다"
+            exit 1
+          fi
+          echo "::warning::PR 배송 주의 — NO_CHECKS 또는 READY_UNMERGED 존재"
+          exit 0
+
+      - name: 측정 원본 보존
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flow-health-${{ github.run_id }}
+          path: ${{ runner.temp }}/flow_health.jsonl
+          if-no-files-found: warn
+          retention-days: 30
