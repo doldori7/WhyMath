@@ -33,6 +33,7 @@ from typing import Any
 
 from sympy import Float, Integer, Rational, fraction, sympify
 
+from whymath_backend.l3.symbolic_equivalence import split_relation_chain
 from whymath_backend.schema.answer_form import (
     ExpectedForm,
     FormVerdict,
@@ -55,7 +56,7 @@ def verify_answer_form(student_answer: str | None, expected: ExpectedForm | None
         # 빈 제출 — 형태를 논할 대상이 없다. 위반이 아니다(제출 안 한 것을 어겼다고 하지 않는다).
         return FormVerdict.unverifiable
     if expected is ExpectedForm.reduced_fraction:
-        return _check_reduced_fraction(student_answer)
+        return _check_reduced_fraction(_submitted_value(student_answer))
     # 어휘에는 있으나 검증기가 아직 없는 형태 — 있다고 위장하지 않는다.
     return FormVerdict.unverifiable
 
@@ -70,6 +71,34 @@ def form_verdict_for(student_answer: str | None, answer_constraint: Any) -> Form
     if not known:
         return FormVerdict.unverifiable
     return verify_answer_form(student_answer, expected)
+
+
+def _submitted_value(student_answer: str) -> str:
+    """등식형 제출에서 **학생이 낸 값**을 표면 그대로 뽑는다 (리뷰 지적 2026-09-01).
+
+    구조화된 풀이 단계는 최종답을 `x = 1/36` 같은 **배정 형태**로 적는 것이 흔하다. 그런데
+    등식 전체를 SymPy에 넘기면 파싱이 실패해 판정이 전부 `unverifiable`이 된다 — 실측:
+
+        x=1/36  값=correct  형태=unverifiable   ← 지시를 지켰는데 신호가 사라진다
+        x=2/72  값=correct  형태=unverifiable   ← 어겼는데도 사라진다
+
+    즉 값 판정은 등식을 읽는데 형태 판정만 못 읽어, **가장 흔한 제출 형태에서 기능이 통째로
+    무력**했다. 준수·위반 양쪽이 같은 값(`unverifiable`)이 되므로 변별력 0이다.
+
+    `split_relation_chain`을 쓰는 이유: 그것이 **정규화 전 원문 조각**을 돌려주기 때문이다
+    (docstring 자인). 형태는 표면 축이라 정규화하는 파서(`read_equation_step`은 해집합을
+    낸다)는 쓸 수 없다. 등호가 없으면 원문 그대로, 비교·부등이 섞이면(ValueError) 원문 그대로
+    넘겨 아래 파싱이 판정 불가로 처리하게 둔다 — 여기서 삼키지 않는다.
+
+    연쇄 등식 `a=b=c`는 **마지막 항**을 취한다(학생이 도달한 최종 표기).
+    """
+    try:
+        pairs = split_relation_chain(student_answer)
+    except ValueError:
+        return student_answer  # 등식 체인이 아니다 — 원문 그대로 판정 경로로
+    if not pairs:
+        return student_answer  # 등호 없음 — 값 자체가 제출됐다
+    return pairs[-1][1]
 
 
 def _check_reduced_fraction(student_answer: str) -> FormVerdict:

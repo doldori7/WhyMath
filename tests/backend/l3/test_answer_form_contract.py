@@ -60,6 +60,27 @@ def test_undecidable_never_becomes_a_violation(submitted: str) -> None:
     assert vaf.verify_answer_form(submitted, REDUCED) is FormVerdict.unverifiable
 
 
+@pytest.mark.parametrize(
+    ("submitted", "expected"),
+    [
+        ("x=1/36", FormVerdict.satisfied),
+        ("x = 2/72", FormVerdict.violated),
+        ("P=1/36", FormVerdict.satisfied),
+        ("x=(1+2)/6=1/2", FormVerdict.satisfied),  # 연쇄 등식은 마지막 항이 최종 표기
+        ("x=0.5", FormVerdict.violated),
+        ("x>1/2", FormVerdict.unverifiable),  # 등식이 아니다 — 판정 불가(삼키지 않는다)
+    ],
+)
+def test_equation_form_answers_are_judged(submitted: str, expected: FormVerdict) -> None:
+    """`x = 1/36` 같은 **배정 형태**는 구조화된 풀이 단계의 흔한 최종답 표기다.
+
+    등식 전체를 파서에 넘기면 판정이 전부 `unverifiable`이 되어, 준수와 위반이 같은 값을
+    내고 변별력이 0이 된다 — 값 판정은 등식을 읽는데 형태 판정만 못 읽던 상태(2026-09-01
+    리뷰 지적·실측 확인). 값을 표면 그대로 뽑은 뒤 판정한다.
+    """
+    assert vaf.verify_answer_form(submitted, REDUCED) is expected
+
+
 def test_no_requirement_is_not_satisfaction() -> None:
     """요구 없음 ≠ 지켰음 — 합치면 형태 준수율이 99%로 부풀어 오른다(None-vs-zero)."""
     assert vaf.verify_answer_form("2/72", None) is FormVerdict.not_required

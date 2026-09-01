@@ -60,8 +60,12 @@ FORM_PATTERNS: dict[str, tuple[str, str | None]] = {
 }
 
 
-def _iter_problems(corpus: pathlib.Path):
-    """문항 뱅크 전수 순회 — 파일별로 즉시 yield(마지막에 모아 저장하지 않는다)."""
+def _iter_problems(corpus: pathlib.Path, errors: list[str]):
+    """문항 뱅크 전수 순회 — 파일별로 즉시 yield(마지막에 모아 저장하지 않는다).
+
+    파싱 실패는 `errors`에 누적된다. 호출자가 그것을 보고 **측정 실패로 판정**해야 한다 —
+    경고만 찍고 넘어가면 불완전한 코퍼스로 낸 수치가 완전한 것처럼 읽힌다.
+    """
     banks = sorted(corpus.glob("problem_bank_*/problems.jsonl"))
     if not banks:
         raise FileNotFoundError(f"문항 뱅크를 찾지 못했다: {corpus}/problem_bank_*/problems.jsonl")
@@ -74,12 +78,16 @@ def _iter_problems(corpus: pathlib.Path):
             try:
                 yield bank, lineno, json.loads(line)
             except json.JSONDecodeError as exc:
-                # 실패 원인을 남긴다 — 예외 타입명만으로는 어느 줄인지 모른다.
-                print(f"[scan][error] {path}:{lineno} JSON 파싱 실패: {exc}", file=sys.stderr)
+                # 삼키지 않는다 — 실패 위치를 남기고 **호출자에게 올린다**.
+                # 계속 진행하면 부분 코퍼스로 "0건"을 내고, 그 0건이 어휘 게이트를 통과시킨다
+                # (측정 실패가 측정 결과로 위장 — 2026-09-01 리뷰 지적).
+                errors.append(f"{path}:{lineno} JSON 파싱 실패: {exc}")
+                print(f"[scan][error] {errors[-1]}", file=sys.stderr)
 
 
 def scan(corpus: pathlib.Path) -> dict:
     total = 0
+    parse_errors: list[str] = []
     per_bank_total: collections.Counter[str] = collections.Counter()
     hits: dict[str, list[dict]] = {name: [] for name in FORM_PATTERNS}
     tails: collections.Counter[str] = collections.Counter()
@@ -89,7 +97,7 @@ def scan(corpus: pathlib.Path) -> dict:
         for name, (pos, neg) in FORM_PATTERNS.items()
     }
 
-    for bank, _lineno, doc in _iter_problems(corpus):
+    for bank, _lineno, doc in _iter_problems(corpus, parse_errors):
         total += 1
         per_bank_total[bank] += 1
         question = doc.get("question_text") or ""
@@ -119,6 +127,8 @@ def scan(corpus: pathlib.Path) -> dict:
         "per_bank_total": dict(per_bank_total),
         "form_hits": {name: rows for name, rows in hits.items()},
         "instruction_tails": dict(tails.most_common()),
+        # 비어 있지 않으면 이 측정치는 **불완전**하다 — 소비자가 그것을 알아야 한다.
+        "parse_errors": parse_errors,
     }
 
 
@@ -138,6 +148,11 @@ def render(result: dict, *, show_tails: bool) -> str:
             attested += 1
     lines.append("")
     lines.append(f"**실증된 형태 어휘: {attested}종**")
+    if result["parse_errors"]:
+        lines.append("")
+        lines.append(f"⚠️ **측정 실패 {len(result['parse_errors'])}건** — 위 수치는 불완전하다.")
+        for err in result["parse_errors"]:
+            lines.append(f"- {err}")
     if attested == 0:
         lines.append("")
         lines.append("→ 0건이다. EOS-28은 **유보 전환**(측정 없는 도입 없음).")
@@ -165,6 +180,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(render(result, show_tails=args.tails))
+    if result["parse_errors"]:
+        # docstring 계약 이행 — 파싱 불가는 "0건"이 아니라 측정 실패다.
+        print(
+            f"측정 실패: 코퍼스 {len(result['parse_errors'])}행을 읽지 못했다 — "
+            "이 수치로 어휘를 판정하면 안 된다.",
+            file=sys.stderr,
+        )
+        return 1
     if args.json:
         args.json.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n(JSON: {args.json})", file=sys.stderr)

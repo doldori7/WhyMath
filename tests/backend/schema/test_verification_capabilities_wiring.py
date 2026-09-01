@@ -197,6 +197,10 @@ def test_expected_form_vocabulary_is_measurement_gated() -> None:
         ), f"어휘 '{form.value}'가 스캐너 패턴에 없다 — 측정 경로 없이 추가됐다"
 
     result = scanner.scan(corpus)
+    assert not result["parse_errors"], (
+        f"코퍼스 {len(result['parse_errors'])}행을 읽지 못했다 — 불완전한 측정 위에서 어휘를 "
+        f"허가할 수 없다: {result['parse_errors'][:3]}"
+    )
     for form in ExpectedForm:
         hits = result["form_hits"].get(form.value, [])
         assert hits, (

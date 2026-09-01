@@ -68,7 +68,10 @@ from whymath_backend.api._segmentation_state import (
 
 # EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
 # `verify_final_answer` 함수 자체의 Protocol 경유(DI)는 후속 — 타입 축을 먼저 끊는다.
-from whymath_backend.composition import default_final_answer_verifier
+from whymath_backend.composition import (
+    default_answer_form_verifier,
+    default_final_answer_verifier,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
@@ -107,7 +110,6 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_answer_form import form_verdict_for
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -972,7 +974,9 @@ async def _final_answer_state(
     result = verifier.verify_final_answer(last_step, problem)
     # EOS-28: 형태 지시 준수는 **값 판정과 나란히·독립으로** 계산한다. 여기서 두 판정이 서로를
     # 참조하지 않는 것이 교수학 계약의 1차 방어다 — 참조하는 순간 형태가 정오에 스며든다.
-    form = form_verdict_for(last_step, getattr(problem, "answer_constraint", None))
+    form = default_answer_form_verifier().verify_answer_form(
+        last_step, getattr(problem, "answer_constraint", None)
+    )
     return result.state, form
 
 
