@@ -81,6 +81,15 @@ gates:
     remind_after_days: 30
     evidence: "AI 검수 전환 결정(2026-07-10·MEMORY 결정 로그) — 검수 큐는 AI 검수로 가동. 파트너 영입은 정규 격상 트랙 분리(게이트 요건 아님)"
     notes: ""
+  - id: G-eos-adr-numbering-series
+    title: "계획서 100 §3.16 ADR-001~010 채택 여부와 번호 계열 결정 — 저장소의 docs/architecture/adr/는 ADR-001=이벤트 저장소 PostgreSQL-first · ADR-002=학생 풀이 단계 엔티티로 번호가 이미 소진됐다. 계획서의 10건(001 Core Boundary·002 Subject Adapter·007 AI Gateway 등)을 그대로 쓰면 같은 번호가 두 주제를 가리킨다 — 태스크 번호에서 3회 겪은 HARN-10/38과 같은 유형. 선택지: ①계획서 10건 미채택(현행 유지 — 선언 §1.3-①이 이미 'ADR = MEMORY 결정로그 + docs/architecture/'로 라우팅을 바꿨다) ②별도 계열(EOSADR-00n)로 배정해 채택 ③기존 2건을 개명(비권장 — 기존 참조 파손). 출처: docs/reviews/eos_source_docs_gap_review_2026-08-31.md §7.3-④"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-01
+    remind_after_days: 5
+    evidence: null
+    notes: ""
   - id: G-eos-g0-verification-design-freeze
     title: "EOS G0 검증설계 동결(2026-09-06) — ①앵커 세트+성취기준 코드 확정(8 vs 6 결정 포함) ②CU 스키마·실패코드 F1~F8 확정 ③실패정의 F-Ⅰ~F-Ⅴ 문서 동결·서명. 미충족 시 W2(되돌릴 수 없는 스키마 주간) 진행 금지 — 실패 정의를 12월에 만들면 확증편향이 된다(전환 설계서 §6.3)"
     kind: human
