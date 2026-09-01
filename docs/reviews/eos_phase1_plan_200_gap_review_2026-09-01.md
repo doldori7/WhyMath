@@ -15,7 +15,7 @@
 
 ## §0. 결론 3줄
 
-1. **문서의 Gate 1 10조건 중 6건은 이미 충족 또는 초과 달성**, 2건은 부분, **2건은 "미완"이 아니라 어휘 충돌**이다. 특히 문서가 Phase 1의 3주를 걸어 만들려는 **Subject Contract와 Core→Math 경계 분리는 2026-08-31에 이미 착지**했고(`EOS-66`·`EOS-67`·`EOS-69`), 경계 위반은 오늘 실측 **0건**이다. 선행 리뷰가 006·100에 내린 진단("첨부 문서가 저장소를 보지 않고 쓰였다")이 200에도 그대로 성립한다.
+1. **문서의 Gate 1 10조건 중 6건은 이미 충족 또는 초과 달성**, 2건은 부분, **2건은 "미완"이 아니라 어휘 충돌**이다. 특히 문서가 Phase 1의 3주를 걸어 만들려는 **Subject Contract와 Core→Math 경계 분리는 2026-08-31에 이미 착지**했고(`EOS-66`·`EOS-67`·`EOS-69`), 경계의 **직접 import 위반**은 오늘 실측 **0건**이다(합성 루트 경유 잔여 2건은 계약에 명시 예외로 남아 G1에서 재확인 — §2 행 9). 선행 리뷰가 006·100에 내린 진단("첨부 문서가 저장소를 보지 않고 쓰였다")이 200에도 그대로 성립한다.
 2. **가장 큰 문제는 미완이 아니라 전제 충돌 3건**이다 — ⓐ 12/31의 정의(문서=출시일 / 선언=내부 검증 판정일) ⓑ 같은 날짜(9/27)에 **서로 다른 Gate 1** ⓒ 주차 번호 1칸 어긋남. 셋 다 문서를 그대로 실행하면 **선언이 최우선으로 못박은 축(AI 콘텐츠 생산 가능성·HIT)이 9월 계획에서 통째로 빠진다.**
 3. 문서가 **옳게 짚은 진짜 갭은 3건**(Entity Version 규칙 미착지 · Skill 그래프 27건으로 얇음 · 추천 이유코드 부분)이며, **되돌리기 비싼 제안 5건**(ID 재설계·이벤트 어휘·디렉터리 물리 이동·ADR 트리 신설·Epic 재편)은 이미 저장소가 근거를 남기고 판정한 축을 다시 여는 것이라 채택 전 명시적 결정이 필요하다.
 
@@ -49,8 +49,8 @@ python3 scripts/harness/backlog.py next --n 500 --json              # 전건(절
 | 5 | Concept/Skill Graph 작동 | **충족·단 Skill 얇음** | 개념 437 · 원자 백본 2,683노드/2,210엣지 · **Skill 27건**. `EdgeType` 6종 정본(PREREQUISITE·COMPOSED_OF·ANALOGOUS_TO·EXTENDS·CONTRASTS·TRIGGERS_DISTRACTOR). 문서 §14의 5종 제안과 **어휘 불일치** + `related_to`는 CLAUDE.md 명시 금지 — §4-B |
 | 6 | Problem/Misconception 연결 작동 | **충족** | 오개념 843건(M-id) · kebab 64 · `misconception_catalog`/`_crosslink`/`_hypothesis`/`_relation` 4모델. 승인·적재 게이트는 `docs/standards/crosswalk_gate_contract.md`가 **코드 동결** |
 | 7 | Learner State 최소 모델 작동 | **충족** | `ConceptMasteryHistory`·`SkillMasteryHistory`(append-only 이력). 문서 §23이 "Digital Twin 불요·Contract만"이라 한 수준을 이미 넘는다 |
-| 8 | EOS Event Schema 실제 저장 | **충족·어휘 충돌** | `attempt_event`(TimescaleDB hypertable) + `evidence_event`·`hint_usage`·`review_timer_event` + `EVENT_DATA_CONTRACT`(payload 단일 진실원). `EventType`은 **한국어 11종**(풀이 단계축). 문서 §22의 영어 12종은 전 저장소 **0건** — 역할 재검색 결과 대응물이 전부 실재하므로 갭이 아니라 **제2 어휘 제안** — §4-C |
-| 9 | Math Adapter Core와 분리 | **달성** | `EOS-69` done. 오늘 실측 **CORE→ADAPTER import 위반 0건**(CORE 305모듈·sympy import 0·수학어휘 0.8/kloc vs ADAPTER 34.3/kloc). `EOS-67`의 import-linter 계약 3건이 CI lint 스텝에서 매 PR 판정 |
+| 8 | EOS Event Schema 실제 저장 | **충족·어휘 충돌** | `attempt_event`(TimescaleDB hypertable) + `evidence_event`·`hint_usage`·`review_timer_event` + `EVENT_DATA_CONTRACT`(payload 단일 진실원). `EventType`은 **한국어 12종**(풀이 단계축 11 + `EOS-57`이 추가한 `문제시도`). 문서 §22의 영어 12종은 전 저장소 **0건** — 역할 재검색 결과 대응물이 전부 실재하므로 갭이 아니라 **제2 어휘 제안** — §4-C |
+| 9 | Math Adapter Core와 분리 | **부분 달성** | `EOS-69` done. **직접** CORE→ADAPTER import는 오늘 실측 **0건**(CORE 305모듈·sympy import 0·수학어휘 0.8/kloc vs ADAPTER 34.3/kloc)이고 `EOS-67` 계약 3건이 CI lint 스텝에서 매 PR 판정한다. **다만 0은 "직접 간선" 기준이다** — 합성 루트 경유 잔여 **2건**(`l3.pedagogy.slot_generator`·`l3.render.adapters` → `whymath_backend.composition`)이 7계층 계약의 `ignore_imports`로 명시 예외돼 있다. `EOS-69` ⑩·경계 문서 §4.1이 *"위반이 없어진 게 아니라 9 → 2로 작아졌다"*고 적었고 재확인 지점은 **G1(9/27)**이다 — §3-B 참조 |
 | 10 | Contract Test CI 자동 검증 | **충족·이름 다름** | `tests/contract`·`tests/architecture` 디렉터리는 **없다**. 역할은 ① import-linter 3계약 ② `tests/infra` 배선 동결 ③ `declared_unwired_audit`(선언≠배선 4축 정적 감사) ④ 결함주입 강등전 게이트 8종 ⑤ E2E 관통 슬라이스 잡이 수행. 문서가 요구한 검사(§27 6항·§28 무결성 7항)보다 **강하다** |
 
 **분포**: 충족·초과 **6** · 부분(진짜 갭) **1** · 어휘 충돌 **3**(1·5·8).
@@ -79,7 +79,7 @@ python3 scripts/harness/backlog.py next --n 500 --json              # 전건(절
 |---|---|---|
 | 조건 | Core Contract **10조건** | **3조건** — ① 앵커 1개 E2E ② **HIT·실패코드 이벤트 적재** ③ Core→Math 정적 의존 0 |
 | 성격 | 구조 계약의 완성도 | 계측 가능한 파이프라인 |
-| 교집합 | 문서 #9 ↔ 저장소 ③ (**오늘 이미 충족**) | |
+| 교집합 | 문서 #9 ↔ 저장소 ③ (**직접 간선은 0 · 합성 루트 경유 2건 잔여**) | |
 
 **문서의 Gate 1에는 HIT·실패코드 축이 통째로 없다.** 그것이 선언의 최우선 목표(②)이자 12/31 판정의 유일한 재료인데, 문서대로 9월을 운영하면 **G1 통과 여부를 잴 계측기가 9/27까지 안 선다.** 반대로 저장소 G1에는 Curriculum·Learner·Recommendation 계약 조건이 없다 — 다만 §2가 보였듯 그것들은 이미 작동하므로 실질 손실은 작다.
 
@@ -123,7 +123,7 @@ python3 scripts/harness/backlog.py next --n 500 --json              # 전건(절
 
 | 문서 §22 | 저장소 실재 |
 |---|---|
-| problem_attempted / answer_submitted | `attempt_event`(hypertable) + `AnswerSubmission`(`EOS-32` done) |
+| problem_attempted / answer_submitted | **`EventType.문제시도`**(`EOS-57` — 이름만 다른 *직접* 대응) + `attempt_event`(hypertable) + `AnswerSubmission`(`EOS-32` done) |
 | answer_evaluated | `검산결과` EventType + `EVENT_DATA_CONTRACT` |
 | hint_requested / (hint 제공) | `힌트요청`·`힌트제공` EventType + `hint_usage` |
 | misconception_detected | `misconception_hypothesis` |
@@ -328,3 +328,28 @@ python3 scripts/harness/backlog.py audit-deps   → ✔ green (위반 0건)     
 ```
 
 번호 배정은 전부 `backlog.py add` 경유다(추론 배정 금지). 실제로 첫 시도 `EOS-76`은 **원격 브랜치의 인플라이트 태스크와 충돌**해 CLI가 거부하고 `EOS-78`을 제안했다 — HARN-10 장치가 작동한 사례로 기록해 둔다.
+
+---
+
+## §9. 정정 이력 (PR #958 리뷰 봇 지적 수용 — 2026-09-01)
+
+초판의 사실 오류 **2건**을 실측 확인 후 정정했다. 둘 다 이 문서가 *다른 문서의 부정확을 지적하는* 성격이라 자기 정확도의 기준이 더 높다.
+
+**① 경계 "위반 0건"이 조기 통과를 부를 수 있었다** (§2 행 9 · §0 결론 1 · §3-B)
+
+초판은 `EOS-69` 결과를 **"달성 · 위반 0건"**으로 적었다. 그러나 스캐너와 `EOS-67` 계약이 세는 것은 **직접 CORE→ADAPTER import**이고, 합성 루트 경유 간선 2건은 7계층 계약의 `ignore_imports`로 **명시 예외** 중이다:
+
+```
+whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.composition
+whymath_backend.l3.render.adapters        -> whymath_backend.composition
+```
+
+경계 문서 §4.1과 `EOS-69` acceptance ⑩ 자신이 *"위반이 없어진 게 아니라 9 → 2로 **작아졌다**"* 고 적고 재확인 지점을 **G1(9/27)**로 명시했다. 이 문서가 그 잔여를 빼고 "0건"만 인용하면 **G1의 "Core→Math 정적 의존 0"이 조기 통과**한다 — 게이트를 느슨하게 만드는 방향의 오류라 가장 나쁜 종류다. **부분 달성**으로 고치고 잔여 2건과 재확인 지점을 본문에 넣었다.
+
+**② `EventType` 개수를 11 → 12로** (§2 행 8 · §4-C)
+
+실측 결과 멤버는 12개다 — 기존 11종에 `EOS-57`이 추가한 **`문제시도`**가 있고, 이것이 바로 계획서 200 §22의 `problem_attempted`에 **직접 대응**한다. 초판이 11로 적어 최신 계약을 누락했고, "영어 12종 ↔ 한국어 N종" 비교 근거도 왜곡됐다.
+
+*자기 방법의 한계 기록*: §1이 선언한 "역할 기반 재검색"은 `attempt_event`·`AnswerSubmission` 같은 **주변 좌석**은 찾았지만 **enum 멤버 자체**는 놓쳤다. `grep problem_attempted` 0건이 맞았고 역할 검색도 대응물을 찾았는데, 정작 *같은 enum 안의 한국어 멤버 목록을 끝까지 세지 않은* 것이 원인이다. 부재·개수 주장에는 **그 집합을 전건 열거**하는 단계가 필요하다(절단 출력 부재 판정 금지의 enum 축).
+
+두 지적 모두 `chatgpt-codex-connector`(P2)가 냈고, 저장소 실측으로 확인한 뒤 수용했다.
