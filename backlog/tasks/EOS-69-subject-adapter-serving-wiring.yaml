@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on:
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/l6/blueprint/assembly.py
   - src/backend/whymath_backend/l3/render/adapters.py
   - src/backend/whymath_backend/l3/pedagogy/slot_generator.py
-session: null
+session: claude/failure-definition-signature-scmzdu
 notes: "출처: EOS-66 acceptance ③ 집행 별항(정본화≠집행). EOS-66이 계약을 만들었으나 경유하는 서빙 경로가 0개다 — 이 태스크가 그 0을 없앤다. 위반 목록 정본 = docs/architecture/eos_core_adapter_boundary.md §4. EOS-67(정적 강제)과의 순서: 이 태스크가 먼저 끝날수록 EOS-67 baseline에 넣을 항목이 줄어든다."
-updated: 2026-08-31
+updated: 2026-09-01
