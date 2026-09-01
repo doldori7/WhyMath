@@ -1065,6 +1065,16 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:골든 실표본 의존 혼동행렬 판독기(EOS-60) — 골든 0건·평가쌍 0건이 측정 "
             "실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
         ),
+        # EOS-64(2026-09-01): 골든 승격 경로 게이트 — 입력이 *승격 제안*(사람이 "이것들을
+        # 올리겠다"고 내미는 목록)이라 제안이 없는 시점에는 돌릴 대상 자체가 없다. CI가 매
+        # 커밋마다 돌릴 성질이 아니고(제안 파일이 레포에 상주하지 않는다), 승격 판정 시점에
+        # 운영자가 돌리는 문지기다. 판정 로직(경로 밖 6종 차단·Wilson 상한 방향·측정 불가
+        # 비통과·사람 판정 우회 불가)은 backend 잡이 수집하는
+        # tests/backend/harness/test_golden_promotion_gate.py가 상시 검증한다.
+        "harness.golden_promotion_gate": (
+            "by-design:승격 제안 의존 경로 문지기(EOS-64 ③) — 제안 목록이 입력이라 상주 입력이 "
+            "없고, 승격 판정 시점에 운영자가 돌린다. 사람 검수를 대체하지 않는 확인 도구다"
+        ),
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,
