@@ -107,6 +107,7 @@ from pydantic import ValidationError
 
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.populate import ConceptTag
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
@@ -681,6 +682,11 @@ class LLMEquivalentProblemGenerator:
             reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
             est_latency_ms=decision.est_latency_ms,
             est_cost_krw=decision.est_cost_krw,
+            # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 여기서는 패밀리 축만
+            # 갈아탈 뿐 법적 판정을 다시 하지 않는다. 안 실어 보내면 원본 결정이 게이트에
+            # 막혔다는 사실이 관측에서 조용히 사라진다(발동률 과소집계·EOS-59 ②).
+            data_export_blocked=decision.data_export_blocked,
+            data_export_reason=decision.data_export_reason,
         )
 
     # ── 라우팅 신호 ────────────────────────────────────────────────────
@@ -700,6 +706,10 @@ class LLMEquivalentProblemGenerator:
             student_subscription=self._subscription,
             budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             sync=True,
+            # 등급: 프롬프트에는 비민감 스펙 요약(성취기준 코드·오개념 id·난이도·답 형태)만
+            # 싣고 원본 본문·풀이는 애초에 스펙에 없다(`_build_user_prompt` 참조) — 실리는
+            # 것은 자체 저작 메타뿐이다. 코퍼스 provenance가 바뀌면 단일 좌석에서 잠긴다.
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
 
     @staticmethod

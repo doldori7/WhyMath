@@ -26,10 +26,15 @@ S1 탈출 게이트 ②("루프당 LLM 비용 실측·로컬 ≥80%")는 `l3_rou
    하므로, 이 프로브를 돌린 뒤 `ops/cost_report --days 1`이 p50/p90·실측 cost_krw를
    집계한다(인그레션 지연 수 초 후).
 3. **클라우드 승급 사슬 도달(OPS-18)** — `local_reason_counts`(LOCAL로 귀결된 사유를
-   budget0/free/rule6_catchall 3버킷으로 계상)·`cloud_reach_count`(CLOUD_MID+CLOUD_HIGH
-   실측 도달 횟수)·`next_tier_calls`(에스컬레이션 재시도 호출 — 이 단발 프로브는 항상 0).
-   0은 "0건 통과"가 아니라 **"미도달"**로 렌더한다 — 학생 요청 6개 호출부가 구조적으로
-   클라우드에 못 올라가는 상태(§5-① 결제 미배선)가 "정상 응답"으로 위장되지 않게 한다.
+   budget0/free/data_export_blocked/rule6_catchall 4버킷으로 계상)·`cloud_reach_count`
+   (CLOUD_MID+CLOUD_HIGH 실측 도달 횟수)·`next_tier_calls`(에스컬레이션 재시도 호출 —
+   이 단발 프로브는 항상 0). 0은 "0건 통과"가 아니라 **"미도달"**로 렌더한다 — 학생 요청
+   6개 호출부가 구조적으로 클라우드에 못 올라가는 상태(§5-① 결제 미배선)가 "정상 응답"으로
+   위장되지 않게 한다.
+4. **데이터 등급 게이트 발동률(EOS-59 ②)** — 국외 반출 차단이 *실제로 몇 번 발동했는지*와
+   그것이 반출 *시도*(클라우드 도달 + 차단) 중 몇 %인지. 이 수치는 **인프로세스**로 낸다 —
+   Langfuse(외부 SaaS)에만 의존하면 관측이 죽었을 때 "0건 발동"과 "측정 실패"가 같은 색이
+   된다(CLAUDE.md 이중 회계 원칙). Langfuse 측 집계는 `ops/cost_report.py`가 별도로 낸다.
 
 대표 믹스의 근거 (표현이 아니라 트래픽 모델)
 --------------------------------------------
@@ -69,12 +74,14 @@ from typing import Protocol
 from whymath_backend.config import Settings
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l3 import pipeline
+from whymath_backend.l3.data_export_policy import guard_data_export
+from whymath_backend.l3.data_grade_defaults import SYNTHETIC_PROBE
 from whymath_backend.l3.interfaces import CacheBackend, InMemoryCache, LLMProvider
 from whymath_backend.l3.models import CostTier, RoutingRequest
 from whymath_backend.l3.providers.anthropic import AnthropicProvider
 from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider
-from whymath_backend.l3.router import _as_cost_tier
+from whymath_backend.l3.router import _as_cost_tier, business_cost_tier
 from whymath_backend.l3.trace.langfuse_sink import LangfuseSink
 
 # 프로브 시스템 프롬프트 — 짧고 결정적(토큰·비용 실측이 목적이지 정답 채점이 아님).
@@ -120,6 +127,8 @@ def _local_request(
         student_subscription=sub,
         budget_krw=0.0,  # 클라우드 예산 0 → guard 규칙2로도 LOCAL 강등(free면 규칙1이 이미 강등)
         sync=True,
+        # 등급: 프롬프트가 이 파일의 합성 스텁("1 + 1은 얼마인가?" 등)뿐 — 제3자 자료 0(EOS-59).
+        data_licenses=SYNTHETIC_PROBE,
     )
 
 
@@ -137,6 +146,9 @@ def _cloud_mid_request(task_type: str, difficulty: str) -> RoutingRequest:
         budget_krw=1000.0,  # cloud_min_cost(CLOUD_MID) 여유(guard 통과)
         sync=True,
         max_latency_ms=30000,
+        # 등급: 합성 스텁 — 반출 가능. 이 프로브의 *존재 이유*가 클라우드 1콜 실측이므로
+        # 등급이 제한이면 게이트가 로컬로 강등해 클라우드 비용을 영영 못 잰다(EOS-59).
+        data_licenses=SYNTHETIC_PROBE,
     )
 
 
@@ -223,43 +235,62 @@ def build_probe_plan(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# LOCAL 강등 사유 3버킷 (OPS-18 acceptance② — "왜 로컬로 귀결됐는가" 계상)
+# LOCAL 강등 사유 4버킷 (OPS-18 acceptance② — "왜 로컬로 귀결됐는가" 계상
+#                        + EOS-59 ② — 데이터 등급 게이트 "작동한 비율")
 #
-# `router.Router._decide_cost_tier`(03a §C.1)와 *동일한 규칙 순서*로 판별한다 — 다른
-# 분류 체계를 새로 만들지 않고 그 함수의 첫 두 규칙을 그대로 미러한다:
+# `router.Router._decide_cost_tier`(03a §C.1)와 *동일한 규칙 순서*로 판별한다:
 #   규칙1 budget_krw<=0            → "budget0"
 #   규칙2(규칙1 미해당) subscription=="free" → "free"
+#   법적 게이트(EOS-59): 비즈니스 축은 클라우드를 원했는데 데이터 등급이 막음
+#                                  → "data_export_blocked"
 #   그 외(규칙3·4가 매치 안 했거나 guard_cloud가 강등)  → "rule6_catchall"
 # 호출자는 실제 결정이 LOCAL로 확정된 요청에만 분류를 적용한다(그 외 티어에는 의미 없음).
-# router.py의 규칙 순서가 바뀌면 이 사본도 맞춰 갱신해야 한다(단발 관측용 미러·자동 동기화 없음).
+#
+# EOS-59에서 규칙1·2 이후 구간은 *손 미러를 그만두고* 라우터 함수(`business_cost_tier`·
+# `guard_data_export`)를 직접 호출한다 — 사유를 하나 더 가르려면 규칙3·4·guard_cloud까지
+# 베껴야 하는데, 그 사본은 반드시 갈라진다(이 주석이 원래 "자동 동기화 없음"을 경고하던
+# 바로 그 위험). 규칙1·2만 여기 남는 이유는 그 둘이 *사유를 가르는* 정보(어느 규칙이
+# 먼저 걸렸나)를 라우터 반환값에서 복원할 수 없기 때문이다.
 # ──────────────────────────────────────────────────────────────────────────
 LOCAL_REASON_BUDGET0 = "budget0"
 LOCAL_REASON_FREE = "free"
+LOCAL_REASON_DATA_EXPORT = "data_export_blocked"
 LOCAL_REASON_RULE6_CATCHALL = "rule6_catchall"
 LOCAL_REASONS: tuple[str, ...] = (
     LOCAL_REASON_BUDGET0,
     LOCAL_REASON_FREE,
+    LOCAL_REASON_DATA_EXPORT,
     LOCAL_REASON_RULE6_CATCHALL,
 )
 
 
 def classify_local_reason(req: RoutingRequest) -> str:
-    """LOCAL 결정 사유 분류 — `router.Router._decide_cost_tier` 규칙1·2를 그대로 미러(OPS-18).
+    """LOCAL 결정 사유 분류 — 규칙1·2 미러 + 법적 게이트는 라우터 함수 직접 호출(OPS-18·EOS-59).
 
     호출자는 실제 `route(req).cost_tier`가 LOCAL로 확정된 요청에만 이 함수를 쓴다. CLOUD로
     간 요청에 호출해도 값은 나오지만 의미가 없다(그 요청은 애초에 이 계상 대상이 아니다).
+
+    `data_export_blocked` 버킷이 **in-process 이중 회계**의 판정치다 — 데이터 등급 게이트의
+    발동률을 Langfuse(외부 SaaS)에만 의존해 세면 관측 인프라가 죽었을 때 "0건 발동"과
+    "측정 실패"가 같은 색이 된다(CLAUDE.md 이중 회계 원칙·`cost_probe` 로컬 비율 선례).
     """
     if req.budget_krw <= 0:
         return LOCAL_REASON_BUDGET0
     if req.student_subscription == "free":
         return LOCAL_REASON_FREE
+    # 비즈니스 축이 클라우드를 원했는데 법적 축이 막았는가 — 라우터와 같은 함수로 판정한다.
+    desired = business_cost_tier(req)
+    if desired is not CostTier.LOCAL and guard_data_export(desired, req.data_licenses) is (
+        CostTier.LOCAL
+    ):
+        return LOCAL_REASON_DATA_EXPORT
     return LOCAL_REASON_RULE6_CATCHALL
 
 
 def _local_reason_counts(
     tier_values: Sequence[str], requests: Sequence[RoutingRequest]
 ) -> dict[str, int]:
-    """성공분 (tier, request) 쌍에서 LOCAL만 골라 사유별 계상 — 3버킷 모두 키 보장(미관측=0)."""
+    """성공분 (tier, request) 쌍에서 LOCAL만 골라 사유별 계상 — 4버킷 모두 키 보장(미관측=0)."""
     counts = {reason: 0 for reason in LOCAL_REASONS}
     for tier, req in zip(tier_values, requests, strict=True):
         if tier != CostTier.LOCAL.value:
@@ -295,7 +326,58 @@ class ProbeReport:
         data["gate2_local_pass"] = self.gate2_local_pass
         data["cloud_reach_count"] = self.cloud_reach_count
         data["next_tier_calls"] = self.next_tier_calls
+        data["data_export_blocked_count"] = self.data_export_blocked_count
+        data["offshore_intent_count"] = self.offshore_intent_count
+        data["data_export_block_rate"] = self.data_export_block_rate
+        data["data_export_block_rate_of_intent"] = self.data_export_block_rate_of_intent
         return data
+
+    # ── 데이터 등급 게이트 "작동한 비율" (EOS-59 ②) ──────────────────────
+    @property
+    def data_export_blocked_count(self) -> int | None:
+        """법적 게이트가 *실제로* 클라우드를 막은 건수. 사유 계상을 안 한 호출이면 None.
+
+        None은 0이 아니다 — "게이트가 한 번도 안 걸렸다"와 "이 프로브는 사유를 안 물었다"를
+        구분한다(`local_reason_counts`의 None 의미론 그대로).
+        """
+        if self.local_reason_counts is None:
+            return None
+        return self.local_reason_counts.get(LOCAL_REASON_DATA_EXPORT, 0)
+
+    @property
+    def offshore_intent_count(self) -> int | None:
+        """비즈니스 축이 *국외 티어를 원한* 요청 수 = 실제 클라우드 도달 + 게이트가 막은 건수.
+
+        "작동한 비율"의 정직한 분모다 — 전체 라우팅으로 나누면 애초에 로컬만 도는 트래픽에서
+        비율이 한없이 0에 수렴해 게이트가 일했는지 알 수 없다(로컬 우세가 MVP 트래픽 모델이라
+        그 왜곡이 상시적이다).
+        """
+        blocked = self.data_export_blocked_count
+        if blocked is None:
+            return None
+        return self.cloud_reach_count + blocked
+
+    @property
+    def data_export_block_rate(self) -> float | None:
+        """전체 성공분 대비 게이트 발동 비율. 성공분 0이거나 미계상이면 None(미상 ≠ 0%)."""
+        blocked = self.data_export_blocked_count
+        succeeded = self.total - self.errors
+        if blocked is None or succeeded <= 0:
+            return None
+        return blocked / succeeded
+
+    @property
+    def data_export_block_rate_of_intent(self) -> float | None:
+        """국외 반출을 *시도한* 요청 중 게이트가 막은 비율 — 게이트의 실효 발동률.
+
+        분모 0(아무도 클라우드를 원하지 않았다)이면 None이다 — 그 경우 "0% 발동"이 아니라
+        **"게이트가 판정할 기회가 없었다"**가 맞다(0건 통과 ≠ 미도달, OPS-18 관례).
+        """
+        blocked = self.data_export_blocked_count
+        intent = self.offshore_intent_count
+        if blocked is None or intent is None or intent == 0:
+            return None
+        return blocked / intent
 
     @property
     def local_ratio_lower(self) -> float | None:
@@ -525,12 +607,15 @@ def render_report(report: ProbeReport) -> str:
     lines.append(f"  게이트② 로컬 판정선(Wilson 하한 ≥80%): {verdict_str}")
     if verdict is False and report.local_ratio is not None and report.local_ratio >= 0.80:
         lines.append("  ※ 점추정은 80% 이상이나 표본이 작아 하한 미달 — --rounds를 키워 재측정.")
-    lines.append("[LOCAL 강등 사유 — budget0/free/rule6_catchall 3버킷(OPS-18)]")
+    lines.append(
+        "[LOCAL 강등 사유 — budget0/free/data_export_blocked/rule6_catchall 4버킷"
+        "(OPS-18·EOS-59)]"
+    )
     if report.local_reason_counts is None:
         lines.append("  (사유 계상 미제공 — requests 없이 호출된 리포트)")
     else:
         for reason in LOCAL_REASONS:
-            lines.append(f"  {reason:<14}: {report.local_reason_counts[reason]}건")
+            lines.append(f"  {reason:<20}: {report.local_reason_counts[reason]}건")
     lines.append("[클라우드 승급 도달 — CLOUD_MID+CLOUD_HIGH 실측(OPS-18)]")
     if report.cloud_reach_count == 0:
         lines.append(
@@ -538,6 +623,24 @@ def render_report(report: ProbeReport) -> str:
         )
     else:
         lines.append(f"  클라우드 도달: {report.cloud_reach_count}건")
+    # 데이터 등급 게이트 "작동한 비율"(EOS-59 ②) — 인프로세스 판정치. 정상 응답 200은
+    # 게이트가 일했다는 증거가 아니므로, 몇 번 발동했고 그것이 *반출 시도* 중 몇 %인지 적는다.
+    lines.append("[데이터 등급 게이트 — 국외 반출 차단 발동률(EOS-59)]")
+    blocked = report.data_export_blocked_count
+    if blocked is None:
+        lines.append("  (사유 계상 미제공 — requests 없이 호출된 리포트라 발동률 산정 불가)")
+    else:
+        intent = report.offshore_intent_count
+        lines.append(f"  차단 발동: {blocked}건  ·  국외 반출 시도(도달+차단): {intent}건")
+        lines.append(f"  전체 대비 발동률: {_fmt_ratio(report.data_export_block_rate)}")
+        rate_of_intent = report.data_export_block_rate_of_intent
+        if rate_of_intent is None:
+            lines.append(
+                "  반출 시도 대비 발동률: 판정 기회 없음 "
+                "(아무 요청도 국외 티어를 원하지 않았다 — 0% 발동과 다르다)"
+            )
+        else:
+            lines.append(f"  반출 시도 대비 발동률: {_fmt_ratio(rate_of_intent)}")
     lines.append("[next_tier() 호출 — 에스컬레이션 재시도, 단발 프로브 범위 밖(OPS-18)]")
     if report.next_tier_calls == 0:
         lines.append(
