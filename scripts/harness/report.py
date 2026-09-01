@@ -163,7 +163,8 @@ def render_brief(
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
-    stale_branches: (branch, age_days, ahead, status, evidence[, partial_port]) 목록
+    stale_branches: (branch, age_days, ahead, status, evidence[, partial_port[, port_scan_error]])
+        목록
         (HARN-13 + 2026-08-05
     3분류 확장) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접 import하지 않게 한다
     (remote_claimed와 동일한 결합도 원칙). status는 "unresolved"|"ported"|"active" —
@@ -222,8 +223,17 @@ def render_brief(
             status_val, evidence_val = entry[3:5] if len(entry) >= 5 else ("unresolved", "")
             # 6번째 원소(부분 착지 단서)는 선택 — 구 호출부 5튜플 호환(HARN-37).
             partial_val = entry[5] if len(entry) >= 6 else ""
+            scan_err_val = entry[6] if len(entry) >= 7 else ""
             normalized.append(
-                (branch_name, age_days_val, ahead_val, status_val, evidence_val, partial_val)
+                (
+                    branch_name,
+                    age_days_val,
+                    ahead_val,
+                    status_val,
+                    evidence_val,
+                    partial_val,
+                    scan_err_val,
+                )
             )
         isolated = [e for e in normalized if e[3] == "isolated"]
         pr_filed = [e for e in normalized if e[3] == "pr_filed"]
@@ -238,11 +248,14 @@ def render_brief(
             lines.append(
                 f"🔴 고립 브랜치 — PR로 노출된 적 없음 (회수 또는 삭제 필요) — {len(isolated)}건:"
             )
-            for stale_branch, age_days, ahead, _status, _evidence, partial in isolated:
+            for stale_branch, age_days, ahead, _status, _evidence, partial, scan_err in isolated:
                 lines.append(
                     f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
                     f"trunk 대비 {ahead}커밋 앞섬"
                 )
+                if scan_err:
+                    # 판정 불가를 조용히 넘기면 "검사했는데 근거 없음"으로 읽힌다.
+                    lines.append(f"      ↳ 포팅 판정 불가: {scan_err} — 삭제 전 수동 확인 필요")
                 if partial:
                     # 흡수 흔적은 있으나 전건은 아니다 — 사람이 같은 조사를 다시 하지
                     # 않게 단서를 잇고, 동시에 '결정 불요'로 숨기지도 않는다(HARN-37).
@@ -251,25 +264,25 @@ def render_brief(
         # 번호를 건넨다. 열림/닫힘은 오프라인 git으로 판정 불가라 번호로 넘긴다.
         if pr_filed:
             lines.append(f"(참고) PR 제출됨 — 처분은 해당 PR에서 — {len(pr_filed)}건:")
-            for stale_branch, age_days, _ahead, _status, evidence, _partial in pr_filed:
+            for stale_branch, age_days, _ahead, _status, evidence, _partial, _err in pr_filed:
                 lines.append(f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전")
         # unresolved는 이제 "PR 조회를 못 해 분리하지 못한" 잔여 축이다(측정 실패).
         if unresolved:
             lines.append(
                 f"⚠️ 미머지 브랜치 (PR 조회 실패로 고립 여부 미판정) — {len(unresolved)}건:"
             )
-            for stale_branch, age_days, ahead, _status, _evidence, _partial in unresolved:
+            for stale_branch, age_days, ahead, _status, _evidence, _partial, _err in unresolved:
                 lines.append(
                     f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
                     f"trunk 대비 {ahead}커밋 앞섬"
                 )
         if ported:
             lines.append(f"(참고) 이미 포팅됨 — 원본 정리만 필요, 결정 불요 — {len(ported)}건:")
-            for stale_branch, _age_days, _ahead, _status, evidence, _partial in ported:
+            for stale_branch, _age_days, _ahead, _status, evidence, _partial, _err in ported:
                 lines.append(f"  · {stale_branch} — 근거: {evidence}")
         if active:
             lines.append(f"(참고) 타 세션 진행중 — 정보성, 결정 불요 — {len(active)}건:")
-            for stale_branch, age_days, ahead, _status, _evidence, _partial in active:
+            for stale_branch, age_days, ahead, _status, _evidence, _partial, _err in active:
                 lines.append(
                     f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
                     f"trunk 대비 {ahead}커밋 앞섬"

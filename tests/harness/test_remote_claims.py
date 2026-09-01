@@ -1431,6 +1431,58 @@ class TestScanStaleBranches:
         assert entry.partial_port.startswith("1/3 파일")
         assert "부분 회수" in entry.partial_port
 
+    def test_multi_commit_recovery_unions_to_full_port(self, bare_remote):
+        """여러_커밋에_나눠_회수해도_전건_착지로_본다 (#962 codex P2)
+
+        회수는 종종 소형 PR 여럿으로 나뉜다 — 커밋 하나가 파일 A를, 다른 하나가 B를 옮긴다.
+        각 커밋을 **따로** 재면 둘 다 부분 착지로 보여, 실제로는 전건 회수된 브랜치가 계속
+        고립으로 남는다(과보고 → 경고 습관화). 근거 커밋들의 착지 파일을 합집합으로 본다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-split-recovery-def456"
+        self._push_multifile_branch(a, branch, ["src/alpha.py", "src/beta.py"])
+        self._commit_on_main(a, {"src/alpha.py": "alpha\n"}, f"1차 회수: {branch} 중 alpha")
+        self._commit_on_main(a, {"src/beta.py": "beta\n"}, f"2차 회수: {branch} 중 beta")
+
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status == "ported", "합집합을 안 보면 전건 회수가 고립으로 남는다"
+        assert "외 1건" in entry.evidence  # 기여 커밋이 복수임을 근거가 자인한다
+        assert entry.partial_port == ""
+
+    def test_failed_file_scan_is_indeterminate_not_full_port(self, bare_remote, monkeypatch):
+        """분모_산출_실패는_전건_착지가_아니라_판정_불가다 (#962 codex P1)
+
+        초판은 `git diff` 실패와 "코드 파일 없는 브랜치"를 같은 빈 집합으로 돌려줬다. 그러면
+        호출부가 실패를 `0/0` 전건 착지로 읽어 **미검증 브랜치를 ported(= 삭제해도 안전)로
+        표시**한다 — git이 잠깐 실패하는 것만으로 이 태스크가 막으려던 구멍이 그대로 다시
+        열린다. 미측정을 0으로 바꾸지 않는다는 규칙이 정확히 이 자리다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = "claude/whymath-scan-failure-ghi789"
+        self._push_multifile_branch(a, branch, ["src/gamma.py"])
+        # 브랜치를 인용하며 **다른** 코드 파일을 건드린 커밋 — 옛 동작이라면 0/0 ported.
+        self._commit_on_main(a, {"src/unrelated.py": "x\n"}, f"언급: {branch} 조사")
+
+        real_git = remote_claims._git
+
+        def flaky_diff(root, *argv, **kwargs):
+            if argv[:2] == ("diff", "--name-only"):
+                raise TimeoutError("git diff 타임아웃(합성)")
+            return real_git(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", flaky_diff)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+
+        entry = {s.branch: s for s in result.stale}[branch]
+        assert entry.status != "ported", "판정 불가가 '결정 불요'가 되면 안 된다"
+        assert entry.evidence == ""
+        # 침묵 실패 금지 — 예외 타입명이 사유에 남는다.
+        assert "TimeoutError" in entry.port_scan_error
+
     def test_shallow_clone_is_pending_not_ok(self, bare_remote, shallow_clone):
         """shallow_클론은_ok가_아니라_판정_보류다
 
