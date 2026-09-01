@@ -239,6 +239,135 @@ class TestTrackTransfer:
         )
 
 
+class TestDependsAttach:
+    """⑥ `--depends` — 등재 후 선행을 붙이는 유일한 CLI 경로 (HARN-52).
+
+    이 경로가 없으면 `audit-deps` 게이트는 **고칠 수 없는 위반**을 지적하게 되고,
+    그런 게이트는 사람이 게이트 자체를 끄게 만든다.
+    """
+
+    def test_depends_attach_blocks_from_next(self, seeded_repo: Path):
+        """부착이 장식이 아님을 실증 — selector가 실제로 후보에서 뺀다."""
+        _add("HARN-90-blocker")
+        _add("HARN-91-dependent")
+        backlog, _ = store.load_backlog(seeded_repo)
+        # 부착 전: 의존 사유로 제외되지 않는다
+        before = selector.classify_todo(backlog, backlog.tasks["HARN-91-dependent"])
+        assert before is None or before.reason != "deps"
+
+        assert (
+            cli.main(
+                ["amend", "HARN-91-dependent", "--depends", "HARN-90-blocker", "--reason", "선행"]
+            )
+            == 0
+        )
+
+        backlog, _ = store.load_backlog(seeded_repo)
+        task = backlog.tasks["HARN-91-dependent"]
+        assert task.depends_on == ["HARN-90-blocker"]
+        # 부착 후: 미해소 의존으로 실제 제외된다 — 부착이 장식이 아님
+        assert selector.unmet_dependencies(backlog, task) == ["HARN-90-blocker"]
+        after = selector.classify_todo(backlog, task)
+        assert after is not None and after.reason == "deps"
+
+    def test_self_dependency_rejected(self, seeded_repo: Path):
+        _add("HARN-92-self")
+        assert (
+            cli.main(["amend", "HARN-92-self", "--depends", "HARN-92-self", "--reason", "x"]) == 1
+        )
+
+    def test_unknown_dependency_rejected(self, seeded_repo: Path):
+        """존재하지 않는 의존은 영구 차단이 된다 — 등록 자체를 막는다."""
+        _add("HARN-93-x")
+        assert cli.main(["amend", "HARN-93-x", "--depends", "NOPE-99-ghost", "--reason", "x"]) == 1
+
+    def test_cycle_rejected(self, seeded_repo: Path, capsys):
+        """순환은 양쪽을 영구 착수 불가로 만든다 — 부착 *시점*에 막는다.
+
+        거부 자체는 `validate_backlog`의 DAG 검사도 잡아내므로 exit code만 보면 amend의
+        선제 순환 검사가 없어도 통과한다(뮤테이션 D1 생존 실측 — 2026-09-01). 그래서
+        **어느 방어선이 잡았는지**를 메시지로 구별한다: 선제 검사는 순환 경로를
+        `A → … → B` 형태로 지목하고, validate 폴백은 그러지 않는다.
+        """
+        _add("HARN-94-a")
+        _add("HARN-95-b")
+        assert cli.main(["amend", "HARN-95-b", "--depends", "HARN-94-a", "--reason", "x"]) == 0
+        capsys.readouterr()
+        assert cli.main(["amend", "HARN-94-a", "--depends", "HARN-95-b", "--reason", "x"]) == 1
+        err = capsys.readouterr().err
+        # validate 폴백은 "depends_on 순환 참조 검출: [...]" 라고만 한다 — "순환"·ID 포함
+        # 여부로는 구별되지 않는다(실측). 선제 검사에만 있는 문구로 고정한다.
+        assert "순환을 만든다" in err, "선제 검사 문구가 아니다 — validate 폴백과 구별 불가"
+        assert "→ … →" in err, "선제 검사는 순환 경로를 화살표로 지목해야 한다"
+        # 부착이 실제로 일어나지 않았다 — 거부가 메시지만이 아님
+        assert _task(seeded_repo, "HARN-94-a").depends_on == []
+
+    def test_duplicate_dependency_rejected(self, seeded_repo: Path):
+        _add("HARN-96-a")
+        _add("HARN-97-b")
+        assert cli.main(["amend", "HARN-97-b", "--depends", "HARN-96-a", "--reason", "x"]) == 0
+        assert cli.main(["amend", "HARN-97-b", "--depends", "HARN-96-a", "--reason", "x"]) == 1
+
+
+class TestPriorityReassign:
+    """⑦ `--priority` — 등재 후 우선순위를 고치는 유일한 CLI 경로 (HARN-52 후속).
+
+    track·acceptance·gate·depends에 이은 마지막 필드였다. 정정 경로가 없으면 잘못 잡힌
+    우선순위가 대장 손편집(금기)으로만 고쳐진다 — 실제로 `HARN-53`이 그랜드파더 만료
+    지점인데 priority 3이라 만료가 명목상으로만 성립하던 상태를 이 경로로 고쳤다.
+    """
+
+    def test_priority_reassigned_and_logged(self, seeded_repo: Path):
+        _add("HARN-98-p")
+        assert _task(seeded_repo, "HARN-98-p").priority == 3
+        assert (
+            cli.main(["amend", "HARN-98-p", "--priority", "1", "--reason", "차단 해소 지점"]) == 0
+        )
+        task = _task(seeded_repo, "HARN-98-p")
+        assert task.priority == 1
+        # 이전 값이 notes에 남는다 — 흔적 없이 덮어쓰면 왜 올렸는지 사라진다(HARN-49 관례)
+        assert "3 → 1" in task.notes
+
+    def test_priority_changes_next_ordering(self, seeded_repo: Path):
+        """부착이 장식이 아님을 실증 — selector 정렬이 실제로 바뀐다."""
+        # 동점 tie-break이 task.id이므로, 우열이 *실제로 뒤집히는* 값으로 잡는다
+        # (둘 다 1로 만들면 id 순으로 갈려 이 검사가 우선순위를 보는지 알 수 없다).
+        _add("HARN-99-low")  # priority 3 (기본)
+        _add("HARN-80-high", "--priority", "2")
+        backlog, _ = store.load_backlog(seeded_repo)
+        low, high = backlog.tasks["HARN-99-low"], backlog.tasks["HARN-80-high"]
+        assert selector.sort_key(backlog, high) < selector.sort_key(backlog, low)
+
+        assert cli.main(["amend", "HARN-99-low", "--priority", "1", "--reason", "상향"]) == 0
+        backlog, _ = store.load_backlog(seeded_repo)
+        low, high = backlog.tasks["HARN-99-low"], backlog.tasks["HARN-80-high"]
+        assert low.priority == 1
+        # 상향 후 정렬 우열이 뒤집힌다 — 정정 전/후가 같은 값을 내면 검증이 아니다
+        assert selector.sort_key(backlog, low) < selector.sort_key(backlog, high)
+
+    @pytest.mark.parametrize("bad", ["0", "6", "-1"])
+    def test_out_of_range_rejected(self, seeded_repo: Path, capsys, bad: str):
+        """범위 밖은 거부 — 선제 검사가 잡았는지 메시지로 구별한다.
+
+        거부 자체는 `models.Task.validate()`의 priority 범위 검사도 잡아내므로 exit code
+        만 보면 amend의 선제 검사가 없어도 통과한다(뮤테이션 P1 생존 실측 — 2026-09-01).
+        선제 검사는 받은 값과 허용 범위를 함께 알려주고 **태스크를 건드리지 않은 채**
+        멈춘다; validate 폴백은 이미 대입한 뒤 되돌린다.
+        """
+        _add("HARN-81-r")
+        capsys.readouterr()
+        assert cli.main(["amend", "HARN-81-r", "--priority", bad, "--reason", "x"]) == 1
+        err = capsys.readouterr().err
+        assert "1(최고)~5" in err, "선제 검사가 허용 범위를 안내해야 한다(validate 폴백과 구별)"
+        assert bad in err, "거부 메시지가 받은 값을 되비춰야 한다"
+        assert _task(seeded_repo, "HARN-81-r").priority == 3
+
+    def test_same_priority_rejected(self, seeded_repo: Path):
+        """무변경 amend는 이벤트 대장을 오염시킨다(정정했다고 읽힌다)."""
+        _add("HARN-82-s")
+        assert cli.main(["amend", "HARN-82-s", "--priority", "3", "--reason", "x"]) == 1
+
+
 class TestOtherFieldsFrozen:
     """④ amend는 status·session·artifacts·id·title을 건드리지 않는다."""
 

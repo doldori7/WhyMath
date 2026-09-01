@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import dep_declaration
 import pathscope
 import remote_claims
 import report
@@ -231,10 +232,24 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
         for item in detail:
             print(f"  · {item}")
         return 0
-    print(f"착수 가능 후보 (상위 {min(args.n, len(ready))}건):")
+    shown = min(args.n, len(ready))
+    # 분모를 함께 낸다 — "상위 N건"만 적으면 *얼마나* 잘렸는지 안 보이고, 그 출력을
+    # 부재 판정("후보에 없다 = 차단됐다")에 쓰는 순간 무효가 된다. 실제로 그렇게 오독해
+    # 정상·뮤테이션 양쪽에서 같은 값을 얻은 사고가 있었다(2026-09-01 · CLAUDE.md
+    # "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 확장 축). 잘렸을 때는 전건 조회
+    # 방법까지 같이 알려 준다 — 규칙을 아는 것과 그 순간 떠올리는 것은 다르다.
+    if shown < len(ready):
+        print(f"착수 가능 후보 (전체 {len(ready)}건 중 상위 {shown}건):")
+    else:
+        print(f"착수 가능 후보 (전체 {len(ready)}건):")
     for i, task in enumerate(ready[: args.n], start=1):
         print(f"{i}. {task.id} [{task.layer}/{task.subject}] {task.title}")
         print(f"   사유: {selector.selection_rationale(backlog, task)}")
+    if shown < len(ready):
+        print(
+            f"\n※ {len(ready) - shown}건이 표시되지 않았다 — 특정 태스크가 후보인지"
+            f" 판정하려면 전건 조회: backlog.py next --n {len(ready)} --json",
+        )
     return 0
 
 
@@ -1253,7 +1268,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
-    """등재된 태스크의 acceptance·requires_gates·track 정정 (HARN-24 + HARN-49 통합).
+    """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
 
     **왜 필요한가 (두 뿌리)**:
     - *acceptance 축(HARN-24)*: 이 CLI에 등재된 태스크의 acceptance를 고치는 서브커맨드가
@@ -1290,10 +1305,14 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
 
     # 변경 요청이 하나도 없으면 거부 — 사유만 남기고 아무것도 안 바꾸는 호출은
     # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
-    if not (args.acceptance or args.gates or args.track):
+    # priority는 `is not None` — 0은 falsy라 `or args.priority`로 쓰면 `--priority 0`이
+    # "인자 없음"으로 처리돼 범위 오류가 아니라 엉뚱한 메시지가 난다(테스트가 실측).
+    if not (
+        args.acceptance or args.gates or args.track or args.depends or args.priority is not None
+    ):
         return _fail(
             f"{task.id}: 변경 항목이 없다 — "
-            "--acceptance / --gate / --track 중 하나 이상을 지정하라"
+            "--acceptance / --gate / --track / --depends / --priority 중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
@@ -1321,6 +1340,60 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             )
         task.requires_gates.append(gid)
         changed.append(f"requires_gates +{gid}")
+
+    # ④ priority 재배정 — 등재 후 우선순위를 고칠 유일한 CLI 경로(HARN-52 후속).
+    #
+    # 왜 필요한가: `depends_on`과 같은 부류의 공백이었다. 등재 시점에 정한 priority가
+    # 나중에 틀린 것으로 드러나도(선행 태스크가 급해졌다·차단 해소 지점이 됐다) 고칠
+    # 경로가 없어 대장 손편집 외에 방법이 없었다(CLAUDE.md 금기). track(HARN-49)·
+    # acceptance/gate(HARN-24)·depends(HARN-52)에 이은 마지막 필드다.
+    #
+    # 이전 값을 notes에 남긴다(HARN-49 관례) — 흔적 없이 덮어쓰면 왜 올렸는지 사라진다.
+    if args.priority is not None:
+        if not 1 <= args.priority <= 5:
+            return _fail(f"{task.id}: priority는 1(최고)~5 범위 — 받은 값 {args.priority}")
+        if args.priority == task.priority:
+            return _fail(f"{task.id}: priority가 이미 {args.priority} — 바꿀 것이 없다")
+        priority_before = task.priority
+        changed.append(f"priority {priority_before} → {args.priority}")
+        note_lines.append(f"priority {priority_before} → {args.priority}: {args.reason}")
+        task.priority = args.priority
+
+    # ③ depends_on 부착 — 등재 후 의존을 붙일 유일한 CLI 경로(HARN-52).
+    #
+    # 왜 필요한가: notes에 "선행: X 착지 후"라고 적어도 `selector.py`는 notes를 읽지 않는다
+    # — `depends_on`만 본다. 그런데 add 시점 외에 depends_on을 고칠 경로가 0건이라, 등재 후
+    # 발견한 선행 관계는 **대장 손편집 외에 방법이 없었다**(CLAUDE.md 금기). `dep_declaration`
+    # 게이트가 그 불일치를 red로 만드는 이상, 고칠 경로가 반드시 함께 있어야 한다 — 고칠 수
+    # 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다.
+    #
+    # 제거는 열지 않는다(추가만) — acceptance·requires_gates와 같은 append 규약. 의존 해제는
+    # 선행 태스크를 done으로 만드는 것이 정상 경로다.
+    for dep in args.depends or []:
+        if dep == task.id:
+            return _fail(f"{task.id}: 자기 자신을 의존으로 걸 수 없다")
+        if dep in task.depends_on:
+            return _fail(f"{task.id}: 의존 '{dep}' 가 이미 있다")
+        if dep not in backlog.tasks:
+            return _fail(
+                f"{task.id}: 의존 대상 '{dep}' 가 백로그에 없다 — "
+                "존재하지 않는 의존은 영구 차단이 된다(full id로 지정하라)"
+            )
+        # 순환 검사: dep에서 출발해 task.id에 도달하면 사이클이다. 사이클은 양쪽 태스크를
+        # 영구 착수 불가로 만들고, validate가 잡더라도 그때는 이미 대장이 오염된 뒤다.
+        stack, seen = [dep], set()
+        while stack:
+            cur = stack.pop()
+            if cur == task.id:
+                return _fail(f"{task.id}: 의존 '{dep}' 는 순환을 만든다 ({dep} → … → {task.id})")
+            if cur in seen:
+                continue
+            seen.add(cur)
+            nxt = backlog.tasks.get(cur)
+            if nxt is not None:
+                stack.extend(nxt.depends_on)
+        task.depends_on.append(dep)
+        changed.append(f"depends_on +{dep}")
 
     # ③ track 이관 — 이전 값을 notes에 남긴다(HARN-49: 흔적 없이 덮어쓰면 왜 옮겼는지 사라진다)
     if args.track:
@@ -1405,6 +1478,54 @@ def _stage_outliers_on_gated_tracks(backlog: Backlog) -> list[str]:
                     f"정정: backlog.py amend {task.id} --track <올바른 트랙> --reason ..."
                 )
     return out
+
+
+def cmd_audit_deps(root: Path, args: argparse.Namespace) -> int:
+    """의존 선언↔집행 대조 (HARN-52) — exit 0/1.
+
+    notes가 순서를 단언하는 어구로 타 태스크를 선행으로 지목하는데 `depends_on`이 비어 있으면
+    위반이다. `selector.py`는 notes를 읽지 않으므로, 그런 태스크는 사람이 "막아 뒀다"고 믿는
+    동안 다른 세션에 착수 가능 후보로 노출된다(#911 리뷰 P2 · EOS-62 실사례).
+
+    판정은 exit code로 한다(CLAUDE.md: 출력 문자열로 통과 선언 금지). `--all`은 그랜드파더를
+    무시하고 전건을 보여 준다 — 레거시 분류(HARN-53) 작업용이며 판정에는 쓰지 않는다.
+    """
+    backlog, _ = _load(root)
+    expiry = dep_declaration.find_expiry_violations(backlog.tasks)
+    findings = dep_declaration.find_undeclared_dependencies(
+        backlog.tasks, apply_exemptions=not args.all
+    )
+    exempt = len(dep_declaration.LEGACY_EXEMPT)
+
+    if args.all:
+        # 감사 모드 — 그랜드파더분까지 전부 보여 주되 판정은 하지 않는다(항상 exit 0).
+        print(f"[감사] 전건 스캔 — 위반 {len(findings)}건 (그랜드파더 {exempt}건 포함)")
+        for f in findings:
+            print(f"  · {f.render()}")
+        return 0
+
+    if not findings and not expiry:
+        print(
+            f"✔ 의존 선언↔집행 green — 위반 0건 "
+            f"(레거시 그랜드파더 {exempt}건은 HARN-53이 분류·만료)"
+        )
+        return 0
+
+    if expiry:
+        print(f"❌ 그랜드파더 만료 계약 위반 {len(expiry)}건:", file=sys.stderr)
+        for v in expiry:
+            print(f"  · {v}", file=sys.stderr)
+    if findings:
+        print(f"❌ 선언되었으나 집행되지 않은 의존 {len(findings)}건:", file=sys.stderr)
+        for f in findings:
+            print(f"  · {f.render()}", file=sys.stderr)
+        print(
+            "\n정정: python3 scripts/harness/backlog.py amend <id> "
+            "--depends <선행-태스크-full-id> --reason '...'\n"
+            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거).",
+            file=sys.stderr,
+        )
+    return 1
 
 
 def cmd_validate(root: Path, args: argparse.Namespace) -> int:
@@ -2188,8 +2309,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
     )
     p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument(
+        "--depends",
+        action="append",
+        default=[],
+        help="depends_on에 선행 태스크 부착 (add 시점 외 유일 경로 — HARN-52). "
+        "full id로 지정. 자기 의존·순환·미존재 대상은 거부",
+    )
+    p.add_argument(
+        "--priority",
+        type=int,
+        help="priority 재배정 1(최고)~5 (add 시점 외 유일 경로 — HARN-52 후속)",
+    )
     p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
     p.set_defaults(func=cmd_amend)
+
+    p = sub.add_parser(
+        "audit-deps", help="의존 선언↔집행 대조 — notes의 '선행'이 depends_on에 있는가 (HARN-52)"
+    )
+    p.add_argument(
+        "--all",
+        action="store_true",
+        help="그랜드파더 무시하고 전건 표시 (감사 모드 — 항상 exit 0)",
+    )
+    p.set_defaults(func=cmd_audit_deps)
 
     p = sub.add_parser("validate", help="백로그 무결성 전수 검증")
     p.add_argument("--quiet", action="store_true")
