@@ -531,3 +531,123 @@ class TestCliTimeWindow:
         _write_events(path, _reviewed_cu("cu-a", 60_000))
         assert main(["--events", str(path), "--since", "not-a-date"]) == 1
         assert "ValueError" in capsys.readouterr().err
+
+
+class TestApprovalResolutionSplit:
+    """EOS-62 ③ — 승인율을 무손질/손질 포함으로 분리 보고한다.
+
+    하나로 뭉친 승인율은 사람이 고쳐서 만든 성공을 AI의 성공으로 계상한다. 두 값을 나란히
+    내야 "HIT 4분 달성"이 품질 실태를 오독시키지 않는다.
+    """
+
+    @staticmethod
+    def _mixed() -> list[ReviewTimerEvent]:
+        """무손질 2 · 손질 1 · 반려 1 — 승인율 두 값이 서로 달라지는 최소 구성."""
+        return [
+            *_reviewed_cu("cu-clean-1", 60_000),
+            *_reviewed_cu("cu-clean-2", 60_000),
+            *_reviewed_cu(
+                "cu-edited",
+                180_000,
+                verdict="approved_with_edit",
+                failure_code=GenerationFailureCode.F7,
+            ),
+            *_reviewed_cu(
+                "cu-rejected", 60_000, verdict="rejected", failure_code=GenerationFailureCode.F2
+            ),
+        ]
+
+    def test_two_approval_rates_are_reported_and_differ(self) -> None:
+        report = aggregate(self._mixed())
+        assert report.decided_count == 4
+        assert report.approved_clean_count == 2
+        assert report.approved_with_edit_count == 1
+        assert report.rejected_count == 1
+        assert report.approval_rate_clean == pytest.approx(2 / 4)
+        assert report.approval_rate_including_edit == pytest.approx(3 / 4)
+        # 두 값이 같으면 이 지표는 아무것도 구분하지 못한다 — 격차 자체가 산출물이다.
+        assert report.approval_rate_clean != report.approval_rate_including_edit
+
+    def test_clean_approval_rate_carries_wilson_lower_bound(self) -> None:
+        """점추정 금지(초인간 검증 표준) — 단측 하한 병기."""
+        report = aggregate(self._mixed())
+        assert report.approval_clean_wilson_lower == pytest.approx(wilson_lower_bound(2, 4))
+        assert report.approval_clean_wilson_lower < report.approval_rate_clean
+
+    def test_edit_codes_are_kept_separate_from_rejection_distribution(self) -> None:
+        """★ F-Ⅲ 분모 보호 — 손질 코드가 반려 분포에 섞이면 12월 판정 임계가 조용히 흔들린다.
+
+        F-Ⅲ("실패 분포에서 판단형 > 60%")의 '실패 분포'는 EOS-51 §5에서 동결된 의미다.
+        여기서 F7(판단형) 손질 1건을 반려 분포에 넣으면 판단형 비중이 0%→50%로 바뀐다.
+        """
+        report = aggregate(self._mixed())
+        assert report.failure_code_counts["F2"] == 1  # 반려 축
+        assert report.failure_code_counts["F7"] == 0  # 손질분은 여기 없다
+        assert report.edit_failure_code_counts["F7"] == 1  # 별도 축
+        # 반려 1건이 전부 기계형(F2)이므로 판단형 비중은 0 — 손질분 혼입 시 0.5가 된다.
+        assert report.judgment_share == pytest.approx(0.0)
+        assert report.machine_share == pytest.approx(1.0)
+
+    def test_edit_without_code_is_counted_not_hidden(self) -> None:
+        """부기는 선택 — 미기재를 0으로 위장하지 않고 센다."""
+        report = aggregate(
+            [
+                *_reviewed_cu("cu-edited-1", 90_000, verdict="approved_with_edit"),
+                *_reviewed_cu(
+                    "cu-edited-2",
+                    90_000,
+                    verdict="approved_with_edit",
+                    failure_code=GenerationFailureCode.F3,
+                ),
+            ]
+        )
+        assert report.approved_with_edit_count == 2
+        assert report.edit_without_code_count == 1
+        assert report.edit_failure_code_counts["F3"] == 1
+
+    def test_no_decisions_reports_none_not_zero(self) -> None:
+        """미측정 ≠ 0 — 판정 종결이 없으면 승인율은 0%가 아니라 미산출."""
+        report = aggregate([start_review(cu_slug="cu-a", reviewer_id="kiki")])
+        assert report.decided_count == 0
+        assert report.approval_rate_clean is None
+        assert report.approval_rate_including_edit is None
+        assert report.approval_clean_wilson_lower is None
+
+    def test_render_shows_both_rates(self) -> None:
+        body = render_report(aggregate(self._mixed()))
+        assert "무손질 승인율 50.0%" in body
+        assert "손질 포함 승인율 75.0%" in body
+        assert "손질 승인 1" in body
+
+    def test_render_states_unmeasured_when_no_decision(self) -> None:
+        body = render_report(aggregate([start_review(cu_slug="cu-a", reviewer_id="kiki")]))
+        assert "미산출(판정 종결 0건)" in body
+
+    def test_edit_verdict_rows_count_as_decisions_in_coverage(self) -> None:
+        """★ 손질 승인이 적재율 분모에서 조용히 빠지지 않는다.
+
+        파서가 `approved_with_edit`를 모르면 그 행은 '비판정'으로 분류돼 분모에서 사라진다 —
+        측정에서 사라지는 것이 이 태스크가 없애려는 바로 그 현상이다.
+        """
+        report = aggregate(
+            _reviewed_cu("cu-edited", 90_000, verdict="approved_with_edit"),
+            verdict_rows=[
+                {"slug": "cu-edited", "verdict": "approved_with_edit"},
+                {"slug": "cu-pending", "review_status": "pending"},
+            ],
+        )
+        assert report.verdict_total == 1  # 손질 승인이 판정으로 계상됐다
+        assert report.verdict_non_verdict_rows == 1  # pending만 비판정
+        assert report.verdict_with_timer == 1
+
+    def test_json_output_carries_the_split(self, tmp_path: Path, capsys) -> None:
+        """--json 소비자(EOS-61 스코어카드)가 두 값을 기계로 읽을 수 있어야 한다."""
+        events_path = tmp_path / "events.jsonl"
+        _write_events(events_path, self._mixed())
+        assert main(["--events", str(events_path), "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["approved_clean_count"] == 2
+        assert payload["approved_with_edit_count"] == 1
+        assert payload["approval_rate_clean"] == pytest.approx(0.5)
+        assert payload["approval_rate_including_edit"] == pytest.approx(0.75)
+        assert payload["edit_failure_code_counts"]["F7"] == 1

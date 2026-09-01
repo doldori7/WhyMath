@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/db/models/review_timer_event.py
   - src/backend/whymath_backend/ops/hit_cu_metrics.py
   - "tests/backend/schema/**"
-session: null
+session: claude/backend-eos-61-scorecard-o3pt47
 notes: "출처: 260830 외부 검토 N4/§17 + 본 검토 §3.4. 선행 EOS-54는 #909로 착지 완료(대상 3파일 trunk 실재) — depends_on으로 강제(#911 codex 리뷰 P2: notes는 셀렉터가 읽지 않는다·selector.py는 depends_on만 본다. 정본화≠집행의 백로그 축 사례). 하류: EOS-60 acceptance ⑥이 이 태스크의 edit-aware verdict를 as-found 라벨 무결성의 대안 경로 ⓑ로 지목한다 — 이 태스크가 늦으면 골든 표본에서 모호 승인분이 제외된다. 12월 필수는 아니나 G2(10/25) 기준선 해석의 정직성에 직결."
-updated: 2026-08-30
+updated: 2026-09-01

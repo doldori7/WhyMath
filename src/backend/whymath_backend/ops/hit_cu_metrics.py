@@ -13,6 +13,11 @@
 3. **CU당 토큰·금액** — GenerationLog 행(JSONL export)을 CU에 조인해 CU당 비용 분포·합계.
 4. **실패코드 분포** — 반려(rejected) 판정의 F1~F8 분포(`GenerationFailureCode` 동결 enum
    소비 — 8코드 전건 표기·0 포함) + 기계형(F1+F2)/판단형(F3+F6+F7) 비중(F-Ⅲ 판정 축).
+5. **승인 해상도(EOS-62)** — 승인율을 **무손질**(`approved`)과 **손질 포함**
+   (`approved`+`approved_with_edit`)으로 분리 보고. 하나로 뭉치면 "HIT 중앙값 4분 + 승인율
+   93%"가 성공으로 읽히는데 승인분의 상당수가 사람 손질일 수 있고, 그 손질분이 바로
+   AI-first 전략의 실패 신호다 — 성공 지표가 실패를 가리는 구조를 여기서 끊는다.
+   손질 부기 결함코드는 반려 분포와 **별도 축**으로 낸다(F-Ⅲ 분모 동결 보호 — 아래 집계 주석).
 
 미측정 ≠ 0 (acceptance ④ — 2026-08-22 규칙)
 --------------------------------------------
@@ -81,7 +86,11 @@ from typing import Any
 from whymath_backend.harness.review_timer import load_events_jsonl
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.schema.enums import GenerationFailureCode
-from whymath_backend.schema.review_timer import ReviewTimerEvent, ReviewTimerEventType
+from whymath_backend.schema.review_timer import (
+    VERDICT_APPROVED_WITH_EDIT,
+    ReviewTimerEvent,
+    ReviewTimerEventType,
+)
 
 __all__ = [
     "CuSummary",
@@ -158,7 +167,14 @@ class SessionSummary:
     verdicts: tuple[str, ...]
     """finished 이벤트의 판정들(정상 1개 — 복수는 anomaly로 별도 카운트)."""
     failure_codes: tuple[str, ...]
-    """반려 실패코드들(F1~F8 값)."""
+    """결함코드들(F1~F8 값) — 반려 필수분 + 손질 승인 부기분이 섞인 평면 목록(하위호환)."""
+    verdict_codes: tuple[tuple[str, str | None], ...]
+    """(판정, 결함코드) 짝 — EOS-62 이후 **반려 코드와 손질 코드를 갈라야** 하므로 필요하다.
+
+    `failure_codes`만으로는 어느 코드가 반려에서 왔고 어느 것이 손질 부기인지 복원할 수 없다
+    (그 평면 목록은 기존 소비자 호환을 위해 남긴다). 코드 미기재 손질 승인은 `(판정, None)`
+    으로 실려 "부기 없음"이 집계에서 보이게 한다 — 사라지면 미기재율이 0으로 위장된다.
+    """
 
 
 def dedupe_events(
@@ -228,6 +244,14 @@ def classify_sessions(events: Sequence[ReviewTimerEvent]) -> tuple[list[SessionS
                 failure_codes=tuple(
                     str(e.failure_code) for e in finishes if e.failure_code is not None
                 ),
+                verdict_codes=tuple(
+                    (
+                        str(e.verdict),
+                        str(e.failure_code) if e.failure_code is not None else None,
+                    )
+                    for e in finishes
+                    if e.verdict is not None
+                ),
             )
         )
     return summaries, anomaly_count
@@ -268,13 +292,23 @@ def classify_cus(sessions: Sequence[SessionSummary]) -> list[CuSummary]:
     return cus
 
 
+#: 판정으로 세는 값 3종(EOS-62 확장 반영). pending·미기재는 판정이 아니다.
+_DECISION_VERDICTS: frozenset[str] = frozenset({"approved", VERDICT_APPROVED_WITH_EDIT, "rejected"})
+
+
 def _parse_verdict_rows(
     rows: Iterable[dict[str, Any]],
 ) -> tuple[list[tuple[str, str]], int, list[str]]:
     """판정 JSONL 행 → (식별자, 판정) 목록 + 비판정 행 수 + 실패 사유.
 
     식별자 키는 slug/cu_slug/code(코퍼스·#841 라벨 양식 수용), 판정 키는 review_status/
-    verdict. approved/rejected만 판정 — pending 등은 비판정으로 분리(분모 오염 방지).
+    verdict. 판정 3종(approved/approved_with_edit/rejected)만 센다 — pending 등은 비판정으로
+    분리(분모 오염 방지).
+
+    `approved_with_edit`(EOS-62)은 *검수 판정* 어휘이지 `ReviewStatus` 값이 아니다. 코퍼스
+    `review_status` 열에는 나타나지 않고 검수 라벨/타이머 유래 행에서만 온다 — 그래도 여기서
+    받아 주는 이유는, 안 받으면 손질 승인분이 **비판정으로 분류돼 적재율 분모에서 조용히
+    빠지기** 때문이다(측정에서 사라지는 것이 이 태스크가 없애려는 바로 그 현상이다).
     """
     verdicts: list[tuple[str, str]] = []
     non_verdict = 0
@@ -285,7 +319,7 @@ def _parse_verdict_rows(
         if not isinstance(identity, str) or not identity:
             errors.append(f"row {idx}: MissingIdentityKey(slug/cu_slug/code)")
             continue
-        if status in ("approved", "rejected"):
+        if status in _DECISION_VERDICTS:
             verdicts.append((identity, str(status)))
         else:
             non_verdict += 1  # pending·미기재 — 판정 아님(분모 제외·정직)
@@ -326,6 +360,24 @@ class HitCuReport:
     coverage_wilson_lower: float | None
     verdict_non_verdict_rows: int
     verdict_parse_errors: tuple[str, ...] = field(default=())
+
+    # ── 승인 해상도(EOS-62) — 무손질 승인과 손질 승인을 분리한다 ──
+    approved_clean_count: int = 0
+    """무손질 승인(verdict=approved) 종결 수 — 그대로 통과한 CU."""
+    approved_with_edit_count: int = 0
+    """손질 후 승인(verdict=approved_with_edit) 종결 수 — 사람이 고쳐서 통과시킨 CU."""
+    decided_count: int = 0
+    """판정이 붙은 종결 수(무손질+손질+반려) — 승인율의 분모."""
+    approval_rate_clean: float | None = None
+    """**무손질** 승인율 = approved / 판정. AI-first 전략의 실질 성적."""
+    approval_rate_including_edit: float | None = None
+    """손질 **포함** 승인율 = (approved + approved_with_edit) / 판정. 종래 '승인율'과 동의."""
+    approval_clean_wilson_lower: float | None = None
+    """무손질 승인율의 Wilson 단측 하한(점추정 금지 — 초인간 검증 표준)."""
+    edit_failure_code_counts: dict[str, int] = field(default_factory=dict)
+    """손질 승인에 부기된 결함코드 분포 — *반려 분포와 별도 축*(아래 주석 참조)."""
+    edit_without_code_count: int = 0
+    """코드 미기재 손질 승인 수 — 부기는 선택이라 0으로 위장하지 않고 센다."""
 
     # ── 실패코드 분포(F1~F8 전건 표기 — GenerationFailureCode 소비) ──
     rejected_count: int = 0
@@ -388,23 +440,53 @@ def aggregate(
 
     # ── 실패코드 분포 — enum 전 멤버 0 포함(동결 8코드 소비·자유 코드는 unknown 분리) ──
     code_counts: dict[str, int] = {code.value: 0 for code in GenerationFailureCode}
+    edit_code_counts: dict[str, int] = {code.value: 0 for code in GenerationFailureCode}
     known_values = set(code_counts)
     rejected_count = 0
+    approved_clean = 0
+    approved_with_edit = 0
+    edit_without_code = 0
     unknown_code_count = 0
     for session in sessions:
-        for verdict in session.verdicts:
+        # 판정과 코드는 같은 finished 이벤트에서 나온다 — 짝지어 순회해야 "반려 코드"와
+        # "손질 코드"를 분리할 수 있다(세션 단위로 뭉뚱그리면 두 축이 섞인다).
+        for verdict, code in session.verdict_codes:
             if verdict == "rejected":
                 rejected_count += 1
-        for code in session.failure_codes:
+                bucket = code_counts
+            elif verdict == VERDICT_APPROVED_WITH_EDIT:
+                approved_with_edit += 1
+                bucket = edit_code_counts
+                if code is None:
+                    edit_without_code += 1  # 부기 선택 — 미기재를 0으로 위장하지 않는다
+            elif verdict == "approved":
+                approved_clean += 1
+                continue  # 무손질 승인엔 코드가 없다(schema validator가 구조 차단)
+            else:
+                continue  # 어휘 밖 — 아래 unknown 카운트가 아니라 판정 자체를 세지 않는다
+            if code is None:
+                continue
             if code in known_values:
-                code_counts[code] += 1
+                bucket[code] += 1
             else:
                 unknown_code_count += 1  # schema 밖 경로 유입 방어(버리지 않고 센다)
     machine_share: float | None = None
     judgment_share: float | None = None
     if rejected_count > 0:
+        # ⚠️ 분모는 **반려 건수만**이다(EOS-51 §5 F-Ⅲ "실패 분포"의 동결 의미). 손질 승인의
+        # 결함코드를 여기 섞으면 12월 판정 임계(판단형 60%)가 조용히 다른 것을 재게 된다 —
+        # 손질분은 edit_failure_code_counts로 따로 낸다. 두 축을 합칠지는 최종 스코어카드
+        # (EOS-61)의 판단이며 이 집계기가 미리 결정하지 않는다.
         machine_share = sum(code_counts[c.value] for c in _MACHINE_CODES) / rejected_count
         judgment_share = sum(code_counts[c.value] for c in _JUDGMENT_CODES) / rejected_count
+    decided_count = approved_clean + approved_with_edit + rejected_count
+    approval_rate_clean: float | None = None
+    approval_rate_including_edit: float | None = None
+    approval_clean_wilson: float | None = None
+    if decided_count > 0:
+        approval_rate_clean = approved_clean / decided_count
+        approval_rate_including_edit = (approved_clean + approved_with_edit) / decided_count
+        approval_clean_wilson = wilson_lower_bound(approved_clean, decided_count)
 
     # ── CU당 비용 조인(slug 우선·problem_id 폴백) — 미조인 CU는 분리(0원 산입 금지) ──
     slug_by_problem: dict[str, str] = {}
@@ -480,6 +562,14 @@ def aggregate(
         coverage_wilson_lower=coverage_wilson,
         verdict_non_verdict_rows=non_verdict_rows,
         verdict_parse_errors=verdict_errors,
+        approved_clean_count=approved_clean,
+        approved_with_edit_count=approved_with_edit,
+        decided_count=decided_count,
+        approval_rate_clean=approval_rate_clean,
+        approval_rate_including_edit=approval_rate_including_edit,
+        approval_clean_wilson_lower=approval_clean_wilson,
+        edit_failure_code_counts=edit_code_counts,
+        edit_without_code_count=edit_without_code,
         rejected_count=rejected_count,
         failure_code_counts=code_counts,
         machine_share=machine_share,
@@ -558,6 +648,55 @@ def render_report(report: HitCuReport) -> str:
             f"- 비판정 행(pending 등) {report.verdict_non_verdict_rows}건 분모 제외 · "
             f"판정 행 파싱 실패 {len(report.verdict_parse_errors)}건"
         )
+    lines += [
+        "",
+        "## 승인 해상도 — 무손질 vs 손질 후 (EOS-62)",
+    ]
+    if report.decided_count == 0:
+        lines.append(
+            "- **미산출(판정 종결 0건)** — 승인율 0%가 아니라 잰 적이 없음. 타이머 finished "
+            "이벤트가 있어야 산출된다."
+        )
+    else:
+        clean = (
+            f"{report.approval_rate_clean:.1%}"
+            if report.approval_rate_clean is not None
+            else "미산출"
+        )
+        incl = (
+            f"{report.approval_rate_including_edit:.1%}"
+            if report.approval_rate_including_edit is not None
+            else "미산출"
+        )
+        wilson = (
+            f"{report.approval_clean_wilson_lower:.1%}"
+            if report.approval_clean_wilson_lower is not None
+            else "미산출"
+        )
+        lines += [
+            f"- 판정 {report.decided_count}건 = 무손질 승인 {report.approved_clean_count} · "
+            f"손질 승인 {report.approved_with_edit_count} · 반려 {report.rejected_count}",
+            f"- **무손질 승인율 {clean}** (Wilson 단측 하한 {wilson}) · "
+            f"손질 포함 승인율 {incl}",
+            "- 두 값의 격차가 AI-first 전략의 실질 성적과 표면 성적의 차다 — 손질 포함 승인율만 "
+            "보면 사람이 고쳐서 만든 성공이 AI의 성공으로 계상된다(EOS-62 근거).",
+        ]
+        edit_codes = {k: v for k, v in report.edit_failure_code_counts.items() if v}
+        if report.approved_with_edit_count:
+            detail = (
+                " · ".join(f"{k} {v}" for k, v in sorted(edit_codes.items()))
+                if edit_codes
+                else "코드 부기 0건"
+            )
+            lines.append(
+                f"- 손질 결함코드(부기·선택): {detail} · 미기재 "
+                f"{report.edit_without_code_count}건"
+            )
+            lines.append(
+                "  - 이 분포는 아래 반려 분포와 **합산하지 않는다** — F-Ⅲ(판단형 60% 초과)의 "
+                "분모는 EOS-51 §5에서 '실패 분포'로 동결됐고, 합칠지는 최종 스코어카드"
+                "(EOS-61)의 판단이다."
+            )
     lines += [
         "",
         f"## 실패코드 분포 (반려 {report.rejected_count}건 — F1~F8 동결 계약)",
