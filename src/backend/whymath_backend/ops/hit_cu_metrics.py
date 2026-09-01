@@ -13,6 +13,18 @@
 3. **CU당 토큰·금액** — GenerationLog 행(JSONL export)을 CU에 조인해 CU당 비용 분포·합계.
 4. **실패코드 분포** — 반려(rejected) 판정의 F1~F8 분포(`GenerationFailureCode` 동결 enum
    소비 — 8코드 전건 표기·0 포함) + 기계형(F1+F2)/판단형(F3+F6+F7) 비중(F-Ⅲ 판정 축).
+5. **승인 해상도(EOS-62)** — 승인율을 **무손질**(`approved`)과 **손질 포함**
+   (`approved`+`approved_with_edit`)으로 분리 보고. 하나로 뭉치면 "HIT 중앙값 4분 + 승인율
+   93%"가 성공으로 읽히는데 승인분의 상당수가 사람 손질일 수 있고, 그 손질분이 바로
+   AI-first 전략의 실패 신호다 — 성공 지표가 실패를 가리는 구조를 여기서 끊는다.
+   손질 부기 결함코드는 반려 분포와 **별도 축**으로 낸다(F-Ⅲ 분모 동결 보호 — 아래 집계 주석).
+   **경계 필수**: EOS-62 착지 *이전*의 `approved`는 그때 손질을 표현할 값이 없었으므로 "무손질"이
+   아니라 **손질 여부 미상**이다. `--edit-aware-since` 없이 무손질로 계상하면 그것이 소급 재분류
+   이고 무손질 승인율이 과대추정된다 — 경계 미지정 시 전건을 판별불가로 두고 **점값 대신 구간**을
+   낸다(fail-closed·`golden_benchmark`의 같은 인자와 동일 기조).
+   **대표성 자인**: 승인율은 *타이머 계측 세션*의 비율이다. 판정 소스(`--verdicts`)보다 계측이
+   적으면(검수 UI 미결선 구간의 정상 상태) 리포트가 "계측 부분표본"임을 명시한다 — 편향된 수가
+   전체 판정의 비율로 읽히지 않게.
 
 미측정 ≠ 0 (acceptance ④ — 2026-08-22 규칙)
 --------------------------------------------
@@ -46,6 +58,7 @@ JSONL export)이다. Langfuse 등 외부 관측 인프라에 일절 의존하지
 입력 형식
 ---------
   --events   검수 타이머 이벤트 JSONL(`harness/review_timer.append_event_jsonl` 산출) [필수]
+  --edit-aware-since  EOS-62 판정 3종화 착지 경계(ISO8601) — 승인 해상도 판별 축
   --verdicts 검수 판정 JSONL — 코퍼스 레코드(slug+review_status) 또는 #841 라벨(code+
              review_status) 형식. approved/rejected 행만 판정으로 센다(pending=미판정).
   --generation-log  GenerationLog 행 JSONL — slug 또는 problem_id + input_tokens/
@@ -82,7 +95,11 @@ from typing import Any
 from whymath_backend.harness.review_timer import load_events_jsonl
 from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.schema.enums import GenerationFailureCode
-from whymath_backend.schema.review_timer import ReviewTimerEvent, ReviewTimerEventType
+from whymath_backend.schema.review_timer import (
+    VERDICT_APPROVED_WITH_EDIT,
+    ReviewTimerEvent,
+    ReviewTimerEventType,
+)
 
 __all__ = [
     "CuSummary",
@@ -159,7 +176,18 @@ class SessionSummary:
     verdicts: tuple[str, ...]
     """finished 이벤트의 판정들(정상 1개 — 복수는 anomaly로 별도 카운트)."""
     failure_codes: tuple[str, ...]
-    """반려 실패코드들(F1~F8 값)."""
+    """결함코드들(F1~F8 값) — 반려 필수분 + 손질 승인 부기분이 섞인 평면 목록(하위호환)."""
+    verdict_codes: tuple[tuple[str, str | None, datetime | None], ...]
+    """(판정, 결함코드) 짝 — EOS-62 이후 **반려 코드와 손질 코드를 갈라야** 하므로 필요하다.
+
+    `failure_codes`만으로는 어느 코드가 반려에서 왔고 어느 것이 손질 부기인지 복원할 수 없다
+    (그 평면 목록은 기존 소비자 호환을 위해 남긴다). 코드 미기재 손질 승인은 `(판정, None, …)`
+    으로 실려 "부기 없음"이 집계에서 보이게 한다 — 사라지면 미기재율이 0으로 위장된다.
+
+    세 번째 원소는 **귀속 시각**(발생 우선·수신 폴백)이다. EOS-62 착지 *이전*에 기록된
+    `approved`는 무손질인지 손질인지 알 수 없으므로(그때는 어휘 자체가 없었다) 경계 없이
+    무손질로 계상하면 무손질 승인율이 과대추정된다 — 시각이 그 판별의 유일한 근거다.
+    """
 
 
 def dedupe_events(
@@ -229,6 +257,15 @@ def classify_sessions(events: Sequence[ReviewTimerEvent]) -> tuple[list[SessionS
                 failure_codes=tuple(
                     str(e.failure_code) for e in finishes if e.failure_code is not None
                 ),
+                verdict_codes=tuple(
+                    (
+                        str(e.verdict),
+                        str(e.failure_code) if e.failure_code is not None else None,
+                        effective_moment(e),
+                    )
+                    for e in finishes
+                    if e.verdict is not None
+                ),
             )
         )
     return summaries, anomaly_count
@@ -269,13 +306,23 @@ def classify_cus(sessions: Sequence[SessionSummary]) -> list[CuSummary]:
     return cus
 
 
+#: 판정으로 세는 값 3종(EOS-62 확장 반영). pending·미기재는 판정이 아니다.
+_DECISION_VERDICTS: frozenset[str] = frozenset({"approved", VERDICT_APPROVED_WITH_EDIT, "rejected"})
+
+
 def _parse_verdict_rows(
     rows: Iterable[dict[str, Any]],
 ) -> tuple[list[tuple[str, str]], int, list[str]]:
     """판정 JSONL 행 → (식별자, 판정) 목록 + 비판정 행 수 + 실패 사유.
 
     식별자 키는 slug/cu_slug/code(코퍼스·#841 라벨 양식 수용), 판정 키는 review_status/
-    verdict. approved/rejected만 판정 — pending 등은 비판정으로 분리(분모 오염 방지).
+    verdict. 판정 3종(approved/approved_with_edit/rejected)만 센다 — pending 등은 비판정으로
+    분리(분모 오염 방지).
+
+    `approved_with_edit`(EOS-62)은 *검수 판정* 어휘이지 `ReviewStatus` 값이 아니다. 코퍼스
+    `review_status` 열에는 나타나지 않고 검수 라벨/타이머 유래 행에서만 온다 — 그래도 여기서
+    받아 주는 이유는, 안 받으면 손질 승인분이 **비판정으로 분류돼 적재율 분모에서 조용히
+    빠지기** 때문이다(측정에서 사라지는 것이 이 태스크가 없애려는 바로 그 현상이다).
     """
     verdicts: list[tuple[str, str]] = []
     non_verdict = 0
@@ -286,7 +333,7 @@ def _parse_verdict_rows(
         if not isinstance(identity, str) or not identity:
             errors.append(f"row {idx}: MissingIdentityKey(slug/cu_slug/code)")
             continue
-        if status in ("approved", "rejected"):
+        if status in _DECISION_VERDICTS:
             verdicts.append((identity, str(status)))
         else:
             non_verdict += 1  # pending·미기재 — 판정 아님(분모 제외·정직)
@@ -328,6 +375,57 @@ class HitCuReport:
     verdict_non_verdict_rows: int
     verdict_parse_errors: tuple[str, ...] = field(default=())
 
+    # ── 승인 해상도(EOS-62) — 무손질 승인과 손질 승인을 분리한다 ──
+    approved_clean_count: int = 0
+    """**판별 가능한** 무손질 승인 수 — EOS-62 경계 이후의 `approved`(그대로 통과한 CU)."""
+    approved_ambiguous_count: int = 0
+    """판별 불가 승인 수 — 경계 미지정이거나 경계 *이전*에 기록된 `approved`.
+
+    그때는 `approved_with_edit` 어휘 자체가 없었으므로 그 값은 "무손질"이 아니라 **손질 여부
+    미상**이다. 무손질로 계상하면 무손질 승인율이 과대추정된다(소급 재분류 금지 — acceptance ④).
+    """
+    approved_with_edit_count: int = 0
+    """손질 후 승인(verdict=approved_with_edit) 종결 수 — 사람이 고쳐서 통과시킨 CU."""
+    decided_count: int = 0
+    """판정이 붙은 종결 수(무손질+손질+반려) — 승인율의 분모."""
+    approval_rate_clean: float | None = None
+    """**무손질** 승인율 = 판별가능 무손질 / 판정. AI-first 전략의 실질 성적.
+
+    판별 불가 승인이 1건이라도 있으면 **None**이다 — 그것들은 무손질일 수도 손질일 수도
+    있어 비율이 구간으로만 존재한다. 하나의 수로 찍으면 그 불확실성이 사라진다(미측정 ≠ 0).
+    """
+    approval_rate_clean_upper: float | None = None
+    """무손질 승인율의 *상한* = (무손질 + 판별불가) / 판정 — 판별 불가분이 전부 무손질이었을 때.
+
+    하한은 `approval_rate_clean_lower`. 둘 사이가 경계 이전 데이터가 남긴 무지의 폭이다.
+    """
+    approval_rate_clean_lower: float | None = None
+    """무손질 승인율의 *하한* = 판별가능 무손질 / 판정 — 판별 불가분이 전부 손질이었을 때."""
+    approval_rate_including_edit: float | None = None
+    """손질 **포함** 승인율 = 전체 승인 / 판정.
+
+    판별 불가분이 있어도 **정확하다** — 판별 불가는 '손질했는가'의 불확실이지 '승인인가'의
+    불확실이 아니다. 그래서 이 값만은 경계 없이도 신뢰할 수 있다.
+    """
+    approval_clean_wilson_lower: float | None = None
+    """무손질 승인율의 Wilson 단측 하한(점추정 금지 — 초인간 검증 표준). 판별 불가 시 None."""
+    edit_aware_boundary: str | None = None
+    """적용된 EOS-62 착지 경계(ISO8601) — None이면 미지정(모든 approved가 판별 불가)."""
+
+    # ── 승인 해상도의 표본 대표성(P1 — 계측 커버리지 편향) ──
+    approval_basis: str = "timer_sessions"
+    """승인율의 산출 모집단 — 타이머 계측 세션. 판정 소스 전체가 아니다."""
+    approval_sample_is_complete: bool | None = None
+    """계측 표본 == 전체 판정인가. None = 판정 소스 미제공이라 비교 불가.
+
+    False면 위 승인율들은 **계측된 부분표본의 비율**이지 전체 판정의 비율이 아니다 —
+    미계측 판정이 다른 분포를 가지면 편향된다(검수 UI 미결선 구간에서 실제로 그럴 수 있다).
+    """
+    edit_failure_code_counts: dict[str, int] = field(default_factory=dict)
+    """손질 승인에 부기된 결함코드 분포 — *반려 분포와 별도 축*(아래 주석 참조)."""
+    edit_without_code_count: int = 0
+    """코드 미기재 손질 승인 수 — 부기는 선택이라 0으로 위장하지 않고 센다."""
+
     # ── 실패코드 분포(F1~F8 전건 표기 — GenerationFailureCode 소비) ──
     rejected_count: int = 0
     failure_code_counts: dict[str, int] = field(default_factory=dict)
@@ -359,8 +457,15 @@ def aggregate(
     time_unknown_excluded_count: int = 0,
     verdict_rows: Sequence[dict[str, Any]] | None = None,
     genlog_rows: Sequence[dict[str, Any]] | None = None,
+    edit_aware_since: datetime | None = None,
 ) -> HitCuReport:
-    """순수 집계 — 이벤트(+판정·비용 행) → HitCuReport. I/O 0."""
+    """순수 집계 — 이벤트(+판정·비용 행) → HitCuReport. I/O 0.
+
+    `edit_aware_since` = EOS-62(판정 3종화) 착지 경계. 그 이전에 기록된 `approved`는 무손질
+    인지 손질인지 알 수 없으므로(어휘가 없었다) **판별 불가**로 분리한다. 미지정이면 모든
+    `approved`가 판별 불가다 — `golden_benchmark`의 `--edit-aware-since`와 같은 fail-closed
+    기조이며, 경계 없이 무손질로 계상하는 것이 정확히 소급 재분류다(acceptance ④ 위반).
+    """
     raw_count = len(events)
     deduped, duplicate_count = dedupe_events(events)
     events = deduped
@@ -389,23 +494,79 @@ def aggregate(
 
     # ── 실패코드 분포 — enum 전 멤버 0 포함(동결 8코드 소비·자유 코드는 unknown 분리) ──
     code_counts: dict[str, int] = {code.value: 0 for code in GenerationFailureCode}
+    edit_code_counts: dict[str, int] = {code.value: 0 for code in GenerationFailureCode}
     known_values = set(code_counts)
     rejected_count = 0
+    approved_clean = 0
+    approved_with_edit = 0
+    edit_without_code = 0
     unknown_code_count = 0
+    approved_ambiguous = 0
     for session in sessions:
-        for verdict in session.verdicts:
+        # 판정과 코드는 같은 finished 이벤트에서 나온다 — 짝지어 순회해야 "반려 코드"와
+        # "손질 코드"를 분리할 수 있다(세션 단위로 뭉뚱그리면 두 축이 섞인다).
+        for verdict, code, moment in session.verdict_codes:
             if verdict == "rejected":
                 rejected_count += 1
-        for code in session.failure_codes:
+                bucket = code_counts
+            elif verdict == VERDICT_APPROVED_WITH_EDIT:
+                approved_with_edit += 1
+                bucket = edit_code_counts
+                if code is None:
+                    edit_without_code += 1  # 부기 선택 — 미기재를 0으로 위장하지 않는다
+            elif verdict == "approved":
+                # 경계 이후의 approved만 "무손질"이다. 그 전(또는 경계 미지정)에는 손질을
+                # 표현할 값 자체가 없었으므로 같은 문자열이 두 사태를 덮고 있다.
+                if (
+                    edit_aware_since is not None
+                    and moment is not None
+                    and moment >= edit_aware_since
+                ):
+                    approved_clean += 1
+                else:
+                    approved_ambiguous += 1
+                continue  # 무손질 승인엔 코드가 없다(schema validator가 구조 차단)
+            else:
+                continue  # 어휘 밖 — 아래 unknown 카운트가 아니라 판정 자체를 세지 않는다
+            if code is None:
+                continue
             if code in known_values:
-                code_counts[code] += 1
+                bucket[code] += 1
             else:
                 unknown_code_count += 1  # schema 밖 경로 유입 방어(버리지 않고 센다)
     machine_share: float | None = None
     judgment_share: float | None = None
     if rejected_count > 0:
+        # ⚠️ 분모는 **반려 건수만**이다(EOS-51 §5 F-Ⅲ "실패 분포"의 동결 의미). 손질 승인의
+        # 결함코드를 여기 섞으면 12월 판정 임계(판단형 60%)가 조용히 다른 것을 재게 된다 —
+        # 손질분은 edit_failure_code_counts로 따로 낸다. 두 축을 합칠지는 최종 스코어카드
+        # (EOS-61)의 판단이며 이 집계기가 미리 결정하지 않는다.
         machine_share = sum(code_counts[c.value] for c in _MACHINE_CODES) / rejected_count
         judgment_share = sum(code_counts[c.value] for c in _JUDGMENT_CODES) / rejected_count
+    decided_count = approved_clean + approved_ambiguous + approved_with_edit + rejected_count
+    approval_rate_clean: float | None = None
+    approval_rate_clean_lower: float | None = None
+    approval_rate_clean_upper: float | None = None
+    approval_rate_including_edit: float | None = None
+    approval_clean_wilson: float | None = None
+    if decided_count > 0:
+        # 손질 포함 승인율은 판별 불가분이 있어도 정확하다 — 판별 불가는 '손질했는가'의
+        # 불확실이지 '승인인가'의 불확실이 아니다.
+        approval_rate_including_edit = (
+            approved_clean + approved_ambiguous + approved_with_edit
+        ) / decided_count
+        approval_rate_clean_lower = approved_clean / decided_count
+        approval_rate_clean_upper = (approved_clean + approved_ambiguous) / decided_count
+        if approved_ambiguous == 0:
+            # 전건 판별 가능할 때만 점값·Wilson을 낸다. 판별 불가가 섞인 채 하나의 수를
+            # 찍으면 그 무지가 사라지고 게이트가 없는 정밀도를 가진 것처럼 읽힌다.
+            approval_rate_clean = approval_rate_clean_lower
+            approval_clean_wilson = wilson_lower_bound(approved_clean, decided_count)
+
+    # 표본 대표성 — 계측 표본이 전체 판정을 덮는가(판정 소스가 있을 때만 판별 가능).
+    approval_sample_is_complete: bool | None = None
+    if verdict_total is not None:
+        approval_sample_is_complete = decided_count >= verdict_total
 
     # ── CU당 비용 조인(slug 우선·problem_id 폴백) — 미조인 CU는 분리(0원 산입 금지) ──
     slug_by_problem: dict[str, str] = {}
@@ -481,6 +642,19 @@ def aggregate(
         coverage_wilson_lower=coverage_wilson,
         verdict_non_verdict_rows=non_verdict_rows,
         verdict_parse_errors=verdict_errors,
+        approved_clean_count=approved_clean,
+        approved_ambiguous_count=approved_ambiguous,
+        approved_with_edit_count=approved_with_edit,
+        decided_count=decided_count,
+        approval_rate_clean=approval_rate_clean,
+        approval_rate_clean_lower=approval_rate_clean_lower,
+        approval_rate_clean_upper=approval_rate_clean_upper,
+        approval_rate_including_edit=approval_rate_including_edit,
+        approval_clean_wilson_lower=approval_clean_wilson,
+        edit_aware_boundary=(edit_aware_since.isoformat() if edit_aware_since else None),
+        approval_sample_is_complete=approval_sample_is_complete,
+        edit_failure_code_counts=edit_code_counts,
+        edit_without_code_count=edit_without_code,
         rejected_count=rejected_count,
         failure_code_counts=code_counts,
         machine_share=machine_share,
@@ -559,6 +733,88 @@ def render_report(report: HitCuReport) -> str:
             f"- 비판정 행(pending 등) {report.verdict_non_verdict_rows}건 분모 제외 · "
             f"판정 행 파싱 실패 {len(report.verdict_parse_errors)}건"
         )
+    lines += [
+        "",
+        "## 승인 해상도 — 무손질 vs 손질 후 (EOS-62)",
+    ]
+    if report.decided_count == 0:
+        lines.append(
+            "- **미산출(판정 종결 0건)** — 승인율 0%가 아니라 잰 적이 없음. 타이머 finished "
+            "이벤트가 있어야 산출된다."
+        )
+    else:
+        incl = (
+            f"{report.approval_rate_including_edit:.1%}"
+            if report.approval_rate_including_edit is not None
+            else "미산출"
+        )
+        lines += [
+            f"- 판정 {report.decided_count}건 = 무손질 승인 {report.approved_clean_count} · "
+            f"판별불가 승인 {report.approved_ambiguous_count} · "
+            f"손질 승인 {report.approved_with_edit_count} · 반려 {report.rejected_count}",
+            f"- 손질 포함 승인율 **{incl}** (판별불가가 있어도 정확 — 승인 여부는 확실하다)",
+        ]
+        if report.approval_rate_clean is not None:
+            wilson = (
+                f"{report.approval_clean_wilson_lower:.1%}"
+                if report.approval_clean_wilson_lower is not None
+                else "미산출"
+            )
+            lines += [
+                f"- **무손질 승인율 {report.approval_rate_clean:.1%}** "
+                f"(Wilson 단측 하한 {wilson})",
+                "- 두 값의 격차가 AI-first 전략의 실질 성적과 표면 성적의 차다 — 손질 포함 "
+                "승인율만 보면 사람이 고쳐서 만든 성공이 AI의 성공으로 계상된다(EOS-62 근거).",
+            ]
+        else:
+            lo = (
+                f"{report.approval_rate_clean_lower:.1%}"
+                if report.approval_rate_clean_lower is not None
+                else "미산출"
+            )
+            hi = (
+                f"{report.approval_rate_clean_upper:.1%}"
+                if report.approval_rate_clean_upper is not None
+                else "미산출"
+            )
+            boundary = report.edit_aware_boundary or "미지정"
+            lines += [
+                f"- **무손질 승인율: 점값 미산출 — 구간 {lo} ~ {hi}** "
+                f"(판별불가 {report.approved_ambiguous_count}건)",
+                f"  - EOS-62 착지 경계 = {boundary}. 경계 이전 `approved`는 그때 손질을 표현할 "
+                "값 자체가 없었으므로 **손질 여부 미상**이다 — 무손질로 계상하면 그것이 소급 "
+                "재분류이고 무손질 승인율이 과대추정된다.",
+                "  - 해소: `--edit-aware-since <ISO8601>`로 착지 경계를 주고 그 이후 검수분으로 "
+                "측정하라(golden_benchmark의 같은 인자와 동일 기조).",
+            ]
+        if report.approval_sample_is_complete is False:
+            lines.append(
+                f"- ⚠ **계측 부분표본 경고** — 위 승인율은 타이머 계측 세션 "
+                f"{report.decided_count}건의 비율이고, 판정 소스는 {report.verdict_total}건이다. "
+                "미계측 판정이 다른 분포를 가지면 편향된다(검수 UI 미결선 구간에서 실제로 그럴 "
+                "수 있다) — 전체 판정의 비율로 읽지 말 것."
+            )
+        elif report.approval_sample_is_complete is None:
+            lines.append(
+                "- 표본 대표성 미판별(판정 소스 미제공) — `--verdicts`를 주면 계측 표본이 전체 "
+                "판정을 덮는지 검사한다."
+            )
+        edit_codes = {k: v for k, v in report.edit_failure_code_counts.items() if v}
+        if report.approved_with_edit_count:
+            detail = (
+                " · ".join(f"{k} {v}" for k, v in sorted(edit_codes.items()))
+                if edit_codes
+                else "코드 부기 0건"
+            )
+            lines.append(
+                f"- 손질 결함코드(부기·선택): {detail} · 미기재 "
+                f"{report.edit_without_code_count}건"
+            )
+            lines.append(
+                "  - 이 분포는 아래 반려 분포와 **합산하지 않는다** — F-Ⅲ(판단형 60% 초과)의 "
+                "분모는 EOS-51 §5에서 '실패 분포'로 동결됐고, 합칠지는 최종 스코어카드"
+                "(EOS-61)의 판단이다."
+            )
     lines += [
         "",
         f"## 실패코드 분포 (반려 {report.rejected_count}건 — F1~F8 동결 계약)",
@@ -673,6 +929,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--until", default=None, help="이 ISO 시각 이전 이벤트만")
     parser.add_argument(
+        "--edit-aware-since",
+        default=None,
+        help="EOS-62(판정 3종화) 착지 경계 ISO8601 — 이 시각 이후의 `approved`만 '무손질'로 "
+        "센다. 미지정이면 전건 판별불가(소급 재분류 금지·golden_benchmark 동일 기조)",
+    )
+    parser.add_argument(
         "--max-median-minutes",
         type=float,
         default=None,
@@ -703,6 +965,15 @@ def main(argv: list[str] | None = None) -> int:
     if not events:
         _say("[측정 실패] 유효 이벤트 0건 — '성공 0'이 아니라 계측 부재다(acceptance ④)")
         return _EXIT_MEASUREMENT_FAIL
+
+    # ── ①-b EOS-62 착지 경계 파싱(승인 해상도 판별 축 — 창 필터와 별개) ──
+    edit_aware_since: datetime | None = None
+    if args.edit_aware_since:
+        try:
+            edit_aware_since = _parse_moment(args.edit_aware_since)
+        except ValueError as exc:
+            _say(f"[측정 실패] {type(exc).__name__}: --edit-aware-since ISO 파싱 불가")
+            return _EXIT_MEASUREMENT_FAIL
 
     # ── ② 시간 창 필터(이번 실행 것인가 — 발생 우선 귀속·시각 미상은 분리 제외) ──
     window_excluded = 0
@@ -781,6 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
         time_unknown_excluded_count=time_unknown_excluded,
         verdict_rows=verdict_rows,
         genlog_rows=genlog_rows,
+        edit_aware_since=edit_aware_since,
     )
     # 데이터는 stdout(단일 JSON 문서 또는 리포트 본문), 진행·판정은 stderr(_say) — 분리.
     if args.json:

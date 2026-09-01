@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 eos_priority: P1
 owner: claude
@@ -17,7 +17,8 @@ acceptance:
   - "② 수정 승인에도 failure_code(F1~F8) 기록 허용·권장 — 어떤 결함을 손질했는지가 F-Ⅲ 실패분포(판단형 60% 초과 판정)의 입력이다. 단 rejected와 달리 필수는 아님(부기 규약 명시)"
   - "③ hit_cu_metrics 집계 반영 — 승인율을 '무손질 승인율'과 '손질 포함 승인율'로 분리 보고. HIT 중앙값 4분 달성이 품질 실태를 오독시키지 않게 함"
   - "④ 하위호환 — 기존 approved 행의 의미를 바꾸지 않는다(소급 재분류 금지·값 추가만). EOS-51 §4 실패코드 F1~F8 폐쇄 동결은 불변(verdict 축과 failure_code 축은 별개)"
-artifacts: []
+artifacts:
+  - "PR #954 (https://github.com/doldori7/WhyMath/pull/954) · 커밋 744b7015"
 paths:
   - src/backend/whymath_backend/schema/review_timer.py
   - src/backend/whymath_backend/db/models/review_timer_event.py
