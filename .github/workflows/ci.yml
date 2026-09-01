@@ -335,9 +335,17 @@ jobs:
       - name: Import contracts (import-linter — 7계층 단방향)
         run: lint-imports
 
+      # OPS-58 — 워커 병렬화. 이 잡 29분 41초 중 이 스텝이 26분 53초(90%)였다(run
+      # 33387572394 스텝 타임스탬프 실측). 나머지 전 스텝 합이 3분 미만이라 여기 말고는
+      # 줄일 곳이 없다. `--dist loadfile`(같은 파일 = 같은 워커)은 이 저장소의 순서 의존
+      # 전역 오염 이력(OPS-06/07/09 `db.session._engine`)을 고려한 보수적 선택이면서
+      # 실측상 기본 `load`보다 오히려 빠르다(32.0s vs 41.4s) — 안전과 속도가 같은 방향.
+      # **커버리지 총계는 직렬과 완전 일치함을 선결 확인**했다(분기 포함 lines 4699/48017 ·
+      # branches 104/11642) — 아래 계층별 커버리지 게이트가 이 산출물을 읽기 때문이다.
       - name: Pytest (with coverage)
         run: |
           pytest \
+            -n auto --dist loadfile \
             --cov=whymath_backend \
             --cov-report=term \
             --cov-report=xml \
