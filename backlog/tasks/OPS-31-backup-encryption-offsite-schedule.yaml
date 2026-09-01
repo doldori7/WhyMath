@@ -5,8 +5,9 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
+eos_priority: null
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,6 +22,6 @@ paths:
   - "scripts/backup/**"
   - tests/infra/test_backup_script.py
   - docs/architecture/db_backup_dr_runbook.md
-session: null
+session: claude/infra-ops-31-backup-encryption-o3pt47
 notes: "정본: docs/architecture/operations_module_gap_review_r3.md §3 D9-2. OPS-02는 done이나 런북 §6 자인 공백 4종의 백로그 추적이 0건이었다."
-updated: 2026-08-11
+updated: 2026-09-01
