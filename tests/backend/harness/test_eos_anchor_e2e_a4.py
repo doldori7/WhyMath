@@ -25,6 +25,11 @@ G1 차단 조건("부품은 전부 실재하는데 앵커 축으로 관통한 �
   ① 신규 수용(accepted_stored) ② 다근·선택 미명시 → 검수필요(needs_review)
   ③ 오답 → SymPy Tier1 fail(rejected_gate) ④ 시드 A4 문항과 같은 구조(rejected_duplicate)
   ⑤ 비JSON → 파싱 실패(generation_failed)
+
+EOS-64 확장(회차 계측 — `TestNightlyRoundInstrumentation`): 이 관통은 nightly로 상시화됐고
+(`tests/infra/test_anchor_e2e_nightly_wiring.py`가 배선을 동결), 회차마다 **작동한 비율**
+(outcome 분포 + 방향별 Wilson 경계)과 **연속 무진전 알람**(회차 대장 기반 exit 2)을 낸다 —
+1회 실증을 상시 계측으로 승격한 축이라 같은 파일에 둔다.
 """
 
 from __future__ import annotations
@@ -36,10 +41,15 @@ from pathlib import Path
 import pytest
 
 from whymath_backend.harness import problem_corpus_accumulate
+from whymath_backend.harness.anchor_round_ledger import (
+    OUTCOME_STATUSES,
+    load_round_ledger,
+)
 from whymath_backend.harness.needs_review_worklist import load_review_queue_jsonl
 from whymath_backend.harness.problem_corpus_accumulate import (
     default_generation_log_path,
     default_review_queue_path,
+    default_round_ledger_path,
     default_worklist_path,
     main,
 )
@@ -560,8 +570,13 @@ class TestGenerationLogAnchorHonesty:
         HIT 이벤트(EOS-54)는 검수자 착석(started/finished/aborted·reviewer_id 필수) 계약이다.
         워크리스트 *생성*은 기계 산출이지 사람 착석이 아니므로, 이 관통이 타이머 JSONL을
         만들면 그것이 날조다 — 전건 수용 회차의 산출 디렉터리에 사이드카(코퍼스·genlog·
-        worklist) 외의 파일이 생기지 않음을 동결한다(검수 큐 review.jsonl은 비수용 발생
-        시에만 생긴다 — 이 회차는 비수용 0이라 부재가 정직).
+        worklist·회차 대장) 외의 파일이 생기지 않음을 동결한다(검수 큐 review.jsonl은 비수용
+        발생 시에만 생긴다 — 이 회차는 비수용 0이라 부재가 정직).
+
+        허용 사이드카 목록은 **의도적으로 화이트리스트**다 — 새 사이드카가 생기면 이 테스트가
+        빨개져 "무엇을 왜 더 쓰는가"를 한 번 설명하게 만든다. `acc.rounds.jsonl`은 EOS-64 ④의
+        회차 대장(기계 산출·검수자 착석 아님)으로 여기 편입했다: 연속 무진전 판정의 재료이며
+        `reviewer_id`·`verdict` 같은 사람 판정 필드를 담지 않는다(날조 축과 무관).
         """
         _patch_live_generator(monkeypatch, [_R_ACCEPT])
         out = tmp_path / "acc.jsonl"
@@ -571,4 +586,145 @@ class TestGenerationLogAnchorHonesty:
         assert code == 0
         capsys.readouterr()
         produced = sorted(p.name for p in tmp_path.iterdir())
-        assert produced == ["acc.genlog.jsonl", "acc.jsonl", "acc.worklist.md"]
+        assert produced == [
+            "acc.genlog.jsonl",
+            "acc.jsonl",
+            "acc.rounds.jsonl",
+            "acc.worklist.md",
+        ]
+        # 대장은 회차 요약만 담는다 — 검수자 착석 필드가 섞이면 그것이 날조다(축 분리 동결).
+        ledger_raw = (tmp_path / "acc.rounds.jsonl").read_text(encoding="utf-8")
+        assert "reviewer_id" not in ledger_raw
+        assert "verdict" not in ledger_raw
+
+
+class TestNightlyRoundInstrumentation:
+    """[EOS-64 ②④] 회차 계측 — 관통 1회 실증을 *상시 계측*으로 승격한 부분의 집행 지점.
+
+    EOS-58이 "한 번 관통했다"를 증명했다면 여기서 붙드는 것은 "회차마다 무엇이 관측되는가"다:
+      ② 리포트가 **작동한 비율**(outcome 분포 + 방향별 Wilson 경계)을 싣는가 — exit 코드는
+        "붙었나"만 말하고 *어느 단계가 일했는지*는 말하지 않는다.
+      ④ 연속 무진전이 **알람으로 승격**되는가 — 같은 exit 1이 매 회차 반복되는 상태를
+        "정상"으로 흘려보내면 그것이 fail-open 상시 실패다.
+    """
+
+    def test_report_carries_operating_rates_distribution(
+        self,
+        tmp_path: Path,
+        a4_seed: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """② 5시도 회차 리포트에 6종 어휘 전건 분포가 실리고, 경계 방향이 지표 성격과 맞는다."""
+        seed_records = load_problem_bank_records(a4_seed)
+        seed0 = _first_selectable_seed(seed_records)
+        _patch_live_generator(
+            monkeypatch,
+            [_R_ACCEPT, _R_NEEDS_REVIEW, _R_GATE_REJECT, _dup_of_seed(seed0), _R_NON_JSON],
+        )
+        out = tmp_path / "acc.jsonl"
+        assert main(["--seed", str(a4_seed), *_a4_args(out, n=5)]) == 0
+        report = json.loads(capsys.readouterr().out)
+
+        rates = report["operating_rates"]
+        assert rates["measured"] is True
+        assert rates["attempted"] == 5
+        # 어휘 전건이 실린다(관측 0인 `accepted`도 count 0으로 명시 — 키 없음과 0건은 다르다).
+        assert set(rates["statuses"]) == set(OUTCOME_STATUSES)
+        assert {s: v["count"] for s, v in rates["statuses"].items()} == {
+            "accepted_stored": 1,
+            "accepted": 0,
+            "needs_review": 1,
+            "rejected_gate": 1,
+            "rejected_duplicate": 1,
+            "generation_failed": 1,
+        }
+        # 방향 — 수용은 하한(과신 방지), 실패는 상한(관측 0을 확정 0으로 읽지 않음).
+        accepted = rates["statuses"]["accepted_stored"]
+        assert accepted["bound_direction"] == "lower" and accepted["bound"] < accepted["rate"]
+        failed = rates["statuses"]["generation_failed"]
+        assert failed["bound_direction"] == "upper" and failed["bound"] > failed["rate"]
+
+    def test_zero_attempt_report_is_unmeasured_not_zero_percent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """② 시도 0회 회차는 '전건 0%'가 아니라 **측정 불가**로 보고된다(미측정≠0)."""
+        _patch_live_generator(monkeypatch, [])
+        out = tmp_path / "acc.jsonl"
+        assert main(_a4_args(out, n=0)) == 1
+        rates = json.loads(capsys.readouterr().out)["operating_rates"]
+        assert rates["measured"] is False
+        assert rates["unmeasured_reason"] is not None
+        assert rates["statuses"]["accepted_stored"]["rate"] is None
+
+    def test_round_ledger_accumulates_one_row_per_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 회차 대장이 회차마다 1행씩 누적된다 — 이 대장이 없으면 알람은 영원히 측정 불가다."""
+        out = tmp_path / "acc.jsonl"
+        run_ids: list[str] = []
+        for script in (_R_NEEDS_REVIEW, _R_ACCEPT):
+            _patch_live_generator(monkeypatch, [script])
+            main(_a4_args(out))
+            run_ids.append(json.loads(capsys.readouterr().out)["run_id"])
+
+        records, errors = load_round_ledger(default_round_ledger_path(out))
+        assert errors == []
+        assert [r.run_id for r in records] == run_ids  # 리포트 run_id와 조인된다
+        assert [r.appended for r in records] == [0, 1]
+
+    def test_consecutive_no_progress_escalates_to_alarm_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 무진전 3회차 연속에서 exit 1 → **exit 2 알람**으로 승격된다(경계 변별력).
+
+        1·2회차가 exit 1로 남고 3회차에서만 2가 되는 것이 이 테스트의 핵심이다 — 임계와
+        무관하게 항상 알람이면 그건 판정이 아니라 소음이고, 영원히 1이면 보호가 없는 것이다.
+        """
+        out = tmp_path / "acc.jsonl"
+        codes: list[int] = []
+        for script in (_R_NEEDS_REVIEW, _R_NEEDS_REVIEW_2, _R_GATE_REJECT):
+            _patch_live_generator(monkeypatch, [script])
+            codes.append(main(_a4_args(out)))
+            captured = capsys.readouterr()
+        assert codes == [1, 1, 2]
+
+        # 알람은 stdout JSON 필드와 stderr 양쪽에 난다(한쪽만이면 습관화로 안 읽힌다).
+        report = json.loads(captured.out)
+        assert report["stagnation"]["alarm"] is True
+        assert report["stagnation"]["consecutive_zero"] == 3
+        assert report["stagnation"]["measured"] is True
+        assert report["stagnation"]["ledger_append_error"] is None
+        assert "연속 무진전 알람" in captured.err
+
+    def test_progress_round_resets_the_alarm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 진전 회차가 끼면 연속이 끊긴다 — 과거 무진전이 영구 알람으로 굳지 않는다."""
+        out = tmp_path / "acc.jsonl"
+        codes: list[int] = []
+        for script in (_R_NEEDS_REVIEW, _R_NEEDS_REVIEW_2, _R_ACCEPT, _R_GATE_REJECT):
+            _patch_live_generator(monkeypatch, [script])
+            codes.append(main(_a4_args(out)))
+            captured = capsys.readouterr()
+        assert codes == [1, 1, 0, 1]  # 3회차 진전 → 4회차 무진전이지만 연속은 1회
+        assert json.loads(captured.out)["stagnation"]["consecutive_zero"] == 1
+
+    def test_custom_window_changes_the_threshold(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """④ 임계는 인자로 조정된다 — 창 1이면 첫 무진전 회차부터 알람(판정이 창에 실제 반응)."""
+        out = tmp_path / "acc.jsonl"
+        _patch_live_generator(monkeypatch, [_R_NEEDS_REVIEW])
+        assert main([*_a4_args(out), "--stagnation-window", "1"]) == 2
+        capsys.readouterr()
+
+    def test_non_positive_window_is_refused_by_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """④ 창 0은 알람을 상시 참으로 만든다 — argparse가 exit 2로 거부한다(변별력 보존)."""
+        out = tmp_path / "acc.jsonl"
+        _patch_live_generator(monkeypatch, [_R_ACCEPT])
+        with pytest.raises(SystemExit) as excinfo:
+            main([*_a4_args(out), "--stagnation-window", "0"])
+        assert excinfo.value.code == 2

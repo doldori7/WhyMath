@@ -1350,3 +1350,21 @@ jobs:
             ../../data/corpus/problem_bank_generated_v0/problems.jsonl \
             ../../data/corpus/problem_bank_rephrased_v0/problems.jsonl \
             ../../data/corpus/problem_bank_killer_v0/problems.jsonl
+
+      # ── EOS-64 ① — 앵커 A4 생성 E2E 관통의 **상시화**(1회 실증 → 야간 계측) ─────────
+      # EOS-58(`docs/reviews/eos_anchor_e2e_a4_2026-08-30.md`)은 생성→SymPy 게이트→dedup→
+      # 코퍼스 저장→검수 큐 관통을 **1회** 실증했다. 1회 실증은 "그때 됐다"이지 "지금도 된다"가
+      # 아니다 — 이 스텝이 그 관통을 매일 밤 다시 돌려 드리프트를 잡는다.
+      #
+      # 실행 주체 판정(태스크 notes의 미결 사항): **CI 러너**다. 이 관통은 hermetic이라
+      # (가짜는 LLM provider 하나뿐 — 생성기·SymPy 게이트·dedup·저장·검수 큐·GenerationLog는
+      # 전부 실코드) Ollama·API 키 없이 돈다. 라이브(Phaiakes9 Ollama) 회차는 별개 축이고,
+      # 그쪽의 상시 계측은 `<out>.rounds.jsonl` 회차 대장 + 연속 무진전 알람(EOS-64 ④)이
+      # 담당한다 — CI에 자격증명·GPU를 들이지 않고도 관통 자체는 매일 검증된다.
+      #
+      # 실 PG는 이 관통에 불요하지만(hermetic) 이 잡에 얹는다 — 야간 안전망을 한 잡에 모아
+      # 신규 잡 증설 0을 유지한다(위 코퍼스 재검증 스텝과 같은 판단).
+      # 배선 실재성은 `tests/infra/test_anchor_e2e_nightly_wiring.py`가 동결한다(OPS-10 선례 —
+      # "워크플로에 썼다"와 "그 잡이 이 관통을 돈다"는 다르다).
+      - name: 앵커 A4 생성 E2E 관통 (EOS-64 상시화 — hermetic)
+        run: pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
