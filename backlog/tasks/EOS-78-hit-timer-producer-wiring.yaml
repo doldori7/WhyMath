@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -17,10 +17,18 @@ acceptance:
   - "④ 변별력(양방향): 타이머 없이 검수 1건을 제출하면 hit_cu_metrics가 '측정 실패'를 내고, 타이머를 붙이면 HIT 중앙값이 산출되는지 둘 다 실측한다. 성공/실패가 같은 값을 내면 검증이 아니라 위장이다"
   - "⑤ 집행 별항(정본화≠집행): ADMIN-07(웹 검수 UI)은 이 태스크의 대체물이 아니다 — ADMIN-04→ADMIN-05/06(+WEB-01)→ADMIN-07 4단 체인이라 9월 안에 서지 않는다. 이 태스크는 **웹 UI 없이 현행 CLI/JSONL 매체에서** HIT를 측정 가능하게 만든다: 신규 서빙 라우트 0·웹 화면 0"
   - "⑥ 범위 밖 동결: 검수 판정 해상도 확장(APPROVED_WITH_EDIT = EOS-62)·DB 적재 경로 전환·ADMIN 축 승격은 하지 않는다"
-artifacts: []
+artifacts:
+  - "#958"
+  - "src/backend/whymath_backend/harness/review_session.py (신설 — 생산자 CLI)"
+  - "tests/backend/harness/test_review_session.py (17건)"
+  - "정정: ops/hit_cu_metrics.py footer·docstring · harness/review_timer.py · schema/review_timer.py (생산자 부재 전제의 stale 서술)"
+  - "ops/declared_unwired_audit.py: _HUMAN_REVIEW_TOOL 신설 + harness.review_session 등재"
+  - "실측 ②: src/ 생산 호출자 0 → start/finish/abort 3지점"
+  - "실측 ④: 타이머 없음 exit 1 / 세션 실행 후 exit 0 (양방향)"
+  - "전체 스위트 11,366 passed · 0 failed · ruff/black/mypy --strict(569)/lint-imports 전부 EXIT=0"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: claude/review-2hi01y
+session: null
 notes: "출처: 계획서 200 검토 docs/reviews/eos_phase1_plan_200_gap_review_2026-09-01.md §8 + Kiki (가) 결정(2026-09-01 — 12/31 판정 기준은 선언·스코어카드 12지표 유지). 근거: harness/review_timer.py 모듈 docstring이 '검수 UI(ADMIN-07) 결선은 후속 태스크'라고 스스로 집행 공백을 자인하고, 실측상 생산 호출자가 0이다. (가) 하에서 HIT는 스코어카드 KPI 1순위이고 EOS-61 acceptance ④가 미측정을 'PASS'가 아니라 exit 1로 처리하므로, 생산자 부재는 '0건 통과'가 아니라 12/31 판정 불가로 직결된다. 정본화≠집행 재발(EOS-54가 writer를 만들고 배선 확인 없이 done)."
 updated: 2026-09-01
