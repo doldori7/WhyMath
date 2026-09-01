@@ -15,6 +15,7 @@ judge 코어(`judge.py`)·하니스(`semantic_eval.py`)는 `LLMSeam`(async `gene
 from __future__ import annotations
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.l3.data_grade_defaults import STUDENT_SUBMITTED_WITH_CORPUS
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import (
     CacheBackend,
@@ -58,6 +59,10 @@ def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
             budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,
             max_latency_ms=5000,
             sync=True,
+            # 등급: judge USER 프롬프트는 `[학생 진술]`을 그대로 싣는다(judge_prompts.py
+            # `JUDGE_USER_TEMPLATE`) + 오개념 카탈로그(자체 저작). 학생 저작이 섞이므로
+            # 반출 불가 — 보수적 병합이 USER_GENERATED를 택한다(EOS-59).
+            data_licenses=STUDENT_SUBMITTED_WITH_CORPUS,
         )
     return RoutingRequest(
         task_type="misconception_judge",
@@ -67,6 +72,9 @@ def _judge_routing_request(settings: Settings | None = None) -> RoutingRequest:
         budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,
         max_latency_ms=1500,
         sync=True,
+        # 등급: 위 general_mid 프로파일과 같은 프롬프트(학생 진술 + 오개념 카탈로그)를
+        # 다른 모델로 보낼 뿐이다 — 자료가 같으므로 등급도 같다(EOS-59).
+        data_licenses=STUDENT_SUBMITTED_WITH_CORPUS,
     )
 
 

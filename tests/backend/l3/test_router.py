@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.models import (
     CallSite,
     CostTier,
@@ -51,6 +52,11 @@ def _req(**overrides: object) -> RoutingRequest:
 
     budget_krw=0 → 축1 규칙1이 LOCAL 강제하므로, 명시적으로 budget을 주지 않는 한
     축2 분기를 독립적으로 검증할 수 있다. 클라우드 경로 테스트는 budget을 채운다.
+
+    `data_licenses`는 *반출 가능*(자체 저작)으로 고정한다 — 이 파일은 축1·축2·축3과
+    구독·예산 가드를 재는 곳이고, 데이터 등급 게이트(EOS-59)를 켜 두면 클라우드 단언이
+    전부 그 게이트 때문에 로컬이 되어 **원래 재려던 규칙을 못 재게 된다**. 등급 축 자체의
+    변별력은 `test_data_export_policy.py`가 양방향으로 봉인한다(여기서 중복하지 않는다).
     """
     defaults: dict[str, object] = {
         "task_type": "explain",
@@ -60,6 +66,7 @@ def _req(**overrides: object) -> RoutingRequest:
         "budget_krw": 0.0,  # 기본: LOCAL 강제
         "max_latency_ms": 30000,
         "sync": True,
+        "data_licenses": SELF_AUTHORED_CORPUS,  # 반출 가능 — 등급 축을 이 파일에서 중립화
     }
     defaults.update(overrides)
     return RoutingRequest(**defaults)  # type: ignore[arg-type]

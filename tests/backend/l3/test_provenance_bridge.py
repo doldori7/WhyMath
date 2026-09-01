@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from whymath_backend.config import Settings
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.models import RoutingRequest, Usage
 from whymath_backend.l3.pregenerate.models import PregenItem, PrewarmItemResult, PrewarmStatus
 from whymath_backend.l3.pregenerate.provenance_bridge import (
@@ -190,12 +191,16 @@ class TestTelemetryFromUsage:
 # EOS-55 재현 좌석 — 스냅샷 조립·모델명 해석·비용 미상 구분·JSONL 적재
 # ──────────────────────────────────────────────────────────────────────
 def _request(**overrides: object) -> RoutingRequest:
+    # `data_licenses`는 *반출 가능*(자체 저작)으로 고정한다 — 이 파일은 provenance 좌석·비용
+    # 산정을 재는 곳이고, 데이터 등급 게이트(EOS-59)가 켜져 있으면 클라우드 단언이 전부 그
+    # 게이트 탓에 LOCAL이 되어 원래 재려던 축을 못 재게 된다(등급 축은 test_data_export_policy).
     base: dict[str, object] = {
         "task_type": "explain",
         "difficulty": "easy",
         "requires_reasoning": False,
         "student_subscription": "free",
         "sync": True,
+        "data_licenses": SELF_AUTHORED_CORPUS,
     }
     base.update(overrides)
     return RoutingRequest(**base)  # type: ignore[arg-type]

@@ -26,6 +26,7 @@ from whymath_backend.l3.models import (
 )
 from whymath_backend.l3.router import Router, _as_cost_tier
 from whymath_backend.ops import cost_probe as cp
+from whymath_backend.schema.enums import LicenseType
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -294,6 +295,7 @@ def test_summarize_decisions_local_reason_counts_with_requests() -> None:
     assert report.local_reason_counts == {
         cp.LOCAL_REASON_BUDGET0: 1,
         cp.LOCAL_REASON_FREE: 1,
+        cp.LOCAL_REASON_DATA_EXPORT: 0,  # EOS-59 버킷 — 이 요청들엔 법적 강등 없음
         cp.LOCAL_REASON_RULE6_CATCHALL: 1,
     }
 
@@ -364,6 +366,10 @@ def test_cloud_reach_flips_0_to_1_and_back_with_killer_premium_request() -> None
         student_subscription="premium",
         budget_krw=1000.0,
         sync=True,
+        # 이 테스트가 재는 것은 *승급 사슬 도달*(OPS-18)이지 데이터 등급 축이 아니다 —
+        # 반출 가능 등급을 명시해 법적 게이트를 중립화한다(미지정이면 EOS-59 fail-closed로
+        # LOCAL이 되어 원래 재려던 축을 못 재게 된다). 등급 축은 test_data_export_policy가 봉인.
+        data_licenses=(LicenseType.WHYMATH_GENERATED,),
     )
     killer_decision = router.route(killer_premium_request)
     killer_tier = _as_cost_tier(killer_decision.cost_tier).value
@@ -578,7 +584,166 @@ def test_json_roundtrip_with_local_reason_counts(tmp_path: Path) -> None:
     assert loaded["local_reason_counts"] == {
         cp.LOCAL_REASON_BUDGET0: 1,
         cp.LOCAL_REASON_FREE: 0,
+        cp.LOCAL_REASON_DATA_EXPORT: 0,  # EOS-59 버킷(미관측=0·키는 항상 보장)
         cp.LOCAL_REASON_RULE6_CATCHALL: 1,
     }
     assert loaded["cloud_reach_count"] == 0
     assert loaded["next_tier_calls"] == 0
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 데이터 등급 게이트 발동률 — in-process 이중 회계 (EOS-59 ②)
+#
+# 이 수치는 Langfuse와 무관하게 산출돼야 한다 — 관측 SaaS가 죽었을 때 "0건 발동"과
+# "측정 실패"가 같은 색이 되면 안 되기 때문이다(CLAUDE.md 이중 회계 원칙).
+# ══════════════════════════════════════════════════════════════════════
+def _aihub_cloud_request() -> RoutingRequest:
+    """비즈니스 축은 CLOUD_MID를 원하지만 자료가 AIHub라 법적 게이트에 막히는 요청."""
+    return RoutingRequest(
+        task_type="diagnose",
+        difficulty="hard",
+        requires_reasoning=True,
+        student_subscription="premium",
+        budget_krw=1000.0,
+        sync=True,
+        data_licenses=(LicenseType.AIHUB_OPEN,),
+    )
+
+
+def test_classify_local_reason_data_export_bucket() -> None:
+    """법적 게이트가 강등한 요청은 rule6_catchall이 아니라 전용 버킷으로 분류된다."""
+    req = _aihub_cloud_request()
+    assert cp.classify_local_reason(req) == cp.LOCAL_REASON_DATA_EXPORT
+    # 분류가 허구가 아님 — 라우터도 실제로 LOCAL로 결정하고 차단 신호를 남긴다.
+    decision = Router().route(req)
+    assert decision.cost_tier == CostTier.LOCAL.value
+    assert decision.data_export_blocked is True
+
+
+def test_classify_local_reason_business_rules_win_over_the_legal_bucket() -> None:
+    """예산 0·free는 애초에 클라우드를 원하지 않았다 — 법적 게이트 탓으로 돌리지 않는다.
+
+    두 축을 섞어 계상하면 "게이트가 일했다"가 과대집계된다(발동률이 거짓이 된다).
+    """
+    budget0 = RoutingRequest(
+        task_type="diagnose",
+        difficulty="hard",
+        requires_reasoning=True,
+        student_subscription="premium",
+        budget_krw=0.0,
+        data_licenses=(LicenseType.AIHUB_OPEN,),
+    )
+    free = RoutingRequest(
+        task_type="diagnose",
+        difficulty="hard",
+        requires_reasoning=True,
+        student_subscription="free",
+        budget_krw=1000.0,
+        data_licenses=(LicenseType.AIHUB_OPEN,),
+    )
+    assert cp.classify_local_reason(budget0) == cp.LOCAL_REASON_BUDGET0
+    assert cp.classify_local_reason(free) == cp.LOCAL_REASON_FREE
+
+
+def test_data_export_block_rate_uses_offshore_intent_as_denominator() -> None:
+    """발동률 = 차단/(클라우드 도달+차단) — 로컬 전용 트래픽에 희석되지 않는다."""
+    blocked = _aihub_cloud_request()
+    local_only = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=0.0,
+        data_licenses=(LicenseType.WHYMATH_GENERATED,),
+    )
+    cloud = RoutingRequest(
+        task_type="diagnose",
+        difficulty="hard",
+        requires_reasoning=True,
+        student_subscription="premium",
+        budget_krw=1000.0,
+        data_licenses=(LicenseType.WHYMATH_GENERATED,),
+    )
+    requests = [blocked, blocked, local_only, cloud]
+    tiers = [
+        CostTier.LOCAL.value,
+        CostTier.LOCAL.value,
+        CostTier.LOCAL.value,
+        CostTier.CLOUD_MID.value,
+    ]
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=1, requests=requests
+    )
+    assert report.data_export_blocked_count == 2
+    assert report.offshore_intent_count == 3  # 클라우드 도달 1 + 차단 2
+    assert report.data_export_block_rate == pytest.approx(2 / 4)
+    assert report.data_export_block_rate_of_intent == pytest.approx(2 / 3)
+
+
+def test_data_export_block_rate_is_none_without_reason_counting() -> None:
+    """requests를 안 준 호출은 '0% 발동'이 아니라 '미상'이다(날조 금지)."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 3, errors=0, error_samples=[], cloud_included=False, rounds=1
+    )
+    assert report.data_export_blocked_count is None
+    assert report.data_export_block_rate is None
+    assert report.data_export_block_rate_of_intent is None
+
+
+def test_data_export_block_rate_of_intent_is_none_when_nobody_wanted_cloud() -> None:
+    """분모 0은 '0% 발동'이 아니라 '판정 기회 없음'으로 남는다(OPS-18 미도달 관례)."""
+    local_only = RoutingRequest(
+        task_type="explain",
+        difficulty="easy",
+        requires_reasoning=False,
+        student_subscription="free",
+        budget_krw=0.0,
+        data_licenses=(LicenseType.WHYMATH_GENERATED,),
+    )
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value],
+        errors=0,
+        error_samples=[],
+        cloud_included=False,
+        rounds=1,
+        requests=[local_only],
+    )
+    assert report.data_export_blocked_count == 0
+    assert report.data_export_block_rate == 0.0
+    assert report.data_export_block_rate_of_intent is None
+    text = cp.render_report(report)
+    assert "판정 기회 없음" in text
+
+
+def test_render_report_shows_the_block_rate_section() -> None:
+    """리포트가 발동률을 *말하는가* — 알고리즘을 붙였으면 작동 비율을 보고해야 한다."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value],
+        errors=0,
+        error_samples=[],
+        cloud_included=True,
+        rounds=1,
+        requests=[_aihub_cloud_request()],
+    )
+    text = cp.render_report(report)
+    assert "데이터 등급 게이트" in text
+    assert "차단 발동: 1건" in text
+    assert "반출 시도 대비 발동률: 100.0%" in text
+
+
+def test_probe_json_carries_the_block_rate(tmp_path: Path) -> None:
+    """JSON 산출물에도 발동률이 실린다 — 사람 눈이 아니라 파일이 근거가 되게 한다."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value],
+        errors=0,
+        error_samples=[],
+        cloud_included=True,
+        rounds=1,
+        requests=[_aihub_cloud_request()],
+    )
+    out = tmp_path / "probe_export.json"
+    out.write_text(json.dumps(report.to_json(), ensure_ascii=False), encoding="utf-8")
+    loaded = json.loads(out.read_text(encoding="utf-8"))
+    assert loaded["data_export_blocked_count"] == 1
+    assert loaded["offshore_intent_count"] == 1
+    assert loaded["data_export_block_rate_of_intent"] == 1.0
