@@ -130,6 +130,21 @@ HARN-53   HARN-54 LIC-01  LIC-04  LIC-05  NLP-05  OPS-57   PB-13    PB-14   S4-5
 
 **4를 건너뛰고 5로 가지 않는다.** 4가 이 런북 전체의 유일한 차단 지점이다.
 
+> ⚠️ **단계 4의 "미분류 0건"은 시점 의존적이다 — 4와 5 사이를 벌리지 말 것.**
+>
+> 병렬 세션이 언제든 새 태스크를 main에 착지시킨다. 특히 **`HARN-55` 머지 이전에 분기한
+> 브랜치**는 구버전 CLI를 들고 있어 `--eos-priority` 요구를 받지 않으며, 그 세션이 만든
+> 태스크 파일에는 **`eos_priority` 필드 자체가 없다**. `add` 게이트의 구멍이 아니라
+> **브랜치 시차**이고, 인플라이트 브랜치가 전부 리베이스될 때까지 계속 발생한다.
+>
+> 실측(2026-09-01): 단계 4에서 0건을 확인한 뒤 clear 직전에 재확인했더니 `EOS-79`가
+> 미분류로 들어와 있었다(PR #958). 그대로 clear했다면 `validate`가 red가 되고
+> `harness-integrity`가 main과 열린 PR 전부를 막았을 것이다.
+>
+> **그래서 5단계 직전에 4를 다시 돌린다** — §6-2의 `validate`가 그 역할이고, 그것이
+> green일 때만 §6-3으로 간다. 만약 clear 후에 red가 나면 당황할 일이 아니다:
+> 도착한 태스크에 `amend --eos-priority`를 붙이면 즉시 복구된다(revert 불요).
+
 ---
 
 ## §4. 게이트 제목의 조건 ③은 이미 소멸했다
@@ -206,6 +221,26 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 git fetch origin main
 git checkout -B main origin/main
 ```
+
+**6-1b. UTF-8 강제 (필수 — 건너뛰면 다음 단계가 터진다)**
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+$env:PYTHONUTF8="1"
+$env:PYTHONIOENCODING="utf-8"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+```
+
+> **실측 사고 (2026-09-01)**: 이 블록 없이 `backlog.py gates list | Select-String ...`을 돌리면
+> `UnicodeEncodeError: 'cp949' codec can't encode character '\u23f3'`로 죽는다. 파이프를 걸면
+> stdout이 콘솔이 아니라 파이프가 되고, Python이 **로케일 인코딩(한국어 Windows = cp949)** 으로
+> 인코딩하는데 CLI 출력의 `⏳`·`—`가 cp949에 없기 때문이다. `--help`도 같은 이유로 죽는다.
+>
+> 이 저장소는 같은 유형을 이미 두 번 겪었다(2026-07-17 logconfig 기동 실패 · HARN-19 git 출력
+> 디코딩). 정본은 `docs/ops/windows_utf8_setup.md` §2·§3이며, 위 3줄은 그 §3.1의 "현재 세션
+> 즉시 적용"판이다. 영구 적용은 `setx PYTHONUTF8 1` + `setx PYTHONIOENCODING utf-8`(새 창부터).
+>
+> 이 환경변수는 **창 단위**다 — 창을 새로 열면 다시 설정해야 한다.
 
 **6-2. 자가검증 — 선행 조건 3종** (실패 상태에서 실제로 실패함을 확인한 검사다)
 

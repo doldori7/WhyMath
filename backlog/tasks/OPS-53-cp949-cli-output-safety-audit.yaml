@@ -15,11 +15,15 @@ acceptance:
   - "① harness/*.py·ops/*.py CLI가 stdout/stderr로 print하는 모든 문자열 리터럴을 전수 스캔해 cp949 인코딩 불가 문자(em dash 등) 존재를 검출하는 회귀 테스트 신설 — CI 동결(2026-08-30 재실측: 개별 모듈 cp949 대응은 산재하나 전수 스캐너 부재)"
   - "② 기존 CLI 리포트 모듈(visualization_reach_report·attempt_grading_shadow_report·pedagogy_content_slot_reach_report 등)도 같은 스캔으로 재확인 — 발견 위반은 이번 태스크에서 함께 수정"
   - "③ 변별력 — em dash 1개를 의도 주입해 스캐너 검출 실측 후 복원(cp 백업 원복). 성공/실패 동일값이면 위장"
+  - "④ 대상 범위 확장 — scripts/harness/*.py(특히 backlog.py)를 포함한다. 기존 ①의 대상은 src/backend/.../harness·ops뿐이라 **사람이 매일 쓰는 대장 CLI가 빠져 있었다**. 2026-09-01 실측: Kiki 머신에서 backlog.py gates list·amend --help 2건이 UnicodeEncodeError로 죽었다(U+23F3 ⏳·U+2014 —)"
+  - "⑤ 해법 우선순위 재판정 — ①의 '문자 금지 스캐너'보다 **진입점에서 stdout/stderr을 UTF-8로 재구성**하는 편이 우선 검토 대상이다. 근거: windows_utf8_setup.md §1이 'CP949를 애플리케이션 내부에서 지원하려 하지 말 것'이라 못박았고, 문자 금지는 한국어 출력의 가독성을 영구히 깎는다. 재구성이 성립하면 ①의 스캐너는 불요해질 수 있으므로 어느 쪽을 채택했는지 명시한다"
+  - "⑥ 변별력(파이프 축) — 콘솔이 아니라 **파이프·리다이렉트**에서 검증한다. 파이프를 걸면 stdout이 로케일 인코딩을 쓰기 때문에 콘솔에서만 테스트하면 이 결함이 보이지 않는다. 로케일 cp949 강제 서브프로세스에서 수정 전 실패·수정 후 성공 양방향 실측"
+  - "⑦ 런북 회귀 방지 — 착지 후 docs/ops/eos_relevance_triage_gate_runbook.md §6-1b의 UTF-8 강제 블록이 여전히 필요한지 재판정한다. 불요해지면 제거하거나 '보험'으로 명시(만료 없는 유예 금지)"
 artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/**"
 session: null
-notes: "원 등재 OPS-24(vafylb b1218739에만 잔존·CLAUDE.md 사고 경위 속 별건 OPS-24와 번호 재사용 충돌) — HARN-35 재등재. S4-16 강등전 CLI의 Phaiakes9 라이브 크래시 실측(em dash U+2014·cp949 부재). 2026-07-17 logconfig 사고와 같은 cp949 계열 2회차 — 등재 의무 건\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/계측 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+notes: "원 등재 OPS-24(vafylb b1218739에만 잔존·CLAUDE.md 사고 경위 속 별건 OPS-24와 번호 재사용 충돌) — HARN-35 재등재. S4-16 강등전 CLI의 Phaiakes9 라이브 크래시 실측(em dash U+2014·cp949 부재). 2026-07-17 logconfig 사고와 같은 cp949 계열 2회차 — 등재 의무 건\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/계측 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필\n\n[정정 2026-09-01] 2026-09-01 실측 사고 편입 + HARN-58 통합. 같은 유형 3회차 — 2026-07-17 logconfig(외부 도구의 읽기 인코딩), HARN-19(우리가 파싱하는 출력), 이번은 **우리가 내는 출력**. 앞 둘은 규칙·코드로 막았으나 출력측 축이 비어 있었다. 우회 수단(PYTHONUTF8 환경변수)은 사람이 매 창에서 기억해야 하므로 항구 대책이 아니다"
 updated: 2026-09-01
