@@ -5,12 +5,13 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on:
   - EOS-57-attempt-skill-ids-persistence
-requires_gates: []
+requires_gates:
+  - G-eos63-skill-event-reach-sample
 acceptance:
   - "① 소비 전환: 스킬 축 분석·롤업이 concept→skill 런타임 재해소 대신 attempt_event.skill_ids(기록된 사실)를 읽는다 — 매핑이 사후에 바뀌어도 과거 시도의 귀속이 흔들리지 않는 것이 전환의 목적"
   - "② 전환 선결 조건 명시: EOS-57 기록률 리포트(harness/attempt_skill_event_reach_report)의 writer 도달률이 관측 창에서 충분히 쌓인 뒤에만 전환한다 — 기록 0건 상태에서 소비를 바꾸면 스킬 숙달 전파가 죽는다(착수 시 실측 수치를 notes에 남긴다)"
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/l2/attempt_skill_event.py
   - "tests/backend/l2/**"
 session: null
-notes: "출처: EOS-57 acceptance ③('집행 별항: 소비 지점 전환은 후속 태스크로 분리'). EOS-57은 영속 좌석+writer까지만 소유한다."
-updated: 2026-08-30
+notes: "출처: EOS-57 acceptance ③('집행 별항: 소비 지점 전환은 후속 태스크로 분리'). EOS-57은 영속 좌석+writer까지만 소유한다.\n\n[차단 2026-09-01] acceptance ② 선결 조건 미충족 — 전환 판단에 필요한 기록률 실측을 이 세션이 낼 수 없다. writer(EOS-57)는 채점 경로 2곳(api/coach.py:1028·api/me.py:771)에 배선 실재하나 착지가 2026-08-30이라 관측 창이 2일이고, harness/attempt_skill_event_reach_report는 스스로 '수치는 실 PG의 실제 채점 이력이 분모라 빈 DB에서는 전 지표 측정 불가'라고 적고 있다(이 세션 컨테이너에 DB 없음). 기록 0건 상태에서 소비를 전환하면 스킬 숙달 전파가 죽는다는 것이 EOS-57 writer docstring의 명시 경고다. Kiki 머신(Phaiakes9 prod DB, 5433)에서 리포트를 돌려 도달률을 확보한 뒤 재착수한다 — 게이트 G-eos63-skill-event-reach-sample로 등재.\n\n[정정 2026-09-01] acceptance ②(기록률 실측 선결)의 집행 지점을 게이트로 건다 — 산문 조건은 셀렉터가 읽지 않으므로 실측 없이 재착수될 수 있다(EOS-62 notes의 '정본화≠집행 백로그 축' 선례 동형). 게이트가 있으면 selector가 알고리즘 수준에서 막는다."
+updated: 2026-09-01
