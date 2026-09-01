@@ -8,25 +8,29 @@
   2. `curriculum_entry`      — CurriculumEntry.national_standard_codes 배열(concept_id ↔ 코드).
   3. `atom_node`             — AtomNode.standard_codes 배열(원자 code ↔ 코드).
 
-── CUR-12와의 경계(선점 금지 — CUR-11 설계 지침 명기) ────────────────────────
-이 엔드포인트는 **기존 조회 재료의 얇은 조합**이다: 핸들러가 3축을 각자 SELECT해 항목으로
-평탄화할 뿐, 함수 레벨 통합(`get_alignments(concept_id, framework_id, outcome_id)` 단일 비동기
-함수·`l1/standards/alignment_query.py` 신설·api/coach·l2/target_progress·l3 DSL 소비처 정렬·
-alignment_type enum·조인 성립 건수 로깅)은 전부 **후속 CUR-12의 몫**이라 여기서 만들지 않는다.
-CUR-12가 통합 함수를 세우면 이 핸들러는 그 함수를 경유하도록 갈아끼우는 것이 의도된 진화다.
-같은 이유로 축 간 어휘 통일도 시도하지 않는다 — `standard_ref`는 축마다 다른 어휘(1축=norm_id,
-2·3축=official_code 계열)를 *그대로* 실어 나르고, 그 사실을 `standard_ref_kind`로 정직하게
-표시한다(조용한 가짜 통일 금지).
+── CUR-12 착지 후(통합 함수 경유) ────────────────────────────────────────────
+CUR-11 초판은 핸들러가 3축을 각자 SELECT했고, 그 docstring이 "CUR-12가 통합 함수를 세우면 이
+핸들러는 그 함수를 경유하도록 갈아끼우는 것이 의도된 진화"라고 미리 지목해 두었다. 그 교체가
+끝났다 — 이 핸들러는 이제 **조회 로직을 갖지 않고** `l1/standards/alignment_query.
+get_alignments`(단일 진실 원천)를 부른 뒤 HTTP 모델로 옮겨 담기만 한다.
+축 간 어휘 통일은 여전히 하지 않는다(Phase 2 물리 테이블 몫) — `standard_ref`는 축마다 다른
+어휘(1축=norm_id, 2·3축=official_code 계열)를 *그대로* 실어 나르고, 그 사실을
+`standard_ref_kind`로 정직하게 표시한다(조용한 가짜 통일 금지).
 
 정렬·페이지네이션(결정적 — 순서 발명 없이 안정 키만):
   전체 순서 = 축 순서 고정(1→2→3) × 축 내 안정 키 정렬(1축=(concept_code, norm_id, link_type)
-  의미 유일키 / 2축=entry_id PK / 3축=code PK, 배열은 저장 순서). limit/offset은 이 합성 순서에
-  적용한다. 구현은 축별 SELECT에 LIMIT(offset+limit)을 걸고 합성 후 슬라이스한다 — 합성 순서가
-  축-우선(prefix 보존)이라 축별 상한 인출로도 올바른 페이지가 나온다. 배열 축은 빈 배열 행이
-  항목 0건을 낳아 prefix 보존을 깨므로 SQL에서 `cardinality(...) > 0`으로 제외한다(행 1건 ≥
-  항목 1건 보장). 이 방식은 offset+limit 행을 메모리에 올리므로 `offset`에 상한(le=10000)을
-  둔다 — 무상한 offset은 축별 인출 폭주가 된다(기존 offset 관례에 상한이 없는 것과 다른 점·
-  사유 명기).
+  의미 유일키 / 2축=entry_id PK / 3축=code PK, 배열은 저장 순서) — 이 순서는 통합 함수가
+  보장한다(`get_alignments`가 축을 값 순으로 돌고 축 내부를 안정 키로 정렬). limit/offset은 이
+  합성 순서에 적용한다. 구현은 통합 함수에 축별 `limit=offset+limit`을 주고 합성 후 슬라이스한다
+  — 합성 순서가 축-우선(prefix 보존)이라 축별 상한 인출로도 올바른 페이지가 나온다.
+  이 방식은 offset+limit 행을 메모리에 올리므로 `offset`에 상한(le=10000)을 둔다 — 무상한
+  offset은 축별 인출 폭주가 된다(기존 offset 관례에 상한이 없는 것과 다른 점·사유 명기).
+
+  배열 축의 빈 배열 행은 항목 0건을 낳아 prefix 보존을 깨므로 SQL에서 제외해야 한다 —
+  통합 함수의 `require_nonempty=True`가 그 `cardinality(...) > 0` 필터다(행 1건 ≥ 항목 1건
+  보장). 기본값이 False인 이유는 반대편 소비처 때문이다: `l2/target_progress`는 빈 배열 행도
+  `probed`로 세어야 "매핑 없음"과 "조인 실패"를 구분할 수 있다. 두 요구가 상충하므로 함수가
+  플래그로 갈라 두고, 각 소비처가 자기에게 필요한 쪽을 *명시*한다(조용한 기본값 의존 금지).
 
 인가 판단(선례 실측): GET·무인증 — concepts/problems GET "공개 카탈로그" 선례(SEC-07 D1이
 GET을 의도적으로 열어 둠). 실리는 것은 개념/원자 식별자와 성취기준 *코드*(사실정보·공공)뿐
@@ -38,25 +42,33 @@ GET을 의도적으로 열어 둠). 실리는 것은 개념/원자 식별자와 
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Literal
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.db.models.atom_node import AtomNode
-from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
-from whymath_backend.db.models.curriculum_entry import CurriculumEntry
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.standards.alignment_query import (
+    ALL_AXES,
+    get_alignments,
+    log_join_stats,
+)
+from whymath_backend.l1.standards.alignment_query import (
+    AlignmentAxis as CoreAlignmentAxis,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/alignments", tags=["alignment"])
 
 # get_session 의존성 — Annotated 메타데이터(B008 회피, concepts.py 선례).
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-# 축 식별자(요청 필터·응답 표시 공용). 축 순서가 곧 합성 순서다(모듈 docstring).
+# 축 식별자(요청 필터·응답 표시 공용) — **HTTP 와이어 계약**이라 코어 enum을 그대로 노출하지
+# 않고 Literal로 둔다(OpenAPI 스키마 안정). 코어 `alignment_query.AlignmentAxis`와 값이
+# 갈리면 안 되므로 `test_alignments.py`가 두 어휘의 일치를 기계로 동결한다.
 AlignmentAxis = Literal["concept_standard_link", "curriculum_entry", "atom_node"]
 
 # offset 상한 — 축별 LIMIT(offset+limit) 인출을 메모리 유한하게 묶는다(모듈 docstring 사유).
@@ -122,98 +134,30 @@ async def list_alignments(
 
     필터는 셋 다 선택이다(미지정=카탈로그 나열). `concept_key`/`standard_ref`는 축마다 다른
     어휘 컬럼에 *그대로* 대조한다 — norm_id 어휘로 2·3축이 잡히지 않는 것은 정직한 결과다
-    (어휘 번역은 CUR-12 몫). 각 축은 필요할 때만 SELECT한다(앞 축에서 offset+limit 항목이
-    차면 뒤 축 조회 생략 — 결정적 순서라 안전).
+    (어휘 번역은 Phase 2 몫). 조회 자체는 전부 `get_alignments`가 한다 — 이 핸들러는 축 필터와
+    페이지 슬라이스, HTTP 모델 변환만 맡는다(조회 로직 복제 0).
     """
     needed = offset + limit
-    items: list[AlignmentItem] = []
-
-    # ── 1축: concept_standard_link (행 1건 = 항목 1건) ──────────────────
-    # 축별 stmt/result 변수는 이름을 분리한다 — Select[...]가 엔티티별 제네릭이라
-    # 한 변수를 재사용하면 mypy --strict가 뒤 축의 행 타입을 앞 축으로 고정한다.
-    if axis in (None, "concept_standard_link"):
-        link_stmt = select(ConceptStandardLink)
-        if concept_key is not None:
-            link_stmt = link_stmt.where(ConceptStandardLink.concept_code == concept_key)
-        if standard_ref is not None:
-            link_stmt = link_stmt.where(ConceptStandardLink.norm_id == standard_ref)
-        link_stmt = link_stmt.order_by(
-            ConceptStandardLink.concept_code,
-            ConceptStandardLink.norm_id,
-            ConceptStandardLink.link_type,
-        ).limit(needed)
-        link_result = await session.execute(link_stmt)
-        for link in link_result.scalars().all():
-            items.append(
-                AlignmentItem(
-                    axis="concept_standard_link",
-                    concept_key=link.concept_code,
-                    standard_ref=link.norm_id,
-                    standard_ref_kind="norm_id",
-                    link_type=link.link_type,
-                )
-            )
-
-    # ── 2축: curriculum_entry.national_standard_codes (배열 평탄화) ─────
-    if axis in (None, "curriculum_entry") and len(items) < needed:
-        entry_stmt = select(CurriculumEntry).where(
-            # 빈 배열·NULL 행 제외 — 행 1건 ≥ 항목 1건이어야 축별 LIMIT 인출이
-            # 합성 순서의 prefix를 보존한다(모듈 docstring 페이지네이션 논증).
-            sa.func.cardinality(CurriculumEntry.national_standard_codes)
-            > 0
+    result = await get_alignments(
+        session,
+        concept_codes=[concept_key] if concept_key is not None else None,
+        outcome_id=standard_ref,
+        axes={CoreAlignmentAxis(axis)} if axis is not None else ALL_AXES,
+        limit=needed,
+        # 페이지네이션의 prefix 보존 요구 — 빈 배열 행을 SQL에서 제외해 "행 1건 ≥ 항목 1건"을
+        # 만든다(모듈 docstring). 기본값에 기대지 않고 *명시*한다.
+        require_nonempty=True,
+    )
+    log_join_stats(result.stats, logger=logger, context="api.alignments.list")
+    items = [
+        AlignmentItem(
+            axis=item.axis.value,
+            concept_key=item.concept_key,
+            standard_ref=item.standard_ref,
+            standard_ref_kind=item.standard_ref_kind,
+            link_type=item.link_type,
+            framework_id=item.framework_id,
         )
-        if concept_key is not None:
-            entry_stmt = entry_stmt.where(CurriculumEntry.concept_id == concept_key)
-        if standard_ref is not None:
-            # `x = ANY(배열)` 대조 — ARRAY comparator `.any()`는 관계용 PropComparator.any와
-            # 스텁이 충돌해 mypy --strict가 거부하므로 typed 표면인 sa.any_ 비교식을 쓴다.
-            entry_stmt = entry_stmt.where(
-                sa.literal(standard_ref) == sa.any_(CurriculumEntry.national_standard_codes)
-            )
-        entry_stmt = entry_stmt.order_by(CurriculumEntry.entry_id).limit(needed)
-        entry_result = await session.execute(entry_stmt)
-        for entry in entry_result.scalars().all():
-            for code in entry.national_standard_codes or []:
-                # standard_ref 필터는 SQL이 *행*을 잡고, 항목 수준 대조는 여기서 한다
-                # (배열엔 다른 코드도 함께 있을 수 있음 — 행 매칭≠항목 매칭).
-                if standard_ref is not None and code != standard_ref:
-                    continue
-                items.append(
-                    AlignmentItem(
-                        axis="curriculum_entry",
-                        concept_key=entry.concept_id,
-                        standard_ref=code,
-                        standard_ref_kind="official_code",
-                        framework_id=entry.framework_id,
-                    )
-                )
-            if len(items) >= needed:
-                break
-
-    # ── 3축: atom_node.standard_codes (배열 평탄화) ─────────────────────
-    if axis in (None, "atom_node") and len(items) < needed:
-        atom_stmt = select(AtomNode).where(sa.func.cardinality(AtomNode.standard_codes) > 0)
-        if concept_key is not None:
-            atom_stmt = atom_stmt.where(AtomNode.code == concept_key)
-        if standard_ref is not None:
-            atom_stmt = atom_stmt.where(
-                sa.literal(standard_ref) == sa.any_(AtomNode.standard_codes)
-            )
-        atom_stmt = atom_stmt.order_by(AtomNode.code).limit(needed)
-        atom_result = await session.execute(atom_stmt)
-        for atom in atom_result.scalars().all():
-            for code in atom.standard_codes or []:
-                if standard_ref is not None and code != standard_ref:
-                    continue
-                items.append(
-                    AlignmentItem(
-                        axis="atom_node",
-                        concept_key=atom.code,
-                        standard_ref=code,
-                        standard_ref_kind="official_code",
-                    )
-                )
-            if len(items) >= needed:
-                break
-
+        for item in result.alignments
+    ]
     return items[offset : offset + limit]

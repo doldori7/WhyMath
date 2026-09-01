@@ -52,7 +52,7 @@ from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.difficulty import RootKind, estimate_difficulty
 from whymath_backend.l3.equivalent.generator import CandidateProblem
-from whymath_backend.l3.equivalent.josa import eul_reul, wa_gwa
+from whymath_backend.lang.josa import eul_reul, wa_gwa
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,

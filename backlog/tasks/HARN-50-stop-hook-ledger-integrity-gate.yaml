@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-50-stop-hook-ledger-integrity-gate
+title: "Stop 훅 대장 무결성 게이트 — 내 세션이 유발한 validate 위반을 안고 종료 금지"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: done
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실사고 재현 — 1세션이 2태스크를 claim한 상태로 정지하면 exit 2로 막힌다(수정 전 동작 복원 시 RED)"
+  - "② 볼모 방지(반대 방향) — 남의 세션이 유발한 전역 위반으로는 막지 않는다. 이 축이 없으면 main의 위반 1건이 모든 세션의 정지를 막고 훅이 즉시 무력화된다"
+  - "③ 해소 시 해제 + stop_hook_active 재정지 통과(무한 루프 방지 기존 계약 유지)"
+  - "④ CI 배선 실재성 — tests/harness 잡이 신규 테스트를 수집하는지 확인(신규 디렉터리가 아니므로 새 잡 불요)"
+artifacts:
+  - "PR #916 (https://github.com/doldori7/WhyMath/pull/916) — check-stop 무결성 게이트 + 테스트 6건 + 뮤테이션 3종"
+  - tests/harness/test_stop_hook_integrity_gate.py
+paths:
+  - scripts/harness/backlog.py
+  - "tests/harness/*"
+session: null
+notes: "사고 경위: 2026-08-31. validate가 '1세션 2태스크 동시 claim' 위반을 정확히 냈는데 명령을 ';'로 이어 붙여 exit code를 판정에 쓰지 않은 채 push했다. 2선 방어인 CI harness-integrity 잡은 그 push에 트리거가 안 걸려(HARN-30) 무증상이었다. 규칙(CLAUDE.md 2026-08-09 '검사 명령의 출력을 억제하거나 잘라서 판정 금지')은 이미 있었고 재발했다 — 그래서 규칙이 아니라 코드로 옮긴다. 뮤테이션 3종 전건 검출(Q1 게이트 제거→사고 회귀·Q2 볼모→반대 결함·Q3 루프 방지 제거)."
+updated: 2026-08-31

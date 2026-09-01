@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ADMIN-12-is-published-dead-publication-axis
+title: "problem.is_published·publish_at 소비처 0건 — 게시 축이 선언만 존재한다"
+track: infra-debt
+stage: S4
+subject: cross
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 현행 실측 고정 — is_published·publish_at을 읽는 코드가 저장소 전체에 0건임을 재확인한다(2026-08-31 실측: schema/problem.py 선언·db/models/problem.py 컬럼 2곳뿐, 쿼리 필터 포함 소비 0). 노출 판정은 전부 l6/_shared.is_review_cleared → is_review_status_cleared 경로로만 이뤄진다."
+  - "② 배선 또는 폐기 결정 — ⓐ게시 축을 실제 게이트로 쓸 것이면 is_review_cleared와의 관계를 명시(AND인지, 예약 게시 publish_at을 누가 평가하는지)하고 서빙 경로에 배선한다 ⓑ쓰지 않을 것이면 컬럼·필드를 제거한다(마이그레이션 동반). 어느 쪽이든 '검수 통과 = 노출'이라는 현행 단일 축이 흐려지지 않아야 한다."
+  - "③ 재발 방지 — 선택한 쪽을 테스트로 동결한다. 배선이면 두 축의 AND 관계를 계약으로, 폐기면 '노출 판정 축은 review_status 하나'임을 회귀 테스트로. EOS-72가 l3/dsl에 건 것과 같은 형태의 가드."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/db/models/problem.py
+session: null
+notes: "PR #935(EOS-72) 리뷰 P2 지적에서 파생. EOS-72가 'ReviewStatus 단일 진실원천' 근거를 적으면서 problem.is_published를 그 축의 소비처로 잘못 적었고, 리뷰 봇이 '독립 Boolean이고 파생·검사 어디에도 없다'고 반증했다 — 실측 결과 봇이 옳았다. 정정은 #935에서 했고, dead 선언 자체의 처분이 이 태스크다. review_status=approved인데 is_published=False(또는 그 반대)가 표현 가능한 상태로 남아 있다는 점이 핵심 — 지금은 아무도 안 읽어서 무해하지만, 누군가 읽기 시작하는 순간 노출 판정이 이원화된다."
+updated: 2026-08-31

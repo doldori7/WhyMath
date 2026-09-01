@@ -211,21 +211,44 @@ def render_brief(
     elif remote_status not in ("ok", "disabled"):
         lines.append(f"(원격 claim 조회 불가: {remote_status} — 로컬 claim 정보만 표시)")
 
-    # 장기 미머지 브랜치 (HARN-13 + 2026-08-05 3분류 확장) — 정보성일 뿐 착수를 막지
-    # 않는다. unresolved만 강조하고 ported/active는 참고로 낮춰, 매 세션 Kiki가 훑어야
-    # 하는 줄 수를 실제 결정 대기 건수로 좁힌다.
+    # 장기 미머지 브랜치 (HARN-13 + 2026-08-05 3분류 + HARN-47 고립/PR대기 분리) —
+    # 정보성일 뿐 착수를 막지 않는다. **행동이 필요한 축(isolated)만 강조**하고 나머지는
+    # 참고로 낮춰, 매 세션 Kiki가 훑어야 하는 줄 수를 실제 조치 대상으로 좁힌다.
     if stale_branches:
         normalized = []
         for entry in stale_branches:
             branch_name, age_days_val, ahead_val = entry[0], entry[1], entry[2]
             status_val, evidence_val = entry[3:5] if len(entry) >= 5 else ("unresolved", "")
             normalized.append((branch_name, age_days_val, ahead_val, status_val, evidence_val))
+        isolated = [e for e in normalized if e[3] == "isolated"]
+        pr_filed = [e for e in normalized if e[3] == "pr_filed"]
         unresolved = [e for e in normalized if e[3] == "unresolved"]
         ported = [e for e in normalized if e[3] == "ported"]
         active = [e for e in normalized if e[3] == "active"]
 
+        # 고립(HARN-47) — PR로 노출된 적이 없어 *이 줄이 유일한 존재 증거*다. 가장 위에
+        # 두고 행동을 명시한다. 이 축과 pr_filed를 한 덩어리로 부르던 것이 경고 습관화의
+        # 원인이었다(2026-08-31 실측: 18건 중 11건은 이미 PR·처분 라벨 보유).
+        if isolated:
+            lines.append(
+                f"🔴 고립 브랜치 — PR로 노출된 적 없음 (회수 또는 삭제 필요) — {len(isolated)}건:"
+            )
+            for stale_branch, age_days, ahead, _status, _evidence in isolated:
+                lines.append(
+                    f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "
+                    f"trunk 대비 {ahead}커밋 앞섬"
+                )
+        # PR 대기 — 작업은 GitHub에 보인다. Kiki에게 "결정하라"고 다시 묻지 않고 PR
+        # 번호를 건넨다. 열림/닫힘은 오프라인 git으로 판정 불가라 번호로 넘긴다.
+        if pr_filed:
+            lines.append(f"(참고) PR 제출됨 — 처분은 해당 PR에서 — {len(pr_filed)}건:")
+            for stale_branch, age_days, _ahead, _status, evidence in pr_filed:
+                lines.append(f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전")
+        # unresolved는 이제 "PR 조회를 못 해 분리하지 못한" 잔여 축이다(측정 실패).
         if unresolved:
-            lines.append(f"⚠️ 미해결 장기 미머지 브랜치 (Kiki 결정 필요) — {len(unresolved)}건:")
+            lines.append(
+                f"⚠️ 미머지 브랜치 (PR 조회 실패로 고립 여부 미판정) — {len(unresolved)}건:"
+            )
             for stale_branch, age_days, ahead, _status, _evidence in unresolved:
                 lines.append(
                     f"  · {stale_branch} — 최종 커밋 {age_days:.0f}일 전 · "

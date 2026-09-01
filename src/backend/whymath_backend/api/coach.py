@@ -65,10 +65,13 @@ from whymath_backend.api._segmentation_state import (
     SolutionSegmentationCounters,
     get_segmentation_counters,
 )
+
+# EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
+# `verify_final_answer` 함수 자체의 Protocol 경유(DI)는 후속 — 타입 축을 먼저 끊는다.
+from whymath_backend.composition import default_final_answer_verifier
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
-from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
@@ -78,6 +81,11 @@ from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l1.embedding_provider import build_provider
+from whymath_backend.l1.standards.alignment_query import (
+    AlignmentAxis,
+    get_alignments,
+    log_join_stats,
+)
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -99,8 +107,6 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_final_answer import FinalAnswerState, verify_final_answer
-from whymath_backend.l3.verify_solution import SolutionVerificationResult
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -165,6 +171,11 @@ from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
+from whymath_backend.schema.verification_capabilities import (
+    ChainVerificationCounts,
+    FinalAnswerVerifier,
+    VerificationOutcome,
+)
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -527,8 +538,12 @@ class _StepVerificationCarry(NamedTuple):
     (CoachResponse)에는 싣지 않는다 — 노출은 기존 solution_coaching 게이트 그대로다.
     """
 
-    verification: SolutionVerificationResult | None
-    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다."""
+    verification: ChainVerificationCounts | None
+    """verify_solution 원 결과(단계 미제출·전이 0이면 None) — 카운트만 적재에 쓴다.
+
+    `ChainVerification`이 아니라 카운트 확장인 이유: 이 운반값의 유일한 소비처가
+    `_log_verify_event`(계측 적재 좌석)이고 거기서 상태별 카운트·보류 사유 분포를 읽는다.
+    채점(`partial_credit`)은 좁은 쪽만 요구한다 — 계약을 필요만큼만 쓰는 것이 분리의 요점이다."""
 
     ocr_gated: bool | None
     """SolutionCoaching.verification_ocr_gated(verification 객체가 아닌 형제 필드) 운반."""
@@ -901,8 +916,12 @@ def _last_solution_step(body: CoachRequest) -> str | None:
 
 
 async def _final_answer_state(
-    session: AsyncSession, problem_id: uuid.UUID | None, body: CoachRequest
-) -> FinalAnswerState | None:
+    session: AsyncSession,
+    problem_id: uuid.UUID | None,
+    body: CoachRequest,
+    *,
+    final_answer_verifier: FinalAnswerVerifier | None = None,
+) -> VerificationOutcome | None:
     """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — L3 서버 권위 3상태(비노출).
 
     완료 상태머신의 *정답/오답 도달 감지* 입력. 게이트(`l4_solution_completion_enabled`) off·
@@ -920,7 +939,13 @@ async def _final_answer_state(
     problem = await session.get(ProblemORM, problem_id)  # 무게이트 로드(완료는 정식 기능).
     if problem is None:
         return None  # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
-    result = verify_final_answer(last_step, problem)
+    # EOS-69: 구현을 이름으로 알지 않는다 — 합성 루트가 과목 구현을 준다.
+    verifier = (
+        final_answer_verifier
+        if final_answer_verifier is not None
+        else default_final_answer_verifier()
+    )
+    result = verifier.verify_final_answer(last_step, problem)
     return result.state
 
 
@@ -1046,8 +1071,8 @@ async def _resolve_completion(
     final_incorrect = False
     if prior == 0 and not already_completed:
         state = await _final_answer_state(session, problem_id, body)
-        final_correct = state is FinalAnswerState.correct
-        final_incorrect = state is FinalAnswerState.incorrect
+        final_correct = state is VerificationOutcome.correct
+        final_incorrect = state is VerificationOutcome.incorrect
 
     cd = decide_completion(
         prior_review_remaining=prior,
@@ -1166,7 +1191,11 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
     맵에 구조적으로 닿지 못한다(`concept.code`는 UNIQUE라 legacy code와 원자 code는 겹치지 않는
     별개 공간 — `docs/handoff/atom_backbone_next_session.md:19`가 이미 기록한 사실이자
     `api/gating.py::_fetch_achievement_codes`가 옮겨간 이유와 동일). 그래서 구 축은 이 concept_id에
-    대해 늘 0행이었다 — 새 조인은 그 선례(`_fetch_achievement_codes`)를 그대로 재사용한다.
+    대해 늘 0행이었다.
+
+    **CUR-12 통합 경유**: 원자 축 조인을 여기서 다시 쓰지 않고
+    `l1/standards/alignment_query.get_alignments`(단일 진실 원천)를 축 1개(ATOM_NODE)로 호출한다
+    — 쿼리 수는 그대로 1회다. 조인 회계(probed/matched)는 `log_join_stats`가 낸다.
 
     문항 없음·개념 미해석·원자 축 미매핑·성취기준 매핑 빈 배열 어느 단계든 graceful None(폴백).
     각 단계를 디버그 로그로 구분한다(CLAUDE.md "작동한 비율" 원칙 — 0%가 "성취기준 미매핑"인지
@@ -1180,31 +1209,34 @@ async def _standard_code_for(session: AsyncSession, problem_id: uuid.UUID | None
             "standard_code_for: 개념 미해석(문항-개념 매핑 없음) problem_id=%s", problem_id
         )
         return None
-    stmt = (
-        select(AtomNode.standard_codes)
-        .join(Concept, Concept.code == AtomNode.code)
-        .where(Concept.concept_id == concept_id)
+    result = await get_alignments(
+        session,
+        concept_ids=[concept_id],
+        axes={AlignmentAxis.ATOM_NODE},
     )
-    standard_codes: list[str] | None = await session.scalar(stmt)
-    if standard_codes is None:
-        # INNER JOIN 0행 — concept.code가 atom_node에 없다(비원자 개념이거나 원자 미적재).
-        logger.debug(
-            "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
-            "problem_id=%s concept_id=%s",
-            problem_id,
-            concept_id,
-        )
+    log_join_stats(result.stats, logger=logger, context=f"coach.standard_code_for/{problem_id}")
+    if result.stats.matched == 0:
+        # 두 사태를 계속 구분해 로그로 남긴다(CUR-04가 세운 3단계 구분 유지 — 0%의 원인이
+        # 묻히지 않게). 기준은 **joined**다: OUTER JOIN이라 개념이 있으면 probed는 늘 1이고,
+        # 원자 행이 실제로 붙었는지는 joined만 안다(#933 리뷰 P2 — probed로 갈랐더니 조인
+        # 미스가 "매핑 없음"으로 잘못 찍혔다).
+        if result.stats.joined == 0:
+            logger.debug(
+                "standard_code_for: 원자 축 조인 미스(concept.code가 atom_node에 없음) "
+                "problem_id=%s concept_id=%s",
+                problem_id,
+                concept_id,
+            )
+        else:
+            logger.debug(
+                "standard_code_for: 원자 노드는 매칭됐으나 성취기준 매핑 없음 "
+                "problem_id=%s concept_id=%s",
+                problem_id,
+                concept_id,
+            )
         return None
-    if not standard_codes:
-        # 원자 노드는 매칭됐으나 이 원자에 연결된 성취기준이 없다(매핑 부재 — 조인 실패 아님).
-        logger.debug(
-            "standard_code_for: 원자 노드는 매칭됐으나 성취기준 매핑 없음 "
-            "problem_id=%s concept_id=%s",
-            problem_id,
-            concept_id,
-        )
-        return None
-    return sorted(standard_codes)[0]
+    # 결정론 — refs는 정렬·중복 제거되어 나온다(첫 코드 선택이 안정).
+    return result.standard_refs(kind="official_code")[0]
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
@@ -1302,7 +1334,7 @@ async def _log_verify_event(
     student_solution: str | None,
     mode: str | None = None,
     persona: str | None = None,
-    verification: SolutionVerificationResult | None = None,
+    verification: ChainVerificationCounts | None = None,
     verification_ocr_gated: bool | None = None,
 ) -> bool | None:
     """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
@@ -1377,7 +1409,7 @@ async def _log_verify_event(
         )
 
     # S4-19: verification이 있을 때만 6필드를 값으로 채운다(없으면 전부 None — 정직 NULL 회계).
-    # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(SolutionVerificationResult)으로
+    # n_transitions는 미적재 — 세 카운트 합==n_transitions 보장(ChainVerificationCounts 규약)으로
     # 재구성 가능하다. ocr_gated도 verification 없으면 None(False로 위장하지 않음).
     # MATH-03: unverifiable_by_reason(사유 코드 분포)도 같은 additive 규약으로 병기한다.
     event = AttemptEventORM(

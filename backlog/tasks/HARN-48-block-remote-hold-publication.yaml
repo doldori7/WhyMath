@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-48-block-remote-hold-publication
+title: "차단(block)의 원격 게시 — 머지 지연 창에서 차단이 무력화되는 결함 해소"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: done
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 결함 재현 고정 — 구 cmd_block이 원격 claim을 release해 차단이 유일한 교차 세션 신호를 지웠음을 테스트로 동결(수정 전 동작 복원 시 RED)"
+  - "② remote_claims.hold() 신설 — harness-claims 브랜치에 kind=block 레코드 게시. 남의 진행 중 claim은 덮어쓰지 않는다(적대적 탈취 방지)"
+  - "③ start가 차단과 착수 claim을 구별해 안내 — 차단은 unblock을 가리키고 claims release --force 탈취를 유도하지 않는다"
+  - "④ unblock이 홀드를 해제 — 안 걷으면 해제된 태스크가 영구 차단으로 보인다"
+  - "⑤ 게시 실패는 침묵하지 않는다 — '이 차단은 로컬에만 있다'를 stderr+이벤트(block_hold_failed)에 남긴다(fail-open 위장 금지)"
+  - "⑥ 구버전 호환 — kind 없는 레코드는 claim으로 읽는다(메타 파손이 차단으로 둔갑 금지)"
+  - "⑦ [정정 2026-08-31] HARN-45와 동일 뿌리(cmd_block의 _release_remote_claim)를 다른 세션이 독립 발견했다. HARN-45 acceptance ②가 요구한 **양방향** 변별력을 흡수한다 — 기본 차단은 자리를 지키고(HARN-48 축), --handover 차단은 인계를 허용한다(HARN-45 축). 한 방향만 만들면 '아무도 이어받을 수 없는 영구 점유'라는 반대 결함이 생긴다."
+artifacts:
+  - "PR #916 (https://github.com/doldori7/WhyMath/pull/916) — remote_claims.hold() + block --handover + 테스트 11건 + 뮤테이션 8종 검출"
+  - "scripts/harness/remote_claims.py hold()"
+  - tests/harness/test_block_hold_cross_session.py
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/*"
+  - docs/standards/build_harness.md
+session: null
+notes: "사고 경위: 2026-08-31 CUR-11. 세션 A가 block(00:28:07) → 13분 뒤 세션 B가 원격 claim(00:41:24) → B가 구현·머지 완료(PR #920). 차단은 대장에 실재했고 next에서도 사라졌으나 미머지 브랜치에 있어 아무것도 막지 못했다. 근본 원인: cmd_block이 _release_remote_claim으로 원격 레코드를 지워, 보호를 거는 행위가 유일한 교차 세션 신호를 제거했다. 일반형 — 대장 조치의 실효 시점은 조치 시점이 아니라 머지 시점이며, harness-claims 브랜치만이 머지 없이 즉시 전파되는 채널이다. HARN-07(읽기측 폴백)·HARN-32(머지 경합)와 같은 계보.\n\n[정정 2026-08-31] HARN-45(타 세션 독립 등재)와 중복 확인 — 양방향 요구를 이 태스크로 흡수"
+updated: 2026-08-31

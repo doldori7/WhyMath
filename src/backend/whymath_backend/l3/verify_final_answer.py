@@ -42,7 +42,6 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -55,6 +54,7 @@ from whymath_backend.l3.solution_set import (
 )
 from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 from whymath_backend.schema.enums import QuestionFormat
+from whymath_backend.schema.verification_capabilities import VerificationOutcome
 
 __all__ = [
     "FinalAnswerResult",
@@ -63,21 +63,10 @@ __all__ = [
 ]
 
 
-class FinalAnswerState(str, Enum):
-    """학생 최종답 검증의 3상태 — `verify_step`의 `VerifyStepState`와 동형(str-Enum 컨벤션).
-
-    `str, Enum`이라 멤버가 문자열 값과 동등 비교된다(`schema/enums.py`·`verify_step` 답습).
-    호출자는 이 값을 읽어 "correct일 때만 완료 진행"을 판단한다(`l4/completion.py`).
-    """
-
-    correct = "correct"
-    """학생 최종답이 기대정답과 동치임을 서버가 결정론으로 확인 — 완료·attempt 적재 근거."""
-
-    incorrect = "incorrect"
-    """학생 최종답이 기대정답과 *불일치*함을 서버가 확인 — 재고 유도(정답 비노출) 근거."""
-
-    unverifiable = "unverifiable"
-    """서버 검증 불가 — 기대정답 미보유·파싱 불가·판정 불가·빈 입력(correct 위장 금지·정직 회피)."""
+# EOS-69: 3상태를 schema 중립 enum과 공유(별칭). 원 docstring이 이미
+# "verify_step의 VerifyStepState와 동형"이라 자인했다 — 이제 문자 그대로 같은 객체다.
+FinalAnswerState = VerificationOutcome
+"""학생 최종답 검증의 3상태 — `VerificationOutcome`의 별칭."""
 
 
 class FinalAnswerResult(BaseModel):

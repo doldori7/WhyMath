@@ -65,7 +65,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from whymath_backend.l3.equivalent.josa import TailReading, tail_reading
+from whymath_backend.lang.josa import TailReading, tail_reading
 
 __all__ = [
     "REASON_DANGLING_EXPONENT_PHRASE",
