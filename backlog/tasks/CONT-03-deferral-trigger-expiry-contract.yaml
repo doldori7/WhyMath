@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - "backlog/**"
   - "scripts/harness/**"
 session: null
-notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F3·§3 D9·§4 트리거 대장 — 외부 EOS 틀 3차 대조에서 발견. CLAUDE.md 금기 '만료 없는 유예·제외 금지'(2026-08-03 결정·2026-08-10 통합점검이 본문 등재)의 갭점검 문서 평면 재발이다. 그 금기가 '1차 집행은 규칙 산문이 아니라 코드다(PB-02 그랜드파더 만료 계약 — 동일 유형 텍스트 규칙 2회 실패 후 코드 착지)'라고 적고 있는데, 갭 점검 문서의 §4 트리거 절은 아직 산문 단계에 있다. CONT-02와 역할 분리: CONT-02는 개념 감사 축 1건의 거취, 본 태스크는 트리거 일반 계약."
-updated: 2026-08-11
+notes: "docs/architecture/ai_content_generation_gap_review_r3.md §2 F3·§3 D9·§4 트리거 대장 — 외부 EOS 틀 3차 대조에서 발견. CLAUDE.md 금기 '만료 없는 유예·제외 금지'(2026-08-03 결정·2026-08-10 통합점검이 본문 등재)의 갭점검 문서 평면 재발이다. 그 금기가 '1차 집행은 규칙 산문이 아니라 코드다(PB-02 그랜드파더 만료 계약 — 동일 유형 텍스트 규칙 2회 실패 후 코드 착지)'라고 적고 있는데, 갭 점검 문서의 §4 트리거 절은 아직 산문 단계에 있다. CONT-02와 역할 분리: CONT-02는 개념 감사 축 1건의 거취, 본 태스크는 트리거 일반 계약.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

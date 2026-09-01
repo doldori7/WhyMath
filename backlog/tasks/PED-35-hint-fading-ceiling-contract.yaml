@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/l4/hint_deferral.py
   - tests/backend/l4/test_hint_deferral.py
 session: null
-notes: "출처: LearnLM 검토 차용 후보 2 — 적대 검증 생존, 갭은 검증 렌즈가 코드로 확증(세션 재확인 완료). 기존 answer_deferral_max_level(learning_scene)과의 방향 차이도 설계에서 화해할 것."
-updated: 2026-08-30
+notes: "출처: LearnLM 검토 차용 후보 2 — 적대 검증 생존, 갭은 검증 렌즈가 코드로 확증(세션 재확인 완료). 기존 answer_deferral_max_level(learning_scene)과의 방향 차이도 설계에서 화해할 것.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/C7/F8 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

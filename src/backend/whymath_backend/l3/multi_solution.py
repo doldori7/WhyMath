@@ -103,6 +103,7 @@ from whymath_backend.db.models.verified_solution import (
     WhsSolutionGrade,
 )
 from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -759,6 +760,9 @@ def generation_routing_request(subscription: str = "free") -> RoutingRequest:
         requires_reasoning=True,
         student_subscription=subscription,
         sync=True,
+        # 등급: 다중 풀이 생성의 입력 시드는 자체 저작 코퍼스의 문항이다(오프라인 공장 —
+        # 학생 자료 없음). 코퍼스에 AIHub 유래가 들어오면 단일 좌석에서 함께 잠긴다.
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
 
 

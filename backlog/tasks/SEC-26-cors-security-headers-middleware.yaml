@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -24,5 +25,5 @@ paths:
   - "tests/backend/**"
   - "tests/infra/**"
 session: null
-notes: "48_보안 §P0 갭. ADMIN-06(백오피스 웹 셸)이 admin-specific CORS origin allowlist를 이미 소유하고 있으므로, 본 태스크는 ADMIN-06의 allowlist 기반선이 확보된 뒤 전역 CORS/보안 헤더로 일반화·확장하는 역할이다. 스테이지 순서상 하드 의존은 불가능하므로 acceptance에서 선행 권장으로 처리한다."
-updated: 2026-08-25
+notes: "48_보안 §P0 갭. ADMIN-06(백오피스 웹 셸)이 admin-specific CORS origin allowlist를 이미 소유하고 있으므로, 본 태스크는 ADMIN-06의 allowlist 기반선이 확보된 뒤 전역 CORS/보안 헤더로 일반화·확장하는 역할이다. 스테이지 순서상 하드 의존은 불가능하므로 acceptance에서 선행 권장으로 처리한다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

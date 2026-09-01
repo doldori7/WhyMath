@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 5
+eos_priority: P0
 owner: claude
 depends_on:
   - S4-09-solution-path-materialization
@@ -21,5 +22,5 @@ paths:
   - "src/backend/whymath_backend/db/models/**"
   - "src/backend/whymath_backend/api/**"
 session: null
-notes: "docs/architecture/solution_module_gap_review.md §3 D3 — 외부 EOS 틀(기능 25) 대조(최대 실행 갭). HintNode Persistence 연기(MEMORY 2026-07-08 Phase 6b) 해제 조건 충족 슬라이스. 학생 대면 서빙 포함 → S3-01 의존(루프 검증 전 기능 확장 금지·S4-05 선례). 스캐폴딩 페이딩·개입 금지 타이머는 §4-①"
-updated: 2026-07-29
+notes: "docs/architecture/solution_module_gap_review.md §3 D3 — 외부 EOS 틀(기능 25) 대조(최대 실행 갭). HintNode Persistence 연기(MEMORY 2026-07-08 Phase 6b) 해제 조건 충족 슬라이스. 학생 대면 서빙 포함 → S3-01 의존(루프 검증 전 기능 확장 금지·S4-05 선례). 스캐폴딩 페이딩·개입 금지 타이머는 §4-①\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/CU★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
+updated: 2026-09-01

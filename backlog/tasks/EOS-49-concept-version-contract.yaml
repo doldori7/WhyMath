@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -22,5 +23,5 @@ paths:
   - "src/backend/alembic/versions/**"
   - "tests/backend/db/**"
 session: null
-notes: "출처: 44_eos_version_management.md §16-3 — EOS-44 종결 시 MVP 범위(§12 'Problem/Concept/Solution 버전 테이블') 좌석 부재를 발견해 등재(docstring 계획은 백로그를 대신하지 못한다). ARCH-31(Problem 축)·EOS-47(attempt 고정 축)과 3분할"
-updated: 2026-08-30
+notes: "출처: 44_eos_version_management.md §16-3 — EOS-44 종결 시 MVP 범위(§12 'Problem/Concept/Solution 버전 테이블') 좌석 부재를 발견해 등재(docstring 계획은 백로그를 대신하지 못한다). ARCH-31(Problem 축)·EOS-47(attempt 고정 축)과 3분할\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/버전규율 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

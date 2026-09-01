@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/ops/declared_unwired_audit.py
   - "tests/backend/ops/**"
 session: null
-notes: "원 등재 SEC-25(6ybkis backup 5d2c2b71에만 잔존) — HARN-35 재등재. SEC-24 회수 세션의 정직한 공백 ①에서 분리된 좌석. 선행 조건 PB-04는 여전히 k20m0w 고립(MOB-18 소유)"
-updated: 2026-08-30
+notes: "원 등재 SEC-25(6ybkis backup 5d2c2b71에만 잔존) — HARN-35 재등재. SEC-24 회수 세션의 정직한 공백 ①에서 분리된 좌석. 선행 조건 PB-04는 여전히 k20m0w 고립(MOB-18 소유)\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

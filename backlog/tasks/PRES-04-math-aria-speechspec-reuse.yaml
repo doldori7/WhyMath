@@ -7,6 +7,7 @@ subject: cross
 layer: mobile
 status: todo
 priority: 5
+eos_priority: P2
 owner: claude
 depends_on:
   - MATH-05-reverse-notation-display-surface
@@ -20,5 +21,5 @@ paths:
   - src/mobile/lib/features/chat/presentation/
   - src/mobile/test/accessibility_test.dart
 session: null
-notes: "2026-08-12 표출 분석 P2-9. LaTeX 원문은 스크린리더에 무의미. MATH-05 ⑥(d)가 미룬 축의 착지"
-updated: 2026-08-13
+notes: "2026-08-12 표출 분석 P2-9. LaTeX 원문은 스크린리더에 무의미. MATH-05 ⑥(d)가 미룬 축의 착지\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01
