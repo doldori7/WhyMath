@@ -805,20 +805,55 @@ class TestCorpusVerifyBlockSupply:
     """`derive_verify_inputs`가 `Problem.conditions_parsed` 외에 코퍼스 verify 블록을 공급원으로 쓴다."""
 
     def test_loads_real_corpus_verify_blocks(self) -> None:
-        """코퍼스 로더가 2,124개의 유효한 verify 블록을 읽는다(NLP-05 실측)."""
+        """코퍼스 로더가 13,570개의 유효한 verify 블록을 읽는다.
+
+        2,124(NLP-05 실측) → 13,570. 증분 11,446은 PB-13이 회수한 저작 확장 코퍼스
+        30종의 문항수와 **정확히 일치**한다(우연한 드리프트가 아니라 회수의 산술 결과).
+        """
         blocks = _load_corpus_verify_blocks()
-        assert len(blocks) == 2124
+        assert len(blocks) == 13570
 
     def test_corpus_slug_derives_when_conditions_parsed_empty(self) -> None:
-        """DB conditions_parsed가 비어 있어도 코퍼스 slug 매칭 시 파생 재료가 생긴다."""
+        """DB conditions_parsed가 비어 있어도 코퍼스 slug 매칭 시 파생 재료가 생긴다.
+
+        표본은 *파생 가능한* 첫 블록으로 고정한다 — dict 선두는 코퍼스 구성이 바뀌면
+        따라 바뀌고(PB-13 회수로 실제로 바뀌었다), 그때 파생 불가 블록이 선두에 오면
+        이 테스트가 '파생 경로 고장'이 아니라 '표본 추첨 결과'로 실패한다.
+        파생 불가 모집단 자체는 test_multi_symbol_population_is_frozen이 따로 동결한다.
+        """
         blocks = _load_corpus_verify_blocks()
-        slug, (expected_conditions, expected_answer_map) = next(iter(blocks.items()))
+        slug, (expected_conditions, expected_answer_map) = next(
+            (s, v)
+            for s, v in blocks.items()
+            if derive_verify_inputs(_problem(conditions=[], answer="3", slug=s)) is not None
+        )
         problem = _problem(conditions=[], answer="3", slug=slug)
         result = derive_verify_inputs(problem)
         assert result is not None
         conditions, answer_map = result
         assert conditions == expected_conditions
         assert answer_map == expected_answer_map
+
+    def test_multi_symbol_population_is_frozen(self) -> None:
+        """파생 불가 블록은 전량 `multi_symbol` 7,098건 — PB-13 회수분의 실측 한계.
+
+        기존 main 코퍼스 2,124블록은 파생 성공률 **100%**인데, PB-13이 회수한 11,446블록은
+        **38.0%**(성공 4,348 · 실패 7,098)다. 실패 사유는 단일 코드 `multi_symbol`뿐이며
+        `no_verify_block`·`parse_error`는 0이다 — 데이터 손상이 아니라 파생기가 다루지 못하는
+        형태라는 뜻이다(예: conditions `["4*1/5 = y"]`).
+
+        이 수치를 동결하는 이유: 회수분의 62%가 섀도 채점 경로에서 소비되지 않는다는 사실이
+        조용히 묻히면 "11,446문 회수 완료"가 실제보다 큰 성과로 읽힌다. 해소는 후속 태스크
+        소관이고, 그때 이 테스트가 개선을 수치로 증명한다.
+        """
+        blocks = _load_corpus_verify_blocks()
+        reasons: dict[str, int] = {}
+        for slug in blocks:
+            problem = _problem(conditions=[], answer="3", slug=slug)
+            if derive_verify_inputs(problem) is None:
+                reason = _derive_from_corpus(problem)
+                reasons[reason] = reasons.get(reason, 0) + 1
+        assert reasons == {"multi_symbol": 7098}
 
     def test_unknown_slug_returns_no_verify_block(self) -> None:
         """코퍼스에 없는 slug는 verify 블록 공급 없이 비파생이다."""
@@ -910,6 +945,6 @@ class TestCorpusCeilingReportDiscriminates:
                 )
 
         report = build_gradability_ceiling_report(problems)
-        assert report.total_problems == 2638
+        assert report.total_problems == 14084
         assert report.bucket_counts["condition_formal_derivable"] > 0
-        assert report.bucket_counts["condition_formal_derivable"] == 872
+        assert report.bucket_counts["condition_formal_derivable"] == 5220
