@@ -196,7 +196,11 @@ def classify(
     # 총량이 문제다. 그래서 브랜치별이 아니라 **1건**의 신호로 낸다.
     # 닫힌 PR을 가진 브랜치는 여기 포함된다 — 닫히고 머지 안 됐다는 것은 작업이
     # 트렁크 밖에 남았다는 뜻이므로, PR이 없는 것보다 더 방치된 상태다.
-    unfiled = [b for b in dormant if not b.pr_open]
+    # `is False`인 이유(Codex P2 지적): `not b.pr_open`은 `None`(열림 여부 **미판정**)
+    # 까지 "PR 없음"으로 센다. API 장애·rate limit이면 전 브랜치가 미판정이 되므로
+    # 순전히 모르는 데이터로 FLOW-01이 확정 발화한다 — collect()가 같은 상황을
+    # unmeasured로 표시해 놓고 신호는 내는 자기모순이다. 아는 것만 센다.
+    unfiled = [b for b in dormant if b.pr_open is False]
     if len(unfiled) > wip_branches:
         findings.append(
             Finding(
@@ -502,23 +506,40 @@ def compute_overlaps(
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
-def _active_branches(root: Path) -> frozenset[str]:
-    """원격 claim 대장에서 '지금 작업 중인 브랜치'를 읽는다.
+def _active_branches(root: Path) -> tuple[frozenset[str], str]:
+    """원격 claim 대장에서 '지금 작업 중인 브랜치'를 읽는다. `(브랜치집합, 사유)`.
 
-    하네스가 없거나 조회에 실패해도 측정은 계속한다 — active 판정이 빠지면
-    진행 중 브랜치가 표류로 오분류될 뿐이고, 그 사실은 리포트가 말한다.
+    **조용히 빈 집합을 돌려주지 않는다** (Codex P2 지적, 2026-09-01). 초판은
+    ⓐ `sys.path`에 `scripts`를 넣어(하네스 모듈은 서로를 top-level로 import하므로
+    `scripts/harness`여야 한다) `ModuleNotFoundError`, ⓑ 존재하지 않는
+    `load_remote_claim_map`을 호출해 `AttributeError`를 냈고, 광범위 `except`가
+    **둘 다 삼켰다**. 결과는 무증상 오작동이다 — active 브랜치가 전부 dormant로
+    분류돼 타 세션이 지금 작업 중인 브랜치에 GIT-01·FLOW-01 오경보가 난다
+    (HARN-47이 없애려던 바로 그 오경보). 실측 시점에 claim 3건이 살아 있었는데
+    이 함수는 `frozenset()`을 냈다.
+
+    그래서 실패 사유를 **반환값으로 올린다** — 호출부가 리포트에 남긴다.
+    `backlog.py:_remote_claim_map`과 같은 리더(`list_claims`)를 쓴다.
     """
+    harness_dir = str(root / "scripts" / "harness")
+    if harness_dir not in sys.path:
+        sys.path.insert(0, harness_dir)
     try:
-        sys.path.insert(0, str(root / "scripts"))
-        from harness import remote_claims, store  # noqa: PLC0415
-
+        import remote_claims  # noqa: PLC0415
+        import store  # noqa: PLC0415
+    except ImportError as exc:
+        return frozenset(), f"{type(exc).__name__}: {exc}"
+    try:
         policy, _ = store.load_policy(root)
         if not policy.remote_claims:
-            return frozenset()
-        claimed, _ = remote_claims.load_remote_claim_map(root, policy)
-        return frozenset(c.branch for c in claimed.values() if getattr(c, "branch", None))
-    except Exception:  # noqa: BLE001 - 하네스 부재/스키마 변화에 견딘다
-        return frozenset()
+            return frozenset(), ""  # 기능 자체가 꺼져 있음 — 실패가 아니다
+        claims, status = remote_claims.list_claims(root, with_meta=True)
+    except Exception as exc:  # noqa: BLE001 - 환경 의존(네트워크·권한)
+        return frozenset(), f"{type(exc).__name__}: {exc}"
+    if status != "ok":
+        # 조회 자체가 실패 — "active 0건"과 구분해서 올린다.
+        return frozenset(), f"claim 조회 status={status}"
+    return frozenset(c.branch for c in claims if getattr(c, "branch", None)), ""
 
 
 def render(report: Report, findings: list[Finding], *, verbose: bool = False) -> str:
@@ -531,8 +552,15 @@ def render(report: Report, findings: list[Finding], *, verbose: bool = False) ->
 
     measured = len(report.branches)
     conflicted = sum(1 for b in report.branches if b.conflicts > 0)
-    drifted = sum(1 for b in report.branches if b.behind >= DRIFT_BEHIND and not b.active)
-    unfiled = sum(1 for b in report.branches if not b.pr_open and not b.active)
+    # 요약은 classify와 **같은 조건**을 써야 한다(Codex P2 지적) — behind만 보면
+    # 오래된 trunk에서 오늘 갈라진 브랜치가 요약에서는 표류로 세어지는데 상세에는
+    # GIT-01이 안 뜬다. 첫 줄 합계가 아래 진단과 모순되는 상태가 된다.
+    drifted = sum(
+        1
+        for b in report.branches
+        if b.behind >= DRIFT_BEHIND and b.age_days >= DRIFT_AGE_DAYS and not b.active
+    )
+    unfiled = sum(1 for b in report.branches if b.pr_open is False and not b.active)
     out.append(
         f"브랜치 {measured}건 측정 · 충돌 {conflicted}건 · 표류 {drifted}건 · PR미제출 {unfiled}건"
     )
@@ -577,13 +605,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--wip-branches", type=int, default=WIP_BRANCHES)
     args = p.parse_args(argv)
 
+    active, claim_err = _active_branches(args.root)
     report = collect(
         args.root,
         trunk=args.trunk,
-        active_branches=_active_branches(args.root),
+        active_branches=active,
         jsonl=args.jsonl,
         measure_conflicts=not args.no_conflicts,
     )
+    if claim_err:
+        # active를 못 읽었으면 진행 중 브랜치가 표류·WIP로 오분류된다. 침묵 금지.
+        report.unmeasured.append(f"active판정({claim_err})")
     if report.status != "ok":
         print(render(report, []))
         return 2  # 측정 실패는 통과(0)도 신호(1)도 아니다 — 세 번째 색이다

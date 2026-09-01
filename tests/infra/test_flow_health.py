@@ -179,6 +179,89 @@ class TestWarnOnlyDoesNotMaskMeasurementFailure:
             _mod, "collect", lambda *a, **k: _mod.Report(status="ok", branches=[bad])
         )
         monkeypatch.setattr(_mod, "compute_overlaps", lambda *a, **k: [])
-        monkeypatch.setattr(_mod, "_active_branches", lambda *a, **k: frozenset())
+        monkeypatch.setattr(_mod, "_active_branches", lambda *a, **k: (frozenset(), ""))
         assert _mod.main([]) == 1, "신호가 있으면 기본은 1"
         assert _mod.main(["--warn-only"]) == 0, "--warn-only는 신호를 0으로 낮춘다"
+
+
+class TestUnknownPrStateIsNotCountedAsUnfiled:
+    """Codex P2 #3899930470 — 모르는 것을 '없음'으로 세지 않는다.
+
+    `not b.pr_open`은 `None`(열림 여부 미판정)까지 "PR 없음"으로 센다. API 장애·
+    rate limit이면 전 브랜치가 미판정이 되므로, 순전히 모르는 데이터로 FLOW-01이
+    **확정 발화**한다 — `collect()`가 같은 상황을 unmeasured로 표시해 놓고 신호는
+    내는 자기모순이다.
+    """
+
+    def test_unknown_pr_state_does_not_trigger_flow01(self):
+        unknown = [healthy(f"b{i}", pr_ref=None, pr_open=None) for i in range(50)]
+        assert "FLOW-01" not in codes(
+            classify(unknown, [])
+        ), "열림 여부를 모르는 브랜치로 WIP 초과를 선언하면 안 된다"
+
+    def test_known_unfiled_still_triggers(self):
+        # 변별력 — 아는 상태에서는 여전히 발화해야 한다
+        known = [healthy(f"b{i}", pr_ref=None, pr_open=False) for i in range(50)]
+        assert "FLOW-01" in codes(classify(known, []))
+
+
+class TestSummaryMatchesDetail:
+    """Codex P2 #3899930474 — 첫 줄 합계가 아래 진단과 모순되면 안 된다."""
+
+    def test_drift_summary_applies_age_condition(self):
+        # 오래된 trunk에서 오늘 갈라진 브랜치: behind는 크지만 표류가 아니다
+        fresh = healthy("new", behind=500, age_days=0.1)
+        report = _mod.Report(status="ok", branches=[fresh])
+        findings = classify([fresh], [])
+        text = _mod.render(report, findings)
+        assert "GIT-01" not in text, "상세에는 GIT-01이 없어야 한다"
+        assert "표류 0건" in text, f"요약도 0이어야 모순이 없다 — 실제: {text.splitlines()[0]}"
+
+    def test_summary_counts_real_drift(self):
+        old = healthy("old", behind=500, age_days=99)
+        report = _mod.Report(status="ok", branches=[old])
+        text = _mod.render(report, classify([old], []))
+        assert "표류 1건" in text
+
+
+class TestActiveClaimFailureIsReported:
+    """Codex P2 #3899930463 — claim 조회 실패를 조용히 빈 집합으로 만들지 않는다.
+
+    초판은 ⓐ `sys.path`에 `scripts`를 넣어 `ModuleNotFoundError`, ⓑ 존재하지 않는
+    `load_remote_claim_map` 호출로 `AttributeError`를 냈고 광범위 `except`가 둘 다
+    삼켰다. 실측 시점에 claim 3건이 살아 있었는데 `frozenset()`이 나왔고, 그 결과
+    타 세션 작업 브랜치가 전부 dormant로 분류돼 오경보 대상이 된다.
+    """
+
+    def test_returns_tuple_of_set_and_reason(self, tmp_path):
+        result = _mod._active_branches(tmp_path)
+        assert (
+            isinstance(result, tuple) and len(result) == 2
+        ), "실패 사유를 반환값으로 올려야 호출부가 리포트에 남길 수 있다"
+        branches, reason = result
+        assert isinstance(branches, frozenset)
+        assert isinstance(reason, str)
+
+    def test_uses_existing_harness_reader(self):
+        """존재하지 않는 API를 부르지 않는다 — 소스에 `list_claims`가 있어야 한다."""
+        src = (
+            Path(__file__).resolve().parents[2] / "scripts" / "ops" / "flow_health.py"
+        ).read_text(encoding="utf-8")
+        assert "list_claims(" in src, "backlog.py와 같은 리더를 호출해야 한다"
+        # 문자열 *언급*이 아니라 **호출**을 본다 — 사고 경위를 docstring에 남기는 것은
+        # 금지 대상이 아니다(그걸 잡으면 왜 이 규칙이 있는지 적을 수 없다).
+        assert "load_remote_claim_map(" not in src, "존재하지 않는 함수를 호출하고 있다"
+
+    def test_failure_reason_reaches_the_report(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            _mod, "_active_branches", lambda r: (frozenset(), "BoomError: 조회불가")
+        )
+        monkeypatch.setattr(
+            _mod, "collect", lambda *a, **k: _mod.Report(status="ok", branches=[healthy()])
+        )
+        monkeypatch.setattr(_mod, "compute_overlaps", lambda *a, **k: [])
+        _mod.main([])
+        out = capsys.readouterr().out
+        assert (
+            "active판정" in out and "BoomError" in out
+        ), f"claim 조회 실패가 리포트에 안 보인다 — 침묵 실패다: {out}"

@@ -107,6 +107,38 @@ class TestFailureIsNotHidden:
         )
 
 
+class TestMeasurementFailurePropagates:
+    """Codex P2 #3899930452 — 감사가 **아무것도 재지 못한** 상태가 초록이면 안 된다.
+
+    `pr_delivery_audit`의 계약은 exit 1이 '주의 필요'와 '측정 실패' **둘 다**를
+    뜻한다. 초판 스텝은 둘을 뭉개고 무조건 `exit 0`을 했다 — curl·API 조회가 통째로
+    실패해도 잡이 초록이었다. 이 PR이 세운 "측정 실패 ≠ 통과" 원칙을 그 스텝 자신이
+    위반한 상태였다.
+    """
+
+    def test_audit_step_distinguishes_measurement_failure(self, job):
+        run = next(
+            (
+                str(s.get("run", ""))
+                for s in job.get("steps", [])
+                if _ORPHAN in str(s.get("run", ""))
+            ),
+            None,
+        )
+        assert run, f"{_ORPHAN} 스텝을 찾지 못했다"
+        assert (
+            "측정 실패" in run
+        ), "측정 실패와 주의 상태를 가르지 않으면 아무것도 재지 못한 잡이 초록이 된다"
+        assert "exit 1" in run, "측정 실패 경로는 스텝을 실패시켜야 한다"
+
+    def test_sentinel_string_actually_exists_in_the_tool(self):
+        """가정 기반 검사 금지 — 도구가 실제로 그 문자열을 낸다."""
+        src = (_REPO_ROOT / _ORPHAN).read_text(encoding="utf-8")
+        assert (
+            "측정 실패" in src
+        ), "워크플로가 찾는 문자열을 도구가 내지 않으면 그 분기는 죽은 코드다"
+
+
 class TestPermissionIsolation:
     def test_observation_job_cannot_write(self, job):
         """⑥ 관측 잡은 읽기만 한다 — claim-reap의 쓰기 권한이 새지 않는다."""

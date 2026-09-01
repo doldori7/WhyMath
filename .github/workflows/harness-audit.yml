@@ -140,17 +140,31 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        # exit 1 = '주의 필요' — 관측 잡이므로 워크플로를 실패시키지 않되,
-        # **측정 실패와 구분해서** 로그에 남긴다. 판정은 exit code로 한다.
+        # `pr_delivery_audit`의 계약은 **exit 1이 두 가지를 뜻한다** — '주의 필요'와
+        # '측정 실패'. 초판은 둘을 뭉개고 무조건 exit 0을 했다(Codex P2 지적):
+        # curl·API·브랜치 규칙 조회가 통째로 실패해 **아무것도 측정하지 못했는데도**
+        # 잡이 초록이었다. 이 PR이 세운 "측정 실패 ≠ 통과" 원칙을 이 스텝 자신이
+        # 위반한 상태였다.
+        #
+        # 그래서 stdout으로 둘을 가른다: 도구는 측정 실패 시 '측정 실패'를 출력하고
+        # 주의 상태는 NO_CHECKS/READY_UNMERGED를 출력한다. 측정 실패면 **스텝을
+        # 실패시킨다** — 관측 잡이라도 "재지 못했다"는 초록이면 안 된다.
+        # 주의 발견은 warning으로만 남기고 통과시킨다(남의 PR 상태로 야간 잡을
+        # red로 만들지 않는다). 판정은 exit code + 출력 내용 양쪽으로 한다.
         run: |
           set +e
           out=$(python3 scripts/ops/pr_delivery_audit.py doldori7/WhyMath 2>&1)
           rc=$?
           echo "$out"
           echo "EXIT=$rc"
-          if [ "$rc" -eq 1 ]; then
-            echo "::warning::PR 배송 주의 — NO_CHECKS 또는 READY_UNMERGED 존재"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
           fi
+          if echo "$out" | grep -q "측정 실패"; then
+            echo "::error::PR 배송 감사가 아무것도 측정하지 못했다 — 초록으로 넘기지 않는다"
+            exit 1
+          fi
+          echo "::warning::PR 배송 주의 — NO_CHECKS 또는 READY_UNMERGED 존재"
           exit 0
 
       - name: 측정 원본 보존

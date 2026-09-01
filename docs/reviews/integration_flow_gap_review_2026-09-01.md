@@ -151,6 +151,23 @@ closed·unmerged인데 브랜치 tip과 일치**해서, ⓐ리뷰 부하가 없�
 에서 한글 브랜치명·커밋 제목을 디코드할 때 붕괴하는 코드였다.
 **기존 방어 장치가 신규 코드에 대해 실제로 작동함을 확인한 사례다.**
 
+### 3.3b 리뷰에서 잡힌 결함 4건 (Codex P2 · 전건 수용)
+
+기계 리뷰가 P2 4건을 냈고 **전부 실측으로 확인돼 수정**했다. 네 건 모두
+**이 문서가 세운 원칙을 코드 자신이 위반한** 형태였다는 점이 공통적이다.
+
+| # | 결함 | 실측 확인 | 위반한 자기 원칙 |
+|---|---|---|---|
+| 463 | `_active_branches`가 존재하지 않는 `load_remote_claim_map`을 부르고, `sys.path`도 틀려(`scripts` → `scripts/harness`) 두 예외를 광범위 `except`가 **삼켰다** | claim 3건이 살아 있는데 `frozenset()` 반환 → 타 세션 작업 브랜치 3개가 dormant로 오분류 | **침묵 실패 금지** |
+| 470 | `not b.pr_open`이 `None`(열림 여부 **미판정**)까지 "PR 없음"으로 계상 | API 장애 시 모르는 데이터로 FLOW-01이 확정 발화 — `collect()`는 같은 상황을 unmeasured로 표시하는데 신호는 내는 자기모순 | **측정 실패 ≠ 통과** |
+| 474 | 요약 카운터가 `behind`만 보고 `age`를 안 봄 (classify는 AND) | 첫 줄 "표류 N건"이 아래 GIT-01 상세와 모순 | 진단 일관성 |
+| 452 | `pr_delivery_audit` 스텝이 exit 1의 두 의미('주의' vs '측정 실패')를 뭉개고 무조건 `exit 0` | 감사가 **아무것도 재지 못해도** 잡이 초록 | **측정 실패 ≠ 통과** |
+
+가장 뼈아픈 것은 463이다. 이 도구의 docstring이 "침묵 실패 금지"를 명시하는데
+정작 `_active_branches`의 `except Exception`이 **오타 두 개를 무증상으로 삼키고**
+있었다. 그래서 실패 사유를 반환값 `(집합, 사유)`으로 올려 리포트에 남기도록 고쳤다.
+회귀는 뮤테이션 5종으로 동결했다(전건 검출).
+
 ### 3.4 배선 (정본화 ≠ 집행)
 
 `harness-audit.yml`에 `flow-health` 잡 추가 — 야간 schedule + main push + dispatch.
@@ -169,9 +186,9 @@ closed·unmerged인데 브랜치 tip과 일치**해서, ⓐ리뷰 부하가 없�
 
 | 항목 | 결과 |
 |---|---|
-| 신규 테스트 | **25건 전건 통과** (판정 로직 15 + `--warn-only` 계약 2 + 배선 8) |
-| `tests/infra` 전체 | **464 passed, 0 failed** |
-| `tests/harness` 전체 | **463 passed, 0 failed** |
+| 신규 테스트 | **34건 전건 통과** (판정 로직 15 + `--warn-only` 2 + 리뷰 회귀 9 + 배선 10) |
+| `tests/infra` 전체 | **473 passed, 0 failed** |
+| `tests/harness` 전체 | **477 passed, 0 failed** |
 | ruff (`scripts tests/harness tests/infra`) | exit 0 |
 | black --check (동일 대상) | exit 0 |
 
@@ -197,7 +214,11 @@ closed·unmerged인데 브랜치 tip과 일치**해서, ⓐ리뷰 부하가 없�
 | 워크플로: 도구 호출 제거 / `fetch-depth` 변조 / `pr_delivery_audit` 재고아화 | ✅ ✅ ✅ |
 | 워크플로: `\|\| true` 은닉 / 쓰기 권한 부여 / fetch 제거 / `pull_request` 트리거 | ✅ ✅ ✅ ✅ |
 
-**17/17 검출.**
+| 리뷰 회귀: `pr_open is False`→`not pr_open` / 요약 age 조건 제거 | ✅ ✅ |
+| 리뷰 회귀: 존재하지 않는 API 재호출 / 실패 사유 리포트 누락 | ✅ ✅ |
+| 리뷰 회귀: 측정 실패도 무조건 exit 0 | ✅ |
+
+**22/22 검출.**
 
 > 뮤테이션 원복은 **`cp` 백업**으로만 했다(CLAUDE.md 2026-08-10 — `git checkout --`은
 > 뮤테이션과 미커밋 구현분을 구분하지 못하고 둘 다 되돌린다). 원복 후 `md5sum -c`로
