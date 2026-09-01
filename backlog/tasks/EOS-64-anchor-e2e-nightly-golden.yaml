@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -16,11 +16,12 @@ acceptance:
   - "② 라이브 회차 리포트에 '작동한 비율' 필드(수용/검수필요/게이트거부/중복/생성실패 분포) — 정상 응답이 아니라 분포가 작동 증거"
   - "③ 골든 승격 = 워크리스트 검수→review_status 백필→Wilson 게이트 CLI 경유만 허용 — 경로 밖 승격은 exit 1, 법정·검수 절차의 기계 대체 금지 명기"
   - "④ 연속 무진전(N회차 수용 0) 알람 — fail-open 상시 실패를 보호 있음으로 신뢰 금지"
-artifacts: []
+artifacts:
+  - "PR #956 (https://github.com/doldori7/WhyMath/pull/956) · ci.yml e2e-nightly 스텝 배선(실행 주체=CI 러너·hermetic) · harness/anchor_round_ledger.py(작동한 비율·outcome 어휘 Literal 파생·방향별 Wilson) · harness/golden_promotion_gate.py(승격 4단 경로·백필 감사로그 각인 확인·경로 밖 exit 1·법정절차 기계대체 금지 명기) · <out>.rounds.jsonl 회차 대장 + 연속 무진전 알람(exit 2) · tests/infra/test_anchor_e2e_nightly_wiring.py 9건(배선 실재 기계 동결·OPS-10 선례) · 뮤테이션 4종 전건 검출 · 전체 스위트 11405 passed·0 failed"
 paths:
   - "src/backend/whymath_backend/harness/**"
   - ".github/workflows/**"
   - "tests/backend/**"
 session: null
 notes: "출처: EOS-58 acceptance ③ 집행 별항(2026-08-30). 1회 관통 실증(docs/reviews/eos_anchor_e2e_a4_2026-08-30.md)의 상시화. 라이브는 Phaiakes9 Ollama 필요 — nightly 실행 주체(CI 러너 vs Kiki 머신 스케줄) 결정 포함. 번호: EOS-60~63 원격 선점으로 CLI 제안 64 사용(HARN-10)."
-updated: 2026-08-30
+updated: 2026-09-01

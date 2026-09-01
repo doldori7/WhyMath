@@ -16,6 +16,7 @@ L4는 *무엇을·언제* 시각화할지 결정하고, 실제 생성·검증은
 
 from __future__ import annotations
 
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.visualization import generate_visualization_spec
@@ -70,6 +71,10 @@ async def visualize_misconception(
         difficulty="medium",
         requires_reasoning=True,
         student_subscription=student_subscription,
+        # 등급: 프롬프트에 실리는 것은 오개념 카탈로그의 개념 라벨과 학생 *수준 라벨*
+        # ("고1"·"초보")뿐이다 — 학생 원문·풀이는 넘기지 않는다(`visualize`는 match와
+        # level만 받는다). 자체 저작이라 반출 가능(EOS-59).
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
     return await generate_visualization_spec(
         _concept_for_misconception(match.misconception),
