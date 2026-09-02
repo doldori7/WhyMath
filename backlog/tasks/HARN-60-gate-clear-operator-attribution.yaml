@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-60-gate-clear-operator-attribution
+title: "게이트 clear의 사람/에이전트 주체를 대장에 기록 — actor가 브랜치명이라 준수 증거가 git 저자에만 의존한다"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 1
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 재현 먼저 — 현행 gate_clear 이벤트의 actor가 브랜치명임을 실측한다(2026-09-01: 'actor: main'). 사람이 clear했는지 에이전트가 했는지 대장만 보고 판정 불가임을 보인다"
+  - "② gates clear에 주체 기록 — done의 --as {kiki,partner}(HARN-06) 선례를 그대로 따른다. 신규 프레임워크 금지: 같은 플래그·같은 이벤트 필드 규약 위에 얹는다"
+  - "③ 변별력 — 사람 소유 게이트를 주체 표기 없이 clear하면 거부되거나 이벤트에 에이전트로 기록되는지, 표기하면 사람으로 기록되는지 양방향 실측. 한쪽만 보면 '항상 통과'가 통과한다"
+  - "④ 소급 불가 명시 — 이미 clear된 게이트의 주체는 사후에 알 수 없다(git 저자가 스쿼시로 소실). 기존 항목을 추정으로 채우지 않고 '미상'으로 두거나 evidence 문안을 근거로만 표시한다. 날조 금지"
+  - "⑤ 배선 확인 — 신규 테스트가 CI(tests/harness 잡)에서 실제로 실행되는지 대조"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/store.py
+  - tests/harness/test_gate_clear_attribution.py
+session: null
+notes: "발견 경위: PR #971 codex P1. Kiki가 서명한 clear 커밋(363d437d · Author: kiki)을 스쿼시 머지하면 저자가 머지 수행자로 바뀌고, 브랜치 ref가 자동 삭제되면 '에이전트가 아니라 사람이 clear했다'는 증거가 복원 불가능해진다. 실측: 이벤트 대장은 actor를 브랜치명('main')으로 기록해 사람 신원을 담지 않는다. 저장소 정책상 merge commit·rebase가 모두 금지(405)라 스쿼시 외 선택지가 없으므로, 증거는 git 메타데이터가 아니라 **대장 데이터**에 있어야 한다. 준수 감사 A3(에이전트의 사람 게이트 clear = 심각도 높음)이 실재하는데 그 준수를 사후 증명할 채널이 취약하다는 것이 이 태스크의 요점이다."
+updated: 2026-09-01
