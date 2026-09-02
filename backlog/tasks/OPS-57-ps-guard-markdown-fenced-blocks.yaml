@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: in_progress
+status: done
 priority: 2
 eos_priority: P1
 owner: claude
@@ -18,10 +18,15 @@ acceptance:
   - "④ 규칙 3종 추가 (2026-09-01 관여도 트리아지 런북 사고) — (e) 보호 브랜치 직접 push 금지(git push origin main은 GH013으로 거부된다 · 실측) (f) git reset --hard 앞에 git status --porcelain 확인 스텝 필수(미커밋 작업분 무증상 소실 — 2026-08-10 유형) (g) python 출력을 파이프·리다이렉트하는 블록은 문서 앞부분에 UTF-8 강제(PYTHONUTF8·PYTHONIOENCODING·Console::OutputEncoding)가 있어야 한다(한국어 Windows에서 stdout이 로케일 인코딩을 써 UnicodeEncodeError로 죽는다 · 실측 2건)"
   - "⑤ 판정 범위 명시 — 이 가드는 '런북이 주의를 지시하는가'를 문서 순서로 본다(같은 문서에서 위험 명령보다 앞에 선행 스텝이 있는가). 특정 붙여넣기가 안전한지는 판정하지 않는다. 이 한계를 도구 출력과 docstring에 적어 과신을 막는다"
   - "⑥ 정직한 평가 동봉 — 착지 시 이번 사고의 결함 목록 대비 '이 가드가 잡는 것/못 잡는 것'을 표로 적는다. 특히 눈먼 검증 스텝(변별력 없는 validate를 차단 지점으로 오인)은 정적 검사로 잡히지 않는다는 점을 명시한다"
-artifacts: []
+  - "⑨ [완료 후 정정 2026-09-02] acceptance ②(a)(b)(c)는 **이 태스크에서 구현하지 않았다** — OPS-60이 승계한다. 이 태스크가 구현한 것은 ①(코드펜스 편입)과 ④~⑥(2026-09-01 런북 사고분)이다. done 처리 시 그 사실을 PR #973 본문에만 적었는데, 리뷰가 '되돌릴 수 없는 done이 잔여 작업을 대장에서 지운다'고 지적해 승계로 분리했다. 대장만 읽는 세션이 '다 됐다'로 읽지 않도록 여기 남긴다"
+artifacts:
+  - "#972"
+  - "scripts/ops/check_ps_scripts.py (런북 코드펜스 + 규칙 3종)"
+  - "tests/infra/test_ps_guard_runbook_rules.py (28건 변별력 동결)"
+  - "docs/reviews/runbook_guard_evaluation_2026-09-01.md (정직한 평가 — 4/7 검출·가드 자신의 결함 3건)"
 paths:
   - scripts/ops/check_ps_scripts.py
   - "tests/infra/**"
-session: claude/ops57-ps-guard-runbook
-notes: "출처: 2026-08-31 LIC-02 siyavula URL 프로브. 원격 세션은 PowerShell 실행 검증이 구조적으로 불가(Windows 부재)하므로 정적 가드가 유일한 방어선인데, 그 가드가 런북 코드펜스를 안 본다. CLAUDE.md '측정·수집 도구를 성공 경로만 보고 설계 금지'·'변별력 없는 검증 스텝 금지'의 도구화. 2026-08-31 추가 관측(4번째 결함): 대화형 붙여넣기에서 `if {...}` / `else {...}`가 여러 입력으로 나뉘면 PS가 if를 완결 문으로 파싱해 else가 고아가 되고(CommandNotFoundException) 검증 스텝이 통째로 미실행된다 — 규칙 (d)로 추가 검토: 런북 코드펜스의 if/else 다중행 구조 경고. acceptance 수정 CLI(HARN-24)가 다른 세션 진행 중이라 notes로 남긴다.\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — 런북 명령 가드. EOS-80 일괄 백필\n\n[정정 2026-09-01] 2026-09-01 관여도 트리아지 게이트 clear 런북에서 결함 7건 발생(라이브 3·리뷰 4). 그중 3건이 이 가드가 기계로 잡을 수 있는 형태다. OPS-57이 이미 '런북 코드펜스 미검사'를 소유하고 있으므로 신규 태스크 대신 여기에 편입한다"
-updated: 2026-09-01
+session: null
+notes: "출처: 2026-08-31 LIC-02 siyavula URL 프로브. 원격 세션은 PowerShell 실행 검증이 구조적으로 불가(Windows 부재)하므로 정적 가드가 유일한 방어선인데, 그 가드가 런북 코드펜스를 안 본다. CLAUDE.md '측정·수집 도구를 성공 경로만 보고 설계 금지'·'변별력 없는 검증 스텝 금지'의 도구화. 2026-08-31 추가 관측(4번째 결함): 대화형 붙여넣기에서 `if {...}` / `else {...}`가 여러 입력으로 나뉘면 PS가 if를 완결 문으로 파싱해 else가 고아가 되고(CommandNotFoundException) 검증 스텝이 통째로 미실행된다 — 규칙 (d)로 추가 검토: 런북 코드펜스의 if/else 다중행 구조 경고. acceptance 수정 CLI(HARN-24)가 다른 세션 진행 중이라 notes로 남긴다.\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — 런북 명령 가드. EOS-80 일괄 백필\n\n[정정 2026-09-01] 2026-09-01 관여도 트리아지 게이트 clear 런북에서 결함 7건 발생(라이브 3·리뷰 4). 그중 3건이 이 가드가 기계로 잡을 수 있는 형태다. OPS-57이 이미 '런북 코드펜스 미검사'를 소유하고 있으므로 신규 태스크 대신 여기에 편입한다\n\n[정정 2026-09-02] PR #973 codex P1 수용 — acceptance 일부 미이행 상태의 done을 승계 태스크(OPS-60)로 분리하고 그 사실을 대장에 명시"
+updated: 2026-09-02
