@@ -195,3 +195,48 @@ class TestMigrationFile:
         source = next(_VERSIONS_DIR.glob("*review_timer_event.py")).read_text(encoding="utf-8")
         elapsed_block = source.split('"elapsed_ms"')[1].split("sa.Column")[0]
         assert "server_default" not in elapsed_block
+
+
+class TestEditAwareVerdictPersistence:
+    """EOS-62 — 판정 3종화가 영속 계층에 **마이그레이션 없이** 안착하는가.
+
+    `verdict`는 TEXT 컬럼이고 폐쇄 강제는 schema 쪽이다(모듈 docstring "DB는 TEXT" 판단).
+    그래서 값 추가는 DDL 변경을 요구하지 않는다 — 그 사실을 주장으로 두지 않고 왕복으로
+    실측한다(마이그레이션이 필요한데 안 만든 상태를 조용히 통과시키지 않기 위해).
+    """
+
+    def test_verdict_column_is_free_text_not_a_db_enum(self) -> None:
+        """DB enum이면 값 추가에 마이그레이션이 필요하다 — TEXT임을 실측해 그 전제를 고정."""
+        column = ReviewTimerEvent.__table__.columns["verdict"]
+        assert isinstance(column.type, sa.Text)
+        assert column.nullable is True
+
+    def test_edit_approval_round_trips(self) -> None:
+        original = SchemaReviewTimerEvent(
+            review_session_id=uuid.uuid4(),
+            cu_slug="quadratic-roots-002",
+            reviewer_id="kiki",
+            event_type="finished",
+            verdict="approved_with_edit",
+            failure_code="F7",
+            failure_note="어휘 수준을 중3에 맞게 손질",
+            elapsed_ms=90_000,
+            occurred_at=datetime(2026, 9, 1, 2, 0, tzinfo=UTC),
+        )
+        restored = ReviewTimerEvent.from_schema(original).to_schema()
+        assert restored.verdict == "approved_with_edit"
+        assert restored.failure_code == "F7"
+
+    def test_edit_approval_without_code_round_trips(self) -> None:
+        """부기 선택 — 코드 없는 손질 승인도 영속·복원된다."""
+        original = SchemaReviewTimerEvent(
+            review_session_id=uuid.uuid4(),
+            cu_slug="quadratic-roots-003",
+            reviewer_id="kiki",
+            event_type="finished",
+            verdict="approved_with_edit",
+            elapsed_ms=90_000,
+        )
+        restored = ReviewTimerEvent.from_schema(original).to_schema()
+        assert restored.verdict == "approved_with_edit"
+        assert restored.failure_code is None

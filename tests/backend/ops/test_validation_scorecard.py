@@ -12,10 +12,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
+from whymath_backend.ops import validation_scorecard as vs
 from whymath_backend.ops.validation_scorecard import (
     KPI_SOURCES,
     KpiVerdict,
@@ -667,3 +669,71 @@ def test_producer_enum_repr_keys_are_understood() -> None:
             {"coverage": {"evaluated": 50}, "fn_by_failure_code": {key: 2}}
         )
         assert adapted["content"]["reviewed_math_errors"] == 2, f"'{key}' 표기를 못 읽었다"
+
+
+class TestEditAwareVerdictSeam:
+    """EOS-62 × EOS-61 이음매 — 손질 승인이 F-Ⅲ 분모를 오염시키지 않는가.
+
+    두 태스크는 서로 다른 브랜치에서 같은 계측 사슬을 건드렸다(EOS-62는 생산자
+    `hit_cu_metrics`, EOS-61은 소비자 `adapt_hit_cu_metrics`). **어느 쪽 CI도 상대를 보지
+    못했으므로** 이 이음매는 두 PR이 각각 green이어도 깨질 수 있는 자리다 — 그래서 실물
+    생산자 산출을 실물 소비자에 태워 고정한다.
+
+    지켜야 하는 것: F-Ⅲ("실패 분포에서 판단형 > 60%")의 '실패 분포'는 EOS-51 §5에서 12월까지
+    수정 금지로 동결된 의미이고, 그 모집단은 **반려분**이다. 손질 승인의 부기 결함코드를
+    `failure_code_counts`에 합쳤다면 소비자는 아무것도 모른 채 다른 모집단 위에서 임계를
+    계산했을 것이다 — 조용한 판정 오염이다.
+    """
+
+    @staticmethod
+    def _producer_report() -> dict:
+        """실물 `hit_cu_metrics.aggregate` 산출(JSON 평면) — 손질 승인 F7이 섞인 구성."""
+        from whymath_backend.harness.review_timer import finish_review, start_review
+        from whymath_backend.ops.hit_cu_metrics import aggregate
+        from whymath_backend.schema.enums import GenerationFailureCode
+
+        events = []
+        for slug, verdict, code in (
+            ("cu-rejected", "rejected", GenerationFailureCode.F2),  # 기계형 반려
+            ("cu-edited", "approved_with_edit", GenerationFailureCode.F7),  # 판단형 손질
+            ("cu-clean", "approved", None),
+        ):
+            started = start_review(cu_slug=slug, reviewer_id="kiki")
+            events.append(started)
+            events.append(
+                finish_review(
+                    review_session_id=started.review_session_id,
+                    cu_slug=slug,
+                    reviewer_id="kiki",
+                    verdict=verdict,  # type: ignore[arg-type]
+                    failure_code=code,
+                    elapsed_ms=60_000,
+                )
+            )
+        return dataclasses.asdict(aggregate(events))
+
+    def test_edit_codes_do_not_enter_the_frozen_failure_distribution(self) -> None:
+        """★ 판단형 F7 손질 1건이 있어도 F-Ⅲ 모집단은 반려 1건 그대로다."""
+        adapted = vs.adapt_hit_cu_metrics(self._producer_report())
+
+        assert adapted["failure_distribution"]["rejected_total"] == 1
+        # 손질분(F7=판단형)이 섞였다면 judgment_hits가 1이 되어 판단형 비중 0%→100%가 된다.
+        assert adapted["failure_distribution"]["judgment_hits"] == 0
+        assert adapted["machine_share"] == {"hits": 1, "trials": 1}
+
+    def test_producer_still_reports_the_edit_axis_separately(self) -> None:
+        """분리는 '버림'이 아니다 — 손질 코드는 별도 축에 살아 있어야 한다."""
+        report = self._producer_report()
+        assert report["edit_failure_code_counts"]["F7"] == 1
+        assert report["failure_code_counts"]["F7"] == 0
+        assert report["approved_with_edit_count"] == 1
+
+    def test_adapter_ignores_new_producer_fields_without_error(self) -> None:
+        """소비자는 EOS-62가 더한 필드를 모른다 — 모르는 채로 정상 동작해야 한다.
+
+        어댑터가 `.get()` 기반이라 필드 추가는 무해하다는 전제를 실측으로 고정한다(전제가
+        깨지면 생산자 확장이 소비자를 조용히 죽인다).
+        """
+        adapted = vs.adapt_hit_cu_metrics(self._producer_report())
+        assert "approval_rate_clean" not in adapted
+        assert adapted["hit"]["sample_size"] == 3

@@ -21,14 +21,15 @@ as-found 라벨 무결성 — fail-closed (acceptance ⑥)
 
   - `rejected` → **그대로 승격**(label=defective). `failure_code`(F1~F8)가 as-found 결함을
     명시하고, 반려는 정의상 손질 전 상태의 판정이다. 근거 = `AsFoundBasis.REJECTED_FAILURE_CODE`.
-  - `approved` → **기본 제외(모호)**. 현행 verdict는 2값이라 *무손질 승인*과 *손질 후 승인*이
-    구분되지 않는다. 손질 후 승인을 clean으로 승격하면 **원래 결함이던 입력이 정상으로
-    라벨링되어 FN율이 과소평가**된다 — 골든이 자기 목적을 훼손한다. 다음 둘 중 하나가
-    성립할 때만 승격한다:
+  - `approved` → **기본 제외(모호)**. 손질 후 승인을 clean으로 승격하면 **원래 결함이던
+    입력이 정상으로 라벨링되어 FN율이 과소평가**된다 — 골든이 자기 목적을 훼손한다.
+    EOS-62가 착지해 verdict는 3값이 됐지만(`approved_with_edit` 실재), **그 이전에 기록된
+    `approved` 행은 여전히 모호**하다(소급 재분류 금지 — 아래 `--edit-aware-since`). 다음 둘
+    중 하나가 성립할 때만 승격한다:
       ⓐ **검수 전 불변 스냅샷 + as-found 결함 라벨**(`--as-found-labels`) →
         `AsFoundBasis.PRE_REVIEW_SNAPSHOT`. 라벨은 스냅샷이 말하는 대로 쓴다(clean/defective).
-      ⓑ **EOS-62의 edit-aware verdict 착지**(`approved_with_edit`가 `ReviewVerdict` 어휘에
-        존재) + `--edit-aware-since` 이후 검수분 → `AsFoundBasis.EDIT_AWARE_VERDICT`.
+      ⓑ **EOS-62의 edit-aware verdict**(`approved_with_edit`가 `ReviewVerdict` 어휘에 존재 —
+        2026-09-01 착지) + `--edit-aware-since` 이후 검수분 → `AsFoundBasis.EDIT_AWARE_VERDICT`.
         그 계약 이후의 밋밋한 `approved`는 "무손질 승인"을 뜻하므로 clean으로 승격하고,
         `approved_with_edit`는 defective로 승격한다.
   - 둘 다 없으면 **제외하고 그 건수를 리포트에 명시**한다(조용한 포함 금지 — 미측정 ≠ 정상).
@@ -259,6 +260,10 @@ def edit_aware_verdict_available() -> bool:
     상수로 박지 않는 이유: 이 저장소의 반복 사고("선언과 실체 불일치")를 피하려면 하류 계약이
     상류 어휘를 직접 보고 판정해야 한다. EOS-62가 착지하면 이 함수가 자동으로 True가 되고,
     착지 전에는 아무도 손대지 않아도 fail-closed가 유지된다.
+
+    **2026-09-01 EOS-62 착지로 현재 True를 낸다** — 설계대로 이 파일은 한 줄도 바뀌지 않은 채
+    경로 ⓑ가 열렸다. 함수를 상수 `True`로 대체하지 않는다: 어휘가 롤백되거나 하류가 구버전
+    schema와 함께 배포되면 다시 False여야 하고, 그때 fail-closed가 살아 있어야 한다.
     """
     return _EDIT_AWARE_VALUE in get_args(ReviewVerdict)
 

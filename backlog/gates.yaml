@@ -67,10 +67,10 @@ gates:
     title: "GitHub environment(staging·prod) required reviewers 등록 — 등록 전까지 배포 승인 게이트는 이름뿐(deploy.yml:112-115 자인)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 14
-    evidence: null
+    evidence: "2026-09-01 Kiki 실행(Phaiakes9 PowerShell). gh api -X PUT repos/doldori7/WhyMath/environments/{staging,prod} 로 생성, prod에 required_reviewers=doldori7(id 178589964) 등록. 판정: gh api repos/doldori7/WhyMath/environments -> {total:2, envs:[{prod, rules:[required_reviewers]},{staging, rules:[]}]}. 환경 id staging=20985105447 prod=20985105982, protection_rule id=64259943. 사전 baseline(같은 명령)은 total:0/envs:[] 로 변별력 실측 확인. 잔여 한계: can_admins_bypass=true, prevent_self_review=false (별도 보고)."
     notes: ""
   - id: G-domain-partner
     title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"
@@ -112,10 +112,10 @@ gates:
     title: "EOS 12월 검증 관여도 트리아지 — 선언 §6-5가 EOS-53→G0에 배정했으나 미산출인 채 G0이 clear된 분(감사 A2). ①잔여 todo 151건(S3 68·S4 83)을 '12월 검증 관여/비관여'로 분류 ②비관여분 이월 표시 ③CUR-11·CUR-12 착수 판정 — 선언 §1.3-③은 CUR-11을 S1-16과 함께 '계약(contract) 수준'으로 분류했으나 실제 acceptance는 /v1/curricula/* 라우터 5종 신설(CUR-11)·coach/target_progress/DSL 소비처 리팩토링(CUR-12)이라 분류가 실물과 어긋난다. clear 전까지 두 태스크는 blocked"
     kind: decision
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-31
     remind_after_days: 7
-    evidence: null
+    evidence: "2026-09-01 Kiki 판정. 조건1 관여도 분류: 비종결 188건 전건 eos_priority 부여 완료(P0 11, P1 70, P2 92, P3 15). 게이트 제목의 151건은 8/31 수치이며 현행 모집단은 다르다. 조건2 이월 표시: N 판정분을 P2/P3로 부여(폐기 아님, 선언 6-5). 조건3 CUR-11/CUR-12 착수 판정: 두 태스크 모두 done(CUR-11 PR #920)이라 판정 대상 소멸. 근거: docs/reviews/eos_verification_relevance_triage_2026-08-31.md 제안본 + 매핑 규칙 docs/ops/eos_relevance_triage_gate_runbook.md 2절 + 집행 PR #961."
     notes: ""
   - id: G-eos63-skill-event-reach-sample
     title: "EOS-63 전환 선결 — attempt_event.skill_ids 기록률 실측(Phaiakes9 prod DB에서 리포트 1회 실행)"
