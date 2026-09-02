@@ -88,7 +88,7 @@ class TestResetHardNeedsCleanCheck:
         )
         assert any("git status --porcelain" in i for i in issues)
 
-    def test_clean_check_in_the_same_block_is_NOT_protection(self, tmp_path: pathlib.Path) -> None:
+    def test_clean_check_in_the_same_block_is_not_protection(self, tmp_path: pathlib.Path) -> None:
         """초판이 이 형태를 축복했다 — codex P1 지적 수용 후 뒤집었다.
 
         붙여넣으면 PowerShell이 status를 찍고 **출력과 무관하게** 곧바로 reset을
