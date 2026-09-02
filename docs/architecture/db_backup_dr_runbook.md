@@ -178,6 +178,22 @@ Write-Host "EXIT=$LASTEXITCODE"
 
 일회용 scratch 컨테이너(pgvector/pg16)를 **포트 55433**에 띄워 최신 백업을 복원한다. 55433은 5432(타 프로젝트)·5433(prod)·55432(demo)와 비충돌. 127.0.0.1 바인딩으로 외부 비노출(실데이터 복제본 — §4 취급 규칙 적용).
 
+### 3-0. 스톱워치 시작 — RTO 측정의 실행 (게이트 `G-backup-restore-rehearsal`)
+
+> **왜 이 절이 있는가**: §5의 RTO 칸은 "첫 리허설 실측으로 채운다"고 적혀 있는데, 종전 §3에는 **시간을 재는 스텝이 하나도 없었다**. 그래서 리허설을 완주해도 게이트가 요구하는 수치가 나오지 않았다 — 절차가 산출하지 못하는 것을 게이트가 요구하는 상태였다. 이 절이 그 간극을 메운다. (CLAUDE.md「작동 신호 없는 알고리즘 부착 금지」의 런북 축 — 측정한다고 적어 놓고 측정 스텝이 없으면 측정은 일어나지 않는다.)
+
+**이 블록부터 3-3b까지는 같은 PowerShell 창에서 연속 실행한다** — `$sw` 변수가 창에 살아 있어야 경과 시간이 나온다. 창을 닫거나 새 창으로 옮기면 3-3b가 `[FAIL]`로 그 사실을 알린다(조용히 0을 내지 않는다).
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Host ("[RTO] stopwatch started at " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
+```
+
+- **성공**: `[RTO] stopwatch started at ...` 한 줄. 곧바로 3-1로 넘어간다(여기서 멈추면 대기 시간이 RTO에 섞인다).
+- **측정 범위(정직 기술)**: 이 스톱워치가 재는 것은 **"백업 파일이 손에 있는 상태에서 복원 완료까지"**다. 실전 RTO는 여기에 ①장애 인지 시간 ②prod 컨테이너 재생성·구성 복원(§3-5) ③오프사이트에서 백업 회수·복호 시간이 더해진다. 그러므로 3-3b가 내는 값은 **RTO의 하한**이며, §5 표에도 그렇게 적는다 — 하한을 전체 RTO로 적으면 재해 시 복구 계획이 낙관 편향된다.
+
 ### 3-1. scratch 기동
 
 ```powershell
@@ -238,6 +254,27 @@ docker exec whymath-restore-test psql -U whymath -d whymath -c $q
 - **성공**: 두 표의 8개 행수가 **모두 일치**. (변별력: 복원이 누락·중단됐으면 scratch 쪽 행수가 다르거나 `ERROR: relation "..." does not exist`가 난다 — 후자는 복원 실패 확정.)
 - **허용 편차(정직 기술)**: 백업 시점 이후 prod에 쓰기가 있었으면 활동 테이블(`dialogue_turn`·`problem_attempt` 등)은 prod ≥ scratch로 벌어질 수 있다. 이 경우 **콘텐츠 정본 3종(`atom_node`·`concept`·`problem`) 일치 + 나머지는 prod ≥ scratch 방향**이면 통과로 판정한다. 리허설은 가급적 유휴 시간(서버 미가동)에 수행.
 - **실패 시 대처**: `relation does not exist` → 3-2 재수행. 행수 역전(scratch > prod) → 백업/복원 대상 컨테이너 혼동 의심 — 두 `docker exec` 대상 이름을 재확인.
+
+### 3-3b. 스톱워치 정지 — RTO 하한 산출 (3-3 통과 직후 즉시)
+
+**3-3의 행수 대조가 통과한 직후에 실행한다.** 통과하지 못했으면 그 회차는 RTO 측정 대상이 아니다 — 실패한 복구의 소요 시간은 복구 시간이 아니다.
+
+```powershell
+# [실행 시스템] Windows PowerShell — 3-0을 실행한 그 창에서 계속
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+if (-not $sw) {
+    Write-Host "[FAIL] stopwatch not found - 3-0을 실행한 창이 아니거나 창이 닫혔다. 이번 회차는 RTO 측정 불가(복원 검증 결과는 유효). 다음 리허설에서 3-0부터 다시 잰다."
+} else {
+    $sw.Stop()
+    $mins = [math]::Round($sw.Elapsed.TotalMinutes, 1)
+    Write-Host ("[RTO] restore-window elapsed = " + $mins + " min (" + $sw.Elapsed.ToString("hh\:mm\:ss") + ")")
+    Write-Host "[RTO] 위 숫자를 세션에 전달하면 5절 표를 갱신한다."
+}
+```
+
+- **성공**: `[RTO] restore-window elapsed = <숫자> min (hh:mm:ss)` 한 줄. **이 숫자를 세션에 그대로 전달**하면 §5 표의 RTO 칸과 게이트 evidence가 채워진다.
+- **변별력**: 창이 바뀌었거나 3-0을 건너뛰었으면 `$sw`가 없어 `[FAIL]`이 나온다 — 0분이나 빈 값이 조용히 나오지 않는다. 이 경우에도 3-3까지의 **복원 성공 판정은 그대로 유효**하다(둘은 별개 사실이다). RTO만 다음 회차로 미룬다.
+- **실패 시 대처**: `[FAIL]`이면 이번엔 RTO 없이 진행하고(3-4 폐기까지 정상 수행), 다음 리허설 때 3-0부터 한 창에서 수행한다.
 
 ### 3-4. scratch 폐기 (+ prod 구성 스냅샷 보관 권장)
 
@@ -302,6 +339,48 @@ Write-Host "EXIT=$LASTEXITCODE"
 - **성공**: `EXIT=0` + `① 잠김 ... OK` / `② 열림 ... OK` 두 줄.
 - **변별력 3종**: 평문을 `.age`로 개명만 했으면 `not_encrypted`, 개인키가 틀리면 `decrypt_failed`, 산출물이 잘렸으면 역시 `decrypt_failed`로 각각 **exit 1**. 그리고 `age`·`pg_restore`가 없으면 **exit 2(판정 불가)** — "검사 못 함"이 "문제 없음"으로 위장되지 않는다.
 - **실패 시 대처**: `EXIT=2`면 도구 부재이므로 §1b의 `winget install FiloSottile.age`를 먼저 하고 재실행한다. `EXIT=1`이면 **그 파일을 반출하지 않는다** — 사유 문면을 그대로 세션에 전달한다.
+### 4-1b. 오프사이트 반출 실행 (ⓐⓑⓒ 충족 후 — 게이트 `G-backup-offsite-move`)
+
+> **왜 이 절이 있는가**: §4-1은 반출 *조건* 3건(ⓐ검증 통과 ⓑ키 분리 ⓒKiki 승인)만 정하고 **반출 자체를 어떻게 하는지는 적지 않았다**. 조건만 있고 절차가 없으면 게이트는 "무엇을 하면 닫히는지"가 불명확한 채로 남는다 — 이 게이트가 22일 대기한 원인 중 하나다. 대상 목적지는 **클라우드 동기화 폴더**(2026-09-02 Kiki 결정).
+
+**반출 대상은 `.dump.age`뿐이다.** `.dump`(평문)·`recipients.txt`는 나가도 되지만 개인키(`whymath-backup-identity.key`)는 **절대 같은 클라우드에 두지 않는다** — 같이 나가면 암호화가 무의미해지고, §4-5 키 분리가 성립하지 않는다. 클라우드 계정이 털리는 사태 하나로 미성년 PII 전량이 열리는 경로를 만들지 않는 것이 이 절의 전부다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
+# 목적지 폴더 경로는 실제 동기화 폴더에 맞춰 아래 한 줄만 바꾼다 (이 블록의 첫 명령 인자 = 사람이 아는 값)
+$Offsite = "$env:USERPROFILE\Google Drive\WhyMath-backups"
+
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+New-Item -ItemType Directory -Path $Offsite -Force | Out-Null
+
+# 평문·개인키가 섞여 나가지 않게 확장자를 명시 필터한다 (와일드카드 * 금지)
+$src = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age"
+if (-not $src) {
+    Write-Host "[FAIL] no .dump.age found - 1b 키쌍 생성과 백업 1회를 먼저 수행한다. 평문 .dump는 반출 대상이 아니다."
+} else {
+    Copy-Item $src.FullName -Destination $Offsite -Force
+    Write-Host ("[OK] copied " + $src.Count + " encrypted artifact(s) to " + $Offsite)
+}
+
+# 자가검증 1: 목적지에 암호화본이 도착했고 크기가 원본과 같은가 (True 여야 함)
+$a = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
+($b -ne $null) -and ($b.Length -eq $a.Length)
+
+# 자가검증 2: 개인키·평문이 목적지로 새지 않았는가 (둘 다 False 여야 함)
+(Test-Path (Join-Path $Offsite "whymath-backup-identity.key"))
+((Get-ChildItem $Offsite -Filter *.dump -ErrorAction SilentlyContinue) -ne $null)
+```
+
+- **성공**: `[OK] copied ...` + 자가검증 1이 `True` + 자가검증 2의 **두 줄이 모두 `False`**.
+- **변별력**: 자가검증 1은 파일 존재가 아니라 **바이트 길이 일치**를 본다 — 동기화 중 잘린 사본은 존재하면서도 열리지 않으므로 `Test-Path`만으로는 구별되지 않는다. 자가검증 2는 이 절이 막으려는 사태(키 동반 유출·평문 반출)를 **직접 검사**한다.
+- **실패 시 대처**: 자가검증 2가 하나라도 `True`면 **그 파일을 목적지에서 즉시 삭제**하고(`Remove-Item`), 클라우드 휴지통에서도 비운다 — 동기화 서비스는 삭제본을 30일 보관하는 경우가 많다.
+- **동기화 완료 확인**: 복사는 로컬 폴더에 넣는 것까지이고, 실제 업로드는 클라우드 클라이언트가 한다. 트레이 아이콘이 "최신 상태"가 될 때까지 확인한다 — **폴더에 파일이 있다 ≠ 클라우드에 올라갔다**.
+
+### 4-1c. 오프사이트 사본 주기적 검증 (반출은 1회가 아니다)
+
+오프사이트 사본은 **회수해서 열어 본 적이 있을 때만** 백업이다. 분기 리허설(§3) 때 최신 백업 대신 **클라우드에서 내려받은 사본**으로 한 번 수행하면 반출 경로 전체(업로드→회수→복호→복원)가 검증된다. 이때도 개인키는 클라우드가 아니라 §1b의 별도 매체에서 가져온다.
+
 2. **외부 도구 반입 금지**: 덤프 파일(또는 그 일부)을 LLM·SaaS·분석 도구에 업로드 금지 — "학생 풀이 데이터를 명시적 동의 없이 학습에 사용 금지" 금기의 백업판.
 3. **보존 상한 = PIPA 파기 창**: 계정 삭제(잊힐 권리) 처리 후에도 그 학생의 데이터는 백업 안에 **최대 `RetentionDays`(기본 14일)** 잔존한다 → 파기 완료 시점은 "라이브 삭제 + RetentionDays 경과" 이후다(`deletion_audit` 기록과 함께 이 창을 파기 안내에 반영). `-RetentionDays`를 늘리면 이 잔존 창도 같이 늘어난다 — 연장은 이 트레이드오프를 인지하고 결정한다.
 4. **리허설 복제본도 동급**: scratch 컨테이너는 실데이터 복제본이다 — 127.0.0.1 바인딩 유지, 리허설 종료 즉시 3-4로 폐기(볼륨 없음 = 잔존물 없음). 리허설 출력 캡처·스크린샷에 학생 행 데이터가 섞이지 않게 행수 집계만 공유한다.
@@ -319,15 +398,15 @@ Write-Host "EXIT=$LASTEXITCODE"
 | 백업 소요 | 수 분 내(현 데이터 규모), 온라인 백업(pg_dump — prod 중단 불요) |
 | 복구 리허설 | 분기 1회, §3 (약 10분) |
 | RPO(허용 데이터 손실) | 마지막 백업 이후 ~ 최대 **24시간**(매일 1회 기준) — WAL/PITR 미도입 한계 |
-| RTO(복구 소요) | **미측정** — 첫 리허설(게이트 `G-backup-restore-rehearsal`) 실측으로 이 칸을 채운다. 추정치를 적지 않는다 |
+| RTO(복구 소요) | **미측정** — 첫 리허설(게이트 `G-backup-restore-rehearsal`) §3-0/§3-3b 실측으로 이 칸을 채운다. 추정치를 적지 않는다. 기입 시 **측정 범위를 함께 적는다**: 리허설이 재는 것은 *백업 파일이 손에 있는 상태에서 복원 완료까지*(=RTO 하한)이며, 실전은 장애 인지·prod 재생성(§3-5)·오프사이트 회수가 더해진다 |
 
 ## §6. 미해결 사항 (정직 기술)
 
-- **오프사이트 사본 부재(잔존)**: 백업이 여전히 prod와 같은 디스크에 있다 — 디스크 동시 소실에 무방비. **다만 막던 원인은 해소됐다**: 반출 조건이던 암호화 절차가 §1b·§4-1a로 착지해, 남은 것은 Kiki의 물리 이동 1회다(게이트 `G-backup-offsite-move`).
+- **오프사이트 사본 부재(잔존)**: 백업이 여전히 prod와 같은 디스크에 있다 — 디스크 동시 소실에 무방비. **막던 원인 2건은 모두 해소됐다**: 반출 조건이던 암호화 절차가 §1b·§4-1a로, 반출 *절차 자체*가 §4-1b(클라우드)로 착지했다. 남은 것은 Kiki의 실행 1회다(게이트 `G-backup-offsite-move`). 목적지는 클라우드 동기화 폴더로 결정(2026-09-02) — 개인키는 동반 반출 금지(§4-5·§4-1b 자가검증 2가 검사).
 - ~~**백업 파일 자체 암호화 미도입**~~ → **해소**(OPS-31): age 공개키 암호화가 백업 스크립트에 착지했고, 실패 시 평문을 남기지 않는 fail-closed다. 계약은 `tests/infra/test_backup_encryption.py`가 동결(뮤테이션 12종 전건 검출).
 - ~~**스케줄 로그온 의존**~~ → **해소**(OPS-31): `register_backup_schedule.ps1`의 S4U + StartWhenAvailable. 등록 스크립트가 되읽기로 실제 `LogonType`을 판정한다.
 - **WAL 아카이빙/PITR 없음**: pg_dump 스냅샷 방식 — 백업 사이 데이터는 유실 범위. OPS-31 범위 밖으로 명시 동결(acceptance ⑤).
-- **RTO 미측정**: §5 참조 — 리허설 게이트가 열리기 전까지 복구 소요는 수치가 없다. 추정으로 채우지 않는다.
+- **RTO 미측정**: §5 참조 — 리허설 게이트가 열리기 전까지 복구 소요는 수치가 없다. 추정으로 채우지 않는다. **2026-09-02 정정**: 종전에는 §3에 시간 측정 스텝이 아예 없어 리허설을 완주해도 이 수치가 산출되지 않았다(절차가 못 내는 것을 게이트가 요구하던 상태) — §3-0·§3-3b 신설로 해소. 측정되는 것은 RTO 하한이며 실전 RTO는 그보다 크다.
 - **암호화가 만든 새 단일 실패점**: 개인키를 잃으면 모든 `.dump.age`가 영구 복구 불가다. 대책은 키 사본뿐이며(§1b), 기계가 강제할 수 없는 구간이다 — 키 사본 존재 여부를 이 런북은 검증하지 못한다.
 - **알림 도달성**: 검사 태스크가 만드는 것은 백업 디렉터리의 파일 하나다 — 누가 그 디렉터리를 볼 때만 보인다. 푸시·메일·중앙 로그는 `OPS-04`(로그 수집·알림) 범위이며 이 PR이 대신하지 않는다.
 - **PS1 실행 검증 부재(구조적)**: `.ps1`은 Kiki 머신에서만 돌아 CI가 실행할 수 없다. 계약 테스트는 **텍스트 동결**이며 "그 문장이 있다"까지만 증명한다 — "의도대로 동작한다"는 §2-1·§4-1a의 자가검증 스텝이 담당한다.
@@ -335,4 +414,5 @@ Write-Host "EXIT=$LASTEXITCODE"
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
+*개정: 2026-09-02 (게이트 2건 실행 준비 — §3-0/§3-3b RTO 측정 스텝 신설(리허설이 게이트 요구 수치를 산출하지 못하던 결함) · §4-1b/§4-1c 클라우드 오프사이트 반출 절차 신설(조건만 있고 절차 부재) · backup_whymath_pg.ps1의 존재하지 않는 절 참조 'section 4-2' → '1b' 정정 · §5 RTO 측정범위 명시 · §6 갱신).*
 *개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*

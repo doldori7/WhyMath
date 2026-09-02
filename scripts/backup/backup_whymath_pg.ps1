@@ -192,7 +192,7 @@ $finalPath = $hostPath
 if (-not $resolvedRecipients) {
     if ($RequireEncryption) {
         Remove-Item $hostPath
-        Fail "-RequireEncryption was given but no recipients file was found (checked -RecipientsFile and $BackupDir\recipients.txt). Plaintext dump deleted. Create the key pair first - see runbook section 4-2."
+        Fail "-RequireEncryption was given but no recipients file was found (checked -RecipientsFile and $BackupDir\recipients.txt). Plaintext dump deleted. Create the key pair first - see runbook section 1b."
     }
     Write-Host "[WARN] backup is NOT encrypted - no recipients file at $BackupDir\recipients.txt."
     Write-Host "[WARN] this artifact contains minor PII in the clear and MUST NOT be copied offsite (runbook 4-1)."
