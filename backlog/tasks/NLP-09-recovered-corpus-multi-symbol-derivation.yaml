@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 2
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/harness/attempt_grading_shadow_report.py
 session: null
-notes: "출처: PB-13 회수 검증(2026-09-01). 회수한 11,446문의 커버리지 기여는 유효하나 62%가 섀도 채점 경로에서 소비되지 않는다 — '11,446문 회수 완료'가 실제보다 크게 읽히지 않도록 계약으로 동결해 뒀다."
-updated: 2026-09-01
+notes: "출처: PB-13 회수 검증(2026-09-01). 회수한 11,446문의 커버리지 기여는 유효하나 62%가 섀도 채점 경로에서 소비되지 않는다 — '11,446문 회수 완료'가 실제보다 크게 읽히지 않도록 계약으로 동결해 뒀다.\n\n[정정 2026-09-02] eos_priority null → P2: P2(판정 이후) 배정 — 회수분 11,446블록 중 7,098건(62%)이 multi_symbol로 섀도 채점 파생 불가. 12월 검증 성립에 필수가 아닌 근거: ⑴기존 main 코퍼스 2,124블록은 파생 성공률 100%로 무영향 — 회수분에 한정된 한계다 ⑵커버리지 기여(성취기준 78→130·초등 9→22)는 파생 여부와 무관하게 이미 실측 확인됐다 ⑶섀도 채점은 관측 경로이지 학생 노출 게이트가 아니다. 다만 '11,446문 회수 완료'가 실제보다 크게 읽히는 것을 막으려고 test_multi_symbol_population_is_frozen이 7,098을 계량기로 동결했다."
+updated: 2026-09-02
