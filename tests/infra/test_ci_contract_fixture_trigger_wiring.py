@@ -131,6 +131,14 @@ _NON_CONTRACT_OUTPUT_EXCLUSIONS: dict[str, str] = {
         "이미지 빌드·기동 스모크 전용. 계약 파일 내용을 판정하지 않으며 ci.yml 주석이 data/ 제외를 "
         "명시적 설계로 선언한다(OPS-03)."
     ),
+    "authoring": (
+        "PB-13 저작 도구 회귀 잡(corpus-authoring) 트리거. 결정론 스켈레톤 생성기·적재 배치의 "
+        "*로직*만 검증하며 최상위 계약 fixture를 읽지 않는다 — 실측(2026-09-01): 이식 테스트 60개와 "
+        "생성기·배치 src 60개 전건에서 access_matrix·notation_contract·notation_support_manifest·"
+        "render_contract·scene_contract·segmentation_contract·visual_style_contract 참조 0/60. "
+        "계약이 바뀌어도 이 잡의 판정은 달라지지 않으므로 트리거 대상이 아니다. "
+        "죽은 플래그가 되지 않는지는 계약 ⑦(test_no_dead_changes_flag)이 별도로 강제한다."
+    ),
     "corpus": (
         "잡 트리거가 아니라 잡 *내부 스텝* 게이트용 보조 플래그(ARCH-21 qa_pipeline). "
         "최상위 계약이 아니라 data/corpus/ 변경을 재는 축이라 계약 매치 대상이 아니다. "
