@@ -43,6 +43,11 @@ _INTENTIONAL_EXCLUSIONS: dict[str, str] = {
         "if: github.event_name == 'schedule' — PR에서 항상 skip. 야간 잡을 머지 게이트로 "
         "선언하는 것은 의미가 어긋난다."
     ),
+    "backend — 전체 스위트 직렬 (교차 파일 오염 탐지·야간)": (
+        "if: github.event_name == 'schedule' — PR에서 항상 skip(위와 같은 사유). 이 잡을 "
+        "required로 걸면 PR 머지 게이트에 직렬 26분이 되돌아와 OPS-58 병렬화가 무의미해진다. "
+        "배선 실재성은 tests/infra/test_backend_serial_nightly_wiring.py가 동결한다."
+    ),
 }
 
 
