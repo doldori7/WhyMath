@@ -74,9 +74,25 @@ def _assert_no_bad_glyphs(candidate: CandidateProblem) -> None:
 class TestPool:
     def test_pool_sizes_and_structural_uniqueness(self) -> None:
         pool = _build_pool()
-        assert len(pool) == 100 + 15 + 15  # trig_definite(5*20) + area(5*3) + distance(5*3).
+        # trig_definite(5*10) + area(5*3) + distance(5*3).
+        # 구 계약은 trig_definite 5*20(순서쌍 전체 lo!=up)이었다 — PR #969 Codex P2로
+        # `lo < up`만 남겨 20→10쌍이 됐다(역순 구간이 "구간 [3*pi/2, 0]"처럼 렌더돼
+        # 묻는 값이 모호했다). C(5,2)=10이 새 계약이다.
+        assert len(pool) == 50 + 15 + 15
         keys = {(s.kind, s.a, s.lower_idx, s.upper_idx) for s in pool}
         assert len(keys) == len(pool)
+
+    def test_no_reversed_intervals_in_any_kind(self) -> None:
+        """**회귀 가드** — 어떤 종류도 역순 구간(lower>upper)을 만들지 않는다.
+
+        PR #969 Codex P2 실측: trig_definite 100문 중 50문이 [3*pi/2, 0] 같은 역순이었다.
+        발문이 "구간"이라 부르면서 방향 적분으로 채점해 묻는 값이 모호해진다. 풀 크기
+        단언(50+15+15)만으로는 *어느* 쌍이 빠졌는지 못 잡으므로 순서 자체를 단언한다.
+        """
+        pool = _build_pool()
+        assert pool, "풀 0건 — 전수 스캔이 대상을 못 찾았다(공허한 통과 방지)"
+        reversed_pairs = [s for s in pool if s.lower_idx >= s.upper_idx]
+        assert not reversed_pairs, f"역순·동일 구간이 {len(reversed_pairs)}건 있다"
 
     def test_answer_matches_independent_recompute(self) -> None:
         for skeleton in _build_pool():
