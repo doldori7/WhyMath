@@ -88,14 +88,33 @@ class TestResetHardNeedsCleanCheck:
         )
         assert any("git status --porcelain" in i for i in issues)
 
-    def test_preceding_clean_check_in_same_block_passes(self, tmp_path: pathlib.Path) -> None:
+    def test_clean_check_in_the_same_block_is_NOT_protection(self, tmp_path: pathlib.Path) -> None:
+        """초판이 이 형태를 축복했다 — codex P1 지적 수용 후 뒤집었다.
+
+        붙여넣으면 PowerShell이 status를 찍고 **출력과 무관하게** 곧바로 reset을
+        실행한다. 사람이 볼 틈이 없으므로 보호가 아니다. 오히려 "확인했다"는
+        착각만 준다.
+        """
         issues = guard.check_runbook_markdown(
             _md(tmp_path, _fence("git status --porcelain\ngit reset --hard origin/main"))
+        )
+        assert any("차단력 있는" in i for i in issues)
+
+    def test_fail_closed_conditional_in_same_block_passes(self, tmp_path: pathlib.Path) -> None:
+        """같은 블록이어도 비어있지 않을 때 중단하면 보호다 — 대안 경로를 막지 않는다."""
+        issues = guard.check_runbook_markdown(
+            _md(
+                tmp_path,
+                _fence(
+                    'if (git status --porcelain) { throw "작업 트리가 비어 있지 않다" }\n'
+                    "git reset --hard origin/main"
+                ),
+            )
         )
         assert issues == []
 
     def test_clean_check_in_earlier_block_passes(self, tmp_path: pathlib.Path) -> None:
-        """런북은 블록을 나눠 사람에게 확인을 시킨다 — 문서 순서로 인정한다."""
+        """런북은 블록을 나눠 사람에게 확인을 시킨다 — 그 형태만 보호로 인정한다."""
         body = (
             _fence("git status --porcelain")
             + "\n확인 후:\n\n"
@@ -147,6 +166,62 @@ class TestPythonPipeNeedsUtf8:
     def test_real_redirect_is_still_caught(self, tmp_path: pathlib.Path) -> None:
         """오탐을 줄이느라 진짜 리다이렉트까지 놓치면 규칙이 죽는다."""
         issues = guard.check_runbook_markdown(_md(tmp_path, _fence("python x.py > out.txt")))
+        assert any("UTF-8" in i for i in issues)
+
+
+class TestBlockquotedFences:
+    """① 인용문 안의 펜스도 붙여넣어 실행된다 — 못 보면 가드가 공허하게 통과한다.
+
+    실측(2026-09-01): 런북 §7 롤백 절차가 전부 인용문 안에 있었고 그 안에
+    `git reset --hard`가 있는데 가드가 한 줄도 보지 못했다. 대상을 하나도 못 찾은
+    전수 가드는 "위반 0건"과 "검사 못 함"이 같은 화면을 낸다.
+    """
+
+    def test_blockquoted_fence_is_parsed(self, tmp_path: pathlib.Path) -> None:
+        body = "> 설명:\n>\n> ```powershell\n> git push origin main\n> ```\n"
+        assert len(guard.iter_powershell_blocks(body)) == 1
+
+    def test_violation_inside_blockquote_is_caught(self, tmp_path: pathlib.Path) -> None:
+        body = "> ```powershell\n> git push origin main\n> ```\n"
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("보호 브랜치 직접 push" in i for i in issues)
+
+    def test_nested_blockquote_prefix_is_stripped(self, tmp_path: pathlib.Path) -> None:
+        body = ">> ```powershell\n>> git reset --hard origin/main\n>> ```\n"
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("차단력 있는" in i for i in issues)
+
+
+class TestUtf8MustBeEnabling:
+    """③ 토큰 등장이 아니라 **활성화하는 대입**이어야 한다 (codex P2)."""
+
+    def test_disabling_assignment_is_not_protection(self, tmp_path: pathlib.Path) -> None:
+        """`="0"`이 보호로 계상되면 정확히 이 규칙이 막으려는 오류가 그대로 난다."""
+        body = _fence('$env:PYTHONUTF8="0"') + "\n" + _fence('python x.py | Select-String "a"')
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("UTF-8" in i for i in issues)
+
+    def test_mention_in_a_comment_is_not_protection(self, tmp_path: pathlib.Path) -> None:
+        body = (
+            _fence("# PYTHONUTF8 을 설정해야 한다")
+            + "\n"
+            + _fence('python x.py | Select-String "a"')
+        )
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("UTF-8" in i for i in issues)
+
+    def test_enabling_assignment_still_passes(self, tmp_path: pathlib.Path) -> None:
+        """좁히다가 정상 형태까지 막으면 규칙이 죽는다."""
+        body = _fence('$env:PYTHONUTF8="1"') + "\n" + _fence('python x.py | Select-String "a"')
+        assert guard.check_runbook_markdown(_md(tmp_path, body)) == []
+
+    def test_ioencoding_value_must_be_utf8(self, tmp_path: pathlib.Path) -> None:
+        body = (
+            _fence('$env:PYTHONIOENCODING="cp949"')
+            + "\n"
+            + _fence('python x.py | Select-String "a"')
+        )
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
         assert any("UTF-8" in i for i in issues)
 
 

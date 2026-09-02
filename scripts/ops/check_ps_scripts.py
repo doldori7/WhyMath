@@ -150,82 +150,103 @@ def check_call_before_def(code: str) -> list[str]:
 # .ps1과 규칙을 나눈 이유: .ps1은 파일 하나가 완결 절차지만, 런북은 **여러 블록이
 # 순서대로 사람에게 건네지는 절차**다. 그래서 선행 스텝의 존재를 *문서 순서*로 본다.
 
-_FENCE_RE = re.compile(r"^[ \t]*```[ \t]*(powershell|pwsh|ps1)[ \t]*$", re.I | re.M)
-_FENCE_END_RE = re.compile(r"^[ \t]*```[ \t]*$", re.M)
+_FENCE_OPEN_RE = re.compile(r"^[ \t]*```[ \t]*(powershell|pwsh|ps1)[ \t]*$", re.I)
+_FENCE_CLOSE_RE = re.compile(r"^[ \t]*```[ \t]*$")
+# 마크다운 인용문 접두 — `> `, `>> ` 등. 인용문 안의 펜스도 붙여넣어 실행된다.
+_BLOCKQUOTE_RE = re.compile(r"^[ \t]*(?:>[ \t]?)+")
 
 # 보호 브랜치 직접 push — origin/upstream 어느 리모트든 main·master 지목이면 거부된다.
 _PUSH_PROTECTED_RE = re.compile(r"\bgit\s+push\b[^\n|;]*?\b(main|master)\b")
 # 선행 확인 스텝
 _CLEAN_CHECK_RE = re.compile(r"\bgit\s+status\b[^\n]*--porcelain")
 _RESET_HARD_RE = re.compile(r"\bgit\s+reset\b[^\n]*--hard")
-# UTF-8 강제 — 셋 중 하나라도 있으면 지시된 것으로 본다.
-_UTF8_SETUP_RE = re.compile(
-    r"PYTHONUTF8|PYTHONIOENCODING|\[Console\]::OutputEncoding|chcp\s+65001", re.I
+# 같은 블록에서 fail-closed로 중단시키는 형태 (조건문 + 중단)
+_FAIL_CLOSED_RE = re.compile(r"\bif\b[^\n]*porcelain|\b(throw|exit|return)\b", re.I)
+
+# UTF-8 강제 — **활성화하는 대입**만 인정한다. 단순 토큰 등장(주석·설명·`="0"`)은
+# 보호가 아니다: `$env:PYTHONUTF8="0"`가 뒤따르는 파이프를 전부 보호로 표시하면
+# 정확히 이 규칙이 막으려는 UnicodeEncodeError가 그대로 난다(codex P2 지적).
+_UTF8_ENABLE_RES = (
+    re.compile(r"\$env:PYTHONUTF8\s*=\s*[\"\']?1[\"\']?"),
+    re.compile(r"\$env:PYTHONIOENCODING\s*=\s*[\"\']?utf-?8", re.I),
+    re.compile(r"\[Console\]::OutputEncoding\s*=[^\n]*UTF8", re.I),
+    re.compile(r"\bchcp\s+65001\b"),
 )
 # python 출력이 콘솔을 벗어나는 형태 (파이프 / 리다이렉트).
 #
 # 리다이렉트는 `\s>` 로만 잡는다 — 앞이 공백이 아닌 `>`는 대개 `<플레이스홀더>`의 닫는
 # 꺾쇠다(실측 오탐: `--until <파일럿종료YYYY-MM-DD> --shadow-ledger ...`가 리다이렉트로
-# 잡혔다). 오탐이 있는 가드는 사람이 끄게 만들므로 좁히는 쪽을 택한다 — 놓치는 형태
-# (`>`를 공백 없이 붙여 쓴 리다이렉트)는 이 저장소 런북 관례에 없다.
+# 잡혔다). 오탐이 있는 가드는 사람이 끄게 만들므로 좁히는 쪽을 택한다.
 _PY_PIPED_RE = re.compile(r"\bpython[0-9.]*\b[^\n]*?(\||\s>+\s*\S)")
 
 
+def _dequote(line: str) -> str:
+    """마크다운 인용문 접두를 벗긴다 — 인용문 안의 펜스도 실행 대상이다."""
+    return _BLOCKQUOTE_RE.sub("", line, count=1)
+
+
 def iter_powershell_blocks(text: str) -> list[tuple[int, str]]:
-    """마크다운에서 powershell 코드펜스를 (시작 줄번호, 본문)로 뽑는다."""
+    """마크다운에서 powershell 코드펜스를 (시작 줄번호, 본문)로 뽑는다.
+
+    인용문(`> `) 안의 펜스도 대상이다 — 실측(2026-09-01): 런북 §7의 롤백 절차가 전부
+    인용문 안에 있었고, 그 안에 `git reset --hard`가 있는데 가드가 **한 줄도 보지
+    못했다**. 대상을 못 찾은 전수 가드는 공허하게 통과한다.
+    """
+    lines = text.split("\n")
     blocks: list[tuple[int, str]] = []
-    for m in _FENCE_RE.finditer(text):
-        body_start = m.end() + 1
-        end = _FENCE_END_RE.search(text, body_start)
-        if end is None:  # 닫히지 않은 펜스 — 본문 끝까지
-            body, stop = text[body_start:], len(text)
+    i = 0
+    while i < len(lines):
+        if _FENCE_OPEN_RE.match(_dequote(lines[i])):
+            body: list[str] = []
+            start = i + 1
+            j = start
+            while j < len(lines) and not _FENCE_CLOSE_RE.match(_dequote(lines[j])):
+                body.append(_dequote(lines[j]))
+                j += 1
+            blocks.append((i + 1, "\n".join(body)))
+            i = j + 1
         else:
-            body, stop = text[body_start : end.start()], end.start()
-        line_no = text.count("\n", 0, m.start()) + 1
-        blocks.append((line_no, body))
-        del stop
+            i += 1
     return blocks
 
 
 def check_runbook_markdown(path: pathlib.Path) -> list[str]:
     """런북 마크다운 1건 — 코드펜스를 **문서 순서**로 훑는다.
 
-    선행 스텝(UTF-8 강제·청결 확인)은 위험 명령보다 *앞선 줄*에 있어야 인정한다.
-    블록 경계가 아니라 줄 위치로 보는 이유: 같은 블록 안에서 설정하고 바로 쓰는 것도
-    정상이고(붙여넣기 한 번), 반대로 지운 뒤에 확인하는 것은 순서가 뒤바뀐 것이라
-    보호가 아니기 때문이다.
+    선행 스텝(UTF-8 강제)은 위험 명령보다 *앞선 줄*에 있어야 인정한다. 청결 확인은
+    더 엄격하다 — **다른(앞선) 펜스**에 있거나 같은 펜스라면 fail-closed 중단이
+    있어야 한다. 같은 펜스의 `status` → `reset --hard`는 보호가 아니다: 붙여넣으면
+    PowerShell이 status를 찍고 **결과와 무관하게** 곧바로 reset을 실행한다
+    (codex P1 지적 — 초판은 이 형태를 테스트로 축복하고 있었다).
     """
     text = path.read_text(encoding="utf-8", errors="replace")
     blocks = iter_powershell_blocks(text)
     if not blocks:
         return []
 
-    # (전역 줄번호, 원문 줄, 코드 줄) — 코드 줄은 주석·문자열이 지워진 판
-    rows: list[tuple[int, str, str]] = []
-    for line_no, body in blocks:
+    rows: list[tuple[int, str, str, int]] = []  # (줄번호, 원문, 코드, 블록 index)
+    for bi, (line_no, body) in enumerate(blocks):
         code_lines = strip_noncode(body).split("\n")
         for off, raw_line in enumerate(body.split("\n")):
             code_line = code_lines[off] if off < len(code_lines) else ""
-            rows.append((line_no + 1 + off, raw_line, code_line))
+            rows.append((line_no + 1 + off, raw_line, code_line, bi))
 
-    # 선행 스텝이 처음 등장하는 위치 (없으면 무한대)
-    def first(pred) -> float:
-        for idx, (_ln, raw, code) in enumerate(rows):
-            if pred(raw, code):
-                return idx
-        return float("inf")
+    def _utf8_enabled(raw: str) -> bool:
+        head = raw.split("#", 1)[0]  # 주석은 실행되지 않는다
+        return any(r.search(head) for r in _UTF8_ENABLE_RES)
 
-    utf8_at = first(lambda raw, code: bool(_UTF8_SETUP_RE.search(raw)))
-    clean_at = first(lambda raw, code: bool(_CLEAN_CHECK_RE.search(code)))
+    utf8_at = next((i for i, r in enumerate(rows) if _utf8_enabled(r[1])), float("inf"))
+    # 청결 확인이 등장한 **블록 index** — 같은 블록은 인정하지 않으므로 블록 단위로 본다.
+    clean_blocks = {r[3] for r in rows if _CLEAN_CHECK_RE.search(r[2])}
+    failclosed_blocks = {
+        bi for bi, (_ln, body) in enumerate(blocks) if _FAIL_CLOSED_RE.search(strip_noncode(body))
+    }
 
     issues: list[str] = []
-
-    # 구조 검사 — 붙여넣어 실행되므로 블록마다 괄호 짝이 맞아야 한다.
     for line_no, body in blocks:
         issues += [f"L{line_no}+ {m}" for m in check_balance(strip_noncode(body))]
 
-    for idx, (ln, _raw, code) in enumerate(rows):
-        # ④ 보호 브랜치 직접 push
+    for idx, (ln, _raw, code, bi) in enumerate(rows):
         m = _PUSH_PROTECTED_RE.search(code)
         if m:
             issues.append(
@@ -234,15 +255,16 @@ def check_runbook_markdown(path: pathlib.Path) -> list[str]:
                 "GH013으로 거부된다(2026-09-01 실측). 브랜치 push + PR로 바꾼다"
             )
 
-        # ⑤ reset --hard 앞의 청결 확인
-        if _RESET_HARD_RE.search(code) and clean_at > idx:
-            issues.append(
-                f"L{ln}: `git reset --hard` 앞에 `git status --porcelain` 확인이 없다 "
-                "— 미커밋 작업분을 무증상으로 지운다(2026-08-10 유형). "
-                "빈 출력을 눈으로 확인하는 스텝을 앞에 둔다"
-            )
+        if _RESET_HARD_RE.search(code):
+            earlier_clean = any(b < bi for b in clean_blocks)
+            if not earlier_clean and bi not in failclosed_blocks:
+                issues.append(
+                    f"L{ln}: `git reset --hard` 앞에 **차단력 있는** 청결 확인이 없다 "
+                    "— 같은 블록의 `git status --porcelain`은 보호가 아니다(붙여넣으면 "
+                    "출력과 무관하게 곧바로 reset이 실행된다). 앞선 블록으로 분리해 사람이 "
+                    "보게 하거나, 같은 블록이라면 비어있지 않을 때 중단하는 조건을 둔다"
+                )
 
-        # ⑥ python 출력의 파이프·리다이렉트 ↔ UTF-8 강제
         if _PY_PIPED_RE.search(code) and utf8_at > idx:
             issues.append(
                 f"L{ln}: python 출력을 파이프·리다이렉트하는데 앞서 UTF-8 강제가 없다 "
