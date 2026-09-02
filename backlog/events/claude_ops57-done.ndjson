@@ -1,0 +1,1 @@
+{"ts": "2026-09-02T02:41:29+00:00", "actor": "claude/ops57-done", "action": "done", "id": "OPS-57-ps-guard-markdown-fenced-blocks", "artifacts": ["#972", "scripts/ops/check_ps_scripts.py (런북 코드펜스 + 규칙 3종)", "tests/infra/test_ps_guard_runbook_rules.py (28건 변별력 동결)", "docs/reviews/runbook_guard_evaluation_2026-09-01.md (정직한 평가 — 4/7 검출·가드 자신의 결함 3건)"]}
