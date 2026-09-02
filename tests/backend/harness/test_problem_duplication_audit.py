@@ -853,7 +853,7 @@ def test_real_corpus_snapshot_t1_resolved_and_t2_zero_pairs_after_qual02() -> No
     demo_pool = pda.demo_pool_corpora()
     report = pda.build_report(loads, demo_pool=demo_pool, demo_pool_status="파일확인됨")
 
-    assert report.total_problems == 14084
+    assert report.total_problems == 14034
     assert len(report.corpora) == 37
 
     # T1 — 해소됨.

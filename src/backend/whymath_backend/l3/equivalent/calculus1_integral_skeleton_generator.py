@@ -207,6 +207,13 @@ def _build_pool(kind: Calculus1IntegralKind | None = None) -> tuple[_Skeleton, .
                 c = rng.choice(_BC_RANGE)
                 lower = rng.choice(_BOUND_RANGE)
                 upper = rng.choice(_BOUND_RANGE)
+            if kd == "antiderivative":
+                # 발문이 "F(0) = k인 F(x)의 F(upper)"를 묻는다 → 적분 하한은 **0이어야 한다**.
+                # 임의 lower를 쓰면 k + ∫(lower, upper)를 계산해 정답이 틀린다(PR #969 Codex P1).
+                # 실측: 이 corpus 100문 중 84문이 lower≠0이었고 첫 레코드는 F(-2)를 묻고 -4부터
+                # 적분해 260/3을 답으로 냈다 — SymPy 검산 결과 올바른 답은 -32/3이다.
+                # 해설문("F(0)에 x=0부터 x=m까지의 정적분을 더한 값")은 처음부터 옳았다.
+                lower = 0
             if lower >= upper:
                 continue
             k = rng.choice(_K_RANGE) if kd == "antiderivative" else 0

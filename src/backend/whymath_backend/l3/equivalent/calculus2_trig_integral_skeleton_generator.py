@@ -154,7 +154,7 @@ class _Skeleton:
 def _build_pool(kind: Calculus2TrigIntegralKind | None = None) -> tuple[_Skeleton, ...]:
     """결정론 뼈대 풀 — kind별 A·경계점 쌍 열거·구조 키 자연 유일·고정 셔플.
 
-    trig_definite는 5점 전체(순서쌍, lower!=upper, 부호 무관) 조합, trig_area·
+    trig_definite는 5점 중 lower<upper 조합(PR #969 Codex P2로 역순 쌍 제거), trig_area·
     trig_distance는 [0,pi] 안(경계점 0·1·2 중 lower<upper)만 허용(sin(x)>=0 구성 보장).
     """
     kinds: tuple[Calculus2TrigIntegralKind, ...] = (
@@ -164,7 +164,12 @@ def _build_pool(kind: Calculus2TrigIntegralKind | None = None) -> tuple[_Skeleto
     for kd in kinds:
         if kd == "trig_definite":
             points = range(5)
-            pairs = [(lo, up) for lo in points for up in points if lo != up]
+            # `lo < up`만 — 발문이 "구간 [lo, up]에서의 정적분"이라 역순 쌍은 표현이 깨진다.
+            # 방향 있는 적분(∫_a^b = -∫_b^a) 자체는 정당하나, "구간"이라고 부르면서 방향 적분으로
+            # 채점하면 묻는 값이 모호해진다(PR #969 Codex P2). 실측: 이 corpus의 구간 표기 100문
+            # 중 50문이 [3*pi/2, 0] 같은 역순이었다. 같은 파일의 trig_area·trig_distance가
+            # 이미 `lo < up` 관례를 쓰므로 그쪽으로 통일한다.
+            pairs = [(lo, up) for lo in points for up in points if lo < up]
         else:
             pairs = [
                 (lo, up)

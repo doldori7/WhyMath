@@ -17,5 +17,13 @@
     "note": "미검수 — 노출 4단(게이트 통과→코퍼스 편입→노출 적격→실노출) 중 *코퍼스 편입*까지만 도달했다. 표본 검수 미실시이므로 노출 적격이 아니다.",
     "sample_review": "없음(0건)",
     "evidence": "없음 — 검수 전까지 is_published=False 유지"
+  },
+  "defect_fix": {
+    "pr": "#969",
+    "findings": [
+      "Codex P1 — antiderivative 적분 하한이 0이 아니어서 정답 오류 84/100",
+      "Codex P2 — trig_definite 역순 구간 50/100"
+    ],
+    "fixed": "생성기 수정 후 재생성 · 재검증 결함 0/0 · SymPy 독립 검산 일치"
   }
 }
