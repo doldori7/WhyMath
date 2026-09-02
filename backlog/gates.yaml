@@ -153,6 +153,15 @@ gates:
     remind_after_days: 3
     evidence: "2026-08-31 전곳 확보 — license_snapshot_coverage.py 20/20 · exit 0(기계 판정). 경위: 1차(08-30 원격 세션) 6/20(egress 403 14곳) → 2차(08-31 Kiki 머신) 19/20(신규 13곳) → 3차 siyavula URL 정정 후 재수집 1/1 성공(run_id=20260831T013601Z-8daf15·sha256=45723a589bd0a69d). 잔여 1곳이던 siyavula는 egress가 아니라 URL 결함이었고(구 /terms 404), 홈페이지 href 스캔으로 https://www.siyavula.com/info/terms-and-conditions 를 발견해 카탈로그 정정(#918). 내용 검증(PR #918 리뷰 P2 기준 — 키워드 매칭≠라이선스 근거): 스냅샷 158,035바이트에서 creative commons×6·license류×24·copyright×9·terms and conditions×26 확인, 원문에 'licensed under a Creative Commons Attribution Only License'(=CC BY) 부여 조항 실재. 단서: 해당 페이지는 'Some material'·'Only material that is clearly marked'로 CC BY 적용 범위를 명시 표기 자료로 한정한다 — 사이트 전체가 CC BY가 아님(LIC-05로 licensing_safety.md 반영 등재 — LIC-04는 타 세션이 선점해 CLI가 번호를 재배정했다). 성공 기준 2중(coverage=0 AND LICENSE_EVIDENCE≥1) 모두 충족."
     notes: ""
+  - id: G-merge-queue-or-strict-relax
+    title: "머지 경합 구조 해소 결정 — GitHub merge queue 도입 또는 'up to date' 요구 해제 (저장소 관리자 설정·OPS-58 ⑤)"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-01
+    remind_after_days: 7
+    evidence: null
+    notes: "[문제] PR 하나를 머지하는 데 재동기화가 4회 필요했다(2026-08-31 PR #935 실측).\n  원인은 실패가 아니라 구조적 경합이다:\n    ⓐ 브랜치 보호에 `Require branches to be up to date before merging`이 켜져 있다\n       (.github/branch-protection-setup.md:52). main이 움직이면 무조건 재동기화 → CI 재시작.\n    ⓑ 그 게이트가 29분 41초다. main은 지금 15~30분마다 전진한다(병렬 세션 다수).\n  30분짜리 게이트가 15~30분 간격의 전진을 이길 수 없다 — 산술적으로 진다.\n\n[이미 한 것 — OPS-58] ⓑ를 줄였다. pytest 병렬화로 실측 1.60배(직렬 100.1s → -n 4 62.7s,\n  커버리지 총계 완전 일치). CI 잡 예상 29분 41초 → 약 19~20분. 경합 *창*은 줄지만\n  경합 자체는 남는다 — main이 20분 안에 또 전진하면 같은 일이 반복된다.\n\n[결정이 필요한 것 — ⓐ] 셋 중 하나. 전부 저장소 관리자 설정이라 세션이 못 바꾼다.\n  1) GitHub **merge queue** 도입 (권장) — 이 문제를 풀려고 만들어진 기능이다. 큐가\n     PR을 main 최신 위에 순서대로 얹어 검증하고 통과분만 넣는다. up-to-date 보장을\n     유지하면서 사람이 재동기화할 필요가 없어진다. 비용: ci.yml에 `merge_group` 트리거\n     추가 + 브랜치 보호에 큐 활성화. 계약(required checks)은 그대로 유지된다.\n  2) `Require branches to be up to date` 해제 — 즉시 경합이 사라지지만, main의 최신\n     변경과 이 PR의 조합이 검증되지 않은 채 들어간다. 이번 세션에서 그 검증이 실제로\n     일한 사례가 있다(#931이 ReviewStatus에 quarantined를 추가하자 #935의 단언이 red —\n     동기화하지 않았으면 머지 후 main에서 터졌다). **비권장** 근거가 실측으로 있다.\n  3) 현행 유지 + OPS-58 단축만으로 감내 — 경합 빈도는 줄지만 0이 되진 않는다.\n\n[판단 재료] 2)를 배제할 근거가 이번 세션에 실측으로 남았다는 점이 핵심이다. 즉 선택은\n  실질적으로 1) vs 3)이고, 1)은 설정 작업 1회로 반복 비용을 없앤다.\n\n[세션이 대행 가능한 범위] 결정이 1)이면 ci.yml의 `merge_group` 트리거 추가는 세션이\n  PR로 낼 수 있다. 브랜치 보호에서 큐를 켜는 것만 Kiki 작업이다."
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1~3단계 완료(2026-08-31 원본 볼륨 복귀·stamp 확정 a9b8c7d6e5f4·백업 확보). 4단계 실행 대기: stamp→upgrade head→운영자 부트스트랩→content_admin grant — 복붙 블록은 notes에 전문 수록"
     kind: human

@@ -335,9 +335,24 @@ jobs:
       - name: Import contracts (import-linter — 7계층 단방향)
         run: lint-imports
 
+      # OPS-58 — 워커 병렬화. 이 잡 29분 41초 중 이 스텝이 26분 53초(90%)였다(run
+      # 33387572394 스텝 타임스탬프 실측). 나머지 전 스텝 합이 3분 미만이라 여기 말고는
+      # 줄일 곳이 없다. `--dist loadfile`(같은 파일 = 같은 워커)은 이 저장소의 순서 의존
+      # 전역 오염 이력(OPS-06/07/09 `db.session._engine`)을 고려한 보수적 선택이면서
+      # 실측상 기본 `load`보다 오히려 빠르다(32.0s vs 41.4s) — 안전과 속도가 같은 방향.
+      #
+      # **실 CI A/B로 검증했다**(이 변경은 런타임 코드를 0줄 바꾸므로 base 커밋과 측정
+      # 대상이 같다 — 통제 대조군이 성립한다):
+      #   직렬 main 1e2e341d(run 33454551710) 1585.46s / 11268 passed·323 skipped·1 xfailed
+      #   병렬 이 스텝  (run 33455108087)      855.75s / 11268 passed·323 skipped·1 xfailed
+      # 아래 계층별 커버리지 게이트가 이 산출물을 읽으므로 PASS 여부가 아니라 **수치까지**
+      # 대조했고 다섯 계층 전부 한 자리도 다르지 않았다(api 3972/4122 · l1 3777/4334 ·
+      # l2 1348/1376 · l3 9100/9747 · l4 3984/4170). 어긋났다면 게이트가 통과하면서도
+      # 틀린 판정을 냈을 자리다.
       - name: Pytest (with coverage)
         run: |
           pytest \
+            -n auto --dist loadfile \
             --cov=whymath_backend \
             --cov-report=term \
             --cov-report=xml \
@@ -1391,3 +1406,53 @@ jobs:
       # 마이그레이션·테스트 스텝을 전부 `python -m` 형태로 통일해 한 인터프리터로 못 박는다.
       - name: 앵커 A4 생성 E2E 관통 (EOS-64 상시화 — hermetic)
         run: python -m pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
+
+  # ── OPS-58 후속 — 병렬화가 약화시킨 탐지력의 복구 (PR #944 Codex P2 지적 수용) ──────
+  # `backend — lint·type·test`는 `-n auto --dist loadfile`로 돈다. `loadfile`은 *같은 파일*의
+  # 테스트만 한 워커에 묶을 뿐 **파일이 다르면 다른 프로세스**다. 그래서 파일 A가 프로세스
+  # 전역을 남기고 파일 B가 그 전역의 기본값을 단언하는 형태의 오염은, 두 파일이 서로 다른
+  # 워커에 배정되는 순간 **격리되어 보이지 않는다** — 직렬 전체 스위트라면 터졌을 빨강이
+  # 초록으로 통과한다. AGENTS.md가 "전체 스위트 통과만 회귀 없음의 근거 · 부분 실행은 순서
+  # 의존 오염을 못 본다"고 못 박은 바로 그 사각이며, xdist 워커는 구조적으로 그 '부분 실행'이다.
+  # (실사고 = OPS-06/07: `db.session._engine` 전역이 파일 경계를 넘어 다른 파일의 단언을 깼고
+  # 파일 단위 실행에서는 재현되지 않았다. 그 특정 전역은 conftest의 `_guard_db_session_global_leak`
+  # 가 테스트 *자신의* teardown에서 잡으므로 xdist에서도 탐지력이 유지되지만, 가드가 없는
+  # 다른 전역은 그렇지 않다 — 이 잡이 그 나머지를 담당한다.)
+  #
+  # 해법은 병렬화를 되돌리는 것이 아니라 **탐지 축을 옮기는 것**이다: PR 경로는 병렬로 빠르게
+  # (26:25 → 14:15) 두고, 직렬 전건은 야간에 돌려 교차 파일 오염을 잡는다. 야간이라 머지
+  # 경합에 시간을 되돌려주지 않으면서 "직렬 전체 스위트 통과" 증거는 매일 갱신된다.
+  # 커버리지는 켜지 않는다 — 이 잡의 목적은 커버리지 판정이 아니라 오염 탐지이고, 계층
+  # 커버리지 게이트는 PR 잡이 이미 상시 집행한다(수치가 직렬과 동일함은 PR #944에서 실측).
+  backend-serial-nightly:
+    name: backend — 전체 스위트 직렬 (교차 파일 오염 탐지·야간)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'schedule'
+    defaults:
+      run:
+        working-directory: src/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          # 교차계층 거버넌스 테스트가 data_pipeline(L1)을 import → 백엔드 잡에도 설치.
+          python -m pip install -e ../data-pipeline
+
+      # `-p xdist.plugin -n0`이 아니라 **플래그 자체를 주지 않는다** — addopts에 `-n`이 없으므로
+      # 이 호출은 단일 프로세스 직렬이다. 순서는 pytest-randomly가 매 회차 무작위화하며, 실패
+      # 시 실행 헤더의 `Using --randomly-seed=N`을 되먹이면 그 순서가 재현된다.
+      # 실행기 단독 호출 금지(CLAUDE.md) — `python -m pytest`로 인터프리터를 못 박는다.
+      - name: Pytest (전체 스위트·직렬·단일 프로세스 — 순서 의존 오염 노출)
+        run: python -m pytest
