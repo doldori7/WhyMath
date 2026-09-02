@@ -361,11 +361,8 @@ jobs:
       - name: Pytest (with coverage)
         run: |
           pytest \
-<<<<<<< HEAD
             -m "not corpus_authoring" \
-=======
             -n auto --dist loadfile \
->>>>>>> origin/main
             --cov=whymath_backend \
             --cov-report=term \
             --cov-report=xml \
