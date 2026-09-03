@@ -1,6 +1,6 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: EOS-81-cl-wiring-closed-loop-e2e
-title: "CL-WIRING ② 폐쇄루프 E2E 뒷반쪽 연장 — attempt 제출→영속→mastery 갱신→후속 추천 반영을 한 테스트에서 증명 (G2·G4 공통 선결)"
+title: "CL-WIRING ② 폐쇄루프 E2E 뒷반쪽 연장 — 코치 완료→attempt 적재→mastery 갱신→후속 추천 변화를 한 테스트에서 증명 (G2·G4 공통 선결)"
 track: math-completion
 stage: S3
 subject: math

@@ -1,6 +1,6 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: MOB-20-cl-wiring-attempt-submission
-title: "CL-WIRING ① Flutter attempt 제출 배선 — POST /v1/me/attempts 클라 호출 착지 (서버 루프는 이미 닫혀 있다)"
+title: "CL-WIRING ① 코치 완료 신호 3필드 클라 소비 — problem_complete·awaiting_reflection·completed_attempt_id (S3-32의 미이행된 클라 절반). ※POST /v1/me/attempts 배선 아님 — 계약상 금지·이중 적재"
 track: math-completion
 stage: S3
 subject: math
