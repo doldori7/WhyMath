@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: in_progress
+status: blocked
 priority: 1
 eos_priority: P1
 owner: claude
@@ -24,6 +24,6 @@ paths:
   - ".github/workflows/**"
   - "docs/reviews/**"
   - docs/architecture/deployment_cd_runbook.md
-session: claude/status-f9lp65
-notes: "발견 경위(2026-09-01 실측): PR #952 가 CI 16잡 green 을 3회 확보하고도 머지되지 못했다. 1라운드는 미해결 Codex 스레드(정당한 룰·처리 완료), 2·3라운드는 전부 mergeable_state=behind 였다 — CI 가 도는 약 30분 사이에 main 에 #963·#964(2라운드), #957(3라운드)이 착지했다. auto-merge 를 켜도 해소되지 않는다: auto-merge 는 브랜치를 자동 최신화하지 않으므로 체크 완료 시점에 base 가 앞서 있으면 그대로 대기한다. 병목은 backend 잡 약 29분이며 병렬 세션이 활발할수록 패배 확률이 오른다 — 확률이 아니라 구조. pr931 근본원인 문서 §2 가 같은 경합을 기술했으나 그 대책(HARN-46 events.ndjson 샤딩)은 dirty(파일 충돌) 축이라 이 behind 축에는 작동하지 않는다. Kiki 판단(2026-09-01): 대안이었던 'require branches to be up to date 해제'는 오래된 base 에서 통과한 CI 로 머지를 허용해 보호를 낮추므로 채택하지 않고, merge queue 를 택한다. ⚠ ruleset 변경은 리포 관리자 권한이 필요하므로 착수 세션은 Kiki 실행 명령 동봉이 필요할 수 있다(CLAUDE.md Kiki 머신 안내 규칙).\n\n[정정 2026-09-03] acceptance ②③이 저장소 관리자 설정(ruleset)을 요구한다 — 세션 권한 밖. 게이트 notes가 세션 대행 범위를 '①ci.yml merge_group 트리거는 세션이 PR로'로 이미 분리했으므로, 그 경계를 대장에 집행한다(산문 선행은 selector가 읽지 않는다 — HARN-52 축).\n\n[정정 2026-09-03] ② '큐가 사용할 체크를 required 집합과 일치'가 성립하려면 라이브 required 집합이 먼저 옳아야 한다. 미강제 10건 상태에서 큐를 켜면 6건만 검증하는 큐가 된다 — 보호를 유지하려는 이 태스크의 취지와 반대 결과."
+session: null
+notes: "발견 경위(2026-09-01 실측): PR #952 가 CI 16잡 green 을 3회 확보하고도 머지되지 못했다. 1라운드는 미해결 Codex 스레드(정당한 룰·처리 완료), 2·3라운드는 전부 mergeable_state=behind 였다 — CI 가 도는 약 30분 사이에 main 에 #963·#964(2라운드), #957(3라운드)이 착지했다. auto-merge 를 켜도 해소되지 않는다: auto-merge 는 브랜치를 자동 최신화하지 않으므로 체크 완료 시점에 base 가 앞서 있으면 그대로 대기한다. 병목은 backend 잡 약 29분이며 병렬 세션이 활발할수록 패배 확률이 오른다 — 확률이 아니라 구조. pr931 근본원인 문서 §2 가 같은 경합을 기술했으나 그 대책(HARN-46 events.ndjson 샤딩)은 dirty(파일 충돌) 축이라 이 behind 축에는 작동하지 않는다. Kiki 판단(2026-09-01): 대안이었던 'require branches to be up to date 해제'는 오래된 base 에서 통과한 CI 로 머지를 허용해 보호를 낮추므로 채택하지 않고, merge queue 를 택한다. ⚠ ruleset 변경은 리포 관리자 권한이 필요하므로 착수 세션은 Kiki 실행 명령 동봉이 필요할 수 있다(CLAUDE.md Kiki 머신 안내 규칙).\n\n[정정 2026-09-03] acceptance ②③이 저장소 관리자 설정(ruleset)을 요구한다 — 세션 권한 밖. 게이트 notes가 세션 대행 범위를 '①ci.yml merge_group 트리거는 세션이 PR로'로 이미 분리했으므로, 그 경계를 대장에 집행한다(산문 선행은 selector가 읽지 않는다 — HARN-52 축).\n\n[정정 2026-09-03] ② '큐가 사용할 체크를 required 집합과 일치'가 성립하려면 라이브 required 집합이 먼저 옳아야 한다. 미강제 10건 상태에서 큐를 켜면 6건만 검증하는 큐가 된다 — 보호를 유지하려는 이 태스크의 취지와 반대 결과.\n\n[차단 2026-09-03] 부분 착지 후 사람 게이트 대기 (PR #974 머지·f0376888). 착지분: acceptance ①(룰셋 실측 — strict_required_status_checks_policy=true 확인, 전제가 가설에서 사실로) · ②의 세션 몫(ci.yml merge_group 트리거 + tests/infra/test_merge_queue_wiring.py 배선 동결, 뮤테이션 4종 검출) · ④(큐 축출 실패 경로 절차) · ⑤(pr931 문서 §4-c behind 축 신설·두 축 구분표).\n\n잔여 ②③은 저장소 관리자 설정이라 세션 권한 밖이다 — requires_gates 2건 부착됨: G-merge-queue-or-strict-relax(큐 켜기) · G-required-checks-live-drift-fix(clear됨). 순서 제약 충족: merge_group 트리거가 main에 먼저 착지했으므로 이제 큐를 켜도 required check가 큐 안에서 보고된다(반대 순서였으면 전 PR 무한 대기).\n\n③(변별력 실측)은 큐가 살아 있어야 가능하므로 ② 이후. unblock 트리거 = Kiki가 ruleset에서 merge queue 활성화."
 updated: 2026-09-03
