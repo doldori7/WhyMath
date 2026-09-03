@@ -141,7 +141,23 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnB
 # ---------------------------------------------------------------------------
 # Step 4: register (replacing any earlier version of the same task)
 # ---------------------------------------------------------------------------
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+# -ErrorAction Stop turns the CIM cmdlet's NON-terminating error into a
+# terminating one so the real reason is attributed HERE. Without it the
+# registration failure (e.g. "Access is denied" when the shell is not
+# elevated) scrolls past and the only [FAIL] the operator sees is the
+# read-back one - which then blames the wrong step. Observed 2026-09-03.
+try {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+} catch {
+    # Match on the HRESULT, not on message text: this machine runs a Korean
+    # locale, so "Access is denied" arrives translated and an English-only
+    # substring check would silently miss it. 0x80070005 = E_ACCESSDENIED.
+    $hint = ""
+    if ("$($_.Exception.Message)" -like "*0x80070005*" -or "$($_.Exception.Message)" -like "*denied*") {
+        $hint = " This is almost always a non-elevated shell: task registration needs Administrator. Open an elevated window with  Start-Process powershell -Verb RunAs  and re-run there. Nothing was changed - an existing task (if any) is untouched because this script registers with -Force and never deletes first."
+    }
+    Fail "Register-ScheduledTask failed for '$TaskName': $($_.Exception.GetType().Name): $($_.Exception.Message).$hint"
+}
 
 # ---------------------------------------------------------------------------
 # Step 5: self-verification - read the task BACK and check the two properties
@@ -151,7 +167,7 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Pr
 # ---------------------------------------------------------------------------
 $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if (-not $check) {
-    Fail "Register-ScheduledTask reported success but '$TaskName' cannot be read back."
+    Fail "task '$TaskName' cannot be read back after registration - it is not registered. If an 'Access is denied' error appeared above, the shell was not elevated; re-run from an Administrator window."
 }
 $logonType = $check.Principal.LogonType
 if ("$logonType" -ne "S4U") {
@@ -178,7 +194,12 @@ $checkAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $chec
 $checkTrigger = New-ScheduledTaskTrigger -Daily -At $CheckAt
 $checkSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
 
-Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $checkTrigger -Principal $principal -Settings $checkSettings -Force | Out-Null
+# Same non-terminating-error trap as step 4 - see the comment there.
+try {
+    Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $checkTrigger -Principal $principal -Settings $checkSettings -Force -ErrorAction Stop | Out-Null
+} catch {
+    Fail "Register-ScheduledTask failed for '$checkTaskName': $($_.Exception.GetType().Name): $($_.Exception.Message). The backup task may be registered while its checker is not - re-run this script (elevated) so both halves land together."
+}
 
 # ---------------------------------------------------------------------------
 # Step 7: self-verification for the check task, same standard as step 5.
@@ -187,7 +208,7 @@ Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $c
 # ---------------------------------------------------------------------------
 $checkBack = Get-ScheduledTask -TaskName $checkTaskName -ErrorAction SilentlyContinue
 if (-not $checkBack) {
-    Fail "Register-ScheduledTask reported success but '$checkTaskName' cannot be read back. The backup task exists but NOTHING READS ITS LEDGER - a missed backup would be silent."
+    Fail "task '$checkTaskName' cannot be read back after registration - it is not registered. The backup task exists but NOTHING READS ITS LEDGER - a missed backup would be silent. If an access error appeared above, re-run from an Administrator window."
 }
 $checkLogon = $checkBack.Principal.LogonType
 if ("$checkLogon" -ne "S4U") {

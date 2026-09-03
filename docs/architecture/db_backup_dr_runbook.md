@@ -404,10 +404,25 @@ $b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
 
 그래서 오프사이트는 스케줄에 **편입**한다. `backup_whymath_pg.ps1 -OffsiteDir <경로>`가 성공한 **암호화** 회차마다 사본을 넣고 **같은 보존 정책**을 그 디렉터리에도 적용한다(최신 1개는 만료돼도 보존 — 로컬과 동일 불변식).
 
+> **⚠ 관리자 창을 *새로* 연다.** 작업 스케줄러 등록은 관리자 권한이 필요한데, 평소 쓰는 창은
+> 관리자가 아니다. "관리자 권한으로 실행하세요"라고 적어 두면 기존 창에 그대로 붙여넣게 되고
+> `Access is denied`(HRESULT 0x80070005)로 실패한다 — 2026-09-03 실측. 아래 **창 ①**에서
+> 관리자 창을 띄우고, 등록 명령은 **창 ②**(새로 열린 관리자 창)에서 실행한다.
+
 ```powershell
-# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 재등록에 필요)
+# [창 ①] 평소 쓰는 Windows PowerShell — 관리자 창을 띄우기만 한다 (UAC 승인 필요)
+Start-Process powershell -Verb RunAs
+```
+
+```powershell
+# [창 ②] 방금 열린 **관리자** PowerShell — 제목 표시줄에 "관리자"가 보여야 한다
+# 관리자 창은 C:\Windows\System32 에서 시작하므로 cd가 필수다
 # ↓ 경로는 실제 동기화 폴더에 맞춘다
 cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+# 자가검증 0: 이 창이 정말 관리자인가 (True 여야 함 — False면 여기서 멈춘다)
+([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
 .\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir "C:\Users\kiki\Google Drive\WhyMath-backups"
 
 # 자가검증: 등록된 백업 작업의 인자에 -OffsiteDir가 실제로 실려 있는가 (True 여야 함)

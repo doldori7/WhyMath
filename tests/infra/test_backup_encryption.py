@@ -625,6 +625,33 @@ class TestOffsiteMirror:
             "[WARN] offsite" not in offsite
         ), "오프사이트 실패를 경고로 흘리고 있다 — 스케줄러 stdout은 아무도 읽지 않는다"
 
+    def test_registration_failure_is_attributed_to_the_real_step(self) -> None:
+        """★ 실패 사유를 실패한 지점에 귀속시킨다.
+
+        2026-09-03 실측: 비관리자 창에서 Register-ScheduledTask가 'Access is denied'로
+        실패했는데, 그것이 **비종료 오류**라 스크립트가 계속 진행했고 운영자가 본 유일한
+        [FAIL]은 되읽기 단계의 "reported success but cannot be read back"이었다. 등록이
+        성공했다고 *주장하면서* 실패를 보고하는 문면이라 진단을 엉뚱한 곳으로 보낸다.
+        """
+        body = (_BACKUP_DIR / "register_backup_schedule.ps1").read_text(encoding="utf-8")
+        assert (
+            "-ErrorAction Stop" in body
+        ), "CIM 비종료 오류를 종료 오류로 승격하지 않으면 실패가 그냥 스크롤된다"
+        assert (
+            "reported success but" not in body
+        ), "등록이 성공했다고 주장하는 실패 문면이 남아 있다 — 사실과 다르다"
+
+    def test_access_denied_hint_is_locale_independent(self) -> None:
+        """★ 한국어 Windows에서는 'Access is denied'가 번역되어 온다.
+
+        영어 문자열만 보는 검사는 이 머신에서 **정상적으로 실패한 상황을 못 알아본다**.
+        HRESULT(0x80070005)는 로케일과 무관하다.
+        """
+        body = (_BACKUP_DIR / "register_backup_schedule.ps1").read_text(encoding="utf-8")
+        assert (
+            "0x80070005" in body
+        ), "권한 오류 판정이 영어 메시지 문자열에만 의존한다 — cp949 로케일에서 뚫린다"
+
     def test_schedule_passes_offsite_through(self) -> None:
         """★ 스크립트가 받아도 스케줄이 안 넘기면 상시 미러가 아니다(배선 실재성).
 
