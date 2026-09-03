@@ -87,6 +87,47 @@ main
   ⚠️ CI workflow가 *한 번이라도 실행*되어야 검색 결과에 등장합니다.
   → 먼저 이 PR을 만들거나 main에 한 번 push하여 CI를 가동한 후 등록하세요.
 
+> ### 🔴🔴 3회차 재발 — 라이브 설정 실측 (2026-09-03 · HARN-56 ① 부수 발견)
+>
+> **이 문서가 선언한 16건 중 10건이 실제로는 등록돼 있지 않았다.** Kiki가
+> `gh api repos/doldori7/WhyMath/rules/branches/main`을 실행해 확인했다(EXIT=0).
+>
+> **라이브에 등록된 6건**: `data-pipeline — lint·type·test` · `data-pipeline — 적재 통합 (실 PG)` ·
+> `data-pipeline — 적재 통합 (실 Neo4j)` · `backend — 마이그레이션·통합 (실 PG)` ·
+> `infra/phaiakes9 — bash syntax` · `policy-guard — CLAUDE.md 금기 가드`
+>
+> **미강제 10건**: `changes` · **`backend — lint·type·test`** · `mobile — flutter analyze·test` ·
+> `concept-reach` · `web — graphing-calculator test·build` · **`infra-contracts (tests/infra)`** ·
+> `docker-build` · **`harness-integrity`** · `declared-unwired-audit` · `corpus-authoring`
+>
+> **또 `backend — lint·type·test`다.** 2026-07-26과 같은 잡이 같은 방식으로 빠졌다. 이 상태에서는
+> 전체 테스트·mypy·커버리지가 red여도 머지가 막히지 않는다. `infra-contracts`가 빠진 것도
+> 뼈아프다 — 운영 자산 계약(백업·스케줄·머지큐 배선)을 지키는 잡 자신이 머지를 못 막는다.
+>
+> **승인 축도 어긋나 있다**: 이 문서는 `Require approvals — 최소 1명`·`Dismiss stale approvals`·
+> `Require review from Code Owners`를 모두 체크로 적었으나, 라이브는
+> `required_approving_review_count: 0` · `dismiss_stale_reviews_on_push: false` ·
+> `require_code_owner_review: false`다.
+>
+> **문서와 정합한 항목**(참고): `strict_required_status_checks_policy: true`(= up to date 요구) ·
+> `required_review_thread_resolution: true` · `required_linear_history: true` · deletion·
+> non_fast_forward 보호.
+>
+> #### 왜 기존 방어가 못 잡았나 — 저장소 경계 밖이라서
+>
+> `tests/infra/test_required_checks_doc.py`는 **문서 ↔ `ci.yml`**을 대조한다. 두 축 다 저장소
+> *안*이다. 라이브 GitHub 설정은 저장소 *밖*이라 어떤 테스트도 보지 않는다. 그래서 문서가
+> 정확하고 `ci.yml`이 정확해도 **설정이 비어 있으면 전부 초록으로 통과**한다. 이 구멍을 메우는
+> 것이 `HARN-63`이며, 시정(체크 10건 등록·승인 수) 자체는 게이트
+> `G-required-checks-live-drift-fix`다. **시정만 하면 4회차가 온다** — 탐지가 따로 필요하다.
+>
+> #### 정정: API 접근 가능성 (아래 2026-07-26 기록의 마지막 문장)
+>
+> 아래 박스는 "Branch Protection API는 이 토큰으로 접근 불가"로 적고 있다. 그것은 **세션
+> 토큰**에 대해서는 여전히 참이지만, **Kiki 머신의 `gh` 토큰으로는 읽기가 된다**(2026-09-03
+> 실측). 따라서 자동 대조의 읽기 경로가 존재한다 — 조회는 사람이, 판정은 기계가 하는 분업이
+> 가능하다는 뜻이다(HARN-63 ①의 설계 전제).
+
 > ### 🔴 왜 이 목록이 중요한가 (2026-07-26 사고)
 >
 > 이 문서는 오랫동안 required check를 **3종만**(`data-pipeline`·`infra/phaiakes9`·
