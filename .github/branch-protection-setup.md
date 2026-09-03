@@ -113,6 +113,24 @@ main
 > `required_review_thread_resolution: true` · `required_linear_history: true` · deletion·
 > non_fast_forward 보호.
 >
+> #### ✅ 시정 완료 (같은 날 2026-09-03 · 게이트 `G-required-checks-live-drift-fix`)
+>
+> Kiki가 미강제 10건을 ruleset(ID `16623542`)에 등록했다. 재조회 후 이 문서의
+> REQUIRED_CHECKS 블록과 **기계 대조**한 결과 라이브 고유 16건 = 문서 16건, 미강제 0건.
+> 이제 `backend — lint·type·test`가 red면 머지가 막힌다.
+>
+> **잔여(비차단) 2건** — `HARN-63`이 승계한다:
+> - **중복 등록 6건**: `web`·`infra-contracts`·`docker-build`·`harness-integrity`·
+>   `declared-unwired-audit`·`corpus-authoring`가 각 2회 등록돼 라이브 항목 수는 22, 고유는
+>   16이다. 같은 컨텍스트를 두 번 요구하는 것이라 판정이 느슨해지지는 않는다(막는 힘은 동일).
+>   다만 `integration_id`가 한쪽만 GitHub Actions(15368)로 pin돼 있다면 나머지 한쪽은
+>   *어느 앱이든* 같은 이름으로 보고하면 충족되는 항목이 된다 — 확인·정리 대상이다.
+>   **드리프트 비교기는 개수가 아니라 집합으로 대조해야 한다**(중복 때문에 22≠16이 나온다).
+> - **승인 축**: 이 문서는 `Require approvals — 최소 1명`·stale dismiss·CODEOWNERS를 체크로
+>   적었으나 라이브는 전부 off(`required_approving_review_count: 0`)다. **의도적으로 바꾸지
+>   않았다** — 1인 개발에서 승인 1명을 요구하면 자가승인이 불가해 머지가 막힌다. 문서를
+>   현실에 맞출지 설정을 문서에 맞출지는 Kiki 판단 사안이다(`HARN-63` ⑤).
+
 > #### 왜 기존 방어가 못 잡았나 — 저장소 경계 밖이라서
 >
 > `tests/infra/test_required_checks_doc.py`는 **문서 ↔ `ci.yml`**을 대조한다. 두 축 다 저장소

@@ -211,10 +211,10 @@ gates:
     title: "라이브 룰셋의 required check 미강제 10건 등록 — 문서 16건 vs 실제 6건(backend lint·infra-contracts·harness-integrity 등 미강제)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-03
     remind_after_days: 3
-    evidence: null
+    evidence: "2026-09-03 Kiki 실행(GitHub 웹 UI ruleset 16623542) — 미강제 10건 등록 완료. 검증: gh api repos/doldori7/WhyMath/rules/branches/main 재조회 후 문서 REQUIRED_CHECKS 블록과 **기계 대조**(눈 대조 아님) — 라이브 고유 16건 vs 문서 16건, 미강제 0건·문서 미선언 0건으로 집합 완전 일치. 등록된 10건: changes / backend — lint·type·test / mobile / concept-reach / web / infra-contracts / docker-build / harness-integrity / declared-unwired-audit / corpus-authoring. 잔여(비차단): 6건이 중복 등록됐다(web·infra-contracts·docker-build·harness-integrity·declared-unwired-audit·corpus-authoring 각 2회 — 라이브 항목 수 22, 고유 16). 중복은 같은 컨텍스트를 두 번 요구하는 것이라 판정을 느슨하게 만들지 않아 차단 사유가 아니며, integration_id 축(특정 앱 pin vs any source) 확인과 정리는 HARN-63이 승계한다. 승인 축(required_approving_review_count=0 vs 문서 '최소 1명')은 **의도적 미변경** — 1인 개발에서 자가승인 불가로 머지가 막히므로 문서/현실 중 무엇을 고칠지는 Kiki 판단 사안이며 이 게이트 범위 밖(HARN-63 ⑤로 승계)."
     notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
