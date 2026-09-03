@@ -100,6 +100,16 @@ const Problem _mcProblem = Problem(
   choices: <String>['0', '1', '2', '3'],
 );
 
+/// 학생이 홈에서 새로 고른 *다른* 문제 — 완료 신호 스코프 회귀용(PR #979 리뷰 P1).
+const Problem _otherProblem = Problem(
+  problemId: 'p-other',
+  sourceType: '자체생성',
+  subject: '공통',
+  questionFormat: '객관식',
+  questionText: '다음 중 옳은 것은?',
+  choices: <String>['가', '나', '다', '라'],
+);
+
 /// 코치 응답 JSON 한 벌(완료 3필드는 [extra]로 덮어쓴다).
 Map<String, dynamic> _coachJson([Map<String, dynamic> extra = const {}]) =>
     <String, dynamic>{
@@ -334,6 +344,70 @@ void main() {
         container.read(coachCompletionSignalProvider),
         CoachCompletionSignal.none,
       );
+    });
+
+    // ── PR #979 리뷰 P1 회귀 2건 ────────────────────────────────────────────
+    // 둘 다 뿌리는 "완료 신호의 수명"이다. 버튼 탭에만 의존한 리셋과, 완료 후에도 열려 있던
+    // 턴 생성 경로가 각각 새 문제를 건너뛰게 / 끝난 세션에 묶이게 만들었다.
+
+    testWidgets('다른 문제로 바뀌면 이전 완료 신호를 인정하지 않는다(신호 스코프)',
+        (tester) async {
+      final fake = _FakeCoachApi(response: _response())
+        ..problemComplete = true
+        ..completedAttemptId = 'att-stale';
+      final container = _container(fake);
+      await tester.pumpWidget(_wrap(container));
+
+      await tester.enterText(find.byType(TextField), '다 풀었어요');
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pumpAndSettle();
+      // 전제: 이 문제에 대해서는 완료 어포던스가 떠 있다.
+      expect(find.text('다음 문항으로'), findsOneWidget);
+
+      // 학생이 홈 → '오늘의 문제 풀기'로 다른 문제를 연 상황(problem_screen과 동형).
+      // '다음 문항으로'를 누르지 않았으므로 신호 자체는 provider에 그대로 살아 있다.
+      container.read(activeProblemProvider.notifier).state = _otherProblem;
+      await tester.pumpAndSettle();
+
+      // 신호는 남아 있지만(=리셋되지 않았지만) 화면은 인정하지 않는다.
+      expect(
+          container.read(coachCompletionSignalProvider).problemComplete, isTrue);
+      expect(find.text('다음 문항으로'), findsNothing);
+      // 새 문제의 선택지가 다시 보인다 — 새로 고른 문제를 건너뛰지 않는다.
+      expect(find.text('보기 번호를 골라 보세요'), findsOneWidget);
+      expect(find.byType(OutlinedButton), findsNWidgets(4));
+    });
+
+    testWidgets('완료 중에는 턴을 만드는 입력이 잠긴다(종단 상태)', (tester) async {
+      final fake = _FakeCoachApi(response: _response())
+        ..problemComplete = true
+        ..completedAttemptId = 'att-terminal';
+      final container = _container(fake);
+      await tester.pumpWidget(_wrap(container));
+
+      final ocrButton =
+          find.widgetWithIcon(IconButton, Icons.camera_alt_outlined);
+
+      // 완료 전: 입력·OCR 모두 살아 있다(대조군 — 항상 잠겨 있는 게 아님을 고정).
+      expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
+      expect(tester.widget<IconButton>(ocrButton).onPressed, isNotNull);
+
+      await tester.enterText(find.byType(TextField), '다 풀었어요');
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pumpAndSettle();
+
+      // 완료 후: 한 턴을 더 보내면 서버가 already_completed로 no-op → problem_complete=false가
+      // 돌아와 유일한 진행 경로('다음 문항으로')가 사라진다. 그래서 턴 생성 입력을 막는다.
+      final callsAtCompletion = fake.calls;
+      expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+      expect(tester.widget<IconButton>(ocrButton).onPressed, isNull);
+      // 진행 경로는 살아 있다.
+      expect(find.text('다음 문항으로'), findsOneWidget);
+      // 변별력: *실제로 눌러 본다*. 잠겨 있으면 onPressed가 null이라 아무 일도 없고,
+      // 가드를 빼면 여기서 턴이 한 번 더 나가 calls가 증가한다(동어반복 아님).
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pumpAndSettle();
+      expect(fake.calls, callsAtCompletion);
     });
   });
 }

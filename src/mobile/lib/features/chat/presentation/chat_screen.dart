@@ -229,8 +229,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
     // 서버가 내린 완료 신호(MOB-20) — 클라는 판정하지 않고 이 권위값만 보고 어포던스를 바꾼다.
-    final CoachCompletionSignal completion =
+    //
+    // **활성 문제에 스코프한다**: 이 provider는 autoDispose가 아니고 하단 탭이 상태를 보존하므로,
+    // 학생이 홈에서 다른 문제를 열면(problem_screen이 activeProblemProvider만 교체) 이전 완료
+    // 신호가 살아남아 *새 문제*의 선택지를 감추고 *이전* attempt의 완료 패널을 띄운다 — 새로 고른
+    // 문제를 건너뛰게 만든다. 신호의 problemId가 지금 문제와 다르면 신호가 없는 것으로 다룬다
+    // (리스너가 아니라 렌더 시점 대조라 경합이 없다).
+    final CoachCompletionSignal rawCompletion =
         ref.watch(coachCompletionSignalProvider);
+    final CoachCompletionSignal completion =
+        rawCompletion.appliesTo(ref.watch(activeProblemProvider)?.problemId)
+            ? rawCompletion
+            : CoachCompletionSignal.none;
 
     // 에러가 생기면 SnackBar로 알리고(가용성·앱은 죽지 않음) 상태를 지운다.
     ref.listen<String?>(
@@ -250,10 +260,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: const Text('WhyMath'),
         actions: [
           // 풀이 사진 보내기 — OCR 화면으로 진입(전송 중엔 비활성·중복 진입 방지).
+          // 완료 중에도 비활성: `sendOcrSolution`도 `_dispatch`를 타 턴을 만든다(입력바와 동일 사유).
           IconButton(
             icon: const Icon(Icons.camera_alt_outlined),
             tooltip: '풀이 사진 보내기',
-            onPressed: state.isSending ? null : _onCaptureSolution,
+            onPressed: state.isSending || completion.problemComplete
+                ? null
+                : _onCaptureSolution,
           ),
           // 약점개념 학습 장면 요청 — 전송 중엔 비활성(중복 요청 방지).
           IconButton(
@@ -341,7 +354,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _InputBar(
                 controller: _inputController,
                 stepsEditorKey: _stepsEditorKey,
-                enabled: !state.isSending,
+                // 완료는 *종단 상태*다 — 여기서 한 턴을 더 보내면 서버가 already_completed로
+                // no-op 처리해 problem_complete=false를 돌려주고(coach.py:2630·l4/completion.py),
+                // 그러면 유일한 '다음 문항으로'가 사라진 채 끝난 세션에 묶인다. 그래서 완료 중에는
+                // 턴을 만드는 입력을 막는다(진행 경로는 '다음 문항으로' 하나만 남긴다).
+                enabled: !state.isSending && !completion.problemComplete,
                 mode: _mode,
                 stepAreaMaxHeight: stepAreaMaxHeight,
                 onSend: _onSend,

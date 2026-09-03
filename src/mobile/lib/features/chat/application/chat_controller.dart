@@ -188,11 +188,13 @@ class ChatController extends _$ChatController {
       //    같은 세션에 턴으로 잇는다. 스테이트리스 `coach()`는 자유 대화 fallback으로 남는다.
       final api = ref.read(coachApiProvider);
       String? dialogueId = state.dialogueId;
+      // 이 턴이 *어느 문제*에 대한 것인지 — 완료 신호를 그 문제에 스코프하는 데 쓴다.
+      // (세션 생성 경로에서만 읽으면 turns 경로의 신호가 문제 없이 남아 낡은 완료로 오독된다.)
+      final String? activeProblemId = ref.read(activeProblemProvider)?.problemId;
       final CoachTurnResult result;
       if (dialogueId == null) {
         // 진단→문제제시에서 넘어온 활성 문제(있으면)에 세션을 묶는다(problem_id 영속).
-        final problemId = ref.read(activeProblemProvider)?.problemId;
-        result = await api.createSession(request, problemId: problemId);
+        result = await api.createSession(request, problemId: activeProblemId);
         dialogueId = result.dialogueId;
       } else {
         result = await api.addTurn(dialogueId, request);
@@ -241,6 +243,7 @@ class ChatController extends _$ChatController {
         problemComplete: result.problemComplete,
         awaitingReflection: result.awaitingReflection,
         completedAttemptId: result.completedAttemptId,
+        problemId: activeProblemId,
       );
     } catch (e) {
       // ④ 실패는 graceful — 에러만 기록하고 입력 상태를 복구한다(앱 안 죽음).
