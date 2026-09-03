@@ -364,7 +364,12 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
   대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)".
 - **상세 노트** — 발췌가 아니라 **원문 그대로**(줄바꿈 보존·스크롤). 게이트 노트에는 실행
   런북이 들어 있다(`G-operator-seat-first-grant` 2,736자) — 요약하면 그게 사라진다
-- **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능
+- **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능.
+  **사람이 본인 게이트를 직접 닫을 때는 `--as kiki`를 붙인다**(HARN-60) — 붙이면 대장에
+  `cleared_by: kiki`가, 생략하면 `cleared_by: claude`(에이전트 중계)가 남는다. 생략을
+  거부하지 않는 이유: 에이전트 중계는 정당한 운영 형태이고(Kiki가 자기 머신에서 실행 →
+  출력 전달 → 세션이 기입), 막으면 CLI를 우회한 YAML 손편집으로 밀려나 아무 기록도 안
+  남는다. 목표는 금지가 아니라 **사후 증명 가능성**이다
 
 해소된 게이트(cleared·waived)는 기본 접힌 별도 그룹에서 근거(evidence)와 함께 열람한다 —
 기본 화면은 행동이 필요한 대기 게이트만 보여 준다.
@@ -418,6 +423,7 @@ python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
                     # block은 원격 대장에 kind=block 홀드를 **게시**한다(HARN-42/48) —
                     # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
+python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..."  # 사람이 본인 게이트를 닫을 때 주체 명시(HARN-60)
 python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>] [--eos-priority P0|P1|P2|P3]
                                                    # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
                                                    # --eos-priority = 기존 태스크 등급 백필의 유일한 합법 경로(HARN-55)
