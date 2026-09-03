@@ -147,6 +147,7 @@ class Spec:
     client: tuple[str, ...] = ()  # C: src/ 기준 상대 경로
     flag: str = ""  # config.Settings 필드 — 기본값 실측으로 status 덮기
     status: str = "Production"
+    duplicate_of: str = ""  # §3.4 REPLACE 신호 '동일 기능 중복 구현' — 원본 행 ID(선언·근거는 seat)
 
 
 def _s(
@@ -188,6 +189,7 @@ def _e(
     flag: str = "",
     status: str = "Production",
     plane: str = "E",
+    duplicate_of: str = "",
 ) -> Spec:
     return Spec(
         fid,
@@ -201,6 +203,7 @@ def _e(
         pipelines=pipelines,
         flag=flag,
         status=status,
+        duplicate_of=duplicate_of,
     )
 
 
@@ -366,8 +369,8 @@ CATALOG: tuple[Spec, ...] = (
     _e("WM-E-101", "원자 백본 그래프 적재·검색·중복 검수", "Platform", "Knowledge Graph", "P0",
        "B3 선수 그래프 2,683노드·2,210엣지", "l1.atom_graph", pipelines=("atom_graph",)),
     _e("WM-E-102", "구 개념그래프 적재·임베딩·검색", "Platform", "Knowledge Graph", "P1",
-       "B4 개념 437 — 원자 축 이전 후 보조", "l1.concept_graph", "api._concept_orchestration",
-       pipelines=("concept_graph",)),
+       "B4 개념 437 — 원자 축 이전(S0-2·ARCH-13) 후 보조 좌석 — 동일 기능 중복", "l1.concept_graph",
+       "api._concept_orchestration", pipelines=("concept_graph",), duplicate_of="WM-E-101"),
     _e("WM-E-103", "개념↔원자 크로스워크 이전", "Platform", "Knowledge Graph", "P1",
        "S0-2 437키 자산 이전", "l1.concept_atom_crosswalk", pipelines=("concept_atom_crosswalk",)),
     _e("WM-E-104", "개념 콘텐츠 4종 적재·해석", "Platform", "Content", "P0",
@@ -767,6 +770,7 @@ class Endpoint:
     path: str
     func: str
     refs: set[str]
+    contract: bool = True  # response_model 선언 또는 204(본문 없음) — §3.4 'API 계약' 신호
 
 
 def _endpoints(router_mod: str) -> list[Endpoint]:
@@ -797,7 +801,10 @@ def _endpoints(router_mod: str) -> list[Endpoint]:
                     if isinstance(root, ast.Name):
                         names.add(root.id)
             refs = {alias[x] for x in names if x in alias}
-            out.append(Endpoint(d.func.attr.upper(), str(raw) or "/", node.name, refs))
+            kw = {k.arg: k.value for k in d.keywords if k.arg}
+            no_body = "status_code" in kw and "204" in ast.unparse(kw["status_code"])
+            contract = "response_model" in kw or no_body
+            out.append(Endpoint(d.func.attr.upper(), str(raw) or "/", node.name, refs, contract))
     return out
 
 
@@ -902,6 +909,16 @@ class Row:
     migration_risk: str = ""
     coupling: str = ""
     tests: str = ""
+    # §3.4 기준 재료 — 측정값
+    fan_in: int = 0  # 자기 모듈을 import하는 타 백엔드 모듈 수(API 명확성 대리)
+    has_cli: bool = False  # argparse/main 진입점 보유(운영자 도구의 계약)
+    contract_gaps: int = 0  # response_model도 204도 없는 엔드포인트 수
+    mixed_own_schema: int = 0  # 자기 모듈 중 MIXED 판정 schema.* 수(모델 충돌 대리)
+    criteria: dict[str, bool] = field(default_factory=dict)
+    keep_met: int = 0
+    replace_signals: int = 0
+    criteria_action: str = ""
+    action_basis: str = ""
 
 
 def _band(value: int, cuts: tuple[int, int, int]) -> int:
@@ -954,7 +971,7 @@ def _score(row: Row, v1: Any) -> None:
         if row.total <= upper:
             row.matrix_action = verdict
             break
-    row.migration_action = "POSTPONE" if row.spec.priority == "P2" else row.matrix_action
+    _apply_criteria_34(row)
     if row.total >= 10 or own == "MIXED":
         row.migration_risk = "High"
     elif row.total >= 5:
@@ -963,6 +980,72 @@ def _score(row: Row, v1: Any) -> None:
         row.migration_risk = "Low"
     row.coupling = ("Low", "Low", "Med", "High")[row.scores["C_coupling"]]
     row.tests = ("Full", "Partial", "Partial", "None")[row.scores["D_tests"]]
+
+
+_STATE_TRACKERS = re.compile(
+    r"audit|evidence|provenance|history|timeseries|_event|generation_log|ledger"
+)
+KEEP_MIN_CRITERIA = 5  # §3.4 "아래를 대부분 만족하면" — 6조건 중 5
+REPLACE_MIN_SIGNALS = 3  # §3.4 REPLACE 신호 6종(측정 가능분) 중 3 — 단독 신호로 REPLACE 선고 금지
+
+
+def _apply_criteria_34(row: Row) -> None:
+    """계획서 100 §3.4 KEEP/REFACTOR/REPLACE/POSTPONE 기준의 *측정 가능한 부분*을 불리언으로.
+
+    §3.4는 서술형 기준이고 §3.14는 점수다. 둘을 이렇게 결합한다:
+    POSTPONE = 우선도 P2 · REPLACE = 매트릭스 14+ 또는 REPLACE 신호 ≥3 · HEAVY = 매트릭스 10~13 ·
+    KEEP = §3.4 KEEP 6조건 중 ≥5 · 나머지 REFACTOR. "수정 비용 > 재작성 비용"은 측정 불가라
+    신호에 넣지 않았다(사람 판단). §3.4 단독 판정(`criteria_action`)도 남겨 매트릭스와 어긋난
+    행을 대시보드가 세게 한다.
+    """
+    sc, plane = row.scores, row.spec.plane
+    own_and_closure = set(row.own_modules) | set(row.closure)
+    tracked = any(_STATE_TRACKERS.search(m) for m in own_and_closure)
+    keep = {
+        "k1_subject_low": sc["A_subject"] <= 1,
+        "k2_api_clear": plane in ("S", "C") or row.fan_in >= 1 or row.has_cli,
+        "k3_tests_exist": sc["D_tests"] <= 2,
+        "k4_model_ok": row.ownership != "MIXED" and row.mixed_own_schema == 0,
+        "k5_coupling_low": sc["C_coupling"] <= 1,
+        "k6_verified": row.status not in ("Flag-off", "Shadow") and row.test_functions >= 1,
+    }
+    replace = {
+        "r1_model_conflict": row.mixed_own_schema > 0,
+        "r2_subject_in_core": row.ownership in ("CORE", "INFRA", "MIXED") and sc["A_subject"] == 3,
+        "r3_untestable": sc["D_tests"] == 3,
+        "r4_duplicate": bool(row.spec.duplicate_of),
+        "r5_state_untracked": sc["E_state"] >= 2 and not tracked,
+        "r6_no_api_contract": plane == "S" and row.contract_gaps > 0,
+    }
+    row.criteria = {**keep, **replace}
+    row.keep_met = sum(keep.values())
+    row.replace_signals = sum(replace.values())
+    if row.spec.priority == "P2":
+        row.criteria_action = "POSTPONE"
+    elif row.replace_signals >= REPLACE_MIN_SIGNALS:
+        row.criteria_action = "REPLACE_CANDIDATE"
+    elif row.keep_met >= KEEP_MIN_CRITERIA:
+        row.criteria_action = "KEEP"
+    else:
+        row.criteria_action = "REFACTOR"
+
+    matrix = row.matrix_action
+    if row.spec.priority == "P2":
+        row.migration_action, row.action_basis = "POSTPONE", "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    elif matrix == "REPLACE_CANDIDATE" or row.replace_signals >= REPLACE_MIN_SIGNALS:
+        row.migration_action = "REPLACE_CANDIDATE"
+        row.action_basis = (
+            f"매트릭스 {row.total}점 / REPLACE 신호 {row.replace_signals}/6 "
+            "— 경계 복구 가능성은 사람 판정"
+        )
+    elif matrix == "HEAVY_REFACTOR":
+        row.migration_action, row.action_basis = "HEAVY_REFACTOR", f"매트릭스 {row.total}점(10~13)"
+    elif row.keep_met >= KEEP_MIN_CRITERIA:
+        row.migration_action, row.action_basis = "KEEP", f"§3.4 KEEP {row.keep_met}/6 충족"
+    else:
+        failed = [k for k, v in keep.items() if not v]
+        row.migration_action = "REFACTOR"
+        row.action_basis = f"§3.4 KEEP {row.keep_met}/6 — 미충족 {', '.join(failed)}"
 
 
 def _status(spec: Spec, defaults: dict[str, str]) -> tuple[str, str]:
@@ -1042,6 +1125,7 @@ def _measure_serving(
         ownership=ownership,
         status=status,
         flag_default=flag_default,
+        contract_gaps=sum(1 for e in matched if not e.contract),
     )
 
 
@@ -1076,13 +1160,19 @@ def _measure_modules(
     imports: set[str] = set()
     verdicts: set[str] = set()
     places: set[str] = set()
+    has_cli = False
+    mixed_own_schema = 0
     for m in own:
         path = _module_path(m)
         assert path is not None and path.is_file()
         text = path.read_text(encoding="utf-8")
         loc += text.count("\n") + 1
         mutations += len(_DB_MUTATION.findall(text))
-        verdicts.add(classify(m)[0])
+        has_cli = has_cli or "argparse" in text or "\ndef main(" in text
+        verdict = classify(m)[0]
+        verdicts.add(verdict)
+        if verdict == "MIXED" and m.startswith("schema."):
+            mixed_own_schema += 1
         imports.update(v1._internal_imports(path))
         places.add(str((path if path.parent == BACKEND else path.parent).relative_to(REPO)))
     for pkg in spec.pipelines:
@@ -1092,6 +1182,7 @@ def _measure_modules(
             continue
         verdicts.add(PIPELINE_MAP.get(pkg, "CORE"))
         places.add(str(pdir.relative_to(REPO)))
+        has_cli = has_cli or (pdir / "__main__.py").is_file()
         for p in sorted(pdir.rglob("*.py")):
             if p.name == "__init__.py":
                 continue
@@ -1124,6 +1215,8 @@ def _measure_modules(
         ownership=_ownership_from_own(verdicts),
         status=status,
         flag_default=flag_default,
+        has_cli=has_cli,
+        mixed_own_schema=mixed_own_schema,
     )
 
 
@@ -1234,6 +1327,29 @@ def _completeness_errors(
     return errors
 
 
+def _effective_import_graph(universe: list[str], v1: Any) -> dict[str, set[str]]:
+    """모듈 → 실효 내부 import 집합. 패키지 import는 그 `__init__`이 재수출하는 모듈로 펼친다.
+
+    `api.coach`가 `from whymath_backend.l4 import PolyaCoach`로 부르면 import 문에는 `l4`만
+    남는다 — `l4/__init__.py`가 `l4.polya.engine`을 재수출하므로 실효 의존은 그 모듈이다.
+    fan-in(§3.4 'API 명확' 대리)이 재수출 뒤에 숨은 소비자를 놓치지 않게 한다.
+    """
+    reexports: dict[str, set[str]] = {}
+    for init in BACKEND.rglob("__init__.py"):
+        pkg = ".".join(init.parent.relative_to(BACKEND).parts)
+        if pkg:
+            reexports[pkg] = set(v1._internal_imports(init))
+    graph: dict[str, set[str]] = {}
+    for m in universe:
+        path = _module_path(m)
+        assert path is not None
+        imps = set(v1._internal_imports(path))
+        for p in list(imps):
+            imps |= reexports.get(p, set())
+        graph[m] = imps
+    return graph
+
+
 def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
     v1 = _load_script(V1_SCRIPT, "_eos_inventory_v1")
     scan = _load_script(SCAN_SCRIPT, "_eos_boundary_scan_v2")
@@ -1271,7 +1387,11 @@ def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
     errors += _completeness_errors(
         endpoint_cache, endpoint_owner, universe, module_owner, router_modules_seen
     )
+    import_graph = _effective_import_graph(universe, v1)
     for row in rows:
+        own = set(row.own_modules)
+        if own and row.spec.plane != "S":
+            row.fan_in = sum(1 for m, imps in import_graph.items() if m not in own and imps & own)
         _score(row, v1)
         log(
             f"[measure] {row.spec.fid} {row.spec.plane} own={row.ownership} "
@@ -1309,6 +1429,15 @@ def dashboard(rows: list[Row], info: dict[str, Any]) -> dict[str, Any]:
         "by_risk": count(lambda r: r.migration_risk),
         "release_p0_proposed": sum(1 for r in rows if r.spec.priority == "P0"),
         "classification_rate": f"{len(rows)}/{len(rows)}",
+        "by_criteria_action": count(lambda r: r.criteria_action),
+        "keep_criteria_histogram": count(lambda r: f"{r.keep_met}/6"),
+        "replace_signal_histogram": count(lambda r: f"{r.replace_signals}/6"),
+        "final_differs_from_matrix": sum(
+            1 for r in rows if r.spec.priority != "P2" and r.migration_action != r.matrix_action
+        ),
+        "final_differs_from_criteria": sum(
+            1 for r in rows if r.migration_action != r.criteria_action
+        ),
     }
 
 
@@ -1317,6 +1446,9 @@ def _q(s: str) -> str:
 
 
 _DASH_GROUPS = (
+    "by_criteria_action",
+    "keep_criteria_histogram",
+    "replace_signal_histogram",
     "by_plane",
     "by_ownership",
     "by_migration_action",
@@ -1340,6 +1472,8 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
         f"  backend_modules_covered: {dash['backend_modules_covered']}",
         f"  endpoints_covered: {dash['endpoints_covered']}",
         f"  release_p0_proposed: {dash['release_p0_proposed']}",
+        f"  final_differs_from_matrix: {dash['final_differs_from_matrix']}",
+        f"  final_differs_from_criteria: {dash['final_differs_from_criteria']}",
     ]
     for key in _DASH_GROUPS:
         lines.append(f"  {key}:")
@@ -1378,7 +1512,19 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
             "    matrix:",
         ]
         lines += [f"      {k}: {v}" for k, v in r.scores.items()]
-        lines += [f"    matrix_total: {r.total}", f"    seat: {_q(s.seat)}"]
+        lines += [
+            f"    matrix_total: {r.total}",
+            f"    criteria_action: {r.criteria_action}",
+            f"    keep_criteria_met: {r.keep_met}/6",
+            f"    replace_signals: {r.replace_signals}/6",
+            f"    action_basis: {_q(r.action_basis)}",
+            f"    fan_in: {r.fan_in}",
+            f"    contract_gaps: {r.contract_gaps}",
+            f"    duplicate_of: {_q(s.duplicate_of)}",
+            "    criteria_34:",
+        ]
+        lines += [f"      {k}: {str(v).lower()}" for k, v in r.criteria.items()]
+        lines += [f"    seat: {_q(s.seat)}"]
     return "\n".join(lines) + "\n"
 
 
@@ -1413,6 +1559,10 @@ CSV_HEADER = [
     "Mixed 의존",
     "DB모델수",
     "테스트fn",
+    "§3.4 KEEP충족(/6)",
+    "§3.4 REPLACE신호(/6)",
+    "§3.4 기준판정",
+    "판정 근거",
     "근거",
 ]
 
@@ -1450,6 +1600,10 @@ def to_csv(rows: list[Row]) -> str:
                 ";".join(r.mixed_deps),
                 len(r.db_models),
                 r.test_functions,
+                r.keep_met,
+                r.replace_signals,
+                r.criteria_action,
+                r.action_basis,
                 s.seat,
             ]
         )

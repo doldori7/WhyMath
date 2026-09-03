@@ -192,7 +192,78 @@ def test_postpone_overrides_only_p2_and_preserves_matrix_verdict(measured: Any) 
         if r.spec.priority == "P2":
             assert r.migration_action == "POSTPONE" and r.matrix_action != "POSTPONE"
         else:
-            assert r.migration_action == r.matrix_action
+            assert r.migration_action != "POSTPONE"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ②-b §3.4 KEEP/REFACTOR/REPLACE/POSTPONE 기준 — 서술형 기준이 실제로 판정을 결정하는가
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_every_row_carries_the_measurable_34_criteria(gen: Any, measured: Any) -> None:
+    rows, _ = measured
+    keep_keys = {f"k{i}" for i in range(1, 7)}
+    replace_keys = {f"r{i}" for i in range(1, 7)}
+    for r in rows:
+        assert {k[:2] for k in r.criteria} == keep_keys | replace_keys, r.spec.fid
+        assert r.keep_met == sum(v for k, v in r.criteria.items() if k.startswith("k"))
+        assert r.replace_signals == sum(v for k, v in r.criteria.items() if k.startswith("r"))
+        assert r.criteria_action in {"KEEP", "REFACTOR", "REPLACE_CANDIDATE", "POSTPONE"}
+        assert r.action_basis, f"{r.spec.fid}: 판정 근거 문자열이 비었다"
+    assert gen.KEEP_MIN_CRITERIA == 5 and gen.REPLACE_MIN_SIGNALS == 3
+
+
+def test_final_action_follows_the_combined_rule_row_by_row(gen: Any, measured: Any) -> None:
+    """POSTPONE=P2 · REPLACE=매트릭스 14+ 또는 신호≥3 · HEAVY=매트릭스 10~13 · KEEP=§3.4 ≥5/6 · 나머지 REFACTOR."""
+    rows, _ = measured
+    for r in rows:
+        if r.spec.priority == "P2":
+            expected = "POSTPONE"
+        elif r.matrix_action == "REPLACE_CANDIDATE" or r.replace_signals >= gen.REPLACE_MIN_SIGNALS:
+            expected = "REPLACE_CANDIDATE"
+        elif r.matrix_action == "HEAVY_REFACTOR":
+            expected = "HEAVY_REFACTOR"
+        elif r.keep_met >= gen.KEEP_MIN_CRITERIA:
+            expected = "KEEP"
+        else:
+            expected = "REFACTOR"
+        assert r.migration_action == expected, (r.spec.fid, r.migration_action, expected)
+
+
+def test_keep_is_never_granted_below_five_of_six_criteria(measured: Any) -> None:
+    """§3.4 '대부분 만족' — 5/6 미만인데 KEEP인 행이 하나라도 있으면 기준이 판정을 결정하지 않는다."""
+    rows, _ = measured
+    offenders = [r.spec.fid for r in rows if r.migration_action == "KEEP" and r.keep_met < 5]
+    assert not offenders, offenders
+    assert any(
+        r.migration_action == "REFACTOR" and r.matrix_action == "KEEP" for r in rows
+    ), "매트릭스 KEEP인데 §3.4 기준 미달로 REFACTOR가 된 행이 0 — 기준이 변별력을 내지 않는다"
+
+
+def test_replace_needs_multiple_signals_not_a_single_one(measured: Any) -> None:
+    """단독 신호(예: 테스트 0건)로 REPLACE를 선고하지 않는다 — 계획서 100 '경계 복구 불가일 때만'."""
+    rows, _ = measured
+    for r in rows:
+        if r.replace_signals <= 2 and r.matrix_action != "REPLACE_CANDIDATE":
+            assert r.migration_action != "REPLACE_CANDIDATE", r.spec.fid
+
+
+def test_duplicate_of_points_at_an_existing_row(gen: Any) -> None:
+    fids = {s.fid for s in gen.CATALOG}
+    for s in gen.CATALOG:
+        if s.duplicate_of:
+            assert s.duplicate_of in fids and s.duplicate_of != s.fid, s.fid
+
+
+def test_criteria_react_to_injected_defects(gen: Any) -> None:
+    """가드 변별력 — 테스트가 없다고 위장한 행은 k3·k6이 꺼지고 r3이 켜져야 한다."""
+    rows, _ = gen.measure(lambda _msg: None)
+    row = next(r for r in rows if r.spec.fid == "WM-E-201")
+    assert row.criteria["k3_tests_exist"] and not row.criteria["r3_untestable"]
+    row.test_functions = 0
+    gen._score(row, gen._load_script(gen.V1_SCRIPT, "_v1_for_mutation"))
+    assert not row.criteria["k3_tests_exist"] and not row.criteria["k6_verified"]
+    assert row.criteria["r3_untestable"] and row.migration_action != "KEEP"
 
 
 def test_status_follows_measured_flag_default(gen: Any, measured: Any) -> None:
