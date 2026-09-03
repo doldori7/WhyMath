@@ -120,7 +120,7 @@ Map<String, dynamic> _coachJson([Map<String, dynamic> extra = const {}]) =>
 Widget _wrap(ProviderContainer container) {
   final router = GoRouter(
     initialLocation: AppRoutes.chatPath,
-    routes: <RouteBase>[
+    routes: [
       GoRoute(
         path: AppRoutes.chatPath,
         builder: (_, __) => const ChatScreen(),
@@ -139,7 +139,9 @@ Widget _wrap(ProviderContainer container) {
 
 ProviderContainer _container(_FakeCoachApi fake) {
   final container = ProviderContainer(
-    overrides: <Override>[
+    // 타입 주석 없이 둔다 — riverpod 3에서 `Override`는 공개 타입명이 아니고,
+    // 이 저장소의 다른 테스트도 전부 `overrides: [...]` 형태다.
+    overrides: [
       coachApiProvider.overrideWithValue(fake),
       activeProblemProvider.overrideWith((ref) => _mcProblem),
     ],
