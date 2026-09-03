@@ -225,3 +225,12 @@ gates:
     remind_after_days: null
     evidence: null
     notes: "수학 K-12 완성 전 어떤 과목도 착수 금지 (불변 전제)"
+  - id: G-state-machine-deferral-recheck
+    title: "8상태 학습 상태 머신 보류의 재확인 (재확인 지점 = G4 2026-12-13) — 2026-09-03 Kiki 결정으로 '신설 보류'했고 재개 조건은 '실 운영 데이터에서 상태 기반 제어가 필요하다는 증거'다. 판정 3택: ①보류 유지(증거 없음 — 기본값) ②ADR로 채택(증거 있음 — *MasteryHistory와의 진실 원천 중복 해소안을 ADR에 포함해야 한다) ③영구 미채택으로 종결. 근거 문서 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §5-A·§11.1 · MEMORY 2026-09-03 결정 로그. 등재 이유: '만료 없는 유예·제외 금지'(CLAUDE.md 2026-08-03) — 보류에 재확인 지점을 못박았으나 그 지점에 알려 줄 장치가 없어 산문으로만 남아 있었다. remind-after-days=101은 2026-09-03 기준 G4(12/13)까지의 일수이며, 그 시점부터 SessionStart 브리핑에 뜬다"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-03
+    remind_after_days: 101
+    evidence: null
+    notes: ""

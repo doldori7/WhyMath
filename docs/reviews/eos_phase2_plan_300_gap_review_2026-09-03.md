@@ -244,7 +244,7 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 |---|---|---|
 | 계획서 300 Phase 2 | **참고 문서로 강등 · 4주 일정 미실행** | 폐기가 아니라 강등 — 10월 실행계획에서만 제외 |
 | Phase 2 목적(§3-A) | **콘텐츠 생산 우선** | *"폐쇄루프는 이미 서버에서 작동하며, 목적이 아니라 G2 생산성을 검증하는 계측 수단"* |
-| 8상태 상태 머신(§5-A·§8-⑤) | **신설 보류** | *"`*MasteryHistory`와 진실 원천이 중복될 위험. 운영 데이터에서 상태 기반 제어가 필요하다는 증거가 생긴 뒤 ADR로 결정"* — **재확인 지점 = G4(12/13)**(만료 없는 유예 금지) |
+| 8상태 상태 머신(§5-A·§8-⑤) | **신설 보류** | *"`*MasteryHistory`와 진실 원천이 중복될 위험. 운영 데이터에서 상태 기반 제어가 필요하다는 증거가 생긴 뒤 ADR로 결정"* — **재확인 지점 = G4(12/13)**(만료 없는 유예 금지). **집행**: `G-state-machine-deferral-recheck`[kiki/decision·`remind_after_days=101`] — 12/13부터 SessionStart 브리핑에 자동으로 뜬다 |
 | One In → One Out(§9-3) | **조건부 채택** | 신규 P0 추가 시 기존 P0 하나를 제거·연기. **예외 3종 = 보안·데이터 손실·출시 차단 결함** |
 
 **최종 운영 결정문(Kiki 원문 요지)**: 계획서 300의 4주 Phase 2는 실행하지 않는다. 폐쇄루프는 독립 목표가 아니라 콘텐츠 생산성과 학습 효과를 측정하기 위한 **기반 계측기**로 취급한다. 10월의 공식 목표는 저장소 정본에 따라 **G2 앵커 콘텐츠 생산**으로 유지한다. 단 Flutter attempt 제출 배선과 기존 E2E 폐쇄루프 연장은 **G2 및 G4의 공통 선결조건**이므로 수일 규모의 CL-WIRING 작업으로 즉시 수행한다. 별도의 8상태 상태 머신 도입은 보류하며, P0 작업에는 예외 조항을 포함한 One In → One Out 규칙을 적용한다.
@@ -265,6 +265,16 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 | `EOS-81-cl-wiring-closed-loop-e2e` | **P0** | §8-② E2E 뒷반쪽 연장. `depends_on: MOB-20`으로 **집행**(산문 선행 금지 · HARN-52) |
 | `HARN-61-p0-swap-exemption-clause` | P2 | One In → One Out **예외 3종** 집행 |
 | ~~`HARN-62`~~ → `HARN-57` ④ | P2 | CLI 의미 중복 고지 수용 — `amend` 결측 필드(`--artifact`·`--path`)로 흡수 |
+| `G-state-machine-deferral-recheck` | 게이트 | 8상태 보류의 **재확인 알림** — `kind=decision`·`assignee=kiki`·`remind_after_days=101`(2026-09-03 + 101일 = **G4 12/13**). 판정 3택(보류 유지 / ADR 채택 / 영구 미채택)을 게이트 제목에 명시 |
+
+**게이트 변별력 실측** — `report.overdue_gates`에 날짜를 주입해 True/False가 갈리는지 확인했다(정상 상태에서 항상 초록인 장치는 보호의 증거가 아니다 · CLAUDE.md 2026-09-01):
+
+| 주입 날짜 | 브리핑 리마인드 |
+|---|---|
+| 2026-09-03 (오늘) · 10-25 (G2) · 12-12 (G4 하루 전) | **False** |
+| **2026-12-13 (G4 당일)** | **True** (경과 101일) |
+| 2026-12-20 | True (경과 108일) |
+| *[뮤테이션]* `status=cleared` · 12-20 | **False** — 해소되면 멈춘다 |
 
 **Kiki 완료조건 4가지**는 `EOS-81` acceptance ①에 그대로 들어갔다 — (가) Flutter가 실제 attempt를 제출한다 (나) attempt가 영속 저장된다 (다) 개념·스킬 mastery가 변경된다 (라) 후속 추천이 갱신된 mastery를 반영한다. **한 번의 테스트에서** 순서대로 증명하며, **"API 200"은 완료 조건이 아니다.**
 
