@@ -2,9 +2,16 @@
 
 > **판정 기준**: 코드 grep·문서 서술이 아니라 **명령 출력**으로 판정한다(CLAUDE.md).
 > **대조 시점**: `claude/whymath-system-review-n75r24` @ `5bb2947b` · API 라우트 103건 · 백엔드 모듈 637개.
-> **성격**: 조사 전용(코드 변경 0). 대장 변경 없음.
-> **환경 한계(명시)**: 샌드박스에 백엔드 의존성 미설치 → 앱 부팅·테스트 실행 불가.
-> 라우트는 AST 파싱으로, CI 결과는 GitHub API 실측으로 대체했다.
+> **성격**: 초판은 조사 전용이었고, 이후 §5-1(G1)의 서버 축을 같은 PR에서 고쳤다(`EOS-82`).
+> **환경 한계(명시·초판 이후 일부 해소)**: 라우트는 AST 파싱으로, CI 결과는 GitHub API 실측으로 대체했다.
+> 초판 작성 시점에는 백엔드 의존성이 미설치라 테스트를 돌리지 못했으나, 이후 Python 3.12 venv를
+> 구성해 **전체 스위트 11,643 passed·0 failed**(+ 재실행 84)와 `mypy --strict` 637파일을 실측했다.
+> **실기기·실 PG 구간은 여전히 확인 밖**이다(pgvector 확장 부재 + docker 데몬 미가동 — `docker info` exit 1).
+
+> **📌 정정 이력 (2026-09-03 · PR #977 리뷰 반영)**: 리뷰 봇 지적 3건을 재검증해 **초판 판정 2건을
+> 뒤집었다** — ⓐ §4 공개 카탈로그를 "해소"로 닫은 것은 오판정이었다(→ **S4**, 실제 갭) ⓑ §4 S1(DSL
+> 권한)은 **철회**한다(재검증 결과 3종 모두 영속 0). ⓒ "미머지 브랜치 미조회" 한계는 `git fetch
+> --unshallow`로 **해소**했다(§1.5 — 원격 36브랜치 재조회). 뒤집힌 2건 모두 *초판이 근거 문서를 반대로 읽은* 경우다.
 
 ---
 
@@ -16,6 +23,10 @@
    `grade`·`school_type`을 **소비하는 코드는 4곳인데 값을 넣는 API가 0곳**이라 하위 기능들이 조용히 무효화된다.
 3. **축 2(관리자 흐름)는 12단계 중 HTTP 표면이 2개뿐이고 사람 UI가 없다.** 실운영 수단은 `python -m ...` CLI 60여 개이며,
    **콘텐츠 "배포(게시)" 축은 선언만 있고 소비처 0건**이다.
+
+4. **학생 안전 축에서 별도 발견 1건** — 무인증 `GET /v1/problems`가 검수 축을 경유하지 않아
+   **검수 전(pending) 문항 158건이 열람된다**(그중 34문은 노출 부적격으로 명시된 문항). 활성 태스크
+   `PB-08`이 이미 등재해 둔 축이며, 이 문서 초판은 이것을 "문서화된 결정"으로 잘못 닫았다(§4 S4).
 
 **종합 판정: "EOS 1과목 완성" 미달.** 축 3은 충족, 축 1은 부분, 축 2는 미달.
 
@@ -62,6 +73,33 @@ CLAUDE.md의 「정본화를 집행으로 착각한 완료 선언 금지」 기�
 
 **검색 방법 명시**(부재 판정 절차): ①역할 기반 재검색(`SubjectAdapter`·`subject_adapter`·`detect_misconception`·`evaluate_answer(`)
 ②소비자 역추적(`composition` default_* 호출처) ③저장소 전체 `.py` 전수. 세 방법 모두 서빙 참조 0건.
+
+---
+
+## §1.5. 미머지 브랜치 교차조회 (초판 한계 해소 — PR #977 리뷰 P2 반영)
+
+초판은 shallow 클론이라 `git log --all --grep`을 쓰지 못했다. 이 저장소는 **trunk가 장기 작업을
+대표하지 않으므로**("trunk 부재 ≠ 미구현" — CLAUDE.md) 그 상태의 "없다" 판정은 신뢰도가 낮았다.
+`git fetch --unshallow origin`(881커밋 확보)으로 해소하고 **원격 브랜치 36개 전건**을 재조회했다.
+
+| 재검증 대상 | 조회 범위 | 결과 |
+|---|---|---|
+| 관리자 라우터 | 전 브랜치 `api/admin*` 파일 존재 | **0건** — ADMIN-04 "없다" 유지 |
+| 게시 축 소비 | 전 브랜치 `is_published` in `api/**`·`l6/**` | **0건** — ADMIN-12 "선언만" 유지 |
+| 필수층 계약 배선 | 전 브랜치 `MathSubjectAdapter`·`detect_misconception` in `api/**`·`composition.py`·`l6/**` | **0건** — §1.3 미배선 유지 |
+
+`ADMIN-12`·`ADMIN-04`를 언급하는 커밋은 있으나 전부 **다른 태스크가 본문에서 참조**한 것이고
+(예: `EOS-72` 커밋이 ADMIN-12를 언급), 해당 기능의 구현 커밋이 아니다. 따라서 본 문서의 "없다"
+판정은 **trunk-only가 아니라 원격 36브랜치 기준**이다.
+
+재현:
+
+```bash
+git fetch --unshallow origin && git fetch origin 'refs/heads/*:refs/remotes/origin/*'
+for b in $(git branch -r | grep -v HEAD); do
+  git grep -l "is_published" "$b" -- 'src/backend/whymath_backend/api/*.py' 'src/backend/whymath_backend/l6/**'
+done
+```
 
 ---
 
@@ -144,7 +182,7 @@ auth · interactions · coach×3 · scene · defect-report · verify-solution ·
 | 5 | 풀이(해설) | 문제 레코드에 동봉 · 독립 쓰기 표면 없음 | ⚠️ 부분 |
 | 6 | 오개념 | CLI 적재 · **HTTP 쓰기/읽기 0** | ⚠️ 부분 |
 | 7 | 교수전략 | CLI 적재(YAML 팩) · **HTTP 0** | ⚠️ 부분 |
-| 8 | 콘텐츠(DSL) | HTTP 3종 — **역할 게이트 없음** | ⚠️ 권한 결함 |
+| 8 | 콘텐츠(DSL) | HTTP 3종(`CurrentUser` — 확정된 인가 정책) · 영속 0 | ✅ 있다(검증·컴파일) · 발행 경로는 미착지 |
 | 9 | 검수 | 대화형 CLI + JSONL 큐 + Markdown 체크박스 · **UI 없음** | ⚠️ 부분 |
 | 10 | 승인 | 기계 판정 각인 CLI + 수동 PATCH · **사람 승인 UI 없음** | ⚠️ 부분 |
 | 11 | 버전 | 디렉터리 규약(`_v0`/`_v1` + `_provenance.json`) + Alembic · **상태머신 미배선** | ⚠️ 부분 |
@@ -216,10 +254,10 @@ data/corpus/<도메인>_v1/ 손편집
 
 | # | 등급 | 내용 |
 |---|---|---|
-| S1 | **중** | **`/v1/dsl/{generate,validate,compile}` 3종이 인증만 요구하고 역할 게이트가 없다** (`api/dsl.py:167,250,263` = `CurrentUser`). 모듈 docstring이 *"관리자 발행은 후속 `RequireContentAdmin`으로 분리한다"*고 **스스로 미완을 자인**한다. 임의의 로그인 학생이 콘텐츠 생성 파이프라인을 호출할 수 있다 — 12단계 중 유일하게 관리자 게이트가 없는 쓰기 표면. |
+| ~~S1~~ | **철회** *(PR #977 리뷰 지적 — 재검증 결과 초판이 틀렸다)* | 초판은 `/v1/dsl/{generate,validate,compile}` 3종을 "관리자 게이트 없는 **쓰기** 표면"으로 분류했으나 **셋 다 아무것도 영속하지 않는다** — `validate`·`compile`은 `SessionDep`을 **받지도 않고**(순수 인메모리 검증·컴파일), `generate`가 받는 세션은 `get_alignments()` **읽기 1회**에만 쓰이며 `session.add`·`commit`이 0건이다(현행 MVP는 스캐폴드 DSL 생성). 모듈 주석의 *"관리자 발행은 후속 `RequireContentAdmin`으로 분리한다"*도 미완의 자인이 아니라 **`CurrentUser`를 이 3종의 인가 정책으로 확정하고, 별개의 *발행* 연산을 나중에 분리하겠다는 선언**이다. 초판은 그 문장을 반대로 읽었다. 이 3종에 관리자 게이트를 걸면 의도된 인증 사용자 기능을 없애면서 정작 발행 경로는 닫지 못한다. |
 | S2 | **중** | **승인 게이트의 HTTP 우회.** `PATCH /v1/problems/{id}`가 `body: dict[str, Any]`를 병합 후 `ProblemSchema`로만 재검증하므로(`api/problems.py:305,336-341`), CONTENT_ADMIN 토큰이면 `{"review_status":"approved"}` 한 줄로 `golden_promotion_gate` 4단 승격을 **완전히 우회**한다. 게이트가 코퍼스 JSONL 축에만 걸려 있다. |
 | S3 | 정보 | **관리자 행위 감사 부재.** 콘텐츠 CUD(concepts·problems)에 감사 로그가 붙지 않는다 — 누가 어떤 문항을 승인·격리·삭제했는지 흔적이 없다. `record_admin_access_audit`은 ADMIN-06 전제의 dead code (`SEC-29`). |
-| — | 해소 | 공개 GET 4종이 `approved`를 요구하지 않는 건(quarantined만 배제) **사고가 아니라 문서화된 결정**이다 — `api/problems.py:14-33`의 SEC-07 D1(공개 카탈로그 유지) + SEC-24(정답류는 `PublicProblem` 투영으로 구조적 제거, 키 부재가 계약) + EOS-71(격리 배제). 유출 범위는 지문·메타에 한정된다. |
+| S4 | **중** *(초판 오판정 정정 — PR #977 리뷰 지적)* | **공개 GET 4종이 `approved`를 요구하지 않아 검수 전 문항이 무인증으로 열람된다.** 초판은 이를 "문서화된 결정이므로 해소"로 적었는데 **두 결정을 뭉갠 오판정**이었다. SEC-07 D1이 정한 것은 *누가 보는가*(무인증 유지)이고, *무엇이 보이는가*(검수 축)는 판단한 적이 없다 — `PB-08` notes가 그 이유를 명시한다: **"무인증 결정이 내려진 시점에는 `review_status`가 전건 `None`이라 검수 축이라는 개념 자체가 런타임에 없었다."** 실측 규모: **pending 158건**(killer_v0 120 · probability_finite_v0 34 · v1 4)이 이 경로로 열람되며, 그중 `probability_finite_v0` 34문은 **S4-16 강등전 통과 전까지 노출 부적격으로 명시된 문항**이다. 활성 태스크 `PB-08-public-catalog-exposure-contract`(EOS-P1·todo)가 이미 이 축을 등재해 두었다. 의사결정 우선순위 #1(학생 안전)에 걸리는 축이므로 "해소"로 닫으면 안 된다. `PublicProblem` 투영(SEC-24)은 *정답류*만 빼고 지문·메타는 그대로 내보내므로 검수 축을 대신하지 못한다. |
 | — | 확인됨 | `Role`은 **v0 2값 확정**(`STUDENT`·`CONTENT_ADMIN`, `schema/enums.py:1666`). `str` mixin을 안 쓰는 이유(서열 비교가 열리면 미성년 보호 매트릭스가 깨짐)까지 고정돼 있다. concepts·problems 쓰기 6라우트 전부 `RequireContentAdmin` — **누구나 POST 불가**. `/v1/me/harness-metrics`도 `RequireContentAdmin`으로 정정 완료(SEC-24). 데모 인증(`api/demo_auth.py`)은 명시 플래그 + 실 provider 존재 시 이중 거부. |
 
 ---
@@ -238,8 +276,10 @@ data/corpus/<도메인>_v1/ 손편집
    `_SELF_EDITABLE`에 `grade`·`school_type`을 추가해 API를 열었고 테스트 8건이 동결한다
    (뮤테이션 2종으로 8건 전부 red 확인). **다만 앱 온보딩에 입력 화면이 아직 없어**
    실사용 값은 여전히 들어가지 않는다 — G1은 `MOB-21` 착지 시점에 닫힌다.
-2. **ADMIN-12 — 게시 축 배선** 또는 명시적 폐기. 선언만 남은 컬럼은 다음 사람을 속인다.
-3. **S1 — DSL 라우트 `RequireContentAdmin` 승격.** 코드가 스스로 적어 둔 미완이다.
+2. **S4 — 공개 카탈로그 검수 축**(`PB-08`, 이미 등재·EOS-P1). **pending 158건**이 무인증으로
+   열람되고 그중 34문은 노출 부적격으로 명시된 문항이다. 학생 안전은 의사결정 우선순위 #1이므로
+   이 목록에서 가장 위다 — 초판이 이것을 "해소"로 잘못 닫았다.
+3. **ADMIN-12 — 게시 축 배선** 또는 명시적 폐기. 선언만 남은 컬럼은 다음 사람을 속인다.
 4. **G4 — 오답→오개념 축 연결.** `distractor_map`이 이미 코퍼스에 있는데 서빙이 안 쓴다.
 5. **ADMIN-04~07 — 검수/승인 UI 4단 체인** (전부 todo). 도메인 파트너가 CLI를 쓸 수는 없다.
 6. **필수층 계약 배선** 또는 "선택층만으로 간다"는 명시적 결정 기록.
