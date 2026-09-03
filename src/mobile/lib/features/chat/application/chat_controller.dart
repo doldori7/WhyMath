@@ -238,13 +238,15 @@ class ChatController extends _$ChatController {
 
       // 서버가 내린 완료 신호를 *그대로* 옮긴다(MOB-20 · S3-32 클라 절반). 클라는 완료 여부를
       // 판정하지 않고, attempt 재적재도 하지 않는다(서버가 이미 적재 — 중복 적재 금지 계약).
-      ref.read(coachCompletionSignalProvider.notifier).state =
-          CoachCompletionSignal(
-        problemComplete: result.problemComplete,
-        awaitingReflection: result.awaitingReflection,
-        completedAttemptId: result.completedAttemptId,
-        problemId: activeProblemId,
-      );
+      // [MUTATION · 즉시 되돌림] acceptance ④ 변별력 실증 — 이 배선을 제거하면
+      // 테스트가 실제로 RED가 되는지 CI로 확인한다. 다음 커밋에서 revert한다.
+      // ref.read(coachCompletionSignalProvider.notifier).state =
+      //     CoachCompletionSignal(
+      //   problemComplete: result.problemComplete,
+      //   awaitingReflection: result.awaitingReflection,
+      //   completedAttemptId: result.completedAttemptId,
+      //   problemId: activeProblemId,
+      // );
     } catch (e) {
       // ④ 실패는 graceful — 에러만 기록하고 입력 상태를 복구한다(앱 안 죽음).
       // 침묵 실패 금지(CLAUDE.md): 학생 화면 문구는 부드럽게 두되 예외 *타입명*은 남긴다
