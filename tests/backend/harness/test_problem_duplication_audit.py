@@ -853,17 +853,42 @@ def test_real_corpus_snapshot_t1_resolved_and_t2_zero_pairs_after_qual02() -> No
     demo_pool = pda.demo_pool_corpora()
     report = pda.build_report(loads, demo_pool=demo_pool, demo_pool_status="파일확인됨")
 
-    assert report.total_problems == 2638
-    assert len(report.corpora) == 7
+    assert report.total_problems == 14034
+    assert len(report.corpora) == 37
 
     # T1 — 해소됨.
     assert len(report.slug_collisions) == 0
-    assert report.corpus_pairs_scanned == 21  # C(7,2)
+    assert report.corpus_pairs_scanned == 666  # C(37,2) — PB-13 회수로 7종→37종
 
-    # T2 — QUAL-02 은퇴 반영 후 확정 실중복 0쌍(데모 풀 동시노출도 0).
-    assert report.duplicate_pair_count == 0
-    assert len(report.duplicate_pairs_same_format) == 0
+    # T2 — PB-13 회수로 실중복 0쌍 → 71쌍. **처분 대기 상태를 동결한다**(은폐 금지).
+    #
+    # 성격 실측(2026-09-01):
+    #   · 71쌍 전부 same_format · diff_format 0
+    #   · 71쌍 전부 **신규↔신규** — 기존 main 코퍼스와의 교차 중복 0(회수가 기존 콘텐츠를 오염시키지 않았다)
+    #   · 71쌍 전부 **단 두 코퍼스 사이**:
+    #     problem_bank_highschool_quotient_rule_v0 ↔ problem_bank_university_calc1_chain_quotient_v0
+    #     (몫미분이 고교·대학 양쪽 과정에 있어 결정론 생성기가 동일 문항을 만들어 냈다)
+    #   · **데모 풀 동시노출 0/71** — 두 코퍼스 모두 데모 풀 밖이라 학생 노출 위험은 현재 0이다
+    #     (데모 풀 = generated_v0 · misconception_mc_v0 · problem_bank_v1)
+    #
+    # 0이 아닌 값을 동결하는 이유: QUAL-01이 9쌍을 발견하고 QUAL-02가 쌍별 개별 판정으로
+    # 은퇴시킨 선례를 따른다. 처분 전까지 수치를 숨기지 않고 계약으로 노출해 둔다 —
+    # 처분 태스크가 이 수를 줄이면 그 개선이 기계로 증명된다.
+    assert report.duplicate_pair_count == 71
+    assert len(report.duplicate_pairs_same_format) == 71
     assert len(report.duplicate_pairs_diff_format) == 0
+    # 기존 콘텐츠 무오염 + 학생 노출 0 — 이 두 축이 깨지면 처분이 시급해진다는 신호다.
+    assert all(not pair.demo_pool_co_exposed for pair in report.duplicate_pairs_same_format)
+    assert {
+        frozenset((pair.corpus_a, pair.corpus_b)) for pair in report.duplicate_pairs_same_format
+    } == {
+        frozenset(
+            (
+                "problem_bank_highschool_quotient_rule_v0",
+                "problem_bank_university_calc1_chain_quotient_v0",
+            )
+        )
+    }
 
     # 은퇴한 9레코드가 실제로 코퍼스에서 사라졌는지 슬러그 단위로 재확인(재유입 가드).
     all_slugs = {record.slug for load in loads for record in load.records}

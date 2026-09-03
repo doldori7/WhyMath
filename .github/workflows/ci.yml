@@ -44,6 +44,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       docker: ${{ steps.filter.outputs.docker }}
       corpus: ${{ steps.filter.outputs.corpus }}
+      authoring: ${{ steps.filter.outputs.authoring }}
     steps:
       - name: Checkout (merge commit + 부모 — PR diff용)
         uses: actions/checkout@v4
@@ -67,7 +68,7 @@ jobs:
           # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
-          be=false; dp=false; mo=false; web=false; dk=false; cp=false
+          be=false; dp=false; mo=false; web=false; dk=false; cp=false; au=false
           # data/ **최상위** *.json = py↔js↔dart 공유 계약 fixture 묶음(access_matrix·
           # notation_contract·render_contract·scene_contract·segmentation_contract·
           # visual_style_contract·notation_support_manifest·notation_missing_baseline).
@@ -175,12 +176,20 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(data/corpus/|\.github/workflows/ci\.yml$)'; then
             cp=true
           fi
+          # PB-13: 결정론 저작 도구(스켈레톤 생성기·적재 배치)와 그 테스트를 건드리면
+          # corpus-authoring 잡을 깨운다. 이 잡은 backend 잡에서 분리된 corpus_authoring
+          # 마커 테스트(60파일·9분12초)를 돌린다 — 분리가 곧 비활성화가 되지 않도록,
+          # **그 테스트가 지키는 코드를 바꾸는 PR에서는 반드시 실행**되게 하는 배선이다.
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/whymath_backend/l3/equivalent/|src/backend/whymath_backend/harness/|tests/backend/l3/equivalent/|tests/backend/harness/|\.github/workflows/ci\.yml$)'; then
+            au=true
+          fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
           echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
           echo "mobile=$mo" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "docker=$dk" >> "$GITHUB_OUTPUT"
           echo "corpus=$cp" >> "$GITHUB_OUTPUT"
+          echo "authoring=$au" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
@@ -352,6 +361,7 @@ jobs:
       - name: Pytest (with coverage)
         run: |
           pytest \
+            -m "not corpus_authoring" \
             -n auto --dist loadfile \
             --cov=whymath_backend \
             --cov-report=term \
@@ -1322,6 +1332,48 @@ jobs:
   # 주기적으로 잡는 별도 안전망이다. schedule 이벤트에서만 돌고(위 무거운 잡들은 schedule
   # 가드로 스킵), push/PR 경로는 완전 무변경이다. backend-migrations 잡과 동형(실 PG·trust).
   # ─────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────
+  # PB-13: 결정론 저작 도구 회귀 (backend 잡에서 분리)
+  #
+  # **왜 분리했나**: PB-13이 회수한 테스트 60파일이 자체로 9분 12초다. backend 잡은
+  # 이미 28.5분이었고(pytest 단독 22분+) 합치면 37.5분 > timeout-minutes: 35 →
+  # 2026-09-01 PR #969에서 실제로 65% 지점 취소됐다.
+  #
+  # **분리 ≠ 비활성화**: 두 경로에서 반드시 돈다 —
+  #   ⑴ 야간 schedule (전량 안전망)
+  #   ⑵ authoring 플래그 — 생성기(l3/equivalent)·배치(harness)·그 테스트를 건드리는 PR
+  # 즉 이 테스트가 지키는 코드를 바꾸면 그 PR에서 실행된다. 코퍼스 데이터만 바꾸는
+  # PR에서는 안 도는데, 이 테스트들이 검증하는 것은 데이터가 아니라 *생성기 로직*이다.
+  # ─────────────────────────────────────────────────────────────────
+  corpus-authoring:
+    name: corpus-authoring — 결정론 저작 도구 회귀 (생성기·배치)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: changes
+    if: github.event_name == 'schedule' || github.event_name != 'pull_request' || needs.changes.outputs.authoring == 'true'
+    defaults:
+      run:
+        working-directory: src/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install -e ../data-pipeline
+
+      - name: Pytest (corpus_authoring 마커 전량)
+        run: pytest -m corpus_authoring
+
   e2e-nightly:
     name: e2e-nightly — 관통 슬라이스 (실 PG·야간)
     runs-on: ubuntu-latest
