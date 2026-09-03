@@ -109,7 +109,74 @@ EOS_TARGET = {
     "INFRA": "EOS Infra",
     "CLIENT": "Client (View Layer)",
 }
-PRIORITIES = ("P0", "P1", "P2")
+PRIORITIES = ("P0", "P1", "P2", "P3")
+# ── 12/31 폐쇄루프 씨앗 — "이 기능이 없으면 폐쇄루프가 깨지는가"의 *기계 판정* 출발점 ──
+# 학생 루프: 계획서 300 §12 API 12종 ↔ 저장소 대응표(eos_phase2_plan_300_gap_review §3) 그대로.
+STUDENT_LOOP_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("auth", "POST /{provider}/callback"),
+        ("auth", "POST /refresh"),
+        ("users", "GET /me"),
+        ("users", "PATCH /me"),
+        ("me", "GET /diagnosis/concepts"),
+        ("me", "GET /diagnosis/summary"),
+        ("me", "POST /assessments/assemble"),
+        ("me", "GET /next-problem"),
+        ("me", "POST /attempts"),
+        ("me", "GET /mastery/current"),
+        ("me", "GET /weak-concepts"),
+        ("me", "GET /weak-concepts/{concept_id}/learning-path"),
+        ("problems", "GET /{problem_id}"),
+        ("problems", "GET /{problem_id}/steps"),
+        ("concepts", "GET /content"),
+        ("concepts", "GET /{concept_id}"),
+        ("coach", "POST /coach/sessions"),
+        ("coach", "POST /coach/sessions/{dialogue_id}/turns"),
+        ("coach", "GET /coach/sessions/{dialogue_id}"),
+        ("verify", "POST /verify-step"),
+        ("verify", "POST /verify-solution"),
+        ("verify", "POST /verify-answer"),
+        ("study", "POST /{objective_id}/study"),
+        ("study", "POST /{objective_id}/outcome"),
+        ("solution_paths", "GET /{solution_path_id}/steps"),
+    }
+)
+# 앵커 콘텐츠 생산 루프: 선언 부록 E G1~G3·G5 차단 조건의 집행 지점.
+PRODUCTION_LOOP_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("app", "POST /v1/generate"),
+        ("app", "GET /v1/jobs/{job_id}"),
+        ("dsl", "POST /generate"),
+        ("dsl", "POST /validate"),
+        ("dsl", "POST /compile"),
+    }
+)
+PRODUCTION_LOOP_MODULES: tuple[str, ...] = (
+    "harness.problem_corpus_accumulate",  # G1 앵커 1개 E2E(생성→검증→검수큐)
+    "harness.review_session",  # G1 HIT 이벤트 적재
+    "harness.review_timer",
+    "harness.needs_review_worklist",  # G1 검수큐
+    "ops.hit_cu_metrics",  # G2 HIT 중앙값 판독
+    "harness.qa_pipeline",  # G2 자동검증률 · G3 누설 0
+    "harness.golden_benchmark",  # G2 자동검증이 맞는지(EOS-60 FN율)
+    "harness.anchor_round_ledger",  # G2 CU 물량 회차 대장(EOS-64)
+    "ops.provenance_audit",  # G1 provenance 레일 · G2 금칙 소스
+    "ops.validation_scorecard",  # G5 Go/No-Go 판정기
+)
+# 불변 계약(선언 §0-6): 루프 도달성과 무관하게 P0 — 미성년 PII·저작권 레일·Langfuse 추적·동의.
+# *구현*하는 모듈만 본다(서빙 표면은 호출 폐쇄에, 엔진은 자기 모듈에). `api._auth`처럼 모든
+# 엔드포인트가 *사용*하는 인증 배관은 여기 넣지 않는다 — 넣으면 인증이 걸린 전 표면이 P0가 된다.
+INVARIANT_MODULE_PREFIXES: tuple[str, ...] = (
+    "privacy.",
+    "consent",
+    "l1.rights",
+    "l3.data_export_policy",
+    "l3.data_grade_defaults",
+    "l3.trace",
+    "ops.log_scrubber",
+)
+# 인증·암호화 배관 자체(User/Auth — 계획서 100 P0 예시) — 자기 모듈로만 판정.
+INVARIANT_AUTH_MODULES: tuple[str, ...] = ("security", "api._auth", "api._crypto")
 AXES = ("A_subject", "B_db", "C_coupling", "D_tests", "E_state", "F_data")
 # data_pipeline 패키지 배정 — BOUNDARY_MAP은 backend만 다루므로 ETL 절반은 여기서 판정한다.
 # 규칙은 l1 배정과 동일: 실어 나르는 엔티티가 수식(latex·canonical)이면 MIXED.
@@ -148,6 +215,8 @@ class Spec:
     flag: str = ""  # config.Settings 필드 — 기본값 실측으로 status 덮기
     status: str = "Production"
     duplicate_of: str = ""  # §3.4 REPLACE 신호 '동일 기능 중복 구현' — 원본 행 ID(선언·근거는 seat)
+    loop_seed: bool = False  # 폐쇄루프 진입점 선언(클라 앱 셸처럼 import 그래프에 안 잡히는 좌석)
+    horizon: str = ""  # "P3" = 장기 연구/플랫폼 선언(근거는 seat) — P3는 선언으로만 생긴다
 
 
 def _s(
@@ -190,6 +259,8 @@ def _e(
     status: str = "Production",
     plane: str = "E",
     duplicate_of: str = "",
+    horizon: str = "",
+    loop_seed: bool = False,
 ) -> Spec:
     return Spec(
         fid,
@@ -204,6 +275,8 @@ def _e(
         flag=flag,
         status=status,
         duplicate_of=duplicate_of,
+        horizon=horizon,
+        loop_seed=loop_seed,
     )
 
 
@@ -230,8 +303,11 @@ def _c(
     seat: str,
     *client: str,
     status: str = "Production",
+    loop_seed: bool = False,
 ) -> Spec:
-    return Spec(fid, name, "C", user, domain, pr, seat, client=client, status=status)
+    return Spec(
+        fid, name, "C", user, domain, pr, seat, client=client, status=status, loop_seed=loop_seed
+    )
 
 
 # fmt: off
@@ -554,21 +630,23 @@ CATALOG: tuple[Spec, ...] = (
     _e("WM-E-501", "OCR 파이프라인(검출→라우팅→인식→조립·검증)", "Student", "Math Engine", "P2",
        "PaddleOCR+Qwen3-VL — 라이브 정확도 미검증", "l5.ocr", "api.ocr_handoff",
        flag="ocr_enabled"),
-    _e("WM-E-601", "L6 모드 게이팅 로직 6종 + 공용 헬퍼", "Student", "Application Mode", "P2",
-       "L6 — 수학 신호 0(Physics 무수정 구역)", "l6._shared", "l6.gifted", "l6.metacognition",
-       "l6.retake", "l6.school_progress", "l6.thinking", "l6.suneung.gating"),
-    _e("WM-E-602", "수능 적응 추천(게이팅×IRT CAT)", "Student", "Recommendation", "P1",
-       "next-problem이 소비", "l6.suneung.recommendation"),
+    _e("WM-E-601", "L6 모드 게이팅 로직 5종(재수·학교진도·사고력·메타인지·영재)", "Student",
+       "Application Mode", "P2",
+       "L6 — 수학 신호 0(Physics 무수정 구역) · 수능 모드는 WM-E-602", "l6.gifted",
+       "l6.metacognition", "l6.retake", "l6.school_progress", "l6.thinking"),
+    _e("WM-E-602", "수능 모드 게이팅·적응 추천(게이팅×IRT CAT)", "Student", "Recommendation", "P1",
+       "next-problem이 소비 — 공용 게이팅 헬퍼 포함", "l6.suneung", "l6._shared"),
     _e("WM-E-603", "평가 청사진 테스트셋 조립", "Student", "Assessment", "P0",
        "ASM-04 — assemble 표면의 엔진", "l6.blueprint"),
     # ════════════════════ E — WH-S·WH-1 하네스(런타임) ════════════════════
     _e("WM-E-701", "WH-S 솔버 하네스(루프·판정·저장소·코퍼스 replay)", "Platform", "Math Engine",
-       "P1", "03b 설계 — PRM 라벨 공급", "whs.harness", "whs.verdict", "whs.baseline",
-       "whs.node_store", "whs.lemma_store", "whs.dead_end_store", "whs.solution_bank",
-       "whs.corpus_replay"),
+       "P1", "03b 설계 — 솔버 자기진화 플랫폼(PRM 라벨 공급) — 12월 폐쇄루프 밖·장기 연구",
+       "whs.harness", "whs.verdict", "whs.baseline", "whs.node_store", "whs.lemma_store",
+       "whs.dead_end_store", "whs.solution_bank", "whs.corpus_replay", horizon="P3"),
     _e("WM-E-702", "WH-S 자기진화(PRM·SFT 학습셋 export)", "Admin", "Math Engine", "P2",
-       "설계 §5 — 2027 학습 파이프라인", "whs.prm_builder", "whs.prm_builder_export_cli",
-       "whs.self_evolution", "whs.self_evolution_export_cli", status="Batch"),
+       "설계 §5 — 2027 학습 파이프라인(PRM·SFT) — 장기 연구", "whs.prm_builder",
+       "whs.prm_builder_export_cli", "whs.self_evolution", "whs.self_evolution_export_cli",
+       status="Batch", horizon="P3"),
     _e("WM-E-703", "bank_solution → SolutionPath 승격 writer", "Admin", "Content", "P0",
        "S4-09 D1", "whs.path_promotion", status="Batch"),
     _e("WM-E-704", "WH-1 튜터링 하네스(턴 루프·LLM 정책·프로즈·프로브 공급)", "Student",
@@ -593,7 +671,8 @@ CATALOG: tuple[Spec, ...] = (
        "JWT·디바이스 서명·봉투 암호화 — 불변 계약", "security", "api._auth", "api._crypto",
        "api._rate_limit", "api._concurrency", "api._degradation", "api._query_filters"),
     _e("WM-E-804", "OAuth 제공자 구현(카카오·네이버 httpx)", "Platform", "Identity", "P0",
-       "OAuth-a2 — code → 검증된 외부 신원", "api.oauth_providers"),
+       "OAuth-a2 — auth callback이 app.state DI로 호출(정적 import 그래프 사각 — 씨앗 선언)",
+       "api.oauth_providers", loop_seed=True),
     _e("WM-E-805", "동의 절차(14세 미만·동의 부여)", "Parent", "Security", "P0",
        "법령 유래 절차 — 기계 대체 금지", "consent", "consent_grant"),
     _e("WM-E-806", "디바이스 저장소·서명 실패 metric", "Platform", "Security", "P1",
@@ -660,8 +739,9 @@ CATALOG: tuple[Spec, ...] = (
     _c("WM-C-002", "온보딩(학년·학교유형·목표)", "Student", "Client UX", "P0",
        "Gate2 ① — EOS-82 클라 축", "mobile/lib/features/onboarding"),
     _c("WM-C-003", "홈·탭 셸·라우팅", "Student", "Client UX", "P0",
-       "MOB-08 indexedStack", "mobile/lib/features/home", "mobile/lib/app.dart",
-       "mobile/lib/main.dart", "mobile/lib/theme"),
+       "MOB-08 indexedStack — 앱 진입점·라우팅(없으면 어떤 화면에도 못 간다)",
+       "mobile/lib/features/home", "mobile/lib/app.dart", "mobile/lib/main.dart",
+       "mobile/lib/theme", loop_seed=True),
     _c("WM-C-004", "코치 채팅(턴·단계 패널·완료 신호)", "Student", "Client UX", "P0",
        "E2 — MOB-20 완료 신호 3필드", "mobile/lib/features/chat/application",
        "mobile/lib/features/chat/data/coach_api.dart",
@@ -672,11 +752,11 @@ CATALOG: tuple[Spec, ...] = (
        "mobile/lib/features/chat/presentation/coach_signal_card.dart",
        "mobile/lib/features/verify"),
     _c("WM-C-005", "MathLive 수식 입력(WebView 임베드)", "Student", "Client UX", "P0",
-       "E1 학생 입력 표준 — 28_mathlive_input.md",
+       "E1 학생 입력 표준(28_mathlive_input.md) — 코치 턴 입력 표면·API 호출 0이라 씨앗 선언",
        "mobile/lib/features/chat/presentation/mathlive_input_screen.dart",
        "mobile/lib/features/chat/presentation/mathlive_input_webview.dart",
        "mobile/lib/features/chat/presentation/webview_fallback.dart",
-       "mobile/assets/mathlive_input"),
+       "mobile/assets/mathlive_input", loop_seed=True),
     _c("WM-C-006", "학습 장면·풀이 경로 렌더러", "Student", "Client UX", "P2",
        "scene 계약 테스트 동결", "mobile/lib/features/chat/presentation/scene_renderer.dart",
        "mobile/lib/features/chat/data/scene_api.dart",
@@ -745,8 +825,43 @@ def _resolve_modules(entry: str, universe: list[str]) -> list[str]:
     return [m for m in universe if m == entry or m.startswith(entry + ".")]
 
 
+_INIT_SYMBOLS: dict[str, dict[str, str]] = {}
+
+
+def _init_symbol_map(pkg: str) -> dict[str, str]:
+    """패키지 `__init__`이 재수출하는 심볼 → 정의 모듈.
+
+    `from whymath_backend.l4 import PolyaCoach`를 `l4.polya.engine`으로 푼다.
+    """
+    if pkg in _INIT_SYMBOLS:
+        return _INIT_SYMBOLS[pkg]
+    out: dict[str, str] = {}
+    init = BACKEND / pkg.replace(".", "/") / "__init__.py"
+    if init.is_file():
+        tree = ast.parse(init.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.level and not node.module.startswith("whymath_backend"):
+                    base = f"{pkg}.{node.module}"  # 상대 import(`from .polya.engine import …`)
+                elif node.module.startswith("whymath_backend"):
+                    base = node.module[len("whymath_backend") :].lstrip(".")
+                else:
+                    continue
+                for a in node.names:
+                    deeper = f"{base}.{a.name}"
+                    out[a.asname or a.name] = (
+                        deeper if (_module_path(deeper) or pathlib.Path()).is_file() else base
+                    )
+    _INIT_SYMBOLS[pkg] = out
+    return out
+
+
 def _import_alias_map(tree: ast.AST) -> dict[str, str]:
-    """import 별칭 → 내부 모듈 점 경로(`from l2 import bkt` → l2.bkt로 파일 해석)."""
+    """import 별칭 → 내부 모듈 점 경로.
+
+    `from l2 import bkt`는 파일 l2.bkt로, `from l4 import PolyaCoach`는 `l4/__init__`의 재수출을
+    따라 l4.polya.engine으로 해석한다. 둘 다 아니면 패키지 자신(`__init__`)에 귀속한다.
+    """
     alias: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -755,7 +870,10 @@ def _import_alias_map(tree: ast.AST) -> dict[str, str]:
             base = node.module[len("whymath_backend") :].lstrip(".")
             for a in node.names:
                 deeper = f"{base}.{a.name}" if base else a.name
-                target = deeper if (_module_path(deeper) or pathlib.Path()).is_file() else base
+                if (_module_path(deeper) or pathlib.Path()).is_file():
+                    target = deeper
+                else:
+                    target = _init_symbol_map(base).get(a.name, base) if base else a.name
                 alias[a.asname or a.name] = target
         elif isinstance(node, ast.Import):
             for a in node.names:
@@ -769,8 +887,26 @@ class Endpoint:
     method: str
     path: str
     func: str
-    refs: set[str]
+    refs: set[str]  # 본문 1-hop 참조 — 6축 매트릭스(기능 단위 결합) 재료
     contract: bool = True  # response_model 선언 또는 204(본문 없음) — §3.4 'API 계약' 신호
+    deep_refs: set[str] = field(
+        default_factory=set
+    )  # 모듈 내 헬퍼 사슬 포함 — 폐쇄루프 도달성 재료
+
+
+def _names_in(node: ast.AST) -> set[str]:
+    """노드 안에서 참조되는 이름(속성 접근은 루트 이름)."""
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            names.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            root: ast.expr = n
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name):
+                names.add(root.id)
+    return names
 
 
 def _endpoints(router_mod: str) -> list[Endpoint]:
@@ -778,6 +914,21 @@ def _endpoints(router_mod: str) -> list[Endpoint]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     alias = _import_alias_map(tree)
     target_obj = "app" if router_mod == "app" else "router"
+    # 모듈 수준 심볼(헬퍼 함수·클래스·상수) → 그 정의가 참조하는 이름. 엔드포인트가 `_run_coach()`를
+    # 부르면 그 헬퍼가 import한 모듈도 엔드포인트의 의존이다(1-hop 본문만 보면 놓친다).
+    local_syms: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        targets: list[str] = []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            targets = [node.name]
+        elif isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target.id]
+        if targets:
+            names_in = _names_in(node)
+            for t in targets:
+                local_syms.setdefault(t, set()).update(names_in)
     out: list[Endpoint] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -790,21 +941,23 @@ def _endpoints(router_mod: str) -> list[Endpoint]:
             if not (isinstance(d.func.value, ast.Name) and d.func.value.id == target_obj):
                 continue
             raw = d.args[0].value if d.args and isinstance(d.args[0], ast.Constant) else ""
-            names: set[str] = set()
-            for n in ast.walk(node):
-                if isinstance(n, ast.Name):
-                    names.add(n.id)
-                elif isinstance(n, ast.Attribute):
-                    root: ast.expr = n
-                    while isinstance(root, ast.Attribute):
-                        root = root.value
-                    if isinstance(root, ast.Name):
-                        names.add(root.id)
-            refs = {alias[x] for x in names if x in alias}
+            body_names = set(_names_in(node))
+            names = set(body_names)
+            frontier = [x for x in names if x in local_syms]
+            while frontier:  # 모듈 내 헬퍼 호출 사슬을 따라 이름을 모은다(visited = names)
+                sym = frontier.pop()
+                for extra in local_syms[sym] - names:
+                    names.add(extra)
+                    if extra in local_syms:
+                        frontier.append(extra)
+            refs = {alias[x] for x in body_names if x in alias}
+            deep_refs = {alias[x] for x in names if x in alias}
             kw = {k.arg: k.value for k in d.keywords if k.arg}
             no_body = "status_code" in kw and "204" in ast.unparse(kw["status_code"])
             contract = "response_model" in kw or no_body
-            out.append(Endpoint(d.func.attr.upper(), str(raw) or "/", node.name, refs, contract))
+            out.append(
+                Endpoint(d.func.attr.upper(), str(raw) or "/", node.name, refs, contract, deep_refs)
+            )
     return out
 
 
@@ -919,6 +1072,11 @@ class Row:
     replace_signals: int = 0
     criteria_action: str = ""
     action_basis: str = ""
+    # 폐쇄루프 도달성 — P0 판정 재료
+    loop_hits: dict[str, bool] = field(default_factory=dict)  # student/production/invariant/seed
+    client_seed_routes: int = 0  # C: 소스에 폐쇄루프 씨앗 경로 리터럴이 몇 개 나오나
+    release_priority: str = ""  # 파생(기계) — 카탈로그 priority는 선행 제안으로 남는다
+    priority_basis: str = ""
 
 
 def _band(value: int, cuts: tuple[int, int, int]) -> int:
@@ -982,6 +1140,54 @@ def _score(row: Row, v1: Any) -> None:
     row.tests = ("Full", "Partial", "Partial", "None")[row.scores["D_tests"]]
 
 
+def _derive_priority(
+    row: Row,
+    student: set[str],
+    production: set[str],
+    seed_routes: set[tuple[str, str]],
+) -> None:
+    """P0 = "없으면 12/31 폐쇄루프가 깨지는가"에 YES — 도달성·씨앗·불변 계약 셋 중 하나.
+
+    P3 = 카탈로그 `horizon` 선언(장기 연구/플랫폼) · P1/P2 = 선행 제안(카탈로그 `priority`)을
+    승계하되 **선행 P0인데 기계가 도달하지 못한 행은 P1로 강등**한다(우회 가능 = P1의 정의).
+    """
+    spec = row.spec
+    own = set(row.own_modules)
+    scope = own | set(row.closure) if spec.plane == "S" else own
+    loop_tables = {m for m in student | production if m.startswith("db.models.")}
+    hits = {
+        "seed_route": any((spec.router, r) in seed_routes for r in spec.routes)
+        or row.client_seed_routes > 0,
+        "seed_declared": spec.loop_seed,
+        "student_loop": bool(own & student) if spec.plane != "S" else False,
+        "production_loop": bool(own & production) if spec.plane != "S" else False,
+        # L1 적재기가 루프가 읽는 테이블을 채운다 — 데이터가 없으면 루프는 빈 화면이다
+        "data_supplier": (
+            spec.plane != "S"
+            and any(m.startswith("l1.") for m in own)
+            and bool(set(row.db_models) & loop_tables)
+        ),
+        "invariant": any(m.startswith(INVARIANT_MODULE_PREFIXES) for m in scope)
+        or any(m.startswith(INVARIANT_AUTH_MODULES) for m in own),
+    }
+    row.loop_hits = hits
+    reasons = [k for k, v in hits.items() if v]
+    reached_only = set(reasons) <= {"student_loop", "production_loop"}
+    if reasons and reached_only and row.status in ("Flag-off", "Shadow"):
+        row.release_priority = "P1"
+        row.priority_basis = f"정적 도달({', '.join(reasons)})했으나 {row.status} — 우회 가능"
+    elif reasons:
+        row.release_priority, row.priority_basis = "P0", "폐쇄루프: " + ", ".join(reasons)
+    elif spec.horizon == "P3":
+        row.release_priority, row.priority_basis = "P3", "장기 연구/플랫폼(horizon 선언)"
+    elif spec.priority == "P0":
+        row.release_priority = "P1"
+        row.priority_basis = "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
+    else:
+        row.release_priority = spec.priority
+        row.priority_basis = f"선행 제안 승계({spec.priority}) — 폐쇄루프 미도달"
+
+
 _STATE_TRACKERS = re.compile(
     r"audit|evidence|provenance|history|timeseries|_event|generation_log|ledger"
 )
@@ -1020,7 +1226,7 @@ def _apply_criteria_34(row: Row) -> None:
     row.criteria = {**keep, **replace}
     row.keep_met = sum(keep.values())
     row.replace_signals = sum(replace.values())
-    if row.spec.priority == "P2":
+    if row.release_priority in ("P2", "P3"):
         row.criteria_action = "POSTPONE"
     elif row.replace_signals >= REPLACE_MIN_SIGNALS:
         row.criteria_action = "REPLACE_CANDIDATE"
@@ -1030,8 +1236,9 @@ def _apply_criteria_34(row: Row) -> None:
         row.criteria_action = "REFACTOR"
 
     matrix = row.matrix_action
-    if row.spec.priority == "P2":
-        row.migration_action, row.action_basis = "POSTPONE", "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    if row.release_priority in ("P2", "P3"):
+        row.migration_action = "POSTPONE"
+        row.action_basis = f"{row.release_priority}(12월 폐쇄루프 비관여 — 이월≠삭제)"
     elif matrix == "REPLACE_CANDIDATE" or row.replace_signals >= REPLACE_MIN_SIGNALS:
         row.migration_action = "REPLACE_CANDIDATE"
         row.action_basis = (
@@ -1220,6 +1427,19 @@ def _measure_modules(
     )
 
 
+_SEED_PATTERNS: list[re.Pattern[str]] = []
+
+
+def _seed_route_patterns() -> list[re.Pattern[str]]:
+    """학생 루프 씨앗 경로를 클라 소스에서 찾는 정규식 — 서빙 표면 테스트 매칭과 같은 규칙."""
+    if not _SEED_PATTERNS:
+        for router, route in sorted(STUDENT_LOOP_ROUTES):
+            method, _, path = route.partition(" ")
+            stub = Endpoint(method, path, "", set())
+            _SEED_PATTERNS.extend(_route_patterns(_router_prefix(router), [stub]))
+    return _SEED_PATTERNS
+
+
 def _measure_client(spec: Spec, tests: TestIndex, errors: list[str]) -> Row:
     files: list[pathlib.Path] = []
     for rel in spec.client:
@@ -1244,6 +1464,12 @@ def _measure_client(spec: Spec, tests: TestIndex, errors: list[str]) -> Row:
                 continue
             parts = target.split("/")
             cross.add(parts[1] if parts[0] == "features" and len(parts) > 1 else parts[0])
+    seed_hits = 0
+    if files:
+        blob = "\n".join(f.read_text(encoding="utf-8") for f in files)
+        for rx in _seed_route_patterns():
+            if rx.search(blob):
+                seed_hits += 1
     # dart 테스트는 `package:korean_math_app/<lib 이하 경로>`로 import한다 — 그 문자열로 맞춘다
     frags = [
         "korean_math_app/" + re.sub(r"^mobile/lib/", "", r)
@@ -1273,6 +1499,7 @@ def _measure_client(spec: Spec, tests: TestIndex, errors: list[str]) -> Row:
         ownership="CLIENT",
         status=status,
         flag_default=flag_default,
+        client_seed_routes=seed_hits,
     )
 
 
@@ -1328,26 +1555,33 @@ def _completeness_errors(
 
 
 def _effective_import_graph(universe: list[str], v1: Any) -> dict[str, set[str]]:
-    """모듈 → 실효 내부 import 집합. 패키지 import는 그 `__init__`이 재수출하는 모듈로 펼친다.
+    """모듈 → 실효 내부 import 집합(심볼 단위 해석).
 
     `api.coach`가 `from whymath_backend.l4 import PolyaCoach`로 부르면 import 문에는 `l4`만
-    남는다 — `l4/__init__.py`가 `l4.polya.engine`을 재수출하므로 실효 의존은 그 모듈이다.
-    fan-in(§3.4 'API 명확' 대리)이 재수출 뒤에 숨은 소비자를 놓치지 않게 한다.
+    남는다 — `l4/__init__`의 재수출을 따라 **그 심볼을 정의한 모듈**(l4.polya.engine)로 푼다.
+    패키지 전체로 펼치지 않으므로(`l6` import가 L6 게이팅 9모듈 전부로 번지지 않음) fan-in과
+    폐쇄루프 도달성 양쪽에서 과대 도달을 막는다. 6축 C·B 점수는 v1 규칙(문 단위)을 그대로 쓴다.
     """
-    reexports: dict[str, set[str]] = {}
-    for init in BACKEND.rglob("__init__.py"):
-        pkg = ".".join(init.parent.relative_to(BACKEND).parts)
-        if pkg:
-            reexports[pkg] = set(v1._internal_imports(init))
     graph: dict[str, set[str]] = {}
     for m in universe:
         path = _module_path(m)
         assert path is not None
-        imps = set(v1._internal_imports(path))
-        for p in list(imps):
-            imps |= reexports.get(p, set())
-        graph[m] = imps
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        graph[m] = set(_import_alias_map(tree).values())
     return graph
+
+
+def _reach(seeds: set[str], graph: dict[str, set[str]]) -> set[str]:
+    """씨앗에서 import 간선을 따라 닿는 모듈 전부(BFS·visited)."""
+    seen: set[str] = set()
+    frontier = [m for m in seeds if m in graph]
+    while frontier:
+        m = frontier.pop()
+        if m in seen:
+            continue
+        seen.add(m)
+        frontier.extend(n for n in graph.get(m, ()) if n not in seen and n in graph)
+    return seen
 
 
 def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
@@ -1388,10 +1622,34 @@ def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
         endpoint_cache, endpoint_owner, universe, module_owner, router_modules_seen
     )
     import_graph = _effective_import_graph(universe, v1)
+    seed_routes = set(STUDENT_LOOP_ROUTES | PRODUCTION_LOOP_ROUTES)
+    for router, route in seed_routes:
+        method, _, path = route.partition(" ")
+        eps = endpoint_cache.get(router, [])
+        if not any(e.method == method and e.path == path for e in eps):
+            errors.append(f"폐쇄루프 씨앗 경로가 실재하지 않는다: {router} {route}")
+    for m in PRODUCTION_LOOP_MODULES:
+        if m not in import_graph:
+            errors.append(f"폐쇄루프 씨앗 모듈이 실재하지 않는다: {m}")
+
+    def _route_refs(routes: frozenset[tuple[str, str]]) -> set[str]:
+        out: set[str] = set()
+        for router, route in routes:
+            method, _, path = route.partition(" ")
+            for e in endpoint_cache.get(router, []):
+                if e.method == method and e.path == path:
+                    out |= e.deep_refs
+        return out
+
+    student = _reach(_route_refs(STUDENT_LOOP_ROUTES), import_graph)
+    production = _reach(
+        _route_refs(PRODUCTION_LOOP_ROUTES) | set(PRODUCTION_LOOP_MODULES), import_graph
+    )
     for row in rows:
         own = set(row.own_modules)
         if own and row.spec.plane != "S":
             row.fan_in = sum(1 for m, imps in import_graph.items() if m not in own and imps & own)
+        _derive_priority(row, student, production, seed_routes)
         _score(row, v1)
         log(
             f"[measure] {row.spec.fid} {row.spec.plane} own={row.ownership} "
@@ -1401,6 +1659,8 @@ def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
         "backend_modules": len(universe),
         "endpoints": sum(len(v) for v in endpoint_cache.values()),
         "errors": errors,
+        "student_loop_reach": len(student),
+        "production_loop_reach": len(production),
     }
     return rows, info
 
@@ -1424,10 +1684,16 @@ def dashboard(rows: list[Row], info: dict[str, Any]) -> dict[str, Any]:
         "by_ownership": count(lambda r: r.ownership),
         "by_migration_action": count(lambda r: r.migration_action),
         "by_matrix_action": count(lambda r: r.matrix_action),
-        "by_priority_proposed": count(lambda r: r.spec.priority),
+        "by_priority_proposed": count(lambda r: r.release_priority),
+        "by_priority_prior_manual": count(lambda r: r.spec.priority),
+        "priority_changed_from_prior": sum(
+            1 for r in rows if r.release_priority != r.spec.priority
+        ),
+        "student_loop_reach_modules": info["student_loop_reach"],
+        "production_loop_reach_modules": info["production_loop_reach"],
         "by_status": count(lambda r: r.status),
         "by_risk": count(lambda r: r.migration_risk),
-        "release_p0_proposed": sum(1 for r in rows if r.spec.priority == "P0"),
+        "release_p0_proposed": sum(1 for r in rows if r.release_priority == "P0"),
         "classification_rate": f"{len(rows)}/{len(rows)}",
         "by_criteria_action": count(lambda r: r.criteria_action),
         "keep_criteria_histogram": count(lambda r: f"{r.keep_met}/6"),
@@ -1454,6 +1720,7 @@ _DASH_GROUPS = (
     "by_migration_action",
     "by_matrix_action",
     "by_priority_proposed",
+    "by_priority_prior_manual",
     "by_status",
     "by_risk",
 )
@@ -1472,6 +1739,9 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
         f"  backend_modules_covered: {dash['backend_modules_covered']}",
         f"  endpoints_covered: {dash['endpoints_covered']}",
         f"  release_p0_proposed: {dash['release_p0_proposed']}",
+        f"  priority_changed_from_prior: {dash['priority_changed_from_prior']}",
+        f"  student_loop_reach_modules: {dash['student_loop_reach_modules']}",
+        f"  production_loop_reach_modules: {dash['production_loop_reach_modules']}",
         f"  final_differs_from_matrix: {dash['final_differs_from_matrix']}",
         f"  final_differs_from_criteria: {dash['final_differs_from_criteria']}",
     ]
@@ -1496,7 +1766,9 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
             f"    tests: {r.tests}",
             f"    migration_action: {r.migration_action}",
             f"    matrix_action: {r.matrix_action}",
-            f"    release_priority_proposed: {s.priority}",
+            f"    release_priority_proposed: {r.release_priority}",
+            f"    release_priority_prior_manual: {s.priority}",
+            f"    priority_basis: {_q(r.priority_basis)}",
             f"    migration_risk: {r.migration_risk}",
             f"    loc: {r.loc}",
             f"    endpoints: {r.endpoints}",
@@ -1521,6 +1793,10 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
             f"    fan_in: {r.fan_in}",
             f"    contract_gaps: {r.contract_gaps}",
             f"    duplicate_of: {_q(s.duplicate_of)}",
+            "    loop_hits:",
+        ]
+        lines += [f"      {k}: {str(v).lower()}" for k, v in r.loop_hits.items()]
+        lines += [
             "    criteria_34:",
         ]
         lines += [f"      {k}: {str(v).lower()}" for k, v in r.criteria.items()]
@@ -1544,6 +1820,8 @@ CSV_HEADER = [
     "Migration Action",
     "매트릭스 판정",
     "출시 우선도(제안)",
+    "우선도 근거",
+    "선행 제안(v2.0)",
     "Migration Risk",
     "A과목",
     "B DB",
@@ -1589,6 +1867,8 @@ def to_csv(rows: list[Row]) -> str:
                 r.tests,
                 r.migration_action,
                 r.matrix_action,
+                r.release_priority,
+                r.priority_basis,
                 s.priority,
                 r.migration_risk,
                 *(r.scores[k] for k in AXES),
@@ -1623,7 +1903,7 @@ def to_markdown(rows: list[Row], dash: dict[str, Any]) -> str:
         lines.append(
             f"| {s.fid} | {s.name} | `{loc}` | {s.user} | {s.domain} | {r.ownership} "
             f"| {r.status} | {r.coupling} | {r.tests} | **{r.migration_action}** "
-            f"| {s.priority} | {r.migration_risk} | {axes} | {r.total} |"
+            f"| {r.release_priority} | {r.migration_risk} | {axes} | {r.total} |"
         )
     lines += ["", f"**대시보드**: {dash}"]
     return "\n".join(lines)

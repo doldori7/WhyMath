@@ -186,13 +186,77 @@ def test_ownership_is_derived_from_boundary_map_not_declared(gen: Any, measured:
     assert all(r.ownership == "CLIENT" for r in rows if r.spec.plane == "C")
 
 
-def test_postpone_overrides_only_p2_and_preserves_matrix_verdict(measured: Any) -> None:
+def test_postpone_overrides_only_p2_p3_and_preserves_matrix_verdict(measured: Any) -> None:
     rows, _ = measured
     for r in rows:
-        if r.spec.priority == "P2":
+        if r.release_priority in ("P2", "P3"):
             assert r.migration_action == "POSTPONE" and r.matrix_action != "POSTPONE"
         else:
             assert r.migration_action != "POSTPONE"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ②-c P0~P3 — "이 기능이 없으면 12/31 폐쇄루프가 깨지는가"를 기계가 답하는가
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_every_loop_seed_route_and_module_actually_exists(gen: Any, measured: Any) -> None:
+    """씨앗이 사라진 엔드포인트·모듈을 가리키면 도달성 전체가 조용히 비어 P0가 0이 된다 — 그래서 실재를 검사."""
+    _, info = measured
+    assert not [e for e in info["errors"] if "씨앗" in e]
+    assert info["student_loop_reach"] > 50 and info["production_loop_reach"] > 50
+
+
+def test_release_priority_is_derived_and_every_p0_carries_loop_evidence(
+    gen: Any, measured: Any
+) -> None:
+    rows, _ = measured
+    for r in rows:
+        assert r.release_priority in gen.PRIORITIES and r.priority_basis, r.spec.fid
+        if r.release_priority == "P0":
+            assert any(r.loop_hits.values()), f"{r.spec.fid}: P0인데 폐쇄루프 근거가 없다"
+        if r.release_priority == "P3":
+            assert r.spec.horizon == "P3", f"{r.spec.fid}: P3는 horizon 선언으로만 생긴다"
+    assert sum(1 for r in rows if r.release_priority == "P0") >= 60
+
+
+def test_flag_off_modules_reached_only_statically_are_not_p0(measured: Any) -> None:
+    """정적 import로 닿았지만 플래그가 꺼진 기능은 없어도 루프가 안 깨진다 — P1(우회 가능)."""
+    rows, _ = measured
+    for r in rows:
+        only_reach = set(k for k, v in r.loop_hits.items() if v) <= {
+            "student_loop",
+            "production_loop",
+        }
+        if r.status in ("Flag-off", "Shadow") and only_reach and any(r.loop_hits.values()):
+            assert r.release_priority == "P1", r.spec.fid
+
+
+def test_invariant_contracts_are_p0_regardless_of_reach(measured: Any) -> None:
+    by_fid = {r.spec.fid: r for r in rows} if (rows := measured[0]) else {}
+    for fid in ("WM-S-007", "WM-S-009", "WM-S-023", "WM-O-901", "WM-E-305", "WM-E-803"):
+        assert by_fid[fid].release_priority == "P0" and by_fid[fid].loop_hits["invariant"], fid
+
+
+def test_client_rows_are_p0_only_via_seed_route_literal_or_declared_seed(measured: Any) -> None:
+    rows, _ = measured
+    for r in rows:
+        if r.spec.plane == "C" and r.release_priority == "P0":
+            assert r.client_seed_routes > 0 or r.spec.loop_seed, r.spec.fid
+        if r.spec.plane == "C" and r.client_seed_routes == 0 and not r.spec.loop_seed:
+            assert r.release_priority != "P0", r.spec.fid
+
+
+def test_prior_manual_priority_is_kept_for_the_diff_not_used_for_p0(
+    gen: Any, measured: Any
+) -> None:
+    rows, info = measured
+    text = gen.to_yaml(rows, gen.dashboard(rows, info))
+    assert text.count("    release_priority_prior_manual: ") == len(rows)
+    demoted = [r for r in rows if r.spec.priority == "P0" and r.release_priority == "P1"]
+    assert demoted, "선행 P0 중 기계가 강등한 행이 0 — 도달성 규칙이 선행 제안을 그대로 베낀 것"
+    for r in demoted:
+        assert "강등" in r.priority_basis or "우회 가능" in r.priority_basis, r.spec.fid
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -217,7 +281,7 @@ def test_final_action_follows_the_combined_rule_row_by_row(gen: Any, measured: A
     """POSTPONE=P2 · REPLACE=매트릭스 14+ 또는 신호≥3 · HEAVY=매트릭스 10~13 · KEEP=§3.4 ≥5/6 · 나머지 REFACTOR."""
     rows, _ = measured
     for r in rows:
-        if r.spec.priority == "P2":
+        if r.release_priority in ("P2", "P3"):
             expected = "POSTPONE"
         elif r.matrix_action == "REPLACE_CANDIDATE" or r.replace_signals >= gen.REPLACE_MIN_SIGNALS:
             expected = "REPLACE_CANDIDATE"

@@ -8,19 +8,22 @@ dashboard:
   classification_rate: 162/162
   backend_modules_covered: 580
   endpoints_covered: 109
-  release_p0_proposed: 94
-  final_differs_from_matrix: 38
-  final_differs_from_criteria: 13
+  release_p0_proposed: 99
+  priority_changed_from_prior: 26
+  student_loop_reach_modules: 200
+  production_loop_reach_modules: 166
+  final_differs_from_matrix: 39
+  final_differs_from_criteria: 12
   by_criteria_action:
-    KEEP: 120
-    POSTPONE: 23
+    KEEP: 122
+    POSTPONE: 21
     REFACTOR: 19
   keep_criteria_histogram:
     2/6: 1
     3/6: 4
     4/6: 19
-    5/6: 32
-    6/6: 106
+    5/6: 33
+    6/6: 105
   replace_signal_histogram:
     0/6: 122
     1/6: 37
@@ -38,10 +41,10 @@ dashboard:
     INFRA: 21
     MIXED: 10
   by_migration_action:
-    HEAVY_REFACTOR: 12
-    KEEP: 111
-    POSTPONE: 23
-    REFACTOR: 15
+    HEAVY_REFACTOR: 11
+    KEEP: 113
+    POSTPONE: 21
+    REFACTOR: 16
     REPLACE_CANDIDATE: 1
   by_matrix_action:
     HEAVY_REFACTOR: 13
@@ -49,6 +52,11 @@ dashboard:
     REFACTOR: 50
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
+    P0: 99
+    P1: 42
+    P2: 19
+    P3: 2
+  by_priority_prior_manual:
     P0: 94
     P1: 45
     P2: 23
@@ -76,6 +84,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 4
@@ -103,6 +113,13 @@ features:
     fan_in: 0
     contract_gaps: 3
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -132,6 +149,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -159,6 +178,13 @@ features:
     fan_in: 0
     contract_gaps: 1
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -188,6 +214,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -215,6 +243,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -244,6 +279,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Med
     loc: 0
     endpoints: 2
@@ -271,6 +308,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -300,6 +344,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 3
@@ -327,6 +373,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -356,6 +409,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route, invariant"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -383,6 +438,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -412,6 +474,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -439,6 +503,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -468,6 +539,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 3
@@ -495,6 +568,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -524,6 +604,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Med
     loc: 0
     endpoints: 1
@@ -551,6 +633,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -580,6 +669,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -607,6 +698,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -636,6 +734,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -663,6 +763,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -692,6 +799,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -719,6 +828,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -748,6 +864,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -775,6 +893,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -804,6 +929,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -831,6 +958,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -860,6 +994,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -887,6 +1023,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -916,6 +1059,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 3
@@ -943,6 +1088,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -971,7 +1123,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Med
     loc: 0
     endpoints: 5
@@ -999,6 +1153,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1028,6 +1189,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -1055,6 +1218,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1084,6 +1254,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -1111,6 +1283,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1140,6 +1319,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 3
@@ -1167,6 +1348,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1196,6 +1384,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1205,7 +1395,7 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 1
-    coupling_count: 7
+    coupling_count: 8
     test_files: 6
     test_functions: 221
     matrix:
@@ -1223,6 +1413,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1252,6 +1449,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1279,6 +1478,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1308,6 +1514,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -1317,17 +1525,17 @@ features:
     adapter_deps: []
     mixed_deps: []
     db_model_modules: 0
-    coupling_count: 3
+    coupling_count: 5
     test_files: 31
     test_functions: 490
     matrix:
       A_subject: 0
       B_db: 0
-      C_coupling: 0
+      C_coupling: 1
       D_tests: 0
       E_state: 1
       F_data: 0
-    matrix_total: 1
+    matrix_total: 2
     criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 0/6
@@ -1335,6 +1543,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1364,6 +1579,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -1391,6 +1608,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1420,6 +1644,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1447,6 +1673,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1476,6 +1709,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -1503,6 +1738,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1531,7 +1773,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1559,6 +1803,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1588,6 +1839,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -1597,7 +1850,7 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 1
-    coupling_count: 14
+    coupling_count: 13
     test_files: 12
     test_functions: 411
     matrix:
@@ -1615,6 +1868,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1644,6 +1904,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -1671,6 +1933,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -1700,6 +1969,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 4
@@ -1727,6 +1998,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1756,6 +2034,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -1783,6 +2063,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1812,6 +2099,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1839,6 +2128,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1868,6 +2164,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 3
@@ -1895,6 +2193,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1924,6 +2229,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -1951,6 +2258,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -1980,6 +2294,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2007,6 +2323,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2036,6 +2359,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2063,6 +2388,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2091,7 +2423,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2119,6 +2453,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2147,7 +2488,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2175,6 +2518,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2203,7 +2553,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2231,6 +2583,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2260,6 +2619,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2287,6 +2648,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2316,6 +2684,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 6
@@ -2325,17 +2695,17 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums, schema.problem]
     db_model_modules: 0
-    coupling_count: 3
+    coupling_count: 8
     test_files: 3
     test_functions: 132
     matrix:
       A_subject: 1
       B_db: 0
-      C_coupling: 0
+      C_coupling: 1
       D_tests: 0
       E_state: 0
       F_data: 0
-    matrix_total: 1
+    matrix_total: 2
     criteria_action: POSTPONE
     keep_criteria_met: 6/6
     replace_signals: 0/6
@@ -2343,6 +2713,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2372,6 +2749,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2399,6 +2778,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2428,6 +2814,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -2455,6 +2843,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2484,6 +2879,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2511,6 +2908,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2540,6 +2944,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 1
@@ -2567,6 +2973,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2596,6 +3009,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 2
@@ -2623,6 +3038,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -2652,6 +3074,8 @@ features:
     migration_action: POSTPONE
     matrix_action: REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 0
     endpoints: 1
@@ -2679,6 +3103,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -2708,6 +3139,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2735,6 +3168,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2764,6 +3204,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 0
     endpoints: 1
@@ -2791,6 +3233,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2820,6 +3269,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, data_supplier"
     migration_risk: Med
     loc: 4005
     endpoints: 0
@@ -2847,6 +3298,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2875,7 +3333,9 @@ features:
     tests: Full
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: High
     loc: 5359
     endpoints: 0
@@ -2903,6 +3363,13 @@ features:
     fan_in: 25
     contract_gaps: 0
     duplicate_of: "WM-E-101"
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2931,7 +3398,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: production_loop, data_supplier"
     migration_risk: Med
     loc: 1275
     endpoints: 0
@@ -2959,6 +3428,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2988,6 +3464,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, data_supplier"
     migration_risk: Low
     loc: 1224
     endpoints: 0
@@ -3015,6 +3493,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3044,6 +3529,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, data_supplier"
     migration_risk: Low
     loc: 680
     endpoints: 0
@@ -3071,6 +3558,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3100,6 +3594,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: High
     loc: 5387
     endpoints: 0
@@ -3127,6 +3623,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3156,6 +3659,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: Med
     loc: 1554
     endpoints: 0
@@ -3183,6 +3688,13 @@ features:
     fan_in: 9
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3212,6 +3724,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: data_supplier"
     migration_risk: Low
     loc: 815
     endpoints: 0
@@ -3239,6 +3753,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3268,6 +3789,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: High
     loc: 1896
     endpoints: 0
@@ -3295,6 +3818,13 @@ features:
     fan_in: 58
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3324,6 +3854,8 @@ features:
     migration_action: POSTPONE
     matrix_action: REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 798
     endpoints: 0
@@ -3351,6 +3883,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -3380,6 +3919,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: data_supplier"
     migration_risk: Med
     loc: 866
     endpoints: 0
@@ -3407,6 +3948,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: true
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3436,6 +3984,8 @@ features:
     migration_action: POSTPONE
     matrix_action: REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 800
     endpoints: 0
@@ -3463,6 +4013,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -3492,6 +4049,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 776
     endpoints: 0
@@ -3519,6 +4078,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3548,6 +4114,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 335
     endpoints: 0
@@ -3575,6 +4143,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3604,6 +4179,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, invariant"
     migration_risk: Low
     loc: 1238
     endpoints: 0
@@ -3631,6 +4208,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3660,6 +4244,8 @@ features:
     migration_action: POSTPONE
     matrix_action: REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 267
     endpoints: 0
@@ -3687,6 +4273,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3715,7 +4308,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 601
     endpoints: 0
@@ -3743,6 +4338,13 @@ features:
     fan_in: 23
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3772,6 +4374,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 438
     endpoints: 0
@@ -3799,6 +4403,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3828,6 +4439,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
     loc: 631
     endpoints: 0
@@ -3838,8 +4451,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 3
     coupling_count: 4
-    test_files: 9
-    test_functions: 119
+    test_files: 6
+    test_functions: 87
     matrix:
       A_subject: 1
       B_db: 2
@@ -3855,6 +4468,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3884,6 +4504,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Med
     loc: 597
     endpoints: 0
@@ -3894,8 +4516,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 4
     coupling_count: 5
-    test_files: 10
-    test_functions: 208
+    test_files: 6
+    test_functions: 161
     matrix:
       A_subject: 1
       B_db: 2
@@ -3911,6 +4533,13 @@ features:
     fan_in: 12
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3936,10 +4565,12 @@ features:
     status: Batch
     flag: ""
     coupling: Low
-    tests: Full
+    tests: Partial
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 147
     endpoints: 0
@@ -3950,23 +4581,30 @@ features:
     mixed_deps: []
     db_model_modules: 2
     coupling_count: 5
-    test_files: 7
-    test_functions: 75
+    test_files: 2
+    test_functions: 8
     matrix:
       A_subject: 0
       B_db: 1
       C_coupling: 1
-      D_tests: 0
+      D_tests: 1
       E_state: 1
       F_data: 2
-    matrix_total: 5
+    matrix_total: 6
     criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
-    fan_in: 1
+    fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -3996,6 +4634,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
     loc: 398
     endpoints: 0
@@ -4006,8 +4646,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 5
     coupling_count: 9
-    test_files: 16
-    test_functions: 381
+    test_files: 10
+    test_functions: 308
     matrix:
       A_subject: 1
       B_db: 2
@@ -4020,9 +4660,16 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 8
+    fan_in: 7
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4052,6 +4699,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
     loc: 1361
     endpoints: 0
@@ -4062,8 +4711,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 7
-    test_files: 21
-    test_functions: 685
+    test_files: 15
+    test_functions: 612
     matrix:
       A_subject: 1
       B_db: 1
@@ -4079,6 +4728,13 @@ features:
     fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4108,6 +4764,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
     loc: 660
     endpoints: 0
@@ -4118,8 +4776,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 6
-    test_files: 15
-    test_functions: 317
+    test_files: 9
+    test_functions: 244
     matrix:
       A_subject: 1
       B_db: 1
@@ -4135,6 +4793,13 @@ features:
     fan_in: 6
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4164,6 +4829,8 @@ features:
     migration_action: POSTPONE
     matrix_action: REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 223
     endpoints: 0
@@ -4174,8 +4841,8 @@ features:
     mixed_deps: []
     db_model_modules: 3
     coupling_count: 4
-    test_files: 8
-    test_functions: 84
+    test_files: 2
+    test_functions: 11
     matrix:
       A_subject: 0
       B_db: 2
@@ -4191,6 +4858,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4220,6 +4894,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 1106
     endpoints: 0
@@ -4230,8 +4906,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 4
     coupling_count: 7
-    test_files: 10
-    test_functions: 133
+    test_files: 4
+    test_functions: 60
     matrix:
       A_subject: 1
       B_db: 2
@@ -4247,6 +4923,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4276,6 +4959,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 1327
     endpoints: 0
@@ -4303,6 +4988,13 @@ features:
     fan_in: 35
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4332,6 +5024,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 972
     endpoints: 0
@@ -4359,6 +5053,13 @@ features:
     fan_in: 16
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4388,6 +5089,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, invariant"
     migration_risk: Low
     loc: 1125
     endpoints: 0
@@ -4415,6 +5118,13 @@ features:
     fan_in: 30
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4444,6 +5154,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 559
     endpoints: 0
@@ -4471,6 +5183,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4500,6 +5219,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, invariant"
     migration_risk: Low
     loc: 333
     endpoints: 0
@@ -4527,6 +5248,13 @@ features:
     fan_in: 14
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4555,7 +5283,9 @@ features:
     tests: Full
     migration_action: REFACTOR
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
     loc: 1629
     endpoints: 0
@@ -4583,6 +5313,13 @@ features:
     fan_in: 19
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -4612,6 +5349,8 @@ features:
     migration_action: REFACTOR
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: High
     loc: 1238
     endpoints: 0
@@ -4639,6 +5378,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -4668,6 +5414,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 891
     endpoints: 0
@@ -4695,6 +5443,13 @@ features:
     fan_in: 6
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4723,7 +5478,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Med
     loc: 924
     endpoints: 0
@@ -4751,6 +5508,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4780,6 +5544,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 1387
     endpoints: 0
@@ -4807,6 +5573,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4835,7 +5608,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 652
     endpoints: 0
@@ -4863,6 +5638,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4892,6 +5674,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 367
     endpoints: 0
@@ -4919,6 +5703,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -4948,6 +5739,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 740
     endpoints: 0
@@ -4975,6 +5768,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5004,6 +5804,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 218
     endpoints: 0
@@ -5031,6 +5833,13 @@ features:
     fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5060,6 +5869,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 4708
     endpoints: 0
@@ -5087,6 +5898,13 @@ features:
     fan_in: 90
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5116,6 +5934,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
     loc: 16981
     endpoints: 0
@@ -5143,6 +5963,13 @@ features:
     fan_in: 35
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5172,6 +5999,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 865
     endpoints: 0
@@ -5199,6 +6028,13 @@ features:
     fan_in: 7
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5228,6 +6064,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 2027
     endpoints: 0
@@ -5255,6 +6093,13 @@ features:
     fan_in: 16
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5284,6 +6129,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
     loc: 1158
     endpoints: 0
@@ -5311,6 +6158,13 @@ features:
     fan_in: 43
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -5339,7 +6193,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 964
     endpoints: 0
@@ -5367,6 +6223,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5396,6 +6259,8 @@ features:
     migration_action: POSTPONE
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 1308
     endpoints: 0
@@ -5423,6 +6288,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5452,6 +6324,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 828
     endpoints: 0
@@ -5479,6 +6353,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5508,6 +6389,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 1219
     endpoints: 0
@@ -5535,6 +6418,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -5564,6 +6454,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 364
     endpoints: 0
@@ -5591,6 +6483,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5620,6 +6519,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 216
     endpoints: 0
@@ -5647,6 +6548,13 @@ features:
     fan_in: 10
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5675,7 +6583,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 199
     endpoints: 0
@@ -5686,8 +6596,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 1
-    test_files: 5
-    test_functions: 124
+    test_files: 6
+    test_functions: 127
     matrix:
       A_subject: 0
       B_db: 0
@@ -5703,6 +6613,13 @@ features:
     fan_in: 11
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5732,6 +6649,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 185
     endpoints: 0
@@ -5742,8 +6661,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 2
-    test_files: 5
-    test_functions: 52
+    test_files: 4
+    test_functions: 49
     matrix:
       A_subject: 0
       B_db: 0
@@ -5759,6 +6678,13 @@ features:
     fan_in: 7
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5788,6 +6714,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 500
     endpoints: 0
@@ -5798,8 +6726,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 4
-    test_files: 6
-    test_functions: 406
+    test_files: 5
+    test_functions: 403
     matrix:
       A_subject: 0
       B_db: 0
@@ -5815,6 +6743,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5844,6 +6779,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 693
     endpoints: 0
@@ -5854,8 +6791,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 7
-    test_files: 6
-    test_functions: 114
+    test_files: 5
+    test_functions: 111
     matrix:
       A_subject: 1
       B_db: 0
@@ -5871,6 +6808,13 @@ features:
     fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -5900,6 +6844,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
     loc: 282
     endpoints: 0
@@ -5910,8 +6856,8 @@ features:
     mixed_deps: [l3.pregenerate.models, l3.pregenerate.validator, schema.enums]
     db_model_modules: 0
     coupling_count: 9
-    test_files: 4
-    test_functions: 83
+    test_files: 3
+    test_functions: 80
     matrix:
       A_subject: 3
       B_db: 0
@@ -5927,6 +6873,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -5956,6 +6909,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 416
     endpoints: 0
@@ -5966,8 +6921,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 15
-    test_files: 5
-    test_functions: 74
+    test_files: 4
+    test_functions: 71
     matrix:
       A_subject: 1
       B_db: 0
@@ -5983,6 +6938,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6012,6 +6974,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Med
     loc: 1222
     endpoints: 0
@@ -6039,6 +7003,13 @@ features:
     fan_in: 8
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6068,6 +7039,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 373
     endpoints: 0
@@ -6095,6 +7068,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6124,6 +7104,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 2043
     endpoints: 0
@@ -6151,6 +7133,13 @@ features:
     fan_in: 31
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6180,6 +7169,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
     loc: 1423
     endpoints: 0
@@ -6190,8 +7181,8 @@ features:
     mixed_deps: []
     db_model_modules: 4
     coupling_count: 13
-    test_files: 28
-    test_functions: 981
+    test_files: 24
+    test_functions: 848
     matrix:
       A_subject: 0
       B_db: 2
@@ -6207,6 +7198,13 @@ features:
     fan_in: 16
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6236,6 +7234,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "정적 도달(student_loop, production_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Med
     loc: 2279
     endpoints: 0
@@ -6246,8 +7246,8 @@ features:
     mixed_deps: []
     db_model_modules: 1
     coupling_count: 9
-    test_files: 34
-    test_functions: 785
+    test_files: 29
+    test_functions: 401
     matrix:
       A_subject: 0
       B_db: 1
@@ -6263,6 +7263,13 @@ features:
     fan_in: 8
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6292,6 +7299,8 @@ features:
     migration_action: REFACTOR
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "정적 도달(student_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 670
     endpoints: 0
@@ -6302,8 +7311,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 10
-    test_files: 15
-    test_functions: 596
+    test_files: 10
+    test_functions: 449
     matrix:
       A_subject: 0
       B_db: 0
@@ -6319,6 +7328,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6347,7 +7363,9 @@ features:
     tests: Full
     migration_action: REFACTOR
     matrix_action: KEEP
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "정적 도달(student_loop, production_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 2369
     endpoints: 0
@@ -6358,8 +7376,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 12
-    test_files: 22
-    test_functions: 571
+    test_files: 16
+    test_functions: 144
     matrix:
       A_subject: 0
       B_db: 0
@@ -6375,6 +7393,13 @@ features:
     fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6404,6 +7429,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "정적 도달(student_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 355
     endpoints: 0
@@ -6414,8 +7441,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 4
-    test_files: 8
-    test_functions: 455
+    test_files: 2
+    test_functions: 28
     matrix:
       A_subject: 0
       B_db: 0
@@ -6431,6 +7458,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6460,6 +7494,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "정적 도달(student_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 607
     endpoints: 0
@@ -6470,8 +7506,8 @@ features:
     mixed_deps: [l3.pregenerate.validator]
     db_model_modules: 0
     coupling_count: 2
-    test_files: 4
-    test_functions: 57
+    test_files: 3
+    test_functions: 54
     matrix:
       A_subject: 1
       B_db: 0
@@ -6487,6 +7523,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6516,6 +7559,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 888
     endpoints: 0
@@ -6526,8 +7571,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 15
-    test_files: 11
-    test_functions: 149
+    test_files: 10
+    test_functions: 146
     matrix:
       A_subject: 1
       B_db: 0
@@ -6543,6 +7588,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6572,6 +7624,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
     loc: 458
     endpoints: 0
@@ -6582,8 +7636,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 9
-    test_files: 3
-    test_functions: 17
+    test_files: 2
+    test_functions: 14
     matrix:
       A_subject: 3
       B_db: 0
@@ -6599,6 +7653,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -6628,6 +7689,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 189
     endpoints: 0
@@ -6655,6 +7718,13 @@ features:
     fan_in: 14
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6681,9 +7751,11 @@ features:
     flag: "ocr_enabled=False"
     coupling: Med
     tests: Full
-    migration_action: POSTPONE
+    migration_action: REFACTOR
     matrix_action: REFACTOR
-    release_priority_proposed: P2
+    release_priority_proposed: P1
+    release_priority_prior_manual: P2
+    priority_basis: "정적 도달(production_loop)했으나 Flag-off — 우회 가능"
     migration_risk: High
     loc: 1625
     endpoints: 0
@@ -6704,13 +7776,20 @@ features:
       E_state: 0
       F_data: 0
     matrix_total: 5
-    criteria_action: POSTPONE
+    criteria_action: REFACTOR
     keep_criteria_met: 2/6
     replace_signals: 1/6
-    action_basis: "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    action_basis: "§3.4 KEEP 2/6 — 미충족 k1_subject_low, k4_model_ok, k5_coupling_low, k6_verified"
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -6726,9 +7805,9 @@ features:
       r6_no_api_contract: false
     seat: "PaddleOCR+Qwen3-VL — 라이브 정확도 미검증"
   - feature_id: WM-E-601
-    name: "L6 모드 게이팅 로직 6종 + 공용 헬퍼"
+    name: "L6 모드 게이팅 로직 5종(재수·학교진도·사고력·메타인지·영재)"
     plane: E
-    location: "src/backend/whymath_backend/l6, src/backend/whymath_backend/l6/gifted, src/backend/whymath_backend/l6/metacognition, src/backend/whymath_backend/l6/retake, src/backend/whymath_backend/l6/school_progress, src/backend/whymath_backend/l6/suneung, src/backend/whymath_backend/l6/thinking"
+    location: "src/backend/whymath_backend/l6/gifted, src/backend/whymath_backend/l6/metacognition, src/backend/whymath_backend/l6/retake, src/backend/whymath_backend/l6/school_progress, src/backend/whymath_backend/l6/thinking"
     user: Student
     domain: "Application Mode"
     eos_ownership: CORE
@@ -6740,36 +7819,45 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
-    loc: 1701
+    loc: 1265
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
-    own_modules: 7
+    own_modules: 5
     adapter_deps: []
     mixed_deps: [schema.enums, schema.problem]
     db_model_modules: 0
-    coupling_count: 3
-    test_files: 11
-    test_functions: 286
+    coupling_count: 4
+    test_files: 9
+    test_functions: 237
     matrix:
       A_subject: 1
       B_db: 0
-      C_coupling: 0
+      C_coupling: 1
       D_tests: 0
       E_state: 0
       F_data: 0
-    matrix_total: 1
+    matrix_total: 2
     criteria_action: POSTPONE
-    keep_criteria_met: 6/6
+    keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
-    fan_in: 2
+    fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
-      k2_api_clear: true
+      k2_api_clear: false
       k3_tests_exist: true
       k4_model_ok: true
       k5_coupling_low: true
@@ -6780,11 +7868,11 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "L6 — 수학 신호 0(Physics 무수정 구역)"
+    seat: "L6 — 수학 신호 0(Physics 무수정 구역) · 수능 모드는 WM-E-602"
   - feature_id: WM-E-602
-    name: "수능 적응 추천(게이팅×IRT CAT)"
+    name: "수능 모드 게이팅·적응 추천(게이팅×IRT CAT)"
     plane: E
-    location: "src/backend/whymath_backend/l6/suneung"
+    location: "src/backend/whymath_backend/l6, src/backend/whymath_backend/l6/suneung"
     user: Student
     domain: "Recommendation"
     eos_ownership: CORE
@@ -6795,19 +7883,21 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
-    loc: 127
+    loc: 563
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
-    own_modules: 1
+    own_modules: 3
     adapter_deps: []
     mixed_deps: [schema.enums, schema.problem]
     db_model_modules: 0
     coupling_count: 5
-    test_files: 1
-    test_functions: 16
+    test_files: 6
+    test_functions: 92
     matrix:
       A_subject: 1
       B_db: 0
@@ -6820,9 +7910,16 @@ features:
     keep_criteria_met: 6/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
-    fan_in: 1
+    fan_in: 7
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6836,7 +7933,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "next-problem이 소비"
+    seat: "next-problem이 소비 — 공용 게이팅 헬퍼 포함"
   - feature_id: WM-E-603
     name: "평가 청사진 테스트셋 조립"
     plane: E
@@ -6852,6 +7949,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 579
     endpoints: 0
@@ -6879,6 +7978,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -6905,9 +8011,11 @@ features:
     flag: ""
     coupling: Med
     tests: Full
-    migration_action: HEAVY_REFACTOR
+    migration_action: POSTPONE
     matrix_action: HEAVY_REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P3
+    release_priority_prior_manual: P1
+    priority_basis: "장기 연구/플랫폼(horizon 선언)"
     migration_risk: High
     loc: 1865
     endpoints: 0
@@ -6928,13 +8036,20 @@ features:
       E_state: 3
       F_data: 3
     matrix_total: 13
-    criteria_action: REFACTOR
+    criteria_action: POSTPONE
     keep_criteria_met: 4/6
     replace_signals: 2/6
-    action_basis: "매트릭스 13점(10~13)"
+    action_basis: "P3(12월 폐쇄루프 비관여 — 이월≠삭제)"
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -6948,7 +8063,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: true
       r6_no_api_contract: false
-    seat: "03b 설계 — PRM 라벨 공급"
+    seat: "03b 설계 — 솔버 자기진화 플랫폼(PRM 라벨 공급) — 12월 폐쇄루프 밖·장기 연구"
   - feature_id: WM-E-702
     name: "WH-S 자기진화(PRM·SFT 학습셋 export)"
     plane: E
@@ -6963,7 +8078,9 @@ features:
     tests: Full
     migration_action: POSTPONE
     matrix_action: REFACTOR
-    release_priority_proposed: P2
+    release_priority_proposed: P3
+    release_priority_prior_manual: P2
+    priority_basis: "장기 연구/플랫폼(horizon 선언)"
     migration_risk: Med
     loc: 1014
     endpoints: 0
@@ -6974,8 +8091,8 @@ features:
     mixed_deps: [schema.enums, schema.problem]
     db_model_modules: 3
     coupling_count: 8
-    test_files: 7
-    test_functions: 118
+    test_files: 6
+    test_functions: 102
     matrix:
       A_subject: 1
       B_db: 2
@@ -6987,10 +8104,17 @@ features:
     criteria_action: POSTPONE
     keep_criteria_met: 6/6
     replace_signals: 1/6
-    action_basis: "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
-    fan_in: 2
+    action_basis: "P3(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7004,7 +8128,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: true
       r6_no_api_contract: false
-    seat: "설계 §5 — 2027 학습 파이프라인"
+    seat: "설계 §5 — 2027 학습 파이프라인(PRM·SFT) — 장기 연구"
   - feature_id: WM-E-703
     name: "bank_solution → SolutionPath 승격 writer"
     plane: E
@@ -7019,7 +8143,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Med
     loc: 540
     endpoints: 0
@@ -7030,8 +8156,8 @@ features:
     mixed_deps: [schema.problem]
     db_model_modules: 3
     coupling_count: 6
-    test_files: 4
-    test_functions: 97
+    test_files: 3
+    test_functions: 81
     matrix:
       A_subject: 1
       B_db: 2
@@ -7047,6 +8173,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7076,6 +8209,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Med
     loc: 2043
     endpoints: 0
@@ -7103,6 +8238,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -7132,6 +8274,8 @@ features:
     migration_action: REFACTOR
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "정적 도달(student_loop, production_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 1561
     endpoints: 0
@@ -7159,6 +8303,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7187,7 +8338,9 @@ features:
     tests: Full
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
     loc: 3381
     endpoints: 0
@@ -7212,9 +8365,16 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "매트릭스 10점(10~13)"
-    fan_in: 2
+    fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7244,6 +8404,8 @@ features:
     migration_action: REFACTOR
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
     loc: 11175
     endpoints: 0
@@ -7271,6 +8433,13 @@ features:
     fan_in: 232
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -7300,6 +8469,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 8133
     endpoints: 0
@@ -7327,6 +8498,13 @@ features:
     fan_in: 124
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7356,6 +8534,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop, invariant"
     migration_risk: Med
     loc: 2571
     endpoints: 0
@@ -7383,6 +8563,13 @@ features:
     fan_in: 25
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7412,6 +8599,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_declared"
     migration_risk: Low
     loc: 171
     endpoints: 0
@@ -7439,6 +8628,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: true
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7452,7 +8648,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "OAuth-a2 — code → 검증된 외부 신원"
+    seat: "OAuth-a2 — auth callback이 app.state DI로 호출(정적 import 그래프 사각 — 씨앗 선언)"
   - feature_id: WM-E-805
     name: "동의 절차(14세 미만·동의 부여)"
     plane: E
@@ -7468,6 +8664,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, invariant"
     migration_risk: Low
     loc: 189
     endpoints: 0
@@ -7495,6 +8693,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7523,7 +8728,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Med
     loc: 1374
     endpoints: 0
@@ -7551,6 +8758,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7580,6 +8794,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 2149
     endpoints: 0
@@ -7607,6 +8823,13 @@ features:
     fan_in: 122
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -7635,7 +8858,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 260
     endpoints: 0
@@ -7663,6 +8888,13 @@ features:
     fan_in: 21
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7692,6 +8924,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 75
     endpoints: 0
@@ -7719,6 +8953,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7748,6 +8989,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: High
     loc: 870
     endpoints: 0
@@ -7775,6 +9018,13 @@ features:
     fan_in: 4
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7804,6 +9054,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: High
     loc: 383
     endpoints: 0
@@ -7831,6 +9083,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7860,6 +9119,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop, invariant"
     migration_risk: Med
     loc: 1675
     endpoints: 0
@@ -7887,6 +9148,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7915,7 +9183,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P0
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Low
     loc: 1374
     endpoints: 0
@@ -7943,6 +9213,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -7972,6 +9249,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: Low
     loc: 3020
     endpoints: 0
@@ -7999,6 +9278,13 @@ features:
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8028,6 +9314,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: Low
     loc: 794
     endpoints: 0
@@ -8052,9 +9340,16 @@ features:
     keep_criteria_met: 6/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
-    fan_in: 0
+    fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8084,6 +9379,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 2771
     endpoints: 0
@@ -8111,6 +9408,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8140,6 +9444,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
     loc: 1113
     endpoints: 0
@@ -8167,6 +9473,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8196,6 +9509,8 @@ features:
     migration_action: REFACTOR
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
     loc: 10101
     endpoints: 0
@@ -8223,6 +9538,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -8252,6 +9574,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: High
     loc: 2978
     endpoints: 0
@@ -8279,6 +9603,13 @@ features:
     fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -8308,6 +9639,8 @@ features:
     migration_action: KEEP
     matrix_action: REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
     loc: 1980
     endpoints: 0
@@ -8335,6 +9668,13 @@ features:
     fan_in: 2
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -8364,6 +9704,8 @@ features:
     migration_action: HEAVY_REFACTOR
     matrix_action: HEAVY_REFACTOR
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
     loc: 8919
     endpoints: 0
@@ -8391,6 +9733,13 @@ features:
     fan_in: 12
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: true
+      production_loop: true
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -8420,6 +9769,8 @@ features:
     migration_action: REPLACE_CANDIDATE
     matrix_action: REPLACE_CANDIDATE
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
     loc: 9840
     endpoints: 0
@@ -8447,6 +9798,13 @@ features:
     fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: false
       k2_api_clear: true
@@ -8476,6 +9834,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 1625
     endpoints: 0
@@ -8503,6 +9863,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8532,6 +9899,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 577
     endpoints: 0
@@ -8559,6 +9928,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8588,6 +9964,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_declared"
     migration_risk: Low
     loc: 259
     endpoints: 0
@@ -8615,6 +9993,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: true
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8628,7 +10013,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "MOB-08 indexedStack"
+    seat: "MOB-08 indexedStack — 앱 진입점·라우팅(없으면 어떤 화면에도 못 간다)"
   - feature_id: WM-C-004
     name: "코치 채팅(턴·단계 패널·완료 신호)"
     plane: C
@@ -8644,6 +10029,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 3183
     endpoints: 0
@@ -8671,6 +10058,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8700,6 +10094,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_declared"
     migration_risk: Low
     loc: 6829
     endpoints: 0
@@ -8727,6 +10123,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: true
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8740,7 +10143,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: true
       r6_no_api_contract: false
-    seat: "E1 학생 입력 표준 — 28_mathlive_input.md"
+    seat: "E1 학생 입력 표준(28_mathlive_input.md) — 코치 턴 입력 표면·API 호출 0이라 씨앗 선언"
   - feature_id: WM-C-006
     name: "학습 장면·풀이 경로 렌더러"
     plane: C
@@ -8753,9 +10156,11 @@ features:
     flag: ""
     coupling: Low
     tests: Full
-    migration_action: POSTPONE
+    migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P2
+    release_priority_proposed: P0
+    release_priority_prior_manual: P2
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 866
     endpoints: 0
@@ -8776,13 +10181,20 @@ features:
       E_state: 0
       F_data: 0
     matrix_total: 0
-    criteria_action: POSTPONE
+    criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 0/6
-    action_basis: "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    action_basis: "§3.4 KEEP 6/6 충족"
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8809,9 +10221,11 @@ features:
     flag: ""
     coupling: Low
     tests: Full
-    migration_action: POSTPONE
+    migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P2
+    release_priority_proposed: P0
+    release_priority_prior_manual: P2
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 11819
     endpoints: 0
@@ -8832,13 +10246,20 @@ features:
       E_state: 3
       F_data: 0
     matrix_total: 3
-    criteria_action: POSTPONE
+    criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 1/6
-    action_basis: "P2(12월 폐쇄루프 비관여 — 이월≠삭제)"
+    action_basis: "§3.4 KEEP 6/6 충족"
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8868,6 +10289,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P0
+    release_priority_prior_manual: P0
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 693
     endpoints: 0
@@ -8895,6 +10318,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8924,6 +10354,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 828
     endpoints: 0
@@ -8951,6 +10383,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -8979,7 +10418,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
+    release_priority_prior_manual: P1
+    priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
     loc: 942
     endpoints: 0
@@ -9007,6 +10448,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: true
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -9036,6 +10484,8 @@ features:
     migration_action: POSTPONE
     matrix_action: KEEP
     release_priority_proposed: P2
+    release_priority_prior_manual: P2
+    priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 52
     endpoints: 0
@@ -9063,6 +10513,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -9092,6 +10549,8 @@ features:
     migration_action: KEEP
     matrix_action: KEEP
     release_priority_proposed: P1
+    release_priority_prior_manual: P1
+    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Low
     loc: 185
     endpoints: 0
@@ -9119,6 +10578,13 @@ features:
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
