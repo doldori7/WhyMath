@@ -120,12 +120,23 @@ main
 > 이제 `backend — lint·type·test`가 red면 머지가 막힌다.
 >
 > **잔여(비차단) 2건** — `HARN-63`이 승계한다:
-> - **중복 등록 6건**: `web`·`infra-contracts`·`docker-build`·`harness-integrity`·
->   `declared-unwired-audit`·`corpus-authoring`가 각 2회 등록돼 라이브 항목 수는 22, 고유는
->   16이다. 같은 컨텍스트를 두 번 요구하는 것이라 판정이 느슨해지지는 않는다(막는 힘은 동일).
->   다만 `integration_id`가 한쪽만 GitHub Actions(15368)로 pin돼 있다면 나머지 한쪽은
->   *어느 앱이든* 같은 이름으로 보고하면 충족되는 항목이 된다 — 확인·정리 대상이다.
->   **드리프트 비교기는 개수가 아니라 집합으로 대조해야 한다**(중복 때문에 22≠16이 나온다).
+> - **소스 pin 미지정 7건** (`integration_id` 실측 2026-09-03 · 게이트
+>   `G-required-checks-source-pin-cleanup`): required check 항목은 보고 주체를 특정 앱으로
+>   pin할 수 있다. pin이 없으면 **어느 주체든 같은 컨텍스트 이름으로 성공을 보고하면 충족**된다
+>   — 이 저장소가 늘 경계하는 "이름만 같으면 통과하는 좌석"이다. 실측 분포:
+>
+>   | 등급 | 대상 | 처분 |
+>   |---|---|---|
+>   | 🔴 **pin 항목이 0건** | `concept-reach — mobile 호출 표면 회귀 가드` | **Actions pin 항목을 먼저 추가**한 뒤 unpinned를 제거 |
+>   | ⚠ pin+unpin 혼재 (6) | `web` · `infra-contracts` · `docker-build` · `harness-integrity` · `declared-unwired-audit` · `corpus-authoring` | unpinned 쪽만 제거(pin된 쌍이 남는다) |
+>   | ✅ pin만 (9) | 나머지 | 조치 없음 |
+>
+>   **⚠ 순서 제약**: "unpinned를 지운다"를 일괄 적용하면 `concept-reach`는 항목이 하나도 남지
+>   않아 **완전 미강제로 되돌아간다** — 바로 위에서 고친 사고의 재생산이다. 그 하나만 추가가
+>   먼저다. 막는 힘 자체는 지금도 있으므로(Actions가 실제 보고자다) 이 정리는 비차단이다.
+>
+>   **드리프트 비교기는 개수가 아니라 집합으로 대조해야 한다** — 중복 때문에 항목 22 vs 문서
+>   16이 나오고, 개수로 보면 정상 상태가 위반으로 오판된다.
 > - **승인 축**: 이 문서는 `Require approvals — 최소 1명`·stale dismiss·CODEOWNERS를 체크로
 >   적었으나 라이브는 전부 off(`required_approving_review_count: 0`)다. **의도적으로 바꾸지
 >   않았다** — 1인 개발에서 승인 1명을 요구하면 자가승인이 불가해 머지가 막힌다. 문서를
