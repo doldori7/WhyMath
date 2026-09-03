@@ -338,6 +338,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-03 (구현·EOS-83): **기능 인벤토리 v2 — 라우터 23행을 기능 단위 162행으로 전수화. EOS Ownership·Migration Action을 행마다 기계가 판정** (Kiki "약 120개 기능을 한 장부로·최중요 필드 = EOS Ownership·Migration Action", claude 구현)
+- **모집단 정의를 먼저 적고 전수성을 기계가 검사한다** — 기능 = 사용자에게 의미 있는 능력 1단위 · 4평면(S 서빙 표면 49 · E 백엔드 엔진 88 · O 운영자 도구 13 · C 클라이언트 12). 백엔드 모듈 580·엔드포인트 109·Flutter feature 10이 **정확히 1행**에 귀속되지 않으면 생성기가 exit 1로 장부를 쓰지 않는다(첫 실행에서 중복 귀속 3건이 실제로 잡혀 제외 문법 `-module`을 도입). 산출 = `scripts/analysis/eos_feature_inventory_v2.py` → `backlog/inventory/feature_inventory_v2.{yaml,csv}`(csv는 utf-8-sig — Kiki Excel) + 해설 `docs/reviews/eos_feature_inventory_v2_2026-09-03.md` + 동결 `tests/infra/test_eos_feature_inventory_v2.py`(드리프트·전수성·결함 주입 4종 RED 확인)
+- **두 핵심 필드는 손으로 적지 않는다** — Ownership은 EOS-65 `BOUNDARY_MAP`으로 자기 모듈을 판정(CORE 108 · INFRA 21 · CLIENT 12 · **MIXED 10** · ADAPTER 8 · CORE+ADAPTER_DEP 3), Action은 v1 6축 임계를 **import**해 판정(KEEP 83 · REFACTOR 43 · HEAVY 12 · REPLACE 검토 1 · POSTPONE 23). 카탈로그 `Spec`에는 ownership 필드 자체가 없다(테스트가 동결). P2는 POSTPONE으로 덮되 `matrix_action`에 원판정 보존(이월 ≠ 삭제)
+- **"120"은 판정 불가·162는 재현 가능한 하한** — 외부 xlsx는 저장소 밖(EOS-68 notes 동일). 차이 추정 3가지를 문서 §1에 적되 단정하지 않았다. v1(EOS-68)은 Gate 0-D 재료로 존치 — 두 장부는 대체가 아니라 두 해상도(양쪽 문서에 관계 명기·테스트 동결)
+- **판정이 말하는 것**: 이전 난이도의 무게 중심은 수학이 아니라 **비대한 인프라 가족**이다 — HEAVY 12건 중 7건이 INFRA(privacy·검수·QA 게이트), A축 3점은 WH-S 하네스 1건뿐. ADAPTER 8행 중 6 KEEP(수학 엔진은 그대로 Math Adapter 패키지로 이동). REPLACE 검토 1건(관측 리포트 14 CLI 가족·15점)은 가족 합산 효과 — 치료는 OPS-19 러너 배선이지 재작성 아님(v1 coach 14점과 동형)
+- **새로 드러난 것 5건(§6 · 등재는 Kiki 판정)**: ① `api._*` 배관이 BOUNDARY_MAP 미등재라 `api` 기본 CORE를 물려받아 인증·app.state 배관 2행이 CORE 판정 — EOS-65 정본 보강 후보 ② DSL 생성기(MIXED·P0) 소유 태스크 0 — `variable_engine`·`validators`·`math_verifier` 파일 단위 ADAPTER 정정으로 해소 가능 ③ 구 개념그래프(HEAVY·P1)는 P2 강등 후보 ④ **학생 대면 WH-1 튜터링 엔진이 `harness`(INFRA)에 살아 경계 감시 밖** — 실측 A=3(`l3.equivalent.rephrase`·`verify_solution` 직접 호출) ⑤ privacy PEP·rights 게이트웨이 서빙 표면의 HTTP 테스트 0건(둘 다 P0)
+- **정직한 공백**: 귀속(묶음)은 사람 판단 — 기계가 보장하는 것은 빠짐·중복 0이지 묶음의 옳음이 아니다 · D축은 파일 단위 중복 계상(상대 비교용) · 1-hop 사각 · 이동 계획(어디로·언제)은 여전히 비어 있다(v1 §7-1 동일) · 상태 필드는 config 플래그 기본값 실측으로 11행이 Flag-off(그중 S-007 법정대리인 동의는 P0인데 OFF — 법령 게이트라 의도된 상태)
+- **계측 결함 2건을 검토에서 잡아 고쳤다**: dart 테스트 매칭이 `lib/features/x`로 찔러 `package:korean_math_app/features/x`를 못 봤고(클라 D축 전부 3점), 패키지 `__init__` 재수출 경유 import(`from …l1.concept_visualization import (…)`)를 못 세었다(직계 부모 1단계까지만 허용해 과대평가 방지). 둘 다 "테스트 없음"으로 위장되는 방향의 결함 — 검토 없이 냈으면 클라 12행이 전부 REFACTOR로 부풀었다
+
 ### 2026-09-03 (HARN-60): **게이트 clear의 주체를 대장에 기록 — 금지가 아니라 증명 가능성으로 푼다**
 
 **문제**: 이벤트의 `actor`가 **브랜치명**이라(실측: gate_clear 20건 전부 — 에이전트 브랜치 10종 +
