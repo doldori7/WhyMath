@@ -16,7 +16,7 @@
     python3 scripts/harness/backlog.py gates add <G-id> --title <제목>
                                                  [--kind human|external|decision]
                                                  [--assignee <담당자>] [--remind-after-days N]
-    python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
+    python3 scripts/harness/backlog.py gates clear <G-id> [--as <담당자>] --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py amend <id> --reason <사유>
       [--acceptance ...] [--gate <G-id>] [--track ...]

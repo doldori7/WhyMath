@@ -364,7 +364,8 @@ python3 scripts/harness/board.py --out docs/reviews/board_2026-08-31.html   # �
   대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)".
 - **상세 노트** — 발췌가 아니라 **원문 그대로**(줄바꿈 보존·스크롤). 게이트 노트에는 실행
   런북이 들어 있다(`G-operator-seat-first-grant` 2,736자) — 요약하면 그게 사라진다
-- **해소 명령** — `backlog.py gates clear <id> --evidence "<근거>"` 그대로 복사 가능.
+- **해소 명령** — `backlog.py gates clear <id> --as <담당자> --evidence "<근거>"` 그대로 복사 가능
+  (보드가 게이트의 담당자를 플래그에 실어 준다 — 복사한 사람이 곧 기록되는 주체다).
   **사람이 본인 게이트를 직접 닫을 때는 `--as kiki`를 붙인다**(HARN-60) — 붙이면 대장에
   `cleared_by: kiki`가, 생략하면 `cleared_by: claude`(에이전트 중계)가 남는다. 생략을
   거부하지 않는 이유: 에이전트 중계는 정당한 운영 형태이고(Kiki가 자기 머신에서 실행 →

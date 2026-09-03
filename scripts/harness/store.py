@@ -120,7 +120,7 @@ def dump_task(task: Task) -> str:
 
 def dump_gates(gates: list[Gate]) -> str:
     lines = [
-        "# 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)",
+        "# 사람 게이트 대장 — clear는 evidence 필수 · 사람이 직접 닫으면 --as <담당자>(HARN-60)",
         "gates:",
     ]
     for gate in gates:
