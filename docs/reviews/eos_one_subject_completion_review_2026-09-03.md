@@ -102,7 +102,7 @@ CLAUDE.md의 「정본화를 집행으로 착각한 완료 선언 금지」 기�
 
 | ID | 단계 | 내용 |
 |---|---|---|
-| **G1** | 2 | **`grade`·`school_type`에 HTTP writer가 0곳**이다. `PATCH /v1/users/me`의 화이트리스트 `_SELF_EDITABLE`(`api/users.py:84-102`) 15개 필드에 둘 다 없고, 가입(`api/auth.py:159-172`)·부트스트랩 CLI도 설정하지 않는다. 반면 **소비자는 4곳**(`api/study.py:167` grade_band 교수법 필터 · `api/coach.py:1210,2243,2599` 학년 프롬프트 개인화 · `l2/target_progress.py:148` 성취기준 커버리지 스코프 · `l4/pedagogy/runtime_selector.py:136,231`). 결과: 전 학생이 영구 `None` → 해당 기능들이 **조용히 스킵/null**. ORM에는 컬럼과 인덱스(`idx_user_school`)까지 있다(`db/models/user.py:90,94,179`). |
+| **G1** | 2 | *(서버 축 해소 — `EOS-82`, 이 PR. 클라 입력 화면은 `MOB-21` 잔여)* **`grade`·`school_type`에 HTTP writer가 0곳**이었다. `PATCH /v1/users/me`의 화이트리스트 `_SELF_EDITABLE`(`api/users.py:84-102`) 15개 필드에 둘 다 없고, 가입(`api/auth.py:159-172`)·부트스트랩 CLI도 설정하지 않는다. 반면 **소비자는 4곳**(`api/study.py:167` grade_band 교수법 필터 · `api/coach.py:1210,2243,2599` 학년 프롬프트 개인화 · `l2/target_progress.py:148` 성취기준 커버리지 스코프 · `l4/pedagogy/runtime_selector.py:136,231`). 결과: 전 학생이 영구 `None` → 해당 기능들이 **조용히 스킵/null**. ORM에는 컬럼과 인덱스(`idx_user_school`)까지 있다(`db/models/user.py:90,94,179`). |
 | **G2** | 2 | 학생↔교육과정 귀속 컬럼 자체가 없다(`curriculum_framework_id`·`textbook` 0). `framework_id`는 브라우징 라우트에만 있고 user 스코프 조인 0건. 코드가 자인: `l2/learner_state.py:61-67`. |
 | **G3** | 2→7 | `next-problem`의 `persona`가 프로필이 아니라 **쿼리 파라미터 기본값**(`api/me.py:2089`)에서 온다. |
 | **G4** | 9→10 | **오답 채점에서 오개념 판정이 일어나지 않는다.** `AttemptSubmitResponse`(`api/me.py:692-712`)에 misconception 필드 0, 저장된 `student_answer` 소비자 0, `distractor_map`(오답 선지→오개념)의 서빙 소비자 0(하네스 전용). 오개념은 **코치 대화 텍스트축에서만** 판정된다. |
@@ -229,14 +229,15 @@ data/corpus/<도메인>_v1/ 손편집
 | 축 | 판정 | 근거 요약 |
 |---|---|---|
 | **③ 시스템 경계** | 🟢 **충족** | 4층 실재 · 위반 0 · CI 매 PR 집행 · 수학어휘 밀도 34배 차. **단 필수층 계약 미배선** |
-| **① 학생 흐름** | 🟡 **부분** | 14단계 중 11개 · 야간 E2E 6구간 관통 12일 연속 green · **끊김 3곳(G1·G4·G6)** |
+| **① 학생 흐름** | 🟡 **부분** | 14단계 중 11개 · 야간 E2E 6구간 관통 12일 연속 green · **끊김 3곳(G1·G4·G6)** — G1은 서버 축만 이 PR에서 해소 |
 | **② 관리자 흐름** | 🔴 **미달** | HTTP 표면 3/12 · 사람 UI 0 · **게시 축 사망** · Skill 27건 · 감사 부재 |
 
 ### 완성까지 남은 것 (영향 큰 순)
 
-1. **G1 — 교육과정/학년 입력 경로** (가장 저렴하고 가장 크다)
-   `_SELF_EDITABLE`에 `grade`·`school_type` 2줄을 더하는 것만으로 이미 존재하는 소비자 4곳이 살아난다.
-   지금은 만들어 둔 기능이 값이 없어 전부 무효화된 상태다.
+1. ~~**G1 — 교육과정/학년 입력 경로**~~ → **서버 축 착지(`EOS-82`, 이 PR)** · 클라 축 잔여(`MOB-21`)
+   `_SELF_EDITABLE`에 `grade`·`school_type`을 추가해 API를 열었고 테스트 8건이 동결한다
+   (뮤테이션 2종으로 8건 전부 red 확인). **다만 앱 온보딩에 입력 화면이 아직 없어**
+   실사용 값은 여전히 들어가지 않는다 — G1은 `MOB-21` 착지 시점에 닫힌다.
 2. **ADMIN-12 — 게시 축 배선** 또는 명시적 폐기. 선언만 남은 컬럼은 다음 사람을 속인다.
 3. **S1 — DSL 라우트 `RequireContentAdmin` 승격.** 코드가 스스로 적어 둔 미완이다.
 4. **G4 — 오답→오개념 축 연결.** `distractor_map`이 이미 코퍼스에 있는데 서빙이 안 쓴다.
