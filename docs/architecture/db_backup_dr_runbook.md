@@ -328,17 +328,24 @@ docker inspect whymath-pg | Out-File -Encoding utf8 C:\Users\kiki\Desktop\__AI\W
 
 ### 4-1a. 반출 전 검증 (ⓐ의 실행)
 
+> **`--pg-restore-docker-image`를 쓴다.** 이 런북의 전제는 "호스트에 PostgreSQL 클라이언트 불요 — 전 과정이 컨테이너 안에서 실행된다"인데, 검증 스크립트 초판은 호스트 PATH의 `pg_restore`만 받아 **그 전제를 지키는 환경에서 영구 `exit 2`**가 됐다(2026-09-03 Phaiakes9 첫 실사용 실측 — 반출 검증이 여기서 멈췄다). 컨테이너 경유와 호스트 경유는 **검사 의미가 동일**하고, 바이너리를 어디서 얻느냐만 다르다. 이미지는 §3 리허설에서 쓴 것과 같아 추가 내려받기가 없다.
+
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 $art = Get-ChildItem C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-python scripts\backup\verify_encrypted_backup.py $art.FullName --identity "$env:USERPROFILE\whymath-backup-identity.key"
+python scripts\backup\verify_encrypted_backup.py $art.FullName --identity "$env:USERPROFILE\whymath-backup-identity.key" --pg-restore-docker-image pgvector/pgvector:pg16
 Write-Host "EXIT=$LASTEXITCODE"
 ```
 
 - **성공**: `EXIT=0` + `① 잠김 ... OK` / `② 열림 ... OK` 두 줄.
-- **변별력 3종**: 평문을 `.age`로 개명만 했으면 `not_encrypted`, 개인키가 틀리면 `decrypt_failed`, 산출물이 잘렸으면 역시 `decrypt_failed`로 각각 **exit 1**. 그리고 `age`·`pg_restore`가 없으면 **exit 2(판정 불가)** — "검사 못 함"이 "문제 없음"으로 위장되지 않는다.
-- **실패 시 대처**: `EXIT=2`면 도구 부재이므로 §1b의 `winget install FiloSottile.age`를 먼저 하고 재실행한다. `EXIT=1`이면 **그 파일을 반출하지 않는다** — 사유 문면을 그대로 세션에 전달한다.
+- **변별력 3종**: 평문을 `.age`로 개명만 했으면 `not_encrypted`, 개인키가 틀리면 `decrypt_failed`, 산출물이 잘렸으면 역시 `decrypt_failed`로 각각 **exit 1**. 그리고 필요한 도구가 없으면 **exit 2(판정 불가)** — "검사 못 함"이 "문제 없음"으로 위장되지 않는다.
+- **실패 시 대처**:
+  - `EXIT=2` + `필요한 도구 부재: age` → §1b의 `winget install FiloSottile.age` 후 재실행.
+  - `EXIT=2` + `필요한 도구 부재: docker` → Docker Desktop을 켠다.
+  - `EXIT=2` + `필요한 도구 부재: pg_restore` → `--pg-restore-docker-image` 플래그를 빠뜨린 것이다(위 블록대로 붙인다). 호스트에 PostgreSQL 클라이언트를 설치할 필요는 없다.
+  - `EXIT=1` → **그 파일을 반출하지 않는다.** 사유 문면을 그대로 세션에 전달한다.
+- **호스트에 `pg_restore`가 이미 있다면** 플래그 없이 실행해도 된다 — 두 경로의 판정은 같다.
 ### 4-1b. 오프사이트 반출 실행 (ⓐⓑⓒ 충족 후 — 게이트 `G-backup-offsite-move`)
 
 > **왜 이 절이 있는가**: §4-1은 반출 *조건* 3건(ⓐ검증 통과 ⓑ키 분리 ⓒKiki 승인)만 정하고 **반출 자체를 어떻게 하는지는 적지 않았다**. 조건만 있고 절차가 없으면 게이트는 "무엇을 하면 닫히는지"가 불명확한 채로 남는다 — 이 게이트가 22일 대기한 원인 중 하나다. 대상 목적지는 **클라우드 동기화 폴더**(2026-09-02 Kiki 결정).
@@ -415,5 +422,6 @@ $b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
+*개정: 2026-09-03 (게이트 실행 중 실측 반영 — §5 RTO 5.8분 기입 + 대표성 한계 등재 · §4-1a를 컨테이너 경유(`--pg-restore-docker-image`)로 교체: 호스트 pg_restore를 요구하던 초판이 이 런북 자신의 '호스트 PG 클라이언트 불요' 전제와 충돌해 반출 검증이 영구 exit 2였다 · exit 2 대처를 도구별로 분기).*
 *개정: 2026-09-02 (게이트 2건 실행 준비 — §3-0/§3-3b RTO 측정 스텝 신설(리허설이 게이트 요구 수치를 산출하지 못하던 결함) · §4-1b/§4-1c 클라우드 오프사이트 반출 절차 신설(조건만 있고 절차 부재) · backup_whymath_pg.ps1의 존재하지 않는 절 참조 'section 4-2' → '1b' 정정 · §5 RTO 측정범위 명시 · §6 갱신).*
 *개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*
