@@ -21,6 +21,7 @@
 #   .\scripts\backup\backup_whymath_pg.ps1
 #   .\scripts\backup\backup_whymath_pg.ps1 -BackupDir D:\wm-backups -RetentionDays 30
 #   .\scripts\backup\backup_whymath_pg.ps1 -RequireEncryption
+#   .\scripts\backup\backup_whymath_pg.ps1 -RequireEncryption -OffsiteDir "C:\Users\kiki\Google Drive\WhyMath-backups"
 #
 # Exit codes: 0 = success, 1 = failure (reason printed; errors are never
 # swallowed - every step checks $LASTEXITCODE and prints why it failed).
@@ -41,7 +42,16 @@ param(
     # output is bound for offsite storage (runbook 4-1).
     [switch]$RequireEncryption,
     # age binary. Override when age is not on PATH.
-    [string]$AgeBin = "age"
+    [string]$AgeBin = "age",
+    # Offsite mirror directory (e.g. a cloud sync folder). EMPTY BY DEFAULT -
+    # existing schedules keep their behaviour until re-registered with it.
+    # When set, every successful ENCRYPTED run is copied there and the SAME
+    # retention is applied to that directory. Without this, a one-time manual
+    # copy decays two ways: new backups never reach offsite (RPO grows without
+    # bound) and expired copies linger past the retention window that runbook
+    # 4-3 declares as the PIPA deletion bound - which would make that
+    # declaration false. Plaintext is never mirrored (see 4-1).
+    [string]$OffsiteDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -192,7 +202,7 @@ $finalPath = $hostPath
 if (-not $resolvedRecipients) {
     if ($RequireEncryption) {
         Remove-Item $hostPath
-        Fail "-RequireEncryption was given but no recipients file was found (checked -RecipientsFile and $BackupDir\recipients.txt). Plaintext dump deleted. Create the key pair first - see runbook section 4-2."
+        Fail "-RequireEncryption was given but no recipients file was found (checked -RecipientsFile and $BackupDir\recipients.txt). Plaintext dump deleted. Create the key pair first - see runbook section 1b."
     }
     Write-Host "[WARN] backup is NOT encrypted - no recipients file at $BackupDir\recipients.txt."
     Write-Host "[WARN] this artifact contains minor PII in the clear and MUST NOT be copied offsite (runbook 4-1)."
@@ -274,4 +284,66 @@ if ($encrypted) { $encLabel = "encrypted (age, key ...$fingerprint)" }
 Write-Host "[OK] backup: $finalPath ($sizeBytes bytes) - $encLabel"
 Write-Host "[OK] status: $statusPath"
 Write-Host "[OK] retention: $RetentionDays day(s), deleted $($expired.Count) expired file(s), $kept kept"
+
+# ---------------------------------------------------------------------------
+# Step 9: offsite mirror (opt-in via -OffsiteDir).
+#
+# Why this lives in the scheduled script and not in a one-off manual command:
+# a manual copy is a snapshot, not a lifecycle. Without this step the offsite
+# copy silently decays - new backups stay local while the offsite artifact ages
+# out of usefulness, and expired copies stay in the cloud past the retention
+# window that runbook 4-3 declares as the PIPA deletion bound.
+#
+# Failure here is FATAL (exit 1) on purpose. A warning would be invisible: this
+# runs unattended under Task Scheduler and nobody reads its stdout. A non-zero
+# LastTaskResult is the only signal that reaches a human. The local artifact is
+# NOT deleted on offsite failure - the backup itself succeeded and stays valid.
+# ---------------------------------------------------------------------------
+if ($OffsiteDir) {
+    if (-not $encrypted) {
+        Fail "-OffsiteDir was given but this run produced a PLAINTEXT backup. Refusing to mirror readable student PII offsite (runbook 4-1). The local artifact is kept. Set up the key pair (runbook 1b) or pass -RequireEncryption."
+    }
+    try {
+        if (-not (Test-Path $OffsiteDir)) {
+            New-Item -ItemType Directory -Path $OffsiteDir -Force | Out-Null
+        }
+    } catch {
+        Fail "offsite directory '$OffsiteDir' could not be created: $($_.Exception.GetType().Name): $($_.Exception.Message)"
+    }
+    try {
+        Copy-Item -LiteralPath $finalPath -Destination $OffsiteDir -Force
+    } catch {
+        Fail "offsite copy failed: $($_.Exception.GetType().Name): $($_.Exception.Message). Local artifact kept at $finalPath."
+    }
+    # Verify by SIZE, not existence. A sync client can leave a truncated file
+    # that Test-Path happily reports as present but pg_restore cannot open.
+    $offsiteCopy = Join-Path $OffsiteDir (Split-Path $finalPath -Leaf)
+    if (-not (Test-Path $offsiteCopy)) {
+        Fail "offsite copy is missing after Copy-Item: $offsiteCopy"
+    }
+    $offsiteSize = (Get-Item $offsiteCopy).Length
+    if ($offsiteSize -ne $sizeBytes) {
+        Fail "offsite copy size mismatch: local $sizeBytes bytes vs offsite $offsiteSize bytes (truncated copy). Local artifact kept."
+    }
+
+    # Same retention, same newest-is-exempt invariant as Step 8. Only encrypted
+    # artifacts are matched - a stray plaintext file offsite is NOT deleted here
+    # because deleting it would hide a policy violation that must be seen.
+    $offsiteDumps = @(Get-ChildItem -Path $OffsiteDir -File | Where-Object { $_.Name -like "*.dump.age" } | Sort-Object LastWriteTime -Descending)
+    $offsiteExpired = @($offsiteDumps | Select-Object -Skip 1 | Where-Object { $_.LastWriteTime -lt $cutoff })
+    foreach ($file in $offsiteExpired) {
+        try {
+            Remove-Item $file.FullName
+            Write-Host "[RETENTION] deleted expired offsite backup: $($file.Name) (last write $($file.LastWriteTime))"
+        } catch {
+            Fail "offsite retention could not delete '$($file.Name)': $($_.Exception.GetType().Name): $($_.Exception.Message). Expired copies past the retention window are a PIPA exposure - do not ignore this."
+        }
+    }
+    $offsitePlaintext = @(Get-ChildItem -Path $OffsiteDir -File -Filter "*.dump" -ErrorAction SilentlyContinue)
+    if ($offsitePlaintext.Count -gt 0) {
+        Fail "offsite directory contains $($offsitePlaintext.Count) PLAINTEXT .dump file(s) - readable student PII outside the machine (runbook 4-1). Remove them (and empty the cloud trash) before the next run."
+    }
+    Write-Host "[OK] offsite: $offsiteCopy ($offsiteSize bytes), retention deleted $($offsiteExpired.Count) expired copy(ies)"
+}
+
 exit 0
