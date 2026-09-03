@@ -18,6 +18,7 @@ A축의 한계를 명시한다: 텍스트 동결은 "그 문장이 있다"까지
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -570,6 +571,195 @@ class TestEncryptedVerification:
         vb.verify_encrypted_backup(enc, identity_file=identity)
         after = {p.name for p in tmp_path.iterdir()}
         assert after == before, f"검증이 파일을 남겼다: {after - before}"
+
+
+# ===========================================================================
+# C-3. 오프사이트 미러 생명주기 (PR #974 Codex P1-2)
+#
+# 1회 복사는 두 방향으로 썩는다: 이후 백업이 오프사이트에 안 가서 RPO가 무한히
+# 자라고, 만료 사본이 클라우드에 남아 §4-3이 PIPA 파기 창의 상한이라고 선언한
+# 보존 기간이 거짓이 된다. 그래서 미러는 스케줄 스크립트에 편입돼야 한다.
+# ===========================================================================
+class TestOffsiteMirror:
+    def test_backup_script_accepts_offsite_dir(self) -> None:
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        assert "$OffsiteDir" in body, "백업 스크립트에 오프사이트 미러 경로 인자가 없다"
+
+    def test_offsite_is_opt_in(self) -> None:
+        """기본값이 비어 있어야 기존 스케줄이 재등록 전까지 동작을 바꾸지 않는다."""
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        assert '[string]$OffsiteDir = ""' in body, "오프사이트가 opt-in이 아니다"
+
+    def test_plaintext_is_never_mirrored(self) -> None:
+        """★ 평문 회차에 -OffsiteDir가 주어지면 거부해야 한다.
+
+        평문 덤프에는 학적·프로필·활동 메타가 그대로 들어 있다(§4 표). 미러가
+        암호화 여부를 보지 않으면 미성년 PII가 클라우드로 나간다.
+        """
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        offsite = body.split("Step 9", 1)[1]
+        assert "if (-not $encrypted)" in offsite, "미러가 암호화 여부를 확인하지 않는다"
+
+    def test_offsite_retention_applies_the_same_window(self) -> None:
+        """★ 만료 사본이 클라우드에 남으면 §4-3의 PIPA 파기 창 선언이 거짓이 된다."""
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        offsite = body.split("Step 9", 1)[1]
+        assert "$offsiteExpired" in offsite, "오프사이트에 보존 정책이 적용되지 않는다"
+        assert "$cutoff" in offsite, "로컬과 다른 만료 기준을 쓰고 있다"
+        assert (
+            "Select-Object -Skip 1" in offsite
+        ), "최신 1개 보존 불변식이 오프사이트에 없다 — 전멸 가능"
+
+    def test_offsite_copy_is_verified_by_size(self) -> None:
+        """존재 검사만으로는 잘린 사본을 못 잡는다 — 있으면서 열리지 않는다."""
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        offsite = body.split("Step 9", 1)[1]
+        assert "$offsiteSize -ne $sizeBytes" in offsite, "사본 크기를 대조하지 않는다"
+
+    def test_offsite_failure_is_fatal_not_a_warning(self) -> None:
+        """★ 무인 실행에서 경고는 아무도 안 읽는다 — 종료코드만 사람에게 닿는다."""
+        body = (_BACKUP_DIR / "backup_whymath_pg.ps1").read_text(encoding="utf-8")
+        offsite = body.split("Step 9", 1)[1]
+        assert 'Fail "offsite copy failed' in offsite, "복사 실패가 치명이 아니다"
+        assert (
+            "[WARN] offsite" not in offsite
+        ), "오프사이트 실패를 경고로 흘리고 있다 — 스케줄러 stdout은 아무도 읽지 않는다"
+
+    def test_schedule_passes_offsite_through(self) -> None:
+        """★ 스크립트가 받아도 스케줄이 안 넘기면 상시 미러가 아니다(배선 실재성).
+
+        **주석이 아니라 조립되는 인자 문자열을 본다.** 초판은 파일 전체에 대한
+        substring 검사여서, argList 조립을 통째로 지워도 상단 usage 주석의
+        `-OffsiteDir` 한 글자에 매치돼 통과했다(2026-09-03 뮤테이션 O4에서 실측 —
+        검출 실패). CLAUDE.md "정의만 하고 안 써도 통과하는 substring 검사" 그대로다.
+        """
+        body = (_BACKUP_DIR / "register_backup_schedule.ps1").read_text(encoding="utf-8")
+        assert "$OffsiteDir" in body, "스케줄 등록이 오프사이트 인자를 모른다"
+
+        # 주석(#로 시작)을 제외한 실행 라인에서 argList 조립을 찾는다.
+        code_lines = [ln for ln in body.splitlines() if not ln.lstrip().startswith("#")]
+        assembly = [ln for ln in code_lines if "$argList" in ln and "-OffsiteDir" in ln]
+        assert assembly, (
+            "argList에 -OffsiteDir를 실어 보내는 실행 라인이 없다 — 인자를 받기만 하고 "
+            "작업에 전달하지 않으면 스케줄된 회차는 오프사이트로 가지 않는다"
+        )
+
+    def test_runbook_does_not_reference_a_nonexistent_flag(self) -> None:
+        """런북이 안내하는 플래그가 스크립트에 실재하는가 (가정 기반 런북 금지).
+
+        2026-09-03에 실제로 존재하지 않는 -BackupArgs를 안내할 뻔했다.
+        """
+        runbook = (
+            Path(__file__).resolve().parents[2]
+            / "docs"
+            / "architecture"
+            / "db_backup_dr_runbook.md"
+        ).read_text(encoding="utf-8")
+        register = (_BACKUP_DIR / "register_backup_schedule.ps1").read_text(encoding="utf-8")
+        for flag in re.findall(r"register_backup_schedule\.ps1([^\n]*)", runbook):
+            for opt in re.findall(r"-([A-Z][A-Za-z]+)", flag):
+                assert (
+                    f"${opt}" in register or f"-{opt}" in register
+                ), f"런북이 register_backup_schedule.ps1에 없는 플래그 -{opt} 를 안내한다"
+
+
+# ===========================================================================
+# C-2. 컨테이너 경유 pg_restore (2026-09-03 Phaiakes9 실사용 결함)
+#
+# 초판은 호스트 PATH의 pg_restore만 받았는데, 런북의 전제는 "호스트에 PostgreSQL
+# 클라이언트 불요 — 전 과정이 컨테이너 안에서 실행된다"이다. 그 전제를 정확히
+# 지키는 환경에서 이 검증은 영구 exit 2가 됐고, 게이트 G-backup-offsite-move의
+# 반출 검증이 거기서 멈췄다. 아래는 그 회귀를 막는다.
+# ===========================================================================
+class TestContainerPgRestore:
+    def test_host_mode_argv_is_unchanged(self, tmp_path: Path) -> None:
+        """기본(호스트) 경로는 종전과 같아야 한다 — 회귀 방지."""
+        target = tmp_path / "a.dump"
+        assert vb.pg_restore_list_argv(target) == ["pg_restore", "--list", str(target)]
+
+    def test_docker_mode_mounts_parent_readonly_and_targets_by_name(self, tmp_path: Path) -> None:
+        """★ 컨테이너 안에서는 **마운트 경로**로 파일을 가리켜야 한다.
+
+        호스트 절대경로를 그대로 넘기면 컨테이너 안에 그 경로가 없어 pg_restore가
+        '파일 없음'으로 비0을 낸다. 그러면 ①(잠김) 축이 암호화 여부와 무관하게 항상
+        통과해, 평문을 .age로 개명만 한 산출물도 잠김 판정을 받는다 — 검사가 위장이 된다.
+        """
+        target = tmp_path / "whymath_x.dump.age"
+        argv = vb.pg_restore_list_argv(target, docker_image="pgvector/pgvector:pg16")
+
+        assert argv[:3] == ["docker", "run", "--rm"], "일회용 실행이어야 한다"
+        assert f"{tmp_path}:{vb._CONTAINER_MOUNT}:ro" in argv, "부모 디렉터리를 읽기 전용으로"
+        assert (
+            argv[-1] == f"{vb._CONTAINER_MOUNT}/{target.name}"
+        ), "컨테이너 내부 경로로 가리켜야 한다"
+        assert str(target) not in argv, "호스트 절대경로가 컨테이너 인자로 새면 안 된다"
+        assert "pgvector/pgvector:pg16" in argv
+
+    def test_docker_mode_mount_is_read_only(self, tmp_path: Path) -> None:
+        """검사가 백업 산출물을 건드릴 이유가 없다 — 쓰기 가능 마운트는 거부한다."""
+        argv = vb.pg_restore_list_argv(tmp_path / "a.age", docker_image="img")
+        mount = argv[argv.index("-v") + 1]
+        assert mount.endswith(":ro"), f"읽기 전용이 아니다: {mount}"
+
+    def test_docker_mode_does_not_require_host_pg_restore(self, tmp_path: Path) -> None:
+        """★ 컨테이너 모드에서 호스트 pg_restore 부재가 판정 불가를 만들면 안 된다.
+
+        이것이 이 결함의 본체다 — 요구하는 도구가 모드에 따라 달라야 한다.
+        docker 자체가 없는 환경에서는 여전히 2가 맞으므로 그 경우는 분기해 확인한다.
+        """
+        enc = tmp_path / "x.dump.age"
+        enc.write_bytes(b"age-encrypted-not-really")
+        identity = tmp_path / "id.key"
+        identity.write_text("dummy\n", encoding="utf-8")
+
+        code = vb.main(
+            [
+                str(enc),
+                "--identity",
+                str(identity),
+                "--age-bin",
+                _AGE or "age",
+                "--pg-restore-bin",
+                "/nonexistent/pg_restore",
+                "--pg-restore-docker-image",
+                "pgvector/pgvector:pg16",
+            ]
+        )
+        if shutil.which("docker") is None or _AGE is None:
+            assert code == 2, "docker·age가 없으면 판정 불가가 맞다"
+        else:
+            assert code != 2, (
+                "컨테이너 모드인데 호스트 pg_restore 부재로 판정 불가가 났다 — "
+                "요구 도구 분기가 동작하지 않는다"
+            )
+
+    def test_missing_host_pg_restore_names_the_container_workaround(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """실패에 **대처**가 남아야 한다 — 무엇이 없는지만 알리면 사람이 거기서 막힌다.
+
+        2026-09-03 실사용에서 Kiki가 정확히 여기서 멈췄다: exit 2 메시지가 pg_restore
+        부재만 말하고 다음 수를 말하지 않았다.
+        """
+        enc = tmp_path / "x.dump.age"
+        enc.write_bytes(b"whatever")
+        identity = tmp_path / "id.key"
+        identity.write_text("dummy\n", encoding="utf-8")
+
+        code = vb.main(
+            [
+                str(enc),
+                "--identity",
+                str(identity),
+                "--age-bin",
+                _AGE or "age",
+                "--pg-restore-bin",
+                "/nonexistent/pg_restore",
+            ]
+        )
+        assert code == 2
+        err = capsys.readouterr().err
+        assert "--pg-restore-docker-image" in err, "대처 경로를 알려주지 않는다"
 
 
 # ===========================================================================
