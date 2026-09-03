@@ -34,6 +34,7 @@
 # Usage (Windows PowerShell, ELEVATED - task registration needs admin):
 #   .\scripts\backup\register_backup_schedule.ps1
 #   .\scripts\backup\register_backup_schedule.ps1 -At 03:30 -RequireEncryption
+#   .\scripts\backup\register_backup_schedule.ps1 -RequireEncryption -OffsiteDir "C:\Users\kiki\Google Drive\WhyMath-backups"
 #   .\scripts\backup\register_backup_schedule.ps1 -Unregister
 #
 # Exit codes: 0 = success, 1 = failure (reason printed).
@@ -58,6 +59,13 @@ param(
     # Interpreter used by the check task. Kiki's machine has conda base and a
     # .venv active at once, so an explicit path may be required.
     [string]$PythonExe = "python",
+    # Offsite mirror directory passed through to backup_whymath_pg.ps1. Empty
+    # by default. When set, each successful encrypted run is mirrored there and
+    # the same retention is applied to it - without this the offsite copy is a
+    # one-time snapshot whose RPO grows without bound and whose expired files
+    # outlive the retention window that runbook 4-3 declares as the PIPA
+    # deletion bound.
+    [string]$OffsiteDir = "",
     # Remove the task instead of creating it.
     [switch]$Unregister
 )
@@ -112,6 +120,9 @@ if (-not (Test-Path $checkScriptPath)) {
 # Step 2: build the action
 # ---------------------------------------------------------------------------
 $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -BackupDir `"$BackupDir`" -RetentionDays $RetentionDays"
+if ($OffsiteDir) {
+    $argList = "$argList -OffsiteDir `"$OffsiteDir`""
+}
 if ($RequireEncryption) {
     $argList = "$argList -RequireEncryption"
 }

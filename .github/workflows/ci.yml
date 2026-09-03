@@ -11,6 +11,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # merge queue 진입분 재검증 (HARN-56). 큐는 PR을 **main 최신 위에 얹은** 임시 브랜치
+  # (refs/heads/gh-readonly-queue/...)에서 검증하므로, 이 트리거가 없으면 required check가
+  # 큐 안에서 **한 번도 보고되지 않아** 모든 PR이 큐에서 무한 대기한다.
+  # ⚠ 순서 제약: 이 트리거가 main에 착지한 *뒤에* 저장소 설정에서 큐를 켠다. 반대로 하면
+  #    켠 시점부터 머지가 전면 정지한다.
+  # 잡 게이팅과의 상호작용(실측): 무거운 잡의 if는 전부 `github.event_name != 'pull_request'`
+  # 형태라 merge_group에서는 **전건 실행**된다 — 큐에서는 경로 기반 절약이 적용되지 않고
+  # 전체 검증이 돈다. 이것이 의도한 동작이다(큐의 목적이 최신 base 위 전체 재검증이므로).
+  # 야간 전용 잡(`if: github.event_name == 'schedule'`)은 큐에서 계속 스킵된다.
+  merge_group:
   # 야간(KST 03시 = UTC 18시) E2E 안전망 — push/PR 없이도 관통 슬라이스가 도는지 확인.
   # GitHub schedule은 default branch(main)에서만 발화한다. 이 이벤트에선 e2e-nightly만
   # 돌고, 무거운 push/PR 잡들은 `&& github.event_name != 'schedule'` 가드로 스킵된다.

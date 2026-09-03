@@ -31,10 +31,10 @@ gates:
     title: "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 30
-    evidence: null
+    evidence: "2026-09-03 Kiki 실행(Phaiakes9 Windows PowerShell) — 복구 리허설 1회 완료. 대상 백업 whymath_20260902_222520.dump.age(age 암호화본·579kB), age 복호 성공(exit 0), scratch 컨테이너 whymath-restore-test(pgvector/pg16·127.0.0.1:55433) 복원 후 pg_restore 오류 0. 무결성: 8개 핵심 테이블 행수 prod↔scratch 완전 일치 — atom_node 0 / concept 2683 / dialogue 0 / dialogue_turn 0 / parental_consent 0 / problem 0 / problem_attempt 0 / user_profile 1. RTO 실측 = 5.8분(00:05:48), 측정 범위는 복원 구간 한정(§3-0~§3-3b) — 런북 §5 표 갱신 완료. 한계 명시(§6 신설): 측정 시점 데이터 규모가 579kB(concept 외 전 테이블 0~1행)라 이 수치는 절차 고정 오버헤드에 가깝고 대표성이 없다 — 학생 데이터 축적 후 재측정 필요. 측정 스텝(§3-0/§3-3b)은 이 리허설 직전 신설(PR #974) — 종전 런북에는 시간 측정 스텝이 없어 게이트 요구 수치가 산출 불가였다."
     notes: ""
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
@@ -207,6 +207,24 @@ gates:
     remind_after_days: 3
     evidence: "2026-08-31 Kiki 실측(whymath-pg, 읽기 전용): SELECT column_name FROM information_schema.columns WHERE table_name=concept AND column_name=embedding_id → 0행. 즉 seq 65(f1a2b3c4d5e7)의 concept.embedding_id 삭제는 stamp --purge a9b8c7d6e5f4 시점에 이미 적용돼 있었고, stamp가 건너뛴 삭제는 없다. 잔존 컬럼 0건이라 제거 작업 불요. PR #929가 착지시킨 음(negative) 극성 프로브를 다시 돌려도 같은 판정이 나온다(존재했다면 stamp_target이 seq 64로 내려가고 present_after_gap이 올라갔을 것)."
     notes: "[경위] PR #929 리뷰(codex 봇 P1)가 짚은 구멍이다. 초판 프로브가 seq 65\n  (f1a2b3c4d5e7 = concept.embedding_id 삭제)를 판별자 없이 건너뛰었고, 2026-08-31 4단계에서\n  stamp --purge a9b8c7d6e5f4(seq 67)를 그 위에 찍었다. 그 시점에 컬럼이 남아 있었다면\n  alembic은 삭제를 `완료`로 믿게 되고 upgrade head는 그 리비전을 영영 실행하지 않는다 —\n  컬럼이 조용히 남는다. 삭제 자체는 죽은 참조 컬럼 정리라 데이터 위험은 낮지만,\n  `스키마가 코드와 일치한다`는 판정이 거짓이 되는 것이 문제다.\n\n[확인 — 읽기 전용, 1줄]\n# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC)\ncd C:\\Users\\kiki\\Desktop\\__AI\\WhyMath\ndocker exec whymath-pg psql -U whymath -d whymath -c \"SELECT column_name FROM information_schema.columns WHERE table_name='concept' AND column_name='embedding_id';\"\n\n[판정] 0행 = 정상(삭제가 이미 적용돼 있었다) → 이 게이트 clear.\n  1행 = 삭제가 건너뛰어졌다 → 세션에 알려주면 제거 절차(백업 선행 → ALTER TABLE concept\n  DROP COLUMN embedding_id)를 값이 채워진 블록으로 드린다.\n\n[대책(코드 착지 완료)] 프로브에 음(negative) 극성 축 신설 — 컬럼의 *존재*가 stamp 대상을\n  그 앞(seq 64)에서 막고 present_after_gap을 올린다. 실측: 정상 DB는\n  stamp_target a9b8c7d6e5f4 / after_gap 0, 컬럼을 되살린 DB는 e6f1a2b3c4d5 / after_gap 2.\n  tests/infra/test_prod_schema_probe.py가 삭제 전용 리비전의 극성을 양방향으로 동결한다."
+  - id: G-required-checks-live-drift-fix
+    title: "라이브 룰셋의 required check 미강제 10건 등록 — 문서 16건 vs 실제 6건(backend lint·infra-contracts·harness-integrity 등 미강제)"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-09-03
+    remind_after_days: 3
+    evidence: "2026-09-03 Kiki 실행(GitHub 웹 UI ruleset 16623542) — 미강제 10건 등록 완료. 검증: gh api repos/doldori7/WhyMath/rules/branches/main 재조회 후 문서 REQUIRED_CHECKS 블록과 **기계 대조**(눈 대조 아님) — 라이브 고유 16건 vs 문서 16건, 미강제 0건·문서 미선언 0건으로 집합 완전 일치. 등록된 10건: changes / backend — lint·type·test / mobile / concept-reach / web / infra-contracts / docker-build / harness-integrity / declared-unwired-audit / corpus-authoring. 잔여(비차단): 6건이 중복 등록됐다(web·infra-contracts·docker-build·harness-integrity·declared-unwired-audit·corpus-authoring 각 2회 — 라이브 항목 수 22, 고유 16). 중복은 같은 컨텍스트를 두 번 요구하는 것이라 판정을 느슨하게 만들지 않아 차단 사유가 아니며, integration_id 축(특정 앱 pin vs any source) 확인과 정리는 HARN-63이 승계한다. 승인 축(required_approving_review_count=0 vs 문서 '최소 1명')은 **의도적 미변경** — 1인 개발에서 자가승인 불가로 머지가 막히므로 문서/현실 중 무엇을 고칠지는 Kiki 판단 사안이며 이 게이트 범위 밖(HARN-63 ⑤로 승계)."
+    notes: ""
+  - id: G-required-checks-source-pin-cleanup
+    title: "required check의 소스 pin 정리 — unpinned 7건(그중 concept-reach는 pin 항목이 아예 없음·순서 주의)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-03
+    remind_after_days: 7
+    evidence: null
+    notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
     kind: human
