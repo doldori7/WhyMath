@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P0
 owner: claude
@@ -23,6 +23,6 @@ paths:
   - "src/mobile/lib/features/chat/application/**"
   - src/mobile/test/problems_api_test.dart
   - src/mobile/test/e2e_loop_flow_test.dart
-session: null
+session: claude/eos-transition-plan-review-w0vmjh
 notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-1·§8-①. Kiki 결정(2026-09-03): 계획서 300 Phase 2 4주는 실행하지 않고 참고 문서로 강등, 10월 공식 목표는 G2 앵커 콘텐츠 생산 유지. 단 이 배선은 G2·G4 공통 선결조건이라 CL-WIRING으로 즉시 수행. 명칭 규약: 계획서 300의 'Gate 2'는 사용하지 않는다 — G2 = Anchor Content Production, CL-WIRING = Student Closed-loop Wiring.\n\n[정정 2026-09-03] 오진단 정정 — 초판 acceptance ①이 이중 적재 결함을 처방했다. 원인: grep 'attempts' src/mobile/lib/ 0건을 역할 재검색 없이 결론으로 씀('식별자 부재 ≠ 기능 부재' 위반) + REC-01의 2026-08-03 관측을 현재 사실로 인용(그 뒤 S3-32 착지로 낡음). 상세 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §11.6-11.7"
 updated: 2026-09-03
