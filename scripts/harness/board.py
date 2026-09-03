@@ -594,8 +594,13 @@ function gateBody(g) {
   const evidenceHtml = g.status === 'pending' ? '' :
     `<h4>근거 (evidence)</h4><div class="none">${esc(g.evidence || '기록 없음')}</div>`;
 
+  // HARN-60: 이 명령은 **사람이 복사해서 실행**하는 경로다. `--as`를 빼고 안내하면 Kiki가
+  // 실행한 clear가 대장에 `cleared_by: claude`로 남는다 — 기록이 없는 것보다 나쁘다(거짓
+  // 주체가 쌓인다). 그러므로 게이트의 담당자를 그대로 플래그에 실어 준다. 담당자가 claude면
+  // (에이전트 소유 게이트) 플래그를 붙이지 않는다 — `--as claude`는 선택지 자체가 아니다.
+  const asFlag = g.assignee && g.assignee !== 'claude' ? ` --as ${g.assignee}` : '';
   const cmd = g.status === 'pending'
-    ? `python3 scripts/harness/backlog.py gates clear ${g.id} --evidence "&lt;근거&gt;"`
+    ? `python3 scripts/harness/backlog.py gates clear ${g.id}${asFlag} --evidence "&lt;근거&gt;"`
     : `python3 scripts/harness/backlog.py gates list`;
 
   return `<div class="body">

@@ -213,6 +213,23 @@ class Gate:
     requested: str = ""  # YYYY-MM-DD
     remind_after_days: int | None = None  # 경과 시 SessionStart 브리핑에 리마인드
     evidence: str | None = None  # cleared 시 근거(커밋/문서) 필수
+    # clear를 수행한 **주체** (HARN-60) — "kiki"/"partner"(사람 자기기입) 또는 "claude"(에이전트).
+    #
+    # 왜 필요한가: 이벤트의 `actor`는 **브랜치명**이라(예: 'claude/git-unshallow-repo-crr6x5',
+    # 'main') 사람이 clear했는지 에이전트가 했는지를 담지 못한다. 준수 감사 A3은 "에이전트의
+    # 사람 게이트 clear"를 심각도 높음으로 보는데, 그 준수를 사후 증명할 채널이 git 저자뿐이었고
+    # 저장소 정책상 스쿼시 머지만 허용돼(merge·rebase 405) 저자는 머지 수행자로 덮이고 브랜치
+    # ref는 자동 삭제된다 — 즉 증거가 복원 불가능해진다. 그래서 증거를 git 메타데이터가 아니라
+    # **대장 데이터**에 둔다.
+    #
+    # 왜 `as_owner`(start/done의 이벤트 필드)를 그대로 쓰지 않는가: 그쪽 규약은 *부재 = 에이전트*다.
+    # 이 태스크가 없애려는 결함이 정확히 그 **부재의 모호함**이라(부재가 '에이전트'인지 'HARN-60
+    # 이전이라 미기록'인지 구별 불가), 여기서는 **항상 명시**되는 별도 필드를 둔다. 플래그(`--as`)와
+    # 소유자 어휘(OWNERS)는 HARN-06 선례를 그대로 재사용한다 — 새 프레임워크가 아니다.
+    #
+    # `None`은 **미상**이며 HARN-60 이전에 clear된 행에만 남는다. 소급 추정 금지(날조 금지):
+    # 스쿼시로 git 저자가 소실됐으므로 사후에 알 수 없다.
+    cleared_by: str | None = None
     notes: str = ""
 
     def validate(self) -> list[str]:
@@ -227,6 +244,10 @@ class Gate:
             errors.append(f"{self.id}: status '{self.status}' 미등록")
         if self.status == "cleared" and not self.evidence:
             errors.append(f"{self.id}: cleared인데 evidence 없음 (근거 필수)")
+        # HARN-60: 주체가 *적혀 있으면* 등록된 소유자여야 한다(오타·자유문자열 유입 차단).
+        # 비어 있는 것은 오류가 아니다 — HARN-60 이전 행의 정직한 '미상'이다(소급 날조 금지).
+        if self.cleared_by is not None and self.cleared_by not in OWNERS:
+            errors.append(f"{self.id}: cleared_by '{self.cleared_by}' 미등록 소유자")
         if self.requested and not DATE_RE.match(self.requested):
             errors.append(f"{self.id}: requested 는 YYYY-MM-DD 형식이어야 함")
         return errors

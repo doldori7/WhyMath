@@ -123,7 +123,7 @@ fvm flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=
 ```powershell
 .\scripts\demo\stop_demo.ps1
 # 녹화가 끝난 *뒤에만* 실행. <>는 치지 말고 실제 링크를 따옴표로 감싼다(PowerShell은 < 를 예약어로 거부).
-python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "https://실제-녹화-링크"
+python scripts\harness\backlog.py gates clear G-kiki-device-demo --as kiki --evidence "https://실제-녹화-링크"
 ```
 
 ## A-*. Windows 함정
@@ -259,7 +259,7 @@ flutter run --dart-define=API_URL=http://<Phaiakes9 LAN IP>:8000 --dart-define=D
 bash scripts/demo/stop_demo.sh     # uvicorn 종료 + throwaway PG(볼륨째) 제거
 # 녹화 증적(링크)을 걸어 게이트 clear:
 # 녹화가 끝난 뒤에만 실행 — 실제 링크를 따옴표로 감싼다.
-python3 scripts/harness/backlog.py gates clear G-kiki-device-demo --evidence "https://실제-녹화-링크"
+python3 scripts/harness/backlog.py gates clear G-kiki-device-demo --as kiki --evidence "https://실제-녹화-링크"
 ```
 게이트가 clear되면 `S1-14-exit-gate-judgement`(owner=kiki)로 3종 게이트 판정을 기록해 S1을 공식 탈출한다.
 

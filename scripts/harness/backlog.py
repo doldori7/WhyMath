@@ -16,7 +16,7 @@
     python3 scripts/harness/backlog.py gates add <G-id> --title <제목>
                                                  [--kind human|external|decision]
                                                  [--assignee <담당자>] [--remind-after-days N]
-    python3 scripts/harness/backlog.py gates clear <G-id> --evidence <근거>
+    python3 scripts/harness/backlog.py gates clear <G-id> [--as <담당자>] --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py amend <id> --reason <사유>
       [--acceptance ...] [--gate <G-id>] [--track ...]
@@ -881,7 +881,12 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         if others:
             print("✔ 통과/면제:")
             for gate in sorted(others, key=lambda g: g.id):
-                print(f"  {gate.id} ({gate.status}) {gate.title}")
+                # HARN-60: cleared는 주체를 함께 보인다. 미상(None)은 HARN-60 이전 행이며
+                # 그대로 '미상'으로 표시한다 — 추정으로 채우지 않는다(날조 금지·acceptance ④).
+                by = ""
+                if gate.status == "cleared":
+                    by = f" [clear 주체: {gate.cleared_by or '미상(HARN-60 이전)'}]"
+                print(f"  {gate.id} ({gate.status}){by} {gate.title}")
         return 0
 
     if args.gate_action == "add":
@@ -890,11 +895,27 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     gate = backlog.gates.get(args.gate_id)
     if gate is None:
         return _fail(f"게이트 '{args.gate_id}' 없음")
+    # HARN-60: clear 주체(사람/에이전트)를 대장에 남긴다. 이벤트의 `actor`는 브랜치명이라
+    # 신원을 담지 못하고, 스쿼시 머지가 git 저자를 덮으므로 증거는 여기(대장)에 있어야 한다.
+    extra: dict[str, object] = {}
     if args.gate_action == "clear":
         if not args.evidence:
             return _fail(f"{gate.id}: clear에는 --evidence <근거> 필수")
+        as_owner = getattr(args, "as_owner", None)
+        # 불일치 검사는 done/start와 동형(HARN-06) — 남의 게이트를 자기 이름으로 못 닫는다.
+        if as_owner is not None and as_owner != gate.assignee:
+            return _fail(
+                f"{gate.id}: --as {as_owner} 불일치 — 이 게이트의 assignee는 '{gate.assignee}'"
+            )
+        # **거부하지 않고 사실대로 적는다.** 에이전트가 사람 게이트를 clear하는 것은 실제로
+        # 일어나는 정당한 중계다(Kiki가 자기 머신에서 실행하고 출력을 전달 → 세션이 기입 —
+        # 기존 20건 중 다수가 그 형태다). 그걸 막으면 대장 CLI를 우회한 YAML 손편집으로
+        # 밀려나고(CLAUDE.md 금지), 그때는 아무 기록도 남지 않아 더 나빠진다. 목표는 금지가
+        # 아니라 **사후 증명 가능성**이므로 주체를 항상 명시적으로 남기는 쪽을 택한다.
         gate.status = "cleared"
         gate.evidence = args.evidence
+        gate.cleared_by = as_owner or "claude"
+        extra["cleared_by"] = gate.cleared_by
     elif args.gate_action == "waive":
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
@@ -905,8 +926,12 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.id,
         evidence=gate.evidence,
         reason=args.reason,
+        **extra,
     )
-    print(f"✔ {gate.id} → {gate.status}")
+    # 주체를 화면에도 되비춘다 — 기입자가 "내가 사람으로 기록됐는지"를 즉시 확인할 수 있어야
+    # 잘못된 기입(에이전트가 --as 없이 사람 게이트를 닫음)이 조용히 지나가지 않는다.
+    subject = f" (clear 주체: {gate.cleared_by})" if args.gate_action == "clear" else ""
+    print(f"✔ {gate.id} → {gate.status}{subject}")
     return 0
 
 
@@ -2420,6 +2445,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("gate_id", nargs="?")
     p.add_argument("--evidence")
     p.add_argument("--reason")
+    # gates clear 전용 — 사람이 본인 게이트를 직접 닫을 때 주체를 명시한다 (HARN-60).
+    # 플래그 이름·선택지는 done/start의 `--as`(HARN-06)를 그대로 재사용한다(새 어휘 금지).
+    # 생략하면 거부하지 않고 `cleared_by="claude"`(에이전트 중계)로 **사실대로** 기록한다.
+    p.add_argument(
+        "--as",
+        dest="as_owner",
+        default=None,
+        choices=[o for o in OWNERS if o != "claude"],
+        help="gates clear: 본인 게이트를 직접 닫을 때 주체 명시 (HARN-60 · 생략 시 에이전트 기록)",
+    )
     # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
     p.add_argument("--title", help="gates add: 게이트 제목 (필수)")
     p.add_argument(
