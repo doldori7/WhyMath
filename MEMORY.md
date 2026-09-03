@@ -361,7 +361,7 @@
 - **계획서 300의 `Gate 2`는 사용하지 않는다** — 인용이 불가피하면 `계획서 300 Gate 2`로 전체를 적는다.
 
 **집행 (정본화≠집행 — 결정문만으로는 셀렉터가 읽지 않는다)**
-- `MOB-20-cl-wiring-attempt-submission` [P0] — Flutter attempt 제출 배선(서버 루프는 이미 닫혀 있으므로 **신규 엔진 0·호출 배선만**)
+- `MOB-20-cl-wiring-attempt-submission` [P0] — **코치 완료 신호 3필드 클라 소비**(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`). *등재 당시 'POST /v1/me/attempts 호출 배선'으로 적었으나 **오진단**이라 같은 날 정정했다 — §아래 정정 블록*
 - `EOS-81-cl-wiring-closed-loop-e2e` [P0] — E2E 뒷반쪽 연장. **`depends_on: MOB-20`으로 집행**(산문 선행 금지 · HARN-52). acceptance ①이 Kiki 완료조건 4가지를 **한 테스트에서** 요구: (가)Flutter 실제 제출 (나)영속 (다)개념·스킬 mastery 변경 (라)후속 추천이 갱신된 mastery 반영. "API 200"은 완료 조건이 아니다.
 - `HARN-61-p0-swap-exemption-clause` [P2] — One In → One Out **예외 3종 집행**. 실측: Rule 4 본체는 `HARN-55`가 이미 CLI에 집행 중(`backlog.py:1312-1382 --swap-out` · `policy.eos_p0_budget=50`)이나 **예외 조항만 미집행**이다. 지금 안 물리는 이유 = 비종결 P0 13건 < 예산 50건. 착수 트리거 = P0가 예산 근접(45+) 또는 예외 사유 P0가 실제 거부될 때.
 - `G-state-machine-deferral-recheck` [kiki/decision · `remind_after_days=101`] — 8상태 보류의 **재확인 알림**. 보류에 재확인 지점을 못박아도 알려 줄 장치가 없으면 산문으로만 남는다(만료 없는 유예 금지의 집행 축). 변별력 실측: 12/12 False → **12/13 True(경과 101일)** → cleared 시 False.
@@ -370,6 +370,15 @@
 **두 전제의 교집합** — CL-WIRING 2건은 계획서 300 Gate 2의 막힌 두 칸(6·10)을 열면서 **동시에 저장소 G4(12/13 "깊이앵커 수동 개입 0 루프 3연속")의 선결**이다. 어느 전제를 택해도 버려지지 않는 유일한 항목이라 목적 충돌과 무관하게 즉시 수행한다.
 
 **자진 공개 1건** — `MOB-20` 등재 시 `paths`를 `src/mobile/lib/**`로 넓게 잡아 overlap 경보 17건이 떴고(대부분 오탐), 좁힐 CLI 경로가 없어 **YAML의 `paths` 필드만 손편집으로 정정**했다(17→8건). 거부를 우회한 것이 아니라 CLI 설계 공백이며, CLAUDE.md 처리 순서 ③(설계 공백은 태스크 등재·HARN-06 선례)에 따라 `HARN-57` ④로 등재했다.
+
+**[같은 날 정정 — PR #976 리뷰 P1·P2 수용]** 초판의 핵심 처방이 **오진단**이었고 코드 실측으로 확인해 전면 수용했다.
+
+- **무엇이 틀렸나**: "Flutter가 `POST /v1/me/attempts`를 호출하지 않는다 → 입력이 서버 루프에 도달하지 않는다"는 진단. 실제로 학생 경로의 attempt는 **코치 완료 경로**가 적재한다 — `S3-32`(done)가 서버검증 최종답→Polya 돌아보기→`_complete_problem`(`api/coach.py:983-1030`)에서 `ProblemAttempt(is_correct=True)`+숙달 2축+`문제시도` 이벤트까지 닫았고, 계약이 **"클라는 별도로 `POST /v1/me/attempts`를 부르지 않는다(중복 적재 금지)"**를 명문화한다(`api/coach.py:440-446`). **처방대로 배선했으면 attempt·숙달 이중 적재라는 실결함을 넣었을 것이다.**
+- **진짜 갭(재측정)**: 서버가 보내는 완료 신호 3필드(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`)가 **Flutter 모델에 없다**(`coach_models.dart` grep 0건). `chat_screen.dart:302-304`가 *"S3-32 소관이라 main엔 아직 없다 — 착지 시 추가할 것"*이라 적은 채 남아 있다 = `S3-32` acceptance ③의 **미이행된 클라 절반**. "완비된 공급원 + 미도달 소비 경로" 반복 패턴.
+- **왜 놓쳤나 (2축)**: ⓐ **자기가 인용한 규칙을 한 축에만 안 썼다** — "식별자 부재 ≠ 기능 부재"를 `LearnerState`·`LearningSession`·`POST /diagnostics` 3건에는 적용해 판정을 뒤집었으면서, attempt 축에서는 `grep` 0건을 역할 재검색 없이 결론으로 썼다. ⓑ **증거의 신선도를 안 봤다** — 근거로 쓴 REC-01 "`problem_attempt` 0행"은 **2026-08-03** 관측이고 `S3-32`는 그 뒤 착지했다. PR에 "DB 실측 없음·REC-01 인용"이라 공백은 밝혔으나 *그 관측이 낡았는지*는 확인하지 않았다. → **관측 리포트를 인용할 때 그 관측 이후 같은 영역에 착지한 태스크가 있는지 함께 확인한다.**
+- **P2(부분 쓰기)**: "한 트랜잭션으로 전파" 표현도 틀렸다 — `api/me.py:745-779`가 attempt를 먼저 commit한 뒤 헬퍼가 각자 commit하며 `l2/attempt_skill_event.py:71-97`이 교차 원자성 미해결을 자인한다. 초판 표현이 **실재하는 부분 쓰기 갭을 덮었다**.
+- **집행**: `MOB-20` acceptance ⑤(①무효화+범위 재정의) · `EOS-81` acceptance ⑥(완료조건 (가) 경로 정정)·⑦(부분 쓰기 정직 표기) · 검토 문서 §0-2·§0-3·§2 행6·§6 G-1·§8-①·§11.3 정정 + **§11.6·§11.7 신설**.
+- **열린 질문(단정 안 함)**: 코치 경로는 **정답 완료 시에만** attempt를 적재한다. 오답이 `ProblemAttempt` 행을 안 남기는 것이 설계인지 갭인지는 미판정 — `EOS-79`(증거 4층 경계) 축에 가깝다.
 
 **미채택** — 300 §12 API 12종 신설(11/12 이미 대응) · §6 Mastery heuristic(BKT·IRT 개악) · §2 `recommend()` 재설계 · §3 상태 머신(보류). 전부 "이미 있는 것을 더 나쁜 것으로 덮는" 축.
 

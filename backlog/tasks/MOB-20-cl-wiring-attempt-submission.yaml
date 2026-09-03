@@ -16,12 +16,13 @@ acceptance:
   - "② 응답 소비: mastery_updates·skill_mastery_updates를 클라가 받아 상태에 반영한다 — 호출만 하고 응답을 버리면 '학생이 자기 숙달 변화를 볼 수 없다'가 그대로 남는다(REC-10 정직 표기 렌더와 같은 축)"
   - "③ 세션 축 정직: AttemptSubmitRequest.session_id를 클라가 보내지 않는 현행 상태를 그대로 둘지 채울지 판정해 적는다 — LearningSession writer 0(EOS-81 ④와 동일 뿌리)이라 지금은 uuid4 placeholder다. 채우지 않기로 하면 '미기록'으로 말하고 조용히 메우지 않는다(EOS-57 None≠[] 규약 동형)"
   - "④ 변별력: 배선 전 상태에서 실패하는 테스트를 먼저 확인한다 — 정상 입력에서 초록인 것은 보호의 증거가 아니다(CLAUDE.md 2026-09-01). 위젯/컨트롤러 테스트가 '제출 시 POST가 나갔는가'를 요청 캡처로 단언하고, 호출을 제거하면 RED가 되는지 실측해 PR에 적는다"
+  - "⑤ [범위 정정 2026-09-03 · PR #976 리뷰 P1 수용] **acceptance ①은 무효다.** 'Flutter가 POST /v1/me/attempts를 호출한다'를 그대로 구현하면 **attempt·숙달 이중 적재**가 된다 — 학생 경로의 attempt는 이미 코치 완료 경로가 적재한다(S3-32 done · api/coach.py:983-1030 _complete_problem → ProblemAttempt(is_correct=True) + 숙달 2축 + 문제시도 이벤트). API 계약이 '클라는 별도로 POST /v1/me/attempts를 부르지 않는다(중복 적재 금지)'를 명문화한다(api/coach.py:440-446). **정정된 범위 = CoachResponse 완료 신호 3필드의 클라 소비**: problem_complete(완료·다음 문항 진행 신호) · awaiting_reflection(돌아보기 대기 UX) · completed_attempt_id(적재된 attempt 참조). 실측 근거 = lib/features/chat/data/coach_models.dart 3필드 grep **0건** · chat_screen.dart:302-304의 자인 주석('그 두 상태는 S3-32 소관이라 main엔 아직 없다 — 착지 시 같은 조건을 이 가드에 추가할 것'). 이는 S3-32 acceptance ③('CoachResponse에 completion 신호 필드 추가해 클라가 next-problem을 자동 호출할 수 있게 한다')의 **미이행된 클라 절반**이다. acceptance ②(응답 소비)·③(세션 축 정직)·④(변별력)는 그대로 유효하되 대상이 attempts 응답이 아니라 CoachResponse다"
 artifacts: []
 paths:
-  - src/mobile/lib/features/problems/**
-  - src/mobile/lib/features/chat/application/**
+  - "src/mobile/lib/features/problems/**"
+  - "src/mobile/lib/features/chat/application/**"
   - src/mobile/test/problems_api_test.dart
   - src/mobile/test/e2e_loop_flow_test.dart
 session: null
-notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-1·§8-①. Kiki 결정(2026-09-03): 계획서 300 Phase 2 4주는 실행하지 않고 참고 문서로 강등, 10월 공식 목표는 G2 앵커 콘텐츠 생산 유지. 단 이 배선은 G2·G4 공통 선결조건이라 CL-WIRING으로 즉시 수행. 명칭 규약: 계획서 300의 'Gate 2'는 사용하지 않는다 — G2 = Anchor Content Production, CL-WIRING = Student Closed-loop Wiring."
+notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-1·§8-①. Kiki 결정(2026-09-03): 계획서 300 Phase 2 4주는 실행하지 않고 참고 문서로 강등, 10월 공식 목표는 G2 앵커 콘텐츠 생산 유지. 단 이 배선은 G2·G4 공통 선결조건이라 CL-WIRING으로 즉시 수행. 명칭 규약: 계획서 300의 'Gate 2'는 사용하지 않는다 — G2 = Anchor Content Production, CL-WIRING = Student Closed-loop Wiring.\n\n[정정 2026-09-03] 오진단 정정 — 초판 acceptance ①이 이중 적재 결함을 처방했다. 원인: grep 'attempts' src/mobile/lib/ 0건을 역할 재검색 없이 결론으로 씀('식별자 부재 ≠ 기능 부재' 위반) + REC-01의 2026-08-03 관측을 현재 사실로 인용(그 뒤 S3-32 착지로 낡음). 상세 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §11.6-11.7"
 updated: 2026-09-03

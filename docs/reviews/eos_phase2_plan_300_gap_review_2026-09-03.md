@@ -18,8 +18,10 @@
 ## §0. 결론 3줄
 
 1. **계획서 300의 단일 목표("학습 폐쇄루프 완성 = 12월 성패를 가르는 Point of No Return")는 저장소 정본과 정면으로 충돌한다.** 선언 §0-3은 2026-08-30에 **폐쇄루프를 목적에서 계측기로 강등**하고(깊이앵커 1개에서만 완결) 최우선 축을 **AI 콘텐츠 생산 가능성(HIT 중앙값 4분)**으로 바꿨다. 그리고 같은 날짜 **10/25에 서로 다른 Gate 2가 두 개** 있다 — 300의 것은 *학생 루프 10조건*, 저장소 G2는 *중등 2앵커 각 60 CU + HIT ≤8분 + 자동검증 ≥70%*(콘텐츠 생산 게이트). 200 검토가 Gate 1에서 발견한 충돌이 **Gate 2에서 그대로 재현**된다(G0 이름 충돌 포함 3회차).
-2. **계획서가 4주에 걸쳐 만들려는 부품은 대부분 이미 서 있다.** 14개 계약 객체 중 12개가 실모델·실스키마로 실재하고, §12가 요구한 12개 API 중 11개가 103개 엔드포인트 안에 대응물을 갖는다. Assessment·Mastery·Misconception·Recommendation 엔진은 `l2/`·`l4/`에 전부 있고, **서버 측 폐쇄루프는 이미 닫혀 있다** — `POST /v1/me/attempts` 한 번이 `mastery_updates`·`skill_mastery_updates`·`attempt_skill_event`까지 한 트랜잭션으로 전파한다(`api/me.py:715-810` 실측).
-3. **진짜 갭은 계획서가 강조하지 않은 곳에 있다 — 루프가 끊긴 지점은 엔진이 아니라 *입력 도달*이다.** Flutter 앱은 `POST /v1/me/attempts`를 **한 번도 호출하지 않는다**(`src/mobile/lib/` 전수 grep 0건 · REC-01이 관측으로 등재한 사실). 백엔드 E2E도 클라 E2E도 **온보딩→진단→문제→코치→verify에서 멈추고** attempt 제출 이후 반쪽(평가→숙달→다음 추천)을 관통하지 않는다. 즉 **엔진은 다 있는데 학생이 그 엔진을 켤 수 없다.** 계획서 300이 옳게 짚은 것은 "연결성이 기능보다 중요하다"는 문장 하나이며, 그 문장이 가리키는 실제 대상은 §4의 Week 1~4 신규 구현이 아니라 **클라 1개 호출과 E2E 뒷반쪽**이다.
+2. **계획서가 4주에 걸쳐 만들려는 부품은 대부분 이미 서 있다.** 14개 계약 객체 중 12개가 실모델·실스키마로 실재하고, §12가 요구한 12개 API 중 11개가 103개 엔드포인트 안에 대응물을 갖는다. Assessment·Mastery·Misconception·Recommendation 엔진은 `l2/`·`l4/`에 전부 있고, **서버 측 폐쇄루프는 이미 닫혀 있다** — attempt 적재에 이어 `record_problem_attempt_mastery`·`record_problem_attempt_skill_mastery`·`record_attempt_skill_event`가 순차 전파된다(`api/me.py:715-810`). *※ 초판은 이를 "한 트랜잭션"이라고 적었으나 **틀렸다** — `api/me.py:745-779`가 attempt를 **먼저 commit**한 뒤 각 헬퍼가 **독립 커밋**하며, `l2/attempt_skill_event.py:71-97`은 교차 레코드 원자성이 미해결임을 스스로 명기한다. 뒤 단계가 실패하면 앞 기록만 남는 **부분 쓰기 갭이 실재**하고, 초판 표현은 그 갭을 없는 것처럼 덮었다(PR #976 리뷰 P2 수용·2026-09-03).*
+3. **진짜 갭은 계획서가 강조하지 않은 곳에 있다 — 루프가 끊긴 지점은 엔진이 아니라 *완료 신호의 클라 도달*이다.** 학생 경로의 attempt는 **`POST /v1/me/attempts`가 아니라 코치 완료 경로가 적재한다** — `S3-32`(done)가 서버검증 최종답 → Polya 돌아보기 → `_complete_problem`(`api/coach.py:983-1030`)에서 `ProblemAttempt(is_correct=True)` 적재·숙달 전파까지 닫았고, API 계약은 **"클라는 별도로 `POST /v1/me/attempts`를 부르지 않는다(중복 적재 금지)"**를 명문화한다(`api/coach.py:440-446`). 끊긴 곳은 그 뒤다: 서버가 내보내는 완료 신호 3필드(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`)가 **Flutter 모델에 아예 없고**(`lib/features/chat/data/coach_models.dart` 전수 grep 0건), `chat_screen.dart:302-304`가 *"그 두 상태는 S3-32 소관이라 main엔 아직 없다 — 착지 시 추가할 것"*이라고 적은 채 남아 있다. **공급원은 완비됐는데 소비 경로가 미도달**인 이 저장소의 반복 패턴이다.
+
+   > ⚠️ **초판 정정 (2026-09-03 · PR #976 리뷰 P1 수용)**: 초판은 "Flutter가 `POST /v1/me/attempts`를 호출하지 않는다 → 학생 입력이 서버 루프에 도달하지 않는다"고 적고 그 호출 배선을 처방했다. **오진단이다.** ⓐ 근거로 쓴 `grep attempts src/mobile/lib/` 0건은 이 문서가 §1에서 스스로 인용한 **"식별자 부재 ≠ 기능 부재"** 규칙의 위반이다 — 역할(코치 완료 경로)로 재검색했으면 나왔다. ⓑ 함께 인용한 REC-01의 "`problem_attempt` 0행"은 **2026-08-03 관측**으로, 한 달 뒤 착지한 `S3-32`에 의해 이미 낡았다(stale 증거를 현재 사실로 인용). ⓒ 처방대로 배선했다면 **attempt·숙달 이중 적재**라는 실결함을 넣었을 것이다. 정정된 처방은 §8-①·§11.6.
 
 ---
 
@@ -58,7 +60,7 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 | 3 | LearnerState 자동 생성 | **부분** | 조립기 `l2/learner_state.py` 실재(v0 8필드 — 생산자 없는 3필드는 의도적 제외). **갭: 소비처가 `api/study.py` 1곳뿐**이고 `GET /learner-state` 단일 표면이 없다 — 학생·클라는 `/me/mastery/current`·`/me/ability`·`/me/diagnosis/*`로 조각을 따로 받는다 |
 | 4 | Concept 자동 선택 | **충족** | `l2/weak_concept_recommendation.py`·`prerequisite_recommendation.py` + `GET /v1/me/weak-concepts`·`/{id}/learning-path`·`/{id}/prerequisites` |
 | 5 | Content → Problem 연결 | **충족** | `GET /v1/concepts/content` → `GET /v1/me/next-problem` → `GET /v1/problems/{id}` · 학습 공급 루프는 `POST /v1/me/objectives/{id}/study`로 클라 배선까지 완료(MOB-13 done) |
-| 6 | Attempt → Assessment 동작 | **충족(서버) / 미도달(클라)** | 서버: `POST /v1/me/attempts`가 채점→`record_problem_attempt_mastery`→`record_problem_attempt_skill_mastery`→`record_attempt_skill_event`를 한 경로에서 수행(`api/me.py:715-810`). **클라: 호출 0건** — `src/mobile/lib/` 전수 grep에 `attempts` 없음. REC-01이 이 사실을 "입력 루프 미도달·`problem_attempt` 0행"으로 관측 등재했다 |
+| 6 | Attempt → Assessment 동작 | **충족** *(초판 "클라 미도달"은 오진단 — §0-3 정정)* | 채점 경로는 **2종**이다: ⓐ `POST /v1/me/attempts`(클라 자가보고 `is_correct`) ⓑ **코치 완료 경로** — `S3-32`(done)가 서버검증 최종답→Polya 돌아보기→`_complete_problem`(`api/coach.py:983-1030`)에서 `ProblemAttempt(is_correct=True)` 적재 + 숙달 전파. 학생 앱은 ⓑ를 탄다(클라가 `solution_steps`를 코치로 보냄 — `chat_controller.dart:84`). ⓐ를 클라가 부르지 않는 것은 **결함이 아니라 계약**이다(`api/coach.py:440-446` 중복 적재 금지) |
 | 7 | Misconception 기록 | **충족** | 오개념 카탈로그 843건(M-id)+kebab crosswalk 64 · 4모델(`misconception_catalog`/`_crosslink`/`_hypothesis`/`_relation`) · 승인·적재 게이트가 `docs/standards/crosswalk_gate_contract.md`로 **코드 동결** |
 | 8 | Mastery 자동 갱신 | **충족** | `ConceptMasteryHistory`·`SkillMasteryHistory` append-only 이력 + `l2/mastery_tracking.py`·`skill_mastery_tracking.py` · BKT(`l2/bkt.py`)·IRT(`l2/irt.py`) 실재. 계획서 §6의 "정답 +0.10 / 오답 −0.08" heuristic보다 **앞서 있다** |
 | 9 | 다음 학습 자동 추천 | **충족·단 이유축 부분** | `GET /v1/me/next-problem`(IRT CAT·약점 가중) + 추천 회계 `l2/recommendation_evidence.py`(REC-03 done). 이유축: PATH-02/09/10 done으로 **정렬 근거 정직 표기**가 서버·영속·렌더 3단 착지. **갭: `candidates[]`·`policy_version` 영속 미착지**(REC-11 todo·P0) |
@@ -168,12 +170,12 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 
 | # | 갭 | 실측 | 대응 후보 |
 |---|---|---|---|
-| **G-1** | **학생 입력이 서버 루프에 도달하지 않는다** — Flutter가 `POST /v1/me/attempts`를 호출하지 않아 `problem_attempt` 0행, θ는 콜드스타트 0.0 고정, 약점 가중은 전 후보 중립(1.0) | `src/mobile/lib/` 전수 grep `attempts` 0건 · REC-01 관측 리포트 | **신규 태스크 후보 ①** (§8) |
+| **G-1** *(2026-09-03 전면 정정)* | ~~학생 입력이 서버 루프에 도달하지 않는다~~ → **완료 신호가 클라에 도달하지 않는다** — 서버는 `S3-32`로 attempt 적재까지 닫았고 `CoachResponse`에 `problem_complete`·`awaiting_reflection`·`completed_attempt_id`를 실어 보내지만, **Flutter 모델에 그 3필드가 없다**. 결과: 돌아보기 대기 UX 부재 · 완료 시 자동 다음 문항 진행 신호 미사용 · `chat_screen.dart`의 선택지 가드가 완료/돌아보기 상태를 여전히 모른다 | `lib/features/chat/data/coach_models.dart` 3필드 grep **0건** · `chat_screen.dart:302-304` 자인 주석(*"S3-32 착지 시 같은 조건을 이 가드에 추가할 것"*) · `S3-32` acceptance ③의 **클라 절반이 미이행** | `MOB-20`(§11.6 재정의) |
 | **G-2** | **E2E가 루프의 뒷반쪽을 밟지 않는다** — 백엔드·클라 E2E 둘 다 verify에서 종료. attempt→assessment→mastery→다음 추천 관통 실증 0 | `test_e2e_vertical_slice_integration.py:281` · `e2e_loop_flow_test.dart:156` | **신규 태스크 후보 ②** |
 | **G-3** | **LearningSession writer 0** — 스키마는 §6.1 DDL로 정본화됐으나 생산자가 없어 추천 처치→결과 결합이 `uuid4()` placeholder로 끊긴다 | `l2/recommendation_evidence.py` docstring 자인 | **신규 태스크 후보 ③** |
 | **G-4** | **학습 상태 머신 부재** — 다만 §5-A의 이중 진실 원천 위험과 함께 판단해야 한다 | 4어휘 전수 0건 | **판단 대기**(§8-⑤) |
 
-**G-1·G-2는 계획서 300의 Gate 2 6·10번 미충족의 유일한 원인이며, 동시에 저장소 G4(12/13) "수동 개입 0 루프 3연속"의 선결이다.** 즉 **두 계획의 교집합**이다 — 어느 전제를 택하든 해야 한다.
+**G-1·G-2는 계획서 300의 Gate 2 10번(반복 가능) 미실증의 원인이며, 동시에 저장소 G4(12/13) "수동 개입 0 루프 3연속"의 선결이다.** 즉 **두 계획의 교집합**이라 어느 전제를 택하든 해야 한다. *(초판은 여기에 6번도 넣었으나 6번은 정정 결과 **충족**이다 — §2 행 6.)*
 
 ---
 
@@ -197,7 +199,7 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 
 | # | 조치 후보 | 근거 | 규모 추정 | eos_priority 후보 |
 |---|---|---|---|---|
-| **①** | **Flutter attempt 제출 배선** — `POST /v1/me/attempts` 클라 호출 착지. 서버는 이미 mastery·skill·event까지 전파하므로 **클라 1개 호출이 루프를 닫는다** | G-1 · REC-01 관측 | 1~2일 | **P0** |
+| **①** *(재정의)* | **코치 완료 신호 3필드 클라 소비** — `problem_complete`·`awaiting_reflection`·`completed_attempt_id`를 Flutter 모델에 넣고 돌아보기 UX·자동 다음 문항·선택지 가드에 연결. **`POST /v1/me/attempts` 배선이 아니다**(계약상 금지·이중 적재). `S3-32` acceptance ③의 미이행된 클라 절반 | G-1 · `coach_models.dart` 3필드 0건 · `chat_screen.dart:302-304` 자인 | 1~2일 | **P0** |
 | **②** | **E2E 뒷반쪽 연장** — 기존 `test_e2e_vertical_slice_integration.py`·`e2e_loop_flow_test.dart`를 attempt→mastery_updates→다음 추천까지 연장(신규 테스트 파일 신설 아님) | G-2 · G4 선결 | 1~2일 | **P0** |
 | **③** | **Vertical Slice PR 규약 부분 채택** — 계획서 §20을 *태스크 분해 지침*으로만 흡수: "표면 1개만 만드는 태스크"보다 "학생이 실제로 도달하는 슬라이스"를 선호. 저장소 PR:태스크 1:1은 유지(대장 정본 불변) | §5-D | 규약 1줄 | P2 |
 | **④** | **LearningSession writer 판정** — 배선하거나, 안 할 거면 스키마를 폐기 판정한다(EOS-72 `ContentLifecycleState` "배선 또는 폐기" 선례 동형) | G-3 | 판정 0.5일 | P1 |
@@ -261,7 +263,7 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 
 | 태스크 | 등급 | 내용 |
 |---|---|---|
-| `MOB-20-cl-wiring-attempt-submission` | **P0** | §8-① Flutter attempt 제출 배선 — 서버 루프가 이미 닫혀 있으므로 **신규 엔진 0·호출 배선만** |
+| `MOB-20-cl-wiring-attempt-submission` | **P0** | §8-① — **범위 재정의됨(§11.6)**: 코치 완료 신호 3필드 클라 소비. 등재 당시의 "`POST /v1/me/attempts` 호출 배선"은 무효 |
 | `EOS-81-cl-wiring-closed-loop-e2e` | **P0** | §8-② E2E 뒷반쪽 연장. `depends_on: MOB-20`으로 **집행**(산문 선행 금지 · HARN-52) |
 | `HARN-61-p0-swap-exemption-clause` | P2 | One In → One Out **예외 3종** 집행 |
 | ~~`HARN-62`~~ → `HARN-57` ④ | P2 | CLI 의미 중복 고지 수용 — `amend` 결측 필드(`--artifact`·`--path`)로 흡수 |
@@ -289,6 +291,29 @@ grep -h "^eos_priority:" backlog/tasks/*.yaml | sort | uniq -c
 `MOB-20` 등재 시 `paths`를 `src/mobile/lib/**`로 넓게 잡아 overlap 경보가 **17건**(대부분 오탐) 떴다. 좁히려 했으나 `amend`에 `--path`가 없어 **YAML의 `paths` 필드만 손편집으로 정정**했다(17 → **8건**, 잔여는 같은 feature 디렉터리라 진성).
 
 거부를 우회한 것이 아니라(거부는 없었다) **CLI 설계 공백**이며, CLAUDE.md "거부의 우회 금지" 처리 순서 ③(CLI 경로가 없는 설계 공백은 태스크 등재 · HARN-06 선례)에 따라 `HARN-57` acceptance ④로 등재했다. 넓은 glob을 방치하지 않은 이유: **상시 오탐은 병렬 세션이 경보를 무시하게 만든다** — 이 저장소가 이미 겪은 fail-open 보호 습관화(`refs/claims` 403) 유형이다.
+
+### 11.6 리뷰 지적 수용 — 초판 오진단 2건 정정 (PR #976 · Codex)
+
+리뷰 봇이 **초판의 핵심 처방을 반박**했고, 코드 실측으로 **둘 다 타당함을 확인**해 전면 수용했다.
+
+| # | 지적 | 검증 | 판정 |
+|---|---|---|---|
+| **P1** | 코치 완료 경로가 이미 attempt·숙달을 적재하므로, 제안한 `POST /v1/me/attempts` 배선은 **이중 적재**를 만든다 | `api/coach.py:983-1030` `_complete_problem` → `ProblemAttempt(is_correct=True)` + `record_problem_attempt_mastery`/`_skill_mastery`/`record_attempt_skill_event`. 계약 명문: `api/coach.py:440-446` *"클라는 별도로 POST /v1/me/attempts를 부르지 않는다(중복 적재 금지)"*. 클라는 `solution_steps`를 코치로 보낸다(`chat_controller.dart:84`) | **타당 — 전면 수용** |
+| **P2** | "한 트랜잭션" 표현이 실재하는 **부분 쓰기 갭**을 덮는다 | `api/me.py:745-779`가 attempt를 먼저 commit, 이후 헬퍼가 각자 commit. `l2/attempt_skill_event.py:71-97`이 교차 원자성 미해결을 자인 | **타당 — 표현 정정** |
+
+**왜 놓쳤는가 (재발 방지 관점)** — 이 문서는 §1에서 **"식별자 부재 ≠ 기능 부재"** 절차를 준수했다고 선언했고 실제로 `LearnerState`·`LearningSession`·`POST /diagnostics` 3건에서는 그 절차가 판정을 뒤집었다. 그런데 **attempt 축에만 적용하지 않았다** — `grep attempts src/mobile/lib/` 0건을 역할 재검색 없이 그대로 결론으로 썼다. 규칙을 알고 인용까지 하면서 한 축에서 빠뜨렸다는 것이 이 사례의 핵심이며, *"부재 주장은 검색 방법 자체가 옳아야 성립하므로 존재 주장보다 오류율이 구조적으로 높다"*(CLAUDE.md 2026-08-31)의 실례다.
+
+두 번째 축은 **증거의 신선도**다. REC-01의 "`problem_attempt` 0행"은 **2026-08-03** 관측이고 `S3-32`는 그 뒤 착지했다. PR 본문에 *"DB 실측 없음 — REC-01 인용"*이라고 공백을 밝혔으나, **인용한 관측이 낡았는지**는 확인하지 않았다. 관측 리포트를 인용할 때는 **그 관측 이후 같은 영역에 착지한 태스크가 있는지**를 함께 봐야 한다.
+
+### 11.7 `MOB-20` 범위 재정의
+
+**무효**: 등재 시 acceptance ①의 *"Flutter가 `POST /v1/me/attempts`를 실제로 호출한다"* — 그대로 구현하면 이중 적재라는 실결함이 된다.
+
+**정정된 범위**: `CoachResponse`의 완료 신호 **3필드를 클라가 소비**한다 — `problem_complete`(완료·다음 문항 진행 신호) · `awaiting_reflection`(돌아보기 대기 UX) · `completed_attempt_id`(적재된 attempt 참조). 이는 `S3-32` acceptance ③이 *"CoachResponse에 completion 신호 필드 추가해 클라가 next-problem을 자동 호출할 수 있게 한다"*고 적은 것의 **미이행된 클라 절반**이며, `chat_screen.dart:302-304`가 남긴 TODO(*"S3-32 착지 시 같은 조건을 이 가드에 추가할 것"*)가 그 사실을 스스로 증언한다.
+
+집행: `backlog.py amend`로 정정항을 **추가**했다(기존 항 삭제 불가 — 위조 방지 설계). `EOS-81`의 완료조건 (가)도 "Flutter가 실제 attempt를 제출한다"에서 **"코치 완료 경로가 attempt를 적재하고 클라가 그 완료 신호를 소비한다"**로 함께 정정했다.
+
+**남은 열린 질문(단정하지 않음)**: 코치 경로는 **정답 완료 시에만** attempt를 적재한다(`is_correct=True`). 오답이 `ProblemAttempt` 행을 남기지 않는 것이 설계 의도인지 갭인지는 이 문서가 판정하지 않았다 — 오개념·보정 루프가 오답 행을 필요로 하는지는 `EOS-79`(증거 4층 경계)가 다룰 축에 가깝다.
 
 ---
 
