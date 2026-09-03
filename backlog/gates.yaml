@@ -31,10 +31,10 @@ gates:
     title: "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 30
-    evidence: null
+    evidence: "2026-09-03 Kiki 실행(Phaiakes9 Windows PowerShell) — 복구 리허설 1회 완료. 대상 백업 whymath_20260902_222520.dump.age(age 암호화본·579kB), age 복호 성공(exit 0), scratch 컨테이너 whymath-restore-test(pgvector/pg16·127.0.0.1:55433) 복원 후 pg_restore 오류 0. 무결성: 8개 핵심 테이블 행수 prod↔scratch 완전 일치 — atom_node 0 / concept 2683 / dialogue 0 / dialogue_turn 0 / parental_consent 0 / problem 0 / problem_attempt 0 / user_profile 1. RTO 실측 = 5.8분(00:05:48), 측정 범위는 복원 구간 한정(§3-0~§3-3b) — 런북 §5 표 갱신 완료. 한계 명시(§6 신설): 측정 시점 데이터 규모가 579kB(concept 외 전 테이블 0~1행)라 이 수치는 절차 고정 오버헤드에 가깝고 대표성이 없다 — 학생 데이터 축적 후 재측정 필요. 측정 스텝(§3-0/§3-3b)은 이 리허설 직전 신설(PR #974) — 종전 런북에는 시간 측정 스텝이 없어 게이트 요구 수치가 산출 불가였다."
     notes: ""
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
