@@ -5,12 +5,13 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
 depends_on: []
-requires_gates: []
+requires_gates:
+  - G-merge-queue-or-strict-relax
 acceptance:
   - "① 실측 선행 — 룰셋의 required status check 목록과 'require branches to be up to date' 실제 설정을 gh api repos/doldori7/WhyMath/rules/branches/main 으로 덤프해 기록한다. 지금 이 태스크의 전제(최신 base 강제가 켜져 있다)는 405 응답 문구와 mergeable_state=behind 로부터의 추론이므로, 설정 실물로 확인하기 전까지는 가설이다. 확인 결과 전제가 틀리면 태스크를 재정의하고 착수하지 않는다"
   - "② merge queue 배선 — main 대상 ruleset에 merge queue 를 켜고, 큐가 사용할 체크를 현행 required 집합과 일치시킨다. 큐 안에서 GitHub 이 최신 base 위로 재검증하므로 개별 PR 의 수동 최신화가 불필요해진다. 'require branches to be up to date' 는 큐 도입 후에도 유지한다 — 보호를 낮추는 것이 아니라 충족 방식을 바꾸는 것이 이 태스크의 취지다(우회 아님)"
@@ -22,6 +23,6 @@ paths:
   - ".github/workflows/**"
   - "docs/reviews/**"
   - docs/architecture/deployment_cd_runbook.md
-session: null
-notes: "발견 경위(2026-09-01 실측): PR #952 가 CI 16잡 green 을 3회 확보하고도 머지되지 못했다. 1라운드는 미해결 Codex 스레드(정당한 룰·처리 완료), 2·3라운드는 전부 mergeable_state=behind 였다 — CI 가 도는 약 30분 사이에 main 에 #963·#964(2라운드), #957(3라운드)이 착지했다. auto-merge 를 켜도 해소되지 않는다: auto-merge 는 브랜치를 자동 최신화하지 않으므로 체크 완료 시점에 base 가 앞서 있으면 그대로 대기한다. 병목은 backend 잡 약 29분이며 병렬 세션이 활발할수록 패배 확률이 오른다 — 확률이 아니라 구조. pr931 근본원인 문서 §2 가 같은 경합을 기술했으나 그 대책(HARN-46 events.ndjson 샤딩)은 dirty(파일 충돌) 축이라 이 behind 축에는 작동하지 않는다. Kiki 판단(2026-09-01): 대안이었던 'require branches to be up to date 해제'는 오래된 base 에서 통과한 CI 로 머지를 허용해 보호를 낮추므로 채택하지 않고, merge queue 를 택한다. ⚠ ruleset 변경은 리포 관리자 권한이 필요하므로 착수 세션은 Kiki 실행 명령 동봉이 필요할 수 있다(CLAUDE.md Kiki 머신 안내 규칙)."
-updated: 2026-09-01
+session: claude/status-f9lp65
+notes: "발견 경위(2026-09-01 실측): PR #952 가 CI 16잡 green 을 3회 확보하고도 머지되지 못했다. 1라운드는 미해결 Codex 스레드(정당한 룰·처리 완료), 2·3라운드는 전부 mergeable_state=behind 였다 — CI 가 도는 약 30분 사이에 main 에 #963·#964(2라운드), #957(3라운드)이 착지했다. auto-merge 를 켜도 해소되지 않는다: auto-merge 는 브랜치를 자동 최신화하지 않으므로 체크 완료 시점에 base 가 앞서 있으면 그대로 대기한다. 병목은 backend 잡 약 29분이며 병렬 세션이 활발할수록 패배 확률이 오른다 — 확률이 아니라 구조. pr931 근본원인 문서 §2 가 같은 경합을 기술했으나 그 대책(HARN-46 events.ndjson 샤딩)은 dirty(파일 충돌) 축이라 이 behind 축에는 작동하지 않는다. Kiki 판단(2026-09-01): 대안이었던 'require branches to be up to date 해제'는 오래된 base 에서 통과한 CI 로 머지를 허용해 보호를 낮추므로 채택하지 않고, merge queue 를 택한다. ⚠ ruleset 변경은 리포 관리자 권한이 필요하므로 착수 세션은 Kiki 실행 명령 동봉이 필요할 수 있다(CLAUDE.md Kiki 머신 안내 규칙).\n\n[정정 2026-09-03] acceptance ②③이 저장소 관리자 설정(ruleset)을 요구한다 — 세션 권한 밖. 게이트 notes가 세션 대행 범위를 '①ci.yml merge_group 트리거는 세션이 PR로'로 이미 분리했으므로, 그 경계를 대장에 집행한다(산문 선행은 selector가 읽지 않는다 — HARN-52 축)."
+updated: 2026-09-03
