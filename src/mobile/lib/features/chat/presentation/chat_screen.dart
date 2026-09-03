@@ -16,6 +16,7 @@ import '../../problems/application/active_problem.dart';
 import '../../problems/data/problem_models.dart';
 import '../../reports/presentation/defect_report_button.dart';
 import '../application/chat_controller.dart';
+import '../application/completion_signal.dart';
 import '../domain/chat_message.dart';
 import '../domain/latex_to_plain.dart';
 import '../domain/solution_steps.dart';
@@ -212,9 +213,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// 완료 후 '다음 문항으로' — 소비한 완료 신호를 비우고 문제 화면으로 넘긴다(MOB-20).
+  ///
+  /// 여기서 어떤 제출도 하지 않는다 — attempt 적재·숙달 전파는 서버가 완료 턴에서 이미 끝냈다
+  /// (중복 적재 금지 계약). 다음 문항 *선정*도 서버(L2 CAT)가 `/v1/me/next-problem`에서 하고,
+  /// 문제 화면이 진입 시 그것을 부른다. 신호를 먼저 비우는 이유: 돌아왔을 때 낡은 완료 패널이
+  /// 남아 있으면 이미 끝난 문항의 완료를 새 문항의 완료로 오독하게 된다.
+  void _onNextProblem() {
+    ref.read(coachCompletionSignalProvider.notifier).state =
+        CoachCompletionSignal.none;
+    context.go(AppRoutes.problemPath);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
+    // 서버가 내린 완료 신호(MOB-20) — 클라는 판정하지 않고 이 권위값만 보고 어포던스를 바꾼다.
+    final CoachCompletionSignal completion =
+        ref.watch(coachCompletionSignalProvider);
 
     // 에러가 생기면 SnackBar로 알리고(가용성·앱은 죽지 않음) 상태를 지운다.
     ref.listen<String?>(
@@ -299,15 +315,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               //  · *대화 모드에서만* 렌더한다 — 풀이 단계 모드는 학생이 다단계 풀이를 *직접
               //    구성*하는 별도 어포던스이고, 그 편집기가 이미 좁은 세로 공간을 쓰므로
               //    선택지 목록을 겹쳐 넣지 않는다(MOB-02 오버플로 불변식 보존).
-              //  · 원 구현(섀도)은 완료(problemComplete)·돌아보기(awaitingReflection) 중에도
-              //    감췄으나 그 두 상태는 S3-32(학습 루프 닫힘·타 세션 회수 중) 소관이라 main엔
-              //    아직 없다 — S3-32 착지 시 같은 조건을 이 가드에 추가할 것.
+              //  · 완료(problemComplete)·돌아보기 대기(awaitingReflection) 중에도 감춘다
+              //    (MOB-20에서 배선 완료 — 서버 완료 신호 3필드가 클라에 도착한다). 완료 후에는
+              //    같은 문항의 보기를 다시 고를 이유가 없고, 돌아보기 턴은 *번호 선택*이 아니라
+              //    학생의 근거 서술을 받아야 하므로 진행을 보류한다(서버 docstring 요구 UX).
               // 주관식 문항엔 위젯이 스스로 빈 자리를 반환해 영향이 0이다(주관식 흐름 무변경).
-              if (_mode == _InputMode.conversation)
+              if (_mode == _InputMode.conversation &&
+                  !completion.problemComplete &&
+                  !completion.awaitingReflection)
                 _ChoiceButtons(
                   enabled: !state.isSending,
                   maxHeight: choiceAreaMaxHeight,
                   onSelected: _onChoiceSelected,
+                ),
+              // 돌아보기 대기 안내 — 정답 도달 후 "왜 그렇게 됐는지" 한 턴을 받는 구간임을
+              // 학생에게 알린다(정오 강조·정답 노출 없음·재촉 없음).
+              if (completion.awaitingReflection) const _ReflectionNotice(),
+              // 완료 → '다음 문항으로 진행' 어포던스. 서버가 attempt를 이미 적재했으므로
+              // 여기서 어떤 제출도 하지 않는다(재적재 금지) — 다음 문제 화면으로 넘길 뿐이다.
+              if (completion.problemComplete)
+                _CompletionPanel(
+                  attemptId: completion.completedAttemptId,
+                  onNext: _onNextProblem,
                 ),
               _InputBar(
                 controller: _inputController,
@@ -516,6 +545,97 @@ class _ChoiceButtons extends ConsumerWidget {
                     ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 돌아보기(메타인지) 대기 안내 — 서버 `awaiting_reflection`이 참인 동안만 그린다(MOB-20).
+///
+/// 정답에 도착했다는 사실 자체를 축하·강조하지 않는다(도파민 설계 금지·정답 노출 금지). 지금은
+/// "왜 그렇게 됐는지"를 한 턴 말하는 구간임을 알리는 *안내*일 뿐이며, 이 구간 동안 선택지 목록은
+/// 감춰져 번호 선택으로 흘려보낼 수 없다(진행 보류). 판정은 하지 않는다 — 서버 값의 표시뿐이다.
+class _ReflectionNotice extends StatelessWidget {
+  const _ReflectionNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.xs6, AppSpacing.md, 0),
+      child: Semantics(
+        // 스크린리더에 한 덩어리로 읽힌다(아이콘은 장식이라 시맨틱에서 제외).
+        container: true,
+        label: '돌아보기 차례입니다. 어떻게 그렇게 됐는지 한 번만 이야기해 주세요.',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
+              child: Icon(
+                Icons.chat_bubble_outline,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: ExcludeSemantics(
+                child: Text(
+                  '돌아보기 차례예요 — 어떻게 그렇게 됐는지 한 번만 이야기해 볼까요?',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 완료 패널 — 서버 `problem_complete`가 참인 동안만 그린다(MOB-20 · '다음 문항으로 진행' 신호).
+///
+/// [attemptId]는 서버가 적재한 ProblemAttempt PK다. **학생에게 표시하지 않는다**(UUID는 학습
+/// 정보가 아니다) — 완료 1건과 패널 1개를 묶는 *동일성 키*로만 쓴다: 연속 완료에서 위젯이
+/// 재사용되지 않고 새로 만들어져, 이전 문항의 패널이 그대로 남아 보이는 상태를 구조적으로 막는다.
+/// 정답·점수·정답률은 어떤 형태로도 싣지 않는다(절대 금기).
+class _CompletionPanel extends StatelessWidget {
+  _CompletionPanel({required this.attemptId, required this.onNext})
+      // 완료 attempt 1건 = 패널 1개. 서버 계약상 완료면 id가 오지만, 오지 않은 경우를 'none'
+      // 으로 *조용히 같게* 만들지 않고 그대로 구분되게 둔다(추정 금지·부재는 부재로).
+      : super(key: ValueKey<String>('completion-panel-${attemptId ?? 'none'}'));
+
+  /// 서버가 적재한 ProblemAttempt PK(완료 아니면 이 위젯 자체가 그려지지 않는다)·없으면 null.
+  final String? attemptId;
+
+  /// '다음 문항으로' 탭 콜백 — 신호를 비우고 문제 화면으로 넘긴다(클라 제출 없음).
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.xs6, AppSpacing.md, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '이 문제는 여기까지예요. 다음 문항으로 가 볼까요?',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // 접근성(MOB-14): 최소 48dp 탭 타깃.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: FilledButton.tonal(
+              onPressed: onNext,
+              child: const Text('다음 문항으로'),
             ),
           ),
         ],

@@ -10,6 +10,8 @@
 //  ③ 턴 영속 — 세션 생성(2턴)+turn(2턴)=… getSession이 누적 턴을 돌려준다.
 //  ④ 세션 problem_id 배선 — 활성 문제가 createSession 본문 problem_id로 실린다.
 //  ⑤ is_minor 서버파생 — 온보딩 PATCH 본문에 is_minor를 싣지 않는다(서버가 birth_year에서 파생).
+//  ⑥ 완료 신호 소비(MOB-20) — 세션 턴은 돌아보기 대기, 다음 턴은 완료를 내리고 클라 상태가
+//     그대로 따라간다. 완료여도 클라는 `POST /v1/me/attempts`를 부르지 않는다(중복 적재 금지).
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -17,6 +19,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/application/chat_controller.dart';
+import 'package:korean_math_app/features/chat/application/completion_signal.dart';
 import 'package:korean_math_app/features/chat/data/coach_api.dart';
 import 'package:korean_math_app/features/onboarding/data/user_api.dart';
 import 'package:korean_math_app/features/problems/application/active_problem.dart';
@@ -74,10 +77,20 @@ class _RoutingAdapter implements HttpClientAdapter {
     }
     if (path == '/v1/coach/sessions') {
       // 세션 생성 — 코치 결정 + 영속 식별자 + verify 신호(answer는 결코 싣지 않는다).
-      return _coachBody(dialogueId: 'dlg-1', wh1: 1);
+      // ⑥ 정답 도달 직후라 *돌아보기 1턴 대기*다(완료 아님·서버 계약 순서 그대로).
+      return _coachBody(
+        dialogueId: 'dlg-1',
+        wh1: 1,
+        awaitingReflection: true,
+      );
     }
     if (path == '/v1/coach/sessions/dlg-1/turns') {
-      return _coachBody(wh1: 2);
+      // ⑥ 학생의 돌아보기 응답 턴에서 완료된다 — 서버가 attempt를 적재하고 id를 돌려준다.
+      return _coachBody(
+        wh1: 2,
+        problemComplete: true,
+        completedAttemptId: 'att-e2e-1',
+      );
     }
     if (method == 'GET' && path == '/v1/coach/sessions/dlg-1') {
       // ③ 생성 2턴 + turn 2턴 = 4턴이 누적 영속됨.
@@ -107,7 +120,13 @@ class _RoutingAdapter implements HttpClientAdapter {
   }
 
   /// 코치 응답(세션/turn 공통) — decision + solution_verification + 영속 필드. answer 없음.
-  Map<String, dynamic> _coachBody({String? dialogueId, required int wh1}) {
+  Map<String, dynamic> _coachBody({
+    String? dialogueId,
+    required int wh1,
+    bool problemComplete = false,
+    bool awaitingReflection = false,
+    String? completedAttemptId,
+  }) {
     return <String, dynamic>{
       'decision': <String, dynamic>{
         'polya_stage_to_advance': 'stay',
@@ -130,6 +149,10 @@ class _RoutingAdapter implements HttpClientAdapter {
       'assistant_turn_id': 'a-$wh1',
       'wh1_turn_index': wh1,
       'wh1_exploration_turn': false,
+      // S3-32 완료 신호 3필드(MOB-20 클라 소비 대상).
+      'problem_complete': problemComplete,
+      'awaiting_reflection': awaitingReflection,
+      'completed_attempt_id': completedAttemptId,
     };
   }
 
@@ -208,6 +231,11 @@ void main() {
         .response!.solutionCoaching!.solutionVerification!.firstIncorrectIndex;
     expect(coachFirstIncorrect, 1);
     expect(jsonEncode(coachMsg.text).contains(_answerSentinel), isFalse);
+    // ⑥ 이 턴은 돌아보기 대기 — 완료가 아니다(클라가 서버 순서를 그대로 따라간다).
+    final afterCreateSignal = container.read(coachCompletionSignalProvider);
+    expect(afterCreateSignal.awaitingReflection, isTrue);
+    expect(afterCreateSignal.problemComplete, isFalse);
+    expect(afterCreateSignal.completedAttemptId, isNull);
 
     // ── 5) 다음 발화 → 같은 세션에 turn 추가 ────────────────────────────────
     await chat.send('이 부분이 맞나요?');
@@ -216,6 +244,16 @@ void main() {
       isTrue,
     );
     expect(container.read(chatControllerProvider).dialogueId, 'dlg-1');
+    // ⑥ 다음 턴에 완료 — 서버가 적재한 attempt id까지 클라 상태에 실린다.
+    final afterTurnSignal = container.read(coachCompletionSignalProvider);
+    expect(afterTurnSignal.problemComplete, isTrue);
+    expect(afterTurnSignal.awaitingReflection, isFalse);
+    expect(afterTurnSignal.completedAttemptId, 'att-e2e-1');
+    // ⑥ 완료여도 클라는 attempt를 재적재하지 않는다 — 이 경로로 나간 요청이 0건이어야 한다.
+    expect(
+      adapter.captured.keys.where((k) => k.contains('/v1/me/attempts')),
+      isEmpty,
+    );
 
     // ── 6) 세션 조회: ③ 턴 영속 확인 ────────────────────────────────────────
     final snapshot = await CoachApi(dio).getSession('dlg-1');
