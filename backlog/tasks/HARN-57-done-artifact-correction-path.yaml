@@ -15,10 +15,11 @@ acceptance:
   - "① 정정 경로 신설 — done 태스크의 artifacts를 추가/보정하는 합법 CLI(예: amend --artifact). 대장 손편집 금지 원칙을 지키면서 사후 증적 보정이 가능해야 한다. 기존 항은 지우지 않고 append만 허용(위조 방지 — amend --acceptance 선례 동형)"
   - "② --no-pr 사유의 사후 해소 표기 — incomplete/ci-red로 종결한 뒤 PR이 실제로 열렸으면 그 사실이 대장에 남아야 한다. 현재는 '커밋 예정' 같은 문구가 영구 증적으로 굳는다"
   - "③ 변별력 실측 — 정정 전/후로 artifacts가 실제 달라지는지, 기존 항이 보존되는지 테스트로 동결. 무의미 입력(빈 문자열·자기 id) 거부"
+  - "④ paths 정정 축도 함께 연다 (HARN-62 흡수 · 2026-09-03) — 등재 후 paths를 고칠 CLI 경로가 없어 넓게 잡은 glob이 영구 고정된다. 넓은 glob은 overlap 경보를 대량 오탐으로 만들고 상시 오탐은 병렬 세션이 경보를 무시하게 만든다(이 저장소가 이미 겪은 fail-open 보호 습관화 유형). 실측 경위: 2026-09-03 MOB-20 등재 시 src/mobile/lib/**로 잡아 경보 17건이 떴고 좁힐 CLI 경로가 없어 YAML 손편집으로 정정했다(PR에 자진 공개)"
 artifacts: []
 paths:
   - scripts/harness/backlog.py
   - "tests/harness/**"
 session: null
-notes: "출처: 2026-09-01 HARN-44 종결 시 실측. EOS 등급 P2 근거: 12월 검증 폐쇄루프(G0~G5)는 이 경로 없이도 성립한다 — 증적은 PR·커밋 메시지로 우회 기록 가능하므로 '애매하면 P0가 아니다' 원칙에 따라 판정 이후로 둔다. 경위: done을 PR 생성 *전에* 부른 세션 실수가 1차 원인이지만(올바른 순서 = PR 생성 후 done --artifact '#N'), 진짜 문제는 그 뒤 정정이 불가능하다는 것이다 — done은 종결 상태라 재실행 거부(done→done 전이 불가), amend는 --acceptance/--gate/--track/--depends/--priority/--eos-priority만 열려 있고 --artifact가 없다. 결과로 HARN-44 artifacts에 '커밋 예정(PR 동반)'이 남고 실제 PR #965는 대장에서 추적 불가다. HARN-52가 남긴 교훈의 재현 — '고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다'(그때는 --depends 부재, 이번은 --artifact 부재). CLAUDE.md '거부의 우회 금지' 처리 순서 3(CLI 경로 자체가 없는 설계 공백이면 태스크 등재·HARN-06 선례)에 따라 등재하며 대장을 손편집하지 않았다. HARN-56은 원격 인플라이트(claude/status-uh55gf·merge-queue-adoption)와 충돌해 CLI 제안 번호 57을 채택."
-updated: 2026-09-01
+notes: "출처: 2026-09-01 HARN-44 종결 시 실측. EOS 등급 P2 근거: 12월 검증 폐쇄루프(G0~G5)는 이 경로 없이도 성립한다 — 증적은 PR·커밋 메시지로 우회 기록 가능하므로 '애매하면 P0가 아니다' 원칙에 따라 판정 이후로 둔다. 경위: done을 PR 생성 *전에* 부른 세션 실수가 1차 원인이지만(올바른 순서 = PR 생성 후 done --artifact '#N'), 진짜 문제는 그 뒤 정정이 불가능하다는 것이다 — done은 종결 상태라 재실행 거부(done→done 전이 불가), amend는 --acceptance/--gate/--track/--depends/--priority/--eos-priority만 열려 있고 --artifact가 없다. 결과로 HARN-44 artifacts에 '커밋 예정(PR 동반)'이 남고 실제 PR #965는 대장에서 추적 불가다. HARN-52가 남긴 교훈의 재현 — '고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다'(그때는 --depends 부재, 이번은 --artifact 부재). CLAUDE.md '거부의 우회 금지' 처리 순서 3(CLI 경로 자체가 없는 설계 공백이면 태스크 등재·HARN-06 선례)에 따라 등재하며 대장을 손편집하지 않았다. HARN-56은 원격 인플라이트(claude/status-uh55gf·merge-queue-adoption)와 충돌해 CLI 제안 번호 57을 채택.\n\n[정정 2026-09-03] HARN-62 흡수 — CLI 의미 중복 고지 수용. amend 결측 필드(--artifact·--path)는 한 문제이며 같은 파일을 소유한다"
+updated: 2026-09-03

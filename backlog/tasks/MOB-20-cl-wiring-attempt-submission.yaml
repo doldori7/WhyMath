@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-20-cl-wiring-attempt-submission
+title: "CL-WIRING ① Flutter attempt 제출 배선 — POST /v1/me/attempts 클라 호출 착지 (서버 루프는 이미 닫혀 있다)"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 1
+eos_priority: P0
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 클라 호출 착지: 학생이 문제를 풀고 제출하면 Flutter가 POST /v1/me/attempts를 실제로 호출한다 — 현행 실측은 src/mobile/lib/ 전수 grep 'attempts' 0건이다(REC-01이 '입력 루프 미도달·problem_attempt 0행'으로 관측 등재한 사실의 원인). 서버는 이미 채점→record_problem_attempt_mastery→record_problem_attempt_skill_mastery→record_attempt_skill_event를 한 경로에서 수행하므로(api/me.py:715-810) 이 태스크는 신규 엔진 0·호출 배선만이다"
+  - "② 응답 소비: mastery_updates·skill_mastery_updates를 클라가 받아 상태에 반영한다 — 호출만 하고 응답을 버리면 '학생이 자기 숙달 변화를 볼 수 없다'가 그대로 남는다(REC-10 정직 표기 렌더와 같은 축)"
+  - "③ 세션 축 정직: AttemptSubmitRequest.session_id를 클라가 보내지 않는 현행 상태를 그대로 둘지 채울지 판정해 적는다 — LearningSession writer 0(EOS-81 ④와 동일 뿌리)이라 지금은 uuid4 placeholder다. 채우지 않기로 하면 '미기록'으로 말하고 조용히 메우지 않는다(EOS-57 None≠[] 규약 동형)"
+  - "④ 변별력: 배선 전 상태에서 실패하는 테스트를 먼저 확인한다 — 정상 입력에서 초록인 것은 보호의 증거가 아니다(CLAUDE.md 2026-09-01). 위젯/컨트롤러 테스트가 '제출 시 POST가 나갔는가'를 요청 캡처로 단언하고, 호출을 제거하면 RED가 되는지 실측해 PR에 적는다"
+artifacts: []
+paths:
+  - src/mobile/lib/features/problems/**
+  - src/mobile/lib/features/chat/application/**
+  - src/mobile/test/problems_api_test.dart
+  - src/mobile/test/e2e_loop_flow_test.dart
+session: null
+notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-1·§8-①. Kiki 결정(2026-09-03): 계획서 300 Phase 2 4주는 실행하지 않고 참고 문서로 강등, 10월 공식 목표는 G2 앵커 콘텐츠 생산 유지. 단 이 배선은 G2·G4 공통 선결조건이라 CL-WIRING으로 즉시 수행. 명칭 규약: 계획서 300의 'Gate 2'는 사용하지 않는다 — G2 = Anchor Content Production, CL-WIRING = Student Closed-loop Wiring."
+updated: 2026-09-03
