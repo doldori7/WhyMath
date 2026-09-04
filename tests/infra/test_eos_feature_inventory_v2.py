@@ -247,6 +247,38 @@ def test_client_rows_are_p0_only_via_seed_route_literal_or_declared_seed(measure
             assert r.release_priority != "P0", r.spec.fid
 
 
+def test_app_state_di_bridge_reaches_wired_components(gen: Any, measured: Any) -> None:
+    """app.state DI로만 배선된 부품(OAuth provider·LLM provider·큐)은 import 그래프에 없다 —
+    다리가 없으면 User/Auth가 P1로 떨어진다. 손 선언(loop_seed)이 아니라 기계가 닿아야 한다."""
+    rows, info = measured
+    di = gen._app_state_di_map()
+    assert len(info["di_keys"]) >= 10
+    assert "api.oauth_providers" in di["OAUTH_PROVIDERS_KEY"]
+    assert any(m.startswith("l3.providers.") for m in di["PROVIDER_KEY"])
+    by_fid = {r.spec.fid: r for r in rows}
+    oauth = by_fid["WM-E-804"]
+    assert oauth.release_priority == "P0" and oauth.loop_hits["student_loop"]
+    assert not oauth.spec.loop_seed, "OAuth provider는 DI 다리로 닿아야 한다 — 손 선언 금지"
+    declared = [s.fid for s in gen.CATALOG if s.loop_seed]
+    assert set(declared) <= {"WM-C-003", "WM-C-005"}, declared
+
+
+def test_sole_supplier_of_a_loop_table_is_promoted_to_p0(gen: Any, measured: Any) -> None:
+    """읽기 표면(P0)이 있는 테이블에 P0 writer가 없으면 유일 writer가 P0 — SolutionPath 승격 writer."""
+    rows, info = measured
+    by_fid = {r.spec.fid: r for r in rows}
+    path_writer = by_fid["WM-E-703"]
+    assert path_writer.release_priority == "P0" and path_writer.loop_hits["data_supplier"]
+    assert "solution_path" in path_writer.priority_basis
+    assert by_fid["WM-E-357"].release_priority == "P2", "이월 선언(C6 다중 풀이)은 승격하지 않는다"
+    # 남은 P0-writer-없는 루프 테이블은 writer가 전부 Flag-off/이월/P3인 것만이어야 한다
+    leftovers = set(info["loop_tables_without_p0_writer"])
+    assert leftovers <= {"db.models.misconception_embedding"}, leftovers
+    for r in rows:
+        if set(r.db_models) & leftovers and r.mutations > 0 and r.spec.plane != "S":
+            assert r.status in ("Flag-off", "Shadow") or r.spec.priority == "P2" or r.spec.horizon
+
+
 def test_prior_manual_priority_is_kept_for_the_diff_not_used_for_p0(
     gen: Any, measured: Any
 ) -> None:

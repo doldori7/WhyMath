@@ -26,7 +26,7 @@
 | **모집단** | **162행** (S 49 · E 88 · O 13 · C 12) | "약 120개"보다 많다 — 이유는 §1. 분류율 162/162 |
 | **EOS Ownership** | CORE 108 · INFRA 21 · CLIENT 12 · **MIXED 10** · ADAPTER 8 · CORE+ADAPTER_DEP 3 | Core가 2/3. 수학 어댑터는 8행(+의존 3행)뿐 — 계획서 100 §3.7의 "Core가 이차방정식을 알게 만들면 안 된다"가 이미 대체로 성립 |
 | **Migration Action** | **KEEP 113 · REFACTOR 16 · HEAVY 11 · REPLACE 검토 1 · POSTPONE 21** | §3.4 기준(KEEP 6조건·REPLACE 신호)과 §3.14 매트릭스의 **결합 판정**(§2). 재작성 대상 0. REPLACE 검토 1건(§4-③)은 가족 합산 효과 |
-| **출시 우선도(기계)** | **P0 99 · P1 42 · P2 19 · P3 2** | "없으면 12/31 폐쇄루프가 깨지는가"를 import 도달성으로 답했다(§7). P0의 80%(79행)가 KEEP — 12월 검증 경로 대부분은 옮길 필요가 없다 |
+| **출시 우선도(기계)** | **P0 101 · P1 40 · P2 19 · P3 2** | "없으면 12/31 폐쇄루프가 깨지는가"를 import 도달성 + app.state DI 다리 + 루프 테이블 유일 writer로 답했다(§7). P0의 80%(81행)가 KEEP — 12월 검증 경로 대부분은 옮길 필요가 없다 |
 | **Migration Risk** | High 24 · Med 43 · Low 95 | High 24건 중 MIXED 10 + 총점 ≥10 14 |
 
 **한 줄 판정**: 이전 난이도가 높은 곳은 *수학*이 아니라 **비대한 가족**(성취기준 적재·문제은행·
@@ -192,20 +192,20 @@ POSTPONE 행은 괄호에 매트릭스 원판정을, 우선도가 선행 제안(
 | ID | 기능명 | 현재 위치 | 사용자 | Domain | **EOS Ownership** | 상태 | 결합도 | 테스트 | **Migration Action** | §3.4 KEEP | **우선도** | 우선도 근거 | Risk | A B C D E F | 계 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---:|
 | WM-E-101 | 원자 백본 그래프 적재·검색·중복 검수 | `…/l1/atom_graph, dp/atom_graph` | Platform | Knowledge Graph | **CORE** | Production | Med | Full | **KEEP (매트릭스 REFACTOR)** | 5/6 | **P0** | 루프 student_loop, data_supplier | Med | 1 2 2 0 1 2 | 8 |
-| WM-E-102 | 구 개념그래프 적재·임베딩·검색 | `…/api, …/l1/concept_graph, dp/concept_graph` | Platform | Knowledge Graph | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0 (←P1)** | 루프 student_loop, production_loop, data_s | High | 1 2 2 0 3 2 | 10 |
+| WM-E-102 | 구 개념그래프 적재·임베딩·검색 | `…/api, …/l1/concept_graph, dp/concept_graph` | Platform | Knowledge Graph | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0 (←P1)** | 루프 student_loop, production_loop, data_suppl | High | 1 2 2 0 3 2 | 10 |
 | WM-E-103 | 개념↔원자 크로스워크 이전 | `…/l1/concept_atom_crosswalk, dp/concept_atom_crosswalk` | Platform | Knowledge Graph | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0 (←P1)** | 루프 production_loop, data_supplier | Med | 0 1 1 0 2 2 | 6 |
 | WM-E-104 | 개념 콘텐츠 4종 적재·해석 | `…/l1/concept_content, dp/concept_content, dp/concept_content_university` | Platform | Content | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, data_supplier | Low | 0 1 0 0 1 1 | 3 |
 | WM-E-105 | 교육과정 프레임워크 로더·해석 | `…/l1/curriculum` | Platform | Curriculum | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, data_supplier | Low | 1 1 1 0 0 1 | 4 |
-| WM-E-106 | 성취기준·평가기준 적재·정렬 질의·앵커 레지스트리 | `…/l1/standards, dp/ncic, dp/standards_university` | Platform | Curriculum | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0** | 루프 student_loop, production_loop, data_s | High | 0 3 2 0 3 3 | 11 |
-| WM-E-107 | 오개념 카탈로그·크로스링크 적재·승인 게이트 | `…/l1/misconception, dp/misconception` | Platform | Pedagogy | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 student_loop, production_loop, data_s | Med | 0 2 1 0 1 3 | 7 |
+| WM-E-106 | 성취기준·평가기준 적재·정렬 질의·앵커 레지스트리 | `…/l1/standards, dp/ncic, dp/standards_university` | Platform | Curriculum | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0** | 루프 student_loop, production_loop, data_suppl | High | 0 3 2 0 3 3 | 11 |
+| WM-E-107 | 오개념 카탈로그·크로스링크 적재·승인 게이트 | `…/l1/misconception, dp/misconception` | Platform | Pedagogy | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 student_loop, production_loop, data_suppl | Med | 0 2 1 0 1 3 | 7 |
 | WM-E-108 | 교수법 팩·단원 DSL 컴파일·적재 | `…/l1/pedagogy` | Platform | Pedagogy | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 data_supplier | Low | 0 1 1 0 0 1 | 3 |
-| WM-E-109 | 문제은행 적재·임베딩·시그니처·페르소나 적합·정답분포 | `…/l1/problem_bank` | Platform | Content | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0** | 루프 student_loop, production_loop, data_s | High | 1 2 2 0 2 3 | 10 |
+| WM-E-109 | 문제은행 적재·임베딩·시그니처·페르소나 적합·정답분포 | `…/l1/problem_bank` | Platform | Content | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0** | 루프 student_loop, production_loop, data_suppl | High | 1 2 2 0 2 3 | 10 |
 | WM-E-110 | 공식 그래프 적재 | `…/l1/formula_graph, dp/formula_graph` | Platform | Knowledge Graph | **MIXED** | Production | Low | Full | **POSTPONE (REFACTOR)** | 4/6 | **P2** | 승계(P2) | High | 3 1 0 0 1 1 | 6 |
 | WM-E-111 | 스킬 그래프 적재·해석 | `…/l1/skill_graph, dp/skill_graph` | Platform | Knowledge Graph | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 data_supplier | Med | 1 1 1 0 1 2 | 6 |
 | WM-E-112 | 풀이 전략 그래프 적재 | `…/l1/strategy_graph, dp/strategy_graph` | Platform | Pedagogy | **MIXED** | Production | Low | Full | **POSTPONE (REFACTOR)** | 4/6 | **P2** | 승계(P2) | High | 3 1 0 0 1 1 | 6 |
 | WM-E-113 | 문제 유형 그래프 적재 | `…/l1/problem_type_graph, dp/problem_type_graph` | Platform | Content | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P1** | 승계(P1) | Low | 0 1 0 0 1 1 | 3 |
 | WM-E-114 | 진단문항·소크라테스 프로브 적재 | `…/l1/atom_probe` | Platform | Assessment | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P1** | 승계(P1) | Low | 0 1 0 0 0 1 | 2 |
-| WM-E-115 | 저작권 게이트웨이·정책 엔진·귀속 | `…/l1/rights` | Platform | Content | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invari | Low | 1 1 1 0 0 1 | 4 |
+| WM-E-115 | 저작권 게이트웨이·정책 엔진·귀속 | `…/l1/rights` | Platform | Content | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invariant | Low | 1 1 1 0 0 1 | 4 |
 | WM-E-116 | 개념 시각화·시각 스타일 오버레이 | `…/l1/concept_visual_style, …/l1/concept_visualization` | Platform | Interaction | **CORE** | Production | Low | Full | **POSTPONE (REFACTOR)** | 6/6 | **P2** | 승계(P2) | Med | 1 1 1 0 0 2 | 5 |
 | WM-E-117 | 임베딩 제공자 셀렉터(bge-m3·OpenAI·fake) | `…/l1` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0 (←P1)** | 루프 student_loop, production_loop | Low | 0 0 0 0 0 0 | 0 |
 | WM-E-118 | 그래프 분석 유틸(ETL 측) | `dp/graph_analytics` | Platform | Knowledge Graph | **CORE** | Production | Low | Full | **POSTPONE (KEEP)** | 6/6 | **P2** | 승계(P2) | Low | 0 0 0 0 1 0 | 1 |
@@ -219,9 +219,9 @@ POSTPONE 행은 괄호에 매트릭스 원판정을, 우선도가 선행 제안(
 | WM-E-208 | 일별 학습 지표 롤업 writer | `…/harness, …/l2` | Admin | Analytics | **CORE** | Production | Low | Full | **HEAVY_REFACTOR** | 6/6 | **P1** | 승계(P1) | High | 1 2 1 0 3 3 | 10 |
 | WM-E-301 | LLM 라우터(3축 결정·모델 매트릭스·seed 정책) | `…/l3` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop | Low | 1 0 0 0 0 0 | 1 |
 | WM-E-302 | LLM 제공자(Ollama·Anthropic·복합) | `…/l3/providers` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop | Low | 0 0 1 0 1 0 | 2 |
-| WM-E-303 | 생성 파이프라인·Redis 캐시·Langfuse 관측 | `…/l3, …/l3/cache, …/l3/trace` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invari | Low | 1 0 1 0 0 0 | 2 |
-| WM-E-304 | QUALITY 티어 비동기 큐(Celery) | `…/l3/queue` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P1** | 승계(P1) | Low | 1 0 1 0 0 0 | 2 |
-| WM-E-305 | 데이터 등급 → 국외 반출 게이트 | `…/l3` | Platform | Security | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invari | Low | 1 0 0 0 0 0 | 1 |
+| WM-E-303 | 생성 파이프라인·Redis 캐시·Langfuse 관측 | `…/l3, …/l3/cache, …/l3/trace` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invariant | Low | 1 0 1 0 0 0 | 2 |
+| WM-E-304 | QUALITY 티어 비동기 큐(Celery) | `…/l3/queue` | Platform | AI Orchestration | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0 (←P1)** | 루프 student_loop, production_loop | Low | 1 0 1 0 0 0 | 2 |
+| WM-E-305 | 데이터 등급 → 국외 반출 게이트 | `…/l3` | Platform | Security | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, production_loop, invariant | Low | 1 0 0 0 0 0 | 1 |
 | WM-E-306 | 빌드타임 캐시 사전생성(pre-warm)·시드 검증 | `…/l3/pregenerate` | Admin | AI Orchestration | **MIXED** | Batch | Med | Full | **REFACTOR** | 3/6 | **P0 (←P1)** | 루프 student_loop, production_loop | High | 3 0 2 0 2 0 | 7 |
 | WM-E-307 | DSL 콘텐츠 생성기(컴파일·검증·복구·변수 엔진) | `…/l3/dsl` | Admin | Content | **MIXED** | Production | Low | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P0** | 루프 production_loop | High | 3 0 0 0 0 0 | 3 |
 | WM-E-308 | 교수법 렌더 어댑터 5종·평가 재료 뱅크 | `…/l3/render` | Platform | Pedagogy | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop | Low | 1 0 1 0 0 0 | 2 |
@@ -252,9 +252,9 @@ POSTPONE 행은 괄호에 매트릭스 원판정을, 우선도가 선행 제안(
 | WM-E-410 | 적응 교수법 policy(Thompson sampling·안전제약) | `…/l4/pedagogy/adaptive` | Student | Pedagogy | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P1** | 승계(P1) | Med | 1 1 1 0 1 1 | 5 |
 | WM-E-411 | 오개념 진단·개입·매칭 게이트·distractor 카탈로그 | `…/l4/misconception` | Student | Pedagogy | **CORE** | Production | Med | Full | **KEEP** | 5/6 | **P0** | 루프 student_loop, production_loop | Low | 1 0 2 0 1 0 | 4 |
 | WM-E-412 | 활성 오개념 가설·프로브 선택·웜스타트·증거 저장 | `…/l4/misconception` | Student | Pedagogy | **CORE** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0** | 루프 student_loop, production_loop | High | 0 2 2 0 3 3 | 10 |
-| WM-E-413 | 오개념 의미(임베딩) 매칭 + shadow | `…/l4/misconception, …/l4/misconception/semantic` | Student | Pedagogy | **CORE** | Flag-off | Med | Full | **REFACTOR** | 4/6 | **P1** | 정적(student_loop, production_loop)했으나 Fla | Med | 0 1 2 0 1 1 | 5 |
+| WM-E-413 | 오개념 의미(임베딩) 매칭 + shadow | `…/l4/misconception, …/l4/misconception/semantic` | Student | Pedagogy | **CORE** | Flag-off | Med | Full | **REFACTOR** | 4/6 | **P1** | 정적(student_loop, production_loop)했으나 Flag-of | Med | 0 1 2 0 1 1 | 5 |
 | WM-E-414 | 오개념 방향 판별 LLM-judge + shadow | `…/l4/misconception` | Student | Pedagogy | **CORE** | Flag-off | Med | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P1** | 정적(student_loop)했으나 Flag-off | Low | 0 0 2 0 1 0 | 3 |
-| WM-E-415 | 오개념 크로스링크(kebab↔M-id) 후보·트리아지·검수·shadow | `…/l4/misconception` | Admin | Pedagogy | **CORE** | Flag-off | Med | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P1 (←P0)** | 정적(student_loop, production_loop)했으나 Fla | Low | 0 0 2 0 0 0 | 2 |
+| WM-E-415 | 오개념 크로스링크(kebab↔M-id) 후보·트리아지·검수·shadow | `…/l4/misconception` | Admin | Pedagogy | **CORE** | Flag-off | Med | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P1 (←P0)** | 정적(student_loop, production_loop)했으나 Flag-of | Low | 0 0 2 0 0 0 | 2 |
 | WM-E-416 | 오답 형태 SymPy 매칭(canonical_wrong_form) + shadow | `…/l4/misconception` | Student | Math Engine | **ADAPTER** | Flag-off | Low | Full | **KEEP** | 5/6 | **P1** | 정적(student_loop)했으나 Flag-off | Low | 0 0 1 0 0 0 | 1 |
 | WM-E-417 | 중간 단계 등가성 shadow 관측·평가 | `…/l4` | Student | Pedagogy | **CORE** | Flag-off | Low | Full | **KEEP** | 5/6 | **P1** | 정적(student_loop)했으나 Flag-off | Low | 1 0 0 0 0 0 | 1 |
 | WM-E-418 | 학습 장면(LearningScene) DSL·생성·시각화 정책 | `…/l4` | Student | Interaction | **CORE** | Production | Med | Full | **POSTPONE (KEEP)** | 5/6 | **P2** | 승계(P2) | Low | 1 0 2 0 1 0 | 4 |
@@ -266,19 +266,19 @@ POSTPONE 행은 괄호에 매트릭스 원판정을, 우선도가 선행 제안(
 | WM-E-603 | 평가 청사진 테스트셋 조립 | `…/l6/blueprint` | Student | Assessment | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop | Low | 1 0 1 0 1 0 | 3 |
 | WM-E-701 | WH-S 솔버 하네스(루프·판정·저장소·코퍼스 replay) | `…/whs` | Platform | Math Engine | **INFRA** | Production | Med | Full | **POSTPONE (HEAVY_REFACTOR)** | 4/6 | **P3 (←P1)** | 장기 연구/플랫폼(horizon 선언) | High | 3 2 2 0 3 3 | 13 |
 | WM-E-702 | WH-S 자기진화(PRM·SFT 학습셋 export) | `…/whs` | Admin | Math Engine | **INFRA** | Batch | Low | Full | **POSTPONE (REFACTOR)** | 6/6 | **P3 (←P2)** | 장기 연구/플랫폼(horizon 선언) | Med | 1 2 1 0 2 2 | 8 |
-| WM-E-703 | bank_solution → SolutionPath 승격 writer | `…/whs` | Admin | Content | **INFRA** | Batch | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P1 (←P0)** | 선행 P0 → 강등: 폐쇄루프 미도달(우회 가능) | Med | 1 2 1 0 2 2 | 8 |
+| WM-E-703 | bank_solution → SolutionPath 승격 writer | `…/whs` | Admin | Content | **INFRA** | Batch | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 data_supplier(유일 writer | Med | 1 2 1 0 2 2 | 8 |
 | WM-E-704 | WH-1 튜터링 하네스(턴 루프·LLM 정책·프로즈·프로브 공급) | `…/harness` | Student | Pedagogy | **INFRA** | Production | High | Full | **REFACTOR** | 4/6 | **P0** | 루프 student_loop, production_loop | Med | 3 0 3 0 1 0 | 7 |
-| WM-E-705 | WH-1 shadow 관측·수확·2단계 종료 게이트 | `…/harness` | Platform | QA | **INFRA** | Flag-off | Med | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P1** | 정적(student_loop, production_loop)했으나 Fla | Low | 0 0 2 0 1 0 | 3 |
+| WM-E-705 | WH-1 shadow 관측·수확·2단계 종료 게이트 | `…/harness` | Platform | QA | **INFRA** | Flag-off | Med | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P1** | 정적(student_loop, production_loop)했으나 Flag-of | Low | 0 0 2 0 1 0 | 3 |
 | WM-E-706 | 성장 증거 대리지표 7종·노출 계약·베이스라인 | `…/harness` | Student | Pedagogy | **INFRA** | Production | Med | Full | **HEAVY_REFACTOR** | 5/6 | **P0 (←P1)** | 루프 student_loop | High | 1 2 2 0 2 3 | 10 |
 | WM-E-801 | Pydantic 계약 스키마(문항·활동·이벤트·권리 등 40종) | `…/schema` | Platform | Versioning | **MIXED** | Production | Low | Full | **REFACTOR (매트릭스 KEEP)** | 4/6 | **P0** | 루프 student_loop, production_loop | High | 3 0 0 0 0 0 | 3 |
 | WM-E-802 | ORM 모델 54종·세션·스키마 버전·alembic | `…/db, …/db/models` | Platform | Versioning | **INFRA** | Production | High | Full | **KEEP** | 5/6 | **P0** | 루프 student_loop, production_loop | Low | 1 0 3 0 0 0 | 4 |
-| WM-E-803 | 인증·인가·암호화·레이트리밋·동시성 배관 | `…/api, …/security.py` | Platform | Security | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 student_loop, production_loop, invari | Med | 1 1 1 0 0 2 | 5 |
-| WM-E-804 | OAuth 제공자 구현(카카오·네이버 httpx) | `…/api` | Platform | Identity | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 seed_declared | Low | 0 0 0 0 0 0 | 0 |
+| WM-E-803 | 인증·인가·암호화·레이트리밋·동시성 배관 | `…/api, …/security.py` | Platform | Security | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0** | 루프 student_loop, production_loop, invariant | Med | 1 1 1 0 0 2 | 5 |
+| WM-E-804 | OAuth 제공자 구현(카카오·네이버 httpx) | `…/api` | Platform | Identity | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop | Low | 0 0 0 0 0 0 | 0 |
 | WM-E-805 | 동의 절차(14세 미만·동의 부여) | `…/consent.py, …/consent_grant.py` | Parent | Security | **INFRA** | Production | Low | Full | **KEEP** | 6/6 | **P0** | 루프 student_loop, invariant | Low | 0 0 0 0 0 0 | 0 |
 | WM-E-806 | 디바이스 저장소·서명 실패 metric | `…/api` | Platform | Security | **CORE** | Production | Low | Full | **KEEP (매트릭스 REFACTOR)** | 6/6 | **P0 (←P1)** | 루프 student_loop, production_loop | Med | 0 1 1 0 3 1 | 6 |
 | WM-E-807 | 앱 조립·합성 루트·설정·app.state 배관 | `…/api, …/composition.py, …/config.py` | Platform | Operations | **CORE** | Production | Low | Full | **KEEP** | 5/6 | **P0** | 루프 student_loop, production_loop | Low | 3 0 1 0 0 0 | 4 |
 | WM-E-808 | 한국어 조사 유틸 | `…/lang` | Platform | Content | **CORE** | Production | Low | Full | **KEEP** | 6/6 | **P0 (←P1)** | 루프 student_loop, production_loop | Low | 0 0 0 0 0 0 | 0 |
-| WM-E-809 | 데모 인증(시연 전용 가짜 OAuth provider) | `…/api` | Admin | Identity | **CORE** | Flag-off | Low | Partial | **KEEP** | 5/6 | **P1** | 승계(P1) | Low | 0 0 0 1 0 0 | 1 |
+| WM-E-809 | 데모 인증(시연 전용 가짜 OAuth provider) | `…/api` | Admin | Identity | **CORE** | Flag-off | Low | Partial | **KEEP** | 5/6 | **P1** | 정적(student_loop)했으나 Flag-off | Low | 0 0 0 1 0 0 | 1 |
 
 ### O 운영자 도구 — CLI·배치·게이트 (13행)
 
@@ -485,7 +485,7 @@ privacy·검수 인프라에 있다 — EOS 전환에서 "Core를 뜯는 일"보
 | backlog 태스크 `eos_priority`(EOS-80 백필) | P0 16 / P1 85 / P2 95 / P3 16 · 미기재 302(대부분 done) | *작업* 단위 — 기능 단위가 아니다 |
 | **이 장부 162행(기존 기능)** | 아래 | 이 절의 대상 |
 
-### 7.2 규칙 — P0는 다섯 가지 증거 중 하나
+### 7.2 규칙 — P0는 다섯 가지 증거 중 하나 (2차 검토로 두 사각을 기계로 메움)
 
 폐쇄루프의 **씨앗**을 코드 좌표로 고정하고(생성기 상수 · 실재하지 않으면 exit 1), 씨앗에서 import
 간선을 따라 닿는 모듈을 BFS로 모은다(패키지 재수출은 심볼 단위로 풀어 `l6` import가 L6 전부로
@@ -494,10 +494,10 @@ privacy·검수 인프라에 있다 — EOS 전환에서 "Core를 뜯는 일"보
 | 증거 | 정의 | 출처 |
 |---|---|---|
 | `seed_route` | 행의 엔드포인트가 씨앗 경로 자체 · 클라 소스에 씨앗 경로 리터럴 실재 | 학생 루프 25경로 = 계획서 300 §12 API ↔ 저장소 대응표 · 생산 루프 5경로 = `/v1/generate`·`/v1/dsl/*` |
-| `student_loop` / `production_loop` | 씨앗에서 정적 도달(학생 200모듈 · 생산 166모듈) | 생산 씨앗 모듈 10 = 선언 부록 E G1~G3·G5 차단 조건의 집행 지점(코퍼스 축적·HIT 타이머·검수큐·QA 파이프라인·골든·회차 대장·provenance·스코어카드) |
-| `data_supplier` | L1 적재기가 루프가 읽는 테이블을 채운다 | 데이터가 없으면 루프는 빈 화면이다 |
+| `student_loop` / `production_loop` | 씨앗에서 정적 도달(학생 207모듈 · 생산 169모듈) — **app.state DI 다리 포함**: app.py의 `app.state.__setattr__(KEY, expr)` 20개 키를 파싱해 KEY 상수를 참조하는 엔드포인트(헬퍼 `api._l3_state` 경유 포함)에 배선 모듈을 의존으로 더한다 | 생산 씨앗 모듈 10 = 선언 부록 E G1~G3·G5 차단 조건의 집행 지점(코퍼스 축적·HIT 타이머·검수큐·QA 파이프라인·골든·회차 대장·provenance·스코어카드) |
+| `data_supplier` | ① L1 적재기가 루프가 읽는 테이블을 채운다 ② **2패스**: 루프 테이블 28개 중 P0 writer가 하나도 없는 테이블의 writer(Flag-off·이월 선언·P3 제외)를 P0로 | 데이터가 없으면 루프는 빈 화면이다. ②로 승격된 것은 SolutionPath 승격 writer(E-703) 1건 — 남은 P0-writer-없는 테이블은 `misconception_embedding`(writer가 Flag-off) 하나 |
 | `invariant` | 불변 계약 *구현*(privacy·consent·rights·반출 게이트·Langfuse·스크러버) + 인증 배관 자체 | 선언 §0-6 |
-| `seed_declared` | import 그래프에 안 잡히는 진입점 — 앱 셸·MathLive 입력·OAuth provider(app.state DI) | 카탈로그 선언 3건, 각각 사유 병기 |
+| `seed_declared` | import 그래프에 안 잡히는 진입점 — 앱 셸·MathLive 입력 | 카탈로그 선언 **2건**(OAuth provider는 DI 다리로 기계 도달해 선언을 제거했다) |
 
 보정 1개: **정적으로 닿았지만 플래그가 꺼진 기능은 P0가 아니다**(P1 "우회 가능") — import는 되지만
 런타임에 실행되지 않는 코드가 없어져도 루프는 돌아간다(7행: 오개념 shadow 4축·step shadow·WH-1
@@ -508,12 +508,12 @@ shadow·OCR). P3는 카탈로그 `horizon` 선언으로만 생긴다(WH-S 솔버
 
 | 우선도 \ Action | KEEP | REFACTOR | HEAVY | REPLACE 검토 | POSTPONE | 계 |
 |---|---:|---:|---:|---:|---:|---:|
-| P0 | 79 | 11 | 9 | 0 | 0 | 99 |
-| P1 | 34 | 5 | 2 | 1 | 0 | 42 |
+| P0 | 81 | 11 | 9 | 0 | 0 | 101 |
+| P1 | 32 | 5 | 2 | 1 | 0 | 40 |
 | P2 | 0 | 0 | 0 | 0 | 19 | 19 |
 | P3 | 0 | 0 | 0 | 0 | 2 | 2 |
 
-P0 99행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 'student_loop': 53, 'data_supplier': 10, 'production_loop': 42, 'seed_declared': 3}. **P0 중 KEEP 79(80%)** — 12월 경로의 대부분은 옮기지
+P0 101행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 'student_loop': 55, 'data_supplier': 11, 'production_loop': 43, 'seed_declared': 2}. **P0 중 KEEP 81(80%)** — 12월 경로의 대부분은 옮기지
 않아도 되고, P0에 REPLACE 검토는 0이다. POSTPONE 21 = P2 19 + P3 2.
 
 ### 7.4 선행 제안(v2.0)과 어긋난 26행
@@ -528,6 +528,7 @@ P0 99행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 's
 | WM-E-102 구 개념그래프 적재·임베딩·검색 | P1 → **P0** | 폐쇄루프: student_loop, production_loop, data_supplier |
 | WM-E-103 개념↔원자 크로스워크 이전 | P1 → **P0** | 폐쇄루프: production_loop, data_supplier |
 | WM-E-117 임베딩 제공자 셀렉터(bge-m3·OpenAI·fake) | P1 → **P0** | 폐쇄루프: student_loop, production_loop |
+| WM-E-304 QUALITY 티어 비동기 큐(Celery) | P1 → **P0** | 폐쇄루프: student_loop, production_loop |
 | WM-E-306 빌드타임 캐시 사전생성(pre-warm)·시드 검증 | P1 → **P0** | 폐쇄루프: student_loop, production_loop |
 | WM-E-309 교수 콘텐츠 슬롯 파이프라인(생성→예심→검수) | P0 → **P1** | 선행 P0 → 강등: 폐쇄루프 미도달(우회 가능) |
 | WM-E-311 독립 다관점 LLM 교차검증 | P1 → **P0** | 폐쇄루프: student_loop |
@@ -538,7 +539,6 @@ P0 99행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 's
 | WM-E-602 수능 모드 게이팅·적응 추천(게이팅×IRT CAT) | P1 → **P0** | 폐쇄루프: student_loop |
 | WM-E-701 WH-S 솔버 하네스(루프·판정·저장소·코퍼스 replay) | P1 → **P3** | 장기 연구/플랫폼(horizon 선언) |
 | WM-E-702 WH-S 자기진화(PRM·SFT 학습셋 export) | P2 → **P3** | 장기 연구/플랫폼(horizon 선언) |
-| WM-E-703 bank_solution → SolutionPath 승격 wr | P0 → **P1** | 선행 P0 → 강등: 폐쇄루프 미도달(우회 가능) |
 | WM-E-706 성장 증거 대리지표 7종·노출 계약·베이스라인 | P1 → **P0** | 폐쇄루프: student_loop |
 | WM-E-806 디바이스 저장소·서명 실패 metric | P1 → **P0** | 폐쇄루프: student_loop, production_loop |
 | WM-E-808 한국어 조사 유틸 | P1 → **P0** | 폐쇄루프: student_loop, production_loop |
@@ -550,11 +550,17 @@ P0 99행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 's
 **읽는 법**:
 - **강등 8행(P0→P1)** 중 다섯이 *조회 API*다 — 교육과정·성취기준·정렬 조회(S-037~039), IRT θ 표시(S-017),
   stateless 코치(S-027). 계획서 100의 P0 예시에 "Curriculum"이 있지만 루프가 밟는 것은 **데이터**(L1
-  적재기 E-105·106 → `data_supplier`로 P0 유지)이고 **운영자 조회 API**는 우회 가능하다. 슬롯 파이프라인
-  (E-309)·SolutionPath 승격 writer(E-703)·비용 리포트(O-904)는 생산 게이트의 집행 지점이 아니다 —
-  E-703은 힌트 단계의 *데이터 공급자*이지만 `whs` 소속이라 `data_supplier` 규칙(l1 한정) 밖이다. **Kiki
-  판정 후보**: E-703을 P0로 되돌릴지.
-- **승격 13행(P1/P2→P0)**은 전부 정적 도달 실측이다. 주목할 셋: **WM-E-102 구 개념그래프** — 중복
+  적재기 E-105·106·108 → `data_supplier`로 P0 유지)이고 **운영자 조회 API**는 우회 가능하다. 슬롯 파이프라인
+  (E-309)·비용 리포트(O-904)는 생산 게이트의 집행 지점이 아니다. 오개념 크로스링크(E-415)는 정적으로
+  닿지만 Flag-off라 P1.
+- **2차 검토로 정정된 2행**: SolutionPath 승격 writer(E-703)는 1차에 `whs` 소속이라 P1이었다 — 실측하니
+  `solution_path` 테이블의 writer가 E-703과 E-357(다중 풀이·C6 이월)뿐이고 읽기 표면(S-032 점층 공개, 클라
+  step panel이 호출)은 "쓰기는 승격 어댑터만 한다"고 자인한다. 12월 앵커 신규 문항의 풀이 경로는 이 writer
+  없이는 테이블에 실리지 않는다 → 2패스 규칙으로 **P0**. OAuth provider(E-804)는 1차에 손 선언 씨앗이었다 —
+  app.py의 `app.state.__setattr__` 배선 20개 키를 파싱하는 DI 다리로 **기계 도달**(auth callback이
+  `OAUTH_PROVIDERS_KEY`를 참조)해 선언을 제거했다. 같은 다리로 Celery 큐(E-304)가 `/v1/jobs` 경로의 의존으로
+  드러나 P0가 됐다(OPS-27 워커 미배포 — P0인데 배포가 없다는 뜻).
+- **승격 14행(P1/P2→P0)**은 전부 정적 도달·DI 다리·유일 writer 실측이다. 주목할 셋: **WM-E-102 구 개념그래프** — 중복
   (`duplicate_of` E-101)인데 학생·생산 루프가 여전히 밟고 루프 테이블을 채운다(교체 전까지는 P0가 맞다);
   **WM-E-306 pre-warm** — 코치가 `l3.pregenerate.validator`를 import한다(배치 도구 안에 런타임 검증
   모듈이 산다 — 귀속 위치 문제); **WM-E-311 교차검증·WM-E-356 비대수 검산** — verifier 경로가 정적으로
@@ -593,7 +599,7 @@ P0 99행의 근거 분포(중복 가능): {'seed_route': 26, 'invariant': 13, 's
 5. **"이동 계획"(어디로·언제)은 여전히 비어 있다** — v1 §7-1과 같다. 이 장부는 *무엇을·얼마나
    어렵게*까지다. 일정은 G0 이후 주간 계획이 소유하며 여기서 지어내지 않는다.
 6. **120 정합은 판정 불가** — §1.
-7. **P0 도달성은 정적 import다** — app.state DI로 호출되는 부품은 그래프에 안 보여 씨앗 선언(E-804 OAuth provider)으로 메웠다. 같은 사각이 더 있을 수 있다. 반대로 정적 도달은 *실행*이 아니라 *참조*다 — Flag-off 보정으로 7행을 걸렀지만 플래그 없는 죽은 참조는 걸러지지 않는다. `data_supplier`는 `l1.` 한정이라 `whs.path_promotion`처럼 다른 패키지의 데이터 공급자는 놓친다(§7.4).
+7. **P0 도달성은 정적 import + app.state DI 다리다** — `__setattr__(KEY, …)` 패턴 20개 키는 기계로 잇는다. 그 밖의 주입(FastAPI `Depends` 팩토리·클로저)은 여전히 사각일 수 있다. "정적 참조 ≠ 실행"은 실측했다: 정적 도달만으로 P0인 48행의 import 사용처를 AST로 검사한 결과 **플래그(`settings.*`) 조건문 안에서만 참조되는 행 0·import만 하고 안 쓰는 행 0** — Flag-off 보정 7행 외의 죽은 참조는 이 휴리스틱으로는 발견되지 않았다(런타임 `getattr` 게이트는 못 본다). `data_supplier`는 2패스로 `l1.` 밖까지 넓혔고, 남은 P0-writer-없는 루프 테이블은 `misconception_embedding`(writer Flag-off) 하나다.
 8. **§3.4의 "수정 비용 > 재작성 비용"은 측정하지 않았다** — REPLACE 신호 6종은 측정 가능분이고 비용
    비교는 사람 판단으로 남긴다. r5(상태 변이 추적)는 모듈명 패턴 대리지표라 이름이 다른 감사 writer를
    놓칠 수 있다(거짓 신호 방향 — 그래서 단독 신호로는 아무 판정도 바꾸지 않는다).

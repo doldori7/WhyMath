@@ -8,10 +8,13 @@ dashboard:
   classification_rate: 162/162
   backend_modules_covered: 580
   endpoints_covered: 109
-  release_p0_proposed: 99
+  release_p0_proposed: 101
   priority_changed_from_prior: 26
-  student_loop_reach_modules: 200
-  production_loop_reach_modules: 166
+  student_loop_reach_modules: 207
+  production_loop_reach_modules: 169
+  loop_tables: 28
+  loop_tables_without_p0_writer: [db.models.misconception_embedding]
+  di_keys_bridged: 20
   final_differs_from_matrix: 39
   final_differs_from_criteria: 12
   by_criteria_action:
@@ -52,8 +55,8 @@ dashboard:
     REFACTOR: 50
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
-    P0: 99
-    P1: 42
+    P0: 101
+    P1: 40
     P2: 19
     P3: 2
   by_priority_prior_manual:
@@ -5153,9 +5156,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
-    release_priority_proposed: P1
+    release_priority_proposed: P0
     release_priority_prior_manual: P1
-    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
+    priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
     loc: 559
     endpoints: 0
@@ -5186,8 +5189,8 @@ features:
     loop_hits:
       seed_route: false
       seed_declared: false
-      student_loop: false
-      production_loop: false
+      student_loop: true
+      production_loop: true
       data_supplier: false
       invariant: false
     criteria_34:
@@ -8143,9 +8146,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
     release_priority_prior_manual: P0
-    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
+    priority_basis: "폐쇄루프: data_supplier(유일 writer — solution_path)"
     migration_risk: Med
     loc: 540
     endpoints: 0
@@ -8178,7 +8181,7 @@ features:
       seed_declared: false
       student_loop: false
       production_loop: false
-      data_supplier: false
+      data_supplier: true
       invariant: false
     criteria_34:
       k1_subject_low: true
@@ -8600,7 +8603,7 @@ features:
     matrix_action: KEEP
     release_priority_proposed: P0
     release_priority_prior_manual: P0
-    priority_basis: "폐쇄루프: seed_declared"
+    priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
     loc: 171
     endpoints: 0
@@ -8630,8 +8633,8 @@ features:
     duplicate_of: ""
     loop_hits:
       seed_route: false
-      seed_declared: true
-      student_loop: false
+      seed_declared: false
+      student_loop: true
       production_loop: false
       data_supplier: false
       invariant: false
@@ -8648,7 +8651,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "OAuth-a2 — auth callback이 app.state DI로 호출(정적 import 그래프 사각 — 씨앗 선언)"
+    seat: "OAuth-a2 — auth callback이 app.state DI(OAUTH_PROVIDERS_KEY)로 호출 → DI 다리로 도달"
   - feature_id: WM-E-805
     name: "동의 절차(14세 미만·동의 부여)"
     plane: E
@@ -8925,7 +8928,7 @@ features:
     matrix_action: KEEP
     release_priority_proposed: P1
     release_priority_prior_manual: P1
-    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
+    priority_basis: "정적 도달(student_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
     loc: 75
     endpoints: 0
@@ -8956,7 +8959,7 @@ features:
     loop_hits:
       seed_route: false
       seed_declared: false
-      student_loop: false
+      student_loop: true
       production_loop: false
       data_supplier: false
       invariant: false

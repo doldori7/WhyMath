@@ -671,8 +671,8 @@ CATALOG: tuple[Spec, ...] = (
        "JWT·디바이스 서명·봉투 암호화 — 불변 계약", "security", "api._auth", "api._crypto",
        "api._rate_limit", "api._concurrency", "api._degradation", "api._query_filters"),
     _e("WM-E-804", "OAuth 제공자 구현(카카오·네이버 httpx)", "Platform", "Identity", "P0",
-       "OAuth-a2 — auth callback이 app.state DI로 호출(정적 import 그래프 사각 — 씨앗 선언)",
-       "api.oauth_providers", loop_seed=True),
+       "OAuth-a2 — auth callback이 app.state DI(OAUTH_PROVIDERS_KEY)로 호출 → DI 다리로 도달",
+       "api.oauth_providers"),
     _e("WM-E-805", "동의 절차(14세 미만·동의 부여)", "Parent", "Security", "P0",
        "법령 유래 절차 — 기계 대체 금지", "consent", "consent_grant"),
     _e("WM-E-806", "디바이스 저장소·서명 실패 metric", "Platform", "Security", "P1",
@@ -909,6 +909,78 @@ def _names_in(node: ast.AST) -> set[str]:
     return names
 
 
+_DI_MAP: dict[str, set[str]] = {}
+
+
+def _app_state_di_map() -> dict[str, set[str]]:
+    """app.py가 `app.state.__setattr__(KEY, expr)`로 배선한 값 → KEY 상수명 → expr이 참조하는 모듈.
+
+    엔드포인트는 `getattr(request.app.state, KEY)`로 부품을 꺼내 쓰므로 정적 import 그래프에는
+    안 보인다(OAuth provider·LLM provider·캐시·큐·트레이스). KEY 상수명은 저장소 전체에서
+    고유하므로 이름으로 잇는다 — 엔드포인트 deep_refs에 KEY가 나타나면 배선 모듈을 의존으로 더한다.
+    """
+    if _DI_MAP:
+        return _DI_MAP
+    tree = ast.parse((BACKEND / "app.py").read_text(encoding="utf-8"))
+    alias = _import_alias_map(tree)
+    # app.py가 KEY를 `as _X`로 들여왔으면 원 이름(_l3_state·auth가 쓰는 이름)도 같은 키로 잇는다
+    original_name: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.asname:
+                    original_name[a.asname] = a.name
+    local_syms: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    local_syms.setdefault(t.id, set()).update(_names_in(node.value))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value:
+            local_syms.setdefault(node.target.id, set()).update(_names_in(node.value))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            local_syms.setdefault(node.name, set()).update(_names_in(node))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr != "__setattr__" or ast.unparse(node.func.value) != "app.state":
+            continue
+        if len(node.args) != 2 or not isinstance(node.args[0], ast.Name):
+            continue
+        names = set(_names_in(node.args[1]))
+        frontier = [x for x in names if x in local_syms]
+        while frontier:
+            sym = frontier.pop()
+            for extra in local_syms[sym] - names:
+                names.add(extra)
+                if extra in local_syms:
+                    frontier.append(extra)
+        mods = {alias[x] for x in names if x in alias and alias[x] not in ("config", "app")}
+        key = node.args[0].id
+        _DI_MAP.setdefault(key, set()).update(mods)
+        if key in original_name:
+            _DI_MAP.setdefault(original_name[key], set()).update(mods)
+    return _DI_MAP
+
+
+_MODULE_KEY_REFS: dict[str, set[str]] = {}
+
+
+def _module_di_keys(mod: str) -> set[str]:
+    """api 헬퍼 모듈(`_l3_state` 등)이 본문에서 참조하는 DI KEY 상수명.
+
+    엔드포인트가 헬퍼 경유로 `getattr(request.app.state, KEY)`를 부르는 경우를 잇는다.
+    """
+    if mod not in _MODULE_KEY_REFS:
+        path = _module_path(mod)
+        names: set[str] = set()
+        if path is not None and path.is_file():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            names = _names_in(tree) & set(_app_state_di_map())
+        _MODULE_KEY_REFS[mod] = names
+    return _MODULE_KEY_REFS[mod]
+
+
 def _endpoints(router_mod: str) -> list[Endpoint]:
     path = BACKEND / ("app.py" if router_mod == "app" else f"api/{router_mod}.py")
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -952,6 +1024,12 @@ def _endpoints(router_mod: str) -> list[Endpoint]:
                         frontier.append(extra)
             refs = {alias[x] for x in body_names if x in alias}
             deep_refs = {alias[x] for x in names if x in alias}
+            di = _app_state_di_map()
+            keys = names & set(di)  # app.state DI 다리 — KEY 상수 참조 = 배선 모듈 의존
+            for helper in [m for m in deep_refs if m.startswith("api.")]:
+                keys |= _module_di_keys(helper)  # 헬퍼(`api._l3_state`) 경유 참조
+            for key in keys:
+                deep_refs |= di[key]
             kw = {k.arg: k.value for k in d.keywords if k.arg}
             no_body = "status_code" in kw and "204" in ast.unparse(kw["status_code"])
             contract = "response_model" in kw or no_body
@@ -1161,18 +1239,25 @@ def _derive_priority(
         "seed_declared": spec.loop_seed,
         "student_loop": bool(own & student) if spec.plane != "S" else False,
         "production_loop": bool(own & production) if spec.plane != "S" else False,
-        # L1 적재기가 루프가 읽는 테이블을 채운다 — 데이터가 없으면 루프는 빈 화면이다
-        "data_supplier": (
-            spec.plane != "S"
-            and any(m.startswith("l1.") for m in own)
-            and bool(set(row.db_models) & loop_tables)
-        ),
+        # L1 적재기가 루프가 읽는 테이블을 채운다 — 데이터가 없으면 루프는 빈 화면이다.
+        # (2패스: P0 writer가 없는 루프 테이블의 유일 생산자도 켜진다 — _promote_sole_suppliers)
+        "data_supplier": spec.plane != "S"
+        and any(m.startswith("l1.") for m in own)
+        and bool(set(row.db_models) & loop_tables),
         "invariant": any(m.startswith(INVARIANT_MODULE_PREFIXES) for m in scope)
         or any(m.startswith(INVARIANT_AUTH_MODULES) for m in own),
     }
     row.loop_hits = hits
-    reasons = [k for k, v in hits.items() if v]
-    reached_only = set(reasons) <= {"student_loop", "production_loop"}
+    _finalize_priority(row)
+
+
+_REACH_ONLY = {"student_loop", "production_loop", "data_supplier"}
+
+
+def _finalize_priority(row: Row) -> None:
+    spec = row.spec
+    reasons = [k for k, v in row.loop_hits.items() if v]
+    reached_only = set(reasons) <= _REACH_ONLY
     if reasons and reached_only and row.status in ("Flag-off", "Shadow"):
         row.release_priority = "P1"
         row.priority_basis = f"정적 도달({', '.join(reasons)})했으나 {row.status} — 우회 가능"
@@ -1186,6 +1271,47 @@ def _derive_priority(
     else:
         row.release_priority = spec.priority
         row.priority_basis = f"선행 제안 승계({spec.priority}) — 폐쇄루프 미도달"
+
+
+def _promote_sole_suppliers(rows: list[Row], loop_tables: set[str]) -> set[str]:
+    """2패스 — 루프가 읽는 테이블에 P0 writer가 하나도 없으면, 그 테이블의 writer를 P0로 올린다.
+
+    "없으면 루프가 깨지는가"의 데이터 축: 읽기 표면이 P0인데 쓰는 쪽이 전부 P1이면 12월 앵커 콘텐츠
+    (새 문항·새 풀이)가 그 테이블에 실리지 않는다. 제외: Flag-off/Shadow(꺼진 채널의 writer),
+    horizon P3, 선행 제안 P2(전환 선언 crosswalk의 *이월* 선언 — 예: 다중 풀이 C6). 남는 테이블은
+    dashboard `loop_tables_without_p0_writer`로 드러낸다(0이 아니면 판정 후보).
+    """
+    writers: dict[str, list[Row]] = {t: [] for t in loop_tables}
+    for r in rows:
+        if r.spec.plane == "S" or r.mutations == 0:
+            continue
+        for t in set(r.db_models) & loop_tables:
+            writers[t].append(r)
+    unresolved: set[str] = set()
+    for table, ws in writers.items():
+        if not ws or any(w.release_priority == "P0" for w in ws):
+            continue
+        promoted = False
+        for w in ws:
+            if (
+                w.status in ("Flag-off", "Shadow")
+                or w.spec.horizon == "P3"
+                or w.spec.priority == "P2"
+            ):
+                continue
+            w.loop_hits["data_supplier"] = True
+            w.priority_basis = (
+                f"유일 data_supplier: {table.removeprefix('db.models.')} 테이블에 P0 writer 없음"
+            )
+            _finalize_priority(w)
+            if w.release_priority == "P0":
+                w.priority_basis = (
+                    f"폐쇄루프: data_supplier(유일 writer — {table.removeprefix('db.models.')})"
+                )
+            promoted = True
+        if not promoted:
+            unresolved.add(table)
+    return unresolved
 
 
 _STATE_TRACKERS = re.compile(
@@ -1650,6 +1776,9 @@ def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
         if own and row.spec.plane != "S":
             row.fan_in = sum(1 for m, imps in import_graph.items() if m not in own and imps & own)
         _derive_priority(row, student, production, seed_routes)
+    loop_tables = {m for m in student | production if m.startswith("db.models.")}
+    tables_without_p0_writer = _promote_sole_suppliers(rows, loop_tables)
+    for row in rows:
         _score(row, v1)
         log(
             f"[measure] {row.spec.fid} {row.spec.plane} own={row.ownership} "
@@ -1661,6 +1790,9 @@ def measure(log: Any) -> tuple[list[Row], dict[str, Any]]:
         "errors": errors,
         "student_loop_reach": len(student),
         "production_loop_reach": len(production),
+        "loop_tables": sorted(loop_tables),
+        "loop_tables_without_p0_writer": sorted(tables_without_p0_writer),
+        "di_keys": sorted(_app_state_di_map()),
     }
     return rows, info
 
@@ -1691,6 +1823,9 @@ def dashboard(rows: list[Row], info: dict[str, Any]) -> dict[str, Any]:
         ),
         "student_loop_reach_modules": info["student_loop_reach"],
         "production_loop_reach_modules": info["production_loop_reach"],
+        "loop_tables": len(info["loop_tables"]),
+        "loop_tables_without_p0_writer": info["loop_tables_without_p0_writer"],
+        "di_keys_bridged": len(info["di_keys"]),
         "by_status": count(lambda r: r.status),
         "by_risk": count(lambda r: r.migration_risk),
         "release_p0_proposed": sum(1 for r in rows if r.release_priority == "P0"),
@@ -1742,6 +1877,9 @@ def to_yaml(rows: list[Row], dash: dict[str, Any]) -> str:
         f"  priority_changed_from_prior: {dash['priority_changed_from_prior']}",
         f"  student_loop_reach_modules: {dash['student_loop_reach_modules']}",
         f"  production_loop_reach_modules: {dash['production_loop_reach_modules']}",
+        f"  loop_tables: {dash['loop_tables']}",
+        f"  loop_tables_without_p0_writer: [{', '.join(dash['loop_tables_without_p0_writer'])}]",
+        f"  di_keys_bridged: {dash['di_keys_bridged']}",
         f"  final_differs_from_matrix: {dash['final_differs_from_matrix']}",
         f"  final_differs_from_criteria: {dash['final_differs_from_criteria']}",
     ]
