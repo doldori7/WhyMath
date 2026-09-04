@@ -360,3 +360,59 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
   반대로 거짓 양성이다).
 - MIXED 29모듈은 두 계측 모두에서 *출발점*이 아니다(§1 반올림 금지와 같은 이유). 잔여 누수 2건이
   전부 MIXED를 경유한다는 사실이 그 사각의 크기를 말한다.
+
+---
+
+## §9. 허용 의존 방향 — Application → Core → Subject Interface ← Math Adapter (EOS-88 · 계획서 100 §3.8 · 2026-09-04)
+
+> §3.8은 두 그림을 준다. **권장**: `Application → EOS Core → Subject Contract → Math Adapter`.
+> **실행 시 어댑터가 Core에 등록되는 형태라면** 실제 의존 역전은 `EOS Core → Subject Interface ← Math Adapter`가
+> 더 정확하다 — *Core는 Math Adapter 구현체를 몰라야 한다*. 이 절은 그 문장을 네 화살표와 "등록 vs 풀"로
+> 나눠 잰 결과다. 게이트 = `tests/infra/test_eos_dependency_direction.py`(19건). **정본화 ≠ 집행**: 직접
+> import 축은 EOS-67 계약이 이미 강제하고(schema가 source), 지연 import·이름·문자열·pull 지점은 이 테스트가 본다.
+
+### 9.1 네 화살표 실측
+
+| 화살표 | §3.8 요구 | 실측 | 집행 |
+|---|---|---|---|
+| Application → Core | 허용 | `api`가 `l*`를 import(layers 최상단) | 7계층 layers 계약 |
+| Core → Subject Interface | 허용·권장 | CORE 소비자 4(`api.coach`·`l3.pedagogy.slot_generator`·`l3.render.adapters`·`l6.blueprint.assembly`)가 `schema.subject_adapter`/`verification_capabilities` 프로토콜을 import | — |
+| Math Adapter → Subject Interface | **필수**(화살표가 위로) | `l4.subject_adapter_math`가 두 인터페이스 모듈을 import하고 적합성 증명 `_CONFORMANCE_PROOF: SubjectAdapter = MathSubjectAdapter()`(L151) 보유. 선택층 5종도 동형 증명 | `test_math_adapter_points_up_at_the_interface` |
+| Subject Interface → Adapter | **금지** | 코드 import **0**(두 파일이 import하는 것은 `schema.answer_form`뿐). docstring이 구현체 이름을 2곳(`schema/subject_adapter.py` L12·L85) 언급 — 의존은 아니나 인터페이스 산문이 구현체를 안다 | EOS-67 계약 1 + 지연 import 검사 |
+| Core → Adapter 구현체(이름·문자열) | **금지** | CORE 코드 **0**(docstring 제외·`composition`은 정의상 제외) | `test_core_code_never_names_an_adapter_implementation` |
+| Core → Application | 금지 | CORE **0**. INFRA 운영 도구 8모듈(`ops.*` 4·`privacy.*` 3·`harness.*` 1)은 `api._crypto`·`api._auth`·`api.me` 등 헬퍼를 import — Application 쪽에 선 도구라 §3.8 대상 아님(9.2) | `test_core_never_imports_the_application` |
+
+### 9.2 등록(push) vs 풀(pull) — 현행은 §3.8이 "덜 정확하다"고 한 형태다
+
+| 측정 | 값 |
+|---|---:|
+| `app.py`가 `app.state`에 등록하는 키 | 13 (provider·cache·trace·queue·metrics·probes·counters…) |
+| 그중 **과목 능력(SubjectAdapter·선택층 5종)** | **0** |
+| 합성 루트에서 기본 구현을 **끌어오는(pull)** Core 모듈 | **3** — `api.coach`(2팩토리) · `l3.pedagogy.slot_generator`(1) · `l3.render.adapters`(2) |
+| 필수층 `MathSubjectAdapter`의 프로덕션 인스턴스화 | **0** (자기 적합성 증명 + 테스트만) |
+
+**읽는 법**: 현행은 *Core가 합성 루트를 안다*(service-locator). 어댑터는 Core에 등록되지 않고, Core가
+`composition.default_*()`를 불러 기본 구현을 받아 온다. 어댑터 **구현체**를 모른다는 조건은 지키지만
+(합성 루트 뒤에 숨어 있다), §3.8의 "등록 형태 → Core→Interface←Adapter" 그림은 아직 없다. 3개 pull
+지점 중 `l*` 2개는 EOS-69가 layers 계약 `ignore_imports`에 간선 단위로 적어 둔 "정직한 잔여"이고,
+`api.coach`는 최상단 계층이라 계약 위반은 아니다. 테스트는 이 3개를 **집합으로 동결**하고(늘면 RED·
+줄면 ratchet), `app.py`가 합성 루트를 import하지 않는 현행도 잠근다 — EOS-89가 등록 형태로 바꾸면 그
+잠금이 의도적으로 깨지고 두 기준선을 함께 갱신한다(두 형태의 소리 없는 공존 금지).
+
+**상환 방향(EOS-89)**: `app.py`(Application)가 `composition.default_*()`를 부팅 시 한 번 불러 `app.state`에
+인터페이스 타입으로 등록 → `api.coach`는 `Depends`로 읽음(`_get_judge_seam_deps` 선례) → `l3` 두 모듈은
+이미 있는 `equivalence=`·`seal=`·`verifier=` 파라미터로 상류에서 받음 → pull 3→0, layers `ignore_imports`
+2줄은 `unmatched_ignore_imports_alerting`이 지우라고 말한다. 주의: EOS-86이 추가하는 `StepChainVerifier`
+팩토리도 같은 등록 경로를 타야 한다(pull 4번째 지점을 만들지 않는다).
+
+### 9.3 재현·공백
+
+```
+/root/.local/bin/pytest tests/infra/test_eos_dependency_direction.py
+```
+
+- 정적 AST 계측이다 — `getattr`·문자열 조립으로 구현체를 찾는 코드는 못 본다(현행 0건은 "내가 찾은
+  방법으로 0건"이다).
+- INFRA 8모듈의 `api` 헬퍼 import(`privacy.* → api._crypto/_auth`)는 §3.8 대상이 아니지만, 암호·인증
+  헬퍼가 `api` 패키지에 사는 것 자체는 배치 냄새다 — 별도 판정 후보(등재 안 함).
+
