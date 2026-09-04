@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P0
 owner: claude
@@ -24,6 +24,6 @@ artifacts: []
 paths:
   - tests/backend/api/test_e2e_vertical_slice_integration.py
   - src/mobile/test/e2e_loop_flow_test.dart
-session: null
+session: claude/session-9ain00
 notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-2·§8-②. Kiki 결정(2026-09-03) 확정: 계획서 300 4주 Phase 2는 실행하지 않고 참고 문서로 강등 · 10월 공식 목표는 G2(앵커 콘텐츠 생산) 유지 · 폐쇄루프는 독립 목표가 아니라 콘텐츠 생산성·학습 효과를 재는 기반 계측기 · 단 CL-WIRING 2건은 G2·G4 공통 선결이라 수일 규모로 즉시 수행. 선행 MOB-20은 완료조건 (가)를 증명 가능하게 만드는 전제라 depends_on으로 집행한다(산문 선행 금지 — HARN-52). 명칭 규약: G2 = Anchor Content Production · CL-WIRING = Student Closed-loop Wiring · 계획서 300의 'Gate 2'는 사용하지 않는다.\n\n[정정 2026-09-03] 완료조건 (가)의 대상 경로 정정 — 초판은 attempt 생산자를 POST /v1/me/attempts로 잘못 지목했다. 실제 학생 경로는 코치 완료(S3-32). 부분 쓰기 갭도 함께 명시(리뷰 P2). 상세 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §11.6-11.7"
-updated: 2026-09-03
+updated: 2026-09-04
