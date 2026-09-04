@@ -3,7 +3,7 @@
 계측기(`eos_core_boundary_probe.py`)는 위반 수로 exit 1을 내지 않는다. **게이트는 여기다**:
 
 1. **리터럴 비교 기준선 동결** — CORE 모듈의 `== "math"`·`in ("quadratic", …)`류는 현재 **1건**
-   (`l1.problem_bank.populate._verify_meta_from_raw`가 answer_kind 16종을 튜플로 열거 — EOS-66의
+   (`l1.problem_bank.populate._verify_meta_from_raw`가 answer_kind 17종을 튜플로 열거 — EOS-66의
    "answer_kind는 Core가 해석하지 않는 불투명 문자열" 계약과 충돌하는 진성 경계 냄새). 새 위치가
    생기면 RED, 그 1건이 어댑터/데이터로 빠지면 기준선을 비워 ratchet한다. 계획서 100 §3.7의
    금지 규칙을 글자 그대로 집행하되, 이미 있던 위반을 0으로 위장하지 않는다.

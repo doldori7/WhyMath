@@ -308,7 +308,7 @@ CORE 266모듈의 AST에서 **비교문(`Compare`)·`match` 패턴의 문자열 
 
 | CORE 모듈 | 위치 | 종류 | 내용 |
 |---|---|---|---|
-| `l1.problem_bank.populate` | `_verify_meta_from_raw` L363 | math_type | `kind_raw in ("real_root_count", …, "inequality_direction", …, "finite_probability")` — answer_kind **16종을 튜플로 열거**해 미지 값을 걸러낸다 |
+| `l1.problem_bank.populate` | `_verify_meta_from_raw` L363 | math_type | `kind_raw in ("real_root_count", …, "inequality_direction", …, "finite_probability")` — answer_kind **17종을 튜플로 열거**해 미지 값을 걸러낸다 |
 
 과목명(`== "math"`) 분기는 **0건**이다. 남은 1건은 유형 문자열이지만 §3.7이 겨냥한 그 형태 —
 "Core가 이차방정식을 안다" — 가 맞다: 적재기(CORE)가 answer_kind의 **허용 어휘**를 갖고 있으면,
