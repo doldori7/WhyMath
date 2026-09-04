@@ -416,3 +416,46 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 - INFRA 8모듈의 `api` 헬퍼 import(`privacy.* → api._crypto/_auth`)는 §3.8 대상이 아니지만, 암호·인증
   헬퍼가 `api` 패키지에 사는 것 자체는 배치 냄새다 — 별도 판정 후보(등재 안 함).
 
+---
+
+## §10. Core의 과목 전용 누수 2종 — enum 멤버·필드명 (EOS-90 · 2026-09-04)
+
+> Subject Contract v1 후보 판정(`docs/reviews/subject_contract_v1_candidate_verdicts_2026-09-04.md`)
+> 중에 CORE 배정 모듈이 수학을 아는 자리 2종이 드러났고, **둘 다 §8의 프로브 v1이 놓쳤다**.
+> 이 절은 그 사각과 계측 확장을 기록한다.
+
+### 10.1 무엇을 못 봤나
+
+| 자리 | 형태 | v1 검출 | 왜 못 봤나 |
+|---|---|---|---|
+| `l4.visualization_policy:47-57` `_SEATED_STYLES` | 수학 전용 표상 7종을 **enum 멤버로 열거**(`VisualizationStyle.단위원` 등) | **0** | 리터럴 스캔은 `Compare`의 *문자열*만 본다. 여기엔 문자열이 하나도 없다(`Attribute` 노드) |
+| `schema.visualization:147-179` `Graph2dSpec` | `tangent_point`·`integral_region`·`show_extrema`·`number_line`을 **typed 필드로 검증** | **0** | 어휘 스캔은 문자열 *상수*만 본다. 이건 값이 아니라 **이름**이다 |
+
+두 번째가 더 무겁다. Core의 최하위 계층 `schema`가 미적분 어휘를 필드명으로 갖고 그 필드를
+**검증까지 한다**(`_validate_typed_spec`). EOS-66의 불투명 페이로드 원칙 — "Core는 `answer_kind`를
+해석하지 않는다" — 과 정면으로 충돌한다. `if problem.type == "quadratic"`을 금지하면서 `tangent_point`를
+필드로 검증하는 것은 같은 지식을 다른 문법으로 갖는 것이다.
+
+### 10.2 계측 확장 — 실측·동결
+
+프로브에 스캐너 2종을 추가했다(`scan_subject_enum_members`·`scan_math_field_names`).
+
+| 축 | 실측 | 동결 위치 |
+|---|---:|---|
+| CORE의 과목 전용 enum 멤버 | **2** | `SUBJECT_ENUM_MEMBER_BASELINE` |
+| CORE의 수학 필드명 | **6** | `MATH_FIELD_NAME_BASELINE` |
+
+필드명 6건 = 위 4개 + `l3.solution_path.sympy_verified`(CORE가 sympy 검증 여부를 필드로 안다) +
+`l4.misconception.catalog._TRIG`(§8.3 데이터 누수 43건의 일부). 결함 주입 8종으로 변별력을
+확인했고(enum 3·필드 5), 비위반 8종은 비검출이다 — 특히 소문자 수신자(`self.tangent`)는 인스턴스
+속성이지 enum 열거가 아니므로 세지 않고, `AnnAssign`이 아닌 대입은 중복 계상을 피해 제외한다.
+
+### 10.3 정직한 공백 — 스캐너가 못 보는 것을 테스트가 고정한다
+
+어휘 목록 기반이라 목록에 없는 과목 어휘는 **놓친다**. `_SEATED_STYLES`의 7종 중 잡는 것은 2종뿐이고
+(`단위원`·`함수그래프`·`부등식영역`·`분포곡선`·`확률시뮬레이션`은 목록에 없다), 그 한계를
+`test_enum_scanner_admits_what_it_cannot_see`가 명시적으로 고정한다 — 놓치는 것을 모르는 채 "0건"이라
+말하지 않기 위해서다. 목록을 넓히면 그 테스트가 실패하고, 그때 기준선도 함께 넓힌다.
+
+상환(어휘를 어댑터·데이터로 이전)은 이 태스크 범위 밖이다 — 등재는 Kiki 판정.
+

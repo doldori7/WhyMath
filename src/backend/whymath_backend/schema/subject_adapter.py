@@ -53,7 +53,25 @@ Core가 "이 문자열은 이차방정식"임을 알게 되는 순간 경계가 
 한계(명시): 스캔·계약 모두 **정적 import**만 본다. 동적 import·문자열 경유 참조는 사각이며,
 `MIXED` 34모듈은 위반 계산에서 빠지므로 0은 *CORE 배정 모듈 기준의* 0이다.
 
-## v1이 3메서드인 이유 (`explain` 미포함)
+## v1이 3메서드인 이유 — 후보 9종 전수 판정 (EOS-90 · 2026-09-04)
+
+계획서 100 §3.9가 제시한 후보 9종을 4축(능력인가 데이터인가 / 과목 지식을 요구하는가 / Physics·
+Chemistry·History에 반드시 존재하는가 / Core가 반환값을 해석해야 하는가)으로 판정한 결과다.
+근거 전문은 `docs/reviews/subject_contract_v1_candidate_verdicts_2026-09-04.md`, 판정표 자체는
+`tests/backend/schema/test_subject_adapter_two_tier_contract.py`의 `CANDIDATE_VERDICTS`가 동결한다.
+
+| 후보 | 판정 | 근거 요약 |
+|---|---|---|
+| `evaluateAnswer` · `detectMisconception` · `validateProblem` | **필수층** | 아래 Protocol 3종 |
+| `getConcept` · `getPrerequisites` · `getLearningObjectives` | 계약 아님(**데이터**) | 개념 15컬럼·EdgeType 6종이 이미 과목 중립이고 `subject`는 Overlay로 빠졌다. **조회(read)지 계산(compute)이 아니다** — 계약에 넣으면 어댑터가 ORM 위임층이 되고 `schema`가 `db`를 알게 된다 |
+| `estimateDifficulty` | 계약 아님(**Core 소유**) | `l2.irt`가 응답 통계만으로 b를 추정한다(문항 내용 미참조). Core가 자기 능력을 과목에 되물을 이유가 없다 |
+| `getRepresentations` | **선택층 후보**(재설계 전제) | 유일하게 진짜 능력이나 `VisualizationStyle` 16종이 전량 수학 어휘라 중립 반환 타입 재설계 전에는 계약이 될 수 없다 |
+| `generateExplanation` | 계약 아님(**어댑터 내부**) | 아래 절 |
+
+**핵심 판별선은 조회 vs 계산이다.** 필수 3종은 전부 *입력을 받아 판정을 내리는 계산*이다. 테이블에서
+행을 읽는 조회는 과목이 아니라 데이터가 답한다.
+
+## `explain`을 v1에서 뺀 이유
 
 계획서 100 §3.9는 `explain`을 후보로 들지만, 저장소 실측 결과 **위임할 공개 진입점이 0건**이다
 (`l1`~`l6` 전수 grep — 공개 `explain*` 함수 없음. 설명 생성기는 전부 스켈레톤 생성기 내부의

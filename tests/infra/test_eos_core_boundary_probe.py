@@ -32,6 +32,27 @@ LITERAL_COMPARE_BASELINE: dict[tuple[str, str], int] = {
     ("l1.problem_bank.populate", "math_type"): 1,
 }
 
+# CORE가 과목 전용 **enum 멤버**를 열거하는 자리 — (모듈, 참조). EOS-90에서 v1의 사각으로
+# 드러났다(문자열이 하나도 없어 리터럴 비교 스캔을 그대로 통과했다).
+SUBJECT_ENUM_MEMBER_BASELINE: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("l4.visualization_policy", "VisualizationStyle.수직선"),
+        ("l4.visualization_policy", "VisualizationStyle.접선도함수"),
+    }
+)
+
+# 과목 어휘가 **필드명**에 박힌 자리 — (모듈, 필드). 값이 아니라 이름이라 어휘 스캔이 못 봤다.
+MATH_FIELD_NAME_BASELINE: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("l3.solution_path", "sympy_verified"),
+        ("l4.misconception.catalog", "_TRIG"),
+        ("schema.visualization", "tangent_point"),
+        ("schema.visualization", "integral_region"),
+        ("schema.visualization", "show_extrema"),
+        ("schema.visualization", "number_line"),
+    }
+)
+
 # 잔여 누수 동결 — (CORE 출발점, ADAPTER 직전의 누수 지점). 줄이는 방향으로만 고친다.
 # 끝점(ADAPTER)이 아니라 *누수 지점*을 고정한다: `l4.solution_coaching`은 `verify_solution`과
 # `wrong_form_match`를 둘 다 import하므로 끝점은 동률이고, 고쳐야 할 자리는 그 앞 모듈이다.
@@ -124,6 +145,24 @@ def test_math_removal_leaves_most_of_core_standing(result: dict[str, Any]) -> No
     assert result["survivors_after_math_removal"] / result["core"] >= 0.90, result["core"]
 
 
+def test_subject_enum_members_in_core_are_frozen(result: dict[str, Any]) -> None:
+    """CORE가 과목 전용 enum 멤버를 여는 자리는 늘 수 없다 — 줄면 기준선을 줄여 ratchet."""
+    observed = {(m, h["ref"]) for m, hits in result["subject_enum_members"].items() for h in hits}
+    new_hits = observed - SUBJECT_ENUM_MEMBER_BASELINE
+    assert not new_hits, f"CORE가 새로 과목 enum 멤버를 열거한다: {sorted(new_hits)}"
+    if observed < SUBJECT_ENUM_MEMBER_BASELINE:
+        pytest.fail(f"줄었다 — SUBJECT_ENUM_MEMBER_BASELINE을 {sorted(observed)}로 ratchet")
+
+
+def test_math_field_names_in_core_are_frozen(result: dict[str, Any]) -> None:
+    """과목 어휘가 필드명에 박힌 자리 동결 — Core가 그 필드의 *의미*를 아는 지점이다."""
+    observed = {(m, h["field"]) for m, hits in result["math_field_names"].items() for h in hits}
+    new_hits = observed - MATH_FIELD_NAME_BASELINE
+    assert not new_hits, f"CORE에 새 수학 필드명: {sorted(new_hits)}"
+    if observed < MATH_FIELD_NAME_BASELINE:
+        pytest.fail(f"줄었다 — MATH_FIELD_NAME_BASELINE을 {sorted(observed)}로 ratchet")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # ② 변별력 — 결함 주입
 # ──────────────────────────────────────────────────────────────────────
@@ -164,6 +203,76 @@ def test_vocabulary_scanner_skips_docstrings_but_catches_data(probe: Any) -> Non
     src = '"""이차방정식을 다루는 모듈 — docstring은 제외."""\nLABEL = "이차함수"\n\n\ndef f():\n    """삼각함수 docstring"""\n    return "LaTeX 본문"\n'
     words = probe.scan_math_vocabulary(src)
     assert [t for _, t in words] == ["이차함수", "LaTeX 본문"], words
+
+
+@pytest.mark.parametrize(
+    ("source", "expect"),
+    [
+        ("S = {VisualizationStyle.수직선}\n", "VisualizationStyle.수직선"),
+        ("x = Style.접선도함수\n", "Style.접선도함수"),
+        ("y = Kind.tangent\n", "Kind.tangent"),
+    ],
+)
+def test_enum_member_scanner_detects_injected_subject_knowledge(
+    probe: Any, source: str, expect: str
+) -> None:
+    hits = probe.scan_subject_enum_members(source)
+    assert len(hits) == 1 and hits[0][1] == expect, hits
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "self.tangent = 1\n",  # 소문자 수신자 = 인스턴스 속성, enum 열거가 아니다
+        "obj.integral_region\n",
+        "S = {Status.pending}\n",  # 과목 무관 enum
+        'x = "quadratic"\n',  # 문자열은 리터럴 스캐너 영역
+    ],
+)
+def test_enum_member_scanner_ignores_non_violations(probe: Any, source: str) -> None:
+    assert probe.scan_subject_enum_members(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "expect"),
+    [
+        ("tangent_point: float\n", "tangent_point"),
+        ("integral_region: str | None = None\n", "integral_region"),
+        ("show_extrema: bool = False\n", "show_extrema"),
+        ("number_line: object = None\n", "number_line"),
+        ("수직선_옵션: int = 0\n", "수직선_옵션"),
+    ],
+)
+def test_field_name_scanner_detects_injected_math_names(
+    probe: Any, source: str, expect: str
+) -> None:
+    hits = probe.scan_math_field_names(source)
+    assert len(hits) == 1 and hits[0][1] == expect, hits
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "created_at: int = 0\n",
+        "point_count: int = 0\n",  # point는 일반어 — 단독으로 잡지 않는다
+        "line_number: int = 0\n",  # number_line과 토큰은 같지만 복합어가 아니다
+        "tangent_point = 1\n",  # 선언(AnnAssign)이 아닌 대입은 세지 않는다(중복 계상 방지)
+    ],
+)
+def test_field_name_scanner_ignores_non_violations(probe: Any, source: str) -> None:
+    assert probe.scan_math_field_names(source) == []
+
+
+def test_enum_scanner_admits_what_it_cannot_see(probe: Any) -> None:
+    """정직한 공백 — 어휘 목록 기반이라 목록에 없는 과목 어휘는 **놓친다**.
+
+    `l4.visualization_policy`는 수학 전용 표상 7종을 열거하는데 스캐너는 그중 2종만 잡는다
+    (`단위원`·`함수그래프`·`부등식영역`·`분포곡선`·`확률시뮬레이션`은 VOCAB_KO에 없다). 이
+    테스트는 그 한계를 **명시적으로 고정**한다 — 놓치는 것을 모르는 채 "0건"이라 말하지 않기
+    위해서다. 목록을 넓히면 이 테스트가 실패하고, 그때 기준선도 함께 넓힌다.
+    """
+    missed = "S = {VisualizationStyle.단위원, VisualizationStyle.분포곡선}\n"
+    assert probe.scan_subject_enum_members(missed) == []
 
 
 def test_reach_detects_an_injected_indirect_edge(probe: Any) -> None:

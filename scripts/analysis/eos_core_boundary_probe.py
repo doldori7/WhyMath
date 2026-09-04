@@ -64,6 +64,30 @@ VOCAB_EN = re.compile(
     re.I,
 )
 
+# 식별자(필드명·enum 멤버) 안의 수학 토큰 — 문자열 상수가 아니라 **이름**에 박힌 수학이다.
+# `\b` 경계를 쓰는 VOCAB_EN이 `integral_region` 같은 snake_case를 놓치므로(밑줄이 word char라
+# 경계가 서지 않는다) 토큰으로 쪼개 정확 일치로 본다.
+MATH_TOKEN_RX = re.compile(
+    r"^(tangent|extrema|extremum|integral|derivative|differential|quadratic|polynomial|"
+    r"trig\w*|sympy|latex|asymptote|vertex|radian|logarithm|factorial|permutation|"
+    r"combination|monomial|binomial|numerator|denominator|sine|cosine|tangential)$",
+    re.I,
+)
+# 토큰 단독으로는 일반어지만 붙으면 수학인 복합어(number+line은 각각 일반어다).
+MATH_PHRASE_RX = re.compile(r"(number_line|unit_circle|coordinate_plane|solution_set)", re.I)
+
+
+def _identifier_is_math(name: str) -> str | None:
+    """식별자가 수학 어휘를 담고 있으면 그 근거를 돌려준다(아니면 None)."""
+    if m := MATH_PHRASE_RX.search(name):
+        return m.group(0)
+    for token in name.split("_"):
+        if MATH_TOKEN_RX.match(token):
+            return token
+    if m := VOCAB_KO.search(name):  # 한글 식별자(enum 멤버 `VisualizationStyle.수직선` 등)
+        return m.group(0)
+    return None
+
 
 def _load_inventory() -> Any:
     spec = importlib.util.spec_from_file_location("_eos_inventory_v2_for_probe", INVENTORY_SCRIPT)
@@ -199,6 +223,48 @@ def scan_math_vocabulary(source: str) -> list[tuple[int, str]]:
     return out
 
 
+def scan_subject_enum_members(source: str) -> list[tuple[int, str, str]]:
+    """`VisualizationStyle.수직선` 꼴 — CORE가 **과목 전용 enum 멤버를 열거**하는 자리.
+
+    EOS-84 v1이 못 보던 형태다. `if x == "quadratic"`(Compare의 문자열)만 봤는데, 같은 지식이
+    `frozenset({VisualizationStyle.단위원, ...})`처럼 **Attribute 노드**로 표현되면 문자열이
+    하나도 없어 스캔을 그대로 통과했다(2026-09-04 실측: `l4.visualization_policy`가 수학 전용
+    표상 7종을 이 형태로 열거하는데 v1 검출 0건).
+
+    오탐을 줄이려고 `Name.attr` 꼴만 보고, 그 `Name`이 대문자로 시작할 때만 센다(enum/상수 클래스
+    관용구). `self.tangent`·`obj.integral` 같은 인스턴스 속성 접근은 세지 않는다.
+    """
+    hits: list[tuple[int, str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id[:1].isupper()
+        ):
+            if why := _identifier_is_math(node.attr):
+                hits.append((node.lineno, f"{node.value.id}.{node.attr}", why))
+    return hits
+
+
+def scan_math_field_names(source: str) -> list[tuple[int, str, str]]:
+    """`tangent_point: float` 꼴 — 과목 어휘가 **필드명 자체**에 박힌 자리.
+
+    두 번째 사각이다. 어휘 스캔은 문자열 *상수*만 보므로 `integral_region`처럼 이름에 박힌
+    수학은 값이 없어 안 보인다(2026-09-04 실측: CORE인 `schema.visualization`의 `Graph2dSpec`이
+    `tangent_point`·`integral_region`·`show_extrema`·`number_line`을 typed 필드로 검증하는데
+    v1 검출 0건). 이것은 Core가 그 필드의 *의미*를 알고 검증까지 한다는 뜻이라 EOS-66의
+    "불투명 페이로드" 계약과 정면으로 충돌한다.
+
+    선언(`AnnAssign`)만 본다 — 사용처를 세면 같은 필드가 여러 번 계상돼 규모가 과장된다.
+    """
+    hits: list[tuple[int, str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if why := _identifier_is_math(node.target.id):
+                hits.append((node.lineno, node.target.id, why))
+    return hits
+
+
 # ──────────────────────────────────────────────────────────────────────
 # 실행
 # ──────────────────────────────────────────────────────────────────────
@@ -219,6 +285,8 @@ def run_probe(log: Any) -> dict[str, Any]:
     survivors = len(core) - len(all_hits)
     compares: dict[str, list[LiteralHit]] = {}
     vocab: dict[str, list[tuple[int, str]]] = {}
+    enum_members: dict[str, list[tuple[int, str, str]]] = {}
+    field_names: dict[str, list[tuple[int, str, str]]] = {}
     for m in core:
         path = inv._module_path(m)
         assert path is not None
@@ -227,11 +295,18 @@ def run_probe(log: Any) -> dict[str, Any]:
             compares[m] = hits
         if words := scan_math_vocabulary(src):
             vocab[m] = words
+        if members := scan_subject_enum_members(src):
+            enum_members[m] = members
+        if fields := scan_math_field_names(src):
+            field_names[m] = fields
     n_cmp = sum(len(v) for v in compares.values())
     n_vocab = sum(len(v) for v in vocab.values())
+    n_enum = sum(len(v) for v in enum_members.values())
+    n_field = sum(len(v) for v in field_names.values())
     log(
         f"[probe] 전이 도달 {len(all_hits)} (잔여 {len(residual)})"
         f" · 리터럴 비교 {n_cmp} · 어휘 상수 {n_vocab}"
+        f" · enum 멤버 {n_enum} · 필드명 {n_field}"
     )
     return {
         "modules": len(universe),
@@ -247,6 +322,14 @@ def run_probe(log: Any) -> dict[str, Any]:
         "literal_compares": {
             m: [{"lineno": h.lineno, "kind": h.kind, "snippet": h.snippet} for h in hits]
             for m, hits in compares.items()
+        },
+        "subject_enum_members": {
+            m: [{"lineno": ln, "ref": ref, "why": why} for ln, ref, why in hits]
+            for m, hits in enum_members.items()
+        },
+        "math_field_names": {
+            m: [{"lineno": ln, "field": f, "why": why} for ln, f, why in hits]
+            for m, hits in field_names.items()
         },
         "math_vocabulary_constants": {
             m: [{"lineno": ln, "text": t} for ln, t in words] for m, words in vocab.items()
