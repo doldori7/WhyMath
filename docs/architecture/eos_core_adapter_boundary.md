@@ -329,7 +329,7 @@ Core가 해석하지 않는 불투명 문자열"로 못 박은 계약과 정면�
 
 | CORE 모듈 | 건수 | 성격 | 처방 방향 |
 |---|---:|---|---|
-| `l4.misconception.catalog` | 31 | 수학 오개념 34종 카탈로그가 **코드 상수**(예 `'제곱근 양수 가정'`) | 카탈로그 *기계*는 중립, *내용*은 과목 데이터 — `data/corpus`(L1) 이전 후보 |
+| `l4.misconception.catalog` | 31 | 수학 오개념 64종 카탈로그가(착수 메모 "34종"은 stale — `test_misconception_catalog.py`가 64로 동결) **코드 상수**(예 `'제곱근 양수 가정'`) | 카탈로그 *기계*는 중립, *내용*은 과목 데이터 — `data/corpus`(L1) 이전 후보 |
 | `schema.pedagogy_pack` | 8 | 예시 문자열 `'이차함수'·'일차함수'·'삼각함수'` | 스키마 설명의 예시 — 과목 중립 예시로 교체 가능 |
 | `l4.misconception.distractor` | 7 | op-code 카탈로그 시드(`'연쇄법칙 내부 도함수 누락'`) | catalog와 동형 — 데이터 이전 후보 |
 | `l4.misconception.models` | 5 | 영역 enum 설명(`미적분·삼각함수·벡터`) | 영역 분류를 과목 데이터로 |
