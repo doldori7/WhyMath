@@ -265,3 +265,98 @@ python3 scripts/analysis/eos_core_adapter_boundary_scan.py --json out.json --mar
 
 `EOS-67` 착지 시 — baseline에 실제로 들어간 항목과 이 문서 §4의 15건을 대조하고, 해제된 건수를
 §4 표에 갱신한다. 배정 자체의 변경은 `BOUNDARY_MAP`을 고치고 본 문서를 재전사한다.
+**추가(2026-09-04)**: `l4.solution_coaching` 분리 또는 오개념 카탈로그 데이터 이전이 착지하면 §8을
+재측정한다(`eos_core_boundary_probe.py`) — 잔여 누수 2·어휘 상수 77이 첫 실측 기준값이다.
+
+---
+
+## §8. "수학을 제거했을 때 무엇이 남는가" — 전이 도달·금지 규칙 실측 (EOS-84 · 2026-09-04)
+
+> 계획서 100 §3.7의 두 문장을 계측으로 옮겼다. 계측기 = `scripts/analysis/eos_core_boundary_probe.py`,
+> 게이트 = `tests/infra/test_eos_core_boundary_probe.py`(리터럴 비교 기준선 1건 동결·과목명 비교 0 · 잔여 누수 집합 동결).
+> **정본화 ≠ 집행**: 이 절의 숫자는 스냅샷이고, 강제는 그 테스트와 EOS-67 계약이 한다.
+
+### 8.1 전이 도달 — EOS-67이 못 보는 축
+
+import-linter 계약은 **직접 import**만 판정한다(§4 "정직한 공백"). "수학을 제거하면 함께 깨지는
+Core"는 *경유* 의존까지 따라가야 보인다. CORE 266모듈 각각에서 import 간선을 BFS로 따라 처음 만나는
+ADAPTER까지의 경로를 전수 산출했다.
+
+| 측정 | 값 | 뜻 |
+|---|---:|---|
+| CORE → … → ADAPTER 직접 import | **0** | EOS-69 상환 결과 그대로(§4.1) |
+| 전이 도달 | **14 / 266** | 수학을 지우면 함께 import에 실패하는 CORE |
+| 최단 경로가 합성 루트 `composition` 경유 | **14 / 14** | **설계된 유일 교체점** 경유 — Physics를 붙일 때 이 파일만 바꾸면 살아난다(EOS-69) |
+| **잔여 누수**(교체점을 막아도 닿음) | **2** | `api.coach` · `api.ocr_handoff` → `l4.solution_coaching`(**MIXED**) → `l3.verify_solution`·`l4.misconception.wrong_form_match`(ADAPTER 둘 다 직접 import — 누수 지점은 `solution_coaching` 하나) |
+| 수학 제거 후 온전히 남는 CORE | **252 / 266 (95%)** | `l1` 62 · `l2` 21 · `l3` 27 · `l4` 66 · `l6` 9 · `api` 32 · `schema` 34 · `lang` 1 |
+
+**읽는 법**: 14건의 최단 경로는 전부 *설계*다 — `l3.pedagogy.slot_generator`·`l3.render.adapters`·
+`api.coach`가 `composition`에서 능력 구현을 받아 오는 배선(EOS-69 ② "기본 구현 선택 편의")이고, 그
+2줄은 계약에 좁은 예외로 적혀 있다. **교체점을 막고 다시 재면 2건이 다른 길로도 닿는다 — 진짜 잔여는 그 2건이고 원인은 하나다**: `l4.solution_coaching`이
+MIXED로 배정된 채 수학 오답 형태 검출기를 직접 import한다. MIXED는 계약 대상이 아니라서(§1 반올림
+금지) 계약이 볼 수 없는 자리다 — 이 축의 상환은 `solution_coaching`을 CORE 골격 + 어댑터 주입으로
+가르는 것이며, 그 전까지는 테스트가 집합을 동결한다(늘면 RED·줄면 ratchet). 동결 열쇠는 (출발점,
+누수 지점)이다 — 끝 ADAPTER는 두 개가 동률이라 열쇠로 쓰면 탐색 순서에 따라 흔들린다(첫 구현이
+`set`을 그대로 순회해 해시 시드마다 다른 끝점을 냈고, 정렬 순회로 고정한 뒤 열쇠도 바꿨다).
+
+### 8.2 금지 규칙 — `if subject == "math"` · `if problem.type == "quadratic"`
+
+CORE 266모듈의 AST에서 **비교문(`Compare`)·`match` 패턴의 문자열 리터럴**이 과목명(`math`·`수학`…)
+또는 수학 유형(`quadratic`·`trig*`·`polynomial`…)인 곳을 찾았다.
+
+**히트 1건** (착수 메모의 "0건"은 정정 — 첫 실측이 아니라 ratchet 테스트가 잡았다):
+
+| CORE 모듈 | 위치 | 종류 | 내용 |
+|---|---|---|---|
+| `l1.problem_bank.populate` | `_verify_meta_from_raw` L363 | math_type | `kind_raw in ("real_root_count", …, "inequality_direction", …, "finite_probability")` — answer_kind **16종을 튜플로 열거**해 미지 값을 걸러낸다 |
+
+과목명(`== "math"`) 분기는 **0건**이다. 남은 1건은 유형 문자열이지만 §3.7이 겨냥한 그 형태 —
+"Core가 이차방정식을 안다" — 가 맞다: 적재기(CORE)가 answer_kind의 **허용 어휘**를 갖고 있으면,
+Physics 어댑터가 `"unit_consistency"`를 들고 와도 적재 단계에서 걸러진다. EOS-66이 "answer_kind는
+Core가 해석하지 않는 불투명 문자열"로 못 박은 계약과 정면으로 충돌하므로 **진성 경계 냄새**로
+분류하고, 상환 방향은 그 열거를 `SubjectAdapter`의 `answer_kinds()`(또는 코퍼스 데이터)로 옮기는
+것이다(EOS-66 후속 — 별도 태스크 등재는 Kiki 판정 후).
+
+테스트는 이 1건을 **(모듈, 종류) 기준선**으로 동결한다 — 새 자리가 생기거나 같은 자리가 늘면 RED,
+빠지면 기준선을 비우라고 실패시킨다(ratchet). 과목명 비교는 기준선 없이 0을 강제한다. 결함
+주입(`if subject == "math":`·`if problem.type == "quadratic":`·튜플 멤버십·`case "trig_identity":`·
+역순 비교)이 각각 1건으로 검출됨을 확인했다(변수 대 변수 비교·대입·docstring·`"pending"`은 비검출).
+
+### 8.3 그러나 Core는 *데이터로* 수학을 안다 — 어휘 상수 77건 / 18모듈
+
+비교문은 깨끗한데, **문자열 상수**(docstring 제외)에 수학 어휘가 박힌 자리가 있다. 이것은 §3.7의
+금지 규칙 위반은 아니지만 "Core가 이차방정식을 안다"의 다른 형태다.
+
+| CORE 모듈 | 건수 | 성격 | 처방 방향 |
+|---|---:|---|---|
+| `l4.misconception.catalog` | 31 | 수학 오개념 34종 카탈로그가 **코드 상수**(예 `'제곱근 양수 가정'`) | 카탈로그 *기계*는 중립, *내용*은 과목 데이터 — `data/corpus`(L1) 이전 후보 |
+| `schema.pedagogy_pack` | 8 | 예시 문자열 `'이차함수'·'일차함수'·'삼각함수'` | 스키마 설명의 예시 — 과목 중립 예시로 교체 가능 |
+| `l4.misconception.distractor` | 7 | op-code 카탈로그 시드(`'연쇄법칙 내부 도함수 누락'`) | catalog와 동형 — 데이터 이전 후보 |
+| `l4.misconception.models` | 5 | 영역 enum 설명(`미적분·삼각함수·벡터`) | 영역 분류를 과목 데이터로 |
+| `l3.pedagogy.slot_generator` | 4 | **LLM 프롬프트 예시**에 `이차함수 $f(x)=x^2-4x+…` | 프롬프트 예시는 교수법 팩(과목별)으로 |
+| `l3.solution_path` | 3 | `ApproachType` 한글 라벨 `'조합적'`(수학 접근법 분류) | 접근법 어휘의 과목 소유 판정 필요 |
+| `schema.visualization` · `l3.viz_eval` · `l3.visualization` | 6 | `graph-quadratic`·정적분 영역·`a*x**2+…` 예시 | 명세 자체는 중립, 예시가 수학 |
+| 그 외 9모듈 | 13 | `schema.concept/standard/textbook_mapping` 필드 설명의 예시(`'미적분학의 기본정리'`), `schema.user` "벡터 저장소"(거짓 양성) | 대부분 설명 예시 — 위해 낮음 |
+
+**판정**: 어휘 상수의 무게 중심은 `l4.misconception`(43/77)이다 — EOS-65가 "카탈로그·crosslink·판정
+큐·probe 36모듈 중 sympy 접촉 2건뿐 — 기계는 중립"으로 CORE에 둔 배정은 *로직*으로는 맞고 *데이터*로는
+새는 자리다. Physics 오개념을 붙일 때 `catalog.py`를 고쳐야 하면 그것은 Core가 아니다. 등재는
+Kiki 판정(후보: 카탈로그 내용을 `data/corpus/misconceptions_v*`로 이전하고 코드는 로더만 남기기).
+
+### 8.4 재현·정직한 공백
+
+```bash
+# [실행 시스템: 저장소 루트 — Linux/WSL 또는 Windows PowerShell]
+cd C:\Users\kiki\Desktop\__AI\WhyMath   # PowerShell인 경우
+python3 scripts/analysis/eos_core_boundary_probe.py                 # 마크다운 리포트
+python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
+```
+
+- 전이 도달은 **정적 import**다. `app.state` DI·`Depends`·문자열 경유 참조는 안 보인다(인벤토리 v2의
+  DI 다리는 엔드포인트 도달성용이라 여기엔 적용하지 않았다 — 적용하면 `composition` 외 교체점이 더
+  드러날 수 있다).
+- 어휘 스캔은 낱말 목록이다. 일반어와 겹치는 낱말(함수·로그·실수·소수·분수·확률)은 의도적으로 뺐다 —
+  거짓 양성이 신호를 덮기 때문이며, 그만큼 **놓치는 것도 있다**(`schema.user`의 "벡터 저장소"는
+  반대로 거짓 양성이다).
+- MIXED 29모듈은 두 계측 모두에서 *출발점*이 아니다(§1 반올림 금지와 같은 이유). 잔여 누수 2건이
+  전부 MIXED를 경유한다는 사실이 그 사각의 크기를 말한다.
