@@ -37,6 +37,23 @@
 이 문서 축에서는 **Attempt와 Assessment가 동거**한다(§2). 한 축의 배정으로 다른 축을 추론할 수
 없다는 것이 두 문서를 따로 두는 이유다.
 
+### 세 번째 축 — `canonical_entity_model_v1.md`(ARCH-37, 2026-09-05 같은 날 착지)
+
+ARCH-37은 78테이블을 **핵심 엔티티 19종**에 귀속시킨다. 그 축은 "이 테이블은 *무엇의*
+테이블인가"(정체성)이고, 이 문서의 축은 "이 데이터는 *무엇에 대한 증거*인가"다. 경쟁하지 않는다 —
+오히려 **정확히 맞물린다**: ARCH-37이 이 문서의 표에 있는 **11개 테이블을 `LearningEvent` 한
+엔티티로 묶는데**(`:176`), 그 묶음 안을 가르는 것이 이 문서의 4층이다. 엔티티가 같다고 증거 층이
+같지 않다(같은 `LearningEvent` 안에 Attempt·Evaluation·Assessment가 다 있다). 셋의 관계:
+
+| 문서 | 축 | 단위 |
+|---|---|---|
+| `32_learning_history.md` §2.3 | 얼마나 가공됐는가 | 3계층 |
+| `canonical_entity_model_v1.md` (ARCH-37) | 무엇의 테이블인가 | 19 엔티티 |
+| **이 문서** | 무엇에 대한 증거인가 | **4층** |
+
+ARCH-37이 독립적으로 같은 규율에 도달한 항목도 있다 — "좌석이 있다고 writer가 있다는 뜻이
+아니다"(그 문서 §7-C). 이 문서의 귀속표가 **writer 열**을 따로 둔 이유와 같다.
+
 > **32번 문서 내부 불일치 1건 (이 작업의 실측 부산물)**: §2.3 표는 `concept_mastery_history`를
 > **Learning History**로 배정하는데, 같은 문서 §3 데이터 흐름(`:56-68`)은 5단계
 > `Raw Event → Learning History → Evidence → Learner State → 소비자`를 그리며 같은 테이블을
@@ -247,6 +264,7 @@ Assessment를 읽으며, WH-1 지표는 Attempt를 읽는다. 오답이 Evaluati
 ## §7. 참고 문서
 
 - `docs/architecture/32_learning_history.md` §2.3·§3·§8 — **선행 정본**(3계층 축·충돌 시 우선)
+- `docs/architecture/canonical_entity_model_v1.md` (ARCH-37) — 엔티티 정체성 축(19종). 이 문서 표의 11테이블이 그쪽 `LearningEvent` 하나에 묶인다
 - `docs/architecture/adr/ADR-002-student-solution-step-entity.md` — "이벤트냐 엔티티냐" 판정 기준
 - `docs/architecture/eos_core_adapter_boundary.md` — 경계표 서술 형식의 선례(EOS-65)
 - `docs/reviews/eos_phase1_plan_200_gap_review_2026-09-01.md` §8.1 D3 — 이 태스크의 출처
