@@ -1,8 +1,13 @@
 # `main` 브랜치 보호 규칙 — 수동 설정 가이드
 
-> GitHub REST API의 *Branch Protection* 엔드포인트에 현재 토큰으로 접근할 수 없어
-> (`Resource not accessible by integration` — 2026-07-26 실측) 이 단계는
+> GitHub REST API의 *Branch Protection* 엔드포인트(`/protection`)는 **세션·CI 토큰**으로
+> 접근할 수 없어(`Resource not accessible by integration` — 2026-07-26 실측) *설정*은
 > **GitHub Settings UI에서 5분 수동 작업**이 필요합니다.
+>
+> **[정정 2026-09-03]** *읽기*는 다르다 — **Kiki 머신의 `gh` 토큰으로는
+> `gh api repos/doldori7/WhyMath/rules/branches/main`이 EXIT=0으로 읽힌다**(실측). 그래서
+> 재발 탐지는 자동화돼 있다: **조회는 사람, 판정은 기계**(§재발 탐지 실행법 · `HARN-63`).
+> 아래 "접근 불가" 표현이 남아 있는 곳은 전부 *설정 API* 이야기다.
 >
 > 자동 가능한 부분(CODEOWNERS·CI status check)은 이미 코드로 표현되어 있습니다 —
 > 이 가이드는 그것들을 *강제하는* 정책만 다룹니다.
@@ -11,12 +16,12 @@
 
 ## 📋 사전 브리핑 (Kiki 직접 수행 과제)
 
-1. **과제 명칭** — `main` 브랜치 보호 규칙 설정 (특히 **required status checks 13종 등록**)
+1. **과제 명칭** — `main` 브랜치 보호 규칙 설정 (특히 **required status checks 16종 등록**)
 2. **목적** — CI가 실패한 코드가 `main`에 들어가지 못하게 막는다. 현재는 이 설정이
    불완전해 **전체 테스트·mypy·커버리지 잡(`backend — lint·type·test`)이 머지를 막지
    못한다** — 2026-07-26에 이 구멍으로 실제 red가 main에 들어갔다(아래 사고 기록).
 3. **구체적 절차** — Settings → Branches → `main` 규칙 편집 → *Require status checks*
-   섹션에서 아래 13개 이름을 하나씩 검색해 추가 → Save. 소요 약 5분(체크 13개 검색·추가가
+   섹션에서 아래 16개 이름을 하나씩 검색해 추가 → Save. 소요 약 5분(체크 16개 검색·추가가
    대부분). 나머지 항목(PR 필수·linear history 등)은 이미 설정돼 있으면 건드리지 않는다.
 4. **성공 기준** — §저장 후 확인의 **자가검증 B**(가장 중요): 새 PR에서 `backend` 잡이
    *아직 돌고 있는 동안* 머지 버튼이 **비활성**이고 "Required statuses must pass"가
@@ -86,6 +91,65 @@ main
 
   ⚠️ CI workflow가 *한 번이라도 실행*되어야 검색 결과에 등장합니다.
   → 먼저 이 PR을 만들거나 main에 한 번 push하여 CI를 가동한 후 등록하세요.
+
+### 정책 파라미터 선언 (체크 목록 *외*의 축)
+
+체크 목록만 대조하면 **승인 수·strict 정책 축을 통째로 놓친다** — 2026-09-03 실측에서 실제로
+승인 수가 어긋나 있었다(문서 "최소 1명" vs 라이브 0). 아래 블록은 위 체크 목록과 같은 자격의
+*의도 선언*이며, `scripts/harness/ruleset_drift.py`가 라이브 JSON과 기계 대조한다.
+
+<!-- RULESET_POLICY_BEGIN — scripts/harness/ruleset_drift.py가 라이브 JSON과 대조한다. tests/infra/test_ruleset_drift.py가 이 블록의 실재를 동결한다. -->
+- `required_check_integration_id` = `15368`
+- `strict_required_status_checks_policy` = `true`
+- `required_approving_review_count` = `1`
+- `dismiss_stale_reviews_on_push` = `true`
+- `require_code_owner_review` = `true`
+- `required_review_thread_resolution` = `true`
+- `required_linear_history` = `true`
+- `deletion` = `true`
+- `non_fast_forward` = `true`
+<!-- RULESET_POLICY_END -->
+
+`required_check_integration_id`는 GitHub Actions 앱의 id다 — required check 항목을 이 앱으로
+pin해야 *다른 주체*가 같은 컨텍스트 이름으로 성공을 보고해도 충족되지 않는다.
+
+### 알면서 유예한 축 (만료 필수)
+
+문서를 **라이브에 맞춰 낮추지 않는다** — 문서가 의도이고 라이브가 결함이다. 다만 의도적으로
+당장 맞추지 않는 축은 여기에 *만료일과 함께* 적는다. 만료일이 지나면 탐지기가 유예를 **위반으로
+승격**시킨다(CLAUDE.md "만료 없는 유예·제외 금지"). 형식:
+``- `키` until `YYYY-MM-DD` — 사유``
+
+<!-- RULESET_DEVIATIONS_BEGIN — 만료 없는 유예 금지. 만료일이 지나면 ruleset_drift.py가 위반으로 승격한다. -->
+- `required_approving_review_count` until `2026-12-31` — 1인 개발 단계에서 승인 1명을 요구하면 자가승인이 불가해 머지가 막힌다. 문서를 현실에 맞출지 설정을 문서에 맞출지는 Kiki 판단 사안(HARN-63 ⑤). 만료 시 재판정.
+- `dismiss_stale_reviews_on_push` until `2026-12-31` — 위와 같은 승인 축 일괄. 승인 요구가 0인 상태에서 stale dismiss는 단독으로 의미가 없다.
+- `require_code_owner_review` until `2026-12-31` — 위와 같은 승인 축 일괄. 1인 단계에서는 Code Owner = 작성자라 충족이 구조적으로 불가하다.
+<!-- RULESET_DEVIATIONS_END -->
+
+### 재발 탐지 실행법 (HARN-63 — 조회는 사람·판정은 기계)
+
+세션·CI 토큰으로는 이 설정을 읽을 수 없지만 **Kiki 머신의 `gh` 토큰으로는 읽힌다**(2026-09-03
+실측). 그래서 조회만 사람이 하고 판정은 기계가 한다. 30일이 지나면 SessionStart 브리핑이
+재확인을 리마인드한다(`.github/ruleset-check-state.json`의 나이를 읽는다).
+
+```powershell
+# Windows PowerShell (= Phaiakes9) — 진입 명령 불요
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh api repos/doldori7/WhyMath/rules/branches/main > ruleset.json
+python scripts\harness\ruleset_drift.py ruleset.json --record
+echo "EXIT=$LASTEXITCODE"
+```
+
+| EXIT | 판정 | 다음 행동 |
+|---|---|---|
+| `0` | 정합 (권고만 있어도 0) | 없음 — 기록 갱신됨 |
+| `1` | **드리프트 위반** | 출력의 "시정 순서"를 위에서부터 따른다 |
+| `2` | **측정 실패** (빈 응답·권한 부족·필드 부재) | 통과가 아니다 — `gh auth status`부터 확인 |
+
+기록 파일(`.github/ruleset-check-state.json`)은 `--record`가 쓴다. **손편집 금지** — 확인하지
+않고 날짜만 미루면 리마인드가 위장이 된다.
+
+---
 
 > ### 🔴🔴 3회차 재발 — 라이브 설정 실측 (2026-09-03 · HARN-56 ① 부수 발견)
 >
@@ -224,8 +288,8 @@ curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
 | 출력 | 판정 |
 |---|---|
 | `off 0 []` | ❌ **required check가 하나도 없다** — 미설정 상태 |
-| `non_admins 13 [...]` 또는 `everyone 13 [...]` | ✅ 13종 등록 완료 |
-| 개수가 13 미만 | ⚠️ 일부 누락 — 목록 출력과 문서 블록을 1:1 대조 |
+| `non_admins 16 [...]` 또는 `everyone 16 [...]` | ✅ 16종 등록 완료 |
+| 개수가 16 미만 | ⚠️ 일부 누락 — 목록 출력과 문서 블록을 1:1 대조 |
 
 > **설정 전 실측값(2026-07-26)**: `enforcement_level=off · contexts=[] · checks=[]`.
 > 즉 문서가 나열하던 3종조차 **실제로는 등록돼 있지 않았다** — `protected: true`(PR 필수·
@@ -234,8 +298,8 @@ curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ### 자가검증 A — 등록된 체크 *개수*를 눈으로 센다
 
-규칙 편집 화면의 *Require status checks* 목록에 **13개**가 있는지 센다.
-13개 미만이면 검색이 빈 이름이 있었다는 뜻이다(오타·개명). 위 목록과 1:1 대조하라.
+규칙 편집 화면의 *Require status checks* 목록에 **16개**가 있는지 센다.
+16개 미만이면 검색이 빈 이름이 있었다는 뜻이다(오타·개명). 위 목록과 1:1 대조하라.
 
 > **왜 개수를 세나**: UI는 "검색 결과 없음"을 조용히 보여줄 뿐 실패를 만들지 않는다.
 > 추가했다고 생각하고 넘어가면 그 체크는 **미설정으로 남는다** — 이것이 2026-07-26
