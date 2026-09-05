@@ -1,7 +1,7 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: EOS-92-cross-subject-contract-probe
 title: "교차 과목 프로브 — Subject Contract v1 필드가 과목 중립인지 Physics로 실측 (9/27 · Provisional 해제 조건)"
-track: subject-expansion
+track: math-completion
 stage: S3
 subject: cross
 layer: backend
@@ -21,5 +21,5 @@ artifacts: []
 paths:
   - docs/architecture/subject_contract_cross_probe.md
 session: null
-notes: "EOS-91이 건 Provisional 상태의 해제 조건. 9/27 = G1 게이트일. 실측(2026-09-05 역할 기반 검색: 'cross-subject probe'·'교차 과목 프로브'·'타 과목 프로브'·physics 프로브 → docs/·backlog/ 에서 0건) — 이 프로브는 지시 이전까지 소유자가 없었다."
+notes: "EOS-91이 건 Provisional 상태의 해제 조건. 9/27 = G1 게이트일. 실측(2026-09-05 역할 기반 검색: 'cross-subject probe'·'교차 과목 프로브'·'타 과목 프로브'·physics 프로브 → docs/·backlog/ 에서 0건) — 이 프로브는 지시 이전까지 소유자가 없었다.\n\n[정정 2026-09-05] track subject-expansion → math-completion: validate 경고: stage=S3인데 subject-expansion 트랙(진입 게이트 G-s5) 전원보다 앞섬. 프로브는 과목 확장이 아니라 EOS Core 계약(EOS-66·math-completion)의 검증이며 G1(9/27) 조건 — 계약과 같은 트랙으로"
 updated: 2026-09-05

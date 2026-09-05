@@ -197,5 +197,10 @@ def test_contract_status_is_provisional_until_probe() -> None:
     )
     assert "cross-subject probe" in doc, "해제 조건(교차 과목 프로브)이 상태 절에 없다"
     assert "9/27" in doc, "프로브 기한(9/27 · G1 게이트일)이 상태 절에 없다"
-    for clause in ("강등", "Core 확장 금지"):
-        assert clause in doc, f"프로브 결과 처리 규칙 2조가 상태 절에 없다: {clause!r}"
+    for clause in ("강등", "Core 확장 금지", "ADR", "중복 구현", "3건을 초과"):
+        assert clause in doc, f"프로브 결과 처리 규칙 3조가 상태 절에 없다: {clause!r}"
+    # (다) 출구가 없으면 (가)·(나)는 위반을 숨기는 금지가 된다 — 출구 조항의 존재를 동결한다.
+    assert "(다)" in doc, "규칙 (다) 출구 조항이 없다 — 출구 없는 금지는 편법을 부른다"
+    # 래칫이 못 잡는 축을 문서가 스스로 밝히는가 — 이 한계 표기가 사라지면 9/27에
+    # 'CI 초록 = 계약 준수'로 오판한다.
+    assert "필드 개수" in doc, "래칫의 한계('기계는 필드 개수만 본다')가 상태 절에서 사라졌다"
