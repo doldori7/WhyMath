@@ -386,13 +386,19 @@ API로 고친다. 룰셋 `PUT`은 **본문이 잘못되면 보호를 통째로 �
 Actions pin" 외에는 아무것도 바꾸지 않음을 코드가 집행하고 테스트가 동결한다
 (`tests/infra/test_ruleset_pin_plan.py`). 네트워크 호출은 하지 않는다 — 조회·적용은 아래 `gh`가 한다.
 
-**① 백업** (읽기 전용 — 이 파일이 롤백 수단이다, 지우지 말 것)
+**① 도구 실재 확인 + 백업** (읽기 전용 — 백업 파일이 롤백 수단이다, 지우지 말 것)
 ```powershell
 # Windows PowerShell (= Phaiakes9)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
+Test-Path scripts\harness\ruleset_pin_plan.py
 gh api repos/doldori7/WhyMath/rulesets/16623542 | Out-File -Encoding utf8 ruleset-backup.json
 Test-Path ruleset-backup.json
 ```
+첫 `Test-Path`가 `False`면 변경안 도구가 이 체크아웃에 없다 — 위 §"판정기 파일이 없다"와 같은
+상황(미머지)이며 같은 복구 절차(브랜치 fetch + checkout -B)를 쓴다. **2026-09-05 실측**: 미머지
+상태에서 ②가 `[Errno 2]`로 죽었는데도 ③이 그대로 실행됐다 — 파일이 없어 gh가 거부했기에
+무사했지만, 오래된 변경안이 남아 있었다면 그대로 PUT됐을 것이다. 그래서 ③은 아래처럼 자가
+가드를 가진다.
 
 **② 변경안 + 롤백 본문 생성** (오프라인 — 표가 나오고 파일 **두 개**가 생긴다)
 ```powershell
@@ -411,11 +417,11 @@ Test-Path ruleset-rollback.json
 읽기 전용 필드 때문에 GitHub이 거부할 수 있어, 롤백 본문도 기계가 만들고 같은 불변식으로
 검증한다 — 보호가 약해진 직후에 사람이 보안 민감 본문을 손으로 고치는 일이 없게.
 
-**③ 적용** (쓰기 — ②의 표를 확인한 뒤에만)
+**③ 적용** (쓰기 — ②의 표를 확인한 뒤에만. 블록 자체가 ② 산출물 두 개의 실재를 확인하고,
+하나라도 없으면 **PUT을 보내지 않는다**)
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json | Out-Null
-echo "PUT_EXIT=$LASTEXITCODE"
+if ((Test-Path ruleset-plan.json) -and (Test-Path ruleset-rollback.json)) { gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json | Out-Null; "PUT_EXIT=$LASTEXITCODE" } else { "중단 — 변경안 또는 롤백 본문이 없다. ②를 먼저 성공시킨다." }
 ```
 
 **④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료

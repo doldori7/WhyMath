@@ -427,3 +427,12 @@ def test_doc_has_api_path_runbook() -> None:
     ), "백업 JSON을 직접 PUT하는 블록이 있다 — 읽기 전용 필드 때문에 실행 불가"
     for b in backup + plan + apply + rollback:
         assert "&&" not in b and "python3 " not in b, "PowerShell 5.1에서 실행 불가한 표기"
+
+    # 2026-09-05 실측: 미머지 상태에서 ②가 죽었는데 ③이 그대로 실행됐다(파일이 없어 gh가
+    # 거부했기에 무사). ①은 도구 실재를, ③은 ② 산출물 두 개의 실재를 스스로 확인해야 한다.
+    assert (
+        "Test-Path scripts\\harness\\ruleset_pin_plan.py" in backup[0]
+    ), "①에 변경안 도구 실재 자가검증이 없다 — 미머지 체크아웃에서 ②가 [Errno 2]로 죽는다"
+    assert (
+        "Test-Path ruleset-plan.json" in apply[0] and "Test-Path ruleset-rollback.json" in apply[0]
+    ), "③이 ② 산출물 실재를 확인하지 않고 PUT한다 — 오래된 변경안이 그대로 적용될 수 있다"
