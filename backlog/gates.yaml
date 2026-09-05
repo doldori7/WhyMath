@@ -244,11 +244,11 @@ gates:
     title: "required check의 소스 pin 정리 — unpinned 7건(그중 concept-reach는 pin 항목이 아예 없음·순서 주의)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-03
     remind_after_days: 7
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-05 ruleset_pin_plan.py 변경안 PUT_EXIT=0 → ruleset_drift.py 재검증 위반 0·권고 0·정합(EXIT=0). 16건 전부 GitHub Actions(15368) pin·중복 0. 롤백 본문도 라이브 PUT 유효 확인."
+    cleared_by: kiki
     notes: ""
   - id: G-retired-atom-prod-cleanup
     title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
