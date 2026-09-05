@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: cancelled
 priority: 2
 eos_priority: P1
 owner: claude
@@ -22,5 +22,5 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - "tests/backend/api/**"
 session: null
-notes: "출처: docs/reviews/eos_micro_project_orchestration_v1_gap_review_2026-09-05.md §6 갭 G-3 (설계서 §6 '탈락분 삭제 대신 격리'). 실측: ReviewStatus.quarantined를 참조하는 프로덕션 코드는 api/problems.py:106의 배제 조건 하나뿐이며 격리 상태로 넣는 API·CLI가 0건이라 현재는 수동 SQL 외 방법이 없다. EOS-71(done)이 읽기측만 착지한 결과다."
+notes: "출처: docs/reviews/eos_micro_project_orchestration_v1_gap_review_2026-09-05.md §6 갭 G-3 (설계서 §6 '탈락분 삭제 대신 격리'). 실측: ReviewStatus.quarantined를 참조하는 프로덕션 코드는 api/problems.py:106의 배제 조건 하나뿐이며 격리 상태로 넣는 API·CLI가 0건이라 현재는 수동 SQL 외 방법이 없다. EOS-71(done)이 읽기측만 착지한 결과다.\n\n[취소 2026-09-05] 오등재 취소 — 갭 판정이 틀렸다. 격리 쓰기 경로는 이미 실재한다: api/problems.py:304 patch_problem(RequireContentAdmin)이 review_status·quarantine_reason·quarantined_at 3필드를 함께 받고, problem_quarantine_contract.md §5가 이를 '격리 설정'의 정본으로 규정하며, tests/backend/api/test_problem_quarantine_serving.py::test_admin_patch_to_quarantined_performs_no_delete가 그 전이를 동결한다. 같은 계약 §138은 전용 엔드포인트(POST /problems/{id}/quarantine)를 '관리자 PATCH로 충분하고 표면을 늘리면 안 된다'며 **의도적으로 미채택**했다 — 이 태스크를 진행하면 계약이 거절한 표면을 추가하게 된다. 원인: 부재 판정을 'ReviewStatus.quarantined 대입/UPDATE' 형태로만 검색해, review_status를 일반 필드로 받는 PATCH 엔드포인트를 놓쳤다(CLAUDE.md 식별자 부재≠기능 부재 — 역할로 재검색했어야 했다). 지적: PR #988 Codex P1."
 updated: 2026-09-05
