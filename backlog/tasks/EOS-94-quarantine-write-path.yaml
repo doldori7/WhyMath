@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-94-quarantine-write-path
+title: "격리 쓰기측 신설 — 문항을 quarantined로 넣는 경로 (EOS-71 읽기측 승계·설계서 갭 G-3)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 격리 집행 경로 신설 — 문항을 ReviewStatus.quarantined로 전이시키는 CLI(또는 ops 경로) + quarantine_reason·quarantined_at 기입 강제. 사유 없는 격리 금지(server_default를 달지 않은 EOS-71의 날조 방지 주석과 정합)"
+  - "② 격리 대상의 경계를 명기 — 게이트 탈락분이 전부 격리는 아니다. 현행 탈락분은 JSONL 검수 큐로 가고 DB 문항이 아니다(needs_review_worklist docstring 자인). 어떤 상태의 것이 DB 격리 대상인지 판정 가능한 문장으로 적고, 아닌 것은 아니라고 적는다"
+  - "③ 집행 별항(정본화≠집행) — EOS-71이 읽기측(배제 조건)만 착지했다. 쓰기측 착지 후 읽기측 술어(is_review_status_cleared 허용목록·quarantine_exclusion_condition)가 그 쓰기를 실제로 보는지 통합 테스트로 확인한다. 두 측이 만나지 않으면 격리는 선언일 뿐이다"
+  - "④ 변별력 양방향 실측 — 격리 주입 시 서빙 경로(api/problems 4종 + L6 7경로)에서 실제 배제되는지, 해제 시 다시 노출되는지 양방향. 정상 입력에서 초록인 것은 보호의 증거가 아니다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/problems.py
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/api/**"
+session: null
+notes: "출처: docs/reviews/eos_micro_project_orchestration_v1_gap_review_2026-09-05.md §6 갭 G-3 (설계서 §6 '탈락분 삭제 대신 격리'). 실측: ReviewStatus.quarantined를 참조하는 프로덕션 코드는 api/problems.py:106의 배제 조건 하나뿐이며 격리 상태로 넣는 API·CLI가 0건이라 현재는 수동 SQL 외 방법이 없다. EOS-71(done)이 읽기측만 착지한 결과다."
+updated: 2026-09-05
