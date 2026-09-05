@@ -1,14 +1,19 @@
-# ADR-003 — Subject Contract v1은 잠정(Provisional)이다: 교차과목 프로브 통과 후 Freeze
+# ADR-004 — Subject Contract v1은 잠정(Provisional)이다: 교차과목 프로브 통과 후 Freeze
 
 - **상태:** **Provisional — pending cross-subject probe (target 2026-09-27)**
 - **결정일:** 2026-09-05
 - **대상:** Subject Contract v1 (`schema/subject_adapter.py` 필수층 · `schema/verification_capabilities.py` 선택층)
 - **관련:** `EOS-66`(계약 정본·#924) · `EOS-69`(경유 배선) · `EOS-70`(explain 능력 판정·todo) · **`EOS-91`(코드 축 상태 라벨·필드 래칫·#986 미머지)** · **`EOS-92`(프로브 실행 태스크·todo)** · `EOS-65`/`eos_core_adapter_boundary.md`(Core↔Adapter 경계) · 게이트 **G1(2026-09-27)** "계측 가능한 파이프라인 — Core→Math 정적 의존 0"
 
-> **번호 계열 주의**: 이 문서의 `ADR-003`은 **저장소 계열**의 다음 빈 번호다. 계획서 100 §3.16이
+> **번호 계열 주의**: 이 문서의 `ADR-004`는 **저장소 계열**의 다음 빈 번호다. 계획서 100 §3.16이
 > 말하는 "ADR-002 Subject Adapter"와 **같은 번호가 아니다** — 계획서의 001~010은 번호가 아니라
 > 결정해야 할 **주제 목록**으로 재정의됐다(2026-09-05 Kiki 결정). 주제↔저장소 문서 매핑은
 > [`README.md`](./README.md)가 정본이다.
+>
+> **초판은 `ADR-003`으로 적혔다가 개명됐다.** `origin/claude/entity-model-freeze-lji37v`가
+> 같은 날 15:45에 `ADR-003-subject-prefix-is-convention-not-entity.md`(노드 ID 접두사 = 규약)를
+> 먼저 선점했고, 이 문서는 16:58이라 나중이다. 원인·대책은 [`README.md`](./README.md) §"번호를
+> 고르는 법" 참조.
 
 ---
 
