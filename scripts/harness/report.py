@@ -159,6 +159,7 @@ def render_brief(
     done_excluded: dict[str, list[str]] | None = None,
     doc_series_candidates: list[tuple[str, tuple[str, ...], str]] | None = None,
     doc_series_status: str = "ok",
+    ruleset_reminder: str | None = None,
 ) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
@@ -184,6 +185,10 @@ def render_brief(
     같은 결합도 원칙(원시 튜플만 받음). **훅이 stderr를 버리므로**(`.claude/settings.json`
     `2>/dev/null`) 스캔 실패는 이 함수가 반환하는 문자열(stdout) 안에만 표시해야 실제로
     보인다 — stale_branch_status와 동형 처리.
+    ruleset_reminder: 브랜치 보호 라이브 확인 리마인드 한 줄(HARN-63) 또는 None. 이미 만들어진
+    문자열만 받는다 — 계산은 호출부(`cmd_brief`) 책임이라 이 모듈이 `ruleset_drift`를 직접
+    import하지 않는다(stale_branches·doc_series와 동일한 결합도 원칙). **이 배선이 ④의 집행
+    지점이다** — 탐지기를 만들어 두고 아무도 돌리지 않는 상태를 브리핑이 매 세션 지적한다.
     """
     lines = ["[빌드하네스 브리핑]"]
 
@@ -332,5 +337,10 @@ def render_brief(
 
     if errors:
         lines.append(f"⚠️ 백로그 무결성 경고 {len(errors)}건 — `backlog.py validate` 확인 필요")
+
+    # 브랜치 보호 라이브 확인 리마인드 (HARN-63 ④) — 저장소 *밖* 설정이라 어떤 테스트도 보지
+    # 못한다. 자동 상시 실행이 불가능하므로(CI에 관리자 토큰 없음) 세션마다 사람에게 묻는다.
+    if ruleset_reminder:
+        lines.append(ruleset_reminder)
 
     return "\n".join(lines)

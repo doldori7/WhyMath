@@ -46,6 +46,7 @@ import dep_declaration
 import pathscope
 import remote_claims
 import report
+import ruleset_drift
 import selector
 import similar
 import store
@@ -1820,6 +1821,14 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    # 브랜치 보호 라이브 확인 리마인드 (HARN-63 ④ 집행 지점) — 문서·ci.yml 대조는 둘 다
+    # 저장소 *안*이라 라이브 설정이 비어도 전부 초록으로 통과한다(3회차 사고의 구조적 원인).
+    # 조회는 사람만 할 수 있으므로(관리자 토큰), 기계는 "얼마나 오래 확인하지 않았는가"를 센다.
+    try:
+        ruleset_reminder = ruleset_drift.state_reminder(root, date.today())
+    except Exception as exc:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다(fail-open·침묵 금지)
+        ruleset_reminder = f"⚠ 브랜치 보호 확인 리마인드 실패({type(exc).__name__})"
+
     print(
         report.render_brief(
             backlog,
@@ -1834,6 +1843,7 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             done_excluded=done_excluded,
             doc_series_candidates=doc_series_candidates,
             doc_series_status=doc_series_status,
+            ruleset_reminder=ruleset_reminder,
         )
     )
     return 0
