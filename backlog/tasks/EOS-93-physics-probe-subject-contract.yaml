@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-93-physics-probe-subject-contract
+title: "Physics Probe (P1-PROBE) — Subject Contract v1 교차과목 대조 후 Freeze 판정 (ADR-003 집행)"
+track: math-completion
+stage: S3
+subject: cross
+layer: backend
+status: cancelled
+priority: 1
+eos_priority: P1
+owner: claude
+depends_on:
+  - EOS-66-subject-adapter-contract
+requires_gates: []
+acceptance:
+  - "① 판정표 산출: 필수층 3메서드(evaluate_answer·detect_misconception·validate_problem) + 반환모델 4종(ProblemStatement·AnswerEvaluation·ProblemValidation·MisconceptionSignal)의 각 필드에 대해 '물리에서 반드시 성립하는가' ○/✗ 판정. 판정표는 중단 여부와 무관하게 파일로 남긴다(실패해도 증거가 남는 설계)"
+  - "② 강등 방향 강제: ✗ 항목은 Math Adapter/선택층으로 내린다. Core에 물리용 분기·옵셔널 필드·유니온 추가 금지(계획서 100 §3.7 재발 방지). 조정 후 test_subject_adapter_two_tier_contract.py REQUIRED_METHODS 갱신"
+  - "③ 중단 규칙: ✗ > 3이면 즉시 중단하고 상태를 'Frozen (math-only, acknowledged)'로 표기해 2026-09-27 예정대로 Freeze — 일정 연기 금지. 중립 계약이라 부르지 않는다"
+  - "④ 상태 전환: ADR-003의 Status를 Provisional → 채택(Frozen 또는 math-only Frozen)으로 갱신하고 결정일·근거 기재. ADR-003이 갱신되지 않으면 done 금지"
+  - "⑤ EOS-70(explain 필수층 편입) 판정을 이 프로브 결과에 종속시켜 결론 기재 — 프로브 전 단독 결정 금지"
+artifacts: []
+paths:
+  - docs/architecture/adr/ADR-003-subject-contract-v1-provisional.md
+  - src/backend/whymath_backend/schema/subject_adapter.py
+  - tests/backend/schema/test_subject_adapter_two_tier_contract.py
+session: null
+notes: "출처: ADR-003(2026-09-05 Kiki 결정). 일정 고정 = 프로브 09-21~09-23 · 계약 조정 09-24~09-26 · Freeze 09-27(G1 판정일). 주차 라벨 사용 금지 — 저장소에 주차 체계가 둘이다(전환선언서 W5=9/28~10/4 vs 계획서003 W5=9/21~9/27). 프로브는 Physics 구현이 아니라 대조다(물리 어댑터 만들지 않음). G1 차단조건(Core→Math 정적의존 0)과는 독립.\n\n[취소 2026-09-05] EOS-92-cross-subject-contract-probe(origin/claude/entity-model-freeze-lji37v·todo)와 중복 — 같은 Kiki 지시(2026-09-05)의 프로브 축을 그쪽이 선점. 이 세션은 ADR 문서 축(ADR-003·계열 규약)만 담당"
+updated: 2026-09-05
