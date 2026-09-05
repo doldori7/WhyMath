@@ -378,6 +378,44 @@ Test-Path scripts\harness\ruleset_drift.py
 *측정 실패* 2는 값이 같습니다. 그래서 위 `Test-Path` 자가검증이 앞에 와야 합니다 — 그것 없이
 `EXIT=2`만 보면 "측정 실패"로 오독하고 `gh auth status`부터 뒤지게 됩니다.
 
+### 소스 pin 시정 — 경로 B (API · UI가 안 될 때)
+
+탐지기가 등급ⓐ(pin 항목 0건)나 권고(중복·혼재)를 냈는데 GitHub UI에서 소스 선택이 안 보이면
+API로 고친다. 룰셋 `PUT`은 **본문이 잘못되면 보호를 통째로 약화**시키므로, 본문은 손으로
+쓰지 않고 `scripts/harness/ruleset_pin_plan.py`가 만든다 — 그 도구는 "중복 제거 + GitHub
+Actions pin" 외에는 아무것도 바꾸지 않음을 코드가 집행하고 테스트가 동결한다
+(`tests/infra/test_ruleset_pin_plan.py`). 네트워크 호출은 하지 않는다 — 조회·적용은 아래 `gh`가 한다.
+
+**① 백업** (읽기 전용 — 이 파일이 롤백 수단이다, 지우지 말 것)
+```powershell
+# Windows PowerShell (= Phaiakes9)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh api repos/doldori7/WhyMath/rulesets/16623542 | Out-File -Encoding utf8 ruleset-backup.json
+Test-Path ruleset-backup.json
+```
+
+**② 변경안 생성** (오프라인 — 표가 나오고 `ruleset-plan.json`이 생긴다)
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+python scripts\harness\ruleset_pin_plan.py ruleset-backup.json --out ruleset-plan.json
+echo "EXIT=$LASTEXITCODE"
+```
+`EXIT=0`이고 표의 "→ 변경" 행이 **탐지기가 지목한 항목과 일치**하면 ③으로. `EXIT=2`는 거부
+(규칙 부재·타 앱 pin·형식 이상)이며 본문이 만들어지지 않는다 — 출력의 사유를 보고 사람이 판단한다.
+
+**③ 적용** (쓰기 — ②의 표를 확인한 뒤에만)
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json | Out-Null
+echo "PUT_EXIT=$LASTEXITCODE"
+```
+
+**④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료.
+`EXIT≠0`이면 롤백: `gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-backup.json`
+— 단 백업에는 읽기 전용 필드가 들어 있어 GitHub이 거부할 수 있다. 그때는
+`python scripts\harness\ruleset_pin_plan.py`가 아니라 백업 JSON에서 `id`·`node_id`·`created_at`·
+`updated_at`·`source`·`source_type`·`_links`·`current_user_can_bypass`를 뺀 본문을 만들어 PUT한다.
+
 ### Status check가 검색 결과에 안 보임
 - CI workflow가 한 번도 실행되지 않은 상태. 임의 PR을 만들어 CI를 가동한 뒤 설정.
 
