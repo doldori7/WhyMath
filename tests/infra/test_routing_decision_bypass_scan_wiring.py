@@ -108,6 +108,39 @@ def swap(decision: RoutingDecision) -> RoutingDecision:
 """
 
 
+def _nested_cloud(tier_expr: str) -> str:
+    """승계 키워드를 *갖춘* 동적 형태 안에 클라우드 리터럴을 숨긴 우회 (PR #983 Codex P1)."""
+    return _HEADER + f"""
+def swap(decision: RoutingDecision, force_cloud: bool) -> RoutingDecision:
+    return RoutingDecision(
+        cost_tier={tier_expr},
+        local_family=None,
+        local_model=None,
+        mode=decision.mode,
+        reason=decision.reason,
+        est_latency_ms=decision.est_latency_ms,
+        data_export_reason=decision.data_export_reason,
+    )
+"""
+
+
+_DYNAMIC_NO_LITERAL = _HEADER + """
+def pick_tier() -> CostTier:
+    return CostTier.LOCAL
+
+
+def swap(decision: RoutingDecision) -> RoutingDecision:
+    return RoutingDecision(
+        cost_tier=pick_tier(),
+        local_family=None,
+        local_model=None,
+        mode=decision.mode,
+        reason=decision.reason,
+        est_latency_ms=decision.est_latency_ms,
+        data_export_reason=decision.data_export_reason,
+    )
+"""
+
 _STAR_KWARGS = _HEADER + """
 def build(**kwargs: object) -> RoutingDecision:
     return RoutingDecision(**kwargs)
@@ -193,6 +226,32 @@ def test_cloud_tier_literal_is_detected(tmp_path: Path, tier_expr: str) -> None:
     assert result.returncode == 1, f"클라우드 직접 생성을 못 잡았다:\n{result.stdout}"
     assert "클라우드 티어 RoutingDecision 직접 생성" in result.stdout
     assert "::smoke" in result.stdout  # 함수 단위 site가 메시지에 실린다(유예 키 안내)
+
+
+@pytest.mark.parametrize(
+    "tier_expr",
+    [
+        "CostTier.CLOUD_MID if force_cloud else decision.cost_tier",
+        'models.CostTier("cloud_high") if force_cloud else decision.cost_tier',
+        "(decision.cost_tier, CostTier.CLOUD_HIGH)[force_cloud]",
+    ],
+    ids=["ifexp-attr", "call-string", "subscript-tuple"],
+)
+def test_cloud_literal_nested_in_dynamic_expression_is_detected(
+    tmp_path: Path, tier_expr: str
+) -> None:
+    """승계 키워드가 있어도 표현식 안에 숨긴 클라우드 리터럴은 위반 (Codex P1·PR #983)."""
+    (tmp_path / "swap.py").write_text(_nested_cloud(tier_expr), encoding="utf-8")
+    result = _run(tmp_path)
+    assert result.returncode == 1, f"중첩 클라우드 리터럴을 못 잡았다:\n{result.stdout}"
+    assert "클라우드 티어 RoutingDecision 직접 생성" in result.stdout
+
+
+def test_dynamic_tier_without_any_literal_passes_with_inheritance(tmp_path: Path) -> None:
+    """리터럴이 전혀 없는 동적 티어는 승계만 있으면 통과 — 정적으로 더 알 수 없다(문서화된 공백)."""
+    (tmp_path / "swap.py").write_text(_DYNAMIC_NO_LITERAL, encoding="utf-8")
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout
 
 
 def test_dynamic_tier_without_inheritance_is_detected(tmp_path: Path) -> None:

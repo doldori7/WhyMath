@@ -16,9 +16,10 @@
 `cost_tier=` 인자의 **형태**로 셋 중 하나로 분류한다.
 
 1. **클라우드 리터럴** — `CostTier.CLOUD_MID`/`CostTier.CLOUD_HIGH`(속성 이름) 또는 문자열
-   `"cloud_mid"`/`"cloud_high"`. 이 결정은 라우터를 거치지 않고 국외 프로바이더에 도달한다
-   → **위반**. 유예 목록(`--waive` 또는 `CLOUD_DIRECT_WAIVERS`)에 `경로::함수`가 있고 만료
-   전이면 통과시키되 `[WAIVED]`로 출력한다.
+   `"cloud_mid"`/`"cloud_high"`가 값 표현식 **어디에든** 있으면(조건식·호출 인자·첨자 포함).
+   이 결정은 라우터를 거치지 않고 국외 프로바이더에 도달할 수 있다 → **위반**. 유예 목록
+   (`--waive` 또는 `CLOUD_DIRECT_WAIVERS`)에 `경로::함수`가 있고 만료 전이면 통과시키되
+   `[WAIVED]`로 출력한다.
 2. **로컬 리터럴** — `CostTier.LOCAL`/`"local"`. 국외로 나가지 않으므로 사각이 아니다 → 통과.
 3. **비리터럴** — 변수·속성(`decision.cost_tier`)·호출 등. 티어를 정적으로 알 수 없으므로
    **판정 승계**가 있어야 한다: `data_export_reason=` 키워드가 있고 그 값이 *표현식*
@@ -48,7 +49,8 @@
 - 공백: `RoutingDecision.model_validate(...)`·`model_construct(...)`, 비리터럴 `update=` —
   2026-09-05 실측 프로덕션 0건. 생기면 이 스캐너를 확장한다(이 문단이 그 조건의 기록이다).
 - 공백: 승계 값이 *표현식*이라는 것까지만 본다 — `data_export_reason=some_unrelated_var`는
-  통과한다. 그 축은 코드 리뷰 대상이다.
+  통과한다. 그 축은 코드 리뷰 대상이다. 같은 이유로 리터럴이 전혀 없는 동적 티어
+  (`cost_tier=pick_tier()`)는 승계만 있으면 통과한다 — 정적으로 더 알 수 없다.
 
 사용:  python3 scripts/ops/check_routing_decision_bypass.py [경로...]
          [--waive 경로::함수=YYYY-MM-DD ...] [--today YYYY-MM-DD]
@@ -133,20 +135,36 @@ def _has_star_kwargs(node: ast.Call) -> bool:
     return any(keyword.arg is None for keyword in node.keywords)
 
 
+def _is_cloud_literal(node: ast.AST) -> bool:
+    """노드 하나가 클라우드 티어 리터럴인가 (`CostTier.CLOUD_*` 속성 또는 `"cloud_*"` 문자열)."""
+    if isinstance(node, ast.Attribute):
+        return node.attr in CLOUD_TIER_NAMES
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value in CLOUD_TIER_VALUES
+    return False
+
+
+def _is_local_literal(node: ast.AST) -> bool:
+    if isinstance(node, ast.Attribute):
+        return node.attr in LOCAL_TIER_NAMES
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value in LOCAL_TIER_VALUES
+    return False
+
+
 def classify_tier(value: ast.expr) -> str:
-    """`cost_tier=` 값 노드 → "cloud" / "local" / "dynamic"."""
-    if isinstance(value, ast.Attribute):
-        if value.attr in CLOUD_TIER_NAMES:
-            return "cloud"
-        if value.attr in LOCAL_TIER_NAMES:
-            return "local"
-        return "dynamic"
-    if isinstance(value, ast.Constant) and isinstance(value.value, str):
-        if value.value in CLOUD_TIER_VALUES:
-            return "cloud"
-        if value.value in LOCAL_TIER_VALUES:
-            return "local"
-        return "dynamic"
+    """`cost_tier=` 값 노드 → "cloud" / "local" / "dynamic".
+
+    **서브트리 전체**를 본다 — 최상위 노드만 보면 `CostTier.CLOUD_MID if flag else
+    decision.cost_tier`·`_as_cost_tier("cloud_high")`처럼 표현식 안에 숨긴 리터럴이 "동적"으로
+    분류되고, 승계 키워드만 붙이면 통과했다(PR #983 Codex P1). 클라우드 리터럴이 *어디든*
+    있으면 클라우드다(보수적 — 그 표현식은 라우터 없이 국외 티어를 만들 수 있다). 로컬은
+    최상위가 로컬 리터럴일 때만이다(`LOCAL if x else decision.cost_tier`는 동적 → 승계 필요).
+    """
+    if any(_is_cloud_literal(node) for node in ast.walk(value)):
+        return "cloud"
+    if _is_local_literal(value):
+        return "local"
     return "dynamic"
 
 
