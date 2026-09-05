@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 eos_priority: P1
 owner: claude
@@ -17,11 +17,12 @@ acceptance:
   - "③ 거부 조건 — status 규칙 부재(이 도구는 규칙을 만들지 않는다)·다른 앱으로 pin된 항목 존재(의미 변경이라 사람 판단)·입력 형식 이상은 전부 exit 2 + 고유 원인 문구"
   - "④ 변별력 실측 — 변환 로직 뮤테이션(체크 1건 누락·pin 생략·타 규칙 변조·읽기전용 필드 잔존)에서 테스트 RED 확인. 입력 인코딩 utf-8-sig·utf-16 관용(ruleset_drift.read_json_text 재사용)"
   - "⑤ 런북 — branch-protection-setup.md 트러블슈팅에 경로 B(백업→변경안→확인→PUT→재검증) PowerShell 블록 추가, PS 호환 테스트가 포괄"
-artifacts: []
+artifacts:
+  - "PR #982 — https://github.com/doldori7/WhyMath/pull/982 (commit 7e36b73b)"
 paths:
   - "scripts/harness/**"
   - "tests/infra/**"
   - ".github/**"
-session: claude/test-driven-development-03elxp
+session: null
 notes: "HARN-64의 재등재(그쪽은 --gates 오지정으로 cancel). 발견 경위(2026-09-05): HARN-63 첫 라이브 실측이 concept-reach 등급ⓐ 위반 1건·권고 12건을 냈고(예측=실측 정확 일치), 시정 게이트 G-required-checks-source-pin-cleanup은 Kiki의 GitHub UI 작업이었다. UI 경로 안내 3회가 착지하지 않아 API 경로로 전환 — 룰셋 PUT은 본문이 잘못되면 보호를 통째로 약화시키므로, 본문 생성 로직을 저장소 코드로 두고 오프라인 테스트한 뒤 쓰는 것이 '검증 없는 실행 안내 금지'를 지키는 유일한 길이다. 실측 구조: rulesets/16623542 · enforcement=active · rules 5종(deletion·non_fast_forward·pull_request·required_status_checks·required_linear_history) · bypass_actors=[] · conditions.ref_name.include=[~DEFAULT_BRANCH] · 항목 22/고유 16/unpinned 7. 이 태스크는 게이트를 요구하지 않는다 — 게이트를 여는 수단이다."
 updated: 2026-09-05
