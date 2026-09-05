@@ -427,12 +427,18 @@ if ((Test-Path ruleset-plan.json) -and (Test-Path ruleset-rollback.json)) { gh a
 **④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료
 (그때 `.github/ruleset-check-state.json`을 커밋한다).
 
-**⑤ 롤백** — ④가 `EXIT≠0`이거나 ③의 `PUT_EXIT≠0`일 때만. ②가 만든 본문을 그대로 보낸다:
+**⑤ 롤백** — ④가 `EXIT≠0`이거나 ③의 `PUT_EXIT≠0`일 때만. 블록 자체가 **④의 마지막 판정을
+읽어** `ok`면 되돌리기를 거부한다 — 정합 상태를 되돌릴 이유는 없다.
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-rollback.json | Out-Null
-echo "ROLLBACK_EXIT=$LASTEXITCODE"
+$v = if (Test-Path .github\ruleset-check-state.json) { (Get-Content .github\ruleset-check-state.json -Raw | ConvertFrom-Json).verdict } else { 'unknown' }
+if ($v -ne 'ok') { gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-rollback.json | Out-Null; "ROLLBACK_EXIT=$LASTEXITCODE" } else { "중단 — 마지막 판정이 정합(ok)이라 되돌릴 이유가 없다. ④가 실패했을 때만 실행한다." }
 ```
+> **왜 가드가 필요한가 (2026-09-05 실측)**: ③ `PUT_EXIT=0` → ④ **위반 0·권고 0·정합** → 그런데
+> 같은 메시지에 있던 ⑤가 그대로 붙여넣기되어 `ROLLBACK_EXIT=0` — 방금 닫힌 게이트가 다시
+> 열렸고, ④가 기록한 상태 파일(`ok`)은 **거짓**이 됐다. "④가 실패했을 때만"이라는 산문은
+> 통째 붙여넣기를 막지 못한다. 가드가 막는다. (한편 이 사고는 변경안·롤백 **두 본문이 라이브
+> PUT에서 모두 유효함**을 증명했다.)
 롤백 후 조회+판정 블록을 다시 돌리면 **적용 전과 같은 판정**(같은 위반·권고)이 나와야 한다 —
 그것이 롤백이 실제로 된 증거다. `ROLLBACK_EXIT≠0`이면 출력 전문을 세션에 보낸다.
 

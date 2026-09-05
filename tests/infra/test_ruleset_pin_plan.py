@@ -436,3 +436,8 @@ def test_doc_has_api_path_runbook() -> None:
     assert (
         "Test-Path ruleset-plan.json" in apply[0] and "Test-Path ruleset-rollback.json" in apply[0]
     ), "③이 ② 산출물 실재를 확인하지 않고 PUT한다 — 오래된 변경안이 그대로 적용될 수 있다"
+    # 2026-09-05 실측: ④ 정합 직후 같은 메시지의 ⑤가 통째 붙여넣기되어 롤백이 실행됐다(게이트
+    # 재개방·상태 파일 거짓). ⑤는 ④의 마지막 판정을 읽어 ok면 거부해야 한다.
+    assert (
+        "ruleset-check-state.json" in rollback[0] and "-ne 'ok'" in rollback[0]
+    ), "⑤가 ④의 판정을 읽지 않고 되돌린다 — 정합 직후 붙여넣기 한 번에 게이트가 다시 열린다"
