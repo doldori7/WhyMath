@@ -394,14 +394,22 @@ gh api repos/doldori7/WhyMath/rulesets/16623542 | Out-File -Encoding utf8 rulese
 Test-Path ruleset-backup.json
 ```
 
-**② 변경안 생성** (오프라인 — 표가 나오고 `ruleset-plan.json`이 생긴다)
+**② 변경안 + 롤백 본문 생성** (오프라인 — 표가 나오고 파일 **두 개**가 생긴다)
 ```powershell
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-python scripts\harness\ruleset_pin_plan.py ruleset-backup.json --out ruleset-plan.json
+python scripts\harness\ruleset_pin_plan.py ruleset-backup.json --out ruleset-plan.json --rollback-out ruleset-rollback.json
 echo "EXIT=$LASTEXITCODE"
+Test-Path ruleset-plan.json
+Test-Path ruleset-rollback.json
 ```
-`EXIT=0`이고 표의 "→ 변경" 행이 **탐지기가 지목한 항목과 일치**하면 ③으로. `EXIT=2`는 거부
-(규칙 부재·타 앱 pin·형식 이상)이며 본문이 만들어지지 않는다 — 출력의 사유를 보고 사람이 판단한다.
+`EXIT=0` + 두 `Test-Path`가 `True` + 표의 "→ 변경" 행이 **탐지기가 지목한 항목과 일치**하면
+③으로. `EXIT=2`는 거부(규칙 부재·**체크 목록 빈 배열**·타 앱 pin·형식 이상)이며 본문이 만들어지지
+않고 **이전 실행의 산출물도 먼저 지워진다** — 오래된 본문이 PUT되는 일을 막기 위해서다. 출력의
+사유를 보고 사람이 판단한다.
+
+`ruleset-rollback.json`은 **적용 전 상태**로 되돌리는 PUT 본문이다. 백업 JSON을 그대로 PUT하면
+읽기 전용 필드 때문에 GitHub이 거부할 수 있어, 롤백 본문도 기계가 만들고 같은 불변식으로
+검증한다 — 보호가 약해진 직후에 사람이 보안 민감 본문을 손으로 고치는 일이 없게.
 
 **③ 적용** (쓰기 — ②의 표를 확인한 뒤에만)
 ```powershell
@@ -410,11 +418,17 @@ gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json
 echo "PUT_EXIT=$LASTEXITCODE"
 ```
 
-**④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료.
-`EXIT≠0`이면 롤백: `gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-backup.json`
-— 단 백업에는 읽기 전용 필드가 들어 있어 GitHub이 거부할 수 있다. 그때는
-`python scripts\harness\ruleset_pin_plan.py`가 아니라 백업 JSON에서 `id`·`node_id`·`created_at`·
-`updated_at`·`source`·`source_type`·`_links`·`current_user_can_bypass`를 뺀 본문을 만들어 PUT한다.
+**④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료
+(그때 `.github/ruleset-check-state.json`을 커밋한다).
+
+**⑤ 롤백** — ④가 `EXIT≠0`이거나 ③의 `PUT_EXIT≠0`일 때만. ②가 만든 본문을 그대로 보낸다:
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-rollback.json | Out-Null
+echo "ROLLBACK_EXIT=$LASTEXITCODE"
+```
+롤백 후 조회+판정 블록을 다시 돌리면 **적용 전과 같은 판정**(같은 위반·권고)이 나와야 한다 —
+그것이 롤백이 실제로 된 증거다. `ROLLBACK_EXIT≠0`이면 출력 전문을 세션에 보낸다.
 
 ### Status check가 검색 결과에 안 보임
 - CI workflow가 한 번도 실행되지 않은 상태. 임의 PR을 만들어 CI를 가동한 뒤 설정.

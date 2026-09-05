@@ -122,7 +122,8 @@ def _run(ruleset: Any, tmp_path: Path, encoding: str = "utf-8") -> tuple[int, Pa
     else:
         src.write_bytes(text.encode(encoding))
     out = tmp_path / "plan.json"
-    return pin.main([str(src), "--out", str(out)]), out
+    rb = tmp_path / "rollback.json"
+    return pin.main([str(src), "--out", str(out), "--rollback-out", str(rb)]), out
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +215,15 @@ def _malformed_entry() -> dict[str, Any]:
     return r
 
 
+def _empty_list() -> dict[str, Any]:
+    r = _healthy()
+    _status_checks(r).clear()
+    return r
+
+
 _REFUSALS: list[tuple[str, Any, str]] = [
     ("status 규칙 부재", _without_status_rule(), "규칙이 없다"),
+    ("체크 목록 빈 배열(OPS-08 동형 — 탐지기는 위반, 도구는 거부)", _empty_list(), "0건"),
     ("타 앱 pin", _foreign_pin(), "다른 앱"),
     ("branch-rules 형태(배열)", [{"type": "deletion"}], "룰셋 객체가 아니다"),
     ("항목 형식 이상", _malformed_entry(), "형식이 예상과 다르다"),
@@ -231,12 +239,78 @@ def test_refusal_exits_two_without_writing(
     assert (
         not out.exists()
     ), f"{label}: 거부했는데 본문 파일이 남았다 — 잘못된 본문이 적용될 수 있다"
+    assert not (tmp_path / "rollback.json").exists(), f"{label}: 거부했는데 롤백 파일이 남았다"
+
+
+@pytest.mark.parametrize(("label", "ruleset", "reason"), _REFUSALS)
+def test_refusal_removes_stale_outputs_from_a_prior_run(
+    label: str, ruleset: Any, reason: str, tmp_path: Path
+) -> None:
+    """직전 성공 실행의 산출물이 남아 있으면 **거부 실행이 그것을 지워야** 한다.
+
+    안 지우면 "EXIT=2면 본문이 없다"는 런북의 약속이 거짓이 되고, 사람은 다음 줄의
+    `gh api --input ruleset-plan.json`으로 **오래된 본문**을 그대로 적용한다(Codex P2).
+    """
+    (tmp_path / "plan.json").write_text('{"stale": true}', encoding="utf-8")
+    (tmp_path / "rollback.json").write_text('{"stale": true}', encoding="utf-8")
+    code, out = _run(ruleset, tmp_path)
+    assert code == 2
+    assert not out.exists(), f"{label}: 이전 변경안이 남았다"
+    assert not (tmp_path / "rollback.json").exists(), f"{label}: 이전 롤백 본문이 남았다"
 
 
 @pytest.mark.parametrize(("label", "ruleset", "reason"), _REFUSALS)
 def test_refusal_reports_its_own_cause(label: str, ruleset: Any, reason: str) -> None:
     with pytest.raises(ruleset_drift.RulesetInputError, match=reason):
         pin.build_plan(ruleset)
+
+
+# ---------------------------------------------------------------------------
+# 계약 ④' — 롤백 본문은 적용보다 먼저, 원본과 완전 동일, 실행 가능해야 한다
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_body_is_faithful_and_put_ready(tmp_path: Path) -> None:
+    """백업 JSON을 그대로 PUT하면 읽기 전용 필드 때문에 거부될 수 있다 — 그러면 롤백이
+    '실행 불가능한 절차'가 된다(Codex P1). 기계가 만든 롤백 본문은 그 결함이 없어야 한다."""
+    original = _as_found()
+    rb = pin.build_rollback(original)
+    assert set(rb) <= set(pin.WRITABLE_FIELDS)
+    assert not (set(rb) & set(pin.READ_ONLY_FIELDS))
+    for k in pin.WRITABLE_FIELDS:
+        assert (k in original) == (k in rb)
+        if k in original:
+            assert rb[k] == original[k], k
+    # 롤백은 변경 전 상태 — 변경안과 달라야 한다(as-found에는 unpinned가 있다)
+    assert rb["rules"] != pin.build_plan(original).body["rules"]
+
+    code, out = _run(original, tmp_path)
+    assert code == 0
+    written = json.loads((tmp_path / "rollback.json").read_text(encoding="utf-8"))
+    assert written == rb
+
+
+def test_success_writes_both_files_atomically(tmp_path: Path) -> None:
+    code, out = _run(_as_found(), tmp_path)
+    assert code == 0
+    assert out.is_file() and (tmp_path / "rollback.json").is_file()
+    assert not list(tmp_path.glob("*.tmp")), "임시 파일이 남았다 — 교체가 원자적이지 않다"
+
+
+@pytest.mark.parametrize(
+    ("label", "corrupt", "reason"),
+    [
+        ("읽기 전용 잔존", lambda b: b.__setitem__("id", 1), "읽기 전용"),
+        ("규칙 변조", lambda b: b["rules"].pop(), "원본과 다르다"),
+        ("알 수 없는 필드", lambda b: b.__setitem__("bogus", 1), "알 수 없는 필드"),
+    ],
+)
+def test_verify_rollback_catches_corruption(label: str, corrupt: Any, reason: str) -> None:
+    original = _as_found()
+    body = pin.build_rollback(original)
+    corrupt(body)
+    with pytest.raises(ruleset_drift.RulesetInputError, match=reason):
+        pin.verify_rollback(original, body)
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +363,11 @@ def _good_body() -> tuple[dict[str, Any], dict[str, Any]]:
             lambda b: _status_checks(b).append(dict(_status_checks(b)[0])),
             "중복",
         ),
+        (
+            "체크 전건 소실(빈 목록)",
+            lambda b: _status_checks(b).clear(),
+            "집합이 달라졌다|0건",
+        ),
     ],
 )
 def test_verify_invariants_catches_corruption(label: str, corrupt: Any, reason: str) -> None:
@@ -327,11 +406,24 @@ def test_doc_has_api_path_runbook() -> None:
     blocks = re.findall(r"```powershell\n(.*?)```", text, flags=re.DOTALL)
     backup = [b for b in blocks if "rulesets/16623542" in b and "ruleset-backup.json" in b]
     plan = [b for b in blocks if "ruleset_pin_plan.py" in b]
-    apply = [b for b in blocks if "-X PUT" in b and "--input" in b]
+    apply = [b for b in blocks if "-X PUT" in b and "--input ruleset-plan.json" in b]
+    rollback = [b for b in blocks if "-X PUT" in b and "--input ruleset-rollback.json" in b]
     assert backup, "백업 블록이 없다"
     assert plan, "변경안 생성 블록이 없다"
     assert apply, "적용 블록이 없다"
-    order = [blocks.index(backup[0]), blocks.index(plan[0]), blocks.index(apply[0])]
-    assert order == sorted(order), "백업 → 변경안 → 적용 순서가 아니다"
-    for b in backup + plan + apply:
+    assert rollback, (
+        "실행 가능한 롤백 블록이 없다 — 백업 JSON을 그대로 PUT하면 읽기 전용 필드로 거부될 수 "
+        "있고, 사람이 보안 민감 본문을 손으로 고치게 된다(Codex P1)"
+    )
+    order = [
+        blocks.index(backup[0]),
+        blocks.index(plan[0]),
+        blocks.index(apply[0]),
+        blocks.index(rollback[0]),
+    ]
+    assert order == sorted(order), "백업 → 변경안 → 적용 → 롤백 순서가 아니다"
+    assert not any(
+        "--input ruleset-backup.json" in b for b in blocks
+    ), "백업 JSON을 직접 PUT하는 블록이 있다 — 읽기 전용 필드 때문에 실행 불가"
+    for b in backup + plan + apply + rollback:
         assert "&&" not in b and "python3 " not in b, "PowerShell 5.1에서 실행 불가한 표기"

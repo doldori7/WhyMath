@@ -14,8 +14,12 @@ HARN-63 첫 라이브 실측(2026-09-05)이 `concept-reach` 등급ⓐ 위반 1�
 
     gh api repos/doldori7/WhyMath/rulesets/16623542 | Out-File -Encoding utf8 ruleset-backup.json
     python scripts\\harness\\ruleset_pin_plan.py ruleset-backup.json --out ruleset-plan.json
+        → ruleset-plan.json(변경안) + ruleset-rollback.json(되돌리기) 두 파일.
+          둘 다 검증 통과 후에만 쓴다.
     (표를 확인한 뒤)
     gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json
+    (문제가 있으면)
+    gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-rollback.json
 
 무엇을 바꾸고 무엇을 바꾸지 않는가 (불변식 — 코드가 집행·위반 시 본문을 쓰지 않는다)
 --------------------------------------------------------------------------------------
@@ -31,12 +35,14 @@ HARN-63 첫 라이브 실측(2026-09-05)이 `concept-reach` 등급ⓐ 위반 1�
 
 거부하는 것 (exit 2 · 사람 판단이 필요한 상태)
 ---------------------------------------------
-  · status 규칙 부재 — 이 도구는 규칙을 *만들지* 않는다(그것은 훨씬 큰 변경이다)
+  · status 규칙 부재 **또는 체크 목록 빈 배열** — 이 도구는 규칙·체크를 *만들지* 않는다
+    (빈 목록은 강제가 꺼진 상태라 드리프트 탐지기가 위반으로 판정한다 — 여기서 "무해"라고
+    하면 두 도구가 모순된다)
   · 다른 앱으로 pin된 항목 — 15368로 바꾸면 의미가 달라진다. 사람이 봐야 한다
   · 입력 형식 이상 — 규칙 배열이 아니거나 항목에 context가 없거나
 
-exit code: 0 = 변경안 작성 / 2 = 거부(본문 미작성). 변경할 것이 없어도 0이다(본문은 현 상태와
-동치 — 적용해도 무해).
+exit code: 0 = 변경안·롤백 본문 작성 / 2 = 거부(본문 미작성 — **이전 실행의 산출물도 먼저
+지운다**, 남겨 두면 오래된 본문이 PUT된다). 변경할 것이 없어도 0이다(본문은 현 상태와 동치).
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -132,6 +139,14 @@ def build_plan(
     params = status_rule.get("parameters")
     if not isinstance(params, dict) or not isinstance(params.get(_STATUS_RULE), list):
         raise RulesetInputError(f"{source}: {_STATUS_RULE} 규칙에 체크 목록 필드가 없다.")
+    if not params[_STATUS_RULE]:
+        # 규칙은 있는데 목록이 비었다 = status check 강제가 꺼진 상태(OPS-08 동형). 드리프트
+        # 탐지기가 이것을 위반으로 판정하는데, 시정 도구가 "변경 없음·무해"로 통과시키면
+        # 두 도구가 서로 모순된다. 이 도구는 체크를 *추가하지* 않으므로 거부한다.
+        raise RulesetInputError(
+            f"{source}: required check가 0건이다 — status check 강제가 꺼진 상태(OPS-08 동형). "
+            "이 도구는 체크를 추가하지 않는다. 체크 등록은 GitHub UI에서 사람이 한다."
+        )
 
     # 컨텍스트별로 묶는다(첫 등장 순서 유지 — 표가 사람이 비교하기 쉽게).
     seen: dict[str, list[int | None]] = {}
@@ -155,11 +170,46 @@ def build_plan(
     ]
     new_rules = [copy.deepcopy(r) if i != idx else new_rule for i, r in enumerate(rules)]
 
-    body: dict[str, Any] = {k: copy.deepcopy(ruleset[k]) for k in WRITABLE_FIELDS if k in ruleset}
+    body = _writable_subset(ruleset)
     body["rules"] = new_rules
 
     verify_invariants(ruleset, body, integration_id, source)
     return Plan(body=body, rows=rows)
+
+
+def _writable_subset(ruleset: dict[str, Any]) -> dict[str, Any]:
+    """GET 응답에서 PUT이 받는 필드만 깊은 복사. 읽기 전용 필드는 여기서 떨어진다."""
+    return {k: copy.deepcopy(ruleset[k]) for k in WRITABLE_FIELDS if k in ruleset}
+
+
+def build_rollback(ruleset: dict[str, Any], source: str = "<입력>") -> dict[str, Any]:
+    """적용 *전* 상태로 되돌리는 PUT 본문 — 변경안과 **함께**, 적용보다 **먼저** 만든다.
+
+    왜 따로 만드나: 백업 JSON(GET 응답)을 그대로 `--input`으로 보내면 읽기 전용 필드 때문에
+    GitHub이 거부할 수 있다. 그러면 "롤백 절차"가 실행 불가능한 절차가 된다 — 보호가
+    약해진 직후, 사람이 보안 민감 본문을 손으로 고쳐야 하는 최악의 타이밍에(Codex P1 지적).
+    그래서 롤백 본문도 기계가 만들고 같은 불변식으로 검증한다.
+    """
+    if not isinstance(ruleset, dict):
+        raise RulesetInputError(f"{source}: 룰셋 객체가 아니다(type={type(ruleset).__name__}).")
+    body = _writable_subset(ruleset)
+    verify_rollback(ruleset, body, source)
+    return body
+
+
+def verify_rollback(original: dict[str, Any], body: dict[str, Any], source: str = "<입력>") -> None:
+    """롤백 본문 = 원본의 쓰기 가능 필드와 **완전 동일**, 읽기 전용 필드 0."""
+    leaked = [k for k in READ_ONLY_FIELDS if k in body]
+    if leaked:
+        raise RulesetInputError(f"{source}: 롤백 본문에 읽기 전용 필드가 남았다: {leaked}")
+    unknown = [k for k in body if k not in WRITABLE_FIELDS]
+    if unknown:
+        raise RulesetInputError(f"{source}: 롤백 본문에 알 수 없는 필드가 있다: {unknown}")
+    for k in WRITABLE_FIELDS:
+        if (k in original) != (k in body) or (k in original and original[k] != body[k]):
+            raise RulesetInputError(f"{source}: 롤백 본문의 `{k}`가 원본과 다르다.")
+    if not isinstance(body.get("rules"), list) or not body["rules"]:
+        raise RulesetInputError(f"{source}: 롤백 본문에 규칙이 없다 — 되돌릴 대상이 없다.")
 
 
 def verify_invariants(
@@ -214,6 +264,8 @@ def verify_invariants(
     unpinned = [e["context"] for e in after_list if e.get("integration_id") != integration_id]
     if unpinned:
         raise RulesetInputError(f"{source}: pin되지 않은 항목이 남았다: {unpinned}")
+    if not after_list:
+        raise RulesetInputError(f"{source}: 변경안의 required check가 0건이다 — 강제가 꺼진다.")
 
 
 def render(plan: Plan, integration_id: int) -> str:
@@ -247,12 +299,26 @@ def main(argv: list[str] | None = None) -> int:
         "--out", type=Path, default=Path("ruleset-plan.json"), help="PUT 본문 출력 경로"
     )
     parser.add_argument("--integration-id", type=int, default=GITHUB_ACTIONS_INTEGRATION_ID)
+    parser.add_argument(
+        "--rollback-out",
+        type=Path,
+        default=Path("ruleset-rollback.json"),
+        help="적용 전 상태로 되돌리는 PUT 본문 출력 경로(적용보다 먼저 만들어 둔다)",
+    )
     args = parser.parse_args(argv)
+
+    # 이전 실행의 산출물을 **먼저** 지운다. 남겨 두면 이번 실행이 거부돼도 "EXIT=2면 본문이
+    # 없다"는 런북의 약속이 거짓이 되고, 오래된 본문이 그대로 PUT될 수 있다(Codex P2 지적).
+    for stale in (args.out, args.rollback_out):
+        if stale.exists():
+            stale.unlink()
+            print(f"이전 산출물 제거: {stale}", file=sys.stderr)
 
     try:
         raw = read_json_text(args.backup_json)
         ruleset = json.loads(raw)
         plan = build_plan(ruleset, args.integration_id, source=str(args.backup_json))
+        rollback = build_rollback(ruleset, source=str(args.backup_json))
     except OSError as exc:
         print(f"❌ 거부 — 입력 파일을 읽지 못했다({type(exc).__name__}): {exc}", file=sys.stderr)
         return 2
@@ -264,15 +330,24 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print(render(plan, args.integration_id))
+    # 모든 검증이 끝난 뒤에만 쓴다. 임시 파일 → 교체로 부분 기록을 남기지 않는다.
     # ASCII 강제 — Windows에서 gh가 읽는 요청 본문의 인코딩 모호성을 없앤다(\uXXXX는 유효 JSON).
-    args.out.write_text(
-        json.dumps(plan.body, ensure_ascii=True, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
+    _publish(args.rollback_out, rollback)
+    _publish(args.out, plan.body)
     print(
-        f"변경안 작성: {args.out} — 표를 확인한 뒤 "
-        f"gh api -X PUT ... --input {args.out} 로 적용한다."
+        f"변경안 작성: {args.out} · 롤백 본문 작성: {args.rollback_out} — 표를 확인한 뒤 "
+        f"gh api -X PUT ... --input {args.out} 로 적용한다. "
+        f"되돌릴 때는 --input {args.rollback_out}."
     )
     return 0
+
+
+def _publish(path: Path, body: dict[str, Any]) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(
+        json.dumps(body, ensure_ascii=True, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    os.replace(tmp, path)
 
 
 if __name__ == "__main__":
