@@ -244,15 +244,15 @@ async def _run_smoke(cloud: _CloudProvider) -> SmokeResult:
         return SmokeResult(ran=True, error=f"{type(exc).__name__}: {exc}")
 
     usage = generated.usage
-    # None-vs-0 구분(pipeline.py:234-241 동형): usage 없음 → None; 클라우드인데 토큰 미상 →
-    # None; 그 외에만 실측 비용을 산정한다. CLOUD_MID는 항상 클라우드라 토큰 미상 시 None.
-    # 비교는 `_as_cost_tier`로 정규화한 뒤 한다 — `use_enum_values=True`라 필드가 문자열이고,
-    # 문자열은 enum 멤버와 `is not`으로 비교하면 항상 참이라 변별력이 없었다(EOS-77 정정).
-    is_cloud = routed is not CostTier.LOCAL
+    # None-vs-0 구분(pipeline.py:234-241 동형): usage 없음 → None; 토큰 미상 → None; 그 외에만
+    # 실측 비용을 산정한다. 이 경로는 위 가드로 *항상* CLOUD_MID다 — 예전의
+    # `decision.cost_tier is not CostTier.LOCAL` 분기는 `use_enum_values=True`라 필드가
+    # 문자열이어서 항상 참이었고(변별력 0), 가드가 티어를 확정한 지금은 분기 자체가 불필요하다
+    # (EOS-77 정정 — mypy도 CLOUD_MID로 좁힌 값과 LOCAL의 비교를 non-overlapping으로 거부한다).
     cost_krw: float | None
     if usage is None:
         cost_krw = None
-    elif is_cloud and (usage.input_tokens is None or usage.output_tokens is None):
+    elif usage.input_tokens is None or usage.output_tokens is None:
         cost_krw = None
     else:
         cost_krw = actual_cost_krw(decision, usage)
