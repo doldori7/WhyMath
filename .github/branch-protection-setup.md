@@ -135,6 +135,18 @@ pin해야 *다른 주체*가 같은 컨텍스트 이름으로 성공을 보고�
 ```powershell
 # Windows PowerShell (= Phaiakes9) — 진입 명령 불요
 cd C:\Users\kiki\Desktop\__AI\WhyMath
+Test-Path scripts\harness\ruleset_drift.py
+```
+
+**자가검증**: 위가 `True`여야 다음으로 갑니다. `False`면 판정기가 이 체크아웃에 없다는 뜻입니다
+— 아래 §트러블슈팅 "판정기 파일이 없다"를 먼저 보세요. (이 스텝은 변별력이 있습니다: 실제로
+2026-09-05에 미머지 상태의 main에서 실행돼 `[Errno 2] No such file or directory`가 났고,
+`$LASTEXITCODE`는 판정기의 exit 2와 **구별되지 않는 2**였습니다 — 즉 이 스텝이 없으면
+"측정 실패"로 오독됩니다.)
+
+```powershell
+# Windows PowerShell — 위 자가검증이 True일 때만
+cd C:\Users\kiki\Desktop\__AI\WhyMath
 gh api repos/doldori7/WhyMath/rules/branches/main | Out-File -Encoding utf8 ruleset.json
 python scripts\harness\ruleset_drift.py ruleset.json --record
 echo "EXIT=$LASTEXITCODE"
@@ -344,6 +356,27 @@ curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
 ---
 
 ## 트러블슈팅
+
+### 판정기 파일이 없다 (`ruleset_drift.py` ... No such file or directory)
+
+`scripts\harness\ruleset_drift.py`가 **아직 main에 병합되지 않은 상태**입니다(HARN-63 PR).
+`git checkout -B main origin/main` 뒤에 실행하면 당연히 없습니다. 병합 전에 돌리려면 그 PR
+브랜치를 체크아웃해야 합니다:
+
+```powershell
+# Windows PowerShell — 병합 전 실행용 (병합 후에는 main에서 그냥 됩니다)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git fetch origin claude/test-driven-development-03elxp
+git checkout -B claude/test-driven-development-03elxp origin/claude/test-driven-development-03elxp
+Test-Path scripts\harness\ruleset_drift.py
+```
+
+> **왜 `pull`이 아니라 `fetch` + `checkout -B`인가**: 재시작(force-push)된 브랜치에서 `pull`은
+> diverged 상태의 add/add 머지 충돌을 냅니다(2026-07-17 실측). CLAUDE.md 규약.
+
+**주의 — `$LASTEXITCODE=2`가 두 가지를 뜻합니다**: 파이썬이 *파일을 못 찾은* 2와 판정기의
+*측정 실패* 2는 값이 같습니다. 그래서 위 `Test-Path` 자가검증이 앞에 와야 합니다 — 그것 없이
+`EXIT=2`만 보면 "측정 실패"로 오독하고 `gh auth status`부터 뒤지게 됩니다.
 
 ### Status check가 검색 결과에 안 보임
 - CI workflow가 한 번도 실행되지 않은 상태. 임의 PR을 만들어 CI를 가동한 뒤 설정.

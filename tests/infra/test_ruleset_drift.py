@@ -656,6 +656,61 @@ def test_reminder_command_runs_on_windows_powershell() -> None:
     assert runbook in (ruleset_drift.state_reminder(Path("/존재하지-않는-루트"), _TODAY) or "")
 
 
+def test_doc_runbook_selfcheck_precedes_the_run_command() -> None:
+    """판정기를 실행하는 블록 **앞에** 파일 실재 자가검증 블록이 와야 한다.
+
+    변별력 근거(2026-09-05 실측): 미머지 상태의 main에서 이 런북을 실행하면 파이썬이
+    `[Errno 2] No such file or directory`로 죽고 `$LASTEXITCODE`가 **2**가 된다 — 판정기의
+    *측정 실패* exit 2와 **구별되지 않는 값**이다. 자가검증이 없으면 "파일이 없다"가 "측정에
+    실패했다"로 오독되고, 사람은 `gh auth status`부터 엉뚱한 곳을 뒤진다.
+
+    **왜 substring 검사가 아니라 순서 검사인가**: 이 문서에는 `Test-Path` 줄이 세 군데 있다
+    (런북·트러블슈팅·산문). `"Test-Path ..." in text` 로 검사하면 **정작 런북의 것을 지워도
+    트러블슈팅 사본이 검사를 만족시켜 초록이 유지된다** — 실제로 2026-09-05 뮤테이션 M18이
+    그렇게 살아남았고, 그 시점의 이 테스트는 위장이었다. 그래서 "어딘가 있는가"가 아니라
+    "실행 블록보다 **앞** 블록에 있는가"를 본다(CLAUDE.md 2026-09-01 ①: 문자열이 아니라
+    구성된 결과를 보라).
+    """
+    blocks = re.findall(
+        r"```powershell\n(.*?)```", _DOC.read_text(encoding="utf-8"), flags=re.DOTALL
+    )
+    assert blocks, "문서에 powershell 블록이 없다 — 실행 경로가 사라졌다"
+
+    run_at = next(
+        (n for n, b in enumerate(blocks) if "ruleset_drift.py ruleset.json --record" in b),
+        None,
+    )
+    assert run_at is not None, "판정기를 실행하는 런북 블록이 없다"
+
+    selfcheck_at = next(
+        (n for n, b in enumerate(blocks) if "Test-Path scripts\\harness\\ruleset_drift.py" in b),
+        None,
+    )
+    assert (
+        selfcheck_at is not None
+    ), "런북에 판정기 파일 존재 자가검증(Test-Path)이 없다 — exit 2 두 종류가 뒤섞인다"
+    assert selfcheck_at < run_at, (
+        f"자가검증 블록(#{selfcheck_at})이 실행 블록(#{run_at})보다 뒤에 있다 — "
+        "실행한 다음에 확인하는 것은 자가검증이 아니다"
+    )
+
+
+def test_doc_documents_recovery_for_missing_detector() -> None:
+    """파일이 없을 때의 복구 절차가 문서에 있어야 한다(미머지 브랜치 체크아웃)."""
+    text = _DOC.read_text(encoding="utf-8")
+    # **제목 자체**를 찾는다. 본문 상호참조("아래 §트러블슈팅 '판정기 파일이 없다'를 보세요")가
+    # 같은 문자열을 담고 있어, 단순 substring 검사는 섹션을 통째로 지워도 통과한다 —
+    # 2026-09-05 뮤테이션 M20이 그렇게 살아남았다(같은 위장이 한 파일에서 두 번 났다).
+    headings = re.findall(r"^#{2,4}\s+(.+?)\s*$", text, flags=re.MULTILINE)
+    assert any(
+        h.startswith("판정기 파일이 없다") for h in headings
+    ), f"복구 절차 섹션(제목)이 없다 — 찾은 제목들: {headings}"
+    assert "git checkout -B claude/" in text, (
+        "복구 절차가 fetch + checkout -B 형태가 아니다 — pull은 force-push된 브랜치에서 "
+        "add/add 충돌을 낸다(CLAUDE.md)"
+    )
+
+
 def test_doc_runbook_block_runs_on_windows_powershell() -> None:
     """문서의 powershell 블록도 같은 계약을 지킨다(복사-실행 대상이다)."""
     text = _DOC.read_text(encoding="utf-8")
