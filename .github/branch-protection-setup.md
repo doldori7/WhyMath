@@ -378,6 +378,70 @@ Test-Path scripts\harness\ruleset_drift.py
 *측정 실패* 2는 값이 같습니다. 그래서 위 `Test-Path` 자가검증이 앞에 와야 합니다 — 그것 없이
 `EXIT=2`만 보면 "측정 실패"로 오독하고 `gh auth status`부터 뒤지게 됩니다.
 
+### 소스 pin 시정 — 경로 B (API · UI가 안 될 때)
+
+탐지기가 등급ⓐ(pin 항목 0건)나 권고(중복·혼재)를 냈는데 GitHub UI에서 소스 선택이 안 보이면
+API로 고친다. 룰셋 `PUT`은 **본문이 잘못되면 보호를 통째로 약화**시키므로, 본문은 손으로
+쓰지 않고 `scripts/harness/ruleset_pin_plan.py`가 만든다 — 그 도구는 "중복 제거 + GitHub
+Actions pin" 외에는 아무것도 바꾸지 않음을 코드가 집행하고 테스트가 동결한다
+(`tests/infra/test_ruleset_pin_plan.py`). 네트워크 호출은 하지 않는다 — 조회·적용은 아래 `gh`가 한다.
+
+**① 도구 실재 확인 + 백업** (읽기 전용 — 백업 파일이 롤백 수단이다, 지우지 말 것)
+```powershell
+# Windows PowerShell (= Phaiakes9)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+Test-Path scripts\harness\ruleset_pin_plan.py
+gh api repos/doldori7/WhyMath/rulesets/16623542 | Out-File -Encoding utf8 ruleset-backup.json
+Test-Path ruleset-backup.json
+```
+첫 `Test-Path`가 `False`면 변경안 도구가 이 체크아웃에 없다 — 위 §"판정기 파일이 없다"와 같은
+상황(미머지)이며 같은 복구 절차(브랜치 fetch + checkout -B)를 쓴다. **2026-09-05 실측**: 미머지
+상태에서 ②가 `[Errno 2]`로 죽었는데도 ③이 그대로 실행됐다 — 파일이 없어 gh가 거부했기에
+무사했지만, 오래된 변경안이 남아 있었다면 그대로 PUT됐을 것이다. 그래서 ③은 아래처럼 자가
+가드를 가진다.
+
+**② 변경안 + 롤백 본문 생성** (오프라인 — 표가 나오고 파일 **두 개**가 생긴다)
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+python scripts\harness\ruleset_pin_plan.py ruleset-backup.json --out ruleset-plan.json --rollback-out ruleset-rollback.json
+echo "EXIT=$LASTEXITCODE"
+Test-Path ruleset-plan.json
+Test-Path ruleset-rollback.json
+```
+`EXIT=0` + 두 `Test-Path`가 `True` + 표의 "→ 변경" 행이 **탐지기가 지목한 항목과 일치**하면
+③으로. `EXIT=2`는 거부(규칙 부재·**체크 목록 빈 배열**·타 앱 pin·형식 이상)이며 본문이 만들어지지
+않고 **이전 실행의 산출물도 먼저 지워진다** — 오래된 본문이 PUT되는 일을 막기 위해서다. 출력의
+사유를 보고 사람이 판단한다.
+
+`ruleset-rollback.json`은 **적용 전 상태**로 되돌리는 PUT 본문이다. 백업 JSON을 그대로 PUT하면
+읽기 전용 필드 때문에 GitHub이 거부할 수 있어, 롤백 본문도 기계가 만들고 같은 불변식으로
+검증한다 — 보호가 약해진 직후에 사람이 보안 민감 본문을 손으로 고치는 일이 없게.
+
+**③ 적용** (쓰기 — ②의 표를 확인한 뒤에만. 블록 자체가 ② 산출물 두 개의 실재를 확인하고,
+하나라도 없으면 **PUT을 보내지 않는다**)
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+if ((Test-Path ruleset-plan.json) -and (Test-Path ruleset-rollback.json)) { gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-plan.json | Out-Null; "PUT_EXIT=$LASTEXITCODE" } else { "중단 — 변경안 또는 롤백 본문이 없다. ②를 먼저 성공시킨다." }
+```
+
+**④ 재검증** — 위 §재발 탐지 실행법의 조회+판정 블록을 다시 돌린다. `EXIT=0`이면 완료
+(그때 `.github/ruleset-check-state.json`을 커밋한다).
+
+**⑤ 롤백** — ④가 `EXIT≠0`이거나 ③의 `PUT_EXIT≠0`일 때만. 블록 자체가 **④의 마지막 판정을
+읽어** `ok`면 되돌리기를 거부한다 — 정합 상태를 되돌릴 이유는 없다.
+```powershell
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+$v = if (Test-Path .github\ruleset-check-state.json) { (Get-Content .github\ruleset-check-state.json -Raw | ConvertFrom-Json).verdict } else { 'unknown' }
+if ($v -ne 'ok') { gh api -X PUT repos/doldori7/WhyMath/rulesets/16623542 --input ruleset-rollback.json | Out-Null; "ROLLBACK_EXIT=$LASTEXITCODE" } else { "중단 — 마지막 판정이 정합(ok)이라 되돌릴 이유가 없다. ④가 실패했을 때만 실행한다." }
+```
+> **왜 가드가 필요한가 (2026-09-05 실측)**: ③ `PUT_EXIT=0` → ④ **위반 0·권고 0·정합** → 그런데
+> 같은 메시지에 있던 ⑤가 그대로 붙여넣기되어 `ROLLBACK_EXIT=0` — 방금 닫힌 게이트가 다시
+> 열렸고, ④가 기록한 상태 파일(`ok`)은 **거짓**이 됐다. "④가 실패했을 때만"이라는 산문은
+> 통째 붙여넣기를 막지 못한다. 가드가 막는다. (한편 이 사고는 변경안·롤백 **두 본문이 라이브
+> PUT에서 모두 유효함**을 증명했다.)
+롤백 후 조회+판정 블록을 다시 돌리면 **적용 전과 같은 판정**(같은 위반·권고)이 나와야 한다 —
+그것이 롤백이 실제로 된 증거다. `ROLLBACK_EXIT≠0`이면 출력 전문을 세션에 보낸다.
+
 ### Status check가 검색 결과에 안 보임
 - CI workflow가 한 번도 실행되지 않은 상태. 임의 PR을 만들어 CI를 가동한 뒤 설정.
 
