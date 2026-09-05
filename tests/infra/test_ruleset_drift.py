@@ -24,6 +24,7 @@ CLAUDE.md(2026-09-01) "보호 장치를 실패 주입 없이 '보호 있음'으�
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import date
@@ -182,19 +183,8 @@ def test_undocumented_live_check_is_violation(tmp_path: Path) -> None:
 # 서로 다른 실패가 같은 글자로 보이고, 고치는 사람이 어디를 볼지 알 수 없다
 # (CLAUDE.md 2026-08-22 "측정·수집 도구를 성공 경로만 보고 설계 금지" ②).
 _MEASUREMENT_FAILURES: list[tuple[str, Any, str]] = [
-    ("빈 배열(규칙 0건)", [], "규칙이 0건"),
     ("오류 응답 객체", {"message": "Not Found", "status": "404"}, "객체가 왔다"),
     ("배열이 아님", "그냥 문자열", "규칙 배열이 아니다"),
-    (
-        "status_checks 규칙 자체가 없음",
-        [{"type": "deletion"}, {"type": "non_fast_forward"}],
-        "규칙 자체가 없다",
-    ),
-    (
-        "체크 목록이 빈 배열(OPS-08 재현)",
-        [{"type": "required_status_checks", "parameters": {"required_status_checks": []}}],
-        "required check가 0건",
-    ),
     (
         "체크 목록 필드 부재",
         [{"type": "required_status_checks", "parameters": {}}],
@@ -527,3 +517,152 @@ def test_session_start_brief_matches_detector_output() -> None:
         ), "확인이 최신·정합인데 브리핑이 리마인드를 냈다(오탐 — 습관화로 경고가 무시된다)"
     else:
         assert expected in out.stdout, "브리핑이 탐지기 리마인드를 내지 않는다 — 배선이 끊겼다"
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑦ — 미강제 상태는 **측정 실패가 아니라 판정 결과**다 (Codex P1 · 2026-09-05)
+# ---------------------------------------------------------------------------
+
+# 읽기에 성공했는데 보호가 없는 상태들. 이것을 exit 2로 올리면 write_state가 돌지 않아
+# 직전의 `ok` 기록이 남고, main이 완전 무방비인 채로 브리핑이 최대 30일간 침묵한다.
+_UNENFORCED_STATES: list[tuple[str, Any]] = [
+    ("규칙 0건(보호 자체가 없음)", []),
+    ("status_checks 규칙 부재", [{"type": "deletion"}, {"type": "non_fast_forward"}]),
+    (
+        "체크 목록이 빈 배열(OPS-08 실측 재현)",
+        [{"type": "required_status_checks", "parameters": {"required_status_checks": []}}],
+    ),
+]
+
+
+@pytest.mark.parametrize(("label", "payload"), _UNENFORCED_STATES)
+def test_unenforced_state_is_drift_not_measurement_failure(
+    label: str, payload: Any, tmp_path: Path
+) -> None:
+    """exit 1(드리프트)이어야 한다 — exit 2면 기록이 갱신되지 않아 침묵한다."""
+    assert _run(payload, tmp_path) == 1, f"{label}이 드리프트로 판정되지 않았다"
+    report = _report(payload)
+    assert any(
+        "강제가 통째로 꺼져" in v for v in report.violations
+    ), f"{label}: 강제 꺼짐이 최우선 위반으로 보고되지 않았다"
+    assert (
+        report.remediation and "먼저" in report.remediation[0]
+    ), "시정 순서의 첫 항목이 '규칙부터 만들기'가 아니다"
+
+
+@pytest.mark.parametrize(("label", "payload"), _UNENFORCED_STATES)
+def test_unenforced_state_updates_the_state_record(
+    label: str, payload: Any, tmp_path: Path
+) -> None:
+    """드리프트가 **기록**되어야 브리핑이 짖는다 — stale `ok`가 남으면 안 된다.
+
+    이 테스트가 Codex P1이 지적한 정확한 경로를 막는다: 기록이 갱신되지 않으면 30일 임계
+    이전이라 `state_reminder`가 None을 돌려주고, 세션은 아무것도 모른 채 지나간다.
+    """
+    (tmp_path / ".github").mkdir()
+    ruleset_drift.write_state(tmp_path, _TODAY, ruleset_drift.Report(), "직전-정상-확인")
+    assert ruleset_drift.state_reminder(tmp_path, _TODAY) is None  # 사전 조건: 조용한 상태
+
+    report = _report(payload)
+    ruleset_drift.write_state(tmp_path, _TODAY, report, "이번-확인")
+    message = ruleset_drift.state_reminder(tmp_path, _TODAY)
+    assert message and "드리프트 미해소" in message, f"{label}: 브리핑이 여전히 조용하다"
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑧ — 입력 인코딩 관용 (Codex P1 · PowerShell 산출물)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("label", "encoding"),
+    [
+        ("PS 5.1 `>` 산출물", "utf-16-le"),
+        ("Out-File -Encoding utf8 산출물(BOM)", "utf-8-sig"),
+        ("평문 UTF-8", "utf-8"),
+        ("UTF-16BE", "utf-16-be"),
+    ],
+)
+def test_input_encodings_are_tolerated(label: str, encoding: str, tmp_path: Path) -> None:
+    """PowerShell이 무엇으로 쓰든 판정이 나와야 한다.
+
+    고치기 전에는 UTF-16LE 입력이 `UnicodeDecodeError`로 **트레이스백을 내며 죽었다** —
+    `except OSError`가 잡지 못하는 예외라 exit 0/1/2 어느 것도 나오지 않았다(2026-09-05 실측).
+    """
+    payload = _rules(_healthy_checks())
+    target = tmp_path / "ruleset.json"
+    text = json.dumps(payload, ensure_ascii=False)
+    if encoding in ("utf-16-le", "utf-16-be"):
+        bom = "\ufeff"  # BOM이 있어야 utf-16 디코더가 바이트 순서를 가린다
+        target.write_bytes((bom + text).encode(encoding))
+    else:
+        target.write_bytes(text.encode(encoding))
+    assert ruleset_drift.main([str(target), "--today", _TODAY.isoformat()]) == 0, label
+
+
+def test_undecodable_input_exits_two_without_traceback(tmp_path: Path) -> None:
+    """어떤 인코딩으로도 안 읽히면 **exit 2**로 정직하게 실패한다(트레이스백 금지)."""
+    target = tmp_path / "ruleset.json"
+    target.write_bytes(b"\xff\xfe\x00\x00\xb7\xb7\xb7\xb7")
+    assert ruleset_drift.main([str(target), "--today", _TODAY.isoformat()]) == 2
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑨ — 측정 실패도 기록된다 (통과로 위장되지 않게)
+# ---------------------------------------------------------------------------
+
+
+def test_measurement_failure_is_recorded_and_surfaced(tmp_path: Path) -> None:
+    """측정 실패 회차가 직전의 `ok` 기록을 그대로 두면 브리핑이 30일간 조용하다."""
+    (tmp_path / ".github").mkdir()
+    ruleset_drift.write_state(tmp_path, _TODAY, ruleset_drift.Report(), "직전-정상-확인")
+    assert ruleset_drift.state_reminder(tmp_path, _TODAY) is None
+
+    ruleset_drift.write_state(tmp_path, _TODAY, None, "이번-측정-실패")
+    message = ruleset_drift.state_reminder(tmp_path, _TODAY)
+    assert message and "측정 실패" in message
+    assert "드리프트 미해소" not in message, "측정 실패와 드리프트가 같은 문구로 보이면 안 된다"
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑩ — Kiki 안내 명령은 Windows PowerShell에서 실제로 실행 가능해야 한다
+# ---------------------------------------------------------------------------
+
+
+def _powershell_incompatibilities(command: str) -> list[str]:
+    """PS 5.1에서 그대로 붙여넣었을 때 깨지는 표기를 찾는다."""
+    problems = []
+    if "&&" in command:
+        problems.append("`&&` — Windows PowerShell 5.1이 받지 않는다")
+    if "python3 " in command:
+        problems.append("`python3` — 이 저장소의 Windows 안내는 `python`이다")
+    return problems
+
+
+def test_reminder_command_runs_on_windows_powershell() -> None:
+    """브리핑 리마인드의 명령이 대상 셸에서 실행 가능해야 한다.
+
+    실행 불가능한 명령을 안내하면 이 탐지기의 **유일한 실행 경로**가 막힌다 — 만들어 두고
+    아무도 못 돌리는 상태가 된다(CLAUDE.md Kiki 머신 안내 규칙 · Codex P2).
+    """
+    runbook = ruleset_drift.POWERSHELL_FETCH_RUNBOOK
+    assert not _powershell_incompatibilities(runbook), _powershell_incompatibilities(runbook)
+    assert (
+        "Out-File -Encoding utf8" in runbook
+    ), "PS 5.1의 `>`는 UTF-16LE로 쓴다 — 산출 인코딩을 명시해야 한다"
+    assert "C:\\Users\\kiki\\Desktop\\__AI\\WhyMath" in runbook, "고정 작업 디렉터리 누락"
+
+    # 리마인드 3종 전부가 그 명령을 그대로 실어야 한다(한 곳만 고치고 나머지가 새는 것 방지).
+    assert runbook in (ruleset_drift.state_reminder(Path("/존재하지-않는-루트"), _TODAY) or "")
+
+
+def test_doc_runbook_block_runs_on_windows_powershell() -> None:
+    """문서의 powershell 블록도 같은 계약을 지킨다(복사-실행 대상이다)."""
+    text = _DOC.read_text(encoding="utf-8")
+    blocks = re.findall(r"```powershell\n(.*?)```", text, flags=re.DOTALL)
+    assert blocks, "문서에 powershell 블록이 없다 — 실행 경로가 사라졌다"
+    for block in blocks:
+        assert not _powershell_incompatibilities(block), _powershell_incompatibilities(block)
+    assert any(
+        "Out-File -Encoding utf8" in b for b in blocks
+    ), "조회 블록이 `>`로 리다이렉트하면 UTF-16LE가 나와 판정기가 읽지 못한다"

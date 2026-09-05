@@ -135,10 +135,16 @@ pin해야 *다른 주체*가 같은 컨텍스트 이름으로 성공을 보고�
 ```powershell
 # Windows PowerShell (= Phaiakes9) — 진입 명령 불요
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-gh api repos/doldori7/WhyMath/rules/branches/main > ruleset.json
+gh api repos/doldori7/WhyMath/rules/branches/main | Out-File -Encoding utf8 ruleset.json
 python scripts\harness\ruleset_drift.py ruleset.json --record
 echo "EXIT=$LASTEXITCODE"
 ```
+
+> **`>` 대신 `Out-File -Encoding utf8`을 쓰는 이유**: Windows PowerShell 5.1의 `>`는 네이티브
+> 명령 출력을 **UTF-16LE**로 씁니다. 그러면 판정기가 읽다가 `UnicodeDecodeError`로 죽어
+> exit 0/1/2 어느 것도 나오지 않습니다(2026-09-05 실측). 읽기측도 UTF-16·BOM을 관용하도록
+> 고쳤지만(`read_json_text`), 산출측에서 먼저 맞추는 것이 정본입니다 —
+> CLAUDE.md "외부 도구가 읽는 파일은 그 도구의 읽기 인코딩에 맞춘다".
 
 | EXIT | 판정 | 다음 행동 |
 |---|---|---|

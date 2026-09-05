@@ -7811,3 +7811,14 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **문서 정정**: 서두의 "API 접근 불가"를 *설정 API*로 한정하고 읽기가 가능함을 명시 · 2026-09-03 재발 기록 유지(라이브에 맞춰 낮추지 않음) · 체크 개수 표기 드리프트 13→16 정정(3곳).
 - **검증**: 신규 44건 · `tests/infra` 699 + `tests/harness` 559 passed(무작위 순서) · ruff/black EXIT=0 · `backlog.py validate`·`audit-deps` green · policy-guard 패턴 0건.
 - **cross-ref**: `scripts/harness/ruleset_drift.py` · `tests/infra/test_ruleset_drift.py` · `.github/branch-protection-setup.md`(RULESET_POLICY·RULESET_DEVIATIONS 블록) · 게이트 `G-required-checks-source-pin-cleanup`(등급ⓐ 시정) · OPS-08·HARN-56
+
+### [보정 2026-09-05] HARN-63 리뷰 상환 — Codex 지적 3건 전건 수용 (PR #981)
+
+CI green·충돌 없음 상태에서 Codex 리뷰가 결함 3건을 냈고 **전건 실측 재현 후 수정**했다. 세 건 다 "내가 만든 안전장치가 정작 자기 규칙을 어긴" 형태다.
+
+- **P1 미강제 상태를 exit 2(측정 실패)로 올리던 버그 — 이 도구의 존재 이유를 정면으로 배신했다**: `required_status_checks` 규칙이 없거나 목록이 비면 `RulesetInputError`를 던져 exit 2였는데, 그러면 `write_state`가 돌지 않아 **직전의 `ok` 기록이 그대로 남는다**. 30일 임계 전이라 `state_reminder`는 None을 돌려주고, **main이 완전 무방비인 채로 브리핑이 최대 30일간 침묵**한다. 즉 OPS-08(강제가 통째로 꺼진 상태)이 재현되면 이 탐지기가 조용해지는 구조였다. 판정 기준을 바로잡았다 — **응답을 읽는 데 성공했는데 규칙이 없으면 그것은 "모른다"가 아니라 "보호가 없다"**이다. 이제 규칙 0건·규칙 부재·목록 빈 배열 셋 다 exit 1이고 최우선 위반으로 헤드라인을 낸다. exit 2는 형식 파괴(오류 응답 객체·배열 아님·항목 형식 이상·필드 부재)에만 남겼다.
+- **P1 PowerShell 산출물을 읽지 못하던 버그 — CLAUDE.md 인코딩 규칙 3회차 위반**: 런북이 안내한 `gh api ... > ruleset.json`은 Windows PowerShell 5.1에서 **UTF-16LE**를 쓴다. 판정기는 `read_text(encoding="utf-8")`이라 `UnicodeDecodeError`가 나는데 이는 `OSError`가 아니라 `except OSError` 핸들러에 안 잡힌다 — **exit 0/1/2 어느 것도 없이 트레이스백으로 죽었다**(실측 확인). `Out-File -Encoding utf8`(BOM 있는 UTF-8)도 `json` 단계에서 깨졌다. 즉 **문서가 안내한 유일한 실행 경로가 처음부터 동작하지 않았다.** 산출측(런북 → `Out-File -Encoding utf8`)과 읽기측(`read_json_text` → utf-8-sig→utf-16 폴백) 양쪽을 고쳤다. 이것은 logconfig(2026-07-17)·HARN-19(2026-08-08)에 이은 **같은 계급 3회차**이며, 대책은 규칙이 아니라 코드다(규칙은 이미 있었고 지키지 못한 것이 문제였다) — `test_input_encodings_are_tolerated` 4종이 동결한다.
+- **P2 실행 불가능한 안내 명령**: 브리핑 리마인드가 `&&`(PS 5.1 미지원)와 `python3`(이 저장소 Windows 안내는 `python`)를 썼다. 탐지기의 **유일한 실행 경로**를 안내하는 문장이 대상 셸에서 안 돌아가면 "만들어 두고 아무도 안 돌리는" 상태가 된다. 런북을 상수 `POWERSHELL_FETCH_RUNBOOK` 하나로 모으고(리마인드 3종이 같은 문자열을 쓴다 — 한 곳만 고치고 나머지가 새는 것 방지), PS 호환성을 문서 블록까지 함께 기계 검사한다.
+- **측정 실패도 기록하게 했다(P1 후속)**: `write_state(report=None)` → `verdict: "measure_fail"`. 기록하지 않으면 실패 회차가 직전 `ok`를 남겨 침묵한다 — 같은 함정의 다른 입구다. 브리핑은 이것을 드리프트와 **다른 문구**로 낸다(“판정을 못 한 것이지 통과가 아니다”).
+- **뮤테이션 6종 추가 검증**(M12~M17): 인코딩 관용 제거 3 failed · 미강제를 다시 측정 실패로 2 failed · 실패 기록 생략 1 failed · 런북 Bash 표기 복귀 1 failed · 문서 `>` 복귀 1 failed · 강제 꺼짐 헤드라인 제거 3 failed. **M15는 1차 시도에서 앵커 불일치로 적용조차 안 됐는데 "52 passed"가 나왔다** — 적용되지 않은 뮤테이션의 초록을 생존으로 읽으면 정반대 결론이 난다. 앵커 실재를 먼저 출력해 확인한 뒤 재실행했다.
+- **교훈**: 이 세션은 자기 도구에 뮤테이션 11종을 돌려 테스트 위장 2건을 스스로 잡고도, **런북이 만든 파일을 실제로 읽어 보는 검사는 하지 않았다**. 뮤테이션은 "코드가 계약을 지키는가"를 보지만 "계약이 현실의 입력을 다루는가"는 보지 않는다 — 산출물을 실제로 만들어 통과시키는 검사가 따로 필요했다. Codex가 그 축을 짚었다.

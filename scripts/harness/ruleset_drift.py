@@ -63,6 +63,19 @@ GITHUB_ACTIONS_INTEGRATION_ID = 15368
 # 통째로 무력했다. 분기(90일)는 그 사이에 한 분기치 PR이 무방비로 지나간다.
 STALE_AFTER_DAYS = 30
 
+# Kiki 머신(Windows PowerShell) 그대로 복사-실행 가능한 조회 명령. 세 가지가 강제된다:
+#   · `;` 구분 — Windows PowerShell 5.1은 `&&`를 받지 않는다
+#   · `python` — 이 저장소의 Windows 안내는 `python3`가 아니다
+#   · `Out-File -Encoding utf8` — PS 5.1의 `>`는 **UTF-16LE**로 쓴다. 그러면 판정기가
+#     읽다가 UnicodeDecodeError로 죽는다(2026-09-05 실측). 읽기측도 관용하지만
+#     (`_read_json_text`) 산출측에서 먼저 맞춘다 — CLAUDE.md 인코딩 정합 규칙.
+POWERSHELL_FETCH_RUNBOOK = (
+    "cd C:\\Users\\kiki\\Desktop\\__AI\\WhyMath; "
+    "gh api repos/doldori7/WhyMath/rules/branches/main | "
+    "Out-File -Encoding utf8 ruleset.json; "
+    "python scripts\\harness\\ruleset_drift.py ruleset.json --record"
+)
+
 _DOC_RELPATH = Path(".github") / "branch-protection-setup.md"
 _STATE_RELPATH = Path(".github") / "ruleset-check-state.json"
 
@@ -196,6 +209,11 @@ class LiveRuleset:
     checks: tuple[LiveCheck, ...]
     params: dict[str, Any]
     rule_types: frozenset[str]
+    # status check 강제 자체가 꺼져 있는가. **측정 실패가 아니라 판정 결과다** — 응답을
+    # 읽는 데 성공했는데 규칙이 없다면 그것은 "모른다"가 아니라 "보호가 없다"이다.
+    # 이것을 exit 2로 올리면 write_state가 돌지 않아 직전의 `ok` 기록이 그대로 남고,
+    # main이 완전 무방비인 채로 브리핑이 최대 30일간 침묵한다(2026-09-05 Codex P1 지적).
+    status_checks_enforced: bool = True
 
 
 def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
@@ -213,9 +231,14 @@ def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
     if not isinstance(payload, list):
         raise RulesetInputError(f"{source}: 규칙 배열이 아니다(type={type(payload).__name__}).")
     if not payload:
-        raise RulesetInputError(
-            f"{source}: 규칙이 0건이다 — 보호 규칙 미설정이거나 조회 권한 부족이다. "
-            "판정 불가(측정 실패)이지 정합이 아니다."
+        # 규칙 0건 = main에 적용되는 보호가 하나도 없다. 읽기는 성공했으므로 판정 가능하며,
+        # 이 저장소가 실제로 겪은 최악 상태다(2026-07-26 OPS-08). 아래 compare가 문서 선언
+        # 전건을 미강제 위반으로 보고한다.
+        return LiveRuleset(
+            checks=(),
+            params={k: False for k in ("required_linear_history", "deletion", "non_fast_forward")},
+            rule_types=frozenset(),
+            status_checks_enforced=False,
         )
 
     rule_types = frozenset(
@@ -268,18 +291,13 @@ def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
     for rtype in ("required_linear_history", "deletion", "non_fast_forward"):
         params[rtype] = rtype in rule_types
 
-    if not saw_status_rule:
-        raise RulesetInputError(
-            f"{source}: required_status_checks 규칙 자체가 없다 — status check 강제가 통째로 "
-            "꺼진 상태다(2026-07-26 OPS-08과 동형). 판정 불가가 아니라 즉시 확인이 필요하다."
-        )
-    if not checks:
-        raise RulesetInputError(
-            f"{source}: required check가 0건이다 — 어떤 CI 잡도 머지를 막지 못한다. "
-            "'위반 0 통과'로 접지 않는다."
-        )
-
-    return LiveRuleset(checks=tuple(checks), params=params, rule_types=rule_types)
+    # 규칙은 읽혔는데 status check 강제가 없거나 목록이 비었다 — 확정된 회귀다(측정 실패 아님).
+    return LiveRuleset(
+        checks=tuple(checks),
+        params=params,
+        rule_types=rule_types,
+        status_checks_enforced=bool(saw_status_rule and checks),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +320,16 @@ class Report:
 def compare(doc: DocDeclaration, live: LiveRuleset, today: date) -> Report:
     """문서 선언(의도) ↔ 라이브 설정(실태) 대조. 개수가 아니라 **집합**으로 본다."""
     report = Report()
+
+    if not live.status_checks_enforced:
+        report.violations.append(
+            "🔴 status check 강제가 통째로 꺼져 있다 — required check 0건이라 **어떤 CI 잡도 "
+            "머지를 막지 못한다**(2026-07-26 OPS-08과 동형). 아래 미강제 목록 전체가 그 결과다."
+        )
+        report.remediation.append(
+            "먼저 ruleset에 required status check 규칙을 만들고 문서 선언 전건을 등록한다 — "
+            "다른 어떤 항목보다 앞선다."
+        )
 
     live_contexts = [c.context for c in live.checks]
     live_unique = set(live_contexts)
@@ -404,17 +432,45 @@ def compare(doc: DocDeclaration, live: LiveRuleset, today: date) -> Report:
 # ---------------------------------------------------------------------------
 
 
-def write_state(root: Path, today: date, report: Report, source: str) -> Path:
+def read_json_text(path: Path) -> str:
+    """입력 JSON을 **산출 인코딩에 관용적으로** 읽는다.
+
+    Windows PowerShell 5.1의 `>` 리다이렉트는 네이티브 명령 출력을 **UTF-16LE**로 쓰고,
+    `Out-File -Encoding utf8`은 **BOM 있는 UTF-8**로 쓴다. 둘 다 `encoding="utf-8"` 읽기에서
+    깨진다 — 전자는 `UnicodeDecodeError`(OSError가 아니라 잡히지 않고 트레이스백으로 죽었다),
+    후자는 `json` 단계에서 BOM 오류다. 2026-09-05 실측·Codex P1 지적.
+
+    CLAUDE.md "외부 도구가 읽는 설정 파일은 그 도구의 읽기 인코딩을 확인하고 맞춘다"의
+    *우리가 읽는 쪽* 대응이다(HARN-19 서브프로세스 디코딩과 같은 축). 산출측도 런북에서
+    UTF-8로 맞추지만(`POWERSHELL_FETCH_RUNBOOK`), 읽기측이 관용해야 실수 한 번이 판정
+    자체를 죽이지 않는다.
+    """
+    raw = path.read_bytes()  # OSError는 호출부가 잡는다
+    for encoding in ("utf-8-sig", "utf-16"):  # utf-16은 BOM으로 LE/BE를 스스로 가린다
+        try:
+            return raw.decode(encoding)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    raise RulesetInputError(
+        f"{path}: 텍스트로 디코딩하지 못했다(시도: utf-8/utf-8-sig/utf-16). "
+        "PowerShell에서는 `> file` 대신 `| Out-File -Encoding utf8 file`을 쓴다."
+    )
+
+
+def write_state(root: Path, today: date, report: Report | None, source: str) -> Path:
     """라이브 확인 사실을 기록한다. SessionStart 브리핑이 이 파일의 나이를 읽어 리마인드한다."""
     path = root / _STATE_RELPATH
+    # report=None = 측정 자체가 실패한 회차. 그 사실을 기록하지 않으면 **직전의 `ok` 기록이
+    # 그대로 남아** 브리핑이 최대 30일간 조용하다 — 측정 실패가 통과로 위장되는 경로다.
+    verdict = "measure_fail" if report is None else ("ok" if report.ok else "drift")
     path.write_text(
         json.dumps(
             {
                 "last_checked": today.isoformat(),
-                "verdict": "ok" if report.ok else "drift",
-                "violations": len(report.violations),
-                "advisories": len(report.advisories),
-                "waived": len(report.waived),
+                "verdict": verdict,
+                "violations": 0 if report is None else len(report.violations),
+                "advisories": 0 if report is None else len(report.advisories),
+                "waived": 0 if report is None else len(report.waived),
                 "source": source,
                 "_note": (
                     "scripts/harness/ruleset_drift.py --record 가 쓴다. 손편집 금지 — "
@@ -440,8 +496,7 @@ def state_reminder(root: Path, today: date) -> str | None:
     if not path.is_file():
         return (
             "⚠ 브랜치 보호 라이브 확인 기록 없음 — 문서·ci.yml 대조만으로는 3회차 사고(HARN-63)를 "
-            "못 막는다. Kiki 머신에서: gh api repos/doldori7/WhyMath/rules/branches/main > "
-            "ruleset.json && python3 scripts/harness/ruleset_drift.py ruleset.json --record"
+            f"못 막는다. Kiki 머신(PowerShell): {POWERSHELL_FETCH_RUNBOOK}"
         )
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
@@ -454,6 +509,13 @@ def state_reminder(root: Path, today: date) -> str | None:
         )
 
     age = (today - last).days
+    if str(state.get("verdict")) == "measure_fail":
+        # 측정 실패는 드리프트와 다른 문구여야 한다 — "위반 N건"과 "판정 자체를 못 했다"를
+        # 같은 글자로 보이게 하면 고치는 사람이 어디를 볼지 알 수 없다.
+        return (
+            f"⚠ 브랜치 보호 **측정 실패** 상태(마지막 시도 {last.isoformat()}·{age}일 경과) — "
+            f"판정을 못 한 것이지 통과가 아니다. 재시도: {POWERSHELL_FETCH_RUNBOOK}"
+        )
     if str(state.get("verdict")) != "ok":
         return (
             f"⚠ 브랜치 보호 드리프트 미해소 — 위반 {state.get('violations')}건 "
@@ -463,8 +525,7 @@ def state_reminder(root: Path, today: date) -> str | None:
     if age > STALE_AFTER_DAYS:
         return (
             f"⚠ 브랜치 보호 라이브 확인 {age}일 경과(임계 {STALE_AFTER_DAYS}일·마지막 "
-            f"{last.isoformat()}) — 재확인 필요: gh api repos/doldori7/WhyMath/rules/branches/main "
-            "> ruleset.json && python3 scripts/harness/ruleset_drift.py ruleset.json --record"
+            f"{last.isoformat()}) — 재확인 필요(PowerShell): {POWERSHELL_FETCH_RUNBOOK}"
         )
     return None
 
@@ -521,26 +582,34 @@ def main(argv: list[str] | None = None) -> int:
     today = args.today or date.today()
     doc_path = args.doc or (root / _DOC_RELPATH)
 
-    try:
-        raw = args.ruleset_json.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(
-            f"❌ 측정 실패 — 입력 파일을 읽지 못했다({type(exc).__name__}): {exc}",
-            file=sys.stderr,
-        )
+    def _measurement_failed(message: str) -> int:
+        """측정 실패를 보고하고 **그 사실도 기록**한다.
+
+        기록하지 않으면 직전의 `ok` 상태가 남아 브리핑이 조용해진다 — 측정 실패가 통과로
+        위장되는 경로이며, 이 도구가 막으려는 것과 정확히 같은 형태의 구멍이다.
+        """
+        print(f"❌ 측정 실패 — {message}", file=sys.stderr)
+        if args.record:
+            path = write_state(root, today, None, str(args.ruleset_json))
+            print(f"기록: {path.relative_to(root)} (verdict=measure_fail)", file=sys.stderr)
         return 2
+
+    try:
+        raw = read_json_text(args.ruleset_json)
+    except OSError as exc:
+        return _measurement_failed(f"입력 파일을 읽지 못했다({type(exc).__name__}): {exc}")
+    except RulesetInputError as exc:
+        return _measurement_failed(str(exc))
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        print(f"❌ 측정 실패 — JSON 파싱 불가: {exc}\n앞 200자: {raw[:200]}", file=sys.stderr)
-        return 2
+        return _measurement_failed(f"JSON 파싱 불가: {exc}\n앞 200자: {raw[:200]}")
 
     try:
         doc = parse_doc(doc_path)
         live = parse_live(payload, source=str(args.ruleset_json))
     except RulesetInputError as exc:
-        print(f"❌ 측정 실패 — {exc}", file=sys.stderr)
-        return 2
+        return _measurement_failed(str(exc))
 
     report = compare(doc, live, today)
     print(render(report, str(args.ruleset_json)))
