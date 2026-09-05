@@ -111,7 +111,7 @@
 | `concept_mastery_history` | `db/models/assessment.py:157` | **Mastery** | 실재 (`l2/mastery_tracking.py:134`) | append-only 측정 시계열(BKT). 증거에서 재계산 가능(불변식 1 충족) |
 | `skill_mastery_history` | `db/models/assessment.py:196` | **Mastery** | 실재 (`l2/skill_mastery_tracking.py:136`) | 위와 같음(스킬 축) |
 | `ability_snapshot` | `db/models/assessment.py:236` | **Mastery** | 실재 (`api/me.py:1085,1156`) | IRT θ(logit) 시계열. BKT 숙달(확률 0–1)과 **척도가 다른 채로 같은 층**에 있다 — §6 미결 |
-| `user_state_snapshot` | `db/models/user.py:282` | **Mastery** | 실재 (`l2/learner_state.py` 조립기 — 32번 `:48`) | 32번 축에서는 Learner State. 이 축에서는 재계산 가능한 파생 상태라 Mastery |
+| `user_state_snapshot` | `db/models/user.py:282` | **Mastery** | **없음 — 빈 좌석** (전수 grep: 프로덕션에 ORM 생성·`session.add` 0건. `l2/learner_state.py`는 **메모리 조립기**이고 이 ORM을 import하지 않는다) | 32번 축에서는 Learner State. 이 축에서는 재계산 가능한 파생 상태라 Mastery. **32번 `:48`이 이 테이블을 Learner State 구현으로 든 것은 좌석 지목이며 writer 실재를 뜻하지 않는다**(PR #985 Codex 지적으로 재실측·정정) |
 | `misconception_hypothesis` | `db/models/misconception_hypothesis.py:55` | **Mastery** (오개념 축) | 실재 (`l4/misconception/evidence_store.py`) | `confidence`·`evidence_count`를 갖는 누적 상태. `evidence_links`(Assessment)가 갱신하는 파생물이라 Mastery의 오개념 축 짝 |
 | `assessment` | `db/models/assessment.py:66` | **혼재** (Assessment + Mastery + 층 밖) | 실재 (`api/me.py:2811,3024`) | **이름이 층과 같지만 층이 아니다.** 진단 평가 1회의 *결과 묶음*이다: `concept_diagnosis`·`weak_points`=Assessment · `estimated_grade/score/percentile`=Mastery · `recommended_path`=추천(층 밖). 새 필드를 여기 넣을 때 어느 층인지 따로 판정해야 한다 |
 | `daily_learning_metrics` | `db/models/timeseries.py:64` | **Mastery** (집계) | 실재 (`l2/learning_metrics_rollup.py`) | 증거에서 재계산 가능한 일별 롤업. 학생 축 유지 |
@@ -132,10 +132,12 @@
    `answer_submission.grading_result`, `student_solution_step.validation` **세 컬럼으로만**
    존재하며 그것만 담는 테이블은 없다. 그중 뒤 둘은 **빈 좌석**이다. 즉 오늘 살아 있는
    Evaluation 증거는 사실상 `is_correct` 한 컬럼이고, §5의 비대칭이 그 위에서 난다.
-2. **빈 좌석 4건**(`answer_submission`·`student_solution_step`·`hint_usage`·`learning_session`)이
-   전부 Attempt·Evaluation 쪽에 몰려 있다. 상위 층(Mastery)은 writer가 다 있다. 증거 파이프라인이
-   **아래가 비고 위가 찬** 모양이며, 위가 찬 이유는 `attempt_event`·`problem_attempt` 두 좌석이
-   아래 몫까지 감당하기 때문이다(그래서 그 둘이 혼재다).
+2. **빈 좌석 5건** — `answer_submission`·`student_solution_step`·`hint_usage`·`learning_session`
+   (Attempt·Evaluation 쪽) + `user_state_snapshot`(Mastery 쪽). 하위 층에 4건이 몰려 있고
+   Mastery는 5좌석 중 4개가 살아 있다. 증거 파이프라인이 **아래가 비고 위가 찬** 모양이며,
+   위가 찬 이유는 `attempt_event`·`problem_attempt` 두 좌석이 아래 몫까지 감당하기 때문이다
+   (그래서 그 둘이 혼재다). Mastery의 빈 좌석 1건은 성격이 다르다 — 조립기는 있는데
+   **영속 경로가 없다**(메모리에서 만들고 버린다).
 
 ---
 
@@ -145,7 +147,7 @@
 |---|---|---|
 | 표가 가리키는 **테이블이 실재하는가** | **예** | `tests/infra/test_evidence_layer_boundary_doc.py` — 마커 블록을 파싱해 각 테이블명이 `db/models/`의 `__tablename__`으로 실재하는지, 배정 라벨이 허용 6종인지 대조. 마커 부재·빈 목록은 "위반 0 통과"가 아니라 **실패**(`test_required_checks_doc.py` 선례) |
 | **배정이 옳은가** | **아니오** | 없음. 새 모델을 엉뚱한 층에 넣어도 CI는 통과한다 |
-| 새 증거 모델이 **표에 등재됐는가** | **아니오** | 없음. 모델을 추가하고 이 표를 안 고쳐도 CI는 통과한다 |
+| 새 증거 모델이 **표에 등재됐는가** | **부분** | 같은 테스트의 `test_every_evidence_table_is_mapped`. **12개 모듈 한정**(`activity`·`answer_submission`·`student_solution_step`·`hint_usage`·`evidence_link`·`evidence_event`·`assessment`·`misconception_hypothesis`·`verified_solution`·`dead_end_log`·`atom_probe`·`review_timer_event`) — 그 안에 모델을 추가하고 표를 안 고치면 red다. **밖은 강제되지 않는다**: `user.py`·`timeseries.py`·`dialogue.py`처럼 비증거 테이블이 섞인 모듈은 등재를 강요하면 사용자·결제 테이블까지 끌어와 무차별 red가 되므로 제외했다 |
 | 불변식 2(하위→상위 참조 금지) | **아니오** | 없음 |
 | 불변식 3(학생 없는 행 배제) | **아니오** | 없음 |
 
@@ -202,16 +204,24 @@
 "클라는 별도로 `POST /v1/me/attempts`를 부르지 않는다 — 중복 적재 금지"),
 `src/mobile/test/e2e_loop_flow_test.dart:254`가 그 엔드포인트가 호출되지 **않음**을 동결한다.
 
-**따라서 학생 경로에서 `problem_attempt.is_correct = False` 행은 구조적으로 생기지 않는다.**
-오답의 흔적은 Attempt 층(`attempt_event`의 검산결과 `passed=False`·힌트요청·막힘)에만 남는다.
-Evaluation의 나머지 두 좌석(`answer_submission.grading_result`·`student_solution_step.validation`)은
-빈 좌석이라 대신 받아 주지도 않는다(§2).
+**따라서 1급 학생 앱(Flutter)이 실제로 타는 경로에서는 `problem_attempt.is_correct = False` 행이
+생기지 않는다.** 오답의 흔적은 Attempt 층(`attempt_event`의 검산결과 `passed=False`·힌트요청·막힘)
+에만 남는다. Evaluation의 나머지 두 좌석(`answer_submission.grading_result`·
+`student_solution_step.validation`)은 빈 좌석이라 대신 받아 주지도 않는다(§2).
+
+> **범위 정정 (PR #985 Codex 지적 수용)**: 이것은 *구조적 불가능*이 아니라 **1급 클라이언트의
+> 계약**이다. `POST /v1/me/attempts`는 살아 있는 **인증 엔드포인트**이고(`user: ConsentedUser`),
+> 인증된 학생·다른 클라이언트(별도 웹·외부 소비자 — 코어를 API로 소비하는 구조)가 부르면
+> `is_correct=False` 행이 **실제로 만들어지고 숙달까지 전파된다**(`api/me.py:750`). Flutter
+> E2E 테스트가 동결하는 것은 *그 앱의 코치 흐름이 그 요청을 하지 않는다*는 사실 하나뿐이다.
+> 그러므로 아래 결론은 "오늘 우리 앱이 만드는 데이터"에 대한 진술이지 스키마 수준의 보장이
+> 아니다 — 오답 행의 부재를 **불변식으로 가정하는 코드를 쓰면 안 된다.**
 
 **판정**: 갭인지 의도인지 이 문서는 단정하지 않는다 — 그것은 교수학·측정 설계의 결정이고
 근거가 코드에 없다. 이 문서가 확정하는 것은 **경계 사실** 하나다:
 
-> Evaluation 층의 음(−) 증거는 학생 경로에서 영속되지 않으며, 그 자리를 Attempt 층 신호가
-> 대신하고 있다.
+> 오늘 1급 학생 앱이 만드는 데이터에서 Evaluation 층의 음(−) 증거는 영속되지 않으며, 그
+> 자리를 Attempt 층 신호가 대신하고 있다. (엔드포인트 수준에서는 가능하다 — 위 범위 정정.)
 
 이것이 중요한 이유는 세 소비자가 서로 다른 층을 읽기 때문이다: 숙달 전파
 (`record_problem_attempt_mastery`)는 Evaluation을 읽고, 오개념 루프(`evidence_links`)는
