@@ -47,6 +47,11 @@
 | Learning History | 교육적 의미가 부여된 시계열·이력 | `learning_session`·`problem_attempt`(`db/models/activity.py`), `concept_mastery_history`·`skill_mastery_history`(append-only 측정 시계열 — `db/models/assessment.py`), `daily_learning_metrics` 등 롤업 3종(`db/models/timeseries.py`) |
 | Learner State | 추론된 현재 학습자 상태 | `UserStateSnapshot`(`db/models/user.py:282`), `l2/learner_state.py` 조립기, `MisconceptionHypothesisRecord` |
 
+> **다른 축 1건 (EOS-79)**: 위 3계층은 "얼마나 가공됐는가"를 묻는다. "무엇에 대한 증거인가"
+> (Attempt·Evaluation·Assessment·Mastery)는 별도 축이며 `evidence_layer_boundary.md`가 정본이다.
+> 한 축의 배정으로 다른 축을 추론할 수 없다 — 예: `concept_mastery_history`는 여기서 Learning
+> History이고 그쪽에서 Mastery다. **충돌 시 이 문서(선행 정본)가 우선한다.**
+
 주의: Learning History는 단일 정규화 테이블이 아니라 **목적별 다중 테이블**(이벤트 로그·측정 시계열·롤업·증거)이다. hypertable 시계열 + 삭제권 오케스트레이션이라는 이 workload에는 이 구조가 맞으며, 단일 거대 history 테이블을 새로 만들지 않는다.
 
 ---
