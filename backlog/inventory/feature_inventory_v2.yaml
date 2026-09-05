@@ -99,8 +99,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 8
-    test_files: 16
-    test_functions: 330
+    test_files: 18
+    test_functions: 386
     matrix:
       A_subject: 0
       B_db: 0
