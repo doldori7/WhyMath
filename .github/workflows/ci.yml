@@ -452,6 +452,15 @@ jobs:
       - name: 게이트 — 데이터 등급 라우팅 신호 (check_routing_data_grade·미명시 0건)
         run: python ../../scripts/ops/check_routing_data_grade.py
 
+      # EOS-77: 라우터 우회 결정 소스 스캔 — 프로덕션 `RoutingDecision(` 직접 생성 중
+      # *클라우드 티어 리터럴*(CLOUD_MID/HIGH)을 검출한다. 그런 결정은 `Router.route`의 데이터
+      # 등급(법적) 게이트를 지나지 않고 국외 프로바이더에 도달한다(위 EOS-59 게이트는 *입력*의
+      # 등급 명시만 보므로 이 우회를 못 본다). 비리터럴 티어는 판정 승계(`data_export_reason=`
+      # 표현식)를 요구하고, 유예는 만료·unmatched를 exit 1로 강제한다. hermetic·cwd 무관.
+      # 변별력은 tests/infra/test_routing_decision_bypass_scan_wiring.py의 결함 주입이 봉인.
+      - name: 게이트 — 라우터 우회 결정 (check_routing_decision_bypass·클라우드 직접 생성 0건)
+        run: python ../../scripts/ops/check_routing_decision_bypass.py
+
       # OPS-16: L3 생성 프롬프트 정본(docs/prompts/l3_*.md)의 3레일 감사 —
       # ⓐ 저작권(평가원·EBS·교과서 본문 복제 금지 지시문) ⓑ 봉인(rephrase 수치·정답 불변)
       # ⓒ 독립성(cross_verify에 생성자 문맥 미주입). 위반 시 exit 1. hermetic(LLM 0·DB 0).
