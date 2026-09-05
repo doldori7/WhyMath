@@ -63,10 +63,17 @@ Chemistry·History에 반드시 존재하는가 / Core가 반환값을 해석해
 | 후보 | 판정 | 근거 요약 |
 |---|---|---|
 | `evaluateAnswer` · `detectMisconception` · `validateProblem` | **필수층** | 아래 Protocol 3종 |
-| `getConcept` · `getPrerequisites` · `getLearningObjectives` | 계약 아님(**데이터**) | 개념 15컬럼·EdgeType 6종이 이미 과목 중립이고 `subject`는 Overlay로 빠졌다. **조회(read)지 계산(compute)이 아니다** — 계약에 넣으면 어댑터가 ORM 위임층이 되고 `schema`가 `db`를 알게 된다 |
-| `estimateDifficulty` | 계약 아님(**Core 소유**) | `l2.irt`가 응답 통계만으로 b를 추정한다(문항 내용 미참조). Core가 자기 능력을 과목에 되물을 이유가 없다 |
-| `getRepresentations` | **선택층 후보**(재설계 전제) | 유일하게 진짜 능력이나 `VisualizationStyle` 16종이 전량 수학 어휘라 중립 반환 타입 재설계 전에는 계약이 될 수 없다 |
-| `generateExplanation` | 계약 아님(**어댑터 내부**) | 아래 절 |
+| `getConcept` · `getPrerequisites` · `getLearningObjectives` | 계약 아님(**데이터**) | 아래 ⓐ |
+| `estimateDifficulty` | 계약 아님(**Core 소유**) | 아래 ⓑ |
+| `getRepresentations` | **선택층 후보**(재설계 전제) | 아래 ⓒ |
+| `generateExplanation` | 계약 아님(**어댑터 내부**) | 다음 절 |
+
+- ⓐ 개념 15컬럼·`EdgeType` 6종이 이미 과목 중립이고 `subject`는 Overlay로 빠졌다. **조회(read)지
+  계산(compute)이 아니다** — 계약에 넣으면 어댑터가 ORM 위임층이 되고 `schema`가 `db`를 알게 된다.
+- ⓑ `l2.irt`가 응답 통계만으로 난이도 b를 추정한다(문항 내용 미참조). Core가 이미 하는 일을 과목에
+  되물을 이유가 없다.
+- ⓒ 유일하게 진짜 능력이나 `VisualizationStyle` 16종이 전량 수학 어휘다. 중립 반환 타입 재설계
+  전에는 계약이 될 수 없다.
 
 **핵심 판별선은 조회 vs 계산이다.** 필수 3종은 전부 *입력을 받아 판정을 내리는 계산*이다. 테이블에서
 행을 읽는 조회는 과목이 아니라 데이터가 답한다.
