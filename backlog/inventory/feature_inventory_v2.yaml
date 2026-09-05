@@ -4779,8 +4779,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 6
-    test_files: 9
-    test_functions: 244
+    test_files: 10
+    test_functions: 245
     matrix:
       A_subject: 1
       B_db: 1
@@ -7630,7 +7630,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
-    loc: 458
+    loc: 483
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -7640,7 +7640,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 2
-    test_functions: 14
+    test_functions: 17
     matrix:
       A_subject: 3
       B_db: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 322
-    test_functions: 5778
+    test_functions: 5781
     matrix:
       A_subject: 3
       B_db: 0
@@ -9840,7 +9840,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 1625
+    loc: 2355
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 5
@@ -9849,8 +9849,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 13
-    test_functions: 65
+    test_files: 14
+    test_functions: 66
     matrix:
       A_subject: 0
       B_db: 0
@@ -9905,7 +9905,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 577
+    loc: 937
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10035,7 +10035,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 3183
+    loc: 4315
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -10295,7 +10295,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 693
+    loc: 3128
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10360,7 +10360,7 @@ features:
     release_priority_prior_manual: P2
     priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
-    loc: 828
+    loc: 2198
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10425,7 +10425,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 942
+    loc: 2534
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
