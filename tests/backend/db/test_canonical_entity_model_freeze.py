@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import re
 from pathlib import Path
 
 import whymath_backend.db.models as models_pkg
@@ -133,6 +134,13 @@ NON_CORE_TABLES: dict[str, str] = {
     "misconception_hypothesis": "판정 보류 — L2 오개념 추론 산출물. 카탈로그도 원시 이벤트도 아니다",
 }
 
+# 좌석 부재 4종(정본 §3) — **좌석 tuple이 비어 있다는 사실 자체**를 동결한다.
+# 아래 RESERVED_ABSENT_TABLE_NAMES는 *이름을 맞힌 경우만* 잡으므로, 예약어를 피한 이름
+# (`hint_content` 등)을 좌석에 등재하면 그대로 통과한다 — 그 구멍을 이 상수가 막는다.
+ABSENT_ENTITIES: frozenset[str] = frozenset(
+    {"Subject", "Hint", "AssessmentResult", "ContentVersion"}
+)
+
 # 좌석 부재 4종이 테이블을 얻으려 할 때 쓸 법한 이름 — 하나라도 생기면 RED.
 # 전수 귀속 검사(①)도 잡지만, 이쪽은 *어느 동결 결정을 깼는지*를 이름으로 지목한다.
 RESERVED_ABSENT_TABLE_NAMES: dict[str, str] = {
@@ -146,6 +154,44 @@ RESERVED_ABSENT_TABLE_NAMES: dict[str, str] = {
     "content_versions": "ContentVersion",
     "entity_version": "ContentVersion",
 }
+
+
+_SEAT_ROW_RE = re.compile(r"^\|\s*\d+\s*\|\s*\*\*(\w+)\*\*\s*\|(.*?)\|\s*(\d+)\s*\|\s*$")
+_NON_CORE_ROW_RE = re.compile(r"^\|\s*`([a-z_]+)`\s*\|\s*(.+?)\s*\|\s*$")
+_TABLE_TOKEN_RE = re.compile(r"`([a-z_]+)`")
+
+_SEC_2A = "### §2-A. 좌석 배정"
+_SEC_2B = "### §2-B. 핵심 외"
+_SEC_2C = "### §2-C. 판정 보류"
+
+
+def _doc_text() -> str:
+    assert _CANON_DOC.is_file(), f"정본 문서가 없다: {_CANON_DOC}"
+    return _CANON_DOC.read_text(encoding="utf-8")
+
+
+def _slice(text: str, start: str, end: str) -> str:
+    """정본의 한 절만 잘라 낸다 — 문서 전역 토큰 검색이 아니라 *그 표*만 본다."""
+    i, j = text.find(start), text.find(end)
+    assert i != -1, f"정본에서 절 머리를 찾지 못했다: {start!r}"
+    assert j > i, f"정본 절 순서가 어긋났다: {start!r} → {end!r}"
+    return text[i:j]
+
+
+def _parse_doc_seats() -> dict[str, tuple[frozenset[str], int]]:
+    """§2-A 표 → {엔티티: (좌석 집합, 표에 적힌 좌석 수)}."""
+    rows: dict[str, tuple[frozenset[str], int]] = {}
+    for line in _slice(_doc_text(), _SEC_2A, _SEC_2B).splitlines():
+        m = _SEAT_ROW_RE.match(line)
+        if m:
+            rows[m.group(1)] = (frozenset(_TABLE_TOKEN_RE.findall(m.group(2))), int(m.group(3)))
+    return rows
+
+
+def _parse_doc_non_core() -> set[str]:
+    """§2-B 표 → 핵심-외 테이블 이름 집합."""
+    section = _slice(_doc_text(), _SEC_2B, _SEC_2C)
+    return {m.group(1) for line in section.splitlines() if (m := _NON_CORE_ROW_RE.match(line))}
 
 
 def _seated_tables() -> set[str]:
@@ -218,24 +264,64 @@ def test_absent_entities_have_no_seat_table() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ④ 문서 정합 — 정본이 78테이블을 전부 적고 있다
+# ③-b 좌석 부재 동결 — 예약어를 피한 이름으로도 좌석을 얻지 못한다
 # ──────────────────────────────────────────────────────────────────────────
-def test_canon_doc_lists_every_table() -> None:
-    """정본 문서 본문이 전 테이블 이름을 담고 있다 — 표가 코드보다 뒤처지면 RED."""
-    _load_all_models()
-    assert _CANON_DOC.is_file(), f"정본 문서가 없다: {_CANON_DOC}"
-    text = _CANON_DOC.read_text(encoding="utf-8")
+def test_absent_entities_keep_empty_seats() -> None:
+    """정본 §3의 4종은 좌석 tuple이 **비어 있어야** 한다.
 
-    missing = sorted(name for name in Base.metadata.tables if f"`{name}`" not in text)
-    assert not missing, (
-        f"정본 §2 귀속표에서 빠진 테이블 {len(missing)}건: {missing}\n"
-        "표는 백틱으로 감싼 테이블명을 포함해야 한다."
+    바로 위 예약어 검사(③)는 *이름을 맞힌 경우만* 잡는다 — `hint_content`처럼 예약어를 피한
+    이름을 좌석에 등재하면 전수 귀속·좌석 실재·문서 정합을 전부 만족하며 통과한다(실측 확인).
+    이 검사는 이름이 아니라 **배정 그 자체**를 보므로 그 우회로를 닫는다.
+    """
+    unknown = sorted(ABSENT_ENTITIES - set(CANONICAL_ENTITY_SEATS))
+    assert not unknown, f"부재 선언에 없는 엔티티가 적혀 있다: {unknown}"
+
+    breached = {
+        e: CANONICAL_ENTITY_SEATS[e] for e in sorted(ABSENT_ENTITIES) if CANONICAL_ENTITY_SEATS[e]
+    }
+    assert not breached, (
+        f"좌석 부재 동결이 깨졌다(좌석 등재됨): {breached}\n"
+        f"부재는 실수가 아니라 결정이다(정본 §3) — 되돌리려면 {_CANON_HINT}"
     )
 
 
-def test_canon_doc_lists_every_canonical_entity() -> None:
-    """정본 문서가 19종 이름을 전부 담고 있다."""
-    assert _CANON_DOC.is_file(), f"정본 문서가 없다: {_CANON_DOC}"
-    text = _CANON_DOC.read_text(encoding="utf-8")
-    missing = sorted(e for e in CANONICAL_ENTITY_SEATS if f"**{e}**" not in text)
-    assert not missing, f"정본에서 굵게 선언되지 않은 엔티티: {missing}"
+# ──────────────────────────────────────────────────────────────────────────
+# ④ 문서 정합 — 이름 존재가 아니라 *배정*을 대조한다
+# ──────────────────────────────────────────────────────────────────────────
+def test_canon_doc_seat_assignments_match_constants() -> None:
+    """§2-A 표의 엔티티→좌석 배정이 상수와 **정확히** 일치한다.
+
+    토큰이 문서 어딘가에 있기만 하면 통과하는 검사는, 배정을 옮겨도(예: `skill_node`를 Skill →
+    Content) 같은 초록을 낸다 — 정본과 집행이 어긋난 채로. 그래서 표를 파싱해 대조한다.
+    """
+    parsed = _parse_doc_seats()
+    expected = {e: (frozenset(seats), len(seats)) for e, seats in CANONICAL_ENTITY_SEATS.items()}
+
+    assert set(parsed) == set(expected), (
+        f"§2-A 표의 엔티티 목록이 상수와 다르다 — 문서에만: {sorted(set(parsed) - set(expected))} · "
+        f"상수에만: {sorted(set(expected) - set(parsed))}\n{_CANON_HINT}"
+    )
+
+    mismatched = {
+        entity: {"문서": sorted(parsed[entity][0]), "상수": sorted(expected[entity][0])}
+        for entity in expected
+        if parsed[entity][0] != expected[entity][0]
+    }
+    assert not mismatched, f"§2-A 좌석 배정이 상수와 어긋난다: {mismatched}\n{_CANON_HINT}"
+
+    bad_counts = {
+        entity: {"표기": parsed[entity][1], "실제": expected[entity][1]}
+        for entity in expected
+        if parsed[entity][1] != expected[entity][1]
+    }
+    assert not bad_counts, f"§2-A '좌석 수' 열이 실제와 다르다: {bad_counts}"
+
+
+def test_canon_doc_non_core_table_matches_constants() -> None:
+    """§2-B 표의 핵심-외 목록이 상수와 정확히 일치한다."""
+    parsed = _parse_doc_non_core()
+    expected = set(NON_CORE_TABLES)
+    assert parsed == expected, (
+        f"§2-B 표가 상수와 다르다 — 문서에만: {sorted(parsed - expected)} · "
+        f"상수에만: {sorted(expected - parsed)}\n{_CANON_HINT}"
+    )
