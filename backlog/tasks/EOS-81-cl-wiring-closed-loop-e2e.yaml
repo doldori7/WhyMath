@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 eos_priority: P0
 owner: claude
@@ -20,10 +20,11 @@ acceptance:
   - "⑤ 실행 실재성: 연장된 두 테스트가 **CI에서 실제로 돈다**는 것을 확인한다 — test_e2e_vertical_slice_integration.py는 실 PG 미도달 시 self-skip이므로 '저장소에 존재함'과 '돌아감'이 다르다(OPS-03·OPS-10·OPS-11 반복 선례). 어느 잡이 어느 조건에서 실행하는지 PR에 적는다"
   - "⑥ [완료조건 (가) 정정 2026-09-03 · PR #976 리뷰 P1 수용] acceptance ① (가)의 'Flutter가 실제 attempt를 제출한다'를 **'코치 완료 경로가 attempt를 적재하고 클라가 그 완료 신호를 소비한다'**로 읽는다. 학생 경로의 attempt 생산자는 POST /v1/me/attempts가 아니라 _complete_problem(api/coach.py:983-1030 · S3-32 done)이며, 클라의 직접 호출은 계약상 금지다(중복 적재 — api/coach.py:440-446). E2E도 그 경로를 관통해야 한다: solution_steps 제출 → 서버 verify correct → Polya 돌아보기 1턴 → problem_complete=True + completed_attempt_id → 그 attempt 행 → mastery 변화 → 다음 추천 변화. (나)(다)(라)는 그대로 유효하다"
   - "⑦ [정직 표기] acceptance ②가 말한 '한 트랜잭션' 성격의 가정을 두지 않는다 — api/me.py:745-779와 _complete_problem 둘 다 attempt를 **먼저 commit**한 뒤 숙달·이벤트 헬퍼가 **각자 commit**한다(l2/attempt_skill_event.py:71-97이 교차 원자성 미해결을 자인). E2E가 부분 쓰기(앞 기록만 남는 상태)를 **정상으로 단언하지 않도록** 각 단계를 개별 관측한다"
-artifacts: []
+artifacts:
+  - "https://github.com/doldori7/WhyMath/pull/980 (커밋 d0d28479 백엔드·eff3a320 모바일) — 백엔드: 실 PG16+alembic head에서 통합 E2E 실제 실행 1 passed(skip 아님)·전체 스위트 12240 passed/322 skipped(exit 0)·뮤테이션 7종 RED. 모바일: flutter test 402 passed·analyze No issues·완료신호 소비 무력화 시 상태+화면 어포던스 동반 RED"
 paths:
   - tests/backend/api/test_e2e_vertical_slice_integration.py
   - src/mobile/test/e2e_loop_flow_test.dart
-session: claude/session-9ain00
+session: null
 notes: "출처: docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §6 G-2·§8-②. Kiki 결정(2026-09-03) 확정: 계획서 300 4주 Phase 2는 실행하지 않고 참고 문서로 강등 · 10월 공식 목표는 G2(앵커 콘텐츠 생산) 유지 · 폐쇄루프는 독립 목표가 아니라 콘텐츠 생산성·학습 효과를 재는 기반 계측기 · 단 CL-WIRING 2건은 G2·G4 공통 선결이라 수일 규모로 즉시 수행. 선행 MOB-20은 완료조건 (가)를 증명 가능하게 만드는 전제라 depends_on으로 집행한다(산문 선행 금지 — HARN-52). 명칭 규약: G2 = Anchor Content Production · CL-WIRING = Student Closed-loop Wiring · 계획서 300의 'Gate 2'는 사용하지 않는다.\n\n[정정 2026-09-03] 완료조건 (가)의 대상 경로 정정 — 초판은 attempt 생산자를 POST /v1/me/attempts로 잘못 지목했다. 실제 학생 경로는 코치 완료(S3-32). 부분 쓰기 갭도 함께 명시(리뷰 P2). 상세 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §11.6-11.7"
-updated: 2026-09-04
+updated: 2026-09-05
