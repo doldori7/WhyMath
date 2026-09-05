@@ -193,6 +193,14 @@ _DART_WRITE = re.compile(r"\.(?:post|patch|delete|put)\s*(?:<[^>]*>)?\s*\(")
 _PY_TESTFN = re.compile(r"(?m)^\s*(?:async )?def test_")
 _CLIENT_SUFFIXES = {".dart", ".js", ".jsx", ".ts", ".tsx"}
 
+# 코드젠 산출물은 저장소의 *기능*이 아니라 빌드 부산물이다(`src/mobile/.gitignore` 22~25행이
+# freezed·json_serializable·riverpod 출력을 무시한다 — CI가 build_runner로 매번 만든다).
+# 이걸 세면 **로컬에 build_runner를 돌렸는지 여부에 따라 장부가 달라진다** — 2026-09-05 실측:
+# `features/ocr`이 추적 파일만 822줄인데 산출물 포함 2188줄로 잡혀 드리프트 테스트가 CI에서
+# RED가 됐다(로컬은 초록 — 정확히 "내 기계에선 되는데"의 형태). 파일 목록은 디스크가 아니라
+# **추적 대상**을 따라야 결정론이 성립한다.
+_GENERATED_CLIENT = re.compile(r"\.(?:g|freezed|gr|config|mocks)\.dart$")
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 카탈로그 — 측정 불가 필드(이름·사용자·Domain·우선도 제안·근거)만 손으로 든다.
@@ -1573,7 +1581,11 @@ def _measure_client(spec: Spec, tests: TestIndex, errors: list[str]) -> Row:
         if p.is_file():
             files.append(p)
         elif p.is_dir():
-            files.extend(q for q in sorted(p.rglob("*")) if q.suffix in _CLIENT_SUFFIXES)
+            files.extend(
+                q
+                for q in sorted(p.rglob("*"))
+                if q.suffix in _CLIENT_SUFFIXES and not _GENERATED_CLIENT.search(q.name)
+            )
         else:
             errors.append(f"{spec.fid}: 클라 경로 {rel!r} 없음")
     loc = 0

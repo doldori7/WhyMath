@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import io
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -466,3 +467,58 @@ def test_docs_reference_each_other_and_the_ledger() -> None:
     assert "eos_feature_inventory_v2_2026-09-03.md" in _V1_DOC.read_text(
         encoding="utf-8"
     ), "v1 문서가 v2를 가리키지 않는다 — 두 장부의 관계는 양쪽에 적는다"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 장부 결정론 — 로컬 빌드 부산물이 수치를 바꾸면 안 된다 (2026-09-05 사고)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_codegen_outputs_are_excluded_from_client_file_counts(gen: Any) -> None:
+    """`.g.dart`·`.freezed.dart`는 세지 않는다 — 세면 장부가 *실행한 기계*에 따라 달라진다.
+
+    사고 경위(2026-09-05): 모바일 작업 중 `dart run build_runner build`를 돌린 트리에서 장부를
+    재생성했더니 `features/ocr`이 822줄(추적)→2188줄(산출물 포함)로 부풀어, 산출물이 없는 CI에서
+    드리프트 테스트가 RED가 됐다. 로컬은 초록이었다 — "내 기계에선 되는데"의 정확한 형태다.
+    코드젠 출력은 `src/mobile/.gitignore`가 무시하는 빌드 부산물이지 저장소의 기능이 아니다.
+    """
+    rx = gen._GENERATED_CLIENT
+    for name in (
+        "ocr_state.freezed.dart",
+        "ocr_controller.g.dart",
+        "app_router.gr.dart",
+        "build.config.dart",
+        "api_client.mocks.dart",
+    ):
+        assert rx.search(name), f"코드젠 산출물을 못 걸렀다: {name}"
+    for name in ("chat_screen.dart", "coach_api.dart", "ocr_models.dart", "main.dart"):
+        assert not rx.search(name), f"실제 소스를 산출물로 오판했다: {name}"
+
+
+def test_ledger_counts_only_tracked_client_sources(gen: Any) -> None:
+    """장부의 클라 `loc`은 git 추적 파일 합계와 같아야 한다 — 디스크 상태와 무관해야 한다.
+
+    이 검사는 **로컬에 코드젠 산출물이 있을 때만 변별력이 있다**(CI 체크아웃에는 없다). 그래서
+    산출물이 하나도 없으면 skip한다 — 없는 환경에서 초록인 것은 보호의 증거가 아니기 때문이다.
+    """
+    repo = _REPO_ROOT
+    mobile = repo / "src" / "mobile"
+    generated = [
+        p for p in mobile.rglob("*.dart") if gen._GENERATED_CLIENT.search(p.name) and p.is_file()
+    ]
+    if not generated:
+        pytest.skip("코드젠 산출물 없음 — 이 환경에서는 변별력이 없다(CI 체크아웃이 그렇다)")
+
+    rows, _ = gen.measure(lambda _msg: None)
+    ocr = next(r for r in rows if r.spec.fid == "WM-C-009")
+    tracked = subprocess.run(
+        ["git", "ls-files", "src/mobile/lib/features/ocr"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    expected = sum((repo / f).read_text(encoding="utf-8").count("\n") + 1 for f in tracked)
+    assert (
+        ocr.loc == expected
+    ), f"장부 loc {ocr.loc} != 추적 파일 합 {expected} — 빌드 부산물 {len(generated)}건이 섞였다"

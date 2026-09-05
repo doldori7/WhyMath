@@ -9840,7 +9840,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 2355
+    loc: 1625
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 5
@@ -9905,7 +9905,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 937
+    loc: 577
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10035,7 +10035,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 4315
+    loc: 3183
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -10295,7 +10295,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 3128
+    loc: 693
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10360,7 +10360,7 @@ features:
     release_priority_prior_manual: P2
     priority_basis: "선행 제안 승계(P2) — 폐쇄루프 미도달"
     migration_risk: Low
-    loc: 2198
+    loc: 828
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -10425,7 +10425,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "폐쇄루프: seed_route"
     migration_risk: Low
-    loc: 2534
+    loc: 942
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
