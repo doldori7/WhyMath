@@ -131,6 +131,29 @@ def _has_pr_reference(artifacts: list[str]) -> bool:
     return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
 
 
+# ── 판정 기준 게이트 (HARN-68) ──────────────────────────────────────────────
+# 규칙 정본은 CLAUDE.md "미머지 존재를 '충족'으로 단정 금지"(2026-09-06 등재).
+# 여기는 그 규칙의 **게이트 clear 축** 집행 지점이다.
+#
+# 판정은 시점에 종속된다. "그 산출물이 있다"는 *언제의 트리에서* 봤느냐에 따라 참이거나
+# 거짓이며, 기준 시점이 없는 판정은 재현할 수 없고 재현 불가한 판정은 며칠 뒤 조용히
+# 거짓이 된다. 사고 경위: 2026-09-05 Gate 0 검토가 **미머지** PR #986을 Gate 0-B 근거로
+# 달았고, 같은 세션의 "고아 3건 소유자 부여 완료" 보고도 셋 다 미머지였다 — main 기준
+# 그날의 실제 변화는 하나뿐이었다.
+#
+# 그래서 evidence에 **기준을 가리키는 것**(커밋 해시 또는 PR 참조)을 요구한다. sha256
+# 같은 긴 해시도 받는다(문서 §정규화 해시를 증적으로 쓴 선례 — G0 검증설계 동결).
+# 경계에 `\b`를 쓰면 안 된다: 파이썬 정규식의 `\w`는 유니코드라 **한글도 단어문자**이므로
+# "커밋 fbbcc53에"처럼 한글이 바로 붙는 흔한 표기에서 경계가 성립하지 않는다(실측: 기존
+# 게이트 evidence 1건이 이 이유로 오탐됐다). ASCII 영숫자만 경계로 본다.
+_JUDGMENT_BASE_RE = re.compile(r"(?:#\d+|/pull/\d+|(?<![0-9A-Za-z])[0-9a-f]{7,64}(?![0-9A-Za-z]))")
+
+
+def _has_judgment_base(evidence: str) -> bool:
+    """evidence가 판정 기준(커밋 해시·PR 참조)을 담고 있는가."""
+    return bool(_JUDGMENT_BASE_RE.search(evidence))
+
+
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
 
 
@@ -903,6 +926,19 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     if args.gate_action == "clear":
         if not args.evidence:
             return _fail(f"{gate.id}: clear에는 --evidence <근거> 필수")
+        # 판정 기준 게이트 (HARN-68) — evidence가 "언제의 트리로 판정했는가"를 담아야 한다.
+        # done의 PR 증적 검사(HARN-23)와 동형이되 탈출구는 **자유 서술**이다: 사람 게이트의
+        # 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·서명·법률 검토·외부 등록),
+        # 그 유형을 미리 열거하면 정상 상태에서 거부하는 검사가 된다 — 그러면 사람은
+        # 게이트를 끄거나 대장을 손편집하고, 그때는 아무 기록도 남지 않아 더 나빠진다.
+        no_base_reason = getattr(args, "no_base", None)
+        if no_base_reason is None and not _has_judgment_base(args.evidence):
+            return _fail(
+                f"{gate.id}: evidence에 판정 기준이 없다 — 커밋 해시나 PR 참조(#12)를 넣어라.\n"
+                "  판정은 시점에 종속된다: 기준 없는 판정은 재현할 수 없고, 재현 불가한\n"
+                "  판정은 며칠 뒤 조용히 거짓이 된다(CLAUDE.md 미머지 존재를 충족으로 단정 금지).\n"
+                "  커밋과 무관한 근거(환경 생성·서명·외부 등록 등)라면 --no-base <사유>."
+            )
         as_owner = getattr(args, "as_owner", None)
         # 불일치 검사는 done/start와 동형(HARN-06) — 남의 게이트를 자기 이름으로 못 닫는다.
         if as_owner is not None and as_owner != gate.assignee:
@@ -918,6 +954,11 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.evidence = args.evidence
         gate.cleared_by = as_owner or "claude"
         extra["cleared_by"] = gate.cleared_by
+        # 탈출구를 쓴 사실과 사유를 **대장과 이벤트 양쪽**에 남긴다. 남지 않는 탈출구는
+        # 게이트를 끄는 것과 같다 — 나중에 "왜 기준이 없었나"를 물을 수 있어야 한다.
+        if no_base_reason is not None:
+            gate.notes = _append_note(gate.notes, no_base_reason, "판정기준 없음")
+            extra["no_base_reason"] = no_base_reason
     elif args.gate_action == "waive":
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
@@ -2650,6 +2691,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=[o for o in OWNERS if o != "claude"],
         help="gates clear: 본인 게이트를 직접 닫을 때 주체 명시 (HARN-60 · 생략 시 에이전트 기록)",
+    )
+    # gates clear 전용 — 판정 기준(커밋 해시·PR 참조)이 없는 근거의 탈출구 (HARN-68).
+    # 자유 서술이다: 사람 게이트의 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·
+    # 서명·법률 검토), 유형을 열거하면 정상 상태에서 거부하는 검사가 된다.
+    p.add_argument(
+        "--no-base",
+        dest="no_base",
+        default=None,
+        metavar="사유",
+        help="gates clear: 판정 기준(커밋·PR)이 없는 근거일 때 사유 명시 (HARN-68)",
     )
     # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
     p.add_argument("--title", help="gates add: 게이트 제목 (필수)")
