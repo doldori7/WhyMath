@@ -130,13 +130,86 @@ def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[No
 # ──────────────────────────────────────────────────────────────────────────
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """무작위 순서 seed를 stdout에 항상 찍는다.
+    """설정 적재를 검증(OPS-61)하고, 무작위 순서 seed를 stdout에 항상 찍는다.
+
+    **이 모듈의 유일한 `pytest_configure`다** — 두 번 정의하면 뒤엣것이 앞엣것을 덮어써
+    먼저 정의된 훅이 조용히 사라진다. 새 초기화 로직은 훅을 하나 더 만들지 말고 헬퍼로
+    빼서 여기서 부른다.
 
     `trylast=True` 필수 — pytest-randomly가 자기 `pytest_configure`에서 `"default"`를
     실제 정수로 확정하므로, 먼저 돌면 재현 불가능한 문자열이 로그에 남는다.
     """
+    # OPS-61 — 설정이 안 읽힌 상태면 여기서 즉시 멈춘다(seed 출력보다 먼저).
+    _assert_backend_ini_loaded(config)
+
     seed = getattr(getattr(config, "option", None), "randomly_seed", None)
     if seed is not None:
         print(
             f"[order] randomly-seed={seed}  (재현: pytest ... -p randomly --randomly-seed={seed})"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPS-61 — 명시 경로 invocation의 `asyncio_mode` 미적용 함정을 **1건의 즉시 실패**로
+#
+# 무엇이 문제였나: `src/backend`에서 `pytest ../../tests/backend/...`처럼 **명시 경로**를 주면
+# pytest가 인자의 공통조상을 상향 탐색해 **저장소 루트의 `pyproject.toml`을 rootdir 앵커**로
+# 잡는다. 루트에는 `[tool.pytest.ini_options]`가 없으므로 `src/backend/pyproject.toml`의
+# `asyncio_mode = "auto"`가 읽히지 않고 **strict로 폴백**하며, 그 결과 `async def` 테스트가
+# 전부 "async def functions are not natively supported"로 실패한다.
+#
+# 실측(2026-09-06):
+#     bare      → rootdir=src/backend  · inifile=src/backend/pyproject.toml · mode='auto'
+#     명시 경로  → rootdir=<저장소 루트> · inifile=<루트>/pyproject.toml      · mode='strict'
+# 2026-09-05 전체 스위트 730 실패 중 **718건(98.4%)**이 이 형태였고, 같은 커밋의 CI(bare
+# `pytest`)는 11,727 passed·0 failed였다 — 즉 코드가 아니라 **호출 방식**이 만든 빨강이다.
+#
+# 왜 가드인가(ARCH-22의 2회차): 이 현상은 2026-07-30에도 관측됐으나 원인이 **"무상한 pin"**으로
+# 잘못 기록돼(그 정정은 `src/backend/pyproject.toml` 주석에 있다) 재발했다. 723건이 늘 빨간
+# 상태면 **새 실패와 소음을 구분할 수 없다** — 실패가 정보가 되지 못한다. 그래서 718건의 혼란
+# 대신 **원인을 지목하는 실패 1건**으로 바꾼다.
+#
+# 이 가드가 하지 않는 것: 모드를 *고쳐 주지* 않는다. 조용히 auto로 되돌리면 "왜 초록인지"가
+# 사라지고, 다음 사람이 rootdir이 어디로 잡혔는지 모른 채 다른 ini 설정(테스트 경로·마커·
+# 필터)도 함께 누락된 상태로 돌게 된다. 알려 주고 멈추는 편이 옳다.
+# ──────────────────────────────────────────────────────────────────────────
+def _assert_backend_ini_loaded(config: pytest.Config) -> None:
+    """`asyncio_mode`가 auto가 아니면 원인을 지목하고 즉시 멈춘다.
+
+    **훅이 아니라 헬퍼다.** 한 모듈에 `pytest_configure`를 두 번 정의하면 뒤엣것이 앞엣것을
+    덮어써 먼저 정의된 훅이 **조용히 사라진다** — 초판이 실제로 그렇게 써서 위쪽 seed 출력
+    훅을 죽였고(실측: seed 줄 0건) `ruff` F811이 그것을 경고했는데 `noqa`로 눌러 위장했다.
+    아래 하나뿐인 `pytest_configure`가 이 헬퍼를 부른다.
+
+    `getini`가 이 키를 모르는 경우(pytest-asyncio 미설치)는 **가드 대상이 아니다** — 그때는
+    async 테스트 자체가 수집되지 않으므로 이 함정과 무관하고, 여기서 막으면 플러그인 부재라는
+    다른 문제를 이 메시지로 오진하게 만든다.
+    """
+    try:
+        mode = str(config.getini("asyncio_mode"))
+    except (ValueError, KeyError):
+        return
+
+    if mode == "auto":
+        return
+
+    raise pytest.UsageError(
+        "\n"
+        "━━━ pytest 설정이 읽히지 않았다 (OPS-61) ━━━\n"
+        f"  asyncio_mode = {mode!r}  (기대: 'auto')\n"
+        f"  rootdir      = {config.rootpath}\n"
+        f"  inifile      = {config.inipath}\n"
+        "\n"
+        "원인: 명시 테스트 경로를 인자로 주면 pytest가 인자의 공통조상을 상향 탐색해\n"
+        "      저장소 루트를 rootdir로 잡는다. 루트 pyproject.toml에는 pytest 설정이 없어\n"
+        "      src/backend/pyproject.toml 의 asyncio_mode='auto' 가 읽히지 않는다.\n"
+        "      이대로 두면 async def 테스트가 전부 실패한다(2026-09-05 실측 718건).\n"
+        "      ※ pytest-asyncio pin 버전과 무관하다 — 상한을 올려도 재현된다.\n"
+        "\n"
+        "해결(둘 중 하나):\n"
+        "  1) CI와 같게 bare 호출     : cd src/backend && python -m pytest -k <필터>\n"
+        "  2) 설정을 명시로 고정       : python -m pytest -c src/backend/pyproject.toml \\\n"
+        "                                --rootdir=src/backend <경로...>\n"
+        "\n"
+        "이 가드의 근거·실측은 src/backend/pyproject.toml 의 pytest-asyncio 주석에 있다."
+    )

@@ -1,229 +1,154 @@
-# KICE 연구보고서 PDF 히스토리 제거 런북 (LIC-07)
+# KICE 연구보고서 PDF 제거 — 실행 기록 및 교훈 (LIC-07 ①③ 실행분)
 
-> **판정 기준: main `76f415db` (2026-09-06 실측)** — 이 문서의 모든 "있다/없다" 판정은 이 커밋
-> 기준이다. 판정에는 시점이 붙어야 하고, 해시 없는 판정은 며칠 뒤 조용히 거짓이 된다
-> (CLAUDE.md 2026-09-06 "미머지 존재를 충족으로 단정 금지").
-
-이 작업은 **Kiki가 직접 실행한다**. 세션이 실행하지 않은 이유는 두 가지다 — ① 히스토리 재작성은
-되돌리기 어렵고 ② 이 세션에서 `git filter-repo` 실행이 **권한 분류기에 의해 거부**됐다. 거부는
-장애물이 아니라 판정이므로 우회하지 않고 소유자에게 실행 명령으로 넘긴다(CLAUDE.md
-"거부(deny)의 우회 금지" 처리 순서 ②).
+> **상태: 제거 실행만 완료 (2026-09-06)** · 판정 기준: main `9d5f81b2`
+> **`LIC-07` 태스크 자체는 열려 있다** — 재유입 방지 가드(acceptance ④)가 미착수이고
+> 정본은 `backlog/tasks/LIC-07-kice-report-pdf-git-history.yaml`(`status: todo`)이다.
+> 이 문서를 "저작권 보호 작업 전체 완료"로 읽으면 그 가드를 누락하게 된다(§7).
+> **결과**: 두 브랜치 삭제로 PDF 제거 완료. 새 clone에서 KICE blob **0건** 실측(§2).
+> **이 문서는 지시서가 아니라 기록이다** — 처음 설계했던 *브랜치 재작성* 방식은 실행 중
+> **이 저장소에서 구조적으로 불가능**함이 드러났고, 실제로 통한 방법은 그게 아니었다.
 
 ---
 
-## 1. 과제 명칭
+## 1. 무엇을 제거했나
 
-git 히스토리에 잔존하는 **KICE 평가기준 개발 연구 보고서 원본 PDF 2건** 제거 — 브랜치 2개 재작성.
-
-## 2. 목적
-
-저작권 위험 자료를 저장소 배포 경로에서 없앤다.
-
-두 PDF는 **고시가 아니라 KICE가 발간한 연구보고서**다. PDF 판권장을 직접 추출해 확인했다:
-
-> **실측 결과 — `(고등학교)…평가기준 개발 연구(수학과).pdf` p2**
-> `연구보고 CRC 2017-5-6 | 발행일 2017년 11월 28일 | 발행처 한국교육과정평가원 |`
-> `I S B N 979-11-5788-529-9 94370 | ※ 본 자료 내용의 무단 복제를 금함`
->
-> **실측 결과 — `2015 개정 … 초중학교 수학과 평가기준 개발 연구.pdf` p2**
-> `연구보고 CRC 2016-2-6 | 발행일 2016년 11월 30일 | 발행처 한국교육과정평가원 |`
-> `I S B N 979-11-5788-347-9 94370 | ※ 본 자료 내용의 무단 복제를 금함`
-
-`docs/data/licensing_safety.md`의 **'NCIC 구분'**이 이 부류를 이미 분류해 두었다 — 성취기준
-*코드·고시 본문*은 저작권법 §7 보호대상 아님(무제한)이지만, NCIC **해설서·연구보고서**는
-공공누리 2유형(**영리 차단·C등급**)이다. WhyMath는 상업 서비스이므로 후자는 잔존시키지 않는다.
-
-**제거 대상이 아닌 것 (혼동 금지)**:
-- `data/ncic/raw/curriculum_math_2022.pdf` — p1이 `교육부 고시 제2022-33호 [별책 8] 수학과 교육과정`.
-  **고시**라 저작권법 §7 제1호(고시·공고·훈령)상 보호받지 못하는 저작물이다. 그대로 둔다.
-- `한국_중고_수학앱_사업계획서.pdf` / `.docx`, `WhyMath_harness.zip`, `files.zip` — 자체 저작물.
-- 작업 트리의 코퍼스 전량 — 2026-09-06 전수 실사 결과 저작권 저촉 **0건**.
-
-## 3. 구체적 절차
-
-### 3.1 사전 실측 — 무엇이 어디에 있는가
-
-| 항목 | 값 |
-|---|---|
-| blob ① | `35cb705abfef4f7fbee7b2e6b77d68a6c25f272d` · 4,824,216 B · 고등 CRC 2017-5-6 |
-| blob ② | `7e1d471e69b2d4135310cd53c4eca98d1b32b5a1` · 5,906,090 B · 초중 CRC 2016-2-6 |
-| 도입 커밋 | `388f7921` "kice pdf 반입" (2026-08-08) |
-| 제거 커밋 | `98a34695` "data(CUR-03): KICE … 구조 메타데이터 반입" (2026-08-08) |
-
-**도달 가능한 ref (unshallow 후 전수 실측)**:
-
-| ref | blob 보유 | 일반 `git clone`이 가져오는가 |
+| blob | 크기 | 문서 |
 |---|---|---|
-| `refs/heads/main` | **0건** | — |
-| `refs/heads/claude/human-bottleneck-tasks-6dszy0` | 2건 | **예** |
-| `refs/heads/merge/human-bottleneck-6dszy0` | 2건 | **예** |
-| `refs/pull/739/head` (닫힌 PR #739) | 2건 | 아니오(명시 fetch 필요) |
+| `35cb705abfef4f7fbee7b2e6b77d68a6c25f272d` | 4.82 MB | 연구보고 CRC 2017-5-6 · 고등학교 수학과 평가기준 개발 연구 |
+| `7e1d471e69b2d4135310cd53c4eca98d1b32b5a1` | 5.91 MB | 연구보고 CRC 2016-2-6 · 초·중학교 수학과 평가기준 개발 연구 |
 
-> **핵심 — main은 깨끗하다.** 처음에는 shallow 클론이라 판정이 불가능했고(SessionStart 훅도
-> "ahead 수치·포팅 근거를 신뢰할 수 없다"고 경고했다), `git fetch --unshallow` 후에야 확정됐다:
-> `git merge-base --is-ancestor 388f7921 origin/main` → **false**. 따라서 **main 히스토리 재작성도,
-> 전 협업자 재clone도, 열린 PR 전건 재기반도 필요 없다.** 재작성 대상은 정체된 브랜치 2개뿐이다.
+판권장 직접 추출로 확인: 발행처 한국교육과정평가원, ISBN 979-11-5788-529-9 / -347-9,
+**"※ 본 자료 내용의 무단 복제를 금함"**. 고시가 아니라 **연구보고서**이므로
+`docs/data/licensing_safety.md`의 'NCIC 구분' 후자(해설서·연구보고서 = 영리 차단·C등급)에 해당한다.
 
-### 3.2 브랜치를 지우지 않고 **재작성**하는 이유
+**제거하지 않은 것**: `data/ncic/raw/curriculum_math_2022.pdf`는 p1이
+`교육부 고시 제2022-33호 [별책 8] 수학과 교육과정` — **고시**라 저작권법 §7 제1호상 보호받지
+못하는 저작물이다. 자체 사업계획서 PDF/docx·하네스 zip도 자체 저작물이라 대상이 아니다.
 
-`claude/human-bottleneck-tasks-6dszy0`은 main에 없는 커밋 **21건**을 담고 있고, 그중
-**3개 태스크의 구현이 main에 착지하지 않았다**(내용 기준 실측):
+## 2. 실제로 한 일
 
-| 태스크 | main 상태 | 산출물 실측 |
-|---|---|---|
-| CUR-03 | done | 코퍼스 `achievement_criteria_v1` main에 있음 ✔ |
-| MISC-04 | done | `db/models/misconception_relation.py` main에 있음 ✔ |
-| S3-32 · REC-02 | done | 회수 완료 ✔ |
-| **MISC-01** | **todo** | `coach.py`의 `visualize_misconception` 배선 매치 **0** ✘ |
-| **MISC-03** | **todo** | `coach.py`의 유사 미응답 문항 서빙 매치 **0** ✘ |
-| **PB-02** | **todo** | `ci.yml`의 커버리지 재생성-diff 매치 **0** ✘ |
+`main`은 두 blob을 담지 않았다(`git merge-base --is-ancestor 388f7921 origin/main` → false).
+보유 ref는 정체된 브랜치 2개와 닫힌 PR #739의 `refs/pull/739/head`뿐이었다. 그래서
+**두 브랜치를 삭제**했다 — 히스토리 재작성 0, main 무변경, 협업자 재clone 불요.
 
-브랜치를 **삭제**하면 이 3건이 소실된다 — 이 저장소가 이미 4번 겪은 "미병합 고립"의 5회차가 된다.
-**재작성**은 PDF blob만 들어내고 21커밋을 전부 보존한다.
-
-**비용(정직한 고지)**: 재작성은 21커밋의 SHA를 전부 바꾼다. 백로그 notes가 인용하는 옛 SHA
-(예: REC-02 notes의 `d554ddad`)는 더 이상 해석되지 않는다. 작업 소실은 없고 부기 참조만 끊긴다.
-
-### 3.3 실행 (예상 소요 5~10분 · 네트워크 상태에 따라 변동)
-
-각 단계마다 **그 단계의 산출물 자체**를 확인하는 자가검증이 붙어 있다. 간접 신호(명령이 조용히
-끝났다 등)를 성공 근거로 삼지 않는다.
-
-**단계 1 — 도구 설치 + 미러 클론 (새 작업 폴더, 저장소 클론과 분리)**
-
-```powershell
-# 실행 시스템: Windows PowerShell (Phaiakes9 = 이 PC 자체 · 별도 접속 불요)
-cd C:\Users\kiki\Desktop\__AI
-python -m pip install git-filter-repo
-Remove-Item -Recurse -Force .\wm-purge -ErrorAction SilentlyContinue
-git clone --mirror https://github.com/doldori7/WhyMath.git wm-purge
-cd .\wm-purge
-git filter-repo --version
+```
+git push origin --delete claude/human-bottleneck-tasks-6dszy0
+git push origin --delete merge/human-bottleneck-6dszy0
 ```
 
-자가검증: `git filter-repo --version`이 버전 문자열을 출력해야 한다. `명령을 찾을 수 없습니다`가
-나오면 `python -m pip install --user git-filter-repo` 후 `python -m git_filter_repo --version`으로
-확인하고, 이후 단계의 `git filter-repo`를 `python -m git_filter_repo`로 바꿔 쓴다.
+**삭제 전 소실 0 증명**(이게 본체다 — 증명 없는 삭제는 미병합 고립 5회차가 된다):
 
-**단계 2 — 재작성 전 상태 실측 (이 숫자가 뒤 단계의 대조군이다)**
+- 두 브랜치가 main에 없는 커밋 21건을 담았고 그중 **MISC-01·MISC-03·PB-02 구현이 main 미착지**였다.
+- 그러나 그 구현은 **`claude/subject-problems-theory-check-7n9n72`에 그대로 있고, 그 브랜치는
+  KICE blob 0건**이다. 기능 마커 5/5 보존(시각화 배선 6=6 · shadow 51→52 · config 플래그 1=1 ·
+  유사문항 서빙 7=7 · 코퍼스 글롭 10=10), 핵심 파일 6개는 **blob SHA 바이트 동일**.
+- 6dszy0에만 있던 파일 4개는 MISC-04 분이고 **전부 main에 이미 있다**(3개 바이트 동일,
+  alembic 1개는 main이 후속판 — PR #821 회수분).
 
-커밋 수를 **셸 변수에 담는다**. 뒤 단계가 이 값을 인자로 쓰므로 자리표시자를 두지 않는다
-(CLAUDE.md 2026-08-31 "앞 단계 출력이 뒤 단계 인자가 되는 블록은 변수로 잇는다").
+**최종 확인**(완전히 새 clone에서). 아래는 **그대로 재실행 가능한** 형태다 — 초안은
+`wm-verify`로 들어가지 않고 SHA도 생략 부호(`35cb705a…`)를 써서, blob이 있어도 항상 0건을 내는
+*무조건 통과하는 검증*이었다(PR #1008 리뷰 지적). 법적 증적 명령에서는 치명적이라 교체했다.
 
 ```powershell
-cd C:\Users\kiki\Desktop\__AI\wm-purge
+cd C:\Users\kiki\Desktop\__AI
 $Blobs = "^(35cb705abfef4f7fbee7b2e6b77d68a6c25f272d|7e1d471e69b2d4135310cd53c4eca98d1b32b5a1) "
-"35cb705abfef4f7fbee7b2e6b77d68a6c25f272d`n7e1d471e69b2d4135310cd53c4eca98d1b32b5a1" | Set-Content -Encoding ascii ..\strip_blobs.txt
-$A = "refs/heads/claude/human-bottleneck-tasks-6dszy0"
-$M = "refs/heads/merge/human-bottleneck-6dszy0"
-$PreA = [int](git rev-list --count "refs/heads/main..$A")
-$PreM = [int](git rev-list --count "refs/heads/main..$M")
-foreach ($r in @("refs/heads/main", $A, $M)) {
-  $n = (git rev-list --objects $r | Select-String -Pattern $Blobs).Count
-  Write-Host "$r -> blob $n 건"
-}
-Write-Host "재작성 전 커밋 수: A=$PreA  M=$PreM"
-```
-
-성공 기준: **main 0건 · 나머지 두 브랜치 각 2건**, `PreA`/`PreM`은 각각 **21**(2026-09-06 실측).
-main이 0이 아니면 **여기서 멈추고 세션에 알린다** — 3.1 판정이 뒤집힌 것이므로 절차를 다시 짠다.
-
-> ⚠ `$PreA`·`$PreM`은 이 창의 변수다. 창을 닫거나 새 창을 열면 단계 4의 대조가 성립하지 않는다.
-> 단계 2~4는 **같은 창에서 연속으로** 실행한다.
-
-**단계 3 — 재작성 (두 브랜치만 · blob ID 지정)**
-
-경로가 아니라 **blob ID**로 지정한다. 파일명이 한글이라 경로 지정은 인코딩에서 어긋날 수 있는데,
-blob ID는 그 위험이 없다.
-
-```powershell
-cd C:\Users\kiki\Desktop\__AI\wm-purge
-git filter-repo --force --partial --refs refs/heads/claude/human-bottleneck-tasks-6dszy0 refs/heads/merge/human-bottleneck-6dszy0 --strip-blobs-with-ids ..\strip_blobs.txt
-```
-
-**단계 4 — 재작성 후 자가검증 (변별력 있는 검사)**
-
-```powershell
-cd C:\Users\kiki\Desktop\__AI\wm-purge
-$PostA = [int](git rev-list --count "refs/heads/main..$A")
-$PostM = [int](git rev-list --count "refs/heads/main..$M")
-$BlobA = (git rev-list --objects $A | Select-String -Pattern $Blobs).Count
-$BlobM = (git rev-list --objects $M | Select-String -Pattern $Blobs).Count
-$Coach = (git show "${A}:src/backend/whymath_backend/api/coach.py" | Select-String -Pattern "visualize_misconception").Count
-$Ci    = (git show "${A}:.github/workflows/ci.yml" | Select-String -Pattern "재생성").Count
-Write-Host "blob:    A=$BlobA  M=$BlobM        (둘 다 0이어야 함)"
-Write-Host "커밋수:  A=$PostA/$PreA  M=$PostM/$PreM  (각각 이전값 또는 이전값-1)"
-Write-Host "내용마커: coach.py=$Coach (6)  ci.yml=$Ci (3)"
-```
-
-성공 기준 — **세 축이 모두** 성립해야 한다. 하나만 보면 위장이 된다(blob 0건만 확인하면
-"브랜치를 통째로 비워도 통과"한다).
-
-| 축 | 기대값 | 왜 이 값인가 |
-|---|---|---|
-| blob | `A=0 M=0` | 제거됐다 |
-| 커밋 수 | `$PostA`가 `$PreA` 또는 `$PreA - 1` (M도 동일) | `388f7921`은 **PDF 2개만** 담은 커밋이라 blob을 들어내면 빈 커밋이 되고, filter-repo가 기본값(`--prune-empty=auto`)으로 정리한다. 그래서 **1 감소가 정상**이다. `98a34695`는 6파일을 바꾸므로 살아남는다. 2 이상 줄거나 0~1로 떨어졌으면 커밋까지 날아간 것이니 **push 금지** |
-| 내용 마커 | `coach.py=6`, `ci.yml=3` | main에 착지하지 않은 MISC-01·PB-02의 구현이 그대로 남아 있는지 직접 본다. 커밋 수만으로는 "커밋은 있는데 내용이 비었다"를 잡지 못한다 |
-
-**단계 5 — force-push (되돌리기 어려운 지점 · 여기까지 자가검증 통과 후에만)**
-
-```powershell
-cd C:\Users\kiki\Desktop\__AI\wm-purge
-git push --force origin refs/heads/claude/human-bottleneck-tasks-6dszy0:refs/heads/claude/human-bottleneck-tasks-6dszy0
-git push --force origin refs/heads/merge/human-bottleneck-6dszy0:refs/heads/merge/human-bottleneck-6dszy0
-```
-
-**단계 6 — 최종 확인 (완전히 새 clone에서 · 캐시 오염 배제)**
-
-```powershell
-cd C:\Users\kiki\Desktop\__AI
 Remove-Item -Recurse -Force .\wm-verify -ErrorAction SilentlyContinue
 git clone https://github.com/doldori7/WhyMath.git wm-verify
-cd .\wm-verify
-$n = (git rev-list --objects --all | Select-String -Pattern "^(35cb705abfef4f7fbee7b2e6b77d68a6c25f272d|7e1d471e69b2d4135310cd53c4eca98d1b32b5a1) ").Count
-Write-Host "새 clone의 KICE blob: $n 건 (0이어야 성공)"
+$objs = git -C wm-verify rev-list --objects --all
+$rc = $LASTEXITCODE
+$n = ($objs | Select-String -Pattern $Blobs).Count
+Write-Host "rev-list exit=$rc · KICE blob=$n 건   (exit 0 이고 0건이어야 성공)"
 ```
 
-## 4. 성공 기준
+**성공 기준**: `exit=0` **그리고** `0 건`. 건수만 보면 clone·조회가 실패해도 0건으로 보이므로
+종료 상태를 함께 판정한다.
 
-- 단계 4: 두 브랜치 blob **0건** + 커밋 수 `$Pre` 또는 `$Pre - 1` + 내용 마커 `coach.py=6`·`ci.yml=3`
-- 단계 6: 새 clone에서 blob **0건**
-- 실패 시 대처: 단계 5 전이면 `wm-purge` 폴더를 지우고 단계 1부터 다시 한다(원격 무변경이라
-  피해 0). 단계 5 후 문제가 발견되면 GitHub의 브랜치 히스토리에서 이전 헤드로 복구 가능하나,
-  그 전에 세션에 상황을 알린다.
+**이 검사의 변별력 근거**: 같은 `$Blobs` 패턴을 삭제 *전* 같은 명령 형태로 돌렸을 때 —
 
-## 5. 실행 환경
+```
+refs/heads/main                                  -> blob 0 건
+refs/heads/claude/human-bottleneck-tasks-6dszy0  -> blob 2 건
+refs/heads/merge/human-bottleneck-6dszy0         -> blob 2 건
+```
 
-- **머신**: Phaiakes9 = Kiki의 작업 PC 그 자체. 평소 쓰는 Windows PowerShell이 곧 Phaiakes9이며
-  SSH·WSL 진입은 불요하다.
-- **작업 디렉터리**: `C:\Users\kiki\Desktop\__AI` (저장소 클론 `…\__AI\WhyMath`와 **분리된**
-  임시 폴더 `wm-purge`·`wm-verify`를 쓴다 — 평소 작업 클론을 건드리지 않는다)
-- **선행 조건**: GitHub push 권한, 네트워크. Docker·서버 기동 불요.
+즉 이 패턴은 blob이 있으면 **실제로 찾아낸다**(2건). 성공·실패 양쪽에서 다른 값을 내므로
+0건이라는 결과가 의미를 가진다. 같은 실측이 "main은 깨끗하다"도 함께 증명해 §2의 삭제 전략을
+성립시켰다.
 
-## 6. 창 구분
+**초안 패턴의 반례(실측)**: 삭제된 커밋을 아직 담고 있는 ref(`refs/pull/739/head`)에
+두 패턴을 각각 돌린 결과 —
 
-**PowerShell 창 하나**에서 단계 1~6을 순서대로 진행한다. 장기 점유 프로세스(서버 등)가 없으므로
-창 분리가 필요 없다. 단계 사이에 자가검증 출력을 읽고 판단하는 지점이 있으니 **한 번에 전부
-붙여넣지 말고 단계 단위로** 실행한다.
+| 패턴 | blob 보유 ref | 정상 ref |
+|---|---|---|
+| 전체 SHA (현행) | **2건** | 0건 |
+| 생략 부호 `35cb705a…` (초안) | **0건** | 0건 |
 
----
+초안은 blob이 *있는데도* 0건을 냈다. 즉 어떤 저장소에 돌려도 통과하는 검사였고, 그것을 법적
+제거 증적으로 쓸 뻔했다.
 
-## 7. 남는 것 — `refs/pull/739/head` (GitHub 지원 요청 필요)
+## 3. 왜 브랜치 재작성은 실패했나 — 재사용 가능한 교훈
 
-닫힌 PR **#739**(`merge: claude/human-bottleneck-tasks-6dszy0 (MISC-01, MISC-03, PB-02, REC-02,
-S3-32)`)의 서버 측 ref `refs/pull/739/head`가 옛 커밋을 계속 보유한다. 이 ref는 **저장소 소유자도
-git으로 지울 수 없다** — force-push로도 사라지지 않는다.
+처음 런북은 `git filter-repo --refs <두 브랜치> --strip-blobs-with-ids`로 **PDF만 들어내고
+커밋 21건은 보존**하는 방식이었다. 실행하니 blob은 사라졌고 파일도 온전했는데(자가검증 1·3축
+통과) **2축이 실패**했다:
 
-- **일반 `git clone`은 `refs/pull/*`을 가져오지 않는다.** 따라서 위 단계 1~6을 마치면 통상적인
-  배포 경로에서는 PDF가 사라진다 — 노출은 "모든 clone"에서 "PR ref를 명시적으로 fetch하는
-  사람"으로 줄어든다.
-- 완전 제거를 원하면 **GitHub Support에 요청**한다(저장소·PR 번호·blob SHA 2건을 적어
-  "remove cached views / stale PR refs" 요청). 이건 웹 폼 작업이라 이 런북 범위 밖이다.
-- 그 요청 전까지 남는 잔여 위험은 **알면서 남기는 한계**로 `LIC-07`에 기록돼 있다.
+```
+1) blob   : A=0 M=0                    ✔
+2) commits: A=726/21  M=729/21         ✘  (기대 21 또는 20)
+3) marker : coach True  ci True        ✔
+```
 
-## 8. 재유입 방지 (`LIC-07` acceptance ④ — 별도 작업)
+원인 — **이 저장소는 커밋이 전부 서명(`gpgsig`, SSH 서명)돼 있다**(표본 200건 중 200건).
+`filter-repo`의 엔진인 `git fast-export`는 **서명을 버린다.** 그래서 PDF와 무관한 조상 705건까지
+SHA가 바뀌었고, 브랜치가 main에서 통째로 분리됐다:
 
-같은 일이 다시 일어나지 않게 하는 가드는 이 런북이 아니라 `LIC-07` ④가 소유한다. 저작권 위험
-원본(대용량 PDF·hwp 등)의 커밋을 CI 또는 pre-commit에서 차단하고, **위반 픽스처를 실제로 주입해
-red를 실증**한 뒤에만 "보호 있음"으로 친다(CLAUDE.md 2026-09-01 "보호 장치를 실패 주입 없이
-'보호 있음'으로 선언 금지").
+| | 재작성 전 | 재작성 후 |
+|---|---|---|
+| A 전체 커밋 | 757 | 757 |
+| main과 공유 | 736 | **31** |
+
+main을 `--refs`에 함께 넣으면 공유 이력은 맞겠지만 그건 **main 재작성**이라 불가.
+즉 **서명된 저장소에서 "브랜치만 재작성" 경로는 구조적으로 막혀 있다.**
+
+> **일반화**: 서명된 저장소에서 `filter-repo`/`filter-branch`로 *일부 ref만* 재작성하면, 재작성한
+> ref가 나머지와 이력을 공유하지 못하게 된다. 히스토리에서 무언가를 지워야 한다면 먼저
+> **그 ref를 지울 수 있는지**(내용이 다른 곳에 보존돼 있는지)를 보라. 삭제가 되면 재작성은
+> 필요 없고, 재작성이 필요하면 전체 ref를 함께 재작성하는 수밖에 없다(= 사실상 저장소 재출발).
+
+## 4. 자가검증 설계가 실제로 한 일
+
+**2축이 없었으면 그대로 push했을 것이다.** blob 0건(1축)과 파일 보존(3축)만으로는 "브랜치가
+main에서 떨어져 나갔다"를 볼 수 없다. 검증 축은 *성공을 확인*하는 게 아니라 *다른 방식의 실패를
+각각* 잡아야 한다는 사례다(CLAUDE.md "변별력 없는 검증 스텝 금지").
+
+같은 실행에서 **검증 스텝 자체의 결함도 두 개** 드러났다:
+
+- **커밋 수 기대값을 `21/18`로 못박았던 초안** — `388f7921`이 PDF 2개만 담은 커밋이라 재작성 시
+  빈 커밋으로 정리되면 20이 된다. *정상 상태에서 실패하는* 검증이었다. `pre` 또는 `pre-1`로 교체.
+- **내용 마커를 한글(`재생성`) grep으로 잡으려던 안** — PowerShell 콘솔 인코딩에 따라 정상
+  상태에서도 매치가 어긋난다. **blob SHA 대조**(ASCII만)로 교체 — 변별력도 더 높다.
+
+## 5. 실행 환경에서 드러난 함정
+
+- **`pip install git-filter-repo` 후 `git filter-repo`가 PATH에 없다**(Windows 사용자 설치).
+  pip이 출력한 경로를 그대로 세션 PATH에 얹어야 한다:
+  `$env:Path = "C:\Users\kiki\AppData\Roaming\Python\Python313\Scripts;" + $env:Path`
+- **`git filter-repo --version`이 버전이 아닌 SHA 형태(`a40bce548d2c`)를 출력**하고
+  `git_filter_repo.__version__`도 없다. **버전 문자열로 도구 정상 여부를 판정하지 말 것** —
+  `--dry-run`(refs 무변경)으로 기능 검증하는 편이 정확하다.
+
+## 6. 남은 한계 (알면서 남김)
+
+`refs/pull/739/head`(닫힌 PR #739)는 서버 측 ref라 **저장소 소유자도 git으로 지울 수 없다.**
+다만 **일반 `git clone`은 `refs/pull/*`을 가져오지 않으므로** 통상 배포 경로에서는 제거가
+완료됐다(§2 최종 확인). 완전 제거는 GitHub Support 요청(저장소·PR #739·blob SHA 2건 명시)이며
+웹 폼 작업이라 이 문서 범위 밖이다. `LIC-07` ⑨에 동일 내용이 기록돼 있다.
+
+## 7. 후속 — **LIC-07은 아직 열려 있다**
+
+제거 실행(acceptance ①③)은 끝났지만 **재유입 방지 가드(acceptance ④)는 미착수**다. 저작권 위험
+원본(대용량 PDF·hwp 등)의 커밋을 CI 또는 pre-commit에서 차단하는 축이며, 만들면 **위반 픽스처를
+실제로 주입해 red를 실증한 뒤에만** "보호 있음"으로 친다(CLAUDE.md 2026-09-01).
+
+그 전까지 이 저장소는 **같은 사고를 다시 겪을 수 있다** — 2026-08-08에 PDF가 들어온 경로가 그대로
+열려 있다. 태스크 정본의 `status`가 `todo`인 것이 그 사실의 단일 진실 원천이며, 이 문서가 아니다.
