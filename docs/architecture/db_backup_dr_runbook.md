@@ -113,12 +113,22 @@ Set-Content -Path "C:\Users\kiki\Desktop\__AI\WhyMath-backups\recipients.txt" -V
 > **태스크는 2개가 등록된다** — `WhyMath-DB-Backup`(백업)과 `WhyMath-DB-Backup-Check`(신선도 검사). 둘째가 없으면 상태 대장을 **아무도 읽지 않고**, 읽지 않는 대장은 아무것도 탐지하지 못한다. 스케줄은 누락을 *줄이고*, 검사 태스크가 누락을 *보이게* 한다 — 이 분업이 §2의 요점이다. (초판은 검사 명령을 런북에 인쇄만 해서 사람이 기억하게 뒀는데, 그건 이 절이 없애려던 조용한 누락과 같은 실패 양식이다 — 2026-09-01 PR #968 리뷰 지적 수용.)
 
 ```powershell
-# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 등록에 필요)
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요) — **일반 창**에서 실행. UAC 창이 뜨면 "예"
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption
+$cmd = "& 'C:\Users\kiki\Desktop\__AI\WhyMath\scripts\backup\register_backup_schedule.ps1' -At 04:00 -CheckAt 09:00 -RequireEncryption"
+Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-Command',$cmd
 ```
 
-- **성공**: `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' registered: daily 09:00, threshold 48 h, LogonType S4U` **두 줄이 모두** 나와야 한다. 한 줄만 나오면 실패다.
+관리자 창이 **새로 열려** 등록을 수행하고 열린 채 남는다(`-NoExit` — 출력을 읽고 닫는다). 사람이 관리자 창을 직접 여는 단계는 없앴다 — 2026-09-06 한 세션에서 그 단계가 **2회 연속** 실패했고(일반 창에 붙여넣음), 그 단계에 의존하는 런북은 실패 확률이 사람에게 걸려 있다. 등록이 됐는지는 관리자 창의 출력이 아니라 **일반 창에서 독립적으로 되읽어** 확인한다:
+
+```powershell
+# [실행 시스템] Windows PowerShell — 같은 일반 창 (관리자 창에 [OK] 두 줄이 보인 뒤)
+$t = Get-ScheduledTask -TaskName "WhyMath-DB-Backup" -ErrorAction SilentlyContinue
+$c = Get-ScheduledTask -TaskName "WhyMath-DB-Backup-Check" -ErrorAction SilentlyContinue
+($t -ne $null) -and ("$($t.Principal.LogonType)" -eq "S4U") -and ($c -ne $null) -and ("$($c.Principal.LogonType)" -eq "S4U")
+```
+
+- **성공**: 관리자 창에 `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' registered: daily 09:00, threshold 48 h, LogonType S4U` **두 줄이 모두** 나오고, 일반 창의 되읽기가 `True`. 한 줄만 나오거나 되읽기가 `False`면 실패다.
 - **변별력**: 스크립트는 등록 후 작업을 **되읽어** `LogonType`이 실제로 `S4U`인지 확인한다. 권한이 모자라 Password 등록으로 강등되면 `[FAIL]`로 멈춘다 — "등록 성공"을 "설정이 옳다"의 근거로 쓰지 않는다.
 - **실패 시 대처**: `[FAIL] this PowerShell window is not elevated`가 나오면 창이 관리자 권한이 아니다 — 스크립트가 아무것도 건드리기 전에 멈춘 것이다(2026-09-06 신설·구판은 `Register-ScheduledTask : Access is denied`를 내고도 계속 진행해 "reported success but cannot be read back"이라는 **틀린 원인**을 보고했다). PowerShell을 "관리자 권한으로 실행"(Win+X → 터미널(관리자))으로 다시 열어 재실행한다 — 창 제목 앞에 `관리자:`가 붙어 있어야 한다. `LogonType 'Password', not S4U`는 등록은 됐으나 강등된 경우이며 대처는 같다.
 
@@ -363,6 +373,21 @@ Write-Host "EXIT=$LASTEXITCODE"
 
 > **정정 이력 (2026-09-03 · PR #974 Codex P1)**: 초판은 "`.dump`(평문)·`recipients.txt`는 나가도 되지만 개인키는…"이라고 적어, **평문 덤프 반출을 허용하는 것처럼 읽혔다** — 바로 앞 문장(`.dump.age`뿐)과 §4-1 금지를 정면으로 뒤집는 서술이었다. 리뷰가 지적했다. 명령 블록은 확장자를 `*.dump.age`로 명시 필터해 실제로는 평문이 나가지 않았지만, **산문을 따라간 운영자는 내보낼 수 있었다** — 명령이 좁다는 것이 산문이 틀려도 된다는 뜻은 아니다.
 
+**사전 확인 — 동기화 클라이언트 실측 (2026-09-06 신설·읽기 전용)**: 아래 시딩 블록의 첫 줄(`$Offsite`)을 정하기 전에 *이 PC에 무엇이 설치·실행돼 있는지*를 실측한다. 출력은 경로·참/거짓·프로세스 이름뿐이라 그대로 세션에 전달해도 된다. 2026-09-06 실측에서 GoogleDriveFS·OneDrive·Dropbox 프로세스가 **0건**이었고 `C:\Users\kiki\Google Drive`는 존재했다 — 폴더의 존재는 동기화의 증거가 아니다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요) — 읽기 전용 실측
+"OneDrive folder (env): $env:OneDrive"
+"Google Drive for desktop installed: " + ((Test-Path 'C:\Program Files\Google\Drive File Stream') -or (Test-Path "$env:LOCALAPPDATA\Google\DriveFS"))
+"Google Drive mirror folder: " + (Test-Path "$env:USERPROFILE\My Drive")
+"Google Drive virtual drive G: " + (Test-Path 'G:\My Drive')
+"Legacy 'Google Drive' folder created: " + (Get-Item 'C:\Users\kiki\Google Drive' -ErrorAction SilentlyContinue).CreationTime
+"desktop.ini in legacy folder: " + (Test-Path 'C:\Users\kiki\Google Drive\desktop.ini')
+"sync-like processes: " + ((Get-Process | Where-Object { $_.Name -match 'drive|onedrive|dropbox|mybox|icloud|mega|pcloud|synology|sync' } | Select-Object -ExpandProperty Name -Unique) -join ', ')
+```
+
+- **판독**: `sync-like processes`가 비어 있으면 **어떤 폴더도 업로드되지 않는다** — 클라이언트를 실행·로그인(또는 설치)한 뒤에야 시딩이 의미가 있다. `Legacy 'Google Drive' folder created`가 2026-09-03이면 그 폴더는 구판 시딩 블록이 만든 **일반 폴더**다(클라이언트 것이 아니다). `desktop.ini`는 Google Drive 데스크톱이 관리 폴더에 두는 파일이라 `True`면 클라이언트 관리 폴더일 가능성이 높다(부재가 곧 미관리는 아니다). `$Offsite`는 클라이언트 설정 화면이 가리키는 폴더 아래로 정한다 — 이 출력에서 *추론*하지 않는다.
+
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
 # 첫 줄 = 사람이 아는 값. 동기화 클라이언트가 만든 **실제 루트** 아래의 하위 폴더로 고친다.
@@ -421,21 +446,27 @@ if (-not (Test-Path -LiteralPath $SyncRoot -PathType Container)) {
 
 그래서 오프사이트는 스케줄에 **편입**한다. `backup_whymath_pg.ps1 -OffsiteDir <경로>`가 성공한 **암호화** 회차마다 사본을 넣고 **같은 보존 정책**을 그 디렉터리에도 적용한다(최신 1개는 만료돼도 보존 — 로컬과 동일 불변식).
 
+**순서(의무)**: `-OffsiteDir`는 §4-1b의 자가검증 2b(`True`)·자가검증 3(웹 화면)이 **통과한 폴더에만** 붙인다. 검증되지 않은 폴더로 미러하면 로컬 폴더 복사가 "상시 오프사이트"로 **위장**되고, 스크립트의 크기 대조·보존 정책까지 전부 통과한다. 정기 백업 자체는 오프사이트를 기다리지 않는다 — 폴더 검증이 안 끝났으면 §2(플래그 없이)로 먼저 등록하고, 검증 후 아래로 **재등록**한다(`-Force`가 덮어쓴다).
+
 ```powershell
-# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 재등록에 필요) — 새 창(관리자)
-# 첫 줄 = §4-1b에서 가드를 통과한 것과 **같은 경로**를 그대로 쓴다
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요) — **일반 창**에서 실행. UAC 창이 뜨면 "예"
+# 첫 줄 = §4-1b 자가검증 2b·3을 통과한 것과 **같은 경로**를 그대로 쓴다
 $Offsite = "C:\Users\kiki\Google Drive\WhyMath-backups"
 
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir $Offsite
+$cmd = "& 'C:\Users\kiki\Desktop\__AI\WhyMath\scripts\backup\register_backup_schedule.ps1' -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir '$Offsite'"
+Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-Command',$cmd
+```
 
+```powershell
+# [실행 시스템] Windows PowerShell — 같은 일반 창 (관리자 창에 [OK] 두 줄이 보인 뒤)
 # 자가검증: 등록된 백업 작업의 인자에 -OffsiteDir가 실제로 실려 있는가 (True 여야 함)
 ((Get-ScheduledTask -TaskName "WhyMath-DB-Backup").Actions.Arguments) -like "*-OffsiteDir*"
 ```
 
-- **성공**: `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' ...` 두 줄 + 자가검증 `True`.
+- **성공**: 관리자 창에 `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' ...` 두 줄 + 일반 창 자가검증 `True`.
 - **변별력**: 자가검증은 "등록됐다"가 아니라 **등록된 인자 문자열에 플래그가 실렸는지**를 본다 — 플래그를 빠뜨린 재등록도 `[OK]` 두 줄은 그대로 내기 때문이다.
-- **실패 시 대처**: `[FAIL] this PowerShell window is not elevated` → 창 B가 관리자 권한이 아니다(§2 대처와 동일). **2026-09-06 실측**: 이 블록을 일반 창에 붙여넣으면 `Register-ScheduledTask : Access is denied`가 났고, 이어지는 `Get-ScheduledTask`가 `WhyMath-DB-Backup` 자체를 찾지 못했다 — 즉 그 시점까지 **정기 백업 작업이 등록돼 있지 않았고** 최신 산출물이 4일 전(9/2) 것이었다. 이 절은 오프사이트만이 아니라 정기 백업 자체를 살리는 단계다.
+- **실패 시 대처**: UAC 창에서 "아니요"를 눌렀거나 관리자 창이 열리지 않으면 아무것도 등록되지 않는다 — 다시 실행해 "예"를 누른다. 관리자 창에 `[FAIL] this PowerShell window is not elevated`가 보이면 승격이 거부된 것이다(§2 대처와 동일). **2026-09-06 실측**: 이 블록을 일반 창에 붙여넣으면 `Register-ScheduledTask : Access is denied`가 났고, 이어지는 `Get-ScheduledTask`가 `WhyMath-DB-Backup` 자체를 찾지 못했다 — 즉 그 시점까지 **정기 백업 작업이 등록돼 있지 않았고** 최신 산출물이 4일 전(9/2) 것이었다. 이 절은 오프사이트만이 아니라 정기 백업 자체를 살리는 단계다.
 
 **첫 회차 확인 (등록 직후 의무)** — 다음 04:00을 기다리지 않는다. 스케줄 회차는 §4-1b의 수동 복사와 **다른 실행 문맥**(S4U 비대화형 로그온)에서 돈다. 특히 목적지가 **가상 드라이브 문자**(`G:\My Drive` 등)면 그 드라이브는 대화형 세션에만 마운트돼 있을 수 있어 S4U 문맥에서 안 보일 가능성이 있다 — 이는 추론이지 실측이 아니므로 **이 블록으로 측정**한다. 실패하면 스크립트가 Step 9에서 `exit 1`로 멈추고(로컬 산출물은 보존) `LastTaskResult`가 `1`로 나타난다.
 
@@ -514,7 +545,7 @@ Kiki 머신의 main 체크아웃은 보호 브랜치라 `backlog.py gates clear`
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
-*개정: 2026-09-06 (게이트 `G-backup-offsite-move` 실행 준비 — §4-1b 시딩 블록의 변별력 결함 정정: 동기화 루트를 무조건 만들던 `New-Item`을 루트 실재 가드 뒤로 옮기고 `[EVIDENCE]` 줄·자가검증 3(웹 화면 교차 확인) 신설 · §4-1c 경로 변수 통일 + 첫 회차 확인 블록 신설(시각 조건으로 시딩 사본 오독 차단·S4U 문맥의 가상 드라이브 가시성은 측정 대상으로 명시) · §4-1e 게이트 증적 5줄·clear 경로 신설 · 회귀 동결 `test_backup_encryption.py::TestOffsiteMirror` 2건 · **같은 날 Kiki 실행 결과 반영**: `register_backup_schedule.ps1` 권한 사전 검사 + `Register-ScheduledTask` try/catch 원인 보고(구판은 Access is denied를 '되읽기 실패'로 오진) · §4-1b 자가검증 2b(동기화 클라이언트 프로세스·부정 검출 전용) + 가드 한계 명시 · §6 정기 백업 미등록 4일 공백 등재 · 테스트 2건 추가).*
+*개정: 2026-09-06 (게이트 `G-backup-offsite-move` 실행 준비 — §4-1b 시딩 블록의 변별력 결함 정정: 동기화 루트를 무조건 만들던 `New-Item`을 루트 실재 가드 뒤로 옮기고 `[EVIDENCE]` 줄·자가검증 3(웹 화면 교차 확인) 신설 · §4-1c 경로 변수 통일 + 첫 회차 확인 블록 신설(시각 조건으로 시딩 사본 오독 차단·S4U 문맥의 가상 드라이브 가시성은 측정 대상으로 명시) · §4-1e 게이트 증적 5줄·clear 경로 신설 · 회귀 동결 `test_backup_encryption.py::TestOffsiteMirror` 2건 · **같은 날 Kiki 실행 결과 반영**: `register_backup_schedule.ps1` 권한 사전 검사 + `Register-ScheduledTask` try/catch 원인 보고(구판은 Access is denied를 '되읽기 실패'로 오진) · §4-1b 자가검증 2b(동기화 클라이언트 프로세스·부정 검출 전용) + 가드 한계 명시 · §6 정기 백업 미등록 4일 공백 등재 · 테스트 2건 추가 · **2차 실행 결과**: 권한 가드는 작동했으나 관리자 창 열기가 같은 세션 2회 실패 → §2·§4-1c를 UAC 자가 승격 런처로 교체 + 일반 창 독립 되읽기 · 동기화 클라이언트 프로세스 0건 실측 → §4-1b 사전 실측 블록 신설 + `-OffsiteDir`는 검증된 폴더에만 붙이는 순서 의무화).*
 *개정: 2026-09-03 (게이트 실행 중 실측 반영 — §5 RTO 5.8분 기입 + 대표성 한계 등재 · §4-1a를 컨테이너 경유(`--pg-restore-docker-image`)로 교체: 호스트 pg_restore를 요구하던 초판이 이 런북 자신의 '호스트 PG 클라이언트 불요' 전제와 충돌해 반출 검증이 영구 exit 2였다 · exit 2 대처를 도구별로 분기).*
 *개정: 2026-09-02 (게이트 2건 실행 준비 — §3-0/§3-3b RTO 측정 스텝 신설(리허설이 게이트 요구 수치를 산출하지 못하던 결함) · §4-1b/§4-1c 클라우드 오프사이트 반출 절차 신설(조건만 있고 절차 부재) · backup_whymath_pg.ps1의 존재하지 않는 절 참조 'section 4-2' → '1b' 정정 · §5 RTO 측정범위 명시 · §6 갱신).*
 *개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*

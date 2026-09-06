@@ -756,6 +756,22 @@ class TestOffsiteMirror:
             "Get-Process" in ln and "Count -gt 0" in ln for ln in code
         ), "동기화 클라이언트 프로세스 검사(자가검증 2b)가 없다"
 
+    def test_runbook_registration_self_elevates(self) -> None:
+        """★ 등록 블록은 사람이 관리자 창을 여는 데 의존하지 않는다.
+
+        2026-09-06 한 세션에서 "관리자 창을 새로 열어 붙여넣는다"가 2회 연속 실패했다
+        (일반 창에 붙여넣음 — 1회차는 Access is denied, 2회차는 사전 가드가 거부).
+        실패 확률이 사람에게 걸린 단계는 런북이 없애야 한다: 일반 창에서 UAC로 자가 승격
+        (`Start-Process -Verb RunAs`)하고, 등록 여부는 일반 창에서 독립적으로 되읽는다.
+        """
+        for heading in ("## §2.", "### 4-1c."):
+            code = "\n".join(_runbook_fences(heading))
+            assert "register_backup_schedule.ps1" in code, f"{heading}: 등록 스크립트 호출이 없다"
+            assert (
+                "Start-Process" in code and "-Verb RunAs" in code
+            ), f"{heading}: 자가 승격 런처가 없다 — 관리자 창 열기가 사람 몫으로 남는다"
+            assert "Get-ScheduledTask" in code, f"{heading}: 일반 창의 독립 되읽기가 없다"
+
     def test_runbook_first_scheduled_offsite_run_is_recency_bound(self) -> None:
         """§4-1c 첫 회차 확인은 '이번 회차' 산출물만 인정해야 한다.
 
