@@ -94,6 +94,19 @@ cd src/backend && python -m pytest ../../tests/backend/<경로>
 718건의 혼란 대신 원인을 지목하는 UsageError 하나다. 실행기는 `python -m pytest`로 못 박는다
 (단독 `pytest` 금지 — 다중 환경에서 다른 인터프리터에 결합될 수 있다).
 
+**CI 스텝도 같은 함정을 밟는다 (2026-09-06 · PR #1003 Codex P1).** 위 규칙은 로컬 전용이 아니다 —
+`ci.yml`에는 `working-directory: src/backend`에서 `../../tests/backend/...`를 **위치 인자로** 주는
+pytest 스텝이 3개 있었고(concept-reach 가드 · e2e 관통 · 앵커 A4), 전부 같은 이유로 backend ini가
+통째로 안 읽힌 채 돌고 있었다. `asyncio_mode`뿐 아니라 `--strict-markers`·`--strict-config`·
+`--import-mode=importlib`도 전부 빠진 상태였는데, **그 파일들에 async 테스트가 없어 초록으로 보였다**
+— 즉 증상 없는 결함이었다. conftest 가드가 붙으면서 비로소 드러났다. 셋 다 `-c pyproject.toml`을
+붙여 고쳤고(cwd가 `src/backend`이므로 상대 표기), 같은 형태의 재유입은
+`tests/infra/test_backend_pytest_config_wiring.py`가 토큰 파싱으로 막는다.
+
+> `--ignore=../../tests/backend/l3`처럼 **옵션의 값**으로 경로가 오는 형태는 위치 인자가 아니라
+> 함정 대상이 아니다(실측 확인). 그래서 가드는 문자열 포함이 아니라 토큰 파싱으로 판정한다 —
+> 문자열 검사였다면 이 스텝을 오탐했을 것이다.
+
 **로컬 전체 스위트의 최소 의존성** — 위 함정을 제거하고도 남는 실패 12건(sync 10 + 판정 불가 2)은
 전부 *컨테이너 의존성* 부재다(Ollama 데몬 · langfuse 클라이언트 · log formatter · 선택 extra의
 `ImportError`). **CI에는 해당하지 않으며**(CI는 해당 서비스를 띄우거나 그 테스트를 skip한다) 별도
