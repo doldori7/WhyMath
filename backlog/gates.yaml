@@ -10,6 +10,16 @@ gates:
     evidence: "Phase 0~1 완주 (2026-08-22, Kiki 실행). 산출물: evidence_20260822_073859.txt(9/9 섹션 OK) · bench_{clean,baseline,rocm,vulkan,resident}_2026-08-22*.csv(전건 성공, 전 모델 gpu_fraction=1.0). 확정 결과: ①대역폭 상한 모델 전 구간 검증(dense 4종 유효 대역폭 167~199 GB/s = 피크 256의 65~78%, 예측 범위 전건 적중) ②dense 27B 11.7 vs MoE 30B-A3B 70.1 t/s = 6.0배 ③상주 재방문 로드 2,340ms→2.6ms(900배) ④flash attention 채택(MoE 왕복 -34.8%) ⑤Vulkan 기각(prefill -75% → 27B 왕복 +68%) ⑥VGM 64.0GB 확정 ⑦커밋 위생 규칙(고아 정리·주기적 재시작). LOCAL_LATENCY_MS는 보정 불요 판정(실측 906/3551/12406ms가 상수 1010/3918/13886ms보다 빨라 상수가 보수적·안전측). 정본 = docs/ops/amd395_local_llm_performance.md ★확정 결론 7항 + §5. 머지 PR #849·#851·#852."
     cleared_by: null
     notes: ""
+  - id: G-arch38-verdict-recheck
+    title: "ARCH-38 '혼입 유지' 판정의 재확인 (재확인 지점 = W8 종료 직후 2026-10-26) — 판정 근거 3종 중 정적으로 확정 불가한 ②③ 축을 사람이 확인한다. ②assessment JSONB 5필드에 *갱신* writer가 생겼는가(현행 write-once·하루 1행 idempotency) ③5필드를 값으로 읽어 판단에 쓰는 서빙 reader가 착지했는가(직렬화는 소비 아님·ASM-11 진행 여부). 근거 ①(W8 경로 접촉 0)은 사람이 볼 필요 없다 — tests/backend/db/test_assessment_result_verdict_premise.py가 자동으로 RED를 낸다. 판정 3택: ①판정 유지(트리거 미발동 — 기본값·ARCH-40을 재생성해 감시 지속) ②재판정 착수(canonical_entity_model_v1.md §5 절차) ③영구 확정으로 종결. 근거 = 정본 §3-C · MEMORY 2026-09-06 결정 로그 · PR #997. 등재 이유: Codex P2 지적 수용 — 재확인을 태스크로만 등재하면 selector가 즉시 착수 후보로 계산해(실측: 후보 124건에 포함) 트리거를 기다리지 않는다. G-state-machine-deferral-recheck 선례 동형"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-06
+    remind_after_days: 50
+    evidence: null
+    cleared_by: null
+    notes: ""
   - id: G-authoring-expansion-merge-decision
     title: "미머지 저작 확장 11,446문 회수·병합 결정 (trjg5x) — PB-06이 조건 확정 후 Kiki 소유로 남긴 결정"
     kind: decision
