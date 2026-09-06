@@ -365,35 +365,49 @@ Write-Host "EXIT=$LASTEXITCODE"
 
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
-# 목적지 폴더 경로는 실제 동기화 폴더에 맞춰 아래 한 줄만 바꾼다 (이 블록의 첫 명령 인자 = 사람이 아는 값)
-$Offsite = "$env:USERPROFILE\Google Drive\WhyMath-backups"
+# 첫 줄 = 사람이 아는 값. 동기화 클라이언트가 만든 **실제 루트** 아래의 하위 폴더로 고친다.
+#   예) Google Drive 미러 모드 "C:\Users\kiki\My Drive\WhyMath-backups" / 가상 드라이브 "G:\My Drive\WhyMath-backups" / OneDrive "C:\Users\kiki\OneDrive\WhyMath-backups"
+$Offsite = "C:\Users\kiki\Google Drive\WhyMath-backups"
 
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-New-Item -ItemType Directory -Path $Offsite -Force | Out-Null
 
-# 평문·개인키가 섞여 나가지 않게 확장자를 명시 필터한다 (와일드카드 * 금지)
-$src = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age"
-if (-not $src) {
-    Write-Host "[FAIL] no .dump.age found - 1b 키쌍 생성과 백업 1회를 먼저 수행한다. 평문 .dump는 반출 대상이 아니다."
+# 가드: 동기화 루트(부모 폴더)는 클라이언트가 만든 것이어야 한다 - 여기서 만들지 않는다.
+# 루트가 없으면 오타 또는 미설치다. 폴더를 만들어 복사하면 로컬 사본이 생기고도 아래 자가검증이 전부 통과한다.
+$SyncRoot = Split-Path -Parent $Offsite
+if (-not (Test-Path -LiteralPath $SyncRoot -PathType Container)) {
+    Write-Host "[FAIL] sync root not found: $SyncRoot - 동기화 클라이언트의 실제 폴더로 `$Offsite 를 고친 뒤 이 블록을 다시 실행한다. 복사는 하지 않았다."
 } else {
-    Copy-Item $src.FullName -Destination $Offsite -Force
-    Write-Host ("[OK] copied " + $src.Count + " encrypted artifact(s) to " + $Offsite)
+    New-Item -ItemType Directory -Path $Offsite -Force | Out-Null
+
+    # 평문·개인키가 섞여 나가지 않게 확장자를 명시 필터한다 (와일드카드 * 금지)
+    $src = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age"
+    if (-not $src) {
+        Write-Host "[FAIL] no .dump.age found - 1b 키쌍 생성과 백업 1회를 먼저 수행한다. 평문 .dump는 반출 대상이 아니다."
+    } else {
+        Copy-Item $src.FullName -Destination $Offsite -Force
+        Write-Host ("[OK] copied " + $src.Count + " encrypted artifact(s) to " + $Offsite)
+    }
+
+    # 자가검증 1: 목적지에 암호화본이 도착했고 크기가 원본과 같은가 (True 여야 함)
+    $a = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $b = Get-ChildItem -LiteralPath (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
+    ($b -ne $null) -and ($b.Length -eq $a.Length)
+
+    # 자가검증 2: 개인키·평문이 목적지로 새지 않았는가 (둘 다 False 여야 함)
+    Test-Path -LiteralPath (Join-Path $Offsite "whymath-backup-identity.key")
+    (@(Get-ChildItem -LiteralPath $Offsite -Filter *.dump -ErrorAction SilentlyContinue).Count -gt 0)
+
+    # 게이트 증적: 반출한 파일명·바이트 크기 (자가검증 3에서 클라우드 웹 화면과 대조한다)
+    Write-Host ("[EVIDENCE] " + $a.Name + " " + $a.Length + " bytes")
 }
-
-# 자가검증 1: 목적지에 암호화본이 도착했고 크기가 원본과 같은가 (True 여야 함)
-$a = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
-($b -ne $null) -and ($b.Length -eq $a.Length)
-
-# 자가검증 2: 개인키·평문이 목적지로 새지 않았는가 (둘 다 False 여야 함)
-(Test-Path (Join-Path $Offsite "whymath-backup-identity.key"))
-((Get-ChildItem $Offsite -Filter *.dump -ErrorAction SilentlyContinue) -ne $null)
 ```
 
-- **성공**: `[OK] copied ...` + 자가검증 1이 `True` + 자가검증 2의 **두 줄이 모두 `False`**.
-- **변별력**: 자가검증 1은 파일 존재가 아니라 **바이트 길이 일치**를 본다 — 동기화 중 잘린 사본은 존재하면서도 열리지 않으므로 `Test-Path`만으로는 구별되지 않는다. 자가검증 2는 이 절이 막으려는 사태(키 동반 유출·평문 반출)를 **직접 검사**한다.
-- **실패 시 대처**: 자가검증 2가 하나라도 `True`면 **그 파일을 목적지에서 즉시 삭제**하고(`Remove-Item`), 클라우드 휴지통에서도 비운다 — 동기화 서비스는 삭제본을 30일 보관하는 경우가 많다.
-- **동기화 완료 확인**: 복사는 로컬 폴더에 넣는 것까지이고, 실제 업로드는 클라우드 클라이언트가 한다. 트레이 아이콘이 "최신 상태"가 될 때까지 확인한다 — **폴더에 파일이 있다 ≠ 클라우드에 올라갔다**.
+- **성공**: `[OK] copied ...` + 자가검증 1이 `True` + 자가검증 2의 **두 줄이 모두 `False`** + `[EVIDENCE] whymath_....dump.age NNNNNN bytes` 한 줄.
+- **자가검증 3 (타 시스템 교차 확인 — 게이트 증적의 핵심)**: 브라우저로 클라우드 **웹 화면**(Google Drive면 drive.google.com)에 들어가 `WhyMath-backups` 폴더를 열고, `[EVIDENCE]` 줄의 파일명이 **같은 파일명·비슷한 크기**(웹은 KB/MB로 반올림 표시)로 보이는지 본다. 로컬 폴더의 파일은 동기화 클라이언트의 *대기열*일 뿐이고, 서버가 파일을 받았다는 증거는 **서버 쪽 화면에서만** 나온다 — **폴더에 파일이 있다 ≠ 클라우드에 올라갔다**. 트레이 아이콘의 "최신 상태" 표시는 보조 신호다(다른 프로세스가 대신 만족시킬 수 있는 간접 신호 — CLAUDE.md). 이 확인이 없어서 게이트가 "클라우드 업로드 완료 미확인"으로 남았다(2026-09-03 PR #974).
+- **변별력**: 가드는 목적지가 아니라 **동기화 루트(부모)** 의 실재를 본다 — 루트를 잘못 적으면 `[FAIL] sync root not found`로 멈추고 복사하지 않는다. 자가검증 1은 파일 존재가 아니라 **바이트 길이 일치**를 본다 — 동기화 중 잘린 사본은 존재하면서도 열리지 않으므로 `Test-Path`만으로는 구별되지 않는다. 자가검증 2는 이 절이 막으려는 사태(키 동반 유출·평문 반출)를 **직접 검사**한다. 자가검증 3은 로컬이 아닌 **다른 시스템**을 본다.
+- **실패 시 대처**: `[FAIL] sync root not found` → `$Offsite` 첫 줄을 클라이언트가 만든 실제 폴더(탐색기에서 동기화 폴더를 열어 주소창 경로를 복사)로 고쳐 재실행. 자가검증 2가 하나라도 `True`면 **그 파일을 목적지에서 즉시 삭제**하고(`Remove-Item`), 클라우드 휴지통에서도 비운다 — 동기화 서비스는 삭제본을 30일 보관하는 경우가 많다. 자가검증 3에서 파일이 안 보이면 클라이언트가 실행 중인지·로그인돼 있는지 확인하고 업로드가 끝난 뒤 다시 본다 — 안 보이는 동안은 게이트를 닫지 않는다.
+
+> **정정 이력 (2026-09-06)**: 초판 블록은 `New-Item -Force`로 목적지를 **무조건 만들었다**. 동기화 루트 경로를 잘못 적어도(오타·미설치·가상 드라이브 문자 차이) 로컬에 일반 폴더가 생기고 복사가 성공하며, 자가검증 1·2가 **전부 통과**했다 — 파일은 있는데 클라우드에는 아무것도 올라가지 않은 채로. CLAUDE.md「변별력 없는 검증 스텝 금지」의 *목적지 오류* 축이다. 가드(루트는 만들지 않고 실재만 확인)·`[EVIDENCE]` 줄·자가검증 3(웹 화면 교차 확인)을 추가했고, `tests/infra/test_backup_encryption.py::TestOffsiteMirror::test_runbook_seed_block_does_not_create_the_sync_root`가 가드의 순서(루트 검사 → `New-Item`)를 동결한다.
 
 ### 4-1c. 상시 미러로 전환 — 1회 복사는 반드시 썩는다 (필수)
 
@@ -405,10 +419,12 @@ $b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
 그래서 오프사이트는 스케줄에 **편입**한다. `backup_whymath_pg.ps1 -OffsiteDir <경로>`가 성공한 **암호화** 회차마다 사본을 넣고 **같은 보존 정책**을 그 디렉터리에도 적용한다(최신 1개는 만료돼도 보존 — 로컬과 동일 불변식).
 
 ```powershell
-# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 재등록에 필요)
-# ↓ 경로는 실제 동기화 폴더에 맞춘다
+# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 재등록에 필요) — 새 창(관리자)
+# 첫 줄 = §4-1b에서 가드를 통과한 것과 **같은 경로**를 그대로 쓴다
+$Offsite = "C:\Users\kiki\Google Drive\WhyMath-backups"
+
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir "C:\Users\kiki\Google Drive\WhyMath-backups"
+.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir $Offsite
 
 # 자가검증: 등록된 백업 작업의 인자에 -OffsiteDir가 실제로 실려 있는가 (True 여야 함)
 ((Get-ScheduledTask -TaskName "WhyMath-DB-Backup").Actions.Arguments) -like "*-OffsiteDir*"
@@ -416,7 +432,42 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 
 - **성공**: `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' ...` 두 줄 + 자가검증 `True`.
 - **변별력**: 자가검증은 "등록됐다"가 아니라 **등록된 인자 문자열에 플래그가 실렸는지**를 본다 — 플래그를 빠뜨린 재등록도 `[OK]` 두 줄은 그대로 내기 때문이다.
-- **첫 회차 확인**: 다음 04:00을 기다리지 말고 §2-1처럼 `Start-ScheduledTask`로 1회 돌린 뒤 목적지에 `.dump.age`가 새로 생겼는지 본다.
+
+**첫 회차 확인 (등록 직후 의무)** — 다음 04:00을 기다리지 않는다. 스케줄 회차는 §4-1b의 수동 복사와 **다른 실행 문맥**(S4U 비대화형 로그온)에서 돈다. 특히 목적지가 **가상 드라이브 문자**(`G:\My Drive` 등)면 그 드라이브는 대화형 세션에만 마운트돼 있을 수 있어 S4U 문맥에서 안 보일 가능성이 있다 — 이는 추론이지 실측이 아니므로 **이 블록으로 측정**한다. 실패하면 스크립트가 Step 9에서 `exit 1`로 멈추고(로컬 산출물은 보존) `LastTaskResult`가 `1`로 나타난다.
+
+```powershell
+# [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요) — 일반 창이어도 된다
+$Offsite = "C:\Users\kiki\Google Drive\WhyMath-backups"
+
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+Start-ScheduledTask -TaskName "WhyMath-DB-Backup"
+Start-Sleep -Seconds 120
+
+# 자가검증 1: 회차 종료코드 - 0 이어야 함 (267009 = 아직 실행 중 → 60초 뒤 이 줄부터 다시)
+(Get-ScheduledTaskInfo -TaskName "WhyMath-DB-Backup").LastTaskResult
+
+# 자가검증 2: **이번 회차**의 암호화본이 목적지에 같은 크기로 도착했는가 (True 여야 함)
+#   최신 로컬 산출물이 10분 이내 것인지도 함께 본다 - §4-1b 시딩 사본을 이번 회차 것으로 오독하지 않게
+$a = Get-ChildItem "C:\Users\kiki\Desktop\__AI\WhyMath-backups\*.dump.age" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$b = Get-ChildItem -LiteralPath (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
+($a.LastWriteTime -gt (Get-Date).AddMinutes(-10)) -and ($b -ne $null) -and ($b.Length -eq $a.Length)
+```
+
+- **성공**: 자가검증 1이 `0`, 자가검증 2가 `True`.
+- **변별력**: 자가검증 2는 최신 산출물의 **생성 시각**을 본다 — 시각 조건이 없으면 §4-1b에서 손으로 복사한 사본이 "스케줄 회차가 도착했다"로 읽힌다(지금 보는 것이 이번 실행 것인가 — CLAUDE.md 2026-08-22). 자가검증 1은 §2-1과 같되, 여기서는 **오프사이트 실패가 exit 1로 합산**된다는 점이 다르다.
+- **실패 시 대처**: 자가검증 1이 `1`이고 자가검증 2가 `False`면 Step 9 실패다. 가장 흔한 원인은 S4U 문맥에서 목적지가 보이지 않는 것 — 동기화 클라이언트의 **미러 모드 폴더**(`C:\Users\kiki\...` 아래 실제 경로)로 `$Offsite`를 바꿔 §4-1b 가드부터 다시 통과시킨 뒤 이 절을 재등록한다. 자가검증 1이 `0`인데 2가 `False`면 산출물이 10분보다 오래된 것이다 — 백업이 이번에 새로 만들어지지 않았다는 뜻이므로 §2-1 자가검증 3(`backup_status.py check`)으로 원인을 가른다.
+
+### 4-1e. 게이트 clear — 증적 5줄 (Kiki → 세션)
+
+Kiki 머신의 main 체크아웃은 보호 브랜치라 `backlog.py gates clear`의 결과를 push할 수 없다. 그래서 **증적은 Kiki가 세션에 전달**하고, clear는 세션이 PR 브랜치에서 실행한다(`G-backup-restore-rehearsal`과 같은 경로 — 2026-09-03). 전달할 것은 아래 5줄의 *출력 그대로*다(값을 손으로 옮겨 적지 않는다):
+
+1. §4-1a — `EXIT=0` 줄과 `① 잠김 ... OK` / `② 열림 ... OK` 두 줄
+2. §4-1b — `[OK] copied ...` · 자가검증 1~2 세 줄(`True` / `False` / `False`) · `[EVIDENCE] ...` 줄
+3. §4-1b 자가검증 3 — 웹 화면에서 본 **파일명과 표시 크기** 한 줄(스크린샷 불요·행 데이터 없음)
+4. §4-1c — `[OK] task ...` 두 줄 + 자가검증 `True`
+5. §4-1c 첫 회차 — 자가검증 1의 `0`과 자가검증 2의 `True`
+
+세션은 이 5줄을 `--evidence`에 담아 `python3 scripts/harness/backlog.py gates clear G-backup-offsite-move --evidence "..."`를 실행하고 PR로 올린다. 3번이 비어 있으면 clear하지 않는다 — 1·2·4·5는 전부 **이 PC 안**의 관측이고, 게이트 제목이 요구하는 "오프사이트"는 3번만 증명한다.
 
 **실패는 치명(exit 1)으로 다룬다.** 이 스크립트는 작업 스케줄러에서 무인 실행되므로 경고는 아무도 읽지 않는다 — 사람에게 닿는 유일한 신호가 `LastTaskResult`다. 오프사이트가 실패하면 **로컬 산출물은 지우지 않고** 종료코드로 알린다(백업 자체는 성공했으므로 유효하다). 스크립트가 치명으로 다루는 상황: 평문 회차인데 `-OffsiteDir`가 주어짐 / 복사 실패 / **크기 불일치(잘린 사본)** / 만료 사본 삭제 실패 / 목적지에 평문 `.dump`가 발견됨.
 
@@ -445,7 +496,7 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 
 ## §6. 미해결 사항 (정직 기술)
 
-- **오프사이트 사본 부재(잔존)**: 백업이 여전히 prod와 같은 디스크에 있다 — 디스크 동시 소실에 무방비. **막던 원인 2건은 모두 해소됐다**: 반출 조건이던 암호화 절차가 §1b·§4-1a로, 반출 *절차 자체*가 §4-1b(클라우드)로 착지했다. 남은 것은 Kiki의 실행 1회다(게이트 `G-backup-offsite-move`). 목적지는 클라우드 동기화 폴더로 결정(2026-09-02) — 개인키는 동반 반출 금지(§4-5·§4-1b 자가검증 2가 검사).
+- **오프사이트 사본 부재(잔존)**: 백업이 여전히 prod와 같은 디스크에 있다 — 디스크 동시 소실에 무방비. **막던 원인 2건은 모두 해소됐다**: 반출 조건이던 암호화 절차가 §1b·§4-1a로, 반출 *절차 자체*가 §4-1b(클라우드)로 착지했다. 남은 것은 Kiki의 실행 1회다(게이트 `G-backup-offsite-move`). 목적지는 클라우드 동기화 폴더로 결정(2026-09-02) — 개인키는 동반 반출 금지(§4-5·§4-1b 자가검증 2가 검사). **2026-09-06 보강**: §4-1b 시딩 블록이 동기화 루트 오타를 못 잡던 결함(무조건 `New-Item` → 로컬 폴더에 복사되고도 자가검증 전부 통과)을 가드로 정정했고, 게이트 증적은 §4-1b 자가검증 3(클라우드 **웹 화면** 교차 확인)으로 고정했다 — 이 PC 안의 관측만으로는 "오프사이트"를 증명할 수 없다(§4-1e).
 - ~~**백업 파일 자체 암호화 미도입**~~ → **해소**(OPS-31): age 공개키 암호화가 백업 스크립트에 착지했고, 실패 시 평문을 남기지 않는 fail-closed다. 계약은 `tests/infra/test_backup_encryption.py`가 동결(뮤테이션 12종 전건 검출).
 - ~~**스케줄 로그온 의존**~~ → **해소**(OPS-31): `register_backup_schedule.ps1`의 S4U + StartWhenAvailable. 등록 스크립트가 되읽기로 실제 `LogonType`을 판정한다.
 - **WAL 아카이빙/PITR 없음**: pg_dump 스냅샷 방식 — 백업 사이 데이터는 유실 범위. OPS-31 범위 밖으로 명시 동결(acceptance ⑤).
@@ -458,6 +509,7 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
+*개정: 2026-09-06 (게이트 `G-backup-offsite-move` 실행 준비 — §4-1b 시딩 블록의 변별력 결함 정정: 동기화 루트를 무조건 만들던 `New-Item`을 루트 실재 가드 뒤로 옮기고 `[EVIDENCE]` 줄·자가검증 3(웹 화면 교차 확인) 신설 · §4-1c 경로 변수 통일 + 첫 회차 확인 블록 신설(시각 조건으로 시딩 사본 오독 차단·S4U 문맥의 가상 드라이브 가시성은 측정 대상으로 명시) · §4-1e 게이트 증적 5줄·clear 경로 신설 · 회귀 동결 `test_backup_encryption.py::TestOffsiteMirror` 2건).*
 *개정: 2026-09-03 (게이트 실행 중 실측 반영 — §5 RTO 5.8분 기입 + 대표성 한계 등재 · §4-1a를 컨테이너 경유(`--pg-restore-docker-image`)로 교체: 호스트 pg_restore를 요구하던 초판이 이 런북 자신의 '호스트 PG 클라이언트 불요' 전제와 충돌해 반출 검증이 영구 exit 2였다 · exit 2 대처를 도구별로 분기).*
 *개정: 2026-09-02 (게이트 2건 실행 준비 — §3-0/§3-3b RTO 측정 스텝 신설(리허설이 게이트 요구 수치를 산출하지 못하던 결함) · §4-1b/§4-1c 클라우드 오프사이트 반출 절차 신설(조건만 있고 절차 부재) · backup_whymath_pg.ps1의 존재하지 않는 절 참조 'section 4-2' → '1b' 정정 · §5 RTO 측정범위 명시 · §6 갱신).*
 *개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*

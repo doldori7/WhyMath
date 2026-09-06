@@ -108,6 +108,26 @@ def _check_code() -> str:
     return _strip_ps_comments(_check_text())
 
 
+_RUNBOOK = _ROOT / "docs" / "architecture" / "db_backup_dr_runbook.md"
+
+
+def _runbook_section(heading: str) -> str:
+    """런북에서 `heading`으로 시작하는 절 본문(다음 `### `/`## ` 제목 전까지)을 돌려준다."""
+    text = _RUNBOOK.read_text(encoding="utf-8")
+    start = text.index(heading)
+    tail = text[start + len(heading) :]
+    end = re.search(r"^#{2,3} ", tail, flags=re.MULTILINE)
+    return tail if end is None else tail[: end.start()]
+
+
+def _runbook_fences(heading: str) -> list[str]:
+    """절 안의 ```powershell 코드펜스 본문들(주석 줄 제거)."""
+    section = _runbook_section(heading)
+    fences = re.findall(r"```powershell\n(.*?)```", section, flags=re.DOTALL)
+    assert fences, f"런북 절 {heading!r}에 powershell 펜스가 없다"
+    return [_strip_ps_comments(f) for f in fences]
+
+
 # ===========================================================================
 # A. PS1 텍스트 동결 — 암호화 스텝
 # ===========================================================================
@@ -661,6 +681,51 @@ class TestOffsiteMirror:
                 assert (
                     f"${opt}" in register or f"-{opt}" in register
                 ), f"런북이 register_backup_schedule.ps1에 없는 플래그 -{opt} 를 안내한다"
+
+    def test_runbook_seed_block_does_not_create_the_sync_root(self) -> None:
+        """★ §4-1b 시딩 블록은 동기화 루트를 만들지 않아야 한다 (변별력 없는 자가검증 금지).
+
+        초판은 `New-Item -Force`로 목적지를 무조건 만들었다. 동기화 루트 경로를 잘못
+        적어도(오타·미설치·가상 드라이브 문자 차이) 로컬에 일반 폴더가 생기고 복사가
+        성공하며, 자가검증 1(크기 일치)·2(키·평문 미유출)가 전부 통과한다 — 파일은
+        있는데 클라우드에는 아무것도 올라가지 않은 채로. 게이트 G-backup-offsite-move가
+        "업로드 완료 미확인"으로 남은 경로다(2026-09-06). 루트는 클라이언트가 만든 것이어야
+        하므로 부모 폴더의 실재를 New-Item **보다 먼저** 확인해야 한다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1b.")).splitlines()
+
+        def _first(pred) -> int | None:
+            return next((i for i, ln in enumerate(code) if pred(ln)), None)
+
+        root_idx = _first(lambda ln: "$SyncRoot" in ln and "Split-Path -Parent $Offsite" in ln)
+        assert root_idx is not None, "시딩 블록이 동기화 루트(부모 폴더)를 계산하지 않는다"
+        test_idx = _first(lambda ln: "Test-Path" in ln and "$SyncRoot" in ln)
+        assert test_idx is not None, "동기화 루트의 실재를 검사하지 않는다"
+        mk_idx = _first(lambda ln: "New-Item" in ln and "$Offsite" in ln)
+        assert mk_idx is not None, "목적지 하위 폴더 생성이 없다"
+        assert root_idx < test_idx < mk_idx, (
+            "New-Item이 루트 검사보다 먼저 실행된다 — 없는 루트를 만들어 버리고 "
+            "자가검증이 로컬 사본에서 전부 통과한다"
+        )
+        assert not any(
+            "New-Item" in ln and "$SyncRoot" in ln for ln in code
+        ), "동기화 루트 자체를 만들고 있다 — 루트는 클라이언트가 만든 것이어야 한다"
+        # 사람이 웹 화면과 대조할 증적 줄이 있어야 게이트가 '이 PC 안 관측'만으로 닫히지 않는다.
+        assert any("[EVIDENCE]" in ln for ln in code), "게이트 증적 줄([EVIDENCE])이 없다"
+
+    def test_runbook_first_scheduled_offsite_run_is_recency_bound(self) -> None:
+        """§4-1c 첫 회차 확인은 '이번 회차' 산출물만 인정해야 한다.
+
+        시각 조건이 없으면 §4-1b에서 손으로 복사한 시딩 사본이 "스케줄 회차가
+        오프사이트에 도착했다"로 읽힌다 — 지금 보는 것이 이번 실행 것인가(CLAUDE.md
+        2026-08-22). S4U 문맥에서 목적지가 안 보이는 실패가 정확히 이 형태로 가려진다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1c."))
+        assert "Start-ScheduledTask" in code, "첫 회차를 실제로 돌리지 않는다"
+        assert "LastTaskResult" in code, "회차 종료코드를 보지 않는다 — Step 9 실패가 안 보인다"
+        assert (
+            "AddMinutes(" in code and "LastWriteTime -gt" in code
+        ), "최신 산출물의 생성 시각 조건이 없다 — 시딩 사본을 이번 회차로 오독한다"
 
 
 # ===========================================================================
