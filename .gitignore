@@ -105,6 +105,25 @@ worktrees/
 *.7z
 *.rar
 
+# 저작권 위험 원본 문서 — LIC-07 ④ (1차 방어선)
+# 2026-08-08에 KICE 평가기준 개발 연구 보고서 PDF 2건이 여기 규칙이 없어 `git add`로 그냥
+# 들어왔다(제거 경위: docs/ops/kice_pdf_history_purge_runbook.md). 원본 문서는 내용이 검사되지
+# 않은 채 모든 clone에 배포되므로 기본 경로에서 아예 스테이징되지 않게 한다.
+# 자체 저작물이라 정말 넣어야 하면 `git add -f` + 가드 허용 목록 등재(사유 필수):
+#   scripts/ops/check_source_document_binaries.py 의 _ALLOWED
+*.pdf
+*.hwp
+*.hwpx
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.epub
+# 자체작성 AI/LLM 인벤토리 — 가드 _ALLOWED 등재분(추적 유지)
+!docs/architecture/ai_llm_inventory_2026-07.xlsx
+
 # 비공개 사업/기획 문서 (민감 정보)
 *사업계획*
 *business_plan*
