@@ -17,11 +17,12 @@ acceptance:
   - "③ 집행 별항(정본화≠집행) — problem_corpus_accumulate.main이 실제로 ①②를 채워 append하는지 hermetic 회차로 rounds.jsonl 행의 값과 CLI 인자·리포트를 대조한다. 변별력: 카나리를 일부러 미달시킨 회차의 대장 행에 canary_passed=False·하한 수치가 실리고 통과 회차와 다른 값이어야 한다. 스키마에 필드만 있고 main이 None으로 흘리면 미이행"
   - "④ 재현 계약 변별력 — 같은 회차의 genlog 행 prompt_version·model_name이 대장 스냅샷과 일치함을 테스트가 확인하고, 대장 값 변조 뮤테이션에서 RED가 나는지 실측한다"
   - "⑤ 구행 호환 — 기존 rounds.jsonl 행(신설 필드 없음)은 None=미기록으로 읽힌다(소급 날조 금지). 신설 필드는 전부 Optional·기본 None"
+  - "[정정 2026-09-06 · PR #1014 Codex P2] notes의 'EOS 계열 소진' 서술은 backlog.py add 거부 문구를 실측 없이 옮긴 도구 오보고였다 — HARN-73(#1002) 실측: EOS 번호 사용 59·미사용 40(01~05·07~27·29~31·33~43). Kiki 결정 A(하위 미사용 번호 재사용 + 제안기 폴백 · 새 접두 기각)·게이트 G-eos-task-prefix-exhausted clear. EOS 축 후속 태스크는 계속 EOS-nn을 쓰고, MP는 소진 대응이 아니라 회차 축 접두라는 정의만 유효하다. 위 소진 문구는 과거 경위로만 읽는다(이 항은 acceptance가 아니라 정정 기록 — HARN-24 정정 항 관용)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/harness/anchor_round_ledger.py
   - src/backend/whymath_backend/harness/problem_corpus_accumulate.py
   - "tests/backend/harness/**"
 session: null
-notes: "출처: 대체안 A §5-① · 갭 리뷰 §2 행4(manifest.lock 갭·소) · §11-5 P1-①. **번호**: 초판은 EOS-98이었으나 타 세션의 EOS-98-age-band-explanation-generation(#994)과 충돌해 회수 — EOS 접두는 소진됐고 이 태스크는 MP(회차) 인프라 축이라 MP-04로 등재(§11-6). 설계서 §2의 manifest.lock.json을 별도 파일로 만들지 않고 기존 회차 대장 1행에 흡수한다 — 이중 진실원천 금지. genlog는 호출 단위·대장은 회차 단위라 게이트 임계와 회차 판정은 대장에만 있는 것이 맞다."
+notes: "출처: 대체안 A §5-① · 갭 리뷰 §2 행4(manifest.lock 갭·소) · §11-5 P1-①. **번호**: 초판은 EOS-98이었으나 타 세션의 EOS-98-age-band-explanation-generation(#994)과 충돌해 회수 — EOS 접두는 소진됐고 이 태스크는 MP(회차) 인프라 축이라 MP-04로 등재(§11-6). 설계서 §2의 manifest.lock.json을 별도 파일로 만들지 않고 기존 회차 대장 1행에 흡수한다 — 이중 진실원천 금지. genlog는 호출 단위·대장은 회차 단위라 게이트 임계와 회차 판정은 대장에만 있는 것이 맞다.\n\n[정정 2026-09-06] PR #1014 Codex P2 — 활성 레코드의 잘못된 소진 근거 정정(HARN-73 실측·Kiki 결정 A). amend에 notes 정정 경로가 없어(HARN-67 ⑥) acceptance 정정 항으로 기록"
 updated: 2026-09-06
