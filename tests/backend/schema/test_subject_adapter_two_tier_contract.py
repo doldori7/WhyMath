@@ -184,19 +184,53 @@ def test_demotion_ledger_only_names_real_contract_fields() -> None:
         )
 
 
-def test_contract_status_is_provisional_until_probe() -> None:
-    """상태 라벨 동결 — 프로브(EOS-92) 없이 Provisional을 되돌리면 RED.
+def test_demotion_ledger_entries_prove_actual_removal() -> None:
+    """대장에 적힌 필드가 **실제로 계약에서 사라졌는가** — 허위 강등 차단.
+
+    바로 위 두 검사만으로는 대장이 증적이 되지 못한다: 필드를 그대로 둔 채 대장에만 적으면
+    (기존 필드 + 비어 있지 않은 이관처) 셋 다 통과한다(실측 확인·PR #986 Codex P2).
+    그러면 "Core 계약이 축소됐다"고 대장이 말하는데 계약은 그대로인 상태를 CI가 승인한다.
+    강등의 증적이려면 **제거 사실 자체**를 봐야 한다.
+    """
+    still_present = {}
+    for key in DEMOTED_FIELDS:
+        dto, _, field = key.partition(".")
+        if dto in _DTO_TYPES and field in _DTO_TYPES[dto].model_fields:
+            still_present[key] = DEMOTED_FIELDS[key]
+    assert not still_present, (
+        f"강등 대장이 강등을 주장하는데 필드가 계약에 그대로 있다: {still_present}\n"
+        "규칙 2조 (가)의 강등은 Core에서 **빼는** 일이다 — 대장 기재만으로는 강등이 아니다.\n"
+        "필드를 제거했으면 이 검사는 통과한다. 제거하지 않을 거면 대장에서 지워라."
+    )
+
+
+# 상태 절의 **제목 줄** — 이 한 줄이 계약의 상태를 말한다.
+# 문서 어딘가에 "Provisional"이 있는지 보면 안 된다: 아래 "왜 Frozen이 아니라 Provisional인가"
+# 절이 그 단어를 품고 있어, 제목만 Frozen으로 바꿔도 토큰 검사는 초록이다(실측 확인·PR #986
+# Codex P2). 상태는 제목이 말하는 것이므로 제목을 정확히 동결한다.
+STATUS_HEADING = "## 🚧 상태: **Provisional** — pending cross-subject probe (9/27)"
+
+
+def test_contract_status_heading_is_provisional_until_probe() -> None:
+    """상태 **제목 줄** 동결 — 프로브(EOS-92) 없이 Provisional을 되돌리면 RED.
 
     이 검사가 없으면 상태 절은 산문일 뿐이라 다음 세션이 무심코 'Frozen'으로 되돌린다.
-    문구 자체를 계약으로 고정해, 되돌리려면 이 테스트를 함께 고치는 **의도적 행위**를 요구한다.
+    제목 줄 자체를 계약으로 고정해, 되돌리려면 이 테스트를 함께 고치는 **의도적 행위**를 요구한다.
     """
     doc = subject_adapter.__doc__ or ""
-    assert "Provisional" in doc, (
-        "계약 상태가 Provisional로 표기돼 있지 않다 — 교차 과목 프로브(EOS-92) 통과 전까지\n"
-        "이 계약은 Math 단일 과목에서 도출된 가설이다."
+    headings = [ln.strip() for ln in doc.splitlines() if ln.lstrip().startswith("## ")]
+    assert headings, "계약 docstring에 절 제목이 하나도 없다 — 파서가 공허하게 통과하는 상태"
+
+    status_headings = [h for h in headings if "상태:" in h]
+    assert len(status_headings) == 1, (
+        f"상태 제목 줄이 {len(status_headings)}개다(1개여야 한다): {status_headings}\n"
+        "두 개면 어느 것이 계약인지 결정 불가이고, 0개면 상태 절이 사라진 것이다."
     )
-    assert "cross-subject probe" in doc, "해제 조건(교차 과목 프로브)이 상태 절에 없다"
-    assert "9/27" in doc, "프로브 기한(9/27 · G1 게이트일)이 상태 절에 없다"
+    assert status_headings[0] == STATUS_HEADING, (
+        f"계약 상태 제목이 바뀌었다:\n  실제: {status_headings[0]}\n  기대: {STATUS_HEADING}\n"
+        "교차 과목 프로브(EOS-92) 통과 전까지 이 계약은 Math 단일 과목에서 도출된 가설이다.\n"
+        "되돌리려면 프로브 결과를 근거로 이 상수와 계약 docstring을 함께 고쳐라."
+    )
     for clause in ("강등", "Core 확장 금지", "ADR", "중복 구현", "3건을 초과"):
         assert clause in doc, f"프로브 결과 처리 규칙 3조가 상태 절에 없다: {clause!r}"
     # (다) 출구가 없으면 (가)·(나)는 위반을 숨기는 금지가 된다 — 출구 조항의 존재를 동결한다.
