@@ -53,8 +53,8 @@ done | sort -u
 |---|---|---|---|
 | [ADR-001](./ADR-001-event-storage-postgresql-first.md) | 이벤트 저장소 PostgreSQL 우선 | 채택 | main |
 | [ADR-002](./ADR-002-student-solution-step-entity.md) | 학생 풀이 step = 별도 정규 엔티티 | 채택 | main |
-| ADR-003 | 노드 ID의 과목 접두사는 규약이지 Subject 엔티티 참조가 아니다 | 채택 | **미머지** `claude/entity-model-freeze-lji37v` |
-| [ADR-004](./ADR-004-subject-contract-v1-provisional.md) | Subject Contract v1 잠정 · 교차과목 프로브 후 Freeze | **Provisional** (target 2026-09-27) | 이 브랜치 |
+| [ADR-003](./ADR-003-subject-prefix-is-convention-not-entity.md) | 노드 ID의 과목 접두사는 규약이지 Subject 엔티티 참조가 아니다 | 채택 | main |
+| [ADR-004](./ADR-004-subject-contract-v1-provisional.md) | Subject Contract v1 잠정 · 교차과목 프로브 후 Freeze | **Provisional** (target 2026-09-27) | main |
 
 **다음 빈 번호: ADR-005** — 쓰기 전에 위 §"번호를 고르는 법"의 스캔을 돌릴 것.
 
@@ -68,7 +68,7 @@ done | sort -u
 |---|---|---|
 | ADR-001 EOS Core Boundary | `docs/architecture/eos_core_adapter_boundary.md` + `scripts/analysis/eos_core_adapter_boundary_scan.py`(`BOUNDARY_MAP`) | 충족 — ADR 형식은 아니나 556모듈 전수 배정으로 결정 내용이 정본화됨(EOS-65 done) |
 | ADR-002 Subject Adapter | [ADR-004](./ADR-004-subject-contract-v1-provisional.md) | 오늘 작성 — Provisional |
-| ADR-003 Entity ID | `ADR-003-subject-prefix-is-convention-not-entity.md`(미머지) | 주제 일치 확인 — 노드 ID 접두사 규약 축 |
+| ADR-003 Entity ID | [ADR-003](./ADR-003-subject-prefix-is-convention-not-entity.md) | 주제 일치 확인 — 노드 ID 접두사 규약 축 |
 | ADR-004 Event Model | | 미확인 |
 | ADR-005 LearnerState | | 미확인 |
 | ADR-006 Content Version | | 미확인 |
