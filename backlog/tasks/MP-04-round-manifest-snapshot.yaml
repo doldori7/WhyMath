@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/harness/anchor_round_ledger.py
   - src/backend/whymath_backend/harness/problem_corpus_accumulate.py
   - "tests/backend/harness/**"
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: 대체안 A §5-① · 갭 리뷰 §2 행4(manifest.lock 갭·소) · §11-5 P1-①. **번호**: 초판은 EOS-98이었으나 타 세션의 EOS-98-age-band-explanation-generation(#994)과 충돌해 회수 — EOS 접두는 소진됐고 이 태스크는 MP(회차) 인프라 축이라 MP-04로 등재(§11-6). 설계서 §2의 manifest.lock.json을 별도 파일로 만들지 않고 기존 회차 대장 1행에 흡수한다 — 이중 진실원천 금지. genlog는 호출 단위·대장은 회차 단위라 게이트 임계와 회차 판정은 대장에만 있는 것이 맞다."
 updated: 2026-09-06
