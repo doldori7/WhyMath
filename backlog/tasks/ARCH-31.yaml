@@ -16,11 +16,12 @@ acceptance:
   - ContentVersion Pydantic 모델 및 ORM 설계
   - Alembic 마이그레이션 추가
   - 기존 identity_id와의 관계 문서화
+  - "[게이트 G-eos49-content-version-seat 판정 2026-09-06·D안 파급] problem_version 테이블은 **Problem 좌석**에 편입한다(엔티티 19종 불변·ContentVersion 좌석은 비운 채 유지). acceptance 2항 'ContentVersion Pydantic 모델 및 ORM 설계'의 **ORM 축은 범위 밖**으로 축소 — 범용 ContentVersion 테이블은 canonical_entity_model_v1.md §3-D 부재 동결 + 44 §14-8(Unified Entity 슈퍼테이블 금기) 대상이다. 공통 축은 44 §6.2 VersionHeader **Pydantic 계약**으로만 공유한다(§6.1 Hybrid). §2-A 표·좌석 상수·ORM/alembic은 같은 PR에 원자적으로(§5-1)"
 artifacts: []
 paths:
   - src/backend/whymath_backend/schema/problem.py
   - src/backend/whymath_backend/db/models/problem.py
   - "src/backend/whymath_backend/alembic/versions/*"
 session: null
-notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Content ID ≠ Content Version ID 분리를 MVP 범위 내에서 구현.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/F5 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
-updated: 2026-09-01
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 Content ID ≠ Content Version ID 분리를 MVP 범위 내에서 구현.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/F5 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필\n\n[정정 2026-09-06] G-eos49 판정의 ARCH-31 파급 — 같은 벽(검사 ①)에 부딪히는 형제 축이라 재판정 방지"
+updated: 2026-09-06

@@ -338,6 +338,49 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-06 (Kiki 판정·게이트 G-eos49-content-version-seat): **도메인별 버전 테이블은 소속 엔티티 좌석에 편입한다 — 두 정본은 처음부터 같은 것을 금지하고 있었다** (Kiki 결정 "D안", claude 실측·집행)
+
+**판정 기준: main `9d5f81b2`** (근거 4건 전부 trunk 실재 확인 — `canonical_entity_model_v1.md` · `test_canonical_entity_model_freeze.py` · `44_eos_version_management.md` · `db/models/curriculum_version.py`).
+
+**충돌로 보였던 것**: `ARCH-37`(#984·09-05)이 `ContentVersion`을 좌석 부재로 동결(§3-D)했는데
+`EOS-49` acceptance ①은 `concept_version` 버전 테이블 신설이다. §4-5는 `EOS-49`를 "기존 좌석의
+컬럼 추가"로 적었으나 그것이 **사실 오류**였다.
+
+**실측 1 — 게이트 문면의 차단 주체가 틀렸다.** 게이트는 "검사 ③/③-b가 막는다"고 적었으나
+`concept_version` 테이블을 `Base.metadata`에 주입해 4검사를 직접 호출한 결과: ①만 RED
+(`귀속 없는 신규 테이블 1건`), ③·③-b·④는 GREEN. ③의 예약 이름 목록은 `content_version`·
+`content_versions`·`entity_version`뿐이고, ③-b는 `ContentVersion` 좌석 tuple만 본다. 정상
+상태에서는 4검사 전부 GREEN — 변별력 확인. **즉 부재 동결을 건드리지 않고 해소 가능했다.**
+
+**실측 2 — 두 정본은 충돌하지 않았다.** 44 §6.1은 Unified Entity 슈퍼테이블을 **보류**하고
+Hybrid(공통 헤더 Pydantic + 도메인별 버전 테이블)를 채택했고 §14-8은 슈퍼테이블 즉시 도입을
+**금기**로 명시한다. §3-D가 막는 것도 문면 그대로 "20번째 엔티티 급조"(=범용 ContentVersion)다.
+둘은 같은 것을 금지하고 있었고, 어긋난 것은 §4-5의 서술 한 줄뿐이었다.
+
+**실측 3 — 선례가 이미 있었다.** `curriculum_version`은 Curriculum 좌석의 2번 테이블이다
+(`db/models/curriculum_version.py` · `version_id` UUID PK + `framework_id` FK + `version_label`).
+버전 테이블이 소속 엔티티 좌석의 일원이 되는 것은 이 저장소의 기존 패턴이다.
+
+**Kiki 판정 (D안)**: `concept_version`을 **Concept 좌석의 4번째 테이블**로 등재한다.
+`ContentVersion` 좌석은 비운 채 유지 — 엔티티 19종 불변, 검사 ③·③-b 무손상. 좌석 합계 41→42.
+`problem_version`(ARCH-31)도 같은 규칙으로 Problem 좌석. 공통 축은 44 §6.2 `VersionHeader`
+**Pydantic 계약**으로만 공유한다(테이블 아님). 게이트 원안 3선택지(①좌석 개통 ②10월 연기
+③테이블 없는 계약으로 축소)는 모두 미채택 — 예외 승인 폭이 가장 좁은 길이 따로 있었다.
+
+**실측 4 — 순서 제약(신규)**: 좌석 상수에만 `concept_version`을 선등재한 상태를 주입하니
+①(`정본이 선언한 테이블이 코드에 없다`)·②(`좌석 테이블이 사라졌다`)·④(문서↔상수 불일치)가
+**3중 RED**. 그러므로 §2-A 표 + 좌석 상수 + ORM/alembic은 **같은 PR에 원자적으로** 담아야 하며,
+판정 세션이 표를 미리 고쳐 두는 것은 금지다 — 정본 §5-1로 등재.
+
+**집행**: `canonical_entity_model_v1.md` §3-D 판정 절 + §4-5 사실 정정 + §5-1 원자성 제약 신설
+(freeze 테스트 8건 GREEN 유지) · `EOS-49` acceptance ①-b · `ARCH-31` acceptance 파급 항
+(범용 ContentVersion ORM을 범위 밖으로 축소) · 게이트 clear. `EOS-49`·`EOS-50` 착수 해금.
+
+**교훈**: 게이트 문면이 지목한 차단 주체를 읽기만으로 믿지 않고 **실패 주입으로 확인**한 것이
+판정을 바꿨다 — ③/③-b가 막는다면 부재 동결 해제(A안)가 불가피했지만, 실제로 막은 ①은
+"§5 절차를 밟았는가"만 묻는 검사였다. CLAUDE.md "보호 장치를 실패 주입 없이 선언 금지"의
+**역방향 적용**: 가드가 *막는다*는 주장도 주입으로 검증해야 한다.
+
 ### 2026-09-06 (저작권 전수 실사): **선언이 데이터를 설명하지 못했다 — `concept_content_v1` 라이선스 고지 정정 + 히스토리 잔존 KICE 보고서 2건 등재** (Kiki "저작권 저촉가능성있는 자료가 있으면 삭제" → 실사 후 "선언을 데이터에 맞춰 정정", claude 실측·구현)
 
 **요청**: 저장소에 저작권 저촉 가능성이 있는 자료가 있으면 삭제.
