@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-99-subject-neutrality-falsifiable-check
+title: "과목 중립성의 반증 가능한 검사 설계 — 필드 채움 검사는 배제 선언한 과목도 통과한다(반증력 0)"
+track: math-completion
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 전제(2026-09-06·main 76f415db·EOS-92 프로브 §3): Subject Contract v1의 15필드 중 13개가 str·str|None·tuple[str,...]이라 불투명 문자열은 어떤 과목이든 받는다. Physics 15/15 ○인데 **계약이 명시적으로 배제 선언한 History(verification_capabilities.py:277 '역사엔 없다')도 15/15 채워진다** — 성공/실패 양쪽에서 같은 값을 내므로 검증이 아니라 위장이다(CLAUDE.md 변별력 없는 검증 스텝 금지)"
+  - "② 반증 가능한 검사를 설계한다: 무엇이 관측되면 '중립성 위반'인가를 먼저 정의하고, 그 상태를 **실제로 주입해 RED가 나는지** 확인한 뒤에만 검사로 친다. 후보 축 — (a) Core 모듈이 answer_kind·conditions 값을 읽어 분기하는지 정적 검출(AST·문자열 비교/딕셔너리 조회 패턴) (b) Physics 어댑터 **스텁**을 실제로 구현해 3메서드를 채워 보고 NotImplementedError·의미 왜곡이 나는 지점 관측 (c) 계약 시그니처의 수학 은유 용어 검출"
+  - "③ 새 장치를 만들기 전에 기존 것으로 되는지 먼저 확인 — eos_core_adapter_boundary_scan.py는 정적 import만 보고 페이로드 해석은 못 본다고 계약이 자인한다(subject_adapter.py:52-55). 확장으로 될 일이면 확장하고, 안 되면 그 사유를 적는다"
+  - "④ **스캔 0건은 실패**로 처리(CLAUDE.md 2026-09-01 ④) — 검사 대상 모듈을 하나도 못 찾으면 공허하게 통과시키지 않는다"
+artifacts: []
+paths:
+  - tests/backend/schema/test_subject_adapter_two_tier_contract.py
+  - scripts/analysis/eos_core_adapter_boundary_scan.py
+session: null
+notes: "출처: EOS-92 교차 과목 프로브(2026-09-06) §3 라운드 2. 프로브는 acceptance ① 문자 그대로 15/15 ○를 냈으나, 같은 검사가 History도 통과시킨다는 것을 대조군으로 실증했다 — 즉 '✗ 0'의 정보량이 낮다. 이것은 계약의 결함이 아니라 '**Core는 페이로드를 해석하지 않는다**'는 설계가 성공한 결과이며, 동시에 필드 채움 검사의 반증력을 0에 가깝게 만든다. 계약 파일 자신이 이 함정을 예고했다(subject_adapter.py:40-55 '래칫의 한계 — 의미적 확장은 잡지 못한다. 그런데 과목 중립성이 실제로 깨지는 주된 경로가 바로 이쪽이다'). EOS-92는 그 축을 §4에서 사람 판정으로 메웠으나(해석 지점 0건 실측) 기계 집행은 여전히 없다 — 이 태스크가 그 공백을 소유한다. 9/27 G1 승격 판정 자체를 막지는 않는다(프로브는 완주했고 ✗ 0)."
+updated: 2026-09-06
