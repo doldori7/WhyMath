@@ -244,6 +244,16 @@ gates:
     title: "PATH-04 선행 — 7주체 S1~S7 학습경로 xlsx(8시트) 원본 제공. sha256 앞16 f4ee650b734ac854 일치 확인 후 data/corpus/learning_paths_v1/source/ 로 브랜치 push (데이터 카드 docs/data/concept_content_corpus_v1.md B.1). 자산 없이 store만 만들면 dead table이라 코드 선행 불가"
     kind: human
     assignee: kiki
+    status: waived
+    requested: 2026-09-06
+    remind_after_days: 14
+    evidence: null
+    cleared_by: null
+    notes: "제목 결함으로 교체(면제 아님) — 원본 xlsx를 data/corpus/learning_paths_v1/source/에 커밋·push하라고 적어 반입 계약(docs/data/external_corpus_ingestion_v1.md §0 '원본 파일은 커밋하지 않는다'·data/raw/ gitignore)과 충돌. PR #1004 Codex P2 지적 수용. 대체 게이트 = G-path04-source-xlsx-local-handoff. 게이트 제목 정정 CLI 부재라 waive+add로 교체"
+  - id: G-path04-source-xlsx-local-handoff
+    title: "PATH-04 선행 — 7주체 S1~S7 학습경로 xlsx(8시트) 원본 제공(Git 밖). Kiki 머신 로컬 data/raw/(gitignored)에 두고 sha256 앞16 f4ee650b734ac854 일치 확인 후 경로·해시를 세션에 전달하거나 세션 대화에 파일 첨부. 원본은 커밋하지 않는다(external_corpus_ingestion_v1.md §0) — data/corpus/learning_paths_v1/에는 추출 산출물(jsonl)+_provenance.json만 커밋. 데이터 카드 concept_content_corpus_v1.md B.1. 자산 없이 store만 만들면 dead table이라 코드 선행 불가"
+    kind: human
+    assignee: kiki
     status: pending
     requested: 2026-09-06
     remind_after_days: 14
