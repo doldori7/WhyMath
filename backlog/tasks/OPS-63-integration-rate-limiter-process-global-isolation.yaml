@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-63-integration-rate-limiter-process-global-isolation
+title: "통합 테스트 레이트리미터 격리 — 프로세스 전역 InMemoryBackend(_rate_limit._BACKEND)의 순서 의존 오염을 conftest autouse로 봉인 (OPS-06 db 엔진 전역 오염과 같은 유형의 2회차)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① tests/backend/conftest.py에 autouse 픽스처를 추가해 모든 백엔드 테스트 시작 시 whymath_backend.api._rate_limit.reset_store()로 프로세스 전역 인메모리 백엔드(_BACKEND)의 카운트를 비운다. 원인 실측(2026-09-06): configure_backend_from_settings 호출처 0건이라 앱마다 백엔드가 재설치되지 않고, 같은 pytest 프로세스의 통합 테스트 21파일이 IP 쓰기 버킷(ip:testclient·60/분)을 공유한다 — 같은 코드로 CI run 34024961969의 실 PG 잡이 07:29 green → 09:39 red(pytest-randomly 순서 차이). InMemory 백엔드일 때만 리셋하고 Redis 백엔드 설정은 건드리지 않는다"
+  - "② test_coach.py·test_viz01_reach_discrimination_integration.py·test_e2e_vertical_slice_integration.py의 개별 reset_store 호출은 그대로 두거나 픽스처로 흡수하되, 한도 계약을 재는 test_rate_limit_integration.py의 단언이 깨지지 않음을 확인한다 — 픽스처는 시작 시점만 비우고 테스트 내부에서 쌓는 카운트는 손대지 않는다"
+  - "③ 변별력(실 PG 필요 — CI 'backend — 마이그레이션·통합 (실 PG)' 잡 또는 Phaiakes9 whymath-pg 5433): 픽스처를 끈 뮤테이션에서 -p no:randomly 고정 순서 test_coach_integration → test_e2e_vertical_slice_integration(E2E 자체 reset 제거 상태)로 429가 재현되고, 픽스처를 켜면 green임을 실측해 기록한다. 로컬 컨테이너(pgvector 없음)에서는 재현 불가하므로 어디서 쟀는지 적는다"
+  - "④ OPS-07 가드와의 관계를 픽스처 docstring에 명시: OPS-07은 종료 시 전역 누수를 탐지·귀책(hermetic 한정), 이 픽스처는 시작 시 카운트를 비우는 격리(통합 포함). 귀책 축은 추가하지 않는다 — 레이트리미터 카운트는 정상 동작의 잔여물이지 누수가 아니다"
+artifacts: []
+paths:
+  - tests/backend/conftest.py
+  - "tests/backend/api/**"
+session: null
+notes: "출처: PR #980 머지 드라이브 2026-09-06 — 실 PG 통합 잡이 같은 코드에서 순서에 따라 red(E2E의 두 번째 POST /v1/coach/sessions가 429). 즉시 조치는 E2E 시작 시 reset_store 한 줄(커밋 e13765c8·PR #980)이고, 이 태스크는 통합 21파일 전체에 대한 구조 격리다. 같은 유형 선례: OPS-06(db.session._engine 전역 오염 → OPS-07 가드·OPS-09 무작위화). 두 번째 발생이라 CLAUDE.md 실수 관리 규칙(시스템·반복 실수 재발방지 등재 의무)에 따라 등재. 번호는 CLI 제안(OPS-62는 로컬 선점). 로컬 검증 한계: 이 컨테이너에는 pgvector 확장·docker가 없어 실 PG 재현은 CI가 판정했다."
+updated: 2026-09-06
