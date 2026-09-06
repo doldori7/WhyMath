@@ -4,12 +4,12 @@ K-12(초·중·고) 개념별 교수학 콘텐츠 4종+α를 담는다 — 은�
 암기카드(앞/뒤/mnemonic). 대학 U4(`concept_content_university`)의 *K-12 짝*이며 같은 개념ID
 (`N1`·`A1`·`HK01`·`10기수1-01-01` 등)로 키잉돼 원자노드DB·성취기준과 조인된다.
 
-라이선스: 와이매스 **자체작성**(원자노드DB 종합·AI 추정). 단 **`explanation` 133건(전부 고등학교
-개념)은 NCIC 성취기준 본문과 사실상 동일하다** — 2026-09-06 전수 실측(유사도 ≥0.90·그중 124건은
-표기 정규화 후 완전 일치). 보유·상업 이용에 제약은 없다: NCIC 성취기준은 교육부 고시
-제2022-33호(NCIC 별책)라 저작권법 §7 제1호(고시)상 보호받지 못하는 저작물이고, 공개분은
-공공누리 제1유형(출처 표시)이다. 같은 본문을 `standards_v1`이 같은 근거로 895건 보유한다.
-`standard_codes`는 성취기준으로 가는 다리로 함께 보존한다.
+라이선스: 와이매스 **자체작성**(원자노드DB 종합·AI 추정). 단 `explanation`의 일부는 NCIC
+성취기준 본문과 사실상 동일하다 — 보유·상업 이용에 제약은 없다(교육부 고시라 저작권법 §7
+제1호상 비보호 + 공공누리 제1유형). **그 건수와 라이선스 선언 문자열은 이 모듈이 아니라
+`ncic_overlap`이 빌드 시점에 실측해 합성한다** — 숫자를 상수로 박으면 다른 xlsx로 재생성할 때
+사실과 다른 표기가 나간다(PR #998 리뷰 지적). `standard_codes`는 성취기준으로 가는 다리로
+함께 보존한다.
 **`formal_definition_internal`(정식정의)은 학생 비노출**(내부 교사/검수용)·전 콘텐츠
 검수필요. 콘텐츠 4종 DB 투영(misconception_catalog·problem 등)은 Phase 3 — 이 코퍼스는
 *자산 보존·캡처*다(휘발 xlsx → 커밋 코퍼스).
@@ -17,28 +17,7 @@ K-12(초·중·고) 개념별 교수학 콘텐츠 4종+α를 담는다 — 은�
 
 from __future__ import annotations
 
-from typing import Final
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from data_pipeline.citation import build_ncic_citation_core
-
-SOURCE_CITATION: Final[str] = (
-    "출처: 와이매스 자체작성 — K-12 개념 교수학 콘텐츠(은유·오개념·정식정의·허용표현·암기카드). "
-    "원자노드DB 종합·AI 추정·검수필요. 단, `explanation` 133건(전부 고등학교 개념)은 NCIC "
-    f"성취기준 본문과 사실상 동일하며 그 출처는 {build_ncic_citation_core()}다."
-)
-LICENSE_NOTICE: Final[str] = (
-    "본 데이터(은유·오개념·정식정의·허용표현·설명·암기카드)는 와이매스 자체 저작물입니다 — "
-    "AI 추정 초안으로 검수필요. **단, `explanation` 133건은 NCIC 성취기준 본문과 사실상 "
-    "동일하다(유사도 ≥0.90·그중 124건은 표기 정규화 후 완전 일치·2026-09-06 전수 실측).** "
-    f"해당 본문의 출처는 {build_ncic_citation_core()}이며, 고시는 저작권법 제7조 제1호"
-    "(고시·공고·훈령)상 보호받지 못하는 저작물이고 NCIC 공개분은 공공누리 제1유형"
-    "(출처 표시·상업 이용·변경 허용)이라 보유·상업 이용에 제약이 없다 — `licensing_safety.md`의 "
-    "'NCIC 구분'(고시 본문 = §7 비보호 ↔ 해설서·연구보고서 = 영리 차단)에서 전자에 해당한다. "
-    "나머지 explanation과 다른 5개 필드는 자체 저작물이다. `formal_definition_internal`"
-    "(정식정의)은 학생 비노출(내부·검수용)."
-)
 
 
 class Flashcard(BaseModel):
@@ -91,8 +70,6 @@ class ConceptContent(BaseModel):
 
 
 __all__ = [
-    "LICENSE_NOTICE",
-    "SOURCE_CITATION",
     "ConceptContent",
     "Flashcard",
 ]

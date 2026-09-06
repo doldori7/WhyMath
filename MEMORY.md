@@ -408,6 +408,22 @@ main에 없는 21커밋을 담고 그중 **MISC-01·MISC-03·PB-02 구현이 mai
 `refs/pull/*`을 가져오지 않으므로 브랜치 재작성만으로 노출이 "모든 clone"에서 "PR ref를 명시
 fetch하는 사람"으로 줄어든다. 완전 제거는 GitHub Support 요청 몫이다.
 
+**리뷰가 잡은 3회차 — 같은 결함의 재발(PR #998 Codex P1)**: 위 정정은 선언 문자열을
+`models.py`에 **상수로 박고** 커밋된 코퍼스 파일도 손으로 고쳤다. 리뷰가 지적하기를, 그러면
+① 다른 xlsx로 재생성할 때 `133건`이 사실과 무관하게 그대로 나가고 ② 빌드 CLI가 사이드카를 통째
+덮어써 `ncic_statement_overlap`이 사라져 **새 게이트가 정상 상태에서 red**를 낸다. 즉 게이트가
+*생성 경로에 배선되지 않았다* — **내가 M5로 막으려던 바로 그 결함을 내 수정이 다시 저질렀다.**
+"정본화를 집행으로 착각한 완료 선언 금지"의 세 번째 사례이고, 이번엔 사람도 나도 못 잡고 리뷰
+봇이 잡았다.
+
+**대책(코드)**: 신규 `data_pipeline/concept_content/ncic_overlap.py` — 겹침을 빌드 시점에 전수
+실측하고 그 숫자로 선언을 **합성**한다(`build_source_citation`/`build_license_notice`).
+`models.py`의 상수 2개는 제거했다. CLI는 `--standards`를 읽고, **성취기준 코퍼스가 없으면
+exit 2로 중단**한다(측정 없이 선언을 쓰지 않는다). 사이드카는 통째 덮어쓰기 대신 **병합**해
+`pool` 같은 다른 도구의 키를 보존한다. 겹침이 0이면 빌더가 출처 표시를 담지 *않는* 다른 문장을
+낸다 — 대칭 축이 없으면 "무슨 데이터든 같은 문장"인 빌더도 통과한다. 뮤테이션 2종 추가 실증
+(선언 재하드코딩 → 4건 red · 사이드카 필드 제거 → 1건 red).
+
 **정정 파일**: `content.json`·`_provenance.json`(+ 기계 판독 `ncic_statement_overlap` 필드) ·
 `data_pipeline/concept_content/{models,__main__}.py` · `docs/data/concept_content_v1.md` ·
 `docs/data/licensing_safety.md` · `l1/concept_content/projection.py` ·

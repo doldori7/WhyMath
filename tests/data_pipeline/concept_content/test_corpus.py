@@ -38,6 +38,7 @@ def test_corpus_self_authored_and_internal_definition() -> None:
     # 성취기준 본문과 사실상 동일). 데이터를 지우는 대신 선언을 데이터에 맞췄으므로
     # (교육부 고시 = 저작권법 §7 비보호 + 공공누리 제1유형), 여기서 지켜야 할 것은 "미수록"이
     # 아니라 **출처 표시**다 — 공공누리 제1유형의 유일한 조건.
+    # 선언 ↔ 실측 정합은 test_models_validate.py가, 서빙측 대조는 backend l1 테스트가 본다.
     assert "자체" in data["source_citation"]
     assert "학생 비노출" in data["license_notice"]
     assert "미수록" not in data["license_notice"]

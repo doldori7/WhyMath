@@ -58,9 +58,16 @@
   연구보고서*는 영리 차단(C등급)이라 여전히 반입 금지다 — `licensing_safety.md` 'NCIC 구분'.
 - **연결 성취기준은 코드도 보존**: `연결 성취기준` 컬럼 → `standard_codes`로 파싱(';'·',' 분할,
   '없음'·빈값 → []). 코드 다리로 원자DB·성취기준과 조인한다.
-- **집행 지점**(선언≠집행): 선언↔데이터 정합은 `tests/backend/l1/`
-  `test_concept_content_license_declaration.py`가, 파이프라인 상수↔커밋 코퍼스 정합은
-  `tests/data_pipeline/concept_content/test_models_validate.py`가 전수로 동결한다.
+- **집행 지점**(선언≠집행): 선언 문자열은 상수가 아니라 **빌드 시점 실측으로 합성**된다
+  (`data_pipeline/concept_content/ncic_overlap.py`) — `explanation`과 연결 성취기준 본문의
+  겹침을 전수 비교해 그 건수로 `source_citation`·`license_notice`를 만들고, 기계 판독용
+  `ncic_statement_overlap`을 사이드카에 함께 남긴다. 숫자를 박아 두면 다른 xlsx로 재생성할 때
+  사실과 다른 표기가 나간다(PR #998 리뷰 지적). 성취기준 코퍼스가 없으면 빌드는 **exit 2로
+  중단**한다 — 측정 없이 선언을 쓰지 않는다.
+  동결: `tests/backend/l1/test_concept_content_license_declaration.py`(커밋된 코퍼스 전수 스캔
+  ↔ 사이드카) · `tests/data_pipeline/concept_content/test_models_validate.py`(빌더가 커밋된
+  코퍼스를 재현하는가) · `test_ncic_overlap.py`·`test_main_cli.py`(데이터가 바뀌면 선언도
+  바뀌는가 — 겹침 0 대칭 포함).
 - **`formal_definition_internal`(정식정의)은 학생 비노출** — 내부·교사/검수용. 노출 계층이 게이팅.
 
 ---
