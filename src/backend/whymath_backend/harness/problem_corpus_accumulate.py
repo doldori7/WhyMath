@@ -53,6 +53,11 @@ L3 코드에는 L4 import 0(계층 규칙). harness는 import-linter 계약 밖(
     조치가 정반대다. 분포가 그 둘을 가른다(CLAUDE.md "작동 신호 없는 알고리즘 부착 금지").
   - **회차 대장** — 회차 1건을 `<out>.rounds.jsonl` 사이드카에 즉시 append한다(genlog·검수 큐와
     같은 규약·끄기 없음). 이 대장이 없으면 연속 무진전이 영원히 "측정 불가"가 된다.
+  - **회차 매니페스트**(MP-04) — 대장 행에 그 회차의 *구성*(프롬프트 버전·모델 핀 ID·카나리
+    임계 3종·중단 감시 2종·시드 파일 sha256·CLI argv)과 *관측 판정*(카나리 통과·점추정·Wilson
+    하한·차단/권고·중단 여부와 사유)을 함께 싣는다. 없으면 "지난주보다 수용률이 낮다"가 모델
+    교체 때문인지 임계 변경 때문인지 대장만으로 갈리지 않는다(genlog 조인이 있어야 모델을 겨우
+    안다). 두 묶음을 분리해 싣는 이유는 `anchor_round_ledger.RoundRecord` docstring 참조.
   - **연속 무진전 알람** — 최신 회차부터 연속으로 신규 행 0인 회차가 `--stagnation-window`
     (기본 3) 이상이면 알람이다. exit 2 + stderr 경고 + 리포트 `stagnation` 필드 3중으로 낸다 —
     stderr 한 줄만이면 습관화돼 소음이 되고(fail-open 상시 실패를 "보호 있음"으로 신뢰 금지),
@@ -71,6 +76,7 @@ exit 코드 3종: 0=신규 수용 ≥1 · 1=이번 회차 무진전 · **2=연�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -124,6 +130,7 @@ from whymath_backend.schema.provenance import GenerationLog
 
 __all__ = [
     "AccumulateReport",
+    "compute_seed_digests",
     "default_generation_log_path",
     "default_round_ledger_path",
     "default_review_queue_path",
@@ -428,6 +435,52 @@ def run_corpus_accumulate(
     )
 
 
+def compute_seed_digests(paths: Sequence[Path]) -> dict[str, str | None]:
+    """시드 코퍼스 경로 → 내용 sha256(hex) 매핑 — 회차 재현 계약의 *입력 지문*(MP-04 ①).
+
+    같은 CLI 인자로 다시 돌려도 시드 파일이 그 사이 자랐으면 dedup 인덱스가 달라져 결과가
+    달라진다 — 그래서 재현 재료에는 경로 문자열이 아니라 **내용의 지문**이 필요하다.
+
+    읽지 못한 경로(부재·권한·디렉터리)는 **키를 남기고 값만 None**으로 둔다: "그 경로를 시드로
+    주었는데 읽지 못했다"는 것도 관측이고, 키를 지우면 인자에 있었다는 사실 자체가 사라진다
+    (날조 금지·미측정≠0). 실패는 삼키지 않고 **예외 타입명**을 로그에 남긴다(침묵 실패 금지 —
+    파일 *내용*·경로 외 정보는 남기지 않는다). 회차를 깨지 않는 관측 경로이므로 예외를 위로
+    올리지 않는다(대장 적재 실패와 같은 등급).
+    """
+    digests: dict[str, str | None] = {}
+    for path in paths:
+        key = str(path)
+        try:
+            hasher = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    hasher.update(chunk)
+        except Exception as exc:  # noqa: BLE001 — 지문 계산 실패는 회차 비차단(타입명 로그)
+            digests[key] = None
+            _LOGGER.warning(
+                "시드 지문 계산 실패(%s) — 경로 %s는 None=미기록으로 대장에 남는다",
+                type(exc).__name__,
+                key,
+            )
+        else:
+            digests[key] = hasher.hexdigest()
+    return digests
+
+
+def _snapshot_single_value(values: set[str]) -> str | None:
+    """회차 전체에서 관측된 값 집합 → 대장 1칸(MP-04 ① `model_name`·`prompt_version`).
+
+    0건이면 None=미기록(생성 호출이 없었던 회차 — 0이나 빈 문자열로 채우지 않는다). 1건이면
+    그 값. **2건 이상이면 정렬 후 ','로 합친다** — 하나만 골라 적으면 그 행은 "회차가 단일
+    모델로 돌았다"고 거짓말하게 되고, 회차 간 비교가 그 거짓 위에서 이뤄진다.
+    """
+    if not values:
+        return None
+    if len(values) == 1:
+        return next(iter(values))
+    return ",".join(sorted(values))
+
+
 def default_generation_log_path(out_path: Path) -> Path:
     """생성 로그 기본 경로 — 축적 산출물 곁 사이드카 `<out>.genlog.jsonl`(항상 적재)."""
     return out_path.with_suffix(".genlog.jsonl")
@@ -574,7 +627,11 @@ def main(argv: list[str] | None = None) -> int:
             "중단해도 그때까지의 수용분은 append되고 비수용분은 검수 큐에 남는다."
         ),
     )
-    args = parser.parse_args(argv)
+    # 회차 매니페스트(MP-04 ①)에 실을 **실행 인자 원문**을 여기서 확정한다 — argv=None(실제
+    # CLI 실행)이면 `sys.argv[1:]`가 원문이고, 테스트·호출자가 리스트를 주면 그것이 원문이다.
+    # parse_args에도 이 확정값을 넘겨 "기록한 인자"와 "해석한 인자"가 갈라지지 않게 한다.
+    effective_argv: list[str] = list(argv) if argv is not None else list(sys.argv[1:])
+    args = parser.parse_args(effective_argv)
     if args.canary < 0:
         parser.error(f"--canary는 0 이상이어야 한다(받은 값 {args.canary}).")
     if not 0.0 <= args.canary_threshold <= 1.0:
@@ -613,8 +670,18 @@ def main(argv: list[str] | None = None) -> int:
     # 값을 흘린다.
     run_id = uuid.uuid4().hex
 
+    # 회차 매니페스트(MP-04 ①)의 모델·프롬프트 좌석 — genlog에 **실제로 적재된 행**에서만
+    # 모은다(적재 전에 모으면 파일에 없는 값을 대장이 주장하게 된다 — 재현 계약 ④의 대조가
+    # 그 순간 거짓이 된다). 회차 중 라우팅이 갈려 값이 여러 개면 전부 모아 둔다.
+    observed_models: set[str] = set()
+    observed_prompt_versions: set[str] = set()
+
     def _genlog_sink(log: GenerationLog) -> None:
-        append_generation_log_jsonl(genlog_path, log, run_id=run_id)
+        stamped = append_generation_log_jsonl(genlog_path, log, run_id=run_id)
+        if stamped.model_name:
+            observed_models.add(stamped.model_name)
+        if stamped.prompt_version:
+            observed_prompt_versions.add(stamped.prompt_version)
 
     # 내구 검수 큐(EOS-58 codex P1-1/P2) — 비수용 outcome 발생 즉시 행 append+flush. 경로는
     # 항상 <out>.review.jsonl 사이드카(뷰와 달리 저장소는 옮기지 않는다 — 누적의 단일 원천).
@@ -671,6 +738,10 @@ def main(argv: list[str] | None = None) -> int:
     payload = report.to_json()
     ledger_path: Path = default_round_ledger_path(args.out)
     ledger_error: str | None = None
+    # 회차 매니페스트(MP-04) — 카나리 관측 3종은 판정이 **있었을 때만** 값이 있다. 판정이
+    # 없었던 회차(관문 꺼짐·시도 0건)를 False/0.0으로 채우면 "게이트가 막았다"·"성공률 0%"로
+    # 위장되므로 전부 None으로 둔다(모른다 ≠ 아니다).
+    canary_json: dict[str, Any] | None = report.canary
     try:
         append_round_ledger(
             ledger_path,
@@ -681,6 +752,29 @@ def main(argv: list[str] | None = None) -> int:
                 accepted=report.accepted,
                 appended=report.appended,
                 outcome_counts=dict(report.outcome_counts),
+                # ① 구성 스냅샷 — 이 회차를 재현하는 데 필요한 입력.
+                #    `--canary 0`·`--abort-window 0`(끔)은 0 그대로 기록한다(None=미기록과 구분).
+                prompt_version=_snapshot_single_value(observed_prompt_versions),
+                model_name=_snapshot_single_value(observed_models),
+                canary_size=args.canary,
+                canary_threshold=args.canary_threshold,
+                canary_confidence=args.canary_confidence,
+                abort_window=args.abort_window,
+                abort_threshold=args.abort_threshold,
+                seed_digests=compute_seed_digests(list(args.seeds)),
+                cli_argv=effective_argv,
+                # ② 관측 판정 — 게이트가 실제로 일했다는 신호.
+                canary_passed=bool(canary_json["passed"]) if canary_json is not None else None,
+                canary_rate=(
+                    float(canary_json["point_estimate"]) if canary_json is not None else None
+                ),
+                canary_lower_bound=(
+                    float(canary_json["wilson_lower"]) if canary_json is not None else None
+                ),
+                canary_blocked=report.canary_blocked,
+                canary_advisory=report.canary_advisory,
+                aborted=report.aborted,
+                abort_reason=report.abort_reason,
             ),
         )
     except Exception as exc:  # noqa: BLE001 — 대장 적재 장애는 회차를 깨지 않되 타입명을 남긴다
