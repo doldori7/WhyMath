@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -23,6 +23,6 @@ paths:
   - tests/backend/l1/problem_bank/test_populate.py
   - tests/infra/test_eos_core_boundary_probe.py
   - docs/architecture/eos_core_adapter_boundary.md
-session: null
+session: claude/status-k9r51v
 notes: "출처: docs/reviews/eos_core_boundary_remediation_candidates_2026-09-04.md §1 — Kiki 2026-09-04 '권고안대로 등재'. 실측: 튜플 17종 = 코퍼스 distinct 17종(차집합 0·현재 거르는 값 0건). 어휘 사본 4곳(acceptance 17·corpus_reverify 15·verifier 파생·populate 17). SubjectAdapter.answer_kinds() 추가는 two-tier 필수층 동결(REQUIRED_METHODS)과 충돌해 비채택."
-updated: 2026-09-04
+updated: 2026-09-06
