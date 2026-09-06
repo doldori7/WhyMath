@@ -28,9 +28,24 @@ _SCRIPT = _REPO_ROOT / "scripts" / "analysis" / "eos_core_boundary_probe.py"
 _BOUNDARY_DOC = _REPO_ROOT / "docs" / "architecture" / "eos_core_adapter_boundary.md"
 
 # 리터럴 비교 기준선 — (CORE 모듈, 위반 종류) → 허용 건수. 줄이는 방향으로만 고친다.
-LITERAL_COMPARE_BASELINE: dict[tuple[str, str], int] = {
-    ("l1.problem_bank.populate", "math_type"): 1,
-}
+# EOS-85로 **0이 됐다**(2026-09-06 · 판정 기준 main dc2e6583). 마지막 1건은
+# `l1/problem_bank/populate.py`가 수학 `answer_kind` 17종을 튜플로 열거하던 자리였고,
+# 그 열거를 불투명 문자열 통과로 바꾸면서 사라졌다. 기준선은 이제 **비어 있다** — 유예 0.
+# (아래 테스트는 "줄었으면 ratchet하라"고 RED를 내므로, 이 dict를 비우지 않으면
+#  0건 실측 자체가 실패로 보고된다 — 기준선은 실측을 따라 내려간다.)
+#
+# ⚠ **이 0이 무엇을 보장하고 무엇을 보장하지 않는가**(EOS-85 실측·과대주장 방지):
+# 스캐너는 비교문의 문자열 리터럴을 `MATH_TYPE_RX`(quadratic|trig*|probability|inequality …
+# 접두 목록)로 판정한다. 위 17종 중 **그 정규식에 걸리는 것은 `inequality_direction` 하나뿐**
+# 이었다 — 즉 원래의 히트 1건은 사실상 그 한 값이 만들었다. 결함 주입으로 확인했다:
+# 화이트리스트를 3종·7종으로 되살려도(`inequality_direction` 제외) 히트는 **0으로 유지되고
+# 이 테스트는 통과한다**. 그러므로 "리터럴 비교 0"은 *접두 목록에 걸리는 어휘*가 없다는 뜻이지
+# 과목 어휘 열거가 전부 사라졌다는 뜻이 아니다.
+# 이 사각의 소유자는 `EOS-01` acceptance ②(매처 확장)이며, 그때까지 `answer_kind` 축의
+# 실질 보호는 행동 축 회귀 테스트가 맡는다
+# (`tests/backend/l1/problem_bank/test_populate.py::test_load_passes_unknown_answer_kind_through_verbatim`
+#  — 같은 뮤테이션에서 실제로 RED가 났다).
+LITERAL_COMPARE_BASELINE: dict[tuple[str, str], int] = {}
 
 # CORE가 과목 전용 **enum 멤버**를 열거하는 자리 — (모듈, 참조). EOS-90에서 v1의 사각으로
 # 드러났다(문자열이 하나도 없어 리터럴 비교 스캔을 그대로 통과했다).
