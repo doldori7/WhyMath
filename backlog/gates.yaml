@@ -34,11 +34,11 @@ gates:
     title: "백업 오프사이트 사본 이동 — 현재 prod와 같은 디스크(SPOF·미성년 PII 포함)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-11
     remind_after_days: 30
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-06 Kiki 실행(Phaiakes9 Windows PowerShell) — 오프사이트 반출 완료. ⓐ 반출 전 검증(§4-1a): verify_encrypted_backup.py --pg-restore-docker-image pgvector/pgvector:pg16 → EXIT=0, '① 잠김(암호문이 pg_restore로 안 읽힘): OK' + '② 열림(복호 후 카탈로그 판독): OK', 사유 'ok — 카탈로그 항목 491건'(대상 whymath_20260906_231309.dump.age). ⓑ 키 분리(§4-5): 목적지의 whymath-backup-identity.key 존재 False, 평문 *.dump 존재 False. ⓒ Kiki 실행으로 승인 성립. §4-1b 반출: '[OK] copied 2 encrypted artifact(s) to C:\\\\Users\\\\kiki\\\\Google Drive\\\\WhyMath-backups' + 자가검증1 True(존재가 아니라 바이트 길이 일치). §4-1c 상시 미러: 재등록 불요였다 — 실측상 이미 등록돼 있었다(Args에 -OffsiteDir \"C:\\\\Users\\\\kiki\\\\Google Drive\\\\WhyMath-backups\" -RequireEncryption · LogonType S4U · State Ready · LastRunTime 2026-09-06 23:13:08 · LastTaskResult 0 · NextRunTime 2026-09-07 04:00, 감시 태스크 WhyMath-DB-Backup-Check도 Ready/S4U/-RequireEncrypted). 미러 작동 증명: backup_whymath_pg.ps1 Step 9는 fail-closed(평문·디렉터리 생성 실패·Copy-Item 실패·사본 부재·바이트 크기 불일치·보존 삭제 실패·목적지 평문 잔존이 전부 Fail→exit 1)이므로 -OffsiteDir가 걸린 회차의 exit 0은 복사·존재·크기일치·보존·평문부재 전 구간 통과를 뜻한다. 클라우드 업로드 실물 확인(drive.google.com 컴퓨터>내 PC>WhyMath-backups): whymath_20260902_222520.dump.age(563KB·9월 2일)·whymath_20260906_231309.dump.age(563KB·오후 11:13) 소유자 '나'로 존재, 로컬 576,864바이트와 정합. 개인키·평문 미업로드. ★실행 중 결함 2건 발견·수정(PR #1009): ①런북 §4 취급 규칙 2~5번이 §4-1a~4-1d 삽입에 밀려 §4-1d 안에 파묻혀 반출 조건 ⓑ가 가리키는 §4-5를 문서에서 찾을 수 없었다(§4-5에 age 개인키 축도 부재 — 봉투 암호화 마스터 키만 다뤘다) ②register_backup_schedule.ps1이 Register-ScheduledTask의 Access denied(0x80070005) 2회 실패에도 [OK] 2줄+exit 0을 냈다(3중 원인: $ErrorActionPreference=Stop이 CDXML/CIM cmdlet에 미적용 · 되읽기가 동명 옛 태스크를 읽어 통과 · [OK] action 줄이 되읽은 값이 아니라 조립한 $argList 출력). 동일 결함 2회 독립 재현. 대책 = 권한 사전 확인·명시적 -ErrorAction Stop+try/catch(예외 타입명)·되읽은 인자와 조립 인자 대조, 계약 동결 TestRunbookCrossReferences 3건+TestScheduledTaskRegistrationFailsClosed 4건(결함 주입 M1~M5·N1~N5 전건 검출). 미해결(승계): 오프사이트 실패가 backup_status.json에는 성공으로 남아 09:00 감시가 못 본다 = OPS-64 등재 · §4-1d 분기 회수 검증(클라우드에서 내려받아 복원) 미실시 · 목적지에 타 도구 산출물 혼재(whymath_db_*.dump.age·whymath_git_*.bundle)로 Step 9 보존이 그것까지 지울 수 있다 — Kiki 확인 대기."
+    cleared_by: kiki
     notes: ""
   - id: G-backup-restore-rehearsal
     title: "DB 복구 리허설 1회 실시(db_backup_dr_runbook.md §3) — RTO 미측정 해소·§5 표 갱신"
@@ -164,11 +164,11 @@ gates:
     title: "EOS-49(ConceptVersion 버전 테이블)·EOS-50(Publish Gate) ↔ ARCH-37 핵심 엔티티 동결 충돌 판정 — ARCH-37(#984·09-05)은 ContentVersion을 '좌석 부재'(canonical_entity_model_v1.md §3-D)로 동결하고 검사 ③/③-b(tests/backend/db/test_canonical_entity_model_freeze.py — 예약 이름 content_version·entity_version 금지 + ContentVersion 좌석 tuple 비어 있음 강제)가 그 좌석 테이블을 RED로 막는다. §4-5는 EOS-49를 '기존 좌석의 컬럼 추가이지 새 엔티티가 아니다'로 적었으나, EOS-49 acceptance ①은 VersionHeader를 공유하는 concept_version 버전 테이블 신설(Pydantic+ORM+alembic)이고 acceptance ②(Published=immutable DB 집행)와 EOS-50(publish 전이 검증 파이프라인)은 그 테이블 위에 선다 — 두 정본 중 하나를 고쳐야 착수 가능. 선택지: ①ARCH-37 §5 절차로 ContentVersion 좌석을 9월에 개통(§1·§2 표 + 테스트 상수 + MEMORY 동반 정정 — '9월 스키마에 넣지 않는다' 지시의 예외 승인) ②EOS-49·50을 동결 해제 지점(10월 이후)으로 연기하고 그때 §5 절차 ③EOS-49 ①을 테이블 없는 계약(VersionHeader Pydantic + concept.current_published_version_id 컬럼 + content_hash — ARCH-37 §4-5의 '컬럼 추가' 해석)으로 축소 재정의하고 EOS-50은 ReviewStatus 축 재사용으로 재정의. 출처: canonical_entity_model_v1.md §3-D·§4-5·§5 · 44_eos_version_management.md §6.3·§7 · EOS-49 acceptance ①②③"
     kind: decision
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-06
     remind_after_days: 5
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-06 Kiki 판정 D안 (세션 https://claude.ai/code/session_01HTc5JmMzrEhsmw72Ja2huY · AskUserQuestion 'D안 — Concept 좌석에 편입' 선택). 판정 기준: main 9d5f81b2 (근거 4건 trunk 실재 확인). 결론: 두 정본은 충돌하지 않았다 — 44 §6.1이 Unified Entity 슈퍼테이블을 보류하고 Hybrid(공통 헤더 Pydantic + 도메인별 버전 테이블)를 채택했고 §14-8이 슈퍼테이블을 금기로 명시하며, ARCH-37 §3-D가 막는 것도 문면 그대로 '20번째 엔티티 급조'(=범용 ContentVersion)다. 판정: concept_version은 Concept 좌석의 4번째 테이블로 편입(선례 curriculum_version⊂Curriculum 좌석 2번 — db/models/curriculum_version.py 실측), ContentVersion 좌석은 비운 채 유지, 엔티티 19종 불변, 좌석 41→42. problem_version(ARCH-31)도 동일 규칙으로 Problem 좌석. 게이트 원안 3선택지(①좌석 개통·②10월 연기·③테이블 없는 계약 축소) 모두 미채택. [게이트 문면 정정] 원 문면의 '검사 ③/③-b가 막는다'는 사실 오류 — 실패 주입 실측 결과 concept_version 주입 시 ①(전수 귀속)만 RED이고 ③·③-b·④는 GREEN(정상 상태 4검사 전부 GREEN·변별력 확인). 막은 것은 부재 동결이 아니라 '§5 절차를 밟았는가'를 묻는 검사였다. [신규 제약] 좌석 상수만 선등재하면 ①②④ 3중 RED — §2-A 표+좌석 상수+ORM/alembic은 같은 PR에 원자적으로(정본 §5-1 신설). 집행: canonical_entity_model_v1.md §3-D 판정 절·§4-5 사실 정정·§5-1 신설(freeze 8건 GREEN 유지) + EOS-49 acceptance ①-b + ARCH-31 파급 항 + MEMORY 결정 로그. EOS-49·EOS-50 착수 해금."
+    cleared_by: kiki
     notes: ""
   - id: G-eos63-skill-event-reach-sample
     title: "EOS-63 전환 선결 — attempt_event.skill_ids 기록률 실측(Phaiakes9 prod DB에서 리포트 1회 실행)"
