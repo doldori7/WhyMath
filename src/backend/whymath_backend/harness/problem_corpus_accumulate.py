@@ -130,7 +130,7 @@ from whymath_backend.schema.provenance import GenerationLog
 
 __all__ = [
     "AccumulateReport",
-    "compute_seed_digests",
+    "compute_dedup_input_digests",
     "default_generation_log_path",
     "default_round_ledger_path",
     "default_review_queue_path",
@@ -435,17 +435,25 @@ def run_corpus_accumulate(
     )
 
 
-def compute_seed_digests(paths: Sequence[Path]) -> dict[str, str | None]:
-    """시드 코퍼스 경로 → 내용 sha256(hex) 매핑 — 회차 재현 계약의 *입력 지문*(MP-04 ①).
+def compute_dedup_input_digests(paths: Sequence[Path]) -> dict[str, str | None]:
+    """dedup 입력 경로 → 내용 sha256(hex) 매핑 — 회차 재현 계약의 *입력 지문*(MP-04 ①).
 
-    같은 CLI 인자로 다시 돌려도 시드 파일이 그 사이 자랐으면 dedup 인덱스가 달라져 결과가
+    **호출자가 dedup 입력 전부를 넘겨야 한다** — `--seeds`뿐 아니라 기존 `--out` 코퍼스까지다
+    (`run_corpus_accumulate`가 `seed_signatures | out_signatures`로 인덱스를 만든다). 이 함수는
+    받은 경로만 뜨므로, 무엇을 넘길지가 계약의 절반이다(PR #1013 Codex P1 — 초판이 seeds만
+    넘겨 수용 판정에 쓰인 입력 하나가 대장에서 빠져 있었다).
+
+    호출 **시점**도 계약이다: 배치가 out에 append하기 **전에** 떠야 한다. 뒤에 뜨면 이 회차의
+    산출물이 섞여 "소비한 입력"이 아니라 "산출 후 상태"를 기록하게 된다.
+
+    같은 CLI 인자로 다시 돌려도 입력 파일이 그 사이 자랐으면 dedup 인덱스가 달라져 결과가
     달라진다 — 그래서 재현 재료에는 경로 문자열이 아니라 **내용의 지문**이 필요하다.
 
-    읽지 못한 경로(부재·권한·디렉터리)는 **키를 남기고 값만 None**으로 둔다: "그 경로를 시드로
-    주었는데 읽지 못했다"는 것도 관측이고, 키를 지우면 인자에 있었다는 사실 자체가 사라진다
-    (날조 금지·미측정≠0). 실패는 삼키지 않고 **예외 타입명**을 로그에 남긴다(침묵 실패 금지 —
-    파일 *내용*·경로 외 정보는 남기지 않는다). 회차를 깨지 않는 관측 경로이므로 예외를 위로
-    올리지 않는다(대장 적재 실패와 같은 등급).
+    읽지 못한 경로(부재·권한·디렉터리)는 **키를 남기고 값만 None**으로 둔다: "그 경로를 dedup
+    입력으로 주었는데 읽지 못했다"는 것도 관측이고(첫 회차의 아직 없는 out이 그 경우다), 키를
+    지우면 인자에 있었다는 사실 자체가 사라진다 (날조 금지·미측정≠0). 실패는 삼키지 않고
+    **예외 타입명**을 로그에 남긴다(침묵 실패 금지 — 파일 *내용*·경로 외 정보는 남기지 않는다).
+    회차를 깨지 않는 관측 경로이므로 예외를 위로 올리지 않는다(대장 적재 실패와 같은 등급).
     """
     digests: dict[str, str | None] = {}
     for path in paths:
@@ -458,7 +466,7 @@ def compute_seed_digests(paths: Sequence[Path]) -> dict[str, str | None]:
         except Exception as exc:  # noqa: BLE001 — 지문 계산 실패는 회차 비차단(타입명 로그)
             digests[key] = None
             _LOGGER.warning(
-                "시드 지문 계산 실패(%s) — 경로 %s는 None=미기록으로 대장에 남는다",
+                "dedup 입력 지문 계산 실패(%s) — 경로 %s는 None=미기록으로 대장에 남는다",
                 type(exc).__name__,
                 key,
             )
@@ -691,6 +699,17 @@ def main(argv: list[str] | None = None) -> int:
         append_review_queue_jsonl(review_queue_path, entry)
 
     generator = _build_live_generator(args.topic_hint, generation_log_sink=_genlog_sink)
+
+    # 회차 매니페스트(MP-04 ①)의 입력 지문 — **배치 호출 앞에서** 뜬다(PR #1013 Codex P1).
+    # 이유 둘: ⓐ dedup 인덱스는 `--seeds`뿐 아니라 **기존 `--out` 코퍼스**로도 만들어진다
+    # (run_corpus_accumulate의 `load_corpus_index([out_path])` → `seed_signatures | out_signatures`)
+    # — out을 빼면 수용 판정에 실제로 쓰인 입력 하나가 대장에서 통째로 빠진다 ⓑ 배치 뒤에
+    # 뜨면 이 회차가 out에 append한 바이트까지 섞여, "소비한 입력"이 아니라 "산출 후 상태"를
+    # 기록하게 된다(재현하려는 사람이 그 해시를 맞출 방법이 없다).
+    # 첫 회차처럼 out이 아직 없으면 값은 None이다 — "그 경로를 dedup 입력으로 썼으나 읽을
+    # 것이 없었다"는 관측이며, 키는 남는다.
+    dedup_digests = compute_dedup_input_digests([*args.seeds, args.out])
+
     report = run_corpus_accumulate(
         out_path=args.out,
         seed_paths=list(args.seeds),
@@ -761,7 +780,7 @@ def main(argv: list[str] | None = None) -> int:
                 canary_confidence=args.canary_confidence,
                 abort_window=args.abort_window,
                 abort_threshold=args.abort_threshold,
-                seed_digests=compute_seed_digests(list(args.seeds)),
+                dedup_input_digests=dedup_digests,
                 cli_argv=effective_argv,
                 # ② 관측 판정 — 게이트가 실제로 일했다는 신호.
                 canary_passed=bool(canary_json["passed"]) if canary_json is not None else None,

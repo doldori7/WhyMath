@@ -182,7 +182,7 @@ class RoundRecord(BaseModel):
     상태였다. 두 묶음을 분리해 싣는다 — **구성(무엇으로 돌렸나)**과 **관측(그래서 뭐가 나왔나)**
     은 성질이 다르고, 섞으면 "임계 0.9"와 "하한 0.34"가 같은 칸에서 읽힌다.
 
-      ① 구성 스냅샷 — `prompt_version`·`model_name`·카나리 3종·중단 감시 2종·`seed_digests`·
+      ① 구성 스냅샷 — `prompt_version`·`model_name`·카나리 3종·중단 감시 2종·`dedup_input_digests`·
          `cli_argv`. 이 회차를 **재현**하는 데 필요한 입력 전부다(같은 명령·같은 시드 파일·같은
          임계로 다시 돌릴 수 있는가).
       ② 관측 판정 — `canary_passed`·`canary_rate`·`canary_lower_bound`·`canary_blocked`·
@@ -273,14 +273,20 @@ class RoundRecord(BaseModel):
         default=None,
         description="롤링 창 불량률 중단 임계(`--abort-threshold`) — 초과 시 회차 즉시 중단.",
     )
-    seed_digests: dict[str, str | None] | None = Field(
+    dedup_input_digests: dict[str, str | None] | None = Field(
         default=None,
         description=(
-            "이 회차가 dedup 인덱스로 읽은 시드 코퍼스의 경로→sha256(hex) 매핑. 같은 명령을 "
-            "다시 돌려도 시드 파일이 그 사이 자랐으면 결과가 달라지므로, 재현 계약에는 "
+            "이 회차가 dedup 인덱스로 읽은 **입력 전부**의 경로→sha256(hex) 매핑 — `--seeds`와 "
+            "**기존 `--out` 코퍼스**를 모두 포함한다(누적 축적은 2회차부터 이전 산출물을 "
+            "signature 인덱스에 합치므로, out을 빼면 수용 판정에 실제로 쓰인 입력 하나가 "
+            "대장에서 통째로 빠진다 — PR #1013 Codex P1). 지문은 배치 **시작 전** 상태에서 "
+            "뜬다: 배치 뒤에 뜨면 이 회차가 out에 append한 바이트가 섞여 '소비한 입력'이 아니라 "
+            "'산출 후 상태'가 되고, 재현하려는 사람이 그 해시를 맞출 방법이 없다. "
+            "같은 명령을 다시 돌려도 입력이 그 사이 자랐으면 결과가 달라지므로 재현 계약에는 "
             "**입력 내용의 지문**이 필요하다. 해시를 계산하지 못한 경로(부재·읽기 실패)는 값이 "
-            "None이다(키는 남긴다 — '그 경로를 시드로 주었으나 읽지 못했다'는 사실 자체가 관측). "
-            "빈 dict는 '시드 0건으로 돌았다'는 관측이고, 필드 자체가 None이면 미기록이다."
+            "None이다(키는 남긴다 — '그 경로를 dedup 입력으로 주었으나 읽지 못했다'는 사실 "
+            "자체가 관측이며, 첫 회차의 아직 없는 out이 이 경우다). 빈 dict는 '입력 0건으로 "
+            "돌았다'는 관측이고, 필드 자체가 None이면 미기록이다."
         ),
     )
     cli_argv: list[str] | None = Field(

@@ -38,7 +38,7 @@ from whymath_backend.harness.anchor_round_ledger import (
     load_round_ledger,
 )
 from whymath_backend.harness.problem_corpus_accumulate import (
-    compute_seed_digests,
+    compute_dedup_input_digests,
     default_generation_log_path,
     default_round_ledger_path,
     main,
@@ -195,7 +195,7 @@ class TestConfigSnapshot:
         # argv 원문 — 개별 필드가 놓친 인자(--topic-hint 등)까지 재실행 가능한 형태로 남는다.
         assert row.cli_argv == argv
 
-    def test_seed_digests_are_content_hashes_of_actual_files(
+    def test_dedup_input_digests_are_content_hashes_of_actual_files(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """시드 경로별 sha256이 **파일 내용의 실제 해시**와 일치한다(경로 문자열이 아니다)."""
@@ -208,28 +208,90 @@ class TestConfigSnapshot:
         capsys.readouterr()
 
         row = _last_row(out)
-        assert row.seed_digests == {
+        assert row.dedup_input_digests is not None
+        # out도 dedup 입력이므로 키가 실린다. 첫 회차라 배치 전에는 없었으니 값은 None이다.
+        assert row.dedup_input_digests == {
             str(seed_a): hashlib.sha256(seed_a.read_bytes()).hexdigest(),
             str(seed_b): hashlib.sha256(seed_b.read_bytes()).hexdigest(),
+            str(out): None,
         }
         # 두 시드의 내용이 다르므로 지문도 달라야 한다 — 같으면 상수를 적고 있는 것이다.
-        assert len(set(row.seed_digests.values())) == 2
+        seed_values = {row.dedup_input_digests[str(seed_a)], row.dedup_input_digests[str(seed_b)]}
+        assert len(seed_values) == 2
 
     def test_no_seed_round_records_empty_map_not_none(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """시드 0건 회차는 빈 dict(관측)로 남는다 — None(미기록)과 구분된다(미측정≠0)."""
+        """`--seed` 0건이어도 out은 dedup 입력이라 키가 남는다 — 빈 dict가 아니다.
+
+        None(미기록)과 구분되는 것은 그대로다(미측정≠0). 첫 회차의 out은 배치 전에 없었으므로
+        값이 None이고, 그것이 "읽을 것이 없었다"는 정직한 관측이다.
+        """
         _patch_live_generator(monkeypatch, [_NON_JSON])
         out = tmp_path / "acc.jsonl"
         main(_args(out, n=1))
         capsys.readouterr()
-        assert _last_row(out).seed_digests == {}
+        assert _last_row(out).dedup_input_digests == {str(out): None}
+
+    def test_second_round_hashes_out_corpus_as_consumed_before_the_batch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """2회차 지문이 **배치 전** out 바이트와 일치한다 (PR #1013 Codex P1 회귀 가드).
+
+        누적 축적은 2회차부터 `--seeds`뿐 아니라 **기존 out 코퍼스**로도 dedup 인덱스를 만든다
+        (`seed_signatures | out_signatures`). 그러므로 out은 수용 판정에 실제로 쓰인 입력이고,
+        지문에서 빠지면 대장은 재현에 필요한 입력 하나를 통째로 잃는다.
+
+        시점도 함께 붙든다: 이 회차가 out에 행을 붙이므로 배치 **뒤에** 지문을 뜨면 값이
+        달라진다. 그래서 "1회차 종료 시점의 out 해시"를 미리 떠 두고 2회차 행과 대조한다 —
+        일치하면 소비한 입력을, 불일치하면 산출 후 상태를 기록한 것이다.
+        """
+        out = tmp_path / "acc.jsonl"
+        # 1회차 — out에 수용 1건을 남긴다(2회차의 dedup 입력이 된다).
+        _patch_live_generator(monkeypatch, [_accept_response(2, 5)])
+        main(_args(out, n=1))
+        capsys.readouterr()
+        before = out.read_bytes()
+        assert before, "1회차가 out에 아무것도 남기지 않았다 — 이 테스트의 전제가 깨졌다"
+        digest_before = hashlib.sha256(before).hexdigest()
+
+        # 2회차 — 다른 근으로 또 1건 수용시켜 out을 **자라게** 한다.
+        _patch_live_generator(monkeypatch, [_accept_response(3, 7)])
+        main(_args(out, n=1))
+        capsys.readouterr()
+        assert out.read_bytes() != before, "2회차가 out을 늘리지 않았다 — 시점 변별력이 없다"
+
+        row = _last_row(out)
+        assert row.dedup_input_digests is not None
+        assert (
+            str(out) in row.dedup_input_digests
+        ), "out 코퍼스가 지문에 없다 — dedup 인덱스에 실제로 쓰인 입력이 대장에서 빠졌다."
+        assert (
+            row.dedup_input_digests[str(out)] == digest_before
+        ), "out 지문이 배치 전 바이트와 다르다 — 소비한 입력이 아니라 산출 후 상태를 기록했다."
+
+    def test_out_is_hashed_once_even_when_also_passed_as_seed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """`--out`을 `--seed`로도 준 회차에서 키가 중복되지 않는다(경로→지문은 단일 사상)."""
+        out = tmp_path / "acc.jsonl"
+        _patch_live_generator(monkeypatch, [_accept_response(2, 5)])
+        main(_args(out, n=1))
+        capsys.readouterr()
+        digest_before = hashlib.sha256(out.read_bytes()).hexdigest()
+
+        _patch_live_generator(monkeypatch, [_accept_response(3, 7)])
+        main(_args(out, n=1, extra=["--seed", str(out)]))
+        capsys.readouterr()
+
+        row = _last_row(out)
+        assert row.dedup_input_digests == {str(out): digest_before}
 
     def test_unreadable_seed_keeps_key_with_none_digest(self, tmp_path: Path) -> None:
         """읽지 못한 시드는 **키를 남기고 값만 None** — 인자에 있었다는 사실을 지우지 않는다."""
         missing = tmp_path / "nope.jsonl"
         present = _seed_file(tmp_path, "here.jsonl", "x")
-        digests = compute_seed_digests([missing, present])
+        digests = compute_dedup_input_digests([missing, present])
         assert digests[str(missing)] is None  # 날조 금지 — 빈 파일 해시를 채우지 않는다
         assert digests[str(present)] == hashlib.sha256(b"x").hexdigest()
 
@@ -445,7 +507,7 @@ class TestLegacyRowCompatibility:
             "canary_confidence",
             "abort_window",
             "abort_threshold",
-            "seed_digests",
+            "dedup_input_digests",
             "cli_argv",
             "canary_passed",
             "canary_rate",
