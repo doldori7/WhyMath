@@ -94,11 +94,11 @@ gates:
     title: "계획서 100 §3.16 ADR-001~010 채택 여부와 번호 계열 결정 — 저장소의 docs/architecture/adr/는 ADR-001=이벤트 저장소 PostgreSQL-first · ADR-002=학생 풀이 단계 엔티티로 번호가 이미 소진됐다. 계획서의 10건(001 Core Boundary·002 Subject Adapter·007 AI Gateway 등)을 그대로 쓰면 같은 번호가 두 주제를 가리킨다 — 태스크 번호에서 3회 겪은 HARN-10/38과 같은 유형. 선택지: ①계획서 10건 미채택(현행 유지 — 선언 §1.3-①이 이미 'ADR = MEMORY 결정로그 + docs/architecture/'로 라우팅을 바꿨다) ②별도 계열(EOSADR-00n)로 배정해 채택 ③기존 2건을 개명(비권장 — 기존 참조 파손). 출처: docs/reviews/eos_source_docs_gap_review_2026-08-31.md §7.3-④"
     kind: decision
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-01
     remind_after_days: 5
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-05 Kiki 결정(Architecture Decision Day). 판정: 선택지 ①③ 기각 - 저장소 ADR 계열 하나만 유지한다. 새 ADR은 다음 빈 번호를 받고, 계획서 100 3.16의 ADR-001~010은 번호가 아니라 '결정해야 할 주제 목록'으로 재정의한다. 주제-저장소 문서 매핑표를 docs/architecture/adr/README.md에 신설(10주제 전건 등재, 확인된 3칸만 채우고 7칸은 미확인으로 비움 - 계획서 원본 미반입). 기존 2건 개명은 기각(ADR-002 참조 12건 이상 파손 실측). 집행 = PR #987 (https://github.com/doldori7/WhyMath/pull/987, 이 clear 시점 열림): 규약 정본 README 번호를 고르는 법 + ADR-004 Subject Contract v1 Provisional. 부수 실측: 이 결정을 문서화한 세션 자신이 작업트리 ls로 번호를 골라 ADR-003 충돌을 재발시켰다(원격 선점 15:45 vs 세션 커밋 16:58) - ADR-004 개명으로 상환하고 원격까지 스캔하는 기계 검사를 HARN-66으로 등재. 규칙이 아니라 집행 장치의 유무가 갈랐다는 것이 이 게이트의 실측 교훈."
+    cleared_by: kiki
     notes: ""
   - id: G-eos-g0-verification-design-freeze
     title: "EOS G0 검증설계 동결(2026-09-06) — ①앵커 세트+성취기준 코드 확정(8 vs 6 결정 포함) ②CU 스키마·실패코드 F1~F8 확정 ③실패정의 F-Ⅰ~F-Ⅴ 문서 동결·서명. 미충족 시 W2(되돌릴 수 없는 스키마 주간) 진행 금지 — 실패 정의를 12월에 만들면 확증편향이 된다(전환 설계서 §6.3)"
