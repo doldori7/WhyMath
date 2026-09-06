@@ -18,8 +18,16 @@
 
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from whymath_backend.schema import subject_adapter, verification_capabilities
-from whymath_backend.schema.subject_adapter import SubjectAdapter
+from whymath_backend.schema.subject_adapter import (
+    AnswerEvaluation,
+    MisconceptionSignal,
+    ProblemStatement,
+    ProblemValidation,
+    SubjectAdapter,
+)
 
 # ──────────────────────────────────────────────────────────────────────────
 # 필수층 — 이 목록을 바꾸는 것은 "모든 과목이 반드시 제공한다"는 선언을 바꾸는 것이다.
@@ -177,3 +185,145 @@ def test_math_adapter_provides_required_and_may_provide_optional() -> None:
         assert not hasattr(
             adapter, optional
         ), f"선택 능력 {optional}이 필수 어댑터 객체에 달려 있다 — 2층 분리가 흐려진다"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# EOS-91 — Provisional 상태의 단조 축소 래칫 (Kiki 지시 2026-09-05)
+#
+# 위 REQUIRED_METHODS는 *메서드*만 본다. 계약의 과목 중립성이 실제로 깨지는 자리는
+# **필드**인데(예: `conditions`가 물리 관계식을 담을 수 있는가), 실측 결과 필드 축은
+# 동결이 **0건**이었다 — 필드를 늘려도 줄여도 CI가 조용했다.
+#
+# 규칙 2조를 기계로 옮기면 비대칭 래칫이 된다:
+#   · 확장(신규 필드) → **무조건 RED**. 예외 경로 없음(규칙 2조 나 "Core 확장 금지").
+#   · 축소(필드 제거) → 강등 대장 DEMOTED_FIELDS 경유로만 통과(규칙 2조 가).
+#     조용한 삭제와 *기록된 강등*을 구분하기 위한 것이다 — 대장이 곧 강등의 증적이다.
+# ══════════════════════════════════════════════════════════════════════════
+
+CORE_CONTRACT_FIELDS: dict[str, frozenset[str]] = {
+    "ProblemStatement": frozenset(
+        {"problem_ref", "question_text", "answer", "answer_kind", "conditions"}
+    ),
+    "AnswerEvaluation": frozenset({"state", "reason", "checked_axes"}),
+    "ProblemValidation": frozenset({"state", "reason", "machine_axes", "residual_axes"}),
+    "MisconceptionSignal": frozenset({"code", "confidence", "matched_signals"}),
+}
+"""프로브 전 Core 계약의 필드 전수 — 이 집합은 **늘어날 수 없고**, 줄어들면 강등 대장을 요구한다."""
+
+DEMOTED_FIELDS: dict[str, str] = {}
+"""프로브에서 깨져 Core→Adapter 강등된 필드 → 이관처.
+
+키는 `"<DTO>.<필드>"`, 값은 이관처(예: "verification_capabilities.SymbolicIdentity" ·
+"l4.subject_adapter_math 내부"). **프로브(EOS-92) 전에는 비어 있는 것이 정상이다** —
+여기에 항목이 생겼다는 것은 어떤 필드가 과목 중립이 아님이 증명됐다는 뜻이다.
+"""
+
+_DTO_TYPES: dict[str, type[BaseModel]] = {
+    "ProblemStatement": ProblemStatement,
+    "AnswerEvaluation": AnswerEvaluation,
+    "ProblemValidation": ProblemValidation,
+    "MisconceptionSignal": MisconceptionSignal,
+}
+
+
+def test_core_contract_fields_never_grow() -> None:
+    """규칙 2조 (나) — Core 확장 금지. 필드가 하나라도 늘면 예외 없이 RED."""
+    grown: dict[str, list[str]] = {}
+    for name, frozen in CORE_CONTRACT_FIELDS.items():
+        actual = frozenset(_DTO_TYPES[name].model_fields)
+        if extra := actual - frozen:
+            grown[name] = sorted(extra)
+    assert not grown, (
+        f"Core 계약 필드가 늘었다: {grown}\n"
+        "규칙 2조 (나) Core 확장 금지 — 이 계약은 프로브를 거치며 **줄어들 수만 있다**.\n"
+        "새 능력은 schema/verification_capabilities.py(선택층) 또는 어댑터 내부로 보내라.\n"
+        "필수층에 넣어야만 하는 근거가 있다면 Kiki 판단을 받고 이 상수와 계약 docstring의\n"
+        "상태 절을 함께 고쳐라(조용한 확장 불가)."
+    )
+
+
+def test_core_contract_shrink_requires_demotion_ledger() -> None:
+    """규칙 2조 (가) — 강등은 대장 경유. 대장 없는 필드 제거는 조용한 삭제이므로 RED."""
+    for name, frozen in CORE_CONTRACT_FIELDS.items():
+        actual = frozenset(_DTO_TYPES[name].model_fields)
+        for missing in sorted(frozen - actual):
+            key = f"{name}.{missing}"
+            assert key in DEMOTED_FIELDS, (
+                f"Core 계약에서 필드가 사라졌는데 강등 대장에 없다: {key}\n"
+                "규칙 2조 (가)는 강등을 *요구*하지만, 강등은 **기록되어야** 강등이다.\n"
+                f'DEMOTED_FIELDS["{key}"] = "<이관처>" 를 적고 프로브 근거(EOS-92)를 남겨라.'
+            )
+            assert DEMOTED_FIELDS[key].strip(), f"{key} 강등 대장에 이관처가 비어 있다"
+
+
+def test_demotion_ledger_only_names_real_contract_fields() -> None:
+    """강등 대장이 실재하지 않는 필드를 가리키지 않는가 — 대장 자체의 오타·유령 항목 차단."""
+    for key in DEMOTED_FIELDS:
+        dto, _, field = key.partition(".")
+        assert dto in CORE_CONTRACT_FIELDS, f"강등 대장의 알 수 없는 DTO: {key}"
+        assert field in CORE_CONTRACT_FIELDS[dto], (
+            f"강등 대장이 계약에 없던 필드를 가리킨다: {key}\n"
+            "강등은 *있던 것*을 내보내는 일이다 — 없던 필드는 강등 대상이 아니다."
+        )
+
+
+def test_demotion_ledger_entries_prove_actual_removal() -> None:
+    """대장에 적힌 필드가 **실제로 계약에서 사라졌는가** — 허위 강등 차단.
+
+    바로 위 두 검사만으로는 대장이 증적이 되지 못한다: 필드를 그대로 둔 채 대장에만 적으면
+    (기존 필드 + 비어 있지 않은 이관처) 셋 다 통과한다(실측 확인·PR #986 Codex P2).
+    그러면 "Core 계약이 축소됐다"고 대장이 말하는데 계약은 그대로인 상태를 CI가 승인한다.
+    강등의 증적이려면 **제거 사실 자체**를 봐야 한다.
+    """
+    still_present = {}
+    for key in DEMOTED_FIELDS:
+        dto, _, field = key.partition(".")
+        if dto in _DTO_TYPES and field in _DTO_TYPES[dto].model_fields:
+            still_present[key] = DEMOTED_FIELDS[key]
+    assert not still_present, (
+        f"강등 대장이 강등을 주장하는데 필드가 계약에 그대로 있다: {still_present}\n"
+        "규칙 2조 (가)의 강등은 Core에서 **빼는** 일이다 — 대장 기재만으로는 강등이 아니다.\n"
+        "필드를 제거했으면 이 검사는 통과한다. 제거하지 않을 거면 대장에서 지워라."
+    )
+
+
+# 상태 절의 **제목 줄** — 이 한 줄이 계약의 상태를 말한다.
+# 문서 어딘가에 "Provisional"이 있는지 보면 안 된다: 아래 "왜 Frozen이 아니라 Provisional인가"
+# 절이 그 단어를 품고 있어, 제목만 Frozen으로 바꿔도 토큰 검사는 초록이다(실측 확인·PR #986
+# Codex P2). 상태는 제목이 말하는 것이므로 제목을 정확히 동결한다.
+STATUS_HEADING = "## 🚧 상태: **Provisional** — pending cross-subject probe (9/27)"
+
+
+def test_contract_status_heading_is_provisional_until_probe() -> None:
+    """상태 **제목 줄** 동결 — 프로브(EOS-92) 없이 Provisional을 되돌리면 RED.
+
+    이 검사가 없으면 상태 절은 산문일 뿐이라 다음 세션이 무심코 'Frozen'으로 되돌린다.
+    제목 줄 자체를 계약으로 고정해, 되돌리려면 이 테스트를 함께 고치는 **의도적 행위**를 요구한다.
+    """
+    doc = subject_adapter.__doc__ or ""
+    headings = [ln.strip() for ln in doc.splitlines() if ln.lstrip().startswith("## ")]
+    assert headings, "계약 docstring에 절 제목이 하나도 없다 — 파서가 공허하게 통과하는 상태"
+
+    status_headings = [h for h in headings if "상태:" in h]
+    assert len(status_headings) == 1, (
+        f"상태 제목 줄이 {len(status_headings)}개다(1개여야 한다): {status_headings}\n"
+        "두 개면 어느 것이 계약인지 결정 불가이고, 0개면 상태 절이 사라진 것이다."
+    )
+    assert status_headings[0] == STATUS_HEADING, (
+        f"계약 상태 제목이 바뀌었다:\n  실제: {status_headings[0]}\n  기대: {STATUS_HEADING}\n"
+        "교차 과목 프로브(EOS-92) 통과 전까지 이 계약은 Math 단일 과목에서 도출된 가설이다.\n"
+        "되돌리려면 프로브 결과를 근거로 이 상수와 계약 docstring을 함께 고쳐라."
+    )
+    for clause in ("강등", "Core 확장 금지", "ADR", "중복 구현", "3건을 초과"):
+        assert clause in doc, f"프로브 결과 처리 규칙 3조가 상태 절에 없다: {clause!r}"
+    # (다) 출구가 없으면 (가)·(나)는 위반을 숨기는 금지가 된다 — 출구 조항의 존재를 동결한다.
+    assert "(다)" in doc, "규칙 (다) 출구 조항이 없다 — 출구 없는 금지는 편법을 부른다"
+    # 래칫이 못 잡는 축을 문서가 스스로 밝히는가 — 이 한계 표기가 사라지면 9/27에
+    # 'CI 초록 = 계약 준수'로 오판한다.
+    assert "필드 개수" in doc, "래칫의 한계('기계는 필드 개수만 본다')가 상태 절에서 사라졌다"
+    # 기계가 못 보는 축에 소유자가 지목돼 있는가 — "기계 집행 없음"에서 끝나면 알려진 갭에
+    # 소유자가 없는 상태다. 보상 통제(EOS-92)의 지목 자체를 동결한다.
+    assert "검증 책임은 `EOS-92`" in doc, (
+        "의미적 확장 축의 검증 책임자(EOS-92)가 한계 절에서 사라졌다 — 기계 집행이 없는 갭은\n"
+        "보상 통제를 지목해야 소유자가 있는 갭이 된다."
+    )
