@@ -7630,7 +7630,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
-    loc: 483
+    loc: 548
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -7640,7 +7640,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 2
-    test_functions: 17
+    test_functions: 22
     matrix:
       A_subject: 3
       B_db: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 324
-    test_functions: 5833
+    test_functions: 5838
     matrix:
       A_subject: 3
       B_db: 0
