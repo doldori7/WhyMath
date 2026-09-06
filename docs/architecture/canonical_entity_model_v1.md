@@ -258,16 +258,72 @@ CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"에 따라 *
   축과 교과 축이 한 축으로 영구 혼동**된다.
 - **9월 조치**: 없음. 열 축 유지.
 
-### §3-B. Hint — 설계 정본은 있고 저장 좌석이 없다
+### §3-B. Hint — 설계 정본은 있고 저장 좌석이 없다 → **영구 부재로 판정**(2026-09-06)
+
+> **판정 기준: main `3f2b39c1`** — 아래 실측은 전부 이 커밋의 trunk 코드에서 확인했다
+> (CLAUDE.md "미머지 존재를 '충족'으로 단정 금지" — 판정에는 시점이 붙어야 한다).
 
 - **현행 실체**: `schemas/v1.1/hint.schema.yaml`이 entity `Hint`·L4·`storage: "PostgreSQL 16
-  (hints)"`·`primary_key: hint_id`로 선언한다. **그러나 `hints` 테이블은 존재하지 않는다.**
-  `l3/solution_path.py`가 힌트 원천 텍스트를 담고, 구조화는 "L4 몫"으로 남아 있다.
-  `hint_usage`는 **사용 기록**이지 힌트 본문이 아니다(`hint_id`는 FK 없는 자유 텍스트).
-- **동결 사유**: 답 미루기 4단계는 Phase 1 성공 기준이라 **언젠가 필요하다**. 다만 9월에 좌석을
-  파면 본문 없는 빈 테이블이 되고, 그때 `hint_usage.hint_id`의 느슨참조를 FK로 조일지가
-  함께 걸린다 — W2가 감당할 결정이 아니다.
-- **9월 조치**: 없음. 승격은 §5 절차 + 별도 태스크.
+  (hints)"`·`primary_key: hint_id`로 선언한다. **그러나 `hints` 테이블은 존재하지 않는다**
+  (ORM `__tablename__` 0건 · alembic 언급 파일 0건).
+
+- **판정(`ARCH-39`)**: **좌석을 만들지 않는다 — 영구 부재.** 종전 §3-B는 "답 미루기 4단계는
+  Phase 1 성공 기준이라 **언젠가 필요하다**"를 동결 사유로 적었다. 그 전제를 이번에 재측정했고,
+  **틀렸다**. 아래는 "아직 안 봤다"가 아니라 **보고 나서 안 만든다**는 판정이다.
+
+#### 판정 근거 — 본문 저장이 무엇을 얻는가: 셋 다 0
+
+1. **힌트에는 영속 정체성이 없다 — 턴마다 동적 생성된다.** 서빙 경로는
+   `l4/hint_deferral.decide_hint_level`(단계 결정) → `api/coach.py`(LLM 발화 조립) →
+   `l4/tone_filter.filter_tone`(정서 안전)이다. 힌트 *본문*은 그 턴의 대화 맥락에서 만들어지며
+   재사용되지 않는다. 저장할 "그 힌트"라는 개체가 애초에 없다.
+
+2. **원천 텍스트(`SolutionStep.hint`)조차 아무도 만들지 않고 아무도 읽지 않는다.** 세 방법으로
+   교차 확인했다(CLAUDE.md "식별자 부재를 기능 부재로 단정 금지" — 부재 주장은 검색 방법이
+   옳아야 성립한다): ⓐ 속성·dict 접근 전수 → 정의 자신 외 0건 ⓑ 적재기
+   `l1/problem_bank/populate.py`의 `hint` 언급 **0건** ⓒ 실코퍼스
+   `problem_bank_generated_v0/problems.jsonl` 200행의 `"hint"` 키 **0건**. DB 좌석도 없다
+   (`problem_step`에 hint 컬럼 없음). 즉 **구조화될 원료 자체가 파이프라인에 흐르지 않는다** —
+   "구조화는 L4 몫"이 막힌 지점은 L4가 아니라 그 앞이다.
+
+3. **Phase 1 KPI가 본문을 요구하지 않는다.** 성공 기준 "세션당 답 미루기 평균 도달 깊이 2.5+"의
+   측정 정본은 `harness/wh1_evaluation.py`의 ⑧ `hint_depth_reached`이며, 산식은
+   `_hint_depth_from_levels(hint_levels)` — `attempt_event`(event_type=`힌트제공`)의
+   **`hint_level` 평균·최대**다. 힌트 본문도, yaml의 `reveals.reveal_score`도 읽지 않는다.
+   `REVEALS` 라벨은 level과 1:1 대응하는 불투명 식별자라 level이 이미 담는 정보 외에
+   새로 담는 것이 없다. → **KPI는 오늘 이미 측정 가능하며, 좌석을 파도 수치가 달라지지 않는다.**
+
+#### 좌석을 파면 생기는 비용(판정의 반대편)
+
+빈 테이블 하나가 아니다. `hints`를 만들면 ⑴ 채울 원료가 없으므로(근거 2) 전건 NULL 행이거나
+아예 0행이고 ⑵ `hint_usage.hint_id` 느슨참조를 FK로 조일지가 함께 걸리는데, **`hint_id`는
+현재 writer가 0건**이다(서빙 코드 전수 — 정의·주석 외 대입 0). 참조도 피참조도 비어 있는
+FK를 만드는 셈이다. ⑶ 그리고 그 빈 좌석은 이후 모든 갭 리뷰에서 "채워야 할 것"으로 다시 걸린다.
+
+#### `hint_usage.hint_id`의 의미 확정(부수 판정)
+
+`hint_id`는 **미래의 `hints` 테이블을 향한 전방참조가 아니다.** Hint 엔티티가 영구 부재로
+판정됐으므로, 이 컬럼이 담을 수 있는 것은 *실재하는 식별자 경로*(GenerationLog id·콘텐츠 주소
+해시)뿐이다. 컬럼은 유지한다(nullable·비용 0·그 경로가 열리면 즉시 쓸 수 있다) — 다만
+**현재 writer 0건**이라는 사실을 `schema/hint_usage.py`가 명시한다. FK로 조이지 않는다.
+
+#### 이 판정이 틀리려면(재확인 트리거)
+
+아래 중 **하나라도** 성립하면 이 판정을 다시 연다. 셋 다 판정 근거를 직접 뒤집는다.
+
+| # | 트리거 | 집행 |
+|---|---|---|
+| 1 | 힌트 본문을 담는 **컬럼**이 어느 테이블에든 생긴다(`hint_text`·`hint_content`·`hint_body` 등) | `test_canonical_entity_model_freeze.py`의 컬럼 예약이 자동 RED — 테이블명 예약(`hints`)만으로는 이 벡터를 못 막는다 |
+| 2 | `SolutionStep.hint`에 **생산자가 생긴다**(적재기·코퍼스가 실제로 채운다) — 근거 2가 깨진다 | 기계 집행 없음 · 갭 리뷰가 확인 |
+| 3 | KPI ⑧의 산식이 `hint_level` 밖(본문·reveal_score)을 읽도록 바뀐다 — 근거 3이 깨진다 | 기계 집행 없음 · 갭 리뷰가 확인 |
+
+트리거 2·3에 기계 집행을 두지 않은 이유: 둘 다 "없음"을 전수로 증명해야 하는 형태라 스캔이
+공허해지기 쉽고(0건 통과와 측정 실패가 같은 색), 트리거 1이 **실제 저장 좌석**이라는 가장
+결정적인 축을 이미 막는다. 트리거 1이 자동 RED인 것으로 충분하다고 판단했다.
+
+- **9월 조치**: `hint.schema.yaml`의 `storage` 선언을 실측에 맞게 정정(드리프트 §7-B 해소) ·
+  `Hint`는 `ABSENT_ENTITIES`·`RESERVED_ABSENT_TABLE_NAMES`에 **그대로 유지**(예약이 판정의
+  집행 수단이 됐다 — 종전엔 "아직 안 만듦", 이제는 "만들지 않기로 함").
 
 ### §3-C. AssessmentResult — `assessment` 안에 혼입돼 있다 → **혼입 유지로 판정**(2026-09-06)
 
@@ -447,8 +503,11 @@ Kiki 지시: *"기존에 검토해 온 훨씬 많은 Node를 모두 9월 schema�
 - **A. `schemas/v1.1` 저장소 선언이 낡았다.** `concept.schema.yaml`·`edge.schema.yaml`이
   `storage: Neo4j 5.x`라고 적지만, Neo4j는 **런타임 미도입**이고 정본은 PG 단일 평면이다
   (CLAUDE.md 2026-08-03 확정). 이 정본은 PG 실측을 따른다.
-- **B. `schemas/v1.1/hint.schema.yaml`이 없는 테이블을 선언한다.** §3-B 참조 —
-  설계 정본과 저장 실측이 어긋난 유일한 엔티티다.
+- **B. ~~`schemas/v1.1/hint.schema.yaml`이 없는 테이블을 선언한다.~~ → 해소**(`ARCH-39` ·
+  2026-09-06). 선언을 실측에 맞춰 정정했다: `storage`는 이제 "없음(영구 부재 판정)"이고,
+  그 파일은 저장 스키마가 아니라 **서빙 계약 명세**임을 헤더가 명시한다. 좌석을 만들어 해소한
+  것이 아니라 **만들지 않기로 판정**해 해소했다 — 근거는 §3-B. 드리프트 A(Neo4j 선언)와
+  형태는 같지만 처분이 다르다: A는 "정본이 PG"라는 *대체 좌석*이 있고, B는 좌석 자체가 없다.
 - **C. 좌석이 있다고 writer가 있다는 뜻이 아니다.** `learning_session`은 스키마가 실재하나
   **writer 0**으로 실측됐다(계획서 300 검토 §4.1). 이 문서는 좌석의 *존재*만 동결하며
   **배선 여부는 판정하지 않는다** — 배선·폐기 판정은 별도 소유자가 필요하다.
@@ -459,16 +518,24 @@ Kiki 지시: *"기존에 검토해 온 훨씬 많은 Node를 모두 9월 schema�
 
 ## 부록. 재현 명령
 
+> ⚠ **명령 정정(`OPS-61` · 2026-09-06)** — 종전 블록은 저장소 루트에서 테스트 경로를
+> *위치 인자로* 주는 형태였고, 그렇게 부르면 pytest가 rootdir을 저장소 루트로 잡아
+> `src/backend/pyproject.toml`의 설정이 통째로 안 읽힌다. 지금은 conftest 가드가 이를
+> **EXIT 4 UsageError로 즉시 정지**시킨다(실측 확인 — 종전 명령은 테스트를 한 건도 돌리지
+> 못한다). 아래는 `-c`로 설정 파일을 못 박은 형태다.
+
 ```bash
 # WSL / Linux — 저장소 루트에서
 cd /mnt/c/Users/kiki/Desktop/__AI/WhyMath
-python -m pytest tests/backend/db/test_canonical_entity_model_freeze.py -v; echo "EXIT=$?"
+python -m pytest -c src/backend/pyproject.toml --rootdir=src/backend \
+  tests/backend/db/test_canonical_entity_model_freeze.py -v; echo "EXIT=$?"
 ```
 
 ```powershell
 # Windows PowerShell (Phaiakes9) — 저장소 루트
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-python -m pytest tests\backend\db\test_canonical_entity_model_freeze.py -v; echo "EXIT=$LASTEXITCODE"
+python -m pytest -c src\backend\pyproject.toml --rootdir=src\backend `
+  tests\backend\db\test_canonical_entity_model_freeze.py -v; echo "EXIT=$LASTEXITCODE"
 ```
 
 판정은 **exit code**로 한다(출력 문자열 아님 — CLAUDE.md "검사 명령의 출력을 억제하거나 잘라서

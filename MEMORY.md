@@ -8452,3 +8452,38 @@ push가 CCR 프록시 403으로 상시 실패한 **하네스 결함**이었고(�
   앵커 관통의 날조 방지 가드(`"verdict" not in ledger_raw`)에 잡혔다 — 이 저장소에서 `verdict`는
   사람 검수 판정 키(`review_session`)다. **가드가 옳았고 이름이 틀렸다**(→ `gate_outcome`으로 개명).
   상대는 평면 필드라 이 충돌을 밟지 않는다. 폐기 산출물은 스크래치패드에만 남긴다.
+
+### 2026-09-06 — ARCH-39: Hint 저장 좌석 **영구 부재**로 판정 (판정 기준 main `3f2b39c1`)
+
+**질문**: `schemas/v1.1/hint.schema.yaml`이 `storage: PostgreSQL 16 (hints)`를 선언하는데 그
+테이블이 없다 — 설계 정본↔저장 실측이 어긋난 유일한 엔티티. 좌석을 만들 것인가.
+
+**판정: 만들지 않는다(영구 부재).** 종전 §3-B의 동결 사유는 "답 미루기 4단계는 Phase 1 성공
+기준이라 **언젠가 필요하다**"였는데, 그 전제를 재측정한 결과 **틀렸다**. 근거 3(전부 trunk 실측):
+
+1. **힌트에 영속 정체성이 없다** — 서빙은 `decide_hint_level` → coach LLM → `tone_filter`로
+   턴마다 동적 생성이며 재사용되지 않는다. 저장할 "그 힌트"라는 개체가 없다.
+2. **원천 텍스트 `SolutionStep.hint`조차 생산자·소비자 0건** — 세 방법 교차 확인(속성 접근 전수 /
+   적재기 `populate.py` hint 언급 0건 / 실코퍼스 200행 `"hint"` 키 0건). DB 좌석도 없다.
+   "구조화는 L4 몫"이 막힌 지점은 L4가 아니라 **그 앞**이다 — 구조화될 원료가 안 흐른다.
+3. **Phase 1 KPI가 본문을 요구하지 않는다** — "평균 도달 깊이 2.5+"의 측정 정본은
+   `wh1_evaluation ⑧ hint_depth_reached` = `attempt_event.hint_level` 평균·최대다. 본문도
+   yaml의 `reveals.reveal_score`도 읽지 않는다. **좌석을 파도 수치가 안 바뀐다.**
+
+**부수 판정**: `hint_usage.hint_id`는 *미래 `hints` 테이블을 향한 전방참조가 아니다*. 컬럼은
+유지하되(nullable·비용 0) **현재 writer 0건**임을 schema docstring에 명시했다. FK로 조이지 않는다
+— 참조도 피참조도 비어 있는 FK가 된다.
+
+**집행(정본화와 별항)**: 재확인 트리거 ①(힌트 본문 **컬럼**이 어느 테이블에든 생김)을
+`test_canonical_entity_model_freeze.py::test_no_table_gains_a_hint_body_column`이 자동 RED로 막는다.
+기존 두 검사는 **테이블 축**이라 이 벡터를 못 본다 — 실증: `problem_step`에 `hint_text`를 주입하니
+신규 가드는 FAILED, 기존 ③·③-b는 **2 passed**였다(구멍이 가설이 아니라 실재). 판정은 소스 grep이
+아니라 `Base.metadata` 실제 컬럼을 훑고, 스캔 0건은 실패로 처리한다. 트리거 ②③은 "없음"의 전수
+증명이라 스캔이 공허해지기 쉬워 기계 집행을 의도적으로 두지 않았다(갭 리뷰 소유).
+
+**부수 발견 — 정본 문서의 재현 명령이 깨져 있었다.** 부록의
+`python -m pytest tests/backend/db/...`(저장소 루트·위치 인자)는 OPS-61 함정에 걸려 **EXIT 4
+UsageError**로 테스트를 한 건도 못 돌린다(실측). `-c src/backend/pyproject.toml
+--rootdir=src/backend`를 붙여 정정하고 동작을 확인했다(9 passed·EXIT 0). 같은 날 착지한 OPS-61
+가드가 **문서 속 낡은 런북을 드러낸** 사례다 — 가드가 없었으면 Kiki가 그 명령을 실행하고 나서야
+알았을 것이다.
