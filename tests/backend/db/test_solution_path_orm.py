@@ -166,9 +166,11 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        # EOS-71 problem 격리 좌석이 현 head(EOS-57 attempt_event.skill_ids 위에 선형 적재).
-        # 두 리비전은 건드리는 테이블이 겹치지 않아(attempt_event ↔ problem) 순서 의존이 0이다.
-        assert heads == {"e7c3b9a15f24"}
+        # EOS-97 generation_log.run_id가 현 head(EOS-71 problem 격리 좌석 위에 선형 적재).
+        # 두 리비전은 건드리는 테이블이 겹치지 않아(problem ↔ generation_log) 순서 의존이 0이다.
+        # 이 상수는 `db/schema_version.py::KNOWN_REVISIONS`의 마지막 항과 **함께** 움직인다 —
+        # 마이그레이션을 더하면 두 곳을 같이 갱신해야 한다(둘 다 head를 고정한다).
+        assert heads == {"b8d3f6a91c24"}
 
     def test_gen_meta_migration_file_exists_with_symmetric_updown(self) -> None:
         """S4-10 `gen_meta` 마이그레이션 파일이 존재하고 up/down이 대칭(컬럼 add/drop)이다."""
