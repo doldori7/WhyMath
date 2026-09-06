@@ -228,3 +228,7 @@
 {"ts": "2026-09-06T00:40:04+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "policy_warn", "id": "HARN-68-judgment-base-commit-enforcement", "rule": "path_overlap", "other": "HARN-61-p0-swap-exemption-clause", "detail": "실파일 교집합 1건 예: scripts/harness/backlog.py · 프리픽스 포함: tests/harness/** ⊇ tests/harness/test_judgment_base_commit.py", "mode": "warn"}
 {"ts": "2026-09-06T00:40:04+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "policy_warn", "id": "HARN-68-judgment-base-commit-enforcement", "rule": "path_overlap", "other": "OPS-19-observability-report-runner-wiring", "detail": "프리픽스 포함: docker-compose*.yml ⊇ scripts/harness/backlog.py", "mode": "warn"}
 {"ts": "2026-09-06T00:40:05+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "add", "id": "HARN-68-judgment-base-commit-enforcement", "eos_priority": "P1"}
+{"ts": "2026-09-06T14:23:17+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "unblock", "id": "CUR-17"}
+{"ts": "2026-09-06T14:23:18+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "claim_release_failed", "id": "CUR-17", "status": "error"}
+{"ts": "2026-09-06T14:23:19+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "unblock", "id": "CUR-18"}
+{"ts": "2026-09-06T14:23:20+00:00", "actor": "claude/entity-model-freeze-lji37v", "action": "claim_release_failed", "id": "CUR-18", "status": "error"}
