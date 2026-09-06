@@ -522,3 +522,65 @@ def test_ledger_counts_only_tracked_client_sources(gen: Any) -> None:
     assert (
         ocr.loc == expected
     ), f"장부 loc {ocr.loc} != 추적 파일 합 {expected} — 빌드 부산물 {len(generated)}건이 섞였다"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 클라 귀속·스캔 범위 — PR #980 Codex P2 2건 정정 (2026-09-06)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_duplicate_client_ownership_is_detected(gen: Any) -> None:
+    """같은 클라 경로를 두 C 행이 지정하면 exit 1 — 백엔드 모듈 중복 귀속 검사와 같은 계약.
+
+    이전 검사는 Flutter feature 디렉터리 *이름 집합*의 부재만 봤다 — 한 feature를 두 행이
+    지정해도 집합에는 한 번만 들어가 통과했고, loc·테스트 수가 두 행에 이중 계상됐다.
+    """
+    dup = replace(gen.CATALOG[-1], fid="WM-X-DUPC", client=("mobile/lib/features/ocr",))
+    errors = _run_with_catalog(gen, (*gen.CATALOG, dup))
+    assert any("mobile/lib/features/ocr" in e and "이미 귀속" in e for e in errors), errors
+
+
+def test_nested_client_ownership_is_detected(gen: Any) -> None:
+    """한 행이 가진 디렉터리의 *하위 경로*를 다른 행이 지정해도 이중 계상 — 중첩도 잡는다."""
+    nested = replace(
+        gen.CATALOG[-1], fid="WM-X-NESTC", client=("mobile/lib/features/ocr/presentation",)
+    )
+    errors = _run_with_catalog(gen, (*gen.CATALOG, nested))
+    assert any("ocr/presentation" in e and "중첩" in e for e in errors), errors
+
+
+def test_dependency_and_build_directories_are_excluded_from_client_scans(
+    gen: Any, tmp_path: Path
+) -> None:
+    """`node_modules/`·`dist/`·`coverage/`는 세지 않는다 — 세면 `npm ci`를 돌린 기계에서만 장부가 변한다.
+
+    제외 목록은 `src/web/graphing-calculator/.gitignore`가 무시하는 디렉터리를 전부 덮어야 한다
+    (그 파일이 늘면 이 검사가 먼저 RED가 되어 목록을 따라가게 한다).
+    """
+    for rel in (
+        "src/a.js",
+        "lib/e.dart",
+        "node_modules/x/b.js",
+        "dist/c.js",
+        "coverage/d.js",
+        ".vite/f.ts",
+        "build/g.dart",
+        ".dart_tool/h.dart",
+        "lib/e.g.dart",
+    ):
+        f = tmp_path / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x\n", encoding="utf-8")
+    got = sorted(str(p.relative_to(tmp_path)) for p in gen._client_source_files(tmp_path))
+    assert got == ["lib/e.dart", "src/a.js"], got
+    web_ignore = (_REPO_ROOT / "src" / "web" / "graphing-calculator" / ".gitignore").read_text(
+        encoding="utf-8"
+    )
+    ignored_dirs = {
+        line.strip().rstrip("/")
+        for line in web_ignore.splitlines()
+        if line.strip().endswith("/") and not line.startswith("#")
+    }
+    assert ignored_dirs, "web .gitignore에서 디렉터리 항목을 하나도 못 읽었다 — 스캔 0건은 실패"
+    missing = ignored_dirs - set(gen._EXCLUDED_CLIENT_DIRS)
+    assert not missing, f"web .gitignore가 무시하는 디렉터리를 제외 목록이 안 덮는다: {missing}"

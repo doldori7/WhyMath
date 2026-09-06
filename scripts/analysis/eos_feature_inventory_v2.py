@@ -201,6 +201,26 @@ _CLIENT_SUFFIXES = {".dart", ".js", ".jsx", ".ts", ".tsx"}
 # **추적 대상**을 따라야 결정론이 성립한다.
 _GENERATED_CLIENT = re.compile(r"\.(?:g|freezed|gr|config|mocks)\.dart$")
 
+# 의존성·빌드 산출물 디렉터리도 저장소의 기능이 아니다 — `src/web/graphing-calculator/.gitignore`가
+# node_modules/·dist/·coverage/·.vite/를, `src/mobile`이 build/·.dart_tool/을 무시한다. rglob은
+# 무시 목록을 모르므로 여기서 이름으로 자른다. 안 자르면 `npm ci`·`vitest --coverage`·`vite build`를
+# 돌린 기계에서만 WM-C-007의 loc이 부풀어 위 코드젠 사고와 같은 형태의 드리프트가 난다
+# (PR #980 Codex P2 지적 — 정정 2026-09-06).
+_EXCLUDED_CLIENT_DIRS = frozenset(
+    {"node_modules", "dist", "coverage", ".vite", "build", ".dart_tool"}
+)
+
+
+def _client_source_files(root: pathlib.Path) -> list[pathlib.Path]:
+    """클라 디렉터리 아래 *소스*만 — 코드젠 산출물·의존성·빌드 디렉터리는 제외(결정론)."""
+    return [
+        q
+        for q in sorted(root.rglob("*"))
+        if q.suffix in _CLIENT_SUFFIXES
+        and not _GENERATED_CLIENT.search(q.name)
+        and not (_EXCLUDED_CLIENT_DIRS & set(q.relative_to(root).parts[:-1]))
+    ]
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 카탈로그 — 측정 불가 필드(이름·사용자·Domain·우선도 제안·근거)만 손으로 든다.
@@ -1583,11 +1603,7 @@ def _measure_client(spec: Spec, tests: TestIndex, errors: list[str]) -> Row:
         if p.is_file():
             files.append(p)
         elif p.is_dir():
-            files.extend(
-                q
-                for q in sorted(p.rglob("*"))
-                if q.suffix in _CLIENT_SUFFIXES and not _GENERATED_CLIENT.search(q.name)
-            )
+            files.extend(_client_source_files(p))
         else:
             errors.append(f"{spec.fid}: 클라 경로 {rel!r} 없음")
     loc = 0
@@ -1691,6 +1707,22 @@ def _completeness_errors(
     }
     for f in sorted(mobile_features - claimed):
         errors.append(f"미귀속 Flutter feature: {f}")
+    # 클라 경로는 *경로 단위*로 정확히 1행 — `claimed`는 feature 디렉터리 이름 집합이라 부재만 잡고,
+    # 같은 경로(또는 그 상위·하위)를 두 C 행이 지정하면 loc·테스트가 이중 계상되는데도 통과했다
+    # (PR #980 Codex P2 지적 — 정정 2026-09-06). 백엔드 모듈·엔드포인트 검사와 같은 형태로 막는다.
+    client_owner: dict[str, str] = {}
+    for spec in CATALOG:
+        for rel in spec.client:
+            key = rel.rstrip("/")
+            if key in client_owner:
+                errors.append(f"{spec.fid}: 클라 경로 {key!r}은 {client_owner[key]}에 이미 귀속")
+                continue
+            for prev, fid in client_owner.items():
+                if key.startswith(prev + "/") or prev.startswith(key + "/"):
+                    errors.append(
+                        f"{spec.fid}: 클라 경로 {key!r}이 {fid}의 {prev!r}과 중첩 — 이중 계상"
+                    )
+            client_owner[key] = spec.fid
     return errors
 
 
