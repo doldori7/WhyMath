@@ -606,8 +606,15 @@ def main(argv: list[str] | None = None) -> int:
         else default_generation_log_path(args.out)
     )
 
+    # 회차 식별자를 **여기서** 정한다(EOS-97 리콜 조인 축). 종전에는 run_corpus_accumulate
+    # 안에서 생성돼 생성 로그 싱크가 그 값을 볼 수 없었고, 그래서 GenerationLog와
+    # AccumulateReport·검수 큐가 서로 다른 축을 갖는 상태였다 — "이 회차로 만든 산출물"을
+    # 기계가 특정할 수 없던 이유다. 한 곳에서 뽑아 세 곳(생성 로그·리포트·검수 큐)에 같은
+    # 값을 흘린다.
+    run_id = uuid.uuid4().hex
+
     def _genlog_sink(log: GenerationLog) -> None:
-        append_generation_log_jsonl(genlog_path, log)
+        append_generation_log_jsonl(genlog_path, log, run_id=run_id)
 
     # 내구 검수 큐(EOS-58 codex P1-1/P2) — 비수용 outcome 발생 즉시 행 append+flush. 경로는
     # 항상 <out>.review.jsonl 사이드카(뷰와 달리 저장소는 옮기지 않는다 — 누적의 단일 원천).
@@ -624,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
         spec=spec,
         n=args.n,
         review_sink=_review_sink,
+        run_id=run_id,
         abort_window=args.abort_window if args.abort_window > 0 else None,
         abort_threshold=args.abort_threshold,
         canary_size=args.canary if args.canary > 0 else None,

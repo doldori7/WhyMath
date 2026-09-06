@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -22,6 +22,6 @@ paths:
   - src/backend/whymath_backend/schema/provenance.py
   - src/backend/whymath_backend/l3/pregenerate/provenance_bridge.py
   - "tests/backend/schema/**"
-session: null
+session: claude/eos-math-micro-project-orchestration-9nco8v
 notes: "출처: docs/reviews/eos_micro_project_orchestration_v1_gap_review_2026-09-05.md §6 갭 G-2 (설계서 §3 리콜 시나리오). EOS-96 재등재분 — 원 등재의 depends_on: EOS-94가 오등재 취소로 무의미해졌고 amend에 의존 제거 경로가 없어 새 ID로 옮겼다. 실측: EOS-55·EOS-73으로 provenance는 설계서보다 강하게 착지했으나(프롬프트 전문 스냅샷+해시 무결성 강제) **선별 처분 축만 비었다** — genlog JSONL 소비 도구 2종은 집계만 하고 개별 산출물을 선별·처분하지 않는다. 설계서가 이 저장소의 실제 공백을 정확히 짚은 항목이다."
-updated: 2026-09-05
+updated: 2026-09-06
