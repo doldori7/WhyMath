@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: EOS-99-subject-neutrality-falsifiable-check
+id: ARCH-43-subject-neutrality-falsifiable-check
 title: "과목 중립성의 반증 가능한 검사 설계 — 필드 채움 검사는 배제 선언한 과목도 통과한다(반증력 0)"
 track: math-completion
 stage: S3
@@ -22,5 +22,5 @@ paths:
   - tests/backend/schema/test_subject_adapter_two_tier_contract.py
   - scripts/analysis/eos_core_adapter_boundary_scan.py
 session: null
-notes: "출처: EOS-92 교차 과목 프로브(2026-09-06) §3 라운드 2. 프로브는 acceptance ① 문자 그대로 15/15 ○를 냈으나, 같은 검사가 History도 통과시킨다는 것을 대조군으로 실증했다 — 즉 '✗ 0'의 정보량이 낮다. 이것은 계약의 결함이 아니라 '**Core는 페이로드를 해석하지 않는다**'는 설계가 성공한 결과이며, 동시에 필드 채움 검사의 반증력을 0에 가깝게 만든다. 계약 파일 자신이 이 함정을 예고했다(subject_adapter.py:40-55 '래칫의 한계 — 의미적 확장은 잡지 못한다. 그런데 과목 중립성이 실제로 깨지는 주된 경로가 바로 이쪽이다'). EOS-92는 그 축을 §4에서 사람 판정으로 메웠으나(해석 지점 0건 실측) 기계 집행은 여전히 없다 — 이 태스크가 그 공백을 소유한다. 9/27 G1 승격 판정 자체를 막지는 않는다(프로브는 완주했고 ✗ 0).\n\n[정정 2026-09-06] Codex P1 지적 수용(PR #999) — 초판 근거가 선택층 문장을 필수층에 적용한 오독이었다. 결론(반증력 있는 검사 필요)은 유지, 근거를 정정"
+notes: "출처: EOS-92 교차 과목 프로브(2026-09-06) §3 라운드 2. 프로브는 acceptance ① 문자 그대로 15/15 ○를 냈으나, 같은 검사가 History도 통과시킨다는 것을 대조군으로 실증했다 — 즉 '✗ 0'의 정보량이 낮다. 이것은 계약의 결함이 아니라 '**Core는 페이로드를 해석하지 않는다**'는 설계가 성공한 결과이며, 동시에 필드 채움 검사의 반증력을 0에 가깝게 만든다. 계약 파일 자신이 이 함정을 예고했다(subject_adapter.py:40-55 '래칫의 한계 — 의미적 확장은 잡지 못한다. 그런데 과목 중립성이 실제로 깨지는 주된 경로가 바로 이쪽이다'). EOS-92는 그 축을 §4에서 사람 판정으로 메웠으나(해석 지점 0건 실측) 기계 집행은 여전히 없다 — 이 태스크가 그 공백을 소유한다. 9/27 G1 승격 판정 자체를 막지는 않는다(프로브는 완주했고 ✗ 0).\n\n[정정 2026-09-06] Codex P1 지적 수용(PR #999) — 초판 근거가 선택층 문장을 필수층에 적용한 오독이었다. 결론(반증력 있는 검사 필요)은 유지, 근거를 정정\n\n[개명 2026-09-06] 초판 id는 EOS-99-subject-neutrality-falsifiable-check이었으나 타 세션 #1000이 같은 번호로 EOS-99-prompt-cache-hit-measurement를 **먼저 머지**해 충돌했다(validate가 '사람·문서·커밋의 EOS-99 참조가 결정 불가가 된다'로 거부 — HARN-10 유형). 머지된 쪽은 개명 불가이므로 미머지인 이쪽을 옮겼다. EOS 계열은 소진(#1000: 'EOS-98·EOS-99가 마지막')이고 **MP는 EOS 후속이 아니라 회차 축 접두**이며, EOS 축 일반의 후속 접두는 게이트 G-eos-task-prefix-exhausted[kiki]가 정한다 — 미결이다. 3자리 손제작은 build_harness.md §8 금기. 그래서 내용상 아키텍처 계약 검증이라 기존 ARCH 계열로 옮겼다(자매 태스크 ARCH-41과 같은 판단). CLI 개명 경로 부재는 HARN-67이 소유한다."
 updated: 2026-09-06

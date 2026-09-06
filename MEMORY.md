@@ -8218,7 +8218,7 @@ Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 코드 0건. 그�
 지점이었다 — 하루에 같은 형태를 두 번 만났다. 통과 결과를 받으면 대조군을 넣어 본다.
 
 **등재 2건**(소유자 없는 알려진 결함 금지 — Gate D):
-- `EOS-99-subject-neutrality-falsifiable-check` — 반증 가능한 중립성 검사 설계(무엇이 관측되면
+- `ARCH-43-subject-neutrality-falsifiable-check` — 반증 가능한 중립성 검사 설계(무엇이 관측되면
   위반인지 먼저 정의하고 **주입해 RED 확인** 후에만 검사로 친다 · 스캔 0건은 실패)
 - `ARCH-41-required-tier-unexercised-tracking` — 필수층 미사용 추적 + 계약 문서의 층 구분 정정
   (`subject_adapter.py:108-118` "경유 배선 완료"가 층을 구분하지 않아 필수층 배선으로 오독된다)
@@ -8245,7 +8245,7 @@ Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 코드 0건. 그�
  · **결론은 살았고 근거를 갈았다**: 반증력 부족 주장을 "History가 잘못 통과한다"에서
    **"갈래 A(채움)는 실패 사례를 구성할 수 없고(15필드 중 13개가 임의 문자열 수용·
    `extra="forbid"`는 필드 추가만 막는다) 갈래 B(뒤틀림)는 사람 판정에 기계 뒷받침이 0이다"**로
-   다시 세웠다. 후자가 더 정확하고 더 강하다 — `EOS-99`가 무엇을 만들어야 하는지도 분명해졌다.
+   다시 세웠다. 후자가 더 정확하고 더 강하다 — `ARCH-43`이 무엇을 만들어야 하는지도 분명해졌다.
 ⓑ **재현 명령이 스캔 실패를 0건으로 위장(P1)**: `grep A | grep -v B`의 `$?`는 마지막 grep 값이라
 **소스 경로가 없어 첫 grep이 죽어도 exit 1**이 나온다 — 내가 문서에 "정상(0건)"이라 적은 바로 그
 값이다. 측정 실패가 통과로 위장되는 정확한 형태이고, 그 값이 9/27 Freeze 판정의 근거가 될
@@ -8262,7 +8262,7 @@ Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 코드 0건. 그�
 비워 뒀다. **같은 세션에서 `ARCH-40`으로 정확히 같은 지적을 받고 고친 직후다.** 1회성 실수가
 아니라 등재 절차에 집행 장치가 없다는 신호다.
 - 즉시 조치: 게이트 `G-required-tier-caller-recheck`[kiki·remind 21일→G1 9/27] 신설 후
-  `amend --gate`로 부착. 차단 실측 후보 123→122, 대조군 `EOS-99` 잔류.
+  `amend --gate`로 부착. 차단 실측 후보 123→122, 대조군 `ARCH-43`(당시 `EOS-99`) 잔류.
 - 재발방지: **`HARN-72-trigger-shaped-task-without-trigger-guard`** — acceptance에 미래 조건부
   문장이 있는데 `depends_on`·`requires_gates`가 둘 다 비면 `add`/`validate`가 경고·거부.
   `HARN-52`(audit-deps)가 *notes의 선행*을 보는 축이라면 이쪽은 *acceptance의 미래 트리거*를
@@ -8336,3 +8336,24 @@ Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 코드 0건. 그�
 - **머지 차단의 진짜 원인은 CI가 아니었다**: 전건 green 뒤에도 `merge`가 405 "A conversation must be resolved" — 저장소 규칙이 리뷰 대화 전건 해결을 요구하는데 Codex P2 스레드 3건이 미해결이었다. 처리: ⓐ `node_modules/`·`dist/`·`coverage/` 스캔 혼입 → `_EXCLUDED_CLIENT_DIRS`(web `.gitignore` 4개 + 모바일 `build/`·`.dart_tool/`) + tmp 트리 테스트(뮤테이션 RED 1/3) ⓑ 클라 경로 중복·중첩 귀속 미검출 → 경로 단위 소유자 맵 + 부모/자식 중첩 검사(현행 33경로 0/0·뮤테이션 RED 2/3) ⓒ `__init__.py` 57건·2,811줄 모집단 제외 → 40건은 자동 귀속이 자명하나 17패키지는 소유 판정이 필요하고 장부 162행·문서 수치가 함께 바뀌어 **ARCH-42로 분리**(4b0d8fa6). 스레드 3건 답글 후 resolve → 자동 머지 발화(86930abc).
 - **EOS 프리픽스 소진(사람 결정 대기)**: `backlog.py add --id EOS-99`가 거부 — EOS-99는 원격 브랜치가 선점했고 **EOS는 00~99를 전부 소진**해 CLI가 "새 프리픽스 등 사람의 결정"(HARN-21)을 요구했다. 임시로 ARCH 계열(ARCH-42)에 등재하고 결정 게이트 `G-eos-task-prefix-exhausted`(선택지 3종)를 Kiki에게 남겼다. 번호 규율(HARN-10)은 이번에도 작동했다 — ARCH-40 로컬 선점·ARCH-41 원격 선점을 잡고 42를 제안, OPS-62 로컬 선점을 잡고 63을 제안.
 - **세션 규율 실수(기록)**: `backlog.py add … | tail -8 && echo ADD_OK`가 add exit 1(OPS-62 충돌)인데도 `ADD_OK`를 찍었다 — 파이프의 exit code는 `tail`의 것이다(CLAUDE.md 2026-08-09 "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 정확한 형태). 다음 명령에서 파이프를 제거해 정정. 피해 0 — 단, 잡은 것은 뒤따른 `validate`가 아니라 눈이었다(validate는 *없는* 태스크를 볼 수 없다).
+
+**번호 충돌 실물 1건 (같은 세션·PR #999)**: 내가 등재한 `EOS-99-subject-neutrality-falsifiable-check`가
+타 세션 #1000의 `EOS-99-prompt-cache-hit-measurement`와 **같은 번호로 충돌**했다. `validate`가
+*"사람·문서·커밋의 'EOS-99' 참조가 결정 불가가 된다"*로 거부했고(HARN-10 집행), **머지된 쪽은 개명
+불가**이므로 미머지인 내 것을 옮겼다 — CLI가 `ARCH-42` 선점을 잡고 **`ARCH-43`을 제안**해 그대로 썼다
+(눈으로 고르지 않았다). 내용은 acceptance 5항·paths·title·notes 전건 보존을 대조로 확인했다.
+
+- **접두 선택 근거**: #1000이 *"EOS-98·EOS-99가 마지막"*으로 소진을 확정했고, **`MP`는 EOS 후속이
+  아니라 회차 축 접두**이며 EOS 축 일반의 후속은 게이트 `G-eos-task-prefix-exhausted`[kiki]가 정한다 —
+  아직 미결이다. 3자리 손제작은 `build_harness.md` §8 금기. 그래서 내용상 아키텍처 계약 검증인 이
+  태스크를 기존 `ARCH` 계열로 옮겼다(자매 `ARCH-41`과 같은 판단). CLI 개명 경로 부재는 `HARN-67` 소유.
+- **`MEMORY.md`는 내가 쓴 3줄만 고쳤다** — 같은 파일의 8173·8177·8337줄은 #1000/#1001이 자기
+  `EOS-99`(캐시 계측)를 서술한 것이라 손대지 않았다. 병렬 세션이 한 파일을 공유할 때 전역 치환은
+  남의 기록을 조용히 바꾼다.
+
+**behind 루프 실측 (`G-merge-queue-or-strict-relax` 판정 근거)**: 이 PR 하나에서 **behind 3회**가 났다.
+CI가 도는 ~20분 사이에 main이 매번 움직였다(#998 → #1000 → …). 머지 API는 CI가 전건 green인데도
+`405 Repository rule violations found · 16 of 16 required status checks are expected`로 거부했다 —
+**실패가 아니라 base가 낡아서**다. 게이트 본문의 *"최신 base 강제 × CI 30분이 만드는 behind 루프"*가
+그대로 재현됐고, 3회차에서는 단순 정렬이 아니라 **번호 충돌**까지 딸려 왔다(위). 정렬 왕복이 길수록
+병렬 세션과의 충돌 표면이 넓어진다는 것이 이 사례의 추가 관측이다.
