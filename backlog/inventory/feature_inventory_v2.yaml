@@ -3610,7 +3610,7 @@ features:
     db_model_modules: 6
     coupling_count: 9
     test_files: 22
-    test_functions: 366
+    test_functions: 367
     matrix:
       A_subject: 0
       B_db: 3
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 324
-    test_functions: 5838
+    test_functions: 5842
     matrix:
       A_subject: 3
       B_db: 0
@@ -9255,7 +9255,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
     migration_risk: Low
-    loc: 3020
+    loc: 3045
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 2
@@ -9265,7 +9265,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 5
-    test_functions: 161
+    test_functions: 164
     matrix:
       A_subject: 1
       B_db: 0
@@ -9590,7 +9590,7 @@ features:
     db_model_modules: 1
     coupling_count: 10
     test_files: 13
-    test_functions: 317
+    test_functions: 318
     matrix:
       A_subject: 3
       B_db: 1
@@ -9645,7 +9645,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
-    loc: 1980
+    loc: 1998
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -9655,7 +9655,7 @@ features:
     db_model_modules: 0
     coupling_count: 8
     test_files: 6
-    test_functions: 194
+    test_functions: 198
     matrix:
       A_subject: 3
       B_db: 0
@@ -9720,7 +9720,7 @@ features:
     db_model_modules: 1
     coupling_count: 44
     test_files: 30
-    test_functions: 572
+    test_functions: 575
     matrix:
       A_subject: 3
       B_db: 1
