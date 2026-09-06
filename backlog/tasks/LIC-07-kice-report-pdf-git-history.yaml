@@ -17,10 +17,14 @@ acceptance:
   - "③ 제거 실행은 Kiki 소유(되돌리기 어려움): 사전 백업 → git-filter-repo로 두 blob만 제거 → 전 협업자 재clone 공지 → 원격 캐시 잔존분은 GitHub 지원 요청(force-push만으로 원격 GC가 즉시 일어나지 않는다). 열린 PR 전건 재기반 필요"
   - "④ 재유입 방지 가드 등재·배선: 저작권 위험 원본(대용량 PDF·hwp 등)의 커밋 차단을 CI 또는 pre-commit에 붙이고, 위반 픽스처 주입으로 red를 실증한다(보호 장치 실패 주입 검증 의무)"
   - "⑤ 범위 밖: 자체 사업계획서 PDF/docx·하네스 zip(자체 저작물·확인 완료) / 작업 트리 코퍼스(전수 실사 결과 저촉 0건)"
+  - "⑥ [정정·2026-09-06 unshallow 실측] main은 두 blob을 담지 않는다 — 'git merge-base --is-ancestor 388f7921 origin/main' → false, 'git rev-list --objects refs/heads/main | grep <blob>' → 0건. 도달 가능한 ref는 브랜치 2개(claude/human-bottleneck-tasks-6dszy0 · merge/human-bottleneck-6dszy0)와 닫힌 PR #739의 refs/pull/739/head뿐이다. 따라서 ③이 전제했던 main 히스토리 재작성·전 협업자 재clone·열린 PR 전건 재기반은 **불요**하다. 등재 시점 판정이 shallow 클론(SessionStart 훅이 판정 보류를 경고)에 근거한 것이 원인"
+  - "⑦ [방법 확정] 브랜치를 삭제하지 않고 **재작성**한다 — claude/human-bottleneck-tasks-6dszy0은 main에 없는 21커밋을 담고 그중 MISC-01·MISC-03·PB-02 구현이 main에 미착지다(내용 실측: coach.py의 visualize_misconception 매치 main 0 / 브랜치 6, ci.yml 커버리지 재생성 main 0 / 브랜치 3). 삭제하면 미병합 고립 5회차가 된다. blob ID 지정(--strip-blobs-with-ids)으로 PDF만 들어내고 커밋은 보존한다. 비용: 21커밋 SHA 변경으로 백로그 notes의 옛 SHA 참조(REC-02의 d554ddad 등)가 해석 불능이 된다 — 작업 소실은 없다"
+  - "⑧ [실행 경로] 런북 docs/ops/kice_pdf_history_purge_runbook.md (6항목 브리핑·단계별 자가검증·변별력 3축[blob 0 + 커밋수 pre 또는 pre-1 + 내용 마커]). 세션이 실행하지 않은 이유 2가지: 되돌리기 어려움 + 이 세션의 git filter-repo 실행이 권한 분류기에 거부됨(우회 금지 규칙에 따라 소유자 실행으로 이관)"
+  - "⑨ [남는 한계·명시] refs/pull/739/head는 저장소 소유자도 git으로 지울 수 없다 — force-push로도 사라지지 않는다. 다만 일반 git clone은 refs/pull/*을 가져오지 않으므로, 브랜치 재작성만으로 노출은 '모든 clone'에서 'PR ref를 명시 fetch하는 사람'으로 줄어든다. 완전 제거는 GitHub Support 요청(저장소·PR #739·blob SHA 2건 명시)이며 웹 폼 작업이라 런북 범위 밖"
 artifacts: []
 paths:
   - docs/data/licensing_safety.md
   - ".github/workflows/ci.yml"
 session: null
-notes: "2026-09-06 저작권 전수 실사에서 발견(세션: claude/remove-copyright-materials-nptqyr). 작업 트리에는 저작권 저촉 자료 0건 — 문제은행 14,034 문항 전량 WHYMATH_GENERATED·자체생성, 벤더 JS(MathLive/three.js/React) 라이선스 고지 보존, 교과서·기출 스캔/PDF 0, 금지 등급 외부 소스(Khan·CK-12·AoPS 등) 실물 0. 유일한 실질 위험이 이 히스토리 2건이다. Kiki 판단 대기(보류 / 절차서만 작성 / 즉시 실행). LIC-06은 paths 과대 지정으로 취소 후 이 번호로 재등재."
+notes: "2026-09-06 저작권 전수 실사에서 발견(세션: claude/remove-copyright-materials-nptqyr). 작업 트리에는 저작권 저촉 자료 0건 — 문제은행 14,034 문항 전량 WHYMATH_GENERATED·자체생성, 벤더 JS(MathLive/three.js/React) 라이선스 고지 보존, 교과서·기출 스캔/PDF 0, 금지 등급 외부 소스(Khan·CK-12·AoPS 등) 실물 0. 유일한 실질 위험이 이 히스토리 2건이다. Kiki 판단 대기(보류 / 절차서만 작성 / 즉시 실행). LIC-06은 paths 과대 지정으로 취소 후 이 번호로 재등재.\n\n[정정 2026-09-06] 2026-09-06 unshallow 후 도달성 재판정 — 등재 시점 판정을 정정한다. 등재는 shallow 클론에서 이뤄져 'main 히스토리 잔존'을 전제했으나, 전체 히스토리를 받아 실측하니 main은 깨끗했다. 작업 규모·위험도가 크게 줄어 acceptance를 갱신한다."
 updated: 2026-09-06

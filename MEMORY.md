@@ -384,6 +384,30 @@ ISBN 979-11-5788-529-9 / -347-9 + "※ 본 자료 내용의 무단 복제를 금
 별책 8이라 §7 비보호 — **제거 대상 아님**(Kiki가 실사 중 이 구분을 정확히 지적했다).
 제거는 히스토리 재작성·force-push라 되돌리기 어려워 세션이 실행하지 않고 **`LIC-07`로 등재**했다.
 
+**발견 2 정정 (같은 날 오후·unshallow 후)**: 위 판정은 **shallow 클론**에서 나온 것이라 도달성을
+확정할 수 없었다(SessionStart 훅도 "ahead 수치·포팅 근거를 신뢰할 수 없다"고 경고했다).
+`git fetch --unshallow` 후 재측정하니 **main은 두 blob을 담지 않는다**
+(`merge-base --is-ancestor 388f7921 origin/main` → false · `rev-list --objects refs/heads/main`
+→ 0건). 보유 ref는 정체된 브랜치 2개와 닫힌 PR #739의 `refs/pull/739/head`뿐이다. 따라서
+**main 히스토리 재작성·전 협업자 재clone·열린 PR 전건 재기반은 불요**하다 — 작업 규모가 크게 줄었다.
+Kiki가 실사 중 "KICE PDF 2건만 문제 아니냐"고 지적한 것이 정확했듯, 이 축도 처음 보고가 과대했다.
+
+**방법도 정정**: 브랜치 **삭제**가 아니라 **재작성**이다. `claude/human-bottleneck-tasks-6dszy0`은
+main에 없는 21커밋을 담고 그중 **MISC-01·MISC-03·PB-02 구현이 main에 미착지**다(내용 실측 —
+`coach.py`의 `visualize_misconception` main 0 / 브랜치 6, `ci.yml` 커버리지 재생성 main 0 /
+브랜치 3). 삭제하면 미병합 고립 **5회차**가 된다. blob ID 지정으로 PDF만 들어내고 커밋은 보존한다.
+
+**실행 주체**: 세션이 `git filter-repo`를 실행하려 했으나 **권한 분류기가 거부**했다. 거부는
+장애물이 아니라 판정이므로 우회하지 않고(CLAUDE.md "거부의 우회 금지" 처리 순서 ②) 소유자 실행으로
+이관 — 런북 `docs/ops/kice_pdf_history_purge_runbook.md`. 런북 초안의 성공 기준이 커밋 수를
+`21/18`로 못박았다가, `388f7921`이 **PDF 2개만** 담은 커밋이라 재작성 시 빈 커밋으로 정리되면
+정상 상태에서 검증이 실패함을 발견해 `pre` 또는 `pre-1` + 내용 마커 3축으로 교체했다 —
+"변별력 없는 검증 스텝 금지"가 *실패 방향*뿐 아니라 *성공 방향*에서도 성립해야 한다는 사례다.
+
+**남는 한계(명시)**: `refs/pull/739/head`는 소유자도 git으로 지울 수 없다. 다만 일반 `git clone`은
+`refs/pull/*`을 가져오지 않으므로 브랜치 재작성만으로 노출이 "모든 clone"에서 "PR ref를 명시
+fetch하는 사람"으로 줄어든다. 완전 제거는 GitHub Support 요청 몫이다.
+
 **정정 파일**: `content.json`·`_provenance.json`(+ 기계 판독 `ncic_statement_overlap` 필드) ·
 `data_pipeline/concept_content/{models,__main__}.py` · `docs/data/concept_content_v1.md` ·
 `docs/data/licensing_safety.md` · `l1/concept_content/projection.py` ·
