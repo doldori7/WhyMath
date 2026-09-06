@@ -338,6 +338,98 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-06 (저작권 전수 실사): **선언이 데이터를 설명하지 못했다 — `concept_content_v1` 라이선스 고지 정정 + 히스토리 잔존 KICE 보고서 2건 등재** (Kiki "저작권 저촉가능성있는 자료가 있으면 삭제" → 실사 후 "선언을 데이터에 맞춰 정정", claude 실측·구현)
+
+**요청**: 저장소에 저작권 저촉 가능성이 있는 자료가 있으면 삭제.
+
+**실사 결과 — 작업 트리는 저촉 0건**:
+- 문제은행 코퍼스 **14,034 문항 전량** `license=WHYMATH_GENERATED`·`source_type=자체생성`(예외 0).
+- 교과서·기출 스캔·PDF·이미지 **0건**. 금지 등급 외부 소스(Khan·CK-12·AoPS·LibreTexts·Mathigon)
+  실물 **0건** — 매치는 전부 *금지를 선언하는* 정책 문서였다.
+- 벤더 JS(MathLive·three.js·React) 라이선스 고지 보존 확인. `data/licenses/snapshots/`는 라이선스
+  페이지 아카이브(준거 증적)로 보존 대상.
+
+**발견 1 — 선언↔데이터 모순(정정함)**: `data/corpus/concept_content_v1`의 `explanation` **133건**이
+NCIC 성취기준 본문과 사실상 동일했다(유사도 ≥0.90·그중 **124건은 표기 정규화 후 글자 그대로**).
+그런데 이 코퍼스의 `license_notice`는 **"K-12 성취기준 본문은 NCIC 저작물이라 미수록"**을 선언하고
+있었고, 데이터는 `concept_content` 테이블로 투영돼 서빙 경로에 올라간다. QUAL-06이 크롤링 파손
+48건을 고치며 ⑥에서 "파손 없는 성취기준 문체 약 129건은 KG-02 소관"으로 남긴 바로 그 잔류분이다.
+
+**판단(Kiki)**: 데이터 삭제가 아니라 **선언 정정**. 근거 — NCIC 성취기준은 교육부 고시
+제2022-33호라 저작권법 **§7 제1호(고시·공고·훈령)상 보호받지 못하는 저작물**이고 NCIC 공개분은
+**공공누리 제1유형**(출처 표시·상업 이용·변경 허용)이다. 같은 본문을 `standards_v1`이 이미 같은
+근거로 895건 보유한다. **법적 위험이 없는 자료를 지우면 합법 콘텐츠만 잃는다** — 결함은 데이터가
+아니라 거짓 선언이었다. 선언이 거짓이면 그 선언에 기대는 하위 판단(감사 신호·리뷰 프롬프트·데이터
+카드·매트릭스)이 전부 조용히 틀린다.
+
+**집행 지점(정본화와 별항)**: 산문만 고치면 다음 재생성에서 드리프트가 소리 없이 돌아온다 —
+실제로 생성원은 `data_pipeline/concept_content/models.py`의 상수였다. 두 게이트를 배선했다.
+- `tests/backend/l1/test_concept_content_license_declaration.py` — 실 코퍼스 전수 스캔 ↔ 사이드카
+  `ncic_statement_overlap` 숫자 대조 + 출처 표시 존재 + 거짓 주장 회귀 + 두 선언 일치(4축).
+- `tests/data_pipeline/concept_content/test_models_validate.py` — 파이프라인 상수 ↔ 커밋 코퍼스
+  바이트 동일(재생성 드리프트 경로 차단).
+**뮤테이션 5종 전건 red 실증**(정상 green·백업 `cp` 원복 후 바이트 동일 확인) — 정상 통과만으로는
+보호의 증거가 아니다(2026-09-01 규칙).
+
+**부수 소득**: 새 선언에 `[수학과 교육과정]` 리터럴을 하드코딩했다가 기존 **과목 중립성 게이트**
+(`test_subject_neutrality_gate.py`)에 걸렸다 — `build_ncic_citation_core()` 합성으로 교정. 이미
+있던 가드가 실제로 잡았다.
+
+**발견 2 — 유일한 실질 위험(미해결·Kiki 소유)**: git 히스토리에 **KICE 평가기준 개발 연구 보고서
+원본 PDF 2건**(고등 CRC 2017-5-6 4.82MB·초중 CRC 2016-2-6 5.91MB)이 잔존한다. 작업 트리에서는
+2026-08-08에 지웠으나(`98a34695`) 히스토리에 남아 clone마다 배포된다. **판권장 직접 추출로 확인**:
+ISBN 979-11-5788-529-9 / -347-9 + "※ 본 자료 내용의 무단 복제를 금함" — 고시가 아니라 KICE 발간
+**연구보고서**이고, `licensing_safety.md`의 'NCIC 구분'이 이미 후자를 **영리 차단(C등급)**으로
+분류해 둔 바로 그 부류다. 같은 커밋군의 `curriculum_math_2022.pdf`는 교육부 고시 제2022-33호
+별책 8이라 §7 비보호 — **제거 대상 아님**(Kiki가 실사 중 이 구분을 정확히 지적했다).
+제거는 히스토리 재작성·force-push라 되돌리기 어려워 세션이 실행하지 않고 **`LIC-07`로 등재**했다.
+
+**발견 2 정정 (같은 날 오후·unshallow 후)**: 위 판정은 **shallow 클론**에서 나온 것이라 도달성을
+확정할 수 없었다(SessionStart 훅도 "ahead 수치·포팅 근거를 신뢰할 수 없다"고 경고했다).
+`git fetch --unshallow` 후 재측정하니 **main은 두 blob을 담지 않는다**
+(`merge-base --is-ancestor 388f7921 origin/main` → false · `rev-list --objects refs/heads/main`
+→ 0건). 보유 ref는 정체된 브랜치 2개와 닫힌 PR #739의 `refs/pull/739/head`뿐이다. 따라서
+**main 히스토리 재작성·전 협업자 재clone·열린 PR 전건 재기반은 불요**하다 — 작업 규모가 크게 줄었다.
+Kiki가 실사 중 "KICE PDF 2건만 문제 아니냐"고 지적한 것이 정확했듯, 이 축도 처음 보고가 과대했다.
+
+**방법도 정정**: 브랜치 **삭제**가 아니라 **재작성**이다. `claude/human-bottleneck-tasks-6dszy0`은
+main에 없는 21커밋을 담고 그중 **MISC-01·MISC-03·PB-02 구현이 main에 미착지**다(내용 실측 —
+`coach.py`의 `visualize_misconception` main 0 / 브랜치 6, `ci.yml` 커버리지 재생성 main 0 /
+브랜치 3). 삭제하면 미병합 고립 **5회차**가 된다. blob ID 지정으로 PDF만 들어내고 커밋은 보존한다.
+
+**실행 주체**: 세션이 `git filter-repo`를 실행하려 했으나 **권한 분류기가 거부**했다. 거부는
+장애물이 아니라 판정이므로 우회하지 않고(CLAUDE.md "거부의 우회 금지" 처리 순서 ②) 소유자 실행으로
+이관 — 런북 `docs/ops/kice_pdf_history_purge_runbook.md`. 런북 초안의 성공 기준이 커밋 수를
+`21/18`로 못박았다가, `388f7921`이 **PDF 2개만** 담은 커밋이라 재작성 시 빈 커밋으로 정리되면
+정상 상태에서 검증이 실패함을 발견해 `pre` 또는 `pre-1` + 내용 마커 3축으로 교체했다 —
+"변별력 없는 검증 스텝 금지"가 *실패 방향*뿐 아니라 *성공 방향*에서도 성립해야 한다는 사례다.
+
+**남는 한계(명시)**: `refs/pull/739/head`는 소유자도 git으로 지울 수 없다. 다만 일반 `git clone`은
+`refs/pull/*`을 가져오지 않으므로 브랜치 재작성만으로 노출이 "모든 clone"에서 "PR ref를 명시
+fetch하는 사람"으로 줄어든다. 완전 제거는 GitHub Support 요청 몫이다.
+
+**리뷰가 잡은 3회차 — 같은 결함의 재발(PR #998 Codex P1)**: 위 정정은 선언 문자열을
+`models.py`에 **상수로 박고** 커밋된 코퍼스 파일도 손으로 고쳤다. 리뷰가 지적하기를, 그러면
+① 다른 xlsx로 재생성할 때 `133건`이 사실과 무관하게 그대로 나가고 ② 빌드 CLI가 사이드카를 통째
+덮어써 `ncic_statement_overlap`이 사라져 **새 게이트가 정상 상태에서 red**를 낸다. 즉 게이트가
+*생성 경로에 배선되지 않았다* — **내가 M5로 막으려던 바로 그 결함을 내 수정이 다시 저질렀다.**
+"정본화를 집행으로 착각한 완료 선언 금지"의 세 번째 사례이고, 이번엔 사람도 나도 못 잡고 리뷰
+봇이 잡았다.
+
+**대책(코드)**: 신규 `data_pipeline/concept_content/ncic_overlap.py` — 겹침을 빌드 시점에 전수
+실측하고 그 숫자로 선언을 **합성**한다(`build_source_citation`/`build_license_notice`).
+`models.py`의 상수 2개는 제거했다. CLI는 `--standards`를 읽고, **성취기준 코퍼스가 없으면
+exit 2로 중단**한다(측정 없이 선언을 쓰지 않는다). 사이드카는 통째 덮어쓰기 대신 **병합**해
+`pool` 같은 다른 도구의 키를 보존한다. 겹침이 0이면 빌더가 출처 표시를 담지 *않는* 다른 문장을
+낸다 — 대칭 축이 없으면 "무슨 데이터든 같은 문장"인 빌더도 통과한다. 뮤테이션 2종 추가 실증
+(선언 재하드코딩 → 4건 red · 사이드카 필드 제거 → 1건 red).
+
+**정정 파일**: `content.json`·`_provenance.json`(+ 기계 판독 `ncic_statement_overlap` 필드) ·
+`data_pipeline/concept_content/{models,__main__}.py` · `docs/data/concept_content_v1.md` ·
+`docs/data/licensing_safety.md` · `l1/concept_content/projection.py` ·
+`harness/concept_content_audit.py` · 테스트 4파일.
+
+---
 ### 2026-09-05 (배선·EOS-81): **폐쇄루프 E2E 뒷반쪽이 닫혔다 — 코치 완료→attempt 적재→개념·스킬 숙달 갱신→추천 변화를 백엔드·모바일 두 앵커가 한 테스트에서 관통 증명** (Kiki /drive, claude 구현·검증)
 - **백엔드**(`test_e2e_vertical_slice_integration.py` 455→788줄, 신규 파일 0): 2턴 완료 경로(정답 `solution_steps` → 서버 correct 판정 → 돌아보기 1턴 → `problem_complete`+`completed_attempt_id`)를 관통. **산출물 자체를 단언**한다 — 그 attempt_id로 `problem_attempt` 실 SELECT(행 1건·`is_correct`·`used_socratic`), 개념·스킬 숙달 델타(strictly greater), `문제시도` 이벤트(`source=coach_completion`). 클라 직접 적재(`POST /v1/me/attempts`)는 계약상 금지라 호출하지 않는다
 - **(라)의 변별력과 정직한 공백**: "추천이 갱신된 mastery를 반영한다"를 *mastery 값이 추천 점수에 기여했다*로는 단언하지 못했다 — 응답의 `weak_concept_signal_count`는 BKT 기록의 **유무** 카운트라 값 변화(0.35→상승)에 변별력이 0이고 가중치는 미노출이다. 그래서 값 델타는 DB로 직접 재고, 추천 축에서는 *attempt가 추천 엔진 입력에 들어갔다*(미시도 필터·`standard_error` None→값)까지만 주장했다. 뮤테이션 5에서 드러난 것: **"완료 문항이 더 이상 추천되지 않는다"는 단독으로는 약한 검사**(엔진이 다른 문항을 골라 통과)이고, 실제 변별력은 **후보 풀 크기 정확히 1 감소**가 냈다
