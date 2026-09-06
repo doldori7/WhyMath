@@ -183,6 +183,9 @@ class AccumulateReport:
     #: 카나리 미달로 본배치가 **시작되지 않았는가**. aborted(롤링 중단)와 구별한다 —
     #: 전자는 시작 전 차단, 후자는 진행 중 정지다.
     canary_blocked: bool = False
+    #: 카나리 판정이 **권고**였는가(n <= canary_size라 막을 본배치가 없던 경우). 판정은
+    #: 냈지만 차단력이 없었다는 뜻 — 이걸 안 적으면 운영자가 "게이트가 봐 줬다"고 오독한다.
+    canary_advisory: bool = False
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -203,6 +206,7 @@ class AccumulateReport:
             "rolling_window": self.rolling_window,
             "canary": self.canary,
             "canary_blocked": self.canary_blocked,
+            "canary_advisory": self.canary_advisory,
         }
 
 
@@ -294,8 +298,10 @@ def run_corpus_accumulate(
     미달이면 남은 회차를 **시작하지 않고** 중단한다(`canary_blocked=True`). 카나리는 버리는
     표본이 아니라 이 회차의 앞부분이므로, 통과분은 그대로 코퍼스에 append된다.
 
-    `n <= canary_size`면 **막을 본배치가 없으므로 판정하지 않는다**(`canary=None`) — 전량이
-    카나리인 회차에 "본배치 차단"은 의미가 없다. `canary_size=None`이면 관문을 끈다.
+    `n <= canary_size`면 막을 본배치가 없으므로 **차단하지는 않되 판정은 낸다**
+    (`canary_advisory=True`) — 차단력 없는 권고다. 판정 자체를 생략하면 기본 경로
+    (`--n 20` · 카나리 30)에서 아무 신호도 남지 않는다(2026-09-06 실측 사고).
+    `canary_size=None`이면 관문을 완전히 끈다.
     """
     seed_signatures, seed_slugs, seed_total = load_corpus_index(list(seed_paths))
     out_signatures, out_slugs, out_total = load_corpus_index([out_path])
@@ -351,7 +357,7 @@ def run_corpus_accumulate(
             if not canary_verdict.passed:
                 # 본배치 미시작 — 여기서 끊으면 남은 n-canary_size건은 생성되지 않는다.
                 canary_blocked = True
-                _LOGGER.warning("%s", canary_verdict.reason)
+                _LOGGER.warning("%s — 본배치 미시작", canary_verdict.reason)
                 break
         if watchdog is not None:
             if watchdog.should_abort():
@@ -360,6 +366,20 @@ def run_corpus_accumulate(
                 abort_reason = watchdog.abort_reason()
                 _LOGGER.warning("%s", abort_reason)
                 break
+
+    # 카나리가 *막을* 수 없는 크기(n <= canary_size)였어도 판정 자체는 낸다 — 차단력은
+    # 없지만 "몇 건 중 몇 건이었는지"가 리포트에 남아야 운영자가 상태를 안다. 이것이 없으면
+    # 기본 경로(--n 20 · 카나리 30)에서 canary=None만 보이고 아무 신호가 없다(2026-09-06 사고).
+    canary_advisory = False
+    if canary_verdict is None and canary_size is not None and canary_size > 0 and outcomes:
+        canary_verdict = evaluate_canary(
+            [item.status for item in outcomes],
+            threshold=canary_threshold,
+            confidence=canary_confidence,
+        )
+        canary_advisory = True
+        if not canary_verdict.passed:
+            _LOGGER.warning("[카나리 권고·차단력 없음] %s", canary_verdict.reason)
 
     counts: dict[str, int] = {}
     reasons: list[str] = []
@@ -404,6 +424,7 @@ def run_corpus_accumulate(
         rolling_window=watchdog.to_json() if watchdog is not None else None,
         canary=canary_verdict.to_json() if canary_verdict is not None else None,
         canary_blocked=canary_blocked,
+        canary_advisory=canary_advisory,
     )
 
 
@@ -681,7 +702,7 @@ def main(argv: list[str] | None = None) -> int:
     # 아니라 "파이프라인이 결함을 대량 복제하려 했다"는 더 급한 신호다. stdout JSON에만
     # 실으면 습관화돼 안 읽히므로 stderr에도 사유를 낸다(조용한 중단 금지).
     if report.canary_blocked:
-        sys.stderr.write(f"[카나리 차단] {payload['canary']['reason']}\n")
+        sys.stderr.write(f"[카나리 차단] {payload['canary']['reason']} — 본배치 미시작\n")
         return 1
     if report.aborted:
         sys.stderr.write(f"[배치 중단] {report.abort_reason}\n")

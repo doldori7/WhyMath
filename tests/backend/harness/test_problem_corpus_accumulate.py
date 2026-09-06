@@ -270,24 +270,30 @@ class TestCanaryGate:
         assert design_doc.canary_blocked is True  # 만점인데 차단된다
         assert design_doc.attempted == 30
 
-    def test_no_canary_when_batch_not_larger_than_canary(self, tmp_path: Path) -> None:
-        """n <= canary_size면 막을 본배치가 없다 — 판정하지 않는다(있는 척 금지)."""
-        seed = _seed_corpus(tmp_path, short_n=3)
+    def test_small_batch_gets_advisory_verdict_not_silence(self, tmp_path: Path) -> None:
+        """n <= canary_size면 **차단은 못 하되 판정은 낸다**(권고).
+
+        [정정 경위] 초판은 이 경우 판정을 아예 생략했다(canary=None). 그런데 CLI 기본
+        `--n`이 20이고 카나리 기본이 30이라 **기본 경로 전체가 무판정**이었다 — 보호를
+        "기본 ON"이라 적어 놓고 아무것도 하지 않는 상태(PR #989 Codex P1). 차단력이
+        없더라도 몇 건 중 몇 건이었는지는 남아야 운영자가 상태를 안다.
+        """
         report = run_corpus_accumulate(
             out_path=tmp_path / "acc.jsonl",
-            seed_paths=[seed],
+            seed_paths=[],
             generator=_AlwaysFailingGenerator(),
             spec=_spec(),
             n=3,
             canary_size=5,
             abort_window=None,
         )
-        assert report.canary is None
+        assert report.canary is not None  # 침묵하지 않는다
+        assert report.canary_advisory is True  # 다만 차단력은 없다
         assert report.canary_blocked is False
-        assert report.attempted == 3  # 전량 돌았다
+        assert report.attempted == 3  # 전량 돌았다(차단하지 않았으므로)
 
-    def test_no_canary_at_exact_boundary(self, tmp_path: Path) -> None:
-        """n == canary_size **정확히 경계** — 여기서도 막을 본배치가 없으므로 판정하지 않는다.
+    def test_exact_boundary_is_advisory_not_blocking(self, tmp_path: Path) -> None:
+        """n == canary_size **정확히 경계** — 막을 본배치가 없으므로 차단하지 않는다.
 
         [뮤테이션 경위] 처음에는 n=3·canary=5로만 확인했는데, `n > canary_size`를
         `n >= canary_size`로 바꾸는 뮤테이션이 **검출되지 않았다**(3 >= 5도 False라 양쪽이
@@ -303,8 +309,8 @@ class TestCanaryGate:
             canary_size=5,
             abort_window=None,
         )
-        assert report.canary is None
-        assert report.canary_blocked is False
+        assert report.canary_blocked is False  # 차단하지 않는다
+        assert report.canary_advisory is True  # 권고로 판정한다
         assert report.attempted == 5
 
     def test_canary_disabled(self, tmp_path: Path) -> None:
@@ -320,6 +326,68 @@ class TestCanaryGate:
         )
         assert report.canary is None
         assert report.attempted == 6
+
+
+class TestDefaultConfigurationDecides:
+    """**기본 설정이 실제로 판정하는가** — PR #989 Codex P1의 회귀 가드.
+
+    [사고 경위] 초판은 카나리 30 · 롤링 창 50을 기본으로 두고 롤링 판정 시작점을 창 크기와
+    같게 묶었다. 그런데 CLI 기본 `--n`은 **20**이다:
+
+        n=20 <= 카나리 30  → 막을 본배치가 없어 카나리 미판정
+        n=20 <  창 50      → 최소 표본 미달이라 롤링 미판정
+        → 전건 실패 20건인데 canary=None · blocked=False · aborted=False
+
+    두 안전장치가 "기본 ON"이라고 적힌 채 **기본 경로에서 아무것도 하지 않았다.** 뮤테이션
+    12종이 이걸 못 잡은 이유는 분명하다 — 테스트가 매번 게이트 인자를 **명시로 넘겨 기본
+    설정을 한 번도 실행하지 않았다**. 이 클래스는 그 공백을 메운다: 게이트 인자를 **하나도
+    주지 않고** 호출한다.
+    """
+
+    def test_default_configuration_actually_decides(self, tmp_path: Path) -> None:
+        """게이트 인자 무지정 + CLI 기본 크기(20) + 전건 실패 → 안전 판정이 **나야** 한다."""
+        report = run_corpus_accumulate(
+            out_path=tmp_path / "acc.jsonl",
+            seed_paths=[],
+            generator=_AlwaysFailingGenerator(),
+            spec=_spec(),
+            n=20,  # CLI 기본값과 동일 — 게이트 인자는 일부러 주지 않는다
+        )
+        # 어떤 형태로든 안전 판정이 실재해야 한다(침묵 금지).
+        assert report.aborted is True, "기본 설정에서 롤링 감시가 판정하지 않았다"
+        assert report.attempted < 20, "전건 실패인데 20건을 끝까지 돌았다"
+        assert report.canary is not None, "기본 설정에서 카나리가 아무 판정도 남기지 않았다"
+
+    def test_default_configuration_lets_healthy_batch_through(self, tmp_path: Path) -> None:
+        """반대 방향 — 정상 배치는 기본 설정에서 끝까지 돈다(상시 중단은 보호가 아니다)."""
+        report = run_corpus_accumulate(
+            out_path=tmp_path / "acc.jsonl",
+            seed_paths=[],
+            generator=SkeletonEquivalentProblemGenerator(),
+            spec=_spec(),
+            n=20,
+        )
+        assert report.aborted is False
+        assert report.attempted == 20
+        assert report.accepted == 20
+
+    def test_duplicates_do_not_trip_the_abort(self, tmp_path: Path) -> None:
+        """중복은 결함이 아니다 — dedup이 일한 회차를 안전장치가 죽이면 안 된다.
+
+        시드와 같은 결정론 풀을 쓰면 전건 `rejected_duplicate`가 난다. 이것을 불량으로
+        세면 정상 축적 회차가 중단된다(기존 회귀 테스트가 실제로 이걸 잡았다).
+        """
+        seed = _seed_corpus(tmp_path, short_n=4)
+        report = run_corpus_accumulate(
+            out_path=tmp_path / "acc.jsonl",
+            seed_paths=[seed],
+            generator=SkeletonEquivalentProblemGenerator(),
+            spec=_spec(),
+            n=20,
+        )
+        assert report.outcome_counts.get("rejected_duplicate", 0) > 0
+        assert report.aborted is False, "중복이 롤링 중단을 유발했다 — 중복은 결함이 아니다"
+        assert report.attempted == 20
 
 
 class TestRollingAbort:

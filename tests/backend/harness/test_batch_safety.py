@@ -12,14 +12,17 @@ import pytest
 
 from whymath_backend.harness.batch_safety import (
     ACCEPTED_STATUSES,
+    DEFAULT_ABORT_MIN_SAMPLES,
     DEFAULT_ABORT_THRESHOLD,
     DEFAULT_ABORT_WINDOW,
     DEFAULT_CANARY_CONFIDENCE,
     DEFAULT_CANARY_SIZE,
     DEFAULT_CANARY_THRESHOLD,
+    NEUTRAL_STATUSES,
     RollingFailureWindow,
     evaluate_canary,
     is_accepted_status,
+    is_neutral_status,
 )
 from whymath_backend.harness.wilson import wilson_lower_bound
 
@@ -46,6 +49,61 @@ class TestAcceptedStatus:
     def test_unknown_status_is_not_accepted(self) -> None:
         """새 status가 생겨도 자동으로 성공에 들지 않는다(fail-closed 허용목록)."""
         assert is_accepted_status("accepted_but_totally_new_variant") is False
+
+
+class TestNeutralStatuses:
+    """중립 status — 성공도 불량도 아니라 분모에서 통째로 빠진다."""
+
+    def test_duplicate_is_neutral(self) -> None:
+        assert NEUTRAL_STATUSES == frozenset({"rejected_duplicate"})
+        assert is_neutral_status("rejected_duplicate") is True
+        assert is_accepted_status("rejected_duplicate") is False
+
+    @pytest.mark.parametrize("status", ["rejected_gate", "generation_failed", "accepted_stored"])
+    def test_others_are_not_neutral(self, status: str) -> None:
+        assert is_neutral_status(status) is False
+
+    def test_canary_excludes_neutral_from_denominator(self) -> None:
+        """중복 10 + 수용 2 → 2/2 판정이지 2/12가 아니다."""
+        verdict = evaluate_canary(["rejected_duplicate"] * 10 + ["accepted_stored"] * 2)
+        assert verdict.trials == 2
+        assert verdict.successes == 2
+
+    def test_all_neutral_is_measurement_failure_not_pass(self) -> None:
+        """전건 중복이면 판정 대상이 0건 — 통과가 아니라 측정 실패다."""
+        verdict = evaluate_canary(["rejected_duplicate"] * 30)
+        assert verdict.measurement_failed is True
+        assert verdict.passed is False
+
+    def test_rolling_skips_neutral_observations(self) -> None:
+        win = RollingFailureWindow(window=4, threshold=0.30, min_samples=4)
+        for _ in range(10):
+            assert win.observe_status("rejected_duplicate") is False
+        assert win.observed == 0  # 관측 자체를 안 했다
+        assert win.should_abort() is False
+        # 실제 불량은 정상적으로 관측된다
+        for _ in range(4):
+            assert win.observe_status("generation_failed") is True
+        assert win.should_abort() is True
+
+
+class TestAbortMinSamples:
+    """판정 시작점이 창 크기와 분리돼 있는가 — 기본 경로 무판정 사고의 회귀 가드."""
+
+    def test_default_min_samples_is_independent_of_window(self) -> None:
+        win = RollingFailureWindow()  # 기본 창 50
+        assert win.window_size == DEFAULT_ABORT_WINDOW
+        # 창 50인데 50건을 기다리면 CLI 기본 --n 20이 통째로 무판정이 된다.
+        for _ in range(DEFAULT_ABORT_MIN_SAMPLES):
+            win.observe(failed=True)
+        assert win.should_abort() is True, "기본 창에서 최소 표본에 도달했는데 판정하지 않는다"
+
+    def test_min_samples_never_exceeds_window(self) -> None:
+        """창이 최소 표본보다 작으면 창 크기가 시작점이다(도달 불가 방지)."""
+        win = RollingFailureWindow(window=3, threshold=0.30)
+        for _ in range(3):
+            win.observe(failed=True)
+        assert win.should_abort() is True
 
 
 class TestCanaryDefaults:
