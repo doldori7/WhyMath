@@ -8167,3 +8167,15 @@ CI 1회차에서 그대로 falsify된 것이라, 주장을 정정하고 구멍�
 - **교훈**: 뮤테이션 6종 중 5종이 통과하고 1종이 뚫렸는데, **뚫린 그 1종이 가드의 유일한 위장
   지점**이었다. 통과한 5종만 보고했으면 "전건 검출"이라고 적었을 것이다 — 뮤테이션은 몇 개를
   돌렸는지가 아니라 **가드의 각 단언마다 하나씩** 설계해야 변별력이 성립한다.
+
+---
+
+## 2026-09-06: PR #980 머지 드라이브 — 실 PG 통합 잡의 순서 의존 429(레이트리미터 전역 상태)·Codex P2 3건·EOS 번호 소진
+
+- **경위**: Kiki "#980도 머지". PR #980(`claude/session-9ain00` — EOS-83·84·88·90·81)은 CI 전건 green이었다가 main 이동 후 두 번 red — ① `infra-contracts`: 인벤토리 v2 장부 LOC 드리프트(main 소스 변경) → `--write` 재생성(e58f11a7) ② `backend — 마이그레이션·통합 (실 PG)`: `test_full_loop_onboarding_to_verify_on_live_pg`의 두 번째 `POST /v1/coach/sessions`가 **429**. 같은 코드가 07:29 green·09:39 red(run 34024961969).
+- **원인(실측)**: `api/_rate_limit._BACKEND`(InMemoryBackend)는 **프로세스 전역**이고 `configure_backend_from_settings` 호출처 0건이라 앱마다 재설치되지 않는다. 통합 테스트 21파일 중 `reset_store`를 부르는 것은 3파일뿐 → 앞서 돈 `test_coach_integration`(세션 생성 20건) 등이 IP 쓰기 버킷(`ip:testclient`·60/분)을 소진하면 뒤 테스트가 429. pytest-randomly 순서가 재현 조건. **OPS-06(`db.session._engine` 전역 오염)과 같은 유형의 2회차** — 그쪽은 hermetic 스위트·엔진 전역, 이쪽은 통합 스위트·레이트리미터 카운트.
+- **즉시 조치**: E2E 시작 시 `asyncio.run(reset_store())` 한 줄 + 원인 주석(e13765c8). 로컬 재현 불가(컨테이너에 pgvector·docker 없음) → CI가 판정(green).
+- **재발방지(의무)**: `OPS-63` 등재 — `tests/backend/conftest.py` autouse 픽스처로 시작 시 카운트 리셋(InMemory 한정), 실 PG에서 뮤테이션 RED 실측, OPS-07(종료 시 귀책)과의 경계 명시.
+- **머지 차단의 진짜 원인은 CI가 아니었다**: 전건 green 뒤에도 `merge`가 405 "A conversation must be resolved" — 저장소 규칙이 리뷰 대화 전건 해결을 요구하는데 Codex P2 스레드 3건이 미해결이었다. 처리: ⓐ `node_modules/`·`dist/`·`coverage/` 스캔 혼입 → `_EXCLUDED_CLIENT_DIRS`(web `.gitignore` 4개 + 모바일 `build/`·`.dart_tool/`) + tmp 트리 테스트(뮤테이션 RED 1/3) ⓑ 클라 경로 중복·중첩 귀속 미검출 → 경로 단위 소유자 맵 + 부모/자식 중첩 검사(현행 33경로 0/0·뮤테이션 RED 2/3) ⓒ `__init__.py` 57건·2,811줄 모집단 제외 → 40건은 자동 귀속이 자명하나 17패키지는 소유 판정이 필요하고 장부 162행·문서 수치가 함께 바뀌어 **ARCH-42로 분리**(4b0d8fa6). 스레드 3건 답글 후 resolve → 자동 머지 발화(86930abc).
+- **EOS 프리픽스 소진(사람 결정 대기)**: `backlog.py add --id EOS-99`가 거부 — EOS-99는 원격 브랜치가 선점했고 **EOS는 00~99를 전부 소진**해 CLI가 "새 프리픽스 등 사람의 결정"(HARN-21)을 요구했다. 임시로 ARCH 계열(ARCH-42)에 등재하고 결정 게이트 `G-eos-task-prefix-exhausted`(선택지 3종)를 Kiki에게 남겼다. 번호 규율(HARN-10)은 이번에도 작동했다 — ARCH-40 로컬 선점·ARCH-41 원격 선점을 잡고 42를 제안, OPS-62 로컬 선점을 잡고 63을 제안.
+- **세션 규율 실수(기록)**: `backlog.py add … | tail -8 && echo ADD_OK`가 add exit 1(OPS-62 충돌)인데도 `ADD_OK`를 찍었다 — 파이프의 exit code는 `tail`의 것이다(CLAUDE.md 2026-08-09 "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 정확한 형태). 다음 명령에서 파이프를 제거해 정정. 피해 0 — 단, 잡은 것은 뒤따른 `validate`가 아니라 눈이었다(validate는 *없는* 태스크를 볼 수 없다).
