@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: blocked
+status: todo
 priority: 4
 eos_priority: P2
 owner: claude
