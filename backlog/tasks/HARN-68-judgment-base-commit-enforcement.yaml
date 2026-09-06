@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-68-judgment-base-commit-enforcement
+title: "판정 기준 커밋 해시 집행 — 게이트 clear가 '언제의 트리로 판정했는가'를 남기게 한다 (미머지 존재를 충족으로 단정 금지 규칙의 집행 지점)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 게이트 clear 축: backlog.py gates clear의 --evidence에 판정 기준(커밋 해시 또는 PR 참조)이 없으면 거부. HARN-23의 done PR 증적 검사와 동형이되, 사람 게이트를 막지 않도록 탈출구를 둔다(--no-base <사유>) — 거부가 YAML 손편집을 부르면 더 나빠진다는 cmd_gates 주석의 판단을 승계"
+  - "② 변별력: 해시 없는 evidence로 clear 시도 → exit 1 / 해시 있으면 통과 / 탈출구 사용 시 사유가 이벤트 대장에 남는가 — 양방향 확인. 정상 상태에서도 실패하는 검사는 금지"
+  - "③ 판정 문서 축은 **범위에서 뺀다**: docs/reviews/ 전수에 기준 해시를 요구하면 기존 문서 전건이 즉시 red가 되고 그랜드파더가 필요해진다(만료 없는 유예 금지). 이 축은 '기계 집행 없음'으로 명시하고 사람 규율로 남긴다 — 뺀다는 판정 자체를 acceptance에 적는 것이 목적"
+  - "④ CLAUDE.md 규칙 본문의 '기계 집행 없음(HARN-68 소유)' 표기를 착지 후 갱신 — 소유자가 일을 마쳤는데 규칙이 계속 '집행 없음'이라 적혀 있으면 그 표기가 거짓이 된다"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - tests/harness/test_judgment_base_commit.py
+session: null
+notes: "출처: CLAUDE.md '미머지 존재를 충족으로 단정 금지'(2026-09-06 등재)의 집행 지점. 사고 경위 = 2026-09-05 Gate 0 A~E 검토가 미머지 EOS-91(PR #986)을 Gate 0-B 근거로 달았고, 같은 세션의 '고아 3건 소유자 부여 완료' 보고도 ARCH-38·39·OPS-61 전부 미머지였다. main 기준 실제 변화는 ARCH-37 하나. Kiki 지적: '미머지 PR로 게이트를 닫지 마십시오 — 판정에는 시점이 붙어야 한다.'"
+updated: 2026-09-06
