@@ -1209,6 +1209,22 @@ jobs:
       - name: 의존 선언↔집행 대조 (HARN-52)
         run: python3 scripts/harness/backlog.py audit-deps
 
+      # HARN-66 — ADR 번호 충돌을 **원격 전 브랜치까지** 스캔해 막는다.
+      # 작업 트리 `ls docs/architecture/adr/`는 "trunk에 무엇이 있는가"만 말하므로 다음 빈
+      # 번호를 알려주지 못한다. 2026-09-05에 그 방식으로 ADR-003을 고른 세션이 같은 날
+      # 15:45에 선점된 ADR-003과 충돌했다(ADR-004로 개명 상환) — 태스크 번호는
+      # `backlog.py add`가 원격 claim까지 검사해 같은 사고를 거부했는데 ADR 번호에는 그
+      # 장치가 없었다. 이 스텝이 그 비대칭을 없앤다.
+      #
+      # 이 잡의 checkout은 fetch-depth: 0이지만 그것만으로는 **원격 브랜치 ref가 로컬에
+      # 오지 않는다**(actions/checkout은 기본적으로 단일 ref만 가져온다). 명시적으로
+      # 전 브랜치를 fetch해야 스캔이 성립하며, 성립하지 않으면 검사기가 exit 1로 그
+      # 사실을 드러낸다("0건 통과" 위장 금지).
+      - name: ADR 번호 충돌 검사 (HARN-66 · 원격 전 브랜치)
+        run: |
+          git fetch --quiet origin '+refs/heads/*:refs/remotes/origin/*'
+          python3 scripts/harness/adr_number_check.py
+
       # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
       # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
       # reap이 늘 "stale claim 없음"을 보고했다. 즉 "통과"가 "검사했다"를 뜻하지 않았다.

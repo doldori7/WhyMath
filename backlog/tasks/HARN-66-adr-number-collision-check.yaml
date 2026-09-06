@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - "scripts/harness/**"
   - docs/architecture/adr/README.md
-session: null
+session: claude/adr-002-subject-adapter-7pytu8
 notes: "사고 경위(2026-09-05): ADR 번호 계열 규약을 만든 그 세션이 작업 트리 ls로 '다음 빈 번호=003'을 골라 ADR-003을 만들었는데, origin/claude/entity-model-freeze-lji37v가 같은 날 15:45에 ADR-003을 선점(세션 커밋은 16:58) — 번호 충돌을 막으려던 문서가 충돌을 하나 더 만들었다. ADR-004로 개명 상환. 대비: 같은 세션에서 태스크 번호는 backlog.py add가 원격 claim 검사로 EOS-83 충돌을 거부했다. 규칙이 아니라 집행 장치의 유무가 갈랐다 — HARN-10/38(태스크 번호 3회)의 ADR 축 재발이며 이번이 4회차다. 규약 정본 = docs/architecture/adr/README.md §번호를 고르는 법."
-updated: 2026-09-05
+updated: 2026-09-06
