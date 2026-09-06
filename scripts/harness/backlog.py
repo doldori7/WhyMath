@@ -36,7 +36,8 @@ import json
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -1077,6 +1078,101 @@ def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str 
     return f"{prefix}-{index:02d}"
 
 
+_HISTORY_TASK_FILE_RE = re.compile(r"^backlog/tasks/([A-Z][A-Z0-9]{0,7})-(\d{2})(?:-|\.yaml$)")
+
+
+def _historically_used_numbers(root: Path, prefix: str) -> set[int] | None:
+    """`<PREFIX>-NN`로 **한 번이라도** 등재된 적 있는 번호(모든 ref·삭제분 포함). 불명이면 None.
+
+    번호 재사용의 안전 조건은 "지금 비어 있음"이 아니라 "**한 번도 쓰인 적 없음**"이다 —
+    과거에 등재됐다 삭제·이관된 번호를 다시 주면 문서·커밋의 `EOS-07` 같은 짧은 참조가
+    두 태스크를 가리킨다(HARN-10이 막는 상태를 시간축으로 재생산). 그래서 taken(현재
+    로컬·원격 파일·claim)만으로는 부족하고 git 이력(`--all --diff-filter=A`)을 본다.
+
+    **fail-closed**: shallow 클론(이력 일부 없음)·git 실패·타임아웃·디코딩 실패는 전부
+    None — "모른다"를 "없다"로 접지 않는다(CLAUDE.md 2026-09-01 ③). 호출부는 None이면
+    폴백 제안을 내지 않고 후보와 수동 확인 절차를 안내한다. 출력 디코딩은 HARN-19 헬퍼
+    (`remote_claims._git`, utf-8 고정)를 재사용한다. (HARN-73)
+    """
+    try:
+        shallow = remote_claims._git(root, "rev-parse", "--is-shallow-repository", timeout=15)
+        if shallow.returncode != 0 or (shallow.stdout or "").strip() == "true":
+            return None
+        log = remote_claims._git(
+            root,
+            "log",
+            "--all",
+            "--diff-filter=A",
+            "--name-only",
+            "--format=",
+            "--",
+            f"backlog/tasks/{prefix}-*",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError, remote_claims.GitOutputDecodeError):
+        return None
+    if log.returncode != 0 or log.stdout is None:
+        return None
+    used: set[int] = set()
+    for line in log.stdout.splitlines():
+        match = _HISTORY_TASK_FILE_RE.match(line.strip())
+        if match and match.group(1) == prefix:
+            used.add(int(match.group(2)))
+    return used
+
+
+@dataclass(frozen=True)
+class NumberSuggestion:
+    """`_suggest_number` 결과 — 제안과 그 근거 수치(문구 조립은 호출부 몫)."""
+
+    suggestion: str | None
+    max_used: int  # 점유된 최대 번호(없으면 0)
+    free_lower: tuple[int, ...]  # taken에 없는 1~99 번호 — 상위 소진 시에만 계산
+    retired: tuple[int, ...]  # free_lower 중 이력상 쓰였다 사라진 번호(재사용 금지)
+    history: str  # "not_needed" | "ok" | "unavailable"
+
+
+def _suggest_number(
+    prefix: str,
+    taken: Mapping[str, tuple[str, str]],
+    history_lookup: Callable[[str], set[int] | None],
+) -> NumberSuggestion:
+    """번호 제안 2단계 — ① 최대+1 상향(HARN-21 그대로) ② 상위 소진 시 하위 미사용 폴백(HARN-73).
+
+    ②의 후보는 taken에 없고 **이력에도 없는** 번호 중 가장 낮은 것. "낮은 번호 제안은
+    '다음 작업' 기대와 어긋난다"는 ①의 설계 의도는 유지된다 — 폴백은 ①이 불가능할 때만
+    작동하고, 이력 조회(`history_lookup`)도 그때만 부른다(비용·부작용 최소화).
+
+    사고 경위(2026-09-06): EOS-99가 원격 브랜치에 선점되자 ①이 None을 내고 cmd_add가
+    "00~99번을 모두 소진"이라고 보고했다 — 실측은 59/100 사용·40개는 한 번도 안 쓰임.
+    오보고가 사람 결정 게이트를 열었다(G-eos-task-prefix-exhausted).
+    """
+    used = [
+        int(number.rsplit("-", 1)[1])
+        for number in taken
+        if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
+    ]
+    max_used = max(used) if used else 0
+    upward = _next_free_number(prefix, taken)
+    if upward is not None:
+        return NumberSuggestion(upward, max_used, (), (), "not_needed")
+    free_lower = tuple(
+        n
+        for n in range(1, 100)
+        if f"{prefix}-{n:02d}" not in taken and f"{prefix}-{n}" not in taken
+    )
+    if not free_lower:
+        return NumberSuggestion(None, max_used, (), (), "not_needed")
+    history = history_lookup(prefix)
+    if history is None:
+        return NumberSuggestion(None, max_used, free_lower, (), "unavailable")
+    retired = tuple(n for n in free_lower if n in history)
+    candidates = [n for n in free_lower if n not in history]
+    if not candidates:
+        return NumberSuggestion(None, max_used, free_lower, retired, "ok")
+    return NumberSuggestion(f"{prefix}-{candidates[0]:02d}", max_used, free_lower, retired, "ok")
+
+
 # 원격 ref 신선도 고지 임계 — 이 저장소는 main이 대략 30분 간격으로 전진한다(2026-08-31
 # 실측: #922·#924·#927·#928·#930·#932·#933가 한나절에 착지). 그보다 오래된 스냅샷으로
 # 판정했다면 "그 사이 등재된 번호는 못 봤다"가 실질적 가능성이 된다.
@@ -1291,21 +1387,41 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         # 다를 때만 번호 참조가 모호해진다.
         if owner and owner != args.id:
             prefix = number.rsplit("-", 1)[0]
-            suggestion = _next_free_number(prefix, taken)
-            if suggestion is None:
-                # 프리픽스가 00~99번을 이미 다 썼다 — 3자리 제안은 TASK_ID_RE 위반이라
-                # 날조하지 않는다(HARN-21 결함②). 사람의 결정(새 프리픽스 분리 등)이 필요.
+            verdict = _suggest_number(prefix, taken, lambda p: _historically_used_numbers(root, p))
+            base = f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
+            tail = "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+            if verdict.suggestion is not None and verdict.history == "not_needed":
+                return _fail(base + f"다음 빈 번호 제안: {verdict.suggestion}. " + tail)
+            top = f"{prefix}-{verdict.max_used:02d}"
+            if verdict.suggestion is not None:
+                # 상위(최대+1)는 막혔지만 한 번도 쓰인 적 없는 하위 번호가 있다(HARN-73).
+                usable = len(verdict.free_lower) - len(verdict.retired)
                 return _fail(
-                    f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                    f"게다가 프리픽스 '{prefix}'는 00~99번을 모두 소진해 TASK_ID_RE(정확히 "
-                    "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다 — 새 프리픽스로 "
-                    "분리하는 등 사람의 결정이 필요하다(HARN-21). "
-                    "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                    base + f"상위 번호 소진(최대 {top}) — 미사용 하위 번호 {usable}개 중 가장 낮은 "
+                    f"{verdict.suggestion} 제안(이력상 쓰였다 사라진 {len(verdict.retired)}개는 "
+                    "제외 — HARN-73). " + tail
                 )
+            if verdict.history == "unavailable":
+                # 후보는 있으나 "한 번도 쓰인 적 없음"을 확인할 수 없다 — 모른다를 없다로
+                # 접지 않고 사람에게 수동 확인 절차를 넘긴다(fail-closed).
+                preview = ", ".join(f"{prefix}-{n:02d}" for n in verdict.free_lower[:10])
+                if len(verdict.free_lower) > 10:
+                    preview += " …"
+                return _fail(
+                    base
+                    + f"상위 번호 소진(최대 {top}) · 미사용 하위 후보 {len(verdict.free_lower)}개"
+                    f"({preview}) — git 이력 조회 불가(shallow 클론·git 오류·타임아웃)로 "
+                    "'한 번도 쓰인 적 없음'을 확인할 수 없어 제안하지 않는다. "
+                    f"`git log --all --diff-filter=A --name-only -- 'backlog/tasks/{prefix}-*'`"
+                    "로 이력을 수동 확인한 뒤 --id로 번호를 명시하라(HARN-73). " + tail
+                )
+            # 정말 다 찼다(미사용 0, 또는 남은 번호가 전부 이력상 사용) — 3자리 제안은
+            # TASK_ID_RE 위반이라 날조하지 않는다(HARN-21 결함②). 사람의 결정이 필요.
             return _fail(
-                f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                f"다음 빈 번호 제안: {suggestion}. "
-                "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                base + f"게다가 프리픽스 '{prefix}'는 00~99번을 모두 소진했다(미사용 0개 · 이력상 "
+                f"쓰였다 사라진 {len(verdict.retired)}개는 재사용 금지) — TASK_ID_RE(정확히 "
+                "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다. 새 프리픽스로 "
+                "분리하는 등 사람의 결정이 필요하다(HARN-21). " + tail
             )
         if not remote_ok:
             print("  · 번호 충돌 검사: 로컬만 통과 — 머지 시 validate가 2선 방어한다")
