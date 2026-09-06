@@ -8390,3 +8390,13 @@ CI가 도는 ~20분 사이에 main이 매번 움직였다(#998 → #1000 → …
 - **대책(코드 동결)**: `tests/infra/test_backup_encryption.py::TestRunbookCrossReferences` 3건 — ①런북의 모든 `§N` 참조가 정의부(절 제목 또는 번호 목록 접두 라벨)로 해소되는가 ②반출 조건 ⓑ의 착지점이 정의된 절인가 ③§4-5가 age 개인키를 명시하는가. **정의 인식을 좁힌 것이 핵심**이다 — 산문 속 괄호 참조 `(§1b)`를 정의로 세면 모든 참조가 스스로를 정의해 검사가 항상 통과한다(CLAUDE.md "정의만 하고 안 써도 통과하는 substring 검사" 동형).
 - **결함 주입 5종 전건 검출**(cp 백업 원복·`git checkout` 미사용): 라벨 제거→3 RED / ⓑ를 §9-9로→2 RED / §4-5에서 키 파일명 제거→1 RED / 산문 괄호참조만으로 정의 위장(§7-7)→1 RED / ⓑ 줄 삭제→1 RED. 정상 상태 3 passed.
 - **게이트 상태**: **여전히 pending**. 이 세션이 한 것은 실행을 막던 문서 결함 제거와 6항목 브리핑 작성이며, 반출 자체는 Phaiakes9에서 Kiki가 실행한다(ⓒ = Kiki 명시 승인). 세션은 clear하지 않는다.
+
+## 2026-09-06: 게이트 `G-backup-offsite-move` 실행 — 반출 성공, 그리고 **등록 실패가 `[OK]`로 보였다**
+
+- **실행 결과(Kiki·Phaiakes9)**: §4-1a 반출 전 검증 `EXIT=0`(① 잠김 OK · ② 열림 OK · 카탈로그 491건) → §4-1b 반출 `[OK] copied 2` · 자가검증 1 `True`(바이트 길이 일치) · 자가검증 2 **`False`/`False`**(개인키·평문 미반출). 목적지 `C:\Users\kiki\Google Drive\WhyMath-backups`. **1회 시딩은 성립**.
+- **사고(§4-1c)**: 일반 권한 창에서 `register_backup_schedule.ps1`을 돌려 `Register-ScheduledTask`가 **Access denied(0x80070005)로 2회 실패**했는데, 스크립트는 **`[OK]` 2줄을 출력하고 exit 0**으로 끝났다. 런북의 자가검증 `-like "*-OffsiteDir*"`도 **`True`**를 냈다. 즉 등록 0건인데 화면은 성공과 구별되지 않았다.
+- **원인 3중**: ⓐ 파일 상단에 `$ErrorActionPreference = "Stop"`이 **있었는데도** 실행이 계속됐다 — 그 선호변수는 ScheduledTasks(CDXML/CIM) cmdlet에 걸리지 않는다. **보호가 있다고 믿은 자리에 보호가 없었다.** ⓑ Step 5의 되읽기가 **동명의 옛 태스크**를 읽어 통과했다(2026-07-17 좀비 uvicorn과 동형 — 다른 등록이 대신 만족시키는 간접 신호). ⓒ `[OK] action:` 줄이 **되읽은 값이 아니라 방금 조립한 `$argList`**를 출력했다 — 실패해도 성공과 글자가 같았다.
+- **대책(코드)**: `register_backup_schedule.ps1` — Step 0a 관리자 권한 **사전** 확인(실패한 뒤가 아니라 실행 전에 거부) · `Register-/Unregister-ScheduledTask` 호출 자리에 **명시적 `-ErrorAction Stop`** + try/catch(사유에 예외 타입명 포함 — 침묵 실패 금지) · 되읽은 인자를 **이번 실행이 조립한 인자와 대조**해 불일치면 `[FAIL]`(옛 태스크가 대신 통과하는 경로 차단) · 성공 줄은 되읽은 값을 출력.
+- **대책(런북)**: §4-1c에 관리자 창 경고를 명시하고 자가검증을 **목적지 값까지 대조**하는 형태로 교체(+인자 문자열 자체 출력). §4-1b에 "§4-1a는 최신 1건만 검증하는데 반출은 전건"이라는 개수 불일치를 명시.
+- **대책(동결)**: `tests/infra/test_backup_encryption.py::TestScheduledTaskRegistrationFailsClosed` 4건 — 검사는 **주석을 제외한 실행 라인**만 본다. 결함 주입 5종 전건 검출(수정 전 전체→4 RED / `-ErrorAction Stop` 제거→1 / 권한확인 무력화→1 / 조립값 출력 복귀→1 / **`-ErrorAction Stop`을 주석에만 넣기→1 RED**). 마지막 건이 이 계약의 위장 축이다.
+- **게이트 판정**: §4-1b(반출 1회)는 충족, §4-1c(상시 미러)는 **미확인** — 자가검증 `True`가 옛 태스크에서 나온 것이라 현재 등록 상태를 실측 전에는 알 수 없다. 부분 성공을 전체 정상으로 해석하지 않는다(CLAUDE.md). 진단 조회 후 판정한다.
