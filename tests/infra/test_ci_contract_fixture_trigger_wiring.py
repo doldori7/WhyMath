@@ -588,8 +588,9 @@ def _parse_frozen_input_paths(source: str, label: str) -> tuple[str, ...] | None
 def _frozen_input_declarations(
     tests_root: Path = _BACKEND_TESTS_DIR,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    """`tests_root/**/test_*.py` 전건을 훑어 `FROZEN_INPUT_PATHS`를 선언한 (테스트 상대경로, 경로
-    튜플) 목록을 돌려준다 — **전수 스캔**이 대상을 정한다(단일 파일 하드코딩 금지 · OPS-62).
+    """`tests_root/**`의 pytest 수집 모듈(`test_*.py` · `*_test.py`) 전건을 훑어 `FROZEN_INPUT_PATHS`를
+    선언한 (테스트 상대경로, 경로 튜플) 목록을 돌려준다 — **전수 스캔**이 대상을 정한다(단일 파일
+    하드코딩 금지 · OPS-62).
 
     **스캔 0건은 통과가 아니라 예외다**(CLAUDE.md 2026-09-01 ④): 종전 하드코딩은 최소 1건을 보장했으나
     전수 스캔은 그 보장이 사라지므로, 상수 이름이 바뀌거나 동결 테스트가 전부 옮겨지면 "위반 0"으로
@@ -600,7 +601,11 @@ def _frozen_input_declarations(
         raise AssertionError(f"{tests_root}: 백엔드 테스트 트리가 없다.")
     root_for_label = tests_root if tests_root != _BACKEND_TESTS_DIR else _REPO_ROOT
     declarations: list[tuple[str, tuple[str, ...]]] = []
-    for path in sorted(tests_root.rglob("test_*.py")):
+    # pytest 기본 수집 패턴 **둘 다**(`python_files` 기본값 = test_*.py · *_test.py — backend
+    # pyproject는 이를 오버라이드하지 않는다). 한쪽만 훑으면 `canonical_freeze_test.py` 같은
+    # 정상 수집 모듈의 선언이 조용히 빠진다(PR #1005 Codex P2).
+    candidates = set(tests_root.rglob("test_*.py")) | set(tests_root.rglob("*_test.py"))
+    for path in sorted(candidates):
         label = path.relative_to(root_for_label).as_posix()
         paths = _parse_frozen_input_paths(path.read_text(encoding="utf-8"), label)
         if paths is not None:
@@ -717,8 +722,17 @@ def test_frozen_input_scan_follows_new_freeze_tests(tmp_path: Path) -> None:
     (tree / "db" / "test_b_freeze.py").write_text(
         'FROZEN_INPUT_PATHS = ("docs/architecture/b.md",)\n', encoding="utf-8"
     )
+    # pytest의 두 번째 기본 수집 패턴(`*_test.py`)도 대상이다 — 한쪽만 훑으면 정상 수집 모듈의
+    # 선언이 조용히 빠진다(Codex P2). 비수집 이름(helpers.py)은 선언해도 대상이 아니다.
+    (tree / "db" / "c_freeze_test.py").write_text(
+        'FROZEN_INPUT_PATHS = ("docs/c.md",)\n', encoding="utf-8"
+    )
+    (tree / "db" / "helpers.py").write_text(
+        'FROZEN_INPUT_PATHS = ("docs/not_collected.md",)\n', encoding="utf-8"
+    )
     declarations = _frozen_input_declarations(tree)
     assert [label for label, _ in declarations] == [
+        "db/c_freeze_test.py",
         "db/test_b_freeze.py",
         "schema/test_a_freeze.py",
     ]
@@ -727,6 +741,7 @@ def test_frozen_input_scan_follows_new_freeze_tests(tmp_path: Path) -> None:
     only_gates = r"^(backlog/gates\.yaml$)"
     violations = _frozen_input_violations(declarations, only_gates, repo_root=None)
     assert violations == [
+        "  · db/c_freeze_test.py: docs/c.md",
         "  · db/test_b_freeze.py: docs/architecture/b.md",
         "  · schema/test_a_freeze.py: docs/a.md",
     ]
