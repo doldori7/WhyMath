@@ -8377,3 +8377,10 @@ CI가 도는 ~20분 사이에 main이 매번 움직였다(#998 → #1000 → …
 - **원인·대책**: `gates clear` 핸들러가 "✔ 게이트 → cleared" 한 줄만 찍고 **부착 태스크를 계산하지 않는다**(보드 HARN-41은 계산하지만 CLI·브리핑에는 없다). 대책 = `HARN-74-gate-clear-blocked-task-reminder`(clear 시 blocked 태스크 목록·unblock 명령·산문 참조 표기·브리핑 항목·실패 주입 테스트). 번호는 `HARN-73`이 원격 브랜치 선점이라 CLI 제안 `HARN-74`를 그대로 썼다. 인접 구분: HARN-52·HARN-72는 *등재 시점* 집행, HARN-74는 *게이트 해소 시점* 후속 집행.
 - **부수 실측**: `ADMIN-02`는 unblock 후에도 `next`에 안 뜬다 — 폐기 판정(병합 금지·ADMIN-02 notes 2026-08-11) 브랜치 `claude/whymath-mvp-plan-architecture-trjg5x`의 done 사본을 HARN-11 미머지 done 필터가 "이미 완료(미머지)"로 읽기 때문. **폐기 판정된 브랜치가 살아 있는 태스크를 가리는 축**이며 `/stray-code` 처분 대상(이 세션 범위 밖·HARN-74 notes에 병기).
 - **Kiki 남은 행동 2건**: `EOS-63` 기록률 리포트 1회 실행(`G-eos63-skill-event-reach-sample`) · `PATH-04` xlsx 제공(`G-path04-learning-path-xlsx`). 런북(6항목 브리핑·자가검증 동봉)은 세션 대화에 제공. 이 세션은 대장·문서 외 코드 변경 0.
+
+## 2026-09-06: 자리표시자 사고 2회차 — "사람이 아는 값" 예외도 뚫렸다 (CLAUDE.md v0.2.12)
+
+- **경위**: PATH-04 xlsx 제공 런북(이 세션·PR #1004 대화)의 첫 줄 `$Src = "여기에_학습경로_xlsx_전체_경로"`가 Kiki 머신에서 **그대로 실행**됐다. 2026-08-31 규칙은 *앞 단계 출력*의 자리표시자만 금지하고 "첫 명령의 인자(사람이 원래 아는 값 — 이메일·경로)"는 예외로 남겼는데, 정확히 그 예외 자리에서 실패했다. 관측: `Get-FileHash` PathNotFound → `$Hash` null → `throw "불일치: "` → **그런데 `throw` 뒤의 `New-Item`·`Copy-Item`·`git status`가 계속 실행**됐다(붙여넣기 줄은 각각 독립 실행되므로 throw는 정지 장치가 아니다). 피해 0 — 실패한 것은 읽기·복사 명령뿐이고 생긴 것은 gitignore 폴더 `data\raw` 빈 디렉터리 1개.
+- **판정**: 동일 유형 2회차(08-31 `G-operator-seat-first-grant` 5단계 안내 → 09-06 PATH-04) = 반복 실수 → 재발방지 등재 의무. "다음엔 채워 주겠다"는 대책이 아니다.
+- **대책(규칙·CLAUDE.md v0.2.12)**: 붙여넣기 블록의 자리표시자 **전면 금지** — 값은 ①세션이 채우거나 ②블록이 스스로 찾거나(파일은 sha256 지문 스캔·컨테이너는 `docker ps`·브랜치는 `git`) ③`Read-Host`로 멈춰 묻는다. `throw` 비정지 사실을 명시하고 후속 줄은 `if ($값) { … }` 가드. 08-31 규칙 본문은 그대로 두고 *확장* 하위 불릿으로 예외를 폐기했다(규칙 이력 보존).
+- **PATH-04 런북 재발행**: 자리표시자 0 — Desktop·Downloads·Documents·OneDrive의 `*.xlsx`를 스캔해 sha256 앞16 `f4ee650b734ac854`와 일치하는 파일을 **블록이 찾는다**. 후보 0건이면 스캔 건수와 함께 보고하고 후속 줄은 가드로 건너뛴다. 이 런북은 Windows 전용이라 컨테이너에서 실행 검증이 불가하다(pwsh 없음) — `check_ps_scripts.py`가 겨냥한 부류와 같은 한계이며, 첫 실행 결과로 검증한다.
