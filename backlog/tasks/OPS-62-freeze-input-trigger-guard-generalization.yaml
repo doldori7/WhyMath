@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - tests/infra/test_ci_contract_fixture_trigger_wiring.py
   - ".github/workflows/ci.yml"
-session: null
+session: claude/eos-math-micro-project-orchestration-9nco8v
 notes: "출처: ARCH-38 세션(2026-09-06·PR #997)이 자기 자신으로 실증. docs/architecture/canonical_entity_model_v1.md는 test_canonical_entity_model_freeze.py 검사 ③④의 입력(_CANON_DOC·§2-A 표 파싱)인데 backend 필터 밖이라 그 문서 단독 변경 PR에서 'backend — lint·type·test'가 conclusion=skipped였다(실측). skip은 required check에서 충족으로 계상되므로, §2-A 표를 조용히 고쳐 좌석 배정을 바꿔도 검사 ④가 실행되지 않는 상태였다. COLLAB-07 ①(data/corpus)·②(schemas)·PR #910 P1(G0 동결 입력)에 이은 **네 번째** 동형 사각이며, 앞 셋과 다른 점은 **그 사각을 막으라고 만든 가드 자신의 범위가 좁아서** 생겼다는 것이다. PR #997이 구멍(canonical_entity_model_v1.md 편입)만 막았고 구조(가드 전수화)는 이 태스크가 닫는다 — 구멍만 막으면 다섯 번째가 온다."
 updated: 2026-09-06
