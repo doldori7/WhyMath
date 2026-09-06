@@ -273,6 +273,12 @@ CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"에 따라 *
 
 > **판정 기준: main `794c0ea8`** — 아래 실측은 전부 이 커밋의 trunk 코드에서 확인했다
 > (CLAUDE.md "미머지 존재를 '충족'으로 단정 금지" — 판정에는 시점이 붙어야 한다).
+>
+> **재확인: main `400a8e76`**(2026-09-06, PR #997 머지 정렬 시점) — 판정 기준 이후 trunk에
+> 들어온 3커밋(`749ccb16`·`59503f7f`·`400a8e76`)이 판정 근거 경로
+> (`assessment`·`api/coach.py`·`l2/`·privacy 3종·이 문서)를 **하나도 건드리지 않았음**을
+> `git diff --name-only`로 확인했다. 근거가 살아 있으므로 판정을 갱신하지 않는다.
+> 판정 *기준* 해시는 실측 시점 그대로 둔다 — 뒤늦게 바꾸면 재현 불가가 된다.
 
 - **현행 실체**: `assessment` 테이블의 JSONB 5필드
   (`concept_diagnosis`·`pattern_diagnosis`·`weak_points`·`strong_points`·`recommended_path`).
