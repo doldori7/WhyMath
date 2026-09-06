@@ -1,1 +1,1 @@
-{"branch": "claude/adr-002-subject-adapter-7pytu8", "harness": "2.0", "task": "HARN-68-judgment-base-commit-enforcement", "ts": "2026-09-06T14:25:08Z"}
+{"branch": "claude/adr-002-subject-adapter-7pytu8", "harness": "2.0", "kind": "block", "reason": "1세션=1태스크 규약(validate 위반 1건 실측) — 같은 브랜치에서 HARN-66과 동시 claim은 거부된다. HARN-66(ADR 번호 검사) 착지 후 재착수한다. 두 태스크는 같은 축('판정 근거가 원격/trunk에 있는가')이라 한 PR에 담을 수 있으나, claim은 순차여야 한다.", "task": "HARN-68-judgment-base-commit-enforcement", "ts": "2026-09-06T14:36:37Z"}
