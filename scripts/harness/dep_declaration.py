@@ -85,6 +85,12 @@ _RESOLVED_STATUSES = frozenset({"done"})
 # 최단 근거가 약 90자였다. 코드만 찍고 근거를 "N/A"로 채우는 것을 막는 하한이다.
 _MIN_SOFT_REASON_CHARS = 40
 
+# 이 코드로 분류하면 `depends_on`으로는 순서를 강제할 수 없다는 뜻이다. 그러면 스케줄러 제외를
+# **다른 수단**(status=blocked)이 담당해야 한다 — 분류만 하고 막지 않으면 원래 있던 경고 하나를
+# 없앤 것뿐이고 그 태스크는 선행 없이 착수 후보로 노출된다(PR #1006 Codex P1 실측: EOS-50이
+# ARCH-31·EOS-49 둘 다 미완인 채 후보 111건에 들어 있었다).
+_CODES_REQUIRING_BLOCK = frozenset({"DISJUNCTIVE", "STAGE_BLOCKED"})
+
 # ── 레거시 그랜드파더 (ARCH-25 패턴) ──────────────────────────────────────
 # key = (위반 태스크 full id, 참조 접두) **쌍** · value = 이 면제를 해소할 백로그 태스크 id.
 # 태스크 단위가 아니라 쌍 단위인 이유: 태스크 전체를 면제하면 그 notes에 *새로운* 미선언
@@ -122,57 +128,90 @@ SOFT_REASON_CODES: dict[str, str] = {
     "MISREAD_REF": "창(window)이 잡은 ID가 선행이 아니다 — 진짜 선행은 별개(있으면 부착)",
 }
 
-# key = (위반 태스크 full id, 참조 접두) · value = (사유 코드, 근거 문장)
-SOFT_DECLARED: dict[tuple[str, str], tuple[str, str]] = {
-    ("ADMIN-04-module-registry", "ADMIN-05"): (
+
+@dataclass(slots=True, frozen=True)
+class SoftDeclaration:
+    """소프트 분류 1건 — 사유 코드 + 근거 + **어느 문장을 분류했는지**.
+
+    `quotes`가 핵심이다. 쌍(태스크, 참조)만으로 억제하면 *그 두 태스크 사이의 앞으로 모든
+    문장*이 함께 묻힌다 — notes는 append 전용이라 나중에 진짜 선행 선언("REF 착지 후 착수")이
+    추가돼도 스캐너·`amend` 가드가 똑같이 green을 낸다(PR #1006 Codex P2). 그래서 억제를
+    **검토한 그 문장에 결속**한다: 창(window)이 이 인용구를 포함할 때만 억제하고, 분류되지
+    않은 새 문장은 정상적으로 위반으로 잡힌다.
+    """
+
+    code: str
+    reason: str
+    quotes: tuple[str, ...]
+
+
+# key = (위반 태스크 full id, 참조 접두) · value = SoftDeclaration
+SOFT_DECLARED: dict[tuple[str, str], SoftDeclaration] = {
+    ("ADMIN-04-module-registry", "ADMIN-05"): SoftDeclaration(
         "REVERSED",
         "notes '\u2026ADMIN-05 선결'은 ADMIN-04가 ADMIN-05의 선결이라는 뜻이다. 진짜 방향은 "
         "이미 대장에 있다 — ADMIN-05.depends_on=['ADMIN-04-module-registry']. 반대로 붙이면 "
         "순환이며 validate가 실제로 거부한다(2026-09-06 시뮬레이션 실측: ADMIN-04→05→06→07 순환).",
+        quotes=("BAC v0 2값) 완료로 선결 없음. ADMIN-05 선결",),
     ),
-    ("ADMIN-09-profile-collection-inventory-contract", "ADMIN-02"): (
+    ("ADMIN-09-profile-collection-inventory-contract", "ADMIN-02"): SoftDeclaration(
         "REVERSED",
         "notes 'ADMIN-02 (c)의 선결 — 처분 근거는 이 대장이 있어야 성립한다'는 ADMIN-09가 "
         "ADMIN-02의 선결이라는 뜻이다. 진짜 방향을 ADMIN-02에 부착했다(HARN-53).",
+        quotes=("blocked)가 참조할 대장이 없다. ADMIN-02 (c)(school_region·gen",),
     ),
-    ("EOS-50-publish-gate-pipeline", "ARCH-31"): (
+    ("EOS-50-publish-gate-pipeline", "ARCH-31"): SoftDeclaration(
         "DISJUNCTIVE",
         "notes '선행: ARCH-31 **또는** EOS-49의 버전 테이블 실체화' — 택일이라 depends_on"
         "(AND)으로 표현하면 둘 다 기다리게 되어 실제보다 강하게 막는다. 둘 중 하나가 done이 "
         "되는 시점에 그때 남은 쪽을 부착하는 것이 정답이다.",
+        quotes=("on') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화",),
     ),
-    ("LIC-03-provenance-enforcement-layer-decision", "LIC-01"): (
+    ("LIC-03-provenance-enforcement-layer-decision", "LIC-01"): SoftDeclaration(
         "STAGE_BLOCKED",
         "LIC-03(S3)이 LIC-01(E2)에 의존하면 store.validate_backlog가 '후행 스테이지 태스크에 "
         "의존 — 로드맵 순서 위반'으로 거부한다(2026-09-06 시뮬레이션으로 재현 확인 — notes의 "
         "2026-08-30 실측이 오늘도 유효). 스케줄러 제외는 status=blocked가 담당한다.",
+        quotes=(
+            "[차단 2026-08-30] LIC-01 완결 선행(기계 강제 — #908 co",
+            "용). depends_on 형식 표현은 LIC-01 stage=E2 로드맵 가드가 거부(2",
+            " 기존 수단. unblock 트리거 = LIC-01 done(머지 확인) 후 착수 세션이 ",
+            "후 착수 세션이 unblock. 부기: LIC-01 stage=E2의 실질 정합(12월 저",
+        ),
     ),
-    ("OPS-35-audit-membership-consumption-detection", "S4-22"): (
+    ("OPS-35-audit-membership-consumption-detection", "S4-22"): SoftDeclaration(
         "HISTORICAL",
         "notes 'S4-22 범위 정정(3종→2종)은 2026-08-10 R3 점검 커밋에서 **선행 완료**' — 이미 "
         "끝난 과거 사실이지 앞으로의 순서 제약이 아니다. 본 태스크는 탐지기·대장 축만 다룬다.",
+        quotes=("er 미발화(성공/실패가 같은 화면). S4-22 범위 정정(3종→2종)은 2026-08",),
     ),
     # ↓ 2건은 **이 태스크(HARN-53)의 정정 사유 문구가 스스로 만든** 위반이다. `amend --reason`이
     # notes에 append되는데 사유가 "…'선결'이라 선언한 방향을 부착한다"처럼 선행 어구와 태스크
     # ID를 한 문장에 담아, 스캐너가 그 인용을 새 선언으로 읽었다. notes는 append 전용이라
     # 되돌릴 CLI 경로가 없어 분류로 남긴다 — **재발은 `amend`의 되먹임 가드가 쓰기 전에 막는다**
     # (같은 PR). 분류로 덮은 것이 아니라, 덮을 수밖에 없게 만든 결함을 함께 고쳤다는 뜻이다.
-    ("ADMIN-02-dead-tenancy-billing-columns", "HARN-53"): (
+    ("ADMIN-02-dead-tenancy-billing-columns", "HARN-53"): SoftDeclaration(
         "MISREAD_REF",
         "notes의 HARN-53 언급은 *정정 사유 인용*이다 — ADMIN-09의 '선결' 문장을 그대로 옮겨 "
         "적었을 뿐 ADMIN-02가 HARN-53을 기다린다는 뜻이 아니다(HARN-53은 이 정정을 수행한 "
         "태스크다). 실제 부착된 선행은 ADMIN-09이다.",
+        quotes=("[정정 2026-09-06] HARN-53 분류: ADMIN-09 notes가 '",),
     ),
-    ("SEC-30-declared-unwired-waiver-staleness", "HARN-53"): (
+    ("SEC-30-declared-unwired-waiver-staleness", "HARN-53"): SoftDeclaration(
         "MISREAD_REF",
         "위와 같은 정정 사유 인용 — SEC-30의 실제 선행은 부착된 PB-04이고, HARN-53은 그 부착을 "
         "수행한 태스크로서 사유 문장에 등장할 뿐이다.",
+        quotes=("[정정 2026-09-06] HARN-53 분류: SEC-30 notes의 '선행",),
     ),
-    ("SEC-30-declared-unwired-waiver-staleness", "MOB-18"): (
+    ("SEC-30-declared-unwired-waiver-staleness", "MOB-18"): SoftDeclaration(
         "MISREAD_REF",
         "notes '선행 조건 PB-04는 여전히 k20m0w 고립(MOB-18 소유)' — 선행은 PB-04이고 MOB-18은 "
         "그 브랜치의 *소유 태스크*일 뿐이다. 창이 60자 안의 MOB-18을 함께 잡았다. 진짜 선행 "
         "PB-04를 부착했다(HARN-53).",
+        quotes=(
+            " PB-04는 여전히 k20m0w 고립(MOB-18 소유)",
+            "다. 스캐너 창(60자)이 같은 문장의 MOB-18(브랜치 소유 태스크)을 함께 잡았으므로",
+        ),
     ),
 }
 
@@ -197,6 +236,26 @@ def _ref_prefix(task_id: str) -> str:
     """'EOS-62-review-verdict' → 'EOS-62' (참조 표기와 대조할 번호까지의 접두)."""
     m = _REF_RE.match(task_id)
     return m.group(1) if m else task_id
+
+
+def _ref_is_inside_quote(text: str, start: int, end: int, quotes: tuple[str, ...]) -> bool:
+    """**참조 토큰의 위치**가 인용구 구간 안인가 — 억제의 결속 기준.
+
+    두 번 좁혔다(PR #1006 Codex P2 상환 중 실측):
+      ① "인용구가 창에 있으면 억제"는 부족했다 — 창은 어구 좌우 60자라 옆 문장을 삼키고,
+         분류 문장 옆에 나중에 append된 진짜 선언이 그 창을 공유하며 함께 묻혔다.
+      ② "어구 위치가 인용구 안이면 억제"도 어긋났다 — 한 문장의 어구가 *다른* 참조까지 함께
+         잡으면서, 분류된 참조가 엉뚱한 어구 occurrence를 통해 다시 위반으로 나왔다.
+    발견은 (어구, 참조) 쌍이지만 그 정체를 정하는 것은 **참조가 어디 적혀 있는가**다. 그래서
+    참조 토큰의 절대 위치로 결속한다. notes는 append 전용이라 기존 구간은 움직이지 않는다.
+    """
+    for quote in quotes:
+        at = text.find(quote)
+        while at != -1:
+            if at <= start and end <= at + len(quote):
+                return True
+            at = text.find(quote, at + 1)
+    return False
 
 
 def find_undeclared_dependencies(
@@ -239,15 +298,24 @@ def find_undeclared_dependencies(
                     # 대상이 전부 해소(done/cancelled)면 순서 제약이 실효 없다
                     if all(statuses.get(t, "") in _RESOLVED_STATUSES for t in targets):
                         continue
-                    seen.add(prefix)
                     # 소프트 분류는 `apply_exemptions`와 **무관하게** 언제나 억제한다 —
                     # 유예는 "아직 안 고쳤다"(감사 시 보여야 한다)이고 소프트는 "고칠 것이
                     # 없다"(판정)라서, 감사 모드에서까지 위반으로 세면 분류가 무의미해진다.
                     # 대신 감사 출력이 소프트 건수를 따로 보고한다(보이지 않게 쌓이지 않는다).
-                    if (tid, prefix) in SOFT_DECLARED:
+                    #
+                    # **인용구가 창에 있을 때만** 억제한다 — 쌍만 보고 억제하면 그 두 태스크
+                    # 사이의 *앞으로 모든* 문장이 함께 묻힌다(notes는 append 전용이라 나중에
+                    # 진짜 선행 선언이 추가돼도 green). 분류되지 않은 문장은 계속 잡힌다.
+                    soft = SOFT_DECLARED.get((tid, prefix))
+                    if soft is not None and _ref_is_inside_quote(
+                        text, lo + ref.start(), lo + ref.end(), soft.quotes
+                    ):
                         continue
                     if apply_exemptions and (tid, prefix) in LEGACY_EXEMPT:
                         continue
+                    # `seen` 등록은 **위반으로 계상한 뒤**에 한다 — 억제된 occurrence에서 미리
+                    # 등록하면 같은 쌍의 *분류되지 않은 다른 문장*이 조용히 묻힌다.
+                    seen.add(prefix)
                     findings.append(
                         Finding(
                             task_id=tid,
@@ -284,7 +352,26 @@ def find_soft_declaration_violations(tasks: dict[str, object]) -> list[str]:
             continue
         if ref not in prefixes:
             violations.append(f"소프트 분류 '{label}' 의 참조 '{ref}' 가 백로그에 없다")
-        code, reason = value
+        code, reason = value.code, value.reason
+        notes = getattr(tasks[task_id], "notes", "") or ""
+        if not value.quotes:
+            violations.append(
+                f"소프트 분류 '{label}' 에 인용구가 없다 — 어느 문장을 분류했는지 적어라"
+                "(쌍 전체를 묻으면 나중에 추가된 진짜 선행 선언까지 함께 묻힌다)"
+            )
+        for quote in value.quotes:
+            if quote not in notes:
+                violations.append(
+                    f"소프트 분류 '{label}' 의 인용구가 notes에 없다: «{quote}» — 문장이 "
+                    "바뀌었으면 분류를 다시 검토하라(낡은 인용구는 억제도 못 하고 "
+                    "표만 거짓으로 만든다)"
+                )
+        if code in _CODES_REQUIRING_BLOCK and getattr(tasks[task_id], "status", "") != "blocked":
+            violations.append(
+                f"소프트 분류 '{label}' 는 코드 '{code}' 인데 '{task_id}' 가 blocked가 아니다 — "
+                "이 코드는 '하드로 표현할 수 없다'는 뜻이라 스케줄러 제외를 다른 수단이 담당해야 "
+                "한다. 분류만 하고 막지 않으면 유일한 경고를 없앤 것뿐이다"
+            )
         if code not in SOFT_REASON_CODES:
             violations.append(
                 f"소프트 분류 '{label}' 의 사유 코드 '{code}' 가 허용 집합 밖이다 "

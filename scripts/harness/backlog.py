@@ -125,6 +125,40 @@ NO_PR_REASONS: tuple[str, ...] = (
 )
 
 
+def _reason_created_declarations(
+    backlog: object, task_id: str, before: set[tuple[str, str]]
+) -> list[object]:
+    """이 명령의 `--reason`이 **새로** 만든 의존 선언 위반 (HARN-53).
+
+    `--reason`은 notes에 append되고 notes는 의존 선언 스캐너의 입력이다. 그래서 정정·차단
+    사유가 선행 어구와 태스크 ID를 한 문장에 담으면 그 인용이 새 선언이 된다(실측 2건).
+    notes는 append 전용이라 기록된 뒤에는 되돌릴 CLI 경로가 없으므로 **쓰기 전에** 막는다.
+
+    *기존* 위반은 이 명령의 책임이 아니다 — 그것까지 막으면 위반 하나가 대장에 있는 동안
+    그 태스크의 모든 정정이 봉쇄되고, 게이트가 자기 정정 경로를 막게 된다.
+    """
+    tasks = getattr(backlog, "tasks", {})
+    return [
+        f
+        for f in dep_declaration.find_undeclared_dependencies(tasks)
+        if f.task_id == task_id and (f.task_id, f.referenced) not in before
+    ]
+
+
+def _fail_on_reason_feedback(backlog: object, task_id: str, before: set[tuple[str, str]]) -> int:
+    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다."""
+    created = _reason_created_declarations(backlog, task_id, before)
+    if not created:
+        return 0
+    for f in created:
+        print(f"  · {f.render()}", file=sys.stderr)  # type: ignore[attr-defined]
+    return _fail(
+        f"{task_id}: --reason 문구가 새 의존 선언을 만든다 — 사유에서 선행 어구와 태스크 ID가 "
+        "한 문장에 함께 오지 않게 고쳐 다시 실행하라(notes는 append 전용이라 기록된 뒤에는 "
+        "되돌릴 수 없다)."
+    )
+
+
 def _has_pr_reference(artifacts: list[str]) -> bool:
     """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
     return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
@@ -736,6 +770,10 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task = backlog.tasks.get(args.id)
     if task is None:
         return _fail(f"태스크 '{args.id}' 없음")
+    _pre_block_findings = {
+        (f.task_id, f.referenced)
+        for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+    }
     error = _transition(task, "blocked")
     if error:
         return _fail(error)
@@ -743,6 +781,10 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task.status = "blocked"
     task.session = None
     task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
+    # `block --reason`도 notes에 append된다 — amend와 같은 되먹임 위험(HARN-53).
+    # `done`·`cancel`은 스캐너가 건너뛰는 상태(done/cancelled)로 바꾸므로 위반을 만들 수 없다.
+    if _fail_on_reason_feedback(backlog, task.id, _pre_block_findings):
+        return 1
     task.updated = _today()
     store.save_task(root, task)
     handover = bool(getattr(args, "handover", False))
@@ -1598,19 +1640,8 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     # 부착한다" 같은 사유가 그 문장 안의 태스크 ID를 새 선행 선언으로 만들었다(2건).
     # notes는 append 전용이라 되돌릴 CLI 경로가 없으므로 **쓰기 전에** 막는다.
     # 판정은 "이 정정이 *새로* 만든 findings"만 — 기존 위반은 이 명령의 책임이 아니다.
-    new_findings = [
-        f
-        for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
-        if f.task_id == task.id and (task.id, f.referenced) not in _pre_amend_findings
-    ]
-    if new_findings:
-        for f in new_findings:
-            print(f"  · {f.render()}", file=sys.stderr)
-        return _fail(
-            f"{args.id}: --reason 문구가 새 의존 선언을 만든다 — 사유에서 선행 어구와 태스크 "
-            "ID가 한 문장에 함께 오지 않게 고쳐 다시 실행하라(notes는 append 전용이라 "
-            "기록된 뒤에는 되돌릴 수 없다)."
-        )
+    if _fail_on_reason_feedback(backlog, task.id, _pre_amend_findings):
+        return 1
 
     store.save_task(root, task)
     event_extra: dict[str, object] = {"reason": args.reason, "changed": changed}

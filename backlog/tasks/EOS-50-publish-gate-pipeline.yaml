@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 3
 eos_priority: P0
 owner: claude
@@ -22,5 +22,5 @@ paths:
   - "src/backend/whymath_backend/api/**"
   - "tests/backend/**"
 session: null
-notes: "출처: 44_eos_version_management.md §16-6 — EOS-44 종결 시 MVP 범위(§12 'Publish with validation') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/D1★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
-updated: 2026-09-01
+notes: "출처: 44_eos_version_management.md §16-6 — EOS-44 종결 시 MVP 범위(§12 'Publish with validation') 좌석 부재 발견·등재. 선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/D1★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필\n\n[차단 2026-09-06] 택일 조건 미충족 — ARCH-31 또는 EOS-49의 버전 테이블 실체화 중 하나가 done이 되면 unblock한다. depends_on은 AND라 택일을 표현할 수 없어(HARN-53 DISJUNCTIVE 분류) 스케줄러 제외는 blocked가 담당한다(LIC-03 선례)"
+updated: 2026-09-06

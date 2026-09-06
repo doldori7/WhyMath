@@ -511,3 +511,27 @@ class TestReasonFeedbackGuard:
             == 0
         )
         assert "T1-91-feedback-ref" in _task(seeded_repo, "T1-90-feedback-target").depends_on
+
+
+class TestBlockReasonFeedbackGuard:
+    """⑦ HARN-53 — `block --reason`도 notes에 append된다(amend와 같은 되먹임).
+
+    `done`·`cancel`은 스캐너가 건너뛰는 상태(done/cancelled)로 바꾸므로 위반을 만들 수 없다 —
+    그래서 가드는 `amend`·`block` 두 곳에만 있다. 이 클래스는 block 쪽을 동결한다.
+    """
+
+    def test_block_reason_creating_a_declaration_is_refused(self, seeded_repo: Path, capsys):
+        assert _add("T1-95-block-guard") == 0
+        assert _add("T1-96-block-ref") == 0
+        before = _task(seeded_repo, "T1-95-block-guard")
+        assert cli.main(["block", "T1-95-block-guard", "--reason", "T1-96 착지 후 재개한다"]) == 1
+        assert "새 의존 선언을 만든다" in capsys.readouterr().err
+        after = _task(seeded_repo, "T1-95-block-guard")
+        assert after.status == before.status, "거부인데 상태가 바뀌었다"
+        assert after.notes == before.notes, "거부인데 notes가 오염됐다"
+
+    def test_block_with_harmless_reason_still_works(self, seeded_repo: Path):
+        """양성 대조 — 차단 경로 자체를 막으면 안 된다."""
+        assert _add("T1-97-block-ok") == 0
+        assert cli.main(["block", "T1-97-block-ok", "--reason", "외부 의사결정 대기"]) == 0
+        assert _task(seeded_repo, "T1-97-block-ok").status == "blocked"
