@@ -94,11 +94,26 @@ dev = [
     # 백엔드 CI 4스텝(ruff·black·mypy·pytest)을 동일 floor·동일 도구로 핀해
     # data-pipeline과 재현성을 일치시킨다. 다음 메이저는 재검증 후 상한을 올린다.
     "pytest>=8.3.3,<10",
-    # 상한 재검증 2026-07-30(ARCH-22): 무상한 pin이 명시 테스트 경로 인자 invocation에서
-    # asyncio_mode 미적용(strict 폴백)을 유발할 수 있음을 로컬에서 관측했으나, 실 CI(bare
-    # `pytest` invocation·PR #648 run 30528307807)에서는 1.4.0도 정상 green — 활성 장애는
-    # 아니었다. 현재 검증된 1.x 계열(1.4.0)에 상한만 걸어 미검증 차기 메이저(2.x) 드리프트를
-    # 예방한다(langfuse>=2.50,<5 선례 동형).
+    # 상한은 미검증 차기 메이저(2.x) 드리프트 예방 목적으로 유지한다(langfuse>=2.50,<5 동형).
+    #
+    # ⚠ 원인 정정 2026-09-06(OPS-61 — ARCH-22 관측의 2회차): ARCH-22(2026-07-30)는 명시 테스트
+    # 경로 invocation에서 asyncio_mode가 미적용(strict 폴백)되는 현상을 **"무상한 pin"** 탓으로
+    # 적었다. **그 진단은 틀렸다 — 실제 원인은 pin이 아니라 `rootdir` 해석이다.**
+    #
+    # `src/backend`에서 `pytest ../../tests/backend/...`처럼 **명시 경로**를 주면 pytest가 인자의
+    # 공통조상을 상향 탐색해 **저장소 루트의 `pyproject.toml`을 rootdir 앵커로 잡는다**. 루트
+    # `pyproject.toml`에는 `[tool.pytest.ini_options]`가 없으므로 이 파일의 `asyncio_mode = "auto"`
+    # 가 **읽히지 않고** strict로 폴백하며, 그 결과 `async def` 테스트가 전부 실패한다.
+    #
+    # 실측(2026-09-06·pytest-asyncio 1.x):
+    #     bare     → rootdir=src/backend        · inifile=src/backend/pyproject.toml · mode='auto'
+    #     명시 경로 → rootdir=<저장소 루트>       · inifile=<루트>/pyproject.toml       · mode='strict'
+    # 즉 **pin 버전과 무관**하며 상한을 올려도 내려도 재현된다. 2026-09-05 전체 스위트 730 실패 중
+    # 718건(98.4%)이 이 형태였고, CI(bare `pytest`)는 같은 커밋에서 11,727 passed·0 failed였다.
+    #
+    # 함정 자체는 `tests/backend/conftest.py`의 `pytest_configure` 가드가 **1건의 즉시 실패**로
+    # 바꾼다 — 718건의 혼란 대신 원인을 지목하는 UsageError 하나. 이 주석은 *왜 그 가드가 있는지*의
+    # 근거이며, 가드를 지우려면 이 문단도 함께 지워야 한다(둘 중 하나만 남으면 다음 사람이 또 밟는다).
     "pytest-asyncio>=0.24.0,<2",
     "pytest-cov>=5.0.0",
     # pytest-randomly — 매 실행 테스트 순서를 섞어 *순서 의존*을 조기·반복 노출한다(OPS-09).
