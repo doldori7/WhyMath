@@ -477,6 +477,17 @@ class GenerationLog(BaseModel):
             "복원은 `restore_input_snapshot`(해시 대조 통과분만 반환)."
         ),
     )
+    run_id: str | None = Field(
+        default=None,
+        description=(
+            "이 호출이 속한 **생성 회차(Run) 식별자** — 리콜의 조인 축(EOS-97). 종전에는 "
+            "run_id가 `AccumulateReport`·`ReviewQueueEntry`에만 있고 GenerationLog에는 없어 "
+            "'이 배치로 만든 산출물'을 기계가 특정할 수 없었다(설계서 §3 리콜 시나리오가 "
+            "짚은 실제 공백). 값은 회차 시작 시 호출자가 정하고 JSONL append 시 스탬프된다 "
+            "— 회차 개념이 없는 경로(pregenerate 단발 인제스트)는 None=미기록(날조 금지)."
+        ),
+        max_length=64,
+    )
     cu_slug: str | None = Field(
         default=None,
         description=(

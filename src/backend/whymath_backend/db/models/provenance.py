@@ -179,9 +179,16 @@ class GenerationLog(Base):
     # 생산 CU 조인 정체성(#912 P1-2) — 코퍼스 키·review_timer cu_slug와 동일 산식(폭 128
     # schema 강제 동형). 정체성 없는 종단(파싱 실패·pregenerate 시드)은 NULL=미기록.
     cu_slug: Mapped[str | None] = mapped_column(sa.String(128))
+    # 리콜 조인 축(EOS-97) — "이 회차로 만든 산출물"을 기계가 특정하는 키. 회차 개념이
+    # 없는 경로(pregenerate 단발 인제스트)는 NULL=미기록(날조 금지·EOS-55 좌석 동형).
+    run_id: Mapped[str | None] = mapped_column(sa.String(64))
 
     # ── 인덱스 (§10.1 CREATE INDEX) ──
-    __table_args__ = (sa.Index("idx_generation_problem", "problem_id"),)
+    # idx_generation_run_id: 리콜은 회차 단위 선별이 주 질의라 인덱스를 둔다(EOS-97).
+    __table_args__ = (
+        sa.Index("idx_generation_problem", "problem_id"),
+        sa.Index("idx_generation_run_id", "run_id"),
+    )
 
     @classmethod
     def from_schema(cls, schema: SchemaGenerationLog) -> GenerationLog:
