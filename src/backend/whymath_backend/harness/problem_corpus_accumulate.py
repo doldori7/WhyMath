@@ -89,6 +89,17 @@ from whymath_backend.harness.anchor_round_ledger import (
     load_round_ledger,
     operating_rates,
 )
+from whymath_backend.harness.batch_safety import (
+    DEFAULT_ABORT_THRESHOLD,
+    DEFAULT_ABORT_WINDOW,
+    DEFAULT_CANARY_CONFIDENCE,
+    DEFAULT_CANARY_SIZE,
+    DEFAULT_CANARY_THRESHOLD,
+    CanaryVerdict,
+    RollingFailureWindow,
+    evaluate_canary,
+    is_accepted_status,
+)
 from whymath_backend.harness.needs_review_worklist import (
     ReviewQueueEntry,
     append_review_queue_jsonl,
@@ -157,6 +168,21 @@ class AccumulateReport:
     run_id: str
     reason_sample: list[str] = field(default_factory=list)
     review_outcomes: list[GenerationOutcome] = field(default_factory=list)
+    #: 롤링 불량률 초과로 회차가 조기 중단됐는가(EOS-95 ③). 중단돼도 그 시점까지의
+    #: 수용분은 append되고 비수용분은 검수 큐에 남는다 — 중단은 폐기가 아니다.
+    aborted: bool = False
+    #: 중단 사유(관측 불량률·창 크기·임계 포함). 중단이 없으면 None — 조용한 중단 금지.
+    abort_reason: str | None = None
+    #: 롤링 창의 최종 상태(관측 수·누적 불량·현재 비율). 감시가 돌았다는 *작동 신호*이며,
+    #: 중단이 없어도 실린다 — "정상 응답 = 알고리즘이 일했다"가 아니기 때문이다.
+    #: 이름이 인자 `abort_window`(창 *크기*)와 다른 이유: 이쪽은 창의 *상태*다.
+    rolling_window: dict[str, Any] | None = None
+    #: 카나리 판정(EOS-95 ①②) — 통과·미달 양쪽 다 실린다. 판정이 아예 없었으면 None
+    #: (카나리 비활성 또는 n이 카나리 크기 이하라 막을 본배치가 없는 경우).
+    canary: dict[str, Any] | None = None
+    #: 카나리 미달로 본배치가 **시작되지 않았는가**. aborted(롤링 중단)와 구별한다 —
+    #: 전자는 시작 전 차단, 후자는 진행 중 정지다.
+    canary_blocked: bool = False
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -172,6 +198,11 @@ class AccumulateReport:
             "reason_sample": self.reason_sample,
             "review_outcomes_count": len(self.review_outcomes),
             "operating_rates": operating_rates(self.outcome_counts, attempted=self.attempted),
+            "aborted": self.aborted,
+            "abort_reason": self.abort_reason,
+            "rolling_window": self.rolling_window,
+            "canary": self.canary,
+            "canary_blocked": self.canary_blocked,
         }
 
 
@@ -231,6 +262,11 @@ def run_corpus_accumulate(
     write: bool = True,
     review_sink: Callable[[ReviewQueueEntry], None] | None = None,
     run_id: str | None = None,
+    abort_window: int | None = DEFAULT_ABORT_WINDOW,
+    abort_threshold: float = DEFAULT_ABORT_THRESHOLD,
+    canary_size: int | None = DEFAULT_CANARY_SIZE,
+    canary_threshold: float = DEFAULT_CANARY_THRESHOLD,
+    canary_confidence: float = DEFAULT_CANARY_CONFIDENCE,
 ) -> AccumulateReport:
     """축적 1회차 — 기존 signature 주입 dedup + 수용분 증분 append(생성기 좌석 무관).
 
@@ -243,6 +279,23 @@ def run_corpus_accumulate(
     남는다(종료 일괄 기록 금지). 싱크 예외는 배치를 깨지 않되 **타입명**을 로그에 남긴다
     (never-break·침묵 실패 금지). None(기본)이면 종전 동작 그대로(기존 호출부 무영향).
     `run_id`는 회차 식별자(미지정 시 uuid4 hex) — 리포트·큐 행 양쪽에 실려 조인 축이 된다.
+
+    `abort_window`·`abort_threshold`(EOS-95 ③): 최근 `abort_window`건의 불량률이
+    `abort_threshold`를 **초과**하면 루프를 즉시 중단한다 — 결함이 대량 복제된 뒤에
+    사후 게이트가 발견하는 것을 막는 비상정지다. 중단해도 **그 시점까지의 수용분은
+    그대로 append되고 비수용분은 검수 큐에 남는다**(중단 ≠ 폐기 — 원인 분석 재료를
+    버리지 않는다). `abort_window=None`이면 감시를 끈다(종전 동작).
+
+    창이 다 차기 전에는 판정하지 않으므로 **`abort_window`보다 짧은 회차는 이 장치가
+    한 번도 판정하지 않는다** — 그 구간의 보호는 아래 카나리 관문이 맡는다.
+
+    `canary_size`·`canary_threshold`·`canary_confidence`(EOS-95 ①②): 회차 앞머리
+    `canary_size`건을 카나리로 삼아, 그 지점에서 **Wilson 단측 하한 ≥ 임계**를 1회 판정한다.
+    미달이면 남은 회차를 **시작하지 않고** 중단한다(`canary_blocked=True`). 카나리는 버리는
+    표본이 아니라 이 회차의 앞부분이므로, 통과분은 그대로 코퍼스에 append된다.
+
+    `n <= canary_size`면 **막을 본배치가 없으므로 판정하지 않는다**(`canary=None`) — 전량이
+    카나리인 회차에 "본배치 차단"은 의미가 없다. `canary_size=None`이면 관문을 끈다.
     """
     seed_signatures, seed_slugs, seed_total = load_corpus_index(list(seed_paths))
     out_signatures, out_slugs, out_total = load_corpus_index([out_path])
@@ -257,16 +310,56 @@ def run_corpus_accumulate(
     # (같은 signature_index·store 공유)하되, 비수용 outcome을 **발생 즉시** 싱크로 흘릴 수
     # 있는 지점이 생긴다(P2 — outcome 리스트 완성 후 일괄 처리로는 중단 시 전부 잃는다).
     outcomes: list[GenerationOutcome] = []
+    # 롤링 불량률 감시(EOS-95 ③) — None이면 감시 없음(종전 동작).
+    watchdog = (
+        RollingFailureWindow(window=abort_window, threshold=abort_threshold)
+        if abort_window is not None
+        else None
+    )
+    aborted = False
+    abort_reason: str | None = None
+    # 카나리 관문(EOS-95 ①) — 앞머리 canary_size건 시점에 1회만 판정한다. 막을 본배치가
+    # 있을 때(n > canary_size)만 의미가 있고, 그 조건을 여기서 한 번에 좁혀 둔다(관문이
+    # 없으면 None) — 루프 안에서 int|None 비교를 하지 않게 되고 조건이 한 곳에만 남는다.
+    canary_gate_at: int | None = (
+        canary_size if canary_size is not None and canary_size > 0 and n > canary_size else None
+    )
+    canary_verdict: CanaryVerdict | None = None
+    canary_blocked = False
     for _ in range(n):
         outcome = run_equivalent_generation(
             spec, generator, signature_index=signature_index, store=sink
         )
         outcomes.append(outcome)
-        if review_sink is not None and outcome.status not in ("accepted_stored", "accepted"):
+        if review_sink is not None and not is_accepted_status(outcome.status):
             try:
                 review_sink(_queue_entry(outcome, resolved_run_id))
             except Exception as exc:  # noqa: BLE001 — 큐 적재 장애는 배치 비차단(타입명 로그)
                 _LOGGER.warning("검수 큐 행 적재 실패(%s) — 배치 계속", type(exc).__name__)
+        if watchdog is not None:
+            watchdog.observe_status(outcome.status)
+        if (
+            canary_gate_at is not None
+            and canary_verdict is None
+            and len(outcomes) >= canary_gate_at
+        ):
+            canary_verdict = evaluate_canary(
+                [item.status for item in outcomes],
+                threshold=canary_threshold,
+                confidence=canary_confidence,
+            )
+            if not canary_verdict.passed:
+                # 본배치 미시작 — 여기서 끊으면 남은 n-canary_size건은 생성되지 않는다.
+                canary_blocked = True
+                _LOGGER.warning("%s", canary_verdict.reason)
+                break
+        if watchdog is not None:
+            if watchdog.should_abort():
+                # 즉시 중단 — 아래 append·리포트 조립은 그대로 수행된다(수용분 보존).
+                aborted = True
+                abort_reason = watchdog.abort_reason()
+                _LOGGER.warning("%s", abort_reason)
+                break
 
     counts: dict[str, int] = {}
     reasons: list[str] = []
@@ -293,7 +386,9 @@ def run_corpus_accumulate(
         _append_records(out_path, fresh_lines)
 
     return AccumulateReport(
-        attempted=n,
+        # 중단되면 실제 시도 수는 n보다 적다 — n을 그대로 쓰면 통과율 분모가 부풀어
+        # "불량이 희석돼 보이는" 리포트가 된다(정직 집계).
+        attempted=len(outcomes),
         accepted=counts.get("accepted_stored", 0),
         appended=len(fresh_lines) if write else 0,
         slug_conflicts=slug_conflicts,
@@ -304,6 +399,11 @@ def run_corpus_accumulate(
         run_id=resolved_run_id,
         reason_sample=reasons,
         review_outcomes=review_outcomes,
+        aborted=aborted,
+        abort_reason=abort_reason,
+        rolling_window=watchdog.to_json() if watchdog is not None else None,
+        canary=canary_verdict.to_json() if canary_verdict is not None else None,
+        canary_blocked=canary_blocked,
     )
 
 
@@ -407,7 +507,66 @@ def main(argv: list[str] | None = None) -> int:
             "항상 적재한다(끄기 없음 — 대장이 없으면 알람이 영원히 '측정 불가'다)."
         ),
     )
+    parser.add_argument(
+        "--canary",
+        type=int,
+        default=DEFAULT_CANARY_SIZE,
+        help=(
+            f"카나리 표본 수(EOS-95 ①·기본 {DEFAULT_CANARY_SIZE}). 회차 앞머리 이 건수를 "
+            "생성한 시점에 Wilson 단측 하한으로 1회 판정하고, 미달이면 남은 회차를 "
+            "시작하지 않는다(exit 1). 0이면 관문을 끈다. --n이 이 값 이하면 막을 본배치가 "
+            "없으므로 판정하지 않는다."
+        ),
+    )
+    parser.add_argument(
+        "--canary-threshold",
+        type=float,
+        default=DEFAULT_CANARY_THRESHOLD,
+        help=(
+            f"카나리 통과에 요구하는 Wilson 하한(기본 {DEFAULT_CANARY_THRESHOLD}). "
+            "주의: n=30에서 0.95는 만점 30/30(하한 91.7%)에도 통과 불가능하다 — 근거는 "
+            "batch_safety 모듈 docstring의 실측 표."
+        ),
+    )
+    parser.add_argument(
+        "--canary-confidence",
+        type=float,
+        default=DEFAULT_CANARY_CONFIDENCE,
+        help=f"카나리 Wilson 단측 신뢰수준(기본 {DEFAULT_CANARY_CONFIDENCE}).",
+    )
+    parser.add_argument(
+        "--abort-window",
+        type=int,
+        default=DEFAULT_ABORT_WINDOW,
+        help=(
+            f"롤링 불량률 감시 창 크기(EOS-95 ③·기본 {DEFAULT_ABORT_WINDOW}). 0이면 감시를 "
+            "끈다. 창이 다 차기 전에는 판정하지 않으므로 이 값보다 짧은 회차는 롤링 감시가 "
+            "한 번도 판정하지 않는다(그 구간의 보호는 카나리 관문)."
+        ),
+    )
+    parser.add_argument(
+        "--abort-threshold",
+        type=float,
+        default=DEFAULT_ABORT_THRESHOLD,
+        help=(
+            f"롤링 창 불량률이 이 값을 **초과**하면 즉시 중단(기본 {DEFAULT_ABORT_THRESHOLD}). "
+            "중단해도 그때까지의 수용분은 append되고 비수용분은 검수 큐에 남는다."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.canary < 0:
+        parser.error(f"--canary는 0 이상이어야 한다(받은 값 {args.canary}).")
+    if not 0.0 <= args.canary_threshold <= 1.0:
+        parser.error(f"--canary-threshold는 [0,1] 범위여야 한다(받은 값 {args.canary_threshold}).")
+    if not 0.0 < args.canary_confidence < 1.0:
+        # 0·1은 Wilson z가 발산해 게이트가 상시 통과/상시 차단이 된다(변별력 0).
+        parser.error(
+            f"--canary-confidence는 (0,1) 범위여야 한다(받은 값 {args.canary_confidence})."
+        )
+    if args.abort_window < 0:
+        parser.error(f"--abort-window는 0 이상이어야 한다(받은 값 {args.abort_window}).")
+    if not 0.0 <= args.abort_threshold <= 1.0:
+        parser.error(f"--abort-threshold는 [0,1] 범위여야 한다(받은 값 {args.abort_threshold}).")
     if args.stagnation_window <= 0:
         # 창 0·음수는 알람을 상시 참으로 만들어 판정을 무의미하게 만든다(변별력 없는 게이트).
         parser.error(f"--stagnation-window는 1 이상이어야 한다(받은 값 {args.stagnation_window}).")
@@ -444,6 +603,11 @@ def main(argv: list[str] | None = None) -> int:
         spec=spec,
         n=args.n,
         review_sink=_review_sink,
+        abort_window=args.abort_window if args.abort_window > 0 else None,
+        abort_threshold=args.abort_threshold,
+        canary_size=args.canary if args.canary > 0 else None,
+        canary_threshold=args.canary_threshold,
+        canary_confidence=args.canary_confidence,
     )
     # 배치 종료 — 관측 전송 확정(2026-07-21 정합성 검토: 생성기 trace 배선). LangfuseSink는
     # 배치 버퍼 전송이라 짧은 CLI는 flush 없이 종료하면 이벤트가 유실된다(cost_probe 동형).
@@ -511,6 +675,17 @@ def main(argv: list[str] | None = None) -> int:
     }
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+
+    # ── 배치 안전장치 판정(EOS-95) ────────────────────────────────────────────
+    # 무진전 알람보다 **먼저** 본다: 카나리 미달·롤링 중단은 "이번 회차가 성과가 없었다"가
+    # 아니라 "파이프라인이 결함을 대량 복제하려 했다"는 더 급한 신호다. stdout JSON에만
+    # 실으면 습관화돼 안 읽히므로 stderr에도 사유를 낸다(조용한 중단 금지).
+    if report.canary_blocked:
+        sys.stderr.write(f"[카나리 차단] {payload['canary']['reason']}\n")
+        return 1
+    if report.aborted:
+        sys.stderr.write(f"[배치 중단] {report.abort_reason}\n")
+        return 1
 
     if stagnation.alarm:
         # stderr + exit 2 — stdout JSON 한 필드만이면 습관화돼 안 읽힌다(fail-open 상시 실패를
