@@ -21,5 +21,5 @@ paths:
   - scripts/harness/dep_declaration.py
   - tests/harness/test_dep_declaration.py
 session: null
-notes: "사고 경위(2026-09-06 PR #994): /drive 세션이 EOS-50에 amend --reason으로 붙인 문장 안에서 따옴표 경계가 있는 'EOS-49'는'과 공백 경계가 있는 'HARN-53 분류'는 감사에 잡혔고, 같은 문장의 'EOS-49의'·'EOS-49가'는 잡히지 않았다 — 즉 CI red 자체는 옳았지만 판정이 표기 우연에 좌우됨이 함께 드러났다. 원 notes '선행: ARCH-31 또는 EOS-49의 버전 테이블 실체화'에서 EOS-49가 한 번도 위반으로 잡히지 않은 이유도 이것이다(ARCH-31만 LEGACY_EXEMPT에 있는 상태로 main이 green이었다). 보호 장치 실패 주입 검증 규칙(CLAUDE.md 2026-09-01)의 '금지 패턴 열거 대신 산출물 검사' 축 — 탐지기가 정상 입력 일부에서만 초록인 상태. 우선순위 3: 감사 자체는 작동 중이고 사각은 누락 방향(오탐 아님)이라 즉시 위험은 낮다. 번호는 CLI 제안(HARN-68은 원격 브랜치 claude/entity-model-freeze-lji37v가 선점)"
+notes: "사고 경위(2026-09-06 PR #994): /drive 세션이 EOS-50에 amend --reason으로 붙인 문장 안에서 따옴표 경계가 있는 'EOS-49'는'과 공백 경계가 있는 'HARN-53 분류'는 감사에 잡혔고, 같은 문장의 'EOS-49의'·'EOS-49가'는 잡히지 않았다 — 즉 CI red 자체는 옳았지만 판정이 표기 우연에 좌우됨이 함께 드러났다. EOS-50 원 notes의 'ARCH-31 또는 EOS-49의 버전 테이블 실체화' 문구에서 EOS-49가 한 번도 위반으로 잡히지 않은 이유도 이것이다(ARCH-31만 LEGACY_EXEMPT에 있는 상태로 main이 green이었다). 보호 장치 실패 주입 검증 규칙(CLAUDE.md 2026-09-01)의 '금지 패턴 열거 대신 산출물 검사' 축 — 탐지기가 정상 입력 일부에서만 초록인 상태. 우선순위 3: 감사 자체는 작동 중이고 사각은 누락 방향(오탐 아님)이라 즉시 위험은 낮다. 번호는 CLI 제안(HARN-68은 원격 브랜치 claude/entity-model-freeze-lji37v가 선점)"
 updated: 2026-09-06
