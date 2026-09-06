@@ -81,20 +81,39 @@ $Py = ".\.venv\Scripts\python.exe"
 
 ## 2. Ollama 준비 확인 — 창 ①
 
-이 회차는 라우터가 고르는 **로컬 모델**로 돌아갑니다. 수학 과제의 로컬 핀은
-`qwen2-math:7b`(MID) / `qwen2-math:1.5b`(FAST)입니다.
+이 회차는 라우터가 고르는 **로컬 모델**로 돌아갑니다. 어떤 모델인지는 **런북이 단정하지 않고
+코드에 묻습니다** — 라우팅은 난이도·저작 패밀리 override를 거쳐 정해지므로, 문서에 모델
+이름을 박아 두면 라우팅이 바뀌는 순간 이 런북이 조용히 거짓이 됩니다.
+
+> **왜 이렇게 하는가**: 이 런북 초판은 `LOCAL_MODEL_MATRIX`만 읽고 `qwen2-math:7b`라고
+> 적었습니다. 실측해 보니 생성기가 로컬 FAST/MID 결정의 **패밀리를 GENERAL로 갈아타서**
+> 실제 모델은 `qwen2.5:7b`였습니다(`local/math/mid → 저작:general`). 그 모델만 없는
+> 상태로 돌리면 60번의 호출이 전부 실패하고 카나리가 차단되는데, 그건 *저작 품질이 나쁜 것*이
+> 아니라 *모델이 없는 것*입니다 — 측정 회차 하나를 통째로 태우는 실패입니다.
+> (PR #1017 Codex P1 지적·수용)
 
 ```powershell
 # Windows PowerShell (= Phaiakes9) · 창 ①
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-ollama list
+$Py = ".\.venv\Scripts\python.exe"
+$Model = & $Py -c "from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator as G; from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec as S; from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID as C; from whymath_backend.schema.enums import Subject; from whymath_backend.l3.router import resolve_model; g=G(None, misconception_catalog={k: v.name_kr for k, v in C.items()}, topic_hint='x', subject=Subject.공통, slug_prefix='probe'); d=g._decide_routing(S(achievement_standard_codes=frozenset({'[9수02-20]'}), target_misconception_ids=frozenset(), difficulty_overall='2.5', answer_format=None)); print(resolve_model(d.local_family, d.local_model))"
+"SELECTED_MODEL=$Model"
+if ($Model) { $Present = (ollama list | Select-String -SimpleMatch $Model) -ne $null; "MODEL_PRESENT=$Present" }
 ```
 
 **판정**:
-- 목록에 `qwen2-math:7b`가 보이면 → §3으로.
-- 목록은 나오는데 `qwen2-math:7b`가 없으면 → 같은 창 ①에서 `ollama pull qwen2-math:7b`
-  (4~5GB · 5~15분). 끝나면 `ollama list`로 다시 확인.
-- **명령 자체가 실패**하면(`CommandNotFoundException` 또는 연결 거부) Ollama 서버가
+- `SELECTED_MODEL=` 뒤에 모델 이름이 찍히고 `MODEL_PRESENT=True`면 → §3으로.
+- `MODEL_PRESENT=False`면 그 모델이 없는 것입니다. **같은 창 ①**에서 아래를 실행하십시오
+  (앞에서 구한 이름을 그대로 씁니다 · 4~5GB · 5~15분):
+
+```powershell
+# Windows PowerShell (= Phaiakes9) · 창 ①
+if ($Model) { ollama pull $Model; ollama list | Select-String -SimpleMatch $Model }
+```
+
+- `SELECTED_MODEL=`이 **비어 있으면** 앞 명령이 실패한 것입니다(§1이 통과했는지 먼저 확인).
+  그 출력을 회신해 주십시오.
+- **`ollama` 명령 자체가 실패**하면(`CommandNotFoundException` 또는 연결 거부) Ollama 서버가
   꺼진 것입니다. **창 ②(새 창)** 를 열어 아래 한 줄만 실행하고, **그 창은 그대로 두십시오**:
 
 ```powershell
@@ -122,15 +141,31 @@ ollama serve
 인자로 주지 않습니다(기본값을 명시적으로 적으면 나중에 기본값이 바뀌어도 이 회차만 옛 값으로
 남습니다 — 대장에는 실제 적용값이 그대로 기록됩니다).
 
+**재실행 안전장치가 왜 필요한가**: 축적기는 **append-only**이고, `--out` 파일이 이미 있으면
+그 내용을 dedup 인덱스에 넣습니다. 그래서 한 번 중단됐다 다시 돌리면 "빈 상태에서 시작한다"는
+이 회차의 전제가 조용히 깨집니다 — 앞 시도의 잔여물이 뒤 시도의 수용률을 깎는데, §4 검사는
+*가장 최근 회차*만 보므로 **정상처럼 보입니다**. 그래서 아래 블록은 대상이 깨끗하지 않으면
+**아예 실행되지 않습니다**(PR #1017 Codex P1 지적·수용).
+
 ```powershell
 # Windows PowerShell (= Phaiakes9) · 창 ①
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 $Py = ".\.venv\Scripts\python.exe"
 $Out = "data\corpus\problem_bank_mp02_first_run_v0\problems.jsonl"
-New-Item -ItemType Directory -Force -Path (Split-Path $Out) | Out-Null
-& $Py -m whymath_backend.harness.problem_corpus_accumulate --out $Out --n 60 --standard-code "[9수02-20]" --difficulty 2.5 --topic-hint "중3 이차방정식 — 두 근 중 더 큰 근을 구하는 형태(답 하나)" | Tee-Object -FilePath "mp02_report.json"
-"ACCUMULATE_EXIT=$LASTEXITCODE"
+$Stale = @($Out, "$Out.rounds.jsonl", "$Out.genlog.jsonl", "$Out.review.jsonl") | Where-Object { Test-Path $_ }
+"STALE_FILES=$($Stale.Count)"
+if ($Stale.Count -gt 0) { "중단: 앞 시도의 산출물이 남아 있습니다 → $($Stale -join ', ')" }
+if ($Stale.Count -eq 0) { New-Item -ItemType Directory -Force -Path (Split-Path $Out) | Out-Null }
+if ($Stale.Count -eq 0) { & $Py -m whymath_backend.harness.problem_corpus_accumulate --out $Out --n 60 --standard-code "[9수02-20]" --difficulty 2.5 --topic-hint "중3 이차방정식 — 두 근 중 더 큰 근을 구하는 형태(답 하나)" | Tee-Object -FilePath "mp02_report.json"; "ACCUMULATE_EXIT=$LASTEXITCODE" }
 ```
+
+**`STALE_FILES=0`이어야 회차가 돕니다.** 0이 아니면 위 "중단:" 줄이 어느 파일이 남았는지
+알려 줍니다 — 그 목록을 회신해 주시면 처분(재시도용 새 폴더 vs 이전 시도 폐기)을 함께
+정하겠습니다. **세션이 지우라고 말하기 전에 지우지 마십시오**: 앞 시도의 genlog에 실패 원인이
+남아 있을 수 있고, 그게 다음 회차 설계의 재료입니다.
+
+> 각 줄을 `if`로 감싼 이유: 붙여넣기 실행에서는 줄마다 독립적으로 돌아가 `throw`가 뒤 줄을
+> 멈추지 못합니다. 가드를 조건문으로 걸어야 실제로 막힙니다.
 
 **예상 출력**: 진행 로그가 흐르다가 마지막에 리포트 JSON이 출력되고, `ACCUMULATE_EXIT=0`
 (신규 수용 0건이면 `1`) 이 찍힙니다. 리포트는 `mp02_report.json`에도 저장됩니다.
@@ -197,12 +232,20 @@ $Py = ".\.venv\Scripts\python.exe"
 $Out = "data\corpus\problem_bank_mp02_first_run_v0\problems.jsonl"
 $RunId = (Get-Content "$Out.rounds.jsonl" | Select-Object -Last 1 | ConvertFrom-Json).run_id
 "RUN_ID_FOR_RECALL=$RunId"
-if ($RunId) { & $Py -m whymath_backend.ops.generation_recall --genlog "$Out.genlog.jsonl" --corpus $Out --run-id $RunId; "RECALL_EXIT=$LASTEXITCODE" }
+$CorpusArgs = @(); if (Test-Path $Out) { $CorpusArgs = @("--corpus", $Out) }
+"CORPUS_ARGS=$($CorpusArgs -join ' ')"
+if ($RunId) { & $Py -m whymath_backend.ops.generation_recall --genlog "$Out.genlog.jsonl" @CorpusArgs --run-id $RunId; "RECALL_EXIT=$LASTEXITCODE" }
 ```
 
 **판정**: 열거 건수가 §4의 `GENLOG_SAME_RUN`과 **같아야** 합니다(과다·과소 0). 다르면 그
 차이 자체가 결함이므로 두 숫자를 함께 회신해 주십시오.
 
+> `--corpus`를 **조건부로** 붙이는 이유: 카나리가 수용 0건으로 차단되면 코퍼스 파일 자체가
+> 생기지 않습니다(§0 ④가 정상 결과로 인정하는 경우입니다). 그 상태에서 없는 경로를
+> `--corpus`로 넘기면 리콜이 `[측정 실패] 코퍼스 파일 없음`과 함께 **exit 2**로 거부합니다
+> — 정상 결과인데 리허설만 실패하는 셈입니다(실측 확인 · PR #1017 Codex P2 지적·수용).
+> `--corpus` 없이도 이 리허설이 재는 것(회차 열거 건수)은 그대로 나옵니다.
+>
 > `$RunId`를 앞 명령의 출력에서 셸 변수로 받는 이유: 이 블록을 통째로 붙여넣어도 값이
 > 자동으로 이어집니다. `if ($RunId)` 가드는 앞 줄이 실패했을 때 뒤 명령이 빈 인자로
 > 실행되는 것을 막습니다.
@@ -246,7 +289,7 @@ if ($RunId) { & $Py -m whymath_backend.ops.generation_recall --genlog "$Out.genl
 | 카나리 기본 30 · 임계 0.90 · 신뢰 0.95 | `harness/batch_safety.py:124-126` |
 | 롤링 창 50 · 임계 0.30 | `harness/batch_safety.py:129-130` |
 | 모듈 실행 진입점(콘솔 스크립트 없음) | `harness/problem_corpus_accumulate.py` 말미 `if __name__ == "__main__"` |
-| 수학 로컬 핀 `qwen2-math:7b`/`1.5b` | `l3/router.py:62-63` `LOCAL_MODEL_MATRIX` |
+| 저작 실제 모델 = **GENERAL/MID** → `qwen2.5:7b`(난이도 2.5 실측) | `l3/equivalent/llm_generator.py:665-690` 저작 패밀리 override + `l3/router.py` `LOCAL_MODEL_MATRIX` · **런북은 이 값을 하드코딩하지 않고 §2가 코드에 묻는다** |
 | 사이드카 3종 경로 규칙 | `default_round_ledger_path` / `default_generation_log_path` / `default_review_queue_path` |
 | 리콜 CLI 인자(`--genlog`·`--corpus`·`--run-id`·dry-run 기본) | `ops/generation_recall.py:385-441` |
 | 검수 CLI 인자(`--queue`·`--events`·`--verdicts`·`--reviewer-id`) | `harness/review_session.py:503-514` |

@@ -22,8 +22,13 @@ argparse는 help 문자열을 화면에 내기 전에 **`%`-포매팅한다**(`_
 무엇을 검사하는가
 ----------------
 `add_argument(..., help=<문자열 리터럴>)`의 그 문자열이 **`%`-포매팅을 통과하는가**.
-argparse가 넘기는 params는 action의 `__dict__` + `prog`이므로, 어떤 키가 오든 견디는
-매핑을 넣어 `s % params`를 실제로 수행하고 `ValueError`가 나는지 본다.
+argparse가 넘기는 params는 `dict(vars(action), prog=...)`라 **키 우주가 정해져 있다** —
+Action의 속성 이름들뿐이다. 그 우주를 그대로 넣어 `s % params`를 수행하고
+`ValueError`(잘못된 포맷 문자)·`KeyError`(없는 이름)·`TypeError`(변환 불가)를 전부 실패로 센다.
+
+초판은 *어떤 키에도 값을 주는* 매핑을 써서 `%(defualt)s` 같은 **오타를 통과시켰다**
+(PR #1017 Codex P2 지적·수용). "모든 입력에서 초록인 가드"가 정확히 그 형태였다 —
+선언한 계약("argparse 포매팅을 통과한다")보다 약한 검사였으므로 가드 자신이 위장이었다.
 
 **금지 패턴 열거가 아니다.** "help에 %를 쓰지 마라" 같은 문자열 규칙은 표기 변형
 (`%s`·`%%`·`%(default)s`는 전부 정당하다)에서 곧바로 오탐·누락을 낸다. 여기서 보는 것은
@@ -57,16 +62,35 @@ _CLI_DIRS = ("harness", "ops")
 _MIN_HELP_STRINGS = 400
 
 
-class _AnyParams(dict[str, object]):
-    """argparse가 넘기는 params 대역 — 어떤 키를 물어도 값을 준다.
+# argparse가 실제로 넘기는 params의 **키 우주** — `dict(vars(action), prog=...)`이므로
+# Action의 속성 이름이 전부이고 그 밖의 이름은 없다(CPython argparse `_expand_help`).
+# 여기 없는 이름을 help가 참조하면 argparse는 KeyError로 죽는다 — `%(defualt)s` 같은 오타가
+# 정확히 그 경우다.
+_ARGPARSE_PARAM_KEYS = frozenset(
+    {
+        "prog",
+        "option_strings",
+        "dest",
+        "nargs",
+        "const",
+        "default",
+        "type",
+        "choices",
+        "required",
+        "help",
+        "metavar",
+        "deprecated",
+    }
+)
 
-    argparse의 실제 params는 `dict(vars(action), prog=...)`라 액션마다 키가 다르다.
-    여기서는 *키 부재*(KeyError)가 아니라 **포맷 문자 자체의 유효성**(ValueError)만
-    판정하려는 것이므로, 키는 전부 있는 것으로 취급한다.
-    """
+# 값은 0으로 준다 — `%(default)s`·`%(default)d`·`%(default).2f` 어느 변환에도 통과하므로
+# *변환 지정자 불일치*를 오탐으로 잡지 않는다. 우리가 재려는 것은 값의 타입이 아니라
+# **포맷 문자열 자체가 성립하는가**이기 때문이다.
+_ARGPARSE_PARAMS: dict[str, object] = {k: 0 for k in _ARGPARSE_PARAM_KEYS}
 
-    def __missing__(self, key: str) -> str:
-        return "X"
+# argparse가 help 포매팅에서 실제로 던질 수 있는 예외 전부. 하나라도 빼면 그 형태의 결함이
+# 조용히 통과한다(초판은 ValueError만 봐서 `%(defualt)s` 오타를 놓쳤다 — PR #1017 Codex P2).
+_FORMAT_ERRORS = (ValueError, KeyError, TypeError)
 
 
 def _string_parts(node: ast.AST) -> list[str]:
@@ -131,8 +155,8 @@ def test_every_help_string_survives_argparse_percent_formatting() -> None:
         if "%" not in text:
             continue
         try:
-            text % _AnyParams()
-        except ValueError as exc:
+            text % _ARGPARSE_PARAMS
+        except _FORMAT_ERRORS as exc:
             rel = path.relative_to(_REPO_ROOT)
             broken.append(f"{rel}:{lineno} — {type(exc).__name__}: {exc} · 원문 {text!r}")
     assert not broken, (
@@ -150,13 +174,16 @@ def test_every_help_string_survives_argparse_percent_formatting() -> None:
         ("기본 %(default)s", False),  # argparse 관용 표기
         ("퍼센트 없음", False),
         ("끝에 걸친 %", True),  # 불완전한 포맷 지정자
+        ("오타 %(defualt)s", True),  # KeyError — argparse의 키 우주에 없는 이름
+        ("없는 이름 %(canary_size)s", True),  # KeyError — 우리 도메인 이름은 params가 아니다
+        ("정수 변환 %(default)d", False),  # 값이 int라 통과 — 변환 지정자를 오탐하지 않는다
     ],
 )
 def test_the_detector_itself_discriminates(text: str, should_raise: bool) -> None:
     """탐지기가 정상·결함을 실제로 **가르는가** — 양쪽에서 같은 값을 내면 위장이다."""
     raised = False
     try:
-        text % _AnyParams()
-    except ValueError:
+        text % _ARGPARSE_PARAMS
+    except _FORMAT_ERRORS:
         raised = True
     assert raised is should_raise, f"탐지기 변별력 상실: {text!r} 에서 raised={raised}"
