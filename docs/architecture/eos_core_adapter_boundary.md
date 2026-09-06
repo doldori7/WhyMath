@@ -459,3 +459,67 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 
 상환(어휘를 어댑터·데이터로 이전)은 이 태스크 범위 밖이다 — 등재는 Kiki 판정.
 
+
+## §11. Core가 불투명 페이로드를 **해석**하는가 — 반증 가능한 검사 (ARCH-43 · 2026-09-06)
+
+> **판정 기준: 작업 트리(main `a7d25f90` 위)** — 아래 수치는 이 커밋의 코드에서 실측했다.
+
+EOS-92 교차 과목 프로브(`subject_contract_cross_probe.md` §3)가 실증한 것: Subject Contract v1의
+15필드 중 13개가 임의 문자열을 받아 **필드 채움 검사는 실패 사례를 구성할 수 없다**(반증력 0).
+계약 파일이 스스로 지목한 진짜 축은 *"Core 코드가 `answer_kind` 값을 읽어 분기하기 시작하는 것"*
+이고, §8의 프로브도 §4의 스캔도 그것을 못 본다 — §8.2는 *리터럴이 수학 어휘인지*를, §4는 *import*를
+본다. `if p.answer_kind == "physics.quantity_with_unit"`는 둘 다 통과한다.
+
+### 11.1 위반 정의 → 주입 RED → 검사
+
+`scripts/analysis/eos_opaque_payload_gate.py`(게이트 · exit 0/1/2)가 **CORE 배정 모듈**(§1의
+`BOUNDARY_MAP` 그대로 — 새 목록 없음)에서 계약 docstring "불투명 페이로드 원칙" 절이 이름 붙인
+필드(`answer`·`answer_kind`·`conditions` — 기계 파생)의 **값**을 다음 자리에 놓으면 위반으로 센다:
+
+| 종류 | 형태 |
+|---|---|
+| `eq_literal` | 리터럴·명명 상수와 `==`/`!=` |
+| `membership` | 어휘 집합에 `in`/`not in` |
+| `substring_probe` | 값 *안*을 `in`으로 더듬기(`"=" in p.conditions`) |
+| `dict_key` | 조회 키(`H[p.answer_kind]`·`H.get(p.answer_kind)`) |
+| `match` | `match p.answer_kind:` |
+| `str_parse` | `p.conditions.split(";")`·`.startswith(...)` |
+
+읽기 형태 4종(속성·첨자·`.get("…")`·같은 스코프 별칭)과 값 보존 str 메서드 경유를 한 값으로 본다 —
+표기를 바꿔 빠져나가지 못하게(문자열 열거가 아니라 **AST로 구성된 결과** 검사).
+
+| 실측 | 값 |
+|---|---:|
+| 분모 (CORE 스캔 모듈) | **309** / 639 파일 (제외: ADAPTER 81 · INFRA 215 · MIXED 34) |
+| 위반 | **1** — `l1.problem_bank.populate:363` `membership` (`kind_raw = raw.get("answer_kind")` → `kind_raw in (17종)`) |
+| 기준선 | 그 1건 · 소유 `EOS-85` · 재확인 G1 2026-09-27 (`KNOWN_VIOLATIONS`) |
+
+§8.2의 리터럴 비교 1건과 **같은 자리**를 다른 축으로 잡았다 — 그쪽은 어휘가 수학이라서, 이쪽은
+Core가 불투명 값을 읽어서. 별칭을 추적하지 않았다면 이 스캐너는 0을 냈을 것이고, 그 0은 맹점이다.
+
+### 11.2 집행 — `tests/infra/test_eos_opaque_payload_gate.py` (CI `infra-contracts` 잡)
+
+실 저장소 스캔을 기준선과 정확히 대조(늘면 RED · 줄면 ratchet RED)하고, 위반 6종 21개 형태를
+합성 소스로 **주입해 RED**를 확인하며, 같은 패턴이 ADAPTER 배정(`l4.subject_adapter_math`·
+`l3.verify_answer`)에 있으면 초록임을, CORE 0건·파싱 실패는 **exit 2**(측정 실패)임을 고정한다.
+실 저장소와 합성 주입은 **같은 판정 함수**(`scan_source`·`run_gate`·`evaluate`)를 쓴다.
+
+### 11.3 축 (b)·(c)의 처분
+
+- **(b) Physics 스텁 실구현** — `tests/backend/schema/test_subject_adapter_physics_stub.py`. 필수 3종을
+  물리 의미로 채운 hermetic 어댑터가 Protocol을 만족한다(NotImplementedError 강요 0). 드러내는 것:
+  필수층은 물리로 *구현 가능*하다 · 필수층에 수학 전용 메서드가 추가되면 이 스텁이 Protocol을 **못
+  만족해 RED**(REQUIRED_METHODS 상수 동결과 별개의 살아 있는 반증기). 드러내지 **못하는** 것: 의미
+  왜곡 — Core 호출자가 0(`ARCH-41`)이라 왜곡이 일어날 호출 지점 자체가 없다. **부분 채택.**
+- **(c) 계약 시그니처의 수학 은유 식별자** — `contract_identifiers()` + 프로브의 `_identifier_is_math`
+  (어휘 단일 원천)로 클래스·메서드·인자·필드 전수 0건 동결 + `parse_latex`·`sympy_expr` 주입 RED.
+  docstring 산문(EOS-92 §2-1 "치환맵")은 못 본다 — 테스트가 그 공백을 명시 고정. **부분 채택.**
+
+### 11.4 정직한 공백
+
+이름 기반(타입 미해결) · 별칭 한 단계·같은 스코프 · 소문자 이름과의 `==` 미계상 · `getattr`·포맷 후
+파싱·런타임 프롬프트 조립 미검출 · 그리고 **필수층 호출자 0**이라 이 게이트가 잡을 위반은 아직
+생길 자리가 없다(`ARCH-41`이 첫 호출자 등장을 추적). 게이트는 그 시점에 대비한 장치이지 현재
+위반의 발견기가 아니다 — 그 사실을 §11.1의 1건(선택층 밖 적재기)이 예외적으로 보여 준다.
+
+재현: `python3 scripts/analysis/eos_opaque_payload_gate.py; echo EXIT=$?` (저장소 루트 · 기대 EXIT=0).
