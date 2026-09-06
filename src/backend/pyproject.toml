@@ -247,6 +247,9 @@ layers = [
 ignore_imports = [
     "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.composition",
     "whymath_backend.l3.render.adapters -> whymath_backend.composition",
+    # EOS-86: solution_coaching이 verify_solution 직접 import를 걷어내고 StepChainVerifier
+    # 기본 구현을 합성 루트에서 지연 조회한다(§CORE_PULL_BASELINE — l4.solution_coaching 편입).
+    "whymath_backend.l4.solution_coaching -> whymath_backend.composition",
 ]
 
 # ──────────────────────────────────────────────────────────────────────
@@ -382,7 +385,9 @@ ignore_imports = [
     "whymath_backend.api.speech -> whymath_backend.l3.speech",
     "whymath_backend.api.ocr -> whymath_backend.l5.ocr.factory",
     "whymath_backend.api.ocr -> whymath_backend.l5.ocr.pipeline",
-    "whymath_backend.l4.solution_coaching -> whymath_backend.l3.verify_solution",
+    # [EOS-86 상환] l4.solution_coaching -> l3.verify_solution 직접 import는 제거됐다(CORE
+    # 재배정 — 위 BOUNDARY_MAP·경계 문서 참조). 이 줄을 지운다(만료는 날짜가 아니라 기계다 —
+    # 간선이 사라지면 unmatched ignore로 CI가 알려준다).
     "whymath_backend.l4.speech -> whymath_backend.l3.speech",
     #   INFRA 출발 (EOS-69 2차 상환에서 재배정 — 아래 그룹② 주석 참조):
     "whymath_backend.api._ocr_state -> whymath_backend.l5.ocr.factory",

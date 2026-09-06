@@ -40,7 +40,7 @@ EOS-69 착수 시점 15건에서 이 배선 이후 실측치로 내려갔다(정
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, cast
 
 from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, extract_equation
 from whymath_backend.l3.symbolic_equivalence import identity_status
@@ -48,8 +48,10 @@ from whymath_backend.l3.verifier import ProblemVerifyInput, Verifier
 from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
 from whymath_backend.l3.verify_answer_form import form_verdict_for
 from whymath_backend.l3.verify_final_answer import FinalAnswerResult, verify_final_answer
+from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.schema.answer_form import FormVerdict
+from whymath_backend.schema.enums import StepType
 from whymath_backend.schema.subject_adapter import (
     AnswerEvaluation,
     MisconceptionSignal,
@@ -60,10 +62,12 @@ from whymath_backend.schema.subject_adapter import (
 from whymath_backend.schema.verification_capabilities import (
     AnswerFormVerifier,
     AssessmentAnswerVerifier,
+    ChainVerification,
     EquivalenceOutcome,
     ExpressionEquivalence,
     ExpressionSeal,
     FinalAnswerVerifier,
+    StepChainVerifier,
 )
 
 _MACHINE_AXIS_NUMERIC = "numeric_substitution"
@@ -253,6 +257,30 @@ def math_answer_form_verifier() -> MathAnswerFormVerifier:
     return MathAnswerFormVerifier()
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 선택적 능력 — 풀이 단계 연쇄 검증 (EOS-86)
+# ──────────────────────────────────────────────────────────────────────────
+class MathStepChainVerifier:
+    """`StepChainVerifier` 수학 구현 — `l3.verify_solution.verify_solution`으로 위임.
+
+    `SolutionVerificationResult`는 이미 `ChainVerificationCounts`(→`ChainVerification`)
+    구조적 적합성을 갖는다(`l3/verify_solution.py`의 `_counts_conformance` 증명 — 설계
+    규칙 1: 중간 변환 객체 금지). 여기서도 상태를 재해석하지 않고 그대로 반환한다.
+    """
+
+    def verify_chain(
+        self, steps: Sequence[str], step_types: Sequence[Any] | None = None
+    ) -> ChainVerification:
+        """전이별 연쇄 검증 그대로 — 4상태(correct/incorrect/unverifiable) 재해석 없음."""
+        typed = cast("Sequence[StepType | None] | None", step_types)
+        return verify_solution(steps, typed)
+
+
+def math_step_chain_verifier() -> MathStepChainVerifier:
+    """기본 주입용 팩토리."""
+    return MathStepChainVerifier()
+
+
 if TYPE_CHECKING:
     # 구조적 적합성 증명 — SubjectAdapter와 동일 패턴(mypy --strict가 검사).
     _EQUIVALENCE_CONFORMANCE: ExpressionEquivalence = MathExpressionEquivalence()
@@ -260,3 +288,4 @@ if TYPE_CHECKING:
     _ASSESSMENT_CONFORMANCE: AssessmentAnswerVerifier = MathAssessmentAnswerVerifier()
     _SEAL_CONFORMANCE: ExpressionSeal = MathExpressionSeal()
     _ANSWER_FORM_CONFORMANCE: AnswerFormVerifier = MathAnswerFormVerifier()
+    _STEP_CHAIN_CONFORMANCE: StepChainVerifier = MathStepChainVerifier()

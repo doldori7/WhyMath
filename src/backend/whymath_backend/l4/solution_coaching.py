@@ -30,12 +30,23 @@ WH-1 1단계 OCR 신뢰 게이팅: `ocr_confidence`(L5 OCR 인식 신뢰도)가 
 `verification_ocr_gated`로 정직히 노출하고 원 verdict(`solution_verification`)는 투명성 위해
 그대로 노출한다. 텍스트 레벨 신호(`validate_response`)는 OCR 분해와 무관해 게이팅하지 않는다.
 임계는 match_gate 게이트 ②(0.8)와 단일 출처를 공유한다(일관성).
+
+EOS-86 MIXED 분해 — 단계 연쇄 검증은 `l3.verify_solution` 직접 import 대신 `StepChainVerifier`
+(schema/verification_capabilities.py) 선택층 계약을 통해 주입받는다. `recommend_coaching_
+for_solution(..., verifier=...)`을 주입하지 않으면 합성 루트(`composition.
+default_step_chain_verifier`)의 기본 구현(수학)으로 지연 폴백한다. `observe_wrong_form_shadow`
+호출도 같은 이유로 합성 루트(`composition.default_wrong_form_shadow_observer`)를 경유한다 —
+이 파일이 더 이상 `l3.verify_solution`·`l4.misconception.wrong_form_match`(둘 다 ADAPTER)를
+직접 알지 못하게 하면서, CORE에서 그 두 모듈로 직접 닿던 경로였던 잔여 누수 2건(`api.coach`·
+`api.ocr_handoff` 경유)을 없앤다(합성 루트는 설계된 유일 교체점 —
+`docs/architecture/eos_core_adapter_boundary.md` §4).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,16 +56,15 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_solution import (
-    SolutionVerificationResult,
-    verify_solution,
-)
 from whymath_backend.l4.hint_deferral import HintLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.match_gate import _DEFAULT_OCR_THRESHOLD
-from whymath_backend.l4.misconception.wrong_form_match import observe_wrong_form_shadow
 from whymath_backend.l4.step_shadow import observe_step_breaks
 from whymath_backend.schema.enums import StepType
+from whymath_backend.schema.verification_capabilities import (
+    ChainVerification,
+    StepChainVerifier,
+)
 
 # OCR 신뢰도 하한 — match_gate 게이트 ②(§3.3)와 *단일 출처* 공유(임계 일관성). 이 미만이면
 # 분해 단계 텍스트 자체가 OCR 오인식일 수 있어, verify_solution이 낸 step-incorrect 신호를
@@ -112,18 +122,29 @@ class SolutionCoaching(BaseModel):
             "`ValidationSignal.span` 노출)."
         ),
     )
-    solution_verification: SolutionVerificationResult | None = Field(
+    solution_verification: Any = Field(
         default=None,
         description=(
-            "L5가 *분해한 단계 시퀀스*(`solution_steps`)를 `verify_solution`으로 연쇄 검증한 "
-            "결과(상태 카운트·`unverified_ratio`·`first_incorrect_index`·`has_incorrect`). "
+            "L5가 *분해한 단계 시퀀스*(`solution_steps`)를 주입된 `StepChainVerifier`(기본: 수학 "
+            "구현·`verify_solution` 위임)로 연쇄 검증한 결과(상태 카운트·`unverified_ratio`·"
+            "`first_incorrect_index`·`has_incorrect`) — 런타임 형태는 `ChainVerificationCounts` "
+            "(schema/verification_capabilities.py)를 만족한다. "
             "단계 미제공 시 None(텍스트 레벨 폴백 — 기존 동작 완전 불변). **노출 안전**: 입력은 "
             "*학생 자신의 단계*이고 `verify_step`의 `reason`('동치 아님 — SymPy: before ≠ "
             "after')은 검증 사유일 뿐 정답/본문이 아니다(verify_step은 정답을 알지도 못함). "
             "단계 레벨 incorrect는 텍스트 신호와 *추가적(OR)*으로 결합돼 검산 코칭을 정밀화한다. "
             "**투명성**: 이 필드는 *원 verdict*를 그대로 노출한다 — 저신뢰 OCR로 코칭 결정에서 "
             "보류돼도(`verification_ocr_gated`) `has_incorrect`/`first_incorrect_index`는 "
-            "verify_solution이 낸 값 그대로다(조용히 숨기지 않음)."
+            "verify_solution이 낸 값 그대로다(조용히 숨기지 않음). "
+            "**타입이 `Any`인 이유(EOS-86 실측)**: 정적 타입은 `ChainVerificationCounts`(Protocol)"
+            "여야 계약에 정직하지만, Pydantic이 그 타입으로 `model_json_schema()`를 시도하면 "
+            "`PydanticInvalidForJsonSchema`(IsInstanceSchema)로 **하드 크래시**한다(OpenAPI "
+            "생성이 앱 기동을 막는다 — 실측 확인). 런타임 직렬화(`model_dump(mode='json')`)는 "
+            "구체 타입(`SolutionVerificationResult`)이 이미 pydantic 모델이라 정상 동작하므로, "
+            "OpenAPI 크래시를 피하려고 `Any`로 낮췄다 — 대가는 **OpenAPI 스키마가 이 필드를 "
+            "불투명 객체로 광고**한다는 것이다(중첩 필드 구조가 스펙에서 사라짐 — Flutter "
+            "codegen이 강타입 모델 대신 `dynamic`/`Map`으로 받는다). 필드가 실려 나가는 값 자체는 "
+            "이전과 바이트 동일하다 — 바뀐 것은 *스펙에 적힌 모양*뿐이다."
         ),
     )
     verification_ocr_gated: bool = Field(
@@ -156,6 +177,7 @@ def recommend_coaching_for_solution(
     hint_level: HintLevel | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
+    verifier: StepChainVerifier | None = None,
 ) -> SolutionCoaching:
     """학생 풀이 + L2 두 신호 → 코칭 처방. L3 결정론 검증을 거쳐 검산 코칭을 우선한다.
 
@@ -169,10 +191,13 @@ def recommend_coaching_for_solution(
     없어 자연히 BKT↔IRT 경로로 폴백한다(false positive 0·보수적). `discrepancy_tol`·
     `mastery_threshold`는 `recommend_coaching`에 그대로 위임한다.
 
-    **단계 결선(WH-1 1단계)**: `solution_steps`가 제공되고 전이가 1개 이상(즉 len≥2)이면
-    `verify_solution(solution_steps, solution_step_types)`로 *L5가 분해한 단계 시퀀스*를
-    연쇄 검증한다(텍스트→단계 *분해*는 L5 OCR·공간정보 책임으로 본 함수 범위 밖 — 백엔드는
-    제공된 단계만 검증). 신호 결합은 **추가적(OR)**으로, 기존 텍스트 레벨 신호를 *약화하지
+    **단계 결선(WH-1 1단계 · EOS-86 재배선)**: `solution_steps`가 제공되고 전이가 1개 이상(즉
+    len≥2)이면 `verifier.verify_chain(solution_steps, solution_step_types)`로 *L5가 분해한 단계
+    시퀀스*를 연쇄 검증한다(텍스트→단계 *분해*는 L5 OCR·공간정보 책임으로 본 함수 범위 밖 —
+    백엔드는 제공된 단계만 검증). `verifier`를 주입하지 않으면 합성 루트(`composition.
+    default_step_chain_verifier`)의 기본 구현(수학 — `l3.verify_solution` 위임)으로 지연
+    폴백한다(이 파일은 `l3.verify_solution`을 더 이상 알지 못한다 — CORE→ADAPTER 직접 의존
+    제거·EOS-84/86). 신호 결합은 **추가적(OR)**으로, 기존 텍스트 레벨 신호를 *약화하지
     않는다*: `arithmetic_error = (텍스트 신호 있음) or verification.has_incorrect`·`verify_steps
     = (텍스트 신호가 kind="solution") or verification.has_incorrect`(단계 레벨 incorrect는
     *단계 자가검산* 프레이밍과 자연 정합). 이 bool들을 *그대로* 기존 `recommend_coaching`에
@@ -215,17 +240,26 @@ def recommend_coaching_for_solution(
         validator if validator is not None else arithmetic_validator(),
         student_solution,
     )
-    # 단계 결선 — L5가 분해한 단계 시퀀스가 있고 전이가 1개 이상(len≥2)일 때만 verify_solution
-    # 호출(분해는 L5 책임·범위 밖). 미제공·전이 0개면 None(기존 텍스트 레벨 동작 완전 불변).
-    verification: SolutionVerificationResult | None = None
+    # 단계 결선 — L5가 분해한 단계 시퀀스가 있고 전이가 1개 이상(len≥2)일 때만 검증 호출(분해는
+    # L5 책임·범위 밖). 미제공·전이 0개면 None(기존 텍스트 레벨 동작 완전 불변). verifier 미주입
+    # 시 합성 루트 기본 구현(수학)으로 지연 폴백 — 이 모듈 자체는 l3.verify_solution을 모른다
+    # (EOS-86: CORE→ADAPTER 직접 의존 제거. composition은 설계된 유일 교체점).
+    verification: ChainVerification | None = None
     if solution_steps is not None and len(solution_steps) >= 2:
-        verification = verify_solution(solution_steps, solution_step_types)
+        if verifier is None:
+            from whymath_backend.composition import default_step_chain_verifier
+
+            verifier = default_step_chain_verifier()
+        verification = verifier.verify_chain(solution_steps, solution_step_types)
 
     # WH-1 1단계 — OCR 신뢰 게이팅. ocr_confidence가 제공되고 임계(0.8·match_gate 공유) 미만이면
     # 분해 단계 텍스트가 OCR 오인식일 수 있어 step 신호를 코칭 결정에서 누그러뜨린다(정확성 #1).
     # 미제공(None)이면 ocr_low=False → step_incorrect_trusted == step_incorrect(기존 동작 불변).
     ocr_low = ocr_confidence is not None and ocr_confidence < _OCR_THRESHOLD
-    step_incorrect = verification is not None and verification.has_incorrect
+    # `has_incorrect`는 ChainVerification 계약(schema/verification_capabilities.py)에 없는
+    # 구체 타입(SolutionVerificationResult)의 편의 필드다 — 계약에 있는 first_incorrect_index
+    # 로 동치 계산한다(`has_incorrect == (first_incorrect_index is not None)`가 그 필드의 정의).
+    step_incorrect = verification is not None and verification.first_incorrect_index is not None
     # 신뢰분 — 저신뢰 OCR이면 step-incorrect를 코칭 결정에 반영하지 않는다(거짓 지적 방지).
     step_incorrect_trusted = step_incorrect and not ocr_low
     # 신호 결합은 *추가적(OR)* — 텍스트 레벨 신호를 약화하지 않고 *신뢰* 단계 incorrect만 더한다.
@@ -269,8 +303,13 @@ def recommend_coaching_for_solution(
     # slice 64: 문항 맥락(problem_id·expected_answer)을 *shadow 로그에만* 주입(진단 라벨 정확도
     # 측정용). `result`엔 싣지 않는다 — 특히 expected_answer는 student-facing이면 정답 누출.
     observe_step_breaks(student_solution, problem_id=problem_id, expected_answer=expected_answer)
-    # 오개념 거짓 항등식 SymPy 탐지 shadow(감사 §7) — 비노출·비차단·로그만(verdict 불변·off 기본).
-    observe_wrong_form_shadow(student_solution)
+    # 오개념 거짓 항등식 SymPy 탐지 shadow(감사 §7) — 비노출·비차단·로그만(verdict 불변·off
+    # 기본). [EOS-86] `wrong_form_match`(ADAPTER)를 더 이상 직접 import하지 않는다 — 합성
+    # 루트(`composition.default_wrong_form_shadow_observer`)에서 지연 조회한다(verifier와
+    # 동일한 pull 지점 재사용 — 새 간선 0).
+    from whymath_backend.composition import default_wrong_form_shadow_observer
+
+    default_wrong_form_shadow_observer()(student_solution)
     return result
 
 

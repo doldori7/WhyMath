@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -27,6 +27,6 @@ paths:
   - scripts/analysis/eos_core_adapter_boundary_scan.py
   - tests/infra/test_eos_core_boundary_probe.py
   - src/backend/pyproject.toml
-session: null
+session: claude/g-eos49-content-version-seat-zvknzk
 notes: "출처: docs/reviews/eos_core_boundary_remediation_candidates_2026-09-04.md §2. 실측: 실행 코드 ~40줄, 수학 결과 접근 has_incorrect·first_incorrect_index 2필드, 시그니처 이미 과목 중립. schema/verification_capabilities.StepChainVerifier.verify_chain 선재 + l3/verify_solution.py:224 _counts_conformance가 구조 적합성을 mypy로 증명(변환 객체 불요). api.ocr_handoff 누수는 api.coach 경유 파생 — 누수 지점 1개. 방안 B(검증을 api.coach로 올림)는 누수를 CORE로 승격시켜 import-linter 직접 위반 — 비채택.\n\n[정정 2026-09-04] EOS-88 실측: 현행 Core는 composition을 pull하는 형태(3지점)이며 §3.8은 등록 형태를 더 정확한 방향으로 지정 — EOS-86의 방안 A 초안이 pull을 하나 더 만들 위험"
-updated: 2026-09-04
+updated: 2026-09-06

@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/api/me.py
   - src/backend/whymath_backend/schema/assessment.py
-session: null
+session: claude/g-eos49-content-version-seat-zvknzk
 notes: "출처: ARCH-38 판정 세션(2026-09-06)의 부수 실측. 정본 §7-C '좌석이 있다고 writer가 있다는 뜻이 아니다'의 **컬럼 축** 사례 — 그 조항은 테이블 축(learning_session writer 0)만 예시로 들고 있었다. ARCH-38 notes가 '소유자 없는 알려진 결함은 Gate D(owner 존재) NO'라 적었으므로 이 결함에도 소유자가 필요하다. ARCH-38 본체(좌석 분리 판정)와 축이 다르다 — 이쪽은 분리가 아니라 공급이다. 인접: ASM-11(적재된 행을 보는 학생 화면 부재·소비 축)."
 updated: 2026-09-06

@@ -171,8 +171,16 @@ class StepChainVerifier(Protocol):
     주입되지 않았을 때의 경로를 반드시 갖는다.
     """
 
-    def verify_chain(self, steps: Sequence[str]) -> ChainVerification:
-        """인접 단계 전이를 순서대로 검증한다. 전이 수 = `len(steps) - 1`."""
+    def verify_chain(
+        self, steps: Sequence[str], step_types: Sequence[Any] | None = None
+    ) -> ChainVerification:
+        """인접 단계 전이를 순서대로 검증한다. 전이 수 = `len(steps) - 1`.
+
+        `step_types`는 전이당 하나씩(길이 = `len(steps) - 1`) 붙는 *과목별* 단계 유형 힌트
+        — 규칙 2("Core가 실제로 읽는 것만 노출한다")에 따라 타입을 `Any`로 둔다. 어휘(수학의
+        `StepType.케이스분류` 등)는 과목 소유이고, Core는 값을 해석하지 않고 그대로 통과시킬
+        뿐이다(`unverifiable_by_reason`의 `Any` 키와 동일 근거). 제공하지 않는 구현은 무시해도
+        된다(선택적 정밀화 — 없어도 계약을 만족한다)."""
         ...
 
 

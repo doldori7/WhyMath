@@ -51,13 +51,18 @@ ADAPTER_IMPL_NAMES: frozenset[str] = frozenset(
         "MathAssessmentAnswerVerifier",
         "MathExpressionSeal",
         "MathAnswerFormVerifier",
+        "MathStepChainVerifier",
     }
 )
 ADAPTER_IMPL_MODULE_TOKEN = "subject_adapter_math"
 
 # 합성 루트에서 기본 구현을 *끌어오는* Core 모듈 — §3.8의 "덜 정확한" 형태. 줄이는 방향으로만.
+# [EOS-86] l4.solution_coaching 편입 — verify_solution 직접 import를 걷어내는 대가로 이 파일이
+# 4번째 pull 지점이 됐다(기존 테스트 무수정 통과를 위해 기본 인자 해석을 이 모듈이 스스로 맡음 —
+# api.coach가 대신 주입하는 방향은 solution_coaching의 300+ 단위테스트 전량이 verifier를 명시
+# 주입해야 해서 비용이 더 컸다. EOS-89 등록 형태 착지 시 이 항목도 함께 정리 대상).
 CORE_PULL_BASELINE: frozenset[str] = frozenset(
-    {"api.coach", "l3.pedagogy.slot_generator", "l3.render.adapters"}
+    {"api.coach", "l3.pedagogy.slot_generator", "l3.render.adapters", "l4.solution_coaching"}
 )
 
 
