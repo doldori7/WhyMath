@@ -63,6 +63,89 @@ def test_required_contract_has_not_silently_grown() -> None:
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 후보 9종 전수 판정 (EOS-90 · 계획서 100 §3.9 Kiki 제시 목록)
+#
+# "과목마다 반드시 존재하는 능력만 계약에 넣는다"를 9후보에 기계 적용한 결과다. 판정 근거는
+# `docs/reviews/subject_contract_v1_candidate_verdicts_2026-09-04.md`.
+#
+# 행선지는 넷뿐이다:
+#   REQUIRED  — 필수층(SubjectAdapter). 모든 과목이 반드시 제공한다.
+#   OPTIONAL  — 선택층(verification_capabilities). 있는 과목만. Core는 없을 때 경로를 갖는다.
+#   DATA      — 계약 아님. 이미 과목 중립 스키마에 **데이터**로 존재한다 → Physics는 행만 채운다.
+#   CORE_OWNED— 계약 아님. Core가 **이미 스스로** 하는 일이라 과목에 되물을 것이 없다.
+#   ADAPTER_INTERNAL — 계약 아님. 어댑터 안에 있어도 되지만 Core가 위임할 진입점이 없다.
+#
+# 이 표를 기계가 기억하는 이유: 다음 세션이 "getConcept이 없네?"라며 필수층에 넣는 것을 막는다.
+# 넣으면 아래 테스트가 판정 기록과 함께 RED가 된다.
+# ──────────────────────────────────────────────────────────────────────────
+CANDIDATE_VERDICTS: dict[str, str] = {
+    # Kiki 후보명(camelCase) → 판정. 저장소 명명은 snake_case다.
+    "evaluateAnswer": "REQUIRED",
+    "detectMisconception": "REQUIRED",
+    "validateProblem": "REQUIRED",
+    # 조회(read)지 계산(compute)이 아니다 — 계약에 넣으면 어댑터가 ORM 위임층이 되고
+    # schema가 db를 알게 되는 계층 역방향이 된다. 개념·엣지·성취기준 스키마는 이미 과목 중립.
+    "getConcept": "DATA",
+    "getPrerequisites": "DATA",
+    "getLearningObjectives": "DATA",
+    # l2.irt가 응답 통계만으로 난이도 b를 추정한다 — 문항 내용을 한 글자도 보지 않는다.
+    "estimateDifficulty": "CORE_OWNED",
+    # 위임할 공개 진입점 0건(설명 생성기는 전부 생성기 내부 비공개 함수).
+    "generateExplanation": "ADAPTER_INTERNAL",
+    # 유일한 선택층 후보. 단 현행 VisualizationStyle 16종이 전량 수학 어휘라
+    # **중립 반환 타입 재설계가 전제**다. 그 전에는 계약이 될 수 없다.
+    "getRepresentations": "OPTIONAL",
+}
+
+# camelCase 후보명 → 저장소의 snake_case 이름(필수층 판정 대조용).
+_SNAKE = {
+    "evaluateAnswer": "evaluate_answer",
+    "detectMisconception": "detect_misconception",
+    "validateProblem": "validate_problem",
+    "getConcept": "get_concept",
+    "getPrerequisites": "get_prerequisites",
+    "getLearningObjectives": "get_learning_objectives",
+    "estimateDifficulty": "estimate_difficulty",
+    "generateExplanation": "generate_explanation",
+    "getRepresentations": "get_representations",
+}
+
+
+def test_every_candidate_has_a_recorded_verdict() -> None:
+    """Kiki 후보 9종이 빠짐없이 판정돼 있는가 — 판정하지 않은 채 넘어간 후보가 없어야 한다."""
+    assert len(CANDIDATE_VERDICTS) == 9, sorted(CANDIDATE_VERDICTS)
+    assert set(CANDIDATE_VERDICTS) == set(_SNAKE), "후보 목록과 이름 매핑이 어긋났다"
+    allowed = {"REQUIRED", "OPTIONAL", "DATA", "CORE_OWNED", "ADAPTER_INTERNAL"}
+    unknown = {k: v for k, v in CANDIDATE_VERDICTS.items() if v not in allowed}
+    assert not unknown, f"정의되지 않은 행선지: {unknown}"
+
+
+def test_only_required_verdicts_appear_in_the_required_tier() -> None:
+    """판정과 실제 계약이 일치하는가 — REQUIRED만 프로토콜에 있고 나머지는 없어야 한다.
+
+    누가 `get_concept`을 필수층에 추가하면 여기서 RED가 나고, 판정 기록(DATA)이 함께 보인다.
+    판정을 바꾸려면 표를 고쳐야 하므로 조용한 확장이 불가능하다.
+    """
+    actual = _public_methods(SubjectAdapter) - {"subject_id"}
+    for candidate, verdict in CANDIDATE_VERDICTS.items():
+        name = _SNAKE[candidate]
+        if verdict == "REQUIRED":
+            assert name in actual, f"{candidate}는 REQUIRED 판정인데 필수층에 없다"
+        else:
+            assert name not in actual, (
+                f"{candidate}가 필수층에 들어왔다 — 판정은 {verdict}였다.\n"
+                "필수층으로 올리려면 CANDIDATE_VERDICTS를 고치고 판정 문서의 근거를 갱신하라."
+            )
+
+
+def test_required_tier_holds_exactly_the_required_verdicts() -> None:
+    """역방향 — 필수층에 판정표 밖의 메서드가 몰래 들어오지 않았는가."""
+    expected = {_SNAKE[c] for c, v in CANDIDATE_VERDICTS.items() if v == "REQUIRED"}
+    actual = _public_methods(SubjectAdapter) - {"subject_id"}
+    assert actual == expected == REQUIRED_METHODS, (actual, expected, REQUIRED_METHODS)
+
+
 def test_optional_capabilities_are_not_required_of_every_subject() -> None:
     """선택층 능력이 필수층으로 새어 들어오지 않았는가 — 두 목록이 겹치면 분리가 무너진 것이다."""
     optional_methods = set()
