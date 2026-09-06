@@ -467,7 +467,7 @@ def compute_seed_digests(paths: Sequence[Path]) -> dict[str, str | None]:
     return digests
 
 
-def _snapshot_single_value(values: set[str]) -> str | None:
+def _snapshot_observed_value(values: set[str]) -> str | None:
     """회차 전체에서 관측된 값 집합 → 대장 1칸(MP-04 ① `model_name`·`prompt_version`).
 
     0건이면 None=미기록(생성 호출이 없었던 회차 — 0이나 빈 문자열로 채우지 않는다). 1건이면
@@ -754,8 +754,8 @@ def main(argv: list[str] | None = None) -> int:
                 outcome_counts=dict(report.outcome_counts),
                 # ① 구성 스냅샷 — 이 회차를 재현하는 데 필요한 입력.
                 #    `--canary 0`·`--abort-window 0`(끔)은 0 그대로 기록한다(None=미기록과 구분).
-                prompt_version=_snapshot_single_value(observed_prompt_versions),
-                model_name=_snapshot_single_value(observed_models),
+                prompt_version=_snapshot_observed_value(observed_prompt_versions),
+                model_name=_snapshot_observed_value(observed_models),
                 canary_size=args.canary,
                 canary_threshold=args.canary_threshold,
                 canary_confidence=args.canary_confidence,

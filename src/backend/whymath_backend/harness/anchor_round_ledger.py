@@ -271,7 +271,7 @@ class RoundRecord(BaseModel):
     )
     abort_threshold: float | None = Field(
         default=None,
-        description="롤링 창 불량률 중단 임계(`--abort-threshold`) — 초과 시 회차 즉시 중단."
+        description="롤링 창 불량률 중단 임계(`--abort-threshold`) — 초과 시 회차 즉시 중단.",
     )
     seed_digests: dict[str, str | None] | None = Field(
         default=None,
