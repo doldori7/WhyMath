@@ -108,6 +108,26 @@ def _check_code() -> str:
     return _strip_ps_comments(_check_text())
 
 
+_RUNBOOK = _ROOT / "docs" / "architecture" / "db_backup_dr_runbook.md"
+
+
+def _runbook_section(heading: str) -> str:
+    """런북에서 `heading`으로 시작하는 절 본문(다음 `### `/`## ` 제목 전까지)을 돌려준다."""
+    text = _RUNBOOK.read_text(encoding="utf-8")
+    start = text.index(heading)
+    tail = text[start + len(heading) :]
+    end = re.search(r"^#{2,3} ", tail, flags=re.MULTILINE)
+    return tail if end is None else tail[: end.start()]
+
+
+def _runbook_fences(heading: str) -> list[str]:
+    """절 안의 ```powershell 코드펜스 본문들(주석 줄 제거)."""
+    section = _runbook_section(heading)
+    fences = re.findall(r"```powershell\n(.*?)```", section, flags=re.DOTALL)
+    assert fences, f"런북 절 {heading!r}에 powershell 펜스가 없다"
+    return [_strip_ps_comments(f) for f in fences]
+
+
 # ===========================================================================
 # A. PS1 텍스트 동결 — 암호화 스텝
 # ===========================================================================
@@ -312,6 +332,45 @@ class TestScheduleContract:
             '"$logonType" -ne "S4U"' in after
         ), "되읽기는 하는데 LogonType을 판정하지 않음 — 변별력 없는 검증 스텝"
         assert "$check.Settings.StartWhenAvailable" in after
+
+    def test_registration_refuses_to_run_unelevated(self) -> None:
+        """★ 권한 없는 창에서는 아무것도 건드리기 전에 멈춰야 한다 (2026-09-06 Phaiakes9 실측).
+
+        S4U + RunLevel Highest 등록은 관리자 창이 필요하다. 구판은 사전 검사가 없어
+        Register-ScheduledTask가 'Access is denied'를 CIM 오류로 내고도 계속 진행했고,
+        되읽기 단계에서 "reported success but cannot be read back"이라는 **틀린 원인**을
+        보고했다 — 침묵 실패의 사촌인 *오진*이다. 검사는 등록·해제 어느 쪽보다도 앞에 있어야
+        한다(-Unregister 경로도 같은 권한이 필요하다).
+        """
+        code = _schedule_code()
+        elev = code.index("IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)")
+        first_register = code.index("Register-ScheduledTask -TaskName")
+        first_unregister = code.index("Unregister-ScheduledTask -TaskName")
+        assert (
+            elev < first_register and elev < first_unregister
+        ), "권한 검사가 등록/해제보다 뒤에 있다 — 검사 전에 이미 손을 댄다"
+        # 검사 실패는 Fail(exit 1)이어야 한다 — 경고 후 진행이면 사전 검사가 아니다.
+        assert 'Fail "' in code[elev : elev + 400], "권한 검사가 실패해도 멈추지 않는다"
+
+    def test_registration_failure_names_the_real_cause(self) -> None:
+        """★ Register-ScheduledTask 실패는 예외 타입·메시지로 보고해야 한다 (침묵 실패 금지).
+
+        CIM 오류는 $ErrorActionPreference = "Stop"을 존중하지 않으므로 -ErrorAction Stop +
+        try/catch가 없으면 실패가 다음 단계로 흘러가 엉뚱한 단계가 원인으로 지목된다.
+        """
+        lines = _schedule_code().splitlines()
+        registers = [i for i, ln in enumerate(lines) if "Register-ScheduledTask -TaskName" in ln]
+        assert len(registers) == 2, f"등록 호출이 2건이어야 한다: {len(registers)}"
+        for i in registers:
+            assert (
+                "-ErrorAction Stop" in lines[i]
+            ), f"{i + 1}행: -ErrorAction Stop 부재 — CIM 오류가 흘러간다"
+            prev = next(ln for ln in reversed(lines[:i]) if ln.strip())
+            assert prev.strip() == "try {", f"{i + 1}행: try 블록 밖에서 등록한다"
+            tail = "\n".join(lines[i + 1 : i + 6])
+            assert (
+                "catch" in tail and "$($_.Exception.GetType().Name)" in tail
+            ), f"{i + 1}행: catch가 예외 타입명을 보고하지 않는다"
 
     def test_absolute_script_path(self) -> None:
         """태스크는 임의 작업 디렉터리에서 뜬다 — 상대 경로면 트리거 시각에 실패한다."""
@@ -662,6 +721,86 @@ class TestOffsiteMirror:
                     f"${opt}" in register or f"-{opt}" in register
                 ), f"런북이 register_backup_schedule.ps1에 없는 플래그 -{opt} 를 안내한다"
 
+    def test_runbook_seed_block_does_not_create_the_sync_root(self) -> None:
+        """★ §4-1b 시딩 블록은 동기화 루트를 만들지 않아야 한다 (변별력 없는 자가검증 금지).
+
+        초판은 `New-Item -Force`로 목적지를 무조건 만들었다. 동기화 루트 경로를 잘못
+        적어도(오타·미설치·가상 드라이브 문자 차이) 로컬에 일반 폴더가 생기고 복사가
+        성공하며, 자가검증 1(크기 일치)·2(키·평문 미유출)가 전부 통과한다 — 파일은
+        있는데 클라우드에는 아무것도 올라가지 않은 채로. 게이트 G-backup-offsite-move가
+        "업로드 완료 미확인"으로 남은 경로다(2026-09-06). 루트는 클라이언트가 만든 것이어야
+        하므로 부모 폴더의 실재를 New-Item **보다 먼저** 확인해야 한다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1b.")).splitlines()
+
+        def _first(pred) -> int | None:
+            return next((i for i, ln in enumerate(code) if pred(ln)), None)
+
+        root_idx = _first(lambda ln: "$SyncRoot" in ln and "Split-Path -Parent $Offsite" in ln)
+        assert root_idx is not None, "시딩 블록이 동기화 루트(부모 폴더)를 계산하지 않는다"
+        test_idx = _first(lambda ln: "Test-Path" in ln and "$SyncRoot" in ln)
+        assert test_idx is not None, "동기화 루트의 실재를 검사하지 않는다"
+        mk_idx = _first(lambda ln: "New-Item" in ln and "$Offsite" in ln)
+        assert mk_idx is not None, "목적지 하위 폴더 생성이 없다"
+        assert root_idx < test_idx < mk_idx, (
+            "New-Item이 루트 검사보다 먼저 실행된다 — 없는 루트를 만들어 버리고 "
+            "자가검증이 로컬 사본에서 전부 통과한다"
+        )
+        assert not any(
+            "New-Item" in ln and "$SyncRoot" in ln for ln in code
+        ), "동기화 루트 자체를 만들고 있다 — 루트는 클라이언트가 만든 것이어야 한다"
+        # 사람이 웹 화면과 대조할 증적 줄이 있어야 게이트가 '이 PC 안 관측'만으로 닫히지 않는다.
+        assert any("[EVIDENCE]" in ln for ln in code), "게이트 증적 줄([EVIDENCE])이 없다"
+        # 부정 검출: 동기화 클라이언트가 안 돌면 어떤 폴더도 업로드되지 않는다.
+        assert any(
+            "Get-Process" in ln and "Count -gt 0" in ln for ln in code
+        ), "동기화 클라이언트 프로세스 검사(자가검증 2b)가 없다"
+
+    def test_runbook_registration_self_elevates(self) -> None:
+        """★ 등록 블록은 사람이 관리자 창을 여는 데 의존하지 않는다.
+
+        2026-09-06 한 세션에서 "관리자 창을 새로 열어 붙여넣는다"가 2회 연속 실패했다
+        (일반 창에 붙여넣음 — 1회차는 Access is denied, 2회차는 사전 가드가 거부).
+        실패 확률이 사람에게 걸린 단계는 런북이 없애야 한다: 일반 창에서 UAC로 자가 승격
+        (`Start-Process -Verb RunAs`)하고, 등록 여부는 일반 창에서 독립적으로 되읽는다.
+        """
+        for heading in ("## §2.", "### 4-1c."):
+            code = "\n".join(_runbook_fences(heading))
+            assert "register_backup_schedule.ps1" in code, f"{heading}: 등록 스크립트 호출이 없다"
+            assert (
+                "Start-Process" in code and "-Verb RunAs" in code
+            ), f"{heading}: 자가 승격 런처가 없다 — 관리자 창 열기가 사람 몫으로 남는다"
+            assert "Get-ScheduledTask" in code, f"{heading}: 일반 창의 독립 되읽기가 없다"
+
+    def test_runbook_offsite_has_deletion_propagation_probe(self) -> None:
+        """★ 오프사이트 보존 정책은 클라우드 측 삭제 전파를 실측해야 성립한다.
+
+        §4-3은 RetentionDays를 PIPA 파기 창의 상한으로 선언한다. 로컬 오프사이트 폴더의
+        만료 삭제가 클라우드로 전파되지 않는 모드(백업형 동기화)면 만료 사본이 영원히 남아
+        그 선언이 거짓이 된다 — 모드별 동작을 문서로 추론하지 않고 프로브 파일로 잰다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1c."))
+        assert (
+            "retention_probe" in code
+        ), "삭제 전파 프로브가 없다 — 보존 정책의 클라우드 측이 미측정"
+        assert (
+            "Remove-Item" in code and "Test-Path" in code
+        ), "프로브를 지우고 부재를 확인하는 단계가 없다"
+
+    def test_runbook_first_scheduled_offsite_run_is_recency_bound(self) -> None:
+        """§4-1c 첫 회차 확인은 '이번 회차' 산출물만 인정해야 한다.
+
+        시각 조건이 없으면 §4-1b에서 손으로 복사한 시딩 사본이 "스케줄 회차가
+        오프사이트에 도착했다"로 읽힌다 — 지금 보는 것이 이번 실행 것인가(CLAUDE.md
+        2026-08-22). S4U 문맥에서 목적지가 안 보이는 실패가 정확히 이 형태로 가려진다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1c."))
+        assert "Start-ScheduledTask" in code, "첫 회차를 실제로 돌리지 않는다"
+        assert "LastTaskResult" in code, "회차 종료코드를 보지 않는다 — Step 9 실패가 안 보인다"
+        assert (
+            "AddMinutes(" in code and "LastWriteTime -gt" in code
+        ), "최신 산출물의 생성 시각 조건이 없다 — 시딩 사본을 이번 회차로 오독한다"
+
 
 # ===========================================================================
 # C-2. 컨테이너 경유 pg_restore (2026-09-03 Phaiakes9 실사용 결함)
@@ -973,7 +1112,6 @@ class TestReviewRegressions:
 # 문서 결함은 조용하다 — 렌더링도 되고 링크도 아니라서 깨진 티가 나지 않는다.
 # 그래서 기계가 본다.
 # ===========================================================================
-_RUNBOOK = _ROOT / "docs" / "architecture" / "db_backup_dr_runbook.md"
 
 # §4-1a·§3-3b·§1b처럼 숫자 뒤 알파벳 접미가 붙는 절이 있다.
 _SECTION = r"(\d+[a-z]?(?:-\d+[a-z]?)?)"
