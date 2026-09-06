@@ -23,12 +23,19 @@ ADR-002 = 학생 풀이 단계 엔티티로 번호를 썼다. 계획서 번호�
 
 ## 번호를 고르는 법 — `ls`로 고르지 말 것
 
+**기계가 판정한다** (HARN-66). 다음 빈 번호를 물어보고, 충돌이면 거부당한다:
+
 ```bash
-# 원격 전 브랜치를 스캔한다. 미머지 브랜치가 이미 그 번호를 쓰고 있을 수 있다.
-for r in $(git ls-remote --heads origin | awk '{print $2}' | sed 's|refs/heads/||'); do
-  git ls-tree -r --name-only "origin/$r" -- docs/architecture/adr/ 2>/dev/null
-done | sort -u
+git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+python3 scripts/harness/adr_number_check.py
 ```
+
+정상이면 `✔ … 다음 빈 번호: ADR-00N`을 출력하고, 같은 번호가 서로 다른 문서를 가리키면
+충돌한 양쪽과 각각이 사는 브랜치를 지목하며 exit 1로 거부한다. 이 검사는 CI
+`harness-integrity` 잡에서도 돌므로, 충돌한 번호는 머지되지 않는다.
+
+**스캔이 성립하지 않으면(원격 조회 실패·대상 0건) 통과가 아니라 exit 1이다** — "0건 통과"로
+위장되면 그것은 보호가 아니다.
 
 **작업 트리의 `ls docs/architecture/adr/`는 다음 빈 번호를 알려주지 않는다.** 그것은 "trunk에
 무엇이 있는가"만 말하며, 장기 미머지 브랜치가 수십 개인 이 저장소에서 trunk는 실제 진척을 점점

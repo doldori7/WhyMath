@@ -502,6 +502,11 @@ python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
                     # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
 python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..."  # 사람이 본인 게이트를 닫을 때 주체 명시(HARN-60)
+# evidence에는 판정 기준(커밋 해시·PR 참조)이 있어야 한다 — 없으면 exit 1 (HARN-68).
+# 판정은 시점에 종속되므로 "무엇을 봤나"가 아니라 "언제의 트리로 봤나"가 근거다.
+python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "main 3b007e23 기준 확인"
+# 커밋과 무관한 근거(환경 생성·서명·외부 등록)는 탈출구 — 사유가 대장·이벤트에 남는다
+python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..." --no-base "저장소 밖 설정 작업"
 python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>] [--eos-priority P0|P1|P2|P3]
                                                    # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
                                                    # --eos-priority = 기존 태스크 등급 백필의 유일한 합법 경로(HARN-55)
