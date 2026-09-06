@@ -129,7 +129,20 @@ jobs:
           # **AST로 파싱해** 강제한다(경로 목록의 하드코딩 두 벌 금지 — 새 동결 입력이 늘면
           # 가드가 자동으로 따라온다). 과트리거는 파일 2건 한정이라 비용이 사실상 0이다
           # (backlog/ 전체가 아니라 gates.yaml 하나 — 태스크 상태 변경 PR은 깨우지 않는다).
-          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|docs/standards/eos_verification_design_v1\.md$|backlog/gates\.yaml$|\.github/workflows/ci\.yml$)'; then
+          #
+          # **엔티티 동결 입력 1건 편입**(ARCH-38 · 2026-09-06) — 같은 형태의 사각이 하나 더
+          # 있었고, 이 PR이 **자기 자신으로** 실증했다. `canonical_entity_model_v1.md`는
+          # tests/backend/db/test_canonical_entity_model_freeze.py의 검사 ③④가 읽는 입력이다
+          # (`_CANON_DOC` — §2-A·§2-B 표를 파싱해 상수와 1:1 대조). 그런데 필터 밖이라 그 문서만
+          # 고치는 PR에서 backend 잡이 SKIP됐다 — 즉 **§2-A 표를 조용히 고쳐 좌석 배정을 바꿔도
+          # 검사 ④가 실행되지 않는다**. G0 동결 입력(위)·data/corpus·schemas(COLLAB-07 ①②)와
+          # 정확히 같은 형태의 네 번째다. 실증: PR #997(이 문서 단독 변경)에서 `backend —
+          # lint·type·test`가 conclusion=skipped였고, skip은 required check에서 충족으로 계상된다.
+          # ※ 위 G0 축과 달리 이 입력은 **AST 가드의 강제 범위 밖**이다 —
+          # test_ci_contract_fixture_trigger_wiring.py의 `_FREEZE_TEST`가 동결 테스트 **한 파일**을
+          # 하드코딩하므로 다른 동결 테스트의 입력은 따라오지 않는다. 그 일반화(가드가 동결 테스트
+          # 전건을 훑도록)는 `OPS-62`가 소유한다 — 여기서는 구멍만 막고, 구조는 그쪽에서 닫는다.
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|docs/standards/eos_verification_design_v1\.md$|backlog/gates\.yaml$|docs/architecture/canonical_entity_model_v1\.md$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
