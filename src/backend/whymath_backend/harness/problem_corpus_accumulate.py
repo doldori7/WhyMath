@@ -606,7 +606,7 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_CANARY_THRESHOLD,
         help=(
             f"카나리 통과에 요구하는 Wilson 하한(기본 {DEFAULT_CANARY_THRESHOLD}). "
-            "주의: n=30에서 0.95는 만점 30/30(하한 91.7%)에도 통과 불가능하다 — 근거는 "
+            "주의: n=30에서 0.95는 만점 30/30(하한 91.7%%)에도 통과 불가능하다 — 근거는 "
             "batch_safety 모듈 docstring의 실측 표."
         ),
     )
