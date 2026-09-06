@@ -74,8 +74,16 @@ Protocol 호출로 대체했다. 계약은 2층이다 — **필수층**(`Subject
 
 ### ② Physics Probe(`P1-PROBE` = `EOS-92`)를 실행해 검증한 뒤 Freeze한다
 
-프로브의 대장 소유자는 **`EOS-92-cross-subject-contract-probe`**다. (이 세션이 등재한 `EOS-93`은
-같은 프로브의 중복이라 취소했다 — 하네스 의미중복 고지가 잡았다.)
+프로브의 대장 소유자는 **둘 중 먼저 main에 착지한 쪽**이다:
+
+- `EOS-92-cross-subject-contract-probe` — `origin/claude/entity-model-freeze-lji37v`(미머지)
+- `EOS-93-physics-probe-subject-contract` — 이 브랜치
+
+초판은 `EOS-93`을 중복으로 취소했으나, PR #987 리뷰가 **그 커밋이 단독 머지되면 트리에 프로브
+소유자가 0명**이 됨을 지적했다(`EOS-92`는 미머지 브랜치에만 있고, `backlog.py next/start`의
+스케줄링 권위는 `backlog/`다). 그래서 `EOS-93`을 착수 가능 상태로 되살리고, **중복 해소를
+`EOS-93` acceptance ⑤로 집행**한다 — 착수 시점에 `EOS-92`가 main에 있으면 `EOS-93`을 cancel하고,
+없으면 `EOS-93`으로 진행한 뒤 `EOS-92` 머지 시 그쪽을 cancel한다. **소유자는 항상 정확히 1명이다.**
 
 **날짜로 고정한다(주차 라벨을 쓰지 않는다 — §"주차 라벨 금지" 참조):**
 
