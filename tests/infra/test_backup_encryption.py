@@ -333,6 +333,45 @@ class TestScheduleContract:
         ), "되읽기는 하는데 LogonType을 판정하지 않음 — 변별력 없는 검증 스텝"
         assert "$check.Settings.StartWhenAvailable" in after
 
+    def test_registration_refuses_to_run_unelevated(self) -> None:
+        """★ 권한 없는 창에서는 아무것도 건드리기 전에 멈춰야 한다 (2026-09-06 Phaiakes9 실측).
+
+        S4U + RunLevel Highest 등록은 관리자 창이 필요하다. 구판은 사전 검사가 없어
+        Register-ScheduledTask가 'Access is denied'를 CIM 오류로 내고도 계속 진행했고,
+        되읽기 단계에서 "reported success but cannot be read back"이라는 **틀린 원인**을
+        보고했다 — 침묵 실패의 사촌인 *오진*이다. 검사는 등록·해제 어느 쪽보다도 앞에 있어야
+        한다(-Unregister 경로도 같은 권한이 필요하다).
+        """
+        code = _schedule_code()
+        elev = code.index("IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)")
+        first_register = code.index("Register-ScheduledTask -TaskName")
+        first_unregister = code.index("Unregister-ScheduledTask -TaskName")
+        assert (
+            elev < first_register and elev < first_unregister
+        ), "권한 검사가 등록/해제보다 뒤에 있다 — 검사 전에 이미 손을 댄다"
+        # 검사 실패는 Fail(exit 1)이어야 한다 — 경고 후 진행이면 사전 검사가 아니다.
+        assert 'Fail "' in code[elev : elev + 400], "권한 검사가 실패해도 멈추지 않는다"
+
+    def test_registration_failure_names_the_real_cause(self) -> None:
+        """★ Register-ScheduledTask 실패는 예외 타입·메시지로 보고해야 한다 (침묵 실패 금지).
+
+        CIM 오류는 $ErrorActionPreference = "Stop"을 존중하지 않으므로 -ErrorAction Stop +
+        try/catch가 없으면 실패가 다음 단계로 흘러가 엉뚱한 단계가 원인으로 지목된다.
+        """
+        lines = _schedule_code().splitlines()
+        registers = [i for i, ln in enumerate(lines) if "Register-ScheduledTask -TaskName" in ln]
+        assert len(registers) == 2, f"등록 호출이 2건이어야 한다: {len(registers)}"
+        for i in registers:
+            assert (
+                "-ErrorAction Stop" in lines[i]
+            ), f"{i + 1}행: -ErrorAction Stop 부재 — CIM 오류가 흘러간다"
+            prev = next(ln for ln in reversed(lines[:i]) if ln.strip())
+            assert prev.strip() == "try {", f"{i + 1}행: try 블록 밖에서 등록한다"
+            tail = "\n".join(lines[i + 1 : i + 6])
+            assert (
+                "catch" in tail and "$($_.Exception.GetType().Name)" in tail
+            ), f"{i + 1}행: catch가 예외 타입명을 보고하지 않는다"
+
     def test_absolute_script_path(self) -> None:
         """태스크는 임의 작업 디렉터리에서 뜬다 — 상대 경로면 트리거 시각에 실패한다."""
         text = _schedule_code()
@@ -712,6 +751,10 @@ class TestOffsiteMirror:
         ), "동기화 루트 자체를 만들고 있다 — 루트는 클라이언트가 만든 것이어야 한다"
         # 사람이 웹 화면과 대조할 증적 줄이 있어야 게이트가 '이 PC 안 관측'만으로 닫히지 않는다.
         assert any("[EVIDENCE]" in ln for ln in code), "게이트 증적 줄([EVIDENCE])이 없다"
+        # 부정 검출: 동기화 클라이언트가 안 돌면 어떤 폴더도 업로드되지 않는다.
+        assert any(
+            "Get-Process" in ln and "Count -gt 0" in ln for ln in code
+        ), "동기화 클라이언트 프로세스 검사(자가검증 2b)가 없다"
 
     def test_runbook_first_scheduled_offsite_run_is_recency_bound(self) -> None:
         """§4-1c 첫 회차 확인은 '이번 회차' 산출물만 인정해야 한다.

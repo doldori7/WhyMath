@@ -78,6 +78,20 @@ function Fail([string]$Reason) {
 }
 
 # ---------------------------------------------------------------------------
+# Step 0a: elevation check - BEFORE anything is registered or removed.
+# Registering an S4U task with RunLevel Highest needs an elevated console.
+# Without it Register-ScheduledTask throws "Access is denied" (0x80070005) as a
+# CIM error that does not honour $ErrorActionPreference = "Stop", so the script
+# used to run on and blame the read-back ("reported success but cannot be read
+# back") instead of the real cause (2026-09-06 Phaiakes9 run). Fail here.
+# ---------------------------------------------------------------------------
+$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Fail "this PowerShell window is not elevated - registering an S4U task with RunLevel Highest needs 'Run as administrator'. Nothing was registered or removed. Open an elevated PowerShell (Win+X -> Terminal (Admin)) and run this script again."
+}
+
+# ---------------------------------------------------------------------------
 # Step 0: unregister path
 # ---------------------------------------------------------------------------
 if ($Unregister) {
@@ -141,7 +155,11 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnB
 # ---------------------------------------------------------------------------
 # Step 4: register (replacing any earlier version of the same task)
 # ---------------------------------------------------------------------------
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+try {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+} catch {
+    Fail "Register-ScheduledTask failed for '$TaskName': $($_.Exception.GetType().Name): $($_.Exception.Message). The task was not created, so there is nothing to read back. 'Access is denied' means this window is not elevated."
+}
 
 # ---------------------------------------------------------------------------
 # Step 5: self-verification - read the task BACK and check the two properties
@@ -178,7 +196,11 @@ $checkAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $chec
 $checkTrigger = New-ScheduledTaskTrigger -Daily -At $CheckAt
 $checkSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
 
-Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $checkTrigger -Principal $principal -Settings $checkSettings -Force | Out-Null
+try {
+    Register-ScheduledTask -TaskName $checkTaskName -Action $checkAction -Trigger $checkTrigger -Principal $principal -Settings $checkSettings -Force -ErrorAction Stop | Out-Null
+} catch {
+    Fail "Register-ScheduledTask failed for '$checkTaskName': $($_.Exception.GetType().Name): $($_.Exception.Message). The backup task exists but the checker was NOT created - a missed backup would be silent. Fix the cause and run this script again."
+}
 
 # ---------------------------------------------------------------------------
 # Step 7: self-verification for the check task, same standard as step 5.
