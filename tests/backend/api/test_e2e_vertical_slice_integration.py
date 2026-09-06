@@ -59,6 +59,7 @@ from pydantic import SecretStr
 from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.api.me import _CANDIDATE_POOL_SIZE
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
@@ -477,6 +478,15 @@ def test_full_loop_onboarding_to_verify_on_live_pg() -> None:
     """
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    # 레이트리미터 격리 — 인메모리 백엔드(`_rate_limit._BACKEND`)는 *프로세스 전역*이고 앱마다
+    # 새로 설치되지 않는다(lifespan 호출 0건 실측). 같은 pytest 프로세스에서 앞서 돈 통합
+    # 테스트(test_coach_integration 세션 생성 20건 등)가 IP 버킷(`ip:testclient`·write 60/분)을
+    # 소진하면, 이 테스트의 두 번째 세션 생성이 429를 받는다 — pytest-randomly 순서에 따라
+    # 재현되는 순서 의존 오염이다(CI run 34024961969 실측: 07:29 green → 09:39 red, 같은 코드).
+    # 이 테스트는 폐쇄루프를 증명하는 자리이지 한도 계약을 재는 자리가 아니므로(그건
+    # test_rate_limit_integration 몫) 시작 시 카운트를 비운다 — test_coach.py 등과 같은 관용.
+    asyncio.run(reset_store())
 
     uid = uuid.uuid4()
     sfx = uid.hex[:8]
