@@ -163,6 +163,24 @@ RESERVED_ABSENT_TABLE_NAMES: dict[str, str] = {
     "entity_version": "ContentVersion",
 }
 
+# 힌트 **본문** 컬럼 예약(ARCH-39 · 2026-09-06) — 정본 §3-B "영구 부재" 판정의 재확인 트리거 ①.
+#
+# 위 두 검사(③ 이름 예약 · ③-b 좌석 tuple)는 둘 다 **테이블** 축이다. 그런데 Hint 좌석을
+# 우회하는 가장 값싼 길은 새 테이블이 아니라 **기존 테이블에 컬럼 하나를 더하는 것**이다
+# (`problem_step.hint_text` 같은 형태) — 그러면 새 테이블이 없으니 ③이 안 잡고, Hint의 좌석
+# tuple도 비어 있는 채라 ③-b도 안 잡는다. 판정 근거 ⑵("본문을 담는 좌석이 없다")가 조용히
+# 깨지는 자리다. 이 검사가 그 축을 막는다.
+#
+# 판정이 막는 것은 **본문**이지 힌트 *메타*가 아니다 — 아래 허용 목록은 판정과 무관하게
+# 실재하는 컬럼들이고, 오히려 이들이 있어서 KPI가 본문 없이 측정된다(정본 §3-B 근거 ⑶).
+_HINT_BODY_COLUMN_TOKENS: tuple[str, ...] = ("text", "content", "body", "message", "prompt")
+_ALLOWED_HINT_COLUMNS: dict[str, str] = {
+    "used_hint": "힌트 사용 여부(불리언) — 본문 아님",
+    "hint_id": "느슨참조 식별자 — 본문 아님(정본 §3-B 부수 판정)",
+    "hint_level": "graded 단계 1~4 — KPI ⑧의 측정 축",
+    "hint_usage_id": "hint_usage PK",
+}
+
 
 _SEAT_ROW_RE = re.compile(r"^\|\s*\d+\s*\|\s*\*\*(\w+)\*\*\s*\|(.*?)\|\s*(\d+)\s*\|\s*$")
 _NON_CORE_ROW_RE = re.compile(r"^\|\s*`([a-z_]+)`\s*\|\s*(.+?)\s*\|\s*$")
@@ -290,6 +308,44 @@ def test_absent_entities_keep_empty_seats() -> None:
     assert not breached, (
         f"좌석 부재 동결이 깨졌다(좌석 등재됨): {breached}\n"
         f"부재는 실수가 아니라 결정이다(정본 §3) — 되돌리려면 {_CANON_HINT}"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ③-c 좌석 부재 동결 — 컬럼 축(ARCH-39). 테이블을 안 만들고 컬럼만 더하는 우회로를 닫는다
+# ──────────────────────────────────────────────────────────────────────────
+def test_no_table_gains_a_hint_body_column() -> None:
+    """어느 테이블도 힌트 **본문** 컬럼을 갖지 않는다(정본 §3-B 재확인 트리거 ①).
+
+    판정 근거 ⑵는 "본문을 담는 좌석이 없다"이다. 그 근거를 깨는 가장 값싼 길은 `hints`
+    테이블이 아니라 기존 테이블의 컬럼 하나이며, 위 ③·③-b는 둘 다 테이블 축이라 그것을
+    보지 못한다(실측: `problem_step`에 `hint_text`를 더해도 둘 다 통과한다).
+
+    판정은 문자열이 아니라 **구성된 결과**를 본다(CLAUDE.md 2026-09-01 ①) — 소스 grep이
+    아니라 `Base.metadata`의 실제 컬럼 목록을 훑는다. 이름에 `hint`가 들어가면서 본문을
+    시사하는 토큰(text/content/body/…)을 함께 가진 컬럼만 위반이고, 힌트 *메타* 컬럼
+    4종은 허용 목록으로 명시한다(과잉 차단 금지 — 그 컬럼들이 있어서 KPI가 성립한다).
+    """
+    _load_all_models()
+    scanned = 0
+    breached: dict[str, str] = {}
+    for table_name, table in Base.metadata.tables.items():
+        for column in table.columns:
+            scanned += 1
+            name = column.name
+            if "hint" not in name or name in _ALLOWED_HINT_COLUMNS:
+                continue
+            if any(token in name for token in _HINT_BODY_COLUMN_TOKENS):
+                breached[f"{table_name}.{name}"] = "힌트 본문 컬럼"
+
+    # 스캔 0건은 통과가 아니라 측정 실패다(CLAUDE.md 2026-09-01 ④).
+    assert scanned > 0, (
+        "메타데이터에서 컬럼을 한 개도 보지 못했다 — 모델 적재가 새고 있다. "
+        "0건 통과와 측정 실패는 같은 색이면 안 된다."
+    )
+    assert not breached, (
+        f"Hint 영구 부재 동결이 컬럼 축에서 깨졌다: {breached}\n"
+        f"힌트 본문은 저장하지 않기로 판정했다(정본 §3-B) — 되돌리려면 {_CANON_HINT}"
     )
 
 
