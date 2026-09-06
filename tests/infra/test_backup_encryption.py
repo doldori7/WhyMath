@@ -772,6 +772,21 @@ class TestOffsiteMirror:
             ), f"{heading}: 자가 승격 런처가 없다 — 관리자 창 열기가 사람 몫으로 남는다"
             assert "Get-ScheduledTask" in code, f"{heading}: 일반 창의 독립 되읽기가 없다"
 
+    def test_runbook_offsite_has_deletion_propagation_probe(self) -> None:
+        """★ 오프사이트 보존 정책은 클라우드 측 삭제 전파를 실측해야 성립한다.
+
+        §4-3은 RetentionDays를 PIPA 파기 창의 상한으로 선언한다. 로컬 오프사이트 폴더의
+        만료 삭제가 클라우드로 전파되지 않는 모드(백업형 동기화)면 만료 사본이 영원히 남아
+        그 선언이 거짓이 된다 — 모드별 동작을 문서로 추론하지 않고 프로브 파일로 잰다.
+        """
+        code = "\n".join(_runbook_fences("### 4-1c."))
+        assert (
+            "retention_probe" in code
+        ), "삭제 전파 프로브가 없다 — 보존 정책의 클라우드 측이 미측정"
+        assert (
+            "Remove-Item" in code and "Test-Path" in code
+        ), "프로브를 지우고 부재를 확인하는 단계가 없다"
+
     def test_runbook_first_scheduled_offsite_run_is_recency_bound(self) -> None:
         """§4-1c 첫 회차 확인은 '이번 회차' 산출물만 인정해야 한다.
 
