@@ -21,6 +21,7 @@ from whymath_backend.ops.generation_recall import (
     TargetRow,
     apply_quarantine,
     build_plan,
+    load_slug_index,
     main,
     select_logs,
 )
@@ -300,3 +301,201 @@ class TestCli:
         assert code == 0  # 매치는 있었다
         captured = capsys.readouterr()  # type: ignore[attr-defined]
         assert "격리 불가" in captured.err  # 조용히 넘어가지 않는다
+
+
+class TestIdentityResolution:
+    """#992 P1-1 — 배치 genlog는 problem_id가 전부 None이다.
+
+    코퍼스 해결이 없으면 이 도구는 **지원 원천에서 한 건도 처분하지 못한다**. 여기서는
+    그 실패 상태를 먼저 재현하고(결함 주입), 해결이 들어왔을 때만 승격되는지 본다 —
+    정상 입력만 초록인 검증은 보호의 증거가 아니다(CLAUDE.md 2026-09-01).
+    """
+
+    def _corpus(self, path: Path, rows: list[dict[str, str]]) -> None:
+        path.write_text(
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_batch_shaped_logs_are_all_unquarantinable_without_corpus(self) -> None:
+        """결함 재현 — problem_id=None + cu_slug만 있는 배치 형태는 격리 대상 0건."""
+        logs = [_log(run_id="R", with_problem=False, cu_slug=f"wm-x-{i}") for i in range(3)]
+        plan = build_plan(logs, RecallSelector(run_id="R"))
+        assert plan.matched == 3
+        assert plan.quarantinable == []  # ← 코퍼스 없이는 아무것도 처분 못 한다
+        assert len(plan.corpus_only) == 3
+        assert plan.regeneration_slugs == ["wm-x-0", "wm-x-1", "wm-x-2"]
+
+    def test_corpus_index_promotes_batch_rows_to_quarantinable(self) -> None:
+        logs = [_log(run_id="R", with_problem=False, cu_slug="wm-x-0")]
+        pid = str(uuid.uuid4())
+        plan = build_plan(logs, RecallSelector(run_id="R"), slug_index={"wm-x-0": pid})
+        assert [row.problem_id for row in plan.quarantinable] == [pid]
+        assert plan.quarantinable[0].problem_id_source == "corpus"  # 출처를 밝힌다
+        assert plan.corpus_only == []
+
+    def test_genlog_problem_id_wins_over_corpus(self) -> None:
+        """로그가 아는 값을 코퍼스 추정으로 덮어쓰지 않는다."""
+        log = _log(run_id="R", with_problem=True, cu_slug="wm-x-0")
+        plan = build_plan(
+            [log], RecallSelector(run_id="R"), slug_index={"wm-x-0": str(uuid.uuid4())}
+        )
+        assert plan.quarantinable[0].problem_id == str(log.problem_id)
+        assert plan.quarantinable[0].problem_id_source == "genlog"
+
+    def test_unresolved_slug_stays_corpus_only(self) -> None:
+        """색인에 없는 slug는 승격되지 않는다 — 과다 처분 금지(acceptance ⑤)."""
+        logs = [_log(run_id="R", with_problem=False, cu_slug="wm-missing")]
+        plan = build_plan(logs, RecallSelector(run_id="R"), slug_index={"wm-other": "id-1"})
+        assert plan.quarantinable == []
+        assert plan.regeneration_slugs == ["wm-missing"]
+
+    def test_no_identity_at_all_is_not_a_regeneration_target(self) -> None:
+        """cu_slug도 없는 행은 재생성 대상이 아니다 — 두 실패를 한 통에 담지 않는다."""
+        logs = [_log(run_id="R", with_problem=False, cu_slug=None)]
+        plan = build_plan(logs, RecallSelector(run_id="R"), slug_index={"wm-x": "id-1"})
+        assert plan.quarantinable == []
+        assert plan.corpus_only == []
+        assert len(plan.unidentifiable) == 1
+        assert plan.regeneration_slugs == []
+
+    def test_slug_index_loads_and_reports_bad_rows(self, tmp_path: Path) -> None:
+        corpus = tmp_path / "c.jsonl"
+        corpus.write_text(
+            '{"slug": "a", "problem_id": "id-a"}\n'
+            "not json\n"
+            '{"question_text": "키 없음"}\n'
+            '{"slug": "b", "problem_id": "id-b"}\n',
+            encoding="utf-8",
+        )
+        index, errors = load_slug_index([corpus])
+        assert index == {"a": "id-a", "b": "id-b"}  # 유효 행은 살린다
+        assert len(errors) == 2
+        assert "JSONDecodeError" in errors[0]  # 타입명 보존(침묵 실패 금지)
+        assert "KeyError" in errors[1]
+
+    def test_slug_collision_keeps_first_and_reports(self, tmp_path: Path) -> None:
+        """조용히 덮어쓰면 어느 UUID로 PATCH가 나갔는지 사후에 알 수 없다."""
+        first, second = tmp_path / "c1.jsonl", tmp_path / "c2.jsonl"
+        self._corpus(first, [{"slug": "a", "problem_id": "id-1"}])
+        self._corpus(second, [{"slug": "a", "problem_id": "id-2"}])
+        index, errors = load_slug_index([first, second])
+        assert index == {"a": "id-1"}
+        assert any("SlugCollision" in e for e in errors)
+
+    def test_identical_duplicate_slug_is_not_a_collision(self, tmp_path: Path) -> None:
+        """같은 값의 중복은 소음이 아니다 — 변별력 있는 경고만 낸다."""
+        first, second = tmp_path / "c1.jsonl", tmp_path / "c2.jsonl"
+        self._corpus(first, [{"slug": "a", "problem_id": "id-1"}])
+        self._corpus(second, [{"slug": "a", "problem_id": "id-1"}])
+        _, errors = load_slug_index([first, second])
+        assert errors == []
+
+    def test_cli_end_to_end_promotes_via_corpus(self, tmp_path: Path, capsys: object) -> None:
+        """CLI 경로 실측 — 배치 형태 genlog + 코퍼스로 격리 대상이 실제로 생긴다."""
+        genlog = tmp_path / "g.genlog.jsonl"
+        logs = [_log(run_id="R", with_problem=False, cu_slug="wm-a")]
+        genlog.write_text("\n".join(x.model_dump_json() for x in logs) + "\n", encoding="utf-8")
+        corpus = tmp_path / "g.jsonl"
+        self._corpus(
+            corpus, [{"slug": "wm-a", "problem_id": "11111111-1111-1111-1111-111111111111"}]
+        )
+        code = main(["--genlog", str(genlog), "--corpus", str(corpus), "--run-id", "R"])
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)  # type: ignore[attr-defined]
+        assert payload["quarantinable_count"] == 1
+        assert payload["slug_index_size"] == 1
+
+    def test_cli_missing_corpus_is_measurement_failure(self, tmp_path: Path) -> None:
+        """코퍼스 경로 오타를 '해결 0건'으로 흘리면 재생성 대상으로 오분류된다."""
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(_log(run_id="R").model_dump_json() + "\n", encoding="utf-8")
+        code = main(
+            ["--genlog", str(genlog), "--corpus", str(tmp_path / "no.jsonl"), "--run-id", "R"]
+        )
+        assert code == 2
+
+    def test_cli_without_corpus_hints_the_flag(self, tmp_path: Path, capsys: object) -> None:
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(
+            _log(run_id="R", with_problem=False, cu_slug="wm-a").model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+        main(["--genlog", str(genlog), "--run-id", "R"])
+        assert "--corpus" in capsys.readouterr().err  # type: ignore[attr-defined]
+
+
+class TestApplyRefusesIncompletePlans:
+    """#992 P1-2 / P2 — 부분 처분은 전건 처분보다 위험하다."""
+
+    def _apply_argv(self, genlog: Path) -> list[str]:
+        return [
+            "--genlog",
+            str(genlog),
+            "--run-id",
+            "R",
+            "--apply",
+            "--api-base",
+            "http://x",
+            "--token",
+            "t",
+            "--reason",
+            "결함",
+        ]
+
+    def test_unreadable_row_blocks_apply_before_any_patch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: object
+    ) -> None:
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(
+            _log(run_id="R").model_dump_json() + "\n{ 깨진 행\n",
+            encoding="utf-8",
+        )
+        sent: list[str] = []
+        monkeypatch.setattr(
+            "whymath_backend.ops.generation_recall.apply_quarantine",
+            lambda *a, **k: sent.append("called") or [],
+        )
+        code = main(self._apply_argv(genlog))
+        assert code == 2  # 매치는 있었지만 계획이 불완전하다 → 측정 실패
+        assert sent == []  # **한 건도 보내지 않았다**
+        assert "--apply를 거부" in capsys.readouterr().err  # type: ignore[attr-defined]
+
+    def test_clean_plan_still_applies(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """변별력 — 깨진 행이 없으면 그대로 처분된다(항상 거부하는 가드는 가드가 아니다)."""
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(_log(run_id="R").model_dump_json() + "\n", encoding="utf-8")
+        sent: list[str] = []
+        monkeypatch.setattr(
+            "whymath_backend.ops.generation_recall.apply_quarantine",
+            lambda *a, **k: (sent.append("called"), [{"problem_id": "p", "ok": True}])[1],
+        )
+        assert main(self._apply_argv(genlog)) == 0
+        assert sent == ["called"]
+
+    def test_corpus_load_error_also_blocks_apply(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """코퍼스 쪽 손상도 같은 취급 — 해결 실패는 잘못된 재생성 분류를 낳는다."""
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(_log(run_id="R").model_dump_json() + "\n", encoding="utf-8")
+        corpus = tmp_path / "c.jsonl"
+        corpus.write_text("not json\n", encoding="utf-8")
+        sent: list[str] = []
+        monkeypatch.setattr(
+            "whymath_backend.ops.generation_recall.apply_quarantine",
+            lambda *a, **k: sent.append("called") or [],
+        )
+        code = main([*self._apply_argv(genlog), "--corpus", str(corpus)])
+        assert code == 2
+        assert sent == []
+
+    def test_limit_with_apply_is_rejected(self, tmp_path: Path) -> None:
+        """표시 상한이 처분 범위를 결정하면 보이는 것보다 많이 격리된다(#992 P2)."""
+        genlog = tmp_path / "g.jsonl"
+        genlog.write_text(_log(run_id="R").model_dump_json() + "\n", encoding="utf-8")
+        with pytest.raises(SystemExit) as exc:
+            main([*self._apply_argv(genlog), "--limit", "1"])
+        assert exc.value.code == 2

@@ -26,11 +26,33 @@ genlog JSONL 소비 도구 2종은 집계만 하고 개별 산출물을 골라�
 **dry-run이 기본이다.** `--apply`를 명시해야 실제로 PATCH를 보낸다. 되돌리기 어려운
 행위는 기본값이 되면 안 된다.
 
-## 처분 불가를 조용히 버리지 않는다
+## 정체성 해결 — genlog의 `problem_id`는 배치 경로에서 항상 None이다 (#992 P1-1)
 
-리콜 대상 중 `problem_id`가 없는 행은 격리할 수 없다(문항으로 착지하지 못한 호출 —
-생성 실패·파싱 실패·pregenerate 캐시 시드). 그 행들을 **집계에서 빼지 않고
-`unquarantinable`로 따로 센다** — 분모에서 조용히 사라지면 "전건 처분됨"으로 오독된다.
+이것이 이 도구의 급소다. 주 입력인 `problem_corpus_accumulate` 사이드카에서
+`LLMEquivalentProblemGenerator._emit_generation_log`는 **`problem_id=None`을 의도적으로**
+기록한다 — 배치 저작 산출물은 JSONL 코퍼스 레코드이지 DB problem 행이 아니므로, DB PK를
+적으면 날조다. 그래서 genlog만 읽으면 **성공 행 전부가 격리 불가로 분류돼 `--apply`가 0건
+PATCH를 보내고도 성공으로 끝난다** — 지원 원천에서 도구가 아무것도 못 하는 상태다.
+
+해결은 `cu_slug`다. 코퍼스 JSONL(`<out>.jsonl`)의 각 레코드가 `slug`와 `problem_id`를
+함께 들고 있고, `l1/problem_bank/populate.py`가 **`ON CONFLICT(slug)`로 upsert**하므로
+slug가 DB 영속 문항의 안정 식별 축이다. 따라서 `--corpus`로 코퍼스 사이드카를 함께 주면
+`cu_slug → problem_id`를 해결해 격리 대상으로 승격한다.
+
+**한계 명시(날조 금지)**: 같은 slug가 *이전에* 적재된 적이 있으면 DB는 기존 행의
+problem_id를 유지하므로(populate가 `problem_id`를 SET 제외) 코퍼스의 UUID와 갈라질 수
+있다. 그 경우 PATCH는 **404로 실패**하며 그 실패는 건별 결과에 그대로 남는다 — 조용히
+엉뚱한 문항을 격리하지 않는다(UUID 공간에서 오조준 성공은 사실상 불가).
+
+## 처분 불가를 조용히 버리지 않는다 — 3분류
+
+  - `quarantinable` — problem_id 확보(genlog 직접 또는 코퍼스 해결). PATCH 대상.
+  - `corpus_only` — `cu_slug`는 있으나 problem_id 미해결. **격리가 아니라 코퍼스 행
+    제거·재생성 대상**이며 `regeneration_slugs`로 slug를 낸다(acceptance ③ 후반부).
+  - `unidentifiable` — cu_slug도 problem_id도 없음. 정체성이 생기기 전에 실패한 호출
+    (provider 예외·파싱 실패)이라 처분 대상 자체가 아니다.
+
+셋 다 **집계에서 빼지 않는다** — 분모에서 조용히 사라지면 "전건 처분됨"으로 오독된다.
 """
 
 from __future__ import annotations
@@ -38,7 +60,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +77,7 @@ __all__ = [
     "TargetRow",
     "apply_quarantine",
     "build_plan",
+    "load_slug_index",
     "main",
     "select_logs",
 ]
@@ -126,11 +149,28 @@ class TargetRow:
     seed: int | None
     input_sha256: str | None
     generated_at: str | None
+    #: problem_id의 출처 — "genlog"(로그가 직접 들고 있었다) / "corpus"(cu_slug로 해결했다)
+    #: / None(미해결). 어디서 온 식별자인지 밝히지 않으면 해결분과 원본이 구분되지 않는다.
+    problem_id_source: str | None = None
 
     @classmethod
-    def from_log(cls, log: GenerationLog) -> TargetRow:
+    def from_log(
+        cls, log: GenerationLog, *, slug_index: Mapping[str, str] | None = None
+    ) -> TargetRow:
+        """로그 1행 → 처분 대상 투영. `slug_index`가 있으면 cu_slug로 problem_id를 해결한다.
+
+        genlog가 직접 들고 있는 problem_id가 **우선**이다 — 코퍼스 해결은 그것이 없을 때만
+        쓰는 보조 축이다(로그가 아는 값을 코퍼스 추정으로 덮어쓰지 않는다).
+        """
+        problem_id = str(log.problem_id) if log.problem_id is not None else None
+        source: str | None = "genlog" if problem_id is not None else None
+        if problem_id is None and slug_index is not None and log.cu_slug is not None:
+            resolved = slug_index.get(log.cu_slug)
+            if resolved is not None:
+                problem_id, source = resolved, "corpus"
         return cls(
-            problem_id=str(log.problem_id) if log.problem_id is not None else None,
+            problem_id=problem_id,
+            problem_id_source=source,
             cu_slug=log.cu_slug,
             run_id=log.run_id,
             prompt_version=log.prompt_version,
@@ -143,6 +183,7 @@ class TargetRow:
     def to_json(self) -> dict[str, Any]:
         return {
             "problem_id": self.problem_id,
+            "problem_id_source": self.problem_id_source,
             "cu_slug": self.cu_slug,
             "run_id": self.run_id,
             "prompt_version": self.prompt_version,
@@ -167,14 +208,36 @@ class RecallPlan:
     unquarantinable: list[TargetRow] = field(default_factory=list)
     load_errors: list[str] = field(default_factory=list)
 
+    @property
+    def corpus_only(self) -> list[TargetRow]:
+        """cu_slug는 있으나 problem_id 미해결 — 격리가 아니라 **재생성·제거** 대상."""
+        return [row for row in self.unquarantinable if row.cu_slug is not None]
+
+    @property
+    def unidentifiable(self) -> list[TargetRow]:
+        """cu_slug도 problem_id도 없음 — 정체성 생기기 전에 실패한 호출."""
+        return [row for row in self.unquarantinable if row.cu_slug is None]
+
+    @property
+    def regeneration_slugs(self) -> list[str]:
+        """재생성 대상 slug 목록(중복 제거·발견 순서 보존) — acceptance ③ 후반부 산출물."""
+        seen: dict[str, None] = {}
+        for row in self.corpus_only:
+            if row.cu_slug is not None:
+                seen.setdefault(row.cu_slug, None)
+        return list(seen)
+
     def to_json(self) -> dict[str, Any]:
         return {
             "scanned": self.scanned,
             "matched": self.matched,
             "quarantinable_count": len(self.quarantinable),
             "unquarantinable_count": len(self.unquarantinable),
+            "corpus_only_count": len(self.corpus_only),
+            "unidentifiable_count": len(self.unidentifiable),
             "quarantinable": [row.to_json() for row in self.quarantinable],
             "unquarantinable": [row.to_json() for row in self.unquarantinable],
+            "regeneration_slugs": self.regeneration_slugs,
             "load_errors": self.load_errors,
         }
 
@@ -184,22 +247,75 @@ def select_logs(logs: Sequence[GenerationLog], selector: RecallSelector) -> list
     return [log for log in logs if selector.matches(log)]
 
 
+def load_slug_index(paths: Sequence[Path]) -> tuple[dict[str, str], list[str]]:
+    """코퍼스 JSONL에서 `slug → problem_id` 색인을 만든다 — (색인, 실패 사유) 튜플.
+
+    스키마 전체 검증(`Problem.model_validate`)을 하지 **않는다** — 필요한 것은 두 키뿐이고,
+    무관한 필드의 검증 실패로 해결 가능한 행까지 잃는 것이 더 나쁘다. 대신 파싱·키 부재는
+    사유로 수집한다(침묵 실패 금지 — 타입명 + 줄 번호만, 필드 값은 싣지 않는다).
+
+    같은 slug가 여러 코퍼스에 있으면 **먼저 읽은 쪽을 유지**하고 충돌을 사유로 남긴다 —
+    조용히 덮어쓰면 어느 UUID로 PATCH가 나갔는지 사후에 알 수 없다.
+    """
+    index: dict[str, str] = {}
+    errors: list[str] = []
+    for path in paths:
+        try:
+            handle = path.open("r", encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"{path.name}: {type(exc).__name__}")
+            continue
+        with handle as fh:
+            for line_no, line in enumerate(fh, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    record = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    errors.append(f"{path.name} line {line_no}: {type(exc).__name__}")
+                    continue
+                if not isinstance(record, dict):
+                    errors.append(f"{path.name} line {line_no}: TypeError(not an object)")
+                    continue
+                slug, problem_id = record.get("slug"), record.get("problem_id")
+                if not isinstance(slug, str) or not isinstance(problem_id, str):
+                    errors.append(f"{path.name} line {line_no}: KeyError(slug/problem_id)")
+                    continue
+                existing = index.get(slug)
+                if existing is not None:
+                    if existing != problem_id:
+                        errors.append(
+                            f"{path.name} line {line_no}: SlugCollision(slug={slug} — 먼저 읽은 "
+                            "problem_id 유지)"
+                        )
+                    continue
+                index[slug] = problem_id
+    return index, errors
+
+
 def build_plan(
     logs: Sequence[GenerationLog],
     selector: RecallSelector,
     *,
     load_errors: Sequence[str] = (),
+    slug_index: Mapping[str, str] | None = None,
 ) -> RecallPlan:
     """선별 결과를 처분 계획으로 조립한다 — 격리 가능/불가를 **나눠서** 센다.
 
-    `problem_id`가 없는 행은 격리 대상이 될 수 없다(문항으로 착지하지 못한 호출).
-    빼지 않고 `unquarantinable`로 옮겨 담는다 — 조용히 사라지면 전건 처분으로 오독된다.
+    `slug_index`(코퍼스 `slug → problem_id`)를 주면 genlog가 `problem_id=None`으로 남긴
+    배치 산출물을 `cu_slug`로 해결해 격리 대상으로 승격한다 — 이 해결이 없으면 주 입력에서
+    격리 가능 대상이 **구조적으로 0건**이다(모듈 docstring "정체성 해결" 참조).
+
+    끝내 problem_id가 없는 행은 격리 대상이 될 수 없다. 빼지 않고 `unquarantinable`로
+    옮겨 담고 cu_slug 유무로 재생성 대상/미착지를 다시 가른다 — 조용히 사라지면 전건
+    처분으로 오독된다.
     """
     matched = select_logs(logs, selector)
     quarantinable: list[TargetRow] = []
     unquarantinable: list[TargetRow] = []
     for log in matched:
-        row = TargetRow.from_log(log)
+        row = TargetRow.from_log(log, slug_index=slug_index)
         (quarantinable if row.problem_id is not None else unquarantinable).append(row)
     return RecallPlan(
         scanned=len(logs),
@@ -262,7 +378,8 @@ def _build_selector(args: argparse.Namespace) -> RecallSelector:
 def main(argv: list[str] | None = None) -> int:
     """CLI — 선별 열거(기본) / 처분(`--apply`). 판정은 exit code로 한다.
 
-    exit 0 = 매치 있음(열거 성공) · 1 = 매치 0건 또는 처분 실패 · 2 = 인자·입력 오류.
+    exit 0 = 매치 있음(열거 성공) · 1 = 매치 0건 또는 처분 실패 · 2 = 인자·입력 오류
+    또는 **불완전한 계획으로의 처분 거부**(읽지 못한 행이 있는데 --apply — 측정 실패).
     """
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.ops.generation_recall",
@@ -278,6 +395,17 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "생성 로그 JSONL 경로(<out>.genlog.jsonl). DB 직접 조회는 미지원 — "
             "모듈 docstring 참조."
+        ),
+    )
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "코퍼스 JSONL 경로(반복 가능·<out>.jsonl). cu_slug → problem_id를 해결해 배치 "
+            "산출물을 격리 대상으로 승격한다. 없으면 배치 genlog는 problem_id가 전부 None이라 "
+            "격리 가능 대상이 구조적으로 0건이다(모듈 docstring '정체성 해결')."
         ),
     )
     parser.add_argument("--run-id", default=None, help="회차 식별자 완전 일치.")
@@ -299,7 +427,8 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "열거 상한(기본 없음 — **전건**). 지정하면 잘린 사실과 분모를 함께 낸다"
-            "(CLAUDE.md: 도구가 알아서 자르는 출력을 부재 판정에 쓰면 안 된다)."
+            "(CLAUDE.md: 도구가 알아서 자르는 출력을 부재 판정에 쓰면 안 된다). "
+            "표시 전용이라 --apply와 함께 쓸 수 없다."
         ),
     )
     parser.add_argument(
@@ -329,6 +458,13 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"{name}는 최소 {MIN_HASH_PREFIX}자여야 한다(받은 값 {value!r}).")
     if args.limit is not None and args.limit <= 0:
         parser.error(f"--limit는 1 이상이어야 한다(받은 값 {args.limit}).")
+    if args.limit is not None and args.apply:
+        # 표시 상한과 처분 범위가 갈리면 **보이는 것보다 많이 격리된다** — 미리보기가 더
+        # 넓은 파괴를 승인하는 형태(#992 P2). 잘라서 처분하는 대신 조합 자체를 거부한다:
+        # 범위를 좁히려면 셀렉터를 좁혀야지 표시 상한을 쓰면 안 된다.
+        parser.error(
+            "--limit와 --apply는 함께 쓸 수 없다 — 표시 상한이 처분 범위를 결정하면 안 된다."
+        )
     if args.apply and not all((args.api_base, args.token, args.reason)):
         parser.error("--apply에는 --api-base·--token·--reason이 모두 필요하다(계약 §5 3필드 기입).")
 
@@ -337,10 +473,23 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"[측정 실패] genlog 파일 없음: {args.genlog}\n")
         return 2
 
+    corpus_paths: list[Path] = list(args.corpus or [])
+    missing_corpus = [p for p in corpus_paths if not p.exists()]
+    if missing_corpus:
+        joined = ", ".join(str(p) for p in missing_corpus)
+        sys.stderr.write(f"[측정 실패] 코퍼스 파일 없음: {joined}\n")
+        return 2
+    slug_index: dict[str, str] | None = None
+    index_errors: list[str] = []
+    if corpus_paths:
+        slug_index, index_errors = load_slug_index(corpus_paths)
+
     logs, load_errors = load_generation_logs_jsonl(args.genlog)
-    plan = build_plan(logs, selector, load_errors=load_errors)
+    all_errors = [*load_errors, *index_errors]
+    plan = build_plan(logs, selector, load_errors=all_errors, slug_index=slug_index)
     payload = plan.to_json()
     payload["dry_run"] = not args.apply
+    payload["slug_index_size"] = len(slug_index) if slug_index is not None else 0
 
     if args.limit is not None:
         # 자를 때는 **자른 사실과 분모**를 함께 낸다.
@@ -352,6 +501,18 @@ def main(argv: list[str] | None = None) -> int:
             "unquarantinable_total": plan.to_json()["unquarantinable_count"],
         }
 
+    if args.apply and all_errors:
+        # 불완전한 계획으로는 처분하지 않는다(#992 P1-2). 건너뛴 행이 바로 이 회차 소산일
+        # 수 있고, 그러면 "처분 완료"인데 결함이 노출된 채 남는다. **PATCH를 한 건도 보내기
+        # 전에** 거부하고 측정 실패로 끝낸다 — 부분 처분은 전건 처분보다 위험하다.
+        json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+        sys.stderr.write(
+            f"[측정 실패] 읽지 못한 행 {len(all_errors)}건이 있어 --apply를 거부한다 — 그 행이 "
+            f"이 회차 소산이면 격리에서 빠진다. 첫 사유: {all_errors[0]}\n"
+        )
+        return 2
+
     if args.apply:
         with httpx.Client(
             base_url=args.api_base, headers={"Authorization": f"Bearer {args.token}"}
@@ -361,12 +522,18 @@ def main(argv: list[str] | None = None) -> int:
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
 
-    if load_errors:
-        sys.stderr.write(f"[로드 실패 {len(load_errors)}행] 첫 사유: {load_errors[0]}\n")
-    if plan.unquarantinable:
+    if all_errors:
+        sys.stderr.write(f"[로드 실패 {len(all_errors)}행] 첫 사유: {all_errors[0]}\n")
+    if plan.corpus_only:
+        hint = "" if corpus_paths else " --corpus로 코퍼스 사이드카를 주면 격리 대상으로 승격된다."
         sys.stderr.write(
-            f"[격리 불가 {len(plan.unquarantinable)}건] problem_id 없음 — 문항으로 착지하지 "
-            "못한 호출이라 처분 대상이 아니다(집계에서 빼지 않았다).\n"
+            f"[격리 불가·재생성 대상 {len(plan.corpus_only)}건] cu_slug는 있으나 problem_id "
+            f"미해결 — 코퍼스 행 제거·재생성 대상이다(regeneration_slugs).{hint}\n"
+        )
+    if plan.unidentifiable:
+        sys.stderr.write(
+            f"[처분 대상 아님 {len(plan.unidentifiable)}건] cu_slug·problem_id 둘 다 없음 — "
+            "정체성이 생기기 전에 실패한 호출이다(집계에서 빼지 않았다).\n"
         )
     if plan.matched == 0:
         sys.stderr.write(f"[매치 0건] 전체 {plan.scanned}행을 훑었다 — 셀렉터를 확인하라.\n")
