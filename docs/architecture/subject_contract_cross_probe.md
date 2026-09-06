@@ -7,7 +7,8 @@
 - **상위 결정**: [`ADR-004`](./adr/ADR-004-subject-contract-v1-provisional.md) — Provisional · 프로브 후 Freeze · ✗ > 3이면 중단
 - **대상 계약**: `schema/subject_adapter.py`(필수층) — 3메서드 + DTO 4종 **15필드**
 - **결론 요약**: **깨진 필드 ✗ = 0 · 강등 0건 · Core 확장 0건.**
-  **그러나 이 프로브는 반증력이 낮다** — 아래 §3이 그 이유를 대조군으로 실증한다.
+  **그러나 이 프로브는 반증력이 낮다** — 채움 축(갈래 A)에는 실패 사례가 존재하지 않고
+  판정 축(갈래 B)에는 기계 뒷받침이 없다. 근거는 §3.
   **오늘 Frozen으로 승격하지 않는다**(ADR-004 ①: 9/27 이전 Frozen 선언 금지).
 
 ---
@@ -111,35 +112,59 @@ ADR-004 §근거가 *"왜 구현이 아니라 대조인가 — 필요한 것은 
 > 아니라 위장이다.* 라운드 1이 15/15 ○를 냈으므로, **그 검사가 실패할 수는 있었는지**를
 > 확인해야 판정이 성립한다.
 
-**대조군: 계약이 명시적으로 배제한 과목(History)을 같은 표에 넣어 본다.**
-계약 자신이 `verification_capabilities.py:277`에서 *"수학·물리엔 있고 **역사엔 없다**"*로
-역사를 경계 사례로 든다. 따라서 History가 ✗를 내야 이 검사에 변별력이 있다.
+### 3-1. 정정 — 초판의 대조군 설계는 무효였다 (Codex P1 · PR #999)
 
-> H1 — 임진왜란(1592)이 조선 사회에 미친 영향을 세 가지 서술하시오.
+**초판은 History를 "계약이 배제 선언한 과목"으로 보고 대조군에 썼다. 그 전제가 틀렸다.**
 
-| 필드 | History로 채운 값 | 결과 |
+| 인용한 곳 | 실제로 무엇을 말하는가 |
+|---|---|
+| `verification_capabilities.py:274-277` — *"수학·물리엔 있고 역사엔 없다"* | **선택적** 능력 `ExpressionEquivalence`에 관한 문장이고, 바로 다음 절이 *"이것이 `SubjectAdapter` **필수 3종에 들어가지 않은 이유**다"*로 잇는다 — 즉 **필수층에서 History를 배제한 문장이 아니라, 그 능력을 필수층에서 뺀 이유**다 |
+| `subject_adapter.py:221-227` — 필수층 추가 게이트 | *"이 능력이 Physics·Chemistry·**History**에도 반드시 존재하는가?"* — **History는 필수층의 대상**이다 |
+
+그러므로 **History가 필수층 DTO를 채우는 것은 설계된 성공(expected pass)이지 대조군이 아니다.**
+초판이 그것을 "배제 선언한 과목도 통과한다"로 읽은 것은 **선택층 문장을 필수층에 적용한
+오독**이다. 그 오독 위에 세운 "반증력 없음" 논증도 그대로는 성립하지 않는다.
+
+### 3-2. 다시 물음 — 그렇다면 이 검사가 **실패하는 입력**은 무엇인가
+
+대조군을 무효화했으니 제대로 찾아야 한다. acceptance ①의 판정 기준은 두 갈래다.
+
+**갈래 A — "채우지 못한다"(기계적 축): 실패하는 입력을 구성할 수 없었다.**
+
+15필드의 타입 분포가 이유다:
+
+| 타입 | 개수 | 실패 가능성 |
 |---|---|---|
-| `problem_ref` | `history.joseon.imjin-war-impact-0001` | 채워짐 |
-| `question_text` | 지문 그대로 | 채워짐 |
-| `answer` | `① 인구 감소·농경지 황폐화 ② 신분제 동요 ③ 공납제 개편 논의` | 채워짐 |
-| `answer_kind` | `history.free_response` | 채워짐 |
-| `conditions` | `""` (기본값) | 채워짐 |
-| `state`·`reason`·`checked_axes` | `unverifiable` · `"서술형 — 기계 채점 불가"` · `()` | 채워짐 |
-| `machine_axes`·`residual_axes` | `()` · `("historical_accuracy","completeness")` | 채워짐 |
-| `code`·`confidence`·`matched_signals` | `history-anachronism` · `0.4` · `()` | 채워짐 |
+| `str` · `str \| None` · `tuple[str, ...]` | **13** | 임의의 문자열을 받는다 — **거부되는 값이 없다** |
+| `Literal["pass","fail","unverifiable"]` | 2 (`state` ×2) | 3값 중 하나면 통과 |
+| `float` (`ge=0, le=1`) | 1 | 0~1이면 통과 |
 
-**결과: History도 15/15 채워진다.**
+`extra="forbid"`는 **필드를 늘리는 것**만 막는다. 기존 필드에 무엇을 넣느냐는 막지 않는다.
+따라서 갈래 A는 **어떤 과목을 대도 통과한다** — History가 통과한 것도 이 때문이고(설계대로),
+계약이 상정하지 않은 임의의 텍스트를 넣어도 마찬가지다. **실패 사례를 구성할 수 없는 검사는
+통과했다는 사실로 아무것도 입증하지 못한다.** 이것이 초판이 옳게 본 부분이며, 정정은
+*근거*(대조군)였지 *결론*(갈래 A는 무정보)이 아니다.
 
-### 판정 — 라운드 1의 "✗ 0"은 정보량이 낮다
+**갈래 B — "의미가 뒤틀린다"(판정 축): 실패할 수 있으나 기계 뒷받침이 없다.**
 
-원인은 계약의 타입 구성이다. 15필드 중 **13필드가 `str` · `str|None` · `tuple[str,...]`**이고,
-나머지 2개는 `Literal` 3값과 `float(0~1)`이다. **불투명 문자열은 어떤 과목이든 받는다** —
-즉 라운드 1은 *원리적으로 ✗를 낼 수 없는 검사*에 가깝다. 계약이 배제하겠다고 선언한
-과목조차 통과하는 검사는, 통과했다는 사실로 중립성을 입증하지 못한다.
+이쪽은 실제로 실패할 수 있다. 실제로 §2에 뒤틀림 후보 3건을 적었고(수학 은유 용어·
+정답/학생답 비대칭·오개념 뒷단 부재), 그중 어느 것도 **과목 중립성을 깨는 수준은 아니라고
+판정**했다. 그러나 그 판정은 **사람의 읽기**이고, 그것을 검사하는 기계는 없다.
+계약 파일이 같은 사실을 적는다(`subject_adapter.py:52-55`): *"그 축의 기계 집행은
+**현재 없다**(있는 척 금지)."*
 
-이것은 계약의 결함이 아니다. 오히려 **"Core는 페이로드를 해석하지 않는다"는 설계가 성공한
-결과**다. 그러나 그 성공은 동시에 **필드 채움 검사의 반증력을 0에 가깝게 만든다**.
-계약 파일 자신이 이 함정을 정확히 예고했다(`subject_adapter.py:40-55` "래칫의 한계"):
+### 3-3. 이 라운드의 결론
+
+라운드 1의 **✗ 0은 다음 두 가지의 합**이다:
+
+- **갈래 A(채움) = 구조적으로 무정보** — 실패 사례가 존재하지 않는 검사의 통과
+- **갈래 B(뒤틀림) = 사람 판정 · 기계 뒷받침 0** — 내가 0으로 판정했고 그 판정을 검사하는 것은 없다
+
+그래서 "✗ 0이니 계약이 과목 중립임이 확인됐다"고 말할 수 **없다**. 말할 수 있는 것은
+**"이 방법으로는 반증하지 못했다"**까지다. 반증 시도가 실패했다고 말하려면 그 시도에
+반증력이 있어야 하는데, 갈래 A에는 없고 갈래 B에는 기계 뒷받침이 없다.
+
+계약 파일 자신이 이 지점을 예고했다(`subject_adapter.py:40-55` "래칫의 한계"):
 
 > 의미적 확장은 잡지 못한다 — `conditions`는 그대로 두고 그 안에 물리 관계식을 넣거나,
 > Core 코드가 `answer_kind` 값을 읽어 분기하기 시작하는 것은 필드 개수가 안 변하므로 CI가
@@ -147,8 +172,8 @@ ADR-004 §근거가 *"왜 구현이 아니라 대조인가 — 필요한 것은 
 > … **이 축의 검증 책임은 `EOS-92`에 있다.**
 
 그러므로 프로브는 §4로 이어져야 한다. 여기서 멈추면 "계약을 채워 봤다"는 의식만 치른 것이다.
-
----
+반증력 있는 검사의 설계는 **`EOS-99`**가 소유한다 — 그 태스크의 근거는 (정정 후) *"History가
+잘못 통과한다"*가 아니라 **"갈래 A에 실패 사례가 존재하지 않고 갈래 B에 기계 뒷받침이 없다"**이다.
 
 ## §4. 라운드 3 — 계약이 지목한 진짜 축: Core가 불투명 페이로드를 해석하는가
 
@@ -206,7 +231,8 @@ Kiki 결정으로 **능력별 좁은 Protocol(선택층)**로 분리했다(`EOS-
 
 1. **ADR-004 ①이 금지한다.** *"2026-09-27까지 Core Contract를 Frozen으로 선언하지 않는다."*
    오늘은 09-06이다. 이 프로브는 9/27 판정의 **입력**이지 판정 자체가 아니다.
-2. **✗ 0의 근거가 약하다.** §3이 실증했듯 같은 검사가 History도 통과시킨다. "반증 시도가
+2. **✗ 0의 근거가 약하다.** §3-3이 보였듯 채움 축은 실패 사례를 구성할 수 없고(무정보),
+   뒤틀림 축은 사람 판정이며 기계 뒷받침이 0이다. "반증 시도가
    실패했다"고 말하려면 그 시도에 반증력이 있어야 하는데, 라운드 1은 그렇지 못했다.
    §4가 보완하지만 §4-2의 한계(필수층 미사용)가 남는다.
 
@@ -239,7 +265,7 @@ ADR-004는 *"프로브 판정자: Kiki 단독인가, 물리 도메인 확인이 
 
 | # | 한계 | 소유자 |
 |---|---|---|
-| 1 | 필드 채움 검사의 반증력이 낮다(§3) — 계약이 배제 선언한 과목도 통과한다. 중립성을 실제로 반증할 수 있는 검사가 필요 | **`EOS-99`** (신설) |
+| 1 | 필드 채움 검사의 반증력이 낮다(§3) — 갈래 A는 실패 사례가 **존재하지 않고**(13/15가 임의 문자열 수용), 갈래 B는 사람 판정에 기계 뒷받침이 0이다. 중립성을 실제로 반증할 수 있는 검사가 필요 | **`EOS-99`** (신설) |
 | 2 | 필수층 호출자 0(§4-2) — 중립성이 *사용*으로 시험된 적이 없다. `EOS-69` ⑦의 설계 결과이므로 결함은 아니나, 그 상태가 지속되는지 추적할 소유자가 없었다 | **`ARCH-41`** (신설) |
 | 3 | 계약 파일 "집행 상태" 절이 층을 구분하지 않아 필수층 배선으로 오독 가능(§4-2 ⚠) | `ARCH-41` acceptance ③ |
 
@@ -255,24 +281,76 @@ ADR-004는 *"프로브 판정자: Kiki 단독인가, 물리 도메인 확인이 
 
 ## 부록. 재현 명령
 
+> **정정 3건 (Codex P1 · PR #999)** — 초판의 이 절은 세 가지가 틀렸다: ⑴`grep` 파이프라인이
+> **스캔 실패와 0건을 구별하지 못했다** ⑵`pytest -q`로 출력을 억제했다(바로 아래에서 그 금지
+> 규칙을 인용하면서) ⑶Kiki 기본 환경인 PowerShell 블록이 없었다. 셋 다 아래에서 고쳤다.
+
+### ① Core 해석 지점 — 스캔 실패를 0건으로 위장하지 않는다
+
+**왜 단순 파이프라인이면 안 되는가(실측)**: `grep A | grep -v B`에서 `$?`는 **마지막** grep의
+값이다. 소스 경로가 없어 첫 grep이 exit 2로 죽어도 마지막 `grep -v`는 여전히 exit 1을 내므로,
+**"스캔 실패"가 "호출자 0건"과 같은 값으로 보인다** — 측정 실패가 통과로 위장되는 정확한 형태다
+(CLAUDE.md 검증 권위: *"인프라가 죽으면 '측정 실패'가 보여야지 '0건 통과'로 위장되면 안 된다"*).
+
 ```bash
 # WSL / Linux — 저장소 루트
 cd /mnt/c/Users/kiki/Desktop/__AI/WhyMath
 
-# §4-1 Core 해석 지점
-# ⚠ 성공 기준: grep은 **매칭이 없을 때 exit 1**이다. 따라서 EXIT=1 이 정상(호출자 0건)이고,
-#   EXIT=0 은 호출자가 생겼다는 뜻이다 — 0을 성공으로 읽으면 판정이 뒤집힌다.
-grep -rn "\.evaluate_answer(\|\.detect_misconception(\|\.validate_problem(" \
-  --include=*.py src/backend/whymath_backend/ \
-  | grep -v schema/subject_adapter.py | grep -v l4/subject_adapter_math.py; echo "EXIT=$?"
+set -o pipefail   # 파이프 중간 실패를 $?로 전파 — 이 줄이 이 검사의 변별력이다
+SRC=src/backend/whymath_backend
+test -d "$SRC" || { echo "SCAN_ERROR: 소스 경로 없음 — 판정 불가"; exit 2; }
 
-# 계약 동결 테스트 (기대: exit 0)
-python -m pytest tests/backend/schema/test_subject_adapter_two_tier_contract.py \
-                 tests/backend/schema/test_subject_adapter.py -q; echo "EXIT=$?"
+grep -rn "\.evaluate_answer(\|\.detect_misconception(\|\.validate_problem(" \
+  --include=*.py "$SRC" \
+  | { grep -v "schema/subject_adapter.py" || true; } \
+  | { grep -v "l4/subject_adapter_math.py" || true; }
+rc=${PIPESTATUS[0]}   # 첫 grep의 값만 본다
+case "$rc" in
+  0) echo "RESULT=CALLERS_FOUND  (필수층 호출자가 생겼다 — §4-2 재판정 필요)" ;;
+  1) echo "RESULT=ZERO_CALLERS   (정상 — 호출자 0건)" ;;
+  *) echo "RESULT=SCAN_ERROR rc=$rc  (판정 불가 — 0건으로 읽지 말 것)" ;;
+esac
 ```
 
-판정은 **exit code**로 한다(출력 문자열 아님 — CLAUDE.md "검사 명령의 출력을 억제하거나
-잘라서 판정 금지").
+```powershell
+# Windows PowerShell (Phaiakes9) — 저장소 루트
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+
+$Src = "src\backend\whymath_backend"
+if (-not (Test-Path $Src)) { Write-Host "SCAN_ERROR: 소스 경로 없음 — 판정 불가"; exit 2 }
+
+$hits = Select-String -Path "$Src\*.py" -Recurse `
+          -Pattern '\.evaluate_answer\(|\.detect_misconception\(|\.validate_problem\(' |
+        Where-Object { $_.Path -notmatch 'subject_adapter(_math)?\.py$' }
+
+if ($null -eq $hits) { Write-Host "RESULT=ZERO_CALLERS   (정상 — 호출자 0건)" }
+else { $hits | ForEach-Object { $_.Path + ":" + $_.LineNumber }; Write-Host "RESULT=CALLERS_FOUND  (§4-2 재판정 필요)" }
+```
+
+**세 상태를 구별한다**: `ZERO_CALLERS`(정상) / `CALLERS_FOUND`(재판정) / `SCAN_ERROR`(판정 불가).
+초판처럼 `EXIT=1` 하나로 읽으면 앞의 둘 중 어느 것인지 알 수 없다.
+
+### ② 계약 동결 테스트 — 출력을 억제하지 않는다
+
+`-q`를 쓰지 않는다. 조용한 도구는 실패해도 성공과 같은 화면을 내며, 이 저장소는 그 형태로
+한 번 뚫렸다(2026-08-09 PR #732 — `black --check -q`가 6파일 실패를 감춰 main red).
+
+```bash
+# WSL / Linux — 저장소 루트에서
+python -m pytest tests/backend/schema/test_subject_adapter_two_tier_contract.py \
+                 tests/backend/schema/test_subject_adapter.py; echo "EXIT=$?"
+```
+
+```powershell
+# Windows PowerShell (Phaiakes9) — 저장소 루트
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+python -m pytest tests\backend\schema\test_subject_adapter_two_tier_contract.py `
+                 tests\backend\schema\test_subject_adapter.py; echo "EXIT=$LASTEXITCODE"
+```
+
+기대: **19 passed · EXIT=0**. 판정은 **exit code**로 한다(출력 문자열 아님 — CLAUDE.md
+"검사 명령의 출력을 억제하거나 잘라서 판정 금지"). 실행기는 `python -m pytest`로 못 박는다
+(단독 `pytest` 금지 — 다중 환경에서 다른 인터프리터에 결합될 수 있다).
 
 ### 이 재현 명령에 변별력이 있는가 — 실패 주입으로 확인함 (2026-09-06)
 
