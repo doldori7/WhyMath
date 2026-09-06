@@ -127,7 +127,9 @@ CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"에 따라 *
 
 16. **AssessmentResult** — 그 진단이 **산출한 판정**(단원별 진단·약점·강점·권장 경로).
     - *이다*: Assessment 1회의 결론.
-    - → **좌석 부재**(§3-C). 현재 `assessment` 행 안의 JSONB 5필드로 **혼입**돼 있다.
+    - → **좌석 부재**(§3-C) — 현재 `assessment` 행 안의 JSONB 5필드로 **혼입**돼 있고,
+      `ARCH-38`이 **혼입 유지로 판정**했다(2026-09-06·main `794c0ea8` 기준). 미결이 아니라
+      **판정된 상태**다 — 근거·비용·재판정 트리거 3종은 §3-C.
 
 ### 행위·전략 축
 
@@ -267,14 +269,96 @@ CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"에 따라 *
   함께 걸린다 — W2가 감당할 결정이 아니다.
 - **9월 조치**: 없음. 승격은 §5 절차 + 별도 태스크.
 
-### §3-C. AssessmentResult — `assessment` 안에 혼입돼 있다
+### §3-C. AssessmentResult — `assessment` 안에 혼입돼 있다 → **혼입 유지로 판정**(2026-09-06)
+
+> **판정 기준: main `794c0ea8`** — 아래 실측은 전부 이 커밋의 trunk 코드에서 확인했다
+> (CLAUDE.md "미머지 존재를 '충족'으로 단정 금지" — 판정에는 시점이 붙어야 한다).
 
 - **현행 실체**: `assessment` 테이블의 JSONB 5필드
   (`concept_diagnosis`·`pattern_diagnosis`·`weak_points`·`strong_points`·`recommended_path`).
   세션(언제 진단했나)과 결과(무엇이 나왔나)가 **한 행에 산다**.
-- **동결 사유**: 분리하면 진단 이력 조회 경로가 전부 바뀐다 — 소급 불가 변경이라 W2 대상이나,
-  이번 주 근거로는 분리 이득이 실측되지 않았다.
-- **9월 조치**: 없음. **혼입 상태를 인정하고 적는다**(날조 금지).
+
+- **판정(`ARCH-38`)**: **분리하지 않는다.** ARCH-37 당시 "이번 주 근거로는 이득이 실측되지
+  않았다"였던 것을 `ARCH-38`이 W8 축으로 전수 재측정했고, 결과는 **이득 0**이다. 아래는
+  "아직 안 봤다"가 아니라 **보고 나서 안 한다**는 판정이다.
+
+#### 판정 근거 — 분리가 무엇을 얻는가: 셋 다 0
+
+1. **W8 경로가 `assessment`를 읽지도 쓰지도 않는다.** 채점→오개념→Mastery 런타임 전 구간
+   (`api/coach.py` `_complete_problem`:983-1030 → `curate_hypothesis`:1692 →
+   `l2/mastery_tracking.py` → `l2/skill_mastery_tracking.py` → `l2/attempt_skill_event.py`,
+   그리고 v1 잔존 경로 `api/me.py:721 submit_attempt`)에서 ORM `Assessment` 참조는 **0건**이다.
+   그 경로가 만지는 것은 `ProblemAttempt`·`misconception_hypothesis`·`ConceptMasteryHistory`·
+   `SkillMasteryHistory`·`attempt_event`이며, `assessment`는 **평행한 별도 좌석**이다.
+   → **분리해도 W8 경로의 코드·쿼리·트랜잭션은 한 줄도 바뀌지 않는다.**
+   ※ `api/coach.py`·`l2/*`의 `assessment` grep 히트 2건은 *모듈 파일명*이 같을 뿐
+   `ConceptMasteryHistory`/`SkillMasteryHistory` 임포트다 — 테이블이 다르다.
+
+2. **Assessment : Result는 1:1·write-once다** — 분리가 푸는 카디널리티 문제가 없다.
+   writer 2곳(`api/me.py:2811` capture·`:3024` assemble)은 행 전체를 조립해 **한 번 commit**
+   하고 끝이며, 5필드를 **갱신하는 경로가 없다**(`PATCH .../complete`는 `completed_at`만
+   채운다·`api/me.py:2547-2570`). capture는 하루 1행 idempotency(`_find_existing_capture`
+   :2655)라 한 세션이 결과를 여러 벌 낳지도 않는다. 별도 엔티티가 정당화되려면 결과가
+   **N개이거나 append-only 이력**이어야 하는데 둘 다 아니다.
+
+3. **reader가 0이라 "죽은 소비 경로 소생"이라는 선례 조건을 충족하지 못한다.**
+   이 저장소의 JSONB→엔티티 분리 선례 `S4-09`(`solution_paths` 실체화)가 스스로 밝힌 정당화는
+   *"reader 2종 소생 — `GET /v1/problems/{id}/steps` 실데이터·`learning_scene`
+   `solution_path_id` 댕글링 해소"*였다. 즉 **이미 있는데 죽어 있던 소비처가 살아난다**는 것이
+   근거였다. AssessmentResult에는 그 소비처가 없다 — 5필드를 *값으로 읽어 판단에 쓰는* 코드는
+   서빙 경로에 0건이고(응답에 실어 보내는 직렬화는 소비가 아니다), 학생 화면 부재는
+   **`ASM-11`이 소유**한다. 분리는 그 화면을 앞당기지 못한다.
+
+#### 분리했을 때의 실비용 (측정된 반대편)
+
+- **프라이버시 3계획의 순서 목록에 삽입**해야 한다 — `privacy/erasure.py:107`(`_ERASURE_PLAN`,
+  "자식 우선" 순서 강제)·`privacy/retention.py:83`·`privacy/export.py:164`
+  (`_STUDENT_FACING_SERIALIZERS`). 셋 다 순서·완전성 거버넌스 테스트가 붙어 있다.
+- **GDPR 삭제 경로에 cascade 관심사가 새로 생긴다.** 현행 `delete_my_assessment`는
+  *"Assessment는 자식 테이블이 없어 FK 위반 우려 없음"*(`api/me.py:2585`)을 전제로 서 있다.
+  자식이 생기면 그 전제가 깨진다.
+- ⚠ **완전성 가드의 사각**: `tests/backend/privacy/test_erasure_plan_completeness.py`는
+  `user_id`·`student_id`·`target_user_id` **소유 컬럼이 있는 테이블만** 스캔한다
+  (`OWNER_COLUMN_NAMES`). `assessment_result`를 `assessment_id` FK만으로 만들면 **미성년
+  진단 데이터를 담은 테이블이 이 가드에 안 보인다** — 등재를 깜빡해도 RED가 안 난다.
+  분리는 이 사각을 새로 만든다.
+- 서빙 표면 5개(`GET /assessments`·`PATCH .../complete`·`DELETE`·`POST .../capture`·
+  `POST .../assemble`)의 조회·조립 경로 전부 변경 + 소급 불가 마이그레이션 왕복.
+
+**요약**: 얻는 것 0 · 치르는 것 위 5종. 지금 분리하면 순수 손실이다.
+
+#### 9월 조치와 기계 집행
+
+- **9월 조치**: 없음(분리하지 않는다). §1-16·§2-A의 `AssessmentResult` 좌석 수는 **0을 유지**한다.
+- **집행**: 이 판정은 이미 기계가 지킨다 — `test_canonical_entity_model_freeze.py`의
+  `ABSENT_ENTITIES`(좌석 tuple 비어 있음) + `RESERVED_ABSENT_TABLE_NAMES`
+  (`assessment_result`·`assessment_results`)가 좌석 신설 시 **RED**를 낸다. 판정을 뒤집으려면
+  §5 절차를 밟아 문서와 상수를 **함께** 고쳐야 한다(둘 중 하나만 고치면 검사 ④가 RED).
+
+#### 재확인 지점 (만료 없는 유예 금지 — CLAUDE.md 2026-08-03)
+
+이 판정은 **영구 결론이 아니라 현재 근거에 대한 판정**이다. 아래 셋 중 **하나라도 성립하면
+재판정**한다 — 셋 다 위 "근거 3"의 부정이다.
+
+| # | 재판정 트리거 | 관측 지점 |
+|---|---|---|
+| 1 | W8 경로(채점→오개념→Mastery)가 `assessment`를 읽거나 쓰기 시작 | `api/coach.py`·`l2/*`에 ORM `Assessment` 참조가 생김 |
+| 2 | 한 Assessment가 결과를 **2개 이상** 낳거나 결과가 append-only 이력이 됨 | 5필드에 *갱신* writer가 생김 |
+| 3 | 5필드를 **값으로 읽어 판단에 쓰는** 서빙 reader가 착지(`ASM-11` 등) | 직렬화가 아닌 소비 코드 |
+
+추적 소유자 = **`ARCH-40-assessment-result-verdict-recheck`**(산문이 아니라 백로그 대장에
+등재 — "선행 조건을 산문에만 적고 대장에 집행하지 않기 금지"). 재확인 기한은 그 태스크가 진다.
+
+#### 함께 실측된 드리프트 (고치지 않고 적는다)
+
+- **`strong_points`는 writer가 0이다.** 5필드 중 유일하게 *쓰는 코드가 아예 없는* 컬럼인데
+  `StudentAssessment` 응답에는 실려 나간다(항상 `[]`). "좌석이 있다고 writer가 있다는 뜻이
+  아니다"(§7-C)의 컬럼 축 사례다. 소유자 = **`ASM-13-strong-points-writer-absence`**.
+- **주차 표기 어긋남**: `ARCH-38` notes는 W8을 `10/12~10/18`로 적지만, 선언의 주간 리듬
+  (W1=`8/31~9/6`, `eos_transition_declaration_2026-08-30.md`)에서 그 구간은 **W7**이고
+  W8은 `10/19~10/25`다. 어느 쪽이든 `ARCH-38` 기한(`2026-10-05`)보다 뒤라 **이 판정의
+  결론은 바뀌지 않는다**. 계획서 300 원문이 저장소 밖이라 라벨·날짜 중 무엇이 정본인지는
+  여기서 판정하지 않는다(날조 금지).
 
 ### §3-D. ContentVersion — 전용 좌석 없이 분산돼 있다
 

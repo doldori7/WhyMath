@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P0
 owner: claude
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/db/models/assessment.py
   - docs/architecture/canonical_entity_model_v1.md
-session: null
+session: claude/status-k9r51v
 notes: "출처: ARCH-37 정본 §3-C가 '혼입 상태를 인정하고 적음'으로 남긴 좌석 부재 4종 중 1건. Kiki 리뷰(2026-09-05): 'AssessmentResult는 나중 일이 아니다 — 진단 세션과 결과가 한 테이블에 섞여 있으면 Phase 2 W8(10/12~10/18, 채점→오개념→Mastery)에서 바로 걸린다. 10월 초 데드라인을 붙여서 등재.' 소유자 없는 알려진 결함은 Gate D(owner 존재) NO."
-updated: 2026-09-05
+updated: 2026-09-06

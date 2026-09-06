@@ -7898,3 +7898,74 @@ CI green·충돌 없음 상태에서 Codex 리뷰가 결함 3건을 냈고 **전
 **교훈**: 판정은 **시점에 종속되는 함수**다. 해시 없는 판정은 재현 불가이고, 재현 불가한 판정은 며칠 뒤 조용히 거짓이 된다 — 틀렸다는 신호조차 없이. 같은 날 아침의 "엔티티 19종 동결 완료"(`7f7da344`)가 저녁에 "필드 축은 무방비"로 드러난 것이 정확히 그 형태였고, 그때는 Codex 리뷰가 잡아 줬을 뿐이다.
 
 **부수 정정 기록**: 이 사고를 지적받은 뒤 재점검에서 Gate 0의 축이 **4개가 아니라 5개**(A~E)임도 드러났다 — 앞선 보고가 `E(Release/Golden Path)`를 통째로 빠뜨렸고, §7 재측정이 그 축을 *"미충족에 가깝다"*로 판정해 둔 상태였다(가장 나쁜 축을 빠뜨린 것). 또한 `B=충족`·`D=부분`은 세션이 새로 판정한 것이 아니라 **2026-09-01 §7 재측정이 이미 내린 판정**이었고, `Gate 0` 이름 충돌도 전환 선언 `:71-74`의 표기 규약(`G0~G5` vs `Phase 0 Gate A~E`)으로 **이미 해소**돼 있었다. 세 건 모두 "이미 있는 것을 못 보고 새로 발견한 것처럼 보고"한 형태다.
+
+---
+
+## 2026-09-06: ARCH-38 판정 — AssessmentResult 좌석 **분리하지 않는다**(혼입 유지)
+
+> **판정 기준: main `794c0ea8`** (바로 위 "판정 시점 규칙" 준수 — 아래 실측은 전부 trunk 코드)
+
+**무엇을 판정했나**: `ARCH-37`이 §3-C에 *"혼입 상태를 인정하고 적는다"*로 남긴 `AssessmentResult`
+좌석 부재를, `ARCH-38`이 **W8(채점→오개념→Mastery) 축으로 전수 재측정**해 판정으로 닫았다.
+acceptance ①이 *"분리가 결론이 아니라 판정이 결론"*이라고 못박은 대로, 결론은 **혼입 유지**다.
+
+**분리가 얻는 것 = 0 (셋 다 실측)**
+1. **W8 경로가 `assessment`를 읽지도 쓰지도 않는다.** `api/coach.py` `_complete_problem`:983-1030
+   → `curate_hypothesis`:1692 → `l2/mastery_tracking.py` → `l2/skill_mastery_tracking.py` →
+   `l2/attempt_skill_event.py`(+ v1 잔존 `api/me.py:721`) 전 구간에서 ORM `Assessment` 참조 **0건**.
+   ORM `Assessment` 임포트는 저장소 전체에서 `api/me.py` **한 곳**뿐이다. 분리해도 그 경로는
+   한 줄도 안 바뀐다. ※ 그 경로의 `assessment` grep 히트 2건은 *모듈 파일명*이 같을 뿐
+   `ConceptMasteryHistory`/`SkillMasteryHistory` 임포트다 — **파일명 동형에 속지 않는 것**이
+   이 판정의 첫 관문이었다.
+2. **Assessment : Result = 1:1 · write-once.** writer 2곳(`api/me.py:2811`·`:3024`)은 행 전체를
+   조립해 한 번 commit하고 끝이며 5필드 *갱신* 경로가 없다(`PATCH .../complete`는 `completed_at`만).
+   capture는 하루 1행 idempotency(`_find_existing_capture`:2655). 별도 엔티티를 정당화하는
+   카디널리티(N개 결과·append-only 이력)가 **둘 다 없다**.
+3. **서빙 reader 0** — 선례 `S4-09`(`solution_paths` 실체화)가 스스로 밝힌 정당화는
+   *"reader 2종 소생·댕글링 해소"*, 즉 **죽어 있던 소비처가 살아난다**였다. 여기엔 그 소비처가
+   없다(응답 직렬화는 소비가 아니다). 학생 화면 부재는 `ASM-11` 소유이고, 분리는 그것을 앞당기지
+   못한다. 반대 방향 선례도 있다 — `LIC-01`은 Rights를 분리하면서 License는 오히려 JSONB로 접었다.
+
+**분리가 치르는 것 (측정된 반대편)**: 프라이버시 3계획의 *순서* 목록 삽입(`erasure.py:107`
+`_ERASURE_PLAN`·`retention.py:83`·`export.py:164`) + GDPR 삭제의 cascade 관심사 신설
+(`api/me.py:2585`가 *"자식 테이블이 없어 FK 위반 우려 없음"*을 전제로 서 있다) + 서빙 5표면 변경 +
+소급 불가 마이그레이션 왕복. **얻는 것 0 · 치르는 것 5종 → 지금 분리하면 순수 손실이다.**
+
+**⚠ 분리했다면 새로 생겼을 사각 (재판정 시 선결로 승계)**:
+`test_erasure_plan_completeness.py`는 `user_id`·`student_id`·`target_user_id` **소유 컬럼이 있는
+테이블만** 스캔한다(`OWNER_COLUMN_NAMES`). `assessment_result`를 `assessment_id` FK만으로 만들면
+**미성년 진단 데이터를 담은 테이블이 파기계획 완전성 가드에 안 보인다** — 등재를 깜빡해도 RED가
+안 난다. 정규화가 프라이버시 가드의 커버리지를 *줄이는* 형태이며, 분리 판정 시 소유 컬럼 부여
+또는 가드 확장을 **동시에** 착지시켜야 한다(`ARCH-40` acceptance ③).
+
+**집행 (정본화 ≠ 집행)**: 이 판정은 이미 기계가 지킨다 —
+`test_canonical_entity_model_freeze.py`의 `ABSENT_ENTITIES` + `RESERVED_ABSENT_TABLE_NAMES`.
+**주장이 아니라 뮤테이션으로 확인했다**(CLAUDE.md "보호 장치를 실패 주입 없이 보호 있음으로 선언
+금지"): `assessment_result` 테이블을 실제로 주입 → `test_absent_entities_have_no_seat_table` +
+`test_every_table_is_attributed` **2건 RED·exit 1** → 프로브 파일 삭제 → **8건 GREEN·exit 0**.
+(원복은 신규 파일 `rm`이라 미커밋 구현분을 건드릴 수 없는 형태를 골랐다 — `git checkout --` 금지
+규칙 2026-08-10의 취지.)
+
+**재확인 지점** (만료 없는 유예·제외 금지): `ARCH-40-assessment-result-verdict-recheck` 등재.
+트리거 3종 = 위 근거 1·2·3의 부정(W8 경로가 Assessment를 만짐 / 5필드 갱신 writer 등장 /
+값을 읽는 서빙 reader 착지). **산문이 아니라 대장에 넣은 이유**는 `selector.py`가 notes를 읽지
+않기 때문이다(2026-09-01 "선행 조건을 산문에만 적고 대장에 집행하지 않기 금지"). 트리거가 전부
+False로 재확인되면 그 태스크를 **재생성**한다 — 감시가 끊기지 않게(ARCH-* 감사 태스크 규약).
+
+**부수 실측 2건 (고치지 않고 적는다 · 소유자 부여)**
+- **`strong_points`만 writer 0건**이다. 5필드 중 유일하게 채우는 코드가 아예 없는데
+  `StudentAssessment` 응답에는 실려 나가 학생에게 항상 `[]`로 보인다. 정본 §7-C
+  *"좌석이 있다고 writer가 있다는 뜻이 아니다"*의 **컬럼 축** 사례다(그 조항은 테이블 축
+  `learning_session`만 예시로 들고 있었다). 소유자 = `ASM-13-strong-points-writer-absence`.
+  ARCH-38 notes가 *"소유자 없는 알려진 결함은 Gate D(owner 존재) NO"*라 적었으므로 소유자를 붙였다.
+- **주차 표기 어긋남**: `ARCH-38` notes는 W8을 `10/12~10/18`로 적지만 선언의 리듬
+  (W1=`8/31~9/6`)에서 그 구간은 **W7**이고 W8은 `10/19~10/25`다. 어느 쪽이든 기한(`10/05`)보다
+  뒤라 **판정 결론은 바뀌지 않는다**. 계획서 300 원문이 저장소 밖이라 라벨·날짜 중 무엇이
+  정본인지는 판정하지 않았다(날조 금지). `eos_phase2_plan_300_gap_review_2026-09-03.md:95-101`이
+  경고한 *"주차 번호 1칸 어긋남 — 세 번째다"*와 같은 형태다.
+
+**교훈**: 이 태스크의 P0·데드라인은 *"W8에서 바로 걸린다"*는 전제에서 왔는데, 실측하니 **W8 경로가
+그 테이블을 아예 지나가지 않았다**. 우선순위의 근거가 되는 인과("A가 B를 막는다")도 코드로
+확인해야 하는 주장이다 — 확인하지 않으면 소급 불가 스키마 변경을 마감에 쫓겨 치를 뻔했다.
+반대로 진짜 W8 리스크로 실측된 것은 혼입이 아니라 **부분 쓰기 갭**(attempt commit 후 헬퍼들이
+각자 독립 commit — `l2/attempt_skill_event.py:71-97` 자인)이고 그 소유자는 `EOS-81`이다.
