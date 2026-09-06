@@ -959,3 +959,81 @@ class TestReviewRegressions:
             bs.load_status(path), max_age_hours=48, require_encrypted=True, now=now
         )
         assert verdict.reason == "stale"
+
+
+# ===========================================================================
+# D. 런북 상호참조 (2026-09-06 · 게이트 G-backup-offsite-move 실행 준비 중 실측)
+#
+# 반출 조건 ⓑ가 "개인키가 다른 매체에 있다(§4-5)"라고 가리키는데, 그 §4-5를
+# 문서에서 찾을 수 없는 상태였다. 취급 규칙 목록(1~5번) 사이에 §4-1a~4-1d가
+# 삽입되면서 2~5번 항목이 §4-1d 본문 안으로 밀려났고, 절 번호는 본문 어디에도
+# 적혀 있지 않아 §4-2·§4-3·§4-5 참조가 전부 착지점을 잃었다. §4-3은 이 파일의
+# 주석도 인용하는 번호라 하중을 받고 있었다.
+#
+# 문서 결함은 조용하다 — 렌더링도 되고 링크도 아니라서 깨진 티가 나지 않는다.
+# 그래서 기계가 본다.
+# ===========================================================================
+_RUNBOOK = _ROOT / "docs" / "architecture" / "db_backup_dr_runbook.md"
+
+# §4-1a·§3-3b·§1b처럼 숫자 뒤 알파벳 접미가 붙는 절이 있다.
+_SECTION = r"(\d+[a-z]?(?:-\d+[a-z]?)?)"
+
+
+def _runbook_definitions(text: str) -> set[str]:
+    """절 번호의 **정의부**만 모은다 — 본문 중 괄호 참조는 정의가 아니다.
+
+    변별력 주의: `(§1b)` 같은 괄호 *참조*를 정의로 세면 모든 참조가 스스로를
+    정의하게 돼 검사가 항상 통과한다(정의만 하고 안 써도 통과하는 substring
+    검사와 같은 위장). 그래서 정의는 두 형태로만 인정한다.
+    """
+    headings = set(re.findall(rf"^#{{2,4}}\s+§?{_SECTION}\.", text, re.M))
+    # 번호 목록 항목의 **접두** 라벨: `5. **(§4-5) 키 분리 유지**: ...`
+    items = set(re.findall(rf"^\d+\.\s+\*\*\(§{_SECTION}\)", text, re.M))
+    return headings | items
+
+
+class TestRunbookCrossReferences:
+    def test_every_section_reference_resolves(self) -> None:
+        """런북이 §N으로 가리키는 절이 전부 문서 안에 실재하는가."""
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        dangling = sorted(set(re.findall(rf"§{_SECTION}", text)) - _runbook_definitions(text))
+        assert not dangling, (
+            f"런북이 존재하지 않는 절을 참조한다: {['§' + d for d in dangling]} — "
+            "읽는 사람이 조건의 정의를 찾지 못한다"
+        )
+
+    def test_export_condition_b_points_at_a_defined_section(self) -> None:
+        """★ 반출 조건 ⓑ의 착지점 — 이 게이트가 실제로 밟는 참조다.
+
+        ⓑ는 '개인키가 다른 매체에 있다'를 요구하면서 그 정의를 다른 절에 위임한다.
+        위임 대상이 없으면 조건은 문장만 남고 판정 기준이 사라진다.
+        """
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        condition = next(
+            (ln for ln in text.splitlines() if ln.lstrip().startswith("- ⓑ")),
+            None,
+        )
+        assert condition is not None, "반출 조건 ⓑ 자체가 런북에서 사라졌다"
+
+        targets = re.findall(rf"§{_SECTION}", condition)
+        assert targets, "ⓑ가 키 분리 규칙의 정의부를 가리키지 않는다"
+        definitions = _runbook_definitions(text)
+        for target in targets:
+            assert target in definitions, f"ⓑ가 가리키는 §{target} 가 런북에 없다"
+
+    def test_key_separation_section_covers_the_age_private_key(self) -> None:
+        """§4-5는 age 개인키를 다뤄야 한다 — ⓑ가 요구하는 키가 그것이다.
+
+        종전 문면은 봉투 암호화 마스터 키(env)만 다뤘다. 그 키는 덤프 *내용물*을
+        덮는 키이고, 반출 조건 ⓑ가 말하는 키는 `.dump.age`를 여는 age 개인키다.
+        정의부가 다른 키를 설명하면 참조가 해소돼도 조건은 여전히 미정의다.
+        """
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        body = next(
+            (ln for ln in text.splitlines() if ln.startswith("5. **(§4-5)")),
+            None,
+        )
+        assert body is not None, "§4-5 정의부(취급 규칙 5번)가 없다"
+        assert (
+            "whymath-backup-identity.key" in body
+        ), "§4-5가 age 개인키를 명시하지 않는다 — 반출 조건 ⓑ의 대상이 미정의로 남는다"
