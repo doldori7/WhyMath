@@ -1,5 +1,8 @@
 # "EOS 1과목 완성" 3축 실측 점검 (2026-09-03)
 
+> **📌 스냅샷 고지 (2026-09-05 추가·본문 무수정)**: 이 문서는 **2026-09-03 시점 스냅샷**이다. 여기서 Subject Contract v1을 "확정"·"초과 달성"·"합격"으로 적은 판정은 그 시점의 것이며, **정본은 계약 모듈** `src/backend/whymath_backend/schema/subject_adapter.py`다 — 2026-09-05 `EOS-91`로 상태가 **Provisional (pending cross-subject probe 9/27)**로 명시됐다. 본문은 기록 보존을 위해 손대지 않았다.
+
+
 > **판정 기준**: 코드 grep·문서 서술이 아니라 **명령 출력**으로 판정한다(CLAUDE.md).
 > **대조 시점**: `claude/whymath-system-review-n75r24` @ `5bb2947b` · API 라우트 103건 · 백엔드 모듈 637개.
 > **성격**: 초판은 조사 전용이었고, 이후 §5-1(G1)의 서버 축을 같은 PR에서 고쳤다(`EOS-82`).

@@ -437,6 +437,21 @@ def detect_cycle(backlog: Backlog) -> list[str]:
     return sorted(tid for tid, deg in indegree.items() if deg > 0)
 
 
+def _trigger_declaration_errors(backlog: Backlog) -> list[str]:
+    """acceptance의 미래 트리거가 depends_on·requires_gates로 집행되는지 (HARN-72).
+
+    `dep_declaration`(notes의 선행 축)과 짝을 이루는 acceptance 축이다. 지연 import인 이유는
+    `store`가 최상단에서 형제 모듈을 끌어오지 않는 기존 구성을 유지하기 위함이며,
+    `dep_declaration`이 별도 subcommand로 사는 것과 달리 이쪽은 `validate_backlog`에 들어와
+    **`add`와 `validate` 양쪽이 한 번에 집행**된다(별도 CI 스텝을 늘리지 않는다).
+    """
+    from trigger_declaration import find_untriggered_tracking_tasks
+
+    if not backlog.tasks:
+        return []  # 빈 백로그는 상위 스키마 검사가 이미 잡는다 — 여기서 중복 실패시키지 않는다
+    return [f.render() for f in find_untriggered_tracking_tasks(backlog.tasks)]
+
+
 def validate_backlog(backlog: Backlog, schema_errors: list[str] | None = None) -> list[str]:
     """전체 무결성 검증 — 위반 목록 반환 (빈 리스트 = green)."""
     errors: list[str] = list(schema_errors or [])
@@ -478,6 +493,10 @@ def validate_backlog(backlog: Backlog, schema_errors: list[str] | None = None) -
     cycle = detect_cycle(backlog)
     if cycle:
         errors.append(f"depends_on 순환 참조 검출: {cycle}")
+
+    # HARN-72 — 산문에만 적힌 미래 트리거를 대장이 집행하게 한다
+    # (selector는 acceptance를 읽지 않는다 — depends_on·requires_gates만 본다)
+    errors.extend(_trigger_declaration_errors(backlog))
 
     errors.extend(_id_number_collisions(backlog.tasks.keys()))
     errors.extend(_eos_priority_grandfather_errors(backlog))

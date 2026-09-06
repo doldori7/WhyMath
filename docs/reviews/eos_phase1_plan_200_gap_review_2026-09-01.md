@@ -1,5 +1,8 @@
 # 계획서 200 「Phase 1 — EOS Core Contract」 ↔ 저장소 실측 대조 (2026-09-01)
 
+> **📌 스냅샷 고지 (2026-09-05 추가·본문 무수정)**: 이 문서는 **2026-09-01 시점 스냅샷**이다. 여기서 Subject Contract v1을 "확정"·"초과 달성"·"합격"으로 적은 판정은 그 시점의 것이며, **정본은 계약 모듈** `src/backend/whymath_backend/schema/subject_adapter.py`다 — 2026-09-05 `EOS-91`로 상태가 **Provisional (pending cross-subject probe 9/27)**로 명시됐다. 본문은 기록 보존을 위해 손대지 않았다.
+
+
 > **대상 문서**: `200_Phase 1 — EOS Core Contract 상세 실행계획`(Kiki 제공·저장소 외부).
 > 기준일 2026-08-27 작성 · 대상기간 2026-09-07~09-27 · Gate 1 10조건 · Week 1~3 · §1~§40.
 >

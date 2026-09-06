@@ -85,11 +85,16 @@ _RESOLVED_STATUSES = frozenset({"done"})
 # 최단 근거가 약 90자였다. 코드만 찍고 근거를 "N/A"로 채우는 것을 막는 하한이다.
 _MIN_SOFT_REASON_CHARS = 40
 
-# 이 코드로 분류하면 `depends_on`으로는 순서를 강제할 수 없다는 뜻이다. 그러면 스케줄러 제외를
-# **다른 수단**(status=blocked)이 담당해야 한다 — 분류만 하고 막지 않으면 원래 있던 경고 하나를
+# 이 코드로 분류하면 *그 참조에 대해서는* depends_on으로 순서를 강제할 수 없다는 뜻이다. 그러면
+# 스케줄러 제외를 **다른 수단**이 담당해야 한다 — 분류만 하고 막지 않으면 원래 있던 경고 하나를
 # 없앤 것뿐이고 그 태스크는 선행 없이 착수 후보로 노출된다(PR #1006 Codex P1 실측: EOS-50이
 # ARCH-31·EOS-49 둘 다 미완인 채 후보 111건에 들어 있었다).
-_CODES_REQUIRING_BLOCK = frozenset({"DISJUNCTIVE", "STAGE_BLOCKED"})
+#
+# 계약이 요구하는 것은 **결과**(착수 후보에서 빠질 것)이지 특정 수단이 아니다. `status=blocked`도
+# 되고, *다른* 참조를 하드로 부착해 막아도 된다 — 실제로 EOS-50은 병렬 세션이 택일의 한쪽인
+# EOS-49를 depends_on에 부착해 막았다(PR #994). 수단을 하나로 못박으면 옳은 해법을 위반으로
+# 만든다.
+_CODES_REQUIRING_EXCLUSION = frozenset({"DISJUNCTIVE", "STAGE_BLOCKED"})
 
 # ── 레거시 그랜드파더 (ARCH-25 패턴) ──────────────────────────────────────
 # key = (위반 태스크 full id, 참조 접두) **쌍** · value = 이 면제를 해소할 백로그 태스크 id.
@@ -327,6 +332,24 @@ def find_undeclared_dependencies(
     return findings
 
 
+def _is_scheduler_excluded(task: object, tasks: dict[str, object]) -> bool:
+    """`selector`가 이 태스크를 착수 후보에서 빼는가 — 소프트 분류의 집행 조건.
+
+    두 수단만 본다: `status=blocked` · 미해소 `depends_on`(대상이 done이 아님). 게이트
+    (`requires_gates`)는 게이트 대장이 있어야 판정할 수 있어 여기서는 보지 않는다 — 즉 이
+    검사는 **보수적**이다(게이트로만 막힌 태스크를 '제외 안 됨'으로 볼 수 있다). 그 경우
+    분류자가 blocked를 함께 걸거나 하드 의존을 부착하면 되므로, 놓치는 쪽이 아니라 과하게
+    요구하는 쪽으로 틀린다.
+    """
+    if getattr(task, "status", "") == "blocked":
+        return True
+    for dep in getattr(task, "depends_on", None) or []:
+        target = tasks.get(dep)
+        if target is None or getattr(target, "status", "") != "done":
+            return True
+    return False
+
+
 def find_soft_declaration_violations(tasks: dict[str, object]) -> list[str]:
     """소프트 분류 계약 위반 (빈 리스트 = 정상).
 
@@ -366,11 +389,12 @@ def find_soft_declaration_violations(tasks: dict[str, object]) -> list[str]:
                     "바뀌었으면 분류를 다시 검토하라(낡은 인용구는 억제도 못 하고 "
                     "표만 거짓으로 만든다)"
                 )
-        if code in _CODES_REQUIRING_BLOCK and getattr(tasks[task_id], "status", "") != "blocked":
+        if code in _CODES_REQUIRING_EXCLUSION and not _is_scheduler_excluded(tasks[task_id], tasks):
             violations.append(
-                f"소프트 분류 '{label}' 는 코드 '{code}' 인데 '{task_id}' 가 blocked가 아니다 — "
-                "이 코드는 '하드로 표현할 수 없다'는 뜻이라 스케줄러 제외를 다른 수단이 담당해야 "
-                "한다. 분류만 하고 막지 않으면 유일한 경고를 없앤 것뿐이다"
+                f"소프트 분류 '{label}' 는 코드 '{code}' 인데 '{task_id}' 가 착수 후보에서 "
+                "제외되지 않는다 — 이 코드는 '하드로 표현할 수 없다'는 뜻이라 스케줄러 제외를 "
+                "**다른 수단**(status=blocked 또는 미해소 depends_on)이 담당해야 한다. "
+                "분류만 하고 막지 않으면 유일한 경고를 없앤 것뿐이다"
             )
         if code not in SOFT_REASON_CODES:
             violations.append(

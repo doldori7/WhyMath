@@ -375,19 +375,35 @@ def test_empty_quotes_is_a_violation(monkeypatch) -> None:  # type: ignore[no-un
     assert any("인용구가 없다" in v for v in dd.find_soft_declaration_violations(tasks))
 
 
-def test_codes_that_cannot_be_hard_require_blocked_status(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """DISJUNCTIVE·STAGE_BLOCKED는 '하드로 못 막는다'는 뜻 — 그러면 blocked가 막아야 한다.
+def test_codes_that_cannot_be_hard_require_scheduler_exclusion(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """DISJUNCTIVE·STAGE_BLOCKED는 '하드로 못 막는다'는 뜻 — 그러면 *무언가가* 막아야 한다.
 
     실측 배경(PR #1006 Codex P1): EOS-50이 택일 선행 둘 다 미완인데 `todo`라서 착수 후보
     111건에 들어 있었다. 분류만 하고 막지 않으면 원래 있던 경고 하나를 없앤 것뿐이다.
+
+    계약이 요구하는 것은 **결과**(후보에서 빠짐)이지 특정 수단이 아니다 — `blocked`도, *다른*
+    참조를 하드로 부착하는 것도 유효하다(실제로 EOS-50은 병렬 세션이 EOS-49를 부착해 막았다).
     """
     for code in ("DISJUNCTIVE", "STAGE_BLOCKED"):
         tasks, table = _soft_case(code=code)
         monkeypatch.setattr(dd, "SOFT_DECLARED", table)
-        violations = dd.find_soft_declaration_violations(tasks)
-        assert any("blocked가 아니다" in v for v in violations), code
-        tasks["A-1-x"].status = "blocked"
+        assert any("제외되지 않는다" in v for v in dd.find_soft_declaration_violations(tasks)), code
+
+        tasks["A-1-x"].status = "blocked"  # 수단 ① 차단
         assert dd.find_soft_declaration_violations(tasks) == [], f"{code}: blocked인데도 위반"
+
+        # 수단 ② 택일의 *다른* 쪽을 하드로 부착 — EOS-50이 EOS-49를 붙여 막은 실제 형태.
+        # (분류된 참조 자신을 붙이면 계약 ③ "하드로 걸어 놓고 소프트라 적는 모순"에 걸린다.)
+        tasks["A-1-x"].status = "todo"
+        tasks["ALT-1-z"] = FakeTask(id="ALT-1-z")
+        tasks["A-1-x"].depends_on = ["ALT-1-z"]
+        assert dd.find_soft_declaration_violations(tasks) == [], f"{code}: 미해소 의존인데도 위반"
+        tasks["ALT-1-z"].status = "done"  # 그 의존이 해소되면 다시 노출 → 위반 복귀
+        assert any(
+            "제외되지 않는다" in v for v in dd.find_soft_declaration_violations(tasks)
+        ), f"{code}: 의존이 done인데 제외로 봤다"
+        tasks["A-1-x"].depends_on = []
+        tasks.pop("ALT-1-z")
 
 
 def test_codes_that_can_be_expressed_do_not_require_blocked(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -398,8 +414,8 @@ def test_codes_that_can_be_expressed_do_not_require_blocked(monkeypatch) -> None
         assert dd.find_soft_declaration_violations(tasks) == [], code
 
 
-def test_repository_block_backed_codes_are_actually_blocked() -> None:
-    """실 대장 — 차단이 필요한 코드의 태스크가 실제로 blocked인가(EOS-50·LIC-03)."""
+def test_repository_exclusion_backed_codes_are_actually_excluded() -> None:
+    """실 대장 — 제외가 필요한 코드의 태스크가 실제로 착수 후보에서 빠지는가(EOS-50·LIC-03)."""
     from pathlib import Path
 
     import store
@@ -408,8 +424,8 @@ def test_repository_block_backed_codes_are_actually_blocked() -> None:
     needing = [
         tid
         for (tid, _ref), v in dd.SOFT_DECLARED.items()
-        if v.code in {"DISJUNCTIVE", "STAGE_BLOCKED"}
+        if v.code in dd._CODES_REQUIRING_EXCLUSION
     ]
-    assert needing, "차단 필요 분류가 0건 — 이 테스트가 공허하게 통과한다"
+    assert needing, "제외 필요 분류가 0건 — 이 테스트가 공허하게 통과한다"
     for tid in needing:
-        assert backlog.tasks[tid].status == "blocked", tid
+        assert dd._is_scheduler_excluded(backlog.tasks[tid], backlog.tasks), tid

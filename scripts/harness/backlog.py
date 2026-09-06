@@ -36,7 +36,8 @@ import json
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -1119,6 +1120,121 @@ def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str 
     return f"{prefix}-{index:02d}"
 
 
+_HISTORY_TASK_FILE_RE = re.compile(r"^backlog/tasks/([A-Z][A-Z0-9]{0,7})-(\d{2})(?:-|\.yaml$)")
+
+
+def _historically_used_numbers(root: Path, prefix: str) -> tuple[set[int] | None, str]:
+    """`<PREFIX>-NN`로 **한 번이라도** 등재된 적 있는 번호(모든 ref·삭제분·rename 포함)와 사유.
+
+    반환 = (번호 집합 또는 None, 사유). 사유 어휘: "ok" · "shallow" · "git_error:<단계> rc=<n>"
+    · "exception:<타입명>" · "no_stdout". None일 때 호출부는 사유별로 다른 조치를 안내한다.
+
+    번호 재사용의 안전 조건은 "지금 비어 있음"이 아니라 "**한 번도 쓰인 적 없음**"이다 —
+    과거에 등재됐다 삭제·이관된 번호를 다시 주면 문서·커밋의 `EOS-07` 같은 짧은 참조가
+    두 태스크를 가리킨다(HARN-10이 막는 상태를 시간축으로 재생산). 그래서 taken(현재
+    로컬·원격 파일·claim)만으로는 부족하고 git 이력(`--all --diff-filter=A`)을 본다.
+
+    **fail-closed**: shallow 클론(이력 일부 없음)·git 실패·타임아웃·디코딩 실패는 전부
+    None — "모른다"를 "없다"로 접지 않는다(CLAUDE.md 2026-09-01 ③). 호출부는 None이면
+    폴백 제안을 내지 않고 **원인을 해소한 뒤 같은 명령을 다시 돌리게** 한다(shallow면
+    unshallow — 그 클론에 `git log`를 손으로 돌려 봐야 같은 불완전 이력이다). 출력
+    디코딩은 HARN-19 헬퍼(`remote_claims._git`, utf-8 고정)를 재사용한다. (HARN-73)
+
+    `--no-renames`: rename 탐지를 끈다. 켜져 있으면(git 2.9+ 기본) `git mv`로 처음 이
+    번호를 얻은 파일이 `R`로 분류돼 `--diff-filter=A`에서 빠지고, 그 파일이 뒤에 삭제되면
+    "한 번도 안 쓰인 번호"로 오판된다(PR #1002 Codex P2). 끄면 D+A 쌍이 되어 목적지
+    경로가 A로 잡힌다.
+    """
+    try:
+        shallow = remote_claims._git(root, "rev-parse", "--is-shallow-repository", timeout=15)
+        if shallow.returncode != 0:
+            return None, f"git_error:rev-parse rc={shallow.returncode}"
+        if (shallow.stdout or "").strip() == "true":
+            return None, "shallow"
+        log = remote_claims._git(
+            root,
+            "log",
+            "--all",
+            "--no-renames",
+            "--diff-filter=A",
+            "--name-only",
+            "--format=",
+            "--",
+            f"backlog/tasks/{prefix}-*",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError, remote_claims.GitOutputDecodeError) as exc:
+        return None, f"exception:{type(exc).__name__}"
+    if log.returncode != 0:
+        return None, f"git_error:log rc={log.returncode}"
+    if log.stdout is None:
+        return None, "no_stdout"
+    used: set[int] = set()
+    for line in log.stdout.splitlines():
+        match = _HISTORY_TASK_FILE_RE.match(line.strip())
+        if match and match.group(1) == prefix:
+            used.add(int(match.group(2)))
+    return used, "ok"
+
+
+@dataclass(frozen=True)
+class NumberSuggestion:
+    """`_suggest_number` 결과 — 제안과 그 근거 수치(문구 조립은 호출부 몫)."""
+
+    suggestion: str | None
+    max_used: int  # 점유된 최대 번호(없으면 0)
+    free_lower: tuple[int, ...]  # taken에 없는 01~99 번호 — 상위 소진 시에만 계산
+    retired: tuple[int, ...]  # free_lower 중 이력상 쓰였다 사라진 번호(재사용 금지)
+    history: str  # "not_needed" | "ok" | "unavailable"
+    history_reason: str = "ok"  # unavailable일 때 원인("shallow"·"exception:…"·"git_error:…")
+
+
+def _suggest_number(
+    prefix: str,
+    taken: Mapping[str, tuple[str, str]],
+    history_lookup: Callable[[str], tuple[set[int] | None, str]],
+) -> NumberSuggestion:
+    """번호 제안 2단계 — ① 최대+1 상향(HARN-21 그대로) ② 상위 소진 시 하위 미사용 폴백(HARN-73).
+
+    ②의 후보는 taken에 없고 **이력에도 없는** 번호 중 가장 낮은 것. "낮은 번호 제안은
+    '다음 작업' 기대와 어긋난다"는 ①의 설계 의도는 유지된다 — 폴백은 ①이 불가능할 때만
+    작동하고, 이력 조회(`history_lookup`)도 그때만 부른다(비용·부작용 최소화).
+
+    번호 공간은 **01~99**다 — `00`은 `TASK_ID_RE`(`\\d{2}`)상 형식적으로 유효하지만
+    `_next_free_number`가 1부터 세듯 제안 대상이 아니며, "모두 소진" 판정과 문구도 이
+    공간(01~99)을 기준으로 말한다(PR #1002 Codex P2 — 00을 세지 않으면서 "00~99 소진"이라
+    말하던 불일치 정정).
+
+    사고 경위(2026-09-06): EOS-99가 원격 브랜치에 선점되자 ①이 None을 내고 cmd_add가
+    "00~99번을 모두 소진"이라고 보고했다 — 실측은 59/100 사용·40개는 한 번도 안 쓰임.
+    오보고가 사람 결정 게이트를 열었다(G-eos-task-prefix-exhausted).
+    """
+    used = [
+        int(number.rsplit("-", 1)[1])
+        for number in taken
+        if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
+    ]
+    max_used = max(used) if used else 0
+    upward = _next_free_number(prefix, taken)
+    if upward is not None:
+        return NumberSuggestion(upward, max_used, (), (), "not_needed")
+    free_lower = tuple(
+        n
+        for n in range(1, 100)
+        if f"{prefix}-{n:02d}" not in taken and f"{prefix}-{n}" not in taken
+    )
+    if not free_lower:
+        return NumberSuggestion(None, max_used, (), (), "not_needed")
+    history, reason = history_lookup(prefix)
+    if history is None:
+        return NumberSuggestion(None, max_used, free_lower, (), "unavailable", reason)
+    retired = tuple(n for n in free_lower if n in history)
+    candidates = [n for n in free_lower if n not in history]
+    if not candidates:
+        return NumberSuggestion(None, max_used, free_lower, retired, "ok")
+    return NumberSuggestion(f"{prefix}-{candidates[0]:02d}", max_used, free_lower, retired, "ok")
+
+
 # 원격 ref 신선도 고지 임계 — 이 저장소는 main이 대략 30분 간격으로 전진한다(2026-08-31
 # 실측: #922·#924·#927·#928·#930·#932·#933가 한나절에 착지). 그보다 오래된 스냅샷으로
 # 판정했다면 "그 사이 등재된 번호는 못 봤다"가 실질적 가능성이 된다.
@@ -1333,21 +1449,55 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         # 다를 때만 번호 참조가 모호해진다.
         if owner and owner != args.id:
             prefix = number.rsplit("-", 1)[0]
-            suggestion = _next_free_number(prefix, taken)
-            if suggestion is None:
-                # 프리픽스가 00~99번을 이미 다 썼다 — 3자리 제안은 TASK_ID_RE 위반이라
-                # 날조하지 않는다(HARN-21 결함②). 사람의 결정(새 프리픽스 분리 등)이 필요.
+            verdict = _suggest_number(prefix, taken, lambda p: _historically_used_numbers(root, p))
+            base = f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
+            tail = "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+            if verdict.suggestion is not None and verdict.history == "not_needed":
+                return _fail(base + f"다음 빈 번호 제안: {verdict.suggestion}. " + tail)
+            top = f"{prefix}-{verdict.max_used:02d}"
+            if verdict.suggestion is not None:
+                # 상위(최대+1)는 막혔지만 한 번도 쓰인 적 없는 하위 번호가 있다(HARN-73).
+                usable = len(verdict.free_lower) - len(verdict.retired)
                 return _fail(
-                    f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                    f"게다가 프리픽스 '{prefix}'는 00~99번을 모두 소진해 TASK_ID_RE(정확히 "
-                    "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다 — 새 프리픽스로 "
-                    "분리하는 등 사람의 결정이 필요하다(HARN-21). "
-                    "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                    base + f"상위 번호 소진(최대 {top}) — 미사용 하위 번호 {usable}개 중 가장 낮은 "
+                    f"{verdict.suggestion} 제안(이력상 쓰였다 사라진 {len(verdict.retired)}개는 "
+                    "제외 — HARN-73). " + tail
                 )
+            if verdict.history == "unavailable":
+                # 후보는 있으나 "한 번도 쓰인 적 없음"을 확인할 수 없다 — 모른다를 없다로
+                # 접지 않고, **원인을 해소한 뒤 같은 명령을 다시 돌리게** 한다(fail-closed).
+                # shallow 클론에 `git log`를 손으로 돌리라고 안내하면 방금 거부한 것과 같은
+                # 불완전 이력을 재탐색할 뿐이므로(PR #1002 Codex P2) 수동 --id 추론은
+                # 안내하지 않는다 — 배정은 도구가 확인할 수 있을 때까지 막힌 채로 둔다.
+                preview = ", ".join(f"{prefix}-{n:02d}" for n in verdict.free_lower[:10])
+                if len(verdict.free_lower) > 10:
+                    preview += " …"
+                if verdict.history_reason == "shallow":
+                    remedy = (
+                        "이 클론은 shallow(이력 일부 없음)라 로컬 이력 조회로도 확인할 수 없다 — "
+                        "`git fetch --unshallow origin`으로 전체 이력을 받은 뒤 같은 add 명령을 "
+                        "다시 실행하라"
+                    )
+                else:
+                    remedy = (
+                        f"사유 {verdict.history_reason} — 원인을 해소한 뒤 같은 add 명령을 "
+                        "다시 실행하라"
+                    )
+                return _fail(
+                    base
+                    + f"상위 번호 소진(최대 {top}) · 미사용 하위 후보 {len(verdict.free_lower)}개"
+                    f"({preview}) — git 이력 조회 불가로 '한 번도 쓰인 적 없음'을 확인할 수 "
+                    f"없어 제안하지 않는다. {remedy}. 번호를 손으로 추론해 --id로 넣지 말 것"
+                    "(HARN-73). " + tail
+                )
+            # 정말 다 찼다(미사용 0, 또는 남은 번호가 전부 이력상 사용) — 3자리 제안은
+            # TASK_ID_RE 위반이라 날조하지 않는다(HARN-21 결함②). 사람의 결정이 필요.
             return _fail(
-                f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
-                f"다음 빈 번호 제안: {suggestion}. "
-                "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+                base + f"게다가 프리픽스 '{prefix}'는 01~99번을 모두 소진했다(번호 공간은 01부터 "
+                f"센다 · 미사용 0개 · 이력상 쓰였다 사라진 {len(verdict.retired)}개는 재사용 "
+                "금지) — TASK_ID_RE(정확히 "
+                "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다. 새 프리픽스로 "
+                "분리하는 등 사람의 결정이 필요하다(HARN-21). " + tail
             )
         if not remote_ok:
             print("  · 번호 충돌 검사: 로컬만 통과 — 머지 시 validate가 2선 방어한다")
@@ -1365,7 +1515,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         requires_gates=args.gates or [],
         acceptance=args.acceptance or [],
         paths=args.paths or [],
-        notes=args.notes or "",
+        notes=_notes_with_trigger_exemption(args),
         updated=_today(),
     )
     # [프리플라이트] 파일 범위 겹침 — 등재 시점에도 todo·in-flight 중복을 검출
@@ -1455,6 +1605,24 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _notes_with_trigger_exemption(args: argparse.Namespace) -> str:
+    """등재 시점 트리거 면제(HARN-72)를 notes에 마커로 붙인다.
+
+    면제를 코드 상수가 아니라 태스크 자신에 두는 이유는 `dep_declaration.LEGACY_EXEMPT`와
+    반대 방향의 선택이다: 그쪽은 *기존* 위반을 일괄 유예하므로 목록 관리가 필요했지만,
+    이쪽은 *개별* 오탐이라 사유가 태스크 옆에 있는 편이 읽는 사람에게 낫다. 무사유 면제는
+    argparse가 값을 요구하므로 구조적으로 불가능하다.
+    """
+    notes = args.notes or ""
+    reason = getattr(args, "no_trigger", None)
+    if not reason:
+        return notes
+    from trigger_declaration import EXEMPTION_MARKER
+
+    marker = f"{EXEMPTION_MARKER} {reason}"
+    return f"{notes}\n\n{marker}" if notes else marker
+
+
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
 
@@ -1507,10 +1675,11 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         or args.depends
         or args.priority is not None
         or args.eos_priority
+        or getattr(args, "no_trigger", None)
     ):
         return _fail(
             f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --track / --depends / "
-            "--priority / --eos-priority 중 하나 이상을 지정하라"
+            "--priority / --eos-priority / --no-trigger 중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
@@ -1556,6 +1725,23 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         changed.append(f"priority {priority_before} → {args.priority}")
         note_lines.append(f"priority {priority_before} → {args.priority}: {args.reason}")
         task.priority = args.priority
+
+    # ⑤ 트리거 면제 — HARN-72 검출기의 오탐 탈출구.
+    #
+    # 왜 필요한가: 검출기는 acceptance 한 문장 안의 (미래조건 + 재측정동사)를 대기 선언으로
+    # 본다. 그런데 *트리거 장치를 만드는* 태스크는 그 어구를 **예시로 인용**하므로 걸린다 —
+    # 실제로 HARN-72 자신이 첫 사례였다. 고칠 수 없는 위반을 지적하는 게이트는 사람이
+    # 게이트를 끄게 만들므로(위 ④ 주석과 같은 이유) 탈출구를 함께 연다.
+    #
+    # 면제는 **코드 상수가 아니라 태스크 notes**에 사유와 함께 남는다 — 나중에 읽는 사람이
+    # 왜 면제됐는지 같은 자리에서 본다(무사유 예외 금지).
+    if getattr(args, "no_trigger", None):
+        from trigger_declaration import EXEMPTION_MARKER
+
+        if EXEMPTION_MARKER in task.notes:
+            return _fail(f"{task.id}: 이미 트리거 면제가 기록돼 있다")
+        note_lines.append(f"{EXEMPTION_MARKER} {args.no_trigger}")
+        changed.append(f"트리거 면제 기록 ({args.no_trigger[:40]}…)")
 
     # ④ depends_on 부착 — 등재 후 의존을 붙일 유일한 CLI 경로(HARN-52).
     #
@@ -2579,6 +2765,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--owner", default="claude")
     p.add_argument("--depends", action="append", default=[])
+    p.add_argument(
+        "--no-trigger",
+        metavar="사유",
+        help="HARN-72 트리거 검출기 오탐 면제 — 사유를 notes에 [트리거 면제] 마커로 남긴다",
+    )
     p.add_argument("--gates", action="append", default=[])
     p.add_argument("--acceptance", action="append", default=[])
     p.add_argument(
@@ -2609,6 +2800,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
     )
     p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument(
+        "--no-trigger",
+        metavar="사유",
+        help="HARN-72 트리거 검출기 오탐 면제 — 사유를 notes에 [트리거 면제] 마커로 남긴다. "
+        "트리거 어구를 *예시로 인용*하는 태스크(검출기 자신 등)용. 사유 없는 면제 불가",
+    )
     p.add_argument(
         "--depends",
         action="append",
