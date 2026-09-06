@@ -182,7 +182,9 @@ def generation_log_from_result(
     )
 
 
-def append_generation_log_jsonl(path: Path, log: GenerationLog) -> GenerationLog:
+def append_generation_log_jsonl(
+    path: Path, log: GenerationLog, *, run_id: str | None = None
+) -> GenerationLog:
     """GenerationLog 1건을 JSONL에 **즉시** append한다(호출마다 open→기록→flush→close).
 
     `generated_at`이 비어 있으면 append 시각(UTC)으로 스탬프한다 — JSONL 매체에서는
@@ -190,15 +192,24 @@ def append_generation_log_jsonl(path: Path, log: GenerationLog) -> GenerationLog
     `harness/review_timer.append_event_jsonl` 동형). 스탬프된 레코드를 반환하므로
     호출자는 기록된 그대로의 사본을 갖는다(원본 불변 — model_copy).
 
+    `run_id`(EOS-97 리콜 조인 축): 주어지고 레코드에 아직 없으면 함께 스탬프한다.
+    `generated_at`과 같은 자리에서 찍는 이유는 같은 성질이기 때문이다 — **회차 정체성은
+    개별 생성 호출이 아니라 그 호출을 감싼 회차가 안다**. 생성기는 자기가 몇 번째 회차에
+    속하는지 모르고 알 필요도 없다(순수 변환 유지).
+
+    이미 값이 있으면 **덮어쓰지 않는다** — 호출자가 명시로 실은 회차를 append 지점이
+    바꾸면 그 레코드는 어느 회차 것인지 거짓말하게 된다.
+
     실패 경로(2026-08-22 규칙 ① "실패해도 증거가 남는가"): 마지막 일괄 저장이 아니라
     **레코드마다 flush**라, 배치 도중 프로세스가 죽어도 그때까지의 호출 이력은 파일에
     남는다.
     """
-    stamped = (
-        log
-        if log.generated_at is not None
-        else log.model_copy(update={"generated_at": datetime.now(UTC)})
-    )
+    updates: dict[str, Any] = {}
+    if log.generated_at is None:
+        updates["generated_at"] = datetime.now(UTC)
+    if run_id is not None and log.run_id is None:
+        updates["run_id"] = run_id
+    stamped = log.model_copy(update=updates) if updates else log
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(stamped.model_dump_json() + "\n")

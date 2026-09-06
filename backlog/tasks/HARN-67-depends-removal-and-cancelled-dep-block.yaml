@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-67-depends-removal-and-cancelled-dep-block
+title: "의존 정정 경로 부재 — amend는 depends 부착만 되고, 취소된 선행이 후속을 영구 차단한다 (HARN-57·59 정정경로 계열 3번째)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 두 결함을 분리해 적는다 — ⓐ amend에 depends **제거** 경로가 없다(--depends는 부착 전용) ⓑ 선행이 **cancelled**여도 selector가 후속을 차단한다(done만 해소로 침). ⓑ가 더 위험하다: 오등재를 바로잡으면 그것에 의존하던 정상 태스크가 조용히 영구 차단되고, 아무 경고도 나지 않는다"
+  - "② ⓑ의 판정 규칙을 정한다 — cancelled 선행을 해소로 볼 것인지, 결정 불가로 보고 **차단하되 경고를 낼 것인지**. 조용한 차단만은 금지(침묵 실패 금지). 어느 쪽이든 next·brief가 그 상태를 **보이게** 해야 한다"
+  - "③ ⓐ 정정 경로 신설 — amend에 remove-depends 옵션(full id 지정 + reason 필수). 대장 손편집 금지 원칙상 정정은 CLI로만 가능해야 한다(HARN-57 done 증적·HARN-59 paths와 같은 계열)"
+  - "④ 변별력 양방향 실측 — 선행을 cancel한 뒤 후속이 next 후보에서 어떻게 되는지 정상·뮤테이션 양방향으로 확인한다. **상위 N건 기본 출력이 아니라 전건 모드(--n 충분히 큰 수 --json)로 판정**한다 (EOS-62 선례: priority가 낮으면 정상·뮤테이션 양쪽 모두 후보에 없음이라 변별력이 0이 된다)"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - scripts/harness/selector.py
+  - "tests/harness/**"
+session: null
+notes: "사고 경위(2026-09-05 실측): PR #988 세션이 EOS-94(격리 쓰기측)를 오등재하고 EOS-96(리콜)에 depends_on EOS-94를 붙였다. Codex 리뷰가 EOS-94의 갭 판정이 틀렸음을 지적(격리 쓰기 경로는 api/problems.py patch_problem으로 이미 실재)해 EOS-94를 cancel했더니 **EOS-96이 후보에서 사라진 채 아무 경고도 나지 않았다**. amend에 의존 제거 경로가 없어 정정이 불가능해 EOS-96을 cancel하고 EOS-97로 재등재해야 했다 — 번호 2개와 왕복 1회를 태웠다. HARN-52가 선행을 대장에 집행하게 만든 뒤의 부작용 축이다: 집행이 강해진 만큼 **정정 경로가 없으면 잘못된 집행도 영구화**된다. HARN-57(done 증적 정정)·HARN-59(paths 정정)와 같은 계열의 세 번째 사례이므로 반복 결함으로 등재한다(CLAUDE.md 실수 관리 — 동일 유형 2회 이상은 재발방지 등재 의무)."
+updated: 2026-09-05
