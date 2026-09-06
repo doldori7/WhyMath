@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 1
 eos_priority: P1
 owner: claude
@@ -18,7 +18,8 @@ acceptance:
   - "③ **Core 확장 0건**(규칙 2조 나) — 프로브 결과로 필수층에 필드·메서드를 추가하지 않는다. Physics가 필요로 하는 새 능력은 전부 선택층 또는 어댑터 내부로"
   - "④ 프로브 후에만 상태 라벨을 Provisional에서 바꾼다 — 깨진 필드 0이면 Frozen 승격 가능, 1건 이상이면 강등 반영 후 재판정"
   - "⑤ 중단 상한(ADR-004 §결정 ④ 집행) — ④의 '강등 반영 후 재판정'에는 상한이 없어 재판정이 늘면 2026-09-27을 넘긴다. 깨진 필드가 **3건을 초과하면 즉시 프로브를 중단**하고, 상태를 'Frozen (math-only, acknowledged)'로 표기해 09-27(G1 판정일)에 **예정대로 Freeze**한다 — 일정 연기 금지. 중단해도 그 시점까지의 판정표는 산출물로 남긴다. 근거: 4건 초과는 부분 수정 대상이 아니라 재설계 대상인데 재설계는 9월 안에 끝나지 않는다. 인지된 한계는 관리할 수 있지만 잘못 선언된 중립성은 관리할 수 없다"
-artifacts: []
+artifacts:
+  - "PR #999 (784e1824) — 교차 과목 프로브 완주: Physics 15/15 ○(✗ 0)·강등 0·Core 확장 0. 판정표 = docs/architecture/subject_contract_cross_probe.md. 라운드 2가 History 대조군으로 검사 반증력 부족을 실증해 Frozen 승격 보류(ADR-004 ① 9/27 이전 금지 + 근거 강도). 승계 EOS-99·ARCH-41"
 paths:
   - docs/architecture/subject_contract_cross_probe.md
 session: null

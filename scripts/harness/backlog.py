@@ -1473,7 +1473,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         requires_gates=args.gates or [],
         acceptance=args.acceptance or [],
         paths=args.paths or [],
-        notes=args.notes or "",
+        notes=_notes_with_trigger_exemption(args),
         updated=_today(),
     )
     # [프리플라이트] 파일 범위 겹침 — 등재 시점에도 todo·in-flight 중복을 검출
@@ -1563,6 +1563,24 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _notes_with_trigger_exemption(args: argparse.Namespace) -> str:
+    """등재 시점 트리거 면제(HARN-72)를 notes에 마커로 붙인다.
+
+    면제를 코드 상수가 아니라 태스크 자신에 두는 이유는 `dep_declaration.LEGACY_EXEMPT`와
+    반대 방향의 선택이다: 그쪽은 *기존* 위반을 일괄 유예하므로 목록 관리가 필요했지만,
+    이쪽은 *개별* 오탐이라 사유가 태스크 옆에 있는 편이 읽는 사람에게 낫다. 무사유 면제는
+    argparse가 값을 요구하므로 구조적으로 불가능하다.
+    """
+    notes = args.notes or ""
+    reason = getattr(args, "no_trigger", None)
+    if not reason:
+        return notes
+    from trigger_declaration import EXEMPTION_MARKER
+
+    marker = f"{EXEMPTION_MARKER} {reason}"
+    return f"{notes}\n\n{marker}" if notes else marker
+
+
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
 
@@ -1610,10 +1628,11 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         or args.depends
         or args.priority is not None
         or args.eos_priority
+        or getattr(args, "no_trigger", None)
     ):
         return _fail(
             f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --track / --depends / "
-            "--priority / --eos-priority 중 하나 이상을 지정하라"
+            "--priority / --eos-priority / --no-trigger 중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
@@ -1659,6 +1678,23 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         changed.append(f"priority {priority_before} → {args.priority}")
         note_lines.append(f"priority {priority_before} → {args.priority}: {args.reason}")
         task.priority = args.priority
+
+    # ⑤ 트리거 면제 — HARN-72 검출기의 오탐 탈출구.
+    #
+    # 왜 필요한가: 검출기는 acceptance 한 문장 안의 (미래조건 + 재측정동사)를 대기 선언으로
+    # 본다. 그런데 *트리거 장치를 만드는* 태스크는 그 어구를 **예시로 인용**하므로 걸린다 —
+    # 실제로 HARN-72 자신이 첫 사례였다. 고칠 수 없는 위반을 지적하는 게이트는 사람이
+    # 게이트를 끄게 만들므로(위 ④ 주석과 같은 이유) 탈출구를 함께 연다.
+    #
+    # 면제는 **코드 상수가 아니라 태스크 notes**에 사유와 함께 남는다 — 나중에 읽는 사람이
+    # 왜 면제됐는지 같은 자리에서 본다(무사유 예외 금지).
+    if getattr(args, "no_trigger", None):
+        from trigger_declaration import EXEMPTION_MARKER
+
+        if EXEMPTION_MARKER in task.notes:
+            return _fail(f"{task.id}: 이미 트리거 면제가 기록돼 있다")
+        note_lines.append(f"{EXEMPTION_MARKER} {args.no_trigger}")
+        changed.append(f"트리거 면제 기록 ({args.no_trigger[:40]}…)")
 
     # ④ depends_on 부착 — 등재 후 의존을 붙일 유일한 CLI 경로(HARN-52).
     #
@@ -2661,6 +2697,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--owner", default="claude")
     p.add_argument("--depends", action="append", default=[])
+    p.add_argument(
+        "--no-trigger",
+        metavar="사유",
+        help="HARN-72 트리거 검출기 오탐 면제 — 사유를 notes에 [트리거 면제] 마커로 남긴다",
+    )
     p.add_argument("--gates", action="append", default=[])
     p.add_argument("--acceptance", action="append", default=[])
     p.add_argument(
@@ -2691,6 +2732,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
     )
     p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
+    p.add_argument(
+        "--no-trigger",
+        metavar="사유",
+        help="HARN-72 트리거 검출기 오탐 면제 — 사유를 notes에 [트리거 면제] 마커로 남긴다. "
+        "트리거 어구를 *예시로 인용*하는 태스크(검출기 자신 등)용. 사유 없는 면제 불가",
+    )
     p.add_argument(
         "--depends",
         action="append",
