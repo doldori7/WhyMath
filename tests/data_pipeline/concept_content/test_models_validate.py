@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from data_pipeline.concept_content.models import (
     LICENSE_NOTICE,
@@ -90,5 +93,30 @@ class TestValidate:
 def test_self_authored_license() -> None:
     assert "자체" in SOURCE_CITATION
     assert "학생 비노출" in LICENSE_NOTICE and "검수필요" in LICENSE_NOTICE
-    # NCIC 본문 미수록·코드만 보존 표기.
-    assert "미수록" in LICENSE_NOTICE
+    # 2026-09-06 정정: 옛 선언은 "NCIC 본문 미수록"이었으나 실제로는 explanation 133건이
+    # 성취기준 본문과 사실상 동일했다(전수 실측). 데이터를 지우는 대신 선언을 데이터에
+    # 맞췄으므로(교육부 고시 = 저작권법 §7 비보호 + 공공누리 제1유형), 이제 상수가 지켜야 할
+    # 것은 "미수록" 주장이 아니라 **출처 표시**다 — 공공누리 제1유형의 유일한 조건이다.
+    # 코퍼스 파일과의 바이트 동일성은 tests/backend/l1/test_concept_content_license_declaration.py.
+    assert "미수록" not in LICENSE_NOTICE
+    for marker in ("NCIC", "교육부 고시 제2022-33호", "공공누리"):
+        assert marker in LICENSE_NOTICE, f"출처 표시에 '{marker}' 누락"
+
+
+# 이 상수들은 코퍼스를 *생성*한다. 커밋된 코퍼스만 고치고 여기를 놔두면 다음 재생성에서 옛
+# 선언이 소리 없이 돌아온다 — 2026-09-06 정정에서 실제로 드러난 드리프트 경로다. 그래서
+# "선언이 옳다"가 아니라 "**생성원과 산출물이 같다**"를 동결한다(집행 지점 분리).
+_CORPUS = (
+    Path(__file__).resolve().parents[3] / "data" / "corpus" / "concept_content_v1" / "content.json"
+)
+
+
+def test_constants_match_committed_corpus() -> None:
+    committed = json.loads(_CORPUS.read_text(encoding="utf-8"))
+    assert committed["source_citation"] == SOURCE_CITATION, (
+        "커밋된 코퍼스의 source_citation이 파이프라인 상수와 다르다 — 재생성하면 코퍼스 선언이 "
+        "조용히 뒤집힌다. 둘을 함께 갱신하라."
+    )
+    assert (
+        committed["license_notice"] == LICENSE_NOTICE
+    ), "커밋된 코퍼스의 license_notice가 파이프라인 상수와 다르다 — 위와 같은 이유로 red."

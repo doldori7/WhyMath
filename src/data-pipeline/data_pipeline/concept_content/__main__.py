@@ -90,7 +90,8 @@ def main(argv: list[str] | None = None) -> int:
             "license_notice": LICENSE_NOTICE,
             "post_extraction": [
                 "개념(학교급!='대학교') 437 + 암기카드 조인 추출. 대학 비추출(U4 별도).",
-                "성취기준 본문 미수록(NCIC)·연결 성취기준 코드만 보존. 정식정의=학생 비노출. "
+                "explanation 일부는 NCIC 성취기준 본문과 동일(교육부 고시 §7 비보호·공공누리 "
+                "제1유형·출처 표시). 연결 성취기준 코드 보존. 정식정의=학생 비노출. "
                 "DB 투영 Phase 3.",
             ],
         },

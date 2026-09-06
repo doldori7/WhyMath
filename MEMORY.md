@@ -338,6 +338,59 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-06 (저작권 전수 실사): **선언이 데이터를 설명하지 못했다 — `concept_content_v1` 라이선스 고지 정정 + 히스토리 잔존 KICE 보고서 2건 등재** (Kiki "저작권 저촉가능성있는 자료가 있으면 삭제" → 실사 후 "선언을 데이터에 맞춰 정정", claude 실측·구현)
+
+**요청**: 저장소에 저작권 저촉 가능성이 있는 자료가 있으면 삭제.
+
+**실사 결과 — 작업 트리는 저촉 0건**:
+- 문제은행 코퍼스 **14,034 문항 전량** `license=WHYMATH_GENERATED`·`source_type=자체생성`(예외 0).
+- 교과서·기출 스캔·PDF·이미지 **0건**. 금지 등급 외부 소스(Khan·CK-12·AoPS·LibreTexts·Mathigon)
+  실물 **0건** — 매치는 전부 *금지를 선언하는* 정책 문서였다.
+- 벤더 JS(MathLive·three.js·React) 라이선스 고지 보존 확인. `data/licenses/snapshots/`는 라이선스
+  페이지 아카이브(준거 증적)로 보존 대상.
+
+**발견 1 — 선언↔데이터 모순(정정함)**: `data/corpus/concept_content_v1`의 `explanation` **133건**이
+NCIC 성취기준 본문과 사실상 동일했다(유사도 ≥0.90·그중 **124건은 표기 정규화 후 글자 그대로**).
+그런데 이 코퍼스의 `license_notice`는 **"K-12 성취기준 본문은 NCIC 저작물이라 미수록"**을 선언하고
+있었고, 데이터는 `concept_content` 테이블로 투영돼 서빙 경로에 올라간다. QUAL-06이 크롤링 파손
+48건을 고치며 ⑥에서 "파손 없는 성취기준 문체 약 129건은 KG-02 소관"으로 남긴 바로 그 잔류분이다.
+
+**판단(Kiki)**: 데이터 삭제가 아니라 **선언 정정**. 근거 — NCIC 성취기준은 교육부 고시
+제2022-33호라 저작권법 **§7 제1호(고시·공고·훈령)상 보호받지 못하는 저작물**이고 NCIC 공개분은
+**공공누리 제1유형**(출처 표시·상업 이용·변경 허용)이다. 같은 본문을 `standards_v1`이 이미 같은
+근거로 895건 보유한다. **법적 위험이 없는 자료를 지우면 합법 콘텐츠만 잃는다** — 결함은 데이터가
+아니라 거짓 선언이었다. 선언이 거짓이면 그 선언에 기대는 하위 판단(감사 신호·리뷰 프롬프트·데이터
+카드·매트릭스)이 전부 조용히 틀린다.
+
+**집행 지점(정본화와 별항)**: 산문만 고치면 다음 재생성에서 드리프트가 소리 없이 돌아온다 —
+실제로 생성원은 `data_pipeline/concept_content/models.py`의 상수였다. 두 게이트를 배선했다.
+- `tests/backend/l1/test_concept_content_license_declaration.py` — 실 코퍼스 전수 스캔 ↔ 사이드카
+  `ncic_statement_overlap` 숫자 대조 + 출처 표시 존재 + 거짓 주장 회귀 + 두 선언 일치(4축).
+- `tests/data_pipeline/concept_content/test_models_validate.py` — 파이프라인 상수 ↔ 커밋 코퍼스
+  바이트 동일(재생성 드리프트 경로 차단).
+**뮤테이션 5종 전건 red 실증**(정상 green·백업 `cp` 원복 후 바이트 동일 확인) — 정상 통과만으로는
+보호의 증거가 아니다(2026-09-01 규칙).
+
+**부수 소득**: 새 선언에 `[수학과 교육과정]` 리터럴을 하드코딩했다가 기존 **과목 중립성 게이트**
+(`test_subject_neutrality_gate.py`)에 걸렸다 — `build_ncic_citation_core()` 합성으로 교정. 이미
+있던 가드가 실제로 잡았다.
+
+**발견 2 — 유일한 실질 위험(미해결·Kiki 소유)**: git 히스토리에 **KICE 평가기준 개발 연구 보고서
+원본 PDF 2건**(고등 CRC 2017-5-6 4.82MB·초중 CRC 2016-2-6 5.91MB)이 잔존한다. 작업 트리에서는
+2026-08-08에 지웠으나(`98a34695`) 히스토리에 남아 clone마다 배포된다. **판권장 직접 추출로 확인**:
+ISBN 979-11-5788-529-9 / -347-9 + "※ 본 자료 내용의 무단 복제를 금함" — 고시가 아니라 KICE 발간
+**연구보고서**이고, `licensing_safety.md`의 'NCIC 구분'이 이미 후자를 **영리 차단(C등급)**으로
+분류해 둔 바로 그 부류다. 같은 커밋군의 `curriculum_math_2022.pdf`는 교육부 고시 제2022-33호
+별책 8이라 §7 비보호 — **제거 대상 아님**(Kiki가 실사 중 이 구분을 정확히 지적했다).
+제거는 히스토리 재작성·force-push라 되돌리기 어려워 세션이 실행하지 않고 **`LIC-07`로 등재**했다.
+
+**정정 파일**: `content.json`·`_provenance.json`(+ 기계 판독 `ncic_statement_overlap` 필드) ·
+`data_pipeline/concept_content/{models,__main__}.py` · `docs/data/concept_content_v1.md` ·
+`docs/data/licensing_safety.md` · `l1/concept_content/projection.py` ·
+`harness/concept_content_audit.py` · 테스트 4파일.
+
+---
+
 ### 2026-09-03 (HARN-60): **게이트 clear의 주체를 대장에 기록 — 금지가 아니라 증명 가능성으로 푼다**
 
 **문제**: 이벤트의 `actor`가 **브랜치명**이라(실측: gate_clear 20건 전부 — 에이전트 브랜치 10종 +
