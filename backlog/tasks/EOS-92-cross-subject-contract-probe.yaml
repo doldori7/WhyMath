@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -21,6 +21,6 @@ acceptance:
 artifacts: []
 paths:
   - docs/architecture/subject_contract_cross_probe.md
-session: null
+session: claude/status-k9r51v
 notes: "EOS-91이 건 Provisional 상태의 해제 조건. 9/27 = G1 게이트일. 실측(2026-09-05 역할 기반 검색: 'cross-subject probe'·'교차 과목 프로브'·'타 과목 프로브'·physics 프로브 → docs/·backlog/ 에서 0건) — 이 프로브는 지시 이전까지 소유자가 없었다.\n\n[정정 2026-09-05] track subject-expansion → math-completion: validate 경고: stage=S3인데 subject-expansion 트랙(진입 게이트 G-s5) 전원보다 앞섬. 프로브는 과목 확장이 아니라 EOS Core 계약(EOS-66·math-completion)의 검증이며 G1(9/27) 조건 — 계약과 같은 트랙으로\n\n[정정 2026-09-06] ADR-004(#987 머지·40c29e58) §결정 ④의 중단 규칙을 대장에 집행. 산문에만 있던 상한을 acceptance로 내린다 — '선행 조건을 산문에만 적고 대장에 집행하지 않기 금지'의 같은 축. 최초 지적은 PR #987 자체 리뷰"
 updated: 2026-09-06
