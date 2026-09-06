@@ -1,7 +1,10 @@
-# KICE 연구보고서 PDF 제거 — 실행 기록 및 교훈 (LIC-07, 완료)
+# KICE 연구보고서 PDF 제거 — 실행 기록 및 교훈 (LIC-07 ①③ 실행분)
 
-> **상태: 완료 (2026-09-06)** · 판정 기준: main `9d5f81b2`
-> **결과**: 두 브랜치 삭제로 제거 완료. 새 clone에서 KICE blob **0건** 실측.
+> **상태: 제거 실행만 완료 (2026-09-06)** · 판정 기준: main `9d5f81b2`
+> **`LIC-07` 태스크 자체는 열려 있다** — 재유입 방지 가드(acceptance ④)가 미착수이고
+> 정본은 `backlog/tasks/LIC-07-kice-report-pdf-git-history.yaml`(`status: todo`)이다.
+> 이 문서를 "저작권 보호 작업 전체 완료"로 읽으면 그 가드를 누락하게 된다(§7).
+> **결과**: 두 브랜치 삭제로 PDF 제거 완료. 새 clone에서 KICE blob **0건** 실측(§2).
 > **이 문서는 지시서가 아니라 기록이다** — 처음 설계했던 *브랜치 재작성* 방식은 실행 중
 > **이 저장소에서 구조적으로 불가능**함이 드러났고, 실제로 통한 방법은 그게 아니었다.
 
@@ -42,13 +45,46 @@ git push origin --delete merge/human-bottleneck-6dszy0
 - 6dszy0에만 있던 파일 4개는 MISC-04 분이고 **전부 main에 이미 있다**(3개 바이트 동일,
   alembic 1개는 main이 후속판 — PR #821 회수분).
 
-**최종 확인**(완전히 새 clone에서):
+**최종 확인**(완전히 새 clone에서). 아래는 **그대로 재실행 가능한** 형태다 — 초안은
+`wm-verify`로 들어가지 않고 SHA도 생략 부호(`35cb705a…`)를 써서, blob이 있어도 항상 0건을 내는
+*무조건 통과하는 검증*이었다(PR #1008 리뷰 지적). 법적 증적 명령에서는 치명적이라 교체했다.
+
+```powershell
+cd C:\Users\kiki\Desktop\__AI
+$Blobs = "^(35cb705abfef4f7fbee7b2e6b77d68a6c25f272d|7e1d471e69b2d4135310cd53c4eca98d1b32b5a1) "
+Remove-Item -Recurse -Force .\wm-verify -ErrorAction SilentlyContinue
+git clone https://github.com/doldori7/WhyMath.git wm-verify
+$objs = git -C wm-verify rev-list --objects --all
+$rc = $LASTEXITCODE
+$n = ($objs | Select-String -Pattern $Blobs).Count
+Write-Host "rev-list exit=$rc · KICE blob=$n 건   (exit 0 이고 0건이어야 성공)"
+```
+
+**성공 기준**: `exit=0` **그리고** `0 건`. 건수만 보면 clone·조회가 실패해도 0건으로 보이므로
+종료 상태를 함께 판정한다.
+
+**이 검사의 변별력 근거**: 같은 `$Blobs` 패턴을 삭제 *전* 같은 명령 형태로 돌렸을 때 —
 
 ```
-git clone https://github.com/doldori7/WhyMath.git wm-verify
-git rev-list --objects --all | Select-String -Pattern "^(35cb705a…|7e1d471e…) "
-→ 0 건
+refs/heads/main                                  -> blob 0 건
+refs/heads/claude/human-bottleneck-tasks-6dszy0  -> blob 2 건
+refs/heads/merge/human-bottleneck-6dszy0         -> blob 2 건
 ```
+
+즉 이 패턴은 blob이 있으면 **실제로 찾아낸다**(2건). 성공·실패 양쪽에서 다른 값을 내므로
+0건이라는 결과가 의미를 가진다. 같은 실측이 "main은 깨끗하다"도 함께 증명해 §2의 삭제 전략을
+성립시켰다.
+
+**초안 패턴의 반례(실측)**: 삭제된 커밋을 아직 담고 있는 ref(`refs/pull/739/head`)에
+두 패턴을 각각 돌린 결과 —
+
+| 패턴 | blob 보유 ref | 정상 ref |
+|---|---|---|
+| 전체 SHA (현행) | **2건** | 0건 |
+| 생략 부호 `35cb705a…` (초안) | **0건** | 0건 |
+
+초안은 blob이 *있는데도* 0건을 냈다. 즉 어떤 저장소에 돌려도 통과하는 검사였고, 그것을 법적
+제거 증적으로 쓸 뻔했다.
 
 ## 3. 왜 브랜치 재작성은 실패했나 — 재사용 가능한 교훈
 
@@ -108,7 +144,11 @@ main에서 떨어져 나갔다"를 볼 수 없다. 검증 축은 *성공을 확�
 완료됐다(§2 최종 확인). 완전 제거는 GitHub Support 요청(저장소·PR #739·blob SHA 2건 명시)이며
 웹 폼 작업이라 이 문서 범위 밖이다. `LIC-07` ⑨에 동일 내용이 기록돼 있다.
 
-## 7. 후속
+## 7. 후속 — **LIC-07은 아직 열려 있다**
 
-재유입 방지 가드(저작권 위험 원본의 커밋 차단)는 `LIC-07` ④가 소유한다. 만들면 **위반 픽스처를
-실제로 주입해 red를 실증한 뒤에만** "보호 있음"으로 친다.
+제거 실행(acceptance ①③)은 끝났지만 **재유입 방지 가드(acceptance ④)는 미착수**다. 저작권 위험
+원본(대용량 PDF·hwp 등)의 커밋을 CI 또는 pre-commit에서 차단하는 축이며, 만들면 **위반 픽스처를
+실제로 주입해 red를 실증한 뒤에만** "보호 있음"으로 친다(CLAUDE.md 2026-09-01).
+
+그 전까지 이 저장소는 **같은 사고를 다시 겪을 수 있다** — 2026-08-08에 PDF가 들어온 경로가 그대로
+열려 있다. 태스크 정본의 `status`가 `todo`인 것이 그 사실의 단일 진실 원천이며, 이 문서가 아니다.
