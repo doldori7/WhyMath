@@ -1,0 +1,27 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-64-offsite-mirror-failure-invisible-to-freshness-check
+title: "오프사이트 미러 실패가 감시에 안 보인다 — backup_status.json이 Step 9보다 먼저 기록돼, 미러가 실패한 회차도 대장에는 성공으로 남는다"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 근거: backup_whymath_pg.ps1은 266줄에서 Write-BackupStatus로 backup_status.json에 성공을 기록하고, 오프사이트 미러(Step 9·302줄~)는 그 뒤에 온다. Step 9의 모든 실패 경로는 Fail(exit 1)이지만 대장에는 이미 성공이 적힌 뒤다. 매일 09:00 WhyMath-DB-Backup-Check는 그 대장을 읽으므로(never_recorded/stale/plaintext_artifact 3사유) 미러가 매 회차 실패해도 '정상'을 보고한다 — 유일한 신호인 LastTaskResult를 자동으로 읽는 것이 없다"
+  - "② 대책 선택지 중 하나를 골라 구현한다: (a) Write-BackupStatus를 Step 9 뒤로 옮긴다 — 단 오프사이트 실패 시 백업 자체는 유효한데 대장이 비어 stale로 오경보하는 부작용을 검토할 것 (b) 상태 레코드에 offsite 필드(요청 여부·성공 여부·목적지·바이트)를 추가하고 check_backup_freshness가 offsite_failed를 별도 사유로 exit 1 (c) Step 9 실패 시 backup_alert.txt를 직접 쓴다. (b)가 기존 3사유 체계와 정합적이다"
+  - "③ 변별력(결함 주입): 오프사이트 목적지를 읽기 전용/부재로 만들어 Step 9를 실패시킨 회차에서 감시가 실제로 exit 1을 내는지 확인한다. 현행 상태에서는 같은 주입에서 감시가 통과한다는 것(=보호 부재)을 먼저 실측해 기록한다 — 정상 상태의 초록은 보호의 증거가 아니다"
+  - "④ tests/infra/test_backup_encryption.py에 계약을 동결한다. PS1은 실행 검증이 불가하므로 backup_status.py의 판정 함수(evaluate_backup_health)는 실동작으로, PS1 쪽 순서·필드는 텍스트로 고정한다(A축 한계 명시)"
+artifacts: []
+paths:
+  - scripts/backup/backup_whymath_pg.ps1
+  - scripts/backup/backup_status.py
+  - scripts/backup/check_backup_freshness.ps1
+  - tests/infra/test_backup_encryption.py
+session: null
+notes: "발견 경위: 2026-09-06 게이트 G-backup-offsite-move 실행 중 미러 작동 여부를 코드로 검증하다 발견. 그 게이트 자체는 LastTaskResult=0으로 미러 성공이 증명돼 막히지 않는다. CLAUDE.md '측정·게이트 도구가 판정치를 외부에만 의존 금지'·'침묵 실패 금지'의 감시 축. 관련 = OPS-31(암호화·스케줄), 런북 db_backup_dr_runbook.md §2-2·§4-1c"
+updated: 2026-09-06

@@ -321,10 +321,16 @@ docker inspect whymath-pg | Out-File -Encoding utf8 C:\Users\kiki\Desktop\__AI\W
 
 ### 취급 규칙 (의무)
 
-1. **보관 위치 고정 + 반출 조건**: 백업 디렉터리(`C:\Users\kiki\Desktop\__AI\WhyMath-backups`)는 Phaiakes9 로컬을 기본으로 한다. **암호화되지 않은 산출물(`.dump`)은 클라우드 업로드·외부 공유·타 기기 복사 금지.** 오프사이트 사본은 **`.dump.age`(age 암호화본)만** 나갈 수 있고, 반출 전 아래 3건을 모두 만족해야 한다 — 절차는 §1b·§4-1a에 착지했다(OPS-31, 이전의 "절차 미도입" 상태 해소):
+> **항목 번호 = 절 번호다.** 아래 5개 항목은 이 문서와 계약 테스트(`tests/infra/test_backup_encryption.py`)에서 **§4-1 ~ §4-5**로 참조된다.
+
+1. **(§4-1) 보관 위치 고정 + 반출 조건**: 백업 디렉터리(`C:\Users\kiki\Desktop\__AI\WhyMath-backups`)는 Phaiakes9 로컬을 기본으로 한다. **암호화되지 않은 산출물(`.dump`)은 클라우드 업로드·외부 공유·타 기기 복사 금지.** 오프사이트 사본은 **`.dump.age`(age 암호화본)만** 나갈 수 있고, 반출 전 아래 3건을 모두 만족해야 한다 — 절차는 §1b·§4-1a에 착지했다(OPS-31, 이전의 "절차 미도입" 상태 해소):
    - ⓐ `verify_encrypted_backup.py`가 **exit 0** (잠김 + 복원 가능 양방향 확인)
    - ⓑ 개인키가 반출 대상과 **다른 매체**에 있다(§4-5 — 같이 나가면 암호화가 무의미)
    - ⓒ Kiki 명시 승인 (게이트 `G-backup-offsite-move`)
+2. **(§4-2) 외부 도구 반입 금지**: 덤프 파일(또는 그 일부)을 LLM·SaaS·분석 도구에 업로드 금지 — "학생 풀이 데이터를 명시적 동의 없이 학습에 사용 금지" 금기의 백업판.
+3. **(§4-3) 보존 상한 = PIPA 파기 창**: 계정 삭제(잊힐 권리) 처리 후에도 그 학생의 데이터는 백업 안에 **최대 `RetentionDays`(기본 14일)** 잔존한다 → 파기 완료 시점은 "라이브 삭제 + RetentionDays 경과" 이후다(`deletion_audit` 기록과 함께 이 창을 파기 안내에 반영). `-RetentionDays`를 늘리면 이 잔존 창도 같이 늘어난다 — 연장은 이 트레이드오프를 인지하고 결정한다.
+4. **(§4-4) 리허설 복제본도 동급**: scratch 컨테이너는 실데이터 복제본이다 — 127.0.0.1 바인딩 유지, 리허설 종료 즉시 3-4로 폐기(볼륨 없음 = 잔존물 없음). 리허설 출력 캡처·스크린샷에 학생 행 데이터가 섞이지 않게 행수 집계만 공유한다.
+5. **(§4-5) 키 분리 유지**: 키가 **두 개**이고 둘 다 백업 산출물과 같은 장소에 두지 않는다. ⓐ **age 개인키**(`whymath-backup-identity.key`) — `.dump.age`를 여는 유일한 수단이다. 보관 규칙의 정본은 §1b「개인키 보관」이며, 오프사이트 목적지로의 **동반 반출은 금지**다(§4-1b 자가검증 2가 직접 검사한다). 이것이 §4-1 반출 조건 ⓑ가 요구하는 '다른 매체'다. ⓑ **봉투 암호화 마스터 키**(env `dialogue_content_encryption_key`) — 백업 디렉터리·덤프와 같은 장소에 두지 않는다. 어느 쪽이든 산출물과 함께 유출되면 암호화가 무의미해진다.
 
 ### 4-1a. 반출 전 검증 (ⓐ의 실행)
 
@@ -393,6 +399,7 @@ $b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
 - **성공**: `[OK] copied ...` + 자가검증 1이 `True` + 자가검증 2의 **두 줄이 모두 `False`**.
 - **변별력**: 자가검증 1은 파일 존재가 아니라 **바이트 길이 일치**를 본다 — 동기화 중 잘린 사본은 존재하면서도 열리지 않으므로 `Test-Path`만으로는 구별되지 않는다. 자가검증 2는 이 절이 막으려는 사태(키 동반 유출·평문 반출)를 **직접 검사**한다.
 - **실패 시 대처**: 자가검증 2가 하나라도 `True`면 **그 파일을 목적지에서 즉시 삭제**하고(`Remove-Item`), 클라우드 휴지통에서도 비운다 — 동기화 서비스는 삭제본을 30일 보관하는 경우가 많다.
+- **검증한 것과 내보내는 것의 개수가 다르다**: §4-1a는 **최신 1건**만 검증하는데 이 블록은 디렉터리의 `.dump.age`를 **전부** 복사한다. 과거 회차까지 조건 ⓐ를 확인하려면 각 파일에 §4-1a를 돌린다(자가검증 1도 최신 1건만 길이 대조한다).
 - **동기화 완료 확인**: 복사는 로컬 폴더에 넣는 것까지이고, 실제 업로드는 클라우드 클라이언트가 한다. 트레이 아이콘이 "최신 상태"가 될 때까지 확인한다 — **폴더에 파일이 있다 ≠ 클라우드에 올라갔다**.
 
 ### 4-1c. 상시 미러로 전환 — 1회 복사는 반드시 썩는다 (필수)
@@ -404,18 +411,25 @@ $b = Get-ChildItem (Join-Path $Offsite $a.Name) -ErrorAction SilentlyContinue
 
 그래서 오프사이트는 스케줄에 **편입**한다. `backup_whymath_pg.ps1 -OffsiteDir <경로>`가 성공한 **암호화** 회차마다 사본을 넣고 **같은 보존 정책**을 그 디렉터리에도 적용한다(최신 1개는 만료돼도 보존 — 로컬과 동일 불변식).
 
-```powershell
-# [실행 시스템] Windows PowerShell — **관리자 권한으로 실행** (작업 재등록에 필요)
-# ↓ 경로는 실제 동기화 폴더에 맞춘다
-cd C:\Users\kiki\Desktop\__AI\WhyMath
-.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir "C:\Users\kiki\Google Drive\WhyMath-backups"
+> **반드시 새 관리자 권한 창에서 실행한다.** 작업 스케줄러 등록은 권한이 필요하고, 일반 창에서는 `Register-ScheduledTask : Access is denied.`(HRESULT 0x80070005)로 실패한다. 스크립트는 이제 **실행 전에** 권한을 확인하고 거부하지만(Step 0a), 2026-09-06에는 그 확인이 없어 **실패한 채로 `[OK]` 두 줄을 출력하고 exit 0**으로 끝났다 — 그 사고의 대책이 아래 자가검증과 스크립트의 fail-closed다.
 
-# 자가검증: 등록된 백업 작업의 인자에 -OffsiteDir가 실제로 실려 있는가 (True 여야 함)
-((Get-ScheduledTask -TaskName "WhyMath-DB-Backup").Actions.Arguments) -like "*-OffsiteDir*"
+```powershell
+# [실행 시스템] Windows PowerShell — **관리자 권한 새 창** (작업 재등록에 필요)
+# ↓ 목적지 경로는 실제 동기화 폴더에 맞춘다 (이 블록의 첫 명령 인자 = 사람이 아는 값)
+$Expected = "C:\Users\kiki\Google Drive\WhyMath-backups"
+
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+.\scripts\backup\register_backup_schedule.ps1 -At 04:00 -CheckAt 09:00 -RequireEncryption -OffsiteDir $Expected
+Write-Host "EXIT=$LASTEXITCODE"
+
+# 자가검증: 등록된 작업의 인자를 **되읽어** 목적지 값까지 일치하는가 (True 여야 함)
+$taskArgs = "$((Get-ScheduledTask -TaskName "WhyMath-DB-Backup").Actions.Arguments)"
+$taskArgs
+$taskArgs -like "*-OffsiteDir `"$Expected`"*"
 ```
 
-- **성공**: `[OK] task 'WhyMath-DB-Backup' ...`과 `[OK] task 'WhyMath-DB-Backup-Check' ...` 두 줄 + 자가검증 `True`.
-- **변별력**: 자가검증은 "등록됐다"가 아니라 **등록된 인자 문자열에 플래그가 실렸는지**를 본다 — 플래그를 빠뜨린 재등록도 `[OK]` 두 줄은 그대로 내기 때문이다.
+- **성공**: `EXIT=0` + `[OK] task 'WhyMath-DB-Backup' ...`·`[OK] task 'WhyMath-DB-Backup-Check' ...` 두 줄 + 자가검증 `True`.
+- **변별력**: 자가검증은 플래그 *존재*가 아니라 **목적지 값까지** 대조하고, 인자 문자열 자체를 출력해 사람이 눈으로 확인할 수 있게 한다. 종전 검사(`-like "*-OffsiteDir*"`)는 **등록이 실패해도 동명의 옛 태스크가 대신 통과시켰다** — 2026-09-06 실측에서 실제로 그렇게 `True`가 나왔다(등록은 0건인데 검사는 통과). 스크립트 쪽도 되읽은 인자가 이번 실행이 조립한 인자와 다르면 `[FAIL]`로 멈춘다.
 - **첫 회차 확인**: 다음 04:00을 기다리지 말고 §2-1처럼 `Start-ScheduledTask`로 1회 돌린 뒤 목적지에 `.dump.age`가 새로 생겼는지 본다.
 
 **실패는 치명(exit 1)으로 다룬다.** 이 스크립트는 작업 스케줄러에서 무인 실행되므로 경고는 아무도 읽지 않는다 — 사람에게 닿는 유일한 신호가 `LastTaskResult`다. 오프사이트가 실패하면 **로컬 산출물은 지우지 않고** 종료코드로 알린다(백업 자체는 성공했으므로 유효하다). 스크립트가 치명으로 다루는 상황: 평문 회차인데 `-OffsiteDir`가 주어짐 / 복사 실패 / **크기 불일치(잘린 사본)** / 만료 사본 삭제 실패 / 목적지에 평문 `.dump`가 발견됨.
@@ -423,11 +437,6 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 ### 4-1d. 오프사이트 사본 주기적 검증 (사본은 열어 봐야 백업이다)
 
 오프사이트 사본은 **회수해서 열어 본 적이 있을 때만** 백업이다. 분기 리허설(§3) 때 최신 백업 대신 **클라우드에서 내려받은 사본**으로 한 번 수행하면 반출 경로 전체(업로드→회수→복호→복원)가 검증된다. 이때도 개인키는 클라우드가 아니라 §1b의 별도 매체에서 가져온다.
-
-2. **외부 도구 반입 금지**: 덤프 파일(또는 그 일부)을 LLM·SaaS·분석 도구에 업로드 금지 — "학생 풀이 데이터를 명시적 동의 없이 학습에 사용 금지" 금기의 백업판.
-3. **보존 상한 = PIPA 파기 창**: 계정 삭제(잊힐 권리) 처리 후에도 그 학생의 데이터는 백업 안에 **최대 `RetentionDays`(기본 14일)** 잔존한다 → 파기 완료 시점은 "라이브 삭제 + RetentionDays 경과" 이후다(`deletion_audit` 기록과 함께 이 창을 파기 안내에 반영). `-RetentionDays`를 늘리면 이 잔존 창도 같이 늘어난다 — 연장은 이 트레이드오프를 인지하고 결정한다.
-4. **리허설 복제본도 동급**: scratch 컨테이너는 실데이터 복제본이다 — 127.0.0.1 바인딩 유지, 리허설 종료 즉시 3-4로 폐기(볼륨 없음 = 잔존물 없음). 리허설 출력 캡처·스크린샷에 학생 행 데이터가 섞이지 않게 행수 집계만 공유한다.
-5. **키 분리 유지**: 봉투 암호화 마스터 키(env)는 백업 디렉터리·덤프와 **같은 장소에 두지 않는다**(같이 유출되면 암호화가 무의미).
 
 ## §5. 운영 요약
 
@@ -458,6 +467,8 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 ---
 
 *작성: 2026-07-26 (OPS-02-db-backup-dr) · 테이블명·암호화 실태는 `src/backend/whymath_backend/db/models/` 2026-07-26 실측.*
+*개정: 2026-09-06 r2 (게이트 실행 중 실측 — §4-1c 자가검증이 **등록 실패를 통과시켰다**: 일반 창 실행으로 `Register-ScheduledTask`가 Access denied(0x80070005) 2회 실패했는데 `register_backup_schedule.ps1`이 `[OK]` 2줄 + exit 0을 냈고, 런북의 `-like "*-OffsiteDir*"` 검사는 **동명의 옛 태스크**를 읽어 `True`가 됐다. 파일 상단 `$ErrorActionPreference = "Stop"`은 이 cmdlet 계열에 걸리지 않았다. 대책 = 스크립트 Step 0a 권한 사전 확인 + 호출 자리 명시적 `-ErrorAction Stop`/try-catch(예외 타입명 포함) + 되읽은 인자와 조립 인자의 대조, 런북은 관리자 창 경고와 목적지 **값**까지 대조하는 자가검증으로 교체 · §4-1b에 '검증 1건 vs 반출 전건' 명시 · 회귀 방지 `test_backup_encryption.py::TestScheduledTaskRegistrationFailsClosed`).*
+*개정: 2026-09-06 (게이트 `G-backup-offsite-move` 실행 준비 — §4 취급 규칙 2~5번 항목이 §4-1a~4-1d 삽입에 밀려 **§4-1d 안에 파묻혀 있던 것**을 목록으로 복귀시키고 절 번호를 본문에 명시: 반출 조건 ⓑ가 가리키는 §4-5가 문서에서 찾을 수 없었다(같은 번호를 §4-3 등 계약 테스트 주석도 인용한다) · §4-5에 age 개인키 축을 편입 — 종전 문면은 봉투 암호화 마스터 키만 다뤄 ⓑ가 요구하는 키를 정의하지 않았다 · 회귀 방지 = `test_backup_encryption.py::TestRunbookCrossReferences`).*
 *개정: 2026-09-03 (게이트 실행 중 실측 반영 — §5 RTO 5.8분 기입 + 대표성 한계 등재 · §4-1a를 컨테이너 경유(`--pg-restore-docker-image`)로 교체: 호스트 pg_restore를 요구하던 초판이 이 런북 자신의 '호스트 PG 클라이언트 불요' 전제와 충돌해 반출 검증이 영구 exit 2였다 · exit 2 대처를 도구별로 분기).*
 *개정: 2026-09-02 (게이트 2건 실행 준비 — §3-0/§3-3b RTO 측정 스텝 신설(리허설이 게이트 요구 수치를 산출하지 못하던 결함) · §4-1b/§4-1c 클라우드 오프사이트 반출 절차 신설(조건만 있고 절차 부재) · backup_whymath_pg.ps1의 존재하지 않는 절 참조 'section 4-2' → '1b' 정정 · §5 RTO 측정범위 명시 · §6 갱신).*
 *개정: 2026-09-01 (OPS-31, PR #968 리뷰 반영: §2 검사 태스크 2개 등록·§2-2 자동 감시로 전환) — §1b 키쌍 생성 신설 · §2 로그온 비의존 스케줄로 전면 개정 · §2-2 누락 감시 신설 · §3-2/3-4 복호·폐기 반영 · §4-1 반출 조건 3건 + §4-1a 반출 전 검증 신설 · §5·§6 갱신.*
