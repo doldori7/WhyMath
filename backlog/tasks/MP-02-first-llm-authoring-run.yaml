@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "data/corpus/**"
   - "docs/reviews/**"
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: 대체안 A(2026-09-06 Kiki 채택) §6 1행 · §11-5 P1-①. **MP 접두 신설 사유**: EOS 계열 소진(TASK_ID_RE 정확히 2자리·EOS-98/99가 마지막). MP = 마이크로 프로젝트(대체안 A 정의: 1 MP = accumulate 회차 1건). MP-01은 초판 오등재(검수 게이트를 회차 태스크에 걸어 교착 — requires_gates는 착수 조건)로 회수된 번호라 재사용하지 않는다(§11-3). Kiki 머신 실행 필수(실 provider·Phaiakes9) — 세션이 런북(6항목 브리핑·자가검증 동봉)을 제공하고 Kiki가 실행한다. EOS-99(캐시 계측)는 이 태스크의 의존이 아니다(참조만). 골든셋의 시작점이라 P0 논거가 있으나 P0 예산(One In One Out) 때문에 P1 — 승격은 Kiki 판단(amend --priority)."
 updated: 2026-09-06
