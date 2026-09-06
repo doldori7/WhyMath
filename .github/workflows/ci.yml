@@ -129,7 +129,22 @@ jobs:
           # **AST로 파싱해** 강제한다(경로 목록의 하드코딩 두 벌 금지 — 새 동결 입력이 늘면
           # 가드가 자동으로 따라온다). 과트리거는 파일 2건 한정이라 비용이 사실상 0이다
           # (backlog/ 전체가 아니라 gates.yaml 하나 — 태스크 상태 변경 PR은 깨우지 않는다).
-          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|docs/standards/eos_verification_design_v1\.md$|backlog/gates\.yaml$|\.github/workflows/ci\.yml$)'; then
+          #
+          # **엔티티 동결 입력 1건 편입**(ARCH-38 · 2026-09-06) — 같은 형태의 사각이 하나 더
+          # 있었고, 이 PR이 **자기 자신으로** 실증했다. `canonical_entity_model_v1.md`는
+          # tests/backend/db/test_canonical_entity_model_freeze.py의 검사 ③④가 읽는 입력이다
+          # (`_CANON_DOC` — §2-A·§2-B 표를 파싱해 상수와 1:1 대조). 그런데 필터 밖이라 그 문서만
+          # 고치는 PR에서 backend 잡이 SKIP됐다 — 즉 **§2-A 표를 조용히 고쳐 좌석 배정을 바꿔도
+          # 검사 ④가 실행되지 않는다**. G0 동결 입력(위)·data/corpus·schemas(COLLAB-07 ①②)와
+          # 정확히 같은 형태의 네 번째다. 실증: PR #997(이 문서 단독 변경)에서 `backend —
+          # lint·type·test`가 conclusion=skipped였고, skip은 required check에서 충족으로 계상된다.
+          # ※ 이 입력도 이제 **AST 가드의 강제 범위 안**이다(OPS-62 · 2026-09-06) — 종전에는
+          # test_ci_contract_fixture_trigger_wiring.py의 `_FREEZE_TEST`가 동결 테스트 **한 파일**을
+          # 하드코딩해 다른 동결 테스트의 입력은 따라오지 않았다(그래서 이 사각이 생겼다). 지금은
+          # 가드가 tests/backend/** 전건을 훑어 FROZEN_INPUT_PATHS를 선언한 동결 테스트 **전부**를
+          # 대상으로 삼고(선언 0건이면 통과가 아니라 RED), test_canonical_entity_model_freeze.py도
+          # 그 상수를 선언한다. 새 동결 테스트는 상수만 선언하면 이 필터 편입이 자동으로 강제된다.
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|data/[^/]+$|data/corpus/|schemas/|docs/standards/eos_verification_design_v1\.md$|backlog/gates\.yaml$|docs/architecture/canonical_entity_model_v1\.md$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
@@ -810,7 +825,13 @@ jobs:
       # 모바일이 새 `/v1/` 표면을 호출하기 시작하면 이 파일이 깨져 "가시화 리포트가 낡았다"를
       # 신호한다(회귀 감시). 명시 파일 경로 실행 — 이 파일엔 async 테스트가 없다.
       - name: Pytest (concept_reach 회귀 가드 — 단일 파일 경량)
-        run: python3 -m pytest ../../tests/backend/harness/test_concept_reach_report.py -q
+        # `-c pyproject.toml` 필수 — 위치 인자(테스트 경로)를 주면 pytest가 인자의 공통조상을
+        # 상향 탐색해 **저장소 루트**를 rootdir로 잡고, 루트 pyproject.toml에는 pytest 설정이
+        # 없어 `src/backend/pyproject.toml`의 ini가 통째로 안 읽힌다(OPS-61 실측). 그러면
+        # asyncio_mode=auto·--strict-markers·--strict-config·--import-mode=importlib가 전부
+        # 빠진 채 도는데 **화면상 정상으로 보인다** — 이 스텝들은 실제로 그 상태로 돌고 있었다.
+        # `-c`로 설정 파일을 못 박으면 bare 호출과 동일해진다(rootdir=src/backend·configfile 동일).
+        run: python3 -m pytest -c pyproject.toml ../../tests/backend/harness/test_concept_reach_report.py -q
 
   # ─────────────────────────────────────────────────────────────────
   # L5 웹 (그래프 계산기 — 격리 Vite + React SPA·국소 비상구)
@@ -1445,7 +1466,13 @@ jobs:
         env:
           WHYMATH_RUN_INTEGRATION: "1"
           WHYMATH_DB_DISABLE_POOL: "1"
-        run: python -m pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
+        # `-c pyproject.toml` 필수 — 위치 인자(테스트 경로)를 주면 pytest가 인자의 공통조상을
+        # 상향 탐색해 **저장소 루트**를 rootdir로 잡고, 루트 pyproject.toml에는 pytest 설정이
+        # 없어 `src/backend/pyproject.toml`의 ini가 통째로 안 읽힌다(OPS-61 실측). 그러면
+        # asyncio_mode=auto·--strict-markers·--strict-config·--import-mode=importlib가 전부
+        # 빠진 채 도는데 **화면상 정상으로 보인다** — 이 스텝들은 실제로 그 상태로 돌고 있었다.
+        # `-c`로 설정 파일을 못 박으면 bare 호출과 동일해진다(rootdir=src/backend·configfile 동일).
+        run: python -m pytest -c pyproject.toml -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
 
       # 초인간 검증 S6(상시성) — 전 코퍼스 verify 재료로 정답을 매일 밤 전수 재검산.
       # 정본 변경·데이터 오염을 야간에 즉시 잡는다(fail 1건이라도 있으면 exit 1). 순수 계산·
@@ -1476,7 +1503,13 @@ jobs:
       # 환경에서 `pytest` 런처가 `python`과 다른 인터프리터에 결합될 수 있다. 이 잡의 설치·
       # 마이그레이션·테스트 스텝을 전부 `python -m` 형태로 통일해 한 인터프리터로 못 박는다.
       - name: 앵커 A4 생성 E2E 관통 (EOS-64 상시화 — hermetic)
-        run: python -m pytest ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
+        # `-c pyproject.toml` 필수 — 위치 인자(테스트 경로)를 주면 pytest가 인자의 공통조상을
+        # 상향 탐색해 **저장소 루트**를 rootdir로 잡고, 루트 pyproject.toml에는 pytest 설정이
+        # 없어 `src/backend/pyproject.toml`의 ini가 통째로 안 읽힌다(OPS-61 실측). 그러면
+        # asyncio_mode=auto·--strict-markers·--strict-config·--import-mode=importlib가 전부
+        # 빠진 채 도는데 **화면상 정상으로 보인다** — 이 스텝들은 실제로 그 상태로 돌고 있었다.
+        # `-c`로 설정 파일을 못 박으면 bare 호출과 동일해진다(rootdir=src/backend·configfile 동일).
+        run: python -m pytest -c pyproject.toml ../../tests/backend/harness/test_eos_anchor_e2e_a4.py
 
   # ── OPS-58 후속 — 병렬화가 약화시킨 탐지력의 복구 (PR #944 Codex P2 지적 수용) ──────
   # `backend — lint·type·test`는 `-n auto --dist loadfile`로 돈다. `loadfile`은 *같은 파일*의

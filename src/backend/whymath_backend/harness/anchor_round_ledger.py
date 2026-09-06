@@ -172,6 +172,28 @@ class RoundRecord(BaseModel):
     `appended`가 무진전 판정 축이고 `accepted`는 참조 축이다(모듈 docstring "무진전의 축").
     `outcome_counts`를 함께 남겨 나중에 대장만으로 분포를 재계산할 수 있게 한다 — 리포트
     JSON을 따로 보관하지 않아도 회차 이력이 자족한다.
+
+    회차 매니페스트(MP-04 — 아래 두 묶음)
+    -------------------------------------
+    종전 8필드는 "몇 건 시도해 몇 건 붙었나"만 말했다. 그래서 대장만 보고는 **이 회차가 어떤
+    임계·어떤 모델·어떤 프롬프트로 돌았는가**를 알 수 없었고(genlog 조인이 있어야 겨우 모델을
+    안다), 배치 안전장치가 실제로 무슨 판정을 냈는지도 대장에는 0건이었다. 회차 간 비교
+    (지난주 대비 수용률 하락이 모델 교체 때문인지 임계 변경 때문인지)가 원리적으로 불가능한
+    상태였다. 두 묶음을 분리해 싣는다 — **구성(무엇으로 돌렸나)**과 **관측(그래서 뭐가 나왔나)**
+    은 성질이 다르고, 섞으면 "임계 0.9"와 "하한 0.34"가 같은 칸에서 읽힌다.
+
+      ① 구성 스냅샷 — `prompt_version`·`model_name`·카나리 3종·중단 감시 2종·`dedup_input_digests`·
+         `cli_argv`. 이 회차를 **재현**하는 데 필요한 입력 전부다(같은 명령·같은 시드 파일·같은
+         임계로 다시 돌릴 수 있는가).
+      ② 관측 판정 — `canary_passed`·`canary_rate`·`canary_lower_bound`·`canary_blocked`·
+         `canary_advisory`·`aborted`·`abort_reason`. 게이트가 **작동했다는 신호**다(CLAUDE.md
+         "작동 신호 없는 알고리즘 부착 금지" — 회차가 exit 0을 냈다는 사실은 카나리가 판정을
+         냈다는 증거가 아니다).
+
+    신설 필드는 **전부 Optional·기본 None**이다. 신설 이전에 기록된 구행은 이 필드가 없으므로
+    `None`=**미기록**으로 읽히고, 로더가 소급해 값을 채우지 않는다(날조 금지 — 그 회차가 어떤
+    임계로 돌았는지는 아무도 모른다는 것이 사실이다). 0·빈 문자열로 채우면 "끔"·"측정됨 0"과
+    구분되지 않는다.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -192,6 +214,141 @@ class RoundRecord(BaseModel):
         description=(
             "매체 파생 필드 — 대장 JSONL에서의 1-기반 줄 번호. append는 기록하지 않고"
             "(파일이 줄 번호를 자칭하지 않음) 로더가 실제 위치를 주입한다."
+        ),
+    )
+
+    # ── ① 구성 스냅샷(MP-04) — "이 회차를 무엇으로 돌렸는가"(재현 재료) ──────────────
+    prompt_version: str | None = Field(
+        default=None,
+        description=(
+            "이 회차가 실제로 쓴 프롬프트 정본 식별자(genlog 행의 `prompt_version` 동일 값 — "
+            "정본 자산 내용 해시). 프롬프트가 바뀌면 수용률이 바뀌므로, 이 값이 없으면 회차 "
+            "간 수용률 비교가 '모델이 나빠졌나 프롬프트가 바뀌었나'를 구분하지 못한다. "
+            "회차에 genlog 행이 0건이면(생성 호출 자체가 없었던 회차) None=미기록. 한 회차에서 "
+            "서로 다른 값이 관측되면 정렬 후 ','로 합쳐 싣는다 — 하나만 골라 적으면 그 행은 "
+            "회차가 단일 프롬프트로 돌았다고 거짓말하게 된다."
+        ),
+    )
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "이 회차가 실제로 호출한 모델의 **핀 ID**(예 'qwen2.5:7b'·'claude-sonnet-4-6') — "
+            "genlog 행의 `model_name`과 같은 값이다. 패밀리명이 아니라 핀 ID여야 '지난 회차와 "
+            "같은 모델인가'가 기계 판정된다. genlog 0건이면 None=미기록, 복수 관측 시 "
+            "`prompt_version`과 같은 규칙(정렬 후 ',' 결합)."
+        ),
+    )
+    canary_size: int | None = Field(
+        default=None,
+        description=(
+            "이 회차에 적용된 카나리 표본 수(`--canary`). **0은 '관문 끔'을 명시**하는 값이고 "
+            "None은 미기록이다 — 둘을 같은 칸으로 접으면 '보호가 꺼져 있었다'가 '기록이 없다'와 "
+            "구분되지 않는다."
+        ),
+    )
+    canary_threshold: float | None = Field(
+        default=None,
+        description=(
+            "카나리 통과에 요구한 Wilson 단측 하한 임계(`--canary-threshold`). 관측된 하한"
+            "(`canary_lower_bound`)과 **짝으로** 있어야 '왜 막혔나/왜 통과했나'가 대장만으로 "
+            "재구성된다(임계가 바뀐 회차와 품질이 바뀐 회차는 조치가 정반대다)."
+        ),
+    )
+    canary_confidence: float | None = Field(
+        default=None,
+        description=(
+            "카나리 Wilson 단측 신뢰수준(`--canary-confidence`). 같은 관측이라도 신뢰수준이 "
+            "다르면 하한이 달라지므로, 이 값 없이는 회차 간 하한을 비교할 수 없다."
+        ),
+    )
+    abort_window: int | None = Field(
+        default=None,
+        description=(
+            "롤링 불량률 감시 창 크기(`--abort-window`). 0은 '감시 끔'을 명시한다(None=미기록). "
+            "회차 길이가 이 값보다 짧으면 롤링 감시는 한 번도 판정하지 않는다 — 그 사실을 "
+            "나중에 판정하려면 창 크기가 대장에 남아 있어야 한다."
+        ),
+    )
+    abort_threshold: float | None = Field(
+        default=None,
+        description="롤링 창 불량률 중단 임계(`--abort-threshold`) — 초과 시 회차 즉시 중단.",
+    )
+    dedup_input_digests: dict[str, str | None] | None = Field(
+        default=None,
+        description=(
+            "이 회차가 dedup 인덱스로 읽은 **입력 전부**의 경로→sha256(hex) 매핑 — `--seeds`와 "
+            "**기존 `--out` 코퍼스**를 모두 포함한다(누적 축적은 2회차부터 이전 산출물을 "
+            "signature 인덱스에 합치므로, out을 빼면 수용 판정에 실제로 쓰인 입력 하나가 "
+            "대장에서 통째로 빠진다 — PR #1013 Codex P1). 지문은 배치 **시작 전** 상태에서 "
+            "뜬다: 배치 뒤에 뜨면 이 회차가 out에 append한 바이트가 섞여 '소비한 입력'이 아니라 "
+            "'산출 후 상태'가 되고, 재현하려는 사람이 그 해시를 맞출 방법이 없다. "
+            "같은 명령을 다시 돌려도 입력이 그 사이 자랐으면 결과가 달라지므로 재현 계약에는 "
+            "**입력 내용의 지문**이 필요하다. 해시를 계산하지 못한 경로(부재·읽기 실패)는 값이 "
+            "None이다(키는 남긴다 — '그 경로를 dedup 입력으로 주었으나 읽지 못했다'는 사실 "
+            "자체가 관측이며, 첫 회차의 아직 없는 out이 이 경우다). 빈 dict는 '입력 0건으로 "
+            "돌았다'는 관측이고, 필드 자체가 None이면 미기록이다."
+        ),
+    )
+    cli_argv: list[str] | None = Field(
+        default=None,
+        description=(
+            "이 회차를 띄운 CLI 인자 그대로(프로그램명 제외). 개별 파라미터 필드가 놓친 인자"
+            "(`--topic-hint`·`--standard-code`·`--n` 등)까지 포함한 **재실행 가능한 원문**이다 "
+            "— 스키마가 필드를 추가할 때마다 과거 회차를 소급 해석할 필요가 없어진다. "
+            "빈 리스트는 '인자 없이 실행'이고 None은 미기록."
+        ),
+    )
+
+    # ── ② 관측 판정(MP-04) — "그래서 게이트가 무슨 판정을 냈는가"(작동 신호) ─────────
+    canary_passed: bool | None = Field(
+        default=None,
+        description=(
+            "카나리 판정 결과. None은 **판정이 없었다**는 뜻이다(관문 꺼짐·시도 0건) — "
+            "False(미달)와 구분된다. 판정 없음을 False로 접으면 '게이트가 막았다'가 되고, "
+            "True로 접으면 '게이트가 봐 줬다'가 된다. 둘 다 거짓이다."
+        ),
+    )
+    canary_rate: float | None = Field(
+        default=None,
+        description=(
+            "카나리 성공률 **점추정**(`CanaryVerdict.point_estimate`). 참고 표시일 뿐 판정 "
+            "근거가 아니다 — 판정은 아래 하한으로 한다(CLAUDE.md 점추정 판정 금지)."
+        ),
+    )
+    canary_lower_bound: float | None = Field(
+        default=None,
+        description=(
+            "카나리 Wilson 단측 **하한**(`CanaryVerdict.wilson_lower`) — 실제 판정 근거값. "
+            "`canary_threshold`와 비교하면 대장 행만으로 통과/미달을 재판정할 수 있다."
+        ),
+    )
+    canary_blocked: bool | None = Field(
+        default=None,
+        description=(
+            "카나리 미달로 본배치가 **시작되지 않았는가**. 진행 중 정지(`aborted`)와 다른 "
+            "사건이다 — 전자는 시작 전 차단이라 남은 n건이 생성조차 되지 않았다는 뜻이다."
+        ),
+    )
+    canary_advisory: bool | None = Field(
+        default=None,
+        description=(
+            "카나리 판정이 **권고**였는가(n <= canary_size라 막을 본배치가 없던 경우). 판정은 "
+            "냈지만 차단력이 없었다는 뜻 — 이 값이 없으면 운영자가 통과 회차를 '게이트가 봐 "
+            "줬다'로 오독한다."
+        ),
+    )
+    aborted: bool | None = Field(
+        default=None,
+        description=(
+            "롤링 불량률 초과로 회차가 조기 중단됐는가. 중단돼도 그 시점까지의 수용분은 "
+            "append되므로 `appended > 0`인 중단 회차가 있을 수 있다 — 중단은 폐기가 아니다."
+        ),
+    )
+    abort_reason: str | None = Field(
+        default=None,
+        description=(
+            "중단 사유(관측 불량률·창 크기·임계 포함). 중단이 없으면 None이고, 그 구분은 "
+            "`aborted`가 말한다(`aborted=False`+None=중단 없음 / `aborted=None`=미기록)."
         ),
     )
 
