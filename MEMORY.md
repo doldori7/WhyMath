@@ -7919,6 +7919,24 @@ CI green·충돌 없음 상태에서 Codex 리뷰가 결함 3건을 냈고 **전
 - **교훈 2**: 세 지적의 공통 형태는 **강도 과장**이다(writer 없는데 있다 / 강제되는데 없다 / 계약인데 구조). 방향이 양쪽으로 갈린 것이 단서다 — 한 방향으로만 틀렸으면 편향이지만, 양쪽으로 틀렸다면 *검증 없이 서술의 톤을 정한 것*이다. 사실 진술마다 근거의 종류(실측 grep / 남의 문서 / 테스트 동결)를 구분해 적었어야 했다.
 - **교훈**: 부재 주장은 **검색어가 아니라 축**을 틀리면 무너진다. 이번엔 "Evaluation을 층 이름으로 쓴 문서"는 재검색에서도 0건이라 태스크 결론 자체는 섰지만, 근접 정본을 못 보고 썼다면 3계층과 경쟁하는 두 번째 배정표를 만들 뻔했다.
 
+## 2026-09-06: EOS-75 — 실패코드 JSON 키 계약 정정 (등재 전제의 부분 정정: 활성 결함이 아니라 *잠복* 결함이었다)
+
+- **등재 전제**: `qa_confusion_matrix`가 `str(GenerationFailureCode.F1)`을 JSON 키로 써서 `GenerationFailureCode.F1`(파이썬 repr)이 샌다 — EOS-61 소비자가 `rsplit(".")` 우회로 양쪽 표기를 받았다(PR #953).
+- **실측 (Python 3.12·pydantic v2)**: `GoldenItem`이 `use_enum_values=True`라 **검증을 거친 항목의 `failure_code`는 이미 `str`("F1")**이다 → 검증 경유 경로에서는 키가 항상 `F1`이었고, 기존 테스트가 `{"F3": 2}`를 단언하며 초록이었던 이유가 이것이다. 반면 `model_construct`(검증 우회)로 enum 인스턴스가 든 항목은 키가 `GenerationFailureCode.F1`로 새고, **같은 정답지의 digest까지 달라진다**(재채점 금지 원장이 "다른 골든"으로 오판하는 축 — 같은 뿌리). 즉 `str(enum)` 구현은 *멀리 떨어진 model_config에 기대어* 우연히 맞던 상태였다.
+- **판정 ①(생산자)**: 표기를 한 곳에서 고정 — `harness/golden_benchmark.canonical_value`(enum이면 `.value`, 아니면 `str`) 신설. `qa_confusion_matrix`의 키 생성(`fn_by_failure_code`·`golden_by_failure_code`)과 결선표 조회(⑤), `compute_digest`의 enum 3축(label·failure_code·as_found_basis)이 모두 이 함수를 쓴다. 검증 경유 항목의 digest는 기존과 **바이트 동일**(값이 이미 str이므로).
+- **판정 ②(소비자 — repr 수용 분기 제거·거부로 전환)**: 저장소 내 repr 키가 든 산출물 0건(grep 전수 — 태스크 YAML 자신뿐) + 검증 경유 생산자가 repr을 낸 적이 없으므로 **구버전 호환 대상이 없다**. `_normalize_code_key`를 제거하고 `_has_enum_repr_key`로 **미측정(None) 처리**한다 — 그냥 두면 sparse 경로에서 "키 없음=0건"으로 읽혀 *수학 오류 0건*이라는 거짓 통과가 되기 때문(측정 실패가 통과로 위장되면 안 된다). dense(`hit_cu_metrics`) 경로도 같은 규칙.
+- **판정 ③(집행)**: 생산자 `TestFailureCodeKeyContract` 3건(검증 우회 항목 키·JSON 키 전수 정규식·결선표 count) + 소비자 rejection 1건(sparse·dense) + digest 표기 독립 1건. **뮤테이션 3종 전건 검출**(cp 백업·md5 동일 원복): 생산자 `str()` 회귀 → 신규 3건만 RED·기존 33건 green(=기존 테스트 변별력 0 실증) / 소비자 거부 무력화 → 1건 RED / digest `str()` 회귀 → 1건 RED.
+- **범위 밖(관찰만)**: `hit_cu_metrics.py:258,263`도 `str(e.failure_code)`이고 `ReviewTimerEvent`도 `use_enum_values=True`(`schema/review_timer.py:152` 실측)라 **같은 잠복 형태**다(검증 경유면 str·우회면 repr). 이 태스크 acceptance는 `qa_confusion_matrix`·`validation_scorecard`이므로 손대지 않았다 — `canonical_value`로 한 줄 교체가 가능하니 다음에 그 파일을 여는 세션이 함께 처리할 것.
+- **교훈**: "코드를 읽어서" 낸 결함 진단(`str(enum)`은 repr이다 — 참)이 "실행에서" 활성인지는 별개다(pydantic 강제변환이 가리고 있었다). 등재 시 재현 스크립트 한 줄(`build_report` 실호출)이 있었다면 우선순위·처방이 달랐다 — 다만 처방 자체(명시 `.value`)는 잠복 상태에서도 옳았고, digest 취약점은 실측이 없었으면 못 봤을 것이다.
+
+### [재발방지 2026-09-06 · PR #994] 대장 쓰기측에 의존 감사가 없어 같은 세션이 audit-deps red를 두 번 push — HARN-70·HARN-71 등재
+
+- **사고 경위(동일 유형 2회)**: ⓐ EOS-50에 `amend --gate … --reason`으로 붙인 문장이 "선행" 어구와 태스크 ID(EOS-49·HARN-53)를 60자 창 안에 함께 담아 CI `harness-integrity`의 `audit-deps`(HARN-52)가 red → `amend --depends EOS-49` + 문안 정정으로 push. ⓑ 그 감사의 사각(아래)을 등재하는 `HARN-70`의 `--notes`가 원문 `'선행: ARCH-31 …'`을 **인용**해 같은 감사에 다시 걸렸고, 로컬 체인이 `;`라 **감사 exit 1인데도 커밋·push가 진행**됐다 → 두 번째 정정 push. 두 건 다 CI가 잡았으므로 main 피해 0, 비용은 왕복 2회.
+- **공통 원인**: 감사가 **읽기측(CI)에만** 있다. 대장을 쓰는 CLI(`amend --reason`·`add --notes`·`block --reason`)는 사람이 쓴 문장이 규칙을 어기는지 쓰기 시점에 보지 않는다 — 규칙은 "정정: amend --depends 또는 notes 표현을 고쳐라"라고 *사후*에만 말한다.
+- **함께 드러난 사각(HARN-70)**: `_REF_RE`의 후행 `\b`가 **한글 조사 직결 표기를 못 잡는다** — 파이썬 `\w`가 한글을 단어문자로 봐서 `EOS-49의`·`EOS-54가`는 0건, `EOS-54 착지 후`·`'EOS-49'는`만 매치. 한국어 notes에서 조사 직결이 기본형이라 판정이 표기 우연에 좌우된다(누락 방향 사각 — EOS-50 원 notes의 EOS-49가 한 번도 위반으로 안 잡힌 이유). CLAUDE.md 2026-09-01 "금지 패턴 열거 대신 산출물 검사" 축.
+- **대책(코드·태스크)**: `HARN-71` 쓰기측 선검사 — 세 CLI 경로가 파일을 쓰기 전에 결과 태스크 1건에 `find_undeclared_dependencies`를 적용해 위반이면 exit 1·대장 무변경(강제 통과 플래그 없음, `--depends` 동반 시 통과). CI 스텝은 그대로(이중 회계). `HARN-70` 정규식 경계를 ASCII 부정 전방탐색으로 교체 + 조사 6형 변별력 + 베이스라인 재산출(신규 위반은 LEGACY_EXEMPT에 넣지 않는다).
+- **대책(세션 규율)**: 대장 조작 후 커밋은 반드시 `audit-deps && validate && git commit && git push`로 **게이트**한다 — `;` 체인은 감사 결과를 무시한다(CLAUDE.md "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 *체인 연산자* 변형: exit code를 봤어도 다음 명령이 그것을 조건으로 삼지 않으면 본 게 아니다).
+- **번호 규율 확인**: `add`가 HARN-68 충돌(원격 브랜치 선점)을 잡고 HARN-70을 제안 → 제안 번호 사용. HARN-10 집행이 실제로 작동했다.
 ---
 
 ## 2026-09-06: 판정 시점 규칙 신설 — "미머지 존재를 충족으로 단정 금지" (CLAUDE.md v0.2.11)
