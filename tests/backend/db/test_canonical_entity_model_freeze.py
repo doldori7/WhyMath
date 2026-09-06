@@ -23,7 +23,15 @@ import whymath_backend.db.models as models_pkg
 from whymath_backend.db.base import Base
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_CANON_DOC = _REPO_ROOT / "docs" / "architecture" / "canonical_entity_model_v1.md"
+
+# ── 동결 입력 경로의 단일 진실 원천 ──────────────────────────────────────────
+# 이 테스트가 읽는 파일 전부. `tests/infra/test_ci_contract_fixture_trigger_wiring.py`가
+# `tests/backend/**`를 전수 스캔해 **이 상수를 AST로 파싱**하고 전건이 CI backend 잡 필터 안에
+# 있는지 동결한다(OPS-62 — 종전에는 G0 동결 테스트 한 파일만 봐서 이 문서가 사각이었다·PR #997).
+# ⚠️ 리터럴 튜플 형태를 유지할 것 — AST 파서가 문자열 상수만 읽는다(f-string·연산 금지).
+FROZEN_INPUT_PATHS: tuple[str, ...] = ("docs/architecture/canonical_entity_model_v1.md",)
+
+_CANON_DOC = _REPO_ROOT / FROZEN_INPUT_PATHS[0]
 _CANON_HINT = f"정본 {_CANON_DOC.relative_to(_REPO_ROOT)} 를 갱신하고 이 상수를 함께 고쳐라."
 
 
