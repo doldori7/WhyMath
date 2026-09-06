@@ -60,8 +60,15 @@ Core의 정의는 `eos_core_adapter_boundary_scan.py`의 `BOUNDARY_MAP`/`classif
 
 ## 종료코드 (판정은 exit code로 — 출력 문자열이 아니다)
 
-- `0` — 위반이 기준선(`KNOWN_VIOLATIONS`)과 정확히 일치(현행 1건은 EOS-85가 소유)
-- `1` — 기준선 밖의 위반이 생겼거나 늘었다 · **또는** 기준선보다 줄었다(ratchet — 기준선을 줄여라)
+- `0` — 위반이 기준선(`KNOWN_VIOLATIONS`)과 **지문 단위로** 정확히 일치(현행 1건은 EOS-85가 소유)
+- `1` — 기준선에 없는 지문의 위반이 생겼다 · **또는** 기준선의 지문이 사라졌다(ratchet — 기준선을
+  줄여라)
+
+기준선의 정체성은 **(모듈, 종류)별 개수가 아니라 위반 하나하나의 지문**이다 — 지문 =
+`sha256(모듈|종류|해석 식의 ast.unparse)[:12]`. 개수만 대조하면 "알려진 위반을 갚으면서 같은 모듈에
+새 위반을 하나 넣는" 변경이 1→1로 상쇄돼 통과한다(PR #1014 Codex P1). 줄 번호는 정체성이 아니다 —
+위 코드가 밀리면 줄은 바뀌지만 지문은 그대로이고, 식이 바뀌면(어휘 추가 등) 지문이 바뀌어 다시
+승인을 받아야 한다. 지문은 `--json` 산출과 마크다운 표에 함께 나온다(기준선에 옮겨 적는 값).
 - `2` — **측정 실패**: 스캔 대상 CORE 모듈 0건 · 파일 읽기/파싱 실패 · 계약에서 불투명 필드 파생
   실패. 측정 실패를 "위반 없음"으로 위장하지 않는다(CLAUDE.md 2026-09-01 ④ "스캔 0건은 실패")
 
@@ -91,6 +98,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -149,11 +157,25 @@ class ContractDerivationError(RuntimeError):
 
 @dataclass(frozen=True)
 class Grandfathered:
-    """기준선 항목 — 소유자와 재확인 지점이 없는 유예는 만료 없는 유예다(금지)."""
+    """기준선 항목 — 소유자와 재확인 지점이 없는 유예는 만료 없는 유예다(금지).
 
-    count: int
+    `fingerprints`는 유예하는 위반 **하나하나**의 지문(`fingerprint_of`)이다 — 개수가 아니라 정체성.
+    같은 지문이 두 자리에 있으면(동일 식이 두 번) 그 지문을 두 번 적는다.
+    """
+
+    fingerprints: tuple[str, ...]
     owner: str
     recheck: str
+
+    @property
+    def count(self) -> int:
+        return len(self.fingerprints)
+
+
+def fingerprint_of(module: str, kind: str, expr: str) -> str:
+    """위반의 안정 지문 — 줄 번호와 무관, 해석 식(`ast.unparse`)이 바뀌면 바뀐다."""
+    digest = hashlib.sha256(f"{module}|{kind}|{expr}".encode("utf-8")).hexdigest()
+    return digest[:12]
 
 
 # 기준선 — (CORE 모듈, 위반 종류) → 유예. **줄이는 방향으로만** 고친다.
@@ -162,7 +184,7 @@ KNOWN_VIOLATIONS: dict[tuple[str, str], Grandfathered] = {
     # EOS-84 프로브의 LITERAL_COMPARE_BASELINE 1건과 같은 자리다(그쪽은 리터럴 어휘로, 이쪽은
     # 불투명 필드 읽기로 잡는다). 상환은 EOS-85(화이트리스트 제거·불투명 통과)가 소유한다.
     ("l1.problem_bank.populate", "membership"): Grandfathered(
-        count=1,
+        fingerprints=("d93b2c7770a0",),  # populate.py `kind_raw in (17종)` — 식이 바뀌면 재승인
         owner="EOS-85-populate-answer-kind-opaque-passthrough",
         recheck="EOS-85 착지 시 이 항목을 비운다 · 늦어도 G1 2026-09-27 재확인",
     ),
@@ -173,7 +195,8 @@ KNOWN_VIOLATIONS: dict[tuple[str, str], Grandfathered] = {
 class Hit:
     lineno: int
     kind: str
-    snippet: str
+    snippet: str  # 사람용 100자 절단
+    expr: str  # 지문 재료 — 해석 식의 ast.unparse 전문
 
 
 @dataclass(frozen=True)
@@ -183,6 +206,7 @@ class Violation:
     lineno: int
     kind: str
     snippet: str
+    fingerprint: str  # 기준선 대조 키 — 줄 번호가 아니라 이것이 정체성이다
 
 
 @dataclass
@@ -345,8 +369,8 @@ class _Judge:
                 self.scan_scope(n, aliases)
 
     def _hit(self, node: ast.AST, kind: str) -> None:
-        snippet = ast.unparse(node).replace("\n", " ")[:100]
-        self.hits.append(Hit(getattr(node, "lineno", 0), kind, snippet))
+        expr = ast.unparse(node).replace("\n", " ")
+        self.hits.append(Hit(getattr(node, "lineno", 0), kind, expr[:100], expr))
 
     def _judge(self, n: ast.AST, aliases: set[str]) -> None:
         if isinstance(n, ast.Compare):
@@ -426,7 +450,16 @@ def run_gate(
             log(f"[gate][error] {msg}")
             continue
         for h in hits:
-            result.violations.append(Violation(mod, path.as_posix(), h.lineno, h.kind, h.snippet))
+            result.violations.append(
+                Violation(
+                    mod,
+                    path.as_posix(),
+                    h.lineno,
+                    h.kind,
+                    h.snippet,
+                    fingerprint_of(mod, h.kind, h.expr),
+                )
+            )
     log(
         f"[gate] 완료 — CORE {result.scanned}/{result.files_total} 스캔 · "
         f"제외 {result.skipped} · 위반 {len(result.violations)} · 오류 {len(result.errors)}"
@@ -435,7 +468,31 @@ def run_gate(
 
 
 def observed_counts(result: GateResult) -> dict[tuple[str, str], int]:
+    """(모듈, 종류)별 개수 — 사람용 요약. **판정에는 쓰지 않는다**(상쇄 우회 — 지문 대조 참조)."""
     return dict(Counter((v.module, v.kind) for v in result.violations))
+
+
+FingerprintKey = tuple[str, str, str]  # (모듈, 종류, 지문)
+
+
+def observed_fingerprints(result: GateResult) -> Counter[FingerprintKey]:
+    return Counter((v.module, v.kind, v.fingerprint) for v in result.violations)
+
+
+def baseline_fingerprints(
+    baseline: dict[tuple[str, str], Grandfathered],
+) -> Counter[FingerprintKey]:
+    return Counter((mod, kind, fp) for (mod, kind), g in baseline.items() for fp in g.fingerprints)
+
+
+def _describe(result: GateResult, keys: Counter[FingerprintKey]) -> list[str]:
+    """지문 키를 `모듈 종류 지문 @ 경로:행` 문자열로 푼다 — 관측된 것만 위치가 있다."""
+    out: list[str] = []
+    for mod, kind, fp in sorted(keys):
+        where = [f"{v.path}:{v.lineno}" for v in result.violations if v.fingerprint == fp]
+        loc = " · ".join(where) if where else "(현재 관측되지 않음)"
+        out.append(f"{mod} {kind} {fp} @ {loc}")
+    return out
 
 
 def evaluate(
@@ -448,19 +505,26 @@ def evaluate(
         return 2, f"측정 실패 — 읽기/파싱 오류 {len(result.errors)}건 (위반 없음이 아니다)"
     if result.scanned == 0:
         return 2, "측정 실패 — 스캔 대상 CORE 모듈 0건 (공허 통과 금지)"
-    observed = observed_counts(result)
-    expected = {k: g.count for k, g in baseline.items()}
-    grown = {k: n for k, n in observed.items() if n > expected.get(k, 0)}
+    # 정체성 = 지문. (모듈, 종류) 개수 대조는 "옛 위반 상환 + 같은 모듈에 새 위반"이 1→1로 상쇄돼
+    # 통과하는 구멍이 있다(PR #1014 Codex P1) — Counter 차집합은 양수만 남기므로 방향별로 따로 본다.
+    observed = observed_fingerprints(result)
+    expected = baseline_fingerprints(baseline)
+    grown = (
+        observed - expected
+    )  # 기준선에 없는 지문(신규 자리 · 식이 바뀐 옛 자리 · 같은 지문 증가)
     if grown:
-        return 1, f"기준선 밖의 불투명 페이로드 해석 위반: {grown}"
-    if observed != expected:
-        shrunk = {
-            k: (expected.get(k, 0), observed.get(k, 0))
-            for k in expected
-            if k not in observed or observed[k] < expected[k]
-        }
-        return 1, f"RATCHET — 위반이 기준선보다 줄었다, KNOWN_VIOLATIONS를 줄여라: {shrunk}"
-    return 0, f"위반 {len(result.violations)}건 = 기준선 (CORE {result.scanned}모듈 스캔)"
+        return 1, "기준선 밖의 불투명 페이로드 해석 위반(지문 불일치): " + "; ".join(
+            _describe(result, grown)
+        )
+    shrunk = expected - observed  # 기준선에는 있는데 관측되지 않는 지문(갚은 빚)
+    if shrunk:
+        return 1, "RATCHET — 기준선의 위반이 사라졌다, KNOWN_VIOLATIONS를 줄여라: " + "; ".join(
+            _describe(result, shrunk)
+        )
+    return (
+        0,
+        f"위반 {len(result.violations)}건 = 기준선(지문 일치) (CORE {result.scanned}모듈 스캔)",
+    )
 
 
 def render_markdown(result: GateResult, code: int, reason: str) -> str:
@@ -476,16 +540,22 @@ def render_markdown(result: GateResult, code: int, reason: str) -> str:
         "",
     ]
     if result.violations:
-        lines += ["| 모듈 | 위치 | 종류 | 코드 |", "|---|---|---|---|"]
+        lines += ["| 모듈 | 위치 | 종류 | 지문 | 코드 |", "|---|---|---|---|---|"]
         for v in result.violations:
-            lines.append(f"| `{v.module}` | {v.path}:{v.lineno} | `{v.kind}` | `{v.snippet}` |")
+            lines.append(
+                f"| `{v.module}` | {v.path}:{v.lineno} | `{v.kind}` | `{v.fingerprint}` "
+                f"| `{v.snippet}` |"
+            )
     else:
         lines.append(
             "없음 — 단 이는 CORE 배정 모듈 기준·정적·이름 기반의 0이다(모듈 docstring 한계)."
         )
     lines += ["", "## 기준선 (KNOWN_VIOLATIONS)", ""]
     for (mod, kind), g in KNOWN_VIOLATIONS.items():
-        lines.append(f"- `{mod}` `{kind}` ×{g.count} — 소유 {g.owner} · 재확인 {g.recheck}")
+        fps = "`·`".join(g.fingerprints)
+        lines.append(
+            f"- `{mod}` `{kind}` ×{g.count} 지문 `{fps}` — 소유 {g.owner} · 재확인 {g.recheck}"
+        )
     lines += ["", f"## 측정 오류 {len(result.errors)}건", ""]
     lines += [f"- `{e}`" for e in result.errors] or ["- 없음"]
     return "\n".join(lines) + "\n"

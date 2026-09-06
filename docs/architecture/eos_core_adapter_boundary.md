@@ -492,14 +492,19 @@ EOS-92 교차 과목 프로브(`subject_contract_cross_probe.md` §3)가 실증�
 |---|---:|
 | 분모 (CORE 스캔 모듈) | **309** / 639 파일 (제외: ADAPTER 81 · INFRA 215 · MIXED 34) |
 | 위반 | **1** — `l1.problem_bank.populate:363` `membership` (`kind_raw = raw.get("answer_kind")` → `kind_raw in (17종)`) |
-| 기준선 | 그 1건 · 소유 `EOS-85` · 재확인 G1 2026-09-27 (`KNOWN_VIOLATIONS`) |
+| 기준선 | 그 1건 · 지문 `d93b2c7770a0` · 소유 `EOS-85` · 재확인 G1 2026-09-27 (`KNOWN_VIOLATIONS`) |
+
+기준선의 정체성은 **(모듈, 종류)별 개수가 아니라 위반 하나하나의 지문**(`sha256(모듈|종류|해석 식의
+ast.unparse)[:12]`)이다 — 개수 대조는 "알려진 위반을 갚으면서 같은 모듈에 새 위반을 하나 넣는" 변경이
+1→1로 상쇄돼 통과한다(PR #1014 Codex P1 · 테스트 §②′가 그 시나리오를 RED로 동결). 줄 번호는 정체성이
+아니다(위 코드가 밀려도 같은 지문) · 식이 바뀌면(어휘 추가 등) 지문이 바뀌어 재승인이 필요하다.
 
 §8.2의 리터럴 비교 1건과 **같은 자리**를 다른 축으로 잡았다 — 그쪽은 어휘가 수학이라서, 이쪽은
 Core가 불투명 값을 읽어서. 별칭을 추적하지 않았다면 이 스캐너는 0을 냈을 것이고, 그 0은 맹점이다.
 
 ### 11.2 집행 — `tests/infra/test_eos_opaque_payload_gate.py` (CI `infra-contracts` 잡)
 
-실 저장소 스캔을 기준선과 정확히 대조(늘면 RED · 줄면 ratchet RED)하고, 위반 6종 21개 형태를
+실 저장소 스캔을 기준선과 지문 단위로 정확히 대조(늘면 RED · 줄면 ratchet RED)하고, 위반 6종 21개 형태를
 합성 소스로 **주입해 RED**를 확인하며, 같은 패턴이 ADAPTER 배정(`l4.subject_adapter_math`·
 `l3.verify_answer`)에 있으면 초록임을, CORE 0건·파싱 실패는 **exit 2**(측정 실패)임을 고정한다.
 실 저장소와 합성 주입은 **같은 판정 함수**(`scan_source`·`run_gate`·`evaluate`)를 쓴다.

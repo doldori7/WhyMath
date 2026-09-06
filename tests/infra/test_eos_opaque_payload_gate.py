@@ -5,8 +5,10 @@
 `conditions`)의 **값**을 리터럴과 비교·어휘 집합 대조·조회 키·match·문자열 파싱에 쓰면 위반.
 이 파일이 하는 일은 넷이다:
 
-1. **실 저장소 동결** — CORE 309모듈(2026-09-06 실측) 스캔이 기준선과 정확히 일치하는가. 늘면 RED,
-   줄면 ratchet RED(기준선을 줄여야 통과).
+1. **실 저장소 동결** — CORE 309모듈(2026-09-06 실측) 스캔이 기준선과 **지문 단위로** 정확히
+   일치하는가. 늘면 RED, 줄면 ratchet RED(기준선을 줄여야 통과). 기준선의 정체성은 (모듈, 종류)별
+   개수가 아니라 위반 하나하나의 AST 지문이다 — 개수 대조는 "옛 위반 상환 + 같은 모듈에 새 위반"이
+   1→1로 상쇄돼 통과한다(PR #1014 Codex P1 · §②′가 그 시나리오를 RED로 동결).
 2. **주입 RED** — 위반 6종을 합성 소스로 넣으면 각각 검출되는가. 정상 입력에서 초록인 것은 보호의
    증거가 아니다(CLAUDE.md 2026-09-01). 실 저장소와 **같은 판정 함수**(`scan_source`·`run_gate`·
    `evaluate`)를 쓴다 — 주입용 파서를 따로 두면 그 파서가 통과해도 실 스캔이 통과한다는 뜻이 안 된다.
@@ -118,9 +120,13 @@ def test_real_scan_matches_the_baseline_exactly(gate: Any, real_result: Any) -> 
     assert code == 0, reason
     observed = gate.observed_counts(real_result)
     assert observed == {k: g.count for k, g in gate.KNOWN_VIOLATIONS.items()}, observed
+    # 개수만이 아니라 지문까지 — 판정이 실제로 대조하는 키
+    assert gate.observed_fingerprints(real_result) == gate.baseline_fingerprints(
+        gate.KNOWN_VIOLATIONS
+    )
 
 
-def test_the_one_known_violation_is_the_alias_form(real_result: Any) -> None:
+def test_the_one_known_violation_is_the_alias_form(gate: Any, real_result: Any) -> None:
     """실재하는 유일한 위반은 `kind_raw = raw.get("answer_kind")` → `kind_raw in (...)` 별칭 경유다.
 
     별칭을 추적하지 않는 스캐너는 이것을 놓치고 0을 낸다 — 그 0은 보호가 아니라 맹점이다.
@@ -128,12 +134,16 @@ def test_the_one_known_violation_is_the_alias_form(real_result: Any) -> None:
     [v] = real_result.violations
     assert v.module == "l1.problem_bank.populate" and v.kind == "membership"
     assert v.snippet.startswith("kind_raw in ("), v.snippet
+    registered = gate.KNOWN_VIOLATIONS[(v.module, v.kind)]
+    assert v.fingerprint in registered.fingerprints, (v.fingerprint, registered.fingerprints)
 
 
 def test_baseline_entries_carry_owner_and_recheck(gate: Any) -> None:
     """만료 없는 유예 금지 — 기준선의 모든 항목에 상환 소유 태스크와 재확인 지점이 있어야 한다."""
     for key, g in gate.KNOWN_VIOLATIONS.items():
         assert g.count >= 1, key
+        for fp in g.fingerprints:  # 지문 형식 — sha256 앞 12 hex (자리표시자·빈 문자열 금지)
+            assert len(fp) == 12 and all(c in "0123456789abcdef" for c in fp), (key, fp)
         assert g.owner.strip() and g.recheck.strip(), key
         owner_yaml = _REPO_ROOT / "backlog" / "tasks" / f"{g.owner}.yaml"
         assert owner_yaml.is_file(), f"{key}: 소유 태스크가 대장에 없다 — {g.owner}"
@@ -320,7 +330,7 @@ def test_end_to_end_parse_failure_is_exit_2_with_the_exception_type(
 def test_end_to_end_ratchet_fails_when_baseline_is_stale(gate: Any, tmp_path: Path) -> None:
     """기준선이 남아 있는데 위반이 사라졌으면 exit 1(RATCHET) — 갚은 빚의 유예 줄이 조용히 남지 않는다."""
     _write(tmp_path, "l2/clean.py", _CLEAN_BODY)
-    stale = {("l2.clean", "eq_literal"): gate.Grandfathered(1, "X", "Y")}
+    stale = {("l2.clean", "eq_literal"): gate.Grandfathered(("0" * 12,), "X", "Y")}
     code, reason = gate.evaluate(gate.run_gate(tmp_path), baseline=stale)
     assert code == 1 and "RATCHET" in reason, reason
 
@@ -332,9 +342,98 @@ def test_end_to_end_growth_beyond_baseline_is_exit_1(gate: Any, tmp_path: Path) 
     )
     result = gate.run_gate(tmp_path)
     assert len(result.violations) == 2
-    one = {("l2.fake_core", "eq_literal"): gate.Grandfathered(1, "X", "Y")}
+    first = result.violations[0].fingerprint
+    one = {("l2.fake_core", "eq_literal"): gate.Grandfathered((first,), "X", "Y")}
     code, reason = gate.evaluate(result, baseline=one)
     assert code == 1 and "기준선 밖" in reason, reason
+    assert result.violations[1].fingerprint in reason, reason  # 어느 자리가 새것인지 지목한다
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ②′ 기준선 정체성 = 지문 — 개수 대조의 상쇄 우회를 RED로 동결 (PR #1014 Codex P1)
+# ──────────────────────────────────────────────────────────────────────
+
+_OLD_SITE = """
+    def choose(p):
+        if p.answer_kind == "physics.quantity_with_unit":
+            return 1
+        return 0
+"""
+_NEW_SITE = """
+    def other(p):
+        if p.answer_kind == "chemistry.molar_mass":
+            return 2
+        return 0
+"""
+
+
+def _fingerprinted_baseline(gate: Any, result: Any) -> dict[tuple[str, str], Any]:
+    """관측된 위반 전부를 그대로 기준선으로 등재한다(테스트용 — 실 기준선은 사람이 옮겨 적는다)."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for v in result.violations:
+        grouped.setdefault((v.module, v.kind), []).append(v.fingerprint)
+    return {k: gate.Grandfathered(tuple(fps), "X", "Y") for k, fps in grouped.items()}
+
+
+def test_baseline_is_per_violation_identity_not_a_count(gate: Any, tmp_path: Path) -> None:
+    """옛 위반을 갚으면서 같은 모듈·같은 종류에 새 위반을 하나 넣으면 (모듈, 종류) 개수는 1→1이다.
+
+    개수 기준선이면 exit 0으로 통과한다(상환과 신규 위반이 상쇄 — Codex P1). 지문 기준선은 신규
+    자리를 "기준선 밖"으로 잡고 옛 자리는 RATCHET으로 잡는다 — 두 신호 중 신규가 먼저 난다.
+    """
+    _write(tmp_path, "l2/fake_core.py", _OLD_SITE)
+    before = gate.run_gate(tmp_path)
+    baseline = _fingerprinted_baseline(gate, before)
+    assert gate.evaluate(before, baseline=baseline)[0] == 0
+
+    _write(tmp_path, "l2/fake_core.py", _NEW_SITE)  # 옛 자리 제거 + 새 자리 추가(같은 모듈·종류)
+    after = gate.run_gate(tmp_path)
+    assert gate.observed_counts(after) == gate.observed_counts(before)  # 개수는 상쇄돼 같다
+    code, reason = gate.evaluate(after, baseline=baseline)
+    assert code == 1 and "기준선 밖" in reason, reason
+    assert after.violations[0].fingerprint in reason and "fake_core.py:3" in reason, reason
+
+
+def test_baseline_fingerprint_survives_line_moves(gate: Any, tmp_path: Path) -> None:
+    """줄 번호는 정체성이 아니다 — 위에 코드가 끼어들어 행이 밀려도 같은 식이면 같은 지문·exit 0."""
+    _write(tmp_path, "l2/fake_core.py", _OLD_SITE)
+    before = gate.run_gate(tmp_path)
+    baseline = _fingerprinted_baseline(gate, before)
+
+    # 주석은 _OLD_SITE와 같은 들여쓰기로 — _write의 dedent가 공통 들여쓰기를 유지하게
+    shifted = "\n    # 주석 세 줄이\n    # 행 번호를\n    # 밀어낸다\n" + _OLD_SITE
+    _write(tmp_path, "l2/fake_core.py", shifted)
+    after = gate.run_gate(tmp_path)
+    assert after.violations[0].lineno != before.violations[0].lineno
+    assert after.violations[0].fingerprint == before.violations[0].fingerprint
+    assert gate.evaluate(after, baseline=baseline)[0] == 0
+
+
+def test_baseline_fingerprint_changes_when_the_expression_changes(
+    gate: Any, tmp_path: Path
+) -> None:
+    """같은 자리라도 해석 식이 바뀌면(어휘 추가 등) 다른 지문 — 유예를 다시 받아야 한다."""
+    _write(tmp_path, "l2/fake_core.py", _OLD_SITE)
+    baseline = _fingerprinted_baseline(gate, gate.run_gate(tmp_path))
+
+    widened = _OLD_SITE.replace(
+        '== "physics.quantity_with_unit"', 'in ("physics.quantity_with_unit", "x")'
+    )
+    _write(tmp_path, "l2/fake_core.py", widened)
+    code, reason = gate.evaluate(gate.run_gate(tmp_path), baseline=baseline)
+    assert code == 1 and "기준선 밖" in reason, reason
+
+
+def test_duplicate_expressions_are_counted_per_fingerprint(gate: Any, tmp_path: Path) -> None:
+    """동일 식이 두 자리에 있으면 지문이 같다 — 기준선에 한 번만 적으면 두 번째는 '증가'로 RED."""
+    _write(tmp_path, "l2/fake_core.py", _OLD_SITE + _OLD_SITE.replace("choose", "again"))
+    result = gate.run_gate(tmp_path)
+    fps = [v.fingerprint for v in result.violations]
+    assert len(fps) == 2 and fps[0] == fps[1]
+    once = {("l2.fake_core", "eq_literal"): gate.Grandfathered((fps[0],), "X", "Y")}
+    assert gate.evaluate(result, baseline=once)[0] == 1
+    twice = {("l2.fake_core", "eq_literal"): gate.Grandfathered((fps[0], fps[0]), "X", "Y")}
+    assert gate.evaluate(result, baseline=twice)[0] == 0
 
 
 def test_cli_end_to_end_on_a_fake_tree(gate: Any, tmp_path: Path, capsys: Any) -> None:
@@ -346,6 +445,7 @@ def test_cli_end_to_end_on_a_fake_tree(gate: Any, tmp_path: Path, capsys: Any) -
     assert out_json.is_file()
     payload = out_json.read_text(encoding="utf-8")
     assert '"exit": 1' in payload and '"eq_literal"' in payload
+    assert '"fingerprint": "' in payload  # 기준선에 옮겨 적을 값이 산출에 남는다
     captured = capsys.readouterr()
     assert "fake_core.py:3" in captured.out
 
