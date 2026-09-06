@@ -959,3 +959,182 @@ class TestReviewRegressions:
             bs.load_status(path), max_age_hours=48, require_encrypted=True, now=now
         )
         assert verdict.reason == "stale"
+
+
+# ===========================================================================
+# D. 런북 상호참조 (2026-09-06 · 게이트 G-backup-offsite-move 실행 준비 중 실측)
+#
+# 반출 조건 ⓑ가 "개인키가 다른 매체에 있다(§4-5)"라고 가리키는데, 그 §4-5를
+# 문서에서 찾을 수 없는 상태였다. 취급 규칙 목록(1~5번) 사이에 §4-1a~4-1d가
+# 삽입되면서 2~5번 항목이 §4-1d 본문 안으로 밀려났고, 절 번호는 본문 어디에도
+# 적혀 있지 않아 §4-2·§4-3·§4-5 참조가 전부 착지점을 잃었다. §4-3은 이 파일의
+# 주석도 인용하는 번호라 하중을 받고 있었다.
+#
+# 문서 결함은 조용하다 — 렌더링도 되고 링크도 아니라서 깨진 티가 나지 않는다.
+# 그래서 기계가 본다.
+# ===========================================================================
+_RUNBOOK = _ROOT / "docs" / "architecture" / "db_backup_dr_runbook.md"
+
+# §4-1a·§3-3b·§1b처럼 숫자 뒤 알파벳 접미가 붙는 절이 있다.
+_SECTION = r"(\d+[a-z]?(?:-\d+[a-z]?)?)"
+
+
+def _runbook_definitions(text: str) -> set[str]:
+    """절 번호의 **정의부**만 모은다 — 본문 중 괄호 참조는 정의가 아니다.
+
+    변별력 주의: `(§1b)` 같은 괄호 *참조*를 정의로 세면 모든 참조가 스스로를
+    정의하게 돼 검사가 항상 통과한다(정의만 하고 안 써도 통과하는 substring
+    검사와 같은 위장). 그래서 정의는 두 형태로만 인정한다.
+    """
+    headings = set(re.findall(rf"^#{{2,4}}\s+§?{_SECTION}\.", text, re.M))
+    # 번호 목록 항목의 **접두** 라벨: `5. **(§4-5) 키 분리 유지**: ...`
+    items = set(re.findall(rf"^\d+\.\s+\*\*\(§{_SECTION}\)", text, re.M))
+    return headings | items
+
+
+class TestRunbookCrossReferences:
+    def test_every_section_reference_resolves(self) -> None:
+        """런북이 §N으로 가리키는 절이 전부 문서 안에 실재하는가."""
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        dangling = sorted(set(re.findall(rf"§{_SECTION}", text)) - _runbook_definitions(text))
+        assert not dangling, (
+            f"런북이 존재하지 않는 절을 참조한다: {['§' + d for d in dangling]} — "
+            "읽는 사람이 조건의 정의를 찾지 못한다"
+        )
+
+    def test_export_condition_b_points_at_a_defined_section(self) -> None:
+        """★ 반출 조건 ⓑ의 착지점 — 이 게이트가 실제로 밟는 참조다.
+
+        ⓑ는 '개인키가 다른 매체에 있다'를 요구하면서 그 정의를 다른 절에 위임한다.
+        위임 대상이 없으면 조건은 문장만 남고 판정 기준이 사라진다.
+        """
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        condition = next(
+            (ln for ln in text.splitlines() if ln.lstrip().startswith("- ⓑ")),
+            None,
+        )
+        assert condition is not None, "반출 조건 ⓑ 자체가 런북에서 사라졌다"
+
+        targets = re.findall(rf"§{_SECTION}", condition)
+        assert targets, "ⓑ가 키 분리 규칙의 정의부를 가리키지 않는다"
+        definitions = _runbook_definitions(text)
+        for target in targets:
+            assert target in definitions, f"ⓑ가 가리키는 §{target} 가 런북에 없다"
+
+    def test_key_separation_section_covers_the_age_private_key(self) -> None:
+        """§4-5는 age 개인키를 다뤄야 한다 — ⓑ가 요구하는 키가 그것이다.
+
+        종전 문면은 봉투 암호화 마스터 키(env)만 다뤘다. 그 키는 덤프 *내용물*을
+        덮는 키이고, 반출 조건 ⓑ가 말하는 키는 `.dump.age`를 여는 age 개인키다.
+        정의부가 다른 키를 설명하면 참조가 해소돼도 조건은 여전히 미정의다.
+        """
+        text = _RUNBOOK.read_text(encoding="utf-8")
+        body = next(
+            (ln for ln in text.splitlines() if ln.startswith("5. **(§4-5)")),
+            None,
+        )
+        assert body is not None, "§4-5 정의부(취급 규칙 5번)가 없다"
+        assert (
+            "whymath-backup-identity.key" in body
+        ), "§4-5가 age 개인키를 명시하지 않는다 — 반출 조건 ⓑ의 대상이 미정의로 남는다"
+
+
+# ===========================================================================
+# E. 등록 실패의 fail-closed (2026-09-06 · 게이트 실행 중 실측)
+#
+# Kiki가 비권한 창에서 register_backup_schedule.ps1을 돌렸다. 두 번의
+# Register-ScheduledTask가 "Access is denied"(0x80070005)로 실패했는데
+# 스크립트는 **[OK] 2줄을 출력하고 exit 0**으로 끝났다. 세 가지가 겹쳤다:
+#
+#   ⓐ 파일 상단에 $ErrorActionPreference = "Stop"이 **있었는데도** 실행이
+#     계속됐다 — 이 cmdlet 계열(ScheduledTasks·CDXML/CIM)에는 그 선호변수가
+#     걸리지 않는다. 보호가 있다고 믿은 자리에 보호가 없었다.
+#   ⓑ Step 5의 되읽기가 **동명의 옛 태스크**를 읽어 통과했다. 2026-07-17
+#     좀비 uvicorn과 같은 형태 — 다른 등록이 대신 만족시키는 간접 신호다.
+#   ⓒ "[OK] action:" 줄이 방금 조립한 $argList를 출력했다. 등록된 값이
+#     아니라 **등록하려던 값**이라, 실패해도 성공과 글자가 같았다.
+#
+# 아래는 세 축을 각각 동결한다. 검사는 주석이 아니라 **실행 라인**을 본다.
+# ===========================================================================
+
+
+def _ps_code_lines(path: Path) -> list[str]:
+    """주석 줄을 걷어낸 실행 라인만 돌려준다.
+
+    substring 검사를 파일 전체에 걸면 위 사고를 설명하는 *주석* 한 줄이
+    검사를 만족시킨다(2026-09-03 뮤테이션 O4에서 실측된 실패 형태).
+    """
+    return [
+        ln
+        for ln in path.read_text(encoding="utf-8").splitlines()
+        if not ln.lstrip().startswith("#")
+    ]
+
+
+class TestScheduledTaskRegistrationFailsClosed:
+    def test_every_registration_call_sets_error_action_stop(self) -> None:
+        """★ 상태 변경 cmdlet은 호출 자리에서 명시적으로 종료 오류로 승격한다.
+
+        $ErrorActionPreference만 믿으면 안 된다 — 실측에서 그 선호변수가 설정된
+        채로 Access denied가 통과했다.
+        """
+        calls = [
+            ln
+            for ln in _ps_code_lines(_SCHEDULE_SCRIPT)
+            if "Register-ScheduledTask" in ln and "-TaskName" in ln
+        ]
+        assert calls, "등록/해제 호출을 하나도 찾지 못했다 — 스캔 0건은 공허한 통과다"
+        for call in calls:
+            assert (
+                "-ErrorAction Stop" in call
+            ), f"등록 호출이 실패를 삼킨다(명시적 -ErrorAction Stop 없음): {call.strip()}"
+
+    def test_registration_failure_reports_the_exception_type(self) -> None:
+        """침묵 실패 금지 — 예외 타입명이 사유에 실려야 한다."""
+        code = "\n".join(_ps_code_lines(_SCHEDULE_SCRIPT))
+        assert "catch {" in code, "등록 실패를 잡는 catch 블록이 없다"
+        assert (
+            "$_.Exception.GetType().Name" in code
+        ), "실패 사유에 예외 타입명이 없다 — 서로 다른 실패가 같은 글자로 보인다"
+
+    def test_elevation_is_checked_before_the_first_registration(self) -> None:
+        """권한 부재는 실행 전에 말한다 — [OK]를 출력한 뒤가 아니라."""
+        lines = _ps_code_lines(_SCHEDULE_SCRIPT)
+        elevation = next(
+            (i for i, ln in enumerate(lines) if "IsInRole" in ln and "Administrator" in ln),
+            None,
+        )
+        assert elevation is not None, "관리자 권한 사전 확인이 없다"
+
+        first_write = next(
+            (
+                i
+                for i, ln in enumerate(lines)
+                if "Register-ScheduledTask" in ln or "Unregister-ScheduledTask" in ln
+            ),
+            None,
+        )
+        assert first_write is not None
+        assert (
+            elevation < first_write
+        ), "권한 확인이 첫 등록/해제 호출보다 뒤에 있다 — 실패한 뒤에 알려 주는 검사다"
+
+    def test_success_line_reports_the_task_not_the_intent(self) -> None:
+        """★ 성공 보고는 **되읽은 값**이어야 한다.
+
+        조립한 $argList를 출력하면 등록이 실패해도 같은 화면이 나온다. 그리고
+        되읽기는 '읽히는가'가 아니라 '이번 실행이 만든 것과 같은가'를 물어야
+        동명의 옛 태스크가 대신 만족시키지 못한다.
+        """
+        code = "\n".join(_ps_code_lines(_SCHEDULE_SCRIPT))
+        assert "$registeredArgs = " in code, "등록된 인자를 되읽는 줄이 없다"
+        assert "$registeredArgs -ne $argList" in code, (
+            "되읽은 인자를 이번 실행이 조립한 인자와 대조하지 않는다 — "
+            "동명의 옛 태스크가 검사를 대신 통과시킨다"
+        )
+        assert (
+            "$registeredCheckArgs -ne $checkArgList" in code
+        ), "검사 태스크 쪽 대조가 없다 — 백업만 갱신되고 감시는 옛 등록으로 남는다"
+        assert (
+            'Write-Host "[OK] action: powershell.exe $argList"' not in code
+        ), "성공 줄이 여전히 조립값을 출력한다"

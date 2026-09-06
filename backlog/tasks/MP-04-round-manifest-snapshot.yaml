@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 eos_priority: P1
 owner: claude
@@ -18,7 +18,8 @@ acceptance:
   - "④ 재현 계약 변별력 — 같은 회차의 genlog 행 prompt_version·model_name이 대장 스냅샷과 일치함을 테스트가 확인하고, 대장 값 변조 뮤테이션에서 RED가 나는지 실측한다"
   - "⑤ 구행 호환 — 기존 rounds.jsonl 행(신설 필드 없음)은 None=미기록으로 읽힌다(소급 날조 금지). 신설 필드는 전부 Optional·기본 None"
   - "[정정 2026-09-06 · PR #1014 Codex P2] notes의 'EOS 계열 소진' 서술은 backlog.py add 거부 문구를 실측 없이 옮긴 도구 오보고였다 — HARN-73(#1002) 실측: EOS 번호 사용 59·미사용 40(01~05·07~27·29~31·33~43). Kiki 결정 A(하위 미사용 번호 재사용 + 제안기 폴백 · 새 접두 기각)·게이트 G-eos-task-prefix-exhausted clear. EOS 축 후속 태스크는 계속 EOS-nn을 쓰고, MP는 소진 대응이 아니라 회차 축 접두라는 정의만 유효하다. 위 소진 문구는 과거 경위로만 읽는다(이 항은 acceptance가 아니라 정정 기록 — HARN-24 정정 항 관용)"
-artifacts: []
+artifacts:
+  - "PR #1013 (https://github.com/doldori7/WhyMath/pull/1013) — commit d6b3f77d · RoundRecord 16필드 신설(구성 스냅샷 9 + 관측 판정 7·전부 Optional 기본 None) · main 집행 배선(argv 확보·genlog append 후 모델/프롬프트 수집·seed sha256) · 신규 테스트 17건 hermetic · 검증자 독립 뮤테이션 3종 전건 RED · harness 1904 passed·ruff/black/mypy EXIT=0"
 paths:
   - src/backend/whymath_backend/harness/anchor_round_ledger.py
   - src/backend/whymath_backend/harness/problem_corpus_accumulate.py
