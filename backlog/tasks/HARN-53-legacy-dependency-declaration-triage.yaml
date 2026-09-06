@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - scripts/harness/dep_declaration.py
   - "backlog/tasks/**"
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: HARN-52 실측 9태스크 10건. 즉시 전건 수정하지 않는 이유 2가지 — ①일부는 타 세션 claim 중이라 병렬 착수 금지 ②SEC-26처럼 하드 의존이 설계상 불가능하다고 자인한 건이 있어 일괄 부착이 오히려 틀린다. 게이트는 신규 위반을 오늘부터 막고, 레거시는 이 태스크가 만료 지점을 갖는다.\n\n[정정 2026-09-01] HARN-52의 LEGACY_EXEMPT를 분류하는 태스크이므로 게이트 착지가 하드 선행 (notes 선언을 depends_on으로 집행 — 이 태스크가 고치려는 결함을 스스로 범하지 않는다)\n\n[정정 2026-09-01] priority 3 → 2: HARN-52 그랜드파더 6건의 만료 지점이라 priority 3이면 만료가 명목상으로만 성립한다 — 아무도 착수하지 않으면 면제가 사실상 영구화되므로 '만료 없는 유예 금지'를 실질 충족시키려면 착수 가시권에 둬야 한다 (자기평가에서 발견·Kiki 승인)\n\n[정정 2026-09-01] eos_priority null → P1: 하네스 전제 — HARN-52 그랜드파더 만료. EOS-80 일괄 백필"
-updated: 2026-09-01
+updated: 2026-09-06

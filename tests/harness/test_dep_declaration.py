@@ -200,3 +200,111 @@ def test_repository_backlog_is_green() -> None:
     assert dd.find_expiry_violations(backlog.tasks) == []
     findings = dd.find_undeclared_dependencies(backlog.tasks)
     assert findings == [], "\n".join(f.render() for f in findings)
+
+
+# ── ⑤ 소프트 선행 분류 (HARN-53) ──────────────────────────────────────────
+#
+# 소프트 분류는 만료가 없다 — "아직 안 고쳤다"(유예)가 아니라 "고칠 것이 없다"(판정)이기
+# 때문이다. 만료가 없으니 **느슨해질 여지를 계약이 대신 막아야** 한다. 아래는 그 계약이
+# 실패 상태에서 실제로 실패 신호를 내는지를 축별로 동결한다.
+
+_GOOD_REASON = "방향이 반대다 — 진짜 선행은 상대 쪽에 부착했고 반대로 붙이면 순환이 된다(실측)."
+
+
+def _soft_case(**over: object) -> tuple[dict[str, FakeTask], dict]:
+    """소프트 분류 1건이 걸린 최소 상황 — 기본은 정상(위반 0)."""
+    tasks = _tasks(FakeTask(id="A-1-x", notes="REF-1 선행"), FakeTask(id="REF-1-y"))
+    table = {("A-1-x", "REF-1"): (over.get("code", "REVERSED"), over.get("reason", _GOOD_REASON))}
+    return tasks, table
+
+
+def test_soft_declaration_suppresses_the_finding(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """정상 대조 — 분류가 있으면 위반으로 세지 않는다."""
+    tasks, table = _soft_case()
+    assert len(dd.find_undeclared_dependencies(tasks)) == 1  # 분류 전에는 위반
+    monkeypatch.setattr(dd, "SOFT_DECLARED", table)
+    assert dd.find_undeclared_dependencies(tasks) == []
+    assert dd.find_soft_declaration_violations(tasks) == []
+
+
+def test_soft_declaration_is_not_bypassed_by_audit_mode(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """`--all`(감사)에서도 억제된다 — 유예와 달리 '아직 안 고침'이 아니기 때문.
+
+    감사 모드가 소프트를 위반으로 세면 분류가 무의미해지고, 대신 CLI가 소프트 목록을 따로
+    출력해 보이지 않게 쌓이는 것을 막는다.
+    """
+    tasks, table = _soft_case()
+    monkeypatch.setattr(dd, "SOFT_DECLARED", table)
+    assert dd.find_undeclared_dependencies(tasks, apply_exemptions=False) == []
+
+
+def test_soft_declaration_is_pair_scoped(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """태스크 전체가 아니라 쌍 단위 — 같은 태스크의 *다른* 미선언 선행은 계속 잡힌다."""
+    tasks = _tasks(
+        FakeTask(id="A-1-x", notes="REF-1 선행. 그리고 REF-2 선행"),
+        FakeTask(id="REF-1-y"),
+        FakeTask(id="REF-2-z"),
+    )
+    monkeypatch.setattr(dd, "SOFT_DECLARED", {("A-1-x", "REF-1"): ("REVERSED", _GOOD_REASON)})
+    findings = dd.find_undeclared_dependencies(tasks)
+    assert [f.referenced for f in findings] == ["REF-2"]
+
+
+def test_unknown_reason_code_is_a_violation(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """자유 서술 코드 금지 — '소프트니까'로 게이트를 옵트아웃할 수 없다."""
+    tasks, table = _soft_case(code="BECAUSE_I_SAID_SO")
+    monkeypatch.setattr(dd, "SOFT_DECLARED", table)
+    violations = dd.find_soft_declaration_violations(tasks)
+    assert len(violations) == 1 and "사유 코드" in violations[0]
+
+
+def test_empty_or_short_reason_is_a_violation(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """코드만 찍고 근거를 비우면 위반 — 왜 하드가 아닌지가 분류의 본체다."""
+    for reason in ("", "   ", "N/A", "하드 아님"):
+        tasks, table = _soft_case(reason=reason)
+        monkeypatch.setattr(dd, "SOFT_DECLARED", table)
+        violations = dd.find_soft_declaration_violations(tasks)
+        assert len(violations) == 1 and "근거" in violations[0], reason
+
+
+def test_soft_plus_hard_declaration_is_a_contradiction(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """depends_on에도 있는데 소프트라 적으면 표가 거짓이다 — 하드를 붙인 뒤 분류를 안 지운 경우."""
+    tasks = _tasks(
+        FakeTask(id="A-1-x", notes="REF-1 선행", depends_on=["REF-1-y"]),
+        FakeTask(id="REF-1-y"),
+    )
+    monkeypatch.setattr(dd, "SOFT_DECLARED", {("A-1-x", "REF-1"): ("REVERSED", _GOOD_REASON)})
+    violations = dd.find_soft_declaration_violations(tasks)
+    assert len(violations) == 1 and "depends_on에도" in violations[0]
+
+
+def test_soft_and_legacy_exempt_together_is_a_contradiction(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """'고칠 것 없음'과 '아직 안 고침'은 동시에 참일 수 없다."""
+    tasks, table = _soft_case()
+    monkeypatch.setattr(dd, "SOFT_DECLARED", table)
+    monkeypatch.setattr(dd, "LEGACY_EXEMPT", {("A-1-x", "REF-1"): "T-1-triage"})
+    violations = dd.find_soft_declaration_violations(tasks)
+    assert any("모두" in v for v in violations)
+
+
+def test_dangling_soft_declaration_is_a_violation(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """대상·참조가 사라지면 분류가 허구가 된다 — 유예의 ①② 축과 같은 규율."""
+    tasks, _ = _soft_case()
+    monkeypatch.setattr(dd, "SOFT_DECLARED", {("GONE-1-x", "REF-1"): ("REVERSED", _GOOD_REASON)})
+    assert any("백로그에 없다" in v for v in dd.find_soft_declaration_violations(tasks))
+    monkeypatch.setattr(dd, "SOFT_DECLARED", {("A-1-x", "GHOST-9"): ("REVERSED", _GOOD_REASON)})
+    assert any("참조" in v for v in dd.find_soft_declaration_violations(tasks))
+
+
+def test_repository_soft_declarations_are_green() -> None:
+    """실 대장 — 소프트 분류 6건이 계약을 지키는가(HARN-53 착지 상태 동결)."""
+    from pathlib import Path
+
+    import store
+
+    root = Path(__file__).resolve().parents[2]
+    backlog, _ = store.load_backlog(root)
+    assert dd.find_soft_declaration_violations(backlog.tasks) == []
+    assert dd.LEGACY_EXEMPT == {}, "HARN-53이 유예를 비웠다 — 새 유예는 만료 계약과 함께 넣어라"
+    assert len(dd.SOFT_DECLARED) == 8
+    assert {c for c, _ in dd.SOFT_DECLARED.values()} <= set(dd.SOFT_REASON_CODES)
