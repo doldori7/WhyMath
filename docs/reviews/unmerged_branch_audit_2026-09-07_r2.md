@@ -337,3 +337,19 @@ python3 scripts/harness/backlog.py amend CUR-07-… --depends HARN-80-direct-com
 python3 scripts/harness/backlog.py validate     # green 570건 · EXIT=0
 python3 scripts/harness/backlog.py audit-deps   # 위반 0 · EXIT=0 — 단, 수정 *전*에도 0이었다(검출 사각·§8.1 #8)
 ```
+
+---
+
+## 10. 실행 부록 — #1020 착지 후 보완 (2026-09-07 · 판정 기준 main `d50781b7`)
+
+§8 정직한 공백이 "#1020에만 있다"고 적은 조건이 해소됐다. **7회차 PR #1020이 `c36af9e2`로, 이 8회차 PR #1027이 `d50781b7`로 머지**되어, 7n9n72 좌석 8건의 고립 참조가 main에 실재한다. §7.3이 충돌 회피로 미뤄 둔 보완 amend 3건을 §4.2 표 근거로 집행했다.
+
+| 좌석 | 7회차가 적은 것 | 8회차 후속이 보탠 동반 변경 (main `d50781b7` 부재 실측) |
+|---|---|---|
+| ASM-06 | `distractor_link.py`·테스트·alembic `0afd40ce1867` | `schema/activity.py`·`db/models/activity.py`·`api/me.py`(슬롯 신설·적재·응답 `matched_misconception_id`)·`schema_version.py`·`l4/misconception/__init__.py` export + 테스트 3파일(test_me 6건·test_activity_orm·schema/test_activity). **alembic 재채번 필수** — 브랜치 리비전의 down_revision `7ef2b5a8e69e`는 main #738이 건너뛴 폐기 리비전이라 그대로 포트하면 multiple heads. main 단일 head = **`c1a5e07b4d38`**(93 리비전 실측) 위로 재채번 |
+| MISC-02 | `prerequisite_link.py`·테스트 | `api/coach.py`·`api/me.py` 보충 경로 + 테스트 6건(test_coach 3·test_me 3). **플래그 신설 불요** — `misconception_crosslink_mode`는 main `config.py`에 이미 실재(8회차 §4.2가 "부재"로 적지 않은 축을 여기서 확정) |
+| MISC-05 | `misconception_slip_report.py`·테스트 | `ops/declared_unwired_audit.py`의 `_OFFLINE_REPORT` 등록 — main에 분류 자체는 실재하나 이 모듈 등록은 0건. 리포트만 착지하면 OPS-22 감사가 미분류로 CI red일 수 있다(소스 판독 예측·주입 미실측 — 착수 세션이 먼저 재현할 것) |
+
+세 항 모두 **paths 유의**를 병기했다 — 현 `paths`가 위 파일들을 덮지 않아 scope-drift 경고가 나면 오탐이 아니라 그 acceptance 항이 명시 승인한 범위다. `paths` 정정 CLI는 `HARN-57`(todo) 소관이라 아직 없다. 이 문면은 *착수 선행 조건이 아니라 실행 시 유의사항*으로 적었다 — 선행이면 `depends_on`으로 집행해야 하고(§8.1 #8 교훈), 이 세 좌석의 착수를 HARN-57에 묶을 이유는 없기 때문이다.
+
+검증: `validate` green(태스크 572·게이트 36·트랙 3) · `audit-deps` 위반 0 · amend 3건 각 EXIT 0.
