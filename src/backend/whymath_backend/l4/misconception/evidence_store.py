@@ -29,6 +29,7 @@ FK CASCADE + 본 모듈 `purge_expired`(보존 경과)로 보장. API 노출은 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import date
 from typing import Any, cast
 
@@ -50,6 +51,7 @@ __all__ = [
     "net_support",
     "net_support_by_misconception",
     "purge_expired",
+    "strong_refutation_mids",
 ]
 
 _VALID_POLARITY = (-1, 1)
@@ -211,6 +213,41 @@ async def net_support_by_misconception(
     )
     result = await session.execute(stmt)
     return {mid: float(support) for mid, support in result.all()}
+
+
+# MISC-20 — "강한 반박"의 경계값. `coach._log_refutation_evidence`가 정정 형태를 직접 보인 풀이에
+# `weight=1.0`(강한 반박)을, 막연한 clean 풀이에 `weight=0.5`(약한 반박)를 싣는다. 그 사이를
+# 가르는 값이며, 상수를 coach에서 import하지 않고 여기 둔다 — L4 내부 모듈이 L5를 참조할 수 없다
+# (계층 역전 금지). 두 값이 바뀌면 이 경계도 함께 재검토해야 한다(테스트가 두 값을 함께 고정).
+_STRONG_REFUTATION_MIN_WEIGHT = 0.75
+
+
+async def strong_refutation_mids(
+    session: AsyncSession, student_id: uuid.UUID, misconception_ids: Sequence[str]
+) -> set[str]:
+    """주어진 오개념들 중 **정정 형태를 직접 보인 강한 반박 증거**가 있는 id 집합(MISC-20).
+
+    "해소"(학생이 실제로 넘어섬)와 "반박"(그냥 안 틀렸음)을 가르는 유일한 기계 신호다 —
+    `polarity=-1` 이면서 `weight >= 0.75`인 증거가 하나라도 있으면 해소 후보다. 약한 반박(0.5)만
+    쌓인 가설은 순지지도가 음수로 돌아 탈락하더라도 `REFUTED`에 머문다(과대해석 금지 · 해소율
+    분자를 부풀리지 않는다).
+
+    `misconception_ids`가 비면 쿼리 없이 빈 집합(N+1·불필요 왕복 회피). 순수 쿼리빌더만.
+    """
+    if not misconception_ids:
+        return set()
+    stmt = (
+        select(EvidenceLink.misconception_id)
+        .where(
+            EvidenceLink.student_id == student_id,
+            EvidenceLink.misconception_id.in_(list(misconception_ids)),
+            EvidenceLink.polarity == -1,
+            func.coalesce(EvidenceLink.weight, 1.0) >= _STRONG_REFUTATION_MIN_WEIGHT,
+        )
+        .distinct()
+    )
+    result = await session.execute(stmt)
+    return {mid for (mid,) in result.all()}
 
 
 async def purge_expired(session: AsyncSession, *, as_of: date) -> int:
