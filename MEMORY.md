@@ -8631,3 +8631,29 @@ audit-deps 면제 어구 안은 채택하지 않았다(면제 문자열은 표�
 이름을 코드에서 실측해 적었다. **같은 `/drive`의 관측**: `HARN-71`은 `next`가 후보로 냈지만 겹침
 경고가 타 세션(`claude/status-k9r51v`)의 원격 claim을 보였다 — 27초 차이의 동시 착수 경쟁이었고
 원격 claim 대장이 막았다(착수하지 않음).
+
+
+## 2026-09-07: HARN-74 착지 — 게이트 해소는 태스크를 풀지 않는다, 그러니 알린다 (#1025) + PR #1025 Codex P2 3건 반영
+
+**결정**: `gates clear`·`waive`는 태스크 status를 건드리지 않는 설계(차단 사유가 게이트뿐인지 기계는
+모른다)를 유지하되, 직후 화면에서 ①그 게이트를 `requires_gates`로 건 blocked 태스크 전건 + `unblock`
+명령(0건도 "0건" 명시 — 결과 보고라 침묵 금지·남은 pending 게이트 병기) ②notes 산문에만 게이트 ID를
+적은 blocked(단어 경계 일치·부착/해제 두 갈래 안내) ③brief·status·status --json에 "해소된 게이트를
+기다리는 blocked N건"(전부 passed인데 blocked·0건이면 침묵 — 요약 규약)을 낸다. 보드(HARN-41)의
+목록 계산은 `selector.gate_dependent_tasks` 한 곳으로 통일. 실측: tests/harness 679(662+17) ·
+뮤테이션 3종 전부 RED(서로 다른 테스트 집합) · 실 대장 ③축 0건, ②축 hit = **CUR-17·CUR-18**
+(`G-eos-verification-relevance-triage` cleared를 notes로만 참조한 blocked — 타 세션 claim 중이라
+미조치. 정정은 `amend --gate` 부착 또는 `unblock`, 사람 몫). **정직한 공백**: ①②는 clear *시점*
+화면이라 이미 닫힌 게이트에는 소급되지 않고, ③은 부착 전제라 산문 참조만 있는 두 건은 brief에 안
+뜬다 — "해소된 게이트 × 산문 참조 blocked" 전수 스캔의 brief 판은 미구현(후속 후보).
+
+**PR #1025 Codex P2 3건(HARN-67 결함·전부 "보호 장치가 특정 경로에서 조용히 무력" 형태)**:
+P2-1 `stall_reason`이 취소 선행+pending 게이트 혼합에서 human_gate를 냈다(게이트를 다 열어도 남는데)
+→ 취소 선행이 있으면 blocked, 게이트 대기 태스크는 `(게이트 대기: G-x)` 표기로 정보 보존.
+P2-2 `next` 경고가 classify 결과(`excluded`)에서 나와 owner/track_gate 조기 제외 태스크는 침묵
+→ status/brief와 같은 `cancelled_dependency_blocks` 직접 스캔으로 교체. P2-3 `--notes-replace`의
+되먹임 마스크가 치환 *전* findings라 치환으로 없앤 선언을 `--reason`이 재생성해도 "기존 위반"으로
+통과(exit 0인데 audit-deps red) → 마스크 = (정정 전) ∩ (치환 직후·사유 append 전). 셋 다 테스트를
+먼저 넣어 RED(3 failed) 확인 후 수정(683 passed). **교훈**: HARN-67 자체 뮤테이션 3종은 전부 RED였다
+— 뮤테이션은 *내가 쓴 분기*만 검증하고, 분기 *앞*의 조기 return(P2-2)과 마스크의 *기준 시점*(P2-3)
+같은 경로 결함은 잡지 못한다. 리뷰 봇이 그 축을 메웠다(PR 열고 ≥5분 뒤 재확인 규율 유효).
