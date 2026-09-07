@@ -97,12 +97,16 @@ async def recommend_strong_concepts(
     *,
     limit: int = 10,
     mastery_threshold: float = 0.7,
+    diagnoses: list[ConceptDiagnosis] | None = None,
 ) -> list[StrongConceptRecommendation]:
     """학습자 강점(BKT/IRT) → 강점 필터(mastery ≥ threshold) → `atom_node` enrich → 상위 N.
 
     흐름:
       ① `compute_concept_diagnoses`로 개념별 진단을 받는다(L2 좌석 재사용·신규 진단 0). 이
-         함수는 *약점 먼저* 정렬해 반환하므로 강점 후보는 뒤쪽에 몰려 있다.
+         함수는 *약점 먼저* 정렬해 반환하므로 강점 후보는 뒤쪽에 몰려 있다. 호출자가 이미 계산해
+         둔 진단 스냅샷이 있으면 `diagnoses`로 넘겨 *재사용*한다(기본 None이면 직접 조회) — 같은
+         요청 안에서 약점·강점 추천이 각자 새로 조회하면 동시 mastery 갱신 시 서로 다른 스냅샷을
+         볼 수 있다(코드 리뷰 실측 — `weak_concept_recommendation`과 동일 근거·동일 파라미터).
       ② **강점 필터** — 최저 신호가 `mastery_threshold` *이상*인 개념만. 신호가 하나도 없으면
          제외(추천 근거 없음 — 약점 판정과 동일 취급).
       ③ 필터된 목록을 뒤집어(reverse) 최고 mastery가 먼저 오게 한다(재정렬만·재계산 0).
@@ -114,7 +118,9 @@ async def recommend_strong_concepts(
     `recommend_weak_concepts`와 달리 `reviewed_only` 게이팅은 두지 않는다 — 학생 본인의
     강점 자각 표시는 검수 상태와 무관하게(자기 이력이므로) 보여준다는 판단(ASM-13 범위).
     """
-    diagnoses = await compute_concept_diagnoses(session, user_id)
+    diagnoses = (
+        diagnoses if diagnoses is not None else await compute_concept_diagnoses(session, user_id)
+    )
 
     strong: list[tuple[ConceptDiagnosis, float]] = []
     for diagnosis in diagnoses:

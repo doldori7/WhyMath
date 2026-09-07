@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from whymath_backend.api import me as me_module
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api.me import (
@@ -2453,6 +2454,8 @@ class TestAssembleMeasurementAssessment:
         ordering_edge_count: int = 0,
         has_cycle: bool = False,
         path_calls: list[int] | None = None,
+        weak_diagnoses_calls: list[Any] | None = None,
+        strong_diagnoses_calls: list[Any] | None = None,
     ) -> None:
         async def _fake_diag(session: Any, user_id: Any) -> list[ConceptDiagnosis]:
             return diagnoses
@@ -2460,10 +2463,19 @@ class TestAssembleMeasurementAssessment:
         async def _fake_hyp(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
             return hypotheses
 
-        async def _fake_weak(session: Any, user_id: Any) -> list[WeakConceptRecommendation]:
+        async def _fake_weak(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[WeakConceptRecommendation]:
+            # PR #1018 Codex 리뷰 — 호출자가 넘긴 diagnoses 스냅샷을 실제로 받는지 캡처.
+            if weak_diagnoses_calls is not None:
+                weak_diagnoses_calls.append(diagnoses)
             return weak
 
-        async def _fake_strong(session: Any, user_id: Any) -> list[StrongConceptRecommendation]:
+        async def _fake_strong(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[StrongConceptRecommendation]:
+            if strong_diagnoses_calls is not None:
+                strong_diagnoses_calls.append(diagnoses)
             return strong or []
 
         async def _fake_gaps(
@@ -2634,6 +2646,36 @@ class TestAssembleMeasurementAssessment:
         assert len(schema.strong_points) == 1
         assert schema.strong_points[0]["concept_id"] == str(strong_cid)
         assert schema.strong_points[0]["mastery"] == 0.95
+
+    def test_weak_and_strong_share_one_diagnoses_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR #1018 Codex 리뷰 — weak·strong이 각자 재조회하면 동시 mastery 갱신 시 서로 다른
+        스냅샷을 볼 수 있었다. 이제 위에서 한 번 구한 `diagnoses`를 그대로 넘겨받는지 확인한다
+        (둘 다 *같은 리스트 객체*를 받아야 한다 — 값만 같은 사본이 아니라 identity로 못 박는다).
+        """
+        cid = uuid.uuid4()
+        shared = [
+            ConceptDiagnosis(concept_id=cid, response_count=1, agreement="agree"),
+        ]
+        weak_calls: list[Any] = []
+        strong_calls: list[Any] = []
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=shared,
+            hypotheses=[],
+            weak=[],
+            strong=[],
+            weak_diagnoses_calls=weak_calls,
+            strong_diagnoses_calls=strong_calls,
+        )
+        asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(weak_calls) == 1 and weak_calls[0] is shared
+        assert len(strong_calls) == 1 and strong_calls[0] is shared
 
     def test_strong_points_empty_when_no_recommendations(
         self, monkeypatch: pytest.MonkeyPatch

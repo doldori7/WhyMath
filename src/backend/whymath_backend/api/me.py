@@ -2683,12 +2683,15 @@ async def _assemble_measurement_assessment(
        diagnosis`. ② `get_active_hypotheses`(활성 오개념 가설, confidence 내림차순) → 같은
        `concept_diagnosis` 배열에 `kind` 판별자로 이어붙임(모듈 상단 주석 참조). ③
        `recommend_weak_concepts`(BKT/IRT 약점 + atom_node 안전 메타) → `weak_points`.
-       `recommend_strong_concepts`(같은 신호의 반대쪽 절반 — ASM-13) → `strong_points`. ④
-       가장 약한 개념(③의 첫 항목·이미 약점 정렬됨)을 대상으로 `recommend_prerequisite_gaps`
-       + `build_learning_path`(`/weak-concepts/{id}/learning-path`와 *동일 호출*·기본
-       파라미터)를 호출해 `recommended_path`를 얻는다. 약점 개념이 하나도 없으면 빈 리스트.
-       각 step에는 경로 수준 정직 표기 3종(`ordering_basis`·`ordering_edge_count`·
-       `has_cycle`)을 동반 기록한다(`PATH-09` — `_CAPTURE_PATH_ORDERING_KEYS` 참조).
+       `recommend_strong_concepts`(같은 신호의 반대쪽 절반 — ASM-13) → `strong_points`. 이
+       둘은 ①에서 이미 구한 `diagnoses`를 `diagnoses=` 인자로 넘겨받아 *같은 스냅샷*을
+       공유한다(PR #1018 Codex 리뷰 실측 — 각자 재조회하면 동시 mastery 갱신 시 세 산출물이
+       서로 다른 시점을 볼 수 있었다). ④ 가장 약한 개념(③의 첫 항목·이미 약점 정렬됨)을
+       대상으로 `recommend_prerequisite_gaps` + `build_learning_path`(`/weak-concepts/{id}/
+       learning-path`와 *동일 호출*·기본 파라미터)를 호출해 `recommended_path`를 얻는다.
+       약점 개념이 하나도 없으면 빈 리스트. 각 step에는 경로 수준 정직 표기 3종
+       (`ordering_basis`·`ordering_edge_count`·`has_cycle`)을 동반 기록한다(`PATH-09` —
+       `_CAPTURE_PATH_ORDERING_KEYS` 참조).
 
     다섯 함수 전부 기존 L2 좌석 재사용(신규 진단·통계·ML 로직 0) — 이 함수가 하는 일은 *호출
     순서 결정 + 필드 매핑*뿐이다. `estimated_grade`·`estimated_score`·`estimated_percentile`·
@@ -2696,8 +2699,9 @@ async def _assemble_measurement_assessment(
     """
     diagnoses = await compute_concept_diagnoses(session, user_id)
     hypotheses = await get_active_hypotheses(session, user_id)
-    weak = await recommend_weak_concepts(session, user_id)
-    strong = await recommend_strong_concepts(session, user_id)
+    # 스냅샷 공유(docstring ③ 참조) — 재조회 0.
+    weak = await recommend_weak_concepts(session, user_id, diagnoses=diagnoses)
+    strong = await recommend_strong_concepts(session, user_id, diagnoses=diagnoses)
 
     concept_diagnosis_items: list[dict[str, Any]] = [
         {"kind": _CAPTURE_ITEM_KIND_CONCEPT, **d.model_dump(mode="json")} for d in diagnoses

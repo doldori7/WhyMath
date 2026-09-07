@@ -62,7 +62,7 @@ from whymath_backend.schema.subject_adapter import (
 from whymath_backend.schema.verification_capabilities import (
     AnswerFormVerifier,
     AssessmentAnswerVerifier,
-    ChainVerification,
+    ChainVerificationCounts,
     EquivalenceOutcome,
     ExpressionEquivalence,
     ExpressionSeal,
@@ -270,7 +270,7 @@ class MathStepChainVerifier:
 
     def verify_chain(
         self, steps: Sequence[str], step_types: Sequence[Any] | None = None
-    ) -> ChainVerification:
+    ) -> ChainVerificationCounts:
         """전이별 연쇄 검증 그대로 — 4상태(correct/incorrect/unverifiable) 재해석 없음."""
         typed = cast("Sequence[StepType | None] | None", step_types)
         return verify_solution(steps, typed)

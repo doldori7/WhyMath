@@ -14,8 +14,9 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 import pytest
-import whymath_backend.l2.strong_concept_recommendation as scr_mod
 from sqlalchemy.ext.asyncio import AsyncSession
+
+import whymath_backend.l2.strong_concept_recommendation as scr_mod
 from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta
 from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.strong_concept_recommendation import (
@@ -123,6 +124,27 @@ class TestStrengthFilter:
         out = await recommend_strong_concepts(_fake_session(), _UID)
         assert out == []
         assert captured["calls"] == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⓐ diagnoses 스냅샷 재사용 (PR #1018 Codex 리뷰 — 동시 mastery 갱신 시 스냅샷 불일치 방지)
+# ──────────────────────────────────────────────────────────────────────────
+class TestDiagnosesSnapshotReuse:
+    async def test_passed_diagnoses_skips_internal_fetch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = {"n": 0}
+
+        async def _boom(_session: AsyncSession, _user_id: uuid.UUID) -> list[ConceptDiagnosis]:
+            calls["n"] += 1
+            raise AssertionError("diagnoses가 주어졌는데 내부에서 재조회했다")
+
+        monkeypatch.setattr(scr_mod, "compute_concept_diagnoses", _boom)
+        _patch_meta(monkeypatch)
+        given = [_diagnosis(code=_UC_A, bkt=0.8, proxy=0.9)]
+        out = await recommend_strong_concepts(_fake_session(), _UID, diagnoses=given)
+        assert calls["n"] == 0
+        assert [r.concept_code for r in out] == [_UC_A]
 
 
 # ──────────────────────────────────────────────────────────────────────────

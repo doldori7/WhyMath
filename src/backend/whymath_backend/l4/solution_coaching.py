@@ -62,7 +62,7 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_OCR_THRESHOLD
 from whymath_backend.l4.step_shadow import observe_step_breaks
 from whymath_backend.schema.enums import StepType
 from whymath_backend.schema.verification_capabilities import (
-    ChainVerification,
+    ChainVerificationCounts,
     StepChainVerifier,
 )
 
@@ -244,7 +244,7 @@ def recommend_coaching_for_solution(
     # L5 책임·범위 밖). 미제공·전이 0개면 None(기존 텍스트 레벨 동작 완전 불변). verifier 미주입
     # 시 합성 루트 기본 구현(수학)으로 지연 폴백 — 이 모듈 자체는 l3.verify_solution을 모른다
     # (EOS-86: CORE→ADAPTER 직접 의존 제거. composition은 설계된 유일 교체점).
-    verification: ChainVerification | None = None
+    verification: ChainVerificationCounts | None = None
     if solution_steps is not None and len(solution_steps) >= 2:
         if verifier is None:
             from whymath_backend.composition import default_step_chain_verifier
@@ -256,9 +256,10 @@ def recommend_coaching_for_solution(
     # 분해 단계 텍스트가 OCR 오인식일 수 있어 step 신호를 코칭 결정에서 누그러뜨린다(정확성 #1).
     # 미제공(None)이면 ocr_low=False → step_incorrect_trusted == step_incorrect(기존 동작 불변).
     ocr_low = ocr_confidence is not None and ocr_confidence < _OCR_THRESHOLD
-    # `has_incorrect`는 ChainVerification 계약(schema/verification_capabilities.py)에 없는
-    # 구체 타입(SolutionVerificationResult)의 편의 필드다 — 계약에 있는 first_incorrect_index
-    # 로 동치 계산한다(`has_incorrect == (first_incorrect_index is not None)`가 그 필드의 정의).
+    # `has_incorrect`는 ChainVerificationCounts 계약(schema/verification_capabilities.py)에
+    # 없는 구체 타입(SolutionVerificationResult)의 편의 필드다 — 계약에 있는
+    # first_incorrect_index로 동치 계산한다(`has_incorrect == (first_incorrect_index is not
+    # None)`이 그 필드의 정의).
     step_incorrect = verification is not None and verification.first_incorrect_index is not None
     # 신뢰분 — 저신뢰 OCR이면 step-incorrect를 코칭 결정에 반영하지 않는다(거짓 지적 방지).
     step_incorrect_trusted = step_incorrect and not ocr_low
