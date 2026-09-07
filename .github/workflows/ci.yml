@@ -1147,6 +1147,15 @@ jobs:
           fi
           echo "OK — 검정교과서 본문 패턴 없음"
 
+      # 저작권 위험 원본 문서(PDF·hwp·오피스·아카이브)의 커밋 차단 — LIC-07 ④.
+      # 위 패턴 검사는 "본문을 옮겨 적었는가"를 보지만, 2026-08-08 KICE 보고서 PDF 2건은
+      # 원본 파일 자체가 들어온 사고였다(텍스트 검사가 구조적으로 못 보는 축).
+      # 확장자 + 매직 바이트 + .gitignore 1차 방어선 실재까지 본다.
+      - name: Forbid source-document binaries (저작권 원본 유입 차단)
+        run: |
+          set -e
+          python3 scripts/ops/check_source_document_binaries.py
+
       # 시크릿 패턴 사전 차단 (의도된 .env.example 등은 .gitignore로 제외됨)
       - name: Forbid hardcoded secret patterns
         run: |
