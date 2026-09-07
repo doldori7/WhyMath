@@ -86,14 +86,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.config import get_settings
 from whymath_backend.harness.anchor_round_ledger import (
     DEFAULT_STAGNATION_WINDOW,
+    PromptCacheTally,
     RoundRecord,
     append_round_ledger,
     default_round_ledger_path,
     judge_stagnation,
     load_round_ledger,
     operating_rates,
+    prompt_cache_rates,
 )
 from whymath_backend.harness.batch_safety import (
     DEFAULT_ABORT_THRESHOLD,
@@ -683,13 +686,23 @@ def main(argv: list[str] | None = None) -> int:
     # 그 순간 거짓이 된다). 회차 중 라우팅이 갈려 값이 여러 개면 전부 모아 둔다.
     observed_models: set[str] = set()
     observed_prompt_versions: set[str] = set()
+    # 프롬프트 캐시 원장(EOS-99) — 모델·프롬프트 좌석과 **같은 자리**에서 모은다: 셋 다
+    # "이 회차가 실제로 무엇으로 돌았는가"이고, 셋 다 genlog에 *적재된 행*에서만 나와야
+    # 대장이 파일에 없는 값을 주장하지 않는다.
+    cache_tally = PromptCacheTally()
 
     def _genlog_sink(log: GenerationLog) -> None:
+        nonlocal cache_tally
         stamped = append_generation_log_jsonl(genlog_path, log, run_id=run_id)
         if stamped.model_name:
             observed_models.add(stamped.model_name)
         if stamped.prompt_version:
             observed_prompt_versions.add(stamped.prompt_version)
+        cache_tally = cache_tally.observe(
+            input_tokens=stamped.input_tokens,
+            cache_read_input_tokens=stamped.cache_read_input_tokens,
+            cache_creation_input_tokens=stamped.cache_creation_input_tokens,
+        )
 
     # 내구 검수 큐(EOS-58 codex P1-1/P2) — 비수용 outcome 발생 즉시 행 append+flush. 경로는
     # 항상 <out>.review.jsonl 사이드카(뷰와 달리 저장소는 옮기지 않는다 — 누적의 단일 원천).
@@ -755,6 +768,19 @@ def main(argv: list[str] | None = None) -> int:
     # 기록해야 대장 행과 디스크 상태가 어긋나지 않는다(중간에 죽으면 그 회차는 대장에 없고,
     # 그건 정직하다 — 완료되지 않은 회차다).
     payload = report.to_json()
+    # 프롬프트 캐시 작동 신호(EOS-99) — 리포트와 대장에 **같은 dict**를 싣는다(두 벌 산식
+    # 금지). 플래그 상태는 이 회차를 돌린 설정에서 읽는다: 설정을 못 읽으면 False로 접지
+    # 않고 None(미상)으로 둔다 — 모르는 것을 '꺼짐'으로 적으면 적중 0%가 당연한 결과로
+    # 읽혀 '켰지만 작동 안 함'이 영영 안 보인다(모른다 ≠ 아니다).
+    caching_enabled: bool | None
+    try:
+        caching_enabled = bool(get_settings().anthropic_prompt_caching)
+    except Exception as exc:  # noqa: BLE001 — 설정 판독 실패는 회차 비차단(타입명 남김)
+        caching_enabled = None
+        _LOGGER.warning(
+            "프롬프트 캐시 플래그 판독 실패(%s) — 판정을 미상으로 둔다", type(exc).__name__
+        )
+    payload["prompt_cache"] = prompt_cache_rates(cache_tally, caching_enabled=caching_enabled)
     ledger_path: Path = default_round_ledger_path(args.out)
     ledger_error: str | None = None
     # 회차 매니페스트(MP-04) — 카나리 관측 3종은 판정이 **있었을 때만** 값이 있다. 판정이
@@ -794,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
                 canary_advisory=report.canary_advisory,
                 aborted=report.aborted,
                 abort_reason=report.abort_reason,
+                prompt_cache=payload["prompt_cache"],
             ),
         )
     except Exception as exc:  # noqa: BLE001 — 대장 적재 장애는 회차를 깨지 않되 타입명을 남긴다

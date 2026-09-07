@@ -634,6 +634,14 @@ class LLMEquivalentProblemGenerator:
                 seed=seed,  # 실려 나간 값만(클라우드=None 미기록·날조 금지)
                 input_tokens=usage.input_tokens if usage is not None else None,
                 output_tokens=usage.output_tokens if usage is not None else None,
+                # 프롬프트 캐시 2종(EOS-99) — 캐시 개념이 없는 로컬 경로는 provider가 채우지
+                # 않아 None(해당 없음)이고, 클라우드는 응답 usage 실측이 그대로 실린다.
+                cache_read_input_tokens=(
+                    usage.cache_read_input_tokens if usage is not None else None
+                ),
+                cache_creation_input_tokens=(
+                    usage.cache_creation_input_tokens if usage is not None else None
+                ),
                 cost_usd=actual_cost_usd_or_none(decision, usage),
                 latency_ms=latency_ms,
                 success=success,

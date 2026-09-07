@@ -158,6 +158,11 @@ class GenerationLog(Base):
     prompt_template_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
     input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     output_tokens: Mapped[int | None] = mapped_column(sa.Integer)
+    # 프롬프트 캐시 2종(EOS-99) — nullable·server_default 없음(구 행 NULL=미기록·소급 날조
+    # 금지, run_id/EOS-55 재현 좌석과 같은 방침). 여기 컬럼이 없으면 `from_schema`의
+    # mapped_keys 필터가 값을 **조용히 버려** DB 경로만 캐시 축을 잃는다(침묵 실패 금지).
+    cache_read_input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
+    cache_creation_input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     cost_usd: Mapped[float | None] = mapped_column(sa.Numeric(8, 4))
     latency_ms: Mapped[int | None] = mapped_column(sa.Integer)
     success: Mapped[bool | None] = mapped_column(sa.Boolean)

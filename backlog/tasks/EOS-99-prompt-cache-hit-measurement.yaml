@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -23,6 +23,6 @@ paths:
   - src/backend/whymath_backend/schema/provenance.py
   - src/backend/whymath_backend/harness/problem_corpus_accumulate.py
   - "tests/backend/l3/**"
-session: null
+session: claude/whymath-system-review-n75r24
 notes: "출처: 대체안 A(2026-09-06 Kiki 채택) §5-② · 갭 리뷰 §2 행26(prefix 캐싱 부분) · §11-5 P2. cache_control 배선 자체는 providers/anthropic.py:356에 실재(flag OFF). ③의 실측은 Kiki 머신 실 provider 필요 — hermetic으로는 적중률이 정의되지 않는다. PR #1000 재구성 재등재분(초판 d29cb5ae — EOS-98 번호 충돌로 브랜치 재구성·§11-6)."
-updated: 2026-09-06
+updated: 2026-09-07

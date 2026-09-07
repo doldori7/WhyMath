@@ -146,6 +146,9 @@ def generation_log_from_result(
       - `input_tokens`/`output_tokens`/`latency_ms`: `result.usage`(provider 실측)에서.
         usage가 None(인제스트 모드·usage 미노출)이면 종전대로 None — 지어내지 않는다.
         latency는 float(ms) 실측을 스키마 계약(int)에 맞춰 반올림한다.
+      - `cache_read_input_tokens`/`cache_creation_input_tokens`(EOS-99): 같은 usage에서
+        그대로. 캐시 개념이 없는 로컬 Ollama 경로는 provider가 채우지 않아 None이고, 그것이
+        "해당 없음"의 정직한 표기다(0으로 접으면 '적중 0%'로 위장된다).
       - `cost_usd`: 인자에서 그대로(호출자가 `actual_cost_usd_or_none`으로 산정 — 로컬
         사전생성=0.0, 미상=None). 이 어댑터는 단가를 모른다(순수 변환).
       - `prompt_version`/`seed`: 재현 좌석(EOS-55) — *실제 쓰인 값만* 인자로 받는다.
@@ -171,6 +174,10 @@ def generation_log_from_result(
         prompt_template_id=prompt_template_id,
         input_tokens=usage.input_tokens if usage is not None else None,
         output_tokens=usage.output_tokens if usage is not None else None,
+        cache_read_input_tokens=(usage.cache_read_input_tokens if usage is not None else None),
+        cache_creation_input_tokens=(
+            usage.cache_creation_input_tokens if usage is not None else None
+        ),
         cost_usd=cost_usd,
         latency_ms=latency_ms,
         success=result.status in _SUCCESS_STATUSES,
