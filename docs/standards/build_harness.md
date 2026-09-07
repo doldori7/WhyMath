@@ -1,6 +1,6 @@
 # 빌드 하네스 (Build Harness) — 작업일정 관리·순차 조율 표준
 
-> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.3 (2026-09-07 HARN-67 — amend 정정 경로 3축(depends 제거·gate 탈착·notes 치환)·취소 선행 판정 규칙·§7a 정정 경로 표. 이전 1.2: 2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
+> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.4 (2026-09-07 HARN-74 — gates clear·waive 직후 부착 blocked 태스크·산문 참조 출력 + brief/status의 '해소된 게이트를 기다리는 blocked' 줄 · §3d 절 추가. 이전 1.3: 2026-09-07 HARN-67 — amend 정정 경로 3축(depends 제거·gate 탈착·notes 치환)·취소 선행 판정 규칙·§7a 정정 경로 표. 이전 1.2: 2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
 >
 > 이 문서의 "빌드 하네스"는 프로젝트 *구축을 관리하는* 레이어다.
 > `src/backend`의 WH-1(튜터링)·WH-S(솔버)는 **제품 런타임 하네스**로 완전히 별개다.
@@ -394,6 +394,27 @@ append 전용이라 나중에 진짜 선행 선언("X 착지 후 착수")이 추
 취소 자체가 틀렸으면 복원한다(HARN-69 — main 기준 todo). (사고 경위 2026-09-05: EOS-94 cancel →
 EOS-96이 후보에서 무경고 소실 → 정정 경로가 없어 EOS-97로 재등재. 번호 2개·왕복 1회 소모)
 
+### 게이트 해소는 태스크를 풀지 않는다 — clear·waive 직후 알리고, brief가 매 세션 되묻는다 (HARN-74)
+
+`gates clear`·`waive`는 게이트 status만 바꾼다 — 그 게이트를 `requires_gates`로 건 **blocked** 태스크는
+그대로 blocked다(차단 사유가 게이트뿐인지 기계는 모르므로 자동 unblock하지 않는다 · 모른다 ≠ 아니다).
+종전에는 `✔ 게이트 → cleared` 한 줄뿐이라 그 사실을 아무도 못 봤다(2026-09-06 실측: ADMIN-02·CUR-17·
+CUR-18이 게이트 해소 뒤 5일 이상 방치·`/status`가 Kiki 대기로 오보고). 이제 두 시점·세 화면에서 보인다:
+
+- **해소 시점** — `gates clear|waive` 직후 `· 부착 blocked 태스크 N건` + 각 줄에
+  `python3 scripts/harness/backlog.py unblock <id>` 명령(남은 pending 게이트가 있으면 `# (다른 게이트 대기:
+  G-x)` 병기 — unblock해도 후보가 되지 않는 이유를 미리 알린다). **0건도 `0건`으로 명시**한다 — 결과 보고에서
+  침묵은 "검사 안 함"과 같은 화면이다. 이어서 `· 산문 참조(requires_gates 미부착) N건` — notes에만 게이트
+  ID를 적은 blocked 태스크(CUR-17·CUR-18 형태). 기계는 의도를 모르므로 명령 대신 `amend <id> --gate <G>`(부착)와
+  `unblock <id>`(해제) 두 갈래를 안내한다. 부분 문자열(`G-x` ⊂ `G-x-y`)은 참조가 아니다. 이벤트에
+  `blocked_attached`·`blocked_notes_ref`가 남는다(화면은 휘발되지만 대장은 남는다).
+- **다음 세션** — `brief`(stdout)·`status`(`--json`은 `gate_stale_blocked`)가 `해소된 게이트를 기다리는 blocked
+  태스크 N건: id(←G) … — 확인: backlog.py unblock <id>` 한 줄을 낸다(0건이면 침묵 — 요약 화면의 규약). clear
+  화면을 놓쳐도 다음 세션이 본다(집행 지점 별항 — 정본화≠집행).
+- 계산은 `selector.gate_dependent_tasks`·`gate_attached_blocked`·`gate_notes_referenced_blocked`·
+  `stale_gate_blocked` 한 곳이며 보드(`board.gate_dependents`)도 같은 헬퍼를 쓴다 — 두 화면이 다른 사실을
+  말하지 않는다. 계약 동결 = `tests/harness/test_gate_clear_reminder.py`(뮤테이션 3종 RED 실측 포함).
+
 ### 되먹임 주의 — 정정 사유가 새 위반을 만든다
 
 `--reason`은 notes에 append되고 notes는 이 스캐너의 입력이다. 그래서 *"…'선행'이라 선언한
@@ -416,7 +437,7 @@ EOS-96이 후보에서 무경고 소실 → 정정 경로가 없어 EOS-97로 �
 ## 4. 일상 워크플로우
 
 ```
-세션 시작   → (자동) SessionStart 브리핑: 현재 스테이지·next 3·게이트 리마인드
+세션 시작   → (자동) SessionStart 브리핑: 현재 스테이지·next 3·게이트 리마인드·해소된 게이트를 기다리는 blocked(HARN-74)
 주도 진행   → /drive              # 순차 루프 (기본 3태스크, 사람 게이트에서 정지)
 단건 작업   → /implement <id>     # start → 구현 → PR 생성 → done --artifact
 새 계획     → /plan <주제>        # 산출물 = backlog add 태스크 등록
@@ -526,6 +547,7 @@ python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
                     # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
 python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
 python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..."  # 사람이 본인 게이트를 닫을 때 주체 명시(HARN-60)
+# clear·waive 직후 그 게이트를 기다리던 blocked 태스크(unblock 명령)·산문 참조가 출력된다 — 0건도 명시 (HARN-74 · §3d)
 # evidence에는 판정 기준(커밋 해시·PR 참조)이 있어야 한다 — 없으면 exit 1 (HARN-68).
 # 판정은 시점에 종속되므로 "무엇을 봤나"가 아니라 "언제의 트리로 봤나"가 근거다.
 python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "main 3b007e23 기준 확인"

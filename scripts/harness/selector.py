@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from models import Backlog, Task
@@ -82,6 +83,90 @@ def unmet_gates(backlog: Backlog, task: Task) -> list[str]:
         for gid in task.requires_gates
         if gid not in backlog.gates or not backlog.gates[gid].passed
     ]
+
+
+def _gate_id_mentioned(text: str, gate_id: str) -> bool:
+    """notes 산문에 게이트 ID가 *단어로* 등장하는가 — 부분 문자열 오탐 방지 (HARN-74 ②).
+
+    왜 필요한가: 단순 `in` 검사는 `G-eos`가 `G-eos-verification-…` 안에서도 참이 되어, 짧은
+    ID의 게이트를 clear할 때 무관한 blocked 태스크가 '산문 참조'로 잡힌다. ID 문자 집합
+    (`[A-Za-z0-9_-]`) 밖의 경계에서 끝나는 일치만 참조로 친다.
+    """
+    pattern = rf"(?<![A-Za-z0-9_-]){re.escape(gate_id)}(?![A-Za-z0-9_-])"
+    return re.search(pattern, text) is not None
+
+
+def gate_dependent_tasks(backlog: Backlog, gate_id: str) -> list[Task]:
+    """이 게이트를 `requires_gates`로 건 **미종결** 태스크 전건 — id 정렬 (단일 진실 원천).
+
+    왜 여기 있는가: 보드(`board.gate_dependents`)와 `gates clear` 화면(HARN-74 ①)이 같은
+    목록을 각자의 comprehension으로 만들면 한쪽만 고쳐질 때 두 화면이 서로 다른 사실을
+    말한다. 계산은 이 한 곳이고 소비자는 status로 좁혀 쓴다. ⚠ 이 목록은 *의존 관계*이지
+    "현재 차단"이 아니다 — 해소된 게이트를 아직 달고 있는 태스크도 포함된다.
+    """
+    return [
+        t
+        for t in sorted(backlog.tasks.values(), key=lambda t: t.id)
+        if gate_id in t.requires_gates and t.status not in ("done", "cancelled")
+    ]
+
+
+def gate_attached_blocked(backlog: Backlog, gate_id: str) -> list[tuple[Task, list[str]]]:
+    """이 게이트를 건 **blocked** 태스크 전건 + 각각의 *다른* 미통과 게이트 (HARN-74 ①).
+
+    왜 필요한가: `gates clear`는 게이트 status만 바꾸고 태스크는 건드리지 않는다 — 그 자체는
+    옳다(차단 사유가 게이트뿐인지 기계는 모르므로 자동 unblock은 하지 않는다 · 모른다 ≠ 아니다).
+    그러나 *알리지도* 않으면 clear한 세션은 부착 태스크의 존재를 모른 채 끝나고 그 태스크는
+    blocked로 방치된다(2026-09-06 실측: 게이트 해소 뒤 ADMIN-02·CUR-17·CUR-18이 5일 이상
+    blocked로 남아 /status가 Kiki 대기로 오보고). 그래서 clear 시점에 전건을 계산해 화면과
+    이벤트 양쪽에 남긴다.
+
+    둘째 원소는 `gate_id`를 **명시적으로 뺀** 미통과 게이트다 — 이 게이트가 아직 pending일 때
+    불러도, 이미 cleared일 때 불러도 같은 답을 내게 하기 위해서다(호출 순서 의존 제거). 비어
+    있지 않으면 unblock해도 후보가 되지 않으므로 화면이 그 사실을 미리 알린다.
+    """
+    result: list[tuple[Task, list[str]]] = []
+    for task in gate_dependent_tasks(backlog, gate_id):
+        if task.status != "blocked":
+            continue
+        others = [g for g in unmet_gates(backlog, task) if g != gate_id]
+        result.append((task, others))
+    return result
+
+
+def gate_notes_referenced_blocked(backlog: Backlog, gate_id: str) -> list[Task]:
+    """notes 산문에만 게이트 ID를 적고 `requires_gates`에는 안 건 **blocked** 태스크 (HARN-74 ②).
+
+    왜 필요한가: `block --reason "G-x 대기"`로 막아 둔 태스크는 게이트를 산문으로만 참조한다 —
+    ①의 부착 목록에는 구조적으로 안 잡히며, 이것이 CUR-17·CUR-18이 방치된 정확한 형태다.
+    기계는 그 산문이 "이 게이트를 기다린다"는 뜻인지 단순 언급인지 모르므로 unblock 명령을
+    내지 않고, 부착(`amend --gate`)과 해제(`unblock`) 중 사람이 고르게 한다. id 정렬.
+    """
+    return [
+        t
+        for t in sorted(backlog.tasks.values(), key=lambda t: t.id)
+        if t.status == "blocked"
+        and gate_id not in t.requires_gates
+        and _gate_id_mentioned(t.notes, gate_id)
+    ]
+
+
+def stale_gate_blocked(backlog: Backlog) -> list[tuple[Task, list[str]]]:
+    """기다릴 게이트가 없는데 blocked로 남은 태스크 — (태스크, 이미 통과한 게이트) (HARN-74 ③).
+
+    대상 = status가 blocked이고 `requires_gates`가 비어 있지 않으며 **전부** passed(cleared/
+    waived). 왜 따로 세는가: ①은 clear *시점*의 알림이라 그 화면을 놓치면 끝이다 — 다음
+    세션이 같은 사실을 다시 보려면 대장에서 매번 계산해야 한다(집행 지점 별항). 기계는 차단
+    사유가 게이트뿐이었는지 모르므로 자동 unblock하지 않고 확인 명령만 낸다. id 정렬.
+    """
+    result: list[tuple[Task, list[str]]] = []
+    for task in sorted(backlog.tasks.values(), key=lambda t: t.id):
+        if task.status != "blocked" or not task.requires_gates:
+            continue
+        if unmet_gates(backlog, task):
+            continue
+        result.append((task, list(task.requires_gates)))
+    return result
 
 
 def classify_todo(

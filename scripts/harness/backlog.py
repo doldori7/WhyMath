@@ -1051,19 +1051,75 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
     store.save_gates(root, sorted(backlog.gates.values(), key=lambda g: g.id))
+    # 이 게이트를 기다리던 blocked 태스크 (HARN-74 ①②) — 게이트 status를 바꾼 **뒤** 계산한다:
+    # "다른 게이트 대기"가 방금 해소된 이 게이트를 빼고 남는 것만 세야 하기 때문이다(헬퍼도
+    # gate_id를 명시적으로 빼지만, 이 순서면 unmet_gates 관점과도 일치한다). 이벤트에도 남긴다 —
+    # 화면은 휘발되지만 대장은 남는다(cancel의 blocked_dependents와 동형).
+    attached = selector.gate_attached_blocked(backlog, gate.id)
+    notes_ref = selector.gate_notes_referenced_blocked(backlog, gate.id)
     store.append_event(
         root,
         f"gate_{args.gate_action}",
         gate.id,
         evidence=gate.evidence,
         reason=args.reason,
+        blocked_attached=[t.id for t, _others in attached],
+        blocked_notes_ref=[t.id for t in notes_ref],
         **extra,
     )
     # 주체를 화면에도 되비춘다 — 기입자가 "내가 사람으로 기록됐는지"를 즉시 확인할 수 있어야
     # 잘못된 기입(에이전트가 --as 없이 사람 게이트를 닫음)이 조용히 지나가지 않는다.
     subject = f" (clear 주체: {gate.cleared_by})" if args.gate_action == "clear" else ""
     print(f"✔ {gate.id} → {gate.status}{subject}")
+    _print_gate_release_reminder(gate.id, attached, notes_ref)
     return 0
+
+
+def _print_gate_release_reminder(
+    gate_id: str,
+    attached: list[tuple[Task, list[str]]],
+    notes_ref: list[Task],
+) -> None:
+    """gates clear·waive 직후 — 그 게이트를 기다리던 blocked 태스크와 다음 명령 (HARN-74 ①②).
+
+    왜 필요한가: 게이트 해소는 태스크 status를 건드리지 않는다(옳다 — 차단 사유가 게이트뿐인지
+    기계는 모른다). 그러나 종전 화면은 `✔ 게이트 → cleared` 한 줄뿐이라, clear한 세션은 부착
+    태스크가 있다는 사실 자체를 몰랐고 그 태스크는 blocked로 방치됐다(2026-09-06 실측 3건·5일).
+    보드(HARN-41)는 이 목록을 계산했지만 CLI·브리핑에는 없었다 — 이 함수가 그 CLI 축이다.
+
+    **0건도 '0건'으로 찍는다** — 이 화면은 그 명령의 *결과 보고*라, 줄이 없으면 "검사했는데
+    없었다"와 "검사하지 않았다"를 구분할 수 없다(침묵 실패 금지 · acceptance ①).
+    ①(부착)은 unblock 명령을 그대로 낸다. ②(산문 참조)는 기계가 의도를 모르므로 명령 대신
+    두 갈래(부착 / 해제) 중 사람이 고르라는 안내를 낸다(모른다 ≠ 아니다).
+    """
+    if attached:
+        print(
+            f"  · 부착 blocked 태스크 {len(attached)}건 — 이 게이트를 기다리던 차단. "
+            "해제 여부를 확인하라:"
+        )
+        for task, others in attached:
+            # 남은 pending 게이트가 있으면 unblock해도 후보가 되지 않는다 — 그 이유를 미리 알린다.
+            # `#` 뒤에 두어 줄을 통째로 복사해도 셸에서 그대로 실행된다.
+            suffix = (
+                f"  # (다른 게이트 대기: {', '.join(others)} — unblock해도 후보가 되지 않는다)"
+                if others
+                else ""
+            )
+            print(f"    python3 scripts/harness/backlog.py unblock {task.id}{suffix}")
+    else:
+        print("  · 부착 blocked 태스크 0건")
+    if notes_ref:
+        print(
+            f"  · 산문 참조(requires_gates 미부착) {len(notes_ref)}건 — "
+            "notes에만 이 게이트를 적은 blocked 태스크. 기계는 의도를 모르므로 사람이 고른다:"
+        )
+        for task in notes_ref:
+            print(
+                f"    {task.id} — 부착: backlog.py amend {task.id} --gate {gate_id} "
+                f"--reason '...' · 또는 해제: backlog.py unblock {task.id}"
+            )
+    else:
+        print("  · 산문 참조(requires_gates 미부착) 0건")
 
 
 def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:

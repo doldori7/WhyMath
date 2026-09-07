@@ -84,6 +84,25 @@ def cancelled_dep_blocked_line(backlog: Backlog) -> str | None:
     )
 
 
+def gate_stale_blocked_line(backlog: Backlog) -> str | None:
+    """해소된 게이트를 기다리는 blocked 태스크의 한 줄 요약 — 0건이면 None (HARN-74 ③).
+
+    `cancelled_dep_blocked_line`과 같은 자리·같은 형식으로 status·brief가 같은 문장을 낸다.
+    왜 0건에 침묵하는가 — ①의 `gates clear` 화면과 규약이 다르다: 그 화면은 *그 명령의 결과
+    보고*라 줄이 없으면 "검사했는데 없었다"와 "검사하지 않았다"를 구분할 수 없어 0건도
+    명시한다. 반면 brief·status는 매 세션 읽는 *요약*이라 0건에 줄을 더하면 신호 대 잡음비만
+    떨어지고 경고가 습관화된다 — 그래서 None을 돌려 침묵을 허용한다.
+    """
+    stale = selector.stale_gate_blocked(backlog)
+    if not stale:
+        return None
+    items = " ".join(f"{task.id}(←{','.join(gates)})" for task, gates in stale)
+    return (
+        f"해소된 게이트를 기다리는 blocked 태스크 {len(stale)}건: {items}"
+        " — 확인: backlog.py unblock <id>"
+    )
+
+
 def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
     lines = ["📊 빌드 하네스 — 프로젝트 현재 상태", ""]
 
@@ -116,6 +135,13 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
     if cancelled_line:
         lines.append("")
         lines.append(f"⚠ {cancelled_line}")
+
+    # 해소된 게이트를 기다리는 blocked (HARN-74 ③) — "차단됨" 절만 보면 게이트 대기로 읽히는데
+    # 실제로는 기다릴 게이트가 없는 상태. 위 "차단됨" 절과 별도 줄로 그 사실을 드러낸다.
+    stale_gate_line = gate_stale_blocked_line(backlog)
+    if stale_gate_line:
+        lines.append("")
+        lines.append(f"⚠ {stale_gate_line}")
 
     pending = [g for g in backlog.gates.values() if g.status == "pending"]
     if pending:
@@ -158,6 +184,10 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
         "cancelled_dep_blocked": [
             {"id": task.id, "cancelled": deps}
             for task, deps in selector.cancelled_dependency_blocks(backlog)
+        ],
+        # 해소된 게이트를 기다리는 blocked (HARN-74 ③) — 텍스트 화면과 같은 사실을 기계도 읽게
+        "gate_stale_blocked": [
+            {"id": task.id, "gates": gates} for task, gates in selector.stale_gate_blocked(backlog)
         ],
         "pending_gates": [
             {
@@ -362,6 +392,12 @@ def render_brief(
     cancelled_line = cancelled_dep_blocked_line(backlog)
     if cancelled_line:
         lines.append(f"⚠️ {cancelled_line}")
+
+    # 해소된 게이트를 기다리는 blocked (HARN-74 ③ 집행 지점) — clear 시점의 알림(①)을 사람이
+    # 놓쳐도 다음 세션이 본다. 위와 같은 이유로 stdout(반환 문자열)에 싣는다. 0건이면 침묵.
+    stale_gate_line = gate_stale_blocked_line(backlog)
+    if stale_gate_line:
+        lines.append(f"⚠️ {stale_gate_line}")
 
     for gate_id, days in overdue_gates(backlog, today):
         gate = backlog.gates[gate_id]
