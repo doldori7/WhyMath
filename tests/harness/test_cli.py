@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -1945,6 +1946,113 @@ class TestStaleBranchClassificationWiring:
         assert "판정 보류" in out
         assert "--unshallow" in out
         assert "미해결 장기 미머지 브랜치" not in out
+
+    def test_brief_forwards_pr_state_lookup_flags_to_render(self, bare_remote, monkeypatch, capsys):
+        """brief가_pr_state_lookup_ok_실패_사유를_render까지_전달한다 (HARN-78 배선 실재성)
+
+        `cmd_brief`가 `scan.pr_state_lookup_ok`/`pr_state_lookup_error`를 읽고도
+        `render_brief`에 안 넘기면, 화면은 상태 조회가 실패했는지 모른 채 예전 문구
+        ("처분은 해당 PR에서")를 계속 낸다 — "장치 존재 ≠ 배선"(OPS-10)의 이 태스크 축.
+        """
+        import remote_claims
+        import report
+
+        _, clone = bare_remote
+        mine = clone("brief-pr-state")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-1",
+                        ref="refs/remotes/origin/claude/pr-1",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=12.0,
+                        ahead=7,
+                        status="pr_filed",
+                        evidence="PR #846 (상태 미확인)",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=False,
+                pr_state_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정",
+            ),
+        )
+        captured_kwargs: dict = {}
+        original_render = report.render_brief
+
+        def spy(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original_render(*args, **kwargs)
+
+        monkeypatch.setattr(report, "render_brief", spy)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+
+        assert captured_kwargs.get("pr_state_lookup_ok") is False
+        assert "NoTokenError" in captured_kwargs.get("pr_state_lookup_error", "")
+        out = capsys.readouterr().out
+        assert "상태 미확인" in out
+        assert "처분은 해당 PR에서" not in out
+
+    def test_branches_cmd_reports_pr_closed_and_state_lookup_gap(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """branches_CLI가_PR닫힘과_상태_미확인을_화면에_낸다 (HARN-78 배선 실재성)
+
+        CI 진입점(`cmd_branches`)이 `pr_closed`를 별도 태그로 안 내거나 상태 미확인
+        사실을 삼키면, 이 축의 정본화(remote_claims)는 있는데 CI가 보는 화면에는
+        여전히 예전 3~4분류만 나온다.
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-pr-closed")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        now = datetime.now(timezone.utc)
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="gates/deploy-environment-approval",
+                        ref="refs/remotes/origin/gates/deploy-environment-approval",
+                        last_commit_at=now,
+                        age_days=26.0,
+                        ahead=3,
+                        status="pr_closed",
+                        evidence="PR #967 닫힘(미머지)",
+                    ),
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-2",
+                        ref="refs/remotes/origin/claude/pr-2",
+                        last_commit_at=now,
+                        age_days=13.0,
+                        ahead=9,
+                        status="pr_filed",
+                        evidence="PR #847 (상태 미확인)",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=False,
+                pr_state_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정",
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "PR 닫힘(미머지): 1건" in out
+        assert "[PR-닫힘] gates/deploy-environment-approval — PR #967 닫힘(미머지)" in out
+        assert "PR 열림/닫힘 조회 미수행" in out and "NoTokenError" in out
 
 
 class TestBatchBlobParsing:
