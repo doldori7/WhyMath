@@ -425,6 +425,25 @@ class GenerationLog(BaseModel):
         description="출력 토큰 수",
         ge=0,
     )
+    cache_read_input_tokens: int | None = Field(
+        default=None,
+        description=(
+            "프롬프트 캐시에서 *읽힌* 프리픽스 토큰 수(EOS-99 적중 축). `input_tokens`와 "
+            "**합산 관계가 아니라 배타 관계**다 — Anthropic은 캐시 적중분을 input_tokens에서 "
+            "빼고 여기에 따로 센다. None=미기록(캐시 개념이 없는 로컬 Ollama 경로·응답 미노출·"
+            "이 컬럼 신설 이전 구행)이고 0=읽었는데 적중 0(실측)이다. 캐싱 플래그가 켜진 "
+            "회차에서 0이 이어지면 '켰지만 작동 안 함'이다(작동 신호 없는 알고리즘 부착 금지)."
+        ),
+        ge=0,
+    )
+    cache_creation_input_tokens: int | None = Field(
+        default=None,
+        description=(
+            "프롬프트 캐시에 *쓰인* 프리픽스 토큰 수(EOS-99 — 첫 회차 호출에서 발생·약 1.25배 "
+            "과금). 의미 규약은 `cache_read_input_tokens`와 동일(None=미기록·0=실측 0)."
+        ),
+        ge=0,
+    )
     cost_usd: float | None = Field(
         default=None,
         description="호출 비용(USD) — DECIMAL(8,4)",

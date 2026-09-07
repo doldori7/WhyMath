@@ -543,3 +543,105 @@ class TestUsageCapture:
         assert out.usage is not None
         assert out.usage.input_tokens is None
         assert out.usage.output_tokens is None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 프롬프트 캐시 토큰 판독 (EOS-99 ① — 켰다는 사실 ≠ 적중했다는 사실)
+#
+# `anthropic_prompt_caching`을 켜면 요청에 `cache_control`이 실리지만, **적중 여부는
+# 응답 usage에만 있다.** 이 두 필드를 안 읽으면 플래그를 켠 상태와 캐시가 실제로 작동하는
+# 상태가 코드에서 구분되지 않는다(짧은 프리픽스는 최소 토큰 미만이라 조용히 무효).
+# ──────────────────────────────────────────────────────────────────────────
+class TestPromptCacheUsageCapture:
+    async def test_dict_cache_tokens_captured(self) -> None:
+        """dict usage의 캐시 2종을 실측 그대로 포착한다(적중 회차)."""
+        msg = _dict_message("42") | {
+            "usage": {
+                "input_tokens": 20,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 2048,
+                "cache_creation_input_tokens": 0,
+            }
+        }
+        provider = AnthropicProvider(
+            client=FakeAnthropicClient(message_response=msg), settings=_model_settings()
+        )
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.cache_read_input_tokens == 2048
+        assert out.usage.cache_creation_input_tokens == 0
+
+    async def test_object_cache_tokens_captured(self) -> None:
+        """pydantic 객체 스타일 usage(실 SDK anthropic.types.Usage 형태)도 포착한다."""
+
+        class _Usage:
+            input_tokens = 11
+            output_tokens = 3
+            cache_read_input_tokens = 0
+            cache_creation_input_tokens = 4096
+
+        msg = _ObjMessage([_Block("text", "본문")])
+        msg.usage = _Usage()  # type: ignore[attr-defined]
+        provider = AnthropicProvider(
+            client=FakeAnthropicClient(message_response=msg), settings=_model_settings()
+        )
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.cache_read_input_tokens == 0
+        assert out.usage.cache_creation_input_tokens == 4096
+
+    async def test_absent_cache_fields_are_none_not_zero(self) -> None:
+        """캐시 필드가 **없는** 응답 → None(미측정)이지 0(실측 0)이 아니다.
+
+        이 방향이 이 태스크의 급소다. 부재를 0으로 접으면 캐시 개념이 없는 provider·구버전
+        SDK 응답이 '적중 0%'로 보고되고, 그러면 '켰지만 작동 안 함' 신호가 상시 켜져 습관화된다.
+        """
+        msg = _dict_message("42") | {"usage": {"input_tokens": 12, "output_tokens": 34}}
+        provider = AnthropicProvider(
+            client=FakeAnthropicClient(message_response=msg), settings=_model_settings()
+        )
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.input_tokens == 12  # 다른 축은 정상 판독(스캔 0건 방지)
+        assert out.usage.cache_read_input_tokens is None
+        assert out.usage.cache_creation_input_tokens is None
+
+    async def test_malformed_cache_values_coerced_to_none(self) -> None:
+        """캐시 값이 비정상 타입(str·bool·음수)이면 None — 토큰 축과 같은 방어 규약."""
+        msg = _dict_message("42") | {
+            "usage": {
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "cache_read_input_tokens": True,
+                "cache_creation_input_tokens": -7,
+            }
+        }
+        provider = AnthropicProvider(
+            client=FakeAnthropicClient(message_response=msg), settings=_model_settings()
+        )
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.cache_read_input_tokens is None
+        assert out.usage.cache_creation_input_tokens is None
+
+    def test_sdk_surface_exposes_cache_fields(self) -> None:
+        """실물 SDK의 `Usage`에 우리가 읽는 두 필드가 **실재**하는지 확인한다.
+
+        CLAUDE.md "외부 SDK 표면을 시임(가짜) 테스트만으로 정합 선언 금지" — 위 테스트는
+        전부 우리가 만든 가짜 응답이라, 필드 이름을 틀려도 자기들끼리 초록이다. SDK가 없는
+        환경(hermetic 단위 CI)에서는 건너뛴다.
+        """
+        anthropic_types = pytest.importorskip("anthropic.types")
+
+        fields = set(anthropic_types.Usage.model_fields)
+
+        assert "cache_read_input_tokens" in fields
+        assert "cache_creation_input_tokens" in fields
