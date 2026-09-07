@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: docs
-status: in_progress
+status: review
 priority: 1
 eos_priority: P1
 owner: claude
