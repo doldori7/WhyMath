@@ -21,11 +21,17 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/privacy/erasure.py
   - src/backend/whymath_backend/privacy/export.py
+  - src/backend/whymath_backend/api/me.py
+  - tests/backend/_external_store_evidence.py
   - tests/backend/privacy/test_erasure.py
   - tests/backend/privacy/test_export.py
+  - tests/backend/privacy/test_external_store_evidence.py
   - tests/backend/api/test_me_erasure.py
   - tests/backend/api/test_me_export.py
   - docs/reviews/eos_privacy_gap_analysis.md
+  - docs/architecture/04a_wh1_tutoring_harness.md
+  - backlog/inventory/feature_inventory_v2.yaml
+  - backlog/inventory/feature_inventory_v2.csv
 session: claude/test-driven-development-03elxp
-notes: "출처: docs/reviews/unmerged_branch_audit_2026-09-07_r2.md §5 (stray-code 8회차 — q8tvcx 커버리지 정독 risk=high). 원 등재 근거 = q8tvcx의 data_platform_module_gap_review_r2.md C1(2026-08-04): 매니페스트가 없는 store 2개를 선언하고 있는 store 1개를 누락 — 양방향 오류이며 누락 쪽이 중대. pending_external은 API 응답에 실리지 않고 ops 로그로만 나간다(수신자 = 운영자). 소유 태스크 OPS-38(OPS-19 회수)의 acceptance 어디에도 없어 OPS-38 done 시 소실될 상태였다. 보안·법령 관련 고립분 → priority 1(stray-code 규칙). 원 브랜치 q8tvcx는 OPS-38 회수 완료 전 삭제 금지."
+notes: "출처: docs/reviews/unmerged_branch_audit_2026-09-07_r2.md §5 (stray-code 8회차 — q8tvcx 커버리지 정독 risk=high). 원 등재 근거 = q8tvcx의 data_platform_module_gap_review_r2.md C1(2026-08-04): 매니페스트가 없는 store 2개를 선언하고 있는 store 1개를 누락 — 양방향 오류이며 누락 쪽이 중대. pending_external은 API 응답에 실리지 않고 ops 로그로만 나간다(수신자 = 운영자). 소유 태스크 OPS-38(OPS-19 회수)의 acceptance 어디에도 없어 OPS-38 done 시 소실될 상태였다. 보안·법령 관련 고립분 → priority 1(stray-code 규칙). 원 브랜치 q8tvcx는 OPS-38 회수 완료 전 삭제 금지.\n\n[정정 2026-09-07] paths ['src/backend/whymath_backend/privacy/erasure.py', 'src/backend/whymath_backend/privacy/export.py', 'tests/backend/privacy/test_erasure.py', 'tests/backend/privacy/test_export.py', 'tests/backend/api/test_me_erasure.py', 'tests/backend/api/test_me_export.py', 'docs/reviews/eos_privacy_gap_analysis.md'] → ['tests/backend/_external_store_evidence.py', 'tests/backend/privacy/test_external_store_evidence.py', 'src/backend/whymath_backend/api/me.py', 'docs/architecture/04a_wh1_tutoring_harness.md', 'backlog/inventory/feature_inventory_v2.yaml', 'backlog/inventory/feature_inventory_v2.csv']: SEC-32 구현 범위 실측 반영: ④ 계약을 tests/backend/_external_store_evidence.py(배포 근거 조회)와 그 변별력 테스트로 분리 신설, api/me.py의 store 열거 docstring·ops 로그 주석 정합, 설계 정본 04a의 3-store 열거에 정정 노트 추가(허위 전제 승계 차단), 테스트 함수 증가로 EOS 인벤토리 재생성(--write)\n\n[정정 2026-09-07] paths ['tests/backend/_external_store_evidence.py', 'tests/backend/privacy/test_external_store_evidence.py', 'src/backend/whymath_backend/api/me.py', 'docs/architecture/04a_wh1_tutoring_harness.md', 'backlog/inventory/feature_inventory_v2.yaml', 'backlog/inventory/feature_inventory_v2.csv'] → ['src/backend/whymath_backend/privacy/erasure.py', 'src/backend/whymath_backend/privacy/export.py', 'src/backend/whymath_backend/api/me.py', 'tests/backend/_external_store_evidence.py', 'tests/backend/privacy/test_erasure.py', 'tests/backend/privacy/test_export.py', 'tests/backend/privacy/test_external_store_evidence.py', 'tests/backend/api/test_me_erasure.py', 'tests/backend/api/test_me_export.py', 'docs/reviews/eos_privacy_gap_analysis.md', 'docs/architecture/04a_wh1_tutoring_harness.md', 'backlog/inventory/feature_inventory_v2.yaml', 'backlog/inventory/feature_inventory_v2.csv']: 직전 amend의 --path가 append가 아니라 replace라 원 7건이 소실됐다 — 원 7건 + 신규 6건 전체를 다시 명시해 복원한다(대장 손편집 금지 규칙 준수)"
 updated: 2026-09-07

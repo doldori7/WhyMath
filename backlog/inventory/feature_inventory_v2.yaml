@@ -7185,7 +7185,7 @@ features:
     db_model_modules: 4
     coupling_count: 13
     test_files: 24
-    test_functions: 853
+    test_functions: 855
     matrix:
       A_subject: 0
       B_db: 2
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 328
-    test_functions: 5916
+    test_functions: 5920
     matrix:
       A_subject: 3
       B_db: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 191
-    test_functions: 2917
+    test_functions: 2921
     matrix:
       A_subject: 1
       B_db: 0
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 196
-    test_functions: 2927
+    test_functions: 2931
     matrix:
       A_subject: 3
       B_db: 0
@@ -8995,7 +8995,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: invariant"
     migration_risk: High
-    loc: 870
+    loc: 915
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 15
@@ -9004,8 +9004,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 14
     coupling_count: 21
-    test_files: 15
-    test_functions: 136
+    test_files: 17
+    test_functions: 151
     matrix:
       A_subject: 1
       B_db: 3

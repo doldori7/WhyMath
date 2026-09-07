@@ -3120,7 +3120,7 @@ async def erase_my_account(
     응답은 *요약 영수증*(user_id·총 삭제 행수)만 — 내부 테이블 구조는 노출하지 않는다. 삭제 후
     본인 토큰/세션도 사라지므로(refresh_token_session 포함) 이후 요청은 재인증이 필요하다.
 
-    RDB 밖 store(ClickHouse·S3·Redis)는 이 트랜잭션이 못 지운다 — `report.pending_external`
+    RDB 밖 store(Redis·Langfuse)는 이 트랜잭션이 못 지운다 — `report.pending_external`
     매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 삭제가 필요함을 가시화한다(누락 은폐
     금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
     """
@@ -3133,7 +3133,7 @@ async def erase_my_account(
     user_id = user.user_id
     report = await erase_user(session, user_id=user_id)
     await session.commit()
-    # ops 가시화 — RDB 밖 store(ClickHouse·S3·Redis)는 이 TX가 못 지운다(report.pending_external).
+    # ops 가시화 — RDB 밖 store(Redis·Langfuse)는 이 TX가 못 지운다(report.pending_external).
     # 누락을 조용히 넘기지 않도록 알림(store명·user_id만·키 패턴 미로깅) — 별도 삭제 필요.
     _logger.info(
         "개인정보 삭제권 실행: user=%s · PG %d행 삭제 · 외부 store %d곳 별도 삭제 필요(%s)",
@@ -3163,7 +3163,7 @@ async def export_my_data(
     user_profile을 모아 반환한다. **부분 export**임을 `not_included`로 정직히 고지한다(대화·시계열·
     외부 store 등 미포함·후속). per-user 본인 데이터라 HTTP 노출이 맞다(전역 집계 아님).
 
-    외부 store(ClickHouse·S3·Redis)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
+    외부 store(Redis·Langfuse)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
     매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 export가 필요함을 가시화한다(누락 은폐
     금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
 
