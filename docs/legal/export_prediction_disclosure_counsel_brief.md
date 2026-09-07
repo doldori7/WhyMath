@@ -502,6 +502,10 @@ $Verdict = Read-Host "변호사 회신 요약(결론 + 회신일 + 기록 문서
 # 게이트 clear — 위 창에서 이어서 실행($Verdict가 살아 있는 같은 창).
 # if 가드를 쓰는 이유: 위 입력이 비었을 때 이 줄이 그대로 실행되는 것을 막는다
 # (PowerShell은 붙여넣기 각 줄을 독립 실행하므로 throw로는 후속 줄이 멈추지 않는다).
+# UTF-8 강제 — 한국어 Windows에서 python stdout이 콘솔을 벗어나면 로케일(cp949)로
+# 인코딩돼 UnicodeEncodeError로 죽는다. 이 게이트의 제목·notes가 전부 한국어라 직격이다.
+$env:PYTHONUTF8 = "1"
+
 if ($Verdict) {
   python scripts\harness\backlog.py gates clear G-export-prediction-disclosure --as kiki --evidence "$Verdict" --no-base "변호사 서면 회신 — 판정 근거가 커밋·PR이 아니라 외부 전문가의 법률 의사표시"
 }
@@ -509,6 +513,10 @@ if ($Verdict) {
 
 ```powershell
 # 자가검증 — 대장에 실제로 반영됐는지 확인한다.
+# 아래는 python 출력을 **파이프**로 넘기므로 UTF-8 강제가 필수다(위 블록과 다른 창에서
+# 실행할 수도 있어 여기서 다시 세운다 — 환경변수는 창 단위로만 산다).
+$env:PYTHONUTF8 = "1"
+
 $Row = python scripts\harness\backlog.py gates list | Select-String "G-export-prediction-disclosure"
 if ($Row -match "\(cleared\)" -and $Row -match "clear 주체: kiki") {
   Write-Host "OK — cleared 반영 + 주체 kiki 기록됨"
