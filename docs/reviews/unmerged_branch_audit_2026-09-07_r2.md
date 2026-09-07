@@ -151,7 +151,7 @@ git diff --name-only 98925b0e..origin/main -- backlog/tasks/
 | (d) retention 폴백 | `privacy/retention.py:80` `(ProblemAttempt, "started_at")`·`purge_expired_records`는 `getattr(model, column) < cutoff`만 — 폴백 없음·docstring이 "NULL은 파기 대상 아님(보수적)"을 명문화. `LearningSession` CASCADE 경로는 coach 경로가 `session_id`를 아예 안 넣고 main에 LearningSession ORM 생성 지점 0건이라 실서빙 성립 미확인 | 실패 |
 
 **7회차가 꼽지 않은 독자 2건 추가**: `l2/learning_metrics_rollup.py:596-612` `_fetch_attempts`가 `started_at.is_not(None)`으로 NULL 행 전건 제외(**COLLAB-03 일별 롤업**이 서빙 적재분에 대해 0건 집계) · `l2/concept_diagnosis.py:170` `order_by(started_at.desc().nulls_last(), attempt_id)`(**SOL-02 앵커 '최근순'**이 UUID 순서로 퇴화). 기존 8건(`wh1_evaluation.py` 시간창 4·정렬 3·주석 1)은 `GET /v1/me/harness-metrics`·`/growth-evidence`가 since/until을 그대로 전달하므로 학생 API 2곳에서 가짜 NO_DATA다.
-브랜치 수정(27faee2d)은 coach.py +13(`started_at=dialogue.started_at`)·me.py +20/-2(`now−timedelta(duration_seconds)` 역산)·테스트 +255이며 main 비조상. **PED-37(미머지)의 전제와 paths는 정합**하며 재등재하지 않는다 — 다만 PED-37 paths에 `l2/learning_metrics_rollup.py`·`l2/concept_diagnosis.py`는 없으므로(수정 대상이 아니라 독자이므로 무방) 회수 시 변별력 테스트가 그 두 독자도 덮으면 좋다(권고·집행 아님).
+브랜치 수정(27faee2d)은 coach.py +13(`started_at=dialogue.started_at`)·me.py +20/-2(`now−timedelta(duration_seconds)` 역산)·테스트 +255이며 main 비조상. **PED-37(미머지)의 전제와 paths는 정합**하며 재등재하지 않는다. 단 **PED-37 acceptance ①의 함수명 결함**(비평 #2): main writer를 `api/coach.py::_apply_completion`으로 지목했는데 그것은 **브랜치**의 함수명(1113행)이고 main은 `_complete_problem`(983행 def·1012행 `ProblemAttemptORM` 생성)이다 — 회수 세션이 문면대로 grep하면 0건. #1020 소유라 무접촉·코멘트로 통보 — 다만 PED-37 paths에 `l2/learning_metrics_rollup.py`·`l2/concept_diagnosis.py`는 없으므로(수정 대상이 아니라 독자이므로 무방) 회수 시 변별력 테스트가 그 두 독자도 덮으면 좋다(권고·집행 아님).
 
 ### 4.3 7n9n72 alembic 좌석 — 7회차 공백 **닫힘**
 
@@ -271,6 +271,8 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 | 착수 세션 | CUR-07 done 전이 + HARN-34 notes 정정 | HARN-80 착지 후 |
 | 착수 세션 | paths 보강 4건(MISC-05 `ops/`·MOB-18·ARCH-30·PB-08 `test_problems_integration.py`) | HARN-57(`--path` amend·PR #1021) 착지 후 |
 | Kiki | MGMT-03 결정 A(변호사)·B 분리 착수 여부 | 실 OAuth 배선 전(재확인 지점) |
+| Kiki | **실 운영 DB의 `problem_attempt.started_at` NULL 행 수 조회**(읽기 전용) — PED-37 priority 1·파기 소급 게이트의 실피해 규모를 정하는 유일한 입력. 세션은 DB에 닿을 수 없다 | 다음 Phaiakes9 세션(명령은 PR 본문·최종 보고에 동봉) |
+| Kiki | **#858(eos-close 라벨·lic-01-mvp-2·코드 23파일) 닫기 전 파일 단위 대조** — triage §5.1 "#861로 전부 착지" 주장을 `git diff origin/main origin/claude/lic-01-rights-provenance-mvp-2 -- src/backend/whymath_backend/l1/rights src/backend/whymath_backend/api/rights.py`로 재검증 후 닫는다. 닫히는 순간 브랜치는 고아(HARN-78 사각) | PR 처분 시 |
 
 ## 8. 정직한 공백
 
@@ -282,7 +284,21 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 - **HARN-11 미머지 done 필터의 역설**: 폐기 판정 브랜치(trjg5x)·회수 대기 브랜치(7n9n72)의 done 사본이 살아 있는 main todo(PATH-03·ADMIN-02·좌석 8건)를 `next`에서 가린다 — 브랜치 삭제와 코드 회수가 서로 당기는 구조. MEMORY 2026-09-06 부수 실측·HARN-74 notes에 이미 관측돼 있어 이 감사는 재등재하지 않고 PATH-03 amend에 "착수는 명시 start"로만 적었다.
 - **e98dw4의 S4-16 중복 구현 폐기 판정**이 main 어디에도 기록돼 있지 않다 — S4-59 ⑤(a)가 기록 의무로 승계.
 - **claim 대장 잔류**(`status-5kvqkv`)는 7회차와 동일·하네스 소관.
-- 완전성 비평 결과는 §8.1에 후기재.
+### 8.1 완전성 비평(에이전트 25번째)이 잡은 것 — 수용 6 · 기각 1
+
+| # | 지적 | 판정 | 조치 |
+|---|---|---|---|
+| 1 | **7n9n72 좌석 "커버" 판정의 근거가 미머지 PR #1020에만 있다** — main 기준 좌석 8건 중 7n9n72를 언급하는 YAML은 MISC-01·MISC-03(8회차 amend)뿐이고 ASM-06·MISC-02·MISC-05·MISC-06·PB-02·PED-14·S3-33·S3-34는 **0건**. 잔여 분석이 PED-37에는 "미머지"를 적용하면서 고립 참조 7건은 충족으로 셌다 — "미머지 존재를 충족으로 단정 금지"의 자기 위반 | **수용** | §4.2 표에 main 기준 열을 명시(아래 정정문). 실질 보호: 7n9n72는 어떤 삭제 배치 목록에도 없어 삭제는 사람이 목록에 추가해야만 일어난다 — 그래도 #1020 머지 전까지 6건의 좌석 참조는 **사람 기억에만** 의존한다. #1020이 닫히면 다음 회차가 §4.2 표로 amend 8건을 재생산해야 한다 |
+| 2 | **PED-37(#1020) acceptance ①이 main에 없는 함수명 `_apply_completion`을 지목** — main writer는 `_complete_problem`(coach.py:983 def·1012 ORM 생성). 회수 세션이 문면대로 찾으면 0건 | **수용** — 7회차 근거 표기 결함 3번째 | PED-37은 #1020 소유라 무접촉. §4.4에 정정문 병기 + PR #1020 코멘트로 통보(§7.4) |
+| 3 | **e98dw4 f8c0e3b6의 이중 지위** — S3-28은 회수 원천으로, S4-16 축은 폐기 대상인데 main에는 전자만 | **수용** | **S3-28 amend**(S4-16 잔여 ~990줄 이식 금지·S4-59 ⑤(a)와 교차) |
+| 4 | MEMORY 슬라이스 75 글자 깨짐이 a3ysut·t608mk·azdnov에서 각 1건씩 **중복 계상**(같은 결함 1건) · 5t5lmv 커버리지만 반대로 "main 우세" 판정(오판) | **수용** | §5 low 6건 중 uncovered 합계는 실질 -2. 정정은 본 PR이 이미 함(MEMORY.md:91) |
+| 5 | **PR 소유 10건(#844~#893)의 구조적 사각** — 08-31 HARN-42 일괄 라벨(eos-rework 5·postpone 4·close 1) 이후 갱신 0·main 좌석 고립 참조 0. 특히 **#858(eos-close)이 코드 23파일**, #856은 브랜치명(lic-01)과 내용(S4-16/OPS-48)이 불일치해 이름 기반 감사가 오도됨. Kiki가 라벨대로 닫는 순간 고아 + HARN-78 사각과 결합 | **수용** | §8 "다음 회차 최우선"을 수치로 보강. 이 8회차 범위 밖(PR 소유는 각 PR이 처분) — 단 **#858 eos-close는 닫기 전에 파일 단위 대조가 선행**돼야 한다는 점을 §7.4에 Kiki 항목으로 |
+| 6 | 판정 기준 드리프트 — 로컬이 stale(#1020 head 93064664·PR #1025 신규) | **수용** | 재fetch 실측: #1020 신규 head는 `origin/main` 머지 커밋뿐(감사 내용 변경 0) · #1025(drives-utqafx: HARN-74·HARN-67·EOS-02 런북)는 이 브랜치와 MEMORY.md만 교차. main은 감사 중 3커밋 전진(0c988966) |
+| 7 | dydkkx 반박이 7회차 "53줄" 수치를 재측정하지 않고 통과시켰다 | **기각** — 두 반박자 모두 195파일 전건 `comm -23`으로 **21파일·53줄을 독립 재현**했고(§4.1), 내용 렌즈는 merge-base로 걸러 저작 27줄까지 좁혔다. 비평의 오탐 | 없음 |
+
+비평이 잡지 못한 것(비평 자신의 공백): started_at 버그의 **실 운영 DB 규모**(NULL 행 수·실사용자 존재)는 어느 축도 측정 못 함 — 읽기 전용 세션 범위 밖이라 §7.4 Kiki 항목으로 넘긴다.
+
+**§4.2 정정문(비평 #1 반영)**: 7n9n72 잔여의 좌석 대조에서 "7회차 좌석 amend에는 있음"이라 적은 6건(ASM-06·MISC-02·MISC-05·MISC-06·PB-02·PED-14, 그리고 S3-33·S3-34)은 **main 기준으로는 미커버**다. 8회차가 main 기준으로 실제 커버 상태를 만든 것은 MISC-01·MISC-03 2건뿐이며, 나머지 8건의 커버 여부는 PR #1020의 착지에 종속된다. 이 문서의 §5 총괄 "9건"에는 7n9n72가 포함되지 않았으므로(별도 §4.2), main 기준 미커버 좌석은 **9 + 8 = 17건**이 정확한 수다.
 
 ## 9. 검증 (전건 exit code — `-q`/`tail` 절단 없음)
 
