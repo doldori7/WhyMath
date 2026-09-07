@@ -278,6 +278,10 @@ python3 scripts/analysis/eos_core_adapter_boundary_scan.py --json out.json --mar
 
 ### 8.1 전이 도달 — EOS-67이 못 보는 축
 
+> ⚠️ **이 절의 수치는 2026-09-04 시점(EOS-84)이다.** EOS-89가 등록(push) 형태로 바꾸면서 전이
+> 도달 14 → 2, 합성 루트 경유 14 → 0으로 재실측됐다 — 최신 값은 **§9.2-b**를 보라. 이 절을
+> 덮어쓰지 않는 이유는 §8이 *그때의 측정 기록*이기 때문이다(판정에는 시점이 붙는다).
+
 import-linter 계약은 **직접 import**만 판정한다(§4 "정직한 공백"). "수학을 제거하면 함께 깨지는
 Core"는 *경유* 의존까지 따라가야 보인다. CORE 266모듈 각각에서 import 간선을 BFS로 따라 처음 만나는
 ADAPTER까지의 경로를 전수 산출했다.
@@ -368,8 +372,10 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 > §3.8은 두 그림을 준다. **권장**: `Application → EOS Core → Subject Contract → Math Adapter`.
 > **실행 시 어댑터가 Core에 등록되는 형태라면** 실제 의존 역전은 `EOS Core → Subject Interface ← Math Adapter`가
 > 더 정확하다 — *Core는 Math Adapter 구현체를 몰라야 한다*. 이 절은 그 문장을 네 화살표와 "등록 vs 풀"로
-> 나눠 잰 결과다. 게이트 = `tests/infra/test_eos_dependency_direction.py`(19건). **정본화 ≠ 집행**: 직접
+> 나눠 잰 결과다. 게이트 = `tests/infra/test_eos_dependency_direction.py`(22건). **정본화 ≠ 집행**: 직접
 > import 축은 EOS-67 계약이 이미 강제하고(schema가 source), 지연 import·이름·문자열·pull 지점은 이 테스트가 본다.
+>
+> **2026-09-07 갱신(EOS-89)**: 9.2를 등록(push) 전환 **이후** 수치로 재실측했다. 9.1은 그대로다.
 
 ### 9.1 네 화살표 실측
 
@@ -382,28 +388,72 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 | Core → Adapter 구현체(이름·문자열) | **금지** | CORE 코드 **0**(docstring 제외·`composition`은 정의상 제외) | `test_core_code_never_names_an_adapter_implementation` |
 | Core → Application | 금지 | CORE **0**. INFRA 운영 도구 8모듈(`ops.*` 4·`privacy.*` 3·`harness.*` 1)은 `api._crypto`·`api._auth`·`api.me` 등 헬퍼를 import — Application 쪽에 선 도구라 §3.8 대상 아님(9.2) | `test_core_never_imports_the_application` |
 
-### 9.2 등록(push) vs 풀(pull) — 현행은 §3.8이 "덜 정확하다"고 한 형태다
+### 9.2 등록(push) vs 풀(pull) — **EOS-89로 등록 형태가 됐다** (2026-09-07 재실측)
 
-| 측정 | 값 |
-|---|---:|
-| `app.py`가 `app.state`에 등록하는 키 | 13 (provider·cache·trace·queue·metrics·probes·counters…) |
-| 그중 **과목 능력(SubjectAdapter·선택층 5종)** | **0** |
-| 합성 루트에서 기본 구현을 **끌어오는(pull)** Core 모듈 | **3** — `api.coach`(2팩토리) · `l3.pedagogy.slot_generator`(1) · `l3.render.adapters`(2) |
-| 필수층 `MathSubjectAdapter`의 프로덕션 인스턴스화 | **0** (자기 적합성 증명 + 테스트만) |
+| 측정 | EOS-88(전) | EOS-89(후) |
+|---|---:|---:|
+| `app.py`가 `app.state`에 등록하는 키 | 13 | **18** |
+| 그중 **과목 능력**(`ExpressionEquivalence`·`FinalAnswerVerifier`·`AssessmentAnswerVerifier`·`ExpressionSeal`·`AnswerFormVerifier`) | **0** | **5** |
+| 합성 루트에서 기본 구현을 **끌어오는(pull) CORE** 모듈 | **3** | **0** |
+| 합성 루트를 소비하는 **비-CORE** 모듈(엔트리포인트) | 0 | **2** — `app` · `harness.concept_assessment_index` |
+| layers 계약의 `-> composition` 면제 줄 | 2 | **0** |
+| 필수층 `MathSubjectAdapter`의 프로덕션 인스턴스화 | 0 | **0** (변화 없음 — 선택층 5종만 등록했다) |
 
-**읽는 법**: 현행은 *Core가 합성 루트를 안다*(service-locator). 어댑터는 Core에 등록되지 않고, Core가
-`composition.default_*()`를 불러 기본 구현을 받아 온다. 어댑터 **구현체**를 모른다는 조건은 지키지만
-(합성 루트 뒤에 숨어 있다), §3.8의 "등록 형태 → Core→Interface←Adapter" 그림은 아직 없다. 3개 pull
-지점 중 `l*` 2개는 EOS-69가 layers 계약 `ignore_imports`에 간선 단위로 적어 둔 "정직한 잔여"이고,
-`api.coach`는 최상단 계층이라 계약 위반은 아니다. 테스트는 이 3개를 **집합으로 동결**하고(늘면 RED·
-줄면 ratchet), `app.py`가 합성 루트를 import하지 않는 현행도 잠근다 — EOS-89가 등록 형태로 바꾸면 그
-잠금이 의도적으로 깨지고 두 기준선을 함께 갱신한다(두 형태의 소리 없는 공존 금지).
+**pull 3지점이 각각 어떻게 사라졌나**
 
-**상환 방향(EOS-89)**: `app.py`(Application)가 `composition.default_*()`를 부팅 시 한 번 불러 `app.state`에
-인터페이스 타입으로 등록 → `api.coach`는 `Depends`로 읽음(`_get_judge_seam_deps` 선례) → `l3` 두 모듈은
-이미 있는 `equivalence=`·`seal=`·`verifier=` 파라미터로 상류에서 받음 → pull 3→0, layers `ignore_imports`
-2줄은 `unmatched_ignore_imports_alerting`이 지우라고 말한다. 주의: EOS-86이 추가하는 `StepChainVerifier`
-팩토리도 같은 등록 경로를 타야 한다(pull 4번째 지점을 만들지 않는다).
+| 자리 | 전(pull) | 후(push) |
+|---|---|---|
+| `api.coach` | `default_final_answer_verifier()`·`default_answer_form_verifier()` 직접 호출 | `SubjectCapabilityDeps`(`Depends(_get_subject_capabilities)`) → `_resolve_completion` → `_final_answer_state`. `_get_judge_seam_deps` 선례와 동형이되 **폴백 없음**(미등록은 `AttributeError`) |
+| `l3.render.adapters` | `default_expression_seal()`·`default_assessment_answer_verifier()` 폴백 | 어댑터 **생성자 주입**(`_CapabilityBackedAdapter`). 상류 = `registry.get_adapter(strategy, seal=…, assessment_verifier=…)` ← `l4.content_supply.supply(...)` ← `api.study`(app.state) |
+| `l3.pedagogy.slot_generator` | `default_expression_equivalence()` 폴백 | 호출부 파라미터(`equivalence=`). 폴백 대신 **fail-loud**: `verification` 주장이 있는데 미주입이면 `LookupError` |
+
+**호출부 4곳의 상류 실측** — acceptance ③이 물은 "상류를 갖지 못하는 곳"의 답이다.
+
+| 호출부 | 능력이 실제로 필요한가 | 상류 |
+|---|---|---|
+| `l4.content_supply` (렌더 경로) | 필요 | **있다** — `api.study` → `app.state` 등록분 |
+| `l3.pedagogy.review` | payload에 `verification` 주장이 있을 때만 | **프로덕션 상류 없음**(`test_zero_production_callers_governance`가 `l3/pedagogy/` 밖 소비자 0을 동결). 현 상류는 테스트뿐이며, 그래서 파라미터를 **선택**으로 두고 필요할 때 터지게 했다 |
+| `l3.pedagogy.example_generator` | **불필요** — 생성 payload에 `verification` 키가 구조적으로 없다 | 없어도 된다(능력을 안 부른다) |
+| `l3.pedagogy.diag_item_projector` | **불필요** — atom_probe payload도 마찬가지 | 없어도 된다 |
+
+임시 처방의 근거: 뒤 세 곳에 능력을 **필수**로 요구하면, 쓰지도 않을 능력을 구하려고 그들이
+합성 루트를 import하게 되고 pull 지점이 자리만 옮겨 되살아난다. 그렇다고 기본값 폴백을 두면
+미주입이 조용히 통과한다. 그래서 **선택 인자 + 필요한 순간 `LookupError`**로 갈랐다
+(`slot_generator._require_equivalence` docstring이 그 판단을 담고 있다). 이 세 모듈이 프로덕션
+상류를 갖게 되는 날, 그 상류는 `api.study`처럼 `app.state` 등록분을 내려보내야 한다.
+
+**엔트리포인트 2곳은 왜 남았나**: 합성 루트는 정의상 *프로세스가 시작되는 자리*가 소비한다.
+`app`(ASGI 팩토리)과 `harness.concept_assessment_index`(렌더 성공률 측정 CLI·`main()` 보유)가
+그 자리다 — CLI는 어댑터를 자기가 조립하므로 능력이 필요한데 그것을 줄 상류가 없다(자기 자신이
+시작점이다). 이 2건은 "면제"가 아니라 **회계**다: `NON_CORE_COMPOSITION_CONSUMERS`가 정확한
+집합 일치를 요구하므로 어느 모듈이든 조용히 늘어나면 RED이고, 열거된 모듈이 실제로
+엔트리포인트인지(`main()` 보유 여부)까지 소스로 검사한다.
+
+**⚠️ EOS-86 주의(변함없음)**: `StepChainVerifier` 팩토리도 이 등록 경로를 타야 한다. Core가
+`composition.default_step_chain_verifier()`를 직접 부르면 pull 4번째 지점이 부활한다. 강제 장치는
+두 개다 — `api/_subject_capability_state.SUBJECT_CAPABILITY_KEYS`(등록 키 목록)와
+`test_registered_capability_keys_match_the_composition_factories`(팩토리 수 = 등록 키 수). 팩토리를
+추가하고 등록을 안 하면 후자가 먼저 RED가 된다.
+
+### 9.2-b 전이 도달 재실측 — 합성 루트 경유가 사라졌다
+
+`scripts/analysis/eos_core_boundary_probe.py` 재실행(2026-09-07):
+
+| 측정 | §8.1(EOS-84) | EOS-89 후 |
+|---|---:|---:|
+| CORE 모집단 | 266 | **267** (`api._subject_capability_state` 신설) |
+| 전이 도달(CORE →…→ ADAPTER) | 14 | **2** |
+| 그중 합성 루트(`composition`) 경유 | 14 / 14 | **0** |
+| 잔여 누수(교체점을 막아도 닿음) | 2 | **2** (변화 없음 — `api.coach`·`api.ocr_handoff` → `l4.solution_coaching`) |
+| 수학 제거 후 온전히 남는 CORE | 252 / 266 (95%) | **265 / 267 (99%)** |
+
+**읽는 법**: §8.1의 14건은 "설계된 교체점을 지나는 정상 도달"이었다. 등록 형태에서는 그 정적
+간선 자체가 없어져 도달이 **아예 계측되지 않는다** — 능력이 `app.state`를 통해 런타임에 흐르기
+때문이다. 그래서 14 → 0이 됐고, 남은 2는 EOS-84가 이미 지목한 *진짜* 잔여(`l4.solution_coaching`
+MIXED)로 이 태스크 범위 밖이다. 다만 **이 감소는 결합이 사라진 것이 아니라 정적 계측의 시야
+밖으로 옮겨간 축을 포함한다** — 프로브 자신의 공백(§9.3 "정적 import다·`app.state` DI는 안
+보인다")이 여기서 그대로 작동한다. 그 축을 보는 도구는 인벤토리 v2의 DI 다리이며, 실제로
+`di_keys_bridged`가 20 → 30으로 늘어 같은 배선을 반대편에서 계측한다.
 
 ### 9.3 재현·공백
 

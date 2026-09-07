@@ -55,10 +55,24 @@ ADAPTER_IMPL_NAMES: frozenset[str] = frozenset(
 )
 ADAPTER_IMPL_MODULE_TOKEN = "subject_adapter_math"
 
-# 합성 루트에서 기본 구현을 *끌어오는* Core 모듈 — §3.8의 "덜 정확한" 형태. 줄이는 방향으로만.
-CORE_PULL_BASELINE: frozenset[str] = frozenset(
-    {"api.coach", "l3.pedagogy.slot_generator", "l3.render.adapters"}
+# 합성 루트에서 기본 구현을 *끌어오는* **CORE** 모듈 — §3.8의 "덜 정확한" 형태. 줄이는 방향으로만.
+# EOS-89로 0이 됐다: `api.coach`는 app.state Depends로, `l3.render.adapters`는 어댑터 생성자
+# 주입으로, `l3.pedagogy.slot_generator`는 호출부 파라미터로 각각 바뀌었다.
+CORE_PULL_BASELINE: frozenset[str] = frozenset()
+
+# 합성 루트를 소비해도 되는 **비-CORE** 모듈 — 프로세스가 시작되는 자리(=합성 루트의 정의).
+# 여기 있는 것은 "허용"이 아니라 **회계**다: 이 집합이 정확히 이 값이어야 통과하므로, 어느
+# 모듈이든 조용히 합성 루트를 쓰기 시작하면 RED가 된다(늘어도·줄어도).
+#   · `app`      — ASGI 앱 팩토리. 부팅 시 능력 5종을 app.state에 등록한다(EOS-89 ①).
+#   · `harness.concept_assessment_index` — 렌더 성공률 측정 CLI(`main()` 보유). 어댑터를 직접
+#     조립하므로 능력이 필요하고, 그 능력을 줄 상류가 없다(프로세스의 시작이 자기 자신이다).
+NON_CORE_COMPOSITION_CONSUMERS: frozenset[str] = frozenset(
+    {"app", "harness.concept_assessment_index"}
 )
+
+# app.py가 `app.state`에 올려야 하는 과목 능력 키 상수명 — `api/_subject_capability_state.py`가
+# 정본이고, 이 목록은 그 정본과 대조된다(이름을 두 곳에 손으로 적어 두지 않는다).
+SUBJECT_CAPABILITY_STATE_MODULE = "api._subject_capability_state"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -239,7 +253,8 @@ def test_core_never_imports_the_application(core_modules: list[str]) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _pull_points() -> set[str]:
+def _composition_importers() -> set[str]:
+    """`whymath_backend.composition`을 import하는 모듈 전부(합성 루트 자신·어댑터 제외)."""
     out: set[str] = set()
     for mod, path in _all_modules().items():
         if mod in {COMPOSITION_MODULE, ADAPTER_MODULE}:
@@ -250,8 +265,15 @@ def _pull_points() -> set[str]:
     return out
 
 
-def test_core_pull_points_from_composition_are_frozen_and_only_shrink() -> None:
-    observed = _pull_points()
+def _pull_points(core: list[str]) -> set[str]:
+    """그중 **CORE 배정** 모듈 — §3.8이 "덜 정확하다"고 한 형태(Core가 배선을 안다)."""
+    return _composition_importers() & set(core)
+
+
+def test_core_pull_points_from_composition_are_frozen_and_only_shrink(
+    core_modules: list[str],
+) -> None:
+    observed = _pull_points(core_modules)
     new = observed - CORE_PULL_BASELINE
     assert (
         not new
@@ -260,26 +282,138 @@ def test_core_pull_points_from_composition_are_frozen_and_only_shrink() -> None:
         pytest.fail(f"pull 지점이 줄었다 — CORE_PULL_BASELINE을 {sorted(observed)}로 ratchet")
 
 
-def test_every_layer_pull_point_is_enumerated_in_the_layers_contract() -> None:
-    """합성 루트가 세탁 통로가 되지 않게 — l* 풀 간선은 pyproject에 한 줄씩 적혀 있어야 한다."""
+def test_non_core_composition_consumers_are_accounted_for(core_modules: list[str]) -> None:
+    """비-CORE 소비자는 **정확히** 열거된 집합이어야 한다 — 늘어도 줄어도 RED.
+
+    CORE 집합만 잠그면 `ops.*`·`harness.*`·`app`이 합성 루트를 조용히 쓰기 시작해도 아무 신호가
+    없다. 그러면 "pull 0"은 사실이지만 무의미해진다(같은 결합이 라벨만 바꿔 옮겨 간 것). 그래서
+    비-CORE 소비자도 회계 대상으로 둔다 — 늘리려면 이 목록을 **고쳐야** 하고, 그 편집이 곧
+    "이 모듈은 엔트리포인트다"라는 선언이 된다.
+    """
+    observed = _composition_importers() - set(core_modules)
+    assert observed == NON_CORE_COMPOSITION_CONSUMERS, (
+        "합성 루트를 쓰는 비-CORE 모듈 집합이 바뀌었다 — 엔트리포인트라면 "
+        f"NON_CORE_COMPOSITION_CONSUMERS를 {sorted(observed)}로 갱신하라: "
+        f"추가={sorted(observed - NON_CORE_COMPOSITION_CONSUMERS)} "
+        f"제거={sorted(NON_CORE_COMPOSITION_CONSUMERS - observed)}"
+    )
+
+
+def test_listed_non_core_consumers_really_are_entry_points() -> None:
+    """열거된 비-CORE 소비자가 실제로 **엔트리포인트**인가 — `app` 또는 `main()` 보유 모듈.
+
+    목록에 이름을 적는 것만으로 면제되면 이 회계는 서명란이 된다. 그래서 "엔트리포인트"라는
+    주장 자체를 소스로 검증한다(합성 루트 = 프로세스가 시작되는 자리라는 정의의 기계 판).
+    """
+    for mod in sorted(NON_CORE_COMPOSITION_CONSUMERS):
+        if mod == "app":
+            continue  # ASGI 앱 팩토리 — 프로세스 진입 그 자체.
+        src = _module_path(mod).read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        has_main = any(
+            isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "main"
+            for n in tree.body
+        )
+        assert has_main, f"{mod}는 엔트리포인트가 아니다(main() 없음) — 합성 루트 소비 정당화 실패"
+
+
+def test_layer_pull_edges_and_the_layers_contract_agree_exactly() -> None:
+    """합성 루트가 세탁 통로가 되지 않게 — l* 풀 간선과 pyproject 면제 줄이 **정확히** 일치한다.
+
+    양방향으로 잰다. 적히지 않은 간선이 있으면 면제 없이 계층을 건너뛰는 것이고, 간선이 없는데
+    면제 줄이 남아 있으면 **죽은 면제**다(import-linter의 `unmatched_ignore_imports_alerting`이
+    같은 것을 보지만, 그 설정이 꺼지는 날 이 검사가 남는다). EOS-89 이후 양쪽 모두 공집합이며,
+    그 사실이 "l* Core가 합성 루트를 모른다"의 계약측 증거다.
+    """
     data = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
     layers = next(c for c in data["tool"]["importlinter"]["contracts"] if c.get("type") == "layers")
-    ignores = set(layers.get("ignore_imports", []))
-    for mod in sorted(_pull_points()):
-        if mod.startswith("api."):
-            continue  # api는 layers 최상단 — 합성 루트 import가 역방향이 아니다
-        edge = f"whymath_backend.{mod} -> whymath_backend.{COMPOSITION_MODULE}"
-        assert edge in ignores, f"열거되지 않은 pull 간선: {edge}"
+    ignores = {
+        line
+        for line in layers.get("ignore_imports", [])
+        if line.endswith(f"-> whymath_backend.{COMPOSITION_MODULE}")
+    }
+    # api는 layers 최상단 — 합성 루트 import가 역방향이 아니라 면제가 필요 없다.
+    edges = {
+        f"whymath_backend.{mod} -> whymath_backend.{COMPOSITION_MODULE}"
+        for mod in _composition_importers()
+        if mod.startswith("l")
+    }
+    assert edges == ignores, (
+        "합성 루트 면제 줄과 실제 간선이 어긋난다 — "
+        f"면제 누락={sorted(edges - ignores)} 죽은 면제={sorted(ignores - edges)}"
+    )
 
 
-def test_app_factory_registers_no_subject_capability_yet() -> None:
-    """현행 실측을 그대로 동결한다: app.py는 합성 루트를 import하지 않는다(등록 형태 부재).
+def _app_state_registered_keys() -> set[str]:
+    """`app.py`의 `app.state.__setattr__(KEY, expr)` 호출에서 KEY **상수명**을 모은다.
 
-    EOS-89가 등록 형태로 바꾸면 이 테스트는 **의도적으로** 실패해야 하고, 그때 pull 기준선과
-    함께 갱신한다 — 두 형태가 소리 없이 공존하는 상태를 막는 잠금이다.
+    인벤토리 v2의 DI 다리(`scripts/analysis/eos_feature_inventory_v2.py::_app_state_di_map`)와
+    **같은 형태**를 읽는다 — 그 도구가 못 보는 방식으로 등록하면 등록은 되지만 정적 분석에서
+    사라지므로, 여기서 같은 파서 형태를 요구해 두 도구의 시야를 일치시킨다.
     """
-    src = (_PKG / "app.py").read_text(encoding="utf-8")
-    assert f"whymath_backend.{COMPOSITION_MODULE}" not in absolute_imports(src)
+    tree = ast.parse((_PKG / "app.py").read_text(encoding="utf-8"))
+    keys: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr != "__setattr__" or ast.unparse(node.func.value) != "app.state":
+            continue
+        if len(node.args) == 2 and isinstance(node.args[0], ast.Name):
+            keys.add(node.args[0].id)
+    return keys
+
+
+def _capability_key_constants() -> set[str]:
+    """`api/_subject_capability_state.py`가 정의한 능력 키 상수명(= 등록되어야 할 목록)."""
+    tree = ast.parse(_module_path(SUBJECT_CAPABILITY_STATE_MODULE).read_text(encoding="utf-8"))
+    return {
+        t.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name) and t.id.endswith("_KEY")
+    }
+
+
+def test_app_factory_registers_every_subject_capability() -> None:
+    """등록(push) 형태의 실재 — `app.py`가 능력 키 **전부**를 app.state에 올린다(EOS-89 ①).
+
+    이 테스트는 EOS-88이 걸어 둔 잠금(`..._registers_no_subject_capability_yet`)을 **대체**한다.
+    두 형태(pull·push)가 소리 없이 공존하지 않게 하려면 잠금을 남겨 두는 것이 아니라 방향을
+    뒤집은 단언으로 바꿔야 한다 — 옛 잠금을 남기면 그 자체가 모순 게이트가 된다.
+
+    별칭 import(`as _X`)를 쓰므로 상수명을 그대로 비교하지 않고 **접미사**로 잇는다
+    (`EXPRESSION_SEAL_KEY` ↔ `_EXPRESSION_SEAL_KEY`).
+    """
+    registered = _app_state_registered_keys()
+    required = _capability_key_constants()
+    assert required, "능력 키 상수를 하나도 찾지 못했다 — 스캔 0건은 통과가 아니다"
+    missing = {
+        name for name in required if not any(r.lstrip("_") == name for r in registered)
+    }
+    assert not missing, f"app.state에 등록되지 않은 과목 능력 키: {sorted(missing)}"
+
+
+def test_app_factory_calls_every_composition_factory() -> None:
+    """등록값이 **합성 루트에서 온다** — app.py가 `composition`의 팩토리를 전부 호출한다.
+
+    키만 올리고 값이 딴 데서 오면 "등록 형태"라는 주장이 절반만 참이다. app.py가 import한
+    `default_*` 이름과 합성 루트의 `__all__`을 대조해 누락을 잡는다.
+    """
+    app_src = (_PKG / "app.py").read_text(encoding="utf-8")
+    assert f"whymath_backend.{COMPOSITION_MODULE}" in absolute_imports(app_src)
+    factories = {
+        n.name
+        for n in ast.walk(ast.parse(_module_path(COMPOSITION_MODULE).read_text(encoding="utf-8")))
+        if isinstance(n, ast.FunctionDef) and n.name.startswith("default_")
+    }
+    assert factories, "합성 루트에서 팩토리를 하나도 찾지 못했다 — 스캔 0건은 통과가 아니다"
+    called = {
+        n.func.id
+        for n in ast.walk(ast.parse(app_src))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert factories <= called, f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(factories - called)}"
 
 
 # ──────────────────────────────────────────────────────────────────────

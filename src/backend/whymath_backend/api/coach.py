@@ -65,13 +65,14 @@ from whymath_backend.api._segmentation_state import (
     SolutionSegmentationCounters,
     get_segmentation_counters,
 )
+from whymath_backend.api._subject_capability_state import (
+    get_answer_form_verifier,
+    get_final_answer_verifier,
+)
 
 # EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
-# `verify_final_answer` 함수 자체의 Protocol 경유(DI)는 후속 — 타입 축을 먼저 끊는다.
-from whymath_backend.composition import (
-    default_answer_form_verifier,
-    default_final_answer_verifier,
-)
+# EOS-89: 능력 *구현*은 `composition`에서 끌어오지(pull) 않고 app.state에서 받는다(push) —
+# 아래 `_get_subject_capabilities` Depends. 이 모듈에 `composition` import가 없는 것이 그 증거다.
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.activity import ProblemAttempt as ProblemAttemptORM
@@ -176,6 +177,7 @@ from whymath_backend.schema.enums import ContentType, EventType, Persona, StepTy
 from whymath_backend.schema.event_data_contract import build_event_data
 from whymath_backend.schema.pedagogy_pack import PedagogyPack
 from whymath_backend.schema.verification_capabilities import (
+    AnswerFormVerifier,
     ChainVerificationCounts,
     FinalAnswerVerifier,
     VerificationOutcome,
@@ -753,6 +755,36 @@ def _get_judge_seam_deps(request: Request) -> _JudgeSeamDeps:
 JudgeSeamDeps = Annotated[_JudgeSeamDeps, Depends(_get_judge_seam_deps)]
 
 
+class _SubjectCapabilityDeps(NamedTuple):
+    """이 라우터가 쓰는 **과목 능력 2종** — app.state 등록분(EOS-89).
+
+    `_JudgeSeamDeps`와 같은 형태다(`request.app.state` 경유라 팩토리 클로저에 의존하지 않아
+    TestClient에서도 안전). 다만 **폴백이 없다**: judge seam은 없으면 자기 기본값으로 도는
+    부가 기능이지만, 답 판정 능력이 없는 채로 도는 것은 "검증 없이 학생에게 응답"이므로
+    `getattr`가 `AttributeError`로 터지게 둔다(등록 누락을 조용히 넘기지 않는다).
+    """
+
+    final_answer: FinalAnswerVerifier
+    answer_form: AnswerFormVerifier
+
+
+def _get_subject_capabilities(request: Request) -> _SubjectCapabilityDeps:
+    """app.state에 등록된 과목 능력을 완료 상태머신 주입용으로 묶는 의존성(EOS-89).
+
+    `create_app`이 부팅 시 `composition.default_*()`로 1회 올린 인스턴스를 요청마다 조회한다.
+    이 라우터가 `composition`을 import하지 않는 것이 §3.8 "등록 형태"의 실체다 — Core는
+    인터페이스 타입(`FinalAnswerVerifier`·`AnswerFormVerifier`)만 안다.
+    """
+
+    return _SubjectCapabilityDeps(
+        final_answer=get_final_answer_verifier(request),
+        answer_form=get_answer_form_verifier(request),
+    )
+
+
+SubjectCapabilityDeps = Annotated[_SubjectCapabilityDeps, Depends(_get_subject_capabilities)]
+
+
 def _judge_for_gate(
     *,
     provider: LLMProvider | None = None,
@@ -942,7 +974,7 @@ async def _final_answer_state(
     problem_id: uuid.UUID | None,
     body: CoachRequest,
     *,
-    final_answer_verifier: FinalAnswerVerifier | None = None,
+    capabilities: _SubjectCapabilityDeps,
 ) -> tuple[VerificationOutcome | None, FormVerdict]:
     """이 턴 풀이의 *마지막 단계*가 문항 기대정답과 어떤 관계인지 — L3 서버 권위 3상태(비노출).
 
@@ -965,16 +997,12 @@ async def _final_answer_state(
     if problem is None:
         # 문항 부재(코퍼스 미적재·신규) → 서버 채점 근거 없음(graceful).
         return None, FormVerdict.not_required
-    # EOS-69: 구현을 이름으로 알지 않는다 — 합성 루트가 과목 구현을 준다.
-    verifier = (
-        final_answer_verifier
-        if final_answer_verifier is not None
-        else default_final_answer_verifier()
-    )
-    result = verifier.verify_final_answer(last_step, problem)
+    # EOS-89: 구현을 이름으로 알지 않는 것에 더해, **끌어오지도 않는다** — 능력은 Application이
+    # 부팅 시 app.state에 등록한 것을 엔드포인트가 Depends로 받아 여기까지 내려준다.
+    result = capabilities.final_answer.verify_final_answer(last_step, problem)
     # EOS-28: 형태 지시 준수는 **값 판정과 나란히·독립으로** 계산한다. 여기서 두 판정이 서로를
     # 참조하지 않는 것이 교수학 계약의 1차 방어다 — 참조하는 순간 형태가 정오에 스며든다.
-    form = default_answer_form_verifier().verify_answer_form(
+    form = capabilities.answer_form.verify_answer_form(
         last_step, getattr(problem, "answer_constraint", None)
     )
     return result.state, form
@@ -1073,6 +1101,7 @@ async def _resolve_completion(
     redirect_turn_index: int,
     body: CoachRequest,
     decision: PedagogyDecision,
+    capabilities: _SubjectCapabilityDeps,
 ) -> _CompletionResult:
     """완료 상태머신 결선(L5 오케스트레이션) — 정답/오답 감지(L3)·완료 판정(L4)·attempt 적재(L2)를
     잇는다(중복 로직은 L2 헬퍼 재사용).
@@ -1108,7 +1137,9 @@ async def _resolve_completion(
     final_incorrect = False
     answer_form = FormVerdict.not_required
     if prior == 0 and not already_completed:
-        state, answer_form = await _final_answer_state(session, problem_id, body)
+        state, answer_form = await _final_answer_state(
+            session, problem_id, body, capabilities=capabilities
+        )
         final_correct = state is VerificationOutcome.correct
         final_incorrect = state is VerificationOutcome.incorrect
         # EOS-28 교수학 계약: `answer_form`은 아래 어느 판정에도 **들어가지 않는다**.
@@ -2137,6 +2168,7 @@ async def create_session(
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
+    subject_capabilities: SubjectCapabilityDeps,
 ) -> SessionCreateResponse:
     """새 대화 + 학생/AI 첫 2턴 영속. AI 턴은 WH-1 primary 발화(기본 ON·폴백=`decision.prompt`).
 
@@ -2272,6 +2304,7 @@ async def create_session(
         redirect_turn_index=1,  # 새 dialogue — 첫 교환(재고 발화 변주 기준).
         body=body,
         decision=decision,
+        capabilities=subject_capabilities,
     )
     decision = completion.decision
     # S1-11 flip(사인오프 2026-07-20): primary on이면 학생-대면 발화(decision.prompt·AI 턴
@@ -2494,6 +2527,7 @@ async def append_turns(
     session: SessionDep,
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
+    subject_capabilities: SubjectCapabilityDeps,
 ) -> TurnAppendResponse:
     """기존 dialogue에 학생/AI 2턴 추가.
 
@@ -2631,6 +2665,7 @@ async def append_turns(
         redirect_turn_index=(dialogue.total_turns or 0) // 2 + 1,
         body=body,
         decision=decision,
+        capabilities=subject_capabilities,
     )
     decision = completion.decision
     # 완료 상태머신이 계산한 남은 돌아보기 턴 수를 세션에 먼저 반영한다(다음 턴 상태). 완료 시
