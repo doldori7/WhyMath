@@ -389,6 +389,22 @@ class Usage:
     latency_ms: float | None = None
     """호출 벽시계 지연(ms) — provider가 time.monotonic()으로 실측. 미측정이면 None."""
 
+    # ── 프롬프트 캐시 축 (EOS-99) ─────────────────────────────────────────
+    # `input_tokens`와 **합산 관계가 아니라 배타 관계**다: Anthropic은 캐시로 읽힌 프리픽스를
+    # `input_tokens`에서 *빼고* `cache_read_input_tokens`에 따로 센다. 그래서 프롬프트 총
+    # 토큰은 `input + cache_read + cache_creation`이고, 적중률의 분모도 그 합이다
+    # (`harness/anchor_round_ledger.prompt_cache_rates` 단일 원천 — 여기서 재구현 금지).
+    #
+    # None의 뜻은 **두 가지이며 이 좌석은 그 둘을 구분하지 않는다** — ⓐ 캐시 개념이 없는
+    # provider(Ollama 로컬: prompt_eval_count/eval_count만 노출) ⓑ 응답에 필드가 없거나
+    # 형태가 달라 못 읽음. 어느 쪽이든 "0건이었다"가 아니다(미측정 ≠ 0). 0은 **읽었는데
+    # 0이었다**는 실측이며, 캐싱 플래그가 켜진 상태의 연속 0은 "켰지만 작동 안 함"이다.
+    cache_read_input_tokens: int | None = None
+    """캐시에서 *읽힌* 프리픽스 토큰 수(적중 — 약 0.1배 과금). 미상·해당없음이면 None."""
+
+    cache_creation_input_tokens: int | None = None
+    """캐시에 *쓰인* 프리픽스 토큰 수(첫 회차 — 약 1.25배 과금). 미상·해당없음이면 None."""
+
 
 @dataclass(slots=True, frozen=True)
 class GenerationResult:

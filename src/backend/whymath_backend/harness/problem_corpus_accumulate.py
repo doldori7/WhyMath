@@ -86,14 +86,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.config import get_settings
 from whymath_backend.harness.anchor_round_ledger import (
     DEFAULT_STAGNATION_WINDOW,
+    PromptCacheTally,
     RoundRecord,
     append_round_ledger,
     default_round_ledger_path,
     judge_stagnation,
     load_round_ledger,
     operating_rates,
+    prompt_cache_rates,
 )
 from whymath_backend.harness.batch_safety import (
     DEFAULT_ABORT_THRESHOLD,
@@ -517,16 +520,32 @@ def _build_live_generator(
     topic_hint: str,
     *,
     generation_log_sink: Callable[[GenerationLog], None] | None = None,
+    subscription: str | None = None,
+    budget_krw: float | None = None,
 ) -> EquivalentProblemGenerator:
     """라이브 LLM 생성기 조립(조성 루트) — L4 카탈로그 라벨 주입·표준 CompositeProvider.
 
     이 함수만 LLM 경로를 안다 — 여기 격리해 run_corpus_accumulate는 좌석 무관을 유지한다.
     `generation_log_sink`(EOS-55): 호출별 GenerationLog(재현 좌석·입력 스냅샷)를 흘릴 싱크
     — main()이 JSONL appender를 배선한다(적재가 기본·정본화≠집행).
+
+    `subscription`·`budget_krw`(EOS-99 PR #1023 codex P1): **둘 다 None이면 생성기 기본값**
+    (단일 좌석 free/0.0)이라 종전 동작과 바이트 단위로 같다. 명시하면 그 값이 라우팅 신호로
+    나간다 — 클라우드 경로를 태우려면 **둘 다** 필요하다(`business_cost_tier` 규칙1이 예산을,
+    규칙2가 구독을 각각 LOCAL로 강제하고 `guard_cloud`가 한 번 더 본다). 하나만 열면 여전히
+    LOCAL이고, 그러면 프롬프트 캐시 계측은 영영 `not_applicable`만 낸다.
     """
     from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
     from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
     from whymath_backend.schema.enums import Subject
+
+    # None은 "지정 안 함"이라 **키 자체를 싣지 않는다** — 생성자 기본값(단일 좌석)이 그대로
+    # 살아 있어야 회귀가 0이다. None을 그대로 넘기면 타입도 깨지고 좌석도 덮인다.
+    routing_overrides: dict[str, Any] = {}
+    if subscription is not None:
+        routing_overrides["subscription"] = subscription
+    if budget_krw is not None:
+        routing_overrides["budget_krw"] = budget_krw
 
     return LLMEquivalentProblemGenerator(
         None,  # 표준 CompositeProvider(Ollama+Anthropic) 지연 구성 — 라이브 환경 전제
@@ -535,6 +554,7 @@ def _build_live_generator(
         subject=Subject.공통,
         slug_prefix="wm-gen-quad",
         generation_log_sink=generation_log_sink,
+        **routing_overrides,
     )
 
 
@@ -553,6 +573,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True, help="축적 산출 JSONL(append).")
     parser.add_argument("--n", type=int, default=20, help="생성 시도 횟수.")
     parser.add_argument("--topic-hint", default=_DEFAULT_TOPIC_HINT, help="저작 주제 힌트.")
+    # ── 클라우드 라우팅 옵트인(EOS-99 PR #1023 codex P1) ──────────────────────────
+    # 기본 None = 미지정 = 생성기 단일 좌석(free/0.0) 그대로 → **회귀 0**. 켜려면 둘 다 준다.
+    parser.add_argument(
+        "--subscription",
+        default=None,
+        choices=["free", "basic", "premium", "gifted"],
+        help=(
+            "라우팅 구독 신호(미지정=단일 좌석 free). 클라우드 경로를 태우려면 "
+            "--budget-krw와 **함께** 지정한다 — 하나만으로는 라우터가 LOCAL로 강제한다."
+        ),
+    )
+    parser.add_argument(
+        "--budget-krw",
+        type=float,
+        default=None,
+        help=(
+            "라우팅 클라우드 잔여 예산(원·미지정=단일 좌석 0.0=LOCAL 강제). "
+            "프롬프트 캐시 적중 계측(EOS-02)처럼 클라우드 호출이 필요한 회차에서만 지정한다."
+        ),
+    )
     parser.add_argument(
         "--standard-code", default=_DEFAULT_STANDARD_CODE, help="스펙 성취기준 코드."
     )
@@ -683,13 +723,23 @@ def main(argv: list[str] | None = None) -> int:
     # 그 순간 거짓이 된다). 회차 중 라우팅이 갈려 값이 여러 개면 전부 모아 둔다.
     observed_models: set[str] = set()
     observed_prompt_versions: set[str] = set()
+    # 프롬프트 캐시 원장(EOS-99) — 모델·프롬프트 좌석과 **같은 자리**에서 모은다: 셋 다
+    # "이 회차가 실제로 무엇으로 돌았는가"이고, 셋 다 genlog에 *적재된 행*에서만 나와야
+    # 대장이 파일에 없는 값을 주장하지 않는다.
+    cache_tally = PromptCacheTally()
 
     def _genlog_sink(log: GenerationLog) -> None:
+        nonlocal cache_tally
         stamped = append_generation_log_jsonl(genlog_path, log, run_id=run_id)
         if stamped.model_name:
             observed_models.add(stamped.model_name)
         if stamped.prompt_version:
             observed_prompt_versions.add(stamped.prompt_version)
+        cache_tally = cache_tally.observe(
+            input_tokens=stamped.input_tokens,
+            cache_read_input_tokens=stamped.cache_read_input_tokens,
+            cache_creation_input_tokens=stamped.cache_creation_input_tokens,
+        )
 
     # 내구 검수 큐(EOS-58 codex P1-1/P2) — 비수용 outcome 발생 즉시 행 append+flush. 경로는
     # 항상 <out>.review.jsonl 사이드카(뷰와 달리 저장소는 옮기지 않는다 — 누적의 단일 원천).
@@ -698,7 +748,12 @@ def main(argv: list[str] | None = None) -> int:
     def _review_sink(entry: ReviewQueueEntry) -> None:
         append_review_queue_jsonl(review_queue_path, entry)
 
-    generator = _build_live_generator(args.topic_hint, generation_log_sink=_genlog_sink)
+    generator = _build_live_generator(
+        args.topic_hint,
+        generation_log_sink=_genlog_sink,
+        subscription=args.subscription,
+        budget_krw=args.budget_krw,
+    )
 
     # 회차 매니페스트(MP-04 ①)의 입력 지문 — **배치 호출 앞에서** 뜬다(PR #1013 Codex P1).
     # 이유 둘: ⓐ dedup 인덱스는 `--seeds`뿐 아니라 **기존 `--out` 코퍼스**로도 만들어진다
@@ -755,6 +810,19 @@ def main(argv: list[str] | None = None) -> int:
     # 기록해야 대장 행과 디스크 상태가 어긋나지 않는다(중간에 죽으면 그 회차는 대장에 없고,
     # 그건 정직하다 — 완료되지 않은 회차다).
     payload = report.to_json()
+    # 프롬프트 캐시 작동 신호(EOS-99) — 리포트와 대장에 **같은 dict**를 싣는다(두 벌 산식
+    # 금지). 플래그 상태는 이 회차를 돌린 설정에서 읽는다: 설정을 못 읽으면 False로 접지
+    # 않고 None(미상)으로 둔다 — 모르는 것을 '꺼짐'으로 적으면 적중 0%가 당연한 결과로
+    # 읽혀 '켰지만 작동 안 함'이 영영 안 보인다(모른다 ≠ 아니다).
+    caching_enabled: bool | None
+    try:
+        caching_enabled = bool(get_settings().anthropic_prompt_caching)
+    except Exception as exc:  # noqa: BLE001 — 설정 판독 실패는 회차 비차단(타입명 남김)
+        caching_enabled = None
+        _LOGGER.warning(
+            "프롬프트 캐시 플래그 판독 실패(%s) — 판정을 미상으로 둔다", type(exc).__name__
+        )
+    payload["prompt_cache"] = prompt_cache_rates(cache_tally, caching_enabled=caching_enabled)
     ledger_path: Path = default_round_ledger_path(args.out)
     ledger_error: str | None = None
     # 회차 매니페스트(MP-04) — 카나리 관측 3종은 판정이 **있었을 때만** 값이 있다. 판정이
@@ -794,6 +862,7 @@ def main(argv: list[str] | None = None) -> int:
                 canary_advisory=report.canary_advisory,
                 aborted=report.aborted,
                 abort_reason=report.abort_reason,
+                prompt_cache=payload["prompt_cache"],
             ),
         )
     except Exception as exc:  # noqa: BLE001 — 대장 적재 장애는 회차를 깨지 않되 타입명을 남긴다
