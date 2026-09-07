@@ -100,3 +100,26 @@ claude/backup/visualization-review-28d0yx-pre-rebase
 claude/backup/whymath-visualization-review-r3-pre-rebase
 claude/backup/gamification-8ap436-pre-rebase
 claude/backup/ai-integration-5qqcp4-pre-rebase
+
+# ── 2026-09-07 7차 배치 (2건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-07.md §4-③ ──
+# 직전 배치 집행 확인(2026-09-07 ls-remote 실측): 4·5·6차 19건 잔존 0/19 · 허용 패턴 밖 수동 4건
+#   (pr/collab-07·backend/cur-16-*·curriculum/eos-curriculum-*·curriculum/cur-15-*) 전건 삭제 완료.
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   drive-eos-81-sequential-wbhw8v = 9d5f81b2 (ahead 0·diff 0파일 — 전량 흡수. EOS-81 main done·이벤트 파일 main 실재)
+#   review-dydkkx-runbook          = dbdcdf6f (PR #961 머지 91c348fd + 후행 1커밋 'EOS-80 done'은 main EOS-80 done +
+#                                    backlog/events/claude_eos80-done.ndjson으로 승계. 브랜치 고유 53줄은 전건 옛 상태
+#                                    (status·notes 후행 갱신 이전)·런북 §6은 main이 --as kiki 추가판으로 우세)
+# ⚠ 허용 패턴(claude/*) 밖 — Kiki 수동 삭제 대상 추가(누적 5건째):
+#   gates/deploy-environment-approval = 907d4629 (PR #967 닫힘·미머지. 게이트 G-deploy-environment-approval clear는
+#     main이 별도 경로(events/claude_status-uh55gf.ndjson)로 상위 증거(gh api 실측·환경 id·protection_rule id)와 함께
+#     기록. 런북 §7-3 성공 판정은 main이 2026-09-01 정정판("왜 워크플로 실행으로 판정하지 않는가")으로 브랜치 판정
+#     기준을 명시 대체. 브랜치 이벤트 파일 1줄은 같은 clear의 약한 중복 기록 — 손실 0)
+#   git push origin --delete gates/deploy-environment-approval
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 기존 승계 + 이번 갱신:
+#   7n9n72(**삭제 절대 금지** — MISC-05/06·PED-14·PB-02·S3-33/34·ASM-06·MISC-02 8건에 고립 참조 부착 + PED-37 회수) ·
+#   trjg5x(PB-13 in_progress·PB-14·ADMIN-02) · k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · a3ysut/t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28) · q8tvcx(OPS-38) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 브랜치 3건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0 — claim 해제 시 차기 삭제 후보) ·
+#   status-f9lp65(HARN-56 block) · test-driven-development-03elxp(MP-02 block·MP-05)
+claude/drive-eos-81-sequential-wbhw8v
+claude/review-dydkkx-runbook
