@@ -156,6 +156,8 @@ def render_brief(
     stale_branches: list[tuple[str, ...]] | None = None,
     stale_branch_status: str = "ok",
     stale_branch_message: str = "",
+    pr_state_lookup_ok: bool = True,
+    pr_state_lookup_error: str = "",
     done_excluded: dict[str, list[str]] | None = None,
     doc_series_candidates: list[tuple[str, tuple[str, ...], str]] | None = None,
     doc_series_status: str = "ok",
@@ -167,8 +169,9 @@ def render_brief(
     stale_branches: (branch, age_days, ahead, status, evidence[, partial_port[, port_scan_error]])
         목록
         (HARN-13 + 2026-08-05
-    3분류 확장) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접 import하지 않게 한다
-    (remote_claimed와 동일한 결합도 원칙). status는 "unresolved"|"ported"|"active" —
+    3분류 확장 · HARN-78 5분류) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접
+    import하지 않게 한다(remote_claimed와 동일한 결합도 원칙). status는
+    "isolated"|"pr_filed"|"pr_closed"|"unresolved"|"ported"|"active" —
     구분 없이 하나로 뭉쳐 보여주면 매 세션 전부를 훑어야 해서 신호 대 잡음비가 나빠진다
     (2026-08-05 실측: 19건 중 실제 결정 대기는 6건뿐이었다). 하위호환을 위해 4-튜플
     (status·evidence 생략)도 받아들인다 — 그 경우 전부 "unresolved"로 취급.
@@ -176,6 +179,11 @@ def render_brief(
     때 "판정 보류" 줄에 덧붙는다 — shallow 클론처럼 *복구 명령이 있는* 실패에서 화면만
     보고 고칠 수 있게 한다(2026-08-11: 브리핑이 shallow 위에서 10건을 오분류하고도
     "ok"로 보고했다). 비면 종전 문구 그대로 — 하위호환.
+    pr_state_lookup_ok/pr_state_lookup_error (HARN-78): pr_filed 후보의 열림/닫힘을
+    GitHub API로 조회했는지·성공했는지. False면 pr_filed 절의 문구가 "처분은 해당
+    PR에서"(이미 확인됨을 전제)가 아니라 "열림/닫힘을 확인하라"(모른다는 사실을
+    명시)로 바뀐다 — 기본값 True는 하위호환(이 두 인자를 안 주는 기존 호출부는
+    종전 문구 그대로).
     done_excluded: task_id → 완료 브랜치 목록(HARN-12) — 타 세션이 이미 끝냈으나 아직
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
@@ -242,6 +250,7 @@ def render_brief(
             )
         isolated = [e for e in normalized if e[3] == "isolated"]
         pr_filed = [e for e in normalized if e[3] == "pr_filed"]
+        pr_closed = [e for e in normalized if e[3] == "pr_closed"]
         unresolved = [e for e in normalized if e[3] == "unresolved"]
         ported = [e for e in normalized if e[3] == "ported"]
         active = [e for e in normalized if e[3] == "active"]
@@ -265,10 +274,30 @@ def render_brief(
                     # 흡수 흔적은 있으나 전건은 아니다 — 사람이 같은 조사를 다시 하지
                     # 않게 단서를 잇고, 동시에 '결정 불요'로 숨기지도 않는다(HARN-37).
                     lines.append(f"      ↳ 부분 착지: {partial} — 잔여분 확인 필요")
-        # PR 대기 — 작업은 GitHub에 보인다. Kiki에게 "결정하라"고 다시 묻지 않고 PR
-        # 번호를 건넨다. 열림/닫힘은 오프라인 git으로 판정 불가라 번호로 넘긴다.
+        # PR 닫힘(미머지, HARN-78) — PR이 있었다는 사실이 처분 완료를 뜻하지 않는다.
+        # isolated와 같은 행동 요구(재작업 또는 폐기 판단)이므로 같은 위계로 강조한다.
+        if pr_closed:
+            lines.append(f"🔴 PR 닫힘(미머지) — 재작업 또는 폐기 판단 필요 — {len(pr_closed)}건:")
+            for stale_branch, age_days, ahead, _status, evidence, _partial, _err in pr_closed:
+                lines.append(
+                    f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전 · "
+                    f"trunk 대비 {ahead}커밋 앞섬"
+                )
+        # PR 대기 — 작업은 GitHub에 보인다. 열림이 GitHub API로 확인됐으면(pr_state_
+        # lookup_ok) Kiki에게 "결정하라"고 다시 묻지 않고 PR 번호를 건넨다. 확인이
+        # 안 됐으면(토큰 없음 등) "열림"이라고 단정하지 않고 직접 확인하라고 말한다
+        # (모른다 ≠ 아니다 — 열려 있다고 가정하는 것도 마찬가지로 오판정이다).
         if pr_filed:
-            lines.append(f"(참고) PR 제출됨 — 처분은 해당 PR에서 — {len(pr_filed)}건:")
+            if pr_state_lookup_ok:
+                lines.append(
+                    f"(참고) PR 제출됨(열림 확인) — 처분은 해당 PR에서 — {len(pr_filed)}건:"
+                )
+            else:
+                reason = f" — {pr_state_lookup_error}" if pr_state_lookup_error else ""
+                lines.append(
+                    f"(참고) PR 제출됨 — 상태 미확인{reason}, PR 번호로 열림/닫힘을 "
+                    f"확인하라 — {len(pr_filed)}건:"
+                )
             for stale_branch, age_days, _ahead, _status, evidence, _partial, _err in pr_filed:
                 lines.append(f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전")
         # unresolved는 이제 "PR 조회를 못 해 분리하지 못한" 잔여 축이다(측정 실패).

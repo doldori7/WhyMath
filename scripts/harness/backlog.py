@@ -2283,6 +2283,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     stale_branches: list[tuple[str, float, int, str, str]] = []
     stale_branch_status = "ok"
     stale_branch_message = ""
+    pr_state_lookup_ok = True
+    pr_state_lookup_error = ""
     if policy.remote_claims:
         try:
             scan = remote_claims.scan_stale_branches(
@@ -2290,6 +2292,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             )
             stale_branch_status = scan.status
             stale_branch_message = scan.message
+            pr_state_lookup_ok = scan.pr_state_lookup_ok
+            pr_state_lookup_error = scan.pr_state_lookup_error
             if scan.status == "ok":
                 stale_branches = [
                     (
@@ -2382,6 +2386,8 @@ def cmd_brief(root: Path, args: argparse.Namespace) -> int:
             stale_branches=stale_branches,
             stale_branch_status=stale_branch_status,
             stale_branch_message=stale_branch_message,
+            pr_state_lookup_ok=pr_state_lookup_ok,
+            pr_state_lookup_error=pr_state_lookup_error,
             done_excluded=done_excluded,
             doc_series_candidates=doc_series_candidates,
             doc_series_status=doc_series_status,
@@ -2737,6 +2743,7 @@ def cmd_branches(root: Path, args: argparse.Namespace) -> int:
 
     isolated = buckets.get("isolated", [])
     pr_filed = buckets.get("pr_filed", [])
+    pr_closed = buckets.get("pr_closed", [])
     undetermined = buckets.get("unresolved", [])
 
     # PR 대조를 못 했으면 "고립 N건"이라는 문장 자체를 만들지 않는다 — 조회 실패
@@ -2752,11 +2759,21 @@ def cmd_branches(root: Path, args: argparse.Namespace) -> int:
     active = buckets.get("active", [])
     ported = buckets.get("ported", [])
     print(
-        f"고립(PR 이력 0건): {len(isolated)}건 · PR 제출됨: {len(pr_filed)}건 · "
-        f"타 세션 진행중: {len(active)}건 · 포팅됨: {len(ported)}건"
+        f"고립(PR 이력 0건): {len(isolated)}건 · PR 닫힘(미머지): {len(pr_closed)}건 · "
+        f"PR 제출됨: {len(pr_filed)}건 · 타 세션 진행중: {len(active)}건 · "
+        f"포팅됨: {len(ported)}건"
     )
+    # (HARN-78) pr_filed의 열림/닫힘 조회 결과 — 토큰 없으면 시도조차 안 되므로 그
+    # 사실을 명시한다("확인함"과 "확인 못함"은 다른 사실이다).
+    if pr_filed and not scan.pr_state_lookup_ok:
+        reason = scan.pr_state_lookup_error or "사유 미상"
+        print(
+            f"⚠ PR 열림/닫힘 조회 미수행({reason}) — PR 제출됨 {len(pr_filed)}건은 수동 확인 필요"
+        )
     for item in isolated:
         print(f"  [고립] {item.branch} — {item.age_days:.0f}일 전 · trunk 대비 {item.ahead}커밋")
+    for item in pr_closed:
+        print(f"  [PR-닫힘] {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
     for item in pr_filed:
         print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
     return 0
