@@ -6,11 +6,11 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 585
+  backend_modules_covered: 586
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
-  student_loop_reach_modules: 208
+  student_loop_reach_modules: 209
   production_loop_reach_modules: 170
   loop_tables: 28
   loop_tables_without_p0_writer: [db.models.misconception_embedding]
@@ -18,18 +18,18 @@ dashboard:
   final_differs_from_matrix: 39
   final_differs_from_criteria: 12
   by_criteria_action:
-    KEEP: 122
+    KEEP: 123
     POSTPONE: 21
-    REFACTOR: 19
+    REFACTOR: 18
   keep_criteria_histogram:
     2/6: 1
-    3/6: 4
+    3/6: 3
     4/6: 19
-    5/6: 33
+    5/6: 34
     6/6: 105
   replace_signal_histogram:
-    0/6: 122
-    1/6: 37
+    0/6: 123
+    1/6: 36
     2/6: 3
   by_plane:
     C: 12
@@ -39,20 +39,20 @@ dashboard:
   by_ownership:
     ADAPTER: 8
     CLIENT: 12
-    CORE: 108
+    CORE: 109
     CORE+ADAPTER_DEP: 3
     INFRA: 21
-    MIXED: 10
+    MIXED: 9
   by_migration_action:
     HEAVY_REFACTOR: 11
-    KEEP: 113
+    KEEP: 114
     POSTPONE: 21
-    REFACTOR: 16
+    REFACTOR: 15
     REPLACE_CANDIDATE: 1
   by_matrix_action:
     HEAVY_REFACTOR: 13
-    KEEP: 98
-    REFACTOR: 50
+    KEEP: 99
+    REFACTOR: 49
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
     P0: 101
@@ -68,8 +68,8 @@ dashboard:
     Flag-off: 11
     Production: 135
   by_risk:
-    High: 24
-    Low: 95
+    High: 23
+    Low: 96
     Med: 43
 features:
   - feature_id: WM-S-001
@@ -685,7 +685,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 6
-    test_functions: 282
+    test_functions: 285
     matrix:
       A_subject: 1
       B_db: 1
@@ -750,7 +750,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 5
-    test_functions: 239
+    test_functions: 242
     matrix:
       A_subject: 1
       B_db: 1
@@ -815,7 +815,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 2
-    test_functions: 194
+    test_functions: 197
     matrix:
       A_subject: 0
       B_db: 1
@@ -880,7 +880,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 4
-    test_functions: 219
+    test_functions: 222
     matrix:
       A_subject: 1
       B_db: 1
@@ -945,7 +945,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 5
-    test_functions: 223
+    test_functions: 226
     matrix:
       A_subject: 0
       B_db: 1
@@ -1010,7 +1010,7 @@ features:
     db_model_modules: 1
     coupling_count: 6
     test_files: 3
-    test_functions: 217
+    test_functions: 220
     matrix:
       A_subject: 0
       B_db: 1
@@ -1075,7 +1075,7 @@ features:
     db_model_modules: 2
     coupling_count: 5
     test_files: 3
-    test_functions: 217
+    test_functions: 220
     matrix:
       A_subject: 0
       B_db: 1
@@ -1140,7 +1140,7 @@ features:
     db_model_modules: 3
     coupling_count: 7
     test_files: 5
-    test_functions: 236
+    test_functions: 239
     matrix:
       A_subject: 0
       B_db: 2
@@ -1205,7 +1205,7 @@ features:
     db_model_modules: 0
     coupling_count: 1
     test_files: 4
-    test_functions: 218
+    test_functions: 221
     matrix:
       A_subject: 0
       B_db: 0
@@ -1400,7 +1400,7 @@ features:
     db_model_modules: 1
     coupling_count: 8
     test_files: 6
-    test_functions: 221
+    test_functions: 224
     matrix:
       A_subject: 1
       B_db: 1
@@ -1530,7 +1530,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 31
-    test_functions: 490
+    test_functions: 493
     matrix:
       A_subject: 0
       B_db: 0
@@ -3284,8 +3284,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 3
     coupling_count: 10
-    test_files: 28
-    test_functions: 359
+    test_files: 29
+    test_functions: 373
     matrix:
       A_subject: 1
       B_db: 2
@@ -3298,7 +3298,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 4
+    fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -4649,8 +4649,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 5
     coupling_count: 9
-    test_files: 10
-    test_functions: 308
+    test_files: 11
+    test_functions: 325
     matrix:
       A_subject: 1
       B_db: 2
@@ -4663,7 +4663,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 7
+    fan_in: 8
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -4688,7 +4688,7 @@ features:
       r6_no_api_contract: false
     seat: "Gate2 ②·③ — LearnerState 단일 API는 갭"
   - feature_id: WM-E-205
-    name: "약개념·선수개념 추천·학습 경로·복습 큐"
+    name: "약·강·선수개념 추천·학습 경로·복습 큐"
     plane: E
     location: "src/backend/whymath_backend/l2"
     user: Student
@@ -4705,17 +4705,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
-    loc: 1361
+    loc: 1535
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 2
-    own_modules: 5
+    own_modules: 6
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 7
-    test_files: 15
-    test_functions: 612
+    test_files: 16
+    test_functions: 629
     matrix:
       A_subject: 1
       B_db: 1
@@ -4751,7 +4751,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: false
       r6_no_api_contract: false
-    seat: "Gate2 ④·⑨"
+    seat: "Gate2 ④·⑨ — ASM-13 강개념(strong_points) 편입"
   - feature_id: WM-E-206
     name: "학습 증거 이벤트 적재(attempt·처치·추천 회계)"
     plane: E
@@ -4780,7 +4780,7 @@ features:
     db_model_modules: 2
     coupling_count: 6
     test_files: 10
-    test_functions: 245
+    test_functions: 248
     matrix:
       A_subject: 1
       B_db: 1
@@ -6158,7 +6158,7 @@ features:
     keep_criteria_met: 3/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 3/6 — 미충족 k1_subject_low, k4_model_ok, k5_coupling_low"
-    fan_in: 43
+    fan_in: 42
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -6838,41 +6838,41 @@ features:
     location: "src/backend/whymath_backend/l4"
     user: Student
     domain: "Pedagogy"
-    eos_ownership: MIXED
-    eos_target: "Core/Adapter 분리 필요"
+    eos_ownership: CORE
+    eos_target: "EOS Core"
     status: Production
     flag: ""
     coupling: Med
     tests: Full
-    migration_action: REFACTOR
-    matrix_action: REFACTOR
+    migration_action: KEEP
+    matrix_action: KEEP
     release_priority_proposed: P0
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
-    migration_risk: High
-    loc: 282
+    migration_risk: Low
+    loc: 322
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
     own_modules: 1
-    adapter_deps: [l3.verify_solution, l4.misconception.wrong_form_match]
+    adapter_deps: []
     mixed_deps: [l3.pregenerate.models, l3.pregenerate.validator, schema.enums]
     db_model_modules: 0
     coupling_count: 9
-    test_files: 3
-    test_functions: 80
+    test_files: 2
+    test_functions: 76
     matrix:
-      A_subject: 3
+      A_subject: 1
       B_db: 0
       C_coupling: 2
       D_tests: 0
       E_state: 0
       F_data: 0
-    matrix_total: 5
-    criteria_action: REFACTOR
-    keep_criteria_met: 3/6
-    replace_signals: 1/6
-    action_basis: "§3.4 KEEP 3/6 — 미충족 k1_subject_low, k4_model_ok, k5_coupling_low"
+    matrix_total: 3
+    criteria_action: KEEP
+    keep_criteria_met: 5/6
+    replace_signals: 0/6
+    action_basis: "§3.4 KEEP 5/6 충족"
     fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
@@ -6884,14 +6884,14 @@ features:
       data_supplier: false
       invariant: false
     criteria_34:
-      k1_subject_low: false
+      k1_subject_low: true
       k2_api_clear: true
       k3_tests_exist: true
-      k4_model_ok: false
+      k4_model_ok: true
       k5_coupling_low: false
       k6_verified: true
       r1_model_conflict: false
-      r2_subject_in_core: true
+      r2_subject_in_core: false
       r3_untestable: false
       r4_duplicate: false
       r5_state_untracked: false
@@ -7185,7 +7185,7 @@ features:
     db_model_modules: 4
     coupling_count: 13
     test_files: 24
-    test_functions: 848
+    test_functions: 851
     matrix:
       A_subject: 0
       B_db: 2
@@ -7630,17 +7630,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
-    loc: 557
+    loc: 586
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
     own_modules: 2
-    adapter_deps: [l3.equivalent.rephrase, l3.symbolic_equivalence, l3.verifier, l3.verify_answer, l3.verify_answer_form, l3.verify_final_answer]
-    mixed_deps: []
+    adapter_deps: [l3.equivalent.rephrase, l3.symbolic_equivalence, l3.verifier, l3.verify_answer, l3.verify_answer_form, l3.verify_final_answer, l3.verify_solution]
+    mixed_deps: [schema.enums]
     db_model_modules: 0
-    coupling_count: 9
-    test_files: 3
-    test_functions: 27
+    coupling_count: 11
+    test_files: 4
+    test_functions: 31
     matrix:
       A_subject: 3
       B_db: 0
@@ -8410,7 +8410,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 11212
+    loc: 11230
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 327
-    test_functions: 5903
+    test_functions: 5907
     matrix:
       A_subject: 3
       B_db: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 190
-    test_functions: 2905
+    test_functions: 2908
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 73
-    test_functions: 1476
+    test_functions: 1479
     matrix:
       A_subject: 1
       B_db: 1
@@ -8800,15 +8800,15 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2239
+    loc: 2262
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
     own_modules: 8
-    adapter_deps: [l4.subject_adapter_math, l5.ocr.factory]
+    adapter_deps: [l4.misconception.wrong_form_match, l4.subject_adapter_math, l5.ocr.factory]
     mixed_deps: []
     db_model_modules: 0
-    coupling_count: 6
+    coupling_count: 7
     test_files: 195
     test_functions: 2920
     matrix:
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 123
+    fan_in: 124
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9775,7 +9775,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 9865
+    loc: 9882
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 13
@@ -9785,7 +9785,7 @@ features:
     db_model_modules: 7
     coupling_count: 28
     test_files: 20
-    test_functions: 402
+    test_functions: 403
     matrix:
       A_subject: 3
       B_db: 3

@@ -290,18 +290,31 @@ ADAPTER까지의 경로를 전수 산출했다.
 |---|---:|---|
 | CORE → … → ADAPTER 직접 import | **0** | EOS-69 상환 결과 그대로(§4.1) |
 | 전이 도달 | **14 / 266** | 수학을 지우면 함께 import에 실패하는 CORE |
-| 최단 경로가 합성 루트 `composition` 경유 | **14 / 14** | **설계된 유일 교체점** 경유 — Physics를 붙일 때 이 파일만 바꾸면 살아난다(EOS-69) |
-| **잔여 누수**(교체점을 막아도 닿음) | **2** | `api.coach` · `api.ocr_handoff` → `l4.solution_coaching`(**MIXED**) → `l3.verify_solution`·`l4.misconception.wrong_form_match`(ADAPTER 둘 다 직접 import — 누수 지점은 `solution_coaching` 하나) |
-| 수학 제거 후 온전히 남는 CORE | **252 / 266 (95%)** | `l1` 62 · `l2` 21 · `l3` 27 · `l4` 66 · `l6` 9 · `api` 32 · `schema` 34 · `lang` 1 |
+| 최단 경로가 합성 루트 `composition` 경유 | 2026-08-31 스냅샷 14/14 (아래 갱신 참조) | **설계된 유일 교체점** 경유 — Physics를 붙일 때 이 파일만 바꾸면 살아난다(EOS-69) |
+| **잔여 누수**(교체점을 막아도 닿음) | **2**(2026-09-06 EOS-86 재실측 — 누수 지점 교체) | `api.coach` · `api.ocr_handoff` → `harness.wh1_primary` → `harness.wh1_loop`(**INFRA**) → `l3.verify_solution`(ADAPTER 직접 import) |
+| 수학 제거 후 온전히 남는 CORE | 2026-08-31 스냅샷 252/266 (아래 갱신 참조) | `l1` 62 · `l2` 21 · `l3` 27 · `l4` 66 · `l6` 9 · `api` 32 · `schema` 34 · `lang` 1 |
 
-**읽는 법**: 14건의 최단 경로는 전부 *설계*다 — `l3.pedagogy.slot_generator`·`l3.render.adapters`·
-`api.coach`가 `composition`에서 능력 구현을 받아 오는 배선(EOS-69 ② "기본 구현 선택 편의")이고, 그
-2줄은 계약에 좁은 예외로 적혀 있다. **교체점을 막고 다시 재면 2건이 다른 길로도 닿는다 — 진짜 잔여는 그 2건이고 원인은 하나다**: `l4.solution_coaching`이
-MIXED로 배정된 채 수학 오답 형태 검출기를 직접 import한다. MIXED는 계약 대상이 아니라서(§1 반올림
-금지) 계약이 볼 수 없는 자리다 — 이 축의 상환은 `solution_coaching`을 CORE 골격 + 어댑터 주입으로
-가르는 것이며, 그 전까지는 테스트가 집합을 동결한다(늘면 RED·줄면 ratchet). 동결 열쇠는 (출발점,
-누수 지점)이다 — 끝 ADAPTER는 두 개가 동률이라 열쇠로 쓰면 탐색 순서에 따라 흔들린다(첫 구현이
-`set`을 그대로 순회해 해시 시드마다 다른 끝점을 냈고, 정렬 순회로 고정한 뒤 열쇠도 바꿨다).
+**[EOS-86·2026-09-06 갱신] `l4.solution_coaching` 축은 상환됐다 — 그런데 잔여 누수는 0이 되지
+않고 자리를 옮겼다.** `l4.solution_coaching`을 CORE로 재배정하고 `l3.verify_solution`·
+`l4.misconception.wrong_form_match` 직접 import를 `StepChainVerifier` 선택층 주입(기본
+구현은 합성 루트 `composition.default_step_chain_verifier`·`default_wrong_form_shadow_
+observer` 경유)으로 교체했다 — BFS로 실측하면 `solution_coaching` 경유 경로는 실제로 0이다.
+그런데 그 경로가 *최단*이어서 이전 스캔은 더 긴 경로를 보지 못했을 뿐이었다: `api.coach`/
+`api.ocr_handoff`는 `harness.wh1_loop`(INFRA — WH-1 튜터링 루프)를 통해서도 `l3.verify_
+solution`에 닿는다. `harness`는 `composition`과 달리 DESIGNED_SEAMS(설계된 유일 교체점)가
+아니라서(`BOUNDARY_MAP`의 `harness` 배정 사유 "상위 계층 호출이 정상이라 계층 계약 밖"은
+*허용*이지 *교체점*이라는 뜻이 아니다) 이 경로를 막지 못한다. **정직한 결론**: 잔여 누수 건수는 여전히 2건이고, 원인은
+`l4.solution_coaching`에서 `harness.wh1_loop`로 옮겨갔다 — EOS-86은 그 축을 온전히 상환했지만
+*전체 잔여 누수를 0으로 만들지는 못했다*(이 발견은 EOS-86 범위 밖 후속 태스크 `ARCH-99`로
+분리 등재했다). 위 표의 다른 스냅샷 수치(14/14·252/266 등)는 이번 세션에서 재검증하지 않았다
+— 모듈 수 자체가 556→583으로 늘어 있어 그대로 인용하면 오도할 수 있다(다음 정기 재측정 몫).
+
+**읽는 법(2026-08-31 원문 — solution_coaching 축만 위 갱신으로 대체)**: 최단 경로 다수는
+*설계*다 — `l3.pedagogy.slot_generator`·`l3.render.adapters`·`api.coach`·(EOS-86부터)
+`l4.solution_coaching`이 `composition`에서 능력 구현을 받아 오는 배선(EOS-69 ② "기본 구현
+선택 편의")이고, 그 줄들은 계약에 좁은 예외로 적혀 있다. 동결 열쇠는 (출발점, 누수 지점)이다
+— 끝 ADAPTER는 동률이 있어 열쇠로 쓰면 탐색 순서에 따라 흔들린다(첫 구현이 `set`을 그대로
+순회해 해시 시드마다 다른 끝점을 냈고, 정렬 순회로 고정한 뒤 열쇠도 바꿨다).
 
 ### 8.2 금지 규칙 — `if subject == "math"` · `if problem.type == "quadratic"`
 

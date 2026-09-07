@@ -7,9 +7,19 @@
    "answer_kind는 Core가 해석하지 않는 불투명 문자열" 계약과 충돌하는 진성 경계 냄새). 새 위치가
    생기면 RED, 그 1건이 어댑터/데이터로 빠지면 기준선을 비워 ratchet한다. 계획서 100 §3.7의
    금지 규칙을 글자 그대로 집행하되, 이미 있던 위반을 0으로 위장하지 않는다.
-2. **잔여 누수 집합 동결** — 합성 루트를 막아도 ADAPTER에 닿는 CORE 출발점은 현재 2건(둘 다
-   `l4.solution_coaching`(MIXED) 경유)이다. 늘면 RED, 줄면 이 집합을 줄여 ratchet한다. 키는
-   (출발점, 누수 지점)이다 — 끝 ADAPTER는 동률이 있어 열쇠로 쓰면 BFS 순서에 따라 흔들린다.
+2. **잔여 누수 집합 동결** — 합성 루트를 막아도 ADAPTER에 닿는 CORE 출발점은 여전히 **2건**
+   이지만 [EOS-86·2026-09-06] **누수 지점이 바뀌었다**: 이전엔 `l4.solution_coaching`(MIXED)이
+   `l3.verify_solution`을 직접 import해 그 자리에서 막혔다. EOS-86이 그 직접 import를
+   `StepChainVerifier` 선택층 주입(기본 구현은 합성 루트 경유)으로 교체해 solution_coaching
+   경유 경로는 실제로 0이 됐다(BFS로 실측 확인) — 그런데 최단 경로가 사라지자 BFS가 그보다
+   *더 긴, 지금까지 가려져 있던* 경로를 찾아냈다: `api.coach`/`api.ocr_handoff` → … →
+   `harness.wh1_loop`(INFRA — `l3.verify_solution`·`l4.misconception.*`를 직접 import) →
+   ADAPTER. `harness`는 `composition`과 달리 DESIGNED_SEAMS가 아니라서(§경계문서 — "상위 계층
+   호출이 정상이라 계층 계약 밖"으로만 취급되지 실제 교체점은 아니다) 이 경로를 막지 않는다.
+   **판정**: 이 누수는 EOS-86이 만든 것이 아니라 *원래 있었고 더 짧은 경로에 가려 안 보였던*
+   것이다(솔직한 실측 — acceptance ③ 원문의 "0건" 기대와 다르다·후속 태스크로 분리 등재).
+   늘면 RED, 줄면 이 집합을 줄여 ratchet한다. 키는 (출발점, 누수 지점)이다 — 끝 ADAPTER는
+   동률이 있어 열쇠로 쓰면 BFS 순서에 따라 흔들린다.
 3. **변별력** — 스캐너에 결함을 실제로 주입해(가짜 소스·가짜 그래프) 검출되는지 확인한다. 정상
    입력에서 초록인 것은 보호의 증거가 아니다(CLAUDE.md 2026-09-01).
 """
@@ -65,16 +75,23 @@ MATH_FIELD_NAME_BASELINE: frozenset[tuple[str, str]] = frozenset(
         ("schema.visualization", "integral_region"),
         ("schema.visualization", "show_extrema"),
         ("schema.visualization", "number_line"),
+        # [EOS-86·2026-09-06] 거짓 양성 — `MATH_TOKEN_RX`의 `trig\w*`가 "trigger"를 부분매치한다
+        # (수학 무관 — CoachingTrigger 필드명). l4.solution_coaching이 MIXED→CORE로 재배정되며
+        # 처음 CORE 스캔 대상에 들어와 드러났다(필드 자체는 EOS-86 이전부터 존재·변경 없음).
+        ("l4.solution_coaching", "trigger"),
     }
 )
 
 # 잔여 누수 동결 — (CORE 출발점, ADAPTER 직전의 누수 지점). 줄이는 방향으로만 고친다.
-# 끝점(ADAPTER)이 아니라 *누수 지점*을 고정한다: `l4.solution_coaching`은 `verify_solution`과
-# `wrong_form_match`를 둘 다 import하므로 끝점은 동률이고, 고쳐야 할 자리는 그 앞 모듈이다.
+# [EOS-86·2026-09-06] l4.solution_coaching은 더 이상 누수 지점이 아니다(verify_solution·
+# wrong_form_match 직접 import 제거 — StepChainVerifier 선택층 주입으로 교체). 그러나 그
+# 최단 경로가 사라지자 BFS가 더 긴 기존 경로를 드러냈다 — harness.wh1_loop(INFRA)가
+# l3.verify_solution을 직접 import해 같은 두 출발점(api.coach·api.ocr_handoff)이 여전히
+# ADAPTER에 닿는다(모듈 상단 §2 상세). EOS-86 범위 밖(별도 후속 태스크)이라 그대로 동결한다.
 RESIDUAL_LEAK_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
-        ("api.coach", "l4.solution_coaching"),
-        ("api.ocr_handoff", "l4.solution_coaching"),
+        ("api.coach", "harness.wh1_loop"),
+        ("api.ocr_handoff", "harness.wh1_loop"),
     }
 )
 
