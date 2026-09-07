@@ -10,7 +10,9 @@
   ② `--gate`가 add 시점 외 requires_gates 부착 경로로 실제 작동하고, selector가 그
      게이트를 미통과로 읽어 태스크를 next에서 뺀다(부착이 장식이 아님을 실증).
   ③ `--track` 이관이 entry_gate 하드락으로의 강등에 실제로 쓰인다.
-  ④ **다른 필드 불변** — status·session·artifacts·id·title을 건드리지 않는다.
+  ④ **상태 전이 표면 불변** — status·session·id는 건드리지 않는다. (HARN-57에서 정밀화:
+     artifacts·paths·title은 *기술(記述)* 축이라 정정 경로가 열렸다 — 아래 세 클래스가
+     그 계약을, `TestFrozenAxesStayFrozen`이 닫힌 축의 동결을 각각 동결한다.)
   ⑤ 변별력 — 무변경 호출·중복 항·미등재 게이트/트랙은 거부(exit 1)한다. 성공/실패
      양쪽에서 같은 결과를 내면 검증이 아니라 위장이다.
 """
@@ -371,7 +373,12 @@ class TestPriorityReassign:
 
 
 class TestOtherFieldsFrozen:
-    """④ amend는 status·session·artifacts·id·title을 건드리지 않는다."""
+    """④ *acceptance만* 고치는 호출은 다른 필드를 하나도 건드리지 않는다.
+
+    HARN-57 이후 artifacts·title에는 전용 플래그가 생겼지만, 그것을 지정하지 않은 호출이
+    부수 효과로 바꾸지 않는다는 계약은 그대로다. 열린 축의 동결은
+    `TestFrozenAxesStayFrozen`이 담당한다.
+    """
 
     def test_status_and_session_untouched(self, seeded_repo: Path):
         assert _add("T1-11-amend-frozen") == 0
@@ -535,3 +542,620 @@ class TestBlockReasonFeedbackGuard:
         assert _add("T1-97-block-ok") == 0
         assert cli.main(["block", "T1-97-block-ok", "--reason", "외부 의사결정 대기"]) == 0
         assert _task(seeded_repo, "T1-97-block-ok").status == "blocked"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HARN-57 — 정정 경로 3축(artifacts·paths·title) + `--no-pr` 사후 해소
+#
+# 원칙 2("다른 필드 불변")를 *무효화*한 것이 아니라 **정밀화**한 결과를 동결한다:
+#   · 여전히 닫힌 것 = id·status·session (상태 전이 우회 표면)
+#   · 열린 것       = artifacts(append만)·paths(교체)·title(교체)
+# 셋 다 정정 경로가 없어 실측 사고를 냈고, 그때마다 YAML 손편집(금기)으로만 고쳐졌다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _add_titled(task_id: str, title: str, *extra: str) -> int:
+    """title을 지정해 등재 — `next` 노출 문자열을 검사하려면 태스크마다 제목이 달라야 한다."""
+    return cli.main(
+        [
+            "add",
+            "--eos-priority",
+            "P2",
+            "--id",
+            task_id,
+            "--title",
+            title,
+            "--track",
+            "math-completion",
+            "--stage",
+            "S1",
+            "--acceptance",
+            "원래 조건 ①",
+            *extra,
+        ]
+    )
+
+
+def _finish_without_pr(task_id: str, reason: str, artifact: str = "커밋 예정(PR 동반)") -> None:
+    """`--no-pr <사유>`로 종결시킨다 — HARN-44가 실제로 남긴 상태의 재현."""
+    assert cli.main(["start", task_id, "--no-remote"]) == 0
+    assert cli.main(["done", task_id, "--artifact", artifact, "--no-pr", reason]) == 0
+
+
+def _amend_events(repo: Path, task_id: str) -> list[dict]:
+    return [
+        e
+        for path in store.event_paths(repo)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+        for e in [json.loads(line)]
+        if e.get("action") == "amend" and e.get("id") == task_id
+    ]
+
+
+class TestArtifactCorrection:
+    """① done 이후 열린 PR의 증적을 붙이는 유일한 합법 경로 — **append만**.
+
+    경위: `done`은 종결 상태라 재실행이 거부되고(done→done 전이 불가) `amend`에는
+    `--artifact`가 없었다. 그래서 done을 PR 생성 *전에* 부르면 잘못된 증적이 영구 고정된다
+    — HARN-44의 artifacts에 "커밋 예정(PR 동반)"이 남고 실제 PR #965는 대장에서 추적 불가.
+    """
+
+    def test_append_preserves_existing_artifacts(self, seeded_repo: Path):
+        """덮어쓰기가 아니다 — 기존 증적이 살아남고 새 증적이 뒤에 붙는다."""
+        assert _add("T1-60-artifact-append") == 0
+        _finish_without_pr("T1-60-artifact-append", "incomplete")
+        before = _task(seeded_repo, "T1-60-artifact-append").artifacts
+        assert before == ["커밋 예정(PR 동반)"]
+
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-60-artifact-append",
+                    "--artifact",
+                    "PR #965",
+                    "--reason",
+                    "done 이후 개설된 PR 증적 보강",
+                ]
+            )
+            == 0
+        )
+        after = _task(seeded_repo, "T1-60-artifact-append").artifacts
+        # 정정 전/후가 실제로 다르고(변별력), 원 항이 보존됐다(덮어쓰기였다면 길이가 1이다)
+        assert after != before
+        assert after == ["커밋 예정(PR 동반)", "PR #965"]
+
+    def test_removal_is_not_opened(self, seeded_repo: Path):
+        """증적 *제거* 플래그는 존재하지 않는다 — 지울 수 있으면 이 CLI가 위조 표면이 된다."""
+        parser = cli.build_parser()
+        amend = parser._subparsers._group_actions[0].choices["amend"]  # type: ignore[union-attr]
+        options = {opt for action in amend._actions for opt in action.option_strings}
+        assert "--artifact" in options
+        assert not {"--drop-artifact", "--remove-artifact", "--clear-artifacts"} & options
+
+    def test_duplicate_artifact_rejected(self, seeded_repo: Path):
+        assert _add("T1-61-artifact-dup") == 0
+        _finish_without_pr("T1-61-artifact-dup", "ci-red", artifact="PR #900")
+        assert (
+            cli.main(["amend", "T1-61-artifact-dup", "--artifact", "PR #900", "--reason", "중복"])
+            == 1
+        )
+        assert _task(seeded_repo, "T1-61-artifact-dup").artifacts == ["PR #900"]
+
+    def test_artifact_recorded_in_event_ledger(self, seeded_repo: Path):
+        assert _add("T1-62-artifact-event") == 0
+        _finish_without_pr("T1-62-artifact-event", "incomplete")
+        assert (
+            cli.main(
+                ["amend", "T1-62-artifact-event", "--artifact", "PR #965", "--reason", "증적 보강"]
+            )
+            == 0
+        )
+        events = _amend_events(seeded_repo, "T1-62-artifact-event")
+        assert len(events) == 1
+        assert events[0]["artifacts"] == ["PR #965"]
+
+    def test_works_on_a_task_that_is_still_in_progress(self, seeded_repo: Path):
+        """정정 축은 상태 전이와 무관하다 — done 전이든 후든 증적을 붙일 수 있다."""
+        assert _add("T1-63-artifact-wip") == 0
+        assert cli.main(["start", "T1-63-artifact-wip", "--no-remote"]) == 0
+        assert (
+            cli.main(
+                ["amend", "T1-63-artifact-wip", "--artifact", "PR #1", "--reason", "선행 증적"]
+            )
+            == 0
+        )
+        task = _task(seeded_repo, "T1-63-artifact-wip")
+        assert task.artifacts == ["PR #1"]
+        # 닫힌 축은 그대로다 — status·session·id는 이 verb가 건드리지 않는다
+        assert task.status == "in_progress"
+        assert task.session is not None
+
+
+class TestNoPrPostHocResolution:
+    """② `--no-pr` 사유의 사후 해소 — PR이 실제로 열렸으면 그 사실이 대장에 남는다.
+
+    현재는 "커밋 예정" 같은 문구가 영구 증적으로 굳고, 이벤트 대장만 보는 도구는 그 태스크를
+    영원히 "PR 없이 끝난 건"으로 센다. 해소는 **증적에서 파생**된다(별도 플래그 없음) —
+    사람이 기억해야 하는 플래그를 하나 더 만들면 그것이 다음 망각 지점이 된다.
+    """
+
+    def test_resolution_recorded_in_notes_and_events(self, seeded_repo: Path):
+        assert _add("T1-64-nopr-resolve") == 0
+        _finish_without_pr("T1-64-nopr-resolve", "incomplete")
+        assert "[PR 보류" in _task(seeded_repo, "T1-64-nopr-resolve").notes
+
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-64-nopr-resolve",
+                    "--artifact",
+                    "PR #965",
+                    "--reason",
+                    "종결 후 개설된 PR",
+                ]
+            )
+            == 0
+        )
+        task = _task(seeded_repo, "T1-64-nopr-resolve")
+        assert "[PR 보류 해소" in task.notes
+        assert "incomplete" in task.notes
+        assert "PR #965" in task.notes
+        events = _amend_events(seeded_repo, "T1-64-nopr-resolve")
+        assert events[-1]["no_pr_resolved"] == "incomplete"
+
+    def test_ci_red_reason_is_carried_into_the_resolution(self, seeded_repo: Path):
+        """어느 사유가 해소됐는지가 남아야 한다 — '해소됨'만으로는 회계가 복원되지 않는다."""
+        assert _add("T1-65-nopr-cired") == 0
+        _finish_without_pr("T1-65-nopr-cired", "ci-red")
+        assert (
+            cli.main(
+                ["amend", "T1-65-nopr-cired", "--artifact", "PR #7", "--reason", "CI 복구 후 개설"]
+            )
+            == 0
+        )
+        assert _amend_events(seeded_repo, "T1-65-nopr-cired")[-1]["no_pr_resolved"] == "ci-red"
+
+    def test_non_pr_artifact_does_not_resolve(self, seeded_repo: Path):
+        """대조군 — PR 참조가 없는 증적은 해소가 아니다(항상 해소하면 위장이다)."""
+        assert _add("T1-66-nopr-noresolve") == 0
+        _finish_without_pr("T1-66-nopr-noresolve", "incomplete")
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-66-nopr-noresolve",
+                    "--artifact",
+                    "커밋 a1b2c3d",
+                    "--reason",
+                    "커밋 해시 보강",
+                ]
+            )
+            == 0
+        )
+        task = _task(seeded_repo, "T1-66-nopr-noresolve")
+        assert "[PR 보류 해소" not in task.notes
+        assert "no_pr_resolved" not in _amend_events(seeded_repo, "T1-66-nopr-noresolve")[-1]
+
+    def test_task_without_a_hold_marker_is_not_marked_resolved(self, seeded_repo: Path):
+        """대조군 — 애초에 보류가 없던 태스크에 '해소'를 기록하면 대장이 거짓말을 한다."""
+        assert _add("T1-67-nopr-none") == 0
+        assert cli.main(["start", "T1-67-nopr-none", "--no-remote"]) == 0
+        assert cli.main(["done", "T1-67-nopr-none", "--artifact", "PR #10"]) == 0
+        assert (
+            cli.main(["amend", "T1-67-nopr-none", "--artifact", "PR #11", "--reason", "후속 PR"])
+            == 0
+        )
+        assert "[PR 보류 해소" not in _task(seeded_repo, "T1-67-nopr-none").notes
+
+    def test_resolution_is_recorded_once(self, seeded_repo: Path):
+        """두 번째 PR 증적이 해소를 다시 기록하면 대장이 소음으로 부푼다."""
+        assert _add("T1-68-nopr-once") == 0
+        _finish_without_pr("T1-68-nopr-once", "incomplete")
+        assert cli.main(["amend", "T1-68-nopr-once", "--artifact", "PR #1", "--reason", "1차"]) == 0
+        assert cli.main(["amend", "T1-68-nopr-once", "--artifact", "PR #2", "--reason", "2차"]) == 0
+        assert _task(seeded_repo, "T1-68-nopr-once").notes.count("[PR 보류 해소") == 1
+
+
+class TestPathsCorrection:
+    """④ paths 정정이 **겹침 판정을 실제로 바꾼다** — 오탐 감소가 이 축의 존재 이유다.
+
+    넓게 잡은 glob이 고정되면 overlap 경보가 대량 오탐이 되고, 상시 오탐은 병렬 세션이
+    경보를 무시하게 만든다(이 저장소가 이미 겪은 fail-open 습관화). 실측: 2026-09-03
+    MOB-20이 `src/mobile/lib/**`로 경보 17건을 냈고 좁힐 CLI 경로가 없어 YAML을 손편집했다.
+
+    주장이 아니라 **판정으로** 증명한다 — `overlap` 서브커맨드가 내는 경보 건수가 줄어야 한다.
+    """
+
+    def _seed_three(self) -> None:
+        assert _add("T1-70-paths-wide", "--path", "src/mobile/lib/**") == 0
+        assert _add("T1-71-paths-attempts", "--path", "src/mobile/lib/features/attempts/**") == 0
+        assert _add("T1-72-paths-diagnosis", "--path", "src/mobile/lib/features/diagnosis/**") == 0
+
+    def _overlap_warnings(self, capsys) -> int:
+        capsys.readouterr()
+        assert cli.main(["overlap", "T1-70-paths-wide"]) == 0
+        return capsys.readouterr().out.count("⚠")
+
+    def test_narrowing_paths_reduces_overlap_warnings(self, seeded_repo: Path, capsys):
+        self._seed_three()
+        assert self._overlap_warnings(capsys) == 2, "넓은 glob이 두 태스크 모두와 겹쳐야 한다"
+
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-70-paths-wide",
+                    "--path",
+                    "src/mobile/lib/features/attempts/**",
+                    "--reason",
+                    "실제 작업 범위로 축소 — 경보 오탐 제거",
+                ]
+            )
+            == 0
+        )
+        assert _task(seeded_repo, "T1-70-paths-wide").paths == [
+            "src/mobile/lib/features/attempts/**"
+        ]
+        # 정정 전/후로 **판정**이 달라진다 — 같은 숫자를 내면 ④의 목적이 성립하지 않는다
+        assert self._overlap_warnings(capsys) == 1
+
+    def test_amend_reports_the_overlap_delta(self, seeded_repo: Path, capsys):
+        """알고리즘을 붙였으면 *작동한 비율*을 말해야 한다 — 정정 직후 건수 변화를 보고한다."""
+        self._seed_three()
+        capsys.readouterr()
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-70-paths-wide",
+                    "--path",
+                    "src/mobile/lib/features/attempts/**",
+                    "--reason",
+                    "범위 축소",
+                ]
+            )
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert "겹침 후보 2건 → 1건" in out
+        assert "감소" in out
+
+    def test_replacement_not_append(self, seeded_repo: Path):
+        """paths는 **교체**다 — append로는 넓은 패턴을 좁힐 방법이 없다(축의 목적 자체가 무산)."""
+        assert _add("T1-73-paths-replace", "--path", "src/mobile/lib/**") == 0
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-73-paths-replace",
+                    "--path",
+                    "src/mobile/lib/core/**",
+                    "--reason",
+                    "축소",
+                ]
+            )
+            == 0
+        )
+        paths = _task(seeded_repo, "T1-73-paths-replace").paths
+        assert paths == ["src/mobile/lib/core/**"], "이전 넓은 패턴이 남으면 좁혀지지 않는다"
+
+    def test_previous_value_kept_in_notes(self, seeded_repo: Path):
+        """교체 축은 이전 값을 notes에 남긴다(HARN-49 track 선례) — 흔적 없이 덮어쓰면 근거가 사라진다."""
+        assert _add("T1-74-paths-notes", "--path", "src/mobile/lib/**") == 0
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-74-paths-notes",
+                    "--path",
+                    "src/mobile/lib/core/**",
+                    "--reason",
+                    "오탐 17건 제거",
+                ]
+            )
+            == 0
+        )
+        notes = _task(seeded_repo, "T1-74-paths-notes").notes
+        assert "src/mobile/lib/**" in notes, "이전 값이 없다 — 왜 좁혔는지 되짚을 수 없다"
+        assert "오탐 17건 제거" in notes
+
+    def test_same_paths_rejected(self, seeded_repo: Path):
+        assert _add("T1-75-paths-same", "--path", "src/mobile/lib/**") == 0
+        assert (
+            cli.main(
+                ["amend", "T1-75-paths-same", "--path", "src/mobile/lib/**", "--reason", "무변경"]
+            )
+            == 1
+        )
+
+    def test_invalid_pattern_rejected(self, seeded_repo: Path, capsys):
+        """절대경로·상위참조는 스키마 위반 — 정정이 대장을 깨뜨리면 안 된다."""
+        assert _add("T1-76-paths-bad", "--path", "src/mobile/lib/**") == 0
+        assert cli.main(["amend", "T1-76-paths-bad", "--path", "/etc/passwd", "--reason", "x"]) == 1
+        assert _task(seeded_repo, "T1-76-paths-bad").paths == ["src/mobile/lib/**"]
+
+    def test_duplicate_path_in_one_call_rejected(self, seeded_repo: Path):
+        assert _add("T1-77-paths-dupe") == 0
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-77-paths-dupe",
+                    "--path",
+                    "docs/a/**",
+                    "--path",
+                    "docs/a/**",
+                    "--reason",
+                    "x",
+                ]
+            )
+            == 1
+        )
+
+
+class TestTitleCorrection:
+    """⑤ title 정정이 **`next`가 내는 줄을 바꾼다** — paths보다 위험도가 높은 축.
+
+    SessionStart 브리핑과 `next`가 노출하는 것은 title 한 줄이다. 범위가 정정된 태스크의 옛
+    제목이 남으면 다음 세션이 *정정 전 처방*을 읽고 착수한다 — MOB-20이 acceptance로 범위를
+    고친 뒤에도 title이 옛 처방을 1순위 후보로 노출했고, 그대로 구현했으면 이중 적재였다.
+    """
+
+    # 실제 MOB-20 제목에 들어 있던 라우트 리터럴은 **일부러 옮겨 쓰지 않는다**:
+    # `scripts/analysis/eos_feature_inventory_v2.py`의 테스트 계상은 tests/ 전 파일을
+    # 라우트 문자열로 grep하므로, 무관한 테스트 파일이 그 문자열을 담기만 해도 해당
+    # 기능의 테스트 함수 수가 통째로 부풀어 인벤토리 대장이 red가 된다(실측).
+    _OLD = "시도 제출 엔드포인트 클라 호출 착지"
+    _NEW = "숙달 신호 단일 경로 정리 — attempts 직접 호출은 하지 않는다"
+
+    def test_next_line_changes_after_correction(self, seeded_repo: Path, capsys):
+        assert _add_titled("T1-80-title-next", self._OLD) == 0
+        capsys.readouterr()
+        assert cli.main(["next", "--n", "500"]) == 0
+        before = capsys.readouterr().out
+        assert self._OLD in before, "정정 전에는 옛 제목이 노출된다(이 검사의 전제)"
+
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-80-title-next",
+                    "--title",
+                    self._NEW,
+                    "--reason",
+                    "범위 정정 반영 — 옛 처방이 후보로 노출되던 상태 해소",
+                ]
+            )
+            == 0
+        )
+        capsys.readouterr()
+        assert cli.main(["next", "--n", "500"]) == 0
+        after = capsys.readouterr().out
+        assert self._NEW in after
+        assert self._OLD not in after, "옛 제목이 남으면 다음 세션이 정정 전 처방을 읽는다"
+
+    def test_brief_reflects_the_corrected_title(self, seeded_repo: Path, capsys):
+        """SessionStart 브리핑도 같은 문자열을 읽는다 — 노출 경로가 둘이므로 둘 다 본다."""
+        assert _add_titled("T1-81-title-brief", self._OLD) == 0
+        assert (
+            cli.main(["amend", "T1-81-title-brief", "--title", self._NEW, "--reason", "정정"]) == 0
+        )
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+        out = capsys.readouterr().out
+        if "T1-81-title-brief" in out:
+            assert self._NEW in out and self._OLD not in out
+        else:  # 브리핑은 상위 N건만 낸다 — 노출되지 않았으면 이 검사는 판정 불가다
+            pytest.skip("브리핑 상위 목록에 대상 태스크가 없어 노출 여부를 판정할 수 없다")
+
+    def test_previous_title_kept_in_notes(self, seeded_repo: Path):
+        assert _add_titled("T1-82-title-notes", self._OLD) == 0
+        assert (
+            cli.main(["amend", "T1-82-title-notes", "--title", self._NEW, "--reason", "범위 정정"])
+            == 0
+        )
+        notes = _task(seeded_repo, "T1-82-title-notes").notes
+        assert self._OLD in notes, "이전 제목이 없다 — 무엇이 어떻게 바뀌었는지 사라진다"
+
+    def test_same_title_rejected(self, seeded_repo: Path):
+        assert _add_titled("T1-83-title-same", self._OLD) == 0
+        assert (
+            cli.main(["amend", "T1-83-title-same", "--title", self._OLD, "--reason", "무변경"]) == 1
+        )
+
+
+class TestFrozenAxesStayFrozen:
+    """정밀화의 반대편 — id·status·session은 **여전히** amend가 건드리지 않는다.
+
+    원칙 2를 조용히 지우면 다음 세션이 그 교훈을 잃는다. artifacts·paths·title이 열린 뒤에도
+    상태 전이 표면은 닫혀 있어야 하고, 그것을 여기서 기계로 동결한다.
+    """
+
+    def test_no_flags_exist_for_state_transition_fields(self, seeded_repo: Path):
+        parser = cli.build_parser()
+        amend = parser._subparsers._group_actions[0].choices["amend"]  # type: ignore[union-attr]
+        options = {opt for action in amend._actions for opt in action.option_strings}
+        assert not {"--status", "--session", "--id", "--owner", "--stage"} & options
+
+    def test_multi_axis_amend_leaves_state_untouched(self, seeded_repo: Path):
+        assert _add_titled("T1-84-frozen", "옛 제목", "--path", "docs/a/**") == 0
+        assert cli.main(["start", "T1-84-frozen", "--no-remote"]) == 0
+        before = _task(seeded_repo, "T1-84-frozen")
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-84-frozen",
+                    "--title",
+                    "새 제목",
+                    "--path",
+                    "docs/b/**",
+                    "--artifact",
+                    "PR #3",
+                    "--reason",
+                    "3축 동시 정정",
+                ]
+            )
+            == 0
+        )
+        after = _task(seeded_repo, "T1-84-frozen")
+        assert after.status == before.status == "in_progress"
+        assert after.session == before.session
+        assert after.id == before.id
+
+    def test_every_axis_previous_value_survives_a_multi_axis_amend(self, seeded_repo: Path):
+        """다축 정정에서 *뒤* 축의 이전 값이 사라지면 안 된다.
+
+        구 구현은 notes에 `note_lines[0]`만 남겨, `--title`과 `--priority`를 함께 고치면
+        한쪽의 이전 값이 침묵으로 유실됐다 — 이전 값 보존이 교체 축의 유일한 안전장치인데
+        그것이 무증상으로 깨지는 형태였다.
+        """
+        assert _add_titled("T1-85-multinote", "옛 제목", "--path", "docs/a/**") == 0
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-85-multinote",
+                    "--priority",
+                    "1",
+                    "--title",
+                    "새 제목",
+                    "--path",
+                    "docs/b/**",
+                    "--reason",
+                    "3축 정정",
+                ]
+            )
+            == 0
+        )
+        notes = _task(seeded_repo, "T1-85-multinote").notes
+        assert "3 → 1" in notes, "priority 이전 값 유실"
+        assert "옛 제목" in notes, "title 이전 값 유실"
+        assert "docs/a/**" in notes, "paths 이전 값 유실"
+
+
+class TestMeaninglessInputRejection:
+    """③ 무의미 입력 4종은 **각각 다른 메시지**로 거부한다.
+
+    같은 메시지를 내면 사람이 무엇을 고쳐야 하는지 알 수 없고, 검사가 하나 사라져도 무증상이
+    된다(변별력 없는 검증 스텝 = 위장). 빈 문자열과 공백만도 가른다 — 셸 변수가 비어 전달된
+    경우와 공백이 섞인 경우는 고칠 지점이 다르다.
+    """
+
+    def _reject_message(self, capsys, *argv: str) -> str:
+        capsys.readouterr()
+        assert cli.main(list(argv)) == 1
+        return capsys.readouterr().err
+
+    def test_four_kinds_have_four_distinct_messages(self, seeded_repo: Path, capsys):
+        assert _add("T1-86-meaningless") == 0
+        _finish_without_pr("T1-86-meaningless", "incomplete", artifact="PR #900")
+        base = ["amend", "T1-86-meaningless", "--reason", "x"]
+
+        empty = self._reject_message(capsys, *base, "--artifact", "")
+        blank = self._reject_message(capsys, *base, "--artifact", "   ")
+        self_id = self._reject_message(capsys, *base, "--artifact", "T1-86-meaningless")
+        same = self._reject_message(capsys, *base, "--artifact", "PR #900")
+
+        assert "빈" in empty
+        assert "공백" in blank
+        assert "자기 태스크 id" in self_id
+        assert "동일한 증적이 이미 있다" in same
+        assert len({empty, blank, self_id, same}) == 4, "네 거부가 같은 말을 하면 진단이 아니다"
+
+    def test_rejection_writes_nothing(self, seeded_repo: Path):
+        """거부는 **쓰기 0** — 절반 기록되면 notes만 오염되고 정정은 안 된 상태가 된다."""
+        assert _add("T1-87-meaningless-write", "--path", "docs/a/**") == 0
+        before = _task(seeded_repo, "T1-87-meaningless-write")
+        assert (
+            cli.main(["amend", "T1-87-meaningless-write", "--artifact", "  ", "--reason", "x"]) == 1
+        )
+        after = _task(seeded_repo, "T1-87-meaningless-write")
+        assert after.artifacts == before.artifacts
+        assert after.notes == before.notes
+        assert after.paths == before.paths
+
+    @pytest.mark.parametrize("axis", ["--path", "--title"])
+    def test_blank_rejected_on_every_new_axis(self, seeded_repo: Path, capsys, axis: str):
+        """세 축 모두가 무의미 입력을 거부한다 — 한 축만 검사하면 나머지가 뚫린다."""
+        task_id = f"T1-88-blank{'p' if axis == '--path' else 't'}"
+        assert _add(task_id) == 0
+        capsys.readouterr()
+        assert cli.main(["amend", task_id, axis, "   ", "--reason", "x"]) == 1
+        assert "공백" in capsys.readouterr().err
+
+    def test_empty_string_reaches_the_blank_diagnosis_on_title(self, seeded_repo: Path, capsys):
+        """`--title ""`은 *지정된* 빈 값이다 — "변경 항목이 없다"로 새면 진단이 거짓말이 된다.
+
+        실측(2026-09-07 검증자): 무변경 가드가 title을 truthiness로 보던 동안 `--title ""`은
+        "변경 항목이 없다"로 거부됐다. exit 1은 같아서 **거부된다는 사실만 보면 정상으로
+        보인다** — 틀린 것은 사람이 어디를 고쳐야 하는지였다(셸 변수가 비어 전달된 경우가
+        정확히 이 형태다). 공백만(`"   "`)은 통과 경로가 달라 이 결함을 드러내지 못한다.
+        """
+        assert _add("T1-90-empty-title") == 0
+        capsys.readouterr()
+        assert cli.main(["amend", "T1-90-empty-title", "--title", "", "--reason", "x"]) == 1
+        err = capsys.readouterr().err
+        assert "빈 title 값은 받지 않는다" in err, err
+        assert "변경 항목이 없다" not in err, err
+
+    def test_self_id_rejected_as_title(self, seeded_repo: Path, capsys):
+        """제목이 자기 id면 `next` 줄이 'ID ID'가 되어 아무것도 말하지 않는다."""
+        assert _add("T1-89-self-title") == 0
+        capsys.readouterr()
+        assert (
+            cli.main(["amend", "T1-89-self-title", "--title", "T1-89-self-title", "--reason", "x"])
+            == 1
+        )
+        assert "자기 태스크 id" in capsys.readouterr().err
+
+
+class TestNewAxesHitTheReasonFeedbackGuard:
+    """⑥ 새 플래그의 `--reason`도 HARN-53 되먹임 가드를 탄다 — 가드를 복제하지 않고 재사용한다.
+
+    `--reason`은 notes에 append되고 notes는 의존 선언 스캐너의 입력이다. 새 축이 가드를
+    우회하면 "정정 사유가 새 위반을 만드는" 되먹임이 이 경로로만 되살아난다.
+    """
+
+    @pytest.mark.parametrize(
+        "axis_argv",
+        [
+            ["--artifact", "PR #5"],
+            ["--path", "docs/z/**"],
+            ["--title", "새 제목"],
+        ],
+        ids=["artifact", "path", "title"],
+    )
+    def test_guard_applies_to_each_new_axis(self, seeded_repo: Path, capsys, axis_argv: list[str]):
+        target = f"T1-93-guard{axis_argv[0][2]}"
+        assert _add(target) == 0
+        assert _add("T1-94-guard-ref") == 0
+        before = _task(seeded_repo, target)
+        capsys.readouterr()
+        assert (
+            cli.main(
+                ["amend", target, *axis_argv, "--reason", "T1-94 착지 후 재검토한다"],
+            )
+            == 1
+        )
+        assert "새 의존 선언을 만든다" in capsys.readouterr().err
+        after = _task(seeded_repo, target)
+        # 거부는 쓰기 0 — 가드가 통과시킨 뒤 되돌리는 형태면 대장이 잠깐 오염된다
+        assert after.artifacts == before.artifacts
+        assert after.paths == before.paths
+        assert after.title == before.title
+        assert after.notes == before.notes
+
+    def test_harmless_reason_still_passes_on_new_axes(self, seeded_repo: Path):
+        """양성 대조 — 무조건 거부면 가드가 아니라 정정 차단기다."""
+        assert _add("T1-95-guard-ok") == 0
+        assert (
+            cli.main(
+                ["amend", "T1-95-guard-ok", "--title", "정정된 제목", "--reason", "범위 정정 반영"]
+            )
+            == 0
+        )
+        assert _task(seeded_repo, "T1-95-guard-ok").title == "정정된 제목"
