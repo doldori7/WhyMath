@@ -207,6 +207,8 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 
 | `whymath-curriculum-design-6eejrv` | PB-08(todo) | 6 | 0 | none | 코드 3파일(problems.py·test_problems·test_problems_integration)의 검수·저작권 2축 게이트+집행 지점+변별력 테스트는 PB-08 ①②③⑤가 문면으로 다룸. 리댁션·ETag 축은 main SEC-24 `PublicProblem` 투영이 상위 방식으로 해소(PB-08 notes "재도입 금지") — 회수 시 2축 where·부모 404만 이식. PR #802 = closed·merged_at null(실측) → 브랜치 yaml의 `done · #802`는 무효, main todo가 정본. PB-12는 SEC-24가 gating 6라우트로 해소·재등재 불요. 선언 공백 1: `test_problems_integration.py`가 PB-08 paths에 없음(acceptance는 다룸) | 조치 없음(paths 보강은 HARN-57 착지 후 착수 세션 몫) |
 
-*(잔여 3건은 결과 도착 후 기재)*
+| `whymath-pedagogy-review-uqyg79` | PED-22~25(done #831·#834·#835·#832)·PED-26(todo) | 49 | 6 | low | 고유 0줄 27파일(코퍼스 YAML 11·l3 생성기 5·테스트 8 등)은 PED-22/24가 바이트 동일 이식. PR #675는 main 머지 이력 0(미머지). uncovered: `l4/pedagogy/signal_assembly.py` 60줄+테스트 119줄(PED-08 ① 공용 좌석 — 로직은 main `_build_signals` get_state 리팩터가 우세·유실은 좌석 경계뿐) · `PED-08`(blocked)/`PED-13`(todo) YAML — coach `decide()` 소비 불가 원인(concept 그래프 code ↔ 원자 code ID 공간 불일치·runtime crosswalk 필요) 실측 분석이 main 0건·번호는 타 done 태스크 점유 · `.claude/agents` 3파일 PED-11 부기 4줄(main은 유령 필드 `preferred_solution_style`을 실재처럼 서술) · `00_overview.md` 04e 인덱스 줄. OPS-15 격리 가드 2종은 PED-25 ⑤ 의도적 제외+MEMORY 회수 경로 기록 → covered | PED-26 ⑤(gdmwhk와 묶음: 처분 기록 의무·04f 병합·04e 이중 점유 해소·PED-13 재배정·소액 문서 2건·③ stale 정정) |
+
+*(잔여 2건 vafylb·trjg5x는 재개 결과 도착 후 기재)*
 
 *(§7·§8·§9는 결과 도착 후 기재)*
