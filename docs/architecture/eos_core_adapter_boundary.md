@@ -273,7 +273,7 @@ python3 scripts/analysis/eos_core_adapter_boundary_scan.py --json out.json --mar
 ## §8. "수학을 제거했을 때 무엇이 남는가" — 전이 도달·금지 규칙 실측 (EOS-84 · 2026-09-04)
 
 > 계획서 100 §3.7의 두 문장을 계측으로 옮겼다. 계측기 = `scripts/analysis/eos_core_boundary_probe.py`,
-> 게이트 = `tests/infra/test_eos_core_boundary_probe.py`(리터럴 비교 기준선 1건 동결·과목명 비교 0 · 잔여 누수 집합 동결).
+> 게이트 = `tests/infra/test_eos_core_boundary_probe.py`(리터럴 비교 기준선 **0건**(EOS-85로 해소)·과목명 비교 0 · 잔여 누수 집합 동결).
 > **정본화 ≠ 집행**: 이 절의 숫자는 스냅샷이고, 강제는 그 테스트와 EOS-67 계약이 한다.
 
 ### 8.1 전이 도달 — EOS-67이 못 보는 축
@@ -304,22 +304,39 @@ MIXED로 배정된 채 수학 오답 형태 검출기를 직접 import한다. MI
 CORE 266모듈의 AST에서 **비교문(`Compare`)·`match` 패턴의 문자열 리터럴**이 과목명(`math`·`수학`…)
 또는 수학 유형(`quadratic`·`trig*`·`polynomial`…)인 곳을 찾았다.
 
-**히트 1건** (착수 메모의 "0건"은 정정 — 첫 실측이 아니라 ratchet 테스트가 잡았다):
+**히트 0건 — `EOS-85`로 해소**(2026-09-06 · 판정 기준 main `dc2e6583`).
+
+종전에 남아 있던 1건은 아래 자리였다:
 
 | CORE 모듈 | 위치 | 종류 | 내용 |
 |---|---|---|---|
-| `l1.problem_bank.populate` | `_verify_meta_from_raw` L363 | math_type | `kind_raw in ("real_root_count", …, "inequality_direction", …, "finite_probability")` — answer_kind **17종을 튜플로 열거**해 미지 값을 걸러낸다 |
+| ~~`l1.problem_bank.populate`~~ | ~~`_verify_meta_from_raw` L363~~ | ~~math_type~~ | ~~`kind_raw in ("real_root_count", …, "inequality_direction", …)` — answer_kind **17종 튜플 열거**~~ → **제거됨** |
 
-과목명(`== "math"`) 분기는 **0건**이다. 남은 1건은 유형 문자열이지만 §3.7이 겨냥한 그 형태 —
-"Core가 이차방정식을 안다" — 가 맞다: 적재기(CORE)가 answer_kind의 **허용 어휘**를 갖고 있으면,
-Physics 어댑터가 `"unit_consistency"`를 들고 와도 적재 단계에서 걸러진다. EOS-66이 "answer_kind는
-Core가 해석하지 않는 불투명 문자열"로 못 박은 계약과 정면으로 충돌하므로 **진성 경계 냄새**로
-분류하고, 상환 방향은 그 열거를 `SubjectAdapter`의 `answer_kinds()`(또는 코퍼스 데이터)로 옮기는
-것이다(EOS-66 후속 — 별도 태스크 등재는 Kiki 판정 후).
+진단은 옳았다 — 적재기(CORE)가 answer_kind **허용 어휘**를 갖고 있으면 Physics 어댑터가
+`"unit_consistency"`를 들고 와도 적재 단계에서 걸러지고, 이는 EOS-66의 "answer_kind는 Core가
+해석하지 않는 불투명 문자열" 계약과 정면 충돌한다. 다만 상환은 예상했던
+`SubjectAdapter.answer_kinds()`로의 **이관**이 아니라 **열거 자체의 제거**였다: 어휘를 어댑터로
+옮기면 Core는 여전히 "허용 목록을 조회해 거른다"는 동작을 갖는데, 애초에 **적재기가 거를 일이
+아니다**. 검증 가능 여부의 판정 권위는 L3 검산(`l3.equivalent.acceptance._CONCEPTUAL_VERIFIERS`)
+이고, 적재기는 값을 **형식만 보고 그대로 통과**시킨다.
 
-테스트는 이 1건을 **(모듈, 종류) 기준선**으로 동결한다 — 새 자리가 생기거나 같은 자리가 늘면 RED,
-빠지면 기준선을 비우라고 실패시킨다(ratchet). 과목명 비교는 기준선 없이 0을 강제한다. 결함
-주입(`if subject == "math":`·`if problem.type == "quadratic":`·튜플 멤버십·`case "trig_identity":`·
+부수 효과로 **조용한 손실**도 사라졌다 — 종전에는 목록에 없는 값이 예외도 경고도 없이 `None`이
+되어 "answer_kind 없는 문항"으로 보였다(`S4-17` `finite_probability` 손실이 그 전례).
+
+> ⚠ **이 0이 보장하는 범위**(과대주장 방지 · EOS-85 결함 주입 실측). 스캐너는 리터럴을
+> `MATH_TYPE_RX`(접두 목록)로 판정하는데, 위 17종 중 그 정규식에 걸리는 것은
+> **`inequality_direction` 하나뿐**이었다. 즉 히트 1건은 사실상 그 한 값이 만들었고,
+> 화이트리스트를 3종·7종으로 되살려도(그 값 제외) **히트는 0으로 유지된다**. 그러므로
+> "리터럴 비교 0"은 *접두 목록에 걸리는 어휘가 없다*는 뜻이지 과목 어휘 열거가 전부 사라졌다는
+> 뜻이 아니다. 같은 파일의 `answer_selection`(largest/smallest/unique)·`answer_aggregate`
+> (sum/product)가 **지금도 같은 형태로 남아 있으면서 스캔에 안 잡히는** 실례다.
+> 매처 확장과 그 두 필드의 처분은 `EOS-01`이 소유한다. 그때까지 `answer_kind` 축의 실질
+> 보호는 행동 축 회귀 테스트가 맡는다(`test_load_passes_unknown_answer_kind_through_verbatim`
+> — 같은 뮤테이션에서 실제로 RED).
+
+테스트는 이제 **빈 기준선**을 동결한다 — 새 자리가 생기면 RED, 실측이 더 줄면 기준선을 다시
+내리라고 실패시킨다(ratchet). 과목명 비교는 기준선 없이 0을 강제한다. 결함 주입
+(`if subject == "math":`·`if problem.type == "quadratic":`·튜플 멤버십·`case "trig_identity":`·
 역순 비교)이 각각 1건으로 검출됨을 확인했다(변수 대 변수 비교·대입·docstring·`"pending"`은 비검출).
 
 ### 8.3 그러나 Core는 *데이터로* 수학을 안다 — 어휘 상수 77건 / 18모듈
@@ -501,6 +518,13 @@ ast.unparse)[:12]`)이다 — 개수 대조는 "알려진 위반을 갚으면서
 
 §8.2의 리터럴 비교 1건과 **같은 자리**를 다른 축으로 잡았다 — 그쪽은 어휘가 수학이라서, 이쪽은
 Core가 불투명 값을 읽어서. 별칭을 추적하지 않았다면 이 스캐너는 0을 냈을 것이고, 그 0은 맹점이다.
+
+> **상환 완료 — `EOS-85`**(2026-09-06 · 판정 기준 main `dc2e6583`). 그 한 자리가 사라져
+> `KNOWN_VIOLATIONS`는 **비었다**(지문 `d93b2c7770a0` 상환). 기준선 항목의 `recheck`가
+> "EOS-85 착지 시 이 항목을 비운다"였고 그대로 집행했다 — *만료 지점을 동반한 유예*가
+> 실제로 회수된 사례다. 두 축이 같은 자리를 잡고 있었으므로 §8.2와 이 절이 **동시에** 0이
+> 됐다. 별칭 탐지력은 실 저장소 위반이 아니라 **합성 주입**이 계속 동결한다 — 위반을 갚으면
+> 탐지력이 사라지는 테스트는 상환을 벌주는 구조라, 그 의존을 끊었다.
 
 ### 11.2 집행 — `tests/infra/test_eos_opaque_payload_gate.py` (CI `infra-contracts` 잡)
 
