@@ -277,6 +277,7 @@ class LLMEquivalentProblemGenerator:
         misconception_catalog: Mapping[str, str] | None = None,
         topic_hint: str | None = None,
         subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
+        budget_krw: float = _STUDENT_ESCALATION_DEFAULTS.budget_krw,
         difficulty: str | None = None,
         temperature: float = 0.9,
         authoring_family: ModelFamily | None = ModelFamily.GENERAL,
@@ -308,6 +309,15 @@ class LLMEquivalentProblemGenerator:
             subscription: 라우팅 신호(구독 — 클라우드 승급 가드). 기본값은
                 `escalation_defaults.default_student_escalation_signals()` 단일 좌석(OPS-18,
                 오늘은 free).
+            budget_krw: 라우팅 신호(클라우드 잔여 예산·원). 기본값은 같은 단일 좌석(오늘은 0.0)
+                이라 **동작 변경 0**이다. 이 좌석이 따로 필요한 이유(EOS-99 PR #1023 codex P1):
+                클라우드로 나가려면 `subscription != free`와 `budget_krw > 0`이 **둘 다** 필요한데
+                (`router.business_cost_tier` 규칙1이 예산을, 규칙2가 구독을 각각 LOCAL로 강제하고
+                `guard_cloud`가 한 번 더 본다), 종전에는 구독만 열려 있고 예산은 단일 좌석 상수로
+                박혀 있어 **구독만 바꿔도 여전히 LOCAL**이었다. 즉 클라우드 경로를 실제로 태울
+                방법이 이 생성기에 없었고, 그래서 프롬프트 캐시 적중 계측(EOS-99)이 이 경로에서는
+                영영 `not_applicable`만 낸다. 실측(2026-09-07): free/0=local · premium/0=local ·
+                premium/5000=cloud_mid.
             difficulty: 라우팅 난이도 라벨(None이면 spec.difficulty_overall에서 파생).
             temperature: **생성 샘플링 온도**(S2-g 생성 다양성·기본 0.9). 튜터링(도구선택·다음
                 행동)은 *결정론*이 좋아 온도를 지정하지 않지만(제공자 기본), *동등문제 저작*은
@@ -359,6 +369,7 @@ class LLMEquivalentProblemGenerator:
         self._catalog = dict(misconception_catalog) if misconception_catalog is not None else None
         self._topic_hint = topic_hint
         self._subscription = subscription
+        self._budget_krw = budget_krw
         self._difficulty = difficulty
         self._temperature = temperature
         self._authoring_family = authoring_family
@@ -712,7 +723,7 @@ class LLMEquivalentProblemGenerator:
             difficulty=difficulty,
             requires_reasoning=True,
             student_subscription=self._subscription,
-            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
+            budget_krw=self._budget_krw,  # 기본값=단일 좌석(OPS-18·회귀 0)·호출자 명시 시 override
             sync=True,
             # 등급: 프롬프트에는 비민감 스펙 요약(성취기준 코드·오개념 id·난이도·답 형태)만
             # 싣고 원본 본문·풀이는 애초에 스펙에 없다(`_build_user_prompt` 참조) — 실리는

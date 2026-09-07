@@ -45,6 +45,23 @@ from whymath_backend.l3.pregenerate.provenance_bridge import generation_log_from
 from whymath_backend.schema.provenance import GenerationLog
 
 
+class _NullProvider:
+    """라우팅 판정만 보는 테스트용 provider 좌석 — 호출되지 않는다(네트워크 0)."""
+
+    async def generate(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
+        raise AssertionError("이 테스트는 라우팅 결정만 본다 — 생성 호출이 있으면 설계 오류")
+
+
+def _spec() -> EquivalenceSpec:
+    """라우팅 판정용 최소 스펙 — 난이도만 의미가 있다(medium → 규칙 4 경로)."""
+    return EquivalenceSpec(
+        achievement_standard_codes=frozenset({"[10공수1-02-02]"}),
+        target_misconception_ids=frozenset(),
+        difficulty_overall=2.5,
+        answer_format=None,
+    )
+
+
 def _cloud_round(n: int, *, prefix_tokens: int = 2000, tail: int = 20) -> PromptCacheTally:
     """동일 프리픽스 n회 반복 회차(acceptance ③의 측정 지점)를 원장으로 재현한다.
 
@@ -373,3 +390,115 @@ class TestCliReportsTheOperatingRate:
 
         assert cache["hit_rate"] == 0.0
         assert cache["state"] == "enabled_not_working"
+
+
+class TestLiveMeasurementCanActuallyReachTheCloud:
+    """계측이 **도달 가능한가** — 라우터가 LOCAL로 강제하면 적중률은 영영 정의되지 않는다.
+
+    지적: PR #1023 codex P1. 이 파일의 나머지가 "캐시 토큰이 들어오면 옳게 집계하는가"를
+    본다면, 이 클래스는 그 앞 질문 — **애초에 클라우드 호출이 일어날 수 있는가** — 를 본다.
+    종전 `_build_live_generator`는 구독·예산을 둘 다 단일 좌석(free/0.0)으로 고정했고,
+    라우터는 그 둘을 각각 독립적으로 LOCAL로 강제한다. 그래서 Anthropic 키를 넣어도 회차는
+    `state='not_applicable'`만 냈다 — 측정 회차가 측정 아닌 이유로 공전한다
+    (CLAUDE.md "검증 없는 실행 안내 금지"·"가정 기반 런북 금지").
+
+    실측(2026-09-07): free/0=local · free/5000=local · **premium/0=local** · premium/5000=cloud_mid.
+    """
+
+    @staticmethod
+    def _tier(subscription: str, budget_krw: float) -> str:
+        from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
+
+        gen = LLMEquivalentProblemGenerator(
+            _NullProvider(), subscription=subscription, budget_krw=budget_krw
+        )
+        decision = gen._decide_routing(_spec())
+        return str(decision.cost_tier)
+
+    def test_default_seat_stays_local(self) -> None:
+        """기본값(미지정)은 종전 그대로 LOCAL — 이 PR이 라우팅 기본을 바꾸지 않았다."""
+        from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
+
+        gen = LLMEquivalentProblemGenerator(_NullProvider())
+
+        assert str(gen._decide_routing(_spec()).cost_tier) == "local"
+
+    def test_both_signals_are_required(self) -> None:
+        """구독만·예산만으로는 못 나간다 — 둘 다 필요하다(한쪽만 고치는 오해 차단)."""
+        assert self._tier("premium", 0.0) == "local"  # 구독만 열림
+        assert self._tier("free", 5000.0) == "local"  # 예산만 열림
+        assert self._tier("premium", 5000.0) == "cloud_mid"  # 둘 다 열림
+
+    def test_cli_propagates_both_or_neither(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CLI 플래그가 생성기까지 실제로 도달한다 — 미지정이면 **키 자체를 싣지 않는다**.
+
+        None을 그대로 넘기면 생성자 기본값(단일 좌석)이 덮여 회귀가 난다. 그래서 '전달됨'이
+        아니라 '전달되지 않음'까지 함께 못박는다.
+        """
+        captured: dict[str, object] = {}
+
+        class _Spy:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+            def generate(self, spec: EquivalenceSpec) -> None:
+                return None
+
+        monkeypatch.setattr(
+            "whymath_backend.l3.equivalent.llm_generator.LLMEquivalentProblemGenerator",
+            _Spy,
+        )
+
+        problem_corpus_accumulate._build_live_generator("힌트")
+        assert "subscription" not in captured and "budget_krw" not in captured
+
+        captured.clear()
+        problem_corpus_accumulate._build_live_generator(
+            "힌트", subscription="premium", budget_krw=5000.0
+        )
+        assert captured["subscription"] == "premium"
+        assert captured["budget_krw"] == 5000.0
+
+    def test_cli_argv_reaches_the_generator(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """**argv → 생성기**까지 관통 확인 — 헬퍼만 검사하면 배선 누락을 못 잡는다.
+
+        위 테스트는 `_build_live_generator`를 직접 부르므로 `main()`의 argparse→헬퍼 구간이
+        빠진다. 실제로 그 구간을 끊는 뮤테이션(M12: `subscription=None` 하드코딩)이 위 검사만
+        있을 때 **초록으로 통과**했다 — 계약을 만들고 집행 지점을 안 본 전형이다
+        (CLAUDE.md "정본화를 집행으로 착각한 완료 선언 금지"). 이 검사가 그 구간을 못박는다.
+        """
+        captured: dict[str, object] = {}
+
+        class _Spy:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+            def generate(self, spec: EquivalenceSpec) -> None:
+                return None
+
+        monkeypatch.setattr(
+            "whymath_backend.l3.equivalent.llm_generator.LLMEquivalentProblemGenerator",
+            _Spy,
+        )
+        main(
+            [
+                "--out",
+                str(tmp_path / "acc.jsonl"),
+                "--n",
+                "1",
+                "--canary",
+                "0",
+                "--abort-window",
+                "0",
+                "--subscription",
+                "premium",
+                "--budget-krw",
+                "5000",
+            ]
+        )
+        capsys.readouterr()
+
+        assert captured["subscription"] == "premium"
+        assert captured["budget_krw"] == 5000.0

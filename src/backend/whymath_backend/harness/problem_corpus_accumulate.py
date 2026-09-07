@@ -520,16 +520,32 @@ def _build_live_generator(
     topic_hint: str,
     *,
     generation_log_sink: Callable[[GenerationLog], None] | None = None,
+    subscription: str | None = None,
+    budget_krw: float | None = None,
 ) -> EquivalentProblemGenerator:
     """라이브 LLM 생성기 조립(조성 루트) — L4 카탈로그 라벨 주입·표준 CompositeProvider.
 
     이 함수만 LLM 경로를 안다 — 여기 격리해 run_corpus_accumulate는 좌석 무관을 유지한다.
     `generation_log_sink`(EOS-55): 호출별 GenerationLog(재현 좌석·입력 스냅샷)를 흘릴 싱크
     — main()이 JSONL appender를 배선한다(적재가 기본·정본화≠집행).
+
+    `subscription`·`budget_krw`(EOS-99 PR #1023 codex P1): **둘 다 None이면 생성기 기본값**
+    (단일 좌석 free/0.0)이라 종전 동작과 바이트 단위로 같다. 명시하면 그 값이 라우팅 신호로
+    나간다 — 클라우드 경로를 태우려면 **둘 다** 필요하다(`business_cost_tier` 규칙1이 예산을,
+    규칙2가 구독을 각각 LOCAL로 강제하고 `guard_cloud`가 한 번 더 본다). 하나만 열면 여전히
+    LOCAL이고, 그러면 프롬프트 캐시 계측은 영영 `not_applicable`만 낸다.
     """
     from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
     from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
     from whymath_backend.schema.enums import Subject
+
+    # None은 "지정 안 함"이라 **키 자체를 싣지 않는다** — 생성자 기본값(단일 좌석)이 그대로
+    # 살아 있어야 회귀가 0이다. None을 그대로 넘기면 타입도 깨지고 좌석도 덮인다.
+    routing_overrides: dict[str, Any] = {}
+    if subscription is not None:
+        routing_overrides["subscription"] = subscription
+    if budget_krw is not None:
+        routing_overrides["budget_krw"] = budget_krw
 
     return LLMEquivalentProblemGenerator(
         None,  # 표준 CompositeProvider(Ollama+Anthropic) 지연 구성 — 라이브 환경 전제
@@ -538,6 +554,7 @@ def _build_live_generator(
         subject=Subject.공통,
         slug_prefix="wm-gen-quad",
         generation_log_sink=generation_log_sink,
+        **routing_overrides,
     )
 
 
@@ -556,6 +573,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True, help="축적 산출 JSONL(append).")
     parser.add_argument("--n", type=int, default=20, help="생성 시도 횟수.")
     parser.add_argument("--topic-hint", default=_DEFAULT_TOPIC_HINT, help="저작 주제 힌트.")
+    # ── 클라우드 라우팅 옵트인(EOS-99 PR #1023 codex P1) ──────────────────────────
+    # 기본 None = 미지정 = 생성기 단일 좌석(free/0.0) 그대로 → **회귀 0**. 켜려면 둘 다 준다.
+    parser.add_argument(
+        "--subscription",
+        default=None,
+        choices=["free", "basic", "premium", "gifted"],
+        help=(
+            "라우팅 구독 신호(미지정=단일 좌석 free). 클라우드 경로를 태우려면 "
+            "--budget-krw와 **함께** 지정한다 — 하나만으로는 라우터가 LOCAL로 강제한다."
+        ),
+    )
+    parser.add_argument(
+        "--budget-krw",
+        type=float,
+        default=None,
+        help=(
+            "라우팅 클라우드 잔여 예산(원·미지정=단일 좌석 0.0=LOCAL 강제). "
+            "프롬프트 캐시 적중 계측(EOS-02)처럼 클라우드 호출이 필요한 회차에서만 지정한다."
+        ),
+    )
     parser.add_argument(
         "--standard-code", default=_DEFAULT_STANDARD_CODE, help="스펙 성취기준 코드."
     )
@@ -711,7 +748,12 @@ def main(argv: list[str] | None = None) -> int:
     def _review_sink(entry: ReviewQueueEntry) -> None:
         append_review_queue_jsonl(review_queue_path, entry)
 
-    generator = _build_live_generator(args.topic_hint, generation_log_sink=_genlog_sink)
+    generator = _build_live_generator(
+        args.topic_hint,
+        generation_log_sink=_genlog_sink,
+        subscription=args.subscription,
+        budget_krw=args.budget_krw,
+    )
 
     # 회차 매니페스트(MP-04 ①)의 입력 지문 — **배치 호출 앞에서** 뜬다(PR #1013 Codex P1).
     # 이유 둘: ⓐ dedup 인덱스는 `--seeds`뿐 아니라 **기존 `--out` 코퍼스**로도 만들어진다
