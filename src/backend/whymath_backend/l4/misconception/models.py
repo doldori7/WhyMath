@@ -58,6 +58,23 @@ class Misconception(BaseModel):
             "*겹치지 않게*(disjoint) 작성해 기존 confidence·matched_signals를 보존한다."
         ),
     )
+    refuting_regex: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "**반박 조건**(OR·정규식) — 하나라도 정규형 텍스트에 매치되면 이 오개념은 매칭 자체가 "
+            "성립하지 않는다(`_match_one`이 None 반환). `signals`가 다 맞아도 무효다.\n\n"
+            "`signals`·`regex_signals`가 *양성* 단편을 찾는 것과 반대 방향이며, 공출현 AND에 "
+            "**부정 조건이 없다는 구조적 공백**을 메운다(MISC-23). 그 공백의 실례: "
+            "`root-loss-by-dividing`의 `('양변','x로 나누')`는 근 손실을 *저지른* 풀이와 그 함정을 "
+            '*정확히 설명한 정답*을 구별하지 못해, "…x=2만 나와서 안 되고 해는 0과 2다"라는 '
+            "정답에 confidence 1.0을 줬다(게이트 0.65를 넘어 확신 오진단이 나갔다).\n\n"
+            "**왜 감점이 아니라 거부인가**: 오개념 귀속이 *반박된* 것이지 *덜 확실한* 것이 아니다. "
+            "낮은 confidence로 남기면 하류(가설·역추적·shadow)가 그것을 약한 증거로 "
+            "취급한다 — 반박된 후보는 증거가 아니라 소음이다. 또 놓치는 오류보다 **정답에 틀렸다고 "
+            "말하는 오류가 해롭다**(결정 우선순위 #1 학생 정서).\n\n"
+            "미설정(기본 빈 튜플)이면 동작 완전 불변 — 기존 항목은 이 필드를 갖지 않는다."
+        ),
+    )
     canonical_wrong_form: tuple[str, str] | None = Field(
         default=None,
         description=(

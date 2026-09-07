@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import re
+
 from whymath_backend.l4.misconception import (
     MisconceptionMatch,
     correct_form_present,
     diagnose,
 )
-from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.catalog import (
+    CATALOG,
+    CATALOG_BY_ID,
+    ZERO_ROOT_MENTION,
+)
+from whymath_backend.l4.misconception.diagnose import _normalize, _signal_hit
+from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
 from whymath_backend.l4.misconception.models import Misconception
 
 
@@ -228,6 +236,48 @@ class TestNotationNormalization:
         # 정규화는 비교에만 — 표시되는 matched_signals는 원본 신호 문자열 유지
         top = diagnose("(a+b)²=a²+b²")[0]
         assert set(top.matched_signals) == {"(a+b)", "a² + b²"}
+
+
+class TestLatexNotationNormalization:
+    """MISC-17 — OCR·MathLive 산출물은 계약상 LaTeX(`OcrResult.plain_latex`→`student_solution`).
+
+    NFKC는 `²`→`2`만 펴고 `^`·`{}`·`\\left`/`\\right`는 남겨, 인식기의 정상 출력 `(a+b)^2=a^2+b^2`가
+    신호 2개 중 1개(0.5)만 맞아 게이트 ①(0.65)에서 탈락하던 실측 결함(PR #1034 Codex P1).
+    카탈로그 `signals`·`correct_form`에는 이 문자가 0건이라 양변 정규화의 일관성이 유지된다.
+    """
+
+    def test_caret_exponent_full_match(self) -> None:
+        # 인식기 기본형 `^2` — 유니코드 `²`와 같은 정규형 `a2+b2`로 접혀야 풀매칭.
+        top = diagnose("(a+b)^2 = a^2+b^2")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_braced_exponent_full_match(self) -> None:
+        top = diagnose("(a+b)^{2} = a^{2}+b^{2}")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_left_right_delimiters_full_match(self) -> None:
+        # `\left(`·`\right)`는 크기 조정 표식일 뿐 — 괄호 자체만 남긴다.
+        top = diagnose(r"\left(a+b\right)^2 = a^2+b^2")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_correct_latex_expansion_stays_partial(self) -> None:
+        # 올바른 전개의 LaTeX형은 유니코드형(`test_symbolic_distribution_unchanged_partial`)과
+        # 동일하게 부분(0.5)에 머문다 — 정규화가 거짓양성을 만들지 않는다.
+        matches = [
+            m
+            for m in diagnose("(a+b)^2 = a^2+2ab+b^2")
+            if m.misconception.id == "distribution-over-power"
+        ]
+        assert matches and matches[0].confidence == 0.5
+
+    def test_correct_form_detected_in_latex(self) -> None:
+        # 정정 형태 탐지(강한 반박)도 같은 `_normalize`를 쓰므로 LaTeX형에서 성립해야 한다.
+        entry = CATALOG_BY_ID["distribution-over-power"]
+        assert entry.correct_form is not None  # 카탈로그 전제 — 없으면 이 검사는 공허하다.
+        assert correct_form_present(entry, "(a+b)^2 = a^2+2ab+b^2")
 
 
 class TestSignalPrecision:
@@ -484,3 +534,162 @@ class TestUnsafeSignalTightening:
                 mid,
                 correct,
             )
+
+
+class TestRefutingRegex:
+    """반박 조건(MISC-23) — 오개념을 *저지른* 풀이와 그것을 *설명한 정답*을 가른다.
+
+    왜 필요했나
+    -----------
+    `signals` 공출현(AND)은 양성 단편만 센다. `root-loss-by-dividing`의
+    `("양변", "x로 나누")`는 근 손실을 저지른 풀이에도, 그 함정을 정확히 설명한 정답에도
+    똑같이 발화한다 — 둘 다 "양변을 x로 나누"를 쓰기 때문이다. 그래서 정답이 confidence
+    1.0을 받아 품질 게이트(0.65)를 넘어 학생에게 확신 오진단으로 나갔다(실측).
+
+    설계 판정: 감점이 아니라 **거부**다. 오개념 귀속이 *반박된* 것이지 *덜 확실한* 것이
+    아니며, 낮은 confidence로 남기면 하류가 그것을 약한 증거로 취급한다.
+    """
+
+    #: 전부 **정답**이다 — 0을 근으로 남겼거나, 그 함정을 경고하는 서술이다.
+    CORRECT_ANSWERS = (
+        "x²=2x에서 양변을 x로 나누면 x=2만 나와서 안 되고 해는 0과 2다",
+        "x²=3x 에서 양변을 x로 나누면 안 된다 — x=0 근을 잃는다",
+        "x²=5x 이므로 x(x-5)=0, 따라서 x=0 또는 x=5",
+        "양변을 x로 나누는 순간 x=0 이라는 근이 사라진다",
+        "x²=7x, 양변을 x로 나누면 x=7 만 남아 x=0 을 잃는다",
+        "x²=10x 의 두 근은 0이나 10 이다 — 양변을 x로 나누면 안 된다",
+    )
+
+    #: 전부 **오개념**이다 — 0을 어디에도 근으로 적지 않았다.
+    ACTUAL_MISCONCEPTIONS = (
+        "x²=2x 양변을 x로 나누면 x=2",
+        "x² = 5x 이므로 양변을 x로 나눠 x=5",
+        "ax²=bx 의 양변을 x로 나누면 x=b/a 라고 했다",
+        "양변을 x로 나누어 x=12 를 얻었다",
+    )
+
+    def test_correct_answers_are_refuted(self) -> None:
+        """정답은_반박돼_후보에서_빠진다"""
+        for text in self.CORRECT_ANSWERS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" not in ids, text
+
+    #: 제로근을 **부정한** 오답들 — 리터럴 `x=0`·`0은`이 있지만 *주장이 아니라 부정*이다.
+    #: 이것을 반박으로 세면 명백한 오개념을 통째로 놓친다(PR #1039 Codex P2).
+    #: 부정 어미를 **하나씩 다르게** 쓴다 — 목록을 좁히는 뮤테이션이 살아남지 않게 하기 위해서다
+    #: (실측: 어미를 `아니` 하나로 줄인 뮤테이션 P3가 처음엔 생존했다).
+    NEGATED_ZERO_ROOT = (
+        "x²=2x에서 x=0은 근이 아니므로 양변을 x로 나누면 x=2다",  # 아니
+        "x=0 은 근이 될 수 없으니 양변을 x로 나눠 x=5",  # 없
+        "0은 근에서 제외하고, 양변을 x로 나누면 x=7",  # 제외
+        "x=0 은 무시해도 되니까 양변을 x로 나누어 x=3",  # 무시
+        "x=0 은 버리고 양변을 x로 나누면 x=9",  # 버리
+        "x=0 은 빼고 생각해서 양변을 x로 나누면 x=11",  # 빼
+    )
+
+    def test_negated_zero_root_is_not_a_refutation(self) -> None:
+        """제로근을_부정한_오답은_반박으로_치지_않는다 — 미검출 방향 회귀 차단
+
+        반박은 탐지를 *끄는* 방향이라 과잉 발동이 곧 미검출이고, 미검출은 오검출과 달리
+        아무도 소리내지 않는다.
+        """
+        for text in self.NEGATED_ZERO_ROOT:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" in ids, text
+
+    def test_actual_misconceptions_still_detected(self) -> None:
+        """진짜_근_손실은_여전히_검출된다 — 반박을 넓히다 오개념을 죽이지 않았는지"""
+        for text in self.ACTUAL_MISCONCEPTIONS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" in ids, text
+
+    def test_refuted_answers_do_not_reach_the_serving_gate(self) -> None:
+        """반박된_정답은_서빙_품질_게이트에_도달하지_않는다 — 실제 해악 지점의 대조
+
+        `diagnose`에서 빠졌다는 것과 학생에게 안 나간다는 것은 다른 사실이므로 따로 단언한다.
+        수정 전에는 이 두 문장이 conf 1.0으로 게이트를 통과했다.
+        """
+        for text in self.CORRECT_ANSWERS:
+            gated = apply_match_quality_gate(diagnose(text))
+            surfaced = [m.misconception.id for m in gated.matches]
+            assert "root-loss-by-dividing" not in surfaced, text
+
+    def test_refutation_is_checked_before_signal_counting(self) -> None:
+        """반박은_신호를_세기_전에_판정된다 — 감점이 아니라 거부임을 계약으로 고정
+
+        신호가 **전부** 맞는 문장(공출현 2/2)인데도 후보가 아예 없어야 한다. 감점 방식이었다면
+        낮은 confidence로 남았을 자리다.
+        """
+        text = "x²=2x에서 양변을 x로 나누면 x=2만 나와서 안 되고 해는 0과 2다"
+        entry = CATALOG_BY_ID["root-loss-by-dividing"]
+        norm = _normalize(text)
+        assert all(_signal_hit(s, norm) for s in entry.signals), "전제: 두 신호가 다 맞는 문장"
+        assert not [m for m in diagnose(text) if m.misconception.id == entry.id]
+
+    #: 끝자리가 0인 수 뒤에 제로근 조사(`과`·`와`·`또는`·`이나`·`,`)가 붙는 문장들.
+    #: `(?<!\d)` 경계가 없으면 `10과`의 `0과`가 제로근 언급으로 오인돼 **반박이 과잉 발동**하고,
+    #: 진짜 오개념이 통째로 미검출된다. 미검출은 오검출과 달리 아무도 소리내지 않는다.
+    BOUNDARY_MISCONCEPTIONS = (
+        "x²=10x 양변을 x로 나누면 x=10과 같다",
+        "x²=20x 이므로 양변을 x로 나누어 x=20와 같은 값을 얻었다",
+        "양변을 x로 나누면 x=30 또는 그 근처다",
+        "x²=40x, 양변을 x로 나누면 x=40이나 마찬가지다",
+        "양변을 x로 나누어 x=50, 이것이 답이다",
+    )
+
+    def test_number_boundary_is_respected(self) -> None:
+        """숫자_경계 — 끝자리 0인 수에 붙은 조사를 제로근으로 오인하지 않는다
+
+        경계가 없으면 반박이 과잉 발동해 진짜 오개념을 놓친다(미검출 방향 회귀). 최초 판의
+        이 테스트는 `x=10`·`x=20`만 봐서 **그 경계를 한 번도 밟지 않는 위장**이었다 —
+        뮤테이션(경계 제거)이 살아남아 드러났다. 조사가 붙은 형태여야 그 절을 실제로 통과한다.
+        """
+        for text in self.BOUNDARY_MISCONCEPTIONS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" in ids, text
+
+    def test_plain_numeric_answers_still_detected(self) -> None:
+        """조사_없는_끝자리0_수도_검출된다"""
+        for text in ("x²=10x 양변을 x로 나누면 x=10", "양변을 x로 나누어 x=20 을 얻었다"):
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" in ids, text
+
+
+class TestRefutingRegexGovernance:
+    """반박 조건을 *가진* 항목의 동결 — 조용히 늘거나 줄지 않게.
+
+    반박은 탐지를 **끄는** 방향이라 잘못 붙으면 오개념을 통째로 놓치고, 그 미검출은 오검출과
+    달리 아무도 소리내지 않는다. 그래서 부여 항목을 명시 목록으로 묶는다.
+    """
+
+    _REFUTING_IDS = {"root-loss-by-dividing"}
+
+    def test_only_listed_entries_have_refuting_regex(self) -> None:
+        """목록_밖_항목은_반박_조건이_없다"""
+        for m in CATALOG:
+            assert isinstance(m.refuting_regex, tuple)
+            if m.id not in self._REFUTING_IDS:
+                assert m.refuting_regex == (), m.id
+
+    def test_listed_entries_actually_have_one(self) -> None:
+        """목록에_적힌_항목은_실제로_갖고_있다 — 선언과 사실의 대조"""
+        for mid in self._REFUTING_IDS:
+            assert CATALOG_BY_ID[mid].refuting_regex, mid
+
+    def test_all_refuting_patterns_compile(self) -> None:
+        """반박_정규식은_전부_컴파일된다 — 런타임 re.error 회귀 가드"""
+        seen = 0
+        for m in CATALOG:
+            for pat in m.refuting_regex:
+                re.compile(pat)
+                seen += 1
+        assert seen > 0, "스캔 0건 — 이 가드가 공허하게 통과했다"
+
+    def test_shared_zero_root_definition_feeds_both_enforcement_points(self) -> None:
+        """제로근_정의가_반박과_전방탐색_양쪽에_쓰인다 — 두 곳이 갈라지지 않게
+
+        같은 개념을 두 번 적었던 것이 PR #1032 Codex P1의 자리였다(한쪽만 넓혀 정답이 샜다).
+        """
+        entry = CATALOG_BY_ID["root-loss-by-dividing"]
+        assert entry.refuting_regex == (ZERO_ROOT_MENTION,)
+        assert ZERO_ROOT_MENTION in entry.regex_signals[0]
