@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-37-attempt-started-at-null-fix-recovery
+title: "ProblemAttempt.started_at 상시 NULL 근본수정 회수 — R15·Brier·전이점수 시간창 조용한 0행 + PII 파기 기준 컬럼 (원 PED-15가 main ID 충돌로 유실·7n9n72 27faee2d 파일 단위 이식)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 1
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 고립 실측 고정(2026-09-07 main 98925b0e): 원 태스크 PED-15-problem-attempt-started-at-null-time-window-bug(done)가 origin/claude/subject-problems-theory-check-7n9n72(621b11f9 · 구현 커밋 27faee2d)에만 존재하고 main의 PED-15는 다른 태스크(growth-evidence-endpoint-client-wiring)라 ID 충돌로 유실됐다. 버그는 main에서 생존 실측: api/coach.py::_apply_completion(ProblemAttemptORM 생성부·ended_at만 대입)·api/me.py::submit_attempt(ProblemAttempt 생성부·duration_seconds·ended_at만 대입) 두 writer 모두 started_at 미대입 · harness/wh1_evaluation.py가 ProblemAttempt.started_at으로 시간창 필터 8곳 · privacy/retention.py:80이 (ProblemAttempt, \"started_at\")을 파기 기준으로 사용 → since/until 지정 호출은 상시 0행, PII 보존기한 파기는 지금까지 0건. 재현: git grep -n 'ProblemAttempt.started_at' origin/main -- src/backend/whymath_backend/harness/wh1_evaluation.py"
+  - "② 이식 방식 = 파일 단위(브랜치가 main보다 228커밋 낡아 통째 머지 금지 — NLP-04 선례). 원 번호 PED-15 재사용 금지(main에서 다른 태스크가 점유). 원 해법: coach.py는 dialogue.started_at 이관·me.py는 ended_at−duration_seconds 역산(클라 미제공 시 서버 now 폴백 여부는 원 acceptance ③ 결정 승계). 백필 없음. main의 현재 writer 구조(coach.py ProblemAttemptORM·me.py ProblemAttempt 생성부)에 맞춰 재적용하고 브랜치 diff를 그대로 붙이지 않는다"
+  - "③ 집행 지점(정본화와 별항): 두 서빙 writer가 실제 요청 경로에서 started_at을 채우는지 통합 테스트로 증명 + 변별력 테스트 — since/until 지정 시 수정 전 0건이던 케이스가 정확한 건수를 반환(수정 전 RED를 먼저 재현한 뒤 GREEN). retention.py 파기 대상 산출이 started_at 기준으로 실제 행을 세는지 별도 assert"
+  - "④ 회귀 0: no-window(since=until=None) 호출 결과 동일 + 전체 백엔드 스위트(부분 스위트 통과를 전체 통과 근거로 보고 금지). 소급 파기 여부는 코드가 아니라 Kiki 결정 — 게이트 G-attempt-retention-purge-backfill-decision(같은 감사에서 신설)이 소유하며 이 태스크는 그 결정을 기다리지 않는다"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/harness/wh1_evaluation.py
+  - "tests/backend/harness/test_wh1_evaluation*.py"
+  - tests/backend/api/test_me.py
+  - tests/backend/api/test_coach_completion.py
+session: null
+notes: "출처: 2026-09-07 미머지 브랜치 감사(docs/reviews/unmerged_branch_audit_2026-09-07.md §4-①). 원 PED-15는 PED-14 구현 중 발견된 부수 버그로 7n9n72에서 2026-08-10 done(backend-engineer 위임·실 PostgreSQL 8 passed·전체 스위트 9266 passed)됐으나 그 브랜치가 main과 PED-15/16 ID 충돌 상태(621b11f9 커밋 메시지가 '그랜드파더 등재'로 자인)라 회수되지 못했다. priority 1 사유: PII 보존기한 파기 기준 컬럼이 이 버그로 상시 NULL — 보안·법령 관련 고립분(stray-code 규칙). 회수 완료 전 원 브랜치 삭제 금지. 원 PED-16(Kiki 결정: 소급 파기 대상 확인)은 태스크가 아니라 게이트 G-attempt-retention-purge-backfill-decision으로 재등재(법령 유래 절차는 기계 대체 금지·리마인드가 있는 게이트가 kiki 소유 태스크보다 표면화가 확실)"
+updated: 2026-09-07
