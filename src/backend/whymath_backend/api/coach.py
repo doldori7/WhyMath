@@ -136,6 +136,7 @@ from whymath_backend.l4.misconception import (
     combine_diagnoses,
     correct_form_present,
     diagnose,
+    reject_refuted,
     select_intervention,
     select_intervention_from_hypotheses,
 )
@@ -885,6 +886,11 @@ async def _compute_matches(
         # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
         if candidates and get_settings().misconception_judge_enabled:
             candidates = await judge_filter(candidates, student_input, judge=_make_judge())
+        # 반박 조건(MISC-23)을 **세 모드 공통 출구**에서 한 번 더 적용한다. substring 경로는
+        # `diagnose`가 이미 걸렀지만, `on` 모드의 의미 후보는 그 경로를 지나지 않으므로
+        # `combine_diagnoses`가 그것을 "semantic-only"로 보고 되살린다(PR #1039 Codex P2).
+        # off 모드에선 무해한 no-op다(이미 걸러진 목록을 다시 훑을 뿐).
+        candidates = reject_refuted(candidates, student_input)
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
