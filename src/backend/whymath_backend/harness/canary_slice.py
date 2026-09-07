@@ -206,22 +206,37 @@ def load_corpus_rows(path: Path) -> tuple[dict[str, tuple[int, dict[str, Any]]],
     return index, errors
 
 
-def _queue_index(entries: list[ReviewQueueEntry]) -> tuple[dict[str, ReviewQueueEntry], list[str]]:
-    """검수 큐 행 → `slug → 행` 색인(먼저 읽은 쪽 유지·충돌은 사유로).
+def _queue_index(
+    entries: list[ReviewQueueEntry], run_id: str
+) -> tuple[dict[str, ReviewQueueEntry], dict[str, ReviewQueueEntry], list[str]]:
+    """검수 큐 행 → 색인 **두 벌**: (이 회차 전용, 전체) + 충돌 사유.
+
+    왜 두 벌인가 (2026-09-07 · PR #1021 Codex P1)
+    --------------------------------------------
+    한 벌만 두면 *어느 회차의* 판정인지 구별할 수 없다. 그런데 카나리 후보가 기존 코퍼스
+    문항과 구조가 같으면 오케스트레이터는 **이번 회차**의 시도를 `rejected_duplicate`로 큐에
+    적고, 그 slug는 **옛 회차**에 적재된 코퍼스 행과도 일치한다. 회차 구분 없이 코퍼스를 먼저
+    보면 이번 회차의 거부가 옛 회차의 수용으로 덮여 `canary_accepted`로 보고된다 —
+    검수자는 실제 판정과 그 사유를 영영 못 본다.
+
+    `ReviewQueueEntry.run_id`는 필수 필드라 이 구분은 데이터로 가능하다(추론이 아니다).
 
     같은 slug가 회차를 넘어 재출현하는 것은 큐의 정상 동작이므로(재시도) 실패가 아니라 사유
     수집 대상이다. slug 없는 행(생성 실패 후보)은 색인 키가 없어 애초에 조인 대상이 아니다.
     """
+    scoped: dict[str, ReviewQueueEntry] = {}
     index: dict[str, ReviewQueueEntry] = {}
     errors: list[str] = []
     for entry in entries:
         if entry.slug is None:
             continue
+        if entry.run_id == run_id and entry.slug not in scoped:
+            scoped[entry.slug] = entry
         if entry.slug in index:
             errors.append(f"review queue line {entry.source_line}: DuplicateSlug(first kept)")
             continue
         index[entry.slug] = entry
-    return index, errors
+    return scoped, index, errors
 
 
 def build_canary_slice(
@@ -233,6 +248,7 @@ def build_canary_slice(
     queue_index: dict[str, ReviewQueueEntry],
     corpus_name: str,
     queue_name: str,
+    run_queue_index: dict[str, ReviewQueueEntry] | None = None,
 ) -> CanarySlice:
     """카나리 구간 절단(순수 — 파일 I/O 0).
 
@@ -240,8 +256,16 @@ def build_canary_slice(
     (None = 그 시도가 후보 조립에 도달하지 못함). 이 함수는 그 순서를 건드리지 않는다 —
     앞에서 `canary_size`개를 자르는 것이 이 도구의 식별 근거 전부다.
 
-    해결원 우선순위는 **코퍼스 먼저**다 — 코퍼스에 있다는 것은 그 후보가 수용·적재됐다는
-    뜻이고, 같은 slug가 큐에도 있다면 그것은 이전 회차의 비수용 이력이다(현재 상태가 아니다).
+    해결원 우선순위는 **이번 회차의 판정이 언제나 먼저**다:
+
+      ① `run_queue_index` — 선택한 run_id가 이 slug에 대해 남긴 검수 큐 행. 이번 회차가 실제로
+         내린 판정이므로 다른 무엇보다 우선한다.
+      ② `corpus_index` — 코퍼스에 있다 = 수용·적재됐다(이 도구의 관측).
+      ③ `queue_index` — 회차 무관 큐 행. ①이 없고 코퍼스에도 없을 때의 마지막 단서다.
+
+    ②를 ① 앞에 두면 **이번 회차의 거부가 옛 회차의 수용으로 덮인다** — 후보가 기존 문항과
+    구조가 같아 `rejected_duplicate`로 차단된 경우가 정확히 그 형태이고, 그때 코퍼스 행은
+    *다른 회차가 적재한 다른 시도*다(2026-09-07 실측·PR #1021 Codex P1).
 
     반환 계약: `len(rows) + len(unresolved) == canary_size`. 카나리 슬롯은 하나도 사라지지
     않는다 — genlog가 부족해 시도 자체가 없던 슬롯도 `GenlogShortfall` 미해결로 남는다
@@ -267,6 +291,18 @@ def build_canary_slice(
                     ),
                 }
             )
+            continue
+        # ① 이번 회차가 이 slug에 대해 내린 판정이 있으면 그것이 정답이다(회차 스코프 우선).
+        scoped_hit = (run_queue_index or {}).get(cu_slug)
+        if scoped_hit is not None:
+            row = scoped_hit.model_dump(mode="json")
+            row["reasons"] = [
+                f"{marker} — 이번 회차 판정: 검수 큐 {queue_name} (run {run_id})",
+                *scoped_hit.reasons,
+            ]
+            row["canary_index"] = index
+            row["resolved_from"] = "review_queue_this_run"
+            rows.append(row)
             continue
         corpus_hit = corpus_index.get(cu_slug)
         if corpus_hit is not None:
@@ -402,6 +438,20 @@ def main(argv: list[str] | None = None) -> int:
             "(0건 성공이 아니다)."
         )
     records, ledger_errors = load_round_ledger(ledger_path)
+    if ledger_errors and args.run_id is None:
+        # 기본 선택은 "대장 마지막 행 = 가장 최근 회차"라고 **주장**한다. 그런데 물리적으로
+        # 마지막인 행이 손상돼 건너뛰어졌다면 그 주장은 거짓이고, 도구는 *이전* 회차의 카나리를
+        # 최신 회차인 양 검수 큐로 내보낸다(2026-09-07 실측·PR #1021 Codex P1 — 손상 행 1건에
+        # exit 0 + "가장 최근 회차를 골랐다" note를 달고 R_OLD를 골랐다).
+        #
+        # 손상 행의 run_id는 **읽을 수 없으므로** 그것이 최신 회차인지 아닌지 판정할 방법이
+        # 없다 — 모른다 ≠ 아니다. 그래서 자동 선택을 거부하고 사람에게 넘긴다. `--run-id`로
+        # 회차를 명시하면 "가장 최근"이라는 주장 자체를 하지 않으므로 그때는 진행한다.
+        return _fail(
+            f"회차 대장에 손상된 행 {len(ledger_errors)}건이 있어 '가장 최근 회차'를 자동으로 "
+            f"고를 수 없다 — 손상 행이 최신 회차인지 알 수 없기 때문이다. `--run-id <회차>`로 "
+            f"명시하라. 손상 사유: {ledger_errors}"
+        )
     record, selection, selection_note = select_round_record(records, args.run_id)
     if record is None:
         broken = f" (대장 로드 실패 {len(ledger_errors)}행)" if ledger_errors else ""
@@ -427,6 +477,22 @@ def main(argv: list[str] | None = None) -> int:
             "없으므로 절단할 수 없다."
         )
     logs, genlog_errors = load_generation_logs_jsonl(genlog_path)
+    if genlog_errors:
+        # **적재 순서가 이 도구의 유일한 정체성 근거**다(모듈 docstring ①). 로더는 파싱 실패
+        # 행을 목록에서 **빼 버리므로**, 앞쪽 한 줄이 깨지면 뒤 행이 통째로 한 칸씩 당겨진다 —
+        # 시도 2·3·4번이 "카나리 1·2·3번"으로 출력되고 exit 0이 난다(2026-09-07 실측·PR #1021
+        # Codex P1: 1행 파손으로 s2·s3·s4가 카나리 1~3번이 됐다).
+        #
+        # 자리표시자로 위치를 보존하는 대안은 성립하지 않는다: 깨진 행의 `run_id`를 읽을 수
+        # 없어 **그 행이 이 회차 것인지조차 판정할 수 없기** 때문이다(모른다 ≠ 아니다).
+        # 그래서 부분 산출을 제공하지 않고 측정 실패로 끝낸다 — 잘못된 30건을 "카나리 전건"으로
+        # 검수하는 것보다 측정을 한 번 더 하는 편이 싸다.
+        return _fail(
+            f"생성 로그에 손상된 행 {len(genlog_errors)}건이 있다 — 적재 순서가 카나리 구간의 "
+            f"유일한 식별 근거라, 행이 하나라도 빠지면 뒤 시도가 앞당겨져 **다른 구간**이 "
+            f"카나리로 보고된다. 손상 행의 run_id를 읽을 수 없어 이 회차 것인지도 판정할 수 "
+            f"없으므로 부분 산출도 내지 않는다. 손상 사유: {genlog_errors}"
+        )
     # 순서 계약 — 파일 순서 그대로다. 정렬하면 "앞머리 N건"이 카나리 구간이 아니게 된다.
     cu_slugs: list[str | None] = [log.cu_slug for log in logs if log.run_id == record.run_id]
 
@@ -443,11 +509,34 @@ def main(argv: list[str] | None = None) -> int:
     if corpus_present:
         corpus_index, corpus_errors = load_corpus_rows(out_path)
     queue_index: dict[str, ReviewQueueEntry] = {}
+    run_queue_index: dict[str, ReviewQueueEntry] = {}
     queue_load_errors: list[str] = []
     queue_dup_errors: list[str] = []
     if queue_present:
         queue_entries, queue_load_errors = load_review_queue_jsonl(review_path)
-        queue_index, queue_dup_errors = _queue_index(queue_entries)
+        run_queue_index, queue_index, queue_dup_errors = _queue_index(queue_entries, record.run_id)
+
+    # 코퍼스·검수 큐의 손상도 **측정 실패**다 — 대장·genlog와 같은 뿌리이므로 같이 닫는다.
+    #
+    # 왜 원본별로 봐주지 않는가: 손상 행의 slug를 읽을 수 없으므로 그 행이 카나리 구간의
+    # 어느 후보였는지 판정할 방법이 없다(모른다 ≠ 아니다). 코퍼스 행이 깨지면 그 후보는
+    # `SlugNotFound`로 *보이거나* 더 나쁘게는 **옛 회차 큐 행**으로 해결돼 엉뚱한 판정이
+    # 붙고, 큐 행이 깨지면 이번 회차의 거부가 사라져 코퍼스의 옛 수용분이 `canary_accepted`로
+    # 보고된다 — 둘 다 exit 0으로 조용히 나간다.
+    #
+    # 이 네 파일은 같은 파이프라인이 append로 쓰는 기계 산출물이라 손상 자체가 이상 사건이다.
+    # 산출물이 게이트 증적(`G-eos-first-run-canary-review`)이 되는 이상, "일부는 읽었다"로
+    # 넘어가는 예외 경로를 두지 않는다 — 예외 경로가 곧 다음 구멍이 된다.
+    source_errors = {
+        "corpus": corpus_errors,
+        "review_queue": [*queue_load_errors, *queue_dup_errors],
+    }
+    broken_sources = {name: errs for name, errs in source_errors.items() if errs}
+    if broken_sources:
+        return _fail(
+            "해결원에 손상된 행이 있다 — 손상 행이 어느 후보였는지 읽을 수 없어 카나리 판정을 "
+            f"신뢰할 수 없다(해당 줄을 고친 뒤 다시 돌려라). {broken_sources}"
+        )
 
     result = build_canary_slice(
         run_id=record.run_id,
@@ -457,6 +546,7 @@ def main(argv: list[str] | None = None) -> int:
         queue_index=queue_index,
         corpus_name=out_path.name,
         queue_name=review_path.name,
+        run_queue_index=run_queue_index,
     )
 
     slugs = [str(row["slug"]) for row in result.rows]
@@ -482,6 +572,11 @@ def main(argv: list[str] | None = None) -> int:
         # 그러면 실검수 건수가 산출 건수보다 적다. 그 차이를 요약이 먼저 말한다.
         "duplicate_slug_rows": len(slugs) - distinct,
         "resolved_from": {
+            # 이번 회차 큐를 별도 칸으로 센다 — 코퍼스 수용분과 합치면 "이번 회차가 실제로
+            # 거부한 건수"가 요약에서 사라진다.
+            "review_queue_this_run": sum(
+                1 for row in result.rows if row["resolved_from"] == "review_queue_this_run"
+            ),
             "corpus": sum(1 for row in result.rows if row["resolved_from"] == "corpus"),
             "review_queue": sum(1 for row in result.rows if row["resolved_from"] == "review_queue"),
         },

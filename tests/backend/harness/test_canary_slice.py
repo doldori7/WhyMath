@@ -263,13 +263,20 @@ class TestResolutionSources:
         rows = _read_jsonl(queue_out)
 
         assert [row["slug"] for row in rows] == ["cu-01", "cu-02", "cu-03", "cu-04"]
+        # 비수용분은 **이번 회차** 큐 행이므로 `review_queue_this_run`이다(2026-09-07 정정 —
+        # `_write_review_queue`의 기본 run_id가 `_RUN`이다). 회차 무관 `review_queue`는
+        # *다른* 회차의 행이 유일한 단서일 때만 쓰인다 — 두 라벨을 가르는 것이 계약이다.
         assert [row["resolved_from"] for row in rows] == [
             "corpus",
-            "review_queue",
+            "review_queue_this_run",
             "corpus",
-            "review_queue",
+            "review_queue_this_run",
         ]
-        assert summary["resolved_from"] == {"corpus": 2, "review_queue": 2}
+        assert summary["resolved_from"] == {
+            "review_queue_this_run": 2,
+            "corpus": 2,
+            "review_queue": 0,
+        }
         # 수용분은 코퍼스 유래 status, 비수용분은 큐의 기계 status·사유가 살아 있다.
         assert rows[0]["status"] == STATUS_CORPUS_RESOLVED
         assert rows[1]["status"] == "needs_review"
@@ -410,3 +417,147 @@ class TestInputGuards:
             with pytest.raises(SystemExit) as excinfo:
                 _run_cli(out, victim)
             assert excinfo.value.code == 2
+
+
+def _corrupt_line(path: Path, line_no: int) -> None:
+    """지정 줄을 파싱 불가로 만든다 — 로더가 그 행을 **목록에서 빼는** 상태를 재현한다."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    lines[line_no - 1] = "{이건 JSON이 아니다"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestLoadErrorsAreMeasurementFailure:
+    """손상된 입력 행은 **측정 실패**다 — 요약 JSON에 적어 두고 exit 0으로 나가지 않는다.
+
+    실측 경위 (2026-09-07 · PR #1021 Codex P1 3건 · 전건 재현 후 수정)
+    ----------------------------------------------------------------
+    초판은 네 입력의 로드 오류를 `summary["load_errors"]`에 **수집만** 하고 판정에는 쓰지
+    않았다. 그 결과 셋 다 exit 0으로 그럴듯한 검수 큐를 냈다:
+
+      ⓐ genlog 1행 파손 → 로더가 그 행을 빼므로 뒤 시도가 한 칸씩 당겨져 **시도 2·3·4번이
+        "카나리 1·2·3번"** 으로 출력됐다(적재 순서가 유일한 식별 근거인데 그 순서가 깨졌다).
+      ⓑ 대장 최신 행 파손 + `--run-id` 생략 → 이전 회차를 고르면서 note는 여전히
+        *"대장 마지막 행(가장 최근 회차)을 골랐다"* 라고 **거짓을 주장**했다.
+      ⓒ 검수 큐 행 파손 → 이번 회차의 거부가 사라지고 옛 코퍼스 행이 `canary_accepted`로
+        보고됐다.
+
+    공통 뿌리: **모른다 ≠ 아니다.** 손상 행은 `run_id`도 `slug`도 읽을 수 없으므로 그것이 이
+    회차·이 후보의 것인지 판정할 방법이 자체가 없다. 그래서 부분 산출을 제공하지 않는다 —
+    잘못된 30건을 "카나리 전건 검수"로 보고하는 비용이 측정 1회를 다시 하는 비용보다 크다.
+    """
+
+    def _fixture(self, tmp_path: Path) -> tuple[Path, Path]:
+        out = tmp_path / "corpus.jsonl"
+        _write_ledger(out, canary_size=3)
+        _write_genlog(out, [(_RUN, f"cu-{i}") for i in range(1, 6)])
+        _write_corpus(out, [f"cu-{i}" for i in range(1, 6)])
+        return out, tmp_path / "queue.jsonl"
+
+    def test_corrupt_genlog_row_does_not_shift_the_window(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """ⓐ genlog 앞줄이 깨지면 **절단하지 않는다**(창이 밀린 채 exit 0이던 자리)."""
+        out, queue_out = self._fixture(tmp_path)
+        _corrupt_line(default_generation_log_path(out), 1)
+        assert _run_cli(out, queue_out) == 1
+        assert not queue_out.exists(), "손상 상태에서 큐를 만들면 그 큐가 잘못된 증적이 된다"
+        assert "적재 순서" in capsys.readouterr().err
+
+    def test_corrupt_latest_ledger_row_blocks_the_latest_claim(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """ⓑ '가장 최근'을 주장할 수 없으면 자동 선택을 **거부**한다."""
+        out, queue_out = self._fixture(tmp_path)
+        ledger = out.with_suffix(".rounds.jsonl")
+        ledger.write_text(ledger.read_text(encoding="utf-8") + "{잘린 최신 행\n", encoding="utf-8")
+        assert _run_cli(out, queue_out) == 1
+        err = capsys.readouterr().err
+        assert "--run-id" in err, "탈출 경로를 알려 주지 않으면 사람은 도구를 우회한다"
+        assert not queue_out.exists()
+
+    def test_explicit_run_id_still_works_despite_other_broken_ledger_rows(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """ⓑ 대조군 — 회차를 **명시하면** '가장 최근' 주장을 하지 않으므로 진행한다.
+
+        이 대조가 없으면 위 거부가 "손상만 있으면 무조건 막는다"인지 "거짓 주장을 막는다"인지
+        구별되지 않는다. 막는 이유가 무엇인지가 곧 이 가드의 계약이다.
+        """
+        out, queue_out = self._fixture(tmp_path)
+        ledger = out.with_suffix(".rounds.jsonl")
+        ledger.write_text(ledger.read_text(encoding="utf-8") + "{잘린 최신 행\n", encoding="utf-8")
+        assert _run_cli(out, queue_out, run_id=_RUN) == 0
+        assert len(_read_jsonl(queue_out)) == 3
+
+    def test_corrupt_review_queue_row_is_failure(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """ⓒ 큐 행이 깨지면 이번 회차의 거부가 사라진다 — 코퍼스 수용분으로 덮이지 않게 막는다."""
+        out, queue_out = self._fixture(tmp_path)
+        _write_review_queue(out, ["cu-2"])
+        _corrupt_line(default_review_queue_path(out), 1)
+        assert _run_cli(out, queue_out) == 1
+        assert not queue_out.exists()
+        assert "해결원에 손상된 행" in capsys.readouterr().err
+
+
+class TestThisRoundVerdictWins:
+    """같은 slug가 코퍼스에도 큐에도 있으면 **이번 회차의 판정**이 이긴다.
+
+    실측 경위 (2026-09-07 · PR #1021 Codex P1): 카나리 후보가 기존 코퍼스 문항과 구조가 같으면
+    오케스트레이터는 이번 회차 시도를 `rejected_duplicate`로 큐에 적는데, 그 slug는 **옛 회차가
+    적재한** 코퍼스 행과도 일치한다. 초판은 코퍼스를 먼저 봐서 그 후보를 `canary_accepted`로
+    보고했고, 거부 사유는 검수자에게 한 번도 노출되지 않았다.
+
+    `ReviewQueueEntry.run_id`가 필수 필드라 이 구분은 **데이터로** 가능하다(추론 아님).
+    """
+
+    def test_this_run_rejection_beats_an_older_corpus_acceptance(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "corpus.jsonl"
+        queue_out = tmp_path / "queue.jsonl"
+        _write_ledger(out, canary_size=1)
+        _write_genlog(out, [(_RUN, "cu-dup")])
+        _write_corpus(out, ["cu-dup"])  # 옛 회차가 적재한 행
+        append_review_queue_jsonl(
+            default_review_queue_path(out),
+            ReviewQueueEntry(
+                status="rejected_duplicate",
+                slug="cu-dup",
+                reasons=["기존 코퍼스와 구조 동일 — dedup 차단"],
+                run_id=_RUN,  # **이번** 회차의 판정
+            ),
+        )
+        assert _run_cli(out, queue_out) == 0
+        rows = _read_jsonl(queue_out)
+        assert len(rows) == 1
+        assert rows[0]["status"] == "rejected_duplicate", "이번 회차 판정이 옛 수용분에 덮였다"
+        assert rows[0]["resolved_from"] == "review_queue_this_run"
+        reasons = rows[0]["reasons"]
+        assert isinstance(reasons, list)
+        assert any("dedup 차단" in str(r) for r in reasons), "거부 사유가 검수자에게 안 보인다"
+        summary = _summary(capsys)
+        resolved = summary["resolved_from"]
+        assert isinstance(resolved, dict)
+        assert resolved["review_queue_this_run"] == 1
+        assert resolved["corpus"] == 0
+
+    def test_older_run_queue_entry_does_not_override_the_corpus(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """대조군 — **다른** 회차의 큐 행은 코퍼스를 이기지 못한다.
+
+        이 대조가 없으면 위 규칙이 "큐가 언제나 이긴다"로 뭉개진다. 그러면 재시도로 남은 옛
+        `needs_review` 행이 이번 회차의 수용분을 비수용으로 뒤집는다 — 반대 방향의 같은 결함이다.
+        """
+        out = tmp_path / "corpus.jsonl"
+        queue_out = tmp_path / "queue.jsonl"
+        _write_ledger(out, canary_size=1)
+        _write_genlog(out, [(_RUN, "cu-retry")])
+        _write_corpus(out, ["cu-retry"])
+        _write_review_queue(out, ["cu-retry"], run_id=_OTHER_RUN)  # 옛 회차의 비수용 이력
+        assert _run_cli(out, queue_out) == 0
+        rows = _read_jsonl(queue_out)
+        assert rows[0]["status"] == STATUS_CORPUS_RESOLVED
+        assert rows[0]["resolved_from"] == "corpus"
