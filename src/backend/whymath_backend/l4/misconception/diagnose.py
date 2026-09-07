@@ -106,8 +106,16 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     confidence = min(1.0, (substr매치 + regex매치) / len(signals)). 둘 다 0이면 None.
     분모는 substring `signals` 기준 유지(v1.1 의미 보존) — 정규식은 분자에 *가산*·상한 1.0.
     v1.3: 개별 signal 매칭은 `_signal_hit`(짧은 영숫자 signal 경계 검사) 경유.
+
+    MISC-23: `refuting_regex`가 하나라도 매치되면 **신호를 세기 전에** None이다. 공출현 AND는
+    오개념을 *저지른* 풀이와 그것을 *설명한* 정답을 구별하지 못하므로, 반박 축이 없으면 정답에
+    확신 오진단이 나간다(실측: conf 1.0으로 품질 게이트 통과).
     """
     norm_text = _normalize(text)
+    # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
+    # "얼마나 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
+    if any(_compile(rx).search(norm_text) is not None for rx in misconception.refuting_regex):
+        return None
     matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
         rs for rs in misconception.regex_signals if _compile(rs).search(norm_text) is not None
