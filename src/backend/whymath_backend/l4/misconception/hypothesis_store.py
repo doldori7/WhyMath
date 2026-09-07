@@ -292,9 +292,9 @@ async def curate_hypothesis(
             refuted.add(mid)
 
     # 3. #191 순수 큐레이션 재사용(감쇠·강화·가지치기·반박 제거·최대 N 캡) — 재구현 0.
-    # 2-b. MISC-20 — 반박 중에서도 *정정 형태를 직접 보인 강한 반박*(weight>=0.75)이 있는 오개념은
-    # "해소"(학생이 실제로 넘어섬)로 구분한다. 막연한 clean 풀이의 약한 반박(0.5)만 쌓인 가설은
-    # REFUTED에 머문다 — 해소율 분자를 부풀리지 않는다. 반박 집합이 비면 쿼리 0(왕복 회피).
+    # 2-b. MISC-20 — 반박 중에서도 *정정 형태를 직접 보였다고 기계가 기록한*(provenance 표식)
+    # 오개념만 "해소"(학생이 실제로 넘어섬)로 구분한다. 표식이 없는 반박(막연한 clean 풀이·하네스
+    # 경로·구 데이터)은 REFUTED에 머문다 — 해소율 분자를 부풀리지 않는다. 반박 집합이 비면 쿼리 0.
     resolved = await strong_refutation_mids(session, student_id, sorted(refuted))
 
     # MISC-20: 사유 맵을 함께 받는다(생존 세트는 `curate`와 동일 — 동치 테스트로 동결).

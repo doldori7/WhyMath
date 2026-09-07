@@ -208,28 +208,22 @@ class TestPersistHypothesesUnknownReason:
         assert session.reason_for(_MIDS[0]) is None  # 사유 미상 — 날조 0
 
 
-class TestStrongRefutationBoundary:
-    """MISC-20 — "해소"의 경계값이 coach가 싣는 두 반박 가중 *사이*에 있다(분자 부풀리기 방지).
+class TestResolvedProvenanceNotWeight:
+    """MISC-20 (Codex P1 수용) — 해소 판정은 **출처 표식**만 본다. 가중치는 출처가 아니다.
 
-    해소율의 정직성은 전적으로 이 경계에 달려 있다: 경계가 약한 반박(0.5) 아래로 내려가면 막연한
-    clean 풀이가 전부 "학생이 극복함"으로 계상돼, 이 태스크가 없애려던 과대해석이 *사유 컬럼을
-    갖춘 채* 되살아난다(더 나쁘다 — 근사라는 사실조차 숨는다). 상수 하나로 뒤집히는 축이라
-    값 자체를 못 박는다.
+    초판은 `polarity=-1 AND coalesce(weight, 1.0) >= 0.75`로 가중치에서 출처를 추론했고 두 곳에서
+    뚫렸다: ①`weight`는 nullable이라 `coalesce(..., 1.0)`이 **NULL(미평가=모름)을 최강 신호로**
+    접었다 ②하네스 `LogEvidenceAction.weight`는 **LLM이 지정**한다 — 숫자 하나로 "이 학생은
+    오개념을 넘어섰다"가 영구 기록될 수 있었다. 그래서 판정 축을 `provenance` 컬럼으로 옮겼다.
     """
 
-    def test_threshold_strictly_between_weak_and_strong_refutation_weights(self) -> None:
-        from whymath_backend.api.coach import _REFUTE_STRONG_WEIGHT, _REFUTE_WEIGHT
-        from whymath_backend.l4.misconception.evidence_store import (
-            _STRONG_REFUTATION_MIN_WEIGHT,
-        )
-
-        # 약한 반박(막연한 clean 풀이)은 해소가 아니고, 강한 반박(정정 형태 직접 제시)은 해소다.
-        assert _REFUTE_WEIGHT < _STRONG_REFUTATION_MIN_WEIGHT <= _REFUTE_STRONG_WEIGHT
-
-    async def test_weak_refutation_row_is_not_strong(self) -> None:
-        """경계 의미론을 쿼리 술어로 확인 — weight=0.5 행은 강한 반박 집합에 들어가지 않는다."""
+    async def test_predicate_filters_on_provenance_and_polarity(self) -> None:
+        """술어 실측 — polarity=-1 **과** provenance 표식을 함께 걸고, 가중치는 보지 않는다."""
         from whymath_backend.db.models.evidence_link import EvidenceLink
-        from whymath_backend.l4.misconception.evidence_store import strong_refutation_mids
+        from whymath_backend.l4.misconception.evidence_store import (
+            CORRECT_FORM_DEMONSTRATED,
+            strong_refutation_mids,
+        )
 
         captured: list[Any] = []
 
@@ -240,14 +234,14 @@ class TestStrongRefutationBoundary:
 
         out = await strong_refutation_mids(_Capturing(), _UID, [_MIDS[0]])  # type: ignore[arg-type]
         assert out == set()
-        # 술어가 polarity=-1 + weight 하한을 함께 건다(둘 중 하나만이면 오탐). **값까지 본다** —
-        # 토큰 존재만 보면 부호가 +1로 뒤집혀도 통과하는데, 그 상태는 *지지* 증거를 반박으로 읽어
-        # 강하게 지지된 가설을 "해소"로 계상한다(해소율이 반대로 부풀려지는 최악의 오작동).
         compiled = str(captured[0].compile(compile_kwargs={"literal_binds": True}))
+        # 값까지 본다 — 토큰 존재만 보면 부호가 +1로 뒤집혀도 통과하는데, 그 상태는 *지지* 증거를
+        # 반박으로 읽어 강하게 지지된 가설을 "해소"로 계상한다(해소율이 반대로 부풀려진다).
         assert "polarity = -1" in compiled, f"반박(-1) 필터가 아니다: {compiled}"
-        assert ">= 0.75" in compiled, f"강한 반박 하한이 걸리지 않았다: {compiled}"
-        # 참조 무결성 — 이 쿼리가 evidence_link를 본다(다른 테이블로 바뀌면 의미가 사라진다).
+        assert CORRECT_FORM_DEMONSTRATED in compiled, f"출처 표식 필터가 없다: {compiled}"
         assert EvidenceLink.__tablename__ in compiled
+        # **가중치는 판정에서 빠져야 한다** — 남아 있으면 LLM 지정 숫자가 다시 해소를 만든다.
+        assert "weight" not in compiled, f"가중치가 아직 판정에 쓰인다: {compiled}"
 
     async def test_empty_input_makes_no_query(self) -> None:
         from whymath_backend.l4.misconception.evidence_store import strong_refutation_mids
@@ -257,3 +251,45 @@ class TestStrongRefutationBoundary:
                 raise AssertionError("빈 입력에는 쿼리하지 않아야 한다(불필요 왕복 0).")
 
         assert await strong_refutation_mids(_Boom(), _UID, []) == set()  # type: ignore[arg-type]
+
+    async def test_coach_stamps_provenance_only_for_correct_form(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """집행 지점 — coach의 반박 적재가 *정정 형태 실측*일 때만 표식을 남긴다.
+
+        표식을 남기는 곳이 여기 하나뿐이므로, 여기서 조건이 느슨해지면 판정 축 전체가 무너진다.
+        """
+        from whymath_backend.api import coach as coach_mod
+        from whymath_backend.l4.misconception.evidence_store import CORRECT_FORM_DEMONSTRATED
+
+        calls: list[dict[str, Any]] = []
+
+        async def _fake_log(session: Any, **kw: Any) -> None:
+            calls.append(kw)
+
+        monkeypatch.setattr(coach_mod, "log_evidence", _fake_log)
+        # 정정 형태가 실재하는 풀이 / 막연한 clean 풀이 각각 1회.
+        for text, expect in (
+            ("(a+b)² = a² + 2ab + b²", CORRECT_FORM_DEMONSTRATED),
+            ("계산했다", None),
+        ):
+            calls.clear()
+            await coach_mod._log_refutation_evidence(
+                object(),  # type: ignore[arg-type]
+                session_id=uuid.uuid4(),
+                student_id=_UID,
+                passed=True,
+                matches=[],
+                active_hypotheses=[
+                    MisconceptionHypothesis(
+                        misconception_id="distribution-over-power",
+                        confidence=0.8,
+                        turns_since_evidence=0,
+                        evidence_count=1,
+                    )
+                ],
+                solution_text=text,
+            )
+            assert len(calls) == 1, calls
+            assert calls[0]["provenance"] == expect, (text, calls[0])
+            assert calls[0]["polarity"] == -1
