@@ -19,7 +19,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1159,3 +1161,120 @@ class TestNewAxesHitTheReasonFeedbackGuard:
             == 0
         )
         assert _task(seeded_repo, "T1-95-guard-ok").title == "정정된 제목"
+
+
+class TestPathsCorrectionEndsScopeDrift:
+    """HARN-59 ② — `--path` 정정이 **scope drift 판정을 실제로 바꾸는가**, 양방향으로.
+
+    왜 양방향인가
+    ------------
+    HARN-57 ④는 `overlap`(다른 태스크와의 겹침) 축만 쟀다. 그런데 `paths`의 소비자는 셋이다 —
+    겹침 검사(`start` 프리플라이트·`check-edit` ②), **scope drift**(`check-edit` ①), 가시성 고지.
+    한 소비자에게만 반영되고 다른 소비자에게는 안 되면 "정정했다"가 거짓이 된다.
+
+    그리고 **한쪽만 보면 검사가 위장이 된다**: 정정 후 통과만 확인하면 *아무것도 안 해도* 통과다
+    (scope drift가 애초에 안 걸리는 파일을 골랐을 수 있다). 그래서 정정 *전*에 그 파일이 실제로
+    걸리는 것을 먼저 확인한다 — 그것이 이 테스트의 변별력이다.
+
+    발견 경위: PR #970 codex P2. `OPS-53`이 acceptance ④로 범위를 `scripts/harness`까지 넓혔는데
+    paths는 `src/backend/...`·`tests/backend/**`뿐이라, 그 태스크를 claim한 세션이 `backlog.py`를
+    편집하면 scope drift 경고를 맞았다. 넓히는 CLI 경로가 없어 acceptance ⑧이 "paths 부착 대기"로
+    남아 있었다.
+    """
+
+    def _invoke_hook(self, monkeypatch, file_path: str) -> int:
+        """실제 훅 진입점(`check-edit`)을 stdin 페이로드로 그대로 호출한다.
+
+        판정 함수(`_check_edit_policy`)를 직접 부르지 않는 이유: 훅이 실제로 도는 경로는 stdin
+        JSON 파싱부터다. 내부 함수만 부르면 배선이 끊겨도 테스트는 초록이다.
+        """
+        payload = {"tool_input": {"file_path": file_path}}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        return cli.main(["check-edit"])
+
+    def _on_branch(self, repo: Path, name: str) -> None:
+        # main 브랜치에서는 정책 검사가 전부 통과하므로(의도된 설계) 세션 브랜치를 만든다.
+        subprocess.run(["git", "checkout", "-q", "-b", name], cwd=repo, check=True)
+
+    def test_scope_drift_before_and_after_the_correction(
+        self, seeded_repo: Path, monkeypatch, capsys
+    ):
+        """정정 **전에는 걸리고**, 정정 **후에는 안 걸린다** — 양쪽 다 실측한다."""
+        self._on_branch(seeded_repo, "claude/harn59-drift")
+        assert _add("T1-96-drift-scope", "--path", "src/backend/api/**") == 0
+        assert cli.main(["start", "T1-96-drift-scope", "--no-remote"]) == 0
+        target = str(seeded_repo / "scripts/harness/backlog.py")
+
+        # ① 정정 전 — 선언 범위 밖이므로 scope_drift가 **걸려야 한다**.
+        #    이 단언이 없으면 아래 ③은 "원래 안 걸리는 파일"에서도 통과한다(위장).
+        capsys.readouterr()
+        assert self._invoke_hook(monkeypatch, target) == 0  # warn 모드 — 차단은 아니다
+        before_err = capsys.readouterr().err
+        assert "scope_drift" in before_err, before_err
+
+        # ② 경고문이 처방하는 것이 **합법 CLI**인지 확인한다 — 구 문구는 "태스크 YAML의 paths에
+        #    추가"라고 적어 사람을 대장 손편집(금지 행위)으로 보냈다.
+        assert "amend" in before_err and "--path" in before_err, before_err
+        assert "YAML" not in before_err, before_err
+
+        # ③ 정정 — `--path`는 **교체**이므로 기존 항목도 함께 지정한다(HARN-57 ④의 설계).
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-96-drift-scope",
+                    "--path",
+                    "src/backend/api/**",
+                    "--path",
+                    "scripts/harness/**",
+                    "--reason",
+                    "범위가 실제로 넓다 — scripts/harness 편입",
+                ]
+            )
+            == 0
+        )
+
+        # ④ 정정 후 — 같은 파일이 이제 범위 안이므로 scope_drift가 **사라져야 한다**.
+        capsys.readouterr()
+        assert self._invoke_hook(monkeypatch, target) == 0
+        assert "scope_drift" not in capsys.readouterr().err
+
+    def test_narrowing_puts_a_file_back_under_scope_drift(
+        self, seeded_repo: Path, monkeypatch, capsys
+    ):
+        """반대 방향 — 좁히면 그 파일이 **다시** 걸린다.
+
+        넓히기만 검증하면 "paths를 읽기는 하는데 합집합으로만 늘어나는" 구현도 통과한다.
+        교체 의미가 scope drift 축에도 도달하는지는 좁히는 방향으로만 드러난다.
+        """
+        self._on_branch(seeded_repo, "claude/harn59-narrow")
+        assert (
+            _add(
+                "T1-97-drift-narrow", "--path", "src/backend/api/**", "--path", "scripts/harness/**"
+            )
+            == 0
+        )
+        assert cli.main(["start", "T1-97-drift-narrow", "--no-remote"]) == 0
+        target = str(seeded_repo / "scripts/harness/backlog.py")
+
+        capsys.readouterr()
+        assert self._invoke_hook(monkeypatch, target) == 0
+        assert "scope_drift" not in capsys.readouterr().err  # 처음엔 범위 안
+
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-97-drift-narrow",
+                    "--path",
+                    "src/backend/api/**",
+                    "--reason",
+                    "범위를 API로 좁힌다",
+                ]
+            )
+            == 0
+        )
+
+        capsys.readouterr()
+        assert self._invoke_hook(monkeypatch, target) == 0
+        assert "scope_drift" in capsys.readouterr().err  # 좁힌 뒤엔 범위 밖

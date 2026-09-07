@@ -2514,7 +2514,11 @@ def _check_edit_policy(root: Path, file_path: str) -> int:
     violations: list[tuple[str, str, str]] = []  # (rule, mode, 메시지)
 
     if mine:
-        # ① scope_drift — 내 claim 태스크가 paths를 선언했는데 그 밖을 편집
+        # ① scope_drift — 내 claim 태스크가 paths를 선언했는데 그 밖을 편집.
+        # 처방 문구는 `amend --path`를 가리킨다: 구 문구("태스크 YAML의 paths에 추가")는
+        # 정정 CLI가 없던 시절의 것이라 **사람을 대장 손편집으로 보내고 있었다** —
+        # CLAUDE.md "거부의 우회 금지"가 금지한 바로 그 행위를 경고문이 처방한 셈이다.
+        # `--path`는 교체이므로 확장 시 기존 항목도 함께 지정해야 한다(HARN-57 ④).
         me = mine[0]
         if me.paths and policy.scope_drift != "off" and not pathscope.path_in_scope(rel, me.paths):
             violations.append(
@@ -2522,7 +2526,8 @@ def _check_edit_policy(root: Path, file_path: str) -> int:
                     "scope_drift",
                     policy.scope_drift,
                     f"'{rel}' 은 claim 태스크 {me.id}의 선언 범위(paths) 밖 — "
-                    f"범위 확장이 맞으면 태스크 YAML의 paths에 추가",
+                    f"범위 확장이 맞으면 `backlog.py amend {me.id} --path <기존 전부> "
+                    f"--path '{rel}' --reason <사유>`로 정정하라 (HARN-59)",
                 )
             )
     elif policy.adhoc_edit != "off" and rel.startswith(CODE_DOMAIN_PREFIXES):
