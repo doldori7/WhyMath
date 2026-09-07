@@ -1789,8 +1789,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 2
-    test_files: 16
-    test_functions: 441
+    test_files: 17
+    test_functions: 446
     matrix:
       A_subject: 0
       B_db: 0
@@ -1854,8 +1854,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 1
     coupling_count: 13
-    test_files: 12
-    test_functions: 411
+    test_files: 13
+    test_functions: 416
     matrix:
       A_subject: 1
       B_db: 1
@@ -8419,8 +8419,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 327
-    test_functions: 5907
+    test_files: 328
+    test_functions: 5912
     matrix:
       A_subject: 3
       B_db: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 190
-    test_functions: 2908
+    test_files: 191
+    test_functions: 2913
     matrix:
       A_subject: 1
       B_db: 0
@@ -8549,8 +8549,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 7
-    test_files: 73
-    test_functions: 1479
+    test_files: 74
+    test_functions: 1484
     matrix:
       A_subject: 1
       B_db: 1
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 195
-    test_functions: 2920
+    test_files: 196
+    test_functions: 2925
     matrix:
       A_subject: 3
       B_db: 0
