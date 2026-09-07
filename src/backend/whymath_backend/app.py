@@ -121,6 +121,9 @@ from whymath_backend.api._subject_capability_state import (
 from whymath_backend.api._subject_capability_state import (
     FINAL_ANSWER_VERIFIER_KEY as _FINAL_ANSWER_VERIFIER_KEY,
 )
+from whymath_backend.api._subject_capability_state import (
+    STEP_CHAIN_VERIFIER_KEY as _STEP_CHAIN_VERIFIER_KEY,
+)
 from whymath_backend.api.alignments import router as alignments_router
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
@@ -158,6 +161,7 @@ from whymath_backend.composition import (
     default_expression_equivalence,
     default_expression_seal,
     default_final_answer_verifier,
+    default_step_chain_verifier,
 )
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
@@ -730,14 +734,15 @@ def create_app(
     # 라우터는 `api/_subject_capability_state.py`의 Depends로 꺼내 쓴다 — 그래서 Core 모듈은
     # `composition`을 이름으로 알지 않는다(`EOS Core → Subject Interface ← Math Adapter`).
     # 부팅 1회 호출이라 요청 경로에서 재조립하지 않는다(팩토리는 상태 없는 판정기를 준다).
-    # ⚠️ EOS-86의 `StepChainVerifier` 팩토리도 **반드시 이 줄들 옆에** 등록해야 한다. Core가
-    #    직접 `composition.default_step_chain_verifier()`를 부르면 EOS-89가 없앤 pull 지점이
-    #    4번째로 되살아난다(SUBJECT_CAPABILITY_KEYS에 키를 더하는 것이 그 강제 장치다).
+    # COMP-01: EOS-86의 `StepChainVerifier` 팩토리도 **같은 줄들 옆에** 등록한다(6번째). 이 줄이
+    #    빠지면 `api/coach.py`의 Depends가 `AttributeError`로 터지고(폴백 없음·침묵 실패 금지),
+    #    tests/infra `test_app_factory_registers_every_subject_capability`가 RED가 된다.
     app.state.__setattr__(_EXPRESSION_EQUIVALENCE_KEY, default_expression_equivalence())
     app.state.__setattr__(_FINAL_ANSWER_VERIFIER_KEY, default_final_answer_verifier())
     app.state.__setattr__(_ASSESSMENT_ANSWER_VERIFIER_KEY, default_assessment_answer_verifier())
     app.state.__setattr__(_EXPRESSION_SEAL_KEY, default_expression_seal())
     app.state.__setattr__(_ANSWER_FORM_VERIFIER_KEY, default_answer_form_verifier())
+    app.state.__setattr__(_STEP_CHAIN_VERIFIER_KEY, default_step_chain_verifier())
     # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회). 기본은 config의 키가
     # 설정된 provider만(카카오·네이버·OAuth-a2) — 키 미설정(CI)이면 빈 dict라 콜백 404. 클라이언트는
     # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
