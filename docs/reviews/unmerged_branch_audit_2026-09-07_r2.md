@@ -209,6 +209,8 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 
 | `whymath-pedagogy-review-uqyg79` | PED-22~25(done #831·#834·#835·#832)·PED-26(todo) | 49 | 6 | low | 고유 0줄 27파일(코퍼스 YAML 11·l3 생성기 5·테스트 8 등)은 PED-22/24가 바이트 동일 이식. PR #675는 main 머지 이력 0(미머지). uncovered: `l4/pedagogy/signal_assembly.py` 60줄+테스트 119줄(PED-08 ① 공용 좌석 — 로직은 main `_build_signals` get_state 리팩터가 우세·유실은 좌석 경계뿐) · `PED-08`(blocked)/`PED-13`(todo) YAML — coach `decide()` 소비 불가 원인(concept 그래프 code ↔ 원자 code ID 공간 불일치·runtime crosswalk 필요) 실측 분석이 main 0건·번호는 타 done 태스크 점유 · `.claude/agents` 3파일 PED-11 부기 4줄(main은 유령 필드 `preferred_solution_style`을 실재처럼 서술) · `00_overview.md` 04e 인덱스 줄. OPS-15 격리 가드 2종은 PED-25 ⑤ 의도적 제외+MEMORY 회수 경로 기록 → covered | PED-26 ⑤(gdmwhk와 묶음: 처분 기록 의무·04f 병합·04e 이중 점유 해소·PED-13 재배정·소액 문서 2건·③ stale 정정) |
 
-*(잔여 2건 vafylb·trjg5x는 재개 결과 도착 후 기재)*
+| `whymath-ai-content-design-vafylb` | S4-59·OPS-53(todo) | 7 | 2 | low | 코드·데이터 잔여 전부 소유 있음 — 강등전 1차 기록 문서 104줄은 S4-59 ①③④, src cp949 가드+em dash 치환 21줄은 OPS-53 ①②⑤, OPS-24 yaml은 OPS-53 재등재. 08-31 감사가 "CLAUDE.md·MEMORY = main 우세 흡수"로 뭉뚱그린 판정을 줄 단위로 재검하니 **2건은 옛 판이 아니라 main 부재 신규 내용**: MEMORY 2026-08-09 병렬 충돌 사고 로그(e98dw4의 S4-16 중복 구현 "머지 금지" 판정·Kiki 머신 클론 브랜치 전환 사고·add CLI를 썼는데도 난 OPS-23 번호 충돌 3회차) · CLAUDE.md 규칙 "공유 클론 — 브랜치 의존 명령 블록에 `git log -1` 자가검증 필수". 부기: 인플라이트 PR #844가 같은 src에 UTF-8 reconfigure 가드 독자 보유 | S4-59 ⑤(④ 착지 시 함께 판정·기록) |
+
+*(잔여 1건 trjg5x는 재개 결과 도착 후 기재)*
 
 *(§7·§8·§9는 결과 도착 후 기재)*
