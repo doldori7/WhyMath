@@ -240,10 +240,12 @@ class TestStrongRefutationBoundary:
 
         out = await strong_refutation_mids(_Capturing(), _UID, [_MIDS[0]])  # type: ignore[arg-type]
         assert out == set()
-        # 술어가 polarity=-1 + weight 하한을 함께 건다(둘 중 하나만이면 오탐).
+        # 술어가 polarity=-1 + weight 하한을 함께 건다(둘 중 하나만이면 오탐). **값까지 본다** —
+        # 토큰 존재만 보면 부호가 +1로 뒤집혀도 통과하는데, 그 상태는 *지지* 증거를 반박으로 읽어
+        # 강하게 지지된 가설을 "해소"로 계상한다(해소율이 반대로 부풀려지는 최악의 오작동).
         compiled = str(captured[0].compile(compile_kwargs={"literal_binds": True}))
-        assert "polarity" in compiled
-        assert "0.75" in compiled
+        assert "polarity = -1" in compiled, f"반박(-1) 필터가 아니다: {compiled}"
+        assert ">= 0.75" in compiled, f"강한 반박 하한이 걸리지 않았다: {compiled}"
         # 참조 무결성 — 이 쿼리가 evidence_link를 본다(다른 테이블로 바뀌면 의미가 사라진다).
         assert EvidenceLink.__tablename__ in compiled
 
