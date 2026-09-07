@@ -98,7 +98,13 @@ def test_csv_ledger_matches_generator_output_and_has_bom(gen: Any, measured: Any
     rows, _ = measured
     raw = _LEDGER_CSV.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf"), "CSV는 utf-8-sig(BOM) — 한국어 Windows Excel 호환"
-    assert raw.decode("utf-8-sig") == gen.to_csv(rows)
+    # 메시지 없이 두면 실패가 5만 자짜리 diff로만 나온다 — 짝인 YAML 테스트와 같은 안내를
+    # 붙여 "무엇을 하면 되는지"를 실패 화면에서 바로 읽게 한다(2026-09-07 PR #1042에서
+    # 이 테스트가 두 번 red를 냈고, 두 번 다 답은 재생성 한 줄이었다).
+    assert raw.decode("utf-8-sig") == gen.to_csv(rows), (
+        "feature_inventory_v2.csv가 생성기 출력과 다르다 — "
+        "`python3 scripts/analysis/eos_feature_inventory_v2.py --write`로 재생성"
+    )
 
 
 def test_csv_has_every_required_field_as_a_column(gen: Any) -> None:
