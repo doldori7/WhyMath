@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -26,6 +26,6 @@ paths:
   - tests/backend/api/test_me_erasure.py
   - tests/backend/api/test_me_export.py
   - docs/reviews/eos_privacy_gap_analysis.md
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: docs/reviews/unmerged_branch_audit_2026-09-07_r2.md §5 (stray-code 8회차 — q8tvcx 커버리지 정독 risk=high). 원 등재 근거 = q8tvcx의 data_platform_module_gap_review_r2.md C1(2026-08-04): 매니페스트가 없는 store 2개를 선언하고 있는 store 1개를 누락 — 양방향 오류이며 누락 쪽이 중대. pending_external은 API 응답에 실리지 않고 ops 로그로만 나간다(수신자 = 운영자). 소유 태스크 OPS-38(OPS-19 회수)의 acceptance 어디에도 없어 OPS-38 done 시 소실될 상태였다. 보안·법령 관련 고립분 → priority 1(stray-code 규칙). 원 브랜치 q8tvcx는 OPS-38 회수 완료 전 삭제 금지."
 updated: 2026-09-07
