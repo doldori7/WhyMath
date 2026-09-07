@@ -337,3 +337,35 @@ python3 scripts/harness/backlog.py amend CUR-07-… --depends HARN-80-direct-com
 python3 scripts/harness/backlog.py validate     # green 570건 · EXIT=0
 python3 scripts/harness/backlog.py audit-deps   # 위반 0 · EXIT=0 — 단, 수정 *전*에도 0이었다(검출 사각·§8.1 #8)
 ```
+
+---
+
+## 10. 실행 부록 — #1020 착지 후 보완 (2026-09-07 · 판정 기준 main `d50781b7`)
+
+§8 정직한 공백이 "#1020에만 있다"고 적은 조건이 해소됐다. **7회차 PR #1020이 `c36af9e2`로, 이 8회차 PR #1027이 `d50781b7`로 머지**되어, 7n9n72 좌석 8건의 고립 참조가 main에 실재한다. §7.3이 충돌 회피로 미뤄 둔 보완 amend 3건을 §4.2 표 근거로 집행했다.
+
+| 좌석 | 7회차가 적은 것 | 8회차 후속이 보탠 동반 변경 (main `d50781b7` 부재 실측) |
+|---|---|---|
+| ASM-06 | `distractor_link.py`·테스트·alembic `0afd40ce1867` | `schema/activity.py`·`db/models/activity.py`·`api/me.py`(슬롯 신설·적재·응답 `matched_misconception_id`)·`schema_version.py`·`l4/misconception/__init__.py` export + 테스트 3파일(test_me 6건·test_activity_orm·schema/test_activity). **alembic 재채번 필수** — 브랜치 리비전의 down_revision `7ef2b5a8e69e`는 main #738이 건너뛴 폐기 리비전이라 그대로 포트하면 multiple heads. main 단일 head = **`c1a5e07b4d38`**(93 리비전 실측) 위로 재채번 |
+| MISC-02 | `prerequisite_link.py`·테스트 | `api/coach.py`·`api/me.py` 보충 경로 + 테스트 6건(test_coach 3·test_me 3). **플래그 신설 불요** — `misconception_crosslink_mode`는 main `config.py`에 이미 실재(8회차 §4.2가 "부재"로 적지 않은 축을 여기서 확정) |
+| MISC-05 | `misconception_slip_report.py`·테스트 | `ops/declared_unwired_audit.py`의 `_OFFLINE_REPORT` 등록 — main에 분류 자체는 실재하나 이 모듈 등록은 0건. 리포트만 착지하면 OPS-22 감사가 미분류로 CI red일 수 있다(소스 판독 예측·주입 미실측 — 착수 세션이 먼저 재현할 것) |
+
+세 항 모두 **paths 유의**를 병기했다 — 현 `paths`가 위 파일들을 덮지 않아 scope-drift 경고가 나면 오탐이 아니라 그 acceptance 항이 명시 승인한 범위다. `paths` 정정 CLI는 `HARN-57`(todo) 소관이라 아직 없다. 이 문면은 *착수 선행 조건이 아니라 실행 시 유의사항*으로 적었다 — 선행이면 `depends_on`으로 집행해야 하고(§8.1 #8 교훈), 이 세 좌석의 착수를 HARN-57에 묶을 이유는 없기 때문이다.
+
+검증: `validate` green(태스크 572·게이트 36·트랙 3) · `audit-deps` 위반 0 · amend 3건 각 EXIT 0.
+
+### 10.1 PR #1033 Codex 리뷰 수용 (P1·P2 각 1건 — 전건 실측 후 수용)
+
+| # | 지적 | 실측 | 조치 |
+|---|---|---|---|
+| **P1** | ASM-06 보완이 `api/me.py`(AttemptSubmitRequest) 경로만 열거했는데 **실제 학생 흐름은 coach**다 — 그것만 회수하면 `selected_choice_index`가 주 흐름에서 영원히 NULL이라 역방향 링크가 휴면 | **확정**. 모바일은 `POST /v1/me/attempts`를 **부르지 않는다**(`completion_signal.dart:9,11`·`coach_models.dart:402`가 "`api/coach.py` 계약 명문·중복 적재 금지"로 자인). 선지 탭은 `chat_screen.dart::_onChoiceSelected`가 `student_input`에 **값만** 싣고, ProblemAttempt는 `api/coach.py::_complete_problem`(`ProblemAttemptORM` :1040)이 만든다. 이 세션의 §4.4 started_at 분석이 찾은 "writer 2곳" 실측과 정합 | ASM-06에 **coach 제출 경로 포함**을 별항으로 부착 — ⓐ요청 스키마 슬롯+`_onChoiceSelected` 동봉 또는 ⓑ서버측 인덱스 파생(택1 착수 시 판정) + **E2E 관통 테스트**(선지 탭 → 적재 → 오개념 링크). me.py 경로는 API 소비자용으로 유지 |
+| **P2** | 세 좌석의 "paths 유의" **산문은 claim 시점 충돌 검출에 무력**하다 — `start`·`overlap`은 acceptance가 아니라 `paths`만 읽는다. paths를 실제로 넣거나 HARN-57에 blocking하라 | **확정**. `amend --path`는 아직 없다(HARN-57 `todo`) — 우회 불가 | 세 좌석 전건 `amend --depends HARN-57`. 즉 §10이 "선행이 아니라 유의사항"으로 적은 판단을 **뒤집었다** — 조율 기능은 유의사항으로 대체되지 않는다 |
+
+**변별력 — 정직 기록**: `next --n 500 --json` 전건 조회에서 세 좌석은 **수정 전후 모두 미노출**이라 그 측정 자체에는 변별력이 없다. 뮤테이션(MISC-05의 `depends_on` 제거·`mutated != original` 단언·`cmp`로 바이트 동일 원복)에서도 여전히 미노출이었다. 대신 셀렉터를 직접 호출해 사유를 확정했다:
+
+```python
+selector.classify_todo(b, t)
+# → Exclusion(task_id='MISC-05-…', reason='deps', detail=['HARN-57-done-artifact-correction-path'])
+```
+
+즉 **의존 집행은 실제로 작동한다**. 노출 수준 A/B가 값을 못 가른 것은 두 번째 필터(HARN-11 "이미 완료(미머지): 7n9n72")가 같은 태스크를 동시에 가리기 때문이고, ASM-06·MISC-02는 애초에 `blocked`다. 같은 CLI 경로의 노출 변별력은 이 세션이 이미 MOB-18에서 실측했다(노출 → 미노출·§8.1 #8).
