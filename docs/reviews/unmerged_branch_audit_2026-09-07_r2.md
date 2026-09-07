@@ -109,7 +109,9 @@ git diff --name-only 98925b0e..origin/main -- backlog/tasks/
 |---|---|---|---|
 | `drive-eos-81-sequential-wbhw8v` (9d5f81b2) | **반박 실패(high)** — 브랜치 ref가 main first-parent의 squash 커밋 #1002를 그대로 가리킴(고유 커밋 0·3-dot diff 0파일·판정 기준 b75f495d와 현 HEAD 96790b46 양쪽 동일). 2-dot 트리 대조 M 108파일 전건 `comm -23` → 75파일·760줄이 브랜치에만 있으나 **75/75가 브랜치 head 이후 main PR(#1003~#1024)이 명시 수정한 파일**이고 열람한 줄 묶음은 전부 후행 판이 대체한 옛 상태(KICE 런북 재작성 지시서→실행 기록판 #1008 · answer_kind 하드코딩 튜플→EOS-85 불투명 통과 · composition pull→EOS-89 push · gates pending→cleared/kiki · CLAUDE.md 0.2.11→0.2.15). EOS-81 산출물 3종 main 실재·세션 이벤트 ndjson 190줄 바이트 동일·`86930abc`(#980) 착지 | **반박 실패(high)** — `merge-base` = 브랜치 head 자신(=#1002 squash 커밋)·`is-ancestor` 양 기준 exit 0. **7회차 근거 표기 정정**: 브랜치 이름은 eos-81이지만 이벤트 파일에 EOS-81 이벤트 0건 — 실제 수행 태스크는 **EOS-75(#994 · 59503f7f · 코드 6파일)·HARN-73(#1002 · 9d5f81b2 · backlog.py+테스트)**이고 둘 다 main done·코드 실재. EOS-81은 세션 9ain00이 #980으로 착지(claim/release be631f60·a42094b6). "EOS-81 main done(#980)"은 사실이나 이 브랜치의 흡수 근거로는 무관 — 판정은 불변, 근거만 바뀜 | **삭제 확정** (7차 배치 등재는 #1020이 보유 — 중복 등재 안 함) |
 | `review-dydkkx-runbook` (dbdcdf6f) | **반박 실패(high)** — 전 트리 512파일 `comm -23` → 고유 938줄, merge-base(e90d2d6f)로 걸러 **브랜치가 실제 저작한 줄은 14파일 27줄**뿐. task yaml 12파일의 "[정정 2026-09-01] eos_priority …" notes는 main 동일 파일에 12/12 실재(grep count 1)하고 main이 09-02~09-06 후행 notes·게이트·상태 전이를 추가한 후행판. 런북 4줄은 main이 GH013 실측 근거로 명시 폐기한 `git push origin main` 안내와 `--as kiki` 이전 clear 명령. 유일하게 main 부재 = EOS-80 done 이벤트 1줄(ts 13:46) — main `claude_eos80-done.ndjson`(#966·ts 19:49)이 같은 id·같은 artifacts로 보유 → 손실 아닌 중복. `eos_priority` 실질 데이터 193파일 전건 브랜치=main 일치. 7회차 "53줄/21파일" 집계 정확히 재현 | **반박 실패(high)** — 근거 4종(#961 머지·main EOS-80 done·이벤트 파일·런북 정정판) 전건 참. **7회차 근거 표기 정정**: "PR #961 머지(91c348fd)"의 91c348fd는 브랜치 내부 `Merge origin/main` 커밋이고 main 스쿼시 커밋은 **b63c48e5** — 두 커밋의 **트리가 바이트 동일**(`rev-parse ^{tree}` 일치·`diff --stat` 0줄)이라 결론 불변. 머지 후 1커밋 dbdcdf6f는 backlog 2파일만 변경(코드·데이터 0) | **삭제 확정** (7차 배치 등재는 #1020 보유) |
-| `gates/deploy-environment-approval` (907d4629) | **반박 실패(high)** — 브랜치가 main보다 더 가진 줄 총 **6줄**(이벤트 1·gates.yaml 2·런북 3). ① 이벤트 1줄·gates.yaml evidence "Waiting for review 상태로 정지함을 확인"은 같은 게이트의 약한 중복 clear — main 샤드 `claude_status-uh55gf.ndjson`이 gh api PUT·환경 id·protection_rule id·baseline 변별력까지 담은 상위 증거 보유 ② 그 유일 문자열은 main 런북 §7-3 정정 문단(:374)이 인용한 뒤 "현 구성에서 관측 불가(deploy는 항상 skipped)"로 반박했고, **PR #967 닫기 코멘트에서 저자 본인이 "판정 근거가 틀렸다"로 철회** — 보존 가치가 아니라 변별력 없는 검증 스텝의 전사 ③ 런북 "등록 완료"·"해소 1건" 각주는 main §8 표 행·§7-4 신설이 상위 대체. 한계: PR #967 **본문**에만 있는 경위(gates.yaml 미해결 충돌 마커→`backlog.py` ScannerError 전멸·Kiki 머신이 타 브랜치 체크아웃)는 main `ScannerError` 0건이나 PR 본문은 브랜치 삭제로 사라지지 않고, 인플라이트 PR #975의 **HARN-61**(충돌 마커 사고 재발방지)이 그 축을 다룬다 | *(도착 후 기재)* | *(2렌즈 후 확정)* |
+| `gates/deploy-environment-approval` (907d4629) | **반박 실패(high)** — 브랜치가 main보다 더 가진 줄 총 **6줄**(이벤트 1·gates.yaml 2·런북 3). ① 이벤트 1줄·gates.yaml evidence "Waiting for review 상태로 정지함을 확인"은 같은 게이트의 약한 중복 clear — main 샤드 `claude_status-uh55gf.ndjson`이 gh api PUT·환경 id·protection_rule id·baseline 변별력까지 담은 상위 증거 보유 ② 그 유일 문자열은 main 런북 §7-3 정정 문단(:374)이 인용한 뒤 "현 구성에서 관측 불가(deploy는 항상 skipped)"로 반박했고, **PR #967 닫기 코멘트에서 저자 본인이 "판정 근거가 틀렸다"로 철회** — 보존 가치가 아니라 변별력 없는 검증 스텝의 전사 ③ 런북 "등록 완료"·"해소 1건" 각주는 main §8 표 행·§7-4 신설이 상위 대체. 한계: PR #967 **본문**에만 있는 경위(gates.yaml 미해결 충돌 마커→`backlog.py` ScannerError 전멸·Kiki 머신이 타 브랜치 체크아웃)는 main `ScannerError` 0건이나 PR 본문은 브랜치 삭제로 사라지지 않고, 인플라이트 PR #975의 **HARN-61**(충돌 마커 사고 재발방지)이 그 축을 다룬다 | **반박 실패(high)** — 근거 4건 전건 실측 참: PR #967 `state=closed·merged=false·head=907d4629`(MCP) · main `claude_status-uh55gf.ndjson` gate_clear 실재(gh api PUT·required_reviewers·환경 id·protection_rule id) · 런북 §7-3 정정문(:374 "왜 워크플로 실행으로 판정하지 않는가" — `deploy.yml:122 needs: preflight` 실측 일치)·§7-4(:378)·§8 표(:432 "등록·강화됨") · 이벤트 1줄 중복. 근거 커밋 b6ce0ae8은 문서·백로그 전용이나 **이 브랜치의 산출물 자체가 대장 1줄+이벤트 1줄+런북(코드 0)** 이라 동종 대 동종 흡수. 브랜치가 건드린 3파일은 b75f495d↔96790b46 사이 diff 0(판정 불변). 권고: Kiki 수동 삭제(`git push origin --delete gates/deploy-environment-approval`)는 head SHA 스냅샷이 든 cleanup-request(#1020)가 **머지된 뒤**에 — 안전성과 무관하나 trunk에 복구 경로 기록이 남는다 | **삭제 확정** (허용 패턴 밖 → Kiki 수동·#1020 머지 후) |
+
+**§4.1 총괄**: 반박자 6/6 반박 실패(전건 high). 7회차 ③ 삭제 3건은 **전건 유효**하며, 8회차가 정정한 것은 판정이 아니라 **근거 표기 2건**(wbhw8v의 흡수 근거는 EOS-81/#980이 아니라 EOS-75/#994·HARN-73/#1002 · dydkkx의 머지 sha는 91c348fd가 아니라 b63c48e5)이다. 삭제 배치는 #1020이 보유하므로 이 8회차는 `.github/branch-cleanup-request.txt`를 **수정하지 않는다**(중복 등재 금지).
 
 ### 4.2 7n9n72 잔여표 — 독립 재도출 vs 7회차 표
 
@@ -223,4 +225,84 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 
 **§5 총괄**: 14건 중 uncovered 0 = 3(6eejrv·gdmwhk·34zvse 코드축) · low = 6 · high = 5(q8tvcx·5t5lmv·k20m0w·trjg5x·iws58k[형식]). 6·7회차 "정직한 공백"이 예고한 유형이 실재했다 — **좌석은 살아 있는데 acceptance가 잔여를 안 덮는 상태가 14건 중 9건**이며, 그중 3건(q8tvcx SEC-13 · k20m0w MGMT-03 · 5t5lmv OPS-35/A11Y-02)은 보안·법령·코드 축이다.
 
-*(§7·§8·§9는 결과 도착 후 기재)*
+## 7. 조치 (전건 `backlog.py` CLI 경유 — 대장 손편집 0)
+
+### 7.1 신규 등재 7건
+
+| ID | 무엇 | priority / EOS | 출처 |
+|---|---|---|---|
+| **SEC-32**-external-store-manifest-truthfulness | 삭제·반출 매니페스트 진실성(Langfuse 누락·ClickHouse/S3 허위 선언) — 원 SEC-13(q8tvcx) 등재 유실·번호 이중 배정 | **1** / P1 | §5 q8tvcx |
+| **MGMT-03**-age-collection-prodsignal-policy | 연령 수집 결정 + `is_production_like` 다신호화(PIPA 미성년 게이트 실집행) — 원 ID 재등재(원격 충돌 0)·owner kiki·depends MGMT-02 | **1** / P1 | §5 k20m0w |
+| **HARN-78** | 탐지기 `pr_filed`가 닫힌 미머지 PR을 소유자로 셈 — "처분은 해당 PR에서"가 막다른 길 | 2 / P2 | §3.2 |
+| **HARN-79** | 위임 에이전트 검증 명령 포그라운드 규약 회수(7n9n72 17줄·반복 실수 3회차)·전 페르소나 일반화 | 3 / P2 | §4.2 |
+| **HARN-80**-direct-commit-landing-done-path | 직접 커밋으로 main 착지한 태스크의 done 경로 부재(`--no-pr direct-commit <sha>` + trunk 조상 실측) — CUR-07 실사례 | 3 / P2 | §5 34zvse |
+| **OPS-67**-event-payload-contract-enforcement | AttemptEvent seam 강제(AST 스캔) — 원 OPS-20(q8tvcx) 등재 유실 | 3 / P2 | §5 q8tvcx |
+| **VIZ-11**-show-extrema-smoke-regression-recovery | VIZ-06(done) 미이행 acceptance ④ 승계 — smoke 회귀 8줄 | 3 / P2 | §5 e98dw4 |
+
+`add`의 번호 충돌 가드·의미 중복 탐지가 전건 정상 작동했다 — SEC-32↔SEC-13(q8tvcx) 유사도 0.67·OPS-67↔OPS-20 0.54를 "재등재 관계"로 정확히 잡았고, OPS-65/66은 미머지 PR #1007이 선점해 67을 채택했다.
+
+### 7.2 좌석 amend 12건 (acceptance append — 기존 항 불변)
+
+| 좌석 | 무엇을 붙였나 |
+|---|---|
+| MISC-01 · MISC-03 | 삭제된 6dszy0 참조 → 유일 사본 7n9n72 + 동반 파일 전건(config 플래그·shadow.py·coach.py 배선) |
+| OPS-38 ⑦ | SEC-13→SEC-32·OPS-20→OPS-67 매핑 + ③ 문서 폐기 시 §3 R2·R3·부록 B1·C1 근거 보존 의무 |
+| OPS-40 ⑤ | head 7052c34a 이후 4커밋의 29항목(OPS-35 12파일·A11Y-02 3·OPS-34·정정 유실 6문서·CLAUDE.md 규칙·MEMORY 3) + main 우세 줄 이식 금지 목록 |
+| OPS-41 ④ | a3ysut 축은 #819로 충족(삭제 후보 근거) · t608mk YAML 4건+MEMORY 13줄 · azdnov 판정서+HARN-22(azdnov판) YAML — notes 전용 산출물을 acceptance로 승격 |
+| CUR-07 | **재구현 금지** — 구현은 main 7b4fb546 착지·잔여는 대장 전이뿐(HARN-80 경로)·전이 전 34zvse 삭제 금지 |
+| ARCH-30 ③ | E7 태스크 6건(models.py "coding"과 결합 의존)·라이선스 3행·아키텍처 문서 2건 |
+| MOB-18 ⑤ | 감사 정본 문서 착지·paths 사각(src/backend 20·src/web 4·tests/infra 2)·ARCH-29↔ARCH-12 상충 선행 재판정·S3-42~48 S3-25 소관·MGMT-03 재등재 |
+| PED-26 ⑤ | 처분 기록 의무(REND-05·PED-21·PED-13)·04f 병합·04e 이중 점유 해소·소액 문서 2건·③ stale |
+| S4-59 ⑤ | 08-09 병렬 충돌 사고 로그·공유 클론 자가검증 규칙 회수 판정(④ 착지 시) |
+| PATH-03 | 회수 원천 7fb49e4d·재구현 금지·HARN-11 필터로 가려짐 명시 |
+| PB-14 ⑤ | S4-19/20 재등재 시 원천 부착(40597d5c·1325fae1)·설계 문서 2건 착지(유령 참조 해소)·**삭제 금지를 PB-14·PATH-03·ADMIN-02 완료 후로 연장** |
+
+### 7.3 손대지 않은 것 (충돌 회피 — 의도적)
+
+- **7회차(#1020)가 amend한 좌석 8건**(ASM-06·MISC-02·MISC-05·MISC-06·PB-02·PED-14·S3-33·S3-34)과 **PB-13**(PR #975 소유)·**`.github/branch-cleanup-request.txt`**(7차 배치 보유). 같은 YAML acceptance 끝에 두 PR이 줄을 붙이면 머지 충돌이다. §4.2 표가 보완 목록을 고정해 두었으므로 **#1020 머지 후 한 번의 amend**로 닫힌다(ASM-06 스키마·ORM·me.py·테스트 9건·alembic 재채번 / MISC-02 집행 지점+테스트 6 / MISC-05 `declared_unwired_audit` 등록).
+- 삭제 배치 **0건 추가** — 7회차 ③ 3건이 §4.1에서 전건 유효로 확정됐고 등재는 #1020이 보유한다.
+- 코드 이식 0줄 — 이 감사의 범위가 아니다.
+
+### 7.4 사람·후속 세션 몫
+
+| 누가 | 무엇 | 언제 |
+|---|---|---|
+| Kiki | `git push origin --delete gates/deploy-environment-approval` (허용 패턴 밖) | **#1020 머지 후**(SHA 스냅샷이 trunk에 남게) |
+| 착수 세션 | CUR-07 done 전이 + HARN-34 notes 정정 | HARN-80 착지 후 |
+| 착수 세션 | paths 보강 4건(MISC-05 `ops/`·MOB-18·ARCH-30·PB-08 `test_problems_integration.py`) | HARN-57(`--path` amend·PR #1021) 착지 후 |
+| Kiki | MGMT-03 결정 A(변호사)·B 분리 착수 여부 | 실 OAuth 배선 전(재확인 지점) |
+
+## 8. 정직한 공백
+
+- **판정 기준 시점**: 감사 중 main이 `96790b46`으로 2커밋 전진(#1015·#1024). 그 두 PR의 head 브랜치(k9r51v·b028ix-eos89)는 머지 후 삭제돼 원격 ref는 40→38이 됐다. 델타는 소유 태스크 14건·삭제 판정 3건의 관련 파일에 diff 0(반박자·에이전트가 각각 실측) — 판정 불변. 이 문서의 기준 해시는 b75f495d로 유지한다.
+- **실행 검증 0**: 전건 정적 git 대조다. 브랜치 테스트를 현 main 위에서 돌리지 않았고 PowerShell 스크립트도 실행하지 않았다 — "이식 시 RED" 예측(7n9n72 config 플래그 부재·k20m0w ARCH-29↔ARCH-12·MISC-05 감사기 미분류)은 소스 판독이다.
+- **워크플로 실패 9건은 재개로 회수**: 최초 실행에서 반박자 6·커버리지 2·비평 1이 세션 한도(06:40 UTC 리셋)로 실패했고, 리셋 후 `resumeFromRunId`로 캐시 재개해 전건 완료했다. 실패한 채 판정을 낸 항목은 없다.
+- **7회차 좌석 3건 보완 미집행**(§7.3) — 충돌 회피이며 §4.2 표가 근거를 고정한다. #1020이 머지되지 않고 닫히면 그 8건 amend와 PED-37·게이트·7차 배치가 통째로 사라지므로, 그 경우 다음 회차가 §4.2·§4.4를 근거로 재등재해야 한다.
+- **PR 소유 18건은 판정 밖**인데, 그중 8월 PR 10건(#844~#893)은 08-31 이후 갱신 0이고 **닫히면 즉시 고아**가 된다(§3.2 탐지기 사각과 결합). 사전 측정한 main 부재 src 파일: #882 12·#880 6·#847 2·#844 1·#865 1·#893 1. 다음 회차의 최우선 관찰 대상.
+- **HARN-11 미머지 done 필터의 역설**: 폐기 판정 브랜치(trjg5x)·회수 대기 브랜치(7n9n72)의 done 사본이 살아 있는 main todo(PATH-03·ADMIN-02·좌석 8건)를 `next`에서 가린다 — 브랜치 삭제와 코드 회수가 서로 당기는 구조. MEMORY 2026-09-06 부수 실측·HARN-74 notes에 이미 관측돼 있어 이 감사는 재등재하지 않고 PATH-03 amend에 "착수는 명시 start"로만 적었다.
+- **e98dw4의 S4-16 중복 구현 폐기 판정**이 main 어디에도 기록돼 있지 않다 — S4-59 ⑤(a)가 기록 의무로 승계.
+- **claim 대장 잔류**(`status-5kvqkv`)는 7회차와 동일·하네스 소관.
+- 완전성 비평 결과는 §8.1에 후기재.
+
+## 9. 검증 (전건 exit code — `-q`/`tail` 절단 없음)
+
+```bash
+python3 scripts/harness/backlog.py validate
+# ✔ 백로그 무결성 green — 태스크 569건, 게이트 35건, 트랙 3건 · EXIT=0
+
+python3 scripts/harness/backlog.py audit-deps
+# ✔ 의존 선언↔집행 green — 위반 0건 (레거시 그랜드파더 0건 · 소프트 분류 8건) · EXIT=0   (MGMT-03 --depends 포함)
+
+python3 scripts/harness/backlog.py next --n 200 --json   # 전건 모드 — 절단 출력으로 부재 판정 금지
+# SEC-32 1위 · HARN-78 4위 · HARN-79 46위 · HARN-80 47위 · OPS-67 54위 · VIZ-11 61위 / 124  (배선 확인)
+# MGMT-03 미노출 — depends_on MGMT-02(blocked)가 막는다: 원문 충실(변호사 회신 선행)·의도된 결과
+
+for t in SEC-32 MGMT-03 HARN-78 HARN-79 HARN-80 OPS-67 VIZ-11; do backlog.py overlap $t --in-flight-only; done
+# 겹침 없음 4건(HARN-78·79·80·VIZ-11) · 경고 3건 = SEC-32↔MP-02(docs/reviews/**) · MGMT-03↔LIC-01 · OPS-67↔LIC-01(src/backend/**·tests/backend/**)
+# — 전건 상대측 광범위 glob 포함이지 같은 파일을 고치는 작업이 아니다(08-31 감사 §7과 동형). EXIT 전건 0
+
+python3 scripts/harness/backlog.py done CUR-07-… --artifact 7b4fb546   # 의도적 시도 — 게이트 판정 관측
+# ❌ 증적에 PR 참조 없음 … --no-pr {investigation|incomplete|ci-red|kiki-hold} · EXIT=1  → 우회하지 않고 HARN-80 등재
+```
+
+각 `add`·`amend`는 개별 EXIT 0이었고 이벤트 대장(`backlog/events/claude_status-qp0lz8.ndjson`)에 전건 기록됐다.
