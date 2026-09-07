@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - scripts/harness/backlog.py
   - "tests/harness/**"
-session: null
+session: claude/g-export-prediction-disclosure-m8adzc
 notes: "발견 경위: 2026-09-07 SEC-32 구현 서브에이전트가 자진 보고. 즉시 복원됐고 이전 값이 notes·이벤트 대장에 남아 피해 0이었으나, 알아채지 못하면 무증상으로 남는다. HARN-57(정정 경로 신설)·HARN-59(scope drift 축 도달)의 후속 — 그 둘이 '고칠 수 있게' 만들었다면 이건 '고치다가 잃지 않게' 만드는 축이다. CLI가 제안한 번호 81을 채택(79는 로컬 충돌)"
 updated: 2026-09-07
