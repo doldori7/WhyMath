@@ -5148,7 +5148,11 @@ class TestLogRefutationEvidence:
     def test_endpoint_match_turn_logs_support_not_refutation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # 매치 입력 + clean 풀이 → +1 지지만(no-match 게이트로 −1 미적재·상호배타).
+        # 매치 턴 → +1 지지만(no-match 게이트로 −1 미적재·상호배타).
+        # MISC-17: 진단은 WH-1 primary와 같이 `student_solution or student_input`을 본다 —
+        # 풀이가 있으면 *풀이*가 매치 턴의 정의다(형제 케이스 5116·5139도 풀이 기준 반박을 기대).
+        # 종전 픽스처("발화에 신호 + clean 풀이 x = 2")는 풀이 우선에서 no-match→−1이 되므로,
+        # 이 테스트의 의도(+1/−1 상호배타)를 보존하려 신호를 풀이에 둔다.
         from whymath_backend.db.models.evidence_link import EvidenceLink
 
         async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
@@ -5159,8 +5163,8 @@ class TestLogRefutationEvidence:
         resp = client.post(
             "/v1/coach/sessions",
             json={
-                "student_input": "내 풀이는 (a+b)² = a² + b² 이렇게 했어",
-                "student_solution": "x = 2",
+                "student_input": "이렇게 풀었어",
+                "student_solution": "내 풀이는 (a+b)² = a² + b² 이렇게 했어",
             },
         )
         assert resp.status_code == 201, resp.text
