@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -25,6 +25,6 @@ paths:
   - "tests/backend/harness/test_wh1_evaluation*.py"
   - tests/backend/api/test_me.py
   - tests/backend/api/test_coach_completion.py
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: 2026-09-07 미머지 브랜치 감사(docs/reviews/unmerged_branch_audit_2026-09-07.md §4-①). 원 PED-15는 PED-14 구현 중 발견된 부수 버그로 7n9n72에서 2026-08-10 done(backend-engineer 위임·실 PostgreSQL 8 passed·전체 스위트 9266 passed)됐으나 그 브랜치가 main과 PED-15/16 ID 충돌 상태(621b11f9 커밋 메시지가 '그랜드파더 등재'로 자인)라 회수되지 못했다. priority 1 사유: PII 보존기한 파기 기준 컬럼이 이 버그로 상시 NULL — 보안·법령 관련 고립분(stray-code 규칙). 회수 완료 전 원 브랜치 삭제 금지. 원 PED-16(Kiki 결정: 소급 파기 대상 확인)은 태스크가 아니라 게이트 G-attempt-retention-purge-backfill-decision으로 재등재(법령 유래 절차는 기계 대체 금지·리마인드가 있는 게이트가 kiki 소유 태스크보다 표면화가 확실)\n\n[정정 2026-09-07] PR #1020 codex P2: acceptance ②의 'ended_at−duration_seconds 역산·서버 now 폴백'이 시간 계약 위반. me.py:754가 ended_at에 서버 now를 넣고 요청 스키마에 발생 시각 필드가 없어 역산값은 업로드 시각 기준 — 32_learning_history.md의 발생/수신 분리와 '수신 시각 복제=날조' 금지에 저촉. 이식 방향을 클라 신고 수집 + ingested_at으로 교체."
 updated: 2026-09-07
