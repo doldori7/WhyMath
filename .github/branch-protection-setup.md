@@ -106,6 +106,7 @@ main
 - `require_code_owner_review` = `true`
 - `required_review_thread_resolution` = `true`
 - `required_linear_history` = `true`
+- `merge_queue` = `true`
 - `deletion` = `true`
 - `non_fast_forward` = `true`
 <!-- RULESET_POLICY_END -->
@@ -284,6 +285,89 @@ echo "EXIT=$LASTEXITCODE"
 - [x] **Allow deletions** — **체크 해제** (main 삭제 방지)
 
 ---
+
+## Merge queue 활성화 (2026-09-07 Kiki 결정 · 게이트 `G-merge-queue-enable-ruleset`)
+
+> **왜 이 절이 생겼나** — `Require branches to be up to date`(위 `strict_required_status_checks_policy`)가
+> 켜져 있는데 CI가 20~30분이고 `main`은 15~30분마다 전진한다. 30분짜리 게이트는 15~30분 간격의
+> 전진을 **산술적으로 이길 수 없다** — PR #935가 재동기화 4회, PR #952가 CI green을 3회 확보하고도
+> `behind`로 3라운드를 태웠다. 대안이던 *up-to-date 요구 해제*는 실측 반례로 배제했다(#931이
+> `ReviewStatus`에 `quarantined`를 추가하자 #935의 단언이 red — 동기화하지 않았으면 머지 후
+> `main`에서 터졌다). 그래서 **보호를 낮추는 대신 충족 방식을 바꾼다**: 큐가 PR을 `main` 최신 위에
+> 순서대로 얹어 재검증하고 통과분만 넣는다. 결정 근거 전문 = 게이트 `G-merge-queue-or-strict-relax`,
+> 승계 태스크 = `HARN-56`.
+
+### 📋 사전 브리핑 (Kiki 직접 수행 과제)
+
+1. **과제 명칭** — `main` 룰셋에 **merge queue** 활성화
+2. **목적** — 사람이 PR을 재동기화하는 왕복을 없앤다. `up-to-date` 보장은 그대로 유지되고, 그
+   보장을 *사람*이 아니라 *큐*가 충족한다. 결과가 쓰이는 곳: 모든 PR의 머지 경로.
+3. **구체적 절차** — 아래 §설정 절차. 소요 약 3분(체크박스 1개 + 파라미터 5개).
+4. **성공 기준** — 아래 §자가검증 D의 `MERGE_QUEUE=True`. `False`면 저장이 안 된 것이다
+   (룰셋을 잘못 골랐을 가능성 — Repository ruleset 목록에서 `main`을 대상으로 하는 것이 맞는지 확인).
+5. **실행 환경** — 웹 브라우저(GitHub, 저장소 admin 권한) + 검증만 Windows PowerShell
+   (`C:\Users\kiki\Desktop\__AI\WhyMath`, `gh` 로그인 상태). 서버·Docker 불요.
+6. **창 구분** — 브라우저 탭 1개 + PowerShell 창 1개(신규). 프로세스 점유 없음, 이후 조작 제약 없음.
+
+> ⚠ **순서 제약(선행 충족됨)** — 큐는 `refs/heads/gh-readonly-queue/...` 임시 브랜치에서 검증하므로
+> CI에 `merge_group` 트리거가 **먼저** 있어야 한다. 없으면 required check가 큐 안에서 한 번도
+> 보고되지 않아 **모든 PR이 큐에서 무한 대기**한다. 이 트리거는 `main`에 이미 착지했다
+> (`origin/main` `3a30244c` · `.github/workflows/ci.yml`) — 즉 지금 켜도 안전하다.
+
+### 설정 절차
+
+1. https://github.com/doldori7/WhyMath → **Settings** → 좌측 **Rules** → **Rulesets**
+2. `main`을 대상으로 하는 룰셋(2026-09-03에 required check 16종을 등록한 그것)을 연다
+3. **Rules** 목록에서 **Require merge queue** 체크
+4. 펼쳐진 파라미터를 아래 값으로 맞춘다:
+
+| 항목 | 값 | 이유 |
+|---|---|---|
+| Merge method | **Squash** | Kiki의 `"pr"` 단축어가 SQUASH이고, `required_linear_history`와도 정합 |
+| Build concurrency (Maximum pull requests to build) | `5` | 앞선 PR이 red면 뒤가 재빌드된다 — 병렬 세션 수에 맞춘 값 |
+| Minimum pull requests to merge | `1` | 1건만 있어도 대기 없이 머지 |
+| Wait time to merge if queue is not full | `5` 분 | 묶음이 안 차도 5분 뒤 진행 |
+| Maximum pull requests to merge | `5` | 한 번에 최대 5건 묶음 |
+| Only merge non-failing pull requests | **ON** | red를 묶음에 실어 통째로 되돌리는 일 방지 |
+| Status check timeout | `90` 분 | 큐 안에서는 경로 기반 절약이 적용되지 않아 **전건 실행**된다(CI 최대 약 30분 + 대기 여유) |
+
+5. **Save changes**
+
+### 활성화 후 달라지는 것
+
+- PR의 머지 버튼이 **Merge when ready**로 바뀐다. 누르면 큐에 들어가고, 사람이 재동기화할 필요가 없다.
+- 큐 안에서는 `changes — 변경 경로 판별`의 경로 기반 잡 스킵이 **적용되지 않는다**(`merge_group`
+  이벤트에서 무거운 잡의 `if`가 전건 통과한다). 의도한 동작이다 — 큐의 목적이 최신 base 위 전체 재검증이다.
+- **축출(dequeue)** — 재검증 red나 타임아웃이면 PR이 큐에서 빠지고 열린 채 남는다. GitHub는 PR
+  타임라인에 "removed this pull request from the merge queue" 이벤트와 사유를 남긴다. 축출은
+  자동 재투입되지 않으므로 **사람 또는 세션이 다시 Merge when ready를 눌러야 한다**(`HARN-56` ④).
+
+### 자가검증 D — 큐가 실제로 켜졌는가 (룰셋 API 직접 확인)
+
+```powershell
+# Windows PowerShell (= Phaiakes9) — 진입 명령 불요
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+gh api repos/doldori7/WhyMath/rules/branches/main | Out-File -Encoding utf8 ruleset.json
+echo "FETCH_EXIT=$LASTEXITCODE"
+$types = (Get-Content ruleset.json -Encoding UTF8 | ConvertFrom-Json) | ForEach-Object { $_.type }
+echo "MERGE_QUEUE=$($types -contains 'merge_queue')"
+echo "RULE_TYPES=$($types -join ',')"
+```
+
+| 출력 | 판정 |
+|---|---|
+| `MERGE_QUEUE=True` | ✅ 켜짐 — 이 출력을 게이트 clear 증적으로 쓴다 |
+| `MERGE_QUEUE=False` | ❌ 저장 안 됨 — 다른 룰셋을 편집했을 가능성. `RULE_TYPES`에 `required_status_checks`가 보이는지로 대상 룰셋이 맞는지 확인 |
+| `FETCH_EXIT`가 0이 아님 | ⚠ 조회 실패(측정 실패) — `gh auth status`부터 확인. **`False`로 읽지 말 것** |
+
+> **변별력 근거**: 이 검사는 켜기 *전* 실측에서 확실히 `MERGE_QUEUE=False`를 낸다
+> (2026-09-07 세션 실측 — 룰셋 규칙 5종 `deletion`·`non_fast_forward`·`pull_request`·
+> `required_status_checks`·`required_linear_history`에 `merge_queue` 없음). 성공/실패 양쪽에서
+> 같은 값을 내는 검사가 아니다.
+>
+> 위 §재발 탐지 실행법의 판정기(`ruleset_drift.py`)도 같은 축을 본다 — `merge_queue`는
+> RULESET_POLICY 블록에 `true`로 선언돼 있으므로, 켜기 전까지는 **정책 불일치로 위반 보고**된다.
+> 그 위반이 사라지는 것이 두 번째(기계) 성공 신호다.
 
 ## 저장 후 확인
 

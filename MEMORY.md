@@ -338,6 +338,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-07 (Kiki 결정·게이트 G-merge-queue-or-strict-relax): **머지 경합은 GitHub merge queue로 푼다 — 보호를 낮추는 대신 up-to-date의 *충족 방식*을 바꾼다** (Kiki "1) merge queue 도입", claude 실측·집행) — 판정 기준 main `3a30244c`
+
+- **결정**: 3안 중 **1) merge queue 도입**. 2) `Require branches to be up to date` 해제는 **실측 반례**로 배제했다 — #931이 `ReviewStatus`에 `quarantined`를 추가하자 #935의 단언이 red가 됐다(동기화하지 않았으면 머지 후 main에서 터졌다). 즉 그 게이트는 실제로 일하고 있으므로 끄면 보호가 준다. 3) 현행 유지는 OPS-58 단축(CI 29분41초 → 약 19~20분) 후에도 main 전진 간격 15~30분을 이기지 못한다 — 확률이 아니라 산술이다(PR #935 재동기화 4회 · PR #952가 CI green 3회를 확보하고도 `behind`로 3라운드).
+- **결정 시점 전제를 추론이 아니라 실측으로 고정**: `GET repos/doldori7/WhyMath/rules/branches/main` → 규칙 5종(`deletion`·`non_fast_forward`·`pull_request`·`required_status_checks`·`required_linear_history`). **`merge_queue` 규칙 없음 · `strict_required_status_checks_policy=true`**. HARN-56 acceptance ①이 "설정 실물로 확인하기 전까지는 가설"이라고 못 박은 축이 이것으로 닫혔다(그 태스크는 타 세션 claim이라 무접촉 — 실측만 여기 남긴다).
+- **선행 조건은 이미 trunk에 있다**: `ci.yml`의 `merge_group` 트리거가 `origin/main` `3a30244c`에 실재(`git show origin/main:.github/workflows/ci.yml`). 순서가 뒤집히면(큐를 먼저 켜면) required check가 큐 안에서 한 번도 보고되지 않아 **모든 PR이 무한 대기**한다 — 지금 켜는 것은 안전하다는 판정이 이 실측에서 나온다.
+- **결정을 산문에 두지 않고 기계로 집행**: `.github/branch-protection-setup.md`의 RULESET_POLICY 블록에 `merge_queue` = `true`를 **선언**하고(문서=의도), `ruleset_drift.py`의 규칙 타입 축에 `merge_queue`를 배선했다. 큐가 꺼져 있는 동안 판정기가 `정책 불일치`를 **위반**으로 보고하고, Kiki가 켜면 그 위반이 사라진다 — 그것이 두 번째(기계) 성공 신호다. "정본화를 집행으로 착각한 완료 선언 금지"의 적용.
+- **가드 자신을 실패 주입으로 검증**(CLAUDE.md 2026-09-01·09-06): 뮤테이션 3종 전건 RED — ⓐ `parse_live` 규칙 타입에서 `merge_queue` 제거 ⓑ 문서 선언 줄 제거 ⓒ 선언값 `true`→`false`. 주입 실재(치환 대상 1건 단언·`mutated != orig`)와 원복 바이트 동일(sha256)을 매 회차 단언하는 순수 Python 하네스로 돌렸다(셸 이스케이프 배제·`git checkout` 계열 원복 금지). **1차 시도에서 ⓐ가 GREEN(위장)이었다** — 큐 OFF만 보면 "선언 True vs 라이브 None"도 불일치라 배선을 지워도 초록이었다. 테스트에 **반대 방향**(큐 ON에서 이 축이 조용한가) 단언을 더해 잡았다. 그 절이 없었으면 Kiki가 큐를 켠 뒤에도 위반이 사라지지 않는 **영구 오탐**을 아무도 못 잡는다.
+- **집행 게이트 분리 등재**: 룰셋에서 큐를 켜는 것은 저장소 admin 설정이라 세션 권한 밖 → `G-merge-queue-enable-ruleset`(human·kiki·3일 리마인드) 신설. 6항목 사전 브리핑·파라미터 표(Squash·동시 빌드 5·최소 1·대기 5분·최대 5·비실패만 머지·타임아웃 90분)·**자가검증 D**(`MERGE_QUEUE=True`)·축출(dequeue) 실패 경로를 `.github/branch-protection-setup.md` 새 절에 전문 수록. 자가검증 D는 켜기 전 실측에서 확실히 `False`를 내므로 변별력이 있다(`FETCH_EXIT`≠0은 *측정 실패*로 분리 — `False`로 읽지 않는다).
+- **경계·공백**: 이 결정 게이트는 **결정만** 닫았다. 집행(큐 활성화)과 도입 전후 변별력 실측(`HARN-56` ②③④⑤ — 큐 대기 중 main에 의도적으로 착지시켜 "경합이 없었을 뿐"과 "경합에 강해졌음"을 구분)은 타 세션 claim 상태의 `HARN-56`이 승계한다. 그 태스크에는 무접촉(대장·paths 모두) — 착수 순서 규칙 준수.
+
 ### 2026-09-07 (stray-code 8회차 · r2): **7회차 판정을 적대 검증했더니 판정은 전건 유효했고, 대신 "좌석은 살아 있는데 acceptance가 잔여를 안 덮는" 상태가 14건 중 9건이었다** (Kiki "Stray-code", claude 실측·등재) — 판정 기준 main `b75f495d` · 정본 `docs/reviews/unmerged_branch_audit_2026-09-07_r2.md`
 
 - **왜 r2인가**: 같은 날 3시간 앞선 다른 세션이 7회차(PR #1020·`status-9dti04`)를 이미 올려 두었다. 재생산하지 않고 ①델타(소유 태스크 14건 불변·신규 판정 대상 0) ②**7회차 판정의 독립 적대 검증**(삭제 3건 × 반박자 2렌즈·7n9n72 잔여표 재도출·started_at 버그 반박·alembic 좌석) ③6·7회차가 두 번 연속 "정직한 공백"으로 남긴 **추적 중 14건의 acceptance 커버리지 전수 정독**을 워크플로(에이전트 25건·읽기 전용)로 수행했다. 7회차 등재분(PED-37·게이트·좌석 8건 amend·7차 배치)은 미머지이므로 재등재도 "착지"로도 적지 않았다.

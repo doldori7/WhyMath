@@ -288,7 +288,10 @@ def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
                 params[key] = rparams.get(key)
 
     # 규칙 타입 자체의 존재 여부도 선언 축이다(required_linear_history 등은 파라미터가 없다).
-    for rtype in ("required_linear_history", "deletion", "non_fast_forward"):
+    # `merge_queue`도 이 부류다 — 큐는 파라미터가 아니라 **규칙의 존재**로 켜진다. 문서가
+    # 선언(=의도)하고 라이브에 규칙이 없으면 정책 불일치로 잡힌다(2026-09-07 Kiki 결정
+    # G-merge-queue-or-strict-relax = merge queue 도입. 결정을 산문에만 두면 집행되지 않는다).
+    for rtype in ("required_linear_history", "deletion", "non_fast_forward", "merge_queue"):
         params[rtype] = rtype in rule_types
 
     # 규칙은 읽혔는데 status check 강제가 없거나 목록이 비었다 — 확정된 회귀다(측정 실패 아님).

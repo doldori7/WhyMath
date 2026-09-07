@@ -100,7 +100,7 @@ features:
     db_model_modules: 0
     coupling_count: 8
     test_files: 19
-    test_functions: 403
+    test_functions: 404
     matrix:
       A_subject: 0
       B_db: 0
