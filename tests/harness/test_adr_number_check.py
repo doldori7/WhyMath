@@ -210,3 +210,66 @@ def test_checker_is_wired_into_ci() -> None:
     assert (
         "refs/remotes/origin/*" in job
     ), "전 브랜치 fetch 선행 스텝이 없다 — 스캔이 성립하지 않는다"
+
+
+# ── PR #1011 리뷰 3건의 회귀 동결 ─────────────────────────────────────────────
+# 셋 다 "초판이 조용히 초록을 냈던 상태"를 주입한다. 정상 입력의 초록은 증거가 아니다.
+
+
+def test_unreadable_advertised_branch_is_red(tmp_path: Path) -> None:
+    """원격이 광고한 브랜치를 로컬에서 못 읽으면 통과가 아니라 실패다 (리뷰 P1).
+
+    초판은 이 경우를 빈 목록으로 접어 **부분 스캔을 초록으로** 냈다 — 그리고 그 사실을
+    "정직한 공백"에 적어 놓고 배포했다. 여기서는 충돌 ADR을 *못 읽는 브랜치 쪽에* 두어,
+    건너뛰면 초록·읽으면 빨강이 되게 한다. 초판이면 이 테스트는 exit 0으로 실패한다.
+    """
+    up = _init_upstream(tmp_path)
+    _branch_with(up, "feat-a", "ADR-002-foo.md")
+    _branch_with(up, "feat-b", "ADR-002-bar.md")  # 충돌 상대 — 이 브랜치를 안 보이게 만든다
+    work = _clone(tmp_path, up)
+    # 광고(ls-remote)는 그대로, 로컬 추적 ref만 지운다 = "fetch 사이에 생긴 브랜치" 재현
+    _git(work, "update-ref", "-d", "refs/remotes/origin/feat-b")
+
+    result = _run(work)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "읽지 못했다" in result.stderr
+    assert "feat-b" in result.stderr  # 어느 대상이 빠졌는지 지목해야 사람이 고친다
+
+
+def test_checked_out_head_is_scanned(tmp_path: Path) -> None:
+    """체크아웃된 HEAD도 스캔 대상이다 (리뷰 P2).
+
+    fork PR의 merge ref나 아직 push하지 않은 로컬 작업은 원격 브랜치가 아니다. 원격만 보면
+    *제안된 바로 그 변경*이 검사에서 빠진다. 여기서는 충돌을 로컬 미푸시 커밋에 둔다 —
+    초판이면 원격끼리는 충돌이 없어 exit 0이 된다.
+    """
+    up = _init_upstream(tmp_path)
+    _branch_with(up, "feat-a", "ADR-002-other.md")
+    work = _clone(tmp_path, up)
+    _git(work, "checkout", "-qb", "local-only")
+    _write(work, f"{ADR_DIR}/ADR-002-local.md", "# local\n")
+    _git(work, "add", "-A")
+    _git(work, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "local")
+
+    result = _run(work)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ADR-002-local.md" in result.stdout
+    assert "HEAD" in result.stdout  # 당사자가 "지금 제안된 변경"임이 보여야 한다
+
+
+def test_number_width_is_normalized(tmp_path: Path) -> None:
+    """`ADR-1-x`와 `ADR-001-y`는 같은 번호다 (리뷰 P2).
+
+    초판은 캡처 문자열을 그대로 키로 써서 "1"과 "001"을 다른 번호로 보고 exit 0을 냈다.
+    """
+    up = _init_upstream(tmp_path)  # main에 ADR-001-alpha
+    _branch_with(up, "feat-a", "ADR-1-beta.md")
+    work = _clone(tmp_path, up)
+
+    result = _run(work)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ADR-001" in result.stdout
+    assert "beta" in result.stdout and "alpha" in result.stdout
