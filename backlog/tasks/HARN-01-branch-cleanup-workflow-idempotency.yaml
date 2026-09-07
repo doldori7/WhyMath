@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-01-branch-cleanup-workflow-idempotency
+title: "branch-cleanup 워크플로가 매 실행 red — 이미 삭제된 과거 배치를 재시도해 404를 실패로 계상(상시 실패 fail-open)"
+track: math-completion
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정(2026-09-07 main c36af9e2): .github/workflows/branch-cleanup.yml의 delete-branches 잡이 최근 3회 연속 conclusion=failure다(run #7 33283959072 · #8 33284480757 · #9 34101252353). #9 로그 실측 — 7차 배치 2건(claude/drive-eos-81-sequential-wbhw8v · claude/review-dydkkx-runbook)은 '삭제 완료'로 정상 처리됐고 exit 1의 원인은 **4~6차 배치 9건의 재시도**다: 이미 삭제된 ref라 스냅샷 조회가 404 Not Found를 내고 그걸 '삭제 실패'로 계상한다. 즉 red는 실제 실패가 아니라 이력 재처리 잡음이다"
+  - "② 왜 고쳐야 하는가(상시 실패 fail-open 금지·CLAUDE.md) — 이 잡은 3회+ 연속 red라 red 신호가 이미 습관화됐다. 그 상태에서는 **진짜 삭제 실패(권한·보호 브랜치·오타)가 같은 색으로 묻힌다**. 배치 파일이 append-only 이력이라 앞으로 항목이 늘수록 404 재시도가 단조 증가하고 red는 영구화된다"
+  - "③ 수정 방향(택1 이상): ⓐ 부재(404)는 '이미 삭제됨'으로 성공 계상하고 실패는 4xx/5xx 중 404 외만 계상 ⓑ 배치 파일에서 집행 완료 구간을 표시해 재시도 대상에서 제외 ⓒ 잡 요약에 '신규 대상 N건 · 이미 부재 M건 · 실패 K건'을 출력해 무엇이 일어났는지 red 없이도 읽히게 한다. 어느 안이든 **exit code가 실제 실패에만 반응**해야 한다"
+  - "④ 변별력(보호 장치 실패 주입 검증) — 수정 후 ⓐ 정상 상태(신규 대상 있음·과거분 부재) exit 0 ⓑ **존재하지만 삭제 불가한 ref를 주입**했을 때 exit 1과 그 ref 이름이 로그에 남는지 확인한다. 정상에서 초록인 것만으로는 보호의 증거가 아니다(2026-09-01 규칙). 실행 검증이 GitHub 러너 전용이라 로컬 재현이 어려우면 그 한계를 명시하고 workflow_dispatch 1회 실행 결과를 증적으로 쓴다"
+artifacts: []
+paths:
+  - ".github/workflows/branch-cleanup.yml"
+  - ".github/branch-cleanup-request.txt"
+session: null
+notes: "발견 경위: 2026-09-07 PR #1020(stray-code 7차) 머지 직후 삭제 집행을 확인하다가 잡이 red인 것을 보고 로그 실측. 7차 배치 자체는 성공했으므로 이번 감사 결과에는 영향 없음 — 고칠 것은 '실패 신호의 변별력'이다. 감사 문서가 '4~6차 잔존 0/19'로 적은 것과도 모순되지 않는다(삭제는 됐고 재시도만 404를 냈다)."
+updated: 2026-09-07
