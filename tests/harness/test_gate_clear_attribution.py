@@ -60,13 +60,26 @@ def _clear_events(repo: Path) -> list[dict]:
     return rows
 
 
+# 이 파일의 evidence 인자에 커밋 해시가 붙어 있는 것은 HARN-68 계약 때문이다:
+# `gates clear`는 evidence에 판정 기준(커밋 해시·PR 참조)을 요구한다. 이 테스트들의
+# 관심사는 주체 기록(HARN-60)이지 판정 기준이 아니므로, 해시는 통과용 최소 표기다.
 class TestSubjectIsRecordedBothWays:
     """주체가 **양방향**으로 갈린다 — 한쪽만 보면 '항상 같은 값'이 통과한다."""
 
     def test_human_self_attested_clear_records_person(self, seeded_repo: Path):
         """사람표기_clear는_사람으로_기록"""
         assert (
-            cli.main(["gates", "clear", _KIKI_GATE, "--as", "kiki", "--evidence", "Kiki 실행 완료"])
+            cli.main(
+                [
+                    "gates",
+                    "clear",
+                    _KIKI_GATE,
+                    "--as",
+                    "kiki",
+                    "--evidence",
+                    "Kiki 실행 완료 (main 3b007e23 기준)",
+                ]
+            )
             == 0
         )
         gate = _gate(seeded_repo, _KIKI_GATE)
@@ -82,7 +95,18 @@ class TestSubjectIsRecordedBothWays:
         거부가 아니라 *사실대로 기록*이다: 대장 CLI를 우회한 손편집으로 밀려나면 아무 기록도
         남지 않아 더 나빠지기 때문이다.
         """
-        assert cli.main(["gates", "clear", _KIKI_GATE, "--evidence", "세션이 중계 기입"]) == 0
+        assert (
+            cli.main(
+                [
+                    "gates",
+                    "clear",
+                    _KIKI_GATE,
+                    "--evidence",
+                    "세션이 중계 기입 (main 3b007e23 기준)",
+                ]
+            )
+            == 0
+        )
         gate = _gate(seeded_repo, _KIKI_GATE)
         assert gate.status == "cleared"
         assert gate.cleared_by == "claude"
@@ -95,9 +119,12 @@ class TestSubjectIsRecordedBothWays:
 
         위 두 테스트가 각각 통과해도 값이 같으면 주체 기록은 무의미하다. 그 축을 직접 잰다.
         """
-        assert cli.main(["gates", "clear", _KIKI_GATE, "--evidence", "e1"]) == 0
+        assert cli.main(["gates", "clear", _KIKI_GATE, "--evidence", "e1 3b007e23"]) == 0
         agent_value = _gate(seeded_repo, _KIKI_GATE).cleared_by
-        assert cli.main(["gates", "clear", _KIKI_GATE, "--as", "kiki", "--evidence", "e2"]) == 0
+        assert (
+            cli.main(["gates", "clear", _KIKI_GATE, "--as", "kiki", "--evidence", "e2 3b007e23"])
+            == 0
+        )
         human_value = _gate(seeded_repo, _KIKI_GATE).cleared_by
         assert agent_value != human_value, "두 경로가 같은 값을 내면 주체 기록이 아니다"
         assert (agent_value, human_value) == ("claude", "kiki")
