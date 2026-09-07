@@ -579,12 +579,13 @@ python3 scripts/harness/board.py                   # 작업 보드 HTML (work/bo
 대장 손편집 금지 원칙은 **정정 경로가 CLI에 있을 때만** 지켜진다. 고칠 수 없는 위반을 지적하는
 게이트는 사람이 게이트를 끄게 만들고(HARN-52 등재 사유와 동형), 정정 경로가 없는 필드는
 `cancel`+재등재로만 고쳐져 번호가 소모된다(EOS-94·96·MP-01·EOS-98 — 2026-09-05/06 실측 4건).
-**판정 기준: main 기준 2026-09-07** — 상태 열은 그 시점의 착지 여부이며 브랜치·PR은 세지 않았다.
+**판정 기준: main `6b38d21c`(2026-09-07 #1021 착지 후)** — 상태 열은 그 시점의 착지 여부이며 브랜치·PR은 세지 않았다.
 
 | 정정 대상 | CLI | 상태(main 기준) |
 |---|---|---|
-| done 증적(artifact) — PR이 done *이후*에 열린 경우 | (설계 중) | HARN-57 · **todo(미착지)** |
-| paths(작업 범위) | (설계 중) | HARN-59 · **todo(미착지)** |
+| done 증적(artifact) — PR이 done *이후*에 열린 경우 | `amend <id> --artifact <PR/커밋> --reason '...'` — append만(증적 삭제는 위조 표면) · PR 참조가 들어오면 `--no-pr` 보류를 자동 해소 | HARN-57 ①② · main 착지(#1021) |
+| title 정정(옛 처방이 next에 노출되는 것을 막는다) | `amend <id> --title <제목> --reason '...'` — 교체·이전 값 notes 기록 | HARN-57 ⑤ · main 착지(#1021) |
+| paths(작업 범위 — 넓은 glob 좁히기) | `amend <id> --path <glob> [--path ...] --reason '...'` — 지정 목록이 새 paths 전체·이전 값 notes 기록 | HARN-57 ④/HARN-59 · main 착지(#1021) |
 | depends_on 제거 | `amend <id> --remove-depends <full-id> --reason '...'` | HARN-67 ③ |
 | requires_gates 탈착(오부착) | `amend <id> --remove-gate <G-id> --reason '...'` — 게이트 status 불변 | HARN-67 ⑤ |
 | notes 어구 치환 | `amend <id> --notes-replace "구문자" "신문자" --reason '...'` — 구문자 정확히 1회 | HARN-67 ⑥ |
