@@ -2135,8 +2135,13 @@ async def coach_decide(
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # S4-19: carry(게이트 이전 단계 검증 운반값)는 stateless 경로에선 미소비(DB 무접근 계약 —
     # 적재 좌석 없음). 마지막 원소=solution_coaching 불변식은 유지된다.
@@ -2191,8 +2196,13 @@ async def create_session(
     prereq = await _prerequisite_coaching_for(session, user.user_id, body.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 큐레이션·영속한다
     # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
@@ -2577,8 +2587,13 @@ async def append_turns(
     prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
     # 세트를 큐레이션(감쇠/강화·누적·증거 반박·캡)·영속한다(트랜잭션 합류·별도 commit 없음·재사용).
