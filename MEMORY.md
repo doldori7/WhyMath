@@ -348,6 +348,17 @@
 - **자기 결함·공백**: **Codex P1(PR #1027)** — 좌석 amend 3건(MOB-18·ARCH-30·CUR-07)에 "HARN-57/HARN-80 착지 후 …"를 **산문으로만** 적고 `depends_on`에 넣지 않아 MOB-18이 `next` 후보로 노출됐다. 이 감사가 문서에서 인용한 규칙("선행 조건을 산문에만 적고 대장에 집행하지 않기 금지")을 같은 세션이 어겼다 — `amend --depends` 3건으로 집행, 전후 노출 실측(노출→미노출). `audit-deps`는 수정 전에도 green — 검출기는 "착지 후"를 알지만 **acceptance를 의도적으로 스캔 제외**(09-01 실측 오탐 4/12·notes 한정)하고 내 문구는 acceptance에 있었다. 설계된 사각을 사람이 메운 사례(`amend --acceptance`가 산문 선행의 통로라는 관측만 기록). 최초 워크플로에서 에이전트 9건이 세션 한도로 실패(06:40 UTC 리셋) → 리셋 후 `resumeFromRunId` 캐시 재개로 전건 회수. 판정 기준 이후 main 2커밋 전진(#1015·#1024)은 관련 파일 diff 0 실측. 실행 검증 0(전건 정적 git 대조). 부수: main `MEMORY.md:91`의 "회전 자omatica"(#922 유입 글자 깨짐)를 a3ysut 대조에서 발견해 정정.
 - **다음 회차 최우선**: 8월 열린 PR 10건(#844~#893·08-31 이후 갱신 0)은 닫히는 순간 고아가 된다(main 부재 src: #882 12·#880 6·#847 2…) — HARN-78 사각과 결합하면 "소유됨"으로 위장된다.
 
+### 2026-09-07 (stray-code 감사·미머지 브랜치 정리 7회차): **좌석이 done이 되면 그 좌석이 지키던 잔여도 함께 고아가 된다 — 7n9n72 잔여 8태스크에 고립 참조 부착 + ID 충돌로 유실된 PED-15 버그 수정 회수 재등재 + 삭제 배치 2건** (Kiki "미머지 브랜치 정리", claude 실측·등재)
+
+**판정 기준: main `98925b0e`** (`--unshallow` 후 트렁크 994커밋 · 원격 브랜치 38 · 열린 PR 17 · 유령 PR 0 · claim 활성 3). 판정 정본 = `docs/reviews/unmerged_branch_audit_2026-09-07.md`. 직전 4~6차 삭제 배치는 잔존 0/19·허용 패턴 밖 수동 4건 전건 삭제 확인.
+
+**발견 1 — 좌석 소멸형 고아(신유형).** 08-31 감사가 `7n9n72`(최대 잔존 고립·main 부재 17파일)의 소유자로 지목한 것은 `HARN-37`이었는데, 그 태스크는 *탐지기 결함 수정* 태스크라 회수 acceptance가 없었고 #962로 done이 되자 잔여 8태스크(MISC-05/06·PED-14·PB-02·S3-33/34·ASM-06·MISC-02)의 명시 참조가 0이 됐다. 좌석 태스크 자체는 main에 todo/blocked로 살아 있으나 `next`는 이들을 "이미 완료(미머지)"로 **제외**하므로 /drive가 영원히 집지 않는 림보다. vafylb(08-31 `S4-59`)가 *done 후 잔여 고아*였다면 이번은 *좌석의 done이 잔여를 고아로 만든* 형태다. 조치 = 재등재가 아니라(ADMIN-08 중복 좌석 선례) `backlog.py amend --acceptance`로 8건에 [고립 참조] 항을 부착 — HARN-34가 MISC-01/03에 notes 손편집으로 한 것과 같은 내용을 이번엔 CLI 경유로 했다(정정 사유·이벤트가 대장에 남는다).
+
+**발견 2 — ID 충돌로 유실된 버그 수정.** 7n9n72의 `PED-15`(ProblemAttempt.started_at 상시 NULL 근본수정·done)와 `PED-16`(Kiki 결정)은 main이 같은 번호를 다른 태스크에 배정해(621b11f9 커밋 메시지가 "ID 충돌 그랜드파더 등재"로 자인) 재등재 경로가 없었고 HARN-35 유실 태스크 재등재에서도 빠졌다. main에서 버그 생존 실측: coach.py·me.py 두 writer 모두 started_at 미대입, wh1_evaluation 시간창 8곳이 그 컬럼으로 필터(since/until 지정 시 상시 0행·가짜 NO), **privacy/retention.py:80이 PII 보존기한 파기 기준으로 그 컬럼을 써 파기 0건**. 조치 = `PED-37`(priority 1·P1·파일 단위 이식·집행 지점 별항) + 게이트 `G-attempt-retention-purge-backfill-decision`(kiki·decision·14일 리마인드 — 법령 유래 절차는 kiki 소유 태스크보다 리마인드가 있는 게이트가 표면화가 확실).
+
+**발견 3 — 삭제 가능 3건.** `wbhw8v`(ahead 0·diff 0) · `dydkkx-runbook`(#961 머지·후행 'EOS-80 done' 커밋도 main이 승계·고유 53줄 전건 옛 상태) → 7차 배치. `gates/deploy-environment-approval`(#967 닫힘·main이 상위 증거로 같은 게이트 clear·런북 §7-3 판정 기준도 main이 09-01 정정판으로 명시 대체) → 허용 패턴 밖이라 Kiki 수동 삭제. 6dszy0 2건은 LIC-07 ⑪이 소실 0을 전수 증명한 뒤 09-06 삭제한 것으로 확인(감사 대상에서 자연 소멸).
+
+**정직한 공백**: claim 활성 3건 판정 보류(f6qz0c는 diff 0 — claim 해제 시 삭제 후보 · f9lp65 백업 스크립트 98줄은 main #993/#1009가 같은 결함을 독립 재구현한 것으로 *보이나* 대조 미실시 · 03elxp) · 7n9n72 alembic `dialogue_server_verified_completion` 1건은 S3-32(done) 회수가 대체했는지 미확인 · 추적 중 14건의 acceptance 전수 정독은 이번에도 하지 않았다(08-31과 같은 공백) · PED-37 `overlap` 경고는 전건 광범위 glob 포함·비활성 세션이며 `--in-flight-only` 결과는 감사 문서 §7 참조.
 ### 2026-09-06 (LIC-07 ④): **저작권 원본 재유입 차단 — 사고가 들어온 경로를 3중으로 닫았다**
 
 **배경**: 2026-08-08에 KICE 보고서 PDF 2건이 들어왔고 제거는 끝냈지만(위 항목) **들어온 경로는
