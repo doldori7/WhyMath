@@ -8799,3 +8799,31 @@ P2-2 `next` 경고가 classify 결과(`excluded`)에서 나와 owner/track_gate 
 먼저 넣어 RED(3 failed) 확인 후 수정(683 passed). **교훈**: HARN-67 자체 뮤테이션 3종은 전부 RED였다
 — 뮤테이션은 *내가 쓴 분기*만 검증하고, 분기 *앞*의 조기 return(P2-2)과 마스크의 *기준 시점*(P2-3)
 같은 경로 결함은 잡지 못한다. 리뷰 봇이 그 축을 메웠다(PR 열고 ≥5분 뒤 재확인 규율 유효).
+
+
+## 2026-09-07: PR #1025 머지가 저장소 룰에 2회 거부 — API 머지 경로의 차단 주체 미규명 (실측 기록)
+
+**사실(실측)**: `"pr"` 지시로 PR #1025를 SQUASH 머지하려 했으나 REST 머지 엔드포인트가 **2회 모두**
+405 `Repository rule violations found` + `16 of 16 required status checks are expected` ·
+`13 of 13 required status checks are expected` 로 거부했다. 두 시도의 조건은 서로 달랐다 —
+1차는 브랜치가 main보다 1커밋 behind(`e4ceda6e`), 2차는 main을 병합해 **최신 상태**(`ecda3788`,
+CI 실행 잡 9건 전부 success·skipped 9건)였다. 즉 `behind`는 원인이 아니다.
+
+**대조군**: 같은 시각 PR #1018이 정상 머지됐고(`99b05f54`), 그 PR의 체크 **이름 18건이 내 PR과
+동일**했다. 다른 점은 `docker-build`·`corpus-authoring` 두 잡이 #1018에서는 success, 내 PR에서는
+경로 밖이라 skipped였다는 것뿐이다. 다만 에러가 "16 **of 16**"(전건 미보고)이라 그 2건만으로는
+설명되지 않는다.
+
+**미규명(중요)**: 무엇이 차단하는지 **확정하지 못했다**. 세션 도구로는 ruleset 내용을 읽을 수 없다.
+가설 2개를 세웠으나 둘 다 반증·확증 실패다 — ⓐ 머지 큐 필수화(ci.yml에 `merge_group` 트리거가
+main에 실재하고 HARN-56이 진행 중): `enable_pr_auto_merge`로 큐 투입을 시도했으나 2분간
+`refs/heads/gh-readonly-queue/*`가 나타나지 않았다 ⓑ 토큰 권한 차이(UI의 소유자 bypass vs 앱
+토큰): 확인 수단이 없다. **CLAUDE.md "차단 주체를 주입으로 검증" 규칙에 따라 추론을 사실로 적지
+않는다** — 여기 적힌 것은 "내가 확인한 범위에서 이렇게 보인다"까지다.
+
+**현재 조치**: auto-merge(SQUASH)를 armed 상태로 두었다(2026-09-07T14:13:44Z). 규칙이 충족되는
+시점에 자동 머지된다. 충족되지 않으면 Kiki가 UI에서 머지하는 것이 유일한 확인된 경로다.
+
+**후속 후보(미등재)**: 머지 경로의 차단 주체를 실측 규명하고(ruleset 조회 권한 확보 또는 큐 상태
+확인 수단), 세션이 API로 머지할 수 있는 조건을 런북에 고정한다. HARN-56(머지 큐 도입, 타 세션
+진행 중)과 같은 축이므로 그쪽에 합류시킬지 별건으로 등재할지는 Kiki 판단.
