@@ -1790,7 +1790,7 @@ features:
     db_model_modules: 0
     coupling_count: 2
     test_files: 17
-    test_functions: 446
+    test_functions: 450
     matrix:
       A_subject: 0
       B_db: 0
@@ -1853,9 +1853,9 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 1
-    coupling_count: 13
+    coupling_count: 14
     test_files: 13
-    test_functions: 416
+    test_functions: 420
     matrix:
       A_subject: 1
       B_db: 1
@@ -7110,7 +7110,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2079
+    loc: 2091
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -7120,7 +7120,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 44
-    test_functions: 1182
+    test_functions: 1187
     matrix:
       A_subject: 1
       B_db: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 328
-    test_functions: 5912
+    test_functions: 5916
     matrix:
       A_subject: 3
       B_db: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 191
-    test_functions: 2913
+    test_functions: 2917
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 74
-    test_functions: 1484
+    test_functions: 1488
     matrix:
       A_subject: 1
       B_db: 1
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 196
-    test_functions: 2925
+    test_functions: 2929
     matrix:
       A_subject: 3
       B_db: 0

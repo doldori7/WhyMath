@@ -43,6 +43,14 @@ from whymath_backend.schema.user import UserProfile as UserProfileSchema
 _UID = uuid.uuid4()
 _MID = "distribution-over-power"  # 카탈로그 슬라이스 4 — (a+b)² = a² + b² 신호로 풀 매칭
 _SOLUTION = "내 풀이는 (a+b)² = a² + b² 이렇게 했어"  # test_coach.py의 검증된 신호 원문 그대로
+# 인식기(Qwen3-VL/PaddleOCR)의 *계약상* 산출물은 LaTeX(`OcrResult.plain_latex`) — 유니코드
+# 위첨자가 아니다. 이 세 형태가 진단에 닿지 않으면 "합류"는 픽스처에서만 성립하는 위장이다
+# (PR #1034 Codex P1 ①). L4 `_normalize`의 LaTeX 접기(`^`·`{}`·`\left`/`\right`)가 담당한다.
+_OCR_LATEX_FORMS: tuple[str, ...] = (
+    "(a+b)^2 = a^2+b^2",
+    "(a+b)^{2} = a^{2}+b^{2}",
+    r"\left(a+b\right)^2 = a^2+b^2",
+)
 
 # OCR 제출 형상 — 발화는 비고 풀이만 있다. ocr_confidence ≥ 0.8이라 게이트 ②는 dormant
 # (low_quality=False) — 이 파일은 *합류* 여부만 보고 품질 강등은 기존 테스트 소관이다.
@@ -231,6 +239,66 @@ class TestOcrSolutionReachesDiagnosis:
         assert any(
             link.misconception_id == _MID for link in _evidence_rows(captured)
         ), "(c) evidence_links 미적재"
+
+
+class TestOcrLatexFormsReachDiagnosis:
+    """대표 OCR LaTeX 형상 3종이 세션 경로에서 (a)(b)(c) 전부 성립 — 픽스처 한정 통과의 위장 방지."""
+
+    @pytest.mark.parametrize("latex", _OCR_LATEX_FORMS)
+    def test_create_session_latex_forms(self, latex: str) -> None:
+        client, captured = _session_client()
+        body = {**_OCR_BODY, "student_solution": latex}
+        resp = client.post("/v1/coach/sessions", json=body)
+        assert resp.status_code == 201, resp.text
+        ids = [m["misconception"]["id"] for m in resp.json()["misconceptions"]]
+        assert _MID in ids, f"(a) LaTeX형 후보 미산출: {latex!r} → {ids}"
+        assert any(h.misconception_id == _MID for h in _hypothesis_rows(captured)), "(b)"
+        assert any(link.misconception_id == _MID for link in _evidence_rows(captured)), "(c)"
+
+
+class TestLowQualityOcrDoesNotPersist:
+    """게이트 ② `low_quality`(ocr_confidence<0.8)의 *집행 지점* — 미확인 전사는 학생 상태를 바꾸지 않는다.
+
+    게이트 ②는 설계상 매칭을 유지하고 플래그만 세워 L5가 재확인을 유도하게 한다. 그런데 이 PR이
+    `student_solution`을 진단에 합류시키면서, 노이즈 전사가 우연히 카탈로그 패턴을 담으면 그 매칭이
+    가설 큐레이션·+1 지지·−1 반박으로 *즉시 영속*되는 경로가 열렸다(Codex P1 ②). 응답 플래그는
+    DB 쓰기를 되돌리지 못하므로 영속 계층이 플래그를 소비해야 한다. 응답의 후보·플래그는 불변.
+    """
+
+    _LOW_BODY: dict[str, Any] = {**_OCR_BODY, "ocr_confidence": 0.5}
+
+    def test_create_session_low_quality_flags_but_does_not_persist(self) -> None:
+        client, captured = _session_client()
+        resp = client.post("/v1/coach/sessions", json=self._LOW_BODY)
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        # 응답은 종전과 동일 — 후보 노출 + 재확인 유도 플래그(게이트 ② 의미론 불변).
+        assert _MID in [m["misconception"]["id"] for m in body["misconceptions"]]
+        assert body["match_low_quality"] is True
+        # 영속은 0 — 가설 신규 편입·지지(+1)·반박(−1) 어느 것도 미확인 전사로 쓰지 않는다.
+        assert _hypothesis_rows(captured) == [], "저품질 OCR 매칭이 가설로 영속됐다"
+        assert _evidence_rows(captured) == [], "저품질 OCR 매칭이 증거로 영속됐다"
+
+    def test_append_turns_low_quality_flags_but_does_not_persist(self) -> None:
+        did = uuid.uuid4()
+        key, dialogue = _preloaded_dialogue(did)
+        client, captured = _session_client(preload={key: dialogue})
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json=self._LOW_BODY)
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert _MID in [m["misconception"]["id"] for m in body["misconceptions"]]
+        assert body["match_low_quality"] is True
+        assert _hypothesis_rows(captured) == []
+        assert _evidence_rows(captured) == []
+
+    def test_high_confidence_control_still_persists(self) -> None:
+        # 대조군 — 같은 형상에서 ocr_confidence=0.95면 영속된다(위 두 검사가 변별력을 갖는 근거).
+        client, captured = _session_client()
+        resp = client.post("/v1/coach/sessions", json=_OCR_BODY)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["match_low_quality"] is False
+        assert _hypothesis_rows(captured) != []
+        assert _evidence_rows(captured) != []
 
 
 class TestTextTurnUnchanged:
