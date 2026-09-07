@@ -61,7 +61,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import ProblemAttempt
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
-from whymath_backend.db.session import get_sessionmaker
+from whymath_backend.db.session import dispose_engine, get_sessionmaker
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
@@ -79,6 +79,7 @@ __all__ = [
     "ensure_skill_ids_column",
     "main",
     "pick_candidate_problems",
+    "probe_settings",
     "probe_to_json",
     "render_probe",
     "summarize",
@@ -346,15 +347,20 @@ async def pick_candidate_problems(session: AsyncSession, *, limit: int) -> list[
     return list(rows)
 
 
-async def prepare(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
+async def prepare(settings: Settings, *, count: int) -> tuple[datetime, list[uuid.UUID]]:
     """제출 전 준비 전량 — 창 경계 확보 → 스키마 확인 → 프로브 사용자 보장 → 후보 선정.
+
+    `dispose_engine()`을 **먼저** 부른다: `get_sessionmaker(settings)`는 전역 캐시가 비어 있을
+    때만 주입 settings로 엔진을 만들기 때문에, 캐시를 비우지 않으면 환경 기본값(풀 활성)으로
+    이미 만들어진 엔진이 그대로 쓰여 `probe_settings()`의 NullPool이 무효가 된다.
 
     창 경계를 **DB 시계**(`now()`)에서 읽는다. 리포트가 비교하는 `problem_attempt.created_at`
     ·`attempt_event.event_at`은 서버(DB)가 찍는 값이므로, 파이썬 프로세스의 시각으로 창을
     자르면 미세한 시계 차만으로 방금 만든 표본이 창 밖으로 새고 그 결과가 "측정 불가(분모 0)"로
     보인다 — 같은 머신이라 확률은 낮지만, 그 실패는 원인을 짐작할 수 없는 형태로 나타난다.
     """
-    sessionmaker = get_sessionmaker()
+    await dispose_engine()
+    sessionmaker = get_sessionmaker(settings)
     async with sessionmaker() as session:
         started_at = (await session.execute(window_statement())).scalar_one()
         await ensure_skill_ids_column(session)
@@ -372,16 +378,29 @@ async def prepare(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
 # ──────────────────────────────────────────────────────────────────────────
 # 제출 (in-process ASGI — 실제 라우트를 태운다)
 # ──────────────────────────────────────────────────────────────────────────
-def _probe_settings() -> Settings:
-    """런타임 생성 시크릿으로 Settings 구성(하드코딩 0·환경변수 요구 0).
+def probe_settings() -> Settings:
+    """런타임 생성 시크릿 + **풀 비활성(NullPool)** Settings(하드코딩 0·환경변수 요구 0).
 
     `database_url` 등 나머지 필드는 환경변수(`WHYMATH_*`)에서 그대로 읽는다 — 프로브가 바꾸는
-    것은 서명 키뿐이고, 그 키는 이 프로세스 안에서 발급·검증에 함께 쓰이므로 외부에 남지 않는다.
+    것은 서명 키와 풀 정책뿐이고, 그 키는 이 프로세스 안에서 발급·검증에 함께 쓰이므로 외부에
+    남지 않는다.
+
+    **`db_disable_pool=True`가 이 프로브의 정상 동작 조건이다**(선호가 아니다). 이 도구는 한
+    회차에서 *여러 이벤트 루프*에 걸쳐 같은 전역 엔진을 쓴다 — 준비는 `asyncio.run()`이 여는
+    루프에서, 제출은 컨텍스트매니저 없이 쓰는 `TestClient`가 **요청마다** 여는 AnyIO 포털의
+    루프에서 돈다. 풀이 살아 있으면 이미 닫힌 루프에 바인딩된 asyncpg 연결이 다음 루프에서
+    재사용돼 `Event loop is closed` / `attached to a different loop`로 **제출이 전건 실패**하고
+    회차가 exit 5로 끝난다(`db/session.py`의 `db_disable_pool` 독스트링이 경고하는 바로 그
+    실패 모드 · 선례 `tests/backend/harness/test_attempt_grading_shadow_report.py`
+    `TestDiscriminatingMismatchCounter` 독스트링). NullPool이면 매 체크아웃이 새 연결이라
+    연결이 루프 경계를 넘지 않는다.
     """
-    return Settings(jwt_secret_key=SecretStr(secrets.token_urlsafe(48)))
+    return Settings(jwt_secret_key=SecretStr(secrets.token_urlsafe(48)), db_disable_pool=True)
 
 
-def submit_attempts(problem_ids: list[uuid.UUID]) -> tuple[AttemptOutcome, ...]:
+def submit_attempts(
+    problem_ids: list[uuid.UUID], *, settings: Settings
+) -> tuple[AttemptOutcome, ...]:
     """`POST /v1/me/attempts`를 문제당 1건씩 태우고 결과를 모은다(정답/오답 교대).
 
     정답만 태우면 모델 B의 **정답 경로**(PRIMARY+TESTED 전체)만 보게 되고, 오답만 태우면
@@ -398,7 +417,6 @@ def submit_attempts(problem_ids: list[uuid.UUID]) -> tuple[AttemptOutcome, ...]:
 
     from whymath_backend.app import create_app
 
-    settings = _probe_settings()
     app = create_app()
     app.dependency_overrides[get_settings] = lambda: settings
     token = create_access_token(PROBE_USER_ID, settings=settings)
@@ -477,9 +495,10 @@ def main(argv: list[str] | None = None) -> int:
         print("--count는 1 이상이어야 한다.", file=sys.stderr)
         return _EXIT_NO_CANDIDATES
 
+    settings = probe_settings()
     try:
         # 창 경계는 준비 트랜잭션의 첫 문장에서 **DB 시계**로 찍는다(prepare docstring 참조).
-        started_at, candidates = asyncio.run(prepare(count=args.count))
+        started_at, candidates = asyncio.run(prepare(settings, count=args.count))
     except ProbeError as exc:
         print(f"준비 실패({type(exc).__name__}): {exc}", file=sys.stderr)
         return exc.exit_code
@@ -487,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DB 오류 — 프로브 준비 실패({type(exc).__name__}): {exc}", file=sys.stderr)
         return _EXIT_DB_UNREACHABLE
 
-    outcomes = submit_attempts(candidates)
+    outcomes = submit_attempts(candidates, settings=settings)
     result = ProbeResult(
         started_at=started_at,
         requested=len(candidates),

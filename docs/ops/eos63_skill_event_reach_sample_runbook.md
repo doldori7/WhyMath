@@ -107,23 +107,30 @@ acceptance ②의 유일한 판정 재료다.
 ```powershell
 # [Windows PowerShell · Phaiakes9]
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-# 브랜치를 강제로 옮기기 전에 작업 트리 청결부터 확인한다 — 더러우면 아무것도 하지 않는다.
+# 작업 트리 청결부터 확인한다 — 더러우면 아무것도 하지 않는다.
 # (붙여넣기 실행에서는 `throw`가 뒤 줄을 멈추지 못하므로 뒷부분을 통째로 가드로 감싼다.)
 $Dirty = (git status --porcelain)
 "WORKTREE_DIRTY=" + [bool]$Dirty
 if (-not $Dirty) {
+  # 지역 브랜치는 손대지 않는다 — detached HEAD로만 옮긴다. `checkout -B`는 지역 브랜치
+  # 포인터를 원격 tip으로 *강제 이동*시켜 아직 push하지 않은 지역 커밋을 그 브랜치에서
+  # 도달 불가로 만든다. 위 청결 검사로는 그 상태가 잡히지 않는다(트리는 깨끗하니까).
+  $Branch = (git rev-parse --abbrev-ref HEAD)
+  "RETURN_TO=$Branch"
   git fetch origin main
   git fetch origin claude/skill-event-reach-sample-ec2w3b
   $ProbeRel = "src/backend/whymath_backend/harness/attempt_skill_reach_probe.py"
   git cat-file -e "origin/main:$ProbeRel" 2>$null
-  if ($LASTEXITCODE -eq 0) { git checkout -B main origin/main }
-  else { git checkout -B claude/skill-event-reach-sample-ec2w3b origin/claude/skill-event-reach-sample-ec2w3b }
+  if ($LASTEXITCODE -eq 0) { git checkout --detach origin/main }
+  else { git checkout --detach origin/claude/skill-event-reach-sample-ec2w3b }
   git log --oneline -1
   "PROBE_FILE_OK=" + (Test-Path (Join-Path (Get-Location) $ProbeRel))
 }
 ```
 
 **자가검증**: `WORKTREE_DIRTY=False` **그리고** `PROBE_FILE_OK=True`.
+`RETURN_TO=`에 찍힌 이름은 회차가 끝난 뒤 돌아갈 브랜치다(§7-4). 이 블록은 **지역 브랜치를
+전혀 바꾸지 않는다** — detached HEAD로만 이동하므로 push하지 않은 지역 커밋이 안전하다.
 - `WORKTREE_DIRTY=True`면 미커밋 변경이 있어 블록이 **아무것도 하지 않은 것**이다(의도) —
   그 변경을 어떻게 할지 세션에 물은 뒤 다시 온다.
 - `PROBE_FILE_OK=False`면 두 fetch가 모두 실패한 것이다(네트워크·브랜치 삭제) — 다음 단계로
@@ -235,6 +242,21 @@ $U = "c5de83b3-9143-58e8-a7a8-cf378801c065"
 docker exec -i whymath-pg psql -U whymath -d whymath -v ON_ERROR_STOP=1 -c "DELETE FROM attempt_event WHERE user_id='$U'; DELETE FROM skill_mastery_history WHERE user_id='$U'; DELETE FROM concept_mastery_history WHERE user_id='$U'; DELETE FROM problem_attempt WHERE user_id='$U'; DELETE FROM user_profile WHERE user_id='$U';"
 "EXIT=$LASTEXITCODE"
 ```
+
+---
+
+### 7-4. 회차 후 원래 브랜치로 복귀
+
+[1단계]가 detached HEAD로 옮겨 두었으므로, 끝나면 원래 자리로 돌아온다.
+
+```powershell
+# [Windows PowerShell · Phaiakes9] 같은 창
+if ($Branch -and $Branch -ne "HEAD") { git checkout $Branch } else { git checkout main }
+git status --short --branch
+```
+
+`$Branch`는 [1단계]가 같은 창에 남긴 값이다. 창을 새로 열었다면 `git checkout main`으로
+돌아오면 된다(지역 커밋은 손대지 않았으므로 그대로 있다).
 
 ---
 

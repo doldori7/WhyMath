@@ -109,7 +109,7 @@ def test_preparation_failures_map_to_distinct_exits(
 ) -> None:
     """준비 실패 3종이 서로 다른 exit로 갈리고, stderr에 **예외 타입명**이 남는다."""
 
-    async def _boom(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
+    async def _boom(settings: Any, *, count: int) -> tuple[datetime, list[uuid.UUID]]:
         raise exc
 
     monkeypatch.setattr(probe, "prepare", _boom)
@@ -120,14 +120,16 @@ def test_preparation_failures_map_to_distinct_exits(
 def test_all_submits_failed_exits_five(monkeypatch: pytest.MonkeyPatch) -> None:
     """준비는 됐는데 201이 하나도 없으면 exit 5 — 배선 회귀를 '해소 0%'로 위장하지 않는다."""
 
-    async def _ok(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
+    async def _ok(settings: Any, *, count: int) -> tuple[datetime, list[uuid.UUID]]:
         return _T0, [uuid.uuid4()]
 
     monkeypatch.setattr(probe, "prepare", _ok)
     monkeypatch.setattr(
         probe,
         "submit_attempts",
-        lambda ids: (_outcome(status_code=503, skill_updates=None, error="HTTP 503: down"),),
+        lambda ids, *, settings: (
+            _outcome(status_code=503, skill_updates=None, error="HTTP 503: down"),
+        ),
     )
     assert probe.main(["--count", "1"]) == 5
 
@@ -137,11 +139,13 @@ def test_successful_round_exits_zero_even_when_resolution_is_zero(
 ) -> None:
     """해소율 0%는 **성공한 측정**이다 — 게이트가 아니므로 exit 0."""
 
-    async def _ok(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
+    async def _ok(settings: Any, *, count: int) -> tuple[datetime, list[uuid.UUID]]:
         return _T0, [uuid.uuid4()]
 
     monkeypatch.setattr(probe, "prepare", _ok)
-    monkeypatch.setattr(probe, "submit_attempts", lambda ids: (_outcome(skill_updates=0),))
+    monkeypatch.setattr(
+        probe, "submit_attempts", lambda ids, *, settings: (_outcome(skill_updates=0),)
+    )
     assert probe.main(["--count", "1"]) == 0
 
 
@@ -282,11 +286,11 @@ def test_window_boundary_comes_from_prepare_not_wall_clock(
     밖으로 새고, 그 결과가 `측정 불가(분모 0)`로 보인다 — 원인을 짐작할 수 없는 실패다.
     """
 
-    async def _ok(*, count: int) -> tuple[datetime, list[uuid.UUID]]:
+    async def _ok(settings: Any, *, count: int) -> tuple[datetime, list[uuid.UUID]]:
         return _T0, [uuid.uuid4()]
 
     monkeypatch.setattr(probe, "prepare", _ok)
-    monkeypatch.setattr(probe, "submit_attempts", lambda ids: (_outcome(),))
+    monkeypatch.setattr(probe, "submit_attempts", lambda ids, *, settings: (_outcome(),))
     out_path = tmp_path / "probe.json"
     assert probe.main(["--count", "1", "--json", str(out_path)]) == 0
     assert f"--since {_T0.isoformat()}" in capsys.readouterr().out
@@ -302,3 +306,43 @@ def test_window_statement_reads_db_clock() -> None:
     from sqlalchemy.dialects import postgresql
 
     assert "now()" in str(probe.window_statement().compile(dialect=postgresql.dialect()))
+
+
+# ── 이벤트 루프 경계(Codex P1) ───────────────────────────────────────────────
+def test_probe_settings_disable_the_connection_pool() -> None:
+    """프로브는 **여러 이벤트 루프**에 걸쳐 같은 전역 엔진을 쓴다 — 준비는 `asyncio.run()`의
+    루프, 제출은 컨텍스트매니저 없는 `TestClient`가 **요청마다** 여는 포털의 루프다.
+
+    풀이 살아 있으면 닫힌 루프에 바인딩된 asyncpg 연결이 재사용돼 `Event loop is closed` /
+    `attached to a different loop`로 제출이 전건 실패하고 회차가 exit 5로 끝난다. 즉
+    `db_disable_pool`은 취향이 아니라 **정상 동작 조건**이라 계약으로 동결한다.
+    """
+    assert probe.probe_settings().db_disable_pool is True
+
+
+async def test_prepare_disposes_the_cached_engine_before_building_the_probe_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`dispose_engine()`이 `get_sessionmaker(settings)`보다 **먼저** 불려야 한다.
+
+    `get_sessionmaker`는 전역 캐시가 비어 있을 때만 주입 settings로 엔진을 만든다 — 캐시를
+    비우지 않으면 환경 기본값(풀 활성)으로 이미 만들어진 엔진이 그대로 쓰여 위 계약이
+    조용히 무효가 된다(순서가 곧 보호다).
+    """
+    order: list[str] = []
+    sentinel = RuntimeError("여기까지만 — 실제 DB 왕복은 이 테스트의 대상이 아니다")
+    marker = object()
+
+    async def _dispose() -> None:
+        order.append("dispose")
+
+    def _sessionmaker(settings: Any = None) -> Any:
+        order.append("sessionmaker")
+        assert settings is marker, "prepare가 주입 settings를 넘기지 않았다"
+        raise sentinel
+
+    monkeypatch.setattr(probe, "dispose_engine", _dispose)
+    monkeypatch.setattr(probe, "get_sessionmaker", _sessionmaker)
+    with pytest.raises(RuntimeError):
+        await probe.prepare(marker, count=1)  # type: ignore[arg-type]
+    assert order == ["dispose", "sessionmaker"]
