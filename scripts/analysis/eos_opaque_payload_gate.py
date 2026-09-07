@@ -179,16 +179,14 @@ def fingerprint_of(module: str, kind: str, expr: str) -> str:
 
 
 # 기준선 — (CORE 모듈, 위반 종류) → 유예. **줄이는 방향으로만** 고친다.
-KNOWN_VIOLATIONS: dict[tuple[str, str], Grandfathered] = {
-    # `_verify_meta_from_raw`: `kind_raw = verify_raw.get("answer_kind")` → `kind_raw in (17종)`.
-    # EOS-84 프로브의 LITERAL_COMPARE_BASELINE 1건과 같은 자리다(그쪽은 리터럴 어휘로, 이쪽은
-    # 불투명 필드 읽기로 잡는다). 상환은 EOS-85(화이트리스트 제거·불투명 통과)가 소유한다.
-    ("l1.problem_bank.populate", "membership"): Grandfathered(
-        fingerprints=("d93b2c7770a0",),  # populate.py `kind_raw in (17종)` — 식이 바뀌면 재승인
-        owner="EOS-85-populate-answer-kind-opaque-passthrough",
-        recheck="EOS-85 착지 시 이 항목을 비운다 · 늦어도 G1 2026-09-27 재확인",
-    ),
-}
+# **비어 있다 — EOS-85 착지로 유일 항목이 상환됐다**(2026-09-06 · 판정 기준 main dc2e6583).
+# 종전 항목: `("l1.problem_bank.populate", "membership")` 지문 `d93b2c7770a0` —
+# `_verify_meta_from_raw`의 `kind_raw = verify_raw.get("answer_kind")` → `kind_raw in (17종)`.
+# 그 항목의 `recheck`가 "EOS-85 착지 시 이 항목을 비운다"였고, 실제로 그렇게 했다(유예는
+# 만료 지점을 동반해야 한다는 규칙이 지켜진 사례 — 만료가 없었으면 이 줄은 남았을 것이다).
+# 상환 형태는 어휘의 *이관*이 아니라 *제거*다: 적재기는 이제 answer_kind를 읽어 해석하지 않고
+# 형식만 보고 통과시킨다(판정 권위는 L3 `acceptance._CONCEPTUAL_VERIFIERS`).
+KNOWN_VIOLATIONS: dict[tuple[str, str], Grandfathered] = {}
 
 
 @dataclass(frozen=True)
