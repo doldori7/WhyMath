@@ -172,7 +172,7 @@ class TestGatesCli:
         """clear_후_의존_태스크_해금"""
         assert (
             cli.main(
-                ["gates", "clear", "G-phaiakes9-key", "--evidence", "라이브 키 투입 커밋 abc123"]
+                ["gates", "clear", "G-phaiakes9-key", "--evidence", "라이브 키 투입 커밋 abc1234"]
             )
             == 0
         )
