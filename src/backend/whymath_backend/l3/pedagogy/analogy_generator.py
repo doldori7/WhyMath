@@ -449,6 +449,8 @@ def run_analogy_review(rows: Sequence[dict[str, Any]]) -> list[AnalogyOutcome]:
             sympy_verified=row.get("sympy_verified"),
             tts_safe=row.get("tts_safe"),
         )
+        # EOS-89: 비유 payload도 `verification` 주장이 없다 — 능력 주입 불요(위 example_generator
+        # 주석과 같은 이유). 주장이 생기면 조용히 통과하지 않고 LookupError로 드러난다.
         verdict: ReviewVerdict = review_slot(payload)
         if verdict.approved:
             # 비유 전용 결함 축 — 본문+깨짐 요약을 합쳐 검사한다(둘 다 학생 노출 후보 문면).
