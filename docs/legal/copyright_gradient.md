@@ -36,7 +36,7 @@ CLAUDE.md 의사결정 우선순위 2번(법적·윤리적 준수)에 따라, **
 | 학교알리미 | 공공 | PII 처리 주의 |
 | OpenStax · Siyavula · Illustrative Math | CC BY 4.0 | 상업·가공 자유 |
 | NuminaMath-CoT · OmniMath · OlymMATH | Apache 2.0 / 공개 | LLM 학습 데이터 |
-| miniF2F · Mathlib4 | MIT / Apache 2.0 | Lean 형식화 |
+| miniF2F · Mathlib4 | 둘 다 **Apache 2.0**(miniF2F는 폴더별 상이 — 우리가 쓰는 `lean`이 Apache 2.0) | Lean 형식화 |
 
 **처리 원칙**: 자유롭게 활용하되 **출처 표시 의무는 반드시 이행**(`licensing_safety.md` 출처 표시 표준 — 인앱 표시 + 내부 로그).
 

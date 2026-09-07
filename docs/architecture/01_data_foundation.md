@@ -51,7 +51,7 @@
 | NuminaMath-CoT | Apache 2.0 | 860k 문항 |
 | MathNet (MIT 2026) | 확인 필요 | 30,000+ 47개국 17언어 |
 | OmniMath | 공개 | 4,428 문항 |
-| miniF2F | MIT | 488 Lean 형식화 |
+| miniF2F | 폴더별 상이 — 우리가 쓰는 `lean`은 **Apache 2.0** (metamath=MIT·hollight=FreeBSD·isabelle=Apache 2.0) | 488 Lean 형식화 |
 | AoPS Wiki | CC BY-SA | 미국·국제경시 |
 
 ### 7. 오개념 카탈로그
