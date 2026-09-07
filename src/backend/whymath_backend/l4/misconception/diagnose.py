@@ -52,17 +52,29 @@ from whymath_backend.l4.misconception.models import (
 _DEFAULT_TOP_K = 3
 
 
-def _normalize(text: str) -> str:
-    """매칭용 표기 정규화 — NFKC 유니코드 정규화 + 모든 공백 제거.
+# MISC-17: LaTeX 표기 접기 — OCR(`OcrResult.plain_latex`)·MathLive 산출물은 계약상 LaTeX라
+# `(a+b)^2`·`a^{2}`·`\left(…\right)` 형태로 온다. NFKC는 `²`→`2`만 펴고 `^`·`{}`·크기 조정
+# 표식은 남겨, 인식기의 *정상* 출력이 신호 2개 중 1개(0.5)만 맞아 게이트 ①(0.65)에서 탈락하던
+# 실측 결함(PR #1034 Codex P1). `^`와 `{}`를 지우면 `a^{2}`·`a^2`·`a²` 모두 정규형 `a2`로 접힌다.
+# 카탈로그 `signals`·`correct_form`에는 이 문자가 0건(2026-09-07 실측)이라 양변 정규화가 일관되고,
+# `regex_signals`는 *정규형 텍스트*를 겨냥하므로 패턴 내부의 `[^0-9]` 같은 메타문자와는 무관하다.
+# 분수(`\frac`)·곱셈 기호(`\cdot`) 등 다른 LaTeX 명령은 접지 않는다 — 신호가 그 형태를 쓰지 않아
+# 필요가 실측되지 않았고, 과도한 접기는 거짓양성 축이 된다(필요 시 실측 후 확장).
+_LATEX_FOLD = re.compile(r"\\left|\\right|[\^{}]")
 
-    학생 표기 변이를 흡수한다: `a² + b²`·`a²+b²`·`a 2 + b 2`가 모두 같은 정규형 `a2+b2`로,
-    위첨자/아래첨자·전각 숫자도 일반 숫자로(NFKC). 비교에만 쓰며, 반환되는 신호 문자열은
-    원본을 유지한다(표시·텔레메트리 일관성).
+
+def _normalize(text: str) -> str:
+    """매칭용 표기 정규화 — NFKC 유니코드 정규화 + 모든 공백 제거 + LaTeX 표기 접기.
+
+    학생 표기 변이를 흡수한다: `a² + b²`·`a²+b²`·`a 2 + b 2`·`a^2+b^2`·`a^{2}+b^{2}`가 모두
+    같은 정규형 `a2+b2`로, 위첨자/아래첨자·전각 숫자도 일반 숫자로(NFKC). 비교에만 쓰며,
+    반환되는 신호 문자열은 원본을 유지한다(표시·텔레메트리 일관성).
 
     참고: NFKC는 위첨자 `²`→`2`로 펴므로 정규식은 *지수 표기를 평문으로* 작성한다
     (예: `(3+4)²=3²+4²`의 정규형은 `(3+4)2=32+42`). 정규식 패턴은 이 정규형을 겨냥한다.
+    LaTeX 접기(`_LATEX_FOLD`)로 `(3+4)^2=3^2+4^2`도 같은 정규형이 된다(MISC-17).
     """
-    return "".join(unicodedata.normalize("NFKC", text).split())
+    return _LATEX_FOLD.sub("", "".join(unicodedata.normalize("NFKC", text).split()))
 
 
 @lru_cache(maxsize=256)
