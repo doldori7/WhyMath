@@ -7,7 +7,7 @@
 >
 > **연결 게이트**: `G-export-prediction-disclosure` (kind=human · assignee=kiki · 원 요청
 > 2026-08-11 · 2026-08-30 재등재 · `backlog/gates.yaml`). **연결 태스크**: 준비물 작성은
-> `MGMT-04-export-prediction-counsel-brief`(claude 소유·이 문서)까지이고, **자문 수행과 게이트
+> `MGMT-07-export-prediction-counsel-brief`(claude 소유·이 문서)까지이고, **자문 수행과 게이트
 > clear는 Kiki 소유**로 남는다 — MGMT-01 선례 동형.
 >
 > **판정 정본**: `docs/legal/export_prediction_disclosure_verdict.md` (잠정 기본값·뒤집힘 조건).
@@ -550,7 +550,7 @@ if ($Row -match "\(cleared\)" -and $Row -match "clear 주체: kiki") {
 
 ---
 
-**버전**: 1.2.0 | **작성**: 2026-09-07 (MGMT-04) | **실측 기준**: `eb39249f`(main `49d9d76a` 병합 후 재실측)
+**버전**: 1.2.0 | **작성**: 2026-09-07 (MGMT-07) | **실측 기준**: `eb39249f`(main `49d9d76a` 병합 후 재실측)
 **다음 검토**: 자문 회신 수령 시 (§5 매핑 실행) 또는 §3.2 전제가 깨질 때 — 즉 **5필드에 값을
 채우는 코드가 처음 추가되는 시점**. 그 시점부터는 "실피해 0"이 성립하지 않으므로 판정 근거
 3번이 무효가 되고 자문 우선순위가 올라간다.

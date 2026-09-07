@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: MGMT-04-export-prediction-counsel-brief
+id: MGMT-07-export-prediction-counsel-brief
 title: "열람권 export 예측 5필드 봉인 — 변호사 자문 브리핑 준비 (G-export-prediction-disclosure 준비물)"
 track: infra-debt
 stage: S3
@@ -21,5 +21,5 @@ artifacts:
 paths:
   - "docs/legal/**"
 session: null
-notes: "G-export-prediction-disclosure(2026-08-11 원 요청·08-30 재등재) 준비물. 게이트 자체는 변호사 판단이라 기계 대체 금지 — 이 태스크는 '준비물 완비'까지만 소유하고 자문 수행·게이트 clear는 Kiki 소유로 남는다(MGMT-01 선례 동형)."
+notes: "G-export-prediction-disclosure(2026-08-11 원 요청·08-30 재등재) 준비물. 게이트 자체는 변호사 판단이라 기계 대체 금지 — 이 태스크는 '준비물 완비'까지만 소유하고 자문 수행·게이트 clear는 Kiki 소유로 남는다(MGMT-01 선례 동형).\n\n[번호 개명 2026-09-07 · 2회차] 최초 MGMT-04로 등재했으나 같은 날 main에 MGMT-04-ip-separation-evidence-pack(status: cancelled)이 착지해 번호가 충돌했다(validate exit 1로 검출). main 쪽은 그 세션이 MGMT-05로 재번호하며 남긴 묘비이지만 이미 머지됐으므로 개명 가능한 쪽인 이쪽을 MGMT-07로 옮긴다. 커밋 메시지·PR #1038 본문·리뷰 답글의 'MGMT-04' 참조는 이 태스크를 가리킨다 — 문서(브리핑·verdict·pipa_data_matrix·MGMT-06 notes)는 전부 MGMT-07로 정정했다. 같은 PR에서 HARN-82→HARN-83 개명에 이은 두 번째 충돌이다."
 updated: 2026-09-07
