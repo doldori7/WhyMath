@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - docs/prompts/misconception_diagnosis.md
-session: null
+session: claude/status-k9r51v
 notes: "출처: PR #1032 Codex P1이 정규식 결함으로 지적했고, 고친 뒤 실측하니 confidence가 여전히 1.0이었다 — 진짜 원인은 substring 경로였고 main에도 있다(git show origin/main 대조 확인). 결정 우선순위 #1(학생 정서) 위반 축이라 P1. 오답이라고 말하는 방향의 오류는 놓치는 것보다 해롭다."
 updated: 2026-09-07

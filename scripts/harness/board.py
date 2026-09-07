@@ -207,11 +207,13 @@ def gate_dependents(
     design-freeze ↔ EOS-56), `selector.unmet_gates`는 그 태스크를 착수 가능으로 본다.
     지금 막고 있는지 여부는 `blocks_now`(=게이트가 pending인가)가 말한다 — 이 구분이
     없으면 화면이 "이미 풀린 게이트가 아직 막고 있다"고 거짓말한다.
+
+    태스크 목록의 계산은 `selector.gate_dependent_tasks`(HARN-74) 한 곳이다 — `gates clear`
+    화면이 같은 목록을 blocked로 좁혀 쓰므로, 보드와 CLI가 다른 사실을 말하지 않게 한다.
     """
     tasks = [
         {"id": t.id, "title": t.title, "status": t.status}
-        for t in sorted(backlog.tasks.values(), key=lambda t: t.id)
-        if gate_id in t.requires_gates and t.status not in ("done", "cancelled")
+        for t in selector.gate_dependent_tasks(backlog, gate_id)
     ]
     tracks = [
         {

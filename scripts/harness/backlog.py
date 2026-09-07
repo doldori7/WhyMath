@@ -19,8 +19,9 @@
     python3 scripts/harness/backlog.py gates clear <G-id> [--as <담당자>] --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py amend <id> --reason <사유>
-      [--acceptance ...] [--gate <G-id>] [--track ...] [--depends ...] [--priority N]
-      [--artifact <PR/커밋>] [--path <glob>] [--title <제목>]
+      [--acceptance ...] [--gate <G-id>] [--remove-gate <G-id>] [--track ...]
+      [--depends <full-id>] [--remove-depends <full-id>] [--notes-replace <구문자> <신문자>]
+      [--priority N] [--artifact <PR/커밋>] [--path <glob>] [--title <제목>]
   python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
     python3 scripts/harness/backlog.py validate [--quiet]
     python3 scripts/harness/backlog.py brief [--format hook]
@@ -154,6 +155,7 @@ def _fail_on_reason_feedback(
     *,
     flag: str = "--reason",
     appended: bool = True,
+    hint: str = "",
 ) -> int:
     """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다.
 
@@ -164,6 +166,9 @@ def _fail_on_reason_feedback(
     "기록된 뒤에는 되돌릴 수 없다"가 참이지만, `add`는 **저장 전** 검사라 아직 아무것도
     쓰이지 않았다(HARN-71) — 그 차이를 안내가 정직하게 말해야 사람이 대장 상태를 오해하지
     않는다.
+
+    hint: 되먹임이 `--reason` 외의 축에서도 생길 수 있는 호출부(amend의 depends 제거·notes
+    치환 — HARN-67)가 그 가능성을 덧붙인다. 없으면 종전 문구 그대로.
     """
     created = _reason_created_declarations(backlog, task_id, before)
     if not created:
@@ -178,7 +183,7 @@ def _fail_on_reason_feedback(
     return _fail(
         f"{task_id}: {flag} 문구가 새 의존 선언을 만든다 — 선행 어구와 태스크 ID가 "
         f"한 문장에 함께 오지 않게 고치거나, 실제 선행이면 `--depends <full-id>`를 함께 "
-        f"주고 다시 실행하라{tail}."
+        f"주고 다시 실행하라{tail}." + (f" {hint}" if hint else "")
     )
 
 
@@ -342,6 +347,12 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
                 f"⚠ 미머지 done 탐지 불가({done_status}) — 완료분이 섞였을 수 있음",
                 file=sys.stderr,
             )
+    # 취소된 선행에 차단된 todo (HARN-67 ②) — 후보 0건 여부·--json 여부와 무관하게 **매번**
+    # 경고한다. 차단 자체는 옳을 수 있으나(결정 불가 → 차단 유지) 조용한 차단만은 금지다:
+    # 선행을 cancel한 세션은 후속이 사라진 것을 못 보고, 다음 세션은 "왜 안 나오지"를 다시
+    # 조사한다(2026-09-05 EOS-96 실측). stderr에 내는 이유는 위 두 경고와 같다 — --json의
+    # stdout은 기계가 읽으므로 오염하면 안 된다.
+    _warn_cancelled_dep_blocks(backlog)
     if args.json:
         print(
             json.dumps(
@@ -385,6 +396,27 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
             f" 판정하려면 전건 조회: backlog.py next --n {len(ready)} --json",
         )
     return 0
+
+
+def _warn_cancelled_dep_blocks(backlog: object) -> None:
+    """취소된 선행에 차단된 todo 태스크마다 정정 명령을 실은 경고 1줄 — stderr (HARN-67 ②).
+
+    기존 "⚠ 후보 제외 … 이미 완료(미머지)" 경고와 같은 자리·같은 형식이다. 정정 명령을
+    같이 싣는 이유: 규칙을 아는 것과 그 순간 떠올리는 것은 다르다(next의 전건 조회 안내와
+    같은 원칙).
+
+    왜 `excluded`(classify_todo 결과)가 아니라 대장을 직접 훑는가: classify는 owner·트랙
+    게이트 제외를 먼저 돌려주므로 사람 소유·E축 태스크의 취소 선행은 `deps_cancelled`로
+    나오지 않는다 — 그 태스크는 영구 차단인데 경고 0건인 침묵 상태가 정확히 그 경로에서
+    재현됐다(PR #1025 Codex P2-2). status/brief 요약이 쓰는 `cancelled_dependency_blocks`와
+    같은 계산을 쓴다(단일 진실 원천). --layer/--subject 필터와 무관하게 전건이다.
+    """
+    for task, deps in selector.cancelled_dependency_blocks(backlog):
+        print(
+            f"⚠ 후보 제외 {task.id} — 취소된 선행 {', '.join(deps)}에 차단됨 · 정정: "
+            f"backlog.py amend {task.id} --remove-depends {deps[0]} --reason '...'",
+            file=sys.stderr,
+        )
 
 
 def cmd_start(root: Path, args: argparse.Namespace) -> int:
@@ -955,15 +987,29 @@ def cmd_cancel(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "cancelled")
     if error:
         return _fail(error)
+    # 이 태스크를 선행으로 가진 미종결 태스크 (HARN-67 ②) — 취소는 막지 않는다(취소 자체는
+    # 정당할 수 있다). 다만 그 후속들은 selector가 취소 선행을 해소로 치지 않으므로 이
+    # 순간부터 후보에서 빠진다 — 그 사실을 취소한 사람이 **지금** 보게 한다. in_progress·
+    # review도 센다: 진행 중 태스크의 depends_on에 남은 취소 선행은 대장 오염이다.
+    dependents = sorted(
+        t.id
+        for t in backlog.tasks.values()
+        if task.id in t.depends_on and t.status not in TERMINAL_STATUSES
+    )
     prev_session = task.session
     task.status = "cancelled"
     task.session = None
     task.notes = _append_note(task.notes, args.reason, "취소")  # block과 동일 — 덮어쓰지 않음
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "cancel", task.id, reason=args.reason)
+    store.append_event(root, "cancel", task.id, reason=args.reason, blocked_dependents=dependents)
     _release_remote_claim(root, task.id, prev_session)
     print(f"🗑 {task.id} 취소 — {args.reason}")
+    if dependents:
+        print(
+            f"⚠ 이 취소로 {len(dependents)}건이 차단된다: {', '.join(dependents)} · 정정: "
+            f"backlog.py amend <id> --remove-depends {task.id} --reason '...'"
+        )
     return 0
 
 
@@ -1071,19 +1117,75 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
     store.save_gates(root, sorted(backlog.gates.values(), key=lambda g: g.id))
+    # 이 게이트를 기다리던 blocked 태스크 (HARN-74 ①②) — 게이트 status를 바꾼 **뒤** 계산한다:
+    # "다른 게이트 대기"가 방금 해소된 이 게이트를 빼고 남는 것만 세야 하기 때문이다(헬퍼도
+    # gate_id를 명시적으로 빼지만, 이 순서면 unmet_gates 관점과도 일치한다). 이벤트에도 남긴다 —
+    # 화면은 휘발되지만 대장은 남는다(cancel의 blocked_dependents와 동형).
+    attached = selector.gate_attached_blocked(backlog, gate.id)
+    notes_ref = selector.gate_notes_referenced_blocked(backlog, gate.id)
     store.append_event(
         root,
         f"gate_{args.gate_action}",
         gate.id,
         evidence=gate.evidence,
         reason=args.reason,
+        blocked_attached=[t.id for t, _others in attached],
+        blocked_notes_ref=[t.id for t in notes_ref],
         **extra,
     )
     # 주체를 화면에도 되비춘다 — 기입자가 "내가 사람으로 기록됐는지"를 즉시 확인할 수 있어야
     # 잘못된 기입(에이전트가 --as 없이 사람 게이트를 닫음)이 조용히 지나가지 않는다.
     subject = f" (clear 주체: {gate.cleared_by})" if args.gate_action == "clear" else ""
     print(f"✔ {gate.id} → {gate.status}{subject}")
+    _print_gate_release_reminder(gate.id, attached, notes_ref)
     return 0
+
+
+def _print_gate_release_reminder(
+    gate_id: str,
+    attached: list[tuple[Task, list[str]]],
+    notes_ref: list[Task],
+) -> None:
+    """gates clear·waive 직후 — 그 게이트를 기다리던 blocked 태스크와 다음 명령 (HARN-74 ①②).
+
+    왜 필요한가: 게이트 해소는 태스크 status를 건드리지 않는다(옳다 — 차단 사유가 게이트뿐인지
+    기계는 모른다). 그러나 종전 화면은 `✔ 게이트 → cleared` 한 줄뿐이라, clear한 세션은 부착
+    태스크가 있다는 사실 자체를 몰랐고 그 태스크는 blocked로 방치됐다(2026-09-06 실측 3건·5일).
+    보드(HARN-41)는 이 목록을 계산했지만 CLI·브리핑에는 없었다 — 이 함수가 그 CLI 축이다.
+
+    **0건도 '0건'으로 찍는다** — 이 화면은 그 명령의 *결과 보고*라, 줄이 없으면 "검사했는데
+    없었다"와 "검사하지 않았다"를 구분할 수 없다(침묵 실패 금지 · acceptance ①).
+    ①(부착)은 unblock 명령을 그대로 낸다. ②(산문 참조)는 기계가 의도를 모르므로 명령 대신
+    두 갈래(부착 / 해제) 중 사람이 고르라는 안내를 낸다(모른다 ≠ 아니다).
+    """
+    if attached:
+        print(
+            f"  · 부착 blocked 태스크 {len(attached)}건 — 이 게이트를 기다리던 차단. "
+            "해제 여부를 확인하라:"
+        )
+        for task, others in attached:
+            # 남은 pending 게이트가 있으면 unblock해도 후보가 되지 않는다 — 그 이유를 미리 알린다.
+            # `#` 뒤에 두어 줄을 통째로 복사해도 셸에서 그대로 실행된다.
+            suffix = (
+                f"  # (다른 게이트 대기: {', '.join(others)} — unblock해도 후보가 되지 않는다)"
+                if others
+                else ""
+            )
+            print(f"    python3 scripts/harness/backlog.py unblock {task.id}{suffix}")
+    else:
+        print("  · 부착 blocked 태스크 0건")
+    if notes_ref:
+        print(
+            f"  · 산문 참조(requires_gates 미부착) {len(notes_ref)}건 — "
+            "notes에만 이 게이트를 적은 blocked 태스크. 기계는 의도를 모르므로 사람이 고른다:"
+        )
+        for task in notes_ref:
+            print(
+                f"    {task.id} — 부착: backlog.py amend {task.id} --gate {gate_id} "
+                f"--reason '...' · 또는 해제: backlog.py unblock {task.id}"
+            )
+    else:
+        print("  · 산문 참조(requires_gates 미부착) 0건")
 
 
 def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:
@@ -1786,8 +1888,22 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
          넓은 glob을 append로 좁힐 방법은 없다.
     3. **사유 필수 + 이벤트 기록** — 왜 고쳤는지가 대장에 남지 않으면 정정 자체가 추적 불가다.
 
-    **여전히 열지 않는 것**: 태스크 삭제·ID 변경·acceptance/artifacts 항목 개별 제거. 대장
-    손편집의 우회 표면이 되거나 ID 계보를 끊는다.
+    **정정 경로 3축 추가(HARN-67 — 원칙 1의 예외를 *제거·치환*으로 한정해 연다)**:
+    - `--remove-depends`: 취소·오등재된 선행을 뗀다. 없으면 오등재를 바로잡을 때 그것에
+      의존하던 정상 태스크가 영구 차단된다(2026-09-05 EOS-94 cancel → EOS-96 침묵 차단).
+    - `--remove-gate`: 오부착 게이트를 뗀다. `gates clear`는 게이트를 *통과*시키는 것이라
+      잘못 걸린 게이트의 정정이 아니다(산출 태스크 자신에 검수 게이트를 걸면 교착 — MP-01).
+    - `--notes-replace 구문자 신문자`: notes의 한 어구를 치환한다. audit-deps가 notes의
+      '선행' 어구를 위반으로 판정하는데 notes를 고칠 CLI가 없었다 — 고칠 수 없는 위반을
+      지적하는 게이트는 사람이 게이트를 끄게 만든다. 구문자는 **정확히 1회** 등장해야 한다
+      (0회는 치환 0건이 성공으로 보이는 위장, 2회+는 어느 쪽인지 결정 불가).
+    셋 다 사유 필수·이벤트 기록(removed_depends·removed_gates·notes_replace)이며, 제거된
+    값·치환 원문은 **이벤트 대장에만** 남긴다 — notes에 원문을 인용하면 스캐너가 인용문 속
+    선행 어구를 다시 위반으로 잡는 되먹임이 된다.
+
+    **여전히 열지 않는 것**: 태스크 삭제·ID 변경(rename)·acceptance/artifacts 항목 개별 제거.
+    대장 손편집의 우회 표면이 되거나 ID 계보를 끊는다. rename 미구현 사유는
+    `docs/standards/build_harness.md` §7a 정정 경로 표 참조.
 
     **알려진 한계**: `--title`의 *이전* 제목도 notes에 append되므로, 옛 제목이 선행 어구와 타
     태스크 ID를 한 문장에 담고 있으면 HARN-53 되먹임 가드가 이 정정을 거부한다. 그때는 같은
@@ -1807,6 +1923,9 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     # 이벤트 대장을 오염시킨다(무변경 amend가 '정정했다'로 읽힌다).
     # priority는 `is not None` — 0은 falsy라 `or args.priority`로 쓰면 `--priority 0`이
     # "인자 없음"으로 처리돼 범위 오류가 아니라 엉뚱한 메시지가 난다(테스트가 실측).
+    remove_depends: list[str] = list(getattr(args, "remove_depends", None) or [])
+    remove_gates: list[str] = list(getattr(args, "remove_gates", None) or [])
+    notes_replace = getattr(args, "notes_replace", None)
     if not (
         args.acceptance
         or args.gates
@@ -1815,6 +1934,9 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         or args.priority is not None
         or args.eos_priority
         or getattr(args, "no_trigger", None)
+        or remove_depends
+        or remove_gates
+        or notes_replace
         or getattr(args, "artifacts", None)
         or getattr(args, "paths", None)
         # title은 truthiness가 아니라 `is not None`으로 본다 — `--title ""`은 *지정됐다*.
@@ -1823,9 +1945,20 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         or getattr(args, "title", None) is not None
     ):
         return _fail(
-            f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --track / --depends / "
-            "--priority / --eos-priority / --no-trigger / --artifact / --path / --title "
-            "중 하나 이상을 지정하라"
+            f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --remove-gate / --track / "
+            "--depends / --remove-depends / --priority / --eos-priority / --no-trigger / "
+            "--notes-replace / --artifact / --path / --title 중 하나 이상을 지정하라"
+        )
+
+    # 같은 호출에서 같은 id를 부착+제거하면 결과가 옵션 처리 순서에 좌우된다 — 결정 불가는
+    # 실행하지 않고 거부한다(HARN-67 ③·⑤).
+    both_deps = sorted(set(args.depends) & set(remove_depends))
+    if both_deps:
+        return _fail(f"{task.id}: 같은 의존을 부착하면서 제거할 수 없다 — {', '.join(both_deps)}")
+    both_gates = sorted(set(args.gates) & set(remove_gates))
+    if both_gates:
+        return _fail(
+            f"{task.id}: 같은 게이트를 부착하면서 제거할 수 없다 — {', '.join(both_gates)}"
         )
 
     changed: list[str] = []
@@ -1844,7 +1977,8 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         task.acceptance.append(text)
         changed.append(f"acceptance +1 ({text[:40]}…)")
 
-    # ② requires_gates: 중복 없이 추가 (제거는 열지 않는다 — 게이트 해제는 gates clear의 몫)
+    # ② requires_gates: 중복 없이 추가. 게이트 *통과*는 gates clear의 몫이고, 오부착의
+    #    *탈착*은 아래 ②-b(HARN-67 ⑤)가 맡는다 — 둘은 다른 일이다.
     for gid in args.gates or []:
         if gid in task.requires_gates:
             return _fail(f"{task.id}: 게이트 '{gid}' 가 이미 붙어 있다")
@@ -1855,6 +1989,22 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             )
         task.requires_gates.append(gid)
         changed.append(f"requires_gates +{gid}")
+
+    # ②-b requires_gates 탈착 (HARN-67 ⑤) — 오부착을 되돌릴 유일한 CLI 경로.
+    #
+    # 왜 필요한가: `requires_gates`는 done 조건이 아니라 **착수 조건**이다(selector.py). 산출물을
+    # 검수하는 게이트를 그 산출물을 *만드는* 태스크에 걸면 교착이 되는데(2026-09-06 MP-01), 그
+    # 실수를 되돌릴 경로가 없어 cancel+재등재로만 고칠 수 있었고 번호가 소모됐다. 게이트
+    # 자체(gates.yaml)의 status는 건드리지 않는다 — 탈착은 태스크 쪽 작업이다.
+    for gid in remove_gates:
+        if gid not in task.requires_gates:
+            return _fail(
+                f"{task.id}: 게이트 '{gid}' 는 requires_gates에 없다 — 뗄 것이 없다 "
+                f"(현재: {task.requires_gates or '없음'})"
+            )
+        task.requires_gates.remove(gid)
+        changed.append(f"requires_gates -{gid}")
+        note_lines.append(f"requires_gates -{gid}: {args.reason}")
 
     # ③ priority 재배정 — 등재 후 우선순위를 고칠 유일한 CLI 경로(HARN-52 후속).
     #
@@ -1899,8 +2049,8 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     # 게이트가 그 불일치를 red로 만드는 이상, 고칠 경로가 반드시 함께 있어야 한다 — 고칠 수
     # 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다.
     #
-    # 제거는 열지 않는다(추가만) — acceptance·requires_gates와 같은 append 규약. 의존 해제는
-    # 선행 태스크를 done으로 만드는 것이 정상 경로다.
+    # 의존 *해소*의 정상 경로는 선행 태스크를 done으로 만드는 것이다. *제거*는 아래 ④-b가
+    # 맡는다(HARN-67 ③) — 취소·오등재된 선행은 done이 될 일이 없으므로 정상 경로로는 못 푼다.
     for dep in args.depends or []:
         if dep == task.id:
             return _fail(f"{task.id}: 자기 자신을 의존으로 걸 수 없다")
@@ -1926,6 +2076,30 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
                 stack.extend(nxt.depends_on)
         task.depends_on.append(dep)
         changed.append(f"depends_on +{dep}")
+
+    # ④-b depends_on 제거 (HARN-67 ③) — 취소·오등재된 선행을 떼는 유일한 CLI 경로.
+    #
+    # 왜 필요한가: selector는 cancelled 선행을 해소로 치지 않는다(결정 불가 → 차단 유지).
+    # 그러면 오등재를 cancel로 바로잡는 순간 그것에 의존하던 정상 태스크가 영구 차단되는데,
+    # 부착만 있고 제거가 없으면 정정은 cancel+재등재뿐이고 번호가 소모된다(2026-09-05
+    # EOS-96 → EOS-97). 제거된 id는 이벤트(removed_depends)에 남는다. HARN-53 되먹임 가드는
+    # 그대로 적용된다 — notes에 "선행: X"가 남은 채 X를 떼면 새 미집행 선언이 되므로 같은
+    # 호출에서 --notes-replace로 어구를 함께 고쳐야 한다.
+    for dep in remove_depends:
+        if dep not in task.depends_on:
+            return _fail(
+                f"{task.id}: 의존 '{dep}' 는 depends_on에 없다 — 뗄 것이 없다"
+                f"(full id로 지정하라 · 현재: {task.depends_on or '없음'})"
+            )
+        task.depends_on.remove(dep)
+        changed.append(f"depends_on -{dep}")
+    if remove_depends:
+        # notes 요약에는 **건수만** — 제거한 ID는 이벤트(removed_depends)와 stdout에만 남긴다.
+        # 실측(2026-09-07): `depends_on -T7-01-blocker: 오등재 선행 제거`처럼 ID와 사유를 한
+        # 줄에 적으면 사유 속 "선행" 낱말이 스캐너 창(60자)에서 그 ID를 새 선언으로 잡아
+        # amend 자신이 HARN-53 가드에 거부됐다. 제거 사유에 "선행"이 들어가는 것은 가장
+        # 자연스러운 경우라 표기 규칙으로 피할 수 없다 — ⑦ notes 치환의 원문 비인용과 같은 원칙.
+        note_lines.append(f"depends_on 제거 {len(remove_depends)}건: {args.reason}")
 
     # ⑤ track 이관 — 이전 값을 notes에 남긴다(HARN-49: 흔적 없이 덮어쓰면 왜 옮겼는지 사라진다)
     if args.track:
@@ -2040,6 +2214,51 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     if added_artifacts and _has_pr_reference(added_artifacts):
         no_pr_resolved = _pending_no_pr_reason(task.notes)
 
+    # ⑩ notes 치환 (HARN-67 ⑥) — notes를 고칠 유일한 CLI 경로. 반드시 `_append_note`로 사유를
+    #    붙이기 **전의** notes에 적용한다 — 사유 문장이 구문자를 담고 있어도 그것이 치환되면
+    #    안 되고, 정정 스탬프는 치환 결과 뒤에 와야 이력 순서가 맞다.
+    #
+    # 구문자는 **정확히 1회** 등장해야 한다. 0회면 "치환 0건인데 exit 0"이 되어 정정이 된
+    # 것처럼 보인다(CLAUDE.md "주입 자체의 실재" 규칙의 CLI판 — 적용되지 않은 뮤테이션이
+    # 통과로 위장된 사고와 같은 형태). 2회 이상이면 어느 쪽인지 결정 불가다. 신문자는 빈
+    # 문자열을 허용한다(어구 삭제). 원문(old/new)은 **이벤트 대장에만** 남긴다 — notes에
+    # 인용하면 스캐너가 인용문 속 선행 어구를 다시 잡는 되먹임이 된다.
+    notes_replace_record: dict[str, str] | None = None
+    if notes_replace:
+        old_text, new_text = notes_replace
+        if not old_text:
+            return _fail(f"{task.id}: --notes-replace 구문자가 비어 있다 — 무엇을 바꿀지 지정하라")
+        hits = task.notes.count(old_text)
+        if hits == 0:
+            return _fail(
+                f"{task.id}: --notes-replace 구문자가 notes에 없다 — 치환 0건은 성공이 아니다"
+                "(현재 notes에서 그대로 복사해 다시 지정하라)"
+            )
+        if hits > 1:
+            return _fail(
+                f"{task.id}: --notes-replace 구문자가 notes에 {hits}회 등장 — 모호하다"
+                "(한 곳만 가리키도록 구문자를 앞뒤로 늘려라)"
+            )
+        task.notes = task.notes.replace(old_text, new_text, 1)
+        changed.append(f"notes 치환 1건 ({len(old_text)}자 → {len(new_text)}자)")
+        note_lines.append(f"notes 치환 — {args.reason}")
+        notes_replace_record = {"old": old_text, "new": new_text}
+
+    # 되먹임 가드의 마스크 — 기본은 정정 *전* 위반(기존 위반은 이 명령의 책임이 아니다).
+    # 치환이 있으면 마스크를 (정정 전) ∩ (치환 직후·사유 append 전)으로 좁힌다: 치환이 없앤
+    # 쌍이 마스크에 남아 있으면 --reason이 같은 쌍을 다시 만들어도 "기존 위반"으로 오판돼
+    # amend는 exit 0인데 audit-deps는 red인 채 남는다 — 대장은 손편집 금지라 거짓 성공을 낸
+    # 정정 경로는 갈 곳이 없다(PR #1025 Codex P2-3). 치환이 *만든* 쌍은 정정 전에 없었으므로
+    # 교집합에도 없다 — 양쪽 다 새 위반으로 잡힌다.
+    feedback_mask = _pre_amend_findings
+    if notes_replace:
+        post_replace = {
+            (f.task_id, f.referenced)
+            for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+            if f.task_id == task.id
+        }
+        feedback_mask = {p for p in _pre_amend_findings if p[0] != task.id or p in post_replace}
+
     task.notes = _append_note(
         # note_lines를 **전부** 남긴다. 예전 구현은 `note_lines[0]`만 기록해 다축 정정
         # (`--title` + `--priority` 등)에서 뒤 축의 *이전 값*이 조용히 사라졌다 — 이전 값을
@@ -2068,7 +2287,15 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     # 부착한다" 같은 사유가 그 문장 안의 태스크 ID를 새 선행 선언으로 만들었다(2건).
     # notes는 append 전용이라 되돌릴 CLI 경로가 없으므로 **쓰기 전에** 막는다.
     # 판정은 "이 정정이 *새로* 만든 findings"만 — 기존 위반은 이 명령의 책임이 아니다.
-    if _fail_on_reason_feedback(backlog, task.id, _pre_amend_findings):
+    # HARN-67: depends 제거·notes 치환도 같은 되먹임을 만들 수 있다(notes의 "선행: X"가 남은
+    # 채 X를 떼면 미집행 선언이 된다) — 그 경우의 정정 경로를 힌트로 덧붙인다.
+    feedback_hint = ""
+    if remove_depends or notes_replace:
+        feedback_hint = (
+            "depends 제거·notes 치환이 원인이면 같은 호출에서 --notes-replace로 선행 어구를 "
+            "함께 고쳐라."
+        )
+    if _fail_on_reason_feedback(backlog, task.id, feedback_mask, hint=feedback_hint):
         return 1
 
     store.save_task(root, task)
@@ -2076,6 +2303,13 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     if track_before is not None:
         # track 축은 field/before/after도 함께 남긴다 — HARN-49가 쓰던 형태를 깨지 않는다.
         event_extra.update(field="track", before=track_before, after=args.track)
+    # HARN-67 — 제거·치환은 notes에 원문을 남기지 않으므로 이벤트가 유일한 복원 근거다.
+    if remove_depends:
+        event_extra["removed_depends"] = remove_depends
+    if remove_gates:
+        event_extra["removed_gates"] = remove_gates
+    if notes_replace_record is not None:
+        event_extra["notes_replace"] = notes_replace_record
     if added_artifacts:
         # done 이벤트의 `artifacts` 키와 같은 이름으로 남긴다 — 증적의 출처(done인가 사후
         # 보정인가)는 action(`done`/`amend`)이 이미 구분하므로 키를 새로 만들 이유가 없다.
@@ -2090,6 +2324,15 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         print(f"  · {c}")
     if no_pr_resolved is not None:
         print(f"  PR 보류 해소: '{no_pr_resolved}' → 증적에 PR 참조가 들어왔다")
+
+    # 제거·탈착이 실제로 착수 가능성을 바꿨는지 그 자리에서 보여준다(정본화 ≠ 집행) — 다른
+    # 사유로 여전히 막혀 있으면 "뗐는데 왜 안 나오지"를 다시 조사하게 되기 때문이다.
+    if (remove_depends or remove_gates) and task.status == "todo":
+        exclusion = selector.classify_todo(backlog, task)
+        if exclusion is None:
+            print("  착수 가능 후보가 됐다 — `next --n 500 --json`(전건)으로 직접 확인하라")
+        else:
+            print(f"  ⚠ 여전히 후보 아님: {exclusion.reason} {exclusion.detail}")
 
     # 정정이 실제로 착수 가능성을 바꿨는지 그 자리에서 보여준다
     # (정본화 ≠ 집행 — 사람이 확인해야 한다).
@@ -2233,7 +2476,8 @@ def cmd_audit_deps(root: Path, args: argparse.Namespace) -> int:
         print(
             "\n정정: python3 scripts/harness/backlog.py amend <id> "
             "--depends <선행-태스크-full-id> --reason '...'\n"
-            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거).\n"
+            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거): "
+            "amend <id> --notes-replace '<구문자>' '<신문자>' --reason '...' (HARN-67 ⑥).\n"
             "하드가 *틀린* 경우(방향 반대·택일·로드맵 순서 위반·과거 사실·오탐 ID)는 "
             "dep_declaration.SOFT_DECLARED에 사유 코드와 근거를 함께 등재하라(HARN-53).",
             file=sys.stderr,
@@ -2245,6 +2489,10 @@ def cmd_validate(root: Path, args: argparse.Namespace) -> int:
     backlog, schema_errors = _load(root)
     errors = store.validate_backlog(backlog, schema_errors)
     warnings = _stage_outliers_on_gated_tracks(backlog)
+    # 취소된 선행 차단 (HARN-67 ②) — 무결성 위반이 아니다(대장은 정합하다·차단은 결정 대기).
+    # red로 만들면 정당한 cancel이 CI를 깨고, 그러면 사람이 cancel 대신 손편집으로 도망간다.
+    # 경고로만 내되 있을 때만 낸다.
+    cancelled_line = report.cancelled_dep_blocked_line(backlog)
     if not errors:
         if not args.quiet:
             print(
@@ -2255,12 +2503,16 @@ def cmd_validate(root: Path, args: argparse.Namespace) -> int:
             # 무결성 위반이 아니라 구조 의심 — exit 0을 바꾸지 않는다(경고를 오류로 승격하면
             # 의도적 배치까지 막고, 그러면 사람이 경고 자체를 끄게 된다)
             print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
+        if cancelled_line:
+            print(f"⚠ {cancelled_line}", file=sys.stderr)
         return 0
     print(f"❌ 무결성 위반 {len(errors)}건:", file=sys.stderr)
     for error in errors:
         print(f"  · {error}", file=sys.stderr)
     for warning in warnings:
         print(f"⚠ 트랙 구조 의심 — {warning}", file=sys.stderr)
+    if cancelled_line:
+        print(f"⚠ {cancelled_line}", file=sys.stderr)
     return 1
 
 
@@ -3104,7 +3356,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "amend",
-        help="등재된 태스크의 acceptance·게이트·트랙·증적·범위·제목 정정 (HARN-24+49+52+57)",
+        help="등재된 태스크의 acceptance·게이트·트랙·의존·notes·증적·범위·제목 정정 "
+        "(HARN-24+49+52+57+67)",
     )
     p.add_argument("id")
     p.add_argument(
@@ -3119,6 +3372,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         dest="gates",
         help="requires_gates에 게이트 부착 (add 시점 외 유일 경로)",
+    )
+    p.add_argument(
+        "--remove-gate",
+        action="append",
+        default=[],
+        dest="remove_gates",
+        metavar="G-ID",
+        help="requires_gates에서 게이트 탈착 (오부착 정정 — HARN-67 ⑤). 게이트 자체의 status는 "
+        "건드리지 않는다. 미부착 게이트·같은 호출의 --gate와 겹치면 거부",
+    )
+    p.add_argument(
+        "--remove-depends",
+        action="append",
+        default=[],
+        dest="remove_depends",
+        metavar="FULL-ID",
+        help="depends_on에서 선행 제거 (취소·오등재 선행 정정 — HARN-67 ③). full id로 지정. "
+        "없는 의존·같은 호출의 --depends와 겹치면 거부",
+    )
+    p.add_argument(
+        "--notes-replace",
+        nargs=2,
+        metavar=("구문자", "신문자"),
+        dest="notes_replace",
+        help="notes의 어구 치환 (HARN-67 ⑥ — audit-deps 위반 어구 정정용). 구문자는 notes에 "
+        "정확히 1회 등장해야 한다(0회·2회+ 거부). 신문자 ''는 어구 삭제. 원문은 이벤트에만 남는다",
     )
     p.add_argument("--track", help="트랙 이관 (entry_gate 하드락으로의 강등 등)")
     p.add_argument(

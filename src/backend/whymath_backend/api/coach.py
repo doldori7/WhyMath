@@ -68,6 +68,7 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.api._subject_capability_state import (
     get_answer_form_verifier,
     get_final_answer_verifier,
+    get_step_chain_verifier,
 )
 
 # EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
@@ -136,6 +137,7 @@ from whymath_backend.l4.misconception import (
     combine_diagnoses,
     correct_form_present,
     diagnose,
+    reject_refuted,
     select_intervention,
     select_intervention_from_hypotheses,
 )
@@ -180,6 +182,7 @@ from whymath_backend.schema.verification_capabilities import (
     AnswerFormVerifier,
     ChainVerificationCounts,
     FinalAnswerVerifier,
+    StepChainVerifier,
     VerificationOutcome,
 )
 
@@ -587,6 +590,7 @@ def _build_response_payload(
     recent_categories: Sequence[SocraticCategory] = (),
     grade: int | None = None,
     standard_code: str | None = None,
+    step_chain_verifier: StepChainVerifier | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -624,6 +628,14 @@ def _build_response_payload(
     None이라 미주입 호출자(stateless `/v1/coach`·sync 직접호출)는 완전 회귀 0. 실제 프롬프트
     반영은 `decide()` 내부에서 pack 주입 ∧ `pedagogy_pack_prompt_enabled` 플래그 ON일 때만
     일어난다(기존 옵트인 게이트 그대로 재사용 — 별도 플래그 신설 0).
+
+    **COMP-01** `step_chain_verifier`: 세 핸들러가 `SubjectCapabilityDeps`(app.state 등록분)에서
+    꺼내 넘기는 단계 연쇄 검증 능력 — **프로덕션 3경로는 전부 명시 주입**이고, 이것이 정본이다.
+    기본 None은 이 함수를 *직접* 부르는 단위테스트(2026-09-07 실측 24곳)용 폴백 좌석이며,
+    None이면 L4 오케스트레이터가 합성 루트 기본 구현으로 폴백한다(`l4/solution_coaching.py`
+    해당 분기 주석).
+    주입값이 실제로 쓰이는지는 `tests/backend/api/test_coach.py`의
+    `TestStepChainVerifierInjection`이 가짜 verifier를 app.state에 올려 동결한다.
 
     **S4-19(2026-08-10)**: 반환이 7-튜플로 확장됐다 — `_StepVerificationCarry`(게이트 *이전*
     단계 검증 운반값·적재 전용)를 끝이 아닌 위치에 삽입해 **마지막 원소=solution_coaching
@@ -690,6 +702,9 @@ def _build_response_payload(
         solution_step_types=body.solution_step_types,
         ocr_confidence=body.ocr_confidence,
         hint_level=decision.hint_level,
+        # COMP-01: 단계 연쇄 검증 능력을 **명시 주입**한다 — 미주입이면 L4가 합성 루트를
+        # 지연 조회(pull)하므로, 이 한 줄이 "Core는 인터페이스만 안다"는 주장의 집행 지점이다.
+        verifier=step_chain_verifier,
     )
     # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은
@@ -756,7 +771,7 @@ JudgeSeamDeps = Annotated[_JudgeSeamDeps, Depends(_get_judge_seam_deps)]
 
 
 class _SubjectCapabilityDeps(NamedTuple):
-    """이 라우터가 쓰는 **과목 능력 2종** — app.state 등록분(EOS-89).
+    """이 라우터가 쓰는 **과목 능력 3종** — app.state 등록분(EOS-89·COMP-01).
 
     `_JudgeSeamDeps`와 같은 형태다(`request.app.state` 경유라 팩토리 클로저에 의존하지 않아
     TestClient에서도 안전). 다만 **폴백이 없다**: judge seam은 없으면 자기 기본값으로 도는
@@ -766,19 +781,25 @@ class _SubjectCapabilityDeps(NamedTuple):
 
     final_answer: FinalAnswerVerifier
     answer_form: AnswerFormVerifier
+    step_chain: StepChainVerifier
+    """풀이 단계 연쇄 검증(COMP-01) — `_build_response_payload`가 L4 오케스트레이터에 명시 주입.
+
+    앞의 둘(완료 상태머신용)과 소비처가 다르지만 좌석을 나누지 않는 이유: 셋 다 *같은 등록
+    (push) 규약*으로 app.state에서 오고, 좌석을 쪼개면 핸들러 시그니처가 능력 수만큼 늘어난다."""
 
 
 def _get_subject_capabilities(request: Request) -> _SubjectCapabilityDeps:
-    """app.state에 등록된 과목 능력을 완료 상태머신 주입용으로 묶는 의존성(EOS-89).
+    """app.state에 등록된 과목 능력을 묶는 의존성(EOS-89 완료 상태머신 2종 + COMP-01 연쇄 검증).
 
     `create_app`이 부팅 시 `composition.default_*()`로 1회 올린 인스턴스를 요청마다 조회한다.
     이 라우터가 `composition`을 import하지 않는 것이 §3.8 "등록 형태"의 실체다 — Core는
-    인터페이스 타입(`FinalAnswerVerifier`·`AnswerFormVerifier`)만 안다.
+    인터페이스 타입(`FinalAnswerVerifier`·`AnswerFormVerifier`·`StepChainVerifier`)만 안다.
     """
 
     return _SubjectCapabilityDeps(
         final_answer=get_final_answer_verifier(request),
         answer_form=get_answer_form_verifier(request),
+        step_chain=get_step_chain_verifier(request),
     )
 
 
@@ -885,6 +906,11 @@ async def _compute_matches(
         # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
         if candidates and get_settings().misconception_judge_enabled:
             candidates = await judge_filter(candidates, student_input, judge=_make_judge())
+        # 반박 조건(MISC-23)을 **세 모드 공통 출구**에서 한 번 더 적용한다. substring 경로는
+        # `diagnose`가 이미 걸렀지만, `on` 모드의 의미 후보는 그 경로를 지나지 않으므로
+        # `combine_diagnoses`가 그것을 "semantic-only"로 보고 되살린다(PR #1039 Codex P2).
+        # off 모드에선 무해한 no-op다(이미 걸러진 목록을 다시 훑을 뿐).
+        candidates = reject_refuted(candidates, student_input)
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
@@ -1014,6 +1040,7 @@ async def _complete_problem(
     user_id: uuid.UUID,
     problem_id: uuid.UUID | None,
     final_answer: str | None,
+    started_at: datetime | None,
 ) -> uuid.UUID | None:
     """완료 확정 — ProblemAttempt(is_correct=True) 적재 + 숙달 전파(L2 헬퍼 재사용·중복 로직 0).
 
@@ -1034,9 +1061,19 @@ async def _complete_problem(
 
     적재된 attempt(is_correct 비-NULL·problem_id 보유)는 `GET /me/next-problem` 미시도 필터(NOT IN)
     에서 제외돼 다음 문항 진행이 작동한다(submit_attempt와 동일 루프 닫힘).
+
+    PED-37 `started_at`: 호출자가 이 풀이의 *발생* 시작 시각을 넘긴다(append_turn은 대화 세션의
+    `dialogue.started_at` — 학생이 이 문항 풀이를 시작한 시점이라 발생 시각끼리의 이관이다).
+    넘어온 값이 None이면 **NULL로 둔다** — 서버 now로 메우면 그건 발생이 아니라 수신 시각의 복제라
+    32_learning_history §EOS-48-2가 금지하는 날조다(NULL=미측정이 정직한 상태). 이 컬럼이 비면
+    `harness/wh1_evaluation`의 since/until 집계와 `privacy/retention`의 파기 창이 조용히 0행이
+    되므로, 값이 *있을 때* 채우는 것이 이 인자의 존재 이유다.
     """
     if problem_id is None:
         return None  # 방어 — 완료는 problem_id가 있을 때만 진입(도달 안 함).
+    # 한 번만 읽어 ended_at·ingested_at에 같은 값을 쓴다 — 두 번 호출하면 마이크로초가 갈려
+    # "종료가 수신보다 앞선다"는 사실이 아닌 시차가 데이터에 남는다.
+    received_at = datetime.now(timezone.utc)
     attempt = ProblemAttemptORM(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답·dialogue 링크에 즉시 사용).
         user_id=user_id,
@@ -1044,7 +1081,14 @@ async def _complete_problem(
         is_correct=True,  # 서버 권위 판정(turn A correct) — 클라 보고 아님.
         student_answer=final_answer,
         used_socratic=True,  # 코치 대화(돌아보기)로 도달.
-        ended_at=datetime.now(timezone.utc),
+        # PED-37: 발생 시작 시각은 *넘어온 값 그대로*(대화 시작 시각) — 없으면 NULL(날조 금지).
+        started_at=started_at,
+        # `ended_at`은 기존 동작(서버 now) 그대로 둔다 — 이 경로는 완료 턴이 곧 종료 시점이라
+        # 사실과 어긋나지 않고, 값을 비우면 이 컬럼으로 attempt를 정렬하는 기존 계약이 깨진다.
+        ended_at=received_at,
+        # EOS-48: 서버 *수신* 시각 좌석. 이 경로는 라이브 대화 턴이라 수신=지금이 사실이다
+        # (오프라인 sync가 아니다). started_at(발생)과 짝을 이뤄 지연 도착 판별을 가능하게 한다.
+        ingested_at=received_at,
     )
     session.add(attempt)
     await session.commit()  # attempt 우선 durable(submit_attempt 패턴).
@@ -1102,6 +1146,7 @@ async def _resolve_completion(
     body: CoachRequest,
     decision: PedagogyDecision,
     capabilities: _SubjectCapabilityDeps,
+    attempt_started_at: datetime | None,
 ) -> _CompletionResult:
     """완료 상태머신 결선(L5 오케스트레이션) — 정답/오답 감지(L3)·완료 판정(L4)·attempt 적재(L2)를
     잇는다(중복 로직은 L2 헬퍼 재사용).
@@ -1115,6 +1160,10 @@ async def _resolve_completion(
       3. `decide_completion`으로 5전이 결정.
       4. `NONE` → no-op(기존 발화 유지). 그 외 → 결정론 발화로 override(prompt·socratic_category).
       5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보).
+
+    PED-37 `attempt_started_at`: 적재할 attempt의 *발생* 시작 시각. `_complete_problem`이 자체로
+    구할 수 없어(이 함수도 dialogue를 모른다) 호출자가 넘긴다 — append_turn은 `dialogue.started_at`,
+    create_session은 None(그 턴에는 dialogue가 아직 없고, 애초에 COMPLETE가 나지 않는다).
 
     반환의 `handled`는 완료 상태머신이 발화를 가로챘는지다 — True면 호출자가 WH-1 primary flip을
     건너뛴다(결정론 메타인지/재고 템플릿을 LLM으로 재작성 금지).
@@ -1185,6 +1234,7 @@ async def _resolve_completion(
             user_id=user_id,
             problem_id=problem_id,
             final_answer=_last_solution_step(body),
+            started_at=attempt_started_at,
         )
     return _CompletionResult(
         decision=new_decision,
@@ -2124,6 +2174,7 @@ async def coach_decide(
     user: ConsentedUser,
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
+    subject_capabilities: SubjectCapabilityDeps,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
@@ -2135,13 +2186,22 @@ async def coach_decide(
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # S4-19: carry(게이트 이전 단계 검증 운반값)는 stateless 경로에선 미소비(DB 무접근 계약 —
     # 적재 좌석 없음). 마지막 원소=solution_coaching 불변식은 유지된다.
     decision, matches, intervention, lthc, entry_category, _step_carry, solution_coaching = (
-        _build_response_payload(body, matches=outcome.matches)
+        _build_response_payload(
+            body,
+            matches=outcome.matches,
+            step_chain_verifier=subject_capabilities.step_chain,
+        )
     )
     return CoachResponse(
         decision=decision,
@@ -2191,8 +2251,13 @@ async def create_session(
     prereq = await _prerequisite_coaching_for(session, user.user_id, body.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 큐레이션·영속한다
     # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
@@ -2201,7 +2266,16 @@ async def create_session(
     # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
     # 결정 *앞에서* 적용한다 — 갱신된 가설 세트를 _build_response_payload로 넘겨 소크라테스
     # 카테고리(ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
-    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    # MISC-17 (PR #1034 Codex P1 수용): 게이트 ② `low_quality`(OCR 인식 신뢰도<0.8)의 *집행 지점*.
+    # 게이트 ②는 설계상 매칭을 유지·플래그만 세워 L5가 재확인을 유도하게 하는데, 풀이가 진단에
+    # 합류하면서 노이즈 전사가 우연히 카탈로그 패턴을 담으면 그 매칭이 가설 편입·+1 지지·−1 반박으로
+    # *즉시 영속*되는 경로가 열렸다. 응답 플래그는 DB 쓰기를 되돌리지 못하므로 영속 계층은 미확인
+    # 전사의 매칭을 확정 진단으로 취급하지 않는다(빈 매칭 = 중립 텍스트 턴과 동일·감쇠만). 응답의
+    # 후보·`match_low_quality`·개입 결정은 종전 그대로(§3.3 "intervention은 여기서 안 바꾼다"·
+    # acceptance ⑤ 준수).
+    # 새 임계 0 — 기존 게이트 ②의 플래그를 소비할 뿐이다.
+    persisted_matches: list[MisconceptionMatch] = [] if outcome.low_quality else outcome.matches
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, persisted_matches)
     # S1-b: WH-1 하네스 *shadow 관측*(비노출·비블로킹·무영속). 플래그 ON일 때만 하네스를 병렬로
     # 돌려 '하네스가 어떤 도구를 골랐는지·verify 판정이 무엇인지'만 서버 로그로 남긴다 — 학생 응답은
     # 아래 결정론 경로(`_build_response_payload`) 그대로다(노출 불변). judge shadow의 `_spawn`
@@ -2288,6 +2362,7 @@ async def create_session(
             polya_state_override=server_state,
             grade=grade,
             standard_code=standard_code,
+            step_chain_verifier=subject_capabilities.step_chain,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -2305,6 +2380,10 @@ async def create_session(
         body=body,
         decision=decision,
         capabilities=subject_capabilities,
+        # PED-37: 이 턴에는 dialogue가 아직 없다(아래에서 생성) → 넘길 발생 시각이 없다. 위 주석대로
+        # 생성 턴에서 COMPLETE는 나지 않으므로 실제로 적재에 쓰이지도 않는다. 서버 now를 대신
+        # 넣지 않는 이유는 그것이 발생이 아니라 수신 시각이기 때문(§EOS-48-2 날조 금지).
+        attempt_started_at=None,
     )
     decision = completion.decision
     # S1-11 flip(사인오프 2026-07-20): primary on이면 학생-대면 발화(decision.prompt·AI 턴
@@ -2468,23 +2547,26 @@ async def create_session(
     )
     # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
     # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
+    # MISC-17: 미확인 전사(low_quality)는 +1 지지도 −1 반박도 생산하지 않는다 — 빈 매칭만 넘기면
+    # 반박 헬퍼가 no-match 게이트를 통과해 clean 검산으로 −1을 쓰므로 반박은 호출 자체를 보류한다.
     await _log_match_evidence(
         session,
         session_id=dialogue.dialogue_id,
         student_id=user.user_id,
-        matches=outcome.matches,
+        matches=persisted_matches,
     )
     # WH-1 §2.3 짝 — clean 검증 풀이(no-match)면 현재 active 가설을 약하게 −1 반박(낙인 방지·#268
     # archived 가드 라이브 발동). +1 생산 뒤·no-match 게이트로 한 턴은 지지/반박 중 하나(상호배타).
-    await _log_refutation_evidence(
-        session,
-        session_id=dialogue.dialogue_id,
-        student_id=user.user_id,
-        passed=verify_passed,
-        matches=outcome.matches,
-        active_hypotheses=active_hypotheses,
-        solution_text=body.student_solution,
-    )
+    if not outcome.low_quality:
+        await _log_refutation_evidence(
+            session,
+            session_id=dialogue.dialogue_id,
+            student_id=user.user_id,
+            passed=verify_passed,
+            matches=persisted_matches,
+            active_hypotheses=active_hypotheses,
+            solution_text=body.student_solution,
+        )
     await session.commit()
 
     # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
@@ -2577,15 +2659,22 @@ async def append_turns(
     prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    # MISC-17: 진단 입력도 WH-1 primary와 같은 관용구 — 사진(OCR) 제출 턴(student_input=''
+    # + student_solution 채움)의 풀이가 후보·가설·증거 적재에 합류한다. student_solution이
+    # None/''이면 `or` 폴백으로 종전 텍스트 턴과 비트동일(회귀 0). 이어붙이기·새 게이트 없음.
     outcome = await _compute_matches(
-        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+        body.student_solution or body.student_input,
+        ocr_confidence=body.ocr_confidence,
+        judge_deps=judge_deps,
     )
     # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
     # 세트를 큐레이션(감쇠/강화·누적·증거 반박·캡)·영속한다(트랜잭션 합류·별도 commit 없음·재사용).
     # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
     # 결정 *앞에서* 적용한다 — 누적 가설 세트를 _build_response_payload로 넘겨 소크라테스 카테고리
     # (ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
-    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    # MISC-17: create_session과 동형 — 게이트 ② low_quality면 영속 계층에 빈 매칭(주석은 위 참조).
+    persisted_matches: list[MisconceptionMatch] = [] if outcome.low_quality else outcome.matches
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, persisted_matches)
     # S1-11(flip-없는 수렴 잔여): 멀티턴에도 WH-1 shadow 관측 배선 — create_session(위 :1191)과
     # 동형. verdict가 실제 발생하는 곳은 멀티턴(풀이 단계 제출)이라, 여기 배선이 없으면 shadow
     # verdict 분포(S1-11 primary 승격 판정의 근거·live_cost 문서 §verdict 분포)가 구조적으로
@@ -2647,6 +2736,7 @@ async def append_turns(
             recent_categories=recent_categories,
             grade=grade,
             standard_code=standard_code,
+            step_chain_verifier=subject_capabilities.step_chain,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -2666,6 +2756,10 @@ async def append_turns(
         body=body,
         decision=decision,
         capabilities=subject_capabilities,
+        # PED-37: 완료 시 적재할 attempt의 발생 시작 시각 = 이 대화가 시작된 시각. 학생이 문항
+        # 풀이에 착수한 시점이라 발생 시각끼리의 이관이고(추정 아님), 완료가 나는 유일한 경로가
+        # 여기다. dialogue.started_at이 비어 있으면 그대로 None(NULL=미측정).
+        attempt_started_at=dialogue.started_at,
     )
     decision = completion.decision
     # 완료 상태머신이 계산한 남은 돌아보기 턴 수를 세션에 먼저 반영한다(다음 턴 상태). 완료 시
@@ -2830,22 +2924,24 @@ async def append_turns(
         persona=event_persona,
     )
     # WH-1 §2.3 — create_session과 동형. 이번 턴 확정 매치를 +1 지지 증거로 적재(생산측·curate 뒤).
+    # MISC-17: create_session과 동형 — low_quality면 +1·−1 모두 보류.
     await _log_match_evidence(
         session,
         session_id=dialogue_id,
         student_id=user.user_id,
-        matches=outcome.matches,
+        matches=persisted_matches,
     )
     # WH-1 §2.3 짝 — create_session과 동형. clean 풀이(no-match)면 active 가설 약한 −1 반박.
-    await _log_refutation_evidence(
-        session,
-        session_id=dialogue_id,
-        student_id=user.user_id,
-        passed=verify_passed,
-        matches=outcome.matches,
-        active_hypotheses=active_hypotheses,
-        solution_text=body.student_solution,
-    )
+    if not outcome.low_quality:
+        await _log_refutation_evidence(
+            session,
+            session_id=dialogue_id,
+            student_id=user.user_id,
+            passed=verify_passed,
+            matches=persisted_matches,
+            active_hypotheses=active_hypotheses,
+            solution_text=body.student_solution,
+        )
     await session.commit()
 
     # WH-1 멀티턴 연속성 — 이번 교환 *전* total_turns(current_total)에서 누적 턴 번호 유도(§2.2).
