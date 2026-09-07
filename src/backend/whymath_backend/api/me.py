@@ -45,7 +45,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import (
@@ -645,6 +645,15 @@ async def list_my_privacy_audit(
 
 
 # ── slice L2-4: 풀이 채점 제출 → ProblemAttempt 적재 + BKT 숙달 자동 전파 ──────────
+# 클라 신고 `started_at`이 서버 수신 시각보다 앞서야 한다는 규칙의 허용 오차.
+#
+# 0으로 두지 않는 이유: 학생 기기의 시계는 실제로 몇 초~몇 분 어긋난다(NTP 미동기 태블릿).
+# 엄격히 거부하면 정직한 제출이 422로 튕겨 학습 기록이 통째로 유실된다. 반대로 무제한 허용은
+# 보존기한 회피를 낳는다 — 막아야 할 것은 *무한한* 미래이지 몇 분의 시계 오차가 아니므로,
+# 유계(有界)로 자른다. 5분이면 시계 오차는 흡수하고 보존기한(년 단위)에는 영향이 없다.
+_STARTED_AT_SKEW_TOLERANCE = timedelta(minutes=5)
+
+
 class AttemptSubmitRequest(BaseModel):
     """본인 풀이 채점 결과 제출 — `POST /v1/me/attempts` 요청 본문.
 
@@ -665,6 +674,20 @@ class AttemptSubmitRequest(BaseModel):
     is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
     student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
     duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
+    # PED-37: 클라 *신고* 발생 시작 시각(선택). 서버가 대신 만들어 낼 수 없는 값이라 클라가 주는
+    # 통로를 여는 것 말고 정직한 방법이 없다 — `ended_at − duration_seconds` 역산은 ended_at이
+    # 서버 수신 시각이라 지연·오프라인 제출에서 창이 통째로 밀린다(32_learning_history §EOS-48-2
+    # "수신 시각 복제 = 날조"). 미제출이면 NULL로 남고, 그 attempt는 시간창 집계·보존 파기에서
+    # 조용히 빠진다(빠지는 것이 계약 — 없는 시각을 지어내지 않는다).
+    started_at: datetime | None = Field(
+        default=None,
+        description=(
+            "풀이 시작 시각(클라이언트 신고·선택). **timezone 필수**(`Z` 또는 `±HH:MM`) — "
+            "naive 값은 422로 거부한다(asyncpg가 서버 로컬 TZ로 해석해 시각이 어긋난다). "
+            "서버 수신 시각보다 미래인 값도 422(보존기한 회피 방지·허용 오차 5분). "
+            "미제출 시 NULL=미측정으로 남는다 — 서버 시각으로 대체하지 않는다(EOS-48)."
+        ),
+    )
     session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
     confidence_self_reported: float | None = Field(
         default=None, ge=0.0, le=1.0, description="학생 자기보고 확신도 0~1(선택)."
@@ -742,7 +765,39 @@ async def submit_attempt(
     있다 — `api/coach.py::_complete_problem`(서버가 `l3.verify_final_answer`로 직접 판정한
     `is_correct=True`만 적재·Polya 돌아보기 1턴 경유). 두 경로 모두 `GET /me/next-problem`의
     미시도 필터에서 동일하게 소비된다(`ProblemAttempt` 존재 여부만 본다).
+
+    PED-37 시간 귀속: `started_at`은 **클라가 신고한 발생 시각을 그대로** 적재하고(미신고면 NULL),
+    서버가 이 요청을 받은 시각은 `ingested_at`에 따로 남긴다(EOS-48 발생/수신 분리). 이 컬럼이
+    비어 있던 동안 `harness/wh1_evaluation`의 since/until 집계(R15 정답률 추세·난이도 추세·Brier·
+    전이 점수)와 `privacy/retention`의 보존기한 파기가 *조용히 0행*이었다 — 시간창 조건이 NULL과
+    비교돼 어떤 행도 통과하지 못했기 때문이다.
     """
+    # 서버 *수신* 시각 — 한 번만 읽어 아래 두 컬럼에 같은 값을 쓴다(두 번 호출 시 생기는
+    # 마이크로초 시차가 "종료가 수신보다 앞선다"는 사실 아닌 신호로 남는 것을 막는다).
+    received_at = datetime.now(UTC)
+    # naive datetime 거부 — 다른 라우터(`GET /v1/devices`·`/v1/me/deletions`)와 *같은 헬퍼*를
+    # 써서 에러 표면을 하나로 유지한다(병렬 구현 금지·`_query_filters` 모듈 취지).
+    #
+    # 왜 필수인가: asyncpg의 TIMESTAMPTZ 인코더는 naive 값을 **서버 로컬 TZ**로 해석한다.
+    # 프로덕션 컨테이너가 UTC이므로 한국 로컬 시각(`2026-09-07T10:00:00`)이 9시간 어긋나
+    # 저장되고, 그러면 이 변경이 되살리려던 시간창 귀속이 오히려 조용히 망가진다
+    # (2026-09-07 실측: 오프셋 없는 ISO 문자열이 `tzinfo=None`으로 그대로 수용됐다).
+    _validate_tz_aware(body.started_at, "started_at")
+    if body.started_at is not None and body.started_at > received_at + _STARTED_AT_SKEW_TOLERANCE:
+        # 미래 시각 거부 — 이 검증이 없으면 클라가 신고한 먼 미래 값이 그대로 적재되고,
+        # `privacy/retention`의 파기 조건(`started_at < cutoff`)을 **영원히** 벗어난다.
+        # 즉 미성년자 답안이 보존기한을 넘겨 무기한 잔존한다(2026-09-07 실측: 2076년 값이
+        # 검증 없이 수용됐고 3년 cutoff 판정이 False였다).
+        #
+        # 이 PR *이전*에는 `started_at`이 항상 NULL이라 조작할 값 자체가 없었다 — 즉 이 통로를
+        # 여는 변경이 그 공격 표면도 함께 만들었으므로, 여는 쪽에서 닫는다.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "`started_at`이 서버 수신 시각보다 미래입니다 — 발생 시각은 수신보다 앞설 수 "
+                "없습니다. 기기 시계를 확인하거나 값을 생략하십시오(생략 시 NULL=미측정)."
+            ),
+        )
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
@@ -752,7 +807,16 @@ async def submit_attempt(
         student_answer=body.student_answer,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
-        ended_at=datetime.now(UTC),
+        # PED-37: 클라 신고 발생 시각을 *그대로* 적재. 미신고면 None이 그대로 들어가 NULL로 남는다
+        # (서버 now 폴백 금지 — 그 폴백이 시간창을 업로드 시각 기준으로 밀어 버린다).
+        started_at=body.started_at,
+        # `ended_at`은 기존 동작(서버 now)을 *일부러* 유지한다. 엄밀히는 이 값도 발생이 아니라
+        # 수신 시각이지만, 정정하려면 클라 신고 ended_at을 새로 받아야 하고 그 사이 미신고 행은
+        # NULL이 되어 이 컬럼으로 attempt를 정렬하는 기존 계약이 깨진다 — 별건으로 분리한다.
+        ended_at=received_at,
+        # EOS-48: 발생(started_at)과 분리된 서버 수신 시각 좌석. 오프라인 태블릿이 하루 뒤
+        # sync해도 "언제 발생했고 언제 받았는가"가 둘 다 남아 지연 도착을 판별할 수 있다.
+        ingested_at=received_at,
     )
     session.add(attempt)
     await session.commit()
@@ -3090,7 +3154,7 @@ async def erase_my_account(
     응답은 *요약 영수증*(user_id·총 삭제 행수)만 — 내부 테이블 구조는 노출하지 않는다. 삭제 후
     본인 토큰/세션도 사라지므로(refresh_token_session 포함) 이후 요청은 재인증이 필요하다.
 
-    RDB 밖 store(ClickHouse·S3·Redis)는 이 트랜잭션이 못 지운다 — `report.pending_external`
+    RDB 밖 store(Redis·Langfuse)는 이 트랜잭션이 못 지운다 — `report.pending_external`
     매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 삭제가 필요함을 가시화한다(누락 은폐
     금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
     """
@@ -3103,7 +3167,7 @@ async def erase_my_account(
     user_id = user.user_id
     report = await erase_user(session, user_id=user_id)
     await session.commit()
-    # ops 가시화 — RDB 밖 store(ClickHouse·S3·Redis)는 이 TX가 못 지운다(report.pending_external).
+    # ops 가시화 — RDB 밖 store(Redis·Langfuse)는 이 TX가 못 지운다(report.pending_external).
     # 누락을 조용히 넘기지 않도록 알림(store명·user_id만·키 패턴 미로깅) — 별도 삭제 필요.
     _logger.info(
         "개인정보 삭제권 실행: user=%s · PG %d행 삭제 · 외부 store %d곳 별도 삭제 필요(%s)",
@@ -3133,7 +3197,7 @@ async def export_my_data(
     user_profile을 모아 반환한다. **부분 export**임을 `not_included`로 정직히 고지한다(대화·시계열·
     외부 store 등 미포함·후속). per-user 본인 데이터라 HTTP 노출이 맞다(전역 집계 아님).
 
-    외부 store(ClickHouse·S3·Redis)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
+    외부 store(Redis·Langfuse)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
     매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 export가 필요함을 가시화한다(누락 은폐
     금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
 

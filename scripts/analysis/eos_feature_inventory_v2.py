@@ -769,6 +769,9 @@ CATALOG: tuple[Spec, ...] = (
        "OPS-19 — 리포트 11개 중 러너 배선은 별도", "harness.*_report",
        "-harness.surrogate_baseline_report",
        "harness.problem_bank_coverage", "harness.objective_coverage",
+       # OPS-68 — `*_report` 와일드카드에 안 걸리는 짝(표본 *생성*기라 이름이 _probe다).
+       # 리포트가 볼 표본을 만드는 도구이므로 관측 가족에 함께 귀속한다.
+       "harness.attempt_skill_reach_probe",
        "harness.concept_assessment_index"),
     # ════════════════════ C 클라이언트 — Flutter·Web ════════════════════
     _c("WM-C-001", "로그인·계정 보안 화면·토큰 배관", "Student", "Client UX", "P0",
