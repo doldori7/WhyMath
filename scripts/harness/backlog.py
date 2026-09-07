@@ -126,9 +126,66 @@ NO_PR_REASONS: tuple[str, ...] = (
 )
 
 
+def _reason_created_declarations(
+    backlog: object, task_id: str, before: set[tuple[str, str]]
+) -> list[object]:
+    """이 명령의 `--reason`이 **새로** 만든 의존 선언 위반 (HARN-53).
+
+    `--reason`은 notes에 append되고 notes는 의존 선언 스캐너의 입력이다. 그래서 정정·차단
+    사유가 선행 어구와 태스크 ID를 한 문장에 담으면 그 인용이 새 선언이 된다(실측 2건).
+    notes는 append 전용이라 기록된 뒤에는 되돌릴 CLI 경로가 없으므로 **쓰기 전에** 막는다.
+
+    *기존* 위반은 이 명령의 책임이 아니다 — 그것까지 막으면 위반 하나가 대장에 있는 동안
+    그 태스크의 모든 정정이 봉쇄되고, 게이트가 자기 정정 경로를 막게 된다.
+    """
+    tasks = getattr(backlog, "tasks", {})
+    return [
+        f
+        for f in dep_declaration.find_undeclared_dependencies(tasks)
+        if f.task_id == task_id and (f.task_id, f.referenced) not in before
+    ]
+
+
+def _fail_on_reason_feedback(backlog: object, task_id: str, before: set[tuple[str, str]]) -> int:
+    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다."""
+    created = _reason_created_declarations(backlog, task_id, before)
+    if not created:
+        return 0
+    for f in created:
+        print(f"  · {f.render()}", file=sys.stderr)  # type: ignore[attr-defined]
+    return _fail(
+        f"{task_id}: --reason 문구가 새 의존 선언을 만든다 — 사유에서 선행 어구와 태스크 ID가 "
+        "한 문장에 함께 오지 않게 고쳐 다시 실행하라(notes는 append 전용이라 기록된 뒤에는 "
+        "되돌릴 수 없다)."
+    )
+
+
 def _has_pr_reference(artifacts: list[str]) -> bool:
     """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
     return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
+
+
+# ── 판정 기준 게이트 (HARN-68) ──────────────────────────────────────────────
+# 규칙 정본은 CLAUDE.md "미머지 존재를 '충족'으로 단정 금지"(2026-09-06 등재).
+# 여기는 그 규칙의 **게이트 clear 축** 집행 지점이다.
+#
+# 판정은 시점에 종속된다. "그 산출물이 있다"는 *언제의 트리에서* 봤느냐에 따라 참이거나
+# 거짓이며, 기준 시점이 없는 판정은 재현할 수 없고 재현 불가한 판정은 며칠 뒤 조용히
+# 거짓이 된다. 사고 경위: 2026-09-05 Gate 0 검토가 **미머지** PR #986을 Gate 0-B 근거로
+# 달았고, 같은 세션의 "고아 3건 소유자 부여 완료" 보고도 셋 다 미머지였다 — main 기준
+# 그날의 실제 변화는 하나뿐이었다.
+#
+# 그래서 evidence에 **기준을 가리키는 것**(커밋 해시 또는 PR 참조)을 요구한다. sha256
+# 같은 긴 해시도 받는다(문서 §정규화 해시를 증적으로 쓴 선례 — G0 검증설계 동결).
+# 경계에 `\b`를 쓰면 안 된다: 파이썬 정규식의 `\w`는 유니코드라 **한글도 단어문자**이므로
+# "커밋 fbbcc53에"처럼 한글이 바로 붙는 흔한 표기에서 경계가 성립하지 않는다(실측: 기존
+# 게이트 evidence 1건이 이 이유로 오탐됐다). ASCII 영숫자만 경계로 본다.
+_JUDGMENT_BASE_RE = re.compile(r"(?:#\d+|/pull/\d+|(?<![0-9A-Za-z])[0-9a-f]{7,64}(?![0-9A-Za-z]))")
+
+
+def _has_judgment_base(evidence: str) -> bool:
+    """evidence가 판정 기준(커밋 해시·PR 참조)을 담고 있는가."""
+    return bool(_JUDGMENT_BASE_RE.search(evidence))
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -737,6 +794,10 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task = backlog.tasks.get(args.id)
     if task is None:
         return _fail(f"태스크 '{args.id}' 없음")
+    _pre_block_findings = {
+        (f.task_id, f.referenced)
+        for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+    }
     error = _transition(task, "blocked")
     if error:
         return _fail(error)
@@ -744,6 +805,10 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     task.status = "blocked"
     task.session = None
     task.notes = _append_note(task.notes, args.reason, "차단")  # 덮어쓰지 않고 append (HARN-20)
+    # `block --reason`도 notes에 append된다 — amend와 같은 되먹임 위험(HARN-53).
+    # `done`·`cancel`은 스캐너가 건너뛰는 상태(done/cancelled)로 바꾸므로 위반을 만들 수 없다.
+    if _fail_on_reason_feedback(backlog, task.id, _pre_block_findings):
+        return 1
     task.updated = _today()
     store.save_task(root, task)
     handover = bool(getattr(args, "handover", False))
@@ -903,6 +968,19 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     if args.gate_action == "clear":
         if not args.evidence:
             return _fail(f"{gate.id}: clear에는 --evidence <근거> 필수")
+        # 판정 기준 게이트 (HARN-68) — evidence가 "언제의 트리로 판정했는가"를 담아야 한다.
+        # done의 PR 증적 검사(HARN-23)와 동형이되 탈출구는 **자유 서술**이다: 사람 게이트의
+        # 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·서명·법률 검토·외부 등록),
+        # 그 유형을 미리 열거하면 정상 상태에서 거부하는 검사가 된다 — 그러면 사람은
+        # 게이트를 끄거나 대장을 손편집하고, 그때는 아무 기록도 남지 않아 더 나빠진다.
+        no_base_reason = getattr(args, "no_base", None)
+        if no_base_reason is None and not _has_judgment_base(args.evidence):
+            return _fail(
+                f"{gate.id}: evidence에 판정 기준이 없다 — 커밋 해시나 PR 참조(#12)를 넣어라.\n"
+                "  판정은 시점에 종속된다: 기준 없는 판정은 재현할 수 없고, 재현 불가한\n"
+                "  판정은 며칠 뒤 조용히 거짓이 된다(CLAUDE.md 미머지 존재를 충족으로 단정 금지).\n"
+                "  커밋과 무관한 근거(환경 생성·서명·외부 등록 등)라면 --no-base <사유>."
+            )
         as_owner = getattr(args, "as_owner", None)
         # 불일치 검사는 done/start와 동형(HARN-06) — 남의 게이트를 자기 이름으로 못 닫는다.
         if as_owner is not None and as_owner != gate.assignee:
@@ -918,6 +996,11 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.evidence = args.evidence
         gate.cleared_by = as_owner or "claude"
         extra["cleared_by"] = gate.cleared_by
+        # 탈출구를 쓴 사실과 사유를 **대장과 이벤트 양쪽**에 남긴다. 남지 않는 탈출구는
+        # 게이트를 끄는 것과 같다 — 나중에 "왜 기준이 없었나"를 물을 수 있어야 한다.
+        if no_base_reason is not None:
+            gate.notes = _append_note(gate.notes, no_base_reason, "판정기준 없음")
+            extra["no_base_reason"] = no_base_reason
     elif args.gate_action == "waive":
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
@@ -1613,6 +1696,11 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     우회 표면이 되거나 ID 계보를 끊는다.
     """
     backlog, _ = _load(root)
+    # 정정 *전* 위반 스냅샷 — 아래 가드가 "이 정정이 새로 만든 것"만 판정하기 위한 기준선.
+    _pre_amend_findings = {
+        (f.task_id, f.referenced)
+        for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+    }
     task = backlog.tasks.get(args.id)
     if task is None:
         return _fail(f"태스크 '{args.id}' 없음")
@@ -1774,6 +1862,14 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             print(f"  · {e}", file=sys.stderr)
         return _fail(f"{args.id}: 스키마/무결성 위반으로 정정 거부")
 
+    # HARN-53: `--reason`은 notes에 append되고 notes는 의존 선언 스캐너의 입력이다. 그래서
+    # *정정 사유가 새 위반을 만드는* 되먹임이 실재한다 — 실측: "…'선결'이라 선언한 방향을
+    # 부착한다" 같은 사유가 그 문장 안의 태스크 ID를 새 선행 선언으로 만들었다(2건).
+    # notes는 append 전용이라 되돌릴 CLI 경로가 없으므로 **쓰기 전에** 막는다.
+    # 판정은 "이 정정이 *새로* 만든 findings"만 — 기존 위반은 이 명령의 책임이 아니다.
+    if _fail_on_reason_feedback(backlog, task.id, _pre_amend_findings):
+        return 1
+
     store.save_task(root, task)
     event_extra: dict[str, object] = {"reason": args.reason, "changed": changed}
     if track_before is not None:
@@ -1849,28 +1945,39 @@ def cmd_audit_deps(root: Path, args: argparse.Namespace) -> int:
     """
     backlog, _ = _load(root)
     expiry = dep_declaration.find_expiry_violations(backlog.tasks)
+    soft_violations = dep_declaration.find_soft_declaration_violations(backlog.tasks)
     findings = dep_declaration.find_undeclared_dependencies(
         backlog.tasks, apply_exemptions=not args.all
     )
     exempt = len(dep_declaration.LEGACY_EXEMPT)
+    soft = len(dep_declaration.SOFT_DECLARED)
 
     if args.all:
         # 감사 모드 — 그랜드파더분까지 전부 보여 주되 판정은 하지 않는다(항상 exit 0).
         print(f"[감사] 전건 스캔 — 위반 {len(findings)}건 (그랜드파더 {exempt}건 포함)")
         for f in findings:
             print(f"  · {f.render()}")
+        # 소프트 분류는 스캔에서 억제되므로 여기서 **따로** 보여 준다 — 안 보여 주면
+        # "고칠 것 없음" 판정이 보이지 않게 쌓인다(HARN-53).
+        print(f"[감사] 소프트 선행 분류 {soft}건 (하드가 *틀린* 경우 — 만료 없음):")
+        for (task_id, ref), (code, reason) in sorted(dep_declaration.SOFT_DECLARED.items()):
+            print(f"  · {task_id} → {ref} [{code}] {reason}")
         return 0
 
-    if not findings and not expiry:
+    if not findings and not expiry and not soft_violations:
         print(
             f"✔ 의존 선언↔집행 green — 위반 0건 "
-            f"(레거시 그랜드파더 {exempt}건은 HARN-53이 분류·만료)"
+            f"(레거시 그랜드파더 {exempt}건 · 소프트 분류 {soft}건)"
         )
         return 0
 
     if expiry:
         print(f"❌ 그랜드파더 만료 계약 위반 {len(expiry)}건:", file=sys.stderr)
         for v in expiry:
+            print(f"  · {v}", file=sys.stderr)
+    if soft_violations:
+        print(f"❌ 소프트 선행 분류 계약 위반 {len(soft_violations)}건:", file=sys.stderr)
+        for v in soft_violations:
             print(f"  · {v}", file=sys.stderr)
     if findings:
         print(f"❌ 선언되었으나 집행되지 않은 의존 {len(findings)}건:", file=sys.stderr)
@@ -1879,7 +1986,9 @@ def cmd_audit_deps(root: Path, args: argparse.Namespace) -> int:
         print(
             "\n정정: python3 scripts/harness/backlog.py amend <id> "
             "--depends <선행-태스크-full-id> --reason '...'\n"
-            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거).",
+            "의존이 아니라 단순 참조라면 notes의 표현을 고쳐라(선행/선결 어구 제거).\n"
+            "하드가 *틀린* 경우(방향 반대·택일·로드맵 순서 위반·과거 사실·오탐 ID)는 "
+            "dep_declaration.SOFT_DECLARED에 사유 코드와 근거를 함께 등재하라(HARN-53).",
             file=sys.stderr,
         )
     return 1
@@ -2650,6 +2759,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=[o for o in OWNERS if o != "claude"],
         help="gates clear: 본인 게이트를 직접 닫을 때 주체 명시 (HARN-60 · 생략 시 에이전트 기록)",
+    )
+    # gates clear 전용 — 판정 기준(커밋 해시·PR 참조)이 없는 근거의 탈출구 (HARN-68).
+    # 자유 서술이다: 사람 게이트의 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·
+    # 서명·법률 검토), 유형을 열거하면 정상 상태에서 거부하는 검사가 된다.
+    p.add_argument(
+        "--no-base",
+        dest="no_base",
+        default=None,
+        metavar="사유",
+        help="gates clear: 판정 기준(커밋·PR)이 없는 근거일 때 사유 명시 (HARN-68)",
     )
     # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
     p.add_argument("--title", help="gates add: 게이트 제목 (필수)")

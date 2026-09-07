@@ -433,3 +433,105 @@ class TestEventLedger:
         assert amends[0]["id"] == "T1-14-amend-event"
         assert amends[0]["reason"] == "정정 사유 X"
         assert any("acceptance" in c for c in amends[0]["changed"])
+
+
+class TestReasonFeedbackGuard:
+    """⑥ HARN-53 — `--reason` 문구가 *새 의존 선언*을 만들면 쓰기 전에 거부한다.
+
+    되먹임의 실체: `--reason`은 notes에 append되고 notes는 의존 선언 스캐너(HARN-52)의
+    입력이다. 그래서 "…'선행'이라 선언한 방향을 부착한다" 같은 **정정 사유 인용**이 그 문장
+    안의 태스크 ID를 새 선행 선언으로 만든다. notes는 append 전용이라 되돌릴 CLI 경로가
+    없으므로, 기록된 뒤에 고치는 것이 불가능하다 — 그래서 쓰기 *전에* 막는다.
+
+    이 클래스가 동결하는 것은 세 가지다: 거부한다 · **거부 시 대장을 건드리지 않는다** ·
+    무해한 사유는 통과한다(무조건 거부면 정정 경로 자체가 막힌다).
+    """
+
+    def _seed_pair(self) -> None:
+        assert _add("T1-90-feedback-target") == 0
+        assert _add("T1-91-feedback-ref") == 0
+
+    def test_reason_creating_a_new_declaration_is_refused(self, seeded_repo: Path, capsys):
+        self._seed_pair()
+        before = _task(seeded_repo, "T1-90-feedback-target")
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-90-feedback-target",
+                    "--priority",
+                    "1",
+                    "--reason",
+                    "T1-91 착지 후 재검토한다",  # 선행 어구 + 타 태스크 ID가 한 문장에
+                ]
+            )
+            == 1
+        )
+        err = capsys.readouterr().err
+        assert "새 의존 선언을 만든다" in err
+        after = _task(seeded_repo, "T1-90-feedback-target")
+        # 거부는 **쓰기 0**이어야 한다 — 절반 기록되면 notes만 오염되고 정정은 안 된 상태가 된다.
+        assert after.priority == before.priority
+        assert after.notes == before.notes
+
+    def test_harmless_reason_still_passes(self, seeded_repo: Path):
+        """양성 대조 — 무조건 거부면 가드가 아니라 정정 차단기다."""
+        self._seed_pair()
+        assert (
+            cli.main(
+                ["amend", "T1-90-feedback-target", "--priority", "1", "--reason", "우선순위 재배정"]
+            )
+            == 0
+        )
+        assert _task(seeded_repo, "T1-90-feedback-target").priority == 1
+
+    def test_guard_only_judges_findings_this_amendment_created(self, seeded_repo: Path):
+        """기존 위반은 이 명령의 책임이 아니다 — 아니면 대장에 위반이 하나만 있어도 amend가 전부 막힌다.
+
+        `--depends`로 선행을 부착하는 정정은 *기존* 위반을 해소하는 정상 경로인데, 그때 사유에
+        같은 ID를 적는 것은 자연스럽다. 그 경우까지 막으면 게이트가 자기 정정 경로를 봉쇄한다.
+        """
+        self._seed_pair()
+        # 먼저 위반 상태를 만든다(사유에 어구 없이 — 가드를 건드리지 않고).
+        assert (
+            cli.main(["amend", "T1-90-feedback-target", "--priority", "1", "--reason", "준비"]) == 0
+        )
+        # 그 위반을 depends 부착으로 해소하는 정정은 통과해야 한다.
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T1-90-feedback-target",
+                    "--depends",
+                    "T1-91-feedback-ref",
+                    "--reason",
+                    "선행 관계 확정",
+                ]
+            )
+            == 0
+        )
+        assert "T1-91-feedback-ref" in _task(seeded_repo, "T1-90-feedback-target").depends_on
+
+
+class TestBlockReasonFeedbackGuard:
+    """⑦ HARN-53 — `block --reason`도 notes에 append된다(amend와 같은 되먹임).
+
+    `done`·`cancel`은 스캐너가 건너뛰는 상태(done/cancelled)로 바꾸므로 위반을 만들 수 없다 —
+    그래서 가드는 `amend`·`block` 두 곳에만 있다. 이 클래스는 block 쪽을 동결한다.
+    """
+
+    def test_block_reason_creating_a_declaration_is_refused(self, seeded_repo: Path, capsys):
+        assert _add("T1-95-block-guard") == 0
+        assert _add("T1-96-block-ref") == 0
+        before = _task(seeded_repo, "T1-95-block-guard")
+        assert cli.main(["block", "T1-95-block-guard", "--reason", "T1-96 착지 후 재개한다"]) == 1
+        assert "새 의존 선언을 만든다" in capsys.readouterr().err
+        after = _task(seeded_repo, "T1-95-block-guard")
+        assert after.status == before.status, "거부인데 상태가 바뀌었다"
+        assert after.notes == before.notes, "거부인데 notes가 오염됐다"
+
+    def test_block_with_harmless_reason_still_works(self, seeded_repo: Path):
+        """양성 대조 — 차단 경로 자체를 막으면 안 된다."""
+        assert _add("T1-97-block-ok") == 0
+        assert cli.main(["block", "T1-97-block-ok", "--reason", "외부 의사결정 대기"]) == 0
+        assert _task(seeded_repo, "T1-97-block-ok").status == "blocked"
