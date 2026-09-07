@@ -65,6 +65,21 @@ def _add(task_id: str, *extra: str) -> int:
     )
 
 
+def _add_with_legacy_notes(repo: Path, task_id: str, notes: str) -> None:
+    """위반 어구가 든 notes를 가진 태스크를 *레거시 상태*로 만든다.
+
+    왜 store로 쓰는가: HARN-71(#1026) 이후 `add --notes`는 위반 문장을 쓰기 전에 거부한다 —
+    그래서 CLI로는 더 이상 이 상태를 만들 수 없다. 그런데 `--notes-replace`가 존재하는 이유가
+    바로 그 가드 *이전*에 기록된 레거시 위반(실 대장에 실재했던 형태)이므로, 테스트는 그 상태를
+    저장소 수준에서 주입한다. add는 정상 경로로 통과시켜 등재 자체는 CLI 규약을 따른다.
+    """
+    assert _add(task_id) == 0
+    backlog, _ = store.load_backlog(repo)
+    task = backlog.tasks[task_id]
+    task.notes = notes
+    store.save_task(repo, task)
+
+
 def _task(repo: Path, task_id: str):
     backlog, _ = store.load_backlog(repo)
     return backlog.tasks[task_id]
@@ -521,7 +536,7 @@ class TestNotesReplace:
     def test_replace_fixes_audit_deps_and_keeps_old_text_out_of_notes(self, seeded_repo, capsys):
         assert cli.main(["audit-deps"]) == 0, "전제: 시드는 green이어야 0→1→0 변별이 성립한다"
         assert _add("T7-20-ref-target") == 0
-        assert _add("T7-21-declarer", "--notes", "선행: T7-20 착지 후 착수") == 0
+        _add_with_legacy_notes(seeded_repo, "T7-21-declarer", "선행: T7-20 착지 후 착수")
         assert cli.main(["audit-deps"]) == 1, "위반 주입이 적용되지 않았다(주입 자체의 실재)"
 
         old = "선행: T7-20 착지 후 착수"
@@ -725,7 +740,7 @@ class TestCodexReview1025:
         여전히 red — 대장은 손편집 금지라 정정 경로가 거짓 성공을 내면 갈 곳이 없다.
         """
         assert _add("T7-10-x") == 0
-        assert _add("T7-11-y", "--notes", "선행: T7-10-x 착지 후 착수") == 0
+        _add_with_legacy_notes(seeded_repo, "T7-11-y", "선행: T7-10-x 착지 후 착수")
         assert cli.main(["audit-deps"]) == 1  # 위반 상태에서 시작한다(변별력)
         before = _task_bytes(seeded_repo, "T7-11-y")
         capsys.readouterr()

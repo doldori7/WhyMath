@@ -82,8 +82,12 @@ def test_slot_generator_honors_injected_equivalence() -> None:
     from whymath_backend.l3.pedagogy.slot_generator import verify_slot_payload
 
     payload = {"verification": {"claim_lhs": "(x+1)**2", "claim_rhs": "x**2 + 2*x + 1"}}
-    # 기본(수학) 구현이면 identity → True. 더블이 이기면 False.
-    assert verify_slot_payload(payload) is True  # 변별력 확인: 기본 경로는 True다.
+    # 변별력 확인: 합성 루트의 수학 구현을 주입하면 identity → True.
+    # (EOS-89 이후 이 인자는 **필수 경로**다 — 생략하면 폴백이 아니라 LookupError다.)
+    assert (
+        verify_slot_payload(payload, equivalence=composition.default_expression_equivalence())
+        is True
+    )
 
     double = _AlwaysNotIdentity()
     assert verify_slot_payload(payload, equivalence=double) is False
@@ -157,6 +161,48 @@ def test_solution_verification_result_satisfies_the_chain_contracts() -> None:
     for step in result.steps:
         assert isinstance(step, StepOutcome)
         assert isinstance(step.state, VerificationOutcome)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ④-b EOS-89 — 능력이 **app.state에 실제로 올라간다**(등록 형태의 런타임 판)
+# ──────────────────────────────────────────────────────────────────────────
+def test_create_app_registers_working_subject_capabilities() -> None:
+    """`create_app()`이 능력 5종을 app.state에 올리고, 올라간 것이 **판정을 한다**.
+
+    AST 검사(`tests/infra/test_eos_dependency_direction.py`)는 "그렇게 적혀 있다"까지만 본다.
+    여기서는 앱을 실제로 만들어 꺼내 쓴다 — 지연 import가 깨졌거나 팩토리가 껍데기를 주면
+    정적 검사는 통과하고 요청이 죽는 부류를 여기서 잡는다(정본화 ≠ 집행).
+    """
+    from whymath_backend.api._subject_capability_state import (
+        EXPRESSION_EQUIVALENCE_KEY,
+        SUBJECT_CAPABILITY_KEYS,
+    )
+    from whymath_backend.app import create_app
+
+    app = create_app()
+    assert SUBJECT_CAPABILITY_KEYS, "등록 대상 키가 0개다 — 스캔 0건은 통과가 아니다"
+    for key in sorted(SUBJECT_CAPABILITY_KEYS):
+        assert getattr(app.state, key, None) is not None, f"app.state에 {key}가 없다"
+
+    # 껍데기가 아니라 판정기다 — 참/거짓 양쪽에서 다른 값을 낸다(변별력).
+    equivalence = getattr(app.state, EXPRESSION_EQUIVALENCE_KEY)
+    assert equivalence.identity_status("(x+1)**2", "x**2 + 2*x + 1") is EquivalenceOutcome.identity
+    assert equivalence.identity_status("x + 1", "x + 2") is EquivalenceOutcome.not_identity
+
+
+def test_registered_capability_keys_match_the_composition_factories() -> None:
+    """등록 키 수 = 합성 루트 팩토리 수 — 한쪽만 늘면 조용한 누락이 생긴다.
+
+    EOS-86의 `StepChainVerifier` 팩토리가 합성 루트에 들어오는 날 이 테스트가 **먼저** 실패해
+    "등록 경로를 태워라"라고 말한다(Core가 직접 부르면 pull 4번째 지점이 부활한다).
+    """
+    from whymath_backend.api._subject_capability_state import SUBJECT_CAPABILITY_KEYS
+
+    factories = [n for n in dir(composition) if n.startswith("default_")]
+    assert len(SUBJECT_CAPABILITY_KEYS) == len(factories), (
+        "합성 루트 팩토리와 app.state 등록 키의 개수가 어긋난다 — "
+        f"팩토리 {sorted(factories)} / 키 {sorted(SUBJECT_CAPABILITY_KEYS)}"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────

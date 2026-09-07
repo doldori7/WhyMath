@@ -126,16 +126,19 @@ def test_real_scan_matches_the_baseline_exactly(gate: Any, real_result: Any) -> 
     )
 
 
-def test_the_one_known_violation_is_the_alias_form(gate: Any, real_result: Any) -> None:
-    """실재하는 유일한 위반은 `kind_raw = raw.get("answer_kind")` → `kind_raw in (...)` 별칭 경유다.
+def test_the_former_alias_violation_is_gone(gate: Any, real_result: Any) -> None:
+    """종전의 유일 위반(`kind_raw = raw.get("answer_kind")` → `kind_raw in (...)`)이 사라졌다.
 
-    별칭을 추적하지 않는 스캐너는 이것을 놓치고 0을 낸다 — 그 0은 보호가 아니라 맹점이다.
+    EOS-85가 그 열거를 제거해 지문 `d93b2c7770a0`이 상환됐고 기준선도 함께 비웠다.
+
+    **별칭 탐지력은 여기서 잃지 않는다.** 이 테스트가 원래 지키던 것은 "별칭을 추적하지 않는
+    스캐너는 이 형태를 놓치고 0을 낸다"였는데, 그 축은 아래 합성 주입 목록의 *별칭 경유
+    (populate 실제 형태)* 항목이 계속 RED로 동결한다 — 실 저장소에 위반이 남아 있어야만
+    탐지력을 확인할 수 있는 구조가 아니다(위반을 갚으면 탐지력이 사라지는 테스트는 상환을
+    벌주는 셈이 된다).
     """
-    [v] = real_result.violations
-    assert v.module == "l1.problem_bank.populate" and v.kind == "membership"
-    assert v.snippet.startswith("kind_raw in ("), v.snippet
-    registered = gate.KNOWN_VIOLATIONS[(v.module, v.kind)]
-    assert v.fingerprint in registered.fingerprints, (v.fingerprint, registered.fingerprints)
+    assert real_result.violations == [], real_result.violations
+    assert gate.KNOWN_VIOLATIONS == {}, gate.KNOWN_VIOLATIONS
 
 
 def test_baseline_entries_carry_owner_and_recheck(gate: Any) -> None:
@@ -155,7 +158,10 @@ def test_cli_main_returns_zero_on_the_real_repo(gate: Any, capsys: Any) -> None:
     code = gate.main([])
     out = capsys.readouterr()
     assert code == 0, out.err
-    assert "분모: CORE **" in out.out and "populate.py:" in out.out
+    # 마크다운 골격이 나왔는가 — 특정 *위반 줄*을 기대하지 않는다(EOS-85로 위반 0건이 됐고,
+    # 위반 문자열을 기대하면 상환할 때마다 이 테스트가 깨진다).
+    assert "분모: CORE **" in out.out
+    assert "## 기준선 (KNOWN_VIOLATIONS)" in out.out
 
 
 def test_cli_main_exits_2_when_source_root_is_missing(gate: Any, tmp_path: Path) -> None:
