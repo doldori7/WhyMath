@@ -1151,6 +1151,17 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # tests/backend/harness/test_attempt_skill_event_reach_report.py가 CI에서 상시 검증한다
         # — 즉 "안 도는 코드"가 아니라 "라이브 입력이 있을 때 사람이 돌리는 관측기"다.
         "harness.attempt_skill_event_reach_report": _NEEDS_LIVE_SAMPLE,
+        # OPS-68(2026-09-07): 위 리포트의 짝 — 게이트 G-eos63-skill-event-reach-sample이
+        # 요구하는 *표본을 만드는* 프로브다. CI가 절대 돌려서는 안 되는 유일한 이유가 미도달
+        # 사유이기도 하다 — 이 도구는 대상 DB에 채점 행을 **쓴다**(problem_attempt·
+        # attempt_event·숙달 시계열). 상시 배선하면 CI가 매 잡마다 DB를 오염시키고, 그
+        # 오염이 곧 다른 리포트의 분모가 된다. 판정 로직(분모 0의 None 처리·실패 사유
+        # 타입명 집계·exit 0/2/3/4/5 변별)은 tests/backend/harness/
+        # test_attempt_skill_reach_probe.py가 CI에서 상시 검증한다.
+        "harness.attempt_skill_reach_probe": (
+            "by-design:실 PG에 표본을 *쓰는* 게이트 실행 도구 — 운영자가 측정 회차에 1회 "
+            "돌린다. CI 상시 실행은 DB 오염이라 금지"
+        ),
         # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
         # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
         # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서
