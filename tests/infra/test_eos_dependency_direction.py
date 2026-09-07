@@ -388,9 +388,7 @@ def test_app_factory_registers_every_subject_capability() -> None:
     registered = _app_state_registered_keys()
     required = _capability_key_constants()
     assert required, "능력 키 상수를 하나도 찾지 못했다 — 스캔 0건은 통과가 아니다"
-    missing = {
-        name for name in required if not any(r.lstrip("_") == name for r in registered)
-    }
+    missing = {name for name in required if not any(r.lstrip("_") == name for r in registered)}
     assert not missing, f"app.state에 등록되지 않은 과목 능력 키: {sorted(missing)}"
 
 
@@ -413,7 +411,9 @@ def test_app_factory_calls_every_composition_factory() -> None:
         for n in ast.walk(ast.parse(app_src))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     }
-    assert factories <= called, f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(factories - called)}"
+    assert (
+        factories <= called
+    ), f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(factories - called)}"
 
 
 # ──────────────────────────────────────────────────────────────────────
