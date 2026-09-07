@@ -19,7 +19,8 @@
     python3 scripts/harness/backlog.py gates clear <G-id> [--as <담당자>] --evidence <근거>
     python3 scripts/harness/backlog.py gates waive <G-id> [--reason <사유>]
     python3 scripts/harness/backlog.py amend <id> --reason <사유>
-      [--acceptance ...] [--gate <G-id>] [--track ...]
+      [--acceptance ...] [--gate <G-id>] [--track ...] [--depends ...] [--priority N]
+      [--artifact <PR/커밋>] [--path <glob>] [--title <제목>]
   python3 scripts/harness/backlog.py add --id ... --title ... --track ... --stage ... (상세는 -h)
     python3 scripts/harness/backlog.py validate [--quiet]
     python3 scripts/harness/backlog.py brief [--format hook]
@@ -184,6 +185,50 @@ def _fail_on_reason_feedback(
 def _has_pr_reference(artifacts: list[str]) -> bool:
     """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
     return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
+
+
+# `done --no-pr <사유>`가 notes에 남기는 마커와, 그 사후 해소 마커 (HARN-57 ②).
+# 해소 마커는 `[PR 보류 해소 …]`라 `_NO_PR_HOLD_RE`(사유 자리에 날짜가 오는 형태)에
+# 걸리지 않는다 — '해소'는 숫자가 아니므로 정규식이 두 마커를 구조적으로 가른다.
+_NO_PR_HOLD_TAG = "PR 보류"
+_NO_PR_RESOLVED_TAG = "PR 보류 해소"
+_NO_PR_HOLD_RE = re.compile(r"\[PR 보류 \d{4}-\d{2}-\d{2}\][ \t]*(\S+)")
+
+
+def _pending_no_pr_reason(notes: str) -> str | None:
+    """아직 해소되지 않은 `--no-pr` 보류 사유. 없으면 None (HARN-57 ②).
+
+    **3상태를 접지 않는다**: "보류 마커가 없다"(None)와 "마커는 있는데 사유를 못 읽었다"는
+    다른 상태다. 후자는 `'사유 미상'`을 돌려준다 — 모르는 것을 '없음'으로 접으면 사후 해소
+    기록 자체가 조용히 사라진다(모른다 ≠ 아니다).
+    """
+    if _NO_PR_RESOLVED_TAG in notes:
+        return None  # 이미 해소가 기록됐다 — 중복 기록은 대장 소음이다
+    if f"[{_NO_PR_HOLD_TAG} " not in notes:
+        return None
+    matches = _NO_PR_HOLD_RE.findall(notes)
+    return matches[-1] if matches else "사유 미상"
+
+
+def _reject_meaningless(task_id: str, axis: str, raw: str) -> str | None:
+    """무의미 입력 3종(빈 문자열·공백만·자기 id) 판정 — 사유 문자열이거나 None (HARN-57 ③).
+
+    빈 문자열과 공백만을 **다른 메시지로** 가른다: 셸 변수가 비어 전달된 경우와 공백이 섞여
+    전달된 경우는 사람이 고칠 지점이 다르다. 한 메시지로 접으면 진단이 사라진다.
+
+    4번째 축인 '기존과 동일한 값'은 여기서 보지 않는다 — 비교 대상이 필드마다 다르므로
+    (리스트 포함 · 스칼라 일치 · 집합 일치) 각 호출부가 자기 축의 메시지로 판정한다.
+    """
+    if raw == "":
+        return f"{task_id}: 빈 {axis} 값은 받지 않는다 (인자가 비어 전달됐는지 확인하라)"
+    if not raw.strip():
+        return f"{task_id}: {axis} 값이 공백 문자뿐이다 — 실제 내용을 지정하라"
+    if raw.strip() == task_id:
+        return (
+            f"{task_id}: {axis}에 자기 태스크 id를 넣을 수 없다 — "
+            "자기 자신을 가리키는 값은 아무것도 말하지 않는다"
+        )
+    return None
 
 
 # ── 판정 기준 게이트 (HARN-68) ──────────────────────────────────────────────
@@ -1697,7 +1742,10 @@ def _notes_with_trigger_exemption(args: argparse.Namespace) -> str:
 
 
 def cmd_amend(root: Path, args: argparse.Namespace) -> int:
-    """등재된 태스크의 acceptance·requires_gates·track·depends_on·priority 정정 (HARN-24+49+52).
+    """등재된 태스크의 acceptance·gates·track·depends_on·priority·artifacts·paths·title 정정.
+
+    (HARN-24+49+52+57)
+
 
     **왜 필요한가 (두 뿌리)**:
     - *acceptance 축(HARN-24)*: 이 CLI에 등재된 태스크의 acceptance를 고치는 서브커맨드가
@@ -1717,15 +1765,33 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     갖는다(HARN-24) — 둘 다 각자의 사고에서 배운 것이라 버리면 그 교훈이 사라진다.
 
     **설계 원칙 3**:
-    1. **append만, 덮어쓰기 금지** — acceptance는 정정 항을 *추가*한다. HARN-20이 notes에서
-       배운 교훈(덮어쓰기가 blocked 4건 전건의 원 notes를 소실시킴)을 승계한다. 기존 항의
-       개별 제거는 열지 않는다.
-    2. **다른 필드 불변** — status·session·artifacts·id·title은 건드리지 않는다. 상태 전이는
-       start/done/block/review/cancel의 몫이고, 이 verb가 그 경로를 우회하면 안 된다.
+    1. **append만, 덮어쓰기 금지** — acceptance·requires_gates·depends_on·artifacts는 정정
+       항을 *추가*한다. HARN-20이 notes에서 배운 교훈(덮어쓰기가 blocked 4건 전건의 원
+       notes를 소실시킴)을 승계한다. 기존 항의 개별 제거는 열지 않는다.
+    2. **상태 전이 표면은 불변, 정정 표면은 열린다** (HARN-57에서 원칙 2를 *정밀화*).
+       - **여전히 닫힌 것 = `id`·`status`·`session`**. 상태 전이는 start/done/block/review/
+         cancel의 몫이고 이 verb가 그 경로를 우회하면 안 된다. `session`은 claim 소유권이라
+         손으로 옮기면 병렬 세션의 겹침 판정이 통째로 거짓이 된다. `id`는 계보를 끊는다.
+       - **열린 것 = `artifacts`·`paths`·`title`**. 이 셋은 상태가 아니라 *기술(記述)*인데
+         정정 경로가 없어 실측 사고를 냈다. ⓐ`artifacts`: done을 PR 생성 전에 부르면 잘못된
+         증적이 영구 고정된다(HARN-44 → "커밋 예정(PR 동반)"이 남고 실제 PR #965는 대장에서
+         추적 불가). ⓑ`paths`: 넓게 잡은 glob이 고정되면 overlap 경보가 대량 오탐이 되고,
+         상시 오탐은 병렬 세션이 경보를 무시하게 만든다(2026-09-03 MOB-20 — 경보 17건,
+         YAML 손편집으로 정정). ⓒ`title`: SessionStart 브리핑과 `next`가 노출하는 것은
+         **title 한 줄**이라, 범위가 정정된 태스크의 옛 제목이 남으면 다음 세션이 정정 전
+         처방을 읽고 착수한다(MOB-20 실측 — paths보다 위험하다).
+       - 셋의 *정정 방식*은 성질에 따라 갈린다: `artifacts`는 **append만**(증적을 지우는 것은
+         위조 표면이다), `paths`·`title`은 **이전 값을 notes에 남기고 교체**한다(HARN-49의
+         track 선례). 좁히는 것이 목적인 필드를 append로 두면 목적 자체가 성립하지 않는다 —
+         넓은 glob을 append로 좁힐 방법은 없다.
     3. **사유 필수 + 이벤트 기록** — 왜 고쳤는지가 대장에 남지 않으면 정정 자체가 추적 불가다.
 
-    **여전히 열지 않는 것**: 태스크 삭제·ID 변경·acceptance 항목 개별 제거. 대장 손편집의
-    우회 표면이 되거나 ID 계보를 끊는다.
+    **여전히 열지 않는 것**: 태스크 삭제·ID 변경·acceptance/artifacts 항목 개별 제거. 대장
+    손편집의 우회 표면이 되거나 ID 계보를 끊는다.
+
+    **알려진 한계**: `--title`의 *이전* 제목도 notes에 append되므로, 옛 제목이 선행 어구와 타
+    태스크 ID를 한 문장에 담고 있으면 HARN-53 되먹임 가드가 이 정정을 거부한다. 그때는 같은
+    호출에 `--depends`로 그 선행을 함께 부착하면 통과한다(가드는 *새로* 생긴 위반만 본다).
     """
     backlog, _ = _load(root)
     # 정정 *전* 위반 스냅샷 — 아래 가드가 "이 정정이 새로 만든 것"만 판정하기 위한 기준선.
@@ -1749,15 +1815,24 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         or args.priority is not None
         or args.eos_priority
         or getattr(args, "no_trigger", None)
+        or getattr(args, "artifacts", None)
+        or getattr(args, "paths", None)
+        # title은 truthiness가 아니라 `is not None`으로 본다 — `--title ""`은 *지정됐다*.
+        # truthiness로 접으면 빈 제목이 이 가드에 먼저 걸려 "변경 항목이 없다"로 거부되고,
+        # 정작 그 경우를 위해 쓴 진단("인자가 비어 전달됐는지 확인하라")에 닿지 못한다.
+        or getattr(args, "title", None) is not None
     ):
         return _fail(
             f"{task.id}: 변경 항목이 없다 — --acceptance / --gate / --track / --depends / "
-            "--priority / --eos-priority / --no-trigger 중 하나 이상을 지정하라"
+            "--priority / --eos-priority / --no-trigger / --artifact / --path / --title "
+            "중 하나 이상을 지정하라"
         )
 
     changed: list[str] = []
     note_lines: list[str] = []
     track_before: str | None = None
+    paths_before: list[str] | None = None
+    added_artifacts: list[str] = []
 
     # ① acceptance: append만 (덮어쓰기 금지 — HARN-20 승계)
     for item in args.acceptance or []:
@@ -1884,7 +1959,101 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             f"eos_priority {eos_before or 'null'} → {args.eos_priority}: {args.reason}"
         )
 
-    task.notes = _append_note(task.notes, note_lines[0] if note_lines else args.reason, "정정")
+    # ⑦ artifacts 사후 보정 — append만 (HARN-57 ①).
+    #
+    # 왜 필요한가: `done`은 종결 상태라 재실행이 거부되고(done→done 전이 불가) `amend`에는
+    # `--artifact`가 없었다. 그래서 done을 PR 생성 *전에* 부른 순간 잘못된 증적이 영구
+    # 고정된다 — HARN-44의 artifacts에 "커밋 예정(PR 동반)"이 남고 실제 PR #965는 대장에서
+    # 추적 불가가 됐다. 고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다.
+    #
+    # **왜 `done`의 사후 플래그가 아니라 `amend`인가**: `done`은 *상태 전이* verb다. 종결된
+    # 태스크에 다시 들어갈 수 있는 모드를 만들면 그 자체가 전이 우회 표면이 된다(위 설계
+    # 원칙 2가 닫아 둔 바로 그것). `amend`는 이미 정정 verb이고 --reason 필수·이벤트 기록·
+    # 되먹임 가드(HARN-53)를 갖추고 있어 세 원칙이 전부 이미 서 있다.
+    #
+    # **제거는 열지 않는다** — 증적을 지울 수 있으면 이 CLI가 위조 표면이 된다.
+    for raw in getattr(args, "artifacts", None) or []:
+        bad = _reject_meaningless(task.id, "증적", raw)
+        if bad:
+            return _fail(bad)
+        text = raw.strip()
+        if text in task.artifacts:
+            return _fail(f"{task.id}: 동일한 증적이 이미 있다 — {text[:60]}")
+        task.artifacts.append(text)
+        added_artifacts.append(text)
+        changed.append(f"artifacts +1 ({text[:40]})")
+
+    # ⑧ paths 범위 정정 — 교체 (HARN-57 ④).
+    #
+    # 왜 append가 아닌가: 이 축의 목적은 **좁히는 것**이다. 넓게 잡은 glob이 고정되면 overlap
+    # 경보가 대량 오탐이 되고(2026-09-03 MOB-20 — `src/mobile/lib/**`로 17건), 상시 오탐은
+    # 병렬 세션이 경보를 무시하게 만든다(이 저장소가 이미 겪은 fail-open 습관화). append로는
+    # 넓은 패턴을 좁힐 방법이 자체가 없으므로 교체가 이 축의 본질이다.
+    #
+    # 대신 **이전 값을 notes에 남긴다**(HARN-49의 track 선례) — 흔적 없이 덮어쓰면 원래 무엇을
+    # 선언했는지, 왜 좁혔는지가 사라진다. 지정한 `--path` 전체가 새 목록이 된다(부분 갱신 아님).
+    if getattr(args, "paths", None):
+        new_paths: list[str] = []
+        for raw in args.paths:
+            bad = _reject_meaningless(task.id, "paths 패턴", raw)
+            if bad:
+                return _fail(bad)
+            text = raw.strip()
+            if text in new_paths:
+                return _fail(f"{task.id}: --path '{text}' 가 한 호출에 중복 지정됐다")
+            new_paths.append(text)
+        if new_paths == task.paths:
+            return _fail(
+                f"{task.id}: paths가 이미 {new_paths} — 바꿀 것이 없다 "
+                "(지정한 목록이 새 paths 전체가 된다)"
+            )
+        paths_before = list(task.paths)
+        task.paths = new_paths
+        changed.append(f"paths {paths_before} → {new_paths}")
+        note_lines.append(f"paths {paths_before} → {new_paths}: {args.reason}")
+
+    # ⑨ title 정정 — 교체 (HARN-57 ⑤).
+    #
+    # **paths보다 위험도가 높다**: SessionStart 브리핑과 `next`가 노출하는 것은 title 한 줄이다.
+    # 범위가 정정된 태스크의 옛 제목이 남으면 다음 세션이 *정정 전 처방*을 읽고 착수한다 —
+    # MOB-20이 acceptance로 범위를 고친 뒤에도 title이 옛 처방("POST /v1/me/attempts 클라 호출
+    # 착지")을 1순위 후보로 노출했고, 그대로 구현했으면 attempt·숙달 이중 적재였다.
+    #
+    # paths와 같은 이유로 교체이고, 같은 이유로 이전 값을 notes에 남긴다.
+    if getattr(args, "title", None) is not None:
+        bad = _reject_meaningless(task.id, "title", args.title)
+        if bad:
+            return _fail(bad)
+        new_title = args.title.strip()
+        if new_title == task.title:
+            return _fail(f"{task.id}: title이 이미 '{new_title}' — 바꿀 것이 없다")
+        title_before = task.title
+        task.title = new_title
+        changed.append(f"title '{title_before}' → '{new_title}'")
+        note_lines.append(f"title '{title_before}' → '{new_title}': {args.reason}")
+
+    # `--no-pr` 사후 해소 (HARN-57 ②) — incomplete/ci-red로 종결한 뒤 PR이 실제로 열렸으면
+    # 그 사실이 대장에 남아야 한다. 별도 플래그를 두지 않고 *증적에서 파생*시키는 이유:
+    # 사람이 기억해야 하는 플래그를 하나 더 만들면 그것이 다음 망각 지점이 된다. PR 참조를
+    # 담은 증적을 붙이는 행위 자체가 해소의 증거다.
+    no_pr_resolved: str | None = None
+    if added_artifacts and _has_pr_reference(added_artifacts):
+        no_pr_resolved = _pending_no_pr_reason(task.notes)
+
+    task.notes = _append_note(
+        # note_lines를 **전부** 남긴다. 예전 구현은 `note_lines[0]`만 기록해 다축 정정
+        # (`--title` + `--priority` 등)에서 뒤 축의 *이전 값*이 조용히 사라졌다 — 이전 값을
+        # 남기는 것이 교체 축의 유일한 안전장치인데 그것이 침묵으로 유실되는 형태였다.
+        task.notes,
+        "\n".join(note_lines) if note_lines else args.reason,
+        "정정",
+    )
+    if no_pr_resolved is not None:
+        task.notes = _append_note(
+            task.notes,
+            f"{no_pr_resolved} → PR 증적 보강: {', '.join(added_artifacts)}",
+            _NO_PR_RESOLVED_TAG,
+        )
     task.updated = _today()
 
     errors = store.validate_backlog(backlog)
@@ -1907,10 +2076,20 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     if track_before is not None:
         # track 축은 field/before/after도 함께 남긴다 — HARN-49가 쓰던 형태를 깨지 않는다.
         event_extra.update(field="track", before=track_before, after=args.track)
+    if added_artifacts:
+        # done 이벤트의 `artifacts` 키와 같은 이름으로 남긴다 — 증적의 출처(done인가 사후
+        # 보정인가)는 action(`done`/`amend`)이 이미 구분하므로 키를 새로 만들 이유가 없다.
+        event_extra["artifacts"] = added_artifacts
+    if no_pr_resolved is not None:
+        # 사후 해소는 **이벤트에도** 남긴다. notes만 남기면 "PR 없이 끝난 태스크" 집계가
+        # 이벤트 대장만 보는 도구에서 영영 틀린 채로 남는다.
+        event_extra["no_pr_resolved"] = no_pr_resolved
     store.append_event(root, "amend", task.id, **event_extra)
     print(f"✎ {task.id} 정정 — {args.reason}")
     for c in changed:
         print(f"  · {c}")
+    if no_pr_resolved is not None:
+        print(f"  PR 보류 해소: '{no_pr_resolved}' → 증적에 PR 참조가 들어왔다")
 
     # 정정이 실제로 착수 가능성을 바꿨는지 그 자리에서 보여준다
     # (정본화 ≠ 집행 — 사람이 확인해야 한다).
@@ -1923,7 +2102,43 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             print(f"  진입 게이트 해소: '{old_gate}' → 없음 (이제 start 가능 — 직접 확인하라)")
         elif new_gate:
             print(f"  ⚠ 새 트랙에도 진입 게이트가 있다: '{new_gate}'")
+    if paths_before is not None:
+        _print_overlap_delta(root, backlog, task, paths_before)
     return 0
+
+
+def _print_overlap_delta(root: Path, backlog, task, paths_before: list[str]) -> None:
+    """paths 정정 전/후의 겹침 건수를 그 자리에서 보여준다 (HARN-57 ④).
+
+    **왜 세는가**: ④의 목적은 오탐 감소인데, "정정했다"만 출력하면 그 목적이 달성됐는지 아무도
+    모른다. 알고리즘을 붙였으면 *작동한 비율*을 말해야 한다는 이 저장소의 원칙(CLAUDE.md
+    "작동 신호 없는 알고리즘 부착 금지")의 적용이다. 판정 자체는 `start`·`overlap`이 쓰는 것과
+    **같은** `pathscope.overlap`을 쓴다 — 여기서 따로 세면 두 숫자가 갈라진다.
+
+    **차단이 아니라 보고다**: 겹침이 늘어나는 정정도 정당할 수 있다(범위를 실제로 넓혀야 하는
+    경우). 사람이 보고 판단한다.
+    """
+    try:
+        files = pathscope.repo_files(root)
+        others = [
+            t
+            for t in _overlap_candidates(
+                backlog, remote_claimed=None, session=None, include_todo=True
+            )
+            if t.id != task.id and t.paths
+        ]
+        before_n = sum(
+            1 for o in others if pathscope.overlap(task.id, paths_before, o.id, o.paths, files)
+        )
+        after_n = sum(
+            1 for o in others if pathscope.overlap(task.id, task.paths, o.id, o.paths, files)
+        )
+    except Exception as exc:  # noqa: BLE001 — 보고용 부가 출력이 정정을 실패시키면 안 된다
+        # 침묵 실패 금지 — 예외 *타입명*을 남긴다(무타입 경고는 8일 무증상 전멸의 원인이었다).
+        print(f"  ⚠ 겹침 재계산 실패({type(exc).__name__}) — 정정 자체는 반영됐다")
+        return
+    verdict = "감소" if after_n < before_n else ("증가" if after_n > before_n else "변화 없음")
+    print(f"  겹침 후보 {before_n}건 → {after_n}건 ({verdict}, 비교 대상 {len(others)}건)")
 
 
 def _stage_outliers_on_gated_tracks(backlog: Backlog) -> list[str]:
@@ -2331,7 +2546,11 @@ def _check_edit_policy(root: Path, file_path: str) -> int:
     violations: list[tuple[str, str, str]] = []  # (rule, mode, 메시지)
 
     if mine:
-        # ① scope_drift — 내 claim 태스크가 paths를 선언했는데 그 밖을 편집
+        # ① scope_drift — 내 claim 태스크가 paths를 선언했는데 그 밖을 편집.
+        # 처방 문구는 `amend --path`를 가리킨다: 구 문구("태스크 YAML의 paths에 추가")는
+        # 정정 CLI가 없던 시절의 것이라 **사람을 대장 손편집으로 보내고 있었다** —
+        # CLAUDE.md "거부의 우회 금지"가 금지한 바로 그 행위를 경고문이 처방한 셈이다.
+        # `--path`는 교체이므로 확장 시 기존 항목도 함께 지정해야 한다(HARN-57 ④).
         me = mine[0]
         if me.paths and policy.scope_drift != "off" and not pathscope.path_in_scope(rel, me.paths):
             violations.append(
@@ -2339,7 +2558,8 @@ def _check_edit_policy(root: Path, file_path: str) -> int:
                     "scope_drift",
                     policy.scope_drift,
                     f"'{rel}' 은 claim 태스크 {me.id}의 선언 범위(paths) 밖 — "
-                    f"범위 확장이 맞으면 태스크 YAML의 paths에 추가",
+                    f"범위 확장이 맞으면 `backlog.py amend {me.id} --path <기존 전부> "
+                    f"--path '{rel}' --reason <사유>`로 정정하라 (HARN-59)",
                 )
             )
     elif policy.adhoc_edit != "off" and rel.startswith(CODE_DOMAIN_PREFIXES):
@@ -2866,7 +3086,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_add)
 
     p = sub.add_parser(
-        "amend", help="등재된 태스크의 acceptance·게이트·트랙 정정 (HARN-24+HARN-49)"
+        "amend",
+        help="등재된 태스크의 acceptance·게이트·트랙·증적·범위·제목 정정 (HARN-24+49+52+57)",
     )
     p.add_argument("id")
     p.add_argument(
@@ -2909,6 +3130,29 @@ def build_parser() -> argparse.ArgumentParser:
             "EOS 등급 지정·변경 (P0|P1|P2|P3) — 기존 태스크 백필의 **유일한 합법 경로**"
             "(대장 손편집 금지). " + _EOS_PRIORITY_HELP
         ),
+    )
+    p.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        dest="artifacts",
+        help="artifacts에 증적 추가 (append만 — 기존 증적은 지우지 않는다·HARN-57). "
+        "done 이후 PR이 열린 경우의 유일한 합법 보정 경로. PR 참조를 담은 증적을 붙이면 "
+        "`--no-pr` 보류 사유의 사후 해소가 대장에 함께 기록된다",
+    )
+    p.add_argument(
+        "--path",
+        action="append",
+        default=[],
+        dest="paths",
+        help="paths 범위 교체 (지정한 --path 전체가 새 목록이 된다 — HARN-57). "
+        "넓게 잡은 glob을 좁히는 용도이므로 append가 아니라 교체다. 이전 값은 notes에 남고, "
+        "정정 직후 겹침 건수 변화를 함께 보고한다",
+    )
+    p.add_argument(
+        "--title",
+        help="title 교체 (HARN-57). 브리핑·next가 노출하는 유일한 문자열이라 "
+        "옛 제목이 남으면 다음 세션이 정정 전 처방을 읽고 착수한다. 이전 값은 notes에 남는다",
     )
     p.add_argument("--reason", required=True, help="정정 사유 (notes·이벤트에 기록)")
     p.set_defaults(func=cmd_amend)
