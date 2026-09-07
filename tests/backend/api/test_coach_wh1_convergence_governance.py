@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from whymath_backend.api import coach
 from whymath_backend.harness import wh1_loop
-from whymath_backend.l4 import solution_coaching
+from whymath_backend.l4 import subject_adapter_math
 from whymath_backend.l4.misconception import hypothesis_store
 
 
@@ -36,4 +36,9 @@ def test_curate_single_source() -> None:
 def test_verify_solution_single_source() -> None:
     # Tier2 단계 검증 — coach 경로의 검산 코칭(solution_coaching)과 하네스가 같은
     # l3.verify_solution을 소비한다(두 경로가 같은 풀이에 다른 판정을 낼 수 없음).
-    assert solution_coaching.verify_solution is wh1_loop.verify_solution
+    #
+    # [EOS-86] solution_coaching은 더 이상 verify_solution을 직접 import하지 않는다 —
+    # StepChainVerifier 선택층 주입(기본 구현 `l4.subject_adapter_math.MathStepChainVerifier`
+    # → `l3.verify_solution.verify_solution` 위임)으로 대체됐다(CORE→ADAPTER 직접 의존 제거).
+    # identity 동결 지점을 그 실제 위임처로 옮긴다 — 사본 분기가 생기면 여전히 여기서 red다.
+    assert subject_adapter_math.verify_solution is wh1_loop.verify_solution

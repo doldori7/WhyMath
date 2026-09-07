@@ -520,8 +520,9 @@ CATALOG: tuple[Spec, ...] = (
        "D3 난이도 타당도 KPI 재료", "l2.item_calibration", "l2.calibrate_items", status="Batch"),
     _e("WM-E-204", "개념 진단(BKT↔IRT 교차)·LearnerState 조립", "Student", "Assessment", "P0",
        "Gate2 ②·③ — LearnerState 단일 API는 갭", "l2.concept_diagnosis", "l2.learner_state"),
-    _e("WM-E-205", "약개념·선수개념 추천·학습 경로·복습 큐", "Student", "Recommendation", "P0",
-       "Gate2 ④·⑨", "l2.weak_concept_recommendation", "l2.prerequisite_recommendation",
+    _e("WM-E-205", "약·강·선수개념 추천·학습 경로·복습 큐", "Student", "Recommendation", "P0",
+       "Gate2 ④·⑨ — ASM-13 강개념(strong_points) 편입", "l2.weak_concept_recommendation",
+       "l2.strong_concept_recommendation", "l2.prerequisite_recommendation",
        "l2.learning_path", "l2.review_queue", "l2.axis_exclusions"),
     _e("WM-E-206", "학습 증거 이벤트 적재(attempt·처치·추천 회계)", "Student", "Event", "P0",
        "E3 Event — REC-03·PED-03·EOS-57", "l2.evidence_event_store", "l2.attempt_skill_event",
@@ -751,7 +752,10 @@ CATALOG: tuple[Spec, ...] = (
        "P0", "EOS-54/78 — HIT 중앙값 KPI 생산자", "harness.review_session",
        "harness.review_timer", "harness.needs_review_worklist",
        "harness.reviewer_sample_package", "harness.concept_content_review_apply",
-       "harness.concept_content_review_batch", "harness.concept_content_audit"),
+       "harness.concept_content_review_batch", "harness.concept_content_audit",
+       # MP-05 — 회차 앞머리 카나리 구간을 검수 큐 JSONL로 잘라내는 CLI. 검수 워크플로의
+       # *입력 생산자*라 여기 귀속한다(산출을 먹는 쪽이 harness.review_session이다).
+       "harness.canary_slice"),
     _o("WM-O-911", "골든 벤치마크 승격·경로 게이트·앵커 회차 대장", "Admin", "QA", "P0",
        "EOS-60/64 — 판정기의 FN율", "harness.golden_benchmark",
        "harness.golden_promotion_gate", "harness.anchor_round_ledger"),

@@ -430,6 +430,15 @@ jobs:
           python -m whymath_backend.harness.coach_prose_leak_eval \
             --n-per-cell 12 --max-leak-upper 0.05 --max-false-block-upper 0.2
 
+      # MISC-07: 앵커 커버 오개념의 정규식 탐지 채널 변별력. 임계는 모듈 상수(검출 하한 0.80·
+      # 오검출 상한 0.10)이고 픽스처는 결정론 생성이라 인자가 없다 — 라이브 0·시드 0·DB 0.
+      # 이 스텝이 없으면 채널은 "저장소에 존재함"일 뿐 매 PR 회귀로 강제되지 않는다(OPS-22
+      # declared-unwired 감사가 정확히 그 상태를 미도달로 잡아냈다).
+      # 표본 수가 게이트의 *통과 가능성*을 좌우하므로(Wilson 상한 0/20=0.1192로 완벽한 채널도
+      # FAIL) CLI가 도달 가능성 자체를 매 실행 재검사하고 불가면 별도 stderr로 구분해 낸다.
+      - name: 게이트 — 앵커 탐지 채널 변별력 (anchor_detection_channel·검출 하한 0.80·오검출 상한 0.10)
+        run: python -m whymath_backend.harness.anchor_detection_channel_eval
+
       # PED-01 ③: 교수법 팩 금지모드 가드 결함주입 강등전. 고정 그리드 실측 여유값 —
       # violating/clean 각 72셀 미검출·오검출 0 → Wilson 상한 0.0362 → 게이트 통과.
       # 팩-프롬프트 GA flip(pedagogy_pack_prompt_enabled 기본 ON)의 선결 게이트다.

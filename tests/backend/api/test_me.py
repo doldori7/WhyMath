@@ -50,6 +50,7 @@ from whymath_backend.l2.recommendation_evidence import (
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
 )
+from whymath_backend.l2.strong_concept_recommendation import StrongConceptRecommendation
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
@@ -2446,12 +2447,15 @@ class TestAssembleMeasurementAssessment:
         diagnoses: list[ConceptDiagnosis],
         hypotheses: list[MisconceptionHypothesis],
         weak: list[WeakConceptRecommendation],
+        strong: list[StrongConceptRecommendation] | None = None,
         gaps_calls: list[uuid.UUID] | None = None,
         path_steps: tuple[Any, ...] = (),
         ordering_basis: str = "empty",
         ordering_edge_count: int = 0,
         has_cycle: bool = False,
         path_calls: list[int] | None = None,
+        weak_diagnoses_calls: list[Any] | None = None,
+        strong_diagnoses_calls: list[Any] | None = None,
     ) -> None:
         async def _fake_diag(session: Any, user_id: Any) -> list[ConceptDiagnosis]:
             return diagnoses
@@ -2459,8 +2463,20 @@ class TestAssembleMeasurementAssessment:
         async def _fake_hyp(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
             return hypotheses
 
-        async def _fake_weak(session: Any, user_id: Any) -> list[WeakConceptRecommendation]:
+        async def _fake_weak(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[WeakConceptRecommendation]:
+            # PR #1018 Codex 리뷰 — 호출자가 넘긴 diagnoses 스냅샷을 실제로 받는지 캡처.
+            if weak_diagnoses_calls is not None:
+                weak_diagnoses_calls.append(diagnoses)
             return weak
+
+        async def _fake_strong(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[StrongConceptRecommendation]:
+            if strong_diagnoses_calls is not None:
+                strong_diagnoses_calls.append(diagnoses)
+            return strong or []
 
         async def _fake_gaps(
             session: Any, user_id: Any, concept_id: uuid.UUID, **kwargs: Any
@@ -2482,6 +2498,7 @@ class TestAssembleMeasurementAssessment:
         monkeypatch.setattr("whymath_backend.api.me.compute_concept_diagnoses", _fake_diag)
         monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _fake_hyp)
         monkeypatch.setattr("whymath_backend.api.me.recommend_weak_concepts", _fake_weak)
+        monkeypatch.setattr("whymath_backend.api.me.recommend_strong_concepts", _fake_strong)
         monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _fake_gaps)
         monkeypatch.setattr("whymath_backend.api.me.build_learning_path", _fake_path)
 
@@ -2604,6 +2621,72 @@ class TestAssembleMeasurementAssessment:
         assert gaps_calls == [weakest]
         assert len(schema.recommended_path) == 1
         assert schema.recommended_path[0]["concept_id"] == str(weakest)
+
+    def test_strong_points_from_recommend_strong_concepts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ASM-13 — `strong_points`는 `recommend_strong_concepts` 결과를 그대로 담는다.
+
+        `recommend_weak_concepts`(weak_points)와 마찬가지로 신규 계산 0 — 호출·매핑만 검증."""
+        strong_cid = uuid.uuid4()
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[],
+            hypotheses=[],
+            weak=[],
+            strong=[
+                StrongConceptRecommendation(concept_id=strong_cid, mastery=0.95, agreement="agree")
+            ],
+        )
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(schema.strong_points) == 1
+        assert schema.strong_points[0]["concept_id"] == str(strong_cid)
+        assert schema.strong_points[0]["mastery"] == 0.95
+
+    def test_weak_and_strong_share_one_diagnoses_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR #1018 Codex 리뷰 — weak·strong이 각자 재조회하면 동시 mastery 갱신 시 서로 다른
+        스냅샷을 볼 수 있었다. 이제 위에서 한 번 구한 `diagnoses`를 그대로 넘겨받는지 확인한다
+        (둘 다 *같은 리스트 객체*를 받아야 한다 — 값만 같은 사본이 아니라 identity로 못 박는다).
+        """
+        cid = uuid.uuid4()
+        shared = [
+            ConceptDiagnosis(concept_id=cid, response_count=1, agreement="agree"),
+        ]
+        weak_calls: list[Any] = []
+        strong_calls: list[Any] = []
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=shared,
+            hypotheses=[],
+            weak=[],
+            strong=[],
+            weak_diagnoses_calls=weak_calls,
+            strong_diagnoses_calls=strong_calls,
+        )
+        asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(weak_calls) == 1 and weak_calls[0] is shared
+        assert len(strong_calls) == 1 and strong_calls[0] is shared
+
+    def test_strong_points_empty_when_no_recommendations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_l2_outputs(monkeypatch, diagnoses=[], hypotheses=[], weak=[], strong=[])
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert schema.strong_points == []
 
 
 class TestCapturedPathOrderingHonesty:

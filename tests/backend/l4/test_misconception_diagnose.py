@@ -230,6 +230,48 @@ class TestNotationNormalization:
         assert set(top.matched_signals) == {"(a+b)", "a² + b²"}
 
 
+class TestLatexNotationNormalization:
+    """MISC-17 — OCR·MathLive 산출물은 계약상 LaTeX(`OcrResult.plain_latex`→`student_solution`).
+
+    NFKC는 `²`→`2`만 펴고 `^`·`{}`·`\\left`/`\\right`는 남겨, 인식기의 정상 출력 `(a+b)^2=a^2+b^2`가
+    신호 2개 중 1개(0.5)만 맞아 게이트 ①(0.65)에서 탈락하던 실측 결함(PR #1034 Codex P1).
+    카탈로그 `signals`·`correct_form`에는 이 문자가 0건이라 양변 정규화의 일관성이 유지된다.
+    """
+
+    def test_caret_exponent_full_match(self) -> None:
+        # 인식기 기본형 `^2` — 유니코드 `²`와 같은 정규형 `a2+b2`로 접혀야 풀매칭.
+        top = diagnose("(a+b)^2 = a^2+b^2")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_braced_exponent_full_match(self) -> None:
+        top = diagnose("(a+b)^{2} = a^{2}+b^{2}")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_left_right_delimiters_full_match(self) -> None:
+        # `\left(`·`\right)`는 크기 조정 표식일 뿐 — 괄호 자체만 남긴다.
+        top = diagnose(r"\left(a+b\right)^2 = a^2+b^2")[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0
+
+    def test_correct_latex_expansion_stays_partial(self) -> None:
+        # 올바른 전개의 LaTeX형은 유니코드형(`test_symbolic_distribution_unchanged_partial`)과
+        # 동일하게 부분(0.5)에 머문다 — 정규화가 거짓양성을 만들지 않는다.
+        matches = [
+            m
+            for m in diagnose("(a+b)^2 = a^2+2ab+b^2")
+            if m.misconception.id == "distribution-over-power"
+        ]
+        assert matches and matches[0].confidence == 0.5
+
+    def test_correct_form_detected_in_latex(self) -> None:
+        # 정정 형태 탐지(강한 반박)도 같은 `_normalize`를 쓰므로 LaTeX형에서 성립해야 한다.
+        entry = CATALOG_BY_ID["distribution-over-power"]
+        assert entry.correct_form is not None  # 카탈로그 전제 — 없으면 이 검사는 공허하다.
+        assert correct_form_present(entry, "(a+b)^2 = a^2+2ab+b^2")
+
+
 class TestSignalPrecision:
     """v1.1 신호 정밀화 — 공통어 거짓양성 축소(슬 101·invertibility)."""
 
