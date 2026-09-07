@@ -1020,6 +1020,7 @@ async def _complete_problem(
     user_id: uuid.UUID,
     problem_id: uuid.UUID | None,
     final_answer: str | None,
+    started_at: datetime | None,
 ) -> uuid.UUID | None:
     """완료 확정 — ProblemAttempt(is_correct=True) 적재 + 숙달 전파(L2 헬퍼 재사용·중복 로직 0).
 
@@ -1040,9 +1041,19 @@ async def _complete_problem(
 
     적재된 attempt(is_correct 비-NULL·problem_id 보유)는 `GET /me/next-problem` 미시도 필터(NOT IN)
     에서 제외돼 다음 문항 진행이 작동한다(submit_attempt와 동일 루프 닫힘).
+
+    PED-37 `started_at`: 호출자가 이 풀이의 *발생* 시작 시각을 넘긴다(append_turn은 대화 세션의
+    `dialogue.started_at` — 학생이 이 문항 풀이를 시작한 시점이라 발생 시각끼리의 이관이다).
+    넘어온 값이 None이면 **NULL로 둔다** — 서버 now로 메우면 그건 발생이 아니라 수신 시각의 복제라
+    32_learning_history §EOS-48-2가 금지하는 날조다(NULL=미측정이 정직한 상태). 이 컬럼이 비면
+    `harness/wh1_evaluation`의 since/until 집계와 `privacy/retention`의 파기 창이 조용히 0행이
+    되므로, 값이 *있을 때* 채우는 것이 이 인자의 존재 이유다.
     """
     if problem_id is None:
         return None  # 방어 — 완료는 problem_id가 있을 때만 진입(도달 안 함).
+    # 한 번만 읽어 ended_at·ingested_at에 같은 값을 쓴다 — 두 번 호출하면 마이크로초가 갈려
+    # "종료가 수신보다 앞선다"는 사실이 아닌 시차가 데이터에 남는다.
+    received_at = datetime.now(timezone.utc)
     attempt = ProblemAttemptORM(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답·dialogue 링크에 즉시 사용).
         user_id=user_id,
@@ -1050,7 +1061,14 @@ async def _complete_problem(
         is_correct=True,  # 서버 권위 판정(turn A correct) — 클라 보고 아님.
         student_answer=final_answer,
         used_socratic=True,  # 코치 대화(돌아보기)로 도달.
-        ended_at=datetime.now(timezone.utc),
+        # PED-37: 발생 시작 시각은 *넘어온 값 그대로*(대화 시작 시각) — 없으면 NULL(날조 금지).
+        started_at=started_at,
+        # `ended_at`은 기존 동작(서버 now) 그대로 둔다 — 이 경로는 완료 턴이 곧 종료 시점이라
+        # 사실과 어긋나지 않고, 값을 비우면 이 컬럼으로 attempt를 정렬하는 기존 계약이 깨진다.
+        ended_at=received_at,
+        # EOS-48: 서버 *수신* 시각 좌석. 이 경로는 라이브 대화 턴이라 수신=지금이 사실이다
+        # (오프라인 sync가 아니다). started_at(발생)과 짝을 이뤄 지연 도착 판별을 가능하게 한다.
+        ingested_at=received_at,
     )
     session.add(attempt)
     await session.commit()  # attempt 우선 durable(submit_attempt 패턴).
@@ -1108,6 +1126,7 @@ async def _resolve_completion(
     body: CoachRequest,
     decision: PedagogyDecision,
     capabilities: _SubjectCapabilityDeps,
+    attempt_started_at: datetime | None,
 ) -> _CompletionResult:
     """완료 상태머신 결선(L5 오케스트레이션) — 정답/오답 감지(L3)·완료 판정(L4)·attempt 적재(L2)를
     잇는다(중복 로직은 L2 헬퍼 재사용).
@@ -1121,6 +1140,10 @@ async def _resolve_completion(
       3. `decide_completion`으로 5전이 결정.
       4. `NONE` → no-op(기존 발화 유지). 그 외 → 결정론 발화로 override(prompt·socratic_category).
       5. `COMPLETE` → `_complete_problem`으로 attempt 적재·숙달 전파(attempt_id 확보).
+
+    PED-37 `attempt_started_at`: 적재할 attempt의 *발생* 시작 시각. `_complete_problem`이 자체로
+    구할 수 없어(이 함수도 dialogue를 모른다) 호출자가 넘긴다 — append_turn은 `dialogue.started_at`,
+    create_session은 None(그 턴에는 dialogue가 아직 없고, 애초에 COMPLETE가 나지 않는다).
 
     반환의 `handled`는 완료 상태머신이 발화를 가로챘는지다 — True면 호출자가 WH-1 primary flip을
     건너뛴다(결정론 메타인지/재고 템플릿을 LLM으로 재작성 금지).
@@ -1191,6 +1214,7 @@ async def _resolve_completion(
             user_id=user_id,
             problem_id=problem_id,
             final_answer=_last_solution_step(body),
+            started_at=attempt_started_at,
         )
     return _CompletionResult(
         decision=new_decision,
@@ -2330,6 +2354,10 @@ async def create_session(
         body=body,
         decision=decision,
         capabilities=subject_capabilities,
+        # PED-37: 이 턴에는 dialogue가 아직 없다(아래에서 생성) → 넘길 발생 시각이 없다. 위 주석대로
+        # 생성 턴에서 COMPLETE는 나지 않으므로 실제로 적재에 쓰이지도 않는다. 서버 now를 대신
+        # 넣지 않는 이유는 그것이 발생이 아니라 수신 시각이기 때문(§EOS-48-2 날조 금지).
+        attempt_started_at=None,
     )
     decision = completion.decision
     # S1-11 flip(사인오프 2026-07-20): primary on이면 학생-대면 발화(decision.prompt·AI 턴
@@ -2701,6 +2729,10 @@ async def append_turns(
         body=body,
         decision=decision,
         capabilities=subject_capabilities,
+        # PED-37: 완료 시 적재할 attempt의 발생 시작 시각 = 이 대화가 시작된 시각. 학생이 문항
+        # 풀이에 착수한 시점이라 발생 시각끼리의 이관이고(추정 아님), 완료가 나는 유일한 경로가
+        # 여기다. dialogue.started_at이 비어 있으면 그대로 None(NULL=미측정).
+        attempt_started_at=dialogue.started_at,
     )
     decision = completion.decision
     # 완료 상태머신이 계산한 남은 돌아보기 턴 수를 세션에 먼저 반영한다(다음 턴 상태). 완료 시
