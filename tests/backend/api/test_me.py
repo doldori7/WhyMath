@@ -10,7 +10,7 @@ import asyncio
 import math
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
@@ -1024,6 +1024,72 @@ class TestSubmitAttempt:
         attempt = session.added[0]
         assert attempt.started_at is None
         assert attempt.ingested_at is not None  # 수신 시각은 서버가 아는 사실이라 채운다
+
+    def test_submit_rejects_naive_started_at(self) -> None:
+        """P2(PR #1036 Codex): 오프셋 없는 값은 422 — asyncpg가 서버 로컬 TZ로 해석한다.
+
+        실측 경위: 초판은 `tz-aware 권장`이라고만 적고 검증하지 않아 `2026-09-07T10:00:00`이
+        `tzinfo=None`으로 수용됐다. 프로덕션 컨테이너가 UTC이므로 한국 로컬 시각이 **9시간
+        어긋나** 저장되고, 그러면 PED-37이 되살리려던 시간창 귀속이 오히려 조용히 망가진다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": "2026-09-07T10:00:00",  # Z도 ±HH:MM도 없다
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert not session.added, "거부된 요청이 행을 남기면 안 된다"
+
+    def test_submit_rejects_future_started_at(self) -> None:
+        """P1(PR #1036 Codex): 미래 시각은 422 — 보존기한 파기를 영원히 회피한다.
+
+        `privacy/retention`은 `started_at < cutoff`인 행만 지운다. 클라가 2076년을 신고하면
+        3년 보존기한이 지나도 그 조건을 **영원히** 만족하지 않아 미성년자 답안이 무기한
+        잔존한다(2026-09-07 실측: 검증 없이 수용됐고 cutoff 판정이 False였다).
+
+        이 PR *이전*에는 started_at이 항상 NULL이라 조작할 값 자체가 없었다 — 통로를 여는
+        변경이 공격 표면도 함께 만들었으므로 여는 쪽에서 닫는다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        far_future = datetime.now(UTC) + timedelta(days=365 * 50)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": far_future.isoformat(),
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert not session.added, "거부된 요청이 행을 남기면 안 된다"
+
+    def test_submit_tolerates_small_clock_skew(self) -> None:
+        """대조군 — 몇 초 앞선 기기 시계는 **통과**한다.
+
+        이 대조가 없으면 위 두 거부가 "미래면 무조건 막는다"인지 "무한한 미래를 막는다"인지
+        구별되지 않는다. 학생 태블릿은 NTP 미동기로 실제로 몇 초~몇 분 어긋나므로, 엄격히
+        거부하면 정직한 제출이 튕겨 학습 기록이 통째로 유실된다 — 막아야 할 것은 시계 오차가
+        아니라 보존기한 회피다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        slightly_ahead = datetime.now(UTC) + timedelta(seconds=30)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": slightly_ahead.isoformat(),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert session.added[0].started_at == slightly_ahead
 
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""

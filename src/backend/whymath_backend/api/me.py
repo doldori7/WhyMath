@@ -45,7 +45,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import (
@@ -645,6 +645,15 @@ async def list_my_privacy_audit(
 
 
 # ── slice L2-4: 풀이 채점 제출 → ProblemAttempt 적재 + BKT 숙달 자동 전파 ──────────
+# 클라 신고 `started_at`이 서버 수신 시각보다 앞서야 한다는 규칙의 허용 오차.
+#
+# 0으로 두지 않는 이유: 학생 기기의 시계는 실제로 몇 초~몇 분 어긋난다(NTP 미동기 태블릿).
+# 엄격히 거부하면 정직한 제출이 422로 튕겨 학습 기록이 통째로 유실된다. 반대로 무제한 허용은
+# 보존기한 회피를 낳는다 — 막아야 할 것은 *무한한* 미래이지 몇 분의 시계 오차가 아니므로,
+# 유계(有界)로 자른다. 5분이면 시계 오차는 흡수하고 보존기한(년 단위)에는 영향이 없다.
+_STARTED_AT_SKEW_TOLERANCE = timedelta(minutes=5)
+
+
 class AttemptSubmitRequest(BaseModel):
     """본인 풀이 채점 결과 제출 — `POST /v1/me/attempts` 요청 본문.
 
@@ -673,8 +682,10 @@ class AttemptSubmitRequest(BaseModel):
     started_at: datetime | None = Field(
         default=None,
         description=(
-            "풀이 시작 시각(클라이언트 신고·선택·tz-aware 권장). 미제출 시 NULL=미측정으로 "
-            "남는다 — 서버 시각으로 대체하지 않는다(발생/수신 분리·EOS-48)."
+            "풀이 시작 시각(클라이언트 신고·선택). **timezone 필수**(`Z` 또는 `±HH:MM`) — "
+            "naive 값은 422로 거부한다(asyncpg가 서버 로컬 TZ로 해석해 시각이 어긋난다). "
+            "서버 수신 시각보다 미래인 값도 422(보존기한 회피 방지·허용 오차 5분). "
+            "미제출 시 NULL=미측정으로 남는다 — 서버 시각으로 대체하지 않는다(EOS-48)."
         ),
     )
     session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
@@ -764,6 +775,29 @@ async def submit_attempt(
     # 서버 *수신* 시각 — 한 번만 읽어 아래 두 컬럼에 같은 값을 쓴다(두 번 호출 시 생기는
     # 마이크로초 시차가 "종료가 수신보다 앞선다"는 사실 아닌 신호로 남는 것을 막는다).
     received_at = datetime.now(UTC)
+    # naive datetime 거부 — 다른 라우터(`GET /v1/devices`·`/v1/me/deletions`)와 *같은 헬퍼*를
+    # 써서 에러 표면을 하나로 유지한다(병렬 구현 금지·`_query_filters` 모듈 취지).
+    #
+    # 왜 필수인가: asyncpg의 TIMESTAMPTZ 인코더는 naive 값을 **서버 로컬 TZ**로 해석한다.
+    # 프로덕션 컨테이너가 UTC이므로 한국 로컬 시각(`2026-09-07T10:00:00`)이 9시간 어긋나
+    # 저장되고, 그러면 이 변경이 되살리려던 시간창 귀속이 오히려 조용히 망가진다
+    # (2026-09-07 실측: 오프셋 없는 ISO 문자열이 `tzinfo=None`으로 그대로 수용됐다).
+    _validate_tz_aware(body.started_at, "started_at")
+    if body.started_at is not None and body.started_at > received_at + _STARTED_AT_SKEW_TOLERANCE:
+        # 미래 시각 거부 — 이 검증이 없으면 클라가 신고한 먼 미래 값이 그대로 적재되고,
+        # `privacy/retention`의 파기 조건(`started_at < cutoff`)을 **영원히** 벗어난다.
+        # 즉 미성년자 답안이 보존기한을 넘겨 무기한 잔존한다(2026-09-07 실측: 2076년 값이
+        # 검증 없이 수용됐고 3년 cutoff 판정이 False였다).
+        #
+        # 이 PR *이전*에는 `started_at`이 항상 NULL이라 조작할 값 자체가 없었다 — 즉 이 통로를
+        # 여는 변경이 그 공격 표면도 함께 만들었으므로, 여는 쪽에서 닫는다.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "`started_at`이 서버 수신 시각보다 미래입니다 — 발생 시각은 수신보다 앞설 수 "
+                "없습니다. 기기 시계를 확인하거나 값을 생략하십시오(생략 시 NULL=미측정)."
+            ),
+        )
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
