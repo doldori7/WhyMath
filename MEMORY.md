@@ -8730,3 +8730,111 @@ vs main 20~30분 전진)만 5회 탓했다. 원인의 절반만 본 진단. **PR
 **부수 실측**: 머지 경쟁은 실재한다(PR 생성→머지 12.5h). `HARN-56`(merge queue)의 근거. 두 태스크
 done 증적이 "머지 대기 중"으로 고정돼 있고 정정 CLI가 없다 — `HARN-57`의 실물. 하네스가 세션
 위반을 2회 잡았다(1세션=1태스크 → block으로 순차화 · audit-deps → 산문 선행에 depends 부착).
+
+
+## 2026-09-07: HARN-67 착지 — 취소된 선행은 "결정 불가 → 차단 유지 + 가시 경고", amend 정정 경로 3축 신설 · EOS-02 사람 게이트 분리 (#1025)
+
+**결정 ①(판정 규칙)**: `depends_on`의 선행이 `cancelled`면 **해소로 보지 않는다**(done만 해소). 취소가
+"불필요해서"인지 "오등재라서"인지 기계는 모르므로(모른다 ≠ 아니다) 해소로 접으면 오등재 태스크의
+후속이 조용히 착수돼 trunk에 없는 파일을 대상으로 일하게 된다. 대신 침묵은 금지 — selector 제외
+사유 `deps_cancelled`를 신설하고 `next`(매번·stderr·`--json` 무관)·`status`·`brief`·`validate`(경고만·
+exit 불변)·`cancel` 시점(의존자 N건 경고) 5곳에서 보이게 했다. 정정은 `amend --remove-depends`
+(오등재 선행 제거) 또는 HARN-69(취소 복원·미착지) 두 갈래.
+
+**결정 ②(정정 경로 3축)**: `amend <id> --remove-depends <full-id>` · `--remove-gate <G-id>`(게이트
+status 불변) · `--notes-replace "구문자" "신문자"`(구문자 정확히 1회 — 0회·2회+ 거부. 0회를 성공으로
+두면 "치환 0건인데 exit 0"이 되어 2026-09-06 미적용 뮤테이션 사고와 같은 형태). 제거한 ID·치환
+원문은 **notes에 인용하지 않고 이벤트 대장에만** 남긴다 — 실측: `depends_on -T7-01: 오등재 선행
+제거` 한 줄이 그 자체로 HARN-53 되먹임 가드에 잡혀 amend가 자기 가드에 거부됐다. ⑥의 두 안 중
+audit-deps 면제 어구 안은 채택하지 않았다(면제 문자열은 표기 변형에서 뚫린다). ⑦ rename은
+**의도적 미구현** — 사유는 `build_harness.md §7a`(전역 치환+원격 claim 재게시 비용 > `add` 충돌 검사로
+사전 거부). 후속 태스크 미등재.
+
+**실측**: tests/harness 662건 통과(633+29, 무작위 순서 포함) · ruff/black green · 뮤테이션 3종
+(next 경고 제거 → 3 RED · classify_todo 분기 제거 → 6 RED(상위 세션이 독립 재실측) · count==1 검사
+제거 → 2 RED) · 실 대장에서 취소 선행에 차단된 todo **0건**(EOS-96은 이미 EOS-97로 재등재됨).
+
+**부수 결정 — EOS-02 분리**: acceptance ①이 Phaiakes9 실 Anthropic 키로 도는 **사람 행동**인데
+`requires_gates`가 비어 있어 에이전트 후보 1순위로 계속 노출됐다(이번 `/drive`에서 실측). 입력
+(라이브 리포트)을 만드는 사람 게이트 `G-eos02-prompt-cache-live-run`을 부착했다 — 산출물 검수 게이트를
+산출 태스크 자신에 거는 교착(2026-09-06 MP-01)과는 다르다(리포트는 EOS-99 도구가 내고 EOS-02는 소비).
+런북 `docs/ops/eos02_prompt_cache_live_runbook.md`는 플래그·리포트 키·stdout 형식·키 env
+이름을 코드에서 실측해 적었다. **같은 `/drive`의 관측**: `HARN-71`은 `next`가 후보로 냈지만 겹침
+경고가 타 세션(`claude/status-k9r51v`)의 원격 claim을 보였다 — 27초 차이의 동시 착수 경쟁이었고
+원격 claim 대장이 막았다(착수하지 않음).
+
+**머지 후 추가 실측 2건(2026-09-07 08:50, PR #1025 자가 점검)**: ① **머지 충돌 상태의 PR에는 GitHub가
+`pull_request` 워크플로 런을 만들지 않는다** — `9e93e13a` push 뒤 45분간 CI 런이 0건이었고, 원인은
+main에 #1026(HARN-71)·#1030(EOS-02)이 착지해 생긴 충돌이었다. "CI가 안 돈다"는 증상은 CI 장애가 아니라
+충돌 신호로 먼저 읽는다(빈 커밋·close/reopen으로 흔들 일이 아니다 — 머지가 답). 머지 head `4f5503f9`에서
+런이 즉시 생성됐다. ② **EOS-02 핸드오프를 두 세션이 동시에 했다** — 이 브랜치(게이트 부착+런북)와
+`claude/status-k9r51v`(block+런북 `docs/ops/eos02_prompt_cache_live_runbook.md`, #1030)가 같은 판단을
+각자 했다. main의 `next`가 EOS-02를 게이트 없이 후보 1순위로 노출한 것이 공통 원인이고, 게이트 부착이
+그 노출을 닫는다. 정본은 먼저 착지한 main 런북, 이 브랜치 런북은 머지에서 삭제. 이 브랜치 런북에만 있던
+stale-file 가드·Ollama 창 분리는 main 런북에 없다(후속 반영 후보·미등재). 부수: HARN-71의 `add --notes`
+가드가 `--notes-replace` 테스트의 준비 단계를 막아 store 수준 레거시 주입으로 교체 — 치환의 대상이
+바로 가드 *이전* 레거시 위반이므로 CLI가 그 상태를 못 만드는 것이 옳다.
+
+## 2026-09-07: HARN-74 착지 — 게이트 해소는 태스크를 풀지 않는다, 그러니 알린다 (#1025) + PR #1025 Codex P2 3건 반영
+
+**결정**: `gates clear`·`waive`는 태스크 status를 건드리지 않는 설계(차단 사유가 게이트뿐인지 기계는
+모른다)를 유지하되, 직후 화면에서 ①그 게이트를 `requires_gates`로 건 blocked 태스크 전건 + `unblock`
+명령(0건도 "0건" 명시 — 결과 보고라 침묵 금지·남은 pending 게이트 병기) ②notes 산문에만 게이트 ID를
+적은 blocked(단어 경계 일치·부착/해제 두 갈래 안내) ③brief·status·status --json에 "해소된 게이트를
+기다리는 blocked N건"(전부 passed인데 blocked·0건이면 침묵 — 요약 규약)을 낸다. 보드(HARN-41)의
+목록 계산은 `selector.gate_dependent_tasks` 한 곳으로 통일. 실측: tests/harness 679(662+17) ·
+뮤테이션 3종 전부 RED(서로 다른 테스트 집합) · 실 대장 ③축 0건, ②축 hit = **CUR-17·CUR-18**
+(`G-eos-verification-relevance-triage` cleared를 notes로만 참조한 blocked — 타 세션 claim 중이라
+미조치. 정정은 `amend --gate` 부착 또는 `unblock`, 사람 몫). **정직한 공백**: ①②는 clear *시점*
+화면이라 이미 닫힌 게이트에는 소급되지 않고, ③은 부착 전제라 산문 참조만 있는 두 건은 brief에 안
+뜬다 — "해소된 게이트 × 산문 참조 blocked" 전수 스캔의 brief 판은 미구현(후속 후보).
+
+**PR #1025 Codex P2 3건(HARN-67 결함·전부 "보호 장치가 특정 경로에서 조용히 무력" 형태)**:
+P2-1 `stall_reason`이 취소 선행+pending 게이트 혼합에서 human_gate를 냈다(게이트를 다 열어도 남는데)
+→ 취소 선행이 있으면 blocked, 게이트 대기 태스크는 `(게이트 대기: G-x)` 표기로 정보 보존.
+P2-2 `next` 경고가 classify 결과(`excluded`)에서 나와 owner/track_gate 조기 제외 태스크는 침묵
+→ status/brief와 같은 `cancelled_dependency_blocks` 직접 스캔으로 교체. P2-3 `--notes-replace`의
+되먹임 마스크가 치환 *전* findings라 치환으로 없앤 선언을 `--reason`이 재생성해도 "기존 위반"으로
+통과(exit 0인데 audit-deps red) → 마스크 = (정정 전) ∩ (치환 직후·사유 append 전). 셋 다 테스트를
+먼저 넣어 RED(3 failed) 확인 후 수정(683 passed). **교훈**: HARN-67 자체 뮤테이션 3종은 전부 RED였다
+— 뮤테이션은 *내가 쓴 분기*만 검증하고, 분기 *앞*의 조기 return(P2-2)과 마스크의 *기준 시점*(P2-3)
+같은 경로 결함은 잡지 못한다. 리뷰 봇이 그 축을 메웠다(PR 열고 ≥5분 뒤 재확인 규율 유효).
+
+
+## 2026-09-07: PR #1025 머지 2회 거부 — 원인은 **이미 저장소에 실측돼 있었다**(HARN-32 ⑦ strict 정책). 내 "미규명" 판정이 오판
+
+**무슨 일**: `"pr"` 지시로 PR #1025를 SQUASH 머지하려 했으나 REST 머지 엔드포인트가 2회 모두 405
+`Repository rule violations found` + `16 of 16 required status checks are expected`로 거부했다. 이후
+`enable_pr_auto_merge`(SQUASH)를 걸자 다음 CI green에서 자동 머지가 발동해 `966c8db6`으로 착지했다.
+
+**원인(내가 규명한 것이 아니라 저장소에 이미 있던 것)**: `HARN-32` acceptance ⑦(2026-08-31 실측·done)이
+`GET /repos/doldori7/WhyMath/rules/branches/main`으로 **`strict_required_status_checks_policy=true`** 를
+확정해 두었고, 같은 405 문구가 그 정책 하나로 전부 설명된다고 이미 적혀 있었다. 즉 **`behind`면 필수 체크가
+병합 커밋 기준으로 재평가돼 "expected"로 보인다** — 판정 도구까지 있다(`scripts/ops/pr_merge_readiness.py`,
+exit 0 = 필수 green + up-to-date + 스레드 해소 = 지금 머지).
+
+**내 두 실패는 둘 다 `behind`였다(사후 실측)**: ⓐ 1차 `e4ceda6e` — main `1306fff4` 미포함 ⓑ 2차 `ecda3788`
+— main `99b05f54`(#1018, 시도 직전 착지) 미포함. 자동 머지가 발동한 `c13a6686`만 `99b05f54`를 포함했다.
+**즉 up-to-date + green 상태에서 직접 머지를 시도한 적이 한 번도 없다.** 성공한 것은 auto-merge가 아니라
+*up-to-date 상태*였을 가능성이 높고, 나는 그 둘을 분리하지 못한 채 auto-merge의 공으로 돌렸다.
+
+**운영 규칙(정정판)**: 직접 머지를 폐기하지 않는다. ①머지 전 `pr_merge_readiness.py`로 판정한다(exit 0이면
+직접 머지, 1이면 사유대로 조치) ②`behind`면 base를 병합·push하고 CI를 다시 기다린다 ③CI 완주와 base 전진이
+경합해 창이 계속 닫히면(HARN-32의 본 주제 — CI ~28분 vs main 머지 간격 ~31분) `enable_pr_auto_merge`가
+그 대기를 대신 서 준다. **auto-merge는 "직접 머지가 막힐 때의 대체 경로"가 아니라 "up-to-date 창을 기다리는
+자동화"다.**
+
+**오류 3건(재발 방지)**:
+1. **부재 판정 절차 위반** — "차단 주체 미규명"을 선언하기 전에 저장소를 찾지 않았다. `strict`·
+   `required status checks`·`merge` 어느 축으로 검색해도 `HARN-32`와 `pr_merge_readiness.py`가 나왔다.
+   CLAUDE.md 2026-08-31 규칙("내가 찾은 방법으로는 0건"이라고 범위를 밝혀 적어라)조차 지키지 않고 그냥
+   "모른다"로 적었다.
+2. **1회 관측의 과잉 일반화** — "직접 머지는 CI 전건 green이어도 거부된다"를 정본 규칙으로 승격했다.
+   반례가 될 조건(up-to-date + green)을 한 번도 시험하지 않았으므로 성립하지 않는 주장이다. 이 규칙이
+   그대로 남았다면 기존 판정 도구와 모순된 절차가 후속 세션 전체에 전파됐다.
+3. **진행 중인 장치의 결과를 기다리지 않은 단정** — auto-merge를 이미 건 상태에서 "Kiki가 UI에서 머지하는
+   것이 유일한 경로"라고 사용자에게 보고했고 17분 뒤 반증됐다.
+
+**잡은 것은 Codex P2**(PR #1035 리뷰) — 정확히 "1회 405를 일반화했고 `HARN-32` ⑦·`pr_merge_readiness.py`와
+모순된다"고 지적했다. 세션의 자기 정정(#1035 초판)은 오류 3을 고쳤을 뿐 오류 1·2는 그대로 두었다 —
+**자기 정정도 같은 사각을 두 번 통과할 수 있다**는 사례다.
