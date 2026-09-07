@@ -1055,6 +1055,17 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 검수 세션(EOS-78) — 판정을 받으며 HIT 타이머를 생산한다. `reviewer_sample_package`
         # (표본 *제시*)와 달리 사람의 판정을 되받는 대면 도구라 배치 사유를 빌려 쓰지 않는다.
         "harness.review_session": _HUMAN_REVIEW_TOOL,
+        # MP-05(2026-09-07): 카나리 구간 절단 — 입력이 *특정 회차의 사이드카 4종*(대장·genlog·
+        # 코퍼스·검수 큐)이라 상주 입력이 없다. 회차를 돌려야 생기는 파일들이고(레포에
+        # 상주하지 않는다), 산출은 그 회차를 검수하려는 사람의 큐다. CI가 매 커밋마다 돌릴
+        # 성질이 아니다 — 대상 회차 없이 돌리면 도구가 측정 실패(exit 1)로 거부한다.
+        # 판정 로직(적재 순서 계약·canary_size 대장 판독·미해결 3종 구분·review_session 형식
+        # 호환)은 backend 잡이 수집하는 tests/backend/harness/test_canary_slice.py가 상시
+        # 검증한다 — "안 도는 코드"가 아니라 "회차를 검수할 때 사람이 돌리는 절단 도구"다.
+        "harness.canary_slice": (
+            "by-design:회차 사이드카 4종이 입력인 카나리 구간 절단 도구(MP-05) — 상주 입력이 "
+            "없고, 카나리를 검수하려는 시점에 운영자가 돌려 review_session에 먹일 큐를 만든다"
+        ),
         # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
         "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다

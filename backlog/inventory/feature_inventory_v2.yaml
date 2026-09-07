@@ -6,7 +6,7 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 583
+  backend_modules_covered: 584
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
@@ -5299,8 +5299,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 10
-    test_files: 11
-    test_functions: 444
+    test_files: 12
+    test_functions: 464
     matrix:
       A_subject: 3
       B_db: 0
@@ -5313,7 +5313,7 @@ features:
     keep_criteria_met: 3/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 3/6 — 미충족 k1_subject_low, k4_model_ok, k5_coupling_low"
-    fan_in: 20
+    fan_in: 21
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8419,8 +8419,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 326
-    test_functions: 5883
+    test_files: 327
+    test_functions: 5903
     matrix:
       A_subject: 3
       B_db: 0
@@ -9385,7 +9385,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 2785
+    loc: 2796
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 25
@@ -9524,8 +9524,8 @@ features:
     mixed_deps: [l3.pregenerate.provenance_bridge, l3.verification_tier, schema.enums, schema.problem]
     db_model_modules: 0
     coupling_count: 64
-    test_files: 58
-    test_functions: 461
+    test_files: 59
+    test_functions: 481
     matrix:
       A_subject: 3
       B_db: 0
@@ -9538,7 +9538,7 @@ features:
     keep_criteria_met: 4/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 4/6 — 미충족 k1_subject_low, k5_coupling_low"
-    fan_in: 0
+    fan_in: 1
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9580,17 +9580,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
     migration_risk: High
-    loc: 2981
+    loc: 3621
     endpoints: 0
     write_endpoints: 0
-    db_mutation_calls: 8
-    own_modules: 7
+    db_mutation_calls: 9
+    own_modules: 8
     adapter_deps: [l3.equivalent.orchestrator]
-    mixed_deps: [schema.enums]
+    mixed_deps: [l3.pregenerate.provenance_bridge, schema.enums]
     db_model_modules: 1
-    coupling_count: 10
-    test_files: 13
-    test_functions: 318
+    coupling_count: 13
+    test_files: 14
+    test_functions: 338
     matrix:
       A_subject: 3
       B_db: 1
@@ -9654,8 +9654,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 8
-    test_files: 8
-    test_functions: 237
+    test_files: 9
+    test_functions: 257
     matrix:
       A_subject: 3
       B_db: 0
@@ -9668,7 +9668,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 2
+    fan_in: 3
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
