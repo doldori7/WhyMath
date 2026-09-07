@@ -2,8 +2,8 @@
 
 > **대상 게이트**: `G-eos-ip-separation-evidence` (kind=human · assignee=kiki · 2026-08-30 등재 · remind 14d)
 > **작성**: 2026-09-07 · `MGMT-05-ip-separation-evidence-pack`
-> **판정 기준**: main `3a30244c` + 브랜치 `claude/geos-ip-separation-evidence-1r16s3`
-> (기계 도구·템플릿은 **아직 main에 없다** — §5 실행 블록이 브랜치 체크아웃을 선행 포함한다)
+> **판정 기준**: main `79b0cc4d` (PR #1041 squash 머지 · 2026-09-07)
+> 기계 도구·템플릿·이 런북 모두 **main에 있다** — 별도 브랜치 체크아웃 불요.
 
 ---
 
@@ -98,10 +98,10 @@
 # [실행 시스템] Windows PowerShell (= Phaiakes9 — 별도 접속 불요)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 
-# 0) 도구가 있는 브랜치로 이동. 이 스크립트는 아직 main에 없다.
-#    force-push 가능성이 있는 브랜치이므로 pull이 아니라 checkout -B로 받는다.
-git fetch origin claude/geos-ip-separation-evidence-1r16s3
-git checkout -B claude/geos-ip-separation-evidence-1r16s3 origin/claude/geos-ip-separation-evidence-1r16s3
+# 0) main 최신화. 도구는 PR #1041(79b0cc4d)로 **main에 착지**했으므로 별도
+#    브랜치 체크아웃이 필요 없다.
+git checkout main
+git pull origin main
 
 # 0-a) 선행 자가검증 — 스크립트가 실제로 있는가 (없으면 아래가 전부 무의미하다)
 $ToolOk = Test-Path scripts\ops\ip_separation_evidence.py
@@ -137,7 +137,7 @@ if ($ToolOk -and $FetchOk) {
   "중단: git fetch --all 이 실패했다 — 오래된 ref로 측정하면 전수가 아니다."
   "  네트워크·인증을 확인하고 1-a)부터 다시 실행할 것."
 } else {
-  "중단: 브랜치 체크아웃이 되지 않았다 — 0)의 git 출력을 확인할 것"
+  "중단: 도구 파일이 없다 — 0)의 git pull 출력을 확인할 것(main 최신화 실패)"
 }
 
 # 3) 자가검증 — 파일이 실제로 생겼는가 + 상태가 ok인가 + 전수를 봤는가

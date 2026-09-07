@@ -39,6 +39,10 @@ _HUMAN_COPY_PASTE_FILES = [
     "docs/standards/crosswalk_gate_contract.md",
     "docs/standards/eos_verification_design_v1.md",
     "docs/data/misconception_crosslink_review_dossier.md",
+    # MGMT-04(2026-09-07) — 변호사 자문 브리핑 §8의 게이트 clear 명령.
+    # 초판(PR #1038)이 --as·--no-base를 모두 빠뜨렸는데 이 스캐너가 못 잡았다: 파일이
+    # 목록에 없으면 가드는 그 파일에 대해 아무것도 지키지 않으면서 초록을 낸다.
+    "docs/legal/export_prediction_disclosure_counsel_brief.md",
 ]
 
 # `gates clear` 뒤에 **구체 게이트 ID**(G-로 시작)가 오는 형태만 잡는다.
