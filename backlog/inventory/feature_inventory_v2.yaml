@@ -9775,7 +9775,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 10397
+    loc: 10416
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 15
@@ -9785,7 +9785,7 @@ features:
     db_model_modules: 7
     coupling_count: 32
     test_files: 21
-    test_functions: 420
+    test_functions: 422
     matrix:
       A_subject: 3
       B_db: 3
