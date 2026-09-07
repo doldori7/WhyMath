@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -26,6 +26,6 @@ paths:
   - src/backend/whymath_backend/l3/render/adapters.py
   - tests/infra/test_eos_dependency_direction.py
   - src/backend/pyproject.toml
-session: null
+session: claude/g-eos49-content-version-seat-b028ix-eos89
 notes: "출처: Kiki 2026-09-04 계획서 100 §3.8 + EOS-88 실측(경계 문서 §9.2): 현행은 service-locator형 pull 3지점(api.coach 2팩토리·slot_generator 1·render.adapters 2), app.state 13키 중 과목 능력 0, MathSubjectAdapter 프로덕션 인스턴스화 0. EOS-69가 '호출부 4곳이 능력을 상류에서 받아 내리면 이 줄도 사라진다'고 적어 둔 잔여의 실행편. EOS-86(StepChainVerifier 팩토리)은 이 등록 경로를 타야 pull 4번째 지점을 만들지 않는다 — EOS-86 acceptance에 amend로 명시."
-updated: 2026-09-04
+updated: 2026-09-07
