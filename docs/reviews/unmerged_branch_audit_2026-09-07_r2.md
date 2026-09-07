@@ -101,7 +101,47 @@ git diff --name-only 98925b0e..origin/main -- backlog/tasks/
 검증은 워크플로(에이전트 25건·읽기 전용 git 조회)로 수행했다. 삭제 판정은 브랜치마다 **반박자 2렌즈**(내용 유실·근거 실재)가
 "잃을 내용 0"을 뒤집으려 시도했고, 나머지는 독립 재도출 후 7회차 표와 대조했다. 기본값은 의심(불확실하면 반박)이다.
 
-*(§4.1·§4.2·§4.4는 결과 도착 순으로 아래에 기재)*
+*(§4.1은 결과 도착 후 기재)*
+
+### 4.2 7n9n72 잔여표 — 독립 재도출 vs 7회차 표
+
+브랜치 `subject-problems-theory-check-7n9n72`(621b11f9 · diff 83파일)를 전건 `git cat-file -e` + `comm -23`으로 재도출했다.
+**결과: 부재 17 + 상이 62 + 바이트 동일 4**(merge-base 대비로만 잡히는 이미 흡수분). 7회차 표의 **17파일 수와 그 목록은 정확**하다.
+그러나 표가 "부재 파일"만 적고 **상이 파일 속 동반 변경**을 빠뜨린 곳이 있어, 표대로 테스트·모듈만 회수하면 RED가 된다.
+
+| 7회차 표 행 | 표가 빠뜨린 동반 변경(main 부재 실측) | 7회차 좌석 amend에는? |
+|---|---|---|
+| PB-02 (tests/infra 2파일) | **`.github/workflows/ci.yml` 본체 56줄** — nightly corpus_reverify 인자 글롭 전환 + data_pipeline 잡 커버리지 재생성-diff 스텝. main `ci.yml:1507-1510`은 3파일 하드코딩(코퍼스 37종 중 3종만 야간 재검증) | **있음**("ci.yml·ops/provenance_audit.py 변경") — 표만 누락 |
+| MISC-01·03 (테스트 3파일) | `config.py` `misconception_visualization_mode: Literal[off,shadow,on]` 39줄 · `l4/misconception/shadow.py` 관측기 122줄 · `api/coach.py` `_maybe_visualize`/`_similar_problem_for` + 응답 필드 2종 | **7회차는 amend 안 함.** main 좌석의 기존 HARN-34 참조가 가리키는 `human-bottleneck-tasks-6dszy0`은 **LIC-07 ⑪(09-06)로 삭제됨** — 좌석이 존재하지 않는 브랜치를 1차 위치로 가리키던 상태. → **이 8회차가 amend**(§7) |
+| ASM-06 (distractor_link + 테스트 + alembic) | `schema/activity.py`·`db/models/activity.py`·`api/me.py`(슬롯 신설·적재·응답 `matched_misconception_id`)·`schema_version.py`·`l4/misconception/__init__.py` export + 테스트 3파일(test_me 6건·test_activity_orm·schema/test_activity). **alembic `0afd40ce1867`의 down_revision이 폐기 대상 `7ef2b5a8e69e`라 그대로 회수 불가·재채번 필수** | 부분(슬롯·alembic·distractor_link만). 커밋 087859bd를 적어 두어 diff로 전건 도달은 가능 |
+| MISC-02 (prerequisite_link + 테스트) | `api/coach.py`·`api/me.py` 보충 경로(그래프 선수 0건일 때 `misconception_crosslink_mode!=off` 게이트) + 테스트 6건(test_coach 3·test_me 3) | 부분 — blocked·"대조 자료로만" 취지라 실피해 낮음 |
+| MISC-05 (slip_report + 테스트) | `ops/declared_unwired_audit.py`에 `harness.misconception_slip_report` `_OFFLINE_REPORT` 등록 9줄 — 없으면 OPS-22 감사기 미분류로 CI RED 가능(읽어서 그렇게 보임·주입 미실측) | 없음 |
+| MISC-06 | (표대로 hypothesis_store·warmstart·coach) — 단 main MISC-06 `paths`는 `hypothesis_store.py`+`harness/wh1_primary.py`이고 브랜치는 A안(`warmstart.py` 소비)이라 paths 정정 필요 | 있음(파일 열거 정확) |
+| PED-14 | (표대로) — 단 main PED-14 acceptance ②("Flutter가 duration_seconds를 실제로 전송")·paths(`src/mobile/**`)와 브랜치 설계(서버 벽시계 파생·클라 변경 0)가 **충돌**. 브랜치 판정(acceptance ② stale)이 main 대장에 미반영 | 있음(파일 열거 정확·② 충돌 미언급) |
+| PED-15/16 → "PED-37로 재등재" | PED-37 YAML은 **main에 없다**(PR #1020 미머지). main 기준 PED-15 코드 잔여(coach.py `started_at=dialogue.started_at`·me.py 역산·테스트 5건)는 좌석 무귀속 | #1020 머지 시 해소 |
+| alembic `7ef2b5a8e69e` "좌석 미확정" | 미확정이 아니라 **대체·폐기 판정 가능**(§4.3) — `verify_final_answer.py`·`completion.py`·dialogue 필드·구 테스트까지 한 묶음으로 옛 설계 | — |
+
+**좌석 없는 잔여(main 기준·미머지 PR 제외) 2건:**
+- `.claude/agents/backend-engineer.md` "검증 명령 실행 규약" 17줄 — 위임 에이전트가 전체 스위트를 백그라운드로 던지고 보고 없이 턴을 끝낸 사고 3회(MISC-02·MISC-06·PED-14)의 재발방지 규칙. 역할 기반 검색(백그라운드·포그라운드·run_in_background·nohup) `.claude/`·`docs/standards/`·`CLAUDE.md` **0건**(무관 매치 Celery·비동기 제외). 재발방지 대책이 규칙·코드·태스크 어느 형태로도 main에 없는 상태 → **HARN-79 등재**(§7).
+- S3-33 "착수 전 조사에서 전량 충족" 판정 근거 5항 — 코드 잔여 0. 7회차 amend가 "재확인만 하고 done"으로 이미 다룸(main 미착지). 추가 조치 없음.
+
+`scripts/harness/store.py`의 PED-15/16 그랜드파더 2항은 재등재(PED-37)로 사유 소멸·불필요. `docs/data/problem_bank_coverage_2026-07.json` 덮어쓰기는 동결본 관례 위반·main 우세. MEMORY 402줄은 부기(회수 시 재기록).
+
+**7회차 amend가 이미 실린 좌석(ASM-06·MISC-02·MISC-05·PB-02·PED-14·MISC-06)은 이 8회차가 손대지 않는다** — 같은 YAML의 acceptance 끝에 두 PR이 각각 줄을 붙이면 머지 충돌이다. 위 표의 보완 목록은 #1020 머지 후 소유자가 한 번의 `amend`로 붙일 수 있게 여기 고정해 둔다(§8 정직한 공백).
+
+### 4.4 PED-15 "started_at 상시 NULL" 버그 — 반박 실패·**main 실존 확정**(high)
+
+7회차가 priority 1 회수(PED-37)와 PII 파기 소급 게이트를 건 전제다. 반박 4축 전부 실패:
+
+| 반박 축 | 실측 | 결과 |
+|---|---|---|
+| (a) 모델 default | `db/models/activity.py:177-186` `started_at: Mapped[datetime\|None] = mapped_column(sa.DateTime(timezone=True))` — default·server_default·onupdate 전무. DDL(`20260529_0224_bb30b816083d`)도 `nullable=True`·server_default 없음(같은 파일 `LearningSession.started_at`은 `server_default=now()`). 이후 ALTER·백필 0건 | 실패 |
+| (b) 다른 writer | ProblemAttempt ORM 생성 지점은 정확히 2곳(`api/me.py:745` `submit_attempt` · `api/coach.py:1012` `_complete_problem`)·둘 다 `ended_at`만 대입. `.started_at =` 대입 0건·insert/bulk/scripts 백필 0건. `AttemptSubmitRequest`는 `extra=forbid`라 클라가 보낼 수단도 없음 | 실패 |
+| (c) 기존 테스트 | attempt 관련 started_at 테스트 10건 전부 nullable 단언·retention 플랜 매핑·롤업 dataclass 입력·`from_schema`로 직접 심는 헬퍼 — **writer 산출물을 단언하는 테스트 0건** | 실패(구조적으로 못 잡음) |
+| (d) retention 폴백 | `privacy/retention.py:80` `(ProblemAttempt, "started_at")`·`purge_expired_records`는 `getattr(model, column) < cutoff`만 — 폴백 없음·docstring이 "NULL은 파기 대상 아님(보수적)"을 명문화. `LearningSession` CASCADE 경로는 coach 경로가 `session_id`를 아예 안 넣고 main에 LearningSession ORM 생성 지점 0건이라 실서빙 성립 미확인 | 실패 |
+
+**7회차가 꼽지 않은 독자 2건 추가**: `l2/learning_metrics_rollup.py:596-612` `_fetch_attempts`가 `started_at.is_not(None)`으로 NULL 행 전건 제외(**COLLAB-03 일별 롤업**이 서빙 적재분에 대해 0건 집계) · `l2/concept_diagnosis.py:170` `order_by(started_at.desc().nulls_last(), attempt_id)`(**SOL-02 앵커 '최근순'**이 UUID 순서로 퇴화). 기존 8건(`wh1_evaluation.py` 시간창 4·정렬 3·주석 1)은 `GET /v1/me/harness-metrics`·`/growth-evidence`가 since/until을 그대로 전달하므로 학생 API 2곳에서 가짜 NO_DATA다.
+브랜치 수정(27faee2d)은 coach.py +13(`started_at=dialogue.started_at`)·me.py +20/-2(`now−timedelta(duration_seconds)` 역산)·테스트 +255이며 main 비조상. **PED-37(미머지)의 전제와 paths는 정합**하며 재등재하지 않는다 — 다만 PED-37 paths에 `l2/learning_metrics_rollup.py`·`l2/concept_diagnosis.py`는 없으므로(수정 대상이 아니라 독자이므로 무방) 회수 시 변별력 테스트가 그 두 독자도 덮으면 좋다(권고·집행 아님).
 
 ### 4.3 7n9n72 alembic 좌석 — 7회차 공백 **닫힘**
 
