@@ -180,3 +180,11 @@ data/audit/
 # Phaiakes9 GPU 성능 진단 산출물 — collect_gpu_evidence.ps1 / bench_ollama.ps1의 실측 결과
 # (머신·시점 종속 로컬 증거. 확정 수치만 docs/ops/amd395_local_llm_performance.md §5로 옮긴다)
 /.gpu_evidence/
+
+# 겸직 IP 귀속 증빙 산출물 (MGMT-05 · 게이트 G-eos-ip-separation-evidence)
+# 기계 리포트는 머신·시점 종속 증거이고, 확인서·양도예정 기록의 **기입 실물**에는
+# 재직사명·서명이 들어간다 — 저장소에 남길 성질의 문서가 아니다.
+# 추적하는 것은 docs/legal/templates/ 의 **빈 템플릿**뿐이며, 실물 보관은 저장소
+# 밖이 원칙이고 docs/private/(기존 규칙)은 부득이한 경우의 2차선이다.
+# 2차 가드(git add -f 방어) = tests/infra/test_ip_separation_evidence.py 의 마커 스캔.
+/.ip_evidence/
