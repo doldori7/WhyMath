@@ -166,11 +166,11 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        # EOS-99 generation_log 프롬프트 캐시 2종이 현 head(EOS-97 run_id 위에 선형 적재).
-        # 같은 테이블의 순수 add-column이라 순서 의존이 0이다(둘 다 nullable·데이터 이관 없음).
+        # SEC-33 ⑥이 problem_attempt.ingested_at에 server_default를 부여(EOS-99 위에 선형 적재).
+        # 같은 컬럼의 ALTER 1건이라 순서 의존이 0이다(백필 없음 — 마이그레이션 docstring 참조).
         # 이 상수는 `db/schema_version.py::KNOWN_REVISIONS`의 마지막 항과 **함께** 움직인다 —
         # 마이그레이션을 더하면 두 곳을 같이 갱신해야 한다(둘 다 head를 고정한다).
-        assert heads == {"c1a5e07b4d38"}
+        assert heads == {"19149e92d368"}
 
     def test_gen_meta_migration_file_exists_with_symmetric_updown(self) -> None:
         """S4-10 `gen_meta` 마이그레이션 파일이 존재하고 up/down이 대칭(컬럼 add/drop)이다."""

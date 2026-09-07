@@ -138,6 +138,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "e7c3b9a15f24",  # EOS-71: problem 격리 좌석 2컬럼 + review_status_enum 'quarantined'
     "b8d3f6a91c24",  # EOS-97: generation_log.run_id — 리콜 조인 축 + idx_generation_run_id
     "c1a5e07b4d38",  # EOS-99: generation_log 프롬프트 캐시 2종(cache_read/creation_input_tokens)
+    "19149e92d368",  # SEC-33 ⑥: problem_attempt.ingested_at server_default(신규 행 좌석 보장)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]
