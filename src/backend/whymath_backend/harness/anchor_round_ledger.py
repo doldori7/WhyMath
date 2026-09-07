@@ -50,7 +50,7 @@ acceptance 문구는 "수용 0"이지만 이 모듈이 세는 축은 `appended`(
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args
@@ -63,6 +63,8 @@ from whymath_backend.l3.equivalent.orchestrator import GenerationOutcome
 __all__ = [
     "ACCEPTED_STATUSES",
     "OUTCOME_STATUSES",
+    "PROMPT_CACHE_STATES",
+    "PromptCacheTally",
     "RoundRecord",
     "StagnationVerdict",
     "append_round_ledger",
@@ -70,6 +72,7 @@ __all__ = [
     "judge_stagnation",
     "load_round_ledger",
     "operating_rates",
+    "prompt_cache_rates",
 ]
 
 # outcome 어휘는 **오케스트레이터의 Literal에서 파생**한다(재선언 금지) — 여기 손으로 6종을
@@ -163,6 +166,158 @@ def operating_rates(
         "unmeasured_reason": reason,
         "statuses": statuses,
         "unknown_statuses": unknown,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 프롬프트 캐시 '작동한 비율' (EOS-99) — 켰다는 사실과 작동했다는 사실을 가른다
+#
+# `settings.anthropic_prompt_caching`을 켜면 요청에 `cache_control`이 실린다. 그러나 그것은
+# **켰다는 사실**일 뿐이다 — 프리픽스가 최소 토큰 미만이면 API는 조용히 캐시하지 않고
+# (silent no-op), 프리픽스가 회차마다 달라지면 매번 새로 쓰기만 한다. 두 경우 모두 응답은
+# 200이고 회차는 exit 0이다. 그래서 적중은 **응답 usage로만** 판정된다(CLAUDE.md
+# "작동 신호 없는 알고리즘 부착 금지").
+#
+# 분모 주의 — `input_tokens`는 캐시 적중분을 **뺀** 값이다(배타 관계). 그래서 적중률의
+# 분모는 `input + cache_read + cache_creation`(= 프롬프트 총 토큰)이다. acceptance ②의
+# 표기 "cache_read/input"을 글자대로 읽으면 분모가 캐시 적중분을 제외한 잔여만 남아 비율이
+# 1을 훌쩍 넘고, 같은 acceptance ③이 정상값으로 지정한 "(n-1)/n에 근접"과 모순된다 —
+# 행동 기준(③)이 계약이므로 분모를 총 프롬프트 토큰으로 잡는다. n회 동일 프리픽스 회차에서
+# 1회차가 쓰고(P) 2~n회차가 읽으면((n-1)P) 비율은 (n-1)P/(nP) = (n-1)/n으로 수렴한다.
+# ──────────────────────────────────────────────────────────────────────────
+
+#: 상태 어휘 전건 — 리포트·대장을 읽는 쪽이 문자열을 상수로 대조할 수 있게 공개한다.
+#
+# 키 이름이 `verdict`가 **아닌** 이유: 회차 대장은 "검수자 착석 필드(reviewer_id·verdict)를
+# 담지 않는다"를 문자열 부재로 동결한 가드가 있다(`test_eos_anchor_e2e_a4.py::
+# TestGenerationLogAnchorHonesty`). 이 상태는 기계 산출이라 그 가드의 *의도*에는 걸리지
+# 않지만, 가드를 느슨하게 고쳐 통과시키는 것보다 이름을 비켜 주는 편이 옳다 — 그 가드의
+# 힘은 **중첩된 어디에 있든 잡는 무딤**에서 나오고, 예외를 파는 순간 그 힘이 사라진다.
+PROMPT_CACHE_STATES: tuple[str, ...] = (
+    "not_applicable",
+    "unmeasured",
+    "disabled",
+    "disabled_but_hit",
+    "enabled_not_working",
+    "enabled_working",
+    "unknown_flag",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PromptCacheTally:
+    """회차 안 genlog 행에서 모은 프롬프트 캐시 원장(불변·순수·파일 I/O 0).
+
+    `observe`는 **새 인스턴스를 돌려준다** — 싱크가 회차 도중 값을 누적하되, 중간 상태가
+    다른 곳에서 조용히 바뀌지 않게 한다(대장 행은 회차 끝의 스냅샷 하나만 본다).
+
+    **캐시 텔레메트리가 없는 행의 `input_tokens`는 분모에 넣지 않는다.** 이것이 이 집계의
+    급소다: 로컬 Ollama 경로는 캐시 개념 자체가 없어 두 캐시 필드가 None인데, 그 행의 입력
+    토큰을 분모에 실으면 **로컬만 돌린 회차가 '적중 0%'로 보인다** — 즉 "해당 없음"이
+    "켰지만 작동 안 함"으로 위장된다(미측정 ≠ 0). 그래서 분모는 캐시 필드를 하나라도 실은
+    행(= 클라우드 응답)에서만 모은다.
+    """
+
+    calls_total: int = 0
+    """관측한 genlog 행 수(전체) — 분모가 아니라 *관측 규모*다."""
+
+    calls_with_cache_telemetry: int = 0
+    """캐시 필드를 하나라도 실은 행 수 — 이 값이 0이면 적중률은 정의되지 않는다."""
+
+    cache_read_tokens: int = 0
+    """캐시에서 읽힌 프리픽스 토큰 합(적중분)."""
+
+    cache_creation_tokens: int = 0
+    """캐시에 쓰인 프리픽스 토큰 합(첫 회차분)."""
+
+    uncached_input_tokens: int = 0
+    """캐시 텔레메트리를 실은 행의 `input_tokens` 합(= 캐시를 타지 않은 잔여 입력)."""
+
+    def observe(
+        self,
+        *,
+        input_tokens: int | None,
+        cache_read_input_tokens: int | None,
+        cache_creation_input_tokens: int | None,
+    ) -> PromptCacheTally:
+        """genlog 행 1건을 반영한 새 원장을 돌려준다(원본 불변).
+
+        None은 **더하지 않는다**(0으로 접지 않는다) — 미기록과 실측 0의 구분이 이 집계의
+        전부이기 때문이다. 캐시 두 필드가 모두 None인 행은 `calls_total`만 늘린다.
+        """
+        has_cache = cache_read_input_tokens is not None or cache_creation_input_tokens is not None
+        if not has_cache:
+            return replace(self, calls_total=self.calls_total + 1)
+        return replace(
+            self,
+            calls_total=self.calls_total + 1,
+            calls_with_cache_telemetry=self.calls_with_cache_telemetry + 1,
+            cache_read_tokens=self.cache_read_tokens + (cache_read_input_tokens or 0),
+            cache_creation_tokens=self.cache_creation_tokens + (cache_creation_input_tokens or 0),
+            uncached_input_tokens=self.uncached_input_tokens + (input_tokens or 0),
+        )
+
+    @property
+    def prompt_tokens_total(self) -> int:
+        """적중률의 분모 — 프롬프트 총 토큰(잔여 입력 + 읽기 + 쓰기·배타 관계 합산)."""
+        return self.uncached_input_tokens + self.cache_read_tokens + self.cache_creation_tokens
+
+
+def prompt_cache_rates(tally: PromptCacheTally, *, caching_enabled: bool | None) -> dict[str, Any]:
+    """회차의 프롬프트 캐시 '작동한 비율' + 판정(순수·파일 I/O 0).
+
+    `caching_enabled`는 이 회차가 돌 때의 `settings.anthropic_prompt_caching`이다. **None은
+    "플래그 상태를 모른다"**이며 False(꺼짐)와 구분한다 — 모르는 것을 꺼짐으로 접으면
+    적중 0%가 "당연한 결과"로 읽혀 '켰지만 작동 안 함'이 영영 안 보인다(모른다 ≠ 아니다).
+
+    상태 어휘(`PROMPT_CACHE_STATES`) — 측정 가능성을 먼저 보고, 그다음에 플래그를 본다:
+
+      - `not_applicable` — 캐시 텔레메트리를 실은 행이 0건. 로컬 경로만 돈 회차이거나
+        provider가 필드를 노출하지 않은 경우다. **적중 0%가 아니다.**
+      - `unmeasured` — 텔레메트리 행은 있는데 토큰 합이 0(분모 없음). 비율은 None.
+      - `disabled` / `disabled_but_hit` — 플래그가 꺼져 있었다. 후자는 그런데도 적중이
+        잡힌 경우로, 리포트가 읽은 플래그와 실제로 돈 설정이 다르다는 신호다(조용히 넘기지
+        않는다).
+      - `enabled_not_working` — **켰는데 적중 0%.** 이 태스크가 존재하는 이유다.
+      - `enabled_working` — 켰고 적중이 있다.
+      - `unknown_flag` — 측정은 됐으나 플래그 상태 미상.
+    """
+    measured = tally.calls_with_cache_telemetry > 0 and tally.prompt_tokens_total > 0
+    hit_rate: float | None = None
+    unmeasured_reason: str | None = None
+    if tally.calls_with_cache_telemetry <= 0:
+        state = "not_applicable"
+        unmeasured_reason = (
+            f"캐시 토큰을 실은 호출 0건(관측 {tally.calls_total}건) — 캐시 개념이 없는 로컬 "
+            "경로만 돌았거나 provider가 필드를 노출하지 않았다. 적중 0%가 아니다(미측정)."
+        )
+    elif tally.prompt_tokens_total <= 0:
+        state = "unmeasured"
+        unmeasured_reason = (
+            f"캐시 텔레메트리 {tally.calls_with_cache_telemetry}건이 있으나 프롬프트 토큰 합이 "
+            "0 — 분모가 없어 비율을 계산할 수 없다(0%가 아니다)."
+        )
+    else:
+        hit_rate = tally.cache_read_tokens / tally.prompt_tokens_total
+        if caching_enabled is None:
+            state = "unknown_flag"
+        elif caching_enabled:
+            state = "enabled_working" if hit_rate > 0 else "enabled_not_working"
+        else:
+            state = "disabled_but_hit" if hit_rate > 0 else "disabled"
+
+    return {
+        "caching_enabled": caching_enabled,
+        "calls_total": tally.calls_total,
+        "calls_with_cache_telemetry": tally.calls_with_cache_telemetry,
+        "cache_read_tokens": tally.cache_read_tokens,
+        "cache_creation_tokens": tally.cache_creation_tokens,
+        "uncached_input_tokens": tally.uncached_input_tokens,
+        "prompt_tokens_total": tally.prompt_tokens_total,
+        "measured": measured,
+        "unmeasured_reason": unmeasured_reason,
+        "hit_rate": hit_rate,
+        "state": state,
     }
 
 
@@ -349,6 +504,17 @@ class RoundRecord(BaseModel):
         description=(
             "중단 사유(관측 불량률·창 크기·임계 포함). 중단이 없으면 None이고, 그 구분은 "
             "`aborted`가 말한다(`aborted=False`+None=중단 없음 / `aborted=None`=미기록)."
+        ),
+    )
+    prompt_cache: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "이 회차의 프롬프트 캐시 작동 신호(EOS-99) — `prompt_cache_rates` 산출물 그대로"
+            "(적중률·토큰 3종·플래그 상태·상태 어휘). 회차 대장에 싣는 이유는 적중률이 "
+            "**회차 간 비교로만 의미를 갖기** 때문이다: 한 회차의 0%는 프리픽스가 짧았을 수도 "
+            "있지만, 플래그가 켜진 채 0%가 연속되면 '켰지만 작동 안 함'이 구조 신호가 된다. "
+            "None=미기록(이 필드 신설 이전 구행)이고, `state='not_applicable'`은 '측정 "
+            "대상이 아니었다'(로컬 경로만 돈 회차)로 0%와 구분된다."
         ),
     )
 

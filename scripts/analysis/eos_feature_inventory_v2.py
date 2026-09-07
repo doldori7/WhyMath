@@ -709,7 +709,10 @@ CATALOG: tuple[Spec, ...] = (
     _e("WM-E-807", "앱 조립·합성 루트·설정·app.state 배관", "Platform", "Operations", "P0",
        "composition = 경계의 유일한 배선 지점(EOS-69)", "composition", "config",
        "api._l3_state", "api._ocr_state", "api._misconception_state",
-       "api._growth_evidence_state", "api._segmentation_state"),
+       "api._growth_evidence_state", "api._segmentation_state",
+       # EOS-89: 과목 능력 5종의 app.state 등록 주소·조회(등록 형태의 배관). `_l3_state`와
+       # 같은 성격이라 같은 좌석에 귀속한다 — 판정 로직 0, 키·getter만.
+       "api._subject_capability_state"),
     _e("WM-E-808", "한국어 조사 유틸", "Platform", "Content", "P1",
        "EOS-69 B분류 해소처 — 과목 무관", "lang"),
     _e("WM-E-809", "데모 인증(시연 전용 가짜 OAuth provider)", "Admin", "Identity", "P1",

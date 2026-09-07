@@ -146,23 +146,67 @@ def _reason_created_declarations(
     ]
 
 
-def _fail_on_reason_feedback(backlog: object, task_id: str, before: set[tuple[str, str]]) -> int:
-    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다."""
+def _fail_on_reason_feedback(
+    backlog: object,
+    task_id: str,
+    before: set[tuple[str, str]],
+    *,
+    flag: str = "--reason",
+    appended: bool = True,
+) -> int:
+    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다.
+
+    `flag`는 그 문구를 실제로 넘긴 인자 이름이다 — `block`·`amend`는 `--reason`, `add`는
+    `--notes`. 잘못된 플래그를 지목하면 사람이 없는 인자를 고치려다 왕복을 태운다.
+
+    `appended`는 그 문구가 *이미 기록됐는지*를 가른다. `block`·`amend`는 append 후 검사라
+    "기록된 뒤에는 되돌릴 수 없다"가 참이지만, `add`는 **저장 전** 검사라 아직 아무것도
+    쓰이지 않았다(HARN-71) — 그 차이를 안내가 정직하게 말해야 사람이 대장 상태를 오해하지
+    않는다.
+    """
     created = _reason_created_declarations(backlog, task_id, before)
     if not created:
         return 0
     for f in created:
         print(f"  · {f.render()}", file=sys.stderr)  # type: ignore[attr-defined]
+    tail = (
+        "(notes는 append 전용이라 기록된 뒤에는 되돌릴 수 없다)"
+        if appended
+        else "(아직 대장에 쓰이지 않았다 — 이 명령은 아무것도 남기지 않고 멈췄다)"
+    )
     return _fail(
-        f"{task_id}: --reason 문구가 새 의존 선언을 만든다 — 사유에서 선행 어구와 태스크 ID가 "
-        "한 문장에 함께 오지 않게 고쳐 다시 실행하라(notes는 append 전용이라 기록된 뒤에는 "
-        "되돌릴 수 없다)."
+        f"{task_id}: {flag} 문구가 새 의존 선언을 만든다 — 선행 어구와 태스크 ID가 "
+        f"한 문장에 함께 오지 않게 고치거나, 실제 선행이면 `--depends <full-id>`를 함께 "
+        f"주고 다시 실행하라{tail}."
     )
 
 
 def _has_pr_reference(artifacts: list[str]) -> bool:
     """증적 목록 중 하나라도 PR 참조(`#12`·`/pull/12`)를 담고 있는가."""
     return any(_PR_REFERENCE_RE.search(a) for a in artifacts)
+
+
+# ── 판정 기준 게이트 (HARN-68) ──────────────────────────────────────────────
+# 규칙 정본은 CLAUDE.md "미머지 존재를 '충족'으로 단정 금지"(2026-09-06 등재).
+# 여기는 그 규칙의 **게이트 clear 축** 집행 지점이다.
+#
+# 판정은 시점에 종속된다. "그 산출물이 있다"는 *언제의 트리에서* 봤느냐에 따라 참이거나
+# 거짓이며, 기준 시점이 없는 판정은 재현할 수 없고 재현 불가한 판정은 며칠 뒤 조용히
+# 거짓이 된다. 사고 경위: 2026-09-05 Gate 0 검토가 **미머지** PR #986을 Gate 0-B 근거로
+# 달았고, 같은 세션의 "고아 3건 소유자 부여 완료" 보고도 셋 다 미머지였다 — main 기준
+# 그날의 실제 변화는 하나뿐이었다.
+#
+# 그래서 evidence에 **기준을 가리키는 것**(커밋 해시 또는 PR 참조)을 요구한다. sha256
+# 같은 긴 해시도 받는다(문서 §정규화 해시를 증적으로 쓴 선례 — G0 검증설계 동결).
+# 경계에 `\b`를 쓰면 안 된다: 파이썬 정규식의 `\w`는 유니코드라 **한글도 단어문자**이므로
+# "커밋 fbbcc53에"처럼 한글이 바로 붙는 흔한 표기에서 경계가 성립하지 않는다(실측: 기존
+# 게이트 evidence 1건이 이 이유로 오탐됐다). ASCII 영숫자만 경계로 본다.
+_JUDGMENT_BASE_RE = re.compile(r"(?:#\d+|/pull/\d+|(?<![0-9A-Za-z])[0-9a-f]{7,64}(?![0-9A-Za-z]))")
+
+
+def _has_judgment_base(evidence: str) -> bool:
+    """evidence가 판정 기준(커밋 해시·PR 참조)을 담고 있는가."""
+    return bool(_JUDGMENT_BASE_RE.search(evidence))
 
 
 # ── 서브커맨드 ───────────────────────────────────────────────────────────────
@@ -945,6 +989,19 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     if args.gate_action == "clear":
         if not args.evidence:
             return _fail(f"{gate.id}: clear에는 --evidence <근거> 필수")
+        # 판정 기준 게이트 (HARN-68) — evidence가 "언제의 트리로 판정했는가"를 담아야 한다.
+        # done의 PR 증적 검사(HARN-23)와 동형이되 탈출구는 **자유 서술**이다: 사람 게이트의
+        # 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·서명·법률 검토·외부 등록),
+        # 그 유형을 미리 열거하면 정상 상태에서 거부하는 검사가 된다 — 그러면 사람은
+        # 게이트를 끄거나 대장을 손편집하고, 그때는 아무 기록도 남지 않아 더 나빠진다.
+        no_base_reason = getattr(args, "no_base", None)
+        if no_base_reason is None and not _has_judgment_base(args.evidence):
+            return _fail(
+                f"{gate.id}: evidence에 판정 기준이 없다 — 커밋 해시나 PR 참조(#12)를 넣어라.\n"
+                "  판정은 시점에 종속된다: 기준 없는 판정은 재현할 수 없고, 재현 불가한\n"
+                "  판정은 며칠 뒤 조용히 거짓이 된다(CLAUDE.md 미머지 존재를 충족으로 단정 금지).\n"
+                "  커밋과 무관한 근거(환경 생성·서명·외부 등록 등)라면 --no-base <사유>."
+            )
         as_owner = getattr(args, "as_owner", None)
         # 불일치 검사는 done/start와 동형(HARN-06) — 남의 게이트를 자기 이름으로 못 닫는다.
         if as_owner is not None and as_owner != gate.assignee:
@@ -960,6 +1017,11 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
         gate.evidence = args.evidence
         gate.cleared_by = as_owner or "claude"
         extra["cleared_by"] = gate.cleared_by
+        # 탈출구를 쓴 사실과 사유를 **대장과 이벤트 양쪽**에 남긴다. 남지 않는 탈출구는
+        # 게이트를 끄는 것과 같다 — 나중에 "왜 기준이 없었나"를 물을 수 있어야 한다.
+        if no_base_reason is not None:
+            gate.notes = _append_note(gate.notes, no_base_reason, "판정기준 없음")
+            extra["no_base_reason"] = no_base_reason
     elif args.gate_action == "waive":
         gate.status = "waived"
         gate.notes = args.reason or gate.notes
@@ -1581,6 +1643,17 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         for e in own_errors:
             print(f"  · {e}", file=sys.stderr)
         return _fail(f"{args.id}: 스키마/무결성 위반으로 추가 거부")
+    # [쓰기측 선검사 · HARN-71] `--notes`가 선행 어구로 타 태스크를 지목하는데 `--depends`가
+    # 비어 있으면 **파일을 쓰기 전에** 거부한다. `block`·`amend`는 이미 같은 검사를 갖고
+    # 있었고(`_fail_on_reason_feedback`) `add`만 빠져 있었다 — 그래서 등재는 조용히 성공하고
+    # CI `harness-integrity`의 `audit-deps`가 나중에 red를 냈다(실측: add EXIT 0 · audit EXIT 1).
+    # 신규 태스크라 "이전 상태"가 없으므로 `before`는 빈 집합이다 — 이 태스크가 만든 선언은
+    # 전부 새 선언이다. 위에서 `backlog.tasks`에 넣은 뒤 검사하므로 참조 대상 해소 여부
+    # (done/cancelled면 순서 제약이 실효 없다)까지 읽기측과 **같은 함수**로 판정한다.
+    if _fail_on_reason_feedback(backlog, task.id, set(), flag="--notes", appended=False):
+        # 대장은 무변경이어야 한다 — `save_task` 이전이라 디스크에 아무것도 쓰이지 않았고,
+        # `backlog.tasks`는 이 프로세스의 메모리라 종료와 함께 사라진다(부분 쓰기 없음).
+        return 1
     path = store.save_task(root, task)
     store.append_event(root, "add", task.id, eos_priority=task.eos_priority)
     print(f"＋ {task.id} 추가 → {path.relative_to(root)} [EOS {task.eos_priority}]")
@@ -2718,6 +2791,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=[o for o in OWNERS if o != "claude"],
         help="gates clear: 본인 게이트를 직접 닫을 때 주체 명시 (HARN-60 · 생략 시 에이전트 기록)",
+    )
+    # gates clear 전용 — 판정 기준(커밋 해시·PR 참조)이 없는 근거의 탈출구 (HARN-68).
+    # 자유 서술이다: 사람 게이트의 정당한 근거에는 커밋과 무관한 것이 많고(환경 생성·
+    # 서명·법률 검토), 유형을 열거하면 정상 상태에서 거부하는 검사가 된다.
+    p.add_argument(
+        "--no-base",
+        dest="no_base",
+        default=None,
+        metavar="사유",
+        help="gates clear: 판정 기준(커밋·PR)이 없는 근거일 때 사유 명시 (HARN-68)",
     )
     # gates add 전용 플래그 (다른 액션에서는 무시됨 — 기본값이 간섭하지 않음)
     p.add_argument("--title", help="gates add: 게이트 제목 (필수)")

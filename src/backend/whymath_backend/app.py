@@ -106,6 +106,21 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.api._segmentation_state import (
     get_segmentation_snapshot as _get_segmentation_snapshot,
 )
+from whymath_backend.api._subject_capability_state import (
+    ANSWER_FORM_VERIFIER_KEY as _ANSWER_FORM_VERIFIER_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    ASSESSMENT_ANSWER_VERIFIER_KEY as _ASSESSMENT_ANSWER_VERIFIER_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    EXPRESSION_EQUIVALENCE_KEY as _EXPRESSION_EQUIVALENCE_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    EXPRESSION_SEAL_KEY as _EXPRESSION_SEAL_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    FINAL_ANSWER_VERIFIER_KEY as _FINAL_ANSWER_VERIFIER_KEY,
+)
 from whymath_backend.api.alignments import router as alignments_router
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
@@ -137,6 +152,13 @@ from whymath_backend.api.study import router as study_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
+from whymath_backend.composition import (
+    default_answer_form_verifier,
+    default_assessment_answer_verifier,
+    default_expression_equivalence,
+    default_expression_seal,
+    default_final_answer_verifier,
+)
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
 from whymath_backend.db.session import dispose_engine, get_session
@@ -703,6 +725,19 @@ def create_app(
     app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
     # 기본 큐는 CeleryJobQueue(지연 연결) — 구성 시 broker 불필요(첫 디스패치 때 연결, S4).
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
+    # ── 과목 능력 등록(push) — 계획서 100 §3.8 / EOS-89 ─────────────────────
+    # Application(여기)이 합성 루트를 **한 번** 불러 인터페이스 타입으로 app.state에 올린다.
+    # 라우터는 `api/_subject_capability_state.py`의 Depends로 꺼내 쓴다 — 그래서 Core 모듈은
+    # `composition`을 이름으로 알지 않는다(`EOS Core → Subject Interface ← Math Adapter`).
+    # 부팅 1회 호출이라 요청 경로에서 재조립하지 않는다(팩토리는 상태 없는 판정기를 준다).
+    # ⚠️ EOS-86의 `StepChainVerifier` 팩토리도 **반드시 이 줄들 옆에** 등록해야 한다. Core가
+    #    직접 `composition.default_step_chain_verifier()`를 부르면 EOS-89가 없앤 pull 지점이
+    #    4번째로 되살아난다(SUBJECT_CAPABILITY_KEYS에 키를 더하는 것이 그 강제 장치다).
+    app.state.__setattr__(_EXPRESSION_EQUIVALENCE_KEY, default_expression_equivalence())
+    app.state.__setattr__(_FINAL_ANSWER_VERIFIER_KEY, default_final_answer_verifier())
+    app.state.__setattr__(_ASSESSMENT_ANSWER_VERIFIER_KEY, default_assessment_answer_verifier())
+    app.state.__setattr__(_EXPRESSION_SEAL_KEY, default_expression_seal())
+    app.state.__setattr__(_ANSWER_FORM_VERIFIER_KEY, default_answer_form_verifier())
     # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회). 기본은 config의 키가
     # 설정된 provider만(카카오·네이버·OAuth-a2) — 키 미설정(CI)이면 빈 dict라 콜백 404. 클라이언트는
     # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
