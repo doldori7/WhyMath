@@ -748,7 +748,10 @@ CATALOG: tuple[Spec, ...] = (
        "P0", "EOS-54/78 — HIT 중앙값 KPI 생산자", "harness.review_session",
        "harness.review_timer", "harness.needs_review_worklist",
        "harness.reviewer_sample_package", "harness.concept_content_review_apply",
-       "harness.concept_content_review_batch", "harness.concept_content_audit"),
+       "harness.concept_content_review_batch", "harness.concept_content_audit",
+       # MP-05 — 회차 앞머리 카나리 구간을 검수 큐 JSONL로 잘라내는 CLI. 검수 워크플로의
+       # *입력 생산자*라 여기 귀속한다(산출을 먹는 쪽이 harness.review_session이다).
+       "harness.canary_slice"),
     _o("WM-O-911", "골든 벤치마크 승격·경로 게이트·앵커 회차 대장", "Admin", "QA", "P0",
        "EOS-60/64 — 판정기의 FN율", "harness.golden_benchmark",
        "harness.golden_promotion_gate", "harness.anchor_round_ledger"),
