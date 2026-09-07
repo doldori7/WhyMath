@@ -38,14 +38,47 @@
 |---|---|---|---|---|---|
 | CK-12 | CC BY-NC | ❌ | ✅ | ✅ | 비상업만 |
 | OpenStax | CC BY 4.0 | ✅ | ✅ | ✅ | 자유 |
-| Siyavula | CC BY | ✅ | ✅ | ✅ | 자유 |
+| Siyavula | CC BY (**명시 표기 자료 한정**) | ⚠️ 조건부 | ⚠️ 조건부 | ✅ **문구 지정** | 사이트 기본값은 **closed copyright·All rights reserved** · CC 표기가 *붙은* 자료만 재사용 가능 · 귀속 = 저자명 + `From www.everythingmaths.co.za`\|`From siyavula.com` · 상표·로고·URL·특허·디자인은 CC 대상 아님 (아래 각주) |
 | LibreTexts | CC BY-SA | ⚠️ | ⚠️ | ✅ | **SA(B등급)** — AI 학습 위험(가중치 SA 전염), 서비스 콘텐츠만 |
 | NRICH | 자체 | ⚠️ 협상 | ❌ | ✅ | Cambridge MMP |
 | Mathigon | 비상업 | ❌ | ❌ | — | 영감만 |
 | AoPS Wiki | CC BY-SA | ⚠️ | ⚠️ | ✅ | **SA(B등급)** — 학습 직접사용 위험; *사실·구조만 추출+자체생성* 우회 |
 | Khan Academy | CC BY-NC-SA | ❌ | ❌ | — | **NC+SA 이중독성(C등급)** — 완전격리 |
 | 3Blue1Brown | YouTube 표준 | ❌ | ❌ | — | 영감만 |
-| Illustrative Math | CC BY 4.0 | ✅ | ✅ | ✅ | 자유 |
+| Illustrative Math | **판(edition)별 상이** — 초판 K–12 Math(© 2019–2021)=CC BY 4.0 · **v.360**(© 2024·TK © 2025)=**CC BY-NC 4.0** | ⚠️ **초판만** | ⚠️ 초판만 | ✅ **문구 지정** | **v.360은 상업 이용 금지**(accessim.org 배포분) — 우리는 상용 서비스라 초판(im.kendallhunt.com)만 사용 가능 · 귀속 = "Based on IM® K–12 Math authored by Illustrative Mathematics and licensed under CC BY 4.0." (아래 각주) |
+
+> **적용 범위 단서 (LIC-05 · 2026-09-07)** — 라이선스명만 적으면 *사이트 전체가 그 라이선스*로 읽힌다.
+> 아래 두 소스는 약관 원문이 범위를 한정하며, 종전 표기는 그 한정을 담지 못했다.
+>
+> **Siyavula** (증적 `data/licenses/snapshots/siyavula/45723a589bd0a69d.html` · sha256 `45723a58…de2b` ·
+> 2026-08-31T01:36:01Z 수집 · §Copyright and Related Rights):
+> - "**Some** material on the site is licensed under a Creative Commons Attribution Only License"
+> - "**Only material that is clearly marked** with a Creative Commons license can be re-used without permission"
+> - 귀속 요건: 저자명 + `"From www.everythingmaths.co.za"` 또는 `"From siyavula.com"`
+> - CC는 **저작권만** 다루며 "does not grant any rights over trademarks, brands, Uniform Resource Locators,
+>   patents, designs" — 리믹스에 로고·브랜드마크를 넣을 수 없다(귀속 요건 이행 목적 제외)
+> - **사이트 기본값은 CC가 아니다**: 푸터가 "except where otherwise noted, this site is covered by a
+>   **closed copyright license. All rights reserved.**"라고 선언한다. 즉 CC BY가 원칙이고 예외가 닫힌 것이
+>   아니라, **닫힌 것이 원칙이고 CC BY가 예외**다 — 종전 '자유' 표기와 방향이 반대였다.
+>
+> **Illustrative Mathematics** (증적 `data/licenses/snapshots/illustrative-mathematics/46845eab5092f74c.html` ·
+> sha256 `46845eab…b2df` · 2026-08-31T00:55:08Z 수집 · §7 License):
+> - §7.1 초판 `IM® K–12 Math`(© 2019–2021 · im.kendallhunt.com) = **CC BY 4.0** — 상업 이용 명시 허용
+> - §7.2 2판 `IM® TK–12 Math v.360`(© 2024 · TK © 2025 · accessim.org) = **CC BY-NC 4.0** —
+>   "Commercial use of the IM v.360 curriculum materials and name … **is prohibited** without prior
+>   written permission". 또 그 CC는 "governs the IM v.360 curriculum **only** and not other IM Products".
+> - 우리는 **상용 서비스**이므로 v.360은 결정 우선순위 #2(법적 준수)상 사용 불가다. 이 구분은
+>   `docs/legal/copyright_guide_v2.md`에는 이미 있었으나 **"반드시 확인"이라고 선언한 이 매트릭스에는
+>   없었다** — 정본이 파생 문서보다 덜 정확한 상태였다.
+>
+> **③ 동일 유형 전수 재점검 — 방법과 한계**: 스냅샷 **20/20 전건**(디렉터리 20 · 본문 20건)을 두 번
+> 훑었다. 1차 = 범위 한정 어구 13종(`some material`·`only material`·`clearly marked`·`unless otherwise`·
+> `except where`·`not all`·`portions of` 등), 2차 = 범위 부정 어구(`does not apply`·`excluding`·
+> `all rights reserved` 등)가 **라이선스명 ±300자 안에 함께 오는 경우**만. 걸린 것은 위 2건이고,
+> 나머지 히트는 MIT 본문의 `substantial portions of the software`(gsm8k·math-hendrycks·prm800k)와
+> 데이터셋 *내용*의 우연 일치(numinamath-tir·omnimath)로 전건 오탐이었다.
+> **한계**: 어구 사전 기반이라 *다른 표현*으로 범위를 한정한 소스는 못 본다 — "내가 쓴 방법으로는 2건"이
+> 정확한 진술이고 "20곳 중 2곳뿐"은 그보다 강한 주장이다.
 
 ## LLM 학습 데이터셋
 

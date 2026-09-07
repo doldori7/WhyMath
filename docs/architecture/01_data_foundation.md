@@ -39,7 +39,7 @@
 |---|---|---|
 | CK-12 | CC BY-NC | 비상업 활용·해설 영감 |
 | OpenStax | CC BY | 상업 활용 가능 |
-| Siyavula | CC BY | 남아공 수학·과학 |
+| Siyavula | CC BY (**명시 표기 자료 한정** — 사이트 기본값은 closed) | 남아공 수학·과학 |
 | LibreTexts | CC BY-SA | 광범위한 수학 자원 |
 | NRICH | 비상업 무료 | *영감만* (상업 X) |
 | Mathigon | 비상업 | 시각화 영감 |
