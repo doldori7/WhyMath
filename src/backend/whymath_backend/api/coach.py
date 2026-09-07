@@ -68,6 +68,7 @@ from whymath_backend.api._segmentation_state import (
 from whymath_backend.api._subject_capability_state import (
     get_answer_form_verifier,
     get_final_answer_verifier,
+    get_step_chain_verifier,
 )
 
 # EOS-69: 상태 어휘·연쇄 결과 타입은 schema의 중립 계약에서 읽는다(수학 모듈 의존 제거).
@@ -136,6 +137,7 @@ from whymath_backend.l4.misconception import (
     combine_diagnoses,
     correct_form_present,
     diagnose,
+    reject_refuted,
     select_intervention,
     select_intervention_from_hypotheses,
 )
@@ -180,6 +182,7 @@ from whymath_backend.schema.verification_capabilities import (
     AnswerFormVerifier,
     ChainVerificationCounts,
     FinalAnswerVerifier,
+    StepChainVerifier,
     VerificationOutcome,
 )
 
@@ -587,6 +590,7 @@ def _build_response_payload(
     recent_categories: Sequence[SocraticCategory] = (),
     grade: int | None = None,
     standard_code: str | None = None,
+    step_chain_verifier: StepChainVerifier | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -624,6 +628,14 @@ def _build_response_payload(
     None이라 미주입 호출자(stateless `/v1/coach`·sync 직접호출)는 완전 회귀 0. 실제 프롬프트
     반영은 `decide()` 내부에서 pack 주입 ∧ `pedagogy_pack_prompt_enabled` 플래그 ON일 때만
     일어난다(기존 옵트인 게이트 그대로 재사용 — 별도 플래그 신설 0).
+
+    **COMP-01** `step_chain_verifier`: 세 핸들러가 `SubjectCapabilityDeps`(app.state 등록분)에서
+    꺼내 넘기는 단계 연쇄 검증 능력 — **프로덕션 3경로는 전부 명시 주입**이고, 이것이 정본이다.
+    기본 None은 이 함수를 *직접* 부르는 단위테스트(2026-09-07 실측 24곳)용 폴백 좌석이며,
+    None이면 L4 오케스트레이터가 합성 루트 기본 구현으로 폴백한다(`l4/solution_coaching.py`
+    해당 분기 주석).
+    주입값이 실제로 쓰이는지는 `tests/backend/api/test_coach.py`의
+    `TestStepChainVerifierInjection`이 가짜 verifier를 app.state에 올려 동결한다.
 
     **S4-19(2026-08-10)**: 반환이 7-튜플로 확장됐다 — `_StepVerificationCarry`(게이트 *이전*
     단계 검증 운반값·적재 전용)를 끝이 아닌 위치에 삽입해 **마지막 원소=solution_coaching
@@ -690,6 +702,9 @@ def _build_response_payload(
         solution_step_types=body.solution_step_types,
         ocr_confidence=body.ocr_confidence,
         hint_level=decision.hint_level,
+        # COMP-01: 단계 연쇄 검증 능력을 **명시 주입**한다 — 미주입이면 L4가 합성 루트를
+        # 지연 조회(pull)하므로, 이 한 줄이 "Core는 인터페이스만 안다"는 주장의 집행 지점이다.
+        verifier=step_chain_verifier,
     )
     # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은
@@ -756,7 +771,7 @@ JudgeSeamDeps = Annotated[_JudgeSeamDeps, Depends(_get_judge_seam_deps)]
 
 
 class _SubjectCapabilityDeps(NamedTuple):
-    """이 라우터가 쓰는 **과목 능력 2종** — app.state 등록분(EOS-89).
+    """이 라우터가 쓰는 **과목 능력 3종** — app.state 등록분(EOS-89·COMP-01).
 
     `_JudgeSeamDeps`와 같은 형태다(`request.app.state` 경유라 팩토리 클로저에 의존하지 않아
     TestClient에서도 안전). 다만 **폴백이 없다**: judge seam은 없으면 자기 기본값으로 도는
@@ -766,19 +781,25 @@ class _SubjectCapabilityDeps(NamedTuple):
 
     final_answer: FinalAnswerVerifier
     answer_form: AnswerFormVerifier
+    step_chain: StepChainVerifier
+    """풀이 단계 연쇄 검증(COMP-01) — `_build_response_payload`가 L4 오케스트레이터에 명시 주입.
+
+    앞의 둘(완료 상태머신용)과 소비처가 다르지만 좌석을 나누지 않는 이유: 셋 다 *같은 등록
+    (push) 규약*으로 app.state에서 오고, 좌석을 쪼개면 핸들러 시그니처가 능력 수만큼 늘어난다."""
 
 
 def _get_subject_capabilities(request: Request) -> _SubjectCapabilityDeps:
-    """app.state에 등록된 과목 능력을 완료 상태머신 주입용으로 묶는 의존성(EOS-89).
+    """app.state에 등록된 과목 능력을 묶는 의존성(EOS-89 완료 상태머신 2종 + COMP-01 연쇄 검증).
 
     `create_app`이 부팅 시 `composition.default_*()`로 1회 올린 인스턴스를 요청마다 조회한다.
     이 라우터가 `composition`을 import하지 않는 것이 §3.8 "등록 형태"의 실체다 — Core는
-    인터페이스 타입(`FinalAnswerVerifier`·`AnswerFormVerifier`)만 안다.
+    인터페이스 타입(`FinalAnswerVerifier`·`AnswerFormVerifier`·`StepChainVerifier`)만 안다.
     """
 
     return _SubjectCapabilityDeps(
         final_answer=get_final_answer_verifier(request),
         answer_form=get_answer_form_verifier(request),
+        step_chain=get_step_chain_verifier(request),
     )
 
 
@@ -885,6 +906,11 @@ async def _compute_matches(
         # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
         if candidates and get_settings().misconception_judge_enabled:
             candidates = await judge_filter(candidates, student_input, judge=_make_judge())
+        # 반박 조건(MISC-23)을 **세 모드 공통 출구**에서 한 번 더 적용한다. substring 경로는
+        # `diagnose`가 이미 걸렀지만, `on` 모드의 의미 후보는 그 경로를 지나지 않으므로
+        # `combine_diagnoses`가 그것을 "semantic-only"로 보고 되살린다(PR #1039 Codex P2).
+        # off 모드에선 무해한 no-op다(이미 걸러진 목록을 다시 훑을 뿐).
+        candidates = reject_refuted(candidates, student_input)
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
@@ -2148,6 +2174,7 @@ async def coach_decide(
     user: ConsentedUser,
     judge_deps: JudgeSeamDeps,
     segmentation_counters: SegmentationCountersDep,
+    subject_capabilities: SubjectCapabilityDeps,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
@@ -2170,7 +2197,11 @@ async def coach_decide(
     # S4-19: carry(게이트 이전 단계 검증 운반값)는 stateless 경로에선 미소비(DB 무접근 계약 —
     # 적재 좌석 없음). 마지막 원소=solution_coaching 불변식은 유지된다.
     decision, matches, intervention, lthc, entry_category, _step_carry, solution_coaching = (
-        _build_response_payload(body, matches=outcome.matches)
+        _build_response_payload(
+            body,
+            matches=outcome.matches,
+            step_chain_verifier=subject_capabilities.step_chain,
+        )
     )
     return CoachResponse(
         decision=decision,
@@ -2331,6 +2362,7 @@ async def create_session(
             polya_state_override=server_state,
             grade=grade,
             standard_code=standard_code,
+            step_chain_verifier=subject_capabilities.step_chain,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -2704,6 +2736,7 @@ async def append_turns(
             recent_categories=recent_categories,
             grade=grade,
             standard_code=standard_code,
+            step_chain_verifier=subject_capabilities.step_chain,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)

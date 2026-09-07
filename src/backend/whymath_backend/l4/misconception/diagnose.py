@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from functools import lru_cache
 
 from whymath_backend.l4.misconception.catalog import CATALOG
@@ -100,14 +101,44 @@ def _signal_hit(signal: str, norm_text: str) -> bool:
     return norm_sig in norm_text
 
 
+def is_refuted(misconception: Misconception, text: str) -> bool:
+    """이 텍스트가 그 오개념을 **반박**하는가 — 반박 조건의 단일 판정처(MISC-23).
+
+    `_match_one`(substring 경로)과 **의미(임베딩) 경로**가 같이 쓴다. 한쪽에만 걸면 다른 쪽이
+    같은 오개념을 되살린다 — `combine_diagnoses`는 substring이 뺀 id를 "semantic-only"로 보고
+    아래에 붙이므로, substring에서만 거부하면 semantic 후보가 그대로 노출된다(PR #1039 Codex P2).
+
+    `combine_diagnoses`가 아니라 여기에 두는 이유: 그 함수는 원문 텍스트를 받지 않는 순수
+    결합기(두 리스트 재배치·변형 0)이고, 반박은 *텍스트에 대한 판정*이라 축이 다르다.
+    """
+    norm_text = _normalize(text)
+    return any(_compile(rx).search(norm_text) is not None for rx in misconception.refuting_regex)
+
+
+def reject_refuted(candidates: Sequence[MisconceptionMatch], text: str) -> list[MisconceptionMatch]:
+    """후보 목록에서 반박된 것을 제거 — 경로와 무관한 **공통 출구**용.
+
+    substring·의미 어느 경로로 들어왔든 여기를 지나면 반박된 후보는 남지 않는다.
+    """
+    return [m for m in candidates if not is_refuted(m.misconception, text)]
+
+
 def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | None:
     """단일 misconception 매칭 — substring 부분집합(정규형 비교) + 정규식 보조 경로(OR).
 
     confidence = min(1.0, (substr매치 + regex매치) / len(signals)). 둘 다 0이면 None.
     분모는 substring `signals` 기준 유지(v1.1 의미 보존) — 정규식은 분자에 *가산*·상한 1.0.
     v1.3: 개별 signal 매칭은 `_signal_hit`(짧은 영숫자 signal 경계 검사) 경유.
+
+    MISC-23: `refuting_regex`가 하나라도 매치되면 **신호를 세기 전에** None이다. 공출현 AND는
+    오개념을 *저지른* 풀이와 그것을 *설명한* 정답을 구별하지 못하므로, 반박 축이 없으면 정답에
+    확신 오진단이 나간다(실측: conf 1.0으로 품질 게이트 통과).
     """
     norm_text = _normalize(text)
+    # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
+    # "얼마나 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
+    if is_refuted(misconception, text):
+        return None
     matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
         rs for rs in misconception.regex_signals if _compile(rs).search(norm_text) is not None
