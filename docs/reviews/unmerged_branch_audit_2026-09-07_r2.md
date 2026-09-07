@@ -202,6 +202,9 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 
 | `whymath-coding-architecture-iws58k` | ARCH-30(todo·P3·2027 이월) | 16 | 4 | high(형식)/low(실질) | acceptance ①②·paths는 `docs/strategy/**`·`models.py`만. **E7 태스크 YAML 6건**(subject: coding·main 0건)은 `models.py` SUBJECTS "coding"의 유일 소비자라 결합 의존 — 문서만 착지하면 E7-01/02/90 인용이 매달린 참조. `licensing_safety.md` 3행(백준/프로그래머스 본문 ❌·KOI 메타만·NCIC 정보과 가등록 — 법령 축·브랜치 유일)·`subject_expansion_readiness.md` §1·§8 10줄·`06_application_modes.md` 1줄이 paths 밖. 실질 위험 낮음(전부 금지/가등록 성격·E7 미착수) | ARCH-30 ③으로 전건 승격(E7 6건 재등재/기각을 models.py와 동일 판정) |
 
-*(잔여 6건은 결과 도착 후 기재)*
+| `whymath-issues-review-k20m0w` | MOB-18·SEC-30·PB-14·HARN-25(todo)·SEC-24(done #816)·S3-24(blocked) | 131 | 2 | **high** | 코드 축: SEC-13~18 6건은 #816(31파일·+2,586)으로 흡수 확인(마커 실측 PublicProblem 16·_MAX_IMAGE_BYTES 12·META_KEY_USER_BINDING 11 등). 나머지 src/tests 잔여(PB-04·S4-22·OPS-25·ARCH-29·MOB-11/14/15·S3-37~50·NS-01/02)는 MOB-18 ①이 이름으로 다룸. uncovered ① **`functional_security_audit_2026-08-08.md`**(133줄·결함 11건 감사 정본) — SEC-24·HARN-25·MOB-18이 참조만 하고 이식 미약속(HARN-25 ⑥ "회수 범위 밖") ② **`MGMT-03` 연령 수집·prod 신호 정책 태스크**(owner kiki·PIPA 미성년 게이트 실집행·is_production_like 단일 신호가 안전장치 3중을 결박) — main 동등 태스크 0건. 정직한 공백 3: (a) MOB-18 paths가 `src/mobile/**`·`tests/backend/**`뿐이라 src/backend 20·src/web 4·tests/infra 2·docs 2·gates 1이 밖 (b) ARCH-29 회수는 main ARCH-12(Kiki 07-13 데모 예외 공식화)와 정면 상충 — 이식 즉시 RED (c) S3-42~48은 S3-24가 아니라 S3-25 소관(7회차 주석 정정) | **MGMT-03 재등재**(priority 1·P1·owner kiki·depends MGMT-02) + MOB-18 ⑤(감사 정본 착지·paths 사각·ARCH-12 재판정 선행·S3-25 소관) |
+| `whymath-pedagogy-review-gdmwhk` | PED-26(todo) | 31 | 0 | low | **코드·테스트·데이터 잔여 0** — 22파일은 PED-22~25(#831·#834·#835·#832)가 흡수·후행 갱신(브랜치판 채택 시 mode_guard 판정·k_type 맹글링·secret 폴백 **회귀**). 유일 정보 = 판정 축 3건(04f §10 "REND-05 진짜 갭" 재판정·§12 행·04e 문서번호 이중 점유 지적 / `REND-05` yaml(Kiki 08-11 결정·main 대응 0건) / `PED-21` yaml(main `signal_assembly.py` 부재·04e §12 "PED-08 ②→PED-13" 참조가 번호 충돌로 허공)). 전부 PED-26 ②가 이름으로 다루나 **"필요분만 CLI 재배정" 재량 조항이라 처분 기록 의무 없음** → done 시 조용히 소실 가능. ②의 "04f 파일 단위 이식"은 main 04e 후행 갱신을 덮어씀 → 병합이어야 | PED-26 amend(uqyg79 결과와 묶어 1회) |
+
+*(잔여 4건은 결과 도착 후 기재)*
 
 *(§7·§8·§9는 결과 도착 후 기재)*
