@@ -14,6 +14,10 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
+from _external_store_evidence import (
+    KNOWN_UNDEPLOYED_STORES,
+    assert_manifest_stores_are_deployed,
+)
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -236,13 +240,36 @@ class TestExportUserData:
 
 
 class TestExternalExportPending:
-    def test_three_stores_with_user_locator(self) -> None:
-        """ClickHouse·S3·Redis 3종·각 locator에 user_id 포함."""
+    """미포함 범위 고지의 진실성 — 선언한 store가 실재해야 한다(SEC-32·삭제권 매니페스트와 동형).
+
+    하드코딩 집합(`{"clickhouse","s3","redis"}`) 대신 배포 근거 대조로 바꾼다. 열람권 쪽이
+    삭제권 쪽보다 느슨하면 안 된다 — 같은 사실("데이터가 밖 어디에 있는가")을 두 권리가
+    서로 다르게 고지하게 된다.
+    """
+
+    def test_declared_stores_are_actually_deployed(self) -> None:
+        """선언된 store 전부에 배포 근거가 있고, 각 locator가 그 user를 가리킨다."""
         uid = uuid.uuid4()
         pending = external_export_pending(uid)
-        assert {t.store for t in pending} == {"clickhouse", "s3", "redis"}
+        assert_manifest_stores_are_deployed(
+            (t.store for t in pending), source="external_export_pending"
+        )
         assert all(str(uid) in t.locator for t in pending)
         assert all(isinstance(t, ExternalDataLocation) for t in pending)
+
+    def test_undeployed_stores_are_not_declared(self) -> None:
+        """미도입 store(ClickHouse·S3)는 미포함 고지에도 등장하지 않는다."""
+        declared = {t.store for t in external_export_pending(uuid.uuid4())}
+        assert not declared & set(KNOWN_UNDEPLOYED_STORES)
+
+    def test_mirrors_erasure_manifest_stores(self) -> None:
+        """삭제권 매니페스트와 *같은 store 집합*이다 — 한쪽만 고치면 두 고지가 모순된다."""
+        from whymath_backend.privacy.erasure import external_erasure_targets
+
+        uid = uuid.uuid4()
+        assert {t.store for t in external_export_pending(uid)} == {
+            t.store for t in external_erasure_targets(uid)
+        }
 
     def test_frozen(self) -> None:
         """ExternalDataLocation은 frozen(불변)."""
