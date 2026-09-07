@@ -34,7 +34,7 @@ import dep_declaration
 import pytest
 import selector
 import store
-from models import Backlog, Task, Track
+from models import Backlog, Gate, Task, Track
 
 import backlog as cli
 
@@ -654,3 +654,109 @@ class TestCancelCountsInflightDependents:
         out = capsys.readouterr().out
         assert "2건이 차단된다: T7-31-active, T7-32-reviewing" in out
         assert "T7-33-gone" not in out
+
+
+# ── PR #1025 Codex 리뷰 P2 3건 — 회귀 동결 ─────────────────────────────────────
+
+
+class TestCodexReview1025:
+    """PR #1025 리뷰(chatgpt-codex-connector P2 ×3)가 잡은 구멍 3개를 계약으로 고정한다.
+
+    셋 다 "보호 장치를 만들었는데 특정 경로에서 조용히 무력"한 형태다 — 초판에서 RED를 확인한
+    뒤 수정했다(보호 장치 실패 주입 규칙 2026-09-01).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _empty_soft_table(self, monkeypatch):
+        monkeypatch.setattr(dep_declaration, "SOFT_DECLARED", {})
+
+    @staticmethod
+    def _mixed_backlog() -> Backlog:
+        """취소된 선행에 막힌 태스크 + pending 게이트를 기다리는 태스크가 **함께** 있는 대장."""
+        backlog = Backlog(stage_order=["S1"])
+        backlog.tracks["main"] = Track(id="main", title="기본")
+        backlog.gates["G-x"] = Gate(id="G-x", title="사람 게이트")
+        common = dict(track="main", stage="S1", updated="2026-09-07")
+        backlog.tasks["S1-01-dep"] = Task(
+            id="S1-01-dep", title="선행", status="cancelled", **common
+        )
+        backlog.tasks["S1-02-follow"] = Task(
+            id="S1-02-follow", title="후속", depends_on=["S1-01-dep"], **common
+        )
+        backlog.tasks["S1-03-gated"] = Task(
+            id="S1-03-gated", title="게이트 대기", requires_gates=["G-x"], **common
+        )
+        return backlog
+
+    def test_mixed_stall_is_blocked_not_human_gate(self):
+        """P2-1: 게이트를 전부 열어도 취소된 선행은 남는다 — 정지 사유가 human_gate면 거짓이다."""
+        backlog = self._mixed_backlog()
+        _ready, excluded = selector.candidates(backlog)
+        code, detail = selector.stall_reason(backlog, excluded)
+        assert code == "blocked", (code, detail)
+        assert "S1-02-follow (취소된 선행: S1-01-dep)" in detail
+        # 게이트 대기 태스크도 사유를 잃지 않는다 — human_gate를 포기한 대가로 게이트 ID가
+        # 목록에서 사라지면 안 된다
+        assert "S1-03-gated (게이트 대기: G-x)" in detail
+
+    def test_pure_gate_stall_is_still_human_gate(self):
+        """변별력 — 취소된 선행이 없으면 종전대로 human_gate."""
+        backlog = self._mixed_backlog()
+        backlog.tasks["S1-01-dep"].status = "todo"  # 취소 아님 → 일반 deps
+        del backlog.tasks["S1-02-follow"]
+        _ready, excluded = selector.candidates(backlog)
+        code, detail = selector.stall_reason(backlog, excluded)
+        assert (code, detail) == ("human_gate", ["G-x"])
+
+    def test_next_warns_for_human_owned_task_with_cancelled_dep(self, seeded_repo, capsys):
+        """P2-2: owner 제외가 먼저라 classify가 deps_cancelled를 못 내도 경고는 나와야 한다."""
+        assert _add("T7-01-blocker") == 0
+        assert _add("T7-02-dependent", "--depends", "T7-01-blocker", "--owner", "kiki") == 0
+        capsys.readouterr()
+        assert cli.main(["cancel", "T7-01-blocker", "--reason", "오등재"]) == 0
+        ids, err = _next_all(capsys)
+        assert "T7-02-dependent" not in ids
+        assert "T7-02-dependent" in err and "취소된 선행 T7-01-blocker" in err
+
+    def test_reason_recreating_the_replaced_declaration_is_refused(self, seeded_repo, capsys):
+        """P2-3: 치환으로 없앤 선언을 --reason이 다시 만들면 amend는 성공이 아니다.
+
+        종전에는 치환 *전* findings로 마스크해 '기존 위반'으로 오판 → exit 0인데 audit-deps는
+        여전히 red — 대장은 손편집 금지라 정정 경로가 거짓 성공을 내면 갈 곳이 없다.
+        """
+        assert _add("T7-10-x") == 0
+        assert _add("T7-11-y", "--notes", "선행: T7-10-x 착지 후 착수") == 0
+        assert cli.main(["audit-deps"]) == 1  # 위반 상태에서 시작한다(변별력)
+        before = _task_bytes(seeded_repo, "T7-11-y")
+        capsys.readouterr()
+        rc = cli.main(
+            [
+                "amend",
+                "T7-11-y",
+                "--notes-replace",
+                "선행: T7-10-x 착지 후 착수",
+                "T7-10-x 참고",
+                "--reason",
+                "선행 T7-10-x 선언을 일반 참조로 정정",
+            ]
+        )
+        err = capsys.readouterr().err
+        assert rc == 1, "사유가 같은 선언을 재생성했는데 통과했다"
+        assert "새 의존 선언을 만든다" in err
+        assert _task_bytes(seeded_repo, "T7-11-y") == before  # 부분 쓰기 없음
+        # 어구 없는 사유로는 통과하고 audit-deps가 green이 된다 — 정정 경로 자체는 살아 있다
+        assert (
+            cli.main(
+                [
+                    "amend",
+                    "T7-11-y",
+                    "--notes-replace",
+                    "선행: T7-10-x 착지 후 착수",
+                    "T7-10-x 참고",
+                    "--reason",
+                    "일반 참조로 정정",
+                ]
+            )
+            == 0
+        )
+        assert cli.main(["audit-deps"]) == 0

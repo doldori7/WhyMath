@@ -292,10 +292,14 @@ def stall_reason(backlog: Backlog, excluded: list[Exclusion]) -> tuple[str, list
     # blocked 계열(other_reasons)로 취급하되, 목록에서 일반 차단과 구별되지 않으면 "왜
     # 안 풀리는가"를 사람이 다시 조사해야 한다 — 취소는 done과 달리 기다려도 안 풀린다.
     cancelled_detail: dict[str, list[str]] = {}
+    # 게이트 대기 태스크의 게이트 ID — 아래에서 human_gate 대신 blocked로 접을 때 목록에서
+    # 게이트 정보가 사라지지 않게 태스크별로 따로 둔다(PR #1025 Codex P2-1).
+    gate_detail: dict[str, list[str]] = {}
     other_reasons = False
     for exc in excluded:
         if exc.reason in ("gates", "track_gate"):
             gate_ids.extend(exc.detail)
+            gate_detail[exc.task_id] = list(exc.detail)
         elif exc.reason == "owner":
             continue  # 사람 소유 태스크도 사람 대기의 일종
         elif exc.reason == "claimed_remote":
@@ -315,12 +319,21 @@ def stall_reason(backlog: Backlog, excluded: list[Exclusion]) -> tuple[str, list
     if active or remote_held:
         local = [f"{t.id} ({t.session or '?'})" for t in active]
         return "in_progress", sorted(local + remote_held)
-    if pending_gates:
+    # 취소된 선행이 하나라도 있으면 human_gate로 접지 않는다 — 게이트를 전부 열어도 그
+    # 태스크는 남으므로 "사람 게이트만 해소되면 진행 가능"은 거짓 정지 사유가 된다
+    # (PR #1025 Codex P2-1: 혼합 정체는 blocked). 일반 deps만 섞인 경우는 종전 동작(human_gate).
+    if pending_gates and not cancelled_detail:
         return "human_gate", pending_gates
 
     def _label(task: Task) -> str:
-        # 취소된 선행 표기 — 정정 경로(amend --remove-depends)가 있음을 목록에서 바로 알린다
+        # 취소된 선행 표기 — 정정 경로(amend --remove-depends)가 있음을 목록에서 바로 알린다.
+        # 게이트 대기 표기 — human_gate를 포기한 대가로 게이트 ID가 목록에서 사라지면 안 된다.
         deps = cancelled_detail.get(task.id)
-        return f"{task.id} (취소된 선행: {', '.join(deps)})" if deps else task.id
+        if deps:
+            return f"{task.id} (취소된 선행: {', '.join(deps)})"
+        gates = gate_detail.get(task.id)
+        if gates:
+            return f"{task.id} (게이트 대기: {', '.join(gates)})"
+        return task.id
 
     return "blocked", sorted(_label(t) for t in open_todo)

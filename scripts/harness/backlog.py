@@ -288,7 +288,7 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
     # 선행을 cancel한 세션은 후속이 사라진 것을 못 보고, 다음 세션은 "왜 안 나오지"를 다시
     # 조사한다(2026-09-05 EOS-96 실측). stderr에 내는 이유는 위 두 경고와 같다 — --json의
     # stdout은 기계가 읽으므로 오염하면 안 된다.
-    _warn_cancelled_dep_exclusions(excluded)
+    _warn_cancelled_dep_blocks(backlog)
     if args.json:
         print(
             json.dumps(
@@ -334,21 +334,23 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
-def _warn_cancelled_dep_exclusions(excluded: list[selector.Exclusion]) -> None:
-    """`deps_cancelled`로 제외된 태스크마다 정정 명령을 실은 경고 1줄 — stderr (HARN-67 ②).
+def _warn_cancelled_dep_blocks(backlog: object) -> None:
+    """취소된 선행에 차단된 todo 태스크마다 정정 명령을 실은 경고 1줄 — stderr (HARN-67 ②).
 
     기존 "⚠ 후보 제외 … 이미 완료(미머지)" 경고와 같은 자리·같은 형식이다. 정정 명령을
     같이 싣는 이유: 규칙을 아는 것과 그 순간 떠올리는 것은 다르다(next의 전건 조회 안내와
     같은 원칙).
+
+    왜 `excluded`(classify_todo 결과)가 아니라 대장을 직접 훑는가: classify는 owner·트랙
+    게이트 제외를 먼저 돌려주므로 사람 소유·E축 태스크의 취소 선행은 `deps_cancelled`로
+    나오지 않는다 — 그 태스크는 영구 차단인데 경고 0건인 침묵 상태가 정확히 그 경로에서
+    재현됐다(PR #1025 Codex P2-2). status/brief 요약이 쓰는 `cancelled_dependency_blocks`와
+    같은 계산을 쓴다(단일 진실 원천). --layer/--subject 필터와 무관하게 전건이다.
     """
-    for exc in sorted(excluded, key=lambda e: e.task_id):
-        if exc.reason != "deps_cancelled":
-            continue
-        deps = ", ".join(exc.detail)
-        first = exc.detail[0] if exc.detail else "<dep>"
+    for task, deps in selector.cancelled_dependency_blocks(backlog):
         print(
-            f"⚠ 후보 제외 {exc.task_id} — 취소된 선행 {deps}에 차단됨 · 정정: "
-            f"backlog.py amend {exc.task_id} --remove-depends {first} --reason '...'",
+            f"⚠ 후보 제외 {task.id} — 취소된 선행 {', '.join(deps)}에 차단됨 · 정정: "
+            f"backlog.py amend {task.id} --remove-depends {deps[0]} --reason '...'",
             file=sys.stderr,
         )
 
@@ -2057,6 +2059,21 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
         note_lines.append(f"notes 치환 — {args.reason}")
         notes_replace_record = {"old": old_text, "new": new_text}
 
+    # 되먹임 가드의 마스크 — 기본은 정정 *전* 위반(기존 위반은 이 명령의 책임이 아니다).
+    # 치환이 있으면 마스크를 (정정 전) ∩ (치환 직후·사유 append 전)으로 좁힌다: 치환이 없앤
+    # 쌍이 마스크에 남아 있으면 --reason이 같은 쌍을 다시 만들어도 "기존 위반"으로 오판돼
+    # amend는 exit 0인데 audit-deps는 red인 채 남는다 — 대장은 손편집 금지라 거짓 성공을 낸
+    # 정정 경로는 갈 곳이 없다(PR #1025 Codex P2-3). 치환이 *만든* 쌍은 정정 전에 없었으므로
+    # 교집합에도 없다 — 양쪽 다 새 위반으로 잡힌다.
+    feedback_mask = _pre_amend_findings
+    if notes_replace:
+        post_replace = {
+            (f.task_id, f.referenced)
+            for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+            if f.task_id == task.id
+        }
+        feedback_mask = {p for p in _pre_amend_findings if p[0] != task.id or p in post_replace}
+
     task.notes = _append_note(task.notes, note_lines[0] if note_lines else args.reason, "정정")
     task.updated = _today()
 
@@ -2080,7 +2097,7 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
             "depends 제거·notes 치환이 원인이면 같은 호출에서 --notes-replace로 선행 어구를 "
             "함께 고쳐라."
         )
-    if _fail_on_reason_feedback(backlog, task.id, _pre_amend_findings, hint=feedback_hint):
+    if _fail_on_reason_feedback(backlog, task.id, feedback_mask, hint=feedback_hint):
         return 1
 
     store.save_task(root, task)
