@@ -32,7 +32,7 @@
 | 11 | `phet` | PhET 시뮬레이션 | CC BY | https://phet.colorado.edu/en/licensing | 공식 라이선싱 페이지 |
 | 12 | `metamath-set-mm` | Metamath set.mm | CC0 | https://raw.githubusercontent.com/metamath/set.mm/HEAD/LICENSE | 공식 저장소 LICENSE(raw·HEAD) |
 | 13 | `omnimath` | OmniMath | 공개 | https://huggingface.co/datasets/KbsdJames/Omni-MATH | 공식 데이터셋 카드 |
-| 14 | `minif2f` | miniF2F | MIT | https://raw.githubusercontent.com/openai/miniF2F/HEAD/README.md | 공식 저장소 README §License(raw·HEAD) — LICENSE 파일 부재 실측(404), README가 선언 원문(lean=Apache·metamath=MIT·hollight=FreeBSD) |
+| 14 | `minif2f` | miniF2F | 폴더별 상이(lean·isabelle=Apache 2.0 · metamath=MIT · hollight=FreeBSD) | https://raw.githubusercontent.com/openai/miniF2F/HEAD/README.md | 공식 저장소 README §License(raw·HEAD) — LICENSE 파일 부재 실측(404), README가 선언 원문. **폴더 4종**(종전 3종 표기는 `isabelle` 누락 · LIC-04 정정) · 우리가 쓰는 488 Lean은 Apache 2.0 |
 | 15 | `olymmath` | OlymMATH | 공개 | https://huggingface.co/datasets/RUC-AIBOX/OlymMATH | 공식 데이터셋 카드 |
 | 16 | `mathlib4` | Mathlib4 | Apache 2.0 | https://raw.githubusercontent.com/leanprover-community/mathlib4/HEAD/LICENSE | 공식 저장소 LICENSE(raw·HEAD) |
 | 17 | `gsm8k` | GSM8K (문서 행 "GSM8K · MATH"의 앞) | MIT | https://raw.githubusercontent.com/openai/grade-school-math/HEAD/LICENSE | 공식 저장소 LICENSE(raw·HEAD) |

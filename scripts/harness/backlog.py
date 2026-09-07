@@ -146,17 +146,38 @@ def _reason_created_declarations(
     ]
 
 
-def _fail_on_reason_feedback(backlog: object, task_id: str, before: set[tuple[str, str]]) -> int:
-    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다."""
+def _fail_on_reason_feedback(
+    backlog: object,
+    task_id: str,
+    before: set[tuple[str, str]],
+    *,
+    flag: str = "--reason",
+    appended: bool = True,
+) -> int:
+    """새 선언이 생겼으면 stderr에 근거를 찍고 exit 1 — 호출부는 이 값을 그대로 반환한다.
+
+    `flag`는 그 문구를 실제로 넘긴 인자 이름이다 — `block`·`amend`는 `--reason`, `add`는
+    `--notes`. 잘못된 플래그를 지목하면 사람이 없는 인자를 고치려다 왕복을 태운다.
+
+    `appended`는 그 문구가 *이미 기록됐는지*를 가른다. `block`·`amend`는 append 후 검사라
+    "기록된 뒤에는 되돌릴 수 없다"가 참이지만, `add`는 **저장 전** 검사라 아직 아무것도
+    쓰이지 않았다(HARN-71) — 그 차이를 안내가 정직하게 말해야 사람이 대장 상태를 오해하지
+    않는다.
+    """
     created = _reason_created_declarations(backlog, task_id, before)
     if not created:
         return 0
     for f in created:
         print(f"  · {f.render()}", file=sys.stderr)  # type: ignore[attr-defined]
+    tail = (
+        "(notes는 append 전용이라 기록된 뒤에는 되돌릴 수 없다)"
+        if appended
+        else "(아직 대장에 쓰이지 않았다 — 이 명령은 아무것도 남기지 않고 멈췄다)"
+    )
     return _fail(
-        f"{task_id}: --reason 문구가 새 의존 선언을 만든다 — 사유에서 선행 어구와 태스크 ID가 "
-        "한 문장에 함께 오지 않게 고쳐 다시 실행하라(notes는 append 전용이라 기록된 뒤에는 "
-        "되돌릴 수 없다)."
+        f"{task_id}: {flag} 문구가 새 의존 선언을 만든다 — 선행 어구와 태스크 ID가 "
+        f"한 문장에 함께 오지 않게 고치거나, 실제 선행이면 `--depends <full-id>`를 함께 "
+        f"주고 다시 실행하라{tail}."
     )
 
 
@@ -1622,6 +1643,17 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         for e in own_errors:
             print(f"  · {e}", file=sys.stderr)
         return _fail(f"{args.id}: 스키마/무결성 위반으로 추가 거부")
+    # [쓰기측 선검사 · HARN-71] `--notes`가 선행 어구로 타 태스크를 지목하는데 `--depends`가
+    # 비어 있으면 **파일을 쓰기 전에** 거부한다. `block`·`amend`는 이미 같은 검사를 갖고
+    # 있었고(`_fail_on_reason_feedback`) `add`만 빠져 있었다 — 그래서 등재는 조용히 성공하고
+    # CI `harness-integrity`의 `audit-deps`가 나중에 red를 냈다(실측: add EXIT 0 · audit EXIT 1).
+    # 신규 태스크라 "이전 상태"가 없으므로 `before`는 빈 집합이다 — 이 태스크가 만든 선언은
+    # 전부 새 선언이다. 위에서 `backlog.tasks`에 넣은 뒤 검사하므로 참조 대상 해소 여부
+    # (done/cancelled면 순서 제약이 실효 없다)까지 읽기측과 **같은 함수**로 판정한다.
+    if _fail_on_reason_feedback(backlog, task.id, set(), flag="--notes", appended=False):
+        # 대장은 무변경이어야 한다 — `save_task` 이전이라 디스크에 아무것도 쓰이지 않았고,
+        # `backlog.tasks`는 이 프로세스의 메모리라 종료와 함께 사라진다(부분 쓰기 없음).
+        return 1
     path = store.save_task(root, task)
     store.append_event(root, "add", task.id, eos_priority=task.eos_priority)
     print(f"＋ {task.id} 추가 → {path.relative_to(root)} [EOS {task.eos_priority}]")

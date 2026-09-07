@@ -57,7 +57,7 @@
 | Metamath | CC0 | ✅ | 형식 증명 (퍼블릭 도메인) |
 | MathNet (MIT 2026) | 확인 필요 | ⚠️ | 30,000+, 47개국 |
 | OmniMath | 공개 | ✅ | 4,428 문항 |
-| miniF2F | MIT | ✅ | 488 Lean |
+| miniF2F | **폴더별 상이** — lean=Apache 2.0 · isabelle=Apache 2.0 · metamath=MIT · hollight=FreeBSD | ✅ | 488 Lean 문항은 **Apache 2.0**(MIT 아님) · 저장소 LICENSE 파일 부재 → README §License가 선언 원문 |
 | OlymMATH | 공개 | ✅ | 올림피아드 |
 | Mathlib4 | Apache 2.0 | ✅ | Lean 형식화 |
 | NuminaMath-TIR | Apache 2.0 | ✅ | 72,540 도구통합추론(AIMO 우승셋) |
@@ -66,6 +66,28 @@
 | DLMF | US Gov Work | ✅ | NIST 특수함수(퍼블릭 도메인, A+) |
 
 *전체 21종 카탈로그·레코드 수·등급: `docs/data/dataset_catalog_v4.md`.*
+
+> **miniF2F 표기 정정 (LIC-04 · 2026-09-07)** — 종전 표기는 `MIT` 단일이었으나 실측상 불완전하다.
+> 저장소에 `LICENSE` 파일이 **없고**(2026-08-30 수집 시 404), 라이선스 선언의 원문은 README의
+> 폴더별 절이다: `lean`=Apache License · `isabelle`=Apache License · `metamath`=MIT ·
+> `hollight`=FreeBSD. 증적 = `data/licenses/snapshots/minif2f/9b6de2b0a301c318.txt`
+> (sha256 `9b6de2b0…f21a` · 2026-08-30T16:44:06Z 수집 · README §License 절 5행).
+> 우리가 실제로 쓰는 488 Lean 문항은 **Apache 2.0**이므로 종전 `MIT` 표기는 *하필 우리가 쓰는
+> 폴더에서* 틀렸다.
+>
+> **소비 판정 영향: 없음.** 네 라이선스(Apache 2.0·MIT·FreeBSD) 모두 상업 이용 허용·copyleft
+> 부재·SA/NC 조건 부재라 Tier1 포함 여부와 등급 **A**는 종전과 동일하다. 다만 배포·재배포 시
+> **고지 의무의 원문이 폴더마다 다르다**는 점만 새로 성립한다(Apache 2.0은 NOTICE·변경 고지,
+> MIT·FreeBSD는 저작권 고지 보존).
+>
+> ⚠ 이 태스크(LIC-04)의 제목은 폴더를 **3종**으로 적었으나 스냅샷 실측은 **4종**이다 —
+> `isabelle`(Apache License)이 빠져 있었다. 같은 오류가 문서 **4곳**에 있었고 전부 정정했다:
+> 이 표 · `license_snapshot_archive.md` 14행 · `01_data_foundation.md` L1 데이터셋 표 ·
+> `copyright_gradient.md` 등급 1 표. 코드측(`scripts/ops/license_snapshot_archiver.py`의
+> `license_label="MIT"`와 폴더 3종 주석)은 **아직 남아 있으며 `LIC-08`이 소유한다** —
+> 그 라벨은 `meta.json`에 기록되므로 스냅샷 메타 재생성 판정이 함께 걸려 문서 정정과 분리했다.
+> `copyright_guide_v2.md`의 "miniF2F / PutnamBench (MIT/Apache)"는 두 벤치마크를 묶은 표기라
+> 거짓이 아니므로 **의도적으로 두었다**.
 
 ## L5 OCR (검출·인식 모델)
 
