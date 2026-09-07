@@ -61,6 +61,7 @@ def _run(
     update_body: str = "",
     dry_run: str = "0",
     raw_payload: str | None = None,
+    token_kind: str = "pat",
 ) -> tuple[int, str, list[str]]:
     """스텁 `gh`를 PATH 앞에 두고 스크립트를 실행한다. (exit code, 출력, update 호출 목록)"""
     bindir = tmp_path / "bin"
@@ -76,6 +77,7 @@ def _run(
     env.update(
         PATH=f"{bindir}{os.pathsep}{env['PATH']}",
         REPO="doldori7/WhyMath",
+        RESYNC_TOKEN_KIND=token_kind,
         DRY_RUN=dry_run,
         STUB_PR_JSON=raw_payload if raw_payload is not None else json.dumps(prs),
         STUB_LIST_RC=str(list_rc),
@@ -217,6 +219,58 @@ def test_dry_run_makes_no_write_call(tmp_path: Path) -> None:
     assert rc == 0, out
     assert calls == [], out
     assert "#109" in out and "DRY_RUN" in out, out
+
+
+# ---------------------------------------------------------------------------
+# 계약 ④ — 쓸 수 없는 토큰으로는 쓰지 않는다 (Codex P1 · fail-closed)
+# ---------------------------------------------------------------------------
+
+
+def test_github_token_fallback_fails_before_any_mutation(tmp_path: Path) -> None:
+    """PAT가 없으면 **아무것도 바꾸지 않고** exit 1.
+
+    변별력 근거: GITHUB_TOKEN이 만든 push는 workflow를 재발화시키지 않는다(GitHub 문서화
+    제약). 그 토큰으로 update-branch를 하면 새 head에 required check가 하나도 보고되지
+    않아 strict 하에서 PR이 **영구히** 막힌다 — `behind`는 사람이 Update branch를 눌러
+    풀 수 있지만(사람 행위는 CI를 재발화시킨다) 체크 없는 head는 그 탈출구마저 없앤다.
+    즉 폴백은 "성공을 보고하면서 PR을 좌초시키는" 반쪽 성공이며, 아무것도 안 하느니 나쁘다.
+
+    이 판단은 제약의 성립 여부와 무관하게 옳다 — 제약이 없다면 비용은 PAT 요구 1회이고,
+    있다면 폴백의 비용은 좌초된 PR이다.
+    """
+    rc, out, calls = _run(tmp_path, [_pr(301)], token_kind="github_token")
+    assert rc == 1, f"쓸 수 없는 토큰인데 초록으로 끝났다: {out}"
+    assert calls == [], f"멈추기 전에 이미 변경했다: {calls}"
+    assert "쓰기 자격 없음" in out, out
+
+
+def test_unset_token_kind_is_also_refused(tmp_path: Path) -> None:
+    """미지정도 거부한다 — 모른다를 '괜찮다'로 접지 않는다(3상태 축)."""
+    rc, out, calls = _run(tmp_path, [_pr(302)], token_kind="")
+    assert rc == 1, out
+    assert calls == []
+
+
+def test_dry_run_is_allowed_without_pat(tmp_path: Path) -> None:
+    """읽기 전용 확인 경로는 PAT 없이도 열려 있어야 한다 — 배선 검증을 막지 않는다."""
+    rc, out, calls = _run(tmp_path, [_pr(303)], token_kind="github_token", dry_run="1")
+    assert rc == 0, out
+    assert calls == []
+    assert "#303" in out and "DRY_RUN" in out, out
+
+
+def test_workflow_passes_token_kind_to_the_script() -> None:
+    """워크플로가 토큰 종류를 실제로 넘기지 않으면 스크립트의 게이트는 항상 거부한다.
+
+    배선이 끊기면 '항상 red'라는 다른 고장으로 나타나므로, 표현식의 실재를 동결한다.
+    """
+    steps = _workflow()["jobs"]["resync"]["steps"]
+    envs = [s.get("env", {}) for s in steps if s.get("env")]
+    kinds = [e.get("RESYNC_TOKEN_KIND") for e in envs if e.get("RESYNC_TOKEN_KIND")]
+    assert kinds, f"RESYNC_TOKEN_KIND를 넘기는 스텝이 없다: {envs}"
+    expr = kinds[0]
+    assert "PR_AUTO_RESYNC_TOKEN" in expr, expr
+    assert "'pat'" in expr and "'github_token'" in expr, expr
 
 
 # ---------------------------------------------------------------------------

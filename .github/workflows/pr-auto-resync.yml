@@ -39,24 +39,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 어느 토큰으로 도는지 로그에 남긴다. GITHUB_TOKEN이 만든 push는 workflow를
-      # 재발화시키지 않는다는 GitHub 제약이 알려져 있어, 그 경우 재동기화는 되지만 CI가
-      # 다시 돌지 않아 PR이 여전히 머지되지 못할 수 있다. 어느 쪽인지 로그로 구분 가능해야
-      # 한다 — 실측 절차는 HARN-85 acceptance ②.
-      - name: 토큰 출처 표시
-        env:
-          HAS_PAT: ${{ secrets.PR_AUTO_RESYNC_TOKEN != '' }}
-        run: |
-          set -u
-          if [ "$HAS_PAT" = "true" ]; then
-            echo "토큰: PR_AUTO_RESYNC_TOKEN (PAT) — update-branch push가 CI를 재발화시킨다"
-          else
-            echo "::warning::토큰: GITHUB_TOKEN 폴백 — 이 토큰이 만든 push는 workflow를 재발화시키지 않을 수 있다(GitHub 문서화 제약 — 이 저장소에서의 성립 여부는 HARN-85 acceptance ②로 실측 대기). 성립하면 브랜치는 최신화돼도 체크가 갱신되지 않아 머지가 계속 막힌다 — 그때 PAT 시크릿 PR_AUTO_RESYNC_TOKEN이 필요하다."
-          fi
-
+      # 토큰 종류를 스크립트에 **명시적으로** 넘긴다. GITHUB_TOKEN이 만든 push는 workflow를
+      # 재발화시키지 않으므로(GitHub 문서화 제약), 그 토큰으로 update-branch를 하면 새 head에
+      # required check가 하나도 보고되지 않아 strict 하에서 PR이 영구히 막힌다 —
+      # behind보다 나쁜 상태다(사람이 Update branch를 눌러 푸는 탈출구마저 사라진다).
+      # 그래서 폴백으로 조용히 진행하지 않고 스크립트가 fail-closed로 멈춘다(Codex P1).
       - name: 재동기화 실행
         env:
           GH_TOKEN: ${{ secrets.PR_AUTO_RESYNC_TOKEN || github.token }}
+          RESYNC_TOKEN_KIND: ${{ secrets.PR_AUTO_RESYNC_TOKEN != '' && 'pat' || 'github_token' }}
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run || '0' }}
         run: bash .github/scripts/pr_auto_resync.sh

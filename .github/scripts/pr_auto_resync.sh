@@ -16,8 +16,13 @@
 #   · 측정 실패가 "0건 통과"로 위장되지 않는다 — 목록 조회가 실패하면 exit 1.
 #   · 모른다 ≠ 아니다 — mergeStateStatus가 UNKNOWN이면 건드리지 않고 그 사실을 출력한다.
 #   · 0건도 읽히게 — 분모(스캔한 PR 수)와 분류별 개수를 항상 요약에 낸다.
+#   · 쓸 수 없는 토큰으로는 **쓰지 않는다**(아래 fail-closed) — 반쪽 성공이 더 나쁘다.
 #
-# 환경변수: REPO(필수·owner/name) · GH_TOKEN(gh가 읽음) · DRY_RUN(1이면 쓰기 생략)
+# 환경변수:
+#   REPO              (필수) owner/name
+#   GH_TOKEN          (필수) gh가 읽는 토큰
+#   RESYNC_TOKEN_KIND (필수) `pat` | `github_token` — 워크플로가 실제로 넘긴 토큰의 종류
+#   DRY_RUN           (선택) 1이면 쓰기 생략(읽기만 — 토큰 종류와 무관하게 허용)
 
 # -e는 의도적으로 쓰지 않는다 — 한 PR의 실패가 나머지 PR 처리를 막으면 안 된다.
 set -uo pipefail
@@ -32,7 +37,29 @@ conflict=0
 unknown=0
 other_err=0
 
-echo "── PR 자동 재동기화 (repo=$REPO · dry_run=$DRY_RUN)"
+echo "── PR 자동 재동기화 (repo=$REPO · dry_run=$DRY_RUN · token=${RESYNC_TOKEN_KIND:-미지정})"
+
+# ⓪ 쓰기 자격 검사 — **어떤 변경보다 먼저**. (Codex P1 · PR #1040)
+#
+# GITHUB_TOKEN이 만든 push는 workflow를 재발화시키지 않는다(GitHub 문서화 제약).
+# 그 토큰으로 update-branch를 하면 브랜치는 최신화되지만 **새 head에 required check가
+# 하나도 보고되지 않는다** — strict(up-to-date 강제) 하에서 그 PR은 "체크 대기"로
+# 영구히 막힌다. behind는 사람이 Update branch를 눌러 풀 수 있지만(사람 행위는 CI를
+# 재발화시킨다), 체크 없는 head는 그 탈출구마저 없앤다. **즉 이 폴백은 아무것도 안
+# 하느니만 못하다** — 성공을 보고하면서 PR을 좌초시킨다.
+#
+# 그래서 fail-open(경고 후 진행)이 아니라 fail-closed(멈춤)로 간다. 이 판단은 제약의
+# 성립 여부와 무관하게 옳다: 제약이 없다면 비용은 "PAT를 불필요하게 요구했다" 1회이고,
+# 있다면 폴백의 비용은 "좌초된 PR"이다. 비대칭이 크다.
+#
+# DRY_RUN은 읽기만 하므로 토큰 종류와 무관하게 허용한다 — 배선 확인 경로를 남긴다.
+if [ "${RESYNC_TOKEN_KIND:-}" != "pat" ] && [ "$DRY_RUN" != "1" ]; then
+  echo "::error::쓰기 자격 없음 — RESYNC_TOKEN_KIND='${RESYNC_TOKEN_KIND:-미지정}' (필요: pat)."
+  echo "저장소 시크릿 PR_AUTO_RESYNC_TOKEN(fine-grained PAT · contents:write + pull_requests:write)이"
+  echo "설정되지 않았다. GITHUB_TOKEN으로 update-branch를 하면 새 head에 체크가 보고되지 않아"
+  echo "PR이 영구히 막히므로, 아무것도 바꾸지 않고 멈춘다(fail-closed). 게이트 G-pr-auto-resync-token."
+  exit 1
+fi
 
 # ① 목록 조회. 실패는 "대상 0건"과 반드시 구분한다.
 payload=$(gh pr list --repo "$REPO" --state open --limit 100 \

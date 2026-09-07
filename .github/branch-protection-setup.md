@@ -337,15 +337,26 @@ merge queue는 **조직(Organization) 소유 저장소 전용**이다 — 공개
 - **auto-merge를 켜지 않은 PR은 건드리지 않는다.** 의도적이다 — 아직 리뷰 중인 PR의 브랜치를
   임의로 전진시키면 리뷰어가 보던 diff가 바뀐다.
 
-**미확정 축 — 토큰**: `GITHUB_TOKEN`이 만든 push는 workflow를 재발화시키지 않는다는 것이
-GitHub의 문서화된 제약이다. 성립하면 브랜치는 최신화되지만 **체크가 다시 돌지 않아** PR이
-여전히 머지되지 못한다 — 그때는 fine-grained PAT를 저장소 시크릿 `PR_AUTO_RESYNC_TOKEN`으로
-넣어야 한다(Kiki 1회 작업). **이 저장소에서 실제로 그런지는 아직 측정하지 않았다**
-(`HARN-85` acceptance ②). 그래서 워크플로는 어느 토큰으로 도는지를 매 실행 로그 첫 줄에
-남기고, 폴백일 때는 `::warning::`을 낸다 — 추론으로 PAT를 먼저 요구하지 않기 위함이다.
+**토큰 — 이것이 없으면 워크플로는 멈춘다(fail-closed)**: `GITHUB_TOKEN`이 만든 push는
+workflow를 재발화시키지 않는다(GitHub 문서화 제약). 그 토큰으로 `update-branch`를 하면
+브랜치는 최신화되지만 **새 head에 required check가 하나도 보고되지 않아** strict 하에서 그
+PR은 "체크 대기"로 **영구히** 막힌다 — `behind`는 사람이 Update branch를 눌러 풀 수 있지만
+(사람 행위는 CI를 재발화시킨다) 체크 없는 head는 그 탈출구마저 없앤다. **즉 폴백은 아무것도
+안 하느니 나쁘다**: 성공을 보고하면서 PR을 좌초시킨다.
 
-**수동 확인**: Actions 탭 → `pr-auto-resync` → Run workflow → `dry_run` = `1`. 쓰기 없이
-후보와 분모(스캔 N건 · BEHIND+auto-merge M건)만 출력한다.
+그래서 폴백으로 진행하지 않고 **쓰기 전에 멈춘다**. 저장소 시크릿
+`PR_AUTO_RESYNC_TOKEN`(fine-grained PAT · `Contents: Read and write` +
+`Pull requests: Read and write`)이 없으면 스크립트가 `쓰기 자격 없음`을 내고 exit 1 —
+게이트 `G-pr-auto-resync-token`이 그 발급을 추적한다.
+
+> 이 결정은 제약의 성립 여부와 **무관하게** 옳다. 제약이 실재하지 않는다면 비용은 "PAT를
+> 불필요하게 요구했다" 1회이고, 실재한다면 폴백의 비용은 "좌초된 PR"이다 — 비대칭이 크므로
+> 측정을 기다리지 않고 안전한 쪽을 택한다. (`HARN-85` ②의 실측은 PAT 착지 후에도 유효하다:
+> 폴백 경로가 실제로 어떻게 실패하는지는 여전히 모르는 채로 남는다.)
+
+**수동 확인**: Actions 탭 → `pr-auto-resync` → Run workflow → `dry_run` = `1`. 읽기 전용이라
+**PAT 없이도 돈다** — 쓰기 자격 검사를 통과해 후보와 분모(스캔 N건 · BEHIND+auto-merge M건)만
+출력한다. 배선 확인 경로를 일부러 열어 둔 것이다.
 
 ## 저장 후 확인
 
