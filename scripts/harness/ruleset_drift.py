@@ -288,10 +288,11 @@ def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
                 params[key] = rparams.get(key)
 
     # 규칙 타입 자체의 존재 여부도 선언 축이다(required_linear_history 등은 파라미터가 없다).
-    # `merge_queue`도 이 부류다 — 큐는 파라미터가 아니라 **규칙의 존재**로 켜진다. 문서가
-    # 선언(=의도)하고 라이브에 규칙이 없으면 정책 불일치로 잡힌다(2026-09-07 Kiki 결정
-    # G-merge-queue-or-strict-relax = merge queue 도입. 결정을 산문에만 두면 집행되지 않는다).
-    for rtype in ("required_linear_history", "deletion", "non_fast_forward", "merge_queue"):
+    # `merge_queue`는 **의도적으로 여기 없다** — GitHub merge queue는 조직 소유 저장소 전용이라
+    # 이 저장소(owner.type=User)에서는 켤 수 없다(2026-09-07 실측). 선언하면 영원히 충족 불가한
+    # 위반이 상시 보고돼 판정기 전체가 소음이 된다(CLAUDE.md '상시 실패하는 fail-open 보호').
+    # 저장소가 조직으로 이관되면 그때 이 튜플에 추가한다 — 근거는 branch-protection-setup.md.
+    for rtype in ("required_linear_history", "deletion", "non_fast_forward"):
         params[rtype] = rtype in rule_types
 
     # 규칙은 읽혔는데 status check 강제가 없거나 목록이 비었다 — 확정된 회귀다(측정 실패 아님).

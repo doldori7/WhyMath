@@ -77,7 +77,6 @@ def _rules(
     codeowner: bool = False,
     thread: bool = True,
     linear: bool = True,
-    queue: bool = True,
 ) -> list[dict[str, Any]]:
     """`gh api .../rules/branches/main` 응답 형태(규칙 배열)를 만든다.
 
@@ -109,8 +108,6 @@ def _rules(
     ]
     if linear:
         rules.append({"type": "required_linear_history"})
-    if queue:
-        rules.append({"type": "merge_queue"})
     return rules
 
 
@@ -169,34 +166,6 @@ def test_strict_policy_false_is_violation(tmp_path: Path) -> None:
 def test_thread_resolution_false_is_violation(tmp_path: Path) -> None:
     """결함 주입: 유예 대상이 *아닌* 정책 파라미터 축."""
     assert _run(_rules(_healthy_checks(), thread=False), tmp_path) == 1
-
-
-def test_merge_queue_absence_is_violation(tmp_path: Path) -> None:
-    """큐 미도입 상태를 주입하면 RED — 2026-09-07 Kiki 결정이 *집행*되는지 본다.
-
-    변별력 근거(실측): 결정 당시 라이브 룰셋은 규칙 5종(deletion·non_fast_forward·pull_request·
-    required_status_checks·required_linear_history)뿐이고 `merge_queue`가 **없었다**. 결정을
-    문서 산문에만 두면 이 상태가 영원히 초록이다 — 정본화는 집행이 아니다(CLAUDE.md).
-
-    `merge_queue`는 파라미터가 아니라 **규칙의 존재**로 켜지므로, 규칙 배열에서 그 타입을
-    빼는 것이 곧 '큐 꺼짐'의 정확한 재현이다.
-    """
-    assert _run(_rules(_healthy_checks(), queue=False), tmp_path) == 1
-    report = _report(_rules(_healthy_checks(), queue=False))
-    assert any(
-        "merge_queue" in v and "정책 불일치" in v for v in report.violations
-    ), f"큐 부재가 위반으로 보고되지 않았다: {report.violations}"
-    # 유예로 조용히 면제되지 않는지 — 결정 직후이므로 유예 선언이 있어서는 안 된다.
-    assert not any("merge_queue" in w for w in report.waived)
-
-    # 반대 방향도 같은 테스트가 본다 — 큐가 켜진 상태에서는 이 축이 조용해야 한다.
-    # 이 절이 없으면 parse_live의 규칙 타입 배선을 지워도 이 테스트가 초록으로 남는다
-    # (선언 True vs 라이브 None도 불일치라서 OFF 쪽만 보면 구별되지 않는다) — 그러면
-    # Kiki가 큐를 켠 뒤에도 위반이 사라지지 않는 **영구 오탐**을 아무도 못 잡는다.
-    on = _report(_rules(_healthy_checks(), queue=True))
-    assert not any(
-        "merge_queue" in v for v in on.violations
-    ), f"큐가 켜졌는데도 위반이 남는다 — 규칙 타입 배선(parse_live)을 확인하라: {on.violations}"
 
 
 def test_undocumented_live_check_is_violation(tmp_path: Path) -> None:

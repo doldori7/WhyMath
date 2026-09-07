@@ -1,0 +1,62 @@
+# PR 자동 재동기화 (HARN-85) — GitHub merge queue의 대체 경로
+#
+# 왜 merge queue가 아닌가: 큐는 **조직(Organization) 소유 저장소 전용**이다. 이 저장소는
+# public이지만 owner.type=User(개인 계정 doldori7)라 룰셋에 `Require merge queue` 항목
+# 자체가 없다(2026-09-07 실측). 근거·실패 경위 = .github/branch-protection-setup.md.
+#
+# 무엇을 하는가: auto-merge가 켜져 있고 base보다 뒤처진(BEHIND) PR만 update-branch로
+# 최신화한다. `Require branches to be up to date`는 **유지**한다 — 보호를 낮추는 것이
+# 아니라 그 충족을 사람 대신 기계가 하게 만드는 것이다.
+#
+# 한계(큐가 아님): 직렬화하지 않는다 · 충돌(409)은 사람 몫 · auto-merge를 켜지 않은 PR은
+# 건드리지 않는다(리뷰 중인 diff를 임의로 전진시키지 않기 위함).
+name: pr-auto-resync
+
+on:
+  # 15분 주기. GitHub 예약은 지연될 수 있으므로 정확한 주기를 전제하지 않는다 —
+  # 늦게 돌아도 다음 주기가 같은 일을 한다(멱등).
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "1이면 update-branch를 호출하지 않고 후보만 출력"
+        required: false
+        default: "0"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-auto-resync
+  cancel-in-progress: false
+
+jobs:
+  resync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 어느 토큰으로 도는지 로그에 남긴다. GITHUB_TOKEN이 만든 push는 workflow를
+      # 재발화시키지 않는다는 GitHub 제약이 알려져 있어, 그 경우 재동기화는 되지만 CI가
+      # 다시 돌지 않아 PR이 여전히 머지되지 못할 수 있다. 어느 쪽인지 로그로 구분 가능해야
+      # 한다 — 실측 절차는 HARN-85 acceptance ②.
+      - name: 토큰 출처 표시
+        env:
+          HAS_PAT: ${{ secrets.PR_AUTO_RESYNC_TOKEN != '' }}
+        run: |
+          set -u
+          if [ "$HAS_PAT" = "true" ]; then
+            echo "토큰: PR_AUTO_RESYNC_TOKEN (PAT) — update-branch push가 CI를 재발화시킨다"
+          else
+            echo "::warning::토큰: GITHUB_TOKEN 폴백 — 이 토큰이 만든 push는 workflow를 재발화시키지 않을 수 있다(GitHub 문서화 제약 — 이 저장소에서의 성립 여부는 HARN-85 acceptance ②로 실측 대기). 성립하면 브랜치는 최신화돼도 체크가 갱신되지 않아 머지가 계속 막힌다 — 그때 PAT 시크릿 PR_AUTO_RESYNC_TOKEN이 필요하다."
+          fi
+
+      - name: 재동기화 실행
+        env:
+          GH_TOKEN: ${{ secrets.PR_AUTO_RESYNC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run || '0' }}
+        run: bash .github/scripts/pr_auto_resync.sh

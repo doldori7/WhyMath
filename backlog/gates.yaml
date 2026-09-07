@@ -234,12 +234,12 @@ gates:
     title: "main 룰셋에 merge queue 활성화 (Settings→Rules→Rulesets→main→Require merge queue) — 2026-09-07 Kiki 결정 G-merge-queue-or-strict-relax의 집행. 선행 조건(ci.yml merge_group 트리거)은 origin/main 3a30244c에 착지 완료라 지금 켜도 안전. 6항목 브리핑·파라미터 표·자가검증 D 전문 = .github/branch-protection-setup.md '## Merge queue 활성화'. clear 증적 = 자가검증 D의 MERGE_QUEUE=True 출력. 켜기 전까지 ruleset_drift.py가 merge_queue 정책 불일치를 위반으로 보고한다(기계 집행)"
     kind: human
     assignee: kiki
-    status: pending
+    status: waived
     requested: 2026-09-07
     remind_after_days: 3
     evidence: null
     cleared_by: null
-    notes: ""
+    notes: "실행 불가 — merge queue는 조직 소유 저장소 전용인데 doldori7/WhyMath는 owner.type=User(개인 계정·공개). 룰셋 편집 화면에 'Require merge queue' 항목 자체가 없다(2026-09-07 Kiki 실측 + GET /repos/doldori7/WhyMath 실측). 면제가 아니라 **전제 반증에 의한 폐기**다. 대체 = HARN-81(자동 재동기화 워크플로우·Kiki 선택 D안)"
   - id: G-merge-queue-or-strict-relax
     title: "머지 경합 구조 해소 결정 — GitHub merge queue 도입 또는 'up to date' 요구 해제 (저장소 관리자 설정·OPS-58 ⑤)"
     kind: decision
@@ -247,7 +247,7 @@ gates:
     status: cleared
     requested: 2026-09-01
     remind_after_days: 7
-    evidence: "2026-09-07 Kiki 결정(세션 대화 내 AskUserQuestion 응답) = **1) GitHub merge queue 도입**. 2)up-to-date 해제는 실측 반례로 배제(#931의 ReviewStatus.quarantined 추가가 #935 단언을 red로 만든 사례 — 동기화 없이 머지했으면 main에서 터졌다), 3)현행 유지는 OPS-58 단축(29분41초→약 19~20분) 후에도 main 전진 간격 15~30분을 이기지 못해 배제.\\n판정 기준: origin/main 3a30244c — 선행 조건인 ci.yml merge_group 트리거가 trunk에 실재함을 실측(git show origin/main:.github/workflows/ci.yml, 23행 'merge_group:'). 즉 '큐를 켠 시점부터 머지 전면 정지' 위험은 이미 해소된 상태다.\\n라이브 룰셋 실측(2026-09-07, GET repos/doldori7/WhyMath/rules/branches/main): 규칙 5종(deletion·non_fast_forward·pull_request·required_status_checks·required_linear_history) — merge_queue 규칙 **없음**, strict_required_status_checks_policy=true. 즉 결정 시점의 전제(큐 미도입·up-to-date 강제 ON)가 추론이 아니라 실측으로 확인됨.\\n집행(별항): 룰셋에서 큐를 켜는 것은 저장소 관리자 설정이라 세션 권한 밖 — 신설 게이트 G-merge-queue-enable-ruleset 및 HARN-56 acceptance ②③④⑤가 승계한다. 이 게이트는 '결정'만 닫는다."
+    evidence: "2026-09-07 **정정** — 최초 판정(같은 날)은 '1) merge queue 도입'이었으나 **전제가 반증**됐다. 실측: GET /repos/doldori7/WhyMath → visibility=public이지만 owner.type=**User**(개인 계정). GitHub merge queue는 **조직(Organization) 소유 저장소 전용**이라 이 저장소에서는 UI 항목 자체가 없다(Kiki가 룰셋 편집 화면에서 'Require merge queue'를 찾지 못한 것이 그 결과 — UI 경로 문제 아님). 결함 원인: 결정을 올리기 전 **계정 유형을 확인하지 않았다** — 라이브 룰셋 실측은 '지금 꺼져 있다'만 말하고 '켤 수 있다'를 말하지 않는데 부재를 미설정으로 읽었다.\\n\\n**재판정 = D) 자동 재동기화 워크플로우**(Kiki 선택). 예약 워크플로우가 열린 PR 중 behind + auto-merge 켜진 것을 찾아 update-branch API로 자동 최신화한다. strict(up-to-date 강제)는 **유지** — 보호를 낮추지 않고 충족을 자동화한다는 원 취지는 그대로다. 2)strict 해제는 실측 반례(#931의 ReviewStatus.quarantined 추가가 #935 단언을 red로 만듦)로 계속 배제, 3)현행 유지는 OPS-58 단축 후에도 main 전진 간격을 못 이겨 배제, A)조직 이관은 이관 부수효과 미실측이라 보류.\\n\\n판정 기준: origin/main af32913b. 승계 태스크 = HARN-81(신규). 집행 게이트 G-merge-queue-enable-ruleset은 실행 불가라 waive."
     cleared_by: kiki
     notes: "[문제] PR 하나를 머지하는 데 재동기화가 4회 필요했다(2026-08-31 PR #935 실측).\n  원인은 실패가 아니라 구조적 경합이다:\n    ⓐ 브랜치 보호에 `Require branches to be up to date before merging`이 켜져 있다\n       (.github/branch-protection-setup.md:52). main이 움직이면 무조건 재동기화 → CI 재시작.\n    ⓑ 그 게이트가 29분 41초다. main은 지금 15~30분마다 전진한다(병렬 세션 다수).\n  30분짜리 게이트가 15~30분 간격의 전진을 이길 수 없다 — 산술적으로 진다.\n\n[이미 한 것 — OPS-58] ⓑ를 줄였다. pytest 병렬화로 실측 1.60배(직렬 100.1s → -n 4 62.7s,\n  커버리지 총계 완전 일치). CI 잡 예상 29분 41초 → 약 19~20분. 경합 *창*은 줄지만\n  경합 자체는 남는다 — main이 20분 안에 또 전진하면 같은 일이 반복된다.\n\n[결정이 필요한 것 — ⓐ] 셋 중 하나. 전부 저장소 관리자 설정이라 세션이 못 바꾼다.\n  1) GitHub **merge queue** 도입 (권장) — 이 문제를 풀려고 만들어진 기능이다. 큐가\n     PR을 main 최신 위에 순서대로 얹어 검증하고 통과분만 넣는다. up-to-date 보장을\n     유지하면서 사람이 재동기화할 필요가 없어진다. 비용: ci.yml에 `merge_group` 트리거\n     추가 + 브랜치 보호에 큐 활성화. 계약(required checks)은 그대로 유지된다.\n  2) `Require branches to be up to date` 해제 — 즉시 경합이 사라지지만, main의 최신\n     변경과 이 PR의 조합이 검증되지 않은 채 들어간다. 이번 세션에서 그 검증이 실제로\n     일한 사례가 있다(#931이 ReviewStatus에 quarantined를 추가하자 #935의 단언이 red —\n     동기화하지 않았으면 머지 후 main에서 터졌다). **비권장** 근거가 실측으로 있다.\n  3) 현행 유지 + OPS-58 단축만으로 감내 — 경합 빈도는 줄지만 0이 되진 않는다.\n\n[판단 재료] 2)를 배제할 근거가 이번 세션에 실측으로 남았다는 점이 핵심이다. 즉 선택은\n  실질적으로 1) vs 3)이고, 1)은 설정 작업 1회로 반복 비용을 없앤다.\n\n[세션이 대행 가능한 범위] 결정이 1)이면 ci.yml의 `merge_group` 트리거 추가는 세션이\n  PR로 낼 수 있다. 브랜치 보호에서 큐를 켜는 것만 Kiki 작업이다."
   - id: G-operator-seat-first-grant
