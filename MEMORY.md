@@ -8801,29 +8801,40 @@ P2-2 `next` 경고가 classify 결과(`excluded`)에서 나와 owner/track_gate 
 같은 경로 결함은 잡지 못한다. 리뷰 봇이 그 축을 메웠다(PR 열고 ≥5분 뒤 재확인 규율 유효).
 
 
-## 2026-09-07: PR #1025 머지가 저장소 룰에 2회 거부 — API 머지 경로의 차단 주체 미규명 (실측 기록)
+## 2026-09-07: PR #1025 머지 2회 거부 — 원인은 **이미 저장소에 실측돼 있었다**(HARN-32 ⑦ strict 정책). 내 "미규명" 판정이 오판
 
-**사실(실측)**: `"pr"` 지시로 PR #1025를 SQUASH 머지하려 했으나 REST 머지 엔드포인트가 **2회 모두**
-405 `Repository rule violations found` + `16 of 16 required status checks are expected` ·
-`13 of 13 required status checks are expected` 로 거부했다. 두 시도의 조건은 서로 달랐다 —
-1차는 브랜치가 main보다 1커밋 behind(`e4ceda6e`), 2차는 main을 병합해 **최신 상태**(`ecda3788`,
-CI 실행 잡 9건 전부 success·skipped 9건)였다. 즉 `behind`는 원인이 아니다.
+**무슨 일**: `"pr"` 지시로 PR #1025를 SQUASH 머지하려 했으나 REST 머지 엔드포인트가 2회 모두 405
+`Repository rule violations found` + `16 of 16 required status checks are expected`로 거부했다. 이후
+`enable_pr_auto_merge`(SQUASH)를 걸자 다음 CI green에서 자동 머지가 발동해 `966c8db6`으로 착지했다.
 
-**대조군**: 같은 시각 PR #1018이 정상 머지됐고(`99b05f54`), 그 PR의 체크 **이름 18건이 내 PR과
-동일**했다. 다른 점은 `docker-build`·`corpus-authoring` 두 잡이 #1018에서는 success, 내 PR에서는
-경로 밖이라 skipped였다는 것뿐이다. 다만 에러가 "16 **of 16**"(전건 미보고)이라 그 2건만으로는
-설명되지 않는다.
+**원인(내가 규명한 것이 아니라 저장소에 이미 있던 것)**: `HARN-32` acceptance ⑦(2026-08-31 실측·done)이
+`GET /repos/doldori7/WhyMath/rules/branches/main`으로 **`strict_required_status_checks_policy=true`** 를
+확정해 두었고, 같은 405 문구가 그 정책 하나로 전부 설명된다고 이미 적혀 있었다. 즉 **`behind`면 필수 체크가
+병합 커밋 기준으로 재평가돼 "expected"로 보인다** — 판정 도구까지 있다(`scripts/ops/pr_merge_readiness.py`,
+exit 0 = 필수 green + up-to-date + 스레드 해소 = 지금 머지).
 
-**미규명(중요)**: 무엇이 차단하는지 **확정하지 못했다**. 세션 도구로는 ruleset 내용을 읽을 수 없다.
-가설 2개를 세웠으나 둘 다 반증·확증 실패다 — ⓐ 머지 큐 필수화(ci.yml에 `merge_group` 트리거가
-main에 실재하고 HARN-56이 진행 중): `enable_pr_auto_merge`로 큐 투입을 시도했으나 2분간
-`refs/heads/gh-readonly-queue/*`가 나타나지 않았다 ⓑ 토큰 권한 차이(UI의 소유자 bypass vs 앱
-토큰): 확인 수단이 없다. **CLAUDE.md "차단 주체를 주입으로 검증" 규칙에 따라 추론을 사실로 적지
-않는다** — 여기 적힌 것은 "내가 확인한 범위에서 이렇게 보인다"까지다.
+**내 두 실패는 둘 다 `behind`였다(사후 실측)**: ⓐ 1차 `e4ceda6e` — main `1306fff4` 미포함 ⓑ 2차 `ecda3788`
+— main `99b05f54`(#1018, 시도 직전 착지) 미포함. 자동 머지가 발동한 `c13a6686`만 `99b05f54`를 포함했다.
+**즉 up-to-date + green 상태에서 직접 머지를 시도한 적이 한 번도 없다.** 성공한 것은 auto-merge가 아니라
+*up-to-date 상태*였을 가능성이 높고, 나는 그 둘을 분리하지 못한 채 auto-merge의 공으로 돌렸다.
 
-**현재 조치**: auto-merge(SQUASH)를 armed 상태로 두었다(2026-09-07T14:13:44Z). 규칙이 충족되는
-시점에 자동 머지된다. 충족되지 않으면 Kiki가 UI에서 머지하는 것이 유일한 확인된 경로다.
+**운영 규칙(정정판)**: 직접 머지를 폐기하지 않는다. ①머지 전 `pr_merge_readiness.py`로 판정한다(exit 0이면
+직접 머지, 1이면 사유대로 조치) ②`behind`면 base를 병합·push하고 CI를 다시 기다린다 ③CI 완주와 base 전진이
+경합해 창이 계속 닫히면(HARN-32의 본 주제 — CI ~28분 vs main 머지 간격 ~31분) `enable_pr_auto_merge`가
+그 대기를 대신 서 준다. **auto-merge는 "직접 머지가 막힐 때의 대체 경로"가 아니라 "up-to-date 창을 기다리는
+자동화"다.**
 
-**후속 후보(미등재)**: 머지 경로의 차단 주체를 실측 규명하고(ruleset 조회 권한 확보 또는 큐 상태
-확인 수단), 세션이 API로 머지할 수 있는 조건을 런북에 고정한다. HARN-56(머지 큐 도입, 타 세션
-진행 중)과 같은 축이므로 그쪽에 합류시킬지 별건으로 등재할지는 Kiki 판단.
+**오류 3건(재발 방지)**:
+1. **부재 판정 절차 위반** — "차단 주체 미규명"을 선언하기 전에 저장소를 찾지 않았다. `strict`·
+   `required status checks`·`merge` 어느 축으로 검색해도 `HARN-32`와 `pr_merge_readiness.py`가 나왔다.
+   CLAUDE.md 2026-08-31 규칙("내가 찾은 방법으로는 0건"이라고 범위를 밝혀 적어라)조차 지키지 않고 그냥
+   "모른다"로 적었다.
+2. **1회 관측의 과잉 일반화** — "직접 머지는 CI 전건 green이어도 거부된다"를 정본 규칙으로 승격했다.
+   반례가 될 조건(up-to-date + green)을 한 번도 시험하지 않았으므로 성립하지 않는 주장이다. 이 규칙이
+   그대로 남았다면 기존 판정 도구와 모순된 절차가 후속 세션 전체에 전파됐다.
+3. **진행 중인 장치의 결과를 기다리지 않은 단정** — auto-merge를 이미 건 상태에서 "Kiki가 UI에서 머지하는
+   것이 유일한 경로"라고 사용자에게 보고했고 17분 뒤 반증됐다.
+
+**잡은 것은 Codex P2**(PR #1035 리뷰) — 정확히 "1회 405를 일반화했고 `HARN-32` ⑦·`pr_merge_readiness.py`와
+모순된다"고 지적했다. 세션의 자기 정정(#1035 초판)은 오류 3을 고쳤을 뿐 오류 1·2는 그대로 두었다 —
+**자기 정정도 같은 사각을 두 번 통과할 수 있다**는 사례다.
