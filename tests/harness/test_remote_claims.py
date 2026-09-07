@@ -1944,6 +1944,35 @@ class TestFetchPrStates:
         assert result is None
         assert "RemoteParseError" in error
 
+    def test_scan_budget_stops_remaining_lookups(self, tmp_path, monkeypatch):
+        """후보가_많아도_전체_예산을_넘기면_남은_조회를_건너뛰고_실패로_낸다 (Codex 리뷰, PR #1043).
+
+        수정 전에는 후보 수만큼 순차 curl 호출이 무제한으로 누적돼, 후보가 많으면
+        SessionStart 훅·CI 잡을 임의로 오래 묶어 둘 수 있었다. 예산을 0으로 낮춰
+        "이미 예산을 다 썼다"를 흉내 내면, 첫 후보를 조회하기도 전에 멈춰야 한다
+        (침묵 성공이 아니라 명시적 실패 사유를 낸다).
+        """
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        monkeypatch.setattr(remote_claims, "_PR_STATE_SCAN_BUDGET_SECONDS", 0.0)
+
+        def fake_git(root, *argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="https://github.com/doldori7/WhyMath.git\n", stderr=""
+            )
+
+        calls: list[list[str]] = []
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        monkeypatch.setattr(
+            remote_claims.subprocess,
+            "run",
+            lambda argv, **kw: calls.append(argv) or subprocess.CompletedProcess(argv, 0),
+        )
+
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77, 967])
+        assert result is None
+        assert "ScanBudgetExceededError" in error
+        assert calls == [], "예산을 이미 초과했으면 curl을 한 번도 부르지 않아야 한다"
+
 
 class TestPrStateReclassification:
     """`scan_stale_branches`가 `_fetch_pr_states`를 소비해 pr_filed를 정밀화한다 (HARN-78).

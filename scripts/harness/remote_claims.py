@@ -1658,6 +1658,13 @@ def _fetch_pr_head_shas(root: Path) -> tuple[dict[str, int] | None, str]:
 # GitHub API PR 상태 조회 타임아웃 — 번호당 1회.
 _PR_STATE_TIMEOUT = 20
 
+# 스캔 전체 예산(초) — 후보 수와 무관하게 SessionStart 훅·CI 잡을 무한정 묶어 두지
+# 않는다. `pr_filed` 후보가 많으면 번호당 순차 curl 호출이 누적돼 총 소요가
+# 무제한으로 늘어날 수 있다(Codex 리뷰 지적, PR #1043). 예산을 넘으면 남은 조회를
+# 건너뛰고 실패로 낸다 — 이미 이 함수는 단일 PR 조회 실패에도 전체를 실패로 내는
+# 전부-또는-전무 계약이므로, 예산 초과도 같은 모양의 실패일 뿐 새 분기를 만들지 않는다.
+_PR_STATE_SCAN_BUDGET_SECONDS = 60.0
+
 # 에이전트 프록시 CA (있을 때만 사용) — 모듈 상수여야 거버넌스 테스트가
 # `monkeypatch.setattr(mod, "_CA_PATH", ...)`로 갈아끼울 수 있다.
 _CA_PATH = "/root/.ccr/ca-bundle.crt"
@@ -1739,7 +1746,13 @@ def _fetch_pr_states(
     owner, repo = match.group(1), match.group(2)
 
     states: dict[int, tuple[str, bool]] = {}
+    scan_started = time.monotonic()
     for number in sorted(set(pr_numbers)):
+        if time.monotonic() - scan_started > _PR_STATE_SCAN_BUDGET_SECONDS:
+            return None, (
+                f"ScanBudgetExceededError: {_PR_STATE_SCAN_BUDGET_SECONDS:.0f}초 예산 초과 — "
+                f"{len(states)}/{len(pr_numbers)}건만 조회 후 중단"
+            )
         cmd = [
             "curl",
             "-sS",
