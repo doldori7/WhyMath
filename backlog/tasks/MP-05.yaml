@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
+session: claude/test-driven-development-03elxp
 notes: "출처: MP-02 착수 중 실측 발견(2026-09-06). MP-02 acceptance ②는 '카나리 30건을 100% 검수'를 요구하는데 그 30건을 지목할 수단이 저장소에 없다 — genlog 적재 순서가 유일한 근거다. 이 CLI가 없으면 검수자는 60건 전부를 보거나 임의로 30건을 고르게 되고, 어느 쪽이든 게이트 G-eos-first-run-canary-review의 증적이 '카나리 30건 검수'라는 주장을 뒷받침하지 못한다. MP-04가 depends인 이유: canary_size를 대장 행에서 읽는데 그 필드가 MP-04 산출물이다."
-updated: 2026-09-06
+updated: 2026-09-07
