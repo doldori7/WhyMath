@@ -113,13 +113,19 @@ $env:PYTHONIOENCODING = "utf-8"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # 1-a) 모든 원격 브랜치를 받아 둔다 — 도구는 이 클론이 가진 ref만 볼 수 있다.
-#      받지 않은 브랜치의 커밋은 스캔 범위 밖이고, 그것이 리포트의 한계 ④다.
+#      **fetch 성공을 확인한다**: 실패해도 오래된 원격 추적 ref는 그대로 남아
+#      스캔이 성공하고 FULL=True까지 나온다 — 누락된 커밋이 "전수 증거"가 된다.
+#      `--all`은 "모든 원격을 대상으로"라는 뜻일 뿐 성공·최신성을 보증하지 않는다.
 git fetch --all --quiet
-git rev-parse --is-shallow-repository   # true 면 아래가 exit 2를 낸다
+$FetchOk = ($LASTEXITCODE -eq 0)
+"FETCH_OK=$FetchOk"
+
+# 1-b) shallow면 도구가 exit 2를 낸다. 미리 보고 넘어간다.
+git rev-parse --is-shallow-repository
 
 # 2) 증거 생성. 산출물은 .ip_evidence\ (gitignore 대상 — 커밋되지 않는다)
 #    신원 2개를 선언한다 — 두 번째는 아래 "확인할 것"을 반드시 읽을 것.
-if ($ToolOk) {
+if ($ToolOk -and $FetchOk) {
   python scripts\ops\ip_separation_evidence.py `
       --identity rollrock.ki@gmail.com `
       --identity kiki@whymath.local `
@@ -127,6 +133,9 @@ if ($ToolOk) {
       --jsonl .ip_evidence\commits.jsonl
   $Code = $LASTEXITCODE
   "EXIT=$Code  (0=혼입없음 · 1=혼입발견 · 2=수집실패)"
+} elseif (-not $FetchOk) {
+  "중단: git fetch --all 이 실패했다 — 오래된 ref로 측정하면 전수가 아니다."
+  "  네트워크·인증을 확인하고 1-a)부터 다시 실행할 것."
 } else {
   "중단: 브랜치 체크아웃이 되지 않았다 — 0)의 git 출력을 확인할 것"
 }
@@ -236,7 +245,13 @@ $Ack = Read-Host "확인서·양도예정 기록 2종에 서명하고 보관까�
 # 수집이 **성공한** 리포트인지 먼저 본다. 실패해도 JSON 파일 자체는 생기므로,
 # 서명 확인만으로 clear하면 shallow 실행(커밋 0건)의 실패 리포트를 근거로
 # human gate가 닫힐 수 있다 — 이 도구가 막으려던 바로 그 실패다.
-$EvidenceOk = ($J.status -eq "ok") -and ($J.total_commits -gt 0) -and $J.scope.is_full_history
+# 리포트가 **이 커밋을 잰 것인지** 대조한다. 증거 생성 후 커밋을 더 쌓았거나,
+# 다른 브랜치를 체크아웃했거나, 이전 실행의 .ip_evidence가 남은 채 블록 ①을
+# 건너뛰면 리포트($J)는 과거 측정인데 기준 커밋($Base)은 현재 HEAD다 — 그대로 clear하면
+# 현재 커밋이 판정 기준으로 적히고 실제 근거는 다른 시점 것이 된다.
+$SameHead = ($J.head_sha -eq $Base)
+$EvidenceOk = ($J.status -eq "ok") -and ($J.total_commits -gt 0) `
+              -and $J.scope.is_full_history -and $SameHead
 
 if ($Ack -eq "서명완료" -and $EvidenceOk) {
   python scripts\harness\backlog.py gates clear G-eos-ip-separation-evidence --as kiki `
@@ -245,6 +260,9 @@ if ($Ack -eq "서명완료" -and $EvidenceOk) {
 } elseif (-not $EvidenceOk) {
   "중단: 기계 증거가 유효하지 않다 — clear하지 않는다."
   "  status=$($J.status)  commits=$($J.total_commits)  full_history=$($J.scope.is_full_history)"
+  "  리포트 기준 커밋=$($J.head_sha)"
+  "  현재 HEAD    =$Base"
+  "  same_head=$SameHead  (False면 리포트가 다른 시점을 잰 것이다)"
   "  실행 블록 ①을 다시 돌려 EXIT=0 또는 1, STATUS=ok, FULL=True를 확인할 것."
 } else {
   "중단: 서명 전에는 clear하지 않는다. 입력값='$Ack'"

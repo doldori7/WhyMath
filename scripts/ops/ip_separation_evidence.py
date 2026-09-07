@@ -86,7 +86,12 @@ KST = timezone(timedelta(hours=9), "KST")
 # 제어문자를 쓴다(git이 %x1e/%x1f로 그대로 출력한다).
 _RS = "\x1e"
 _FS = "\x1f"
-_FIELDS = ("%H", "%an", "%aE", "%cn", "%cE", "%aI", "%cI", "%s", "%b")
+# **소문자 `%ae`/`%ce`를 쓴다 — 대문자 `%aE`/`%cE`는 `.mailmap`이 적용된 값이다.**
+# 2026-09-07 실측: 저장소에 `개인 <kiki@ex.com> 사내계정 <worker@employer.co.kr>`
+# 한 줄만 있으면 `%aE`는 재직사 커밋을 개인 이메일로 출력한다 — 귀속 증빙 도구가
+# 정확히 잡아야 할 것을 못 보고 "혼입 0종"으로 exit 0을 낸다. 이름도 같은 이유로
+# 원본(`%an`/`%cn`)을 쓴다(`%aN`/`%cN`이 매핑본).
+_FIELDS = ("%H", "%an", "%ae", "%cn", "%ce", "%aI", "%cI", "%s", "%b")
 _FORMAT = _FS.join(_FIELDS) + _RS
 
 # 기본 스캔 범위 — 모든 ref. HEAD만 보면 미머지 브랜치의 커밋이 통째로 빠진다.
@@ -257,11 +262,13 @@ def stream_commits(
 
     timed_out = threading.Event()
 
-    def _reap() -> None:
+    def _on_timeout() -> None:
+        # watchdog 스레드가 호출한다. 여기서는 깨우기만 하고, 실제 수거는
+        # `finally`의 `_reap(proc)`이 단일 경로로 처리한다.
         timed_out.set()
         proc.kill()
 
-    watchdog = threading.Timer(timeout, _reap)
+    watchdog = threading.Timer(timeout, _on_timeout)
     watchdog.daemon = True
     watchdog.start()
 
@@ -274,7 +281,7 @@ def stream_commits(
             sink = jsonl.open("w", encoding="utf-8")
         except OSError as exc:
             watchdog.cancel()
-            proc.kill()
+            _reap(proc)
             errfile.close()
             raise EvidenceError(f"{type(exc).__name__}: jsonl 생성 실패 — {exc}") from exc
 
@@ -300,15 +307,38 @@ def stream_commits(
             stderr = errfile.read().strip()[:200]
             raise EvidenceError(f"GitExitError({proc.returncode}): git log — {stderr}")
     except subprocess.TimeoutExpired as exc:
-        proc.kill()
         raise EvidenceError("TimeoutExpired: git log 종료 대기 초과") from exc
     finally:
+        # 정상 종료·조기 close()·jsonl 실패가 **같은 정리 경로**를 지난다.
+        # kill만 하고 wait하지 않으면 POSIX에서 자식이 zombie로 남고 종료 자체도
+        # 확정되지 않는다(2026-09-07 리뷰 지적). stdout을 먼저 닫아 write end가
+        # 막힌 프로세스가 깨어나게 한 뒤 kill → wait 순서로 반드시 거둔다.
         watchdog.cancel()
+        _reap(proc)
         if sink:
             sink.close()
+        errfile.close()
+
+
+def _reap(proc) -> None:
+    """자식 프로세스를 확실히 종료·수거한다. **모든 종료 경로의 단일 출구**.
+
+    `kill()`만으로는 부족하다 — 커널이 프로세스를 정리해도 파이썬이 `wait()`을
+    하지 않으면 zombie 항목이 남고, 그것은 이후 다른 `subprocess` 호출이나 GC
+    시점까지 따라다닌다. 예외를 올리지 않는다: 이 함수는 `finally`에서만 불리며,
+    여기서 터지면 **원래 실패 원인을 덮어쓴다**.
+    """
+    try:
+        if proc.stdout is not None:
+            proc.stdout.close()
+    except OSError:
+        pass
+    try:
         if proc.poll() is None:
             proc.kill()
-        errfile.close()
+        proc.wait(timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def _parse_record(raw: str) -> Commit | None:
@@ -941,11 +971,24 @@ def main(argv=None) -> int:
     markdown = render(report, root_name=args.root.resolve().name)
 
     if args.out:
-        args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "ip_separation_evidence.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        (args.out / "ip_separation_evidence.md").write_text(markdown, encoding="utf-8")
+        # 저장 실패를 **exit 2(수집 실패)** 로 바꾼다. 그냥 두면 `OSError`가
+        # 빠져나가 파이썬이 exit 1을 내는데, 이 CLI에서 1은 "수집 성공 · 혼입
+        # 발견"으로 예약된 값이다 — 디스크·권한 문제가 신원 혼입으로 오분류되고,
+        # 이전 실행의 리포트가 남아 있으면 런북이 **그것을 다시 읽는다**
+        # (2026-09-07 리뷰 지적). 실패는 실패의 색을 가져야 한다.
+        try:
+            args.out.mkdir(parents=True, exist_ok=True)
+            (args.out / "ip_separation_evidence.json").write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            (args.out / "ip_separation_evidence.md").write_text(markdown, encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"❌ 리포트 저장 실패 — {type(exc).__name__}: {exc}\n"
+                "   이 실행의 산출물은 신뢰할 수 없다. 증빙으로 쓰지 말 것.",
+                file=sys.stderr,
+            )
+            return 2
 
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else markdown)
 

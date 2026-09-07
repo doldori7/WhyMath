@@ -550,9 +550,15 @@ def test_timeout_fires_even_when_read_blocks(repo: Path, monkeypatch) -> None:
     released = threading.Event()
 
     class _BlockingStdout:
+        closed = False
+
         def read(self, _n):
             released.wait(10)  # kill()이 풀어 준다 — 안 풀리면 테스트가 실패한다
             return ""
+
+        def close(self):
+            # 실물 파이프를 충실히 흉내낸다 — `_reap`이 종료 경로에서 닫는다.
+            self.closed = True
 
     class _FakeProc:
         stdout = _BlockingStdout()
@@ -572,6 +578,7 @@ def test_timeout_fires_even_when_read_blocks(repo: Path, monkeypatch) -> None:
         list(stream_commits(repo, timeout=0.05))
     assert "TimeoutExpired" in str(excinfo.value)
     assert released.is_set()  # watchdog이 실제로 kill했다
+    assert _FakeProc.stdout.closed  # 종료 경로가 stdout까지 닫았다
 
 
 # ── 서명 스캔본 가드 (2026-09-07 리뷰 P2) ──────────────────────────────────
@@ -596,3 +603,110 @@ def test_no_signed_scan_is_tracked() -> None:
     """서명 스캔본이 저장소에 커밋되지 않았다 — 마커 스캔의 바이너리 축."""
     found = scan_tracked_documents(_REPO)
     assert found["signed_binary"] == [], f"서명 스캔본 의심: {found['signed_binary']}"
+
+
+# ── mailmap 우회 (2026-09-07 재리뷰 P1) ────────────────────────────────────
+def test_mailmap_does_not_hide_employer_identity(repo: Path, tmp_path: Path) -> None:
+    """**`.mailmap`이 재직사 신원을 개인 신원으로 가리지 못한다.**
+
+    이 파일에서 `test_shallow_clone_is_not_ok`·`test_unreachable_commit_is_scanned`와
+    같은 급의 계약이다. git의 `%aE`(대문자)는 `.mailmap`이 **적용된** 이메일을
+    내므로, 저장소에 다음 한 줄만 있으면 재직사 커밋이 개인 이메일로 보인다:
+
+        개인 <kiki@example.com> 사내계정 <worker@employer.co.kr>
+
+    그 상태에서 IDENT-01은 신호 없이 exit 0을 낸다 — 귀속 증빙 도구가 정확히
+    잡아야 할 것을 못 보는 것이다. 원본은 소문자 `%ae`/`%ce`로만 나온다.
+
+    결함 주입 표적: `_FIELDS`의 `%ae`→`%aE`(또는 `%ce`→`%cE`)로 되돌리면
+    이 테스트만 RED가 되고 나머지는 전부 GREEN이다.
+    """
+    # 재직사 신원으로 커밋한다
+    (repo / "corp.txt").write_text("x", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(
+        repo,
+        "-c",
+        "user.name=사내계정",
+        "-c",
+        "user.email=worker@employer.co.kr",
+        "commit",
+        "-q",
+        "-m",
+        "재직사 계정 커밋",
+    )
+    # 그 신원을 개인 신원으로 매핑하는 .mailmap을 심는다
+    (repo / ".mailmap").write_text(
+        "개인 <kiki@example.com> 사내계정 <worker@employer.co.kr>\n", encoding="utf-8"
+    )
+    _git(repo, "add", ".mailmap")
+    _git(repo, "commit", "-q", "-m", "mailmap")
+
+    # 전제 확인 — 이 환경의 git이 실제로 mailmap을 적용하는가(변별력 확보).
+    mapped = _mod._git(repo, "log", "--format=%aE", "-n", "3")
+    raw = _mod._git(repo, "log", "--format=%ae", "-n", "3")
+    assert mapped != raw, "이 git이 mailmap을 적용하지 않는다 — 테스트가 무효다"
+
+    report = collect(repo, personal=PERSONAL, tool=TOOL)
+    assert report.status == "ok"
+    assert [f.code for f in report.findings] == ["IDENT-01"] * len(report.findings)
+
+    # **두 축을 각각 못박는다.** "1건 이상"으로만 단언하면 author·committer 중
+    # 한쪽만 mailmap 포맷으로 되돌려도 나머지가 발화해 통과한다 — 실제로 첫 판에
+    # M27·M28이 그렇게 살아남았다(CLAUDE.md '픽스처가 그 절을 실제로 밟는가').
+    roles = {f.subject.split(":", 1)[0] for f in report.findings if "employer.co.kr" in f.subject}
+    assert roles == {"author", "committer"}, f"mailmap에 가려 놓친 축이 있다: {roles}"
+
+
+# ── 자식 프로세스 수거 (2026-09-07 재리뷰 P2) ──────────────────────────────
+def test_early_close_reaps_the_child(repo: Path) -> None:
+    """조기 `close()`에서도 자식을 **kill 후 wait까지** 한다 — zombie 방지.
+
+    `kill()`만 하고 `wait()`하지 않으면 POSIX에서 자식이 zombie로 남고 종료
+    자체도 확정되지 않는다. `poll()`이 None이 아니면 수거가 끝난 것이다.
+    """
+    captured = {}
+    real_popen = _mod.subprocess.Popen
+
+    def _spy(*a, **k):
+        proc = real_popen(*a, **k)
+        captured["proc"] = proc
+        captured["waited"] = False
+        real_wait = proc.wait
+
+        def _wait(timeout=None):
+            captured["waited"] = True
+            return real_wait(timeout=timeout)
+
+        proc.wait = _wait
+        return proc
+
+    _mod.subprocess.Popen = _spy
+    try:
+        gen = stream_commits(repo)
+        next(gen)
+        gen.close()
+    finally:
+        _mod.subprocess.Popen = real_popen
+
+    proc = captured["proc"]
+    # **`poll()`만으로는 변별력이 없다** — `poll()`은 스스로 `waitpid(WNOHANG)`을
+    # 불러 zombie를 거두므로, wait를 지운 코드에서도 None이 아닌 값을 낸다.
+    # 첫 판에 M29가 그렇게 살아남았다. 계약은 "종료 경로가 자식을 거둔다"이고
+    # 파이썬에서 그 수단은 `wait()`이므로, 호출 자체를 못박는다.
+    assert captured["waited"], "종료 경로가 wait()를 부르지 않았다 — zombie로 남는다"
+    assert proc.poll() is not None, "자식이 종료되지 않았다"
+
+
+# ── 산출물 저장 실패 (2026-09-07 재리뷰 P2) ────────────────────────────────
+def test_out_write_failure_is_exit_2_not_1(repo: Path, tmp_path: Path) -> None:
+    """저장 실패는 **exit 2**다 — exit 1(혼입 발견)로 오분류되면 안 된다.
+
+    `--out`이 기존 *일반 파일*이면 `mkdir`이 `NotADirectoryError`(OSError)를 내는데,
+    잡지 않으면 파이썬이 exit 1을 낸다. 이 CLI에서 1은 "수집 성공 · 혼입 발견"으로
+    예약된 값이라, 디스크·권한 문제가 신원 혼입으로 보이게 된다.
+    """
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("나는 파일이다", encoding="utf-8")
+    code = main(["--root", str(repo), "--identity", "kiki@example.com", "--out", str(blocker)])
+    assert code == 2, f"저장 실패가 exit {code} — 2여야 한다"
