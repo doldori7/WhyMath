@@ -352,8 +352,20 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     - `verification_tier` — **거부**(`ProblemCorpusError`). 이쪽은 *기계 검증 강도*를 뜻하는
       **플랫폼 어휘**라 과목과 무관하게 폐쇄집합이며, 오타가 조용히 통과하면 검증 강도를
       잘못 보고하게 된다.
-    - `answer_selection`·`answer_aggregate` — 현재는 조용한 `None` 강등이다. `answer_kind`와
-      같은 형태의 과목 어휘지만 이번 범위 밖이며, 승계는 `EOS-01`이 소유한다.
+    - `answer_selection`·`answer_aggregate` — **통과**(EOS-01). `answer_kind`와 같은 과목
+      어휘이며 판정 권위도 같은 자리(L3 `verify_root_selection`·`verify_root_aggregate`)에 있다.
+
+    ⚠ **기계 가드의 범위(있는 척 금지 · EOS-01 ② 실측)**: 이 세 필드의 어휘 열거는 두 정적
+    축 중 **어느 쪽도 잡지 못한다**. ⑴ 경계 프로브(`eos_core_boundary_probe`)는 리터럴을
+    `MATH_TYPE_RX` 접두 목록으로 판정하는데 `largest`·`smallest`·`unique`·`sum`·`product`는
+    전부 미매치다(실측). 이 낱말들을 정규식에 넣으면 일반어라 거짓 양성이 신호를 덮는다 —
+    그 판단은 프로브 자신의 주석이 이미 밝힌 설계다. ⑵ 불투명 페이로드 게이트는
+    `ProblemStatement` DTO 필드를 축으로 삼는데 이 두 필드는 **DTO에 없다**(계약은 `answer`·
+    `answer_kind`·`conditions` 3종만 불투명으로 선언). 즉 사각은 잘못 설정된 것이 아니라
+    **설계상 범위 밖**이다. 그래서 이 축의 실질 보호는 아래 회귀 테스트(행동 축)가 맡는다 —
+    `tests/backend/l1/problem_bank/test_populate.py`의 미등록 값 통과 단언 3종.
+    (두 필드를 Subject Contract 필수층 DTO에 편입할지는 별건이다 — 필수층 추가는 "모든 과목이
+    반드시 제공한다"는 선언이라 되돌리기 어렵고, `subject_adapter.py`가 그 게이트를 따로 둔다.)
 
     즉 판정 기준은 "폐쇄집합인가"가 아니라 **"누구의 어휘인가"**다 — 과목 어휘는 통과시키고
     플랫폼 어휘는 거부한다.
@@ -367,10 +379,19 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
         raise ProblemCorpusError(f"verify.conditions 형식오류: slug={slug} value={conditions!r}")
     answer_map = {str(k): str(v) for k, v in dict(answer_map_raw).items()}
     steps = [str(s) for s in steps_raw] if isinstance(steps_raw, list) else None
+    # EOS-01 — `answer_selection`·`answer_aggregate`도 **불투명 문자열로 통과**시킨다.
+    # EOS-85가 `answer_kind`에 세운 기준("폐쇄집합인가"가 아니라 "누구의 어휘인가")을 같은
+    # 함수의 남은 두 형제에 적용한다. 실측(2026-09-07)으로 둘 다 **과목 어휘**임을 확인했다:
+    #   · 판정 권위가 L3에 있다 — `l3/verify_answer.verify_root_selection`이
+    #     `selection not in ("largest","smallest","unique")`이면 보수적으로 `None`을 낸다
+    #     (`_CONCEPTUAL_VERIFIERS` 디스패치와 같은 구조). 적재기가 거를 일이 아니다.
+    #   · 의미가 수학에 묶여 있다 — "근 중 가장 큰 값"·"근들의 합/곱"이며, 다른 과목은 같은
+    #     자리에 다른 어휘를 담는다.
+    # 종전엔 목록 밖 값이 예외도 경고도 없이 `None`이 됐다(answer_kind와 같은 조용한 손실).
     sel_raw = verify_raw.get("answer_selection")
-    selection = sel_raw if sel_raw in ("largest", "smallest", "unique") else None
+    selection = sel_raw if isinstance(sel_raw, str) and sel_raw else None
     agg_raw = verify_raw.get("answer_aggregate")
-    aggregate = agg_raw if agg_raw in ("sum", "product") else None
+    aggregate = agg_raw if isinstance(agg_raw, str) and agg_raw else None
     # EOS-85 — `answer_kind`는 **불투명 문자열로 그대로 통과**시킨다(어휘 열거 없음).
     # 종전엔 17종을 튜플로 열거하고 그 밖은 `None`으로 떨어뜨렸다. 두 가지가 문제였다:
     #   ⑴ **경계 위반** — 적재기는 CORE인데 수학 answer_kind 어휘를 알고 있었다. 경계 프로브

@@ -3415,7 +3415,7 @@ features:
     db_model_modules: 2
     coupling_count: 4
     test_files: 11
-    test_functions: 141
+    test_functions: 144
     matrix:
       A_subject: 0
       B_db: 1
@@ -3795,7 +3795,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: High
-    loc: 1898
+    loc: 1919
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -3805,7 +3805,7 @@ features:
     db_model_modules: 4
     coupling_count: 10
     test_files: 28
-    test_functions: 436
+    test_functions: 439
     matrix:
       A_subject: 1
       B_db: 2

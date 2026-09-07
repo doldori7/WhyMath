@@ -548,6 +548,91 @@ def test_load_passes_unknown_answer_kind_through_verbatim(tmp_path: Path) -> Non
     assert records[0].verify.answer_kind == "unit_consistency"
 
 
+def test_load_passes_unknown_selection_and_aggregate_through_verbatim(tmp_path: Path) -> None:
+    """EOS-01 — `answer_selection`·`answer_aggregate`도 미등록 값이 **원문 그대로** 실린다.
+
+    `answer_kind`와 같은 함수·같은 결함류다. 판정 권위는 L3에 있고
+    (`verify_root_selection`이 `selection not in ("largest","smallest","unique")`이면 보수적으로
+    `None`을 낸다), 적재기는 거를 일이 아니다.
+
+    쓰는 값은 **어느 목록에도 없는 것**이다 — 있는 값을 쓰면 화이트리스트를 되살려도 통과해
+    변별력이 0이 된다. 이 축은 정적 가드 두 개(`MATH_TYPE_RX` 접두 매처 · 불투명 페이로드 게이트)
+    가 **구조적으로 못 보는** 자리라(populate docstring §기계 가드의 범위), 이 테스트가 실질
+    보호의 전부다.
+    """
+    record = _base_record(
+        slug="wm-test-unknown-selection",
+        verify={
+            "conditions": "x**2 - 1 = 0",
+            "answer_map": {},
+            "answer_selection": "closest_to_origin",
+            "answer_aggregate": "median",
+        },
+    )
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert records[0].verify.answer_selection == "closest_to_origin"
+    assert records[0].verify.answer_aggregate == "median"
+
+
+def test_load_keeps_selection_and_aggregate_type_hygiene(tmp_path: Path) -> None:
+    """음성 대조 — 불투명 통과는 타입 위생까지 버리는 것이 아니다(문자열 아님·빈 값 → None)."""
+    for bad in ({"nested": 1}, "", 7, None, ["largest"]):
+        record = _base_record(
+            slug="wm-test-bad-selection",
+            verify={
+                "conditions": "x**2 - 1 = 0",
+                "answer_map": {},
+                "answer_selection": bad,
+                "answer_aggregate": bad,
+            },
+        )
+        path = _write(tmp_path, [record])
+        records = load_problem_bank_records(path)
+        assert records[0].verify.answer_selection is None, bad
+        assert records[0].verify.answer_aggregate is None, bad
+
+
+def test_corpus_selection_and_aggregate_values_all_survive_loading(tmp_path: Path) -> None:
+    """실코퍼스가 쓰는 두 필드의 어휘 전건이 그대로 실린다(전수 축 · 스캔 0건은 실패)."""
+    import json
+
+    repo_root = Path(__file__).resolve().parents[4]
+    pairs: set[tuple[str | None, str | None]] = set()
+    for corpus in sorted((repo_root / "data" / "corpus").glob("*/problems.jsonl")):
+        for line in corpus.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            verify = json.loads(line).get("verify") or {}
+            sel, agg = verify.get("answer_selection"), verify.get("answer_aggregate")
+            if isinstance(sel, str) and sel or isinstance(agg, str) and agg:
+                pairs.add(
+                    (
+                        sel if isinstance(sel, str) and sel else None,
+                        agg if isinstance(agg, str) and agg else None,
+                    )
+                )
+    assert (
+        pairs
+    ), "코퍼스에서 answer_selection·answer_aggregate를 하나도 찾지 못했다 — 스캔이 공허하다"
+
+    records = [
+        _base_record(
+            slug=f"wm-test-sa-{i}",
+            verify={
+                "conditions": "x**2 - 1 = 0",
+                "answer_map": {},
+                **({"answer_selection": sel} if sel else {}),
+                **({"answer_aggregate": agg} if agg else {}),
+            },
+        )
+        for i, (sel, agg) in enumerate(sorted(pairs, key=lambda t: (t[0] or "", t[1] or "")))
+    ]
+    path = _write(tmp_path, records)
+    loaded = load_problem_bank_records(path)
+    assert {(r.verify.answer_selection, r.verify.answer_aggregate) for r in loaded} == pairs
+
+
 def test_load_keeps_answer_kind_type_hygiene(tmp_path: Path) -> None:
     """불투명 통과는 **형식 검사까지 버리는 것이 아니다** — 문자열이 아니거나 비면 None.
 
