@@ -983,6 +983,47 @@ class TestSubmitAttempt:
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
 
+    def test_submit_persists_reported_started_at_verbatim(self) -> None:
+        """PED-37: 클라 신고 발생 시각을 *그대로* 적재하고, 수신 시각은 ingested_at에 따로 남긴다.
+
+        이 컬럼이 비어 있던 동안 `harness/wh1_evaluation`의 since/until 집계와
+        `privacy/retention` 파기가 조용히 0행이었다 — 그래서 라우트 경유로 배선을 고정한다.
+        `started_at != ingested_at` 단언이 "서버 now 폴백 부재"의 증거다(같으면 폴백 잔존).
+        """
+        reported = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "duration_seconds": 240,
+                "started_at": reported.isoformat(),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.started_at == reported
+        assert attempt.ingested_at is not None
+        assert attempt.ingested_at > reported  # 신고는 과거·수신은 지금(복제가 아니다)
+        # 기존 계약 불변 — ended_at은 서버 now를 유지한다(수신 시각과 같은 값).
+        assert attempt.ended_at == attempt.ingested_at
+
+    def test_submit_without_started_at_leaves_null(self) -> None:
+        """PED-37: 미신고면 NULL=미측정으로 남긴다 — 서버 now로 메우지 않는다(날조 금지)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert attempt.started_at is None
+        assert attempt.ingested_at is not None  # 수신 시각은 서버가 아는 사실이라 채운다
+
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""
         app = create_app()

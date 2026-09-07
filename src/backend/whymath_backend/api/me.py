@@ -664,6 +664,18 @@ class AttemptSubmitRequest(BaseModel):
     is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
     student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
     duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
+    # PED-37: 클라 *신고* 발생 시작 시각(선택). 서버가 대신 만들어 낼 수 없는 값이라 클라가 주는
+    # 통로를 여는 것 말고 정직한 방법이 없다 — `ended_at − duration_seconds` 역산은 ended_at이
+    # 서버 수신 시각이라 지연·오프라인 제출에서 창이 통째로 밀린다(32_learning_history §EOS-48-2
+    # "수신 시각 복제 = 날조"). 미제출이면 NULL로 남고, 그 attempt는 시간창 집계·보존 파기에서
+    # 조용히 빠진다(빠지는 것이 계약 — 없는 시각을 지어내지 않는다).
+    started_at: datetime | None = Field(
+        default=None,
+        description=(
+            "풀이 시작 시각(클라이언트 신고·선택·tz-aware 권장). 미제출 시 NULL=미측정으로 "
+            "남는다 — 서버 시각으로 대체하지 않는다(발생/수신 분리·EOS-48)."
+        ),
+    )
     session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
     confidence_self_reported: float | None = Field(
         default=None, ge=0.0, le=1.0, description="학생 자기보고 확신도 0~1(선택)."
@@ -741,7 +753,16 @@ async def submit_attempt(
     있다 — `api/coach.py::_complete_problem`(서버가 `l3.verify_final_answer`로 직접 판정한
     `is_correct=True`만 적재·Polya 돌아보기 1턴 경유). 두 경로 모두 `GET /me/next-problem`의
     미시도 필터에서 동일하게 소비된다(`ProblemAttempt` 존재 여부만 본다).
+
+    PED-37 시간 귀속: `started_at`은 **클라가 신고한 발생 시각을 그대로** 적재하고(미신고면 NULL),
+    서버가 이 요청을 받은 시각은 `ingested_at`에 따로 남긴다(EOS-48 발생/수신 분리). 이 컬럼이
+    비어 있던 동안 `harness/wh1_evaluation`의 since/until 집계(R15 정답률 추세·난이도 추세·Brier·
+    전이 점수)와 `privacy/retention`의 보존기한 파기가 *조용히 0행*이었다 — 시간창 조건이 NULL과
+    비교돼 어떤 행도 통과하지 못했기 때문이다.
     """
+    # 서버 *수신* 시각 — 한 번만 읽어 아래 두 컬럼에 같은 값을 쓴다(두 번 호출 시 생기는
+    # 마이크로초 시차가 "종료가 수신보다 앞선다"는 사실 아닌 신호로 남는 것을 막는다).
+    received_at = datetime.now(UTC)
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
@@ -751,7 +772,16 @@ async def submit_attempt(
         student_answer=body.student_answer,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
-        ended_at=datetime.now(UTC),
+        # PED-37: 클라 신고 발생 시각을 *그대로* 적재. 미신고면 None이 그대로 들어가 NULL로 남는다
+        # (서버 now 폴백 금지 — 그 폴백이 시간창을 업로드 시각 기준으로 밀어 버린다).
+        started_at=body.started_at,
+        # `ended_at`은 기존 동작(서버 now)을 *일부러* 유지한다. 엄밀히는 이 값도 발생이 아니라
+        # 수신 시각이지만, 정정하려면 클라 신고 ended_at을 새로 받아야 하고 그 사이 미신고 행은
+        # NULL이 되어 이 컬럼으로 attempt를 정렬하는 기존 계약이 깨진다 — 별건으로 분리한다.
+        ended_at=received_at,
+        # EOS-48: 발생(started_at)과 분리된 서버 수신 시각 좌석. 오프라인 태블릿이 하루 뒤
+        # sync해도 "언제 발생했고 언제 받았는가"가 둘 다 남아 지연 도착을 판별할 수 있다.
+        ingested_at=received_at,
     )
     session.add(attempt)
     await session.commit()
