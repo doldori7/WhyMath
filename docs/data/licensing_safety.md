@@ -45,7 +45,7 @@
 | AoPS Wiki | CC BY-SA | ⚠️ | ⚠️ | ✅ | **SA(B등급)** — 학습 직접사용 위험; *사실·구조만 추출+자체생성* 우회 |
 | Khan Academy | CC BY-NC-SA | ❌ | ❌ | — | **NC+SA 이중독성(C등급)** — 완전격리 |
 | 3Blue1Brown | YouTube 표준 | ❌ | ❌ | — | 영감만 |
-| Illustrative Math | **판(edition)별 상이** — 초판 K–12 Math(© 2019–2021)=CC BY 4.0 · **v.360**(© 2024·TK © 2025)=**CC BY-NC 4.0** | ⚠️ **초판만** | ⚠️ 초판만 | ✅ **문구 지정** | **v.360은 상업 이용 금지**(accessim.org 배포분) — 우리는 상용 서비스라 초판(im.kendallhunt.com)만 사용 가능 · 귀속 = "Based on IM® K–12 Math authored by Illustrative Mathematics and licensed under CC BY 4.0." (아래 각주) |
+| Illustrative Math | **판(edition)별 상이** — 초판 K–12 Math(© 2019–2021)=CC BY 4.0 · **v.360**(© 2024·TK © 2025)=**CC BY-NC 4.0** | ⚠️ **초판만** | ⚠️ 초판만 | ✅ **3조건 전부** | **v.360은 상업 이용 금지**(accessim.org 배포분) — 우리는 상용 서비스라 초판(im.kendallhunt.com)만 사용 가능 · 귀속은 ①저자 표시 ②**라이선스 하이퍼링크** ③**변경 여부 표시** 3조건이며, 흔히 쓰는 한 줄 문구는 약관이 "suggested"라 부르는 **예시일 뿐 3조건을 대체하지 않는다** (아래 각주) |
 
 > **적용 범위 단서 (LIC-05 · 2026-09-07)** — 라이선스명만 적으면 *사이트 전체가 그 라이선스*로 읽힌다.
 > 아래 두 소스는 약관 원문이 범위를 한정하며, 종전 표기는 그 한정을 담지 못했다.
@@ -67,6 +67,15 @@
 > - §7.2 2판 `IM® TK–12 Math v.360`(© 2024 · TK © 2025 · accessim.org) = **CC BY-NC 4.0** —
 >   "Commercial use of the IM v.360 curriculum materials and name … **is prohibited** without prior
 >   written permission". 또 그 CC는 "governs the IM v.360 curriculum **only** and not other IM Products".
+> - **귀속은 3조건이다**(2026-09-07 PR #1029 Codex P2 지적 수용 — 최초 판에서 예시 문구만 적었다):
+>   "users are free to share and adapt the materials for any purpose, including commercially,
+>   **with appropriate attribution to the author**, Illustrative Mathematics, **hyperlink to the
+>   license**, and **indication if changes were made**". 이어지는 한 줄 문구
+>   ("Based on IM® K–12 Math authored by Illustrative Mathematics and licensed under CC BY 4.0.")는
+>   원문이 **"A suggested attribution"**이라 부르는 *예시*이며, 그것만 표기하면 ②하이퍼링크와
+>   ③변경 표시가 빠진다. 실제 재사용·가공 시 세 조건을 모두 이행한다.
+>   (일반론으로도 CC BY 4.0 §3(a)가 라이선스 링크와 변경 표시를 요구하므로, 예시 문구는 **하한이지
+>   상한이 아니다** — Siyavula의 지정 문구에도 같은 원리가 적용된다.)
 > - 우리는 **상용 서비스**이므로 v.360은 결정 우선순위 #2(법적 준수)상 사용 불가다. 이 구분은
 >   `docs/legal/copyright_guide_v2.md`에는 이미 있었으나 **"반드시 확인"이라고 선언한 이 매트릭스에는
 >   없었다** — 정본이 파생 문서보다 덜 정확한 상태였다.
