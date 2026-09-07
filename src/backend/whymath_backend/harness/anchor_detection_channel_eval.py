@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from whymath_backend.harness.wilson import wilson_lower_bound, wilson_upper_bound
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
 
 _EXIT_OK = 0
 _EXIT_FAIL = 1
@@ -158,6 +159,14 @@ def _root_loss_by_dividing() -> ChannelFixtures:
     ) + (
         "ax²=bx 의 양변을 x로 나누면 x=b/a",  # 기호형 — substring 경로 소관
         "x²=2x 양변을 x로 나누면 x=20 이라고 적었다",  # 경계
+        # PR #1032 Codex P1 회귀 동결 — 0을 근으로 적는 방법은 `x=0` 하나가 아니다.
+        # 아래 문장들은 전부 **올바른 설명**이고 리터럴 `x=0`을 포함하지 않는다. 최초 판의
+        # 배제 조건(`x=0` 리터럴)은 이들을 통째로 놓쳐 정답을 오개념으로 불렀다.
+        "x²=2x에서 양변을 x로 나누면 x=2만 나와서 안 되고 해는 0과 2다",
+        "x²=3x 의 해는 0과 3이다",
+        "x²=7x, 양변을 x로 나누면 x=7 만 남아 x=0 을 잃는다",
+        "x²=10x 의 두 근은 0이나 10 이다",
+        "x²=5x 양변을 x로 나누면 x=5 이지만 근이 0인 경우를 빠뜨리면 안 된다",
     )
     return ChannelFixtures("root-loss-by-dividing", "A4", pos, neg)
 
@@ -209,6 +218,18 @@ def _channel_fired(kebab_id: str, text: str) -> bool:
     return False
 
 
+def _survives_serving_gate(kebab_id: str, text: str) -> bool:
+    """이 텍스트의 그 오개념이 **서빙 품질 게이트(top-1 floor 0.65)를 넘어** 살아남는가.
+
+    정규식이 *발화했다*와 학생 경로에 *도달했다*는 다른 사실이다(PR #1032 Codex P2). 이 채널들의
+    의도된 수치 입력에서는 기호 substring 신호가 0이라 정규식 단독 가산분만 남고
+    confidence=1/2=0.5 → floor 0.65 미만으로 `apply_match_quality_gate`가 **후보 전체를 비운다**.
+    그 사실을 재지 않으면 "검출률 100%"가 곧 "쓰인다"로 오독된다(작동 신호 없는 알고리즘 부착 금지).
+    """
+    gated = apply_match_quality_gate(diagnose(text, top_k=len(CATALOG_BY_ID)))
+    return any(m.misconception.id == kebab_id for m in gated.matches)
+
+
 @dataclass
 class ChannelResult:
     """채널 1개의 측정 결과."""
@@ -221,6 +242,9 @@ class ChannelResult:
     negatives: int = 0
     ambiguous_fired: int = 0
     ambiguous_total: int = 0
+    #: 양성 중 **서빙 게이트까지 살아남은** 수. 검출 수와 다를 수 있고, 0이어도 게이트는 통과한다
+    #: — 서빙 결선은 acceptance ③이 D2 후속으로 명시 이관한 범위이기 때문이다. 다만 **보고한다**.
+    serving_reach: int = 0
     misses: list[str] = field(default_factory=list)
     leaks: list[str] = field(default_factory=list)
 
@@ -251,6 +275,7 @@ class ChannelResult:
             "false_positive_upper_bound": round(self.false_positive_upper, 4),
             "ambiguous_fired": self.ambiguous_fired,
             "ambiguous_total": self.ambiguous_total,
+            "serving_reach": self.serving_reach,
             "passed": self.passed,
             "misses": self.misses[:5],
             "leaks": self.leaks[:5],
@@ -270,6 +295,8 @@ def evaluate() -> list[ChannelResult]:
                 r.detected += 1
             else:
                 r.misses.append(text)
+            if _survives_serving_gate(fx.kebab_id, text):
+                r.serving_reach += 1
         for text in fx.negatives:
             if _channel_fired(fx.kebab_id, text):
                 r.false_positives += 1
@@ -281,14 +308,20 @@ def evaluate() -> list[ChannelResult]:
     return results
 
 
-def _gate_is_reachable(negatives: int) -> bool:
-    """이 음성 표본 수에서 *오검출 0건*이 상한을 통과할 수 있는가.
+def _gate_is_reachable(positives: int, negatives: int) -> bool:
+    """이 표본 수에서 *완벽한 채널*(전건 검출·오검출 0)이 **양쪽 경계를 다** 통과할 수 있는가.
 
     통과 불가면 그 게이트는 채널의 품질과 **무관하게** 항상 FAIL이다 — 완벽한 채널도 떨어뜨리는
     게이트는 변별이 아니라 위장이고, 사람이 결국 게이트를 끄게 만든다. 그래서 실패를 채널의
     탓으로 돌리지 않고 **게이트 자신의 결함**으로 따로 보고한다.
+
+    두 축을 다 본다(PR #1032 Codex P2) — 최초 판은 음성 축만 봐서, 양성이 11건 미만으로 줄면
+    전건 검출로도 하한 0.80에 못 닿는데 `unreachable`이 비어 있어 그 필연적 실패가 **채널 탓으로**
+    보고됐다. 한쪽만 검사하는 도달 가능성 검사는 그 자체가 위장이다.
     """
-    return wilson_upper_bound(0, negatives) <= FALSE_POSITIVE_CEILING
+    detection_ok = wilson_lower_bound(positives, positives) >= DETECTION_FLOOR
+    false_positive_ok = wilson_upper_bound(0, negatives) <= FALSE_POSITIVE_CEILING
+    return detection_ok and false_positive_ok
 
 
 @dataclass(frozen=True)
@@ -348,7 +381,7 @@ def build_report() -> Report:
         ),
         # 표본이 작아 *구조적으로* 통과 불가한 게이트를 채널 실패로 오독하지 않게 분리 보고한다.
         unreachable_gate_channels=tuple(
-            r.kebab_id for r in results if not _gate_is_reachable(r.negatives)
+            r.kebab_id for r in results if not _gate_is_reachable(r.positives, r.negatives)
         ),
     )
 
@@ -373,7 +406,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"검출 {ch.detected}/{ch.positives}(하한 {ch.detection_lower:.4f}) · "
                 f"오검출 {ch.false_positives}/{ch.negatives}"
                 f"(상한 {ch.false_positive_upper:.4f}) · "
-                f"모호 {ch.ambiguous_fired}/{ch.ambiguous_total}"
+                f"모호 {ch.ambiguous_fired}/{ch.ambiguous_total} · "
+                f"서빙도달 {ch.serving_reach}/{ch.positives}"
             )
         print(
             f"\n앵커 커버 {report.anchor_covered_total}종 = "

@@ -22,7 +22,9 @@ from whymath_backend.harness.anchor_detection_channel_eval import (
     DETECTION_FLOOR,
     FALSE_POSITIVE_CEILING,
     UNCHANNELABLE,
+    _channel_fired,
     _gate_is_reachable,
+    _survives_serving_gate,
     build_fixtures,
     build_report,
     main,
@@ -46,17 +48,17 @@ class TestGateIsReachable:
     def test_every_channel_gate_can_be_passed(self) -> None:
         """모든_채널의_게이트가_도달_가능"""
         for fx in build_fixtures():
-            assert _gate_is_reachable(len(fx.negatives)), (
-                f"{fx.kebab_id}: 음성 {len(fx.negatives)}건으로는 오검출 0건에서도 "
-                f"상한 {FALSE_POSITIVE_CEILING}을 통과할 수 없다"
+            assert _gate_is_reachable(len(fx.positives), len(fx.negatives)), (
+                f"{fx.kebab_id}: 양성 {len(fx.positives)}·음성 {len(fx.negatives)}건으로는 "
+                f"완벽한 채널도 경계 {DETECTION_FLOOR}/{FALSE_POSITIVE_CEILING}을 통과할 수 없다"
             )
 
     def test_small_sample_is_reported_unreachable(self) -> None:
         """작은_표본은_도달불가로_판정된다 — 이 검사 자체의 변별력 확인"""
         # n=20에서 Wilson 상한(0/20)=0.1192 > 0.10 이므로 도달 불가여야 한다. 이 단언이
         # 없으면 `_gate_is_reachable`이 항상 True를 돌려줘도 위 테스트가 통과한다.
-        assert not _gate_is_reachable(20)
-        assert _gate_is_reachable(30)
+        assert not _gate_is_reachable(27, 20)
+        assert _gate_is_reachable(27, 30)
 
 
 class TestFixtureIntegrity:
@@ -125,3 +127,71 @@ class TestJsonMirrorsObject:
         channels = report.to_json()["channels"]
         assert isinstance(channels, list)
         assert len(channels) == len(report.channels)
+
+
+class TestZeroRootExclusionIsNotLiteralOnly:
+    """PR #1032 Codex P1 회귀 동결 — 0을 근으로 적는 방법은 `x=0` 하나가 아니다.
+
+    최초 판의 배제 조건은 리터럴 `x=0`뿐이라, **완전히 올바른 설명**인
+    "…x=2만 나와서 안 되고 해는 0과 2다"가 그 리터럴을 포함하지 않아 매치됐다. 그 문장은
+    substring 두 신호도 함께 발화하므로 confidence 1.0 — 정답에 확신 오진단이 나가는 자리였다.
+    """
+
+    _CORRECT_EXPLANATIONS = (
+        "x²=2x에서 양변을 x로 나누면 x=2만 나와서 안 되고 해는 0과 2다",
+        "x²=3x 의 해는 0과 3이다",
+        "x²=7x, 양변을 x로 나누면 x=7 만 남아 x=0 을 잃는다",
+        "x²=10x 의 두 근은 0이나 10 이다",
+        "x²=5x 양변을 x로 나누면 x=5 이지만 근이 0인 경우를 빠뜨리면 안 된다",
+    )
+
+    def test_correct_explanations_do_not_fire_the_channel(self) -> None:
+        """제로근을_다른_표기로_적은_정답은_채널을_발화시키지_않는다"""
+        for text in self._CORRECT_EXPLANATIONS:
+            assert not _channel_fired("root-loss-by-dividing", text), text
+
+    def test_intended_omission_still_fires(self) -> None:
+        """진짜_근_손실은_여전히_검출된다 — 배제를 넓히다 채널을 죽이지 않았는지"""
+        assert _channel_fired("root-loss-by-dividing", "x²=2x 양변을 x로 나누면 x=2")
+
+
+class TestServingReachIsMeasured:
+    """정규식이 *발화했다*와 학생 경로에 *도달했다*는 다른 사실이다(Codex P2)."""
+
+    def test_serving_reach_is_reported_per_channel(self) -> None:
+        """채널별_서빙_도달이_보고된다"""
+        for ch in build_report().channels:
+            assert 0 <= ch.serving_reach <= ch.positives
+
+    def test_factor_sign_flip_does_not_reach_serving(self) -> None:
+        """factor_sign_flip은_서빙_게이트를_넘지_못한다 — 측정된 사실을 동결한다
+
+        기호 substring 신호(`(x-a)`·`x=-a`)는 수치 입력에 매치되지 않으므로 정규식 단독 가산분만
+        남아 confidence=1/2=0.5 → floor 0.65 미만이다. **이 0을 숨기면 "검출률 100%"가 "쓰인다"로
+        오독된다.** 서빙 결선은 acceptance ③이 D2 후속으로 이관한 범위이므로 게이트로 삼지 않고
+        MISC-22로 등재했다 — 그 태스크가 해소되면 이 테스트가 XPASS처럼 실패해 알린다.
+        """
+        assert not _survives_serving_gate("factor-sign-flip", "(x-2)=0 이므로 x=-2")
+        reach = {c.kebab_id: c.serving_reach for c in build_report().channels}
+        assert reach["factor-sign-flip"] == 0
+
+    def test_other_channels_do_reach_serving(self) -> None:
+        """나머지_두_채널은_서빙에_도달한다 — 위 0이 측정 결함이 아님을 대조로 보인다"""
+        reach = {c.kebab_id: c.serving_reach for c in build_report().channels}
+        assert reach["root-loss-by-dividing"] > 0
+        assert reach["extremum-value-vs-point-confused"] > 0
+
+
+class TestReachabilityChecksBothBounds:
+    """한쪽만 검사하는 도달 가능성 검사는 그 자체가 위장이다(Codex P2)."""
+
+    def test_small_positive_sample_is_unreachable(self) -> None:
+        """양성_표본이_작으면_도달불가로_판정된다"""
+        # 전건 검출이어도 Wilson 하한이 0.80에 못 닿는 구간.
+        assert not _gate_is_reachable(5, 40)
+        assert _gate_is_reachable(27, 40)
+
+    def test_small_negative_sample_is_unreachable(self) -> None:
+        """음성_표본이_작으면_도달불가로_판정된다"""
+        assert not _gate_is_reachable(27, 20)
+        assert _gate_is_reachable(27, 30)

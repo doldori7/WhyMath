@@ -7110,7 +7110,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2064
+    loc: 2079
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -7120,7 +7120,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 44
-    test_functions: 1175
+    test_functions: 1182
     matrix:
       A_subject: 1
       B_db: 0
@@ -9710,7 +9710,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 9669
+    loc: 9703
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 3
@@ -9718,9 +9718,9 @@ features:
     adapter_deps: [l3.equivalent.acceptance, l3.equivalent.canonicalize, l3.equivalent.counterexample_fuzz, l3.equivalent.defect_seeder, l3.equivalent.retag, l3.finite_probability, l3.symbolic_equivalence, l3.verify_answer, l3.verify_solution]
     mixed_deps: [l3.pregenerate.provenance_bridge, l3.verification_tier, schema.enums, schema.problem]
     db_model_modules: 1
-    coupling_count: 45
+    coupling_count: 46
     test_files: 31
-    test_functions: 588
+    test_functions: 595
     matrix:
       A_subject: 3
       B_db: 1
