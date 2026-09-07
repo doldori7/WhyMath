@@ -140,7 +140,9 @@ def test_pilot_pipeline_e2e() -> None:
         PrescreenStore(engine=engine).apply(scored)
 
         # ── ⑤ 검수(APPROVED·reviewed_by 기계·k_type_verified 정직) ─────
-        verdicts = review_rows(all_rows)
+        # EOS-89: 생성 단계와 같은 항등 판정 능력을 검수 단계에도 넘긴다 — 주입된 행은
+        # `verification` 주장을 가지므로 능력 없이 검수하면 LookupError다(Codex P1 #1024).
+        verdicts = review_rows(all_rows, equivalence=default_expression_equivalence())
         assert all(v.approved for _id, v in verdicts)  # 정상 픽스처 전건 승인
         ReviewStore(engine=engine).apply(verdicts)
         verified = [
