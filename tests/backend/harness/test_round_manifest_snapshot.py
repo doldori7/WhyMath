@@ -114,7 +114,7 @@ def _patch_live_generator(monkeypatch: pytest.MonkeyPatch, responses: Sequence[s
     from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID  # 조성 루트 미러
 
     def _build(
-        topic_hint: str, *, generation_log_sink: object = None
+        topic_hint: str, *, generation_log_sink: object = None, **_routing: object
     ) -> LLMEquivalentProblemGenerator:
         return LLMEquivalentProblemGenerator(
             _ScriptedProvider(responses),  # type: ignore[arg-type]

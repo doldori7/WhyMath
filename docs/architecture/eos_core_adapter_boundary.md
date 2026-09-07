@@ -273,10 +273,14 @@ python3 scripts/analysis/eos_core_adapter_boundary_scan.py --json out.json --mar
 ## §8. "수학을 제거했을 때 무엇이 남는가" — 전이 도달·금지 규칙 실측 (EOS-84 · 2026-09-04)
 
 > 계획서 100 §3.7의 두 문장을 계측으로 옮겼다. 계측기 = `scripts/analysis/eos_core_boundary_probe.py`,
-> 게이트 = `tests/infra/test_eos_core_boundary_probe.py`(리터럴 비교 기준선 1건 동결·과목명 비교 0 · 잔여 누수 집합 동결).
+> 게이트 = `tests/infra/test_eos_core_boundary_probe.py`(리터럴 비교 기준선 **0건**(EOS-85로 해소)·과목명 비교 0 · 잔여 누수 집합 동결).
 > **정본화 ≠ 집행**: 이 절의 숫자는 스냅샷이고, 강제는 그 테스트와 EOS-67 계약이 한다.
 
 ### 8.1 전이 도달 — EOS-67이 못 보는 축
+
+> ⚠️ **이 절의 수치는 2026-09-04 시점(EOS-84)이다.** EOS-89가 등록(push) 형태로 바꾸면서 전이
+> 도달 14 → 2, 합성 루트 경유 14 → 0으로 재실측됐다 — 최신 값은 **§9.2-b**를 보라. 이 절을
+> 덮어쓰지 않는 이유는 §8이 *그때의 측정 기록*이기 때문이다(판정에는 시점이 붙는다).
 
 import-linter 계약은 **직접 import**만 판정한다(§4 "정직한 공백"). "수학을 제거하면 함께 깨지는
 Core"는 *경유* 의존까지 따라가야 보인다. CORE 266모듈 각각에서 import 간선을 BFS로 따라 처음 만나는
@@ -286,40 +290,70 @@ ADAPTER까지의 경로를 전수 산출했다.
 |---|---:|---|
 | CORE → … → ADAPTER 직접 import | **0** | EOS-69 상환 결과 그대로(§4.1) |
 | 전이 도달 | **14 / 266** | 수학을 지우면 함께 import에 실패하는 CORE |
-| 최단 경로가 합성 루트 `composition` 경유 | **14 / 14** | **설계된 유일 교체점** 경유 — Physics를 붙일 때 이 파일만 바꾸면 살아난다(EOS-69) |
-| **잔여 누수**(교체점을 막아도 닿음) | **2** | `api.coach` · `api.ocr_handoff` → `l4.solution_coaching`(**MIXED**) → `l3.verify_solution`·`l4.misconception.wrong_form_match`(ADAPTER 둘 다 직접 import — 누수 지점은 `solution_coaching` 하나) |
-| 수학 제거 후 온전히 남는 CORE | **252 / 266 (95%)** | `l1` 62 · `l2` 21 · `l3` 27 · `l4` 66 · `l6` 9 · `api` 32 · `schema` 34 · `lang` 1 |
+| 최단 경로가 합성 루트 `composition` 경유 | 2026-08-31 스냅샷 14/14 (아래 갱신 참조) | **설계된 유일 교체점** 경유 — Physics를 붙일 때 이 파일만 바꾸면 살아난다(EOS-69) |
+| **잔여 누수**(교체점을 막아도 닿음) | **2**(2026-09-06 EOS-86 재실측 — 누수 지점 교체) | `api.coach` · `api.ocr_handoff` → `harness.wh1_primary` → `harness.wh1_loop`(**INFRA**) → `l3.verify_solution`(ADAPTER 직접 import) |
+| 수학 제거 후 온전히 남는 CORE | 2026-08-31 스냅샷 252/266 (아래 갱신 참조) | `l1` 62 · `l2` 21 · `l3` 27 · `l4` 66 · `l6` 9 · `api` 32 · `schema` 34 · `lang` 1 |
 
-**읽는 법**: 14건의 최단 경로는 전부 *설계*다 — `l3.pedagogy.slot_generator`·`l3.render.adapters`·
-`api.coach`가 `composition`에서 능력 구현을 받아 오는 배선(EOS-69 ② "기본 구현 선택 편의")이고, 그
-2줄은 계약에 좁은 예외로 적혀 있다. **교체점을 막고 다시 재면 2건이 다른 길로도 닿는다 — 진짜 잔여는 그 2건이고 원인은 하나다**: `l4.solution_coaching`이
-MIXED로 배정된 채 수학 오답 형태 검출기를 직접 import한다. MIXED는 계약 대상이 아니라서(§1 반올림
-금지) 계약이 볼 수 없는 자리다 — 이 축의 상환은 `solution_coaching`을 CORE 골격 + 어댑터 주입으로
-가르는 것이며, 그 전까지는 테스트가 집합을 동결한다(늘면 RED·줄면 ratchet). 동결 열쇠는 (출발점,
-누수 지점)이다 — 끝 ADAPTER는 두 개가 동률이라 열쇠로 쓰면 탐색 순서에 따라 흔들린다(첫 구현이
-`set`을 그대로 순회해 해시 시드마다 다른 끝점을 냈고, 정렬 순회로 고정한 뒤 열쇠도 바꿨다).
+**[EOS-86·2026-09-06 갱신] `l4.solution_coaching` 축은 상환됐다 — 그런데 잔여 누수는 0이 되지
+않고 자리를 옮겼다.** `l4.solution_coaching`을 CORE로 재배정하고 `l3.verify_solution`·
+`l4.misconception.wrong_form_match` 직접 import를 `StepChainVerifier` 선택층 주입(기본
+구현은 합성 루트 `composition.default_step_chain_verifier`·`default_wrong_form_shadow_
+observer` 경유)으로 교체했다 — BFS로 실측하면 `solution_coaching` 경유 경로는 실제로 0이다.
+그런데 그 경로가 *최단*이어서 이전 스캔은 더 긴 경로를 보지 못했을 뿐이었다: `api.coach`/
+`api.ocr_handoff`는 `harness.wh1_loop`(INFRA — WH-1 튜터링 루프)를 통해서도 `l3.verify_
+solution`에 닿는다. `harness`는 `composition`과 달리 DESIGNED_SEAMS(설계된 유일 교체점)가
+아니라서(`BOUNDARY_MAP`의 `harness` 배정 사유 "상위 계층 호출이 정상이라 계층 계약 밖"은
+*허용*이지 *교체점*이라는 뜻이 아니다) 이 경로를 막지 못한다. **정직한 결론**: 잔여 누수 건수는 여전히 2건이고, 원인은
+`l4.solution_coaching`에서 `harness.wh1_loop`로 옮겨갔다 — EOS-86은 그 축을 온전히 상환했지만
+*전체 잔여 누수를 0으로 만들지는 못했다*(이 발견은 EOS-86 범위 밖 후속 태스크 `ARCH-99`로
+분리 등재했다). 위 표의 다른 스냅샷 수치(14/14·252/266 등)는 이번 세션에서 재검증하지 않았다
+— 모듈 수 자체가 556→583으로 늘어 있어 그대로 인용하면 오도할 수 있다(다음 정기 재측정 몫).
+
+**읽는 법(2026-08-31 원문 — solution_coaching 축만 위 갱신으로 대체)**: 최단 경로 다수는
+*설계*다 — `l3.pedagogy.slot_generator`·`l3.render.adapters`·`api.coach`·(EOS-86부터)
+`l4.solution_coaching`이 `composition`에서 능력 구현을 받아 오는 배선(EOS-69 ② "기본 구현
+선택 편의")이고, 그 줄들은 계약에 좁은 예외로 적혀 있다. 동결 열쇠는 (출발점, 누수 지점)이다
+— 끝 ADAPTER는 동률이 있어 열쇠로 쓰면 탐색 순서에 따라 흔들린다(첫 구현이 `set`을 그대로
+순회해 해시 시드마다 다른 끝점을 냈고, 정렬 순회로 고정한 뒤 열쇠도 바꿨다).
 
 ### 8.2 금지 규칙 — `if subject == "math"` · `if problem.type == "quadratic"`
 
 CORE 266모듈의 AST에서 **비교문(`Compare`)·`match` 패턴의 문자열 리터럴**이 과목명(`math`·`수학`…)
 또는 수학 유형(`quadratic`·`trig*`·`polynomial`…)인 곳을 찾았다.
 
-**히트 1건** (착수 메모의 "0건"은 정정 — 첫 실측이 아니라 ratchet 테스트가 잡았다):
+**히트 0건 — `EOS-85`로 해소**(2026-09-06 · 판정 기준 main `dc2e6583`).
+
+종전에 남아 있던 1건은 아래 자리였다:
 
 | CORE 모듈 | 위치 | 종류 | 내용 |
 |---|---|---|---|
-| `l1.problem_bank.populate` | `_verify_meta_from_raw` L363 | math_type | `kind_raw in ("real_root_count", …, "inequality_direction", …, "finite_probability")` — answer_kind **17종을 튜플로 열거**해 미지 값을 걸러낸다 |
+| ~~`l1.problem_bank.populate`~~ | ~~`_verify_meta_from_raw` L363~~ | ~~math_type~~ | ~~`kind_raw in ("real_root_count", …, "inequality_direction", …)` — answer_kind **17종 튜플 열거**~~ → **제거됨** |
 
-과목명(`== "math"`) 분기는 **0건**이다. 남은 1건은 유형 문자열이지만 §3.7이 겨냥한 그 형태 —
-"Core가 이차방정식을 안다" — 가 맞다: 적재기(CORE)가 answer_kind의 **허용 어휘**를 갖고 있으면,
-Physics 어댑터가 `"unit_consistency"`를 들고 와도 적재 단계에서 걸러진다. EOS-66이 "answer_kind는
-Core가 해석하지 않는 불투명 문자열"로 못 박은 계약과 정면으로 충돌하므로 **진성 경계 냄새**로
-분류하고, 상환 방향은 그 열거를 `SubjectAdapter`의 `answer_kinds()`(또는 코퍼스 데이터)로 옮기는
-것이다(EOS-66 후속 — 별도 태스크 등재는 Kiki 판정 후).
+진단은 옳았다 — 적재기(CORE)가 answer_kind **허용 어휘**를 갖고 있으면 Physics 어댑터가
+`"unit_consistency"`를 들고 와도 적재 단계에서 걸러지고, 이는 EOS-66의 "answer_kind는 Core가
+해석하지 않는 불투명 문자열" 계약과 정면 충돌한다. 다만 상환은 예상했던
+`SubjectAdapter.answer_kinds()`로의 **이관**이 아니라 **열거 자체의 제거**였다: 어휘를 어댑터로
+옮기면 Core는 여전히 "허용 목록을 조회해 거른다"는 동작을 갖는데, 애초에 **적재기가 거를 일이
+아니다**. 검증 가능 여부의 판정 권위는 L3 검산(`l3.equivalent.acceptance._CONCEPTUAL_VERIFIERS`)
+이고, 적재기는 값을 **형식만 보고 그대로 통과**시킨다.
 
-테스트는 이 1건을 **(모듈, 종류) 기준선**으로 동결한다 — 새 자리가 생기거나 같은 자리가 늘면 RED,
-빠지면 기준선을 비우라고 실패시킨다(ratchet). 과목명 비교는 기준선 없이 0을 강제한다. 결함
-주입(`if subject == "math":`·`if problem.type == "quadratic":`·튜플 멤버십·`case "trig_identity":`·
+부수 효과로 **조용한 손실**도 사라졌다 — 종전에는 목록에 없는 값이 예외도 경고도 없이 `None`이
+되어 "answer_kind 없는 문항"으로 보였다(`S4-17` `finite_probability` 손실이 그 전례).
+
+> ⚠ **이 0이 보장하는 범위**(과대주장 방지 · EOS-85 결함 주입 실측). 스캐너는 리터럴을
+> `MATH_TYPE_RX`(접두 목록)로 판정하는데, 위 17종 중 그 정규식에 걸리는 것은
+> **`inequality_direction` 하나뿐**이었다. 즉 히트 1건은 사실상 그 한 값이 만들었고,
+> 화이트리스트를 3종·7종으로 되살려도(그 값 제외) **히트는 0으로 유지된다**. 그러므로
+> "리터럴 비교 0"은 *접두 목록에 걸리는 어휘가 없다*는 뜻이지 과목 어휘 열거가 전부 사라졌다는
+> 뜻이 아니다. 같은 파일의 `answer_selection`(largest/smallest/unique)·`answer_aggregate`
+> (sum/product)가 **지금도 같은 형태로 남아 있으면서 스캔에 안 잡히는** 실례다.
+> 매처 확장과 그 두 필드의 처분은 `EOS-01`이 소유한다. 그때까지 `answer_kind` 축의 실질
+> 보호는 행동 축 회귀 테스트가 맡는다(`test_load_passes_unknown_answer_kind_through_verbatim`
+> — 같은 뮤테이션에서 실제로 RED).
+
+테스트는 이제 **빈 기준선**을 동결한다 — 새 자리가 생기면 RED, 실측이 더 줄면 기준선을 다시
+내리라고 실패시킨다(ratchet). 과목명 비교는 기준선 없이 0을 강제한다. 결함 주입
+(`if subject == "math":`·`if problem.type == "quadratic":`·튜플 멤버십·`case "trig_identity":`·
 역순 비교)이 각각 1건으로 검출됨을 확인했다(변수 대 변수 비교·대입·docstring·`"pending"`은 비검출).
 
 ### 8.3 그러나 Core는 *데이터로* 수학을 안다 — 어휘 상수 77건 / 18모듈
@@ -368,8 +402,10 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 > §3.8은 두 그림을 준다. **권장**: `Application → EOS Core → Subject Contract → Math Adapter`.
 > **실행 시 어댑터가 Core에 등록되는 형태라면** 실제 의존 역전은 `EOS Core → Subject Interface ← Math Adapter`가
 > 더 정확하다 — *Core는 Math Adapter 구현체를 몰라야 한다*. 이 절은 그 문장을 네 화살표와 "등록 vs 풀"로
-> 나눠 잰 결과다. 게이트 = `tests/infra/test_eos_dependency_direction.py`(19건). **정본화 ≠ 집행**: 직접
+> 나눠 잰 결과다. 게이트 = `tests/infra/test_eos_dependency_direction.py`(22건). **정본화 ≠ 집행**: 직접
 > import 축은 EOS-67 계약이 이미 강제하고(schema가 source), 지연 import·이름·문자열·pull 지점은 이 테스트가 본다.
+>
+> **2026-09-07 갱신(EOS-89)**: 9.2를 등록(push) 전환 **이후** 수치로 재실측했다. 9.1은 그대로다.
 
 ### 9.1 네 화살표 실측
 
@@ -382,28 +418,72 @@ python3 scripts/analysis/eos_core_boundary_probe.py --json probe.json
 | Core → Adapter 구현체(이름·문자열) | **금지** | CORE 코드 **0**(docstring 제외·`composition`은 정의상 제외) | `test_core_code_never_names_an_adapter_implementation` |
 | Core → Application | 금지 | CORE **0**. INFRA 운영 도구 8모듈(`ops.*` 4·`privacy.*` 3·`harness.*` 1)은 `api._crypto`·`api._auth`·`api.me` 등 헬퍼를 import — Application 쪽에 선 도구라 §3.8 대상 아님(9.2) | `test_core_never_imports_the_application` |
 
-### 9.2 등록(push) vs 풀(pull) — 현행은 §3.8이 "덜 정확하다"고 한 형태다
+### 9.2 등록(push) vs 풀(pull) — **EOS-89로 등록 형태가 됐다** (2026-09-07 재실측)
 
-| 측정 | 값 |
-|---|---:|
-| `app.py`가 `app.state`에 등록하는 키 | 13 (provider·cache·trace·queue·metrics·probes·counters…) |
-| 그중 **과목 능력(SubjectAdapter·선택층 5종)** | **0** |
-| 합성 루트에서 기본 구현을 **끌어오는(pull)** Core 모듈 | **3** — `api.coach`(2팩토리) · `l3.pedagogy.slot_generator`(1) · `l3.render.adapters`(2) |
-| 필수층 `MathSubjectAdapter`의 프로덕션 인스턴스화 | **0** (자기 적합성 증명 + 테스트만) |
+| 측정 | EOS-88(전) | EOS-89(후) |
+|---|---:|---:|
+| `app.py`가 `app.state`에 등록하는 키 | 13 | **18** |
+| 그중 **과목 능력**(`ExpressionEquivalence`·`FinalAnswerVerifier`·`AssessmentAnswerVerifier`·`ExpressionSeal`·`AnswerFormVerifier`) | **0** | **5** |
+| 합성 루트에서 기본 구현을 **끌어오는(pull) CORE** 모듈 | **3** | **0** |
+| 합성 루트를 소비하는 **비-CORE** 모듈(엔트리포인트) | 0 | **2** — `app` · `harness.concept_assessment_index` |
+| layers 계약의 `-> composition` 면제 줄 | 2 | **0** |
+| 필수층 `MathSubjectAdapter`의 프로덕션 인스턴스화 | 0 | **0** (변화 없음 — 선택층 5종만 등록했다) |
 
-**읽는 법**: 현행은 *Core가 합성 루트를 안다*(service-locator). 어댑터는 Core에 등록되지 않고, Core가
-`composition.default_*()`를 불러 기본 구현을 받아 온다. 어댑터 **구현체**를 모른다는 조건은 지키지만
-(합성 루트 뒤에 숨어 있다), §3.8의 "등록 형태 → Core→Interface←Adapter" 그림은 아직 없다. 3개 pull
-지점 중 `l*` 2개는 EOS-69가 layers 계약 `ignore_imports`에 간선 단위로 적어 둔 "정직한 잔여"이고,
-`api.coach`는 최상단 계층이라 계약 위반은 아니다. 테스트는 이 3개를 **집합으로 동결**하고(늘면 RED·
-줄면 ratchet), `app.py`가 합성 루트를 import하지 않는 현행도 잠근다 — EOS-89가 등록 형태로 바꾸면 그
-잠금이 의도적으로 깨지고 두 기준선을 함께 갱신한다(두 형태의 소리 없는 공존 금지).
+**pull 3지점이 각각 어떻게 사라졌나**
 
-**상환 방향(EOS-89)**: `app.py`(Application)가 `composition.default_*()`를 부팅 시 한 번 불러 `app.state`에
-인터페이스 타입으로 등록 → `api.coach`는 `Depends`로 읽음(`_get_judge_seam_deps` 선례) → `l3` 두 모듈은
-이미 있는 `equivalence=`·`seal=`·`verifier=` 파라미터로 상류에서 받음 → pull 3→0, layers `ignore_imports`
-2줄은 `unmatched_ignore_imports_alerting`이 지우라고 말한다. 주의: EOS-86이 추가하는 `StepChainVerifier`
-팩토리도 같은 등록 경로를 타야 한다(pull 4번째 지점을 만들지 않는다).
+| 자리 | 전(pull) | 후(push) |
+|---|---|---|
+| `api.coach` | `default_final_answer_verifier()`·`default_answer_form_verifier()` 직접 호출 | `SubjectCapabilityDeps`(`Depends(_get_subject_capabilities)`) → `_resolve_completion` → `_final_answer_state`. `_get_judge_seam_deps` 선례와 동형이되 **폴백 없음**(미등록은 `AttributeError`) |
+| `l3.render.adapters` | `default_expression_seal()`·`default_assessment_answer_verifier()` 폴백 | 어댑터 **생성자 주입**(`_CapabilityBackedAdapter`). 상류 = `registry.get_adapter(strategy, seal=…, assessment_verifier=…)` ← `l4.content_supply.supply(...)` ← `api.study`(app.state) |
+| `l3.pedagogy.slot_generator` | `default_expression_equivalence()` 폴백 | 호출부 파라미터(`equivalence=`). 폴백 대신 **fail-loud**: `verification` 주장이 있는데 미주입이면 `LookupError` |
+
+**호출부 4곳의 상류 실측** — acceptance ③이 물은 "상류를 갖지 못하는 곳"의 답이다.
+
+| 호출부 | 능력이 실제로 필요한가 | 상류 |
+|---|---|---|
+| `l4.content_supply` (렌더 경로) | 필요 | **있다** — `api.study` → `app.state` 등록분 |
+| `l3.pedagogy.review` | payload에 `verification` 주장이 있을 때만 | **프로덕션 상류 없음**(`test_zero_production_callers_governance`가 `l3/pedagogy/` 밖 소비자 0을 동결). 현 상류는 테스트뿐이며, 그래서 파라미터를 **선택**으로 두고 필요할 때 터지게 했다 |
+| `l3.pedagogy.example_generator` | **불필요** — 생성 payload에 `verification` 키가 구조적으로 없다 | 없어도 된다(능력을 안 부른다) |
+| `l3.pedagogy.diag_item_projector` | **불필요** — atom_probe payload도 마찬가지 | 없어도 된다 |
+
+임시 처방의 근거: 뒤 세 곳에 능력을 **필수**로 요구하면, 쓰지도 않을 능력을 구하려고 그들이
+합성 루트를 import하게 되고 pull 지점이 자리만 옮겨 되살아난다. 그렇다고 기본값 폴백을 두면
+미주입이 조용히 통과한다. 그래서 **선택 인자 + 필요한 순간 `LookupError`**로 갈랐다
+(`slot_generator._require_equivalence` docstring이 그 판단을 담고 있다). 이 세 모듈이 프로덕션
+상류를 갖게 되는 날, 그 상류는 `api.study`처럼 `app.state` 등록분을 내려보내야 한다.
+
+**엔트리포인트 2곳은 왜 남았나**: 합성 루트는 정의상 *프로세스가 시작되는 자리*가 소비한다.
+`app`(ASGI 팩토리)과 `harness.concept_assessment_index`(렌더 성공률 측정 CLI·`main()` 보유)가
+그 자리다 — CLI는 어댑터를 자기가 조립하므로 능력이 필요한데 그것을 줄 상류가 없다(자기 자신이
+시작점이다). 이 2건은 "면제"가 아니라 **회계**다: `NON_CORE_COMPOSITION_CONSUMERS`가 정확한
+집합 일치를 요구하므로 어느 모듈이든 조용히 늘어나면 RED이고, 열거된 모듈이 실제로
+엔트리포인트인지(`main()` 보유 여부)까지 소스로 검사한다.
+
+**⚠️ EOS-86 주의(변함없음)**: `StepChainVerifier` 팩토리도 이 등록 경로를 타야 한다. Core가
+`composition.default_step_chain_verifier()`를 직접 부르면 pull 4번째 지점이 부활한다. 강제 장치는
+두 개다 — `api/_subject_capability_state.SUBJECT_CAPABILITY_KEYS`(등록 키 목록)와
+`test_registered_capability_keys_match_the_composition_factories`(팩토리 수 = 등록 키 수). 팩토리를
+추가하고 등록을 안 하면 후자가 먼저 RED가 된다.
+
+### 9.2-b 전이 도달 재실측 — 합성 루트 경유가 사라졌다
+
+`scripts/analysis/eos_core_boundary_probe.py` 재실행(2026-09-07):
+
+| 측정 | §8.1(EOS-84) | EOS-89 후 |
+|---|---:|---:|
+| CORE 모집단 | 266 | **267** (`api._subject_capability_state` 신설) |
+| 전이 도달(CORE →…→ ADAPTER) | 14 | **2** |
+| 그중 합성 루트(`composition`) 경유 | 14 / 14 | **0** |
+| 잔여 누수(교체점을 막아도 닿음) | 2 | **2** (변화 없음 — `api.coach`·`api.ocr_handoff` → `l4.solution_coaching`) |
+| 수학 제거 후 온전히 남는 CORE | 252 / 266 (95%) | **265 / 267 (99%)** |
+
+**읽는 법**: §8.1의 14건은 "설계된 교체점을 지나는 정상 도달"이었다. 등록 형태에서는 그 정적
+간선 자체가 없어져 도달이 **아예 계측되지 않는다** — 능력이 `app.state`를 통해 런타임에 흐르기
+때문이다. 그래서 14 → 0이 됐고, 남은 2는 EOS-84가 이미 지목한 *진짜* 잔여(`l4.solution_coaching`
+MIXED)로 이 태스크 범위 밖이다. 다만 **이 감소는 결합이 사라진 것이 아니라 정적 계측의 시야
+밖으로 옮겨간 축을 포함한다** — 프로브 자신의 공백(§9.3 "정적 import다·`app.state` DI는 안
+보인다")이 여기서 그대로 작동한다. 그 축을 보는 도구는 인벤토리 v2의 DI 다리이며, 실제로
+`di_keys_bridged`가 20 → 30으로 늘어 같은 배선을 반대편에서 계측한다.
 
 ### 9.3 재현·공백
 
@@ -501,6 +581,13 @@ ast.unparse)[:12]`)이다 — 개수 대조는 "알려진 위반을 갚으면서
 
 §8.2의 리터럴 비교 1건과 **같은 자리**를 다른 축으로 잡았다 — 그쪽은 어휘가 수학이라서, 이쪽은
 Core가 불투명 값을 읽어서. 별칭을 추적하지 않았다면 이 스캐너는 0을 냈을 것이고, 그 0은 맹점이다.
+
+> **상환 완료 — `EOS-85`**(2026-09-06 · 판정 기준 main `dc2e6583`). 그 한 자리가 사라져
+> `KNOWN_VIOLATIONS`는 **비었다**(지문 `d93b2c7770a0` 상환). 기준선 항목의 `recheck`가
+> "EOS-85 착지 시 이 항목을 비운다"였고 그대로 집행했다 — *만료 지점을 동반한 유예*가
+> 실제로 회수된 사례다. 두 축이 같은 자리를 잡고 있었으므로 §8.2와 이 절이 **동시에** 0이
+> 됐다. 별칭 탐지력은 실 저장소 위반이 아니라 **합성 주입**이 계속 동결한다 — 위반을 갚으면
+> 탐지력이 사라지는 테스트는 상환을 벌주는 구조라, 그 의존을 끊었다.
 
 ### 11.2 집행 — `tests/infra/test_eos_opaque_payload_gate.py` (CI `infra-contracts` 잡)
 

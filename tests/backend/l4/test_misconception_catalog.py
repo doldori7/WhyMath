@@ -215,17 +215,32 @@ class TestNameClarity:
 
 
 class TestRegexSignals:
-    """v1.2 `regex_signals` — 선택 필드(기본 빈 튜플)·시연 4종·전부 컴파일 가능(슬 102·후속 확장).
+    """v1.2 `regex_signals` — 선택 필드(기본 빈 튜플)·현행 7종·전부 컴파일 가능(슬 102·후속 확장).
 
     슬 102 후속 보수적 확장: log-distribution(로그 합 분배·`log(2+3)=log2+log3`)를 추가했다.
-    네 종 모두 *거짓 수치 항등식*만 매치하는 disjoint 정규식(명명그룹 역참조·`\\d+` 피연산자)이다.
+    이 넷은 모두 *거짓 수치 항등식*만 매치하는 disjoint 정규식(명명그룹 역참조·`\\d+` 피연산자)이다.
+
+    MISC-07 앵커 채널 3종 추가: 앵커 커버 오개념의 기계 채널이 0이던 상태를 해소한다. 앞의 넷과
+    달리 *항등식*이 아니라 **풀이 흐름**(근의 부호 반전·근 손실·값↔좌표 혼동)을 겨냥하므로 판정
+    축이 다르다 — 변별력은 `harness.anchor_detection_channel_eval`이 양성/음성 픽스처와 Wilson
+    경계로 매 실행 측정한다(`tests/backend/harness/test_anchor_detection_channel_eval.py` 배선).
+
+    이 집합이 *동결*인 이유: 정규식은 조용히 늘리기 쉬운데, 늘어난 채널이 정답을 오검출하면
+    학생에게 "틀렸다"고 말하는 방향의 오류가 된다(결정 우선순위 #1). 그래서 새 채널은 이 목록에
+    등재 + 측정 통과를 **함께** 요구한다.
     """
 
+    #: 정규식 채널을 *가진* 항목의 동결 집합 — 여기 없는 항목이 채널을 얻으면 테스트가 적색.
     _DEMO_IDS = {
+        # v1.2 거짓 수치 항등식 4종
         "distribution-over-power",
         "square-root-positivity",
         "fraction-cancellation",
         "log-distribution",
+        # MISC-07 앵커 채널 3종 (A4 2 · A6 1)
+        "root-loss-by-dividing",
+        "factor-sign-flip",
+        "extremum-value-vs-point-confused",
     }
 
     def test_field_defaults_empty_and_is_tuple(self) -> None:

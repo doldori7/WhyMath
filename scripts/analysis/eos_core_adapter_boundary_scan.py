@@ -131,7 +131,12 @@ BOUNDARY_MAP: dict[str, tuple[Verdict, str]] = {
         "배정은 파일 단위(선례: wrong_form_match). CORE가 이것을 import하면 위반이 맞다 — "
         "Core는 schema.subject_adapter Protocol만 알아야 하고 구현체는 DI로만 주입된다",
     ),
-    "l4.solution_coaching": ("MIXED", "코칭 대화 구조는 중립이나 풀이 단계 참조가 수식 전제"),
+    "l4.solution_coaching": (
+        "CORE",
+        "[EOS-86 재배정] verify_solution/wrong_form_match 직접 import 제거 — 단계 연쇄 검증은 "
+        "StepChainVerifier(선택층 계약) 주입 경유로 교체(합성 루트 default_step_chain_verifier)."
+        " 코칭 오케스트레이션은 원래도 중립이었고, 남은 수식 전제는 없다",
+    ),
     "l4.speech": ("MIXED", "낭독 교수 정책 — 정책은 중립, 대상이 수식"),
     # ── L5 상호작용 — OCR은 수식 인식 그 자체 ──
     "l5": ("CORE", "상호작용 계층 골격"),
