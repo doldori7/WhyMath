@@ -685,7 +685,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 6
-    test_functions: 287
+    test_functions: 290
     matrix:
       A_subject: 1
       B_db: 1
@@ -750,7 +750,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 5
-    test_functions: 244
+    test_functions: 247
     matrix:
       A_subject: 1
       B_db: 1
@@ -815,7 +815,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 2
-    test_functions: 199
+    test_functions: 202
     matrix:
       A_subject: 0
       B_db: 1
@@ -880,7 +880,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 4
-    test_functions: 224
+    test_functions: 227
     matrix:
       A_subject: 1
       B_db: 1
@@ -945,7 +945,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 5
-    test_functions: 228
+    test_functions: 231
     matrix:
       A_subject: 0
       B_db: 1
@@ -1008,9 +1008,9 @@ features:
     adapter_deps: []
     mixed_deps: []
     db_model_modules: 1
-    coupling_count: 6
+    coupling_count: 7
     test_files: 4
-    test_functions: 227
+    test_functions: 230
     matrix:
       A_subject: 0
       B_db: 1
@@ -1075,7 +1075,7 @@ features:
     db_model_modules: 2
     coupling_count: 5
     test_files: 3
-    test_functions: 222
+    test_functions: 225
     matrix:
       A_subject: 0
       B_db: 1
@@ -1140,7 +1140,7 @@ features:
     db_model_modules: 3
     coupling_count: 7
     test_files: 5
-    test_functions: 241
+    test_functions: 244
     matrix:
       A_subject: 0
       B_db: 2
@@ -1205,7 +1205,7 @@ features:
     db_model_modules: 0
     coupling_count: 1
     test_files: 4
-    test_functions: 223
+    test_functions: 226
     matrix:
       A_subject: 0
       B_db: 0
@@ -1400,7 +1400,7 @@ features:
     db_model_modules: 1
     coupling_count: 8
     test_files: 6
-    test_functions: 226
+    test_functions: 229
     matrix:
       A_subject: 1
       B_db: 1
@@ -1530,7 +1530,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 32
-    test_functions: 500
+    test_functions: 503
     matrix:
       A_subject: 0
       B_db: 0
@@ -1789,8 +1789,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 2
-    test_files: 17
-    test_functions: 448
+    test_files: 18
+    test_functions: 457
     matrix:
       A_subject: 0
       B_db: 0
@@ -1853,9 +1853,9 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 1
-    coupling_count: 13
-    test_files: 13
-    test_functions: 418
+    coupling_count: 14
+    test_files: 14
+    test_functions: 427
     matrix:
       A_subject: 1
       B_db: 1
@@ -4650,7 +4650,7 @@ features:
     db_model_modules: 5
     coupling_count: 9
     test_files: 11
-    test_functions: 327
+    test_functions: 330
     matrix:
       A_subject: 1
       B_db: 2
@@ -4715,7 +4715,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 16
-    test_functions: 631
+    test_functions: 634
     matrix:
       A_subject: 1
       B_db: 1
@@ -4780,7 +4780,7 @@ features:
     db_model_modules: 2
     coupling_count: 6
     test_files: 10
-    test_functions: 250
+    test_functions: 253
     matrix:
       A_subject: 1
       B_db: 1
@@ -7110,7 +7110,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2079
+    loc: 2091
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -7120,7 +7120,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 44
-    test_functions: 1182
+    test_functions: 1187
     matrix:
       A_subject: 1
       B_db: 0
@@ -7185,7 +7185,7 @@ features:
     db_model_modules: 4
     coupling_count: 13
     test_files: 24
-    test_functions: 855
+    test_functions: 858
     matrix:
       A_subject: 0
       B_db: 2
@@ -8419,8 +8419,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 328
-    test_functions: 5920
+    test_files: 329
+    test_functions: 5932
     matrix:
       A_subject: 3
       B_db: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 191
-    test_functions: 2921
+    test_files: 192
+    test_functions: 2933
     matrix:
       A_subject: 1
       B_db: 0
@@ -8549,8 +8549,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 7
-    test_files: 74
-    test_functions: 1488
+    test_files: 75
+    test_functions: 1500
     matrix:
       A_subject: 1
       B_db: 1
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 196
-    test_functions: 2931
+    test_files: 197
+    test_functions: 2940
     matrix:
       A_subject: 3
       B_db: 0
