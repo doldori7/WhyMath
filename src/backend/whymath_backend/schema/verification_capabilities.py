@@ -169,10 +169,28 @@ class StepChainVerifier(Protocol):
 
     제공하지 않는 과목이 정상이다(서술형 역사 답안엔 '전이 동치'가 없다). Core는 이 능력이
     주입되지 않았을 때의 경로를 반드시 갖는다.
+
+    **반환 타입이 `ChainVerification`이 아니라 `ChainVerificationCounts`인 이유(EOS-86 리뷰
+    실측 — PR #1018 Codex)**: 이 능력의 유일한 소비처(`l4.solution_coaching.recommend_
+    coaching_for_solution` → `api/coach.py`의 `_log_verify_event`)가 `n_correct`·
+    `n_incorrect`·`n_unverifiable`·`unverified_ratio`·`unverifiable_by_reason`(카운트
+    확장분)을 **무조건 읽는다**. 좁은 `ChainVerification`만 요구했다면, 그것만 만족하는
+    커스텀 구현을 주입해도 타입 검사를 통과해 놓고 그 카운트 필드 접근에서
+    `AttributeError`가 났을 것이다 — "필요만큼만 요구한다"는 인터페이스 분리 원칙(모듈
+    docstring 규칙 2)은 *소비처가 실제로 좁을 때*만 성립하고, 이 계약은 소비처가 넓어서
+    성립하지 않는다.
     """
 
-    def verify_chain(self, steps: Sequence[str]) -> ChainVerification:
-        """인접 단계 전이를 순서대로 검증한다. 전이 수 = `len(steps) - 1`."""
+    def verify_chain(
+        self, steps: Sequence[str], step_types: Sequence[Any] | None = None
+    ) -> ChainVerificationCounts:
+        """인접 단계 전이를 순서대로 검증한다. 전이 수 = `len(steps) - 1`.
+
+        `step_types`는 전이당 하나씩(길이 = `len(steps) - 1`) 붙는 *과목별* 단계 유형 힌트
+        — 규칙 2("Core가 실제로 읽는 것만 노출한다")에 따라 타입을 `Any`로 둔다. 어휘(수학의
+        `StepType.케이스분류` 등)는 과목 소유이고, Core는 값을 해석하지 않고 그대로 통과시킬
+        뿐이다(`unverifiable_by_reason`의 `Any` 키와 동일 근거). 제공하지 않는 구현은 무시해도
+        된다(선택적 정밀화 — 없어도 계약을 만족한다)."""
         ...
 
 

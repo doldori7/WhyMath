@@ -36,7 +36,7 @@ Physics·국어를 붙일 때 **이 파일은 고쳐야 한다** — 그것이 �
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from whymath_backend.schema.verification_capabilities import (
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         ExpressionEquivalence,
         ExpressionSeal,
         FinalAnswerVerifier,
+        StepChainVerifier,
     )
 
 __all__ = [
@@ -53,6 +54,8 @@ __all__ = [
     "default_expression_equivalence",
     "default_expression_seal",
     "default_final_answer_verifier",
+    "default_step_chain_verifier",
+    "default_wrong_form_shadow_observer",
 ]
 
 
@@ -93,3 +96,23 @@ def default_answer_form_verifier() -> AnswerFormVerifier:
     from whymath_backend.l4.subject_adapter_math import math_answer_form_verifier
 
     return math_answer_form_verifier()
+
+
+def default_step_chain_verifier() -> StepChainVerifier:
+    """`StepChainVerifier`(풀이 단계 연쇄 검증)의 기본 구현을 준다."""
+    from whymath_backend.l4.subject_adapter_math import math_step_chain_verifier
+
+    return math_step_chain_verifier()
+
+
+def default_wrong_form_shadow_observer() -> Callable[[str], None]:
+    """오개념 거짓 항등식 SymPy shadow 관측(fire-and-forget)의 기본 구현을 준다.
+
+    `verification_capabilities.py`의 Protocol 계약이 아니라 콜러블 하나다 — 관측기는 값을
+    돌려주지 않고 로그로만 sink하므로(비노출·비차단) 능력 계약으로 분리할 상태가 없다. 그래도
+    구현(`l4.misconception.wrong_form_match`)은 ADAPTER이므로 이 파일을 통해서만 조회한다
+    (그래야 solution_coaching이 이 모듈 하나만 알면 된다 — 규칙 1·3 그대로 적용).
+    """
+    from whymath_backend.l4.misconception.wrong_form_match import observe_wrong_form_shadow
+
+    return observe_wrong_form_shadow
