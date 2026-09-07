@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-82-required-checks-premise-drift
+title: "머지 판정 도구의 필수 체크 전제가 실측과 어긋난다 — docstring '6종·6.5분·느린 잡 제외' vs 현재 규칙 16종(느린 잡 포함)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 재확인 — GET /repos/doldori7/WhyMath/rules/branches/main 으로 required_status_checks 전건을 다시 조회해 목록·건수를 조회 시각과 함께 기록한다. 2026-09-07 실측값은 16종이며 'backend — lint·type·test'가 포함돼 있다"
+  - "② docstring 정정 — pr_merge_readiness.py 모듈 docstring의 '필수 체크 6종(중앙값 6.5분)뿐' 과 '최장 잡 backend — lint·type·test(~30분)는 필수 목록에 없다' 두 문장을 실측값으로 교체한다. 도구 *코드*는 규칙을 라이브 조회하므로 동작 자체는 정상이다 — 고칠 대상은 전략을 오도하는 산문이지 로직이 아니다"
+  - "③ 완화 전략 재판정 — 느린 잡이 필수에 포함되면 '필수만 기다리면 6.5분'이라는 완화가 성립하지 않는다. 필수 16종의 실측 소요(중앙값)를 다시 재어 대기 시간과 base 전진 확률을 재산출하고, 완화가 여전히 유효한지 판정한다. 무효라면 그 사실을 docstring에 명시해 다음 세션이 없는 최적화를 믿지 않게 한다"
+  - "④ 변별력 — 도구가 필수 목록을 하드코딩이 아니라 라이브 조회한다는 것을 결함 주입으로 확인한다(규칙 응답을 6종으로 축소 주입 → 판정 문구·exit code가 실제로 달라지는가). 주입 전후 바이트 동일 원복을 단언한다"
+  - "⑤ 정직한 공백 — 6종에서 16종으로 늘어난 시점과 사유는 ruleset 이력 조회 권한이 없어 규명하지 못했다. 규명 수단을 찾지 못하면 '조회 방법 없음'이라고 범위를 밝혀 적는다(추론으로 채우지 않는다)"
+artifacts: []
+paths:
+  - scripts/ops/pr_merge_readiness.py
+session: null
+notes: "발견 경위(2026-09-07): 세션이 PR #1025를 머지하려다 REST 405 'Repository rule violations found / 16 of 16 required status checks are expected'를 2회 맞았다. 원인 규명 과정에서 pr_merge_readiness.py를 읽었는데, 그 docstring은 '필수 체크 6종(중앙값 6.5분)뿐이고 최장 잡 backend — lint·type·test(~30분)는 필수 목록에 없다'고 적고 있었다. 그런데 같은 도구를 실행해 규칙을 라이브 조회하니 16종이었고 그 느린 잡이 필수에 들어 있었다. 405 에러 문구의 '16'과도 일치한다.\\n\\n왜 중요한가: 그 docstring은 단순 설명이 아니라 이 저장소의 머지 전략 근거다 — '필수만 기다리면 6.5분이라 base 전진 확률 16%, 전체를 기다리면 28.6분이라 70%'라는 계산이 완화 방안 전체를 떠받친다. 느린 잡이 필수가 된 순간 그 계산의 분자가 바뀌므로, 전략을 읽고 따르는 세션은 있지도 않은 최적화를 믿게 된다. 도구 코드는 라이브 조회라 정상 동작하므로 이것은 무증상이다 — 판정은 맞고 산문만 틀렸다.\\n\\n인접: HARN-32가 그 전제를 세운 태스크이고, 머지 큐 도입(HARN-56)이 착지하면 이 축의 실효성 자체가 달라진다. 다만 이 태스크는 그 둘과 독립적으로 성립한다 — 산문이 실측과 어긋난 것을 고치는 일이라 다른 태스크의 결과를 기다리지 않는다."
+updated: 2026-09-07
