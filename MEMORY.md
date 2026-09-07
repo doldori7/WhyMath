@@ -8599,3 +8599,35 @@ vs main 20~30분 전진)만 5회 탓했다. 원인의 절반만 본 진단. **PR
 **부수 실측**: 머지 경쟁은 실재한다(PR 생성→머지 12.5h). `HARN-56`(merge queue)의 근거. 두 태스크
 done 증적이 "머지 대기 중"으로 고정돼 있고 정정 CLI가 없다 — `HARN-57`의 실물. 하네스가 세션
 위반을 2회 잡았다(1세션=1태스크 → block으로 순차화 · audit-deps → 산문 선행에 depends 부착).
+
+
+### 2026-09-07 — HARN-67 착지: 취소된 선행은 "결정 불가 → 차단 유지 + 가시 경고", amend 정정 경로 3축 신설 · EOS-02 사람 게이트 분리
+
+**결정 ①(판정 규칙)**: `depends_on`의 선행이 `cancelled`면 **해소로 보지 않는다**(done만 해소). 취소가
+"불필요해서"인지 "오등재라서"인지 기계는 모르므로(모른다 ≠ 아니다) 해소로 접으면 오등재 태스크의
+후속이 조용히 착수돼 trunk에 없는 파일을 대상으로 일하게 된다. 대신 침묵은 금지 — selector 제외
+사유 `deps_cancelled`를 신설하고 `next`(매번·stderr·`--json` 무관)·`status`·`brief`·`validate`(경고만·
+exit 불변)·`cancel` 시점(의존자 N건 경고) 5곳에서 보이게 했다. 정정은 `amend --remove-depends`
+(오등재 선행 제거) 또는 HARN-69(취소 복원·미착지) 두 갈래.
+
+**결정 ②(정정 경로 3축)**: `amend <id> --remove-depends <full-id>` · `--remove-gate <G-id>`(게이트
+status 불변) · `--notes-replace "구문자" "신문자"`(구문자 정확히 1회 — 0회·2회+ 거부. 0회를 성공으로
+두면 "치환 0건인데 exit 0"이 되어 2026-09-06 미적용 뮤테이션 사고와 같은 형태). 제거한 ID·치환
+원문은 **notes에 인용하지 않고 이벤트 대장에만** 남긴다 — 실측: `depends_on -T7-01: 오등재 선행
+제거` 한 줄이 그 자체로 HARN-53 되먹임 가드에 잡혀 amend가 자기 가드에 거부됐다. ⑥의 두 안 중
+audit-deps 면제 어구 안은 채택하지 않았다(면제 문자열은 표기 변형에서 뚫린다). ⑦ rename은
+**의도적 미구현** — 사유는 `build_harness.md §7a`(전역 치환+원격 claim 재게시 비용 > `add` 충돌 검사로
+사전 거부). 후속 태스크 미등재.
+
+**실측**: tests/harness 662건 통과(633+29, 무작위 순서 포함) · ruff/black green · 뮤테이션 3종
+(next 경고 제거 → 3 RED · classify_todo 분기 제거 → 6 RED(상위 세션이 독립 재실측) · count==1 검사
+제거 → 2 RED) · 실 대장에서 취소 선행에 차단된 todo **0건**(EOS-96은 이미 EOS-97로 재등재됨).
+
+**부수 결정 — EOS-02 분리**: acceptance ①이 Phaiakes9 실 Anthropic 키로 도는 **사람 행동**인데
+`requires_gates`가 비어 있어 에이전트 후보 1순위로 계속 노출됐다(이번 `/drive`에서 실측). 입력
+(라이브 리포트)을 만드는 사람 게이트 `G-eos02-prompt-cache-live-run`을 부착했다 — 산출물 검수 게이트를
+산출 태스크 자신에 거는 교착(2026-09-06 MP-01)과는 다르다(리포트는 EOS-99 도구가 내고 EOS-02는 소비).
+런북 `docs/reviews/eos02_prompt_cache_live_run_runbook.md`는 플래그·리포트 키·stdout 형식·키 env
+이름을 코드에서 실측해 적었다. **같은 `/drive`의 관측**: `HARN-71`은 `next`가 후보로 냈지만 겹침
+경고가 타 세션(`claude/status-k9r51v`)의 원격 claim을 보였다 — 27초 차이의 동시 착수 경쟁이었고
+원격 claim 대장이 막았다(착수하지 않음).

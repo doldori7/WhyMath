@@ -1,6 +1,6 @@
 # 빌드 하네스 (Build Harness) — 작업일정 관리·순차 조율 표준
 
-> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.2 (2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
+> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.3 (2026-09-07 HARN-67 — amend 정정 경로 3축(depends 제거·gate 탈착·notes 치환)·취소 선행 판정 규칙·§7a 정정 경로 표. 이전 1.2: 2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
 >
 > 이 문서의 "빌드 하네스"는 프로젝트 *구축을 관리하는* 레이어다.
 > `src/backend`의 WH-1(튜터링)·WH-S(솔버)는 **제품 런타임 하네스**로 완전히 별개다.
@@ -334,6 +334,7 @@ CI 진입점이 이걸 빠뜨리면 **지금 누가 작업 중인 브랜치가 "
 | 후행 스테이지 의존(E축 등) | 소프트 `STAGE_BLOCKED` | `validate`가 로드맵 순서 위반으로 거부한다 · 제외는 `status=blocked`가 담당 |
 | 이미 끝난 과거 사실 서술 | 소프트 `HISTORICAL` | 앞으로의 순서 제약이 아니다 |
 | 창(60자)이 잡은 ID가 선행이 아님 | 소프트 `MISREAD_REF` | 진짜 선행이 따로 있으면 그쪽을 부착 |
+| 선행이 **cancel**됐다 | **결정 불가 → 차단 유지 + 경고**(해소 아님 — HARN-67 ②) | 오등재면 `amend <id> --remove-depends <full-id> --reason '...'` · 취소가 틀렸으면 복원(HARN-69 · main 기준 todo) |
 
 ### 소프트 분류가 옵트아웃이 되지 않는 이유
 
@@ -375,12 +376,35 @@ append 전용이라 나중에 진짜 선행 선언("X 착지 후 착수")이 추
 그리고 **보이지 않게 쌓이지 않는다**: `audit-deps --all`이 소프트 전건을 코드·근거와 함께
 출력하고, green 줄에도 건수가 찍힌다.
 
+### 취소된 선행은 해소가 아니다 — 차단은 유지하되 보이게 한다 (HARN-67 ②)
+
+`selector`는 `depends_on`의 선행이 **done**일 때만 해소로 친다. 선행이 `cancelled`면 그 태스크는
+기다려도 영원히 풀리지 않는데, 취소가 "불필요해서"인지 "잘못 등재돼서"인지 기계는 모른다
+(모른다 ≠ 아니다). 해소로 간주하면 오등재 태스크의 후속이 조용히 착수돼 trunk에 없는 파일을
+대상으로 작업하게 되므로 **차단은 유지**한다. 대신 조용한 차단만은 금지다(침묵 실패 금지):
+
+- `next` — `--json`·후보 유무와 무관하게 **매번** stderr에 `⚠ 후보 제외 <id> — 취소된 선행 <dep>에
+  차단됨 · 정정: …`를 낸다(제외 사유 코드 `deps_cancelled` — 일반 `deps`와 구별).
+- `status`·`brief`·`validate` — `취소된 선행에 차단된 태스크 N건: id(←dep) …` 한 줄(0건이면 침묵).
+  brief는 훅이 stderr를 버리므로 stdout에 싣는다. validate는 **red로 만들지 않는다**(대장은 정합하다).
+- `cancel` — 취소 시점에 그 태스크를 선행으로 가진 미종결(todo/blocked/in_progress/review)
+  태스크를 세어 `⚠ 이 취소로 N건이 차단된다: …`를 낸다. 취소를 막지는 않는다.
+
+정정은 두 갈래다 — 선행이 오등재였으면 후속에서 `amend --remove-depends`로 뗀다(HARN-67 ③),
+취소 자체가 틀렸으면 복원한다(HARN-69 — main 기준 todo). (사고 경위 2026-09-05: EOS-94 cancel →
+EOS-96이 후보에서 무경고 소실 → 정정 경로가 없어 EOS-97로 재등재. 번호 2개·왕복 1회 소모)
+
 ### 되먹임 주의 — 정정 사유가 새 위반을 만든다
 
 `--reason`은 notes에 append되고 notes는 이 스캐너의 입력이다. 그래서 *"…'선행'이라 선언한
 방향을 부착한다"* 같은 **사유 인용**이 그 문장 안의 태스크 ID를 새 선언으로 만든다(HARN-53
-실측 2건). notes는 append 전용이라 기록된 뒤에는 되돌릴 CLI 경로가 없으므로 **쓰기 전에**
-거부한다 — 사유에서 선행 어구와 태스크 ID가 한 문장에 오지 않게 쓴다.
+실측 2건). 기록된 뒤의 정정은 `--notes-replace`(HARN-67 ⑥) 한 경로뿐이므로 **쓰기 전에**
+거부한다 — 사유에서 선행 어구와 태스크 ID가 한 문장에 오지 않게 쓴다. 같은 되먹임이
+`--remove-depends`·`--notes-replace` 축에도 있다(notes에 "선행: X"가 남은 채 X를 떼면 미집행
+선언이 된다) — 그때는 같은 호출에서 `--notes-replace`로 어구를 함께 고친다(거부 메시지가 안내).
+같은 이유로 amend는 제거한 의존 ID·치환 원문을 notes에 **인용하지 않고 이벤트 대장에만** 남긴다
+(실측: `depends_on -T7-01: 오등재 선행 제거` 한 줄이 그 자체로 새 선언이 되어 amend가 자기 가드에
+거부됐다).
 
 가드가 붙은 곳은 `amend`와 `block` 둘이다. `done`·`cancel`도 사유를 notes에 append하지만
 그 명령들은 태스크를 스캐너가 건너뛰는 상태(`done`·`cancelled`)로 바꾸므로 위반을 만들 수
@@ -508,7 +532,10 @@ python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "main 3
 # 커밋과 무관한 근거(환경 생성·서명·외부 등록)는 탈출구 — 사유가 대장·이벤트에 남는다
 python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..." --no-base "저장소 밖 설정 작업"
 python3 scripts/harness/backlog.py amend <id> --reason "..." [--acceptance "정정 항"] [--gate <G-id>] [--track <트랙>] [--eos-priority P0|P1|P2|P3]
+                                                   [--depends <full-id>] [--remove-depends <full-id>] [--remove-gate <G-id>] [--notes-replace "구문자" "신문자"]
                                                    # 등재된 태스크의 정정 CLI(HARN-24) — tasks/*.yaml 손편집 금지
+                                                   # --remove-depends/--remove-gate/--notes-replace = 정정 경로 3축(HARN-67 · §7a) — 없는 것 제거·미부착 탈착·
+                                                   #   구문자 0회/2회+ 치환은 exit 1 + 파일 무변경. 원문·제거 ID는 이벤트에만 남는다
                                                    # --eos-priority = 기존 태스크 등급 백필의 유일한 합법 경로(HARN-55)
 python3 scripts/harness/backlog.py add --id ... --title ... --eos-priority P0|P1|P2|P3 --path "src/backend/**"  # /plan 산출물
 #   ↑ --eos-priority는 **필수**다 — 미지정은 exit 1 (계획서 100 Rule 1·3 집행 지점 · HARN-55).
@@ -524,6 +551,31 @@ python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 python3 scripts/harness/board.py                   # 작업 보드 HTML (work/board.html)
 ```
+
+### 7a. 정정 경로 표 — 대장 손편집 없이 고칠 수 있는 것 (HARN-57·59·67)
+
+대장 손편집 금지 원칙은 **정정 경로가 CLI에 있을 때만** 지켜진다. 고칠 수 없는 위반을 지적하는
+게이트는 사람이 게이트를 끄게 만들고(HARN-52 등재 사유와 동형), 정정 경로가 없는 필드는
+`cancel`+재등재로만 고쳐져 번호가 소모된다(EOS-94·96·MP-01·EOS-98 — 2026-09-05/06 실측 4건).
+**판정 기준: main 기준 2026-09-07** — 상태 열은 그 시점의 착지 여부이며 브랜치·PR은 세지 않았다.
+
+| 정정 대상 | CLI | 상태(main 기준) |
+|---|---|---|
+| done 증적(artifact) — PR이 done *이후*에 열린 경우 | (설계 중) | HARN-57 · **todo(미착지)** |
+| paths(작업 범위) | (설계 중) | HARN-59 · **todo(미착지)** |
+| depends_on 제거 | `amend <id> --remove-depends <full-id> --reason '...'` | HARN-67 ③ |
+| requires_gates 탈착(오부착) | `amend <id> --remove-gate <G-id> --reason '...'` — 게이트 status 불변 | HARN-67 ⑤ |
+| notes 어구 치환 | `amend <id> --notes-replace "구문자" "신문자" --reason '...'` — 구문자 정확히 1회 | HARN-67 ⑥ |
+| cancelled 복원 | (미구현) | HARN-69 · **todo(미착지)** |
+| **ID 개명(rename)** | **미구현 — 의도적** | 태스크 미등재(상위 세션 결정) |
+
+**rename을 열지 않는 이유(HARN-67 ⑦ 검토)**: ① 태스크 ID는 파일명·이벤트 대장·원격 claim ref·
+타 태스크의 `depends_on`·커밋 메시지·문서 인용에 퍼져 있어 개명은 **전역 치환 + 원격 claim 재게시**가
+된다 — 한 곳이라도 빠지면 계보가 끊긴다(그 자체가 새 정정 경로 부재를 만든다). ② 개명이 필요한
+사고는 전부 **등재 시점 번호 충돌**이었고(EOS-98 ↔ #994), 그것은 `backlog.py add`의 원격 claim까지
+보는 충돌 검사(HARN-10)와 미사용 번호 제안(HARN-73)이 예방한다 — 사후 개명보다 사전 거부가 싸다.
+③ 충돌이 이미 난 뒤의 정정은 `cancel`+재등재로 **번호 하나**를 태우는 것이 전역 치환의 실패
+표면보다 싸다. 후속 태스크 등재 여부는 상위 세션이 결정한다.
 
 테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (2026-08-10 실측 251건 —
 문서 수치는 스냅샷이며 정확 수는 pytest 수집이 정본. CI `harness-integrity` 잡이
@@ -548,5 +600,5 @@ exit code이므로 "출력 억제·잘라내기 판정 금지" 금기(CLAUDE.md 
 - ❌ 홀더 브랜치 생존 확인 없이 `--ignore-remote-claim` 사용 — 확인 명령(`git log -1 --format='%cr %h %s' origin/<branch>`)은 거부 메시지에 동봉된다. 살아 있는 세션이면 그 순간부터 중복 구현이다
 - ❌ 과탐 1건 때문에 `--no-remote`로 보호 전체 끄기 — 태스크 단위 우회(`--ignore-remote-claim`)가 있다
 - ❌ 측정(policy report) 없이 warn→block 승격, 또는 결정로그 없는 승격
-- ❌ **산출물을 검수하는 게이트를 그 산출물을 *만드는* 태스크에 걸기 (2026-09-06 등재)** — `requires_gates`는 `done` 조건이 아니라 **착수 조건**이다(`selector.py:6` — 후보 = 게이트 전부 cleared/waived). 회차 산출물을 사람이 검수해야 clear되는 게이트를 회차 태스크에 걸면 *회차 전엔 검수할 것이 없고 검수 전엔 회차를 못 시작하는* 교착이 된다. 검수 게이트는 **그 산출물을 소비하는 후속 태스크**에 건다(선행 태스크 = 산출, 후속 태스크 = `depends_on` 선행 + `requires_gates` 검수). `amend`는 게이트를 *부착만* 하므로(HARN-67 ⑤) 오부착은 `cancel`+재등재로만 고칠 수 있고 번호가 소모된다 — 등재 전에 `next --n 500 --json`으로 노출 여부를 확인한다. (사고 경위: 2026-09-06 `MP-01`에 `G-eos-first-run-canary-review`를 걸어 교착 → `MP-02`(회차)·`MP-03`(골든 승격·게이트+의존)로 분리 재등재. 정정 경로 부재로 인한 번호 소모 3회차 — EOS-94·96·MP-01)
+- ❌ **산출물을 검수하는 게이트를 그 산출물을 *만드는* 태스크에 걸기 (2026-09-06 등재)** — `requires_gates`는 `done` 조건이 아니라 **착수 조건**이다(`selector.py:6` — 후보 = 게이트 전부 cleared/waived). 회차 산출물을 사람이 검수해야 clear되는 게이트를 회차 태스크에 걸면 *회차 전엔 검수할 것이 없고 검수 전엔 회차를 못 시작하는* 교착이 된다. 검수 게이트는 **그 산출물을 소비하는 후속 태스크**에 건다(선행 태스크 = 산출, 후속 태스크 = `depends_on` 선행 + `requires_gates` 검수). 오부착은 `amend <id> --remove-gate <G-id> --reason '...'`로 뗀다(HARN-67 ⑤ — 그 전에는 `amend`가 부착 전용이라 `cancel`+재등재로만 고칠 수 있었고 번호가 소모됐다). 탈착 경로가 생겼어도 등재 전에 `next --n 500 --json`으로 노출 여부를 확인하는 편이 싸다. (사고 경위: 2026-09-06 `MP-01`에 `G-eos-first-run-canary-review`를 걸어 교착 → `MP-02`(회차)·`MP-03`(골든 승격·게이트+의존)로 분리 재등재. 정정 경로 부재로 인한 번호 소모 3회차 — EOS-94·96·MP-01)
 - ❌ **제안기의 "00~99 모두 소진" 문구를 실측 없이 사실로 등재하기 (2026-09-06 등재 · 같은 날 정정)** — `TASK_ID_RE`(`models.py:109`)는 정확히 2자리만 허용하고 `_next_free_number`는 3자리를 날조하지 않고 `None`을 내 `add`가 거부한다(HARN-21) — 여기까지는 맞다. 그러나 그 거부 문구가 말하는 "소진"은 **최대+1 방향만 본 결과**였고, 실측(모든 ref 이력 전수 · HARN-73)은 EOS 번호 **사용 59·미사용 40**(01~05·07~27·29~31·33~43)이었다. 대응은 새 접두가 아니라 **하위 미사용 번호 재사용**이다(Kiki 결정 A · `G-eos-task-prefix-exhausted` clear · 제안기가 하위 폴백을 하도록 HARN-73이 고쳤다). 3자리 손제작 금지는 그대로다. `MP`(#1000)는 소진 대응이 아니라 *회차 축* 접두로만 남는다 — EOS 축 태스크는 계속 `EOS-nn`을 쓴다. (사고 경위: 2026-09-06 PR #1000이 CLI 문구와 `ls | max` 추론만으로 "현재 소진된 접두: EOS"를 이 절에 등재했고, 같은 날 타 세션(#1001)도 같은 문구로 결정 게이트를 열었다 — **두 세션이 같은 도구 출력을 실측 없이 사실로 옮겼다**. "환경 사실의 추론 등재 금지"(CLAUDE.md)의 *도구 출력* 축: 도구가 내는 판정 문구도 환경 사실이 아니라 도구의 주장이다)

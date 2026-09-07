@@ -67,6 +67,23 @@ def current_stage(backlog: Backlog) -> str:
     return progress[-1][0] if progress else "?"
 
 
+def cancelled_dep_blocked_line(backlog: Backlog) -> str | None:
+    """취소된 선행에 차단된 todo 태스크의 한 줄 요약 — 0건이면 None (HARN-67 ②).
+
+    status·brief·validate 세 화면이 같은 문장을 내게 한 곳에 둔다. "결정 불가 → 차단
+    유지"인 상태를 침묵으로 두면 그 태스크는 영구 차단처럼 보이고, 정정 경로가 있어도
+    아무도 쓰지 않는다 — 그래서 요약 줄에 정정 명령을 함께 싣는다.
+    """
+    blocked = selector.cancelled_dependency_blocks(backlog)
+    if not blocked:
+        return None
+    items = " ".join(f"{task.id}(←{','.join(deps)})" for task, deps in blocked)
+    return (
+        f"취소된 선행에 차단된 태스크 {len(blocked)}건: {items}"
+        " — 정정: backlog.py amend <id> --remove-depends <dep> --reason '...'"
+    )
+
+
 def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
     lines = ["📊 빌드 하네스 — 프로젝트 현재 상태", ""]
 
@@ -93,6 +110,12 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
             lines.append(
                 f"{_STATUS_MARK['blocked']}{task.id} {task.title} — {task.notes or '사유 미기록'}"
             )
+
+    # 취소된 선행에 차단된 todo — status=blocked가 아니라 화면에 안 잡히던 축 (HARN-67 ②)
+    cancelled_line = cancelled_dep_blocked_line(backlog)
+    if cancelled_line:
+        lines.append("")
+        lines.append(f"⚠ {cancelled_line}")
 
     pending = [g for g in backlog.gates.values() if g.status == "pending"]
     if pending:
@@ -131,6 +154,11 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
             if t.status == "in_progress"
         ],
         "blocked": [t.id for t in backlog.tasks.values() if t.status == "blocked"],
+        # 취소된 선행에 차단된 todo (HARN-67 ②) — 텍스트 화면과 같은 사실을 기계도 읽게
+        "cancelled_dep_blocked": [
+            {"id": task.id, "cancelled": deps}
+            for task, deps in selector.cancelled_dependency_blocks(backlog)
+        ],
         "pending_gates": [
             {
                 "id": g.id,
@@ -328,6 +356,12 @@ def render_brief(
             "blocked": "차단 상태 — /status 로 원인 확인",
         }.get(code, code)
         lines.append(f"착수 가능 태스크 없음: {label} {detail}")
+
+    # 취소된 선행에 차단된 todo (HARN-67 ②) — 훅은 stderr를 버리므로(`2>/dev/null`) 이 줄이
+    # stdout(반환 문자열)에 있어야 세션이 실제로 본다. 0건이면 아무것도 내지 않는다.
+    cancelled_line = cancelled_dep_blocked_line(backlog)
+    if cancelled_line:
+        lines.append(f"⚠️ {cancelled_line}")
 
     for gate_id, days in overdue_gates(backlog, today):
         gate = backlog.gates[gate_id]
