@@ -6,7 +6,7 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 586
+  backend_modules_covered: 587
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
@@ -8433,7 +8433,7 @@ features:
     keep_criteria_met: 4/6
     replace_signals: 2/6
     action_basis: "§3.4 KEEP 4/6 — 미충족 k1_subject_low, k4_model_ok"
-    fan_in: 235
+    fan_in: 236
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8498,7 +8498,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 124
+    fan_in: 125
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8563,7 +8563,7 @@ features:
     keep_criteria_met: 6/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
-    fan_in: 25
+    fan_in: 26
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 124
+    fan_in: 125
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9385,7 +9385,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 2796
+    loc: 2807
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 25
@@ -9775,17 +9775,17 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 9882
+    loc: 10397
     endpoints: 0
     write_endpoints: 0
-    db_mutation_calls: 13
-    own_modules: 16
+    db_mutation_calls: 15
+    own_modules: 17
     adapter_deps: [l3.verify_answer]
     mixed_deps: [l3.pregenerate.provenance_bridge, schema.enums, schema.problem]
     db_model_modules: 7
-    coupling_count: 28
-    test_files: 20
-    test_functions: 403
+    coupling_count: 32
+    test_files: 21
+    test_functions: 420
     matrix:
       A_subject: 3
       B_db: 3
