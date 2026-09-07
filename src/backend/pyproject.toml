@@ -228,26 +228,21 @@ layers = [
     "whymath_backend.l1",
     "whymath_backend.schema",
 ]
-# 합성 루트(`whymath_backend.composition`) 경유 체인 — **간선 1건만** 좁게 예외한다.
+# 합성 루트(`whymath_backend.composition`) 경유 면제 — **EOS-89로 0건이 됐다.**
 #
-# 왜 예외가 필요한가: 합성 루트는 계층 스택 *밖*의 횡단 배선 지점이라(능력 계약과 과목
-# 구현을 잇는 유일한 곳) 정의상 상위 계층을 안다. layers 계약은 간접 체인을 따라가므로
-# `l3.pedagogy.slot_generator -> composition -> l4.subject_adapter_math`를 역방향으로 본다.
+# 히스토리(지우지 않는 이유): EOS-69는 `l3.pedagogy.slot_generator`·`l3.render.adapters`가
+# 합성 루트를 경유해 어댑터에 닿는 간선 2건을 여기 **간선 단위로** 적어 두고 "호출부가 능력을
+# 상류에서 받아 내리면 이 줄도 사라진다"고 남겼다. EOS-89가 그 상류를 만들었다 —
+# 능력은 `create_app`이 `app.state`에 등록하고, 렌더는 어댑터 **생성자 주입**으로, 슬롯 검증은
+# 호출부 파라미터로 내려온다. 그래서 두 간선이 실제로 사라졌고
+# `unmatched_ignore_imports_alerting`(기본 ERROR)이 "이 줄을 지워라"라고 말했다 —
+# 만료가 날짜가 아니라 기계였다는 것의 실증이다.
 #
-# 왜 `-> whymath_backend.composition` 전체를 열지 않는가: 그러면 합성 루트가 **세탁 통로**가
-# 된다 — 어느 Core 모듈이든 이 경유로 어댑터에 닿아도 계약이 침묵한다. 간선 단위로 적어 두면
-# 새 Core→composition 간선이 생기는 즉시 lint-imports가 적색이 되어 *그때마다 판단*을
-# 강요한다. 반대로 이 간선이 사라지면 `unmatched_ignore_imports_alerting`(기본 ERROR)이
-# "이 줄을 지워라"라고 말한다 — 만료가 날짜가 아니라 기계다.
-#
-# 정직한 잔여(EOS-69): `verify_slot_payload`는 이제 능력(`ExpressionEquivalence`)을 **주입받는다**
-# — 타 과목·테스트는 L3를 건드리지 않고 자기 구현을 넣을 수 있다. 남은 것은 *기본 구현 선택*
-# 편의뿐이며, 호출부 4곳(review·example_generator·diag_item_projector·slot_generator 자신)이
-# 능력을 상류에서 받아 내리면 이 줄도 사라진다. 위반이 없어진 게 아니라 **작아졌다**.
-ignore_imports = [
-    "whymath_backend.l3.pedagogy.slot_generator -> whymath_backend.composition",
-    "whymath_backend.l3.render.adapters -> whymath_backend.composition",
-]
+# 다시 열지 말 것: `-> whymath_backend.composition`을 통째로 면제하면 합성 루트가 **세탁 통로**가
+# 된다(어느 Core 모듈이든 이 경유로 어댑터에 닿아도 계약이 침묵). 새 간선이 필요하면 간선
+# 단위로 한 줄씩 적고, `tests/infra/test_eos_dependency_direction.py`의 CORE_PULL_BASELINE도
+# 함께 갱신해야 한다(그 테스트가 면제 줄과 실제 간선의 **정확한 일치**를 양방향으로 잰다).
+ignore_imports = []
 
 # ──────────────────────────────────────────────────────────────────────
 # EOS Core ↔ Math Adapter 경계 강제 (EOS-67) — 7계층 축과 **별개의 축**이다.
