@@ -182,4 +182,21 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 브랜치 ps1의 HRESULT 로케일 독립 힌트 문구(한국어 Windows에서 'Access is denied' 번역 문제)는 main 실행 라인에 없으나, main 설계(사전 검사)가 그 경로를 막으므로
 검사 축의 유실은 아니다 — 사전 검사를 통과하고도 정책 차단 등으로 실패하는 경우의 안내 문구 수준이다(읽어서 그렇게 보인다·실행 검증 없음).
 
-*(§5·§7·§8·§9는 결과 도착 후 기재)*
+## 5. 추적 중 14건 — acceptance 커버리지 전수 정독 (6·7회차 공백 **닫힘**)
+
+6·7회차가 "소유 태스크의 실재·생존·브랜치 지목까지만 기계 확인했고 acceptance가 잔여 전부를 덮는지는 보지 않았다"고
+두 번 연속 남긴 공백이다. 좌석이 done이 되는 순간 acceptance 밖 잔여는 고아가 된다(vafylb·7n9n72 실사례). 브랜치마다 에이전트
+1건이 ①`git diff --name-only` 전건 → `cat-file -e` 부재/상이 → `comm -23` 고유 줄 ②고유 줄 본문 판독 ③소유 태스크 YAML 전문
+(acceptance·notes·paths·artifacts) 대조 ④항목별 covered / absorbed_main_superior / uncovered 판정을 수행했다. 읽기 전용·실행 검증 없음.
+
+| 브랜치 | 소유(status) | 잔여 | uncovered | risk | 핵심 판정 | 8회차 조치 |
+|---|---|---|---|---|---|---|
+| `backup/ai-content-a3ysut-pre-rebase` | OPS-41(todo) | 6 | 1 | low | diff 16파일 **전부 PR #819(081d235a)로 착지**(파일 집합 정확히 일치). 잔여 고유 줄 전건 옛 판. 유일 uncovered = main `MEMORY.md:91` 글자 깨짐("회전 자omatica" ← #922) — 브랜치 유실이 아니라 main 결함 | OPS-41 ④(a): 이 축 충족·삭제 후보 근거 성립(착수 세션 재확인 후). MEMORY 1단어는 본 PR이 정정 |
+| `whymath-constitution-rules-check-azdnov` | OPS-41(todo) | 5 | 1 | low | 판정서 `id_renumber_verdict_2026-08-11.md`(106줄·착지대 head 05a1a344 포인터 유일 기록)·HARN-22(azdnov판) YAML·MEMORY 판정 로그 7줄이 main 0건. acceptance ①이 "문서"로 간접 포섭하나 **YAML 재등재·CLI 재배정은 notes에만** — 그 YAML의 실질(충돌 조회 계기판·이중 배정 16건 추적·재채번 판정 권한 승계)은 main의 어떤 열린 태스크도 소유 안 함 | OPS-41 ④(c) |
+| `whymath-data-platform-design-t608mk` | OPS-41(todo) | 7 | 6 | low | r2 문서(423줄)는 acceptance ①②가 덮으나 **태스크 YAML 4건(OPS-35/36/37·QUAL-05)·MEMORY 결정 로그 13줄(Kiki D-A "ClickHouse 미도입 확정·행동 로그 정본 = PG+TimescaleDB")이 notes에만**. 갭 4건 main 존속 실측(rollup 호출 주체 0·qa_report upload-artifact 0·CLAUDE.md:73 ClickHouse 선언·pilot_kpi_baseline.py:207). OPS-35·36은 main 동번호 별건 실재 | OPS-41 ④(b) |
+| `whymath-ai-recommendation-review-q8tvcx` | OPS-38(todo) | 11 | 2 | **high** | 같은 커밋 ee9df6dc의 태스크 등재 4건 중 HARN-15 main done·OPS-21은 OPS-32 흡수. **SEC-13(삭제·반출 매니페스트가 미도입 ClickHouse·S3 선언 + 실재 반출처 Langfuse 누락 — 미성년자 데이터·법령)·OPS-20(AttemptEvent seam 강제 테스트 0건)은 acceptance·main 어디에도 없음.** main `privacy/erasure.py:182/188`·`export.py:196/201` clickhouse·s3 선언·langfuse 0건 실측. 후행 `eos_privacy_gap_analysis.md`가 허위 전제를 승계 | **SEC-32(priority 1)·OPS-67 재등재** + OPS-38 ⑦(③ 문서 폐기 시 §3 R2·R3·부록 B1·C1 근거 보존) |
+| `whymath-service-operations-review-5t5lmv` | OPS-40(todo) | 33 | 29 | **high** | acceptance ①②가 head 7052c34a 기준 — 그 뒤 4커밋의 **OPS-35 클라 버전 게이트(backend app.py 92줄·config·test_app 3건·mobile update_required.dart+test·컨트롤러 7건·SLO 행 = 12파일)·A11Y-02 접근성 커버리지 가드(거버넌스 테스트 160·3축 155·06_design_system §7)·OPS-34 설계 YAML·r2 §4 정정 유실 6문서(main 여전히 flutter_tts·44dp)·CLAUDE.md 규칙 1줄·MEMORY 3건**이 무소유. HARN-35 notes는 "OPS-40 소유"로 미뤄 **상호 미소유** | OPS-40 ⑤로 전건 승격(main 우세 줄 이식 금지 목록 병기) |
+
+*(잔여 9건은 결과 도착 후 기재)*
+
+*(§7·§8·§9는 결과 도착 후 기재)*
