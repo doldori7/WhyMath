@@ -37,8 +37,10 @@
 ③④가 이 과제의 본체다. ①은 그 입력을 만들 뿐이고, 기계가 대신할 수 있는 것은 거기까지다 —
 확인서의 서명은 본인의 의사표시라 애초에 대체 대상이 아니다.
 
-**예상 출력(①)**: `상태: ok` · `총 커밋: 1000건 내외` · `혼입 신원: 0종` ·
-KST 외 오프셋 커밋 200건 내외(클라우드 세션분 — 정상이다, §4 참조).
+**예상 출력(①)** — 2026-09-07 실측 기준(모든 ref 45개 전수):
+`STATUS=ok` · `COMMITS=2297` · `FULL=True` · `PERSON_AUTHORED=1021` · `FOREIGN=0종` ·
+오프셋 분포 `+00:00` 1222 / `+09:00` 892 / `-04:00` 183 · 업무시간 비율 0.33 내외.
+숫자는 이력이 자라면 달라진다 — **비교할 것은 `FULL=True`와 `FOREIGN=0종`이다.**
 
 ## 4. 성공 기준
 
@@ -48,14 +50,27 @@ KST 외 오프셋 커밋 200건 내외(클라우드 세션분 — 정상이다, 
 |---|---|---|
 | `0` | 수집 성공 · 선언 밖 신원 **없음** | ③으로 진행 |
 | `1` | 수집 성공 · **혼입 신원 발견** | 리포트 §5의 커밋 해시를 확인한다. 재직사 계정이면 ③ 전에 상의가 먼저다 |
-| `2` | **수집 실패** (shallow 클론·git 오류 등) | 리포트를 증빙으로 쓰지 않는다. 화면의 사유를 그대로 전달 |
+| `2` | **수집 실패** (shallow 클론·git 오류·신원 미선언 등) | 리포트를 증빙으로 쓰지 않는다. 화면의 사유를 그대로 전달 |
 
 > `2`는 "이상 없음"이 아니다. 잘린 이력에서 나온 "혼입 0건"은 잘린 부분에 대해 아무 말도
 > 하지 않으며, 그것을 확인서에 첨부하면 그대로 거짓 진술이 된다.
 
-**놀라지 않아도 되는 것**: 리포트 §2에 `+09:00`이 아닌 오프셋(예: `-04:00`)이 수백 건
-찍힌다. 클라우드 세션 컨테이너에서 만들어진 커밋이며, **재직사 장비를 뜻하지 않는다**.
-확인서 §2-1의 세 번째 항목이 이 사실을 적는 자리다 — 감추지 말고 그대로 적는다.
+**exit code와 함께 반드시 볼 것 — `FULL=True`**. 범위를 좁혀 돌리면(`--rev`·`--since`)
+`EXIT=0`이 나와도 그것은 *그 범위 안에서만* 참이다. `FULL=False`인 리포트를 "이력 전체에서
+혼입 없음"의 근거로 쓰면 안 되며, 실행 블록 ③이 이 조건을 검사해 clear를 거부한다.
+
+**신원 선언 확인**(위 §실행 블록 ①의 "반드시 확인할 것"): `kiki@whymath.local`이 본인의
+로컬 git 설정 주소가 맞는지 확인했는가. 이 확인 없이 `EXIT=0`을 성공으로 읽으면, 선언으로
+가린 신원이 검증된 것처럼 보인다.
+
+**놀라지 않아도 되는 것 2가지**:
+
+1. 리포트 §2에 `+09:00`이 아닌 오프셋(`-04:00`·`+00:00`)이 **1400건 넘게** 찍힌다.
+   클라우드 세션 컨테이너와 하네스 봇이 만든 커밋이며 **재직사 장비를 뜻하지 않는다**.
+   확인서 §2-1의 세 번째 항목이 이 사실을 적는 자리다 — 감추지 말고 그대로 적는다.
+2. 리포트 §3의 시각 분포는 **사람이 저작한 커밋만**(약 1021건) 센다. 하네스 봇의 장부
+   커밋 932건이 섞이면 "개인 시간에 작업했는가"라는 질문에 봇의 실행 시각이 답하기
+   때문이다. 전체 스캔분 수치도 같은 절에 병기되므로 감춰지지 않는다.
 
 **③④의 성공 기준**: 두 문서의 모든 체크 항목에 표시가 있고, "일부"로 표시한 항목마다
 사유가 적혀 있고, 서명일과 서명이 들어가 있을 것. **빈칸이 남은 문서는 미완성이 아니라
@@ -97,10 +112,17 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# 1-a) 모든 원격 브랜치를 받아 둔다 — 도구는 이 클론이 가진 ref만 볼 수 있다.
+#      받지 않은 브랜치의 커밋은 스캔 범위 밖이고, 그것이 리포트의 한계 ④다.
+git fetch --all --quiet
+git rev-parse --is-shallow-repository   # true 면 아래가 exit 2를 낸다
+
 # 2) 증거 생성. 산출물은 .ip_evidence\ (gitignore 대상 — 커밋되지 않는다)
+#    신원 2개를 선언한다 — 두 번째는 아래 "확인할 것"을 반드시 읽을 것.
 if ($ToolOk) {
   python scripts\ops\ip_separation_evidence.py `
       --identity rollrock.ki@gmail.com `
+      --identity kiki@whymath.local `
       --out .ip_evidence `
       --jsonl .ip_evidence\commits.jsonl
   $Code = $LASTEXITCODE
@@ -109,18 +131,34 @@ if ($ToolOk) {
   "중단: 브랜치 체크아웃이 되지 않았다 — 0)의 git 출력을 확인할 것"
 }
 
-# 3) 자가검증 — 파일이 실제로 생겼는가 + 상태가 ok인가
+# 3) 자가검증 — 파일이 실제로 생겼는가 + 상태가 ok인가 + 전수를 봤는가
 #    exit code만 믿지 않는다. 파일이 없으면 첨부할 것이 없다.
 $Report = ".ip_evidence\ip_separation_evidence.json"
 if (Test-Path $Report) {
   $J = Get-Content $Report -Raw -Encoding UTF8 | ConvertFrom-Json
   "STATUS=$($J.status)  COMMITS=$($J.total_commits)  HEAD=$($J.head_sha)"
+  "SCOPE=$($J.scope.description)  FULL=$($J.scope.is_full_history)"
+  "PERSON_AUTHORED=$($J.scope.person_authored)건 (시각 분포의 모집단)"
   "FOREIGN=$($J.identities.foreign_identities.PSObject.Properties.Count)종"
   "WORK_HOURS_RATIO=$($J.time_profile.work_hours_ratio)"
 } else {
   "중단: 리포트 파일이 없다 — 2)의 EXIT과 화면 메시지를 확인할 것"
 }
 ```
+
+### ⚠ 반드시 확인할 것 — 왜 신원을 2개 선언하는가
+
+2026-09-07 전수 실측(모든 ref 2297건)에서 **커밋 신원 2개가 추가로 발견**됐다.
+초판 도구는 `HEAD`만 훑어서 이 둘을 통째로 못 봤다(2297건 중 1018건만 스캔).
+
+| 발견된 신원 | 건수 | 정체 | 처리 |
+|---|---|---|---|
+| `whymath-harness <harness@whymath.invalid>` | 932 | 빌드 하네스 봇. 전부 `origin/harness-claims`(claim 대장 orphan 브랜치)에만 있고 트리는 `claims/` 하나뿐 — 소스가 아니라 기계 장부 | 도구 신원으로 **기본 분류**(코드에 고정). 숨기지 않는다 — 리포트 §1 표에 건수와 함께 실린다 |
+| `kiki <kiki@whymath.local>` | 30 author·30 committer·63 coauthor | **로컬 git 설정으로 만들어진 주소로 보인다** — 커밋 시각이 전부 KST(+09:00)이고 내용도 정상 개발분(EOS-204·MISC-12~16 등, PR #882 참조) | 위 블록이 `--identity`로 선언한다. **본인 주소가 맞는지 확인하는 것은 본인 몫이다** |
+
+**`kiki@whymath.local`이 본인 것이 아니라면**: 위 블록에서 두 번째
+`--identity kiki@whymath.local` 줄을 지우고 다시 돌린다. 그러면 그 30건이 혼입
+신호로 뜨고, 그 커밋들이 무엇인지 확인한 뒤 확인서 §2-2에 사실대로 적는다.
 
 **여기서 나온 `HEAD=` 값을 메모한다.** 확인서 §1과 양도기록 §1의 "기준 커밋"에 그대로
 옮겨 적을 값이다.
@@ -195,10 +233,19 @@ $Today = (Get-Date -Format "yyyy-MM-dd")
 # 서명 완료를 직접 확인한다. 붙여넣기 실행이어도 이 줄에서 멈춘다.
 $Ack = Read-Host "확인서·양도예정 기록 2종에 서명하고 보관까지 마쳤으면 '서명완료' 를 입력"
 
-if ($Ack -eq "서명완료") {
+# 수집이 **성공한** 리포트인지 먼저 본다. 실패해도 JSON 파일 자체는 생기므로,
+# 서명 확인만으로 clear하면 shallow 실행(커밋 0건)의 실패 리포트를 근거로
+# human gate가 닫힐 수 있다 — 이 도구가 막으려던 바로 그 실패다.
+$EvidenceOk = ($J.status -eq "ok") -and ($J.total_commits -gt 0) -and $J.scope.is_full_history
+
+if ($Ack -eq "서명완료" -and $EvidenceOk) {
   python scripts\harness\backlog.py gates clear G-eos-ip-separation-evidence --as kiki `
-    --evidence "$Today Kiki 서명. 판정 기준: $Base (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — 전체 이력 $($J.total_commits)건, 선언 밖 신원 $($Foreign)종, 평일 09-18시 KST 커밋 비율 $($J.time_profile.work_hours_ratio). ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관($Vault) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
+    --evidence "$Today Kiki 서명. 판정 기준: $Base (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — $($J.scope.description) $($J.total_commits)건(사람 저작 $($J.scope.person_authored)건), 선언 밖 신원 $($Foreign)종, 평일 09-18시 KST 커밋 비율 $($J.time_profile.work_hours_ratio). ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관($Vault) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
   "EXIT=$LASTEXITCODE  (0=clear 성공 · 1=거부)"
+} elseif (-not $EvidenceOk) {
+  "중단: 기계 증거가 유효하지 않다 — clear하지 않는다."
+  "  status=$($J.status)  commits=$($J.total_commits)  full_history=$($J.scope.is_full_history)"
+  "  실행 블록 ①을 다시 돌려 EXIT=0 또는 1, STATUS=ok, FULL=True를 확인할 것."
 } else {
   "중단: 서명 전에는 clear하지 않는다. 입력값='$Ack'"
 }

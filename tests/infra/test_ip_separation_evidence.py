@@ -23,6 +23,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,13 @@ time_profile = _mod.time_profile
 ai_profile = _mod.ai_profile
 evaluate_thresholds = _mod.evaluate_thresholds
 collect = _mod.collect
+parse_coauthors = _mod.parse_coauthors
+person_authored = _mod.person_authored
+build_scope = _mod.build_scope
+looks_like_signed_binary = _mod.looks_like_signed_binary
+stream_commits = _mod.stream_commits
+EvidenceError = _mod.EvidenceError
+DEFAULT_REVS = _mod.DEFAULT_REVS
 marker_of = _mod.marker_of
 scan_tracked_documents = _mod.scan_tracked_documents
 SIGNED_MARKER = _mod.SIGNED_MARKER
@@ -65,9 +73,10 @@ def commit(
     ce: str = "noreply@github.com",
     ad: str = "2026-03-07T22:10:00+09:00",
     subject: str = "feat: 무언가",
+    coauthors=None,
 ) -> Commit:
     """정상 커밋 — 어떤 신호도 내면 안 되는 기준점."""
-    return Commit(sha, an, ae, cn, ce, ad, ad, subject)
+    return Commit(sha, an, ae, cn, ce, ad, ad, subject, coauthors or [])
 
 
 # ── IDENT-01 신원 혼입 ─────────────────────────────────────────────────────
@@ -188,7 +197,7 @@ def test_ai_profile_counts_tool_authored_commits() -> None:
     """AI 저작 커밋은 별도로 센다 — 판정이 아니라 실사 대비 사실 자료다."""
     prof = ai_profile([commit(), commit("e" * 40, an="Claude", ae="noreply@anthropic.com")], TOOL)
     assert prof["tool_authored_commits"] == 1
-    assert prof["tool_authored_ratio"] == 0.5
+    assert prof["tool_involved_ratio"] == 0.5
 
 
 # ── 렌더 계약 ──────────────────────────────────────────────────────────────
@@ -411,3 +420,179 @@ def test_evidence_outputs_are_gitignored() -> None:
     assert ignored("docs/private/ip/declaration.md")
     # 반대 방향 — 정본 템플릿까지 무시되면 가드가 아니라 사고다
     assert not ignored("docs/legal/templates/no_employer_assets_declaration_ko.md")
+
+
+# ── Co-Authored-By 트레일러 (2026-09-07 리뷰 P2) ────────────────────────────
+def test_parse_coauthors_reads_trailers() -> None:
+    """본문의 `Co-Authored-By`를 (이름, 이메일)로 뽑는다 — 대소문자 무관."""
+    body = (
+        "본문 한 줄\n\n"
+        "Co-Authored-By: Claude <noreply@anthropic.com>\n"
+        "co-authored-by: 동료 <peer@example.com>\n"
+    )
+    assert parse_coauthors(body) == [
+        ["Claude", "noreply@anthropic.com"],
+        ["동료", "peer@example.com"],
+    ]
+
+
+def test_parse_coauthors_is_silent_without_trailers() -> None:
+    """정상 침묵 — 트레일러가 없으면 빈 목록."""
+    assert parse_coauthors("그냥 본문\nSigned-off-by: x <x@y.z>\n") == []
+
+
+def test_coauthor_identity_is_scanned() -> None:
+    """**공동저작자도 신원 검사를 받는다** — 잠재적 공동 권리자이기 때문이다.
+
+    결함 주입 표적: `classify_identities`에서 coauthor 순회를 지우면 이 테스트만
+    RED가 되고 author/committer 테스트는 그대로 GREEN이다.
+    """
+    c = commit(coauthors=[["사내동료", "peer@employer.co.kr"]])
+    _, findings = classify_identities([c], PERSONAL, TOOL)
+    assert [f.code for f in findings] == ["IDENT-01"]
+    assert findings[0].subject.startswith("coauthor:")
+
+
+def test_ai_profile_counts_coauthored_not_only_authored() -> None:
+    """AI 관여는 author만 세면 크게 빗나간다 (실측 25 vs 998).
+
+    이 저장소의 관례는 사람이 author이고 AI가 트레일러로 들어가는 형태다.
+    """
+    human_with_ai = commit(coauthors=[["Claude", "noreply@anthropic.com"]])
+    ai_authored = commit("f" * 40, an="Claude", ae="noreply@anthropic.com")
+    prof = ai_profile([human_with_ai, ai_authored, commit("0" * 40)], TOOL)
+    assert prof["tool_authored_commits"] == 1
+    assert prof["tool_coauthored_commits"] == 1
+    assert prof["tool_involved_commits"] == 2  # 합집합
+
+
+# ── 시각 분포의 모집단 (사람 저작) ──────────────────────────────────────────
+def test_person_authored_excludes_tool_commits() -> None:
+    """봇이 커밋한 시각은 사람이 일한 시각이 아니다 — 모집단에서 뺀다."""
+    bot = commit("1" * 40, an="whymath-harness", ae="harness@whymath.invalid")
+    people = person_authored([commit(), bot], TOOL)
+    assert [c.sha for c in people] == ["a" * 40]
+
+
+def test_harness_bot_is_a_tool_not_a_foreign_identity() -> None:
+    """하네스 봇은 사람이 아니다 — 기본 도구 신원에 들어 있다.
+
+    실측 근거: 이 신원의 932건은 전부 `harness-claims`(claim 대장 orphan 브랜치)에만
+    있고 트리는 `claims/` 하나뿐이다. 다만 **숨기지는 않는다** — 신원 표에 실린다.
+    """
+    assert "harness@whymath.invalid" in DEFAULT_TOOL_IDENTITIES
+    bot = commit("2" * 40, an="whymath-harness", ae="harness@whymath.invalid")
+    profile, findings = classify_identities([bot], PERSONAL, TOOL)
+    assert findings == []
+    assert "whymath-harness <harness@whymath.invalid>" in profile["by_author"]
+
+
+# ── 스캔 범위 (2026-09-07 리뷰 P1·P2) ──────────────────────────────────────
+def test_default_scope_is_all_refs() -> None:
+    """기본 범위는 HEAD가 아니라 모든 ref다 — HEAD만 보면 44%만 본다(실측)."""
+    assert tuple(DEFAULT_REVS) == ("--all",)
+
+
+def test_scope_marks_full_history_only_when_unfiltered() -> None:
+    """전수/부분을 양방향으로 구분한다 — 부분인데 전수로 표시되면 거짓 진술이다."""
+    assert build_scope(["--all"], None, refs=3, scanned=9)["is_full_history"] is True
+    assert build_scope(["HEAD"], None, refs=3, scanned=9)["is_full_history"] is False
+    assert build_scope(["--all"], "2026-01-01", refs=3, scanned=9)["is_full_history"] is False
+
+
+def test_unreachable_commit_is_scanned(repo: Path) -> None:
+    """**HEAD에서 도달할 수 없는 커밋도 검사한다.**
+
+    이 파일에서 `test_shallow_clone_is_not_ok` 다음으로 중요한 계약이다. 초판은
+    `git log HEAD`만 순회해 미머지 브랜치의 커밋을 통째로 놓쳤고, 이 저장소
+    실측으로 2297건 중 1279건(56%)이 그 사각에 있었다 — 그 커밋에 재직사 신원이
+    있어도 리포트는 "혼입 0건"이라고 선언했을 것이다.
+    """
+    _git(repo, "checkout", "-q", "-b", "side")
+    (repo / "side.txt").write_text("x", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=stranger@employer.co.kr", "commit", "-q", "-m", "곁가지")
+    _git(repo, "checkout", "-q", "main")
+
+    # HEAD만 보면 침묵한다 — 이것이 초판의 상태다
+    head_only = collect(repo, personal=PERSONAL, tool=TOOL, revs=("HEAD",))
+    assert head_only.findings == []
+    assert head_only.scope["is_full_history"] is False
+    assert head_only.unmeasured  # 부분 측정임을 스스로 말한다
+
+    # 기본(모든 ref)이면 잡는다
+    full = collect(repo, personal=PERSONAL, tool=TOOL)
+    # `-c user.email`은 author·committer 둘 다 바꾸므로 역할별로 2건이 정상이다.
+    assert {f.code for f in full.findings} == {"IDENT-01"}
+    roles = sorted(f.subject.split(":", 1)[0] for f in full.findings)
+    assert roles == ["author", "committer"]
+    assert all("employer.co.kr" in f.subject for f in full.findings)
+    assert full.scope["is_full_history"] is True
+    assert full.unmeasured == []
+
+
+def test_partial_scope_report_refuses_full_history_wording(repo: Path) -> None:
+    """부분 범위 리포트는 '이력 전체'라고 말하지 않는다."""
+    partial = collect(repo, personal=PERSONAL, tool=TOOL, revs=("HEAD",))
+    text = render(partial)
+    assert "부분 측정" in text
+    assert "스캔한" in text
+
+
+# ── 타임아웃 집행 (2026-09-07 리뷰 P2) ─────────────────────────────────────
+def test_timeout_fires_even_when_read_blocks(repo: Path, monkeypatch) -> None:
+    """**블로킹 read 안에서 멈춰도** 타임아웃이 걸린다.
+
+    초판은 `proc.stdout.read()`가 반환된 **뒤에만** deadline을 봤다. git이 출력
+    없이 정지하면 그 검사 지점에 영영 도달하지 못해, 선언한 300초가 장식이 된다.
+    watchdog 스레드가 프로세스를 죽여야 read가 풀린다.
+    """
+    released = threading.Event()
+
+    class _BlockingStdout:
+        def read(self, _n):
+            released.wait(10)  # kill()이 풀어 준다 — 안 풀리면 테스트가 실패한다
+            return ""
+
+    class _FakeProc:
+        stdout = _BlockingStdout()
+        returncode = -9
+
+        def kill(self):
+            released.set()
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    monkeypatch.setattr(_mod.subprocess, "Popen", lambda *a, **k: _FakeProc())
+    with pytest.raises(EvidenceError) as excinfo:
+        list(stream_commits(repo, timeout=0.05))
+    assert "TimeoutExpired" in str(excinfo.value)
+    assert released.is_set()  # watchdog이 실제로 kill했다
+
+
+# ── 서명 스캔본 가드 (2026-09-07 리뷰 P2) ──────────────────────────────────
+def test_signed_scan_is_detected_by_name_and_location() -> None:
+    """서명 **스캔본**(PDF·이미지)은 첫 줄을 읽을 수 없다 — 이름과 위치로 본다."""
+    assert looks_like_signed_binary("docs/legal/재직사자산무사용확인서.pdf")
+    assert looks_like_signed_binary("anywhere/IP양도예정기록.jpg")
+    assert looks_like_signed_binary("docs/legal/scan001.pdf")
+
+
+def test_signed_scan_guard_does_not_overfire() -> None:
+    """정상 침묵 — 정본 템플릿·일반 문서·다른 경로의 자산은 잡지 않는다."""
+    assert (
+        looks_like_signed_binary("docs/legal/templates/no_employer_assets_declaration_ko.md")
+        is None
+    )
+    assert looks_like_signed_binary("docs/legal/copyright_guide_v2.md") is None
+    assert looks_like_signed_binary("assets/logo.png") is None  # 법무 경로가 아니다
+
+
+def test_no_signed_scan_is_tracked() -> None:
+    """서명 스캔본이 저장소에 커밋되지 않았다 — 마커 스캔의 바이너리 축."""
+    found = scan_tracked_documents(_REPO)
+    assert found["signed_binary"] == [], f"서명 스캔본 의심: {found['signed_binary']}"
