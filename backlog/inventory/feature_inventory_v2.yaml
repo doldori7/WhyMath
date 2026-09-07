@@ -6,15 +6,15 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 582
+  backend_modules_covered: 583
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
-  student_loop_reach_modules: 207
+  student_loop_reach_modules: 208
   production_loop_reach_modules: 170
   loop_tables: 28
   loop_tables_without_p0_writer: [db.models.misconception_embedding]
-  di_keys_bridged: 20
+  di_keys_bridged: 30
   final_differs_from_matrix: 39
   final_differs_from_criteria: 12
   by_criteria_action:
@@ -1723,7 +1723,7 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 0
-    coupling_count: 6
+    coupling_count: 7
     test_files: 3
     test_functions: 18
     matrix:
@@ -3415,7 +3415,7 @@ features:
     db_model_modules: 2
     coupling_count: 4
     test_files: 11
-    test_functions: 138
+    test_functions: 144
     matrix:
       A_subject: 0
       B_db: 1
@@ -3795,7 +3795,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop, data_supplier"
     migration_risk: High
-    loc: 1896
+    loc: 1919
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -3805,7 +3805,7 @@ features:
     db_model_modules: 4
     coupling_count: 10
     test_files: 28
-    test_functions: 433
+    test_functions: 439
     matrix:
       A_subject: 1
       B_db: 2
@@ -4965,7 +4965,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 1327
+    loc: 1343
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -4974,8 +4974,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 3
-    test_files: 69
-    test_functions: 1446
+    test_files: 70
+    test_functions: 1471
     matrix:
       A_subject: 1
       B_db: 0
@@ -5030,7 +5030,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 972
+    loc: 991
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -5040,7 +5040,7 @@ features:
     db_model_modules: 0
     coupling_count: 4
     test_files: 15
-    test_functions: 234
+    test_functions: 239
     matrix:
       A_subject: 0
       B_db: 0
@@ -5105,7 +5105,7 @@ features:
     db_model_modules: 0
     coupling_count: 4
     test_files: 33
-    test_functions: 786
+    test_functions: 791
     matrix:
       A_subject: 1
       B_db: 0
@@ -5290,7 +5290,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 1640
+    loc: 1647
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -5299,8 +5299,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 10
-    test_files: 10
-    test_functions: 424
+    test_files: 11
+    test_functions: 444
     matrix:
       A_subject: 3
       B_db: 0
@@ -5420,7 +5420,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
-    loc: 891
+    loc: 935
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -5428,7 +5428,7 @@ features:
     adapter_deps: []
     mixed_deps: [l3.pregenerate.models, schema.enums]
     db_model_modules: 0
-    coupling_count: 5
+    coupling_count: 4
     test_files: 10
     test_functions: 158
     matrix:
@@ -5485,7 +5485,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
     migration_risk: Med
-    loc: 924
+    loc: 961
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 3
@@ -5493,9 +5493,9 @@ features:
     adapter_deps: []
     mixed_deps: []
     db_model_modules: 2
-    coupling_count: 6
+    coupling_count: 5
     test_files: 7
-    test_functions: 64
+    test_functions: 67
     matrix:
       A_subject: 0
       B_db: 1
@@ -5550,7 +5550,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: Med
-    loc: 1387
+    loc: 1394
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 2
@@ -5875,7 +5875,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 4708
+    loc: 4727
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 2
@@ -5884,8 +5884,8 @@ features:
     mixed_deps: [l3.pregenerate.provenance_bridge, l3.pregenerate.validator, schema.enums, schema.problem]
     db_model_modules: 0
     coupling_count: 24
-    test_files: 107
-    test_functions: 1283
+    test_files: 108
+    test_functions: 1303
     matrix:
       A_subject: 0
       B_db: 0
@@ -6015,7 +6015,7 @@ features:
     db_model_modules: 0
     coupling_count: 2
     test_files: 7
-    test_functions: 153
+    test_functions: 155
     matrix:
       A_subject: 0
       B_db: 0
@@ -6080,7 +6080,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 23
-    test_functions: 498
+    test_functions: 500
     matrix:
       A_subject: 0
       B_db: 0
@@ -6145,7 +6145,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 57
-    test_functions: 837
+    test_functions: 839
     matrix:
       A_subject: 3
       B_db: 0
@@ -6907,7 +6907,7 @@ features:
     eos_target: "EOS Core"
     status: Production
     flag: ""
-    coupling: Med
+    coupling: High
     tests: Full
     migration_action: KEEP
     matrix_action: KEEP
@@ -6915,7 +6915,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
-    loc: 416
+    loc: 440
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -6923,17 +6923,17 @@ features:
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 0
-    coupling_count: 15
+    coupling_count: 16
     test_files: 4
     test_functions: 71
     matrix:
       A_subject: 1
       B_db: 0
-      C_coupling: 2
+      C_coupling: 3
       D_tests: 0
       E_state: 0
       F_data: 0
-    matrix_total: 3
+    matrix_total: 4
     criteria_action: KEEP
     keep_criteria_met: 5/6
     replace_signals: 0/6
@@ -8410,7 +8410,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 11186
+    loc: 11212
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8419,8 +8419,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 325
-    test_functions: 5861
+    test_files: 326
+    test_functions: 5883
     matrix:
       A_subject: 3
       B_db: 0
@@ -8433,7 +8433,7 @@ features:
     keep_criteria_met: 4/6
     replace_signals: 2/6
     action_basis: "§3.4 KEEP 4/6 — 미충족 k1_subject_low, k4_model_ok"
-    fan_in: 233
+    fan_in: 235
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8475,7 +8475,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 8141
+    loc: 8147
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 189
-    test_functions: 2884
+    test_files: 190
+    test_functions: 2905
     matrix:
       A_subject: 1
       B_db: 0
@@ -8800,17 +8800,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2149
+    loc: 2239
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
-    own_modules: 7
+    own_modules: 8
     adapter_deps: [l4.subject_adapter_math, l5.ocr.factory]
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 6
-    test_files: 186
-    test_functions: 2789
+    test_files: 195
+    test_functions: 2920
     matrix:
       A_subject: 3
       B_db: 0
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 122
+    fan_in: 123
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9515,7 +9515,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
-    loc: 10418
+    loc: 10487
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 15
@@ -9523,9 +9523,9 @@ features:
     adapter_deps: [l3.equivalent.acceptance, l3.equivalent.binomial_distribution_skeleton_generator, l3.equivalent.calculus1_integral_skeleton_generator, l3.equivalent.calculus2_trig_integral_skeleton_generator, l3.equivalent.calculus_chain_quotient_rule_skeleton_generator, l3.equivalent.calculus_product_rule_skeleton_generator, l3.equivalent.calculus_skeleton_generator, l3.equivalent.canonicalize, l3.equivalent.combination_binomial_skeleton_generator, l3.equivalent.complex_number_arithmetic_skeleton_generator, l3.equivalent.conceptual_count_mc_generator, l3.equivalent.conic_section_focus_skeleton_generator, l3.equivalent.coordinate_geometry_skeleton_generator, l3.equivalent.discrete_expected_value_skeleton_generator, l3.equivalent.elementary_addsub_skeleton_generator, l3.equivalent.elementary_area_measure_skeleton_generator, l3.equivalent.elementary_division_remainder_skeleton_generator, l3.equivalent.elementary_gcd_lcm_skeleton_generator, l3.equivalent.elementary_rounding_skeleton_generator, l3.equivalent.elementary_volume_measure_skeleton_generator, l3.equivalent.exp_log_skeleton_generator, l3.equivalent.finite_probability_skeleton_generator, l3.equivalent.generator, l3.equivalent.highschool_quotient_rule_skeleton_generator, l3.equivalent.inductive_sequence_skeleton_generator, l3.equivalent.linear_function_value_skeleton_generator, l3.equivalent.linear_inequality_system_skeleton_generator, l3.equivalent.llm_generator, l3.equivalent.matrix_ops_skeleton_generator, l3.equivalent.measurement_unit_conversion_skeleton_generator, l3.equivalent.misconception_eval_mc_generator, l3.equivalent.orchestrator, l3.equivalent.permutation_combination_skeleton_generator, l3.equivalent.polynomial_arithmetic_skeleton_generator, l3.equivalent.polynomial_factoring_skeleton_generator, l3.equivalent.probability_law_skeleton_generator, l3.equivalent.quadratic_inequality_boundary_skeleton_generator, l3.equivalent.radian_conversion_skeleton_generator, l3.equivalent.rephrase, l3.equivalent.rephrase_hygiene, l3.equivalent.root_aggregate_skeleton_generator, l3.equivalent.sample_mean_distribution_skeleton_generator, l3.equivalent.sequence_sigma_skeleton_generator, l3.equivalent.sequence_skeleton_generator, l3.equivalent.sequence_sum_skeleton_generator, l3.equivalent.skeleton_generator, l3.equivalent.trig_equation_skeleton_generator, l3.equivalent.trig_skeleton_generator, l3.equivalent.vector_operations_skeleton_generator]
     mixed_deps: [l3.pregenerate.provenance_bridge, l3.verification_tier, schema.enums, schema.problem]
     db_model_modules: 0
-    coupling_count: 63
-    test_files: 57
-    test_functions: 441
+    coupling_count: 64
+    test_files: 58
+    test_functions: 461
     matrix:
       A_subject: 3
       B_db: 0
@@ -9645,7 +9645,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
     migration_risk: Med
-    loc: 2155
+    loc: 2321
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -9654,8 +9654,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 0
     coupling_count: 8
-    test_files: 7
-    test_functions: 217
+    test_files: 8
+    test_functions: 237
     matrix:
       A_subject: 3
       B_db: 0
@@ -9710,7 +9710,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 9281
+    loc: 9269
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 3
@@ -9775,7 +9775,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 9840
+    loc: 9865
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 13
@@ -9783,7 +9783,7 @@ features:
     adapter_deps: [l3.verify_answer]
     mixed_deps: [l3.pregenerate.provenance_bridge, schema.enums, schema.problem]
     db_model_modules: 7
-    coupling_count: 26
+    coupling_count: 28
     test_files: 20
     test_functions: 402
     matrix:

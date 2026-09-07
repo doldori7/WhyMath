@@ -22,8 +22,8 @@
 --
 -- Discriminators are derived from src/backend/alembic/versions/*.py upgrade()
 -- bodies (create_table / add_column / drop_column). obj_column = '' means
--- "check the table". seq = position in the linear chain (length 92,
--- head = b8d3f6a91c24).
+-- "check the table". seq = position in the linear chain (length 93,
+-- head = c1a5e07b4d38).
 --
 -- POLARITY. Most rows are '+': the object EXISTS once the revision is applied.
 -- A revision that only DROPS something needs '-': the object's ABSENCE is what
@@ -78,7 +78,8 @@ WITH expected(seq, revision, obj_table, obj_column, polarity) AS (
         (88, 'f4b2d8c1a3e5', 'generation_log',         'prompt_version',            '+'),
         (89, 'd4a71c0f9b32', 'attempt_event',          'skill_ids',                 '+'),
         (90, 'e7c3b9a15f24', 'problem',                'quarantine_reason',         '+'),
-        (91, 'b8d3f6a91c24', 'generation_log',         'run_id',                    '+')
+        (91, 'b8d3f6a91c24', 'generation_log',         'run_id',                    '+'),
+        (92, 'c1a5e07b4d38', 'generation_log',         'cache_read_input_tokens',   '+')
 )
 SELECT
     e.seq,

@@ -1147,6 +1147,15 @@ jobs:
           fi
           echo "OK — 검정교과서 본문 패턴 없음"
 
+      # 저작권 위험 원본 문서(PDF·hwp·오피스·아카이브)의 커밋 차단 — LIC-07 ④.
+      # 위 패턴 검사는 "본문을 옮겨 적었는가"를 보지만, 2026-08-08 KICE 보고서 PDF 2건은
+      # 원본 파일 자체가 들어온 사고였다(텍스트 검사가 구조적으로 못 보는 축).
+      # 확장자 + 매직 바이트 + .gitignore 1차 방어선 실재까지 본다.
+      - name: Forbid source-document binaries (저작권 원본 유입 차단)
+        run: |
+          set -e
+          python3 scripts/ops/check_source_document_binaries.py
+
       # 시크릿 패턴 사전 차단 (의도된 .env.example 등은 .gitignore로 제외됨)
       - name: Forbid hardcoded secret patterns
         run: |
@@ -1216,6 +1225,22 @@ jobs:
       # 못박았다(만료 없는 유예 금지 — 그 태스크가 done인데 면제가 남으면 이 스텝이 red).
       - name: 의존 선언↔집행 대조 (HARN-52)
         run: python3 scripts/harness/backlog.py audit-deps
+
+      # HARN-66 — ADR 번호 충돌을 **원격 전 브랜치까지** 스캔해 막는다.
+      # 작업 트리 `ls docs/architecture/adr/`는 "trunk에 무엇이 있는가"만 말하므로 다음 빈
+      # 번호를 알려주지 못한다. 2026-09-05에 그 방식으로 ADR-003을 고른 세션이 같은 날
+      # 15:45에 선점된 ADR-003과 충돌했다(ADR-004로 개명 상환) — 태스크 번호는
+      # `backlog.py add`가 원격 claim까지 검사해 같은 사고를 거부했는데 ADR 번호에는 그
+      # 장치가 없었다. 이 스텝이 그 비대칭을 없앤다.
+      #
+      # 이 잡의 checkout은 fetch-depth: 0이지만 그것만으로는 **원격 브랜치 ref가 로컬에
+      # 오지 않는다**(actions/checkout은 기본적으로 단일 ref만 가져온다). 명시적으로
+      # 전 브랜치를 fetch해야 스캔이 성립하며, 성립하지 않으면 검사기가 exit 1로 그
+      # 사실을 드러낸다("0건 통과" 위장 금지).
+      - name: ADR 번호 충돌 검사 (HARN-66 · 원격 전 브랜치)
+        run: |
+          git fetch --quiet origin '+refs/heads/*:refs/remotes/origin/*'
+          python3 scripts/harness/adr_number_check.py
 
       # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
       # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
