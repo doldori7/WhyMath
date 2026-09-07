@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MGMT-04-export-prediction-counsel-brief
+title: "열람권 export 예측 5필드 봉인 — 변호사 자문 브리핑 준비 (G-export-prediction-disclosure 준비물)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: docs
+status: in_progress
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 변호사 자문 브리핑 docs/legal/export_prediction_disclosure_counsel_brief.md 신설 — MGMT-01 guardian_verification_counsel_brief.md 형식(0.Kiki 6항목 · 1.서비스 요약 · 2.현행 실태 실측표 파일:줄 · 3.질문 ⓐ배경ⓑ질문ⓒ답변별 코드귀결 · 4.회신→구현 매핑 · 5.첨부 색인)"
+  - "② 판정 전제 재실측 병기: 예측 5필드 non-None writer 0건이 2026-09-07 현재도 유지되는지 실측하고 verdict 문서에 측정일·방법·결과를 각주로 고정 (전제가 깨지면 '실피해 0의 창' 논거가 무효)"
+  - "③ docs/legal/pipa_data_matrix.md §5 변호사 자문 체크리스트에 이 질문 1줄 추가 — 게이트는 대장에 있는데 변호사에게 건네는 체크리스트에는 없던 누락 해소"
+  - "④ 집행 지점(정본화와 별항): 브리핑이 verdict 문서·게이트에서 역참조되어 자문 착수 시 실제로 도달 가능한가 — verdict 문서에 링크 1줄"
+artifacts: []
+paths:
+  - "docs/legal/**"
+session: claude/g-export-prediction-disclosure-m8adzc
+notes: "G-export-prediction-disclosure(2026-08-11 원 요청·08-30 재등재) 준비물. 게이트 자체는 변호사 판단이라 기계 대체 금지 — 이 태스크는 '준비물 완비'까지만 소유하고 자문 수행·게이트 clear는 Kiki 소유로 남는다(MGMT-01 선례 동형)."
+updated: 2026-09-07
