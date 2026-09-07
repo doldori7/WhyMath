@@ -9,7 +9,8 @@ status: todo
 priority: 3
 eos_priority: P3
 owner: claude
-depends_on: []
+depends_on:
+  - HARN-57-done-artifact-correction-path
 requires_gates: []
 acceptance:
   - "① 본문 대조(선행) — origin/claude/whymath-coding-architecture-iws58k(head a8e01be2)의 E7 설계·2차 과목 비교 검토가 subject_expansion_e_axis_v1.md 현행과 정합인지 읽고 채택 여부 판정"
@@ -20,5 +21,5 @@ paths:
   - "docs/strategy/**"
   - scripts/harness/models.py
 session: null
-notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A6. subject-expansion 트랙 유일 미회수 설계 산출물. 회수 완료 전 원 브랜치 삭제 금지\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필\n\n[정정 2026-09-07] stray-code 8회차(2026-09-07 r2 §5) 커버리지 정독: acceptance ①②·paths(docs/strategy/**·models.py)가 E7 태스크 6건·라이선스 매트릭스 3행·아키텍처 문서 2건을 다루지 않음 — models.py 'coding' 등록과 E7 YAML은 결합 의존(유일 소비자)이라 문서만 착지하면 매달린 ID 참조가 남는다. 7회차(PR #1020) 무접촉"
+notes: "docs/reviews/unmerged_branch_audit_full_2026-08-11.md §2-A6. subject-expansion 트랙 유일 미회수 설계 산출물. 회수 완료 전 원 브랜치 삭제 금지\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필\n\n[정정 2026-09-07] stray-code 8회차(2026-09-07 r2 §5) 커버리지 정독: acceptance ①②·paths(docs/strategy/**·models.py)가 E7 태스크 6건·라이선스 매트릭스 3행·아키텍처 문서 2건을 다루지 않음 — models.py 'coding' 등록과 E7 YAML은 결합 의존(유일 소비자)이라 문서만 착지하면 매달린 ID 참조가 남는다. 7회차(PR #1020) 무접촉\n\n[정정 2026-09-07] Codex P1(PR #1027) 동형: ③ 'paths 확장은 HARN-57 착지 후'가 산문 선행 — depends_on으로 집행"
 updated: 2026-09-07

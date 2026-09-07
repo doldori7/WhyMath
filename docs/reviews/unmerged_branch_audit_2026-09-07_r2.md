@@ -296,6 +296,8 @@ HARN-56 block claim이 살아 있어 판정하지 않는다. 7회차가 "main #9
 | 6 | 판정 기준 드리프트 — 로컬이 stale(#1020 head 93064664·PR #1025 신규) | **수용** | 재fetch 실측: #1020 신규 head는 `origin/main` 머지 커밋뿐(감사 내용 변경 0) · #1025(drives-utqafx: HARN-74·HARN-67·EOS-02 런북)는 이 브랜치와 MEMORY.md만 교차. main은 감사 중 3커밋 전진(0c988966) |
 | 7 | dydkkx 반박이 7회차 "53줄" 수치를 재측정하지 않고 통과시켰다 | **기각** — 두 반박자 모두 195파일 전건 `comm -23`으로 **21파일·53줄을 독립 재현**했고(§4.1), 내용 렌즈는 merge-base로 걸러 저작 27줄까지 좁혔다. 비평의 오탐 | 없음 |
 
+| 8 | **Codex P1(PR #1027 리뷰)**: MOB-18 ⑤(b) "HARN-57 착지 후 paths 확장"이 **산문 선행** — `depends_on`에 없어 `next --n 500 --json`이 MOB-18을 후보로 냈다. 지금 claim되면 backend·web·infra-test·docs·gates 파일이 선언 범위 밖이라 overlap·scope-drift 검사가 다른 세션에 경고할 수 없다 | **수용** — CLAUDE.md "선행 조건을 산문에만 적고 대장에 집행하지 않기 금지"(2026-09-01·HARN-52)의 **자기 위반**. 같은 형태가 ARCH-30 ③(HARN-57)·CUR-07(HARN-80)에도 있었다 | `amend --depends` 3건(MOB-18→HARN-57 · ARCH-30→HARN-57 · CUR-07→HARN-80). 변별력 실측: 수정 전 MOB-18 **노출** → 수정 후 **미노출**(§9). `audit-deps`는 수정 전에도 green이었다 — 검출기(`dep_declaration.py`)는 "착지 후" 어구를 알지만 **acceptance를 의도적으로 스캔 제외**한다(2026-09-01 실측: acceptance 포함 시 12건 중 4건 오탐 → notes 한정). 내 선행 문구는 acceptance에 있었다. 설계된 사각이며 사람(Codex)이 잡았다 — `amend --acceptance`가 산문 선행을 실을 수 있는 통로라는 관측만 남긴다(등재 없음·HARN-71 쓰기측 선검사도 notes 대상) |
+
 비평이 잡지 못한 것(비평 자신의 공백): started_at 버그의 **실 운영 DB 규모**(NULL 행 수·실사용자 존재)는 어느 축도 측정 못 함 — 읽기 전용 세션 범위 밖이라 §7.4 Kiki 항목으로 넘긴다.
 
 **§4.2 정정문(비평 #1 반영)**: 7n9n72 잔여의 좌석 대조에서 "7회차 좌석 amend에는 있음"이라 적은 6건(ASM-06·MISC-02·MISC-05·MISC-06·PB-02·PED-14, 그리고 S3-33·S3-34)은 **main 기준으로는 미커버**다. 8회차가 main 기준으로 실제 커버 상태를 만든 것은 MISC-01·MISC-03 2건뿐이며, 나머지 8건의 커버 여부는 PR #1020의 착지에 종속된다. 이 문서의 §5 총괄 "9건"에는 7n9n72가 포함되지 않았으므로(별도 §4.2), main 기준 미커버 좌석은 **9 + 8 = 17건**이 정확한 수다.
@@ -322,3 +324,16 @@ python3 scripts/harness/backlog.py done CUR-07-… --artifact 7b4fb546   # 의�
 ```
 
 각 `add`·`amend`는 개별 EXIT 0이었고 이벤트 대장(`backlog/events/claude_status-qp0lz8.ndjson`)에 전건 기록됐다.
+
+**PR 리뷰 후 추가(Codex P1 수용 — §8.1 #8)**: 산문 선행 3건을 `depends_on`으로 집행. 변별력을 전후로 실측했다:
+
+```bash
+python3 scripts/harness/backlog.py next --n 500 --json | (MOB-18·ARCH-30·CUR-07 노출 여부)
+# 수정 전: MOB-18 노출 · ARCH-30 미노출(P3 우선순위) · CUR-07 미노출(HARN-11 필터)
+python3 scripts/harness/backlog.py amend MOB-18-… --depends HARN-57-done-artifact-correction-path --reason …   # EXIT=0
+python3 scripts/harness/backlog.py amend ARCH-30-… --depends HARN-57-done-artifact-correction-path --reason …  # EXIT=0
+python3 scripts/harness/backlog.py amend CUR-07-… --depends HARN-80-direct-commit-landing-done-path --reason …  # EXIT=0
+# 수정 후: MOB-18 미노출 · ARCH-30 미노출 · CUR-07 미노출 — MOB-18이 값을 갈랐다(변별력 있음)
+python3 scripts/harness/backlog.py validate     # green 570건 · EXIT=0
+python3 scripts/harness/backlog.py audit-deps   # 위반 0 · EXIT=0 — 단, 수정 *전*에도 0이었다(검출 사각·§8.1 #8)
+```
