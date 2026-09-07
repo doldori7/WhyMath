@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 eos_priority: P1
 owner: claude
@@ -17,7 +17,8 @@ acceptance:
   - "③ 집행 지점(정본화와 별항): 두 서빙 writer가 실제 요청 경로에서 started_at을 채우는지 통합 테스트로 증명 + 변별력 테스트 — since/until 지정 시 수정 전 0건이던 케이스가 정확한 건수를 반환(수정 전 RED를 먼저 재현한 뒤 GREEN). retention.py 파기 대상 산출이 started_at 기준으로 실제 행을 세는지 별도 assert"
   - "④ 회귀 0: no-window(since=until=None) 호출 결과 동일 + 전체 백엔드 스위트(부분 스위트 통과를 전체 통과 근거로 보고 금지). 소급 파기 여부는 코드가 아니라 Kiki 결정 — 게이트 G-attempt-retention-purge-backfill-decision(같은 감사에서 신설)이 소유하며 이 태스크는 그 결정을 기다리지 않는다"
   - "②-a 시각 귀속 정정(PR #1020 codex P2 — ② 원 해법 중 me.py 축을 대체한다): ended_at−duration_seconds 역산을 쓰지 않는다. 실측(main 96790b46): api/me.py:754가 ended_at=datetime.now(UTC)로 **수신 시각**을 넣고 AttemptSubmitRequest(:647)에는 started_at·ended_at 필드가 아예 없다(duration_seconds만). 따라서 역산 결과는 '발생 시각'이 아니라 now−duration = **업로드 시각 기준**이며, 지연·오프라인 제출에서 R15·Brier·전이점수 시간창이 동기화 지연만큼 통째로 밀린다. 게다가 32_learning_history.md §EOS-48-1이 problem_attempt.started_at/ended_at을 '클라 신고 발생 시각', ingested_at을 '수신 시각'으로 명시 분리했으므로 서버 now 파생값을 그 컬럼에 넣는 것은 같은 문서 §EOS-48-2의 '수신 시각 복제 = 날조' 금지에 정면으로 걸린다. 올바른 이식: ⓐ AttemptSubmitRequest에 클라 신고 started_at(선택)을 신설해 그대로 적재 ⓑ 서버 수신 시각은 ingested_at에 넣는다 ⓒ 클라가 신고하지 않으면 started_at은 NULL=미기록으로 둔다(서버 now 폴백 금지 — 그 폴백이 바로 이 지적의 대상이다). coach.py 축의 dialogue.started_at 이관은 발생 시각끼리의 이관이라 ② 그대로 유효하다"
-artifacts: []
+artifacts:
+  - "PR #1036 — me.py 클라 신고 started_at 그대로 적재 + ingested_at 분리 · coach.py dialogue.started_at 이관 · NULL 취급 계약 동결 · 뮤테이션 구현자 2종+검증자 6종 전건 RED(P2 서버 now 폴백 포함) · 전체 백엔드 12499 passed · 후속 SEC-33 등재 · 커밋 9ec61e17"
 paths:
   - src/backend/whymath_backend/api/coach.py
   - src/backend/whymath_backend/api/me.py
@@ -29,6 +30,6 @@ paths:
   - docs/architecture/32_learning_history.md
   - backlog/inventory/feature_inventory_v2.yaml
   - backlog/inventory/feature_inventory_v2.csv
-session: claude/test-driven-development-03elxp
+session: null
 notes: "출처: 2026-09-07 미머지 브랜치 감사(docs/reviews/unmerged_branch_audit_2026-09-07.md §4-①). 원 PED-15는 PED-14 구현 중 발견된 부수 버그로 7n9n72에서 2026-08-10 done(backend-engineer 위임·실 PostgreSQL 8 passed·전체 스위트 9266 passed)됐으나 그 브랜치가 main과 PED-15/16 ID 충돌 상태(621b11f9 커밋 메시지가 '그랜드파더 등재'로 자인)라 회수되지 못했다. priority 1 사유: PII 보존기한 파기 기준 컬럼이 이 버그로 상시 NULL — 보안·법령 관련 고립분(stray-code 규칙). 회수 완료 전 원 브랜치 삭제 금지. 원 PED-16(Kiki 결정: 소급 파기 대상 확인)은 태스크가 아니라 게이트 G-attempt-retention-purge-backfill-decision으로 재등재(법령 유래 절차는 기계 대체 금지·리마인드가 있는 게이트가 kiki 소유 태스크보다 표면화가 확실)\n\n[정정 2026-09-07] PR #1020 codex P2: acceptance ②의 'ended_at−duration_seconds 역산·서버 now 폴백'이 시간 계약 위반. me.py:754가 ended_at에 서버 now를 넣고 요청 스키마에 발생 시각 필드가 없어 역산값은 업로드 시각 기준 — 32_learning_history.md의 발생/수신 분리와 '수신 시각 복제=날조' 금지에 저촉. 이식 방향을 클라 신고 수집 + ingested_at으로 교체.\n\n[정정 2026-09-07] paths ['src/backend/whymath_backend/api/coach.py', 'src/backend/whymath_backend/api/me.py', 'src/backend/whymath_backend/harness/wh1_evaluation.py', 'tests/backend/harness/test_wh1_evaluation*.py', 'tests/backend/api/test_me.py', 'tests/backend/api/test_coach_completion.py'] → ['src/backend/whymath_backend/api/coach.py', 'src/backend/whymath_backend/api/me.py', 'src/backend/whymath_backend/harness/wh1_evaluation.py', 'tests/backend/harness/test_wh1_evaluation*.py', 'tests/backend/api/test_me.py', 'tests/backend/api/test_coach_completion.py', 'tests/backend/api/test_attempt_started_at_integration.py', 'docs/architecture/32_learning_history.md', 'backlog/inventory/feature_inventory_v2.yaml', 'backlog/inventory/feature_inventory_v2.csv']: PED-37 구현 범위 실측 정정 — ① 집행 지점 증명용 실 PG 통합 테스트 신규 모듈(test_attempt_started_at_integration.py) ② EOS-48 발생/수신 분리의 부분 착지를 기록한 설계문서 추기(32_learning_history.md §4-6) ③ 테스트 추가로 기계 재생성되는 EOS 기능 인벤토리 2종(생성기 출력·손편집 아님)"
 updated: 2026-09-07
