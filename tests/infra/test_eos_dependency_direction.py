@@ -80,6 +80,15 @@ NON_CORE_COMPOSITION_CONSUMERS: frozenset[str] = frozenset(
 # 정본이고, 이 목록은 그 정본과 대조된다(이름을 두 곳에 손으로 적어 두지 않는다).
 SUBJECT_CAPABILITY_STATE_MODULE = "api._subject_capability_state"
 
+# 합성 루트 팩토리 중 app.py가 부르지 **않아도 되는** 것들 — CORE_PULL_BASELINE과 이중 회계다.
+# [EOS-86, EOS-89와 병행 개발] `default_step_chain_verifier`·`default_wrong_form_shadow_observer`는
+# app.state 등록 대상이 아니라 `l4.solution_coaching`(CORE_PULL_BASELINE에 이미 편입)이 지연
+# 호출하는 값이다. 여기서 빼면서 저기에 안 넣거나, 저기서 빼면서 여기에 남기면 이중 회계가
+# 깨진다 — 두 집합을 함께 갱신한다.
+PULL_ONLY_COMPOSITION_FACTORIES: frozenset[str] = frozenset(
+    {"default_step_chain_verifier", "default_wrong_form_shadow_observer"}
+)
+
 
 # ──────────────────────────────────────────────────────────────────────
 # 스캐너 (순수 함수 — 결함 주입 테스트가 직접 부른다)
@@ -399,10 +408,12 @@ def test_app_factory_registers_every_subject_capability() -> None:
 
 
 def test_app_factory_calls_every_composition_factory() -> None:
-    """등록값이 **합성 루트에서 온다** — app.py가 `composition`의 팩토리를 전부 호출한다.
+    """등록값이 **합성 루트에서 온다** — app.py가 `composition`의 push 대상 팩토리를 전부 호출한다.
 
     키만 올리고 값이 딴 데서 오면 "등록 형태"라는 주장이 절반만 참이다. app.py가 import한
-    `default_*` 이름과 합성 루트의 `__all__`을 대조해 누락을 잡는다.
+    `default_*` 이름과 합성 루트의 `__all__`을 대조해 누락을 잡는다. `PULL_ONLY_COMPOSITION_
+    FACTORIES`(CORE_PULL_BASELINE과 이중 회계)에 실린 것은 app.py가 부르지 않는 것이 정상이므로
+    제외한다.
     """
     app_src = (_PKG / "app.py").read_text(encoding="utf-8")
     assert f"whymath_backend.{COMPOSITION_MODULE}" in absolute_imports(app_src)
@@ -412,14 +423,15 @@ def test_app_factory_calls_every_composition_factory() -> None:
         if isinstance(n, ast.FunctionDef) and n.name.startswith("default_")
     }
     assert factories, "합성 루트에서 팩토리를 하나도 찾지 못했다 — 스캔 0건은 통과가 아니다"
+    push_factories = factories - PULL_ONLY_COMPOSITION_FACTORIES
     called = {
         n.func.id
         for n in ast.walk(ast.parse(app_src))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     }
     assert (
-        factories <= called
-    ), f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(factories - called)}"
+        push_factories <= called
+    ), f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(push_factories - called)}"
 
 
 # ──────────────────────────────────────────────────────────────────────
