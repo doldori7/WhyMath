@@ -51,14 +51,20 @@ ADAPTER_IMPL_NAMES: frozenset[str] = frozenset(
         "MathAssessmentAnswerVerifier",
         "MathExpressionSeal",
         "MathAnswerFormVerifier",
+        "MathStepChainVerifier",
     }
 )
 ADAPTER_IMPL_MODULE_TOKEN = "subject_adapter_math"
 
 # 합성 루트에서 기본 구현을 *끌어오는* **CORE** 모듈 — §3.8의 "덜 정확한" 형태. 줄이는 방향으로만.
-# EOS-89로 0이 됐다: `api.coach`는 app.state Depends로, `l3.render.adapters`는 어댑터 생성자
-# 주입으로, `l3.pedagogy.slot_generator`는 호출부 파라미터로 각각 바뀌었다.
-CORE_PULL_BASELINE: frozenset[str] = frozenset()
+# EOS-89가 기존 3건을 0으로 줄였다: `api.coach`는 app.state Depends로, `l3.render.adapters`는
+# 어댑터 생성자 주입으로, `l3.pedagogy.slot_generator`는 호출부 파라미터로 각각 바뀌었다.
+# [EOS-86, EOS-89와 병행 개발] `l4.solution_coaching`이 신규 1건으로 남는다 — verify_solution
+# 직접 import를 걷어내는 대가로 이 모듈이 합성 루트에서 StepChainVerifier 기본 구현을 지연
+# 조회한다(기존 테스트 무수정 통과를 위해 기본 인자 해석을 이 모듈이 스스로 맡음 — api.coach가
+# 대신 주입하는 방향은 solution_coaching의 300+ 단위테스트 전량이 verifier를 명시 주입해야 해서
+# 비용이 더 컸다). EOS-89는 이 간선을 몰랐다(병행 개발) — 등록 형태 전환은 별도 판단 대상.
+CORE_PULL_BASELINE: frozenset[str] = frozenset({"l4.solution_coaching"})
 
 # 합성 루트를 소비해도 되는 **비-CORE** 모듈 — 프로세스가 시작되는 자리(=합성 루트의 정의).
 # 여기 있는 것은 "허용"이 아니라 **회계**다: 이 집합이 정확히 이 값이어야 통과하므로, 어느
@@ -73,6 +79,15 @@ NON_CORE_COMPOSITION_CONSUMERS: frozenset[str] = frozenset(
 # app.py가 `app.state`에 올려야 하는 과목 능력 키 상수명 — `api/_subject_capability_state.py`가
 # 정본이고, 이 목록은 그 정본과 대조된다(이름을 두 곳에 손으로 적어 두지 않는다).
 SUBJECT_CAPABILITY_STATE_MODULE = "api._subject_capability_state"
+
+# 합성 루트 팩토리 중 app.py가 부르지 **않아도 되는** 것들 — CORE_PULL_BASELINE과 이중 회계다.
+# [EOS-86, EOS-89와 병행 개발] `default_step_chain_verifier`·`default_wrong_form_shadow_observer`는
+# app.state 등록 대상이 아니라 `l4.solution_coaching`(CORE_PULL_BASELINE에 이미 편입)이 지연
+# 호출하는 값이다. 여기서 빼면서 저기에 안 넣거나, 저기서 빼면서 여기에 남기면 이중 회계가
+# 깨진다 — 두 집합을 함께 갱신한다.
+PULL_ONLY_COMPOSITION_FACTORIES: frozenset[str] = frozenset(
+    {"default_step_chain_verifier", "default_wrong_form_shadow_observer"}
+)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -393,10 +408,12 @@ def test_app_factory_registers_every_subject_capability() -> None:
 
 
 def test_app_factory_calls_every_composition_factory() -> None:
-    """등록값이 **합성 루트에서 온다** — app.py가 `composition`의 팩토리를 전부 호출한다.
+    """등록값이 **합성 루트에서 온다** — app.py가 `composition`의 push 대상 팩토리를 전부 호출한다.
 
     키만 올리고 값이 딴 데서 오면 "등록 형태"라는 주장이 절반만 참이다. app.py가 import한
-    `default_*` 이름과 합성 루트의 `__all__`을 대조해 누락을 잡는다.
+    `default_*` 이름과 합성 루트의 `__all__`을 대조해 누락을 잡는다. `PULL_ONLY_COMPOSITION_
+    FACTORIES`(CORE_PULL_BASELINE과 이중 회계)에 실린 것은 app.py가 부르지 않는 것이 정상이므로
+    제외한다.
     """
     app_src = (_PKG / "app.py").read_text(encoding="utf-8")
     assert f"whymath_backend.{COMPOSITION_MODULE}" in absolute_imports(app_src)
@@ -406,14 +423,15 @@ def test_app_factory_calls_every_composition_factory() -> None:
         if isinstance(n, ast.FunctionDef) and n.name.startswith("default_")
     }
     assert factories, "합성 루트에서 팩토리를 하나도 찾지 못했다 — 스캔 0건은 통과가 아니다"
+    push_factories = factories - PULL_ONLY_COMPOSITION_FACTORIES
     called = {
         n.func.id
         for n in ast.walk(ast.parse(app_src))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     }
     assert (
-        factories <= called
-    ), f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(factories - called)}"
+        push_factories <= called
+    ), f"app.py가 부르지 않는 합성 루트 팩토리: {sorted(push_factories - called)}"
 
 
 # ──────────────────────────────────────────────────────────────────────

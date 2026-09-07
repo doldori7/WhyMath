@@ -193,12 +193,37 @@ def test_create_app_registers_working_subject_capabilities() -> None:
 def test_registered_capability_keys_match_the_composition_factories() -> None:
     """등록 키 수 = 합성 루트 팩토리 수 — 한쪽만 늘면 조용한 누락이 생긴다.
 
-    EOS-86의 `StepChainVerifier` 팩토리가 합성 루트에 들어오는 날 이 테스트가 **먼저** 실패해
-    "등록 경로를 태워라"라고 말한다(Core가 직접 부르면 pull 4번째 지점이 부활한다).
+    EOS-86의 `StepChainVerifier` 팩토리가 합성 루트에 들어온 날 이 테스트가 실제로 **먼저
+    실패했다**(2026-09-07, PR #1018 — EOS-89와 병행 개발되며 origin/main 병합 중 실측). 이
+    트립와이어는 의도대로 작동했다 — 다만 판정은 "등록 경로를 태워라"가 아니라 **정직한 유예**로
+    났다: 유일한 프로덕션 호출부(`api/coach.py` 한 곳)로 push 전환하는 것 자체는 어렵지 않으나,
+    `l4.solution_coaching`은 그 경로 하나만 등록해도 지연 import 폴백이 소스에 남는 한 여전히
+    pull 지점으로 스캔되고(`test_eos_dependency_direction.py`의 `CORE_PULL_BASELINE`), 완전
+    제거는 이 함수를 직접 호출하는 300+ 단위테스트 전량의 verifier 명시 주입을 요구해 이번
+    병합-충돌 수정 범위를 넘어선다(원 PR #1018 acceptance ⑥ 판정과 동일 근거). 후속 태스크
+    `COMP-01`이 완전 push 전환(app.state 등록·`api/coach.py` 3개 호출 경로 배선)을 소유한다.
+
+    두 번째 이유는 범주 문제다 — `default_wrong_form_shadow_observer`는 애초에 "능력"이
+    아니다. `Callable[[str], None]` 관측기(fire-and-forget sink)로, 값을 돌려주지 않아
+    `SUBJECT_CAPABILITY_KEYS`가 다루는 "판정 능력" 범주에 들지 않는다(팩토리 자신의 docstring:
+    "능력 계약으로 분리할 상태가 없다"). 그래서 이 카운트 비교에서 항상 제외한다 — 이름
+    접두사(`default_*`)만 보는 이 스캔의 한계이며, `PULL_ONLY_COMPOSITION_FACTORIES`
+    (test_eos_dependency_direction.py)와 이중 회계되는 관측기 축이다.
     """
     from whymath_backend.api._subject_capability_state import SUBJECT_CAPABILITY_KEYS
 
-    factories = [n for n in dir(composition) if n.startswith("default_")]
+    # 관측기(비-능력) 팩토리 — 위 docstring 참조. 능력 카운트에서 항상 제외한다.
+    non_capability_factories = frozenset({"default_wrong_form_shadow_observer"})
+    # EOS-86이 push 전환을 유예한 pull 전용 능력 — COMP-01이 소유(위 docstring 참조).
+    pending_push_capability_factories = frozenset({"default_step_chain_verifier"})
+
+    factories = [
+        n
+        for n in dir(composition)
+        if n.startswith("default_")
+        and n not in non_capability_factories
+        and n not in pending_push_capability_factories
+    ]
     assert len(SUBJECT_CAPABILITY_KEYS) == len(factories), (
         "합성 루트 팩토리와 app.state 등록 키의 개수가 어긋난다 — "
         f"팩토리 {sorted(factories)} / 키 {sorted(SUBJECT_CAPABILITY_KEYS)}"
