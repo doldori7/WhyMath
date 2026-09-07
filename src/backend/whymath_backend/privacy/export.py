@@ -25,9 +25,11 @@ data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용
 `AttemptEvent`(세부 시도 이벤트)를 동기 export로 포함(Phase1·완전성 우선) — 매우 큰 이력은 후속
 스트리밍으로 최적화 가능.
 
-외부 store(ClickHouse 행동 로그·S3 객체·Redis 캐시)는 RDB 밖이라 이 export(PostgreSQL)에 *포함되지
+외부 store(Redis 캐시·큐 · Langfuse 트레이스 SaaS)는 RDB 밖이라 이 export(PostgreSQL)에 *포함되지
 않는다* — `external_export_pending`으로 *구조화*해 ops가 가시화한다(#252 `external_erasure_targets`
 미러·정보 누출 방지로 student-facing 응답엔 인프라 store명/locator 미노출·ops 로그만).
+그 매니페스트에 적히는 store는 **실재하는 것만**이다(SEC-32 — 미도입 ClickHouse·S3 제거·
+실 반출처 Langfuse 등재. 근거 대조는 `tests/backend/_external_store_evidence.py` 계약).
 
 저장소 패턴: `AsyncSession` 주입·**읽기 전용**(commit 0·flush 0·`select`만·원시 SQL 0). per-user
 본인 데이터라 HTTP 노출이 맞다("전역 집계는 ops CLI" 제약은 *전역*에만 — 이건 본인 1명).
@@ -132,7 +134,7 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
 # 부분 export임을 정직히 알린다(GDPR 완전성·날조 0). 외부 store 상세는 ops 로그(아래 함수)로만.
 _NOT_INCLUDED: tuple[str, ...] = (
     "손글씨 이미지 *원본 파일*은 외부 저장소(별도 시스템) 보관 — 본 export엔 참조 URI만 담긴다.",
-    "행동 로그·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
+    "LLM 응답 캐시·요청 처리 트레이스 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
     # ASM-12 — 제외를 침묵하면 부분 export를 완전 export로 위장하게 된다(정직 고지).
     "성적 예측 추정치(추정 등급·점수·백분위·합격 예측)는 학습 보호 정책에 따라 미포함 — "
@@ -169,16 +171,18 @@ _STUDENT_FACING_SERIALIZERS: dict[type[Base], Any] = {
 class ExternalDataLocation(BaseModel):
     """RDB *밖* store에 남은 본인 데이터 — 이 export(PG)에 *포함되지 않음*. ops용 구조화. 불변.
 
-    `export_user_data`는 PostgreSQL만 읽는다. 외부 store(ClickHouse 행동 로그·S3/MinIO 객체·Redis
-    캐시)는 RDB 밖·별도 클라이언트라 이 export에 *포함되지 않는다*. 이 모델은 그 미포함을 *조용히
-    넘기지 않고*(날조 0·GDPR 범위 정직) ops가 인지·후속 export할 체크리스트로 *구조화*한다.
-    `locator`는 *정확한 키 문법을 단정하지 않는다* — 키/프리픽스 규약은 인프라 정의라 user_id 연관
-    대상만 서술한다(없는 사실 날조 금지). 정보 누출 방지로 student-facing 응답엔 싣지 않는다.
+    `export_user_data`는 PostgreSQL만 읽는다. 외부 store(Redis 캐시·큐, Langfuse 트레이스
+    SaaS)는 RDB 밖·별도 클라이언트/전송 인프라라 이 export에 *포함되지 않는다*. 이 모델은 그
+    미포함을 *조용히 넘기지 않고*(날조 0·GDPR 범위 정직) ops가 인지·후속 export할 체크리스트로
+    *구조화*한다. `locator`는 *정확한 키 문법을 단정하지 않는다* — 키/프리픽스 규약은 인프라
+    정의라 user_id 연관 대상만 서술하고, **user 단위 조회가 불가능한 store는 그 사실 자체를
+    적는다**(SEC-32 — 후속 export가 가능하다는 인상만 남기면 미포함 고지가 거짓이 된다).
+    정보 누출 방지로 student-facing 응답엔 싣지 않는다.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    store: str = Field(description="외부 store 식별자(clickhouse·s3·redis).")
+    store: str = Field(description="외부 store 식별자(redis·langfuse).")
     data: str = Field(description="그 store가 보유한 사용자 데이터 설명(한국어).")
     locator: str = Field(description="대상(user_id 연관·키 규약은 인프라 정의·단정 아님).")
 
@@ -191,21 +195,32 @@ def external_export_pending(user_id: uuid.UUID) -> tuple[ExternalDataLocation, .
     locator는 *키 문법을 단정하지 않고* user_id 연관 대상만 서술한다(인프라 키 규약 날조 금지).
     """
     uid = str(user_id)
+    # 삭제권 매니페스트(`erasure.external_erasure_targets`)와 *같은 store 집합*을 본다 — 한쪽만
+    # 고치면 "지울 곳"과 "못 담은 곳"이 어긋나 두 권리의 범위 고지가 서로 모순된다. ClickHouse·
+    # S3를 뺀 사유와 Langfuse를 넣은 사유는 그쪽 주석이 정본이다(중복 서술 대신 단일 진실).
     return (
         ExternalDataLocation(
-            store="clickhouse",
-            data="학습 행동 로그(이벤트 스트림·분석)",
-            locator=f"student_id_hash(user_id={uid}) 연관 이벤트 행 — 해시 매핑은 적재 규약 따름",
-        ),
-        ExternalDataLocation(
-            store="s3",
-            data="업로드 이미지·렌더 객체(손글씨 풀이·시각화)",
-            locator=f"user_id={uid} 연관 업로드/렌더 객체(프리픽스 규약은 인프라 정의)",
-        ),
-        ExternalDataLocation(
             store="redis",
-            data="세션·핫 캐시(작업메모리·레이트리밋)",
-            locator=f"user_id={uid} 연관 세션·캐시 키(TTL 만료가 기본)",
+            data=(
+                "LLM 응답 캐시(학생 프롬프트로 생성된 응답 본문)·QUALITY 비동기 큐 payload"
+                "(prompt·system 원문)."
+            ),
+            locator=(
+                f"user_id={uid}의 요청에서 파생되나 *user_id로 조회할 키가 없다* — 캐시 키는 "
+                "(프롬프트·시스템·티어) 해시라 본인 데이터만 골라 담을 수 없다."
+            ),
+        ),
+        ExternalDataLocation(
+            store="langfuse",
+            data=(
+                "L3 라우팅 결정 트레이스(`l3_routing` 이벤트) — 티어·모델·토큰·비용·지연 등 "
+                "*결정 메타데이터*. 프롬프트·응답 본문은 전송하지 않는다."
+            ),
+            locator=(
+                f"user_id={uid}의 요청에서 생성되나 학생 연결 축은 해시(`student_id_hash`) 하나"
+                "뿐이고 현행 서빙 경로는 그마저 채우지 않는다(2026-09-07 실측) — user 단위 조회 "
+                "불가."
+            ),
         ),
     )
 
