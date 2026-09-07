@@ -574,6 +574,29 @@ class TestRefutingRegex:
             ids = [m.misconception.id for m in diagnose(text)]
             assert "root-loss-by-dividing" not in ids, text
 
+    #: 제로근을 **부정한** 오답들 — 리터럴 `x=0`·`0은`이 있지만 *주장이 아니라 부정*이다.
+    #: 이것을 반박으로 세면 명백한 오개념을 통째로 놓친다(PR #1039 Codex P2).
+    #: 부정 어미를 **하나씩 다르게** 쓴다 — 목록을 좁히는 뮤테이션이 살아남지 않게 하기 위해서다
+    #: (실측: 어미를 `아니` 하나로 줄인 뮤테이션 P3가 처음엔 생존했다).
+    NEGATED_ZERO_ROOT = (
+        "x²=2x에서 x=0은 근이 아니므로 양변을 x로 나누면 x=2다",  # 아니
+        "x=0 은 근이 될 수 없으니 양변을 x로 나눠 x=5",  # 없
+        "0은 근에서 제외하고, 양변을 x로 나누면 x=7",  # 제외
+        "x=0 은 무시해도 되니까 양변을 x로 나누어 x=3",  # 무시
+        "x=0 은 버리고 양변을 x로 나누면 x=9",  # 버리
+        "x=0 은 빼고 생각해서 양변을 x로 나누면 x=11",  # 빼
+    )
+
+    def test_negated_zero_root_is_not_a_refutation(self) -> None:
+        """제로근을_부정한_오답은_반박으로_치지_않는다 — 미검출 방향 회귀 차단
+
+        반박은 탐지를 *끄는* 방향이라 과잉 발동이 곧 미검출이고, 미검출은 오검출과 달리
+        아무도 소리내지 않는다.
+        """
+        for text in self.NEGATED_ZERO_ROOT:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "root-loss-by-dividing" in ids, text
+
     def test_actual_misconceptions_still_detected(self) -> None:
         """진짜_근_손실은_여전히_검출된다 — 반박을 넓히다 오개념을 죽이지 않았는지"""
         for text in self.ACTUAL_MISCONCEPTIONS:
