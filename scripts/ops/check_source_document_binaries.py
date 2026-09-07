@@ -22,9 +22,13 @@
    검사하지 않으면, 누가 그 줄을 지워도 아무 신호가 나지 않는다.
 ① **확장자** — `.pdf`·`.hwp`/`.hwpx`·오피스(`.doc(x)`·`.ppt(x)`·`.xls(x)`)·`.epub`·아카이브.
 ② **매직 바이트** — 확장자를 바꿔 넣어도 잡는다. `%PDF`(PDF) · `PK\\x03\\x04`(zip 계열:
-   오피스 OOXML·hwpx·zip). ①만 있으면 `보고서.pdf` → `보고서.txt` 한 번으로 뚫린다.
+   오피스 OOXML·hwpx·zip) · gzip·bzip2·xz·7z·rar. ①만 있으면 `보고서.pdf` → `보고서.txt`
+   한 번으로 뚫린다.
+③ **허용 목록의 내용 고정** — 등재 경로는 `sha256`이 일치할 때만 면제된다. 경로만으로 면제하면
+   그 경로가 통로가 된다(PR #1016 리뷰 지적·실측 재현).
+④ **읽지 못한 파일은 통과가 아니다** — 전수 스캔을 주장하므로 읽기 실패는 exit 2로 올린다.
 
-두 축을 모두 두는 이유는 **금지 패턴 열거가 표기 변형에서 뚫리기 때문**이다(CLAUDE.md
+①②를 함께 두는 이유는 **금지 패턴 열거가 표기 변형에서 뚫리기 때문**이다(CLAUDE.md
 2026-09-01 "금지 패턴 열거 대신 산출물 검사") — 여기서 "산출물"은 파일의 실제 바이트다.
 
 **판정 범위(과신 금지)**: 이 가드는 *원본 문서 파일*을 잡지, 텍스트로 옮겨 적은 본문을 잡지
@@ -45,6 +49,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import subprocess
 import sys
@@ -69,22 +74,42 @@ BLOCKED_SUFFIXES: Final[frozenset[str]] = frozenset(
         ".zip",
         ".7z",
         ".rar",
+        # tar 계열 — `PurePosixPath("a.tar.gz").suffix`가 `.gz`라 **맨 끝 조각만** 본다.
+        # `.gz`·`.bz2`·`.xz`를 넣으면 `.tar.gz`·`.tar.bz2`도 자동으로 걸린다(복합 확장자
+        # 별도 처리 불요). `.gitignore`가 이미 `*.tar.gz`·`*.tar.bz2`를 대용량 아카이브로
+        # 다루고 있었는데 이 가드만 비어 있었다 — PR #1016 리뷰 지적.
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".tar",
     }
 )
 
 BLOCKED_MAGIC: Final[tuple[tuple[bytes, str], ...]] = (
     (b"%PDF", "PDF"),
     (b"PK\x03\x04", "zip 계열(오피스 OOXML·hwpx·zip)"),
+    (b"\x1f\x8b", "gzip"),
+    (b"BZh", "bzip2"),
+    (b"\xfd7zXZ\x00", "xz"),
+    (b"7z\xbc\xaf\x27\x1c", "7z"),
+    (b"Rar!\x1a\x07", "rar"),
 )
 """확장자를 바꿔 넣은 경우를 잡는다 — 실제 바이트가 정본이다."""
 
-_ALLOWED: Final[dict[str, str]] = {
+_ALLOWED: Final[dict[str, tuple[str, str]]] = {
     "docs/architecture/ai_llm_inventory_2026-07.xlsx": (
+        "a15a0b380426a4fea0cd77e4456b8880857110182032b7a65315fd40b2cd2032",
         "와이매스 자체작성 AI/LLM 인벤토리(2026-07) — 제3자 저작물 아님. "
-        "스택 표의 모델·프로바이더 실측 대장이라 표 형식이 정본이다."
+        "스택 표의 모델·프로바이더 실측 대장이라 표 형식이 정본이다.",
     ),
 }
-"""사유가 붙은 **영구 예외**. 저작권 위험이 없는 자체 저작물만 올린다."""
+"""`{경로: (sha256, 사유)}` — 사유가 붙은 **영구 예외**이되 *내용에 묶인다*.
+
+경로만으로 면제하면 그 경로에 제3자 문서(심지어 PDF)를 덮어써도 검사를 통째로 건너뛴다 —
+`.gitignore` 부정 규칙이 그 경로의 스테이징도 허용하므로 **하드코딩된 사유 문자열 하나로
+policy-guard가 통과**한다(PR #1016 리뷰 지적·실측 재현). 그래서 해시를 함께 못박고, 내용이
+바뀌면 **의도적으로 해시를 갱신**해야 통과한다. 갱신 자체가 리뷰 지점이 된다.
+"""
 
 _MIN_TRACKED_FILES: Final = 100
 """전수성 하한 — 이보다 적으면 `git ls-files`가 제대로 돌지 않은 것으로 본다.
@@ -111,26 +136,67 @@ def _tracked_files(repo_root: pathlib.Path) -> list[str] | None:
     return [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
 
 
+class UnreadableTrackedFileError(Exception):
+    """추적 파일을 읽지 못했다 — 스캔이 불완전하므로 통과가 아니라 측정 실패다."""
+
+
 def _magic_of(path: pathlib.Path) -> str | None:
-    """차단 대상 매직 바이트면 그 이름, 아니면 None. 읽기 실패는 None(확장자 축이 남는다)."""
+    """차단 대상 매직 바이트면 그 이름, 아니면 None.
+
+    읽기 실패를 None(=매직 없음)으로 접으면, sparse checkout이나 권한 문제로 내용을 못 본
+    파일이 **검사된 것처럼** 계상돼 `OK`가 출력된다(PR #1016 리뷰 지적). 전수 스캔을 주장하는
+    도구이므로 fail closed — 예외 타입명을 달아 올려보내고 호출부가 exit 2로 판정한다.
+    """
     try:
         head = path.open("rb").read(8)
-    except OSError:
-        return None
+    except OSError as exc:
+        raise UnreadableTrackedFileError(f"{path} ({type(exc).__name__}: {exc})") from exc
     for signature, label in BLOCKED_MAGIC:
         if head.startswith(signature):
             return label
     return None
 
 
+def _sha256_of(path: pathlib.Path) -> str:
+    """허용 목록 대조용 해시. 읽기 실패는 `UnreadableTrackedFileError`로 올린다(fail closed)."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(65536), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise UnreadableTrackedFileError(f"{path} ({type(exc).__name__}: {exc})") from exc
+    return digest.hexdigest()
+
+
 def find_violations(repo_root: pathlib.Path, tracked: list[str]) -> list[tuple[str, str]]:
-    """(경로, 사유) 목록. 허용 목록에 있는 경로는 제외한다."""
+    """(경로, 사유) 목록.
+
+    허용 목록 항목은 **해시가 일치할 때만** 면제된다 — 경로 면제는 그 경로를 통로로 만든다.
+    Raises:
+        UnreadableTrackedFileError: 추적 파일을 읽지 못함(→ 호출부가 exit 2).
+    """
     violations: list[tuple[str, str]] = []
     for name in tracked:
-        if name in _ALLOWED:
-            continue
         path = repo_root / name
         suffix = pathlib.PurePosixPath(name).suffix.lower()
+
+        allowance = _ALLOWED.get(name)
+        if allowance is not None:
+            expected, _reason = allowance
+            actual = _sha256_of(path)
+            if actual == expected:
+                continue
+            violations.append(
+                (
+                    name,
+                    f"허용 목록 항목이나 내용이 바뀌었다 — sha256 {actual[:12]}… ≠ "
+                    f"등재값 {expected[:12]}…. 자체 저작물이 맞다면 _ALLOWED의 해시를 "
+                    "의도적으로 갱신하라",
+                )
+            )
+            continue
+
         if suffix in BLOCKED_SUFFIXES:
             violations.append((name, f"차단 확장자 {suffix}"))
             continue
@@ -194,7 +260,14 @@ def main(argv: list[str]) -> int:
         return EXIT_MEASUREMENT_FAILURE
 
     dead = find_dead_allowances(repo_root, tracked)
-    violations = find_violations(repo_root, tracked)
+    try:
+        violations = find_violations(repo_root, tracked)
+    except UnreadableTrackedFileError as exc:
+        print(
+            f"[측정 실패] 추적 파일을 읽지 못해 전수 스캔이 성립하지 않았다: {exc}\n"
+            "  (sparse checkout·권한 문제 등. 불완전한 스캔을 OK로 내보내지 않는다.)"
+        )
+        return EXIT_MEASUREMENT_FAILURE
 
     if unignored:
         print(

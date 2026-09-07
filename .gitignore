@@ -100,8 +100,12 @@ worktrees/
 # WhyMath 추가 보안 패턴 (자동 생성)
 # 대용량 아카이브 파일 (의도적 추가 시 git add -f 사용)
 *.zip
+*.tar
 *.tar.gz
 *.tar.bz2
+*.gz
+*.bz2
+*.xz
 *.7z
 *.rar
 
