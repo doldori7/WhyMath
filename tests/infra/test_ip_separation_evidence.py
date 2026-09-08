@@ -58,6 +58,12 @@ TEMPLATE_MARKER = _mod.TEMPLATE_MARKER
 render = _mod.render
 main = _mod.main
 LIMITS = _mod.LIMITS
+case_collision_keys = _mod.case_collision_keys
+consumption_profile = _mod.consumption_profile
+consumption_note = _mod.consumption_note
+summary_of = _mod.summary_of
+render_summary = _mod.render_summary
+summarize_cli = _mod.summarize_cli
 DEFAULT_TOOL_IDENTITIES = _mod.DEFAULT_TOOL_IDENTITIES
 
 PERSONAL = {"kiki@example.com"}
@@ -710,3 +716,296 @@ def test_out_write_failure_is_exit_2_not_1(repo: Path, tmp_path: Path) -> None:
     blocker.write_text("나는 파일이다", encoding="utf-8")
     code = main(["--root", str(repo), "--identity", "kiki@example.com", "--out", str(blocker)])
     assert code == 2, f"저장 실패가 exit {code} — 2여야 한다"
+
+
+# ── CONSUME-01 · 리포트를 소비자가 읽을 수 있는가 ─────────────────────────
+#
+# 2026-09-08 라이브 실측에서 이 도구는 리포트를 **잘 만들었는데 런북이 읽지
+# 못했다**. Windows PowerShell 5.1의 `ConvertFrom-Json`이 대소문자만 다른
+# 신원 키를 중복으로 보고 거부했고, 그 실패 화면에 `FOREIGN=0종`이 찍혀
+# "혼입 없음"처럼 읽혔다. 아래 축은 그 두 가지를 각각 동결한다.
+
+
+def _report_payload(**over) -> dict:
+    """정상 리포트 payload — 각 테스트가 필요한 필드만 뒤집는다."""
+    payload = {
+        "status": "ok",
+        "total_commits": 2621,
+        "head_sha": "6259f8be40ae7f83345c7e7740b7718ec4727d44",
+        "scope": {
+            "description": "저장소의 모든 ref(129개) 전수",
+            "is_full_history": True,
+            "person_authored": 1132,
+        },
+        "identities": {"foreign_identities": {}},
+        "time_profile": {"work_hours_ratio": 0.348},
+        "findings": [],
+    }
+    payload.update(over)
+    return payload
+
+
+def test_case_collision_is_silent_on_distinct_keys() -> None:
+    """정상 입력에서 침묵 — 모든 입력에서 발화하는 검출기가 아니다."""
+    assert case_collision_keys({"a": {"Claude <x@y>": 1, "Sonnet <z@y>": 2}}) == []
+
+
+def test_case_collision_finds_the_live_pair() -> None:
+    """실측 그대로의 쌍을 잡는다 — 이 쌍이 PowerShell 파싱을 무너뜨렸다."""
+    hits = case_collision_keys(
+        {
+            "identities": {
+                "by_coauthor": {
+                    "Claude <noreply@anthropic.com>": 702,
+                    "claude <noreply@anthropic.com>": 1,
+                }
+            }
+        }
+    )
+    assert len(hits) == 1
+    assert "identities.by_coauthor" in hits[0]
+    assert "Claude <noreply@anthropic.com>" in hits[0]
+    assert "claude <noreply@anthropic.com>" in hits[0]
+
+
+def test_case_collision_walks_nested_lists() -> None:
+    """리스트 안의 객체도 본다 — findings 배열에 숨으면 못 보는 검출기는 공허하다."""
+    hits = case_collision_keys({"findings": [{"A": 1, "a": 2}]})
+    assert len(hits) == 1 and "findings[0]" in hits[0]
+
+
+def test_consumption_profile_declares_unsafe_when_colliding() -> None:
+    """리포트가 자신의 소비 가능성을 **스스로** 말한다."""
+    unsafe = consumption_profile({"x": {"Claude <a@b>": 1, "claude <a@b>": 2}})
+    assert unsafe["powershell_convertfrom_json_safe"] is False
+    assert unsafe["case_collision_keys"]
+    assert "--summary-from" in unsafe["safe_consumption"]
+
+    safe = consumption_profile({"x": {"Claude <a@b>": 1}})
+    assert safe["powershell_convertfrom_json_safe"] is True
+    assert safe["case_collision_keys"] == []
+
+
+def test_consumption_note_names_the_parser_and_the_way_out() -> None:
+    note = consumption_note(["identities.by_coauthor: Claude <a@b> ~ claude <a@b>"])
+    assert "ConvertFrom-Json" in note
+    assert "--summary-from" in note
+
+
+def test_summary_of_clean_report_is_clear_ready() -> None:
+    fields, blockers = summary_of(
+        _report_payload(), expect_head="6259f8be40ae7f83345c7e7740b7718ec4727d44"
+    )
+    assert blockers == []
+    assert fields["CLEAR_READY"] == "1"
+    assert fields["SAME_HEAD"] == "1"
+    assert fields["COMMITS"] == "2621"
+    assert fields["FULL"] == "1"
+    assert fields["FOREIGN"] == "0"
+
+
+@pytest.mark.parametrize(
+    "over, marker",
+    [
+        ({"status": "shallow"}, "status=shallow"),
+        ({"total_commits": 0}, "commits=0"),
+        (
+            {"scope": {"description": "HEAD만", "is_full_history": False}},
+            "full_history=false",
+        ),
+    ],
+)
+def test_summary_of_blocks_each_failure_mode(over, marker) -> None:
+    """결함 주입 — 축마다 **그 축이 없으면 통과할 입력**으로 RED를 확인한다."""
+    fields, blockers = summary_of(_report_payload(**over))
+    assert fields["CLEAR_READY"] == "0"
+    assert any(marker in b for b in blockers), blockers
+    assert marker in fields["CLEAR_BLOCKERS"]
+
+
+def test_summary_of_blocks_stale_report() -> None:
+    """리포트가 **다른 시점**을 잰 것이면 막는다 — 이 축이 없으면 과거 측정으로 게이트가 닫힌다."""
+    fields, _ = summary_of(_report_payload(), expect_head="a" * 40)
+    assert fields["SAME_HEAD"] == "0"
+    assert fields["CLEAR_READY"] == "0"
+    assert "head_mismatch" in fields["CLEAR_BLOCKERS"]
+
+
+def test_short_sha_is_accepted_but_too_short_is_not() -> None:
+    """짧은 sha는 받되 7자 미만은 비교로 치지 않는다 — 우연 일치로 통과하면 안 된다."""
+    ok, _ = summary_of(_report_payload(), expect_head="6259f8be")
+    assert ok["SAME_HEAD"] == "1"
+    coincidence, _ = summary_of(_report_payload(), expect_head="6259")
+    assert coincidence["SAME_HEAD"] == "0"
+
+
+def test_summary_values_never_span_lines() -> None:
+    """KEY=VALUE 파서가 무너지지 않게 — 줄바꿈이 섞인 설명도 한 줄로 접는다."""
+    fields, _ = summary_of(
+        _report_payload(scope={"description": "여러\n줄\n설명", "is_full_history": True})
+    )
+    text = render_summary(fields)
+    assert len(text.splitlines()) == len(fields)
+    assert "SCOPE=여러 줄 설명" in text
+
+
+def test_summary_cli_reads_a_report_powershell_would_reject(tmp_path: Path, capsys) -> None:
+    """**이 테스트가 이 태스크의 본체다** — 실측 실패를 그대로 재현한 입력을 읽어낸다."""
+    payload = _report_payload(
+        identities={
+            "by_coauthor": {
+                "Claude <noreply@anthropic.com>": 702,
+                "claude <noreply@anthropic.com>": 1,
+            },
+            "foreign_identities": {},
+        }
+    )
+    report = tmp_path / "ip_separation_evidence.json"
+    report.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    code = main(["--summary-from", str(report), "--expect-head", payload["head_sha"]])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "SUMMARY_OK=1" in out
+    assert "CLEAR_READY=1" in out
+    assert "CASE_COLLISIONS=1" in out  # 충돌은 감춰지지 않는다
+
+
+def test_summary_cli_missing_file_emits_no_values(tmp_path: Path, capsys) -> None:
+    """실패는 값으로 위장되지 않는다 — `FOREIGN=0`이 실패 화면에 찍히면 '이상 없음'으로 읽힌다."""
+    code = main(["--summary-from", str(tmp_path / "없음.json")])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "SUMMARY_OK=0" in out
+    assert "FileNotFoundError" in out  # 예외 타입명 — 침묵 실패 금지
+    for forbidden in ("FOREIGN=", "CLEAR_READY=", "STATUS=", "COMMITS="):
+        assert forbidden not in out
+
+
+def test_summary_cli_broken_json_names_the_exception(tmp_path: Path, capsys) -> None:
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"status": "ok",', encoding="utf-8")
+    code = main(["--summary-from", str(broken)])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "SUMMARY_OK=0" in out
+    assert "JSONDecodeError" in out
+    assert "CLEAR_READY=" not in out
+
+
+def test_summary_cli_wrong_file_is_not_a_report(tmp_path: Path, capsys) -> None:
+    """다른 JSON을 가리켜도 '읽었다'가 되지 않는다 — 경로 오타가 통과하면 안 된다."""
+    other = tmp_path / "other.json"
+    other.write_text('{"hello": "world"}', encoding="utf-8")
+    code = main(["--summary-from", str(other)])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "SchemaError" in out
+    assert "CLEAR_READY=" not in out
+
+
+def test_summary_cli_exit_1_when_readable_but_blocked(tmp_path: Path, capsys) -> None:
+    """읽기 실패(2)와 조건 미충족(1)은 **다른 색**이다 — 섞이면 대처가 달라진다."""
+    report = tmp_path / "shallow.json"
+    report.write_text(
+        json.dumps(_report_payload(status="shallow", total_commits=0)), encoding="utf-8"
+    )
+    code = main(["--summary-from", str(report)])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "SUMMARY_OK=1" in out
+    assert "CLEAR_READY=0" in out
+    assert "status=shallow" in out
+
+
+def test_summary_mode_does_not_touch_git(tmp_path: Path, capsys) -> None:
+    """git 없는 디렉터리에서도 성립한다 — 요약은 이미 만든 리포트를 읽을 뿐이다."""
+    report = tmp_path / "r.json"
+    report.write_text(json.dumps(_report_payload()), encoding="utf-8")
+    code = main(["--root", str(tmp_path), "--summary-from", str(report)])
+    assert code == 0
+    assert "SUMMARY_OK=1" in capsys.readouterr().out
+
+
+def test_generated_report_carries_consumption_block(repo: Path, tmp_path: Path) -> None:
+    """집행 지점 — 실제 실행이 낸 리포트에 소비 블록이 실린다(정본화와 별항)."""
+    out = tmp_path / "ev"
+    main(["--root", str(repo), "--identity", "me@example.com", "--out", str(out)])
+    payload = json.loads((out / "ip_separation_evidence.json").read_text(encoding="utf-8"))
+    assert "consumption" in payload
+    assert payload["consumption"]["powershell_convertfrom_json_safe"] in (True, False)
+    assert "--summary-from" in payload["consumption"]["safe_consumption"]
+
+
+def _runbook_text() -> str:
+    return (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "ops"
+        / "ip_separation_evidence_gate_runbook.md"
+    ).read_text(encoding="utf-8")
+
+
+def _fenced_command_lines(text: str) -> list:
+    """```powershell 펜스 **안**의 줄만 돌려준다.
+
+    산문과 명령을 나누는 이유: 이 런북은 `ConvertFrom-Json`을 *금지 사유로*
+    언급해야 한다 — 산문에서도, 실행 블록의 주석에서도. 문서 전체를 문자열로
+    훑는 가드는 그 설명 자체를 위반으로 잡아 — 규칙을 지키려는 문장이 규칙
+    위반이 되는 — 사람이 가드를 꺼 버리게 만든다. 검사 대상은 **실제로
+    실행되는 줄**이므로 주석 전용 줄(`#`로 시작)도 제외한다. 줄 끝 주석이
+    달린 실행 줄(`… | ConvertFrom-Json  # 설명`)은 그대로 남는다.
+    """
+    lines, inside = [], False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            inside = stripped.lower().startswith("```powershell")
+            continue
+        if inside and stripped and not stripped.startswith("#"):
+            lines.append(line)
+    return lines
+
+
+def test_runbook_does_not_consume_the_report_with_convertfrom_json() -> None:
+    """런북 동결 — 이 저장소에서 **다시 이 실패를 만들지 못하게** 한다.
+
+    2026-09-08 실측에서 깨진 줄은 `$J = Get-Content $Report … | ConvertFrom-Json`
+    이었다. 파일 이름이 변수 뒤에 숨어 있었으므로, "리포트 파일명과 같은 줄"을
+    찾는 가드는 **이 줄을 놓친다**. 그래서 실행 블록 안의 `ConvertFrom-Json`
+    자체를 금지한다 — 이 런북에는 그것을 정당하게 쓸 자리가 없다.
+    """
+    commands = _fenced_command_lines(_runbook_text())
+    assert commands, "펜스 추출이 0줄 — 스캔 0건은 실패다(공허한 통과 금지)"
+    offenders = [line for line in commands if "ConvertFrom-Json" in line]
+    assert not offenders, f"실행 블록이 리포트를 ConvertFrom-Json으로 읽는다: {offenders}"
+
+
+def test_runbook_reads_the_report_through_the_safe_path() -> None:
+    """금지만으로는 부족하다 — 대체 경로가 실제로 블록 안에 있어야 한다."""
+    commands = _fenced_command_lines(_runbook_text())
+    assert any(
+        "--summary-from" in line for line in commands
+    ), "런북 실행 블록에 안전 소비 경로(--summary-from)가 없다"
+
+
+def test_fence_extractor_actually_separates_prose_from_commands() -> None:
+    """가드의 재료 자체를 검증한다 — 펜스 추출이 틀리면 위 두 검사는 위장이다."""
+    sample = "\n".join(
+        [
+            "설명에서 ConvertFrom-Json 을 금지한다",
+            "",
+            "```powershell",
+            "# 주석에서도 ConvertFrom-Json 을 금지 사유로 적는다",
+            "Get-Item x",
+            "$J = Get-Content $R | ConvertFrom-Json  # 줄 끝 주석은 면제가 아니다",
+            "```",
+            "뒷글 ConvertFrom-Json",
+        ]
+    )
+    extracted = _fenced_command_lines(sample)
+    # 산문 2줄·주석 1줄은 빠지고 실행 줄 2줄만 남는다 — 줄 끝 주석은 면제가 아니다
+    assert extracted == [
+        "Get-Item x",
+        "$J = Get-Content $R | ConvertFrom-Json  # 줄 끝 주석은 면제가 아니다",
+    ]

@@ -38,9 +38,10 @@
 확인서의 서명은 본인의 의사표시라 애초에 대체 대상이 아니다.
 
 **예상 출력(①)** — 2026-09-07 실측 기준(모든 ref 45개 전수):
-`STATUS=ok` · `COMMITS=2297` · `FULL=True` · `PERSON_AUTHORED=1021` · `FOREIGN=0종` ·
-오프셋 분포 `+00:00` 1222 / `+09:00` 892 / `-04:00` 183 · 업무시간 비율 0.33 내외.
-숫자는 이력이 자라면 달라진다 — **비교할 것은 `FULL=True`와 `FOREIGN=0종`이다.**
+`STATUS=ok` · `COMMITS=2621` · `FULL=1` · `PERSON_AUTHORED=1132` · `FOREIGN=0` ·
+오프셋 분포 `+00:00` 1433 / `+09:00` 1002 / `-04:00` 186 · 업무시간 비율 0.348.
+(2026-09-08 Kiki 머신 실측 · ref 129개 전수) 숫자는 이력이 자라면 달라진다 —
+**비교할 것은 `FULL=1`과 `FOREIGN=0`이다.**
 
 ## 4. 성공 기준
 
@@ -55,8 +56,17 @@
 > `2`는 "이상 없음"이 아니다. 잘린 이력에서 나온 "혼입 0건"은 잘린 부분에 대해 아무 말도
 > 하지 않으며, 그것을 확인서에 첨부하면 그대로 거짓 진술이 된다.
 
-**exit code와 함께 반드시 볼 것 — `FULL=True`**. 범위를 좁혀 돌리면(`--rev`·`--since`)
-`EXIT=0`이 나와도 그것은 *그 범위 안에서만* 참이다. `FULL=False`인 리포트를 "이력 전체에서
+**리포트를 읽는 방법**: 위 블록의 3)은 `--summary-from`으로 도구 자신에게 리포트를
+읽힌다. **PowerShell의 `ConvertFrom-Json`을 쓰지 않는다** — 이 창의 JSON 파서는
+객체 키를 대소문자 무시로 다뤄 `Claude <noreply@anthropic.com>`과
+`claude <noreply@anthropic.com>`을 중복 키로 거부한다(2026-09-08 실측 ·
+`DuplicateKeysInJsonString`). 키는 커밋한 사람의 이름·이메일이라 우리가 통제할 수
+없으므로 **파서를 바꾸는 것이 유일한 해결**이다. 요약 모드의 exit code는
+`0`=읽었고 조건 충족 · `1`=읽었으나 미충족(`CLEAR_BLOCKERS`가 사유) ·
+`2`=**읽기 자체가 불가**(값을 한 줄도 내지 않는다).
+
+**exit code와 함께 반드시 볼 것 — `FULL=1`**. 범위를 좁혀 돌리면(`--rev`·`--since`)
+`EXIT=0`이 나와도 그것은 *그 범위 안에서만* 참이다. `FULL=0`인 리포트를 "이력 전체에서
 혼입 없음"의 근거로 쓰면 안 되며, 실행 블록 ③이 이 조건을 검사해 clear를 거부한다.
 
 **신원 선언 확인**(위 §실행 블록 ①의 "반드시 확인할 것"): `kiki@whymath.local`이 본인의
@@ -141,18 +151,12 @@ if ($ToolOk -and $FetchOk) {
 }
 
 # 3) 자가검증 — 파일이 실제로 생겼는가 + 상태가 ok인가 + 전수를 봤는가
-#    exit code만 믿지 않는다. 파일이 없으면 첨부할 것이 없다.
-$Report = ".ip_evidence\ip_separation_evidence.json"
-if (Test-Path $Report) {
-  $J = Get-Content $Report -Raw -Encoding UTF8 | ConvertFrom-Json
-  "STATUS=$($J.status)  COMMITS=$($J.total_commits)  HEAD=$($J.head_sha)"
-  "SCOPE=$($J.scope.description)  FULL=$($J.scope.is_full_history)"
-  "PERSON_AUTHORED=$($J.scope.person_authored)건 (시각 분포의 모집단)"
-  "FOREIGN=$($J.identities.foreign_identities.PSObject.Properties.Count)종"
-  "WORK_HOURS_RATIO=$($J.time_profile.work_hours_ratio)"
-} else {
-  "중단: 리포트 파일이 없다 — 2)의 EXIT과 화면 메시지를 확인할 것"
-}
+#    **PowerShell의 ConvertFrom-Json을 쓰지 않는다.** 이 창의 파서는 JSON 객체
+#    키를 대소문자 무시로 다뤄 'Claude <…>'와 'claude <…>'를 중복으로 거부한다
+#    (2026-09-08 실측). 리포트를 읽는 일은 도구 자신에게 시킨다.
+python scripts\ops\ip_separation_evidence.py `
+    --summary-from .ip_evidence\ip_separation_evidence.json
+"SUMMARY_EXIT=$LASTEXITCODE  (0=읽었고 조건 충족 · 1=읽었으나 미충족 · 2=읽기 실패)"
 ```
 
 ### ⚠ 반드시 확인할 것 — 왜 신원을 2개 선언하는가
@@ -229,41 +233,46 @@ explorer $Vault
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 
 # 판정 기준(커밋)과 실측치를 블록이 스스로 찾는다 — 손으로 옮겨 적지 않는다.
+# 리포트는 **도구가 읽는다**(--summary-from). PowerShell의 ConvertFrom-Json은
+# 대소문자만 다른 신원 키를 중복으로 거부하므로 여기서 쓰지 않는다.
 $Base = (git rev-parse HEAD)
-$J = Get-Content .ip_evidence\ip_separation_evidence.json -Raw -Encoding UTF8 | ConvertFrom-Json
-$Foreign = $J.identities.foreign_identities.PSObject.Properties.Count
 $Vault = "$env:USERPROFILE\Documents\WhyMath-IP"
 $Today = (Get-Date -Format "yyyy-MM-dd")
 
+# 요약을 KEY=VALUE로 받아 해시테이블로 만든다. 파싱 실패 시 값이 한 줄도
+# 나오지 않으므로 $S는 비고, 아래 조건은 그대로 거짓이 된다.
+$Lines = & python scripts\ops\ip_separation_evidence.py `
+    --summary-from .ip_evidence\ip_separation_evidence.json `
+    --expect-head $Base
+$SummaryExit = $LASTEXITCODE
+$S = @{}
+foreach ($L in $Lines) { if ($L -match '^([A-Z_]+)=(.*)$') { $S[$Matches[1]] = $Matches[2] } }
+$Lines                       # 화면에 그대로 남긴다 — 무엇을 근거로 닫는지 보이게
+"SUMMARY_EXIT=$SummaryExit"
+
 "기준 커밋: $Base"
-"기계 증거: 커밋 $($J.total_commits)건 · 혼입 $($Foreign)종 · 업무시간 비율 $($J.time_profile.work_hours_ratio)"
 "보관 폴더: $Vault"
 
 # 서명 완료를 직접 확인한다. 붙여넣기 실행이어도 이 줄에서 멈춘다.
 $Ack = Read-Host "확인서·양도예정 기록 2종에 서명하고 보관까지 마쳤으면 '서명완료' 를 입력"
 
-# 수집이 **성공한** 리포트인지 먼저 본다. 실패해도 JSON 파일 자체는 생기므로,
-# 서명 확인만으로 clear하면 shallow 실행(커밋 0건)의 실패 리포트를 근거로
-# human gate가 닫힐 수 있다 — 이 도구가 막으려던 바로 그 실패다.
-# 리포트가 **이 커밋을 잰 것인지** 대조한다. 증거 생성 후 커밋을 더 쌓았거나,
-# 다른 브랜치를 체크아웃했거나, 이전 실행의 .ip_evidence가 남은 채 블록 ①을
-# 건너뛰면 리포트($J)는 과거 측정인데 기준 커밋($Base)은 현재 HEAD다 — 그대로 clear하면
-# 현재 커밋이 판정 기준으로 적히고 실제 근거는 다른 시점 것이 된다.
-$SameHead = ($J.head_sha -eq $Base)
-$EvidenceOk = ($J.status -eq "ok") -and ($J.total_commits -gt 0) `
-              -and $J.scope.is_full_history -and $SameHead
+# 기계 조건 판정은 도구의 exit code로 한다 — 화면 문자열이 아니다.
+# 0 = 읽었고 status=ok · 커밋>0 · 전수 · 리포트가 이 커밋을 잰 것.
+# exit code만 보지 않는 이유: `python`을 못 찾으면 PowerShell은 예외를 내고
+# $LASTEXITCODE는 **직전 명령(git)의 0이 그대로 남는다** — 출력이 한 줄도
+# 없는데 "성공"으로 읽힌다. 그래서 도구가 실제로 낸 값 2개를 함께 본다
+# (간접 신호를 성공 판정으로 쓰지 않는다).
+$EvidenceOk = ($SummaryExit -eq 0) -and ($S['SUMMARY_OK'] -eq '1') -and ($S['CLEAR_READY'] -eq '1')
 
 if ($Ack -eq "서명완료" -and $EvidenceOk) {
   python scripts\harness\backlog.py gates clear G-eos-ip-separation-evidence --as kiki `
-    --evidence "$Today Kiki 서명. 판정 기준: $Base (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — $($J.scope.description) $($J.total_commits)건(사람 저작 $($J.scope.person_authored)건), 선언 밖 신원 $($Foreign)종, 평일 09-18시 KST 커밋 비율 $($J.time_profile.work_hours_ratio). ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관($Vault) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
+    --evidence "$Today Kiki 서명. 판정 기준: $Base (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — $($S['SCOPE']) $($S['COMMITS'])건(사람 저작 $($S['PERSON_AUTHORED'])건), 선언 밖 신원 $($S['FOREIGN'])종, 평일 09-18시 KST 커밋 비율 $($S['WORK_HOURS_RATIO']). ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관($Vault) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
   "EXIT=$LASTEXITCODE  (0=clear 성공 · 1=거부)"
 } elseif (-not $EvidenceOk) {
   "중단: 기계 증거가 유효하지 않다 — clear하지 않는다."
-  "  status=$($J.status)  commits=$($J.total_commits)  full_history=$($J.scope.is_full_history)"
-  "  리포트 기준 커밋=$($J.head_sha)"
-  "  현재 HEAD    =$Base"
-  "  same_head=$SameHead  (False면 리포트가 다른 시점을 잰 것이다)"
-  "  실행 블록 ①을 다시 돌려 EXIT=0 또는 1, STATUS=ok, FULL=True를 확인할 것."
+  "  SUMMARY_EXIT=$SummaryExit  (2=리포트를 읽지 못함 · 1=조건 미충족)"
+  "  CLEAR_BLOCKERS=$($S['CLEAR_BLOCKERS'])"
+  "  실행 블록 ①을 다시 돌려 EXIT=0 또는 1, STATUS=ok, FULL=1을 확인할 것."
 } else {
   "중단: 서명 전에는 clear하지 않는다. 입력값='$Ack'"
 }

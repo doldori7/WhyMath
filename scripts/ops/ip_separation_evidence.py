@@ -54,10 +54,23 @@
    값이라 위조 가능하고, git은 **장비 소유를 증명하지 않는다**. 이 한계는 옵션이
    아니라 리포트 본문에 항상 실린다.
 
+리포트를 **읽는** 경로 — `--summary-from` (2026-09-08 추가)
+-----------------------------------------------------------
+리포트 JSON의 신원 키는 사람의 이름·이메일이라 `Claude <…>`와 `claude <…>`가
+공존할 수 있다. Windows PowerShell 5.1의 `ConvertFrom-Json`은 객체 키를 대소문자
+**무시**로 다뤄 이런 JSON을 통째로 거부한다(`DuplicateKeysInJsonString`). 키를
+우리가 통제할 수 없으므로 **소비 경로를 준다**: `--summary-from <report.json>`은
+git을 건드리지 않고 리포트를 읽어 평면 `KEY=VALUE`만 낸다.
+
 exit code
     0 — 수집 성공 · 신원 혼입 없음
     1 — 수집 성공 · 주의 항목 있음(혼입 또는 지정 임계 초과)
     2 — 수집 자체가 불가 — "이상 없음"으로 읽지 말 것
+
+    `--summary-from` 모드에서는
+    0 — 리포트를 읽었고 게이트 clear의 기계 조건 충족 (`CLEAR_READY=1`)
+    1 — 읽었으나 조건 미충족 — 사유는 `CLEAR_BLOCKERS`
+    2 — **읽기 자체가 불가** — 값을 한 줄도 내지 않는다(실패가 값으로 위장되지 않게)
 """
 
 from __future__ import annotations
@@ -906,6 +919,201 @@ def scan_tracked_documents(root: Path) -> dict:
     return out
 
 
+# ── 리포트 소비 (CONSUME-01) ──────────────────────────────────────────────
+#
+# 왜 이 절이 있는가 (2026-09-08 라이브 실측)
+# -----------------------------------------
+# 이 도구는 리포트를 **잘 만들었는데 소비자가 읽지 못했다**. Kiki가 게이트
+# 런북을 실행해 `EXIT=0` · 전수 2621건까지 성공했으나, 그 다음 자가검증 줄의
+# `ConvertFrom-Json`이 리포트를 통째로 거부했다:
+#
+#     JSON 문자열에서 변환된 사전에 중복된 키 'Claude <noreply@anthropic.com>'
+#     및 'claude <noreply@anthropic.com>'이(가) 포함되어 있기 때문에 …
+#
+# Windows PowerShell 5.1의 `ConvertFrom-Json`은 JSON 객체를 **대소문자 무시**
+# 사전으로 만든다. 우리 리포트의 신원 키는 사람의 이름·이메일이라 대소문자를
+# 우리가 통제할 수 없다 — 누군가 한 번 `claude`로 커밋하면 그 순간부터 이
+# 저장소의 모든 리포트가 PowerShell에서 파싱 불가가 된다.
+#
+# 그러므로 **키를 고치는 대신 소비 경로를 준다**. `--summary-from`은 리포트를
+# 파이썬으로 읽어 평면 `KEY=VALUE`로 낸다. 파이썬 dict는 대소문자를 구별하므로
+# 두 신원이 각자 살아남고, PowerShell은 JSON 파서를 쓰지 않는다.
+#
+# 함께 고친 축: 실패가 **성공처럼 보이던 것**. 파싱이 깨진 뒤에도 런북은
+# `FOREIGN=0종`을 출력했다($J가 null인데 `.PSObject.Properties.Count`가 0을
+# 냈다) — "혼입 없음"으로 읽히는 화면이다. 이 모드는 읽기에 실패하면 값을
+# 하나도 내지 않고 `SUMMARY_OK=0` + `REASON=<예외타입>: …`만 낸다.
+
+
+def case_collision_keys(node, _path: str = "$") -> list:
+    """같은 객체 안에서 **대소문자만 다른 형제 키**를 전부 찾는다.
+
+    반환 형식: `"identities.by_coauthor: Claude <…> ~ claude <…>"` 문자열 목록.
+    빈 목록이면 이 payload는 대소문자 무시 파서(PowerShell 5.1 등)에서도
+    안전하다. 리포트가 자신의 소비 가능성을 **스스로 말하게** 하는 축이다.
+    """
+    hits: list = []
+    if isinstance(node, dict):
+        buckets: dict = {}
+        for key in node:
+            buckets.setdefault(str(key).casefold(), []).append(str(key))
+        for _folded, names in buckets.items():
+            if len(names) > 1:
+                hits.append(f"{_path}: {' ~ '.join(sorted(names))}")
+        for key, value in node.items():
+            hits += case_collision_keys(value, f"{_path}.{key}" if _path != "$" else str(key))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            hits += case_collision_keys(value, f"{_path}[{i}]")
+    return hits
+
+
+def consumption_profile(payload: dict) -> dict:
+    """리포트에 실리는 소비 가능성 블록 — 소비자가 조용히 깨지지 않게."""
+    collisions = case_collision_keys(payload)
+    return {
+        "case_collision_keys": collisions,
+        "powershell_convertfrom_json_safe": not collisions,
+        "safe_consumption": (
+            "python scripts/ops/ip_separation_evidence.py "
+            "--summary-from <report.json> [--expect-head <sha>]"
+        ),
+        "note": (
+            "Windows PowerShell 5.1의 ConvertFrom-Json은 JSON 객체 키를 대소문자 "
+            "무시로 다뤄 위 키 쌍을 중복으로 거부한다(DuplicateKeysInJsonString). "
+            "이 리포트를 PowerShell에서 읽을 때는 --summary-from을 쓴다."
+        ),
+    }
+
+
+def consumption_note(collisions: list) -> str:
+    """Markdown 부록 — 충돌이 **있을 때만** 붙인다."""
+    lines = [
+        "",
+        "## 7. 이 리포트를 읽는 방법 (CONSUME-01)",
+        "",
+        f"이 리포트의 JSON에는 **대소문자만 다른 키가 {len(collisions)}쌍** 있다. "
+        "커밋 신원의 이름·이메일이 그대로 키가 되기 때문이며, 데이터 오류가 아니다.",
+        "",
+        "- Windows PowerShell 5.1의 `ConvertFrom-Json`은 이런 JSON을 "
+        "**거부한다**(`DuplicateKeysInJsonString`) — 객체 키를 대소문자 무시로 "
+        "다루기 때문이다.",
+        "- 안전한 읽기 경로: "
+        "`python scripts/ops/ip_separation_evidence.py --summary-from <report.json>`",
+        "",
+    ]
+    lines += [f"  - `{c}`" for c in collisions[:10]]
+    if len(collisions) > 10:
+        lines.append(f"  - … 외 {len(collisions) - 10}쌍")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _same_head(report_head: str, expect_head: str) -> bool:
+    """짧은 sha·긴 sha를 함께 받아들이되 **7자 미만은 비교로 치지 않는다**.
+
+    7자 미만을 접두 비교하면 우연 일치가 '같은 커밋'으로 통과한다 — 그 통과는
+    다른 시점의 리포트로 게이트를 닫게 만든다.
+    """
+    a, b = report_head.strip().lower(), expect_head.strip().lower()
+    if len(a) < 7 or len(b) < 7:
+        return False
+    return a.startswith(b) or b.startswith(a)
+
+
+def _flat(value) -> str:
+    """KEY=VALUE 한 줄에 담기게 만든다 — 줄바꿈이 섞이면 파서가 무너진다."""
+    return " ".join(str(value).split())
+
+
+def summary_of(payload: dict, *, expect_head: str = "") -> tuple:
+    """게이트 판정에 필요한 값만 평면 추출한다. 반환: (fields, blockers).
+
+    `blockers`가 비어 있어야 게이트 clear의 **기계 축**이 성립한다. 판정을
+    런북(PowerShell)이 아니라 여기서 하는 이유: 런북의 조건식은 실패했을 때
+    조용히 빈 값을 내지만, 여기서는 사유가 `CLEAR_BLOCKERS`로 나온다.
+    """
+    scope = payload.get("scope") or {}
+    identities = payload.get("identities") or {}
+    time_prof = payload.get("time_profile") or {}
+    foreign = identities.get("foreign_identities") or {}
+
+    status = str(payload.get("status", ""))
+    commits = int(payload.get("total_commits") or 0)
+    head = str(payload.get("head_sha") or "")
+    is_full = bool(scope.get("is_full_history"))
+
+    blockers: list = []
+    if status != "ok":
+        blockers.append(f"status={status or '미기록'}")
+    if commits <= 0:
+        blockers.append(f"commits={commits}")
+    if not is_full:
+        blockers.append("full_history=false")
+    if expect_head:
+        if not _same_head(head, expect_head):
+            blockers.append(f"head_mismatch(report={head or '없음'} expect={expect_head})")
+
+    fields = {
+        "SUMMARY_OK": "1",
+        "STATUS": _flat(status),
+        "COMMITS": str(commits),
+        "HEAD": _flat(head),
+        "SCOPE": _flat(scope.get("description", "미기록")),
+        "FULL": "1" if is_full else "0",
+        "PERSON_AUTHORED": str(scope.get("person_authored", "")),
+        "FOREIGN": str(len(foreign)),
+        "WORK_HOURS_RATIO": _flat(time_prof.get("work_hours_ratio", "")),
+        "FINDINGS": str(len(payload.get("findings") or [])),
+        "CASE_COLLISIONS": str(len(case_collision_keys(payload))),
+        "EXPECT_HEAD": _flat(expect_head),
+        "SAME_HEAD": ("na" if not expect_head else ("1" if _same_head(head, expect_head) else "0")),
+        "CLEAR_READY": "0" if blockers else "1",
+        "CLEAR_BLOCKERS": _flat(" | ".join(blockers)),
+    }
+    return fields, blockers
+
+
+def render_summary(fields: dict) -> str:
+    return "\n".join(f"{k}={v}" for k, v in fields.items())
+
+
+def summarize_cli(path, *, expect_head: str = "") -> int:
+    """`--summary-from` 본체.
+
+    exit 0 — 읽었고 게이트 clear의 기계 조건 충족
+    exit 1 — 읽었으나 조건 미충족 (사유는 `CLEAR_BLOCKERS`)
+    exit 2 — **읽기 자체가 불가** — 값이 한 줄도 나오지 않는다
+    """
+
+    def _fail(reason: str) -> int:
+        # 실패할 때 값을 내지 않는 것이 이 함수의 계약이다. 'FOREIGN=0' 같은
+        # 값이 실패 화면에 섞이면 그 화면은 '이상 없음'으로 읽힌다.
+        print("SUMMARY_OK=0")
+        print(f"REASON={_flat(reason)}")
+        return 2
+
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return _fail(f"{type(exc).__name__}: {exc} — 리포트 파일을 읽지 못했다")
+    except UnicodeDecodeError as exc:  # pragma: no cover - 방어
+        return _fail(f"{type(exc).__name__}: {exc}")
+    try:
+        payload = json.loads(raw)
+    except ValueError as exc:  # json.JSONDecodeError 포함
+        return _fail(f"{type(exc).__name__}: {exc} — 리포트 JSON이 손상됐다")
+    if not isinstance(payload, dict) or "status" not in payload:
+        return _fail(
+            "SchemaError: 이 파일은 IP-SEP 리포트가 아니다('status' 필드 없음) — "
+            "경로를 확인할 것"
+        )
+
+    fields, blockers = summary_of(payload, expect_head=expect_head)
+    print(render_summary(fields))
+    return 1 if blockers else 0
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
@@ -935,6 +1143,20 @@ def main(argv=None) -> int:
         metavar="EMAIL",
         help=f"도구·플랫폼 신원 (기본: {', '.join(DEFAULT_TOOL_IDENTITIES)})",
     )
+    p.add_argument(
+        "--summary-from",
+        type=Path,
+        metavar="REPORT_JSON",
+        help="이미 만든 리포트 JSON을 읽어 평면 KEY=VALUE 요약만 낸다(git 접근 없음). "
+        "대소문자 무시 JSON 파서(Windows PowerShell 5.1 ConvertFrom-Json)에서 "
+        "리포트가 거부되는 문제의 안전 소비 경로",
+    )
+    p.add_argument(
+        "--expect-head",
+        metavar="SHA",
+        help="--summary-from과 함께: 리포트가 이 커밋을 잰 것인지 대조한다. "
+        "불일치면 CLEAR_READY=0",
+    )
     p.add_argument("--out", type=Path, help="리포트 저장 디렉터리 (JSON + Markdown)")
     p.add_argument("--jsonl", type=Path, help="커밋별 원자료를 즉시 flush할 경로")
     p.add_argument("--json", action="store_true", help="기계 판독 출력(stdout)")
@@ -946,6 +1168,11 @@ def main(argv=None) -> int:
         help="업무시간 커밋 비율이 이 값을 넘으면 신호(0.0~1.0). 미지정이면 판정하지 않는다",
     )
     args = p.parse_args(argv)
+
+    # 요약 모드는 **git을 건드리지 않는다** — 이미 만든 리포트를 읽을 뿐이므로
+    # shallow·네트워크·작업 트리 상태와 무관하게 성립해야 한다.
+    if args.summary_from is not None:
+        return summarize_cli(args.summary_from, expect_head=args.expect_head or "")
 
     try:
         ws, we = (int(x) for x in args.work_hours.split("-", 1))
@@ -968,7 +1195,13 @@ def main(argv=None) -> int:
     payload = asdict(report)
     payload["findings"] = [asdict(f) if not isinstance(f, dict) else f for f in report.findings]
     payload["limits"] = LIMITS
+    payload["consumption"] = consumption_profile(payload)
     markdown = render(report, root_name=args.root.resolve().name)
+    if payload["consumption"]["case_collision_keys"]:
+        # 충돌이 있으면 **리포트 본문이 스스로 말한다**. 이 사실을 알리지 않으면
+        # 소비자(런북·실사 담당자)는 파서가 거부할 때에야 알게 되고, 그때는
+        # 이미 "도구가 고장났다"로 읽힌다.
+        markdown += consumption_note(payload["consumption"]["case_collision_keys"])
 
     if args.out:
         # 저장 실패를 **exit 2(수집 실패)** 로 바꾼다. 그냥 두면 `OSError`가
