@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1233,7 +1234,7 @@ class TestScanStaleBranches:
         assert branches[branch].status == "active"
         assert branches[branch].evidence == ""
 
-    def test_four_classifications_distinguished_in_one_scan(self, bare_remote):
+    def test_four_classifications_distinguished_in_one_scan(self, bare_remote, monkeypatch):
         """네_분류가_한_스캔에서_동시에_구분된다
 
         isolated·pr_filed·ported·active가 서로 다른 값으로 동시에 나오는지 변별력 실측.
@@ -1245,7 +1246,15 @@ class TestScanStaleBranches:
         HARN-47이 추가한 pr_filed 축이 핵심이다. 이 축이 무력해지면(PR 대조 실패)
         11건이 통째로 isolated로 승격돼 "고립 7건"이라는 판정이 "고립 18건"이 된다 —
         경고 습관화가 정확히 그렇게 시작됐다.
+
+        HARN-78: `_fetch_pr_states`를 "열림 확인됨"으로 고정한다 — 이 테스트의 초점은
+        4분류(now 5분류) 자체지 열림/닫힘 정밀화가 아니고, 통제하지 않으면 이 스캔이
+        도는 환경에 실제 `GITHUB_TOKEN`이 있는지에 따라 결과가 흔들린다(있으면 실제
+        네트워크로 존재하지 않는 PR #77을 조회하려 들어 결정 불가능해진다).
         """
+        monkeypatch.setattr(
+            remote_claims, "_fetch_pr_states", lambda root, numbers: ({77: ("open", False)}, "")
+        )
         _, clone = bare_remote
         remote_path, _ = bare_remote
         a, b = clone("session-a"), clone("session-b")
@@ -1831,6 +1840,275 @@ class TestScanStaleBranches:
         result = remote_claims.scan_stale_branches(a, days_threshold=3)
         assert result.status != "ok"
         assert result.stale == []
+
+
+class TestFetchPrStates:
+    """`_fetch_pr_states` — GitHub API로 pr_filed 후보의 열림/닫힘·머지 여부를 가른다 (HARN-78).
+
+    `_fetch_pr_head_shas`(오프라인 git)와 달리 이 함수는 네트워크 API가 **필수**다.
+    토큰 없이 호출되면 즉시 `None`을 돌려줘야 한다(미인증 요청은 IP당 60req/h로
+    상시 소진 상태 — CLAUDE.md 2026-09-01 main red 실측과 같은 함정).
+    """
+
+    def test_no_token_returns_none_without_network_call(self, tmp_path, monkeypatch):
+        """토큰_없으면_네트워크를_아예_안_부르고_None을_돌려준다"""
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        calls: list[list[str]] = []
+        monkeypatch.setattr(
+            remote_claims.subprocess,
+            "run",
+            lambda argv, **kw: calls.append(argv) or subprocess.CompletedProcess(argv, 0),
+        )
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77])
+        assert result is None
+        assert "NoTokenError" in error
+        assert calls == [], "토큰이 없는데 subprocess가 불렸다 — 조회를 시도해서는 안 된다"
+
+    def test_empty_input_returns_empty_dict_without_network_call(self, tmp_path, monkeypatch):
+        """조회_대상_0건이면_네트워크_없이_빈_dict를_돌려준다
+
+        토큰 유무와 무관하게 성립해야 한다 — "조회할 게 없음"과 "조회 실패"는 다른 사실이다.
+        """
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        calls: list[list[str]] = []
+        monkeypatch.setattr(
+            remote_claims.subprocess,
+            "run",
+            lambda argv, **kw: calls.append(argv) or subprocess.CompletedProcess(argv, 0),
+        )
+        result, error = remote_claims._fetch_pr_states(tmp_path, [])
+        assert result == {}
+        assert error == ""
+        assert calls == []
+
+    def test_success_distinguishes_open_and_closed_unmerged(self, tmp_path, monkeypatch):
+        """성공하면_열림과_닫힘·미머지가_다른_값으로_나온다 — 변별력의 핵심"""
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+        def fake_git(root, *argv, **kwargs):
+            assert argv[:2] == ("remote", "get-url")
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="https://github.com/doldori7/WhyMath.git\n", stderr=""
+            )
+
+        payloads = {
+            77: {"state": "open", "merged": False},
+            967: {"state": "closed", "merged": False},
+        }
+
+        def fake_run(argv, **kwargs):
+            assert argv[0] == "curl"
+            number = int(argv[-1].rsplit("/", 1)[-1])
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps(payloads[number]), stderr=""
+            )
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        monkeypatch.setattr(remote_claims.subprocess, "run", fake_run)
+
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77, 967])
+        assert error == ""
+        assert result == {77: ("open", False), 967: ("closed", False)}
+
+    def test_curl_exception_returns_none_with_exception_type(self, tmp_path, monkeypatch):
+        """curl_호출_자체가_죽으면_예외_타입명을_담아_None을_돌려준다 (침묵 실패 금지)"""
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+        def fake_git(root, *argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="https://github.com/doldori7/WhyMath.git\n", stderr=""
+            )
+
+        def boom(argv, **kwargs):
+            raise OSError("curl 미설치")
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        monkeypatch.setattr(remote_claims.subprocess, "run", boom)
+
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77])
+        assert result is None
+        assert "OSError" in error
+
+    def test_non_github_remote_returns_none(self, tmp_path, monkeypatch):
+        """origin이_GitHub이_아니면_None — URL 파싱 실패도 침묵하지 않는다"""
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+        def fake_git(root, *argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="https://gitlab.com/example/repo.git\n", stderr=""
+            )
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77])
+        assert result is None
+        assert "RemoteParseError" in error
+
+    def test_scan_budget_stops_remaining_lookups(self, tmp_path, monkeypatch):
+        """후보가_많아도_전체_예산을_넘기면_남은_조회를_건너뛰고_실패로_낸다 (Codex 리뷰, PR #1043).
+
+        수정 전에는 후보 수만큼 순차 curl 호출이 무제한으로 누적돼, 후보가 많으면
+        SessionStart 훅·CI 잡을 임의로 오래 묶어 둘 수 있었다. 예산을 0으로 낮춰
+        "이미 예산을 다 썼다"를 흉내 내면, 첫 후보를 조회하기도 전에 멈춰야 한다
+        (침묵 성공이 아니라 명시적 실패 사유를 낸다).
+        """
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        monkeypatch.setattr(remote_claims, "_PR_STATE_SCAN_BUDGET_SECONDS", 0.0)
+
+        def fake_git(root, *argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="https://github.com/doldori7/WhyMath.git\n", stderr=""
+            )
+
+        calls: list[list[str]] = []
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        monkeypatch.setattr(
+            remote_claims.subprocess,
+            "run",
+            lambda argv, **kw: calls.append(argv) or subprocess.CompletedProcess(argv, 0),
+        )
+
+        result, error = remote_claims._fetch_pr_states(tmp_path, [77, 967])
+        assert result is None
+        assert "ScanBudgetExceededError" in error
+        assert calls == [], "예산을 이미 초과했으면 curl을 한 번도 부르지 않아야 한다"
+
+
+class TestPrStateReclassification:
+    """`scan_stale_branches`가 `_fetch_pr_states`를 소비해 pr_filed를 정밀화한다 (HARN-78).
+
+    `_fetch_pr_states` 내부(GitHub API)는 위 `TestFetchPrStates`가 이미 단위로 봉인했다 —
+    여기서는 그 결과가 분류·evidence·`pr_state_lookup_ok`에 **정확히** 반영되는지만 본다.
+    실물 GitHub API를 부르지 않도록 `_fetch_pr_states` 자체를 monkeypatch한다(bare 로컬
+    원격은 github.com URL이 아니므로 그 아래 계층을 그대로 쓰면 매번 RemoteParseError다).
+    """
+
+    def _push_pr_filed_branch(self, bare_remote, pr_number: int) -> tuple[Path, str]:
+        """pr_filed로 1차 분류될 브랜치 1건을 원격에 만들고 (clone, branch명)을 돌려준다."""
+        remote_path, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        branch = f"claude/whymath-prstate-example-{pr_number}"
+        subprocess.run(["git", "checkout", "-b", branch], cwd=a, check=True, capture_output=True)
+        (a / "w.txt").write_text("work\n", encoding="utf-8")
+        subprocess.run(["git", "add", "w.txt"], cwd=a, check=True, capture_output=True)
+        past = (datetime.now(timezone.utc) - timedelta(days=9)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        subprocess.run(
+            ["git", "commit", "-m", "work"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+            env={**_os_environ(), "GIT_AUTHOR_DATE": past, "GIT_COMMITTER_DATE": past},
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch], cwd=a, check=True, capture_output=True
+        )
+        tip = subprocess.run(
+            ["git", "rev-parse", f"refs/heads/{branch}"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "update-ref", f"refs/pull/{pr_number}/head", tip],
+            cwd=remote_path,
+            check=True,
+            capture_output=True,
+        )
+        return b, branch
+
+    def test_closed_unmerged_pr_reclassified_as_pr_closed(self, bare_remote, monkeypatch):
+        """닫히고_미머지된_PR은_pr_closed로_승격된다 — isolated와 같은 행동 요구
+
+        재현 대상(HARN-78 acceptance ①): PR #967·#802·#675 전부 closed·merged=false인데
+        `pr_filed`로 분류돼 "결정 불요"처럼 보였다.
+        """
+        b, branch = self._push_pr_filed_branch(bare_remote, 967)
+        monkeypatch.setattr(
+            remote_claims, "_fetch_pr_states", lambda root, numbers: ({967: ("closed", False)}, "")
+        )
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert result.pr_state_lookup_ok is True
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "pr_closed"
+        assert branches[branch].evidence == "PR #967 닫힘(미머지)"
+
+    def test_open_pr_stays_pr_filed(self, bare_remote, monkeypatch):
+        """열린_PR은_pr_filed로_남는다 — 처분은 그 PR에서 그대로 유효"""
+        b, branch = self._push_pr_filed_branch(bare_remote, 975)
+        monkeypatch.setattr(
+            remote_claims, "_fetch_pr_states", lambda root, numbers: ({975: ("open", False)}, "")
+        )
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert result.pr_state_lookup_ok is True
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "pr_filed"
+        assert branches[branch].evidence == "PR #975"
+
+    def test_lookup_failure_marks_evidence_unconfirmed_not_open(self, bare_remote, monkeypatch):
+        """상태_조회_실패는_'열림'으로_가정하지_않고_'상태_미확인'을_명시한다
+
+        성공(상태 확인됨)과 실패(미확인)가 다른 글자를 내야 한다(HARN-78 acceptance ③) —
+        여기서 실패를 "그냥 pr_filed 그대로"로 조용히 두면 열림과 미확인이 같은 글자가 된다.
+        """
+        b, branch = self._push_pr_filed_branch(bare_remote, 802)
+        monkeypatch.setattr(
+            remote_claims,
+            "_fetch_pr_states",
+            lambda root, numbers: (None, "NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정"),
+        )
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert result.pr_state_lookup_ok is False
+        assert "NoTokenError" in result.pr_state_lookup_error
+        branches = {s.branch: s for s in result.stale}
+        assert branches[branch].status == "pr_filed"
+        assert branches[branch].evidence == "PR #802 (상태 미확인)"
+
+    def test_no_pr_filed_candidates_skips_lookup_entirely(self, bare_remote, monkeypatch):
+        """pr_filed_후보가_0건이면_상태_조회_자체를_시도하지_않는다
+
+        "조회 안 함"(대상 없음)과 "조회 실패"는 다른 사실이다 — 전자는 pr_state_lookup_ok가
+        True(기본값)로 남아야 하고, `_fetch_pr_states`가 호출조차 되지 않아야 한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        subprocess.run(
+            ["git", "checkout", "-b", "claude/no-pr-here"], cwd=a, check=True, capture_output=True
+        )
+        past = (datetime.now(timezone.utc) - timedelta(days=9)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        (a / "iso.txt").write_text("iso\n", encoding="utf-8")
+        subprocess.run(["git", "add", "iso.txt"], cwd=a, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "iso work"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+            env={**_os_environ(), "GIT_AUTHOR_DATE": past, "GIT_COMMITTER_DATE": past},
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "claude/no-pr-here"],
+            cwd=a,
+            check=True,
+            capture_output=True,
+        )
+
+        called = False
+
+        def boom(root, numbers):
+            nonlocal called
+            called = True
+            return ({}, "")
+
+        monkeypatch.setattr(remote_claims, "_fetch_pr_states", boom)
+        result = remote_claims.scan_stale_branches(b, days_threshold=3)
+        assert result.status == "ok"
+        assert result.pr_state_lookup_ok is True
+        assert result.pr_state_lookup_error == ""
+        assert called is False, "pr_filed 후보가 없는데 상태 조회를 시도했다"
+        assert {s.branch: s.status for s in result.stale}["claude/no-pr-here"] == "isolated"
 
 
 class TestScanDocSeriesDuplicates:

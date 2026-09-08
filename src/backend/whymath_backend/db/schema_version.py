@@ -137,6 +137,9 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "d4a71c0f9b32",  # EOS-57: attempt_event.skill_ids[] 좌석 + event_type_enum '문제시도'
     "e7c3b9a15f24",  # EOS-71: problem 격리 좌석 2컬럼 + review_status_enum 'quarantined'
     "b8d3f6a91c24",  # EOS-97: generation_log.run_id — 리콜 조인 축 + idx_generation_run_id
+    "c1a5e07b4d38",  # EOS-99: generation_log 프롬프트 캐시 2종(cache_read/creation_input_tokens)
+    "d2f4a68b91e7",  # MISC-20: misconception_hypothesis.deactivated_reason — 해소율 정직화 축
+    "e3b5c79d02f8",  # MISC-20: evidence_links.provenance — 해소 판정의 출처 축(가중치 추론 폐기)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

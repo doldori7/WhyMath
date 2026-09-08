@@ -67,6 +67,42 @@ def current_stage(backlog: Backlog) -> str:
     return progress[-1][0] if progress else "?"
 
 
+def cancelled_dep_blocked_line(backlog: Backlog) -> str | None:
+    """취소된 선행에 차단된 todo 태스크의 한 줄 요약 — 0건이면 None (HARN-67 ②).
+
+    status·brief·validate 세 화면이 같은 문장을 내게 한 곳에 둔다. "결정 불가 → 차단
+    유지"인 상태를 침묵으로 두면 그 태스크는 영구 차단처럼 보이고, 정정 경로가 있어도
+    아무도 쓰지 않는다 — 그래서 요약 줄에 정정 명령을 함께 싣는다.
+    """
+    blocked = selector.cancelled_dependency_blocks(backlog)
+    if not blocked:
+        return None
+    items = " ".join(f"{task.id}(←{','.join(deps)})" for task, deps in blocked)
+    return (
+        f"취소된 선행에 차단된 태스크 {len(blocked)}건: {items}"
+        " — 정정: backlog.py amend <id> --remove-depends <dep> --reason '...'"
+    )
+
+
+def gate_stale_blocked_line(backlog: Backlog) -> str | None:
+    """해소된 게이트를 기다리는 blocked 태스크의 한 줄 요약 — 0건이면 None (HARN-74 ③).
+
+    `cancelled_dep_blocked_line`과 같은 자리·같은 형식으로 status·brief가 같은 문장을 낸다.
+    왜 0건에 침묵하는가 — ①의 `gates clear` 화면과 규약이 다르다: 그 화면은 *그 명령의 결과
+    보고*라 줄이 없으면 "검사했는데 없었다"와 "검사하지 않았다"를 구분할 수 없어 0건도
+    명시한다. 반면 brief·status는 매 세션 읽는 *요약*이라 0건에 줄을 더하면 신호 대 잡음비만
+    떨어지고 경고가 습관화된다 — 그래서 None을 돌려 침묵을 허용한다.
+    """
+    stale = selector.stale_gate_blocked(backlog)
+    if not stale:
+        return None
+    items = " ".join(f"{task.id}(←{','.join(gates)})" for task, gates in stale)
+    return (
+        f"해소된 게이트를 기다리는 blocked 태스크 {len(stale)}건: {items}"
+        " — 확인: backlog.py unblock <id>"
+    )
+
+
 def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
     lines = ["📊 빌드 하네스 — 프로젝트 현재 상태", ""]
 
@@ -93,6 +129,19 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
             lines.append(
                 f"{_STATUS_MARK['blocked']}{task.id} {task.title} — {task.notes or '사유 미기록'}"
             )
+
+    # 취소된 선행에 차단된 todo — status=blocked가 아니라 화면에 안 잡히던 축 (HARN-67 ②)
+    cancelled_line = cancelled_dep_blocked_line(backlog)
+    if cancelled_line:
+        lines.append("")
+        lines.append(f"⚠ {cancelled_line}")
+
+    # 해소된 게이트를 기다리는 blocked (HARN-74 ③) — "차단됨" 절만 보면 게이트 대기로 읽히는데
+    # 실제로는 기다릴 게이트가 없는 상태. 위 "차단됨" 절과 별도 줄로 그 사실을 드러낸다.
+    stale_gate_line = gate_stale_blocked_line(backlog)
+    if stale_gate_line:
+        lines.append("")
+        lines.append(f"⚠ {stale_gate_line}")
 
     pending = [g for g in backlog.gates.values() if g.status == "pending"]
     if pending:
@@ -131,6 +180,15 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
             if t.status == "in_progress"
         ],
         "blocked": [t.id for t in backlog.tasks.values() if t.status == "blocked"],
+        # 취소된 선행에 차단된 todo (HARN-67 ②) — 텍스트 화면과 같은 사실을 기계도 읽게
+        "cancelled_dep_blocked": [
+            {"id": task.id, "cancelled": deps}
+            for task, deps in selector.cancelled_dependency_blocks(backlog)
+        ],
+        # 해소된 게이트를 기다리는 blocked (HARN-74 ③) — 텍스트 화면과 같은 사실을 기계도 읽게
+        "gate_stale_blocked": [
+            {"id": task.id, "gates": gates} for task, gates in selector.stale_gate_blocked(backlog)
+        ],
         "pending_gates": [
             {
                 "id": g.id,
@@ -156,6 +214,8 @@ def render_brief(
     stale_branches: list[tuple[str, ...]] | None = None,
     stale_branch_status: str = "ok",
     stale_branch_message: str = "",
+    pr_state_lookup_ok: bool = True,
+    pr_state_lookup_error: str = "",
     done_excluded: dict[str, list[str]] | None = None,
     doc_series_candidates: list[tuple[str, tuple[str, ...], str]] | None = None,
     doc_series_status: str = "ok",
@@ -167,8 +227,9 @@ def render_brief(
     stale_branches: (branch, age_days, ahead, status, evidence[, partial_port[, port_scan_error]])
         목록
         (HARN-13 + 2026-08-05
-    3분류 확장) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접 import하지 않게 한다
-    (remote_claimed와 동일한 결합도 원칙). status는 "unresolved"|"ported"|"active" —
+    3분류 확장 · HARN-78 5분류) — 원시 튜플로 받아 이 모듈이 `remote_claims`를 직접
+    import하지 않게 한다(remote_claimed와 동일한 결합도 원칙). status는
+    "isolated"|"pr_filed"|"pr_closed"|"unresolved"|"ported"|"active" —
     구분 없이 하나로 뭉쳐 보여주면 매 세션 전부를 훑어야 해서 신호 대 잡음비가 나빠진다
     (2026-08-05 실측: 19건 중 실제 결정 대기는 6건뿐이었다). 하위호환을 위해 4-튜플
     (status·evidence 생략)도 받아들인다 — 그 경우 전부 "unresolved"로 취급.
@@ -176,6 +237,11 @@ def render_brief(
     때 "판정 보류" 줄에 덧붙는다 — shallow 클론처럼 *복구 명령이 있는* 실패에서 화면만
     보고 고칠 수 있게 한다(2026-08-11: 브리핑이 shallow 위에서 10건을 오분류하고도
     "ok"로 보고했다). 비면 종전 문구 그대로 — 하위호환.
+    pr_state_lookup_ok/pr_state_lookup_error (HARN-78): pr_filed 후보의 열림/닫힘을
+    GitHub API로 조회했는지·성공했는지. False면 pr_filed 절의 문구가 "처분은 해당
+    PR에서"(이미 확인됨을 전제)가 아니라 "열림/닫힘을 확인하라"(모른다는 사실을
+    명시)로 바뀐다 — 기본값 True는 하위호환(이 두 인자를 안 주는 기존 호출부는
+    종전 문구 그대로).
     done_excluded: task_id → 완료 브랜치 목록(HARN-12) — 타 세션이 이미 끝냈으나 아직
     머지 전인 태스크. `next`(HARN-11)와 동형으로 후보에서 제외해 브리핑이 이미 끝난
     일을 1순위로 추천하는 근접사고를 막는다. 순수 함수 — 원격 조회는 호출부(`cmd_brief`)
@@ -242,6 +308,7 @@ def render_brief(
             )
         isolated = [e for e in normalized if e[3] == "isolated"]
         pr_filed = [e for e in normalized if e[3] == "pr_filed"]
+        pr_closed = [e for e in normalized if e[3] == "pr_closed"]
         unresolved = [e for e in normalized if e[3] == "unresolved"]
         ported = [e for e in normalized if e[3] == "ported"]
         active = [e for e in normalized if e[3] == "active"]
@@ -265,10 +332,30 @@ def render_brief(
                     # 흡수 흔적은 있으나 전건은 아니다 — 사람이 같은 조사를 다시 하지
                     # 않게 단서를 잇고, 동시에 '결정 불요'로 숨기지도 않는다(HARN-37).
                     lines.append(f"      ↳ 부분 착지: {partial} — 잔여분 확인 필요")
-        # PR 대기 — 작업은 GitHub에 보인다. Kiki에게 "결정하라"고 다시 묻지 않고 PR
-        # 번호를 건넨다. 열림/닫힘은 오프라인 git으로 판정 불가라 번호로 넘긴다.
+        # PR 닫힘(미머지, HARN-78) — PR이 있었다는 사실이 처분 완료를 뜻하지 않는다.
+        # isolated와 같은 행동 요구(재작업 또는 폐기 판단)이므로 같은 위계로 강조한다.
+        if pr_closed:
+            lines.append(f"🔴 PR 닫힘(미머지) — 재작업 또는 폐기 판단 필요 — {len(pr_closed)}건:")
+            for stale_branch, age_days, ahead, _status, evidence, _partial, _err in pr_closed:
+                lines.append(
+                    f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전 · "
+                    f"trunk 대비 {ahead}커밋 앞섬"
+                )
+        # PR 대기 — 작업은 GitHub에 보인다. 열림이 GitHub API로 확인됐으면(pr_state_
+        # lookup_ok) Kiki에게 "결정하라"고 다시 묻지 않고 PR 번호를 건넨다. 확인이
+        # 안 됐으면(토큰 없음 등) "열림"이라고 단정하지 않고 직접 확인하라고 말한다
+        # (모른다 ≠ 아니다 — 열려 있다고 가정하는 것도 마찬가지로 오판정이다).
         if pr_filed:
-            lines.append(f"(참고) PR 제출됨 — 처분은 해당 PR에서 — {len(pr_filed)}건:")
+            if pr_state_lookup_ok:
+                lines.append(
+                    f"(참고) PR 제출됨(열림 확인) — 처분은 해당 PR에서 — {len(pr_filed)}건:"
+                )
+            else:
+                reason = f" — {pr_state_lookup_error}" if pr_state_lookup_error else ""
+                lines.append(
+                    f"(참고) PR 제출됨 — 상태 미확인{reason}, PR 번호로 열림/닫힘을 "
+                    f"확인하라 — {len(pr_filed)}건:"
+                )
             for stale_branch, age_days, _ahead, _status, evidence, _partial, _err in pr_filed:
                 lines.append(f"  · {stale_branch} — {evidence} · 최종 커밋 {age_days:.0f}일 전")
         # unresolved는 이제 "PR 조회를 못 해 분리하지 못한" 잔여 축이다(측정 실패).
@@ -328,6 +415,18 @@ def render_brief(
             "blocked": "차단 상태 — /status 로 원인 확인",
         }.get(code, code)
         lines.append(f"착수 가능 태스크 없음: {label} {detail}")
+
+    # 취소된 선행에 차단된 todo (HARN-67 ②) — 훅은 stderr를 버리므로(`2>/dev/null`) 이 줄이
+    # stdout(반환 문자열)에 있어야 세션이 실제로 본다. 0건이면 아무것도 내지 않는다.
+    cancelled_line = cancelled_dep_blocked_line(backlog)
+    if cancelled_line:
+        lines.append(f"⚠️ {cancelled_line}")
+
+    # 해소된 게이트를 기다리는 blocked (HARN-74 ③ 집행 지점) — clear 시점의 알림(①)을 사람이
+    # 놓쳐도 다음 세션이 본다. 위와 같은 이유로 stdout(반환 문자열)에 싣는다. 0건이면 침묵.
+    stale_gate_line = gate_stale_blocked_line(backlog)
+    if stale_gate_line:
+        lines.append(f"⚠️ {stale_gate_line}")
 
     for gate_id, days in overdue_gates(backlog, today):
         gate = backlog.gates[gate_id]

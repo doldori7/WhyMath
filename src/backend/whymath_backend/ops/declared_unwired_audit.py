@@ -922,18 +922,15 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # + `data/auth_sessions_api.dart`)과 401 자동 갱신 인터셉터(`core/auth_interceptor.dart`
         # + `core/token_refresh_api.dart`)를 배선해 5개 라우트 전부 dart 호출로 reached 전환됐다.
         # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
-        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
-        # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
-        # SEC-24(원 SEC-15) 이식 메모: 원 브랜치는 이 4건을 "PB-04 도달 관측 테스트가 6경로를
-        # 전부 호출하므로 stale"이라며 제거했으나, PB-04(`api/_l6_mode_reach_state.py`)는 main에
-        # 미착지라 그 전제가 성립하지 않는다. `test_gating.py`가 6경로를 다 부르긴 하지만
-        # 수신자가 `_client([...]).get(...)` 형태(호출식)라 감사기의 리터럴 정규식
-        # (`_TEST_CLIENT_CALL` — 식별자 수신자만 매칭)이 못 본다 — 실측으로 여전히 unclassified.
-        # 따라서 면제를 유지한다(제거하면 감사 exit 1).
-        "GET /v1/gating/gifted": _INTERNAL_TOOL,
-        "GET /v1/gating/metacognition": _INTERNAL_TOOL,
-        "GET /v1/gating/suneung": _INTERNAL_TOOL,
-        "GET /v1/gating/thinking": _INTERNAL_TOOL,
+        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다).
+        # MOB-18 회수(2026-09-07): **면제 4건을 제거했다.** 위 SEC-24 이식 메모가 면제 유지의
+        # 근거로 삼은 전제("PB-04가 main에 미착지")가 이 회수로 해소됐다 — `api/
+        # _l6_mode_reach_state.py`가 착지하고 `test_l6_mode_reach_observability.py`가 6경로를
+        # `client.get("/v1/gating/...")` 형태(식별자 수신자)로 호출하므로 감사기의
+        # `_TEST_CLIENT_CALL` 정규식이 실제로 본다. 실측으로 확인했다: 이식 직후 감사가
+        # 이 4건을 stale-waiver로 잡아 exit 1을 냈고(추론이 아니라 도구 출력), 제거 후 exit 0이다.
+        # gifted·metacognition·suneung·thinking 4종이 여기 있었다(retake·school-progress는
+        # 이전부터 test_gating.py 경유로 reached였다).
         # 스킬 축 숙달 곡선 — api/me.py docstring이 "Phase 2b-2"로 명시(개념 축 /v1/me/mastery는
         # 이미 reached·스킬 축은 아직 화면 미착수)
         "GET /v1/me/skill-mastery": (
@@ -1055,6 +1052,17 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # 검수 세션(EOS-78) — 판정을 받으며 HIT 타이머를 생산한다. `reviewer_sample_package`
         # (표본 *제시*)와 달리 사람의 판정을 되받는 대면 도구라 배치 사유를 빌려 쓰지 않는다.
         "harness.review_session": _HUMAN_REVIEW_TOOL,
+        # MP-05(2026-09-07): 카나리 구간 절단 — 입력이 *특정 회차의 사이드카 4종*(대장·genlog·
+        # 코퍼스·검수 큐)이라 상주 입력이 없다. 회차를 돌려야 생기는 파일들이고(레포에
+        # 상주하지 않는다), 산출은 그 회차를 검수하려는 사람의 큐다. CI가 매 커밋마다 돌릴
+        # 성질이 아니다 — 대상 회차 없이 돌리면 도구가 측정 실패(exit 1)로 거부한다.
+        # 판정 로직(적재 순서 계약·canary_size 대장 판독·미해결 3종 구분·review_session 형식
+        # 호환)은 backend 잡이 수집하는 tests/backend/harness/test_canary_slice.py가 상시
+        # 검증한다 — "안 도는 코드"가 아니라 "회차를 검수할 때 사람이 돌리는 절단 도구"다.
+        "harness.canary_slice": (
+            "by-design:회차 사이드카 4종이 입력인 카나리 구간 절단 도구(MP-05) — 상주 입력이 "
+            "없고, 카나리를 검수하려는 시점에 운영자가 돌려 review_session에 먹일 큐를 만든다"
+        ),
         # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
         "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다
@@ -1140,6 +1148,17 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # tests/backend/harness/test_attempt_skill_event_reach_report.py가 CI에서 상시 검증한다
         # — 즉 "안 도는 코드"가 아니라 "라이브 입력이 있을 때 사람이 돌리는 관측기"다.
         "harness.attempt_skill_event_reach_report": _NEEDS_LIVE_SAMPLE,
+        # OPS-68(2026-09-07): 위 리포트의 짝 — 게이트 G-eos63-skill-event-reach-sample이
+        # 요구하는 *표본을 만드는* 프로브다. CI가 절대 돌려서는 안 되는 유일한 이유가 미도달
+        # 사유이기도 하다 — 이 도구는 대상 DB에 채점 행을 **쓴다**(problem_attempt·
+        # attempt_event·숙달 시계열). 상시 배선하면 CI가 매 잡마다 DB를 오염시키고, 그
+        # 오염이 곧 다른 리포트의 분모가 된다. 판정 로직(분모 0의 None 처리·실패 사유
+        # 타입명 집계·exit 0/2/3/4/5 변별)은 tests/backend/harness/
+        # test_attempt_skill_reach_probe.py가 CI에서 상시 검증한다.
+        "harness.attempt_skill_reach_probe": (
+            "by-design:실 PG에 표본을 *쓰는* 게이트 실행 도구 — 운영자가 측정 회차에 1회 "
+            "돌린다. CI 상시 실행은 DB 오염이라 금지"
+        ),
         # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
         # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
         # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서

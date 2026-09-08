@@ -84,6 +84,12 @@ from whymath_backend.api._l3_state import (
 from whymath_backend.api._l3_state import (
     get_trace as _get_trace,
 )
+from whymath_backend.api._l6_mode_reach_state import (
+    L6ModeReachCounters,
+    L6ModeReachSnapshot,
+    get_l6_mode_reach_counters,
+    set_l6_mode_reach_counters,
+)
 from whymath_backend.api._misconception_state import get_semantic_matcher
 from whymath_backend.api._ocr_state import (
     OCR_COUNTERS_KEY as _OCR_COUNTERS_KEY,
@@ -105,6 +111,24 @@ from whymath_backend.api._segmentation_state import (
 )
 from whymath_backend.api._segmentation_state import (
     get_segmentation_snapshot as _get_segmentation_snapshot,
+)
+from whymath_backend.api._subject_capability_state import (
+    ANSWER_FORM_VERIFIER_KEY as _ANSWER_FORM_VERIFIER_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    ASSESSMENT_ANSWER_VERIFIER_KEY as _ASSESSMENT_ANSWER_VERIFIER_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    EXPRESSION_EQUIVALENCE_KEY as _EXPRESSION_EQUIVALENCE_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    EXPRESSION_SEAL_KEY as _EXPRESSION_SEAL_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    FINAL_ANSWER_VERIFIER_KEY as _FINAL_ANSWER_VERIFIER_KEY,
+)
+from whymath_backend.api._subject_capability_state import (
+    STEP_CHAIN_VERIFIER_KEY as _STEP_CHAIN_VERIFIER_KEY,
 )
 from whymath_backend.api.alignments import router as alignments_router
 from whymath_backend.api.auth import (
@@ -137,6 +161,14 @@ from whymath_backend.api.study import router as study_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
+from whymath_backend.composition import (
+    default_answer_form_verifier,
+    default_assessment_answer_verifier,
+    default_expression_equivalence,
+    default_expression_seal,
+    default_final_answer_verifier,
+    default_step_chain_verifier,
+)
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.schema_version import verify_schema_version
 from whymath_backend.db.session import dispose_engine, get_session
@@ -391,6 +423,35 @@ class GrowthEvidenceExposureReachBody(BaseModel):
     )
 
 
+class L6ModeReachBody(BaseModel):
+    """/health/ready L6 응용 모드 6종 도달 관측 섹션(PB-04) — `GET /v1/gating/*` 6개 카운터.
+
+    `problem_bank_gap_review_r2.md` §0-②-나 — 6개 값이 전부 0이면 "L6 응용 모드 6종이
+    구현은 됐지만 학생 앱(mobile/web) 어디도 이 경로를 호출한 적이 없다"는 실측 주장이
+    라이브로도 유지된다는 뜻이다. 어느 값이든 0이 아니게 되는 순간이 그 모드의 도달 주장이
+    깨지는 순간이다(정적 grep 감사와의 이중 회계).
+    """
+
+    retake: int = Field(
+        ..., description="GET /v1/gating/retake 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+    suneung: int = Field(
+        ..., description="GET /v1/gating/suneung 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+    school_progress: int = Field(
+        ..., description="GET /v1/gating/school-progress 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+    thinking: int = Field(
+        ..., description="GET /v1/gating/thinking 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+    metacognition: int = Field(
+        ..., description="GET /v1/gating/metacognition 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+    gifted: int = Field(
+        ..., description="GET /v1/gating/gifted 누적 요청 수(프로세스 재시작 시 리셋)"
+    )
+
+
 class OcrReachBody(BaseModel):
     """/health/ready OCR 도달 관측 요약 (NLP-01) — 요청·성공·사유별 503 인프로세스 카운트.
 
@@ -453,6 +514,10 @@ class ReadyBody(BaseModel):
         ...,
         description="성장 증거 노출 계약 경유 도달 관측(PED-08) — /growth-evidence(구분 카운터).",
     )
+    l6_mode_reach: L6ModeReachBody = Field(
+        ...,
+        description="L6 응용 모드 6종 도달 관측(PB-04) — /v1/gating/* 6개 엔드포인트별 카운터.",
+    )
 
 
 def _component_body(check: ComponentCheck) -> ComponentCheckBody:
@@ -500,6 +565,18 @@ def _growth_evidence_exposure_body(
     달라(다른 라우트를 명명하는 별도 docstring) 별도 변환 함수를 둔다.
     """
     return GrowthEvidenceExposureReachBody(requests_total=snapshot.requests_total)
+
+
+def _l6_mode_reach_body(snapshot: L6ModeReachSnapshot) -> L6ModeReachBody:
+    """L6ModeReachSnapshot(도메인) → L6ModeReachBody(HTTP 스키마) 변환(PB-04)."""
+    return L6ModeReachBody(
+        retake=snapshot.retake,
+        suneung=snapshot.suneung,
+        school_progress=snapshot.school_progress,
+        thinking=snapshot.thinking,
+        metacognition=snapshot.metacognition,
+        gifted=snapshot.gifted,
+    )
 
 
 def _metrics_body(snapshot: MetricsSnapshot) -> MetricsSummaryBody:
@@ -703,6 +780,20 @@ def create_app(
     app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
     # 기본 큐는 CeleryJobQueue(지연 연결) — 구성 시 broker 불필요(첫 디스패치 때 연결, S4).
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
+    # ── 과목 능력 등록(push) — 계획서 100 §3.8 / EOS-89 ─────────────────────
+    # Application(여기)이 합성 루트를 **한 번** 불러 인터페이스 타입으로 app.state에 올린다.
+    # 라우터는 `api/_subject_capability_state.py`의 Depends로 꺼내 쓴다 — 그래서 Core 모듈은
+    # `composition`을 이름으로 알지 않는다(`EOS Core → Subject Interface ← Math Adapter`).
+    # 부팅 1회 호출이라 요청 경로에서 재조립하지 않는다(팩토리는 상태 없는 판정기를 준다).
+    # COMP-01: EOS-86의 `StepChainVerifier` 팩토리도 **같은 줄들 옆에** 등록한다(6번째). 이 줄이
+    #    빠지면 `api/coach.py`의 Depends가 `AttributeError`로 터지고(폴백 없음·침묵 실패 금지),
+    #    tests/infra `test_app_factory_registers_every_subject_capability`가 RED가 된다.
+    app.state.__setattr__(_EXPRESSION_EQUIVALENCE_KEY, default_expression_equivalence())
+    app.state.__setattr__(_FINAL_ANSWER_VERIFIER_KEY, default_final_answer_verifier())
+    app.state.__setattr__(_ASSESSMENT_ANSWER_VERIFIER_KEY, default_assessment_answer_verifier())
+    app.state.__setattr__(_EXPRESSION_SEAL_KEY, default_expression_seal())
+    app.state.__setattr__(_ANSWER_FORM_VERIFIER_KEY, default_answer_form_verifier())
+    app.state.__setattr__(_STEP_CHAIN_VERIFIER_KEY, default_step_chain_verifier())
     # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회). 기본은 config의 키가
     # 설정된 provider만(카카오·네이버·OAuth-a2) — 키 미설정(CI)이면 빈 dict라 콜백 404. 클라이언트는
     # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
@@ -768,6 +859,9 @@ def create_app(
     set_growth_evidence_counters(
         app, GrowthEvidenceReachCounters(), key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY
     )
+    # PB-04 — L6 응용 모드 6종(`GET /v1/gating/*`) 도달 관측 카운터. 앱 수명 동안 1개
+    # (재시작 시 리셋 — 인프로세스 계측이라 영속 저장 0·growth_evidence와 동형 전제).
+    set_l6_mode_reach_counters(app, L6ModeReachCounters())
 
     def _observe_request(elapsed_ms: float, status_code: int) -> None:
         """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
@@ -902,6 +996,7 @@ def create_app(
         growth_evidence_exposure_counters = get_growth_evidence_counters(
             request.app, key=GROWTH_EVIDENCE_EXPOSURE_COUNTERS_KEY
         )
+        l6_mode_reach_counters = get_l6_mode_reach_counters(request.app)
         # 세 딥체크는 서로 독립이라 동시 실행한다. 각 체크는 예외를 던지지 않는 계약
         # (ops/service_health — 비크래시 보고)이라 gather에 예외 누수가 없다.
         db_check, redis_check, llm_check = await asyncio.gather(
@@ -933,6 +1028,7 @@ def create_app(
             growth_evidence_exposure=_growth_evidence_exposure_body(
                 growth_evidence_exposure_counters.snapshot()
             ),
+            l6_mode_reach=_l6_mode_reach_body(l6_mode_reach_counters.snapshot()),
         )
         return JSONResponse(
             status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),

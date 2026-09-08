@@ -520,8 +520,9 @@ CATALOG: tuple[Spec, ...] = (
        "D3 난이도 타당도 KPI 재료", "l2.item_calibration", "l2.calibrate_items", status="Batch"),
     _e("WM-E-204", "개념 진단(BKT↔IRT 교차)·LearnerState 조립", "Student", "Assessment", "P0",
        "Gate2 ②·③ — LearnerState 단일 API는 갭", "l2.concept_diagnosis", "l2.learner_state"),
-    _e("WM-E-205", "약개념·선수개념 추천·학습 경로·복습 큐", "Student", "Recommendation", "P0",
-       "Gate2 ④·⑨", "l2.weak_concept_recommendation", "l2.prerequisite_recommendation",
+    _e("WM-E-205", "약·강·선수개념 추천·학습 경로·복습 큐", "Student", "Recommendation", "P0",
+       "Gate2 ④·⑨ — ASM-13 강개념(strong_points) 편입", "l2.weak_concept_recommendation",
+       "l2.strong_concept_recommendation", "l2.prerequisite_recommendation",
        "l2.learning_path", "l2.review_queue", "l2.axis_exclusions"),
     _e("WM-E-206", "학습 증거 이벤트 적재(attempt·처치·추천 회계)", "Student", "Event", "P0",
        "E3 Event — REC-03·PED-03·EOS-57", "l2.evidence_event_store", "l2.attempt_skill_event",
@@ -708,7 +709,14 @@ CATALOG: tuple[Spec, ...] = (
     _e("WM-E-807", "앱 조립·합성 루트·설정·app.state 배관", "Platform", "Operations", "P0",
        "composition = 경계의 유일한 배선 지점(EOS-69)", "composition", "config",
        "api._l3_state", "api._ocr_state", "api._misconception_state",
-       "api._growth_evidence_state", "api._segmentation_state"),
+       "api._growth_evidence_state", "api._segmentation_state",
+       # EOS-89: 과목 능력 5종의 app.state 등록 주소·조회(등록 형태의 배관). `_l3_state`와
+       # 같은 성격이라 같은 좌석에 귀속한다 — 판정 로직 0, 키·getter만.
+       "api._subject_capability_state",
+       # MOB-18(PB-04): L6 6모드 도달 카운터의 app.state 등록 주소·조회. 공개면이
+       # `_growth_evidence_state`와 동형(KEY 상수 + Snapshot + Counters + set/get)이고
+       # 교육적 판정 로직이 0이라 같은 배관 좌석에 귀속한다.
+       "api._l6_mode_reach_state"),
     _e("WM-E-808", "한국어 조사 유틸", "Platform", "Content", "P1",
        "EOS-69 B분류 해소처 — 과목 무관", "lang"),
     _e("WM-E-809", "데모 인증(시연 전용 가짜 OAuth provider)", "Admin", "Identity", "P1",
@@ -748,7 +756,10 @@ CATALOG: tuple[Spec, ...] = (
        "P0", "EOS-54/78 — HIT 중앙값 KPI 생산자", "harness.review_session",
        "harness.review_timer", "harness.needs_review_worklist",
        "harness.reviewer_sample_package", "harness.concept_content_review_apply",
-       "harness.concept_content_review_batch", "harness.concept_content_audit"),
+       "harness.concept_content_review_batch", "harness.concept_content_audit",
+       # MP-05 — 회차 앞머리 카나리 구간을 검수 큐 JSONL로 잘라내는 CLI. 검수 워크플로의
+       # *입력 생산자*라 여기 귀속한다(산출을 먹는 쪽이 harness.review_session이다).
+       "harness.canary_slice"),
     _o("WM-O-911", "골든 벤치마크 승격·경로 게이트·앵커 회차 대장", "Admin", "QA", "P0",
        "EOS-60/64 — 판정기의 FN율", "harness.golden_benchmark",
        "harness.golden_promotion_gate", "harness.anchor_round_ledger"),
@@ -762,6 +773,9 @@ CATALOG: tuple[Spec, ...] = (
        "OPS-19 — 리포트 11개 중 러너 배선은 별도", "harness.*_report",
        "-harness.surrogate_baseline_report",
        "harness.problem_bank_coverage", "harness.objective_coverage",
+       # OPS-68 — `*_report` 와일드카드에 안 걸리는 짝(표본 *생성*기라 이름이 _probe다).
+       # 리포트가 볼 표본을 만드는 도구이므로 관측 가족에 함께 귀속한다.
+       "harness.attempt_skill_reach_probe",
        "harness.concept_assessment_index"),
     # ════════════════════ C 클라이언트 — Flutter·Web ════════════════════
     _c("WM-C-001", "로그인·계정 보안 화면·토큰 배관", "Student", "Client UX", "P0",

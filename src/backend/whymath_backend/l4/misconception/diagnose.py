@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from functools import lru_cache
 
 from whymath_backend.l4.misconception.catalog import CATALOG
@@ -52,17 +53,29 @@ from whymath_backend.l4.misconception.models import (
 _DEFAULT_TOP_K = 3
 
 
-def _normalize(text: str) -> str:
-    """매칭용 표기 정규화 — NFKC 유니코드 정규화 + 모든 공백 제거.
+# MISC-17: LaTeX 표기 접기 — OCR(`OcrResult.plain_latex`)·MathLive 산출물은 계약상 LaTeX라
+# `(a+b)^2`·`a^{2}`·`\left(…\right)` 형태로 온다. NFKC는 `²`→`2`만 펴고 `^`·`{}`·크기 조정
+# 표식은 남겨, 인식기의 *정상* 출력이 신호 2개 중 1개(0.5)만 맞아 게이트 ①(0.65)에서 탈락하던
+# 실측 결함(PR #1034 Codex P1). `^`와 `{}`를 지우면 `a^{2}`·`a^2`·`a²` 모두 정규형 `a2`로 접힌다.
+# 카탈로그 `signals`·`correct_form`에는 이 문자가 0건(2026-09-07 실측)이라 양변 정규화가 일관되고,
+# `regex_signals`는 *정규형 텍스트*를 겨냥하므로 패턴 내부의 `[^0-9]` 같은 메타문자와는 무관하다.
+# 분수(`\frac`)·곱셈 기호(`\cdot`) 등 다른 LaTeX 명령은 접지 않는다 — 신호가 그 형태를 쓰지 않아
+# 필요가 실측되지 않았고, 과도한 접기는 거짓양성 축이 된다(필요 시 실측 후 확장).
+_LATEX_FOLD = re.compile(r"\\left|\\right|[\^{}]")
 
-    학생 표기 변이를 흡수한다: `a² + b²`·`a²+b²`·`a 2 + b 2`가 모두 같은 정규형 `a2+b2`로,
-    위첨자/아래첨자·전각 숫자도 일반 숫자로(NFKC). 비교에만 쓰며, 반환되는 신호 문자열은
-    원본을 유지한다(표시·텔레메트리 일관성).
+
+def _normalize(text: str) -> str:
+    """매칭용 표기 정규화 — NFKC 유니코드 정규화 + 모든 공백 제거 + LaTeX 표기 접기.
+
+    학생 표기 변이를 흡수한다: `a² + b²`·`a²+b²`·`a 2 + b 2`·`a^2+b^2`·`a^{2}+b^{2}`가 모두
+    같은 정규형 `a2+b2`로, 위첨자/아래첨자·전각 숫자도 일반 숫자로(NFKC). 비교에만 쓰며,
+    반환되는 신호 문자열은 원본을 유지한다(표시·텔레메트리 일관성).
 
     참고: NFKC는 위첨자 `²`→`2`로 펴므로 정규식은 *지수 표기를 평문으로* 작성한다
     (예: `(3+4)²=3²+4²`의 정규형은 `(3+4)2=32+42`). 정규식 패턴은 이 정규형을 겨냥한다.
+    LaTeX 접기(`_LATEX_FOLD`)로 `(3+4)^2=3^2+4^2`도 같은 정규형이 된다(MISC-17).
     """
-    return "".join(unicodedata.normalize("NFKC", text).split())
+    return _LATEX_FOLD.sub("", "".join(unicodedata.normalize("NFKC", text).split()))
 
 
 @lru_cache(maxsize=256)
@@ -88,14 +101,44 @@ def _signal_hit(signal: str, norm_text: str) -> bool:
     return norm_sig in norm_text
 
 
+def is_refuted(misconception: Misconception, text: str) -> bool:
+    """이 텍스트가 그 오개념을 **반박**하는가 — 반박 조건의 단일 판정처(MISC-23).
+
+    `_match_one`(substring 경로)과 **의미(임베딩) 경로**가 같이 쓴다. 한쪽에만 걸면 다른 쪽이
+    같은 오개념을 되살린다 — `combine_diagnoses`는 substring이 뺀 id를 "semantic-only"로 보고
+    아래에 붙이므로, substring에서만 거부하면 semantic 후보가 그대로 노출된다(PR #1039 Codex P2).
+
+    `combine_diagnoses`가 아니라 여기에 두는 이유: 그 함수는 원문 텍스트를 받지 않는 순수
+    결합기(두 리스트 재배치·변형 0)이고, 반박은 *텍스트에 대한 판정*이라 축이 다르다.
+    """
+    norm_text = _normalize(text)
+    return any(_compile(rx).search(norm_text) is not None for rx in misconception.refuting_regex)
+
+
+def reject_refuted(candidates: Sequence[MisconceptionMatch], text: str) -> list[MisconceptionMatch]:
+    """후보 목록에서 반박된 것을 제거 — 경로와 무관한 **공통 출구**용.
+
+    substring·의미 어느 경로로 들어왔든 여기를 지나면 반박된 후보는 남지 않는다.
+    """
+    return [m for m in candidates if not is_refuted(m.misconception, text)]
+
+
 def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | None:
     """단일 misconception 매칭 — substring 부분집합(정규형 비교) + 정규식 보조 경로(OR).
 
     confidence = min(1.0, (substr매치 + regex매치) / len(signals)). 둘 다 0이면 None.
     분모는 substring `signals` 기준 유지(v1.1 의미 보존) — 정규식은 분자에 *가산*·상한 1.0.
     v1.3: 개별 signal 매칭은 `_signal_hit`(짧은 영숫자 signal 경계 검사) 경유.
+
+    MISC-23: `refuting_regex`가 하나라도 매치되면 **신호를 세기 전에** None이다. 공출현 AND는
+    오개념을 *저지른* 풀이와 그것을 *설명한* 정답을 구별하지 못하므로, 반박 축이 없으면 정답에
+    확신 오진단이 나간다(실측: conf 1.0으로 품질 게이트 통과).
     """
     norm_text = _normalize(text)
+    # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
+    # "얼마나 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
+    if is_refuted(misconception, text):
+        return None
     matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
         rs for rs in misconception.regex_signals if _compile(rs).search(norm_text) is not None

@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -1946,6 +1947,113 @@ class TestStaleBranchClassificationWiring:
         assert "--unshallow" in out
         assert "미해결 장기 미머지 브랜치" not in out
 
+    def test_brief_forwards_pr_state_lookup_flags_to_render(self, bare_remote, monkeypatch, capsys):
+        """brief가_pr_state_lookup_ok_실패_사유를_render까지_전달한다 (HARN-78 배선 실재성)
+
+        `cmd_brief`가 `scan.pr_state_lookup_ok`/`pr_state_lookup_error`를 읽고도
+        `render_brief`에 안 넘기면, 화면은 상태 조회가 실패했는지 모른 채 예전 문구
+        ("처분은 해당 PR에서")를 계속 낸다 — "장치 존재 ≠ 배선"(OPS-10)의 이 태스크 축.
+        """
+        import remote_claims
+        import report
+
+        _, clone = bare_remote
+        mine = clone("brief-pr-state")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-1",
+                        ref="refs/remotes/origin/claude/pr-1",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=12.0,
+                        ahead=7,
+                        status="pr_filed",
+                        evidence="PR #846 (상태 미확인)",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=False,
+                pr_state_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정",
+            ),
+        )
+        captured_kwargs: dict = {}
+        original_render = report.render_brief
+
+        def spy(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return original_render(*args, **kwargs)
+
+        monkeypatch.setattr(report, "render_brief", spy)
+        capsys.readouterr()
+        assert cli.main(["brief"]) == 0
+
+        assert captured_kwargs.get("pr_state_lookup_ok") is False
+        assert "NoTokenError" in captured_kwargs.get("pr_state_lookup_error", "")
+        out = capsys.readouterr().out
+        assert "상태 미확인" in out
+        assert "처분은 해당 PR에서" not in out
+
+    def test_branches_cmd_reports_pr_closed_and_state_lookup_gap(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """branches_CLI가_PR닫힘과_상태_미확인을_화면에_낸다 (HARN-78 배선 실재성)
+
+        CI 진입점(`cmd_branches`)이 `pr_closed`를 별도 태그로 안 내거나 상태 미확인
+        사실을 삼키면, 이 축의 정본화(remote_claims)는 있는데 CI가 보는 화면에는
+        여전히 예전 3~4분류만 나온다.
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-pr-closed")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        now = datetime.now(timezone.utc)
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="gates/deploy-environment-approval",
+                        ref="refs/remotes/origin/gates/deploy-environment-approval",
+                        last_commit_at=now,
+                        age_days=26.0,
+                        ahead=3,
+                        status="pr_closed",
+                        evidence="PR #967 닫힘(미머지)",
+                    ),
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-2",
+                        ref="refs/remotes/origin/claude/pr-2",
+                        last_commit_at=now,
+                        age_days=13.0,
+                        ahead=9,
+                        status="pr_filed",
+                        evidence="PR #847 (상태 미확인)",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=False,
+                pr_state_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정",
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "PR 닫힘(미머지): 1건" in out
+        assert "[PR-닫힘] gates/deploy-environment-approval — PR #967 닫힘(미머지)" in out
+        assert "PR 열림/닫힘 조회 미수행" in out and "NoTokenError" in out
+
 
 class TestBatchBlobParsing:
     """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.
@@ -1989,3 +2097,111 @@ class TestBatchBlobParsing:
         bodies = ["status: done\n", "status: todo\n"]
         parsed = list(remote_claims._iter_batch_blobs(self._batch_output(bodies)))
         assert [remote_claims._top_level_field(p, "status") for p in parsed] == ["done", "todo"]
+
+
+class TestAddWriteSideDepAudit:
+    """`add --notes`의 쓰기측 의존 감사 선검사 (HARN-71).
+
+    읽기측(`audit-deps` · CI harness-integrity)만 있던 시절, `add`는 선행 어구가 든
+    notes를 **조용히 등재하고 EXIT 0**을 냈다(실측). 그 red는 CI에서야 드러나 세션이
+    push를 두 번 태웠다. 여기서 고정하는 것은 세 갈래다 — (가) 위반이면 거부하고
+    **대장에 아무것도 남기지 않는다** (나) 실제 선행이면 `--depends`로 통과한다
+    (다) 어구 없는 notes는 그대로 통과한다.
+    """
+
+    _NOTES_VIOLATION = "선행: S1-10-audit-repay-1 착지 후 착수"
+
+    @staticmethod
+    def _findings_for(repo: Path, task_id: str) -> list[object]:
+        """읽기측 검출기가 이 태스크에 대해 낸 위반 목록."""
+        import dep_declaration
+
+        backlog, _ = store.load_backlog(repo)
+        return [
+            f
+            for f in dep_declaration.find_undeclared_dependencies(backlog.tasks)
+            if f.task_id == task_id
+        ]
+
+    def _add_argv(self, task_id: str, *extra: str) -> list[str]:
+        return [
+            "add",
+            "--eos-priority",
+            "P2",
+            "--id",
+            task_id,
+            "--title",
+            "쓰기측 선검사 프로브",
+            "--track",
+            "math-completion",
+            "--stage",
+            "S2",
+            "--acceptance",
+            "테스트 green",
+            *extra,
+        ]
+
+    def test_undeclared_dependency_in_notes_rejected_before_write(self, seeded_repo: Path, capsys):
+        """가_선행어구_notes만_주면_거부되고_대장은_무변경"""
+        task_path = seeded_repo / "backlog" / "tasks" / "S2-92-dep-probe.yaml"
+        events_before = _all_events_text(seeded_repo)
+
+        assert cli.main(self._add_argv("S2-92-dep-probe", "--notes", self._NOTES_VIOLATION)) == 1
+
+        err = capsys.readouterr().err
+        assert "--notes" in err, "고칠 인자를 지목해야 사람이 없는 플래그를 뒤지지 않는다"
+        assert "--depends" in err, "통과 경로(실제 선행이면 선언하라)를 함께 말해야 한다"
+        # 거부는 *쓰기 전*이다 — 파일도 이벤트도 남지 않아야 한다
+        assert not task_path.exists()
+        assert _all_events_text(seeded_repo) == events_before
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "S2-92-dep-probe" not in backlog.tasks
+        assert cli.main(["validate"]) == 0
+
+    def test_same_notes_passes_when_dependency_is_declared(self, seeded_repo: Path):
+        """나_같은_문장도_depends를_함께_주면_통과"""
+        assert (
+            cli.main(
+                self._add_argv(
+                    "S2-93-dep-probe",
+                    "--notes",
+                    self._NOTES_VIOLATION,
+                    "--depends",
+                    "S1-10-audit-repay-1",
+                )
+            )
+            == 0
+        )
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks["S2-93-dep-probe"].depends_on == ["S1-10-audit-repay-1"]
+        # 읽기측 검출기도 같은 판정이어야 한다 — 쓰기측이 느슨하면 CI가 다시 red다.
+        # (CLI `audit-deps` 대신 검출기를 직접 부른다: 시딩 저장소에는 실 저장소의
+        #  면제 계약이 지목하는 태스크가 없어 CLI 쪽은 무관한 사유로 exit 1을 낸다)
+        assert not self._findings_for(seeded_repo, "S2-93-dep-probe")
+
+    def test_notes_without_dependency_phrase_passes(self, seeded_repo: Path):
+        """다_어구_없는_notes는_통과"""
+        assert (
+            cli.main(
+                self._add_argv(
+                    "S2-94-dep-probe",
+                    "--notes",
+                    "S1-10-audit-repay-1 과 같은 파일을 건드리므로 충돌에 주의한다",
+                )
+            )
+            == 0
+        )
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert "S2-94-dep-probe" in backlog.tasks
+        assert not self._findings_for(seeded_repo, "S2-94-dep-probe")
+
+    def test_cancel_is_structurally_exempt_not_forgotten(self):
+        """cancel은_구조적_면제다_빠뜨린_것이_아니다"""
+        # HARN-71 acceptance ①은 notes 기록 경로 4종(block·amend·add·cancel)의 커버리지를
+        # **실측**하라고 요구한다. block·amend·add는 위 선검사가 막고, cancel만 선검사가
+        # 없다 — 빠뜨린 것이 아니라 읽기측 검출기가 cancelled 태스크를 아예 스캔하지 않기
+        # 때문이다(취소된 태스크의 선행 순서는 실효가 없다). 그 전제가 조용히 바뀌면
+        # cancel이 무방비 경로가 되므로 여기서 동결한다.
+        import dep_declaration
+
+        assert "cancelled" in dep_declaration._SCAN_SKIP_STATUSES

@@ -49,6 +49,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._l3_state import get_cache
 from whymath_backend.api._rate_limit import RateLimitedVisualization
+from whymath_backend.api._subject_capability_state import (
+    get_assessment_answer_verifier,
+    get_expression_seal,
+)
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
 from whymath_backend.db.models.user import UserProfile
@@ -218,11 +222,15 @@ async def post_study_unit(
 
     signals = await _build_signals(session, user.user_id, concept_code)
     tally = get_process_tally()
+    # EOS-89: 과목 능력 2종은 app.state 등록분(`create_app`)에서 꺼내 공급 사슬에 내려보낸다 —
+    # 렌더 어댑터가 합성 루트를 스스로 부르지 않게 하는 push 경로의 시작점이 여기다.
     result = await supply(
         code=concept_code,
         signals=signals,
         session=session,
         cache=get_cache(request),
+        seal=get_expression_seal(request),
+        assessment_verifier=get_assessment_answer_verifier(request),
         k_type=KnowledgeType(objective.k_type).value,
         tally=tally,
     )
