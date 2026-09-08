@@ -31,6 +31,8 @@ REPO="${REPO:?REPO 미설정 — owner/name 형식으로 넘겨야 한다}"
 DRY_RUN="${DRY_RUN:-0}"
 
 fatal=0
+am_on=0
+behind_any=0
 behind_am=0
 updated=0
 conflict=0
@@ -93,6 +95,14 @@ while IFS= read -r row; do
     continue
   fi
 
+  # 버리기 **전에** 각 축을 따로 센다 (HARN-87). 원래 이 두 줄은 카운터 없이 곧장
+  # continue했고, 그래서 요약의 "BEHIND+auto-merge 0건"이 서로 처방이 다른 세 상태를
+  # 한 화면으로 만들었다: ⓐauto-merge를 켠 PR이 아예 없다(자동화가 구조적으로 발화 불가)
+  # ⓑBEHIND가 없다(정상 대기) ⓒ둘 다 있으나 서로 다른 PR이다. "알고리즘을 붙였으면 그것이
+  # 작동한 비율을 리포트가 말해야 한다"(CLAUDE.md 2026-08-03)의 이 워크플로 축이다.
+  [ "$automerge" = "on" ] && am_on=$((am_on + 1))
+  [ "$state" = "BEHIND" ] && behind_any=$((behind_any + 1))
+
   # auto-merge를 켜지 않은 PR은 건드리지 않는다 — 리뷰 중인 diff를 임의로 전진시키지 않기 위함.
   [ "$automerge" != "on" ] && continue
   [ "$state" != "BEHIND" ] && continue
@@ -131,7 +141,31 @@ while IFS= read -r row; do
 done <<<"$(printf '%s' "$payload" | jq -c '.[]')"
 
 # ③ 요약 — 분모를 항상 낸다. "0건"이 침묵이 아니라 값으로 보여야 한다.
-echo "── 요약: 스캔 ${scanned}건 · BEHIND+auto-merge ${behind_am}건 · 최신화 ${updated}건 ·"
+#
+# 분모가 세 층이다: 스캔(전체) → 판정(mergeStateStatus를 아는 것) → 각 축(auto-merge·BEHIND)
+# → 교집합(실제 대상). 마지막 하나만 내면 0의 의미를 복원할 수 없다.
+decided=$((scanned - unknown))
+echo "── 요약: 스캔 ${scanned}건 · 판정 ${decided}건 · auto-merge 켜짐 ${am_on}건 · BEHIND ${behind_any}건 ·"
+echo "        BEHIND+auto-merge ${behind_am}건 · 최신화 ${updated}건 ·"
 echo "        충돌 ${conflict}건 · 미판정 ${unknown}건 · 기타실패 ${other_err}건"
+
+# ④ 대상이 0건이면 **왜** 0인지 말한다 (HARN-87).
+#
+# 셋은 처방이 완전히 다르다. ⓐ는 이 자동화가 아무리 자주 돌아도 발화할 수 없다는 뜻이라
+# 주기 조정이 아니라 운용 관행(또는 설계)을 바꿔야 하고, ⓑ·ⓒ는 정상 대기다. 이 줄이
+# 없으면 ⓐ가 ⓑ처럼 보이고, 그 오독은 "경합이 없어서 안 돌았다"는 잘못된 안심을 만든다.
+if [ "$behind_am" -eq 0 ]; then
+  if [ "$decided" -eq 0 ]; then
+    echo "ⓘ 대상 0건 — 판정된 PR이 0건이다(전부 미판정이거나 열린 PR이 없다). 대상 집합을 아직 모른다."
+  elif [ "$am_on" -eq 0 ]; then
+    echo "::notice::대상 0건의 원인 = auto-merge를 켠 PR이 하나도 없다(판정 ${decided}건 중 0건)."
+    echo "이 자동화는 auto-merge가 켜진 PR만 다루므로, 이 상태에서는 예약이 아무리 자주 돌아도"
+    echo "구조적으로 발화하지 않는다 — '경합이 없었다'가 아니라 '대상 집합이 비어 있다'."
+  elif [ "$behind_any" -eq 0 ]; then
+    echo "ⓘ 대상 0건 — auto-merge 켜짐 ${am_on}건은 있으나 BEHIND가 0건이다. 할 일이 없는 정상 상태."
+  else
+    echo "ⓘ 대상 0건 — auto-merge 켜짐 ${am_on}건·BEHIND ${behind_any}건이 각각 존재하나 교집합이 없다(서로 다른 PR)."
+  fi
+fi
 
 exit "$fatal"
