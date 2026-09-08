@@ -406,6 +406,57 @@ class TestFactorSignFlipServingReach:
         assert m is None or m.matched_regex_signals == ()
 
 
+class TestExplicitCorrectionMentionSuppressesRegex:
+    """MISC-22 v1.5 후속(Codex P1, PR #1071 리뷰) — 거짓 항등식을 *인용해 반박*한 진술은
+
+    정규식이 발화해도(부분 문자열만 보므로) confidence를 얻으면 안 된다. v1.5 전에는 이 인용-반박
+    진술도 conf 0.5(게이트 미만)에 머물러 무해했으나, "정규식 매치=신호 전체" 정정 이후에는 그대로
+    두면 확신 개입(정답에 오진단)이 나갈 뻔했다 — 5개 채널(factor-sign-flip·distribution-over-
+    power·square-root-positivity·fraction-cancellation·log-distribution) 전부 실측 확인.
+    `EXPLICIT_CORRECTION_MENTION`(catalog.py)이 정정 언급 앞에서 해당 regex_signals의 미발화를
+    보장한다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=10) if m.misconception.id == mid), None)
+
+    def test_factor_sign_flip_refuted_quote_not_confident(self) -> None:
+        m = self._find("(x-2)=0이므로 x=-2라는 풀이는 틀리고 x=2다", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_distribution_refuted_quote_not_confident(self) -> None:
+        m = self._find("(3+4)²=3²+4²는 틀렸고 정답은 49다", "distribution-over-power")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_square_root_refuted_quote_not_confident(self) -> None:
+        m = self._find("√((-3)²)=-3은 틀리고 3이 맞다", "square-root-positivity")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_fraction_cancellation_refuted_quote_not_confident(self) -> None:
+        # "틀린"(관형형)은 어간 "틀리"를 substring으로 포함하지 않는다 — 활용형 나열 검증.
+        m = self._find("(2+4)/2=4는 틀린 계산이고 실제로는 3이다", "fraction-cancellation")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_log_distribution_refuted_quote_not_confident(self) -> None:
+        m = self._find("log(2+3)=log2+log3은 틀렸고 log5가 맞다", "log-distribution")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_genuine_misconceptions_still_reach_full_confidence(self) -> None:
+        # 회귀 가드 — 반박 언급이 *없는* 진짜 오개념까지 죽이면 안 된다.
+        cases = (
+            ("(x-2)=0 이므로 x=-2", "factor-sign-flip"),
+            ("(3+4)² = 3² + 4² = 25", "distribution-over-power"),
+            ("√((-3)²) = -3", "square-root-positivity"),
+            ("(2+4)/2 = 4", "fraction-cancellation"),
+            ("log(2+3) = log2 + log3", "log-distribution"),
+        )
+        for text, mid in cases:
+            m = self._find(text, mid)
+            assert m is not None, mid
+            assert m.confidence == 1.0, mid
+            assert len(m.matched_regex_signals) == 1, mid
+
+
 class TestExtremumAmbiguousCoincidenceNotOverconfident:
     """MISC-24 — `extremum-value-vs-point-confused`가 f(x₀)=x₀ 우연의 일치 정답에 확신 오진단을
     내지 않는다.

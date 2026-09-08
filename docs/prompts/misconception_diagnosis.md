@@ -294,6 +294,23 @@ Wilson 경계로 exit 0/1을 낸다: `python -m whymath_backend.harness.anchor_d
 `anchor_detection_channel_eval`이 다루지 않지만 `tests/backend/l4/test_misconception_diagnose.py`
 `TestNumericSubstitutionDetection`이 실측·동결한다.
 
+**MISC-22 후속 — 정정 언급 방어(Codex P1, PR #1071 리뷰)** — 위 정정 직후 리뷰가 놓친 축을
+지적했다: 학생이 거짓 항등식을 *인용해 반박*한 진술("(x-2)=0이므로 x=-2라는 풀이는 틀리고
+x=2다"·"√((-3)²)=-3은 틀리고 3이 맞다")도 정규식은 부분 문자열만 보므로 여전히 발화한다. v1.5
+전에는 conf 0.5(게이트 미만)에 머물러 무해했지만, "정규식 매치=신호 전체" 정정 이후에는 그대로
+confidence 1.0까지 올라가 확신 개입(정답에 오진단)이 나갈 뻔했다(5채널 전부 실측 확인). 카탈로그에
+`EXPLICIT_CORRECTION_MENTION`(`ZERO_ROOT_MENTION` 옆에 정의 — "틀리·틀렸·틀린·틀려·틀릴·틀림·
+아니·오답·잘못·오류")을 신설하고, 이 5개 채널의 `regex_signals`를 `root-loss-by-dividing`과 같은
+방식(`\A(?!.*<패턴>).*`)으로 정정 언급 앞에서 미발화하게 만들었다. 한글 활용형은 음절 블록이라
+substring 분해가 안 된다는 점(`"틀린"`이 어간 `"틀리"`를 문자열로 포함하지 않음)을 실측으로 확인해
+활용형을 개별 나열했다. `tests/backend/l4/test_misconception_diagnose.py`
+`TestExplicitCorrectionMentionSuppressesRegex`가 5채널 전부·정답 회귀 양쪽을 동결한다.
+
+**정직한 공백**: `root-loss-by-dividing`도 같은 취약점이 있다 — 다만 substring 두 신호("양변"·
+"x로 나누")가 이미 conf 1.0을 만들어 이번 정정과 *무관하게* 이전부터 노출돼 있었다(범위 밖 —
+`MISC-25`로 분리 등재). `EXPLICIT_CORRECTION_MENTION`이 카탈로그 전체(800+ 항목)의 substring
+경로에서 이 축을 얼마나 커버하는지도 미측정 — `MISC-25` 소관.
+
 **MISC-24 해소(v1.6)** — 위 "extremum-value-vs-point-confused" 27/27 서빙 도달은 정규식이
 "극댓값" substring을 리터럴 포함해 **원리상 구별 불가한 우연의 일치 정답까지** 확신 진단으로
 내보내는 자리였다(위 "알려진 한계 → 해소" 절 참조). `ambiguous_regex_signals` 필드로 이 항목의
