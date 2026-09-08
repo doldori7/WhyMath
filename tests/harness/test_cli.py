@@ -2205,3 +2205,121 @@ class TestAddWriteSideDepAudit:
         import dep_declaration
 
         assert "cancelled" in dep_declaration._SCAN_SKIP_STATUSES
+
+
+class TestTransitionRejectionGuidance:
+    """전이 거부가 **해소 경로**를 함께 내는가 (HARN-86).
+
+    사고 경위: 2026-09-07 LIC-07(owner=kiki) 완료 기입을 Kiki에게 안내하며 `done
+    ... --as kiki` 한 줄만 주었는데, 그 태스크가 todo라 전이표에 없어 exit 1로
+    공전했다 — 왕복 1회 낭비. 세션 쪽 규칙("검증 없는 실행 안내 금지")은 이미
+    있으므로 대책을 **도구 쪽**에 둔다: 거부가 해소 경로를 내면 안내자가 전이표를
+    몰라도 실행자가 막히지 않는다.
+    """
+
+    def _task(self, status: str, owner: str = "claude") -> cli.Task:
+        return cli.Task(
+            id="TEST-01-probe",
+            title="probe",
+            track="infra-debt",
+            stage="S3",
+            status=status,
+            owner=owner,
+        )
+
+    # ── ① 사고 재현 경로: todo → done ────────────────────────────────────
+    def test_todo_to_done_rejection_carries_start_command(self):
+        """todo→done_거부는_start_선행_명령을_동봉한다"""
+        message = cli._transition(self._task("todo"), "done")
+        assert message is not None
+        assert "todo → in_progress → done" in message
+        # 실행자가 그대로 붙여 넣을 수 있어야 한다 — "start를 먼저 하세요" 같은
+        # 산문은 안내가 아니라 또 하나의 규칙 설명이다.
+        assert "backlog.py start TEST-01-probe" in message
+        assert "backlog.py done TEST-01-probe --artifact <증적>" in message
+
+    def test_human_owned_rejection_carries_as_flag_on_every_hop(self):
+        """사람소유_거부는_모든_홉에_as_플래그를_단다"""
+        # LIC-07이 실제로 그랬다 — owner=kiki. `--as`가 빠진 안내는 owner 거부로
+        # 또 한 번 튕겨 왕복이 2회가 된다.
+        message = cli._transition(self._task("todo", owner="kiki"), "done")
+        assert message is not None
+        assert "start TEST-01-probe --as kiki" in message
+        assert "done TEST-01-probe --as kiki --artifact <증적>" in message
+
+    # ── ② 변별력: 정상 전이는 같은 화면을 내지 않는다 ──────────────────────
+    def test_allowed_transition_emits_no_guidance(self):
+        """허용된_전이는_안내를_내지_않는다"""
+        # 성공/실패 양쪽에서 같은 값을 내는 검사는 검증이 아니라 위장이다
+        # (CLAUDE.md 2026-07-17 "변별력 없는 검증 스텝 금지").
+        assert cli._transition(self._task("todo"), "in_progress") is None
+        assert cli._transition(self._task("in_progress"), "done") is None
+
+    def _startable_id(self, capsys) -> str:
+        """게이트 없이 즉시 착수 가능한 태스크 1건 (TestLifecycle과 같은 방식)."""
+        assert cli.main(["next", "--n", "1", "--json"]) == 0
+        return json.loads(capsys.readouterr().out)[0]["id"]
+
+    def test_guidance_is_absent_from_successful_cli_run(self, seeded_repo: Path, capsys):
+        """정상_start_출력에는_해소_경로가_없다"""
+        task_id = self._startable_id(capsys)
+        assert cli.main(["start", task_id, "--session", "b"]) == 0
+        captured = capsys.readouterr()
+        assert "해소 경로" not in (captured.out + captured.err)
+
+    def test_rejection_surfaces_through_cli_stderr(self, seeded_repo: Path, capsys):
+        """거부_안내는_CLI_stderr로_실제로_나온다"""
+        # 함수 단위 통과와 "사용자가 실제로 본다"는 다르다 — 배선까지 동결한다.
+        # 같은 태스크의 같은 상태(todo)에서 갈리는 두 검사다: start는 통과하고
+        # review는 거부된다 — 화면이 갈리지 않으면 이 안내는 변별력이 0이다.
+        task_id = self._startable_id(capsys)
+        assert cli.main(["review", task_id]) == 1
+        assert "해소 경로" in capsys.readouterr().err
+
+    # ── ③ 종결 상태: 없는 경로를 지어내지 않는다 ──────────────────────────
+    def test_terminal_status_says_no_route_instead_of_inventing_one(self):
+        """종결_상태는_경로를_지어내지_않는다"""
+        for terminal in cli.TERMINAL_STATUSES:
+            message = cli._transition(self._task(terminal), "in_progress")
+            assert message is not None
+            assert "해소 경로 없음" in message
+            # 우회를 권하면 안 된다 — 거부는 판정이다(CLAUDE.md 거부 우회 금지).
+            assert "손편집" in message
+            assert "backlog.py add" in message
+
+    # ── ④ 산출물 검사: 안내한 명령이 실제로 파싱되는가 ─────────────────────
+    def test_every_suggested_command_actually_parses(self):
+        """안내한_모든_명령이_실제_파서를_통과한다"""
+        # 문자열이 아니라 **구성된 결과**를 검사한다(CLAUDE.md 2026-09-01 ①).
+        # 이 검사가 없으면 `review --as kiki`처럼 존재하지 않는 플래그를 안내해도
+        # 초록이다 — 그 안내를 받은 사람은 argparse 오류를 보게 된다.
+        parser = cli.build_parser()
+        statuses = tuple(cli.STATUS_TRANSITIONS)
+        pairs = [
+            (src, dst)
+            for src in statuses
+            for dst in statuses
+            if dst not in cli.STATUS_TRANSITIONS.get(src, ()) and src != dst
+        ]
+        assert pairs, "거부 쌍이 0건이면 이 전수 가드는 공허하게 통과한다"
+        checked = 0
+        for src, dst in pairs:
+            for owner in ("claude", "kiki"):
+                route = cli._transition_route(src, dst)
+                if route is None:
+                    continue
+                for status in route:
+                    command = cli._status_command(self._task(src, owner=owner), status)
+                    argv = command.replace(cli._CLI + " ", "").split()
+                    # 자리표시자는 그 자리의 값일 뿐이므로 파싱에는 영향이 없다
+                    parser.parse_args(argv)
+                    checked += 1
+        assert checked > 0, "스캔 0건은 실패다 — 검사 대상을 하나도 못 찾았다"
+
+    def test_route_is_shortest_not_merely_valid(self):
+        """경로는_유효한_아무_경로가_아니라_최단이다"""
+        # in_progress→cancelled는 blocked 경유·todo 경유 둘 다 유효하지만 어느 쪽도
+        # 2단계다. 3단계짜리 경로를 내놓으면 사람이 한 번 더 왕복한다.
+        assert len(cli._transition_route("in_progress", "cancelled")) == 2
+        assert cli._transition_route("blocked", "done") == ["todo", "in_progress", "done"]
+        assert cli._transition_route("todo", "review") == ["in_progress", "review"]

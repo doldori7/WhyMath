@@ -38,6 +38,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -80,13 +81,96 @@ def _fail(message: str, code: int = 1) -> int:
     return code
 
 
+# ── 전이 거부의 해소 경로 안내 (HARN-86) ────────────────────────────────────
+# 거부는 장애물이 아니라 판정이다(CLAUDE.md 프로세스·안내). 다만 "허용 목록"만 내는
+# 거부는 *전이표를 이미 아는 사람*에게만 유용하다 — 안내자가 규칙을 모른 채 런북에
+# 명령을 적으면 그 런북은 실행 시점에 exit 1로 공전한다(2026-09-07 실측: LIC-07의
+# done 안내가 todo→done 거부로 왕복 1회 낭비). 그래서 거부가 **해소 경로 자체**를
+# 함께 낸다 — 안내자가 규칙을 몰라도 실행자가 막히지 않게. "고칠 수 없는 위반을
+# 지적하는 게이트는 사람이 게이트를 끄게 만든다"(HARN-52 등재 사유)의 같은 축이다.
+_CLI = "python3 scripts/harness/backlog.py"
+
+
+def _transition_route(source: str, target: str) -> list[str] | None:
+    """source → target 최단 상태 경로(source 제외한 경유 상태 목록). 도달 불가면 None.
+
+    BFS다 — 전이표는 6노드짜리 작은 그래프이므로 최단 경로가 곧 "최소 왕복"이다.
+    `seen`을 enqueue 시점에 채우므로 같은 상태를 두 번 거치는 경로는 나오지 않는다.
+    """
+    if source == target:
+        return []
+    seen = {source}
+    queue: deque[tuple[str, list[str]]] = deque([(source, [])])
+    while queue:
+        node, path = queue.popleft()
+        for nxt in STATUS_TRANSITIONS.get(node, ()):
+            if nxt in seen:
+                continue
+            step = [*path, nxt]
+            if nxt == target:
+                return step
+            seen.add(nxt)
+            queue.append((nxt, step))
+    return None
+
+
+def _status_command(task: Task, status: str) -> str:
+    """목표 status로 가는 CLI 한 줄.
+
+    `--as <owner>` 표기는 owner 거부 메시지(HARN-06, cmd_start·cmd_done)가 이미 쓰는
+    형식을 그대로 재사용한다 — 새 어휘를 만들지 않는다. `--as`를 받는 것은 start·done
+    두 명령뿐이므로 나머지 홉에는 붙이지 않는다(붙이면 argparse가 거부한다).
+    `<증적>`·`<사유>`는 그 명령의 required 인자 자리이며, 안내를 보는 사람이 원래
+    알고 있는 값이다(앞 명령이 만들어 내는 값이 아니다 — CLAUDE.md 자리표시자 규칙).
+    """
+    as_flag = f" --as {task.owner}" if task.owner != "claude" else ""
+    commands = {
+        "in_progress": f"{_CLI} start {task.id}{as_flag}",
+        "review": f"{_CLI} review {task.id}",
+        "done": f"{_CLI} done {task.id}{as_flag} --artifact <증적>",
+        "blocked": f"{_CLI} block {task.id} --reason '<사유>'",
+        "cancelled": f"{_CLI} cancel {task.id} --reason '<사유>'",
+        "todo": f"{_CLI} unblock {task.id}",
+    }
+    return commands[status]
+
+
+def _transition_guidance(task: Task, new_status: str) -> str:
+    """거부에 덧붙일 해소 경로 블록 — 그대로 붙여 넣을 수 있는 명령 목록."""
+    route = _transition_route(task.status, new_status)
+    if route is None:
+        # 현행 전이표에서 도달 불가는 곧 "출발이 종결 상태"다. 그래도 종결 여부를
+        # 따로 묻는다 — 전이표가 바뀌어 다른 도달 불가 쌍이 생겨도 없는 사실을
+        # 단정하지 않기 위해서다(모르면 모른다고 — CLAUDE.md AI·신뢰).
+        if task.status in TERMINAL_STATUSES:
+            return (
+                f"\n  해소 경로 없음 — '{task.status}'은(는) 종결 상태이며 나가는 전이가 없다. "
+                f"후속 작업은 새 태스크로 등재한다: {_CLI} add ... "
+                f"(대장 YAML 손편집으로 되돌리지 않는다 — CLAUDE.md 거부 우회 금지)"
+            )
+        return (
+            f"\n  해소 경로 없음 — 전이표에 '{task.status}'에서 '{new_status}'로 가는 "
+            f"경로가 없다(models.py STATUS_TRANSITIONS 확인)"
+        )
+    chain = " → ".join([task.status, *route])
+    lines = [f"\n  해소 경로 ({len(route)}단계): {chain}"]
+    lines += [f"\n    {i}) {_status_command(task, status)}" for i, status in enumerate(route, 1)]
+    return "".join(lines)
+
+
 def _transition(task: Task, new_status: str) -> str | None:
-    """상태 전이 검사 — 허용되지 않으면 오류 메시지 반환."""
+    """상태 전이 검사 — 허용되지 않으면 오류 메시지 반환.
+
+    거부 메시지에는 항상 해소 경로가 붙는다. 정상 전이는 None을 돌려주므로 안내
+    문자열이 나올 자리가 구조적으로 없다 — 성공/실패가 같은 화면을 내면 그 안내는
+    변별력이 0이고, 변별력 없는 안내는 위장이다(CLAUDE.md 2026-07-17).
+    """
     allowed = STATUS_TRANSITIONS.get(task.status, ())
     if new_status not in allowed:
         return (
             f"{task.id}: {task.status} → {new_status} 전이 불가 "
             f"(허용: {list(allowed) or '없음(종결 상태)'})"
+            f"{_transition_guidance(task, new_status)}"
         )
     return None
 
