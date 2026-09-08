@@ -88,4 +88,4 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 - 전체 런북: `scripts/demo/README.md` (§A Windows 경로·함정표)
 - 시연 대본: `docs/architecture/s1_e2e_demo_script.md`
 - 실측 기록: `MEMORY.md` 2026-07-09~10 결정 로그
-- 정리: `.\scripts\demo\stop_demo.ps1` · 게이트: `python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "https://..."`
+- 정리: `.\scripts\demo\stop_demo.ps1` · 게이트: `python scripts\harness\backlog.py gates clear G-kiki-device-demo --as kiki --evidence "https://..." --no-base "시연 녹화 링크 — 판정 근거가 커밋·PR이 아니라 실기기 시연 영상이다"`
