@@ -80,6 +80,91 @@ class TestOverdueGates:
         assert report.overdue_gates(backlog, date(2026, 7, 20)) == []
 
 
+class TestGateDueDisplay:
+    """일정이 미래로 못박힌 재확인 게이트가 '지체'로 오독되지 않는지 (2026-09-08 등재).
+
+    remind_after_days는 '그 문턱을 넘기 전까지는 조용히 대기'하라는 설계인데,
+    status/gates 출력이 문턱과 무관하게 경과일만 보이면 정상 대기가 지체처럼
+    읽힌다. G-state-machine-deferral-recheck(문턱 101일, 재확인 지점 12/13)
+    선례가 실제로 이 형태로 오독됐다.
+    """
+
+    def _backlog_with_future_recheck(self) -> Backlog:
+        backlog = self._backlog()
+        backlog.gates["G-far"] = Gate(
+            id="G-far",
+            title="8상태 상태 머신 보류 재확인",
+            kind="decision",
+            requested="2026-09-03",
+            remind_after_days=101,
+        )
+        return backlog
+
+    def _backlog(self) -> Backlog:
+        return _backlog()
+
+    def test_gate_not_due_before_threshold(self):
+        """test_문턱_전에는_행동_불요로_판정"""
+        backlog = self._backlog_with_future_recheck()
+        assert report.gate_due(backlog.gates["G-far"], date(2026, 9, 8)) is False
+
+    def test_gate_due_once_threshold_reached(self):
+        """test_문턱_도달_후에는_행동_필요로_판정"""
+        backlog = self._backlog_with_future_recheck()
+        assert report.gate_due(backlog.gates["G-far"], date(2026, 12, 13)) is True
+
+    def test_gate_without_remind_after_days_is_always_due(self):
+        """test_remind_after_days_미설정은_즉시형이라_항상_행동_필요"""
+        gate = Gate(id="G-immediate", title="즉시형", requested="2026-07-05")
+        assert report.gate_due(gate, date(2026, 7, 6)) is True
+
+    def test_target_date_is_requested_plus_threshold(self):
+        """test_목표일은_requested_플러스_문턱"""
+        backlog = self._backlog_with_future_recheck()
+        assert report.gate_target_date(backlog.gates["G-far"]) == date(2026, 12, 13)
+
+    def test_status_suffix_shows_days_elapsed_when_due(self):
+        """test_행동_필요_게이트는_경과일_표기"""
+        backlog = self._backlog()
+        suffix = report.gate_status_suffix(backlog.gates["G-key"], date(2026, 7, 20))
+        assert suffix == " — 15일 경과"
+
+    def test_status_suffix_shows_target_date_not_elapsed_days_when_not_due(self):
+        """test_예정_게이트는_경과일_대신_목표일과_D-day_표기
+
+        핵심 회귀 방지 — '5일 경과'처럼 지체를 뜻하는 문구가 나오면 안 된다.
+        """
+        backlog = self._backlog_with_future_recheck()
+        suffix = report.gate_status_suffix(backlog.gates["G-far"], date(2026, 9, 8))
+        assert suffix == " — 예정 재확인 2026-12-13 (D-96)"
+        assert "경과" not in suffix
+
+    def test_render_status_due_gate_appears_in_action_section(self):
+        """test_행동_필요_게이트는_사람_행동_필요_섹션에_나온다"""
+        backlog = self._backlog_with_future_recheck()
+        # G-key: 7일 문턱, 15일 경과 → 행동 필요.
+        text = report.render_status(backlog, [], date(2026, 7, 20))
+        due_section = text.split("── 대기 중 게이트 (사람 행동 필요) ──")[1].split("──")[0]
+        assert "G-key" in due_section
+        assert "15일 경과" in due_section
+
+    def test_render_status_future_recheck_gate_not_shown_as_elapsed(self):
+        """test_미래_재확인_게이트가_status에서_지체로_안_보인다 (회귀 재현 케이스)
+
+        재현 대상: G-state-machine-deferral-recheck가 요청일 5일 뒤에 이미
+        '5일 경과'로 대기 중 게이트 목록에 섞여 나왔던 사고.
+        """
+        backlog = self._backlog_with_future_recheck()
+        text = report.render_status(backlog, [], date(2026, 9, 8))
+        assert "── 예정된 재확인 (아직 기한 전 — 행동 불요) ──" in text
+        scheduled_section = text.split("── 예정된 재확인")[1]
+        assert "G-far" in scheduled_section
+        assert "예정 재확인 2026-12-13 (D-96)" in scheduled_section
+        # 행동 필요 섹션에는 나오면 안 된다.
+        due_section = text.split("── 대기 중 게이트 (사람 행동 필요) ──")[1].split("──")[0]
+        assert "G-far" not in due_section
+
+
 class TestBrief:
     def test_brief_shows_current_stage_my_tasks_and_reminders(self):
         """test_브리핑에_현재_스테이지와_내_태스크와_리마인드"""

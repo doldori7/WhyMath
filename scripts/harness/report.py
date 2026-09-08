@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import selector
-from models import Backlog
+from models import Backlog, Gate
 
 # 상태별 표시 기호 (터미널 폭 절약)
 _STATUS_MARK = {
@@ -44,6 +44,51 @@ def overdue_gates(backlog: Backlog, today: date) -> list[tuple[str, int]]:
             result.append((gate.id, days))
     result.sort(key=lambda pair: -pair[1])
     return result
+
+
+def gate_due(gate: Gate, today: date) -> bool:
+    """게이트가 지금 사람 행동이 필요한 상태인가.
+
+    remind_after_days가 없으면(즉시형) 항상 대상이다. 있으면 그 문턱을 넘어야
+    대상이다 — '만료 없는 유예·제외 금지'(CLAUDE.md)의 반대편 실수를 막는다:
+    재확인 지점을 미래로 못박은 게이트(예: G-state-machine-deferral-recheck,
+    remind_after_days=101)는 그 지점 전까지는 *일정대로 대기 중*이지 지체가
+    아니다. 문턱 전에 '경과일'만 보여 주면 정상 대기가 지체처럼 읽힌다.
+    """
+    if gate.remind_after_days is None:
+        return True
+    days = _days_pending(gate.requested, today)
+    return days is not None and days >= gate.remind_after_days
+
+
+def gate_target_date(gate: Gate) -> date | None:
+    """remind_after_days 문턱에 도달하는 날짜 (requested + remind_after_days)."""
+    if not gate.requested or gate.remind_after_days is None:
+        return None
+    try:
+        y, m, d = (int(x) for x in gate.requested.split("-"))
+    except ValueError:
+        return None
+    return date(y, m, d) + timedelta(days=gate.remind_after_days)
+
+
+def gate_status_suffix(gate: Gate, today: date) -> str:
+    """게이트 한 줄에 붙일 상태 표기.
+
+    지금 행동이 필요한 게이트만 '{N}일 경과'로 표시한다(진짜 지체). 아직 문턱
+    전인 예정된 재확인은 대신 목표일과 D-day를 보여 준다 — 경과일 숫자만
+    보이면 재확인 지점이 미래(예: 12/13)인데도 마치 그날부터 밀린 것처럼 읽힌다.
+    """
+    days = _days_pending(gate.requested, today)
+    if days is None:
+        return ""
+    if gate_due(gate, today):
+        return f" — {days}일 경과"
+    target = gate_target_date(gate)
+    remaining = gate.remind_after_days - days if gate.remind_after_days is not None else None
+    if target is not None and remaining is not None:
+        return f" — 예정 재확인 {target.isoformat()} (D-{remaining})"
+    return f" — {days}일 경과"
 
 
 def stage_progress(backlog: Backlog) -> list[tuple[str, int, int]]:
@@ -145,12 +190,22 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
 
     pending = [g for g in backlog.gates.values() if g.status == "pending"]
     if pending:
-        lines.append("")
-        lines.append("── 대기 중 게이트 (사람 행동 필요) ──")
-        for gate in sorted(pending, key=lambda g: g.id):
-            days = _days_pending(gate.requested, today)
-            age = f" — {days}일 경과" if days is not None else ""
-            lines.append(f"⏳ {gate.id} [{gate.assignee}] {gate.title}{age}")
+        due_now = [g for g in pending if gate_due(g, today)]
+        scheduled = [g for g in pending if not gate_due(g, today)]
+        if due_now:
+            lines.append("")
+            lines.append("── 대기 중 게이트 (사람 행동 필요) ──")
+            # 오래된 순 — 가장 지체된 것이 먼저 보여야 한다.
+            for gate in sorted(due_now, key=lambda g: -(_days_pending(g.requested, today) or 0)):
+                suffix = gate_status_suffix(gate, today)
+                lines.append(f"⏳ {gate.id} [{gate.assignee}] {gate.title}{suffix}")
+        if scheduled:
+            lines.append("")
+            lines.append("── 예정된 재확인 (아직 기한 전 — 행동 불요) ──")
+            # 가장 임박한 재확인부터 — 문턱까지 얼마나 남았는지가 관심사다.
+            for gate in sorted(scheduled, key=lambda g: gate_target_date(g) or date.max):
+                suffix = gate_status_suffix(gate, today)
+                lines.append(f"🕓 {gate.id} [{gate.assignee}] {gate.title}{suffix}")
 
     ready, excluded = selector.candidates(backlog)
     lines.append("")
@@ -194,6 +249,12 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
                 "id": g.id,
                 "assignee": g.assignee,
                 "days": _days_pending(g.requested, today),
+                # due=False는 지체가 아니라 미래 재확인 지점을 기다리는 정상 대기다
+                # (remind_after_days 미도달) — 소비자가 'days'만 보고 지체로 오독하지
+                # 않도록 명시적 판정을 함께 싣는다.
+                "due": gate_due(g, today),
+                "remind_after_days": g.remind_after_days,
+                "target_date": (gate_target_date(g).isoformat() if gate_target_date(g) else None),
             }
             for g in backlog.gates.values()
             if g.status == "pending"

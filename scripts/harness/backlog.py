@@ -1052,11 +1052,21 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     if args.gate_action == "list" or args.gate_action is None:
         pending = [g for g in backlog.gates.values() if g.status == "pending"]
         others = [g for g in backlog.gates.values() if g.status != "pending"]
-        print("⏳ 대기 중 게이트:")
-        for gate in sorted(pending, key=lambda g: g.id):
-            days = report._days_pending(gate.requested, date.today())
-            age = f" — {days}일 경과" if days is not None else ""
-            print(f"  {gate.id} [{gate.assignee}/{gate.kind}] {gate.title}{age}")
+        today = date.today()
+        due_now = [g for g in pending if report.gate_due(g, today)]
+        scheduled = [g for g in pending if not report.gate_due(g, today)]
+        print("⏳ 대기 중 게이트 (사람 행동 필요):")
+        due_sorted = sorted(due_now, key=lambda g: -(report._days_pending(g.requested, today) or 0))
+        for gate in due_sorted:
+            suffix = report.gate_status_suffix(gate, today)
+            print(f"  {gate.id} [{gate.assignee}/{gate.kind}] {gate.title}{suffix}")
+        if scheduled:
+            print("🕓 예정된 재확인 (아직 기한 전 — 행동 불요):")
+            for gate in sorted(scheduled, key=lambda g: report.gate_target_date(g) or date.max):
+                print(
+                    f"  {gate.id} [{gate.assignee}/{gate.kind}] {gate.title}"
+                    f"{report.gate_status_suffix(gate, today)}"
+                )
         if others:
             print("✔ 통과/면제:")
             for gate in sorted(others, key=lambda g: g.id):
