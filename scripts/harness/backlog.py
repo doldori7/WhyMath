@@ -1050,13 +1050,22 @@ def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
 def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.gate_action == "list" or args.gate_action is None:
-        pending = [g for g in backlog.gates.values() if g.status == "pending"]
+        # HARN-94: 경과일만 찍던 화면을 **처리 상황**으로 바꾼다. 계산·정렬은 report에 한 곳
+        # (pending_gate_views) — 여기서 따로 세면 status 화면과 두 숫자가 갈라진다.
+        views = report.pending_gate_views(backlog, date.today())
         others = [g for g in backlog.gates.values() if g.status != "pending"]
-        print("⏳ 대기 중 게이트:")
-        for gate in sorted(pending, key=lambda g: g.id):
-            days = report._days_pending(gate.requested, date.today())
-            age = f" — {days}일 경과" if days is not None else ""
-            print(f"  {gate.id} [{gate.assignee}/{gate.kind}] {gate.title}{age}")
+        overdue_n = sum(1 for v in views if v.overdue)
+        print(f"⏳ 대기 중 게이트 {len(views)}건 (독촉 초과 {overdue_n}건) — 급한 순:")
+        for view in views:
+            gate = view.gate
+            # 대기 태스크는 0건도 찍는다 — 줄이 없으면 "0건"과 "안 셌다"를 구분할 수 없다.
+            dep = f"대기 태스크 {len(view.dependents)}건"
+            if view.dependents:
+                dep += f" ({', '.join(view.dependents)})"
+            mark = "⚠" if view.overdue else "·"
+            print(f"  {mark} {gate.id} [{gate.assignee}/{gate.kind}]")
+            print(f"      {view.status_text()} · {dep}")
+            print(f"      {gate.title}")
         if others:
             print("✔ 통과/면제:")
             for gate in sorted(others, key=lambda g: g.id):
