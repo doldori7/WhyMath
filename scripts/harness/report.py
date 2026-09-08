@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import date
 
 import selector
@@ -31,6 +32,98 @@ def _days_pending(gate_requested: str, today: date) -> int | None:
         return (today - date(y, m, d)).days
     except ValueError:
         return None
+
+
+@dataclass(frozen=True)
+class GateView:
+    """pending 게이트 하나의 **처리 상황** — 세 화면(gates list·status·status --json)의 공통 계산.
+
+    왜 한 곳인가: 종전에는 세 화면이 각자 `_days_pending`만 불러 "N일 경과"를 찍었고,
+    `remind_after_days`는 어디에도 나오지 않았다. 그래서 **독촉 기한을 넘긴 게이트와 아직
+    한참 남은 게이트가 화면상 구분되지 않았다** — 2026-09-08 실측에서 `G-eos63`(7일 경과 /
+    기한 7일 = 초과)보다 `G-eos-ip-separation-evidence`(9일 경과 / 기한 14일 = 미도래)가
+    **더 급해 보였다**. 경과일만 크면 급해 보이기 때문이다.
+
+    이것이 왜 문제인가: 이 목록에는 *재확인 지점이 미래인* 예약 게이트가 섞여 있다(2026-10-26·
+    2026-09-27·2026-12-13 3건). 예약분이 "N일 방치"로 읽히면 목록 전체가 소음이 되고,
+    소음이 된 목록은 사람이 읽지 않는다 — 상시 실패 경고가 습관화되는 것과 같은 형태다.
+
+    **추론하지 않는다**: title 산문에서 "재확인 지점"을 파싱해 예약 여부를 추정하지 않는다
+    (모른다 ≠ 아니다). `remind_after_days`가 이 저장소가 그 축에 이미 채택한 대리값이며
+    (`G-state-machine-deferral-recheck`의 101일이 그렇게 등재됐다), 여기서는 그 값만 쓴다.
+    """
+
+    gate: object  # models.Gate — 순환 import를 피해 느슨하게 둔다
+    days: int | None  # 경과일 (requested 미기재면 None)
+    remind_after: int | None  # 독촉 기한 (미설정이면 None)
+    dependents: list[str]  # 이 게이트를 requires_gates로 건 **미종결** 태스크 id
+
+    @property
+    def overdue(self) -> bool:
+        """독촉 기한을 넘겼는가. 기한·경과일 중 하나라도 모르면 **False**(단정하지 않는다)."""
+        return (
+            self.days is not None
+            and self.remind_after is not None
+            and self.days >= self.remind_after
+        )
+
+    @property
+    def remaining(self) -> int | None:
+        """독촉까지 남은 일수. 이미 초과했거나 기한이 없으면 None."""
+        if self.days is None or self.remind_after is None or self.overdue:
+            return None
+        return self.remind_after - self.days
+
+    @property
+    def over_by(self) -> int | None:
+        """독촉 기한을 넘긴 일수. 초과가 아니면 None."""
+        if not self.overdue:
+            return None
+        assert self.days is not None and self.remind_after is not None
+        return self.days - self.remind_after
+
+    def status_text(self) -> str:
+        """한 줄 처리 상황 — 경과·기한·초과/잔여를 **셋 다** 낸다.
+
+        셋 중 하나라도 빠지면 두 게이트가 같아 보인다: 경과만 내면 기한을 모르고, 기한만
+        내면 지금 어디인지 모르며, 초과/잔여만 내면 분모가 없다.
+        """
+        if self.days is None:
+            return "경과일 미상(requested 미기재)"
+        if self.remind_after is None:
+            return f"{self.days}일 경과 · 독촉 기한 없음"
+        if self.overdue:
+            # 0일 지남 = 오늘이 바로 그 기한. "0일 지남"은 사람에게 안 읽힌다.
+            over = "오늘 기한 도달" if self.over_by == 0 else f"{self.over_by}일 지남"
+            return f"독촉 초과 · {self.days}일 경과 / 기한 {self.remind_after}일 ({over})"
+        return f"대기 · {self.days}일 경과 / 기한 {self.remind_after}일 ({self.remaining}일 남음)"
+
+    def sort_key(self) -> tuple[int, int, str]:
+        """초과분 먼저(많이 지난 순) → 임박 순 → 기한 없음. id순은 급한 것을 아래로 민다."""
+        if self.overdue:
+            return (0, -(self.over_by or 0), str(getattr(self.gate, "id", "")))
+        if self.remaining is not None:
+            return (1, self.remaining, str(getattr(self.gate, "id", "")))
+        return (2, 0, str(getattr(self.gate, "id", "")))
+
+
+def pending_gate_views(backlog: Backlog, today: date) -> list[GateView]:
+    """대기 중 게이트를 **급한 순**으로. 세 화면이 이 목록 하나를 공유한다.
+
+    `dependents`는 `selector.gate_dependent_tasks`(단일 진실 원천)를 그대로 쓴다 — 각
+    화면이 자기 comprehension으로 세면 한쪽만 고쳐질 때 두 화면이 서로 다른 사실을 말한다.
+    """
+    views = [
+        GateView(
+            gate=g,
+            days=_days_pending(g.requested, today),
+            remind_after=g.remind_after_days,
+            dependents=[t.id for t in selector.gate_dependent_tasks(backlog, g.id)],
+        )
+        for g in backlog.gates.values()
+        if g.status == "pending"
+    ]
+    return sorted(views, key=GateView.sort_key)
 
 
 def overdue_gates(backlog: Backlog, today: date) -> list[tuple[str, int]]:
@@ -143,14 +236,21 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
         lines.append("")
         lines.append(f"⚠ {stale_gate_line}")
 
-    pending = [g for g in backlog.gates.values() if g.status == "pending"]
-    if pending:
+    views = pending_gate_views(backlog, today)
+    if views:
+        overdue_n = sum(1 for v in views if v.overdue)
         lines.append("")
-        lines.append("── 대기 중 게이트 (사람 행동 필요) ──")
-        for gate in sorted(pending, key=lambda g: g.id):
-            days = _days_pending(gate.requested, today)
-            age = f" — {days}일 경과" if days is not None else ""
-            lines.append(f"⏳ {gate.id} [{gate.assignee}] {gate.title}{age}")
+        lines.append(
+            f"── 대기 중 게이트 (사람 행동 필요) — {len(views)}건 중 독촉 초과 {overdue_n}건 ·"
+            " 급한 순 ──"
+        )
+        for view in views:
+            gate = view.gate
+            # 0건도 값으로 찍는다 — 줄이 없으면 "0건"과 "안 셌다"를 구분할 수 없다.
+            dep = f" · 대기 태스크 {len(view.dependents)}건"
+            mark = "⚠" if view.overdue else "⏳"
+            lines.append(f"{mark} {gate.id} [{gate.assignee}] {view.status_text()}{dep}")
+            lines.append(f"    {gate.title}")
 
     ready, excluded = selector.candidates(backlog)
     lines.append("")
@@ -189,14 +289,30 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
         "gate_stale_blocked": [
             {"id": task.id, "gates": gates} for task, gates in selector.stale_gate_blocked(backlog)
         ],
+        # 텍스트 화면과 **같은 사실**을 기계도 읽게 한다 (HARN-94). 종전에는 days만 있어,
+        # 기계 소비자도 "독촉 초과"와 "아직 한참 남음"을 구분할 수 없었다.
+        #
+        # 왜 `blocked_tasks`가 아니라 `dependents`인가 (Codex P2 · PR #1070): HARN-94
+        # acceptance ⑦이 `blocked_tasks`라고 적었으나 **그 이름이 틀렸다**. 게이트는
+        # status가 blocked인 태스크만 붙잡는 게 아니다 — `todo` 태스크도 requires_gates로
+        # 착수 후보에서 제외된다. blocked만 세면 게이트가 실제로 붙잡는 양을 **과소 보고**한다.
+        # 값은 `selector.gate_dependent_tasks`(단일 진실 원천)에서 오고 그 docstring도
+        # "이 목록은 *의존 관계*이지 '현재 차단'이 아니다"라고 못박는다. 구현을 틀린 문면에
+        # 맞추면 JSON이 자기 내용에 대해 거짓말을 하므로, 이름을 지키고 **계약을 정정**했다
+        # (HARN-94 acceptance 정정항 · 2026-09-08).
         "pending_gates": [
             {
-                "id": g.id,
-                "assignee": g.assignee,
-                "days": _days_pending(g.requested, today),
+                "id": v.gate.id,
+                "assignee": v.gate.assignee,
+                "kind": v.gate.kind,
+                "days": v.days,
+                "remind_after_days": v.remind_after,
+                "overdue": v.overdue,
+                "over_by": v.over_by,
+                "remaining": v.remaining,
+                "dependents": v.dependents,
             }
-            for g in backlog.gates.values()
-            if g.status == "pending"
+            for v in pending_gate_views(backlog, today)
         ],
         "next": [t.id for t in ready[:5]],
         "validate_errors": errors,
