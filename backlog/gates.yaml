@@ -230,15 +230,25 @@ gates:
     evidence: "2026-08-31 전곳 확보 — license_snapshot_coverage.py 20/20 · exit 0(기계 판정). 경위: 1차(08-30 원격 세션) 6/20(egress 403 14곳) → 2차(08-31 Kiki 머신) 19/20(신규 13곳) → 3차 siyavula URL 정정 후 재수집 1/1 성공(run_id=20260831T013601Z-8daf15·sha256=45723a589bd0a69d). 잔여 1곳이던 siyavula는 egress가 아니라 URL 결함이었고(구 /terms 404), 홈페이지 href 스캔으로 https://www.siyavula.com/info/terms-and-conditions 를 발견해 카탈로그 정정(#918). 내용 검증(PR #918 리뷰 P2 기준 — 키워드 매칭≠라이선스 근거): 스냅샷 158,035바이트에서 creative commons×6·license류×24·copyright×9·terms and conditions×26 확인, 원문에 'licensed under a Creative Commons Attribution Only License'(=CC BY) 부여 조항 실재. 단서: 해당 페이지는 'Some material'·'Only material that is clearly marked'로 CC BY 적용 범위를 명시 표기 자료로 한정한다 — 사이트 전체가 CC BY가 아님(LIC-05로 licensing_safety.md 반영 등재 — LIC-04는 타 세션이 선점해 CLI가 번호를 재배정했다). 성공 기준 2중(coverage=0 AND LICENSE_EVIDENCE≥1) 모두 충족."
     cleared_by: null
     notes: ""
+  - id: G-merge-queue-enable-ruleset
+    title: "main 룰셋에 merge queue 활성화 (Settings→Rules→Rulesets→main→Require merge queue) — 2026-09-07 Kiki 결정 G-merge-queue-or-strict-relax의 집행. 선행 조건(ci.yml merge_group 트리거)은 origin/main 3a30244c에 착지 완료라 지금 켜도 안전. 6항목 브리핑·파라미터 표·자가검증 D 전문 = .github/branch-protection-setup.md '## Merge queue 활성화'. clear 증적 = 자가검증 D의 MERGE_QUEUE=True 출력. 켜기 전까지 ruleset_drift.py가 merge_queue 정책 불일치를 위반으로 보고한다(기계 집행)"
+    kind: human
+    assignee: kiki
+    status: waived
+    requested: 2026-09-07
+    remind_after_days: 3
+    evidence: null
+    cleared_by: null
+    notes: "실행 불가 — merge queue는 조직 소유 저장소 전용인데 doldori7/WhyMath는 owner.type=User(개인 계정·공개). 룰셋 편집 화면에 'Require merge queue' 항목 자체가 없다(2026-09-07 Kiki 실측 + GET /repos/doldori7/WhyMath 실측). 면제가 아니라 전제 반증에 의한 폐기다. 대체 = HARN-85-pr-auto-resync-workflow(자동 재동기화·Kiki 선택 D안). [정정 2026-09-07] 최초 waive 사유가 대체 태스크를 'HARN-81'로 적었으나 그 번호는 타 세션의 HARN-81-amend-path-silent-shrinkage-warning이 쓰고 있어 CLI가 HARN-85로 재배정했다 — 존재하지 않는 승계자를 가리켜 추적성이 끊긴 상태였다(PR #1040 Codex P2 지적·수용)."
   - id: G-merge-queue-or-strict-relax
     title: "머지 경합 구조 해소 결정 — GitHub merge queue 도입 또는 'up to date' 요구 해제 (저장소 관리자 설정·OPS-58 ⑤)"
     kind: decision
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-01
     remind_after_days: 7
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-07 **정정** — 최초 판정(같은 날)은 '1) merge queue 도입'이었으나 **전제가 반증**됐다. 실측: GET /repos/doldori7/WhyMath → visibility=public이지만 owner.type=**User**(개인 계정). GitHub merge queue는 **조직(Organization) 소유 저장소 전용**이라 이 저장소에서는 UI 항목 자체가 없다(Kiki가 룰셋 편집 화면에서 'Require merge queue'를 찾지 못한 것이 그 결과 — UI 경로 문제 아님). 결함 원인: 결정을 올리기 전 **계정 유형을 확인하지 않았다** — 라이브 룰셋 실측은 '지금 꺼져 있다'만 말하고 '켤 수 있다'를 말하지 않는데 부재를 미설정으로 읽었다.\\n\\n**재판정 = D) 자동 재동기화 워크플로우**(Kiki 선택). 예약 워크플로우가 열린 PR 중 behind + auto-merge 켜진 것을 찾아 update-branch API로 자동 최신화한다. strict(up-to-date 강제)는 **유지** — 보호를 낮추지 않고 충족을 자동화한다는 원 취지는 그대로다. 2)strict 해제는 실측 반례(#931의 ReviewStatus.quarantined 추가가 #935 단언을 red로 만듦)로 계속 배제, 3)현행 유지는 OPS-58 단축 후에도 main 전진 간격을 못 이겨 배제, A)조직 이관은 이관 부수효과 미실측이라 보류.\\n\\n판정 기준: origin/main 79b0cc4d (PR #1040 브랜치가 병합한 base). 승계 태스크 = **HARN-85-pr-auto-resync-workflow**(최초 기재의 'HARN-81'은 번호 충돌로 CLI가 재배정한 것을 반영하지 못한 오기 — PR #1040 Codex P2 지적·정정). 집행 게이트 G-merge-queue-enable-ruleset은 실행 불가라 waive, 대신 G-pr-auto-resync-token이 신설됐다."
+    cleared_by: kiki
     notes: "[문제] PR 하나를 머지하는 데 재동기화가 4회 필요했다(2026-08-31 PR #935 실측).\n  원인은 실패가 아니라 구조적 경합이다:\n    ⓐ 브랜치 보호에 `Require branches to be up to date before merging`이 켜져 있다\n       (.github/branch-protection-setup.md:52). main이 움직이면 무조건 재동기화 → CI 재시작.\n    ⓑ 그 게이트가 29분 41초다. main은 지금 15~30분마다 전진한다(병렬 세션 다수).\n  30분짜리 게이트가 15~30분 간격의 전진을 이길 수 없다 — 산술적으로 진다.\n\n[이미 한 것 — OPS-58] ⓑ를 줄였다. pytest 병렬화로 실측 1.60배(직렬 100.1s → -n 4 62.7s,\n  커버리지 총계 완전 일치). CI 잡 예상 29분 41초 → 약 19~20분. 경합 *창*은 줄지만\n  경합 자체는 남는다 — main이 20분 안에 또 전진하면 같은 일이 반복된다.\n\n[결정이 필요한 것 — ⓐ] 셋 중 하나. 전부 저장소 관리자 설정이라 세션이 못 바꾼다.\n  1) GitHub **merge queue** 도입 (권장) — 이 문제를 풀려고 만들어진 기능이다. 큐가\n     PR을 main 최신 위에 순서대로 얹어 검증하고 통과분만 넣는다. up-to-date 보장을\n     유지하면서 사람이 재동기화할 필요가 없어진다. 비용: ci.yml에 `merge_group` 트리거\n     추가 + 브랜치 보호에 큐 활성화. 계약(required checks)은 그대로 유지된다.\n  2) `Require branches to be up to date` 해제 — 즉시 경합이 사라지지만, main의 최신\n     변경과 이 PR의 조합이 검증되지 않은 채 들어간다. 이번 세션에서 그 검증이 실제로\n     일한 사례가 있다(#931이 ReviewStatus에 quarantined를 추가하자 #935의 단언이 red —\n     동기화하지 않았으면 머지 후 main에서 터졌다). **비권장** 근거가 실측으로 있다.\n  3) 현행 유지 + OPS-58 단축만으로 감내 — 경합 빈도는 줄지만 0이 되진 않는다.\n\n[판단 재료] 2)를 배제할 근거가 이번 세션에 실측으로 남았다는 점이 핵심이다. 즉 선택은\n  실질적으로 1) vs 3)이고, 1)은 설정 작업 1회로 반복 비용을 없앤다.\n\n[세션이 대행 가능한 범위] 결정이 1)이면 ci.yml의 `merge_group` 트리거 추가는 세션이\n  PR로 낼 수 있다. 브랜치 보호에서 큐를 켜는 것만 Kiki 작업이다."
   - id: G-operator-seat-first-grant
     title: "운영자 좌석 1호 발급 (whymath-pg) — 1~3단계 완료(2026-08-31 원본 볼륨 복귀·stamp 확정 a9b8c7d6e5f4·백업 확보). 4단계 실행 대기: stamp→upgrade head→운영자 부트스트랩→content_admin grant — 복붙 블록은 notes에 전문 수록"
@@ -290,6 +300,16 @@ gates:
     evidence: "READY:True (check_status 6모델 전부·2026-07-09) + 라이브 rephrase 184/590 성공. '키 투입'(서버 라이브·도달·첫 파이프라인 동작) 충족. '실측 비용 검증'은 S1-12(클라우드 티어)로 이관"
     cleared_by: null
     notes: "ROADMAP 병목 ② — S1 라이브 선행분 전체의 선결 조건"
+  - id: G-pr-auto-resync-token
+    title: "PR 자동 재동기화용 PAT 발급 — 저장소 시크릿 PR_AUTO_RESYNC_TOKEN (fine-grained PAT · Repository access=doldori7/WhyMath · 권한 Contents:Read and write + Pull requests:Read and write). 없으면 pr-auto-resync 워크플로가 fail-closed로 exit 1(아무것도 바꾸지 않음) — GITHUB_TOKEN이 만든 push는 CI를 재발화시키지 않아 새 head에 체크 0건이 되고 strict 하에서 PR이 영구히 막히기 때문(PR #1040 Codex P1). 발급 경로 = GitHub Settings→Developer settings→Personal access tokens→Fine-grained tokens→Generate new token, 등록 경로 = 저장소 Settings→Secrets and variables→Actions→New repository secret. 자가검증 = Actions 탭 pr-auto-resync를 dry_run=0으로 1회 수동 실행해 '쓰기 자격 없음'이 사라지고 요약 줄(스캔 N건)이 나오는지 확인"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-07
+    remind_after_days: 3
+    evidence: null
+    cleared_by: null
+    notes: ""
   - id: G-prod-dead-column-check
     title: "prod DB(whymath-pg:5433) user_profile 미소비 컬럼 비영행 확인 — school_id·subscription_tier/_started_at/_renewed_at·school_region·gender 각각 NOT NULL 행이 있는지 실측(ADMIN-02 acceptance① 선결·샌드박스에서 접근 불가)"
     kind: human
