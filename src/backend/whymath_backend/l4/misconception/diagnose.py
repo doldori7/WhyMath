@@ -42,6 +42,16 @@ signal을 영숫자 경계 정규식(`(?<![0-9A-Za-z.])sig(?![0-9A-Za-z.])`)으�
 한계(방향맹)의 정본 해법이고, *어휘* 차원 거짓양성(짧은 토큰 오매칭)은 v1.3이 직접 줄인다.
 잔여: 부분매칭(0.5) 자체의 정밀도 한계(예: `'분모'` 단독 0.5)는 substring 설계의 알려진
 트레이드오프 — semantic/judge 계층(슬104~108)이 그 자리다.
+
+v1.6 정정(MISC-24): MISC-22가 5개 정규식 채널(factor-sign-flip 등)의 정규식-단독 매치를
+게이트 도달로 정정한 부수효과로, `extremum-value-vs-point-confused`가 `f(x₀)=x₀`인 *우연의
+일치* 정답(예: 극대점 x=2에서 극댓값도 2)에도 confidence 1.0을 내 확신 오진단 위험이 있음이
+드러났다 — 실은 MISC-22 이전부터 있던 사실(그 정규식이 리터럴 '극댓값'을 포함해 substring이
+항상 함께 발화). 이 항목은 오개념 발화 텍스트와 우연의 일치 정답 텍스트가 **글자 그대로
+동일**해 정규식으로도 반박(`refuting_regex`)으로도 원리상 구별이 불가능하다.
+`ambiguous_regex_signals` 필드(models.py)로 이 항목만 예외적으로 정규식 가산을 0으로 둬
+confidence가 항상 substring 신호만으로 결정되게 한다(다른 5개 채널의 MISC-22 정정은 완전히
+불변).
 """
 
 from __future__ import annotations
@@ -152,6 +162,12 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     MISC-23: `refuting_regex`가 하나라도 매치되면 **신호를 세기 전에** None이다. 공출현 AND는
     오개념을 *저지른* 풀이와 그것을 *설명한* 정답을 구별하지 못하므로, 반박 축이 없으면 정답에
     확신 오진단이 나간다(실측: conf 1.0으로 품질 게이트 통과).
+
+    MISC-24: `ambiguous_regex_signals=True`인 항목은 정규식 매치가 `matched_regex_signals`
+    (텔레메트리)에는 담기되 confidence 가산에는 기여하지 않는다(numerator에서 배제) —
+    `extremum-value-vs-point-confused`처럼 오개념 발화와 우연의 일치 정답이 텍스트상 완전히
+    동일해(`refuting_regex`로 반박할 대상 자체가 없음) 정규식 매치 자체가 확정 증거가 될 수
+    없는 항목을 위한 것이다(models.py 필드 docstring 근거).
     """
     norm_text = _normalize(text)
     # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
@@ -167,7 +183,15 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     # MISC-22(v1.5): 정규식 매치 1건 = substring 신호 전체(len(signals))와 동등한 완결 증거로
     # 가산한다 — disjoint 역참조 정규식은 substring AND 전체에 준하는 확정적 단서이기 때문이다
     # (위 docstring 근거). 분모는 substring signals 개수(>=1, 카탈로그 불변식) 유지.
-    numerator = len(matched) + len(matched_regex) * len(misconception.signals)
+    # MISC-24: 단, `ambiguous_regex_signals`가 선 항목은 정규식 가산을 0으로 둔다 — 매치된
+    # 정규식이 확정 증거가 아니라 원리상 반박 불가능한 모호 신호이기 때문이다(models.py 근거).
+    if misconception.ambiguous_regex_signals:
+        numerator = len(matched)
+    else:
+        numerator = len(matched) + len(matched_regex) * len(misconception.signals)
+    if numerator == 0:
+        # matched_regex만 있고(ambiguous 항목이라 가산 0) matched는 비었다면 세울 증거가 없다.
+        return None
     confidence = min(1.0, numerator / len(misconception.signals))
     return MisconceptionMatch(
         misconception=misconception,

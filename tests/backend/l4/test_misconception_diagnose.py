@@ -406,6 +406,99 @@ class TestFactorSignFlipServingReach:
         assert m is None or m.matched_regex_signals == ()
 
 
+class TestExtremumAmbiguousCoincidenceNotOverconfident:
+    """MISC-24 — `extremum-value-vs-point-confused`가 f(x₀)=x₀ 우연의 일치 정답에 확신 오진단을
+    내지 않는다.
+
+    배경(acceptance ①의 실측 재현)
+    -------------------------------
+    이 채널의 정규식은 리터럴 "극댓값"을 포함해 매치될 때마다 substring 신호 "극댓값"도 항상
+    함께 발화한다. MISC-22 정정 *이전*(v1.2 원식)에도 `1(substring)+1(regex 1개 credit)=2=
+    len(signals)`로 이미 confidence 1.0이었다 — 즉 이 위험은 MISC-22와 무관하게 이전부터
+    있었다(MISC-22 조사 중 발견 → MISC-24로 분리 등재). f(x₀)=x₀인 *우연의 일치* 정답(극대점
+    x=2에서 극댓값도 2)은 오개념을 저지른 풀이와 텍스트가 글자 그대로 동일해 `refuting_regex`
+    (MISC-23)로도 반박할 대상이 없다 — 그래서 `ambiguous_regex_signals`(models.py)로 이 항목의
+    정규식 가산 자체를 0으로 만드는 방식으로 해소한다.
+    """
+
+    def _find(
+        self, text: str, mid: str = "extremum-value-vs-point-confused"
+    ) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
+
+    def test_ambiguous_coincidence_no_longer_reaches_full_confidence(self) -> None:
+        """우연의_일치_정답은_더는_confidence_1.0에_도달하지_않는다 — acceptance ①·② 직접 재현"""
+        text = "극대는 x=2 에서 나오고 극댓값은 2 이다 (f(2)=2 인 함수)"
+        m = self._find(text)
+        assert m is not None  # 정규식은 여전히 발화(텔레메트리 유지)
+        assert m.confidence == 0.5  # 1.0이 아니라 substring "극댓값" 단독 수준에 캡됨
+        assert m.matched_signals == ("극댓값",)
+        assert len(m.matched_regex_signals) == 1  # 발화는 기록되나 가산은 0
+
+    def test_ambiguous_coincidence_does_not_survive_serving_gate(self) -> None:
+        """우연의_일치_정답은_서빙_품질_게이트를_통과하지_못한다 — 실제 해악 지점의 대조"""
+        text = "극대는 x=2 에서 나오고 극댓값은 2 이다 (f(2)=2 인 함수)"
+        gated = apply_match_quality_gate(diagnose(text))
+        surfaced = [m.misconception.id for m in gated.matches]
+        assert "extremum-value-vs-point-confused" not in surfaced
+
+    def test_numeric_trace_misconception_also_capped(self) -> None:
+        """x좌표라는_말을_안_쓴_수치_흔적_오개념도_함께_0.5에_갇힌다 — 회귀가 아니라 설계 의도
+
+        원래 이 정규식이 잡으려던 자리(학생이 "x좌표"라는 말 없이 극댓값을 좌표 숫자로 답한
+        경우)도 우연의 일치 정답과 텍스트가 완전히 같은 형태라 함께 캡된다 — 그 자체가 이
+        채널이 텍스트만으로는 둘을 가를 수 없다는 실측 증거다.
+        """
+        m = self._find("극대는 x=-1 에서 나오고 극댓값은 -1")
+        assert m is not None
+        assert m.confidence == 0.5
+        assert len(m.matched_regex_signals) == 1  # 정규식은 여전히 발화(검출은 유지)
+
+    def test_explicit_x_coordinate_confusion_unaffected(self) -> None:
+        """x좌표라는_말을_명시한_경우는_MISC-24와_무관하게_여전히_confidence_1.0
+
+        정규식과 무관한 substring AND("극댓값"+"x좌표") 경로 — 원래도 모호하지 않았다.
+        """
+        m = self._find("극댓값을 극점의 x좌표라고 답함")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert set(m.matched_signals) == {"극댓값", "x좌표"}
+        gated = apply_match_quality_gate(diagnose("극댓값을 극점의 x좌표라고 답함"))
+        assert any(x.misconception.id == "extremum-value-vs-point-confused" for x in gated.matches)
+
+    def test_distinct_coordinate_and_value_not_flagged(self) -> None:
+        """좌표와_값이_다른_정답은_여전히_미탐지 — 회귀 없음(FP 0 대조)"""
+        m = self._find("극대는 x=-1 에서 나오고 극댓값은 101")
+        assert m is None or m.matched_regex_signals == ()
+
+
+class TestAmbiguousRegexSignalsGovernance:
+    """`ambiguous_regex_signals` 부여 항목의 동결 — 조용히 늘거나 줄지 않게(MISC-24).
+
+    `TestRefutingRegexGovernance`와 같은 정신 — 이 플래그도 탐지를 **끄는** 방향(정규식이
+    발화해도 confidence에 기여하지 않게)이라 잘못 붙으면 다른 채널의 MISC-22 해소를 조용히
+    되돌린다.
+    """
+
+    _AMBIGUOUS_IDS = {"extremum-value-vs-point-confused"}
+
+    def test_only_listed_entries_have_the_flag(self) -> None:
+        """목록_밖_항목은_플래그가_없다 — 다른 5개 정규식 채널(MISC-22)의 회귀 방지"""
+        for m in CATALOG:
+            if m.id not in self._AMBIGUOUS_IDS:
+                assert m.ambiguous_regex_signals is False, m.id
+
+    def test_listed_entries_actually_have_it(self) -> None:
+        """목록에_적힌_항목은_실제로_플래그가_켜져있다 — 선언과 사실의 대조"""
+        for mid in self._AMBIGUOUS_IDS:
+            assert CATALOG_BY_ID[mid].ambiguous_regex_signals is True, mid
+
+    def test_flagged_entries_actually_have_regex_signals(self) -> None:
+        """플래그를_가진_항목은_실제로_regex_signals가_있다 — 무의미한 플래그 방지"""
+        for mid in self._AMBIGUOUS_IDS:
+            assert CATALOG_BY_ID[mid].regex_signals, mid
+
+
 class TestRegexBackwardCompatibility:
     """v1.2 정규식 도입이 v1.1 기호식 매칭(confidence·matched_signals)을 *불변*으로 유지."""
 

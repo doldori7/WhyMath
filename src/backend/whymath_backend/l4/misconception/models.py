@@ -78,6 +78,27 @@ class Misconception(BaseModel):
             "미설정(기본 빈 튜플)이면 동작 완전 불변 — 기존 항목은 이 필드를 갖지 않는다."
         ),
     )
+    ambiguous_regex_signals: bool = Field(
+        default=False,
+        description=(
+            "**MISC-24** — true면 이 항목의 `regex_signals` 매치는 `matched_regex_signals`"
+            "(디버그·텔레메트리)에는 여전히 기록되지만 confidence 가산에는 **기여하지 않는다**"
+            "(`_match_one`이 numerator에서 완전히 배제 — matched substring만으로 confidence를 "
+            "결정). `refuting_regex`(반박·OR)와는 반대 축이다: 반박은 *반박할 문자열*이 따로 "
+            "있어야 성립하는데, 이 필드가 다루는 케이스는 반박할 대상 자체가 없다 — 극점 x좌표와 "
+            "극값이 *우연히 같은 수*(f(x₀)=x₀)인 정답과, 그 값을 x좌표로 혼동한 오답은 텍스트가 "
+            "**글자 그대로 동일**하다(disjoint 증명이 성립하지 않음 — MISC-22가 다른 5개 정규식 "
+            "채널에 요구한 disjoint 보증과 근본적으로 다른 케이스). 옛 v1.2식(정규식 매치=신호 "
+            "1개 상당)으로도 이 문제는 안 풀린다: `extremum-value-vs-point-confused`는 signals가 "
+            "2개뿐이고 정규식 패턴 자체가 리터럴 '극댓값'을 포함해 매치 시 substring이 이미 1개"
+            "(=신호 1개 상당) 함께 발화하므로, 옛 식으로도 1(substring)+1(regex 1개 credit)="
+            "2=len(signals) → confidence 1.0으로 동일하게 게이트를 넘는다(실측: MISC-24). 그래서 "
+            "이 필드는 *가산분을 아예 0으로* 만든다 — 이 항목의 confidence는 substring 신호"
+            "(`극댓값`·`x좌표`)만으로 결정되고, 'x좌표'라는 말을 학생이 실제로 쓴 명시적 케이스만 "
+            "confidence 1.0(원래도 정규식과 무관하게 도달하던 경로)에 도달한다. 미설정(기본 "
+            "False)이면 기존 항목(MISC-22 5개 채널) 동작 완전 불변."
+        ),
+    )
     canonical_wrong_form: tuple[str, str] | None = Field(
         default=None,
         description=(

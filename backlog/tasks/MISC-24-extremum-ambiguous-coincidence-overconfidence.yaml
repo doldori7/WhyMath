@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -19,7 +19,12 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/l4/misconception/diagnose.py
+  - src/backend/whymath_backend/l4/misconception/models.py
   - docs/prompts/misconception_diagnosis.md
-session: null
-notes: "출처: MISC-22(정규식 매치를 substring 신호 전체와 동등하게 가산하도록 confidence 공식을 정정하는 작업) 조사 중 발견. MISC-22 변경과 무관하게 *이미* main에 존재하던 위험이다(구 v1.2 공식으로도 이 케이스는 conf 1.0이었음을 실측 확인 — regex 패턴이 '극댓값' 리터럴을 포함해 substring이 항상 동반 매치). 학생 정서 최우선(CLAUDE.md 의사결정 우선순위 #1) 원칙상 방치 부적절하나 MISC-22 acceptance 범위 밖이라 분리 등재한다."
+  - src/backend/whymath_backend/harness/anchor_detection_channel_eval.py
+  - tests/backend/l4/test_misconception_diagnose.py
+  - tests/backend/harness/test_anchor_detection_channel_eval.py
+  - MEMORY.md
+session: claude/status-vlul18
+notes: "출처: MISC-22(정규식 매치를 substring 신호 전체와 동등하게 가산하도록 confidence 공식을 정정하는 작업) 조사 중 발견. MISC-22 변경과 무관하게 *이미* main에 존재하던 위험이다(구 v1.2 공식으로도 이 케이스는 conf 1.0이었음을 실측 확인 — regex 패턴이 '극댓값' 리터럴을 포함해 substring이 항상 동반 매치). 학생 정서 최우선(CLAUDE.md 의사결정 우선순위 #1) 원칙상 방치 부적절하나 MISC-22 acceptance 범위 밖이라 분리 등재한다.\n\n[정정 2026-09-08] paths ['src/backend/whymath_backend/l4/misconception/catalog.py', 'src/backend/whymath_backend/l4/misconception/diagnose.py', 'docs/prompts/misconception_diagnosis.md'] → ['src/backend/whymath_backend/l4/misconception/catalog.py', 'src/backend/whymath_backend/l4/misconception/diagnose.py', 'src/backend/whymath_backend/l4/misconception/models.py', 'docs/prompts/misconception_diagnosis.md', 'src/backend/whymath_backend/harness/anchor_detection_channel_eval.py', 'tests/backend/l4/test_misconception_diagnose.py', 'tests/backend/harness/test_anchor_detection_channel_eval.py', 'MEMORY.md']: 구현 범위: models.py에 ambiguous_regex_signals 필드 신설, anchor_detection_channel_eval.py에 ambiguous_serving_reach 게이트 추가, 관련 테스트·MEMORY 결정 로그 갱신"
 updated: 2026-09-08

@@ -9018,3 +9018,59 @@ recall 프로브의 전제가 깨짐 — 순수 구어체 패러프레이즈로 
 **교훈**: confidence 공식 같은 *공유* 계산 로직을 정정할 때는 "내가 지금 보는 항목"이 아니라
 "그 로직을 쓰는 모든 항목"에서 재측정해야 한다 — 실측 없이 문서 주석(특히 안전 근거를 담은
 주석)을 신뢰하면 이미 깨져 있는 전제를 그대로 물려받는다.
+
+## 2026-09-08: MISC-24 — extremum-value-vs-point-confused의 f(x₀)=x₀ 우연의 일치 확신 오진단 해소
+
+**배경**: MISC-22 조사 중 발견된 위험을 분리 등재한 태스크. `extremum-value-vs-point-confused`의
+정규식(`극대.{0,40}?x=(?P<x>-?\d+).{0,40}?극댓값[…]{0,2}(?P=x)(?!\d)`)은 리터럴 "극댓값"을
+포함해 매치될 때마다 substring 신호도 항상 동반 발화한다 — 그래서 f(x₀)=x₀인 *우연의 일치*
+정답(예: 극대점 x=2에서 극댓값도 2)이 conf 1.0으로 서빙 품질 게이트(0.65)를 통과했다. 이 위험은
+MISC-22의 confidence 공식 정정과 **무관하게 이전부터** 실재했다(구 v1.2 공식으로도
+1(substring "극댓값")+1(regex 신호 1개 상당)=2=len(signals)로 이미 1.0 — 카탈로그 주석의
+"정규식 단독 매치는 0.5로 안전하다"는 안전 근거 자체가 실측과 어긋나 있었다).
+
+**결정**: `Misconception`(models.py)에 `ambiguous_regex_signals: bool` 필드를 신설하고
+`extremum-value-vs-point-confused`에만 `True`로 부여했다. `_match_one`(diagnose.py)은 이
+플래그가 선 항목의 정규식 매치를 `matched_regex_signals`(텔레메트리)에는 기록하되 confidence
+가산(numerator)에서는 완전히 배제한다 — 그 결과 이 항목의 confidence는 항상 substring 신호
+(`극댓값`·`x좌표`)만으로 결정된다.
+
+**기각한 대안들(acceptance ②가 제시한 두 방향 모두 통하지 않음을 실측으로 확인)**:
+- **정규식 가산을 옛 v1.2식(신호 1개 상당)으로 되돌리기** — 이 항목은 signals가 2개뿐이고
+  정규식 자체가 이미 substring 1개("극댓값")를 포함하므로, 옛 식으로도
+  `1(substring)+1(regex 1개 credit)=2=len(signals)` → 여전히 confidence 1.0. 되돌려도 안 풀린다.
+- **`refuting_regex`(MISC-23식 반박) 추가** — 오개념을 저지른 풀이와 우연의 일치 정답은 텍스트가
+  **글자 그대로 동일**하다(둘 다 "극대는 x=N…극댓값은 N" 형태). 반박은 *반박할 문자열*이 따로
+  있어야 성립하는데 여기는 그 문자열 자체가 없다 — 반박 축으로는 원리상 풀 수 없는 문제였다.
+
+그래서 채택한 것은 "감산/반박"이 아니라 **가산 자체를 0으로 만드는** 제3의 축
+(`ambiguous_regex_signals`)이다.
+
+**부수 효과(회귀가 아니라 의도)**: `anchor_detection_channel_eval`의 `_extremum_value_vs_point()`
+`positives` 픽스처(27건)는 전부 "좌표 숫자==값 숫자" 템플릿이라 `ambiguous` 픽스처와 텍스트
+구조가 동일했다 — 즉 이 채널이 "검출 27/27·서빙도달 27/27"이라 보고하던 것 자체가 우연의
+일치와 원리상 구별 불가능한 자리였다. 정정 후 `serving_reach`는 0/27로 떨어진다(회귀가 아니라
+해소 그 자체 — 텍스트만으로 구별 불가능한 형태는 애초에 확신 진단이 나가서는 안 됐다). 학생이
+명시적으로 "x좌표"라는 말을 쓴 경우(정규식과 무관한 substring AND 경로)는 이번 정정과 무관하게
+계속 confidence 1.0에 도달한다 — 그 경로는 원래도 모호하지 않았다.
+
+**acceptance ③ 집행**: `anchor_detection_channel_eval.ChannelResult`에 `ambiguous_serving_reach`
+필드를 신설해 `passed`가 이를 **0으로 강제**하게 했다 — 기존 `ambiguous_fired`(정규식 발화
+여부)는 계속 보고만 하지만, "서빙 게이트까지 살아남았는가"는 더 이상 보고로 그치지 않고
+게이트로 쓴다. 이 게이트 자신의 변별력은 `ChannelResult`를 직접 조립해(`ambiguous_serving_
+reach=1`) `passed`가 실제로 `False`가 되는지 확인했다(`TestAmbiguousServingReachIsGated::
+test_ambiguous_serving_reach_gates_passed`).
+
+**변별력 검증(결함 주입)**: `ambiguous_regex_signals=True`를 `False`로 되돌려 9개 테스트가
+RED로 전환되는 것을 확인했다(models/diagnose/catalog/anchor_detection_channel_eval 4개 계층
+전부에서 실패 신호가 남 — `TestGatePasses` 2건·`TestServingReachIsMeasured` 1건·
+`TestAmbiguousServingReachIsGated` 2건·`TestExtremumAmbiguousCoincidenceNotOverconfident` 3건·
+`TestAmbiguousRegexSignalsGovernance` 1건). 원복 후 108건 전부 그린으로 복귀.
+
+**동시성 메모**: 이 세션 작업 중 같은 브랜치(`claude/status-vlul18`)에서 MISC-22(PR #1071)의
+Codex P1 후속 수정(5개 채널에 `EXPLICIT_CORRECTION_MENTION` 반박 언급 가드 추가)이 같은
+`catalog.py` 파일에 동시 진행됐다 — 실측(diff 대조)으로 겹치는 항목이 없음을 확인하고
+(factor-sign-flip·distribution-over-power·square-root-positivity·fraction-cancellation·
+log-distribution 5종 vs 이 태스크의 extremum-value-vs-point-confused 1종, 완전 disjoint) 커밋
+시 서로의 미커밋 변경을 침범하지 않도록 hunk 단위로 선택 스테이징했다. `root-loss-by-dividing`의
+같은 유형 취약점은 그쪽 세션이 `MISC-25`로 별도 등재했다(이 태스크 범위 밖).
