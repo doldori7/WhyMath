@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from whymath_backend.l1.standards.anchor_registry import (
     SCOPE_DECEMBER_2026,
     default_registry_path,
