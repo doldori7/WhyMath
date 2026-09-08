@@ -91,11 +91,48 @@ def _fail(message: str, code: int = 1) -> int:
 _CLI = "python3 scripts/harness/backlog.py"
 
 
-def _transition_route(source: str, target: str) -> list[str] | None:
-    """source → target 최단 상태 경로(source 제외한 경유 상태 목록). 도달 불가면 None.
+# 전이표가 허용하는 전이가 곧 **실행 가능한** 전이는 아니다 (Codex P2 · PR #1067).
+# `cmd_start`는 전이 검사를 통과한 뒤 `selector.classify_todo`를 부르고, 그것이 session을
+# 보유한 태스크를 `claimed`로 거부한다(selector.py:206). 그래서 session을 든 채 in_progress로
+# 가는 홉은 전이표상 합법이어도 반드시 exit 1이다. 실측(2026-09-08 시딩 저장소):
+#
+#   review/session=b     → start    EXIT=1 (claimed)   ← Codex가 지적한 경로
+#   in_progress→unblock  → todo/session=b (session이 남는다) → start EXIT=1 (claimed)
+#   in_progress→block    → blocked/session=null → unblock → start EXIT=0  ← 실행 가능
+#
+# 즉 **더 짧은 경로가 깨진 경로**였다. "붙여 넣을 수 있는 명령"을 약속하는 기능이 실행되지
+# 않는 명령을 내면 그 기능은 없느니만 못하다 — 이 태스크가 고치려던 결함 그 자체다.
+# 그래서 경로 탐색을 (상태, session 보유) 쌍 위에서 한다: 최단이 아니라 **실행 가능한 것 중
+# 최단**을 고른다.
+_HOP_NEEDS_FREE_SESSION = "in_progress"  # start — classify_todo의 claimed 검사
+_HOP_FREES_SESSION = "blocked"  # block — task.session = None
 
-    BFS다 — 전이표는 6노드짜리 작은 그래프이므로 최단 경로가 곧 "최소 왕복"이다.
-    `seen`을 enqueue 시점에 채우므로 같은 상태를 두 번 거치는 경로는 나오지 않는다.
+
+def _hop_is_executable(target: str, session_held: bool) -> bool:
+    """이 홉의 CLI 명령이 지금 상태에서 실제로 성공하는가."""
+    return not (target == _HOP_NEEDS_FREE_SESSION and session_held)
+
+
+def _session_after(target: str, session_held: bool) -> bool:
+    """홉을 밟은 뒤의 session 보유 상태.
+
+    `block`은 비우고(`task.session = None`), `start`는 채운다. `unblock`은 **비우지 않는다** —
+    원격 claim만 걷고 로컬 session 필드는 그대로 둔다(cmd_unblock 실측). 그래서
+    in_progress→todo 직행은 session을 든 todo를 만든다.
+    """
+    if target == _HOP_FREES_SESSION:
+        return False
+    if target == _HOP_NEEDS_FREE_SESSION:
+        return True
+    return session_held
+
+
+def _transition_route(source: str, target: str, *, session_held: bool) -> list[str] | None:
+    """source → target **실행 가능한** 최단 경로(source 제외 경유 상태). 없으면 None.
+
+    (상태, session 보유) 쌍 위의 BFS다 — 상태만으로 탐색하면 실행 불가한 홉을 최단이라는
+    이유로 고른다. `session_held`는 호출부가 실제 태스크에서 읽어 넘긴다(가정 금지).
+    `seen`을 enqueue 시점에 채우므로 같은 쌍을 두 번 거치는 경로는 나오지 않는다.
     """
     if source == target:
         # 같은 상태로의 "이동"은 경로가 아니라 무의미다 — 빈 리스트를 돌려주면 호출부가
@@ -103,36 +140,42 @@ def _transition_route(source: str, target: str) -> list[str] | None:
         # 세션이 죽은 in_progress 태스크에 start를 걸면 "해소 경로 (0단계): in_progress").
         # 순환(같은 상태로 되돌아오는 최단 고리)이 필요하면 _transition_cycle이 따로 낸다.
         return None
-    seen = {source}
-    queue: deque[tuple[str, list[str]]] = deque([(source, [])])
+    seen = {(source, session_held)}
+    queue: deque[tuple[str, bool, list[str]]] = deque([(source, session_held, [])])
     while queue:
-        node, path = queue.popleft()
+        node, held, path = queue.popleft()
         for nxt in STATUS_TRANSITIONS.get(node, ()):
-            if nxt in seen:
+            if not _hop_is_executable(nxt, held):
+                continue
+            nxt_held = _session_after(nxt, held)
+            if (nxt, nxt_held) in seen:
                 continue
             step = [*path, nxt]
             if nxt == target:
                 return step
-            seen.add(nxt)
-            queue.append((nxt, step))
+            seen.add((nxt, nxt_held))
+            queue.append((nxt, nxt_held, step))
     return None
 
 
-def _transition_cycle(status: str) -> list[str] | None:
+def _transition_cycle(status: str, *, session_held: bool) -> list[str] | None:
     """status를 떠났다가 **다시 status로** 돌아오는 최단 고리. 없으면 None.
 
     쓰임: 이미 그 상태인 태스크에 같은 전이를 걸었을 때(예: 세션이 죽은 `in_progress`
     태스크의 재착수). 전이표는 자기 자신으로의 전이를 열지 않으므로 한 바퀴 돌아야 한다.
 
-    **동률일 때 `todo` 경유를 고른다.** `in_progress`에서 되돌아오는 고리는 `review`
-    경유와 `todo` 경유가 둘 다 2단계지만, 그 둘은 원격 claim에 대해 정반대다 —
-    `cmd_review`는 claim을 **유지**하고(여전히 in-flight) `cmd_unblock`은 **해제**한다.
-    같은 상태로의 재진입을 요청했다는 것은 앞 홀더가 사라졌다는 뜻이므로, 자리를 비우는
-    쪽이 옳다. 길이만 보는 타이브레이크는 claim을 든 채 재착수하라고 안내한다.
+    선정 기준은 두 단계다. **1차는 실행 가능성** — `in_progress` 재진입의 2단계 후보
+    (`unblock`→`start`)는 `unblock`이 session을 비우지 않아 **실측에서 거부된다**. 실제로
+    도는 것은 3단계 `block`→`unblock`→`start`다(block이 session을 비운다). 짧은 쪽을 고르면
+    깨진 안내다. **2차는 동률일 때 `todo` 경유** — session이 없어 두 후보가 다 도는 경우
+    `review` 경유는 원격 claim을 유지하고 `todo` 경유(`unblock`)는 해제한다. 같은 상태로의
+    재진입은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳다.
     """
     best: list[str] | None = None
     for first in sorted(STATUS_TRANSITIONS.get(status, ()), key=lambda st: st != "todo"):
-        rest = _transition_route(first, status)
+        if not _hop_is_executable(first, session_held):
+            continue
+        rest = _transition_route(first, status, session_held=_session_after(first, session_held))
         if rest is None:
             continue
         candidate = [first, *rest]
@@ -162,15 +205,36 @@ def _status_command(task: Task, status: str) -> str:
     return commands[status]
 
 
+def _blocked_by_session_note(task: Task, new_status: str, session_held: bool) -> str:
+    """실행 가능한 경로가 없을 때, 그 원인이 session 보유인지 구조인지 가려 말한다.
+
+    없는 경로를 지어내지 않는 것만으로는 부족하다 — 왜 없는지를 말하지 않으면 읽는 사람이
+    전이표를 뒤지다 "표에는 있는데?"에서 멈춘다. 실제로 그 경로는 표에는 있고 CLI로만 막힌다.
+    """
+    if not session_held:
+        return ""
+    if _transition_route(task.status, new_status, session_held=False) is None:
+        return ""  # session을 비워도 못 간다 — 구조적 부재이므로 호출부의 설명이 맞다
+    return (
+        f"\n  실행 가능한 해소 경로 없음 — 전이표에는 '{task.status}' → … → '{new_status}' 경로가 "
+        f"있으나 그 경로가 `start`를 지나고, 이 태스크는 session('{task.session}')을 들고 있어 "
+        f"`start`가 claim 검사에서 거부한다(selector.classify_todo). "
+        f"'{task.status}'에서는 session을 비우는 전이(`block`)가 전이표에 없어 우회로도 없다. "
+        f"→ 갈 수 있는 곳: {list(STATUS_TRANSITIONS.get(task.status, ())) or '없음'} "
+        f"(세션 소유자 본인이면 그 세션에서 이어서 작업하는 것이 정상 경로다)"
+    )
+
+
 def _transition_guidance(task: Task, new_status: str) -> str:
     """거부에 덧붙일 해소 경로 블록 — 그대로 붙여 넣을 수 있는 명령 목록."""
+    held = bool(task.session)
     if new_status == task.status:
         # 이미 그 상태다. "0단계 경로"를 내는 것은 안내가 아니라 위장이다 — 답처럼 보이는데
         # 실행할 것이 없다. 무엇이 사실인지 말하고, 재진입이 필요한 경우의 고리만 준다.
         head = f"\n  이미 '{task.status}' 상태다 — 이 명령이 바꿀 것이 없다."
-        cycle = _transition_cycle(task.status)
+        cycle = _transition_cycle(task.status, session_held=held)
         if cycle is None:
-            return head
+            return head + _blocked_by_session_note(task, task.status, held)
         lines = [
             head,
             f"\n  같은 상태로 **다시** 들어가려면 (예: 세션이 끊긴 태스크의 재착수) "
@@ -178,7 +242,7 @@ def _transition_guidance(task: Task, new_status: str) -> str:
         ]
         lines += [f"\n    {i}) {_status_command(task, st)}" for i, st in enumerate(cycle, 1)]
         return "".join(lines)
-    route = _transition_route(task.status, new_status)
+    route = _transition_route(task.status, new_status, session_held=held)
     if route is None:
         # 현행 전이표에서 도달 불가는 곧 "출발이 종결 상태"다. 그래도 종결 여부를
         # 따로 묻는다 — 전이표가 바뀌어 다른 도달 불가 쌍이 생겨도 없는 사실을
@@ -189,6 +253,9 @@ def _transition_guidance(task: Task, new_status: str) -> str:
                 f"후속 작업은 새 태스크로 등재한다: {_CLI} add ... "
                 f"(대장 YAML 손편집으로 되돌리지 않는다 — CLAUDE.md 거부 우회 금지)"
             )
+        note = _blocked_by_session_note(task, new_status, held)
+        if note:
+            return note
         return (
             f"\n  해소 경로 없음 — 전이표에 '{task.status}'에서 '{new_status}'로 가는 "
             f"경로가 없다(models.py STATUS_TRANSITIONS 확인)"

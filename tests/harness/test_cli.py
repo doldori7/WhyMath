@@ -2217,7 +2217,10 @@ class TestTransitionRejectionGuidance:
     몰라도 실행자가 막히지 않는다.
     """
 
-    def _task(self, status: str, owner: str = "claude") -> cli.Task:
+    def _task(self, status: str, owner: str = "claude", session: str | None = None) -> cli.Task:
+        # session 축이 기본값이 아니다 — in_progress·review 태스크는 **항상** session을 들고
+        # 있고(cmd_start가 채우고 cmd_review가 보존한다), 그 사실이 어느 경로가 실행 가능한지를
+        # 바꾼다. session=None으로만 시험하면 실제로 쓰이는 상태를 한 번도 밟지 않는다.
         return cli.Task(
             id="TEST-01-probe",
             title="probe",
@@ -2225,6 +2228,7 @@ class TestTransitionRejectionGuidance:
             stage="S3",
             status=status,
             owner=owner,
+            session=session,
         )
 
     # ── ① 사고 재현 경로: todo → done ────────────────────────────────────
@@ -2305,7 +2309,7 @@ class TestTransitionRejectionGuidance:
         checked = 0
         for src, dst in pairs:
             for owner in ("claude", "kiki"):
-                route = cli._transition_route(src, dst)
+                route = cli._transition_route(src, dst, session_held=False)
                 if route is None:
                     continue
                 for status in route:
@@ -2323,33 +2327,122 @@ class TestTransitionRejectionGuidance:
         # 태스크에 start를 걸면 "해소 경로 (0단계): in_progress"만 나왔다 — 답처럼
         # 보이는데 실행할 명령이 하나도 없다. 위 ④의 전수 가드는 `src != dst`만
         # 생성하므로 이 절을 **한 번도 밟지 않았다**(절마다 그 절의 반례가 필요하다).
-        message = cli._transition(self._task("in_progress"), "in_progress")
+        message = cli._transition(self._task("in_progress", session="b"), "in_progress")
         assert message is not None
         assert "0단계" not in message
         assert "이미 'in_progress' 상태다" in message
-        # 재진입 고리는 실행 가능한 명령을 동반해야 한다
+        # 재진입 고리는 **실행 가능한** 명령을 동반해야 한다 (block이 session을 비운다)
+        assert "backlog.py block TEST-01-probe" in message
         assert "backlog.py unblock TEST-01-probe" in message
         assert "backlog.py start TEST-01-probe" in message
 
-    def test_reentry_cycle_prefers_the_claim_releasing_hop(self):
-        """재진입_고리는_claim을_걷는_홉을_고른다"""
-        # in_progress로 되돌아오는 고리는 review 경유·todo 경유 둘 다 2단계다. 그러나
-        # cmd_review는 원격 claim을 유지하고 cmd_unblock은 해제한다 — 같은 상태로의
-        # 재진입은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳다.
-        assert cli._transition_cycle("in_progress") == ["todo", "in_progress"]
-        message = cli._transition(self._task("in_progress"), "in_progress")
-        assert "review TEST-01-probe" not in message
+    def test_reentry_cycle_is_executable_not_merely_shortest(self):
+        """재진입_고리는_최단이_아니라_실행_가능한_것이다"""
+        # session을 든 in_progress에서 2단계 후보(unblock → start)는 **실측에서 거부된다** —
+        # cmd_unblock이 session을 비우지 않아 뒤따르는 start가 claimed로 막힌다. 실제로 도는
+        # 것은 3단계(block이 session을 비운다). 짧은 쪽을 고르면 깨진 안내다.
+        assert cli._transition_cycle("in_progress", session_held=True) == [
+            "blocked",
+            "todo",
+            "in_progress",
+        ]
+        # session이 없으면 그 제약이 사라지므로 2단계가 옳다 — 제약이 결과를 바꾸는지 확인한다
+        # (양쪽이 같은 답이면 이 모델은 변별력이 0이다)
+        assert cli._transition_cycle("in_progress", session_held=False) == ["todo", "in_progress"]
 
     def test_same_status_route_is_none_not_empty(self):
         """같은_상태_경로는_빈_리스트가_아니라_None이다"""
         # 빈 리스트를 돌려주면 호출부가 그것을 "0단계 경로"로 렌더한다 — 결함의 뿌리였다.
-        assert cli._transition_route("in_progress", "in_progress") is None
-        assert cli._transition_route("todo", "todo") is None
+        assert cli._transition_route("in_progress", "in_progress", session_held=True) is None
+        assert cli._transition_route("todo", "todo", session_held=False) is None
+
+    # ── ⑥ 종단: 안내한 명령을 실제로 실행하면 전건 성공하는가 ────────────
+    #
+    # Codex P2(PR #1067)가 잡은 것이 정확히 이 축이다 — 파싱은 통과하지만 **실행하면
+    # exit 1**인 명령을 안내했다(`review`에서 시작하는 경로의 첫 홉 `start`가 claim
+    # 검사에 걸린다). ④의 파서 검사는 "문법이 맞는가"만 묻고 "돌아가는가"는 묻지 않는다.
+    # "붙여 넣을 수 있는 명령"을 약속하는 기능의 유일한 정직한 검증은 붙여 넣어 보는 것이다.
+
+    _COMMAND_RE = __import__("re").compile(r"\d\) python3 scripts/harness/backlog\.py (.+)$")
+
+    def _guidance_commands(self, stderr: str) -> list[list[str]]:
+        """안내 블록에서 명령 인자만 뽑아 자리표시자를 실제 값으로 채운다."""
+        out: list[list[str]] = []
+        for line in stderr.splitlines():
+            m = self._COMMAND_RE.search(line.strip())
+            if not m:
+                continue
+            argv = [a.strip("'") for a in m.group(1).split()]
+            out.append([a.replace("<사유>", "검증").replace("<증적>", "PR #1") for a in argv])
+        return out
+
+    def _run_guided(self, cli_argv: list[str], task_id: str, capsys) -> None:
+        """거부 → 안내 추출 → 안내대로 전건 실행 → 전부 exit 0이어야 한다."""
+        assert cli.main(cli_argv) == 1
+        commands = self._guidance_commands(capsys.readouterr().err)
+        assert commands, "안내가 명령을 하나도 내지 않았다"
+        for argv in commands:
+            extra = ["--no-remote"] if argv[0] == "start" else []
+            assert cli.main([*argv, *extra]) == 0, f"안내한 명령이 실패했다: {argv}"
+            capsys.readouterr()
+
+    def test_guided_route_todo_to_done_actually_runs(self, seeded_repo: Path, capsys):
+        """안내대로_실행하면_todo에서_done까지_간다"""
+        task_id = self._startable_id(capsys)
+        self._run_guided(["done", task_id, "--artifact", "PR #1"], task_id, capsys)
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "done"
+
+    def test_guided_route_in_progress_to_cancelled_actually_runs(self, seeded_repo: Path, capsys):
+        """안내대로_실행하면_in_progress에서_cancelled까지_간다"""
+        task_id = self._startable_id(capsys)
+        assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 0
+        capsys.readouterr()
+        self._run_guided(["cancel", task_id, "--reason", "x"], task_id, capsys)
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "cancelled"
+
+    def test_guided_reentry_cycle_actually_runs(self, seeded_repo: Path, capsys):
+        """안내대로_실행하면_재진입_고리가_실제로_돈다"""
+        # 이 테스트가 원래 결함(unblock → start)을 잡는다: unblock이 session을 비우지 않아
+        # start가 claimed로 거부됐다. 문자열 검사로는 보이지 않고 실행해야만 보인다.
+        task_id = self._startable_id(capsys)
+        assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 0
+        capsys.readouterr()
+        self._run_guided(["start", task_id, "--no-remote"], task_id, capsys)
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "in_progress"
+
+    # ── ⑦ 실행 불가를 정직하게 말한다 (Codex P2) ──────────────────────────
+    def test_review_dead_end_reports_why_instead_of_a_broken_command(self):
+        """review_막다른길은_깨진_명령_대신_이유를_말한다"""
+        message = cli._transition(self._task("review", session="b"), "cancelled")
+        assert message is not None
+        # 깨질 명령을 내지 않는다
+        assert "backlog.py start" not in message
+        # 왜 없는지 말한다 — 전이표에는 있는데 CLI로 막힌다는 사실까지
+        assert "실행 가능한 해소 경로 없음" in message
+        assert "classify_todo" in message
+        assert "['done', 'in_progress']" in message
+
+    def test_session_free_review_would_have_a_route(self):
+        """session이_없으면_같은_전이가_경로를_갖는다"""
+        # 변별력: 막는 것이 'review'라는 상태가 아니라 **session 보유**임을 보인다.
+        # 양쪽이 같은 답이면 이 모델은 아무것도 구별하지 않는 것이다.
+        assert cli._transition_route("review", "cancelled", session_held=True) is None
+        assert cli._transition_route("review", "cancelled", session_held=False) is not None
 
     def test_route_is_shortest_not_merely_valid(self):
         """경로는_유효한_아무_경로가_아니라_최단이다"""
         # in_progress→cancelled는 blocked 경유·todo 경유 둘 다 유효하지만 어느 쪽도
         # 2단계다. 3단계짜리 경로를 내놓으면 사람이 한 번 더 왕복한다.
-        assert len(cli._transition_route("in_progress", "cancelled")) == 2
-        assert cli._transition_route("blocked", "done") == ["todo", "in_progress", "done"]
-        assert cli._transition_route("todo", "review") == ["in_progress", "review"]
+        assert len(cli._transition_route("in_progress", "cancelled", session_held=False)) == 2
+        assert cli._transition_route("blocked", "done", session_held=False) == [
+            "todo",
+            "in_progress",
+            "done",
+        ]
+        assert cli._transition_route("todo", "review", session_held=False) == [
+            "in_progress",
+            "review",
+        ]
