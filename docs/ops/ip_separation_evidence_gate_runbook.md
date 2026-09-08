@@ -161,9 +161,22 @@ if ($ToolOk -and $FetchOk) {
 #    **PowerShell의 ConvertFrom-Json을 쓰지 않는다.** 이 창의 파서는 JSON 객체
 #    키를 대소문자 무시로 다뤄 'Claude <…>'와 'claude <…>'를 중복으로 거부한다
 #    (2026-09-08 실측). 리포트를 읽는 일은 도구 자신에게 시킨다.
-python scripts\ops\ip_separation_evidence.py `
-    --summary-from .ip_evidence\ip_separation_evidence.json
-"SUMMARY_EXIT=$LASTEXITCODE  (0=읽었고 조건 충족 · 1=읽었으나 미충족 · 2=읽기 실패)"
+# 3-a) 선검사 — **이 체크아웃의 도구가 --summary-from을 아는가**.
+#      모르면 브랜치가 낡은 것이지 리포트가 깨진 것이 아니다. 이 검사가 없으면
+#      argparse의 인자 오류도 exit 2를 내므로 "읽기 실패"와 구분되지 않는다
+#      (2026-09-08 실측: 미머지 상태의 main에서 실행돼 왕복 1회 소모).
+$HasSummary = [bool](python scripts\ops\ip_separation_evidence.py --help 2>&1 |
+                     Select-String -SimpleMatch -- "--summary-from")
+"HAS_SUMMARY_FROM=$HasSummary"
+
+if ($HasSummary) {
+  python scripts\ops\ip_separation_evidence.py `
+      --summary-from .ip_evidence\ip_separation_evidence.json
+  "SUMMARY_EXIT=$LASTEXITCODE  (0=읽었고 조건 충족 · 1=읽었으나 미충족 · 2=읽기 실패)"
+} else {
+  "중단: 이 체크아웃의 도구에 --summary-from이 없다 — 0)의 최신화가 안 됐거나"
+  "      이 기능이 아직 머지되지 않은 것이다. 리포트 문제가 아니다."
+}
 ```
 
 ### ⚠ 반드시 확인할 것 — 왜 신원을 2개 선언하는가
@@ -248,10 +261,16 @@ $Today = (Get-Date -Format "yyyy-MM-dd")
 
 # 요약을 KEY=VALUE로 받아 해시테이블로 만든다. 파싱 실패 시 값이 한 줄도
 # 나오지 않으므로 $S는 비고, 아래 조건은 그대로 거짓이 된다.
-$Lines = & python scripts\ops\ip_separation_evidence.py `
-    --summary-from .ip_evidence\ip_separation_evidence.json `
-    --expect-head $Base
-$SummaryExit = $LASTEXITCODE
+# 도구 능력 선검사 — 없으면 argparse 오류(exit 2)가 "읽기 실패"로 오독된다.
+$HasSummary = [bool](python scripts\ops\ip_separation_evidence.py --help 2>&1 |
+                     Select-String -SimpleMatch -- "--summary-from")
+$Lines = if ($HasSummary) {
+  & python scripts\ops\ip_separation_evidence.py `
+      --summary-from .ip_evidence\ip_separation_evidence.json `
+      --expect-head $Base
+} else { @() }
+$SummaryExit = if ($HasSummary) { $LASTEXITCODE } else { 2 }
+"HAS_SUMMARY_FROM=$HasSummary"
 $S = @{}
 foreach ($L in $Lines) { if ($L -match '^([A-Z_]+)=(.*)$') { $S[$Matches[1]] = $Matches[2] } }
 $Lines                       # 화면에 그대로 남긴다 — 무엇을 근거로 닫는지 보이게

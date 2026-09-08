@@ -1008,6 +1008,29 @@ def _runbook_text() -> str:
     ).read_text(encoding="utf-8")
 
 
+def _powershell_fences(text: str) -> list:
+    """```powershell 펜스를 **블록 단위로** 돌려준다(주석·빈 줄 제외).
+
+    블록을 합쳐서 보면 "어딘가 한 번 있으면 통과"가 되어, 두 블록 중 하나에서
+    가드를 지워도 초록이 나온다(2026-09-08 뮤테이션 R3 생존으로 발각). 검사는
+    **그 가드가 필요한 자리마다** 있는지를 물어야 한다.
+    """
+    fences, current, inside = [], [], False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if inside:
+                fences.append(current)
+                current = []
+            inside = stripped.lower().startswith("```powershell")
+            continue
+        if inside and stripped and not stripped.startswith("#"):
+            current.append(line)
+    if inside and current:
+        fences.append(current)
+    return fences
+
+
 def _fenced_command_lines(text: str) -> list:
     """```powershell 펜스 **안**의 줄만 돌려준다.
 
@@ -1051,6 +1074,31 @@ def test_runbook_reads_the_report_through_the_safe_path() -> None:
     ), "런북 실행 블록에 안전 소비 경로(--summary-from)가 없다"
 
 
+def test_runbook_checks_tool_capability_before_using_it() -> None:
+    """도구 능력 선검사 동결 (2026-09-08 실측) — **호출하는 블록마다** 요구한다.
+
+    `--summary-from`이 없는 체크아웃에서 이 블록을 돌리면 argparse가 **exit 2**를
+    내는데, 요약 모드의 "읽기 실패"도 exit 2다 — 화면만 보면 리포트가 깨진 것으로
+    읽힌다. 실제 원인은 브랜치가 낡은 것이다.
+
+    "런북 어딘가에 선검사가 있다"로는 부족하다: 블록이 둘인데 한쪽에서만 검사하면
+    나머지 블록은 무방비인 채로 이 테스트가 통과한다(뮤테이션 R3 생존으로 발각).
+    """
+    fences = _powershell_fences(_runbook_text())
+    assert fences, "펜스 추출이 0건 — 스캔 0건은 실패다(공허한 통과 금지)"
+
+    callers = [f for f in fences if any("--summary-from .ip_evidence" in line for line in f)]
+    assert callers, "런북에 --summary-from 호출이 하나도 없다"
+
+    for fence in callers:
+        assert any(
+            "--help" in line and "ip_separation_evidence" in line for line in fence
+        ), f"이 블록이 능력 확인 없이 --summary-from을 쓴다: {fence[:3]}"
+        assert any(
+            "HAS_SUMMARY_FROM" in line for line in fence
+        ), f"선검사 결과가 이 블록의 화면에 남지 않는다: {fence[:3]}"
+
+
 def test_fence_extractor_actually_separates_prose_from_commands() -> None:
     """가드의 재료 자체를 검증한다 — 펜스 추출이 틀리면 위 두 검사는 위장이다."""
     sample = "\n".join(
@@ -1071,3 +1119,9 @@ def test_fence_extractor_actually_separates_prose_from_commands() -> None:
         "Get-Item x",
         "$J = Get-Content $R | ConvertFrom-Json  # 줄 끝 주석은 면제가 아니다",
     ]
+
+
+def test_fence_grouping_keeps_blocks_apart() -> None:
+    """블록 경계가 실제로 나뉘는지 — 합쳐지면 '한쪽만 검사'가 통과한다."""
+    sample = "\n".join(["```powershell", "A", "```", "사이 산문", "```powershell", "B", "```"])
+    assert _powershell_fences(sample) == [["A"], ["B"]]
