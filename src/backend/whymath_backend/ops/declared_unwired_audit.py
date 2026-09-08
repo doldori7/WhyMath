@@ -922,18 +922,15 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # + `data/auth_sessions_api.dart`)과 401 자동 갱신 인터셉터(`core/auth_interceptor.dart`
         # + `core/token_refresh_api.dart`)를 배선해 5개 라우트 전부 dart 호출로 reached 전환됐다.
         # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
-        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
-        # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
-        # SEC-24(원 SEC-15) 이식 메모: 원 브랜치는 이 4건을 "PB-04 도달 관측 테스트가 6경로를
-        # 전부 호출하므로 stale"이라며 제거했으나, PB-04(`api/_l6_mode_reach_state.py`)는 main에
-        # 미착지라 그 전제가 성립하지 않는다. `test_gating.py`가 6경로를 다 부르긴 하지만
-        # 수신자가 `_client([...]).get(...)` 형태(호출식)라 감사기의 리터럴 정규식
-        # (`_TEST_CLIENT_CALL` — 식별자 수신자만 매칭)이 못 본다 — 실측으로 여전히 unclassified.
-        # 따라서 면제를 유지한다(제거하면 감사 exit 1).
-        "GET /v1/gating/gifted": _INTERNAL_TOOL,
-        "GET /v1/gating/metacognition": _INTERNAL_TOOL,
-        "GET /v1/gating/suneung": _INTERNAL_TOOL,
-        "GET /v1/gating/thinking": _INTERNAL_TOOL,
+        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다).
+        # MOB-18 회수(2026-09-07): **면제 4건을 제거했다.** 위 SEC-24 이식 메모가 면제 유지의
+        # 근거로 삼은 전제("PB-04가 main에 미착지")가 이 회수로 해소됐다 — `api/
+        # _l6_mode_reach_state.py`가 착지하고 `test_l6_mode_reach_observability.py`가 6경로를
+        # `client.get("/v1/gating/...")` 형태(식별자 수신자)로 호출하므로 감사기의
+        # `_TEST_CLIENT_CALL` 정규식이 실제로 본다. 실측으로 확인했다: 이식 직후 감사가
+        # 이 4건을 stale-waiver로 잡아 exit 1을 냈고(추론이 아니라 도구 출력), 제거 후 exit 0이다.
+        # gifted·metacognition·suneung·thinking 4종이 여기 있었다(retake·school-progress는
+        # 이전부터 test_gating.py 경유로 reached였다).
         # 스킬 축 숙달 곡선 — api/me.py docstring이 "Phase 2b-2"로 명시(개념 축 /v1/me/mastery는
         # 이미 reached·스킬 축은 아직 화면 미착수)
         "GET /v1/me/skill-mastery": (
