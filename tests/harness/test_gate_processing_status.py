@@ -241,6 +241,13 @@ def test_status_text_screen_shows_deadline_and_ordering() -> None:
 
 
 def test_status_json_exposes_the_same_facts() -> None:
+    """JSON 키는 `dependents`다 — `blocked_tasks`가 아니다 (Codex P2 · PR #1070).
+
+    acceptance ⑦의 `blocked_tasks`라는 이름이 틀렸다: 게이트는 status가 blocked인
+    태스크만 붙잡는 게 아니라 `todo`도 requires_gates로 착수 후보에서 제외한다. blocked만
+    세면 게이트가 붙잡는 양을 과소 보고하므로, 이름을 값의 의미에 맞추고 계약을 정정했다.
+    이 단언이 그 결정을 동결한다 — 되돌리려면 계약부터 다시 손봐야 한다.
+    """
     payload = json.loads(report.render_status_json(_sample_backlog(), [], _TODAY))
     by_id = {g["id"]: g for g in payload["pending_gates"]}
 

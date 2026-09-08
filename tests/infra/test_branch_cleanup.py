@@ -53,12 +53,36 @@ if args[:1] == ["api"]:
     target = args[1]
     branch = target.split("/git/ref/heads/", 1)[-1]
     record("GET " + branch)
+
+    # 조회 실패 모드 주입 — 404가 아닌 실패(인증·rate limit·5xx)를 재현한다.
+    # 실제 gh는 이때도 non-zero로 끝나므로, "비-0 = 부재"로 접으면 여기서 뚫린다.
+    mode = os.environ.get("STUB_LOOKUP_FAILURE", "")
+    if mode == "auth":
+        # gh help exit-codes: 4 = 인증 필요. stderr에 HTTP 상태가 **없다**.
+        sys.stderr.write(
+            "gh: To use GitHub CLI in a GitHub Actions workflow, "
+            "set the GH_TOKEN environment variable.\n"
+        )
+        sys.exit(4)
+    if mode == "ratelimit":
+        sys.stdout.write('{"message":"API rate limit exceeded","status":"403"}')
+        sys.stderr.write("gh: API rate limit exceeded (HTTP 403)\n")
+        sys.exit(1)
+    if mode == "server":
+        sys.stdout.write('{"message":"Server Error","status":"500"}')
+        sys.stderr.write("gh: Server Error (HTTP 500)\n")
+        sys.exit(1)
+
     if branch not in refs:
-        # 실제 gh의 결정적 성질: 오류 응답 **본문을 stdout으로** 뱉고 non-zero로 끝난다.
-        # `2>/dev/null`도 `--jq`도 이 본문을 막지 못한다 — 이것이 HARN-01의 원인이다.
+        # 실제 gh의 결정적 성질 둘 다 재현한다:
+        #   ⓐ 오류 응답 **본문을 stdout으로** 뱉는다 — `--jq`도 `2>/dev/null`도 못 막는다.
+        #     이것이 HARN-01의 원래 원인이다(부재 가드가 발화하지 못했다).
+        #   ⓑ HTTP 상태를 담은 요약을 **stderr로** 낸다 — 404와 그 밖의 실패를 가르는
+        #     유일한 재료이며, `2>/dev/null`은 이것을 버린다.
         sys.stdout.write(
             '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
         )
+        sys.stderr.write("gh: Not Found (HTTP 404)\n")
         sys.exit(1)
     sys.stdout.write(refs[branch] + "\n")
     sys.exit(0)
@@ -75,6 +99,7 @@ def _run(
     refs: dict[str, str] | None = None,
     undeletable: list[str] | None = None,
     request_file: str | None = None,
+    lookup_failure: str = "",
 ) -> tuple[int, str, list[str]]:
     """스텁 `gh`를 PATH 앞에 두고 스크립트를 실행한다. (exit code, 출력, gh 호출 목록)"""
     import json as _json
@@ -97,6 +122,7 @@ def _run(
         STUB_REFS=_json.dumps(refs or {}),
         STUB_UNDELETABLE=_json.dumps(undeletable or []),
         STUB_CALLS=str(calls),
+        STUB_LOOKUP_FAILURE=lookup_failure,
         REQUEST_FILE=request_file if request_file is not None else str(tmp_path / "absent.txt"),
     )
     proc = subprocess.run(
@@ -159,6 +185,64 @@ def test_snapshot_uses_singular_ref_endpoint(tmp_path: Path) -> None:
     rc, out, calls = _run(tmp_path, "claude/foo", refs={"claude/foo": _SHA})
     assert rc == 0, out
     assert calls[0] == "GET claude/foo", f"단수형 조회가 아니다: {calls}"
+
+
+# ---------------------------------------------------------------------------
+# 계약 ①-b — 부재는 **404일 때만**이다 (Codex P1 · PR #1070)
+#
+# 초판은 `if ! sha=$(gh api ...)`로 **비-0 종료 전부**를 부재로 접었다. 그러면 토큰이
+# 죽거나 rate limit에 걸린 실행에서 전 대상이 "이미 부재"가 되고 잡은 exit 0으로 끝난다 —
+# 브랜치를 하나도 못 지운 실행이 성공으로 보고된다. 원래 버그(거짓 red)보다 나쁘다:
+# red는 사람이 보지만 정리 잡의 green은 아무도 안 본다.
+#
+# 2026-09-08 실측(수정 전): 인증 실패 스텁에 `이미 부재 3건 · 실패 0건 · EXIT=0`.
+# ---------------------------------------------------------------------------
+
+
+def test_auth_failure_is_not_mistaken_for_absent(tmp_path: Path) -> None:
+    """토큰이 죽은 실행이 **거짓 green**으로 끝나면 안 된다 (Codex P1의 반례).
+
+    `gh`는 인증 실패를 exit 4로 내고 stderr에 HTTP 상태를 **적지 않는다** — 그래서
+    "비-0이면 부재"도 "404 문자열이 있으면 부재"도 아닌, *404가 확인될 때만* 부재다.
+    """
+    rc, out, calls = _run(
+        tmp_path,
+        "claude/a,claude/b,claude/c",
+        refs={},
+        lookup_failure="auth",
+    )
+    assert rc == 1, f"인증이 죽었는데 잡이 초록으로 끝났다:\n{out}"
+    assert "이미 부재 0건" in out, f"조회 실패를 부재로 계상했다:\n{out}"
+    assert "실패 3건" in out, out
+    assert [c for c in calls if c.startswith("DELETE")] == [], "조회도 못 했는데 삭제를 시도했다"
+    assert "GH_TOKEN" in out, "실패 원인이 로그에 없다 — 원인 없는 실패는 8개가 같아 보인다"
+
+
+def test_rate_limit_is_a_failure_not_absence(tmp_path: Path) -> None:
+    """403은 4xx이지만 404가 아니다 — acceptance ③-ⓐ의 '404 외만 실패로 계상'."""
+    rc, out, _ = _run(tmp_path, "claude/a", refs={}, lookup_failure="ratelimit")
+    assert rc == 1, out
+    assert "이미 부재 0건" in out and "실패 1건" in out, out
+    assert "rate limit" in out, "응답 본문이 로그에 없다"
+
+
+def test_server_error_is_a_failure_not_absence(tmp_path: Path) -> None:
+    """5xx도 마찬가지 — GitHub이 아플 때 배치를 '전부 이미 삭제됨'으로 보고하면 안 된다."""
+    rc, out, _ = _run(tmp_path, "claude/a", refs={}, lookup_failure="server")
+    assert rc == 1, out
+    assert "이미 부재 0건" in out and "실패 1건" in out, out
+    assert "500" in out, out
+
+
+def test_404_is_still_absent_and_green(tmp_path: Path) -> None:
+    """대조군 — 위 셋을 실패로 만들면서 **404는 여전히 성공**이어야 한다.
+
+    이 단언이 없으면 "전부 실패로 계상"이라는 과잉 수정이 통과한다(그건 HARN-01이
+    고치려던 상시 red 그 자체다).
+    """
+    rc, out, _ = _run(tmp_path, "claude/gone", refs={})
+    assert rc == 0, f"404인데 red다 — HARN-01 회귀:\n{out}"
+    assert "이미 부재 1건" in out and "실패 0건" in out, out
 
 
 # ---------------------------------------------------------------------------

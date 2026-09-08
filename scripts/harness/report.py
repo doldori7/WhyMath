@@ -291,6 +291,15 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
         ],
         # 텍스트 화면과 **같은 사실**을 기계도 읽게 한다 (HARN-94). 종전에는 days만 있어,
         # 기계 소비자도 "독촉 초과"와 "아직 한참 남음"을 구분할 수 없었다.
+        #
+        # 왜 `blocked_tasks`가 아니라 `dependents`인가 (Codex P2 · PR #1070): HARN-94
+        # acceptance ⑦이 `blocked_tasks`라고 적었으나 **그 이름이 틀렸다**. 게이트는
+        # status가 blocked인 태스크만 붙잡는 게 아니다 — `todo` 태스크도 requires_gates로
+        # 착수 후보에서 제외된다. blocked만 세면 게이트가 실제로 붙잡는 양을 **과소 보고**한다.
+        # 값은 `selector.gate_dependent_tasks`(단일 진실 원천)에서 오고 그 docstring도
+        # "이 목록은 *의존 관계*이지 '현재 차단'이 아니다"라고 못박는다. 구현을 틀린 문면에
+        # 맞추면 JSON이 자기 내용에 대해 거짓말을 하므로, 이름을 지키고 **계약을 정정**했다
+        # (HARN-94 acceptance 정정항 · 2026-09-08).
         "pending_gates": [
             {
                 "id": v.gate.id,
