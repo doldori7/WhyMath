@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -21,6 +21,6 @@ paths:
   - "src/backend/whymath_backend/l4/misconception/**"
   - "data/corpus/misconception_crosslinks_v1/**"
   - docs/prompts/misconception_diagnosis.md
-session: null
+session: claude/status-iraoq3
 notes: "MISC-07 착수 중 실측으로 드러난 별건. MISC-07은 '앵커 커버 오개념에 기계 채널 부여'인데, 측정해 보니 앵커 커버 kebab 좌석 자체가 A4(3)·A6(2) 5종뿐이고 나머지 4앵커는 0이었다. 채널 커버 0의 절반은 채널이 없어서가 아니라 좌석이 없어서다 — 두 문제는 해법이 다르므로 분리한다. MISC-07 범위는 좌석이 있는 5종까지."
-updated: 2026-09-07
+updated: 2026-09-08
