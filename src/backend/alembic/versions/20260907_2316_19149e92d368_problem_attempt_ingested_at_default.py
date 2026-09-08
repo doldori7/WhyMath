@@ -22,8 +22,15 @@
 upgrade: `problem_attempt.ingested_at`에 `server_default=now()` 부여(컬럼 정의·nullable 불변).
 downgrade: server_default 제거(대칭 — 기존 행 데이터는 영향 없음).
 
+**체인 재부모화(2026-09-08)**: 작성 시점 head는 `c1a5e07b4d38`(EOS-99)였으나, 병렬 세션의
+MISC-20이 `d2f4a68b91e7`·`e3b5c79d02f8` 2건을 먼저 착지시켜 같은 부모에서 갈라진 head 2개가
+됐다. 저장소는 단일 head 관례이므로 이쪽을 `e3b5c79d02f8` 위로 재부모화한다(`d4a71c0f9b32`가
+같은 상황에서 한 처리와 동형). **순서 의존은 없다**: MISC-20 2건은 `misconception_hypothesis`·
+`evidence_links`에 컬럼을 더하고, 본 리비전은 `problem_attempt`의 기존 컬럼 DEFAULT만 바꾼다 —
+건드리는 객체가 겹치지 않아 어느 순서로 적용해도 결과가 같다.
+
 Revision ID: 19149e92d368
-Revises: c1a5e07b4d38
+Revises: e3b5c79d02f8
 Create Date: 2026-09-07 23:16:00.000000
 """
 
@@ -37,7 +44,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "19149e92d368"
-down_revision: str | None = "c1a5e07b4d38"
+down_revision: str | None = "e3b5c79d02f8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

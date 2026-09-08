@@ -101,6 +101,7 @@ from whymath_backend.db.models.problem import Problem, ProblemRelation
 from whymath_backend.db.models.timeseries import DailyLearningMetrics
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.growth_evidence_exposure import (
+    ExposureTier,
     MetricExposure,
     classify_metric_exposure,
     narrate_calibration_brier,
@@ -3406,6 +3407,16 @@ class GrowthEvidenceResponse(BaseModel):
 # 그대로 내보내면 학생 대면 JSON에 낙인 라벨이 유출된다(이 태스크의 핵심 랜드마인). 계약의
 # *판정*(exposable_now=False)은 그대로 신뢰하되 *서술*만 이 문장으로 교체한다 — 계약 로직
 # 재구현이 아니라 표현 계층 소유권 이전이다.
+# MISC-20 — ⑩ 오개념 해소율이 PROVISIONAL(근사·노출 보류)일 때 학생에게 나갈 서빙 층 소유
+# 문장. 계약 모듈의 `suppressed_reason` 원문은 재승격 조건·`is_active`·`deactivated_reason`
+# 같은 **내부 용어**를 담아 운영자용이다 — 그대로 내보내면 검수되지 않은 내부 진단 문구가 학생
+# 대면 JSON에 흘러간다(`GrowthEvidenceMetricView`가 `Metric.note`를 뺀 것과 같은 이유).
+# `hint_depth_reached` 랜드마인 방어와 동형: 계약의 *판정*은 그대로 신뢰하고 *서술*만 교체한다.
+_RESOLUTION_RATE_SUPPRESSED_MESSAGE = (
+    "오개념 극복 정도는 아직 정확하게 알려드리기 어려워요 — 지금 방식으로는 네가 실제로 넘어선 "
+    "오개념과 잠시 나타나지 않은 오개념을 구분하지 못해요. 더 정확해지면 다시 보여드릴게요."
+)
+
 _HINT_DEPTH_SUPPRESSED_MESSAGE = (
     "지금은 이 지표만 따로 보여드리기 어려워요 — 힌트 사용 패턴과 정답률을 함께 살펴보는 "
     "중이에요. 대신 다른 성장 지표로 진행 상황을 확인해보세요."
@@ -3424,6 +3435,16 @@ def _render_growth_evidence_metric(
     """
     metric = getattr(metrics, field)
     exposure = exposure_by_field[field]
+    if exposure.tier is ExposureTier.PROVISIONAL:
+        # MISC-20 집행 지점 — 계약이 근사로 판정한 값은 서빙 층을 통과하지 못한다(value null화).
+        # 필드 자체는 남긴다(강등 ≠ 삭제 — 계산·내부 리포트는 유지되고 학생 노출만 멈춘다).
+        # `status`는 정직하게 원값 그대로(계측은 됐고 노출만 보류라는 사실을 위장하지 않는다).
+        return GrowthEvidenceMetricView(
+            status=metric.status,
+            value=None,
+            exposable_now=False,
+            suppressed_reason=_RESOLUTION_RATE_SUPPRESSED_MESSAGE,
+        )
     if field == "hint_depth_reached" and not exposure.exposable_now:
         return GrowthEvidenceMetricView(
             status=metric.status,

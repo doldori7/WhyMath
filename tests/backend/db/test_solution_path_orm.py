@@ -166,8 +166,9 @@ class TestMigrationFileChain:
                 downs.add(down.group(1))
         heads = revisions - downs
         assert len(heads) == 1, f"단일 head여야 한다 — 실제 heads: {sorted(heads)}"
-        # SEC-33 ⑥이 problem_attempt.ingested_at에 server_default를 부여(EOS-99 위에 선형 적재).
-        # 같은 컬럼의 ALTER 1건이라 순서 의존이 0이다(백필 없음 — 마이그레이션 docstring 참조).
+        # SEC-33 ⑥이 problem_attempt.ingested_at에 server_default를 부여 — MISC-20 2건
+        # (d2f4a68b91e7·e3b5c79d02f8) 위로 재부모화해 선형 적재(병렬 착지로 head가 갈라져
+        # 재부모화·마이그레이션 docstring 참조). 건드리는 객체가 겹치지 않아 순서 의존 0.
         # 이 상수는 `db/schema_version.py::KNOWN_REVISIONS`의 마지막 항과 **함께** 움직인다 —
         # 마이그레이션을 더하면 두 곳을 같이 갱신해야 한다(둘 다 head를 고정한다).
         assert heads == {"19149e92d368"}

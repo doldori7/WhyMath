@@ -285,6 +285,79 @@ echo "EXIT=$LASTEXITCODE"
 
 ---
 
+## 머지 경합 — merge queue는 이 저장소에서 **쓸 수 없다** (2026-09-07 실측)
+
+> **먼저 읽을 것 — 다시 제안하지 말 것.** `Require branches to be up to date`(위
+> `strict_required_status_checks_policy`)가 켜져 있고 CI가 20~30분인데 `main`은 15~30분마다
+> 전진한다. 30분짜리 게이트는 15~30분 간격의 전진을 **산술적으로 이길 수 없다** — PR #935가
+> 재동기화 4회, PR #952가 CI green을 3회 확보하고도 `behind`로 3라운드를 태웠다. GitHub
+> **merge queue**가 정확히 이 문제를 풀려고 만들어진 기능이지만, **이 저장소에서는 제공되지 않는다.**
+
+### 왜 안 되는가 (조건과 실측)
+
+merge queue는 **조직(Organization) 소유 저장소 전용**이다 — 공개 저장소는 조직 소유면 무료
+플랜에서도 되고, 비공개는 조직 + Enterprise Cloud가 필요하다. **개인 계정 소유는 공개·비공개
+모두 제공되지 않는다.**
+
+| 축 | 실측값 (`GET /repos/doldori7/WhyMath`) |
+|---|---|
+| `visibility` | `public` |
+| `owner.type` | **`User`** (개인 계정 `doldori7`) |
+
+그래서 Settings → Rules → Rulesets → `main` 룰셋의 Rules 목록에 **`Require merge queue` 항목
+자체가 나타나지 않는다**(2026-09-07 Kiki 실측). UI 경로 문제가 아니라 항목 부재다.
+
+> **실패 경위(재발 방지)** — 이 절은 사고 기록이다. 2026-09-07 세션이 라이브 룰셋에서
+> `merge_queue` 규칙이 **없음**을 확인하고 그것을 "아직 안 켰다"로 읽었다. 부재는 *미설정*일
+> 수도 *미제공*일 수도 있는데 앞의 것만 가정했고, 그 상태로 Kiki에게 결정을 올려 왕복 1회를
+> 태웠다. **설정 부재는 설정 가능을 함의하지 않는다** — 기능 도입을 제안하기 전에 그 기능이
+> 이 저장소의 *계정 유형·가시성·플랜*에서 제공되는지부터 확인한다.
+>
+> `ruleset_drift.py`의 규칙 타입 축에 `merge_queue`를 **의도적으로 넣지 않은** 이유도 이것이다.
+> 넣으면 영원히 충족 불가한 위반이 매 실행마다 보고돼 판정기 출력 전체가 소음이 된다.
+> 저장소가 조직으로 이관되면 그때 추가한다.
+
+### 대신 하는 것 — 자동 재동기화 (`pr-auto-resync.yml` · HARN-85)
+
+보호를 낮추는 대신(=`strict` 해제) **충족을 자동화**한다. `Require branches to be up to date`는
+그대로 유지된다 — 그 게이트는 실제로 일하고 있다(#931이 `ReviewStatus`에 `quarantined`를
+추가하자 #935의 단언이 red가 됐다. 동기화하지 않았으면 머지 후 `main`에서 터졌다).
+
+예약 워크플로우가 주기적으로 열린 PR을 훑어, **auto-merge가 켜져 있고 `behind`인 것만**
+`PUT /repos/{owner}/{repo}/pulls/{n}/update-branch`로 최신화한다. 사람이 누르던 "Update branch"를
+기계가 누르는 것이다.
+
+**한계(명시)** — 큐가 아니다:
+- **직렬화하지 않는다.** 동시에 여러 PR이 auto-merge 대기 중이면 모두 같은 `main` 위로
+  최신화되고, 그중 하나가 먼저 머지되면 나머지는 다시 `behind`가 된다(다음 주기에 또 최신화).
+  PR 동시 대기 수가 많을수록 CI 소모가 늘어난다 — 큐의 `Maximum entries to build`에 해당하는
+  절약 장치가 없다.
+- **충돌은 사람 몫이다.** `update-branch`가 409를 내면(내용 충돌) 워크플로우는 건너뛰고
+  로그에 PR 번호와 응답 본문을 남긴다. 조용히 넘기지 않는다.
+- **auto-merge를 켜지 않은 PR은 건드리지 않는다.** 의도적이다 — 아직 리뷰 중인 PR의 브랜치를
+  임의로 전진시키면 리뷰어가 보던 diff가 바뀐다.
+
+**토큰 — 이것이 없으면 워크플로는 멈춘다(fail-closed)**: `GITHUB_TOKEN`이 만든 push는
+workflow를 재발화시키지 않는다(GitHub 문서화 제약). 그 토큰으로 `update-branch`를 하면
+브랜치는 최신화되지만 **새 head에 required check가 하나도 보고되지 않아** strict 하에서 그
+PR은 "체크 대기"로 **영구히** 막힌다 — `behind`는 사람이 Update branch를 눌러 풀 수 있지만
+(사람 행위는 CI를 재발화시킨다) 체크 없는 head는 그 탈출구마저 없앤다. **즉 폴백은 아무것도
+안 하느니 나쁘다**: 성공을 보고하면서 PR을 좌초시킨다.
+
+그래서 폴백으로 진행하지 않고 **쓰기 전에 멈춘다**. 저장소 시크릿
+`PR_AUTO_RESYNC_TOKEN`(fine-grained PAT · `Contents: Read and write` +
+`Pull requests: Read and write`)이 없으면 스크립트가 `쓰기 자격 없음`을 내고 exit 1 —
+게이트 `G-pr-auto-resync-token`이 그 발급을 추적한다.
+
+> 이 결정은 제약의 성립 여부와 **무관하게** 옳다. 제약이 실재하지 않는다면 비용은 "PAT를
+> 불필요하게 요구했다" 1회이고, 실재한다면 폴백의 비용은 "좌초된 PR"이다 — 비대칭이 크므로
+> 측정을 기다리지 않고 안전한 쪽을 택한다. (`HARN-85` ②의 실측은 PAT 착지 후에도 유효하다:
+> 폴백 경로가 실제로 어떻게 실패하는지는 여전히 모르는 채로 남는다.)
+
+**수동 확인**: Actions 탭 → `pr-auto-resync` → Run workflow → `dry_run` = `1`. 읽기 전용이라
+**PAT 없이도 돈다** — 쓰기 자격 검사를 통과해 후보와 분모(스캔 N건 · BEHIND+auto-merge M건)만
+출력한다. 배선 확인 경로를 일부러 열어 둔 것이다.
+
 ## 저장 후 확인
 
 1. 페이지 하단 **Create** 또는 **Save changes** 클릭
