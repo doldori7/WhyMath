@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-87-pr-auto-resync-live-measurement
+title: "PR 자동 재동기화 라이브 측정 — 토큰 재발화 실측 + 도입 전후 변별력 (HARN-85 ②④ 승계)"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates:
+  - G-pr-auto-resync-token
+acceptance:
+  - "① 토큰 재발화 실측 — PAT 착지 후 pr-auto-resync를 실제로 돌려 update-branch가 만든 새 head에 required check가 **보고되는지** 확인한다(check-runs 조회로 개수·시각). PAT 경로가 정상 작동함을 확인하는 것이 목적이며, GITHUB_TOKEN 폴백 경로는 fail-closed로 막혀 있어 관측 대상이 아니다(HARN-85가 그 경로를 의도적으로 닫았다)"
+  - "② 도입 전후 변별력 — 테스트 PR 1건에 auto-merge를 켜고 재동기화 대기 중 main에 다른 PR을 **의도적으로 착지**시킨 뒤, 수동 개입 없이 재동기화가 일어나 최종 머지되는지 확인한다. 이 주입 없이는 '경합이 없었을 뿐'과 '경합에 강해졌음'을 구분할 수 없다. 전 상태 기준선: PR #935 재동기화 4회 · PR #952가 CI green 3회 확보하고도 behind로 3라운드 · PR #1040 자신이 머지까지 main 병합 3회"
+  - "③ 주기·비용 재판정 — 15분 주기는 근거 없는 초기값이다. 실측 1주 뒤 (a)재동기화 발생 건수 (b)그로 인한 CI 실행 증가분을 세어 주기를 조정하거나 유지한다. 큐와 달리 직렬화하지 않으므로 동시 대기 PR이 많을 때 CI 소모가 증폭될 수 있다 — 그 증폭이 실제로 관측되는지 본다"
+artifacts: []
+paths:
+  - ".github/workflows/pr-auto-resync.yml"
+  - ".github/scripts/pr_auto_resync.sh"
+  - ".github/branch-protection-setup.md"
+session: null
+notes: "선행: 게이트 G-pr-auto-resync-token(PAT 발급·시크릿 등록)이 있어야 ①②를 측정할 수 있다 — requires_gates로 집행한다(산문 선행 금지 규칙). HARN-85(PR #1040·머지 34001b42)의 acceptance ②④를 승계한다. HARN-85 done 증적이 이 태스크를 승계자로 지목하므로 번호가 재배정되면 그 증적도 함께 정정해야 한다(2026-09-07 Codex P2 'HARN-81 존재하지 않는 승계자' 사고의 재발 방지)."
+updated: 2026-09-08
