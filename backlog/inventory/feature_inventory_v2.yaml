@@ -100,7 +100,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 21
-    test_functions: 428
+    test_functions: 431
     matrix:
       A_subject: 0
       B_db: 0
@@ -1530,7 +1530,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 33
-    test_functions: 512
+    test_functions: 515
     matrix:
       A_subject: 0
       B_db: 0
@@ -1595,7 +1595,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 9
-    test_functions: 127
+    test_functions: 130
     matrix:
       A_subject: 0
       B_db: 0
@@ -3025,7 +3025,7 @@ features:
     db_model_modules: 0
     coupling_count: 3
     test_files: 6
-    test_functions: 117
+    test_functions: 120
     matrix:
       A_subject: 3
       B_db: 0
@@ -7119,8 +7119,8 @@ features:
     mixed_deps: [schema.problem]
     db_model_modules: 0
     coupling_count: 9
-    test_files: 44
-    test_functions: 1206
+    test_files: 46
+    test_functions: 1222
     matrix:
       A_subject: 1
       B_db: 0
@@ -7175,7 +7175,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 1423
+    loc: 1594
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 9
@@ -7184,8 +7184,8 @@ features:
     mixed_deps: []
     db_model_modules: 4
     coupling_count: 13
-    test_files: 24
-    test_functions: 862
+    test_files: 26
+    test_functions: 878
     matrix:
       A_subject: 0
       B_db: 2
@@ -8345,7 +8345,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: High
-    loc: 3381
+    loc: 3414
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 3
@@ -8355,7 +8355,7 @@ features:
     db_model_modules: 5
     coupling_count: 14
     test_files: 10
-    test_functions: 260
+    test_functions: 266
     matrix:
       A_subject: 1
       B_db: 2
@@ -8410,7 +8410,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 11230
+    loc: 11244
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 329
-    test_functions: 5940
+    test_functions: 5943
     matrix:
       A_subject: 3
       B_db: 0
@@ -8475,7 +8475,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 8147
+    loc: 8170
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 193
-    test_functions: 2957
+    test_files: 194
+    test_functions: 2968
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 75
-    test_functions: 1508
+    test_functions: 1511
     matrix:
       A_subject: 1
       B_db: 1
@@ -9135,7 +9135,7 @@ features:
     db_model_modules: 0
     coupling_count: 15
     test_files: 14
-    test_functions: 179
+    test_functions: 182
     matrix:
       A_subject: 0
       B_db: 0
