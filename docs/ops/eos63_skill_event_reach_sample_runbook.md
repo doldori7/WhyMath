@@ -3,11 +3,18 @@
 > 이 문서는 게이트 **`G-eos63-skill-event-reach-sample`**(kiki·2026-09-01 등재)의 실행 절차다.
 > 게이트가 풀리면 `EOS-63-attempt-skill-event-consumption`(P1)의 차단이 해제된다.
 >
-> **판정 기준: main `3a30244c`** — 아래 명령·플래그·기본값·경로는 전부 그 커밋의 코드에서
-> 확인했다(`attempt_skill_event_reach_report.main()` 인자 정의 · `config.Settings.database_url`
-> 기본값과 `WHYMATH_` 접두 · `scripts/demo/run_demo.ps1`의 DB URL 규약).
-> **단, 이 런북이 쓰는 프로브(`attempt_skill_reach_probe`)는 아직 main에 없다** — 아래 [1단계]
-> 블록이 그 사실을 *스스로 판정해* 올바른 체크아웃을 고른다(사람이 고를 것 없음).
+> **판정 기준: main `4abacdce`(2026-09-08 재확인)** — 아래 명령·플래그·기본값·경로는 전부 그
+> 커밋의 코드에서 확인했다(`attempt_skill_event_reach_report.main()` 인자 정의 ·
+> `config.Settings.database_url` 기본값과 `WHYMATH_` 접두 · `scripts/demo/run_demo.ps1`의 DB URL
+> 규약 · `attempt_skill_reach_probe`의 exit 표).
+>
+> **갱신(2026-09-08)**: 최초 작성(main `3a30244c`) 시점에는 프로브(`attempt_skill_reach_probe`)가
+> main에 없어 [1단계]가 그 사실을 스스로 판정해 폴백 브랜치를 고르게 돼 있었다. 그 프로브는
+> **main에 착지했고 폴백 브랜치(`claude/skill-event-reach-sample-ec2w3b`)는 삭제됐다**(실측:
+> `git cat-file -e origin/main:src/backend/whymath_backend/harness/attempt_skill_reach_probe.py`
+> → 존재 · `git ls-remote --heads origin claude/skill-event-reach-sample-ec2w3b` → 0건). 삭제된
+> ref를 fetch하면 Kiki 화면에 해석 불가한 오류가 뜨므로 [1단계]에서 그 분기를 제거했다 —
+> 이제 main만 본다. (CLAUDE.md 「검증 없는 실행 안내 금지」: 안내 전 실재를 실측한다)
 
 ---
 
@@ -102,7 +109,7 @@ acceptance ②의 유일한 판정 재료다.
 > 아래 블록은 **자리표시자가 하나도 없다**. 그대로 통째로 붙여넣으면 된다.
 > 각 블록 끝의 자가검증 줄이 **실패 상태에서 다른 값을 낸다** — 그 값을 보고 다음 블록으로 간다.
 
-### [1단계] 체크아웃 — 블록이 스스로 올바른 브랜치를 고른다
+### [1단계] 체크아웃 — main으로 detached 이동(지역 브랜치 무변경)
 
 ```powershell
 # [Windows PowerShell · Phaiakes9]
@@ -118,11 +125,8 @@ if (-not $Dirty) {
   $Branch = (git rev-parse --abbrev-ref HEAD)
   "RETURN_TO=$Branch"
   git fetch origin main
-  git fetch origin claude/skill-event-reach-sample-ec2w3b
   $ProbeRel = "src/backend/whymath_backend/harness/attempt_skill_reach_probe.py"
-  git cat-file -e "origin/main:$ProbeRel" 2>$null
-  if ($LASTEXITCODE -eq 0) { git checkout --detach origin/main }
-  else { git checkout --detach origin/claude/skill-event-reach-sample-ec2w3b }
+  git checkout --detach origin/main
   git log --oneline -1
   "PROBE_FILE_OK=" + (Test-Path (Join-Path (Get-Location) $ProbeRel))
 }
@@ -133,8 +137,8 @@ if (-not $Dirty) {
 전혀 바꾸지 않는다** — detached HEAD로만 이동하므로 push하지 않은 지역 커밋이 안전하다.
 - `WORKTREE_DIRTY=True`면 미커밋 변경이 있어 블록이 **아무것도 하지 않은 것**이다(의도) —
   그 변경을 어떻게 할지 세션에 물은 뒤 다시 온다.
-- `PROBE_FILE_OK=False`면 두 fetch가 모두 실패한 것이다(네트워크·브랜치 삭제) — 다음 단계로
-  가지 말고 세션에 알린다.
+- `PROBE_FILE_OK=False`면 fetch가 실패했거나(네트워크) main에서 프로브가 사라진 것이다 —
+  다음 단계로 가지 말고 세션에 알린다. 이 검사는 변별력이 있다: 파일이 없으면 `False`가 뜬다.
 
 ### [2단계] 환경 — UTF-8 + prod DB + 컨테이너 생존
 
@@ -144,15 +148,25 @@ $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath?ssl=disable"
+# 이 창은 저장소 루트에 있는데 `-m whymath_backend...`는 패키지가 venv에 설치돼 있어야 풀린다.
+# 설치돼 있으면 이 줄은 무해하고(같은 코드를 가리킨다), 안 돼 있으면 이 줄이 해결한다 —
+# "설치돼 있을 것이다"라는 가정 자체를 없앤다.
+$env:PYTHONPATH = (Resolve-Path "src\backend").Path
 $Py = "src\backend\.venv\Scripts\python.exe"
 New-Item -ItemType Directory -Force -Path work\eos63 | Out-Null
 "PG_CONTAINER=" + (docker ps --filter "name=whymath-pg" --filter "status=running" --format "{{.Names}}")
 "PY_OK=" + (Test-Path $Py)
+& $Py -c "import whymath_backend, sys; print('IMPORT_OK=True')"
+"IMPORT_EXIT=$LASTEXITCODE"
 ```
 
-**자가검증**: `PG_CONTAINER=whymath-pg` **그리고** `PY_OK=True`. `PG_CONTAINER=`이 비어 있으면
-컨테이너가 죽은 것이다 — `docker start whymath-pg` 후 이 블록을 다시 돌린다.
-(이 검사는 정상/비정상에서 서로 다른 값을 낸다 — 컨테이너가 없으면 빈 문자열이 나온다.)
+**자가검증**: 세 줄이 모두 맞아야 한다 — `PG_CONTAINER=whymath-pg` · `PY_OK=True` ·
+`IMPORT_OK=True`(그리고 `IMPORT_EXIT=0`).
+- `PG_CONTAINER=`이 비어 있으면 컨테이너가 죽은 것이다 — `docker start whymath-pg` 후 이 블록을
+  다시 돌린다. (이 검사는 변별력이 있다 — 컨테이너가 없으면 빈 문자열이 나온다.)
+- `IMPORT_OK`가 안 찍히고 `IMPORT_EXIT=1`이면 의존성 미설치다(ModuleNotFoundError의 *대상*이
+  화면에 찍힌다 — 그 이름을 세션에 전달한다). 3단계로 가면 같은 실패를 DB 오류처럼 보게 되므로
+  여기서 멈추는 것이 맞다.
 
 ### [3단계] 사전 관측 (읽기 전용 — DB에 아무것도 쓰지 않는다)
 
