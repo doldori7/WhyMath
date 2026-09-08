@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 eos_priority: P2
 owner: claude
@@ -15,7 +15,8 @@ acceptance:
   - "① 실측 재현: diagnose('극대는 x=2 에서 나오고 극댓값은 2 이다 (f(2)=2 인 함수)')가 extremum-value-vs-point-confused를 confidence 1.0으로 반환하고 apply_match_quality_gate(top-1 floor 0.65)를 통과함을 확인한다 — 카탈로그 주석(catalog.py 극댓값 항목)은 이 케이스가 '정규식 단독 매치 0.5로 게이트 미만'이라 안전하다고 적지만, 그 정규식 패턴 자체가 리터럴 '극댓값'을 포함해 매치 시 substring 신호도 항상 함께 발화하므로 실제로는 conf 1.0이다(MISC-22 조사 중 발견 — 요구되는 조건이 아니라 결과다)"
   - "② f(x0)=x0인 정답(극대점 좌표와 극댓값이 우연히 같은 수)이 실제로 학생에게 '오개념'으로 확신 진단될 위험을 해소한다 — 원리상 구별 불가이므로(카탈로그 주석 명시) 이 채널이 게이트를 통과해서는 안 된다는 것이 원 설계 의도였다. 해소 방향은 이 항목만 예외적으로 regex-only 가산을 옛 방식(1개 신호 상당)으로 유지하거나, ambiguous 판정을 코드 경로에 반영하거나(예: 별도 refuting 신호로 f(x)=x 좌표-값 동일 케이스를 배제) 등 pedagogy-designer 검토 대상"
   - "③ anchor_detection_channel_eval의 ambiguous 계급 측정(현재 '보고만' 함)이 실제 서빙 게이트 통과 여부까지 재는지 확인하고, 필요하면 ambiguous fixture에도 _survives_serving_gate 단언을 추가해 이 위험을 회귀 동결한다"
-artifacts: []
+artifacts:
+  - "https://github.com/doldori7/WhyMath/pull/1072"
 paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/l4/misconception/diagnose.py
@@ -25,6 +26,6 @@ paths:
   - tests/backend/l4/test_misconception_diagnose.py
   - tests/backend/harness/test_anchor_detection_channel_eval.py
   - MEMORY.md
-session: claude/status-vlul18
+session: null
 notes: "출처: MISC-22(정규식 매치를 substring 신호 전체와 동등하게 가산하도록 confidence 공식을 정정하는 작업) 조사 중 발견. MISC-22 변경과 무관하게 *이미* main에 존재하던 위험이다(구 v1.2 공식으로도 이 케이스는 conf 1.0이었음을 실측 확인 — regex 패턴이 '극댓값' 리터럴을 포함해 substring이 항상 동반 매치). 학생 정서 최우선(CLAUDE.md 의사결정 우선순위 #1) 원칙상 방치 부적절하나 MISC-22 acceptance 범위 밖이라 분리 등재한다.\n\n[정정 2026-09-08] paths ['src/backend/whymath_backend/l4/misconception/catalog.py', 'src/backend/whymath_backend/l4/misconception/diagnose.py', 'docs/prompts/misconception_diagnosis.md'] → ['src/backend/whymath_backend/l4/misconception/catalog.py', 'src/backend/whymath_backend/l4/misconception/diagnose.py', 'src/backend/whymath_backend/l4/misconception/models.py', 'docs/prompts/misconception_diagnosis.md', 'src/backend/whymath_backend/harness/anchor_detection_channel_eval.py', 'tests/backend/l4/test_misconception_diagnose.py', 'tests/backend/harness/test_anchor_detection_channel_eval.py', 'MEMORY.md']: 구현 범위: models.py에 ambiguous_regex_signals 필드 신설, anchor_detection_channel_eval.py에 ambiguous_serving_reach 게이트 추가, 관련 테스트·MEMORY 결정 로그 갱신"
 updated: 2026-09-08
