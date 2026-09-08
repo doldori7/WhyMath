@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-88-amend-acceptance-replace
+title: "amend에 acceptance 정정 경로 부재 — 오등재된 항을 지울 CLI 경로가 없다 (append 전용)"
+track: infra-debt
+stage: S3
+subject: math
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① `amend --acceptance-replace <구문자> <신문자>` 추가 — `--notes-replace`(HARN-67 ⑥)와 같은 계약: 구문자는 대상 acceptance 항 전체에 정확히 1회 등장해야 하고(0회·2회+ 거부), 신문자 `''`는 그 항 삭제, 원문은 이벤트 대장에 남는다. 손편집 금지 원칙을 지키면서 오등재를 되돌릴 수 있게 하는 것이 목적이다"
+  - "② 항 단위 삭제 경로 — `--remove-acceptance <인덱스 또는 구문자>`가 필요한지 판정한다. `--acceptance-replace`로 빈 문자열 치환이 가능하면 중복이므로 만들지 않는다(선택지 폭발 방지). 판정 근거를 notes에 남긴다"
+  - "③ 회귀 테스트 — `tests/harness/test_cli.py`에 (a)정상 치환 (b)구문자 0회 거부 (c)구문자 2회+ 거부 (d)빈 신문자로 항 삭제 (e)이벤트에 원문 기록을 동결한다. 뮤테이션으로 각 절이 실제 RED를 내는지 확인한다 — 특히 (b)(c)는 픽스처가 그 절을 밟는지 주의한다(CLAUDE.md 2026-09-07 '픽스처 접촉' 축)"
+artifacts: []
+paths:
+  - scripts/harness/backlog.py
+  - "tests/harness/**"
+session: null
+notes: "발생 경위(2026-09-08): HARN-87에 acceptance ④를 등재하며 bash 인자 안에 마크다운 백틱을 그대로 썼다 — 셸이 그것을 명령 치환으로 실행해 식별자 4개(`*/15`, API 경로, `workflow_dispatch`, `push: branches: [main]`)가 통째로 사라진 채 저장됐다. \"cron은 라 2~3회 발화했어야\" 같은 무의미 문장만 남았고, CLI는 그 사실을 알 수 없어 정상 종료했다. `--acceptance`가 append 전용이라 되돌릴 수 없어 정정본 ⑤를 덧붙이는 것으로만 수습했다 — 대장에 손상된 항이 영구히 남는다.\n\n이것이 이 태스크의 근거다: 지울 수 없는 오등재는 대장의 신뢰를 깎고, 사람이 결국 손편집으로 우회하게 만든다(HARN-53이 \"고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다\"고 적은 것과 같은 구조). `--notes-replace`가 notes 축에 이미 그 경로를 열어 두었으므로 acceptance 축에도 대칭으로 필요하다.\n\n부수: 백틱 자체는 CLAUDE.md 규칙(2026-09-08 등재)이 막는다 — 이 태스크는 그 규칙이 뚫렸을 때의 복구 경로를 만든다. 규칙과 코드는 상보다."
+updated: 2026-09-08
