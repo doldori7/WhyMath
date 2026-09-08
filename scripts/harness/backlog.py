@@ -98,7 +98,11 @@ def _transition_route(source: str, target: str) -> list[str] | None:
     `seen`을 enqueue 시점에 채우므로 같은 상태를 두 번 거치는 경로는 나오지 않는다.
     """
     if source == target:
-        return []
+        # 같은 상태로의 "이동"은 경로가 아니라 무의미다 — 빈 리스트를 돌려주면 호출부가
+        # 그것을 0단계 경로로 렌더해 **명령이 하나도 없는 안내**를 낸다(2026-09-08 실측:
+        # 세션이 죽은 in_progress 태스크에 start를 걸면 "해소 경로 (0단계): in_progress").
+        # 순환(같은 상태로 되돌아오는 최단 고리)이 필요하면 _transition_cycle이 따로 낸다.
+        return None
     seen = {source}
     queue: deque[tuple[str, list[str]]] = deque([(source, [])])
     while queue:
@@ -112,6 +116,29 @@ def _transition_route(source: str, target: str) -> list[str] | None:
             seen.add(nxt)
             queue.append((nxt, step))
     return None
+
+
+def _transition_cycle(status: str) -> list[str] | None:
+    """status를 떠났다가 **다시 status로** 돌아오는 최단 고리. 없으면 None.
+
+    쓰임: 이미 그 상태인 태스크에 같은 전이를 걸었을 때(예: 세션이 죽은 `in_progress`
+    태스크의 재착수). 전이표는 자기 자신으로의 전이를 열지 않으므로 한 바퀴 돌아야 한다.
+
+    **동률일 때 `todo` 경유를 고른다.** `in_progress`에서 되돌아오는 고리는 `review`
+    경유와 `todo` 경유가 둘 다 2단계지만, 그 둘은 원격 claim에 대해 정반대다 —
+    `cmd_review`는 claim을 **유지**하고(여전히 in-flight) `cmd_unblock`은 **해제**한다.
+    같은 상태로의 재진입을 요청했다는 것은 앞 홀더가 사라졌다는 뜻이므로, 자리를 비우는
+    쪽이 옳다. 길이만 보는 타이브레이크는 claim을 든 채 재착수하라고 안내한다.
+    """
+    best: list[str] | None = None
+    for first in sorted(STATUS_TRANSITIONS.get(status, ()), key=lambda st: st != "todo"):
+        rest = _transition_route(first, status)
+        if rest is None:
+            continue
+        candidate = [first, *rest]
+        if best is None or len(candidate) < len(best):
+            best = candidate
+    return best
 
 
 def _status_command(task: Task, status: str) -> str:
@@ -137,6 +164,20 @@ def _status_command(task: Task, status: str) -> str:
 
 def _transition_guidance(task: Task, new_status: str) -> str:
     """거부에 덧붙일 해소 경로 블록 — 그대로 붙여 넣을 수 있는 명령 목록."""
+    if new_status == task.status:
+        # 이미 그 상태다. "0단계 경로"를 내는 것은 안내가 아니라 위장이다 — 답처럼 보이는데
+        # 실행할 것이 없다. 무엇이 사실인지 말하고, 재진입이 필요한 경우의 고리만 준다.
+        head = f"\n  이미 '{task.status}' 상태다 — 이 명령이 바꿀 것이 없다."
+        cycle = _transition_cycle(task.status)
+        if cycle is None:
+            return head
+        lines = [
+            head,
+            f"\n  같은 상태로 **다시** 들어가려면 (예: 세션이 끊긴 태스크의 재착수) "
+            f"({len(cycle)}단계): {' → '.join([task.status, *cycle])}",
+        ]
+        lines += [f"\n    {i}) {_status_command(task, st)}" for i, st in enumerate(cycle, 1)]
+        return "".join(lines)
     route = _transition_route(task.status, new_status)
     if route is None:
         # 현행 전이표에서 도달 불가는 곧 "출발이 종결 상태"다. 그래도 종결 여부를

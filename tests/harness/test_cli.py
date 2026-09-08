@@ -2316,6 +2316,36 @@ class TestTransitionRejectionGuidance:
                     checked += 1
         assert checked > 0, "스캔 0건은 실패다 — 검사 대상을 하나도 못 찾았다"
 
+    # ── ⑤ 같은 상태로의 전이: 0단계 경로를 내지 않는다 ──────────────────
+    def test_same_status_rejection_is_not_an_empty_route(self):
+        """같은_상태_거부는_빈_경로를_내지_않는다"""
+        # 2026-09-08 stray-code 9회차가 자기 PR에서 잡은 결함: 세션이 끊긴 in_progress
+        # 태스크에 start를 걸면 "해소 경로 (0단계): in_progress"만 나왔다 — 답처럼
+        # 보이는데 실행할 명령이 하나도 없다. 위 ④의 전수 가드는 `src != dst`만
+        # 생성하므로 이 절을 **한 번도 밟지 않았다**(절마다 그 절의 반례가 필요하다).
+        message = cli._transition(self._task("in_progress"), "in_progress")
+        assert message is not None
+        assert "0단계" not in message
+        assert "이미 'in_progress' 상태다" in message
+        # 재진입 고리는 실행 가능한 명령을 동반해야 한다
+        assert "backlog.py unblock TEST-01-probe" in message
+        assert "backlog.py start TEST-01-probe" in message
+
+    def test_reentry_cycle_prefers_the_claim_releasing_hop(self):
+        """재진입_고리는_claim을_걷는_홉을_고른다"""
+        # in_progress로 되돌아오는 고리는 review 경유·todo 경유 둘 다 2단계다. 그러나
+        # cmd_review는 원격 claim을 유지하고 cmd_unblock은 해제한다 — 같은 상태로의
+        # 재진입은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳다.
+        assert cli._transition_cycle("in_progress") == ["todo", "in_progress"]
+        message = cli._transition(self._task("in_progress"), "in_progress")
+        assert "review TEST-01-probe" not in message
+
+    def test_same_status_route_is_none_not_empty(self):
+        """같은_상태_경로는_빈_리스트가_아니라_None이다"""
+        # 빈 리스트를 돌려주면 호출부가 그것을 "0단계 경로"로 렌더한다 — 결함의 뿌리였다.
+        assert cli._transition_route("in_progress", "in_progress") is None
+        assert cli._transition_route("todo", "todo") is None
+
     def test_route_is_shortest_not_merely_valid(self):
         """경로는_유효한_아무_경로가_아니라_최단이다"""
         # in_progress→cancelled는 blocked 경유·todo 경유 둘 다 유효하지만 어느 쪽도
