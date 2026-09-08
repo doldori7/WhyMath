@@ -823,6 +823,68 @@ def test_summary_of_blocks_each_failure_mode(over, marker) -> None:
     assert marker in fields["CLEAR_BLOCKERS"]
 
 
+def test_foreign_identity_blocks_clear() -> None:
+    """혼입이 있으면 기계가 clear하지 못한다 (2026-09-08 Codex P1).
+
+    이 축이 없으면 생성 명령이 exit 1을 낸 리포트로도 요약이 exit 0을 내
+    게이트가 닫힌다 — **재직사 계정이 이력에 있는 채로** "귀속 분리 증빙 확보"가
+    선언된다. 혼입이 오분류였을 때의 해소 경로는 게이트 통과가 아니라 그 신원을
+    `--identity`로 선언하고 다시 재는 것이다.
+    """
+    fields, blockers = summary_of(
+        _report_payload(
+            identities={"foreign_identities": {"author:kiki <kiki@employer.co.kr>": 3}},
+            findings=[{"code": "IDENT-01", "subject": "author:kiki <kiki@employer.co.kr>"}],
+        )
+    )
+    assert fields["FOREIGN"] == "1"
+    assert fields["CLEAR_READY"] == "0"
+    assert "foreign_identities=1" in fields["CLEAR_BLOCKERS"]
+    assert any("foreign_identities" in b for b in blockers)
+
+
+def test_non_ident_finding_also_blocks_clear() -> None:
+    """혼입 말고도 생성이 exit 1을 내는 축(임계 초과)이 있다 — 그것도 막는다."""
+    fields, _ = summary_of(
+        _report_payload(findings=[{"code": "TIME-01", "subject": "업무시간 비율"}])
+    )
+    assert fields["CLEAR_READY"] == "0"
+    assert "TIME-01" in fields["CLEAR_BLOCKERS"]
+
+
+def test_ident_finding_is_not_counted_twice() -> None:
+    """IDENT-01은 foreign 축이 이미 이름을 붙였다 — 같은 사실을 두 번 세지 않는다."""
+    fields, blockers = summary_of(
+        _report_payload(
+            identities={"foreign_identities": {"author:x <x@e.co>": 1}},
+            findings=[{"code": "IDENT-01", "subject": "author:x <x@e.co>"}],
+        )
+    )
+    assert blockers == ["foreign_identities=1"]
+    assert "findings=" not in fields["CLEAR_BLOCKERS"]
+
+
+def test_summary_cli_exit_1_on_foreign_identity(tmp_path: Path, capsys) -> None:
+    """CLI 축 — 런북의 $EvidenceOk가 이 exit code로 판정하므로 여기서 새야 한다."""
+    report = tmp_path / "foreign.json"
+    report.write_text(
+        json.dumps(
+            _report_payload(
+                identities={"foreign_identities": {"author:kiki <kiki@employer.co.kr>": 3}},
+                findings=[{"code": "IDENT-01", "subject": "author:kiki <kiki@employer.co.kr>"}],
+            )
+        ),
+        encoding="utf-8",
+    )
+    code = main(
+        ["--summary-from", str(report), "--expect-head", "6259f8be40ae7f83345c7e7740b7718ec4727d44"]
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "CLEAR_READY=0" in out
+    assert "foreign_identities=1" in out
+
+
 def test_summary_of_blocks_stale_report() -> None:
     """리포트가 **다른 시점**을 잰 것이면 막는다 — 이 축이 없으면 과거 측정으로 게이트가 닫힌다."""
     fields, _ = summary_of(_report_payload(), expect_head="a" * 40)

@@ -69,7 +69,9 @@ exit code
 
     `--summary-from` 모드에서는
     0 — 리포트를 읽었고 게이트 clear의 기계 조건 충족 (`CLEAR_READY=1`)
-    1 — 읽었으나 조건 미충족 — 사유는 `CLEAR_BLOCKERS`
+    1 — 읽었으나 조건 미충족 — 사유는 `CLEAR_BLOCKERS`. **신원 혼입(IDENT-01)도
+        여기 포함**된다: 생성 명령이 exit 1을 낸 리포트로 게이트가 닫히면
+        재직사 계정이 이력에 있는 채로 "귀속 분리 확보"가 선언된다
     2 — **읽기 자체가 불가** — 값을 한 줄도 내지 않는다(실패가 값으로 위장되지 않게)
 """
 
@@ -1053,6 +1055,26 @@ def summary_of(payload: dict, *, expect_head: str = "") -> tuple:
     if expect_head:
         if not _same_head(head, expect_head):
             blockers.append(f"head_mismatch(report={head or '없음'} expect={expect_head})")
+
+    # 신원 혼입·임계 신호는 **사람이 조사할 일**이므로 기계가 clear하지 못하게 막는다.
+    # 이 축이 없으면 생성 명령이 exit 1(혼입 발견)을 낸 리포트로도 요약은 exit 0을 내
+    # 게이트가 닫힌다 — 재직사 계정이 이력에 있는 채로 "귀속 분리 증빙 확보"가
+    # 선언되는 것이며, 이 도구가 막으려던 실패 그 자체다 (2026-09-08 Codex P1).
+    # 혼입이 오분류였다면 해소 경로는 게이트를 통과시키는 것이 아니라 그 신원을
+    # `--identity`로 선언하고 다시 재는 것이다.
+    findings = payload.get("findings") or []
+    if foreign:
+        blockers.append(f"foreign_identities={len(foreign)}")
+    # IDENT-01은 위에서 이미 이름이 붙었으므로 중복 계상하지 않는다. 나머지 축
+    # (예: TIME-01 임계 초과)은 코드와 함께 따로 남긴다 — 무엇이 막았는지 보이게.
+    other = [
+        f
+        for f in findings
+        if not (isinstance(f, dict) and str(f.get("code", "")).startswith("IDENT-"))
+    ]
+    if other:
+        codes = sorted({str(f.get("code", "?")) if isinstance(f, dict) else "?" for f in other})
+        blockers.append(f"findings={len(other)}({','.join(codes)})")
 
     fields = {
         "SUMMARY_OK": "1",
