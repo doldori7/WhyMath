@@ -46,7 +46,8 @@ class TestPackageDataLoading:
         assert text.strip()  # 비어있지 않음
         # 각 (주석·빈 줄 아닌) 줄이 JSON 객체다.
         lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        assert len(lines) == 168  # 150 + 843 트랜치5 recall·FP 각 6건 + MISC-21 recall·FP 각 3건
+        # 150 + 843 트랜치5 recall·FP 각 6건 + MISC-21 recall 3·FP 4건(#1068 P1 회귀 FP 1건 추가)
+        assert len(lines) == 169
         for ln in lines:
             rec = json.loads(ln)
             assert "statement" in rec
@@ -71,7 +72,7 @@ class TestPackageDataLoading:
             else:
                 fp += 1
         assert recall == 98  # recall 프로브 수(843 트랜치5 +6 + MISC-21 +3)
-        assert fp == 70  # FP 프로브(843 트랜치5 +6 + MISC-21 +3)
+        assert fp == 71  # FP 프로브(843 트랜치5 +6 + MISC-21 +4 — #1068 P1 회귀 1건 포함)
 
     def test_all_expected_ids_in_catalog(self) -> None:
         # recall 프로브의 expected_id는 모두 카탈로그 id(매처가 잡을 수 있는 라벨).
@@ -124,14 +125,14 @@ class TestComputeDiagnosticRecall:
         assert (manual_hits, manual_total) == compute_diagnostic_recall()
 
     def test_fp_probes_excluded_from_total(self) -> None:
-        # total(recall 프로브 98) < 전체 프로브(168) — FP 프로브 70건이 제외됐다.
+        # total(recall 프로브 98) < 전체 프로브(169) — FP 프로브 71건이 제외됐다.
         _, total = compute_diagnostic_recall()
         all_probes = sum(
             1
             for ln in read_probes_text().splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         )
-        assert all_probes == 168
+        assert all_probes == 169
         assert total == 98
         assert total < all_probes
 
@@ -184,7 +185,7 @@ class TestIterFpProbes:
     def test_returns_only_fp_statements(self) -> None:
         # 실 프로브셋의 FP(올바른 진술·expected_id null)만 추출 — 수는 split 테스트와 일치(70).
         fp = _iter_fp_probes()
-        assert len(fp) == 70
+        assert len(fp) == 71
         assert all(isinstance(s, str) and s for s in fp)
         # FP statement 집합은 recall statement와 서로소여야(같은 진술이 양쪽일 수 없음).
         recall_statements = {

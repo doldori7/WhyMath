@@ -166,3 +166,4 @@
 {"statement": "3:2와 2:3은 비교하는 대상의 앞뒤가 달라 서로 다른 비다", "expected_id": null, "near_id": "ratio-order-swapped", "kind": "correct-near", "note": "MISC-21 A2 좌석 — 올바른 비의 순서 구분(비의 순서·같다 미포함)"}
 {"statement": "동전과 주사위를 같이 던지는 경우의 수를 셀 때 그냥 두 경우의 수를 더해버렸어", "expected_id": "addition-multiplication-rule-confused", "near_id": null, "kind": "paraphrase", "note": "MISC-21 A3 좌석 — signals 미공출현(합의 법칙·곱의 법칙 회피)"}
 {"statement": "동시에 일어나는 두 사건의 경우의 수는 각각의 경우의 수를 곱해서 구한다", "expected_id": null, "near_id": "addition-multiplication-rule-confused", "kind": "correct-near", "note": "MISC-21 A3 좌석 — 올바른 곱사건 판단(법칙 명칭 미포함)"}
+{"statement": "합의 법칙과 곱의 법칙을 구분해서 써야 한다", "expected_id": null, "near_id": "addition-multiplication-rule-confused", "kind": "correct-near", "note": "PR #1068 Codex P1 회귀 — 법칙 명칭 공출현 + 반박 조건(구분) 대조"}

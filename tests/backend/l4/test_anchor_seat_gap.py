@@ -162,6 +162,45 @@ class TestSeatVsNoSeatDiscrimination:
         assert result.seat_count == 2
 
 
+class TestMalformedRowsRejected:
+    """필수 필드 누락 행은 건너뛰지 않고 던진다(PR #1068 Codex P2 — 침묵 실패 금지).
+
+    조용히 건너뛰면 "좌석이 진짜 0"과 "스키마 드리프트로 못 읽었다"가 같은 출력(0건)이 되어
+    부분 생성 코퍼스가 진짜 좌석 갭인 척한다.
+    """
+
+    _ANCHOR = _FakeAnchor("AX", "합성 앵커", "december_2026", ("[TEST-01]",))
+
+    def test_misconception_row_missing_standard_code_raises(self) -> None:
+        misconceptions = [{"mis_id": "M9001"}]  # standard_code 누락
+        with pytest.raises(AnchorSeatGapError):
+            compute_seat_gap([self._ANCHOR], misconceptions, crosslinks=[])
+
+    def test_misconception_row_missing_mis_id_raises(self) -> None:
+        misconceptions = [{"standard_code": "[TEST-01]"}]  # mis_id 누락
+        with pytest.raises(AnchorSeatGapError):
+            compute_seat_gap([self._ANCHOR], misconceptions, crosslinks=[])
+
+    def test_crosslink_row_missing_mis_id_raises(self) -> None:
+        misconceptions = [{"standard_code": "[TEST-01]", "mis_id": "M9001"}]
+        crosslinks = [{"kebab_id": "fake-kebab"}]  # mis_id 누락
+        with pytest.raises(AnchorSeatGapError):
+            compute_seat_gap([self._ANCHOR], misconceptions, crosslinks)
+
+    def test_crosslink_row_missing_kebab_id_raises(self) -> None:
+        misconceptions = [{"standard_code": "[TEST-01]", "mis_id": "M9001"}]
+        crosslinks = [{"mis_id": "M9001"}]  # kebab_id 누락
+        with pytest.raises(AnchorSeatGapError):
+            compute_seat_gap([self._ANCHOR], misconceptions, crosslinks)
+
+    def test_well_formed_rows_still_pass(self) -> None:
+        """회귀 가드 — 반박 강화가 정상 입력까지 거부하지 않는지."""
+        misconceptions = [{"standard_code": "[TEST-01]", "mis_id": "M9001"}]
+        crosslinks = [{"kebab_id": "fake-kebab", "mis_id": "M9001"}]
+        (result,) = compute_seat_gap([self._ANCHOR], misconceptions, crosslinks)
+        assert result.seat_count == 1
+
+
 class TestRealCorpusMutation:
     """실 crosslinks.json 경로로도 같은 변별력을 확인 — 파일 I/O 경로 자체를 검증."""
 

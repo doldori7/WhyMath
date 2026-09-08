@@ -122,20 +122,26 @@ def compute_seat_gap(
     좌석이 있는 상태·없는 상태를 직접 만들 수 있어야 "이 검사가 실제로 구별하는가"를 뮤테이션
     스타일로 확인할 수 있다(CLAUDE.md "변별력 없는 검증 스텝 금지").
     """
+    # PR #1068 Codex P2: 필수 필드 누락은 *조용히 건너뛰지* 않고 던진다. 이 모듈은 fail-closed
+    # 측정기라 선언했다(docstring "판별력 보장") — 스키마 드리프트·부분 생성 코퍼스를 조용히
+    # 삼키면 "좌석이 진짜로 0"과 "데이터가 깨져서 못 읽었다"가 같은 출력(0건)으로 보여, 진짜
+    # 좌석 갭인 척 오판정을 낳는다.
     mis_ids_by_code: dict[str, list[str]] = {}
-    for record in misconceptions:
+    for idx, record in enumerate(misconceptions):
         code = record.get("standard_code")
         mid = record.get("mis_id")
         if not code or not mid:
-            continue
+            raise AnchorSeatGapError(
+                f"misconceptions[{idx}]: standard_code·mis_id 필수 필드 누락 — {record!r}"
+            )
         mis_ids_by_code.setdefault(str(code), []).append(str(mid))
 
     kebabs_by_mid: dict[str, list[str]] = {}
-    for row in crosslinks:
+    for idx, row in enumerate(crosslinks):
         mid = row.get("mis_id")
         kebab = row.get("kebab_id")
         if not mid or not kebab:
-            continue
+            raise AnchorSeatGapError(f"crosslinks[{idx}]: mis_id·kebab_id 필수 필드 누락 — {row!r}")
         kebabs_by_mid.setdefault(str(mid), []).append(str(kebab))
 
     results: list[AnchorSeatCount] = []
