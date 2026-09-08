@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 eos_priority: P1
 owner: claude
@@ -22,7 +22,13 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/privacy/retention.py
   - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/db/models/activity.py
+  - src/backend/whymath_backend/db/schema_version.py
+  - "src/backend/alembic/versions/**"
   - "tests/backend/privacy/**"
-session: null
-notes: "발견 경위: 2026-09-07 PED-37 구현 중 서브에이전트가 자진 보고. PED-37은 ②-a 지시('클라 신고값을 그대로 적재')를 따랐고 그 지시와 충돌하는 방어를 임의로 넣지 않았다 — 올바른 판단이며 이 태스크가 그 몫을 승계한다. 우선순위 1 사유: 미성년자 PII 보존기한은 법령 유래 절차이고(CLAUDE.md 의사결정 우선순위 2위), 회피 경로가 열린 채로는 파기 0건이던 상태가 '일부만 파기'로 바뀔 뿐 완결되지 않는다. 실측 좌표: privacy/retention.py:127 delete where(ts<cutoff) · 모듈 docstring 17행 NULL 정직 스코프 선언 · api/me.py AttemptSubmitRequest.started_at(검증 없음)\n\n[정정 2026-09-07] PED-37 done 이후 병렬 세션(PR #1037)이 그 acceptance를 확장했고, 확장분이 PED-37 구현으로 충족되지 않는다. CLAUDE.md '회수 시 acceptance 전수 재대조 — 미이행분은 승계 태스크로 분리 등재'에 따라 이 태스크가 잇는다. 함께 이 태스크 ②의 근거 오류도 정정한다(ingested_at의 server_default 부재 실측)"
+  - tests/backend/api/test_attempt_started_at_integration.py
+  - tests/backend/db/test_event_time_active_time_orm.py
+  - tests/backend/db/test_solution_path_orm.py
+session: claude/g-eos49-content-version-seat-zvknzk
+notes: "발견 경위: 2026-09-07 PED-37 구현 중 서브에이전트가 자진 보고. PED-37은 ②-a 지시('클라 신고값을 그대로 적재')를 따랐고 그 지시와 충돌하는 방어를 임의로 넣지 않았다 — 올바른 판단이며 이 태스크가 그 몫을 승계한다. 우선순위 1 사유: 미성년자 PII 보존기한은 법령 유래 절차이고(CLAUDE.md 의사결정 우선순위 2위), 회피 경로가 열린 채로는 파기 0건이던 상태가 '일부만 파기'로 바뀔 뿐 완결되지 않는다. 실측 좌표: privacy/retention.py:127 delete where(ts<cutoff) · 모듈 docstring 17행 NULL 정직 스코프 선언 · api/me.py AttemptSubmitRequest.started_at(검증 없음)\n\n[정정 2026-09-07] PED-37 done 이후 병렬 세션(PR #1037)이 그 acceptance를 확장했고, 확장분이 PED-37 구현으로 충족되지 않는다. CLAUDE.md '회수 시 acceptance 전수 재대조 — 미이행분은 승계 태스크로 분리 등재'에 따라 이 태스크가 잇는다. 함께 이 태스크 ②의 근거 오류도 정정한다(ingested_at의 server_default 부재 실측)\n\n[정정 2026-09-07] paths ['src/backend/whymath_backend/privacy/retention.py', 'src/backend/whymath_backend/api/me.py', 'tests/backend/privacy/**'] → ['src/backend/whymath_backend/privacy/retention.py', 'src/backend/whymath_backend/api/me.py', 'src/backend/whymath_backend/db/models/activity.py', 'src/backend/whymath_backend/db/schema_version.py', 'src/backend/alembic/versions/**', 'tests/backend/privacy/**', 'tests/backend/api/test_attempt_started_at_integration.py', 'tests/backend/db/test_event_time_active_time_orm.py', 'tests/backend/db/test_solution_path_orm.py']: 구현 실측 — ⑥(ingested_at server_default 선행)이 모델·마이그레이션·schema_version 상수를, ②(COALESCE 배선 검증)가 db/test_event_time_active_time_orm.py·test_solution_path_orm.py(단일 head 동결)·test_attempt_started_at_integration.py(실 PG 재현)를 건드렸다 — 원 범위는 retention.py 단일 파일 변경만 가정"
 updated: 2026-09-07
