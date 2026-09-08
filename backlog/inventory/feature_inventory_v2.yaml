@@ -1010,7 +1010,7 @@ features:
     db_model_modules: 1
     coupling_count: 7
     test_files: 4
-    test_functions: 230
+    test_functions: 231
     matrix:
       A_subject: 0
       B_db: 1
@@ -1530,7 +1530,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 33
-    test_functions: 515
+    test_functions: 516
     matrix:
       A_subject: 0
       B_db: 0
@@ -1790,7 +1790,7 @@ features:
     db_model_modules: 0
     coupling_count: 2
     test_files: 18
-    test_functions: 465
+    test_functions: 466
     matrix:
       A_subject: 0
       B_db: 0
@@ -1855,7 +1855,7 @@ features:
     db_model_modules: 1
     coupling_count: 14
     test_files: 14
-    test_functions: 435
+    test_functions: 436
     matrix:
       A_subject: 1
       B_db: 1
@@ -8355,7 +8355,7 @@ features:
     db_model_modules: 5
     coupling_count: 14
     test_files: 10
-    test_functions: 266
+    test_functions: 267
     matrix:
       A_subject: 1
       B_db: 2
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 329
-    test_functions: 5943
+    test_functions: 5946
     matrix:
       A_subject: 3
       B_db: 0
@@ -8475,7 +8475,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 8170
+    loc: 8177
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 194
-    test_functions: 2968
+    test_files: 195
+    test_functions: 2980
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 75
-    test_functions: 1511
+    test_functions: 1512
     matrix:
       A_subject: 1
       B_db: 1
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 198
-    test_functions: 2964
+    test_functions: 2965
     matrix:
       A_subject: 3
       B_db: 0
@@ -9060,7 +9060,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: invariant"
     migration_risk: High
-    loc: 383
+    loc: 411
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4
@@ -9070,7 +9070,7 @@ features:
     db_model_modules: 7
     coupling_count: 12
     test_files: 11
-    test_functions: 58
+    test_functions: 63
     matrix:
       A_subject: 0
       B_db: 3
