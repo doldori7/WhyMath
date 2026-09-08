@@ -142,7 +142,10 @@ from whymath_backend.l4.misconception import (
     select_intervention_from_hypotheses,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
-from whymath_backend.l4.misconception.evidence_store import log_evidence
+from whymath_backend.l4.misconception.evidence_store import (
+    CORRECT_FORM_DEMONSTRATED,
+    log_evidence,
+)
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
@@ -1871,6 +1874,10 @@ async def _log_refutation_evidence(
             misconception_id=hyp.misconception_id,
             polarity=-1,  # clean 정답 = 의심 오개념 *반박* 증거(#1 낙인 방지).
             weight=_REFUTE_STRONG_WEIGHT if strong else _REFUTE_WEIGHT,
+            # MISC-20: 해소 판정의 유일한 축은 이 *출처 표식*이다(가중치가 아니다 — 가중치는
+            # nullable이고 하네스 경로에선 LLM이 지정한다). 정정 형태를 기계가 실측한
+            # 경우에만 값을 남기고, 아니면 None으로 둔다(모르는 것을 해소로 세지 않는다).
+            provenance=CORRECT_FORM_DEMONSTRATED if strong else None,
         )
 
 
