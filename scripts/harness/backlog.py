@@ -2181,10 +2181,52 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
                 f"{task.id}: paths가 이미 {new_paths} — 바꿀 것이 없다 "
                 "(지정한 목록이 새 paths 전체가 된다)"
             )
+
+        # HARN-81 — 축소가 무증상이면 미탐이 된다. 두 가지를 한다: ⓐ제거분을 **항상 열거**하고
+        # ⓑ "덧붙이려다 교체된" 형태만 **거부**한다.
+        #
+        # 왜 모든 축소를 거부하지 않는가: 좁히기가 이 축의 목적이고 실사용의 절반이다
+        # (HARN-57). 절반에서 매번 요구되는 확인 플래그는 사람이 항상 붙이게 되고, 항상
+        # 붙이는 플래그는 가드가 아니다 — 이 저장소가 fail-open 경고에서 겪은 습관화가
+        # fail-closed 쪽으로 뒤집힌 형태일 뿐이다.
+        #
+        # 그래서 **사고의 형태**만 거부한다: 잃은 파일과 얻은 파일이 **동시에** 있는 경우.
+        # 순수 축소(잃기만)는 의도적 좁히기이고, 순수 확장(얻기만)은 위험 방향이 아니다.
+        # 둘이 같이 나면 "새 경로를 덧붙이려 했는데 교체라 옛것이 사라진" SEC-32 형태다.
+        dropped, lost_scope, gained_scope, delta_error = _path_scope_delta(
+            root, task.id, task.paths, new_paths
+        )
+        if delta_error:
+            # 침묵 실패 금지 — 타입명을 남긴다. 파일 전개 없이는 ⓑ 판정이 불가능하므로
+            # 거부는 못 하지만 ⓐ 열거는 아래에서 그대로 수행된다(가드가 반만 산다).
+            print(
+                f"  ⚠ 범위 델타 계산 실패({delta_error}) — 축소 거부 판정은 생략, "
+                "제거 목록만 열거한다",
+                file=sys.stderr,
+            )
+        if lost_scope and gained_scope and not getattr(args, "drop_scope", False):
+            return _fail(
+                f"{task.id}: paths 교체로 **기존 범위가 사라지면서 새 범위가 늘었다** — "
+                "덧붙이려다 교체된 형태다(--path는 append가 아니라 교체·HARN-57).\n"
+                f"  제거되는 패턴 {len(dropped)}건: {dropped}\n"
+                f"  범위를 잃는 패턴 {len(lost_scope)}건: {lost_scope}\n"
+                f"  새로 잡는 영역 {len(gained_scope)}건: {gained_scope}\n"
+                "  paths는 병렬 세션 겹침 탐지의 유일한 입력이라 좁아지면 *미탐*이 된다 — "
+                "경보가 안 뜨므로 사람이 알아챌 기회 자체가 없다(HARN-81).\n"
+                "  의도한 것이라면: 남길 경로를 **전부** --path로 다시 명시하거나, "
+                "정말 버리는 것이면 --drop-scope 를 붙여라(사유는 --reason에 남는다)."
+            )
+
         paths_before = list(task.paths)
         task.paths = new_paths
         changed.append(f"paths {paths_before} → {new_paths}")
         note_lines.append(f"paths {paths_before} → {new_paths}: {args.reason}")
+        # ⓐ 제거분 전건 열거 — 순수 축소(정당한 좁히기)에서도 조용하지 않게 한다.
+        # 정상(유지·확장) 케이스에서는 이 줄이 아예 안 나온다(대조군 — 양쪽이 같은 화면이면
+        # 검증이 아니라 위장이다).
+        if dropped:
+            changed.append(f"paths 제거 {len(dropped)}건: {dropped}")
+            note_lines.append(f"paths 제거 {len(dropped)}건: {dropped}")
 
     # ⑨ title 정정 — 교체 (HARN-57 ⑤).
     #
@@ -2348,6 +2390,55 @@ def cmd_amend(root: Path, args: argparse.Namespace) -> int:
     if paths_before is not None:
         _print_overlap_delta(root, backlog, task, paths_before)
     return 0
+
+
+def _path_scope_delta(
+    root: Path, task_id: str, before: list[str], after: list[str]
+) -> tuple[list[str], list[str], list[str], str | None]:
+    """paths 교체의 축소분 — (제거된 패턴, 범위를 잃은 패턴, 새 영역 패턴, 계산실패 사유).
+
+    **왜 필요한가 (HARN-81)**: `--path`는 append가 아니라 교체다(HARN-57 ④ — 좁히는 것이
+    이 축의 목적이라 append로는 좁힐 방법이 없다). 그런데 교체가 **무증상**이라, 신규 경로만
+    넘기면 기존 경로가 조용히 사라진다. 2026-09-07 SEC-32에서 실제로 났다 — 신규 6건만 넘겨
+    원 7건이 소실됐고 구현자가 우연히 알아채 13건을 다시 명시해 복원했다(설계가 아니라 운).
+
+    **왜 위험한가**: `paths`는 병렬 세션 겹침 탐지의 유일한 입력이다. 넓어지면 오탐이지만
+    (HARN-59가 다룬 축 — 시끄러워서 자가교정된다) **좁아지면 미탐**이고, 미탐은 경보가 아예
+    안 뜨므로 사람이 알아챌 기회 자체가 없다. 두 세션이 같은 파일을 모르고 병렬 구현하는
+    형태(2026-07-27 OPS-07 735줄 폐기 · 2026-09-06 MP-04 전량 폐기)의 재발 경로다.
+
+    **판정은 `pathscope.overlap`으로 한다** — `start`·`overlap`이 쓰는 것과 **같은** 함수다.
+    여기서 따로 세면 두 숫자가 갈라진다(`_print_overlap_delta`가 세운 규약을 승계).
+    파일 차집합으로 재지 *않는* 이유: 패턴이 아직 아무 파일도 안 덮을 수 있고(신규 디렉터리),
+    그러면 파일 기준 판정은 **정상·사고 양쪽에서 0건**을 내 공허하게 통과한다(실측 —
+    시드 저장소에서 이 가드가 그렇게 뚫렸다. CLAUDE.md "스캔 0건은 실패").
+    `overlap`은 정적 프리픽스 축을 함께 보므로 파일이 0건이어도 판정이 산다.
+
+    · *잃은 패턴* = 제거됐고, 새 목록의 **어느 패턴과도 더는 겹치지 않는** 것.
+      (`lib/**` → `lib/core/**`처럼 새 패턴이 옛 범위 안이면 겹치므로 잃은 것으로 세지 않는다 —
+       그건 세분화이지 포기가 아니다.)
+    · *새 영역 패턴* = 옛 목록의 어느 패턴과도 겹치지 않는 신규 패턴.
+
+    실패해도 판정을 멈추지 않는다(fail-open) — 대신 사유를 돌려주고 호출부가 타입명과 함께
+    경고한다(침묵 실패 금지). 전개가 불가능해도 *제거된 패턴 목록*은 정확하므로 열거는 산다.
+    """
+    removed = [p for p in before if p not in after]
+    added = [p for p in after if p not in before]
+    try:
+        files = pathscope.repo_files(root)
+    except Exception as exc:  # noqa: BLE001 — 전개 실패가 정정을 막으면 사람이 가드를 끈다
+        return removed, [], [], type(exc).__name__
+    lost = [
+        p
+        for p in removed
+        if after and pathscope.overlap(task_id, [p], task_id, after, files) is None
+    ]
+    gained = [
+        p
+        for p in added
+        if before and pathscope.overlap(task_id, [p], task_id, before, files) is None
+    ]
+    return removed, lost, gained, None
 
 
 def _print_overlap_delta(root: Path, backlog, task, paths_before: list[str]) -> None:
@@ -3444,6 +3535,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="paths 범위 교체 (지정한 --path 전체가 새 목록이 된다 — HARN-57). "
         "넓게 잡은 glob을 좁히는 용도이므로 append가 아니라 교체다. 이전 값은 notes에 남고, "
         "정정 직후 겹침 건수 변화를 함께 보고한다",
+    )
+    p.add_argument(
+        "--drop-scope",
+        action="store_true",
+        dest="drop_scope",
+        help="paths 교체로 기존 범위를 *버리는* 것이 의도임을 확인 (HARN-81). "
+        "잃는 파일과 얻는 파일이 동시에 있으면 '덧붙이려다 교체된' 사고 형태라 기본 거부한다 — "
+        "정말 버리는 경우에만 붙여라. 제거된 패턴은 어느 경우든 notes·이벤트에 열거된다",
     )
     p.add_argument(
         "--title",
