@@ -163,17 +163,18 @@ class TestServingReachIsMeasured:
         for ch in build_report().channels:
             assert 0 <= ch.serving_reach <= ch.positives
 
-    def test_factor_sign_flip_does_not_reach_serving(self) -> None:
-        """factor_sign_flip은_서빙_게이트를_넘지_못한다 — 측정된 사실을 동결한다
+    def test_factor_sign_flip_now_reaches_serving(self) -> None:
+        """factor_sign_flip은_서빙_게이트를_넘는다 — MISC-22 해소를 동결한다(스스로 만료 알림).
 
-        기호 substring 신호(`(x-a)`·`x=-a`)는 수치 입력에 매치되지 않으므로 정규식 단독 가산분만
-        남아 confidence=1/2=0.5 → floor 0.65 미만이다. **이 0을 숨기면 "검출률 100%"가 "쓰인다"로
-        오독된다.** 서빙 결선은 acceptance ③이 D2 후속으로 이관한 범위이므로 게이트로 삼지 않고
-        MISC-22로 등재했다 — 그 태스크가 해소되면 이 테스트가 XPASS처럼 실패해 알린다.
+        기호 substring 신호(`(x-a)`·`x=-a`)는 수치 입력에 매치되지 않지만, MISC-22(v1.5)가
+        confidence 공식을 정정해 정규식 매치 1건을 신호 전체와 동등한 완결 증거로 가산한다 —
+        conf=1.0 → floor 0.65 통과. 이전(v1.2 원식)에는 0.5에 갇혀 **한 번도 학생에게 도달하지
+        못했다**(작동 신호 없는 알고리즘 부착). 이 테스트는 그 해소를 동결한다 — 회귀(다시 0.5로
+        떨어짐)가 생기면 이 테스트가 실패해 알린다.
         """
-        assert not _survives_serving_gate("factor-sign-flip", "(x-2)=0 이므로 x=-2")
+        assert _survives_serving_gate("factor-sign-flip", "(x-2)=0 이므로 x=-2")
         reach = {c.kebab_id: c.serving_reach for c in build_report().channels}
-        assert reach["factor-sign-flip"] == 0
+        assert reach["factor-sign-flip"] == 27
 
     def test_other_channels_do_reach_serving(self) -> None:
         """나머지_두_채널은_서빙에_도달한다 — 위 0이 측정 결함이 아님을 대조로 보인다"""

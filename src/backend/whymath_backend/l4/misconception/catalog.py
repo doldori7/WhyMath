@@ -770,10 +770,17 @@ _CALCULUS: tuple[Misconception, ...] = (
         # 때만 매치하니 올바른 `극댓값은 2`와 disjoint다.
         #
         # ⚠ 알려진 한계(정직 표기): f(x₀)=x₀인 *우연의 일치*(극대점 x=2에서 극댓값도 2)에서는
-        # 정답도 매치한다 — 이 채널은 원리상 그 둘을 구별하지 못한다. 그래서 게이트가 아니라
-        # 보조 신호다: 정규식 단독 매치의 confidence는 1/2=0.5로 진단 게이트(0.65) 미만이라
-        # 이 채널만으로 확신 오진단이 나가지 않는다(측정은 anchor_detection_channel_eval의
-        # ambiguous 계급).
+        # 정답도 매치한다 — 이 채널은 원리상 그 둘을 구별하지 못한다.
+        #
+        # ⚠ 정정(MISC-22 조사 중 발견 — MISC-24로 별도 등재): 이전 주석은 "정규식 단독 매치의
+        # confidence는 1/2=0.5라 게이트(0.65) 미만이라 안전하다"고 적었으나 실측과 다르다 — 이
+        # 정규식 패턴 자체가 리터럴 "극댓값"을 포함하므로 매치될 때마다 substring 신호 "극댓값"도
+        # *항상* 함께 발화해 conf는 이미 1.0이다(구 v1.2 공식으로도 동일 — MISC-22의 confidence
+        # 식 정정과 무관하게 이전부터 있던 사실). 즉 이 채널은 실제로는 게이트를 통과하고
+        # 있고(측정: anchor_detection_channel_eval `extremum-value-vs-point-confused` serving_reach
+        # 27/27), f(x₀)=x₀ 우연의 일치 정답에 대한 확신 오진단 위험은 **미해소** 상태다 — 측정은
+        # `anchor_detection_channel_eval`의 ambiguous 계급이 보고만 하고 게이트로 쓰지 않는다.
+        # 해소는 MISC-24 소관(pedagogy-designer 검토 대상).
         regex_signals=(r"극대.{0,40}?x=(?P<x>-?\d+).{0,40}?극댓값[은는이가=]{0,2}(?P=x)(?!\d)",),
     ),
 )

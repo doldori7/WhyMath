@@ -222,9 +222,12 @@ def _survives_serving_gate(kebab_id: str, text: str) -> bool:
     """이 텍스트의 그 오개념이 **서빙 품질 게이트(top-1 floor 0.65)를 넘어** 살아남는가.
 
     정규식이 *발화했다*와 학생 경로에 *도달했다*는 다른 사실이다(PR #1032 Codex P2). 이 채널들의
-    의도된 수치 입력에서는 기호 substring 신호가 0이라 정규식 단독 가산분만 남고
-    confidence=1/2=0.5 → floor 0.65 미만으로 `apply_match_quality_gate`가 **후보 전체를 비운다**.
-    그 사실을 재지 않으면 "검출률 100%"가 곧 "쓰인다"로 오독된다(작동 신호 없는 알고리즘 부착 금지).
+    의도된 수치 입력에서는 기호 substring 신호가 0이라 정규식 단독 매치만 남는다. MISC-22(v1.5)
+    이전에는 그 가산분이 substring 신호 1개와만 동등해 confidence=1/2=0.5 → floor 0.65 미만으로
+    `apply_match_quality_gate`가 **후보 전체를 비웠다**(factor-sign-flip이 이렇게 한 번도 학생에게
+    도달하지 못했다). MISC-22가 정규식 매치 1건을 신호 전체와 동등하게 가산하도록 confidence
+    공식을 정정해 이 함수는 그 사실(도달 여부)을 계속 잰다 — "검출률 100%"가 곧 "쓰인다"로
+    오독되지 않도록(작동 신호 없는 알고리즘 부착 금지) 채널 추가·정정 때마다 재측정한다.
     """
     gated = apply_match_quality_gate(diagnose(text, top_k=len(CATALOG_BY_ID)))
     return any(m.misconception.id == kebab_id for m in gated.matches)

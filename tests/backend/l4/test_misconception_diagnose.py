@@ -313,8 +313,9 @@ class TestNumericSubstitutionDetection:
         # v1.2 정규식이 (3+4)²=3²+4² 흔적을 잡아 *추가* 탐지.
         m = self._find("(3+4)² = 3² + 4² = 25", "distribution-over-power")
         assert m is not None
-        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        # (v1.2 원식이면 0/2 + 1/2 = 0.5로 서빙 게이트 0.65에 못 미쳤다 — 그 결함이 MISC-22)
+        assert m.confidence == 1.0
         assert m.matched_signals == ()  # 기호 substring 0
         assert len(m.matched_regex_signals) == 1
 
@@ -322,13 +323,16 @@ class TestNumericSubstitutionDetection:
         # √((-3)²)=-3 — 음수 대입으로 거짓 항등식이 드러난 흔적
         m = self._find("√((-3)²) = -3", "square-root-positivity")
         assert m is not None
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert len(m.matched_regex_signals) == 1
 
     def test_fraction_numeric_substitution_detected(self) -> None:
         # (2+4)/2=4 — 분자 합에서 분모와 같은 항을 통째로 약분한 수치 흔적
         m = self._find("(2+4)/2 = 4", "fraction-cancellation")
         assert m is not None
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert m.matched_signals == ()
         assert len(m.matched_regex_signals) == 1
 
@@ -349,8 +353,8 @@ class TestNumericSubstitutionDetection:
         # *수*만 적음) → v1.1이면 미탐지. v1.2 정규식이 *추가* 탐지.
         m = self._find("log(2+3) = log2 + log3", "log-distribution")
         assert m is not None
-        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert m.matched_signals == ()  # 기호 substring 0
         assert len(m.matched_regex_signals) == 1
 
@@ -366,6 +370,40 @@ class TestNumericSubstitutionDetection:
         ):
             m = self._find(text, "log-distribution")
             assert m is None or m.matched_regex_signals == ()
+
+
+class TestFactorSignFlipServingReach:
+    """MISC-22 — factor-sign-flip 채널이 confidence 공식 정정 후 서빙 게이트(0.65)에 도달한다.
+
+    이 채널은 signals가 기호형(`("(x-a)", "x=-a")`)이라 수치 입력에 substring이 구조적으로
+    0건 매치된다 — v1.2 원식이면 정규식만 매치돼 conf 0.5에 갇혀 한 번도 서빙에 닿지 못했다
+    (`anchor_detection_channel_eval` 실측). MISC-22가 confidence 공식을 정정한다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
+
+    def test_numeric_sign_flip_reaches_full_confidence(self) -> None:
+        m = self._find("(x-2)=0 이므로 x=-2", "factor-sign-flip")
+        assert m is not None
+        assert m.confidence == 1.0  # 정규식 매치 1건 = 신호 전체(MISC-22)
+        assert m.matched_signals == ()  # 기호 substring 0(수치 입력이라 구조적으로 미매칭)
+        assert len(m.matched_regex_signals) == 1
+
+    def test_numeric_sign_flip_survives_serving_gate(self) -> None:
+        # 서빙 게이트(top-1 floor 0.65)까지 살아남는지 — MISC-22 해소의 실제 판정 기준.
+        gated = apply_match_quality_gate(diagnose("(x-2)=0 이므로 x=-2", top_k=5))
+        assert any(m.misconception.id == "factor-sign-flip" for m in gated.matches)
+
+    def test_correct_root_not_flagged(self) -> None:
+        # 부호가 뒤집히지 않은 올바른 풀이는 여전히 미탐지(역참조 불일치·거짓양성 0).
+        m = self._find("(x-2)=0 이므로 x=2", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_originally_positive_root_not_flagged(self) -> None:
+        # (x+2)=0의 근은 -2가 정답이다 — 부호가 원래 +인 정답까지 오탐하면 안 된다.
+        m = self._find("(x+2)=0 이므로 x=-2", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
 
 
 class TestRegexBackwardCompatibility:

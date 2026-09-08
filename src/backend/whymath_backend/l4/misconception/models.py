@@ -53,9 +53,12 @@ class Misconception(BaseModel):
         description=(
             "v1.2 보조 탐지 경로 — *정규화된 텍스트*에 `re.search`로 검사하는 정규식(OR). "
             "주로 *거짓 항등식의 수치 대입*(예: `(3+4)²=3²+4²`)을 잡는다. 미설정(기본 빈 튜플) 시 "
-            "기존 substring 동작 불변. confidence 분모는 substring `signals` 기준 유지하고 정규식 "
-            "매치는 분자에 *가산*(상한 1.0)하므로, 수치 정규식은 기호 substring 케이스와 "
-            "*겹치지 않게*(disjoint) 작성해 기존 confidence·matched_signals를 보존한다."
+            "기존 substring 동작 불변. v1.5(MISC-22): 정규식 매치 1건은 substring 신호 **전체**와 "
+            "동등한 완결 증거로 가산(단독으로도 confidence 1.0) — 명명그룹 역참조로 정답·기호식과 "
+            "*disjoint*하게 작성된 정규식은 substring AND 전체에 준하는 확정적 단서이기 때문이다. "
+            "그래서 정규식은 *반드시* 기호 substring 케이스·정답과 겹치지 않게(disjoint) 작성해야 "
+            "하고(그렇지 않으면 확신 오진단), substring만으로의 기존 confidence·matched_signals는 "
+            "불변이다."
         ),
     )
     refuting_regex: tuple[str, ...] = Field(

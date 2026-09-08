@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -20,6 +20,6 @@ paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/l4/misconception/diagnose.py
   - docs/prompts/misconception_diagnosis.md
-session: null
+session: claude/status-vlul18
 notes: "출처: PR #1032 Codex P2 지적. 지적은 '세 채널 모두 서빙에 못 닿는다'였으나 실측하니 factor-sign-flip 하나뿐이었다(나머지 둘은 substring이 함께 발화해 conf 1.0). MISC-07 acceptance ③이 서빙 결선을 D2 후속으로 명시 이관했으므로 MISC-07의 게이트로 삼지 않고 분리 등재한다. 측정 자체는 MISC-07이 착지시켰다(serving_reach 필드)."
-updated: 2026-09-07
+updated: 2026-09-08

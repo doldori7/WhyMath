@@ -8972,3 +8972,49 @@ COMP-01(PR #1045) 검증 중 **같은 실행 하나에서 두 결함이 겹쳤�
 것과 달리, 판정 도구(`pr_merge_readiness.py`)가 exit 0을 낸 시점에는 경로가 열려 있었다. 최종적으로는
 armed 상태였던 auto-merge가 먼저 성사됐다(`f9e25f80`). 즉 두 경로는 배타가 아니라 **경합**이며,
 "Base branch was modified"는 실패가 아니라 다른 쪽이 이겼다는 신호다.
+
+## 2026-09-08: MISC-22 — 오개념 정규식 채널 confidence 공식 정정(v1.5), 4개 채널이 한 번도 학생에게 도달하지 못했던 결함 해소
+
+**결정**: `_match_one`(diagnose.py)의 confidence 공식을 `min(1.0, (substr매치+regex매치)/len(signals))`
+에서 `min(1.0, substr매치/len(signals) + regex매치_건수)`로 정정했다 — **정규식 매치 1건을 substring
+신호 전체와 동등한 완결 증거로 가산**한다(사실상 regex 매치 1건 = 단독 conf 1.0). MISC-22 acceptance
+②의 두 선택지((가) factor-sign-flip에 수치 signal 추가 / (나) confidence 의미 확장) 중 **(나)를
+채택**했다.
+
+**(가)를 기각한 이유**: factor-sign-flip의 규칙(부호 반전)은 명명그룹 역참조로만 표현 가능하다 —
+"(x-2)=0…x=-2"(오개념)와 "(x+2)=0…x=-2"(부호가 원래 +인 정답)를 가르는 것은 *괄호 안 수와 결론의
+수가 같은가*이고, 이건 plain substring으로 인코딩할 수 없다. 시도해 보면 어떤 새 substring
+signal도 "(x+2)=0 이므로 x=-2"(정답)에 오탐하거나, 아무것도 못 잡거나 둘 중 하나였다.
+
+**(나)가 안전했던 근거(실측)**: 카탈로그의 `regex_signals` 7종은 전부 명명그룹 역참조로 좌·우변이
+글자 그대로 일치할 때만 매치하도록 설계돼 있고, 각 항목 주석이 정답·기호식과의 disjoint를 개별
+증명한다 — 즉 "부분 신호"가 아니라 이미 확정적 단서였다. 그런데 옛 공식은 이를 substring 신호
+1개와만 동등하게 쳐서, 수치 대입이 유일한 매칭 경로인 항목(기호 substring이 구조적으로 0건)의
+confidence를 절반(보통 0.5)에 가뒀다. 직접 실측하니 **7종 중 4종이 이미 이 함정에 있었다** —
+`factor-sign-flip`은 MISC-07이 measure한 대로 서빙 게이트(0.65) 미달로 0/27이었고, `distribution-
+over-power`·`square-root-positivity`·`fraction-cancellation`·`log-distribution`(v1.2 "헤드라인
+역량"으로 시연됐던 4종 전부)도 각자의 대표 수치 대입 예시에서 conf 0.5로 **똑같이 갇혀 있었다**
+(코드에 없던 사실 — 기존 테스트가 conf==0.5를 frozen 단언으로 박아 뒀을 뿐 아무도 "이게 서빙에
+못 닿는다"를 측정하지 않았다). 즉 v1.2의 "수치 대입 탐지" 헤드라인 역량은 **런칭 이래 한 번도
+학생에게 도달하지 못했다**(작동 신호 없는 알고리즘 부착 — 슬 105 학습경로 알고리즘 사고의 재발
+형태). `root-loss-by-dividing`은 이미 substring 공출현으로 conf 1.0이라 회귀 없음.
+
+**유일한 예외처럼 보였던 것도 실은 예외가 아니었다**: `extremum-value-vs-point-confused`는 문서
+주석이 "정규식 단독 매치는 conf 0.5로 게이트 미만이라 안전하다"(f(x₀)=x₀ 우연의 일치 보호)고
+적고 있었으나, 실측하면 그 regex 패턴 자체가 리터럴 "극댓값"을 포함해 매치 시 substring도 항상
+동반 발화한다 — **v1.2 원식으로도 이미 conf 1.0**이었다. 즉 이 문서 주석은 실측과 어긋난 상태로
+방치돼 있었다(신뢰됐다면 (나)가 이 채널을 깨뜨린다고 오판했을 것). 그리고 f(x₀)=x₀ 우연의 일치에
+대한 확신 오진단 위험은 **이번 정정과 무관하게 이전부터 실재**했다 — MISC-22 범위 밖이라
+`MISC-24`로 분리 등재했다.
+
+**검증**: 전체 백엔드 스위트(12,636건) 그린. 최초 전체 스위트 실행에서 2건 실패를 잡았다 —
+`test_misconception_semantic.py::test_numeric_regex_path_unchanged`(conf==0.5 frozen 단언, 값
+갱신)와 `test_misconception_semantic_eval.py::test_recall_probes_evade_substring_full_match`
+(recall 프로브 하나가 "수치 대입 재진술"이라 이제 regex만으로 conf 1.0에 도달해 semantic-only
+recall 프로브의 전제가 깨짐 — 순수 구어체 패러프레이즈로 교체, 카운트 불변). 둘 다
+`tests/backend/l4/test_misconception_diagnose.py`만 봐서는 안 잡혔을 결함으로, **전체 스위트
+필수 원칙**(CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지")이 실제로 잡아낸 사례다.
+
+**교훈**: confidence 공식 같은 *공유* 계산 로직을 정정할 때는 "내가 지금 보는 항목"이 아니라
+"그 로직을 쓰는 모든 항목"에서 재측정해야 한다 — 실측 없이 문서 주석(특히 안전 근거를 담은
+주석)을 신뢰하면 이미 깨져 있는 전제를 그대로 물려받는다.
