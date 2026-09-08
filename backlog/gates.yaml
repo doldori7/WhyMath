@@ -304,11 +304,11 @@ gates:
     title: "PR 자동 재동기화용 PAT 발급 — 저장소 시크릿 PR_AUTO_RESYNC_TOKEN (fine-grained PAT · Repository access=doldori7/WhyMath · 권한 Contents:Read and write + Pull requests:Read and write). 없으면 pr-auto-resync 워크플로가 fail-closed로 exit 1(아무것도 바꾸지 않음) — GITHUB_TOKEN이 만든 push는 CI를 재발화시키지 않아 새 head에 체크 0건이 되고 strict 하에서 PR이 영구히 막히기 때문(PR #1040 Codex P1). 발급 경로 = GitHub Settings→Developer settings→Personal access tokens→Fine-grained tokens→Generate new token, 등록 경로 = 저장소 Settings→Secrets and variables→Actions→New repository secret. 자가검증 = Actions 탭 pr-auto-resync를 dry_run=0으로 1회 수동 실행해 '쓰기 자격 없음'이 사라지고 요약 줄(스캔 N건)이 나오는지 확인"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-07
     remind_after_days: 3
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-08 Kiki 실행 완료 — PAT 발급·시크릿 등록·자가검증까지 확인. 판정 기준: main ee2e1918(워크플로 실행 시점 checkout SHA) · 워크플로 파일은 34001b42(PR #1040)로 착지.\n\n[실측 3건 — 실행 이력 API + 잡 로그 전문 확인]\n① run 34187171965 (workflow_dispatch · 04:29:33Z) — failure. Kiki 1차 수동 실행.\n② run 34187637864 (**schedule** · 04:37:17Z) — failure. `RESYNC_TOKEN_KIND: pat`으로 시크릿은 이미 등록돼 있었으나 gh가 거부:\n   `Post \"https://api.github.com/graphql\": net/http: invalid header field value for \"Authorization\"`\n   → 토큰 값에 헤더로 쓸 수 없는 문자(줄바꿈·공백 등)가 섞여 있었다. 붙여넣기 시 개행이 딸려 들어간 전형적 형태다.\n   **설계대로 동작했다**: 스크립트가 이것을 \"대상 0건\"이 아니라 `PR 목록 조회 실패(exit=1) — 측정 실패다`로 판정하고 **HTTP 응답 본문을 그대로 남겨** 원인이 즉시 규명됐다(HARN-85 실패 경로 설계 ③의 실증).\n③ run 34188745979 (workflow_dispatch · 04:56:02Z) — **success · dry_run=0(실주행)**. Kiki가 시크릿을 다시 등록한 뒤 재실행.\n   출력: `── PR 자동 재동기화 (repo=doldori7/WhyMath · dry_run=0 · token=pat)` → `── 요약: 스캔 17건 · BEHIND+auto-merge 0건 · 최신화 0건 · 충돌 0건 · 미판정 4건 · 기타실패 0건`\n\n[이 게이트가 묻던 것 = 충족] PAT 경로로 워크플로가 실제로 돌고 정상 종료한다. `쓰기 자격 없음` fail-closed도 사라졌다.\n\n[부수로 닫힌 것 — 예약 발화 미확정] ②가 **schedule 이벤트**다. 즉 예약은 발화한다(워크플로 결함이 아니었다). 착지 00:09Z → 첫 예약 발화 04:37Z로 약 4시간 28분이 걸렸다(표본 1). HARN-87 ⑤~⑧이 \"미확정\"으로 남겨 둔 축이 이것으로 갈렸다.\n\n[남는 것 — 새 결함] ③에서 `mergeStateStatus`가 **미판정 4건**이었고 그중 PR #1059는 같은 시각 REST가 `mergeable_state: behind`로 답한 PR이다. 즉 재동기화해야 할 대상을 정확히 건너뛰었다. 설계(\"모른다 ≠ 아니다\")는 옳게 작동했으나 **일괄 조회가 GitHub의 지연 계산을 유발하지 않아 대상이 UNKNOWN으로 보인다** — 자동화의 실효를 무력화하는 축이라 별도 태스크로 등재한다."
+    cleared_by: kiki
     notes: ""
   - id: G-prod-dead-column-check
     title: "prod DB(whymath-pg:5433) user_profile 미소비 컬럼 비영행 확인 — school_id·subscription_tier/_started_at/_renewed_at·school_region·gender 각각 NOT NULL 행이 있는지 실측(ADMIN-02 acceptance① 선결·샌드박스에서 접근 불가)"
