@@ -6,7 +6,7 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 588
+  backend_modules_covered: 589
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
@@ -3609,8 +3609,8 @@ features:
     mixed_deps: []
     db_model_modules: 6
     coupling_count: 9
-    test_files: 22
-    test_functions: 367
+    test_files: 23
+    test_functions: 384
     matrix:
       A_subject: 0
       B_db: 3
@@ -3623,7 +3623,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "매트릭스 11점(10~13)"
-    fan_in: 4
+    fan_in: 5
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -6015,7 +6015,7 @@ features:
     db_model_modules: 0
     coupling_count: 2
     test_files: 7
-    test_functions: 155
+    test_functions: 158
     matrix:
       A_subject: 0
       B_db: 0
@@ -7110,7 +7110,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2170
+    loc: 2224
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 1
@@ -7120,7 +7120,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 46
-    test_functions: 1222
+    test_functions: 1225
     matrix:
       A_subject: 1
       B_db: 0
@@ -7370,17 +7370,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "정적 도달(student_loop, production_loop)했으나 Flag-off — 우회 가능"
     migration_risk: Low
-    loc: 2369
+    loc: 2632
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
-    own_modules: 10
+    own_modules: 11
     adapter_deps: []
     mixed_deps: []
     db_model_modules: 0
-    coupling_count: 12
-    test_files: 16
-    test_functions: 144
+    coupling_count: 13
+    test_files: 17
+    test_functions: 161
     matrix:
       A_subject: 0
       B_db: 0
