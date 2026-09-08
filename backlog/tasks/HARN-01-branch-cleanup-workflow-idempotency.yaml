@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: review
 priority: 2
 eos_priority: P2
 owner: claude
@@ -21,6 +21,6 @@ artifacts: []
 paths:
   - ".github/workflows/branch-cleanup.yml"
   - ".github/branch-cleanup-request.txt"
-session: null
+session: claude/status-38gu4d
 notes: "발견 경위: 2026-09-07 PR #1020(stray-code 7차) 머지 직후 삭제 집행을 확인하다가 잡이 red인 것을 보고 로그 실측. 7차 배치 자체는 성공했으므로 이번 감사 결과에는 영향 없음 — 고칠 것은 '실패 신호의 변별력'이다. 감사 문서가 '4~6차 잔존 0/19'로 적은 것과도 모순되지 않는다(삭제는 됐고 재시도만 404를 냈다).\n\n[정정 2026-09-08] PR #1031 Codex P2 리뷰가 반례를 제시해 run #9 로그를 재실측 — 내 진단(기전)과 리뷰 결론이 모두 틀렸고 실제 원인은 gh api 오류 본문이 stdout으로 새어 부재 가드가 무력해진 것"
 updated: 2026-09-08
