@@ -160,3 +160,10 @@
 {"statement": "반지름이 r인 원의 넓이는 원주율에 반지름의 제곱을 곱한 값이다", "expected_id": null, "near_id": "circle-area-circumference", "kind": "correct-near", "note": "올바른 원 넓이 πr² — 2πr 미포함"}
 {"statement": "조합은 뽑는 순서를 고려하지 않고 개수만 세는 경우의 수이다", "expected_id": null, "near_id": "combination-no-denominator", "kind": "correct-near", "note": "올바른 조합 정의 — nPr 미포함"}
 {"statement": "같은 것이 있는 순열은 전체 계승을 같은 것의 개수의 계승으로 나눈다", "expected_id": null, "near_id": "same-item-permutation-no-divide", "kind": "correct-near", "note": "올바른 같은 것 순열 — 서로 다른 미포함"}
+{"statement": "네 조각으로 나눈 것 하나가 두 조각으로 나눈 것 하나보다 양이 많다고 생각했어", "expected_id": "bigger-denominator-bigger-fraction", "near_id": null, "kind": "paraphrase", "note": "MISC-21 A1 좌석 — signals 미공출현(분모가 클수록·크다 회피)"}
+{"statement": "분모가 클수록 한 조각의 크기는 작아진다", "expected_id": null, "near_id": "bigger-denominator-bigger-fraction", "kind": "correct-near", "note": "MISC-21 A1 좌석 — 올바른 단위분수 크기 비교(크다 미포함)"}
+{"statement": "3:2랑 2:3은 결국 같은 관계를 나타낸다고 봤어", "expected_id": "ratio-order-swapped", "near_id": null, "kind": "paraphrase", "note": "MISC-21 A2 좌석 — signals 미공출현(비의 순서 회피)"}
+{"statement": "3:2와 2:3은 비교하는 대상의 앞뒤가 달라 서로 다른 비다", "expected_id": null, "near_id": "ratio-order-swapped", "kind": "correct-near", "note": "MISC-21 A2 좌석 — 올바른 비의 순서 구분(비의 순서·같다 미포함)"}
+{"statement": "동전과 주사위를 같이 던지는 경우의 수를 셀 때 그냥 두 경우의 수를 더해버렸어", "expected_id": "addition-multiplication-rule-confused", "near_id": null, "kind": "paraphrase", "note": "MISC-21 A3 좌석 — signals 미공출현(합의 법칙·곱의 법칙 회피)"}
+{"statement": "동시에 일어나는 두 사건의 경우의 수는 각각의 경우의 수를 곱해서 구한다", "expected_id": null, "near_id": "addition-multiplication-rule-confused", "kind": "correct-near", "note": "MISC-21 A3 좌석 — 올바른 곱사건 판단(법칙 명칭 미포함)"}
+{"statement": "합의 법칙과 곱의 법칙을 구분해서 써야 한다", "expected_id": null, "near_id": "addition-multiplication-rule-confused", "kind": "correct-near", "note": "PR #1068 Codex P1 회귀 — 법칙 명칭 공출현 + 반박 조건(구분) 대조"}

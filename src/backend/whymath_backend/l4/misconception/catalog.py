@@ -495,6 +495,34 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 수치평가 MC distractor(b 선지)의 역추적 좌석. ([10공수1-02-08]·M0123)
         signals=("근과 계수", "부호"),
     ),
+    # ── MISC-21 트랜치(2026-09-08·앵커 좌석 보강 A1·A2) — G0 앵커 A1(초3 분수)·A2(초6
+    # 비와 비율)는 misconceptions_v1에 M-id는 있었지만(A1=4·A2=2) 카탈로그 좌석이 0이었다
+    # (MISC-07 실측). 아래 2종은 각 앵커에서 severity·대표성이 가장 높은 M-id 1건씩을
+    # doc-first(misconception_diagnosis.md #65-66)로 승격한 것 — 나머지 M-id(A1 3건·A2
+    # 0건 잔여)는 이번 세션에서 억지로 채우지 않는다(과도한 확장 금지·CLAUDE.md).
+    Misconception(
+        id="bigger-denominator-bigger-fraction",
+        name_kr="분모 클수록 분수 크다는 착각",
+        domain="대수",
+        canonical_statement="분모가 클수록 분수가 크다(1/4 > 1/2)",
+        counterexample="1/4 < 1/2 — 전체를 더 잘게 나눌수록(분모가 클수록) 한 조각은 작아진다",
+        # "분모가 클수록"+"크다" 공출현 — 단위분수 크기 역전의 양성 단편(M0462·A1 앵커).
+        # 올바른 진술("분모가 클수록 한 조각은 작다")도 "크다"를 포함하지 않아 대체로 구분되나
+        # 정본이 "…보다 작다고 착각하면 안 된다"류로 "크다"를 인용하면 FP 가능(§5.3 한계).
+        signals=("분모가 클수록", "크다"),
+    ),
+    Misconception(
+        id="ratio-order-swapped",
+        name_kr="비의 순서 무시(교환 가정)",
+        domain="대수",
+        canonical_statement="비 a:b와 b:a는 같다(순서가 중요하지 않다고 봄)",
+        counterexample="3:2와 2:3은 다른 비 — 비교하는 두 양의 순서를 바꾸면 비도 달라진다",
+        # "비의 순서"+"같다" 공출현 — 비의 교환 불가성을 놓친 양성 단편(M0515·A2 앵커). "비의
+        # 순서는 상관없다"류 정오 판정을 직접 언급하지 않는 서술은 대체로 미포함되나, 두 토큰이
+        # 우연히 함께 등장하는 다른 맥락에서 FP 가능(§5.3 한계 — 임베딩/LLM 후속). 1글자 signal
+        # ("비")은 짧은 signal 래칫(`test_catalog_short_signal_ratchet`)을 피하려 의도적으로 배제.
+        signals=("비의 순서", "같다"),
+    ),
 )
 
 # 기하 영역 — doc "기하 영역"(#8-10, #26, #59-62) (8종·843 트랜치5 비대수 확장 4).
@@ -634,6 +662,30 @@ _PROBSTAT: tuple[Misconception, ...] = (
         # "같은 것"+"서로 다른" 공출현 — 중복을 나누지 않은 양성 단편(M0190·분배누락). 정본은
         # "같은 것은 그 개수의 계승으로 나눈다"라 "서로 다른"을 포함하지 않아 구분된다.
         signals=("같은 것", "서로 다른"),
+    ),
+    # ── MISC-21 트랜치(2026-09-08·앵커 좌석 보강 A3) — G0 앵커 A3(중2 경우의 수와 확률)는
+    # M-id 4건(M0417·M0418·M0599·M0600)이 있었지만 카탈로그 좌석이 0이었다(MISC-07 실측).
+    # 앵커 대표성이 가장 높은 M0599(합의 법칙·곱의 법칙 혼동)를 doc-first(#67)로 승격한다
+    # — 나머지 3건(확률>1·중복계산)은 이번 세션에서 억지로 채우지 않는다.
+    Misconception(
+        id="addition-multiplication-rule-confused",
+        name_kr="합의 법칙·곱의 법칙 혼동",
+        domain="확률통계",
+        canonical_statement=(
+            "경우의 수를 셀 때 합의 법칙(또는)과 곱의 법칙(그리고)을 구분하지 않는다"
+        ),
+        counterexample="주사위와 동전을 동시에 던지는 경우의 수는 6×2=12(곱의 법칙) — "
+        "6+2=8(합의 법칙)이 아니다. 동시에 일어나는지(그리고=곱) 아닌지(또는=합)를 따져야 한다",
+        # "합의 법칙"+"곱의 법칙" 공출현 — 두 법칙을 뒤섞어 쓰는 양성 단편(M0599·A3 앵커).
+        signals=("합의 법칙", "곱의 법칙"),
+        # 반박 조건(MISC-23 패턴) — "구분해서/구별해야" 등 *두 법칙을 명시적으로 구분하는*
+        # 서술은 혼동이 아니라 정답이다(PR #1068 Codex P1). 실측: judge 비활성 상태에서
+        # "합의 법칙과 곱의 법칙을 구분해서 써야 한다"가 signals 2/2 공출현으로 confidence
+        # 1.0을 받아 품질 게이트를 통과 — 정답에 반례 개입이 나갈 뻔했다. "구분"·"구별"은
+        # 실제 혼동 서술(예: "헷갈려서 6+2로 계산했다")에는 나타나지 않아 미검출 방향
+        # 회귀 위험이 낮다 — tests/backend/l4/test_misconception_diagnose.py
+        # TestAdditionMultiplicationRefutation이 정답·오답 양쪽을 대조한다.
+        refuting_regex=(r"구분|구별",),
     ),
 )
 
@@ -848,7 +900,15 @@ positive-signal형(학생이 *틀린 주장을 직접 적는* 유형)만 채택 
 
 순서 안정성: 신규 항목은 각 도메인 *기존 항목 뒤에* 붙인다(진단 동률 정렬이 대수
 distribution-over-power를 첫째로 유지 — 회귀 가드). 도메인 튜플 합성 순서도 불변
-(_ALGEBRA 먼저)."""
+(_ALGEBRA 먼저).
+
+MISC-21(2026-09-08): EOS G0 앵커 A1(초3 분수)·A2(초6 비와 비율)·A3(중2 경우의 수와 확률)의
+카탈로그 좌석 0 문제(MISC-07 실측) 해소 — 대수 2종(bigger-denominator-bigger-fraction·
+ratio-order-swapped)·확률통계 1종(addition-multiplication-rule-confused) 추가(64→67종).
+A5(고1 이차함수 최대·최소)는 판정에서 *의도적으로 제외* — 유일한 M-id 후보(M0614·M0835
+"정의역 제한·꼭짓점만 확인")가 바로 위 문단이 명시한 omission형(끝점 확인 누락)이라, 기존
+설계가 이미 회피 대상으로 못박은 범주를 재도입하지 않는다(판정 근거 상세는 crosswalk
+seat-gap 판정 노트 참조)."""
 
 
 CATALOG_BY_ID: dict[str, Misconception] = {m.id: m for m in CATALOG}

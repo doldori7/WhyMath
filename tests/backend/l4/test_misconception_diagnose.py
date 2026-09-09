@@ -655,6 +655,59 @@ class TestRefutingRegex:
             assert "root-loss-by-dividing" in ids, text
 
 
+class TestAdditionMultiplicationRefutation:
+    """반박 조건(PR #1068 Codex P1) — `addition-multiplication-rule-confused`.
+
+    왜 필요했나
+    -----------
+    `signals=("합의 법칙", "곱의 법칙")` 공출현(AND)은 두 법칙을 *뒤섞어 쓴* 오답에도, 두
+    법칙을 *정확히 구분해 설명한* 정답에도 똑같이 발화한다 — 둘 다 두 법칙 이름을 함께
+    언급하기 때문이다. judge(`misconception_judge_enabled`)가 비활성인 기본 상태에서
+    "합의 법칙과 곱의 법칙을 구분해서 써야 한다"가 confidence 1.0으로 품질 게이트(0.65)를
+    넘어 정답에 반례 개입이 나갈 뻔했다(실측).
+    """
+
+    #: 전부 **정답**이다 — 두 법칙을 명시적으로 구분·구별하는 서술.
+    CORRECT_ANSWERS = (
+        "합의 법칙과 곱의 법칙을 구분해서 써야 한다",
+        "합의 법칙과 곱의 법칙을 구별해야 헷갈리지 않는다",
+        "동시에 일어나면 곱의 법칙, 아니면 합의 법칙으로 구분한다",
+    )
+
+    #: 전부 **오개념**이다 — 두 법칙을 혼동해 틀리게 계산했다("구분"·"구별" 미포함).
+    ACTUAL_MISCONCEPTIONS = (
+        "동전과 주사위를 던지는 경우의 수는 합의 법칙과 곱의 법칙이 헷갈려서 6+2=8로 계산했다",
+        "합의 법칙과 곱의 법칙 중 뭘 써야 할지 몰라서 그냥 6+2로 풀었다",
+    )
+
+    def test_correct_answers_are_refuted(self) -> None:
+        """정답은_반박돼_후보에서_빠진다"""
+        for text in self.CORRECT_ANSWERS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "addition-multiplication-rule-confused" not in ids, text
+
+    def test_actual_misconceptions_still_detected(self) -> None:
+        """진짜_혼동은_여전히_검출된다 — 반박을 넓히다 오개념을 죽이지 않았는지"""
+        for text in self.ACTUAL_MISCONCEPTIONS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "addition-multiplication-rule-confused" in ids, text
+
+    def test_refuted_answers_do_not_reach_the_serving_gate(self) -> None:
+        """반박된_정답은_서빙_품질_게이트에_도달하지_않는다 — 실제 해악 지점의 대조"""
+        for text in self.CORRECT_ANSWERS:
+            gated = apply_match_quality_gate(diagnose(text))
+            surfaced = [m.misconception.id for m in gated.matches]
+            assert "addition-multiplication-rule-confused" not in surfaced, text
+
+    def test_refutation_is_checked_before_signal_counting(self) -> None:
+        """반박은_신호를_세기_전에_판정된다 — 감점이 아니라 거부임을 계약으로 고정"""
+        text = "합의 법칙과 곱의 법칙을 구분해서 써야 한다"
+        entry = CATALOG_BY_ID["addition-multiplication-rule-confused"]
+        norm = _normalize(text)
+        assert all(_signal_hit(s, norm) for s in entry.signals), "전제: 두 신호가 다 맞는 문장"
+        assert not [m for m in diagnose(text) if m.misconception.id == entry.id]
+
+
 class TestRefutingRegexGovernance:
     """반박 조건을 *가진* 항목의 동결 — 조용히 늘거나 줄지 않게.
 
@@ -662,7 +715,7 @@ class TestRefutingRegexGovernance:
     달리 아무도 소리내지 않는다. 그래서 부여 항목을 명시 목록으로 묶는다.
     """
 
-    _REFUTING_IDS = {"root-loss-by-dividing"}
+    _REFUTING_IDS = {"root-loss-by-dividing", "addition-multiplication-rule-confused"}
 
     def test_only_listed_entries_have_refuting_regex(self) -> None:
         """목록_밖_항목은_반박_조건이_없다"""
