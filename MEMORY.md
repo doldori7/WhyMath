@@ -9074,3 +9074,37 @@ Codex P1 후속 수정(5개 채널에 `EXPLICIT_CORRECTION_MENTION` 반박 언�
 log-distribution 5종 vs 이 태스크의 extremum-value-vs-point-confused 1종, 완전 disjoint) 커밋
 시 서로의 미커밋 변경을 침범하지 않도록 hunk 단위로 선택 스테이징했다. `root-loss-by-dividing`의
 같은 유형 취약점은 그쪽 세션이 `MISC-25`로 별도 등재했다(이 태스크 범위 밖).
+## 2026-09-08: ad hoc 요청이 backlog 태스크와 10분 차로 중복 구현 — PR #1073 닫음 (main #1070 HARN-94와 동형)
+
+Kiki가 대화 중 "게이트 화면이 지체를 잘못 표기한다"를 **ad hoc 요청**(backlog 태스크 경유 없음)으로
+지적했다 — `G-state-machine-deferral-recheck`가 재확인 지점(12/13)보다 훨씬 전인데도 `/status`·
+`gates list`에 "5일 경과"로만 나와 실제로 지체된 게이트와 구분이 안 됐다. 원인을 실측하고
+`report.py`에 `gate_due`/`gate_target_date`/`gate_status_suffix`를 만들어 커밋(`1cb526c9`)·
+푸시(13:22 UTC)·PR #1073을 열었다.
+
+PR이 `mergeable_state: dirty`였다 — 원인은 **같은 증상을 겨냥한 타 세션의 정식 backlog 태스크
+`HARN-94-gate-list-processing-status-visibility`가 10분 먼저(13:12 UTC) main에 머지된 것**
+(PR #1070, `HARN-01`과 합본). 그 세션은 `/gates` 실행 중 **독립적으로** 같은 버그를 발견했고,
+`GateView` 공유 추상화로 `gates list`/`status` 텍스트/`status --json` 세 화면을 한 곳에서 계산하게
+만들었다 — 이 PR의 3곳 중복 구현보다 더 완성도가 높고, 3상태(기한 없음·미도래·초과) 처리와 대기
+태스크 수까지 포함했다. main 기준 실측으로 이미 원하는 동작(재확인 지점 전 게이트는 "대기 · N일
+경과 / 기한 M일 (D일 남음)"으로, 진짜 지체 게이트는 `⚠ ... 독촉 초과`로 구분)을 확인하고, 이 PR은
+PR #1073에 사유를 남기고 닫았다 — 코드는 폐기, main의 HARN-94를 그대로 신뢰.
+
+**왜 이번엔 기존 방어 장치(path_overlap 경고·claim 대장)가 못 잡았나**: 그 장치들은 *내가 편집하는
+파일*을 *이미 in-flight로 claim된 다른 태스크의 선언 paths*와 대조한다. 이번 충돌의 originating
+work(HARN-94)는 **내가 작업을 시작한 시점엔 아직 backlog에 존재하지 않았다**(다른 세션이 `/gates`를
+실행하다 그 자리에서 발견해 같은 날 처음부터 끝까지 만들었다) — 그러니 대조할 claim 자체가 없었다.
+더 근본적으로, **이 작업은 ad hoc 요청이라 애초에 `backlog.py start <id>`를 거치지 않았다** — 그래서
+내 쪽에서도 claim이 없었고, 결국 두 세션 모두 서로를 볼 방법이 없는 상태에서 같은 증상을 각자
+발견·구현했다. `PostToolUse`의 `check-edit` 훅이 실제로 경고를 냈지만(`scripts/harness/backlog.py`가
+`HARN-86` 세션의 paths와 겹친다) 그건 이 충돌과 무관한 별개 세션이었다 — 진짜 충돌 상대는 경고
+대상이 아니었다.
+
+**대책 판단**: 이번 경합은 "동시 순간 발견"의 순수한 타이밍 레이스라 코드 수준 방지책이 마땅치
+않다(태스크가 존재하기 *전*의 충돌은 claim 시스템의 설계 범위 밖). 유일하게 값싼 완화책은 **ad hoc
+수정을 시작하기 전에 `backlog.py next`/`grep`으로 같은 증상을 겨냥한 기존·최근 태스크가 있는지
+먼저 훑는 습관**인데, 이번 경우 그 태스크가 내 조사 *이후*에 생겼으므로 사전 검색으로도 못 잡았을
+사례다. 새 CLAUDE.md 규칙이나 코드 게이트를 추가하지 않는다 — 강제해도 잡히지 않는 경합에 상시
+검사를 얹으면 그 자체가 무력한 가드가 된다(2026-09-01 규칙의 정신). 손실은 세션 하나의 구현
+시간뿐이고 데이터·main 영향은 0.
