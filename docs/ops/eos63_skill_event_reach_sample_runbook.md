@@ -48,8 +48,8 @@ acceptance ②의 유일한 판정 재료다.
 
 | 단계 | 무엇이 일어나는가 | 예상 출력 | 소요 |
 |---|---|---|---|
-| ① 체크아웃 | 프로브가 main에 있으면 main, 없으면 작업 브랜치를 고른다 | `PROBE_FILE_OK=True` | ~20초 |
-| ② 환경 | UTF-8 콘솔 + prod DB(5433) URL 주입 + 컨테이너 생존 확인 | `PG_CONTAINER=whymath-pg` | ~10초 |
+| ① 체크아웃 | main으로 detached 이동(지역 브랜치 무변경) | `PROBE_FILE_OK=True` | ~20초 |
+| ② 환경 | UTF-8 콘솔 + prod DB(5433) URL 주입 + **포트 도달성**·import 확인 | `PORT5433_OPEN=True` | ~10초 |
 | ③ 사전 관측 | 지금 DB에 무엇이 있는지 읽는다(**쓰기 0**) | 리포트 마크다운 | ~10초 |
 | ④ 표본 생성 | 채점 20건을 실제 라우트로 제출 | 회차 요약 + `work\eos63\probe.json` | 1~3분 |
 | ⑤ 사후 측정 | 프로브 회차 창으로 리포트 재실행 | 리포트 + `work\eos63\report.json` | ~10초 |
@@ -80,13 +80,18 @@ acceptance ②의 유일한 판정 재료다.
 
 | exit | 뜻 | 대처 |
 |---:|---|---|
-| 2 | DB 미도달 | Docker Desktop·`whymath-pg` 컨테이너 가동 확인(②의 자가검증이 먼저 잡는다) |
+| 2 | DB 미도달 | ②의 `PORT5433_OPEN`이 먼저 잡는다 — 컨테이너 생존이 아니라 **호스트 포트 도달성**을 본다(§[2단계] 대처) |
 | 3 | **스키마 뒤처짐** — `attempt_event.skill_ids` 부재 | §6의 마이그레이션 블록을 1회 실행 후 ④부터 재개 |
-| 4 | 후보 문제 0건 | 코퍼스 미적재 — `scripts\demo\seed_demo.py`(§6) 실행 후 ④부터 재개 |
+| 4 | 후보 문제 0건 | 코퍼스 미적재 — **prod에 시드하지 않는다**(§7-2). 이 회차는 여기서 끝나고, 그 사실 자체가 측정 결과다 |
 | 5 | 제출 전건 실패 | 화면의 「실패 사유」 표(예외 타입명)를 그대로 세션에 전달 |
 
 `해소율 0%`는 **실패가 아니라 측정값**이다(exit 0). 그 경우도 게이트는 닫힌다 — 닫히지 않는 것은
 *측정이 안 된 경우*뿐이다.
+
+> **단, exit 4(후보 문제 0건)는 다르다.** 그것은 해소율이 0인 것이 아니라 **분모를 만들 수조차
+> 없는** 상태이고, prod에 시드해서 만드는 것은 2026-07-26 확정 결정 위반이다(§7-2). 이 경우
+> 게이트를 닫을지 여부는 사람의 판단이며, 세션이 대신 닫지 않는다 — 남은 해소율 축은
+> `EOS-43-skill-resolution-isolated-db-measurement`가 격리 DB에서 소유한다.
 
 ## 5. 실행 환경
 
@@ -116,8 +121,11 @@ acceptance ②의 유일한 판정 재료다.
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 # 작업 트리 청결부터 확인한다 — 더러우면 아무것도 하지 않는다.
 # (붙여넣기 실행에서는 `throw`가 뒤 줄을 멈추지 못하므로 뒷부분을 통째로 가드로 감싼다.)
-$Dirty = (git status --porcelain)
-"WORKTREE_DIRTY=" + [bool]$Dirty
+# `--untracked-files=no`가 핵심: untracked 파일은 체크아웃을 막지도 덮어쓰지도 않는데,
+# 그것까지 세면 위험하지 않은 상태에서 블록이 멈춘다(2026-09-08 실측 — `reports/`와
+# `ruleset*.json` 5건 때문에 회차가 한 번 공전했다). 위험한 것은 *추적 중인* 변경뿐이다.
+$Dirty = (git status --porcelain --untracked-files=no)
+"TRACKED_DIRTY=" + [bool]$Dirty
 if (-not $Dirty) {
   # 지역 브랜치는 손대지 않는다 — detached HEAD로만 옮긴다. `checkout -B`는 지역 브랜치
   # 포인터를 원격 tip으로 *강제 이동*시켜 아직 push하지 않은 지역 커밋을 그 브랜치에서
@@ -132,10 +140,10 @@ if (-not $Dirty) {
 }
 ```
 
-**자가검증**: `WORKTREE_DIRTY=False` **그리고** `PROBE_FILE_OK=True`.
+**자가검증**: `TRACKED_DIRTY=False` **그리고** `PROBE_FILE_OK=True`.
 `RETURN_TO=`에 찍힌 이름은 회차가 끝난 뒤 돌아갈 브랜치다(§7-4). 이 블록은 **지역 브랜치를
 전혀 바꾸지 않는다** — detached HEAD로만 이동하므로 push하지 않은 지역 커밋이 안전하다.
-- `WORKTREE_DIRTY=True`면 미커밋 변경이 있어 블록이 **아무것도 하지 않은 것**이다(의도) —
+- `TRACKED_DIRTY=True`면 추적 중인 미커밋 변경이 있어 블록이 **아무것도 하지 않은 것**이다(의도) —
   그 변경을 어떻게 할지 세션에 물은 뒤 다시 온다.
 - `PROBE_FILE_OK=False`면 fetch가 실패했거나(네트워크) main에서 프로브가 사라진 것이다 —
   다음 단계로 가지 말고 세션에 알린다. 이 검사는 변별력이 있다: 파일이 없으면 `False`가 뜬다.
@@ -155,69 +163,84 @@ $env:PYTHONPATH = (Resolve-Path "src\backend").Path
 $Py = "src\backend\.venv\Scripts\python.exe"
 New-Item -ItemType Directory -Force -Path work\eos63 | Out-Null
 "PG_CONTAINER=" + (docker ps --filter "name=whymath-pg" --filter "status=running" --format "{{.Names}}")
+# 컨테이너 생존은 *간접* 신호다 — 아래 두 줄이 진짜 판정이다(2026-09-08 사고: 컨테이너가 Up이고
+# pg_isready도 통과하는데 호스트에서만 못 붙는 상태가 실재했다). `PortBindings`는 만들 때 요청한
+# **설정**이고 `docker ps`의 Ports·`NetworkSettings.Ports`는 **실현된 게시**다 — 이 둘이 어긋나는
+# 것이 그 고장의 형태이므로, 설정이 옳다는 이유로 정상으로 읽지 않는다.
+"PG_PORTS_REALIZED=" + (docker inspect -f '{{json .NetworkSettings.Ports}}' whymath-pg)
+"PORT5433_OPEN=" + (Test-NetConnection -ComputerName 127.0.0.1 -Port 5433 -WarningAction SilentlyContinue).TcpTestSucceeded
 "PY_OK=" + (Test-Path $Py)
 & $Py -c "import whymath_backend, sys; print('IMPORT_OK=True')"
 "IMPORT_EXIT=$LASTEXITCODE"
 ```
 
-**자가검증**: 세 줄이 모두 맞아야 한다 — `PG_CONTAINER=whymath-pg` · `PY_OK=True` ·
-`IMPORT_OK=True`(그리고 `IMPORT_EXIT=0`).
+**자가검증**: 다섯 줄이 모두 맞아야 한다 — `PG_CONTAINER=whymath-pg` ·
+`PG_PORTS_REALIZED`가 **빈 배열이 아님**(`{"5432/tcp":[{...5433...}]}`) · `PORT5433_OPEN=True` ·
+`PY_OK=True` · `IMPORT_OK=True`(그리고 `IMPORT_EXIT=0`).
 - `PG_CONTAINER=`이 비어 있으면 컨테이너가 죽은 것이다 — `docker start whymath-pg` 후 이 블록을
-  다시 돌린다. (이 검사는 변별력이 있다 — 컨테이너가 없으면 빈 문자열이 나온다.)
+  다시 돌린다.
+- **`PORT5433_OPEN=False`인데 `PG_CONTAINER`는 채워져 있으면** 포트 게시가 성립하지 않은 것이다.
+  Windows의 Hyper-V/WinNAT 동적 포트 제외 범위가 5433을 삼킨 경우가 실측된 원인이다 —
+  `netsh interface ipv4 show excludedportrange protocol=tcp`로 5433을 포함하는 구간이 있는지 보고,
+  있으면 관리자 권한으로 `net stop winnat` → `netsh int ipv4 add excludedportrange protocol=tcp
+  startport=5433 numberofports=1` → `net start winnat` 후 Docker Desktop과 컨테이너를 재기동한다
+  (Docker Desktop을 먼저 종료하고 실행한다). 상세·재발 방지는 `OPS-72`가 소유한다.
 - `IMPORT_OK`가 안 찍히고 `IMPORT_EXIT=1`이면 의존성 미설치다(ModuleNotFoundError의 *대상*이
   화면에 찍힌다 — 그 이름을 세션에 전달한다). 3단계로 가면 같은 실패를 DB 오류처럼 보게 되므로
   여기서 멈추는 것이 맞다.
+
+> **`$LASTEXITCODE`를 단독 판정으로 쓰지 않는다**: 이 변수는 *외부 실행 파일이 실제로 돌았을 때만*
+> 갱신된다. 명령이 파싱 오류 등으로 시작조차 못 하면 **이전 값이 그대로 남아 성공처럼 보인다**
+> (2026-09-08 실측 — 실패한 명령 뒤에 `REPORT_EXIT=0`이 찍혔다). 그래서 아래 단계들은 exit code와
+> **산출물 파일의 실재**를 함께 본다. CLAUDE.md 「래퍼가 종료 코드를 가림」 축의 PowerShell 변형이다.
 
 ### [3단계] 사전 관측 (읽기 전용 — DB에 아무것도 쓰지 않는다)
 
 ```powershell
 # [Windows PowerShell · Phaiakes9] 같은 창
+# 이전 회차 잔재를 먼저 지운다 — 안 지우면 옛 파일이 이번 결과인 척한다
+# (CLAUDE.md 「지금 보는 것이 이번 실행 것인가」).
+Remove-Item work\eos63\probe.json, work\eos63\report.json -ErrorAction SilentlyContinue
+"===== 3. 사전 관측 (읽기 전용) ====="
 & $Py -m whymath_backend.harness.attempt_skill_event_reach_report --json work\eos63\before.json
-"EXIT=$LASTEXITCODE"
-```
-
-**자가검증**: `EXIT=0`. `EXIT=2`면 DB 오류이며 **화면의 예외 타입명**을 세션에 전달한다.
-이 단계의 출력은 "회차 전 상태"이고, 판정에는 쓰지 않는다(과거 시도가 분모에 섞여 있다).
-
-### [4단계] 표본 생성 — 실제 채점 라우트를 20건 태운다
-
-```powershell
-# [Windows PowerShell · Phaiakes9] 같은 창
+"BEFORE_EXIT=$LASTEXITCODE"
+"===== 4. 표본 생성 20건 (여기서만 DB에 쓴다) ====="
 & $Py -m whymath_backend.harness.attempt_skill_reach_probe --count 20 --json work\eos63\probe.json
-"EXIT=$LASTEXITCODE"
+"PROBE_EXIT=$LASTEXITCODE"
+if (Test-Path work\eos63\probe.json) {
+  "===== 5. 사후 측정 ====="
+  $Since = (Get-Content work\eos63\probe.json -Raw | ConvertFrom-Json).started_at
+  "SINCE=$Since"
+  & $Py -m whymath_backend.harness.attempt_skill_event_reach_report --since $Since --json work\eos63\report.json
+  "REPORT_EXIT=$LASTEXITCODE"
+  if (Test-Path work\eos63\report.json) {
+    $R = Get-Content work\eos63\report.json -Raw | ConvertFrom-Json
+    $P = Get-Content work\eos63\probe.json  -Raw | ConvertFrom-Json
+    "===== 6. 게이트 증적 ====="
+    "WINDOW=$($R.since)"
+    "ATTEMPTS=$($R.attempts_total)  EVENTS=$($R.events_total)"
+    "EMPTY=$($R.events_empty_skill_ids)  NONEMPTY=$($R.events_nonempty_skill_ids)  NULL=$($R.events_null_skill_ids)"
+    "WRITER_REACH=$($R.writer_reach_rate)  RESOLUTION=$($R.resolution_rate)  E2E=$($R.end_to_end_rate)"
+    "PROBE_ACCEPTED=$($P.accepted)  PROBE_FAILED=$($P.failed)"
+    git log --oneline -1
+  } else { "REPORT_JSON_MISSING=True -- 사후 측정 실패. 화면의 오류 줄을 세션에 전달한다" }
+} else { "PROBE_JSON_MISSING=True -- 표본 생성 실패. 위 PROBE_EXIT 숫자를 세션에 전달한다" }
 ```
 
-**자가검증**: `EXIT=0`. 0이 아니면 §4의 exit 표를 따른다(3=스키마·4=코퍼스·2=DB·5=제출 실패).
+**왜 한 블록인가**: 3~6단계를 따로 두었더니 회차 하나가 **4단계를 통째로 건너뛴 채 5단계로
+넘어가** 공전했다(2026-09-08 실측). 붙여넣기 실행에서는 순서를 사람이 지켜 주지 않으므로,
+순서를 **가드가 강제**하게 한다 — 앞 단계 산출물이 없으면 뒷 단계가 아예 돌지 않는다.
 
-### [5단계] 사후 측정 — 프로브 회차의 창으로만 다시 읽는다
+**판정은 exit code가 아니라 산출물 파일의 실재로 한다** — 위 §[2단계] 말미의 `$LASTEXITCODE`
+경고 참조. `Test-Path`는 실패 상태에서 실제로 `False`를 내므로 변별력이 있다.
 
-```powershell
-# [Windows PowerShell · Phaiakes9] 같은 창
-# 창 경계는 앞 단계 산출물에서 변수로 잇는다(사람이 값을 옮겨 적지 않는다).
-$Since = (Get-Content work\eos63\probe.json -Raw | ConvertFrom-Json).started_at
-"SINCE=$Since"
-& $Py -m whymath_backend.harness.attempt_skill_event_reach_report --since $Since --json work\eos63\report.json
-"EXIT=$LASTEXITCODE"
-```
+**성공 판정**: `===== 6. 게이트 증적 =====` 아래 6줄이 출력되고 `EVENTS`가 1 이상.
+그 6줄과 마지막 커밋 줄을 **그대로 복사해 세션에 전달**한다 — 그것이 게이트 증적이다.
 
-**자가검증**: `SINCE=`가 `2026-…`로 시작하는 실제 시각이어야 하고 `EXIT=0`이어야 한다.
-`SINCE=`가 비면 4단계 JSON이 안 만들어진 것이다 — 4단계부터 다시 한다.
-
-### [6단계] 자가검증 — 게이트 증적에 넣을 수치를 뽑는다
-
-```powershell
-# [Windows PowerShell · Phaiakes9] 같은 창
-$R = Get-Content work\eos63\report.json -Raw | ConvertFrom-Json
-$P = Get-Content work\eos63\probe.json  -Raw | ConvertFrom-Json
-"WINDOW=$($R.since)"
-"ATTEMPTS=$($R.attempts_total)  EVENTS=$($R.events_total)"
-"EMPTY=$($R.events_empty_skill_ids)  NONEMPTY=$($R.events_nonempty_skill_ids)  NULL=$($R.events_null_skill_ids)"
-"WRITER_REACH=$($R.writer_reach_rate)  RESOLUTION=$($R.resolution_rate)  E2E=$($R.end_to_end_rate)"
-"PROBE_ACCEPTED=$($P.accepted)  PROBE_FAILED=$($P.failed)"
-```
-
-**성공 판정**: `EVENTS`가 1 이상. 그러면 이 6줄을 **그대로 복사해 세션에 전달**한다 —
-그것이 게이트 증적이다.
+**멈춘 지점별 대처**:
+- `PROBE_JSON_MISSING=True` → `PROBE_EXIT` 숫자가 원인을 가른다(§4의 exit 표).
+  **`4`(후보 문제 0건)는 §7-2로 간다 — prod에 시드하지 않는다.**
+- `REPORT_JSON_MISSING=True` → 사후 측정이 실패했다. 화면의 예외 타입명을 전달한다.
 
 ---
 
@@ -235,15 +258,34 @@ cd C:\Users\kiki\Desktop\__AI\WhyMath
 
 `EXIT=0`을 확인한 뒤 [4단계]부터 재개한다.
 
-### 7-2. exit 4(후보 문제 0건)가 났을 때 — 코퍼스 시드
+### 7-2. exit 4(후보 문제 0건)가 났을 때 — ⛔ prod에 시드하지 않는다
+
+> **이 절은 2026-09-09에 뒤집혔다.** 이전 판은 여기서 `& $Py scripts\demo\seed_demo.py`를
+> 돌리라고 안내했다. **그 안내는 prod DB를 오염시킨다** — `seed_demo.py`는
+> `WHYMATH_DATABASE_URL`을 그대로 쓰므로, 이 런북의 [2단계]가 그 변수를 prod(5433)로 설정한
+> 상태에서 실행하면 문항 코퍼스 3종(손저작 4 + 단답 620 + 객관식 1080)이 **prod에 적재된다**.
+> `scripts/demo/PILOT_RUNBOOK.md`의 DB 선택 표는 그 경로를 이미 기각했다 —
+> *"B. prod 오버라이드 `whymath-pg`(5433) — 데모 시드가 prod에 섞임 — **미채택**"*
+> (Kiki 확정 2026-07-26). 런북이 확정 결정과 충돌하고 있었다.
+
+**exit 4가 나면 이 회차는 prod에서 끝난다.** 후보 문제 0건은 고쳐야 할 오류가 아니라
+**측정 결과**다 — prod에 태울 문항이 없다는 사실 자체가 게이트가 물은 것의 일부다. §6의
+사전 관측(3단계) 출력과 아래 전수 카운트를 증적으로 남기고 세션에 전달한다.
 
 ```powershell
-# [Windows PowerShell · Phaiakes9] 같은 창
-& $Py scripts\demo\seed_demo.py
+# [Windows PowerShell · Phaiakes9] 같은 창 — 읽기 전용 전수 카운트
+docker exec -i whymath-pg psql -U whymath -d whymath -v ON_ERROR_STOP=1 -c "SELECT 'problem' AS t, count(*) AS n FROM problem UNION ALL SELECT 'problem_with_difficulty', count(*) FROM problem WHERE difficulty_overall IS NOT NULL UNION ALL SELECT 'problem_attempt', count(*) FROM problem_attempt UNION ALL SELECT 'attempt_event', count(*) FROM attempt_event UNION ALL SELECT 'user_profile', count(*) FROM user_profile UNION ALL SELECT 'concept', count(*) FROM concept ORDER BY 1;"
 "EXIT=$LASTEXITCODE"
 ```
 
-`EXIT=0`을 확인한 뒤 [4단계]부터 재개한다.
+해소율(개념→스킬 매핑이 실제로 스킬을 찾아내는 비율)은 **격리 DB**에서 따로 잰다 — 그 값은
+코퍼스·브리지 데이터의 성질이지 prod 트래픽의 성질이 아니라, 같은 코퍼스면 어느 DB에서 재도
+같은 답이 나온다. 그 회차는 `EOS-43-skill-resolution-isolated-db-measurement`가 소유한다.
+
+**2026-09-09 실측(main `94d1f28a`)**: `problem` 0 · `problem_with_difficulty` 0 ·
+`problem_attempt` 0 · `attempt_event` 0 · `concept` 2,683 · `user_profile` 2. prod DB에는
+개념 백본만 있고 문항 코퍼스도 채점 이력도 전 기간 0건이다. 이 회차를 다시 돌리는 세션은
+**같은 결과를 먼저 예상하고** 시작한다.
 
 ### 7-3. 표본 정리 (선택 — **게이트를 닫은 뒤에만**)
 
