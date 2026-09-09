@@ -60,6 +60,26 @@ gates:
     evidence: "2026-09-03 Kiki 실행(Phaiakes9 Windows PowerShell) — 복구 리허설 1회 완료. 대상 백업 whymath_20260902_222520.dump.age(age 암호화본·579kB), age 복호 성공(exit 0), scratch 컨테이너 whymath-restore-test(pgvector/pg16·127.0.0.1:55433) 복원 후 pg_restore 오류 0. 무결성: 8개 핵심 테이블 행수 prod↔scratch 완전 일치 — atom_node 0 / concept 2683 / dialogue 0 / dialogue_turn 0 / parental_consent 0 / problem 0 / problem_attempt 0 / user_profile 1. RTO 실측 = 5.8분(00:05:48), 측정 범위는 복원 구간 한정(§3-0~§3-3b) — 런북 §5 표 갱신 완료. 한계 명시(§6 신설): 측정 시점 데이터 규모가 579kB(concept 외 전 테이블 0~1행)라 이 수치는 절차 고정 오버헤드에 가깝고 대표성이 없다 — 학생 데이터 축적 후 재측정 필요. 측정 스텝(§3-0/§3-3b)은 이 리허설 직전 신설(PR #974) — 종전 런북에는 시간 측정 스텝이 없어 게이트 요구 수치가 산출 불가였다."
     cleared_by: null
     notes: ""
+  - id: G-canonical-repo-cutover-kiki-s-broom
+    title: "정본 저장소 전환 집행 — kiki-s-broom/WhyMath 조직 계정 확인·시크릿 재등록(DEPLOY_SSH_HOST/USER/KEY/KNOWN_HOSTS/PATH·PR_AUTO_RESYNC_TOKEN)·브랜치 보호 룰셋 재구성(merge queue 활성화 확인)·GitHub Actions 활성화 확인. 2026-09-09 Kiki 결정(신규 정본 전환, HARN-96)의 집행 단계"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-09
+    remind_after_days: 3
+    evidence: null
+    cleared_by: null
+    notes: ""
+  - id: G-canonical-repo-migrate-decision
+    title: "정본 저장소 전환 여부 결정 — doldori7/WhyMath에서 kiki-s-broom/WhyMath(merge queue 가능 조직 계정 추정)로. G-merge-queue-or-strict-relax(2026-09-07)가 User 계정 제약으로 포기했던 merge queue 도입을 재검토하는 계기"
+    kind: decision
+    assignee: kiki
+    status: cleared
+    requested: 2026-09-09
+    remind_after_days: 3
+    evidence: "2026-09-09 Kiki가 이 세션과의 대화에서 3안 중 \"새 정본 저장소로 전환 (시나리오 A)\"을 직접 선택 — doldori7/WhyMath는 유지만 하고 향후 개발·PR·머지를 kiki-s-broom/WhyMath로 옮기기로 결정. 판정 기준(커밋)은 없음 — 대화 중 즉석 결정이라 --no-base 처리. 집행 상세·실행 범위 한계·개방 질문은 HARN-96-canonical-repo-migration-kiki-s-broom 및 G-canonical-repo-cutover-kiki-s-broom 참조."
+    cleared_by: claude
+    notes: "[판정기준 없음 2026-09-09] 커밋 없는 대화 중 즉석 결정 — Kiki가 이 세션에서 직접 시나리오 A(전환)를 선택"
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human

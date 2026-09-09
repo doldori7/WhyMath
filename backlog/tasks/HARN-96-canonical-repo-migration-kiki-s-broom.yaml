@@ -1,0 +1,31 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-96-canonical-repo-migration-kiki-s-broom
+title: "정본 저장소 전환 — doldori7/WhyMath에서 kiki-s-broom/WhyMath로 (merge queue 재도입 가능성 실측 포함)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 1
+eos_priority: P1
+owner: claude
+depends_on: []
+requires_gates:
+  - G-canonical-repo-cutover-kiki-s-broom
+acceptance:
+  - "① 계정 유형 실측 선행 — kiki-s-broom이 실제로 Organization 계정인지 GitHub API(owner.type)로 확인한다. 이 세션은 cross-tier 제약으로 kiki-s-broom 저장소에 API 접근이 불가했다(add_repo가 \"cross-tier adds are not supported in v1\" 로 거부 — 세션당 단일 owner만 부착 가능). kiki-s-broom을 초기 소스로 하는 새 세션에서 GET /repos/kiki-s-broom/whymath 를 실행해 owner.type=Organization을 확정하기 전까지는, \"merge queue 큐잉등록 성공\"이 유일한 간접 근거임을 명시한다(간접 신호를 성공 판정으로 쓰는 안내 금지 축 — 반증 가능성 열어둠)."
+  - "② 시크릿 이관 — doldori7/WhyMath에 존재가 확인된 시크릿(DEPLOY_SSH_HOST/USER/KEY/KNOWN_HOSTS/PATH, PR_AUTO_RESYNC_TOKEN)을 kiki-s-broom/whymath 저장소 Settings→Secrets and variables→Actions에 동일 이름으로 재등록한다. 값은 세션이 읽을 수 없으므로 Kiki가 직접 발급·등록해야 한다(기존 값 복사 불가 — GitHub는 시크릿 값을 재조회 허용하지 않는다)."
+  - "③ 브랜치 보호/룰셋 재구성 — .github/branch-protection-setup.md에 문서화된 규칙(필수 상태 체크 목록·up-to-date 강제 등)을 kiki-s-broom/whymath main에 동일하게 재설정한다. 이번엔 merge queue 옵션이 실제로 화면에 있는지 먼저 확인하고(①의 조직 계정 확정과 연동), 있으면 활성화한다. HARN-82가 지적한 축(문서와 라이브 설정 불일치) 재발을 막기 위해, 설정 직후 라이브 조회 스크립트(pr_merge_readiness.py 등)로 required check 개수를 실측해 문서에 병기한다."
+  - "④ CI 배선 확인 — kiki-s-broom/whymath에서 GitHub Actions가 활성화되어 있는지, ci.yml의 merge_group 트리거를 포함한 5개 워크플로(ci.yml·deploy.yml·branch-cleanup.yml·harness-audit.yml·pr-auto-resync.yml)가 실제로 발화하는지 1회 이상 실측 확인한다(성공 경로만 보고 설계하지 않기 — 실패 시 원인이 로그에 남는지도 확인)."
+  - "⑤ 병렬 세션 좌표 — 이관 시점에 doldori7/WhyMath에서 진행 중인 다른 세션들(이 등재 시점 기준 EOS-63·HARN-56·HARN-82·HARN-86·HARN-87·MGMT-06·MP-02 claim 중)의 작업이 두 저장소로 갈라지지 않도록 컷오버 시점을 정하고, 컷오버 전후로 미러링(강제 동기화 또는 일시 정지) 절차를 문서화한다. 이관 도중 커밋이 갈라지면 회수 비용이 이번 사고 이력(미병합 고립 4회차 등)과 같은 유형이 된다."
+  - "⑥ 정본 참조 갱신 — README·CI 배지·docs 내 저장소 URL 등 doldori7/WhyMath를 정본으로 지칭하는 참조를 kiki-s-broom/WhyMath로 갱신한다(코드 변경은 이 세션이 PR로 낼 수 있는 범위 — 설정 자체는 Kiki 실행)."
+  - "⑦ 구 저장소 처리 방침 — doldori7/WhyMath를 아카이브할지, 리다이렉트 안내만 남길지 Kiki가 결정하고 기록한다."
+  - "⑧ 이 태스크의 실행 범위 한계 명시 — 착수 세션은 kiki-s-broom을 초기 소스로 하는 새 세션이어야 한다(cross-tier 제약 실측 완료 — ①에 근거 병기). doldori7/WhyMath에 고정된 세션에서는 준비 문서·백로그 등재까지만 가능하고 실제 push/PR/설정 집행은 불가하다."
+artifacts: []
+paths:
+  - ".github/workflows/**"
+  - "docs/**"
+  - "backlog/**"
+session: null
+notes: "발견 경위(2026-09-09): Kiki가 대화 중 \"GitHub 프로젝트 kiki-s-broom/WhyMath의 main 브랜치로 큐잉등록 했어\"라고 보고했다. 세션이 doldori7/WhyMath 스코프에 고정된 채로 확인한 사실은 다음과 같다.\n\n[확인된 사실 — 익명 git clone(읽기 전용)]\n· kiki-s-broom/whymath는 실재하는 공개 저장소이고, doldori7/WhyMath와 별도 owner다(전환/리다이렉트가 아니라 독립 저장소).\n· main 브랜치 HEAD = 94d1f28, 그 부모가 doldori7/WhyMath 현재 main HEAD인 3059936과 동일 — 즉 이 세션이 보는 최신 코드베이스에 커밋 1개(#1074, 병렬 중복 착수 경위 기록)를 더 얹은 상태.\n· .github/workflows/ 5종(ci.yml·deploy.yml·branch-cleanup.yml·harness-audit.yml·pr-auto-resync.yml)이 그대로 존재하고, ci.yml의 merge_group 트리거·pr-auto-resync.yml의 PR_AUTO_RESYNC_TOKEN 참조도 그대로 복사돼 있다.\n\n[이 세션이 확인하지 못한 것 — 도구 제약]\n· add_repo(access=push)가 \"cross-tier adds are not supported in v1: session already has repos from owner(s) [doldori7]\"로 거부됐다 — 세션 하나는 한 owner의 저장소만 부착 가능. 그 결과 kiki-s-broom/whymath의 GitHub API(owner.type·브랜치 보호 룰셋·시크릿 존재 여부·Actions 활성화 상태)를 이 세션에서는 조회할 수 없다.\n· \"merge queue 큐잉등록 성공\"은 Kiki의 구두 보고뿐이며, 이 저장소가 실제 Organization 계정인지는 API로 직접 확인하지 못했다(가용성 확인 절차 축 — 설정 성공 보고를 계정 유형 확정의 증거로 대체하지 않기 위해 acceptance ①로 별도 등재).\n\n[배경 — 이 결정과 연결된 기존 게이트]\nG-merge-queue-or-strict-relax(2026-09-07 cleared)가 \"merge queue 도입\"을 채택했다가 doldori7/WhyMath가 User 계정이라 조직 전용 기능을 쓸 수 없어 D)자동 재동기화(HARN-85)로 재판정한 바 있다. kiki-s-broom이 실제 Organization이면 그 제약이 사라지므로, 이번 이관은 그 원래 판정의 전제 자체를 바꾸는 사건이다 — 다만 HARN-85(자동 재동기화)는 이관 완료 전까지, 그리고 이관 후에도 merge queue가 커버하지 못하는 예외 상황의 안전망으로 유지 여부를 별도 판단해야 한다(이 태스크의 범위 밖 — 승계 시 acceptance에 추가 권장).\n\n[Kiki 결정 — 이번 대화, 2026-09-09]\n\"새 정본 저장소로 전환\" 선택(3안 중 시나리오 A) — doldori7/WhyMath는 유지만 하고, 향후 모든 개발·PR·머지를 kiki-s-broom/WhyMath로 옮긴다.\n\n[이 세션의 실행 범위 한계]\n이 세션은 doldori7/WhyMath에 고정된 채(설계 브랜치 claude/g-merge-queue-strict-relax-rm3cmc) 시작됐고, 위 cross-tier 제약으로 kiki-s-broom 쪽에 push/PR/API 작업을 할 수 없다. 그래서 이번 세션의 산출물은 (a) 이 백로그 태스크·게이트 등재 (b) 이관 준비 문서 작성까지이고, 실제 이관 집행(시크릿 재등록·브랜치 보호 재구성·병렬 세션 컷오버)은 kiki-s-broom을 초기 소스로 하는 새 세션 + Kiki의 GitHub 설정 작업이 필요하다."
+updated: 2026-09-09
