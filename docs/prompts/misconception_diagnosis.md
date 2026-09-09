@@ -177,13 +177,19 @@ v1.1 substring(AND)은 *기호식*(`(a+b)²=a²+b²`)은 잡지만, 학생이 �
 - **검사 대상·방식**: 정규식은 substring과 *동일한 정규화 텍스트*(`_normalize`: NFKC+공백제거,
   위첨자 `²`→`2`)에 `re.search`로 검사한다. 따라서 정규식 패턴은 *지수를 평문으로* 쓴 정규형을
   겨냥한다(예: `(3+4)²=3²+4²`의 정규형은 `(3+4)2=32+42`).
-- **confidence 의미 보존(중요)**: 분모는 **substring `signals` 개수로 유지**하고, 정규식 매치는
-  분자에 *가산*하되 상한 1.0으로 캡한다:
-  `confidence = min(1.0, (substr매치 + regex매치) / len(signals))`.
-  그래서 substring만으로의 기존 confidence(1.0/0.5)는 **불변**이고, 정규식은 substring이 0이어도
-  *추가로* 후보를 띄우는 **보조 경로**가 된다(예: 수치 대입만 있으면 0/2 → 1/2 = 0.5로 탐지).
+- **confidence 의미(v1.5 정정 — MISC-22)**: 분모는 **substring `signals` 개수로 유지**하고,
+  정규식 매치는 분자에 `len(signals)`만큼 *가산*하되 상한 1.0으로 캡한다:
+  `confidence = min(1.0, substr매치/len(signals) + regex매치_건수)`.
+  즉 **정규식 매치 1건은 그 자체로 confidence 1.0**이다 — 명명그룹 역참조로 정답·기호식과
+  disjoint하게 작성된 정규식은 substring AND 전체에 준하는 확정적 단서이기 때문이다(작성 원칙은
+  아래 그대로). substring만으로의 기존 confidence(1.0/0.5)는 **불변**이다.
   매치된 정규식은 `MisconceptionMatch.matched_regex_signals`에 *분리* 저장 → 기존 소비자의
   `matched_signals` 단언은 깨지지 않는다.
+  - **v1.2 원식(폐기)**: `confidence = min(1.0, (substr매치 + regex매치) / len(signals))` —
+    정규식 매치를 substring 신호 *1개*와만 동등하게 쳤다. disjoint 정규식은 원래 확정적 단서인데
+    "부분 신호"로 과소평가돼, `factor-sign-flip`을 비롯한 4개 시연 채널의 "수치 대입 탐지"가
+    conf 0.5에 갇혀 서빙 품질 게이트(0.65)를 한 번도 넘지 못했다(작동 신호 없는 알고리즘 부착 —
+    `anchor_detection_channel_eval` 실측·MISC-22 후속). §"서빙 도달" 표 참조.
 - **작성 원칙(disjoint·보수적)**: 수치 정규식은 *반드시* 기호 substring 케이스와 **겹치지 않게**
   쓴다. ① 피연산자를 `\d+`로 한정해 기호(`a`·`b`·`x`)에는 절대 매치되지 않게 하고, ② **명명그룹
   역참조**(`(?P<x>\d+)…(?P=x)`)로 좌·우변 항이 *글자 그대로 일치*할 때만 매치시켜 **올바른 계산**
@@ -232,11 +238,32 @@ G0 확정 앵커(A1~A6)에 귀속되면서 이 카탈로그에 좌석이 있는 
 발화해 **confidence 1.0**이 유지된다(정규식은 이제 미발화). 즉 확신 오진단의 실제 원인은
 substring 경로이고 이는 이 채널 추가 **이전부터** 있었다(`origin/main` 대조 확인). 별건 등재.
 
-**⚠ 알려진 한계(정직 표기)** — `extremum-value-vs-point-confused`는 `f(x₀)=x₀`인 *우연의 일치*
-(극대점 x=2에서 극댓값도 2)에서 정답도 매치한다. 원리상 구별 불가이므로 게이트로 쓰지 않고
-보조 신호로만 둔다: 정규식 단독 매치의 confidence는 1/2=0.5로 진단 게이트(0.65) 미만이라 이
-채널만으로 확신 오진단이 나가지 않는다. 측정 리포트는 이를 `ambiguous` 계급으로 **분리 보고**한다
-(음성에 넣으면 원리상 통과 불가한 게이트가 되고, 숨기면 오검출률이 실제보다 좋아 보인다).
+**⚠ 알려진 한계 → 해소(`MISC-24`)** — `extremum-value-vs-point-confused`는 `f(x₀)=x₀`인
+*우연의 일치*(극대점 x=2에서 극댓값도 2)에서 정답도 매치한다. 원리상 구별 불가한데, 이 정규식
+패턴이 리터럴 "극댓값"을 포함해 매치 시 substring 신호도 항상 함께 발화하므로 confidence가
+**1.0**이었고(v1.2 원식으로도 마찬가지였다 — MISC-22의 공식 정정과 무관한 이전부터의 사실)
+서빙 품질 게이트(0.65)를 **통과했다**. "보조 신호로만 둔다"는 원 설계 의도가 실측과 어긋난
+채로 있었다.
+
+**해소 방식**: 오개념을 저지른 풀이와 우연의 일치 정답은 텍스트가 **글자 그대로 동일**해
+`refuting_regex`(MISC-23식 반박)도 세울 수 없고, 정규식 가산을 옛 v1.2식(신호 1개 상당)으로
+되돌려도 이 항목은 signals가 2개뿐이라(정규식이 이미 substring 1개를 포함) 여전히 1.0에 갇힌다
+— 두 우회 모두 통하지 않는다. 그래서 `models.py`에 `ambiguous_regex_signals`(bool) 필드를
+신설해 이 항목만 정규식 매치의 confidence 가산을 **0**으로 만든다: 정규식은 여전히 발화해
+`matched_regex_signals`(텔레메트리)에는 남지만 confidence는 substring 신호(`극댓값`·`x좌표`)
+만으로 결정된다. 그 결과 이 채널이 원래 잡으려던 자리(예: "극대는 x=-1…극댓값은 -1"처럼
+"x좌표"라는 말 없이 값만 좌표 숫자로 답한 흔적)도 함께 conf 0.5(게이트 미만)에 멈춘다 —
+회귀가 아니라 **의도된 결과**다: 이 흔적은 텍스트만으로 우연의 일치와 원리상 구별 불가능하므로
+애초에 확신 진단이 나가서는 안 됐다(학생 정서 최우선 — 정답에 틀렸다고 말하는 오류가 놓치는
+것보다 해롭다). 학생이 명시적으로 "x좌표"라는 말을 써서 값을 좌표로 답한 경우(예: "극댓값을
+극점의 x좌표라고 답함")는 정규식과 무관한 substring AND("극댓값"+"x좌표") 경로로 여전히
+confidence 1.0에 도달한다 — 그 경로는 원래도 모호하지 않았고 이번 정정과 무관하게 불변이다.
+
+측정 리포트는 `ambiguous` 계급을 여전히 **분리 보고**한다(음성에 넣으면 원리상 통과 불가한
+게이트가 되고, 숨기면 오검출률이 실제보다 좋아 보인다) — `ambiguous_fired`(정규식 발화 여부)는
+계속 보고만 하지만, `ambiguous_serving_reach`(서빙 품질 게이트까지 살아남은 수)는 이제
+`ChannelResult.passed`가 **0으로 강제**한다(MISC-24 acceptance ③). 우연의 일치 픽스처가
+서빙까지 도달하면 그 자체가 확신 오진단이므로 "발화했다"는 보고에 그치지 않고 게이트로 쓴다.
 
 **채널을 붙이지 *않은* 2종과 그 이유** — 앵커 커버 5종 중 나머지 둘은 표면 채널로 원리상 판정
 불가다. "3종 부여"를 "5종 커버 완료"로 읽지 않도록 사유를 데이터로 남긴다(`UNCHANNELABLE`):
@@ -253,7 +280,8 @@ Wilson 경계로 exit 0/1을 낸다: `python -m whymath_backend.harness.anchor_d
 매 실행 재검사한다.
 
 **서빙 도달은 검출과 다른 사실이다 (PR #1032 Codex P2)** — 리포트는 `serving_reach`로 "정규식이
-발화한 뒤 품질 게이트(top-1 floor 0.65)까지 살아남은 수"를 따로 낸다. 실측:
+발화한 뒤 품질 게이트(top-1 floor 0.65)까지 살아남은 수"를 따로 낸다. 실측(v1.2 원식 — MISC-22
+정정 *이전*):
 
 | 채널 | 검출 | 서빙 도달 | 왜 |
 |---|---|---|---|
@@ -263,7 +291,61 @@ Wilson 경계로 exit 0/1을 낸다: `python -m whymath_backend.harness.anchor_d
 
 `factor-sign-flip`의 0은 **숨기지 않는다** — 숨기면 "검출률 100%"가 "쓰인다"로 오독된다(작동 신호
 없는 알고리즘 부착 금지). 다만 서빙 결선은 MISC-07 acceptance ③이 D2 후속으로 이관한 범위라
-게이트로 삼지 않고 `MISC-22`로 등재했고, 해소되면 해당 동결 테스트가 실패해 스스로 만료를 알린다.
+게이트로 삼지 않고 `MISC-22`로 등재했다.
+
+**MISC-22 해소(v1.5)** — confidence 공식을 정정해 정규식 매치 1건이 substring 신호 전체와
+동등하게(단독으로 1.0) 가산되도록 했다(위 "confidence 의미" 절 참조). 재측정:
+
+| 채널 | 검출 | 서빙 도달(v1.5) | 왜 |
+|---|---|---|---|
+| `factor-sign-flip` | 27/27 | **27/27** | 정규식 매치 1건 = 신호 전체 → conf 1.0 (해소) |
+| `root-loss-by-dividing` | 27/27 | 27/27 | 회귀 없음(이미 substring 공출현으로 conf 1.0) |
+| `extremum-value-vs-point-confused` | 27/27 | 27/27 | 정규식이 "극댓값" substring을 리터럴 포함해 v1.2 원식으로도 이미 conf 1.0 — 이 27/27이 곧 확신 오진단 위험이었다(`MISC-24`) |
+
+같은 정정이 `distribution-over-power`·`square-root-positivity`·`fraction-cancellation`·
+`log-distribution`(§v1.2 시연 4종)의 수치 대입 탐지도 conf 0.5→1.0으로 함께 고쳤다 — 이 4종은
+`anchor_detection_channel_eval`이 다루지 않지만 `tests/backend/l4/test_misconception_diagnose.py`
+`TestNumericSubstitutionDetection`이 실측·동결한다.
+
+**MISC-22 후속 — 정정 언급 방어(Codex P1, PR #1071 리뷰)** — 위 정정 직후 리뷰가 놓친 축을
+지적했다: 학생이 거짓 항등식을 *인용해 반박*한 진술("(x-2)=0이므로 x=-2라는 풀이는 틀리고
+x=2다"·"√((-3)²)=-3은 틀리고 3이 맞다")도 정규식은 부분 문자열만 보므로 여전히 발화한다. v1.5
+전에는 conf 0.5(게이트 미만)에 머물러 무해했지만, "정규식 매치=신호 전체" 정정 이후에는 그대로
+confidence 1.0까지 올라가 확신 개입(정답에 오진단)이 나갈 뻔했다(5채널 전부 실측 확인). 카탈로그에
+`EXPLICIT_CORRECTION_MENTION`(`ZERO_ROOT_MENTION` 옆에 정의 — "틀리·틀렸·틀린·틀려·틀릴·틀림·
+아니·오답·잘못·오류")을 신설하고, 이 5개 채널의 `regex_signals`를 `root-loss-by-dividing`과 같은
+방식(`\A(?!.*<패턴>).*`)으로 정정 언급 앞에서 미발화하게 만들었다. 한글 활용형은 음절 블록이라
+substring 분해가 안 된다는 점(`"틀린"`이 어간 `"틀리"`를 문자열로 포함하지 않음)을 실측으로 확인해
+활용형을 개별 나열했다. `tests/backend/l4/test_misconception_diagnose.py`
+`TestExplicitCorrectionMentionSuppressesRegex`가 5채널 전부·정답 회귀 양쪽을 동결한다.
+
+**정직한 공백**: `root-loss-by-dividing`도 같은 취약점이 있다 — 다만 substring 두 신호("양변"·
+"x로 나누")가 이미 conf 1.0을 만들어 이번 정정과 *무관하게* 이전부터 노출돼 있었다(범위 밖 —
+`MISC-25`로 분리 등재). `EXPLICIT_CORRECTION_MENTION`이 카탈로그 전체(800+ 항목)의 substring
+경로에서 이 축을 얼마나 커버하는지도 미측정 — `MISC-25` 소관.
+
+**MISC-24 해소(v1.6)** — 위 "extremum-value-vs-point-confused" 27/27 서빙 도달은 정규식이
+"극댓값" substring을 리터럴 포함해 **원리상 구별 불가한 우연의 일치 정답까지** 확신 진단으로
+내보내는 자리였다(위 "알려진 한계 → 해소" 절 참조). `ambiguous_regex_signals` 필드로 이 항목의
+정규식 가산을 0으로 만든 뒤 재측정:
+
+| 채널 | 검출 | 서빙 도달(v1.6) | 모호 서빙 도달 | 왜 |
+|---|---|---|---|---|
+| `factor-sign-flip` | 27/27 | 27/27 | 0/0(대상 없음) | 회귀 없음 |
+| `root-loss-by-dividing` | 27/27 | 27/27 | 0/0(대상 없음) | 회귀 없음 |
+| `extremum-value-vs-point-confused` | 27/27 | **0/27** | **0/2** | 정규식 가산 0 → 모든 수치-흔적 매치(positives·ambiguous 공통 형태)가 conf 0.5에 캡 — 해소 |
+
+`extremum-value-vs-point-confused`의 서빙 도달이 27/27→0/27로 떨어진 것은 **회귀가 아니라
+해소 그 자체**다: 그 27건의 `positives` 픽스처는 전부 "좌표 숫자==값 숫자" 형태라 `ambiguous`
+픽스처와 텍스트 구조가 동일했다 — 즉 이 채널이 "검출"이라 부르던 것 중 서빙까지 가던 몫이
+처음부터 우연의 일치와 원리상 구별 불가능한 자리였다. 학생이 명시적으로 "x좌표"라는 말을 쓴
+경우(정규식과 무관한 substring AND 경로)는 이 정정과 무관하게 계속 conf 1.0에 도달한다 —
+`tests/backend/l4/test_misconception_diagnose.py`
+`TestExtremumAmbiguousCoincidenceNotOverconfident`·`TestExtremumSubstringPathUnaffected`가
+동결한다. 리포트의 `ambiguous_serving_reach`(모호 픽스처가 서빙 게이트까지 살아남은 수)는 이제
+`ChannelResult.passed`가 0으로 강제한다(acceptance ③) —
+`tests/backend/harness/test_anchor_detection_channel_eval.py`
+`TestAmbiguousServingReachIsGated`가 동결한다.
 
 ### v1.3 구현(현재) — 짧은 영숫자 signal의 경계 매칭 (슬 109·라이브 FP 교정)
 
