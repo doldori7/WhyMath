@@ -6,7 +6,7 @@ schema_version: 2
 dashboard:
   population: 162
   classification_rate: 162/162
-  backend_modules_covered: 589
+  backend_modules_covered: 590
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 26
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 198
-    test_functions: 2965
+    test_files: 199
+    test_functions: 3000
     matrix:
       A_subject: 3
       B_db: 0
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 126
+    fan_in: 127
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9108,7 +9108,7 @@ features:
       r6_no_api_contract: false
     seat: "security_privacy.md 보존·파기 정본"
   - feature_id: WM-O-903
-    name: "서비스 헬스 딥체크·프리플라이트·로그 스크러버"
+    name: "서비스 헬스 딥체크·프리플라이트·DB 도달성 진단·로그 스크러버"
     plane: O
     location: "src/backend/whymath_backend/ops"
     user: Admin
@@ -9125,17 +9125,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop, invariant"
     migration_risk: Med
-    loc: 1695
+    loc: 2130
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 8
-    own_modules: 4
+    own_modules: 5
     adapter_deps: []
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 15
-    test_files: 14
-    test_functions: 182
+    test_files: 15
+    test_functions: 217
     matrix:
       A_subject: 0
       B_db: 0
@@ -9171,7 +9171,7 @@ features:
       r4_duplicate: false
       r5_state_untracked: true
       r6_no_api_contract: false
-    seat: "OPS-01·SEC-05·SEC-11"
+    seat: "OPS-01·SEC-05·SEC-11·OPS-72"
   - feature_id: WM-O-904
     name: "LLM 비용 프로브·비용 리포트"
     plane: O
@@ -9385,7 +9385,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 2804
+    loc: 2814
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 25

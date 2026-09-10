@@ -94,18 +94,30 @@ _CLI = "python3 scripts/harness/backlog.py"
 # 전이표가 허용하는 전이가 곧 **실행 가능한** 전이는 아니다 (Codex P2 · PR #1067).
 # `cmd_start`는 전이 검사를 통과한 뒤 `selector.classify_todo`를 부르고, 그것이 session을
 # 보유한 태스크를 `claimed`로 거부한다(selector.py:206). 그래서 session을 든 채 in_progress로
-# 가는 홉은 전이표상 합법이어도 반드시 exit 1이다. 실측(2026-09-08 시딩 저장소):
+# 가는 홉은 전이표상 합법이어도 반드시 exit 1이다. 그래서 경로 탐색을 (상태, session 보유)
+# 쌍 위에서 한다: 최단이 아니라 **실행 가능한 것 중 최단**을 고른다.
 #
-#   review/session=b     → start    EXIT=1 (claimed)   ← Codex가 지적한 경로
-#   in_progress→unblock  → todo/session=b (session이 남는다) → start EXIT=1 (claimed)
-#   in_progress→block    → blocked/session=null → unblock → start EXIT=0  ← 실행 가능
-#
-# 즉 **더 짧은 경로가 깨진 경로**였다. "붙여 넣을 수 있는 명령"을 약속하는 기능이 실행되지
-# 않는 명령을 내면 그 기능은 없느니만 못하다 — 이 태스크가 고치려던 결함 그 자체다.
-# 그래서 경로 탐색을 (상태, session 보유) 쌍 위에서 한다: 최단이 아니라 **실행 가능한 것 중
-# 최단**을 고른다.
+# (HARN-95 — 2026-09-10) 이 모델이 실측으로 잡은 진짜 결함 2건은 **모델을 정확히 하는 것을
+# 넘어 근본 원인을 고쳤다**(경로를 우회하는 것으로 끝내지 않았다):
+#   ⓐ `cmd_unblock`이 원격 claim만 걷고 `task.session`은 비우지 않아, in_progress→todo
+#      직행(unblock) 뒤의 `start`가 여전히 claimed로 거부됐다 — "더 짧은 경로가 깨진
+#      경로"였다. `cmd_unblock`도 `cmd_block`처럼 session을 비우도록 고쳐 이제 직행이
+#      실제로 통한다(아래 `_HOP_FREES_SESSION`에 `todo`도 포함).
+#   ⓑ `review`의 비-done 출구가 `in_progress` 하나뿐인데 그 홉은 session 보유 시 항상
+#      거부되고 review에서 나가는 다른 전이가 없어, review 태스크는 done 말고 나갈 길이
+#      없는 막다른 길이었다(재작업·PR 폐기 시 대장 손편집 말고는 방법이 없었다).
+#      `models.py`에 `review → blocked` 엣지를 추가했다 — `cmd_block`은 이미 어느
+#      상태에서든 session을 비우고 blocked로 내리는 범용 동사라 새 코드가 필요 없었다.
+# 두 수정을 합치면 이 그래프에서 session이 원인이 되어 전 구간이 막히는 (출발, 도착) 쌍이
+# 0건이 된다(전수 스캔 — `TestNoSessionCausedDeadEnds`). 그래도 이 (상태, session) 모델
+# 자체는 남긴다 — review→in_progress 직행은 여전히 session 보유 시 거부되므로(review는
+# 여전히 in-flight) 세션 인지 경로 탐색이 계속 필요하다.
 _HOP_NEEDS_FREE_SESSION = "in_progress"  # start — classify_todo의 claimed 검사
-_HOP_FREES_SESSION = "blocked"  # block — task.session = None
+# block과 unblock 둘 다 session을 비운다 — (HARN-95) `unblock`은 이전에는 원격 claim만
+# 걷고 로컬 `task.session`은 그대로 둬서 in_progress→todo 직행이 session을 든 todo를
+# 만들었다(그 뒤 start가 claimed로 거부). `cmd_unblock`을 `cmd_block`과 같은 계약으로
+# 맞췄으므로(todo = 아무도 안 쥔 상태) 여기도 함께 넓힌다.
+_HOP_FREES_SESSION = frozenset({"blocked", "todo"})
 
 
 def _hop_is_executable(target: str, session_held: bool) -> bool:
@@ -116,11 +128,10 @@ def _hop_is_executable(target: str, session_held: bool) -> bool:
 def _session_after(target: str, session_held: bool) -> bool:
     """홉을 밟은 뒤의 session 보유 상태.
 
-    `block`은 비우고(`task.session = None`), `start`는 채운다. `unblock`은 **비우지 않는다** —
-    원격 claim만 걷고 로컬 session 필드는 그대로 둔다(cmd_unblock 실측). 그래서
-    in_progress→todo 직행은 session을 든 todo를 만든다.
+    `block`·`unblock`(HARN-95 이후)은 비우고(`task.session = None`), `start`는 채운다.
+    `review`(HARN-20)는 보존한다 — 여전히 in-flight라는 뜻이므로 `session_held` 그대로.
     """
-    if target == _HOP_FREES_SESSION:
+    if target in _HOP_FREES_SESSION:
         return False
     if target == _HOP_NEEDS_FREE_SESSION:
         return True
@@ -164,10 +175,11 @@ def _transition_cycle(status: str, *, session_held: bool) -> list[str] | None:
     쓰임: 이미 그 상태인 태스크에 같은 전이를 걸었을 때(예: 세션이 죽은 `in_progress`
     태스크의 재착수). 전이표는 자기 자신으로의 전이를 열지 않으므로 한 바퀴 돌아야 한다.
 
-    선정 기준은 두 단계다. **1차는 실행 가능성** — `in_progress` 재진입의 2단계 후보
-    (`unblock`→`start`)는 `unblock`이 session을 비우지 않아 **실측에서 거부된다**. 실제로
-    도는 것은 3단계 `block`→`unblock`→`start`다(block이 session을 비운다). 짧은 쪽을 고르면
-    깨진 안내다. **2차는 동률일 때 `todo` 경유** — session이 없어 두 후보가 다 도는 경우
+    선정 기준은 두 단계다. **1차는 실행 가능성** — 실행 불가한 홉은 후보에서 제외한다
+    (`_hop_is_executable`). `in_progress` 재진입은 (HARN-95 이후) 2단계 `unblock`→`start`가
+    직접 실행된다 — `unblock`이 이제 session을 비우므로 뒤따르는 `start`가 claimed로
+    거부되지 않는다(HARN-95 이전에는 이 홉이 거부돼 3단계 `block`→`unblock`→`start`를
+    골라야 했다). **2차는 동률일 때 `todo` 경유** — session이 없어 두 후보가 다 도는 경우
     `review` 경유는 원격 claim을 유지하고 `todo` 경유(`unblock`)는 해제한다. 같은 상태로의
     재진입은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳다.
     """
@@ -1221,6 +1233,14 @@ def _release_remote_claim(root: Path, task_id: str, prev_session: str | None) ->
 
 
 def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
+    """전이표의 모든 `→ todo` 홉이 이 명령을 거친다(blocked→todo가 주 용도지만
+    `_status_command`가 in_progress→todo에도 이 명령을 안내한다 — HARN-95).
+
+    `task.session`을 **비운다**(HARN-95 이전에는 원격 claim만 걷고 로컬 session은
+    남겼다) — `cmd_block`과 같은 계약: `todo` = 아무도 쥐지 않은 상태. 이전 계약대로
+    두면 in_progress→todo 직행(unblock) 뒤의 `start`가 여전히 claimed로 거부돼, 전이표가
+    합법으로 표시하는 홉이 실제로는 항상 실패했다(실측 2026-09-08).
+    """
     backlog, _ = _load(root)
     task = backlog.tasks.get(args.id)
     if task is None:
@@ -1230,6 +1250,7 @@ def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
         return _fail(error)
     prev_session = task.session
     task.status = "todo"
+    task.session = None
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "unblock", task.id)
@@ -3314,12 +3335,29 @@ def cmd_branches(root: Path, args: argparse.Namespace) -> int:
         print(
             f"⚠ PR 열림/닫힘 조회 미수행({reason}) — PR 제출됨 {len(pr_filed)}건은 수동 확인 필요"
         )
+    # (HARN-93 ②) 처분 라벨(eos-merge/rework/postpone/close) 조회 결과 — 이 라벨은
+    # "닫는다/미룬다"는 결정인데 만료 지점이 없어 방치되기 쉽다(CLAUDE.md "만료 없는
+    # 유예·제외 금지"). 토큰이 없으면 조회 자체를 안 하므로 그 사실을 먼저 밝힌다.
+    disposal_labeled = [item for item in pr_filed if item.disposal_labels]
+    if pr_filed and not scan.pr_label_lookup_ok:
+        reason = scan.pr_label_lookup_error or "사유 미상"
+        print(
+            f"⚠ 처분 라벨 조회 미수행({reason}) — PR 제출됨 {len(pr_filed)}건은 라벨 수동 확인 필요"
+        )
     for item in isolated:
         print(f"  [고립] {item.branch} — {item.age_days:.0f}일 전 · trunk 대비 {item.ahead}커밋")
     for item in pr_closed:
         print(f"  [PR-닫힘] {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
     for item in pr_filed:
-        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
+        label_note = ""
+        if item.disposal_labels:
+            label_note = f" · 라벨: {','.join(item.disposal_labels)}(정체 {item.age_days:.0f}일)"
+        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전{label_note}")
+    if disposal_labeled:
+        print(
+            f"⚠ 처분 라벨 붙은 열린 PR {len(disposal_labeled)}건 — 닫기 전 "
+            "`python3 scripts/ops/pr_disposal_precheck.py --pr <N>`로 회수 선행 확인 (HARN-93 ③)"
+        )
     return 0
 
 
@@ -3545,7 +3583,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_block)
 
-    p = sub.add_parser("unblock", help="차단 해제")
+    p = sub.add_parser(
+        "unblock", help="→ todo 전이(session 해제) — 차단 해제뿐 아니라 in_progress 재진입에도 사용"
+    )
     p.add_argument("id")
     p.set_defaults(func=cmd_unblock)
 

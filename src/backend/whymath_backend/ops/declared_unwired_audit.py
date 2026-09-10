@@ -1159,6 +1159,16 @@ _MANIFEST: dict[str, dict[str, str]] = {
             "by-design:실 PG에 표본을 *쓰는* 게이트 실행 도구 — 운영자가 측정 회차에 1회 "
             "돌린다. CI 상시 실행은 DB 오염이라 금지"
         ),
+        # OPS-72(2026-09-10): 호스트→prod DB 도달성 진단. 입력이 **살아 있는 docker 데몬 +
+        # 실행 중인 prod 컨테이너**라 CI에는 둘 다 없다(있더라도 CI의 PG는 서비스 컨테이너지
+        # whymath-pg가 아니다) — 상시 실행하면 전건 UNKNOWN(exit 2)만 난다. 그것이 이 도구의
+        # 설계값이지 CI에서 확인할 값이 아니다. **판정 로직은 순수 코어로 분리돼 있고**
+        # tests/backend/ops/test_db_host_reachability.py가 6상태 전건을 주입해 CI에서 상시
+        # 검증한다(REACHABLE/NOT_PUBLISHED/NO_BINDING/PUBLISHED_BUT_CLOSED/FOREIGN_LISTENER/
+        # UNKNOWN이 서로 다른 답으로 갈리는지까지). 운영 배선은 사람 경로다 —
+        # docs/standards/incident_response_slo.md §4-1의 실패 유형과 /demo-doctor 카탈로그
+        # W1행이 이 CLI를 1차 진단으로 지목한다.
+        "ops.db_host_reachability": _LIVE_DEPENDENT,
         # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
         # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
         # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서
