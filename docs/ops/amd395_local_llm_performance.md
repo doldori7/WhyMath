@@ -3,6 +3,7 @@
 > **대상 머신**: GMKtec EVO-X2 · Ryzen AI Max+ 395(Strix Halo) · Radeon 8060S(gfx1151) · 128GB LPDDR5X-8000 · Windows 11
 > **목적**: WhyMath L3 로컬 추론(Ollama·Qwen 계열)의 처리량·지연을 이 하드웨어에서 물리 한계 근처까지 끌어올리는 조건을 **측정으로** 확정한다.
 > **작성**: 2026-08-21 · 브랜치 `claude/amd-395-gpu-diagnosis-jinh6i`
+> **갱신**: 2026-09-10 · OPS-52 ROCm 7.2.1 standalone 시도 결과 회수·§5 Phase 6·§6 항목4 추가
 
 ---
 
@@ -149,6 +150,7 @@ LLM 토큰 생성은 매 토큰마다 활성 가중치를 통째로 읽으므로
 - standalone 최신 llama.cpp가 더 빠른 사례가 반복 보고된다(Qwen3-30B-A3B ~101 t/s).
 - **하지만 교체 비용이 있다**: WhyMath는 `l3/providers/ollama.py`에 Ollama 클라이언트로 배선돼 있다 [코드]. 교체하려면 `llama-server`의 OpenAI 호환 API로 프로바이더를 새로 쓰거나(라우터 경유 원칙은 유지), Ollama를 그대로 두어야 한다.
 - **판단 기준**: Phase 6에서 standalone이 **+20% 이상**일 때만 배선 변경을 태스크로 등재한다. 그 미만이면 Ollama 유지가 총비용상 이득이다.
+- 🔴 **OPS-52 실측 시도 완료(2026-08-23 실측 · 2026-09-10 문서 회수)**: 진짜 standalone `llama-server`(Ollama 밖에서 새로 빌드/기동하는 OpenAI 호환 API)가 아니라, 더 가벼운 변형 — AMD 공식 ROCm 7.2.1 Windows wheel을 격리 설치해 Ollama 0.32.15의 내장 HIP DLL을 7.2로 교체하는 방식을 먼저 시도했다(경로 ①의 wheel 배포 변형). **+20% 기준 미달로 Ollama 유지 결정**. 상세는 §5 Phase 6 실측·§6 항목 4.
 
 ### L5. 모델·양자화 선택 — **가장 큰 레버** [계산]
 - **MoE 우선**. §2 표대로 dense 27B(≈10 t/s) → MoE 30B-A3B(≈100 t/s)는 10배다.
@@ -348,7 +350,7 @@ Phase 1~5로 §2 기대치에 도달했으면 **하지 않는다**. 도달 못 �
 | 4a | Vulkan (`OLLAMA_VULKAN=1`+`IGPU_ENABLE=1`) | 1.0 | 42.4 | 11.9 | 315~2,577 | ✅ 라벨 잡힘 — 다만 `ROCm / gfx1151`과 `Vulkan / 0.0` 혼재 → §5 2026-08-25 |
 | 4b | ROCm (`OLLAMA_VULKAN=0`) | 1.0 | 42.6 | 12.0 | 313~2,489 | ✅ 라벨 확정 `ROCm / gfx1151` — 2026-08-25 |
 | 5 | 상주 정책 | 1.0 | 42.1 (재방문 load 3.1 ms) | — | 1,467~5,490 | ✅ 재방문 로드 3~4 ms — 2026-08-25 |
-| 6 | llama.cpp standalone | | | | | [미측정] — Phase 1~5에서 기대치 도달, 건너뜀 |
+| 6 | ROCm 7.2.1 DLL 교체(Ollama 경유) | 1.0(GPU offload 정상) | — | — | 30b-a3b만: 왕복 13.93s | ⚠️ **부분 실측**(OPS-52, 2026-08-23) — +20% 미달·dense 미측정·진짜 standalone 미시행. 상세 = 아래 |
 
 **기대 기준선**(§2 [계산]): 7b = 30~41 t/s · 27b = 8.5~11 t/s · 1.5b = 141~179 t/s
 
@@ -695,9 +697,38 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
   ANSI로 읽으며 구문 오류 발생. 세 스크립트에 BOM을 유지하고, 콘솔 인코딩 설정을 `param` 블록 **이후**로 이동했다
   (`param` 앞의 실행문은 특정 조건에서 파싱을 막는다).
 
+### ⚠️ Phase 6 실측 — ROCm 7.2.1 DLL 교체 시도, 진짜 standalone llama-server는 미시행 (2026-08-23 실측 · OPS-52 · 2026-09-10 문서 회수)
+
+> **회수 경위**: 이 실측은 2026-08-23에 Phaiakes9에서 실제로 실행됐으나, 원래 커밋(브랜치 `claude/ops-50-51-52-moe-rocm-followup`)이 PR #860으로 열린 채 머지되지 않고 방치됐다(라벨 `eos-postpone`). 2026-09-07 `stray-code` 7회차가 스크립트 4종(`install_rocm72_standalone.ps1`·`activate_rocm72_standalone.ps1/py`·`restore_rocm72_builtin.py`)만 main으로 회수했고, 이 결과 서술은 2026-09-10 OPS-52 세션이 PR #860 diff에서 추가로 포팅했다. **스크립트 자체는 재검증(정적 검사 `check_ps_scripts.py` 통과·`py_compile` 통과)했지만, 아래 수치는 2026-08-23 원 실행 결과를 그대로 인용한 것이며 이 세션이 재실행하지는 않았다.**
+
+**방법**: AMD 공식 ROCm 7.2.1 Windows wheel 3종(`rocm_sdk_core`/`rocm_sdk_devel`/`rocm_sdk_libraries_custom`, `repo.radeon.com/rocm/windows/rocm-rel-7.2.1`)을 `work/rocm-7.2.1-standalone/`에 `pip install --target`(격리·비침습)로 설치한 뒤, Ollama 0.32.15의 내장 HIP DLL(`amdhip64.dll`/`hipblas.dll`)을 standalone 7.2 빌드로 교체(`amdhip64_7.dll → amdhip64.dll` 별칭 복사)하고 Ollama를 재기동해 측정했다. **이것은 acceptance ②가 요구하는 "standalone llama-server(OpenAI 호환 API)"가 아니다** — Ollama 서버·API·모델 로더는 그대로이고 HIP 런타임 DLL만 바뀐, 더 가벼운 변형이다. 다만 WhyMath L3 라우터는 경유하지 않고 Ollama API에 직접 요청했다.
+
+| 조건 | 왕복 지연(첫 호출·64토큰) | 비고 |
+|---|---|---|
+| 내장 ROCm 7.1(대조군) | 15.99s (eval 46.56 t/s) | `rocm_v7_1/amdhip64_7.dll` — Ollama가 버전별 서브디렉터리로 선택하는 정식 경로 |
+| standalone ROCm 7.2.1 DLL 교체 | 13.93s | GPU offload 정상(`size_vram` 18GB), 모델 로드 성공. eval t/s는 원 실행 로그에 미기록 |
+
+- **판정**: (15.99 − 13.93) / 15.99 = **12.9% 단축** — §3 L4의 +20% 기준 **미달**.
+- **원 자료 간 불일치 (정직하게 남긴다)**: 이 실측을 담은 원 커밋(f663eda6)의 서술은 "이득이 없었다"라고 적었고, 같은 작업을 요약한 PR #860 본문은 "생성 속도가 현저히 느려"라고 적었다 — 그러나 위 표의 왕복 수치(13.93s < 15.99s)만 보면 방향이 반대(더 빠름)다. 이 세션은 재실행 접근이 없어(Windows/gfx1151 실물 하드웨어가 이 세션에 없음) 어느 서술이 맞는지 판정하지 않는다. **다만 +20% 결정에는 영향이 없다** — 12.9% 단축으로 읽어도 기준 미달이라는 결론은 바뀌지 않는다.
+- **ABI/버전 경로 리스크**: Ollama 0.32.15는 HIP 런타임을 `rocm_v7_1/` 같은 버전별 서브디렉터리로 명시 선택하도록 빌드돼 있다. 이번 시도의 `amdhip64_7.dll → amdhip64.dll` 별칭 복사는 이 버전 선택 로직을 **우회**하는 비공식 경로라, 표면적 동작(모델 로드·생성 성공)과 별개로 잠재적 미검증 거동(정밀도 저하·드문 커널 실패 등)이 있을 수 있다.
+- **범위 한계 (acceptance ② 대비)**: `qwen3:30b-a3b`(MoE)만 측정했고 **dense `qwen3.5:27b`는 이 시도에서 측정하지 않았다**. 진짜 standalone `llama-server`(Ollama 밖에서 새로 빌드·기동하는 OpenAI 호환 API 서버)도 시도하지 않았다.
+- **왜 여기서 멈췄는가**: Phase 1~5가 이미 §2 기대 기준선(§5 진단표)을 만족했고, 이 가벼운 DLL-교체 실험조차 +20% 기준에 못 미쳐 신호가 부정적이었다. 정식 standalone `llama-server`를 새로 빌드·검증하는 것은 Ollama 재현보다 훨씬 큰 엔지니어링 투자(HIP SDK로 llama.cpp 소스 빌드 또는 release 바이너리 검증·모델 변환·OpenAI 호환 어댑터)인데, 이미 나온 두 신호(미달 폭·ABI 우회 리스크)가 기대값을 낮춘다고 판단해 보류했다. 재검토 트리거는 **Ollama가 ROCm 7.2를 공식 지원**하거나 **§2 기대 기준선을 밑도는 상황이 재발**할 때다.
+- **도구**(재현 명령, Phaiakes9 전용):
+  ```powershell
+  # 창 A (리포 루트) — 다운로드·설치만
+  cd C:\Users\kiki\Desktop\__AI\WhyMath
+  powershell -ExecutionPolicy Bypass -File .\scripts\ops\install_rocm72_standalone.ps1 -Phase DownloadInstall
+  # 적용·시험 (Ollama 종료·재기동 포함 — 다른 Ollama 사용자 없는지 확인 후)
+  powershell -ExecutionPolicy Bypass -File .\scripts\ops\install_rocm72_standalone.ps1 -Phase ActivateAndBench
+  # 원복(내장 ROCm 7.1로 되돌림)
+  python .\scripts\ops\restore_rocm72_builtin.py
+  ```
+  Python 등가 경로: `scripts/ops/activate_rocm72_standalone.py`(설치 이후 적용·시험 단계만 수행).
+- **원복 확인**: 원 실행(2026-08-23)에서 `restore_rocm72_builtin.py`로 내장 ROCm 7.1 복원 및 정상 동작을 확인했다(PR #860 서술 — 이 세션은 재확인하지 않음).
+
 ---
 
-## 6. WhyMath 적용 — 측정이 끝나면 결정할 것 3개
+## 6. WhyMath 적용 — 측정이 끝나면 결정할 것 4개
 
 1. ✅ **`LOCAL_LATENCY_MS` 보정 — 불요로 판정(2026-08-22)** [코드+실측]. 실측 왕복(prefill 796자 + 128토큰)을 현행 상수와 대조:
 
@@ -732,6 +763,8 @@ WhyMath는 긴 프롬프트·짧은 출력(PRM 단계 검증·동치 판정)이 
    - 하니스: `src/backend/whymath_backend/harness/quality_tier_moe_accuracy_battle.py`
 
 3. **로컬 vs OpenRouter 비교축** — t/s만으로 고르지 않는다. `detection accuracy` / `false alarm` / `왕복 지연` / `t/s` / `컨텍스트` / `비용` / `반복 실행 안정성` 7축으로 비교하고, **정확도 축은 결함 주입 강등전으로 판정**한다(`docs/standards/superhuman_verification_standard.md`). 로컬이 정확도에서 지더라도 지연·비용에서 이기는 구간이 있고, 그 반대도 있다.
+
+4. ✅ **ROCm 7.2.1 standalone 시도 — 배선 변경 보류 결정(OPS-52, 2026-08-23 실측 · 2026-09-10 문서 회수)** [실측]. 상세는 §5 "Phase 6 실측" 참조. DLL 교체 방식(진짜 standalone `llama-server`가 아닌 가벼운 변형)의 왕복 지연 단축은 12.9%로 §3 L4의 +20% 기준에 못 미쳤고, HIP 런타임 버전 선택을 우회하는 비공식 경로라는 리스크도 있다. **결정: Ollama 번들 유지, `l3/router.py`·`l3/providers/ollama.py`에 신규 provider 경로를 설계하는 태스크로 승격하지 않는다.** 정식 standalone `llama-server` 빌드·isolated 벤치(acceptance ②의 원래 요구)는 Phase 1~5가 이미 §2 기대 기준선을 충족한 상태에서 추가 투자 대비 기대값이 낮다고 판단해 보류한다 — 재검토 트리거는 Ollama의 ROCm 7.2 공식 지원 또는 §2 기대 기준선 미달 재발.
 
 ---
 
