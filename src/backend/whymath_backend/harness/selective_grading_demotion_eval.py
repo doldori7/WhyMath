@@ -99,7 +99,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Literal, cast, get_args
+from typing import Any, Literal, get_args
 
 import sympy
 
@@ -329,7 +329,9 @@ def bucket_headroom(
     for problem in problems:
         classified = classify_gradability(problem)
         if classified in available and problem.answer and problem.slug:
-            available[cast(GradabilityBucket, classified)] += 1
+            # `classify_gradability`가 이미 `GradabilityBucket`을 반환한다 — cast는 중복이고
+            # mypy strict의 `redundant-cast`가 이를 오류로 낸다(CI 실측 2026-09-10).
+            available[classified] += 1
     return [
         BucketHeadroom(bucket=bucket, available=available[bucket], required=demand[bucket])
         for bucket in demand
