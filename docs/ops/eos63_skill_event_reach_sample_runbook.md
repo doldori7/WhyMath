@@ -49,7 +49,7 @@ acceptance ②의 유일한 판정 재료다.
 | 단계 | 무엇이 일어나는가 | 예상 출력 | 소요 |
 |---|---|---|---|
 | ① 체크아웃 | main으로 detached 이동(지역 브랜치 무변경) | `PROBE_FILE_OK=True` | ~20초 |
-| ② 환경 | UTF-8 콘솔 + prod DB(5433) URL 주입 + **포트 도달성**·import 확인 | `PORT5433_OPEN=True` | ~10초 |
+| ② 환경 | UTF-8 콘솔 + prod DB URL 주입 + import 확인 + **도달성 CLI**(OPS-72) | `REACH_EXIT=0` | ~15초 |
 | ③ 사전 관측 | 지금 DB에 무엇이 있는지 읽는다(**쓰기 0**) | 리포트 마크다운 | ~10초 |
 | ④ 표본 생성 | 채점 20건을 실제 라우트로 제출 | 회차 요약 + `work\eos63\probe.json` | 1~3분 |
 | ⑤ 사후 측정 | 프로브 회차 창으로 리포트 재실행 | 리포트 + `work\eos63\report.json` | ~10초 |
@@ -80,7 +80,7 @@ acceptance ②의 유일한 판정 재료다.
 
 | exit | 뜻 | 대처 |
 |---:|---|---|
-| 2 | DB 미도달 | ②의 `PORT5433_OPEN`이 먼저 잡는다 — 컨테이너 생존이 아니라 **호스트 포트 도달성**을 본다(§[2단계] 대처) |
+| 2 | DB 미도달 | ②의 도달성 CLI(`REACH_EXIT`)가 먼저 잡는다 — 컨테이너 생존이 아니라 **실제 TCP 연결 성립**을 판정한다(§[2단계] 대처) |
 | 3 | **스키마 뒤처짐** — `attempt_event.skill_ids` 부재 | §6의 마이그레이션 블록을 1회 실행 후 ④부터 재개 |
 | 4 | 후보 문제 0건 | 코퍼스 미적재 — **prod에 시드하지 않는다**(§7-2). 이 회차는 여기서 끝나고, 그 사실 자체가 측정 결과다 |
 | 5 | 제출 전건 실패 | 화면의 「실패 사유」 표(예외 타입명)를 그대로 세션에 전달 |
@@ -148,7 +148,7 @@ if (-not $Dirty) {
 - `PROBE_FILE_OK=False`면 fetch가 실패했거나(네트워크) main에서 프로브가 사라진 것이다 —
   다음 단계로 가지 말고 세션에 알린다. 이 검사는 변별력이 있다: 파일이 없으면 `False`가 뜬다.
 
-### [2단계] 환경 — UTF-8 + prod DB + 컨테이너 생존
+### [2단계] 환경 — UTF-8 + prod DB + **도달성 판정**(OPS-72 CLI)
 
 ```powershell
 # [Windows PowerShell · Phaiakes9] 같은 창
@@ -162,32 +162,26 @@ $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath
 $env:PYTHONPATH = (Resolve-Path "src\backend").Path
 $Py = "src\backend\.venv\Scripts\python.exe"
 New-Item -ItemType Directory -Force -Path work\eos63 | Out-Null
-"PG_CONTAINER=" + (docker ps --filter "name=whymath-pg" --filter "status=running" --format "{{.Names}}")
-# 컨테이너 생존은 *간접* 신호다 — 아래 두 줄이 진짜 판정이다(2026-09-08 사고: 컨테이너가 Up이고
-# pg_isready도 통과하는데 호스트에서만 못 붙는 상태가 실재했다). `PortBindings`는 만들 때 요청한
-# **설정**이고 `docker ps`의 Ports·`NetworkSettings.Ports`는 **실현된 게시**다 — 이 둘이 어긋나는
-# 것이 그 고장의 형태이므로, 설정이 옳다는 이유로 정상으로 읽지 않는다.
-"PG_PORTS_REALIZED=" + (docker inspect -f '{{json .NetworkSettings.Ports}}' whymath-pg)
-"PORT5433_OPEN=" + (Test-NetConnection -ComputerName 127.0.0.1 -Port 5433 -WarningAction SilentlyContinue).TcpTestSucceeded
 "PY_OK=" + (Test-Path $Py)
 & $Py -c "import whymath_backend, sys; print('IMPORT_OK=True')"
 "IMPORT_EXIT=$LASTEXITCODE"
+# 도달성 판정은 여기서 손으로 하지 않는다 — 전용 CLI가 정본이다(OPS-72). 컨테이너 생존
+# (docker ps)은 *간접* 신호일 뿐이고, 2026-09-08에는 컨테이너가 Up이고 pg_isready도 통과하는데
+# 호스트에서만 못 붙는 상태가 실재했다. 이 CLI는 설정(HostConfig.PortBindings)과 실현
+# (NetworkSettings.Ports)과 실제 TCP 연결을 각각 읽어 6상태로 가르고 대책까지 출력한다.
+& $Py -m whymath_backend.ops.db_host_reachability
+"REACH_EXIT=$LASTEXITCODE"
 ```
 
-**자가검증**: 다섯 줄이 모두 맞아야 한다 — `PG_CONTAINER=whymath-pg` ·
-`PG_PORTS_REALIZED`가 **빈 배열이 아님**(`{"5432/tcp":[{...5433...}]}`) · `PORT5433_OPEN=True` ·
-`PY_OK=True` · `IMPORT_OK=True`(그리고 `IMPORT_EXIT=0`).
-- `PG_CONTAINER=`이 비어 있으면 컨테이너가 죽은 것이다 — `docker start whymath-pg` 후 이 블록을
-  다시 돌린다.
-- **`PORT5433_OPEN=False`인데 `PG_CONTAINER`는 채워져 있으면** 포트 게시가 성립하지 않은 것이다.
-  Windows의 Hyper-V/WinNAT 동적 포트 제외 범위가 5433을 삼킨 경우가 실측된 원인이다 —
-  `netsh interface ipv4 show excludedportrange protocol=tcp`로 5433을 포함하는 구간이 있는지 보고,
-  있으면 관리자 권한으로 `net stop winnat` → `netsh int ipv4 add excludedportrange protocol=tcp
-  startport=5433 numberofports=1` → `net start winnat` 후 Docker Desktop과 컨테이너를 재기동한다
-  (Docker Desktop을 먼저 종료하고 실행한다). 상세·재발 방지는 `OPS-72`가 소유한다.
+**자가검증**: `PY_OK=True` · `IMPORT_OK=True`(그리고 `IMPORT_EXIT=0`) · **`REACH_EXIT=0`**.
 - `IMPORT_OK`가 안 찍히고 `IMPORT_EXIT=1`이면 의존성 미설치다(ModuleNotFoundError의 *대상*이
   화면에 찍힌다 — 그 이름을 세션에 전달한다). 3단계로 가면 같은 실패를 DB 오류처럼 보게 되므로
   여기서 멈추는 것이 맞다.
+- **`REACH_EXIT=1`이면 DB에 못 붙는다.** CLI가 어떤 상태인지(`NOT_PUBLISHED`·`NO_BINDING`·
+  `PUBLISHED_BUT_CLOSED`·`FOREIGN_LISTENER`)와 그에 맞는 대책을 함께 출력하므로 그대로 따른다.
+  Windows 포트 예약 축의 영구 조치는 `/demo-doctor` 카탈로그 **§W1**에 있다.
+- **`REACH_EXIT=2`는 고장이 아니라 측정 불가**다(docker 미가동 등). 화면의 `측정 사유 기록`을
+  먼저 해소한다 — 이것을 도달 불가로 읽으면 엉뚱한 곳을 파게 된다.
 
 > **`$LASTEXITCODE`를 단독 판정으로 쓰지 않는다**: 이 변수는 *외부 실행 파일이 실제로 돌았을 때만*
 > 갱신된다. 명령이 파싱 오류 등으로 시작조차 못 하면 **이전 값이 그대로 남아 성공처럼 보인다**
