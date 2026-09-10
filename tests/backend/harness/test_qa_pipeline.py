@@ -131,6 +131,61 @@ class TestAxisEquivalenceCanonicalize:
         assert result.status == "ok"
         assert result.detail == {"total_conditions_checked": 0, "violations": 0}
 
+    @pytest.mark.parametrize("answer_kind", sorted(qp._NON_EQUATION_DSL_ANSWER_KINDS))
+    def test_non_equation_dsl_answer_kinds_are_excluded_from_check(
+        self, tmp_path: Path, answer_kind: str
+    ) -> None:
+        """S3-28: 확률/통계 전용 DSL(answer_kind별 별도 파서)은 등식 DSL 검사 대상이 아니다.
+
+        실측(2026-08-03): 2647건 중 130건이 전부 이 6종 — 각자 이미 닫힌 파서
+        (`l3/finite_probability.py`·`l3/verify_answer.py`의 comma-list 파서)로 검증되므로
+        등식 sympify 폐쇄성 검사를 적용하면 필연적으로 위반 오탐이 난다(코퍼스 결함 아님).
+        """
+        bank = tmp_path / "problem_bank_a"
+        bank.mkdir()
+        # 실제로 sympify 위반을 내는 형태(확률 미니 DSL·쉼표 숫자열) — exempt 안 됐다면
+        # gate_fail이 났을 조건들. answer_kind가 상위/verify 어느 쪽에 있어도 동작해야 한다.
+        rows = [
+            {
+                "slug": "p1",
+                "answer_kind": answer_kind,
+                "conditions": "space=dice(n=2,faces=6); event=sum==7",
+            },
+            {
+                "slug": "p2",
+                "verify": {"answer_kind": answer_kind, "conditions": "3,5,7,9"},
+            },
+        ]
+        (bank / "problems.jsonl").write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        result = qp._axis_equivalence_canonicalize(tmp_path)
+        assert result.status == "ok"
+        assert result.detail == {"total_conditions_checked": 0, "violations": 0}
+
+    def test_equation_answer_kind_violation_still_caught(self, tmp_path: Path) -> None:
+        """비exempt answer_kind(또는 무지정)는 등식 DSL 검사가 그대로 적용된다(회귀 방지 —
+        exempt 범위를 넓혀 진짜 결함까지 숨기지 않았는지 확인)."""
+        bank = tmp_path / "problem_bank_a"
+        bank.mkdir()
+        rows = [
+            {
+                "slug": "p1",
+                "verify": {
+                    "answer_kind": "real_root_count",
+                    "conditions": "largest_root(2, 8) == 8",
+                },
+            }
+        ]
+        (bank / "problems.jsonl").write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        result = qp._axis_equivalence_canonicalize(tmp_path)
+        assert result.status == "gate_fail"
+        assert result.detail == {"total_conditions_checked": 1, "violations": 1}
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 축 3 — concept_graph_reachability(원자 백본 그래프 atom_graph_v1)
