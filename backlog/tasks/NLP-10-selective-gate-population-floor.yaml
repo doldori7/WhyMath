@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: NLP-10-selective-gate-population-floor
+title: "선택형 강등전 B버킷 모집단 여유 2배 — 파생 범위 확대가 게이트를 표본 부족으로 실행 불가에 빠뜨릴 수 있다"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정 — NLP-09가 파생 게이트를 미지수 이름에서 개수로 옮기면서 `classify_gradability`의 B버킷(`numeric_short_answer_candidate`)이 7,130 → **154**로 줄었다(HEAD 실물 대조). 우선순위가 A→C→B라 C(symbolic)로 승격된 6,976건이 B에서 빠진 결과이며, 채점 품질로는 개선이다(약한 수치 휴리스틱 → SymPy 검산).\n② 위험 규명 — CI 게이트 `selective_grading_demotion_eval`은 A/B 각 75건을 표본으로 뽑는다(`--n-defective 150 --n-clean 150`을 75/75로 분할). B 모집단이 154건이면 여유는 **2.05배**뿐이다. NLP-09 이전에는 95배였다. 앞으로 파생 가능 범위가 더 넓어질수록(이 저장소가 지향하는 방향이다) B는 더 줄고, 75건 미만이 되는 순간 이 게이트는 통과가 아니라 **표본 부족으로 실행 불가**가 된다.\n③ 판정 — 셋 중 하나를 실측으로 고른다: (ⓐ) 표본 수를 줄여도 Wilson 상한이 규약(오검출 ≤0.02)을 증명하는가 — `anchor_detection_channel_eval`이 이미 \"도달 가능성 자체를 매 실행 재검사\"하는 선례를 갖고 있다 (ⓑ) B버킷 정의를 넓혀 모집단을 회복하는가 (ⓒ) A/B 분할 비율을 모집단 비례로 바꾸는가.\n④ 집행 지점(정본화와 별항) — 판정이 무엇이든 **모집단 부족을 조용한 실패로 두지 않는다**. CLI가 실행 전 B 모집단 크기를 확인하고 표본 요구를 못 채우면 \"게이트 통과\"가 아니라 명시적 exit 1 + 별도 stderr로 구분해 낸다(`anchor_detection_channel_eval`의 도달 가능성 재검사와 같은 패턴). 회귀 테스트로 그 분기를 동결한다 — 모집단을 75 미만으로 주입했을 때 RED가 나는지 확인한 뒤에만 보호로 친다."
+artifacts: []
+paths:
+  - src/backend/whymath_backend/harness/selective_grading_demotion_eval.py
+  - tests/backend/harness/test_selective_grading_demotion_eval.py
+session: null
+notes: "발단: NLP-09(회수 코퍼스 multi_symbol 파생) 작업 중 실측으로 드러났다. 그 태스크의 acceptance ③(영향 범위 명시)이 요구한 대조에서, 영향이 \"unclassified → 분류됨\"(72건)이 아니라 압도적으로 **B → C 이동**(6,976건)이었다는 것이 확인됐다.\n\n이 태스크를 별도로 여는 이유: NLP-09의 변경 자체는 게이트를 깨지 않았다(CI와 동일 인자로 실행 확인 — 검출 150/150 · 오검출 0/150 · EXIT=0). 지금 red가 아니므로 NLP-09에서 고치는 것은 범위 확대다. 그러나 여유가 95배에서 2배로 줄어든 것은 **구조적 변화**이고, 다음에 파생 범위를 넓히는 작업이 아무 경고 없이 이 게이트를 실행 불가로 만들 수 있다. CLAUDE.md \"docstring 속 계획은 백로그를 대신하지 못한다\"."
+updated: 2026-09-10
