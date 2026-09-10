@@ -322,7 +322,12 @@ jobs:
     # 스위트 성장(초인간 검증 하니스·843 트랜치·원자 축 누적·CACHE-01 content_supply)으로
     # 유닛+커버리지가 25분 경계 초과 → 2026-07-25 boundary 타임아웃 실측(pytest 단독 22분+ 미완).
     # timeout은 상한일 뿐이라 정상 완료 시 낭비 없음(hang 방지 상한만 유지)이므로 여유 상향.
-    # 후속 최적화 과제: pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리.
+    # 2026-08-21 main 01ff6041에서 이 여유(당시 최대 표본 기준 16%)가 실제로 소진돼
+    # Pytest 단계 cancelled 발생(OPS-47). pytest-xdist 병렬화(OPS-58, 아래 Pytest 스텝
+    # `-n auto --dist loadfile`)로 소요 자체를 줄이는 축을 채택 — slow 마크 분리는
+    # 미채택(여러 축 동시 투입 시 어느 것이 들었는지 판정 불가 — CLAUDE.md 규칙).
+    # 재측정(2026-09-10, main push 11표본, scripts/analysis/measure_backend_job_timeout_headroom.py):
+    # 소요 최소/중앙/최대 12.7/18.3/19.5분 → 최대 표본 기준 여유 15.5분(44.2%, 목표 30%+ 충족).
     timeout-minutes: 35
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
@@ -1149,21 +1154,54 @@ jobs:
         uses: actions/checkout@v4
 
       # 검정교과서 출판사명 + "본문" 또는 "예제" 동시 등장 패턴은 사전 차단
-      # (코드·문서에 의도적으로 사용된 경우는 # codeowner-ack 주석으로 우회)
-      # ci.yml 자신은 위 패턴 문자열을 정의로 포함하므로 제외 (자기참조 오탐 방지)
+      # (코드·문서에 의도적으로 사용된 경우는 # codeowner-ack 주석으로 우회 — OPS-54가
+      # 실제로 배선했다. 이전에는 이 주석만 있고 grep이 그 마커를 걸러내지 않아
+      # "우회 규약"이 존재하지 않는 기능이었다 — 실측: 매칭 라인에 마커를 넣어도 여전히
+      # 적색이었다)
+      # ci.yml 자신과 tests/infra/test_policy_guard_source_patterns.py(이 두 스텝의 픽스처·
+      # 문서 문자열이 위반 패턴을 그대로 담고 있다)는 정의/픽스처로 패턴 문자열을 포함하므로
+      # 제외한다 (자기참조 오탐 방지 — 실측: 제외 없이 돌리면 저 테스트 파일 자체가 걸린다)
       - name: Forbid 검정교과서 본문 patterns
         run: |
           set -e
           patterns='천재교육.*본문|비상교육.*본문|미래엔.*본문|동아출판.*예제|신사고.*예제'
-          if grep -rEn --include='*.py' --include='*.md' --include='*.json' \
+          hits=$(grep -rEn --include='*.py' --include='*.md' --include='*.json' \
               --include='*.txt' --include='*.yaml' --include='*.yml' \
               --exclude-dir='.git' --exclude-dir='node_modules' \
-              --exclude='ci.yml' \
-              "$patterns" . ; then
+              --exclude='ci.yml' --exclude='test_policy_guard_source_patterns.py' \
+              -E "$patterns" . | grep -v '#\s*codeowner-ack' || true)
+          if [ -n "$hits" ]; then
+              echo "$hits"
               echo "::error::검정교과서 본문/예제 직접 인용 의심 패턴 발견 (CLAUDE.md 절대 금기)"
               exit 1
           fi
           echo "OK — 검정교과서 본문 패턴 없음"
+
+      # EBS·평가원(수능·모평) 본문 직접 인용 의심 패턴 — OPS-54(EOS-53 crosswalk 갭 #7).
+      # 기존 검정교과서 패턴과 달리 "EBS"·"평가원"·"수능" 같은 낱말은 *이 저장소 자신의
+      # 저작권 준수 docstring*(예: schema/problem.py "평가원·EBS·검정교과서는 본문·문항
+      # 미보유")에 극도로 흔해서, 낱말 단순 동시등장으로는 실측 292건 오탐이 났다.
+      # 그래서 정책 산문이 아니라 **실제 인용의 공식 표기 형식**만 잡는다:
+      #   ① 평가원 공식 출처 표기(연도+학년도+대학수학능력시험/모의평가/모의고사) —
+      #      실제 기출 인용에는 항상 붙지만 "평가원 기출 금지" 같은 정책 문장에는 없다
+      #   ② EBS 대표 교재명(수능특강/수능완성/만점마무리) + 쪽수 표기 — 구조 메타데이터
+      #      (JSON {"book":..,"page":47} 등)는 "쪽"·"페이지"·"p."를 산문으로 쓰지 않는다
+      # 실측(2026-09-10 main 기준): 두 패턴 모두 저장소 전수 0건 — 배경 산문과 변별됨.
+      - name: Forbid EBS·평가원 본문 patterns
+        run: |
+          set -e
+          patterns='[0-9]{4}학년도.*(대학수학능력시험|모의평가|모의고사)|EBS.*(수능특강|수능완성|만점마무리).*[0-9]+(쪽|페이지|p\.)'
+          hits=$(grep -rEn --include='*.py' --include='*.md' --include='*.json' \
+              --include='*.txt' --include='*.yaml' --include='*.yml' \
+              --exclude-dir='.git' --exclude-dir='node_modules' \
+              --exclude='ci.yml' --exclude='test_policy_guard_source_patterns.py' \
+              -E "$patterns" . | grep -v '#\s*codeowner-ack' || true)
+          if [ -n "$hits" ]; then
+              echo "$hits"
+              echo "::error::EBS·평가원 본문 직접 인용 의심 패턴 발견 (CLAUDE.md 절대 금기)"
+              exit 1
+          fi
+          echo "OK — EBS·평가원 본문 패턴 없음"
 
       # 저작권 위험 원본 문서(PDF·hwp·오피스·아카이브)의 커밋 차단 — LIC-07 ④.
       # 위 패턴 검사는 "본문을 옮겨 적었는가"를 보지만, 2026-08-08 KICE 보고서 PDF 2건은

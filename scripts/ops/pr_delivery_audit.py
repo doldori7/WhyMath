@@ -20,7 +20,7 @@ PR에서도 0이다(2026-08-31 재확인). **판정에 쓰지 말 것.**
 조회에 실패하면 exit 1과 함께 실패 사유를 낸다 — 조용히 빈 목록을 반환하지 않는다.
 
 사용:
-    python3 scripts/ops/pr_delivery_audit.py doldori7/WhyMath
+    python3 scripts/ops/pr_delivery_audit.py "$GITHUB_REPOSITORY"
 
 exit code
     0 — 열린 PR 전부가 정상 배송 중(대기·진행)
@@ -116,16 +116,32 @@ def classify(
     return "READY_UNMERGED"
 
 
-def _get(path: str) -> object:
+def _get(path: str) -> tuple[int, object]:
+    """GET 후 `(마지막 응답의 HTTP 상태코드, 파싱된 JSON)`을 돌려준다.
+
+    **`-L`(리다이렉트 추종)이 필수다** — 저장소가 다른 owner로 *이관*되면 GitHub은
+    301과 함께 새 위치를 알려주는데, 따라가지 않으면 본문이 규칙 배열이 아니라
+    `{"message": "Moved Permanently", ...}` 딕셔너리로 온다. 그러면 호출측의
+    집합 컴프리헨션이 조용히 공집합을 만들어 **"필수 체크 0건"으로 위장된다**
+    (2026-09-10 실측 — 조직 이관 후 harness-audit run 34425627951이 이 경로로 red).
+
+    상태코드를 함께 돌려주는 이유는 실패했을 때 *원인*을 구분해 남기기 위해서다 —
+    301(이동)·403/404(권한·부재)·200(진짜 0건)이 같은 문구로 보이면 안 된다
+    (CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계 금지" ②).
+    """
+    marker = "\n<<<HTTP:%{http_code}>>>"
     cmd = [
         "curl",
         "-sS",
+        "-L",  # 이관 리다이렉트 추종 — 없으면 301 본문을 데이터로 오독한다
         "--max-time",
         str(TIMEOUT),
         *_ca_args(),
         *_auth_args(),
         "-H",
         "Accept: application/vnd.github+json",
+        "-w",
+        marker,
         f"{API}{path}",
     ]
     try:
@@ -142,10 +158,26 @@ def _get(path: str) -> object:
         raise SystemExit(
             f"❌ 측정 실패(curl rc={out.returncode}): {path}\n{out.stderr[:400]}"
         ) from None
+    body, status = _split_status(out.stdout)
     try:
-        return json.loads(out.stdout)
+        return status, json.loads(body)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"❌ 측정 실패(JSON): {path}\n앞 400자: {out.stdout[:400]}") from exc
+        raise SystemExit(
+            f"❌ 측정 실패(JSON · HTTP {status}): {path}\n앞 400자: {body[:400]}"
+        ) from exc
+
+
+def _split_status(stdout: str) -> tuple[str, int]:
+    """`-w` 마커로 붙인 상태코드를 본문에서 떼어낸다.
+
+    마커가 없으면(스텁 curl 등) 상태를 0으로 보고 본문을 그대로 돌려준다 — 상태를
+    모르는 것과 200인 것을 같은 값으로 접지 않기 위해서다(모른다 ≠ 아니다).
+    """
+    head, sep, tail = stdout.rpartition("<<<HTTP:")
+    if not sep or not tail.endswith(">>>"):
+        return stdout, 0
+    code = tail[: -len(">>>")]
+    return head.rstrip("\n"), int(code) if code.isdigit() else 0
 
 
 def main() -> int:
@@ -153,7 +185,15 @@ def main() -> int:
         raise SystemExit(f"사용: {sys.argv[0]} <owner/repo>")
     repo = sys.argv[1]
 
-    rules = _get(f"/repos/{repo}/rules/branches/main")
+    status, rules = _get(f"/repos/{repo}/rules/branches/main")
+    if not isinstance(rules, list):
+        # 목록이 아니면 규칙을 **읽지 못한 것**이다 — 이동(301)·권한(403)·부재(404)가
+        # 여기로 모인다. 원인을 지우고 "0건"으로 뭉개면 다음 세션이 헛다리를 짚는다.
+        raise SystemExit(
+            f"❌ 측정 실패 — 규칙 응답이 목록이 아니다(HTTP {status} · repo={repo}). "
+            "저장소 이동·권한 부족·오타를 의심하라. '이상 없음'이 아니다\n"
+            f"응답 앞 300자: {str(rules)[:300]}"
+        )
     required = {
         c["context"]
         for r in rules
@@ -162,10 +202,11 @@ def main() -> int:
     }
     if not required:
         raise SystemExit(
-            "❌ 측정 실패 — 필수 체크 0건(규칙 미조회/권한 부족). '이상 없음'이 아니다"
+            f"❌ 측정 실패 — 규칙 {len(rules)}건은 읽혔으나 required_status_checks 0건"
+            f"(HTTP {status} · repo={repo}). '이상 없음'이 아니다"
         )
 
-    prs = _get(f"/repos/{repo}/pulls?state=open&per_page=50")
+    _, prs = _get(f"/repos/{repo}/pulls?state=open&per_page=50")
     if not isinstance(prs, list):
         raise SystemExit(f"❌ 측정 실패 — PR 목록 조회: {str(prs)[:300]}")
     if not prs:
@@ -175,7 +216,7 @@ def main() -> int:
     buckets: dict[str, list[str]] = {}
     for pr in prs:
         sha = pr["head"]["sha"]
-        cr = _get(f"/repos/{repo}/commits/{sha}/check-runs?per_page=100")
+        _, cr = _get(f"/repos/{repo}/commits/{sha}/check-runs?per_page=100")
         runs = {
             c["name"]: (c.get("conclusion") if c.get("status") == "completed" else None)
             for c in (cr.get("check_runs", []) if isinstance(cr, dict) else [])
