@@ -82,7 +82,7 @@ acceptance ②의 유일한 판정 재료다.
 |---:|---|---|
 | 2 | DB 미도달 | ②의 도달성 CLI(`REACH_EXIT`)가 먼저 잡는다 — 컨테이너 생존이 아니라 **실제 TCP 연결 성립**을 판정한다(§[2단계] 대처) |
 | 3 | **스키마 뒤처짐** — `attempt_event.skill_ids` 부재 | §6의 마이그레이션 블록을 1회 실행 후 ④부터 재개 |
-| 4 | 후보 문제 0건 | 코퍼스 미적재 — **prod에 시드하지 않는다**(§7-2). 이 회차는 여기서 끝나고, 그 사실 자체가 측정 결과다 |
+| 4 | 후보 문제 0건 | 코퍼스 미적재 — **시드 대상 DB가 prod임을 알고** 적재할지 정한다(§7-2에 두 갈래의 재료). 적재하지 않으면 이 회차는 여기서 끝나고, 그 사실 자체가 측정 결과다 |
 | 5 | 제출 전건 실패 | 화면의 「실패 사유」 표(예외 타입명)를 그대로 세션에 전달 |
 
 `해소율 0%`는 **실패가 아니라 측정값**이다(exit 0). 그 경우도 게이트는 닫힌다 — 닫히지 않는 것은
@@ -91,7 +91,7 @@ acceptance ②의 유일한 판정 재료다.
 > **단, exit 4(후보 문제 0건)는 다르다.** 그것은 해소율이 0인 것이 아니라 **분모를 만들 수조차
 > 없는** 상태다 — 측정이 성립하지 않았으므로 게이트를 닫는 근거가 되지 못한다. 문항을 적재해
 > 분모를 만들지, 아니면 그 상태를 그대로 보고할지는 **사람의 판단**이며(§7-2에 두 갈래의 재료가
->있다), 세션이 대신 정하지 않는다.
+> 있다), 세션이 대신 정하지 않는다.
 >
 > **실제 진행(2026-09-10)**: 적재 후 회차를 완주해 `RESOLUTION=0.0`을 얻었고, 그 0%는 위 표의
 > "전부 해소 0건" 행 — 즉 **브리지 데이터가 비었다**는 판정이다. 게이트는 그 증적으로 clear됐고
@@ -167,7 +167,12 @@ $env:PYTHONPATH = (Resolve-Path "src\backend").Path
 $Py = "src\backend\.venv\Scripts\python.exe"
 New-Item -ItemType Directory -Force -Path work\eos63 | Out-Null
 "PY_OK=" + (Test-Path $Py)
-& $Py -c "import whymath_backend, sys; print('IMPORT_OK=True')"
+# 여기서 `import whymath_backend`만 하면 **아무것도 검증하지 못한다** — 그 패키지의
+# `__init__.py`에는 무거운 import가 하나도 없어(문서 문자열 + `__version__`뿐) SQLAlchemy·
+# Pydantic이 없어도 통과한다. 게다가 위 PYTHONPATH가 발견 가능성까지 보장해 준다. 그래서
+# **3~6단계가 실제로 부르는 모듈들**을 직접 import한다. 프로브의 ASGI 의존(`TestClient`·
+# `create_app`)은 함수 안 지연 import라 모듈 import로도 안 잡히므로 따로 세운다.
+& $Py -c "import whymath_backend.harness.attempt_skill_event_reach_report, whymath_backend.harness.attempt_skill_reach_probe, whymath_backend.app; from fastapi.testclient import TestClient; print('IMPORT_OK=True')"
 "IMPORT_EXIT=$LASTEXITCODE"
 # 도달성 판정은 여기서 손으로 하지 않는다 — 전용 CLI가 정본이다(OPS-72). 컨테이너 생존
 # (docker ps)은 *간접* 신호일 뿐이고, 2026-09-08에는 컨테이너가 Up이고 pg_isready도 통과하는데
@@ -237,7 +242,7 @@ if (Test-Path work\eos63\probe.json) {
 
 **멈춘 지점별 대처**:
 - `PROBE_JSON_MISSING=True` → `PROBE_EXIT` 숫자가 원인을 가른다(§4의 exit 표).
-  **`4`(후보 문제 0건)는 §7-2로 간다 — prod에 시드하지 않는다.**
+  **`4`(후보 문제 0건)는 §7-2로 간다 — 시드 대상이 prod임을 알고 적재 여부를 정한다.**
 - `REPORT_JSON_MISSING=True` → 사후 측정이 실패했다. 화면의 예외 타입명을 전달한다.
 
 ---
