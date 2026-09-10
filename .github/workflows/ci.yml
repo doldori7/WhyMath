@@ -322,7 +322,12 @@ jobs:
     # 스위트 성장(초인간 검증 하니스·843 트랜치·원자 축 누적·CACHE-01 content_supply)으로
     # 유닛+커버리지가 25분 경계 초과 → 2026-07-25 boundary 타임아웃 실측(pytest 단독 22분+ 미완).
     # timeout은 상한일 뿐이라 정상 완료 시 낭비 없음(hang 방지 상한만 유지)이므로 여유 상향.
-    # 후속 최적화 과제: pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리.
+    # 2026-08-21 main 01ff6041에서 이 여유(당시 최대 표본 기준 16%)가 실제로 소진돼
+    # Pytest 단계 cancelled 발생(OPS-47). pytest-xdist 병렬화(OPS-58, 아래 Pytest 스텝
+    # `-n auto --dist loadfile`)로 소요 자체를 줄이는 축을 채택 — slow 마크 분리는
+    # 미채택(여러 축 동시 투입 시 어느 것이 들었는지 판정 불가 — CLAUDE.md 규칙).
+    # 재측정(2026-09-10, main push 11표본, scripts/analysis/measure_backend_job_timeout_headroom.py):
+    # 소요 최소/중앙/최대 12.7/18.3/19.5분 → 최대 표본 기준 여유 15.5분(44.2%, 목표 30%+ 충족).
     timeout-minutes: 35
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
