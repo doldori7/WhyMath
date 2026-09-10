@@ -671,6 +671,50 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
 
+        # [프리플라이트 0.5] 트렁크 의존·게이트 시차 (HARN-91) — classify_todo는 로컬
+        # 백로그 사본만 보므로, 내 마지막 fetch 뒤 트렁크에 새로 착지한 의존·게이트(조건이
+        # *강화*되는 방향)는 그쪽 판정에 안 보인다. 위 done 스캔이 이미 fetch=True로 최신
+        # remote-tracking ref를 받아 뒀으므로 같은 fetch에 편승한다(추가 네트워크 없음).
+        # done_status != "ok"면 그 fetch 자체가 실패한 것이라 이 검사도 신뢰할 근거가
+        # 없다 — 같은 원인이므로 별도 경고를 내지 않고 위 경고 하나로 묶는다.
+        if done_status == "ok":
+            drift_result = remote_claims.scan_trunk_task_drift(root, task)
+            if drift_result.status == "ok" and drift_result.drift:
+                lines = [
+                    f"  - {'의존 미충족' if d.kind == 'dep' else '게이트 미통과'}: "
+                    f"{d.ref_id} (트렁크 상태: {d.trunk_state})"
+                    for d in drift_result.drift
+                ]
+                message = (
+                    f"{task.id} 착수 거부 — 트렁크 사본에 로컬엔 없는 조건이 새로 "
+                    f"착지했다(HARN-91):\n"
+                    + "\n".join(lines)
+                    + f"\n  확인: git show {drift_result.trunk_ref}:backlog/tasks/{task.id}.yaml\n"
+                    f"  로컬을 최신화(git fetch && git merge {drift_result.trunk_ref})한 뒤 "
+                    f"재시도하거나, 그래도 착수해야 하면: --ignore-remote-claim"
+                )
+                if getattr(args, "ignore_remote_claim", False):
+                    print(
+                        f"⚠ 트렁크 의존·게이트 시차 무시하고 진행 — 착수 조건 미충족 위험을 "
+                        f"감수합니다: {', '.join(d.ref_id for d in drift_result.drift)}",
+                        file=sys.stderr,
+                    )
+                    store.append_event(
+                        root,
+                        "start_ignored_trunk_drift",
+                        task.id,
+                        drift=[f"{d.kind}:{d.ref_id}" for d in drift_result.drift],
+                    )
+                else:
+                    return _fail(message)
+            elif drift_result.status != "ok":
+                # 판정 불가를 '시차 없음'으로 위장하지 않는다 (측정 실패 ≠ 통과)
+                print(
+                    f"⚠ 트렁크 의존·게이트 시차 탐지 불가({drift_result.status}) — "
+                    f"트렁크에 새로 착지한 조건을 못 봤을 수 있음",
+                    file=sys.stderr,
+                )
+
     # [프리플라이트 1] 파일 범위 겹침 — 타 in-flight(로컬 ∪ 원격 claim) paths와 교차
     overlap_error = _check_path_overlap(
         root, backlog, task, policy, remote_claimed=remote_claimed, session=session
@@ -3503,8 +3547,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--ignore-remote-claim",
         action="store_true",
         dest="ignore_remote_claim",
-        help="이 태스크의 읽기측 교차 세션 판정만 무시 (stale 홀더 확인 후 — "
-        "HARN-08). CAS conflict는 무시되지 않는다",
+        help="이 태스크의 읽기측 판정만 무시 — 교차 세션(stale 홀더 확인 후, HARN-08)·"
+        "미머지 done(HARN-11)·트렁크 의존·게이트 시차(HARN-91). CAS conflict는 무시되지 않는다",
     )
     p.add_argument(
         "--as",

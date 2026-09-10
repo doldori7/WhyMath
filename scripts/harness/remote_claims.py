@@ -91,7 +91,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from models import Backlog
+from models import Backlog, Task
 
 # claim 저장소 = origin의 단일 브랜치. 태스크당 파일 1개.
 CLAIMS_BRANCH = "harness-claims"
@@ -761,6 +761,40 @@ def _top_level_field(text: str, key: str) -> str:
     return ""
 
 
+def _top_level_list_field(text: str, key: str) -> list[str]:
+    """태스크 YAML 본문에서 최상위 리스트 필드를 뽑는다 (`_top_level_field`의 리스트 버전).
+
+    `store.dump_task`가 내는 두 형태만 지원한다: `key: []`(빈 리스트) 또는 `key:` 다음
+    `  - value` 들여쓰기 줄들. 손편집으로 형식이 어긋난 파일(플로우 스타일 `[a, b]` 등)은
+    못 읽고 빈 리스트를 반환한다 — 탐지 실패는 미탐이며, `_top_level_field`와 같은 한계를
+    그대로 승계한다(우리가 원격에서 읽는 파일은 전부 `store.dump_task`가 쓴 것이므로
+    정상 경로에서는 이 한계에 걸리지 않는다).
+    """
+    prefix = f"{key}:"
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith(prefix):
+            continue
+        rest = line[len(prefix) :].strip()
+        if rest == "[]":
+            return []
+        if rest:
+            return []  # 인라인 스칼라 — 리스트 형태가 아님(미탐)
+        values: list[str] = []
+        for item_line in lines[i + 1 :]:
+            if not item_line.startswith("  - "):
+                break
+            item = item_line[4:].strip()
+            if len(item) >= 2 and item.startswith('"') and item.endswith('"'):
+                try:
+                    item = json.loads(item)
+                except json.JSONDecodeError:
+                    item = item[1:-1]
+            values.append(item)
+        return values
+    return []
+
+
 def _resolve_trunk_ref(root: Path) -> tuple[str, str]:
     """기본(트렁크) 브랜치의 원격 ref를 해소한다 — (ref, 해소 경로).
 
@@ -812,6 +846,111 @@ def _trunk_task_status(root: Path, trunk_ref: str, task_id: str) -> str:
     if show.returncode != 0:
         return ""  # 브랜치에서 신설된 태스크 — 트렁크에 아직 없다
     return _top_level_field(show.stdout, "status")
+
+
+def _trunk_gate_status(root: Path, trunk_ref: str, gate_id: str) -> str:
+    """트렁크 사본 gates.yaml에서 특정 게이트의 status. 없거나 못 읽으면 "" (신호 없음).
+
+    `store.dump_gates`의 고정 출력 형태(`  - id: <id>` 다음 `    <key>: <value>` 들여쓰기
+    블록)만 파싱한다 — `_trunk_task_status`와 같은 한계 선언(손편집 어긋남은 미탐).
+    """
+    try:
+        show = _git(root, "show", f"{trunk_ref}:backlog/gates.yaml", timeout=10)
+    except Exception:  # pragma: no cover - 환경 의존
+        return ""
+    if show.returncode != 0:
+        return ""
+    id_prefix = "  - id:"
+    in_block = False
+    for line in show.stdout.splitlines():
+        if line.startswith(id_prefix):
+            in_block = line[len(id_prefix) :].strip() == gate_id
+            continue
+        if not in_block:
+            continue
+        if not line.startswith("    "):
+            in_block = False
+            continue
+        if line.strip().startswith("status:"):
+            return line.split("status:", 1)[1].strip()
+    return ""
+
+
+@dataclass(frozen=True)
+class TrunkDrift:
+    """트렁크 사본이 로컬보다 착수 조건을 강화한 항목 1건 (HARN-91).
+
+    `kind`: "dep"(트렁크에만 있는 미충족 의존) | "gate"(트렁크에만 있는 미통과 게이트).
+    `trunk_state`: 그 항목의 트렁크 관점 상태(의존 태스크의 status·게이트의 status) —
+        관측 자체가 안 됐으면 "?"(파일 없음·파싱 실패 — 모른다 ≠ 아니다이므로 미충족으로
+        간주해 여전히 drift로 센다: 신규 항목의 부재는 안전 방향이 아니다).
+    """
+
+    kind: str
+    ref_id: str
+    trunk_state: str
+
+
+@dataclass(frozen=True)
+class TrunkDriftResult:
+    """트렁크 의존·게이트 시차 탐지 결과. status가 `ok`가 아니면 판정 불가(HARN-91 ④-ⓓ)."""
+
+    status: str  # ok | offline | error:<Type>
+    drift: list[TrunkDrift] = field(default_factory=list)
+    trunk_ref: str = ""
+
+
+def scan_trunk_task_drift(root: Path, task: Task) -> TrunkDriftResult:
+    """트렁크 사본의 태스크 파일에 로컬 사본엔 없는 미충족 의존·게이트가 있는지 본다.
+
+    (HARN-91) `start`의 착수 자격 판정(`selector.classify_todo`)은 **로컬 작업 트리의
+    백로그 사본**만 읽는다 — 내 클론이 마지막으로 fetch한 뒤 origin/<트렁크>에 새로
+    착지한 의존·게이트(조건이 *강화*되는 방향)는 그 판정에 반영되지 않는다. 이 함수는
+    트렁크 사본의 같은 태스크 파일을 직접 읽어 그 시차를 좁힌다.
+
+    네트워크 비용: 이 함수 자체는 fetch하지 않는다 — 호출측(`cmd_start`)이 HARN-11의
+    `scan_remote_done(fetch=True)`로 이미 remote-tracking ref를 최신화한 뒤 같은 fetch에
+    편승한다(추가 왕복은 `_resolve_trunk_ref`의 `ls-remote` 1회뿐). 오프라인 환경에서
+    쓰려면 호출측이 먼저 fetch 여부/상태를 판정해 이 함수 호출 여부를 결정한다.
+
+    비교 대상은 **로컬에 없는 항목만**이다 — 로컬에 이미 있는 의존·게이트는
+    `selector.classify_todo`가 이미 검사했다(중복 판정 금지). 로컬·트렁크가 같으면
+    drift 0건이다(대조군 — 모든 착수를 막는 검사는 검사가 아니다).
+    """
+    if not has_remote(root):
+        return TrunkDriftResult("offline")
+    try:
+        trunk_ref, _source = _resolve_trunk_ref(root)
+        show = _git(root, "show", f"{trunk_ref}:backlog/tasks/{task.id}.yaml", timeout=10)
+        if show.returncode != 0:
+            # 트렁크에 이 태스크 파일이 없다 — 로컬에서 신설된 태스크(아직 트렁크 미착지).
+            # 이 축의 관심사는 "트렁크가 조건을 강화했는가"이므로 신설 자체는 drift가 아니다.
+            return TrunkDriftResult("ok", trunk_ref=trunk_ref)
+
+        trunk_deps = _top_level_list_field(show.stdout, "depends_on")
+        trunk_gates = _top_level_list_field(show.stdout, "requires_gates")
+
+        drift: list[TrunkDrift] = []
+        for dep_id in trunk_deps:
+            if dep_id in task.depends_on:
+                continue
+            dep_status = _trunk_task_status(root, trunk_ref, dep_id)
+            if dep_status != "done":
+                drift.append(TrunkDrift("dep", dep_id, dep_status or "?"))
+
+        for gate_id in trunk_gates:
+            if gate_id in task.requires_gates:
+                continue
+            gate_status = _trunk_gate_status(root, trunk_ref, gate_id)
+            if gate_status not in ("cleared", "waived"):
+                drift.append(TrunkDrift("gate", gate_id, gate_status or "?"))
+
+        return TrunkDriftResult("ok", drift, trunk_ref)
+    except subprocess.TimeoutExpired:
+        return TrunkDriftResult("offline")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
+        return TrunkDriftResult(f"error:{type(exc).__name__}")
 
 
 def scan_remote_in_progress(
