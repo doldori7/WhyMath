@@ -9167,3 +9167,35 @@ audit 문서와 동일 방법론)을 계산하고, 0건이면 안전, N건이면
 --no-project --with pyyaml --with pytest pytest ...`(두 패키지 다 `--with`로 줘야 같은 임시
 venv에 들어간다 — `pytest`만 `--with`에서 빠지면 PATH의 별도 venv pytest가 실행돼 재현 안 됨)로
 우회해 811건 전건 그린을 확인했다. CI 환경 자체의 문제는 아님(이 세션 컨테이너 한정 추정).
+
+## 2026-09-10: HARN-95 — 전이표 합법 전이 2종의 CLI 실행 불가 결함, 근본 수정(우회 아님)
+
+HARN-86(#1067)이 "전이표가 허용하는 전이가 곧 실행 가능한 전이는 아니다"를 실측하고 경로
+탐색 모델((상태, session 보유) 쌍 위 BFS)로 **우회**했다 — 실행 불가한 홉을 안내에서 피하는
+방식. HARN-95는 그 우회 아래 남은 **CLI 자체의 결함 2건**을 근본에서 고쳤다:
+
+- **(a) `in_progress → todo`**: `cmd_unblock`이 원격 claim만 걷고 `task.session`을 비우지
+  않아, 뒤따르는 `start`가 `selector.classify_todo`의 claimed 검사에 항상 거부됐다. 우회로
+  (`block`→`unblock`→`start`, 3단계)만 있었다 — **더 짧은 경로가 깨진 경로**였던 것.
+  `cmd_unblock`을 `cmd_block`과 같은 계약(`task.session = None`)으로 맞췄다.
+- **(b) `review → in_progress`**: `cmd_review`가 의도적으로 session을 보존해(HARN-20) 이
+  홉은 항상 거부되고, review의 다른 출구가 없어 **done 말고 나갈 길이 없는 막다른 길**이었다.
+  선택지 4종(claim 검사에 자기 세션 재개 예외 / 전용 재개 명령 신설 / review→blocked 엣지 /
+  의도로 확정) 중 **review→blocked 엣지 추가**를 택했다 — `cmd_block`은 이미 어느 상태에서든
+  session을 비우는 범용 동사라 새 코드가 필요 없었고, 이중 claim 방어(`selector.classify_todo`)
+  자체는 건드리지 않는 최소 침습 안이다. 이 저장소는 이중 claim 방어가 무력화됐을 때 병렬
+  중복 구현으로 두 번(735줄·40분) 대가를 치른 뒤 그 방어를 세웠으므로, 그 검사를 넓히는 안
+  (ⓐ)은 채택하지 않았다.
+
+**전수 검증**: 두 수정을 합치면 이 그래프에서 session 보유가 원인이 되어 도달이 완전히
+막히는 (출발, 도착) 쌍이 **0건**이 된다 — Python으로 BFS 모델을 독립 재구현해 old/new 전건
+diff를 뜬 뒤, 그 결과를 `TestNoSessionCausedDeadEnds`(전수 스캔)로 코드에 고정했다. 파생
+효과로 기존 락 테스트 다수의 기대값이 바뀌었다(`in_progress` 재진입 3단계→2단계 · `review→
+cancelled` None→`['blocked','cancelled']` 등) — 문자열 검사가 아니라 실 CLI 종단 실행
+(`unblock`→`start`, `block`→`cancel` 각 2단계)으로 재확인했다.
+
+**부수 관측**: `_blocked_by_session_note`(막힌 이유 설명 장치)가 이 수정 이후 실 그래프에서
+트리거될 사례가 0건이 됐다 — 죽은 코드로 방치하지 않으려고 합성 전이표(`monkeypatch`)로
+별도 유닛 테스트를 만들었다. 이 과정에서 그 헬퍼가 "호출부가 route(held=True)==None을 이미
+확인했다"는 암묵 전제를 갖고 있음을 발견했다(전제 없이 직접 부르면 무의미한 답을 낸다) —
+`_transition`(공개 경로)을 통해 호출하는 형태로 테스트를 고쳐 이 전제를 실제로 만족시켰다.
