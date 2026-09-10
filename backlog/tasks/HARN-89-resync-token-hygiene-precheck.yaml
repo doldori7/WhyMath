@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -20,6 +20,6 @@ artifacts: []
 paths:
   - ".github/scripts/pr_auto_resync.sh"
   - tests/infra/test_pr_auto_resync.py
-session: null
+session: claude/charming-goodall-4zky7s
 notes: "[경위] 2026-09-08 게이트 G-pr-auto-resync-token 집행 중 발생. Kiki가 시크릿에 붙여넣은 PAT 값 끝에 개행이 딸려 들어가, 첫 수동 실행(run #1 · id 34187171965)이 `Post \"https://api.github.com/graphql\": net/http: invalid header field value for \"Authorization\"` 로 실패했다. 원인 규명에 필요했던 결정적 단서는 Actions 로그에서 `GH_TOKEN: ***` 다음 줄에 타임스탬프 접두가 없는 빈 줄이 있다는 것 — 즉 시크릿 값이 두 줄이라는 사실이었고, 이것은 사람 운영자가 스스로 도달하기 어렵다.\n\n[왜 태스크인가] 스크립트의 증거 설계 자체는 제대로 작동했다(실패 응답 본문을 남기도록 돼 있어 진단이 1분 만에 끝났다). 그러나 그 메시지는 Go net/http의 내부 오류 문면이라 **처방으로 번역되지 않는다**. 측정·수집 도구는 \"실패 원인이 남는가\"뿐 아니라 그 원인이 **행동 가능한 형태**여야 한다는 축(CLAUDE.md 2026-08-22)의 미충족 사례다. 이 결함은 PAT를 재발급할 때마다(만료 주기) 재현 가능하다.\n\n[한계 — 의도적 제외] 이 태스크는 토큰의 *형태*만 검사한다. 권한 충분성(Contents/Pull requests write)은 실제 쓰기를 해 봐야 알 수 있으므로 이 검사의 대상이 아니며, 그 축은 HARN-87 acceptance ①②가 가진다.\n\n[정정 2026-09-08] PR #1062 Codex P2 수용 — PAT 없는 dry-run 경로를 깨뜨리는 조건이 ①에 있었다"
-updated: 2026-09-08
+updated: 2026-09-10

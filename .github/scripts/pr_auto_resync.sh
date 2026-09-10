@@ -41,7 +41,76 @@ other_err=0
 
 echo "── PR 자동 재동기화 (repo=$REPO · dry_run=$DRY_RUN · token=${RESYNC_TOKEN_KIND:-미지정})"
 
-# ⓪ 쓰기 자격 검사 — **어떤 변경보다 먼저**. (Codex P1 · PR #1040)
+# ⓪ 토큰 위생 사전 검사 (HARN-89) — **어떤 gh 호출보다 먼저**.
+#
+# 경위: PAT를 시크릿에 붙여넣을 때 끝에 개행이 함께 들어가, 그 값으로 만든 첫 실행이
+# Go net/http의 내부 오류 문면(`invalid header field value for "Authorization"`)으로만
+# 실패했다. 그 메시지는 처방으로 번역되지 않는다 — 원인 규명에는 Actions 로그에서
+# `GH_TOKEN: ***` 다음 줄에 타임스탬프 없는 빈 줄이 있다는, 사람이 스스로 도달하기
+# 어려운 단서가 필요했다. 그래서 헤더에 넣기 전에 여기서 형태를 검사해 무엇이
+# 잘못됐는지 이름을 붙인다. 토큰 값 자체는 절대 출력하지 않는다(길이·불리언만 —
+# CLAUDE.md 시크릿 자가검증 규칙).
+#
+# 문자 위생(개행·제어문자·비ASCII)은 **토큰 종류 무관 전 실행**에 적용한다 — 헤더에
+# 넣을 수 없는 값은 어느 토큰이든 실패한다. 형식 검사(github_pat_ 접두·길이 범위)는
+# RESYNC_TOKEN_KIND=pat일 때만 적용한다 — github_token 경로(GITHUB_TOKEN 폴백, ghs_
+# 접두)에서는 접두가 다른 것이 정상이다(PR #1062 Codex P2 수용 — acceptance ④).
+raw_token="${GH_TOKEN:-}"
+if [ -z "$raw_token" ]; then
+  echo "::error::GH_TOKEN 위생 검사 실패 — 값이 비어 있다. gh를 호출하기 전에 멈춘다."
+  exit 1
+fi
+
+# 앞뒤 공백·개행(스페이스·탭·CR·LF 등)을 제거한다. 조용히 고치지 않는다 — 값이 아니라
+# '고쳤다는 사실'만 로그에 남긴다.
+trimmed_token="${raw_token#"${raw_token%%[![:space:]]*}"}"
+trimmed_token="${trimmed_token%"${trimmed_token##*[![:space:]]}"}"
+
+if [ "$trimmed_token" != "$raw_token" ]; then
+  echo "::warning::GH_TOKEN 값의 앞/뒤 공백문자(스페이스·탭·개행 등)를 제거했다 — 시크릿 등록 시"
+  echo "함께 붙여넣힌 것으로 보인다(원본 길이=${#raw_token} → 정리 후 길이=${#trimmed_token}). 값 자체는 출력하지 않는다."
+fi
+
+if [ -z "$trimmed_token" ]; then
+  echo "::error::GH_TOKEN 위생 검사 실패 — 공백만 제거해도 빈 문자열이다(원본 길이=${#raw_token})."
+  exit 1
+fi
+
+# 남은 이상 — 값 내부의 공백·제어문자·비ASCII. LC_ALL=C는 이 검사에만 한정한다(서브셸)
+# — 뒤이은 한국어 로그 출력에 영향을 주지 않기 위함.
+if (
+  export LC_ALL=C
+  [[ "$trimmed_token" == *[[:space:]]* ]] || [[ "$trimmed_token" == *[![:print:]]* ]]
+); then
+  echo "::error::GH_TOKEN 위생 검사 실패 — 앞뒤 공백 제거 후에도 값 내부에 공백·개행·제어문자·비ASCII"
+  echo "문자가 남아 있다(길이=${#trimmed_token}). HTTP 헤더 값에 들어갈 수 없는 문자는 net/http가"
+  echo "'invalid header field value'로만 보고한다 — 시크릿을 다시 정확히(따옴표·개행 없이) 등록하라."
+  exit 1
+fi
+
+if [ "${RESYNC_TOKEN_KIND:-}" = "pat" ]; then
+  case "$trimmed_token" in
+    github_pat_*) ;;
+    *)
+      echo "::error::GH_TOKEN 형식 검사 실패 — RESYNC_TOKEN_KIND=pat인데 값이 'github_pat_' 접두로"
+      echo "시작하지 않는다(길이=${#trimmed_token}). fine-grained PAT가 아닌 값이 등록됐을 수 있다."
+      exit 1
+      ;;
+  esac
+  pat_len=${#trimmed_token}
+  if [ "$pat_len" -lt 60 ] || [ "$pat_len" -gt 255 ]; then
+    echo "::error::GH_TOKEN 형식 검사 실패 — fine-grained PAT치고 길이가 비정상이다(길이=${pat_len},"
+    echo "기대 범위=60~255). 잘리거나 다른 값이 섞여 등록됐을 수 있다."
+    exit 1
+  fi
+fi
+
+if [ "$trimmed_token" != "$raw_token" ]; then
+  GH_TOKEN="$trimmed_token"
+  export GH_TOKEN
+fi
+
+# ① 쓰기 자격 검사 — **어떤 변경보다 먼저**. (Codex P1 · PR #1040)
 #
 # GITHUB_TOKEN이 만든 push는 workflow를 재발화시키지 않는다(GitHub 문서화 제약).
 # 그 토큰으로 update-branch를 하면 브랜치는 최신화되지만 **새 head에 required check가
@@ -63,7 +132,7 @@ if [ "${RESYNC_TOKEN_KIND:-}" != "pat" ] && [ "$DRY_RUN" != "1" ]; then
   exit 1
 fi
 
-# ① 목록 조회. 실패는 "대상 0건"과 반드시 구분한다.
+# ② 목록 조회. 실패는 "대상 0건"과 반드시 구분한다.
 payload=$(gh pr list --repo "$REPO" --state open --limit 100 \
   --json number,mergeStateStatus,autoMergeRequest,headRefName 2>&1)
 rc=$?
@@ -80,7 +149,7 @@ if [ -z "${scanned:-}" ]; then
   exit 1
 fi
 
-# ② 후보 선별 + 처리
+# ③ 후보 선별 + 처리
 while IFS= read -r row; do
   [ -z "$row" ] && continue
   n=$(printf '%s' "$row" | jq -r '.number')
@@ -140,7 +209,7 @@ while IFS= read -r row; do
   esac
 done <<<"$(printf '%s' "$payload" | jq -c '.[]')"
 
-# ③ 요약 — 분모를 항상 낸다. "0건"이 침묵이 아니라 값으로 보여야 한다.
+# ④ 요약 — 분모를 항상 낸다. "0건"이 침묵이 아니라 값으로 보여야 한다.
 #
 # 분모가 세 층이다: 스캔(전체) → 판정(mergeStateStatus를 아는 것) → 각 축(auto-merge·BEHIND)
 # → 교집합(실제 대상). 마지막 하나만 내면 0의 의미를 복원할 수 없다.
@@ -149,7 +218,7 @@ echo "── 요약: 스캔 ${scanned}건 · 판정 ${decided}건 · auto-merge 
 echo "        BEHIND+auto-merge ${behind_am}건 · 최신화 ${updated}건 ·"
 echo "        충돌 ${conflict}건 · 미판정 ${unknown}건 · 기타실패 ${other_err}건"
 
-# ④ 대상이 0건이면 **왜** 0인지 말한다 (HARN-87).
+# ⑤ 대상이 0건이면 **왜** 0인지 말한다 (HARN-87).
 #
 # 셋은 처방이 완전히 다르다. ⓐ는 이 자동화가 아무리 자주 돌아도 발화할 수 없다는 뜻이라
 # 주기 조정이 아니라 운용 관행(또는 설계)을 바꿔야 하고, ⓑ·ⓒ는 정상 대기다. 이 줄이
