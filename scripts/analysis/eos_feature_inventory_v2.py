@@ -779,6 +779,9 @@ CATALOG: tuple[Spec, ...] = (
        # 리포트가 볼 표본을 만드는 도구이므로 관측 가족에 함께 귀속한다.
        "harness.attempt_skill_reach_probe",
        "harness.concept_assessment_index"),
+    _o("WM-O-914", "데이터 무결성 게이트(orphan·dangling·duplicate 6종)", "Admin", "QA", "P0",
+       "OPS-55 — 느슨참조 드리프트 감사(v_integrity_violations) · 주간 지표 #4 산출원",
+       "ops.integrity_violations_gate"),
     # ════════════════════ C 클라이언트 — Flutter·Web ════════════════════
     _c("WM-C-001", "로그인·계정 보안 화면·토큰 배관", "Student", "Client UX", "P0",
        "폐쇄루프 진입 — 클라 절반", "mobile/lib/features/auth", "mobile/lib/core"),
