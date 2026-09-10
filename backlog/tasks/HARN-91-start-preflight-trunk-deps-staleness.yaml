@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -21,6 +21,6 @@ paths:
   - scripts/harness/backlog.py
   - scripts/harness/selector.py
   - "tests/harness/test_start_preflight*.py"
-session: null
+session: claude/eloquent-rubin-g2qlro
 notes: "[발생 경위] 2026-09-08. 위 ②의 사례가 그대로다. 피해는 크지 않았다 — 코드 자체는 유효해서 HARN-90으로 재귀속했고 폐기는 0줄이다. 다만 병합 시점이 아니라 착수 시점에 알았다면 애초에 다른 순서로 진행했을 것이다.\n\n[왜 1회성이 아닌가] 이 저장소는 장기 미머지 브랜치가 상시 수십 건이고 대장이 git 안에 산다. 즉 로컬 사본과 트렁크의 시차는 예외가 아니라 상시 조건이며, 조건이 강화되는 방향(의존 추가·게이트 부착)의 변경이 잦을수록 이 형태는 반복된다. CLAUDE.md \"trunk 부재를 미구현으로 단정 금지\"·\"미머지 존재를 충족으로 단정 금지\"가 사람의 판정에 대해 말하는 것을, 이 태스크는 **하네스 자신의 판정**에 대해 묻는다.\n\n[구현 시 고려] fetch 비용이 매 start마다 추가된다. HARN-11이 이미 `fetch=True`를 한 번 하므로 같은 fetch에 편승할 수 있는지 먼저 본다. 오프라인·프록시 차단 환경에서 조회 실패를 fail-closed로 할지 fail-open+명시 경고로 할지는 구현자 판정이되, 어느 쪽이든 **무증상은 금지**다."
-updated: 2026-09-08
+updated: 2026-09-10
