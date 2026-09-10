@@ -188,3 +188,10 @@ data/audit/
 # 밖이 원칙이고 docs/private/(기존 규칙)은 부득이한 경우의 2차선이다.
 # 2차 가드(git add -f 방어) = tests/infra/test_ip_separation_evidence.py 의 마커 스캔.
 /.ip_evidence/
+
+# 룰셋 런북 산출물 — ruleset_drift.py / ruleset_pin_plan.py의 docstring이 Kiki에게
+# 저장소 루트에 만들라고 안내하는 파일들이다(각각 `gh api ... > ruleset.json`,
+# `... | Out-File ruleset-backup.json` → `--out ruleset-plan.json` + rollback).
+# 라이브 설정의 시점 스냅숏이라 커밋 대상이 아니고, 무시하지 않으면 매 세션
+# `git status`에 뜬 채로 남아 언젠가 실수로 들어간다(2026-09-10 Kiki 머신 실측: 5건 누적).
+/ruleset*.json
