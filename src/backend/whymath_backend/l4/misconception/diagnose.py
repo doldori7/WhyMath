@@ -132,6 +132,154 @@ def is_refuted(misconception: Misconception, text: str) -> bool:
     return any(_compile(rx).search(norm_text) is not None for rx in misconception.refuting_regex)
 
 
+#: 절(clause) 경계 — 근접 창을 여기서 자른다(MISC-25).
+#:
+#: `_normalize`가 공백·줄바꿈을 지우므로 **정규화 전에** 잘라야 한다. 이것이 "문장 스코프"를
+#: 단독으로 쓸 수 없는 기술적 이유이기도 하다 — 구두점 없는 손글씨 전사에서는 텍스트 전체가
+#: 한 문장이 되어 문장 스코프가 텍스트 전체 스코프로 조용히 붕괴한다(교수학 판정 실측:
+#: 번호 매김·구두점 없는 시나리오에서 문장 스코프가 64/64를 오억제).
+#: 번호 매김(`1)`·`(2)`)을 포함하는 이유가 그것이다 — 손글씨 풀이의 실제 단계 구분자다.
+_CLAUSE_BOUNDARY = re.compile(r"[\n.?!;。？！]+|(?:\(\s*\d+\s*\)|\d+\s*\))")
+
+#: 정정 어휘가 신호에서 이만큼 떨어져 있으면 그 신호를 가리키는 말로 보지 않는다(정규형 기준).
+#:
+#: 앞뒤가 비대칭인 이유: 한국어 정정은 뒤에 붙는 형태("…라는 풀이는 **틀렸다**")가 길고,
+#: 앞에 붙는 형태("**틀린** 풀이: …")는 짧다. 후치 전용 창은 전치 라벨을 전부 놓친다
+#: (교수학 판정 실측: 후치 전용 스코프가 전치 라벨 66종 중 **0종**만 인지).
+#:
+#: **12를 고른 근거는 실측된 간격이다.** 교수학 검토가 합성 대조군에서 제안한 초기값은
+#: 12/24였는데, 24로 두자 `test_input_is_not_masked_by_gate_or_topk`가 지키던 진짜 오개념
+#: ("분모가 0이면 나눌 수 있다고 봤고 x=0은 근이 아니다")이 억제됐다 — 뒤쪽의 `아니다`는
+#: *제로근*을 부정하는 말이지 나눗셈 오개념을 부정하는 말이 아닌데 창이 거기까지 닿았다.
+#: 그래서 양쪽 거리를 전부 재 봤다(정규형 기준, 신호 끝 → 정정 어휘 시작):
+#:
+#:   억제돼야 하는 4종  : 5 · 7 · 9 · 9   (최대 9)
+#:   억제되면 안 되는 1종: 16              (내용성 신호만 기준으로는 18)
+#:
+#: 9와 16 사이가 비어 있어 **12는 양쪽에 여유(3·4)를 두고 갈라진다** — 한 테스트에 맞춘
+#: 값이 아니라 측정된 간격의 중앙이다. 앞뒤를 같게 둔 이유는 전치 라벨("틀린 풀이: …")이
+#: 필요로 하는 거리가 5로 후치보다 짧아 12로 충분하기 때문이다(후치 전용 창이면 전치 라벨을
+#: 66종 중 0종만 인지한다 — 교수학 검토 실측).
+#:
+#: **정직 표기 — 여전히 잠정값이다.** 실제 학생 손글씨 코퍼스가 저장소에 없어 학생 글 기준
+#: 최적값은 **판정 불가**다. 위 간격은 5개 사례에서 얻은 것이라 표본이 작다. 실데이터가
+#: 생기면 `explicit_correction_gap_eval`로 재측정해 조정한다.
+_CORRECTION_LOOKBEHIND = 12
+_CORRECTION_LOOKAHEAD = 12
+
+#: 이 축이 쓰는 정정 어휘 — `catalog.EXPLICIT_CORRECTION_MENTION`과 **의도적으로 다르다**.
+#:
+#: 차이는 딱 하나, 맨어간 `아니`를 빼고 **종결형**(`아니다`·`아니야`·`아냐`·`아닙니다`)만
+#: 남긴 것이다. 한국어에서 연결형 `아니라`·`아니므로`·`아닌`은 정정 표지가 아니라 **대조
+#: 표지**이고, 대조는 오개념을 *부정*하는 말이 아니라 *주장*하는 가장 흔한 형식이다
+#: ("A가 아니라 B다").
+#:
+#: 이 구별을 안 하면 이 저장소가 이미 한 번 싸운 결함이 되살아난다 — 회귀 테스트
+#: `test_negated_zero_root_is_not_a_refutation`이 동결한 문장이 정확히 그것이다:
+#:
+#:     "x²=2x에서 x=0은 근이 **아니**므로 양변을 x로 나누면 x=2다"
+#:
+#: 명백한 근 손실 오답인데 `아니`가 있다는 이유로 진단이 꺼지면 진짜 오개념을 놓친다
+#: (`_ZERO_ROOT_DENIAL` 주석의 같은 사례 · PR #1039 Codex P2). 교수학 판정도 같은 축을
+#: 독립으로 지적했다 — 저장소가 *직접 오개념으로 라벨한* 프로브 2건
+#: (`square-root-positivity`·`exponent-zero`)이 `아니라`를 달고 있다.
+#:
+#: `EXPLICIT_CORRECTION_MENTION` 쪽을 안 고치는 이유: 그것은 5개 정규식 채널의 **텍스트 전체**
+#: 전방탐색에 쓰이고 있어 손대면 그 채널들의 계약이 함께 바뀐다. 스코프가 다르면 어휘도
+#: 다를 수 있다 — 좁은 스코프가 넓은 어휘를 감당하고, 넓은 스코프는 못 한다.
+_CORRECTION_NEAR_SIGNAL = (
+    r"(?:틀리|틀렸|틀린|틀려|틀릴|틀림|오답|잘못|오류|아니다|아니야|아냐|아닙니다)"
+)
+
+
+def _clauses(text: str) -> list[str]:
+    """원문을 절 단위로 자른다 — 정규화 **전에** 해야 경계가 살아 있다."""
+    return [c for c in _CLAUSE_BOUNDARY.split(text) if c and c.strip()]
+
+
+def has_explicit_correction_near_signals(misconception: Misconception, text: str) -> bool:
+    """학생이 이 오개념을 **명시적으로 부정**하고 있는가 — 절 경계 안 근접 판정(MISC-25).
+
+    `signals`의 공출현(AND)은 오개념을 *저지른* 풀이와 그것을 *인용해 부정한* 풀이를 구별하지
+    못한다. 실측: 진단 카탈로그의 **측정 가능 66종 전부**가 "…라는 풀이는 틀렸다"를 붙여도
+    서빙 게이트를 통과했다(`harness/explicit_correction_gap_eval.py`). 항목별 결함이 아니라
+    구조적 공백이라 항목마다 `refuting_regex`를 다는 방식으로는 못 메운다(66곳 중복).
+
+    **왜 텍스트 전체 스코프가 아닌가** — 그것이 이 함수 설계의 핵심이다. "정정 어휘가 어디든
+    있으면 진단하지 않는다"로 하면 다음 풀이에서 진단이 통째로 사라진다:
+
+        1) 처음에 -3을 +3으로 잘못 옮겨 적어서 고쳤다.
+        2) x²=2x 이므로 양변을 x로 나누면 x=2.
+
+    학생은 1단계에서 전사 실수를 *스스로 잡아냈고*(메타인지가 작동한 순간) 2단계에서 근 손실을
+    저질렀다. "잘못" 한 단어 때문에 67종 전부가 꺼지면 **자기 오류를 언어화한 학생일수록 진단을
+    덜 받는** 역선택이 된다 — 이 프로젝트가 기르려는 바로 그 행동에 침묵으로 보상하는 꼴이다.
+    게다가 미검출은 아무도 소리내지 않는다(`_ZERO_ROOT_DENIAL`이 같은 이유로 이미 근접 창을
+    택했다 — 이 저장소는 "반박 축이 너무 넓을 때 좁힌다"를 한 번 판정한 적이 있다).
+    교수학 판정 실측: 전체 스코프는 위 유형 시나리오에서 정탐 66/66을 전부 침묵시켰고,
+    절 경계 근접 창은 최악 3/66만 잃으면서 오진단 제거 이득의 88%를 지켰다.
+
+    **왜 `refuting_regex`(거부)와 별도 함수인가**: `refuting_regex`는 *그 오개념의 정의에
+    비추어 반박이 확정되는* 조건이다(`ZERO_ROOT_MENTION` — 0을 적었으면 근을 잃지 않았다는
+    수학적 함의). 이 축은 확정 반박이 아니라 **귀속 불명**이라 성질이 다르다. 같은 이름으로
+    묶으면 그 차이가 사라진다.
+
+    **한계(정직 표기)**:
+      · 정정 어휘 없는 인용("친구는 (a+b)²=a²+b²이라고 **했어**")은 원리상 못 잡는다 —
+        스코프가 아니라 귀속(attribution) 문제이고 어휘·거리로는 미해결이다.
+      · `EXPLICIT_CORRECTION_MENTION`은 `아닌가`·`맞지 않다`·`성립하지 않는다`·`착각했다`
+        등을 아직 못 잡는다(실측). 넓히는 것은 이 스코프 축소가 **선행 조건**이다 —
+        전체 스코프에서 패턴을 넓히면 오억제가 함께 커진다(MISC-26 등재).
+      · 원격 후치 정정("{오개념}. 이렇게 쓰면 오답이다")은 절이 갈려 못 잡는다. 창을 다음 절
+        머리까지 열면 회복되지만 "뒤 절의 무관한 정정"이 같은 규모로 오억제된다 —
+        정확히 등가 교환이라 유지(=진단) 쪽으로 기울였다(우선순위: 미검출도 손해다).
+    """
+    if not misconception.signals:
+        return False
+    correction = _compile(_CORRECTION_NEAR_SIGNAL)
+    for clause in _clauses(text):
+        norm_clause = _normalize(clause)
+        if not norm_clause:
+            continue
+        hits = [s for s in misconception.signals if _signal_hit(s, norm_clause)]
+        if not hits:
+            # 신호가 없는 절의 정정 어휘는 이 오개념을 가리키는 말이 아니다(위 1)단계 사례).
+            #
+            # 정직 표기: 이 줄은 **빠른 경로**이지 유일한 방어선이 아니다 — 지워도 동작이 같다
+            # (아래 `_signal_span`이 그 절에 없는 신호에 대해 None을 돌려 같은 자리에서 걸린다).
+            # 뮤테이션으로 확인했다. 의도를 드러내려 남기되, "이 줄이 절 스코프를 지킨다"고
+            # 읽히지 않도록 적어 둔다 — 실제 스코프는 `norm_clause`를 창의 모집단으로 쓰는 데서
+            # 나온다(그 축은 뮤테이션 C2가 지킨다).
+            continue
+        for signal in hits:
+            span = _signal_span(signal, norm_clause)
+            if span is None:  # pragma: no cover — _signal_hit가 True면 위치가 있다
+                continue
+            start, end = span
+            window = norm_clause[
+                max(0, start - _CORRECTION_LOOKBEHIND) : end + _CORRECTION_LOOKAHEAD
+            ]
+            if correction.search(window):
+                return True
+    return False
+
+
+def _signal_span(signal: str, norm_clause: str) -> tuple[int, int] | None:
+    """정규형 절에서 signal의 위치 — `_signal_hit`과 **같은 규칙**으로 찾는다.
+
+    규칙이 갈리면 "맞았다는데 위치는 없다"가 생겨 창이 조용히 안 열린다.
+    """
+    norm_sig = _normalize(signal)
+    if not norm_sig:
+        return None
+    if norm_sig.isdigit() or (len(norm_sig) == 1 and norm_sig.isascii() and norm_sig.isalpha()):
+        pattern = rf"(?<![0-9A-Za-z.]){re.escape(norm_sig)}(?![0-9A-Za-z.])"
+        found = _compile(pattern).search(norm_clause)
+        return (found.start(), found.end()) if found else None
+    index = norm_clause.find(norm_sig)
+    return (index, index + len(norm_sig)) if index >= 0 else None
+
+
 def reject_refuted(candidates: Sequence[MisconceptionMatch], text: str) -> list[MisconceptionMatch]:
     """후보 목록에서 반박된 것을 제거 — 경로와 무관한 **공통 출구**용.
 
@@ -173,6 +321,11 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
     # "얼마나 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
     if is_refuted(misconception, text):
+        return None
+    # MISC-25 — 학생이 이 오개념을 *명시적으로 부정*하는 절에서 신호가 나왔다면 귀속이 성립하지
+    # 않는다. `is_refuted`와 나란히(둘 다 세기 전에) 두는 이유는 같다 — 나중에 감점하면 "얼마나
+    # 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
+    if has_explicit_correction_near_signals(misconception, text):
         return None
     matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
