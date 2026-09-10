@@ -22,6 +22,7 @@ red였다. fail-closed 설계 덕에 "이상 없음"으로 위장되지는 않�
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import subprocess
@@ -155,3 +156,99 @@ class TestRedirectHandling:
         # 읽히긴 했는데 0건인 상태 — 이동/권한과 **구분돼야** 한다.
         assert "읽혔으나" in msg and "200" in msg, msg
         assert "목록이 아니다" not in msg, msg
+
+
+# ── HARN-03 — GitHub API를 부르는 curl은 전부 리다이렉트를 따라야 한다 ────────────
+#
+# HARN-02는 *이름을 리터럴로 박아 둔 축*을 고쳤다. 그런데 이관 결함에는 축이 **둘**이다:
+# ⓑ리다이렉트를 따라가지 않는 축은 owner를 리터럴로 갖지 않는 코드에도 있다
+# (`remote_claims.py`는 `git remote get-url origin`에서 파싱한다 — 클론의 origin URL이
+# 옛 주소인 한 계속 301을 받는다). 실측: SessionStart 브리핑이 미머지 브랜치 13건을
+# `APIError: PR #675 응답 형식 이상 — {'message': 'Moved Permanently', ...}`로 내며
+# 열림/닫힘 판정을 전건 포기하고 있었다.
+#
+# 소스에 `-L`이라는 글자가 있는지가 아니라 **AST로 구성된 인자 리스트**를 본다 —
+# 금지 패턴 열거는 표기 변형에 뚫리지만 구성 결과 검사는 그렇지 않다
+# (CLAUDE.md 2026-09-01 ①).
+
+_CURL_SCAN_GLOBS = ("scripts/**/*.py", ".github/scripts/*.py")
+
+
+def _curl_argv_literals() -> list[tuple[Path, int, list[str]]]:
+    """`["curl", ...]` 형태의 리스트 리터럴을 전부 모은다 (파일, 줄, 문자열 원소들)."""
+    found: list[tuple[Path, int, list[str]]] = []
+    for pattern in _CURL_SCAN_GLOBS:
+        for path in sorted(_ROOT.glob(pattern)):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except SyntaxError:  # 문법이 깨진 파일은 이 가드의 관심사가 아니다
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.List) or not node.elts:
+                    continue
+                first = node.elts[0]
+                if not (isinstance(first, ast.Constant) and first.value == "curl"):
+                    continue
+                parts: list[str] = []
+                for elt in node.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        parts.append(elt.value)
+                    elif isinstance(elt, ast.JoinedStr):
+                        # f-string — 상수 조각만 이어 붙인다(URL 판별에는 충분하다)
+                        parts.append(
+                            "".join(
+                                v.value
+                                for v in elt.values
+                                if isinstance(v, ast.Constant) and isinstance(v.value, str)
+                            )
+                        )
+                found.append((path, node.lineno, parts))
+    return found
+
+
+def _targets_github_api(parts: list[str]) -> bool:
+    """이 argv가 GitHub API를 부르는가.
+
+    URL만 보면 **놓친다** — `f"{API}{path}"` 형태는 호스트가 모듈 상수라 AST의 상수
+    조각에 남지 않는다(실측: 5곳 중 4곳이 이 형태라 URL 검사만으로는 1곳만 잡혔다).
+    그래서 같은 argv에 반드시 함께 오는 **Accept 헤더**를 신호로 쓴다 — GitHub 전용
+    미디어 타입이라 다른 대상과 섞이지 않는다.
+    """
+    return any("api.github.com" in s or "vnd.github" in s for s in parts)
+
+
+class TestGithubApiCurlFollowsRedirects:
+    """이관 결함 축 ⓑ — 리다이렉트 미추종."""
+
+    def test_scan_finds_curl_invocations(self):
+        argvs = _curl_argv_literals()
+        # 0건이면 아래 검사가 공허하게 통과한다 — AST 형태가 바뀌면 여기서 먼저 걸린다.
+        assert len(argvs) >= 4, f"curl 호출 리터럴이 {len(argvs)}건 — 스캔이 형태를 놓쳤다"
+
+    def test_every_github_api_curl_follows_redirects(self):
+        offenders = [
+            f"{path.relative_to(_ROOT)}:{lineno}"
+            for path, lineno, parts in _curl_argv_literals()
+            if _targets_github_api(parts) and "-L" not in parts
+        ]
+        assert not offenders, (
+            "GitHub API를 부르는 curl에 -L이 없다 — 저장소가 이관되면 301 본문이 데이터로 "
+            "오독돼 조용히 빈 결과가 된다(2026-09-09 이관 실측):\n" + "\n".join(offenders)
+        )
+
+    def test_guard_is_not_silently_emptied_by_assembled_argv(self):
+        """한계를 **변별력 있게** 못박는다 — 리스트 리터럴이 아니면 이 가드는 못 본다.
+
+        `cmd = ["curl"] + flags` 처럼 변수로 조립한 argv는 AST에서 리스트 리터럴로 보이지
+        않아 위 검사의 사각이 된다. 지금 저장소의 GitHub API 호출은 **5곳 전부 리터럴**이므로
+        가드가 유효하다. 조립 형태로 바뀌어 이 수가 줄면 여기서 먼저 실패해, 가드가 조용히
+        비어 가는 대신 사람이 사각을 다시 판단하게 된다(자명 단언은 검증이 아니다).
+        """
+        github = [a for a in _curl_argv_literals() if _targets_github_api(a[2])]
+        assert len(github) >= 5, (
+            f"리터럴로 보이는 GitHub API curl 호출이 {len(github)}건 — 5건 미만이면 "
+            "조립 형태로 바뀌어 위 -L 검사의 사각에 들어갔을 수 있다. 줄어든 호출을 "
+            "직접 확인하고 이 수를 갱신하라."
+        )

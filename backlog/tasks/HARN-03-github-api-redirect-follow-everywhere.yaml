@@ -1,0 +1,28 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-03-github-api-redirect-follow-everywhere
+title: "이관 리다이렉트를 따라가지 않아 PR 상태 판정이 전건 불능 — GitHub API curl 4곳에 -L 부재"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: in_progress
+priority: 1
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실패 관측 고정 — SessionStart 브리핑이 미머지 브랜치 13건을 \"PR 제출됨 — 상태 미확인\"으로 내고 있고, 그 사유가 `APIError: PR #675 응답 형식 이상 — {'message': 'Moved Permanently', 'url': 'https://api.github.com/repositories/1237870848/pulls/675', ...}`다(2026-09-10 실측). 즉 이관 리다이렉트를 따라가지 못해 PR 열림/닫힘 판정이 **전건 불능**이다. 첫 PR에서 None을 돌려주고 중단하므로 13건 전부가 미판정으로 떨어진다."
+  - "② 전수 배선 — 저장소의 GitHub API curl 호출 4곳(scripts/harness/remote_claims.py · scripts/ops/pr_merge_readiness.py · scripts/ops/flow_health.py · scripts/analysis/measure_merge_gate_latency.py)에 리다이렉트 추종을 넣는다. HARN-02가 pr_delivery_audit.py 한 곳만 고쳤는데, 실측해 보니 **나머지 전부가 같은 상태**였다 — 한 곳만 고치면 나머지가 조용히 남는다."
+  - "③ 산출물 검사 가드 — 소스에 문자열이 있는지가 아니라 **AST로 구성된 인자 목록**을 본다: 리스트 리터럴의 첫 원소가 \"curl\"이고 그 안에 GitHub API URL(api.github.com 또는 API 상수 보간)이 있으면 \"-L\"이 반드시 포함돼야 한다. 스캔 대상이 0건이면 실패한다(대상을 못 찾은 전수 가드는 공허하게 통과한다). 금지 패턴 열거가 아니라 구성 결과 검사라 표기 변형에 뚫리지 않는다."
+  - "④ 변별력 — 4개 파일 각각에서 \"-L\"을 제거해 가드가 RED를 내는지 확인한다(파일별로 따로 — 한 곳만 검출하는 가드도 하나만 깨뜨리면 RED다). 추가로 ⓐAST 스캔의 대상 수집을 0건으로 만들고 ⓑ리스트 리터럴이 아닌 형태로 curl 인자를 구성했을 때 스캔이 놓치는지 확인해 한계를 기록한다. 각 주입은 치환 count와 mutated != original을 단언하고 원복은 cp 백업 + 바이트 동일로 확인한다."
+artifacts: []
+paths:
+  - scripts/harness/remote_claims.py
+  - scripts/ops/pr_merge_readiness.py
+  - scripts/ops/flow_health.py
+  - scripts/analysis/measure_merge_gate_latency.py
+  - tests/infra/test_canonical_repo_reference.py
+session: claude/g-merge-queue-strict-relax-t51cn4
+notes: "발견 경위(2026-09-10): HARN-02 착지 직후 SessionStart 브리핑이 이 오류를 그대로 출력했다. HARN-02는 pr_delivery_audit.py 한 곳의 리다이렉트 미추종을 고쳤고 실행 표면의 옛 owner 리터럴을 없앴지만, **이 파일은 owner를 리터럴로 갖고 있지 않다** — `git remote get-url origin`에서 파싱한다. 그래서 HARN-02가 만든 옛-owner 스캔 가드에 걸리지 않았고, 클론의 origin URL이 옛 주소인 한 계속 301을 받는다.\n\n교훈이 하나 있다: 이관 결함의 축은 **두 개**다 — ⓐ이름을 리터럴로 박아 둔 것(HARN-02가 처리) ⓑ리다이렉트를 따라가지 않는 것(이 태스크). ⓐ만 고치면 ⓑ는 옛 URL을 가진 모든 클론에서 그대로 남는다. HARN-02의 가드는 ⓐ만 본다.\n\n[겹침 고지] scripts/ops/pr_merge_readiness.py는 HARN-82(claude/g-export-prediction-disclosure-m8adzc · blocked)의 소유 파일이다. 이 태스크가 건드리는 것은 curl 인자 한 줄이고 HARN-82의 축(필수 체크 6종 vs 16종 docstring)과 겹치지 않는다. HARN-02에서도 같은 파일의 사용 예 1줄을 같은 사유로 고쳤다."
+updated: 2026-09-10

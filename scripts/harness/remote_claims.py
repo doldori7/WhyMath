@@ -1756,6 +1756,7 @@ def _fetch_pr_states(
         cmd = [
             "curl",
             "-sS",
+            "-L",  # 이관 리다이렉트 추종 — 301 본문을 데이터로 오독하지 않기 위해
             "--max-time",
             str(_PR_STATE_TIMEOUT),
             *_ca_args(),
