@@ -42,8 +42,14 @@ _mod = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = _mod
 _spec.loader.exec_module(_mod)
 
-# 이관 전 owner. 실행 표면에 이 문자열이 남아 있으면 그 경로는 옛 저장소를 가리킨다.
-_STALE_OWNER = "doldori7"
+# 이관 전 저장소를 **가리키는 형태**만 금지한다 — `owner/repo` 꼴.
+#
+# 계정 이름 자체(`doldori7`)는 금지하지 않는다. 과거를 서술하는 산문이 그것을 정당하게
+# 언급하기 때문이다 — 실제로 HARN-98이 `ruleset_drift.py`에 "owner.type=User(개인 계정
+# doldori7)였고…"라는 이력 주석을 넣었고, 이 가드의 1차 판본이 그것을 위반으로 잡았다.
+# 이력을 현재로 덮어쓰게 만드는 가드는 사람이 가드를 끄게 만든다. 실제 결함은 언제나
+# **경로 형태**로 나타난다(`repos/doldori7/WhyMath`·인자 `doldori7/WhyMath`).
+_STALE_REPO_POINTER = "doldori7/"
 
 # 이력 기록(MEMORY.md·backlog·docs/reviews)은 **일부러 제외한다** — 과거 사실의
 # 기록이라 현재로 덮어쓰면 판정 시점이 사라진다. 스캔 대상은 "지금 실행되는 것"뿐이다.
@@ -84,7 +90,7 @@ class TestNoStaleOwnerInExecutionSurface:
         for path in _scan_targets():
             text = path.read_text(encoding="utf-8")
             for lineno, line in enumerate(text.splitlines(), 1):
-                if _STALE_OWNER in line:
+                if _STALE_REPO_POINTER in line:
                     offenders.append(f"{path.relative_to(_ROOT)}:{lineno}: {line.strip()[:100]}")
         assert not offenders, (
             "실행 표면이 이관 전 owner를 가리킨다 — 새 이름을 적어 넣지 말고 자기서술로 바꿔라:\n"
