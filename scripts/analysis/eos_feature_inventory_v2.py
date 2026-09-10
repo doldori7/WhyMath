@@ -640,6 +640,7 @@ CATALOG: tuple[Spec, ...] = (
        flag="misconception_judge_enabled", status="Shadow"),
     _e("WM-E-415", "오개념 크로스링크(kebab↔M-id) 후보·트리아지·검수·shadow", "Admin", "Pedagogy",
        "P0", "crosswalk_gate_contract.md 코드 동결", "l4.misconception.crosslink_*",
+       "l4.misconception.anchor_seat_gap",
        flag="misconception_crosslink_mode", status="Shadow"),
     _e("WM-E-416", "오답 형태 SymPy 매칭(canonical_wrong_form) + shadow", "Student", "Math Engine",
        "P1", "B6 기계판정 채널 — MISC-07", "l4.misconception.wrong_form_match",

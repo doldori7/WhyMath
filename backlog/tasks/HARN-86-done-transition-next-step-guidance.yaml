@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: review
 priority: 2
 eos_priority: P2
 owner: claude
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - scripts/harness/backlog.py
   - tests/harness/test_cli.py
-session: null
+session: claude/status-u2caay
 notes: "재발방지대책(CLAUDE.md 실수 관리 의무). 사고 경위: 2026-09-07 LIC-07 완료 기입을 Kiki에게 안내하면서 done 명령만 주었는데 todo→done이 전이표에 없어 exit 1. '검증 없는 실행 안내 금지'(가정 기반 런북) 유형의 재발이며, 세션 쪽 규칙은 이미 있으므로 이번 대책은 **도구 쪽**에 둔다 — 거부가 해소 경로를 함께 내면 안내자가 규칙을 몰라도 사람이 막히지 않는다. '고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다'(HARN-52 등재 사유)의 같은 축."
-updated: 2026-09-07
+updated: 2026-09-08
