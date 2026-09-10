@@ -77,6 +77,7 @@ def _rules(
     codeowner: bool = False,
     thread: bool = True,
     linear: bool = True,
+    merge_queue: bool = True,
 ) -> list[dict[str, Any]]:
     """`gh api .../rules/branches/main` 응답 형태(규칙 배열)를 만든다.
 
@@ -108,6 +109,8 @@ def _rules(
     ]
     if linear:
         rules.append({"type": "required_linear_history"})
+    if merge_queue:
+        rules.append({"type": "merge_queue"})
     return rules
 
 
@@ -166,6 +169,29 @@ def test_strict_policy_false_is_violation(tmp_path: Path) -> None:
 def test_thread_resolution_false_is_violation(tmp_path: Path) -> None:
     """결함 주입: 유예 대상이 *아닌* 정책 파라미터 축."""
     assert _run(_rules(_healthy_checks(), thread=False), tmp_path) == 1
+
+
+def test_merge_queue_off_is_violation(tmp_path: Path) -> None:
+    """결함 주입: 누가 merge queue를 끈다 (HARN-98).
+
+    2026-09-09부터 큐가 머지 경로를 지탱한다 — PR은 큐 브랜치에서 최신 main 위에 얹혀
+    재검증되고, 거기서만 경로 기반 잡 스킵이 풀려 전체 스위트가 돈다. 큐가 꺼지면 그 재검증이
+    통째로 사라지는데, 감시 축에 없으면 **아무 신호도 나지 않는다**. 그 상태가 정확히
+    "보호가 있다고 믿는 무보호"다(CLAUDE.md 상시 실패하는 fail-open 보호).
+    """
+    assert _run(_rules(_healthy_checks(), merge_queue=False), tmp_path) == 1
+    report = _report(_rules(_healthy_checks(), merge_queue=False))
+    assert any("merge_queue" in v for v in report.violations), report.violations
+
+
+def test_merge_queue_on_is_not_a_violation() -> None:
+    """변별력 — 켜진 상태에서는 조용해야 한다.
+
+    양쪽에서 같은 답을 내면 이 축은 아무것도 구별하지 않는 것이다. 위 RED와 짝이어야
+    "감시한다"가 성립한다.
+    """
+    report = _report(_rules(_healthy_checks(), merge_queue=True))
+    assert not any("merge_queue" in v for v in report.violations), report.violations
 
 
 def test_undocumented_live_check_is_violation(tmp_path: Path) -> None:
