@@ -360,6 +360,16 @@ gates:
     evidence: "2026-09-03 Kiki 실행(GitHub 웹 UI ruleset 16623542) — 미강제 10건 등록 완료. 검증: gh api repos/doldori7/WhyMath/rules/branches/main 재조회 후 문서 REQUIRED_CHECKS 블록과 **기계 대조**(눈 대조 아님) — 라이브 고유 16건 vs 문서 16건, 미강제 0건·문서 미선언 0건으로 집합 완전 일치. 등록된 10건: changes / backend — lint·type·test / mobile / concept-reach / web / infra-contracts / docker-build / harness-integrity / declared-unwired-audit / corpus-authoring. 잔여(비차단): 6건이 중복 등록됐다(web·infra-contracts·docker-build·harness-integrity·declared-unwired-audit·corpus-authoring 각 2회 — 라이브 항목 수 22, 고유 16). 중복은 같은 컨텍스트를 두 번 요구하는 것이라 판정을 느슨하게 만들지 않아 차단 사유가 아니며, integration_id 축(특정 앱 pin vs any source) 확인과 정리는 HARN-63이 승계한다. 승인 축(required_approving_review_count=0 vs 문서 '최소 1명')은 **의도적 미변경** — 1인 개발에서 자가승인 불가로 머지가 막히므로 문서/현실 중 무엇을 고칠지는 Kiki 판단 사안이며 이 게이트 범위 밖(HARN-63 ⑤로 승계)."
     cleared_by: null
     notes: ""
+  - id: G-required-checks-source-of-truth
+    title: "필수 체크의 정본 소스 결정 — 라이브 집행이 룰셋에서 클래식 브랜치 보호로 갈라졌다. 2026-09-10 Kiki 실측: Settings→Rules→Rulesets→main의 `Require status checks to pass`는 **비어 있고**, Settings→Branches의 `Branch protection rules`에 **`main` 규칙이 존재**한다. 즉 보호는 살아 있으나(merge queue가 CI를 19분 55초 기다린 뒤 머지한 실측과 정합) 이 저장소의 관측 도구 3종(`pr_delivery_audit.py`·`ruleset_drift.py`·`ruleset_pin_plan.py`)은 전부 룰셋만 읽으므로 그것을 보지 못한다 — harness-audit 「통합 흐름 진단」이 상시 red인 현재 원인이다. 권고 = A) 룰셋에 `Require status checks to pass` 재활성화 + 16건 재등록(도구·게이트가 전부 룰셋 기준으로 만들어져 있고 GITHUB_TOKEN이 룰셋은 읽지만 클래식은 403이라 새 자격증명이 불요). B) 클래식을 정본으로 인정하면 도구 3종을 PAT 경로로 다시 써야 한다. 선행 확인 = 클래식 `main` 규칙의 내용(필수 체크 목록·건수, `Require merge queue` 체크 여부) — merge queue가 클래식 쪽에만 있으면 클래식을 지우는 순간 큐가 죽으므로 **룰셋이 전부 갖추기 전에는 클래식을 삭제하지 않는다**. 해소 시 `HARN-82`(2026-09-07부터 이 이유로 blocked)의 차단 조건 ①이 함께 충족된다"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-10
+    remind_after_days: 2
+    evidence: null
+    cleared_by: null
+    notes: ""
   - id: G-required-checks-source-pin-cleanup
     title: "required check의 소스 pin 정리 — unpinned 7건(그중 concept-reach는 pin 항목이 아예 없음·순서 주의)"
     kind: human
