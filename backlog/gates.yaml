@@ -67,7 +67,7 @@ gates:
     status: cleared
     requested: 2026-09-09
     remind_after_days: 3
-    evidence: "2026-09-10 실측 — 저장소 전환 승계 확인(5축 중 4축). ① owner.type=Organization (GitHub 검색 API 응답 `\"type\":\"Organization\"` · org id 326699881) ② 이관이지 신설 아님 — repo id 1237870848이 doldori7 시절과 동일 ③ Actions 승계 — `GET /actions/workflows` 총 5건이 전부 state=active (branch-cleanup·ci·deploy·harness-audit·pr-auto-resync) ④ 시크릿 승계 — PR_AUTO_RESYNC_TOKEN이 살아 있다(pr-auto-resync run #16까지 schedule 이벤트로 conclusion=success · fail-closed 설계상 시크릿 부재면 exit 1이므로 변별력 있는 신호) ⑤ 브랜치 보호 승계 + merge queue 활성 — `PUT /pulls/1063/merge`가 405 `Repository rule violations found: A conversation must be resolved... Changes must be made through the merge queue`.\n\n미실측 1건 = DEPLOY_SSH_HOST/USER/KEY/KNOWN_HOSTS/PATH. deploy.yml이 수동 승인 워크플로라 이관 후 실행 이력이 없어 확인 경로가 없다 — HARN-96 acceptance ②의 잔여로 남긴다(간접 신호로 대체하지 않는다).\n\n판정 기준: main b2afb674. 이 clear는 Kiki가 2026-09-10 Phaiakes9에서 같은 evidence로 실행해 성공한 것을 이 브랜치에 재현한 것이다 — Kiki 머신의 실행분은 로컬 main(미커밋)에 있었고, main이 merge queue로 보호돼 직접 push가 불가해 PR 경로로 옮겼다."
+    evidence: "2026-09-10 실측(PR #1063 세션): owner.type=Organization(검색 API) · repo id 1237870848 동일(Transfer) · Actions 워크플로 5종 state=active · PR_AUTO_RESYNC_TOKEN 승계(pr-auto-resync run 16까지 token=pat 정상 종료) · 브랜치 보호 승계 + merge queue 활성(PUT /pulls/1063/merge가 405 rule violation). 미실측 1건 = DEPLOY_SSH_* (deploy.yml이 수동 승인이라 이관 후 실행 이력 없음) — HARN-96 acceptance에 잔여로 남긴다."
     cleared_by: claude
     notes: "[정정 2026-09-09] 최초 제목은 kiki-s-broom/whymath를 별도 복사본으로 오인해 '시크릿 재등록·브랜치 보호 재구성'을 요구했다. 이후 이 브랜치를 push하며 GitHub의 'This repository moved' 응답 + 브랜치·claim 이력 완전 동일을 실측해, 복사본이 아니라 GitHub 저장소 전환(Transfer repository)임을 확인했다 — 전환은 시크릿·브랜치 보호·webhook·Actions 설정을 자동 승계한다(GitHub 표준 동작). 그래서 이 게이트의 실제 작업은 '재등록/재구성'이 아니라 '자동 승계가 됐는지 확인'으로 좁아졌다. 상세 = HARN-96-canonical-repo-migration-kiki-s-broom acceptance ⑨."
   - id: G-canonical-repo-migrate-decision
@@ -214,11 +214,11 @@ gates:
     title: "EOS-63 전환 선결 — attempt_event.skill_ids 기록률 실측(Phaiakes9 prod DB에서 리포트 1회 실행)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-01
     remind_after_days: 7
-    evidence: null
-    cleared_by: null
+    evidence: "판정 기준: main 28a90846. Kiki가 docs/ops/eos63_skill_event_reach_sample_runbook.md 그대로 Phaiakes9 whymath-pg(5433)에서 실행(2026-09-10). WINDOW=2026-09-10T03:33:12.332113+00:00 ATTEMPTS=20 EVENTS=20 EMPTY=20 NONEMPTY=0 NULL=0 WRITER_REACH=1.0 RESOLUTION=0.0 E2E=0.0 PROBE_ACCEPTED=20 PROBE_FAILED=0. 실측 성립(EVENTS≥1) — 판정은 '전환 보류'(해소율 0%). 원인 read-only 확인: skill_node_total=0 skill_node_estimable=0 concept_total=2683 concept_with_skills=0. 근본원인 해소는 SKB-01-skill-concept-bridge-prod-populate로 분리 등재, EOS-63 depends_on에 추가(전환 착수 보류 유지)."
+    cleared_by: claude
     notes: ""
   - id: G-export-prediction-disclosure
     title: "열람권 export의 예측 5필드 제외(잠정) 법률 검토 — PIPA §35/GDPR Art.15가 추론치 원시값 제공을 요구하는지"
@@ -400,6 +400,16 @@ gates:
     evidence: null
     cleared_by: null
     notes: "수학 K-12 완성 전 어떤 과목도 착수 금지 (불변 전제)"
+  - id: G-skb01-bridge-populate
+    title: "SKB-01 skill_node·concept.behavior_skills 브릿지 prod 적재 실행 — Phaiakes9 whymath-pg 쓰기(populate CLI 2종)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-10
+    remind_after_days: 7
+    evidence: null
+    cleared_by: null
+    notes: ""
   - id: G-state-machine-deferral-recheck
     title: "8상태 학습 상태 머신 보류의 재확인 (재확인 지점 = G4 2026-12-13) — 2026-09-03 Kiki 결정으로 '신설 보류'했고 재개 조건은 '실 운영 데이터에서 상태 기반 제어가 필요하다는 증거'다. 판정 3택: ①보류 유지(증거 없음 — 기본값) ②ADR로 채택(증거 있음 — *MasteryHistory와의 진실 원천 중복 해소안을 ADR에 포함해야 한다) ③영구 미채택으로 종결. 근거 문서 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §5-A·§11.1 · MEMORY 2026-09-03 결정 로그. 등재 이유: '만료 없는 유예·제외 금지'(CLAUDE.md 2026-08-03) — 보류에 재확인 지점을 못박았으나 그 지점에 알려 줄 장치가 없어 산문으로만 남아 있었다. remind-after-days=101은 2026-09-03 기준 G4(12/13)까지의 일수이며, 그 시점부터 SessionStart 브리핑에 뜬다"
     kind: decision
