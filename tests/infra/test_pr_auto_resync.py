@@ -393,13 +393,47 @@ def test_script_is_executable_and_syntactically_valid() -> None:
     assert proc.returncode == 0, proc.stderr
 
 
-def test_doc_records_that_merge_queue_is_unavailable_here() -> None:
-    """다음 세션이 merge queue를 다시 제안하지 못하게 **조건과 실측**이 문서에 박혀야 한다.
+def test_doc_records_current_merge_queue_state_with_evidence() -> None:
+    """문서가 merge queue의 **현행 사실**을 근거와 함께 적어야 한다 (HARN-98).
 
-    제목만 검사하면 본문을 지워도 통과하므로 실측 근거(owner.type)까지 본다.
+    원래 이 테스트는 "쓸 수 없다는 사실이 적혀 있다"를 동결했다(2026-09-07). 그 전제는
+    2026-09-09 저장소가 조직(kiki-s-broom)으로 전환되면서 **거짓이 됐고**, 테스트는 거짓을
+    동결하는 상태가 됐다. 이제 방향을 뒤집어 *현행 사실 + 그것을 뒷받침하는 실측*을 요구한다.
+
+    왜 제목만 보지 않는가: 제목만 검사하면 본문을 지워도 통과한다. 그래서 ①계정 유형이라는
+    제공 조건 ②큐가 실제로 일한 증거(merge_group 이벤트) ③전제가 바뀐 이력 셋을 함께 본다.
+    ③을 요구하는 이유는 그 절이 CLAUDE.md v0.2.18("설정 부재를 설정 가능으로 단정 금지")의
+    발생 근거이기 때문이다 — 사실이 바뀌었다고 사고 기록까지 지우면 규칙의 출처가 사라진다.
     """
     text = _DOC.read_text(encoding="utf-8")
     headings = [line for line in text.splitlines() if line.startswith("## ")]
-    assert any("merge queue" in h for h in headings), f"미제공 사실을 적은 절이 없다: {headings}"
-    assert "owner.type" in text and "User" in text, "실측 근거(계정 유형)가 문서에 없다"
-    assert "조직" in text, "제공 조건(조직 소유 전용)이 문서에 없다"
+    assert any("merge queue" in h for h in headings), f"merge queue 절이 없다: {headings}"
+
+    # ① 제공 조건 — 조직 소유 전용이라는 조건 자체는 변하지 않았다
+    assert "owner.type" in text, "계정 유형 축이 문서에 없다"
+    assert "Organization" in text, "현행 계정 유형(조직)이 문서에 없다"
+
+    # ② 큐가 **실제로 일한** 증거 — 설정 조회보다 강한 근거이며, 라이브 룰셋을 읽지 못하는
+    #    세션에서도 확인 가능한 유일한 축이다.
+    #    앵커는 문서에 **한 번만** 나오는 토큰으로 잡는다: `merge_group`은 큐의 잡 스킵을
+    #    설명하는 문단에도 나오므로, 그 단어로 검사하면 증거 블록을 통째로 지워도 통과한다
+    #    (실측: 뮤테이션 Q3 생존 → 이 형태로 교체). run id와 큐 브랜치명은 각 1회다.
+    assert "34318528035" in text, "큐 CI 실행 id(증거)가 문서에 없다"
+    assert "gh-readonly-queue" in text, "큐 브랜치 실측이 문서에 없다"
+
+    # ③ 사고 기록 보존 — v0.2.18의 발생 근거가 지워지지 않았는가.
+    #    "설정 부재"도 같은 절에 2회 나와 한쪽을 지워도 통과했다(뮤테이션 Q4 생존) —
+    #    규칙 버전 문자열은 1회뿐이라 그것을 앵커로 쓴다.
+    assert "v0.2.18" in text, "전제가 바뀐 이력(v0.2.18 발생 근거)이 지워졌다"
+
+
+def test_ruleset_policy_declares_merge_queue() -> None:
+    """선언 축에 merge_queue가 있어야 감시가 실효를 갖는다 (HARN-98 집행 지점).
+
+    `ruleset_drift.compare`는 **문서 선언 키만 순회**한다 — 라이브 파서에만 넣으면 그 축은
+    한 번도 대조되지 않는다. 큐가 머지 경로를 지탱하는 지금, 감시 축 부재는 "누가 큐를 꺼도
+    판정기가 모르는" 상태다.
+    """
+    text = _DOC.read_text(encoding="utf-8")
+    begin, end = text.index("RULESET_POLICY_BEGIN"), text.index("RULESET_POLICY_END")
+    assert "`merge_queue` = `true`" in text[begin:end], "정책 선언 블록에 merge_queue가 없다"
