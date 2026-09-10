@@ -195,3 +195,10 @@ data/audit/
 # 라이브 설정의 시점 스냅숏이라 커밋 대상이 아니고, 무시하지 않으면 매 세션
 # `git status`에 뜬 채로 남아 언젠가 실수로 들어간다(2026-09-10 Kiki 머신 실측: 5건 누적).
 /ruleset*.json
+
+# 관측 리포트의 임시 출력 위치 — 런북의 정본 경로는 이미 무시되는 `work/`다
+# (예: eos63 런북이 `--json work\eos63\report.json`을 지정한다). 그러나 `--json`은
+# 임의 경로를 받으므로 즉석 실행이 루트에 남긴다(2026-09-10 Kiki 머신 실측:
+# reports/eos63_reach_report.json). 머신·시점 종속 실측치라 커밋 대상이 아니다 —
+# 확정 수치는 게이트 evidence나 문서로 옮긴다.
+/reports/
