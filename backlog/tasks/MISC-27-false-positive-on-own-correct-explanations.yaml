@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P1
 owner: claude
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/harness/explicit_correction_gap_eval.py
-session: null
+session: claude/status-38gu4d
 notes: "발단: MISC-25 교수학 검토의 곁가지 실측. MISC-25(정정 언급)·MISC-26(어휘 확장)과 축이 다르다 — 그 둘로 안 걸리는 25건이 남는다는 것이 이 태스크의 근거다. EOS P1로 둔 이유: 정답을 쓴 학생에게 확신 오진단이 나가는 것은 의사결정 우선순위 #1(학생 안전·정서)에 직접 닿는다."
 updated: 2026-09-10
