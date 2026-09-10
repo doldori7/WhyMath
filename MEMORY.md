@@ -350,6 +350,13 @@
 - **대책(규칙)**: CLAUDE.md v0.2.20 — 기존 "픽스처가 그 절을 실제로 밟는가"(2026-09-07)에 **"뮤테이션 전건 RED는 커버리지의 증거가 아니다"** 축을 확장으로 덧붙였다. 실무 절차: 조건문 추가 시 "이 절이 없으면 무엇이 통과하는가"에서 멈추지 말고 **"이 분기가 실세계에서 몇 가지 원인으로 발생하는가"를 열거**한다. 특히 `if !cmd` 같은 **이진 판정이 다치 현실을 접는 자리**가 위험하다.
 - **함께 수용한 P2**: `status --json`의 `pending_gates` 필드명이 `HARN-94` acceptance ⑦의 `blocked_tasks`와 어긋났다. 다만 **문면이 틀렸다** — 게이트는 `todo` 태스크도 `requires_gates`로 붙잡으므로 blocked만 세면 과소 보고다. 이름을 값의 의미(`dependents`)에 맞추고 `backlog.py amend --acceptance`로 계약을 정정했다.
 - **미완**: `workflow_dispatch` 라이브 실행은 **못 했다** — 세션 토큰에 dispatch 권한이 없다(403 · 2026-08-10 선례와 동일). 로컬 스텁 실행(19 테스트 · 뮤테이션 11종)이 그 자리를 상당 부분 메우지만 실제 GitHub API 응답 형태는 재현하지 않는다. 다음 배치 푸시 때 자연히 검증된다.
+### 2026-09-08 (라이브 실측·게이트 G-pr-auto-resync-token): **자동 재동기화가 처음으로 돌았다 — 열린 질문 2개가 닫히고 결함 2개가 드러났다** (Kiki PAT 발급·실행, claude 로그 판독·등재) — 판정 기준 main `ee2e1918`(실행 시점 checkout)
+
+- **닫힌 질문 ① 예약은 발화한다.** run `34187637864`이 **`schedule` 이벤트**다(04:37:17Z). 워크플로 결함이 아니었다. 착지 00:09Z → 첫 예약 발화 04:37Z로 **약 4시간 28분**(표본 1). `HARN-87` ⑤~⑧이 "미확정"으로 남겨 둔 축이 이것으로 갈렸다 — **미확정을 유지한 판단이 옳았다**(⑥에서 "구조적 달성 불가"로 확정했다면 지금 그 근거가 틀린 채 대장에 남아 있었을 것이다).
+- **닫힌 질문 ② PAT 경로가 실제로 돈다.** run `34188745979`(workflow_dispatch · dry_run=0 · 04:56:02Z) **success** — `token=pat` · `── 요약: 스캔 17건 · BEHIND+auto-merge 0건 · 최신화 0건 · 충돌 0건 · 미판정 4건 · 기타실패 0건`. 게이트 clear.
+- **드러난 결함 ① 토큰 값 오염** — 04:37 예약 실행은 시크릿이 이미 등록된 상태(`RESYNC_TOKEN_KIND: pat`)에서 `Post "https://api.github.com/graphql": net/http: invalid header field value for "Authorization"`로 실패했다. 붙여넣기에 개행·공백이 딸려 들어간 형태다. **실패 경로 설계가 그대로 일했다** — 스크립트가 이것을 "대상 0건"이 아니라 `PR 목록 조회 실패(exit=1) — 측정 실패다`로 판정하고 **HTTP 응답 본문을 남겨** 원인이 즉시 규명됐다(`HARN-85` ③의 실증). Kiki 재등록 후 정상. 대책은 타 세션이 `HARN-89-resync-token-hygiene-precheck`로 등재(토큰 위생 사전 검사).
+- **드러난 결함 ② 대상을 못 본다 → `HARN-90` 등재(priority 1)**. 성공 실행의 **미판정 4건** 중 하나가 PR #1059인데, **같은 시각 REST는 그 PR을 `mergeable_state: behind`로 답했다** — 재동기화해야 할 바로 그 대상을 건너뛰었다. `gh pr list --json mergeStateStatus`가 GitHub의 지연 계산을 유발하지 않아 UNKNOWN으로 오는 것으로 보인다(단건 조회가 계산을 촉발한다 — **추론이므로 ①에서 실측하도록 적었다**). 설계("모른다 ≠ 아니다")는 옳게 작동했으나 입력이 거의 항상 UNKNOWN이면 **자동화가 형식적으로 정상이면서 실효 0**이 된다. 요약이 분모와 미판정 수를 내도록 설계한 덕에 그 상태가 첫 실행에서 즉시 보였다("작동한 비율" 원칙의 효과).
+- **등재 절차에서 배운 것 2건**: ⓐ`add`가 번호 충돌로 `HARN-89`를 거부해 타 세션의 동명 태스크를 알게 됐다 — **paths 2개가 정확히 겹쳐**(같은 스크립트·같은 테스트 파일) 병렬 충돌 고지를 notes에 박았다. 이번엔 등재 전에 역할 기반 grep(`mergeStateStatus|update-branch|auto-resync|재동기화`)을 먼저 돌렸다(직전 `HARN-88` 중복의 교훈 적용). ⓑ`audit-deps` 쓰기측 선검사가 내 notes의 "선행" 어구를 의존 선언으로 읽고 **등재를 거부**했다 — 오탐이지만 규칙대로 우회하지 않고 **문구를 고쳐** 재등재했다(대장 차원 의존이 아니라 실행 순서 권고임을 문장에서 분리).
 ### 2026-09-08 (stray-code 9회차): **좌석은 전부 살아 있었고, 대신 감사가 자기 세션의 PR 결함을 잡았다 — 그리고 "처분 라벨"이 만료 없는 유예로 8일째 서 있었다** (Kiki "stray-code", claude 실측·등재) — 판정 기준 main `4abacdce` · 정본 `docs/reviews/unmerged_branch_audit_2026-09-08.md`
 
 - **전제 복구**: 세션이 shallow(52커밋)로 시작해 브리핑도 "판정 보류"를 냈다 — `--unshallow`로 1,043커밋 복원 후 판정. 이걸 안 풀면 ahead 수치·포팅 근거가 통째로 오염된다.
@@ -9009,6 +9016,26 @@ COMP-01(PR #1045) 검증 중 **같은 실행 하나에서 두 결함이 겹쳤�
 armed 상태였던 auto-merge가 먼저 성사됐다(`f9e25f80`). 즉 두 경로는 배타가 아니라 **경합**이며,
 "Base branch was modified"는 실패가 아니라 다른 쪽이 이겼다는 신호다.
 
+## 2026-09-08: 게이트 `title`만 인용해 이미 뒤집힌 결정을 재안내 (CLAUDE.md 등재분 = `HARN-92`)
+
+`LIC-07` done 처리 후 "머지 경합 해소"를 안내하며 `G-merge-queue-or-strict-relax`의 `title`("merge queue
+도입 또는 'up to date' 요구 해제")을 그대로 인용해 사용자에게 선택을 요청했다. 실측하니 그 게이트는 이미
+**`cleared`**(`cleared_by: kiki`, 2026-09-07)였고 `evidence`에는 "1) merge queue는 조직 소유 저장소 전용이라
+이 저장소(`owner.type=User`)에서 실행 불가 — 전제 반증 → 재판정 = **D) 자동 재동기화 워크플로우**"가
+기록돼 있었다. `title`은 최초 등재 시점의 *질문*을 담고 있을 뿐, 이후 `status`·`evidence`가 답을 갱신해도
+`title`은 append 전용 설계(`HARN-76`)상 그대로 남는다.
+
+사용자가 그 낡은 `title`을 따라 "up to date 요구 해제"를 선택한 뒤에야 `evidence`를 조회해 이미 결정·구현된
+사안(`pr-auto-resync.yml`, `HARN-85` done)임을 뒤늦게 발견했다 — 왕복 1회 낭비.
+
+같은 세션에서 이어서 `G-pr-auto-resync-token`도 main 기준 `pending`만 보고 "PAT 미발급"으로 판정할 뻔했으나,
+이번엔 "trunk 부재를 미구현으로 단정 금지" 규칙을 스스로 적용해(미머지 브랜치 `claude/pat-issuance-q516cw`
+실측) 사전에 잡았다 — 그 브랜치에 이미 `cleared`(Kiki가 당일 새벽 PAT 발급·시크릿 등록·`workflow_dispatch`
+성공 실측)로 기록돼 있었다. 그 축은 기존 규칙이 이미 커버하므로 별도 등재하지 않았다.
+
+**대책**: `HARN-92`(도구 쪽) — `backlog.py gates`에 단일 게이트 브리핑 경로를 추가해 `status`·`cleared_by`·
+`evidence`를 `title`과 함께, `title`보다 먼저 출력하게 한다. `HARN-86`(전이 거부가 해소 경로를 안 알려주던
+결함)과 같은 형태 — 안내자가 규율을 몰라도 도구가 낡은 `title`에 낚이지 않게 만든다.
 ## 2026-09-08: MISC-22 — 오개념 정규식 채널 confidence 공식 정정(v1.5), 4개 채널이 한 번도 학생에게 도달하지 못했던 결함 해소
 
 **결정**: `_match_one`(diagnose.py)의 confidence 공식을 `min(1.0, (substr매치+regex매치)/len(signals))`
