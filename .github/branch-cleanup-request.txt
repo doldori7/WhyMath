@@ -123,3 +123,25 @@ claude/backup/ai-integration-5qqcp4-pre-rebase
 #   status-f9lp65(HARN-56 block) · test-driven-development-03elxp(MP-02 block·MP-05)
 claude/drive-eos-81-sequential-wbhw8v
 claude/review-dydkkx-runbook
+
+# ── 2026-09-08 8차 배치 (1건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-08.md §4 ──
+# 직전 배치 집행 확인(2026-09-08 실측): 누적 21건 전건 잔존 0/21 · 허용 패턴 밖 수동 3건
+#   (gates/deploy-environment-approval·pr/collab-07·backend/cur-16-*) 전건 삭제 완료.
+#   ⚠ 이 파일은 삭제된 과거 배치를 계속 열거한다 — 워크플로가 그 404를 실패로 계상해 매 실행 red다(HARN-01 소유).
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   backup/ai-content-a3ysut-pre-rebase = b271671b
+#     근거: diff 16파일 **전부 main 실재**(부재 0). 고유 줄 20(6파일)은 전건 옛 판이며 main이 더 넓다 —
+#     예: schema/enums.py ReviewStatus가 브랜치 3종 docstring인 데 반해 main은 3종+quarantined+EOS-71 근거.
+#     CONT-02/03/04는 updated 날짜와 옛 notes뿐. 8회차가 유일 uncovered로 남긴 MEMORY.md 글자 깨짐은
+#     #1027이 정정해 지금 고유 줄 0. 좌석 OPS-41 ④(a)가 "이 축은 충족 상태 · 착수 세션이 재확인 후
+#     삭제 배치 후보로 내릴 수 있다"고 명시 승인했고, 9회차가 그 재확인을 독립 재도출로 수행했다.
+#     OPS-41의 나머지 두 축(t608mk·azdnov)은 브랜치가 그대로 남아 영향 없다.
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 7차 배치 승계에서 a3ysut만 해제:
+#   7n9n72(**삭제 절대 금지** — 좌석 10건이 main 기준으로 전부 참조 확인 2026-09-08) ·
+#   trjg5x(PB-13·PB-14·ADMIN-02·PATH-03) · k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07) ·
+#   5t5lmv(OPS-40) · iws58k(ARCH-30) · t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28) ·
+#   q8tvcx(OPS-38·SEC-32는 done이나 OPS-38·OPS-67 잔존) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 4건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0) ·
+#   test-driven-development-03elxp(ahead 0·diff 0 — 9회차 신규 측정) · status-f9lp65(2↑·diff 5) ·
+#   status-iraoq3(MISC-21·9회차 신규 등장). 앞 둘은 claim 해제 시 잃을 내용 0으로 즉시 삭제 후보다.
+claude/backup/ai-content-a3ysut-pre-rebase

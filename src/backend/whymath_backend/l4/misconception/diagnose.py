@@ -13,12 +13,19 @@ v1.2 정교화(슬 102): substring AND를 넘어 **정규식 보조 탐지 경�
 기호식(`(a+b)²=a²+b²`)은 잡지만 학생이 *구체 수치로* 계산해버린 흔적은 못 잡던 한계(§5.3·슬
 101에서 문서화)를 줄인다. 정규식은 *정규화된 텍스트*에 `re.search`로 검사한다.
 
-confidence 의미 보존(중요): 분모는 substring `signals` 개수로 *유지*하고, 정규식 매치는
-분자에 *가산*하되 상한 1.0으로 캡한다 — `min(1.0, (substr매치 + regex매치)/len(signals))`.
-따라서 substring만으로의 기존 confidence(1.0/0.5)는 불변이고 정규식은 *추가* 탐지가 된다.
-수치 정규식은 기호 substring 케이스와 *겹치지 않게*(disjoint) 작성해 `matched_signals`
-집합·기존 confidence를 보존한다(예: distribution 정규식은 `(3+4)²=3²+4²` *숫자*만 매치,
-기호 `(a+b)²=a²+b²`엔 매치되지 않음).
+수치 정규식은 기호 substring 케이스와 *겹치지 않게*(disjoint) 작성해 `matched_signals` 집합·
+기존 substring-only confidence를 보존한다(예: distribution 정규식은 `(3+4)²=3²+4²` *숫자*만
+매치, 기호 `(a+b)²=a²+b²`엔 매치되지 않음).
+
+v1.5 정정(MISC-22): 정규식 매치 1건 = substring 신호 **전체**와 동등한 완결 증거로 가산한다 —
+`min(1.0, matched/len(signals) + matched_regex_count)`(코드는 통분해 `numerator = matched +
+matched_regex*len(signals)`로 구현). v1.2의 옛 식(`min(1.0, (substr+regex)/len(signals))`)은
+정규식 매치를 substring 신호 *1개*와만 동등하게 쳐서, 정규식이 disjoint 역참조로 이미
+substring AND 전체에 준하는 확정 증거임에도 확신도가 0.5(수치 신호 종류가 흔히 2개)에 갇혔다 —
+그 결과 `factor-sign-flip`을 비롯한 4개 v1.2 시연 채널의 "수치 대입 탐지" 헤드라인 역량이 서빙
+품질 게이트(0.65)에 전혀 못 미쳐 **한 번도 학생에게 도달하지 못했다**(작동 신호 없는 알고리즘
+부착 — `anchor_detection_channel_eval` 실측·MISC-22). substring만으로의 기존 confidence
+(1.0/0.5)는 불변 — 이 정정은 *정규식이 매치했을 때만* 영향을 준다.
 
 v1.3 정밀화(슬 109·라이브 FP 교정): **짧은 영숫자 signal의 경계 매칭**. `"0"` 같은 숫자-only
 signal과 `"b"` 같은 단일 ASCII 문자 signal은 plain substring으로 두면 *다른 토큰 내부*에
@@ -35,6 +42,16 @@ signal을 영숫자 경계 정규식(`(?<![0-9A-Za-z.])sig(?![0-9A-Za-z.])`)으�
 한계(방향맹)의 정본 해법이고, *어휘* 차원 거짓양성(짧은 토큰 오매칭)은 v1.3이 직접 줄인다.
 잔여: 부분매칭(0.5) 자체의 정밀도 한계(예: `'분모'` 단독 0.5)는 substring 설계의 알려진
 트레이드오프 — semantic/judge 계층(슬104~108)이 그 자리다.
+
+v1.6 정정(MISC-24): MISC-22가 5개 정규식 채널(factor-sign-flip 등)의 정규식-단독 매치를
+게이트 도달로 정정한 부수효과로, `extremum-value-vs-point-confused`가 `f(x₀)=x₀`인 *우연의
+일치* 정답(예: 극대점 x=2에서 극댓값도 2)에도 confidence 1.0을 내 확신 오진단 위험이 있음이
+드러났다 — 실은 MISC-22 이전부터 있던 사실(그 정규식이 리터럴 '극댓값'을 포함해 substring이
+항상 함께 발화). 이 항목은 오개념 발화 텍스트와 우연의 일치 정답 텍스트가 **글자 그대로
+동일**해 정규식으로도 반박(`refuting_regex`)으로도 원리상 구별이 불가능하다.
+`ambiguous_regex_signals` 필드(models.py)로 이 항목만 예외적으로 정규식 가산을 0으로 둬
+confidence가 항상 substring 신호만으로 결정되게 한다(다른 5개 채널의 MISC-22 정정은 완전히
+불변).
 """
 
 from __future__ import annotations
@@ -126,13 +143,31 @@ def reject_refuted(candidates: Sequence[MisconceptionMatch], text: str) -> list[
 def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | None:
     """단일 misconception 매칭 — substring 부분집합(정규형 비교) + 정규식 보조 경로(OR).
 
-    confidence = min(1.0, (substr매치 + regex매치) / len(signals)). 둘 다 0이면 None.
-    분모는 substring `signals` 기준 유지(v1.1 의미 보존) — 정규식은 분자에 *가산*·상한 1.0.
+    confidence = min(1.0, substr매치/len(signals) + regex매치). 둘 다 0이면 None.
     v1.3: 개별 signal 매칭은 `_signal_hit`(짧은 영숫자 signal 경계 검사) 경유.
+
+    MISC-22 정정(v1.5) — 정규식 매치 1건은 *전체 신호 AND*와 동등한 완결 증거로 가산한다
+    (분자에 `len(signals)`를 더해 단독으로도 상한 1.0을 채운다). 카탈로그의 모든 `regex_signals`는
+    명명그룹 역참조로 좌·우변이 글자 그대로 일치할 때만 매치하도록 설계돼 정답·기호식과
+    *disjoint*가 이미 항목별로 증명돼 있다(각 항목 주석 참조) — 즉 규격상 "부분 신호"가 아니라
+    substring AND 전체에 준하는 확정적 단서다. v1.2의 옛 가산식(정규식 매치를 substring 신호 1개와
+    동등하게 취급)은 이 disjoint 보증을 과소평가해 `factor-sign-flip`(수치 입력에서 상징적
+    substring이 구조적으로 0건)을 confidence 0.5에 가둬 서빙 품질 게이트(0.65)에 영원히 못 미치게
+    했다(작동 신호 없는 알고리즘 부착) — 같은 결함이 `distribution-over-power`·
+    `square-root-positivity`·`fraction-cancellation`·`log-distribution`의 수치 대입 탐지에도
+    동일하게 있었다(실측: 4종 전부 conf 0.5). `extremum-value-vs-point-confused`는 회귀 없음 —
+    그 정규식 패턴 자체가 substring 신호 `극댓값`을 리터럴로 포함해 regex 매치 시 substring도 항상
+    함께 매치하므로 옛 식으로도 이미 conf 1.0이었다(실측 확인).
 
     MISC-23: `refuting_regex`가 하나라도 매치되면 **신호를 세기 전에** None이다. 공출현 AND는
     오개념을 *저지른* 풀이와 그것을 *설명한* 정답을 구별하지 못하므로, 반박 축이 없으면 정답에
     확신 오진단이 나간다(실측: conf 1.0으로 품질 게이트 통과).
+
+    MISC-24: `ambiguous_regex_signals=True`인 항목은 정규식 매치가 `matched_regex_signals`
+    (텔레메트리)에는 담기되 confidence 가산에는 기여하지 않는다(numerator에서 배제) —
+    `extremum-value-vs-point-confused`처럼 오개념 발화와 우연의 일치 정답이 텍스트상 완전히
+    동일해(`refuting_regex`로 반박할 대상 자체가 없음) 정규식 매치 자체가 확정 증거가 될 수
+    없는 항목을 위한 것이다(models.py 필드 docstring 근거).
     """
     norm_text = _normalize(text)
     # 반박 조건 먼저(MISC-23) — 양성 단편을 세기 *전에* 판정한다. 나중에 감점하는 형태였다면
@@ -145,8 +180,19 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     )
     if not matched and not matched_regex:
         return None
-    # 분모는 substring signals 개수(>=1, 카탈로그 불변식). 정규식 가산분은 1.0으로 캡.
-    confidence = min(1.0, (len(matched) + len(matched_regex)) / len(misconception.signals))
+    # MISC-22(v1.5): 정규식 매치 1건 = substring 신호 전체(len(signals))와 동등한 완결 증거로
+    # 가산한다 — disjoint 역참조 정규식은 substring AND 전체에 준하는 확정적 단서이기 때문이다
+    # (위 docstring 근거). 분모는 substring signals 개수(>=1, 카탈로그 불변식) 유지.
+    # MISC-24: 단, `ambiguous_regex_signals`가 선 항목은 정규식 가산을 0으로 둔다 — 매치된
+    # 정규식이 확정 증거가 아니라 원리상 반박 불가능한 모호 신호이기 때문이다(models.py 근거).
+    if misconception.ambiguous_regex_signals:
+        numerator = len(matched)
+    else:
+        numerator = len(matched) + len(matched_regex) * len(misconception.signals)
+    if numerator == 0:
+        # matched_regex만 있고(ambiguous 항목이라 가산 0) matched는 비었다면 세울 증거가 없다.
+        return None
+    confidence = min(1.0, numerator / len(misconception.signals))
     return MisconceptionMatch(
         misconception=misconception,
         confidence=confidence,

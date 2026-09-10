@@ -38,6 +38,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -80,13 +81,204 @@ def _fail(message: str, code: int = 1) -> int:
     return code
 
 
+# ── 전이 거부의 해소 경로 안내 (HARN-86) ────────────────────────────────────
+# 거부는 장애물이 아니라 판정이다(CLAUDE.md 프로세스·안내). 다만 "허용 목록"만 내는
+# 거부는 *전이표를 이미 아는 사람*에게만 유용하다 — 안내자가 규칙을 모른 채 런북에
+# 명령을 적으면 그 런북은 실행 시점에 exit 1로 공전한다(2026-09-07 실측: LIC-07의
+# done 안내가 todo→done 거부로 왕복 1회 낭비). 그래서 거부가 **해소 경로 자체**를
+# 함께 낸다 — 안내자가 규칙을 몰라도 실행자가 막히지 않게. "고칠 수 없는 위반을
+# 지적하는 게이트는 사람이 게이트를 끄게 만든다"(HARN-52 등재 사유)의 같은 축이다.
+_CLI = "python3 scripts/harness/backlog.py"
+
+
+# 전이표가 허용하는 전이가 곧 **실행 가능한** 전이는 아니다 (Codex P2 · PR #1067).
+# `cmd_start`는 전이 검사를 통과한 뒤 `selector.classify_todo`를 부르고, 그것이 session을
+# 보유한 태스크를 `claimed`로 거부한다(selector.py:206). 그래서 session을 든 채 in_progress로
+# 가는 홉은 전이표상 합법이어도 반드시 exit 1이다. 실측(2026-09-08 시딩 저장소):
+#
+#   review/session=b     → start    EXIT=1 (claimed)   ← Codex가 지적한 경로
+#   in_progress→unblock  → todo/session=b (session이 남는다) → start EXIT=1 (claimed)
+#   in_progress→block    → blocked/session=null → unblock → start EXIT=0  ← 실행 가능
+#
+# 즉 **더 짧은 경로가 깨진 경로**였다. "붙여 넣을 수 있는 명령"을 약속하는 기능이 실행되지
+# 않는 명령을 내면 그 기능은 없느니만 못하다 — 이 태스크가 고치려던 결함 그 자체다.
+# 그래서 경로 탐색을 (상태, session 보유) 쌍 위에서 한다: 최단이 아니라 **실행 가능한 것 중
+# 최단**을 고른다.
+_HOP_NEEDS_FREE_SESSION = "in_progress"  # start — classify_todo의 claimed 검사
+_HOP_FREES_SESSION = "blocked"  # block — task.session = None
+
+
+def _hop_is_executable(target: str, session_held: bool) -> bool:
+    """이 홉의 CLI 명령이 지금 상태에서 실제로 성공하는가."""
+    return not (target == _HOP_NEEDS_FREE_SESSION and session_held)
+
+
+def _session_after(target: str, session_held: bool) -> bool:
+    """홉을 밟은 뒤의 session 보유 상태.
+
+    `block`은 비우고(`task.session = None`), `start`는 채운다. `unblock`은 **비우지 않는다** —
+    원격 claim만 걷고 로컬 session 필드는 그대로 둔다(cmd_unblock 실측). 그래서
+    in_progress→todo 직행은 session을 든 todo를 만든다.
+    """
+    if target == _HOP_FREES_SESSION:
+        return False
+    if target == _HOP_NEEDS_FREE_SESSION:
+        return True
+    return session_held
+
+
+def _transition_route(source: str, target: str, *, session_held: bool) -> list[str] | None:
+    """source → target **실행 가능한** 최단 경로(source 제외 경유 상태). 없으면 None.
+
+    (상태, session 보유) 쌍 위의 BFS다 — 상태만으로 탐색하면 실행 불가한 홉을 최단이라는
+    이유로 고른다. `session_held`는 호출부가 실제 태스크에서 읽어 넘긴다(가정 금지).
+    `seen`을 enqueue 시점에 채우므로 같은 쌍을 두 번 거치는 경로는 나오지 않는다.
+    """
+    if source == target:
+        # 같은 상태로의 "이동"은 경로가 아니라 무의미다 — 빈 리스트를 돌려주면 호출부가
+        # 그것을 0단계 경로로 렌더해 **명령이 하나도 없는 안내**를 낸다(2026-09-08 실측:
+        # 세션이 죽은 in_progress 태스크에 start를 걸면 "해소 경로 (0단계): in_progress").
+        # 순환(같은 상태로 되돌아오는 최단 고리)이 필요하면 _transition_cycle이 따로 낸다.
+        return None
+    seen = {(source, session_held)}
+    queue: deque[tuple[str, bool, list[str]]] = deque([(source, session_held, [])])
+    while queue:
+        node, held, path = queue.popleft()
+        for nxt in STATUS_TRANSITIONS.get(node, ()):
+            if not _hop_is_executable(nxt, held):
+                continue
+            nxt_held = _session_after(nxt, held)
+            if (nxt, nxt_held) in seen:
+                continue
+            step = [*path, nxt]
+            if nxt == target:
+                return step
+            seen.add((nxt, nxt_held))
+            queue.append((nxt, nxt_held, step))
+    return None
+
+
+def _transition_cycle(status: str, *, session_held: bool) -> list[str] | None:
+    """status를 떠났다가 **다시 status로** 돌아오는 최단 고리. 없으면 None.
+
+    쓰임: 이미 그 상태인 태스크에 같은 전이를 걸었을 때(예: 세션이 죽은 `in_progress`
+    태스크의 재착수). 전이표는 자기 자신으로의 전이를 열지 않으므로 한 바퀴 돌아야 한다.
+
+    선정 기준은 두 단계다. **1차는 실행 가능성** — `in_progress` 재진입의 2단계 후보
+    (`unblock`→`start`)는 `unblock`이 session을 비우지 않아 **실측에서 거부된다**. 실제로
+    도는 것은 3단계 `block`→`unblock`→`start`다(block이 session을 비운다). 짧은 쪽을 고르면
+    깨진 안내다. **2차는 동률일 때 `todo` 경유** — session이 없어 두 후보가 다 도는 경우
+    `review` 경유는 원격 claim을 유지하고 `todo` 경유(`unblock`)는 해제한다. 같은 상태로의
+    재진입은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳다.
+    """
+    best: list[str] | None = None
+    for first in sorted(STATUS_TRANSITIONS.get(status, ()), key=lambda st: st != "todo"):
+        if not _hop_is_executable(first, session_held):
+            continue
+        rest = _transition_route(first, status, session_held=_session_after(first, session_held))
+        if rest is None:
+            continue
+        candidate = [first, *rest]
+        if best is None or len(candidate) < len(best):
+            best = candidate
+    return best
+
+
+def _status_command(task: Task, status: str) -> str:
+    """목표 status로 가는 CLI 한 줄.
+
+    `--as <owner>` 표기는 owner 거부 메시지(HARN-06, cmd_start·cmd_done)가 이미 쓰는
+    형식을 그대로 재사용한다 — 새 어휘를 만들지 않는다. `--as`를 받는 것은 start·done
+    두 명령뿐이므로 나머지 홉에는 붙이지 않는다(붙이면 argparse가 거부한다).
+    `<증적>`·`<사유>`는 그 명령의 required 인자 자리이며, 안내를 보는 사람이 원래
+    알고 있는 값이다(앞 명령이 만들어 내는 값이 아니다 — CLAUDE.md 자리표시자 규칙).
+    """
+    as_flag = f" --as {task.owner}" if task.owner != "claude" else ""
+    commands = {
+        "in_progress": f"{_CLI} start {task.id}{as_flag}",
+        "review": f"{_CLI} review {task.id}",
+        "done": f"{_CLI} done {task.id}{as_flag} --artifact <증적>",
+        "blocked": f"{_CLI} block {task.id} --reason '<사유>'",
+        "cancelled": f"{_CLI} cancel {task.id} --reason '<사유>'",
+        "todo": f"{_CLI} unblock {task.id}",
+    }
+    return commands[status]
+
+
+def _blocked_by_session_note(task: Task, new_status: str, session_held: bool) -> str:
+    """실행 가능한 경로가 없을 때, 그 원인이 session 보유인지 구조인지 가려 말한다.
+
+    없는 경로를 지어내지 않는 것만으로는 부족하다 — 왜 없는지를 말하지 않으면 읽는 사람이
+    전이표를 뒤지다 "표에는 있는데?"에서 멈춘다. 실제로 그 경로는 표에는 있고 CLI로만 막힌다.
+    """
+    if not session_held:
+        return ""
+    if _transition_route(task.status, new_status, session_held=False) is None:
+        return ""  # session을 비워도 못 간다 — 구조적 부재이므로 호출부의 설명이 맞다
+    return (
+        f"\n  실행 가능한 해소 경로 없음 — 전이표에는 '{task.status}' → … → '{new_status}' 경로가 "
+        f"있으나 그 경로가 `start`를 지나고, 이 태스크는 session('{task.session}')을 들고 있어 "
+        f"`start`가 claim 검사에서 거부한다(selector.classify_todo). "
+        f"'{task.status}'에서는 session을 비우는 전이(`block`)가 전이표에 없어 우회로도 없다. "
+        f"→ 갈 수 있는 곳: {list(STATUS_TRANSITIONS.get(task.status, ())) or '없음'} "
+        f"(세션 소유자 본인이면 그 세션에서 이어서 작업하는 것이 정상 경로다)"
+    )
+
+
+def _transition_guidance(task: Task, new_status: str) -> str:
+    """거부에 덧붙일 해소 경로 블록 — 그대로 붙여 넣을 수 있는 명령 목록."""
+    held = bool(task.session)
+    if new_status == task.status:
+        # 이미 그 상태다. "0단계 경로"를 내는 것은 안내가 아니라 위장이다 — 답처럼 보이는데
+        # 실행할 것이 없다. 무엇이 사실인지 말하고, 재진입이 필요한 경우의 고리만 준다.
+        head = f"\n  이미 '{task.status}' 상태다 — 이 명령이 바꿀 것이 없다."
+        cycle = _transition_cycle(task.status, session_held=held)
+        if cycle is None:
+            return head + _blocked_by_session_note(task, task.status, held)
+        lines = [
+            head,
+            f"\n  같은 상태로 **다시** 들어가려면 (예: 세션이 끊긴 태스크의 재착수) "
+            f"({len(cycle)}단계): {' → '.join([task.status, *cycle])}",
+        ]
+        lines += [f"\n    {i}) {_status_command(task, st)}" for i, st in enumerate(cycle, 1)]
+        return "".join(lines)
+    route = _transition_route(task.status, new_status, session_held=held)
+    if route is None:
+        # 현행 전이표에서 도달 불가는 곧 "출발이 종결 상태"다. 그래도 종결 여부를
+        # 따로 묻는다 — 전이표가 바뀌어 다른 도달 불가 쌍이 생겨도 없는 사실을
+        # 단정하지 않기 위해서다(모르면 모른다고 — CLAUDE.md AI·신뢰).
+        if task.status in TERMINAL_STATUSES:
+            return (
+                f"\n  해소 경로 없음 — '{task.status}'은(는) 종결 상태이며 나가는 전이가 없다. "
+                f"후속 작업은 새 태스크로 등재한다: {_CLI} add ... "
+                f"(대장 YAML 손편집으로 되돌리지 않는다 — CLAUDE.md 거부 우회 금지)"
+            )
+        note = _blocked_by_session_note(task, new_status, held)
+        if note:
+            return note
+        return (
+            f"\n  해소 경로 없음 — 전이표에 '{task.status}'에서 '{new_status}'로 가는 "
+            f"경로가 없다(models.py STATUS_TRANSITIONS 확인)"
+        )
+    chain = " → ".join([task.status, *route])
+    lines = [f"\n  해소 경로 ({len(route)}단계): {chain}"]
+    lines += [f"\n    {i}) {_status_command(task, status)}" for i, status in enumerate(route, 1)]
+    return "".join(lines)
+
+
 def _transition(task: Task, new_status: str) -> str | None:
-    """상태 전이 검사 — 허용되지 않으면 오류 메시지 반환."""
+    """상태 전이 검사 — 허용되지 않으면 오류 메시지 반환.
+
+    거부 메시지에는 항상 해소 경로가 붙는다. 정상 전이는 None을 돌려주므로 안내
+    문자열이 나올 자리가 구조적으로 없다 — 성공/실패가 같은 화면을 내면 그 안내는
+    변별력이 0이고, 변별력 없는 안내는 위장이다(CLAUDE.md 2026-07-17).
+    """
     allowed = STATUS_TRANSITIONS.get(task.status, ())
     if new_status not in allowed:
         return (
             f"{task.id}: {task.status} → {new_status} 전이 불가 "
             f"(허용: {list(allowed) or '없음(종결 상태)'})"
+            f"{_transition_guidance(task, new_status)}"
         )
     return None
 
@@ -1050,13 +1242,22 @@ def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
 def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.gate_action == "list" or args.gate_action is None:
-        pending = [g for g in backlog.gates.values() if g.status == "pending"]
+        # HARN-94: 경과일만 찍던 화면을 **처리 상황**으로 바꾼다. 계산·정렬은 report에 한 곳
+        # (pending_gate_views) — 여기서 따로 세면 status 화면과 두 숫자가 갈라진다.
+        views = report.pending_gate_views(backlog, date.today())
         others = [g for g in backlog.gates.values() if g.status != "pending"]
-        print("⏳ 대기 중 게이트:")
-        for gate in sorted(pending, key=lambda g: g.id):
-            days = report._days_pending(gate.requested, date.today())
-            age = f" — {days}일 경과" if days is not None else ""
-            print(f"  {gate.id} [{gate.assignee}/{gate.kind}] {gate.title}{age}")
+        overdue_n = sum(1 for v in views if v.overdue)
+        print(f"⏳ 대기 중 게이트 {len(views)}건 (독촉 초과 {overdue_n}건) — 급한 순:")
+        for view in views:
+            gate = view.gate
+            # 대기 태스크는 0건도 찍는다 — 줄이 없으면 "0건"과 "안 셌다"를 구분할 수 없다.
+            dep = f"대기 태스크 {len(view.dependents)}건"
+            if view.dependents:
+                dep += f" ({', '.join(view.dependents)})"
+            mark = "⚠" if view.overdue else "·"
+            print(f"  {mark} {gate.id} [{gate.assignee}/{gate.kind}]")
+            print(f"      {view.status_text()} · {dep}")
+            print(f"      {gate.title}")
         if others:
             print("✔ 통과/면제:")
             for gate in sorted(others, key=lambda g: g.id):

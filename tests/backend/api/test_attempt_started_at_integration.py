@@ -24,6 +24,12 @@
 베이스: `test_coach_integration.py`·`test_e2e_vertical_slice_integration.py`의 실 PG 픽스처·시딩
 헬퍼 패턴을 *동형 복제*한다(각 통합 모듈이 `_settings`·`_pg_reachable`을 독립 정의하는 선례 —
 모듈 간 test import 이중 수집 회피). 정리는 try/finally로 FK 안전 순서를 보장한다.
+
+SEC-33 후속(`TestRetentionPurge.test_null_started_at_is_still_purged_via_ingested_at_fallback`):
+위 파기 소비자 테스트가 고정한 "NULL은 파기 대상 아님" 정직 스코프는 그 자체로 새 회피 통로였다
+— 클라가 `started_at` 신고를 아예 생략하면 무기한 보존을 얻는다. `privacy/retention`이
+`ProblemAttempt`만 `COALESCE(started_at, ingested_at)`으로 폴백해 닫는다(`ingested_at`은 서버
+전용·클라 조작 불가).
 """
 
 from __future__ import annotations
@@ -475,7 +481,9 @@ class TestRetentionPurge:
                     },
                 )
                 assert resp.status_code == 201, resp.text
-            # 미신고 1건 — 보존 정책의 정직 스코프(NULL은 비교가 NULL이라 파기 대상 아님)를 고정.
+            # 미신고 1건 — ingested_at(수신 시각)이 방금이라 COALESCE 폴백도 아직 만료 전이다.
+            # (started_at·ingested_at이 *둘 다* 만료돼야 파기 대상이 된다 — 아래 SEC-33 테스트가
+            # ingested_at도 오래됐을 때는 파기됨을 별도로 증명한다.)
             resp = client.post(
                 "/v1/me/attempts",
                 headers=auth,
@@ -493,6 +501,55 @@ class TestRetentionPurge:
             assert remaining[0].started_at is None, "남은 1건은 미신고(NULL) 행이어야 한다"
         finally:
             asyncio.run(_cleanup(uid, problem_ids=[pid]))
+
+    def test_null_started_at_is_still_purged_via_ingested_at_fallback(self) -> None:
+        """SEC-33 ① — NULL 회피 재현: 미신고 attempt도 ingested_at이 오래되면 파기된다.
+
+        수정 전(COALESCE 미도입)에는 `started_at`이 NULL인 행은 `ingested_at`이 아무리 오래돼도
+        `started_at < cutoff`가 NULL이라 *영원히* 파기 대상에서 빠졌다 — 클라가 발생 시각 신고를
+        생략하기만 하면 보존기한을 무기한 회피할 수 있는 통로였다(위 테스트가 고정한 "정직
+        스코프"의 반대편 악용). `ingested_at`은 서버가 수신 순간 그대로 채우므로 클라가 조작할
+        수 없다 — 여기서는 그 값이 "오래전에 수신됐다"는 상태를 API가 아니라 직접 UPDATE로
+        재현한다(API로는 backdate 불가 — 수신 시각은 항상 요청 처리 시점이다).
+        """
+        _skip_unless_pg()
+        uid, pid = uuid.uuid4(), uuid.uuid4()
+        old_ingest = datetime(2000, 5, 1, 10, 0, tzinfo=UTC)
+        try:
+            asyncio.run(_add_all(_adult_user(uid), _problem(pid, "sec33-a")))
+            client, auth = _client(uid)
+            resp = client.post(
+                "/v1/me/attempts",
+                headers=auth,
+                json={"problem_id": str(pid), "is_correct": True},  # started_at 미신고 → NULL
+            )
+            assert resp.status_code == 201, resp.text
+            attempts = asyncio.run(_attempts_of(uid))
+            assert len(attempts) == 1
+            assert attempts[0].started_at is None
+            asyncio.run(self._backdate_ingested_at(attempts[0].attempt_id, old_ingest))
+
+            counts = asyncio.run(self._purge(as_of=date(2005, 1, 1), years=3))
+            assert counts["problem_attempt"] == 1, (
+                "미신고(NULL) attempt가 ingested_at 폴백으로도 파기되지 않았다 — "
+                "started_at 미신고가 보존기한을 무기한 회피하는 통로로 남아 있다"
+            )
+            assert asyncio.run(_attempts_of(uid)) == []
+        finally:
+            asyncio.run(_cleanup(uid, problem_ids=[pid]))
+
+    @staticmethod
+    async def _backdate_ingested_at(attempt_id: uuid.UUID, when: datetime) -> None:
+        """`ingested_at`을 직접 UPDATE — 서버 전용 컬럼이라 API로는 과거 값을 만들 수 없다."""
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("UPDATE problem_attempt SET ingested_at = :when WHERE attempt_id = :aid"),
+                    {"when": when, "aid": str(attempt_id)},
+                )
+        finally:
+            await engine.dispose()
 
     @staticmethod
     async def _purge(*, as_of: date, years: int) -> dict[str, int]:
