@@ -9710,7 +9710,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 10489
+    loc: 10491
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 4

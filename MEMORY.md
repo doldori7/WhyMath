@@ -338,6 +338,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-10 (사고·재발방지·규칙 등재 · PR #1075): **CI가 5회 연속 red였는데 "로컬 green"으로 보고했다 — mypy 1건이 뒤 스텝 20개를 skipped로 만들었다** (claude 자책 실측·등재) — 판정 기준 main `e7068a6d`
+
+- **무엇이 일어났나**: PR #1075의 CI 런이 14:17·14:52·15:33·16:00·16:48 **5회 전부 `failure`**였다. 그동안 세션은 "전체 백엔드 스위트 12,240 passed"를 근거로 PR 본문에 검증 요약을 적었고, CI 결과는 "확인하지 못했다"로 남겨 뒀다 — 그런데 확인 못 한 것과 통과한 것을 같은 문단에 적으면 읽는 사람에게는 통과로 읽힌다.
+- **실제 원인은 1줄**: `harness/selective_grading_demotion_eval.py:332`의 `cast(GradabilityBucket, classified)`. `classify_gradability`가 이미 그 Literal을 반환하므로 mypy strict가 `redundant-cast`로 잡는다. `Found 1 error in 1 file (checked 648 source files)`.
+- **왜 5회나 몰랐나 — 이번 사고의 핵심**: `mypy`는 `backend — lint·type·test` 잡의 **7번째 스텝**이다. 거기서 exit 1이 나자 **뒤 스텝 20개가 전부 `skipped`**로 넘어갔다 — pytest(커버리지)·계층별 커버리지 게이트·게이트 CLI 13종. 그 13종 안에는 **이 PR이 신설한 게이트 2종**(`explicit_correction_gap` · `misconception_false_positive`)도 있었다. 즉 PR 본문이 "CI 게이트로 배선했다"고 적은 것이 **한 번도 실행된 적이 없었다.** `skipped`는 화면에서 red가 아니므로 "실패 1건짜리 잡"으로 보였지만 실은 **검증 표면 전체가 미실행**이었다.
+- **왜 반복인가**: CLAUDE.md 2026-08-09 본문("CI가 실제로 쓰는 명령을 그대로 재현한다 — 대상을 좁히면 CI가 보는 파일을 안 볼 수 있다")의 **2회차**다. 그때(PR #732)는 *대상 경로*를 좁혔고, 이번엔 **검사 종류를 통째로 빠뜨렸다** — 로컬에서 pytest만 돌리고 `mypy --strict`·`lint-imports`·게이트 CLI를 한 번도 돌리지 않았다.
+- **대책(규칙)**: CLAUDE.md v0.2.21 — "검사 명령의 출력을 억제하거나 잘라서 판정 금지"에 **"안 돌린 검사와 통과한 검사를 같은 화면에서 읽지 않는다"** 축을 확장으로 등재했다. ①로컬 검증은 CI 잡의 **스텝 목록을 열어 놓고** 맞춘다 ②실패 잡을 볼 때 `failure` 스텝만 보지 말고 **뒤따르는 `skipped` 스텝의 수를 센다** — 그 수가 이번 실행에서 아무것도 모르는 검사의 수다. 신설 게이트가 그 안에 있으면 "배선했다"는 아직 미검증이다.
+- **해소 실측(CI 명령 전건 재현)**: `mypy --strict whymath_backend` exit 0(650 files) · `lint-imports` 3 kept/0 broken · 게이트 CLI **13종 전부 exit 0** · 전체 스위트 + 커버리지 **12,288 passed · 87.07%**(요구 70%) · 계층별 floor exit 0 · `tests/infra`+`tests/harness` 2,017 passed.
+- **같은 세션의 두 번째 확인**: `tests/infra` 실행에서 하네스 알림이 `exit code 0`인데 로그 판정 줄은 `INFRA_EXIT=1`이었다 — CLAUDE.md 2026-09-07 "래퍼가 종료 코드를 가리는 축"이 실제로 발화했다. 판정 줄을 함께 읽는 습관이 실패 2건을 잡았다.
+
 ### 2026-09-10 (MISC-29 · 측정된 "아니오" 2회차): **근접 임계 설계를 실측이 기각했다 — 그리고 오탐 모집단 자체가 잘못 잡혀 있었다** (claude 실측·등재) — 판정 기준 main `fbdb608d`
 
 - **등재된 설계**: 약한 signal(숫자·단일 ASCII)은 내용성 signal에서 N자 이내일 때만 매치로 센다. `MISC-25`가 만든 근접 창 도구를 재사용하므로 신규 프레임워크 0 — 싸고 명확해 보였다.
