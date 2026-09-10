@@ -64,11 +64,11 @@ gates:
     title: "정본 저장소 전환 확인 — kiki-s-broom/WhyMath 조직 계정 여부 확인 + 시크릿(DEPLOY_SSH_HOST/USER/KEY/KNOWN_HOSTS/PATH·PR_AUTO_RESYNC_TOKEN)·브랜치 보호 룰셋·GitHub Actions 설정이 저장소 전환과 함께 실제로 정상 승계됐는지 1회 실측. 2026-09-09 Kiki 결정(신규 정본 전환, HARN-96)의 집행 단계"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-09
     remind_after_days: 3
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-10 실측(PR #1063 세션): owner.type=Organization(검색 API) · repo id 1237870848 동일(Transfer) · Actions 워크플로 5종 state=active · PR_AUTO_RESYNC_TOKEN 승계(pr-auto-resync run 16까지 token=pat 정상 종료) · 브랜치 보호 승계 + merge queue 활성(PUT /pulls/1063/merge가 405 rule violation). 미실측 1건 = DEPLOY_SSH_* (deploy.yml이 수동 승인이라 이관 후 실행 이력 없음) — HARN-96 acceptance에 잔여로 남긴다."
+    cleared_by: claude
     notes: "[정정 2026-09-09] 최초 제목은 kiki-s-broom/whymath를 별도 복사본으로 오인해 '시크릿 재등록·브랜치 보호 재구성'을 요구했다. 이후 이 브랜치를 push하며 GitHub의 'This repository moved' 응답 + 브랜치·claim 이력 완전 동일을 실측해, 복사본이 아니라 GitHub 저장소 전환(Transfer repository)임을 확인했다 — 전환은 시크릿·브랜치 보호·webhook·Actions 설정을 자동 승계한다(GitHub 표준 동작). 그래서 이 게이트의 실제 작업은 '재등록/재구성'이 아니라 '자동 승계가 됐는지 확인'으로 좁아졌다. 상세 = HARN-96-canonical-repo-migration-kiki-s-broom acceptance ⑨."
   - id: G-canonical-repo-migrate-decision
     title: "정본 저장소 전환 여부 결정 — doldori7/WhyMath에서 kiki-s-broom/WhyMath(merge queue 가능 조직 계정 추정)로. G-merge-queue-or-strict-relax(2026-09-07)가 User 계정 제약으로 포기했던 merge queue 도입을 재검토하는 계기"
@@ -164,11 +164,11 @@ gates:
     title: "겸직 IP 귀속 분리 증빙 — ①개인 장비·개인 계정·개인 시간 작업 사실 증빙(커밋 타임스탬프 등) ②재직사 자산·데이터 무사용 확인서 자체 작성·보관 ③신설 법인 설립 시 IP 양도 계약 예정 기록. 12/31 산출물 전체의 귀속 리스크·투자 실사 항목(전환 설계서 §1.1-b, 2h 소요)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-30
     remind_after_days: 14
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-10 Kiki 서명. 판정 기준: ce587dc092032435649ceb642f71608942ab8e36 (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — 저장소의 모든 ref(137개) 전수 2746건(사람 저작 1163건), 선언 밖 신원 0종, 평일 09-18시 KST 커밋 비율 0.3577. ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관(C:\\Users\\kiki\\Documents\\WhyMath-IP) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
+    cleared_by: kiki
     notes: ""
   - id: G-eos-task-prefix-exhausted
     title: "EOS 태스크 번호 00~99 전부 소진 — 후속 프리픽스 결정 필요(HARN-21: backlog.py add가 번호 제안을 거부). 2026-09-06 인벤토리 후속 1건은 임시로 ARCH 계열(ARCH-42)에 등재. 선택지: ①새 프리픽스(예 EOS2·EOSM) ②EOS 3자리 허용(TASK_ID_RE 변경·HARN-10 번호 참조 규율 재검토) ③트랙별 프리픽스 분리"
