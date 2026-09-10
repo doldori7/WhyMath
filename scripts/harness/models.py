@@ -92,7 +92,14 @@ STATUS_TRANSITIONS: dict[str, tuple[str, ...]] = {
     "todo": ("in_progress", "blocked", "cancelled"),
     "in_progress": ("review", "done", "blocked", "todo"),
     "blocked": ("todo", "cancelled"),
-    "review": ("done", "in_progress"),
+    # "blocked"는 HARN-95가 추가 — review의 유일한 비-done 출구가 in_progress였는데
+    # 그 홉은 cmd_review가 session을 보존해 CLI로 항상 거부된다(review는 여전히
+    # in-flight). 그래서 done 말고는 나갈 길이 없는 막다른 길이었다 — PR이 closed로
+    # 처리되거나 재작업이 필요해 이 태스크를 blocked/cancelled로 내려야 하는 경우
+    # 손편집 말고는 방법이 없었다. cmd_block은 이미 어떤 상태에서든 session을 비우고
+    # blocked로 내리는 범용 동사이므로, review를 그 출발점에 추가하는 것만으로
+    # review → blocked → todo → cancelled/in_progress 전 구간이 다시 열린다.
+    "review": ("done", "in_progress", "blocked"),
     "done": (),  # 종결 상태
     "cancelled": (),  # 종결 상태
 }
