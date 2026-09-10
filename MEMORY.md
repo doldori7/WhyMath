@@ -9132,3 +9132,38 @@ work(HARN-94)는 **내가 작업을 시작한 시점엔 아직 backlog에 존재
 사례다. 새 CLAUDE.md 규칙이나 코드 게이트를 추가하지 않는다 — 강제해도 잡히지 않는 경합에 상시
 검사를 얹으면 그 자체가 무력한 가드가 된다(2026-09-01 규칙의 정신). 손실은 세션 하나의 구현
 시간뿐이고 데이터·main 영향은 0.
+
+## 2026-09-10: HARN-93 — 처분 라벨 PR 닫기 전 안전 확인 도구, 자기발견 오탐 1건 수정
+
+`HARN-42`가 붙인 처분 라벨(eos-merge/rework/postpone/close)이 붙은 열린 PR 10건이 만료 지점 없이
+8일+ 방치되고 있었다(stray-code 9회차 감사). 두 축을 착지했다:
+
+**② 탐지 축**: `remote_claims._fetch_pr_labels`(GitHub API, `_fetch_pr_states`와 별도 호출 —
+반환 튜플 계약을 바꾸면 기존 테스트가 전부 갈아엎여야 해서 `_auth_args`/`_ca_args`와 같은 이유로
+중복을 택함)를 `scan_stale_branches`에 배선해 `StaleBranch.disposal_labels`를 채운다. `backlog.py
+branches`가 `pr_filed` 항목에 라벨+정체일수를 출력하고, 처분 라벨이 하나라도 있으면 정책 도구
+실행을 권하는 안내 줄을 낸다. 토큰이 없어 조회를 못 했으면(`pr_label_lookup_ok=False`) 그 사실을
+별도로 알린다("라벨 없음"과 "모른다"를 혼동하지 않음).
+
+**③ 집행 지점**: `scripts/ops/pr_disposal_precheck.py <owner/repo> <pr>` — 오프라인 git으로
+trunk(`origin/main`) 대비 PR head의 "trunk 부재 코드 파일"(`src|tests|scripts|data` 프리픽스,
+audit 문서와 동일 방법론)을 계산하고, 0건이면 안전, N건이면 backlog에 그 PR을 참조하는 회수
+좌석이 있는지 확인한다. exit 0(안전)/1(차단 또는 측정 실패) — 이 저장소의 "판정은 항상 0/1" 관례.
+
+**자기발견 결함(구현 중 실측)**: 첫 버전은 "회수 좌석"을 `#<PR번호>` 텍스트 언급만으로 인정했다.
+실 PR #858(eos-close, 16일 방치)로 직접 실행했더니 `HARN-42` 자신이 notes에 `#858`을 여러 번
+남긴다는 이유만으로 "회수 좌석 있음 → 닫아도 안전"으로 **오탐**됐다 — HARN-42는 이 PR을 CLOSE로
+*판정*만 했을 뿐 코드를 옮기지 않았는데, 판정한 사실과 옮기기로 한 사실이 같은 문자열로 뭉개진
+것이다(CLAUDE.md "변별력 없는 검증 스텝 금지"의 변형 — 두 서로 다른 사실이 같은 신호를 낸다).
+`pathscope.path_in_scope`로 "그 태스크의 `paths`가 실제로 부재 파일을 커버하는가"를 추가 요구해
+고쳤다 — 재실행 결과 #858은 정확히 **차단**(josa.py·test_josa.py 2건, 회수 좌석 없음)으로
+뒤집혔다. `docs/reviews/unmerged_branch_audit_2026-09-08.md`가 기록한 "#858 main 부재 파일 0건"
+과는 다른 값인데, 이는 버그가 아니라 **main이 그 사이 이틀 더 전진**했기 때문이다(트렁크 부재
+카운트는 정의상 시점 종속 — 이 도구가 정확히 그 시점 드리프트 문제를 실시간으로 재확인시키려고
+존재한다).
+
+**환경 메모(이 세션 국한)**: 샌드박스의 `pytest`가 `uv tool`로 설치돼 PyYAML이 없는 별도 venv에서
+돈다 — `import yaml`은 시스템 `python3`에서 되지만 `pytest` 바이너리 자체는 안 된다. `uv run
+--no-project --with pyyaml --with pytest pytest ...`(두 패키지 다 `--with`로 줘야 같은 임시
+venv에 들어간다 — `pytest`만 `--with`에서 빠지면 PATH의 별도 venv pytest가 실행돼 재현 안 됨)로
+우회해 811건 전건 그린을 확인했다. CI 환경 자체의 문제는 아님(이 세션 컨테이너 한정 추정).

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -20,6 +20,6 @@ paths:
   - "scripts/harness/**"
   - "backlog/**"
   - "docs/reviews/**"
-session: null
+session: claude/status-2ghwhp
 notes: "출처: stray-code 9회차 감사(docs/reviews/unmerged_branch_audit_2026-09-08.md). 8회차 r2 정직한 공백이 '다음 회차 최우선 관찰 대상'으로 지목한 축을 등재한다. 회수 태스크가 아니라 **처분 안전 태스크**다 — 코드를 옮기지 않고, 옮겨야 할 것이 있는지 닫기 전에 알게 한다."
-updated: 2026-09-08
+updated: 2026-09-10

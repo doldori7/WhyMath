@@ -2054,6 +2054,88 @@ class TestStaleBranchClassificationWiring:
         assert "[PR-닫힘] gates/deploy-environment-approval — PR #967 닫힘(미머지)" in out
         assert "PR 열림/닫힘 조회 미수행" in out and "NoTokenError" in out
 
+    def test_branches_cmd_renders_disposal_label_and_precheck_hint(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """branches_CLI가_처분_라벨과_회수_선행_확인_안내를_화면에_낸다 (HARN-93 ② 배선 실재성)
+
+        `remote_claims.scan_stale_branches`가 `disposal_labels`를 채워도 `cmd_branches`가
+        그것을 읽어 출력하지 않으면 "정본화는 있는데 화면에는 안 보인다"는 HARN-93 acceptance
+        ②가 지적한 바로 그 공백이 재생산된다 — 이 테스트가 실제 CLI 출력 문자열을 본다.
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-disposal-label")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/lic-01-rights-provenance-mvp-2",
+                        ref="refs/remotes/origin/claude/lic-01-rights-provenance-mvp-2",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=16.0,
+                        ahead=28,
+                        status="pr_filed",
+                        evidence="PR #858",
+                        disposal_labels=("eos-close",),
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=True,
+                pr_label_lookup_ok=True,
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "라벨: eos-close(정체 16일)" in out
+        assert "pr_disposal_precheck.py --pr <N>" in out
+
+    def test_branches_cmd_reports_label_lookup_failure_reason(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """토큰이 없어 라벨 조회 자체를 못 했으면 그 사실을 명시한다(모른다 ≠ 라벨 없음)."""
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-label-lookup-fail")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-3",
+                        ref="refs/remotes/origin/claude/pr-3",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=8.0,
+                        ahead=4,
+                        status="pr_filed",
+                        evidence="PR #844",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=True,
+                pr_label_lookup_ok=False,
+                pr_label_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정 — 라벨 조회 생략",
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "처분 라벨 조회 미수행" in out and "NoTokenError" in out
+
 
 class TestBatchBlobParsing:
     """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.

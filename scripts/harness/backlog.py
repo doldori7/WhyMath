@@ -3314,12 +3314,29 @@ def cmd_branches(root: Path, args: argparse.Namespace) -> int:
         print(
             f"⚠ PR 열림/닫힘 조회 미수행({reason}) — PR 제출됨 {len(pr_filed)}건은 수동 확인 필요"
         )
+    # (HARN-93 ②) 처분 라벨(eos-merge/rework/postpone/close) 조회 결과 — 이 라벨은
+    # "닫는다/미룬다"는 결정인데 만료 지점이 없어 방치되기 쉽다(CLAUDE.md "만료 없는
+    # 유예·제외 금지"). 토큰이 없으면 조회 자체를 안 하므로 그 사실을 먼저 밝힌다.
+    disposal_labeled = [item for item in pr_filed if item.disposal_labels]
+    if pr_filed and not scan.pr_label_lookup_ok:
+        reason = scan.pr_label_lookup_error or "사유 미상"
+        print(
+            f"⚠ 처분 라벨 조회 미수행({reason}) — PR 제출됨 {len(pr_filed)}건은 라벨 수동 확인 필요"
+        )
     for item in isolated:
         print(f"  [고립] {item.branch} — {item.age_days:.0f}일 전 · trunk 대비 {item.ahead}커밋")
     for item in pr_closed:
         print(f"  [PR-닫힘] {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
     for item in pr_filed:
-        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전")
+        label_note = ""
+        if item.disposal_labels:
+            label_note = f" · 라벨: {','.join(item.disposal_labels)}(정체 {item.age_days:.0f}일)"
+        print(f"  [PR]   {item.branch} — {item.evidence} · {item.age_days:.0f}일 전{label_note}")
+    if disposal_labeled:
+        print(
+            f"⚠ 처분 라벨 붙은 열린 PR {len(disposal_labeled)}건 — 닫기 전 "
+            "`python3 scripts/ops/pr_disposal_precheck.py --pr <N>`로 회수 선행 확인 (HARN-93 ③)"
+        )
     return 0
 
 
