@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -21,6 +21,6 @@ paths:
   - scripts/harness/selector.py
   - scripts/harness/models.py
   - tests/harness/test_cli.py
-session: null
+session: claude/status-2ghwhp
 notes: "출처: PR #1067 Codex P2 리뷰(HARN-86 후속). 지적은 '안내가 실행 불가한 명령을 낸다'였고 그 안내 결함은 #1067에서 고쳤다(경로 탐색이 실행 가능성을 모델링) — 이 태스크는 그 아래에 있는 **CLI 자체의 결함**을 소유한다. #1067은 결함을 우회할 뿐 없애지 않는다: (a)는 block 경유로 돌아가고 (b)는 정직한 진단만 낸다."
-updated: 2026-09-08
+updated: 2026-09-10
