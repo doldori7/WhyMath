@@ -60,6 +60,26 @@ gates:
     evidence: "2026-09-03 Kiki 실행(Phaiakes9 Windows PowerShell) — 복구 리허설 1회 완료. 대상 백업 whymath_20260902_222520.dump.age(age 암호화본·579kB), age 복호 성공(exit 0), scratch 컨테이너 whymath-restore-test(pgvector/pg16·127.0.0.1:55433) 복원 후 pg_restore 오류 0. 무결성: 8개 핵심 테이블 행수 prod↔scratch 완전 일치 — atom_node 0 / concept 2683 / dialogue 0 / dialogue_turn 0 / parental_consent 0 / problem 0 / problem_attempt 0 / user_profile 1. RTO 실측 = 5.8분(00:05:48), 측정 범위는 복원 구간 한정(§3-0~§3-3b) — 런북 §5 표 갱신 완료. 한계 명시(§6 신설): 측정 시점 데이터 규모가 579kB(concept 외 전 테이블 0~1행)라 이 수치는 절차 고정 오버헤드에 가깝고 대표성이 없다 — 학생 데이터 축적 후 재측정 필요. 측정 스텝(§3-0/§3-3b)은 이 리허설 직전 신설(PR #974) — 종전 런북에는 시간 측정 스텝이 없어 게이트 요구 수치가 산출 불가였다."
     cleared_by: null
     notes: ""
+  - id: G-canonical-repo-cutover-kiki-s-broom
+    title: "정본 저장소 전환 확인 — kiki-s-broom/WhyMath 조직 계정 여부 확인 + 시크릿(DEPLOY_SSH_HOST/USER/KEY/KNOWN_HOSTS/PATH·PR_AUTO_RESYNC_TOKEN)·브랜치 보호 룰셋·GitHub Actions 설정이 저장소 전환과 함께 실제로 정상 승계됐는지 1회 실측. 2026-09-09 Kiki 결정(신규 정본 전환, HARN-96)의 집행 단계"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-09
+    remind_after_days: 3
+    evidence: null
+    cleared_by: null
+    notes: "[정정 2026-09-09] 최초 제목은 kiki-s-broom/whymath를 별도 복사본으로 오인해 '시크릿 재등록·브랜치 보호 재구성'을 요구했다. 이후 이 브랜치를 push하며 GitHub의 'This repository moved' 응답 + 브랜치·claim 이력 완전 동일을 실측해, 복사본이 아니라 GitHub 저장소 전환(Transfer repository)임을 확인했다 — 전환은 시크릿·브랜치 보호·webhook·Actions 설정을 자동 승계한다(GitHub 표준 동작). 그래서 이 게이트의 실제 작업은 '재등록/재구성'이 아니라 '자동 승계가 됐는지 확인'으로 좁아졌다. 상세 = HARN-96-canonical-repo-migration-kiki-s-broom acceptance ⑨."
+  - id: G-canonical-repo-migrate-decision
+    title: "정본 저장소 전환 여부 결정 — doldori7/WhyMath에서 kiki-s-broom/WhyMath(merge queue 가능 조직 계정 추정)로. G-merge-queue-or-strict-relax(2026-09-07)가 User 계정 제약으로 포기했던 merge queue 도입을 재검토하는 계기"
+    kind: decision
+    assignee: kiki
+    status: cleared
+    requested: 2026-09-09
+    remind_after_days: 3
+    evidence: "2026-09-09 Kiki가 이 세션과의 대화에서 3안 중 \"새 정본 저장소로 전환 (시나리오 A)\"을 직접 선택 — doldori7/WhyMath는 유지만 하고 향후 개발·PR·머지를 kiki-s-broom/WhyMath로 옮기기로 결정. 판정 기준(커밋)은 없음 — 대화 중 즉석 결정이라 --no-base 처리. 집행 상세·실행 범위 한계·개방 질문은 HARN-96-canonical-repo-migration-kiki-s-broom 및 G-canonical-repo-cutover-kiki-s-broom 참조."
+    cleared_by: claude
+    notes: "[판정기준 없음 2026-09-09] 커밋 없는 대화 중 즉석 결정 — Kiki가 이 세션에서 직접 시나리오 A(전환)를 선택"
   - id: G-crosswalk-approval
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human
@@ -307,7 +327,7 @@ gates:
     status: cleared
     requested: 2026-09-07
     remind_after_days: 3
-    evidence: "2026-09-08 Kiki 실행 완료 — PAT 발급·시크릿 등록·자가검증까지 확인. 판정 기준: main ee2e1918(워크플로 실행 시점 checkout SHA) · 워크플로 파일은 34001b42(PR #1040)로 착지.\n\n[실측 3건 — 실행 이력 API + 잡 로그 전문 확인]\n① run 34187171965 (workflow_dispatch · 04:29:33Z) — failure. Kiki 1차 수동 실행.\n② run 34187637864 (**schedule** · 04:37:17Z) — failure. `RESYNC_TOKEN_KIND: pat`으로 시크릿은 이미 등록돼 있었으나 gh가 거부:\n   `Post \"https://api.github.com/graphql\": net/http: invalid header field value for \"Authorization\"`\n   → 토큰 값에 헤더로 쓸 수 없는 문자(줄바꿈·공백 등)가 섞여 있었다. 붙여넣기 시 개행이 딸려 들어간 전형적 형태다.\n   **설계대로 동작했다**: 스크립트가 이것을 \"대상 0건\"이 아니라 `PR 목록 조회 실패(exit=1) — 측정 실패다`로 판정하고 **HTTP 응답 본문을 그대로 남겨** 원인이 즉시 규명됐다(HARN-85 실패 경로 설계 ③의 실증).\n③ run 34188745979 (workflow_dispatch · 04:56:02Z) — **success · dry_run=0(실주행)**. Kiki가 시크릿을 다시 등록한 뒤 재실행.\n   출력: `── PR 자동 재동기화 (repo=doldori7/WhyMath · dry_run=0 · token=pat)` → `── 요약: 스캔 17건 · BEHIND+auto-merge 0건 · 최신화 0건 · 충돌 0건 · 미판정 4건 · 기타실패 0건`\n\n[이 게이트가 묻던 것 = 충족] PAT 경로로 워크플로가 실제로 돌고 정상 종료한다. `쓰기 자격 없음` fail-closed도 사라졌다.\n\n[부수로 닫힌 것 — 예약 발화 미확정] ②가 **schedule 이벤트**다. 즉 예약은 발화한다(워크플로 결함이 아니었다). 착지 00:09Z → 첫 예약 발화 04:37Z로 약 4시간 28분이 걸렸다(표본 1). HARN-87 ⑤~⑧이 \"미확정\"으로 남겨 둔 축이 이것으로 갈렸다.\n\n[남는 것 — 새 결함] ③에서 `mergeStateStatus`가 **미판정 4건**이었고 그중 PR #1059는 같은 시각 REST가 `mergeable_state: behind`로 답한 PR이다. 즉 재동기화해야 할 대상을 정확히 건너뛰었다. 설계(\"모른다 ≠ 아니다\")는 옳게 작동했으나 **일괄 조회가 GitHub의 지연 계산을 유발하지 않아 대상이 UNKNOWN으로 보인다** — 자동화의 실효를 무력화하는 축이라 별도 태스크로 등재한다."
+    evidence: "2026-09-08 Kiki 실행 완료 — fine-grained PAT 발급 + 저장소 시크릿 PR_AUTO_RESYNC_TOKEN 등록 + 수동 실행 검증.\n\n판정 기준: main a3b5cdc1b905a1e64d74ff1847c391e8b575efcf (run #3의 head_sha).\n\n[성공 실측] workflow_dispatch run #3 (id 34188745979 · 2026-09-08 04:56:02Z · dry_run=0) conclusion=success. 로그 실측 3줄:\n  - 헤더 `── PR 자동 재동기화 (repo=doldori7/WhyMath · dry_run=0 · token=pat)` — RESYNC_TOKEN_KIND=pat 즉 시크릿이 비어 있지 않고 이름이 정확하다\n  - `── 요약: 스캔 17건 · BEHIND+auto-merge 0건 · 최신화 0건 · 충돌 0건 · 미판정 4건 · 기타실패 0건`\n  - 미판정 4건(#1059·#1051·#1010·#1007)은 GitHub이 mergeStateStatus를 아직 계산하지 않은 PR로, 설계대로 \"모른다 != 아니다\"에 따라 건너뛰었다.\n스캔 17건은 그 시점 열린 PR 수와 일치하며, 이 값이 나왔다는 것은 GraphQL 조회(gh pr list)가 PAT로 성공했다는 뜻이다.\n\n[검증의 변별력과 그 한계 — 명시] dry_run=0으로 돌린 것이 핵심이다. dry_run=1은 쓰기 자격 검사를 건너뛰도록 일부러 열어 둔 경로라 PAT 없이도 통과하므로 변별력이 0이다. 다만 이번 실행에서 BEHIND+auto-merge가 0건이었으므로 update-branch 쓰기는 한 번도 호출되지 않았다 — 즉 이 게이트가 실증한 것은 (a)시크릿 실재 (b)토큰 값의 유효성(읽기 API 성공)까지이고, (c)Contents/Pull requests 쓰기 권한이 실제로 충분한지는 아직 미실증이다. 그 축은 승계 태스크 HARN-87 acceptance ①②가 가진다.\n\n[중간 실패 1건과 근본원인 — 재발 방지용 기록] 첫 수동 실행(run #1 · 04:31:07Z)은 실패했다. 실패 메시지는 `PR 목록 조회 실패(exit=1)`이고 스크립트가 남긴 응답 본문이 `Post \"https://api.github.com/graphql\": net/http: invalid header field value for \"Authorization\"` 였다. 이것은 권한 거부가 아니라 Authorization 헤더에 넣을 수 없는 문자가 토큰 값에 들어 있다는 뜻이다.\n  결정적 증거: 같은 로그의 env 출력에서 `GH_TOKEN: ***` 다음 줄에 타임스탬프 접두가 없는 빈 줄이 있었다. GitHub Actions 로그는 모든 줄에 타임스탬프를 붙이므로, 타임스탬프 없는 줄은 앞 줄의 연속 = 시크릿 값 자체가 개행을 포함한다.\n  처치: 토큰 재생성 후 PowerShell로 클립보드 값을 검사(길이·앞뒤 공백·github_pat_ 접두·비ASCII — 값은 미출력)하고 Set-Clipboard로 Trim한 뒤 시크릿을 갱신. run #3에서 해소 확인.\n  이 진단은 스크립트가 실패 응답 본문을 로그에 남기도록 설계돼 있었기에 1분 만에 가능했다(CLAUDE.md \"실패 원인이 남는가\"). 다만 사람 운영자에게는 여전히 해독 불가한 메시지이므로, 토큰 사전 검사(앞뒤 공백 제거 + 개행·비ASCII·길이 이상을 값 노출 없이 이름 붙여 보고)를 태스크 HARN-89로 등재했다.\n\n[부수 실측 — HARN-87 ⑤⑦에 넘긴다] run #2(id 34187637864)가 event=schedule로 2026-09-08 04:37:17Z에 발화했다. 이는 pr-auto-resync 자신의 첫 예약 실행 표본이며, 04:30 슬롯 기준 약 7분 지연이다(표본 1건 — 중앙값·최대 간격 판정에는 부족하므로 일반화하지 않는다). run #2는 시크릿 수정 전이라 같은 헤더 결함으로 실패했다."
     cleared_by: kiki
     notes: ""
   - id: G-prod-dead-column-check

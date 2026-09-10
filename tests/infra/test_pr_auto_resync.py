@@ -213,6 +213,92 @@ def test_summary_counts_are_real_not_hardcoded(tmp_path: Path) -> None:
     assert len(calls) == 2
 
 
+# ---------------------------------------------------------------------------
+# 계약 ③-b — "대상 0건"이 세 상태를 한 화면으로 만들지 않는가 (HARN-87)
+#
+# 원래 요약은 교집합(BEHIND+auto-merge)만 냈다. 그래서 0건이 ⓐauto-merge를 켠 PR이
+# 아예 없음(자동화가 구조적으로 발화 불가) ⓑBEHIND 없음(정상 대기) ⓒ둘 다 있으나 서로
+# 다른 PR — 셋 모두에서 **같은 글자**로 보였다. 처방이 각각 다른데 화면이 같으면 그
+# 요약은 신호가 아니다.
+#
+# 아래 5건은 각 분기를 **실제로 밟는** 픽스처를 하나씩 두고, 마지막 1건은 대조군이다:
+# 대상이 있을 때 진단 줄이 **나오지 않아야** 한다. 모든 입력에서 나오는 줄은 배경 소음이고
+# 배경 소음은 사람이 읽지 않는다.
+# ---------------------------------------------------------------------------
+
+_DIAGNOSIS_MARK = "대상 0건"
+
+
+def test_summary_separates_automerge_and_behind_denominators(tmp_path: Path) -> None:
+    """세 분모가 각각 독립으로 움직이는지 — 하나라도 교집합을 따라가면 이 단언이 깨진다."""
+    prs = [
+        _pr(301),  # BEHIND + auto-merge  → 세 축 전부
+        _pr(302, automerge=False),  # BEHIND만
+        _pr(303, state="CLEAN"),  # auto-merge만
+        _pr(304, state="CLEAN", automerge=False),  # 어느 축도 아님
+        _pr(305, state="UNKNOWN"),  # 미판정 — 판정 분모에서 빠진다
+    ]
+    rc, out, _ = _run(tmp_path, prs)
+    assert rc == 0, out
+    assert "스캔 5건" in out, out
+    assert "판정 4건" in out, out  # 5 - 미판정 1
+    assert "auto-merge 켜짐 2건" in out, out  # 301, 303
+    assert "BEHIND 2건" in out, out  # 301, 302
+    assert "BEHIND+auto-merge 1건" in out, out  # 301만
+
+
+def test_zero_targets_because_nobody_enabled_automerge_is_named(tmp_path: Path) -> None:
+    """ⓐ 이 자동화가 **구조적으로 발화할 수 없는** 상태 — 가장 오독하기 쉬운 0건이다.
+
+    BEHIND인 PR은 있는데 auto-merge가 하나도 안 켜져 있다. 예약 주기를 아무리 줄여도
+    대상이 생기지 않으므로, 처방은 '주기 조정'이 아니라 운용 관행 또는 설계 변경이다.
+    """
+    prs = [_pr(311, automerge=False), _pr(312, automerge=False)]
+    rc, out, calls = _run(tmp_path, prs)
+    assert rc == 0 and calls == []
+    assert "::notice::" in out, out  # 이 분기만 annotation으로 올린다
+    assert "auto-merge를 켠 PR이 하나도 없다" in out, out
+    assert "구조적으로 발화하지 않는다" in out, out
+
+
+def test_zero_targets_because_nothing_is_behind_is_named(tmp_path: Path) -> None:
+    """ⓑ 정상 대기 — auto-merge는 켜져 있는데 아무도 뒤처지지 않았다."""
+    prs = [_pr(321, state="CLEAN"), _pr(322, state="BLOCKED")]
+    rc, out, calls = _run(tmp_path, prs)
+    assert rc == 0 and calls == []
+    assert "BEHIND가 0건이다" in out, out
+    assert "::notice::" not in out, out  # ⓐ와 구분된다
+
+
+def test_zero_targets_because_sets_are_disjoint_is_named(tmp_path: Path) -> None:
+    """ⓒ 두 축 모두 비어 있지 않은데 교집합만 비었다 — 서로 다른 PR이다."""
+    prs = [_pr(331, automerge=False), _pr(332, state="CLEAN")]
+    rc, out, calls = _run(tmp_path, prs)
+    assert rc == 0 and calls == []
+    assert "교집합이 없다" in out, out
+    assert "auto-merge를 켠 PR이 하나도 없다" not in out, out
+
+
+def test_zero_targets_with_nothing_decided_is_named(tmp_path: Path) -> None:
+    """판정된 PR이 0건이면 대상 집합 자체를 **모르는** 것이다 — 0을 아니다로 접지 않는다."""
+    prs = [_pr(341, state="UNKNOWN"), _pr(342, state="UNKNOWN")]
+    rc, out, calls = _run(tmp_path, prs)
+    assert rc == 0 and calls == []
+    assert "판정된 PR이 0건이다" in out, out
+    assert "::notice::" not in out, out
+
+
+def test_diagnosis_line_is_absent_when_a_target_exists(tmp_path: Path) -> None:
+    """대조군 — 대상이 있으면 진단 줄이 **나오지 않는다**.
+
+    이 단언이 이 계약의 핵심이다. 진단이 모든 실행에서 나오면 그것은 상태를 가르는
+    신호가 아니라 상시 배경이고, 상시 배경은 습관화돼 읽히지 않는다.
+    """
+    rc, out, calls = _run(tmp_path, [_pr(351)])
+    assert rc == 0 and len(calls) == 1
+    assert _DIAGNOSIS_MARK not in out, out
+
+
 def test_dry_run_makes_no_write_call(tmp_path: Path) -> None:
     """DRY_RUN은 후보를 보여주되 쓰지 않는다 — 배선 확인을 안전하게 할 수 있어야 한다."""
     rc, out, calls = _run(tmp_path, [_pr(109)], dry_run="1")

@@ -313,8 +313,9 @@ class TestNumericSubstitutionDetection:
         # v1.2 정규식이 (3+4)²=3²+4² 흔적을 잡아 *추가* 탐지.
         m = self._find("(3+4)² = 3² + 4² = 25", "distribution-over-power")
         assert m is not None
-        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        # (v1.2 원식이면 0/2 + 1/2 = 0.5로 서빙 게이트 0.65에 못 미쳤다 — 그 결함이 MISC-22)
+        assert m.confidence == 1.0
         assert m.matched_signals == ()  # 기호 substring 0
         assert len(m.matched_regex_signals) == 1
 
@@ -322,13 +323,16 @@ class TestNumericSubstitutionDetection:
         # √((-3)²)=-3 — 음수 대입으로 거짓 항등식이 드러난 흔적
         m = self._find("√((-3)²) = -3", "square-root-positivity")
         assert m is not None
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert len(m.matched_regex_signals) == 1
 
     def test_fraction_numeric_substitution_detected(self) -> None:
         # (2+4)/2=4 — 분자 합에서 분모와 같은 항을 통째로 약분한 수치 흔적
         m = self._find("(2+4)/2 = 4", "fraction-cancellation")
         assert m is not None
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert m.matched_signals == ()
         assert len(m.matched_regex_signals) == 1
 
@@ -349,8 +353,8 @@ class TestNumericSubstitutionDetection:
         # *수*만 적음) → v1.1이면 미탐지. v1.2 정규식이 *추가* 탐지.
         m = self._find("log(2+3) = log2 + log3", "log-distribution")
         assert m is not None
-        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
-        assert m.confidence == 0.5
+        # MISC-22(v1.5): 정규식 매치 1건 = 신호 전체와 동등한 완결 증거 → conf 1.0.
+        assert m.confidence == 1.0
         assert m.matched_signals == ()  # 기호 substring 0
         assert len(m.matched_regex_signals) == 1
 
@@ -366,6 +370,184 @@ class TestNumericSubstitutionDetection:
         ):
             m = self._find(text, "log-distribution")
             assert m is None or m.matched_regex_signals == ()
+
+
+class TestFactorSignFlipServingReach:
+    """MISC-22 — factor-sign-flip 채널이 confidence 공식 정정 후 서빙 게이트(0.65)에 도달한다.
+
+    이 채널은 signals가 기호형(`("(x-a)", "x=-a")`)이라 수치 입력에 substring이 구조적으로
+    0건 매치된다 — v1.2 원식이면 정규식만 매치돼 conf 0.5에 갇혀 한 번도 서빙에 닿지 못했다
+    (`anchor_detection_channel_eval` 실측). MISC-22가 confidence 공식을 정정한다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
+
+    def test_numeric_sign_flip_reaches_full_confidence(self) -> None:
+        m = self._find("(x-2)=0 이므로 x=-2", "factor-sign-flip")
+        assert m is not None
+        assert m.confidence == 1.0  # 정규식 매치 1건 = 신호 전체(MISC-22)
+        assert m.matched_signals == ()  # 기호 substring 0(수치 입력이라 구조적으로 미매칭)
+        assert len(m.matched_regex_signals) == 1
+
+    def test_numeric_sign_flip_survives_serving_gate(self) -> None:
+        # 서빙 게이트(top-1 floor 0.65)까지 살아남는지 — MISC-22 해소의 실제 판정 기준.
+        gated = apply_match_quality_gate(diagnose("(x-2)=0 이므로 x=-2", top_k=5))
+        assert any(m.misconception.id == "factor-sign-flip" for m in gated.matches)
+
+    def test_correct_root_not_flagged(self) -> None:
+        # 부호가 뒤집히지 않은 올바른 풀이는 여전히 미탐지(역참조 불일치·거짓양성 0).
+        m = self._find("(x-2)=0 이므로 x=2", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_originally_positive_root_not_flagged(self) -> None:
+        # (x+2)=0의 근은 -2가 정답이다 — 부호가 원래 +인 정답까지 오탐하면 안 된다.
+        m = self._find("(x+2)=0 이므로 x=-2", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
+
+
+class TestExplicitCorrectionMentionSuppressesRegex:
+    """MISC-22 v1.5 후속(Codex P1, PR #1071 리뷰) — 거짓 항등식을 *인용해 반박*한 진술은
+
+    정규식이 발화해도(부분 문자열만 보므로) confidence를 얻으면 안 된다. v1.5 전에는 이 인용-반박
+    진술도 conf 0.5(게이트 미만)에 머물러 무해했으나, "정규식 매치=신호 전체" 정정 이후에는 그대로
+    두면 확신 개입(정답에 오진단)이 나갈 뻔했다 — 5개 채널(factor-sign-flip·distribution-over-
+    power·square-root-positivity·fraction-cancellation·log-distribution) 전부 실측 확인.
+    `EXPLICIT_CORRECTION_MENTION`(catalog.py)이 정정 언급 앞에서 해당 regex_signals의 미발화를
+    보장한다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=10) if m.misconception.id == mid), None)
+
+    def test_factor_sign_flip_refuted_quote_not_confident(self) -> None:
+        m = self._find("(x-2)=0이므로 x=-2라는 풀이는 틀리고 x=2다", "factor-sign-flip")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_distribution_refuted_quote_not_confident(self) -> None:
+        m = self._find("(3+4)²=3²+4²는 틀렸고 정답은 49다", "distribution-over-power")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_square_root_refuted_quote_not_confident(self) -> None:
+        m = self._find("√((-3)²)=-3은 틀리고 3이 맞다", "square-root-positivity")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_fraction_cancellation_refuted_quote_not_confident(self) -> None:
+        # "틀린"(관형형)은 어간 "틀리"를 substring으로 포함하지 않는다 — 활용형 나열 검증.
+        m = self._find("(2+4)/2=4는 틀린 계산이고 실제로는 3이다", "fraction-cancellation")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_log_distribution_refuted_quote_not_confident(self) -> None:
+        m = self._find("log(2+3)=log2+log3은 틀렸고 log5가 맞다", "log-distribution")
+        assert m is None or m.matched_regex_signals == ()
+
+    def test_genuine_misconceptions_still_reach_full_confidence(self) -> None:
+        # 회귀 가드 — 반박 언급이 *없는* 진짜 오개념까지 죽이면 안 된다.
+        cases = (
+            ("(x-2)=0 이므로 x=-2", "factor-sign-flip"),
+            ("(3+4)² = 3² + 4² = 25", "distribution-over-power"),
+            ("√((-3)²) = -3", "square-root-positivity"),
+            ("(2+4)/2 = 4", "fraction-cancellation"),
+            ("log(2+3) = log2 + log3", "log-distribution"),
+        )
+        for text, mid in cases:
+            m = self._find(text, mid)
+            assert m is not None, mid
+            assert m.confidence == 1.0, mid
+            assert len(m.matched_regex_signals) == 1, mid
+
+
+class TestExtremumAmbiguousCoincidenceNotOverconfident:
+    """MISC-24 — `extremum-value-vs-point-confused`가 f(x₀)=x₀ 우연의 일치 정답에 확신 오진단을
+    내지 않는다.
+
+    배경(acceptance ①의 실측 재현)
+    -------------------------------
+    이 채널의 정규식은 리터럴 "극댓값"을 포함해 매치될 때마다 substring 신호 "극댓값"도 항상
+    함께 발화한다. MISC-22 정정 *이전*(v1.2 원식)에도 `1(substring)+1(regex 1개 credit)=2=
+    len(signals)`로 이미 confidence 1.0이었다 — 즉 이 위험은 MISC-22와 무관하게 이전부터
+    있었다(MISC-22 조사 중 발견 → MISC-24로 분리 등재). f(x₀)=x₀인 *우연의 일치* 정답(극대점
+    x=2에서 극댓값도 2)은 오개념을 저지른 풀이와 텍스트가 글자 그대로 동일해 `refuting_regex`
+    (MISC-23)로도 반박할 대상이 없다 — 그래서 `ambiguous_regex_signals`(models.py)로 이 항목의
+    정규식 가산 자체를 0으로 만드는 방식으로 해소한다.
+    """
+
+    def _find(
+        self, text: str, mid: str = "extremum-value-vs-point-confused"
+    ) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
+
+    def test_ambiguous_coincidence_no_longer_reaches_full_confidence(self) -> None:
+        """우연의_일치_정답은_더는_confidence_1.0에_도달하지_않는다 — acceptance ①·② 직접 재현"""
+        text = "극대는 x=2 에서 나오고 극댓값은 2 이다 (f(2)=2 인 함수)"
+        m = self._find(text)
+        assert m is not None  # 정규식은 여전히 발화(텔레메트리 유지)
+        assert m.confidence == 0.5  # 1.0이 아니라 substring "극댓값" 단독 수준에 캡됨
+        assert m.matched_signals == ("극댓값",)
+        assert len(m.matched_regex_signals) == 1  # 발화는 기록되나 가산은 0
+
+    def test_ambiguous_coincidence_does_not_survive_serving_gate(self) -> None:
+        """우연의_일치_정답은_서빙_품질_게이트를_통과하지_못한다 — 실제 해악 지점의 대조"""
+        text = "극대는 x=2 에서 나오고 극댓값은 2 이다 (f(2)=2 인 함수)"
+        gated = apply_match_quality_gate(diagnose(text))
+        surfaced = [m.misconception.id for m in gated.matches]
+        assert "extremum-value-vs-point-confused" not in surfaced
+
+    def test_numeric_trace_misconception_also_capped(self) -> None:
+        """x좌표라는_말을_안_쓴_수치_흔적_오개념도_함께_0.5에_갇힌다 — 회귀가 아니라 설계 의도
+
+        원래 이 정규식이 잡으려던 자리(학생이 "x좌표"라는 말 없이 극댓값을 좌표 숫자로 답한
+        경우)도 우연의 일치 정답과 텍스트가 완전히 같은 형태라 함께 캡된다 — 그 자체가 이
+        채널이 텍스트만으로는 둘을 가를 수 없다는 실측 증거다.
+        """
+        m = self._find("극대는 x=-1 에서 나오고 극댓값은 -1")
+        assert m is not None
+        assert m.confidence == 0.5
+        assert len(m.matched_regex_signals) == 1  # 정규식은 여전히 발화(검출은 유지)
+
+    def test_explicit_x_coordinate_confusion_unaffected(self) -> None:
+        """x좌표라는_말을_명시한_경우는_MISC-24와_무관하게_여전히_confidence_1.0
+
+        정규식과 무관한 substring AND("극댓값"+"x좌표") 경로 — 원래도 모호하지 않았다.
+        """
+        m = self._find("극댓값을 극점의 x좌표라고 답함")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert set(m.matched_signals) == {"극댓값", "x좌표"}
+        gated = apply_match_quality_gate(diagnose("극댓값을 극점의 x좌표라고 답함"))
+        assert any(x.misconception.id == "extremum-value-vs-point-confused" for x in gated.matches)
+
+    def test_distinct_coordinate_and_value_not_flagged(self) -> None:
+        """좌표와_값이_다른_정답은_여전히_미탐지 — 회귀 없음(FP 0 대조)"""
+        m = self._find("극대는 x=-1 에서 나오고 극댓값은 101")
+        assert m is None or m.matched_regex_signals == ()
+
+
+class TestAmbiguousRegexSignalsGovernance:
+    """`ambiguous_regex_signals` 부여 항목의 동결 — 조용히 늘거나 줄지 않게(MISC-24).
+
+    `TestRefutingRegexGovernance`와 같은 정신 — 이 플래그도 탐지를 **끄는** 방향(정규식이
+    발화해도 confidence에 기여하지 않게)이라 잘못 붙으면 다른 채널의 MISC-22 해소를 조용히
+    되돌린다.
+    """
+
+    _AMBIGUOUS_IDS = {"extremum-value-vs-point-confused"}
+
+    def test_only_listed_entries_have_the_flag(self) -> None:
+        """목록_밖_항목은_플래그가_없다 — 다른 5개 정규식 채널(MISC-22)의 회귀 방지"""
+        for m in CATALOG:
+            if m.id not in self._AMBIGUOUS_IDS:
+                assert m.ambiguous_regex_signals is False, m.id
+
+    def test_listed_entries_actually_have_it(self) -> None:
+        """목록에_적힌_항목은_실제로_플래그가_켜져있다 — 선언과 사실의 대조"""
+        for mid in self._AMBIGUOUS_IDS:
+            assert CATALOG_BY_ID[mid].ambiguous_regex_signals is True, mid
+
+    def test_flagged_entries_actually_have_regex_signals(self) -> None:
+        """플래그를_가진_항목은_실제로_regex_signals가_있다 — 무의미한 플래그 방지"""
+        for mid in self._AMBIGUOUS_IDS:
+            assert CATALOG_BY_ID[mid].regex_signals, mid
 
 
 class TestRegexBackwardCompatibility:
@@ -655,6 +837,59 @@ class TestRefutingRegex:
             assert "root-loss-by-dividing" in ids, text
 
 
+class TestAdditionMultiplicationRefutation:
+    """반박 조건(PR #1068 Codex P1) — `addition-multiplication-rule-confused`.
+
+    왜 필요했나
+    -----------
+    `signals=("합의 법칙", "곱의 법칙")` 공출현(AND)은 두 법칙을 *뒤섞어 쓴* 오답에도, 두
+    법칙을 *정확히 구분해 설명한* 정답에도 똑같이 발화한다 — 둘 다 두 법칙 이름을 함께
+    언급하기 때문이다. judge(`misconception_judge_enabled`)가 비활성인 기본 상태에서
+    "합의 법칙과 곱의 법칙을 구분해서 써야 한다"가 confidence 1.0으로 품질 게이트(0.65)를
+    넘어 정답에 반례 개입이 나갈 뻔했다(실측).
+    """
+
+    #: 전부 **정답**이다 — 두 법칙을 명시적으로 구분·구별하는 서술.
+    CORRECT_ANSWERS = (
+        "합의 법칙과 곱의 법칙을 구분해서 써야 한다",
+        "합의 법칙과 곱의 법칙을 구별해야 헷갈리지 않는다",
+        "동시에 일어나면 곱의 법칙, 아니면 합의 법칙으로 구분한다",
+    )
+
+    #: 전부 **오개념**이다 — 두 법칙을 혼동해 틀리게 계산했다("구분"·"구별" 미포함).
+    ACTUAL_MISCONCEPTIONS = (
+        "동전과 주사위를 던지는 경우의 수는 합의 법칙과 곱의 법칙이 헷갈려서 6+2=8로 계산했다",
+        "합의 법칙과 곱의 법칙 중 뭘 써야 할지 몰라서 그냥 6+2로 풀었다",
+    )
+
+    def test_correct_answers_are_refuted(self) -> None:
+        """정답은_반박돼_후보에서_빠진다"""
+        for text in self.CORRECT_ANSWERS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "addition-multiplication-rule-confused" not in ids, text
+
+    def test_actual_misconceptions_still_detected(self) -> None:
+        """진짜_혼동은_여전히_검출된다 — 반박을 넓히다 오개념을 죽이지 않았는지"""
+        for text in self.ACTUAL_MISCONCEPTIONS:
+            ids = [m.misconception.id for m in diagnose(text)]
+            assert "addition-multiplication-rule-confused" in ids, text
+
+    def test_refuted_answers_do_not_reach_the_serving_gate(self) -> None:
+        """반박된_정답은_서빙_품질_게이트에_도달하지_않는다 — 실제 해악 지점의 대조"""
+        for text in self.CORRECT_ANSWERS:
+            gated = apply_match_quality_gate(diagnose(text))
+            surfaced = [m.misconception.id for m in gated.matches]
+            assert "addition-multiplication-rule-confused" not in surfaced, text
+
+    def test_refutation_is_checked_before_signal_counting(self) -> None:
+        """반박은_신호를_세기_전에_판정된다 — 감점이 아니라 거부임을 계약으로 고정"""
+        text = "합의 법칙과 곱의 법칙을 구분해서 써야 한다"
+        entry = CATALOG_BY_ID["addition-multiplication-rule-confused"]
+        norm = _normalize(text)
+        assert all(_signal_hit(s, norm) for s in entry.signals), "전제: 두 신호가 다 맞는 문장"
+        assert not [m for m in diagnose(text) if m.misconception.id == entry.id]
+
+
 class TestRefutingRegexGovernance:
     """반박 조건을 *가진* 항목의 동결 — 조용히 늘거나 줄지 않게.
 
@@ -662,7 +897,7 @@ class TestRefutingRegexGovernance:
     달리 아무도 소리내지 않는다. 그래서 부여 항목을 명시 목록으로 묶는다.
     """
 
-    _REFUTING_IDS = {"root-loss-by-dividing"}
+    _REFUTING_IDS = {"root-loss-by-dividing", "addition-multiplication-rule-confused"}
 
     def test_only_listed_entries_have_refuting_regex(self) -> None:
         """목록_밖_항목은_반박_조건이_없다"""
