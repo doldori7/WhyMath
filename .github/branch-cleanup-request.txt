@@ -145,3 +145,25 @@ claude/review-dydkkx-runbook
 #   test-driven-development-03elxp(ahead 0·diff 0 — 9회차 신규 측정) · status-f9lp65(2↑·diff 5) ·
 #   status-iraoq3(MISC-21·9회차 신규 등장). 앞 둘은 claim 해제 시 잃을 내용 0으로 즉시 삭제 후보다.
 claude/backup/ai-content-a3ysut-pre-rebase
+
+# ── 2026-09-10 9차 배치 (1건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-10.md §3.1·§4 ──
+# 직전 배치 집행 확인(2026-09-10 실측): 누적 22건(8차 a3ysut 포함) 전건 잔존 0/22.
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   misc-24-extremum-ambiguous-coincidence = c3415fd4
+#     근거: 소유 태스크 MISC-24(done)의 notes가 "PR #1072는 중복 diff로 close, 실제 변경은
+#     PR #1071(claude/status-vlul18, 2026-09-09 07:54 UTC 머지)로 통합"이라고 기록한 경위를
+#     GitHub API로 직접 재확인(PR #1071 merged:true · PR #1072 closed·merged:false, 기록과 일치).
+#     diff 13파일(main 부재 0) — models.py 바이트 동일, catalog.py는 main이 MISC-25 후속까지
+#     포함한 상위집합(고유 줄은 들여쓰기 차이뿐).
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 8차 배치 승계 전건 유지:
+#   7n9n72(**삭제 절대 금지**) · trjg5x(PB-13·PB-14·ADMIN-02·PATH-03) · k20m0w(MOB-18) ·
+#   gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07·HARN-80) · 5t5lmv(OPS-40) · iws58k(ARCH-30) ·
+#   t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28·VIZ-11) · q8tvcx(OPS-67) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 3건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0) ·
+#   test-driven-development-03elxp(ahead 0·diff 0) · status-f9lp65(diff 5). 9회차의 status-iraoq3은
+#   이번 population에서 부재(브랜치 삭제 확인).
+# ⚠ 참고(판정 아님) — claude/entity-model-freeze-lji37v는 PR #1007(오픈)로 이미 노출된 브랜치라
+#   이 배치의 판정 대상이 아니다. 그 PR의 Gate 0 r6 판정 부분은 이 세션의 별도 PR #1081이 이미
+#   main에 직접 포팅했다 — PR #1007 자체의 처분(HARN-77·OPS-65·OPS-66 부분 재제출 여부)은
+#   그 PR 소유자가 판단할 사안이다(감사 §6 정직한 공백 참조).
+claude/misc-24-extremum-ambiguous-coincidence
