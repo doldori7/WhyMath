@@ -19,7 +19,7 @@
 따라서 이 도구는 **JSON을 파일 경로로 받는다** — 스스로 조회하지 않는다. 자동 상시 실행이
 불가능하다는 것이 정직한 제약이며, 그 제약 위에서 "조회는 사람·판정은 기계"로 분업한다.
 
-    gh api repos/doldori7/WhyMath/rules/branches/main > ruleset.json
+    gh api repos/{owner}/{repo}/rules/branches/main > ruleset.json
     python3 scripts/harness/ruleset_drift.py ruleset.json --record
 
 exit code (셋 다 서로 구별된다 — "측정 실패"가 "위반 0 통과"로 위장되면 안 된다)
@@ -71,7 +71,7 @@ STALE_AFTER_DAYS = 30
 #     (`_read_json_text`) 산출측에서 먼저 맞춘다 — CLAUDE.md 인코딩 정합 규칙.
 POWERSHELL_FETCH_RUNBOOK = (
     "cd C:\\Users\\kiki\\Desktop\\__AI\\WhyMath; "
-    "gh api repos/doldori7/WhyMath/rules/branches/main | "
+    "gh api repos/{owner}/{repo}/rules/branches/main | "
     "Out-File -Encoding utf8 ruleset.json; "
     "python scripts\\harness\\ruleset_drift.py ruleset.json --record"
 )

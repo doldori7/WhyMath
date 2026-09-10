@@ -17,7 +17,7 @@ true`(= 머지 시점에 브랜치가 up-to-date여야 함)다. 따라서 대기
 브랜치 보호 규칙이나 ci.yml은 건드리지 않는다(HARN-32 ⑥ 범위 밖 — 사람 결정).
 
 사용:
-    python3 scripts/ops/pr_merge_readiness.py doldori7/WhyMath 916
+    python3 scripts/ops/pr_merge_readiness.py "$GITHUB_REPOSITORY" 916
 
 exit code (게이트 CLI 관례)
     0 — 지금 머지 가능(필수 전부 green + up-to-date + 스레드 해소)

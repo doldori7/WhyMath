@@ -1,8 +1,15 @@
 # PR 자동 재동기화 (HARN-85) — GitHub merge queue의 대체 경로
 #
-# 왜 merge queue가 아닌가: 큐는 **조직(Organization) 소유 저장소 전용**이다. 이 저장소는
-# public이지만 owner.type=User(개인 계정 doldori7)라 룰셋에 `Require merge queue` 항목
-# 자체가 없다(2026-09-07 실측). 근거·실패 경위 = .github/branch-protection-setup.md.
+# 왜 merge queue가 아니었나: 큐는 **조직(Organization) 소유 저장소 전용**인데, 이 워크플로를
+# 만들 당시 저장소는 개인 계정 소유라 룰셋에 `Require merge queue` 항목 자체가 없었다
+# (2026-09-07 실측). 근거·실패 경위 = .github/branch-protection-setup.md.
+#
+# [전제 변경 2026-09-10 실측] 저장소가 조직으로 이관돼(repo id 동일 · owner.type=Organization)
+# 그 제약이 사라졌고, 실제로 merge queue가 켜져 있다 — `PUT /pulls/{n}/merge`가
+# `Changes must be made through the merge queue` 룰 위반으로 405를 낸다. 즉 위 문단은
+# **이 워크플로가 만들어진 이유의 기록**이지 현재 상태의 서술이 아니다. 큐 도입 후 이 워크플로를
+# 안전망으로 남길지 제거할지의 재판정은 HARN-56-merge-queue-adoption의 몫이며, 이 주석은
+# 사실만 병기한다(정책 판단을 여기서 하지 않는다).
 #
 # 무엇을 하는가: auto-merge가 켜져 있고 base보다 뒤처진(BEHIND) PR만 update-branch로
 # 최신화한다. `Require branches to be up to date`는 **유지**한다 — 보호를 낮추는 것이
