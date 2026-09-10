@@ -9710,7 +9710,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 9725
+    loc: 9756
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 3
@@ -9720,7 +9720,7 @@ features:
     db_model_modules: 1
     coupling_count: 46
     test_files: 31
-    test_functions: 601
+    test_functions: 603
     matrix:
       A_subject: 3
       B_db: 1
