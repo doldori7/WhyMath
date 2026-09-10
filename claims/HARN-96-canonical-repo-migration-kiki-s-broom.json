@@ -1,1 +1,1 @@
-{"branch": "claude/g-merge-queue-strict-relax-t51cn4", "harness": "2.0", "task": "HARN-96-canonical-repo-migration-kiki-s-broom", "ts": "2026-09-10T03:47:57Z"}
+{"branch": "claude/g-merge-queue-strict-relax-t51cn4", "harness": "2.0", "kind": "block", "reason": "잔여 acceptance가 전부 Kiki 결정·설정 작업이다 — ② DEPLOY_SSH_* 실측(배포 1회 또는 설정 화면) · ⑤ 병렬 세션 컷오버 좌표 · ⑦ 구 저장소 처분 방침. 실측으로 끝낼 수 있는 축(①③④·⑥ 실행 표면)은 2026-09-10 PR #1063에서 끝냈고 acceptance ⑩에 기록했다. 착수 자격 확인 중 claim이 잡혀 다른 세션을 막지 않도록 되돌린다.", "task": "HARN-96-canonical-repo-migration-kiki-s-broom", "ts": "2026-09-10T03:48:55Z"}
