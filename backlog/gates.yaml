@@ -164,11 +164,11 @@ gates:
     title: "겸직 IP 귀속 분리 증빙 — ①개인 장비·개인 계정·개인 시간 작업 사실 증빙(커밋 타임스탬프 등) ②재직사 자산·데이터 무사용 확인서 자체 작성·보관 ③신설 법인 설립 시 IP 양도 계약 예정 기록. 12/31 산출물 전체의 귀속 리스크·투자 실사 항목(전환 설계서 §1.1-b, 2h 소요)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-08-30
     remind_after_days: 14
-    evidence: null
-    cleared_by: null
+    evidence: "2026-09-10 Kiki 서명. 판정 기준: ce587dc092032435649ceb642f71608942ab8e36 (MGMT-05 PR). ①기계 증거 = scripts/ops/ip_separation_evidence.py 실행 결과 — 저장소의 모든 ref(137개) 전수 2746건(사람 저작 1163건), 선언 밖 신원 0종, 평일 09-18시 KST 커밋 비율 0.3577. ②재직사 자산·데이터 무사용 확인서 자체 작성·서명 완료. ③신설 법인 IP 양도 예정 기록 작성·서명 완료. 3종 모두 저장소 밖 보관(C:\\Users\\kiki\\Documents\\WhyMath-IP) + 자기발송으로 시점 고정. 저장소에는 빈 템플릿(docs/legal/templates/)만 추적한다. 법적 판단(업무상저작물·직무발명·겸업금지)은 미착수 — 확인서 §5가 자문 질문 목록으로 승계."
+    cleared_by: kiki
     notes: ""
   - id: G-eos-task-prefix-exhausted
     title: "EOS 태스크 번호 00~99 전부 소진 — 후속 프리픽스 결정 필요(HARN-21: backlog.py add가 번호 제안을 거부). 2026-09-06 인벤토리 후속 1건은 임시로 ARCH 계열(ARCH-42)에 등재. 선택지: ①새 프리픽스(예 EOS2·EOSM) ②EOS 3자리 허용(TASK_ID_RE 변경·HARN-10 번호 참조 규율 재검토) ③트랙별 프리픽스 분리"
