@@ -288,11 +288,20 @@ def parse_live(payload: Any, source: str = "<입력>") -> LiveRuleset:
                 params[key] = rparams.get(key)
 
     # 규칙 타입 자체의 존재 여부도 선언 축이다(required_linear_history 등은 파라미터가 없다).
-    # `merge_queue`는 **의도적으로 여기 없다** — GitHub merge queue는 조직 소유 저장소 전용이라
-    # 이 저장소(owner.type=User)에서는 켤 수 없다(2026-09-07 실측). 선언하면 영원히 충족 불가한
-    # 위반이 상시 보고돼 판정기 전체가 소음이 된다(CLAUDE.md '상시 실패하는 fail-open 보호').
-    # 저장소가 조직으로 이관되면 그때 이 튜플에 추가한다 — 근거는 branch-protection-setup.md.
-    for rtype in ("required_linear_history", "deletion", "non_fast_forward"):
+    #
+    # `merge_queue`는 2026-09-07~09-08 동안 **의도적으로 여기 없었다** — 그때 이 저장소는
+    # owner.type=User(개인 계정 doldori7)였고 GitHub merge queue는 조직 소유 전용이라 켤 수
+    # 없었다. 충족 불가한 것을 선언하면 위반이 상시 보고돼 판정기 전체가 소음이 되므로
+    # (CLAUDE.md '상시 실패하는 fail-open 보호') 빼 두고, "저장소가 조직으로 이관되면 그때
+    # 이 튜플에 추가한다"는 조건을 주석에 박아 뒀다.
+    #
+    # **그 조건이 충족됐다(2026-09-09)**: 저장소가 kiki-s-broom(Organization)으로 전환되고
+    # main 룰셋에 merge queue가 켜졌다. 근거는 라이브 룰셋 덤프가 아니라 **큐가 실제로 일한
+    # 사실**이다 — PR #1067이 큐 브랜치 `gh-readonly-queue/main/pr-1067-94d1f28a`에서
+    # merge_group CI(run 34318528035)를 거쳐 머지됐고 그 head가 그대로 main(a374d2e0)이 됐다.
+    # 이제 큐가 머지 경로를 지탱하므로 **감시 축에서 빠져 있는 것이 위험**이다: 누가 큐를 꺼도
+    # 판정기가 모르는, 보호가 있다고 믿는 무보호 상태가 된다.
+    for rtype in ("required_linear_history", "deletion", "non_fast_forward", "merge_queue"):
         params[rtype] = rtype in rule_types
 
     # 규칙은 읽혔는데 status check 강제가 없거나 목록이 비었다 — 확정된 회귀다(측정 실패 아님).
