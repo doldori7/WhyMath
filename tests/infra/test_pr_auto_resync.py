@@ -52,6 +52,12 @@ def _pr(number: int, state: str = "BEHIND", automerge: bool = True) -> dict[str,
     }
 
 
+# 계약 ⑤(HARN-89)용 기본 토큰 — pat 형식 검사(github_pat_ 접두·길이 60~255)를 만족하는
+# 깨끗한 값. token_kind가 "pat"가 아닌 테스트에서도 문자 위생은 그대로 통과해야 하므로
+# 굳이 다른 값을 쓸 이유가 없다 — 대조군(g)의 기준값이기도 하다.
+_CLEAN_PAT = "github_pat_" + "A" * 70
+
+
 def _run(
     tmp_path: Path,
     prs: list[dict[str, Any]],
@@ -62,6 +68,7 @@ def _run(
     dry_run: str = "0",
     raw_payload: str | None = None,
     token_kind: str = "pat",
+    gh_token: str | None = None,
 ) -> tuple[int, str, list[str]]:
     """스텁 `gh`를 PATH 앞에 두고 스크립트를 실행한다. (exit code, 출력, update 호출 목록)"""
     bindir = tmp_path / "bin"
@@ -79,6 +86,7 @@ def _run(
         REPO="doldori7/WhyMath",
         RESYNC_TOKEN_KIND=token_kind,
         DRY_RUN=dry_run,
+        GH_TOKEN=gh_token if gh_token is not None else _CLEAN_PAT,
         STUB_PR_JSON=raw_payload if raw_payload is not None else json.dumps(prs),
         STUB_LIST_RC=str(list_rc),
         STUB_UPDATE_RC=str(update_rc),
@@ -343,6 +351,133 @@ def test_dry_run_is_allowed_without_pat(tmp_path: Path) -> None:
     assert rc == 0, out
     assert calls == []
     assert "#303" in out and "DRY_RUN" in out, out
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑤ — 토큰 위생 사전 검사 (HARN-89)
+#
+# 2026-09-08 사고: PAT를 시크릿에 붙여넣을 때 끝에 개행이 딸려 들어가, gh 호출이 Go
+# net/http의 내부 오류 문면으로만 실패했다. 여기서는 gh를 부르기 전에 그 오염 형태를
+# 실제로 주입해 각각 다른 메시지가 나오는지 확인한다(2026-09-01 등재 규칙 — 정상 토큰
+# 에서 초록인 것은 보호의 증거가 아니다). (g) 대조군이 핵심이다: 모든 입력에서 경고가
+# 나오면 그 경고는 신호가 아니라 배경 소음이다.
+# ---------------------------------------------------------------------------
+
+
+def test_trailing_newline_is_trimmed_and_logged(tmp_path: Path) -> None:
+    """(a) 끝 개행 — 제거 후 통과하되, 조용히 고치지 않고 그 사실을 고지한다."""
+    rc, out, calls = _run(tmp_path, [_pr(401)], gh_token=_CLEAN_PAT + "\n")
+    assert rc == 0, out
+    assert calls == ["repos/doldori7/WhyMath/pulls/401/update-branch"], out
+    assert "::warning::GH_TOKEN" in out and "제거했다" in out, out
+    assert _CLEAN_PAT not in out, "토큰 값 자체가 로그에 출력됐다"
+
+
+def test_trailing_space_is_trimmed_and_logged(tmp_path: Path) -> None:
+    """(b) 끝 공백 — 제거 후 통과 + 고지."""
+    rc, out, calls = _run(tmp_path, [_pr(402)], gh_token=_CLEAN_PAT + "  ")
+    assert rc == 0, out
+    assert len(calls) == 1, out
+    assert "::warning::GH_TOKEN" in out and "제거했다" in out, out
+
+
+def test_leading_space_is_trimmed_and_logged(tmp_path: Path) -> None:
+    """(c) 앞 공백 — 제거 후 통과 + 고지."""
+    rc, out, calls = _run(tmp_path, [_pr(403)], gh_token="  " + _CLEAN_PAT)
+    assert rc == 0, out
+    assert len(calls) == 1, out
+    assert "::warning::GH_TOKEN" in out and "제거했다" in out, out
+
+
+def test_internal_newline_is_fail_closed(tmp_path: Path) -> None:
+    """(d) 값 내부 개행 — 앞뒤 제거로는 못 없앤다. fail-closed(exit 1) + 이름 붙인 진단."""
+    contaminated = _CLEAN_PAT[:40] + "\n" + _CLEAN_PAT[40:]
+    rc, out, calls = _run(tmp_path, [_pr(404)], gh_token=contaminated)
+    assert rc == 1, f"값 내부 개행인데 초록으로 끝났다: {out}"
+    assert calls == [], f"멈추기 전에 이미 gh를 호출했다: {calls}"
+    assert "::error::GH_TOKEN 위생 검사 실패" in out, out
+    assert "내부에 공백·개행·제어문자·비ASCII" in out, out
+    assert _CLEAN_PAT not in out, "토큰 값 자체가 로그에 출력됐다"
+
+
+def test_non_ascii_byte_is_fail_closed(tmp_path: Path) -> None:
+    """(e) 비ASCII 문자 — fail-closed + 이름 붙인 진단."""
+    contaminated = _CLEAN_PAT[:40] + "é" + _CLEAN_PAT[41:]
+    rc, out, calls = _run(tmp_path, [_pr(405)], gh_token=contaminated)
+    assert rc == 1, f"비ASCII 문자인데 초록으로 끝났다: {out}"
+    assert calls == []
+    assert "::error::GH_TOKEN 위생 검사 실패" in out, out
+    assert "내부에 공백·개행·제어문자·비ASCII" in out, out
+
+
+def test_empty_token_is_fail_closed(tmp_path: Path) -> None:
+    """(f) 빈 문자열 — fail-closed. gh를 한 번도 부르지 않는다."""
+    rc, out, calls = _run(tmp_path, [_pr(406)], gh_token="")
+    assert rc == 1, f"빈 토큰인데 초록으로 끝났다: {out}"
+    assert calls == []
+    assert "::error::GH_TOKEN 위생 검사 실패" in out and "비어 있다" in out, out
+
+
+def test_clean_token_triggers_no_hygiene_warning(tmp_path: Path) -> None:
+    """(g) 대조군 — 정상 토큰에서는 위생 경고·에러가 전혀 나오지 않는다.
+
+    이 단언이 이 계약의 핵심이다. 모든 입력에서 경고가 나오면 그것은 상태를 가르는
+    신호가 아니라 상시 배경이고, 상시 배경은 습관화돼 읽히지 않는다.
+    """
+    rc, out, calls = _run(tmp_path, [_pr(407)])
+    assert rc == 0, out
+    assert len(calls) == 1, out
+    assert "GH_TOKEN" not in out, f"정상 토큰인데 GH_TOKEN 관련 문구가 나왔다: {out}"
+
+
+def test_pat_kind_without_prefix_is_fail_closed(tmp_path: Path) -> None:
+    """형식 검사 — RESYNC_TOKEN_KIND=pat인데 github_pat_ 접두가 없으면 거부한다."""
+    rc, out, calls = _run(tmp_path, [_pr(408)], gh_token="ghp_" + "A" * 66, token_kind="pat")
+    assert rc == 1, f"접두 없는 값인데 초록으로 끝났다: {out}"
+    assert calls == []
+    assert "::error::GH_TOKEN 형식 검사 실패" in out and "'github_pat_' 접두" in out, out
+
+
+def test_pat_kind_with_abnormal_length_is_fail_closed(tmp_path: Path) -> None:
+    """형식 검사 — RESYNC_TOKEN_KIND=pat인데 길이가 비정상이면(잘림·오염 의심) 거부한다."""
+    rc, out, calls = _run(tmp_path, [_pr(409)], gh_token="github_pat_ab", token_kind="pat")
+    assert rc == 1, f"비정상 길이인데 초록으로 끝났다: {out}"
+    assert calls == []
+    assert "::error::GH_TOKEN 형식 검사 실패" in out and "길이가 비정상" in out, out
+
+
+def test_github_token_kind_skips_pat_prefix_check(tmp_path: Path) -> None:
+    """ⓔ 대조군 — token_kind=github_token · dry_run=1 · 정상 ghs_ 토큰은 통과해야 한다.
+
+    ①의 fail-closed 목록에서 github_pat_ 접두 부재를 뺀 정정(PR #1062 Codex P2)이 지켜지는지
+    판정한다 — 이것이 깨지면 test_dry_run_is_allowed_without_pat도 함께 RED가 된다.
+    """
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(410)],
+        gh_token="ghs_" + "B" * 36,
+        token_kind="github_token",
+        dry_run="1",
+    )
+    assert rc == 0, out
+    assert calls == []
+    assert "GH_TOKEN" not in out, f"정상 ghs_ 토큰인데 GH_TOKEN 관련 문구가 나왔다: {out}"
+
+
+def test_github_token_kind_still_rejects_embedded_newline(tmp_path: Path) -> None:
+    """ⓕ 같은 조건에 개행이 섞이면 여전히 거부한다 — 문자 위생은 토큰 종류 무관이다."""
+    ghs = "ghs_" + "B" * 36
+    contaminated = ghs[:20] + "\n" + ghs[20:]
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(411)],
+        gh_token=contaminated,
+        token_kind="github_token",
+        dry_run="1",
+    )
+    assert rc == 1, f"github_token 경로에서 개행 오염이 통과했다: {out}"
+    assert calls == []
+    assert "::error::GH_TOKEN 위생 검사 실패" in out, out
 
 
 def test_workflow_passes_token_kind_to_the_script() -> None:
