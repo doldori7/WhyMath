@@ -16,6 +16,7 @@ from whymath_backend.harness.misconception_false_positive_eval import (
     format_report,
     load_answer_explanations,
     main,
+    weak_signal_gap,
 )
 
 
@@ -141,3 +142,73 @@ class TestRealCorpus:
 def test_cli_exit_codes_are_only_zero_or_one_for_measurable_runs(threshold: float) -> None:
     """측정 가능한 실행의 종료 코드는 0/1뿐 — 2(측정 실패)는 모집단 0에만 쓴다."""
     assert main(["--max-fp-ratio", str(threshold)]) in (0, 1)
+
+
+class TestWeakSignalGapRejectsProximityThreshold:
+    """MISC-29가 근접 임계를 **기각**한 근거를 동결한다.
+
+    판정을 산문으로만 남기면 다음 세션이 같은 가설을 처음부터 다시 세운다. 여기서
+    동결하는 것은 특정 숫자가 아니라 **대소 관계**다 — 코퍼스가 바뀌어 관계가 뒤집히면
+    red가 나서 "이제 다시 검토할 만하다"를 알린다.
+    """
+
+    #: 진짜 오개념 발화 — `division-by-zero`의 canonical_statement를 학생이 그대로 말한 형태.
+    _TRUE_POSITIVE = "분모에 변수가 와도 항상 정의되니까 0을 넣어도 된다"
+    #: 순수 오탐 — **실제 코퍼스 문장**(정답 해설). 몫의 미분법 설명이라 나눗셈 오개념과 무관.
+    #:
+    #: 코퍼스 원문을 그대로 쓰는 것이 중요하다. 처음엔 이 문장을 축약해 적었는데
+    #: ("…조합하면 f'(0)의 값은 -14이다") 거리가 12가 아니라 13이 나와, 재려던 분포의
+    #: 어느 버킷에도 속하지 않는 합성 문장을 재고 있었다 — 테스트가 그것을 잡았다.
+    _FALSE_POSITIVE = (
+        "몫의 미분법에 따라 분자와 분모를 각각 미분해 조합한 뒤 "
+        "x = 0에서 계산하면 f'(0)의 값은 -14이다."
+    )
+    #: 정탐과 **같은 거리**에 놓이는 오탐 — 임계 불가의 가장 강한 형태.
+    _FALSE_POSITIVE_SAME_GAP = (
+        "몫의 미분법에 따라 분자와 분모를 각각 미분해 조합하면 f'(0)의 값은 -14이다."
+    )
+
+    def test_a_true_positive_sits_farther_than_a_real_corpus_false_positive(self) -> None:
+        """[기각 근거 ①] 잡아야 할 문장이 걸러야 할 코퍼스 문장보다 **멀다**.
+
+        이 부등호가 성립하는 한 어떤 거리 임계도 둘을 동시에 만족시킬 수 없다 —
+        낮게 잡으면 정탐이 죽고 높게 잡으면 오탐이 남는다.
+        """
+        tp_gap = weak_signal_gap("division-by-zero", self._TRUE_POSITIVE)
+        fp_gap = weak_signal_gap("division-by-zero", self._FALSE_POSITIVE)
+        assert tp_gap is not None and fp_gap is not None
+        assert tp_gap > fp_gap, (
+            f"정탐 거리 {tp_gap} ≤ 오탐 거리 {fp_gap} — 분포가 갈라졌다면 "
+            "MISC-29의 근접 임계 설계를 재검토할 시점이다"
+        )
+
+    def test_a_true_positive_and_a_false_positive_can_share_the_same_gap(self) -> None:
+        """[기각 근거 ②] 잡아야 할 것과 걸러야 할 것이 **같은 거리**에 있다.
+
+        ①의 역전보다 강한 증거다. 거리가 같으면 임계가 어디에 있든 두 문장은 항상
+        같은 판정을 받는다 — 설계가 원리적으로 불가능함을 보인다.
+        """
+        tp_gap = weak_signal_gap("division-by-zero", self._TRUE_POSITIVE)
+        fp_gap = weak_signal_gap("division-by-zero", self._FALSE_POSITIVE_SAME_GAP)
+        assert tp_gap == fp_gap, f"정탐 {tp_gap} vs 오탐 {fp_gap}"
+
+    def test_both_fixtures_actually_reach_the_diagnosis(self) -> None:
+        """[대조군] 두 문장 모두 실제로 그 오개념을 발화시킨다.
+
+        이 단언이 없으면 위 테스트는 "둘 다 매치 안 됨"으로도 통과할 수 있다 —
+        거리만 재고 매치 여부를 안 보면 기각 근거가 공허해진다.
+        """
+        for text in (self._TRUE_POSITIVE, self._FALSE_POSITIVE, self._FALSE_POSITIVE_SAME_GAP):
+            ids = [fp.kebab_id for fp in evaluate([text]).false_positives]
+            assert "division-by-zero" in ids, text
+
+    def test_gap_is_none_when_the_item_has_no_weak_signal(self) -> None:
+        """약한 신호가 없는 항목은 `None` — '거리 0'과 '해당 없음'을 섞지 않는다."""
+        assert weak_signal_gap("composite-function-commutes", "(f∘g)(1)과 (g∘f)(1)") is None
+
+    def test_report_publishes_the_gap_distribution(self) -> None:
+        """리포트가 거리 분포를 낸다 — 기각 판정이 매 실행 재현되게."""
+        report = evaluate([self._FALSE_POSITIVE])
+        rendered = format_report(report)
+        assert "약한 신호 거리 분포" in rendered
+        assert "겹친다" in rendered

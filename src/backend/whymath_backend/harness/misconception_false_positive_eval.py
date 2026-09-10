@@ -58,6 +58,7 @@ __all__ = [
     "format_report",
     "load_answer_explanations",
     "main",
+    "weak_signal_gap",
 ]
 
 _EXIT_OK = 0
@@ -98,6 +99,61 @@ def _is_weak(signal: str) -> bool:
     """숫자-only·단일 ASCII 문자 signal — 다른 주장 안에서 정당하게 등장하는 약한 토큰."""
     norm = _normalize(signal)
     return norm.isdigit() or (len(norm) == 1 and norm.isascii() and norm.isalpha())
+
+
+def weak_signal_gap(kebab_id: str, text: str) -> int | None:
+    """약한 signal이 **가장 가까운 내용성 signal**과 떨어진 거리(정규형 문자·최댓값).
+
+    약한 신호가 여럿이면 그중 가장 나쁜(먼) 것을 쓴다 — "모든 약한 신호가 가까울 것"을
+    요구하는 판정과 눈금을 맞추기 위해서다. 어느 쪽도 없으면 `None`(해당 없음).
+
+    ────────────────────────────────────────────────────────────────────────
+    이 함수는 **기각된 가설의 재현 장치**다 (MISC-29)
+    ────────────────────────────────────────────────────────────────────────
+    `MISC-29`는 "약한 signal은 내용성 signal에서 N자 이내일 때만 센다"는 근접 요구로
+    `weak-signal` 계열 오진단을 걷어 내려 했다. 전수 측정이 그 설계를 **기각했다**:
+
+        순수 오탐(정정 언급 없음·22건) 거리 : 12 · 27 · 29
+        진짜 오개념 발화 거리               : 0 · 1 · 3 · 10 · **13**
+
+    거리 13짜리 정탐이 거리 12짜리 오탐보다 **멀다**. 그 정탐은
+    `"분모에 변수가 와도 항상 정의되니까 0을 넣어도 된다"` — `division-by-zero`의
+    `canonical_statement`를 학생이 그대로 발화한 형태라 반드시 잡아야 하는 문장이다.
+    두 분포가 겹치므로 단일 거리 임계로는 가를 수 없다.
+
+    함수를 남기는 이유는 그 판정을 **재현 가능하게** 하기 위해서다 — 지우면 다음 세션이
+    같은 가설을 처음부터 다시 세우고 같은 측정을 반복한다. 리포트가 분포를 함께 내므로
+    코퍼스가 바뀌어 겹침이 해소되면 그때 다시 검토할 수 있다.
+    """
+    misconception = CATALOG_BY_ID[kebab_id]
+    norm = _normalize(text)
+    weak = [s for s in misconception.signals if _is_weak(s)]
+    strong = [s for s in misconception.signals if not _is_weak(s)]
+    if not weak or not strong:
+        return None
+    worst = 0
+    for weak_signal in weak:
+        norm_weak = _normalize(weak_signal)
+        occurrences = [i for i in range(len(norm)) if norm.startswith(norm_weak, i)]
+        if not occurrences:
+            return None
+        nearest: int | None = None
+        for weak_at in occurrences:
+            for strong_signal in strong:
+                norm_strong = _normalize(strong_signal)
+                strong_at = norm.find(norm_strong)
+                if strong_at < 0:
+                    continue
+                gap = max(
+                    0,
+                    max(weak_at, strong_at)
+                    - min(weak_at + len(norm_weak), strong_at + len(norm_strong)),
+                )
+                nearest = gap if nearest is None else min(nearest, gap)
+        if nearest is None:
+            return None
+        worst = max(worst, nearest)
+    return worst
 
 
 @dataclass(frozen=True)
@@ -201,6 +257,22 @@ def format_report(report: FalsePositiveReport, *, top_n: int = 10) -> str:
         for kebab, n in report.by_misconception.most_common(top_n):
             signals = CATALOG_BY_ID[kebab].signals
             lines.append(f"    {n:>5}건  {kebab:<40} signals={signals}")
+
+        # MISC-29 기각 근거의 재현 — 약한 신호 거리 분포를 함께 낸다.
+        gaps = Counter(
+            gap
+            for fp in report.false_positives
+            if (gap := weak_signal_gap(fp.kebab_id, fp.text)) is not None
+        )
+        if gaps:
+            spread = " ".join(f"{g}:{n}" for g, n in sorted(gaps.items()))
+            lines += [
+                "",
+                "  [약한 신호 거리 분포] 거리:건수 — MISC-29가 근접 임계를 기각한 근거:",
+                f"    {spread}",
+                "    진짜 오개념 발화의 거리는 0~13이라 순수 오탐(12·27·29)과 **겹친다**.",
+                "    단일 거리 임계로는 못 가른다(`weak_signal_gap` docstring).",
+            ]
     lines += [
         "",
         "  ※ 대리 지표다 — 정답 해설은 학생 입력이 아니다(모듈 docstring).",
