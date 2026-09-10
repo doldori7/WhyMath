@@ -139,7 +139,24 @@ def is_refuted(misconception: Misconception, text: str) -> bool:
 #: 한 문장이 되어 문장 스코프가 텍스트 전체 스코프로 조용히 붕괴한다(교수학 판정 실측:
 #: 번호 매김·구두점 없는 시나리오에서 문장 스코프가 64/64를 오억제).
 #: 번호 매김(`1)`·`(2)`)을 포함하는 이유가 그것이다 — 손글씨 풀이의 실제 단계 구분자다.
-_CLAUSE_BOUNDARY = re.compile(r"[\n.?!;。？！]+|(?:\(\s*\d+\s*\)|\d+\s*\))")
+#:
+#: 연결어미 `-고`도 경계다(MISC-26에서 추가). 한국어 풀이는 구두점 없이 절을 잇는 일이
+#: 흔한데, MISC-25 착지분은 구두점·번호만 봐서 그 형태를 통째로 놓쳤다 — **내가 넣은
+#: 축의 실측된 결함**이다:
+#:
+#:     "부호를 잘못 봤**고** 양변을 x로 나누면 x=2다"   ← 근 손실인데 억제됐다
+#:     "앞에서 틀린 부분을 고치**고** 양변을 x로 나누면 x=2다"  ← 같음
+#:
+#: 둘 다 *다른 것*을 정정하고 이 오개념을 저지른 문장이라 진단이 살아야 한다. MISC-25의
+#: 대조군 픽스처가 전부 마침표·번호를 썼기 때문에 이 형태를 한 번도 밟지 않았다.
+#:
+#: **인용격 `라고`·`다고`는 제외한다** — 그것은 절 경계가 아니라 인용 조사다. 빼지 않으면
+#: "친구는 (a+b)²를 a²+b²**라고** 했는데 틀렸어"가 인용 앞뒤로 갈려 억제가 풀린다(남의
+#: 오답을 비판하는 문장에 확신 오진단이 나간다). 실측으로 이 예외를 확인했다.
+#:
+#: `-지만`·`-는데`는 경계로 두지 **않는다**: "A라고 봤**지만** 맞지 않다"의 `맞지 않다`는
+#: 실제로 A를 반박하므로 갈라 놓으면 반박을 잃는다. `-고`만 넣은 것은 그 차이 때문이다.
+_CLAUSE_BOUNDARY = re.compile(r"[\n.?!;。？！]+|(?:\(\s*\d+\s*\)|\d+\s*\))|(?<![라다])고\s+")
 
 #: 정정 어휘가 신호에서 이만큼 떨어져 있으면 그 신호를 가리키는 말로 보지 않는다(정규형 기준).
 #:
@@ -241,7 +258,7 @@ def has_explicit_correction_near_signals(misconception: Misconception, text: str
         norm_clause = _normalize(clause)
         if not norm_clause:
             continue
-        hits = [s for s in misconception.signals if _signal_hit(s, norm_clause)]
+        hits = [s for s in misconception.signals if _anchorable(s, norm_clause)]
         if not hits:
             # 신호가 없는 절의 정정 어휘는 이 오개념을 가리키는 말이 아니다(위 1)단계 사례).
             #
@@ -264,18 +281,42 @@ def has_explicit_correction_near_signals(misconception: Misconception, text: str
     return False
 
 
-def _signal_span(signal: str, norm_clause: str) -> tuple[int, int] | None:
-    """정규형 절에서 signal의 위치 — `_signal_hit`과 **같은 규칙**으로 찾는다.
+def _is_weak_signal(signal: str) -> bool:
+    """숫자-only(`"0"`·`"180"`)·단일 ASCII 문자 signal인가 — **창을 열 자격이 없는** 신호.
 
-    규칙이 갈리면 "맞았다는데 위치는 없다"가 생겨 창이 조용히 안 열린다.
+    이런 신호는 v1.3이 경계 검사를 붙여 오매칭을 줄였지만, 여전히 *다른 주장 안*에서
+    정당하게 등장한다. `"0"`은 정의역 조건(`x=0은 근이 아니다`·`분모는 0이 될 수 없다`)에
+    나오고, 그 조건문에 붙은 부정 어미가 **엉뚱한 오개념을 반박한 것으로 읽힌다**:
+
+        "분모가 0이면 나눌 수 있다고 봤고 x=0은 근이 아니다"
+
+    앞 절이 나눗셈 오개념이고 뒤 절의 `아니다`는 *제로근*을 부정하는 말인데, 뒤 절의 `0`이
+    창을 열어 `division-by-zero`를 삼켰다(실측 — `test_input_is_not_masked_by_gate_or_topk`).
+    그래서 창은 **내용성 있는 신호**(한글 형태소·연산자·복합 토큰)만 연다.
+
+    비용은 0이다 — 카탈로그에 신호가 전부 약한 항목은 없다(실측: 약한 신호를 가진 3종
+    `division-by-zero`·`exponent-zero`·`angle-sum-non-triangle` 모두 내용성 신호를 함께
+    가진다). 즉 어떤 항목도 이 축을 통째로 잃지 않는다.
+    """
+    norm_sig = _normalize(signal)
+    return norm_sig.isdigit() or (len(norm_sig) == 1 and norm_sig.isascii() and norm_sig.isalpha())
+
+
+def _anchorable(signal: str, norm_clause: str) -> bool:
+    """이 절에서 이 signal이 매치되고, 창을 열 자격(내용성)이 있는가."""
+    return not _is_weak_signal(signal) and _signal_hit(signal, norm_clause)
+
+
+def _signal_span(signal: str, norm_clause: str) -> tuple[int, int] | None:
+    """정규형 절에서 signal의 위치.
+
+    `_anchorable`을 통과한 신호만 들어오므로 약한 신호(숫자·단일 영문자)의 경계 정규식
+    갈래는 여기에 도달하지 않는다 — 그래서 substring `find` 하나로 충분하다. 갈래를 남겨
+    두면 도달 불가 분기가 되어 "검사됐다"는 착시를 준다.
     """
     norm_sig = _normalize(signal)
     if not norm_sig:
         return None
-    if norm_sig.isdigit() or (len(norm_sig) == 1 and norm_sig.isascii() and norm_sig.isalpha()):
-        pattern = rf"(?<![0-9A-Za-z.]){re.escape(norm_sig)}(?![0-9A-Za-z.])"
-        found = _compile(pattern).search(norm_clause)
-        return (found.start(), found.end()) if found else None
     index = norm_clause.find(norm_sig)
     return (index, index + len(norm_sig)) if index >= 0 else None
 

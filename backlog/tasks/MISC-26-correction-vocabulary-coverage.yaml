@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/l4/misconception/diagnose.py
-session: null
+session: claude/status-38gu4d
 notes: "발단: MISC-25 구현 중 교수학 검토가 실측으로 지적. 선행 의존을 대장에 집행한다(notes 산문만으로는 selector가 안 읽는다 — CLAUDE.md 2026-09-01)."
 updated: 2026-09-10
