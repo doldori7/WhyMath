@@ -8997,6 +8997,26 @@ COMP-01(PR #1045) 검증 중 **같은 실행 하나에서 두 결함이 겹쳤�
 armed 상태였던 auto-merge가 먼저 성사됐다(`f9e25f80`). 즉 두 경로는 배타가 아니라 **경합**이며,
 "Base branch was modified"는 실패가 아니라 다른 쪽이 이겼다는 신호다.
 
+## 2026-09-08: 게이트 `title`만 인용해 이미 뒤집힌 결정을 재안내 (CLAUDE.md 등재분 = `HARN-92`)
+
+`LIC-07` done 처리 후 "머지 경합 해소"를 안내하며 `G-merge-queue-or-strict-relax`의 `title`("merge queue
+도입 또는 'up to date' 요구 해제")을 그대로 인용해 사용자에게 선택을 요청했다. 실측하니 그 게이트는 이미
+**`cleared`**(`cleared_by: kiki`, 2026-09-07)였고 `evidence`에는 "1) merge queue는 조직 소유 저장소 전용이라
+이 저장소(`owner.type=User`)에서 실행 불가 — 전제 반증 → 재판정 = **D) 자동 재동기화 워크플로우**"가
+기록돼 있었다. `title`은 최초 등재 시점의 *질문*을 담고 있을 뿐, 이후 `status`·`evidence`가 답을 갱신해도
+`title`은 append 전용 설계(`HARN-76`)상 그대로 남는다.
+
+사용자가 그 낡은 `title`을 따라 "up to date 요구 해제"를 선택한 뒤에야 `evidence`를 조회해 이미 결정·구현된
+사안(`pr-auto-resync.yml`, `HARN-85` done)임을 뒤늦게 발견했다 — 왕복 1회 낭비.
+
+같은 세션에서 이어서 `G-pr-auto-resync-token`도 main 기준 `pending`만 보고 "PAT 미발급"으로 판정할 뻔했으나,
+이번엔 "trunk 부재를 미구현으로 단정 금지" 규칙을 스스로 적용해(미머지 브랜치 `claude/pat-issuance-q516cw`
+실측) 사전에 잡았다 — 그 브랜치에 이미 `cleared`(Kiki가 당일 새벽 PAT 발급·시크릿 등록·`workflow_dispatch`
+성공 실측)로 기록돼 있었다. 그 축은 기존 규칙이 이미 커버하므로 별도 등재하지 않았다.
+
+**대책**: `HARN-92`(도구 쪽) — `backlog.py gates`에 단일 게이트 브리핑 경로를 추가해 `status`·`cleared_by`·
+`evidence`를 `title`과 함께, `title`보다 먼저 출력하게 한다. `HARN-86`(전이 거부가 해소 경로를 안 알려주던
+결함)과 같은 형태 — 안내자가 규율을 몰라도 도구가 낡은 `title`에 낚이지 않게 만든다.
 ## 2026-09-08: MISC-22 — 오개념 정규식 채널 confidence 공식 정정(v1.5), 4개 채널이 한 번도 학생에게 도달하지 못했던 결함 해소
 
 **결정**: `_match_one`(diagnose.py)의 confidence 공식을 `min(1.0, (substr매치+regex매치)/len(signals))`
