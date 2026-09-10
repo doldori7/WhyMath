@@ -9132,3 +9132,54 @@ work(HARN-94)는 **내가 작업을 시작한 시점엔 아직 backlog에 존재
 사례다. 새 CLAUDE.md 규칙이나 코드 게이트를 추가하지 않는다 — 강제해도 잡히지 않는 경합에 상시
 검사를 얹으면 그 자체가 무력한 가드가 된다(2026-09-01 규칙의 정신). 손실은 세션 하나의 구현
 시간뿐이고 데이터·main 영향은 0.
+
+## 2026-09-10 (조치·S3-28): **condition_dsl_violation 130건 = canonicalize 적용범위 오탐(코퍼스 결함 아님) — answer_kind 6종 exempt 필터 회수·재실측 확정**
+
+**배경**: `S3-28`이 판정을 요구한 미해결 항목 — ARCH-21 qa_pipeline 첫 실행에서 `equivalence_canonicalize`
+축이 코퍼스 전수(당시 2647건)에서 130건 위반을 냈고, (a)실 콘텐츠 결함 vs (b)canonicalize 스코프 오탐
+판정이 미뤄져 있었다. 같은 판정·조치가 이미 미머지 브랜치 `claude/openrouter-setup-guide-e98dw4`
+(커밋 `902702ea`)에 구현돼 있었으나(HARN-34 고립 참조 — `backlog.py start`가 done-미머지로 착수 거부),
+2026-09-07 stray-code 8회차가 회수 원천으로 지목된 `f8c0e3b6`에 **S4-16 잔여 하네스(~990줄, main #683이
+이미 병렬 중복 구현해 폐기 대상)가 함께 실려 이식 오염 위험**을 지적해뒀다.
+
+**착수 전 재확인**: `f8c0e3b6` 자체는 S4-16 코드만 담고 있었고, 실제 S3-28 조치는 같은 브랜치의 별도
+커밋 `902702ea`("condition_dsl_violation 130/2647건 = canonicalize 적용범위 오탐 판정·조치")에
+있었다 — notes의 "같은 커밋" 표현이 부정확했던 것으로 확인(두 커밋이 다른 파일셋: `902702ea`는
+`.github/workflows/ci.yml`·`MEMORY.md`·`harness/qa_pipeline.py`·`tests/backend/harness/
+test_qa_pipeline.py`만, `f8c0e3b6`은 S4-16 4파일만 — 겹치는 파일 0). 파일 단위로 `902702ea`의
+diff만 대상으로 삼아 이식했다.
+
+**재실측(2026-09-10, 코퍼스가 14034건으로 증가한 뒤 재확인)**: 판정이 그대로 유지됨을 확인 —
+`condition_dsl_violation` 위반이 여전히 정확히 6개 answer_kind(`finite_probability`·`finite_count`·
+`mean_equals_median`·`events_independent`·`conditional_equal`·`dot_product_scalar`)에만 130건
+분포(나머지 13904건은 등식 DSL 그대로 통과). 이 6종은 각자 독립된 닫힌 DSL(`l3/finite_probability.py`
+정규식·`l3/verify_answer.py` 쉼표숫자열)로 이미 검증되며 `condition_dsl_violation`은 등식/부등식
+sympify 폐쇄성만 검증하도록 설계된 함수라 필연적 오탐 — **판정 (b) canonicalize 스코프 오탐** 재확인.
+
+**조치**(새 판정 로직 0 — 적용 대상 필터만, `902702ea` 이식): `qa_pipeline._NON_EQUATION_DSL_ANSWER_KINDS`
+(6종 frozenset) 신설, `_axis_equivalence_canonicalize`가 최상위/`verify.answer_kind` 양쪽을 방어적으로
+읽어 해당 answer_kind를 검사 대상에서 제외(`condition_dsl_violation` 함수 자체는 무변경). 조치 후 재실행:
+`equivalence_canonicalize` violations 130→**0**(checked 14034→13904, 정확히 제외분만큼 감소 — 판정과
+수치 정합). 회귀 테스트 8건 추가(`tests/backend/harness/test_qa_pipeline.py::TestAxisEquivalenceCanonicalize`)
+— exempt 6종 각각 스킵 확인(파라미터화) + 비exempt answer_kind(`real_root_count`)의 진짜 위반은 그대로
+잡힘 확인(스코프 확대가 결함을 숨기지 않았는지 변별력 실측).
+
+**ci.yml 강제 게이트 전환은 이 태스크 범위 밖(ARCH-23 소관) — 손대지 않았다**: `902702ea` 원본은
+`equivalence_canonicalize` 필터 적용 후 qa_pipeline 7축 전체가 `overall.pass=true`임을 확인하고
+`ci.yml`의 `continue-on-error`를 제거했으나, 이 태스크의 `[고립 참조 정정 2026-09-07]` acceptance가
+"ci.yml continue-on-error 제거는 ARCH-23 소관"이라고 명시적으로 갈라뒀다 — 실제로 이 세션 환경에서
+CLI 전체 실행 결과 `defect_report_intake` 축이 DB 부재로 `error`(무관한 인프라 사유, 이 세션 sandbox에
+Postgres 없음)라 `overall.pass=false`이므로, 원본 커밋 당시의 "7축 전부 ok" 전제 자체가 지금은 성립하지
+않는다 — ARCH-23이 별도로 이 판정을 다시 해야 한다. 이 태스크는 `equivalence_canonicalize` 축 단독
+`ok`(violations 0)까지만 책임진다.
+
+**S4-16 잔여 이식 금지 준수**: `harness/residue_gate_demotion_battle.py`·`l3/finite_probability_defect_seeder.py`
+및 관련 테스트(~990줄, `f8c0e3b6` 소재)는 이식하지 않았다 — main `#683`이 병렬 중복 구현으로 대체했고
+그 폐기 판정은 vafylb 세션 MEMORY(2026-08-09)·`S4-59` ⑤(a)가 이미 소유한다.
+
+**검증**: python3.12 venv(`pip install -e src/backend[dev]` + `pip install -e src/data-pipeline`)에서
+`tests/backend/harness/test_qa_pipeline.py` 전건 green(49건, 신규 8건 포함)·ruff·black·mypy strict
+clean(대상 두 파일 한정 — 전체 스위트는 이 세션 환경(python 3.11 기본 + DB 부재)에서 재현 불가라
+돌리지 못했음을 명시). `python -m whymath_backend.harness.qa_pipeline` 실 CLI 실행으로
+`equivalence_canonicalize={"status":"ok","detail":{"total_conditions_checked":13904,"violations":0}}`
+직접 확인.
