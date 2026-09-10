@@ -605,6 +605,15 @@ jobs:
           alembic downgrade base
           alembic upgrade head
 
+      # OPS-55: 데이터 무결성 게이트 — orphan concept/skill/problem·dangling curriculum_ref·
+      # duplicate canonical_id·event schema_invalid 6종을 실 PG에서 스캔(0건=exit 0). 마이그레이션
+      # 직후 DB는 비어 있어 이 스텝 자체는 상시 통과(스모크)이지만, "저장소에 존재함≠돌아감"
+      # (OPS-10 선례) — 이 스텝이 CI 배선의 집행 지점이다. 6종 각각의 검출 변별력(주입 성공/실패
+      # 양쪽 신호)은 바로 아래 Pytest 통합테스트 스텝이 수집하는
+      # test_integrity_violations_gate_integration.py가 검증한다.
+      - name: 게이트 — 데이터 무결성 (integrity_violations_gate·orphan·dangling·duplicate 6종)
+        run: python -m whymath_backend.ops.integrity_violations_gate
+
       - name: Pytest (통합테스트 — 실 PG·l3 외부서비스 제외)
         env:
           WHYMATH_RUN_INTEGRATION: "1"

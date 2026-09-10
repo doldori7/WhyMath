@@ -4,12 +4,12 @@
 # 출시 우선도(release_priority)는 *제안*이다 — 확정은 Kiki.
 schema_version: 2
 dashboard:
-  population: 162
-  classification_rate: 162/162
-  backend_modules_covered: 592
+  population: 163
+  classification_rate: 163/163
+  backend_modules_covered: 593
   endpoints_covered: 109
   release_p0_proposed: 101
-  priority_changed_from_prior: 26
+  priority_changed_from_prior: 27
   student_loop_reach_modules: 210
   production_loop_reach_modules: 171
   loop_tables: 28
@@ -18,7 +18,7 @@ dashboard:
   final_differs_from_matrix: 39
   final_differs_from_criteria: 12
   by_criteria_action:
-    KEEP: 123
+    KEEP: 124
     POSTPONE: 21
     REFACTOR: 18
   keep_criteria_histogram:
@@ -26,50 +26,50 @@ dashboard:
     3/6: 3
     4/6: 19
     5/6: 36
-    6/6: 103
+    6/6: 104
   replace_signal_histogram:
-    0/6: 123
+    0/6: 124
     1/6: 36
     2/6: 3
   by_plane:
     C: 12
     E: 88
-    O: 13
+    O: 14
     S: 49
   by_ownership:
     ADAPTER: 8
     CLIENT: 12
     CORE: 109
     CORE+ADAPTER_DEP: 3
-    INFRA: 21
+    INFRA: 22
     MIXED: 9
   by_migration_action:
     HEAVY_REFACTOR: 11
-    KEEP: 114
+    KEEP: 115
     POSTPONE: 21
     REFACTOR: 15
     REPLACE_CANDIDATE: 1
   by_matrix_action:
     HEAVY_REFACTOR: 13
-    KEEP: 99
+    KEEP: 100
     REFACTOR: 49
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
     P0: 101
-    P1: 40
+    P1: 41
     P2: 19
     P3: 2
   by_priority_prior_manual:
-    P0: 94
+    P0: 95
     P1: 45
     P2: 23
   by_status:
-    Batch: 16
+    Batch: 17
     Flag-off: 11
     Production: 135
   by_risk:
     High: 23
-    Low: 96
+    Low: 97
     Med: 43
 features:
   - feature_id: WM-S-001
@@ -8433,7 +8433,7 @@ features:
     keep_criteria_met: 4/6
     replace_signals: 2/6
     action_basis: "§3.4 KEEP 4/6 — 미충족 k1_subject_low, k4_model_ok"
-    fan_in: 236
+    fan_in: 237
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8498,7 +8498,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 125
+    fan_in: 126
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 199
-    test_functions: 3007
+    test_files: 200
+    test_functions: 3016
     matrix:
       A_subject: 3
       B_db: 0
@@ -9822,6 +9822,71 @@ features:
       r5_state_untracked: false
       r6_no_api_contract: false
     seat: "OPS-19 — 리포트 11개 중 러너 배선은 별도"
+  - feature_id: WM-O-914
+    name: "데이터 무결성 게이트(orphan·dangling·duplicate 6종)"
+    plane: O
+    location: "src/backend/whymath_backend/ops"
+    user: Admin
+    domain: "QA"
+    eos_ownership: INFRA
+    eos_target: "EOS Infra"
+    status: Batch
+    flag: ""
+    coupling: Low
+    tests: Full
+    migration_action: KEEP
+    matrix_action: KEEP
+    release_priority_proposed: P1
+    release_priority_prior_manual: P0
+    priority_basis: "선행 P0 → 강등: 폐쇄루프 미도달(우회 가능)"
+    migration_risk: Low
+    loc: 448
+    endpoints: 0
+    write_endpoints: 0
+    db_mutation_calls: 0
+    own_modules: 1
+    adapter_deps: []
+    mixed_deps: []
+    db_model_modules: 0
+    coupling_count: 2
+    test_files: 2
+    test_functions: 17
+    matrix:
+      A_subject: 0
+      B_db: 0
+      C_coupling: 0
+      D_tests: 0
+      E_state: 0
+      F_data: 0
+    matrix_total: 0
+    criteria_action: KEEP
+    keep_criteria_met: 6/6
+    replace_signals: 0/6
+    action_basis: "§3.4 KEEP 6/6 충족"
+    fan_in: 0
+    contract_gaps: 0
+    duplicate_of: ""
+    loop_hits:
+      seed_route: false
+      seed_declared: false
+      student_loop: false
+      production_loop: false
+      data_supplier: false
+      invariant: false
+    criteria_34:
+      k1_subject_low: true
+      k2_api_clear: true
+      k3_tests_exist: true
+      k4_model_ok: true
+      k5_coupling_low: true
+      k6_verified: true
+      r1_model_conflict: false
+      r2_subject_in_core: false
+      r3_untestable: false
+      r4_duplicate: false
+      r5_state_untracked: false
+      r6_no_api_contract: false
+    seat: "OPS-55 — 느슨참조 드리프트 감사(v_integrity_violations) · 주간 지표 #4 산출원"
   - feature_id: WM-C-001
     name: "로그인·계정 보안 화면·토큰 배관"
     plane: C
