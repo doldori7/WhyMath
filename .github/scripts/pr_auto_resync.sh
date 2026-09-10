@@ -38,6 +38,8 @@ updated=0
 conflict=0
 unknown=0
 other_err=0
+recheck_calls=0
+recheck_resolved=0
 
 echo "── PR 자동 재동기화 (repo=$REPO · dry_run=$DRY_RUN · token=${RESYNC_TOKEN_KIND:-미지정})"
 
@@ -150,6 +152,21 @@ if [ -z "${scanned:-}" ]; then
 fi
 
 # ③ 후보 선별 + 처리
+#
+# UNKNOWN 재조회 (HARN-99) — 일괄 조회(list)는 머지 가능성 계산을 유발하지 않아
+# mergeStateStatus가 UNKNOWN으로 오는 경우가 실측상 흔하다(2026-09-08 관측: PR #1059가
+# 같은 시각 REST 단건 조회로는 `behind`였다). 단건 조회(`gh pr view`)는 계산을 촉발하고,
+# 첫 응답도 미판정이면 짧게 재시도하면 대개 해소된다(이 태스크의 2026-09-10 REST 단건
+# 실측 — 같은 저장소 열린 PR 19건 중 최초 조회에서 미판정 6건, 그중 5건이 재조회 1회로
+# 해소되고 1건은 2회째도 미판정으로 남았다 — "재조회해도 끝까지 UNKNOWN이면 건드리지
+# 않는다" 계약이 실제로 발생하는 입력임을 확인). 비용 절제를 위해 **auto-merge가 켜진
+# 후보만** 재조회한다 — 꺼진 PR은 BEHIND로 밝혀져도 어차피 건드리지 않으므로 API
+# 호출을 쓸 이유가 없다(같은 실측에서 auto-merge 켜짐 6건 중 미판정은 2건뿐이었다 —
+# 재조회 후보를 auto-merge로 좁히지 않았다면 불필요한 호출이 6건이 아니라 19건 규모로
+# 늘었을 것).
+retry_attempts="${UNKNOWN_RECHECK_ATTEMPTS:-2}"
+retry_sleep="${UNKNOWN_RECHECK_SLEEP_SECONDS:-2}"
+
 while IFS= read -r row; do
   [ -z "$row" ] && continue
   n=$(printf '%s' "$row" | jq -r '.number')
@@ -157,8 +174,31 @@ while IFS= read -r row; do
   state=$(printf '%s' "$row" | jq -r '.mergeStateStatus // "UNKNOWN"')
   automerge=$(printf '%s' "$row" | jq -r 'if .autoMergeRequest == null then "off" else "on" end')
 
+  if { [ "$state" = "UNKNOWN" ] || [ -z "$state" ] || [ "$state" = "null" ]; } \
+    && [ "$automerge" = "on" ]; then
+    attempt=1
+    while [ "$attempt" -le "$retry_attempts" ]; do
+      recheck_calls=$((recheck_calls + 1))
+      view_json=$(gh pr view "$n" --repo "$REPO" --json mergeStateStatus 2>&1)
+      view_rc=$?
+      if [ "$view_rc" -eq 0 ]; then
+        new_state=$(printf '%s' "$view_json" | jq -r '.mergeStateStatus // "UNKNOWN"' 2>/dev/null)
+        if [ -n "$new_state" ] && [ "$new_state" != "UNKNOWN" ] && [ "$new_state" != "null" ]; then
+          state="$new_state"
+          recheck_resolved=$((recheck_resolved + 1))
+          break
+        fi
+      fi
+      attempt=$((attempt + 1))
+      if [ "$attempt" -le "$retry_attempts" ] && [ "$retry_sleep" != "0" ]; then
+        sleep "$retry_sleep"
+      fi
+    done
+  fi
+
   if [ "$state" = "UNKNOWN" ] || [ -z "$state" ] || [ "$state" = "null" ]; then
-    # GitHub이 아직 머지 가능성을 계산하지 않은 상태. 모른다를 아니다로 접지 않는다.
+    # GitHub이 아직(또는 재조회 후에도) 머지 가능성을 계산하지 않은 상태. 모른다를
+    # 아니다로 접지 않는다 — 재조회로도 못 뚫은 것은 기존 계약 그대로 건너뛴다.
     unknown=$((unknown + 1))
     echo "· #$n ($head): mergeStateStatus 미판정 — 이번 주기 건너뜀(모른다 ≠ 아니다)"
     continue
@@ -216,7 +256,8 @@ done <<<"$(printf '%s' "$payload" | jq -c '.[]')"
 decided=$((scanned - unknown))
 echo "── 요약: 스캔 ${scanned}건 · 판정 ${decided}건 · auto-merge 켜짐 ${am_on}건 · BEHIND ${behind_any}건 ·"
 echo "        BEHIND+auto-merge ${behind_am}건 · 최신화 ${updated}건 ·"
-echo "        충돌 ${conflict}건 · 미판정 ${unknown}건 · 기타실패 ${other_err}건"
+echo "        충돌 ${conflict}건 · 미판정 ${unknown}건 · 기타실패 ${other_err}건 ·"
+echo "        재조회 ${recheck_calls}건(해소 ${recheck_resolved}건) — HARN-99 API 호출 비용"
 
 # ⑤ 대상이 0건이면 **왜** 0인지 말한다 (HARN-87).
 #
