@@ -252,6 +252,31 @@ def _axis_corpus_audit(repo_root: Path) -> AxisResult:
 # ──────────────────────────────────────────────────────────────────────────
 
 
+# S3-28 — `condition_dsl_violation`은 *등식/부등식* 폐쇄 DSL(SymPy sympify로 파싱되는
+# lhs op rhs)만 검증하도록 설계됐다(원 설계: `l3/equivalent/llm_generator.py`의 대수
+# 조건 생성 축). 아래 answer_kind들은 각자 *독립된, 이미 닫힌* DSL을 쓴다 —
+# `finite_probability`/`finite_count`는 `l3/finite_probability.py`의 정규식 기반
+# `space=...; event=...` 문법(sympify 대상이 아님·전수 열거로 별도 검증), 나머지 넷은
+# `l3/verify_answer.py`의 쉼표구분 숫자열 DSL(`verify_mean_equals_median` 등이
+# `_parse_number_list`로 직접 파싱 — sympify하면 `sympy.Tuple`이 되어 `sympy.Expr`이
+# 아니므로 필연적으로 위반 판정된다). 즉 코퍼스 결함이 아니라 이 축의 적용 범위가
+# 넓었던 것(실측 2026-08-03: 2647건 중 130건 전부 이 6종 — 나머지 2517건은 등식 DSL
+# 그대로 통과. 재실측 2026-09-10: 코퍼스가 14034건으로 늘어난 뒤에도 위반은 여전히
+# 정확히 이 6종·130건뿐이라 판정이 그대로 유지됨을 확인). 새 판정 로직을 추가하는 게
+# 아니라 이미 다른 파서로 닫힘이 보장된 answer_kind를 *적용 대상에서 제외*한다(각자의
+# 폐쇄성은 해당 verify_* 함수·전수 열거가 이미 보증).
+_NON_EQUATION_DSL_ANSWER_KINDS = frozenset(
+    {
+        "finite_probability",
+        "finite_count",
+        "mean_equals_median",
+        "events_independent",
+        "conditional_equal",
+        "dot_product_scalar",
+    }
+)
+
+
 def _axis_equivalence_canonicalize(corpus_root: Path) -> AxisResult:
     """코퍼스 전 문제의 `conditions`에 폐쇄 검증 DSL 위반이 있는지 순회 검사한다.
 
@@ -259,16 +284,22 @@ def _axis_equivalence_canonicalize(corpus_root: Path) -> AxisResult:
     적용하는 것뿐이다(acceptance 위반 아님). `conditions` 필드는 스키마가 다양해
     레코드 최상위 또는 `verify.conditions`(실측 확인 — 현재 커밋 코퍼스는 전부
     `verify.conditions`에 있다) 양쪽을 방어적으로 읽고, 둘 다 없으면 스킵(에러로
-    만들지 않는다).
+    만들지 않는다). `answer_kind`가 `_NON_EQUATION_DSL_ANSWER_KINDS`에 속하면 이
+    축의 검사 대상에서 제외한다(S3-28 — 등식 DSL 폐쇄성 검사이지 그 answer_kind의
+    전용 DSL 폐쇄성은 각자의 파서가 이미 보증).
     """
     total = 0
     violations = 0
     for path in sorted(corpus_root.glob("problem_bank_*/problems.jsonl")):
         for problem in _load_jsonl(path):
+            verify = problem.get("verify")
+            verify = verify if isinstance(verify, dict) else {}
+            answer_kind = verify.get("answer_kind") or problem.get("answer_kind")
+            if answer_kind in _NON_EQUATION_DSL_ANSWER_KINDS:
+                continue
             conditions = problem.get("conditions")
             if not isinstance(conditions, str):
-                verify = problem.get("verify")
-                conditions = verify.get("conditions") if isinstance(verify, dict) else None
+                conditions = verify.get("conditions")
             if not isinstance(conditions, str) or not conditions.strip():
                 continue
             total += 1
