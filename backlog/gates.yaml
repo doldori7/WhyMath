@@ -214,11 +214,11 @@ gates:
     title: "EOS-63 전환 선결 — attempt_event.skill_ids 기록률 실측(Phaiakes9 prod DB에서 리포트 1회 실행)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-01
     remind_after_days: 7
-    evidence: null
-    cleared_by: null
+    evidence: "판정 기준: main 28a90846. Kiki가 docs/ops/eos63_skill_event_reach_sample_runbook.md 그대로 Phaiakes9 whymath-pg(5433)에서 실행(2026-09-10). WINDOW=2026-09-10T03:33:12.332113+00:00 ATTEMPTS=20 EVENTS=20 EMPTY=20 NONEMPTY=0 NULL=0 WRITER_REACH=1.0 RESOLUTION=0.0 E2E=0.0 PROBE_ACCEPTED=20 PROBE_FAILED=0. 실측 성립(EVENTS≥1) — 판정은 '전환 보류'(해소율 0%). 원인 read-only 확인: skill_node_total=0 skill_node_estimable=0 concept_total=2683 concept_with_skills=0. 근본원인 해소는 SKB-01-skill-concept-bridge-prod-populate로 분리 등재, EOS-63 depends_on에 추가(전환 착수 보류 유지)."
+    cleared_by: claude
     notes: ""
   - id: G-export-prediction-disclosure
     title: "열람권 export의 예측 5필드 제외(잠정) 법률 검토 — PIPA §35/GDPR Art.15가 추론치 원시값 제공을 요구하는지"
@@ -400,6 +400,16 @@ gates:
     evidence: null
     cleared_by: null
     notes: "수학 K-12 완성 전 어떤 과목도 착수 금지 (불변 전제)"
+  - id: G-skb01-bridge-populate
+    title: "SKB-01 skill_node·concept.behavior_skills 브릿지 prod 적재 실행 — Phaiakes9 whymath-pg 쓰기(populate CLI 2종)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-10
+    remind_after_days: 7
+    evidence: null
+    cleared_by: null
+    notes: ""
   - id: G-state-machine-deferral-recheck
     title: "8상태 학습 상태 머신 보류의 재확인 (재확인 지점 = G4 2026-12-13) — 2026-09-03 Kiki 결정으로 '신설 보류'했고 재개 조건은 '실 운영 데이터에서 상태 기반 제어가 필요하다는 증거'다. 판정 3택: ①보류 유지(증거 없음 — 기본값) ②ADR로 채택(증거 있음 — *MasteryHistory와의 진실 원천 중복 해소안을 ADR에 포함해야 한다) ③영구 미채택으로 종결. 근거 문서 = docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md §5-A·§11.1 · MEMORY 2026-09-03 결정 로그. 등재 이유: '만료 없는 유예·제외 금지'(CLAUDE.md 2026-08-03) — 보류에 재확인 지점을 못박았으나 그 지점에 알려 줄 장치가 없어 산문으로만 남아 있었다. remind-after-days=101은 2026-09-03 기준 G4(12/13)까지의 일수이며, 그 시점부터 SessionStart 브리핑에 뜬다"
     kind: decision
