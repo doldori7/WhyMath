@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/l4/misconception/catalog.py
   - src/backend/whymath_backend/l4/misconception/diagnose.py
   - docs/prompts/misconception_diagnosis.md
-session: null
+session: claude/status-38gu4d
 notes: "출처: MISC-22(PR #1071) Codex P1 리뷰 대응 중 발견. MISC-22는 자신이 새로 노출시킨 5개 regex 채널(factor-sign-flip·distribution-over-power·square-root-positivity·fraction-cancellation·log-distribution)만 EXPLICIT_CORRECTION_MENTION으로 방어하고 그 상수를 catalog.py에 신설했다(재사용 가능). root-loss-by-dividing은 정규식이 아니라 substring 두 신호가 이미 confidence 1.0을 만들어 이번 정정과 무관하게 이전부터 노출돼 있었다 — 범위가 카탈로그 전체로 열려 있어 별도 조사 태스크로 분리한다. MISC-24(extremum-value-vs-point-confused)는 다른 축(우연의 일치·원리상 구별 불가)이라 겹치지 않는다."
-updated: 2026-09-08
+updated: 2026-09-10
