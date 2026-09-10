@@ -2054,6 +2054,88 @@ class TestStaleBranchClassificationWiring:
         assert "[PR-닫힘] gates/deploy-environment-approval — PR #967 닫힘(미머지)" in out
         assert "PR 열림/닫힘 조회 미수행" in out and "NoTokenError" in out
 
+    def test_branches_cmd_renders_disposal_label_and_precheck_hint(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """branches_CLI가_처분_라벨과_회수_선행_확인_안내를_화면에_낸다 (HARN-93 ② 배선 실재성)
+
+        `remote_claims.scan_stale_branches`가 `disposal_labels`를 채워도 `cmd_branches`가
+        그것을 읽어 출력하지 않으면 "정본화는 있는데 화면에는 안 보인다"는 HARN-93 acceptance
+        ②가 지적한 바로 그 공백이 재생산된다 — 이 테스트가 실제 CLI 출력 문자열을 본다.
+        """
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-disposal-label")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/lic-01-rights-provenance-mvp-2",
+                        ref="refs/remotes/origin/claude/lic-01-rights-provenance-mvp-2",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=16.0,
+                        ahead=28,
+                        status="pr_filed",
+                        evidence="PR #858",
+                        disposal_labels=("eos-close",),
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=True,
+                pr_label_lookup_ok=True,
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "라벨: eos-close(정체 16일)" in out
+        assert "pr_disposal_precheck.py --pr <N>" in out
+
+    def test_branches_cmd_reports_label_lookup_failure_reason(
+        self, bare_remote, monkeypatch, capsys
+    ):
+        """토큰이 없어 라벨 조회 자체를 못 했으면 그 사실을 명시한다(모른다 ≠ 라벨 없음)."""
+        import remote_claims
+
+        _, clone = bare_remote
+        mine = clone("branches-label-lookup-fail")
+        monkeypatch.chdir(mine)
+        assert cli.main(["seed"]) == 0
+
+        monkeypatch.setattr(
+            remote_claims,
+            "scan_stale_branches",
+            lambda root, **kwargs: remote_claims.StaleBranchScanResult(
+                "ok",
+                stale=[
+                    remote_claims.StaleBranch(
+                        branch="claude/pr-3",
+                        ref="refs/remotes/origin/claude/pr-3",
+                        last_commit_at=datetime.now(timezone.utc),
+                        age_days=8.0,
+                        ahead=4,
+                        status="pr_filed",
+                        evidence="PR #844",
+                    ),
+                ],
+                pr_lookup_ok=True,
+                pr_state_lookup_ok=True,
+                pr_label_lookup_ok=False,
+                pr_label_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정 — 라벨 조회 생략",
+            ),
+        )
+        capsys.readouterr()
+        assert cli.main(["branches"]) == 0
+        out = capsys.readouterr().out
+        assert "처분 라벨 조회 미수행" in out and "NoTokenError" in out
+
 
 class TestBatchBlobParsing:
     """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.
@@ -2331,24 +2413,33 @@ class TestTransitionRejectionGuidance:
         assert message is not None
         assert "0단계" not in message
         assert "이미 'in_progress' 상태다" in message
-        # 재진입 고리는 **실행 가능한** 명령을 동반해야 한다 (block이 session을 비운다)
-        assert "backlog.py block TEST-01-probe" in message
+        # 재진입 고리는 **실행 가능한** 명령을 동반해야 한다 — HARN-95 이후 unblock 자체가
+        # session을 비우므로 2단계(unblock → start)로 충분하다(이전에는 block 경유
+        # 3단계였다 — 위 test_reentry_cycle_is_executable_not_merely_shortest 참조).
         assert "backlog.py unblock TEST-01-probe" in message
         assert "backlog.py start TEST-01-probe" in message
 
     def test_reentry_cycle_is_executable_not_merely_shortest(self):
         """재진입_고리는_최단이_아니라_실행_가능한_것이다"""
-        # session을 든 in_progress에서 2단계 후보(unblock → start)는 **실측에서 거부된다** —
-        # cmd_unblock이 session을 비우지 않아 뒤따르는 start가 claimed로 막힌다. 실제로 도는
-        # 것은 3단계(block이 session을 비운다). 짧은 쪽을 고르면 깨진 안내다.
-        assert cli._transition_cycle("in_progress", session_held=True) == [
+        # HARN-95 이전: session을 든 in_progress에서 2단계 후보(unblock → start)는
+        # **실측에서 거부됐다** — cmd_unblock이 session을 비우지 않아 뒤따르는 start가
+        # claimed로 막혔다. 실제로 도는 것은 3단계(block이 session을 비운다)뿐이었다.
+        # HARN-95가 cmd_unblock 자체를 고쳐(session도 함께 비움) 2단계가 이제 실제로
+        # 실행된다 — 최단이 곧 실행 가능한 것이 됐다(아래 종단 테스트가 exit 0을 확인).
+        assert cli._transition_cycle("in_progress", session_held=True) == ["todo", "in_progress"]
+        assert cli._transition_cycle("in_progress", session_held=False) == ["todo", "in_progress"]
+        # in_progress 재진입은 이제 session 유무와 무관하게 같은 2단계지만, session이
+        # 여전히 판단을 가르는 자리가 남아 있다 — `review`는 in_progress 직행(start)이
+        # session 보유 시 항상 거부되므로(review는 여전히 in-flight, HARN-20), session을
+        # 쥔 채로는 반드시 `blocked`를 거쳐야 한다(review→blocked, HARN-95가 새로 연 엣지).
+        # 양쪽이 같은 답이면 이 모델은 session에 대해 아무것도 구별하지 않는 것이다.
+        assert cli._transition_cycle("review", session_held=True) == [
             "blocked",
             "todo",
             "in_progress",
+            "review",
         ]
-        # session이 없으면 그 제약이 사라지므로 2단계가 옳다 — 제약이 결과를 바꾸는지 확인한다
-        # (양쪽이 같은 답이면 이 모델은 변별력이 0이다)
-        assert cli._transition_cycle("in_progress", session_held=False) == ["todo", "in_progress"]
+        assert cli._transition_cycle("review", session_held=False) == ["in_progress", "review"]
 
     def test_same_status_route_is_none_not_empty(self):
         """같은_상태_경로는_빈_리스트가_아니라_None이다"""
@@ -2404,8 +2495,11 @@ class TestTransitionRejectionGuidance:
 
     def test_guided_reentry_cycle_actually_runs(self, seeded_repo: Path, capsys):
         """안내대로_실행하면_재진입_고리가_실제로_돈다"""
-        # 이 테스트가 원래 결함(unblock → start)을 잡는다: unblock이 session을 비우지 않아
-        # start가 claimed로 거부됐다. 문자열 검사로는 보이지 않고 실행해야만 보인다.
+        # HARN-95 이전에는 이 테스트가 원래 결함(unblock → start)을 잡았다: unblock이
+        # session을 비우지 않아 start가 claimed로 거부됐다 — 문자열 검사로는 안 보이고
+        # 실행해야만 보였다. HARN-95가 cmd_unblock 자체를 고쳐 그 결함은 이제 없다 —
+        # 이 테스트는 그 회귀가 재발하지 않는지(안내한 명령이 실제로 exit 0인지)를
+        # 계속 지킨다.
         task_id = self._startable_id(capsys)
         assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 0
         capsys.readouterr()
@@ -2413,24 +2507,93 @@ class TestTransitionRejectionGuidance:
         backlog, _ = store.load_backlog(seeded_repo)
         assert backlog.tasks[task_id].status == "in_progress"
 
-    # ── ⑦ 실행 불가를 정직하게 말한다 (Codex P2) ──────────────────────────
-    def test_review_dead_end_reports_why_instead_of_a_broken_command(self):
-        """review_막다른길은_깨진_명령_대신_이유를_말한다"""
-        message = cli._transition(self._task("review", session="b"), "cancelled")
+    # ── ⑦ HARN-95: review는 더 이상 막다른 길이 아니다 ──────────────────
+    #
+    # 2026-09-08 시점에는 review→cancelled(session 보유)가 진짜 막다른 길이었고, 위
+    # `test_review_dead_end_reports_why_instead_of_a_broken_command`(현재는 삭제·아래로
+    # 대체)가 "깨진 명령 대신 이유를 말한다"는 정직성만 지켰다. HARN-95가 `review →
+    # blocked` 엣지를 열어(cmd_block은 이미 어느 상태에서든 session을 비우는 범용
+    # 동사라 새 코드가 필요 없었다) 그 막다른 길 자체를 없앴다 — 이제 review에서
+    # done이 아닌 다른 곳(blocked·todo·cancelled·in_progress)으로도 나갈 수 있다.
+    def test_review_reaches_blocked_and_beyond_end_to_end(self, seeded_repo: Path, capsys):
+        """review에서_시작한_안내대로_실행하면_cancelled까지_간다 (HARN-95 종단)"""
+        task_id = self._startable_id(capsys)
+        assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 0
+        capsys.readouterr()
+        assert cli.main(["review", task_id]) == 0
+        capsys.readouterr()
+        # review는 session을 보존한 채라 in_progress 직행은 여전히 거부되지만, blocked
+        # 경유로 cancelled까지 실제로 도달한다 — 더 이상 done만 남은 막다른 길이 아니다.
+        self._run_guided(["cancel", task_id, "--reason", "검증"], task_id, capsys)
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "cancelled"
+
+    def test_review_to_in_progress_direct_hop_still_needs_session_free(self):
+        """review→in_progress_직행은_여전히_session_보유_시_거부된다"""
+        # HARN-95는 review의 *다른* 출구(blocked)를 열었을 뿐, review→in_progress 직행
+        # 자체는 그대로다 — cmd_review가 여전히 session을 보존하기 때문(HARN-20). 변별력:
+        # session 유무가 경로의 **모양**(길이)을 계속 가른다 — 도달 자체는 막히지 않지만
+        # (아래 ⑧ 전수 스캔이 그 사실을 고정한다) 직행이 되는 것과 blocked를 거쳐야 하는
+        # 것은 다른 사실이다. 양쪽이 같은 길이면 이 모델은 session에 대해 아무것도
+        # 구별하지 않는 것이다.
+        held = cli._transition_route("review", "in_progress", session_held=True)
+        free = cli._transition_route("review", "in_progress", session_held=False)
+        assert free == ["in_progress"]
+        assert held == ["blocked", "todo", "in_progress"]
+        assert len(held) > len(free)
+
+    # ── ⑧ 전수 스캔: session이 원인인 전 구간 봉쇄가 이제 0건이다 ──────────
+    def test_no_session_caused_dead_ends_remain(self):
+        """session_보유가_전_구간을_막는_쌍이_이_그래프에는_없다 (HARN-95 acceptance ②③)
+
+        "review 하나만 고쳤다"가 아니라 **그래프 전체**에서 session 보유가 목적지
+        도달을 완전히 막는 (출발, 도착) 쌍이 하나도 남지 않았음을 스캔으로 고정한다.
+        위 개별 테스트들이 review·in_progress를 짚었지만, 이 테스트가 없으면 다른
+        (출발, 도착) 조합에 같은 결함이 남아 있어도 아무도 모른다(CLAUDE.md "스캔
+        0건은 실패" — 전수를 보지 않은 통과 선언은 공허하다).
+        """
+        statuses = list(cli.STATUS_TRANSITIONS)
+        non_terminal = [s for s in statuses if s not in cli.TERMINAL_STATUSES]
+        assert non_terminal, "스캔 대상이 0건이면 이 전수 가드는 공허하게 통과한다"
+        blocked_by_session: list[tuple[str, str]] = []
+        checked = 0
+        for src in non_terminal:
+            for dst in statuses:
+                if dst == src:
+                    continue
+                checked += 1
+                held_route = cli._transition_route(src, dst, session_held=True)
+                free_route = cli._transition_route(src, dst, session_held=False)
+                if held_route is None and free_route is not None:
+                    blocked_by_session.append((src, dst))
+        assert checked > 0, "스캔 0건은 실패다 — 검사 대상을 하나도 못 찾았다"
+        assert blocked_by_session == [], (
+            f"session 보유가 전 구간을 막는 쌍이 남아 있다: {blocked_by_session} — "
+            "이 쌍들에 대해 사람은 손편집 말고 나갈 방법이 없다"
+        )
+
+    def test_blocked_by_session_note_mechanism_still_works_on_a_synthetic_gap(self, monkeypatch):
+        """세션이_막는_경로_설명_장치_자체는_여전히_동작한다 (합성 시나리오)
+
+        위 ⑧이 *실 전이표*에는 그런 쌍이 없음을 고정하지만, 그 설명 장치
+        (`_blocked_by_session_note`)가 죽은 코드로 방치되면 안 된다 — 미래에 새 상태·
+        엣지가 session 인지 없이 추가되면 이 장치가 다시 필요해진다. 전이표를 일시적으로
+        좁혀(A→B 직행만 있고 session을 비우는 우회가 없는 합성 그래프) 장치가 여전히
+        "왜 막혔는지"를 정확히 설명하는지 확인한다.
+        """
+        # A -> X -> in_progress -> () : 목표(in_progress)가 A의 직접 허용 목록에 없어
+        # `_transition`이 안내 계산으로 들어가고, session을 쥔 채로는 X를 지나 in_progress로
+        # 가는 홉이 막힌다(X가 session을 비우지 않으므로) — 반면 session이 없으면 같은
+        # 경로가 통한다. `_transition`(공개 경로)을 통해 불러서 "route(held=True)가 이미
+        # None"이라는 이 헬퍼의 전제를 실제 호출부와 똑같이 만족시킨다(헬퍼를 전제 없이
+        # 직접 부르면 무의미한 입력에 무의미한 답을 낼 뿐이다).
+        synthetic = {"A": ("X",), "X": ("in_progress",), "in_progress": ()}
+        monkeypatch.setattr(cli, "STATUS_TRANSITIONS", synthetic)
+        message = cli._transition(self._task("A", session="b"), "in_progress")
         assert message is not None
-        # 깨질 명령을 내지 않는다
         assert "backlog.py start" not in message
-        # 왜 없는지 말한다 — 전이표에는 있는데 CLI로 막힌다는 사실까지
         assert "실행 가능한 해소 경로 없음" in message
         assert "classify_todo" in message
-        assert "['done', 'in_progress']" in message
-
-    def test_session_free_review_would_have_a_route(self):
-        """session이_없으면_같은_전이가_경로를_갖는다"""
-        # 변별력: 막는 것이 'review'라는 상태가 아니라 **session 보유**임을 보인다.
-        # 양쪽이 같은 답이면 이 모델은 아무것도 구별하지 않는 것이다.
-        assert cli._transition_route("review", "cancelled", session_held=True) is None
-        assert cli._transition_route("review", "cancelled", session_held=False) is not None
 
     def test_route_is_shortest_not_merely_valid(self):
         """경로는_유효한_아무_경로가_아니라_최단이다"""
