@@ -2281,6 +2281,7 @@ Desmos/GeoGebra·백엔드 `sympy.latex` 생성 — 기존 미채택 결정 승�
 - **범위 준수(⑧)**: `assessment` 테이블 필드의 존폐는 건드리지 않았다.
 
 ### 2026-08-09 (헌법 개정·CI 사고): **PR #732 CI red 2건 — ①`black --check -q | tail`로 실패를 통과로 오판(내 검증 호출 방식 결함) ②고립본 Dart 테스트의 `invalid_constant`(그 브랜치가 CI를 통과한 적 없음이 판명). CLAUDE.md에 "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 신설** (claude 진단·수정, Kiki "pr" 지시)
+### 2026-08-09 (사고 기록·병렬 충돌 2건·S4-16) [2026-09-11 S4-59 회수 — 고립 브랜치 `claude/whymath-ai-content-design-vafylb`(`0b2427ee`)에만 있던 기록, main 전수 grep 0건 확인 후 백필]: **S4-16 중복 구현 + OPS-23 번호 선점 — 공유 자원(태스크·번호·Kiki 머신 클론) 충돌 실측·정본 판정**: ⑴ S4-16을 openrouter 세션(`claude/openrouter-setup-guide-e98dw4`)이 claim(2026-08-03 11:58Z) → 당시 그 브랜치에 하네스 코드 0건임을 실측 확인 후 **Kiki 승인 하에 강제 해제**·본 세션이 인수, 하네스 구현·PR #683으로 **main 기머지**. 그런데 그 세션이 해제 후에도 독자 하네스를 계속 구현해 `f8c0e3b6`(CLI `--n-per-class`/`--n-clean` — 본 세션의 `corpus`+`--sample-n`과 상이) 푸시 — 2026-07-27 OPS-07 중복 구현(한쪽 735줄 폐기)과 같은 유형 재발. **정본 판정: 본 세션 구현**(claim 보유·main 기머지·Phaiakes9 라이브 디버깅 이력·cp949 수정 포함). `f8c0e3b6`은 미머지 중복 — 머지 금지 대상. ⑵ Kiki 머신 클론이 라이브 강등전 런북 도중 `s4-16-battle` 로컬 브랜치(`f8c0e3b6` 추적)로 전환돼 있었음(타 세션 런북 수행 중 전환된 것으로 추정 — 전환 주체는 미실측) → 본 세션 런북이 다른 코드 위에서 실행돼 argparse 오류. 런북에 동봉한 자가검증(`git log -1`·usage 출력 대조)이 이탈을 검출 — "변별력 있는 검증 스텝"의 실효 입증. 대책: CLAUDE.md Kiki 머신 안내 규칙에 "브랜치 의존 명령 블록 직전 `git log -1` 자가검증 필수" 명문화(이 백필 세션이 CLAUDE.md에도 동반 반영). ⑶ `OPS-23` 번호를 본 세션이 `backlog.py add`로 정상 등재했으나 병렬 세션의 `OPS-23-mobile-only-pr-backend-guard-blindspot`이 먼저 main 머지 → 리베이스 후 validate가 번호 충돌 검출(ARCH-13·OPS-15에 이은 3회차 — **이번엔 add CLI를 썼는데도 발생**: 인플라이트 번호는 CLI도 못 본다는 구조 한계 재확인). 처방대로 미머지 쪽(본 세션)을 `OPS-24-cp949-cli-output-safety-audit`로 개명·validate green. (claude 규명, Kiki 라이브 실행 중 공동 발견)
 ### 2026-08-08 (구현·REC-02): **WH-1 도구6 select_probe 공급선 배선 — L1 역인덱스 조회 + 하네스 조립, L4 무수정**
 
 **무엇/왜**: `ai_recommendation_module_gap_review.md` §3 D2 실측 — WH-1 하네스 도구6(`select_probe`,
@@ -9835,3 +9836,32 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   skipped(EOS 인벤토리 신규 함수 3개 반영 재생성). `ruff`·`black --line-length
   100`·`mypy --strict` clean.
 - **정직한 공백**: 위 수능 분기 점수 산정의 미러-드리프트 위험 외 없음.
+
+## 2026-09-11: S4-59 — 강등전 1차 실측 기록 회수 (고립 브랜치 잔여 소유 공백 해소·CLAUDE.md 규칙 백필 동반)
+
+- **배경**: `HARN-35`(done·PR #900)가 고립 브랜치 `claude/whymath-ai-content-design-vafylb`에서
+  `OPS-24`(→`OPS-53`)만 회수하고 종료해, 같은 브랜치의 `docs/standards/
+  residue_gate_demotion_battle_2026-08-10.md`(104줄 — S4-16 강등전 1차 실측: 결함 검출
+  2/12·Wilson 95% 하한 0.0568로 인간 검수 대체 승격 기각)가 소유자 없이 남았다
+  (2026-08-31 감사·`unmerged_branch_audit_2026-08-31.md`가 발견·`S4-59` 등재).
+- **실측 재확인**: `git show origin/claude/whymath-ai-content-design-vafylb:...`로 전문
+  재대조·`git grep`으로 `0.0568`·`승격 기각`·`11h 36m`이 main·인플라이트 PR #844 양쪽
+  0건임을 재확인. main의 실제 08-14 라운드 항목(다른 모델 3종 비교 — qwen3.5:27b
+  timeout·qwen2.5:7b/qwen2-math:7b 구분력 부재)을 직접 읽어, 1차 라운드 고유의
+  결함류별 실명 관찰(`missing_condition` 0/3·`unstated_equiprobability` 0/3)과 비용
+  실측(qwen3.5:27b num_ctx=8192·45콜·11h36m38s)이 정말로 main에 없음을 확인 후 파일
+  단위로 이식(byte-diff 0).
+- **집행 지점**: `S4-16` 태스크 notes에 회수 문서 참조 링크 추가(`backlog.py amend
+  --notes-replace`) — 재개 시 이 문서를 먼저 읽도록 강제. `backlog.py validate` exit 0.
+- **고립 참조 2건 동반 회수(acceptance⑤)**: 같은 브랜치의 커밋(`0b2427ee`)에만 있던
+  ⓐ MEMORY.md 결정 로그 1줄(2026-08-09 — S4-16 병렬 중복 구현 정본 판정·OPS-23 번호
+  충돌 3회차) — 2026-08-09 블록에 원문 그대로 백필(시간 역순 위치 유지) ⓑ CLAUDE.md
+  규칙 1줄("Kiki 머신 클론은 여러 세션 공유 단일 작업 사본 — 브랜치 의존 실행 명령
+  블록에 실행 직전 `git log -1 --oneline` 자가검증 필수") — 08-31 "git fetch +
+  checkout -B" 규칙과는 다른 축(그쪽은 재시작 브랜치, 이쪽은 실행 도중 타 세션의
+  전환)이라 별도 삽입, 버전 푸터 0.2.20→0.2.21 갱신.
+- **정직한 공백**: docs-only 변경(코드 경로 무접촉)이라 acceptance 범위 밖 없음.
+- **검증**: `tests/infra` 1303 passed, 1 skipped(Python 소스 무변경이라 EOS 인벤토리
+  드리프트 없음). policy-guard 3패턴(검정교과서 본문·EBS/평가원 본문·하드코딩 시크릿)
+  로컬 재현 전건 clean. `backlog.py validate` exit 0(태스크 618건·게이트 44건·트랙
+  3건 green).
