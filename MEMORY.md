@@ -9746,3 +9746,48 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   증가, 회귀 없음). `ruff`·`black --line-length 100`·`mypy --strict` clean.
 - **정직한 공백**: 원출처(2412.16429) 재확인 불가(위 참조) 외 없음 — acceptance①~⑦
   전항목 충족.
+
+## 2026-09-11: PED-35 — 힌트 유도-제공 균형 상한 계약 (규칙 6 "상한 도달 보장" 신설)
+
+- **배경**: `decide_hint_level`의 규칙 5('숙달' 학생 base-1 완화)가 규칙 1(5회+
+  막힘 → 최소 레벨 3)의 결과를 매 턴 다시 깎았다. `prev_hint_level`이 매 턴
+  이 함수 자신의 반환값으로 피드백되면서 escalation(+1)과 discount(-1)이 정확히
+  상쇄돼, '숙달' 학생은 5턴 이상 연속 좌절/막힘 신호를 내도 레벨이 최대 2에서
+  고착됐다(레벨 3 "부분 풀이"에 구조적으로 도달 불가 — 2026-08-30 코드 실측 갭,
+  `learnlm_pedagogy_prompting_review_2026-08.md` §4-2 인용).
+- **해법**: 규칙 6을 신설 — 규칙 1과 *같은 조건*(`turn_count >= STUCK_TURN_THRESHOLD`)
+  을 그대로 재사용해 규칙 5의 완화가 그 최소 레벨(3)까지 깎지 못하게 보정한다.
+  즉답(레벨 4) 허용이 아니라 스펙 L37 "부분 풀이(5회+ 막힘)" 종착 보장이며, 짧은
+  horizon의 점진 상승(규칙 2·3)은 '생산적 고투' 취지대로 여전히 완화된다. 새
+  파라미터·`PolyaState` 필드·`turn_meta` 연동 없이 기존 임계값만 재사용해
+  paths(`hint_deferral.py` + 테스트) 범위를 지켰다(대안: consecutive-signal-count
+  신규 필드 추가·규칙 4에만 discount 적용·별도 신규 임계값 — 모두 과공학/불일치로
+  기각).
+- **변별력(RED-before-fix, `cp` 백업/복원 — git 계열 원복 금지 준수)**: (a) 규칙 6
+  제거 → 구 버그값(2)을 pin하던 기존 테스트 정정본 1건 + 신규 연속턴/경계/무영향
+  discriminability 테스트 3건, 정확히 4건 RED(나머지 무관) (b) 신규
+  `is_ceiling_reached` 술어를 `return True`로 뮤테이션 → 신규 테스트 2건 정확히
+  RED. 두 라운드 모두 복원 후 바이트 동일 확인 → GREEN.
+- **acceptance②(임계 튜닝)** — 정직한 공백으로 남김: `STUCK_TURN_THRESHOLD=5`는
+  튜닝하지 않았다. 이 세션은 라이브 `wh1_evaluation` 세션 지표(도움 감소 곡선·
+  이탈률)에 접근할 수 없어 실측 근거를 만들 수 없다 — LearnLM 2407.12687 §5.5는
+  방향성 참고일 뿐 이 임계값의 직접 측정이 아니다. 재보정은 SSM 파일럿 또는 전용
+  실측 태스크로 미룬다.
+- **acceptance③("작동한 비율")** — 정본화만 완료, 집행은 범위 밖: `is_ceiling_reached
+  (hint_level, turn_count)` 순수 훅을 `is_stuck_turn_count`/`is_answer_demand`와
+  같은 패턴으로 신설(decide_hint_level 출력 재사용, 재계산 아님). 상한 도달률
+  집계가 가능한 훅만 제공하며, 실제 세션 리포트/텔레메트리 배선은 이 태스크의
+  paths 밖으로 명시 — "정본화를 집행으로 착각한 완료 선언 금지" 준수.
+- **acceptance④(PED-31 관계)** — `docs/architecture/04f_pedagogy_module_boundaries.md`
+  §102가 이미 명문화한 대로 `decide_hint_level`의 단계 결정은 hint_deferral
+  고유 책임이며 PED-31의 전략 라이브러리 축(strategy 단위 `fading_schedule`,
+  문서 갭 ⑩)과는 다른 층위임을 docstring에 명시. PED-31 문서가 그 갭의 후속으로
+  제안한 번호("PED-36")는 실제 `backlog.py add`로 등재된 적이 없음을 실측
+  확인(`backlog/tasks/` 전수 grep 0건) — 중복 설계가 아니다.
+- **검증**: `test_hint_deferral.py` 37 passed(기존 29 + Rule6 discriminability 4
+  + predicate 테스트 4). 전체 백엔드 스위트(python3.12 venv) → **12784 passed,
+  340 skipped, 1 xfailed, PYTEST_EXIT=0**(PED-34 시점 12776에서 +8 — 신규
+  테스트 수만큼 정확히 증가, 회귀 없음). `tests/infra` 1303 passed, 1 skipped
+  (EOS 인벤토리 신규 함수 반영 재생성 2회 — `is_ceiling_reached` 추가 후 재확인
+  누락 방지). `ruff`·`black --line-length 100`·`mypy --strict` clean.
+- **정직한 공백**: 위 acceptance②·③ 범위 제한 참조 외 없음.
