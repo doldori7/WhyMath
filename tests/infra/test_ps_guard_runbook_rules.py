@@ -225,6 +225,133 @@ class TestUtf8MustBeEnabling:
         assert any("UTF-8" in i for i in issues)
 
 
+class TestAutoVariableAssignment:
+    """⑦(OPS-60) 자동/예약 변수 대입 — 대입은 거부되는데 $home은 이미 참이라 위장 성공."""
+
+    @pytest.mark.parametrize(
+        "name", ["home", "host", "input", "error", "args", "pwd", "matches", "profile"]
+    )
+    def test_assignment_to_each_reserved_name_is_rejected(
+        self, tmp_path: pathlib.Path, name: str
+    ) -> None:
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence(f'${name} = "x"')))
+        assert any("자동/예약 변수 대입" in i for i in issues), name
+
+    def test_case_insensitive_match(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence('$HOME = "x"')))
+        assert any("자동/예약 변수 대입" in i for i in issues)
+
+    def test_similarly_named_variable_passes(self, tmp_path: pathlib.Path) -> None:
+        """`$homeDir`는 다른 변수다 — 접두 일치만으로 오탐하면 안 된다."""
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence('$homeDir = "C:\\temp"')))
+        assert issues == []
+
+    def test_comparison_is_not_assignment(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence("if ($home -eq $null) {}")))
+        assert issues == []
+
+    def test_property_assignment_on_the_variable_passes(self, tmp_path: pathlib.Path) -> None:
+        """`$Host.UI...`는 $Host 재대입이 아니라 멤버 대입 — 흔한 정상 패턴이라 통과해야 한다."""
+        issues = guard.check_runbook_markdown(
+            _md(tmp_path, _fence('$Host.UI.RawUI.WindowTitle = "WhyMath"'))
+        )
+        assert issues == []
+
+    def test_reading_the_variable_passes(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence("Write-Host $args[0]")))
+        assert issues == []
+
+
+class TestInvokeWebRequestNeedsBasicParsing:
+    """⑧(OPS-60) -UseBasicParsing 누락 — PS 5.1 IE 파싱이 무인 실행을 대화형으로 멈춘다."""
+
+    def test_missing_flag_is_rejected(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(
+            _md(tmp_path, _fence('Invoke-WebRequest "http://x/health"'))
+        )
+        assert any("-UseBasicParsing" in i for i in issues)
+
+    def test_alias_iwr_is_also_checked(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(_md(tmp_path, _fence('iwr "http://x/health"')))
+        assert any("-UseBasicParsing" in i for i in issues)
+
+    def test_flag_present_passes(self, tmp_path: pathlib.Path) -> None:
+        issues = guard.check_runbook_markdown(
+            _md(tmp_path, _fence('Invoke-WebRequest -UseBasicParsing "http://x/health"'))
+        )
+        assert issues == []
+
+    def test_unrelated_command_passes(self, tmp_path: pathlib.Path) -> None:
+        assert guard.check_runbook_markdown(_md(tmp_path, _fence("Write-Host hi"))) == []
+
+
+class TestCatchResponseNeedsExistenceCheck:
+    """⑨(OPS-60) catch 안 $_.Exception.Response 무가드 접근 — 전송 계층 오류에서 null."""
+
+    def test_unguarded_property_access_is_rejected(self, tmp_path: pathlib.Path) -> None:
+        body = _fence(
+            "try {\n  Invoke-WebRequest -UseBasicParsing $u\n} catch {\n"
+            "  $_.Exception.Response.StatusCode\n}"
+        )
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("Exception.Response" in i for i in issues)
+
+    def test_guarded_by_earlier_if_in_same_block_passes(self, tmp_path: pathlib.Path) -> None:
+        body = _fence(
+            "try {\n  Invoke-WebRequest -UseBasicParsing $u\n} catch {\n"
+            "  if ($_.Exception.Response) {\n"
+            "    $_.Exception.Response.StatusCode\n"
+            "  }\n}"
+        )
+        assert guard.check_runbook_markdown(_md(tmp_path, body)) == []
+
+    def test_bare_mention_without_dot_access_passes(self, tmp_path: pathlib.Path) -> None:
+        """대입만 하고 프로퍼티 체인으로 파고들지 않으면 이 좁은 규칙의 대상이 아니다."""
+        body = _fence("catch {\n  $resp = $_.Exception.Response\n}")
+        assert guard.check_runbook_markdown(_md(tmp_path, body)) == []
+
+    def test_guard_in_later_block_does_not_retroactively_protect(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        body = (
+            _fence("catch {\n  $_.Exception.Response.StatusCode\n}")
+            + "\n"
+            + _fence("if ($_.Exception.Response) {}")
+        )
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("Exception.Response" in i for i in issues)
+
+
+class TestFenceStartingWithBareElse:
+    """④(OPS-60, 좁힌 채택) 펜스가 else/elseif로 시작 — 대응하는 if가 있을 수 없다."""
+
+    def test_fence_starting_with_else_is_rejected(self, tmp_path: pathlib.Path) -> None:
+        body = _fence("if ($x) {\n  Write-Host a\n}") + "\n" + _fence("else {\n  Write-Host b\n}")
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("else" in i and "펜스가" in i for i in issues)
+
+    def test_fence_starting_with_elseif_is_rejected(self, tmp_path: pathlib.Path) -> None:
+        body = _fence("elseif ($y) {\n  Write-Host b\n}")
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("펜스가" in i for i in issues)
+
+    def test_if_else_in_the_same_fence_passes(self, tmp_path: pathlib.Path) -> None:
+        body = _fence("if ($x) {\n  Write-Host a\n} else {\n  Write-Host b\n}")
+        assert guard.check_runbook_markdown(_md(tmp_path, body)) == []
+
+    def test_closing_brace_before_else_is_still_caught(self, tmp_path: pathlib.Path) -> None:
+        """`} else {`처럼 닫는 중괄호가 붙어 시작해도 잡는다(`\\}?` 허용)."""
+        body = _fence("if ($x) {\n  Write-Host a") + "\n" + _fence("} else {\n  Write-Host b\n}")
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("펜스가" in i for i in issues)
+
+    def test_first_fence_is_also_checked(self, tmp_path: pathlib.Path) -> None:
+        """맨 처음 펜스가 else로 시작해도(앞선 펜스 자체가 없어도) 구조적으로 깨져 있다."""
+        body = _fence("else {\n  Write-Host b\n}")
+        issues = guard.check_runbook_markdown(_md(tmp_path, body))
+        assert any("펜스가" in i for i in issues)
+
+
 class TestRepositoryAssetsStayGreen:
     """기존 자산 전건이 새 규칙에서 green이어야 CI 차단으로 승격할 수 있다 (acceptance ③)."""
 

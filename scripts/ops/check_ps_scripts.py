@@ -26,10 +26,35 @@ Kiki에게 건네는 PowerShell의 대부분은 .ps1이 아니라 **런북 코�
      로케일(cp949)로 인코딩돼 `UnicodeEncodeError`로 죽는다. 문서 앞부분에 UTF-8
      강제(PYTHONUTF8·PYTHONIOENCODING·Console::OutputEncoding)가 있어야 한다.
 
-**판정 범위 (과신 금지)**: ④~⑥은 "런북이 주의를 지시하는가"를 **문서 순서**로 본다 —
+런북 전용 규칙 3종 추가 (OPS-60 — 2026-08-31 LIC-02 siyavula URL 프로브에서 유래):
+  ⑦ 자동/예약 변수 대입 — `$home`·`$host`·`$input`·`$error`·`$args`·`$pwd`·`$matches`·
+     `$profile`은 PowerShell이 미리 의미를 정해 둔 변수다. 대입은 거부되지만(오류가
+     stderr로만 흘러 조용히 넘어가기 쉽다) **원래 값이 이미 참(truthy)이라** 그 뒤
+     `if ($home)` 같은 조건은 대입 성공 여부와 무관하게 참이 돼, "대입 실패"가
+     "성공"처럼 보이는 신호를 낸다.
+  ⑧ `Invoke-WebRequest`(별칭 `iwr`)에 `-UseBasicParsing` 누락 — PowerShell 5.1(Windows
+     기본 탑재판)은 이 스위치가 없으면 내부적으로 IE 엔진 파싱을 시도하다가 "Internet
+     Explorer 엔진이 처음 사용되기 전에 최초 실행을 완료해야 합니다" 대화상자로
+     **대화형 정지**한다 — 무인 실행(스케줄러·자동화)이 거기서 영원히 멈춘다.
+  ⑨ `catch` 안에서 `$_.Exception.Response`를 존재 확인 없이 프로퍼티 체인으로 참조 —
+     HTTP 계층 오류(4xx/5xx)에서는 `Response`가 채워지지만, **전송 계층** 오류
+     (DNS 실패·TLS 실패·연결 거부·타임아웃)에서는 `Response` 자체가 `$null`이라
+     `.StatusCode` 등 접근이 `NullReferenceException`으로 죽어 **원래 원인**(DNS·TLS·
+     연결거부)이 화면에서 사라지고 무관한 오류만 남는다.
+
+④번째 후보(if/else 다중행 구조)는 **범위를 좁혀 채택**했다 — 아래 "if/else 펜스 분리"
+참조. 전면 채택(펜스 경계와 무관하게 모든 if/else 짝을 정적으로 추적)은 중첩·backtick
+줄바꿈·문자열 안의 `else` 같은 경우의 수가 많아 오탐 위험이 크다고 판단해 보류했다.
+대신 **펜스가 `else`/`elseif`로 시작하는 경우만** 잡는다 — 이 형태는 그 펜스 안에
+대응하는 `if`가 있을 수 없으므로(있다면 `else`로 시작하지 않는다) 예외 없이 항상
+구조적으로 깨져 있다(오탐 0, 위양성 0인 좁은 부분집합).
+
+**판정 범위 (과신 금지)**: ④~⑨는 "런북이 주의를 지시하는가"를 **문서 순서**로 본다 —
 위험 명령보다 앞에 선행 스텝이 있는지만 확인한다. 특정 붙여넣기가 실제로 안전한지,
 사람이 그 스텝을 실제로 실행했는지는 판정하지 않는다. 그리고 **의미적 결함**
-(예: 변별력 없는 검증 스텝을 차단 지점으로 오인)은 정적 검사로 잡히지 않는다.
+(예: 변별력 없는 검증 스텝을 차단 지점으로 오인)은 정적 검사로 잡히지 않는다. ⑧은
+한 코드 줄 안에서만 `-UseBasicParsing`을 찾는다 — 백틱 줄바꿈으로 인자가 다음 줄에
+이어지면 놓친다(좁히는 쪽 선택 — 오탐보다 미탐이 안전하다는 이 파일의 기존 원칙과 동일).
 
 사용:  python3 scripts/ops/check_ps_scripts.py [경로...]
        인자 없으면 scripts/**/*.ps1 + docs/**/*.md 코드펜스 전부
@@ -179,6 +204,26 @@ _UTF8_ENABLE_RES = (
 # 잡혔다). 오탐이 있는 가드는 사람이 끄게 만들므로 좁히는 쪽을 택한다.
 _PY_PIPED_RE = re.compile(r"\bpython[0-9.]*\b[^\n]*?(\||\s>+\s*\S)")
 
+# OPS-60 ⑦ — 자동/예약 변수 대입. 뒤에 `(?![\w-])`를 둬 `$homeDir` 같은 다른 이름의
+# 변수를 오탐하지 않는다. `=`만 잡고 `==`(비교)·`-eq`(비교 연산자, `=` 미포함)는
+# 자연히 배제된다. `+=`/`-=` 등 복합 대입까지는 좁혀서 다루지 않는다(미탐 허용).
+_AUTO_VAR_NAMES = ("home", "host", "input", "error", "args", "pwd", "matches", "profile")
+_AUTO_VAR_ASSIGN_RE = re.compile(rf"\$(?:{'|'.join(_AUTO_VAR_NAMES)})(?![\w-])\s*=(?!=)", re.I)
+
+# OPS-60 ⑧ — Invoke-WebRequest/iwr에 -UseBasicParsing 누락. 한 코드 줄 안에서만 본다.
+_WEB_REQUEST_RE = re.compile(r"\b(?:Invoke-WebRequest|iwr)\b", re.I)
+_USE_BASIC_PARSING_RE = re.compile(r"-UseBasicParsing\b", re.I)
+
+# OPS-60 ⑨ — catch 안 $_.Exception.Response 무가드 프로퍼티 체인 접근. 가드는 같은
+# 블록의 **앞선 줄**에서 그 표현식을 진리값으로 검사하는 `if (...)`만 인정한다(대입 후
+# 별도 변수로 검사하는 형태는 미탐 허용 — 좁히는 쪽).
+_RESPONSE_GUARD_IF_RE = re.compile(r"\bif\s*\([^)\n]*\$_\.Exception\.Response[^)\n]*\)", re.I)
+_RESPONSE_UNGUARDED_ACCESS_RE = re.compile(r"\$_\.Exception\.Response\s*\.")
+
+# OPS-60 ④ 평가 후 채택분 — 펜스가 `else`/`elseif`로 시작. 이 펜스 안에는 대응하는
+# `if`가 있을 수 없다(있었다면 첫 코드 줄이 `else`가 아니다) — 오탐 없는 좁은 부분집합.
+_BARE_ELSE_START_RE = re.compile(r"^\s*\}?\s*else(?:if)?\b", re.I)
+
 
 def _dequote(line: str) -> str:
     """마크다운 인용문 접두를 벗긴다 — 인용문 안의 펜스도 실행 대상이다."""
@@ -246,6 +291,21 @@ def check_runbook_markdown(path: pathlib.Path) -> list[str]:
     for line_no, body in blocks:
         issues += [f"L{line_no}+ {m}" for m in check_balance(strip_noncode(body))]
 
+    # OPS-60 ④ 평가 후 채택분 — 펜스가 else/elseif로 시작(대응하는 if가 있을 수 없다).
+    for line_no, body in blocks:
+        code_lines = strip_noncode(body).split("\n")
+        first_code_line = next((c for c in code_lines if c.strip()), "")
+        if _BARE_ELSE_START_RE.match(first_code_line):
+            issues.append(
+                f"L{line_no}+: 펜스가 `else`/`elseif`로 시작 — 대응하는 `if`가 이 펜스 "
+                "안에 있을 수 없다. 붙여넣기가 펜스 단위로 분리되면 이전 펜스의 if는 "
+                "그 자리에서 완결 문으로 실행되고, 이 펜스의 else는 CommandNotFoundException "
+                "으로 거부된다(2026-09-01 실측 유형). if/else를 한 펜스에 합친다"
+            )
+
+    # OPS-60 ⑨ 가드 추적 — 같은 블록의 앞선 줄에서 본 if(...Response...)만 인정한다.
+    response_guarded_blocks: set[int] = set()
+
     for idx, (ln, _raw, code, bi) in enumerate(rows):
         m = _PUSH_PROTECTED_RE.search(code)
         if m:
@@ -270,6 +330,31 @@ def check_runbook_markdown(path: pathlib.Path) -> list[str]:
                 f"L{ln}: python 출력을 파이프·리다이렉트하는데 앞서 UTF-8 강제가 없다 "
                 "— 한국어 Windows에서 stdout이 로케일(cp949)로 인코딩돼 UnicodeEncodeError로 "
                 ' 죽는다(2026-09-01 실측 2건). $env:PYTHONUTF8="1" 등을 앞에 둔다'
+            )
+
+        m = _AUTO_VAR_ASSIGN_RE.search(code)
+        if m:
+            issues.append(
+                f"L{ln}: 자동/예약 변수 대입: {m.group(0).strip()!r} "
+                "— PowerShell 자동 변수(읽기 전용)라 대입이 거부되는데, 원래 값이 이미 "
+                "참이라 이후 조건문에서 '대입 실패'가 '성공'처럼 보인다. 다른 이름을 쓴다"
+            )
+
+        if _WEB_REQUEST_RE.search(code) and not _USE_BASIC_PARSING_RE.search(code):
+            issues.append(
+                f"L{ln}: Invoke-WebRequest/iwr에 -UseBasicParsing 이 없다 "
+                "— PowerShell 5.1이 IE 엔진 파싱을 시도하다 대화형 대화상자로 정지해 "
+                "무인 실행이 멈춘다. -UseBasicParsing 을 추가한다"
+            )
+
+        if _RESPONSE_GUARD_IF_RE.search(code):
+            response_guarded_blocks.add(bi)
+        elif _RESPONSE_UNGUARDED_ACCESS_RE.search(code) and bi not in response_guarded_blocks:
+            issues.append(
+                f"L{ln}: `$_.Exception.Response`를 존재 확인 없이 프로퍼티로 참조 "
+                "— DNS·TLS·연결거부 같은 전송 계층 오류에서는 Response가 $null이라 "
+                "NullReferenceException으로 원래 원인이 유실된다. "
+                "`if ($_.Exception.Response) { ... }`로 먼저 확인한다"
             )
 
     return issues
