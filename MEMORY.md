@@ -9342,3 +9342,60 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
 
 산출물: `docs/reviews/unmerged_branch_audit_2026-09-10.md` · `.github/branch-cleanup-request.txt`
 9차 배치(1건) · 신규 회수 태스크 등재 0건(전건 기존 좌석 유효).
+
+## 2026-09-11: HARN-97 — 태스크 ID 번호 3자리 확장 (자릿수 확장 채택, 판정 기준 main 5fa97039)
+
+- **발단**: 2026-09-09 실측(같은 태스크 notes) — `models.TASK_ID_RE`가 `\d{2}`(정확히 2자리)만
+  허용해 ARCH·EOS 두 접두가 99개 상한에 근접·`--id EOS-100`이 형식 검증 자체에서 거부됐다.
+  HARN-73(2026-09-06)의 하위 미사용 번호 재사용(Kiki 결정 A)이 당장의 우회는 제공했지만
+  (그 세션은 EOS-43으로 등재), 두 접두 모두 01~99 공백이 줄어드는 추세라 재발이 예견됐다.
+- **결정**: **① 자릿수 확장**(2~3자리, 100~999는 선행 0 없이) 채택. 기각: ②접두사 분할
+  (EOS·ARCH를 도메인별로 쪼개는 것은 기존 참조·문서·커밋의 짧은 ID 의미를 흔드는 훨씬 큰
+  구조 변경이라, 순수 상한 문제에 비해 비용이 과도) ③안전한 공백 재사용 확장(HARN-73이
+  이미 구현·Kiki 승인했고, 01~99 범위에 한정해 그대로 둔다 — 100 이상을 "재사용할 옛
+  빈자리"로 취급하는 것은 개념적으로 틀렸다: 그 번호들은 한 번도 존재한 적이 없다).
+  자릿수 확장이 가장 싼 이유를 실측으로 확인했다: 번호 추출·충돌 검사(`store._ID_NUMBER_RE`
+  = `\d+`, `dep_declaration._REF_RE` = `\d{1,3}`)는 이미 자릿수 무관하게 파싱하고 있었다 —
+  좁혀 온 것은 `models.TASK_ID_RE`와 `backlog.py`의 두 상한(`_next_free_number`·
+  `_HISTORY_TASK_FILE_RE`)뿐이었다(acceptance① 전수 열거 — `scripts/` 전체 grep 기준
+  이 세 지점 + `\d{2}` 리터럴을 쓰는 무관 도메인 코드 2건(대학/NCIC 표준코드, 태스크 ID와
+  무관)만 발견).
+- **구현**:
+  ① `models.TASK_ID_RE`: `\d{2}` → `(?:\d{2}|[1-9]\d{2})` — 2자리(00~99, 관례상 제안은
+     01부터) 또는 선행 0 없는 3자리(100~999). "099" 같은 3자리 선행 0 표기는 "99"와
+     같은 번호를 가리키는 두 번째 문자열이 되므로 거부한다.
+  ② `backlog.py:_HISTORY_TASK_FILE_RE`: `(\d{2})` → `(\d{2,3})` — 3자리 파일명도 "한
+     번이라도 쓰인 적 있음" 이력 스캔에 잡히게 한다.
+  ③ `backlog.py:_next_free_number`에 `cap: int = 99` 키워드 인자 추가(기본값 불변 —
+     HARN-21·HARN-73의 기존 동작·테스트를 그대로 보존). `_suggest_number`의 3단계 설계:
+     1단계(상향, 01~99)·2단계(HARN-73 하위 미사용 재사용, 01~99 한정) 둘 다 실패했을 때만
+     **3단계**로 `_next_free_number(prefix, taken, cap=999)`를 다시 불러 100 이상을 제안한다
+     — 새 `history="extended"` 상태로 표시해 `cmd_add`가 "하위 재사용"과 "3자리 확장"을
+     다른 문구로 안내한다(같은 값이면 사람이 왜 100번대를 받았는지 알 수 없다). "정말
+     소진"(사람의 결정 필요) 문구는 경계가 99에서 **999**로 이동했을 뿐 그대로 남는다.
+- **검증**: `tests/harness/test_id_number_parser.py`(20건, 신규 5+기존 15)·
+  `test_next_free_number_format_guard.py`(신규 6·수정 3·기존 유지)·`test_backlog_add_id_collision.py`
+  — 대상 3파일 55 passed. `tests/harness` 전체 815 passed(무작위 순서). `ruff check scripts
+  tests/harness`·`black --check --line-length 100`(CI와 동일 명령) — clean. `backlog.py
+  validate`/`audit-deps` — green.
+- **실패 주입(acceptance③)**: 정규식 두 곳 모두 fix 적용 *전* 상태로 되돌려 실제 RED를
+  확인한 뒤 원복했다 — `TASK_ID_RE.match("EOS-100")`은 수정 전 `None`(거부)·수정 후 매치.
+  `_HISTORY_TASK_FILE_RE.match("backlog/tasks/ZQ-100-old.yaml")`도 동일(수정 전 `None`·
+  수정 후 매치) — 신규 테스트(`test_deleted_three_digit_task_file_number_is_reported`)가
+  그 경계를 동결한다.
+- **자릿수 혼재의 정렬·파싱(acceptance②)**: 파싱은 애초에 깨지지 않는다 —
+  `store.id_number_of("EOS-100")`·`_id_number_collisions(["EOS-43-…", "EOS-100-…"])`이
+  자릿수 무관하게 정확히 동작함을 테스트로 고정했다(`TestTaskIdReAcceptsThreeDigitNumbers`).
+  **알려진·수용한 코스메틱 트레이드오프**: `selector.py`·`store._id_number_collisions`의
+  일부 `sorted(..., key=lambda t: t.id)`(문자열 정렬)는 "EOS-100"을 "EOS-43"보다 앞에
+  둔다(사전식 "1" < "4"). 이 정렬은 이미 결정론적 출력 순서를 위한 것이지 "번호가 작은
+  순"이라는 선택 로직이 아니다(우선순위·스테이지·의존성이 실제 선택을 결정 — `_next_free_number`·
+  `_suggest_number`는 전부 `int()` 변환 비교라 이 트레이드오프의 영향을 받지 않는다). 모든
+  `sorted()` 호출부를 숫자 키로 바꾸는 것은 이 태스크의 세 선택지(자릿수 확장/접두사
+  분할/공백 재사용) 어디에도 없는 범위 확장이라 채택하지 않는다 — 필요해지면 별도 태스크로.
+- **acceptance①의 부재 판정 범위**: `scripts/` 전체(`grep -rn "\\d{2}\b"`)에서 태스크 ID
+  형식을 가정하는 지점은 위 3곳(`models.TASK_ID_RE`·`backlog._HISTORY_TASK_FILE_RE`·
+  `backlog._next_free_number`/`_suggest_number`)뿐이었다. `docs/` 링크 생성기·CI 스크립트
+  중 `backlog/tasks/{id}.yaml` 경로를 조립하는 지점(`remote_claims.py`·`backlog.py` 8곳)은
+  전부 이미 검증된 full ID 문자열을 그대로 보간해 자릿수 가정이 없음을 확인했다(부재
+  판정은 이 grep 방법으로 0건 — 다른 이름으로 존재할 가능성은 배제하지 않는다).
