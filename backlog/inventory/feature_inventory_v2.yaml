@@ -3610,7 +3610,7 @@ features:
     db_model_modules: 6
     coupling_count: 9
     test_files: 23
-    test_functions: 389
+    test_functions: 390
     matrix:
       A_subject: 0
       B_db: 3
