@@ -9490,3 +9490,40 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   unwired_audit.py` 67 passed, 전체 스위트 재실행 12,762 passed·0 failed·`PYTEST_EXIT=0`
   (로그 내 판정 줄을 직접 읽어 확인 — 래퍼 exit code를 신뢰하지 않는다).
 
+
+## 2026-09-11: OPS-60 — PowerShell 가드 런타임 실패 규칙 3종 승계 + 실사고 1건 발견·수정
+
+- **배경**: OPS-57 acceptance②의 미이행분(2026-08-31 LIC-02 siyavula URL 프로브에서 유래).
+  `scripts/ops/check_ps_scripts.py`에 런북 전용 규칙 ⑦~⑨를 신설: ⑦ 자동/예약 변수
+  (`$home`·`$host`·`$input`·`$error`·`$args`·`$pwd`·`$matches`·`$profile`) 대입 금지 —
+  대입은 거부되지만 원래 값이 이미 참이라 이후 `if($home)`이 "성공"처럼 보인다. ⑧
+  `Invoke-WebRequest`/`iwr`에 `-UseBasicParsing` 필수 — 없으면 PS 5.1이 IE 엔진 파싱을
+  시도하다 대화형 대화상자로 무인 실행을 정지시킨다. ⑨ `catch` 안 `$_.Exception.Response`
+  존재 확인 없는 프로퍼티 체인 접근 금지 — 전송 계층 오류(DNS·TLS·연결거부)에서는
+  Response가 `$null`이라 NullReferenceException으로 원래 원인이 유실된다.
+- **④(if/else 다중행 구조) 판정**: acceptance④가 "오탐 위험이 커 채택 여부를 먼저
+  판정"하라고 명시적으로 열어 둔 항목이었다. 전면 채택(펜스 경계 무관 모든 if/else 짝을
+  정적 추적)은 중첩·backtick 줄바꿈·문자열 속 `else` 등 변수가 많아 보류. 대신 **"펜스가
+  `else`/`elseif`로 시작"만 채택** — 이 부분집합은 그 펜스 안에 대응하는 `if`가 있을 수
+  없으므로(있었다면 `else`로 시작하지 않는다) 오탐이 구조적으로 0이다. 판정 근거를
+  `backlog.py amend --acceptance`로 대장에 직접 기록(산문 판정 누락 방지 — HARN-52
+  선례와 같은 원리를 acceptance 판정에도 적용).
+- **실사고 발견·수정(acceptance⑤·⑥ 충족 과정에서)**: 신규 ⑨ 규칙을 저장소 전체 자산
+  (324건)에 먼저 돌려본 결과 `docs/architecture/deployment_cd_runbook.md`의 레디니스
+  체크 catch 블록이 정확히 이 버그 패턴이었다 — `$_.Exception.Response.StatusCode.value__`
+  를 존재 확인 없이 참조. 규칙을 좁혀 이 실사고를 피해가는 대신 런북 자체를 고쳤다
+  (`if ($_.Exception.Response) {...} else {...}`로 전송 계층 오류와 HTTP 오류를 분리).
+  이것이 CLAUDE.md "오탐 우선" 원칙과 "가드가 막는다는 주장도 주입으로 검증" 원칙의
+  실제 적용 사례다 — 사후에 지어낸 합성 픽스처가 아니라 **실제 저장소 자산에서** 규칙의
+  변별력이 입증됐다.
+- **검증**: 신규 규칙 4종(⑦⑧⑨④) 각각 양방향(위반 exit 1·정상 exit 0) 테스트 — 총 54건
+  전부 통과(`tests/infra/test_ps_guard_runbook_rules.py`). `check_ps_scripts.py`(인자 없이
+  전체 스캔) — 324건 0위반. `tests/infra` 전체 — 1276 passed(중간에 `check_ps_scripts.py`
+  LOC 변화로 EOS 인벤토리 드리프트 1회 발생·`--write` 재생성으로 해소, OPS-56과 동일
+  패턴 — 코드 변경 후 인벤토리 재생성을 잊지 않는 것이 이 저장소의 상시 체크리스트가
+  됐다). `ruff check`·`black --check --line-length 100` — clean.
+- **정직한 공백**: ⑧은 한 코드 줄 안에서만 `-UseBasicParsing`을 찾는다 — 백틱 줄바꿈으로
+  인자가 다음 줄에 이어지면 놓친다(미탐 허용, 오탐보다 안전). ⑨의 가드 인정 범위는
+  "같은 블록의 앞선 줄에서 `if (...Response...)`로 진리값 검사"로 좁혔다 — 변수에 대입한
+  뒤 별도로 검사하는 형태는 미탐 허용. .ps1 파일(BOM·괄호·call-before-def) 축은 이번
+  범위 밖 — 신규 규칙 3종은 전부 런북 마크다운 전용(`check_runbook_markdown`)이다.
