@@ -9603,3 +9603,45 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   `status` 재대입(`BackupStatus | None` → `BackupStatus`)에서 기존에 이미 내던
   Incompatible-types 경고 1건이 이번 편집으로 줄 번호만 이동했다(267→329) — 이 태스크
   범위(오프사이트 상태 필드 추가) 밖의 선행 결함이라 손대지 않았다. 별도 추적이 필요하다.
+
+## 2026-09-11: OPS-70 — anchors.yaml 정본 훼손(파일시스템 축, OPS-63 전역 오염과 같은 유형) 해소
+
+- **배경**: `tests/backend/l1/test_eos_anchor_registry.py::test_broken_registry_still_writes_evidence`가
+  실패 경로를 실측하려고 저장소 정본 `data/corpus/eos_anchor_set_v1/anchors.yaml`을
+  `write_text("anchors: []\n")`로 직접 비우고 `finally`에서 원본 바이트로 복원했다.
+  `-n auto` 병렬 실행에서 다른 워커가 그 비워진 창에 정본을 읽으면
+  `AnchorRegistryError`로 무관한 잡이 red가 됐다(PR #1044 head `2523b06f` 실측). 스위트
+  전후 sha256은 동일해도(복원 성공) 그 사이 창에는 실제로 빈 상태가 있었다 — OPS-63의
+  프로세스 전역 오염(레이트리미터 InMemoryBackend)과 같은 형태의 **파일시스템** 판.
+- **해법(acceptance② 선택지 그대로 — 경로 주입구 신설)**: `scripts/analysis/eos_anchor_asset_audit.py`에
+  `--registry`(기본값=정본) CLI 플래그를 추가하고 `load_anchor_defs()`/`step_anchor_registry()`가
+  그 값을 인자로 받도록 스레딩했다(선행 확인 사항이던 "경로 주입구 부재"를 해소 — 이전엔
+  `main()`이 `--out`만 받고 레지스트리 경로는 모듈 상수 고정이었다). 테스트는 이제
+  `tmp_path` 사본을 만들어 `--registry`로 가리킨다 — 정본은 한 번도 손대지 않는다. cwd
+  트릭·심볼릭 링크는 채택하지 않았다(다른 리더도 같이 속는 우회이므로 acceptance②의
+  명시 배제를 따름).
+- **변별력(결함 주입 2건, 각각 RED 확인 후 `cp` 백업으로 바이트 동일 복원)**:
+  ① 테스트를 원래 형태(정본 직접 write + finally 복원)로 되돌림 → 신규 스파이 테스트
+  `test_broken_registry_injection_never_touches_the_canonical_file` RED. 이 스파이는
+  `Path.write_text`/`write_bytes`를 monkeypatch로 가로채 **호출 시점**을 잡는다 — 스위트
+  전후 해시 대조였다면 `finally` 복원 뒤라 무증상이었을 자리다(정상 상태의 초록은 보호의
+  증거가 아니라는 CLAUDE.md 원칙을 정면으로 겨냥한 설계).
+  ② 스크립트의 `step_anchor_registry`에서 `ctx.get("registry_path")` 전달을 제거(→
+  `load_anchor_defs()`로 되돌림 — `--registry`를 파싱만 하고 무시하는 회귀) →
+  `test_broken_registry_still_writes_evidence` RED(사본을 가리켜도 스크립트가 정본을
+  계속 읽어 exit 0 — "적재 실패가 exit 0으로 위장"이 그대로 재현됨).
+- **전수 점검(acceptance④)**: naive `grep 'data/corpus' + write_text`가 이 결함을 놓친
+  이유(리터럴과 write 호출이 다른 표현식 — `registry = _REPO_ROOT / "data/corpus/..."` 후
+  `registry.write_text(...)`)를 재현하지 않는 AST 기반 스캐너(함수 단위로 corpus 리터럴이
+  관여한 변수명에 태그를 붙이고 그 변수에 대한 write 호출을 탐지)로 `tests/`·`scripts/`
+  전체를 스캔했다. 결과: 이 1건(수정 대상 그 자체) 외 추가 인스턴스 0건 — 정직한 음성
+  결과다. 스캐너 자체는 세션 스크래치패드에만 존재(상시 CI 가드로는 승격하지 않음 — 이
+  패턴이 반복된다는 근거가 아직 없어 과공학 방지 원칙상 보류).
+- **검증**: `tests/backend/l1/test_eos_anchor_registry.py` 44 passed(신규 1건).
+  `tests/backend/l1` 전체 1111 passed, 85 skipped. `tests/infra` 전체 1286 passed, 1
+  skipped(1차 실행에서 `test_eos_feature_inventory_v2.py` 2건 드리프트 발견 —
+  신규 테스트 함수 2건이 집계에 반영 안 됨 → `--write` 재생성 후 재확인 green).
+  `ruff check`·`black --check --line-length 100` clean.
+- **정직한 공백**: 없음 — 이 태스크의 스코프(파일시스템 축)는 acceptance①~④ 전부
+  충족했다. 429 레이트리미터 전역 오염(같은 유형의 프로세스 메모리 축)은 OPS-63 소관으로
+  범위 밖(acceptance⑤ 명시).
