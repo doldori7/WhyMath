@@ -22,7 +22,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -725,6 +725,61 @@ class Settings(BaseSettings):
             "파싱된 집합은 `trusted_proxy_ips` 프로퍼티 참조."
         ),
     )
+    # ── SEC-26: CORS + TrustedHost 미들웨어 allowlist(48_보안 §P0 갭) ──
+    # 이 백엔드의 학생 클라는 Flutter 네이티브 앱이라 브라우저 CORS 적용 대상이 아니다
+    # (`tests/backend/test_cors_policy_freeze.py`의 원 결정 — 근거는 그대로 유효). 웹 클라
+    # (`src/web/` 백오피스·교사 대시보드, ADMIN-06)가 실제로 브라우저에서 이 API를 호출하게
+    # 되면 이 값을 명시 설정한다. oauth_redirect_uri_allowlist·trusted_proxy_ip_allowlist와
+    # 동일 패턴: 콤마 구분 원시값 + 파싱 프로퍼티. 비면 *전부 거부*(deny-by-default) —
+    # CORSMiddleware는 항상 등록되지만 allow_origins=[]이면 모든 브라우저 cross-origin
+    # 요청을 거부한다(네이티브 앱은 영향 없음 — CORS는 브라우저가 강제하는 정책이다).
+    cors_allowed_origins: str = Field(
+        default="",
+        description=(
+            "브라우저 cross-origin 요청을 허용할 origin 화이트리스트(콤마 구분, 예: "
+            "https://admin.whymath.kr). 비면 *전부 거부*(deny-by-default) — 네이티브 앱은 "
+            "미영향. `*`는 `cors_allow_credentials=True`와 동시 사용 금지(부팅 시 예외로 "
+            "거부 — CORS 자격증명 노출 취약점 방지). 환경변수 WHYMATH_CORS_ALLOWED_ORIGINS. "
+            "시크릿 아님(공개 URL). 파싱된 리스트는 `cors_allowed_origins_list` 프로퍼티 참조."
+        ),
+    )
+    cors_allow_credentials: bool = Field(
+        default=False,
+        description=(
+            "CORS 응답에 자격증명(쿠키·Authorization 헤더 반영)을 허용할지. 기본 False — "
+            "이 백엔드는 Bearer 토큰을 요청 헤더로 직접 보내므로(쿠키 미사용) 기본값을 켤 "
+            "이유가 없다. True로 켤 때 `cors_allowed_origins`에 `*`가 있으면 부팅이 실패한다."
+        ),
+    )
+    trusted_hosts_allowlist: str = Field(
+        default="",
+        description=(
+            "TrustedHostMiddleware가 허용할 Host 헤더 화이트리스트(콤마 구분, 예: "
+            "api.whymath.kr). 비면 `*`(전부 허용 — 현재 동작 무회귀·로컬 개발 편의 유지). "
+            "배포 환경은 설정을 권장(Host 헤더 위조·캐시 포이즈닝 방지). 환경변수 "
+            "WHYMATH_TRUSTED_HOSTS_ALLOWLIST. 시크릿 아님. 파싱된 리스트는 "
+            "`trusted_hosts_list` 프로퍼티 참조."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _forbid_cors_wildcard_with_credentials(self) -> "Settings":
+        """`*` + `allow_credentials=True` 조합을 부팅 시점에 거부(fail-closed).
+
+        브라우저 CORS 스펙 자체가 이 조합을 금지하지만(Fetch 표준 — 자격증명 포함 요청엔
+        와일드카드 origin이 허용되지 않아 브라우저가 응답을 버린다), 그 실패는 *브라우저에서*
+        조용히 일어나 서버 쪽에서는 "동작하는 것처럼" 보인다. 여기서 즉시 예외를 내는 이유는
+        와일드카드가 실수로 credentials와 함께 배포되는 순간을 부팅 실패로 만들어, 조용한
+        보안 구멍이 되는 것을 막기 위함이다(CLAUDE.md "확실하지 않을 때 침묵 금지"와 동형).
+        """
+        if self.cors_allow_credentials and "*" in self.cors_allowed_origins_list:
+            raise ValueError(
+                "WHYMATH_CORS_ALLOWED_ORIGINS에 '*'와 WHYMATH_CORS_ALLOW_CREDENTIALS=true를 "
+                "동시에 설정할 수 없습니다 — 자격증명 포함 CORS 응답에 와일드카드 origin은 "
+                "허용되지 않습니다(SEC-26)."
+            )
+        return self
+
     # ── RPT-01: 학생 결함 신고(무인증 표면) IP 단위 rate limit ──
     defect_report_rate_limit_ip_per_minute: int = Field(
         default=20,
@@ -1383,6 +1438,24 @@ class Settings(BaseSettings):
         리스트가 아닌 `frozenset`(정확한 문자열 일치만 지원 — CIDR·IPv6 정규화는 후속).
         """
         return frozenset(u.strip() for u in self.trusted_proxy_ip_allowlist.split(",") if u.strip())
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        """`cors_allowed_origins`(콤마 구분 원시값)를 파싱한 리스트(공백 제거·빈 항목 제외).
+
+        빈 리스트면 deny-by-default — CORSMiddleware가 어떤 브라우저 cross-origin 요청도
+        허용하지 않는다(네이티브 앱은 미영향).
+        """
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
+    @property
+    def trusted_hosts_list(self) -> list[str]:
+        """`trusted_hosts_allowlist`(콤마 구분 원시값)를 파싱한 리스트.
+
+        비면 `["*"]`(전부 허용) — Host 헤더 검증 미구성 상태의 현재 동작을 무회귀로 보존한다.
+        """
+        parsed = [h.strip() for h in self.trusted_hosts_allowlist.split(",") if h.strip()]
+        return parsed if parsed else ["*"]
 
     @property
     def production_like(self) -> bool:
