@@ -31,13 +31,15 @@ in-process import, subprocess 금지. 1~7 기존 축은 **새 판정 로직 신�
     9. defect_report_intake    — `db.models.audit.DefectReport`(RPT-01 학생 결함 신고 수집 현황)
 
 축 9(`defect_report_intake`)는 나머지 8축과 달리 *커밋된 코퍼스 파일*이 아니라 **DB**를 읽는다
-(`defect_report` 테이블 행 수). "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)과
-"0건 접수"(테이블은 있는데 아직 신고가 없음)를 *다른 값*으로 낸다(이중 회계, CLAUDE.md
-"변별력 없는 검증 스텝 금지" — `_axis_defect_report_intake` 참조). DB 자체가 도달 불가(연결
-실패 등)면 이 축이 판정하지 않고 예외를 그대로 올려 `_run_axis_safely`가 "error"로 격리한다
-(no_snapshot·ok·error 세 값이 서로 다른 사태를 가리킨다). CI의 `data-pipeline` 잡은 Postgres
-서비스가 없어 이 축은 그 잡에서 상시 "error"로 보고되는데, 이 잡의 qa_pipeline 스텝은 이미
-`continue-on-error: true`(S3-28 전까지 비강제 게이트)라 CI를 막지 않는다.
+(`defect_report` 테이블 행 수). "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)·
+"DB 도달 불가"(연결 자체가 안 됨 — 이 환경에 Postgres가 없음)·"0건 접수"(테이블은 있는데
+아직 신고가 없음) 세 가지를 *서로 다른 값*으로 낸다(3중 회계, CLAUDE.md "변별력 없는 검증
+스텝 금지"·"3상태를 truthiness로 접지 않는다" — `_axis_defect_report_intake` 참조).
+"DB 도달 불가"는 `no_snapshot`(검사를 시도조차 못 한 정당한 환경 제약 — 집계 제외)으로
+분류하되 `table_exists=None`(모른다)으로 "테이블 없음"(`table_exists=False`)과 구분한다
+— CI의 `data-pipeline` 잡은 Postgres 서비스가 없어 이 축이 그 잡에서는 상시 이 경로를
+탄다(ARCH-23 r3 보강 (a)안). 그 밖의 진짜 예외(권한 오류 등)는 여기서 판정하지 않고
+그대로 올려 `_run_axis_safely`가 "error"로 격리한다.
 
 **wilson.py는 별도 축이 아니다** — 위 1·4·5·7·8 다섯 축이 이미 각자 내부에서
 `wilson_lower_bound`/`wilson_upper_bound`를 호출해 경계 판정을 한다(Wilson은 그 다섯 축이
@@ -97,7 +99,7 @@ import sqlalchemy as sa
 # whymath_backend가 아니라 별도 pip 패키지(whymath-data-pipeline)다. 원자 백본 그래프
 # 검증의 단일 진실 원천이 거기에만 있어 harness가 예외적으로 패키지 경계를 넘는다.
 from data_pipeline.atom_graph.validate import AtomRelation, _find_prerequisite_cycle
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from whymath_backend.config import get_settings
@@ -547,10 +549,13 @@ async def _defect_report_intake_async(
 ) -> AxisResult:
     """`defect_report` 테이블 행 수를 재는 실제 판정 로직 — 세션 팩토리 주입(테스트 가능).
 
-    "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)과 "0건 접수"(테이블은
-    있는데 아직 아무도 신고하지 않음)를 *다른 값*으로 구분한다(이중 회계, CLAUDE.md
-    "변별력 없는 검증 스텝 금지"). 그 밖의 DB 오류(연결 실패 등)는 여기서 삼키지 않고
-    그대로 전파해 `_run_axis_safely`가 "error"로 격리하게 한다(세 번째 구분값).
+    "수집 경로 미배선"(테이블 자체가 없음 — 마이그레이션 미적용)·"DB 도달 불가"(연결
+    자체가 안 됨 — 이 환경에 Postgres가 없음)·"0건 접수"(테이블은 있는데 아직 아무도
+    신고하지 않음) 세 가지를 *서로 다른 값*으로 구분한다(3중 회계, CLAUDE.md "변별력
+    없는 검증 스텝 금지"·"3상태를 truthiness로 접지 않는다"). `table_exists`는
+    True(있고 셌음)/False(없음이 확인됨)/None(연결이 안 돼 있는지조차 모름) 3상태다.
+    그 밖의 DB 오류(권한 오류 등 진짜 예외)는 여기서 삼키지 않고 그대로 전파해
+    `_run_axis_safely`가 "error"로 격리하게 한다.
     """
     async with sessionmaker() as session:
         try:
@@ -568,6 +573,37 @@ async def _defect_report_intake_async(
                     },
                 )
             raise
+        except (OperationalError, OSError) as exc:
+            # DB 연결 자체가 안 됨(예: CI data-pipeline 잡에 Postgres 서비스 없음) — 검사를
+            # 시도조차 못 한 "정당한 환경 제약"이지 결함이 아니다(ARCH-23 r3 보강 (a)안).
+            # "테이블 없음"과 값이 겹치면 위장이므로 table_exists=None(모른다)으로 분리한다.
+            # 연결이 성립조차 안 한 세션은 rollback이 안전을 보장하지 않아 호출하지 않는다
+            # — async with의 __aexit__ 정리에 맡긴다.
+            #
+            # OSError를 함께 잡는 이유(실측, ARCH-23) — 처음엔 `OperationalError`만 잡으면
+            # 충분하다고 가정하고 그렇게만 구현했으나, 실제로 이 환경(Postgres 미기동)에서
+            # `python -m whymath_backend.harness.qa_pipeline`을 직접 돌려보니 축 9가 여전히
+            # "error"로 격리되고 있었다(`overall.pass: false` — continue-on-error를 뗀 채였다면
+            # CI가 상시 red가 됐을 사고). 원인: async 엔진(asyncpg)의 커넥션 풀 체크아웃
+            # 단계에서 연결 자체가 실패하면 SQLAlchemy가 DBAPI 예외를 감싸는 지점(문장 실행 중
+            # 예외 처리)에 도달하기도 전이라, 원 예외(`ConnectionRefusedError` — `OSError` 하위)가
+            # *래핑 없이* 그대로 올라온다(SQLAlchemy 2.0.52 + asyncpg 실측 확인 — "외부 SDK
+            # 표면을 시임 테스트만으로 정합 선언 금지" 위반을 실측으로 잡아낸 사례). `OSError`도
+            # 함께 잡아야 이 코드경로가 실제로 발화한다.
+            print(
+                f"[qa_pipeline] 축 'defect_report_intake' DB 연결 불가 — "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            return AxisResult(
+                measured=True,
+                status="no_snapshot",
+                detail={
+                    "table_exists": None,
+                    "db_reachable": False,
+                    "reason": "DB 연결 불가(이 환경에 Postgres 없음) — 이 환경에서 검사 미수행",
+                },
+            )
     return AxisResult(
         measured=True,
         status="ok",
