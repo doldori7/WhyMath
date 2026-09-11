@@ -1619,17 +1619,25 @@ def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, 
     return taken
 
 
-def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str | None:
-    """`<PREFIX>-<n>` 다음 빈 번호(2자리 zero-padded) — **최대 사용 번호 +1**부터 찾는다.
+def _next_free_number(
+    prefix: str, taken: Mapping[str, tuple[str, str]], *, cap: int = 99
+) -> str | None:
+    """`<PREFIX>-<n>` 다음 빈 번호(2자리 zero-padded, 100 이상은 3자리) — **최대 사용
+    번호 +1**부터 `cap`까지 찾는다.
 
     가장 작은 빈 번호를 주면 과거에 비워진 낮은 번호(예 HARN-01)를 제안하게 되는데,
     그건 "이 트랙의 다음 작업"이라는 사람의 기대와 어긋나 제안이 오히려 혼선을 준다.
 
     `{index:02d}`는 **최소** 2자리이지 **정확히** 2자리가 아니다 — index가 100을 넘으면
-    "100"(3자리)을 내는데, `models.TASK_ID_RE`는 `\\d{2}` 정확히 2자리만 허용한다. 즉
-    프리픽스가 00~99번을 다 쓰면 다음 제안이 형식 위반 ID가 된다(HARN-21 결함②). 그래서
-    index가 99를 넘어서면 날조된 3자리를 내지 않고 **`None`을 반환** — 호출부(`cmd_add`)가
-    사람에게 "이 프리픽스가 소진됐다"는 명시적 오류를 낸다.
+    "100"(3자리)을 그대로 낸다(Python format spec은 최소 폭이지 절단이 아니다). HARN-21
+    시점에는 `models.TASK_ID_RE`가 정확히 2자리만 허용해 그 3자리 출력이 형식 위반
+    ID였다 — 그래서 기본 `cap=99`는 그대로 두어 이 함수 자신과 HARN-73의 tier 1(상향)
+    동작·기존 테스트를 전혀 바꾸지 않는다. HARN-97이 `models.TASK_ID_RE`를 2~3자리
+    (100~999는 선행 0 없이)로 넓히면서, `_suggest_number`의 tier 3(하위 미사용 번호도
+    없을 때의 최종 폴백)만 `cap=999`로 이 함수를 다시 불러 3자리 번호를 제안한다 —
+    호출부를 분리해 두어 "언제 3자리를 제안해도 되는가"라는 정책 판단은
+    `_suggest_number`가 갖고, 이 함수는 순수하게 "주어진 상한 안에서 다음 빈 번호"만
+    계산한다.
     """
     used = [
         int(number.rsplit("-", 1)[1])
@@ -1637,14 +1645,16 @@ def _next_free_number(prefix: str, taken: Mapping[str, tuple[str, str]]) -> str 
         if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
     ]
     index = max(used) + 1 if used else 1
-    while index <= 99 and (f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken):
+    while index <= cap and (f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken):
         index += 1
-    if index > 99:
+    if index > cap:
         return None
     return f"{prefix}-{index:02d}"
 
 
-_HISTORY_TASK_FILE_RE = re.compile(r"^backlog/tasks/([A-Z][A-Z0-9]{0,7})-(\d{2})(?:-|\.yaml$)")
+# HARN-97: 2자리뿐 아니라 3자리(100~999) 파일명도 이력에 잡아야 향후 3자리 번호의
+# "한 번이라도 쓰인 적 있음"을 정확히 판정한다 — models.TASK_ID_RE와 폭을 맞춘다.
+_HISTORY_TASK_FILE_RE = re.compile(r"^backlog/tasks/([A-Z][A-Z0-9]{0,7})-(\d{2,3})(?:-|\.yaml$)")
 
 
 def _historically_used_numbers(root: Path, prefix: str) -> tuple[set[int] | None, str]:
@@ -1709,7 +1719,7 @@ class NumberSuggestion:
     max_used: int  # 점유된 최대 번호(없으면 0)
     free_lower: tuple[int, ...]  # taken에 없는 01~99 번호 — 상위 소진 시에만 계산
     retired: tuple[int, ...]  # free_lower 중 이력상 쓰였다 사라진 번호(재사용 금지)
-    history: str  # "not_needed" | "ok" | "unavailable"
+    history: str  # "not_needed" | "ok" | "extended" | "unavailable"
     history_reason: str = "ok"  # unavailable일 때 원인("shallow"·"exception:…"·"git_error:…")
 
 
@@ -1718,20 +1728,37 @@ def _suggest_number(
     taken: Mapping[str, tuple[str, str]],
     history_lookup: Callable[[str], tuple[set[int] | None, str]],
 ) -> NumberSuggestion:
-    """번호 제안 2단계 — ① 최대+1 상향(HARN-21 그대로) ② 상위 소진 시 하위 미사용 폴백(HARN-73).
+    """번호 제안 3단계 — ① 최대+1 상향(HARN-21, 01~99) ② 상위 소진 시 하위 미사용
+    폴백(HARN-73, 01~99 범위 한정) ③ ②도 없으면 3자리(100~999)로 확장 제안(HARN-97).
+
+    ①②는 **그대로 유지한다** — HARN-73에서 이미 Kiki가 결정한 동작(A안: 하위 미사용
+    번호 재사용)과 그 테스트를 이 태스크가 바꿀 이유가 없다. `_next_free_number`의
+    기본 `cap=99`가 그 경계를 그대로 지킨다.
 
     ②의 후보는 taken에 없고 **이력에도 없는** 번호 중 가장 낮은 것. "낮은 번호 제안은
     '다음 작업' 기대와 어긋난다"는 ①의 설계 의도는 유지된다 — 폴백은 ①이 불가능할 때만
-    작동하고, 이력 조회(`history_lookup`)도 그때만 부른다(비용·부작용 최소화).
-
-    번호 공간은 **01~99**다 — `00`은 `TASK_ID_RE`(`\\d{2}`)상 형식적으로 유효하지만
-    `_next_free_number`가 1부터 세듯 제안 대상이 아니며, "모두 소진" 판정과 문구도 이
-    공간(01~99)을 기준으로 말한다(PR #1002 Codex P2 — 00을 세지 않으면서 "00~99 소진"이라
+    작동하고, 이력 조회(`history_lookup`)도 그때만 부른다(비용·부작용 최소화). 후보
+    공간은 **01~99**로 한정한다 — 100 이상은 아직 아무도 안 써 본 새 번호이지 "재사용할
+    옛 빈자리"가 아니다. `00`은 `TASK_ID_RE`상 형식적으로 유효하지만 `_next_free_number`가
+    1부터 세듯 제안 대상이 아니다(PR #1002 Codex P2 — 00을 세지 않으면서 "00~99 소진"이라
     말하던 불일치 정정).
 
-    사고 경위(2026-09-06): EOS-99가 원격 브랜치에 선점되자 ①이 None을 내고 cmd_add가
-    "00~99번을 모두 소진"이라고 보고했다 — 실측은 59/100 사용·40개는 한 번도 안 쓰임.
-    오보고가 사람 결정 게이트를 열었다(G-eos-task-prefix-exhausted).
+    ③이 HARN-97의 실제 신설분이다 — 2026-09-09 실측: `--id EOS-100`을 직접 지정해도
+    `models.TASK_ID_RE`가 정확히 2자리만 허용해 **형식 검증 단계에서** 거부됐다(①②의
+    "탐색 소진" 판정과는 다른 길 — ①②는 여기 도달하기 전에 이미 안전한 2자리 번호를
+    찾아낼 수도 있었지만, 사람이 "다음은 100번대"라는 순차 기대로 3자리를 직접 썼을
+    때도 형식 자체가 막았다). `models.TASK_ID_RE`를 2~3자리(100~999, 선행 0 없이)로
+    넓혔으므로, ②까지 전부 실패했을 때(01~99가 지금 점유돼 있거나 이력상 전부
+    쓰인 적 있음) `_next_free_number(prefix, taken, cap=999)`로 100 이상을 다시 시도한다
+    — `history="extended"`로 표시해 호출부(`cmd_add`)가 "하위 재사용"과 "3자리 확장"을
+    다른 문구로 알린다(같은 값이면 사람이 왜 100번대를 받았는지 알 수 없다).
+
+    사고 경위(2026-09-06 · HARN-73): EOS-99가 원격 브랜치에 선점되자 ①이 None을 내고
+    cmd_add가 "00~99번을 모두 소진"이라고 보고했다 — 실측은 59/100 사용·40개는 한 번도
+    안 쓰임. 오보고가 사람 결정 게이트를 열었다(G-eos-task-prefix-exhausted, Kiki 결정
+    A = 하위 재사용). 사고 경위(2026-09-09 · HARN-97): 그 A안으로 우회하며 실제 상한에
+    처음 부딪혔다 — ARCH·EOS 두 접두 모두 01~99 소진에 근접·`--id EOS-100`이 형식
+    위반으로 거부. ③은 그 다음 층을 연다.
     """
     used = [
         int(number.rsplit("-", 1)[1])
@@ -1748,14 +1775,18 @@ def _suggest_number(
         if f"{prefix}-{n:02d}" not in taken and f"{prefix}-{n}" not in taken
     )
     if not free_lower:
-        return NumberSuggestion(None, max_used, (), (), "not_needed")
+        extended = _next_free_number(prefix, taken, cap=999)
+        return NumberSuggestion(extended, max_used, (), (), "extended" if extended else "ok")
     history, reason = history_lookup(prefix)
     if history is None:
         return NumberSuggestion(None, max_used, free_lower, (), "unavailable", reason)
     retired = tuple(n for n in free_lower if n in history)
     candidates = [n for n in free_lower if n not in history]
     if not candidates:
-        return NumberSuggestion(None, max_used, free_lower, retired, "ok")
+        extended = _next_free_number(prefix, taken, cap=999)
+        return NumberSuggestion(
+            extended, max_used, free_lower, retired, "extended" if extended else "ok"
+        )
     return NumberSuggestion(f"{prefix}-{candidates[0]:02d}", max_used, free_lower, retired, "ok")
 
 
@@ -1979,6 +2010,13 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
             if verdict.suggestion is not None and verdict.history == "not_needed":
                 return _fail(base + f"다음 빈 번호 제안: {verdict.suggestion}. " + tail)
             top = f"{prefix}-{verdict.max_used:02d}"
+            if verdict.suggestion is not None and verdict.history == "extended":
+                # 하위(01~99) 재사용도 없다 — 3자리(100~999)로 확장 제안(HARN-97).
+                usable = len(verdict.free_lower) - len(verdict.retired)
+                return _fail(
+                    base + f"상위 2자리 번호 소진(최대 {top}) · 미사용 하위 번호 {usable}개도 "
+                    f"없음 — 3자리로 확장해 {verdict.suggestion} 제안(HARN-97). " + tail
+                )
             if verdict.suggestion is not None:
                 # 상위(최대+1)는 막혔지만 한 번도 쓰인 적 없는 하위 번호가 있다(HARN-73).
                 usable = len(verdict.free_lower) - len(verdict.retired)
@@ -2014,14 +2052,15 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
                     f"없어 제안하지 않는다. {remedy}. 번호를 손으로 추론해 --id로 넣지 말 것"
                     "(HARN-73). " + tail
                 )
-            # 정말 다 찼다(미사용 0, 또는 남은 번호가 전부 이력상 사용) — 3자리 제안은
-            # TASK_ID_RE 위반이라 날조하지 않는다(HARN-21 결함②). 사람의 결정이 필요.
+            # 정말 다 찼다 — 001~999(HARN-97 확장 상한) 전부가 지금 점유돼 있거나
+            # 이력상 쓰였다 사라진 번호다. TASK_ID_RE(2~3자리, 999 상한)를 지키는 다음
+            # 번호를 더 이상 제안할 수 없다 — 이 규모(접두당 999개)에 실제로 도달하는
+            # 것은 이 저장소 관측 이력상 전무하므로 사람의 결정이 필요하다(HARN-97).
             return _fail(
-                base + f"게다가 프리픽스 '{prefix}'는 01~99번을 모두 소진했다(번호 공간은 01부터 "
+                base + f"게다가 프리픽스 '{prefix}'는 001~999번을 모두 소진했다(번호 공간은 01부터 "
                 f"센다 · 미사용 0개 · 이력상 쓰였다 사라진 {len(verdict.retired)}개는 재사용 "
-                "금지) — TASK_ID_RE(정확히 "
-                "2자리 숫자)를 지키는 다음 번호를 더 이상 제안할 수 없다. 새 프리픽스로 "
-                "분리하는 등 사람의 결정이 필요하다(HARN-21). " + tail
+                "금지) — TASK_ID_RE(2~3자리 숫자, 999 상한)를 지키는 다음 번호를 더 이상 제안할 "
+                "수 없다. 새 프리픽스로 분리하는 등 사람의 결정이 필요하다(HARN-97). " + tail
             )
         if not remote_ok:
             print("  · 번호 충돌 검사: 로컬만 통과 — 머지 시 validate가 2선 방어한다")
