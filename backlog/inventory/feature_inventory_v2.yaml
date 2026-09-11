@@ -1789,8 +1789,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 2
-    test_files: 18
-    test_functions: 466
+    test_files: 19
+    test_functions: 472
     matrix:
       A_subject: 0
       B_db: 0
@@ -6460,7 +6460,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: Low
-    loc: 364
+    loc: 371
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -6469,8 +6469,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 9
-    test_files: 6
-    test_functions: 93
+    test_files: 7
+    test_functions: 99
     matrix:
       A_subject: 0
       B_db: 0
@@ -7704,8 +7704,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 1
-    test_files: 16
-    test_functions: 371
+    test_files: 17
+    test_functions: 377
     matrix:
       A_subject: 0
       B_db: 0

@@ -9713,3 +9713,36 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   xfailed, PYTEST_EXIT=0** — 코드 변경이 없으므로 회귀도 없다.
 - **정직한 공백**: 없음 — 조사 결과 acceptance 전항목이 이미 충족된 상태를 확인했고,
   범위 밖 동결(⑨)도 자명하게 성립한다(코드를 건드리지 않았다).
+
+## 2026-09-11: PED-34 — 프롬프트 원칙 6 "인지부하 관리" 신설 (LearnLM 루브릭 차용)
+
+- **배경**: `docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md`가 LearnLM
+  25항목 루브릭 중 인지부하 축(최대 비중 9/25)이 WhyMath 프롬프트 정본에 통째로
+  없는 순수 공백임을 실측했다(원칙 5개·`l4/polya/prompts.py`·템플릿 전체에서
+  응답 길이·청크·무관정보·턴당 질문 규칙 0건).
+- **해법**: `docs/standards/prompt_engineering.md`에 "6. 인지부하 관리" 신설 —
+  턴당 질문 1개·응답 길이 상한(3문장 이내)·관리 가능한 청크 분할·무관 정보/반복
+  금지·정보 제시 순서(선 유도→후 보강)를 위반 판정 가능한 문장으로 명문화.
+  `l4/polya/prompts.py`의 `_BASE_SYSTEM`(4단계 전체 공유)에 원칙 6 항목을 추가하고
+  기존 "질문 1-2개까지만"을 "질문은 정확히 1개"로 교체(원칙과 충돌하는 옛 문구를
+  남기지 않음).
+- **집행 지점(정본화≠집행)**: `tests/backend/l4/test_polya_prompts.py`(신규 9건)가
+  ①`STAGE_PROMPTS` 정본 문면 ②`PolyaCoach.decide()` → `PedagogyDecision.system`
+  (= `/v1/coach`가 LLM에 실제로 넘기는 문자열) 양쪽에서 5축 전부를 확인한다.
+- **측정 계약**: 루브릭 채점기(자동 실행기) 확장은 acceptance④가 SSM #12 파일럿
+  소관으로 명시 배제하므로, `prompt_engineering.md`의 기존 LLM-as-judge
+  `EVAL_PROMPT`에 신규 5문항(원칙 6의 5축과 1:1 대응하는 0/1 판정 문항)만 추가해
+  SSM #12가 실행할 판정 기준을 명문화했다 — 채점 로직은 재구현하지 않았다.
+- **변별력(결함 주입 — `_BASE_SYSTEM`을 구버전 "질문 1-2개"로 되돌림 → RED 확인 →
+  `cp` 백업 바이트 동일 복원)**: 원칙 6의 5축 단언 5건 + 4단계 실소비 경로 단언
+  4건, 총 9건 전부 RED → 복원 후 재확인 GREEN.
+- **원문 재확인 시도**: 리뷰 §6이 지시한 "문면 차용 전 원문 1분 재확인"을 이 세션도
+  시도했으나 `arxiv.org`가 에이전트 프록시로 여전히 차단된다(`EGRESS_BLOCKED`
+  직접 확인) — 원 검토의 confidence 표기(likely/unverified)를 그대로 승계.
+- **검증**: `tests/backend/l4/test_polya_prompts.py`(9)·`test_polya_engine.py`
+  (23, "1-2개" 텍스트 의존 0건) → 32 passed. `tests/backend/l4` 전체 1545 passed,
+  22 skipped. 전체 백엔드 스위트(python3.12 venv) → **12776 passed, 340 skipped,
+  1 xfailed, PYTEST_EXIT=0**(PED-27 시점 12767에서 +9 — 신규 테스트만큼 정확히
+  증가, 회귀 없음). `ruff`·`black --line-length 100`·`mypy --strict` clean.
+- **정직한 공백**: 원출처(2412.16429) 재확인 불가(위 참조) 외 없음 — acceptance①~⑦
+  전항목 충족.
