@@ -74,6 +74,7 @@ from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.hint_usage import HintUsage
+from whymath_backend.db.models.job_ownership import JobOwnership
 from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
@@ -120,6 +121,7 @@ _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
     (EvidenceLink, "student_id"),  # 증거 그래프(user CASCADE이나 명시 삭제로 보고 일관)
     (DeviceCredential, "user_id"),
     (RefreshTokenSession, "user_id"),
+    (JobOwnership, "user_id"),  # SEC-27: 비동기 QUALITY 작업 소유권·느슨참조(job_id FK 아님)
     (ParentalConsent, "user_id"),
     (UserTrackHistory, "user_id"),
     (UserPersonaHistory, "user_id"),

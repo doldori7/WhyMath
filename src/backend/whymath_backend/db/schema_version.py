@@ -141,6 +141,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "d2f4a68b91e7",  # MISC-20: misconception_hypothesis.deactivated_reason — 해소율 정직화 축
     "e3b5c79d02f8",  # MISC-20: evidence_links.provenance — 해소 판정의 출처 축(가중치 추론 폐기)
     "19149e92d368",  # SEC-33 ⑥: problem_attempt.ingested_at server_default(신규 행 좌석 보장)
+    "f2662166a661",  # SEC-27: job_ownership — 비동기 QUALITY 작업 소유권(job_id→user_id)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]
