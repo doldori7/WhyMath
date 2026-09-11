@@ -99,8 +99,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 9
-    test_files: 22
-    test_functions: 496
+    test_files: 23
+    test_functions: 503
     matrix:
       A_subject: 0
       B_db: 0
@@ -165,7 +165,7 @@ features:
     db_model_modules: 0
     coupling_count: 6
     test_files: 5
-    test_functions: 135
+    test_functions: 139
     matrix:
       A_subject: 1
       B_db: 0
@@ -4975,7 +4975,7 @@ features:
     db_model_modules: 0
     coupling_count: 3
     test_files: 70
-    test_functions: 1471
+    test_functions: 1475
     matrix:
       A_subject: 1
       B_db: 0
@@ -5040,7 +5040,7 @@ features:
     db_model_modules: 0
     coupling_count: 4
     test_files: 15
-    test_functions: 239
+    test_functions: 243
     matrix:
       A_subject: 0
       B_db: 0
@@ -5104,8 +5104,8 @@ features:
     mixed_deps: [l3.pregenerate.validator]
     db_model_modules: 0
     coupling_count: 4
-    test_files: 33
-    test_functions: 791
+    test_files: 34
+    test_functions: 798
     matrix:
       A_subject: 1
       B_db: 0
@@ -5170,7 +5170,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 5
-    test_functions: 97
+    test_functions: 101
     matrix:
       A_subject: 1
       B_db: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 196
-    test_functions: 2984
+    test_functions: 2988
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 76
-    test_functions: 1518
+    test_functions: 1522
     matrix:
       A_subject: 1
       B_db: 1
@@ -8800,7 +8800,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 2402
+    loc: 2475
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 201
-    test_functions: 3011
+    test_files: 202
+    test_functions: 3025
     matrix:
       A_subject: 3
       B_db: 0

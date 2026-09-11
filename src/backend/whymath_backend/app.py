@@ -46,6 +46,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from whymath_backend.api._auth import CurrentUser, has_scope_consent
 from whymath_backend.api._device_store import (
@@ -764,6 +766,49 @@ def create_app(
         redoc_url=None if _prod_like else "/redoc",
         openapi_url=None if _prod_like else "/openapi.json",
     )
+    # SEC-26(48_보안 §P0 "CORS/보안 헤더 미들웨어" 갭): TrustedHost → CORS → 보안 헤더 순으로
+    # 가장 먼저 건다(등록 순서 = 바깥 래핑 순서 — 나쁜 Host를 가장 먼저 걷어내고, preflight를
+    # CORS가 처리하고, 마지막으로 모든 응답에 보안 헤더를 얹는다). 셋 다 *항상* 등록한다 —
+    # allowlist가 비어 있으면 각자 안전한 기본 자세로 수렴한다(TrustedHost는 `*`=현재 동작
+    # 무회귀, CORS는 deny-by-default=네이티브 앱 미영향). 와일드카드+credentials 조합은
+    # `Settings._forbid_cors_wildcard_with_credentials`가 부팅 시점에 이미 막았다.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings_for_app.trusted_hosts_list)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings_for_app.cors_allowed_origins_list,
+        allow_credentials=settings_for_app.cors_allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.middleware("http")
+    async def _security_headers_middleware(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        """모든 응답에 보안 헤더를 얹는다(SEC-26 — 48_보안 §P0 "CORS/보안 헤더" 갭 해소).
+
+        `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy`는 항상 적용한다(다운사이드
+        없음 — `/docs` 등 스키마 표면도 프레이밍·스니핑 보호를 받아야 마땅하다). `Strict-
+        Transport-Security`·`Content-Security-Policy`는 `_prod_like`에서만 적용한다 — CSP
+        `default-src 'none'`은 이 API가 JSON 전용이라 안전하지만 Swagger UI(`/docs`)는 CDN
+        스크립트·스타일을 로드해야 렌더링되므로, 개발 환경(docs 활성)에서 CSP를 걸면 그
+        페이지가 깨진다. `_prod_like`에서는 `docs_url`이 이미 None(라우트 자체가 없음)이라
+        이 충돌이 발생하지 않는다 — 즉 CSP 게이팅은 기존 docs_url 게이팅과 정확히 같은 축을
+        재사용한다(별도 판정 좌석을 만들지 않음).
+        """
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if _prod_like:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=63072000; includeSubDomains; preload"
+            )
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+        return response
+
     # 기본 provider는 CompositeProvider — cost_tier로 로컬(Ollama)↔클라우드(Anthropic)
     # 디스패치(S5). 둘 다 지연이라 구성 시 라이브 Ollama·Anthropic 키가 필요 없다.
     # (OPS-01) 변수로 잡아 두는 이유: 기본 readiness probes가 같은 provider의

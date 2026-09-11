@@ -750,6 +750,94 @@ class TestDocsProdSurfaceGate:
             get_settings.cache_clear()  # 다음 테스트로 kakao 구성 누수 방지.
 
 
+class TestSecurityHeadersMiddleware:
+    """SEC-26(48_보안 §P0 "CORS/보안 헤더 미들웨어" 갭) — 모든 응답에 보안 헤더가 얹힌다.
+
+    HSTS·CSP는 `_prod_like`에서만(도크스 게이팅과 같은 축 재사용 — `TestDocsProdSurfaceGate`와
+    동일한 kakao env 트리거 패턴). 나머지 3종은 항상.
+    """
+
+    def _client(self) -> TestClient:
+        app = create_app(
+            provider=StubProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(),
+        )
+        return TestClient(app)
+
+    def test_always_on_headers_present_in_dev(self) -> None:
+        """dev(kakao 미설정) → nosniff·DENY·referrer-policy는 있고 HSTS·CSP는 없다."""
+        get_settings.cache_clear()
+        try:
+            resp = self._client().get("/health")
+            assert resp.headers["x-content-type-options"] == "nosniff"
+            assert resp.headers["x-frame-options"] == "DENY"
+            assert resp.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+            assert "strict-transport-security" not in {k.lower() for k in resp.headers}
+            assert "content-security-policy" not in {k.lower() for k in resp.headers}
+        finally:
+            get_settings.cache_clear()
+
+    def test_hsts_and_csp_present_when_production_like(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """kakao 구성(프로덕션 추정) → HSTS·CSP가 추가로 실린다."""
+        monkeypatch.setenv("WHYMATH_KAKAO_CLIENT_ID", "prod-kakao-id")
+        get_settings.cache_clear()
+        try:
+            resp = self._client().get("/health")
+            assert resp.headers["strict-transport-security"] == (
+                "max-age=63072000; includeSubDomains; preload"
+            )
+            assert resp.headers["content-security-policy"] == (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+            # 상시 헤더도 여전히 실린다(축소가 아니라 추가).
+            assert resp.headers["x-content-type-options"] == "nosniff"
+        finally:
+            get_settings.cache_clear()
+
+
+class TestTrustedHostMiddleware:
+    """SEC-26 — TrustedHostMiddleware. 미설정(기본) → `*`(무회귀). 설정 시 Host 헤더 검증."""
+
+    def test_default_allows_any_host(self) -> None:
+        """미설정 → 어떤 Host 헤더든 통과(현재 동작 무회귀)."""
+        get_settings.cache_clear()
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            resp = TestClient(app, base_url="http://anything.example.com").get("/health")
+            assert resp.status_code == 200
+        finally:
+            get_settings.cache_clear()
+
+    def test_configured_allowlist_rejects_mismatched_host(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """WHYMATH_TRUSTED_HOSTS_ALLOWLIST 설정 시, 목록 밖 Host는 400으로 거부된다."""
+        monkeypatch.setenv("WHYMATH_TRUSTED_HOSTS_ALLOWLIST", "api.whymath.kr")
+        get_settings.cache_clear()
+        try:
+            app = create_app(
+                provider=StubProvider(),
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=StubQueue(),
+            )
+            ok = TestClient(app, base_url="http://api.whymath.kr").get("/health")
+            assert ok.status_code == 200
+            rejected = TestClient(app, base_url="http://evil.example.com").get("/health")
+            assert rejected.status_code == 400
+        finally:
+            get_settings.cache_clear()
+
+
 class TestParseAppVersion:
     """`_parse_app_version` 순수 함수 단위테스트(OPS-17) — 외부 semver 라이브러리 없이 정수
     3튜플 비교로 버전을 가른다."""

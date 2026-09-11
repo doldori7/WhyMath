@@ -338,6 +338,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-09-11 (구현·SEC-26): **CORS/보안 헤더 미들웨어 배선 — 48_보안 §P0 갭 해소, "네이티브 앱이라 미적용" 원 결정을 그대로 흡수하는 deny-by-default 설계** (claude 구현) — 판정 기준 main `97fb89fb`
+
+- **배경**: `docs/architecture/48_eos_security_access_control.md`(§18 P0 목록·§제2부 매핑 L829)가 "CORS/보안 헤더 미들웨어 없음"을 EOS P0 갭으로 명시. 원 결정(2026-08-11 SEC-24)은 "학생 클라가 Flutter 네이티브 앱이라 브라우저 CORS 미적용" — 그 논리 자체는 여전히 유효하지만, `src/web/`(웹 클라)이 이제 저장소에 실재하고 `ADMIN-06`(백오피스 웹 셸)이 향후 브라우저에서 이 API를 호출할 예정이라 미들웨어 부재가 더는 안전하지 않다.
+- **설계**: `config.py`에 `cors_allowed_origins`(콤마 구분, 기본 "")·`cors_allow_credentials`(기본 False)·`trusted_hosts_allowlist`(콤마 구분, 기본 "") 3필드 + 파싱 프로퍼티 2종(`oauth_redirect_uri_allowlist`·`trusted_proxy_ip_allowlist`와 동일 패턴) 추가. `app.py::create_app`에서 TrustedHostMiddleware → CORSMiddleware → 커스텀 보안 헤더 미들웨어 순으로 **항상** 등록 — allowlist가 비면 각자 안전한 기본 자세로 수렴한다(TrustedHost `*`=현재 동작 무회귀, CORS 빈 리스트=deny-by-default·네이티브 앱 미영향, 원 결정과 실질적으로 동치). 보안 헤더는 `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy` 상시 + `Strict-Transport-Security`·`Content-Security-Policy`는 `_prod_like`(기존 docs_url 게이팅과 같은 판정 좌석 재사용 — 새 축을 만들지 않음. CSP `default-src 'none'`을 dev에 걸면 `/docs`(Swagger UI, CDN 스크립트 필요)가 깨지므로, docs가 이미 비활성인 prod에서만 적용해 충돌을 원천 차단).
+- **와일드카드+credentials 금지 = 부팅 시점 강제**: `Settings.model_validator`가 `cors_allowed_origins`에 `*`와 `cors_allow_credentials=True`가 동시 설정되면 `ValidationError`로 부팅을 막는다 — 브라우저 Fetch 표준도 이 조합을 금지하지만 그 실패는 브라우저에서 조용히 일어나므로(CLAUDE.md "확실하지 않을 때 침묵 금지"), 서버 쪽에서 fail-closed로 만들었다.
+- **RED-before-fix 검증**: 미들웨어 등록 블록 전체를 제거하는 뮤테이션 → `TestSecurityHeadersMiddleware`·`TestTrustedHostMiddleware`·`test_cors_policy_freeze.py` 5/7건이 RED로 반응(2건은 "기본값이 비어 있어도 결과가 같은" 대조 테스트라 불변 — 설계상 정상). `model_validator` 제거 뮤테이션 → `test_cors_wildcard_with_credentials_rejected_at_boot` RED. 원복은 `cp` 백업으로 실행(git 계열 원복 금지 준수), `diff` 바이트 동일 확인.
+- **`test_cors_policy_freeze.py` 전면 갱신**: 원 결정("미들웨어 없음")을 동결하던 테스트를 갱신 결정("미들웨어 있음·deny-by-default")을 동결하는 형태로 교체 — 그 파일 자신의 docstring이 이미 "이 테스트가 실패하면(=CORSMiddleware가 조용히 추가됨) 그 갱신 없이 결정이 우회된 것"이라고 예고해 둔 대로.
+- **범위 경계**: `trusted_hosts_allowlist`·`cors_allowed_origins` 둘 다 프로덕션 값은 미설정(배포 시 설정 필요 — 그때까지는 각각 안전한 기본 자세 유지). `ADMIN-06`은 아직 미착수(S4)라 하드 의존 없이 독립 진행(acceptance①이 "선행 권장"으로만 명시).
+
 ### 2026-09-10 (사고·재발방지·규칙 등재): **증거를 실행용 펜스에 담아 냈다 — 붙여넣기 실행 사고 2회차, 규칙 축이 실패했으므로 코드 축으로 간다** (Kiki 붙여넣기 실행·오류 제보, claude 원인 규명·규칙/태스크 등재) — 판정 기준 main `091dd3c5`
 
 - **무엇이 일어났나**: `OPS-72` 착지 보고에서 세션이 **검증 증거**를 실행용 코드펜스에 담았다 — 커밋 메시지 한 줄(`b64f470d  OPS-72: … (#1065)`)과 `git cat-file -e origin/main:<경로>  → 존재` 두 줄. Kiki가 그 펜스를 통째로 붙여넣어 PowerShell에서 3건이 터졌다: **ParserError**(메시지 끝 `(#1065)`를 식으로 파싱 — "'(' 뒤에 식이 와야 합니다") 1건 + **`fatal: too many arguments`**(`→ 존재`가 git의 두 번째 인자가 됨) 2건. 전부 읽기 전용 명령이라 **피해 0**.
