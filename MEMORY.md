@@ -9563,3 +9563,43 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   소스 미변경이라 회귀 없음 확인용) · `backlog.py validate` green.
 - **정직한 공백**: 실 PG가 필요한 21파일 교차 오염 재현(원래 acceptance③)은 CI 또는
   Phaiakes9에서만 확인 가능 — 이 세션은 하지 못했다.
+
+## 2026-09-11: OPS-64 — 오프사이트 미러 실패가 감시에 안 보이던 상태(Step 7/Step 9 기록 순서) 해소
+
+- **배경**: 2026-09-06 게이트 `G-backup-offsite-move` 실행 중 발견. `backup_whymath_pg.ps1`은
+  266줄(Step 7)에서 `backup_status.json`에 "성공"을 기록하고, 오프사이트 미러(Step 9·
+  302줄~)는 그 뒤에 온다. Step 9의 모든 실패 경로는 `Fail`(exit 1)이지만 그 시점엔 이미
+  대장에 성공이 적혀 있다 — 매일 09:00 `WhyMath-DB-Backup-Check`가 그 대장만 읽으므로
+  미러가 매 회차 실패해도 "정상"으로 보인다.
+- **해법(acceptance② 선택지 b)**: `backup_status.py`의 `BackupStatus`에
+  `offsite_requested`/`offsite_ok`/`offsite_destination`/`offsite_size_bytes` 4필드를
+  추가하고, `evaluate_backup_health`가 `offsite_requested and not offsite_ok`를 별도
+  사유 `offsite_failed`(exit 1)로 판정한다 — `--require-encrypted`와 무관하게 항상 본다
+  (오프사이트 도착 여부는 로컬 암호화 정책과 별개 사실). PS1 쪽은 `Write-BackupStatus`를
+  **두 번** 부른다: Step 7에서 `-OffsiteRequested`/`-OffsiteDestination`만 넘긴 비관적
+  기록(`OffsiteOk`는 함수 기본값 `$false`), Step 9의 모든 `Fail` 갈래(디렉터리 생성·복사·
+  존재확인·사이즈대조·보존삭제·평문잔존검사)를 지난 뒤에만 `-OffsiteOk $true`로 재기록한다.
+  (a)안(Step 9 뒤로 옮기기)은 채택하지 않았다 — 백업 자체는 성공했는데 미러 단계 예외로
+  레코드가 전혀 안 쓰이면 `stale`로 오경보하는 부작용이 있다.
+- **변별력(결함 주입 3건, 각각 RED 확인 후 백업으로 바이트 동일 복원)**:
+  ① Step 7 호출에서 `-OffsiteRequested`/`-OffsiteDestination` 제거 →
+  `test_step7_records_offsite_request_pessimistically` RED.
+  ② Step 9 성공 경로의 재기록 호출을 삭제 →
+  `test_step9_success_overwrites_with_optimistic_offsite_status` RED
+  ("정확히 1건" 단언 `0 == 1`).
+  ③ 같은 재기록 호출을 사이즈 대조 `Fail`보다 **앞**(오프사이트 사이즈 산출 직후)으로
+  옮김 → 순서 불변식 단언 RED(`call_idx 36 <= last_fail_idx 56`) — Step 9가 아직
+  실패할 수 있는 시점에 낙관적 레코드가 쓰이는 회귀를 별도로 잡는다.
+  파이썬 판정 축은 `test_offsite_failure_is_invisible_without_the_new_fields`가 같은
+  `evaluate_backup_health` 함수에 두 입력을 넣어 사고 재현(①: 신규 필드 없는 레코드는
+  오프사이트 요청·실패 여부와 무관하게 항상 `ok=True` — 구버전 동작 그대로)과 수정 후
+  판정(②: `offsite_failed`)을 대조한다.
+- **검증**: `tests/infra/test_backup_encryption.py` 85 passed(신규 13건 — PS1 텍스트
+  동결 2건·Python 실동작 8건·CLI 와이어링 3건). `ruff check`·
+  `black --check --line-length 100` clean(기존 line-too-long 1건 발견해 f-string을
+  변수로 분리해 해소). `tests/infra` 전체·`src/backend` 전체 스위트 재확인 — 결과는
+  아래 세션 로그 참조.
+- **정직한 공백**: `mypy scripts/backup/backup_status.py`가 record 서브커맨드의
+  `status` 재대입(`BackupStatus | None` → `BackupStatus`)에서 기존에 이미 내던
+  Incompatible-types 경고 1건이 이번 편집으로 줄 번호만 이동했다(267→329) — 이 태스크
+  범위(오프사이트 상태 필드 추가) 밖의 선행 결함이라 손대지 않았다. 별도 추적이 필요하다.
