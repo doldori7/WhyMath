@@ -46,9 +46,13 @@ from whymath_backend.l2.learning_path import LearningPath, LearningStep
 from whymath_backend.l2.recommendation_evidence import (
     EVENT_TYPE_RECOMMENDATION_TREATMENT,
     META_KEY_APPLIED_WEIGHTS,
+    META_KEY_CANDIDATES,
     META_KEY_MODE,
+    META_KEY_POLICY_VERSION,
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
+    POLICY_VERSION_CAT,
+    POLICY_VERSION_SUNEUNG,
 )
 from whymath_backend.l2.strong_concept_recommendation import StrongConceptRecommendation
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
@@ -1748,6 +1752,21 @@ class TestNextProblem:
         assert META_KEY_MODE not in row.meta  # 기본 CAT은 mode 미기록
         assert session.commits == 1
 
+    def test_recommendation_records_candidates_and_policy_version(self) -> None:
+        """REC-11 — 기본 CAT 처치 기록에 candidates[]·policy_version=cat_v1이 함께 실린다."""
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, 1.0)])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_CAT
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(pid_a), str(pid_b)}
+        # 점수 내림차순 — b=0(θ와 일치)이 정보량 최대이므로 pid_a(difficulty_to_logit(3.0)≈0)가
+        # pid_b(irt_b=1.0, θ=0에서 멀어 정보량 낮음)보다 위.
+        assert candidates[0]["problem_id"] == str(pid_a)
+
     def test_recommendation_records_applied_weights_true_when_weak_concept_used(
         self,
     ) -> None:
@@ -2104,6 +2123,25 @@ class TestNextProblemSuneungMode:
         assert row.meta[META_KEY_MODE] == "suneung"
         assert row.meta[META_KEY_PROBLEM_ID] == str(problem.problem_id)
         assert session.commits == 1
+
+    def test_recommendation_records_candidates_and_policy_version_suneung(self) -> None:
+        """REC-11 — 수능 모드 처치 기록에 candidates[]·policy_version=suneung_v1이 실린다.
+
+        적격(시그니처 보유)·부적격(수능 신호 전무) 후보를 함께 넣어 candidates[]가 부적격을
+        빼고 적격만 담는지(진실 게이트 재적용)까지 함께 확인한다.
+        """
+        eligible = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        ineligible = _suneung_problem()  # 수능 신호 전무 → is_suneung_eligible=False
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([_OrmProblemRow(eligible), _OrmProblemRow(ineligible)])]
+        )
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?mode=suneung")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_SUNEUNG
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(eligible.problem_id)}
 
     def test_purpose_learning_applies_in_suneung_mode_too(self) -> None:
         """REC-04 — purpose는 mode와 직교한다: 수능 모드에서도 밴드 안 후보가 선택된다."""
