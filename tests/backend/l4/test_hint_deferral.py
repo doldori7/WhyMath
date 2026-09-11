@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
+from whymath_backend.l4.hint_deferral import (
+    REVEALS,
+    decide_hint_level,
+    is_ceiling_reached,
+)
 from whymath_backend.l4.lthc.models import MasteryLevel
 
 
@@ -281,3 +285,26 @@ class TestCeilingGuarantee:
                 )
                 >= 3
             )
+
+
+class TestCeilingReachedTelemetryHook:
+    """PED-35 acceptance③ — `is_ceiling_reached` 순수 훅("작동한 비율" 집계용)."""
+
+    def test_reached_when_stuck_and_level_at_least_3(self) -> None:
+        assert is_ceiling_reached(hint_level=3, turn_count=5) is True
+        assert is_ceiling_reached(hint_level=4, turn_count=6) is True
+
+    def test_not_reached_when_stuck_but_level_below_3(self) -> None:
+        # 규칙 6이 무력화된(가정) 경우를 재현 — 막힘 상태인데 레벨이 3 미달.
+        assert is_ceiling_reached(hint_level=2, turn_count=5) is False
+
+    def test_not_reached_when_not_stuck_even_if_level_high(self) -> None:
+        # 막힘 임계 미달이면 상한 보장 자체가 무관 — 레벨이 높아도 "도달" 집계 대상 아님.
+        assert is_ceiling_reached(hint_level=4, turn_count=1) is False
+
+    def test_matches_decide_hint_level_real_output(self) -> None:
+        # 실제 decide_hint_level 출력과 조합해도 일관됨(정본화가 재계산이 아니라 재사용임을 확인).
+        level = decide_hint_level(
+            student_input="음...", turn_count=5, prev_hint_level=1, mastery_level="숙달"
+        )
+        assert is_ceiling_reached(hint_level=level, turn_count=5) is True
