@@ -8549,8 +8549,8 @@ features:
     mixed_deps: [schema.enums]
     db_model_modules: 2
     coupling_count: 7
-    test_files: 75
-    test_functions: 1512
+    test_files: 76
+    test_functions: 1516
     matrix:
       A_subject: 1
       B_db: 1

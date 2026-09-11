@@ -9527,3 +9527,39 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   "같은 블록의 앞선 줄에서 `if (...Response...)`로 진리값 검사"로 좁혔다 — 변수에 대입한
   뒤 별도로 검사하는 형태는 미탐 허용. .ps1 파일(BOM·괄호·call-before-def) 축은 이번
   범위 밖 — 신규 규칙 3종은 전부 런북 마크다운 전용(`check_runbook_markdown`)이다.
+
+## 2026-09-11: OPS-63 — 통합 테스트 레이트리미터 전역 격리 (OPS-06/07과 같은 유형 2회차)
+
+- **배경**: `configure_backend_from_settings` 호출처가 0건이라 FastAPI 앱마다 백엔드가
+  재설치되지 않고, 같은 pytest 프로세스에서 도는 통합 테스트 21파일이 프로세스 전역
+  `whymath_backend.api._rate_limit._BACKEND`(기본 InMemoryBackend)의 IP 쓰기 버킷을
+  공유한다 — 2026-09-06 실측으로 같은 커밋의 실 PG 통합 잡이 pytest-randomly 순서
+  차이만으로 07:29 green → 09:39 red로 갈렸다. `db.session._engine` 전역 오염
+  (OPS-06 → OPS-07 가드) 이후 같은 유형의 전역 오염 2회차 — CLAUDE.md 실수 관리
+  규칙(반복 실수 재발방지 등재 의무)에 따라 등재된 태스크.
+- **해법**: `tests/backend/conftest.py`에 오토유즈 픽스처
+  `_reset_rate_limit_store_before_test`를 신설 — 모든 백엔드 테스트 **시작 시**
+  `InMemoryBackend`일 때만 `reset_store()`를 호출한다(Redis 설정은 건드리지 않음).
+  로직은 `reset_inmemory_rate_limit_store()`라는 순수 함수로 분리해 `_db_leak_guard`
+  (OPS-07 선례)와 동형으로 pytest 스케줄링과 무관하게 직접 테스트할 수 있게 했다.
+- **OPS-07과의 경계(acceptance④)**: OPS-07은 테스트 **종료** 시 전역 누수를 탐지·귀책하고
+  hermetic에만 적용된다. 이 픽스처는 테스트 **시작** 시 카운트를 비우는 *격리*이고
+  hermetic·integration 양쪽 모두에 적용된다 — 귀책 축은 추가하지 않는다(레이트리미터
+  카운트는 정상 동작의 잔여물이지 누수가 아니다).
+- **acceptance③-정정(PR #1001 Codex P2) 이행**: 원래 제안된 두 파일 순서 재현은 IP 쓰기
+  한도(60/분)에 못 미쳐(≈38) 변별력이 없다고 이미 정정돼 있었다 — 시딩 기반 절차로
+  교체됐다. `tests/backend/api/test_rate_limit_fixture_isolation.py`(신규, 4건)가 그
+  hermetic 축을 구현: ①IP 쓰기 버킷에 60건 직접 시딩 → 헬퍼 미호출 상태에서 429 재현
+  ②같은 시딩 후 헬퍼 호출 → 재요청 통과(격리가 실제로 비움) ③Redis 백엔드로 교체한
+  상태에서 헬퍼가 `.reset()`을 호출하지 않음(acceptance① 경계) ④이 테스트 자신도
+  오토유즈 픽스처의 수혜를 받는지 확인. pytest-randomly 순서와 무관하게 직접 함수
+  호출로 검증했다 — 순서 의존 검증은 순서가 바뀌면 조용히 무의미해진다는 게 이 태스크
+  자체의 발단이었다. 21개 파일의 실제 순서 재현(실 PG 필요 축)은 이 세션의 샌드박스에
+  pgvector·docker가 없어 재현 불가 — CI의 "backend — 마이그레이션·통합 (실 PG)" 잡이
+  이 픽스처 적용 상태로 green인지로 간접 확인한다(태스크 notes가 이미 이 한계를 명시).
+- **검증**: `test_rate_limit_fixture_isolation.py` 4 passed(무작위 순서로도 안정) ·
+  `test_coach.py`(285) · `tests/backend/api` 전체(1583 passed·131 skipped) ·
+  `ruff check`·`black --check --line-length 100`·`mypy --strict whymath_backend`(clean,
+  소스 미변경이라 회귀 없음 확인용) · `backlog.py validate` green.
+- **정직한 공백**: 실 PG가 필요한 21파일 교차 오염 재현(원래 acceptance③)은 CI 또는
+  Phaiakes9에서만 확인 가능 — 이 세션은 하지 못했다.
