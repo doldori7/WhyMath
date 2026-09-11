@@ -9791,3 +9791,47 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   (EOS 인벤토리 신규 함수 반영 재생성 2회 — `is_ceiling_reached` 추가 후 재확인
   누락 방지). `ruff`·`black --line-length 100`·`mypy --strict` clean.
 - **정직한 공백**: 위 acceptance②·③ 범위 제한 참조 외 없음.
+
+## 2026-09-11: REC-11 — candidates[]·policy_version 영속 (추천 오프라인 평가 소급 불가 축 해소)
+
+- **배경**: `/v1/me/next-problem`의 처치 기록(`record_recommendation_treatment`, REC-03)은
+  "어떤 문항이 나갔는지"만 기록했고 "그때 무엇과 비교해 선택됐는지"는 기록하지 않았다 —
+  선택 알고리즘(정책)이 나중에 바뀌면 과거 로그로 그 시점 정책의 소급 평가(off-policy
+  evaluation)를 할 수 없다(EOS-53 crosswalk 갭 #5 E6 — `policy_version` 전수 grep 0
+  실측으로 확정).
+- **해법**: `l2/recommendation_evidence.py`의 `record_recommendation_treatment`에
+  `candidates: list[tuple[uuid.UUID, float]] | None`·`policy_version: str | None` 선택
+  인자 신설(둘 다 생략하면 회귀 0). `candidates`는 점수 내림차순 상위
+  `CANDIDATES_META_CAP=10`건만 저장(원 풀 최대 50건 전량 저장은 과공학 — `pool_size`가
+  원 풀 크기를 이미 별도 기록). `POLICY_VERSION_CAT="cat_v1"`/
+  `POLICY_VERSION_SUNEUNG="suneung_v1"` 상수 신설.
+- **집행 지점(정본화≠집행)**: 원 태스크 `paths`가 실 호출부(`api/me.py`)를 빠뜨려 "정본화만
+  하고 아무도 호출 안 함" 사고를 만들 뻔했다 — 발견 후 `backlog.py amend --path`로
+  `api/me.py`·`ops/recommendation_reach_report.py`를 추가하고 두 분기 모두 배선했다.
+  기본 CAT 분기는 이미 계산된 `items`·`weights`를 재사용(새 쿼리 0). 수능 분기는
+  `recommend_suneung_index`(L6) 내부 공식(적격 게이트×정보량×수능우선순위×약점가중)을
+  *미러해 재계산*한다 — 이미 정해진 `chosen_index`는 그대로 쓰므로 결정에는 영향
+  없음(관측 재계산일 뿐). **정직한 공백**: 그 함수의 알고리즘이 바뀌면 이 미러도 함께
+  갱신해야 한다(코드 주석 2곳에 드리프트 위험 명시) — 선택된 `problem_id` 자체는 항상
+  정확하고 `candidates[]`의 점수만 영향받을 수 있다.
+- **acceptance②(followed 결과 결합)**: REC-03 docstring이 이미 동결한 것과 동일 이유(실
+  `session_id` 미배선)로 범위 밖임을 모듈 docstring에 명시 — 이 좌석은 결과를 결합하지
+  않는다.
+- **acceptance③("작동한 비율")**: `ops/recommendation_reach_report.py`(REC-01 기존 4축)에
+  5번째 축 신설 — `recommendation_render` 처치 전체 중 `meta.candidates`·
+  `meta.policy_version`이 둘 다 실린 건수의 비율(JSONB `has_key` 2회 AND). 분모(처치
+  전체)가 0이면 비율은 **None**(0/0을 지어내지 않는다 — 이 리포트의 기존 None-vs-0
+  회계 원칙 승계).
+- **변별력(RED-before-fix 3회, `cp` 백업/복원 — git 계열 원복 금지 준수, 매회 바이트
+  동일 확인)**: (a) `record_recommendation_treatment`의 meta 기록 로직 제거 → 신규 4건
+  중 값 검증 3건 정확히 RED(absence-only 1건은 애초에 무관) (b) `build_report`의 rate
+  계산을 `0.0`으로 뮤테이션 → rate 단언 7건 정확히 RED(무관 9건 GREEN 유지) (c)
+  `api/me.py` 두 호출부의 `candidates=`·`policy_version=` 인자 제거 → API 레벨 신규
+  2건(CAT·수능 분기 각 1건) 정확히 RED.
+- **검증**: `test_recommendation_evidence.py` 12 passed(+4)·`test_me.py` 192
+  passed(+2)·`test_recommendation_reach_report.py` 16 passed(+5). 전체 백엔드 스위트
+  → **12795 passed, 340 skipped, 1 xfailed, PYTEST_EXIT=0**(PED-35 시점 12784에서
+  +11 — 신규 테스트 수만큼 정확히 증가, 회귀 없음). `tests/infra` 1303 passed, 1
+  skipped(EOS 인벤토리 신규 함수 3개 반영 재생성). `ruff`·`black --line-length
+  100`·`mypy --strict` clean.
+- **정직한 공백**: 위 수능 분기 점수 산정의 미러-드리프트 위험 외 없음.

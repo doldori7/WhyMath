@@ -685,7 +685,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 6
-    test_functions: 290
+    test_functions: 292
     matrix:
       A_subject: 1
       B_db: 1
@@ -750,7 +750,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 5
-    test_functions: 247
+    test_functions: 249
     matrix:
       A_subject: 1
       B_db: 1
@@ -815,7 +815,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 2
-    test_functions: 202
+    test_functions: 204
     matrix:
       A_subject: 0
       B_db: 1
@@ -880,7 +880,7 @@ features:
     db_model_modules: 1
     coupling_count: 5
     test_files: 4
-    test_functions: 227
+    test_functions: 229
     matrix:
       A_subject: 1
       B_db: 1
@@ -945,7 +945,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 5
-    test_functions: 231
+    test_functions: 233
     matrix:
       A_subject: 0
       B_db: 1
@@ -1010,7 +1010,7 @@ features:
     db_model_modules: 1
     coupling_count: 7
     test_files: 4
-    test_functions: 231
+    test_functions: 233
     matrix:
       A_subject: 0
       B_db: 1
@@ -1075,7 +1075,7 @@ features:
     db_model_modules: 2
     coupling_count: 5
     test_files: 4
-    test_functions: 287
+    test_functions: 289
     matrix:
       A_subject: 0
       B_db: 1
@@ -1140,7 +1140,7 @@ features:
     db_model_modules: 3
     coupling_count: 7
     test_files: 5
-    test_functions: 244
+    test_functions: 246
     matrix:
       A_subject: 0
       B_db: 2
@@ -1205,7 +1205,7 @@ features:
     db_model_modules: 0
     coupling_count: 1
     test_files: 4
-    test_functions: 226
+    test_functions: 228
     matrix:
       A_subject: 0
       B_db: 0
@@ -1400,7 +1400,7 @@ features:
     db_model_modules: 1
     coupling_count: 8
     test_files: 7
-    test_functions: 238
+    test_functions: 240
     matrix:
       A_subject: 1
       B_db: 1
@@ -1530,7 +1530,7 @@ features:
     db_model_modules: 0
     coupling_count: 5
     test_files: 33
-    test_functions: 516
+    test_functions: 518
     matrix:
       A_subject: 0
       B_db: 0
@@ -4650,7 +4650,7 @@ features:
     db_model_modules: 5
     coupling_count: 9
     test_files: 11
-    test_functions: 330
+    test_functions: 332
     matrix:
       A_subject: 1
       B_db: 2
@@ -4715,7 +4715,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 16
-    test_functions: 638
+    test_functions: 640
     matrix:
       A_subject: 1
       B_db: 1
@@ -4770,7 +4770,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop"
     migration_risk: Med
-    loc: 660
+    loc: 715
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 5
@@ -4780,7 +4780,7 @@ features:
     db_model_modules: 2
     coupling_count: 6
     test_files: 10
-    test_functions: 253
+    test_functions: 259
     matrix:
       A_subject: 1
       B_db: 1
@@ -4793,7 +4793,7 @@ features:
     keep_criteria_met: 6/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
-    fan_in: 6
+    fan_in: 7
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -7185,7 +7185,7 @@ features:
     db_model_modules: 4
     coupling_count: 13
     test_files: 26
-    test_functions: 878
+    test_functions: 880
     matrix:
       A_subject: 0
       B_db: 2
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 330
-    test_functions: 5960
+    test_functions: 5962
     matrix:
       A_subject: 3
       B_db: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 196
-    test_functions: 2982
+    test_functions: 2984
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 76
-    test_functions: 1516
+    test_functions: 1518
     matrix:
       A_subject: 1
       B_db: 1
@@ -9385,29 +9385,29 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 2829
+    loc: 2900
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 25
     own_modules: 4
     adapter_deps: []
     mixed_deps: [schema.enums]
-    db_model_modules: 5
-    coupling_count: 11
+    db_model_modules: 6
+    coupling_count: 13
     test_files: 5
-    test_functions: 120
+    test_functions: 125
     matrix:
       A_subject: 1
-      B_db: 2
+      B_db: 3
       C_coupling: 2
       D_tests: 0
       E_state: 3
       F_data: 3
-    matrix_total: 11
+    matrix_total: 12
     criteria_action: KEEP
     keep_criteria_met: 5/6
     replace_signals: 0/6
-    action_basis: "매트릭스 11점(10~13)"
+    action_basis: "매트릭스 12점(10~13)"
     fan_in: 0
     contract_gaps: 0
     duplicate_of: ""
