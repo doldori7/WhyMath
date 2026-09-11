@@ -1337,6 +1337,9 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     if args.gate_action == "add":
         return _cmd_gates_add(root, args, backlog)
 
+    if args.gate_action == "show":
+        return _cmd_gates_show(args, backlog)
+
     gate = backlog.gates.get(args.gate_id)
     if gate is None:
         return _fail(f"게이트 '{args.gate_id}' 없음")
@@ -1452,6 +1455,52 @@ def _print_gate_release_reminder(
             )
     else:
         print("  · 산문 참조(requires_gates 미부착) 0건")
+
+
+def _cmd_gates_show(args: argparse.Namespace, backlog) -> int:
+    """게이트 단건 브리핑 — `status`·근거를 `title`보다 먼저 낸다 (HARN-92).
+
+    왜 필요한가: `gates.yaml`의 `title`은 게이트 최초 등재 시점의 질문 문구이고
+    append 전용 설계(HARN-76)라 `status`가 `pending → cleared/waived`로 바뀌어도
+    갱신되지 않는다. `gates list`는 `title`과 `status`를 함께 보여도 근거(evidence/
+    notes)는 안 보이므로, 사람에게 게이트를 서술할 때 `title`만 옮겨 적으면 이미
+    뒤집힌 질문을 다시 묻게 된다(2026-09-07~08 실측: `G-merge-queue-or-strict-relax`
+    가 이미 cleared·재판정됐는데 title을 그대로 인용해 사용자에게 다시 물었다).
+
+    `status`별로 근거 필드가 다르다(Codex P2 리뷰 지적 — `gates.py`의 clear/waive
+    저장 위치가 다르다): `cleared`는 `evidence`, `waived`는 `notes`(waive 사유는
+    evidence가 아니라 notes에 적힌다), `pending`은 아직 근거가 없다는 사실 자체를
+    "없음(아직 결정 전)"으로 명시한다(CLAUDE.md "모른다 ≠ 아니다" — 조회 실패와
+    아직-없음을 구분). 근거는 **전문 출력**(절단 없음)이다 — 앞 N자 미리보기는
+    핵심 정정 문구가 뒷부분에 있으면 통째로 잘라낼 수 있다(같은 리뷰 지적 —
+    `G-merge-queue-or-strict-relax`의 993자 evidence 중 재판정 문구는 403번째
+    글자부터 시작한다).
+    """
+    gate_id = args.gate_id
+    if not gate_id:
+        return _fail("gates show: 게이트 id 필요 (예: gates show G-xxx)")
+    gate = backlog.gates.get(gate_id)
+    if gate is None:
+        return _fail(f"게이트 '{gate_id}' 없음")
+
+    header = f"게이트: {gate.id}  [{gate.assignee}/{gate.kind}]"
+    if gate.status == "cleared":
+        header += f"  상태: cleared (clear 주체: {gate.cleared_by or '미상(HARN-60 이전)'})"
+    else:
+        header += f"  상태: {gate.status}"
+    print(header)
+
+    if gate.status == "cleared":
+        print("evidence (전문):")
+        print(gate.evidence or "(이상 상태 — cleared인데 evidence 없음. validate로 확인)")
+    elif gate.status == "waived":
+        print("notes — waive 사유 (전문):")
+        print(gate.notes or "(이상 상태 — waived인데 notes 없음)")
+    else:
+        print("evidence: 없음(아직 결정 전)")
+    print()
+    print(f"title(등재 시점 질문 — 최신 판정을 반영하지 않을 수 있다): {gate.title}")
+    return 0
 
 
 def _cmd_gates_add(root: Path, args: argparse.Namespace, backlog) -> int:
@@ -3643,7 +3692,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_cancel)
 
     p = sub.add_parser("gates", help="사람 게이트 대장")
-    p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive"])
+    p.add_argument("gate_action", nargs="?", choices=["list", "add", "clear", "waive", "show"])
     p.add_argument("gate_id", nargs="?")
     p.add_argument("--evidence")
     p.add_argument("--reason")

@@ -183,6 +183,85 @@ class TestGatesCli:
         assert "S1-12-phaiakes9-live-verify" in ids
 
 
+class TestGatesShow:
+    """HARN-92 — `gates show <id>`가 status별 근거를 title보다 먼저 낸다.
+
+    title만 인용하면 이미 뒤집힌 결정을 재안내하게 되는 사고(2026-09-07~08 실측:
+    `G-merge-queue-or-strict-relax`)의 재발방지대책. cleared→evidence, waived→notes,
+    pending→"없음(아직 결정 전)"으로 근거 필드가 갈린다(Codex P2 리뷰 지적 — waive는
+    evidence가 아니라 notes에 저장된다).
+    """
+
+    def test_show_missing_id_rejected(self, seeded_repo: Path):
+        assert cli.main(["gates", "show"]) == 1
+
+    def test_show_unknown_gate_rejected(self, seeded_repo: Path):
+        assert cli.main(["gates", "show", "G-does-not-exist"]) == 1
+
+    def test_show_pending_gate_states_no_decision_yet(self, seeded_repo: Path, capsys):
+        """pending — "없음(아직 결정 전)"을 명시한다(모른다 ≠ 아니다)."""
+        assert cli.main(["gates", "show", "G-phaiakes9-key"]) == 0
+        out = capsys.readouterr().out
+        assert "상태: pending" in out
+        assert "없음(아직 결정 전)" in out
+
+    def test_show_cleared_gate_prints_full_evidence_before_title(self, seeded_repo: Path, capsys):
+        """cleared — evidence 전문(절단 없음)이 title보다 먼저 나온다.
+
+        `G-merge-queue-or-strict-relax` 사고 재현: evidence가 길고 핵심 재판정 문구가
+        뒷부분에 있어도(993자 중 403번째 글자) 그 문구가 통째로 출력에 실재해야 한다
+        — 앞 N자 미리보기였다면 잘려나갔을 자리에 마커를 심는다.
+        """
+        padding = "배경 설명 " * 80  # 403자 안팎을 앞에 채워 "뒷부분" 시나리오를 재현
+        marker = "재판정 = D 자동 재동기화 워크플로우"
+        evidence = f"{padding}{marker} — 커밋 abc1234에서 확정"
+        assert cli.main(["gates", "add", "G-show-cleared", "--title", "낡은 질문 문구"]) == 0
+        capsys.readouterr()
+        assert (
+            cli.main(["gates", "clear", "G-show-cleared", "--as", "kiki", "--evidence", evidence])
+            == 0
+        )
+        capsys.readouterr()
+        assert cli.main(["gates", "show", "G-show-cleared"]) == 0
+        out = capsys.readouterr().out
+        assert "상태: cleared (clear 주체: kiki)" in out
+        assert marker in out  # 절단됐다면 이 마커는 사라진다
+        assert out.index(marker) < out.index("낡은 질문 문구")  # evidence가 title보다 먼저
+
+    def test_show_waived_gate_prints_notes_not_evidence_label(self, seeded_repo: Path, capsys):
+        """waived — 사유는 notes에 있다(evidence 아님). ③ 정정 지점의 직접 검증."""
+        assert cli.main(["gates", "add", "G-show-waived", "--title", "낡은 질문 문구2"]) == 0
+        capsys.readouterr()
+        assert cli.main(["gates", "waive", "G-show-waived", "--reason", "대체 결정 = HARN-85"]) == 0
+        capsys.readouterr()
+        assert cli.main(["gates", "show", "G-show-waived"]) == 0
+        out = capsys.readouterr().out
+        assert "상태: waived" in out
+        assert "대체 결정 = HARN-85" in out
+        assert "evidence (전문)" not in out  # waived는 evidence 라벨을 쓰지 않는다
+        assert out.index("대체 결정 = HARN-85") < out.index("낡은 질문 문구2")
+
+    def test_list_title_alone_does_not_reveal_evidence(self, seeded_repo: Path, capsys):
+        """대조군 — `gates list`의 title 인용만으로는 재판정 내용을 알 수 없다.
+
+        `show`가 새로 여는 정보(근거)를 `list`가 이미 주고 있었다면 이 태스크는
+        불필요하다 — 그렇지 않음을 실측으로 고정한다.
+        """
+        marker = "재판정 = D 자동 재동기화 워크플로우"
+        evidence = "배경 " * 50 + marker
+        assert cli.main(["gates", "add", "G-show-contrast", "--title", "대조군 질문"]) == 0
+        capsys.readouterr()
+        assert (
+            cli.main(["gates", "clear", "G-show-contrast", "--evidence", evidence + " abc1234"])
+            == 0
+        )
+        capsys.readouterr()
+        assert cli.main(["gates", "list"]) == 0
+        out = capsys.readouterr().out
+        assert "대조군 질문" in out
+        assert marker not in out  # list는 title만 보여줄 뿐 evidence 본문은 안 보여준다
+
+
 class TestGatesAdd:
     """HARN-18 — gates add CLI 경로 (손편집 금지 규약의 구멍 메움).
 
