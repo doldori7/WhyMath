@@ -9683,3 +9683,33 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   이스케이프되지 않은 `\.`·`\s`(일반 문자열 안의 백슬래시)가 생겨 `DeprecationWarning:
   invalid escape sequence`가 났던 것을 발견·수정(`\\` 이중 이스케이프 또는 표현 우회) —
   `-W error::DeprecationWarning`으로 재확인.
+
+## 2026-09-11: PED-27 — "이미 해소됨" 판정(SEC-24가 선행 착지, 재구현 없이 대장만 정정)
+
+- **배경**: PED-27은 2026-08-13 01:21 병합된 게임화 모듈 r3 재점검(`69c3986d`, #813)이
+  등재했다 — `GET /v1/me/harness-metrics`가 `ConsentedUser`(학생 포함 전원)로 열려
+  있어 원시 대리지표(INTERNAL_ONLY 2종·Brier 원값·게임화 의심 낙인)가 학생 토큰에 그대로
+  노출된다는 지적. 그런데 SEC-24(`014b790d`, PR #816)가 그보다 **6시간 먼저**
+  (2026-08-12 19:24) `RequireContentAdmin`으로 정확히 이 라우트를 닫아 놓았다 — r3
+  재점검이 SEC-24 병합 이전 브랜치 상태를 서술했고, main 병합 시점에 재확인하지
+  않아 이미 해소된 위협을 새 태스크로 재등재했다.
+- **실측 확인(코드 변경 없이 현재 main 대조)**: acceptance①~⑨ 전항목이 이미 충족돼
+  있음을 확인했다 — `api/me.py:3256`의 라우트가 `RequireContentAdmin`을 실제로 쓰고,
+  `tests/backend/api/test_me_harness_metrics_auth_gate.py`가 3방향(401 무토큰·403
+  학생·200 admin) + 오버라이드 우회 검증까지 이미 실측 고정돼 있으며,
+  `tests/backend/harness/test_wh1_evaluation_integration.py`의 `_user()` 헬퍼가
+  SEC-24를 인용하는 주석과 함께 `role=CONTENT_ADMIN`으로 시드한다. `GET
+  /v1/me/growth-evidence`(PED-08)가 `classify_metric_exposure`의 유일한 학생 대면
+  호출자가 됐다는 acceptance⑦의 문구도 참이다.
+- **결정**: 코드 재작성·재커밋 없음(acceptance①의 "계약 로직 재구현·복사 금지"를
+  따름 — 테스트도 SEC-24가 이미 충분히 갖춰 놓았다). 이 세션은 대장(`PED-27`)의
+  acceptance에 정정 항목을 추가해 각 항목을 SEC-24 코드와 대조한 근거를 남기고,
+  완료 증적으로 SEC-24 자신의 커밋/PR(`014b790d`/#816)을 인용해 `done`으로 닫는다 —
+  "trunk 부재를 미구현으로 단정 금지" 규칙의 거울상(여기서는 trunk에 이미 있는 해법을
+  놓치고 새 태스크를 만든 쪽의 오류)이다.
+- **검증**: `pytest tests/backend/api/test_me_harness_metrics_auth_gate.py
+  tests/backend/api/test_me_growth_evidence.py -q` → 24 passed. 전체 백엔드 스위트
+  (`pytest tests/backend -q`, python3.12 venv) → **12767 passed, 340 skipped, 1
+  xfailed, PYTEST_EXIT=0** — 코드 변경이 없으므로 회귀도 없다.
+- **정직한 공백**: 없음 — 조사 결과 acceptance 전항목이 이미 충족된 상태를 확인했고,
+  범위 밖 동결(⑨)도 자명하게 성립한다(코드를 건드리지 않았다).
