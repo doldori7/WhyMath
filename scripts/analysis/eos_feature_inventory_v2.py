@@ -738,7 +738,10 @@ CATALOG: tuple[Spec, ...] = (
        "단위비용 KPI(≤250원) 판독기", "ops.cost_probe", "ops.cost_report"),
     _o("WM-O-905", "12월 검증 스코어카드·QA 혼동행렬·HIT/CU 계측", "Admin", "QA", "P0",
        "EOS-54/60/61 — Go/No-Go 판정기", "ops.validation_scorecard",
-       "ops.qa_confusion_matrix", "ops.hit_cu_metrics"),
+       "ops.qa_confusion_matrix", "ops.hit_cu_metrics",
+       # OPS-56: EOS-51 §6 "기술 KPI 6종" 주간 cron 집계기 — hit_cu_metrics.aggregate()를
+       # 재사용하는 소비자라 같은 좌석(같은 Go/No-Go 계측 묶음)에 귀속한다.
+       "ops.weekly_metrics_report"),
     _o("WM-O-906", "콘텐츠 출처·라이선스 감사 게이트·사이드카", "Admin", "Content", "P0",
        "ARCH-20·PB-11 — 저작권 레일 · EOS-97 리콜(genlog 사이드카 선별·처분)",
        "ops.provenance_audit", "ops.corpus_provenance_sidecar", "ops.generation_recall"),
