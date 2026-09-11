@@ -6,16 +6,16 @@ schema_version: 2
 dashboard:
   population: 163
   classification_rate: 163/163
-  backend_modules_covered: 592
+  backend_modules_covered: 593
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 27
   student_loop_reach_modules: 210
-  production_loop_reach_modules: 171
-  loop_tables: 28
+  production_loop_reach_modules: 172
+  loop_tables: 29
   loop_tables_without_p0_writer: [db.models.misconception_embedding]
   di_keys_bridged: 32
-  final_differs_from_matrix: 40
+  final_differs_from_matrix: 41
   final_differs_from_criteria: 12
   by_criteria_action:
     KEEP: 124
@@ -51,8 +51,8 @@ dashboard:
     REPLACE_CANDIDATE: 1
   by_matrix_action:
     HEAVY_REFACTOR: 13
-    KEEP: 99
-    REFACTOR: 50
+    KEEP: 98
+    REFACTOR: 51
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
     P0: 101
@@ -69,8 +69,8 @@ dashboard:
     Production: 135
   by_risk:
     High: 23
-    Low: 96
-    Med: 44
+    Low: 95
+    Med: 45
 features:
   - feature_id: WM-S-001
     name: "헬스체크·상태 조회"
@@ -100,7 +100,7 @@ features:
     db_model_modules: 0
     coupling_count: 9
     test_files: 23
-    test_functions: 503
+    test_functions: 506
     matrix:
       A_subject: 0
       B_db: 0
@@ -150,11 +150,11 @@ features:
     coupling: Low
     tests: Full
     migration_action: KEEP
-    matrix_action: KEEP
+    matrix_action: REFACTOR
     release_priority_proposed: P0
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: seed_route"
-    migration_risk: Low
+    migration_risk: Med
     loc: 0
     endpoints: 2
     write_endpoints: 1
@@ -162,18 +162,18 @@ features:
     own_modules: 1
     adapter_deps: []
     mixed_deps: [l3.pregenerate.validator, schema.enums]
-    db_model_modules: 0
-    coupling_count: 6
+    db_model_modules: 1
+    coupling_count: 7
     test_files: 5
-    test_functions: 139
+    test_functions: 142
     matrix:
       A_subject: 1
-      B_db: 0
+      B_db: 1
       C_coupling: 1
       D_tests: 0
       E_state: 1
-      F_data: 0
-    matrix_total: 3
+      F_data: 1
+    matrix_total: 5
     criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 1/6
@@ -4975,7 +4975,7 @@ features:
     db_model_modules: 0
     coupling_count: 3
     test_files: 70
-    test_functions: 1475
+    test_functions: 1478
     matrix:
       A_subject: 1
       B_db: 0
@@ -5040,7 +5040,7 @@ features:
     db_model_modules: 0
     coupling_count: 4
     test_files: 15
-    test_functions: 243
+    test_functions: 246
     matrix:
       A_subject: 0
       B_db: 0
@@ -5105,7 +5105,7 @@ features:
     db_model_modules: 0
     coupling_count: 4
     test_files: 34
-    test_functions: 798
+    test_functions: 801
     matrix:
       A_subject: 1
       B_db: 0
@@ -5170,7 +5170,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 5
-    test_functions: 101
+    test_functions: 104
     matrix:
       A_subject: 1
       B_db: 0
@@ -8475,17 +8475,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 8177
+    loc: 8233
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
-    own_modules: 54
+    own_modules: 55
     adapter_deps: []
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 196
-    test_functions: 2988
+    test_files: 197
+    test_functions: 3002
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 76
-    test_functions: 1522
+    test_functions: 1525
     matrix:
       A_subject: 1
       B_db: 1
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 202
-    test_functions: 3025
+    test_functions: 3028
     matrix:
       A_subject: 3
       B_db: 0
@@ -8995,15 +8995,15 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: invariant"
     migration_risk: High
-    loc: 915
+    loc: 917
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 15
     own_modules: 4
     adapter_deps: []
     mixed_deps: [schema.enums]
-    db_model_modules: 14
-    coupling_count: 21
+    db_model_modules: 15
+    coupling_count: 22
     test_files: 17
     test_functions: 151
     matrix:

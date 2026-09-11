@@ -27,9 +27,12 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 소비처가 아직 특정 역할로 좁혀지지 않음) `require_content_admin`이 아니라 인증 존재만 요구한다.
 `/v1/jobs/{id}`(폴링)도 같은 `CurrentUser` 게이트다(SEC-24(원 SEC-15) —
 `functional_security_audit_2026-08-08.md` M6): SEC-07 당시 "범위 밖"으로 남겨졌던 폴링이
-무인증인 채 검증 전 원시 LLM 출력을 반환하고 있었다(짝인 POST는 봉인·폴링만 열림). 소유권
-(job↔user) 검사는 현재 job 저장 구조(`JobStatus` — job_id·state·text·error뿐)에 user 매핑이
-없어 불가 — job→user 저장이 생길 때 후속(그전까지 최소 인증 게이트·job_id는 UUID4라 열거 곤란).
+무인증인 채 검증 전 원시 LLM 출력을 반환하고 있었다(짝인 POST는 봉인·폴링만 열림).
+
+소유권(job↔user) 검사(SEC-27, 48_보안 §P0): `job_ownership` 테이블(`db/models/
+job_ownership.py`)이 `POST /v1/generate`의 큐잉 시점에 (job_id, user_id)를 기록하고,
+`GET /v1/jobs/{id}`가 그 행으로 소유자를 대조해 타 사용자 job 폴링을 404로 거부한다
+(매핑 부재도 동일하게 404 — 존재 자체를 노출하지 않음).
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -172,6 +175,7 @@ from whymath_backend.composition import (
     default_step_chain_verifier,
 )
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.job_ownership import JobOwnership
 from whymath_backend.db.schema_version import verify_schema_version
 from whymath_backend.db.session import dispose_engine, get_session
 from whymath_backend.l3 import pipeline
@@ -1185,6 +1189,12 @@ def create_app(
             )
 
         if result.is_queued:
+            # SEC-27: 소유권(job↔user) 기록 — /v1/jobs/{job_id} 폴링이 이 행으로 소유자를
+            # 대조한다(app.py 모듈 docstring 경계 메모의 "job→user 저장이 생길 때 후속"이 이것).
+            # is_queued=True는 pipeline.generate가 실제 enqueue 성공 후에만 세우므로(l3/pipeline.py
+            # GenerationResult.is_queued) job_id는 항상 채워진 문자열이다.
+            session.add(JobOwnership(job_id=result.job_id or "", user_id=user.user_id))
+            await session.commit()
             # 비동기 QUALITY 큐잉 → 202 Accepted + job_id(폴링 안내).
             queued = GenerateQueuedBody(
                 job_id=result.job_id or "",
@@ -1209,13 +1219,24 @@ def create_app(
         )
 
     @app.get("/v1/jobs/{job_id}", tags=["l3"], response_model=JobStatusBody)
-    async def get_job(job_id: str, request: Request, user: CurrentUser) -> JobStatusBody:
+    async def get_job(
+        job_id: str,
+        request: Request,
+        user: CurrentUser,
+        session: Annotated[AsyncSession, Depends(get_session)],
+    ) -> JobStatusBody:
         """QUALITY 비동기 작업 폴링 — 상태 + (완료 시) 생성 텍스트 (03a §D.3).
 
         인증 필수(`CurrentUser` — SEC-24(원 SEC-15) M6, POST /v1/generate와 동일 게이트):
-        무인증 폴링은 검증 전 원시 LLM 출력의 무인증 노출 표면이었다. **소유권(job↔user)
-        검사는 후속** — 현재 job 저장 구조(`JobStatus`)에 user 매핑이 없어 인증 게이트만
-        건다. job→user 저장이 생기면 타 사용자 job 폴링을 403/404로 거부하도록 확장한다.
+        무인증 폴링은 검증 전 원시 LLM 출력의 무인증 노출 표면이었다.
+
+        **소유권(job↔user) 검사(SEC-27)**: `job_ownership` 테이블(POST /v1/generate가
+        큐잉 시점에 기록)에서 `job_id`를 PK lookup한다. 행이 없거나(매핑 부재 — 이 배포
+        이전에 큐잉된 job·잘못된 job_id) `user_id`가 요청자와 다르면(타 사용자 job) 둘 다
+        **404**로 거부한다(403이 아닌 이유 — acceptance③: 소유자가 아니면 그 리소스의
+        *존재 자체*도 노출하지 않는다. job_id는 UUID4라 존재 여부 자체는 열거 곤란하지만,
+        403/404 응답 차이로 "존재하지만 내 것이 아님"을 알려주지 않는 것이 더 안전한
+        기본값이다).
 
         완료(success) 시 `text`는 *검증 전 원시 출력*이다(앱 docstring 경계 메모) —
         학생 직접 노출 금지. 진행 중(pending)·실패(failure)·판정 불가(unknown)는 모두
@@ -1223,8 +1244,12 @@ def create_app(
         우선). result backend 도달 실패도 unknown으로 흡수된다(CeleryJobQueue.result).
 
         큐가 폴링(result)을 지원하지 않으면(가짜·미지원 구현) unknown으로 보고한다 —
-        ollama check_status 기능 탐지와 동일한 방어 패턴.
+        ollama check_status 기능 탐지와 동일한 방어 패턴. 소유권 검사는 그보다 *먼저*
+        하므로, 큐 미지원이라도 소유자가 아니면 여전히 404다.
         """
+        ownership = await session.get(JobOwnership, job_id)
+        if ownership is None or ownership.user_id != user.user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
         queue = _get_queue(request)
         result_fn = getattr(queue, "result", None)
         if result_fn is None:
