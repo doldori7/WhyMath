@@ -27,11 +27,35 @@ _WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pr-auto-resync.yml"
 _DOC = _REPO_ROOT / ".github" / "branch-protection-setup.md"
 
 _STUB_GH = """#!/usr/bin/env python3
-import os, sys
+import json, os, sys
 args = sys.argv[1:]
 if args[:2] == ["pr", "list"]:
     sys.stdout.write(os.environ.get("STUB_PR_JSON", "[]"))
     sys.exit(int(os.environ.get("STUB_LIST_RC", "0")))
+if args[:2] == ["pr", "view"]:
+    # HARN-99 — 단건 재조회 스텁. STUB_VIEW_SEQUENCES는 {"<번호>": [상태, ...]}로,
+    # 같은 PR을 여러 번 부를 때마다 다음 값을 준다(짧은 재시도 시뮬레이션). 마지막
+    # 값을 넘어서면 그 값을 반복한다. 호출마다 STUB_VIEW_STATE_DIR 아래 인덱스 파일로
+    # 진행 상황을 기억한다(서로 다른 gh 프로세스 호출 간 상태 공유).
+    n = args[2]
+    seqs = json.loads(os.environ.get("STUB_VIEW_SEQUENCES", "{}"))
+    seq = seqs.get(n) or ["UNKNOWN"]
+    state_dir = os.environ.get("STUB_VIEW_STATE_DIR", "")
+    idx = 0
+    idx_path = os.path.join(state_dir, "idx_" + n) if state_dir else None
+    if idx_path and os.path.exists(idx_path):
+        with open(idx_path, encoding="utf-8") as fh:
+            idx = int(fh.read().strip() or "0")
+    val = seq[min(idx, len(seq) - 1)]
+    if idx_path:
+        with open(idx_path, "w", encoding="utf-8") as fh:
+            fh.write(str(idx + 1))
+    rc = int(os.environ.get("STUB_VIEW_RC", "0"))
+    if rc != 0:
+        sys.stderr.write(os.environ.get("STUB_VIEW_ERROR_BODY", "gh: view failed"))
+        sys.exit(rc)
+    sys.stdout.write(json.dumps({"number": int(n), "mergeStateStatus": val}))
+    sys.exit(0)
 if args[:1] == ["api"]:
     target = args[-1]
     with open(os.environ["STUB_CALLS"], "a", encoding="utf-8") as fh:
@@ -69,8 +93,19 @@ def _run(
     raw_payload: str | None = None,
     token_kind: str = "pat",
     gh_token: str | None = None,
+    view_sequences: dict[str, list[str]] | None = None,
+    view_rc: int = 0,
+    view_error_body: str = "",
+    recheck_sleep: str = "0",
+    recheck_attempts: str | None = None,
 ) -> tuple[int, str, list[str]]:
-    """스텁 `gh`를 PATH 앞에 두고 스크립트를 실행한다. (exit code, 출력, update 호출 목록)"""
+    """스텁 `gh`를 PATH 앞에 두고 스크립트를 실행한다. (exit code, 출력, update 호출 목록)
+
+    `view_sequences`(HARN-99)는 UNKNOWN 재조회(`gh pr view`) 스텁의 순차 응답을 준다 —
+    `recheck_sleep` 기본값 "0"은 테스트를 실제 대기 없이 빠르게 돌리기 위함이며(운영
+    기본값 2초는 스크립트 자체 기본값으로 별도 동결한다), `recheck_attempts`를 지정하지
+    않으면 스크립트 기본(2회)을 그대로 쓴다.
+    """
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     gh = bindir / "gh"
@@ -79,6 +114,9 @@ def _run(
 
     calls = tmp_path / "calls.txt"
     calls.write_text("", encoding="utf-8")
+
+    view_state_dir = tmp_path / "view_state"
+    view_state_dir.mkdir(exist_ok=True)
 
     env = dict(os.environ)
     env.update(
@@ -92,7 +130,14 @@ def _run(
         STUB_UPDATE_RC=str(update_rc),
         STUB_UPDATE_BODY=update_body,
         STUB_CALLS=str(calls),
+        STUB_VIEW_SEQUENCES=json.dumps(view_sequences or {}),
+        STUB_VIEW_STATE_DIR=str(view_state_dir),
+        STUB_VIEW_RC=str(view_rc),
+        STUB_VIEW_ERROR_BODY=view_error_body,
+        UNKNOWN_RECHECK_SLEEP_SECONDS=recheck_sleep,
     )
+    if recheck_attempts is not None:
+        env["UNKNOWN_RECHECK_ATTEMPTS"] = recheck_attempts
     proc = subprocess.run(
         ["bash", str(_SCRIPT)], env=env, capture_output=True, text=True, timeout=60
     )
@@ -560,6 +605,83 @@ def test_doc_records_current_merge_queue_state_with_evidence() -> None:
     #    "설정 부재"도 같은 절에 2회 나와 한쪽을 지워도 통과했다(뮤테이션 Q4 생존) —
     #    규칙 버전 문자열은 1회뿐이라 그것을 앵커로 쓴다.
     assert "v0.2.18" in text, "전제가 바뀐 이력(v0.2.18 발생 근거)이 지워졌다"
+
+
+# ---------------------------------------------------------------------------
+# 계약 ⑥ — UNKNOWN 재조회 (HARN-99)
+#
+# 일괄 조회(list)의 mergeStateStatus는 계산을 유발하지 않아 UNKNOWN으로 자주 온다
+# (2026-09-08 관측: PR #1059가 같은 시각 REST 단건 조회로는 `behind`였다). 단건
+# 조회(`gh pr view`)는 계산을 촉발하며, 이 태스크의 2026-09-10 실측(같은 저장소 열린 PR
+# 6건 REST 단건 재조회)에서도 첫 호출이 종종 `unknown`이지만 반복 호출로 대개 해소됐다.
+# auto-merge가 켜진 후보만 재조회해 비용을 절제한다.
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_with_automerge_is_rechecked_and_updated_when_resolved(
+    tmp_path: Path,
+) -> None:
+    """①②의 핵심 — list UNKNOWN + auto-merge on을 단건 재조회로 뚫어 BEHIND를 찾아낸다.
+
+    고치기 전에는 RED다 — 현재 코드는 UNKNOWN을 보는 즉시 건너뛰므로 update-branch
+    호출이 0건이다.
+    """
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(501, state="UNKNOWN")],
+        view_sequences={"501": ["BEHIND"]},
+    )
+    assert rc == 0, out
+    assert calls == ["repos/doldori7/WhyMath/pulls/501/update-branch"], out
+    assert "재조회 1건" in out, out
+
+
+def test_unknown_resolved_only_after_a_retry(tmp_path: Path) -> None:
+    """② 첫 재조회도 UNKNOWN이면 짧게 한 번 더 시도한다."""
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(502, state="UNKNOWN")],
+        view_sequences={"502": ["UNKNOWN", "BEHIND"]},
+    )
+    assert rc == 0, out
+    assert calls == ["repos/doldori7/WhyMath/pulls/502/update-branch"], out
+    assert "재조회 2건" in out, out
+
+
+def test_unknown_still_unknown_after_retries_is_skipped_like_before(
+    tmp_path: Path,
+) -> None:
+    """③ 기존 계약 동결 — 재조회해도 끝까지 UNKNOWN이면 여전히 건드리지 않고 출력에 남긴다."""
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(503, state="UNKNOWN")],
+        view_sequences={"503": ["UNKNOWN", "UNKNOWN"]},
+    )
+    assert rc == 0, out
+    assert calls == []
+    assert "#503" in out and "미판정" in out, out
+    assert "재조회 2건(해소 0건)" in out, out
+
+
+def test_unknown_without_automerge_is_never_rechecked(tmp_path: Path) -> None:
+    """② 비용 절제 — auto-merge가 꺼진 후보는 재조회 대상이 아니다(어차피 건드리지 않는다)."""
+    rc, out, calls = _run(
+        tmp_path,
+        [_pr(504, state="UNKNOWN", automerge=False)],
+        # 재조회됐다면 이 값이 나왔을 것 — 나오면 안 된다.
+        view_sequences={"504": ["BEHIND"]},
+    )
+    assert rc == 0, out
+    assert calls == []
+    assert "재조회 0건" in out, out
+
+
+def test_recheck_call_count_is_logged_even_when_zero(tmp_path: Path) -> None:
+    """④ 호출 비용 기록 — 재조회가 0건이어도 그 사실이 값으로 보여야 한다."""
+    rc, out, calls = _run(tmp_path, [_pr(505)])
+    assert rc == 0, out
+    assert len(calls) == 1, out
+    assert "재조회 0건" in out, out
 
 
 def test_ruleset_policy_declares_merge_queue() -> None:

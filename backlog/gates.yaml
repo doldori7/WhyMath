@@ -360,6 +360,16 @@ gates:
     evidence: "2026-09-03 Kiki 실행(GitHub 웹 UI ruleset 16623542) — 미강제 10건 등록 완료. 검증: gh api repos/doldori7/WhyMath/rules/branches/main 재조회 후 문서 REQUIRED_CHECKS 블록과 **기계 대조**(눈 대조 아님) — 라이브 고유 16건 vs 문서 16건, 미강제 0건·문서 미선언 0건으로 집합 완전 일치. 등록된 10건: changes / backend — lint·type·test / mobile / concept-reach / web / infra-contracts / docker-build / harness-integrity / declared-unwired-audit / corpus-authoring. 잔여(비차단): 6건이 중복 등록됐다(web·infra-contracts·docker-build·harness-integrity·declared-unwired-audit·corpus-authoring 각 2회 — 라이브 항목 수 22, 고유 16). 중복은 같은 컨텍스트를 두 번 요구하는 것이라 판정을 느슨하게 만들지 않아 차단 사유가 아니며, integration_id 축(특정 앱 pin vs any source) 확인과 정리는 HARN-63이 승계한다. 승인 축(required_approving_review_count=0 vs 문서 '최소 1명')은 **의도적 미변경** — 1인 개발에서 자가승인 불가로 머지가 막히므로 문서/현실 중 무엇을 고칠지는 Kiki 판단 사안이며 이 게이트 범위 밖(HARN-63 ⑤로 승계)."
     cleared_by: null
     notes: ""
+  - id: G-required-checks-source-of-truth
+    title: "필수 체크의 정본 소스 결정 — 라이브 집행이 룰셋에서 클래식 브랜치 보호로 갈라졌다. 2026-09-10 Kiki 실측: Settings→Rules→Rulesets→main의 `Require status checks to pass`는 **비어 있고**, Settings→Branches의 `Branch protection rules`에 **`main` 규칙이 존재**한다. 즉 보호는 살아 있으나(merge queue가 CI를 19분 55초 기다린 뒤 머지한 실측과 정합) 이 저장소의 관측 도구 3종(`pr_delivery_audit.py`·`ruleset_drift.py`·`ruleset_pin_plan.py`)은 전부 룰셋만 읽으므로 그것을 보지 못한다 — harness-audit 「통합 흐름 진단」이 상시 red인 현재 원인이다. 권고 = A) 룰셋에 `Require status checks to pass` 재활성화 + 16건 재등록(도구·게이트가 전부 룰셋 기준으로 만들어져 있고 GITHUB_TOKEN이 룰셋은 읽지만 클래식은 403이라 새 자격증명이 불요). B) 클래식을 정본으로 인정하면 도구 3종을 PAT 경로로 다시 써야 한다. 선행 확인 = 클래식 `main` 규칙의 내용(필수 체크 목록·건수, `Require merge queue` 체크 여부) — merge queue가 클래식 쪽에만 있으면 클래식을 지우는 순간 큐가 죽으므로 **룰셋이 전부 갖추기 전에는 클래식을 삭제하지 않는다**. 해소 시 `HARN-82`(2026-09-07부터 이 이유로 blocked)의 차단 조건 ①이 함께 충족된다"
+    kind: decision
+    assignee: kiki
+    status: cleared
+    requested: 2026-09-10
+    remind_after_days: 2
+    evidence: "2026-09-10 A안 집행 완료 — Kiki가 룰셋에 `Require status checks to pass` 재활성화 + 16건 등록. **기계 확인**: harness-audit(main) run `34541228406`(23:14:13Z) **failure** → run `34542340399`(23:28:58Z · main `17c94cd0`) **success** — 그 사이 등록 외 변경이 없으므로 전이 자체가 집행의 증거다. 라이브 실측(Kiki gh admin 토큰): 룰셋 규칙 6종(`deletion`·`non_fast_forward`·`pull_request`·`required_linear_history`·`merge_queue`·`required_status_checks`) · 필수체크 **16건 전건 `integration_id=15368` pin** · 문서 REQUIRED_CHECKS 16건과 집합 일치(`ruleset_drift.py`가 집합 불일치 0건 보고). [선행 확인도 완료 — 결과가 게이트 전제를 뒤집었다] 클래식 브랜치 보호 실측: 필수체크 **13건**·`strict=true`이고 항목 목록에 `required_merge_queue`가 **없다**. 즉 게이트가 세운 안전 조건(\"큐가 클래식에만 있으면 삭제 시 큐가 죽는다\")은 **불성립**이며, merge queue는 룰셋 쪽에 있으므로 클래식을 지워도 큐는 죽지 않는다. 또 클래식 13건은 룰셋 16건의 **부분집합**이다(부족분 3: `concept-reach — mobile 호출 표면 회귀 가드`·`declared-unwired-audit — 선언≠배선 4축 정적 감사 (OPS-22)`·`corpus-authoring — 결정론 저작 도구 회귀 (생성기·배치)`) — 클래식은 2026-09-03 등록 이전 상태의 낡은 사본이다. [잔여 2축 — 후속 게이트 `G-strict-policy-and-classic-cleanup`이 승계] ① 룰셋 `strict_required_status_checks_policy=false` vs 문서 선언 `true`(현재 실질 strict는 클래식의 `strict=true`가 살려 두고 있다) ② 클래식 브랜치 보호 정리. [판정하지 않은 것] 2026-09-07T21:25:48Z에 룰셋에서 규칙이 사라진 원인은 여전히 미규명이다 — 룰셋 변경 이력 조회 수단이 없다."
+    cleared_by: claude
+    notes: "[판정기준 없음 2026-09-10] 저장소 설정(GitHub 룰셋) 변경이라 커밋이 없다 — 근거는 라이브 API 실측 + harness-audit run 34541228406→34542340399 전이"
   - id: G-required-checks-source-pin-cleanup
     title: "required check의 소스 pin 정리 — unpinned 7건(그중 concept-reach는 pin 항목이 아예 없음·순서 주의)"
     kind: human
@@ -417,6 +427,16 @@ gates:
     status: pending
     requested: 2026-09-03
     remind_after_days: 101
+    evidence: null
+    cleared_by: null
+    notes: ""
+  - id: G-strict-policy-and-classic-cleanup
+    title: "strict 정책 축 결정 + 클래식 브랜치 보호 정리 — 필수 체크 16건은 룰셋에 복원됐으나(`G-required-checks-source-of-truth` cleared) 두 축이 남았다. **① strict**: 룰셋 `strict_required_status_checks_policy=false` vs 문서 선언 `true` — `ruleset_drift.py` 위반 1건. 현재 실질 strict는 클래식의 `strict=true`가 살려 두고 있어 클래식을 지우면 실질도 false가 된다. **② 클래식**: 필수체크 13건(룰셋 16건의 부분집합·2026-09-03 이전 낡은 사본)·`required_merge_queue` 없음 → 지워도 큐는 죽지 않고 필수 체크도 줄지 않는다(실측). **권고 = strict를 해제하고(문서 선언을 `false`로 정정) 클래식을 삭제한다.** 근거 3: ⓐ merge queue는 최신 base 위에 큐 브랜치를 만들어 CI를 돌리므로 'up to date 요구'가 구조적으로 중복이다 ⓑ 실제 마찰이 관측됐다 — 2026-09-10 이 세션의 PR #1063·#1092·#1094가 전부 `behind`로 막혀 main 수동 병합을 3회 반복했고, 그때마다 CI가 처음부터 다시 돌았다 ⓒ 기존 게이트 `G-merge-queue-or-strict-relax`가 애초에 이 둘을 **택일**로 물었고(merge queue 도입 **또는** strict 해제) merge queue 쪽이 이미 채택됐다. **대안**: strict를 유지하려면 룰셋에서 `Require branches to be up to date before merging`을 켜고 문서는 그대로 둔다 — 이 경우 위 마찰이 계속된다. 어느 쪽이든 클래식 삭제는 별개로 안전하다. 문서(`.github/branch-protection-setup.md` RULESET_POLICY 블록) 정정과 `ruleset_drift.py` 재검증은 결정 후 claude가 수행한다"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: 2026-09-10
+    remind_after_days: 3
     evidence: null
     cleared_by: null
     notes: ""

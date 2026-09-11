@@ -1,6 +1,6 @@
 # 빌드 하네스 (Build Harness) — 작업일정 관리·순차 조율 표준
 
-> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.4 (2026-09-07 HARN-74 — gates clear·waive 직후 부착 blocked 태스크·산문 참조 출력 + brief/status의 '해소된 게이트를 기다리는 blocked' 줄 · §3d 절 추가. 이전 1.3: 2026-09-07 HARN-67 — amend 정정 경로 3축(depends 제거·gate 탈착·notes 치환)·취소 선행 판정 규칙·§7a 정정 경로 표. 이전 1.2: 2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
+> **정본**: `backlog/` + `scripts/harness/` | **채택**: 2026-07-08 결정로그 | **버전**: 1.5 (2026-09-11 HARN-92 — `gates show <id>` 신설: 사람에게 게이트를 서술할 때 title(등재 시점 질문·append 전용이라 미갱신)만 인용해 이미 뒤집힌 결정을 재안내하던 사고 재발방지. status별 근거(cleared→evidence, waived→notes, pending→"없음")를 title보다 먼저 전문 출력. 이전 1.4: 2026-09-07 HARN-74 — gates clear·waive 직후 부착 blocked 태스크·산문 참조 출력 + brief/status의 '해소된 게이트를 기다리는 blocked' 줄 · §3d 절 추가. 이전 1.3: 2026-09-07 HARN-67 — amend 정정 경로 3축(depends 제거·gate 탈착·notes 치환)·취소 선행 판정 규칙·§7a 정정 경로 표. 이전 1.2: 2026-08-10 통합점검 — gates add 반영·테스트 수 실측 정정. 1.1 이후 §4 삭제 403 런북(2026-08-06 HARN-16)이 버전 표기 없이 추가돼 있었다)
 >
 > 이 문서의 "빌드 하네스"는 프로젝트 *구축을 관리하는* 레이어다.
 > `src/backend`의 WH-1(튜터링)·WH-S(솔버)는 **제품 런타임 하네스**로 완전히 별개다.
@@ -565,7 +565,14 @@ python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소�
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
                     # block은 원격 대장에 kind=block 홀드를 **게시**한다(HARN-42/48) —
                     # 머지 없이 병렬 세션의 start가 즉시 거부된다. unblock이 그 홀드를 걷는다
-python3 scripts/harness/backlog.py gates list|add|clear|waive   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
+python3 scripts/harness/backlog.py gates list|add|clear|waive|show   # add = 게이트 등재 CLI(HARN-18) — gates.yaml 손편집 금지
+python3 scripts/harness/backlog.py gates show <id>   # 사람에게 게이트를 서술할 때는 반드시 이 경로를 거친다(HARN-92) —
+                    # title은 등재 시점 질문이라 status가 cleared/waived로 바뀌어도 갱신되지 않는다(append 전용·HARN-76).
+                    # `gates list`는 title과 status만 보여줄 뿐 근거는 안 보인다 — title만 옮겨 적으면 이미 뒤집힌
+                    # 질문을 다시 묻게 된다(2026-09-07~08 실측: G-merge-queue-or-strict-relax가 cleared·재판정됐는데
+                    # title 그대로 재안내해 왕복 1회 낭비). show는 status별 근거를 title보다 먼저, 전문(절단 없음)으로
+                    # 낸다 — cleared는 evidence, waived는 notes(waive 사유는 evidence가 아니라 notes에 저장된다),
+                    # pending은 "없음(아직 결정 전)"을 명시한다(모른다 ≠ 아니다).
 python3 scripts/harness/backlog.py gates clear <id> --as kiki --evidence "..."  # 사람이 본인 게이트를 닫을 때 주체 명시(HARN-60)
 # clear·waive 직후 그 게이트를 기다리던 blocked 태스크(unblock 명령)·산문 참조가 출력된다 — 0건도 명시 (HARN-74 · §3d)
 # evidence에는 판정 기준(커밋 해시·PR 참조)이 있어야 한다 — 없으면 exit 1 (HARN-68).
