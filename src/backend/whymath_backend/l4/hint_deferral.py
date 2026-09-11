@@ -97,6 +97,13 @@ def decide_hint_level(
     4. 그 외 → 1(방향, 가장 빠른 단계).
     5. `mastery_level`로 양방향 조정(slice 69 숙달·slice 77 초보·L2→L4·ZPD): '숙달'→max(1,
        base-1)(생산적 고투), '초보'→min(4, base+1)(능력 낮음→세분화). 발전중/None은 불변.
+    6. **상한 도달 보장**(PED-35) — 규칙 1(5회+ 막힘)이 정한 최소 레벨 3을 규칙 5의 '숙달'
+       완화가 다시 깎지 못하게 한다. 즉답(레벨4) 허용이 아니라 스펙 L37 "3. 부분 풀이(5회+
+       막힘)" 종착 보장이다 — 규칙 5가 매 턴 재적용되고 그 결과가 다음 턴 `prev`로 그대로
+       피드백되면서, '숙달' 학생은 5턴 이상 막혀도 레벨이 최대 2에서 고착됐다(실측 갭 —
+       `docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md` §4-2 인용). 규칙 6은
+       규칙 1의 조건(turn_count ≥ 5)을 그대로 재사용해 그 보장만 복원한다 — 짧은 horizon의
+       점진 상승(규칙 2·3)은 '생산적 고투' 취지대로 여전히 완화된다.
 
     `prev_hint_level=None`(새 세션·첫 결정) → 1 시작. 후퇴는 자동 없음(prev 이하로 안 내림은
     1·2 규칙에서 보장; 4의 기본 1 복귀는 의도된 디폴트 — 막힘 신호 사라지면 다시 은근하게).
@@ -120,6 +127,13 @@ def decide_hint_level(
         base = max(1, base - 1)
     elif mastery_level == "초보":
         base = min(4, base + 1)
+
+    # 6. 상한 도달 보장(PED-35) — 규칙 1과 *같은 조건*을 재사용해, 규칙 5의 '숙달' 완화가
+    # 그 최소 레벨(3)까지 깎지 못하게 한다. prev가 매 턴 이 함수의 반환값으로 피드백되므로
+    # 완화 없이는 이 보장이 없다 — 실측 갭: turn_count≥5가 유지돼도 '숙달' 학생은 최대
+    # 레벨 2에서 고착됐다(레벨 3 "부분 풀이"에 구조적으로 도달 불가).
+    if turn_count >= STUCK_TURN_THRESHOLD:
+        base = max(base, 3)
 
     return cast(HintLevel, base)
 
