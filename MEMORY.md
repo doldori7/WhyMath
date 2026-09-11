@@ -9410,3 +9410,83 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   중 `backlog/tasks/{id}.yaml` 경로를 조립하는 지점(`remote_claims.py`·`backlog.py` 8곳)은
   전부 이미 검증된 full ID 문자열을 그대로 보간해 자릿수 가정이 없음을 확인했다(부재
   판정은 이 grep 방법으로 0건 — 다른 이름으로 존재할 가능성은 배제하지 않는다).
+
+## 2026-09-11: OPS-56 — 주간 KPI 6종 집계 cron 신설 (metrics/weekly.json append)
+
+- **발단**: acceptance①이 "7지표"라고 지칭했으나, 실측 결과 `docs/standards/
+  eos_verification_design_v1.md` §6은 스스로 "기술 KPI **6종**"이라 못박고 있고, 그 문서
+  어디에도 7번째 지표명이 없다. "7지표" 표기는 `OPS-56` 태스크 notes·
+  `docs/reviews/eos_plan52_crosswalk_2026-09.md`·`docs/strategy/
+  eos_transition_declaration_2026-08-30.md` 3곳에 반복돼 있었지만 전부 같은 오기의 전파였다
+  (배경 탐색 에이전트가 실측). 이 파일의 WH-1 대리지표 "7종"(별개 태스크 — 서로게이트
+  metrics, `harness/wh1_evaluation.py`)이 혼동 원인으로 보인다. CLAUDE.md "자체 정의 금지"·
+  "모른다≠아니다"를 지키기 위해 **문서가 실제로 동결한 6종만** 구현하고 7번째를 지어내지
+  않았다 — 이 정정 판단 자체를 `weekly_metrics_report.py` 모듈 docstring에 근거와 함께
+  고정했다(코드가 스스로 "왜 6인가"를 설명한다).
+- **구조적 미측정 2종 발견**: 6종 중 2종(**자동검증 1차 통과율**·**재작업률**)은 이 저장소에
+  집계 대상 로그 자체가 없다 — Deterministic Gate pass/fail 누적 테이블 부재,
+  Run 재생성 카운트 로그 부재(EOS-55는 재현성 *컬럼*만 추가했지 재생성 카운트 로그는
+  미착석 — `validation_scorecard.adapt_hit_cu_metrics` 독스트링이 이미 같은 판정을 하고
+  있었다). 이 2종은 DB 연결 성패와 무관하게 **항상** `measured=False`로 낸다
+  (`STRUCTURALLY_UNMEASURED` — "0%"이 아니라 "측정 불가"). 나머지 4종(HIT·처리량·단위비용·
+  실패유형분포)은 `review_timer_event`·`generation_log`에서 실계산하되, 표본 0건은 진짜
+  활동-없음-0과 DB-연결-실패를 구분해 후자만 미측정 처리한다(acceptance②).
+- **환경의 정직한 공백**: 이 cron이 붙는 GitHub Actions Postgres는 backend-migrations
+  잡과 동형인 **매 실행 새로 뜨는 빈 컨테이너**다 — Phaiakes9의 실제 콘텐츠 제작 DB로
+  가는 네트워크 경로 자체가 없다(`DEPLOY_SSH_*`는 별도 클라우드 배포 대상용). 그래서 이
+  워크플로가 GitHub Actions에서 도는 한 4종 동적 KPI는 당분간 정직한 "0"(빈 스키마)을
+  낸다 — 결함이 아니라 실제 환경 상태이며, 실 데이터 도달은 `OPS-19`(러너 배선) 몫으로
+  명시적으로 경계를 그었다(acceptance③ — `OPS-19`·`OPS-30`과 중복 등재하지 않는다).
+- **설계**: 집계 수식을 재발명하지 않고 `ops.hit_cu_metrics.aggregate()`(순수 함수)를
+  그대로 재사용 — `_fetch_report()`가 새로 짠 것은 "이번 주 창으로 필터링해 그 함수에
+  넘길 이벤트·genlog 행을 DB에서 읽어오는" 얇은 어댑터뿐이다. 단위비용 환산 환율은 새
+  매직넘버를 만들지 않고 이 저장소의 기존 단일 진실 원천(`l3/router.py`의
+  `USD_TO_KRW = 1540.0`, 2026-06-23 기준 — 비용 라우팅 실측에도 쓰이는 그 상수)을
+  워크플로에서 `python -c`로 조회해 `--krw-per-usd`에 주입한다(CLI 자체의 기본값은 여전히
+  `None` — 환율 미지정 시 하드코딩 대신 미측정, `test_unit_cost_unmeasured_without_krw_rate`
+  가 동결).
+- **main 머지 큐 제약 우회**: `main`이 `HARN-56` 이후 머지 큐 전용 룰셋이라 워크플로가
+  직접 push할 수 없다(`harness-audit.yml`의 `refs/heads/harness-claims` 직접 push와 다름 —
+  그쪽은 non-main 대장 브랜치라 룰셋 밖). `weekly-metrics.yml`은 매주 실행 시 브랜치를
+  만들어 `metrics/weekly.json` 변경을 커밋·푸시하고 `gh pr create` + `gh pr merge --auto
+  --squash`로 PR 경로를 거친다(이 세션이 수동으로 반복해 온 `enable_pr_auto_merge` 패턴과
+  동일 메커니즘).
+- **최소 경보(acceptance③ 경계 — "최소"만)**: 신규 알림 채널(Slack/이메일 등, `OPS-30`
+  몫)을 만들지 않는다. 대신 4종 동적 KPI 전부가 `db_failure_reason`으로 강등되면(=진짜
+  연결/조회 실패) 마지막 스텝이 잡 자체를 `exit 1`로 red 처리한다 — GitHub이 예약 실행
+  실패 시 기본 제공하는 저장소 watcher 알림을 그대로 최소 경보로 쓴다. 이 스텝은 커밋·
+  PR 생성 스텝 **뒤**에 둬서, 구조적 실패라도 그 사실(예외 타입명 포함)을 담은 행 자체는
+  먼저 원장에 남도록 순서를 잡았다(CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계
+  금지" — 실패해도 증거가 남아야 한다).
+- **배선 실재성 동결**: `OPS-10`·`test_anchor_e2e_nightly_wiring.py` 선례를 그대로 따라
+  `tests/infra/test_weekly_metrics_cron_wiring.py`(12건)를 신설 — cron 값(`0 22 * * 0`
+  = 월 07:00 KST) 자체를 고정하고, 집계 스텝·최소 경보 스텝 각각의 fail-open 여부를
+  결함 주입 8종(cron 부재·cron 값 오류·집계 스텝 부재·bare 실행기·집계 스텝 fail-open·
+  경보 스텝 부재·경보 스텝 fail-open·`exit 1` 부재)으로 변별력 확인.
+- **EOS 인벤토리 귀속**: 신규 모듈 `ops.weekly_metrics_report`를 `eos_feature_inventory_v2.py`
+  `WM-O-905`(검증 스코어카드·QA 혼동행렬·HIT/CU 계측 좌석 — `hit_cu_metrics` 재사용
+  소비자라 같은 좌석)에 편입하고 `--write`로 `backlog/inventory/feature_inventory_v2.{yaml,csv}`
+  재생성(미편입 시 `tests/infra/test_eos_feature_inventory_v2.py`가 "미귀속 모듈"로 즉시
+  RED — 실제로 처음 전체 스위트 실행에서 21건 ERROR로 재현·확인 후 조치).
+- **검증**: `test_weekly_metrics_report.py`(hermetic, 14 passed) · `test_weekly_metrics_
+  report_integration.py`(실 PG, `pytest.mark.integration` 기본 skip — 창 안/밖 행 배제를
+  전/후 대조로 검증, collection 2건 확인) · `test_weekly_metrics_cron_wiring.py`(12 passed) ·
+  `ruff check`·`black --check --line-length 100`(backend·infra 양쪽, CI와 동일 명령) ·
+  `mypy --strict whymath_backend/ops/weekly_metrics_report.py`(clean) · `tests/infra`
+  전체(1250 passed, OPS-56 반영 후 재실행 — 위 21건 ERROR 해소 확인).
+- **정직한 공백**: PR 생성·auto-merge 워크플로 스텝 자체의 실동작(GitHub API 실호출)은
+  이 세션에서 라이브 검증하지 못했다 — CI 파싱 기반 배선 테스트만 확보했고, 첫 실제
+  스케줄 발화(다음 월요일 07:00 KST) 또는 `workflow_dispatch` 수동 실행이 최초 실증이 된다.
+- **전체 스위트 첫 실행에서 발견·조치**: 위 검증 목록은 파일 단위 실행이었다 —
+  CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지"에 따라 `src/backend` 전체
+  (`python -m pytest -q`, 12,762건)를 별도로 돌렸더니 `ops/test_declared_unwired_audit.py::
+  TestRealRepositoryReport::test_real_repo_report_passes` 1건이 실패했다 — 신설 모듈
+  `ops.weekly_metrics_report`가 이 감사기의 `harness_clis` 축에서 "미도달인데 의도 선언
+  없음"으로 잡힌 것. 원인은 `declared_unwired_audit.ci_executed_modules()`가 `.github/
+  workflows/ci.yml` **한 파일만** 스캔하는 설계라, 이 모듈을 실행하는 별도 워크플로
+  `weekly-metrics.yml`은 그 스캔 범위 밖이었다(실제 미배선이 아니라 탐지기의 스캔 범위
+  한계). `harness.learning_metrics_rollup_cli`(COLLAB-03)와 동형 사유로 `ops.
+  weekly_metrics_report`에 `by-design` 유예를 등재해 해소 — 재대조: `test_declared_
+  unwired_audit.py` 67 passed, 전체 스위트 재실행 12,762 passed·0 failed·`PYTEST_EXIT=0`
+  (로그 내 판정 줄을 직접 읽어 확인 — 래퍼 exit code를 신뢰하지 않는다).
+

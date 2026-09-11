@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P0
 owner: claude
@@ -17,9 +17,13 @@ acceptance:
   - "③ 경계 명시: 러너 배선(OPS-19)·경보 last-hop(OPS-30)과 중복 등재 금지 — 이 태스크는 cron+append+최소 경보만"
 artifacts: []
 paths:
+  - "src/backend/whymath_backend/ops/**"
+  - "tests/backend/ops/**"
+  - "tests/infra/**"
   - ".github/workflows/**"
-  - "scripts/ops/**"
   - "metrics/**"
-session: null
-notes: "출처: EOS-53 crosswalk 갭 #13(H4). 주간 cron 0건 실측(daily 2종뿐). W1~W17 주간 리듬의 계기판 — G2~G4 판정 시계열.\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/H4★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필"
-updated: 2026-09-01
+  - scripts/analysis/eos_feature_inventory_v2.py
+  - "backlog/inventory/**"
+session: claude/ops-56-weekly-metrics-cron
+notes: "출처: EOS-53 crosswalk 갭 #13(H4). 주간 cron 0건 실측(daily 2종뿐). W1~W17 주간 리듬의 계기판 — G2~G4 판정 시계열.\n\n[정정 2026-09-01] eos_priority null → P0: 판정표 R/H4★ — 검증설계서 §8 집행 지점 명시 지목. EOS-80 일괄 백필\n\n[정정 2026-09-11] paths ['.github/workflows/**', 'scripts/ops/**', 'metrics/**'] → ['src/backend/whymath_backend/ops/**', 'tests/backend/ops/**', 'tests/infra/**', '.github/workflows/**', 'metrics/**', 'scripts/analysis/eos_feature_inventory_v2.py', 'backlog/inventory/**']: 실제 구현 위치 반영 — 원안 scripts/ops/**는 실제로 쓰이지 않았고 코드는 src/backend/whymath_backend/ops/**에, 테스트는 tests/backend/ops/**·tests/infra/**에, EOS 인벤토리 귀속 갱신은 scripts/analysis/eos_feature_inventory_v2.py·backlog/inventory/**에 위치\npaths 제거 1건: ['scripts/ops/**']"
+updated: 2026-09-11

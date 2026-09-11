@@ -6,7 +6,7 @@ schema_version: 2
 dashboard:
   population: 163
   classification_rate: 163/163
-  backend_modules_covered: 591
+  backend_modules_covered: 592
   endpoints_covered: 109
   release_p0_proposed: 101
   priority_changed_from_prior: 27
@@ -15,7 +15,7 @@ dashboard:
   loop_tables: 28
   loop_tables_without_p0_writer: [db.models.misconception_embedding]
   di_keys_bridged: 32
-  final_differs_from_matrix: 39
+  final_differs_from_matrix: 40
   final_differs_from_criteria: 12
   by_criteria_action:
     KEEP: 124
@@ -51,8 +51,8 @@ dashboard:
     REPLACE_CANDIDATE: 1
   by_matrix_action:
     HEAVY_REFACTOR: 13
-    KEEP: 100
-    REFACTOR: 49
+    KEEP: 99
+    REFACTOR: 50
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
     P0: 101
@@ -69,8 +69,8 @@ dashboard:
     Production: 135
   by_risk:
     High: 23
-    Low: 97
-    Med: 43
+    Low: 96
+    Med: 44
 features:
   - feature_id: WM-S-001
     name: "헬스체크·상태 조회"
@@ -8419,8 +8419,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 0
-    test_files: 329
-    test_functions: 5946
+    test_files: 330
+    test_functions: 5960
     matrix:
       A_subject: 3
       B_db: 0
@@ -8484,8 +8484,8 @@ features:
     mixed_deps: [schema.answer_submission, schema.enums, schema.problem, schema.student_solution_step]
     db_model_modules: 0
     coupling_count: 28
-    test_files: 195
-    test_functions: 2980
+    test_files: 196
+    test_functions: 2982
     matrix:
       A_subject: 1
       B_db: 0
@@ -8498,7 +8498,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 126
+    fan_in: 127
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8809,8 +8809,8 @@ features:
     mixed_deps: []
     db_model_modules: 0
     coupling_count: 7
-    test_files: 200
-    test_functions: 3009
+    test_files: 201
+    test_functions: 3011
     matrix:
       A_subject: 3
       B_db: 0
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 127
+    fan_in: 128
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -9250,30 +9250,30 @@ features:
     coupling: Low
     tests: Full
     migration_action: KEEP
-    matrix_action: KEEP
+    matrix_action: REFACTOR
     release_priority_proposed: P0
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: production_loop"
-    migration_risk: Low
-    loc: 3045
+    migration_risk: Med
+    loc: 3463
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 2
-    own_modules: 3
+    own_modules: 4
     adapter_deps: []
     mixed_deps: [schema.enums]
-    db_model_modules: 0
-    coupling_count: 5
-    test_files: 5
-    test_functions: 164
+    db_model_modules: 2
+    coupling_count: 8
+    test_files: 7
+    test_functions: 180
     matrix:
       A_subject: 1
-      B_db: 0
+      B_db: 1
       C_coupling: 1
       D_tests: 0
       E_state: 1
-      F_data: 0
-    matrix_total: 3
+      F_data: 2
+    matrix_total: 6
     criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 0/6
@@ -9385,7 +9385,7 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
     migration_risk: High
-    loc: 2814
+    loc: 2829
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 25
@@ -9589,8 +9589,8 @@ features:
     mixed_deps: [l3.pregenerate.provenance_bridge, schema.enums]
     db_model_modules: 1
     coupling_count: 13
-    test_files: 14
-    test_functions: 338
+    test_files: 16
+    test_functions: 354
     matrix:
       A_subject: 3
       B_db: 1
