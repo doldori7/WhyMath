@@ -9477,4 +9477,16 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
 - **정직한 공백**: PR 생성·auto-merge 워크플로 스텝 자체의 실동작(GitHub API 실호출)은
   이 세션에서 라이브 검증하지 못했다 — CI 파싱 기반 배선 테스트만 확보했고, 첫 실제
   스케줄 발화(다음 월요일 07:00 KST) 또는 `workflow_dispatch` 수동 실행이 최초 실증이 된다.
+- **전체 스위트 첫 실행에서 발견·조치**: 위 검증 목록은 파일 단위 실행이었다 —
+  CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지"에 따라 `src/backend` 전체
+  (`python -m pytest -q`, 12,762건)를 별도로 돌렸더니 `ops/test_declared_unwired_audit.py::
+  TestRealRepositoryReport::test_real_repo_report_passes` 1건이 실패했다 — 신설 모듈
+  `ops.weekly_metrics_report`가 이 감사기의 `harness_clis` 축에서 "미도달인데 의도 선언
+  없음"으로 잡힌 것. 원인은 `declared_unwired_audit.ci_executed_modules()`가 `.github/
+  workflows/ci.yml` **한 파일만** 스캔하는 설계라, 이 모듈을 실행하는 별도 워크플로
+  `weekly-metrics.yml`은 그 스캔 범위 밖이었다(실제 미배선이 아니라 탐지기의 스캔 범위
+  한계). `harness.learning_metrics_rollup_cli`(COLLAB-03)와 동형 사유로 `ops.
+  weekly_metrics_report`에 `by-design` 유예를 등재해 해소 — 재대조: `test_declared_
+  unwired_audit.py` 67 passed, 전체 스위트 재실행 12,762 passed·0 failed·`PYTEST_EXIT=0`
+  (로그 내 판정 줄을 직접 읽어 확인 — 래퍼 exit code를 신뢰하지 않는다).
 
