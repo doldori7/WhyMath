@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 eos_priority: P2
 owner: claude
@@ -19,10 +19,12 @@ acceptance:
   - "⑤ 변별력(양방향): 합성 세트 + 그 세트 문항에 대한 합성 시도를 넣어 unattributable 카운터가 실제로 오르는지 → 제거 시 복원되는지 실측(절대값 0 assert 금지 — 델타 패턴). 세트에 없는 문항의 시도는 카운터에 잡히지 않는지도 확인. 뮤테이션 원복은 cp 백업으로만"
   - "⑥ CI 배선 실재 확인: tests/backend/harness/**가 backend 잡 testpaths로 기수집됨을 확인하고 신규 워크플로 0. 실PG 통합 델타 테스트가 필요하면 tests/backend/db/*_integration.py(-m integration·backend-migrations 잡) 관례를 따른다. 판정은 exit code(출력 억제·절단 금지)"
   - "⑦ 범위 밖(명시·Kiki 결정 2026-08-11 '관측 먼저'): problem_attempt.assessment_id 컬럼 신설·마이그레이션은 **이 태스크에 포함하지 않는다**(관측 결과를 발화 조건으로 삼는 별도 결정) · 채점·점수 산출 0 · partial_credit(l6/blueprint/assembly.py:526) 호출자 배선 0 · 멱등 창 설계 0 · 학생 대면 노출 0(ASM-11 소관)"
+  - "[실행 증적 2026-09-12] ①현행 실측 고정 — ProblemAttempt(activity.py) 전수 grep으로 assessment_id 컬럼 부재 재확인, assemble_blueprint_assessment(api/me.py, completed_at=None 적재)·complete_my_assessment(_close_owned_resource로 시각만 갱신, 결과 산출 코드 0) 코드 읽기로 notes 주장과 정확히 일치 확인 — 반증되지 않음, 범위 재조정 불요.\n\n②정합 설계 본체 — harness/assessment_set_attribution_report.py 신설(신규 스키마 0·마이그레이션 0·엔드포인트 0). assessment_seat_reach_report.py(ASM-01) 4단 분리(collect_test_set_rows(AsyncSession) → build_report(순수) → render_report/report_to_json/dump_json → main CLI exit 0/2) 그대로 답습. 산출 5축: 세트 수 · 선언 vs 관측 문항 수 정합 · 귀속 판별 불가 시도 수(unattributable_attempt_count, 세트 문항 (user_id,problem_id) 쌍에 problem_attempt 존재 여부) · 빈 완료 세트(completed_at 有 + concept_diagnosis/recommended_path/strong_points 전부 빈 배열) · 중복 청사진 세트(같은 사용자·같은 문항 id 집합 2건 이상).\n\n③정직 표기 — pattern_diagnosis 헤더 없음/형태 이상 행은 malformed_count로 별도 계상(조용한 유실 금지). \"귀속 0건\"과 \"안 풀었다\"를 구분: 절대값이 아니라 델타 테스트(합성 세트+합성 시도 추가/제거)로 카운터 실동작 검증.\n\n④게임화 금기 — 데이터 모델에 estimated_grade 등 4개 예측 필드 자체가 없음. test_no_result_gating_fields_appear_in_json_output이 JSON 출력에 그 필드명 문자열이 등장하지 않음을 동결.\n\n⑤변별력(양방향, hermetic) — test_unattributable_count_increases_when_attempt_pair_present(0→1 증가)·test_unattributable_count_restores_to_zero_when_attempt_pair_removed(1→0 복원)·test_attempt_for_problem_not_in_any_set_does_not_count(세트 밖 문항 시도 무영향)·test_attempt_by_different_user_for_same_problem_does_not_count(타인 시도 무영향) 전부 절대값 0 assert 금지 원칙 준수. 실 PG 델타 통합테스트(tests/backend/db/test_assessment_set_attribution_report_integration.py)도 동일 패턴으로 작성 — 이 샌드박스는 PG 미도달이라 스킵되나 PG 도달성 체크까지는 정상 도달 확인(WHYMATH_RUN_INTEGRATION=1로 재확인), CI에서 실행.\n\n⑥CI 배선 실재 확인 — tests/backend/harness/**·tests/backend/db/**는 backend 잡 testpaths(tests/backend)로 기수집됨을 .github/workflows/ci.yml 실측으로 확인, 신규 워크플로 0.\n\n⑦범위 밖 — problem_attempt.assessment_id 컬럼 신설·마이그레이션 미포함(관측 결과를 발화 조건으로 삼는 별도 결정, Kiki 2026-08-11 \"관측 먼저\"). 채점·점수 산출 0·partial_credit 호출자 배선 0·멱등 창 설계 0·학생 대면 노출 0.\n\nRED-before-fix 3건(cp 백업/복원, git 원복 미사용, diff 바이트 동일 확인): ①unattributable 카운팅 로직 제거 → 2건 RED(20건 무회귀) ②empty_completion 상시 False로 훼손 → 1건 RED(21건 무회귀) ③dup_groups 로직 제거 → 1건 RED(21건 무회귀).\n\n전체 스위트가 잡은 진짜 파급 2건(부분 스위트로는 안 보임): test_assessment_result_verdict_premise.py(ARCH-38 전제 가드 — 신규 모듈의 Assessment ORM 임포트를 _ALLOWED_IMPORTERS에 사유와 함께 등재)·ops/declared_unwired_audit.py(OPS-22 — harness.assessment_set_attribution_report를 _OFFLINE_REPORT로 선언). eos_feature_inventory_v2 재생성 2회(신규 모듈 1회·declared_unwired_audit.py 라인 변경 1회).\n\n검증: ruff·black·mypy 대상 파일 전건 clean. 전체 백엔드 스위트 12878 passed·342 skipped·1 xfailed(0 failed, 18분13초, 안정 트리). tests/infra 1303 passed·1 skipped."
 artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
-session: null
-notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D5. ASM-04가 '세트 시행·채점 폐루프는 범위 밖(구성까지)'이라 스스로 정직하게 자인했으나 후속 소유자가 붙지 않아 무주공산이 됐다(같은 artifacts가 자인한 partial_credit 호출자 0·멱등 창 미설정도 동일). 귀속이 없으면 외부 EOS 틀 모듈 51의 분석 축(문항별 정답률·성취도·교육과정 달성률)이 원천 불가이고 세트 단위 심리측정(신뢰도)도 정의 자체가 불가능하다 — r2 §5-⑦ 발화 조건의 근거.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
-updated: 2026-09-01
+  - tests/backend/db/test_assessment_set_attribution_report_integration.py
+session: claude/asm-10-attribution-observability
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D5. ASM-04가 '세트 시행·채점 폐루프는 범위 밖(구성까지)'이라 스스로 정직하게 자인했으나 후속 소유자가 붙지 않아 무주공산이 됐다(같은 artifacts가 자인한 partial_credit 호출자 0·멱등 창 미설정도 동일). 귀속이 없으면 외부 EOS 틀 모듈 51의 분석 축(문항별 정답률·성취도·교육과정 달성률)이 원천 불가이고 세트 단위 심리측정(신뢰도)도 정의 자체가 불가능하다 — r2 §5-⑦ 발화 조건의 근거.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필\n\n[정정 2026-09-12] ASM-10 실행 완료 — acceptance①~⑦ 이행·RED-before-fix·전체 검증 증적 등재\n\n[정정 2026-09-12] paths ['src/backend/whymath_backend/harness/**', 'tests/backend/harness/**'] → ['src/backend/whymath_backend/harness/**', 'tests/backend/harness/**', 'tests/backend/db/test_assessment_set_attribution_report_integration.py']: acceptance⑤ 실 PG 델타 통합테스트가 tests/backend/db/에 위치 — LIC-01과 파일 단위 겹침(다른 파일들)이라 실 충돌 아님, 범위 명시로 policy_warn 해소"
+updated: 2026-09-12

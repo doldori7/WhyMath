@@ -1210,6 +1210,10 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # concept-reach(OPS-23)와 달리 mobile-only PR 회귀 가드가 아니라 관측 리포트다.
         "harness.formula_reach_report": _OFFLINE_REPORT,
         "harness.assessment_seat_reach_report": _OFFLINE_REPORT,
+        # ASM-10(2026-09-12): 조립 세트 시행 귀속 관측 — assessment_seat_reach_report와 동일
+        # 성격(정적 DB 조회·게이트 아님). problem_attempt에 assessment_id가 없어 귀속을
+        # 해소하지 않고 가시화만 한다(스키마·엔드포인트 0).
+        "harness.assessment_set_attribution_report": _OFFLINE_REPORT,
         "harness.recommendation_outcome_report": _OFFLINE_REPORT,
         "harness.learning_path_orderability_report": _OFFLINE_REPORT,
         "harness.rephrased_corpus_hygiene": _OFFLINE_REPORT,
