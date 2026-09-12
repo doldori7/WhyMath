@@ -1,0 +1,277 @@
+"""명시적 정정 언급 사각 측정 — 학생이 오개념을 *부정*했는데도 확신 진단이 나가는가 (MISC-25).
+
+설계 정본: `MISC-25` acceptance②. 발단은 `MISC-22`(PR #1071) Codex P1 리뷰다 — 그 PR은
+자신이 새로 노출시킨 5개 정규식 채널만 `EXPLICIT_CORRECTION_MENTION` 전방탐색으로 막았고,
+그보다 앞서 있던 **substring 경로의 같은 사각**은 범위 밖으로 분리됐다. 이 모듈이 그 사각의
+크기를 잰다.
+
+────────────────────────────────────────────────────────────────────────────
+무엇이 사각인가
+────────────────────────────────────────────────────────────────────────────
+`_match_one`의 `signals`는 *공출현(AND)*만 본다. 그래서 오개념을 **저지른** 풀이와 그것을
+**인용해 부정한** 풀이를 구별하지 못한다. 실측:
+
+    diagnose("x²=2x 양변을 x로 나누면 x=2라는 풀이는 틀렸다")
+      → root-loss-by-dividing  confidence 1.0  (서빙 게이트 0.65 통과)
+
+학생이 "틀렸다"고 명시했는데 그 오개념을 가졌다고 확신 개입이 나간다. 의사결정 우선순위 #1
+(학생 안전·웰빙)에 직접 닿는다 — 맞게 안 학생에게 틀렸다고 말하는 쪽이 놓치는 쪽보다 해롭다
+(`models.py::refuting_regex` docstring이 이미 그렇게 선언한다).
+
+────────────────────────────────────────────────────────────────────────────
+측정 설계 — 대조군이 없으면 이 측정은 위장이다
+────────────────────────────────────────────────────────────────────────────
+"정정 문장에서 진단이 안 나왔다"는 두 가지를 뜻할 수 있다:
+  ① 반박 축이 작동했다 (우리가 재려는 것)
+  ② 애초에 그 문장이 이 항목을 발화시키지 못했다 (측정 실패)
+구별하지 않으면 ②가 ①로 위장한다. 그래서 항목마다 **대조군**(정정 어구 없는 같은 문장)을
+함께 돌리고, 대조군이 서빙 게이트를 못 넘는 항목은 분모에서 빼고 *사유를 적어* 보고한다.
+
+*측정 실패의 사유를 나눠 세는 이유*(1차 시도의 실제 결함): 초안 생성기는 문장에
+`canonical_statement`를 붙였는데, `root-loss-by-dividing`의 그것이 `x=0 근 손실`이라
+항목 자신의 `refuting_regex`(`ZERO_ROOT_MENTION`)를 밟아 **대조군이 스스로 반박**됐다.
+그 결과가 "미발화"로 뭉뚱그려져 사각 1건이 통계에서 사라질 뻔했다 — 원인을 안 나누면
+도구 결함이 관측 결과로 보인다(CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계 금지").
+
+────────────────────────────────────────────────────────────────────────────
+왜 confidence가 아니라 **서빙 게이트 통과**를 세는가
+────────────────────────────────────────────────────────────────────────────
+`apply_match_quality_gate`는 top-1 floor라 confidence가 높아도 다른 후보에 밀리면 학생에게
+안 나간다. 해가 되는 것은 *confidence 수치*가 아니라 *도달*이므로 도달을 센다
+(`anchor_detection_channel_eval._survives_serving_gate`와 같은 이유·같은 방식).
+
+사용:
+    python -m whymath_backend.harness.explicit_correction_gap_eval
+    python -m whymath_backend.harness.explicit_correction_gap_eval --max-gap-ratio 0.0
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
+from whymath_backend.l4.misconception.diagnose import diagnose, is_refuted
+from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
+from whymath_backend.l4.misconception.models import Misconception
+
+__all__ = [
+    "CORRECTION_PHRASES",
+    "CorrectionProbe",
+    "GapReport",
+    "ProbeResult",
+    "build_probes",
+    "evaluate",
+    "format_report",
+    "main",
+]
+
+_EXIT_OK = 0
+_EXIT_FAIL = 1
+# 측정 자체가 불가한 상태(대상 0건 등)는 기준 미달과 다르다 — 통과로 위장하지 않는다.
+_EXIT_UNMEASURABLE = 2
+
+#: 학생이 오개념을 명시적으로 부정할 때 쓰는 대표 어구.
+#:
+#: `catalog.EXPLICIT_CORRECTION_MENTION`이 겨냥하는 표현에서 뽑았고, 활용형을 골고루 밟도록
+#: 골랐다(`틀렸`·`잘못`·`오답`·`아니`). 한글 활용형은 substring 분해가 안 되므로(`틀리`가
+#: `틀린`을 포함하지 않는다) 어간 하나로 대표시키면 그 축을 안 밟는다 — 카탈로그 상수의
+#: 활용형 나열과 같은 이유다.
+CORRECTION_PHRASES: tuple[str, ...] = (
+    "라는 풀이는 틀렸다",
+    "는 잘못된 계산이다",
+    "로 보면 오답이다",
+    "은 아니다",
+)
+
+
+@dataclass(frozen=True)
+class CorrectionProbe:
+    """항목 1개의 대조군 + 정정 변형 묶음."""
+
+    kebab_id: str
+    control: str
+    refuted: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProbeResult:
+    """항목 1개의 측정 결과.
+
+    `unmeasurable_reason`이 있으면 이 항목은 분모에서 빠진다 — 그 사유가 곧 도구가
+    무엇을 못 쟀는지에 대한 정직한 기록이다.
+    """
+
+    kebab_id: str
+    unmeasurable_reason: str | None
+    reaches_when_refuted: bool = False
+    worst_phrase: str = ""
+
+    @property
+    def measurable(self) -> bool:
+        return self.unmeasurable_reason is None
+
+
+def _control_text(misconception: Misconception) -> str:
+    """오개념을 *주장하는* 대조군 문장 — 신호를 공출현시킨다.
+
+    `canonical_statement`를 붙이지 **않는다**: 그 문장이 항목 자신의 `refuting_regex`를
+    밟을 수 있어(모듈 docstring의 `root-loss-by-dividing` 사례) 대조군이 스스로 죽는다.
+    신호만 늘어놓는 것이 "이 항목이 발화하는 최소 텍스트"에 가장 가깝다.
+    """
+    return " ".join(misconception.signals)
+
+
+def build_probes() -> tuple[CorrectionProbe, ...]:
+    """카탈로그 전건에 대해 대조군·정정 변형을 결정론 생성한다(무작위 0·라이브 0)."""
+    return tuple(
+        CorrectionProbe(
+            kebab_id=m.id,
+            control=_control_text(m),
+            refuted=tuple(_control_text(m) + phrase for phrase in CORRECTION_PHRASES),
+        )
+        for m in CATALOG
+    )
+
+
+def _reaches_student(kebab_id: str, text: str) -> bool:
+    """이 텍스트에서 그 오개념이 **서빙 품질 게이트를 넘어** 학생에게 도달하는가."""
+    gated = apply_match_quality_gate(diagnose(text, top_k=len(CATALOG_BY_ID)))
+    return any(m.misconception.id == kebab_id for m in gated.matches)
+
+
+def _evaluate_one(probe: CorrectionProbe) -> ProbeResult:
+    misconception = CATALOG_BY_ID[probe.kebab_id]
+
+    if not probe.control.strip():
+        return ProbeResult(probe.kebab_id, "signals 없음 — 대조군을 만들 수 없다")
+    if is_refuted(misconception, probe.control):
+        # 신호 문자열 자체가 항목의 반박 조건을 밟은 경우. 도구의 한계이지 관측 결과가 아니다.
+        return ProbeResult(probe.kebab_id, "대조군이 항목 자신의 refuting_regex를 밟음")
+    if not _reaches_student(probe.kebab_id, probe.control):
+        return ProbeResult(probe.kebab_id, "대조군이 서빙 게이트에 도달하지 못함")
+
+    for text, phrase in zip(probe.refuted, CORRECTION_PHRASES, strict=True):
+        if _reaches_student(probe.kebab_id, text):
+            return ProbeResult(probe.kebab_id, None, reaches_when_refuted=True, worst_phrase=phrase)
+    return ProbeResult(probe.kebab_id, None, reaches_when_refuted=False)
+
+
+@dataclass(frozen=True)
+class GapReport:
+    """전수 측정 결과 — 분모를 항상 함께 낸다."""
+
+    results: tuple[ProbeResult, ...]
+
+    @property
+    def measurable(self) -> tuple[ProbeResult, ...]:
+        return tuple(r for r in self.results if r.measurable)
+
+    @property
+    def gap(self) -> tuple[ProbeResult, ...]:
+        return tuple(r for r in self.measurable if r.reaches_when_refuted)
+
+    @property
+    def gap_ratio(self) -> float | None:
+        """사각 비율. **측정 가능 항목이 0이면 0.0이 아니라 `None`**(분모 없는 0 금지)."""
+        if not self.measurable:
+            return None
+        return len(self.gap) / len(self.measurable)
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "catalog_total": len(self.results),
+            "measurable": len(self.measurable),
+            "gap": len(self.gap),
+            "gap_ratio": self.gap_ratio,
+            "gap_ids": [r.kebab_id for r in self.gap],
+            "unmeasurable": [
+                {"id": r.kebab_id, "reason": r.unmeasurable_reason}
+                for r in self.results
+                if not r.measurable
+            ],
+        }
+
+
+def evaluate() -> GapReport:
+    return GapReport(tuple(_evaluate_one(p) for p in build_probes()))
+
+
+def format_report(report: GapReport) -> str:
+    lines = [
+        "=" * 70,
+        "명시적 정정 언급 사각 — 학생이 부정했는데도 진단이 도달하는가 (MISC-25)",
+        "=" * 70,
+        f"  카탈로그 전체 : {len(report.results)}종",
+        f"  측정 가능     : {len(report.measurable)}종 (대조군이 서빙 게이트에 도달한 항목)",
+    ]
+    ratio = report.gap_ratio
+    if ratio is None:
+        lines.append("  사각 비율     : 측정 불가 — 측정 가능 항목이 0종이다(통과 아님)")
+    else:
+        lines.append(f"  사각          : {len(report.gap)}/{len(report.measurable)} ({ratio:.1%})")
+    if report.gap:
+        lines.append("")
+        lines.append("  [사각 항목] 정정 어구가 있는데도 학생에게 도달한다:")
+        for r in report.gap:
+            lines.append(f"    · {r.kebab_id:<44} ← {r.worst_phrase!r}")
+    unmeasurable = [r for r in report.results if not r.measurable]
+    if unmeasurable:
+        lines.append("")
+        lines.append("  [측정 불가] 분모에서 제외 — 사유별:")
+        for r in unmeasurable:
+            lines.append(f"    · {r.kebab_id:<44} {r.unmeasurable_reason}")
+    lines.append("=" * 70)
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m whymath_backend.harness.explicit_correction_gap_eval",
+        description=(
+            "학생이 오개념을 명시적으로 부정한 텍스트에서 그 오개념 진단이 서빙 게이트를 "
+            "넘어 도달하는 비율을 카탈로그 전수로 잰다(MISC-25 · hermetic·DB 0·LLM 0)."
+        ),
+    )
+    parser.add_argument(
+        "--max-gap-ratio",
+        type=float,
+        default=None,
+        help="사각 비율 상한 — 초과하면 exit 1(기본 미지정=측정만).",
+    )
+    parser.add_argument("--json", dest="json_path", type=Path, default=None)
+    args = parser.parse_args(argv)
+
+    report = evaluate()
+    print(format_report(report))
+
+    if args.json_path is not None:
+        args.json_path.parent.mkdir(parents=True, exist_ok=True)
+        args.json_path.write_text(
+            json.dumps(report.to_json(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"JSON 산출물: {args.json_path}")
+
+    ratio = report.gap_ratio
+    if ratio is None:
+        # 잰 것이 없다 — 기준 미달이 아니라 측정 실패다(스캔 0건은 실패).
+        print(
+            "[측정 불가] 대조군이 도달한 항목이 0종 — 카탈로그·게이트·생성기 중 하나가 깨졌다.",
+            file=sys.stderr,
+        )
+        return _EXIT_UNMEASURABLE
+    if args.max_gap_ratio is not None and ratio > args.max_gap_ratio:
+        print(
+            f"[게이트 미달] 사각 비율 {ratio:.1%} > 상한 {args.max_gap_ratio:.1%}",
+            file=sys.stderr,
+        )
+        return _EXIT_FAIL
+    return _EXIT_OK
+
+
+if __name__ == "__main__":  # pragma: no cover — 모듈 실행 진입점
+    raise SystemExit(main())

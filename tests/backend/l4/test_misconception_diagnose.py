@@ -928,3 +928,212 @@ class TestRefutingRegexGovernance:
         entry = CATALOG_BY_ID["root-loss-by-dividing"]
         assert entry.refuting_regex == (ZERO_ROOT_MENTION,)
         assert ZERO_ROOT_MENTION in entry.regex_signals[0]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# MISC-25 — 명시적 정정 언급: 절 경계 안 근접 판정
+# ──────────────────────────────────────────────────────────────────────────
+class TestExplicitCorrectionNearSignals:
+    """학생이 오개념을 *명시적으로 부정*했는데도 확신 진단이 나가던 구조적 공백.
+
+    발단: `MISC-22`(PR #1071) Codex P1이 5개 정규식 채널에서 이 축을 지적했고, 그보다 앞서
+    있던 **substring 경로의 같은 사각**은 범위 밖으로 분리됐다(MISC-25).
+
+    실측된 크기: 진단 카탈로그의 **측정 가능 66종 전부**가 "…라는 풀이는 틀렸다"를 붙여도
+    서빙 게이트를 통과했다(100%). 항목별 결함이 아니라 구조적 공백이라 항목마다
+    `refuting_regex`를 다는 방식으로는 못 메운다 —
+    측정 정본은 `harness/explicit_correction_gap_eval.py`.
+    """
+
+    def test_explicit_correction_suppresses_confident_diagnosis(self) -> None:
+        """[결함 재현] MISC-25 acceptance① 그 문장 — 정정 언급이 있으면 진단이 나가지 않는다.
+
+        수정 전 실측: `root-loss-by-dividing` confidence **1.0**으로 게이트 통과 →
+        `select_intervention`이 COUNTEREXAMPLE을 내 *정답을 쓴 학생에게* 반례가 나갔다.
+        """
+        text = "x²=2x 양변을 x로 나누면 x=2라는 풀이는 틀렸다"
+        assert "root-loss-by-dividing" not in [m.misconception.id for m in diagnose(text)]
+
+    def test_prefix_correction_label_is_also_recognized(self) -> None:
+        """전치 라벨("틀린 풀이: …")도 인지한다 — 창이 **양방향**이어야 하는 이유.
+
+        후치 전용 창이면 이 형태를 하나도 못 잡는다(교수학 판정 실측: 전치 라벨 66종 중 0종).
+        이 픽스처가 없으면 `_CORRECTION_LOOKBEHIND`를 0으로 줄여도 전건 초록이다.
+        """
+        assert "root-loss-by-dividing" not in [
+            m.misconception.id for m in diagnose("틀린 풀이: 양변을 x로 나누면 x=2")
+        ]
+
+    def test_quoted_criticism_of_someone_elses_error_is_suppressed(self) -> None:
+        """남의 오답을 인용해 비판하는 문장 — 그 학생이 그 오개념을 가진 것이 아니다."""
+        text = "친구는 (a+b)² 를 a² + b² 라고 했는데 틀렸어"
+        assert "distribution-over-power" not in [m.misconception.id for m in diagnose(text)]
+
+    # ── 아래 4건이 이 설계의 본체다: **억제되면 안 되는** 경우 ──
+
+    def test_self_correction_in_an_earlier_clause_does_not_silence_a_later_error(self) -> None:
+        """[대조군·핵심] 앞 단계에서 스스로 정정하고 뒤 단계에서 오개념을 저지른 풀이.
+
+        텍스트 전체 스코프를 택했다면 "잘못" 한 단어 때문에 이 진단이 사라진다. 그러면
+        **자기 오류를 언어화한 학생일수록 진단을 덜 받는** 역선택이 되고, 그건 이 프로젝트가
+        기르려는 바로 그 메타인지 행동에 침묵으로 보상하는 것이다. 게다가 미검출은 아무도
+        소리내지 않는다 — 이 픽스처가 그 침묵을 소리내게 하는 자리다.
+        """
+        text = (
+            "1) 처음에 -3을 +3으로 잘못 옮겨 적어서 고쳤다.\n2) x²=2x 이므로 양변을 x로 나누면 x=2."
+        )
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_numbered_steps_without_punctuation_still_split_into_clauses(self) -> None:
+        """[대조군] 구두점 없는 손글씨 전사 — 번호 매김이 절 경계여야 한다.
+
+        문장부호에만 기대면 이런 텍스트는 전체가 한 문장이 되어 **문장 스코프가 텍스트 전체
+        스코프로 조용히 붕괴**한다(교수학 판정 실측: 64/64 오억제). OCR·손글씨 경로에서
+        구두점 없는 전사는 예외가 아니라 기본에 가깝다.
+
+        **픽스처 주의**: 정정 어휘가 신호에서 근접 창 **안**에 있어야 이 절을 밟는다. 초안은
+        "부호를 잘못 봐서 고침"이었는데 `잘못`이 `양변`에서 정규형 11자 떨어져 lookbehind
+        12자 창을 **한 글자 차이로 벗어났다** — 번호 경계를 지워도 통과해서 뮤테이션 M1이
+        살아남았다. 즉 이름은 '번호 경계'인데 코드는 그 절을 지나가지 않았다.
+        """
+        text = "1) 부호가 잘못 2) x²=2x 양변을 x로 나누면 x=2"
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_correction_in_a_previous_sentence_does_not_reach_across_the_period(self) -> None:
+        """[대조군] 정정이 신호와 **가깝지만 다른 절**이면 억제하지 않는다.
+
+        위 번호 경계 테스트와 짝이면서 다른 절을 밟는다 — 이쪽은 마침표 경계다. 정정 어휘가
+        창 거리 안(정규형 3자)에 있으므로, 절 경계가 없으면 반드시 억제된다.
+        경계를 통째로 없애는 뮤테이션(=텍스트 전체 스코프로의 붕괴)이 여기서 잡힌다.
+        """
+        text = "부호를 잘못 봤다. 양변을 x로 나누면 x=2"
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_distant_correction_in_the_same_clause_does_not_suppress(self) -> None:
+        """[대조군] 같은 절이어도 창 밖이면 억제하지 않는다 — 창 계산이 신호 위치 기준인지.
+
+        `_signal_span`이 `_signal_hit`과 다른 규칙을 쓰면(예: 항상 0에서 시작) 창이 절 머리에
+        열려 먼 정정까지 삼킨다. 이 픽스처는 정정을 절 머리에, 신호를 창 밖(정규형 15자)에
+        두어 그 차이를 드러낸다 — 없으면 `_signal_span` 뮤테이션이 살아남는다.
+        """
+        text = "잘못 적었던 부분을 고치고 다시 계산하면 양변을 x로 나누면 x=2"
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_contrastive_ani_connective_is_not_a_correction_marker(self) -> None:
+        """[대조군·언어] 연결형 `아니`는 정정 표지가 아니라 **대조 표지**다.
+
+        "A가 아니라 B다"는 오개념을 *부정*하는 말이 아니라 *주장*하는 가장 흔한 형식이다.
+        `catalog.EXPLICIT_CORRECTION_MENTION`을 그대로 쓰면 이 문장이 억제돼
+        `TestRefutingRegex::test_negated_zero_root_is_not_a_refutation`이 지키던 것을 잃는다
+        (실제로 1차 구현에서 그 테스트가 red를 냈다 — 이 저장소가 PR #1039에서 이미 한 번
+        싸운 결함의 재발이었다). 그래서 이 축은 종결형만 정정으로 본다.
+        """
+        text = "x²=2x에서 x=0은 근이 아니므로 양변을 x로 나누면 x=2다"
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_numeric_signal_window_opens_at_the_signal_not_the_clause_head(self) -> None:
+        """[대조군] **숫자 signal**(`"0"`)도 창이 신호 위치에서 열린다.
+
+        `_signal_span`은 `_signal_hit`처럼 두 갈래다 — 숫자·단일 영문자는 경계 정규식,
+        나머지는 substring. 위 픽스처들은 전부 `양변`·`x로 나누` 같은 substring 갈래라
+        **경계 정규식 갈래를 한 번도 밟지 않았다**(뮤테이션 M9 생존으로 발각). 여기서
+        `division-by-zero`의 `"0"`으로 그 갈래를 밟는다: 정정이 절 머리에, 숫자 신호가
+        창 밖(정규형 18자)에 있으므로 창이 신호 기준으로 열려야만 진단이 살아남는다.
+        """
+        text = "잘못 적었던 부분을 고치고 다시 계산하니 분모가 0"
+        assert "division-by-zero" in [m.misconception.id for m in diagnose(text)]
+
+    def test_suppression_still_works_in_a_later_clause_of_a_long_solution(self) -> None:
+        """[억제] 앞 절이 긴 다중 절 풀이에서도 뒤 절의 정정이 인지된다.
+
+        창은 **그 절 안의** 신호 위치를 기준으로 열려야 한다. 전체 텍스트 기준 위치를 쓰면
+        앞 절 길이만큼 밀려 창이 절 끝 밖으로 나가고, 정정이 있는데도 못 잡는다
+        (뮤테이션 M3). 앞 절이 짧으면 밀림이 작아 우연히 통과하므로 **길게** 잡았다 —
+        초안(28자)으로는 밀림이 창 안에 흡수돼 M3가 살아남았고, 함수 수준에서 원본과
+        출력이 실제로 갈리는 길이를 찾아 교체했다.
+        """
+        text = (
+            "앞에서 계수를 정리하고 공통인수를 묶고 다시 한 번 검토한 뒤에 아래를 적었다. "
+            "양변을 x로 나누면 x=2라는 풀이는 틀렸다"
+        )
+        assert "root-loss-by-dividing" not in [m.misconception.id for m in diagnose(text)]
+
+    def test_self_correction_joined_by_the_connective_go_does_not_silence(self) -> None:
+        """[대조군] 연결어미 `-고`로 이어진 자기정정은 뒤 절의 오개념을 죽이지 않는다.
+
+        **MISC-25 착지분의 실측된 결함**이다(MISC-26에서 발견·수정). 그때 대조군 픽스처가
+        전부 마침표·번호를 써서 이 형태를 한 번도 밟지 않았고, 한국어 풀이가 구두점 없이
+        절을 잇는 가장 흔한 방식이 바로 `-고`다.
+        """
+        for text in (
+            "부호를 잘못 봤고 양변을 x로 나누면 x=2다",
+            "앞에서 틀린 부분을 고치고 양변을 x로 나누면 x=2다",
+        ):
+            assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)], text
+
+    def test_quotative_rago_is_not_a_clause_boundary(self) -> None:
+        """인용격 `라고`는 절 경계가 아니다 — 빼지 않으면 인용 비판의 억제가 풀린다.
+
+        `-고`를 경계로 넣을 때 `라고`·`다고`를 제외하지 않으면
+        "친구는 (a+b)²를 a²+b²**라고** 했는데 틀렸어"가 인용 앞뒤로 갈려, 남의 오답을
+        비판하는 문장에 확신 오진단이 나간다. 위 `-고` 테스트와 반대 방향의 짝이다 —
+        한쪽만 두면 "`-고`를 통째로 경계에서 뺐다"도 같은 초록을 낸다.
+        """
+        text = "친구는 (a+b)² 를 a² + b² 라고 했는데 틀렸어"
+        assert "distribution-over-power" not in [m.misconception.id for m in diagnose(text)]
+
+    def test_weak_signals_do_not_anchor_a_correction_window(self) -> None:
+        """[대조군] 숫자 signal(`"0"`)은 창을 열지 않는다 — 정의역 조건문에 딸려 나오기 때문.
+
+        "분모가 0이면 나눌 수 있다고 봤고 x=0은 근이 아니다"에서 뒤 절의 `아니다`는
+        *제로근*을 부정하는 말이지 나눗셈 오개념을 부정하는 말이 아니다. 그런데 뒤 절의
+        `0`이 신호로 잡혀 창을 열면 그 `아니다`가 `division-by-zero`를 삼킨다(실측).
+        비용은 0이다 — 신호가 전부 약한 카탈로그 항목은 없다(실측 확인).
+        """
+        text = "분모가 0이면 나눌 수 있다고 봤고 x=0은 근이 아니다"
+        assert "division-by-zero" in [m.misconception.id for m in diagnose(text, top_k=70)]
+
+    def test_genuine_refutation_after_a_connective_is_still_suppressed(self) -> None:
+        """`-지만` **뒤**의 진짜 반박은 억제된다 — 연결어미를 경계로 넣지 않은 이유.
+
+        "…라고 봤지만 틀렸다"의 `틀렸다`는 실제로 앞 주장을 반박하므로 갈라 놓으면 반박을
+        잃는다. 그래서 `-지만`·`-는데`는 경계가 아니다.
+
+        ⚠️ **알려진 한계(이 테스트가 지키는 것의 이면)**: 같은 연결어미가 반대 뜻으로도
+        쓰인다 — "부호가 잘못됐**지만** 양변을 x로 나누면 x=2다"는 *다른 것*을 정정하고
+        이 오개념을 저지른 문장인데 현재 억제된다(미검출). 두 문장은 연결어미만으로는
+        구별 불가이고, 이것이 `MISC-28`(귀속 판정)의 근거다. 어휘를 넓히면 이 미검출
+        경로가 **함께 넓어지므로**, MISC-26은 어휘 확장을 채택하지 않았다.
+        """
+        text = "양변을 x로 나누면 x=2라고 봤지만 틀렸다"
+        assert "root-loss-by-dividing" not in [m.misconception.id for m in diagnose(text)]
+
+    def test_distant_correction_referring_to_an_earlier_step_does_not_suppress(self) -> None:
+        """[대조군] 같은 절 안이어도 **창 밖**(정규형 16자)의 정정은 이 오개념을 안 가린다.
+
+        "양변을 x로 나누면 x=2인데 앞의 계산이 틀렸다" — `틀렸다`가 가리키는 것은 *앞의
+        계산*이고 근 손실은 그대로 저질러졌다. 창을 옛 24로 되돌리면 여기까지 닿아 억제된다.
+
+        이 픽스처가 필요한 이유: MISC-26에서 절 경계에 연결어미 `-고`가 추가되면서, 창 크기를
+        고정하던 원래 사례("…있다고 봤고 x=0은 근이 아니다")가 **절 분리로 먼저 보호**받게
+        됐다. 그 결과 창 크기 뮤테이션(12→24)이 살아남았다 — 방어가 다른 절로 옮겨 갔을 뿐인데
+        "창 크기가 검사됐다"고 읽힐 자리다. 그래서 창만이 막는 사례를 따로 둔다.
+        """
+        text = "양변을 x로 나누면 x=2인데 앞의 계산이 틀렸다"
+        assert "root-loss-by-dividing" in [m.misconception.id for m in diagnose(text)]
+
+    def test_plain_misconception_without_any_correction_is_unaffected(self) -> None:
+        """[대조군] 정정 어휘가 없는 순수 오개념은 그대로 진단된다(과잉 억제 아님)."""
+        assert "root-loss-by-dividing" in [
+            m.misconception.id for m in diagnose("x²=2x 양변을 x로 나누면 x=2")
+        ]
+
+    def test_sentence_final_anida_is_a_correction_marker(self) -> None:
+        """종결형 `아니다`는 정정으로 본다 — 연결형과의 구별이 실제로 작동하는지 확인.
+
+        위 `test_contrastive_ani_connective_...`와 짝이다. 한쪽만 두면 "아니 계열을 전부 뺐다"와
+        "종결형만 남겼다"가 같은 초록을 낸다.
+        """
+        assert "root-loss-by-dividing" not in [
+            m.misconception.id for m in diagnose("양변을 x로 나누면 x=2인 것은 아니다")
+        ]
