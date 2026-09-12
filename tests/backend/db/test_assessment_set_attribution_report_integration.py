@@ -6,6 +6,10 @@ ASM-10 acceptance⑤: 합성 `실전모의고사` Assessment + 그 세트 문항
 실제로 오르는지 실측 → 삭제해 복원되는지 실측한다. **절대값 0을 어디서도 assert하지 않는다** —
 오직 `insert 전/후/cleanup 후`의 **델타**만 비교한다(CLAUDE.md 변별력 원칙).
 
+`assessment.user_id`·`problem_attempt.problem_id`는 각각 `user_profile`·`problem` FK다 — 실
+PG는 이 제약을 강제하므로(로컬 무DB 샌드박스에서는 드러나지 않았다), 합성 `UserProfile`·
+`Problem` 행을 선행 삽입하고 마지막에 함께 정리한다.
+
 `WHYMATH_RUN_INTEGRATION=1` + 살아있는 PG에서만 실행. `tests/backend/db/
 test_assessment_seat_reach_report_integration.py`의 DB 접속 판정(`_pg_reachable()`)·자체 엔진
 생성·dispose 패턴을 그대로 미러링한다.
@@ -19,17 +23,19 @@ import uuid
 import pytest
 from pydantic import SecretStr
 from sqlalchemy import delete, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.activity import ProblemAttempt
 from whymath_backend.db.models.assessment import Assessment
+from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.harness.assessment_set_attribution_report import (
     build_report,
     collect_test_set_rows,
 )
-from whymath_backend.schema.enums import AssessmentType
+from whymath_backend.schema.enums import AssessmentType, Curriculum, SourceType, Subject
 
 pytestmark = pytest.mark.integration
 
@@ -48,6 +54,25 @@ async def _pg_reachable() -> bool:
         return False
     finally:
         await engine.dispose()
+
+
+def _add_user(session: AsyncSession, user_id: uuid.UUID) -> None:
+    session.add(UserProfile(user_id=user_id))
+
+
+def _add_problem(session: AsyncSession, problem_id: uuid.UUID) -> None:
+    """FK를 만족하는 최소 `Problem` 행(본문 없음·`test_attempt_grading_shadow_report.py`의
+    최소 구성 선례를 그대로 답습)."""
+    session.add(
+        Problem(
+            problem_id=problem_id,
+            source_type=SourceType.자체생성,
+            curriculum_version=Curriculum.REVISION_2022,
+            valid_from_year=2022,
+            subject=Subject.공통,
+            unit_codes=["U-ASM10-TEST"],
+        )
+    )
 
 
 def test_unattributable_count_delta_on_synthetic_set_and_attempt_insert_and_cleanup() -> None:
@@ -74,11 +99,13 @@ def test_unattributable_count_delta_on_synthetic_set_and_attempt_insert_and_clea
         finally:
             await engine.dispose()
 
-    async def _insert_set_only() -> None:
+    async def _insert_fk_prereqs_and_set() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
+                _add_user(session, uid)
+                _add_problem(session, pid)
                 session.add(
                     Assessment(
                         assessment_id=aid,
@@ -101,6 +128,16 @@ def test_unattributable_count_delta_on_synthetic_set_and_attempt_insert_and_clea
         finally:
             await engine.dispose()
 
+    async def _remove_attempt_only() -> None:
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    delete(ProblemAttempt).where(ProblemAttempt.attempt_id == attempt_id)
+                )
+        finally:
+            await engine.dispose()
+
     async def _cleanup() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
@@ -109,26 +146,17 @@ def test_unattributable_count_delta_on_synthetic_set_and_attempt_insert_and_clea
                     delete(ProblemAttempt).where(ProblemAttempt.attempt_id == attempt_id)
                 )
                 await conn.execute(delete(Assessment).where(Assessment.assessment_id == aid))
+                await conn.execute(delete(Problem).where(Problem.problem_id == pid))
+                await conn.execute(delete(UserProfile).where(UserProfile.user_id == uid))
         finally:
             await engine.dispose()
 
     try:
         before = asyncio.run(_measure())
-        asyncio.run(_insert_set_only())
+        asyncio.run(_insert_fk_prereqs_and_set())
         after_set_only = asyncio.run(_measure())
         asyncio.run(_insert_matching_attempt())
         after_attempt = asyncio.run(_measure())
-
-        async def _remove_attempt_only() -> None:
-            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
-            try:
-                async with engine.begin() as conn:
-                    await conn.execute(
-                        delete(ProblemAttempt).where(ProblemAttempt.attempt_id == attempt_id)
-                    )
-            finally:
-                await engine.dispose()
-
         asyncio.run(_remove_attempt_only())
         after_attempt_removed = asyncio.run(_measure())
 
@@ -172,6 +200,10 @@ def test_attempt_for_unrelated_problem_does_not_move_the_counter() -> None:
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
+                _add_user(session, uid)
+                # 세트 문항(pid_in_set)·시도 문항(pid_unrelated) 둘 다 FK 대상이라 선행 삽입.
+                _add_problem(session, pid_in_set)
+                _add_problem(session, pid_unrelated)
                 session.add(
                     Assessment(
                         assessment_id=aid,
@@ -195,6 +227,10 @@ def test_attempt_for_unrelated_problem_does_not_move_the_counter() -> None:
                     delete(ProblemAttempt).where(ProblemAttempt.attempt_id == attempt_id)
                 )
                 await conn.execute(delete(Assessment).where(Assessment.assessment_id == aid))
+                await conn.execute(
+                    delete(Problem).where(Problem.problem_id.in_([pid_in_set, pid_unrelated]))
+                )
+                await conn.execute(delete(UserProfile).where(UserProfile.user_id == uid))
         finally:
             await engine.dispose()
 
