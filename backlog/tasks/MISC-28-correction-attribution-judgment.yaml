@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: blocked
 priority: 2
 eos_priority: P2
 owner: claude
@@ -19,6 +19,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/misconception/diagnose.py
   - src/backend/whymath_backend/l4/misconception/judge_seam.py
-session: claude/status-38gu4d
-notes: "발단: MISC-26에서 정정 어휘 13종을 결함 주입으로 재니 전건이 오억제를 냈다. 어휘를 넓히는 것이 답이 아니라는 것이 그 태스크의 결론이고, 이 태스크가 그 잔여를 받는다. 교수학 판정(MISC-25 세션)이 '귀속(attribution) 문제이고 어휘·거리로는 원리상 미해결 — LLM-judge 좌석이 그 자리'라고 독립 지목했다.\n\n[정정 2026-09-12] 오억제 전수 재현 + 값싼 결정론 해법(창 방향화) 실측 반증 + 양방향 측정 착지 — 좌석 선택은 학생 노출을 바꾸므로 게이트로 분리\n\n[정정 2026-09-12] ③ 좌석 선택은 학생 노출을 바꾸는 교수학 결정 — 세션이 단독으로 고르지 않는다"
+session: null
+notes: "발단: MISC-26에서 정정 어휘 13종을 결함 주입으로 재니 전건이 오억제를 냈다. 어휘를 넓히는 것이 답이 아니라는 것이 그 태스크의 결론이고, 이 태스크가 그 잔여를 받는다. 교수학 판정(MISC-25 세션)이 '귀속(attribution) 문제이고 어휘·거리로는 원리상 미해결 — LLM-judge 좌석이 그 자리'라고 독립 지목했다.\n\n[정정 2026-09-12] 오억제 전수 재현 + 값싼 결정론 해법(창 방향화) 실측 반증 + 양방향 측정 착지 — 좌석 선택은 학생 노출을 바꾸므로 게이트로 분리\n\n[정정 2026-09-12] ③ 좌석 선택은 학생 노출을 바꾸는 교수학 결정 — 세션이 단독으로 고르지 않는다\n\n[차단 2026-09-12] acceptance ③ 좌석 선택이 사람 게이트 G-misc28-attribution-seat 대기 — ①(오억제 100% 전수 재현)·③의 값싼 결정론 해법 반증·④(양방향 측정)는 PR #1148로 착지. 후보 3종 모두 학생 노출을 바꾸므로 측정만 갖춘 세션이 단독 선택하지 않는다"
 updated: 2026-09-12
