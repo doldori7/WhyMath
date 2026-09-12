@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/db/models/misconception_hypothesis.py
   - src/backend/whymath_backend/schema/misconception_hypothesis.py
 session: null
-notes: "검토 문서 §12·§61 반영. 감사 추적 및 개인정보 분리."
-updated: 2026-08-26
+notes: "검토 문서 §12·§61 반영. 감사 추적 및 개인정보 분리.\n\n[정정 2026-09-12] eos_priority null → P3: PR #893 회수 시점 백필 — 오개념 관측성(hypothesis/evidence↔event store 연결) 장기 과제, P3"
+updated: 2026-09-12

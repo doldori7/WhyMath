@@ -15,7 +15,6 @@ data-pipeline의 graph_analytics(extra)는 본 테스트 범위 밖 — 별도 o
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/l4/misconception/intervene.py
   - src/backend/whymath_backend/db/models/misconception_remediation.py
 session: null
-notes: "검토 문서 §20-21·§46 반영. 직접 교정 금지 원칙 유지."
-updated: 2026-08-26
+notes: "검토 문서 §20-21·§46 반영. 직접 교정 금지 원칙 유지.\n\n[정정 2026-09-12] eos_priority null → P3: PR #893 회수 시점 백필 — remediation strategy 카탈로그 분리는 콘텐츠 확장 성격의 장기 과제, P3"
+updated: 2026-09-12
