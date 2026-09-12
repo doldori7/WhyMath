@@ -49,6 +49,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +75,11 @@ from whymath_backend.db.models.user import (
     UserProfile,
     UserStateSnapshot,
     UserTrackHistory,
+)
+from whymath_backend.schema.activity import ProblemAttempt as SchemaProblemAttempt
+from whymath_backend.schema.answer_submission import AnswerSubmission as SchemaAnswerSubmission
+from whymath_backend.schema.student_solution_step import (
+    StudentSolutionStep as SchemaStudentSolutionStep,
 )
 
 __all__ = [
@@ -248,6 +254,89 @@ class UserDataExport(BaseModel):
     )
 
 
+# SEC-31: 학생 답안/풀이 3테이블(problem_attempt·answer_submission·student_solution_step)의
+# 봉투 암호화 필드 복호 명세 — (schema/attr 이름, 평문 컬럼, 암호화 컬럼, nonce 컬럼, 종류).
+# 종류: "text"(nullable str — resolve_dialogue_content 재사용)·"json"(nullable dict —
+# resolve_dialogue_image_analysis 재사용)·"text_required"(student_solution_step.expression
+# 전용 — schema는 필수 str이라 resolve_student_solution_step_expression으로 복호. 둘 다 없으면
+# RuntimeError·조용한 빈 문자열 없음).
+_StudentWorkFieldSpec = tuple[str, str, str, str, str]
+
+_PROBLEM_ATTEMPT_ENCRYPTED_FIELDS: tuple[_StudentWorkFieldSpec, ...] = (
+    (
+        "student_answer",
+        "student_answer",
+        "student_answer_encrypted",
+        "student_answer_nonce",
+        "text",
+    ),
+    (
+        "handwriting_uri",
+        "handwriting_uri",
+        "handwriting_uri_encrypted",
+        "handwriting_uri_nonce",
+        "text",
+    ),
+    ("ocr_result", "ocr_result", "ocr_result_encrypted", "ocr_result_nonce", "json"),
+)
+_ANSWER_SUBMISSION_ENCRYPTED_FIELDS: tuple[_StudentWorkFieldSpec, ...] = (
+    ("raw_response", "raw_response", "raw_response_encrypted", "raw_response_nonce", "text"),
+    ("latex", "latex", "latex_encrypted", "latex_nonce", "text"),
+    ("canonical_ast", "canonical_ast", "canonical_ast_encrypted", "canonical_ast_nonce", "json"),
+)
+_STUDENT_SOLUTION_STEP_ENCRYPTED_FIELDS: tuple[_StudentWorkFieldSpec, ...] = (
+    ("expression", "expression", "expression_encrypted", "expression_nonce", "text_required"),
+    ("canonical_ast", "canonical_ast", "canonical_ast_encrypted", "canonical_ast_nonce", "json"),
+)
+
+# 모델 → (필드 명세, 대응 schema 클래스). `_row_to_json`(→`to_schema()`)을 그대로 못 쓰는 이유:
+# `student_solution_step.expression`은 schema에서 필수 `str`인데, 암호화 행에서는 ORM 컬럼이
+# NULL이라 `to_schema()`를 먼저 부르면 복호 적용 전에 ValidationError가 난다(SEC-31 마이그레이션
+# 참조). 그래서 이 3모델은 "복호 → schema 검증" 순서를 지키는 전용 함수(`_student_work_row_json`)
+# 로 내보낸다.
+_StudentWorkModelSpec = tuple[tuple[_StudentWorkFieldSpec, ...], type[BaseModel]]
+_STUDENT_WORK_MODELS: dict[type[Base], _StudentWorkModelSpec] = {
+    ProblemAttempt: (_PROBLEM_ATTEMPT_ENCRYPTED_FIELDS, SchemaProblemAttempt),
+    AnswerSubmission: (_ANSWER_SUBMISSION_ENCRYPTED_FIELDS, SchemaAnswerSubmission),
+    StudentSolutionStep: (_STUDENT_SOLUTION_STEP_ENCRYPTED_FIELDS, SchemaStudentSolutionStep),
+}
+
+
+def _student_work_row_json(row: Any, cipher: Any) -> dict[str, Any]:
+    """SEC-31: 학생 답안/풀이 3테이블 전용 — 복호를 *먼저* 적용한 뒤 schema로 재검증한 JSON.
+
+    `_row_to_json`(→ `row.to_schema()`)을 그대로 쓰지 않는 이유는 모듈 상단 `_STUDENT_WORK_MODELS`
+    주석 참조(student_solution_step.expression 필수 str 계약과의 순서 충돌). ciphertext 컬럼은
+    필드 명세의 `encrypted_attr`/`nonce_attr` 집합으로 직접 제외한다(`_NON_SCHEMA_COLUMNS`
+    속성에 의존하지 않아 이 함수가 자기 완결적이다). 복호 실패(cipher 미설정인데 암호화 행)는
+    각 resolve 헬퍼가 RuntimeError로 노출한다(조용한 침묵 실패 금지 — CLAUDE.md).
+    """
+    from whymath_backend.api._crypto import (
+        resolve_dialogue_content,
+        resolve_dialogue_image_analysis,
+        resolve_student_solution_step_expression,
+    )
+
+    model = type(row)
+    specs, schema_cls = _STUDENT_WORK_MODELS[model]
+    exclude = {name for spec in specs for name in (spec[2], spec[3])}
+    mapped_keys = {
+        col.key for col in sa.inspect(model).mapper.column_attrs if col.key not in exclude
+    }
+    data: dict[str, Any] = {key: getattr(row, key) for key in mapped_keys}
+    for attr, plain_attr, encrypted_attr, nonce_attr, kind in specs:
+        plain = getattr(row, plain_attr)
+        encrypted = getattr(row, encrypted_attr)
+        nonce = getattr(row, nonce_attr)
+        if kind == "text":
+            data[attr] = resolve_dialogue_content(cipher, plain, encrypted, nonce)
+        elif kind == "json":
+            data[attr] = resolve_dialogue_image_analysis(cipher, plain, encrypted, nonce)
+        else:  # "text_required"
+            data[attr] = resolve_student_solution_step_expression(cipher, plain, encrypted, nonce)
+    return schema_cls.model_validate(data).model_dump(mode="json")
+
+
 def _row_to_json(row: Any) -> dict[str, Any]:
     """ORM 행 → JSON-safe dict(`to_schema().model_dump(mode="json")`). `_EXPORT_PLAN` 모델 전제.
 
@@ -270,6 +359,16 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
     `user_profile`은 단건. **commit/flush 0**(읽기 전용·저장소 패턴). 외부 store는 포함하지 않고
     `external_export_pending`(ops)로 별도 고지. 멱등·부작용 0(같은 user는 같은 데이터·시각만 갱신).
     """
+    # SEC-31: 학생 답안/풀이 3테이블 봉투 암호화 cipher — export 순회 전 1회 조립(감사상환 #2
+    # content_cipher와 동일 위치·동일 이유: 함수-지역 import로 privacy → api 순환 회피). 이
+    # cipher는 `_student_work_row_json`에 전달돼 3모델 각각의 복호에 재사용된다(요청당 1회
+    # cipher 조립 — 행마다 조립하지 않음). 키 유실 시 조용한 평문 유출/빈 응답 대신 시끄러운
+    # 실패(각 resolve 헬퍼가 RuntimeError).
+    from whymath_backend.api._crypto import require_student_work_cipher
+    from whymath_backend.config import get_settings
+
+    student_work_cipher = require_student_work_cipher(get_settings())
+
     data: dict[str, list[dict[str, Any]]] = {}
     for model, column, category in _EXPORT_PLAN:
         result = await session.execute(
@@ -277,7 +376,11 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
             .where(getattr(model, column) == user_id)
             .order_by(*model.__mapper__.primary_key)
         )
-        data[category] = [_row_to_json(row) for row in result.scalars().all()]
+        rows = result.scalars().all()
+        if model in _STUDENT_WORK_MODELS:
+            data[category] = [_student_work_row_json(row, student_work_cipher) for row in rows]
+        else:
+            data[category] = [_row_to_json(row) for row in rows]
 
     # 대화 턴(채팅 본문·손글씨) — `dialogue_turn`엔 user_id가 없어 부모 `dialogue`로 조인해 본인
     # 턴만 조회. (dialogue_id, turn_order) 정렬로 대화별·시간순 결정적. 전체 본문 포함(증분 6).
@@ -297,7 +400,6 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
         resolve_dialogue_image_analysis,
         resolve_dialogue_image_uri,
     )
-    from whymath_backend.config import get_settings
 
     content_cipher = require_dialogue_content_cipher(get_settings())
     turn_dicts: list[dict[str, Any]] = []

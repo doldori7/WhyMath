@@ -1014,6 +1014,33 @@ class Settings(BaseSettings):
         ),
     )
 
+    student_work_encryption_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "SEC-31: 학생 답안·풀이 본문(`problem_attempt`·`answer_submission`·"
+            "`student_solution_step` 3테이블) at-rest 봉투 암호화 마스터 키(base64 인코딩 "
+            "32바이트=AES-256). 빈 값=암호화 비활성(평문 저장·기존 동작 폴백·점진 도입). "
+            "**dialogue·evidence payload·device secret 키와 분리**(폭발 반경 축소 — 한 키 유출이 "
+            "다른 자산으로 번지지 않음). 3테이블은 *같은* 키를 공유한다 — 한 답안 제출 흐름 안에서 "
+            "함께 쓰이는 같은 데이터 주체의 같은 논리적 사건이라(dialogue_turn 내부 3축 공유 "
+            "논리의 확장), 테이블별로 쪼개도 폭발 반경이 줄지 않는 반면 '미설정→평문 폴백' 함정만 "
+            "늘어난다. DB 밖(env/Settings)에 두어 DB dump만으로는 답안·풀이 본문 복호 불가하게 "
+            "한다(CLAUDE.md 절대 금기 '학생 데이터=민감 정보 암호화 저장'의 기계적 시행). "
+            "`WHYMATH_STUDENT_WORK_ENCRYPTION_KEY` env로만 주입(SecretStr — repr/로그 평문 차단·"
+            '하드코딩 금지). 키 생성: `python -c "import base64,os; '
+            'print(base64.b64encode(os.urandom(32)).decode())"`.'
+        ),
+    )
+    student_work_decryption_fallback_keys: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "학생 답안·풀이 키 회전용 *복호 전용* fallback 키 목록(쉼표 구분 base64 32바이트). "
+            "primary 키 회전 시 구 키를 여기 두면 구 키로 암호화된 행이 lockout 없이 복호된다 "
+            "(encrypt는 항상 primary). 전 행 재암호화(백필) 후 제거. 빈 값=fallback 없음. "
+            "`WHYMATH_STUDENT_WORK_DECRYPTION_FALLBACK_KEYS` env(SecretStr·하드코딩 금지)."
+        ),
+    )
+
     coach_device_hmac_secret: SecretStr = Field(
         default=SecretStr(""),
         description=(

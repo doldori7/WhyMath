@@ -173,7 +173,9 @@ class TestMigrationFileChain:
         # 마이그레이션을 더하면 두 곳을 같이 갱신해야 한다(둘 다 head를 고정한다).
         # SEC-29가 f2662166a661(SEC-27) 위에 4c6dfb1527a9(privacy_audit.resource_type/
         # resource_id/action)를 얹어 head를 이동.
-        assert heads == {"4c6dfb1527a9"}
+        # SEC-31이 4c6dfb1527a9 위에 3f5c83f51246(학생 답안/풀이 3테이블 봉투 암호화)를 얹어
+        # head를 다시 이동.
+        assert heads == {"3f5c83f51246"}
 
     def test_gen_meta_migration_file_exists_with_symmetric_updown(self) -> None:
         """S4-10 `gen_meta` 마이그레이션 파일이 존재하고 up/down이 대칭(컬럼 add/drop)이다."""

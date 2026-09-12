@@ -43,6 +43,7 @@ from whymath_backend.api._crypto import (
     encrypt_dialogue_image_analysis,
     encrypt_dialogue_image_uri,
     require_dialogue_content_cipher,
+    require_student_work_cipher,
     resolve_dialogue_content,
     resolve_dialogue_image_analysis,
     resolve_dialogue_image_uri,
@@ -1077,12 +1078,21 @@ async def _complete_problem(
     # 한 번만 읽어 ended_at·ingested_at에 같은 값을 쓴다 — 두 번 호출하면 마이크로초가 갈려
     # "종료가 수신보다 앞선다"는 사실이 아닌 시차가 데이터에 남는다.
     received_at = datetime.now(timezone.utc)
+    # SEC-31: 학생 답안 봉투 암호화 — me.py::submit_attempt와 동일 헬퍼(encrypt_dialogue_content)·
+    # 동일 키(student_work)를 재사용해 두 ProblemAttempt 적재 경로가 같은 보호를 받는다(부분
+    # 배선 방지). final_answer는 서버가 완료 확정 시 기록용으로 담는 값(모듈 docstring 참조).
+    student_work_cipher = require_student_work_cipher(get_settings())
+    student_answer_plain, student_answer_encrypted, student_answer_nonce = encrypt_dialogue_content(
+        student_work_cipher, final_answer
+    )
     attempt = ProblemAttemptORM(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답·dialogue 링크에 즉시 사용).
         user_id=user_id,
         problem_id=problem_id,
         is_correct=True,  # 서버 권위 판정(turn A correct) — 클라 보고 아님.
-        student_answer=final_answer,
+        student_answer=student_answer_plain,
+        student_answer_encrypted=student_answer_encrypted,
+        student_answer_nonce=student_answer_nonce,
         used_socratic=True,  # 코치 대화(돌아보기)로 도달.
         # PED-37: 발생 시작 시각은 *넘어온 값 그대로*(대화 시작 시각) — 없으면 NULL(날조 금지).
         started_at=started_at,

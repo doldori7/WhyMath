@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
+import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -20,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api import me as me_module
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api.me import (
     ConceptAbilityItem,
     _add_ability_snapshot_if_attempts,
@@ -29,6 +33,7 @@ from whymath_backend.api.me import (
     candidate_pool_order_by,
 )
 from whymath_backend.app import create_app
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -888,6 +893,29 @@ def _attempts_client(session: _QueueSession) -> TestClient:
     return TestClient(app)
 
 
+@contextmanager
+def _student_work_key_env(key_b64: str | None) -> Iterator[None]:
+    """SEC-31: `WHYMATH_STUDENT_WORK_ENCRYPTION_KEY`를 env로 주입(또는 제거)하고 `get_settings`
+    캐시를 리셋·원복(`test_dialogue_content_encryption_integration.py`의 `_dialogue_key_env`
+    패턴 미러 — `submit_attempt`가 `get_settings()`를 직접 호출하므로 dependency_overrides로는
+    주입할 수 없다)."""
+    var = "WHYMATH_STUDENT_WORK_ENCRYPTION_KEY"
+    prev = os.environ.get(var)
+    if key_b64 is None:
+        os.environ.pop(var, None)
+    else:
+        os.environ[var] = key_b64
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = prev
+        get_settings.cache_clear()
+
+
 class TestSubmitAttempt:
     def test_submit_with_assessed_concept(self) -> None:
         """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
@@ -987,6 +1015,53 @@ class TestSubmitAttempt:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
+
+    def test_submit_stores_student_answer_plaintext_when_key_unset(self) -> None:
+        """SEC-31: 키 미설정(기존 동작) — student_answer는 평문 그대로·암호화 컬럼은 None."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        with _student_work_key_env(None):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 3이야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer == "내 답은 3이야"
+        assert attempt.student_answer_encrypted is None
+        assert attempt.student_answer_nonce is None
+
+    def test_submit_encrypts_student_answer_when_key_configured(self) -> None:
+        """SEC-31: 키 설정 시 — student_answer는 NULL·암호화 컬럼에 ciphertext/nonce가 실리고
+        그 ciphertext를 같은 키로 복호하면 원문이 그대로 나온다(dialogue_turn 선례 계약 미러)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        with _student_work_key_env(key_b64):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 5야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer is None  # 평문 컬럼 비움
+        assert attempt.student_answer_encrypted is not None
+        assert attempt.student_answer_nonce is not None
+        cipher = SecretCipher(base64.b64decode(key_b64))
+        assert (
+            cipher.decrypt(attempt.student_answer_encrypted, attempt.student_answer_nonce)
+            == "내 답은 5야"
+        )
 
     def test_submit_persists_reported_started_at_verbatim(self) -> None:
         """PED-37: 클라 신고 발생 시각을 *그대로* 적재하고, 수신 시각은 ingested_at에 따로 남긴다.
