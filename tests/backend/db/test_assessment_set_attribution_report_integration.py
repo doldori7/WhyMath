@@ -106,6 +106,9 @@ def test_unattributable_count_delta_on_synthetic_set_and_attempt_insert_and_clea
             async with sm() as session:
                 _add_user(session, uid)
                 _add_problem(session, pid)
+                # UserProfile·Problem 사이에 relationship()이 없어 UOW가 raw FK만으로
+                # insert 순서를 보장하지 않는다 — flush로 선행 삽입을 확정한다.
+                await session.flush()
                 session.add(
                     Assessment(
                         assessment_id=aid,
@@ -204,6 +207,9 @@ def test_attempt_for_unrelated_problem_does_not_move_the_counter() -> None:
                 # 세트 문항(pid_in_set)·시도 문항(pid_unrelated) 둘 다 FK 대상이라 선행 삽입.
                 _add_problem(session, pid_in_set)
                 _add_problem(session, pid_unrelated)
+                # UserProfile·Problem 사이에 relationship()이 없어 UOW가 raw FK만으로
+                # insert 순서를 보장하지 않는다 — flush로 선행 삽입을 확정한다.
+                await session.flush()
                 session.add(
                     Assessment(
                         assessment_id=aid,
