@@ -3405,25 +3405,25 @@ features:
     release_priority_prior_manual: P1
     priority_basis: "폐쇄루프: production_loop, data_supplier"
     migration_risk: Med
-    loc: 1275
+    loc: 1339
     endpoints: 0
     write_endpoints: 0
-    db_mutation_calls: 5
+    db_mutation_calls: 6
     own_modules: 2
     adapter_deps: []
     mixed_deps: []
-    db_model_modules: 2
-    coupling_count: 4
+    db_model_modules: 3
+    coupling_count: 5
     test_files: 11
-    test_functions: 144
+    test_functions: 149
     matrix:
       A_subject: 0
-      B_db: 1
+      B_db: 2
       C_coupling: 1
       D_tests: 0
-      E_state: 2
+      E_state: 3
       F_data: 2
-    matrix_total: 6
+    matrix_total: 8
     criteria_action: KEEP
     keep_criteria_met: 6/6
     replace_signals: 1/6
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 206
-    test_functions: 3254
+    test_functions: 3259
     matrix:
       A_subject: 3
       B_db: 0
