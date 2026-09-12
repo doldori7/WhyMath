@@ -414,8 +414,18 @@ gates:
     title: "SKB-01 skill_node·concept.behavior_skills 브릿지 prod 적재 실행 — Phaiakes9 whymath-pg 쓰기(populate CLI 2종)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-09-10
+    remind_after_days: 7
+    evidence: "판정 기준: main 8201d018 (git log --oneline -1 출력 그대로)\nKiki 실행(Phaiakes9, 2026-09-12) — docs/ops/g_skb01_skill_node_populate_runbook.md 런북 그대로:\nTABLE_EXISTS=t\nBEFORE_COUNT=0\nPOPULATE_EXIT=0\nAFTER_COUNT=27\n(참고: 1차 db_host_reachability는 Docker Desktop 미기동으로 UNKNOWN exit 2였고, Docker 기동 후 재실행에서 REACHABLE exit 0으로 정상 전환 확인 — 이후 적재 실행)\nskill_node 27건 최초 적재 성공. concept.behavior_skills(SKB-01 acceptance③-보정)는 이 게이트 범위 밖 — 별도 코드 작업 필요."
+    cleared_by: claude
+    notes: ""
+  - id: G-skb01-concept-behavior-skills-populate
+    title: "SKB-01 concept.behavior_skills 채우기 실행 — Phaiakes9 whymath-pg 쓰기(crosswalk populate CLI 재실행, PR 병합 후)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-09-12
     remind_after_days: 7
     evidence: null
     cleared_by: null
