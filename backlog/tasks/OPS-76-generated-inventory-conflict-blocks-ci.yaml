@@ -1,5 +1,5 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
-id: OPS-73-generated-inventory-conflict-blocks-ci
+id: OPS-76-generated-inventory-conflict-blocks-ci
 title: "생성 인벤토리 장부가 PR 충돌을 상시화하고, 충돌한 PR은 CI가 조용히 멈춘다"
 track: infra-debt
 stage: S3
@@ -19,5 +19,5 @@ paths:
   - scripts/analysis/eos_feature_inventory_v2.py
   - scripts/ops/pr_delivery_audit.py
 session: claude/status-38gu4d
-notes: "발단: PR #1075 처리 중 실측. 한 태스크(MISC-29) 마무리 과정에서 인벤토리 충돌 3회, 그중 2회는 CI가 아예 안 돌아 5회 연속 red를 낡은 결과로 오인했다. CLAUDE.md v0.2.21이 관측 쪽 사람 규칙을 등재했고 이 태스크는 그 기계 집행과 충돌원 제거를 소유한다."
+notes: "발단: PR #1075 처리 중 실측. 한 태스크(MISC-29) 마무리 과정에서 인벤토리 충돌 3회, 그중 2회는 CI가 아예 안 돌아 5회 연속 red를 낡은 결과로 오인했다. CLAUDE.md v0.2.21이 관측 쪽 사람 규칙을 등재했고 이 태스크는 그 기계 집행과 충돌원 제거를 소유한다. [개명 2026-09-12] 원래 OPS-73으로 등재했으나, 이 브랜치가 미머지로 머무는 동안 다른 세션이 같은 번호로 OPS-73-runbook-evidence-fence-guard를 add해 main에 착지시켰다(done). validate가 번호 충돌 exit 1을 내 OPS-76으로 옮긴다(OPS-74·75도 원격 브랜치가 인플라이트로 점유 중이라 CLI가 76을 제안했다) — main 쪽은 머지돼 개명 불가이므로 미머지인 이쪽이 이동한다. 이 현상 자체는 HARN-97 acceptance ④가 예고한 '브랜치 간 동시 add' 축이며, backlog.py에 개명 명령이 없어 add+파일 제거로 수행했다(승계 태스크에 등재)."
 updated: 2026-09-12
