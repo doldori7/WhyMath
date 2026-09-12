@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
+import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -20,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api import me as me_module
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api.me import (
     ConceptAbilityItem,
     _add_ability_snapshot_if_attempts,
@@ -29,6 +33,7 @@ from whymath_backend.api.me import (
     candidate_pool_order_by,
 )
 from whymath_backend.app import create_app
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -46,9 +51,13 @@ from whymath_backend.l2.learning_path import LearningPath, LearningStep
 from whymath_backend.l2.recommendation_evidence import (
     EVENT_TYPE_RECOMMENDATION_TREATMENT,
     META_KEY_APPLIED_WEIGHTS,
+    META_KEY_CANDIDATES,
     META_KEY_MODE,
+    META_KEY_POLICY_VERSION,
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
+    POLICY_VERSION_CAT,
+    POLICY_VERSION_SUNEUNG,
 )
 from whymath_backend.l2.strong_concept_recommendation import StrongConceptRecommendation
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
@@ -884,6 +893,29 @@ def _attempts_client(session: _QueueSession) -> TestClient:
     return TestClient(app)
 
 
+@contextmanager
+def _student_work_key_env(key_b64: str | None) -> Iterator[None]:
+    """SEC-31: `WHYMATH_STUDENT_WORK_ENCRYPTION_KEY`를 env로 주입(또는 제거)하고 `get_settings`
+    캐시를 리셋·원복(`test_dialogue_content_encryption_integration.py`의 `_dialogue_key_env`
+    패턴 미러 — `submit_attempt`가 `get_settings()`를 직접 호출하므로 dependency_overrides로는
+    주입할 수 없다)."""
+    var = "WHYMATH_STUDENT_WORK_ENCRYPTION_KEY"
+    prev = os.environ.get(var)
+    if key_b64 is None:
+        os.environ.pop(var, None)
+    else:
+        os.environ[var] = key_b64
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = prev
+        get_settings.cache_clear()
+
+
 class TestSubmitAttempt:
     def test_submit_with_assessed_concept(self) -> None:
         """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
@@ -983,6 +1015,53 @@ class TestSubmitAttempt:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
+
+    def test_submit_stores_student_answer_plaintext_when_key_unset(self) -> None:
+        """SEC-31: 키 미설정(기존 동작) — student_answer는 평문 그대로·암호화 컬럼은 None."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        with _student_work_key_env(None):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 3이야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer == "내 답은 3이야"
+        assert attempt.student_answer_encrypted is None
+        assert attempt.student_answer_nonce is None
+
+    def test_submit_encrypts_student_answer_when_key_configured(self) -> None:
+        """SEC-31: 키 설정 시 — student_answer는 NULL·암호화 컬럼에 ciphertext/nonce가 실리고
+        그 ciphertext를 같은 키로 복호하면 원문이 그대로 나온다(dialogue_turn 선례 계약 미러)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        with _student_work_key_env(key_b64):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 5야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer is None  # 평문 컬럼 비움
+        assert attempt.student_answer_encrypted is not None
+        assert attempt.student_answer_nonce is not None
+        cipher = SecretCipher(base64.b64decode(key_b64))
+        assert (
+            cipher.decrypt(attempt.student_answer_encrypted, attempt.student_answer_nonce)
+            == "내 답은 5야"
+        )
 
     def test_submit_persists_reported_started_at_verbatim(self) -> None:
         """PED-37: 클라 신고 발생 시각을 *그대로* 적재하고, 수신 시각은 ingested_at에 따로 남긴다.
@@ -1748,6 +1827,21 @@ class TestNextProblem:
         assert META_KEY_MODE not in row.meta  # 기본 CAT은 mode 미기록
         assert session.commits == 1
 
+    def test_recommendation_records_candidates_and_policy_version(self) -> None:
+        """REC-11 — 기본 CAT 처치 기록에 candidates[]·policy_version=cat_v1이 함께 실린다."""
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, 1.0)])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_CAT
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(pid_a), str(pid_b)}
+        # 점수 내림차순 — b=0(θ와 일치)이 정보량 최대이므로 pid_a(difficulty_to_logit(3.0)≈0)가
+        # pid_b(irt_b=1.0, θ=0에서 멀어 정보량 낮음)보다 위.
+        assert candidates[0]["problem_id"] == str(pid_a)
+
     def test_recommendation_records_applied_weights_true_when_weak_concept_used(
         self,
     ) -> None:
@@ -2104,6 +2198,25 @@ class TestNextProblemSuneungMode:
         assert row.meta[META_KEY_MODE] == "suneung"
         assert row.meta[META_KEY_PROBLEM_ID] == str(problem.problem_id)
         assert session.commits == 1
+
+    def test_recommendation_records_candidates_and_policy_version_suneung(self) -> None:
+        """REC-11 — 수능 모드 처치 기록에 candidates[]·policy_version=suneung_v1이 실린다.
+
+        적격(시그니처 보유)·부적격(수능 신호 전무) 후보를 함께 넣어 candidates[]가 부적격을
+        빼고 적격만 담는지(진실 게이트 재적용)까지 함께 확인한다.
+        """
+        eligible = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        ineligible = _suneung_problem()  # 수능 신호 전무 → is_suneung_eligible=False
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([_OrmProblemRow(eligible), _OrmProblemRow(ineligible)])]
+        )
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?mode=suneung")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_SUNEUNG
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(eligible.problem_id)}
 
     def test_purpose_learning_applies_in_suneung_mode_too(self) -> None:
         """REC-04 — purpose는 mode와 직교한다: 수능 모드에서도 밴드 안 후보가 선택된다."""

@@ -134,3 +134,56 @@ def test_anthropic_tuning_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.anthropic_effort == "xhigh"
     assert s.anthropic_thinking is True
     assert s.anthropic_prompt_caching is True
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SEC-26: CORS/TrustedHost allowlist (48_보안 §P0 "CORS/보안 헤더 미들웨어" 갭)
+# ──────────────────────────────────────────────────────────────────────────
+def test_cors_allowed_origins_default_deny() -> None:
+    """기본값(미설정) → 빈 리스트 = deny-by-default. 네이티브 앱은 CORS 미적용 대상."""
+    s = Settings()
+    assert s.cors_allowed_origins_list == []
+    assert s.cors_allow_credentials is False
+
+
+def test_cors_allowed_origins_parsed_from_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """콤마 구분 원시값이 공백 제거·빈 항목 제외로 파싱된다(oauth_redirect_uris와 동일 패턴)."""
+    monkeypatch.setenv(
+        "WHYMATH_CORS_ALLOWED_ORIGINS", "https://admin.whymath.kr, https://teacher.whymath.kr,"
+    )
+    s = Settings()
+    assert s.cors_allowed_origins_list == [
+        "https://admin.whymath.kr",
+        "https://teacher.whymath.kr",
+    ]
+
+
+def test_cors_wildcard_with_credentials_rejected_at_boot() -> None:
+    """`*` + allow_credentials=True는 부팅 시점에 ValidationError(fail-closed)."""
+    with pytest.raises(ValidationError):
+        Settings(cors_allowed_origins="*", cors_allow_credentials=True)
+
+
+def test_cors_wildcard_without_credentials_allowed() -> None:
+    """`*`만 단독으로는 허용(credentials 없는 CORS 와일드카드는 표준적으로 안전)."""
+    s = Settings(cors_allowed_origins="*", cors_allow_credentials=False)
+    assert s.cors_allowed_origins_list == ["*"]
+
+
+def test_cors_specific_origin_with_credentials_allowed() -> None:
+    """와일드카드가 아닌 명시 origin + credentials는 허용된다(금지 대상은 조합 자체가 아니다)."""
+    s = Settings(cors_allowed_origins="https://admin.whymath.kr", cors_allow_credentials=True)
+    assert s.cors_allow_credentials is True
+
+
+def test_trusted_hosts_default_wildcard() -> None:
+    """미설정 → `["*"]`(전부 허용) — Host 헤더 검증 미구성 상태의 현재 동작 무회귀."""
+    s = Settings()
+    assert s.trusted_hosts_list == ["*"]
+
+
+def test_trusted_hosts_parsed_from_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """설정되면 명시 리스트로 좁혀진다."""
+    monkeypatch.setenv("WHYMATH_TRUSTED_HOSTS_ALLOWLIST", "api.whymath.kr, api2.whymath.kr")
+    s = Settings()
+    assert s.trusted_hosts_list == ["api.whymath.kr", "api2.whymath.kr"]

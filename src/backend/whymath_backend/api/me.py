@@ -63,6 +63,10 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser, RequireContentAdmin
+from whymath_backend.api._crypto import (
+    encrypt_dialogue_content,
+    require_student_work_cipher,
+)
 from whymath_backend.api._growth_evidence_state import (
     get_growth_evidence_counters,
     get_growth_evidence_exposure_counters,
@@ -125,6 +129,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
     estimate_ability,
+    item_information,
     learning_band_weight,
     select_weighted_item,
 )
@@ -138,7 +143,11 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
-from whymath_backend.l2.recommendation_evidence import record_recommendation_treatment
+from whymath_backend.l2.recommendation_evidence import (
+    POLICY_VERSION_CAT,
+    POLICY_VERSION_SUNEUNG,
+    record_recommendation_treatment,
+)
 from whymath_backend.l2.review_queue import ReviewQueue, fetch_review_queue
 from whymath_backend.l2.skill_mastery_tracking import (
     record_problem_attempt_skill_mastery,
@@ -164,7 +173,9 @@ from whymath_backend.l6.suneung import (
     METADATA_ONLY_SOURCES,
     SUNEUNG_DEFAULT_MIN_FIT,
     SUNEUNG_EXAM_TYPES,
+    is_suneung_eligible,
     recommend_suneung_index,
+    suneung_item_weight,
 )
 from whymath_backend.privacy import (
     UserDataExport,
@@ -225,8 +236,8 @@ EventKindFilter = Annotated[
     list[AuditEventKind] | None,
     Query(
         description=(
-            "개인정보 감사 이벤트 종류 필터(export_data·consent_change·admin_access·"
-            "role_change). 반복 지정 시 OR(IN). 생략 시 전체."
+            "개인정보·콘텐츠 감사 이벤트 종류 필터(export_data·consent_change·admin_access·"
+            "role_change·content_mutation). 반복 지정 시 OR(IN). 생략 시 전체."
         )
     ),
 ]
@@ -799,13 +810,25 @@ async def submit_attempt(
                 "없습니다. 기기 시계를 확인하거나 값을 생략하십시오(생략 시 NULL=미측정)."
             ),
         )
+    # SEC-31: 학생 답안 3축(student_answer·handwriting_uri·ocr_result) 봉투 암호화 — cipher
+    # 있으면 평문 컬럼은 NULL·암호화 컬럼에 저장(dialogue_turn._build_dialogue_turn 패턴 동형·
+    # 순수 seam인 ProblemAttempt() 생성자엔 cipher를 넣지 않고 이 handler 층에서 결정한다).
+    # `AttemptSubmitRequest`에 handwriting_uri·ocr_result가 아직 없어(v1 계약) 그 두 축은
+    # 현재 항상 None이지만, 세 축을 *함께* 암호화 경로에 태워야 후속 writer가 그 필드를 채우기
+    # 시작해도 곧바로 암호화 대상이 된다(부분 배선 방지 — EOS-32 §4-6 판정 근거와 동형).
+    student_work_cipher = require_student_work_cipher(get_settings())
+    student_answer_plain, student_answer_encrypted, student_answer_nonce = encrypt_dialogue_content(
+        student_work_cipher, body.student_answer
+    )
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
         problem_id=body.problem_id,
         session_id=body.session_id,
         is_correct=body.is_correct,
-        student_answer=body.student_answer,
+        student_answer=student_answer_plain,
+        student_answer_encrypted=student_answer_encrypted,
+        student_answer_nonce=student_answer_nonce,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
         # PED-37: 클라 신고 발생 시각을 *그대로* 적재. 미신고면 None이 그대로 들어가 NULL로 남는다
@@ -2197,6 +2220,11 @@ async def recommend_next_problem(
     (`record_recommendation_treatment` — 가짜 처치 금지, null 응답은 기록하지 않음). 결과
     결합(추천→정답 여부)은 아직 없다(S3-01 파일럿 이후 후속).
 
+    REC-11: 이 처치 기록에는 `candidates`(점수 상위 후보 problem_id·점수)와 `policy_version`
+    (이 분기의 알고리즘 식별자 — 기본 CAT은 `POLICY_VERSION_CAT`, 수능 모드는
+    `POLICY_VERSION_SUNEUNG`)도 함께 실린다 — 정책이 나중에 바뀌어도 과거 로그로 그 시점
+    정책의 소급 평가(off-policy evaluation)가 가능하게 하는 선행 재료다.
+
     REC-04: `purpose`는 `mode`와 직교하는 축이다(수능 여부와 무관하게 적용). 기본
     `diagnosis`는 현행 그대로(정보량 최대, 회귀 0). `learning`이면 예상 정답확률이 목표
     성공률 밴드(70~85%, 문헌값)에 드는 후보를 `l2.learning_band_weight`로 가중해 같은 곱
@@ -2329,6 +2357,21 @@ async def recommend_next_problem(
                 band_calibrated=band_calibrated,
             )
         picked = candidates[chosen_index]
+        # REC-11: candidates[] 관측 — recommend_suneung_index 내부 공식(적격 게이트 × 정보량
+        # × 수능우선순위×약점가중)을 재계산해 미러한다(이미 정해진 chosen_index를 그대로 쓰므로
+        # 결정에는 영향 없음·관측 재계산일 뿐). 그 함수의 알고리즘이 바뀌면 이 미러도 함께
+        # 갱신해야 한다 — 단일 진실 원천은 여전히 recommend_suneung_index.
+        candidate_scores: list[tuple[uuid.UUID, float]] = []
+        for i, p in enumerate(candidates):
+            if not is_suneung_eligible(p, persona):
+                continue
+            b = resolve_item_difficulty_b(p.irt_difficulty_b, p.difficulty_overall)
+            if b is None:
+                continue
+            extra = extra_weights[i] if extra_weights is not None else 1.0
+            weight = suneung_item_weight(p) * extra
+            score = item_information(theta, IrtItem(difficulty=b)) * weight
+            candidate_scores.append((p.problem_id, score))
         # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — null 분기(위)는
         # 호출하지 않는다.
         await record_recommendation_treatment(
@@ -2338,6 +2381,8 @@ async def recommend_next_problem(
             pool_size=len(candidates),
             applied_weights=extra_weights is not None,
             mode=mode,
+            candidates=candidate_scores,
+            policy_version=POLICY_VERSION_SUNEUNG,
         )
         await session.commit()
         return NextProblemResponse(
@@ -2426,6 +2471,12 @@ async def recommend_next_problem(
             band_calibrated=band_calibrated,
         )
     chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
+    # REC-11: candidates[] 관측 — select_weighted_item과 *같은* 점수 공식(정보량×가중)을
+    # 그대로 재사용한다(items·weights는 이미 이 함수 안에서 계산돼 있으므로 새 쿼리 0).
+    cat_candidate_scores: list[tuple[uuid.UUID, float]] = [
+        (pid, item_information(theta, item) * (weights[i] if weights is not None else 1.0))
+        for i, ((pid, _d, _b), item) in enumerate(zip(candidate_rows, items, strict=True))
+    ]
     # REC-03: 학생에게 실제로 반환되는 추천만 처치로 기록(가짜 처치 금지) — 위 null 분기는
     # 호출하지 않는다.
     await record_recommendation_treatment(
@@ -2435,6 +2486,8 @@ async def recommend_next_problem(
         pool_size=len(candidate_rows),
         applied_weights=weights is not None,
         mode=mode,
+        candidates=cat_candidate_scores,
+        policy_version=POLICY_VERSION_CAT,
     )
     await session.commit()
     return NextProblemResponse(
