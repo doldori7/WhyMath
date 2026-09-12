@@ -35,7 +35,14 @@ from whymath_backend.harness.assessment_set_attribution_report import (
     build_report,
     collect_test_set_rows,
 )
-from whymath_backend.schema.enums import AssessmentType, Curriculum, SourceType, Subject
+from whymath_backend.schema.enums import (
+    AssessmentType,
+    Curriculum,
+    Persona,
+    Role,
+    SourceType,
+    Subject,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -57,7 +64,15 @@ async def _pg_reachable() -> bool:
 
 
 def _add_user(session: AsyncSession, user_id: uuid.UUID) -> None:
-    session.add(UserProfile(user_id=user_id))
+    """FK를 만족하는 최소 `UserProfile` 행(`persona_primary`는 실 PG NOT NULL —
+    `test_standard_attainment_report_integration.py`의 최소 구성 선례를 그대로 답습)."""
+    session.add(
+        UserProfile(
+            user_id=user_id,
+            persona_primary=Persona.A_일반고고3,
+            role=Role.STUDENT,
+        )
+    )
 
 
 def _add_problem(session: AsyncSession, problem_id: uuid.UUID) -> None:
