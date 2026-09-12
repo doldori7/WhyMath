@@ -28,8 +28,8 @@ dashboard:
     5/6: 37
     6/6: 103
   replace_signal_histogram:
-    0/6: 126
-    1/6: 34
+    0/6: 125
+    1/6: 35
     2/6: 3
   by_plane:
     C: 12
@@ -3275,28 +3275,28 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, data_supplier"
     migration_risk: Med
-    loc: 4005
+    loc: 4412
     endpoints: 0
     write_endpoints: 0
-    db_mutation_calls: 2
+    db_mutation_calls: 3
     own_modules: 8
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 3
     coupling_count: 10
-    test_files: 29
-    test_functions: 373
+    test_files: 30
+    test_functions: 405
     matrix:
       A_subject: 1
       B_db: 2
       C_coupling: 2
       D_tests: 0
-      E_state: 1
+      E_state: 2
       F_data: 2
-    matrix_total: 8
+    matrix_total: 9
     criteria_action: KEEP
     keep_criteria_met: 5/6
-    replace_signals: 0/6
+    replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
     fan_in: 5
     contract_gaps: 0
@@ -3319,7 +3319,7 @@ features:
       r2_subject_in_core: false
       r3_untestable: false
       r4_duplicate: false
-      r5_state_untracked: false
+      r5_state_untracked: true
       r6_no_api_contract: false
     seat: "B3 선수 그래프 2,683노드·2,210엣지"
   - feature_id: WM-E-102
