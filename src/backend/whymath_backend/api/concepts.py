@@ -46,7 +46,7 @@ import asyncio
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -58,6 +58,7 @@ from whymath_backend.api._concurrency import (
     etag_for,
     matches_if_none_match,
 )
+from whymath_backend.api._rate_limit import _client_ip
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.models.concept_content import ConceptContent
@@ -67,9 +68,11 @@ from whymath_backend.l4.misconception.semantic.provider import (
     EmbeddingProvider,
     build_provider,
 )
+from whymath_backend.privacy.audit import record_content_mutation_audit
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
 from whymath_backend.schema.concept_content import ConceptContentSchema
+from whymath_backend.schema.enums import PrivacyAuditAction, PrivacyAuditResourceType
 
 router = APIRouter(prefix="/v1/concepts", tags=["concept"])
 
@@ -279,7 +282,11 @@ async def list_concept_content(
     summary="개념 노드 생성",
 )
 async def create_concept(
-    body: ConceptSchema, session: SessionDep, response: Response, admin: RequireContentAdmin
+    body: ConceptSchema,
+    session: SessionDep,
+    response: Response,
+    admin: RequireContentAdmin,
+    request: Request,
 ) -> ConceptSchema:
     """검증된 schema.Concept를 영속화하고 복원해 반환한다(201). `Role.CONTENT_ADMIN` 전용.
 
@@ -287,9 +294,22 @@ async def create_concept(
     명확히 보고한다(스택트레이스 노출 금지 — 시스템 경계 검증). commit은 핸들러 책임이며
     여기서 명시적으로 부른다(get_session은 commit하지 않음). 응답에 ETag를 실어 이후
     조건부 수정(If-Match)을 가능케 한다.
+
+    SEC-29: 성공 시 `record_content_mutation_audit`로 감사 행을 같은 트랜잭션에 합류시킨다
+    (IntegrityError로 롤백되면 감사 행도 함께 롤백 — 실패한 시도는 감사하지 않는다).
     """
     orm = Concept.from_schema(body)
     session.add(orm)
+    settings = get_settings()
+    record_content_mutation_audit(
+        session,
+        actor_user_id=admin.user_id,
+        resource_type=PrivacyAuditResourceType.concept,
+        resource_id=orm.concept_id,
+        action=PrivacyAuditAction.create,
+        ip=_client_ip(request, settings=settings),
+        settings=settings,
+    )
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -378,6 +398,7 @@ async def patch_concept(
     session: SessionDep,
     response: Response,
     admin: RequireContentAdmin,
+    request: Request,
     if_match: Annotated[str | None, Header()] = None,
 ) -> ConceptSchema:
     """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식을 유지한다.
@@ -387,6 +408,8 @@ async def patch_concept(
     위반(미정의 필드·잘못된 값)이면 422, `code` UNIQUE 충돌이면 409. **낙관적 동시성**:
     `If-Match`(GET ETag)를 보내면 그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 —
     비파괴). `session.merge`로 PK 기준 갱신하고 응답에 새 ETag를 싣는다.
+
+    SEC-29: 성공 시 `record_content_mutation_audit`로 감사 행을 같은 트랜잭션에 합류시킨다.
     """
     existing = await session.get(Concept, concept_id)
     if existing is None:
@@ -409,6 +432,16 @@ async def patch_concept(
             },
         ) from exc
     updated = await session.merge(Concept.from_schema(validated))
+    settings = get_settings()
+    record_content_mutation_audit(
+        session,
+        actor_user_id=admin.user_id,
+        resource_type=PrivacyAuditResourceType.concept,
+        resource_id=concept_id,
+        action=PrivacyAuditAction.update,
+        ip=_client_ip(request, settings=settings),
+        settings=settings,
+    )
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -427,6 +460,7 @@ async def delete_concept(
     concept_id: uuid.UUID,
     session: SessionDep,
     admin: RequireContentAdmin,
+    request: Request,
     if_match: Annotated[str | None, Header()] = None,
 ) -> Response:
     """개념 삭제 — 없으면 404. 이 개념을 참조하는 엣지·매핑이 있으면 FK 위반 → 409.
@@ -434,6 +468,9 @@ async def delete_concept(
 
     cascade를 ORM에 두지 않았으므로(가짜 cascade 금지) 참조가 있으면 삭제를 거부한다.
     `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).
+
+    SEC-29: 성공 시 `record_content_mutation_audit`로 감사 행을 같은 트랜잭션에 합류시킨다
+    (FK 위반으로 롤백되면 감사 행도 함께 롤백).
     """
     existing = await session.get(Concept, concept_id)
     if existing is None:
@@ -443,6 +480,16 @@ async def delete_concept(
         )
     ensure_if_match(if_match, etag_for(existing.to_schema()))
     await session.delete(existing)
+    settings = get_settings()
+    record_content_mutation_audit(
+        session,
+        actor_user_id=admin.user_id,
+        resource_type=PrivacyAuditResourceType.concept,
+        resource_id=concept_id,
+        action=PrivacyAuditAction.delete,
+        ip=_client_ip(request, settings=settings),
+        settings=settings,
+    )
     try:
         await session.commit()
     except IntegrityError as exc:
