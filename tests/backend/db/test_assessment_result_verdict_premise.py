@@ -67,6 +67,10 @@ _ALLOWED_IMPORTERS: dict[str, str] = {
     "privacy/export.py": "본인 반출 직렬화(_STUDENT_FACING_SERIALIZERS)",
     "privacy/retention.py": "보존기간 파기 계획 — 기준 컬럼 started_at",
     "harness/assessment_seat_reach_report.py": "오프라인 도달 관측 리포트(게이트 아님·CLI)",
+    "harness/assessment_set_attribution_report.py": (
+        "ASM-10 — 오프라인 세트 귀속 관측 리포트(게이트 아님·CLI). W8 경로(api/coach.py 등) "
+        "미참조·읽기 전용(collect_test_set_rows), 쓰기 0."
+    ),
 }
 
 # 판정 근거 ①이 "접촉 0"이라고 단언한 채점→오개념→Mastery 경로.
