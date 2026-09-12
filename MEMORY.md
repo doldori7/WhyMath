@@ -9949,3 +9949,29 @@ PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 
   드리프트 없음). policy-guard 3패턴(검정교과서 본문·EBS/평가원 본문·하드코딩 시크릿)
   로컬 재현 전건 clean. `backlog.py validate` exit 0(태스크 618건·게이트 44건·트랙
   3건 green).
+
+## 2026-09-12: 미머지 브랜치 감사 11회차 — SEC-34 침해 문서정정 세션이 stray-code 이어받음 (신규 회수 0건 · 삭제 10차 배치 1건)
+
+- **계기**: 같은 세션이 앞서 `SEC-34`(Phaiakes9 채굴 침해) 근거로 `OPS-74`(AMD395 문서
+  오진 정정)·`OPS-75`(전면 재측정 후속) 등재 + PR #1137 작업 중 PR #860을 superseded로
+  종료했다. Kiki가 "백로그등재"를 지시해 `/stray-code`를 실행 — SessionStart 브리핑이
+  지목한 고립 브랜치 11건 + PR 닫힘(미머지) 3건 = 14건을 감사했다(`docs/reviews/
+  unmerged_branch_audit_2026-09-12.md`).
+- **방법**: 서브에이전트(워크트리 격리·읽기 전용)에 14건 전수 조사를 위임하고, 결과를
+  10회차 문서(2026-09-10)와 대조해 재확인했다. 13건은 head SHA·diff 건수가 10회차와
+  100% 동일(신규 커밋 0) — 이미 소유 태스크(OPS-40·CUR-07/HARN-80·OPS-41·PED-26·
+  ASM-06 외 다수·MOB-18·ARCH-30·PB-13/14·PATH-03·ADMIN-02·OPS-38/67·VIZ-11·PB-08)가
+  head SHA·파일 단위로 명시하고 있어 **신규 회수 태스크 등재 0건**. 14번째
+  `ops-50-51-52-moe-rocm-followup`(PR #860 원 브랜치)만 오늘 처음 고립돼 전체 절차를
+  새로 수행 — merge-base 대비 브랜치 추가줄 259개 중 256개가 main에 그대로 존재(3개는
+  black 재포맷 줄바꿈뿐), LIC-01 rights 모듈 9파일 바이트 동일, `OPS-52.yaml`(done)
+  notes가 PR #1090 포팅을 명시 — **삭제 가능** 판정.
+- **집행**: `.github/branch-cleanup-request.txt` 10차 배치에
+  `claude/ops-50-51-52-moe-rocm-followup`(head `167b5dd0`) 등재. 기존 13건의 "회수
+  완료 전 삭제 금지" 제외 목록은 전건 유지(PB-13·MOB-18은 다른 세션이 현재
+  in_progress로 작업 중일 수 있어 개입하지 않음).
+- **정직한 공백**: 과거 배치(1~9차, 누적 22건)의 `ls-remote` 잔존 재확인은 이번 회차
+  범위 밖(요청은 이번 14건 판정에 한정) — `branch-cleanup.yml`이 매 main 머지마다
+  수행한다.
+- **검증**: `backlog.py validate` exit 0. `backlog.py next --n 3` 착수 후보 불변(신규
+  태스크 없음을 배선으로 확인).
