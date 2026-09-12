@@ -1,1 +1,1 @@
-{"branch": "claude/status-38gu4d", "harness": "2.0", "task": "MISC-28-correction-attribution-judgment", "ts": "2026-09-12T07:20:30Z"}
+{"branch": "claude/status-38gu4d", "harness": "2.0", "kind": "block", "reason": "acceptance ③ 좌석 선택이 사람 게이트 G-misc28-attribution-seat 대기 — ①(오억제 100% 전수 재현)·③의 값싼 결정론 해법 반증·④(양방향 측정)는 PR #1148로 착지. 후보 3종 모두 학생 노출을 바꾸므로 측정만 갖춘 세션이 단독 선택하지 않는다", "task": "MISC-28-correction-attribution-judgment", "ts": "2026-09-12T11:32:46Z"}
