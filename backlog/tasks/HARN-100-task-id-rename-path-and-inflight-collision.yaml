@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 eos_priority: P2
 owner: claude
@@ -18,6 +18,6 @@ paths:
   - scripts/harness/backlog.py
   - scripts/harness/store.py
   - "tests/harness/**"
-session: null
+session: claude/status-38gu4d
 notes: "출처: OPS-76 착수 중 실측(2026-09-12). HARN-97 acceptance ④가 예고한 축의 실제 발생 2건이며, HARN-97 본체는 자릿수 확장(#1106)으로 done 처리돼 이 축을 다루지 않는다. 완료된 태스크의 acceptance를 되살리지 않고 승계 태스크로 분리했다(CLAUDE.md 회수 규칙)."
 updated: 2026-09-12
