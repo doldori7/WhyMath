@@ -19,11 +19,21 @@ acceptance:
 artifacts: []
 paths:
   - src/backend/whymath_backend/privacy/audit.py
+  - src/backend/whymath_backend/privacy/__init__.py
   - src/backend/whymath_backend/db/models/audit.py
-  - src/backend/whymath_backend/api/_auth.py
-  - src/backend/whymath_backend/ops/role_grant_cli.py
+  - src/backend/whymath_backend/schema/audit.py
+  - src/backend/whymath_backend/schema/enums.py
+  - src/backend/whymath_backend/api/concepts.py
+  - src/backend/whymath_backend/api/problems.py
+  - src/backend/whymath_backend/api/me.py
+  - src/backend/whymath_backend/db/schema_version.py
+  - scripts/ops/probe_prod_schema_revision.sql
   - "src/backend/alembic/versions/**"
   - tests/backend/privacy/test_audit.py
+  - tests/backend/api/test_concepts.py
+  - tests/backend/api/test_problems.py
+  - tests/backend/db/test_solution_path_orm.py
+  - docs/architecture/48_eos_security_access_control.md
 session: claude/sec-29-admin-access-audit
-notes: "48_보안 §P0 Security Audit 갭. record_admin_access_audit은 관리자 콘솔 Phase B(ADMIN-06)를 전제로 한 dead code 상태다. 현재 contract는 actor_user_id/target_user_id/ip/settings뿐이므로 CONTENT_ADMIN 엔드포인트(concepts/problems)에는 직접 적용할 수 없다. 본 태스크는 먼저 삭제/배선/확장 3개 방향 중 하나를 결정하고 그에 맞춰 실행한다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
-updated: 2026-09-11
+notes: "48_보안 §P0 Security Audit 갭. record_admin_access_audit은 관리자 콘솔 Phase B(ADMIN-06)를 전제로 한 dead code 상태다. 현재 contract는 actor_user_id/target_user_id/ip/settings뿐이므로 CONTENT_ADMIN 엔드포인트(concepts/problems)에는 직접 적용할 수 없다. 본 태스크는 먼저 삭제/배선/확장 3개 방향 중 하나를 결정하고 그에 맞춰 실행한다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필\n\n[정정 2026-09-12] paths ['src/backend/whymath_backend/privacy/audit.py', 'src/backend/whymath_backend/db/models/audit.py', 'src/backend/whymath_backend/api/_auth.py', 'src/backend/whymath_backend/ops/role_grant_cli.py', 'src/backend/alembic/versions/**', 'tests/backend/privacy/test_audit.py'] → ['src/backend/whymath_backend/privacy/audit.py', 'src/backend/whymath_backend/privacy/__init__.py', 'src/backend/whymath_backend/db/models/audit.py', 'src/backend/whymath_backend/schema/audit.py', 'src/backend/whymath_backend/schema/enums.py', 'src/backend/whymath_backend/api/concepts.py', 'src/backend/whymath_backend/api/problems.py', 'src/backend/whymath_backend/api/me.py', 'src/backend/whymath_backend/db/schema_version.py', 'scripts/ops/probe_prod_schema_revision.sql', 'src/backend/alembic/versions/**', 'tests/backend/privacy/test_audit.py', 'tests/backend/api/test_concepts.py', 'tests/backend/api/test_problems.py', 'tests/backend/db/test_solution_path_orm.py', 'docs/architecture/48_eos_security_access_control.md']: 투자 결과 결정 (c) 스키마 확장을 채택 — (b) 배선 후보였던 api/_auth.py·ops/role_grant_cli.py는 최종 미편집이라 범위에서 뺀다. 실제 편집 범위로 좁힌다: schema/enums.py·schema/audit.py(신규 enum·Pydantic 필드), api/concepts.py·api/problems.py·api/me.py(6라우터 배선·EventKindFilter 설명), db/schema_version.py·probe_prod_schema_revision.sql(신규 head 반영), test_concepts.py·test_problems.py·test_solution_path_orm.py(RED-before-fix·head 상수 갱신) 추가. HARN-59 scope_drift 경고 정정.\npaths 제거 2건: ['src/backend/whymath_backend/api/_auth.py', 'src/backend/whymath_backend/ops/role_grant_cli.py']"
+updated: 2026-09-12
