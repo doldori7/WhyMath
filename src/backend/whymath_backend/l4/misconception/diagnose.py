@@ -60,6 +60,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from functools import lru_cache
+from typing import Literal
 
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import (
@@ -214,6 +215,70 @@ def _clauses(text: str) -> list[str]:
     return [c for c in _CLAUSE_BOUNDARY.split(text) if c and c.strip()]
 
 
+#: 정정 어구의 **귀속 판정** 3상태 (MISC-28 · Kiki 판정 2026-09-12 · 후보 ⓒ).
+#:
+#: `"refuted"`  — 정정 어구가 신호 **뒤**에 있다. `"…라는 풀이는 틀렸다"` 형태로, 정정이
+#:                가리키는 대상이 방금 말한 그 주장이라는 것이 어순으로 확정된다 → **억제**.
+#: `"unclear"`  — 정정 어구가 신호 **앞**에 있다. 여기엔 두 가지가 섞여 있고 **위치로는
+#:                구별되지 않는다**(실측):
+#:                  · 정당한 반박: `"틀린 풀이: <오개념>"`(라벨 후 인용)
+#:                  · 무관한 정정: `"부호를 잘못 옮겨 적었지만 <오개념>"`
+#:                → 억제도 진단도 아닌 **판정 보류**. 매칭은 유지하되 재확인을 요구한다.
+#: `"none"`     — 정정 어구 없음 → 평소대로 진단.
+#:
+#: **왜 방향이 판별자인가 — 그리고 왜 그것만으로는 부족한가**: 두 축을 전수로 쟀더니 창을
+#: 한쪽으로 접는 것만으로는 실패가 *옮겨질 뿐*이었다(MISC-28 실측, 카탈로그 66종):
+#:
+#:     현행(양방향 억제)  : 오억제 66/66(100%) · 선행정정 사각  0/66(  0%)
+#:     뒤돌아보기 끔       : 오억제  2/66(  3%) · 선행정정 사각 66/66(100%)
+#:
+#: 즉 앞쪽 정정을 "억제"로 읽으면 무관한 정정까지 삼키고, "무시"로 읽으면 정당한 반박에
+#: 확신 진단이 나간다. 어느 쪽도 **틀린 확신**을 만든다. 그래서 세 번째 상태를 둔다 —
+#: 귀속이 불명할 때는 판정하지 않고 **묻는다**.
+#:
+#: Kiki 판정 원문 취지: "목표가 정답률 최대화가 아니라 학생에게 잘못된 확신을 주는 오류를
+#: 최소화하는 것이다. 귀속이 불명확한데 바로 '네가 틀렸다'고 판정하는 것보다, 판정을
+#: 보류하고 한 번 확인하는 상태를 두는 편이 교육적으로 안전하다." 이는
+#: `models.py::refuting_regex` docstring의 기존 선언과 같은 축이다.
+CorrectionVerdict = Literal["refuted", "unclear", "none"]
+
+
+def classify_correction_attribution(misconception: Misconception, text: str) -> CorrectionVerdict:
+    """정정 어구가 **이 오개념을 가리키는가**를 3상태로 판정한다 (MISC-28).
+
+    `has_explicit_correction_near_signals`의 bool 판정을 대체하지 않고 **감싼다** — 그
+    함수는 `"refuted"`만을 True로 보는 종전 계약을 유지해 기존 호출부·테스트가 그대로
+    선다. 새 상태(`"unclear"`)를 소비하는 것은 `_match_one`이다.
+
+    한계(정직 표기): 이 판정은 **어순**만 본다. 같은 방향 안의 귀속(무엇을 정정하는가)은
+    여전히 미해결이며, 그것이 `"unclear"`를 억제가 아닌 *보류*로 두는 이유다 — 모르는
+    것을 아는 척하지 않는다.
+    """
+    # `signals`가 비면 아래 루프가 아무 것도 내지 않아 자연히 `"none"`이다 — 조기 반환 가드를
+    # 두지 **않는다**. 뮤테이션에서 그 가드를 지워도 전건 초록이었다(= 동작이 동일한 죽은 절).
+    # 가드처럼 생겼는데 아무것도 막지 않는 코드는 없는 것보다 나쁘다: 읽는 사람이 그것을
+    # 검증된 보호로 계상한다(CLAUDE.md "보호 장치를 실패 주입 없이 '보호 있음'으로 선언 금지").
+    correction = _compile(_CORRECTION_NEAR_SIGNAL)
+    verdict: CorrectionVerdict = "none"
+    for clause in _clauses(text):
+        norm_clause = _normalize(clause)
+        if not norm_clause:
+            continue
+        hits = [s for s in misconception.signals if _anchorable(s, norm_clause)]
+        for signal in hits:
+            span = _signal_span(signal, norm_clause)
+            if span is None:  # pragma: no cover — _signal_hit가 True면 위치가 있다
+                continue
+            start, end = span
+            # 뒤쪽(lookahead) 정정이 하나라도 있으면 확정 반박 — 즉시 확정한다.
+            if correction.search(norm_clause[end : end + _CORRECTION_LOOKAHEAD]):
+                return "refuted"
+            # 앞쪽(lookbehind) 정정은 귀속 불명 — 뒤쪽 확정이 없을 때만 남는다.
+            if correction.search(norm_clause[max(0, start - _CORRECTION_LOOKBEHIND) : start]):
+                verdict = "unclear"
+    return verdict
+
+
 def has_explicit_correction_near_signals(misconception: Misconception, text: str) -> bool:
     """학생이 이 오개념을 **명시적으로 부정**하고 있는가 — 절 경계 안 근접 판정(MISC-25).
 
@@ -251,34 +316,19 @@ def has_explicit_correction_near_signals(misconception: Misconception, text: str
         머리까지 열면 회복되지만 "뒤 절의 무관한 정정"이 같은 규모로 오억제된다 —
         정확히 등가 교환이라 유지(=진단) 쪽으로 기울였다(우선순위: 미검출도 손해다).
     """
-    if not misconception.signals:
-        return False
-    correction = _compile(_CORRECTION_NEAR_SIGNAL)
-    for clause in _clauses(text):
-        norm_clause = _normalize(clause)
-        if not norm_clause:
-            continue
-        hits = [s for s in misconception.signals if _anchorable(s, norm_clause)]
-        if not hits:
-            # 신호가 없는 절의 정정 어휘는 이 오개념을 가리키는 말이 아니다(위 1)단계 사례).
-            #
-            # 정직 표기: 이 줄은 **빠른 경로**이지 유일한 방어선이 아니다 — 지워도 동작이 같다
-            # (아래 `_signal_span`이 그 절에 없는 신호에 대해 None을 돌려 같은 자리에서 걸린다).
-            # 뮤테이션으로 확인했다. 의도를 드러내려 남기되, "이 줄이 절 스코프를 지킨다"고
-            # 읽히지 않도록 적어 둔다 — 실제 스코프는 `norm_clause`를 창의 모집단으로 쓰는 데서
-            # 나온다(그 축은 뮤테이션 C2가 지킨다).
-            continue
-        for signal in hits:
-            span = _signal_span(signal, norm_clause)
-            if span is None:  # pragma: no cover — _signal_hit가 True면 위치가 있다
-                continue
-            start, end = span
-            window = norm_clause[
-                max(0, start - _CORRECTION_LOOKBEHIND) : end + _CORRECTION_LOOKAHEAD
-            ]
-            if correction.search(window):
-                return True
-    return False
+    # MISC-28 — 판정 구현은 `classify_correction_attribution` **하나**다. 이 함수는 그 3상태를
+    # bool로 접은 얇은 뷰이며, 종전 계약(정정 어구가 신호 근접 창 안에 있는가 — 앞·뒤 무관)을
+    # 그대로 보존한다. 카탈로그 전수 프로브 938건에서 두 구현의 판정이 100% 일치함을 확인한 뒤
+    # 합쳤다(신호 문자열 자체에 정정 어휘가 든 항목은 0건이라 창 모양 차이도 무영향).
+    #
+    # **왜 합쳤나**: 같은 절 경계 루프를 두 벌 두면 한쪽만 뮤테이션에서 검사된다 — 실제로
+    # 이 함수 쪽 루프의 경계 절을 지워도 전건 초록이었다(M7 생존). 사본은 검증되지 않은 채
+    # "검증된 구현"의 일부로 계상된다.
+    #
+    # **주의**: `_match_one`은 더 이상 이 함수를 부르지 않는다(3상태를 직접 소비한다). 여기서
+    # True는 "억제하라"가 아니라 "정정 어구가 근처에 있다"는 *탐지* 신호다 — 억제 여부는
+    # 방향에 달렸다(뒤=억제·앞=보류).
+    return classify_correction_attribution(misconception, text) != "none"
 
 
 def _is_weak_signal(signal: str) -> bool:
@@ -366,7 +416,14 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     # MISC-25 — 학생이 이 오개념을 *명시적으로 부정*하는 절에서 신호가 나왔다면 귀속이 성립하지
     # 않는다. `is_refuted`와 나란히(둘 다 세기 전에) 두는 이유는 같다 — 나중에 감점하면 "얼마나
     # 깎을 것인가"라는 답 없는 눈금 문제가 생기고, 깎인 후보가 하류에 약한 증거로 남는다.
-    if has_explicit_correction_near_signals(misconception, text):
+    #
+    # MISC-28(Kiki 판정 · 후보 ⓒ) — 그 판정을 **3상태**로 받는다. `"refuted"`(정정이 신호 뒤)만
+    # 종전처럼 None이고, `"unclear"`(정정이 신호 앞)는 억제하지 않는다. 앞쪽 정정에는 정당한
+    # 반박과 무관한 정정이 **위치로 구별되지 않게** 섞여 있어(실측 교환표: 억제하면 오억제
+    # 66/66, 무시하면 선행정정 사각 66/66) 어느 쪽으로 단정해도 *틀린 확신*이 나간다. 그래서
+    # 매칭은 살리되 플래그를 세워 하류가 **확인 질문**으로 내리게 한다.
+    verdict = classify_correction_attribution(misconception, text)
+    if verdict == "refuted":
         return None
     matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
@@ -392,6 +449,9 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
         confidence=confidence,
         matched_signals=matched,
         matched_regex_signals=matched_regex,
+        # MISC-28 — confidence 눈금은 건드리지 않는다(`refuting_regex` docstring의 "왜 감점이
+        # 아니라 거부인가"와 충돌 회피). 귀속 불명은 *신뢰도가 낮은 것*이 아니라 *다른 축*이다.
+        attribution_unclear=verdict == "unclear",
     )
 
 

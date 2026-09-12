@@ -40,6 +40,19 @@
 안 나간다. 해가 되는 것은 *confidence 수치*가 아니라 *도달*이므로 도달을 센다
 (`anchor_detection_channel_eval._survives_serving_gate`와 같은 이유·같은 방식).
 
+────────────────────────────────────────────────────────────────────────────
+세 축 — 한쪽만 보면 반드시 오독한다 (MISC-28)
+────────────────────────────────────────────────────────────────────────────
+① **사각**(원래 축) — 학생이 부정했는데 진단이 도달하는가. 낮을수록 좋다.
+② **오억제**(MISC-28 ④) — *다른 것*을 정정했는데 이 오개념까지 억제되는가. 낮을수록 좋다.
+   ①만 보면 **과잉 억제가 개선으로 보인다**(무엇이든 억제하면 ①은 0%가 된다). 실제로 그
+   상태였다 — ①이 0%인 동안 ②는 **100%**였고 그 사실이 어느 화면에도 없었다.
+③ **보류**(MISC-28 ⓒ) — 전치 정정 라벨에서 **확신 진단이 새는가**. 0이어야 한다.
+   Kiki 판정(2026-09-12)으로 전치 정정은 *억제*가 아니라 *보류*가 됐다. 그러면 ①이 그
+   형태를 더는 0%로 보증하지 않는다(도달하기 때문이다). 보증해야 하는 것이 "도달하지
+   않는다"에서 "도달하되 확신을 보류한다"로 바뀌었으므로 축을 하나 더 둔다 — 없으면
+   ⓒ 도입이 "②가 100%→3%"라는 좋은 숫자만 남기고 그 대가를 감춘다.
+
 사용:
     python -m whymath_backend.harness.explicit_correction_gap_eval
     python -m whymath_backend.harness.explicit_correction_gap_eval --max-gap-ratio 0.0
@@ -61,13 +74,16 @@ from whymath_backend.l4.misconception.models import Misconception
 __all__ = [
     "CORRECTION_PHRASES",
     "FOREIGN_CORRECTION_PREFIXES",
+    "PREFIX_CORRECTION_LABELS",
     "CorrectionProbe",
     "GapReport",
+    "HeldVerdictResult",
     "ProbeResult",
     "build_probes",
     "evaluate",
     "format_report",
     "main",
+    "measure_held_verdicts",
     "measure_over_suppression",
 ]
 
@@ -218,6 +234,80 @@ def measure_over_suppression() -> tuple[OverSuppressionResult, ...]:
     return tuple(results)
 
 
+#: 정정 라벨을 **앞**에 붙이는 형태 — 정당한 반박인데 어순 규칙만으로는 억제되지 않는다.
+#:
+#: MISC-25가 막은 사각(`CORRECTION_PHRASES`)은 전부 *후치*다("…라는 풀이는 틀렸다"). 전치
+#: 라벨은 그 창으로는 안 잡히고 lookbehind 창이 잡는데, MISC-28 ⓒ가 그 창의 판정을
+#: 억제에서 **보류**로 바꿨다. 그래서 이 형태는 이제 학생에게 *도달한다* — 보류 플래그를
+#: 달고. 그 사실이 화면에 없으면 ⓒ의 비용이 보이지 않는다.
+#:
+#: 마지막 항목은 **대조군**이다: 정정 어휘가 없는 접두이므로 도달하되 **보류되면 안 된다**.
+#: 없으면 `held`가 `reaches`와 구별되지 않아 이 축 전체가 위장이 된다 — 실제로 뮤테이션
+#: M13(`held=bool(hit)`, 즉 "도달하면 보류로 친다")이 대조군 없이는 **살아남았다**.
+PREFIX_CORRECTION_LABELS: tuple[str, ...] = (
+    "틀린 풀이: ",
+    "오답 예시 — ",
+    "잘못된 풀이는 ",
+    "참고로 적어 보면 ",
+)
+
+#: 대조군 접두 — 이 항목만 "보류되지 않아야 정상"이다.
+_CONTROL_PREFIX_LABEL_TEXT = "참고로 적어 보면 "
+
+
+@dataclass(frozen=True)
+class HeldVerdictResult:
+    """항목 1개 × 전치 라벨 1개 — 도달했는가 / 보류 플래그가 붙었는가 (MISC-28 ⓒ).
+
+    잡아야 하는 실패는 `reaches and not held` 하나다 — **확신 진단이 그대로 나가는** 상태.
+    `not reaches`는 종전의 억제(ⓒ 이전 동작)이고, `reaches and held`가 ⓒ의 의도다.
+    """
+
+    kebab_id: str
+    label: str
+    reaches: bool
+    held: bool
+
+    @property
+    def is_control(self) -> bool:
+        """정정 어휘가 없는 대조군 행 — 보류되지 **않아야** 정상이라 누출 집계에서 뺀다."""
+        return self.label == _CONTROL_PREFIX_LABEL_TEXT
+
+    @property
+    def confident_and_wrong(self) -> bool:
+        return self.reaches and not self.held and not self.is_control
+
+
+def measure_held_verdicts() -> tuple[HeldVerdictResult, ...]:
+    """전치 정정 라벨에서 **확신 진단이 새는가**를 잰다 (MISC-28 ⓒ 집행 지점).
+
+    ⓒ는 전치 정정을 억제하지 않으므로 사각 축(`gap`)이 이 형태를 더는 0%로 보증하지
+    않는다. 대신 보증해야 하는 것이 바뀐다 — *도달하되 보류돼야 한다*. 이 함수가 그
+    새 보증을 측정한다. 없으면 ⓒ 도입이 "오억제 100%→3%"라는 **좋은 숫자만** 남기고
+    그 대가를 감춘다.
+    """
+    results: list[HeldVerdictResult] = []
+    for misconception in CATALOG:
+        base = _control_text(misconception)
+        if not base.strip() or is_refuted(misconception, base):
+            continue
+        if not _reaches_student(misconception.id, base):
+            continue  # 대조군 미발화 — 도달 여부를 물을 수 없다
+        for label in PREFIX_CORRECTION_LABELS:
+            text = label + base
+            gated = apply_match_quality_gate(diagnose(text, top_k=len(CATALOG_BY_ID)))
+            hit = [m for m in gated.matches if m.misconception.id == misconception.id]
+            results.append(
+                HeldVerdictResult(
+                    kebab_id=misconception.id,
+                    label=label,
+                    reaches=bool(hit),
+                    held=bool(hit) and hit[0].attribution_unclear,
+                )
+            )
+    return tuple(results)
+
+
 @dataclass(frozen=True)
 class GapReport:
     """전수 측정 결과 — 분모를 항상 함께 낸다."""
@@ -298,6 +388,35 @@ def format_report(report: GapReport) -> str:
             lines.append(
                 f"    · {label:<22} {hit:>3}/{len(rows):<3} ({hit / len(rows):6.1%}){note}"
             )
+
+    # ── 세 번째 축 (MISC-28 ⓒ) ────────────────────────────────────────────
+    # ⓒ가 전치 정정을 억제에서 *보류*로 바꿨으므로 사각 축은 이 형태를 더는 0%로 보증하지
+    # 않는다. 그래서 새 보증("도달하되 보류")을 같은 화면에 낸다 — 이 표가 없으면 위 두 표가
+    # "오억제 100%→3%"라는 좋은 숫자만 남기고 그 대가를 감춘다.
+    held = measure_held_verdicts()
+    if held:
+        lines.append("")
+        lines.append("  [보류 축] 전치 정정 라벨 — 도달하되 **확신을 보류**하는가 (ⓒ):")
+        for label in PREFIX_CORRECTION_LABELS:
+            held_rows = [r for r in held if r.label == label]
+            if label == _CONTROL_PREFIX_LABEL_TEXT:
+                # 대조군은 "보류된 수"를 센다 — 0이어야 정상(정정 어휘가 없으니 보류할 게 없다).
+                hit = sum(1 for r in held_rows if r.held)
+                lines.append(
+                    f"    · {label!r:<18} 보류    {hit:>3}/{len(held_rows):<3} "
+                    f"({hit / len(held_rows):6.1%}) ← [대조군] 보류되면 안 된다"
+                )
+                continue
+            leaked = sum(1 for r in held_rows if r.confident_and_wrong)
+            lines.append(
+                f"    · {label!r:<18} 확신 누출 {leaked:>3}/{len(held_rows):<3} "
+                f"({leaked / len(held_rows):6.1%}) ← 0이어야 한다"
+            )
+        reaching = sum(1 for r in held if r.reaches)
+        lines.append(
+            f"    (참고) 도달 {reaching}/{len(held)} — ⓒ 이전에는 정정 라벨이 전부 억제됐다. "
+            "억제가 아니라 보류가 된 것이 이 축의 변화다."
+        )
     lines.append("=" * 70)
     return "\n".join(lines)
 
