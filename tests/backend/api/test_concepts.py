@@ -30,13 +30,20 @@ from sqlalchemy.exc import IntegrityError
 from whymath_backend.api._auth import require_content_admin
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.audit import PrivacyAudit
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.models.concept_content import ConceptContent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
-from whymath_backend.schema.enums import EdgeType, Role
+from whymath_backend.schema.enums import (
+    AuditEventKind,
+    EdgeType,
+    PrivacyAuditAction,
+    PrivacyAuditResourceType,
+    Role,
+)
 from whymath_backend.security import create_access_token
 
 _VALID_BODY = {"code": "CAL-INT-FTC", "name_ko": "미적분학의 기본정리", "level": "단원"}
@@ -174,7 +181,8 @@ class TestCreate:
         assert resp.status_code == 201, resp.text
         assert resp.json()["code"] == "CAL-INT-FTC"
         assert fake.committed is True
-        assert len(fake.added) == 1
+        # SEC-29: Concept 본체 + 콘텐츠CUD 감사 행(PrivacyAudit) = 2건, 같은 트랜잭션.
+        assert len(fake.added) == 2
 
     def test_create_duplicate_code_returns_409(self) -> None:
         """code UNIQUE 충돌(IntegrityError) → 롤백 후 409(스택트레이스 없이)."""
@@ -326,6 +334,70 @@ class TestDelete:
         resp = _client(fake).delete(f"/v1/concepts/{concept.concept_id}")
         assert resp.status_code == 409
         assert fake.rolled_back is True
+
+
+class TestContentMutationAudit:
+    """SEC-29(48_보안 §P0) — 콘텐츠 CUD(생성/수정/삭제)가 `PrivacyAudit` 행을 남긴다.
+
+    비관리자/미인증 거부는 `TestAuthGate`(이 파일)가 이미 검증한다 — 여기서는 acceptance④의
+    나머지 절반("관리자 동작 시 감사 이벤트 생성")과 그 행의 필드 정합을 검증한다.
+    """
+
+    def _audit_rows(self, fake: FakeSession) -> list[PrivacyAudit]:
+        return [obj for obj in fake.added if isinstance(obj, PrivacyAudit)]
+
+    def test_create_writes_content_mutation_audit_row(self) -> None:
+        fake = FakeSession()
+        resp = _client(fake).post("/v1/concepts", json=_VALID_BODY)
+        assert resp.status_code == 201, resp.text
+        rows = self._audit_rows(fake)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.user_id == _ADMIN_USER.user_id
+        assert row.target_user_id is None
+        assert row.event_kind == AuditEventKind.content_mutation.value
+        assert row.resource_type == PrivacyAuditResourceType.concept.value
+        assert row.action == PrivacyAuditAction.create.value
+        assert str(row.resource_id) == resp.json()["concept_id"]
+
+    def test_patch_writes_content_mutation_audit_row(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"name_en": "Updated FTC"}
+        )
+        assert resp.status_code == 200, resp.text
+        rows = self._audit_rows(fake)
+        assert len(rows) == 1
+        assert rows[0].action == PrivacyAuditAction.update.value
+        assert rows[0].resource_id == concept.concept_id
+
+    def test_delete_writes_content_mutation_audit_row(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).delete(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 204
+        rows = self._audit_rows(fake)
+        assert len(rows) == 1
+        assert rows[0].action == PrivacyAuditAction.delete.value
+        assert rows[0].resource_id == concept.concept_id
+
+    def test_failed_create_does_not_leave_committed_audit_row(self) -> None:
+        """IntegrityError로 롤백되면(409) 감사 행도 함께 롤백 대상(같은 트랜잭션).
+
+        `FakeSession`은 실제 롤백을 모사하지 않으므로(add된 객체를 지우지 않음) 여기서는
+        `rolled_back is True`(전체 트랜잭션이 롤백 호출을 받았다)만 확인한다 — 실 PG에서
+        ROLLBACK이 add()된 행까지 되돌린다는 것은 DB 트랜잭션의 기본 보장이라 별도 가정이
+        필요 없다(session.add는 flush 전까지 방문 상태일 뿐).
+        """
+        err = IntegrityError("INSERT", {}, Exception("duplicate key value violates unique"))
+        fake = FakeSession(commit_error=err)
+        resp = _client(fake).post("/v1/concepts", json=_VALID_BODY)
+        assert resp.status_code == 409
+        assert fake.rolled_back is True
+        # 감사 행은 add()는 됐으나(같은 트랜잭션 참여) commit은 되지 않았다.
+        assert len(self._audit_rows(fake)) == 1
+        assert fake.committed is False
 
 
 class TestConcurrency:

@@ -8,8 +8,8 @@ dashboard:
   classification_rate: 163/163
   backend_modules_covered: 593
   endpoints_covered: 109
-  release_p0_proposed: 101
-  priority_changed_from_prior: 27
+  release_p0_proposed: 103
+  priority_changed_from_prior: 29
   student_loop_reach_modules: 210
   production_loop_reach_modules: 172
   loop_tables: 29
@@ -28,8 +28,8 @@ dashboard:
     5/6: 36
     6/6: 104
   replace_signal_histogram:
-    0/6: 124
-    1/6: 36
+    0/6: 126
+    1/6: 34
     2/6: 3
   by_plane:
     C: 12
@@ -55,8 +55,8 @@ dashboard:
     REFACTOR: 51
     REPLACE_CANDIDATE: 1
   by_priority_proposed:
-    P0: 101
-    P1: 41
+    P0: 103
+    P1: 39
     P2: 19
     P3: 2
   by_priority_prior_manual:
@@ -1985,7 +1985,7 @@ features:
     db_model_modules: 1
     coupling_count: 4
     test_files: 8
-    test_functions: 190
+    test_functions: 193
     matrix:
       A_subject: 1
       B_db: 1
@@ -2036,9 +2036,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
     release_priority_prior_manual: P1
-    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2046,11 +2046,11 @@ features:
     db_mutation_calls: 0
     own_modules: 1
     adapter_deps: []
-    mixed_deps: [schema.problem]
+    mixed_deps: [schema.enums, schema.problem]
     db_model_modules: 1
-    coupling_count: 4
+    coupling_count: 8
     test_files: 8
-    test_functions: 190
+    test_functions: 193
     matrix:
       A_subject: 1
       B_db: 1
@@ -2061,7 +2061,7 @@ features:
     matrix_total: 6
     criteria_action: KEEP
     keep_criteria_met: 6/6
-    replace_signals: 1/6
+    replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
     fan_in: 0
     contract_gaps: 0
@@ -2072,7 +2072,7 @@ features:
       student_loop: false
       production_loop: false
       data_supplier: false
-      invariant: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2084,7 +2084,7 @@ features:
       r2_subject_in_core: false
       r3_untestable: false
       r4_duplicate: false
-      r5_state_untracked: true
+      r5_state_untracked: false
       r6_no_api_contract: false
     seat: "B7 — 운영자 저작 표면"
   - feature_id: WM-S-032
@@ -2180,7 +2180,7 @@ features:
     db_model_modules: 1
     coupling_count: 3
     test_files: 6
-    test_functions: 80
+    test_functions: 84
     matrix:
       A_subject: 0
       B_db: 1
@@ -2310,7 +2310,7 @@ features:
     db_model_modules: 1
     coupling_count: 2
     test_files: 1
-    test_functions: 41
+    test_functions: 45
     matrix:
       A_subject: 0
       B_db: 1
@@ -2361,9 +2361,9 @@ features:
     tests: Full
     migration_action: KEEP
     matrix_action: REFACTOR
-    release_priority_proposed: P1
+    release_priority_proposed: P0
     release_priority_prior_manual: P1
-    priority_basis: "선행 제안 승계(P1) — 폐쇄루프 미도달"
+    priority_basis: "폐쇄루프: invariant"
     migration_risk: Med
     loc: 0
     endpoints: 3
@@ -2371,22 +2371,22 @@ features:
     db_mutation_calls: 0
     own_modules: 1
     adapter_deps: []
-    mixed_deps: []
+    mixed_deps: [schema.enums]
     db_model_modules: 1
-    coupling_count: 4
+    coupling_count: 8
     test_files: 6
-    test_functions: 80
+    test_functions: 84
     matrix:
-      A_subject: 0
+      A_subject: 1
       B_db: 1
       C_coupling: 1
       D_tests: 0
       E_state: 2
       F_data: 1
-    matrix_total: 5
+    matrix_total: 6
     criteria_action: KEEP
     keep_criteria_met: 6/6
-    replace_signals: 1/6
+    replace_signals: 0/6
     action_basis: "§3.4 KEEP 6/6 충족"
     fan_in: 0
     contract_gaps: 0
@@ -2397,7 +2397,7 @@ features:
       student_loop: false
       production_loop: false
       data_supplier: false
-      invariant: false
+      invariant: true
     criteria_34:
       k1_subject_low: true
       k2_api_clear: true
@@ -2409,7 +2409,7 @@ features:
       r2_subject_in_core: false
       r3_untestable: false
       r4_duplicate: false
-      r5_state_untracked: true
+      r5_state_untracked: false
       r6_no_api_contract: false
     seat: "B4 — 운영자 저작 표면"
   - feature_id: WM-S-037
@@ -8410,7 +8410,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: High
-    loc: 11244
+    loc: 11321
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8420,7 +8420,7 @@ features:
     db_model_modules: 0
     coupling_count: 0
     test_files: 330
-    test_functions: 5962
+    test_functions: 5971
     matrix:
       A_subject: 3
       B_db: 0
@@ -8475,7 +8475,7 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: student_loop, production_loop"
     migration_risk: Low
-    loc: 8233
+    loc: 8257
     endpoints: 0
     write_endpoints: 0
     db_mutation_calls: 0
@@ -8485,7 +8485,7 @@ features:
     db_model_modules: 0
     coupling_count: 28
     test_files: 197
-    test_functions: 3002
+    test_functions: 3011
     matrix:
       A_subject: 1
       B_db: 0
@@ -8550,7 +8550,7 @@ features:
     db_model_modules: 2
     coupling_count: 7
     test_files: 76
-    test_functions: 1525
+    test_functions: 1532
     matrix:
       A_subject: 1
       B_db: 1
@@ -8810,7 +8810,7 @@ features:
     db_model_modules: 0
     coupling_count: 7
     test_files: 202
-    test_functions: 3028
+    test_functions: 3037
     matrix:
       A_subject: 3
       B_db: 0
@@ -8823,7 +8823,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 1/6
     action_basis: "§3.4 KEEP 5/6 충족"
-    fan_in: 128
+    fan_in: 129
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:
@@ -8995,17 +8995,17 @@ features:
     release_priority_prior_manual: P0
     priority_basis: "폐쇄루프: invariant"
     migration_risk: High
-    loc: 917
+    loc: 966
     endpoints: 0
     write_endpoints: 0
-    db_mutation_calls: 15
+    db_mutation_calls: 17
     own_modules: 4
     adapter_deps: []
     mixed_deps: [schema.enums]
     db_model_modules: 15
     coupling_count: 22
     test_files: 17
-    test_functions: 151
+    test_functions: 153
     matrix:
       A_subject: 1
       B_db: 3
@@ -9018,7 +9018,7 @@ features:
     keep_criteria_met: 5/6
     replace_signals: 0/6
     action_basis: "매트릭스 13점(10~13)"
-    fan_in: 4
+    fan_in: 6
     contract_gaps: 0
     duplicate_of: ""
     loop_hits:

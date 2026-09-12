@@ -22,7 +22,7 @@
 --
 -- Discriminators are derived from src/backend/alembic/versions/*.py upgrade()
 -- bodies (create_table / add_column / drop_column / alter_column). seq =
--- position in the linear chain (length 97, head = f2662166a661).
+-- position in the linear chain (length 98, head = 4c6dfb1527a9).
 --
 -- KIND. What the probe looks at for a row:
 --   'object'  - existence. obj_column = '' means "check the table", otherwise
@@ -100,7 +100,8 @@ WITH expected(seq, revision, obj_table, obj_column, polarity, obj_kind) AS (
         -- attribute-only revision: the column predates it, so only its DEFAULT
         -- separates "applied" from "not applied" (see KIND note in the header).
         (95, '19149e92d368', 'problem_attempt',        'ingested_at',               '+', 'default'),
-        (96, 'f2662166a661', 'job_ownership',          '',                          '+', 'object')
+        (96, 'f2662166a661', 'job_ownership',          '',                          '+', 'object'),
+        (97, '4c6dfb1527a9', 'privacy_audit',          'resource_type',             '+', 'object')
 )
 SELECT
     e.seq,
